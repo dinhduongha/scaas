@@ -28,8 +28,9 @@ no `capped` jobs.
   - merge `node-ua-jobs` and `fs3-t12` + push: done.
   - token-family rename: option (a), regenerate `dex_order_kat.json` and `metatx-parity.json` (CREATE2-derived fields
     only), and rename the deploy JSON keys `implementation_none…` as well. Start after the `ua8` merge, rebased onto
-    main. Inventory: `scratchpad/token-rename-report.md`; worktree `.claude/worktrees/token-rename` (no commits, at
-    `c016f971`).
+    main. Inventory: `scratchpad/token-rename-report.md`; worktree `.claude/worktrees/token-rename`: BUILT on branch
+    `token-rename` (on main `b7c34170`; code `d4550552`, vectors `ea7a671f`, docs and gate logs after; report
+    `scratchpad/token-rename-report-2.md`); waits for the owner's go to merge.
   - no bamboo-dms / Odoo items in scaas (memory `bamboo-dms-separate`).
 
 **Next (in order, subagent-driven):**
@@ -122,7 +123,7 @@ no `capped` jobs.
     3 tampered log copies each exit 1.
   - Figures: `ROLL_MAX` unchanged 96 / 80 / 64 / 32 (n2560: 6,032 gas under on `uaExecute`). `debit_min_gas`
     6,826,921 / 6,998,368 / 7,168,690 / 7,358,343. The part of the split overhead that grows with data size is
-    ≤ 2,405 gas (bound 8,000). `UnderlyingPqzToken` is 61,137 B (4,399 B headroom).
+    ≤ 2,405 gas (bound 8,000). `WrappedPqzToken` is 61,137 B (4,399 B headroom).
     `clients/ua-qt/build` (2 GB, git-ignored) is kept for incremental re-runs.
   - **Final whole-branch review: Ready with fixes**
     (`.superpowers/sdd/2026-10-27-metatx-split/final-review.md`, git-ignored).
@@ -694,12 +695,12 @@ background shell left running.
   UA-6 §9 keeps relation / statement / verifier, only the message pre-image changed (UA-6 built it) → 8a documents the
   message in `pqz-stmt`, re-pins `UAPqzVerifier.PROBE_PQZL`; PQZ vectors keep an opaque 32-byte message.
 - **Metatx split:** spike on branch `metatx-lib` (`bbca6985`, worktree `.claude/worktrees/metatx-lib`, report
-  `scratchpad/metatx-lib-report.md`): NoUnderlyingToken 38,351 B; A (library) token 34,588 + lib 11,577, +7–8.7k gas
+  `scratchpad/metatx-lib-report.md`): NormalToken 38,351 B; A (library) token 34,588 + lib 11,577, +7–8.7k gas
   cold; B (module behind `fallback`) token 7,083, +2.7k cold; B′ 3,347. Owner 2026-10-21: size vs 24,576 is not an
-  argument (wait for Glamsterdam); the real ceiling is 64 KiB — `UnderlyingPqzToken` ≈ 61 KB + governance. **Timing
+  argument (wait for Glamsterdam); the real ceiling is 64 KiB — `WrappedPqzToken` ≈ 61 KB + governance. **Timing
   (controller ruling on the owner's ask):** after part B merges, before fs3 Tasks 12 / 6 / 13 and before governance code.
 
-- **Spike A on `UnderlyingPqzToken` (owner ask, done `a12cd06b` on `metatx-lib`; report section in
+- **Spike A on `WrappedPqzToken` (owner ask, done `a12cd06b` on `metatx-lib`; report section in
   `scratchpad/metatx-lib-report.md`, log `smartcontracts/evm/runs/2026-10-21-metatx-lib-spike-pqz.txt`; 49 / 49 tests,
   parity prod / A / A2):** runtime 61,045 (headroom 4,491 under 65,536) → **A 56,898 (8,638)** with `SpikeMtxLib`
   11,577 → A2 (+ `SpikePqzMtxLib` 4,212) 54,321 (11,215). PQZ layer stays ≈ 12.7 KB (its auth / digest / nonce / fee are
@@ -717,7 +718,7 @@ background shell left running.
 ## Session 2026-10-20 (night; 5h part A merged) — resume here
 
 **State:** main pushed (this note). **5h part A merged** (branch `pqz-state-b`, `0b499439..`; merge commit "Merge branch
-'pqz-state-b'"). Gates on the branch head: forge 1325 / 0 / 9, size gate 0 (`UnderlyingPqzToken` ≈ 61 KB, all tokens
+'pqz-state-b'"). Gates on the branch head: forge 1325 / 0 / 9, size gate 0 (`WrappedPqzToken` ≈ 61 KB, all tokens
 < 65,536 B), PQZ statement vectors byte-identical, docs_check 0 errors, clientkeys 107 / 0 / 2, zether-prover cargo +
 wasm smoke green. **Not exercised:** `script/pqz/e2e.py` on a chain (fs3 Task 13). No agent, capped job or Codex run
 left running. SDD ledger with every ruling (git-ignored, kept for part B):
@@ -727,7 +728,7 @@ left running. SDD ledger with every ruling (git-ignored, kept for part B):
   retired, libraries return what the debit moved (`PqzCore.Paid` / Zether `fee`); T3b `IConfidentialToken`, `mtx*`
   names, shared signature `(payload, proof, auth, beneficiary, accHint[, …])` (Zether `auth` / `accHint` empty), UA-5c
   (a) Zether UA envelope `SCAAS-ZETHER-UA-ENVELOPE-V1`, (b) one `mtxUnshield(…, uint256 amount, bytes32 recipient)`,
-  `UnderlyingLib.payOutTo`; T4 e2e.py / zether-prover (32-byte recipient) / clientkeys; T5 docs + decisions.
+  `WrappedLib.payOutTo`; T4 e2e.py / zether-prover (32-byte recipient) / clientkeys; T5 docs + decisions.
 - **Final review fixes:** `ACC_MARK` on every stored `acc` word (a shield-only rollover zeroed them → next `ROLL_MAX`
   20.9 M gas; now 12.09 M); Zether decoyFee built (owner ruling 4).
 - **Owner rulings today (night):** keep the shared arg order as built (`mtxUnshield(…, amount, recipient)` vs
@@ -755,7 +756,7 @@ reports beside it). No agent, capped job or Codex run left running.
 - **Done, NOT reviewed:** Task 3 `ff4e6948` — PQZ `SHIELD_POOL`, **txFee** (= today's `confidentialFee`) + **decoyFee**
   (op 7 only, sender-chosen payload word ≥ token `minDecoyFee`, same to every leg, check `fee == txFee + M·decoyFee`),
   fees to public UA balances, NONE mode retired, disclosure from the blob, events/views, relayed mode binding. forge
-  1290 / 0 / 9, statement vectors unchanged, `UnderlyingPqzToken` 60,754 B.
+  1290 / 0 / 9, statement vectors unchanged, `WrappedPqzToken` 60,754 B.
 - **Owner rulings today (5h):** ROLL_AGE 5 blocks; decoyFee explicit sender field (no derivation); txFee unchanged;
   **no view `fallback`** — views stay direct token functions calling the library; the 4 KiB size margin dropped (only
   the hard 65,536 B limit); UA-5c (a) confidential ops through the UA envelope + (b) unshield to a `bytes32` UA → Task
@@ -806,7 +807,7 @@ or Codex run is left running.
   compared with the init code's link references — **OK**.
 - `rev2-small-fixes` head `8c7c00f2`, worktree `.claude/worktrees/rev2-small-fixes`: CHAIN-02 (first-activation future
   guard, `--check` ok) and CHAIN-03 (`Math.mulDiv`, 3 tests at 2^250; full forge 1326 / 0 / 14; size baseline raised,
-  `UnderlyingPqzToken` 60,352 B) done; **A-3 (Rust secret wiping) WIP `aee749df`**: finish with
+  `WrappedPqzToken` 60,352 B) done; **A-3 (Rust secret wiping) WIP `aee749df`**: finish with
   `scripts/capped sh pqz-core/pqzl/rust/run.sh a3` (proof bytes must be unchanged), then mark A-3 fixed and drop the
   WIP prefix. Expect a `size-baseline.json` conflict with Z2.
 

@@ -11,7 +11,7 @@ import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 
-/// @notice Plan 5h Task 3b, UA-5c (a)(b) on `NONE_ZETHER` (CTR-ZTH-51): the proof-carrying ops through the UA envelope
+/// @notice Plan 5h Task 3b, UA-5c (a)(b) on `NORMAL_ZETHER` (CTR-ZTH-51): the proof-carrying ops through the UA envelope
 ///         (`uaExecute`, binding tag `SCAAS-ZETHER-UA-ENVELOPE-V1`, the outer fee from the signer's UA balance), a
 ///         proof lifted between the address and the UA envelope fails both ways, the unshield to a `bytes32` UA
 ///         recipient (the statement's recipient word, credited on the UA ledger), and the empty `auth` / `accHint`

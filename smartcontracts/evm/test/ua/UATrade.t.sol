@@ -6,11 +6,11 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 
@@ -273,9 +273,9 @@ contract UATradeTest is UALedgerBase {
     }
 
     function test_ledgerOff_everyUATradeFunction() public {
-        NoUnderlyingToken off = NoUnderlyingToken(Clones.clone(address(
-            new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
-        off.initialize(address(this), 1, abi.encode(noneInit("Off", "OFF", 6, 1_000_000, alice, address(this))));
+        NormalToken off = NormalToken(Clones.clone(address(
+            new NormalToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
+        off.initialize(address(this), 1, abi.encode(normalInit("Off", "OFF", 6, 1_000_000, alice, address(this))));
         ITradeToken.UATradeOrder memory o = _o(_pad(alice), 1000, 2000);
         vm.expectRevert(IUALedger.UALedgerOff.selector);
         off.uaTrade(o, "", _f(600, 1200, 0));

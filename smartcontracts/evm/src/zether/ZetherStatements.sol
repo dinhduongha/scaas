@@ -54,7 +54,7 @@ contract ZetherStatements {
         return _unshield(token, payload, amount, recipient, beneficiary, ZetherLib.tagOf(envelopeBinding), envelopeBinding);
     }
 
-    /// @notice The statement of `mtxUnshieldUnwrap` on an `UNDERLYING_ZETHER` token: relayed, the envelope binding;
+    /// @notice The statement of `mtxUnshieldUnwrap` on an `WRAPPED_ZETHER` token: relayed, the envelope binding;
     ///         direct, `ZTX_V1_DIRECT` with the leg and `minOut` bound (`unwrapBinding`).
     function unshieldUnwrapStatement(
         address token,

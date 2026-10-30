@@ -34,7 +34,7 @@ contract AdminLibTest is Test {
     function test_storageSlotIsTheErc7201Namespace() public {
         bytes32 slot = keccak256(abi.encode(uint256(keccak256("scaas.token")) - 1)) & ~bytes32(uint256(0xff));
         assertEq(slot, 0x83083067f3d1caf66741d4eeefa9d3f4f0e5b0793677731d6fee7e67b774ac00);
-        h.init(AdminLib.KIND_NONE, MINTABLE, 0, ownerA, none);
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, 0, ownerA, none);
         assertEq(vm.load(address(h), slot), bytes32(uint256(MINTABLE))); // features at slot+0
         assertEq(vm.load(address(h), bytes32(uint256(slot) + 2)), bytes32(uint256(uint160(ownerA)))); // owner at slot+2
     }
@@ -61,50 +61,50 @@ contract AdminLibTest is Test {
     function test_regulatedFlags_notBuiltOnPublicKinds_invalidOnConfidential() public {
         for (uint8 b = 5; b < 9; ++b) {
             vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotBuilt.selector, b));
-            h.init(AdminLib.KIND_NONE, 1 << b, 0, address(0), none);
+            h.init(AdminLib.KIND_NORMAL, 1 << b, 0, address(0), none);
             vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotBuilt.selector, b));
-            h.init(AdminLib.KIND_UNDERLYING, 1 << b, 0, address(0), none);
+            h.init(AdminLib.KIND_WRAPPED, 1 << b, 0, address(0), none);
             vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, b));
-            h.init(AdminLib.KIND_NONE_ZETHER, 1 << b, 0, address(0), none);
+            h.init(AdminLib.KIND_NORMAL_ZETHER, 1 << b, 0, address(0), none);
             vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, b));
-            h.init(AdminLib.KIND_UNDERLYING_ZETHER, 1 << b, 0, address(0), none);
+            h.init(AdminLib.KIND_WRAPPED_ZETHER, 1 << b, 0, address(0), none);
         }
     }
 
     function test_unknownBitsAndKinds_refused() public {
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, uint8(9)));
-        h.init(AdminLib.KIND_NONE, 1 << 9, 0, address(0), none);
+        h.init(AdminLib.KIND_NORMAL, 1 << 9, 0, address(0), none);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, uint8(0)));
         h.init(6, PAYABLE, 0, address(0), none); // reserved *_ZETHER_PQZ kinds: nothing valid (P6g built 4, 5)
     }
 
     function test_lockedMustBeSubset_payableBurnableAlwaysLocked() public {
         vm.expectRevert(ITokenAdmin.LockedNotSubset.selector);
-        h.init(AdminLib.KIND_NONE, MINTABLE, BURNABLE, address(0), none);
-        h.init(AdminLib.KIND_NONE, PAYABLE | MINTABLE | BURNABLE, 0, address(0), none);
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, BURNABLE, address(0), none);
+        h.init(AdminLib.KIND_NORMAL, PAYABLE | MINTABLE | BURNABLE, 0, address(0), none);
         assertEq(h.lockedFeatures(), PAYABLE | BURNABLE);
     }
 
     function test_initialRoles_onlyForSetFlags() public {
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.RoleWithoutFeature.selector, uint8(1)));
-        h.init(AdminLib.KIND_NONE, BURNABLE, 0, address(0), _roles(minter));
+        h.init(AdminLib.KIND_NORMAL, BURNABLE, 0, address(0), _roles(minter));
         AdminLib.Roles memory r;
         r.issuer = address(1);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.RoleWithoutFeature.selector, uint8(5)));
-        h.init(AdminLib.KIND_NONE, 0, 0, address(0), r);
+        h.init(AdminLib.KIND_NORMAL, 0, 0, address(0), r);
         r.issuer = address(0);
         r.compliance = address(1);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.RoleWithoutFeature.selector, uint8(8)));
-        h.init(AdminLib.KIND_NONE, 0, 0, address(0), r);
+        h.init(AdminLib.KIND_NORMAL, 0, 0, address(0), r);
     }
 
     function test_rateAdminMustBeAContract() public {
         AdminLib.Roles memory r;
         r.rateAdmin = address(0xEE);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.RoleNotContract.selector, uint8(3), address(0xEE)));
-        h.init(AdminLib.KIND_UNDERLYING, RATE, 0, address(0), r);
+        h.init(AdminLib.KIND_WRAPPED, RATE, 0, address(0), r);
         r.rateAdmin = address(new Puller());
-        h.init(AdminLib.KIND_UNDERLYING, RATE, 0, address(0), r);
+        h.init(AdminLib.KIND_WRAPPED, RATE, 0, address(0), r);
         assertTrue(h.hasRole(3, r.rateAdmin));
     }
 
@@ -113,7 +113,7 @@ contract AdminLibTest is Test {
         emit ITokenAdmin.RoleGranted(1, minter, address(0));
         vm.expectEmit(address(h));
         emit ITokenAdmin.OwnershipTransferred(address(0), ownerA);
-        h.init(AdminLib.KIND_NONE, MINTABLE, 0, ownerA, _roles(minter));
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, 0, ownerA, _roles(minter));
         assertEq(h.owner(), ownerA);
         assertTrue(h.hasRole(1, minter));
     }
@@ -121,7 +121,7 @@ contract AdminLibTest is Test {
     // ------------------------------------------------------------------ owner powers
 
     function test_grantRevokeRenounce() public {
-        h.init(AdminLib.KIND_NONE, MINTABLE, 0, ownerA, none);
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, 0, ownerA, none);
         vm.prank(minter);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.NotOwner.selector, minter));
         h.grantRole(1, minter);
@@ -146,7 +146,7 @@ contract AdminLibTest is Test {
     }
 
     function test_grant_onlyARoleOfASetFlag() public {
-        h.init(AdminLib.KIND_NONE, PAYABLE | BURNABLE, 0, ownerA, none);
+        h.init(AdminLib.KIND_NORMAL, PAYABLE | BURNABLE, 0, ownerA, none);
         vm.startPrank(ownerA);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.NoSuchRole.selector, uint8(0)));
         h.grantRole(0, minter);
@@ -158,7 +158,7 @@ contract AdminLibTest is Test {
     }
 
     function test_disableFeature_alwaysLockedEvenWhenNeverSet() public {
-        h.init(AdminLib.KIND_NONE, 0, 0, ownerA, _roles(address(0)));
+        h.init(AdminLib.KIND_NORMAL, 0, 0, ownerA, _roles(address(0)));
         vm.startPrank(ownerA);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureLocked.selector, uint8(0)));
         h.disableFeature(0);
@@ -168,7 +168,7 @@ contract AdminLibTest is Test {
     }
 
     function test_disableFeature_oneWay_lockedRefused() public {
-        h.init(AdminLib.KIND_NONE, PAYABLE | MINTABLE | BURNABLE, 0, ownerA, _roles(minter));
+        h.init(AdminLib.KIND_NORMAL, PAYABLE | MINTABLE | BURNABLE, 0, ownerA, _roles(minter));
         vm.startPrank(ownerA);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureLocked.selector, uint8(0)));
         h.disableFeature(0);
@@ -188,14 +188,14 @@ contract AdminLibTest is Test {
     }
 
     function test_lockedFlagCannotBeDisabled() public {
-        h.init(AdminLib.KIND_NONE, MINTABLE, MINTABLE, ownerA, none);
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, MINTABLE, ownerA, none);
         vm.prank(ownerA);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureLocked.selector, uint8(1)));
         h.disableFeature(1);
     }
 
     function test_twoStepTransferAndRenounce_rolesSurvive() public {
-        h.init(AdminLib.KIND_NONE, MINTABLE, 0, ownerA, _roles(minter));
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, 0, ownerA, _roles(minter));
         vm.prank(ownerA);
         vm.expectEmit(address(h));
         emit ITokenAdmin.OwnershipTransferStarted(ownerA, ownerB);
@@ -220,7 +220,7 @@ contract AdminLibTest is Test {
     }
 
     function test_noOwnerMeansNoAdministration() public {
-        h.init(AdminLib.KIND_NONE, MINTABLE, 0, address(0), _roles(minter));
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, 0, address(0), _roles(minter));
         vm.prank(address(0));
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.NotOwner.selector, address(0)));
         h.disableFeature(1);
@@ -233,7 +233,7 @@ contract AdminLibTest is Test {
 
     function test_zeroAccountRoleRefused() public {
         // init skips a zero role holder (0 = none), so only `grantRole` can reach the check
-        h.init(AdminLib.KIND_NONE, MINTABLE, 0, ownerA, none);
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, 0, ownerA, none);
         vm.prank(ownerA);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.RoleAccountZero.selector, uint8(1)));
         h.grantRole(1, address(0));
@@ -243,7 +243,7 @@ contract AdminLibTest is Test {
     }
 
     function test_nonOwnerCannotAdminister() public {
-        h.init(AdminLib.KIND_NONE, MINTABLE, 0, ownerA, _roles(minter));
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, 0, ownerA, _roles(minter));
         address eve = address(0xE5);
         vm.startPrank(eve);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.NotOwner.selector, eve));
@@ -258,7 +258,7 @@ contract AdminLibTest is Test {
     }
 
     function test_renounceClearsPendingOwner() public {
-        h.init(AdminLib.KIND_NONE, MINTABLE, 0, ownerA, none);
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, 0, ownerA, none);
         vm.startPrank(ownerA);
         h.transferOwnership(ownerB);
         h.renounceOwnership();
@@ -269,7 +269,7 @@ contract AdminLibTest is Test {
     }
 
     function test_oldOwnerLosesPowerAfterTransfer() public {
-        h.init(AdminLib.KIND_NONE, MINTABLE, 0, ownerA, none);
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, 0, ownerA, none);
         vm.prank(ownerA);
         h.transferOwnership(ownerB);
         vm.prank(ownerB);
@@ -280,7 +280,7 @@ contract AdminLibTest is Test {
     }
 
     function test_transferToZeroCannotBeAccepted() public {
-        h.init(AdminLib.KIND_NONE, MINTABLE, 0, ownerA, none);
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, 0, ownerA, none);
         vm.prank(ownerA);
         h.transferOwnership(address(0));
         vm.prank(address(0));
@@ -289,7 +289,7 @@ contract AdminLibTest is Test {
     }
 
     function test_ownerGrantRateAdminToEoaRefused() public {
-        h.init(AdminLib.KIND_UNDERLYING, RATE, 0, ownerA, none);
+        h.init(AdminLib.KIND_WRAPPED, RATE, 0, ownerA, none);
         address eoa = address(0xEE);
         vm.prank(ownerA);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.RoleNotContract.selector, uint8(3), eoa));

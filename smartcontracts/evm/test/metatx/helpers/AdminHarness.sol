@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {AdminLib} from "../../../src/metatx/AdminLib.sol";
 
-/// Exposes `AdminLib` on its own storage, for every kind (the built tokens use NONE and, transitionally, UNDERLYING).
+/// Exposes `AdminLib` on its own storage, for every kind (the built tokens use NORMAL and, transitionally, WRAPPED).
 contract AdminHarness {
     function init(uint8 kind, uint256 features_, uint256 locked, address owner_, AdminLib.Roles memory roles) external {
         AdminLib.init(kind, features_, locked, owner_, roles);

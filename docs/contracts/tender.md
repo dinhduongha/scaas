@@ -102,7 +102,7 @@ discretion. A tender that wants no discretion sets `dqWindow = 0`.
 
 <a id="deposit-token"></a>
 <a id="CTR-TND-07"></a>**CTR-TND-07** — **Deposit token** = a token deployed by the chain's one `OpenFactory`
-([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) as kind `NONE` or `UNDERLYING` (regulated = flags 5–8)
+([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) as kind `NORMAL` or `WRAPPED` (regulated = flags 5–8)
 through a **registered, non-deprecated** implementation (unregistered clones have version 0 ⇒
 `implementationOf == 0` ⇒ refused; Zether kinds refused), checked at `createTender`. `versionOf` is decoded with the
 factory's one `TokenKind` enum. **Transitional (BUILT):** two factories exist (`OpenFactory` and the v1 `OpenFactoryV1` with kind `META`, with enums that
@@ -318,7 +318,7 @@ uint256 nextTenderId;                   // starts at 1
 ```
 
 No bidder list: clients enumerate bids from `BidCommitted` events. `createTender` checks (`BadConfig`): deposit token
-acceptance (`isToken`, `versionOf`, `implementationOf ≠ 0`, `!isDeprecated`, kind `NONE` or `UNDERLYING`); `minDeposit > 0`; `now < commitDeadline ≤ now + 365 d`; reveal window in `[1 h, 30 d]`; `maxPrice == 0 ∨
+acceptance (`isToken`, `versionOf`, `implementationOf ≠ 0`, `!isDeprecated`, kind `NORMAL` or `WRAPPED`); `minDeposit > 0`; `now < commitDeadline ≤ now + 365 d`; reveal window in `[1 h, 30 d]`; `maxPrice == 0 ∨
 minPrice ≤ maxPrice`; `minBidders ≥ 1`; HOLD ⇒ `revealDeadline < bondReleaseTime ≤ revealDeadline + 730 d`, RETURN ⇒
 `bondReleaseTime == 0`; `slashSink ∉ {0, this}`; `dqWindow ≤ 7 d`, `maxDisqualifications ≤ 2`, `dqWindow == 0 ⇒
 maxDisqualifications == 0 ∧ forfeitClasses == 0`.

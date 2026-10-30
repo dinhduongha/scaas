@@ -19,7 +19,7 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 | [mandates.md](mandates.md) | `MandateWallet`: delegated, capped payment from the payer's own wallet; auto-pay client integration | **BUILT**; revocation epoch **SPECIFIED** |
 | [settlement.md](settlement.md) | map of every settlement kind: entry points, who checks what, fees, finality (adds no rules) | overview |
 
-<p align="center"><img src="../assets/token-axes.svg" width="860" alt="Token model on two axes. Kind = confidential layer: NONE and UNDERLYING (plain, built in P1), NONE_ZETHER and UNDERLYING_ZETHER (built in P3, unaudited, dev chains only), NONE_PQZ and UNDERLYING_PQZ (built on the private chains, unaudited); the combined kinds NONE_ZETHER_PQZ and UNDERLYING_ZETHER_PQZ were dropped on 2026-10-20. Who signs = the account: an EOA (ECDSA, built), a SmartKeyAccount (ERC-1271, built) or a Universal Account with a PQ key mldsa44, mldsa65 or fndsa512 through the UA ledger in the token base (specified, not built); every kind accepts the same intents from each."></p>
+<p align="center"><img src="../assets/token-axes.svg" width="860" alt="Token model on two axes. Kind = confidential layer: NORMAL and WRAPPED (plain, built in P1), NORMAL_ZETHER and WRAPPED_ZETHER (built in P3, unaudited, dev chains only), NORMAL_PQZ and WRAPPED_PQZ (built on the private chains, unaudited); the combined kinds NORMAL_ZETHER_PQZ and WRAPPED_ZETHER_PQZ were dropped on 2026-10-20. Who signs = the account: an EOA (ECDSA, built), a SmartKeyAccount (ERC-1271, built) or a Universal Account with a PQ key mldsa44, mldsa65 or fndsa512 through the UA ledger in the token base (specified, not built); every kind accepts the same intents from each."></p>
 
 How the families relate:
 
@@ -72,7 +72,7 @@ the implementation's immutables). `chain_uid` is the chain's genesis block hash 
 
 | Contract | Source of `chain_uid` |
 |---|---|
-| token implementations (`NoUnderlyingToken`, `UnderlyingToken`, `NoUnderlyingZetherToken`, `UnderlyingZetherToken`) | constructor immutable of the **implementation**; a clone runs its code by `DELEGATECALL`, so it uses the value with no storage and no `initialize` argument and cannot declare another one |
+| token implementations (`NormalToken`, `WrappedToken`, `NormalZetherToken`, `WrappedZetherToken`) | constructor immutable of the **implementation**; a clone runs its code by `DELEGATECALL`, so it uses the value with no storage and no `initialize` argument and cannot declare another one |
 | `OpenFactory` | constructor immutable; an env must carry it, and `deployImplementation` refuses a release whose `chainUid()` differs ([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) |
 | `SmartKeyAccount` | the factory's constructor argument, passed to `new SmartKeyAccount(chainUid)` |
 | `MandateWallet`, `HederaMandateWallet` | constructor argument from the chain profile; the node checks it before relaying for that wallet |
@@ -166,7 +166,7 @@ power.
 | Any token (EVM) | the `owner` (optional; 0 = none) | `grantRole` / `revokeRole` for the roles of set flags, `disableFeature(bit)` one-way on a flag not locked at creation, two-step `transferOwnership`, `renounceOwnership` (role holders keep their roles); no power touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22) |
 | Any token (EVM), role holders | the holders of `minter`, `rateAdmin` (has code), `guardian`, `issuer`, `compliance` (the role column of the flag table; several holders allowed, may `renounceRole`) | the power of the flag only (mint to a public balance, a bounded timelocked rate change, `disableWrap`, freeze / forced transfer against a recorded order / bounded pause / allowlist); none touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22), [CTR-TOK-06](token-wrappers.md#CTR-TOK-06), [CTR-TOK-07](token-wrappers.md#CTR-TOK-07) |
 | `SCaaSDex` | `admin` set once at creation ([CTR-DEX-24](dex.md#CTR-DEX-24); built: written once by `initialize`; `SCaaSDexV1`: immutable) (a multisig in production; the venue operator's multisig for a managed market) | `setMarket` (list or delist a pair), `setFeeSplit` (relayer share and treasury of the signed fee; never the amount), `setExchangeTarget` (list or delist an exchange target or executor), `setListedOnly` (DEX-wide listed-only mode for the exchange path); none touches funds | [CTR-DEX-03](dex.md#CTR-DEX-03), [CTR-DEX-23](dex.md#CTR-DEX-23) |
-| `NONE_ZETHER` / `UNDERLYING_ZETHER` | the token `owner` and role holders per kind and flags ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); the auditor key is immutable (built, P3: set once by `initialize`; the old `ZetherToken` is in `legacy/p3/`) | as the flags — nothing touches a reserve or a shielded balance | [CTR-ZTH-09](zether.md#CTR-ZTH-09) |
+| `NORMAL_ZETHER` / `WRAPPED_ZETHER` | the token `owner` and role holders per kind and flags ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); the auditor key is immutable (built, P3: set once by `initialize`; the old `ZetherToken` is in `legacy/p3/`) | as the flags — nothing touches a reserve or a shielded balance | [CTR-ZTH-09](zether.md#CTR-ZTH-09) |
 | `SealedBidTender`, `VestingGrant`, `Distribution`, `ExchangeOffer`, `UARegistry` | none | — | per file |
 | Non-EVM tier-1 tokens: Soroban `scaas-token`, GRAM `ScaasJettonMaster`, CosmWasm CW20 | Soroban and GRAM `admin`, CW20 `minter` (optional) | `mint` / `Mint`, unlimited on that token (a supply power, not a balance power) | [soroban](../networks/soroban.md#contracts), [ton](../networks/ton.md#overview), [cosmos](../networks/cosmos.md#contracts) |
 | Soroban `scaas-dex` | `admin` | `set_market` (per-pair fees ≤ 1 %, on/off) | [soroban](../networks/soroban.md#dex) |
@@ -228,14 +228,14 @@ It writes
 owner/admin is a Safe from the first block, and deployer keys come from a hardware wallet or KMS. **Transitional
 (BUILT, P1e):** every contract is deployed by `new X{salt: DEPLOY_SALT}` through forge's deterministic deployer (default
 salt `keccak256("scaas.deploy.v1")`; a re-run on the same chain collides, so a new version needs a new salt), the script
-stops without the deployer and checks `chainUid()` of the token factory, of the `NONE` implementation and of the `SCaaSDex` implementation against `chain_uid` (the v1 contracts have no
+stops without the deployer and checks `chainUid()` of the token factory, of the `NORMAL` implementation and of the `SCaaSDex` implementation against `chain_uid` (the v1 contracts have no
 `chainUid()`; controller ruling, pending the owner). `CHAIN_UID`, when set, must equal the RPC's block 0 hash (read at any head
 by rolling to block 1), else the script stops; unset it defaults to that hash.
 
-The script creates `deployments/` itself. It deploys `OpenFactory` with `NoUnderlyingToken` as version 1 of `NONE` (`UnderlyingToken` is over
+The script creates `deployments/` itself. It deploys `OpenFactory` with `NormalToken` as version 1 of `NORMAL` (`WrappedToken` is over
 EIP-170 and waits for the size work) and, for the node until P5, the v1 line: `OpenFactoryV1` with `MetaToken` (version 1
 of `META`, when the registrar is the deployer), `MetaTxDex` and `SCaaSDexV1`, plus `SmartKeyAccountFactory`. The JSON gains
-`token_factory`, `implementation_none`, `dex_implementation` (the `SCaaSDex` implementation) and `chain_uid`. `forge script … --broadcast` needs `--sender <deployer address>`; `DEPLOY_SALT` is optional.
+`token_factory`, `implementation_normal`, `dex_implementation` (the `SCaaSDex` implementation) and `chain_uid`. `forge script … --broadcast` needs `--sender <deployer address>`; `DEPLOY_SALT` is optional.
 
 <a id="CTR-GEN-06"></a>**CTR-GEN-06** — **Every SCaaS EVM contract is deployed through a deterministic CREATE2
 deployer with a fixed salt** (owner): implementations, factories, registries and the DEX, instead of `new` (CREATE,
@@ -246,7 +246,7 @@ user's `SmartKeyAccount` (the node and app predict it per chain). A contract wit
 argument gets the **same address on every chain**. Safety never rests on the address: the salt is in every digest
 ([CTR-GEN-05](#CTR-GEN-05)).
 
-**Transitional (BUILT, P1e).** Linked libraries (`AdminLib`, `HederaLib`, `UnderlyingLib`) are still placed by forge from
+**Transitional (BUILT, P1e).** Linked libraries (`AdminLib`, `HederaLib`, `WrappedLib`) are still placed by forge from
 the sender's nonce, not by CREATE2 (controller ruling, pending the owner), so their addresses differ per deployer.
 
 <a id="CTR-GEN-03"></a>**CTR-GEN-03** — On-chain code lives in its own tree at the repository root, one directory

@@ -21,7 +21,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 | Phase | Content | Streams |
 |---|---|---|
 | P0 | Spec and fold into the component docs and `decisions.md` | done |
-| P1 | The complete base on the new tree: `MetaTxBase`, `ERC20MetaTx`, `MetaTokenBase`; both structs, allowlist, ticket; approve rule; `salt = chain_uid`; CREATE2 deployer; kinds `NONE`, `UNDERLYING`; factory `createToken`; the v1/v2 lines to the backup (v2 done in P1e, v1 renamed `…V1` until P3/P5) | MT-1, MT-2, MT-3, MT-4 |
+| P1 | The complete base on the new tree: `MetaTxBase`, `ERC20MetaTx`, `MetaTokenBase`; both structs, allowlist, ticket; approve rule; `salt = chain_uid`; CREATE2 deployer; kinds `NORMAL`, `WRAPPED`; factory `createToken`; the v1/v2 lines to the backup (v2 done in P1e, v1 renamed `…V1` until P3/P5) | MT-1, MT-2, MT-3, MT-4 |
 | P2 | **P2a** `TradeLib` token side + `mtxWrap` (done, merged `6a5c6b0`); **P2b-1** `SCaaSDex` as a clone, `createDex`, DEX registry, `mtxSettle` for SCaaS legs (done, merged `0510c7d`; old `SCaaSDex` kept as `SCaaSDexV1` for the node until P5); **P2b-2** outside legs (`DexOrder`, `DexPuller`, DEX-side cancels, ERC-1271 cap, bounded `MatchFailed`) (done, merged `7049c78`; `checkOrder` not built, H7); **P2c** exchange path `mtxExchange`/`mtxExchangeVia`, `setExchangeTarget`, `setListedOnly` (done, merged `d85fc8b`) | MT-5 |
 | P3 | `*_ZETHER` kinds: `ZetherLayer`, `ZetherLib`, `ZetherStatements`, shield / unshield paths; `ZetherToken` to `legacy/p3/` (owner: backup, not delete) (done, merged `dc9d219`; P3b modes done) | MT-6 |
 | P4 | `MandateWallet`, `SmartKeyAccount` (rename: EVM, Solana, Soroban) on `MetaTxBase`; the typed-struct line to `legacy/p4/` (done, merged `ebacaac`) | MT-7 (+ rename in NM-*) |
@@ -77,21 +77,21 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 - [x] Keep the old code for reference: git tag `ref/pre-token-tree` on the last commit before P1, and copy the v1/v2 token
       sources and the old `ZetherToken` to `smartcontracts/evm/legacy/` (not built, not tested; a README says "reference only").
 - [ ] P1 refactors in place (`git mv` + edit), not a rewrite. Reuse map: `MetaTxCore` → `MetaTxBase`/`ERC20MetaTx`;
-      `MetaTokenBase` pay → `PayLib` (not built: pay is inline behind `PAYABLE`, controller ruling pending the owner); `Single`+`Multi` → `UnderlyingLib`/`UnderlyingToken`; `HederaV2Lib` → `HederaLib`;
+      `MetaTokenBase` pay → `PayLib` (not built: pay is inline behind `PAYABLE`, controller ruling pending the owner); `Single`+`Multi` → `WrappedLib`/`WrappedToken`; `HederaV2Lib` → `HederaLib`;
       `ZetherToken` → `ZetherLib`/`ZetherLayer` (P3); tests ported. `TradeLib` (P2) reuses the owner's prototype
       `/home/ha/work/blockchain/metatx/contracts` (`MtxTradeOrderLib`, `ERC1776Tradeable.mtxTradeOrder`,
       `ERC1776Dex.mtxTrade`) and the `OP_TRADE` legs of `MetaToken`/`MetaTokenBase`/`MetaTxDex` (the v1 ones are in `legacy/p5/`).
 
 **P1 — MT-1…MT-4**
-- P1 is split into five plans, written one at a time: **P1a** (MetaTxBase, SigCheck, SaltedEIP712, tag + legacy) — **done 2026-10-09**, merged `1d51d22` (712 tests); plan `docs/superpowers/plans/2026-10-09-p1a-metatxbase.md`; **P1b** ERC20MetaTx — **done 2026-10-10** merged `fb2a234` (758 tests); **P1c** MetaTokenBase + AdminLib/HederaLib + kind NONE (no `PayLib`, C3) — **done 2026-10-10**, merged `3a43c2e` (792 tests); **P1d** UnderlyingLib + UnderlyingToken (1–8 legs, native leg, roles) — **done 2026-10-11**, merged `d03d894` (814 tests, e2e 4/4 + e2e_hedera 1/1); plan `docs/superpowers/plans/2026-10-11-p1d-underlyingtoken.md`; **P1e** `OpenFactory` (`createToken`/`TokenConfig`), CREATE2 deployer + `chainUid()` gate, size gate (ratchet), v1 renamed `…V1`, factory v2 backed up — **done 2026-10-11**, merged `e433bf5` (819 tests, e2e 4/4 + e2e_hedera 1/1); plan `docs/superpowers/plans/2026-10-11-p1e-openfactory.md`. P1 is complete except the partial item MT-4 (other domains) and the parked items below (MT-1/MT-3's v1 part closed in P5: the v1 line is in `legacy/p5/`).
+- P1 is split into five plans, written one at a time: **P1a** (MetaTxBase, SigCheck, SaltedEIP712, tag + legacy) — **done 2026-10-09**, merged `1d51d22` (712 tests); plan `docs/superpowers/plans/2026-10-09-p1a-metatxbase.md`; **P1b** ERC20MetaTx — **done 2026-10-10** merged `fb2a234` (758 tests); **P1c** MetaTokenBase + AdminLib/HederaLib + kind NORMAL (no `PayLib`, C3) — **done 2026-10-10**, merged `3a43c2e` (792 tests); **P1d** WrappedLib + WrappedToken (1–8 legs, native leg, roles) — **done 2026-10-11**, merged `d03d894` (814 tests, e2e 4/4 + e2e_hedera 1/1); plan `docs/superpowers/plans/2026-10-11-p1d-underlyingtoken.md`; **P1e** `OpenFactory` (`createToken`/`TokenConfig`), CREATE2 deployer + `chainUid()` gate, size gate (ratchet), v1 renamed `…V1`, factory v2 backed up — **done 2026-10-11**, merged `e433bf5` (819 tests, e2e 4/4 + e2e_hedera 1/1); plan `docs/superpowers/plans/2026-10-11-p1e-openfactory.md`. P1 is complete except the partial item MT-4 (other domains) and the parked items below (MT-1/MT-3's v1 part closed in P5: the v1 line is in `legacy/p5/`).
 - Asset-suite wording follow-up (P1c final re-review): `asset-suite.md` ~791/793/794/854/906 still say "minter renounced" as the precondition for bond redemption and splits; since P1c the rule is "`MINTABLE` disabled (`disableFeature`)" — `renounceRole` alone leaves the flag set and still yields `MinterLive` (fails closed). Reword when the asset-suite stream starts.
 - P1b notes (2026-10-10: all done in P1b except (c), done in P5 (the node's ERC-1271 gas floor 432,349), and (g), deliberately not done; (d) done on bamboo-dms branch `scaas-metatx-v1-kat`, owner merges): (a) `MetaTxBase` alone is ≈ 9.4 KB on the mock — watch the 20,480 B token budget; (b) pin 'every allowlisted function is nonReentrant' without the mock's `poke` forwarder — resolved in P1a final review: `_selfCall` requires ticket 2; (c) relayer gas estimate for SubjectAccount/SmartKeyAccount signers must cover 400k·64/63 + 5k for the ERC-1271 call (P5 node); (d) bamboo-dms `dms_blockchain/tests/test_eip712.py:14` must be repointed to `metatx_v1_kat.json` (other repo; P5 moved it to `legacy/p5/test/vectors/`, see the bamboo-dms item under P5). (e) `ERC20MetaTx` (git mv of `MetaTxCore`) sits on `MetaTxBase`: drop `MetaTxCore`'s own `nonReentrant` and `_metaNonce`, declare `_msgSender() override(Context, MetaTxBase)`, `MetaTransfer` path uses `_checkEnvelope` + `_useNonce` (watch the order of the three adjacent uint256 args `batch, nonce, validUntil`); (f) each token re-pins `mtxSelectors()` == `_mtxRule`, and keeps the "no `mtx…` in the allowlist" test; (g) optional: fee checks before the call (`_checkFee` in step 3) so a doomed tx is cheap; a dedicated error for an unguarded allowlisted target (today `Reentrancy()`); (h) `eip712Domain` drop `virtual`; v1 KAT writer `MetaTxKat.t.sol` (now `legacy/p5/test/`) gets the `WRITE_KAT` guard.
 - P1c notes (from the P1b reviews, 2026-10-10): (a) the typed path's "cannot fail after step 3" and `mtxPayReceiverFee` step 5 hold only while `_update` refuses nothing beyond `to == this`: any P1c pause/freeze/feature refusal added to `_update` must be mirrored in `_checkTransfer` (and checked before the receiver-fee transfer); (b) `_chargeFee` re-derives the fee class from `_mtxRule`, so rules must stay constant per selector (hardened in P1b: an ABSOLUTE+FIXED fee is taken as is); (c) Multi `_mtxRule` falls back to `MetaTxBase._mtxRule`, so rules P1c adds in `ERC20MetaTx`/`MetaTokenBase` are dropped on Multi (moot after P1d; otherwise switch it to `MetaTokenBase._mtxRule`); (d) `HederaAccountAuth.sol:29` `asView` safety comment names `executeMetaTransaction` as the sole call site: there are now many non-view call sites (all `nonReentrant`, non-static frames), still safe; repoint the comment in P1c (HederaLib); (e) deferred test gaps still open: Task 3 — `FeePolicy.validateRecipient` is unreachable on both paths (the resolved recipient is never 0; delete or pin), no success-path test of a relayer-filled third-party `feeRecipient` on the typed path (only the `== to` refusal, `test/v2/Base.t.sol`); Task 4 — unwrap: no raw `ERC20InsufficientBalance`-from-`_burn` case when the reserve suffices, no dirty-address-word case; Task 5 — no SmartKeyAccount-clone (400k) payee test, no single-field tamper tests (`fee`/`feeRecipient`/`rfValidUntil`), no invalid-fee-nibble shape case, no RP4 assertions after a failed co-signature. Task 6's gaps were closed in the P1b final fix wave.
-- P1c notes dispositions (2026-10-10): (a) no `_update` refusal was added in P1c (flags 5–8 are refused at init, C2): carry to the asset-suite stream; (b) unchanged; (c) done in P1d (`UnderlyingToken._mtxRule` falls back to `super._mtxRule`); (d) done (`HederaLib`, `asView` comment repointed); (e) open test gaps stay as listed.
+- P1c notes dispositions (2026-10-10): (a) no `_update` refusal was added in P1c (flags 5–8 are refused at init, C2): carry to the asset-suite stream; (b) unchanged; (c) done in P1d (`WrappedToken._mtxRule` falls back to `super._mtxRule`); (d) done (`HederaLib`, `asView` comment repointed); (e) open test gaps stay as listed.
 - Asset-suite stream, from the P1c final review (C2): issuer and compliance must be contract-only when flags 5–8 are built; roles are keyed by flag bit and `_grant` requires the role's own bit, which cannot express FORCE = issuer + compliance or one issuer shared by FREEZE/FORCE/PAUSE, so the stream must key roles by role id (issuer, compliance) or map bits; and any `_update` refusal (freeze/pause/allowlist) must be mirrored in `_checkTransfer` and before the receiver-fee transfer.
 - [~] **MT-1** (built through P1e: kinds on `TokenConfig`, `OpenFactory.createToken`; the v1 line moved to `smartcontracts/evm/legacy/p5/` in P5; owner: backup, not delete) Two bases: generic `MetaTxBase` (any SCaaS contract; `_chargeFee` refuses all but `NONE`, CTR-MTX-22) and
-      the token base `ERC20MetaTx is MetaTxBase` (absorbs `MetaTxCore`) with `MetaTokenBase` on top; kinds `NONE` and
-      `UNDERLYING` (the native-coin leg, CTR-TOK-26) with `AdminLib`, `UnderlyingLib`, `HederaLib`, `SigCheck` (CTR-TOK-21…24); factory
+      the token base `ERC20MetaTx is MetaTxBase` (absorbs `MetaTxCore`) with `MetaTokenBase` on top; kinds `NORMAL` and
+      `WRAPPED` (the native-coin leg, CTR-TOK-26) with `AdminLib`, `WrappedLib`, `HederaLib`, `SigCheck` (CTR-TOK-21…24); factory
       `createToken` (CTR-TOK-25). Back up what token-tree spec §8 deletes (the v1 names are in `legacy/p5/`): `ERC20MetaTx`(v1), `MetaToken`, `HederaMetaToken`,
       v1 `OpenFactory`, `MetaTxDex`, `MetaTxCore`, `Single`/`MultiUnderlyingToken` (merged), the `Hedera*UnderlyingToken`
       children, `SigLib`, `OpenFactoryV2.createMetaToken` (gone with factory v2, P1e), the regulated children (flags instead, CTR-AS-17).
@@ -102,22 +102,22 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
       all-or-nothing; `_msgSender()` everywhere per the `msg.sender` inventory; lint/test that no token reads
       `msg.sender` directly except the allowed spots; UA path split into `UAMetaTransaction`/`UAMetaTransfer` +
       `uaExecuteTransfer`/`uaBatchTransfer` (CTR-UA-26); KATs `metatx_kat.json`, `metatransfer_kat.json`, v3 pair.
-- [x] **MT-3** `approve` only by contracts (caller and spender) — built in P1b on the v2 line; the v1 line left the build in P5 (`legacy/p5/`); `mtxWrap` for a SCaaS underlying done in P2a (UnderlyingToken), inherited by `UnderlyingZetherToken` (P3); the approve rule holds on both Zether kinds (tested in P3).
+- [x] **MT-3** `approve` only by contracts (caller and spender) — built in P1b on the v2 line; the v1 line left the build in P5 (`legacy/p5/`); `mtxWrap` for a SCaaS underlying done in P2a (WrappedToken), inherited by `WrappedZetherToken` (P3); the approve rule holds on both Zether kinds (tested in P3).
 - [~] **MT-4** (built in P1e for tokens and the token factory: both deploy scripts on CREATE2, gate on `chainUid()`; open for the UA registry, UA F1; Zether digests done in P3, SmartKeyAccount and MandateWallet in P4) `salt = chain_uid` in every domain (implementation immutables; SmartKeyAccount, MandateWallet, SCaaSDex,
       UA registry, Zether digests); deploy scripts on a CREATE2 deployer; deploy gate checks `chainUid()`.
 
 - UA ledger split (CTR-UA-26: `UAMetaTransaction`/`UAMetaTransfer`, `uaExecuteTransfer`/`uaBatchTransfer`) moved from P1b to UA F1 (R4).
-- P1e sizes: `UnderlyingToken` 26,449 B is over EIP-170 (24,576) until the size work (owner: optimise later; baseline in `size-baseline.json`); `UnderlyingLib` 10,096 B; `NoUnderlyingToken` 20,196 B; `OpenFactory` 6,715 B; the deploy scripts deploy only `NONE` for the new factory.
+- P1e sizes: `WrappedToken` 26,449 B is over EIP-170 (24,576) until the size work (owner: optimise later; baseline in `size-baseline.json`); `WrappedLib` 10,096 B; `NormalToken` 20,196 B; `OpenFactory` 6,715 B; the deploy scripts deploy only `NORMAL` for the new factory.
 - P1d follow-ups (parked test gaps, not fixed): no `mtxExecute(single-asset selector)` on a two-leg token test; native `UnderlyingTransferMismatch` untested; `addReserve` with native `msg.value > amount` untested; guardian revoke untested (these stay parked; the dead `META_MULTI` count branch is gone with factory v2: done in P1e).
-- P1d follow-ups (final review): (a) the native leg is absent from the `WrapperInvariant` handler: add a 4th leg (native, with a `vm.deal` forced coin) and a §12 conformance row for CTR-TOK-26; (b) the deploy scripts must deploy `UnderlyingToken` (it links `UnderlyingLib` and `AdminLib`) once it fits EIP-170.
+- P1d follow-ups (final review): (a) the native leg is absent from the `WrapperInvariant` handler: add a 4th leg (native, with a `vm.deal` forced coin) and a §12 conformance row for CTR-TOK-26; (b) the deploy scripts must deploy `WrappedToken` (it links `WrappedLib` and `AdminLib`) once it fits EIP-170.
 - P1e follow-ups (parked): (a) the size ratchet does not tighten itself: when a baselined contract shrinks, lower its entry in `smartcontracts/evm/size-baseline.json` by hand (the gate only notes an entry that now fits); (b) `smartcontracts/scripts/deploy.sh` requires `PRIVATE_KEY` (it derives `--sender` from it), so a KMS or hardware-wallet deployer needs a script change; (c) done in P3: kinds 2 and 3 are built, their creation passes the Zether gate; only the PQZ kinds 4–7 are `KindReserved`; (d) integrators: the factory's underlying index is only as truthful as the implementation, trust it for registered versions (`versionOf(token).version != 0`); `createTokenUnregistered` records version 0; (e) libraries stay placed by forge from the sender's nonce, not by CREATE2 (E7); (f) the P1d parked test gaps above stay.
 
 **P2 — MT-5**
-- P2a (done, merged `6a5c6b0`): `TradeLib` (`scaas.trade`) and the trade entries on every token, `mtxWrap` + `NativeNotGasless` on `UnderlyingToken` (D1 closed; a native wrap by `mtxExecute(wrap(…))` still reverts `NativeValueMismatch(0, amount)`); 855 tests. Plan `docs/superpowers/plans/2026-10-11-p2a-trade-token-side.md`. Open for P2b/P2c: the DEX side below. **F4 (owner): `NoUnderlyingToken` is 22,951 B, over its 20,480 B budget (ratchet baseline), `UnderlyingToken` 29,974 B: owner — code size is not a concern, the product waits for the Glamsterdam fork (larger code limit); the ratchet baseline records sizes.**
+- P2a (done, merged `6a5c6b0`): `TradeLib` (`scaas.trade`) and the trade entries on every token, `mtxWrap` + `NativeNotGasless` on `WrappedToken` (D1 closed; a native wrap by `mtxExecute(wrap(…))` still reverts `NativeValueMismatch(0, amount)`); 855 tests. Plan `docs/superpowers/plans/2026-10-11-p2a-trade-token-side.md`. Open for P2b/P2c: the DEX side below. **F4 (owner): `NormalToken` is 22,951 B, over its 20,480 B budget (ratchet baseline), `WrappedToken` 29,974 B: owner — code size is not a concern, the product waits for the Glamsterdam fork (larger code limit); the ratchet baseline records sizes.**
 - P2b-1 (done, merged `0510c7d`): `SCaaSDex` clone (`scaas.dex`, salted domain `SCaaS Dex`; MT-4 domain done for the new DEX), `OpenFactory` DEX catalogue and `createDex`/`isDex`/`dexVersionOf`, deploy key `dex_implementation`, built DEX kept as `SCaaSDexV1`; 891 tests. Plan `docs/superpowers/plans/2026-10-11-p2b1-scaasdex-clone.md`. P2b-2 built them except `checkOrder` (see P2b-2). P2c built `mtxExchange`/`mtxExchangeVia`, `setExchangeTarget`, `setListedOnly`. `SCaaSDexV1` moved to `legacy/p5/` in P5 (owner: backup, not delete).
 - P2b-2 (done, merged `7049c78`): outside legs (`DexOrder` in the DEX domain, `TradeLib` on the DEX's own `scaas.trade` state, `ESCROW` refused), `DexPuller` deployed by `initialize`, `mtxCancelOrders` / `mtxInvalidateNonces`, ERC-1271 cap by codehash (constructor takes the `SmartKeyAccount` implementation), `MatchFailed` reason capped at 256 bytes, `SigCheckGasStarved` reverts the whole `mtxSettle` (m8 closed), payouts by `SafeERC20`; 913 tests. Plan `docs/superpowers/plans/2026-10-11-p2b2-dex-outside-legs.md`. Open: `checkOrder` for the new DEX (not specified: dex.md §10 reads are the intake; with the node's P7 intake), the DEX invariant suite (§14). Size baseline raised by 9 B per token (`precheck` argument). Node P7: a batch reverting with `SigCheckGasStarved` is split and simulated per settlement, never retried whole with more gas (a party's `destination` that is a hook-token recipient can forge the selector; hook tokens are never listed). `mtxSettle` success is not monotonic in gas (a settlement can fail with an empty `MatchFailed` reason at a gas above a starved-revert window), so the node never trusts plain `eth_estimateGas`: it sizes gas from a simulation that requires every planned `ok[i]` true and reads an empty `MatchFailed` reason as out of gas (retry with more gas, never mark the order invalid). Limitation: no HIP-632 branch on DEX signatures, so a Hedera ED25519 account cannot sign a `DexOrder` or a DEX-side cancel (follow-up: `IS_HEDERA` in `SCaaSDex`).
 - P2c (done, merged `d85fc8b`): the exchange path on `SCaaSDex` — `mtxExchange` (interactions: never the DEX or the puller, never `mtxTrade`, data of at least 4 bytes), `mtxExchangeVia` (`IExchangeExecutor.exchangeCallback`), `setExchangeTarget` / `setListedOnly` and the `LISTED_POOLS` condition, `tokenKnown` (counted per listed market), the surplus to the signers by floor with the remainder to the last leg, `InsufficientOutput`, conservation over every snapshotted token, a pull check that refuses an inexact sell token, every `approve` interaction reset to 0, `increaseAllowance` and Permit2 `approve` refused (`ForbiddenSelector`, controller ruling, pending the owner); `ExchangeLegSettled`; 949 tests. Plan `docs/superpowers/plans/2026-10-11-p2c-dex-exchange-path.md`. Open: the fork test with real Uniswap bytecode (dex.md section 14), the DEX invariant suite, the node's TradeEngine (NODE-DEX-17/18, P7).
-- P2 notes (from P1c, P1d): (2) Named `mtxTransfer` is +9 execution gas over `mtxExecuteTransfer` (33,681 vs 33,672): the row is logged, not asserted; `mtxPay` on a fresh lane is +2.6 k (the `PAYABLE` gate's cold SLOAD, C3). (3) The asset suite's inline per-transfer admin check (CTR-TOK-24) also needs NONE bytes: it competes with the size debt in F4.
+- P2 notes (from P1c, P1d): (2) Named `mtxTransfer` is +9 execution gas over `mtxExecuteTransfer` (33,681 vs 33,672): the row is logged, not asserted; `mtxPay` on a fresh lane is +2.6 k (the `PAYABLE` gate's cold SLOAD, C3). (3) The asset suite's inline per-transfer admin check (CTR-TOK-24) also needs NORMAL bytes: it competes with the size debt in F4.
 - [x] Rename `OrderBookDex` → `SCaaSDex` (owner 2026-10-09; EIP-712 domain name `SCaaS Dex`); git mv + docs + node names. (done 2026-10-09)
 - [~] **MT-5** DEX (P2a done: `TradeOrder` + `mtxTrade`/`mtxCancelOrder`/`mtxInvalidateNonces` in the tokens, `receiveToken == this` accepted, flag 4 not read by the token; P2b done (P2b-1, P2b-2); P2c done (merged `d85fc8b`); open: the invariant suite, the Uniswap fork test): `SCaaSDex.mtxSettle`
       (Path A/B, 1 taker + N makers, 50 % floor, fee split, conservation invariant); outside-token legs through the
@@ -126,7 +126,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
       `setListedOnly` (CTR-DEX-03); tokens accept `receiveToken == this` and flag 4 (CTR-DEX-15).
 
 **P3 — MT-6**
-- P3 (done, merged `dc9d219`; P3b modes pending): `NoUnderlyingZetherToken` / `UnderlyingZetherToken` (`ZetherLayer is MetaTokenBase`, logic in the external `ZetherLib`, `scaas.zether`), `ZetherStatements`, `zetherShield` from the public balance, `zetherWrapShield` / `zetherUnshieldUnwrap` on `UNDERLYING_ZETHER` (nothing minted), relaying through `mtxExecute` with the envelope binding in the transient ticket (`MetaTxBase._envelopeBinding`), `chainUid` in every token-side digest and the 416-byte header, the Zether gate on `OpenFactory`, `DeployBase` registers kinds 2–3 on dev chains with `DEPLOY_ZETHER=1` (opt-in), the prover on the new header and ABI; the built `ZetherToken`, `ZetherMetaTx`, old `IZetherToken` and their tests in `smartcontracts/evm/legacy/p3/`; 977 tests. Plan `docs/superpowers/plans/2026-10-11-p3-zether-kinds.md`. Open: a real-passkey envelope test (CTR-ZTH-21), gas of `zetherWrapShield` / `zetherUnshieldUnwrap` (the zether.md gas tables are re-measured on the new kinds), the registry's `chainUid` (UA F1), client Zether encoders (after P3b; the node relays Zether calls opaquely, P5); disclosure questions for the disclosure review (plan header).
+- P3 (done, merged `dc9d219`; P3b modes pending): `NormalZetherToken` / `WrappedZetherToken` (`ZetherLayer is MetaTokenBase`, logic in the external `ZetherLib`, `scaas.zether`), `ZetherStatements`, `zetherShield` from the public balance, `zetherWrapShield` / `zetherUnshieldUnwrap` on `WRAPPED_ZETHER` (nothing minted), relaying through `mtxExecute` with the envelope binding in the transient ticket (`MetaTxBase._envelopeBinding`), `chainUid` in every token-side digest and the 416-byte header, the Zether gate on `OpenFactory`, `DeployBase` registers kinds 2–3 on dev chains with `DEPLOY_ZETHER=1` (opt-in), the prover on the new header and ABI; the built `ZetherToken`, `ZetherMetaTx`, old `IZetherToken` and their tests in `smartcontracts/evm/legacy/p3/`; 977 tests. Plan `docs/superpowers/plans/2026-10-11-p3-zether-kinds.md`. Open: a real-passkey envelope test (CTR-ZTH-21), gas of `zetherWrapShield` / `zetherUnshieldUnwrap` (the zether.md gas tables are re-measured on the new kinds), the registry's `chainUid` (UA F1), client Zether encoders (after P3b; the node relays Zether calls opaquely, P5); disclosure questions for the disclosure review (plan header).
 - [x] v1 line to backup (P5): `OpenFactoryV1`, `IOpenFactoryV1`, `IFactoryTokenV1`, `MetaToken`, `HederaMetaToken`, `MetaTxDex`, `SCaaSDexV1` and their tests in `smartcontracts/evm/legacy/p5/`; the Zether part moved in P3 (E1; owner: backup, not delete).
 - [ ] `mtxBatch` needs a not-batchable hook for PQZ selectors (`MtxNotBatchable(selector)`, pq-zero-knowledge.md CTR-PQZ-21): with `PqzToken` (no PQZ selector exists yet; P3 left the room: the binding hook takes a PQZ tag).
 - [~] **MT-6** Zether (done in P3: transient envelope binding, `zetherShield` from the public balance, `mtxWrap` inherited, the `zether*` renames, binding without `to`/`value`, prover `Header.chain_uid`, `HEADER_LEN` 416; open: `PqzToken` on the one base, PQZ selectors not batchable, CTR-PQZ-21, with the PQZ stream).
@@ -162,7 +162,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 
 #### Done 2026-10-21
 
-- **Spike A for `UnderlyingPqzToken`** (owner 2026-10-21) — done `a12cd06b` on `metatx-lib`: 61,045 → A 56,898
+- **Spike A for `WrappedPqzToken`** (owner 2026-10-21) — done `a12cd06b` on `metatx-lib`: 61,045 → A 56,898
   (headroom 8,638 under 65,536) / A2 54,321 (11,215); relayed +7–9k gas (A), large op 7 envelope ≈ +1 M unless only
   the data hash goes to the library. HANDOFF.md top note.
 - **Nethermind 2.2.0 + Glamsterdam on the SCaaS testnet** (owner 2026-10-21: "Glamsterdam đã có trên testnet eth …
@@ -184,7 +184,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 - [ ] **Template library** (owner 2026-10-12): every README use case — including economic (commercial) contracts: escrow with an arbiter, milestone service contracts, sale with delivery, leases, installment loans, subscriptions, revenue sharing, deposit with periodic withdrawal (`VestingGrant` / `MandateWallet`), provenance and family-tree registries — ships as an **implementation deployed once per chain**; a user only creates a new instance by clone (EIP-1167) / CREATE2 through a factory with its own parameters (as `OpenFactory.createToken` / `createDex` do today), and calls it by meta-transaction. Off-chain presets (CTR-AS-14 JSON) are only parameter sets for these factories. Spec first (owner rule): `docs/contracts/templates.md` — the template set, each one's init parameters and invariants, the factory (`createX`, deterministic address, `chainUid` gate, registry of instances), who pays the fee per template, client builders; then code streams per template.
 - [ ] **P0 follow-ups (minor, deferred by the final review):** `zether.md` gas-cap / 2.5 M paragraphs quote only
       single-recipient figures; `zether.md` ~1327 `recipient` vs target `to`, ~216/220/238 informal `zetherShield(Y…)`
-      prose; architecture sequence 5 lacks `UnderlyingLib`; `asset-suite.md` 893–897 "BUILT" next to `createToken`, `IRegulatedToken` block old names (`issuer()`, `compliance()`, `ControlsDisabled`, `RoleRenounced`);
+      prose; architecture sequence 5 lacks `WrappedLib`; `asset-suite.md` 893–897 "BUILT" next to `createToken`, `IRegulatedToken` block old names (`issuer()`, `compliance()`, `ControlsDisabled`, `RoleRenounced`);
       `clients/app.md` CLI-APP-26 cites CTR-TOK-21 for built kinds; `node/store.md`:157 SQL comments; `node/job-api.md`:328
       unlabelled `SmartKeyAccount.mtxExecuteAsOwner`; CTR-TOK-26 "the invariant" wording; `dropped-artifacts.tsv` duplicates
       and the bare token `273`; CTR-ACC-80 "(then named SubjectAccount)"; budget warnings `token-wrappers.md`, `dex.md` (owner).
@@ -361,7 +361,7 @@ chainId 9000 → **7622**; `PqzToken` implements `IERC20MetaTx` (PQZ rev 1.4 R28
 
 **Done after the handoff:** `fix-ligero-oog` merged + pushed (root cause: 108 mutations in one EVM call frame, quadratic memory gas over forge's 2^30; now one frame per mutation + 7 `test_other_*`; full forge suite 1269 passed, 0 failed). Owner rulings recorded (decisions.md CTR-PQZ-23): op 7 BUNDLE no early revert (wallet explains); PQZH op 7 ≤ 10 inline credits. Owner ruling (same day): M counts legs (real + decoys), so odd recipient counts pad with decoys (7 real ⇒ M = 8, 1 decoy); for auditor-on BUNDLE shapes over the cap the wallet (P6h) offers (a) one M = 8 COMPACT / commit-reveal transfer (default, ≈ 10.4 M) or (b) split into fitting BUNDLE transfers (e.g. 2 × M = 4, ≈ 21.4 M total), user chooses (decisions.md CTR-PQZ-23).
 
-**Next (owner: S5 / S6 not started because of shutdown):** S5 fuzz (op 7 seeds from S4 rows; 3 × 2 h capped) → S6 artifact (Docker, run alone, `--memory`) → S8 (op 7 into Nethermind.Pqz image, calibrate `G_7`, activate on the SCaaS testnet) → S7 (CTR-PQZ-25/-26, S9 proposals 1/2/4, gas tables) → op 7 entry points in P6g tokens; PQZH token on chain (no PQZH gas yet). Open from P6g: `UnderlyingPqzToken` 62,572 B (2.9 KB under 64 KiB), no pinned storage layouts for PQZ tokens, SCaaS testnet gen-1 registry has no classical kinds. Open from S4: op 7 disclosure-bundle / per-leg opening vectors (needs a pqz-stmt codec).
+**Next (owner: S5 / S6 not started because of shutdown):** S5 fuzz (op 7 seeds from S4 rows; 3 × 2 h capped) → S6 artifact (Docker, run alone, `--memory`) → S8 (op 7 into Nethermind.Pqz image, calibrate `G_7`, activate on the SCaaS testnet) → S7 (CTR-PQZ-25/-26, S9 proposals 1/2/4, gas tables) → op 7 entry points in P6g tokens; PQZH token on chain (no PQZH gas yet). Open from P6g: `WrappedPqzToken` 62,572 B (2.9 KB under 64 KiB), no pinned storage layouts for PQZ tokens, SCaaS testnet gen-1 registry has no classical kinds. Open from S4: op 7 disclosure-bundle / per-leg opening vectors (needs a pqz-stmt codec).
 
 **After power-on:** `cd /home/dockers/mba-chain-nethermind && docker compose up -d blockchain-node`; `python3 -I pqz-core/nethermind/chain/e2e.py head --rpc http://127.0.0.1:8545`. Stale worktrees from this session (s3, s9, s4, p6g) can be removed (`git worktree remove`), branches kept.
 
@@ -387,7 +387,7 @@ chainId 9000 → **7622**; `PqzToken` implements `IERC20MetaTx` (PQZ rev 1.4 R28
   6. D3 verdict (record): PQZL {1, 2, 4, 8} (M = 16 input ≈ 469 KB > 393,216); PQZH {1, 2, 4} (M = 8 bound 281,208 > 262,144 and input 497,149 > `MAX_INPUT`; M = 16 likewise) — matches `built_legs`.
   7. `params/anon/anon_sizes.py` reads measured numbers; STATUS.md entry; plan S3 results; decisions.md lines. LH-2 stays S4.
 - `p6g` — P6g contracts + SCaaS testnet deploy (owner mandate: deploy on the SCaaS testnet without per-step approval). Plan NOT written yet: `docs/superpowers/plans/2026-10-16-p6g-contracts.md`. Still to read: decisions.md CTR-PQZ-*, accounts.md, P6c / P6f plans. Agent's design notes (to become D1…, controller proposals):
-  1. Mirror the Zether layer: `PqzLayer` (abstract, on `MetaTokenBase`) + `PqzLib` (external, ERC-7201) + kinds `NoUnderlyingPqzToken` (`NONE_PQZ`, 4) and `UnderlyingPqzToken` (`UNDERLYING_PQZ`, 5); `pqzShield` burns public units like `zetherShield` (spec §7.3 `transferFrom` predates the token tree — record); `pqzWrapShield` / `pqzUnshieldUnwrap` on UNDERLYING (CTR-PQZ-22); `NONE_ZETHER_PQZ` / `UNDERLYING_ZETHER_PQZ` stay reserved; `OpenFactory.pqzEnabled` + `setPqzEnabled` (gated by `PqzSafety`), `KindReserved` up to 5.
+  1. Mirror the Zether layer: `PqzLayer` (abstract, on `MetaTokenBase`) + `PqzLib` (external, ERC-7201) + kinds `NormalPqzToken` (`NORMAL_PQZ`, 4) and `WrappedPqzToken` (`WRAPPED_PQZ`, 5); `pqzShield` burns public units like `zetherShield` (spec §7.3 `transferFrom` predates the token tree — record); `pqzWrapShield` / `pqzUnshieldUnwrap` on WRAPPED (CTR-PQZ-22); `NORMAL_ZETHER_PQZ` / `WRAPPED_ZETHER_PQZ` stay reserved; `OpenFactory.pqzEnabled` + `setPqzEnabled` (gated by `PqzSafety`), `KindReserved` up to 5.
   2. `PqzSafety`: allowlist {31337, 1337, 7622} + `selfTest()` (STATICCALL op 6 on `0x…0f01`, exactly 32 B = `0xed910a2c…1333d205`).
   3. `UAPqzVerifier`: op 3 on `opTag(REGISTER) ‖ psid ‖ message ‖ pk`, psid immutable (PQZL v2); constructor self-test + R_REG vector (1, bit-flip 0); registry slot `_CFG18` exists; kind cap ≈ 2.8–3 M measured, `verifyBudget` ≥ it.
   4. v3 UA path: virtual `_uaEnvelopeBinding(m)` hook (default 0) in `ERC20MetaTx._uaExecute`, PQZ overrides with `SCAAS-PQZ-UA-ENVELOPE-V1`; PQZ selectors refused in `mtxBatch` / `uaBatch`.
@@ -546,7 +546,7 @@ Credit cap stays 1024 units for now.
    on" = listing + `registry() != 0`, no ERC-165), C5b-6 (derived destination checked only at payout → `MatchFailed`),
    C5b-9 (`uaWrap` emits only `UAWrapped`), C5b-11 (node: tagged legs + `UALegSettled` only; intake / bytes32 book / PQ
    gossip wait for UA F5), C5b-12, C5b-14 (`SCaaSDex` 23,493 B stays out of the size baseline). Numbers so far: two
-   `mldsa65` legs 12,124,252 gas (three revert `UAVerifyGas`); `UNDERLYING` size pin raised 45,056 → 49,152.
+   `mldsa65` legs 12,124,252 gas (three revert `UAVerifyGas`); `WRAPPED` size pin raised 45,056 → 49,152.
    Then **UA-5c** (from `ua5b`).
 2. **PQZ relation fix-ups** — branch `pqz-relfix`, worktree `.claude/worktrees/relfix`, `53f5ab3` WIP (from `3ad4069`).
    Decisions B, 1–5 done in code + spec; builds, KAT 19/19, tamper `fails 0`, ASan/UBSan clean, docs_check 0 errors.
@@ -666,12 +666,12 @@ as an id (`pad(addr)` for native ids), `SigCheck.isValid7702`; the UA ledger in 
 `initialize`, balances in the ERC-7201 `scaas.ua.ledger` struct, `UA_POOL`'s own ERC-20 slot = the ledger total (L4-2),
 `transferToUA`, `uaExecute` / `uaBatch` / `uaExecuteTransfer` / `uaBatchTransfer`, `uaCancelNonce`, `IUALedger`, a
 derived UA may self-call only the two `unwrap`s (L4-3/L4-4), a ledger move to the token itself reverts `TransferToSelf`);
-named `uaTransfer` / `uaTransferWithFee` / `uaPay` / `uaUnwrap`; T-V3-1/2/3 (the invariants fuzz NONE and a 1:1
-UNDERLYING clone incl. the burn under a UA, per-UA replay, reserve; a mutation check confirmed they catch ledger bugs);
+named `uaTransfer` / `uaTransferWithFee` / `uaPay` / `uaUnwrap`; T-V3-1/2/3 (the invariants fuzz NORMAL and a 1:1
+WRAPPED clone incl. the burn under a UA, per-UA replay, reserve; a mutation check confirmed they catch ledger bugs);
 `metatx3.json` + clientkeys typed data; unwrap refuses `UA_POOL` as recipient. MT-2's UA path closed. T-V3-4 (size)
 deferred to Glamsterdam.
 
-**Owner-visible consequence:** every token implementation now exceeds EIP-170 (NONE 31,770 B; UnderlyingZetherToken
+**Owner-visible consequence:** every token implementation now exceeds EIP-170 (NORMAL 31,770 B; WrappedZetherToken
 49,778 B, init 51,473 B > EIP-3860) — deploys need `--code-size-limit 65536` (test chains / anvil only); public chains with
 the 24 KiB limit cannot take the tokens until Glamsterdam (owner rule: no size optimisation). `deploy.sh evm` now also
 runs forge `--slow` (parallel broadcast vs anvil automine left a deploy tx pending forever; per-tx gas fits 2^24).
@@ -988,16 +988,16 @@ call table for the renamed rows (P5); open questions in the plan (agent mandates
 **State:** P3 on branch `p3-zether`, merge pending; head is the fix-wave-2 commit on `f847471` (final review I1, m1–m7). Plan `docs/superpowers/plans/2026-10-11-p3-zether-kinds.md`.
 977 forge tests; `zether-prover` `cargo test` 53 green (the `read_balance` BrokenPipe flake fixed); e2e 4/4 and 1/1; real `deploy.sh evm` broadcasts on anvil 31337 green both default and with `DEPLOY_ZETHER=1` (27 txs, BLS verifier 14.08 M gas). Fix wave 2: the Zether deploy is opt-in (`DEPLOY_ZETHER`), `deploy.sh` adds `--code-size-limit 65536 --gas-estimate-multiplier 105` and keeps the previous JSON on a failed broadcast, `ZetherDeploy.t` checks JSON keys, the SmartKeyAccount implementation and per-tx gas under EIP-7825, kind 3 `initialSupply` pinned, stale docs. Fix wave 1 (review follow-ups): S3 disclosure vectors through `ZetherDisclosure` (chain-B negative), every published selector relayed once on both kinds, the stronger invariant (legs 1:1 and 3/7, rate changes, surplus never drops), `OpenFactory._checkZether` probes low level (typed error on a permissive fallback), the prover API refuses `unwrapBinding` outside `proveBurn`.
 
-**Built:** `src/zether/ZetherLib.sol` (external, `scaas.zether`), `ZetherLayer.sol`, `NoUnderlyingZetherToken.sol` (kind 2),
-`UnderlyingZetherToken.sol` (kind 3: `zetherWrapShield`, `zetherUnshieldUnwrap`), `ZetherStatements.sol`, the new
+**Built:** `src/zether/ZetherLib.sol` (external, `scaas.zether`), `ZetherLayer.sol`, `NormalZetherToken.sol` (kind 2),
+`WrappedZetherToken.sol` (kind 3: `zetherWrapShield`, `zetherUnshieldUnwrap`), `ZetherStatements.sol`, the new
 `IZetherToken.sol`; `MetaTxBase._envelopeBinding` / `_ticketBinding` (transient `scaas.mtx.binding`); `ERC20MetaTx._domainName`
 (`"SCaaS ZetherToken"`); `ConfidentialConfig.maxShielded` / `confidentialFee`; `OpenFactory` Zether gate and verifier check;
 verifier header 416 B and `ZetherDisclosure` challenge with `chainUid`; `DeployBase` deploys the Zether stack on dev chains when `DEPLOY_ZETHER=1` (opt-in; `deploy.sh` adds the forge flags);
 the Rust prover on the new header, digests and ABI (vectors regenerated, `envelope.json`); from the disclosure review,
-HASH stored in one `bytes32` slot and the `ITransferDisclosure` NatSpec corrected (G2, G5). Tests: `ZetherNone.t`,
-`ZetherMulti.t`, `ZetherRevertPaths.t`, `ZetherRelay.t`, `ZetherUnderlying.t`, `ZetherInvariant.t`, `ZetherDeploy.t`,
+HASH stored in one `bytes32` slot and the `ITransferDisclosure` NatSpec corrected (G2, G5). Tests: `ZetherNormal.t`,
+`ZetherMulti.t`, `ZetherRevertPaths.t`, `ZetherRelay.t`, `ZetherWrapped.t`, `ZetherInvariant.t`, `ZetherDeploy.t`,
 `v2/FactoryZether.t`. The old `ZetherToken` line is in `smartcontracts/evm/legacy/p3/` (not built). Sizes:
-`NoUnderlyingZetherToken` 30,659 B, `UnderlyingZetherToken` 40,381 B, `ZetherLib` 15,662 B (ratchet baseline).
+`NormalZetherToken` 30,659 B, `WrappedZetherToken` 40,381 B, `ZetherLib` 15,662 B (ratchet baseline).
 
 **Rulings K1-K18 (plan header).** **K1** `chainUid` in every token-side digest, the prover's `s` too; registry unchanged.
 **K2** the kinds are the public kinds plus the layer. **K3** domain `"SCaaS ZetherToken"` by a hook. **K4** two config
@@ -1090,7 +1090,7 @@ spec's `FeeWouldStick` is not a named error in `SCaaSDex` (the split is validate
 **Built:** `src/trade/ITradeToken.sol` (structs, events, errors) and `TradeLib` (ERC-7201 `scaas.trade`
 `0x2c9c6bfc…2f00`; `precheck` → the token's signature check → `record`); in `ERC20MetaTx` (every kind) `mtxTrade`,
 `mtxCancelOrder`, `mtxInvalidateNonces`, `tradeOrderDigest`, `cancelOrderDigest`, `invalidateNoncesDigest`, `pulled`,
-`minNonce`; on `UnderlyingToken` `mtxWrap` (`UnderlyingLib.wrapBySig`) with `NativeNotGasless`, `WrapOrderInvalid`,
+`minNonce`; on `WrappedToken` `mtxWrap` (`WrappedLib.wrapBySig`) with `NativeNotGasless`, `WrapOrderInvalid`,
 `WrapReceivedMismatch`. Tests `Trade.t` (21), `MtxWrap.t` (16), `TradeKat.t` (1, `test/vectors/trade_kat.json`).
 Neither `mtx…` trade entry nor `mtxWrap` is allowlisted; `MsgSenderLint` pins their direct `msg.sender` reads.
 
@@ -1098,11 +1098,11 @@ Neither `mtx…` trade entry nor `mtxWrap` is allowlisted; `MsgSenderLint` pins 
 signature check, with the Hedera branch, stays the token's. **F2** error names the spec leaves open:
 `MinNonceNotIncreasing(current, requested)`, `MinNonceAboveCap(requested)`, `NotDex(caller)`, `DexNotContract(dex)`.
 **F3** `mtxWrap` errors; the relayer binding is the underlying's `mtxTrade` (the wrapper passes `msg.sender` as
-`submitter`). **F4 (flag to the owner):** size. `NoUnderlyingToken` 22,951 B is **over its 20,480 B budget** (under
-EIP-170), `UnderlyingToken` 29,974 B, `ZetherToken` 28,860 B; all in the ratchet baseline, size-pin tests NONE ≤ 23,552 and
-UNDERLYING ≤ 30,720; `TradeLib` 3,104 B, `UnderlyingLib` 11,654 B. Optimise later (owner). **F5** the new KAT is
+`submitter`). **F4 (flag to the owner):** size. `NormalToken` 22,951 B is **over its 20,480 B budget** (under
+EIP-170), `WrappedToken` 29,974 B, `ZetherToken` 28,860 B; all in the ratchet baseline, size-pin tests NORMAL ≤ 23,552 and
+WRAPPED ≤ 30,720; `TradeLib` 3,104 B, `WrappedLib` 11,654 B. Optimise later (owner). **F5** the new KAT is
 `trade_kat.json`; `dex_kat.json` stays the built `SCaaSDex` `Order` vector the node reads until P2b/P5. **F6** the trade
-entries live in `ERC20MetaTx`, so every kind on `MetaTokenBase` (NONE, UNDERLYING) has them; `ZetherToken` (on `ZetherMetaTx`) and v1 `MetaToken` have no `mtxTrade` (Zether in P3). `EscrowFillShape`, `NotDex`, `DexNotContract` are named by the spec; only the arguments of the last two were open. Fix commits: 341e3eb and the final-review wave.
+entries live in `ERC20MetaTx`, so every kind on `MetaTokenBase` (NORMAL, WRAPPED) has them; `ZetherToken` (on `ZetherMetaTx`) and v1 `MetaToken` have no `mtxTrade` (Zether in P3). `EscrowFillShape`, `NotDex`, `DexNotContract` are named by the spec; only the arguments of the last two were open. Fix commits: 341e3eb and the final-review wave.
 
 **Not done / next = P2b plan:** `SCaaSDex` as a clone, `createDex`, DEX registry, `mtxSettle` (Path A/B), `DexPuller`;
 the old `SCaaSDex` is kept as `SCaaSDexV1` for the node until P5 (done in P2b-1 except `DexPuller`). Then P2c (exchange path). `mtxWrap` on `ZetherToken`
@@ -1134,20 +1134,20 @@ domains, E10), and the P1d test gaps in TODO.
 `OpenFactoryV1`/`IOpenFactoryV1`/`IFactoryTokenV1`; factory v2 is backed up in `smartcontracts/evm/legacy/p1e/`.
 `script/DeployBase.sol`: every contract by CREATE2 through forge's deterministic deployer (`DEPLOY_SALT`), `_setup`
 requires the deployer, `_gate` checks `chainUid()`; both deploy scripts on it; JSON keys `token_factory`,
-`implementation_none`, `chain_uid` (`factory_v2` and `implementation_meta_none` are gone). CI size gate
+`implementation_normal`, `chain_uid` (`factory_v2` and `implementation_meta_none` are gone). CI size gate
 `scripts/size_gate.py` with `smartcontracts/evm/size-baseline.json`.
 
 **Rulings E1–E10 (plan header).** For the owner: **E1** the v1 line stays in the build as `…V1` until the node and
 clientkeys (P5) and Zether (P3) move, then `git mv` to `legacy/` (backup, not delete). **E7** CREATE2 for every deployed
 contract, `forge script --broadcast` needs `--sender` (`deploy.sh` and the e2e pass it); linked libraries are still
 placed by forge from the sender, not by CREATE2. **E9** the size gate is a ratchet: token implementations ≤ 20,480 B,
-others ≤ 24,576 B, init ≤ 49,152 B; baseline `UnderlyingToken` 26,449, `ZetherToken` 28,849; it does not tighten itself.
+others ≤ 24,576 B, init ≤ 49,152 B; baseline `WrappedToken` 26,449, `ZetherToken` 28,849; it does not tighten itself.
 Also: E2 v2 becomes `OpenFactory` (`git mv`); E3 no Zether or DEX creation yet (P3, P2); E4 `kind()` is a pure constant;
 E5 `ConfigFieldForOtherKind`; E6 one source for the legs (the P1d D8 cross-check is gone); E8 the deploy gate; E10 other
 domains' `salt = chain_uid` is not in P1e (MT-4 stays open for them).
 
-**Sizes (forge build src --sizes, runtime B):** `NoUnderlyingToken` 20,196 (284 left of 20,480), `UnderlyingToken` 26,449
-(over EIP-170), `UnderlyingLib` 10,096, `OpenFactory` 6,850, `OpenFactoryV1` 6,057, `ZetherToken` 28,849.
+**Sizes (forge build src --sizes, runtime B):** `NormalToken` 20,196 (284 left of 20,480), `WrappedToken` 26,449
+(over EIP-170), `WrappedLib` 10,096, `OpenFactory` 6,850, `OpenFactoryV1` 6,057, `ZetherToken` 28,849.
 
 **For integrators:** the factory's underlying index is only as truthful as the implementation; trust it for registered
 versions (`versionOf(token).version != 0`); `createTokenUnregistered` records version 0.
@@ -1157,7 +1157,7 @@ test gaps stay; `OpenFactory` accepts registration of kinds 2 and 3 before P3 (o
 Main has a newer commit (`7c90483`, Gnosis profile `prague`, `docs/networks/evm.md` table row) that this branch lacks;
 the merge should be clean (that table row was not touched).
 
-**Next action:** write the **P2** plan (`TradeLib`, `SCaaSDex` as a clone, `createDex`): find room in `NoUnderlyingToken`
+**Next action:** write the **P2** plan (`TradeLib`, `SCaaSDex` as a clone, `createDex`): find room in `NormalToken`
 first (284 B left).
 
 ### Session 2026-10-11 (P1d)
@@ -1165,14 +1165,14 @@ first (284 B left).
 **State:** P1d merged into `main` as `d03d894` (814 forge tests; e2e 4/4 and e2e_hedera 1/1;
 docs checker 0 errors). Not pushed. Plan `docs/superpowers/plans/2026-10-11-p1d-underlyingtoken.md`.
 
-**P1d delivered:** one `UnderlyingToken` (kind `UNDERLYING`, 1–8 legs) over the external `UnderlyingLib`
+**P1d delivered:** one `WrappedToken` (kind `WRAPPED`, 1–8 legs) over the external `WrappedLib`
 (`scaas.underlying`, slot formula in CTR-TOK-24); `SingleUnderlyingToken`, `MultiUnderlyingToken`, `HederaTokensV2` and the
-Hedera children are gone (HTS check and association run in `UnderlyingLib` init under `IS_HEDERA`). Native-coin leg
+Hedera children are gone (HTS check and association run in `WrappedLib` init under `IS_HEDERA`). Native-coin leg
 (CTR-TOK-26). Rate admin and guardian are `AdminLib` roles (`renounceRole(bit)`; `rateAdmin()`, `guardian()`,
-`renounceRateAdmin`, `renounceGuardian` removed). `IUnderlyingToken` carries the events and errors. `_legCount` is removed:
-linear layout is ERC-20 slots 0–4. Tests: `Underlying.t.sol` (9), `NativeLeg.t.sol` (13), the rest ported.
+`renounceRateAdmin`, `renounceGuardian` removed). `IWrappedToken` carries the events and errors. `_legCount` is removed:
+linear layout is ERC-20 slots 0–4. Tests: `Wrapped.t.sol` (9), `NativeLeg.t.sol` (13), the rest ported.
 
-**Rulings D1–D12 (plan header).** For the owner: **D2** size is out of scope: `UnderlyingToken` 25,408 B is over EIP-170
+**Rulings D1–D12 (plan header).** For the owner: **D2** size is out of scope: `WrappedToken` 25,408 B is over EIP-170
 (24,576) and the 20,480 B budget, so it cannot be deployed on a real chain; the deploy scripts still deploy only
 `META_NONE`; the size work (at the latest the P1e CI gate) must bring it down. **D4** rate admin and guardian are roles,
 a role may have several holders, `renounceRole` leaves the rate and a pending change. **D6** native leg has 18 decimals,
@@ -1181,8 +1181,8 @@ a role may have several holders, `renounceRole` leaves the rate and a pending ch
 `abi.encode(UnderlyingInit)`, legs must equal the factory's `underlyings`; D9 `META_SINGLE` takes 1–8 legs, nothing
 implements `META_MULTI`.
 
-**Sizes (forge build --sizes):** `UnderlyingToken` 25,408, `UnderlyingLib` 11,018, `NoUnderlyingToken` 20,038,
-`AdminLib` 3,406, `HederaLib` 753; over 24,576: `UnderlyingToken` and `ZetherToken` (28,849) only.
+**Sizes (forge build --sizes):** `WrappedToken` 25,408, `WrappedLib` 11,018, `NormalToken` 20,038,
+`AdminLib` 3,406, `HederaLib` 753; over 24,576: `WrappedToken` and `ZetherToken` (28,849) only.
 
 **e2e:** the first `e2e` run failed all four ("forge script failed", 0.6 s); a second run and each test alone passed 4/4.
 Cause found in P1e: `e2e.rs` did not create `deployments/` on a fresh checkout, so the script's `writeJson` failed on the
@@ -1203,20 +1203,20 @@ unchanged, docs checker 0 errors). Base `d827062`; not pushed.
 **P1c delivered:** `AdminLib` (flags, owner, roles in `scaas.token`; CTR-TOK-22) with all events and errors in the new
 `ITokenAdmin` (`src/metatx/ITokenAdmin.sol`), so they are in the token ABI; new `RoleAccountZero(uint8)`. `MetaTokenBase`
 on `AdminLib`: `PAYABLE` gate on `mtxPay`/`payWithFee`/`mtxPayReceiverFee`, ERC-165, `IS_HEDERA`. `HederaLib` replaces
-`HederaV2Lib` (`requireValid` public view, linked); `HederaNoUnderlyingToken` deleted. `NoUnderlyingToken` uses the
+`HederaV2Lib` (`requireValid` public view, linked); `HederaNoUnderlyingToken` deleted. `NormalToken` uses the
 `MINTABLE`/`BURNABLE` flags and roles (no `minter()`, `MinterRenounced`, `NotMinter`). Wrappers report legacy powers as flags (C5).
 `test/v2/Features.t.sol` (13 tests).
 
 **Rulings for the owner:** C1 own `AdminLib`, not OZ `AccessControlDefaultAdminRules` (two-step owner, no delay); C2 flags
 5–8 refused at init with `FeatureNotBuilt` until the asset suite; C3 no external `PayLib` (pay is inline over the
 `MetaTransfer` core, gated by `PAYABLE`; +2.6 k gas on a fresh lane), so PAYABLE is advisory for payments (a signed payment still settles
-through `mtxExecuteTransfer`); gating `entryRef ≠ 0` would contradict T2 — owner to decide; C9 NONE has 442 B left, P2 must find room;
+through `mtxExecuteTransfer`); gating `entryRef ≠ 0` would contradict T2 — owner to decide; C9 NORMAL has 442 B left, P2 must find room;
 `ITokenAdmin` carries the admin functions, events and errors; `RoleAccountZero` refuses granting a role to address 0.
 
-**Sizes (runtime B):** `NoUnderlyingToken` 20,038 (<= 20,480); over EIP-170: `Single` 28,296, `Multi` 29,147, `HederaSingle`
+**Sizes (runtime B):** `NormalToken` 20,038 (<= 20,480); over EIP-170: `Single` 28,296, `Multi` 29,147, `HederaSingle`
 29,201, `HederaMulti` 30,052, `ZetherToken` 28,849 (until P1d); `AdminLib` 3,403, `HederaLib` 753.
 
-**Next action:** (superseded by the P1d section above) write the **P1d** plan (`UnderlyingLib` + `UnderlyingToken`).
+**Next action:** (superseded by the P1d section above) write the **P1d** plan (`WrappedLib` + `WrappedToken`).
 
 ### Shutdown 2026-10-10
 
@@ -1230,12 +1230,12 @@ merged into its main; the owner merges.
 line moved onto it (named builders, per-kind allowlists, gasless burn/wrap/unwrap; `MetaTxCore` and the op dispatch removed);
 receiver-pays (`mtxPayReceiverFee`, `ReceiverFee` co-signature, token as fee recipient refused as `TransferToSelf`, HIP-632 payee
 test); conformance + `msg.sender` lint; KATs `metatx_kat.json` (unchanged) and `metatransfer_kat.json` (new) written on a
-`NoUnderlyingToken` clone.
+`NormalToken` clone.
 
 **Rulings for the owner:** R3 wrappers over EIP-170 until P1d; R4 UA ledger split moved to UA F1; R7 SmartKeyAccount name on the
 token side now (`SMART_KEY_ACCOUNT_IMPL`; the account contract stays `SubjectAccount` until P4).
 
-**Sizes (runtime B):** `NoUnderlyingToken` 17,602, `HederaNoUnderlyingToken` 18,057 (both <= 20,480); over EIP-170: `Single` 26,102,
+**Sizes (runtime B):** `NormalToken` 17,602, `HederaNoUnderlyingToken` 18,057 (both <= 20,480); over EIP-170: `Single` 26,102,
 `Multi` 26,951, `HederaSingle` 27,417, `HederaMulti` 28,266, `ZetherToken` 28,849.
 
 ### Shutdown 2026-10-09 (evening)
@@ -1282,8 +1282,8 @@ subagent-driven vs native — recommended subagent-driven). Then write P1b…P1e
 |---|---|
 | P1a | tag + `legacy/`; `SigCheck`; `SaltedEIP712` (salt = chain_uid); `MetaTxBase` (MetaTransaction, lanes, transient sender + ticket, allowlist, `mtxExecute`/`mtxBatch`/`cancelNonce`, fee NONE only); KAT — **plan written** |
 | P1b | `ERC20MetaTx` on `MetaTxBase` (`git mv MetaTxCore`): `MetaTransfer`, `mtxExecuteTransfer`/`mtxBatchTransfer`, fee classes, receiver-pays, approve-only-by-contracts, UA path, KATs |
-| P1c | `MetaTokenBase`: features + owner model (`AdminLib`, regulated flags), `PayLib`, init/provenance, `IS_HEDERA` + `HederaLib`; kind `NONE` |
-| P1d | `UnderlyingLib` + `UnderlyingToken` (Single+Multi merged, native-coin leg, `mtxWrap`) |
+| P1c | `MetaTokenBase`: features + owner model (`AdminLib`, regulated flags), `PayLib`, init/provenance, `IS_HEDERA` + `HederaLib`; kind `NORMAL` |
+| P1d | `WrappedLib` + `WrappedToken` (Single+Multi merged, native-coin leg, `mtxWrap`) |
 | P1e | factory `createToken`, CREATE2 deployer, deploy scripts + `chainUid()` gate, delete v1/v2 lines, CI size gate |
 
 **P1a plan notes:** the plan's code was run in a scratch copy (692 tests pass, KAT matches `cast`). (1) The bare
@@ -1311,8 +1311,8 @@ regulated flags refused on confidential kinds; factory creates DEX clones, `isDe
 `SubjectAccount` → `SmartKeyAccount`; keep old code (tag + `legacy/`); refactor in place.
 
 **Controller rulings during P0 (review if you disagree):** R4/R8 budget warnings left as warnings (`token-wrappers.md`
-986 > 845, `dex.md` 538 > 520 — owner to accept or ask for a split); R7 native leg on every `UNDERLYING*` kind incl.
-`UNDERLYING_ZETHER`; R10 target `zetherUnshield(payload, proof, authSig, beneficiary, to, amount)` order; R12 target EIP-712
+986 > 845, `dex.md` 538 > 520 — owner to accept or ask for a split); R7 native leg on every `WRAPPED*` kind incl.
+`WRAPPED_ZETHER`; R10 target `zetherUnshield(payload, proof, authSig, beneficiary, to, amount)` order; R12 target EIP-712
 domain `"SCaaS SmartKeyAccount"` (P4); R14 `PAYABLE`/`BURNABLE` always locked (`disableFeature` reverts `FeatureLocked`);
 R5 owner acts on a flag only by granting itself the role, OZ `AccessControlDefaultAdminRules` is the P1 candidate.
 
@@ -1325,10 +1325,10 @@ Token-tree design accepted by the owner and folded (P0 done); record frozen at `
 (Status line holds the id map). The Zether multi-recipient record is frozen too. Code is unchanged: every affected
 section carries a "Transitional (BUILT)" note naming the phase.
 
-- **Tree:** `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → four kinds by code (`NONE`, `UNDERLYING`, `NONE_ZETHER`,
-  `UNDERLYING_ZETHER`; `*_PQZ` reserved), features by flags (payable, mint, burn, adjustable rate, wrap-disable, freeze,
+- **Tree:** `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → four kinds by code (`NORMAL`, `WRAPPED`, `NORMAL_ZETHER`,
+  `WRAPPED_ZETHER`; `*_PQZ` reserved), features by flags (payable, mint, burn, adjustable rate, wrap-disable, freeze,
   force, pause, allowlist); one owner model; Hedera as an `IS_HEDERA` branch; the native coin as an underlying leg; libraries
-  `AdminLib`, `PayLib`, `UnderlyingLib`, `HederaLib`, `TradeLib`, `ZetherLib`; `SCaaSDex` as a clone. Ids CTR-TOK-21…26,
+  `AdminLib`, `PayLib`, `WrappedLib`, `HederaLib`, `TradeLib`, `ZetherLib`; `SCaaSDex` as a clone. Ids CTR-TOK-21…26,
   CTR-MTX-25, CTR-AS-17, CTR-DEX-24, CTR-ZTH-37…47, CTR-ACC-11, CTR-PQZ-22.
 - **TODO §00 is now phases P1–P5** (P1 = MT-1…MT-4 on the new tree, P2 = MT-5, P3 = MT-6, P4 = MT-7 + rename, P5 = MT-8/9).
 - **Owner decisions for P1:** (1) keep the old code for reference: git tag `ref/pre-token-tree` on the last commit before

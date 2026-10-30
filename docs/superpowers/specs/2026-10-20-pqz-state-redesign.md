@@ -36,7 +36,7 @@ controller's request of 2026-10-20 (library split, §8). Normative text today:
   [`shield-and-key-reuse.md`](../../research/shield-and-key-reuse.md) §2–§3.
 - **[pool]** CTR-PQZ-15 / CTR-ZTH-51 Change "`SHIELD_POOL` sentinel instead of burn", both layers (§5.10).
 - **[mtx]** CTR-ZTH-45 Change "one name for both confidential layers: `mtxShield` / `mtxUnshield`" (§5.11).
-- **[kinds]** CTR-TOK-21 Change "`NONE_ZETHER_PQZ` / `UNDERLYING_ZETHER_PQZ` dropped" (§7).
+- **[kinds]** CTR-TOK-21 Change "`NORMAL_ZETHER_PQZ` / `WRAPPED_ZETHER_PQZ` dropped" (§7).
 - **[bls]** CTR-ZTH-32 Change "classical Zether uses BLS12-381 only", bn254 line to `legacy/` (§7).
 - **[ua]** CTR-UA-30 and its Changes (a UA signs; PQZ key = attribute of a PQ signer, supplied in `register`, `R_REG`
   bound to the UA id; `authRef` removed incl. Zether): built in **UA-6**, which comes before 5h (§7).
@@ -674,7 +674,7 @@ This changes the owner's stated q, so it is **owner question Q1**.
 - **5g-Z1 and 5g-Z2 are merged** (`77f7478`, `c173de37`) [Z2]: the PQZ tokens take their `UAPqzVerifier` from
   `Env.deps[ENV_PQZ_VERIFIER]` and are released by `OpenFactory.deployImplementation` with the linked libraries listed
   in `Env.libs` and checked by `libCodeHashes`. 5h builds on that: D14's four libraries are four `Env.libs` entries
-  (deploy scripts publish a new `Env` version for `NONE_PQZ` / `UNDERLYING_PQZ`); the 16k step adds a new
+  (deploy scripts publish a new `Env` version for `NORMAL_PQZ` / `WRAPPED_PQZ`); the 16k step adds a new
   `UAPqzVerifier` (new id, new probe) and so another `Env` version and release. No factory logic changes for PQZ
   besides [kinds].
 - **UA-6 comes before 5h** [ua] (CTR-UA-30; spec and plan written separately): the PQZ key becomes an attribute of a
@@ -688,10 +688,10 @@ This changes the owner's stated q, so it is **owner question Q1**.
   `minDecoyFee` and, by the owner's fee ruling of 2026-10-20, applies to both layers: the Zether multi-recipient payload
   carries the sender's `decoyFee` (`fee = txFee + M·d`, paid to every leg; built in the final fix wave). Relations, proofs and the Zether
   layout are unchanged.
-- **Kinds 6 and 7 dropped** [kinds] (CTR-TOK-21 Change): `NONE_ZETHER_PQZ` / `UNDERLYING_ZETHER_PQZ` leave
-  `IOpenFactory.TokenKind`; ids 6 and 7 are not reused. With the enum ending at `UNDERLYING_PQZ` the ABI decoder already
+- **Kinds 6 and 7 dropped** [kinds] (CTR-TOK-21 Change): `NORMAL_ZETHER_PQZ` / `WRAPPED_ZETHER_PQZ` leave
+  `IOpenFactory.TokenKind`; ids 6 and 7 are not reused. With the enum ending at `WRAPPED_PQZ` the ABI decoder already
   rejects 6 and 7, so the four `KindReserved` checks of `OpenFactory` and the error go (tests in `v2/Factory.t.sol`,
-  `PqzNone.t.sol` move to "decoding reverts"); token-wrappers.md kind table, pq-zero-knowledge.md, contracts/README.md.
+  `PqzNormal.t.sol` move to "decoding reverts"); token-wrappers.md kind table, pq-zero-knowledge.md, contracts/README.md.
 - **Zether BLS12-381 only** [bls] (CTR-ZTH-32 Change): the bn254 Zether line — the bn254 verifier instances, the
   `proofSystemId` `…/bn254/…`, its deploy steps and `Env` publication, the bn254 vectors and test suites — moves to
   `legacy/` (backup, not delete); the prover keeps its curve-generic code but builds and tests BLS12-381 only; the
@@ -704,7 +704,7 @@ This changes the owner's stated q, so it is **owner question Q1**.
 
 ## 8. Code size and the library split
 
-`UnderlyingPqzToken` is 60,105 B (limit 65,536, 5,431 B left), `NoUnderlyingPqzToken` 47,349 B; `PqzLib` 20,551 B
+`WrappedPqzToken` is 60,105 B (limit 65,536, 5,431 B left), `NormalPqzToken` 47,349 B; `PqzLib` 20,551 B
 (at the first version; **after 5g-Z2 `size-baseline.json` has 60,621 B and 48,160 B** [Z2]: 819 B left under the
 4 KiB margin target) [superseded: the margin is dropped]
 (EIP-170's 24,576 B applies to libraries in the size gate). The tokens hold the entry points and the ERC-20 / UA side;
@@ -730,14 +730,14 @@ rollover 4 KB (owner: lighter per-call code for the node, as the Zether transfer
 entries [Z2]). 5h removes the `acc` and `inline` arguments of the debit entry points (calldata decoding of `bytes` +
 `bytes[]` per entry point, ≈ 0.1–0.15 KB each), retires the two PQZ NONE entry points (O5) and `plainPending` [noPP],
 and adds five views and `mtxPrepareAcc` (≈ 0.1–0.15 KB each, each a DELEGATECALL stub), the `SHIELD_POOL` moves
-[pool] and the shared-interface argument checks [mtx] (≈ 0.2–0.4 KB): projected `UnderlyingPqzToken` ≈ 60.0–61.0 KB,
-`NoUnderlyingPqzToken` ≈ 47.5–48.5 KB [estimate] — **at or above the 4 KiB margin target (≤ 61,440 B) for the
-underlying kind.** [superseded: margin dropped, no fallback built] So the former reserve becomes part of plan Task 1 unless the split alone restores the margin: route
+[pool] and the shared-interface argument checks [mtx] (≈ 0.2–0.4 KB): projected `WrappedPqzToken` ≈ 60.0–61.0 KB,
+`NormalPqzToken` ≈ 47.5–48.5 KB [estimate] — **at or above the 4 KiB margin target (≤ 61,440 B) for the
+wrapped kind.** [superseded: margin dropped, no fallback built] So the former reserve becomes part of plan Task 1 unless the split alone restores the margin: route
 the read-only statement / disclosure views of the token (`transferStatement`, `transferSingleStatement`,
 `burnStatement`, `disclosureStatement`, `verifyTransferAmount`) and the new state views through one `fallback` that
 DELEGATECALLs `PqzViewLib` / `PqzStateLib` by selector (≈ 2–3 KB saved, no state-changing path through the fallback).
 Task 1 does the split first, with no behaviour change, so the later tasks see the real headroom. The Zether kinds
-(`UnderlyingZetherToken` 58,432 B) change by the rename and the pool moves only (≈ ±0.3 KB).
+(`WrappedZetherToken` 58,432 B) change by the rename and the pool moves only (≈ ±0.3 KB).
 
 ## 9. Risks
 
@@ -756,7 +756,7 @@ Task 1 does the split first, with no behaviour change, so the later tasks see th
   and `R_REG`, so its review covers parameters and transcript together.
 - **Third-party shield flooding** (§5.7): one TRIVIAL entry per victim per block, one unit each; priced only by Q2's fee.
 - **Same-block residual** (§5.9): a debit that inlines an entry of its own block can be reverted by a merge.
-- **Token size** (§8): `UnderlyingPqzToken` near the 4 KiB margin target before 5h; the view `fallback` is likely needed.
+- **Token size** (§8): `WrappedPqzToken` near the 4 KiB margin target before 5h; the view `fallback` is likely needed.
 - **Rename breadth** [mtx]: every client, relayer allow-list (`mtxSelectors`), e2e script, test and doc that names a
   `zether*` / `pqz*` entry point or event changes in one step (test chains only, no migration).
 - **Un-roll waste**: a debit with `p < rolled` makes keepers re-roll ≤ `INLINE_MAX` entries.

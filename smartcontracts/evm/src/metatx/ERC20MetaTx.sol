@@ -424,7 +424,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         _uaMove(bytes32(0), to, v);
     }
 
-    /// @notice The UA allowlist (CTR-UA-26): selectors a `UAMetaTransaction` may call; none on the base, `NONE` adds
+    /// @notice The UA allowlist (CTR-UA-26): selectors a `UAMetaTransaction` may call; none on the base, `NORMAL` adds
     ///         `burn`, the wrapper kinds their `unwrap`s and `unwrapToUA`. `approve`, `trade`, transfers and the dedicated
     ///         `…ToUA` functions are never on it (`MetaTxUnknownOp`).
     function _uaAllowed(bytes4) internal view virtual returns (bool) {

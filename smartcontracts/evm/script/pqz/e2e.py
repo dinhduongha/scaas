@@ -593,7 +593,7 @@ def run(kd, kr, ke):
     # from the init code without arguments on env 1, named explicitly (owner 2026-10-20; the factory appends
     # envVersion, env, implArgs)
     fac = D.deploy("OpenFactory", encs(["w"] * 3, [sd.addr, uid, 0]))
-    for kind, name in ((0, "NoUnderlyingToken"), (4, "NoUnderlyingPqzToken"), (5, "UnderlyingPqzToken")):
+    for kind, name in ((0, "NormalToken"), (4, "NormalPqzToken"), (5, "WrappedPqzToken")):
         require_release_gas(name)
         code, libs = D.linked(name)
         hashes = [keccak256(bytes.fromhex(rpc("eth_getCode", [a, "latest"])[2:])) for a in libs]
@@ -756,8 +756,8 @@ def run(kd, kr, ke):
     t1 = create(4, "PQZ USD", "pqUSD", [], 0, 1, 1 | 2 | 4, salt=b"pq1")  # BUNDLE, FULL auditor, PAYABLE|MINTABLE|BURNABLE
     t2 = create(5, "PQZ wrapped tUSD", "pqW", [[tusd, 1, 1]], 1, 2, 1, salt=b"pq2")  # COMPACT, OPTIONAL
 
-    # -------------------------------------------------------------- 4. the NONE_PQZ life cycle with real proofs
-    log("\n## 4. NONE_PQZ (pqUSD: BUNDLE, auditor FULL): shield, transfer, rollover by count, hint, burn, refresh, disclosure")
+    # -------------------------------------------------------------- 4. the NORMAL_PQZ life cycle with real proofs
+    log("\n## 4. NORMAL_PQZ (pqUSD: BUNDLE, auditor FULL): shield, transfer, rollover by count, hint, burn, refresh, disclosure")
     C1 = Client(t1, "pqUSD")
     sd.send(t1, cd("mint(address,uint256)", ["w", "w"], sd.addr, 5_000 * SCALE), "pqUSD mint 5,000 public")
     sd.send(t1, cd(API["shield"], ["w", "w"], alice.ua, 1_000), "mtxShield(alice, 1,000): no proof, free, into the pool")
@@ -849,8 +849,8 @@ def run(kd, kr, ke):
     check_public(C1, "after the relayed transfers")
     restore(C1, "section 5")
 
-    # -------------------------------------------------------------- 6. UNDERLYING_PQZ (COMPACT, auditor OPTIONAL)
-    log("\n## 6. UNDERLYING_PQZ (pqW over tUSD: COMPACT, auditor OPTIONAL): wrap-shield, R_TX0 commit-reveal, unshield-unwrap")
+    # -------------------------------------------------------------- 6. WRAPPED_PQZ (COMPACT, auditor OPTIONAL)
+    log("\n## 6. WRAPPED_PQZ (pqW over tUSD: COMPACT, auditor OPTIONAL): wrap-shield, R_TX0 commit-reveal, unshield-unwrap")
     C2 = Client(t2, "pqW")
     sd.send(tusd, cd("approve(address,uint256)", ["w", "w"], t2, 10**12), "tUSD approve pqW")
     sd.send(t2, cd(API["wrapShield"], ["w", "w", "w"], tusd, 500 * SCALE, alice.ua), "mtxWrapShield(tUSD 500, alice)")

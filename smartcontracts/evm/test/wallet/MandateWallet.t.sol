@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {V2Fixture, UID_, noneInit} from "../v2/helpers/V2Fixture.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {V2Fixture, UID_, normalInit} from "../v2/helpers/V2Fixture.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -19,7 +19,7 @@ contract FalsePayToken {
     }
 }
 
-/// A `MandateWallet` of `owner` holding 10 000 of a kind-NONE token, a mandate for `delegate` (1 000 per payment,
+/// A `MandateWallet` of `owner` holding 10 000 of a kind-NORMAL token, a mandate for `delegate` (1 000 per payment,
 /// 2 500 per day, 30 days) and one approved payee; chain 7622 with its real `chain_uid`.
 abstract contract MandateFixture is V2Fixture {
     uint256 internal constant OWNER_PK = 0x0A11CE;
@@ -28,13 +28,13 @@ abstract contract MandateFixture is V2Fixture {
     address internal delegate = vm.addr(DELEGATE_PK);
     address internal npp = address(0x4EE);
     address internal stranger = address(0x5745);
-    NoUnderlyingToken internal t;
+    NormalToken internal t;
     MandateWallet internal w;
 
     function setUp() public virtual {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        t = _none(address(this), 0, address(this));
+        t = _normal(address(this), 0, address(this));
         w = new MandateWallet(owner, UID_);
         t.mint(address(w), 10_000);
         vm.startPrank(owner);
@@ -143,7 +143,7 @@ contract MandateWalletTest is MandateFixture {
     }
 
     function test_payee_is_per_token() public {
-        NoUnderlyingToken t2 = _none(address(this), 0, address(this));
+        NormalToken t2 = _normal(address(this), 0, address(this));
         t2.mint(address(w), 100);
         vm.prank(owner);
         w.setMandate(address(t2), delegate, 10, 10, 1 days, uint64(block.timestamp + 1 days));

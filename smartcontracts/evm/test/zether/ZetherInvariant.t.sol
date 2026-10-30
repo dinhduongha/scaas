@@ -2,13 +2,13 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {IConfidentialUnderlyingToken} from "../../src/confidential/IConfidentialToken.sol";
+import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
 import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
-import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
@@ -16,7 +16,7 @@ import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 
 /// Random shield / wrap-shield / transfer / roll-over / unshield / unshield-unwrap / unwrap / rate-change sequences on one
-/// `UNDERLYING_ZETHER` token (legs 1:1 and 3/7, rate-adjustable, bn254, no auditor), real proofs; the plaintext balances
+/// `WRAPPED_ZETHER` token (legs 1:1 and 3/7, rate-adjustable, bn254, no auditor), real proofs; the plaintext balances
 /// are the ghost. Every value op does work (`_ensureAcc` rolls over, wrap-shields or shields first), the surplus
 /// `collateral − supply` never drops except by a rate change (rounding against the holder), and the underlying paid
 /// out equals a ghost per leg (CTR-ZTH-22 a, review T5 I1). D19 (CTR-ZTH-51): the shielded value is public units in
@@ -24,7 +24,7 @@ import {Catalogue} from "../helpers/Catalogue.sol";
 /// unshield-unwrap burns exactly the pool's share), `balanceOf(SHIELD_POOL) == totalShielded · S`, and
 /// `Σ balanceOf == totalSupply()`.
 contract ZetherHandler is ZetherFixture {
-    UnderlyingZetherToken public w;
+    WrappedZetherToken public w;
     MockERC20[2] public leg;
     User[3] internal us;
     uint256[3] public acc;
@@ -39,8 +39,8 @@ contract ZetherHandler is ZetherFixture {
         _stack();
         leg[0] = new MockERC20("USD", "USD", 6);
         leg[1] = new MockERC20("ODD", "ODD", 6);
-        UnderlyingZetherToken impl = UnderlyingZetherToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, _zenv(),
-            type(UnderlyingZetherToken).creationCode)));
+        WrappedZetherToken impl = WrappedZetherToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(),
+            type(WrappedZetherToken).creationCode)));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals) = ("Z", "Z", 6);
         c.features = (1 << AdminLib.PAYABLE) | (1 << AdminLib.RATE_ADJUSTABLE);
@@ -50,7 +50,7 @@ contract ZetherHandler is ZetherFixture {
         c.legs[0] = IFactoryToken.Leg(address(leg[0]), 1, 1);
         c.legs[1] = IFactoryToken.Leg(address(leg[1]), 3, 7);
         c.conf = IFactoryToken.ConfidentialConfig("", SCALE, MAX, FEE, 0, 0, MIN_DECOY);
-        w = UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, abi.encode(c), "inv")));
+        w = WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "inv")));
         tok = ZetherLayer(address(w));
         _users();
         (us[0], us[1], us[2]) = (alice, bob, carol);
@@ -62,7 +62,7 @@ contract ZetherHandler is ZetherFixture {
         uint256 inAmt = (units * den + num - 1) / num;
         leg[0].mint(address(this), inAmt);
         leg[0].approve(address(t), inAmt);
-        UnderlyingToken(payable(address(t))).wrap(address(leg[0]), inAmt);
+        WrappedToken(payable(address(t))).wrap(address(leg[0]), inAmt);
         if (to != address(this)) t.transfer(to, units);
     }
 
@@ -215,7 +215,7 @@ contract ZetherHandler is ZetherFixture {
         bytes memory pl = _unshieldPayload(tok, us[i]);
         bytes memory st = stm.unshieldUnwrapStatement(address(w), pl, amt, bytes32(uint256(uint160(address(0xD00D)))), ben, address(leg[l]), out, 0);
         s0 = w.totalSupply();
-        w.mtxUnshieldUnwrap(pl, _proveU(us[i], st, amt, acc[i], ben, tok), "", ZetherTypes.UA.unwrap(ben), "", IConfidentialUnderlyingToken.Unwrap(address(leg[l]), bytes32(uint256(uint160(address(0xD00D)))), amt, out));
+        w.mtxUnshieldUnwrap(pl, _proveU(us[i], st, amt, acc[i], ben, tok), "", ZetherTypes.UA.unwrap(ben), "", IConfidentialWrappedToken.Unwrap(address(leg[l]), bytes32(uint256(uint160(address(0xD00D)))), amt, out));
         require(w.totalSupply() == s0 - amt * SCALE, "unshield-unwrap burns exactly from the pool");
     }
 

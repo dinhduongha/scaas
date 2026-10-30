@@ -5,8 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
@@ -15,8 +15,8 @@ import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 
 /// Random mixes of native moves, mints, burns, `transferToUA`, the UA transfer entries (`uaExecuteTransfer`, the named
-/// `uaTransfer` / `uaTransferWithFee`, `uaBatchTransfer`; any side native or derived, with or without a fee) on the NONE
-/// clone and on the 1:1 UNDERLYING clone `wrp`, plus wrap, wrap→UA and the burn under a derived UA (`unwrap` through
+/// `uaTransfer` / `uaTransferWithFee`, `uaBatchTransfer`; any side native or derived, with or without a fee) on the NORMAL
+/// clone and on the 1:1 WRAPPED clone `wrp`, plus wrap, wrap→UA and the burn under a derived UA (`unwrap` through
 /// `uaExecute` with a fee after the self-call, or the named `uaUnwrap`), and the `UA_POOL` `transferFrom` refusal.
 /// UA-5a (CTR-UA-28, CTR-UA-26, CTR-MTX-05): `wrapToUA` on `wrp` and on the native-leg `wrpN`, `mintToUA`,
 /// `payWithFeeToUA`, `burn` under a derived UA, wraps of the ledger-leg `wrpL` (leg `tok` at 3/2, wrapped by this
@@ -47,7 +47,7 @@ contract UALedgerHandler is Test {
     uint256 internal refs;
 
     constructor(
-        NoUnderlyingToken tok_, UnderlyingToken wrp_, UnderlyingToken wrpL_, UnderlyingToken wrpN_, MockERC20 und_,
+        NormalToken tok_, WrappedToken wrp_, WrappedToken wrpL_, WrappedToken wrpN_, MockERC20 und_,
         UARegistry reg_, address minter_, bytes32[2] memory uas_, bytes[2] memory keys_, uint16[2] memory kinds_
     ) {
         (tok, wrp, wrpL, wrpN, und, reg, minter) = (tok_, wrp_, wrpL_, wrpN_, und_, reg_, minter_);
@@ -62,12 +62,12 @@ contract UALedgerHandler is Test {
             address(this)];
     }
 
-    // ----- ops: NONE clone -----
+    // ----- ops: NORMAL clone -----
 
     function mint(uint256 who, uint256 amount) external {
         amount = bound(amount, 0, 1e12);
         vm.prank(minter);
-        NoUnderlyingToken(address(tok)).mint(vm.addr(pks[who % 3]), amount);
+        NormalToken(address(tok)).mint(vm.addr(pks[who % 3]), amount);
         _settle(tok, 0, 1);
     }
 
@@ -75,7 +75,7 @@ contract UALedgerHandler is Test {
         address a = vm.addr(pks[who % 3]);
         amount = bound(amount, 0, tok.balanceOf(a));
         vm.prank(a);
-        NoUnderlyingToken(address(tok)).burn(amount);
+        NormalToken(address(tok)).burn(amount);
         _settle(tok, 0, 1);
     }
 
@@ -95,7 +95,7 @@ contract UALedgerHandler is Test {
         _settle(tok, 1, 1);
     }
 
-    // ----- ops: UNDERLYING clone (1:1, one leg) -----
+    // ----- ops: WRAPPED clone (1:1, one leg) -----
 
     function wrapNative(uint256 who, uint256 amount) external {
         address a = vm.addr(pks[who % 3]);
@@ -103,7 +103,7 @@ contract UALedgerHandler is Test {
         und.mint(a, amount);
         vm.startPrank(a);
         und.approve(address(wrp), amount);
-        UnderlyingToken(address(wrp)).wrap(amount);
+        WrappedToken(address(wrp)).wrap(amount);
         vm.stopPrank();
         _settle(wrp, 0, 1);
     }
@@ -155,11 +155,11 @@ contract UALedgerHandler is Test {
         vm.startPrank(a);
         if (nativeLeg) {
             vm.deal(a, amount);
-            UnderlyingToken(address(wrpN)).wrapToUA{value: amount}(address(0), amount, uas[ua % 2]);
+            WrappedToken(address(wrpN)).wrapToUA{value: amount}(address(0), amount, uas[ua % 2]);
         } else {
             und.mint(a, amount);
             und.approve(address(wrp), amount);
-            UnderlyingToken(address(wrp)).wrapToUA(address(und), amount, uas[ua % 2]);
+            WrappedToken(address(wrp)).wrapToUA(address(und), amount, uas[ua % 2]);
         }
         vm.stopPrank();
         _settle(nativeLeg ? wrpN : wrp, 1, 1);
@@ -168,7 +168,7 @@ contract UALedgerHandler is Test {
     function mintToUA(uint256 ua, uint256 amount) external {
         amount = bound(amount, 0, 1e12);
         vm.prank(minter);
-        NoUnderlyingToken(address(tok)).mintToUA(uas[ua % 2], amount);
+        NormalToken(address(tok)).mintToUA(uas[ua % 2], amount);
         _settle(tok, 1, 1);
     }
 
@@ -187,7 +187,7 @@ contract UALedgerHandler is Test {
         bytes32 f = uas[fromIdx % 2];
         amount = bound(amount, 0, tok.balanceOfUA(f) * 100 / 101) / 100 * 100;
         uint256 fee = withFee ? amount / 100 : 0;
-        MetaTxLib.UAMetaTransaction memory m = _uaCall(tok, f, abi.encodeCall(NoUnderlyingToken.burn, (amount)), fee);
+        MetaTxLib.UAMetaTransaction memory m = _uaCall(tok, f, abi.encodeCall(NormalToken.burn, (amount)), fee);
         bytes memory auth = _auth(3 + fromIdx % 2, tok.uaDigest(m));
         vm.prank(RELAYER);
         tok.uaExecute(m, auth);
@@ -204,14 +204,14 @@ contract UALedgerHandler is Test {
         uint256 want = amount * n / d;
         if (want == 0) return; // WrapTooSmall
         vm.prank(minter);
-        NoUnderlyingToken(address(tok)).mint(address(this), amount);
+        NormalToken(address(tok)).mint(address(this), amount);
         tok.approve(address(wrpL), amount);
         uint256 b0 = _balL(to);
         if (to > 2 && oneStep) {
-            assertEq(UnderlyingToken(address(wrpL)).wrapToUA(address(tok), amount, _id(to)), want, "minted");
+            assertEq(WrappedToken(address(wrpL)).wrapToUA(address(tok), amount, _id(to)), want, "minted");
             _settle2(tok, 0, 2, wrpL, 1, 1);
         } else {
-            assertEq(UnderlyingToken(address(wrpL)).wrap(amount), want, "minted");
+            assertEq(WrappedToken(address(wrpL)).wrap(amount), want, "minted");
             if (to > 2) wrpL.transferToUA(_id(to), want);
             else wrpL.transfer(vm.addr(pks[to]), want);
             _settle2(tok, 0, 2, wrpL, to > 2 ? 1 : 0, 2);
@@ -228,7 +228,7 @@ contract UALedgerHandler is Test {
 
     /// `wrpL`'s leg: rate and reserve.
     function _legL() internal view returns (uint256 n, uint256 d, uint256 r) {
-        (uint96 n_, uint96 d_, uint256 r_,,) = UnderlyingToken(address(wrpL)).legOf(address(tok));
+        (uint96 n_, uint96 d_, uint256 r_,,) = WrappedToken(address(wrpL)).legOf(address(tok));
         (n, d, r) = (n_, d_, r_);
     }
 
@@ -254,7 +254,7 @@ contract UALedgerHandler is Test {
             if (amount * rd / rn == 0) return; // UnwrapTooSmall
             uint256 b0 = wrpL.balanceOf(a);
             vm.prank(a);
-            UnderlyingToken(address(wrpL)).unwrapToUA(address(tok), amount, to, 0);
+            WrappedToken(address(wrpL)).unwrapToUA(address(tok), amount, to, 0);
             _settle2(wrpL, 0, 1, tok, 1, 1);
             _checkUnwrapToUA(amount, 0, b0 - wrpL.balanceOf(a), tok.balanceOfUA(to) - c0, r0);
             return;
@@ -270,7 +270,7 @@ contract UALedgerHandler is Test {
 
     function _unwrapToUAUnder(uint256 fromIdx, bytes32 f, bytes32 to, uint256 amount, uint256 fee) internal {
         MetaTxLib.UAMetaTransaction memory m =
-            _uaCall(wrpL, f, abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), amount, to, 0)), fee);
+            _uaCall(wrpL, f, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), amount, to, 0)), fee);
         bytes memory auth = _auth(3 + fromIdx % 2, wrpL.uaDigest(m));
         vm.prank(RELAYER);
         wrpL.uaExecute(m, auth);
@@ -309,7 +309,7 @@ contract UALedgerHandler is Test {
     // ----- ops: UA transfers on either token -----
 
     /// `from`/`to` index 0–2 a native holder, 3–4 a UA; `withFee` adds a FIXED fee to `FEE_TO` (1 % cap). `seed` picks
-    /// the token (NONE or `wrp`) and the entry (`uaExecuteTransfer`, the named form, `uaBatchTransfer`).
+    /// the token (NORMAL or `wrp`) and the entry (`uaExecuteTransfer`, the named form, `uaBatchTransfer`).
     function uaTransfer(uint256 from, uint256 to, uint256 amount, bool withFee, uint256 seed) external {
         MetaTokenBase t_ = seed % 2 == 0 ? tok : wrp;
         bytes32 f = _id(from % 5);
@@ -440,7 +440,7 @@ contract UALedgerHandler is Test {
     }
 }
 
-/// T-V3-2, on the NONE clone and on the UNDERLYING clones (`wrp` 1:1; UA-5a: the ledger-leg `wrpL` at 3/2, the
+/// T-V3-2, on the NORMAL clone and on the WRAPPED clones (`wrp` 1:1; UA-5a: the ledger-leg `wrpL` at 3/2, the
 /// native-leg `wrpN` 1:1): `totalSupply == Σ balanceOf(native incl. UA_POOL)`, `balanceOf(UA_POOL) == Σ balanceOfUA`, replaying
 /// `Transfer` logs equals `balanceOf` for every native holder (`UA_POOL` included), replaying `UATransfer` logs equals
 /// `balanceOfUA` for every tracked UA; `UATransfer` iff a side is derived (checked per call by the handler); `wrp` and
@@ -476,11 +476,11 @@ contract UALedgerInvariantTest is UALedgerBase {
         assertEq(t.balanceOf(POOL), uaSum, "pool");
     }
 
-    function invariant_T_V3_2_none() public view {
+    function invariant_T_V3_2_normal() public view {
         _check(tok);
     }
 
-    function invariant_T_V3_2_underlying() public view {
+    function invariant_T_V3_2_wrapped() public view {
         _check(wrp);
         assertEq(wrp.totalSupply(), und.balanceOf(address(wrp)), "1:1 backing");
     }

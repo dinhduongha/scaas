@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-/// @title The confidential-token interface both layers implement: the classical Zether (`NONE_ZETHER`,
-///        `UNDERLYING_ZETHER`) and the post-quantum PQZ (`NONE_PQZ`, `UNDERLYING_PQZ`) (plan 5h D20, CTR-ZTH-45).
+/// @title The confidential-token interface both layers implement: the classical Zether (`NORMAL_ZETHER`,
+///        `WRAPPED_ZETHER`) and the post-quantum PQZ (`NORMAL_PQZ`, `WRAPPED_PQZ`) (plan 5h D20, CTR-ZTH-45).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** One selector per function across both layers, no layer argument.
 ///         Ids are `bytes32` UAs. Every proof-taking entry point takes `(payload, proof, auth, beneficiary, accHint[,
 ///         …])`: PQZ — `auth` the signing UA's own signature over the statement digest, `beneficiary` equal to the
@@ -88,8 +88,8 @@ interface IConfidentialToken {
     function mtxRollOver(bytes32 ua, uint256 n) external;
 }
 
-/// @title The two leg paths of the wrapper kinds `UNDERLYING_ZETHER` and `UNDERLYING_PQZ`, one selector each.
-interface IConfidentialUnderlyingToken {
+/// @title The two leg paths of the wrapper kinds `WRAPPED_ZETHER` and `WRAPPED_PQZ`, one selector each.
+interface IConfidentialWrappedToken {
     /// @notice The leg of an unshield-unwrap: `amount` shielded units paid from leg `underlying`, at least `minOut` of it,
     ///         to `recipient` (a padded address or a derived UA). One calldata struct keeps the shared signature within
     ///         the legacy code generator's stack.

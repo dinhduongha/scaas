@@ -1,24 +1,24 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {UnderlyingToken} from "../metatx/UnderlyingToken.sol";
+import {WrappedToken} from "../metatx/WrappedToken.sol";
 import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
 import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
 import {MetaTxBase} from "../metatx/MetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {AdminLib} from "../metatx/AdminLib.sol";
-import {UnderlyingLib} from "../metatx/UnderlyingLib.sol";
+import {WrappedLib} from "../metatx/WrappedLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherLayer} from "./ZetherLayer.sol";
 import {ZetherLib} from "./ZetherLib.sol";
-import {IConfidentialUnderlyingToken} from "../confidential/IConfidentialToken.sol";
+import {IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 
-/// @title Kind `UNDERLYING_ZETHER` (CTR-TOK-21): the wrapper of 1–8 legs with the Zether layer (CTR-ZTH-44).
+/// @title Kind `WRAPPED_ZETHER` (CTR-TOK-21): the wrapper of 1–8 legs with the Zether layer (CTR-ZTH-44).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Dev chains only. The legs, rates, reserves, `wrap`/`unwrap`,
-///         `mtxWrap` and the rate and guardian roles are `UnderlyingToken`'s (`UnderlyingLib`); the layer adds
+///         `mtxWrap` and the rate and guardian roles are `WrappedToken`'s (`WrappedLib`); the layer adds
 ///         `mtxWrapShield` (a leg's underlying straight into a shielded balance, minted to the pool) and
 ///         `mtxUnshieldUnwrap` (a shielded balance straight out to a leg's underlying, burnt from the pool; to an
 ///         address or, through a SCaaS ledger leg, a UA). Reserve
@@ -26,26 +26,26 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         construction (a wrap-shield mints `minted`, a multiple of the scale, to the pool, an unshield-unwrap burns
 ///         `amount·shieldScale` from it and pays `⌊amount·shieldScale·den/num⌋`, worth at most what it removes), and
 ///         `executeRate` checks it. Flags: `PAYABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE` (CTR-ZTH-47). Never on Hedera.
-contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer, IConfidentialUnderlyingToken {
+contract WrappedZetherToken is WrappedToken, ZetherLayer, IConfidentialWrappedToken {
     /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env` (Hedera off: no
     ///      dev chain there); no `implArgs`.
     constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
-        UnderlyingToken(envVersion, env, implArgs)
+        WrappedToken(envVersion, env, implArgs)
         ZetherLayer(env)
     {}
 
-    /// @dev The legs (`UnderlyingToken`), restated for the second base.
-    function underlyings() public view override(UnderlyingToken, MetaTokenBase) returns (address[] memory) {
+    /// @dev The legs (`WrappedToken`), restated for the second base.
+    function underlyings() public view override(WrappedToken, MetaTokenBase) returns (address[] memory) {
         return super.underlyings();
     }
 
-    function kind() public pure override(UnderlyingToken, MetaTokenBase) returns (uint8) {
-        return AdminLib.KIND_UNDERLYING_ZETHER;
+    function kind() public pure override(WrappedToken, MetaTokenBase) returns (uint8) {
+        return AdminLib.KIND_WRAPPED_ZETHER;
     }
 
-    function _init(TokenConfig memory cfg) internal override(UnderlyingToken, MetaTokenBase) {
+    function _init(TokenConfig memory cfg) internal override(WrappedToken, MetaTokenBase) {
         _requireUnused(cfg, true, false, false, false);
-        UnderlyingLib.initToken(cfg, false, AdminLib.KIND_UNDERLYING_ZETHER);
+        WrappedLib.initToken(cfg, false, AdminLib.KIND_WRAPPED_ZETHER);
         ZetherLib.init(cfg.conf, TRANSFER_VERIFIER);
     }
 
@@ -56,7 +56,7 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer, IConfidentialUnd
     ///         to `SHIELD_POOL`; `minted % shieldScale ≠ 0` ⇒ `AmountNotScaled` (the client sends an exact amount).
     function mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA) external payable nonReentrant {
         address m = _msgSender();
-        (,, uint256 minted) = UnderlyingLib.wrap(UnderlyingLib.indexOf(underlying), amountIn, m, msg.value);
+        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value);
         uint256 scale = ZetherLib.$().shieldScale;
         if (minted % scale != 0) revert AmountNotScaled(minted, scale);
         ZetherLib.shield(ZetherTypes.UA.wrap(toUA), minted / scale, _REGISTRY, m);
@@ -87,25 +87,25 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer, IConfidentialUnd
         ZetherTypes.UA beneficiary,
         Unwrap calldata x
     ) private {
-        uint256 i = UnderlyingLib.indexOf(x.underlying);
+        uint256 i = WrappedLib.indexOf(x.underlying);
         // a derived recipient: the leg's `transferToUA` checks it
         if (UAKinds.inNativeSpace(x.recipient)) _requirePayee(address(uint160(uint256(x.recipient))));
         uint256 fee = ZetherLib.unshield(payload, proof, beneficiary, x.amount, x.recipient, _envUnwrap(x.underlying, x.minOut));
         uint256 wrapped = x.amount * ZetherLib.$().shieldScale;
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped); // D19: burn from the pool
         _fromPool(beneficiary, fee);
-        UnderlyingLib.payOutTo(i, x.recipient, wrapped, x.minOut);
+        WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut);
     }
 
-    /// @notice As `UnderlyingToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
-    function disableFeature(uint8 bit) external override(UnderlyingToken, MetaTokenBase) nonReentrant {
+    /// @notice As `WrappedToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
+    function disableFeature(uint8 bit) external override(WrappedToken, MetaTokenBase) nonReentrant {
         AdminLib.disableFeature(bit, _msgSender());
-        if (bit == AdminLib.RATE_ADJUSTABLE) UnderlyingLib.dropPending();
+        if (bit == AdminLib.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }
 
     /// @notice The collateral check of a rate change counts the shielded value too.
     function executeRate() external override nonReentrant {
-        UnderlyingLib.executeRate(_msgSender(), totalSupply()); // the shielded value sits in SHIELD_POOL (D19)
+        WrappedLib.executeRate(_msgSender(), totalSupply()); // the shielded value sits in SHIELD_POOL (D19)
     }
 
     // ------------------------------------------------------------------ the layer's hooks
@@ -138,10 +138,10 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer, IConfidentialUnd
 
     // ------------------------------------------------------------------ allowlist (CTR-MTX-19, CTR-ZTH-34)
 
-    /// @notice `UnderlyingToken`'s first six, then the Zether ops and the two underlying paths, each `ABSOLUTE`, then
-    ///         `UnderlyingToken`'s UA-5a two (`wrapToUA` `ABSOLUTE`, `unwrapToUA` `AMOUNT(1)`, CTR-UA-28).
+    /// @notice `WrappedToken`'s first six, then the Zether ops and the two underlying paths, each `ABSOLUTE`, then
+    ///         `WrappedToken`'s UA-5a two (`wrapToUA` `ABSOLUTE`, `unwrapToUA` `AMOUNT(1)`, CTR-UA-28).
     function mtxSelectors()
-        public pure override(UnderlyingToken, IMetaTx, MetaTxBase)
+        public pure override(WrappedToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         s = new bytes4[](19);
@@ -168,16 +168,16 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer, IConfidentialUnd
         (s[18], c[18]) = (this.mtxSetRollOverMode.selector, FEE_CLASS_ABSOLUTE);
     }
 
-    function _mtxRule(bytes4 sel) internal view override(UnderlyingToken, MetaTxBase) returns (MtxRule memory) {
+    function _mtxRule(bytes4 sel) internal view override(WrappedToken, MetaTxBase) returns (MtxRule memory) {
         if (_isZetherOp(sel) || sel == this.mtxUnshieldUnwrap.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
         if (sel == this.mtxWrapShield.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 100);
-        return UnderlyingToken._mtxRule(sel);
+        return WrappedToken._mtxRule(sel);
     }
 
-    /// @notice `UnderlyingToken`'s UA allowlist, the Zether ops and `mtxUnshieldUnwrap` (CTR-ZTH-51, UA-5c, as
-    ///         `NoUnderlyingZetherToken`); not `mtxWrapShield` (a UA wrap-shields in two signed steps, `uaWrap` then
+    /// @notice `WrappedToken`'s UA allowlist, the Zether ops and `mtxUnshieldUnwrap` (CTR-ZTH-51, UA-5c, as
+    ///         `NormalZetherToken`); not `mtxWrapShield` (a UA wrap-shields in two signed steps, `uaWrap` then
     ///         `mtxShield`).
-    function _uaAllowed(bytes4 sel) internal view override(UnderlyingToken, ERC20MetaTx) returns (bool) {
-        return _isZetherOp(sel) || sel == this.mtxUnshieldUnwrap.selector || UnderlyingToken._uaAllowed(sel);
+    function _uaAllowed(bytes4 sel) internal view override(WrappedToken, ERC20MetaTx) returns (bool) {
+        return _isZetherOp(sel) || sel == this.mtxUnshieldUnwrap.selector || WrappedToken._uaAllowed(sel);
     }
 }

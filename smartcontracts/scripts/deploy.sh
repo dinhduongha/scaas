@@ -14,7 +14,7 @@
 #                            64 KiB code (anvil --code-size-limit 65536, chain 7622 maxCodeSize 0x10000); a chain at
 #                            24,576 refuses the deploy. Always --gas-estimate-multiplier 105: forge's default x1.30 on
 #                            the BLS inner-product verifier (~14 M, DEPLOY_ZETHER) exceeds the 2^24 per-transaction cap
-#                            (EIP-7825); the largest implementation, UnderlyingPqzToken (13,319,335 gas measured), is
+#                            (EIP-7825); the largest implementation, WrappedPqzToken (13,319,335 gas measured), is
 #                            deployed by script/pqz/e2e.py, not here. DEPLOY_ZETHER=1 (dev chains only) adds the Zether
 #                            stack. --slow always (one tx per block: anvil automine can strand a large tx).
 #   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/hedera-<chainid>.json)

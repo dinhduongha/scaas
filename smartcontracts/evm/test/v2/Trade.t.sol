@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {V2Fixture, UID_} from "./helpers/V2Fixture.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
@@ -16,12 +16,12 @@ contract TradeTest is V2Fixture {
     uint256 constant ALICE_PK = 0xA11CE;
     address alice = vm.addr(ALICE_PK);
     address other = address(0x07E5);
-    NoUnderlyingToken t;
-    NoUnderlyingToken t2;
+    NormalToken t;
+    NormalToken t2;
 
     function setUp() public {
-        t = _none(alice, 1_000_000, address(0));
-        t2 = _none(alice, 1_000_000, address(0));
+        t = _normal(alice, 1_000_000, address(0));
+        t2 = _normal(alice, 1_000_000, address(0));
     }
 
     function _order(uint256 amount, uint256 receiveAmount) internal view returns (ITradeToken.TradeOrder memory o) {
@@ -35,7 +35,7 @@ contract TradeTest is V2Fixture {
         o.validUntil = block.timestamp + 300;
     }
 
-    function _sign(NoUnderlyingToken tok, ITradeToken.TradeOrder memory o) internal view returns (bytes memory) {
+    function _sign(NormalToken tok, ITradeToken.TradeOrder memory o) internal view returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, tok.tradeOrderDigest(o));
         return abi.encodePacked(r, s, v);
     }
@@ -329,7 +329,7 @@ contract TradeTest is V2Fixture {
     }
 
     function test_hugeAmount_partFillDoesNotOverflow() public {
-        NoUnderlyingToken big = _none(alice, type(uint256).max, address(0));
+        NormalToken big = _normal(alice, type(uint256).max, address(0));
         ITradeToken.TradeOrder memory o = _order(type(uint256).max, 1);
         uint256 sell = o.amount - o.amount / 2;
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, big.tradeOrderDigest(o));

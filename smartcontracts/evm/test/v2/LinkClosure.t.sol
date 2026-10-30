@@ -7,7 +7,7 @@ import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
-import {UnderlyingLib} from "../../src/metatx/UnderlyingLib.sol";
+import {WrappedLib} from "../../src/metatx/WrappedLib.sol";
 import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
 import {HederaLib} from "../../src/hedera/HederaLib.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
@@ -24,9 +24,9 @@ import {closureLibs} from "../helpers/Catalogue.sol";
 ///         implementation, read from the artifacts' `linkReferences` (each library's own, recursively); and no closure
 ///         library can self-destruct, CALLCODE or (bar the named ones) DELEGATECALL.
 contract LinkClosureTest is Test {
-    IOpenFactory.TokenKind constant NONE = IOpenFactory.TokenKind.NONE;
+    IOpenFactory.TokenKind constant NORMAL = IOpenFactory.TokenKind.NORMAL;
     string[] internal names = [
-        "AdminLib", "HederaLib", "TradeLib", "MtxPipelineLib", "UnderlyingLib", "ZetherLib",
+        "AdminLib", "HederaLib", "TradeLib", "MtxPipelineLib", "WrappedLib", "ZetherLib",
         "PqzStateLib", "PqzTransferLib", "PqzBurnLib", "PqzViewLib"
     ];
 
@@ -36,7 +36,7 @@ contract LinkClosureTest is Test {
         if (h == keccak256("HederaLib")) return address(HederaLib);
         if (h == keccak256("TradeLib")) return address(TradeLib);
         if (h == keccak256("MtxPipelineLib")) return address(MtxPipelineLib);
-        if (h == keccak256("UnderlyingLib")) return address(UnderlyingLib);
+        if (h == keccak256("WrappedLib")) return address(WrappedLib);
         if (h == keccak256("ZetherLib")) return address(ZetherLib);
         if (h == keccak256("PqzStateLib")) return address(PqzStateLib);
         if (h == keccak256("PqzTransferLib")) return address(PqzTransferLib);
@@ -82,21 +82,21 @@ contract LinkClosureTest is Test {
         }
     }
 
-    /// Every kind: the env `DeployBase` publishes (NONE, both Zether kinds, the DEX) and the one the fixtures build
+    /// Every kind: the env `DeployBase` publishes (NORMAL, both Zether kinds, the DEX) and the one the fixtures build
     /// (`closureLibs`, all six token kinds).
     function test_envLibsEqualLinkClosure() public {
         address ska = new SmartKeyAccountFactory(ZUID).IMPLEMENTATION();
         DeployHarness h = new DeployHarness();
         (OpenFactory f,) = h.deploy(ZUID, true, ska);
-        _assertEnvIsClosure("DeployBase NONE", "NoUnderlyingToken", f.envOf(NONE, 1));
-        _assertEnvIsClosure("DeployBase NONE_ZETHER", "NoUnderlyingZetherToken",
-            f.envOf(IOpenFactory.TokenKind.NONE_ZETHER, 1));
-        _assertEnvIsClosure("DeployBase UNDERLYING_ZETHER", "UnderlyingZetherToken",
-            f.envOf(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1));
+        _assertEnvIsClosure("DeployBase NONE", "NormalToken", f.envOf(NORMAL, 1));
+        _assertEnvIsClosure("DeployBase NORMAL_ZETHER", "NormalZetherToken",
+            f.envOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1));
+        _assertEnvIsClosure("DeployBase WRAPPED_ZETHER", "WrappedZetherToken",
+            f.envOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1));
         _assertEnvIsClosure("DeployBase DEX", "SCaaSDex", f.dexEnvOf(1));
 
-        string[6] memory impls = ["NoUnderlyingToken", "UnderlyingToken", "NoUnderlyingZetherToken",
-            "UnderlyingZetherToken", "NoUnderlyingPqzToken", "UnderlyingPqzToken"];
+        string[6] memory impls = ["NormalToken", "WrappedToken", "NormalZetherToken",
+            "WrappedZetherToken", "NormalPqzToken", "WrappedPqzToken"];
         for (uint8 k; k < 6; ++k) {
             IFactoryToken.Env memory e;
             e.libs = closureLibs(IOpenFactory.TokenKind(k));
@@ -108,7 +108,7 @@ contract LinkClosureTest is Test {
 
     /// R6: over every library of every closure, PUSH data skipped, from the start to the last `INVALID` (solc puts its
     /// trailing data and the CBOR metadata after it): no SELFDESTRUCT (0xff), no CALLCODE (0xf2); DELEGATECALL (0xf4)
-    /// only in `MtxPipelineLib` (exactly 2, -> `HederaLib`) and in `UnderlyingLib` (exactly 1, -> `AdminLib`, its own
+    /// only in `MtxPipelineLib` (exactly 2, -> `HederaLib`) and in `WrappedLib` (exactly 1, -> `AdminLib`, its own
     /// link reference).
     function test_libraryOpcodes() public view {
         for (uint256 n; n < names.length; ++n) {
@@ -118,7 +118,7 @@ contract LinkClosureTest is Test {
             assertFalse(destruct, string.concat(name, ": SELFDESTRUCT"));
             assertFalse(callcode, string.concat(name, ": CALLCODE"));
             bytes32 h = keccak256(bytes(name));
-            uint256 want = h == keccak256("MtxPipelineLib") ? 2 : h == keccak256("UnderlyingLib") ? 1 : 0;
+            uint256 want = h == keccak256("MtxPipelineLib") ? 2 : h == keccak256("WrappedLib") ? 1 : 0;
             assertEq(delegates, want, string.concat(name, ": DELEGATECALL count"));
         }
     }

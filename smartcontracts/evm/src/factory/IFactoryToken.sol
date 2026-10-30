@@ -38,7 +38,7 @@ interface IFactoryToken {
     }
 
 
-    /// @notice One leg of an `UNDERLYING*` kind: `underlying` (`address(0)` = the native coin, CTR-TOK-26), rate
+    /// @notice One leg of an `WRAPPED*` kind: `underlying` (`address(0)` = the native coin, CTR-TOK-26), rate
     ///         `num/den` (CTR-TOK-04). `uint256` so a value `≥ 2^96` reverts `RateInvalid` instead of failing to decode.
     struct Leg {
         address underlying;
@@ -83,10 +83,10 @@ interface IFactoryToken {
         uint256 lockedFeatures;
         address owner;               // 0 = no administration ever
         AdminLib.Roles roles;        // initial holders, each only for a set flag
-        uint256 initialSupply;       // NONE* only
-        address initialHolder;       // NONE* only
-        Leg[] legs;                  // UNDERLYING* only, 1..8
-        RateConfig rate;             // UNDERLYING* only, with RATE_ADJUSTABLE
+        uint256 initialSupply;       // NORMAL* only
+        address initialHolder;       // NORMAL* only
+        Leg[] legs;                  // WRAPPED* only, 1..8
+        RateConfig rate;             // WRAPPED* only, with RATE_ADJUSTABLE
         ConfidentialConfig conf;     // *_ZETHER only
     }
 
@@ -97,7 +97,7 @@ interface IFactoryToken {
     ///         opaque to the factory (here `abi.encode(TokenConfig)`), decoded and validated by the implementation.
     function initialize(address creator, uint64 version, bytes calldata initArgs) external;
 
-    /// @notice The token's underlyings in leg order, empty for the `NONE*` kinds: the factory's index reads it after
+    /// @notice The token's underlyings in leg order, empty for the `NORMAL*` kinds: the factory's index reads it after
     ///         `initialize`.
     function underlyings() external view returns (address[] memory);
 

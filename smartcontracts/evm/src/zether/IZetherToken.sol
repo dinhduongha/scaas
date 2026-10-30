@@ -8,14 +8,14 @@ import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {IUALedger} from "../metatx/IUALedger.sol";
 import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 
-/// @title The confidential layer of the kinds `NONE_ZETHER` and `UNDERLYING_ZETHER` (CTR-ZTH-44, CTR-ZTH-45): ElGamal
+/// @title The confidential layer of the kinds `NORMAL_ZETHER` and `WRAPPED_ZETHER` (CTR-ZTH-44, CTR-ZTH-45): ElGamal
 ///        `acc`/`pending` balances over the token's public ERC-20 balance.
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Byte-exact contract with the prover: `docs/contracts/zether.md`.
 ///         The token is also an `IERC20MetaTx` on the one meta-transaction base: every proof-carrying entry point is a
 ///         direct call (statement `ZTX_V1_DIRECT`, binding 0) or an allowlisted self-call of `mtxExecute` / `uaExecute`
 ///         whose envelope binding the statement carries (`ZTX_V1_RELAYED`, CTR-ZTH-34, CTR-ZTH-51). The shared entry points
 ///         and events are `IConfidentialToken`'s (`auth` and `accHint` must be empty here); `mtxWrapShield` and
-///         `mtxUnshieldUnwrap` are on `UNDERLYING_ZETHER` only (`IConfidentialUnderlyingToken`); the prover views are in
+///         `mtxUnshieldUnwrap` are on `WRAPPED_ZETHER` only (`IConfidentialWrappedToken`); the prover views are in
 ///         `ZetherStatements` (CTR-ZTH-46).
 interface IZetherToken is IUALedger, IConfidentialToken {
     /// @notice One account at one block. An unset point is `O`.

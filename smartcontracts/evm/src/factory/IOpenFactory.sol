@@ -9,15 +9,15 @@ import {IFactoryToken} from "./IFactoryToken.sol";
 ///        with the creator's opaque `initArgs`; no power over any token or DEX it created.
 interface IOpenFactory {
     /// @notice CTR-TOK-21, a fresh enum (nothing deployed): the value equals the implementation's `kind()`.
-    ///         `NONE_PQZ` / `UNDERLYING_PQZ` are built (P6g); ids 6 and 7 (the dropped
+    ///         `NORMAL_PQZ` / `WRAPPED_PQZ` are built (P6g); ids 6 and 7 (the dropped
     ///         `*_ZETHER_PQZ` kinds) are never reused: an out-of-range kind fails ABI decoding.
     enum TokenKind {
-        NONE,
-        UNDERLYING,
-        NONE_ZETHER,
-        UNDERLYING_ZETHER,
-        NONE_PQZ,
-        UNDERLYING_PQZ
+        NORMAL,
+        WRAPPED,
+        NORMAL_ZETHER,
+        WRAPPED_ZETHER,
+        NORMAL_PQZ,
+        WRAPPED_PQZ
     }
 
     /// @notice A release: the factory-deployed code, the env version it was deployed with (its `keccak256(abi.encode(env))`

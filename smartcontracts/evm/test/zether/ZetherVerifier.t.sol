@@ -15,7 +15,7 @@ contract InvHarness is ZetherBls12381Curve {
 
 /// @notice Verifier đứng một mình: proof đúng qua, mọi thay đổi một bit / một trường / một witness sai
 ///         đều bị từ chối. Statement dựng tay theo zether.md §7 (header 512 byte, `chainUid` là word 3; token và
-///         `ZetherStatements` dựng y hệt — xem ZetherNone.t.sol `test_statementHeaderCarriesChainUid`).
+///         `ZetherStatements` dựng y hệt — xem ZetherNormal.t.sol `test_statementHeaderCarriesChainUid`).
 contract ZetherVerifierTest is Test {
     bytes32 constant OP_T = keccak256("SCAAS-ZETHER-OP-TRANSFER-V1");
     bytes32 constant OP_B = keccak256("SCAAS-ZETHER-OP-BURN-V1");

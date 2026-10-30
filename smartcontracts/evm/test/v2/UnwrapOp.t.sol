@@ -7,8 +7,8 @@ import {V2Fixture} from "./helpers/V2Fixture.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {BlacklistERC20, SenderPaysFeeERC20, HookERC20, ITokensReceived, RateAdminForwarder}
     from "./helpers/V2Mocks.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
-import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -16,7 +16,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 /// Người nhận có hook (ERC-777): trong lúc unwrap không gas đang chạy, đọc nonce, số dư của người ký và của người
 /// nhận phí, gọi `transfer` của wrapper (không có guard), hoặc thử vào lại một hàm có guard.
 contract HookRecipient is ITokensReceived {
-    UnderlyingToken public w;
+    WrappedToken public w;
     address public watched;
     uint256 public watchedBatch;
     address public watchedFeeTo;
@@ -25,7 +25,7 @@ contract HookRecipient is ITokensReceived {
     uint256 public seenFeeBalance;
     bool public reenterGuarded;
 
-    constructor(UnderlyingToken w_) { w = w_; }
+    constructor(WrappedToken w_) { w = w_; }
 
     function arm(address who, uint256 batch, address feeTo, bool guarded) external {
         watched = who;
@@ -54,7 +54,7 @@ contract UnwrapOpTest is V2Fixture {
     address shop = address(0x5409);
     address feeTaker = address(0xFEE);
     MockERC20 usdc;
-    UnderlyingToken t;
+    WrappedToken t;
 
     function setUp() public {
         vm.warp(1_800_000_000);
@@ -64,7 +64,7 @@ contract UnwrapOpTest is V2Fixture {
         _wrapFor(t, MockERC20(address(usdc)), alice, 1_000e6);
     }
 
-    function _wrapFor(UnderlyingToken w, MockERC20 u, address who, uint256 v) internal {
+    function _wrapFor(WrappedToken w, MockERC20 u, address who, uint256 v) internal {
         u.mint(who, v);
         vm.startPrank(who);
         u.approve(address(w), v);
@@ -95,7 +95,7 @@ contract UnwrapOpTest is V2Fixture {
         MetaTxLib.MetaTransaction memory m = _op(100e6, shop, 100e6);
         bytes32 d = t.mtxDigest(m);
         vm.expectEmit(address(t));
-        emit IUnderlyingToken.Unwrapped(alice, address(usdc), shop, 100e6, 100e6);
+        emit IWrappedToken.Unwrapped(alice, address(usdc), shop, 100e6, 100e6);
         vm.expectEmit(address(t));
         emit IMetaTx.MetaTransactionExecuted(alice, relayer, 9, 0, d, relayer, 0);
         _run(address(t), m);
@@ -107,7 +107,7 @@ contract UnwrapOpTest is V2Fixture {
 
     /// Phí bằng đơn vị wrapped, cơ sở = `wrapped` (`AMOUNT(0)`), lấy SAU khi đốt; người giữ giữ phần dư làm tròn.
     function test_feeInWrappedUnitsAfterTheCall() public {
-        UnderlyingToken q = _single(address(usdc), 18, 1e12, 1, _fixedRate());
+        WrappedToken q = _single(address(usdc), 18, 1e12, 1, _fixedRate());
         _wrapFor(q, usdc, alice, 10e6);
         MetaTxLib.MetaTransaction memory m = _op(2e18 + 5, shop, 2e6);
         m.mode = RR | RF | PCT;
@@ -115,7 +115,7 @@ contract UnwrapOpTest is V2Fixture {
         m.feeRecipient = feeTaker;
         uint256 fee = uint256(2e18 + 5) / 100;
         vm.expectEmit(address(q));
-        emit IUnderlyingToken.Unwrapped(alice, address(usdc), shop, 2e18, 2e6);
+        emit IWrappedToken.Unwrapped(alice, address(usdc), shop, 2e18, 2e6);
         vm.expectEmit(address(q));
         emit IERC20.Transfer(alice, feeTaker, fee);
         _run(address(q), m);
@@ -140,24 +140,24 @@ contract UnwrapOpTest is V2Fixture {
 
     function test_innerRefusalsBubble() public {
         _runRevert(address(t), _op(10e6, address(0), 0),
-            abi.encodeWithSelector(IUnderlyingToken.UnwrapRecipientInvalid.selector, address(0)));
+            abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, address(0)));
         _runRevert(address(t), _op(10e6, address(t), 0),
-            abi.encodeWithSelector(IUnderlyingToken.UnwrapRecipientInvalid.selector, address(t)));
+            abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, address(t)));
         _runRevert(address(t), _op(10e6, shop, 10e6 + 1),
-            abi.encodeWithSelector(IUnderlyingToken.UnwrapBelowMin.selector, 10e6, 10e6 + 1));
-        _runRevert(address(t), _op(0, shop, 0), abi.encodeWithSelector(IUnderlyingToken.UnwrapTooSmall.selector));
+            abi.encodeWithSelector(IWrappedToken.UnwrapBelowMin.selector, 10e6, 10e6 + 1));
+        _runRevert(address(t), _op(0, shop, 0), abi.encodeWithSelector(IWrappedToken.UnwrapTooSmall.selector));
         _runRevert(address(t), _op(2_000e6, shop, 0),
-            abi.encodeWithSelector(IUnderlyingToken.InsufficientReserve.selector, address(usdc), 2_000e6, 1_000e6));
+            abi.encodeWithSelector(IWrappedToken.InsufficientReserve.selector, address(usdc), 2_000e6, 1_000e6));
         // Multi: an underlying that is not a leg
         address[] memory us = new address[](2);
         (us[0], us[1]) = (address(usdc), address(new MockERC20("Tether", "USDT", 6)));
         uint256[] memory ones = new uint256[](2);
         (ones[0], ones[1]) = (1, 1);
-        UnderlyingToken mu = _multi(us, ones, ones, _fixedRate(), address(0));
+        WrappedToken mu = _multi(us, ones, ones, _fixedRate(), address(0));
         bytes memory d = abi.encodeWithSignature(
             "unwrap(address,uint256,address,uint256)", address(0x1234), 10e6, shop, 0);
         _runRevert(address(mu), _call(alice, d, 9, RR),
-            abi.encodeWithSelector(IUnderlyingToken.UnknownUnderlying.selector, address(0x1234)));
+            abi.encodeWithSelector(IWrappedToken.UnknownUnderlying.selector, address(0x1234)));
     }
 
     /// R132 không áp cho unwrap: không có người được trả.
@@ -173,7 +173,7 @@ contract UnwrapOpTest is V2Fixture {
     /// Chuyển underlying fail trong lời gọi; nó revert cả tx, kể cả phí và nonce.
     function test_underlyingRevertUndoesFeeAndNonce() public {
         BlacklistERC20 bl = new BlacklistERC20();
-        UnderlyingToken b = _single(address(bl), 6, 1, 1, _fixedRate());
+        WrappedToken b = _single(address(bl), 6, 1, 1, _fixedRate());
         _wrapFor(b, MockERC20(address(bl)), alice, 100e6);
         bl.setBlocked(shop, true);
         MetaTxLib.MetaTransaction memory m = _op(50e6, shop, 0);
@@ -186,19 +186,19 @@ contract UnwrapOpTest is V2Fixture {
 
     function test_senderPaysFeeUnderlyingRevertsTheGaslessUnwrap() public {
         SenderPaysFeeERC20 sp = new SenderPaysFeeERC20();
-        UnderlyingToken b = _single(address(sp), 18, 1, 1, _fixedRate());
+        WrappedToken b = _single(address(sp), 18, 1, 1, _fixedRate());
         sp.mint(alice, 1 ether); // the sender-side fee of the wrap itself
         _wrapFor(b, MockERC20(address(sp)), alice, 100 ether);
         sp.mint(address(b), 1 ether);
         _runRevert(address(b), _op(10 ether, shop, 0), abi.encodeWithSelector(
-            IUnderlyingToken.UnderlyingTransferMismatch.selector, address(sp), 10 ether, 10.1 ether));
+            IWrappedToken.UnderlyingTransferMismatch.selector, address(sp), 10 ether, 10.1 ether));
     }
 
     /// Hook ERC-777 giữa unwrap: nonce đã ghi (bước 4), đã đốt, CHƯA thu phí (phí sau lời gọi); hàm không guard
     /// chạy được và trạng thái vẫn nhất quán.
     function test_erc777HookSeesTheNonceSpentAndConsistentState() public {
         HookERC20 hk = new HookERC20();
-        UnderlyingToken h = _single(address(hk), 18, 1, 1, _fixedRate());
+        WrappedToken h = _single(address(hk), 18, 1, 1, _fixedRate());
         HookRecipient r = new HookRecipient(h);
         hk.setHooked(address(r));
         _wrapFor(h, MockERC20(address(hk)), alice, 10 ether);
@@ -222,7 +222,7 @@ contract UnwrapOpTest is V2Fixture {
 
     function test_erc777HookCannotReenterAGuardedFunction() public {
         HookERC20 hk = new HookERC20();
-        UnderlyingToken h = _single(address(hk), 18, 1, 1, _fixedRate());
+        WrappedToken h = _single(address(hk), 18, 1, 1, _fixedRate());
         HookRecipient r = new HookRecipient(h);
         hk.setHooked(address(r));
         _wrapFor(h, MockERC20(address(hk)), alice, 10 ether);
@@ -240,16 +240,16 @@ contract UnwrapOpTest is V2Fixture {
     /// Đổi tỉ lệ đang chờ: unwrap không gas vẫn chạy ở tỉ lệ hiện tại, `minOut` bảo vệ người ký.
     function test_gaslessUnwrapWorksDuringAPendingRateChange() public {
         RateAdminForwarder adm = new RateAdminForwarder();
-        UnderlyingToken a = _single(address(usdc), 6, 1, 1, _adjustable(address(adm)));
+        WrappedToken a = _single(address(usdc), 6, 1, 1, _adjustable(address(adm)));
         _wrapFor(a, usdc, alice, 100);
-        adm.exec(address(a), abi.encodeCall(UnderlyingToken.proposeRate, (address(usdc), 101, 100)));
+        adm.exec(address(a), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 101, 100)));
         _run(address(a), _op(50, shop, 50));
         assertEq(usdc.balanceOf(shop), 50);
         vm.warp(block.timestamp + 7 days);
-        adm.exec(address(a), abi.encodeCall(UnderlyingToken.executeRate, ()));
+        adm.exec(address(a), abi.encodeCall(WrappedToken.executeRate, ()));
         MetaTxLib.MetaTransaction memory m = _op(50, shop, 50);
         m.batch = 10;
-        _runRevert(address(a), m, abi.encodeWithSelector(IUnderlyingToken.UnwrapBelowMin.selector, 49, 50));
+        _runRevert(address(a), m, abi.encodeWithSelector(IWrappedToken.UnwrapBelowMin.selector, 49, 50));
     }
 
     /// No named unwrap any more (R10): both selectors hit no function and revert empty.

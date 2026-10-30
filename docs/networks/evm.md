@@ -184,24 +184,24 @@ which needs `experimental = true` for `evm_version = "amsterdam"`; the profiles 
 (EIP-7843): Clique has no slot, so the opcode is off on the testnet. The bytecode equals the earlier `osaka` build apart
 from the metadata; the gas bounds of the tests moved with Amsterdam's prices (EIP-8037 state gas, EIP-8038 storage writes,
 EIP-7976 calldata floor, EIP-2780 intrinsic), each re-pin names its EIP in the test. The flows' total gas (regular + EIP-8037
-state gas) exceeds 2^24, up to ~111 M for the largest implementation deploy (`UNDERLYING_PQZ`, 110.3 M, table below), so the SCaaS testnet runs a 200 M block gas limit
+state gas) exceeds 2^24, up to ~111 M for the largest implementation deploy (`WRAPPED_PQZ`, 110.3 M, table below), so the SCaaS testnet runs a 200 M block gas limit
 (genesis `gasLimit` `0xbebc200`, reset 2026-10-22; `TargetBlockGasLimit` 200,000,000).
 
 **Minimum block gas limit per release kind (review C5-1; controller proposal, owner may override; no code-size work before
 Glamsterdam).** A release is one `CREATE2` of the whole implementation in the registrar's transaction. Under EIP-8037 the
 code deposit is state gas at 1,530 per byte of runtime, EIP-7825 caps only the regular gas at 2^24 = 16,777,216, and the
 transaction's gas may not exceed the block gas limit, so a release needs `runtime × 1,530 + 16,777,216` of block gas limit
-(the 2^24 term is the regular-gas bound, not the measured figure: `UnderlyingPqzToken` measures about 4.1 M regular). Runtime
+(the 2^24 term is the regular-gas bound, not the measured figure: `WrappedPqzToken` measures about 4.1 M regular). Runtime
 sizes are `smartcontracts/evm/size-baseline.json`'s (re-measured after the metatx split at T8 `69fce983`; the split took 269-456 B off each kind):
 
 | Kind (contract) | Runtime | State gas | Needs |
 |---|---|---|---|
-| `NONE` (`NoUnderlyingToken`) | 38,195 B | 58.4 M | **75.2 M** |
-| `UNDERLYING` (`UnderlyingToken`) | 48,068 B | 73.5 M | 90.3 M |
-| `NONE_ZETHER` (`NoUnderlyingZetherToken`) | 48,313 B | 73.9 M | 90.7 M |
-| `NONE_PQZ` (`NoUnderlyingPqzToken`) | 49,067 B | 75.1 M | 91.8 M |
-| `UNDERLYING_ZETHER` (`UnderlyingZetherToken`) | 60,282 B | 92.2 M | 109.0 M |
-| `UNDERLYING_PQZ` (`UnderlyingPqzToken`) | 61,137 B | 93.5 M | **110.3 M** |
+| `NORMAL` (`NormalToken`) | 38,195 B | 58.4 M | **75.2 M** |
+| `WRAPPED` (`WrappedToken`) | 48,068 B | 73.5 M | 90.3 M |
+| `NORMAL_ZETHER` (`NormalZetherToken`) | 48,313 B | 73.9 M | 90.7 M |
+| `NORMAL_PQZ` (`NormalPqzToken`) | 49,067 B | 75.1 M | 91.8 M |
+| `WRAPPED_ZETHER` (`WrappedZetherToken`) | 60,282 B | 92.2 M | 109.0 M |
+| `WRAPPED_PQZ` (`WrappedPqzToken`) | 61,137 B | 93.5 M | **110.3 M** |
 | information: `MtxPipelineLib` (linked library of every release) | 8,106 B | 12.4 M | 29.2 M |
 | information: `MtxRelayFee` (CTR-MTX-27 router; its `MtxRelayExecutor` 554 B) | 2,908 B | 4.4 M | 21.2 M |
 
@@ -232,14 +232,14 @@ seconds; owner ruling 2026-10-20: every mainnet — any chain outside `DeployBas
 dev chains, so 22776, Hedera 295 and an unknown chain too — defaults to and may not go below 3 days; the SCaaS testnet defaults to 10
 minutes, the other listed test / dev chains to 0; at most 30 days, the factory's `MAX_NOTICE_PERIOD`; `DEMO_SUPPLY`
 needs 0) and, when
-the deployer is the registrar, publishes env 1 of `NONE` and of the DEX (the factory, `chain_uid`, the UA registry, the
+the deployer is the registrar, publishes env 1 of `NORMAL` and of the DEX (the factory, `chain_uid`, the UA registry, the
 `SmartKeyAccount` implementation, Hedera, the linked libraries with their code hashes) and has the factory deploy
-(plan 5g-Z2, [CTR-TOK-03](../contracts/token-wrappers.md#release-env)) `NoUnderlyingToken` as
-version 1 of `NONE` on the UA registry (since UA-4 every token implementation carries the UA ledger and is over
-EIP-170, so `deploy.sh` always passes `--code-size-limit 65536` (and `--slow`: one tx per block, because forge's parallel broadcast can strand a deploy tx that doesn't fit the block's remaining gas) and the chain needs 64 KiB code; `UnderlyingToken` is not
+(plan 5g-Z2, [CTR-TOK-03](../contracts/token-wrappers.md#release-env)) `NormalToken` as
+version 1 of `NORMAL` on the UA registry (since UA-4 every token implementation carries the UA ledger and is over
+EIP-170, so `deploy.sh` always passes `--code-size-limit 65536` (and `--slow`: one tx per block, because forge's parallel broadcast can strand a deploy tx that doesn't fit the block's remaining gas) and the chain needs 64 KiB code; `WrappedToken` is not
 deployed until the size work), the `SCaaSDex`
 implementation as DEX version 1 (a DEX is a `createDex` clone) and `SmartKeyAccountFactory` (P4); with `DEMO_SUPPLY`, two
-kind-`NONE` demo tokens; the v1 line left the deploy in P5 (`legacy/p5/`) ([deploy](../contracts/README.md#build-ci-and-pins)).
+kind-`NORMAL` demo tokens; the v1 line left the deploy in P5 (`legacy/p5/`) ([deploy](../contracts/README.md#build-ci-and-pins)).
 Since UA-3 it also deploys the UA registry generation 1 with its verifiers on every chain (first, since UA-4: the token implementations take its address; `_deployUARegistry`; budget
 12 M, Hedera 10.5 M): the EIP-2537 kinds and `bls-bn254-minsig` only where `script/UAPrecompileProbe.sol`, asked
 through an `eth_call` with no `to` (the node's own precompiles), passes; `bls-bn254-minsig` only on private chains, the
@@ -248,12 +248,12 @@ Solidity on the registry's expanded-key cache: an ML-DSA UA's cache parts (`cach
 ≤ 13.5 M gas) come before its `register` ([accounts.md §1.9](../contracts/accounts.md#verifiers)).
 
 It writes
-`deployments/<chainid>.json` (`token_factory`, `implementation_none`, `dex_implementation`, `ua_registry`, `chain_uid`, `smart_key_account_factory`,
+`deployments/<chainid>.json` (`token_factory`, `implementation_normal`, `dex_implementation`, `ua_registry`, `chain_uid`, `smart_key_account_factory`,
 `smart_key_account_implementation`, `demo_token`, `demo_token_2`; `factory`, `implementation`, `dex`, `scaas_dex` are gone with v1),
 which seeds the client and the node configuration. forge writes it during the simulation, before the broadcast; `deploy.sh` puts the previous file back (or removes the new one) when the broadcast fails.
-Zether (built, P3; dev chains only, UNAUDITED): opt in with `DEPLOY_ZETHER=1` (default off; on a non-dev chain the script refuses). It deploys `ZetherStatements`, `ZetherDisclosure` and per curve the inner-product, transfer and burn verifiers; when the deployer is the registrar it publishes per curve an env of `NONE_ZETHER` and `UNDERLYING_ZETHER` (the UA registry, whose Zether kinds it enables there; `deps` = transfer, burn, inner-product verifier, disclosure, [CTR-ZTH-20](../contracts/zether.md#CTR-ZTH-20); env 1 bn254, env 2 BLS12-381), has the factory deploy the two confidential implementations on it (bn254 as version 1, BLS12-381 as version 2 of each kind; the curve is the release's `curve()`) and enables both kinds, with the keys `zether_registry` (= `ua_registry`), `zether_disclosure`, `zether_statements`, `zether_inner_product_verifier_<curve>`, `zether_verifier_<curve>` (transfer), `zether_burn_verifier_<curve>`, `implementation_none_zether_<curve>`, `implementation_underlying_zether_<curve>` (`<curve>` = `bn254`, `bls12381`; plan 5g-Z1). The implementations exceed 24,576 B and the BLS inner-product verifier's deploy (the generators) uses ~14 M gas, so `deploy.sh` always passes `--gas-estimate-multiplier 105` to `forge script` (the default ×1.30 exceeds the Osaka per-transaction cap of 16,777,216, EIP-7825; ×1.13 or more fails; the largest implementation, `UnderlyingPqzToken`, 13,467,833 gas measured through `deployImplementation` (plan 5g-Z2; 63,975 B of init code with the env), is deployed by `script/pqz/e2e.py`, which sets its own limit) and the anvil needs `--code-size-limit 65536`; `ZetherDeploy.t` checks each deploy fits. `scripts/e2e-zether.sh` runs the
+Zether (built, P3; dev chains only, UNAUDITED): opt in with `DEPLOY_ZETHER=1` (default off; on a non-dev chain the script refuses). It deploys `ZetherStatements`, `ZetherDisclosure` and per curve the inner-product, transfer and burn verifiers; when the deployer is the registrar it publishes per curve an env of `NORMAL_ZETHER` and `WRAPPED_ZETHER` (the UA registry, whose Zether kinds it enables there; `deps` = transfer, burn, inner-product verifier, disclosure, [CTR-ZTH-20](../contracts/zether.md#CTR-ZTH-20); env 1 bn254, env 2 BLS12-381), has the factory deploy the two confidential implementations on it (bn254 as version 1, BLS12-381 as version 2 of each kind; the curve is the release's `curve()`) and enables both kinds, with the keys `zether_registry` (= `ua_registry`), `zether_disclosure`, `zether_statements`, `zether_inner_product_verifier_<curve>`, `zether_verifier_<curve>` (transfer), `zether_burn_verifier_<curve>`, `implementation_normal_zether_<curve>`, `implementation_wrapped_zether_<curve>` (`<curve>` = `bn254`, `bls12381`; plan 5g-Z1). The implementations exceed 24,576 B and the BLS inner-product verifier's deploy (the generators) uses ~14 M gas, so `deploy.sh` always passes `--gas-estimate-multiplier 105` to `forge script` (the default ×1.30 exceeds the Osaka per-transaction cap of 16,777,216, EIP-7825; ×1.13 or more fails; the largest implementation, `WrappedPqzToken`, 13,467,833 gas measured through `deployImplementation` (plan 5g-Z2; 63,975 B of init code with the env), is deployed by `script/pqz/e2e.py`, which sets its own limit) and the anvil needs `--code-size-limit 65536`; `ZetherDeploy.t` checks each deploy fits. `scripts/e2e-zether.sh` runs the
 dev-chain e2e (UA-3, rewritten for UA-8): a fresh anvil 31337, this deploy, one BLS12-381 Zether UA registered through a relayer
-with the clientkeys portable PoP (no chain id, chain uid or registry in it; all attributes absent), and a `NONE_ZETHER` token
+with the clientkeys portable PoP (no chain id, chain uid or registry in it; all attributes absent), and a `NORMAL_ZETHER` token
 shielding to it (`script/ZetherE2E.s.sol`).
 Integration tests use `anvil --hardfork osaka --gas-limit 16777216 --code-size-limit 65536` (64 KiB code, as EIP-7954 proposes; owner 2026-10-11 — real chains keep 24,576, so a contract that only fits this anvil still cannot be deployed there).
 

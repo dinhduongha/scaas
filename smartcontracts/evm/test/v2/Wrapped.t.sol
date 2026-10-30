@@ -2,20 +2,20 @@
 pragma solidity ^0.8.20;
 
 import {stdJson} from "forge-std/StdJson.sol";
-import {V2Fixture, Rate, underlyingInit} from "./helpers/V2Fixture.sol";
+import {V2Fixture, Rate, wrappedInit} from "./helpers/V2Fixture.sol";
 import {RateAdminForwarder} from "./helpers/V2Mocks.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
-import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 
-/// Kind `UNDERLYING` on `AdminLib` (CTR-TOK-22): flags valid for the kind, the rate role and the guardian as roles,
+/// Kind `WRAPPED` on `AdminLib` (CTR-TOK-22): flags valid for the kind, the rate role and the guardian as roles,
 /// `disableFeature(RATE_ADJUSTABLE)` cancels a pending change, the single-asset ABI rule, the leg count, and
-/// `UnderlyingLib` writing only its own namespace.
-contract UnderlyingTest is V2Fixture {
+/// `WrappedLib` writing only its own namespace.
+contract WrappedTest is V2Fixture {
     using stdJson for string;
 
     uint8 constant RATE = 3;
@@ -29,7 +29,7 @@ contract UnderlyingTest is V2Fixture {
     address bob = address(0xB0B);
 
     function initExt(address[] memory us, bytes memory d) external returns (address) {
-        return _clone(_underlyingImpl(), address(this), us, d);
+        return _clone(_wrappedImpl(), address(this), us, d);
     }
 
     function _two() internal view returns (address[] memory us, uint256[] memory one) {
@@ -39,7 +39,7 @@ contract UnderlyingTest is V2Fixture {
         (one[0], one[1]) = (1, 1);
     }
 
-    function _wrap(UnderlyingToken t, MockERC20 u, address who, uint256 v) internal {
+    function _wrap(WrappedToken t, MockERC20 u, address who, uint256 v) internal {
         u.mint(who, v);
         vm.startPrank(who);
         u.approve(address(t), v);
@@ -49,25 +49,25 @@ contract UnderlyingTest is V2Fixture {
 
     // ------------------------------------------------------------------ flags and init
 
-    function test_validFlags_underlyingKind() public {
+    function test_validFlags_wrappedKind() public {
         (address[] memory us, uint256[] memory one) = _two();
         Rate memory fixedRate;
-        IFactoryToken.TokenConfig memory c = underlyingInit(us, one, one, 6, fixedRate, address(0), address(0));
+        IFactoryToken.TokenConfig memory c = wrappedInit(us, one, one, 6, fixedRate, address(0), address(0));
         c.features |= 1 << AdminLib.MINTABLE;
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.MINTABLE));
         this.initExt(us, abi.encode(c));
-        c = underlyingInit(us, one, one, 6, fixedRate, address(0), address(0));
+        c = wrappedInit(us, one, one, 6, fixedRate, address(0), address(0));
         c.roles.rateAdmin = address(new RateAdminForwarder());
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.RoleWithoutFeature.selector, RATE));
         this.initExt(us, abi.encode(c));
-        c = underlyingInit(us, one, one, 6, _adjustable(bob), address(0), address(0));
+        c = wrappedInit(us, one, one, 6, _adjustable(bob), address(0), address(0));
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.RoleNotContract.selector, RATE, bob));
         this.initExt(us, abi.encode(c));
         // adjustable without an initial rate admin is valid: the owner grants the role later
-        c = underlyingInit(us, one, one, 6, _adjustable(address(0)), address(0), wrapperOwner);
-        UnderlyingToken t = UnderlyingToken(this.initExt(us, abi.encode(c)));
+        c = wrappedInit(us, one, one, 6, _adjustable(address(0)), address(0), wrapperOwner);
+        WrappedToken t = WrappedToken(this.initExt(us, abi.encode(c)));
         assertTrue(t.rateAdjustable());
-        assertEq(t.kind(), AdminLib.KIND_UNDERLYING);
+        assertEq(t.kind(), AdminLib.KIND_WRAPPED);
         assertEq(t.features(), (1 << AdminLib.PAYABLE) | (1 << RATE));
     }
 
@@ -78,27 +78,27 @@ contract UnderlyingTest is V2Fixture {
         uint256[] memory none;
         vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.UnderlyingCountInvalid.selector, 0));
         this.initExt(new address[](0),
-            abi.encode(underlyingInit(new address[](0), none, none, 6, fixedRate, address(0), address(0))));
+            abi.encode(wrappedInit(new address[](0), none, none, 6, fixedRate, address(0), address(0))));
         address[] memory nine = new address[](9);
         uint256[] memory ones = new uint256[](9);
         for (uint256 i; i < 9; ++i) (nine[i], ones[i]) = (address(new MockERC20("X", "X", 6)), 1);
         vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.UnderlyingCountInvalid.selector, 9));
-        this.initExt(nine, abi.encode(underlyingInit(nine, ones, ones, 6, fixedRate, address(0), address(0))));
+        this.initExt(nine, abi.encode(wrappedInit(nine, ones, ones, 6, fixedRate, address(0), address(0))));
     }
 
     // ------------------------------------------------------------------ rate role (RATE_ADJUSTABLE)
 
     function test_rateRole_grantRevokeRenounce_leaveTheRate() public {
         RateAdminForwarder adm = new RateAdminForwarder();
-        UnderlyingToken t = _single(address(usdc), 6, 1, 1, _adjustable(address(0)));
-        vm.expectRevert(IUnderlyingToken.NotRateAdmin.selector);
+        WrappedToken t = _single(address(usdc), 6, 1, 1, _adjustable(address(0)));
+        vm.expectRevert(IWrappedToken.NotRateAdmin.selector);
         adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100)));
         vm.prank(wrapperOwner);
         t.grantRole(RATE, address(adm));
         adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100)));
         vm.prank(wrapperOwner);
         t.revokeRole(RATE, address(adm));
-        vm.expectRevert(IUnderlyingToken.NotRateAdmin.selector);
+        vm.expectRevert(IWrappedToken.NotRateAdmin.selector);
         adm.exec(address(t), abi.encodeCall(t.cancelRate, ()));
         // revoking leaves the pending change and the rate as they are
         (address u,,, uint64 eta) = t.pendingRate();
@@ -114,18 +114,18 @@ contract UnderlyingTest is V2Fixture {
 
     function test_disableRateAdjustable_cancelsThePendingChange_andFixesTheRate() public {
         RateAdminForwarder adm = new RateAdminForwarder();
-        UnderlyingToken t = _single(address(usdc), 6, 1, 1, _adjustable(address(adm)));
+        WrappedToken t = _single(address(usdc), 6, 1, 1, _adjustable(address(adm)));
         adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100)));
         usdc.mint(alice, 10);
         vm.prank(alice);
         usdc.approve(address(t), 10);
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.WrapPausedForRateChange.selector, address(usdc)));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapPausedForRateChange.selector, address(usdc)));
         t.wrap(10);
         vm.expectEmit(address(t));
         emit ITokenAdmin.FeatureDisabled(RATE, wrapperOwner);
         vm.expectEmit(address(t));
-        emit IUnderlyingToken.RateChangeCancelled(address(usdc));
+        emit IWrappedToken.RateChangeCancelled(address(usdc));
         vm.prank(wrapperOwner);
         t.disableFeature(RATE);
         (address u, uint96 n, uint96 d, uint64 eta) = t.pendingRate();
@@ -133,15 +133,15 @@ contract UnderlyingTest is V2Fixture {
         assertFalse(t.rateAdjustable());
         vm.prank(alice);
         t.wrap(10);
-        vm.expectRevert(IUnderlyingToken.RateFixed.selector);
+        vm.expectRevert(IWrappedToken.RateFixed.selector);
         adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100)));
-        vm.expectRevert(IUnderlyingToken.RateFixed.selector);
+        vm.expectRevert(IWrappedToken.RateFixed.selector);
         adm.exec(address(t), abi.encodeCall(t.executeRate, ()));
     }
 
     function test_disableRateAdjustable_withNothingPending_emitsNoCancel() public {
         RateAdminForwarder adm = new RateAdminForwarder();
-        UnderlyingToken t = _single(address(usdc), 6, 1, 1, _adjustable(address(adm)));
+        WrappedToken t = _single(address(usdc), 6, 1, 1, _adjustable(address(adm)));
         vm.recordLogs();
         vm.prank(wrapperOwner);
         t.disableFeature(RATE);
@@ -152,33 +152,33 @@ contract UnderlyingTest is V2Fixture {
 
     function test_guardianRole_disableWrap_oneWay_andFlagGates() public {
         (address[] memory us, uint256[] memory one) = _two();
-        UnderlyingToken t = _multi(us, one, one, _fixedRate(), bob); // an EOA guardian is allowed
+        WrappedToken t = _multi(us, one, one, _fixedRate(), bob); // an EOA guardian is allowed
         vm.prank(alice);
-        vm.expectRevert(IUnderlyingToken.NotGuardian.selector);
+        vm.expectRevert(IWrappedToken.NotGuardian.selector);
         t.disableWrap(address(usdt), "x");
         vm.expectEmit(address(t));
-        emit IUnderlyingToken.WrapDisabled(address(usdt), bob, "depeg");
+        emit IWrappedToken.WrapDisabled(address(usdt), bob, "depeg");
         vm.prank(bob);
         t.disableWrap(address(usdt), "depeg");
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.WrapDisabledFor.selector, address(usdt)));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapDisabledFor.selector, address(usdt)));
         t.disableWrap(address(usdt), "again");
         // a disabled flag stops the role: the guardian keeps the role but has no power
         vm.prank(wrapperOwner);
         t.disableFeature(GUARD);
         assertTrue(t.hasRole(GUARD, bob));
         vm.prank(bob);
-        vm.expectRevert(IUnderlyingToken.NotGuardian.selector);
+        vm.expectRevert(IWrappedToken.NotGuardian.selector);
         t.disableWrap(address(usdc), "late");
     }
 
     function test_guardianRenounces() public {
         (address[] memory us, uint256[] memory one) = _two();
-        UnderlyingToken t = _multi(us, one, one, _fixedRate(), bob);
+        WrappedToken t = _multi(us, one, one, _fixedRate(), bob);
         vm.prank(bob);
         t.renounceRole(GUARD);
         vm.prank(bob);
-        vm.expectRevert(IUnderlyingToken.NotGuardian.selector);
+        vm.expectRevert(IWrappedToken.NotGuardian.selector);
         t.disableWrap(address(usdt), "x");
     }
 
@@ -186,20 +186,20 @@ contract UnderlyingTest is V2Fixture {
 
     function test_singleAssetAbi_onlyWithExactlyOneLeg() public {
         (address[] memory us, uint256[] memory one) = _two();
-        UnderlyingToken m = _multi(us, one, one, _fixedRate(), address(0));
+        WrappedToken m = _multi(us, one, one, _fixedRate(), address(0));
         _wrap(m, usdc, alice, 100);
         vm.startPrank(alice);
-        vm.expectRevert(IUnderlyingToken.UnderlyingRequired.selector);
+        vm.expectRevert(IWrappedToken.UnderlyingRequired.selector);
         m.wrap(1);
-        vm.expectRevert(IUnderlyingToken.UnderlyingRequired.selector);
+        vm.expectRevert(IWrappedToken.UnderlyingRequired.selector);
         m.unwrap(1, alice);
-        vm.expectRevert(IUnderlyingToken.UnderlyingRequired.selector);
+        vm.expectRevert(IWrappedToken.UnderlyingRequired.selector);
         m.unwrap(1, alice, 0);
         vm.stopPrank();
         assertEq(m.underlying(), address(0));
         assertEq(m.underlyings().length, 2);
 
-        UnderlyingToken s = _single(address(usdc), 6, 1, 1, _fixedRate());
+        WrappedToken s = _single(address(usdc), 6, 1, 1, _fixedRate());
         assertEq(s.underlying(), address(usdc));
         // the per-leg ABI works on one leg too
         _wrap(s, usdc, alice, 50);
@@ -212,11 +212,11 @@ contract UnderlyingTest is V2Fixture {
 
     // ------------------------------------------------------------------ storage (CTR-TOK-24)
 
-    /// `UnderlyingLib` keeps the legs in `scaas.underlying`: leg i at `keccak256(i ‖ NS)` (+1 rate, +2 reserve);
+    /// `WrappedLib` keeps the legs in `scaas.underlying`: leg i at `keccak256(i ‖ NS)` (+1 rate, +2 reserve);
     /// a wrap and a rate proposal write nothing in `scaas.token`.
     function test_underlyingStateLivesInItsNamespace() public {
         RateAdminForwarder adm = new RateAdminForwarder();
-        UnderlyingToken t = _single(address(usdc), 6, 3, 7, _adjustable(address(adm)));
+        WrappedToken t = _single(address(usdc), 6, 3, 7, _adjustable(address(adm)));
         bytes32[12] memory tokBefore;
         for (uint256 i; i < 12; ++i) tokBefore[i] = vm.load(address(t), bytes32(uint256(NS_TOKEN) + i));
         usdc.mint(address(this), 1_000);
@@ -234,15 +234,15 @@ contract UnderlyingTest is V2Fixture {
         for (uint256 s = 3; s < 8; ++s) assertEq(vm.load(address(t), bytes32(s)), bytes32(0));
     }
 
-    /// Errors raised inside the external `UnderlyingLib` (OpenZeppelin's `FailedCall`, `SafeERC20FailedOperation`,
-    /// `InsufficientBalance`) are in the token ABI only if `IUnderlyingToken` declares them.
+    /// Errors raised inside the external `WrappedLib` (OpenZeppelin's `FailedCall`, `SafeERC20FailedOperation`,
+    /// `InsufficientBalance`) are in the token ABI only if `IWrappedToken` declares them.
     /// R4 (metatx split): an error raised only inside a linked library must still be in the token's ABI, so a client
     /// decodes it (`SigCheckGasStarved`, `ModeFeeInvalid`, `FeeRecipientRequired`, `HtsQueryFailed`, …). Checked for
-    /// `UnderlyingLib` × `UnderlyingToken` and `MtxPipelineLib` × every kind's artifact.
+    /// `WrappedLib` × `WrappedToken` and `MtxPipelineLib` × every kind's artifact.
     function test_libraryErrorsAreInTheTokenAbi() public view {
-        _requireErrorsIn("UnderlyingLib", "UnderlyingToken");
-        string[6] memory kinds = ["NoUnderlyingToken", "UnderlyingToken", "NoUnderlyingZetherToken",
-            "UnderlyingZetherToken", "NoUnderlyingPqzToken", "UnderlyingPqzToken"];
+        _requireErrorsIn("WrappedLib", "WrappedToken");
+        string[6] memory kinds = ["NormalToken", "WrappedToken", "NormalZetherToken",
+            "WrappedZetherToken", "NormalPqzToken", "WrappedPqzToken"];
         for (uint256 k; k < kinds.length; ++k) _requireErrorsIn("MtxPipelineLib", kinds[k]);
     }
 

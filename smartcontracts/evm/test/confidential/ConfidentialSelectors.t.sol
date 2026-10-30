@@ -2,11 +2,11 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {IConfidentialToken, IConfidentialUnderlyingToken} from "../../src/confidential/IConfidentialToken.sol";
+import {IConfidentialToken, IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
-import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
-import {UnderlyingPqzToken} from "../../src/pqz/UnderlyingPqzToken.sol";
+import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
+import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 
 /// Plan 5h D20 (spec §5.11, owner Q3): one interface, one selector per shared function across the Zether and the PQZ
 /// layer; the ABI the clients encode is pinned by signature.
@@ -39,12 +39,12 @@ contract ConfidentialSelectorsTest is Test {
         assertEq(zid, type(IConfidentialToken).interfaceId);
         assertEq(pid, type(IConfidentialToken).interfaceId);
 
-        assertEq(UnderlyingZetherToken.mtxWrapShield.selector, IConfidentialUnderlyingToken.mtxWrapShield.selector);
-        assertEq(UnderlyingPqzToken.mtxWrapShield.selector, IConfidentialUnderlyingToken.mtxWrapShield.selector);
-        assertEq(UnderlyingZetherToken.mtxUnshieldUnwrap.selector, IConfidentialUnderlyingToken.mtxUnshieldUnwrap.selector);
-        assertEq(UnderlyingPqzToken.mtxUnshieldUnwrap.selector, IConfidentialUnderlyingToken.mtxUnshieldUnwrap.selector);
-        assertEq(UnderlyingZetherToken.mtxWrapShield.selector ^ UnderlyingPqzToken.mtxUnshieldUnwrap.selector,
-            type(IConfidentialUnderlyingToken).interfaceId);
+        assertEq(WrappedZetherToken.mtxWrapShield.selector, IConfidentialWrappedToken.mtxWrapShield.selector);
+        assertEq(WrappedPqzToken.mtxWrapShield.selector, IConfidentialWrappedToken.mtxWrapShield.selector);
+        assertEq(WrappedZetherToken.mtxUnshieldUnwrap.selector, IConfidentialWrappedToken.mtxUnshieldUnwrap.selector);
+        assertEq(WrappedPqzToken.mtxUnshieldUnwrap.selector, IConfidentialWrappedToken.mtxUnshieldUnwrap.selector);
+        assertEq(WrappedZetherToken.mtxWrapShield.selector ^ WrappedPqzToken.mtxUnshieldUnwrap.selector,
+            type(IConfidentialWrappedToken).interfaceId);
     }
 
     /// The shared ABI: `(payload, proof, auth, beneficiary, accHint[, …])`, ids `bytes32`.
@@ -59,9 +59,9 @@ contract ConfidentialSelectorsTest is Test {
         assertEq(IConfidentialToken.mtxUnshield.selector,
             bytes4(keccak256("mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)")));
         assertEq(IConfidentialToken.mtxRollOver.selector, bytes4(keccak256("mtxRollOver(bytes32,uint256)")));
-        assertEq(IConfidentialUnderlyingToken.mtxWrapShield.selector,
+        assertEq(IConfidentialWrappedToken.mtxWrapShield.selector,
             bytes4(keccak256("mtxWrapShield(address,uint256,bytes32)")));
-        assertEq(IConfidentialUnderlyingToken.mtxUnshieldUnwrap.selector,
+        assertEq(IConfidentialWrappedToken.mtxUnshieldUnwrap.selector,
             bytes4(keccak256("mtxUnshieldUnwrap(bytes,bytes,bytes,bytes32,bytes,(address,bytes32,uint256,uint256))")));
         assertEq(IConfidentialToken.Shielded.selector, keccak256("Shielded(bytes32,address,uint256,uint64)"));
         assertEq(IConfidentialToken.RolledOver.selector, keccak256("RolledOver(bytes32,uint64,uint32,bytes32)"));

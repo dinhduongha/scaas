@@ -5,7 +5,7 @@ import {console2} from "forge-std/Test.sol";
 import {PqzStatePinGasTest, GasBurner, RowBurner} from "./PqzStateGas.t.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
-import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
+import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 
 /// metatx-split T5 (spec §3.6, §10 R9; owner variant A 2026-10-21): the split's relayed overhead must not grow with the
@@ -35,7 +35,7 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
         bytes memory fpk = new bytes(897); // fndsa512: 0x09 then every h_i = 0 < q
         fpk[0] = 0x09;
         fnFee2 = reg.register(UAKinds.FNDSA512, fpk, IUARegistry.UAAttrs("", 0, 0, ""), new bytes(666), "");
-        NoUnderlyingPqzToken(address(tok)).mintToUA(fnFee2, 1000);
+        NormalPqzToken(address(tok)).mintToUA(fnFee2, 1000);
         minted += 1000;
         bytes32 mlFee = feeUA;
         for (uint256 k; k < 3; ++k) {

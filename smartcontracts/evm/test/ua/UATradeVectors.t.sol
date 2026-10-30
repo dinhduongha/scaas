@@ -16,13 +16,13 @@ import {
     ZetherSchnorrBls12381Verifier
 } from "../../src/ua/verifiers/PairingVerifiers.sol";
 import {UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
-import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 
@@ -33,7 +33,7 @@ contract KindFactory {
     }
 
     function versionOf(address) external pure returns (IOpenFactory.TokenKind, uint64) {
-        return (IOpenFactory.TokenKind.NONE, 1);
+        return (IOpenFactory.TokenKind.NORMAL, 1);
     }
 
     function isDeprecated(IOpenFactory.TokenKind, uint64) external pure returns (bool) {
@@ -41,7 +41,7 @@ contract KindFactory {
     }
 }
 
-/// smartcontracts/vectors/ua/uatrade_kat.json (UA-5b, dex.md CTR-DEX-25/26) on context A with the real verifiers: `NONE`
+/// smartcontracts/vectors/ua/uatrade_kat.json (UA-5b, dex.md CTR-DEX-25/26) on context A with the real verifiers: `NORMAL`
 /// clones at the vector's token addresses, a `SCaaSDex` clone at its DEX address. Every row's order, cancel and
 /// invalidation digest is recomputed by the token, every auth passes through the token under the purpose `trade`
 /// (`uaCancelOrder`, `uaInvalidateNonces`, and the order in a settlement against the native maker, gas logged per kind);
@@ -51,8 +51,8 @@ contract UATradeVectorsTest is UARegistryBase {
     address internal constant RELAYER = address(0xBEEF);
     address internal constant TREASURY = address(0x7EA5);
     string internal vj;
-    NoUnderlyingToken internal A;
-    NoUnderlyingToken internal B;
+    NormalToken internal A;
+    NormalToken internal B;
     SCaaSDex internal dex;
 
     function setUp() public override {
@@ -98,11 +98,11 @@ contract UATradeVectorsTest is UARegistryBase {
         reg.register(0x0131, pk, _none(), vm.parseJsonBytes(pj, string.concat(k, "pop.sig")), "");
     }
 
-    function _token(address at) internal returns (NoUnderlyingToken t) {
-        address impl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_A, false), ""));
+    function _token(address at) internal returns (NormalToken t) {
+        address impl = address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_A, false), ""));
         vm.etch(at, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
-        t = NoUnderlyingToken(at);
-        t.initialize(address(this), 1, abi.encode(noneInit("T", "T", 6, 1e15, address(this), address(this))));
+        t = NormalToken(at);
+        t.initialize(address(this), 1, abi.encode(normalInit("T", "T", 6, 1e15, address(this), address(this))));
     }
 
     function _realCfgs() internal returns (UARegistry.KindConfig[] memory c) {
@@ -146,7 +146,7 @@ contract UATradeVectorsTest is UARegistryBase {
         return ISCaaSDex.Leg(sell, 1, abi.encode(o), vm.parseJsonBytes(vj, string.concat(r, "auth")), fill);
     }
 
-    function _fund(NoUnderlyingToken t, bytes32 id, uint256 v) internal {
+    function _fund(NormalToken t, bytes32 id, uint256 v) internal {
         if (UAKinds.inNativeSpace(id)) t.transfer(address(uint160(uint256(id))), v);
         else t.transferToUA(id, v);
     }

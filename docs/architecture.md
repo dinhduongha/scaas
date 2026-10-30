@@ -235,8 +235,8 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 
 | Component | Path | Role | Status |
 |---|---|---|---|
-| EVM contracts | `smartcontracts/evm/` (Foundry; `src/{account,chains,common,dex,factory,hedera,metatx,trade,ua,wallet,zether}`) | Target: the token tree `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)); the libraries `TradeLib`, `AdminLib`, `UnderlyingLib`, `ZetherLib`, `HederaLib`, with pay inline behind the `PAYABLE` flag in `MetaTokenBase` (no `PayLib`; [CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); `OpenFactory` for tokens and DEX clones ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); `SCaaSDex`; `MandateWallet`; `SmartKeyAccount`; `UARegistry` (`src/ua/`); the Zether verifiers (bn254, BLS12-381), `ZetherDisclosure`, `ZetherStatements`. Build profiles `private7622` (the SCaaS testnet), `zether`, `gnosis`, `celo` | BUILT (P1a–P1e): `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase`, kind `NONE` = `NoUnderlyingToken`, kind `UNDERLYING` = `UnderlyingToken` (1–8 legs, native-coin leg) + `UnderlyingLib`, `AdminLib`, `HederaLib`, and `OpenFactory` with `createToken`/`TokenConfig`; `TradeLib` and the `SCaaSDex` clone (P2), the `*_ZETHER` kinds and `ZetherLib` (P3), `MandateWallet` and `SmartKeyAccount` (P4); the v1 line, the old `ZetherToken` and the typed structs in `legacy/` (P3–P5). SPECIFIED: `PqzToken` |
-| Hedera contracts | the EVM implementations | No separate contracts: the EVM implementations deployed with `IS_HEDERA` (HIP-632 signatures, fail-closed HTS checks; [CTR-TOK-23](contracts/token-wrappers.md#CTR-TOK-23)) | BUILT (P1c–P1d): `IS_HEDERA` is an immutable of every implementation; `HederaLib` (`smartcontracts/evm/src/hedera/`) holds the HIP-632 path, and the HTS association is called from `UnderlyingLib` init; the Hedera wrapper children are deleted (the v1 `HederaMetaToken` is in `legacy/p5/`) |
+| EVM contracts | `smartcontracts/evm/` (Foundry; `src/{account,chains,common,dex,factory,hedera,metatx,trade,ua,wallet,zether}`) | Target: the token tree `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NORMAL`, `WRAPPED`, `NORMAL_ZETHER`, `WRAPPED_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)); the libraries `TradeLib`, `AdminLib`, `WrappedLib`, `ZetherLib`, `HederaLib`, with pay inline behind the `PAYABLE` flag in `MetaTokenBase` (no `PayLib`; [CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); `OpenFactory` for tokens and DEX clones ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); `SCaaSDex`; `MandateWallet`; `SmartKeyAccount`; `UARegistry` (`src/ua/`); the Zether verifiers (bn254, BLS12-381), `ZetherDisclosure`, `ZetherStatements`. Build profiles `private7622` (the SCaaS testnet), `zether`, `gnosis`, `celo` | BUILT (P1a–P1e): `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase`, kind `NORMAL` = `NormalToken`, kind `WRAPPED` = `WrappedToken` (1–8 legs, native-coin leg) + `WrappedLib`, `AdminLib`, `HederaLib`, and `OpenFactory` with `createToken`/`TokenConfig`; `TradeLib` and the `SCaaSDex` clone (P2), the `*_ZETHER` kinds and `ZetherLib` (P3), `MandateWallet` and `SmartKeyAccount` (P4); the v1 line, the old `ZetherToken` and the typed structs in `legacy/` (P3–P5). SPECIFIED: `PqzToken` |
+| Hedera contracts | the EVM implementations | No separate contracts: the EVM implementations deployed with `IS_HEDERA` (HIP-632 signatures, fail-closed HTS checks; [CTR-TOK-23](contracts/token-wrappers.md#CTR-TOK-23)) | BUILT (P1c–P1d): `IS_HEDERA` is an immutable of every implementation; `HederaLib` (`smartcontracts/evm/src/hedera/`) holds the HIP-632 path, and the HTS association is called from `WrappedLib` init; the Hedera wrapper children are deleted (the v1 `HederaMetaToken` is in `legacy/p5/`) |
 | Cosmos contracts | `smartcontracts/cosmos/` (CosmWasm workspace) | `scaas-token` (CW20 + meta-op), `scaas-mandate`, `scaas-dex`, shared `scaas-metaop` | BUILT |
 | Soroban contracts | `smartcontracts/soroban/` | SEP-41 token + `pay`, mandate, DEX; native auth as the meta-tx (Stellar and Pi Network) | BUILT |
 | Move contracts | `smartcontracts/move/{aptos,sui}/` | Package `scaas`: `meta` (per-subject account + lanes), mandate, DEX | BUILT |
@@ -278,17 +278,17 @@ linked docs; this page only explains the fit.
 classDiagram
     MetaTxBase <|-- ERC20MetaTx
     ERC20MetaTx <|-- MetaTokenBase
-    MetaTokenBase <|-- NoUnderlyingToken : NONE
-    MetaTokenBase <|-- UnderlyingToken : UNDERLYING, 1-8 legs
-    MetaTokenBase <|-- NoUnderlyingZetherToken : NONE_ZETHER
-    MetaTokenBase <|-- UnderlyingZetherToken : UNDERLYING_ZETHER
-    ZetherLayer <|-- NoUnderlyingZetherToken
-    ZetherLayer <|-- UnderlyingZetherToken
+    MetaTokenBase <|-- NormalToken : NORMAL
+    MetaTokenBase <|-- WrappedToken : WRAPPED, 1-8 legs
+    MetaTokenBase <|-- NormalZetherToken : NORMAL_ZETHER
+    MetaTokenBase <|-- WrappedZetherToken : WRAPPED_ZETHER
+    ZetherLayer <|-- NormalZetherToken
+    ZetherLayer <|-- WrappedZetherToken
     MetaTokenBase ..> TradeLib : trade
     MetaTokenBase ..> AdminLib : flags and roles
     MetaTokenBase ..> HederaLib : if IS_HEDERA
-    UnderlyingToken ..> UnderlyingLib : legs
-    UnderlyingZetherToken ..> UnderlyingLib : legs
+    WrappedToken ..> WrappedLib : legs
+    WrappedZetherToken ..> WrappedLib : legs
     ZetherLayer ..> ZetherLib : proofs
     class MetaTxBase {
         <<abstract>>
@@ -310,7 +310,7 @@ classDiagram
     }
     class TradeLib { <<library>> }
     class AdminLib { <<library>> }
-    class UnderlyingLib { <<library>> }
+    class WrappedLib { <<library>> }
     class ZetherLib { <<library>> }
     class HederaLib { <<library>> }
 ```
@@ -328,10 +328,10 @@ registered implementation, initialized in the same call, and answers its own pro
 
 | Kind | `PAYABLE` | `MINTABLE` | `BURNABLE` | `RATE_ADJUSTABLE` | `WRAP_DISABLEABLE` | `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST` |
 |---|---|---|---|---|---|---|
-| `NONE` | yes | yes | yes | — | — | yes |
-| `UNDERLYING` | yes | — | — | yes | yes | yes |
-| `NONE_ZETHER` | yes | yes | yes | — | — | refused |
-| `UNDERLYING_ZETHER` | yes | — | — | yes | yes | refused |
+| `NORMAL` | yes | yes | yes | — | — | yes |
+| `WRAPPED` | yes | — | — | yes | yes | yes |
+| `NORMAL_ZETHER` | yes | yes | yes | — | — | refused |
+| `WRAPPED_ZETHER` | yes | — | — | yes | yes | refused |
 
 *Valid features per kind: the "Valid kinds" column of [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22); the
 regulated flags 5–8 are [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17).*
@@ -449,7 +449,7 @@ the funds in that wallet, and the payer pays no gas for an `approve` ([CTR-ACC-0
 ```mermaid
 flowchart LR
     U["Underlying leg<br/>ERC-20 or native coin"]
-    subgraph TOK["UnderlyingZetherToken"]
+    subgraph TOK["WrappedZetherToken"]
         P["Public balance<br/>ERC-20"]
         S["Shielded balance<br/>acc and pending per UA"]
     end
@@ -471,7 +471,7 @@ flowchart LR
 ```
 
 *Public and shielded paths of a confidential kind ([CTR-ZTH-44](contracts/zether.md#CTR-ZTH-44),
-[CTR-ZTH-45](contracts/zether.md#CTR-ZTH-45)); `NONE_ZETHER` has only shield and unshield.*
+[CTR-ZTH-45](contracts/zether.md#CTR-ZTH-45)); `NORMAL_ZETHER` has only shield and unshield.*
 
 Businesses need amounts hidden from competitors and visible to their auditor; identities stay public by design ("not
 a mixer"). The confidential kinds therefore add a **layer over the public balance** instead of a separate token: the
@@ -744,14 +744,14 @@ The same call, with the same bytes, registers the UA on any other chain (anyone 
 
 Value enters the shielded balance straight from an underlying leg and leaves straight to one
 ([CTR-ZTH-45](contracts/zether.md#CTR-ZTH-45), [CTR-ZTH-37](contracts/zether.md#CTR-ZTH-37)); built (P3) on development
-chains only: `UnderlyingZetherToken` (`mtxWrapShield`, `mtxUnshieldUnwrap`; plan 5h names), Zether ops relayed through `mtxExecute`,
+chains only: `WrappedZetherToken` (`mtxWrapShield`, `mtxUnshieldUnwrap`; plan 5h names), Zether ops relayed through `mtxExecute`,
 and `ITransferDisclosure`.
 
 ```mermaid
 sequenceDiagram
     participant SND as Sender (clientkeys, zether-prover)
     participant RLY as Node (relayer)
-    participant TOK as UnderlyingZetherToken
+    participant TOK as WrappedZetherToken
     participant STM as ZetherStatements
     participant VER as Zether verifier
     participant RCV as Recipient
@@ -944,7 +944,7 @@ Crypto-shredding, disclosure for reconciliation and the land gate are in
 | **Consumed** | Job state: the subject nonce moved past the intent's nonce through a transaction this node did not land (or has not attributed yet). Never a failure by itself ([NODE-LANE-09](node/submit-lanes.md#NODE-LANE-09)). |
 | **UA** | Universal Account: an account identifier derived from key data, an EOA generalised to every signature scheme — the native address for a chain's native accounts (never registered), otherwise `keccak256(keccak256(kind_tag) ‖ key_data)` (32 bytes, kind-tagged, top 96 bits non-zero), registered per chain with a portable proof of possession that binds the UA, its attributes (PQZ key, KEM record) and the PQZ proof hash — no chain, registry or caller, so registration is relayable and copyable to any chain (UA-8) ([contracts/accounts.md](contracts/accounts.md)). The built registry uses the Zether-only `keccak256(encodedY)` form until the UA registry replaces it ([CTR-UA-22](contracts/accounts.md#CTR-UA-22)). |
 | **Mandate** | An on-chain spending authorization held by a subject's wallet contract (`MandateWallet`): delegate, per-payment and per-period caps, payees, expiry, revocation ([CTR-ACC-06](contracts/mandates.md#CTR-ACC-06)). |
-| **Kind** | The implementation a token is cloned from, chosen at creation: `NONE`, `UNDERLYING` (1–8 legs), `NONE_ZETHER`, `UNDERLYING_ZETHER`; the post-quantum kinds are reserved ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)). Code, not a setting. |
+| **Kind** | The implementation a token is cloned from, chosen at creation: `NORMAL`, `WRAPPED` (1–8 legs), `NORMAL_ZETHER`, `WRAPPED_ZETHER`; the post-quantum kinds are reserved ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)). Code, not a setting. |
 | **Feature flag** | A bit of a token's `features`, chosen at creation (`PAYABLE`, `MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, the regulated `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`); per flag locked or disableable, never set later ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
 | **Owner** | A token's optional administrator: grants and revokes the roles of its flags, may clear an unlocked flag, may renounce for good; it acts on a flag only through a role ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
 | **Role holder** | An account granted the role of a flag (`minter`, `rateAdmin`, `guardian`, `issuer`, `compliance`); it can use only that flag's power and keeps the role after the owner renounces ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |

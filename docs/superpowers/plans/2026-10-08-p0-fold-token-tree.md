@@ -98,11 +98,11 @@ git commit -m "docs: fold the accepted Zether multi-recipient design (Z1-Z13) in
 - Modify: `docs/decisions.md`
 
 **Interfaces:**
-- Produces anchors: `CTR-TOK-21` tree and kinds (one implementation per kind; `NONE`, `UNDERLYING` 1–8 legs, `NONE_ZETHER`, `UNDERLYING_ZETHER`; PQZ kinds reserved), `CTR-TOK-22` features (`features`, `lockedFeatures`, bit table of spec §5, validation in `initialize`, `disableFeature`, `PAYABLE` default off and immutable), `CTR-TOK-23` Hedera as `IS_HEDERA`, `CTR-TOK-24` libraries, ERC-7201 namespaces, size budget 20,480 B, `CTR-TOK-25` factory `createToken` / `createTokenUnregistered` / `TokenConfig` / `TokenCreated`, `CTR-MTX-25` one `SigCheck`. Tasks 3–5 link `CTR-TOK-22` and `CTR-TOK-25`.
+- Produces anchors: `CTR-TOK-21` tree and kinds (one implementation per kind; `NORMAL`, `WRAPPED` 1–8 legs, `NORMAL_ZETHER`, `WRAPPED_ZETHER`; PQZ kinds reserved), `CTR-TOK-22` features (`features`, `lockedFeatures`, bit table of spec §5, validation in `initialize`, `disableFeature`, `PAYABLE` default off and immutable), `CTR-TOK-23` Hedera as `IS_HEDERA`, `CTR-TOK-24` libraries, ERC-7201 namespaces, size budget 20,480 B, `CTR-TOK-25` factory `createToken` / `createTokenUnregistered` / `TokenConfig` / `TokenCreated`, `CTR-MTX-25` one `SigCheck`. Tasks 3–5 link `CTR-TOK-22` and `CTR-TOK-25`.
 
 - [ ] **Step 1: `token-wrappers.md` — tree and kinds**
 
-Replace the class list and diagram of *Overview* by spec §3's tree (Mermaid `classDiagram`, the checker refuses ASCII art — C11) and the kinds table; anchor `CTR-TOK-21` on the paragraph "One implementation per kind; features are flags (CTR-TOK-22)". Rename section *Tiers* to *Kinds*; merge the tier-2 and tier-3 subsections into `### UNDERLYING — UnderlyingToken (1–8 legs)` keeping every rate/reserve rule (`CTR-TOK-04/05/06/07/13/19`) with "tier 2/3" replaced by "a one-leg / multi-leg `UnderlyingToken`"; add the single-asset ABI rule (works only with one leg, `UnderlyingRequired`).
+Replace the class list and diagram of *Overview* by spec §3's tree (Mermaid `classDiagram`, the checker refuses ASCII art — C11) and the kinds table; anchor `CTR-TOK-21` on the paragraph "One implementation per kind; features are flags (CTR-TOK-22)". Rename section *Tiers* to *Kinds*; merge the tier-2 and tier-3 subsections into `### WRAPPED — WrappedToken (1–8 legs)` keeping every rate/reserve rule (`CTR-TOK-04/05/06/07/13/19`) with "tier 2/3" replaced by "a one-leg / multi-leg `WrappedToken`"; add the single-asset ABI rule (works only with one leg, `UnderlyingRequired`).
 
 - [ ] **Step 2: `token-wrappers.md` — features**
 
@@ -214,7 +214,7 @@ git commit -m "docs: factory-made DEX clones and an advisory DEX registry (T12)"
 
 - [ ] **Step 1: Layer and invariant**
 
-Rewrite *Underlying, verifier gas, chains* as `## Confidential layer` with anchor `CTR-ZTH-44` (spec §6.1 and §6.3 verbatim) and anchor `CTR-ZTH-47`. Edit `CTR-ZTH-08` (Zether on the one base) to "a `ZetherLayer` on `MetaTokenBase` kinds `NONE_ZETHER` / `UNDERLYING_ZETHER` (CTR-TOK-21)". In *Meta-transaction envelope*: the envelope (`ZetherMetaTx`, `_executeOp`, `relayed*`) becomes allowlisted self-calls of `mtxExecute` — link the MT-6 rule already there; mark the built envelope Transitional (P3).
+Rewrite *Underlying, verifier gas, chains* as `## Confidential layer` with anchor `CTR-ZTH-44` (spec §6.1 and §6.3 verbatim) and anchor `CTR-ZTH-47`. Edit `CTR-ZTH-08` (Zether on the one base) to "a `ZetherLayer` on `MetaTokenBase` kinds `NORMAL_ZETHER` / `WRAPPED_ZETHER` (CTR-TOK-21)". In *Meta-transaction envelope*: the envelope (`ZetherMetaTx`, `_executeOp`, `relayed*`) becomes allowlisted self-calls of `mtxExecute` — link the MT-6 rule already there; mark the built envelope Transitional (P3).
 
 - [ ] **Step 2: Names**
 
@@ -222,11 +222,11 @@ Add anchor `CTR-ZTH-45` with spec §6.2's table. Replace, in `zether.md`, `integ
 
 - [ ] **Step 3: ZetherStatements and the register**
 
-Add anchor `CTR-ZTH-46` (spec T14 + §6.1 sentence). Add register entries `CTR-ZTH-44…47`. Set `CTR-ZTH-10` (underlying ERC-20 in v1) `status: superseded`, `superseded-by: CTR-ZTH-44`. Edit `CTR-ZTH-14` to drop "fee-on-transfer underlyings refused" if it now lives in `UnderlyingLib`'s rule (`CTR-TOK-11`), linking it.
+Add anchor `CTR-ZTH-46` (spec T14 + §6.1 sentence). Add register entries `CTR-ZTH-44…47`. Set `CTR-ZTH-10` (underlying ERC-20 in v1) `status: superseded`, `superseded-by: CTR-ZTH-44`. Edit `CTR-ZTH-14` to drop "fee-on-transfer underlyings refused" if it now lives in `WrappedLib`'s rule (`CTR-TOK-11`), linking it.
 
 - [ ] **Step 4: PQZ — names only**
 
-In `pq-zero-knowledge.md`, add anchor `CTR-PQZ-22`: "PQZ entry points are `pqzShield`, `pqzWrapShield`, `pqzTransfer`, `pqzUnshield`, `pqzUnshieldUnwrap`, `pqzRollOver`; kinds `NONE_PQZ`, `UNDERLYING_PQZ` (and `*_ZETHER_PQZ`) are reserved (CTR-TOK-21)". Rename the selectors in the normative ABI line accordingly (`pqzBurn` → `pqzUnshield`, `fund` → `pqzShield`). Add one `open` sentence: "Disclosure changes Z9/Z10/Z12 and multi-recipient transfers are not ruled for PQZ (owner review pending)." Register `CTR-PQZ-22`.
+In `pq-zero-knowledge.md`, add anchor `CTR-PQZ-22`: "PQZ entry points are `pqzShield`, `pqzWrapShield`, `pqzTransfer`, `pqzUnshield`, `pqzUnshieldUnwrap`, `pqzRollOver`; kinds `NORMAL_PQZ`, `WRAPPED_PQZ` (and `*_ZETHER_PQZ`) are reserved (CTR-TOK-21)". Rename the selectors in the normative ABI line accordingly (`pqzBurn` → `pqzUnshield`, `fund` → `pqzShield`). Add one `open` sentence: "Disclosure changes Z9/Z10/Z12 and multi-recipient transfers are not ruled for PQZ (owner review pending)." Register `CTR-PQZ-22`.
 Run: `grep -n 'SENDER_CP\|attest\|opt-out\|MAX_RECIPIENTS' docs/contracts/pq-zero-knowledge.md`
 Expected: no new lines beyond the `open` sentence.
 
@@ -280,7 +280,7 @@ git commit -m "docs: SubjectAccount is SmartKeyAccount (T15)"
 
 Write `docs/README.md` with these sections, in order (no anchors `<a id=…>`: the page defines no rules — checker rule at `docs_check.py:431`):
 1. `# SCaaS — SmartContract as a Service` and a 3-line lead (what it is, that this page is the entry point).
-2. `## What SCaaS is` — from `SCaaS-v2.md` *What SCaaS is*, updated: contract families, the node, clients; the EVM token model in one paragraph (kinds `NONE`/`UNDERLYING` × confidential layer, features chosen at creation, link `CTR-TOK-21`, `CTR-TOK-22`).
+2. `## What SCaaS is` — from `SCaaS-v2.md` *What SCaaS is*, updated: contract families, the node, clients; the EVM token model in one paragraph (kinds `NORMAL`/`WRAPPED` × confidential layer, features chosen at creation, link `CTR-TOK-21`, `CTR-TOK-22`).
 3. `## Who it is for` — from `SCaaS-v2.md`, unchanged in substance.
 4. `## What it offers` — from `SCaaS-v2.md`, each bullet ending with a link to its component doc (tokens → `contracts/token-wrappers.md`, gasless meta-tx → `contracts/metatx.md`, payments → `integration.md`, DEX → `contracts/dex.md`, confidential balances → `contracts/zether.md`, accounts → `contracts/accounts.md`, tender/asset suite, node mesh → `node/README.md`). Replace any v1/v2 names (`MetaToken`, `SubjectAccount`, tiers) by the folded names.
 5. `## Deployment shapes` — from `SCaaS-v2.md`.
@@ -314,7 +314,7 @@ git commit -m "docs: README.md is the one entry page (SCaaS-v2.md merged into it
 
 - [ ] **Step 1: Components table is current**
 
-Rewrite the EVM and Hedera rows of *Components* (:198–200): EVM row lists the token tree (`MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER`), the libraries, `OpenFactory` (tokens + DEX), `OrderBookDex`, `MandateWallet`, `SmartKeyAccount`, `UniversalAccountRegistry`, Zether verifiers, `ZetherDisclosure`, `ZetherStatements`; status "BUILT: v1/v2 lines and `ZetherToken`; target tree SPECIFIED (P1–P5)". Hedera row: "no separate contracts; implementations deployed with `IS_HEDERA` (CTR-TOK-23)". Contents line at :9 lists the new sections of Steps 2–4.
+Rewrite the EVM and Hedera rows of *Components* (:198–200): EVM row lists the token tree (`MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NORMAL`, `WRAPPED`, `NORMAL_ZETHER`, `WRAPPED_ZETHER`), the libraries, `OpenFactory` (tokens + DEX), `OrderBookDex`, `MandateWallet`, `SmartKeyAccount`, `UniversalAccountRegistry`, Zether verifiers, `ZetherDisclosure`, `ZetherStatements`; status "BUILT: v1/v2 lines and `ZetherToken`; target tree SPECIFIED (P1–P5)". Hedera row: "no separate contracts; implementations deployed with `IS_HEDERA` (CTR-TOK-23)". Contents line at :9 lists the new sections of Steps 2–4.
 
 - [ ] **Step 2: New section `## Contract layer` (after *Components*)**
 

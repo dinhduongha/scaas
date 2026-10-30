@@ -42,12 +42,12 @@ suite and the confidential layer. The node (`scaas-node`). Clients: signers, wal
 
 **The EVM token model.** One base tree serves every token.
 
-<p align="center"><img src="assets/token-tree.svg" width="860" alt="EVM token tree: MetaTxBase, ERC20MetaTx, MetaTokenBase, then the kinds NONE and UNDERLYING (built in P1) and NONE_ZETHER and UNDERLYING_ZETHER (target, P3); libraries AdminLib, UnderlyingLib, HederaLib (built), TradeLib (P2) and ZetherLib (P3) (target)."></p>
+<p align="center"><img src="assets/token-tree.svg" width="860" alt="EVM token tree: MetaTxBase, ERC20MetaTx, MetaTokenBase, then the kinds NORMAL and WRAPPED (built in P1) and NORMAL_ZETHER and WRAPPED_ZETHER (target, P3); libraries AdminLib, WrappedLib, HederaLib (built), TradeLib (P2) and ZetherLib (P3) (target)."></p>
 
-- **Kinds.** A token has one of four kinds: `NONE` (a plain issuer token), `UNDERLYING` (a wrapper of one to eight
-  legs, each an ERC-20 or the native coin), or the same two with the confidential layer, `NONE_ZETHER` and
-  `UNDERLYING_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)). The post-quantum confidential kinds
-  `NONE_PQZ`, `UNDERLYING_PQZ` are built on the private chains and unaudited; the combined kinds 6 and 7 were dropped (CTR-TOK-21)
+- **Kinds.** A token has one of four kinds: `NORMAL` (a plain issuer token), `WRAPPED` (a wrapper of one to eight
+  legs, each an ERC-20 or the native coin), or the same two with the confidential layer, `NORMAL_ZETHER` and
+  `WRAPPED_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)). The post-quantum confidential kinds
+  `NORMAL_PQZ`, `WRAPPED_PQZ` are built on the private chains and unaudited; the combined kinds 6 and 7 were dropped (CTR-TOK-21)
   ([pq-zero-knowledge.md](contracts/pq-zero-knowledge.md)).
 - **Signing is not a kind.** Every token accepts the same intents from an EOA, a `SmartKeyAccount` (ERC-1271) or a
   Universal Account with a PQ key (`mldsa44`, `mldsa65`, `fndsa512`) through the UA ledger in the token base

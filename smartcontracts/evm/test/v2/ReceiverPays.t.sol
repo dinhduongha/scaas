@@ -4,14 +4,14 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-import {noneInit} from "./helpers/V2Fixture.sol";
+import {normalInit} from "./helpers/V2Fixture.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// Receiver-pays (CTR-MTX-05, CTR-MTX-06): the payer's `MetaTransfer` runs untouched, the payee's co-signed
@@ -26,14 +26,14 @@ contract ReceiverPaysTest is Test {
     address internal feeTo = address(0xFEE);
     bytes32 internal constant REF = keccak256("request-1");
     uint32 internal constant RR = MetaTxLib.MODE_RESTRICT_RELAYER;
-    NoUnderlyingToken internal t;
+    NormalToken internal t;
 
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        address impl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""));
-        t = NoUnderlyingToken(Clones.clone(impl));
-        t.initialize(address(this), 1, abi.encode(noneInit("Points", "PTS", 6, 0, address(this), address(this))));
+        address impl = address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""));
+        t = NormalToken(Clones.clone(impl));
+        t.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
         t.mint(payer, 1_000e6);
     }
 

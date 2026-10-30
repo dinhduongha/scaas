@@ -5,7 +5,7 @@
 #   1. a `zether-bls12381` UA: clientkeys makes the portable PoP (UA-8 P1: no chain id, chain uid or registry), a relayer
 #      submits it through `register(kind, keyData, UAAttrs, pop, pqzPop)` (a Zether UA holds no PQZ or KEM key: no
 #      `storePqzPop`, whatever the block gas limit);
-#   2. a NONE_ZETHER token from the deployed factory shields to it (script/ZetherE2E.s.sol).
+#   2. a NORMAL_ZETHER token from the deployed factory shields to it (script/ZetherE2E.s.sol).
 # Needs anvil, forge, cast, jq, node (clients/clientkeys with its node_modules). PORT (default 18545) for the anvil.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -44,5 +44,5 @@ echo "1/2 Zether UA registered (clientkeys PoP, relayed)"
 cd "$ROOT/smartcontracts/evm"
 ZETHER_Y="$Y1" forge script script/ZetherE2E.s.sol --rpc-url "$RPC" --broadcast --disable-code-size-limit \
   --sender "$DEPLOYER" --silent >/dev/null
-echo "2/2 NONE_ZETHER token shielded to the Zether UA (registered by kindOf)"
+echo "2/2 NORMAL_ZETHER token shielded to the Zether UA (registered by kindOf)"
 echo "e2e-zether: 2/2 passed"

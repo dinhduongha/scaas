@@ -156,7 +156,7 @@ contract OpenFactory is IOpenFactory {
     function createTokenUnregistered(TokenKind kind, address implementation, bytes calldata initArgs, bytes32 salt)
         external returns (address)
     {
-        if (uint8(kind) >= uint8(TokenKind.NONE_ZETHER)) revert UnregisteredConfidentialKind(kind);
+        if (uint8(kind) >= uint8(TokenKind.NORMAL_ZETHER)) revert UnregisteredConfidentialKind(kind);
         _checkImplementation(kind, implementation);
         return _create(kind, 0, implementation, initArgs, salt);
     }

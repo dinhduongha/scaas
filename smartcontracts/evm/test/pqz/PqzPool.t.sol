@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Test, console2} from "forge-std/Test.sol";
-import {IConfidentialToken, IConfidentialUnderlyingToken} from "../../src/confidential/IConfidentialToken.sol";
+import {IConfidentialToken, IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
@@ -10,8 +10,8 @@ import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {PqzSafety} from "../../src/pqz/PqzSafety.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
-import {UnderlyingPqzToken} from "../../src/pqz/UnderlyingPqzToken.sol";
-import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
+import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
+import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
@@ -230,16 +230,16 @@ contract PqzPoolTest is PqzFixture {
     }
 }
 
-/// The relayed unwrap binding (D15) and the D19 pool moves of the underlying kind.
-contract PqzPoolUnderlyingTest is PqzFixture {
+/// The relayed unwrap binding (D15) and the D19 pool moves of the wrapped kind.
+contract PqzPoolWrappedTest is PqzFixture {
     uint256 internal constant KEY = 0xA11CE;
     MockERC20 internal usd;
-    UnderlyingPqzToken internal w;
+    WrappedPqzToken internal w;
 
     function setUp() public {
         _stack();
-        _releaseUnderlying();
-        w = _newUnderlying("w");
+        _releaseWrapped();
+        w = _newWrapped("w");
         tok = PqzLayer(address(w));
         usd = MockERC20(w.underlyings()[0]);
     }
@@ -253,7 +253,7 @@ contract PqzPoolUnderlyingTest is PqzFixture {
         assertEq(w.totalSupply(), 1_000 * SCALE, "minted to the pool");
         assertEq(w.balanceOf(MetaTxLib.SHIELD_POOL), 1_000 * SCALE);
         bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, carol), _blob(3, PqzCt.CT));
-        IConfidentialUnderlyingToken.Unwrap memory x = IConfidentialUnderlyingToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 400, 0);
+        IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 400, 0);
         w.mtxUnshieldUnwrap(pl, hex"c0de", _mlAuth(), _benM(pl), "", x);
         assertEq(usd.balanceOf(address(0xD00D)), 400 * SCALE);
         assertEq(w.totalSupply(), 600 * SCALE, "burnt from the pool");
@@ -271,10 +271,10 @@ contract PqzPoolUnderlyingTest is PqzFixture {
         usd.approve(address(w), type(uint256).max);
         w.mtxWrapShield(address(usd), 100 * SCALE, alice);
         bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), _blob(3, PqzCt.CT));
-        IConfidentialUnderlyingToken.Unwrap memory x = IConfidentialUnderlyingToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 40, 7);
+        IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 40, 7);
         MetaTxLib.MetaTransaction memory m;
         m.from = vm.addr(KEY);
-        m.data = abi.encodeCall(UnderlyingPqzToken.mtxUnshieldUnwrap, (pl, hex"c0de", _mlAuth(), _benM(pl), bytes(""), x));
+        m.data = abi.encodeCall(WrappedPqzToken.mtxUnshieldUnwrap, (pl, hex"c0de", _mlAuth(), _benM(pl), bytes(""), x));
         m.validUntil = block.timestamp + 1 hours;
         bytes32 env = w.envelopeBinding(m);
         bytes32 want = keccak256(abi.encode(env, w.unwrapBinding(address(usd), 7)));
@@ -294,7 +294,7 @@ contract PqzPoolUnderlyingTest is PqzFixture {
 /// `shieldIn`, op 7 with `decoyFee`, unshield, unshield-unwrap (the mocked precompile accepts every proof; amounts are
 /// bounded by `totalShielded` so the pool never goes short).
 contract PqzPoolHandler is Test {
-    UnderlyingPqzToken internal w;
+    WrappedPqzToken internal w;
     MockERC20 internal usd;
     bytes32[] internal uas; // alice (the sender), bob, carol, xs
     bytes internal auth;
@@ -304,7 +304,7 @@ contract PqzPoolHandler is Test {
     uint256 public fees; // ghost Σ fees paid to UAs
     address public constant PAYEE = address(0xD00D);
 
-    constructor(UnderlyingPqzToken w_, bytes32[] memory uas_, bytes memory auth_) {
+    constructor(WrappedPqzToken w_, bytes32[] memory uas_, bytes memory auth_) {
         (w, uas, auth) = (w_, uas_, auth_);
         usd = MockERC20(w.underlyings()[0]);
         usd.approve(address(w), type(uint256).max);
@@ -399,7 +399,7 @@ contract PqzPoolHandler is Test {
         if (w.totalShielded() <= f) return;
         a = bound(a, 1, w.totalShielded() - f);
         bytes memory pl = bytes.concat(abi.encode(_p(), block.number + 100, uint256(0), uas[0], ben), _blob(PqzCt.CT));
-        w.mtxUnshieldUnwrap(pl, hex"c0de", auth, ben, "", IConfidentialUnderlyingToken.Unwrap(address(usd), bytes32(uint256(uint160(PAYEE))), a, 0));
+        w.mtxUnshieldUnwrap(pl, hex"c0de", auth, ben, "", IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(PAYEE))), a, 0));
         fees += f;
         supply -= a * SCALE;
     }
@@ -407,14 +407,14 @@ contract PqzPoolHandler is Test {
 
 contract PqzPoolInvariantTest is PqzFixture {
     PqzPoolHandler internal h;
-    UnderlyingPqzToken internal w;
+    WrappedPqzToken internal w;
 
     function setUp() public {
         _stack();
         _mockOp(7, 1);
-        _releaseUnderlying();
+        _releaseWrapped();
         minDecoy = 1;
-        w = _newUnderlying("inv");
+        w = _newWrapped("inv");
         tok = PqzLayer(address(w));
         bytes32[] memory u = new bytes32[](5);
         (u[0], u[1], u[2]) = (alice, bob, carol);

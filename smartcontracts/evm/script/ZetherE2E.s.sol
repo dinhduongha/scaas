@@ -13,7 +13,7 @@ import {ZetherLayer} from "../src/zether/ZetherLayer.sol";
 import {ZetherTypes} from "../src/zether/ZetherTypes.sol";
 
 /// @title The token leg of the UA-3 dev-chain e2e (`scripts/e2e-zether.sh`): after `deploy.sh evm` with
-///        `DEPLOY_ZETHER=1` and a `zether-bls12381` UA registered with a clientkeys PoP, a `NONE_ZETHER` token from the
+///        `DEPLOY_ZETHER=1` and a `zether-bls12381` UA registered with a clientkeys PoP, a `NORMAL_ZETHER` token from the
 ///        deployed factory shields to it: the token finds the UA by `registry.kindOf` (accounts.md §1.13).
 /// @notice env: PRIVATE_KEY (deployer, holds the token's initial supply), ZETHER_Y (the UA's `Y`, 128 bytes, EIP-2537).
 contract ZetherE2E is Script {
@@ -29,12 +29,12 @@ contract ZetherE2E is Script {
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features) = ("Zether E2E", "zE2E", 6, 1 << AdminLib.PAYABLE);
         (c.initialSupply, c.initialHolder) = (1_000_000, vm.addr(pk));
-        // version 1 of NONE_ZETHER is the BLS12-381 release (CTR-ZTH-20, CTR-ZTH-32); the creator names no verifier
+        // version 1 of NORMAL_ZETHER is the BLS12-381 release (CTR-ZTH-20, CTR-ZTH-32); the creator names no verifier
         c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0);
         vm.startBroadcast(pk);
         ZetherLayer t = ZetherLayer(
             OpenFactory(j.readAddress(".token_factory")).createToken(
-                IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(c), keccak256("scaas.e2e.zether")
+                IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), keccak256("scaas.e2e.zether")
             )
         );
         t.mtxShield(ZetherTypes.UA.unwrap(ZetherTypes.toUA(y)), 1234);

@@ -1,19 +1,19 @@
-# P1d — `UnderlyingLib` + `UnderlyingToken`: one wrapper kind for 1–8 legs, the native-coin leg, rate admin and guardian as `AdminLib` roles — Implementation Plan
+# P1d — `WrappedLib` + `WrappedToken`: one wrapper kind for 1–8 legs, the native-coin leg, rate admin and guardian as `AdminLib` roles — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace `SingleUnderlyingToken`, `MultiUnderlyingToken` and the two Hedera wrapper children by one
-implementation `UnderlyingToken` (kind `UNDERLYING`, CTR-TOK-21) whose legs, reserves and rates live in an external
-library `UnderlyingLib` (ERC-7201 `scaas.underlying`, CTR-TOK-24), add the native-coin leg (CTR-TOK-26), and move the
+implementation `WrappedToken` (kind `WRAPPED`, CTR-TOK-21) whose legs, reserves and rates live in an external
+library `WrappedLib` (ERC-7201 `scaas.underlying`, CTR-TOK-24), add the native-coin leg (CTR-TOK-26), and move the
 rate admin and the guardian onto the `AdminLib` roles of `RATE_ADJUSTABLE` and `WRAP_DISABLEABLE` (CTR-TOK-22).
 
-**Architecture:** `UnderlyingLib` (public mutations linked at deploy, small internal helpers inlined) owns
-`UnderlyingStorage {legs, legIndex, pending, legCount, rateDelay, maxRateStepBps}` and does the core of wrap and unwrap
+**Architecture:** `WrappedLib` (public mutations linked at deploy, small internal helpers inlined) owns
+`WrappedStorage {legs, legIndex, pending, legCount, rateDelay, maxRateStepBps}` and does the core of wrap and unwrap
 without a destination: pull (or take `msg.value` on the native leg), price, reserve, pay out; rate proposals with
 timelock; `disableWrap`; init (decode, check against the factory's `underlyings`, `AdminLib.init`, legs; Hedera HTS
-association under `IS_HEDERA`). `UnderlyingToken` keeps the ERC-20 side inline (mint after the pull, burn before the
+association under `IS_HEDERA`). `WrappedToken` keeps the ERC-20 side inline (mint after the pull, burn before the
 payout), emits `Wrapped`/`Unwrapped`/`ReserveAdded`, and declares every library event and error through
-`IUnderlyingToken` so they are in its ABI. Factory v2 keeps `initialize(creator, underlyings, version, initData)`;
+`IWrappedToken` so they are in its ABI. Factory v2 keeps `initialize(creator, underlyings, version, initData)`;
 `META_SINGLE` now takes 1–8 legs; P1e replaces the factory with `createToken`/`TokenConfig`.
 
 **Tech Stack:** Solidity 0.8.28, Foundry (forge 1.3.5; external libraries are auto-linked in tests and scripts),
@@ -32,25 +32,25 @@ OpenZeppelin Contracts 5.2.0, forge-std 1.16.2; `scaas-node` e2e (Rust, `cargo t
   `/usr/bin/grep`, `rtk proxy git diff`.
 - Build pins unchanged (solc 0.8.28, optimizer 200, no via-IR, EVM prague). New/touched src files `pragma solidity ^0.8.24;`.
 - **Size: not optimised in this plan (owner, 2026-10-11: "tạm thời chưa quan tâm kích thước, tối ưu sau").** Measured in
-  the spike: `UnderlyingToken` 25,408 B (over EIP-170 24,576 — see D2), `UnderlyingLib` 11,018 B, `NoUnderlyingToken`
+  the spike: `WrappedToken` 25,408 B (over EIP-170 24,576 — see D2), `WrappedLib` 11,018 B, `NormalToken`
   20,038 B (unchanged), `AdminLib` 3,406 B. Size tests pin ceilings, they do not shrink anything.
 - Flag bits (CTR-TOK-22): 0 `PAYABLE`, 1 `MINTABLE`, 2 `BURNABLE`, 3 `RATE_ADJUSTABLE` (role rateAdmin, contract only),
-  4 `WRAP_DISABLEABLE` (role guardian, any address), 5–8 regulated (refused `FeatureNotBuilt`). Valid on `UNDERLYING`:
-  {0, 3, 4} (+ 5–8 refused). Kind `UNDERLYING` = 1.
+  4 `WRAP_DISABLEABLE` (role guardian, any address), 5–8 regulated (refused `FeatureNotBuilt`). Valid on `WRAPPED`:
+  {0, 3, 4} (+ 5–8 refused). Kind `WRAPPED` = 1.
 - Namespaces: `scaas.underlying` `0x38d6f7edefffa65376a58a6aced8a2c86698d3a0b5d15a785f69ed89d0cd1000`
   (`cast index-erc7201 scaas.underlying`); `scaas.token` `0x83083067f3d1caf66741d4eeefa9d3f4f0e5b0793677731d6fee7e67b774ac00`;
-  `scaas.metatx` `0x06b01547c739946503c06c80685cc72ae2fec5074fd602f84cd2fa888722ac00`. `UnderlyingStorage` slots:
+  `scaas.metatx` `0x06b01547c739946503c06c80685cc72ae2fec5074fd602f84cd2fa888722ac00`. `WrappedStorage` slots:
   `legs` NS+0 (leg i at `keccak256(abi.encode(i, NS))`, +1 `num ‖ den`, +2 `reserve`), `legIndex` NS+1, `pending` NS+2,
   `legCount ‖ rateDelay ‖ maxRateStepBps` NS+3.
 - Linear layout of every token after this plan: ERC-20 slots 0–4 only (`_legCount` is removed from `MetaTokenBase`).
-- Token ABI added/kept on `UnderlyingToken`: `wrap(uint256)` payable, `wrap(address,uint256)` payable,
+- Token ABI added/kept on `WrappedToken`: `wrap(uint256)` payable, `wrap(address,uint256)` payable,
   `unwrap(uint256,address)`, `unwrap(uint256,address,uint256)`, `unwrap(address,uint256,address,uint256) returns (out,
   burned)`, `addReserve(address,uint256)` payable, `disableWrap(address,bytes32)`, `proposeRate`, `cancelRate`,
   `executeRate`, views `underlying`, `underlyings`, `legOf`, `collateralValue`, `previewWrap`, `previewUnwrap`,
   `rateAdjustable`, `rateDelay`, `maxRateStepBps`, `pendingRate`, constant `RATE_WINDOW` (7 days). Removed:
   `renounceRateAdmin`, `renounceGuardian`, `rateAdmin()`, `guardian()`, events `RateAdminRenounced`,
   `GuardianRenounced`, error `RateAdminNotContract`. New error `NativeValueMismatch(uint256 value, uint256 expected)`.
-- Allowlist of `UnderlyingToken` (CTR-MTX-19), rule = (class, amountArg, staticLen): `cancelNonce` (1,0,36),
+- Allowlist of `WrappedToken` (CTR-MTX-19), rule = (class, amountArg, staticLen): `cancelNonce` (1,0,36),
   `wrap(uint256)` (1,0,36), `unwrap(uint256,address,uint256)` (2,0,100), `wrap(address,uint256)` (1,0,68),
   `unwrap(address,uint256,address,uint256)` (2,1,132), `addReserve(address,uint256)` (1,0,68). `_mtxRule` falls back to
   `super._mtxRule` (closes P1c note (c)).
@@ -80,12 +80,12 @@ OpenZeppelin Contracts 5.2.0, forge-std 1.16.2; `scaas-node` e2e (Rust, `cargo t
 - **D1 — `mtxWrap` (CTR-TOK-20) moves to P2.** It calls `underlying.mtxTrade(TradeOrder, …)`, which does not exist
   before `TradeLib` (P2, MT-5). `NativeNotGasless()` goes with it. A native wrap through `mtxExecute(wrap(…))` fails with
   `NativeValueMismatch(0, amount)` (a self-call carries no value). Cost if wrong: none now; P2 adds one entry point.
-- **D2 — Size is out of scope (owner).** `UnderlyingToken` is ~25.4 KB, over EIP-170, so it cannot be deployed on a real
+- **D2 — Size is out of scope (owner).** `WrappedToken` is ~25.4 KB, over EIP-170, so it cannot be deployed on a real
   chain yet; forge tests do not enforce EIP-170. The deploy scripts keep deploying only `META_NONE` (the P1b R3
   arrangement continues) and the size tests pin a ceiling (26,624). The size work (the owner's "optimise later", at
   the latest the P1e CI size gate) must bring it under 24,576 (and the 20,480 budget). Flag to the owner.
-- **D3 — `UnderlyingToken.sol` is `git mv` of `SingleUnderlyingToken.sol`, rewritten**; most of its logic moves to the
-  new `UnderlyingLib.sol`. `MultiUnderlyingToken.sol` and `src/hedera/HederaTokensV2.sol` are deleted.
+- **D3 — `WrappedToken.sol` is `git mv` of `SingleUnderlyingToken.sol`, rewritten**; most of its logic moves to the
+  new `WrappedLib.sol`. `MultiUnderlyingToken.sol` and `src/hedera/HederaTokensV2.sol` are deleted.
 - **D4 — Rate admin and guardian are `AdminLib` roles.** The spec's errors stay: `RateFixed()` when `RATE_ADJUSTABLE` is
   clear, `NotRateAdmin()` without the role, `NotGuardian()` when `WRAP_DISABLEABLE` is clear or without the role. A
   non-contract rate admin is `ITokenAdmin.RoleNotContract(3, a)` (from `AdminLib`, at init or grant), replacing
@@ -93,24 +93,24 @@ OpenZeppelin Contracts 5.2.0, forge-std 1.16.2; `scaas-node` e2e (Rust, `cargo t
   **leaves the rate and a pending change as they are**; `rateAdmin()`/`guardian()` are gone (a role may have several
   holders: `hasRole` + `RoleGranted`/`RoleRevoked`). The rate admin is optional at init (the owner may grant it later).
 - **D5 — `disableFeature(RATE_ADJUSTABLE)` cancels a pending change** (CTR-TOK-06): `MetaTokenBase.disableFeature`
-  becomes `virtual`; `UnderlyingToken` overrides it, emits `FeatureDisabled(3, owner)` then, if a change was pending,
+  becomes `virtual`; `WrappedToken` overrides it, emits `FeatureDisabled(3, owner)` then, if a change was pending,
   `RateChangeCancelled(u)`.
 - **D6 — Native leg decimals: 18, but 8 on Hedera.** The spec says 18; Hedera's EVM counts HBAR in tinybars (8
   decimals), and decimals are display only (CTR-TOK-08). Cost if wrong: a display value on Hedera.
 - **D7 — `NativeValueMismatch(value, expected)`** is the one error for `msg.value ≠ amount` on the native leg and
   `msg.value ≠ 0` on an ERC-20 leg (the spec names none).
-- **D8 — Init encoding (transitional until P1e):** `initData = abi.encode(IUnderlyingToken.UnderlyingInit)` = the
-  UNDERLYING subset of `TokenConfig`: `name, symbol, decimals, features, lockedFeatures, owner, roles, legs[] (underlying,
+- **D8 — Init encoding (transitional until P1e):** `initData = abi.encode(IWrappedToken.UnderlyingInit)` = the
+  WRAPPED subset of `TokenConfig`: `name, symbol, decimals, features, lockedFeatures, owner, roles, legs[] (underlying,
   num, den as uint256), rate (rateDelay, maxRateStepBps)`. `legs[i].underlying` must equal the factory's
   `underlyings[i]` (`UnknownUnderlying(u)`; length `UnderlyingCountInvalid(n)`), so the factory index cannot lie.
   `rate` must be zero without `RATE_ADJUSTABLE` and within bounds with it (`RateConfigInvalid`).
-- **D9 — Factory v2 (transitional until P1e):** `META_SINGLE` is kind `UNDERLYING` and takes 1–8 legs; nothing
-  implements `META_MULTI` any more (registering `UnderlyingToken` under it fails `VersionKindMismatch(MULTI, SINGLE)`).
-  `tokenKind()` of `UnderlyingToken` is `META_SINGLE` for every leg count.
-- **D10 — `HtsQueryFailed`/`AssociateFailed`** are raised by `HederaLib` (inlined in `UnderlyingLib`) and re-declared in
-  `IUnderlyingToken` with the same selectors so they are in the token ABI.
+- **D9 — Factory v2 (transitional until P1e):** `META_SINGLE` is kind `WRAPPED` and takes 1–8 legs; nothing
+  implements `META_MULTI` any more (registering `WrappedToken` under it fails `VersionKindMismatch(MULTI, SINGLE)`).
+  `tokenKind()` of `WrappedToken` is `META_SINGLE` for every leg count.
+- **D10 — `HtsQueryFailed`/`AssociateFailed`** are raised by `HederaLib` (inlined in `WrappedLib`) and re-declared in
+  `IWrappedToken` with the same selectors so they are in the token ABI.
 - **D11 — Where the code sits (size, D2):** init decoding, `collateralValue`, `previewWrap`, `previewUnwrap` are public
-  in `UnderlyingLib`; `underlying`, `underlyings`, `legOf`, `pendingRate` read the namespace inline (moving them out made
+  in `WrappedLib`; `underlying`, `underlyings`, `legOf`, `pendingRate` read the namespace inline (moving them out made
   the token larger in the spike).
 - **D12 — Test fixture owner:** every wrapper the fixture builds has `owner = wrapperOwner = address(0x0A11)`, nothing
   locked, `PAYABLE` set (as built), `RATE_ADJUSTABLE` with an adjustable `Rate`, `WRAP_DISABLEABLE` with a non-zero
@@ -120,27 +120,27 @@ OpenZeppelin Contracts 5.2.0, forge-std 1.16.2; `scaas-node` e2e (Rust, `cargo t
 
 | File | Task | Responsibility |
 |---|---|---|
-| `src/metatx/IUnderlyingToken.sol` (new) | 1 | structs `LegInit`, `RateConfig`, `UnderlyingInit`; events, errors, functions of kind UNDERLYING |
-| `src/metatx/UnderlyingLib.sol` (new) | 1 | `scaas.underlying` storage; init, wrap/addReserve pull, unwrap quote + payout, rates, `disableWrap`, views |
-| `src/metatx/UnderlyingToken.sol` (`git mv` of `SingleUnderlyingToken.sol`) | 1 | thin token: ABI, mint/burn, events, allowlist |
+| `src/metatx/IWrappedToken.sol` (new) | 1 | structs `LegInit`, `RateConfig`, `UnderlyingInit`; events, errors, functions of kind WRAPPED |
+| `src/metatx/WrappedLib.sol` (new) | 1 | `scaas.underlying` storage; init, wrap/addReserve pull, unwrap quote + payout, rates, `disableWrap`, views |
+| `src/metatx/WrappedToken.sol` (`git mv` of `SingleUnderlyingToken.sol`) | 1 | thin token: ABI, mint/burn, events, allowlist |
 | `src/metatx/MultiUnderlyingToken.sol`, `src/hedera/HederaTokensV2.sol` | 1 | deleted |
 | `src/metatx/MetaTokenBase.sol` | 1 | drop `_legCount`; `disableFeature` `virtual` |
 | `src/factory/OpenFactoryV2.sol`, `src/common/IOpenFactoryV2.sol` | 1 | `META_SINGLE` takes 1–8 legs |
-| `test/v2/helpers/V2Fixture.sol` | 1 | `Rate`, `underlyingInit`, `_single`/`_multi` build `UnderlyingToken` |
+| `test/v2/helpers/V2Fixture.sol` | 1 | `Rate`, `wrappedInit`, `_single`/`_multi` build `WrappedToken` |
 | `test/v2/*.t.sol`, `test/hedera/HederaV2.t.sol`, `test/metatx/MsgSenderLint.t.sol`, `test/v2/layout/*.json` | 1 | port |
-| `test/v2/Underlying.t.sol`, `test/v2/NativeLeg.t.sol` (new) | 2 | conformance of the new rules |
-| `script/Deploy.s.sol`, `script/hedera/DeployHedera.s.sol` | 3 | comments only (NONE-only stays, D2) |
+| `test/v2/Wrapped.t.sol`, `test/v2/NativeLeg.t.sol` (new) | 2 | conformance of the new rules |
+| `script/Deploy.s.sol`, `script/hedera/DeployHedera.s.sol` | 3 | comments only (NORMAL-only stays, D2) |
 | `docs/contracts/token-wrappers.md`, `docs/contracts/metatx.md`, `docs/networks/hedera.md`, `docs/history/dropped-artifacts.tsv`, `TODO.md`, `HANDOFF.md` | 3 | docs |
 
 ---
 
-### Task 1: `UnderlyingLib` + `UnderlyingToken`; delete the wrapper tiers; port every test
+### Task 1: `WrappedLib` + `WrappedToken`; delete the wrapper tiers; port every test
 
 **Model:** Opus, effort high (money path: src transcription + a judgment-heavy port across many test files).
 
 **Files (src):**
-- Create: `smartcontracts/evm/src/metatx/IUnderlyingToken.sol`, `smartcontracts/evm/src/metatx/UnderlyingLib.sol` (full texts below)
-- Rename + rewrite: `git mv smartcontracts/evm/src/metatx/SingleUnderlyingToken.sol smartcontracts/evm/src/metatx/UnderlyingToken.sol` (full text below)
+- Create: `smartcontracts/evm/src/metatx/IWrappedToken.sol`, `smartcontracts/evm/src/metatx/WrappedLib.sol` (full texts below)
+- Rename + rewrite: `git mv smartcontracts/evm/src/metatx/SingleUnderlyingToken.sol smartcontracts/evm/src/metatx/WrappedToken.sol` (full text below)
 - Delete: `git rm smartcontracts/evm/src/metatx/MultiUnderlyingToken.sol smartcontracts/evm/src/hedera/HederaTokensV2.sol`
 - Modify: `smartcontracts/evm/src/metatx/MetaTokenBase.sol`, `smartcontracts/evm/src/factory/OpenFactoryV2.sol`,
   `smartcontracts/evm/src/common/IOpenFactoryV2.sol`
@@ -153,20 +153,20 @@ RateVectors,Allowlist,Features,MetaTxGasV2,FactoryV2,Layout}.t.sol`, `test/metat
 `/usr/bin/grep -rlE "SingleUnderlyingToken|MultiUnderlyingToken|HederaTokensV2|Hedera(Single|Multi)Underlying|renounceRateAdmin|renounceGuardian|rateAdmin\(\)|guardian\(\)|_legCount|META_MULTI" smartcontracts/evm/test smartcontracts/evm/script`.
 
 **Interfaces:**
-- Consumes: `AdminLib` (`init`, `disableFeature`, `hasFeature`, `hasRole`, `$()`, `Roles`, flag constants, `KIND_UNDERLYING`),
+- Consumes: `AdminLib` (`init`, `disableFeature`, `hasFeature`, `hasRole`, `$()`, `Roles`, flag constants, `KIND_WRAPPED`),
   `HederaLib.checkAndAssociate(address) internal returns (bool)`, `MetaTokenBase` (`IS_HEDERA`, `_msgSender`,
   `UnderlyingCountInvalid(uint256)`, `nonReentrant`, `FEE_CLASS_*`, `MtxRule`).
-- Produces (Task 2 relies on these exact names): `IUnderlyingToken.{LegInit, RateConfig, UnderlyingInit}`, every
+- Produces (Task 2 relies on these exact names): `IWrappedToken.{LegInit, RateConfig, UnderlyingInit}`, every
   event/error listed in the file below; fixture `struct Rate {bool adjustable; address rateAdmin; uint32 rateDelay;
-  uint16 maxRateStepBps;}`, free function `underlyingInit(address[] us, uint256[] nums, uint256[] dens, uint8 dec, Rate
-  cfg, address guardian, address owner) returns (IUnderlyingToken.UnderlyingInit)`, members `wrapperOwner`
-  (`address(0x0A11)`), `_underlyingImpl()`, `_one(address)`, `_oneU(uint256)`, `_singleInit(address u, uint8 dec,
+  uint16 maxRateStepBps;}`, free function `wrappedInit(address[] us, uint256[] nums, uint256[] dens, uint8 dec, Rate
+  cfg, address guardian, address owner) returns (IWrappedToken.UnderlyingInit)`, members `wrapperOwner`
+  (`address(0x0A11)`), `_wrappedImpl()`, `_one(address)`, `_oneU(uint256)`, `_singleInit(address u, uint8 dec,
   uint256 num, uint256 den, Rate cfg) returns (bytes)`, `_single(address u, uint8 dec, uint256 num, uint256 den, Rate
-  cfg) returns (UnderlyingToken)`, `_multiInit(address[] us, uint256[] nums, uint256[] dens, Rate cfg, address guardian)
-  returns (bytes)`, `_multi(… same …) returns (UnderlyingToken)`, `_fixedRate()`, `_adjustable(address admin)` (both
+  cfg) returns (WrappedToken)`, `_multiInit(address[] us, uint256[] nums, uint256[] dens, Rate cfg, address guardian)
+  returns (bytes)`, `_multi(… same …) returns (WrappedToken)`, `_fixedRate()`, `_adjustable(address admin)` (both
   return `Rate`).
 
-- [ ] **Step 1: Write `IUnderlyingToken.sol`**
+- [ ] **Step 1: Write `IWrappedToken.sol`**
 
 ```solidity
 // SPDX-License-Identifier: Apache-2.0
@@ -174,10 +174,10 @@ pragma solidity ^0.8.24;
 
 import {AdminLib} from "./AdminLib.sol";
 
-/// @title Kind `UNDERLYING` (CTR-TOK-21): 1–8 legs, each an ERC-20 or the native coin (`address(0)`, CTR-TOK-26).
-/// @notice Events and errors raised by `UnderlyingLib` (an external library) are declared here so that they are in the
+/// @title Kind `WRAPPED` (CTR-TOK-21): 1–8 legs, each an ERC-20 or the native coin (`address(0)`, CTR-TOK-26).
+/// @notice Events and errors raised by `WrappedLib` (an external library) are declared here so that they are in the
 ///         token ABI.
-interface IUnderlyingToken {
+interface IWrappedToken {
     /// @notice One leg at creation: `underlying` (`address(0)` = the native coin), rate `num/den` (CTR-TOK-04).
     ///         `uint256` so a value `≥ 2^96` reverts `RateInvalid` instead of failing to decode.
     struct LegInit {
@@ -192,7 +192,7 @@ interface IUnderlyingToken {
         uint16 maxRateStepBps;
     }
 
-    /// @notice The UNDERLYING subset of `TokenConfig` (CTR-TOK-25); `legs[i].underlying == underlyings[i]` of the
+    /// @notice The WRAPPED subset of `TokenConfig` (CTR-TOK-25); `legs[i].underlying == underlyings[i]` of the
     ///         factory call.
     struct UnderlyingInit {
         string name;
@@ -274,7 +274,7 @@ interface IUnderlyingToken {
 }
 ```
 
-- [ ] **Step 2: Write `UnderlyingLib.sol`**
+- [ ] **Step 2: Write `WrappedLib.sol`**
 
 ```solidity
 // SPDX-License-Identifier: Apache-2.0
@@ -285,12 +285,12 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {IUnderlyingToken} from "./IUnderlyingToken.sol";
+import {IWrappedToken} from "./IWrappedToken.sol";
 import {AdminLib} from "./AdminLib.sol";
 import {MetaTokenBase} from "./MetaTokenBase.sol";
 import {HederaLib} from "../hedera/HederaLib.sol";
 
-/// @title Legs, reserve and rates of kind `UNDERLYING` (CTR-TOK-24), in the ERC-7201 namespace `scaas.underlying`.
+/// @title Legs, reserve and rates of kind `WRAPPED` (CTR-TOK-24), in the ERC-7201 namespace `scaas.underlying`.
 /// @notice External library: the core of wrap and unwrap **without a destination** (pull, rate, reserve; pay out),
 ///         rate changes with timelock, `disableWrap`. The token mints and burns (ERC-20 stays inline) and emits
 ///         `Wrapped`/`Unwrapped`/`ReserveAdded`.
@@ -300,7 +300,7 @@ import {HederaLib} from "../hedera/HederaLib.sol";
 ///         `Σ⌊reserve_i·q_i⌋ ≥ totalSupply()`; `reserve` changes only through wrap, unwrap, `addReserve`; the raw
 ///         balance never prices anything. The native leg (`address(0)`, CTR-TOK-26) reads `address(this).balance`
 ///         where an ERC-20 leg reads `balanceOf(this)`.
-library UnderlyingLib {
+library WrappedLib {
     using SafeERC20 for IERC20;
 
     /// @dev slot a: token ‖ decimals ‖ wrapEnabled ‖ adjustable (copy, so a fixed-rate wrap reads no config);
@@ -324,7 +324,7 @@ library UnderlyingLib {
     }
 
     /// @custom:storage-location erc7201:scaas.underlying
-    struct UnderlyingStorage {
+    struct WrappedStorage {
         mapping(uint256 => Leg) legs;
         mapping(address => uint256) legIndex; // index + 1
         PendingRate pending;
@@ -342,7 +342,7 @@ library UnderlyingLib {
     /// @notice Execution window after `eta`; past it the change counts as none everywhere.
     uint256 internal constant RATE_WINDOW = 7 days;
 
-    function $() internal pure returns (UnderlyingStorage storage s) {
+    function $() internal pure returns (WrappedStorage storage s) {
         assembly ("memory-safe") { s.slot := _STORAGE }
     }
 
@@ -352,33 +352,33 @@ library UnderlyingLib {
     ///         order), write the metadata, the flags/owner/roles (`AdminLib.init`), the rate config and the legs in the
     ///         factory's order (which never changes).
     function initToken(address[] calldata underlyings, bytes calldata initData, bool isHedera) public {
-        IUnderlyingToken.UnderlyingInit memory c = abi.decode(initData, (IUnderlyingToken.UnderlyingInit));
+        IWrappedToken.UnderlyingInit memory c = abi.decode(initData, (IWrappedToken.UnderlyingInit));
         uint256 n = underlyings.length;
         if (n == 0 || n > MAX_LEGS) revert MetaTokenBase.UnderlyingCountInvalid(n);
         if (c.legs.length != n) revert MetaTokenBase.UnderlyingCountInvalid(c.legs.length);
         for (uint256 i; i < n; ++i) {
-            if (c.legs[i].underlying != underlyings[i]) revert IUnderlyingToken.UnknownUnderlying(underlyings[i]);
+            if (c.legs[i].underlying != underlyings[i]) revert IWrappedToken.UnknownUnderlying(underlyings[i]);
         }
         AdminLib.TokenStorage storage t = AdminLib.$();
         t.name = c.name;
         t.symbol = c.symbol;
         t.decimals = c.decimals;
-        AdminLib.init(AdminLib.KIND_UNDERLYING, c.features, c.lockedFeatures, c.owner, c.roles);
+        AdminLib.init(AdminLib.KIND_WRAPPED, c.features, c.lockedFeatures, c.owner, c.roles);
         bool adjustable = AdminLib.hasFeature(AdminLib.RATE_ADJUSTABLE);
-        UnderlyingStorage storage s = $();
-        IUnderlyingToken.RateConfig memory rate = c.rate;
+        WrappedStorage storage s = $();
+        IWrappedToken.RateConfig memory rate = c.rate;
         if (!adjustable) {
-            if (rate.rateDelay != 0 || rate.maxRateStepBps != 0) revert IUnderlyingToken.RateConfigInvalid();
+            if (rate.rateDelay != 0 || rate.maxRateStepBps != 0) revert IWrappedToken.RateConfigInvalid();
         } else {
             if (rate.rateDelay < 2 days || rate.rateDelay > 30 days || rate.maxRateStepBps == 0
-                || rate.maxRateStepBps > 1000) revert IUnderlyingToken.RateConfigInvalid();
+                || rate.maxRateStepBps > 1000) revert IWrappedToken.RateConfigInvalid();
             s.rateDelay = rate.rateDelay;
             s.maxRateStepBps = rate.maxRateStepBps;
         }
         for (uint256 i; i < n; ++i) _addLeg(s, c.legs[i], adjustable, isHedera);
     }
 
-    function _addLeg(UnderlyingStorage storage s, IUnderlyingToken.LegInit memory l, bool adjustable, bool isHedera)
+    function _addLeg(WrappedStorage storage s, IWrappedToken.LegInit memory l, bool adjustable, bool isHedera)
         private
     {
         address u = l.underlying;
@@ -386,17 +386,17 @@ library UnderlyingLib {
         if (u == NATIVE) {
             d = isHedera ? 8 : 18; // Hedera's EVM counts the native coin in tinybars
         } else {
-            if (u == address(this) || u.code.length == 0) revert IUnderlyingToken.UnderlyingInvalid(u);
-            if (isHedera && !HederaLib.checkAndAssociate(u)) revert IUnderlyingToken.UnderlyingInvalid(u);
+            if (u == address(this) || u.code.length == 0) revert IWrappedToken.UnderlyingInvalid(u);
+            if (isHedera && !HederaLib.checkAndAssociate(u)) revert IWrappedToken.UnderlyingInvalid(u);
             (bool ok, bytes memory ret) = u.staticcall(abi.encodeCall(IERC20Metadata.decimals, ()));
             if (!ok || ret.length != 32 || uint256(bytes32(ret)) > type(uint8).max) {
-                revert IUnderlyingToken.DecimalsUnreadable(u);
+                revert IWrappedToken.DecimalsUnreadable(u);
             }
             d = uint8(uint256(bytes32(ret)));
         }
         (uint256 num, uint256 den) = (l.num, l.den);
-        if (num == 0 || den == 0 || num > MAX_RATE || den > MAX_RATE) revert IUnderlyingToken.RateInvalid(num, den);
-        if (s.legIndex[u] != 0) revert IUnderlyingToken.DuplicateUnderlying(u);
+        if (num == 0 || den == 0 || num > MAX_RATE || den > MAX_RATE) revert IWrappedToken.RateInvalid(num, den);
+        if (s.legIndex[u] != 0) revert IWrappedToken.DuplicateUnderlying(u);
         uint256 i = s.legCount;
         s.legs[i] = Leg({
             token: u, decimals: d, wrapEnabled: true, adjustable: adjustable,
@@ -412,20 +412,20 @@ library UnderlyingLib {
     function wrap(uint256 i, uint256 amount, address from, uint256 value)
         public returns (address u, uint256 received, uint256 minted)
     {
-        UnderlyingStorage storage s = $();
+        WrappedStorage storage s = $();
         Leg storage L = s.legs[i];
         u = L.token;
-        if (!L.wrapEnabled) revert IUnderlyingToken.WrapDisabledFor(u);
-        if (L.adjustable && _isPending(s)) revert IUnderlyingToken.WrapPausedForRateChange(u);
+        if (!L.wrapEnabled) revert IWrappedToken.WrapDisabledFor(u);
+        if (L.adjustable && _isPending(s)) revert IWrappedToken.WrapPausedForRateChange(u);
         received = _pull(L, amount, from, value);
         minted = Math.mulDiv(received, L.num, L.den);
-        if (minted == 0) revert IUnderlyingToken.WrapTooSmall();
+        if (minted == 0) revert IWrappedToken.WrapTooSmall();
     }
 
     /// @notice Anyone; no mint. Refused on a leg whose wrap is disabled.
     function addReserve(uint256 i, uint256 amount, address from, uint256 value) public returns (uint256 received) {
         Leg storage L = $().legs[i];
-        if (!L.wrapEnabled) revert IUnderlyingToken.WrapDisabledFor(L.token);
+        if (!L.wrapEnabled) revert IWrappedToken.WrapDisabledFor(L.token);
         received = _pull(L, amount, from, value);
     }
 
@@ -435,14 +435,14 @@ library UnderlyingLib {
         address u = L.token;
         uint256 reserve = L.reserve;
         if (u == NATIVE) {
-            if (value != amount) revert IUnderlyingToken.NativeValueMismatch(value, amount);
+            if (value != amount) revert IWrappedToken.NativeValueMismatch(value, amount);
             uint256 before = address(this).balance - value;
-            if (before < reserve) revert IUnderlyingToken.ReserveShortfall(u, before, reserve);
+            if (before < reserve) revert IWrappedToken.ReserveShortfall(u, before, reserve);
             received = value;
         } else {
-            if (value != 0) revert IUnderlyingToken.NativeValueMismatch(value, 0);
+            if (value != 0) revert IWrappedToken.NativeValueMismatch(value, 0);
             uint256 before = IERC20(u).balanceOf(address(this));
-            if (before < reserve) revert IUnderlyingToken.ReserveShortfall(u, before, reserve);
+            if (before < reserve) revert IWrappedToken.ReserveShortfall(u, before, reserve);
             IERC20(u).safeTransferFrom(from, address(this), amount);
             received = IERC20(u).balanceOf(address(this)) - before;
         }
@@ -454,15 +454,15 @@ library UnderlyingLib {
         public view returns (uint256 out, uint256 burned)
     {
         if (recipient == address(0) || recipient == address(this)) {
-            revert IUnderlyingToken.UnwrapRecipientInvalid(recipient);
+            revert IWrappedToken.UnwrapRecipientInvalid(recipient);
         }
         Leg storage L = $().legs[i];
         (uint256 num, uint256 den) = (L.num, L.den);
         out = Math.mulDiv(wrapped, den, num);
-        if (out == 0) revert IUnderlyingToken.UnwrapTooSmall();
-        if (out < minOut) revert IUnderlyingToken.UnwrapBelowMin(out, minOut);
+        if (out == 0) revert IWrappedToken.UnwrapTooSmall();
+        if (out < minOut) revert IWrappedToken.UnwrapBelowMin(out, minOut);
         uint256 reserve = L.reserve;
-        if (out > reserve) revert IUnderlyingToken.InsufficientReserve(L.token, out, reserve);
+        if (out > reserve) revert IWrappedToken.InsufficientReserve(L.token, out, reserve);
         burned = Math.mulDiv(out, num, den, Math.Rounding.Ceil);
     }
 
@@ -478,7 +478,7 @@ library UnderlyingLib {
         else IERC20(u).safeTransfer(recipient, out);
         uint256 after_ = _balance(u);
         uint256 sent = before > after_ ? before - after_ : 0;
-        if (sent != out) revert IUnderlyingToken.UnderlyingTransferMismatch(u, out, sent);
+        if (sent != out) revert IWrappedToken.UnderlyingTransferMismatch(u, out, sent);
     }
 
     // ------------------------------------------------------------------ guardian (WRAP_DISABLEABLE)
@@ -486,82 +486,82 @@ library UnderlyingLib {
     /// @notice One-way: no re-enable (a compromised guardian reopening a depegged inflow would drain the good legs).
     function disableWrap(address u, bytes32 reason, address caller) public {
         if (!AdminLib.hasFeature(AdminLib.WRAP_DISABLEABLE) || !AdminLib.hasRole(AdminLib.WRAP_DISABLEABLE, caller)) {
-            revert IUnderlyingToken.NotGuardian();
+            revert IWrappedToken.NotGuardian();
         }
         Leg storage L = $().legs[indexOf(u)];
-        if (!L.wrapEnabled) revert IUnderlyingToken.WrapDisabledFor(u);
+        if (!L.wrapEnabled) revert IWrappedToken.WrapDisabledFor(u);
         L.wrapEnabled = false;
-        emit IUnderlyingToken.WrapDisabled(u, caller, reason);
+        emit IWrappedToken.WrapDisabled(u, caller, reason);
     }
 
     // ------------------------------------------------------------------ rates (CTR-TOK-06, CTR-TOK-13)
 
     function _onlyRateAdmin(address caller) private view {
-        if (!AdminLib.hasFeature(AdminLib.RATE_ADJUSTABLE)) revert IUnderlyingToken.RateFixed();
-        if (!AdminLib.hasRole(AdminLib.RATE_ADJUSTABLE, caller)) revert IUnderlyingToken.NotRateAdmin();
+        if (!AdminLib.hasFeature(AdminLib.RATE_ADJUSTABLE)) revert IWrappedToken.RateFixed();
+        if (!AdminLib.hasRole(AdminLib.RATE_ADJUSTABLE, caller)) revert IWrappedToken.NotRateAdmin();
     }
 
     /// @notice The step is checked ONCE, here, against the current rate (which cannot change while pending).
     function proposeRate(address u, uint96 num, uint96 den, address caller) public {
         _onlyRateAdmin(caller);
-        UnderlyingStorage storage s = $();
-        if (_isPending(s)) revert IUnderlyingToken.RateChangePending();
+        WrappedStorage storage s = $();
+        if (_isPending(s)) revert IWrappedToken.RateChangePending();
         uint256 i = indexOf(u);
-        if (num == 0 || den == 0) revert IUnderlyingToken.RateInvalid(num, den);
+        if (num == 0 || den == 0) revert IWrappedToken.RateInvalid(num, den);
         Leg storage L = s.legs[i];
         (uint96 n0, uint96 d0) = (L.num, L.den);
         // |num'·den − num·den'|·10⁴ ≤ num·den'·bps — exact in integers, every product < 2^207.
         uint256 a = uint256(num) * d0;
         uint256 b = uint256(n0) * den;
-        if ((a > b ? a - b : b - a) * 10_000 > b * s.maxRateStepBps) revert IUnderlyingToken.RateStepTooLarge();
+        if ((a > b ? a - b : b - a) * 10_000 > b * s.maxRateStepBps) revert IWrappedToken.RateStepTooLarge();
         uint64 eta = uint64(block.timestamp + s.rateDelay);
         s.pending = PendingRate({leg: uint8(i), num: num, den: den, eta: uint56(eta)});
-        emit IUnderlyingToken.RateChangeProposed(u, n0, d0, num, den, eta);
+        emit IWrappedToken.RateChangeProposed(u, n0, d0, num, den, eta);
     }
 
     function cancelRate(address caller) public {
         _onlyRateAdmin(caller);
-        UnderlyingStorage storage s = $();
-        if (!_isPending(s)) revert IUnderlyingToken.NoRateChangePending();
+        WrappedStorage storage s = $();
+        if (!_isPending(s)) revert IWrappedToken.NoRateChangePending();
         _drop(s);
     }
 
     /// @notice `disableFeature(RATE_ADJUSTABLE)` fixes the rate and cancels a pending change (CTR-TOK-06).
     function dropPending() public {
-        UnderlyingStorage storage s = $();
+        WrappedStorage storage s = $();
         if (_isPending(s)) _drop(s);
         else delete s.pending;
     }
 
-    function _drop(UnderlyingStorage storage s) private {
+    function _drop(WrappedStorage storage s) private {
         address u = s.legs[s.pending.leg].token;
         delete s.pending;
-        emit IUnderlyingToken.RateChangeCancelled(u);
+        emit IWrappedToken.RateChangeCancelled(u);
     }
 
     /// @notice Only the rate admin executes: a third party cannot bundle the execution with its own wraps.
     function executeRate(address caller, uint256 supply) public {
         _onlyRateAdmin(caller);
-        UnderlyingStorage storage s = $();
+        WrappedStorage storage s = $();
         PendingRate memory p = s.pending;
-        if (p.eta == 0) revert IUnderlyingToken.NoRateChangePending();
-        if (block.timestamp < p.eta) revert IUnderlyingToken.RateChangeNotReady(p.eta);
-        if (block.timestamp > uint256(p.eta) + RATE_WINDOW) revert IUnderlyingToken.RateChangeExpired(p.eta);
+        if (p.eta == 0) revert IWrappedToken.NoRateChangePending();
+        if (block.timestamp < p.eta) revert IWrappedToken.RateChangeNotReady(p.eta);
+        if (block.timestamp > uint256(p.eta) + RATE_WINDOW) revert IWrappedToken.RateChangeExpired(p.eta);
         bool anyDisabled = _requireCollateral(s, p, supply);
         Leg storage T = s.legs[p.leg];
         (uint96 n0, uint96 d0) = (T.num, T.den);
         if (anyDisabled && uint256(p.num) * d0 < uint256(n0) * p.den) {
-            revert IUnderlyingToken.RateDecreaseWithDisabledLeg();
+            revert IWrappedToken.RateDecreaseWithDisabledLeg();
         }
         T.num = p.num;
         T.den = p.den;
         delete s.pending;
-        emit IUnderlyingToken.RateChanged(T.token, n0, d0, p.num, p.den);
+        emit IWrappedToken.RateChanged(T.token, n0, d0, p.num, p.den);
     }
 
     /// @dev Every leg: `balance ≥ reserve` (no phantom reserve); then `C' ≥ supply` with the new rate, summing with an
     ///      early exit once covered but still checking every leg's balance. Returns "some leg has wrap disabled".
-    function _requireCollateral(UnderlyingStorage storage s, PendingRate memory p, uint256 supply)
+    function _requireCollateral(WrappedStorage storage s, PendingRate memory p, uint256 supply)
         private view returns (bool anyDisabled)
     {
         uint256 c;
@@ -570,19 +570,19 @@ library UnderlyingLib {
             Leg storage L = s.legs[i];
             uint256 r = L.reserve;
             uint256 bal = _balance(L.token);
-            if (bal < r) revert IUnderlyingToken.ReserveShortfall(L.token, bal, r);
+            if (bal < r) revert IWrappedToken.ReserveShortfall(L.token, bal, r);
             if (!L.wrapEnabled) anyDisabled = true;
             if (c < supply) {
                 c = Math.saturatingAdd(c, i == p.leg ? _value(r, p.num, p.den) : _value(r, L.num, L.den));
             }
         }
-        if (c < supply) revert IUnderlyingToken.RateChangeUndercollateralized(c, supply);
+        if (c < supply) revert IWrappedToken.RateChangeUndercollateralized(c, supply);
     }
 
     // ------------------------------------------------------------------ views
 
     function collateralValue() public view returns (uint256 c) {
-        UnderlyingStorage storage s = $();
+        WrappedStorage storage s = $();
         uint256 n = s.legCount;
         for (uint256 i; i < n; ++i) {
             Leg storage L = s.legs[i];
@@ -606,13 +606,13 @@ library UnderlyingLib {
 
     function indexOf(address u) internal view returns (uint256) {
         uint256 x = $().legIndex[u];
-        if (x == 0) revert IUnderlyingToken.UnknownUnderlying(u);
+        if (x == 0) revert IWrappedToken.UnknownUnderlying(u);
         return x - 1;
     }
 
     /// @dev The single-asset ABI works only with exactly one leg.
     function sole() internal view returns (uint256) {
-        if ($().legCount != 1) revert IUnderlyingToken.UnderlyingRequired();
+        if ($().legCount != 1) revert IWrappedToken.UnderlyingRequired();
         return 0;
     }
 
@@ -620,7 +620,7 @@ library UnderlyingLib {
         return _isPending($());
     }
 
-    function _isPending(UnderlyingStorage storage s) private view returns (bool) {
+    function _isPending(WrappedStorage storage s) private view returns (bool) {
         uint256 eta = s.pending.eta;
         return eta != 0 && block.timestamp <= eta + RATE_WINDOW;
     }
@@ -637,15 +637,15 @@ library UnderlyingLib {
 }
 ```
 
-- [ ] **Step 3: `git mv` and rewrite `UnderlyingToken.sol`; delete the tiers**
+- [ ] **Step 3: `git mv` and rewrite `WrappedToken.sol`; delete the tiers**
 
 ```bash
 cd smartcontracts/evm
-git mv src/metatx/SingleUnderlyingToken.sol src/metatx/UnderlyingToken.sol
+git mv src/metatx/SingleUnderlyingToken.sol src/metatx/WrappedToken.sol
 git rm -q src/metatx/MultiUnderlyingToken.sol src/hedera/HederaTokensV2.sol
 ```
 
-Full text of `src/metatx/UnderlyingToken.sol`:
+Full text of `src/metatx/WrappedToken.sol`:
 
 ```solidity
 // SPDX-License-Identifier: Apache-2.0
@@ -653,22 +653,22 @@ pragma solidity ^0.8.24;
 
 import {MetaTokenBase} from "./MetaTokenBase.sol";
 import {AdminLib} from "./AdminLib.sol";
-import {UnderlyingLib} from "./UnderlyingLib.sol";
-import {IUnderlyingToken} from "./IUnderlyingToken.sol";
+import {WrappedLib} from "./WrappedLib.sol";
+import {IWrappedToken} from "./IWrappedToken.sol";
 import {MetaTxBase} from "./MetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
 import {IOpenFactoryV2} from "../common/IOpenFactoryV2.sol";
 
-/// @title Kind `UNDERLYING` (CTR-TOK-21): a wrapper of 1–8 legs, each an ERC-20 or the native coin (CTR-TOK-26), at
-///        per-leg rates `num/den`, with internal per-leg reserves; the logic is in `UnderlyingLib`.
+/// @title Kind `WRAPPED` (CTR-TOK-21): a wrapper of 1–8 legs, each an ERC-20 or the native coin (CTR-TOK-26), at
+///        per-leg rates `num/den`, with internal per-leg reserves; the logic is in `WrappedLib`.
 /// @notice Any-of (CTR-TOK-07): wrap one chosen leg, unwrap into one chosen leg, bounded by that leg's reserve. The
 ///         single-asset ABI (`wrap(amount)`, `unwrap(amount, recipient[, minOut])`) works only with exactly one leg
 ///         (`UnderlyingRequired`). Flags (CTR-TOK-22): `PAYABLE`, `RATE_ADJUSTABLE` (role rateAdmin, a contract:
 ///         timelocked rate changes), `WRAP_DISABLEABLE` (role guardian: one-way `disableWrap`). Built by the factory
 ///         through `initialize(creator, underlyings, version, abi.encode(UnderlyingInit))`; P1e switches to
 ///         `TokenConfig`.
-contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
-    uint256 public constant RATE_WINDOW = UnderlyingLib.RATE_WINDOW;
+contract WrappedToken is MetaTokenBase, IWrappedToken {
+    uint256 public constant RATE_WINDOW = WrappedLib.RATE_WINDOW;
 
     bytes4 internal constant SEL_WRAP = bytes4(keccak256("wrap(uint256)"));
     bytes4 internal constant SEL_UNWRAP_MIN = bytes4(keccak256("unwrap(uint256,address,uint256)"));
@@ -685,46 +685,46 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
         return IOpenFactoryV2.TokenKind.META_SINGLE;
     }
 
-    /// @param initData `abi.encode(UnderlyingInit)`; decoded and checked in `UnderlyingLib.initToken`.
+    /// @param initData `abi.encode(UnderlyingInit)`; decoded and checked in `WrappedLib.initToken`.
     function _init(address, address[] calldata us, bytes calldata initData) internal override {
-        UnderlyingLib.initToken(us, initData, IS_HEDERA);
+        WrappedLib.initToken(us, initData, IS_HEDERA);
     }
 
     // ------------------------------------------------------------------ wrap / unwrap / reserve
 
     /// @notice Single-asset ABI. Mints the MEASURED amount received at the leg's rate, rounded down.
     function wrap(uint256 amount) external payable nonReentrant returns (uint256) {
-        return _wrap(UnderlyingLib.sole(), amount);
+        return _wrap(WrappedLib.sole(), amount);
     }
 
     function wrap(address u, uint256 amount) external payable nonReentrant returns (uint256) {
-        return _wrap(UnderlyingLib.indexOf(u), amount);
+        return _wrap(WrappedLib.indexOf(u), amount);
     }
 
     /// @notice Single-asset ABI, `minOut = 0`; not allowlisted.
     function unwrap(uint256 wrapped, address recipient) external nonReentrant returns (uint256 out) {
-        (out,) = _unwrap(UnderlyingLib.sole(), wrapped, recipient, 0);
+        (out,) = _unwrap(WrappedLib.sole(), wrapped, recipient, 0);
     }
 
     function unwrap(uint256 wrapped, address recipient, uint256 minOut) external nonReentrant returns (uint256 out) {
-        (out,) = _unwrap(UnderlyingLib.sole(), wrapped, recipient, minOut);
+        (out,) = _unwrap(WrappedLib.sole(), wrapped, recipient, minOut);
     }
 
     function unwrap(address u, uint256 wrapped, address recipient, uint256 minOut)
         external nonReentrant returns (uint256 out, uint256 burned)
     {
-        return _unwrap(UnderlyingLib.indexOf(u), wrapped, recipient, minOut);
+        return _unwrap(WrappedLib.indexOf(u), wrapped, recipient, minOut);
     }
 
     /// @notice Anyone; no mint. Over-collateralises before a rate decrease; otherwise a donation to every holder.
     function addReserve(address u, uint256 amount) external payable nonReentrant {
         address from = _msgSender();
-        emit ReserveAdded(from, u, UnderlyingLib.addReserve(UnderlyingLib.indexOf(u), amount, from, msg.value));
+        emit ReserveAdded(from, u, WrappedLib.addReserve(WrappedLib.indexOf(u), amount, from, msg.value));
     }
 
     function _wrap(uint256 i, uint256 amount) private returns (uint256 minted) {
         address account = _msgSender();
-        (address u, uint256 received, uint256 m) = UnderlyingLib.wrap(i, amount, account, msg.value);
+        (address u, uint256 received, uint256 m) = WrappedLib.wrap(i, amount, account, msg.value);
         minted = m;
         _mint(account, minted);
         emit Wrapped(account, u, received, minted);
@@ -734,35 +734,35 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
     function _unwrap(uint256 i, uint256 wrapped, address recipient, uint256 minOut)
         private returns (uint256 out, uint256 burned)
     {
-        (out, burned) = UnderlyingLib.quoteUnwrap(i, wrapped, recipient, minOut);
+        (out, burned) = WrappedLib.quoteUnwrap(i, wrapped, recipient, minOut);
         address from = _msgSender();
         _burn(from, burned);
-        address u = UnderlyingLib.payOut(i, recipient, out);
+        address u = WrappedLib.payOut(i, recipient, out);
         emit Unwrapped(from, u, recipient, burned, out);
     }
 
     // ------------------------------------------------------------------ roles: guardian, rate admin
 
     function disableWrap(address u, bytes32 reason) external {
-        UnderlyingLib.disableWrap(u, reason, _msgSender());
+        WrappedLib.disableWrap(u, reason, _msgSender());
     }
 
     function proposeRate(address u, uint96 num, uint96 den) external {
-        UnderlyingLib.proposeRate(u, num, den, _msgSender());
+        WrappedLib.proposeRate(u, num, den, _msgSender());
     }
 
     function cancelRate() external {
-        UnderlyingLib.cancelRate(_msgSender());
+        WrappedLib.cancelRate(_msgSender());
     }
 
     function executeRate() external {
-        UnderlyingLib.executeRate(_msgSender(), totalSupply());
+        WrappedLib.executeRate(_msgSender(), totalSupply());
     }
 
     /// @notice `disableFeature(RATE_ADJUSTABLE)` also cancels a pending rate change (CTR-TOK-06).
     function disableFeature(uint8 bit) external override {
         AdminLib.disableFeature(bit, _msgSender());
-        if (bit == AdminLib.RATE_ADJUSTABLE) UnderlyingLib.dropPending();
+        if (bit == AdminLib.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }
 
     // ------------------------------------------------------------------ allowlist (CTR-MTX-19)
@@ -798,12 +798,12 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
 
     /// @notice The one underlying of a one-leg token (`address(0)` for the native coin); `address(0)` with more legs.
     function underlying() external view returns (address) {
-        UnderlyingLib.UnderlyingStorage storage s = UnderlyingLib.$();
+        WrappedLib.WrappedStorage storage s = WrappedLib.$();
         return s.legCount == 1 ? s.legs[0].token : address(0);
     }
 
     function underlyings() external view returns (address[] memory us) {
-        UnderlyingLib.UnderlyingStorage storage s = UnderlyingLib.$();
+        WrappedLib.WrappedStorage storage s = WrappedLib.$();
         uint256 n = s.legCount;
         us = new address[](n);
         for (uint256 i; i < n; ++i) us[i] = s.legs[i].token;
@@ -812,23 +812,23 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
     function legOf(address u)
         external view returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals_, bool wrapEnabled)
     {
-        UnderlyingLib.Leg storage L = UnderlyingLib.$().legs[UnderlyingLib.indexOf(u)];
+        WrappedLib.Leg storage L = WrappedLib.$().legs[WrappedLib.indexOf(u)];
         return (L.num, L.den, L.reserve, L.decimals, L.wrapEnabled);
     }
 
     /// @notice `Σ⌊reserve_i·num_i/den_i⌋`, saturating at `type(uint256).max` instead of overflowing.
     function collateralValue() external view returns (uint256) {
-        return UnderlyingLib.collateralValue();
+        return WrappedLib.collateralValue();
     }
 
     /// @notice `(⌊amount·q⌋, ⌈minted/q⌉)`: clients round `amount` down to `used` so no dust stays in the reserve.
     ///         Ignores fee-on-transfer (assumes `received == amount`).
     function previewWrap(address u, uint256 amount) external view returns (uint256 minted, uint256 used) {
-        return UnderlyingLib.previewWrap(u, amount);
+        return WrappedLib.previewWrap(u, amount);
     }
 
     function previewUnwrap(address u, uint256 wrapped) external view returns (uint256 out, uint256 burned) {
-        return UnderlyingLib.previewUnwrap(u, wrapped);
+        return WrappedLib.previewUnwrap(u, wrapped);
     }
 
     function rateAdjustable() external view returns (bool) {
@@ -836,18 +836,18 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
     }
 
     function rateDelay() external view returns (uint32) {
-        return UnderlyingLib.$().rateDelay;
+        return WrappedLib.$().rateDelay;
     }
 
     function maxRateStepBps() external view returns (uint16) {
-        return UnderlyingLib.$().maxRateStepBps;
+        return WrappedLib.$().maxRateStepBps;
     }
 
     /// @notice All zero when nothing is pending or the pending change has expired.
     function pendingRate() external view returns (address u, uint96 num, uint96 den, uint64 eta) {
-        if (!UnderlyingLib.isPending()) return (address(0), 0, 0, 0);
-        UnderlyingLib.UnderlyingStorage storage s = UnderlyingLib.$();
-        UnderlyingLib.PendingRate memory p = s.pending;
+        if (!WrappedLib.isPending()) return (address(0), 0, 0, 0);
+        WrappedLib.WrappedStorage storage s = WrappedLib.$();
+        WrappedLib.PendingRate memory p = s.pending;
         return (s.legs[p.leg].token, p.num, p.den, p.eta);
     }
 }
@@ -870,18 +870,18 @@ In `src/factory/OpenFactoryV2.sol` `_createTiered`, replace the count line:
 
 ```solidity
         uint256 n = underlyings.length;
-        // Transitional (P1d): `META_SINGLE` is kind UNDERLYING (`UnderlyingToken`, 1–8 legs); nothing implements
+        // Transitional (P1d): `META_SINGLE` is kind WRAPPED (`WrappedToken`, 1–8 legs); nothing implements
         // `META_MULTI` any more. P1e replaces the enum (CTR-TOK-25).
         bool countBad = kind == TokenKind.META_NONE ? n != 0
             : kind == TokenKind.META_SINGLE ? n == 0 || n > MAX_LEGS : n < 2 || n > MAX_LEGS;
         if (countBad) revert UnderlyingCountInvalid(n);
 ```
 
-In `src/common/IOpenFactoryV2.sol`: enum comments `META_SINGLE // v2 kind UNDERLYING: 1–8 legs (P1d)`,
+In `src/common/IOpenFactoryV2.sol`: enum comments `META_SINGLE // v2 kind WRAPPED: 1–8 legs (P1d)`,
 `META_MULTI // retired in P1d: no implementation`; the `createTiered` notice `META_NONE 0, META_SINGLE 1–8`.
 
 Run `timeout 900 scripts/capped bash -c 'cd smartcontracts/evm && forge build src'` — expected: compiles (the size
-table reports `UnderlyingToken` over EIP-170 and `forge build --sizes` exits non-zero: that is D2, not an error here).
+table reports `WrappedToken` over EIP-170 and `forge build --sizes` exits non-zero: that is D2, not an error here).
 
 - [ ] **Step 5: Fixture** — apply to `test/v2/helpers/V2Fixture.sol` (the spike's diff against `main`):
 
@@ -893,15 +893,15 @@ index 2442e96..f82a06f 100644
 @@ -8,8 +8,8 @@ import {AdminLib} from "../../../src/metatx/AdminLib.sol";
  import {IOpenFactoryV2} from "../../../src/common/IOpenFactoryV2.sol";
  import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
- import {NoUnderlyingToken} from "../../../src/metatx/NoUnderlyingToken.sol";
+ import {NormalToken} from "../../../src/metatx/NormalToken.sol";
 -import {SingleUnderlyingToken} from "../../../src/metatx/SingleUnderlyingToken.sol";
 -import {MultiUnderlyingToken} from "../../../src/metatx/MultiUnderlyingToken.sol";
-+import {UnderlyingToken} from "../../../src/metatx/UnderlyingToken.sol";
-+import {IUnderlyingToken} from "../../../src/metatx/IUnderlyingToken.sol";
++import {WrappedToken} from "../../../src/metatx/WrappedToken.sol";
++import {IWrappedToken} from "../../../src/metatx/IWrappedToken.sol";
  
  bytes32 constant UID_ = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
  
-@@ -48,6 +48,34 @@ function noneInit(string memory n, string memory s, uint8 d, uint256 supply, add
+@@ -48,6 +48,34 @@ function normalInit(string memory n, string memory s, uint8 d, uint256 supply, add
      c.initialHolder = holder;
  }
  
@@ -916,8 +916,8 @@ index 2442e96..f82a06f 100644
 +
 +/// `UnderlyingInit` for legs `us` at `nums/dens`: `PAYABLE` (as built), `RATE_ADJUSTABLE` with `cfg.adjustable`,
 +/// `WRAP_DISABLEABLE` with a non-zero `guardian`; nothing locked; `owner` (0 = none).
-+function underlyingInit(address[] memory us, uint256[] memory nums, uint256[] memory dens, uint8 dec, Rate memory cfg,
-+    address guardian, address owner) pure returns (IUnderlyingToken.UnderlyingInit memory c)
++function wrappedInit(address[] memory us, uint256[] memory nums, uint256[] memory dens, uint8 dec, Rate memory cfg,
++    address guardian, address owner) pure returns (IWrappedToken.UnderlyingInit memory c)
 +{
 +    c.name = "Wrapped";
 +    c.symbol = "WRP";
@@ -928,9 +928,9 @@ index 2442e96..f82a06f 100644
 +    c.owner = owner;
 +    c.roles.rateAdmin = cfg.rateAdmin;
 +    c.roles.guardian = guardian;
-+    c.legs = new IUnderlyingToken.LegInit[](us.length);
-+    for (uint256 i; i < us.length; ++i) c.legs[i] = IUnderlyingToken.LegInit(us[i], nums[i], dens[i]);
-+    c.rate = IUnderlyingToken.RateConfig(cfg.rateDelay, cfg.maxRateStepBps);
++    c.legs = new IWrappedToken.LegInit[](us.length);
++    for (uint256 i; i < us.length; ++i) c.legs[i] = IWrappedToken.LegInit(us[i], nums[i], dens[i]);
++    c.rate = IWrappedToken.RateConfig(cfg.rateDelay, cfg.maxRateStepBps);
 +}
 +
  /// ERC-1271 đốt ~100k gas rồi trả magic: qua được với 400k, không qua với 50k.
@@ -939,16 +939,16 @@ index 2442e96..f82a06f 100644
 @@ -79,7 +107,9 @@ abstract contract V2Fixture is Test {
      }
  
-     address internal noneImpl;
+     address internal normalImpl;
 -    address internal singleImpl;
-+    address internal underlyingImpl;
++    address internal wrappedImpl;
 +    /// Owner the fixture gives every wrapper it builds (`disableFeature`, `grantRole` in tests).
 +    address internal wrapperOwner = address(0x0A11);
  
-     function _none(address creator_, uint256 supply, address minter) internal returns (NoUnderlyingToken) {
-         if (noneImpl == address(0)) {
+     function _none(address creator_, uint256 supply, address minter) internal returns (NormalToken) {
+         if (normalImpl == address(0)) {
 @@ -89,44 +119,52 @@ abstract contract V2Fixture is Test {
-             abi.encode(noneInit("Points", "PTS", 0, supply, creator_, minter))));
+             abi.encode(normalInit("Points", "PTS", 0, supply, creator_, minter))));
      }
  
 -    function _fixedRate() internal pure returns (SingleUnderlyingToken.RateConfig memory c) {}
@@ -982,24 +982,24 @@ index 2442e96..f82a06f 100644
      {
 -        if (singleImpl == address(0)) {
 -            singleImpl = address(new SingleUnderlyingToken(address(this), address(0), UID_, false));
-+        return abi.encode(underlyingInit(_one(u), _oneU(num), _oneU(den), dec, cfg, address(0), wrapperOwner));
++        return abi.encode(wrappedInit(_one(u), _oneU(num), _oneU(den), dec, cfg, address(0), wrapperOwner));
 +    }
 +
-+    function _underlyingImpl() internal returns (address) {
-+        if (underlyingImpl == address(0)) {
-+            underlyingImpl = address(new UnderlyingToken(address(this), address(0), UID_, false));
++    function _wrappedImpl() internal returns (address) {
++        if (wrappedImpl == address(0)) {
++            wrappedImpl = address(new WrappedToken(address(this), address(0), UID_, false));
          }
 -        address[] memory us = new address[](1);
 -        us[0] = u;
 -        return SingleUnderlyingToken(_clone(singleImpl, address(this), us, _singleInit(dec, num, den, cfg)));
-+        return underlyingImpl;
++        return wrappedImpl;
      }
  
 -    address internal multiImpl;
 +    function _single(address u, uint8 dec, uint256 num, uint256 den, Rate memory cfg)
-+        internal returns (UnderlyingToken)
++        internal returns (WrappedToken)
 +    {
-+        return UnderlyingToken(_clone(_underlyingImpl(), address(this), _one(u), _singleInit(u, dec, num, den, cfg)));
++        return WrappedToken(_clone(_wrappedImpl(), address(this), _one(u), _singleInit(u, dec, num, den, cfg)));
 +    }
  
 -    function _multiInit(uint256[] memory nums, uint256[] memory dens, SingleUnderlyingToken.RateConfig memory cfg,
@@ -1008,19 +1008,19 @@ index 2442e96..f82a06f 100644
 +        address guardian) internal view returns (bytes memory)
      {
 -        return abi.encode("Any USD", "aUSD", uint8(18), nums, dens, cfg, guardian);
-+        return abi.encode(underlyingInit(us, nums, dens, 18, cfg, guardian, wrapperOwner));
++        return abi.encode(wrappedInit(us, nums, dens, 18, cfg, guardian, wrapperOwner));
      }
  
 -    function _multi(address[] memory us, uint256[] memory nums, uint256[] memory dens,
 -        SingleUnderlyingToken.RateConfig memory cfg, address guardian) internal returns (MultiUnderlyingToken)
 +    function _multi(address[] memory us, uint256[] memory nums, uint256[] memory dens, Rate memory cfg,
-+        address guardian) internal returns (UnderlyingToken)
++        address guardian) internal returns (WrappedToken)
      {
 -        if (multiImpl == address(0)) {
 -            multiImpl = address(new MultiUnderlyingToken(address(this), address(0), UID_, false));
 -        }
 -        return MultiUnderlyingToken(_clone(multiImpl, address(this), us, _multiInit(nums, dens, cfg, guardian)));
-+        return UnderlyingToken(_clone(_underlyingImpl(), address(this), us, _multiInit(us, nums, dens, cfg, guardian)));
++        return WrappedToken(_clone(_wrappedImpl(), address(this), us, _multiInit(us, nums, dens, cfg, guardian)));
      }
  
      /// A `MetaTransfer` from `from` on lane `batch`, nonce 0, valid 300 s, relayer `relayer`, no fee.
@@ -1031,13 +1031,13 @@ index 2442e96..f82a06f 100644
 1. Types: `\bSingleUnderlyingToken\.RateConfig\b` and `\bMultiUnderlyingToken\.RateConfig\b` → `Rate` (import
    `Rate` from the fixture). **Use the word boundary**: a plain `s/SingleUnderlyingToken.RateConfig/Rate/` also turns
    `SingleUnderlyingToken.RateConfigInvalid` into `RateInvalid` (a different error). Then `\bSingleUnderlyingToken\b`,
-   `\bMultiUnderlyingToken\b` → `UnderlyingToken`; imports of the two files → `UnderlyingToken.sol`.
-2. Events and errors of the kind are members of the interface: `UnderlyingToken.<Event|Error>` →
-   `IUnderlyingToken.<…>` (`UnderlyingToken.WrapTooSmall.selector` does not compile: inherited interface members are not
-   reachable through the contract name). Import `IUnderlyingToken`.
+   `\bMultiUnderlyingToken\b` → `WrappedToken`; imports of the two files → `WrappedToken.sol`.
+2. Events and errors of the kind are members of the interface: `WrappedToken.<Event|Error>` →
+   `IWrappedToken.<…>` (`WrappedToken.WrapTooSmall.selector` does not compile: inherited interface members are not
+   reachable through the contract name). Import `IWrappedToken`.
 3. Init data: `_singleInit(dec, num, den, cfg)` → `_singleInit(u, dec, num, den, cfg)`; `_multiInit(nums, dens, cfg,
    guardian)` → `_multiInit(us, nums, dens, cfg, guardian)`; hand-rolled `abi.encode("Wrapped", …)` /
-   `abi.encode("Any USD", …)` → `abi.encode(underlyingInit(us, nums, dens, dec, cfg, guardian, owner))`.
+   `abi.encode("Any USD", …)` → `abi.encode(wrappedInit(us, nums, dens, dec, cfg, guardian, owner))`.
 4. Roles instead of the legacy admin (D4):
    - `t.rateAdmin()` → `t.hasRole(3, a)`; `t.guardian()` → `t.hasRole(4, g)`.
    - `RateAdminNotContract(a)` → `ITokenAdmin.RoleNotContract(3, a)`.
@@ -1060,22 +1060,22 @@ index 2442e96..f82a06f 100644
 6. `address(0)` is the native leg now: drop the `_refuse(address(0), …, UnderlyingInvalid(0))` case of
    `Tier2.t.sol test_initRefusals` (Task 2 tests the native leg); `address(0xDEAD)` (no code) stays `UnderlyingInvalid`.
 7. `Features.t.sol`: delete `test_wrappersReportLegacyFeatures`, `_checkWrapper` and the "legacy wrappers (ruling C5)"
-   heading (Task 2's `test_validFlags_underlyingKind` replaces them), and the now-unused imports.
-8. `FactoryV2.t.sol`: register one `UnderlyingToken` under `SINGLE`; `SINGLE` creates 1–8 legs (3 legs is a valid
-   SINGLE creation now; 0 and 9 → `UnderlyingCountInvalid`); `registerImplementation(MULTI, 1, underlyingImpl)` →
+   heading (Task 2's `test_validFlags_wrappedKind` replaces them), and the now-unused imports.
+8. `FactoryV2.t.sol`: register one `WrappedToken` under `SINGLE`; `SINGLE` creates 1–8 legs (3 legs is a valid
+   SINGLE creation now; 0 and 9 → `UnderlyingCountInvalid`); `registerImplementation(MULTI, 1, wrappedImpl)` →
    `VersionKindMismatch(MULTI, SINGLE)`; `createTiered(MULTI, …)` → `VersionUnknown(MULTI, 1)`; size pins:
-   `noneImpl ≤ 20_480`, `underlyingImpl ≤ 26_624` with the comment `// Transitional (P1d, D2): over EIP-170 until the
+   `normalImpl ≤ 20_480`, `wrappedImpl ≤ 26_624` with the comment `// Transitional (P1d, D2): over EIP-170 until the
    size work; measured 25,408`.
-9. `Layout.t.sol`: `_pin("NoUnderlyingToken", "NoUnderlyingToken")` and `_pin("UnderlyingToken", "UnderlyingToken")`
+9. `Layout.t.sol`: `_pin("NormalToken", "NormalToken")` and `_pin("WrappedToken", "WrappedToken")`
    only; delete `test/v2/layout/{Single,Multi,HederaSingle,HederaMulti}UnderlyingToken.json`; write
-   `test/v2/layout/UnderlyingToken.json` and rewrite `NoUnderlyingToken.json` to exactly
+   `test/v2/layout/WrappedToken.json` and rewrite `NormalToken.json` to exactly
    `{"labels": ["_balances", "_allowances", "_totalSupply", "_name", "_symbol"], "slots": ["0", "1", "2", "3", "4"],
    "offsets": [0, 0, 0, 0, 0]}` (pretty-printed like the old files). `test_reserveSlotIsWhereIndexersReadIt` reads the
    namespace: `bytes32 NS = 0x38d6…1000; bytes32 leg0 = keccak256(abi.encode(uint256(0), NS));` token at `leg0`,
    `num ‖ den` at `leg0 + 1`, `reserve` at `leg0 + 2`, `legCount` = low byte of `NS + 3` (== 1); slot 5 is zero.
-10. `MsgSenderLint.t.sol`: `FILES` = MetaTxBase, ERC20MetaTx, MetaTokenBase, NoUnderlyingToken, UnderlyingToken,
-    UnderlyingLib, AdminLib, HederaLib (8 entries; `string[8]`); expected `msg.sender` count 0 for `UnderlyingToken.sol`
-    and `UnderlyingLib.sol`; drop the `HederaTokensV2` line.
+10. `MsgSenderLint.t.sol`: `FILES` = MetaTxBase, ERC20MetaTx, MetaTokenBase, NormalToken, WrappedToken,
+    WrappedLib, AdminLib, HederaLib (8 entries; `string[8]`); expected `msg.sender` count 0 for `WrappedToken.sol`
+    and `WrappedLib.sol`; drop the `HederaTokensV2` line.
 11. `HederaV2.t.sol` — apply the spike's diff:
 
 ```diff
@@ -1088,25 +1088,25 @@ index 83fa0a6..0ff60cc 100644
  import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
  import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 -import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol";
-+import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
-+import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
- import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
++import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
++import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
+ import {NormalToken} from "../../src/metatx/NormalToken.sol";
  import {HederaLib} from "../../src/hedera/HederaLib.sol";
 -import {HederaSingleUnderlyingToken, HederaMultiUnderlyingToken} from "../../src/hedera/HederaTokensV2.sol";
  import {MockERC20} from "../helpers/Mocks.sol";
--import {noneInit} from "../v2/helpers/V2Fixture.sol";
-+import {noneInit, underlyingInit, Rate} from "../v2/helpers/V2Fixture.sol";
+-import {normalInit} from "../v2/helpers/V2Fixture.sol";
++import {normalInit, wrappedInit, Rate} from "../v2/helpers/V2Fixture.sol";
  import {MockHederaAccountService, MockHts} from "./HederaMocks.sol";
  
  /// T5: con Hedera của ba tầng (TW2 §11, R144) — HIP-632 trên mỗi tầng, associate lúc init, kiểm phí HTS fail-closed.
 @@ -43,9 +43,7 @@ contract HederaV2Test is Test {
          f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1,
-             address(new NoUnderlyingToken(address(f), address(0), UID, true)));
+             address(new NormalToken(address(f), address(0), UID, true)));
          f.registerImplementation(IOpenFactoryV2.TokenKind.META_SINGLE, 1,
 -            address(new HederaSingleUnderlyingToken(address(f), UID)));
 -        f.registerImplementation(IOpenFactoryV2.TokenKind.META_MULTI, 1,
 -            address(new HederaMultiUnderlyingToken(address(f), UID)));
-+            address(new UnderlyingToken(address(f), address(0), UID, true)));
++            address(new WrappedToken(address(f), address(0), UID, true)));
          vm.stopPrank();
          usdc = new MockERC20("USD Coin", "USDC", 6);
          plain = new MockERC20("Plain", "PLN", 6);
@@ -1117,7 +1117,7 @@ index 83fa0a6..0ff60cc 100644
 -        IOpenFactoryV2.TokenKind[3] memory k = [IOpenFactoryV2.TokenKind.META_NONE, IOpenFactoryV2.TokenKind.META_SINGLE,
 -            IOpenFactoryV2.TokenKind.META_MULTI];
 -        assertLe(f.implementationOf(k[0], 1).code.length, 20_480); // CTR-TOK-24 (measured 20,038)
--        // Transitional (R3): Hedera wrappers over EIP-170 until P1d (`UnderlyingLib`); measured 29,201 / 30,052
+-        // Transitional (R3): Hedera wrappers over EIP-170 until P1d (`WrappedLib`); measured 29,201 / 30,052
 -        assertLe(f.implementationOf(k[1], 1).code.length, 29_696);
 -        assertLe(f.implementationOf(k[2], 1).code.length, 30_720);
 +        assertLe(f.implementationOf(IOpenFactoryV2.TokenKind.META_NONE, 1).code.length, 20_480); // CTR-TOK-24
@@ -1141,7 +1141,7 @@ index 83fa0a6..0ff60cc 100644
 +        uint256[] memory one = new uint256[](1);
 +        one[0] = 1;
 +        Rate memory c;
-+        return abi.encode(underlyingInit(us, one, one, 6, c, address(0), address(0)));
++        return abi.encode(wrappedInit(us, one, one, 6, c, address(0), address(0)));
      }
  
      function _wrapFor(address t, MockERC20 u, address who, uint256 v) internal {
@@ -1149,7 +1149,7 @@ index 83fa0a6..0ff60cc 100644
          vm.startPrank(who);
          u.approve(t, v);
 -        SingleUnderlyingToken(t).wrap(v);
-+        UnderlyingToken(t).wrap(v);
++        WrappedToken(t).wrap(v);
          vm.stopPrank();
      }
  
@@ -1162,7 +1162,7 @@ index 83fa0a6..0ff60cc 100644
 -            abi.encode("Any", "ANY", uint8(6), n, n, c, address(0)), "m");
 +        Rate memory c;
 +        address t = f.createTiered(IOpenFactoryV2.TokenKind.META_SINGLE, 1, us,
-+            abi.encode(underlyingInit(us, n, n, 6, c, address(0), address(0))), "m");
++            abi.encode(wrappedInit(us, n, n, 6, c, address(0), address(0))), "m");
          assertTrue(MockHts(HTS).associated(t, address(usdc)));
          assertTrue(MockHts(HTS).associated(t, address(usdt)));
          assertFalse(MockHts(HTS).associated(t, address(plain))); // not an HTS token: nothing to associate
@@ -1170,15 +1170,15 @@ index 83fa0a6..0ff60cc 100644
          vm.startPrank(alice);
          usdt.approve(t, 10e6);
 -        HederaMultiUnderlyingToken(t).wrap(address(usdt), 10e6);
-+        UnderlyingToken(t).wrap(address(usdt), 10e6);
++        WrappedToken(t).wrap(address(usdt), 10e6);
          vm.stopPrank();
          bytes32 payId = keccak256("inv");
 -        MetaTxLib.MetaTransfer memory x = _tr(shop, 3e6, payId, HederaMultiUnderlyingToken(t).payLane(payId));
-+        MetaTxLib.MetaTransfer memory x = _tr(shop, 3e6, payId, UnderlyingToken(t).payLane(payId));
++        MetaTxLib.MetaTransfer memory x = _tr(shop, 3e6, payId, WrappedToken(t).payLane(payId));
          bytes memory sig = _edSign(IERC20MetaTx(t).mtxTransferDigest(x));
          vm.prank(relayer);
 -        HederaMultiUnderlyingToken(t).mtxPay(alice, shop, 3e6, payId, x.validUntil, RR, relayer, 0, address(0), sig);
-+        UnderlyingToken(t).mtxPay(alice, shop, 3e6, payId, x.validUntil, RR, relayer, 0, address(0), sig);
++        WrappedToken(t).mtxPay(alice, shop, 3e6, payId, x.validUntil, RR, relayer, 0, address(0), sig);
          assertEq(IERC20MetaTx(t).balanceOf(shop), 3e6);
      }
  
@@ -1197,14 +1197,14 @@ index 83fa0a6..0ff60cc 100644
  
      function test_anyCustomFeeRefuses() public {
 -        bytes memory e = abi.encodeWithSelector(SingleUnderlyingToken.UnderlyingInvalid.selector, address(usdc));
-+        bytes memory e = abi.encodeWithSelector(IUnderlyingToken.UnderlyingInvalid.selector, address(usdc));
++        bytes memory e = abi.encodeWithSelector(IWrappedToken.UnderlyingInvalid.selector, address(usdc));
          MockHts(HTS).setFees(address(usdc), MockHts.Fees.Fixed);
          _refuse(e);
          MockHts(HTS).setFees(address(usdc), MockHts.Fees.Fractional);
 ```
 
-12. `MetaTxGasV2.t.sol`: the wrapper rows run on `UnderlyingToken` (`createTiered(META_SINGLE, …)` with
-    `abi.encode(underlyingInit(…))`); update logged numbers only, keep the assertions that are about the NONE token.
+12. `MetaTxGasV2.t.sol`: the wrapper rows run on `WrappedToken` (`createTiered(META_SINGLE, …)` with
+    `abi.encode(wrappedInit(…))`); update logged numbers only, keep the assertions that are about the NORMAL token.
 13. `WrapperInvariant.t.sol`, `UnwrapOp.t.sol`, `RateVectors.t.sol`, `Tier2.t.sol`, `Multi.t.sol`, `Rates.t.sol`: rules
     1–6; guardian and rate admin are set through `_multi(…, guardian)` / `_adjustable(admin)` as before.
 
@@ -1218,7 +1218,7 @@ Expected: all pass; count = 792 − 1 (`test_wrappersReportLegacyFeatures`) ± t
 the exact number and every split/merge). `forge build --sizes` is expected to fail on EIP-170 (D2).
 
 - [ ] **Step 8: Commit** — `git add` the src, tests and layout files (never `claude-code-api.txt`); message
-`P1d: UnderlyingLib + UnderlyingToken (1–8 legs, native leg, roles); delete Single/Multi/Hedera tiers; port tests` + trailer.
+`P1d: WrappedLib + WrappedToken (1–8 legs, native leg, roles); delete Single/Multi/Hedera tiers; port tests` + trailer.
 
 ---
 
@@ -1227,33 +1227,33 @@ the exact number and every split/merge). `forge build --sizes` is expected to fa
 **Model:** Sonnet, effort medium (transcription: both files are complete and passed in the spike).
 
 **Files:**
-- Create: `smartcontracts/evm/test/v2/Underlying.t.sol`, `smartcontracts/evm/test/v2/NativeLeg.t.sol`
+- Create: `smartcontracts/evm/test/v2/Wrapped.t.sol`, `smartcontracts/evm/test/v2/NativeLeg.t.sol`
 
 **Interfaces:**
-- Consumes: Task 1's fixture (`Rate`, `underlyingInit`, `wrapperOwner`, `_underlyingImpl`, `_one`, `_singleInit`,
+- Consumes: Task 1's fixture (`Rate`, `wrappedInit`, `wrapperOwner`, `_wrappedImpl`, `_one`, `_singleInit`,
   `_single`, `_multi`, `_fixedRate`, `_adjustable`, `_clone`, `_call`, `_signCall`, `_execCall`, `relayer`, `RR`),
-  `RateAdminForwarder` (`test/v2/helpers/V2Mocks.sol`), `IUnderlyingToken`, `ITokenAdmin`, `AdminLib`.
+  `RateAdminForwarder` (`test/v2/helpers/V2Mocks.sol`), `IWrappedToken`, `ITokenAdmin`, `AdminLib`.
 - Produces: nothing later tasks consume.
 
-- [ ] **Step 1: Write `test/v2/Underlying.t.sol`**
+- [ ] **Step 1: Write `test/v2/Wrapped.t.sol`**
 
 ```solidity
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {V2Fixture, Rate, underlyingInit} from "./helpers/V2Fixture.sol";
+import {V2Fixture, Rate, wrappedInit} from "./helpers/V2Fixture.sol";
 import {RateAdminForwarder} from "./helpers/V2Mocks.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
-import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
 
-/// Kind `UNDERLYING` on `AdminLib` (CTR-TOK-22): flags valid for the kind, the rate role and the guardian as roles,
+/// Kind `WRAPPED` on `AdminLib` (CTR-TOK-22): flags valid for the kind, the rate role and the guardian as roles,
 /// `disableFeature(RATE_ADJUSTABLE)` cancels a pending change, the single-asset ABI rule, init vs the factory's
-/// `underlyings`, and `UnderlyingLib` writing only its own namespace.
-contract UnderlyingTest is V2Fixture {
+/// `underlyings`, and `WrappedLib` writing only its own namespace.
+contract WrappedTest is V2Fixture {
     uint8 constant RATE = 3;
     uint8 constant GUARD = 4;
     bytes32 constant NS_UNDERLYING = 0x38d6f7edefffa65376a58a6aced8a2c86698d3a0b5d15a785f69ed89d0cd1000;
@@ -1265,7 +1265,7 @@ contract UnderlyingTest is V2Fixture {
     address bob = address(0xB0B);
 
     function initExt(address[] memory us, bytes memory d) external returns (address) {
-        return _clone(_underlyingImpl(), address(this), us, d);
+        return _clone(_wrappedImpl(), address(this), us, d);
     }
 
     function _two() internal view returns (address[] memory us, uint256[] memory one) {
@@ -1275,7 +1275,7 @@ contract UnderlyingTest is V2Fixture {
         (one[0], one[1]) = (1, 1);
     }
 
-    function _wrap(UnderlyingToken t, MockERC20 u, address who, uint256 v) internal {
+    function _wrap(WrappedToken t, MockERC20 u, address who, uint256 v) internal {
         u.mint(who, v);
         vm.startPrank(who);
         u.approve(address(t), v);
@@ -1285,35 +1285,35 @@ contract UnderlyingTest is V2Fixture {
 
     // ------------------------------------------------------------------ flags and init
 
-    function test_validFlags_underlyingKind() public {
+    function test_validFlags_wrappedKind() public {
         (address[] memory us, uint256[] memory one) = _two();
         Rate memory fixedRate;
-        IUnderlyingToken.UnderlyingInit memory c = underlyingInit(us, one, one, 6, fixedRate, address(0), address(0));
+        IWrappedToken.UnderlyingInit memory c = wrappedInit(us, one, one, 6, fixedRate, address(0), address(0));
         c.features |= 1 << AdminLib.MINTABLE;
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.MINTABLE));
         this.initExt(us, abi.encode(c));
-        c = underlyingInit(us, one, one, 6, fixedRate, address(0), address(0));
+        c = wrappedInit(us, one, one, 6, fixedRate, address(0), address(0));
         c.roles.rateAdmin = address(new RateAdminForwarder());
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.RoleWithoutFeature.selector, RATE));
         this.initExt(us, abi.encode(c));
-        c = underlyingInit(us, one, one, 6, _adjustable(bob), address(0), address(0));
+        c = wrappedInit(us, one, one, 6, _adjustable(bob), address(0), address(0));
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.RoleNotContract.selector, RATE, bob));
         this.initExt(us, abi.encode(c));
         // adjustable without an initial rate admin is valid: the owner grants the role later
-        c = underlyingInit(us, one, one, 6, _adjustable(address(0)), address(0), wrapperOwner);
-        UnderlyingToken t = UnderlyingToken(this.initExt(us, abi.encode(c)));
+        c = wrappedInit(us, one, one, 6, _adjustable(address(0)), address(0), wrapperOwner);
+        WrappedToken t = WrappedToken(this.initExt(us, abi.encode(c)));
         assertTrue(t.rateAdjustable());
-        assertEq(t.kind(), AdminLib.KIND_UNDERLYING);
+        assertEq(t.kind(), AdminLib.KIND_WRAPPED);
         assertEq(t.features(), (1 << AdminLib.PAYABLE) | (1 << RATE));
     }
 
     function test_init_legsMustMatchTheFactoryUnderlyings() public {
         (address[] memory us, uint256[] memory one) = _two();
         Rate memory fixedRate;
-        bytes memory d = abi.encode(underlyingInit(us, one, one, 6, fixedRate, address(0), address(0)));
+        bytes memory d = abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0)));
         address[] memory swapped = new address[](2);
         (swapped[0], swapped[1]) = (us[1], us[0]);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnknownUnderlying.selector, address(usdt)));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnknownUnderlying.selector, address(usdt)));
         this.initExt(swapped, d);
         vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.UnderlyingCountInvalid.selector, 2));
         this.initExt(_one(address(usdc)), d);
@@ -1328,15 +1328,15 @@ contract UnderlyingTest is V2Fixture {
 
     function test_rateRole_grantRevokeRenounce_leaveTheRate() public {
         RateAdminForwarder adm = new RateAdminForwarder();
-        UnderlyingToken t = _single(address(usdc), 6, 1, 1, _adjustable(address(0)));
-        vm.expectRevert(IUnderlyingToken.NotRateAdmin.selector);
+        WrappedToken t = _single(address(usdc), 6, 1, 1, _adjustable(address(0)));
+        vm.expectRevert(IWrappedToken.NotRateAdmin.selector);
         adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100)));
         vm.prank(wrapperOwner);
         t.grantRole(RATE, address(adm));
         adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100)));
         vm.prank(wrapperOwner);
         t.revokeRole(RATE, address(adm));
-        vm.expectRevert(IUnderlyingToken.NotRateAdmin.selector);
+        vm.expectRevert(IWrappedToken.NotRateAdmin.selector);
         adm.exec(address(t), abi.encodeCall(t.cancelRate, ()));
         // revoking leaves the pending change and the rate as they are
         (address u,,, uint64 eta) = t.pendingRate();
@@ -1352,18 +1352,18 @@ contract UnderlyingTest is V2Fixture {
 
     function test_disableRateAdjustable_cancelsThePendingChange_andFixesTheRate() public {
         RateAdminForwarder adm = new RateAdminForwarder();
-        UnderlyingToken t = _single(address(usdc), 6, 1, 1, _adjustable(address(adm)));
+        WrappedToken t = _single(address(usdc), 6, 1, 1, _adjustable(address(adm)));
         adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100)));
         usdc.mint(alice, 10);
         vm.prank(alice);
         usdc.approve(address(t), 10);
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.WrapPausedForRateChange.selector, address(usdc)));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapPausedForRateChange.selector, address(usdc)));
         t.wrap(10);
         vm.expectEmit(address(t));
         emit ITokenAdmin.FeatureDisabled(RATE, wrapperOwner);
         vm.expectEmit(address(t));
-        emit IUnderlyingToken.RateChangeCancelled(address(usdc));
+        emit IWrappedToken.RateChangeCancelled(address(usdc));
         vm.prank(wrapperOwner);
         t.disableFeature(RATE);
         (address u, uint96 n, uint96 d, uint64 eta) = t.pendingRate();
@@ -1371,15 +1371,15 @@ contract UnderlyingTest is V2Fixture {
         assertFalse(t.rateAdjustable());
         vm.prank(alice);
         t.wrap(10);
-        vm.expectRevert(IUnderlyingToken.RateFixed.selector);
+        vm.expectRevert(IWrappedToken.RateFixed.selector);
         adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100)));
-        vm.expectRevert(IUnderlyingToken.RateFixed.selector);
+        vm.expectRevert(IWrappedToken.RateFixed.selector);
         adm.exec(address(t), abi.encodeCall(t.executeRate, ()));
     }
 
     function test_disableRateAdjustable_withNothingPending_emitsNoCancel() public {
         RateAdminForwarder adm = new RateAdminForwarder();
-        UnderlyingToken t = _single(address(usdc), 6, 1, 1, _adjustable(address(adm)));
+        WrappedToken t = _single(address(usdc), 6, 1, 1, _adjustable(address(adm)));
         vm.recordLogs();
         vm.prank(wrapperOwner);
         t.disableFeature(RATE);
@@ -1390,33 +1390,33 @@ contract UnderlyingTest is V2Fixture {
 
     function test_guardianRole_disableWrap_oneWay_andFlagGates() public {
         (address[] memory us, uint256[] memory one) = _two();
-        UnderlyingToken t = _multi(us, one, one, _fixedRate(), bob); // an EOA guardian is allowed
+        WrappedToken t = _multi(us, one, one, _fixedRate(), bob); // an EOA guardian is allowed
         vm.prank(alice);
-        vm.expectRevert(IUnderlyingToken.NotGuardian.selector);
+        vm.expectRevert(IWrappedToken.NotGuardian.selector);
         t.disableWrap(address(usdt), "x");
         vm.expectEmit(address(t));
-        emit IUnderlyingToken.WrapDisabled(address(usdt), bob, "depeg");
+        emit IWrappedToken.WrapDisabled(address(usdt), bob, "depeg");
         vm.prank(bob);
         t.disableWrap(address(usdt), "depeg");
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.WrapDisabledFor.selector, address(usdt)));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapDisabledFor.selector, address(usdt)));
         t.disableWrap(address(usdt), "again");
         // a disabled flag stops the role: the guardian keeps the role but has no power
         vm.prank(wrapperOwner);
         t.disableFeature(GUARD);
         assertTrue(t.hasRole(GUARD, bob));
         vm.prank(bob);
-        vm.expectRevert(IUnderlyingToken.NotGuardian.selector);
+        vm.expectRevert(IWrappedToken.NotGuardian.selector);
         t.disableWrap(address(usdc), "late");
     }
 
     function test_guardianRenounces() public {
         (address[] memory us, uint256[] memory one) = _two();
-        UnderlyingToken t = _multi(us, one, one, _fixedRate(), bob);
+        WrappedToken t = _multi(us, one, one, _fixedRate(), bob);
         vm.prank(bob);
         t.renounceRole(GUARD);
         vm.prank(bob);
-        vm.expectRevert(IUnderlyingToken.NotGuardian.selector);
+        vm.expectRevert(IWrappedToken.NotGuardian.selector);
         t.disableWrap(address(usdt), "x");
     }
 
@@ -1424,20 +1424,20 @@ contract UnderlyingTest is V2Fixture {
 
     function test_singleAssetAbi_onlyWithExactlyOneLeg() public {
         (address[] memory us, uint256[] memory one) = _two();
-        UnderlyingToken m = _multi(us, one, one, _fixedRate(), address(0));
+        WrappedToken m = _multi(us, one, one, _fixedRate(), address(0));
         _wrap(m, usdc, alice, 100);
         vm.startPrank(alice);
-        vm.expectRevert(IUnderlyingToken.UnderlyingRequired.selector);
+        vm.expectRevert(IWrappedToken.UnderlyingRequired.selector);
         m.wrap(1);
-        vm.expectRevert(IUnderlyingToken.UnderlyingRequired.selector);
+        vm.expectRevert(IWrappedToken.UnderlyingRequired.selector);
         m.unwrap(1, alice);
-        vm.expectRevert(IUnderlyingToken.UnderlyingRequired.selector);
+        vm.expectRevert(IWrappedToken.UnderlyingRequired.selector);
         m.unwrap(1, alice, 0);
         vm.stopPrank();
         assertEq(m.underlying(), address(0));
         assertEq(m.underlyings().length, 2);
 
-        UnderlyingToken s = _single(address(usdc), 6, 1, 1, _fixedRate());
+        WrappedToken s = _single(address(usdc), 6, 1, 1, _fixedRate());
         assertEq(s.underlying(), address(usdc));
         // the per-leg ABI works on one leg too
         _wrap(s, usdc, alice, 50);
@@ -1450,11 +1450,11 @@ contract UnderlyingTest is V2Fixture {
 
     // ------------------------------------------------------------------ storage (CTR-TOK-24)
 
-    /// `UnderlyingLib` keeps the legs in `scaas.underlying`: leg i at `keccak256(i ‖ NS)` (+1 rate, +2 reserve);
+    /// `WrappedLib` keeps the legs in `scaas.underlying`: leg i at `keccak256(i ‖ NS)` (+1 rate, +2 reserve);
     /// a wrap and a rate proposal write nothing in `scaas.token`.
     function test_underlyingStateLivesInItsNamespace() public {
         RateAdminForwarder adm = new RateAdminForwarder();
-        UnderlyingToken t = _single(address(usdc), 6, 3, 7, _adjustable(address(adm)));
+        WrappedToken t = _single(address(usdc), 6, 3, 7, _adjustable(address(adm)));
         bytes32[12] memory tokBefore;
         for (uint256 i; i < 12; ++i) tokBefore[i] = vm.load(address(t), bytes32(uint256(NS_TOKEN) + i));
         usdc.mint(address(this), 1_000);
@@ -1481,11 +1481,11 @@ contract UnderlyingTest is V2Fixture {
 pragma solidity ^0.8.20;
 
 import {Errors} from "@openzeppelin/contracts/utils/Errors.sol";
-import {V2Fixture, UID_, Rate, underlyingInit} from "./helpers/V2Fixture.sol";
+import {V2Fixture, UID_, Rate, wrappedInit} from "./helpers/V2Fixture.sol";
 import {RateAdminForwarder} from "./helpers/V2Mocks.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
-import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
@@ -1494,8 +1494,8 @@ contract CoinRefuser {}
 
 /// Re-enters the token from `receive` (unwrap to itself again).
 contract CoinReenterer {
-    UnderlyingToken public t;
-    function arm(UnderlyingToken t_) external { t = t_; }
+    WrappedToken public t;
+    function arm(WrappedToken t_) external { t = t_; }
     receive() external payable {
         t.unwrap(1, address(this), 0);
     }
@@ -1510,35 +1510,35 @@ contract NativeLegTest is V2Fixture {
     MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
 
     function initExt(address[] memory us, bytes memory d) external returns (address) {
-        return _clone(_underlyingImpl(), address(this), us, d);
+        return _clone(_wrappedImpl(), address(this), us, d);
     }
 
     /// One native leg at 1:1, 18 decimals, rates fixed.
-    function _native() internal returns (UnderlyingToken) {
+    function _native() internal returns (WrappedToken) {
         return _single(address(0), 18, 1, 1, _fixedRate());
     }
 
-    function _wrapNative(UnderlyingToken t, address who, uint256 v) internal {
+    function _wrapNative(WrappedToken t, address who, uint256 v) internal {
         vm.deal(who, v);
         vm.prank(who);
         t.wrap{value: v}(v);
     }
 
     function test_native_wrapAndUnwrap() public {
-        UnderlyingToken t = _native();
+        WrappedToken t = _native();
         assertEq(t.underlying(), address(0));
         (,,, uint8 dec,) = t.legOf(address(0));
         assertEq(dec, 18);
         vm.deal(alice, 3 ether);
         vm.expectEmit(address(t));
-        emit IUnderlyingToken.Wrapped(alice, address(0), 3 ether, 3 ether);
+        emit IWrappedToken.Wrapped(alice, address(0), 3 ether, 3 ether);
         vm.prank(alice);
         assertEq(t.wrap{value: 3 ether}(3 ether), 3 ether);
         assertEq(t.balanceOf(alice), 3 ether);
         assertEq(address(t).balance, 3 ether);
         assertEq(t.collateralValue(), 3 ether);
         vm.expectEmit(address(t));
-        emit IUnderlyingToken.Unwrapped(alice, address(0), bob, 1 ether, 1 ether);
+        emit IWrappedToken.Unwrapped(alice, address(0), bob, 1 ether, 1 ether);
         vm.prank(alice);
         assertEq(t.unwrap(1 ether, bob, 1 ether), 1 ether);
         assertEq(bob.balance, 1 ether);
@@ -1548,12 +1548,12 @@ contract NativeLegTest is V2Fixture {
     }
 
     function test_native_valueMustMatch() public {
-        UnderlyingToken t = _native();
+        WrappedToken t = _native();
         vm.deal(alice, 2 ether);
         vm.startPrank(alice);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.NativeValueMismatch.selector, 1 ether, 2 ether));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.NativeValueMismatch.selector, 1 ether, 2 ether));
         t.wrap{value: 1 ether}(2 ether);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.NativeValueMismatch.selector, 0, 1 ether));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.NativeValueMismatch.selector, 0, 1 ether));
         t.addReserve(address(0), 1 ether);
         vm.stopPrank();
     }
@@ -1563,12 +1563,12 @@ contract NativeLegTest is V2Fixture {
         (us[0], us[1]) = (address(usdc), address(0));
         uint256[] memory one = new uint256[](2);
         (one[0], one[1]) = (1, 1);
-        UnderlyingToken t = _multi(us, one, one, _fixedRate(), address(0));
+        WrappedToken t = _multi(us, one, one, _fixedRate(), address(0));
         usdc.mint(alice, 5);
         vm.deal(alice, 1);
         vm.startPrank(alice);
         usdc.approve(address(t), 5);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.NativeValueMismatch.selector, 1, 0));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.NativeValueMismatch.selector, 1, 0));
         t.wrap{value: 1}(address(usdc), 5);
         t.wrap(address(usdc), 5);
         t.wrap{value: 1}(address(0), 1);
@@ -1581,20 +1581,20 @@ contract NativeLegTest is V2Fixture {
         uint256[] memory one = new uint256[](2);
         (one[0], one[1]) = (1, 1);
         Rate memory fixedRate;
-        bytes memory d = abi.encode(underlyingInit(us, one, one, 18, fixedRate, address(0), address(0)));
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.DuplicateUnderlying.selector, address(0)));
+        bytes memory d = abi.encode(wrappedInit(us, one, one, 18, fixedRate, address(0), address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.DuplicateUnderlying.selector, address(0)));
         this.initExt(us, d);
     }
 
     function test_native_forcedCoinIsNotReserve() public {
-        UnderlyingToken t = _native();
+        WrappedToken t = _native();
         _wrapNative(t, alice, 1 ether);
         vm.deal(address(t), 5 ether); // selfdestruct / block reward
         (,, uint256 reserve,,) = t.legOf(address(0));
         assertEq(reserve, 1 ether);
         assertEq(t.collateralValue(), 1 ether);
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.InsufficientReserve.selector, address(0), 2 ether,
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.InsufficientReserve.selector, address(0), 2 ether,
             1 ether));
         t.unwrap(2 ether, alice, 0);
         _wrapNative(t, bob, 1 ether); // the surplus does not stop a wrap
@@ -1602,12 +1602,12 @@ contract NativeLegTest is V2Fixture {
     }
 
     function test_native_shortfallStopsWrapNotUnwrap() public {
-        UnderlyingToken t = _native();
+        WrappedToken t = _native();
         _wrapNative(t, alice, 2 ether);
         vm.deal(address(t), 1 ether); // the balance fell below the reserve
         vm.deal(bob, 1 ether);
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.ReserveShortfall.selector, address(0), 1 ether,
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.ReserveShortfall.selector, address(0), 1 ether,
             2 ether));
         t.wrap{value: 1 ether}(1 ether);
         vm.prank(alice);
@@ -1616,10 +1616,10 @@ contract NativeLegTest is V2Fixture {
     }
 
     function test_native_addReserveIsPayable() public {
-        UnderlyingToken t = _native();
+        WrappedToken t = _native();
         vm.deal(bob, 1 ether);
         vm.expectEmit(address(t));
-        emit IUnderlyingToken.ReserveAdded(bob, address(0), 1 ether);
+        emit IWrappedToken.ReserveAdded(bob, address(0), 1 ether);
         vm.prank(bob);
         t.addReserve{value: 1 ether}(address(0), 1 ether);
         assertEq(t.collateralValue(), 1 ether);
@@ -1627,7 +1627,7 @@ contract NativeLegTest is V2Fixture {
     }
 
     function test_native_refusingRecipientRevertsTheUnwrap() public {
-        UnderlyingToken t = _native();
+        WrappedToken t = _native();
         _wrapNative(t, alice, 1 ether);
         address r = address(new CoinRefuser());
         vm.prank(alice);
@@ -1637,7 +1637,7 @@ contract NativeLegTest is V2Fixture {
     }
 
     function test_native_reentrantRecipientIsBlocked() public {
-        UnderlyingToken t = _native();
+        WrappedToken t = _native();
         CoinReenterer r = new CoinReenterer();
         r.arm(t);
         _wrapNative(t, address(r), 2 ether);
@@ -1647,7 +1647,7 @@ contract NativeLegTest is V2Fixture {
     }
 
     function test_native_contractRecipientGetsAllGas() public {
-        UnderlyingToken t = _native();
+        WrappedToken t = _native();
         _wrapNative(t, alice, 1 ether);
         GasHungry g = new GasHungry();
         vm.prank(alice);
@@ -1656,11 +1656,11 @@ contract NativeLegTest is V2Fixture {
     }
 
     function test_native_noGaslessWrap_gaslessUnwrapWorks() public {
-        UnderlyingToken t = _native();
+        WrappedToken t = _native();
         MetaTxLib.MetaTransaction memory m = _call(alice, abi.encodeWithSignature("wrap(uint256)", 1 ether), 1, RR);
         bytes memory sig = _signCall(ALICE_PK, address(t), m);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.NativeValueMismatch.selector, 0, 1 ether));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.NativeValueMismatch.selector, 0, 1 ether));
         t.mtxExecute(m, sig);
         _wrapNative(t, alice, 1 ether);
         m = _call(alice, abi.encodeWithSignature("unwrap(uint256,address,uint256)", 1 ether, bob, 1 ether), 1, RR);
@@ -1670,12 +1670,12 @@ contract NativeLegTest is V2Fixture {
 
     function test_native_executeRateChecksTheCoinBalance() public {
         RateAdminForwarder adm = new RateAdminForwarder();
-        UnderlyingToken t = _single(address(0), 18, 1, 1, _adjustable(address(adm)));
+        WrappedToken t = _single(address(0), 18, 1, 1, _adjustable(address(adm)));
         _wrapNative(t, alice, 1 ether);
         adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(0), 101, 100)));
         vm.warp(block.timestamp + 7 days);
         vm.deal(address(t), 0.5 ether);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.ReserveShortfall.selector, address(0), 0.5 ether,
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.ReserveShortfall.selector, address(0), 0.5 ether,
             1 ether));
         adm.exec(address(t), abi.encodeCall(t.executeRate, ()));
         vm.deal(address(t), 1 ether);
@@ -1685,7 +1685,7 @@ contract NativeLegTest is V2Fixture {
     }
 
     function test_native_decimalsOnHederaAre8() public {
-        UnderlyingToken h = UnderlyingToken(_clone(address(new UnderlyingToken(address(this), address(0), UID_, true)),
+        WrappedToken h = WrappedToken(_clone(address(new WrappedToken(address(this), address(0), UID_, true)),
             address(this), _one(address(0)), _singleInit(address(0), 8, 1, 1, _fixedRate())));
         (,,, uint8 dec,) = h.legOf(address(0));
         assertEq(dec, 8);
@@ -1718,28 +1718,28 @@ Full suite: Task 1's count + 22.
 **Files:**
 - Modify: `smartcontracts/evm/script/Deploy.s.sol`, `smartcontracts/evm/script/hedera/DeployHedera.s.sol` — comments
   only: "Single/Multi chờ P1d" / "Transitional (R3): Single/Multi are over EIP-170 until P1d" → "Transitional (P1d,
-  D2): `UnderlyingToken` is over EIP-170 until the size work; only META_NONE is deployed and registered".
+  D2): `WrappedToken` is over EIP-170 until the size work; only META_NONE is deployed and registered".
 - Modify: `docs/contracts/token-wrappers.md` — every "Transitional (BUILT)" note that names the Single/Multi tiers,
   their init encodings, `renounceRateAdmin`/`renounceGuardian`, the Hedera wrapper children, `_legCount` or "until P1d":
   §2.2 (built encoding = `UnderlyingInit`, D8; `RoleNotContract(3, a)`), CTR-TOK-26 (built in P1d: `NativeValueMismatch`
   (D7), native decimals 8 on Hedera (D6); `mtxWrap`/`NativeNotGasless` with P2 (D1)), §2.2.1 (built multi-leg encoding
   replaced; `renounceRole(4)`), §3 CTR-TOK-06 "built: dropped by `renounceRateAdmin`" (now: `renounceRole` leaves it;
   `disableFeature(RATE_ADJUSTABLE)` cancels, D5), CTR-TOK-20 (transitional: P2, D1), CTR-TOK-22 transitional (kind
-  `UNDERLYING` on `AdminLib` roles), §7 Interfaces (block and table: one `UnderlyingToken` row with `IUnderlyingToken`
-  events/errors, no Single/Multi/Hedera-children rows), §8 CTR-TOK-24 (`UnderlyingLib` row as built with its size;
+  `WRAPPED` on `AdminLib` roles), §7 Interfaces (block and table: one `WrappedToken` row with `IWrappedToken`
+  events/errors, no Single/Multi/Hedera-children rows), §8 CTR-TOK-24 (`WrappedLib` row as built with its size;
   transitional sizes; D2 "controller ruling, pending the owner") and the storage table (`scaas.underlying` with the slot
   formula of the Global Constraints; linear layout = ERC-20 slots 0–4), §10 CTR-TOK-23 transitional (children deleted;
-  association in `UnderlyingLib` under `IS_HEDERA`). Net ≤ 0 lines (budget warning).
-- Modify: `docs/contracts/metatx.md` — the P1b/P1c "(BUILT)" bullet of §16 gains P1d (the `UNDERLYING` allowlist of six
+  association in `WrappedLib` under `IS_HEDERA`). Net ≤ 0 lines (budget warning).
+- Modify: `docs/contracts/metatx.md` — the P1b/P1c "(BUILT)" bullet of §16 gains P1d (the `WRAPPED` allowlist of six
   selectors, Global Constraints).
 - Modify: `docs/networks/hedera.md` — `HederaTokensV2.sol` children gone; `HederaLib.checkAndAssociate` runs in
-  `UnderlyingLib` init under `IS_HEDERA`; a native (HBAR) leg has 8 decimals (D6).
+  `WrappedLib` init under `IS_HEDERA`; a native (HBAR) leg has 8 decimals (D6).
 - Modify: `docs/history/dropped-artifacts.tsv` — a row for every load-bearing token the checker (C7) reports as gone
   (e.g. `renounceRateAdmin()`, `renounceGuardian()`, `RateAdminRenounced`, `GuardianRenounced`, `RateAdminNotContract`,
   `HederaSingleUnderlyingToken`, `HederaMultiUnderlyingToken`, `MultiUnderlyingToken`, `SingleUnderlyingToken`),
   reason `renamed` or `obsolete`, pointing at the CTR id where the meaning lives now.
 - Modify: `TODO.md` §00 (P1 line: P1d done with its merge and test count; MT-3 "`mtxWrap` … (P1d)" → "(P2, D1)"; the
-  "P1d: wrappers over EIP-170" bullet → "`UnderlyingToken` 25,408 B over EIP-170 until the size work (owner: optimise
+  "P1d: wrappers over EIP-170" bullet → "`WrappedToken` 25,408 B over EIP-170 until the size work (owner: optimise
   later; D2)"; P1c note (c) done; P2 notes gain D1 `mtxWrap`), `HANDOFF.md` (top section "Session 2026-10-11 (P1d)":
   state, what was built, rulings D1–D12 with D2/D4/D6 flagged for the owner, sizes, next = P1e plan).
 
@@ -1748,10 +1748,10 @@ Full suite: Task 1's count + 22.
 ```bash
 timeout 900 scripts/capped bash -c 'cd smartcontracts/evm && forge build --sizes --json 2>/dev/null' > /tmp/p1d-sizes.json || true
 jq -r 'to_entries[] | select(.value.runtime_size > 24576) | "\(.key) \(.value.runtime_size)"' /tmp/p1d-sizes.json
-jq -r 'to_entries[] | select(.key | test("^(NoUnderlyingToken|UnderlyingToken|UnderlyingLib|AdminLib|HederaLib)$")) | "\(.key) \(.value.runtime_size)"' /tmp/p1d-sizes.json
+jq -r 'to_entries[] | select(.key | test("^(NormalToken|WrappedToken|WrappedLib|AdminLib|HederaLib)$")) | "\(.key) \(.value.runtime_size)"' /tmp/p1d-sizes.json
 ```
 
-Expected over 24,576: exactly `UnderlyingToken` and `ZetherToken`. Anything else over: stop, report. Use the measured
+Expected over 24,576: exactly `WrappedToken` and `ZetherToken`. Anything else over: stop, report. Use the measured
 numbers in the docs.
 
 - [ ] **Step 2: e2e** (the scripts still deploy only `META_NONE`; this proves the deploy path still links and runs):

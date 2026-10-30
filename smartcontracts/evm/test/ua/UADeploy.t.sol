@@ -110,10 +110,10 @@ contract UADeployTest is Test {
     function test_C5_1_releaseNeedsABlockGasLimit() public {
         DeployHarness h = new DeployHarness();
         string memory base = vm.readFile("./size-baseline.json");
-        uint256 plain = vm.parseJsonUint(base, ".NoUnderlyingToken") * 1530 + 16_777_216;
-        uint256 conf = vm.parseJsonUint(base, ".UnderlyingPqzToken") * 1530 + 16_777_216;
-        assertEq(h.gasNeed("NoUnderlyingToken"), plain);
-        assertEq(h.gasNeed("UnderlyingPqzToken"), conf);
+        uint256 plain = vm.parseJsonUint(base, ".NormalToken") * 1530 + 16_777_216;
+        uint256 conf = vm.parseJsonUint(base, ".WrappedPqzToken") * 1530 + 16_777_216;
+        assertEq(h.gasNeed("NormalToken"), plain);
+        assertEq(h.gasNeed("WrappedPqzToken"), conf);
         assertLt(plain, 80_000_000, "plain kinds: about 75 M");
         assertGt(conf, 100_000_000, "confidential kinds: about 110 M");
         assertLt(conf, 120_000_000);
@@ -121,11 +121,11 @@ contract UADeployTest is Test {
         assertEq(h.gasNeed("SCaaSDex"), uint256(24_576) * 1530 + 16_777_216);
         // an Ethereum-like 60 M block cannot hold any confidential release
         vm.expectRevert(bytes(string.concat("block gas limit 60000000 < ", vm.toString(conf),
-            " needed to deploy the UnderlyingPqzToken release (NET-EVM-06)")));
-        h.checkGas("UnderlyingPqzToken", 60_000_000);
-        h.checkGas("UnderlyingPqzToken", conf);
+            " needed to deploy the WrappedPqzToken release (NET-EVM-06)")));
+        h.checkGas("WrappedPqzToken", 60_000_000);
+        h.checkGas("WrappedPqzToken", conf);
         // the gate reads the chain's block gas limit
         if (block.gaslimit < conf) vm.expectRevert();
-        h.requireGas("UnderlyingPqzToken");
+        h.requireGas("WrappedPqzToken");
     }
 }
