@@ -94,6 +94,8 @@ interface ISCaaSDex {
         uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
     /// @notice `reason` = the failed settlement's revert data, at most its first 256 bytes.
     event MatchFailed(bytes32 indexed ref, bytes reason);
+    /// @notice `mtxExchangeBatch`: `reason` = the failed plan's revert data, at most its first 256 bytes.
+    event ExchangeFailed(bytes32 indexed ref, bytes reason);
     /// @notice Raised by `TradeLib` on outside-token legs and DEX-side cancels (same as `ITradeToken`), listed for the ABI.
     event TradeFilled(bytes32 indexed orderHash, address indexed from, uint256 sellFill, uint256 receiveFill,
         uint256 dexFee);
@@ -156,8 +158,8 @@ interface ISCaaSDex {
     error MinNonceNotIncreasing(uint256 current, uint256 requested);
     error MinNonceAboveCap(uint256 requested);
     /// @notice `SigCheck`'s: the submitter left too little gas for a capped ERC-1271 call (CTR-DEX-08); it reverts the
-    ///         whole `mtxSettle`, never only one settlement. The registry's `UAVerifyGas()` (a UA leg's verify could
-    ///         not get its cap) does the same (CTR-DEX-26).
+    ///         whole `mtxSettle` or `mtxExchangeBatch`, never only one item. The registry's `UAVerifyGas()` (a UA
+    ///         leg's verify could not get its cap) does the same (CTR-DEX-26).
     error SigCheckGasStarved(uint256 cap, uint256 gasLeft);
     error UAVerifyGas();
     /// @notice A path (a) interaction failed (CTR-DEX-20): its position, target and at most 256 bytes of its revert
@@ -189,6 +191,13 @@ interface ISCaaSDex {
     function mtxExchange(ExchangePlan calldata p, Interaction[] calldata interactions) external;
     /// @notice Exchange path (b): the pulled sell fills go to `executor`, which pays the DEX back in its callback.
     function mtxExchangeVia(ExchangePlan calldata p, address executor, bytes calldata data) external;
+    /// @notice Path (a) plans, one isolated self-call each (spec §5, DX10): a failed plan emits `ExchangeFailed`, the
+    ///         others still settle; `SigCheckGasStarved` / `UAVerifyGas` revert the whole call; `NothingSettled` when
+    ///         no plan settles; `LengthMismatch` unless `ps.length == interactions.length`.
+    function mtxExchangeBatch(ExchangePlan[] calldata ps, Interaction[][] calldata interactions)
+        external returns (bool[] memory ok);
+    /// @notice The DEX only (`NotSelf`): one plan of `mtxExchangeBatch`, `submitter` its caller.
+    function exchangeOne(ExchangePlan calldata p, Interaction[] calldata interactions, address submitter) external;
     /// @notice Hybrid path (a): makers at their own price (`⌈fill · receiveAmount / amount⌉`, `mtxSettle`'s fee and
     ///         self-trade rule), the rest through the DEX's own interactions; the taker gets its floor
     ///         (`Σ maker fill + outsideFloor`, the fee once on it) plus everything the route returns above

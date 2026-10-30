@@ -286,29 +286,33 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         ok = new bool[](ss.length);
         bool any;
         for (uint256 i; i < ss.length; ++i) {
-            bytes memory data = abi.encodeCall(this.settleOne, (ss[i], msg.sender));
-            bool success;
-            bytes memory reason;
-            assembly ("memory-safe") {
-                success := call(gas(), address(), 0, add(data, 0x20), mload(data), 0, 0)
-                let n := returndatasize()
-                if gt(n, MAX_REASON) { n := MAX_REASON }
-                reason := mload(0x40)
-                mstore(reason, n)
-                returndatacopy(add(reason, 0x20), 0, n)
-                mstore(0x40, add(add(reason, 0x20), and(add(n, 0x1f), not(0x1f))))
-            }
-            if (success) {
-                ok[i] = true;
-                any = true;
-            } else if (reason.length >= 4
-                && (bytes4(reason) == SigCheckGasStarved.selector || bytes4(reason) == UAVerifyGas.selector)) {
-                assembly ("memory-safe") { revert(add(reason, 0x20), mload(reason)) }
-            } else {
-                emit MatchFailed(ss[i].ref, reason);
-            }
+            ok[i] = _selfCall(abi.encodeCall(this.settleOne, (ss[i], msg.sender)), ss[i].ref, false);
+            any = any || ok[i];
         }
         if (!any) revert NothingSettled();
+    }
+
+    /// @dev PD3, the one isolated item of `mtxSettle` and `mtxExchangeBatch`: a self-call with all remaining gas, at
+    ///      most `MAX_REASON` bytes of its revert data kept; `SigCheckGasStarved` / `UAVerifyGas` revert the whole call
+    ///      with it; anything else is `MatchFailed` (`exchange` false) or `ExchangeFailed` (true) and the next item runs.
+    function _selfCall(bytes memory data, bytes32 ref, bool exchange) private returns (bool success) {
+        bytes memory reason;
+        assembly ("memory-safe") {
+            success := call(gas(), address(), 0, add(data, 0x20), mload(data), 0, 0)
+            let n := returndatasize()
+            if gt(n, MAX_REASON) { n := MAX_REASON }
+            reason := mload(0x40)
+            mstore(reason, n)
+            returndatacopy(add(reason, 0x20), 0, n)
+            mstore(0x40, add(add(reason, 0x20), and(add(n, 0x1f), not(0x1f))))
+        }
+        if (success) return true;
+        if (reason.length >= 4
+            && (bytes4(reason) == SigCheckGasStarved.selector || bytes4(reason) == UAVerifyGas.selector)) {
+            assembly ("memory-safe") { revert(add(reason, 0x20), mload(reason)) }
+        }
+        if (exchange) emit ExchangeFailed(ref, reason);
+        else emit MatchFailed(ref, reason);
     }
 
     /// @notice Only through `mtxSettle` (the self-call isolates one settlement); `submitter` is the real caller.
@@ -459,9 +463,36 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     ///         interaction granted is set back to 0 after the last interaction (controller ruling: the DEX keeps no
     ///         allowance past the route).
     function mtxExchange(ExchangePlan calldata p, Interaction[] calldata xs) external nonReentrant {
-        (Tok[] memory t, Calc[] memory c, bool onlyListed) = _exchangeIn(p, msg.sender);
+        _exchange(p, xs, msg.sender);
+    }
+
+    /// @notice Path (a) plans, each isolated as a settlement of `mtxSettle` (spec §5, DX10): one self-call
+    ///         `exchangeOne` per plan; a failed plan emits `ExchangeFailed` (at most `MAX_REASON` bytes of its revert
+    ///         data) and the next one runs; `SigCheckGasStarved` / `UAVerifyGas` revert the whole call; no plan settled
+    ///         ⇒ `NothingSettled`. A later plan sees the state the earlier ones left (`pulled`, balances).
+    function mtxExchangeBatch(ExchangePlan[] calldata ps, Interaction[][] calldata xs)
+        external nonReentrant returns (bool[] memory ok)
+    {
+        if (ps.length != xs.length) revert LengthMismatch();
+        ok = new bool[](ps.length);
+        bool any;
+        for (uint256 i; i < ps.length; ++i) {
+            ok[i] = _selfCall(abi.encodeCall(this.exchangeOne, (ps[i], xs[i], msg.sender)), ps[i].ref, true);
+            any = any || ok[i];
+        }
+        if (!any) revert NothingSettled();
+    }
+
+    /// @notice Only through `mtxExchangeBatch` (the batch holds the reentrancy guard); `submitter` is the real caller.
+    function exchangeOne(ExchangePlan calldata p, Interaction[] calldata xs, address submitter) external {
+        if (msg.sender != address(this)) revert NotSelf();
+        _exchange(p, xs, submitter);
+    }
+
+    function _exchange(ExchangePlan calldata p, Interaction[] calldata xs, address submitter) private {
+        (Tok[] memory t, Calc[] memory c, bool onlyListed) = _exchangeIn(p, submitter);
         _route(xs, onlyListed);
-        _exchangeOut(p, t, c, msg.sender);
+        _exchangeOut(p, t, c, submitter);
     }
 
     /// @dev Path (a)'s interactions in order, then every allowance an `approve` among them granted set back to 0.
