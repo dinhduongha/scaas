@@ -132,7 +132,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      and, where possible, the metatx-split e2e owed on a real node → Task 14 (wasm32 limb path).
   6. P6h (clients + WASM) → P6i (node) → P6j (review) → P6-PUB drafts. In parallel: TradeEngine EVM ∥ non-EVM 1 × N
      (DEX).
-  7. UA-7 PQ chat sessions (needs UA-8's KEM keys); then the next 4b / UA-8 plans in the family order
+  7. UA-7 PQ chat sessions (needs UA-8's KEM keys); then the next 4b / UA-8 plans in the family order (each spec answers the checklist [NET-ALL-84](docs/networks/README.md#NET-ALL-84))
      NEAR → Cosmos / Sui / Aptos / Solana → Algorand (`fndsa512` once AVM v14 ships) → TON (registry design first).
   Details of the registration items:
      - **UA on non-EVM families — every kind, not only PQ** (owner 2026-10-29; rules NET-ALL-20 / NET-ALL-21,

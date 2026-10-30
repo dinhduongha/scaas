@@ -434,6 +434,35 @@ clientkeys refuse a native send to that form. Why: a 20-byte form is exactly the
 account-shaped form invites native sends to a keyless address. Cost: dev passkey accounts re-open; users copy a URN,
 not an address. Owner-confirmed.
 
+<a id="ua-family-checklist"></a><a id="NET-ALL-84"></a>**NET-ALL-84** — **Every family's UA spec answers the same
+checklist** (owner 2026-10-30). The questions come from the first non-EVM UA round, the 4b Soroban spec (its §0 rows
+S1–S18, `docs/superpowers/specs/2026-10-30-soroban-4b-ua-base-design.md`). A family spec answers every row in its own §0
+(row, options considered, choice and why, cost if wrong, who decided), or says why the row does not apply. The **shared**
+column is the same answer on every chain ([NET-ALL-20](#NET-ALL-20), one rule everywhere); only the **family** column
+differs, and it states the chain's own mechanics (NEAR ≠ Algorand ≠ Soroban …), never a lumped answer.
+
+| # | Question | Shared answer (every family) | Family-specific part | 4b Soroban |
+|---|---|---|---|---|
+| 1 | Where the records live | one registry per chain holding the UA-8 records; chain-wide `keyHash` uniqueness | a registry contract, a factory, a lazy open, an account app … | S1 |
+| 2 | Registration form | the UA-8 portable `register` (same record bytes and digests as EVM, [CTR-UA-31](../contracts/accounts.md#CTR-UA-31)) | encoding of the call on the chain | S2 |
+| 3 | Kinds enabled in generation 1 | classical kinds first, PQ where the chain verifies it; a kind without an on-chain verifier only in relayer-checked mode | which verifiers the chain has | S3 |
+| 4 | PQ verifier | ML-DSA / Falcon only through a chain-native or measured on-chain verifier | host function, precompile, opcode, or none | S4 |
+| 5 | SDK, toolchain and network pins | exact versions pinned, local network first | the chain's SDK / node versions | S5 |
+| 6 | UA ledger in tokens | UA balances live in our tokens, never in a native account a UA cannot sign for ([NET-ALL-21](#NET-ALL-21)) | storage shape of the ledger | S6 |
+| 7 | Replay protection | per-UA lanes and nonces; a payment uses its pay lane, nonce 0 | where the lanes are stored | S7 |
+| 8 | Relayer binding | every UA entry relayable (fee may be 0); an optional bound relayer authenticates itself | how the relayer proves itself | S8 |
+| 9 | Who may receive | only a UA that can spend on that chain | the chain's spend check | S9 |
+| 10 | `msig` members | members verified by their own kinds; a member the chain cannot verify carries no signing weight there | which native members exist | S10 |
+| 11 | Storage, expiry, archival | records stay in state; nothing is only a hash; an archived or frozen record is restorable, never deleted | rent / TTL / storage-deposit / MBR model | S11 |
+| 12 | Who pays fees, storage and restores | the relayer; users and UAs need no native coin | the chain's fee and deposit flows | S12 |
+| 13 | Classical Zether (not post-quantum) | its own item, never lumped with PQZ; the Zether PoP kind 0x0141 is enabled only with a Zether token on that chain | whether a verifier fits the chain | S13a |
+| 14 | PQZ | its own item; PQZ ciphertexts stay in state ([never lose ciphertext](../contracts/pq-zero-knowledge.md)); without a PQZ verifier the PQZ attributes are stored unproven | whether a PQZ verifier exists | S13b |
+| 15 | Code authority | an account signs with its own key, no delegated code authority ([CTR-UA-24](../contracts/accounts.md#CTR-UA-24), [NET-ALL-83](#NET-ALL-83)) | the chain's ways to hand authority to code and which are detectable | S14 |
+| 16 | Node job kinds | UA entries are `ua_metatx` jobs, registry writes are `call` jobs | the adapter's build of each | S15 |
+| 17 | Upgrade and admin | no admin and no upgrade path on the registry; relayer lists fixed at deploy | how the chain makes code immutable | S16 |
+| 18 | Test order | unit tests, then a local network, then the public testnet | the chain's devnet / sandbox | S17 |
+| 19 | Order inside the round | stated per round, with its branches | — | S18 |
+
 ## 7. Key lifecycle per family
 
 <a id="key-lifecycle"></a><a id="NET-ALL-05"></a>**NET-ALL-05** — **Key rotation and recovery are stated per family;

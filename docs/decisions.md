@@ -4374,6 +4374,18 @@ to an attacker key) stays undetectable; signature paths already verify the curre
 (EIP-7702 designators: own-key ECDSA only, no delegated caller) is unaffected.
 **Source.** [research/eip7702-audit-2026-10-30.md](research/eip7702-audit-2026-10-30.md) §8, §6.3 D6; the D6 build report.
 
+### NET-ALL-84 — One UA checklist for every family's spec
+- old: — · status: current · owner: yes · date: 2026-10-30 · normative: networks/README.md#NET-ALL-84 · superseded-by: —
+
+**Rule.** Every family's UA spec answers the 19-row checklist of networks/README.md NET-ALL-84 in its own §0 (or says
+why a row does not apply): a shared answer that is the same on every chain, and a family-specific part that states the
+chain's own mechanics. The rows come from the 4b Soroban spec's §0 (S1–S18, S13 split into classical Zether S13a and
+PQZ S13b). Owner request 2026-10-30. Status: current (docs).
+**Why.** The same questions must be asked of NEAR, Cosmos / Sui / Aptos / Solana, Algorand and TON as of Soroban, so
+no family spec silently skips one, while the answers keep each chain's real mechanics.
+**Cost if wrong.** A family whose mechanics do not fit a row explains why in its spec.
+**Source.** The 4b Soroban spec, `docs/superpowers/specs/2026-10-30-soroban-4b-ua-base-design.md` §0.
+
 ## 27. Networks — EVM
 
 ### NET-EVM-01 — Celo fee currency (CIP-64)
