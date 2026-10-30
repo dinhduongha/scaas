@@ -9,7 +9,9 @@
 P=2026-10-30-token-rename
 STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 forge-isolate sizes cargo-scaas-node clientkeys docs named-tests"
 FAMILIES=""
-# "<step>|<form>|<name>": the test functions the rename renamed (forge pass form), plus the renamed parity / KAT readers
+# "<step>|<form>|<name>": the test functions the rename renamed (forge pass form), plus the renamed parity / KAT readers.
+# Not listed: invariant_T_V3_2_wrapped / _normal (renamed too): forge prints an invariant as "[PASS] <name>" without "(",
+# which the forge form does not match; their PASS lines are in the forge-* logs (UALedgerInvariantTest).
 NEW_TESTS=$(cat <<'NAMES'
 forge|forge|test_allowlistPinned_wrappedZether
 forge|forge|test_allowlistRefusals_wrappedZether
@@ -20,14 +22,12 @@ forge|forge|test_validFlags_wrappedKind
 forge|forge|test_disclosureOnTheWrappedKind
 forge|forge|test_wrapped_classAndBasisMatchTheRule
 forge|forge|test_createToken_wrapped_indexesEveryLeg_includingNative
-forge|forge|invariant_T_V3_2_wrapped
 forge|forge|test_normal_allowlistPinned
 forge|forge|test_normal_everyListedSelectorRuns
 forge|forge|test_normal_classAndBasisMatchTheRule
 forge|forge|test_normalZether_burnUnderUA
 forge|forge|test_createToken_normal_emitsOneEventWithProvenance
 forge|forge|test_allowlists_normalKind
-forge|forge|invariant_T_V3_2_normal
 forge|forge|test_parity
 forge|forge|test_ruleTableParity
 forge|forge|test_dexKat
