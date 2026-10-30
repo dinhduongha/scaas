@@ -5,14 +5,14 @@ import {Vm} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
-import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 
@@ -24,7 +24,7 @@ contract UARouter {
     }
 }
 
-/// The SCaaSDex fixture with UA ledgers on (CTR-DEX-26): a factory on context A whose `NONE` implementation is bound to
+/// The SCaaSDex fixture with UA ledgers on (CTR-DEX-26): a factory on context A whose `NORMAL` implementation is bound to
 /// the UA registry `REG_L`; `A` (alice 1e6) and `B` (bob 1e6) listed, the outside `usdc` (dave, approved to the puller)
 /// listed against `A`, `C` a SCaaS token with the ledger off listed against `A`. `uaP` holds 100 k A, `uaB` 100 k B.
 abstract contract UADexBase is UALedgerBase {
@@ -33,21 +33,21 @@ abstract contract UADexBase is UALedgerBase {
     address internal dave;
     OpenFactory internal f;
     SCaaSDex internal dex;
-    NoUnderlyingToken internal A;
-    NoUnderlyingToken internal B;
-    NoUnderlyingToken internal C;
+    NormalToken internal A;
+    NormalToken internal B;
+    NormalToken internal C;
     MockERC20 internal usdc;
 
     function setUp() public virtual override {
         super.setUp();
         dave = vm.addr(DAVE_PK);
         f = new OpenFactory(address(this), chainUidA, 0);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NONE, 1, type(NoUnderlyingToken).creationCode, REG_L, address(0), false);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NONE, 2, type(NoUnderlyingToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, REG_L, address(0), false);
+        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 2, type(NormalToken).creationCode, address(0), address(0), false);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        A = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(noneInit("A", "A", 0, 1e6, alice, address(0))), "A"));
-        B = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(noneInit("B", "B", 0, 1e6, bob, address(0))), "B"));
-        C = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 2, abi.encode(noneInit("C", "C", 0, 1e6, bob, address(0))), "C"));
+        A = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 0, 1e6, alice, address(0))), "A"));
+        B = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("B", "B", 0, 1e6, bob, address(0))), "B"));
+        C = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 2, abi.encode(normalInit("C", "C", 0, 1e6, bob, address(0))), "C"));
         dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(address(this), 200_000, TREASURY, false)), "dex"));
         usdc = new MockERC20("USD Coin", "USDC", 6);
         usdc.mint(dave, 1e6);

@@ -18,8 +18,8 @@ import {
 } from "../../src/zether/ZetherVerifier.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
-import {NoUnderlyingZetherToken} from "../../src/zether/NoUnderlyingZetherToken.sol";
-import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {ZUID} from "./helpers/ZetherFixture.sol";
 import {zetherEnv} from "../helpers/Catalogue.sol";
 
@@ -61,7 +61,7 @@ contract ZetherDeployTest is Test {
             assertEq(e.deps[1], bv);
             assertEq(e.deps[2], ip);
             assertEq(e.deps[3], _at(h, type(ZetherDisclosure).creationCode));
-            assertEq(e.libs.length, k == 2 ? 5 : 6); // NONE_ZETHER: no UnderlyingLib
+            assertEq(e.libs.length, k == 2 ? 5 : 6); // NORMAL_ZETHER: no WrappedLib
             for (uint256 i; i < e.libs.length; ++i) assertEq(e.libCodeHashes[i], e.libs[i].codehash);
         }
         assertEq(vm.parseJsonAddress(json, string.concat(".zether_verifier_", key)), tv);
@@ -73,24 +73,24 @@ contract ZetherDeployTest is Test {
             assertEq(address(rel.verifier()), tv);
             assertEq(address(rel.burnVerifier()), bv);
         }
-        assertEq(vm.parseJsonAddress(json, string.concat(".implementation_none_zether_", key)),
-            f.implementationOf(IOpenFactory.TokenKind.NONE_ZETHER, c + 1));
-        assertEq(vm.parseJsonAddress(json, string.concat(".implementation_underlying_zether_", key)),
-            f.implementationOf(IOpenFactory.TokenKind.UNDERLYING_ZETHER, c + 1));
+        assertEq(vm.parseJsonAddress(json, string.concat(".implementation_normal_zether_", key)),
+            f.implementationOf(IOpenFactory.TokenKind.NORMAL_ZETHER, c + 1));
+        assertEq(vm.parseJsonAddress(json, string.concat(".implementation_wrapped_zether_", key)),
+            f.implementationOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, c + 1));
     }
 
     function test_devChain_registersBothConfidentialKinds() public {
         DeployHarness h = new DeployHarness();
         (OpenFactory f, string memory json) = h.deploy(ZUID, true, ska);
-        assertTrue(f.kindEnabled(IOpenFactory.TokenKind.NONE_ZETHER));
-        assertTrue(f.kindEnabled(IOpenFactory.TokenKind.UNDERLYING_ZETHER));
-        NoUnderlyingZetherToken none = NoUnderlyingZetherToken(f.implementationOf(IOpenFactory.TokenKind.NONE_ZETHER, 1));
-        UnderlyingZetherToken und =
-            UnderlyingZetherToken(payable(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1)));
+        assertTrue(f.kindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
+        assertTrue(f.kindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER));
+        NormalZetherToken none = NormalZetherToken(f.implementationOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1));
+        WrappedZetherToken und =
+            WrappedZetherToken(payable(f.implementationOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1)));
         // CTR-ZTH-20: one release per kind on the canonical verifiers, the curve an attribute of the release (`curve()`)
         address tv = _checkCurve(f, h, json);
-        assertEq(none.kind(), AdminLib.KIND_NONE_ZETHER);
-        assertEq(und.kind(), AdminLib.KIND_UNDERLYING_ZETHER);
+        assertEq(none.kind(), AdminLib.KIND_NORMAL_ZETHER);
+        assertEq(und.kind(), AdminLib.KIND_WRAPPED_ZETHER);
         address reg = vm.parseJsonAddress(json, ".ua_registry");
         assertEq(vm.parseJsonAddress(json, ".zether_registry"), reg, "the same registry");
         assertFalse(IUARegistry(reg).kindEnabled(0x0140), "zether-bn254 is in legacy/ua6/");
@@ -110,12 +110,12 @@ contract ZetherDeployTest is Test {
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << AdminLib.PAYABLE);
         c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0);
-        ZetherLayer t = ZetherLayer(f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(c), "z"));
+        ZetherLayer t = ZetherLayer(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z"));
         assertEq(address(t.verifier()), tv);
         assertEq(t.chainUid(), ZUID);
         // minDecoyFee on both layers (owner 2026-10-20): a Zether token takes a non-zero one (bounds: ZetherMulti)
         c.conf.minDecoyFee = 1;
-        assertEq(ZetherLayer(f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(c), "z2")).minDecoyFee(), 1);
+        assertEq(ZetherLayer(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z2")).minDecoyFee(), 1);
     }
 
     /// Without `DEPLOY_ZETHER` no chain gets the stack (a plain anvil deploys as before P3); with it, a non-dev
@@ -126,10 +126,10 @@ contract ZetherDeployTest is Test {
             vm.chainId(ids[i]);
             DeployHarness h = new DeployHarness();
             (OpenFactory f,) = h.deploy(ZUID, false, ska);
-            assertFalse(f.kindEnabled(IOpenFactory.TokenKind.NONE_ZETHER));
-            assertEq(f.implementationOf(IOpenFactory.TokenKind.NONE_ZETHER, 1), address(0));
-            assertEq(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1), address(0));
-            assertEq(f.implementationOf(IOpenFactory.TokenKind.NONE, 1) == address(0), false, "the public kinds still");
+            assertFalse(f.kindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
+            assertEq(f.implementationOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1), address(0));
+            assertEq(f.implementationOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1), address(0));
+            assertEq(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1) == address(0), false, "the public kinds still");
             if (i == 0) continue;
             h = new DeployHarness();
             vm.expectRevert("DEPLOY_ZETHER: dev chains only (CTR-ZTH-02)");
@@ -177,8 +177,8 @@ contract ZetherDeployTest is Test {
             type(ZetherInnerProductVerifierBls12381).creationCode,
             abi.encodePacked(type(ZetherTransferVerifierBls12381).creationCode, ipArg),
             abi.encodePacked(type(ZetherBurnVerifierBls12381).creationCode, ipArg),
-            abi.encodePacked(type(NoUnderlyingZetherToken).creationCode, zArgs),
-            abi.encodePacked(type(UnderlyingZetherToken).creationCode, zArgs)
+            abi.encodePacked(type(NormalZetherToken).creationCode, zArgs),
+            abi.encodePacked(type(WrappedZetherToken).creationCode, zArgs)
         ];
         Create2Probe probe = new Create2Probe();
         for (uint256 i; i < codes.length; ++i) {
@@ -195,7 +195,7 @@ contract ZetherDeployTest is Test {
             assertLt(txGas * 105 * 105 / 10_000, TX_GAS_CAP, "regular gas fits EIP-7825 with --gas-estimate-multiplier 105");
             // C5-1: regular + state gas against the budget of the deploy gate (NET-EVM-06): runtime x 1,530 + 2^24
             assertLe(txGas + uint256(int256(vg.gasStateUsed)),
-                vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".UnderlyingZetherToken") * 1530 + TX_GAS_CAP,
+                vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".WrappedZetherToken") * 1530 + TX_GAS_CAP,
                 "regular + state gas fits the deploy gate's budget");
         }
     }

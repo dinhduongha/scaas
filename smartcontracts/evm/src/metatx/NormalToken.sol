@@ -6,23 +6,23 @@ import {AdminLib} from "./AdminLib.sol";
 import {MetaTxBase} from "./MetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
 
-/// @title Kind `NONE` (CTR-TOK-21): a standalone token, no underlying.
+/// @title Kind `NORMAL` (CTR-TOK-21): a standalone token, no underlying.
 /// @notice Flags valid here: `PAYABLE`, `MINTABLE` (role `minter`), `BURNABLE` (holder burn). A supply cap or a mint
 ///         rate limit, if an issuer needs one, lives in its minter contract. Built by `OpenFactory.createToken`
 ///         (CTR-TOK-25): `initialSupply` is minted to `initialHolder`; `legs`, `rate`, `conf` must be empty.
-contract NoUnderlyingToken is MetaTokenBase {
+contract NormalToken is MetaTokenBase {
     /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env`; this kind takes
     ///      no `implArgs`.
     constructor(uint16, Env memory env, bytes memory) MetaTokenBase(env) {}
 
     function kind() public pure virtual override returns (uint8) {
-        return AdminLib.KIND_NONE;
+        return AdminLib.KIND_NORMAL;
     }
 
     function _init(TokenConfig memory cfg) internal virtual override {
         _requireUnused(cfg, false, true, true, true);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-        AdminLib.init(AdminLib.KIND_NONE, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
+        AdminLib.init(AdminLib.KIND_NORMAL, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
 

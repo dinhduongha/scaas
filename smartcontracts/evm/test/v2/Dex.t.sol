@@ -5,14 +5,14 @@ import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
-import {UID_, noneInit} from "./helpers/V2Fixture.sol";
+import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 
@@ -54,17 +54,17 @@ contract DexTest is Test {
     OpenFactory f;
     SCaaSDex dexImpl;
     SCaaSDex dex;
-    NoUnderlyingToken a; // the taker sells A
-    NoUnderlyingToken b; // the makers sell B
+    NormalToken a; // the taker sells A
+    NormalToken b; // the makers sell B
 
     function setUp() public {
         f = new OpenFactory(registrar, UID_, 0);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NONE, 1, type(NoUnderlyingToken).creationCode, address(0), address(0),
+        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0),
             false);
         dexImpl = SCaaSDex(Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0)));
-        a = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(noneInit("A", "A", 0, 1e6, alice, address(0))), "a"));
-        IFactoryToken.TokenConfig memory cb = noneInit("B", "B", 0, 1e6, bob, address(0));
-        b = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(cb), "b"));
+        a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 0, 1e6, alice, address(0))), "a"));
+        IFactoryToken.TokenConfig memory cb = normalInit("B", "B", 0, 1e6, bob, address(0));
+        b = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(cb), "b"));
         vm.prank(bob);
         b.transfer(carol, 500_000);
         dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(admin, 200_000, treasury, false)), "dex"));
@@ -74,7 +74,7 @@ contract DexTest is Test {
 
     // ------------------------------------------------------------------ helpers
 
-    function _order(address from, NoUnderlyingToken receiveToken, uint256 amount, uint256 receiveAmount, uint256 fee)
+    function _order(address from, NormalToken receiveToken, uint256 amount, uint256 receiveAmount, uint256 fee)
         internal view returns (ITradeToken.TradeOrder memory o)
     {
         o.from = from;
@@ -88,7 +88,7 @@ contract DexTest is Test {
         o.validUntil = block.timestamp + 300;
     }
 
-    function _leg(uint256 pk, NoUnderlyingToken sell, ITradeToken.TradeOrder memory o, uint256 fill)
+    function _leg(uint256 pk, NormalToken sell, ITradeToken.TradeOrder memory o, uint256 fill)
         internal view returns (DexLegs.Leg memory l)
     {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, sell.tradeOrderDigest(o));
@@ -315,8 +315,8 @@ contract DexTest is Test {
     /// CHAIN-03 (review T2, 2026-10-19): a 1 % taker fee on 2^250 B, its signed bound (`TradeLib`) and the relayer
     /// share (`_payLeg`) are `mulDiv`, not products past 2^256; every amount is the exact one.
     function test_settle_hugeAmounts_feeAndRelayerShare() public {
-        NoUnderlyingToken big = NoUnderlyingToken(
-            f.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(noneInit("G", "G", 0, 1 << 251, bob, address(0))), "g"));
+        NormalToken big = NormalToken(
+            f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("G", "G", 0, 1 << 251, bob, address(0))), "g"));
         vm.prank(admin);
         dex.setMarket(address(a), address(big), true);
         DexLegs.Settlement memory s;
@@ -493,15 +493,15 @@ contract DexTest is Test {
     }
 
     function test_classification_deprecatedAndUnregisteredAreOutside() public {
-        address impl = address(new NoUnderlyingToken(1, plainEnv(address(f), address(0), UID_, address(0), false), ""));
-        address u = f.createTokenUnregistered(IOpenFactory.TokenKind.NONE, impl, abi.encode(noneInit("C", "C", 0, 1e6, alice, address(0))), "c");
+        address impl = address(new NormalToken(1, plainEnv(address(f), address(0), UID_, address(0), false), ""));
+        address u = f.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, impl, abi.encode(normalInit("C", "C", 0, 1e6, alice, address(0))), "c");
         vm.startPrank(admin);
         dex.setMarket(address(a), u, true);
         assertEq(dex.tokenKind(u), 2);
         assertEq(dex.tokenKind(address(a)), 1);
         vm.stopPrank();
         vm.prank(registrar);
-        f.deprecate(IOpenFactory.TokenKind.NONE, 1, "x");
+        f.deprecate(IOpenFactory.TokenKind.NORMAL, 1, "x");
         assertEq(dex.tokenKind(address(a)), 1); // a snapshot: unchanged until the market is listed again
         vm.prank(admin);
         dex.setMarket(address(a), address(b), true);
@@ -586,7 +586,7 @@ contract DexTest is Test {
     /// through the puller (EOAs cannot approve a SCaaS token, CTR-TOK-01, so it fails on the allowance).
     function test_deprecatedTokenListedAsOutside_isADexOrderPulledByThePuller() public {
         vm.prank(registrar);
-        f.deprecate(IOpenFactory.TokenKind.NONE, 1, "x");
+        f.deprecate(IOpenFactory.TokenKind.NORMAL, 1, "x");
         vm.prank(admin);
         dex.setMarket(address(a), address(b), true);
         DexLegs.Settlement memory s = _book();

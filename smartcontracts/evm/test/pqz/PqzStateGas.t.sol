@@ -11,7 +11,7 @@ import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UAPqzVerifier} from "../../src/pqz/UAPqzVerifier.sol";
-import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
+import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 
 /// Task 7b: a stand-in for a precompile with a known price: burns `B` gas, answers 1 (`_precompiles`).
@@ -126,7 +126,7 @@ contract PqzStatePinGasTest is PqzSlots {
         _fund(tok, _pqzUA(_pk(12), 12), 100); // D19: the pool holds the fees the measured debits pay out
         _public(tok, vm.addr(RKEY), 1000); // the relayed envelopes' signer pays the outer fee (full-tx pins)
         feeUA = _mldsaUA(50); // the ML-DSA relay path's signer (8d2b fix round, review I1 / I2)
-        NoUnderlyingPqzToken(address(tok)).mintToUA(feeUA, 1000);
+        NormalPqzToken(address(tok)).mintToUA(feeUA, 1000);
         minted += 1000;
         _tableSetUp();
         vm.resumeGasMetering();
@@ -712,12 +712,12 @@ contract PqzStatePinGasTest is PqzSlots {
         (hm[0], ha[0]) = _msigHolder(2, 150);
         (hm[1], ha[1]) = _msigHolder(3, 160);
         slhFee = reg.register(UAKinds.SLHDSA128S, abi.encodePacked(keccak256("slh fee")), IUARegistry.UAAttrs("", 0, 0, ""), new bytes(7_856), "");
-        NoUnderlyingPqzToken(address(tok)).mintToUA(slhFee, 1000);
+        NormalPqzToken(address(tok)).mintToUA(slhFee, 1000);
         minted += 1000;
         bytes memory fpk = new bytes(897); // fndsa512: 0x09 then every h_i = 0 < q
         fpk[0] = 0x09;
         fnFee = reg.register(UAKinds.FNDSA512, fpk, IUARegistry.UAAttrs("", 0, 0, ""), new bytes(666), "");
-        NoUnderlyingPqzToken(address(tok)).mintToUA(fnFee, 1000);
+        NormalPqzToken(address(tok)).mintToUA(fnFee, 1000);
         minted += 1000;
         gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
         _holderSys("pqzl", false);

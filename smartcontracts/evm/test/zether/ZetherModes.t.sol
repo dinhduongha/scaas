@@ -6,8 +6,8 @@ import {ZetherFixture} from "./helpers/ZetherFixture.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
-import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
@@ -345,29 +345,29 @@ abstract contract ZetherModesSuite is ZetherFixture {
     }
 }
 
-contract ZetherModesNoneTest is ZetherModesSuite {
+contract ZetherModesNormalTest is ZetherModesSuite {
     function setUp() public {
         _stack();
         _users();
     }
 
     function _kind() internal pure override returns (IOpenFactory.TokenKind) {
-        return IOpenFactory.TokenKind.NONE_ZETHER;
+        return IOpenFactory.TokenKind.NORMAL_ZETHER;
     }
 }
 
-contract ZetherModesUnderlyingTest is ZetherModesSuite {
+contract ZetherModesWrappedTest is ZetherModesSuite {
     MockERC20 internal usd = new MockERC20("USD", "USD", 6);
 
     function setUp() public {
         _stack();
-        UnderlyingZetherToken impl = UnderlyingZetherToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, _zenv(),
-            type(UnderlyingZetherToken).creationCode)));
+        WrappedZetherToken impl = WrappedZetherToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(),
+            type(WrappedZetherToken).creationCode)));
         _users();
     }
 
     function _kind() internal pure override returns (IOpenFactory.TokenKind) {
-        return IOpenFactory.TokenKind.UNDERLYING_ZETHER;
+        return IOpenFactory.TokenKind.WRAPPED_ZETHER;
     }
 
     /// @dev One USD leg 1:1, `PAYABLE` only.
@@ -383,7 +383,7 @@ contract ZetherModesUnderlyingTest is ZetherModesSuite {
     function _public(ZetherLayer t, address to, uint256 units) internal override {
         usd.mint(address(this), units);
         usd.approve(address(t), units);
-        UnderlyingToken(payable(address(t))).wrap(address(usd), units);
+        WrappedToken(payable(address(t))).wrap(address(usd), units);
         if (to != address(this)) t.transfer(to, units);
         minted[address(t)] += units;
     }

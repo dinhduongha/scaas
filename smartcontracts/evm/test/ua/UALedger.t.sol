@@ -10,9 +10,9 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {MockWallet} from "./UARegistryBase.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
@@ -339,7 +339,7 @@ contract UALedgerTest is UALedgerBase {
         wrp.uaExecute(m, a);
         assertEq(und.balanceOf(bob), 200);
         assertEq(wrp.balanceOf(alice), 300);
-        // no `unwrap` on the NONE kind's UA allowlist
+        // no `unwrap` on the NORMAL kind's UA allowlist
         m = _m(address(tok), _pad(alice), data);
         a = _authM(address(tok), m);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, bytes4(data)));
@@ -405,8 +405,8 @@ contract UALedgerTest is UALedgerBase {
     // ----- registry binding (CTR-UA-19) -----
 
     function test_registryOff() public {
-        NoUnderlyingToken off = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
-        off.initialize(address(this), 1, abi.encode(noneInit("Off", "OFF", 6, 100, alice, address(this))));
+        NormalToken off = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
+        off.initialize(address(this), 1, abi.encode(normalInit("Off", "OFF", 6, 100, alice, address(this))));
         assertEq(off.registry(), address(0));
         assertFalse(off.supportsInterface(type(IUALedger).interfaceId));
         assertTrue(tok.supportsInterface(type(IUALedger).interfaceId));
@@ -420,10 +420,10 @@ contract UALedgerTest is UALedgerBase {
 
     function test_initialize_registryChainUid() public {
         bytes32 other = keccak256("other genesis");
-        address impl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), other, REG_L, false), ""));
-        NoUnderlyingToken c = NoUnderlyingToken(Clones.clone(impl));
+        address impl = address(new NormalToken(1, plainEnv(address(this), address(0), other, REG_L, false), ""));
+        NormalToken c = NormalToken(Clones.clone(impl));
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UARegistryChainUid.selector, chainUidA, other));
-        c.initialize(address(this), 1, abi.encode(noneInit("X", "X", 6, 0, address(0), address(this))));
+        c.initialize(address(this), 1, abi.encode(normalInit("X", "X", 6, 0, address(0), address(this))));
     }
 
     function test_uaDigest_domainAndTypehash() public view {

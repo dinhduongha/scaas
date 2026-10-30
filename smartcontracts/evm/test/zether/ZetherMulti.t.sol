@@ -12,7 +12,7 @@ import {ZetherProver} from "./helpers/ZetherProver.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 
-/// @notice Multi-recipient transfers (CTR-ZTH-37/38) on a `NONE_ZETHER` token: effects, refusals, disclosure in the
+/// @notice Multi-recipient transfers (CTR-ZTH-37/38) on a `NORMAL_ZETHER` token: effects, refusals, disclosure in the
 ///         three modes and the gas table M ∈ {1, 2, 4, 8} × {HASH, BUNDLE, NONE}, on BLS12-381 (the bn254 suite is in `legacy/ua6/`).
 abstract contract ZetherMultiSuite is ZetherFixture {
     User[8] internal rs;

@@ -23,12 +23,12 @@ library AdminLib {
     uint8 internal constant ALLOWLIST = 8;
 
     // ------------------------------------------------------------------ kinds (CTR-TOK-21, fresh enum)
-    uint8 internal constant KIND_NONE = 0;
-    uint8 internal constant KIND_UNDERLYING = 1;
-    uint8 internal constant KIND_NONE_ZETHER = 2;
-    uint8 internal constant KIND_UNDERLYING_ZETHER = 3;
-    uint8 internal constant KIND_NONE_PQZ = 4;
-    uint8 internal constant KIND_UNDERLYING_PQZ = 5;
+    uint8 internal constant KIND_NORMAL = 0;
+    uint8 internal constant KIND_WRAPPED = 1;
+    uint8 internal constant KIND_NORMAL_ZETHER = 2;
+    uint8 internal constant KIND_WRAPPED_ZETHER = 3;
+    uint8 internal constant KIND_NORMAL_PQZ = 4;
+    uint8 internal constant KIND_WRAPPED_PQZ = 5;
 
     /// @dev Flags 5–8 (regulated controls, CTR-AS-17): valid on non-confidential kinds, not built yet (asset suite).
     uint256 internal constant REGULATED = (1 << FREEZE) | (1 << FORCE) | (1 << PAUSE) | (1 << ALLOWLIST);
@@ -188,15 +188,15 @@ library AdminLib {
         if (caller != s.owner || caller == address(0)) revert ITokenAdmin.NotOwner(caller);
     }
 
-    /// @dev Valid flags per kind (CTR-TOK-22 table): NONE* mint/burn, UNDERLYING* rate/wrap, regulated only on
+    /// @dev Valid flags per kind (CTR-TOK-22 table): NORMAL* mint/burn, WRAPPED* rate/wrap, regulated only on
     ///      non-confidential kinds (CTR-AS-17), PAYABLE everywhere. An unknown kind has no valid flag.
     function _validFor(uint8 kind) private pure returns (uint256) {
         uint256 none = (1 << PAYABLE) | (1 << MINTABLE) | (1 << BURNABLE);
         uint256 und = (1 << PAYABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE);
-        if (kind == KIND_NONE) return none | REGULATED;
-        if (kind == KIND_UNDERLYING) return und | REGULATED;
-        if (kind == KIND_NONE_ZETHER || kind == KIND_NONE_PQZ) return none;
-        if (kind == KIND_UNDERLYING_ZETHER || kind == KIND_UNDERLYING_PQZ) return und;
+        if (kind == KIND_NORMAL) return none | REGULATED;
+        if (kind == KIND_WRAPPED) return und | REGULATED;
+        if (kind == KIND_NORMAL_ZETHER || kind == KIND_NORMAL_PQZ) return none;
+        if (kind == KIND_WRAPPED_ZETHER || kind == KIND_WRAPPED_PQZ) return und;
         return 0;
     }
 

@@ -5,7 +5,7 @@ import {console2} from "forge-std/Test.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -192,7 +192,7 @@ contract ZetherRelayTest is ZetherFixture {
             if (s[i] == ZetherLayer.mtxRollOverSigned.selector || s[i] == ZetherLayer.mtxSetRollOverMode.selector) continue;
             MetaTxLib.MetaTransaction memory m = _mt("", 200 + i, RR, 0);
             if (s[i] == IMetaTx.cancelNonce.selector) m.data = abi.encodeCall(IMetaTx.cancelNonce, (55));
-            else if (s[i] == NoUnderlyingToken.burn.selector) m.data = abi.encodeCall(NoUnderlyingToken.burn, (7));
+            else if (s[i] == NormalToken.burn.selector) m.data = abi.encodeCall(NormalToken.burn, (7));
             else {
                 m.data = _zetherOpCall(s[i], bal, tok.envelopeBinding(m));
                 if (s[i] != ZetherLayer.mtxShield.selector && s[i] != ZetherLayer.mtxRollOver.selector
@@ -260,7 +260,7 @@ contract ZetherRelayTest is ZetherFixture {
     function test_allowlistPinned() public {
         (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = tok.mtxSelectors();
         bytes4[11] memory want = [
-            IMetaTx.cancelNonce.selector, NoUnderlyingToken.burn.selector, ZetherLayer.mtxShield.selector,
+            IMetaTx.cancelNonce.selector, NormalToken.burn.selector, ZetherLayer.mtxShield.selector,
             ZetherLayer.mtxConfidentialTransfer.selector, ZetherLayer.mtxConfidentialTransferCompact.selector,
             ZetherLayer.mtxConfidentialTransferSingle.selector,
             ZetherLayer.mtxUnshield.selector, ZetherLayer.mtxRollOver.selector, ZetherLayer.mtxRollOverBatch.selector,
@@ -278,7 +278,7 @@ contract ZetherRelayTest is ZetherFixture {
         assertEq(bytes4(keccak256("mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)")),
             ZetherLayer.mtxUnshield.selector);
         bytes[1] memory refused = [
-            abi.encodeCall(NoUnderlyingToken.mint, (payer, 1))
+            abi.encodeCall(NormalToken.mint, (payer, 1))
         ];
         for (uint256 i; i < refused.length; ++i) {
             MetaTxLib.MetaTransaction memory m = _mt(refused[i], 100 + i, RR, 0);

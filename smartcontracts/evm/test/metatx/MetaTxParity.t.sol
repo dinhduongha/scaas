@@ -4,8 +4,8 @@ pragma solidity ^0.8.24;
 import {Test, Vm, console2} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -19,20 +19,20 @@ import {UALedgerBase} from "../ua/UALedgerBase.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
-import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
-import {UnderlyingPqzToken} from "../../src/pqz/UnderlyingPqzToken.sol";
+import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
+import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {ZetherKeys} from "../zether/helpers/ZetherKeys.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
-import {NoUnderlyingZetherToken} from "../../src/zether/NoUnderlyingZetherToken.sol";
-import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue, pqzEnv, plainEnv} from "../helpers/Catalogue.sol";
-import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 // =====================================================================================================================
@@ -585,7 +585,7 @@ abstract contract ParityCases is ParityIO {
     // ------------------------------------------------------------------ builders
 
     function _pAmt(Tk memory k, uint256 amount) internal view returns (bytes memory) {
-        if (k.style != 1) return abi.encodeCall(NoUnderlyingToken.burn, (amount));
+        if (k.style != 1) return abi.encodeCall(NormalToken.burn, (amount));
         return abi.encodeWithSignature("unwrap(uint256,address,uint256)", amount, k.payee, uint256(0));
     }
 
@@ -1863,7 +1863,7 @@ abstract contract ParityCases is ParityIO {
 // the rigs: one per token family; each builds clones (CREATE, so stable addresses) of its two kinds
 // =====================================================================================================================
 
-/// `NONE` and `UNDERLYING` on the UA ledger fixture (a registry with the stand-in verifiers, `p256` / `bip340` UAs).
+/// `NORMAL` and `WRAPPED` on the UA ledger fixture (a registry with the stand-in verifiers, `p256` / `bip340` UAs).
 contract PlainRig is UALedgerBase, ParityCases {
     function init() external {
         setUp();
@@ -1881,8 +1881,8 @@ contract PlainRig is UALedgerBase, ParityCases {
         wrp.transferToUA(uaP, 2_000_000);
         tks.push(Tk("UNDERLYING", address(wrp), ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, uaP, 1, address(und), dex, 0, 0));
         // NONE with no UA registry (the ledger off)
-        address off = Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), "")));
-        NoUnderlyingToken(off).initialize(address(this), 1, abi.encode(noneInit("Points", "PTS", 6, 10_000_000, alice, address(this))));
+        address off = Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), "")));
+        NormalToken(off).initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 10_000_000, alice, address(this))));
         tks.push(Tk("NONE_LEDGEROFF", off, ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, 0, 2, address(0), dex, 0, 0));
     }
 
@@ -1899,7 +1899,7 @@ contract PlainRig is UALedgerBase, ParityCases {
     }
 }
 
-/// `NONE_PQZ` and `UNDERLYING_PQZ` at the committed parameter set, the `PQZ` precompile mocked as in the PQZ suites:
+/// `NORMAL_PQZ` and `WRAPPED_PQZ` at the committed parameter set, the `PQZ` precompile mocked as in the PQZ suites:
 /// the ops are relayed with a proof the mock accepts, everything else is real code.
 contract PqzRig is PqzFixture, ParityCases {
     uint256 internal constant SK = 0xA11CE;
@@ -1912,15 +1912,15 @@ contract PqzRig is PqzFixture, ParityCases {
         address dex = address(new ParityDex());
         bytes32 uaD = _mldsaUA(9);
         address signer = vm.addr(SK);
-        // NONE_PQZ
-        address t = _pClone(address(noneImpl), _cfg(uint256(1) << 40));
-        NoUnderlyingPqzToken(t).mint(signer, 20_000_000);
-        NoUnderlyingPqzToken(t).mintToUA(uaD, 2_000_000);
+        // NORMAL_PQZ
+        address t = _pClone(address(normalImpl), _cfg(uint256(1) << 40));
+        NormalPqzToken(t).mint(signer, 20_000_000);
+        NormalPqzToken(t).mintToUA(uaD, 2_000_000);
         tks.push(Tk("NONE_PQZ", t, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), uaD, 0, address(0), dex, 0, 0));
-        // UNDERLYING_PQZ: one 1:1 leg
+        // WRAPPED_PQZ: one 1:1 leg
         MockERC20 usd = new MockERC20("USD", "USD", 6);
-        address impl = Catalogue.release(factory, IOpenFactory.TokenKind.UNDERLYING_PQZ, 1,
-            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(UnderlyingPqzToken).creationCode);
+        address impl = Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1,
+            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(WrappedPqzToken).creationCode);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = 1 << AdminLib.PAYABLE;
         c.roles.minter = address(0);
@@ -1930,8 +1930,8 @@ contract PqzRig is PqzFixture, ParityCases {
         usd.mint(signer, 20_000_000);
         vm.startPrank(signer);
         usd.approve(w, 20_000_000);
-        UnderlyingToken(payable(w)).wrap(20_000_000);
-        UnderlyingToken(payable(w)).transferToUA(uaD, 2_000_000);
+        WrappedToken(payable(w)).wrap(20_000_000);
+        WrappedToken(payable(w)).transferToUA(uaD, 2_000_000);
         vm.stopPrank();
         tks.push(Tk("UNDERLYING_PQZ", w, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), uaD, 1, address(usd), dex, 0, 0));
     }
@@ -2022,7 +2022,7 @@ contract PqzRig is PqzFixture, ParityCases {
     }
 }
 
-/// `NONE_ZETHER` and `UNDERLYING_ZETHER` (BLS12-381 classical Zether, real prover, real verifiers).
+/// `NORMAL_ZETHER` and `WRAPPED_ZETHER` (BLS12-381 classical Zether, real prover, real verifiers).
 contract ZetherRig is ZetherFixture, ParityCases {
     uint256 internal constant SK = 0xA11CE;
     uint256 internal constant PK2 = 0xB0B;
@@ -2034,16 +2034,16 @@ contract ZetherRig is ZetherFixture, ParityCases {
         _users();
         address dex = address(new ParityDex());
         address signer = vm.addr(SK);
-        // NONE_ZETHER
-        address t = _pClone(address(noneImpl), _cfg(true, uint256(1) << 40));
-        NoUnderlyingZetherToken(t).mint(signer, 20_000_000);
+        // NORMAL_ZETHER
+        address t = _pClone(address(normalImpl), _cfg(true, uint256(1) << 40));
+        NormalZetherToken(t).mint(signer, 20_000_000);
         vm.prank(signer);
         MetaTokenBase(t).transferToUA(ZetherTypes.UA.unwrap(bob.ua), 2_000_000);
         tks.push(Tk("NONE_ZETHER", t, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), ZetherTypes.UA.unwrap(bob.ua), 0, address(0), dex, 0, 0));
-        // UNDERLYING_ZETHER: one 1:1 leg
+        // WRAPPED_ZETHER: one 1:1 leg
         MockERC20 usd = new MockERC20("USD", "USD", 6);
-        address impl = Catalogue.release(factory, IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, _zenv(),
-            type(UnderlyingZetherToken).creationCode);
+        address impl = Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(),
+            type(WrappedZetherToken).creationCode);
         IFactoryToken.TokenConfig memory c = _cfg(true, uint256(1) << 40);
         c.features = 1 << AdminLib.PAYABLE;
         c.roles.minter = address(0);
@@ -2053,8 +2053,8 @@ contract ZetherRig is ZetherFixture, ParityCases {
         usd.mint(signer, 20_000_000);
         vm.startPrank(signer);
         usd.approve(w, 20_000_000);
-        UnderlyingToken(payable(w)).wrap(20_000_000);
-        UnderlyingToken(payable(w)).transferToUA(ZetherTypes.UA.unwrap(bob.ua), 2_000_000);
+        WrappedToken(payable(w)).wrap(20_000_000);
+        WrappedToken(payable(w)).transferToUA(ZetherTypes.UA.unwrap(bob.ua), 2_000_000);
         vm.stopPrank();
         tks.push(Tk("UNDERLYING_ZETHER", w, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), ZetherTypes.UA.unwrap(bob.ua), 1, address(usd), dex, 0, 0));
     }

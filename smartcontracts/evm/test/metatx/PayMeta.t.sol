@@ -16,7 +16,7 @@ import {IRig, PlainRig, PqzRig, ZetherRig} from "./MetaTxParity.t.sol";
 /// @notice CTR-MTX-26 (metatx split T7, spec §6.1, R11): `mtxPayMeta` / `uaPayMeta` are `mtxPay` / `uaPay` with
 ///         `payId = metaPayId(salt, meta)` — the same digest, lane `payLane(payId)`, nonce 0 — and emit
 ///         `PaymentMeta(payId, meta)` before `PaymentSettled`. Run on a clone of every token kind (the parity rigs:
-///         `NONE`, `UNDERLYING`, `NONE` with the ledger off, both PQZ and both Zether kinds; the signer of every rig is
+///         `NORMAL`, `WRAPPED`, `NORMAL` with the ledger off, both PQZ and both Zether kinds; the signer of every rig is
 ///         `0xA11CE`). `test_payMetaVectors` writes (`PAYMETA_WRITE=1`) or checks `../vectors/metatx/paymeta.json`, the
 ///         vectors every other family and `clientkeys` read.
 contract PayMetaTest is Test {
@@ -54,7 +54,7 @@ contract PayMetaTest is Test {
                 toks.push(t[i]);
             }
         }
-        assertEq(toks.length, 7, "six kinds and NONE with the ledger off");
+        assertEq(toks.length, 7, "six kinds and NORMAL with the ledger off");
     }
 
     // ------------------------------------------------------------------ helpers

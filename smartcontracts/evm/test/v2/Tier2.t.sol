@@ -5,8 +5,8 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {V2Fixture, Rate} from "./helpers/V2Fixture.sol";
 import {MockERC20, FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {SenderPaysFeeERC20, SlashableERC20, NoDecimals, BadDecimals, RateAdminForwarder} from "./helpers/V2Mocks.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
-import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
@@ -14,7 +14,7 @@ import {AdminLib} from "../../src/metatx/AdminLib.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
-/// T2: tầng 2 `UnderlyingToken` — wrap/unwrap/reserve, tỉ lệ, làm tròn (TW2 §5, R133, R134, R137, R143).
+/// T2: tầng 2 `WrappedToken` — wrap/unwrap/reserve, tỉ lệ, làm tròn (TW2 §5, R133, R134, R137, R143).
 contract Tier2Test is V2Fixture {
     MockERC20 usdc;
     address alice = address(0xA11CE);
@@ -31,26 +31,26 @@ contract Tier2Test is V2Fixture {
         u.approve(spender, v);
     }
 
-    function _wrap(UnderlyingToken t, MockERC20 u, address who, uint256 v) internal returns (uint256) {
+    function _wrap(WrappedToken t, MockERC20 u, address who, uint256 v) internal returns (uint256) {
         _fund(u, who, v, address(t));
         vm.prank(who);
         return t.wrap(v);
     }
 
     function test_oneToOneIsV1Behaviour() public {
-        UnderlyingToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
-        assertEq(t.kind(), AdminLib.KIND_UNDERLYING);
+        WrappedToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
+        assertEq(t.kind(), AdminLib.KIND_WRAPPED);
         assertEq(t.underlying(), address(usdc));
         assertEq(t.underlyings().length, 1);
         _fund(usdc, alice, 100e6, address(t));
         vm.expectEmit(address(t));
-        emit IUnderlyingToken.Wrapped(alice, address(usdc), 100e6, 100e6);
+        emit IWrappedToken.Wrapped(alice, address(usdc), 100e6, 100e6);
         vm.prank(alice);
         assertEq(t.wrap(100e6), 100e6);
         (,, uint256 reserve,,) = t.legOf(address(usdc));
         assertEq(reserve, 100e6);
         vm.expectEmit(address(t));
-        emit IUnderlyingToken.Unwrapped(alice, address(usdc), bob, 40e6, 40e6);
+        emit IWrappedToken.Unwrapped(alice, address(usdc), bob, 40e6, 40e6);
         vm.prank(alice);
         assertEq(t.unwrap(40e6, bob), 40e6); // v1 selector: minOut 0
         assertEq(usdc.balanceOf(bob), 40e6);
@@ -60,7 +60,7 @@ contract Tier2Test is V2Fixture {
 
     /// 10¹²:1 (USDC → 18 decimals): wrap không làm tròn; unwrap trả ⌊w/10¹²⌋, đốt bội của 10¹², người giữ giữ dư.
     function test_integerRateKeepsDustWithTheHolder() public {
-        UnderlyingToken t = _single(address(usdc), 18, 1e12, 1, _fixedRate());
+        WrappedToken t = _single(address(usdc), 18, 1e12, 1, _fixedRate());
         assertEq(_wrap(t, usdc, alice, 2e6), 2e18);
         vm.prank(alice);
         uint256 out = t.unwrap(1.5e12 + 7, bob, 1);
@@ -73,7 +73,7 @@ contract Tier2Test is V2Fixture {
 
     /// 3:7: wrap ⌊in·3/7⌋, unwrap ⌊w·7/3⌋, đốt ⌈out·3/7⌉ ≤ w.
     function test_roundingAlwaysDown() public {
-        UnderlyingToken t = _single(address(usdc), 6, 3, 7, _fixedRate());
+        WrappedToken t = _single(address(usdc), 6, 3, 7, _fixedRate());
         (uint256 minted, uint256 used) = t.previewWrap(address(usdc), 10);
         assertEq(minted, 4);
         assertEq(used, 10);
@@ -91,7 +91,7 @@ contract Tier2Test is V2Fixture {
 
     /// 1 USDC → 100 điểm (`D = 0`): 1:10⁴. 15 000 raw mint 1 điểm và để 5 000 trong reserve (review L2).
     function test_previewWrapUsedAndDustInReserve() public {
-        UnderlyingToken t = _single(address(usdc), 0, 1, 1e4, _fixedRate());
+        WrappedToken t = _single(address(usdc), 0, 1, 1e4, _fixedRate());
         (uint256 minted, uint256 used) = t.previewWrap(address(usdc), 15_000);
         assertEq(minted, 1);
         assertEq(used, 10_000);
@@ -101,34 +101,34 @@ contract Tier2Test is V2Fixture {
     }
 
     function test_zeroOutputsRevert() public {
-        UnderlyingToken t = _single(address(usdc), 0, 1, 1e4, _fixedRate());
+        WrappedToken t = _single(address(usdc), 0, 1, 1e4, _fixedRate());
         _fund(usdc, alice, 9_999, address(t));
         vm.prank(alice);
-        vm.expectRevert(IUnderlyingToken.WrapTooSmall.selector);
+        vm.expectRevert(IWrappedToken.WrapTooSmall.selector);
         t.wrap(9_999);
-        UnderlyingToken t2 = _single(address(usdc), 18, 1e12, 1, _fixedRate());
+        WrappedToken t2 = _single(address(usdc), 18, 1e12, 1, _fixedRate());
         _wrap(t2, usdc, alice, 1);
         vm.prank(alice);
-        vm.expectRevert(IUnderlyingToken.UnwrapTooSmall.selector);
+        vm.expectRevert(IWrappedToken.UnwrapTooSmall.selector);
         t2.unwrap(1e12 - 1, bob);
     }
 
     function test_unwrapBelowMinAndBadRecipient() public {
-        UnderlyingToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
+        WrappedToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
         _wrap(t, usdc, alice, 10);
         vm.startPrank(alice);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapBelowMin.selector, 5, 6));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapBelowMin.selector, 5, 6));
         t.unwrap(5, bob, 6);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapRecipientInvalid.selector, address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, address(0)));
         t.unwrap(5, address(0));
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapRecipientInvalid.selector, address(t)));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, address(t)));
         t.unwrap(5, address(t));
         vm.stopPrank();
     }
 
     function test_feeOnTransferInboundMintsWhatArrived() public {
         FeeOnTransferERC20 fot = new FeeOnTransferERC20();
-        UnderlyingToken t = _single(address(fot), 18, 1, 1, _fixedRate());
+        WrappedToken t = _single(address(fot), 18, 1, 1, _fixedRate());
         fot.mint(alice, 100 ether);
         vm.prank(alice);
         fot.approve(address(t), 100 ether);
@@ -143,7 +143,7 @@ contract Tier2Test is V2Fixture {
 
     function test_senderPaysFeeUnderlyingCannotLeave() public {
         SenderPaysFeeERC20 sp = new SenderPaysFeeERC20();
-        UnderlyingToken t = _single(address(sp), 18, 1, 1, _fixedRate());
+        WrappedToken t = _single(address(sp), 18, 1, 1, _fixedRate());
         sp.mint(alice, 100 ether);
         vm.prank(alice);
         sp.approve(address(t), 50 ether);
@@ -152,12 +152,12 @@ contract Tier2Test is V2Fixture {
         sp.mint(address(t), 1 ether); // so the wrapper can pay the extra fee at all
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(
-            IUnderlyingToken.UnderlyingTransferMismatch.selector, address(sp), 10 ether, 10.1 ether));
+            IWrappedToken.UnderlyingTransferMismatch.selector, address(sp), 10 ether, 10.1 ether));
         t.unwrap(10 ether, bob);
     }
 
     function test_donationIsNotCountedAndStaysLocked() public {
-        UnderlyingToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
+        WrappedToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
         _wrap(t, usdc, alice, 100);
         usdc.mint(address(t), 1_000);
         (,, uint256 reserve,,) = t.legOf(address(usdc));
@@ -169,14 +169,14 @@ contract Tier2Test is V2Fixture {
 
     function test_negativeRebaseStopsWrapNotUnwrap() public {
         SlashableERC20 sl = new SlashableERC20(6);
-        UnderlyingToken t = _single(address(sl), 6, 1, 1, _fixedRate());
+        WrappedToken t = _single(address(sl), 6, 1, 1, _fixedRate());
         sl.mint(alice, 200);
         vm.prank(alice);
         sl.approve(address(t), 200);
         vm.prank(alice);
         t.wrap(100);
         sl.slash(address(t), 30);
-        bytes memory err = abi.encodeWithSelector(IUnderlyingToken.ReserveShortfall.selector, address(sl), 70, 100);
+        bytes memory err = abi.encodeWithSelector(IWrappedToken.ReserveShortfall.selector, address(sl), 70, 100);
         vm.prank(alice);
         vm.expectRevert(err);
         t.wrap(10);
@@ -193,7 +193,7 @@ contract Tier2Test is V2Fixture {
     function test_gaslessWrapPaysAbsoluteFeeFromMinted() public {
         uint256 pk = 0xA11CE;
         address signer = vm.addr(pk);
-        UnderlyingToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
+        WrappedToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
         _fund(usdc, signer, 100e6, address(t));
         MetaTxLib.MetaTransaction memory m = _call(signer, abi.encodeWithSignature("wrap(uint256)", 100e6), 1, RR | FIX);
         m.fee = 2e6; // ABSOLUTE: uncapped
@@ -205,21 +205,21 @@ contract Tier2Test is V2Fixture {
     }
 
     function test_addReserveRaisesBackingNotSupply() public {
-        UnderlyingToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
+        WrappedToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
         _wrap(t, usdc, alice, 100);
         _fund(usdc, bob, 50, address(t));
         vm.expectEmit(address(t));
-        emit IUnderlyingToken.ReserveAdded(bob, address(usdc), 50);
+        emit IWrappedToken.ReserveAdded(bob, address(usdc), 50);
         vm.prank(bob);
         t.addReserve(address(usdc), 50);
         assertEq(t.totalSupply(), 100);
         assertEq(t.collateralValue(), 150);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnknownUnderlying.selector, bob));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnknownUnderlying.selector, bob));
         t.addReserve(bob, 1);
     }
 
     function test_decimalsAreTheIssuersChoiceAndLegSnapshot() public {
-        UnderlyingToken t = _single(address(usdc), 18, 1e12, 1, _fixedRate());
+        WrappedToken t = _single(address(usdc), 18, 1e12, 1, _fixedRate());
         assertEq(t.decimals(), 18);
         (uint96 num, uint96 den,, uint8 d, bool enabled) = t.legOf(address(usdc));
         assertEq(num, 1e12);
@@ -230,7 +230,7 @@ contract Tier2Test is V2Fixture {
     }
 
     function test_allowanceOnlyBetweenContracts() public {
-        UnderlyingToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
+        WrappedToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
         vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, bob));
         t.approve(bob, 1);
         vm.prank(bob);
@@ -241,7 +241,7 @@ contract Tier2Test is V2Fixture {
     // ------------------------------------------------------------------ init refusals
 
     function initExt(address[] memory us, bytes memory d) external returns (address) {
-        return _clone(_underlyingImpl(), address(this), us, d);
+        return _clone(_wrappedImpl(), address(this), us, d);
     }
 
     /// Init of one leg `u` at `num/den` with `cfg`, expected to revert `err`.
@@ -253,16 +253,16 @@ contract Tier2Test is V2Fixture {
 
     function test_initRefusals() public {
         Rate memory f = _fixedRate();
-        bytes4 inv = IUnderlyingToken.UnderlyingInvalid.selector;
+        bytes4 inv = IWrappedToken.UnderlyingInvalid.selector;
         _refuse(address(0xDEAD), 1, 1, f, abi.encodeWithSelector(inv, address(0xDEAD)));
         // owner ruling 2026-10-30 (D5): an EIP-7702 designator is not a token, even one delegating to a real token
         vm.etch(address(0xD7702), abi.encodePacked(hex"ef0100", address(usdc)));
         _refuse(address(0xD7702), 1, 1, f, abi.encodeWithSelector(inv, address(0xD7702)));
         address nd = address(new NoDecimals());
-        _refuse(nd, 1, 1, f, abi.encodeWithSelector(IUnderlyingToken.DecimalsUnreadable.selector, nd));
+        _refuse(nd, 1, 1, f, abi.encodeWithSelector(IWrappedToken.DecimalsUnreadable.selector, nd));
         address bd = address(new BadDecimals());
-        _refuse(bd, 1, 1, f, abi.encodeWithSelector(IUnderlyingToken.DecimalsUnreadable.selector, bd));
-        bytes4 ri = IUnderlyingToken.RateInvalid.selector;
+        _refuse(bd, 1, 1, f, abi.encodeWithSelector(IWrappedToken.DecimalsUnreadable.selector, bd));
+        bytes4 ri = IWrappedToken.RateInvalid.selector;
         _refuse(address(usdc), 0, 1, f, abi.encodeWithSelector(ri, 0, 1));
         _refuse(address(usdc), 1, 0, f, abi.encodeWithSelector(ri, 1, 0));
         _refuse(address(usdc), 1 << 96, 1, f, abi.encodeWithSelector(ri, 1 << 96, 1));
@@ -270,7 +270,7 @@ contract Tier2Test is V2Fixture {
         // fixed with leftovers
         Rate memory c = _fixedRate();
         c.rateDelay = 7 days;
-        bytes memory cfgErr = abi.encodeWithSelector(IUnderlyingToken.RateConfigInvalid.selector);
+        bytes memory cfgErr = abi.encodeWithSelector(IWrappedToken.RateConfigInvalid.selector);
         _refuse(address(usdc), 1, 1, c, cfgErr);
         // adjustable: admin must have code, delay [2d, 30d], step [1, 1000]
         _refuse(address(usdc), 1, 1, _adjustable(bob),
@@ -295,24 +295,24 @@ contract Tier2Test is V2Fixture {
         two[1] = address(new MockERC20("Tether", "USDT", 6));
         uint256[] memory one = new uint256[](2);
         one[0] = one[1] = 1;
-        UnderlyingToken t = UnderlyingToken(this.initExt(two, _multiInit(two, one, one, _fixedRate(), address(0))));
-        assertEq(t.kind(), AdminLib.KIND_UNDERLYING);
+        WrappedToken t = WrappedToken(this.initExt(two, _multiInit(two, one, one, _fixedRate(), address(0))));
+        assertEq(t.kind(), AdminLib.KIND_WRAPPED);
         assertEq(t.underlying(), address(0));
         assertEq(t.underlyings().length, 2);
-        vm.expectRevert(IUnderlyingToken.UnderlyingRequired.selector);
+        vm.expectRevert(IWrappedToken.UnderlyingRequired.selector);
         t.wrap(1);
-        vm.expectRevert(IUnderlyingToken.UnderlyingRequired.selector);
+        vm.expectRevert(IWrappedToken.UnderlyingRequired.selector);
         t.unwrap(1, bob);
     }
 
     function test_initRefusesItselfAsUnderlying() public {
-        address impl = _underlyingImpl();
+        address impl = _wrappedImpl();
         address predicted = Clones.predictDeterministicAddress(impl, bytes32("self"));
         address c = Clones.cloneDeterministic(impl, bytes32("self"));
         assertEq(c, predicted);
         IFactoryToken.TokenConfig memory cfg =
             abi.decode(_singleInit(c, 6, 1, 1, _fixedRate()), (IFactoryToken.TokenConfig));
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnderlyingInvalid.selector, c));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnderlyingInvalid.selector, c));
         MetaTokenBase(c).initialize(address(this), 1, abi.encode(cfg));
     }
 
@@ -324,7 +324,7 @@ contract Tier2Test is V2Fixture {
         _single(address(usdc), 6, type(uint96).max, type(uint96).max, c);
         c.rateDelay = 30 days;
         c.maxRateStepBps = 1000;
-        UnderlyingToken t = _single(address(usdc), 6, 1, 1, c);
+        WrappedToken t = _single(address(usdc), 6, 1, 1, c);
         assertTrue(t.rateAdjustable());
         assertTrue(t.hasRole(3, adm));
         assertEq(t.rateDelay(), 30 days);
@@ -338,7 +338,7 @@ contract Tier2Test is V2Fixture {
         num = uint96(bound(num, 1, type(uint96).max));
         den = uint96(bound(den, 1, type(uint96).max));
         amount = bound(amount, 1, 1e30);
-        UnderlyingToken t = _single(address(usdc), 6, num, den, _fixedRate());
+        WrappedToken t = _single(address(usdc), 6, num, den, _fixedRate());
         (uint256 minted,) = t.previewWrap(address(usdc), amount);
         vm.assume(minted > 0);
         _wrap(t, usdc, alice, amount);

@@ -11,7 +11,7 @@ import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
-import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
+import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 
@@ -420,10 +420,10 @@ contract PqzMultiTest is PqzFixture {
         // a PQZH release: its verifier is the env's, an immutable (CTR-ZTH-20)
         pqv = _newPqzVerifier(PQZH_ID);
         factory = new OpenFactory(registrar, PQZ_UID, 0);
-        Catalogue.release(factory, IOpenFactory.TokenKind.NONE_PQZ, 1,
-            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NoUnderlyingPqzToken).creationCode);
+        Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
+            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NONE_PQZ, true);
+        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
         PqzLayer h = _newToken("pqzh");
         assertEq(h.proofSystemId(), PQZH_ID);
         bytes32[] memory rec = _legsOf(8);
@@ -448,7 +448,7 @@ contract PqzMultiTest is PqzFixture {
 
     /// The four transfer selectors are allowlisted `ABSOLUTE` on the relaying paths; the NONE ones are gone (D11).
     function test_multi_allowlisted() public view {
-        (bytes4[] memory s,,) = NoUnderlyingPqzToken(address(tok)).mtxSelectors();
+        (bytes4[] memory s,,) = NormalPqzToken(address(tok)).mtxSelectors();
         bytes4[4] memory want = [PqzLayer.mtxConfidentialTransfer.selector, PqzLayer.mtxConfidentialTransferCompact.selector,
             PqzLayer.mtxConfidentialTransferSingle.selector, PqzLayer.mtxConfidentialTransferSingleCompact.selector];
         for (uint256 i; i < 4; ++i) {

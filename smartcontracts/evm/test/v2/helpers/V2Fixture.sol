@@ -7,8 +7,8 @@ import {MetaTokenBase} from "../../../src/metatx/MetaTokenBase.sol";
 import {AdminLib} from "../../../src/metatx/AdminLib.sol";
 import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
-import {NoUnderlyingToken} from "../../../src/metatx/NoUnderlyingToken.sol";
-import {UnderlyingToken} from "../../../src/metatx/UnderlyingToken.sol";
+import {NormalToken} from "../../../src/metatx/NormalToken.sol";
+import {WrappedToken} from "../../../src/metatx/WrappedToken.sol";
 import {plainEnv} from "../../helpers/Catalogue.sol";
 
 bytes32 constant UID_ = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
@@ -19,22 +19,22 @@ contract BaseHarness is MetaTokenBase {
     constructor(address f, address s) MetaTokenBase(plainEnv(f, s, UID_, address(0), false)) {}
 
     function kind() public pure override returns (uint8) {
-        return AdminLib.KIND_NONE;
+        return AdminLib.KIND_NORMAL;
     }
 
     function _init(TokenConfig memory cfg) internal override {
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         AdminLib.Roles memory none;
-        AdminLib.init(AdminLib.KIND_NONE, 1 << AdminLib.PAYABLE, 0, address(0), none);
+        AdminLib.init(AdminLib.KIND_NORMAL, 1 << AdminLib.PAYABLE, 0, address(0), none);
         _mint(cfg.initialHolder, cfg.initialSupply);
     }
 
     function mint(address to, uint256 v) external { _mint(to, v); }
 }
 
-/// Kind-NONE `TokenConfig` with the behaviour built before P1c: `PAYABLE | MINTABLE | BURNABLE`, nothing locked, no
+/// Kind-NORMAL `TokenConfig` with the behaviour built before P1c: `PAYABLE | MINTABLE | BURNABLE`, nothing locked, no
 /// owner, `minter` (0 = none), `supply` to `holder`. Callers `abi.encode` it (after adjusting fields).
-function noneInit(string memory n, string memory s, uint8 d, uint256 supply, address holder, address minter)
+function normalInit(string memory n, string memory s, uint8 d, uint256 supply, address holder, address minter)
     pure returns (IFactoryToken.TokenConfig memory c)
 {
     c.name = n;
@@ -55,9 +55,9 @@ struct Rate {
     uint16 maxRateStepBps;
 }
 
-/// `TokenConfig` of kind UNDERLYING for legs `us` at `nums/dens`: `PAYABLE` (as built), `RATE_ADJUSTABLE` with `cfg.adjustable`,
+/// `TokenConfig` of kind WRAPPED for legs `us` at `nums/dens`: `PAYABLE` (as built), `RATE_ADJUSTABLE` with `cfg.adjustable`,
 /// `WRAP_DISABLEABLE` with a non-zero `guardian`; nothing locked; `owner` (0 = none).
-function underlyingInit(address[] memory us, uint256[] memory nums, uint256[] memory dens, uint8 dec, Rate memory cfg,
+function wrappedInit(address[] memory us, uint256[] memory nums, uint256[] memory dens, uint8 dec, Rate memory cfg,
     address guardian, address owner) pure returns (IFactoryToken.TokenConfig memory c)
 {
     c.name = "Wrapped";
@@ -109,17 +109,17 @@ abstract contract V2Fixture is Test {
         return BaseHarness(_clone(address(impl), creator_, new address[](0), abi.encode(c)));
     }
 
-    address internal noneImpl;
-    address internal underlyingImpl;
+    address internal normalImpl;
+    address internal wrappedImpl;
     /// Owner the fixture gives every wrapper it builds (`disableFeature`, `grantRole` in tests).
     address internal wrapperOwner = address(0x0A11);
 
-    function _none(address creator_, uint256 supply, address minter) internal returns (NoUnderlyingToken) {
-        if (noneImpl == address(0)) {
-            noneImpl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), UID_, address(0), false), ""));
+    function _normal(address creator_, uint256 supply, address minter) internal returns (NormalToken) {
+        if (normalImpl == address(0)) {
+            normalImpl = address(new NormalToken(1, plainEnv(address(this), address(0), UID_, address(0), false), ""));
         }
-        return NoUnderlyingToken(_clone(noneImpl, creator_, new address[](0),
-            abi.encode(noneInit("Points", "PTS", 0, supply, creator_, minter))));
+        return NormalToken(_clone(normalImpl, creator_, new address[](0),
+            abi.encode(normalInit("Points", "PTS", 0, supply, creator_, minter))));
     }
 
     function _fixedRate() internal pure returns (Rate memory c) {}
@@ -142,32 +142,32 @@ abstract contract V2Fixture is Test {
     function _singleInit(address u, uint8 dec, uint256 num, uint256 den, Rate memory cfg)
         internal view returns (bytes memory)
     {
-        return abi.encode(underlyingInit(_one(u), _oneU(num), _oneU(den), dec, cfg, address(0), wrapperOwner));
+        return abi.encode(wrappedInit(_one(u), _oneU(num), _oneU(den), dec, cfg, address(0), wrapperOwner));
     }
 
-    function _underlyingImpl() internal returns (address) {
-        if (underlyingImpl == address(0)) {
-            underlyingImpl = address(new UnderlyingToken(1, plainEnv(address(this), address(0), UID_, address(0), false), ""));
+    function _wrappedImpl() internal returns (address) {
+        if (wrappedImpl == address(0)) {
+            wrappedImpl = address(new WrappedToken(1, plainEnv(address(this), address(0), UID_, address(0), false), ""));
         }
-        return underlyingImpl;
+        return wrappedImpl;
     }
 
     function _single(address u, uint8 dec, uint256 num, uint256 den, Rate memory cfg)
-        internal returns (UnderlyingToken)
+        internal returns (WrappedToken)
     {
-        return UnderlyingToken(_clone(_underlyingImpl(), address(this), _one(u), _singleInit(u, dec, num, den, cfg)));
+        return WrappedToken(_clone(_wrappedImpl(), address(this), _one(u), _singleInit(u, dec, num, den, cfg)));
     }
 
     function _multiInit(address[] memory us, uint256[] memory nums, uint256[] memory dens, Rate memory cfg,
         address guardian) internal view returns (bytes memory)
     {
-        return abi.encode(underlyingInit(us, nums, dens, 18, cfg, guardian, wrapperOwner));
+        return abi.encode(wrappedInit(us, nums, dens, 18, cfg, guardian, wrapperOwner));
     }
 
     function _multi(address[] memory us, uint256[] memory nums, uint256[] memory dens, Rate memory cfg,
-        address guardian) internal returns (UnderlyingToken)
+        address guardian) internal returns (WrappedToken)
     {
-        return UnderlyingToken(_clone(_underlyingImpl(), address(this), us, _multiInit(us, nums, dens, cfg, guardian)));
+        return WrappedToken(_clone(_wrappedImpl(), address(this), us, _multiInit(us, nums, dens, cfg, guardian)));
     }
 
     /// A `MetaTransfer` from `from` on lane `batch`, nonce 0, valid 300 s, relayer `relayer`, no fee.

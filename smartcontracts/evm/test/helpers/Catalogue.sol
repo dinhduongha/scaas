@@ -6,7 +6,7 @@ import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
-import {UnderlyingLib} from "../../src/metatx/UnderlyingLib.sol";
+import {WrappedLib} from "../../src/metatx/WrappedLib.sol";
 import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
 import {HederaLib} from "../../src/hedera/HederaLib.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
@@ -45,14 +45,14 @@ function pqzEnv(address factory, bytes32 uid, address registry, address verifier
 /// @notice The transitive link closure of `kind`'s implementation (metatx-split §4, R5), each library with its code
 ///         hash. Checked against the artifacts' `linkReferences` by `LinkClosure.t.sol`.
 function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory l) {
-    bool und = kind == IOpenFactory.TokenKind.UNDERLYING || kind == IOpenFactory.TokenKind.UNDERLYING_ZETHER
-        || kind == IOpenFactory.TokenKind.UNDERLYING_PQZ;
-    bool zth = kind == IOpenFactory.TokenKind.NONE_ZETHER || kind == IOpenFactory.TokenKind.UNDERLYING_ZETHER;
-    bool pqz = kind == IOpenFactory.TokenKind.NONE_PQZ || kind == IOpenFactory.TokenKind.UNDERLYING_PQZ;
+    bool und = kind == IOpenFactory.TokenKind.WRAPPED || kind == IOpenFactory.TokenKind.WRAPPED_ZETHER
+        || kind == IOpenFactory.TokenKind.WRAPPED_PQZ;
+    bool zth = kind == IOpenFactory.TokenKind.NORMAL_ZETHER || kind == IOpenFactory.TokenKind.WRAPPED_ZETHER;
+    bool pqz = kind == IOpenFactory.TokenKind.NORMAL_PQZ || kind == IOpenFactory.TokenKind.WRAPPED_PQZ;
     l = new address[](4 + (und ? 1 : 0) + (zth ? 1 : 0) + (pqz ? 4 : 0));
     (l[0], l[1], l[2], l[3]) = (address(AdminLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
     uint256 n = 4;
-    if (und) l[n++] = address(UnderlyingLib);
+    if (und) l[n++] = address(WrappedLib);
     if (zth) l[n++] = address(ZetherLib);
     if (pqz) {
         (l[n], l[n + 1], l[n + 2], l[n + 3]) =

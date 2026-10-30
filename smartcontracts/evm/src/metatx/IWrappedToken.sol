@@ -3,10 +3,10 @@ pragma solidity ^0.8.24;
 
 import {ITradeToken} from "../trade/ITradeToken.sol";
 
-/// @title Kind `UNDERLYING` (CTR-TOK-21): 1–8 legs, each an ERC-20 or the native coin (`address(0)`, CTR-TOK-26).
-/// @notice Events and errors raised by `UnderlyingLib` (an external library) are declared here so that they are in the
+/// @title Kind `WRAPPED` (CTR-TOK-21): 1–8 legs, each an ERC-20 or the native coin (`address(0)`, CTR-TOK-26).
+/// @notice Events and errors raised by `WrappedLib` (an external library) are declared here so that they are in the
 ///         token ABI. The creation config is `IFactoryToken.TokenConfig` (`legs`, `rate`).
-interface IUnderlyingToken {
+interface IWrappedToken {
     /// @notice `account` is credited `minted`: the caller of a direct wrap; for `mtxWrap` the order's `destination` (or
     ///         `from`) and the units net of the submitter's fee (W-Q), which its `Transfer` shows.
     event Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted);
@@ -59,7 +59,7 @@ interface IUnderlyingToken {
     error NativeNotGasless();
     error WrapOrderInvalid(address receiveToken);
     error WrapReceivedMismatch(uint256 expected, uint256 received);
-    /// @notice Raised by OpenZeppelin inside UnderlyingLib (same selectors), listed for the ABI.
+    /// @notice Raised by OpenZeppelin inside WrappedLib (same selectors), listed for the ABI.
     error FailedCall();
     error SafeERC20FailedOperation(address token);
     error InsufficientBalance(uint256 balance, uint256 needed);

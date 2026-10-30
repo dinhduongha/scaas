@@ -5,11 +5,11 @@ import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
-import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
-import {UnderlyingPqzToken} from "../../src/pqz/UnderlyingPqzToken.sol";
-import {IConfidentialToken, IConfidentialUnderlyingToken} from "../../src/confidential/IConfidentialToken.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
+import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
+import {IConfidentialToken, IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
@@ -77,14 +77,14 @@ contract PqzSharedTest is PqzFixture {
     function test_unshieldUnwrap_toUA() public {
         PqzLayer legTok = _newToken("leg");
         MockERC20 usd = new MockERC20("USD", "USD", 6);
-        _releaseUnderlying();
+        _releaseWrapped();
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = (1 << AdminLib.PAYABLE);
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](2);
         c.legs[0] = IFactoryToken.Leg(address(legTok), 1, 1);
         c.legs[1] = IFactoryToken.Leg(address(usd), 1, 1);
-        UnderlyingPqzToken w = UnderlyingPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_PQZ, 1, abi.encode(c), "w")));
+        WrappedPqzToken w = WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "w")));
         _public(legTok, address(this), 100 * SCALE);
         legTok.approve(address(w), type(uint256).max);
         w.mtxWrapShield(address(legTok), 100 * SCALE, alice);
@@ -93,20 +93,20 @@ contract PqzSharedTest is PqzFixture {
         w.mtxWrapShield(address(usd), 100 * SCALE, alice);
         bytes memory pl = _burnPl(3, bytes32(0));
         w.mtxUnshieldUnwrap(pl, hex"c0de", _mlAuth(), bytes32(0), "",
-            IConfidentialUnderlyingToken.Unwrap(address(legTok), fan, 40, 0));
+            IConfidentialWrappedToken.Unwrap(address(legTok), fan, 40, 0));
         assertEq(legTok.balanceOfUA(fan), 40 * SCALE, "the leg's own UA ledger");
         assertEq(w.totalSupply(), 160 * SCALE, "burnt from the pool");
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UALegNotLedger.selector, address(usd)));
-        w.mtxUnshieldUnwrap(pl, hex"c0de", _mlAuth(), bytes32(0), "", IConfidentialUnderlyingToken.Unwrap(address(usd), fan, 10, 0));
+        w.mtxUnshieldUnwrap(pl, hex"c0de", _mlAuth(), bytes32(0), "", IConfidentialWrappedToken.Unwrap(address(usd), fan, 10, 0));
         // the UA allowlist of the kind: not `mtxWrapShield` (a UA wrap-shields in two steps)
-        _uaRefused(PqzLayer(address(w)), abi.encodeCall(UnderlyingPqzToken.mtxWrapShield, (address(usd), SCALE, alice)));
+        _uaRefused(PqzLayer(address(w)), abi.encodeCall(WrappedPqzToken.mtxWrapShield, (address(usd), SCALE, alice)));
         (bytes4[] memory s, uint8[] memory cl,) = w.mtxSelectors();
         bytes4[18] memory want = [
             IMetaTx.cancelNonce.selector, bytes4(keccak256("wrap(uint256)")), bytes4(keccak256("unwrap(uint256,address,uint256)")),
             bytes4(keccak256("wrap(address,uint256)")), bytes4(keccak256("unwrap(address,uint256,address,uint256)")),
-            UnderlyingToken.addReserve.selector, UnderlyingToken.wrapToUA.selector, UnderlyingToken.unwrapToUA.selector,
+            WrappedToken.addReserve.selector, WrappedToken.wrapToUA.selector, WrappedToken.unwrapToUA.selector,
             PqzLayer.mtxShield.selector, PqzLayer.mtxConfidentialTransfer.selector, PqzLayer.mtxConfidentialTransferCompact.selector,
-            PqzLayer.mtxUnshield.selector, UnderlyingPqzToken.mtxWrapShield.selector, UnderlyingPqzToken.mtxUnshieldUnwrap.selector,
+            PqzLayer.mtxUnshield.selector, WrappedPqzToken.mtxWrapShield.selector, WrappedPqzToken.mtxUnshieldUnwrap.selector,
             PqzLayer.mtxConfidentialTransferSingle.selector, PqzLayer.mtxConfidentialTransferSingleCompact.selector,
             PqzLayer.mtxRollOver.selector, PqzLayer.mtxPrepareAcc.selector
         ];
@@ -155,12 +155,12 @@ contract PqzSharedTest is PqzFixture {
         t.uaExecute(m, _mlAuth());
     }
 
-    /// `NONE_PQZ`: exactly `cancelNonce`, `burn`, the six shared PQZ ops and the rollover / `mtxPrepareAcc` (owner
+    /// `NORMAL_PQZ`: exactly `cancelNonce`, `burn`, the six shared PQZ ops and the rollover / `mtxPrepareAcc` (owner
     /// 2026-10-20: every mtx* write is relayable), `ABSOLUTE`.
-    function test_allowlists_noneKind() public {
-        (bytes4[] memory s, uint8[] memory c,) = NoUnderlyingPqzToken(address(tok)).mtxSelectors();
+    function test_allowlists_normalKind() public {
+        (bytes4[] memory s, uint8[] memory c,) = NormalPqzToken(address(tok)).mtxSelectors();
         bytes4[10] memory want = [
-            IMetaTx.cancelNonce.selector, NoUnderlyingToken.burn.selector, PqzLayer.mtxShield.selector,
+            IMetaTx.cancelNonce.selector, NormalToken.burn.selector, PqzLayer.mtxShield.selector,
             PqzLayer.mtxConfidentialTransfer.selector, PqzLayer.mtxConfidentialTransferCompact.selector,
             PqzLayer.mtxUnshield.selector, PqzLayer.mtxConfidentialTransferSingle.selector,
             PqzLayer.mtxConfidentialTransferSingleCompact.selector, PqzLayer.mtxRollOver.selector,
@@ -217,7 +217,7 @@ contract PqzSharedTest is PqzFixture {
         // the UA envelope
         _fund(tok, alice, 3);
         vm.roll(block.number + ROLL_AGE);
-        NoUnderlyingPqzToken(address(tok)).mintToUA(fan, 5);
+        NormalPqzToken(address(tok)).mintToUA(fan, 5);
         minted += 5;
         _relayUA(abi.encodeCall(PqzLayer.mtxRollOver, (alice, 1)), 0);
         assertEq(tok.pqzAccount(alice).rolled, 2, "rolled via the UA envelope, fee 0");

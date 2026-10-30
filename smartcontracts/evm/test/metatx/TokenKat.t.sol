@@ -3,16 +3,16 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// KATs of the two structs on a real token (metatx.md "One rule, four places"): `metatx_kat.json` (v3
 /// `MetaTransaction`, `cancelNonce(42)`) and `metatransfer_kat.json` (`MetaTransfer`, a payment on its pay lane
-/// with a bound FIXED fee), both in the token domain "SCaaS MetaToken" of a `NoUnderlyingToken` clone on chain
+/// with a bound FIXED fee), both in the token domain "SCaaS MetaToken" of a `NormalToken` clone on chain
 /// 7622 with its real `chain_uid`, each with the relayed `calldata` (`mtxExecute` / `mtxExecuteTransfer`) that scaas-node
 /// and clientkeys must encode byte for byte. `WRITE_KAT=true forge test --match-contract TokenKatTest` rewrites them.
 contract TokenKatTest is Test {
@@ -24,13 +24,13 @@ contract TokenKatTest is Test {
     address internal constant RELAYER = address(0xBEEF);
     string internal constant OUT_TX = "./test/vectors/metatx_kat.json";
     string internal constant OUT_TRANSFER = "./test/vectors/metatransfer_kat.json";
-    NoUnderlyingToken internal tok;
+    NormalToken internal tok;
 
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        tok = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""))));
-        tok.initialize(address(this), 1, abi.encode(noneInit("Points", "PTS", 6, 0, address(this), address(this))));
+        tok = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""))));
+        tok.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
         tok.mint(vm.addr(ALICE_PK), 1_000e6);
     }
 

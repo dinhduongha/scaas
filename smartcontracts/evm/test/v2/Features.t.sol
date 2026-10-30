@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
@@ -16,7 +16,7 @@ import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 
-/// Kind NONE on the flags and the owner model (CTR-TOK-21, CTR-TOK-22) and the Hedera branch (CTR-TOK-23).
+/// Kind NORMAL on the flags and the owner model (CTR-TOK-21, CTR-TOK-22) and the Hedera branch (CTR-TOK-23).
 contract FeaturesTest is Test {
     bytes32 internal constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
     uint256 internal constant PK = 0xA11CE;
@@ -36,7 +36,7 @@ contract FeaturesTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        impl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""));
+        impl = address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""));
     }
 
     function _cfg(uint256 features, uint256 locked, address owner_, address minter_, uint256 supply)
@@ -49,9 +49,9 @@ contract FeaturesTest is Test {
     }
 
     function _token(address implementation, IFactoryToken.TokenConfig memory cfg)
-        internal returns (NoUnderlyingToken t)
+        internal returns (NormalToken t)
     {
-        t = NoUnderlyingToken(Clones.clone(implementation));
+        t = NormalToken(Clones.clone(implementation));
         t.initialize(address(this), 1, abi.encode(cfg));
     }
 
@@ -63,7 +63,7 @@ contract FeaturesTest is Test {
     // ------------------------------------------------------------------ init, provenance
 
     function test_initWritesMetadataProvenanceAndFlags() public {
-        NoUnderlyingToken t = _token(impl, _cfg(PAYABLE | MINTABLE | BURNABLE, MINTABLE, ownerA, minter, 1_000));
+        NormalToken t = _token(impl, _cfg(PAYABLE | MINTABLE | BURNABLE, MINTABLE, ownerA, minter, 1_000));
         assertEq(t.name(), "Points");
         assertEq(t.symbol(), "PTS");
         assertEq(t.decimals(), 6);
@@ -79,7 +79,7 @@ contract FeaturesTest is Test {
     }
 
     function test_initRefusesFlagsOfAnotherKind() public {
-        NoUnderlyingToken t = NoUnderlyingToken(Clones.clone(impl));
+        NormalToken t = NormalToken(Clones.clone(impl));
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, uint8(3)));
         t.initialize(address(this), 1, abi.encode(_cfg(1 << 3, 0, address(0), address(0), 0)));
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotBuilt.selector, uint8(7)));
@@ -89,7 +89,7 @@ contract FeaturesTest is Test {
     // ------------------------------------------------------------------ MINTABLE, BURNABLE
 
     function test_mint_needsTheFlagAndTheRole() public {
-        NoUnderlyingToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, minter, 0));
+        NormalToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, minter, 0));
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.MissingRole.selector, uint8(1), alice));
         t.mint(alice, 1);
@@ -104,25 +104,25 @@ contract FeaturesTest is Test {
     }
 
     function test_mint_withoutTheFlag_fixedSupply() public {
-        NoUnderlyingToken t = _token(impl, _cfg(0, 0, address(0), address(0), 7));
+        NormalToken t = _token(impl, _cfg(0, 0, address(0), address(0), 7));
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, uint8(1)));
         t.mint(alice, 1);
         assertEq(t.totalSupply(), 7);
     }
 
     function test_burn_onlyWithBurnable_directAndGasless() public {
-        NoUnderlyingToken off = _token(impl, _cfg(0, 0, address(0), address(0), 100));
+        NormalToken off = _token(impl, _cfg(0, 0, address(0), address(0), 100));
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, uint8(2)));
         off.burn(1);
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice,
-            data: abi.encodeCall(NoUnderlyingToken.burn, (1)), batch: 1, nonce: 0, validUntil: block.timestamp + 300,
+            data: abi.encodeCall(NormalToken.burn, (1)), batch: 1, nonce: 0, validUntil: block.timestamp + 300,
             mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
         bytes memory s = _sig(off.mtxDigest(m));
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, uint8(2)));
         off.mtxExecute(m, s);
-        NoUnderlyingToken on = _token(impl, _cfg(BURNABLE, 0, address(0), address(0), 100));
+        NormalToken on = _token(impl, _cfg(BURNABLE, 0, address(0), address(0), 100));
         s = _sig(on.mtxDigest(m));
         vm.prank(relayer);
         on.mtxExecute(m, s);
@@ -132,7 +132,7 @@ contract FeaturesTest is Test {
     // ------------------------------------------------------------------ PAYABLE
 
     function test_payable_off_gatesThePayEntries_notMetaTransfer() public {
-        NoUnderlyingToken t = _token(impl, _cfg(0, 0, address(0), address(0), 100));
+        NormalToken t = _token(impl, _cfg(0, 0, address(0), address(0), 100));
         bytes memory off = abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, uint8(0));
         vm.prank(alice);
         vm.expectRevert(off);
@@ -156,15 +156,15 @@ contract FeaturesTest is Test {
     }
 
     function test_payable_on_payWithFeeWorks() public {
-        NoUnderlyingToken t = _token(impl, _cfg(PAYABLE, 0, address(0), address(0), 100));
+        NormalToken t = _token(impl, _cfg(PAYABLE, 0, address(0), address(0), 100));
         vm.prank(alice);
         t.payWithFee(shop, 10, FeeMode.NONE, 0, address(0), bytes32("r"));
         assertEq(t.balanceOf(shop), 10);
     }
 
     function test_supportsInterface_paymentOnlyWhenPayable() public {
-        NoUnderlyingToken off = _token(impl, _cfg(0, 0, address(0), address(0), 0));
-        NoUnderlyingToken on = _token(impl, _cfg(PAYABLE, 0, address(0), address(0), 0));
+        NormalToken off = _token(impl, _cfg(0, 0, address(0), address(0), 0));
+        NormalToken on = _token(impl, _cfg(PAYABLE, 0, address(0), address(0), 0));
         bytes4[4] memory always = [type(IERC165).interfaceId, type(IERC20).interfaceId, type(IMetaTx).interfaceId,
             type(IERC20MetaTx).interfaceId];
         for (uint256 i; i < 4; ++i) {
@@ -179,7 +179,7 @@ contract FeaturesTest is Test {
     // ------------------------------------------------------------------ owner through the token
 
     function test_ownerAdministersThroughTheToken() public {
-        NoUnderlyingToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, address(0), 0));
+        NormalToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, address(0), 0));
         vm.prank(ownerA);
         vm.expectEmit(address(t));
         emit ITokenAdmin.RoleGranted(1, minter, ownerA);
@@ -204,7 +204,7 @@ contract FeaturesTest is Test {
     }
 
     function test_adminFunctionsAreNeverSelfCalls() public {
-        NoUnderlyingToken t = _token(impl, _cfg(MINTABLE, 0, alice, address(0), 0));
+        NormalToken t = _token(impl, _cfg(MINTABLE, 0, alice, address(0), 0));
         bytes4[7] memory sels = [t.grantRole.selector, t.revokeRole.selector, t.renounceRole.selector,
             t.disableFeature.selector, t.transferOwnership.selector, t.acceptOwnership.selector,
             t.renounceOwnership.selector];
@@ -221,7 +221,7 @@ contract FeaturesTest is Test {
 
     /// AdminLib writes `scaas.token` only: the meta-tx lanes (`scaas.metatx`) and the ERC-20 slots stay put.
     function test_adminWritesDoNotTouchOtherNamespaces() public {
-        NoUnderlyingToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, address(0), 100));
+        NormalToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, address(0), 100));
         bytes32 lane = keccak256(abi.encode(uint256(1), keccak256(abi.encode(alice,
             bytes32(0x06b01547c739946503c06c80685cc72ae2fec5074fd602f84cd2fa888722ac00)))));
         bytes32 bal = keccak256(abi.encode(alice, uint256(0)));
@@ -255,11 +255,11 @@ contract FeaturesTest is Test {
         uint256 edKey = 0xA11CE5;
         address native = address(uint160(1_234_567));
         MockHederaAccountService(has).setEdKey(native, vm.addr(edKey));
-        address hImpl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), UID, address(0), true), ""));
+        address hImpl = address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), true), ""));
         IFactoryToken.TokenConfig memory cfg;
         (cfg.name, cfg.symbol, cfg.initialSupply, cfg.initialHolder) = ("P", "P", 100, native);
-        NoUnderlyingToken h = _token(hImpl, cfg);
-        NoUnderlyingToken e = _token(impl, cfg);
+        NormalToken h = _token(hImpl, cfg);
+        NormalToken e = _token(impl, cfg);
         assertTrue(h.IS_HEDERA());
         MetaTxLib.MetaTransfer memory x = MetaTxLib.MetaTransfer({from: native, to: shop, value: 10, entryRef: 0,
             batch: 1, nonce: 0, validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0,

@@ -10,8 +10,8 @@ import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
 
 /// The delegate of the 2026-10-29 hot-wallet drain: says yes to every ERC-1271 question and, called on the victim's
@@ -37,14 +37,14 @@ contract Sweeper {
 contract Sweeper7702Test is MandateFixture {
     address internal attacker = address(0xA77AC);
     Sweeper internal sweeper;
-    NoUnderlyingToken internal v;
-    UnderlyingToken internal wt;
+    NormalToken internal v;
+    WrappedToken internal wt;
     MockERC20 internal u;
 
     function setUp() public override {
         super.setUp();
         sweeper = new Sweeper();
-        v = _none(owner, 1_000, owner);
+        v = _normal(owner, 1_000, owner);
         u = new MockERC20("U", "U", 6);
         wt = _single(address(u), 6, 1, 1, _fixedRate());
         u.mint(owner, 100);
@@ -67,7 +67,7 @@ contract Sweeper7702Test is MandateFixture {
         _swept(address(v), abi.encodeCall(IERC20.transfer, (attacker, 1_000)));
         _swept(address(v), abi.encodeCall(IERC20Payment.payWithFee, (attacker, 1_000, FeeMode.NONE, 0, address(0), 0)));
         _swept(address(v), abi.encodeCall(IERC20.approve, (address(sweeper), 1_000)));
-        _swept(address(v), abi.encodeCall(NoUnderlyingToken.mint, (attacker, 1e9)));
+        _swept(address(v), abi.encodeCall(NormalToken.mint, (attacker, 1e9)));
         _swept(address(v), abi.encodeCall(ITokenAdmin.transferOwnership, (attacker)));
         _swept(address(v), abi.encodeCall(IMetaTx.cancelNonce, (0)));
         _swept(address(wt), abi.encodeWithSignature("unwrap(uint256,address)", 100, attacker));

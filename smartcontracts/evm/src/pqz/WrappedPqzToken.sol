@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {UnderlyingToken} from "../metatx/UnderlyingToken.sol";
+import {WrappedToken} from "../metatx/WrappedToken.sol";
 import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
 import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
 import {MetaTxBase} from "../metatx/MetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {AdminLib} from "../metatx/AdminLib.sol";
-import {UnderlyingLib} from "../metatx/UnderlyingLib.sol";
+import {WrappedLib} from "../metatx/WrappedLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {PqzLayer} from "./PqzLayer.sol";
@@ -15,37 +15,37 @@ import {PqzCore} from "./PqzCore.sol";
 import {PqzBurnLib} from "./PqzBurnLib.sol";
 import {PqzStateLib} from "./PqzStateLib.sol";
 import {PqzViewLib} from "./PqzViewLib.sol";
-import {IConfidentialUnderlyingToken} from "../confidential/IConfidentialToken.sol";
+import {IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
 
-/// @title Kind `UNDERLYING_PQZ` (CTR-TOK-21, CTR-PQZ-22): the wrapper of 1–8 legs with the PQZ layer (P6g plan D1).
+/// @title Kind `WRAPPED_PQZ` (CTR-TOK-21, CTR-PQZ-22): the wrapper of 1–8 legs with the PQZ layer (P6g plan D1).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Chains 31337 / 1337 / 7622 only. Legs, rates, reserves,
-///         `wrap` / `unwrap` and the roles are `UnderlyingToken`'s; the layer adds `mtxWrapShield` (a leg's underlying
+///         `wrap` / `unwrap` and the roles are `WrappedToken`'s; the layer adds `mtxWrapShield` (a leg's underlying
 ///         into a TRIVIAL pending entry, the public-equivalent minted to `SHIELD_POOL`; plan 5h D18, D19) and
 ///         `mtxUnshieldUnwrap` (a burn: `amount · shieldScale` burnt from `SHIELD_POOL`, then paid out of a leg's
-///         reserve to an address or, through a SCaaS ledger leg, to a UA), as on `UNDERLYING_ZETHER`. Reserve invariant
+///         reserve to an address or, through a SCaaS ledger leg, to a UA), as on `WRAPPED_ZETHER`. Reserve invariant
 ///         `Σ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply()` (the shielded value is the pool's public units).
-contract UnderlyingPqzToken is UnderlyingToken, PqzLayer, IConfidentialUnderlyingToken {
+contract WrappedPqzToken is WrappedToken, PqzLayer, IConfidentialWrappedToken {
     /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env`, whose
     ///      `deps[ENV_PQZ_VERIFIER]` is the release's `UAPqzVerifier` (CTR-ZTH-20 / CTR-PQZ-10); no `implArgs`.
     constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
-        UnderlyingToken(envVersion, env, implArgs)
+        WrappedToken(envVersion, env, implArgs)
         PqzLayer(env)
     {
         if (!SigCheck.isContract(env.registry)) revert BadInit();
     }
 
-    /// @dev The legs (`UnderlyingToken`), restated for the second base.
-    function underlyings() public view override(UnderlyingToken, MetaTokenBase) returns (address[] memory) {
+    /// @dev The legs (`WrappedToken`), restated for the second base.
+    function underlyings() public view override(WrappedToken, MetaTokenBase) returns (address[] memory) {
         return super.underlyings();
     }
 
-    function kind() public pure override(UnderlyingToken, MetaTokenBase) returns (uint8) {
-        return AdminLib.KIND_UNDERLYING_PQZ;
+    function kind() public pure override(WrappedToken, MetaTokenBase) returns (uint8) {
+        return AdminLib.KIND_WRAPPED_PQZ;
     }
 
-    function _init(TokenConfig memory cfg) internal override(UnderlyingToken, MetaTokenBase) {
+    function _init(TokenConfig memory cfg) internal override(WrappedToken, MetaTokenBase) {
         _requireUnused(cfg, true, false, false, false);
-        UnderlyingLib.initToken(cfg, false, AdminLib.KIND_UNDERLYING_PQZ);
+        WrappedLib.initToken(cfg, false, AdminLib.KIND_WRAPPED_PQZ);
         PqzStateLib.init(cfg.conf, _REGISTRY, PQZ_VERIFIER);
     }
 
@@ -56,7 +56,7 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer, IConfidentialUnderlyin
     ///         `minted / shieldScale` for `toUA`.
     function mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA) external payable nonReentrant {
         address m = _msgSender();
-        (,, uint256 minted) = UnderlyingLib.wrap(UnderlyingLib.indexOf(underlying), amountIn, m, msg.value);
+        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value);
         uint256 scale = PqzCore.$().shieldScale;
         if (minted % scale != 0) revert AmountNotScaled(minted, scale);
         PqzStateLib.shield(toUA, minted / scale, m, _REGISTRY);
@@ -75,7 +75,7 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer, IConfidentialUnderlyin
         _burn(_envUnwrap(x, _ticketBinding()), payload, proof, auth, accHint);
         uint256 wrapped = x.amount * PqzCore.$().shieldScale;
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped);
-        UnderlyingLib.payOutTo(UnderlyingLib.indexOf(x.underlying), x.recipient, wrapped, x.minOut);
+        WrappedLib.payOutTo(WrappedLib.indexOf(x.underlying), x.recipient, wrapped, x.minOut);
     }
 
     /// @notice The `envelopeBinding` word of a direct `mtxUnshieldUnwrap` (P6g plan D12).
@@ -98,15 +98,15 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer, IConfidentialUnderlyin
         (e.amount, e.recipient) = (x.amount, x.recipient);
     }
 
-    /// @notice As `UnderlyingToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
-    function disableFeature(uint8 bit) external override(UnderlyingToken, MetaTokenBase) nonReentrant {
+    /// @notice As `WrappedToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
+    function disableFeature(uint8 bit) external override(WrappedToken, MetaTokenBase) nonReentrant {
         AdminLib.disableFeature(bit, _msgSender());
-        if (bit == AdminLib.RATE_ADJUSTABLE) UnderlyingLib.dropPending();
+        if (bit == AdminLib.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }
 
     /// @notice The collateral check of a rate change: `totalSupply()` (the shielded value sits in `SHIELD_POOL`, D19).
     function executeRate() external override nonReentrant {
-        UnderlyingLib.executeRate(_msgSender(), totalSupply());
+        WrappedLib.executeRate(_msgSender(), totalSupply());
     }
 
     // ------------------------------------------------------------------ the layer's hooks
@@ -137,10 +137,10 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer, IConfidentialUnderlyin
 
     // ------------------------------------------------------------------ allowlist (CTR-MTX-19, CTR-PQZ-21)
 
-    /// @notice `UnderlyingToken`'s eight, then the PQZ ops and the two leg paths, each `ABSOLUTE` (incl. the rollover
+    /// @notice `WrappedToken`'s eight, then the PQZ ops and the two leg paths, each `ABSOLUTE` (incl. the rollover
     ///         and `mtxPrepareAcc`).
     function mtxSelectors()
-        public pure override(UnderlyingToken, IMetaTx, MetaTxBase)
+        public pure override(WrappedToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         s = new bytes4[](18);
@@ -166,14 +166,14 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer, IConfidentialUnderlyin
         (s[17], c[17]) = (this.mtxPrepareAcc.selector, FEE_CLASS_ABSOLUTE);
     }
 
-    function _mtxRule(bytes4 sel) internal view override(UnderlyingToken, MetaTxBase) returns (MtxRule memory) {
+    function _mtxRule(bytes4 sel) internal view override(WrappedToken, MetaTxBase) returns (MtxRule memory) {
         if (sel == this.mtxWrapShield.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 100);
         if (_isPqzOp(sel)) return _pqzRule(sel);
-        return UnderlyingToken._mtxRule(sel);
+        return WrappedToken._mtxRule(sel);
     }
 
-    /// @notice The leg paths of `UnderlyingToken` and the PQZ ops; not `mtxWrapShield` (the pool holds no leg).
-    function _uaAllowed(bytes4 sel) internal view override(UnderlyingToken, ERC20MetaTx) returns (bool) {
-        return (_isPqzOp(sel) && sel != this.mtxWrapShield.selector) || UnderlyingToken._uaAllowed(sel);
+    /// @notice The leg paths of `WrappedToken` and the PQZ ops; not `mtxWrapShield` (the pool holds no leg).
+    function _uaAllowed(bytes4 sel) internal view override(WrappedToken, ERC20MetaTx) returns (bool) {
+        return (_isPqzOp(sel) && sel != this.mtxWrapShield.selector) || WrappedToken._uaAllowed(sel);
     }
 }

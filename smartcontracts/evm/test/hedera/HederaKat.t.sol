@@ -3,14 +3,14 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// The Hedera vector (NET-HED-03, CTR-TOK-23): a payment `MetaTransfer` of the Hedera account 0.0.1234567 (long-zero
-/// `from`) on an `IS_HEDERA` `NoUnderlyingToken` clone on chain 296, in the salted token domain. Forge writes every
+/// `from`) on an `IS_HEDERA` `NormalToken` clone on chain 296, in the salted token domain. Forge writes every
 /// struct field, the struct hash and the digest (`WRITE_KAT=true forge test --match-contract HederaKatTest`); it
 /// writes no calldata and executes nothing. Then `python3 test/hedera/gen_hedera_kat.py` adds the RFC 8032 ed25519
 /// signature over the digest (the bytes HIP-632's `isAuthorizedRaw` checks); scaas-node (`adapters::hedera` tests)
@@ -24,9 +24,9 @@ contract HederaKatTest is Test {
 
     function test_hederaKat() public {
         vm.chainId(296);
-        NoUnderlyingToken tok =
-            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), UID, address(0), true), ""))));
-        tok.initialize(address(this), 1, abi.encode(noneInit("HBUSD", "HBUSD", 6, 0, address(this), address(0))));
+        NormalToken tok =
+            NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), true), ""))));
+        tok.initialize(address(this), 1, abi.encode(normalInit("HBUSD", "HBUSD", 6, 0, address(this), address(0))));
         bytes32 ref = bytes32(uint256(0x42));
         MetaTxLib.MetaTransfer memory t = MetaTxLib.MetaTransfer({
             from: NATIVE, to: address(0x5409), value: 250_000_000, entryRef: ref, batch: tok.payLane(ref), nonce: 0,

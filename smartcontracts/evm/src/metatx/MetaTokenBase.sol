@@ -74,7 +74,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         _init(abi.decode(initArgs, (TokenConfig)));
     }
 
-    /// @notice No underlying (the `NONE*` kinds); `UnderlyingToken` lists its legs. Read by the factory's index.
+    /// @notice No underlying (the `NORMAL*` kinds); `WrappedToken` lists its legs. Read by the factory's index.
     function underlyings() public view virtual returns (address[] memory us) {}
 
     /// @dev The kind checks its fields of `cfg` (`ConfigFieldForOtherKind` for another kind's), calls `_setMetadata`
@@ -108,7 +108,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     function implementation() external view returns (address) { return _SELF; }
     function creator() external view returns (address) { return AdminLib.$().creator; }
     function version() external view returns (uint64) { return AdminLib.$().version; }
-    /// @notice CTR-TOK-21 kind: 0 `NONE`, 1 `UNDERLYING`, 2 `NONE_ZETHER`, 3 `UNDERLYING_ZETHER`; a constant of the
+    /// @notice CTR-TOK-21 kind: 0 `NORMAL`, 1 `WRAPPED`, 2 `NORMAL_ZETHER`, 3 `WRAPPED_ZETHER`; a constant of the
     ///         implementation, so the factory can check it before any clone exists.
     function kind() public pure virtual returns (uint8);
 

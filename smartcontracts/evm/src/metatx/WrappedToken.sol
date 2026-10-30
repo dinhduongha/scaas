@@ -3,22 +3,22 @@ pragma solidity ^0.8.24;
 
 import {MetaTokenBase} from "./MetaTokenBase.sol";
 import {AdminLib} from "./AdminLib.sol";
-import {UnderlyingLib} from "./UnderlyingLib.sol";
-import {IUnderlyingToken} from "./IUnderlyingToken.sol";
+import {WrappedLib} from "./WrappedLib.sol";
+import {IWrappedToken} from "./IWrappedToken.sol";
 import {MetaTxBase} from "./MetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 
-/// @title Kind `UNDERLYING` (CTR-TOK-21): a wrapper of 1–8 legs, each an ERC-20 or the native coin (CTR-TOK-26), at
-///        per-leg rates `num/den`, with internal per-leg reserves; the logic is in `UnderlyingLib`.
+/// @title Kind `WRAPPED` (CTR-TOK-21): a wrapper of 1–8 legs, each an ERC-20 or the native coin (CTR-TOK-26), at
+///        per-leg rates `num/den`, with internal per-leg reserves; the logic is in `WrappedLib`.
 /// @notice Any-of (CTR-TOK-07): wrap one chosen leg, unwrap into one chosen leg, bounded by that leg's reserve. The
 ///         single-asset ABI (`wrap(amount)`, `unwrap(amount, recipient[, minOut])`) works only with exactly one leg
 ///         (`UnderlyingRequired`). Flags (CTR-TOK-22): `PAYABLE`, `RATE_ADJUSTABLE` (role rateAdmin, a contract:
 ///         timelocked rate changes), `WRAP_DISABLEABLE` (role guardian: one-way `disableWrap`). Built by
 ///         `OpenFactory.createToken` (CTR-TOK-25) from `legs` and `rate`; `initialSupply`, `initialHolder`, `conf`
 ///         must be empty.
-contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
-    uint256 public constant RATE_WINDOW = UnderlyingLib.RATE_WINDOW;
+contract WrappedToken is MetaTokenBase, IWrappedToken {
+    uint256 public constant RATE_WINDOW = WrappedLib.RATE_WINDOW;
 
     bytes4 internal constant SEL_WRAP = bytes4(keccak256("wrap(uint256)"));
     bytes4 internal constant SEL_UNWRAP_MIN = bytes4(keccak256("unwrap(uint256,address,uint256)"));
@@ -33,46 +33,46 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
     constructor(uint16, Env memory env, bytes memory) MetaTokenBase(env) {}
 
     function kind() public pure virtual override returns (uint8) {
-        return AdminLib.KIND_UNDERLYING;
+        return AdminLib.KIND_WRAPPED;
     }
 
-    /// @dev `initialSupply`, `initialHolder`, `conf` must be empty; legs and rate are checked in `UnderlyingLib`.
+    /// @dev `initialSupply`, `initialHolder`, `conf` must be empty; legs and rate are checked in `WrappedLib`.
     function _init(TokenConfig memory cfg) internal virtual override {
         _requireUnused(cfg, true, false, false, true);
-        UnderlyingLib.initToken(cfg, IS_HEDERA, AdminLib.KIND_UNDERLYING);
+        WrappedLib.initToken(cfg, IS_HEDERA, AdminLib.KIND_WRAPPED);
     }
 
     // ------------------------------------------------------------------ wrap / unwrap / reserve
 
     /// @notice Single-asset ABI. Mints the MEASURED amount received at the leg's rate, rounded down.
     function wrap(uint256 amount) external payable nonReentrant returns (uint256) {
-        return _wrap(UnderlyingLib.sole(), amount, 0);
+        return _wrap(WrappedLib.sole(), amount, 0);
     }
 
     function wrap(address u, uint256 amount) external payable nonReentrant returns (uint256) {
-        return _wrap(UnderlyingLib.indexOf(u), amount, 0);
+        return _wrap(WrappedLib.indexOf(u), amount, 0);
     }
 
     /// @notice `wrap(u, amount)` minted into the registered SIGNING UA `to` (CTR-UA-28), the receiver checked first.
     ///         Address allowlist `ABSOLUTE`: relayed, the native leg reverts (no coin in a self-call).
     function wrapToUA(address u, uint256 amount, bytes32 to) external payable nonReentrant returns (uint256) {
         _requireDerivedReceiver(to);
-        return _wrap(UnderlyingLib.indexOf(u), amount, to);
+        return _wrap(WrappedLib.indexOf(u), amount, to);
     }
 
     /// @notice Single-asset ABI, `minOut = 0`; not allowlisted.
     function unwrap(uint256 wrapped, address recipient) external nonReentrant returns (uint256 out) {
-        (out,) = _unwrap(UnderlyingLib.sole(), wrapped, recipient, 0);
+        (out,) = _unwrap(WrappedLib.sole(), wrapped, recipient, 0);
     }
 
     function unwrap(uint256 wrapped, address recipient, uint256 minOut) external nonReentrant returns (uint256 out) {
-        (out,) = _unwrap(UnderlyingLib.sole(), wrapped, recipient, minOut);
+        (out,) = _unwrap(WrappedLib.sole(), wrapped, recipient, minOut);
     }
 
     function unwrap(address u, uint256 wrapped, address recipient, uint256 minOut)
         external nonReentrant returns (uint256 out, uint256 burned)
     {
-        return _unwrap(UnderlyingLib.indexOf(u), wrapped, recipient, minOut);
+        return _unwrap(WrappedLib.indexOf(u), wrapped, recipient, minOut);
     }
 
     /// @notice `unwrap(u, …)` paid into `to` in leg `u`'s UA ledger (CTR-UA-28): burns from the subject (a native, or a
@@ -80,18 +80,18 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
     function unwrapToUA(address u, uint256 wrapped, bytes32 to, uint256 minOut)
         external nonReentrant returns (uint256 out, uint256 burned)
     {
-        uint256 i = UnderlyingLib.indexOf(u);
-        (out, burned) = UnderlyingLib.quoteUnwrapToUA(i, wrapped, minOut);
+        uint256 i = WrappedLib.indexOf(u);
+        (out, burned) = WrappedLib.quoteUnwrapToUA(i, wrapped, minOut);
         address from = _msgSender();
         _burn(from, burned);
-        UnderlyingLib.payOutToUA(i, to, out);
+        WrappedLib.payOutToUA(i, to, out);
         emit UnwrappedToUA(from, u, to, burned, out);
     }
 
     /// @notice Anyone; no mint. Over-collateralises before a rate decrease; otherwise a donation to every holder.
     function addReserve(address u, uint256 amount) external payable nonReentrant {
         address from = _msgSender();
-        emit ReserveAdded(from, u, UnderlyingLib.addReserve(UnderlyingLib.indexOf(u), amount, from, msg.value));
+        emit ReserveAdded(from, u, WrappedLib.addReserve(WrappedLib.indexOf(u), amount, from, msg.value));
     }
 
     /// @notice Signature wrap of a SCaaS underlying (CTR-TOK-20): mints `minted − fee` to `o.destination` (or
@@ -101,7 +101,7 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
     {
         uint256 received;
         uint256 fee;
-        (received, minted, fee) = UnderlyingLib.wrapBySig(u, o, sig, msg.sender);
+        (received, minted, fee) = WrappedLib.wrapBySig(u, o, sig, msg.sender);
         address to = o.destination == address(0) ? o.from : o.destination;
         _mint(to, minted - fee);
         if (fee != 0) _mint(msg.sender, fee);
@@ -117,7 +117,7 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
     {
         uint256 received;
         uint256 fee;
-        (received, minted, fee) = UnderlyingLib.wrapBySigUA(u, o, auth, msg.sender);
+        (received, minted, fee) = WrappedLib.wrapBySigUA(u, o, auth, msg.sender);
         bytes32 to = o.destination == 0 ? o.from : o.destination;
         if (UAKinds.inNativeSpace(to)) _mint(address(uint160(uint256(to))), minted - fee);
         else _uaMint(to, minted - fee);
@@ -130,7 +130,7 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
     ///      `_requireDerivedReceiver`, which also refuses 0 as a native id).
     function _wrap(uint256 i, uint256 amount, bytes32 to) private returns (uint256 minted) {
         address account = _msgSender();
-        (address u, uint256 received, uint256 m) = UnderlyingLib.wrap(i, amount, account, msg.value);
+        (address u, uint256 received, uint256 m) = WrappedLib.wrap(i, amount, account, msg.value);
         minted = m;
         if (to == 0) _mint(account, minted);
         else _uaMove(0, to, minted);
@@ -141,35 +141,35 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
     function _unwrap(uint256 i, uint256 wrapped, address recipient, uint256 minOut)
         private returns (uint256 out, uint256 burned)
     {
-        (out, burned) = UnderlyingLib.quoteUnwrap(i, wrapped, recipient, minOut);
+        (out, burned) = WrappedLib.quoteUnwrap(i, wrapped, recipient, minOut);
         address from = _msgSender();
         _burn(from, burned);
-        address u = UnderlyingLib.payOut(i, recipient, out);
+        address u = WrappedLib.payOut(i, recipient, out);
         emit Unwrapped(from, u, recipient, burned, out);
     }
 
     // ------------------------------------------------------------------ roles: guardian, rate admin
 
     function disableWrap(address u, bytes32 reason) external nonReentrant {
-        UnderlyingLib.disableWrap(u, reason, _msgSender());
+        WrappedLib.disableWrap(u, reason, _msgSender());
     }
 
     function proposeRate(address u, uint96 num, uint96 den) external nonReentrant {
-        UnderlyingLib.proposeRate(u, num, den, _msgSender());
+        WrappedLib.proposeRate(u, num, den, _msgSender());
     }
 
     function cancelRate() external nonReentrant {
-        UnderlyingLib.cancelRate(_msgSender());
+        WrappedLib.cancelRate(_msgSender());
     }
 
     function executeRate() external virtual nonReentrant {
-        UnderlyingLib.executeRate(_msgSender(), totalSupply());
+        WrappedLib.executeRate(_msgSender(), totalSupply());
     }
 
     /// @notice `disableFeature(RATE_ADJUSTABLE)` also cancels a pending rate change (CTR-TOK-06).
     function disableFeature(uint8 bit) external virtual override nonReentrant {
         AdminLib.disableFeature(bit, _msgSender());
-        if (bit == AdminLib.RATE_ADJUSTABLE) UnderlyingLib.dropPending();
+        if (bit == AdminLib.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }
 
     // ------------------------------------------------------------------ allowlist (CTR-MTX-19)
@@ -216,12 +216,12 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
 
     /// @notice The one underlying of a one-leg token (`address(0)` for the native coin); `address(0)` with more legs.
     function underlying() external view returns (address) {
-        UnderlyingLib.UnderlyingStorage storage s = UnderlyingLib.$();
+        WrappedLib.WrappedStorage storage s = WrappedLib.$();
         return s.legCount == 1 ? s.legs[0].token : address(0);
     }
 
-    function underlyings() public view virtual override(IUnderlyingToken, MetaTokenBase) returns (address[] memory us) {
-        UnderlyingLib.UnderlyingStorage storage s = UnderlyingLib.$();
+    function underlyings() public view virtual override(IWrappedToken, MetaTokenBase) returns (address[] memory us) {
+        WrappedLib.WrappedStorage storage s = WrappedLib.$();
         uint256 n = s.legCount;
         us = new address[](n);
         for (uint256 i; i < n; ++i) us[i] = s.legs[i].token;
@@ -230,23 +230,23 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
     function legOf(address u)
         external view returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals_, bool wrapEnabled)
     {
-        UnderlyingLib.Leg storage L = UnderlyingLib.$().legs[UnderlyingLib.indexOf(u)];
+        WrappedLib.Leg storage L = WrappedLib.$().legs[WrappedLib.indexOf(u)];
         return (L.num, L.den, L.reserve, L.decimals, L.wrapEnabled);
     }
 
     /// @notice `Σ⌊reserve_i·num_i/den_i⌋`, saturating at `type(uint256).max` instead of overflowing.
     function collateralValue() external view returns (uint256) {
-        return UnderlyingLib.collateralValue();
+        return WrappedLib.collateralValue();
     }
 
     /// @notice `(⌊amount·q⌋, ⌈minted/q⌉)`: clients round `amount` down to `used` so no dust stays in the reserve.
     ///         Ignores fee-on-transfer (assumes `received == amount`).
     function previewWrap(address u, uint256 amount) external view returns (uint256 minted, uint256 used) {
-        return UnderlyingLib.previewWrap(u, amount);
+        return WrappedLib.previewWrap(u, amount);
     }
 
     function previewUnwrap(address u, uint256 wrapped) external view returns (uint256 out, uint256 burned) {
-        return UnderlyingLib.previewUnwrap(u, wrapped);
+        return WrappedLib.previewUnwrap(u, wrapped);
     }
 
     function rateAdjustable() external view returns (bool) {
@@ -254,18 +254,18 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
     }
 
     function rateDelay() external view returns (uint32) {
-        return UnderlyingLib.$().rateDelay;
+        return WrappedLib.$().rateDelay;
     }
 
     function maxRateStepBps() external view returns (uint16) {
-        return UnderlyingLib.$().maxRateStepBps;
+        return WrappedLib.$().maxRateStepBps;
     }
 
     /// @notice All zero when nothing is pending or the pending change has expired.
     function pendingRate() external view returns (address u, uint96 num, uint96 den, uint64 eta) {
-        if (!UnderlyingLib.isPending()) return (address(0), 0, 0, 0);
-        UnderlyingLib.UnderlyingStorage storage s = UnderlyingLib.$();
-        UnderlyingLib.PendingRate memory p = s.pending;
+        if (!WrappedLib.isPending()) return (address(0), 0, 0, 0);
+        WrappedLib.WrappedStorage storage s = WrappedLib.$();
+        WrappedLib.PendingRate memory p = s.pending;
         return (s.legs[p.leg].token, p.num, p.den, p.eta);
     }
 }

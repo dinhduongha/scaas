@@ -2,16 +2,16 @@
 pragma solidity ^0.8.24;
 
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
-import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
-import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 
@@ -76,9 +76,9 @@ contract UALedgerNamedTest is UALedgerBase {
 
     /// `uaPay` is pay: it needs `PAYABLE`, like `mtxPay`; a `UAMetaTransfer` with `entryRef` set is never gated.
     function test_uaPay_needsPayable() public {
-        IFactoryToken.TokenConfig memory c = noneInit("NoPay", "NP", 6, 0, address(0), address(this));
+        IFactoryToken.TokenConfig memory c = normalInit("NoPay", "NP", 6, 0, address(0), address(this));
         c.features = 1 << AdminLib.MINTABLE;
-        NoUnderlyingToken np = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+        NormalToken np = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
         np.initialize(address(this), 1, abi.encode(c));
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, AdminLib.PAYABLE));
         np.uaPay(uaP, uaB, 1, keccak256("p"), block.timestamp + 1, RR, RELAYER, 0, address(0), "");
@@ -113,7 +113,7 @@ contract UALedgerNamedTest is UALedgerBase {
         assertEq(wrp.balanceOfUA(uaP), 750);
     }
 
-    /// No fee in the named form; on the NONE kind no `unwrap` is on the UA allowlist.
+    /// No fee in the named form; on the NORMAL kind no `unwrap` is on the UA allowlist.
     function test_uaUnwrap_refusals() public {
         uint256 until = block.timestamp + 300;
         vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.MtxModeShape.selector, RR | FIX));
@@ -133,10 +133,10 @@ contract UALedgerNamedTest is UALedgerBase {
         bytes memory data = abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 10, POOL, 0);
         MetaTxLib.UAMetaTransaction memory m = _m(address(wrp), uaP, data);
         bytes memory a = _authM(address(wrp), m);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapRecipientInvalid.selector, POOL));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, POOL));
         vm.prank(RELAYER);
         wrp.uaExecute(m, a);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapRecipientInvalid.selector, POOL));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, POOL));
         vm.prank(RELAYER);
         wrp.uaUnwrap(uaP, address(und), 10, POOL, 0, 1, 0, m.validUntil, RR, RELAYER, a);
     }
@@ -150,7 +150,7 @@ contract UALedgerNamedTest is UALedgerBase {
             MetaTxLib.SHIELD_POOL, 0);
         MetaTxLib.UAMetaTransaction memory m = _m(address(wrp), uaP, data);
         bytes memory a = _authM(address(wrp), m);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapRecipientInvalid.selector, MetaTxLib.SHIELD_POOL));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, MetaTxLib.SHIELD_POOL));
         vm.prank(RELAYER);
         wrp.uaExecute(m, a);
     }

@@ -6,13 +6,13 @@ import {OpenFactory} from "../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../src/metatx/AdminLib.sol";
-import {UnderlyingLib} from "../src/metatx/UnderlyingLib.sol";
+import {WrappedLib} from "../src/metatx/WrappedLib.sol";
 import {MtxPipelineLib} from "../src/metatx/MtxPipelineLib.sol";
 import {HederaLib} from "../src/hedera/HederaLib.sol";
 import {TradeLib} from "../src/trade/TradeLib.sol";
 import {ZetherLib} from "../src/zether/ZetherLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {NoUnderlyingToken} from "../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 import {UARegistry} from "../src/ua/UARegistry.sol";
 import {MtxRelayFee, MtxRelayExecutor} from "../src/metatx/MtxRelayFee.sol";
@@ -46,8 +46,8 @@ import {
     ZetherBurnVerifierBls12381
 } from "../src/zether/ZetherVerifier.sol";
 import {IZetherInnerProductVerifier} from "../src/zether/IZetherVerifier.sol";
-import {NoUnderlyingZetherToken} from "../src/zether/NoUnderlyingZetherToken.sol";
-import {UnderlyingZetherToken} from "../src/zether/UnderlyingZetherToken.sol";
+import {NormalZetherToken} from "../src/zether/NormalZetherToken.sol";
+import {WrappedZetherToken} from "../src/zether/WrappedZetherToken.sol";
 
 /// @title Shared deploy steps (CTR-GEN-05, CTR-GEN-06, NET-EVM-05): `chain_uid` from the RPC, the deterministic CREATE2
 ///        deployer, the UA registry with its verifiers, the token factory with its implementations, the `chainUid()` gate.
@@ -88,8 +88,8 @@ abstract contract DeployBase is Script {
     ///         regular gas, which EIP-7825 caps at `TX_REGULAR_GAS_CAP` (2^24): the transaction needs
     ///         `runtime x 1,530 + 2^24` and may not exceed the block gas limit. Runtime sizes are `size-baseline.json`'s
     ///         (the contracts over the EIP-170 limit; any other is priced at `EIP170_LIMIT`).
-    ///         `NoUnderlyingToken` 38,195 B = 75.2 M, `UnderlyingZetherToken` 60,282 B = 109.0 M,
-    ///         `UnderlyingPqzToken` 61,137 B = 110.3 M (the figures move with the baseline).
+    ///         `NormalToken` 38,195 B = 75.2 M, `WrappedZetherToken` 60,282 B = 109.0 M,
+    ///         `WrappedPqzToken` 61,137 B = 110.3 M (the figures move with the baseline).
     uint256 internal constant STATE_GAS_PER_BYTE = 1530;
     uint256 internal constant TX_REGULAR_GAS_CAP = 1 << 24;
     uint256 internal constant EIP170_LIMIT = 24_576;
@@ -161,14 +161,14 @@ abstract contract DeployBase is Script {
     }
 
     /// @notice The token factory (`noticePeriod`) and the UA registry (`_deployUARegistry`) by CREATE2; when the deployer
-    ///         is the registrar (plan 5g-Z2: only the factory deploys releases), env version 1 of `NONE` and of the DEX
+    ///         is the registrar (plan 5g-Z2: only the factory deploys releases), env version 1 of `NORMAL` and of the DEX
     ///         (`_env`: the factory, `chain_uid`, the registry, the `SmartKeyAccount` implementation, Hedera, the linked
-    ///         libraries with their code hashes), then the `NONE` release (on that registry: the UA ledger, CTR-UA-18)
+    ///         libraries with their code hashes), then the `NORMAL` release (on that registry: the UA ledger, CTR-UA-18)
     ///         and the `SCaaSDex` release, each version 1; otherwise the registrar publishes and deploys them later from
-    ///         the same init code. Writes `token_factory`, `implementation_none`, `dex_implementation`, `ua_registry`,
+    ///         the same init code. Writes `token_factory`, `implementation_normal`, `dex_implementation`, `ua_registry`,
     ///         `mtx_relay_fee`, `mtx_relay_executor`, `chain_uid` into the JSON object `"deploy"`; with `DEPLOY_ZETHER` also the Zether stack (`_deployZether`,
-    ///         dev chains only). NONE and `UNDERLYING` both exceed EIP-170 (the UA ledger): deploy with
-    ///         `--code-size-limit 65536` (deploy.sh); `UNDERLYING` is still not deployed here (owner: wait for Glamsterdam).
+    ///         dev chains only). NORMAL and `WRAPPED` both exceed EIP-170 (the UA ledger): deploy with
+    ///         `--code-size-limit 65536` (deploy.sh); `WRAPPED` is still not deployed here (owner: wait for Glamsterdam).
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
         internal returns (OpenFactory f)
     {
@@ -179,16 +179,16 @@ abstract contract DeployBase is Script {
         _gate(address(f));
         vm.serializeAddress("deploy", "token_factory", address(f));
         if (register) {
-            // the link closure of NoUnderlyingToken (task 6): MtxPipelineLib, which links HederaLib
+            // the link closure of NormalToken (task 6): MtxPipelineLib, which links HederaLib
             address[] memory libs = new address[](4);
             (libs[0], libs[1], libs[2], libs[3]) =
                 (address(AdminLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
-            f.publishEnv(IOpenFactory.TokenKind.NONE, 1,
+            f.publishEnv(IOpenFactory.TokenKind.NORMAL, 1,
                 _env(f, address(reg), smartKeyAccountImpl, isHedera, new address[](0), libs));
-            _requireReleaseGas("NoUnderlyingToken");
-            address none = f.deployImplementation(IOpenFactory.TokenKind.NONE, 1, 1, type(NoUnderlyingToken).creationCode, "");
+            _requireReleaseGas("NormalToken");
+            address none = f.deployImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, "");
             _gate(none);
-            vm.serializeAddress("deploy", "implementation_none", none);
+            vm.serializeAddress("deploy", "implementation_normal", none);
             // The DEX release (CTR-DEX-24): clones come from `createDex`; DEX version 1.
             address[] memory dexLibs = new address[](1);
             dexLibs[0] = address(TradeLib);
@@ -298,22 +298,22 @@ abstract contract DeployBase is Script {
         } catch {}
     }
 
-    /// @notice The link closure of a Zether token (task 6): `UnderlyingLib` only in `UNDERLYING_ZETHER`.
+    /// @notice The link closure of a Zether token (task 6): `WrappedLib` only in `WRAPPED_ZETHER`.
     function _zetherLibs(bool underlying) internal view returns (address[] memory l) {
         l = new address[](underlying ? 6 : 5);
         (l[0], l[1], l[2], l[3], l[4]) =
             (address(AdminLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(ZetherLib));
-        if (underlying) l[5] = address(UnderlyingLib);
+        if (underlying) l[5] = address(WrappedLib);
     }
 
     /// @notice Dev chains only (CTR-ZTH-02; elsewhere the verifiers refuse to deploy): `ZetherStatements`,
     ///         `ZetherDisclosure`, the BLS12-381 inner-product verifier (the generators, ~14 M gas) and the transfer and
     ///         burn verifiers on it (classical Zether is BLS12-381 only, CTR-ZTH-32; the bn254 steps are in
-    ///         `legacy/ua6/`); when the deployer is the registrar, an env of `NONE_ZETHER` and `UNDERLYING_ZETHER`
+    ///         `legacy/ua6/`); when the deployer is the registrar, an env of `NORMAL_ZETHER` and `WRAPPED_ZETHER`
     ///         (version 1; `deps` = transfer, burn, inner-product verifier, disclosure, CTR-ZTH-20) and the two releases
     ///         on it, then the kinds enabled. JSON `zether_registry` (= `ua_registry`), `zether_statements`,
     ///         `zether_disclosure`, `zether_{inner_product_,,burn_}verifier_bls12381`,
-    ///         `implementation_{none,underlying}_zether_bls12381`. **UNAUDITED — NOT FOR PRODUCTION FUNDS.** The
+    ///         `implementation_{normal,wrapped}_zether_bls12381`. **UNAUDITED — NOT FOR PRODUCTION FUNDS.** The
     ///         implementations exceed EIP-170 and the BLS inner-product verifier takes ~14 M gas: anvil
     ///         `--code-size-limit 65536`, forge script `--code-size-limit 65536 --gas-estimate-multiplier 105` (deploy.sh
     ///         passes both; docs/networks/evm.md).
@@ -329,29 +329,29 @@ abstract contract DeployBase is Script {
         if (register) {
             address[] memory deps = new address[](4);
             (deps[0], deps[1], deps[2], deps[3]) = (tv, bv, address(ip), dis);
-            f.publishEnv(IOpenFactory.TokenKind.NONE_ZETHER, 1,
+            f.publishEnv(IOpenFactory.TokenKind.NORMAL_ZETHER, 1,
                 _env(f, reg, smartKeyAccountImpl, false, deps, _zetherLibs(false)));
-            f.publishEnv(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1,
+            f.publishEnv(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1,
                 _env(f, reg, smartKeyAccountImpl, false, deps, _zetherLibs(true)));
-            _requireReleaseGas("NoUnderlyingZetherToken");
-            _requireReleaseGas("UnderlyingZetherToken");
-            address none = f.deployImplementation(IOpenFactory.TokenKind.NONE_ZETHER, 1, 1,
-                type(NoUnderlyingZetherToken).creationCode, "");
-            address und = f.deployImplementation(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, 1,
-                type(UnderlyingZetherToken).creationCode, "");
+            _requireReleaseGas("NormalZetherToken");
+            _requireReleaseGas("WrappedZetherToken");
+            address none = f.deployImplementation(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, 1,
+                type(NormalZetherToken).creationCode, "");
+            address und = f.deployImplementation(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, 1,
+                type(WrappedZetherToken).creationCode, "");
             _gate(none);
             _gate(und);
-            vm.serializeAddress("deploy", "implementation_none_zether_bls12381", none);
-            vm.serializeAddress("deploy", "implementation_underlying_zether_bls12381", und);
-            f.setKindEnabled(IOpenFactory.TokenKind.NONE_ZETHER, true);
-            f.setKindEnabled(IOpenFactory.TokenKind.UNDERLYING_ZETHER, true);
+            vm.serializeAddress("deploy", "implementation_normal_zether_bls12381", none);
+            vm.serializeAddress("deploy", "implementation_wrapped_zether_bls12381", und);
+            f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER, true);
+            f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER, true);
         }
         vm.serializeAddress("deploy", "zether_disclosure", dis);
         vm.serializeAddress("deploy", "zether_registry", reg); // = ua_registry
         vm.serializeAddress("deploy", "zether_statements", address(stm));
     }
 
-    /// @notice Two kind-`NONE` demo tokens from `f` (dev chains; only when the deployer is the registrar): 6 decimals,
+    /// @notice Two kind-`NORMAL` demo tokens from `f` (dev chains; only when the deployer is the registrar): 6 decimals,
     ///         `PAYABLE`, `supply` each to the deployer, half of each to `holder`; JSON `demo_token`, `demo_token_2`.
     function _demoTokens(OpenFactory f, uint256 supply, address deployer, address holder)
         internal returns (address demo, address demo2)
@@ -377,7 +377,7 @@ abstract contract DeployBase is Script {
         c.features = 1 << AdminLib.PAYABLE;
         c.initialSupply = supply;
         c.initialHolder = holder;
-        return f.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(c), tokenSalt);
+        return f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), tokenSalt);
     }
 
     /// @notice The deploy gate (CTR-GEN-05): `chainUid()` of the deployed contract equals the RPC's genesis hash.

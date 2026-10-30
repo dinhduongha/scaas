@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {NoUnderlyingToken} from "../metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../metatx/NormalToken.sol";
 import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
 import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
 import {MetaTxBase} from "../metatx/MetaTxBase.sol";
@@ -12,27 +12,27 @@ import {ZetherLayer} from "./ZetherLayer.sol";
 import {ZetherLib} from "./ZetherLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 
-/// @title Kind `NONE_ZETHER` (CTR-TOK-21): the standalone token with the Zether layer (CTR-ZTH-44).
+/// @title Kind `NORMAL_ZETHER` (CTR-TOK-21): the standalone token with the Zether layer (CTR-ZTH-44).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Dev chains only. `MINTABLE` mints public units only; shielded
 ///         value exists only through `mtxShield`, which moves public units to `SHIELD_POOL`. Flags: `PAYABLE`, `MINTABLE`, `BURNABLE`
 ///         (the regulated flags are refused, CTR-ZTH-47). Built by `OpenFactory.createToken` with `conf` set and `legs`,
 ///         `rate` empty. Never on Hedera (no dev chain there).
-contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
+contract NormalZetherToken is NormalToken, ZetherLayer {
     /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env` (Hedera off: no
     ///      dev chain there); no `implArgs`.
     constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
-        NoUnderlyingToken(envVersion, env, implArgs)
+        NormalToken(envVersion, env, implArgs)
         ZetherLayer(env)
     {}
 
-    function kind() public pure override(NoUnderlyingToken, MetaTokenBase) returns (uint8) {
-        return AdminLib.KIND_NONE_ZETHER;
+    function kind() public pure override(NormalToken, MetaTokenBase) returns (uint8) {
+        return AdminLib.KIND_NORMAL_ZETHER;
     }
 
-    function _init(TokenConfig memory cfg) internal override(NoUnderlyingToken, MetaTokenBase) {
+    function _init(TokenConfig memory cfg) internal override(NormalToken, MetaTokenBase) {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-        AdminLib.init(AdminLib.KIND_NONE_ZETHER, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
+        AdminLib.init(AdminLib.KIND_NORMAL_ZETHER, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
         ZetherLib.init(cfg.conf, TRANSFER_VERIFIER);
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
@@ -56,7 +56,7 @@ contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
     /// @notice The allowlist (CTR-MTX-19, CTR-ZTH-34): `cancelNonce` (base), `burn(uint256)` `AMOUNT(0)`, then the
     ///         Zether ops, each `ABSOLUTE`.
     function mtxSelectors()
-        public pure override(NoUnderlyingToken, IMetaTx, MetaTxBase)
+        public pure override(NormalToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         s = new bytes4[](11);
@@ -75,15 +75,15 @@ contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
         (s[10], c[10]) = (this.mtxSetRollOverMode.selector, FEE_CLASS_ABSOLUTE);
     }
 
-    function _mtxRule(bytes4 sel) internal view override(NoUnderlyingToken, MetaTxBase) returns (MtxRule memory) {
+    function _mtxRule(bytes4 sel) internal view override(NormalToken, MetaTxBase) returns (MtxRule memory) {
         if (_isZetherOp(sel)) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
-        return NoUnderlyingToken._mtxRule(sel);
+        return NormalToken._mtxRule(sel);
     }
 
-    /// @notice `NoUnderlyingToken`'s UA allowlist (`burn`) and the Zether ops (CTR-ZTH-51, UA-5c): `mtxShield` (no proof,
+    /// @notice `NormalToken`'s UA allowlist (`burn`) and the Zether ops (CTR-ZTH-51, UA-5c): `mtxShield` (no proof,
     ///         no binding; the Zether UA shields its own public units, UA-6 U8) and the proof-carrying ones, whose
     ///         statement carries the UA envelope binding; the outer fee from the signer's UA balance.
-    function _uaAllowed(bytes4 sel) internal view override(NoUnderlyingToken, ERC20MetaTx) returns (bool) {
-        return _isZetherOp(sel) || NoUnderlyingToken._uaAllowed(sel);
+    function _uaAllowed(bytes4 sel) internal view override(NormalToken, ERC20MetaTx) returns (bool) {
+        return _isZetherOp(sel) || NormalToken._uaAllowed(sel);
     }
 }

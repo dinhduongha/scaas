@@ -16,13 +16,13 @@ import {
     BlsMinSigBn254Verifier,
     ZetherSchnorrBls12381Verifier
 } from "../../src/ua/verifiers/PairingVerifiers.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 
-/// smartcontracts/vectors/ua/metatx3.json (accounts.md §1.16, the v3 KAT): a `NONE` clone at the vector's token
+/// smartcontracts/vectors/ua/metatx3.json (accounts.md §1.16, the v3 KAT): a `NORMAL` clone at the vector's token
 /// address on context A with the real UA-2a/UA-2b verifiers. Every row's struct (built from the file's typed data)
 /// hashes to the file's digest here, every auth passes (native: ECDSA over the digest; derived: `requireAuthorized`
 /// under `metatx`), and every `UAMetaTransfer` row really executes. Gas of `uaExecuteTransfer` per signer is logged.
@@ -31,7 +31,7 @@ import {plainEnv} from "../helpers/Catalogue.sol";
 contract UAMetaTx3VectorsTest is UARegistryBase {
     string internal sj;
     string internal vj;
-    NoUnderlyingToken internal tok;
+    NormalToken internal tok;
 
     function setUp() public override {
         super.setUp();
@@ -51,10 +51,10 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             );
         }
         address token = vm.parseJsonAddress(vj, ".token");
-        address impl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_A, false), ""));
+        address impl = address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_A, false), ""));
         vm.etch(token, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
-        tok = NoUnderlyingToken(token);
-        tok.initialize(address(this), 1, abi.encode(noneInit("Points", "PTS", 6, 0, address(0), address(this))));
+        tok = NormalToken(token);
+        tok.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(0), address(this))));
         vm.warp(1_800_000_000);
     }
 
@@ -123,7 +123,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
         assertEq(vm.parseJsonBytes32(vj, ".domainSeparator"), ds);
     }
 
-    /// `UAMetaTransaction` rows: digest and auth (the `unwrap` itself is not on the `NONE` kind's allowlist).
+    /// `UAMetaTransaction` rows: digest and auth (the `unwrap` itself is not on the `NORMAL` kind's allowlist).
     function test_callRows() public view {
         uint256 n;
         for (uint256 i; vm.keyExistsJson(vj, string.concat(".call[", vm.toString(i), "]")); ++i) {
@@ -188,7 +188,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
         assertEq(tok.balanceOf(MetaTxLib.UA_POOL), 0);
     }
 
-    /// `unwrapToUA` rows: digest and auth (the call is not on the `NONE` kind's allowlist; it runs in UAAllowlist5a).
+    /// `unwrapToUA` rows: digest and auth (the call is not on the `NORMAL` kind's allowlist; it runs in UAAllowlist5a).
     function test_vectors_unwrapToUA() public view {
         uint256 n;
         for (uint256 i; vm.keyExistsJson(vj, string.concat(".unwrapToUA[", vm.toString(i), "]")); ++i) {

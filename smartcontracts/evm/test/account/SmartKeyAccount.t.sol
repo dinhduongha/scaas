@@ -6,8 +6,8 @@ import {Hashes} from "@openzeppelin/contracts/utils/cryptography/Hashes.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {P256} from "@openzeppelin/contracts/utils/cryptography/P256.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
-import {V2Fixture, UID_, noneInit} from "../v2/helpers/V2Fixture.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {V2Fixture, UID_, normalInit} from "../v2/helpers/V2Fixture.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -99,15 +99,15 @@ contract SmartKeyAccountTest is WebAuthnSoft {
 
     SmartKeyAccountFactory internal fac;
     SmartKeyAccount internal acct;
-    NoUnderlyingToken internal t;
+    NormalToken internal t;
 
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
         fac = new SmartKeyAccountFactory(UID_);
-        NoUnderlyingToken impl = new NoUnderlyingToken(1, plainEnv(address(this), fac.IMPLEMENTATION(), UID_, address(0), false), "");
-        t = NoUnderlyingToken(_clone(address(impl), address(this), new address[](0),
-            abi.encode(noneInit("Points", "PTS", 0, 0, address(this), address(this)))));
+        NormalToken impl = new NormalToken(1, plainEnv(address(this), fac.IMPLEMENTATION(), UID_, address(0), false), "");
+        t = NormalToken(_clone(address(impl), address(this), new address[](0),
+            abi.encode(normalInit("Points", "PTS", 0, 0, address(this), address(this)))));
         acct = SmartKeyAccount(payable(fac.deploy(_passkey(PASSKEY), GUARDIAN)));
         t.mint(address(acct), 1000);
     }

@@ -15,11 +15,11 @@ import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 import {ZetherTranscript} from "../../src/zether/ZetherTranscript.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 
-/// @notice The whole life of a `NONE_ZETHER` token (a factory clone, the real verifier, real proofs from the test
+/// @notice The whole life of a `NORMAL_ZETHER` token (a factory clone, the real verifier, real proofs from the test
 ///         prover), on BLS12-381 (the only classical Zether curve since UA-6): shield from the public balance, transfer,
 ///         roll-over, unshield into public units; replay protection; `chainUid` in every digest (CTR-ZTH-36);
 ///         disclosure.
-abstract contract ZetherNoneSuite is ZetherFixture {
+abstract contract ZetherNormalSuite is ZetherFixture {
 
     function setUp() public {
         _deploy(true);
@@ -760,4 +760,4 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     }
 }
 
-contract ZetherNoneBls12381Test is ZetherNoneSuite {}
+contract ZetherNormalBls12381Test is ZetherNormalSuite {}

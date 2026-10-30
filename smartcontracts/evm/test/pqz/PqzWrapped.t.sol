@@ -2,10 +2,10 @@
 pragma solidity ^0.8.24;
 
 import {console2, Vm} from "forge-std/Test.sol";
-import {IConfidentialUnderlyingToken} from "../../src/confidential/IConfidentialToken.sol";
+import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
-import {UnderlyingPqzToken} from "../../src/pqz/UnderlyingPqzToken.sol";
+import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
@@ -14,26 +14,26 @@ import {AdminLib} from "../../src/metatx/AdminLib.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
-import {HookLeg} from "../zether/ZetherUnderlying.t.sol";
+import {HookLeg} from "../zether/ZetherWrapped.t.sol";
 import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 
-/// `UNDERLYING_PQZ` (P6g plan Task 6): a leg's underlying straight into a TRIVIAL pending entry (plan 5h D18) and a burn straight out to a
+/// `WRAPPED_PQZ` (P6g plan Task 6): a leg's underlying straight into a TRIVIAL pending entry (plan 5h D18) and a burn straight out to a
 /// leg, the direct binding of the leg and `minOut` (D12), the reserve invariant.
-contract PqzUnderlyingTest is PqzFixture {
+contract PqzWrappedTest is PqzFixture {
     MockERC20 internal usd;
-    UnderlyingPqzToken internal w;
+    WrappedPqzToken internal w;
 
     function setUp() public {
         _stack();
-        Catalogue.release(factory, IOpenFactory.TokenKind.UNDERLYING_PQZ, 1,
-            pqzEnv(address(factory), PQZ_UID_(), address(reg), address(pqv)), type(UnderlyingPqzToken).creationCode);
+        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1,
+            pqzEnv(address(factory), PQZ_UID_(), address(reg), address(pqv)), type(WrappedPqzToken).creationCode);
         usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = (1 << AdminLib.PAYABLE);
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        w = UnderlyingPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_PQZ, 1, abi.encode(c), "w")));
+        w = WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "w")));
         tok = PqzLayer(address(w));
     }
 
@@ -57,7 +57,7 @@ contract PqzUnderlyingTest is PqzFixture {
 
         bytes memory nb = _blob(21, PqzCt.CT);
         bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), nb);
-        IConfidentialUnderlyingToken.Unwrap memory x = IConfidentialUnderlyingToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 400, 400 * SCALE);
+        IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 400, 400 * SCALE);
         bytes memory st = w.unshieldUnwrapStatement(pl, x, 0);
         assertEq(bytes32(_cut(st, 544, 32)), w.unwrapBinding(address(usd), 400 * SCALE), "direct: leg and minOut bound");
         assertEq(uint256(bytes32(_cut(st, 288, 32))), 400);
@@ -70,11 +70,11 @@ contract PqzUnderlyingTest is PqzFixture {
         assertGe(usd.balanceOf(address(w)), w.totalSupply(), "reserve invariant (the pool is in totalSupply)");
         // minOut above the quote
         pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), _blob(22, PqzCt.CT));
-        x = IConfidentialUnderlyingToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 10, 10 * SCALE + 1);
+        x = IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 10, 10 * SCALE + 1);
         vm.expectRevert();
         w.mtxUnshieldUnwrap(pl, hex"c0de", _mlAuth(), _benM(pl), "", x);
         // an unknown leg
-        x = IConfidentialUnderlyingToken.Unwrap(address(0xBAD), bytes32(uint256(uint160(address(0xD00D)))), 10, 0);
+        x = IConfidentialWrappedToken.Unwrap(address(0xBAD), bytes32(uint256(uint160(address(0xD00D)))), 10, 0);
         vm.expectRevert();
         w.mtxUnshieldUnwrap(pl, hex"c0de", _mlAuth(), _benM(pl), "", x);
     }
@@ -88,8 +88,8 @@ contract PqzUnderlyingTest is PqzFixture {
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(hook), 1, 1);
-        UnderlyingPqzToken z =
-            UnderlyingPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_PQZ, 1, abi.encode(c), "hook")));
+        WrappedPqzToken z =
+            WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "hook")));
         hook.mint(address(this), SCALE);
         hook.approve(address(z), SCALE);
         bytes[2] memory calls =
@@ -117,33 +117,33 @@ contract PqzUnderlyingTest is PqzFixture {
         assertEq(usd.balanceOf(address(w)), w.totalSupply());
     }
 
-    /// The largest implementation (`UnderlyingPqzToken`, plan 5g-Z) fits one transaction's regular-gas cap as `deploy.sh`
+    /// The largest implementation (`WrappedPqzToken`, plan 5g-Z) fits one transaction's regular-gas cap as `deploy.sh`
     /// sends a deploy (gas limit = forge's estimate × `--gas-estimate-multiplier 105`; forge's estimate ran ~1.05× the
     /// measured CREATE2 + intrinsic + calldata, ZetherDeploy.t; Osaka: the limit itself, ×1.30 did not fit). Init code over EIP-3860's 49,152
     /// fits 7622 / anvil (131,072 with `--code-size-limit 65536`).
     /// Plan 5g-Z2: measured through `OpenFactory.deployImplementation` itself (the env appended, the release's checks),
     /// as the registrar's transaction: intrinsic + calldata + the call.
     function test_largestImplementationFitsOneOsakaTx() public {
-        bytes memory code = type(UnderlyingPqzToken).creationCode;
+        bytes memory code = type(WrappedPqzToken).creationCode;
         vm.prank(registrar);
-        address a = factory.deployImplementation(IOpenFactory.TokenKind.UNDERLYING_PQZ, 2, 1, code, "");
+        address a = factory.deployImplementation(IOpenFactory.TokenKind.WRAPPED_PQZ, 2, 1, code, "");
         // F185: the call is its own transaction (`isolate`); under Amsterdam EIP-7825's 2^24 caps the REGULAR gas, which
         // `lastCallGas` reports with the intrinsic and the calldata (or the EIP-7976 floor), and EIP-8037 state gas (the
         // 64 KiB of code, the new slots) comes apart: it needs a limit above 2^24, which a transaction may have.
         Vm.Gas memory vg = vm.lastCallGas();
         uint256 txGas = vg.gasTotalUsed;
-        emit log_named_uint("UnderlyingPqzToken deployImplementation state gas (EIP-8037)", uint256(int256(vg.gasStateUsed)));
-        uint256 init = code.length + abi.encode(uint16(1), factory.envOf(IOpenFactory.TokenKind.UNDERLYING_PQZ, 1),
+        emit log_named_uint("WrappedPqzToken deployImplementation state gas (EIP-8037)", uint256(int256(vg.gasStateUsed)));
+        uint256 init = code.length + abi.encode(uint16(1), factory.envOf(IOpenFactory.TokenKind.WRAPPED_PQZ, 1),
             bytes("")).length;
-        emit log_named_uint("UnderlyingPqzToken init code bytes (with the env)", init);
-        emit log_named_uint("UnderlyingPqzToken runtime bytes", a.code.length);
-        emit log_named_uint("UnderlyingPqzToken deployImplementation tx gas", txGas);
+        emit log_named_uint("WrappedPqzToken init code bytes (with the env)", init);
+        emit log_named_uint("WrappedPqzToken runtime bytes", a.code.length);
+        emit log_named_uint("WrappedPqzToken deployImplementation tx gas", txGas);
         assertGt(init, 49_152, "over EIP-3860: 64 KiB chains only");
         assertLe(init, 131_072);
         assertLt(txGas * 105 * 105 / 10_000, 1 << 24, "regular gas fits EIP-7825 with --gas-estimate-multiplier 105");
         // C5-1: regular + state gas against the block gas limit NET-EVM-06 / the deploy gate require for this release
-        uint256 need = vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".UnderlyingPqzToken") * 1530 + (1 << 24);
-        emit log_named_uint("UnderlyingPqzToken release block gas limit needed (NET-EVM-06)", need);
+        uint256 need = vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".WrappedPqzToken") * 1530 + (1 << 24);
+        emit log_named_uint("WrappedPqzToken release block gas limit needed (NET-EVM-06)", need);
         assertLe(txGas + uint256(int256(vg.gasStateUsed)), need, "regular + state gas fits the deploy gate's budget");
     }
 }

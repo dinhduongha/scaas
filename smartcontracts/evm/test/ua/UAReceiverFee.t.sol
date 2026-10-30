@@ -11,10 +11,10 @@ import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {MockWallet} from "./UARegistryBase.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
@@ -58,7 +58,7 @@ contract UAReceiverFeeTest is UALedgerBase {
         _fund(id, amount);
     }
 
-    function _call(NoUnderlyingToken t_, MetaTxLib.UAMetaTransfer memory t, uint256 fee, address feeTo, uint256 rfUntil,
+    function _call(NormalToken t_, MetaTxLib.UAMetaTransfer memory t, uint256 fee, address feeTo, uint256 rfUntil,
         bytes memory err) internal returns (uint256 gas)
     {
         bytes32 d = t_.uaTransferDigest(t);
@@ -186,9 +186,9 @@ contract UAReceiverFeeTest is UALedgerBase {
         _runRevert(t, 0, FEE_TO, until, abi.encodeWithSelector(IMetaTokenV2.ReceiverFeeAmount.selector, 0, 10));
         _runRevert(t, 11, FEE_TO, until, abi.encodeWithSelector(IMetaTokenV2.ReceiverFeeAmount.selector, 11, 10));
         // `PAYABLE` off
-        NoUnderlyingToken np =
-            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
-        IFactoryToken.TokenConfig memory c = noneInit("NP", "NP", 6, 0, address(0), address(this));
+        NormalToken np =
+            NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+        IFactoryToken.TokenConfig memory c = normalInit("NP", "NP", 6, 0, address(0), address(this));
         c.features = (1 << AdminLib.MINTABLE) | (1 << AdminLib.BURNABLE);
         np.initialize(address(this), 1, abi.encode(c));
         np.mintToUA(uaP, 10);
@@ -288,11 +288,11 @@ contract UAReceiverFeeTest is UALedgerBase {
     function test_uaPayReceiverFee_erc1271Payee() public {
         MockWallet impl = new MockWallet(bob, 0, 100_000, address(0)); // ECDSA by bob after burning 100 k gas
         address payee = Clones.clone(address(impl));
-        NoUnderlyingToken t400 =
-            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(impl), chainUidA, REG_L, false), ""))));
-        t400.initialize(address(this), 1, abi.encode(noneInit("S", "S", 6, 0, address(0), address(this))));
+        NormalToken t400 =
+            NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(impl), chainUidA, REG_L, false), ""))));
+        t400.initialize(address(this), 1, abi.encode(normalInit("S", "S", 6, 0, address(0), address(this))));
         t400.mintToUA(uaP, 2 * N);
-        NoUnderlyingToken[2] memory ts = [tok, t400];
+        NormalToken[2] memory ts = [tok, t400];
         _fund(uaP, N);
         for (uint256 i; i < 2; ++i) {
             MetaTxLib.UAMetaTransfer memory t = _pay(uaP, _pad(payee), N);

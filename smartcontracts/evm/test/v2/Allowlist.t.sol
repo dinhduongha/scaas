@@ -5,13 +5,13 @@ import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {MockERC20, StubUARegistry} from "../helpers/Mocks.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
-import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-import {noneInit, underlyingInit, Rate} from "./helpers/V2Fixture.sol";
+import {normalInit, wrappedInit, Rate} from "./helpers/V2Fixture.sol";
 import {FeePolicy} from "../../src/common/FeePolicy.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
@@ -22,7 +22,7 @@ contract ReenteringERC20 is MockERC20 {
     constructor() MockERC20("Re", "RE", 6) {}
     function arm(address t) external { target = t; }
     function transferFrom(address from, address to, uint256 v) public override returns (bool) {
-        if (target != address(0)) UnderlyingToken(target).wrap(1);
+        if (target != address(0)) WrappedToken(target).wrap(1);
         return super.transferFrom(from, to, v);
     }
 }
@@ -38,16 +38,16 @@ contract AllowlistTest is Test {
     uint32 internal constant FIX = MetaTxLib.MODE_FEE_FIXED;
     uint32 internal constant PCT = MetaTxLib.MODE_FEE_PERCENT;
 
-    NoUnderlyingToken internal none;
-    UnderlyingToken internal single;
-    UnderlyingToken internal multi;
+    NormalToken internal none;
+    WrappedToken internal single;
+    WrappedToken internal multi;
     MockERC20 internal u;
     MockERC20 internal u2;
     /// UA-5a (CTR-UA-28): the wrappers run the UA ledger on a stub registry (every derived id a `p256` UA); `ledgered`
     /// is a one-leg 1:1 wrapper of `pts`, a SCaaS ledger token, so `unwrapToUA` can pay out.
     StubUARegistry internal stub;
-    NoUnderlyingToken internal pts;
-    UnderlyingToken internal ledgered;
+    NormalToken internal pts;
+    WrappedToken internal ledgered;
     bytes32 internal constant UA = keccak256("scaas.allowlist.ua");
 
     function setUp() public {
@@ -55,30 +55,30 @@ contract AllowlistTest is Test {
         vm.warp(1_800_000_000);
         u = new MockERC20("U", "U", 6);
         u2 = new MockERC20("U2", "U2", 6);
-        none = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""))));
-        none.initialize(address(this), 1, abi.encode(noneInit("P", "P", 6, 0, address(this), address(this))));
+        none = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""))));
+        none.initialize(address(this), 1, abi.encode(normalInit("P", "P", 6, 0, address(this), address(this))));
         stub = new StubUARegistry(UID);
-        single = UnderlyingToken(
-            Clones.clone(address(new UnderlyingToken(1, plainEnv(address(this), address(0), UID, address(stub), false), ""))));
+        single = WrappedToken(
+            Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), UID, address(stub), false), ""))));
         Rate memory cfg;
         address[] memory one = new address[](1);
         one[0] = address(u);
         uint256[] memory r1 = new uint256[](1);
         r1[0] = 1;
-        single.initialize(address(this), 1, abi.encode(underlyingInit(one, r1, r1, 6, cfg, address(0), address(0))));
-        multi = UnderlyingToken(
-            Clones.clone(address(new UnderlyingToken(1, plainEnv(address(this), address(0), UID, address(stub), false), ""))));
+        single.initialize(address(this), 1, abi.encode(wrappedInit(one, r1, r1, 6, cfg, address(0), address(0))));
+        multi = WrappedToken(
+            Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), UID, address(stub), false), ""))));
         address[] memory two = new address[](2);
         (two[0], two[1]) = (address(u), address(u2));
         uint256[] memory r = new uint256[](2);
         (r[0], r[1]) = (1, 1);
-        multi.initialize(address(this), 1, abi.encode(underlyingInit(two, r, r, 6, cfg, address(0), address(0))));
-        pts = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), UID, address(stub), false), ""))));
-        pts.initialize(address(this), 1, abi.encode(noneInit("PTS", "PTS", 6, 0, address(this), address(this))));
-        ledgered = UnderlyingToken(
-            Clones.clone(address(new UnderlyingToken(1, plainEnv(address(this), address(0), UID, address(stub), false), ""))));
+        multi.initialize(address(this), 1, abi.encode(wrappedInit(two, r, r, 6, cfg, address(0), address(0))));
+        pts = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(stub), false), ""))));
+        pts.initialize(address(this), 1, abi.encode(normalInit("PTS", "PTS", 6, 0, address(this), address(this))));
+        ledgered = WrappedToken(
+            Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), UID, address(stub), false), ""))));
         one[0] = address(pts);
-        ledgered.initialize(address(this), 1, abi.encode(underlyingInit(one, r1, r1, 6, cfg, address(0), address(0))));
+        ledgered.initialize(address(this), 1, abi.encode(wrappedInit(one, r1, r1, 6, cfg, address(0), address(0))));
         pts.mint(address(this), 10e6); // this fixture is a contract, so it may approve (CTR-TOK-01)
         pts.approve(address(ledgered), 10e6);
         ledgered.wrap(10e6);
@@ -132,17 +132,17 @@ contract AllowlistTest is Test {
 
     // ------------------------------------------------------------------ pins
 
-    function test_none_allowlistPinned() public view {
+    function test_normal_allowlistPinned() public view {
         bytes4[] memory s = new bytes4[](2);
         uint8[] memory c = new uint8[](2);
         (s[0], c[0]) = (IMetaTx.cancelNonce.selector, 1);
-        (s[1], c[1]) = (NoUnderlyingToken.burn.selector, 2);
+        (s[1], c[1]) = (NormalToken.burn.selector, 2);
         _pin(address(none), s, c, new uint8[](2));
     }
 
     /// P1d: one implementation for 1–8 legs, so one list (the single-asset ABI and the per-leg ABI); UA-5a appends
     /// `wrapToUA` `ABSOLUTE` and `unwrapToUA` `AMOUNT(1)`.
-    function _pinUnderlying(address t) internal view {
+    function _pinWrapped(address t) internal view {
         bytes4[] memory s = new bytes4[](8);
         uint8[] memory c = new uint8[](8);
         uint8[] memory a = new uint8[](8);
@@ -158,18 +158,18 @@ contract AllowlistTest is Test {
     }
 
     function test_single_allowlistPinned() public view {
-        _pinUnderlying(address(single));
+        _pinWrapped(address(single));
     }
 
     function test_multi_allowlistPinned() public view {
-        _pinUnderlying(address(multi));
+        _pinWrapped(address(multi));
     }
 
     // ------------------------------------------------------------------ every listed selector runs
 
-    function test_none_everyListedSelectorRuns() public {
+    function test_normal_everyListedSelectorRuns() public {
         _run(address(none), abi.encodeCall(IMetaTx.cancelNonce, (99)));
-        _run(address(none), abi.encodeCall(NoUnderlyingToken.burn, (1e6)));
+        _run(address(none), abi.encodeCall(NormalToken.burn, (1e6)));
         assertEq(none.balanceOf(alice), 998e6);
     }
 
@@ -180,12 +180,12 @@ contract AllowlistTest is Test {
         _run(address(single), abi.encodeWithSignature("wrap(address,uint256)", address(u), 10e6));
         _run(address(single), abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(u), 1e6, alice, 0));
         _run(address(single), abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6));
-        _run(address(single), abi.encodeCall(UnderlyingToken.wrapToUA, (address(u), 10e6, UA)));
+        _run(address(single), abi.encodeCall(WrappedToken.wrapToUA, (address(u), 10e6, UA)));
         assertEq(single.balanceOf(alice), 36e6);
         assertEq(single.balanceOfUA(UA), 20e6);
         assertEq(u.balanceOf(address(single)), 58e6);       // 60 wrapped − 4 unwrapped + 2 by addReserve
         // `unwrapToUA` needs a ledger leg: the same implementation, one leg `pts`
-        _run(address(ledgered), abi.encodeCall(UnderlyingToken.unwrapToUA, (address(pts), 1e6, UA, 1e6)));
+        _run(address(ledgered), abi.encodeCall(WrappedToken.unwrapToUA, (address(pts), 1e6, UA, 1e6)));
         assertEq(pts.balanceOfUA(UA), 2e6);
         assertEq(ledgered.balanceOf(alice), 8e6);
     }
@@ -196,7 +196,7 @@ contract AllowlistTest is Test {
         _run(address(multi), abi.encodeWithSignature("wrap(address,uint256)", address(u2), 10e6));
         _run(address(multi), abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(u2), 1e6, alice, 0));
         _run(address(multi), abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6));
-        _run(address(multi), abi.encodeCall(UnderlyingToken.wrapToUA, (address(u2), 10e6, UA)));
+        _run(address(multi), abi.encodeCall(WrappedToken.wrapToUA, (address(u2), 10e6, UA)));
         assertEq(multi.balanceOf(alice), 18e6);
         assertEq(multi.balanceOfUA(UA), 20e6);
         assertEq(u.balanceOf(address(multi)), 2e6);         // addReserve(u) twice
@@ -228,18 +228,18 @@ contract AllowlistTest is Test {
         }
     }
 
-    function test_none_classAndBasisMatchTheRule() public {
+    function test_normal_classAndBasisMatchTheRule() public {
         bytes[] memory k = new bytes[](2);
         uint256[] memory b = new uint256[](2);
         k[0] = abi.encodeCall(IMetaTx.cancelNonce, (99));
-        (k[1], b[1]) = (abi.encodeCall(NoUnderlyingToken.burn, (3e6)), 3e6);
+        (k[1], b[1]) = (abi.encodeCall(NormalToken.burn, (3e6)), 3e6);
         _crossCheck(address(none), k, b);
     }
 
     /// P1d: one implementation, so one rule for every leg count; all eight entries need a one-leg token (with more
     /// legs the single-asset rows revert `UnderlyingRequired` before the AMOUNT cap is checked) whose leg is a ledger
     /// token (`unwrapToUA` reaches the cap only after its pay-out).
-    function test_underlying_classAndBasisMatchTheRule() public {
+    function test_wrapped_classAndBasisMatchTheRule() public {
         bytes[] memory k = new bytes[](8);
         uint256[] memory b = new uint256[](8);
         k[0] = abi.encodeCall(IMetaTx.cancelNonce, (99));
@@ -249,8 +249,8 @@ contract AllowlistTest is Test {
         // basis = arg 1 (`wrapped`), not arg 0 (an address) or arg 3 (`minOut`)
         (k[4], b[4]) = (abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(pts), 3e6, alice, 1e6), 3e6);
         k[5] = abi.encodeWithSignature("addReserve(address,uint256)", address(pts), 1e6);
-        k[6] = abi.encodeCall(UnderlyingToken.wrapToUA, (address(pts), 10e6, UA));
-        (k[7], b[7]) = (abi.encodeCall(UnderlyingToken.unwrapToUA, (address(pts), 3e6, UA, 1e6)), 3e6);
+        k[6] = abi.encodeCall(WrappedToken.wrapToUA, (address(pts), 10e6, UA));
+        (k[7], b[7]) = (abi.encodeCall(WrappedToken.unwrapToUA, (address(pts), 3e6, UA, 1e6)), 3e6);
         _crossCheck(address(ledgered), k, b);
     }
 
@@ -280,8 +280,8 @@ contract AllowlistTest is Test {
             _refused(t, abi.encodeWithSelector(MetaTokenBase.payWithFeeToUA.selector));
             _refused(t, abi.encodeWithSelector(MetaTokenBase.uaPayReceiverFee.selector));
         }
-        _refused(address(none), abi.encodeCall(NoUnderlyingToken.mint, (alice, 1)));
-        _refused(address(none), abi.encodeCall(NoUnderlyingToken.mintToUA, (UA, 1)));
+        _refused(address(none), abi.encodeCall(NormalToken.mint, (alice, 1)));
+        _refused(address(none), abi.encodeCall(NormalToken.mintToUA, (UA, 1)));
         _refused(address(none), abi.encodeCall(ITokenAdmin.renounceRole, (1)));
         _refused(address(single), abi.encodeWithSignature("unwrap(uint256,address)", 1, alice));
         _refused(address(single), abi.encodeWithSignature("proposeRate(address,uint96,uint96)", address(u), 1, 1));
@@ -323,21 +323,21 @@ contract AllowlistTest is Test {
         (MetaTxLib.MetaTransaction memory m, bytes memory sig) =
             _m(address(single), abi.encodeWithSignature("unwrap(uint256,address,uint256)", 1e6, alice, 2e6), RR, 0);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapBelowMin.selector, 1e6, 2e6));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapBelowMin.selector, 1e6, 2e6));
         single.mtxExecute(m, sig);
         assertEq(single.mtxNonce(alice, m.batch), 0);
     }
 
     function test_reentryFromUnderlyingHook_reverts() public {
         ReenteringERC20 bad = new ReenteringERC20();
-        UnderlyingToken w = UnderlyingToken(
-            Clones.clone(address(new UnderlyingToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""))));
+        WrappedToken w = WrappedToken(
+            Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""))));
         Rate memory cfg;
         address[] memory one = new address[](1);
         one[0] = address(bad);
         uint256[] memory r1 = new uint256[](1);
         r1[0] = 1;
-        w.initialize(address(this), 1, abi.encode(underlyingInit(one, r1, r1, 6, cfg, address(0), address(0))));
+        w.initialize(address(this), 1, abi.encode(wrappedInit(one, r1, r1, 6, cfg, address(0), address(0))));
         bad.mint(alice, 10e6);
         vm.prank(alice);
         bad.approve(address(w), 10e6);

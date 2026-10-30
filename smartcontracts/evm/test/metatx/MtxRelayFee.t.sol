@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {console2, Vm} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {MtxRelayFee, MtxRelayExecutor} from "../../src/metatx/MtxRelayFee.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
@@ -18,7 +18,7 @@ import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.s
 import {MtxRegistryMock} from "../helpers/MtxRegistryMock.sol";
 import {DeployHarness} from "../helpers/DeployHarness.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
-import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {PqzRegistryBase, PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {GasBurner} from "../pqz/PqzStateGas.t.sol";
 
@@ -40,7 +40,7 @@ contract ReenterToken {
 
 /// @notice CTR-MTX-27 (metatx split T9, spec §7.1, R14): `MtxRelayFee` runs a fee-less call through its executor, then the
 ///         payer's router-bound payment (`entryRef = relayRef(target, callData)`, lane `payLane(ref)`, nonce 0, relayer =
-///         router, fee `NONE`), atomically. Token: a `NONE` clone on a gen-1 `UARegistry` with `mldsa65` (the precompile
+///         router, fee `NONE`), atomically. Token: a `NORMAL` clone on a gen-1 `UARegistry` with `mldsa65` (the precompile
 ///         mocked, filler signatures, `PqzRegistryBase`); target: a `MetaTxBase` contract (`MtxRegistryMock`, fee `NONE`)
 ///         whose `mtxExecute` carries bob's own signature. Payers: alice (ECDSA, address path) and an `mldsa65` UA.
 contract MtxRelayFeeTest is PqzRegistryBase {
@@ -53,7 +53,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
 
     MtxRelayFee internal router;
     address internal exec;
-    NoUnderlyingToken internal tok;
+    NormalToken internal tok;
     MtxRegistryMock internal target;
     address internal alice = vm.addr(ALICE_PK);
     address internal bob = vm.addr(BOB_PK);
@@ -67,9 +67,9 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 100_000);
         reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
-        tok = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1,
+        tok = NormalToken(Clones.clone(address(new NormalToken(1,
             plainEnv(address(this), address(0), PQZ_UID, address(reg), false), ""))));
-        tok.initialize(address(this), 1, abi.encode(noneInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
+        tok.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
         ml = _mldsaUA(7);
         tok.mintToUA(ml, 1_000);
         target = new MtxRegistryMock("SCaaS TestRegistry", PQZ_UID);
@@ -476,9 +476,9 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         assertEq(target.count(bob), 0, "the call rolled back");
         assertEq(tok.mtxNonce(alice, t.batch), 0);
 
-        NoUnderlyingToken tok2 = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1,
+        NormalToken tok2 = NormalToken(Clones.clone(address(new NormalToken(1,
             plainEnv(address(this), address(0), PQZ_UID, address(reg), false), ""))));
-        tok2.initialize(address(this), 1, abi.encode(noneInit("Other", "OTH", 6, 1_000_000, alice, address(this))));
+        tok2.initialize(address(this), 1, abi.encode(normalInit("Other", "OTH", 6, 1_000_000, alice, address(this))));
         bytes memory s = _sig(t);
         vm.prank(REL);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);

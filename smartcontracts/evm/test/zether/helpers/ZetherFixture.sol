@@ -9,7 +9,7 @@ import {AdminLib} from "../../../src/metatx/AdminLib.sol";
 import {UARegistry} from "../../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../../src/ua/UAKinds.sol";
 import {SchnorrBn254Verifier, ZetherSchnorrBls12381Verifier} from "../../../src/ua/verifiers/PairingVerifiers.sol";
-import {NoUnderlyingZetherToken} from "../../../src/zether/NoUnderlyingZetherToken.sol";
+import {NormalZetherToken} from "../../../src/zether/NormalZetherToken.sol";
 import {ZetherLayer} from "../../../src/zether/ZetherLayer.sol";
 import {ZetherDisclosure} from "../../../src/zether/ZetherDisclosure.sol";
 import {ZetherStatements} from "../../../src/zether/ZetherStatements.sol";
@@ -30,7 +30,7 @@ bytes32 constant ZUID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65
 /// @notice The real stack (BLS12-381, the only classical Zether curve since UA-6, CTR-ZTH-32): `OpenFactory` with the
 ///         Zether gate on, the UA registry (`zether-bls12381` and `schnorr-bn254` for a SIGNING UA, on their real
 ///         verifiers), the verifiers, `ZetherDisclosure`,
-///         `ZetherStatements` and `NoUnderlyingZetherToken` clones. The test wallet keeps `x` and the plaintext balances
+///         `ZetherStatements` and `NormalZetherToken` clones. The test wallet keeps `x` and the plaintext balances
 ///         to build witnesses and decrypt; the prover is the test-only `ZetherProver`. Public units come from `mint`
 ///         (the fixture is the minter); `_public` is overridden where they come from a wrap.
 abstract contract ZetherFixture is Test {
@@ -42,7 +42,7 @@ abstract contract ZetherFixture is Test {
     }
 
     OpenFactory internal factory;
-    NoUnderlyingZetherToken internal noneImpl;
+    NormalZetherToken internal normalImpl;
     UARegistry internal reg;
     IZetherVerifier internal ver;
     IZetherBurnVerifier internal burnVer;
@@ -97,11 +97,11 @@ abstract contract ZetherFixture is Test {
         stm = new ZetherStatements();
         reg = _uaRegistry();
         prover = new ZetherProver();
-        noneImpl = NoUnderlyingZetherToken(Catalogue.release(factory, IOpenFactory.TokenKind.NONE_ZETHER, 1, _zenv(),
-            type(NoUnderlyingZetherToken).creationCode));
+        normalImpl = NormalZetherToken(Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_ZETHER, 1, _zenv(),
+            type(NormalZetherToken).creationCode));
         vm.startPrank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NONE_ZETHER, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.UNDERLYING_ZETHER, true);
+        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER, true);
+        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER, true);
         vm.stopPrank();
     }
 
@@ -143,7 +143,7 @@ abstract contract ZetherFixture is Test {
     }
 
     function _newToken(bool auditor, bytes32 salt, uint256 maxShielded) internal virtual returns (ZetherLayer) {
-        return ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(_cfg(auditor, maxShielded)), salt));
+        return ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(_cfg(auditor, maxShielded)), salt));
     }
 
     /// Registers `Y = [x]G` as `zether-bls12381` (the Zether key is the UA: no `authRef` since UA-6), relayed by
@@ -177,7 +177,7 @@ abstract contract ZetherFixture is Test {
 
     /// @dev `units` public units to `to`.
     function _public(ZetherLayer t, address to, uint256 units) internal virtual {
-        NoUnderlyingZetherToken(address(t)).mint(to, units);
+        NormalZetherToken(address(t)).mint(to, units);
         minted[address(t)] += units;
     }
 

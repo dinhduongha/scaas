@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {V2Fixture} from "./helpers/V2Fixture.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 
 /// @title Vector tỉ lệ chung cho mọi họ (TW2 §10.4): `test/vectors/wrap_rate_vectors.json`.
 /// @notice `(num, den, in) → (minted, used)` và `(num, den, w) → (out, burned)`, sinh từ `previewWrap` /
@@ -22,7 +22,7 @@ contract RateVectorsTest is V2Fixture {
         string memory wj = "[";
         string memory uj = "[";
         for (uint256 r; r < rates.length; ++r) {
-            UnderlyingToken t = _single(address(u), 6, rates[r][0], rates[r][1], _fixedRate());
+            WrappedToken t = _single(address(u), 6, rates[r][0], rates[r][1], _fixedRate());
             string memory head = string.concat('{"num":', _q(rates[r][0]), ',"den":', _q(rates[r][1]));
             for (uint256 i; i < ins.length; ++i) {
                 (uint256 minted, uint256 used) = t.previewWrap(address(u), ins[i]);

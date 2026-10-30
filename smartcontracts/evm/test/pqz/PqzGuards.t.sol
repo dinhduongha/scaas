@@ -12,7 +12,7 @@ import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
-import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
+import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 
 /// The token guards of the contracts review fix round (review2 T1, 2026-10-27): PQZH value tokens only at sets that
@@ -32,10 +32,10 @@ contract PqzGuardsTest is PqzFixture {
     function _pqzh(bytes32 salt_) internal returns (PqzLayer) {
         pqv = _newPqzVerifier(PQZH_ID);
         factory = new OpenFactory(registrar, PQZ_UID, 0);
-        Catalogue.release(factory, IOpenFactory.TokenKind.NONE_PQZ, 1,
-            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NoUnderlyingPqzToken).creationCode);
+        Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
+            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NONE_PQZ, true);
+        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
         return _newToken(salt_);
     }
 
@@ -49,12 +49,12 @@ contract PqzGuardsTest is PqzFixture {
         vm.skip(!PqzSet.HAS_PQZH || PqzSet.PQZH_VALUE);
         pqv = _newPqzVerifier(PQZH_ID);
         factory = new OpenFactory(registrar, PQZ_UID, 0);
-        Catalogue.release(factory, IOpenFactory.TokenKind.NONE_PQZ, 1,
-            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NoUnderlyingPqzToken).creationCode);
+        Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
+            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NONE_PQZ, true);
+        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
         vm.expectRevert(IPqzToken.PqzhValueUnsupported.selector);
-        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), "pqzh");
+        factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), "pqzh");
     }
 
     function test_pqzhValue_flagMatchesTheSet() public pure {
@@ -111,7 +111,7 @@ contract PqzGuardsTest is PqzFixture {
             c.conf.auditorMode = modes[i];
             c.conf.auditorKey = abi.encode(bytes32(0));
             vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, bytes32(0)));
-            factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(c), bytes32(i + 1));
+            factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), bytes32(i + 1));
         }
     }
 
@@ -129,7 +129,7 @@ contract PqzGuardsTest is PqzFixture {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.conf.auditorKey = abi.encode(bob);
         vm.expectRevert(err);
-        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(c), "badaud");
+        factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "badaud");
     }
 
     // ------------------------------------------------------------------ C2-5: shieldIn is pulled before the library

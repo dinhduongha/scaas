@@ -6,7 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
@@ -23,8 +23,8 @@ contract UADexHandler is Test {
     address internal constant TREASURY = address(0x7EA5);
     uint256 internal constant PPM = 1_000_000;
 
-    NoUnderlyingToken internal immutable A;
-    NoUnderlyingToken internal immutable B;
+    NormalToken internal immutable A;
+    NormalToken internal immutable B;
     SCaaSDex internal immutable dex;
     UARegistry internal immutable reg;
     UARouter internal immutable router;
@@ -36,7 +36,7 @@ contract UADexHandler is Test {
     uint256 public settled;
     uint256 public exchanged;
 
-    constructor(NoUnderlyingToken a, NoUnderlyingToken b, SCaaSDex d, UARegistry r, UARouter ro, bytes32[2] memory uas,
+    constructor(NormalToken a, NormalToken b, SCaaSDex d, UARegistry r, UARouter ro, bytes32[2] memory uas,
         bytes[2] memory keys_, uint16[2] memory kinds_)
     {
         (A, B, dex, reg, router) = (a, b, d, r, ro);
@@ -74,7 +74,7 @@ contract UADexHandler is Test {
         Plan memory p;
         (p.ti, p.mi) = (ti % 4, mi % 4);
         if (p.ti == p.mi) return;
-        (NoUnderlyingToken X, NoUnderlyingToken Y) = aSells ? (A, B) : (B, A); // the taker sells X, the maker Y
+        (NormalToken X, NormalToken Y) = aSells ? (A, B) : (B, A); // the taker sells X, the maker Y
         p.amt = bound(amt, 2, 5_000);
         bool escrow = shapes & 4 != 0;
         p.tAmount = escrow ? p.amt + bound(extra, 0, p.amt) : p.amt;
@@ -137,7 +137,7 @@ contract UADexHandler is Test {
     }
 
     /// An order at 1:1 (`receiveAmount = amount`) on a fresh nonce.
-    function _order(NoUnderlyingToken recv, bytes32 from, bytes32 dest, uint256 amount, uint256 fee, uint8 flags)
+    function _order(NormalToken recv, bytes32 from, bytes32 dest, uint256 amount, uint256 fee, uint8 flags)
         internal returns (ITradeToken.UATradeOrder memory o)
     {
         o = ITradeToken.UATradeOrder({
@@ -148,7 +148,7 @@ contract UADexHandler is Test {
     }
 
     /// Shape 1 as is; shape 0 the same fields as a `TradeOrder` (a native `from` and `destination`).
-    function _leg(NoUnderlyingToken sell, ITradeToken.UATradeOrder memory o, bool shape1, uint256 fill)
+    function _leg(NormalToken sell, ITradeToken.UATradeOrder memory o, bool shape1, uint256 fill)
         internal view returns (ISCaaSDex.Leg memory)
     {
         if (shape1) return ISCaaSDex.Leg(address(sell), 1, abi.encode(o), _sign(o.from, sell.uaTradeOrderDigest(o)), fill);
@@ -172,7 +172,7 @@ contract UADexHandler is Test {
 
     /// Per token (0 = A, 1 = B): the four parties by id, then the relayer and the treasury.
     function _snap() internal view returns (int256[6][2] memory s) {
-        NoUnderlyingToken[2] memory t = [A, B];
+        NormalToken[2] memory t = [A, B];
         for (uint256 k; k < 2; ++k) {
             for (uint256 i; i < 4; ++i) s[k][i] = int256(t[k].balanceOfUA(ids[i]));
             s[k][4] = int256(t[k].balanceOf(RELAYER));
@@ -231,7 +231,7 @@ contract UADexInvariantTest is UADexBase {
         targetContract(address(h));
     }
 
-    function _check(NoUnderlyingToken t) internal view {
+    function _check(NormalToken t) internal view {
         address[7] memory a = h.natives();
         uint256 sum;
         for (uint256 i; i < a.length; ++i) sum += t.balanceOf(a[i]);

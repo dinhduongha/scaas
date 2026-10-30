@@ -6,20 +6,20 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
 import {UAFndsaVerifier} from "../../src/ua/FnDsa.sol";
 import {UASlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// The UA ledger with PQ signers (P6c; accounts.md CTR-UA-26, §1.16): pq_signatures.json's `metatx3` rows — the
-/// metatx3.json structs and domain, one row per PQ kind — on a `NONE` clone at the vector token address, context A,
+/// metatx3.json structs and domain, one row per PQ kind — on a `NORMAL` clone at the vector token address, context A,
 /// the real PQ verifiers (ML-DSA on its cached expanded key). Every digest is recomputed by the token, every auth passes
 /// `requireAuthorized` under `metatx`, every `UAMetaTransfer` row executes. Gas of `uaExecuteTransfer` per kind is logged.
 /// UA-5a (metatx.md, the `uaPayReceiverFee` paragraph): receiver-pays with an `mldsa65` payer and an `mldsa65` payee
 /// (two PQ verifies) fits one 16,777,216-gas transaction (EIP-7825), intrinsic and calldata included.
 contract UAMetaTx3PqTest is UARegistryBase {
-    NoUnderlyingToken internal tok;
+    NormalToken internal tok;
 
     function _pj() internal view returns (string memory) {
         return vm.readFile("../vectors/ua/pq_signatures.json");
@@ -46,10 +46,10 @@ contract UAMetaTx3PqTest is UARegistryBase {
         for (uint256 p; p < 2; ++p) reg.cacheExpandedKey(0x0131, pk1, p);
         reg.register(0x0131, pk1, _none(), vm.parseJsonBytes(pj, ".extraKeys[0].pop.sig"), "");
         address token = vm.parseJsonAddress(pj, ".metatx3.token");
-        address impl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_A, false), ""));
+        address impl = address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_A, false), ""));
         vm.etch(token, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
-        tok = NoUnderlyingToken(token);
-        tok.initialize(address(this), 1, abi.encode(noneInit("Points", "PTS", 6, 0, address(0), address(this))));
+        tok = NormalToken(token);
+        tok.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(0), address(this))));
         vm.warp(1_800_000_000);
     }
 
@@ -88,7 +88,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
         t.feeRecipient = vm.parseJsonAddress(pj, string.concat(p, "feeRecipient"));
     }
 
-    /// `UAMetaTransaction` rows: digest and auth (the `unwrap` itself is not on the `NONE` kind's allowlist).
+    /// `UAMetaTransaction` rows: digest and auth (the `unwrap` itself is not on the `NORMAL` kind's allowlist).
     function test_callRows() public view {
         string memory pj = _pj();
         uint256 n;

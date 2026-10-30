@@ -6,7 +6,7 @@ import {VmSafe} from "forge-std/Vm.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
@@ -18,7 +18,7 @@ import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.s
 import {SubjectKey, KeyKind} from "../../src/account/SmartKeyAccount.sol";
 import {PqzRegistryBase, PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
-import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {IRig, PlainRig, PqzRig, ZetherRig} from "./MetaTxParity.t.sol";
 
@@ -33,7 +33,7 @@ contract GasProbe {
 /// calldata a token hands the library are read from the DELEGATECALL itself (`vm.startStateDiffRecording`), so the test
 /// sees what the library got, not what a view reports.
 ///
-/// The `NONE` fixture `tok` runs on the gen-1 registry of chain 7622 (`mldsa65` on its mocked precompile, cap 100,000)
+/// The `NORMAL` fixture `tok` runs on the gen-1 registry of chain 7622 (`mldsa65` on its mocked precompile, cap 100,000)
 /// with this chain's `SmartKeyAccount` implementation; `htok` is the same kind built `IS_HEDERA` (HIP-632 at 0x16a,
 /// `MockHederaAccountService`).
 contract MtxCtxTest is PqzRegistryBase {
@@ -47,14 +47,14 @@ contract MtxCtxTest is PqzRegistryBase {
     bytes32 internal constant DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)");
     // ERC20MetaTx `_UA_STORAGE` (ERC-7201 `scaas.ua.ledger`); the ERC-20 `_balances` / `_totalSupply` slots per
-    // test/v2/layout/NoUnderlyingToken.json
+    // test/v2/layout/NormalToken.json
     bytes32 internal constant UA_STORAGE = 0x9e2def943e5a7ec3982e5d00524104579a6b98ce8b31343ac0092718cc04e900;
 
     address internal alice = vm.addr(ALICE_PK);
     address internal hed = address(uint160(1_234_567)); // a Hedera account 0.0.N, no code
     SmartKeyAccountFactory internal fac;
-    NoUnderlyingToken internal tok;
-    NoUnderlyingToken internal htok;
+    NormalToken internal tok;
+    NormalToken internal htok;
     bytes32 internal u; // an `mldsa65` UA of `reg`
 
     function setUp() public {
@@ -72,10 +72,10 @@ contract MtxCtxTest is PqzRegistryBase {
         htok.mint(hed, 1_000_000);
     }
 
-    function _token(address ska, bool hedera) internal returns (NoUnderlyingToken t) {
-        NoUnderlyingToken impl = new NoUnderlyingToken(1, plainEnv(address(this), ska, PQZ_UID, address(reg), hedera), "");
-        t = NoUnderlyingToken(Clones.clone(address(impl)));
-        t.initialize(address(this), 1, abi.encode(noneInit("Points", "PTS", 6, 0, address(this), address(this))));
+    function _token(address ska, bool hedera) internal returns (NormalToken t) {
+        NormalToken impl = new NormalToken(1, plainEnv(address(this), ska, PQZ_UID, address(reg), hedera), "");
+        t = NormalToken(Clones.clone(address(impl)));
+        t.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
     }
 
     // ------------------------------------------------------------------ helpers
@@ -296,9 +296,9 @@ contract MtxCtxTest is PqzRegistryBase {
     /// (clientkeys' metatx3.json: every `call`, `burn` and `transfer` row) and `mtxDigest` of a Zether kind (the
     /// zether-prover's envelope.json), each on a clone etched at the vector's token address on the vector's chain.
     function test_digestViewsEqualKats() public {
-        // metatx_kat.json / metatransfer_kat.json: a `NONE` clone, chain 7622
+        // metatx_kat.json / metatransfer_kat.json: a `NORMAL` clone, chain 7622
         string memory j = vm.readFile("test/vectors/metatx_kat.json");
-        address at = _etchNone(vm.parseJsonAddress(j, ".verifying_contract"), vm.parseJsonBytes32(j, ".salt"), 7622);
+        address at = _etchNormal(vm.parseJsonAddress(j, ".verifying_contract"), vm.parseJsonBytes32(j, ".salt"), 7622);
         assertEq(MetaTokenBase(at).mtxDigest(_katTx(j)), vm.parseJsonBytes32(j, ".digest"), "metatx_kat");
         j = vm.readFile("test/vectors/metatransfer_kat.json");
         assertEq(vm.parseJsonAddress(j, ".verifying_contract"), at);
@@ -306,11 +306,11 @@ contract MtxCtxTest is PqzRegistryBase {
 
         // clientkeys' UA vectors (metatx3.json, context A)
         j = vm.readFile("../vectors/ua/metatx3.json");
-        at = _etchNone(vm.parseJsonAddress(j, ".token"), vm.parseJsonBytes32(j, ".chainUid"), vm.parseJsonUint(j, ".chainId"));
+        at = _etchNormal(vm.parseJsonAddress(j, ".token"), vm.parseJsonBytes32(j, ".chainUid"), vm.parseJsonUint(j, ".chainId"));
         assertEq(_uaRows(j, at, ".call[", false) + _uaRows(j, at, ".burn[", false) + _uaRows(j, at, ".transfer[", true), 33,
             "metatx3: every call, burn and transfer row");
 
-        // the zether-prover's envelope.json: a `NONE_ZETHER` clone (domain "SCaaS ZetherToken") at its token address
+        // the zether-prover's envelope.json: a `NORMAL_ZETHER` clone (domain "SCaaS ZetherToken") at its token address
         ZetherRig zr = new ZetherRig();
         zr.init();
         (, address[] memory zs,) = zr.setup();
@@ -400,9 +400,9 @@ contract MtxCtxTest is PqzRegistryBase {
         t.feeRecipient = vm.parseJsonAddress(j, string.concat(p, "feeRecipient"));
     }
 
-    function _etchNone(address at, bytes32 uid, uint256 chainId) internal returns (address) {
+    function _etchNormal(address at, bytes32 uid, uint256 chainId) internal returns (address) {
         vm.chainId(chainId);
-        NoUnderlyingToken impl = new NoUnderlyingToken(1, plainEnv(address(this), address(0), uid, address(0), false), "");
+        NormalToken impl = new NormalToken(1, plainEnv(address(this), address(0), uid, address(0), false), "");
         vm.etch(at, _cloneCode(address(impl)));
         return at;
     }
@@ -424,12 +424,12 @@ contract MtxCtxTest is PqzRegistryBase {
     function test_relayedCall_writesRecordedSlots() public {
         bytes32 relayer = _balSlot(RELAYER);
         // mtxExecute: burn(1,000) with a fixed fee of 5 to the relayer
-        MetaTxLib.MetaTransaction memory m = _mt(alice, abi.encodeCall(NoUnderlyingToken.burn, (1_000)), 11,
+        MetaTxLib.MetaTransaction memory m = _mt(alice, abi.encodeCall(NormalToken.burn, (1_000)), 11,
             RR | MetaTxLib.MODE_FEE_FIXED, 5);
         _checkWrites(abi.encodeCall(IMetaTx.mtxExecute, (m, _ecdsa(ALICE_PK, tok.mtxDigest(m)))), "mtxExecute",
             _set(_nonceSlot(MetaTxLib.pad(alice), 11), _balSlot(alice), relayer, _supplySlot(), 0, 4));
         // uaExecute: the `mldsa65` UA burns through UA_POOL, fee from its ledger
-        MetaTxLib.UAMetaTransaction memory um = _um(u, abi.encodeCall(NoUnderlyingToken.burn, (1_000)), 12,
+        MetaTxLib.UAMetaTransaction memory um = _um(u, abi.encodeCall(NormalToken.burn, (1_000)), 12,
             RR | MetaTxLib.MODE_FEE_FIXED, 5);
         _checkWrites(abi.encodeCall(IUALedger.uaExecute, (um, _mlAuth())), "uaExecute",
             _set(_nonceSlot(u, 12), _uaSlot(u), _balSlot(MetaTxLib.UA_POOL), _supplySlot(), relayer, 5));
@@ -487,7 +487,7 @@ contract MtxCtxTest is PqzRegistryBase {
     /// never with a verdict. (At the transaction level the EIP-7976 calldata floor of the 3,309-byte signature hides the
     /// window, so the sweep runs on frames.)
     function test_minGas_mldsa65UaExecute() public {
-        MetaTxLib.UAMetaTransaction memory m = _um(u, abi.encodeCall(NoUnderlyingToken.burn, (10)), 2, 0, 0);
+        MetaTxLib.UAMetaTransaction memory m = _um(u, abi.encodeCall(NormalToken.burn, (10)), 2, 0, 0);
         bytes memory cd = abi.encodeCall(IUALedger.uaExecute, (m, _mlAuth()));
         uint256 snap = vm.snapshotState();
         (bool ok, bytes memory ret, VmSafe.AccountAccess[] memory a) = _recorded(address(tok), cd);

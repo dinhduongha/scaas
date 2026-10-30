@@ -5,20 +5,20 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
-import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeeMode} from "../../src/common/FeePolicy.sol";
-import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 
-/// accounts.md CTR-UA-26 as grown by UA-5a (CTR-UA-27 "allowlist or dedicated function"): `burn` (`NONE*`) and
+/// accounts.md CTR-UA-26 as grown by UA-5a (CTR-UA-27 "allowlist or dedicated function"): `burn` (`NORMAL*`) and
 /// `unwrapToUA` (the wrappers) run under `uaExecute` / `uaBatch`; under a derived ticket each debits exactly the subject
 /// through `UA_POOL`, and the fee (`AMOUNT(i)`) comes from the signer's UA balance after the call. The dedicated
 /// functions (`wrapToUA`, `mintToUA`, `payWithFeeToUA`), `addReserve`, `approve` and `mtxTrade` stay off it.
@@ -42,7 +42,7 @@ contract UAAllowlist5aTest is UALedgerBase {
     function test_uaExecute_burnUnderUA() public {
         _fund(uaP, 1_000);
         uint256 supply = tok.totalSupply();
-        MetaTxLib.UAMetaTransaction memory m = _withFee(_m(address(tok), uaP, abi.encodeCall(NoUnderlyingToken.burn, (400))), 4);
+        MetaTxLib.UAMetaTransaction memory m = _withFee(_m(address(tok), uaP, abi.encodeCall(NormalToken.burn, (400))), 4);
         vm.expectEmit(address(tok));
         emit IUALedger.UATransfer(uaP, bytes32(0), 400);
         vm.expectEmit(address(tok));
@@ -57,23 +57,23 @@ contract UAAllowlist5aTest is UALedgerBase {
         assertEq(tok.balanceOf(FEE_TO), 4);
         assertEq(tok.totalSupply(), supply - 400);
         // more than the UA holds: the burn through the pool refuses; the fee cap is `AMOUNT(0)`'s 1 %
-        _exec(address(tok), _m(address(tok), uaP, abi.encodeCall(NoUnderlyingToken.burn, (597))),
+        _exec(address(tok), _m(address(tok), uaP, abi.encodeCall(NormalToken.burn, (597))),
             abi.encodeWithSelector(IUALedger.UAInsufficientBalance.selector, uaP, 596, 597));
         // `BURNABLE` off: the feature error of `burn`
-        NoUnderlyingToken nb =
-            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
-        IFactoryToken.TokenConfig memory c = noneInit("NB", "NB", 6, 0, address(0), address(this));
+        NormalToken nb =
+            NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+        IFactoryToken.TokenConfig memory c = normalInit("NB", "NB", 6, 0, address(0), address(this));
         c.features = (1 << AdminLib.PAYABLE) | (1 << AdminLib.MINTABLE);
         nb.initialize(address(this), 1, abi.encode(c));
         nb.mintToUA(uaP, 10);
-        _exec(address(nb), _m(address(nb), uaP, abi.encodeCall(NoUnderlyingToken.burn, (1))),
+        _exec(address(nb), _m(address(nb), uaP, abi.encodeCall(NormalToken.burn, (1))),
             abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, AdminLib.BURNABLE));
     }
 
     /// A native signer burns its own address balance (`mtxExecute` on the ids path).
     function test_uaExecute_burnNative() public {
         uint256 supply = tok.totalSupply();
-        _exec(address(tok), _m(address(tok), _pad(alice), abi.encodeCall(NoUnderlyingToken.burn, (100))), "");
+        _exec(address(tok), _m(address(tok), _pad(alice), abi.encodeCall(NormalToken.burn, (100))), "");
         assertEq(tok.balanceOf(alice), 1_000_000 - 100);
         assertEq(tok.totalSupply(), supply - 100);
     }
@@ -85,7 +85,7 @@ contract UAAllowlist5aTest is UALedgerBase {
         _wrapL(alice, 10_000);
         vm.prank(alice);
         wrpL.transferToUA(uaP, 10_000);
-        bytes memory data = abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), 4_000, uaB, 4_000));
+        bytes memory data = abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 4_000, uaB, 4_000));
         MetaTxLib.UAMetaTransaction memory m = _m(address(wrpL), uaP, data);
         (m.mode, m.fee, m.feeRecipient) = (RR | RF | PCT, 10_000, FEE_TO); // 1 % of `wrapped`
         vm.expectEmit(address(wrpL));
@@ -95,7 +95,7 @@ contract UAAllowlist5aTest is UALedgerBase {
         vm.expectEmit(address(tok));
         emit IUALedger.UATransfer(_pad(address(wrpL)), uaB, 4_000);
         vm.expectEmit(address(wrpL));
-        emit IUnderlyingToken.UnwrappedToUA(POOL, address(tok), uaB, 4_000, 4_000);
+        emit IWrappedToken.UnwrappedToUA(POOL, address(tok), uaB, 4_000, 4_000);
         _exec(address(wrpL), m, "");
         assertEq(wrpL.balanceOfUA(uaP), 10_000 - 4_000 - 40);
         assertEq(wrpL.balanceOf(FEE_TO), 40);
@@ -109,12 +109,12 @@ contract UAAllowlist5aTest is UALedgerBase {
     /// At 3/2 under `uaExecute`: `unwrapToUA(1000)` burns ⌈666·3/2⌉ = 999 from the UA, pays out 666 in `tok`; the
     /// `AMOUNT(1)` fee (1 % of `wrapped` = 10) comes after.
     function test_uaExecute_unwrapToUA_rate32() public {
-        UnderlyingToken w = _wrapperAt(address(tok), 3, 2);
+        WrappedToken w = _wrapperAt(address(tok), 3, 2);
         _wrapLOn(w, alice, 1_001);
         vm.prank(alice);
         w.transferToUA(uaP, 1_501);
         MetaTxLib.UAMetaTransaction memory m =
-            _m(address(w), uaP, abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), 1_000, uaB, 666)));
+            _m(address(w), uaP, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 1_000, uaB, 666)));
         (m.mode, m.fee, m.feeRecipient) = (RR | RF | PCT, 10_000, FEE_TO);
         vm.expectEmit(address(w));
         emit IUALedger.UATransfer(uaP, bytes32(0), 999);
@@ -123,7 +123,7 @@ contract UAAllowlist5aTest is UALedgerBase {
         vm.expectEmit(address(tok));
         emit IUALedger.UATransfer(_pad(address(w)), uaB, 666);
         vm.expectEmit(address(w));
-        emit IUnderlyingToken.UnwrappedToUA(POOL, address(tok), uaB, 999, 666);
+        emit IWrappedToken.UnwrappedToUA(POOL, address(tok), uaB, 999, 666);
         vm.expectEmit(address(w));
         emit IERC20.Transfer(POOL, FEE_TO, 10);
         _exec(address(w), m, "");
@@ -140,7 +140,7 @@ contract UAAllowlist5aTest is UALedgerBase {
         _wrapL(alice, 100);
         vm.prank(alice);
         wrpL.transferToUA(uaP, 100);
-        _exec(address(wrpL), _m(address(wrpL), uaP, abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), 10, _pad(bob), 0))),
+        _exec(address(wrpL), _m(address(wrpL), uaP, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 10, _pad(bob), 0))),
             abi.encodeWithSelector(IUALedger.UANotRegistered.selector, _pad(bob)));
         assertEq(wrpL.balanceOfUA(uaP), 100);
     }
@@ -153,8 +153,8 @@ contract UAAllowlist5aTest is UALedgerBase {
         _fund(uaP, 10);
         address[6] memory on = [address(wrp), address(tok), address(tok), address(wrp), address(tok), address(tok)];
         bytes[6] memory calls = [
-            abi.encodeCall(UnderlyingToken.wrapToUA, (address(und), 1, uaB)),
-            abi.encodeCall(NoUnderlyingToken.mintToUA, (uaB, 1)),
+            abi.encodeCall(WrappedToken.wrapToUA, (address(und), 1, uaB)),
+            abi.encodeCall(NormalToken.mintToUA, (uaB, 1)),
             abi.encodeCall(MetaTokenBase.payWithFeeToUA, (uaB, 1, FeeMode.NONE, 0, address(0), bytes32("ref"))),
             abi.encodeWithSignature("addReserve(address,uint256)", address(und), 1),
             abi.encodeCall(IERC20.approve, (address(this), 1)),
@@ -179,24 +179,24 @@ contract UAAllowlist5aTest is UALedgerBase {
         wrpL.transferToUA(uaP, 100);
         MetaTxLib.UAMetaTransaction[] memory ms = new MetaTxLib.UAMetaTransaction[](2);
         bytes[] memory as_ = new bytes[](2);
-        ms[0] = _m(address(wrpL), uaP, abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), 60, uaB, 0)));
-        ms[1] = _m(address(wrpL), uaP, abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), 60, uaB, 0)));
+        ms[0] = _m(address(wrpL), uaP, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 60, uaB, 0)));
+        ms[1] = _m(address(wrpL), uaP, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 60, uaB, 0)));
         ms[1].nonce = 1;
         (as_[0], as_[1]) = (_authM(address(wrpL), ms[0]), _authM(address(wrpL), ms[1]));
         // the second item asks for more than is left (the reserve, 1:1 with the supply, is checked first)
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.InsufficientReserve.selector, address(tok), 60, 40));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.InsufficientReserve.selector, address(tok), 60, 40));
         vm.prank(RELAYER);
         wrpL.uaBatch(ms, as_);
         assertEq(wrpL.balanceOfUA(uaP), 100);
-        ms[1] = _m(address(wrpL), uaP, abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), 40, uaB, 0)));
+        ms[1] = _m(address(wrpL), uaP, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 40, uaB, 0)));
         ms[1].nonce = 1;
         as_[1] = _authM(address(wrpL), ms[1]);
         vm.prank(RELAYER);
         wrpL.uaBatch(ms, as_);
         assertEq(wrpL.balanceOfUA(uaP), 0);
         assertEq(tok.balanceOfUA(uaB), 100);
-        ms[0] = _m(address(tok), uaP, abi.encodeCall(NoUnderlyingToken.burn, (30)));
-        ms[1] = _m(address(tok), uaP, abi.encodeCall(NoUnderlyingToken.burn, (70)));
+        ms[0] = _m(address(tok), uaP, abi.encodeCall(NormalToken.burn, (30)));
+        ms[1] = _m(address(tok), uaP, abi.encodeCall(NormalToken.burn, (70)));
         ms[1].nonce = 1;
         (as_[0], as_[1]) = (_authM(address(tok), ms[0]), _authM(address(tok), ms[1]));
         vm.prank(RELAYER);

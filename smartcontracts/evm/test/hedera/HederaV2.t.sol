@@ -9,13 +9,13 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
-import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {HederaLib} from "../../src/hedera/HederaLib.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {MockERC20, StubUARegistry} from "../helpers/Mocks.sol";
-import {noneInit, underlyingInit, Rate} from "../v2/helpers/V2Fixture.sol";
+import {normalInit, wrappedInit, Rate} from "../v2/helpers/V2Fixture.sol";
 import {MockHederaAccountService, MockHts} from "./HederaMocks.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 
@@ -42,8 +42,8 @@ contract HederaV2Test is Test {
         alice = address(uint160(1_234_567));
         MockHederaAccountService(HAS).setEdKey(alice, vm.addr(ALICE_KEY));
         f = new OpenFactory(registrar, UID, 0);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NONE, 1, type(NoUnderlyingToken).creationCode, address(0), address(0), true);
-        Catalogue.plain(f, IOpenFactory.TokenKind.UNDERLYING, 1, type(UnderlyingToken).creationCode, address(0), address(0), true);
+        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), true);
+        Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), true);
         usdc = new MockERC20("USD Coin", "USDC", 6);
         plain = new MockERC20("Plain", "PLN", 6);
         MockHts(HTS).setHts(address(usdc), true);
@@ -54,9 +54,9 @@ contract HederaV2Test is Test {
         // for the UA-5a receivers; +2.3 / +3.4 KB for UA-5b (UATradeOrder, uaWrap); +1.6 KB for the guard on every entry
         // (review W-Q, CTR-MTX-18); +13 B for MetaTxBase on MtxPipelineLib's internals (metatx split T2; T3 moves the
         // tokens onto the library) (size-baseline.json holds the exact ratchet)
-        assertLe(f.implementationOf(IOpenFactory.TokenKind.NONE, 1).code.length, 38_925);
+        assertLe(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1).code.length, 38_925);
         // Transitional (P1d D2): over EIP-170 until the size work
-        assertLe(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING, 1).code.length, 49_152);
+        assertLe(f.implementationOf(IOpenFactory.TokenKind.WRAPPED, 1).code.length, 49_152);
     }
 
     function _edSign(bytes32 digest) internal pure returns (bytes memory) {
@@ -74,7 +74,7 @@ contract HederaV2Test is Test {
     function _single(address u) internal returns (address) {
         address[] memory us = new address[](1);
         us[0] = u;
-        return f.createToken(IOpenFactory.TokenKind.UNDERLYING, 1, abi.encode(_init(us)), keccak256(abi.encode(u)));
+        return f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(_init(us)), keccak256(abi.encode(u)));
     }
 
     /// One leg at 1:1, rates fixed, no owner.
@@ -82,14 +82,14 @@ contract HederaV2Test is Test {
         uint256[] memory one = new uint256[](1);
         one[0] = 1;
         Rate memory c;
-        return underlyingInit(us, one, one, 6, c, address(0), address(0));
+        return wrappedInit(us, one, one, 6, c, address(0), address(0));
     }
 
     function _wrapFor(address t, MockERC20 u, address who, uint256 v) internal {
         u.mint(who, v);
         vm.startPrank(who);
         u.approve(t, v);
-        UnderlyingToken(t).wrap(v);
+        WrappedToken(t).wrap(v);
         vm.stopPrank();
     }
 
@@ -97,7 +97,7 @@ contract HederaV2Test is Test {
 
     function test_tier1NativeAccountPays() public {
         vm.prank(alice);
-        address t = f.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(noneInit("Points", "PTS", 0, 1000, alice, address(0))), "n");
+        address t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("Points", "PTS", 0, 1000, alice, address(0))), "n");
         MetaTxLib.MetaTransfer memory x = _tr(shop, 250, 0, 1);
         bytes memory sig = _edSign(IERC20MetaTx(t).mtxTransferDigest(x));
         vm.prank(relayer);
@@ -108,7 +108,7 @@ contract HederaV2Test is Test {
     /// HIP-632 payee: a native Hedera account co-signs the `ReceiverFee` (64-byte ed25519) for an EVM payer's payment.
     function test_tier1NativeAccountPayeeCoSignsReceiverFee() public {
         vm.prank(alice);
-        address t = f.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(noneInit("Points", "PTS", 0, 1000, alice, address(0))), "n");
+        address t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("Points", "PTS", 0, 1000, alice, address(0))), "n");
         uint256 payerPk = 0xB0B;
         address payer = vm.addr(payerPk);
         address feeTo = address(0xFEE);
@@ -151,20 +151,20 @@ contract HederaV2Test is Test {
         uint256[] memory n = new uint256[](3);
         (n[0], n[1], n[2]) = (1, 1, 1);
         Rate memory c;
-        address t = f.createToken(IOpenFactory.TokenKind.UNDERLYING, 1, abi.encode(underlyingInit(us, n, n, 6, c, address(0), address(0))), "m");
+        address t = f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(wrappedInit(us, n, n, 6, c, address(0), address(0))), "m");
         assertTrue(MockHts(HTS).associated(t, address(usdc)));
         assertTrue(MockHts(HTS).associated(t, address(usdt)));
         assertFalse(MockHts(HTS).associated(t, address(plain))); // not an HTS token: nothing to associate
         usdt.mint(alice, 10e6);
         vm.startPrank(alice);
         usdt.approve(t, 10e6);
-        UnderlyingToken(t).wrap(address(usdt), 10e6);
+        WrappedToken(t).wrap(address(usdt), 10e6);
         vm.stopPrank();
         bytes32 payId = keccak256("inv");
-        MetaTxLib.MetaTransfer memory x = _tr(shop, 3e6, payId, UnderlyingToken(t).payLane(payId));
+        MetaTxLib.MetaTransfer memory x = _tr(shop, 3e6, payId, WrappedToken(t).payLane(payId));
         bytes memory sig = _edSign(IERC20MetaTx(t).mtxTransferDigest(x));
         vm.prank(relayer);
-        UnderlyingToken(t).mtxPay(alice, shop, 3e6, payId, x.validUntil, RR, relayer, 0, address(0), sig);
+        WrappedToken(t).mtxPay(alice, shop, 3e6, payId, x.validUntil, RR, relayer, 0, address(0), sig);
         assertEq(IERC20MetaTx(t).balanceOf(shop), 3e6);
     }
 
@@ -182,17 +182,17 @@ contract HederaV2Test is Test {
 
     bytes32 constant UA = keccak256("scaas.hedera.ua"); // a derived id: the stub registry calls it a p256 UA
 
-    /// Version 2 of NONE and UNDERLYING with the UA ledger on (a stub registry: native signers only).
+    /// Version 2 of NORMAL and WRAPPED with the UA ledger on (a stub registry: native signers only).
     function _ledgerOn() internal {
         StubUARegistry stub = new StubUARegistry(UID);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NONE, 2, type(NoUnderlyingToken).creationCode, address(stub), address(0), true);
-        Catalogue.plain(f, IOpenFactory.TokenKind.UNDERLYING, 2, type(UnderlyingToken).creationCode, address(stub), address(0), true);
+        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 2, type(NormalToken).creationCode, address(stub), address(0), true);
+        Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 2, type(WrappedToken).creationCode, address(stub), address(0), true);
     }
 
     function _singleV2(address u) internal returns (address) {
         address[] memory us = new address[](1);
         us[0] = u;
-        return f.createToken(IOpenFactory.TokenKind.UNDERLYING, 2, abi.encode(_init(us)), keccak256(abi.encode(u, 2)));
+        return f.createToken(IOpenFactory.TokenKind.WRAPPED, 2, abi.encode(_init(us)), keccak256(abi.encode(u, 2)));
     }
 
     /// An HTS leg wraps straight into a UA: the wrapper's association is unchanged, the UA needs none.
@@ -203,9 +203,9 @@ contract HederaV2Test is Test {
         usdc.mint(alice, 10e6);
         vm.startPrank(alice);
         usdc.approve(t, 10e6);
-        UnderlyingToken(t).wrapToUA(address(usdc), 10e6, UA);
+        WrappedToken(t).wrapToUA(address(usdc), 10e6, UA);
         vm.stopPrank();
-        assertEq(UnderlyingToken(t).balanceOfUA(UA), 10e6);
+        assertEq(WrappedToken(t).balanceOfUA(UA), 10e6);
         assertEq(usdc.balanceOf(t), 10e6);
     }
 
@@ -216,7 +216,7 @@ contract HederaV2Test is Test {
         _wrapFor(t, usdc, alice, 10e6);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UALegNotLedger.selector, address(usdc)));
         vm.prank(alice);
-        UnderlyingToken(t).unwrapToUA(address(usdc), 1e6, UA, 0);
+        WrappedToken(t).unwrapToUA(address(usdc), 1e6, UA, 0);
         assertEq(IERC20MetaTx(t).balanceOf(alice), 10e6);
     }
 
@@ -225,7 +225,7 @@ contract HederaV2Test is Test {
     function test_uaPayReceiverFee_hip632Payee() public {
         _ledgerOn();
         vm.prank(alice);
-        address t = f.createToken(IOpenFactory.TokenKind.NONE, 2, abi.encode(noneInit("Points", "PTS", 0, 1000, alice, address(0))), "n2");
+        address t = f.createToken(IOpenFactory.TokenKind.NORMAL, 2, abi.encode(normalInit("Points", "PTS", 0, 1000, alice, address(0))), "n2");
         uint256 payerPk = 0xB0B;
         address payer = vm.addr(payerPk);
         address feeTo = address(0xFEE);
@@ -253,7 +253,7 @@ contract HederaV2Test is Test {
         us[0] = address(usdc);
         IFactoryToken.TokenConfig memory init = _init(us);
         vm.expectRevert(err);
-        f.createToken(IOpenFactory.TokenKind.UNDERLYING, 1, abi.encode(init), "x");
+        f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(init), "x");
     }
 
     function test_isTokenFailureRefuses() public {
@@ -272,7 +272,7 @@ contract HederaV2Test is Test {
     }
 
     function test_anyCustomFeeRefuses() public {
-        bytes memory e = abi.encodeWithSelector(IUnderlyingToken.UnderlyingInvalid.selector, address(usdc));
+        bytes memory e = abi.encodeWithSelector(IWrappedToken.UnderlyingInvalid.selector, address(usdc));
         MockHts(HTS).setFees(address(usdc), MockHts.Fees.Fixed);
         _refuse(e);
         MockHts(HTS).setFees(address(usdc), MockHts.Fees.Fractional);

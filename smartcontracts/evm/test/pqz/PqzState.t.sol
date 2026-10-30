@@ -8,7 +8,7 @@ import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
-import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
+import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {PqzSafety} from "../../src/pqz/PqzSafety.sol";
 
 /// Storage helpers over the ERC-7201 namespace `scaas.pqz` (plan 5h D2 / D3 layout).

@@ -7,8 +7,8 @@ import {OpenFactory} from "../../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../../../src/metatx/AdminLib.sol";
-import {NoUnderlyingPqzToken} from "../../../src/pqz/NoUnderlyingPqzToken.sol";
-import {UnderlyingPqzToken} from "../../../src/pqz/UnderlyingPqzToken.sol";
+import {NormalPqzToken} from "../../../src/pqz/NormalPqzToken.sol";
+import {WrappedPqzToken} from "../../../src/pqz/WrappedPqzToken.sol";
 import {MockERC20} from "../../helpers/Mocks.sol";
 import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
 import {PqzCt} from "../../../src/pqz/PqzCt.sol";
@@ -20,13 +20,13 @@ import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {Catalogue, pqzEnv} from "../../helpers/Catalogue.sol";
 
 /// @notice The PQZ token stack of chain 7622 in forge (P6g plan D6): the gen-1 registry (`PqzRegistryBase`), `OpenFactory`
-///         with the PQZ gate on, `NoUnderlyingPqzToken` clones. The `PQZ` precompile answers 1 for ops 1, 2, 4, 5 unless
+///         with the PQZ gate on, `NormalPqzToken` clones. The `PQZ` precompile answers 1 for ops 1, 2, 4, 5 unless
 ///         a test changes it; everything else is real. The test is the client: it mirrors each account's `acc` and
 ///         entries (arbitrary canonical bytes; the proofs are mocked; the token reads both from its own state, plan 5h) and the alice / bob / auditor keys of
 ///         `statement_transfer.json`, so a transfer can rebuild the vector's statement body.
 abstract contract PqzFixture is PqzRegistryBase {
     OpenFactory internal factory;
-    NoUnderlyingPqzToken internal noneImpl;
+    NormalPqzToken internal normalImpl;
     PqzLayer internal tok;
     PqzCtHarness internal ct;
     address internal registrar = address(0xF00D);
@@ -58,11 +58,11 @@ abstract contract PqzFixture is PqzRegistryBase {
         ct = new PqzCtHarness();
         factory = new OpenFactory(registrar, PQZ_UID, 0);
         // plan 5g-Z2: the PQZL release, its verifier the env's (CTR-ZTH-20)
-        noneImpl = NoUnderlyingPqzToken(Catalogue.release(factory, IOpenFactory.TokenKind.NONE_PQZ, 1,
-            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NoUnderlyingPqzToken).creationCode));
+        normalImpl = NormalPqzToken(Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
+            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode));
         vm.startPrank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NONE_PQZ, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.UNDERLYING_PQZ, true);
+        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true);
         vm.stopPrank();
         for (uint8 op = 1; op <= 5; ++op) if (op != 3) _mockOp(op, 1);
         txStmt = _vecHex("statement_transfer.json", ".rows[0].stmt");
@@ -86,22 +86,22 @@ abstract contract PqzFixture is PqzRegistryBase {
     }
 
     function _newToken(bytes32 s) internal returns (PqzLayer) {
-        return PqzLayer(factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), s));
+        return PqzLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), s));
     }
 
-    function _releaseUnderlying() internal {
-        Catalogue.release(factory, IOpenFactory.TokenKind.UNDERLYING_PQZ, 1,
-            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(UnderlyingPqzToken).creationCode);
+    function _releaseWrapped() internal {
+        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1,
+            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(WrappedPqzToken).creationCode);
     }
 
-    /// An `UNDERLYING_PQZ` token with one 1:1 `MockERC20` leg (after `_releaseUnderlying`).
-    function _newUnderlying(bytes32 s) internal returns (UnderlyingPqzToken) {
+    /// An `WRAPPED_PQZ` token with one 1:1 `MockERC20` leg (after `_releaseWrapped`).
+    function _newWrapped(bytes32 s) internal returns (WrappedPqzToken) {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = (1 << AdminLib.PAYABLE);
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
-        return UnderlyingPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_PQZ, 1, abi.encode(c), s)));
+        return WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), s)));
     }
 
     // ------------------------------------------------------------------ ciphertexts
@@ -227,7 +227,7 @@ abstract contract PqzFixture is PqzRegistryBase {
     }
 
     function _public(PqzLayer t, address to, uint256 units) internal {
-        NoUnderlyingPqzToken(address(t)).mint(to, units);
+        NormalPqzToken(address(t)).mint(to, units);
         minted += units;
     }
 

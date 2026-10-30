@@ -7,7 +7,7 @@ import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
-import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
+import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
@@ -103,7 +103,7 @@ contract PqzRelayTest is PqzFixture {
 
     function test_v3FeeUA() public {
         bytes32 fee = _mldsaUA(9);
-        NoUnderlyingPqzToken(address(tok)).mintToUA(fee, 20 * SCALE + 5);
+        NormalPqzToken(address(tok)).mintToUA(fee, 20 * SCALE + 5);
         minted += 20 * SCALE + 5;
         MetaTxLib.UAMetaTransaction memory m;
         m.from = fee;
@@ -119,7 +119,7 @@ contract PqzRelayTest is PqzFixture {
         _assertConservation(tok);
 
         // a v3 transfer: the UA binding (its own tag) in the statement; `shieldIn` 2 from the fee UA's own balance
-        NoUnderlyingPqzToken(address(tok)).mintToUA(fee, 2 * SCALE);
+        NormalPqzToken(address(tok)).mintToUA(fee, 2 * SCALE);
         minted += 2 * SCALE;
         bytes memory pl = _payload(1, 2, alice, bob, bytes32(0), _out(2, false), "");
         m.data = abi.encodeCall(PqzLayer.mtxConfidentialTransferSingle, (pl, hex"c0de", _mlAuth(), _benT(pl), bytes("")));
@@ -147,7 +147,7 @@ contract PqzRelayTest is PqzFixture {
         tok.uaBatch(ms, auths);
         // UA-6: a holder is a signing UA, so alice (registered with her PQZ key in one call) signs an envelope herself;
         // the same envelope under a signature the `mldsa65` precompile rejects is refused (no `authRef`, no foreign signer)
-        NoUnderlyingPqzToken(address(tok)).mintToUA(alice, 3 * SCALE);
+        NormalPqzToken(address(tok)).mintToUA(alice, 3 * SCALE);
         minted += 3 * SCALE;
         MetaTxLib.UAMetaTransaction memory h;
         h.from = alice;

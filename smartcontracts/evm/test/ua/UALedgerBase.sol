@@ -4,19 +4,19 @@ pragma solidity ^0.8.24;
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {ZetherKeys} from "../zether/helpers/ZetherKeys.sol";
 import {ZetherSchnorrBls12381Verifier} from "../../src/ua/verifiers/PairingVerifiers.sol";
-import {noneInit, underlyingInit, Rate} from "../v2/helpers/V2Fixture.sol";
+import {normalInit, wrappedInit, Rate} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// The UA ledger fixture (accounts.md CTR-UA-18/19/26): a registry at `REG_L` on context A (chain 31337, `chainUidA`)
-/// with the stand-in verifier for the eight classical kinds and the real `zether-bls12381` verifier; a `NONE` clone and a
-/// one-leg 1:1 `UNDERLYING` clone bound to it; two registered SIGNING UAs (`p256`, `bip340`) and a registered Zether UA
+/// with the stand-in verifier for the eight classical kinds and the real `zether-bls12381` verifier; a `NORMAL` clone and a
+/// one-leg 1:1 `WRAPPED` clone bound to it; two registered SIGNING UAs (`p256`, `bip340`) and a registered Zether UA
 /// (a SIGNING UA since UA-6, U8: it receives and signs with a Schnorr by `x`). UA-5a
 /// (CTR-UA-28): `wrpL`, a one-leg 1:1 wrapper of the ledger token `tok` (its reserve wrapped by this fixture, a contract
 /// that may approve, CTR-TOK-01), and `wrpN`, a one-leg 1:1 wrapper of the native coin.
@@ -37,10 +37,10 @@ abstract contract UALedgerBase is UARegistryBase {
     address internal constant POOL = MetaTxLib.UA_POOL;
 
     UARegistry internal lreg;
-    NoUnderlyingToken internal tok;
-    UnderlyingToken internal wrp;
-    UnderlyingToken internal wrpL; // leg: `tok` (a SCaaS ledger token)
-    UnderlyingToken internal wrpN; // leg: the native coin
+    NormalToken internal tok;
+    WrappedToken internal wrp;
+    WrappedToken internal wrpL; // leg: `tok` (a SCaaS ledger token)
+    WrappedToken internal wrpN; // leg: the native coin
     MockERC20 internal und;
     address internal alice;
     address internal bob;
@@ -68,33 +68,33 @@ abstract contract UALedgerBase is UARegistryBase {
         );
         (alice, bob) = (vm.addr(ALICE_PK), vm.addr(BOB_PK));
         vm.warp(1_800_000_000);
-        tok = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
-        tok.initialize(address(this), 1, abi.encode(noneInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
+        tok = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+        tok.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
         und = new MockERC20("Und", "UND", 6);
-        wrp = UnderlyingToken(Clones.clone(address(new UnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+        wrp = WrappedToken(Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (address(und), 1);
         Rate memory fixedRate;
-        wrp.initialize(address(this), 1, abi.encode(underlyingInit(us, one, one, 6, fixedRate, address(0), address(0))));
+        wrp.initialize(address(this), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
         wrpL = _wrapper(address(tok));
         wrpN = _wrapper(address(0));
     }
 
     /// A one-leg 1:1 wrapper of `leg`, ledger on (`REG_L`), `PAYABLE`, fixed rate.
-    function _wrapper(address leg) internal returns (UnderlyingToken) {
+    function _wrapper(address leg) internal returns (WrappedToken) {
         return _wrapperAt(leg, 1, 1);
     }
 
     /// The same at rate `num/den` (units per leg unit).
-    function _wrapperAt(address leg, uint256 num, uint256 den) internal returns (UnderlyingToken w) {
-        w = UnderlyingToken(Clones.clone(address(new UnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+    function _wrapperAt(address leg, uint256 num, uint256 den) internal returns (WrappedToken w) {
+        w = WrappedToken(Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
         address[] memory us = new address[](1);
         uint256[] memory n = new uint256[](1);
         uint256[] memory d = new uint256[](1);
         (us[0], n[0], d[0]) = (leg, num, den);
         Rate memory fixedRate;
-        w.initialize(address(this), 1, abi.encode(underlyingInit(us, n, d, 6, fixedRate, address(0), address(0))));
+        w.initialize(address(this), 1, abi.encode(wrappedInit(us, n, d, 6, fixedRate, address(0), address(0))));
     }
 
     // ----- structs -----
@@ -108,7 +108,7 @@ abstract contract UALedgerBase is UARegistryBase {
 
     function _m(address token, bytes32 from, bytes memory data) internal view returns (MetaTxLib.UAMetaTransaction memory m) {
         m = MetaTxLib.UAMetaTransaction({
-            from: from, data: data, batch: 1, nonce: NoUnderlyingToken(token).uaNonce(from, 1),
+            from: from, data: data, batch: 1, nonce: NormalToken(token).uaNonce(from, 1),
             validUntil: block.timestamp + 300, mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
         });
     }
@@ -130,11 +130,11 @@ abstract contract UALedgerBase is UARegistryBase {
     }
 
     function _authT(address token, MetaTxLib.UAMetaTransfer memory t) internal view returns (bytes memory) {
-        return _authFor(t.from, NoUnderlyingToken(token).uaTransferDigest(t));
+        return _authFor(t.from, NormalToken(token).uaTransferDigest(t));
     }
 
     function _authM(address token, MetaTxLib.UAMetaTransaction memory m) internal view returns (bytes memory) {
-        return _authFor(m.from, NoUnderlyingToken(token).uaDigest(m));
+        return _authFor(m.from, NormalToken(token).uaDigest(m));
     }
 
     function _xfer(MetaTxLib.UAMetaTransfer memory t) internal {
@@ -171,7 +171,7 @@ abstract contract UALedgerBase is UARegistryBase {
     }
 
     /// The same on any wrapper `w` of `tok`, at its rate: returns the units minted (and passed on).
-    function _wrapLOn(UnderlyingToken w, address who, uint256 amount) internal returns (uint256 minted) {
+    function _wrapLOn(WrappedToken w, address who, uint256 amount) internal returns (uint256 minted) {
         tok.mint(address(this), amount);
         tok.approve(address(w), amount);
         minted = w.wrap(amount);

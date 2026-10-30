@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {stdJson} from "forge-std/StdJson.sol";
 import {V2Fixture} from "./helpers/V2Fixture.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 
 /// @title Ghim storage layout của từng implementation v2 (TW2 §10.1): indexer và storage proof đọc `reserve`.
 /// @notice So `storageLayout` của artifact solc (`extra_output`) với `test/v2/layout/<Contract>.json` đã commit
@@ -29,17 +29,17 @@ contract LayoutTest is V2Fixture {
     }
 
     function test_storageLayoutIsPinned() public view {
-        _pin("NoUnderlyingToken", "NoUnderlyingToken");
-        _pin("UnderlyingToken", "UnderlyingToken");
-        _pin("NoUnderlyingZetherToken", "NoUnderlyingZetherToken"); // the Zether layer lives in `scaas.zether`
-        _pin("UnderlyingZetherToken", "UnderlyingZetherToken");
+        _pin("NormalToken", "NormalToken");
+        _pin("WrappedToken", "WrappedToken");
+        _pin("NormalZetherToken", "NormalZetherToken"); // the Zether layer lives in `scaas.zether`
+        _pin("WrappedZetherToken", "WrappedZetherToken");
     }
 
     /// Thứ indexer thật sự đọc (ERC-7201 `scaas.underlying`): chân i ở `keccak256(i ‖ NS)`: `token`, `+ 1` `num ‖ den`,
     /// `+ 2` `reserve`; `legCount` là byte thấp của `NS + 3`.
     function test_reserveSlotIsWhereIndexersReadIt() public {
         MockERC20 u = new MockERC20("U", "U", 6);
-        UnderlyingToken t = _single(address(u), 6, 3, 7, _fixedRate());
+        WrappedToken t = _single(address(u), 6, 3, 7, _fixedRate());
         u.mint(address(this), 1_000);
         u.approve(address(t), 1_000);
         t.wrap(1_000);
