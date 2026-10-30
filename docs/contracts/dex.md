@@ -747,10 +747,10 @@ SPECIFIED ([NODE-DEX-04](../node/dex-venue.md#NODE-DEX-04)).
 later plans then fail `ExchangeFailed(ref, …)` empty or `InteractionFailed(i, target, "")` — at the relayer's cost only.
 The node packs plans from the simulation's per-plan gas plus each leg kind's verify cap ([CTR-DEX-26](#CTR-DEX-26)'s
 table) and puts plans with untried targets last. A per-plan gas field is not added ([CTR-DEX-16](#CTR-DEX-16)'s ruling
-stands). Status **BUILT** (DEX round, 2026-10-30): `SCaaSDex`, `ISCaaSDex`; `test/v2/DexBatch.t.sol` (12 tests: `ok =
+stands). Status **BUILT** (DEX round, 2026-10-30): `SCaaSDex`, `ISCaaSDex`; `test/v2/DexBatch.t.sol` (13 tests: `ok =
 [true, false, true]`, `NothingSettled`, a real `SigCheckGasStarved` and `UAVerifyGas` reverting the whole call, a target
 forging the starvation selector failing only its plan, a returnbomb, `LengthMismatch`, `NotSelf`, relayer binding and
-fee share by the batch's caller, a later plan seeing an earlier plan's `pulled`, `restorePulled` forbidden), the four
+fee share by the batch's caller, a later plan seeing an earlier plan's `pulled`, `restorePulled` forbidden, a token whose allowance reset forges the starvation selector failing only its plan), the four
 `InteractionFailed` tests of `DexExchange.t.sol`. Measured: batch overhead **7,298** gas per plan (a one-plan batch
 301,719 against `mtxExchange` 294,421).
 
