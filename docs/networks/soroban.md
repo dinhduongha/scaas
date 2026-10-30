@@ -362,7 +362,11 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
   topics `ref, target, token`, data `payer, payee, amount` (`payer` / `payee` as `Holder`).
 - **Relayer rule.** `relayer.require_auth()` is not satisfied by the transaction source: the node adds an explicit
   `SourceAccount` auth entry rooted at the `relay` call. Node config `params.relay_fee = { router, min_amount }`; the node
-  reads `router.executor()` once and refuses a plain pay, a pay-meta or a relay fee to the router or its executor.
+  reads `router.executor()` once and refuses a plain pay, a pay-meta or a relay fee to the router or its executor, an
+  `approve` to either as spender (an amount 0 withdraws: allowed), a `transfer_from` with either as spender or `to`, and
+  a `relay` / `ua_relay` whose relayed target call does any of these (whatever the executor holds or is approved, any
+  relay can spend). A router without `executor()` is a config error: its chain's Soroban jobs fail with it (`dead`),
+  never requeued (router-fix review, carried to UA-Soroban, controller 2026-10-31).
 - **Owed.** A testnet or localnet simulate-and-submit of a `relay_fee` job to prove the `SourceAccount` path (the Rust test
   environment has no transaction source). TODO.md, "metatx split — e2e still owed".
 - Commits: pay-meta + router T10 `cd5e508c`, fix 1 `351f67ea`.

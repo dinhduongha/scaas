@@ -380,13 +380,13 @@ impl SorobanAdapter {
     }
 
     /// A read-only call by simulation from lane 0; `None` = it needs a restore (an archived entry): unknown, never a
-    /// default value. A simulation error is an `Err` (fail closed).
+    /// default value. A simulation error is an `Err` (fail closed): `SimRefused` when the host refused the call.
     async fn view(&self, contract: &ScAddress, f: &str, args: Vec<ScVal>) -> Result<Option<ScVal>> {
         let call = InvokeContractArgs { contract_address: contract.clone(), function_name: ScSymbol(f.try_into()?), args: args.try_into()? };
         let env = TransactionEnvelope::Tx(TransactionV1Envelope { tx: self.tx(0, 0, 0, call, vec![])?, signatures: Default::default() });
         let sim = self.rpc("simulateTransaction", json!({"transaction": env.to_xdr_base64(Limits::none())?})).await?;
         if let Some(e) = sim.get("error").and_then(|e| e.as_str()) {
-            bail!("{f}: {e}");
+            return Err(SimRefused(format!("{f}: {e}")).into());
         }
         if sim.get("restorePreamble").is_some_and(|r| !r.is_null()) {
             return Ok(None);
@@ -402,14 +402,20 @@ impl SorobanAdapter {
 
     /// Decision (D): the router's executor, read once from `router.executor()` (the router names it at construction,
     /// immutable); a plain pay, a pay-meta or a relay fee to it is refused like one to the router.
+    /// A router without `executor()` (an old stateless router, not the relay-fee contract) is a config error: the
+    /// job fails with it (`Revert`), never requeued forever; a transport failure or a needed restore stays `Transport`.
     async fn load_executor(&self) -> std::result::Result<(), SimError> {
         let (Some(router), None) = (&self.relay_fee.router, self.relay_fee.executor.get()) else { return Ok(()) };
+        let config = |why: String| SimError::Revert(format!(
+            "config: params.relay_fee.router {router} {why}; deploy the router with its executor (deploy.sh soroban <net> relay_fee)"));
         match self.view(router, "executor", vec![]).await {
             Ok(Some(ScVal::Address(x))) => {
                 let _ = self.relay_fee.executor.set(x);
                 Ok(())
             }
-            Ok(v) => Err(SimError::Transport(format!("router executor() unreadable: {v:?}"))),
+            Ok(Some(v)) => Err(config(format!("executor() is not an address: {v:?}"))),
+            Ok(None) => Err(SimError::Transport("router executor(): its state needs a restore".into())),
+            Err(e) if e.is::<SimRefused>() => Err(config(format!("has no executor(): {e:#}"))),
             Err(e) => Err(SimError::Transport(format!("router executor(): {e:#}"))),
         }
     }
@@ -432,6 +438,18 @@ impl SorobanAdapter {
         (current != *signed).then(|| format!("StaleEpoch: signed {signed}, epoch(token) {current}; re-read epoch(token) and re-sign (CTR-ACC-07)"))
     }
 }
+
+/// `simulateTransaction` answered `error`: the host refused the call (not a transport failure).
+#[derive(Debug)]
+struct SimRefused(String);
+
+impl std::fmt::Display for SimRefused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for SimRefused {}
 
 fn clone_signer(s: &LocalSigner) -> Result<LocalSigner> {
     match s {
@@ -802,21 +820,31 @@ pub fn job_call(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &Relay
         None => host_call(network, op)?,
     };
     if pays_router(&call, policy) {
-        bail!("a plain pay to the relay-fee router or its executor is refused (CTR-MTX-27: never pay the router)");
+        bail!("a pay or approval to the relay-fee router or its executor is refused (CTR-MTX-27: never pay the router)");
     }
     Ok((call, auth))
 }
 
 /// CTR-MTX-27: a call that pays (or approves for later pays) the router or its executor: a token `pay` / `pay_meta` /
-/// `transfer` to either (argument 1), a `Holder::Addr` of either as the `to` / payee (argument 1) of `ua_pay` /
-/// `ua_pay_meta` / `ua_transfer` (outside `ua_relay`), `mtx_mandate_pay`, `mtx_withdraw`, `mtx_set_payee` (unless it
-/// withdraws the approval), or as either order's `destination` of `settle`. Coins on the router are stranded; the
-/// executor runs targets as itself, so the next relay could take them.
+/// `transfer` to either (argument 1), `approve` to either as spender (argument 1; an amount 0 withdraws, allowed),
+/// `transfer_from` with either as spender or `to` (arguments 0, 2), a `Holder::Addr` of either as the `to` / payee
+/// (argument 1) of `ua_pay` / `ua_pay_meta` / `ua_transfer` (outside `ua_relay`), `mtx_mandate_pay`, `mtx_withdraw`,
+/// `mtx_set_payee` (unless it withdraws the approval), or as either order's `destination` of `settle`; for `relay` /
+/// `ua_relay`, the relayed target call by the same rule. Coins on the router are stranded; the executor runs targets as
+/// itself, so the next relay could take whatever it holds or is approved.
 pub fn pays_router(call: &InvokeContractArgs, policy: &RelayFeePolicy) -> bool {
     let (a, f) = (call.args.as_slice(), call.function_name.0.as_slice());
+    if let (b"relay" | b"ua_relay", Some(ScVal::Address(t)), Some(ScVal::Symbol(func)), Some(ScVal::Vec(Some(inner)))) = (f, a.get(1), a.get(2), a.get(3)) {
+        let target = InvokeContractArgs { contract_address: t.clone(), function_name: func.clone(), args: inner.0.clone() };
+        if pays_router(&target, policy) {
+            return true;
+        }
+    }
     let to = a.get(1);
     policy.router.iter().chain(policy.executor.get()).any(|x| match f {
         b"pay" | b"pay_meta" | b"transfer" => to == Some(&ScVal::Address(x.clone())),
+        b"approve" => to == Some(&ScVal::Address(x.clone())) && a.get(2).and_then(scval_i128) != Some(0),
+        b"transfer_from" => [0, 2].iter().any(|&i| a.get(i) == Some(&ScVal::Address(x.clone()))),
         b"ua_pay" | b"ua_pay_meta" | b"ua_transfer" | b"mtx_mandate_pay" | b"mtx_withdraw" => to == Some(&holder_addr(x)),
         b"mtx_set_payee" => to == Some(&holder_addr(x)) && a.get(2) != Some(&ScVal::Bool(false)),
         b"settle" => a.iter().take(2).any(|o| field(o, "destination") == Some(&holder_addr(x))),
@@ -856,6 +884,9 @@ pub fn relay_fee_job(
     }
     if call.args[9] != ScVal::Address(lane.clone()) {
         bail!("relayer argument is not this lane");
+    }
+    if pays_router(&call, policy) {
+        bail!("the relayed call pays or approves the relay-fee router or its executor (CTR-MTX-27)");
     }
     let (ScVal::Address(target), ScVal::Symbol(func), ScVal::Vec(Some(inner))) = (&call.args[1], &call.args[2], &call.args[3]) else {
         bail!("relay target / func / args malformed");
@@ -1117,7 +1148,7 @@ pub fn ua_metatx_job(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &
     };
     ua_valid_until(&call)?;
     if pays_router(&call, policy) {
-        bail!("a UA pay to the relay-fee router or its executor is refused outside ua_relay (CTR-MTX-27)");
+        bail!("a pay or approval to the relay-fee router or its executor is refused (outside ua_relay's own fee; CTR-MTX-27)");
     }
     if f.name == "ua_relay" {
         ua_relay_policy(&call, lane, policy)?;
@@ -1381,8 +1412,13 @@ mod tests {
 
     /// `to` = the payee: the router (open mode, the default), the lane, or anyone else (bound).
     fn relay_job_to(token_pay_ref: &[u8], relayer: &str, target_in_call: &str, op_ref: &[u8], func: ScVal, payee: &str) -> Value {
+        relay_job_args(token_pay_ref, relayer, target_in_call, op_ref, func, payee, vec![addr(CONTRACT), addr(OWNER)])
+    }
+
+    /// `relay_job_to` with the target call's arguments given.
+    fn relay_job_args(token_pay_ref: &[u8], relayer: &str, target_in_call: &str, op_ref: &[u8], func: ScVal, payee: &str,
+                      args: Vec<ScVal>) -> Value {
         let token = CONTRACT;
-        let args = vec![addr(token), addr(OWNER)];
         let to = addr(payee);
         let signed = vec![addr(WALLET), func, vecv(args.clone()), byt(&SALT), addr(token), to.clone(), i128v(7), ScVal::U64(1_800_000_300)];
         let pay = inv(token, "pay", vec![addr(OWNER), to.clone(), i128v(7), byt(token_pay_ref), ScVal::U64(1_800_000_300)], vec![]);
@@ -1800,6 +1836,73 @@ mod tests {
         let e = ua_metatx_job(&NET7, &ua_op(WALLET2, "ua_relay", ua_relay_args(h_addr(WALLET2), LANE)), &lane(), &RelayFeePolicy { tokens: vec![], ..policy() })
             .unwrap_err().to_string();
         assert!(e.contains("token"), "{e}");
+    }
+
+    /// Router-fix review (carried to ua-soroban): anything approved to the executor is spendable by anyone through
+    /// `relay` (the executor runs targets as itself), and an approval to the router strands like a pay. The node refuses
+    /// `approve` naming either as spender (an `approve(…, 0, …)` withdraws: allowed) and `transfer_from` naming either
+    /// as spender or `to`; for `relay` / `ua_relay` jobs it checks the relayed target call the same way.
+    #[test]
+    fn node_refuses_approvals_to_router_or_executor() {
+        let p = policy();
+        p.executor.set(executor()).unwrap();
+        let ex = executor().to_string();
+        let host = |f: &str, args: Vec<ScVal>| json!({"payload": payload(NET7, inv(CONTRACT, f, args, vec![])),
+            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": VU, "extra": {}});
+        let approve = |x: &str, n: u64| vec![addr(FROM), addr(x), i128v(n), ScVal::U32(100)];
+        let tf_spender = |x: &str| vec![addr(x), addr(FROM), addr(LANE), i128v(5)];
+        let tf_to = |x: &str| vec![addr(LANE), addr(FROM), addr(x), i128v(5)];
+        assert!(job_call(&NET7, &host("approve", approve(LANE, 5)), &lane(), &p).is_ok());
+        assert!(job_call(&NET7, &host("transfer_from", tf_to(OWNER)), &lane(), &p).is_ok());
+        for x in [WALLET2, ex.as_str()] {
+            for (f, args) in [("approve", approve(x, 5)), ("transfer_from", tf_spender(x)), ("transfer_from", tf_to(x))] {
+                let e = job_call(&NET7, &host(f, args.clone()), &lane(), &p).unwrap_err().to_string();
+                assert!(e.contains("router"), "{f} {x}: {e}");
+                // relay_fee: the relayed target call
+                let rf = relay_ref(&NET7, &sc(WALLET), &ScSymbol(f.try_into().unwrap()), &args, &SALT);
+                let job = relay_job_args(&rf, LANE, WALLET, &rf, sym(f), LANE, args.clone());
+                let e = relay_fee_job(&NET7, &job, &lane(), &p).unwrap_err().to_string();
+                assert!(e.contains("router"), "relay {f} {x}: {e}");
+                // ua_relay: the same
+                let mut ua = ua_relay_args(h_addr(WALLET2), LANE);
+                (ua[2], ua[3]) = (sym(f), vecv(args));
+                let e = ua_metatx_job(&NET7, &ua_op(WALLET2, "ua_relay", ua), &lane(), &p).unwrap_err().to_string();
+                assert!(e.contains("router"), "ua_relay {f} {x}: {e}");
+            }
+            assert!(job_call(&NET7, &host("approve", approve(x, 0)), &lane(), &p).is_ok(), "withdrawing an approval to {x}");
+        }
+        // the relayed target paying the router is refused too (the T8 attack shape: a victim's pay to the router)
+        let args = vec![addr(FROM), addr(WALLET2), i128v(5), byt(&[3; 32]), u64v(VU)];
+        let rf = relay_ref(&NET7, &sc(WALLET), &ScSymbol("pay".try_into().unwrap()), &args, &SALT);
+        assert!(relay_fee_job(&NET7, &relay_job_args(&rf, LANE, WALLET, &rf, sym("pay"), LANE, args), &lane(), &p).is_err());
+        // an ordinary relayed call still passes
+        let args = vec![addr(CONTRACT), addr(OWNER)];
+        let rf = relay_ref(&NET7, &sc(WALLET), &ScSymbol("revoke".try_into().unwrap()), &args, &SALT);
+        assert!(relay_fee_job(&NET7, &relay_job_args(&rf, LANE, WALLET, &rf, sym("revoke"), LANE, args), &lane(), &p).is_ok());
+    }
+
+    /// Router-fix review (carried): a configured router without `executor()` (an old stateless router, or not the
+    /// relay-fee contract at all) is a config error: the chain's Soroban jobs fail with it (`Revert`, the job goes
+    /// `dead` with the reason), never `Transport` (requeued forever).
+    #[tokio::test]
+    async fn missing_executor_is_a_config_error() {
+        let answers: [Answer; 2] = [
+            Arc::new(|c| match c.function_name.0.as_slice() {
+                b"executor" => json!({"error": "HostError: Error(WasmVm, MissingValue)\ntrying to invoke non-existent contract function"}),
+                _ => json!({"error": "stop here"}),
+            }),
+            Arc::new(|c| match c.function_name.0.as_slice() {
+                b"executor" => view_ok(ScVal::U32(7)),
+                _ => json!({"error": "stop here"}),
+            }),
+        ];
+        for answer in answers {
+            let (a, _) = stub_adapter(answer, true).await;
+            let (c, f, args) = ua_ops(ScVal::Void).remove(0);
+            let e = a.build(&ua_job(c, f, args), 0).await.err().unwrap();
+            assert!(matches!(&e, SimError::Revert(r) if r.contains("config") && r.contains("executor")), "{e:?}");
+            assert!(a.relay_fee.executor.get().is_none());
+        }
     }
 
     /// Decision (D): the router's executor is never a payee: plain `pay` / `pay_meta` and relay-fee jobs refuse it.
