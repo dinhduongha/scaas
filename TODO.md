@@ -120,6 +120,10 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   3. EVM contracts: **DEX, one round** — the 50 % minFill floor removed + `mtxHybrid` / `mtxHybridVia` +
      `mtxExchangeBatch` + mode 3 / 4 tests + reference executor + Uniswap fork test (item "DEX: drop the 50 % minimum-fill
      floor + four matching modes" under "Recorded, not scheduled"); `TradeLib`, `SCaaSDex`, node `dex.rs`, clientkeys.
+     DEX spec accepted by the owner 2026-10-30: `docs/superpowers/specs/2026-10-30-dex-round-design.md` (branch `spec-dex`; DX7
+     changed: a hybrid's unsold taker remainder is refunded when the sold part meets its `minFill` and limit, else revert;
+     DX10 / DX11 confirmed). Plan written (no owner review): `docs/superpowers/plans/2026-10-30-dex-round.md` (T1–T19, build
+     branch `dex-round` from `main`).
   4. **4b Soroban (UA base) + UA-8 step 2 (Soroban registry)**, plus **classical Zether on Soroban** (owner 2026-10-30;
      spec S13a: its own track and branch `soroban-zether` after `soroban-4b`, BLS12-381 host functions, measure the verifier
      first — a verify over the per-transaction budget is a STOP for the owner), in one round — shared ML-DSA verifier (CAP-0087 host
