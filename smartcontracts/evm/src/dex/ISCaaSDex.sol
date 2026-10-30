@@ -144,6 +144,9 @@ interface ISCaaSDex {
     ///         not get its cap) does the same (CTR-DEX-26).
     error SigCheckGasStarved(uint256 cap, uint256 gasLeft);
     error UAVerifyGas();
+    /// @notice A path (a) interaction failed (CTR-DEX-20): its position, target and at most 256 bytes of its revert
+    ///         data, so a target cannot forge `SigCheckGasStarved` / `UAVerifyGas` or return a bomb.
+    error InteractionFailed(uint256 index, address target, bytes reason);
     error FillMismatch(uint256 expected, uint256 got);
     /// @notice Path B checks the DEX makes on the matched part (the token checks Path A itself).
     error BelowMinFill(bytes32 orderHash);

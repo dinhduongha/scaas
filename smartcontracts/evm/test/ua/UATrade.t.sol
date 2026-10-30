@@ -235,6 +235,14 @@ contract UATradeTest is UALedgerBase {
         assertEq(tok.pulled(tok.uaTradeOrderDigest(o)), 100);
     }
 
+    function test_ua_minFill_remainderClosesBelowMinFill() public {
+        ITradeToken.UATradeOrder memory o = _o(uaP, 1000, 2000);
+        o.minFill = 300;
+        _trade(o, _f(800, 1600, 0));
+        _trade(o, _f(200, 400, 0)); // the remainder, below minFill
+        assertEq(tok.pulled(tok.uaTradeOrderDigest(o)), 1000);
+    }
+
     function test_nonceFloor_and_balance() public {
         ITradeToken.UATradeOrder memory o = _o(uaP, 1000, 2000);
         tok.uaInvalidateNonces(uaP, 1, 2, _authP(uaP, UAKinds.PURPOSE_TRADE, tok.uaInvalidateNoncesDigest(uaP, 1, 2)));

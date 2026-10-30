@@ -122,6 +122,9 @@ contract Hostile {
 
     function boom() external pure { revert Boom(42); }
     function burn() external pure { while (true) {} }
+    function forge() external pure { revert ISCaaSDex.SigCheckGasStarved(1, 2); }
+    function bomb() external pure { assembly { revert(0, 1000000) } }
+    function bigOk() external pure { assembly { return(0, 1000000) } }
     function reenter(ISCaaSDex d) external { d.mtxSettle(DexLegs.wire(new DexLegs.Settlement[](0))); }
 }
 
@@ -402,8 +405,8 @@ contract DexExchangeTest is Test {
         a.transfer(address(dex), 50);
         router.setQuirks(50, 0);
         DexLegs.ExchangePlan memory p = _plan(_alice());
-        _expectExchange(p, _swap(address(a), address(b), 1000, 2000), abi.encodeWithSelector(
-            IERC20Errors.ERC20InsufficientAllowance.selector, address(router), 1000, 1050));
+        _expectExchange(p, _swap(address(a), address(b), 1000, 2000), _wrapped(1, address(router),
+            abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, address(router), 1000, 1050)));
         ISCaaSDex.Interaction[] memory xs = _swap(address(a), address(b), 1000, 2000);
         xs[0].data = abi.encodeCall(IERC20.approve, (address(router), type(uint256).max));
         _expectExchange(p, xs, _err(ISCaaSDex.ConservationBroken.selector, address(a)));
@@ -552,8 +555,8 @@ contract DexExchangeTest is Test {
         ISCaaSDex.Interaction[] memory xs = _cat(
             _ix(address(usdc), abi.encodeCall(IERC20.transferFrom, (dave, address(0xBAD), 100))),
             _swap(address(a), address(b), 1000, 2000));
-        _expectExchange(_plan(_alice()), xs,
-            abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, address(dex), 0, 100));
+        _expectExchange(_plan(_alice()), xs, _wrapped(0, address(usdc),
+            abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, address(dex), 0, 100)));
     }
 
     function test_exchange_reenteringTarget_isRefused() public {
@@ -561,20 +564,76 @@ contract DexExchangeTest is Test {
         ISCaaSDex.Interaction[] memory xs =
             _cat(_ix(address(h), abi.encodeCall(Hostile.reenter, (ISCaaSDex(address(dex))))),
                 _swap(address(a), address(b), 1000, 2000));
-        _expectExchange(_plan(_alice()), xs,
-            abi.encodeWithSelector(ReentrancyGuardTransient.ReentrancyGuardReentrantCall.selector));
+        _expectExchange(_plan(_alice()), xs, _wrapped(0, address(h),
+            abi.encodeWithSelector(ReentrancyGuardTransient.ReentrancyGuardReentrantCall.selector)));
     }
 
-    /// A failing interaction reverts the plan with its own data; a gas-burning one fails only this call.
+    function _wrapped(uint256 index, address target, bytes memory reason) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(ISCaaSDex.InteractionFailed.selector, index, target, reason);
+    }
+
+    /// A failing interaction reverts the plan wrapped with its index, target and reason; a gas-burning one fails only
+    /// this call.
     function test_exchange_revertingAndGasBurningTargets() public {
         Hostile h = new Hostile();
         DexLegs.ExchangePlan memory p = _plan(_alice());
         _expectExchange(p, _ix(address(h), abi.encodeCall(Hostile.boom, ())),
-            abi.encodeWithSelector(Hostile.Boom.selector, 42));
+            _wrapped(0, address(h), abi.encodeWithSelector(Hostile.Boom.selector, 42)));
         ISCaaSDex.Interaction[] memory xs = _ix(address(h), abi.encodeCall(Hostile.burn, ()));
         vm.prank(relayer);
         vm.expectRevert();
         dex.mtxExchange{gas: 1_000_000}(DexLegs.wire(p), xs);
+    }
+
+    function test_exchange_failingTarget_wrappedAsInteractionFailed() public {
+        Hostile h = new Hostile();
+        ISCaaSDex.Interaction[] memory xs = _cat(_swap(address(a), address(b), 1000, 2000),
+            _ix(address(h), abi.encodeCall(Hostile.boom, ())));
+        _expectExchange(_plan(_alice()), xs,
+            _wrapped(2, address(h), abi.encodeWithSelector(Hostile.Boom.selector, 42)));
+    }
+
+    /// A target cannot forge the starvation errors the batch re-raises: its data is only the `reason`.
+    function test_exchange_targetForgingStarvation_isInteractionFailed() public {
+        Hostile h = new Hostile();
+        _expectExchange(_plan(_alice()), _ix(address(h), abi.encodeCall(Hostile.forge, ())),
+            _wrapped(0, address(h), abi.encodeWithSelector(ISCaaSDex.SigCheckGasStarved.selector, 1, 2)));
+    }
+
+    function test_exchange_returnbombTarget_boundedCopy() public {
+        Hostile h = new Hostile();
+        DexLegs.ExchangePlan memory p = _plan(_alice());
+        vm.prank(relayer);
+        try dex.mtxExchange(DexLegs.wire(p), _ix(address(h), abi.encodeCall(Hostile.bomb, ()))) {
+            revert("must fail");
+        } catch (bytes memory err) {
+            assertEq(bytes4(err), ISCaaSDex.InteractionFailed.selector);
+            (uint256 i, address t, bytes memory reason) = abi.decode(_tail(err), (uint256, address, bytes));
+            assertEq(i, 0);
+            assertEq(t, address(h));
+            assertEq(reason.length, 256);
+        }
+        // the target itself pays ~2.2 M gas to expand 1 MB; an unbounded copy would cost the DEX as much again
+        vm.prank(relayer);
+        uint256 g = gasleft();
+        try dex.mtxExchange(DexLegs.wire(p), _ix(address(h), abi.encodeCall(Hostile.bomb, ()))) {} catch {}
+        assertLt(g - gasleft(), 3_000_000);
+    }
+
+    function test_exchange_successReturnDataNotCopied() public {
+        Hostile h = new Hostile();
+        ISCaaSDex.Interaction[] memory xs = _cat(_ix(address(h), abi.encodeCall(Hostile.bigOk, ())),
+            _swap(address(a), address(b), 1000, 2000));
+        vm.prank(relayer);
+        uint256 g = gasleft();
+        dex.mtxExchange(DexLegs.wire(_plan(_alice())), xs);
+        // the target pays ~2.2 M to expand 1 MB; a copy into memory would add as much again
+        assertLt(g - gasleft(), 3_000_000);
+    }
+
+    function _tail(bytes memory err) internal pure returns (bytes memory out) {
+        out = new bytes(err.length - 4);
+        for (uint256 i; i < out.length; ++i) out[i] = err[i + 4];
     }
 
     // ------------------------------------------------------------------ listed targets: LISTED_POOLS × listed-only

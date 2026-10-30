@@ -216,6 +216,26 @@ contract DexTest is Test {
         assertEq(b.pulled(b.tradeOrderDigest(mo)), 100);
     }
 
+    function test_settle_minFill_remainderClosesBelowMinFill() public {
+        ITradeToken.TradeOrder memory mo = _order(bob, a, 1000, 500, 0);
+        mo.minFill = 300;
+        DexLegs.Settlement[] memory ss = new DexLegs.Settlement[](2);
+        uint256[2] memory fills = [uint256(800), 200]; // the second is the remainder, below minFill
+        for (uint256 i; i < 2; ++i) {
+            ss[i].ref = bytes32(i + 1);
+            ss[i].makers = new DexLegs.Leg[](1);
+            ss[i].makers[0] = _leg(BOB_PK, b, mo, fills[i]);
+            ITradeToken.TradeOrder memory to = _order(alice, b, fills[i] / 2, fills[i], 0);
+            to.nonce = i + 1;
+            ss[i].taker = _leg(ALICE_PK, a, to, fills[i] / 2);
+        }
+        vm.prank(relayer);
+        bool[] memory ok = dex.mtxSettle(DexLegs.wire(ss));
+        assertTrue(ok[0]);
+        assertTrue(ok[1]);
+        assertEq(b.pulled(b.tradeOrderDigest(mo)), 1000);
+    }
+
     function test_settle_pathAOrderFilledInFiveSettlements() public {
         ITradeToken.TradeOrder memory mo = _order(bob, a, 1000, 500, 0);
         DexLegs.Settlement[] memory ss = new DexLegs.Settlement[](5);
