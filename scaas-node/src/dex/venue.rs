@@ -1074,9 +1074,9 @@ fn sig_bytes(s: &str) -> std::result::Result<Bytes, VenueError> {
 }
 
 /// Readable DEX error (for `MatchFailed.reason` in the client); an EMPTY reason is the settlement's self-call
-/// running out of gas, never an order's fault (P2b-2: success is not monotonic in gas).
+/// running out of gas (or an interaction's, wrapped in `InteractionFailed`), never an order's fault (P2b-2: success is not monotonic in gas).
 pub fn revert_name(data: &[u8]) -> String {
-    if data.is_empty() {
+    if crate::guard::reason_is_out_of_gas(data) {
         return "out_of_gas".into();
     }
     crate::abi::decode_revert(data)
@@ -1151,6 +1151,14 @@ pub fn encode_event(log: &Log) -> Option<Value> {
 
 #[cfg(test)]
 mod tests {
+    /// T5 minor: an interaction out of gas inside a batch plan is `InteractionFailed(i, target, "")`, read as out_of_gas.
+    #[test]
+    fn a_wrapped_empty_interaction_revert_is_out_of_gas() {
+        let e = |r: &[u8]| ISCaaSDex::InteractionFailed { index: alloy::primitives::U256::from(2), target: Address::repeat_byte(7), reason: r.to_vec().into() }.abi_encode();
+        assert_eq!(revert_name(&[]), "out_of_gas");
+        assert_eq!(revert_name(&e(&[])), "out_of_gas");
+        assert!(revert_name(&e(&[1, 2])).starts_with("InteractionFailed"));
+    }
     use super::*;
     use alloy::primitives::LogData;
     use alloy::sol_types::SolError;
