@@ -123,11 +123,18 @@ fn kem_record_vectors() {
     }
     assert_eq!(arr(&p, "kemRecords").len(), 9);
     let ua = [1u8; 32];
-    assert_eq!(kem_record_digest(&ua, 0, &[0; 1600]), Err(UAError::KemVersion));
-    assert_eq!(kem_record_digest(&ua, 1, &[0; 1599]), Err(UAError::KemKeyLength));
-    assert_eq!(kem_record_digest(&ua, 1, &[0; 1601]), Err(UAError::KemKeyLength));
+    let kem = |scheme: u8, n: usize| [vec![scheme], vec![0u8; n - 1]].concat(); // scheme byte ‖ zeros, n bytes in all
+    assert_eq!(kem_record_digest(&ua, 0, &kem(1, 1601)), Err(UAError::KemVersion));
+    assert_eq!(kem_record_digest(&ua, 1, &kem(1, 1600)), Err(UAError::KemKeyLength));
+    assert_eq!(kem_record_digest(&ua, 1, &kem(1, 1602)), Err(UAError::KemKeyLength));
+    assert_eq!(kem_record_digest(&ua, 1, &[]), Err(UAError::KemKeyLength));
+    // CTR-UA-32: scheme 1 only; 0, the reserved 2 and an unknown id are UAKemScheme, whatever the length
+    for scheme in [0u8, 2, 0xff] {
+        assert_eq!(kem_record_digest(&ua, 1, &kem(scheme, 1601)), Err(UAError::KemScheme));
+        assert_eq!(kem_record_digest(&ua, 1, &kem(scheme, 1600)), Err(UAError::KemScheme));
+    }
     // known answers (ua-py / ua-go): the 8-byte version word and the decimal "evm:" chain key
-    assert_eq!(hx(&kem_record_digest(&ua, u64::MAX, &[0; 1600]).unwrap()), "0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31");
+    assert_eq!(hx(&kem_record_digest(&ua, u64::MAX, &kem(1, 1601)).unwrap()), "0x8c997440926a352465f61b53b75606d794efa60c66ac4a7a63f25369a15f7092");
     assert_eq!(hx(&chain_key_hash((1 << 40) + 7)), "0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950"); // keccak256("evm:1099511627783")
 }
 
@@ -235,7 +242,7 @@ fn negatives_refused() {
             _ => sig_level += 1, // PQ / classical signatures: verified by the signature vectors (no verifier in this crate)
         }
     }
-    assert_eq!((run, sig_level), (58, 5), "{} negatives", arr(&p, "negatives").len());
+    assert_eq!((run, sig_level), (62, 5), "{} negatives", arr(&p, "negatives").len());
     println!("{run} digest-layer negatives refused, {sig_level} signature-level");
 }
 

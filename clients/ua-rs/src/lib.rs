@@ -33,6 +33,8 @@ pub enum UAError {
     KemHolder(u16),
     KemVersion,
     KemKeyLength,
+    /// First byte of a `kemPk` is not an enabled KEM scheme id (CTR-UA-32).
+    KemScheme,
     PqzPopHash,
     /// `setPqzKey` on a registration that already has a PQZ key (write-once).
     PqzKeySet,
@@ -52,6 +54,7 @@ impl UAError {
             UAError::KemHolder(_) => "UAKemHolder",
             UAError::KemVersion => "UAKemVersion",
             UAError::KemKeyLength => "UAKemKeyLength",
+            UAError::KemScheme => "UAKemScheme",
             UAError::PqzPopHash => "UAPqzPopHash",
             UAError::PqzKeySet => "UAPqzKeySet",
         }
