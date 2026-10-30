@@ -120,7 +120,9 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   3. EVM contracts: **DEX, one round** — the 50 % minFill floor removed + `mtxHybrid` / `mtxHybridVia` +
      `mtxExchangeBatch` + mode 3 / 4 tests + reference executor + Uniswap fork test (item "DEX: drop the 50 % minimum-fill
      floor + four matching modes" under "Recorded, not scheduled"); `TradeLib`, `SCaaSDex`, node `dex.rs`, clientkeys.
-  4. **4b Soroban (UA base) + UA-8 step 2 (Soroban registry)** in one round — shared ML-DSA verifier (CAP-0087 host
+  4. **4b Soroban (UA base) + UA-8 step 2 (Soroban registry)**, plus **classical Zether on Soroban** (owner 2026-10-30;
+     spec S13a: its own track and branch `soroban-zether` after `soroban-4b`, BLS12-381 host functions, measure the verifier
+     first — a verify over the per-transaction budget is a STOP for the owner), in one round — shared ML-DSA verifier (CAP-0087 host
      functions) and vectors. **No waiting** (owner 2026-10-29): code and tests on a local network / quickstart at
      Protocol 30 as soon as the stream is free (Stellar Core v30.0.0 stable, the SDK's ML-DSA wrapper merged 2026-10-19
      — check which soroban-sdk release carries it); only the testnet e2e runs after 2026-11-03 (Stellar testnet votes
@@ -373,10 +375,6 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 
 ### Recorded, not scheduled
 
-- [ ] **Classical Zether (not post-quantum) on Soroban** (4b spec S13a, 2026-10-30; separate from PQZ, S13b): never built on
-  Soroban; measure a verifier first (BLS12-381 / BN254 host functions, CAP-59 / CAP-74; a range proof may not fit the
-  per-transaction CPU budget, Groth16 over a Zether-like circuit is the practical candidate, `networks/soroban.md`), then a
-  Soroban Zether token, with the Zether PoP kind 0x0141 enabled on the Soroban registry at the same time.
 - [ ] **DEX: drop the 50 % minimum-fill floor + four matching modes** (owner 2026-10-29; research
   [docs/research/dex-matching-modes.md](docs/research/dex-matching-modes.md)): (a) owner decision: `MIN_FILL_PPM` goes,
   the per-fill minimum is the signer's `minFill` only (§6.3: new CTR-DEX-14 text, then `TradeLib`, `SCaaSDex` Path B,
