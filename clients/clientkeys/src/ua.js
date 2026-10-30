@@ -289,10 +289,11 @@ export function pqzKeyRecordMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopH
  *  `personal_sign` (ruling C7 / A1-I2); every other purpose stays UAAuth (CTR-MTX-14). */
 export const isPortablePurpose = (tag) => [POP_V2_TAG, KEM_TAG, PQZ_KEY_TAG].some((t) => hex(t) === hex(sized(tag, 32, 'purposeTag')));
 
-/** EIP-191 `personal_sign` of a 32-byte digest: `keccak256("\x19Ethereum Signed Message:\n32" ‖ digest)`, what a code-less
- *  native (EOA) `msig` member signs, as 65-byte r ‖ s ‖ v (low-s, v 27 / 28), over the `memberDigest` of a portable record
- *  only (`isPortablePurpose`); a member with code (EIP-7702 delegate, contract wallet) answers ERC-1271
- *  `isValidSignature(memberDigest, sig)` instead, and every other purpose stays UAAuth (CTR-MTX-14). */
+/** EIP-191 `personal_sign` of a 32-byte digest: `keccak256("\x19Ethereum Signed Message:\n32" ‖ digest)`, what a native EOA
+ *  `msig` member (code-less, or an EIP-7702 designator: its own key, never its delegate; owner ruling 2026-10-30) signs, as
+ *  65-byte r ‖ s ‖ v (low-s, v 27 / 28), over the `memberDigest` of a portable record only (`isPortablePurpose`); a contract
+ *  wallet member answers ERC-1271 `isValidSignature(memberDigest, sig)` instead, and every other purpose stays UAAuth
+ *  (CTR-MTX-14). */
 export const personalSignDigest = (digest) =>
   keccak_256(concatBytes(utf8ToBytes('\x19Ethereum Signed Message:\n32'), sized(digest, 32, 'digest')));
 
