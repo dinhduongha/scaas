@@ -369,6 +369,10 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 
 ### Recorded, not scheduled
 
+- [ ] **Classical Zether (not post-quantum) on Soroban** (4b spec S13a, 2026-10-30; separate from PQZ, S13b): never built on
+  Soroban; measure a verifier first (BLS12-381 / BN254 host functions, CAP-59 / CAP-74; a range proof may not fit the
+  per-transaction CPU budget, Groth16 over a Zether-like circuit is the practical candidate, `networks/soroban.md`), then a
+  Soroban Zether token, with the Zether PoP kind 0x0141 enabled on the Soroban registry at the same time.
 - [ ] **DEX: drop the 50 % minimum-fill floor + four matching modes** (owner 2026-10-29; research
   [docs/research/dex-matching-modes.md](docs/research/dex-matching-modes.md)): (a) owner decision: `MIN_FILL_PPM` goes,
   the per-fill minimum is the signer's `minFill` only (§6.3: new CTR-DEX-14 text, then `TradeLib`, `SCaaSDex` Path B,
