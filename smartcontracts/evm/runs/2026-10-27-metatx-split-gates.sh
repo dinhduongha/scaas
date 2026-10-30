@@ -71,6 +71,8 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
     # starts near-sandbox itself (the binary near-workspaces fetched for the near step) and stops it with the test
     e2e-near) cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_near -- --ignored ;;
     e2e-algorand) smartcontracts/algorand/scripts/e2e.sh ;; # a fresh localnet up (capped), e2e, down on any exit
+    soroban-spike-local) CAPPED_SLOTS=1 smartcontracts/soroban/spike/run.sh ;;
+    e2e-soroban-local) smartcontracts/soroban/scripts/e2e-local.sh ;;
     named-tests) named_tests ;;
     *) echo "unknown step $1"; return 2 ;;
   esac

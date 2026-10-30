@@ -31,7 +31,7 @@ grep -hE 'pub fn (g1_add|g1_mul|g1_msm|g2_add|g2_mul|g2_msm|pairing_check)\(' "$
 echo "# figures from soroban-sdk =30.0.0-rc.1 over soroban-env-host 30.0.0 (S5: re-pin to 30.0.0 when it ships)"
 echo "## unit tests (SDK testutils, protocol 30; full cargo output: runs/$DATE-ua-soroban-t0-cargo.txt)"
 "$ROOT/scripts/capped" cargo test -j2 -- --nocapture --test-threads=1 2>&1 | tee "$RUNS/$DATE-ua-soroban-t0-cargo.txt" \
-  | grep -E 'BUDGET|^test |test result|panicked|^warning|^error'
+  | grep -E 'BUDGET|^test |^(ok|FAILED)$|test result|panicked|^warning|^error'   # a result after --nocapture output stands alone
 # soroban-sdk 30 refuses a plain cargo build for Wasm: the CLI (>= 30) shakes the contract spec
 CARGO_BUILD_JOBS=2 "$ROOT/scripts/capped" "$STELLAR_BIN" contract build --manifest-path "$HERE/Cargo.toml" --quiet \
   >>"$RUNS/$DATE-ua-soroban-t0-cargo.txt" 2>&1
