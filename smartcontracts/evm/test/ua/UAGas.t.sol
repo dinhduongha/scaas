@@ -60,7 +60,7 @@ contract GasProbe {
 
 contract UAGasTest is UARegistryBase {
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;
-    uint256 internal constant MSIG_MEMBER_GAS = 35_000; // UARegistry.MSIG_MEMBER_GAS
+    uint256 internal constant MSIG_MEMBER_GAS = 45_000; // UARegistry.MSIG_MEMBER_GAS
 
     bytes internal _big;
     address internal _impl;
@@ -263,13 +263,12 @@ contract UAGasTest is UARegistryBase {
         }
     }
 
-    /// Every member signs, in index order: derived with its key data, natives without; `_big` as every signature.
+    /// Every member signs, in index order, without key data (CTR-UA-33); `_big` as every signature.
     function _burnAuth(bytes memory d) internal view returns (bytes memory) {
         uint16 count = uint16(bytes2(abi.encodePacked(d[2], d[3])));
         UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](count);
         for (uint16 j; j < count; ++j) {
-            uint16 kind = uint16(bytes2(abi.encodePacked(d[4 + 36 * uint256(j)], d[5 + 36 * uint256(j)])));
-            s[j] = UARegistry.MemberSig(j, kind < 0x0100 ? bytes("") : _key(kind), _big);
+            s[j] = UARegistry.MemberSig(j, "", _big);
         }
         return _msigAuth(d, s);
     }
@@ -327,8 +326,7 @@ contract UAGasTest is UARegistryBase {
             bytes32 ua = r.register(UAKinds.MSIG, d, _none(), "", "");
             UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](t[x]);
             for (uint16 j; j < t[x]; ++j) {
-                (, bytes memory k) = _memberAt(d, j);
-                s[j] = UARegistry.MemberSig(j, k, big);
+                s[j] = UARegistry.MemberSig(j, "", big); // CTR-UA-33: the registry reads each key from its record
             }
             bytes memory auth = _msigAuth(d, s);
             vm.cool(address(r));
@@ -339,12 +337,6 @@ contract UAGasTest is UARegistryBase {
             used[x] = g - gasleft();
         }
         return (used[1] - used[0]) / 7;
-    }
-
-    function _memberAt(bytes memory d, uint16 j) internal view returns (uint16 kind, bytes memory k) {
-        uint256 o = 4 + 36 * uint256(j);
-        kind = uint16(bytes2(abi.encodePacked(d[o], d[o + 1])));
-        k = _key(kind);
     }
 
     /// msig over 16 native members of one flavor (0 EOA, 1 EIP-7702 designator, 2 ERC-1271 wallet); (gas with 16 - gas
@@ -413,14 +405,14 @@ contract UAGasTest is UARegistryBase {
         revert("pk");
     }
 
-    /// Register step 4: Σ of the c largest caps + c × MSIG_MEMBER_GAS ≤ verifyBudget (here 1,145,000 + 105,000).
+    /// Register step 4: Σ of the c largest caps + c × MSIG_MEMBER_GAS ≤ verifyBudget (here 1,145,000 + 135,000).
     function test_T_GAS_structureOverBudgetRefused() public {
         Member[] memory m = new Member[](3);
         uint16[3] memory kinds = [uint16(0x0100), uint16(0x0101), uint16(0x0107)];
         UARegistry tight =
             _deploy(address(0x5cc1), chainUidA, address(0), false, 1_200_000, address(0), true, _cfgs(address(mock)));
         UARegistry roomy =
-            _deploy(address(0x5cc2), chainUidA, address(0), false, 1_250_000, address(0), true, _cfgs(address(mock)));
+            _deploy(address(0x5cc2), chainUidA, address(0), false, 1_280_000, address(0), true, _cfgs(address(mock)));
         for (uint256 i; i < 3; ++i) {
             bytes memory k = _key(kinds[i]);
             m[i] = Member(kinds[i], _register(tight, kinds[i], k), 1);
@@ -433,7 +425,7 @@ contract UAGasTest is UARegistryBase {
         // threshold 2 of the same three: c = 2, the two largest caps
         d = _msigKey(2, m);
         tight.register(UAKinds.MSIG, d, _none(), "", "");
-        // 16 native members on a chain with SmartKeyAccount clones: 16 × 435 k = 6.96 M ≤ 12 M
+        // 16 native members on a chain with SmartKeyAccount clones: 16 × 445 k = 7.12 M ≤ 12 M
         UARegistry ska = _deploy(
             address(0x5cc3),
             chainUidA,

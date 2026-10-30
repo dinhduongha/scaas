@@ -110,15 +110,17 @@ contract UARegistryVectorsTest is UARegistryBase {
         return _d(i, string.concat("negatives[", vm.toString(n), "].", f));
     }
 
-    /// A stored kind (zether-bls12381) carries an empty keyData in its auth.
-    function _authKey(uint256 i, bytes memory k) internal view returns (bytes memory) {
-        return vm.keyExistsJson(sj, _d(i, "stored")) ? bytes("") : k;
+    /// A stored kind (zether-bls12381) carries an empty keyData in its auth, and so does every signature under
+    /// `member` (CTR-UA-33: the registry reads the key from the id's record).
+    function _authKey(uint256 i, bytes memory k, bytes32 p) internal view returns (bytes memory) {
+        return vm.keyExistsJson(sj, _d(i, "stored")) || p == UAKinds.PURPOSE_MEMBER ? bytes("") : k;
     }
 
     function _derivedSig(uint256 i, uint256 s, bytes memory k, bytes32 ua) internal {
         string memory row = string.concat("sigs[", vm.toString(s), "].");
         bytes32 p = _purposeTag(vm.parseJsonString(sj, _d(i, string.concat(row, "purpose"))));
-        bytes memory auth = abi.encode(_authKey(i, k), vm.parseJsonBytes(sj, _d(i, string.concat(row, "sig"))));
+        bytes memory auth = abi.encode(_authKey(i, k, p), vm.parseJsonBytes(sj, _d(i, string.concat(row, "sig"))));
+        if (p == UAKinds.PURPOSE_MEMBER && k.length != 0) _memberKeyRefused(i, row, k, ua);
         bytes32 dg = vm.parseJsonBytes32(sj, _d(i, string.concat(row, "digest")));
         uint256 g = gasleft();
         reg.requireAuthorized(ua, p, dg, auth);
@@ -126,14 +128,22 @@ contract UARegistryVectorsTest is UARegistryBase {
         if (s == 0) emit log_named_uint(string.concat("requireAuthorized ", vm.parseJsonString(sj, _d(i, "name"))), g);
     }
 
+    /// CTR-UA-33: under `member` the key data in auth is refused, even the id's own.
+    function _memberKeyRefused(uint256 i, string memory row, bytes memory k, bytes32 ua) internal {
+        bytes memory auth = abi.encode(k, vm.parseJsonBytes(sj, _d(i, string.concat(row, "sig"))));
+        bytes32 dg = vm.parseJsonBytes32(sj, _d(i, string.concat(row, "digest")));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        reg.requireAuthorized(ua, UAKinds.PURPOSE_MEMBER, dg, auth);
+    }
+
     /// Verify-side negatives: the registry is asked exactly the row's message under metatx or member.
     function _derivedNegative(uint256 i, uint256 n, uint16 kind, bytes memory k, bytes32 ua) internal {
         bytes32 m = vm.parseJsonBytes32(sj, _neg(i, n, "message"));
-        bytes memory auth = abi.encode(_authKey(i, k), vm.parseJsonBytes(sj, _neg(i, n, "sig")));
         bytes32 p;
         if (m == UAKinds.uaMessage(kind, UAKinds.PURPOSE_METATX, digest)) p = UAKinds.PURPOSE_METATX;
         else if (m == UAKinds.uaMessage(kind, UAKinds.PURPOSE_MEMBER, digest)) p = UAKinds.PURPOSE_MEMBER;
         else revert(string.concat(vm.parseJsonString(sj, _neg(i, n, "name")), ": a message the registry never asks"));
+        bytes memory auth = abi.encode(_authKey(i, k, p), vm.parseJsonBytes(sj, _neg(i, n, "sig")));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
         reg.requireAuthorized(ua, p, digest, auth);
     }
@@ -239,7 +249,7 @@ contract UARegistryVectorsTest is UARegistryBase {
                 reg.requireAuthorized(ua, p, dg, auth);
             }
         }
-        assertEq(sets, 9, "msig sets");
+        assertEq(sets, 10, "msig sets");
         assertEq(valid, 2);
     }
 }
