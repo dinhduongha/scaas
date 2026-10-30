@@ -73,9 +73,12 @@ def probe(n):
 
 
 def pqz_key(ua):
-    """A holder's PQZ key as the token reads it (UA-6: an attribute, `recordOf(ua).pqzKey` = its SSTORE2 pointer; data
-    after the pointer's leading 0x00); `keyOf` is the UA's signing key."""
-    ptr = "0x" + words(call(REG[0], cd("recordOf(bytes32)", ["w"], ua)))[-1][12:].hex()
+    """A holder's PQZ key as the token reads it (UA-8 UA8-D9, `PqzCore._keyPtr`): `pqzKeyOf(ua)` = (SSTORE2 pointer, proof
+    hash, proven), a proven key only (`recordOf` lists unproven keys too); the key is the pointer's code after its leading
+    0x00. `keyOf` is the UA's signing key."""
+    w = words(call(REG[0], cd("pqzKeyOf(bytes32)", ["w"], ua)))
+    assert int.from_bytes(w[2], "big") == 1, f"pqz_key: {ua.hex()[:16]}… has no proven PQZ key"
+    ptr = "0x" + w[0][12:].hex()
     k = bytes.fromhex(rpc("eth_getCode", [ptr, "latest"])[2:])[1:]
     assert len(k) == K.PK_BYTES, f"pqz_key: {len(k)} B at {ptr}, want {K.PK_BYTES} (a UA without a PQZ key?)"
     return k
@@ -102,13 +105,17 @@ const U = await import(process.argv[1] + '/src/ua.js'), B = await import(process
 const a = JSON.parse(process.argv[2]), h = (k) => (a[k] === undefined ? undefined : B.fromHex(a[k]));
 const o = { ua: h('ua'), pqzKey: h('pqzKey'), kemVersion: a.kemVersion ?? 0, kemPk: h('kemPk') };
 console.log(B.hex(a.fn === 'reg' ? U.pqzRegMessage(o) : a.fn === 'kem' ? U.kemRecordMessage(a.kind, { ua: o.ua, version: a.kemVersion, kemPk: o.kemPk })
+  : a.fn === 'keyreg' ? U.uaMessage(0x0142, U.PQZ_KEY_TAG, U.pqzKeyDigest({ ua: o.ua, pqzKeyHash: U.keyHashOf(0x0142, o.pqzKey) }))
+  : a.fn === 'keyrec' ? U.pqzKeyRecordMessage(a.kind, { ua: o.ua, pqzKey: o.pqzKey, pqzPopHash: h('pqzPopHash') }).message
   : U.holderPopMessage(a.kind, { ...o, pqzPopHash: h('pqzPopHash') }).message));
 """
 
 
 def portable(fn, **a):
     """The portable message from clients/clientkeys (ua.js): fn 'pop' = `holderPopMessage(kind, ...).message` (what the
-    UA's `pop` signs, UA-8 P1), fn 'reg' = `pqzRegMessage` (what R_REG proves over), fn 'kem' = `kemRecordMessage` (`setKemKey`'s sig). bytes arguments go as hex."""
+    UA's `pop` signs, UA-8 P1), fn 'reg' = `pqzRegMessage` (what R_REG proves over), fn 'kem' = `kemRecordMessage` (`setKemKey`'s sig),
+    fn 'keyrec' = `pqzKeyRecordMessage(...).message` (`setPqzKey`'s sig), fn 'keyreg' = `uaMessage(0x0142, PURPOSE_PQZ_KEY,
+    pqzKeyDigest(ua, keyHash(0x0142, pqzKey)))` (what a later key's R_REG proves over). bytes arguments go as hex."""
     a = {k: v.hex() if isinstance(v, bytes) else v for k, v in dict(a, fn=fn).items()}
     out = subprocess.run(["node", "--input-type=module", "-e", _PORTABLE_JS, "--", CK, json.dumps(a)], check=True, capture_output=True, text=True)
     return bytes.fromhex(out.stdout.strip()[2:])
@@ -655,6 +662,26 @@ def run(kd, kr, ke):
                     pq.ml_sign(65, alice.seed, kc(TAG[MLDSA65], portable("kem", kind=MLDSA65, ua=alice.ua, kemVersion=2, kemPk=kem2)))),
             "setKemKey v2 (alice, ML-DSA-65 sig)")
     check(int.from_bytes(words(call(reg, cd("kemKeyOf(bytes32)", ["w"], alice.ua)))[0], "big") == 2, "alice kemKeyOf: version 2")
+    # ruling A1-I1 (review m2): a PQZ key added later to a UA registered without one — `setPqzKey` signed by the UA (real
+    # ML-DSA-65) over `uaMessage(0x0131, PURPOSE_PQZ_KEY, pqzKeyRecordDigest(pqzKeyDigest(ua, h), ph))`, then a third
+    # party's `storePqzPop` with the real R_REG over `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, h))`
+    dave = ml_ua("dave", MLDSA65, sk("ml-dave"))
+    dpk, ds, de, _ = K.keygen(sk("pqz-dave"))
+    dproof = pq.prove(3, K.build_register(portable("keyreg", ua=dave.ua, pqzKey=dpk), dpk), K.i8(ds) + K.i16(de))
+    dph = kc(dproof)
+    dsig = pq.ml_sign(65, dave.seed, kc(TAG[MLDSA65], portable("keyrec", kind=MLDSA65, ua=dave.ua, pqzKey=dpk, pqzPopHash=dph)))
+    sd.send(reg, cd("setPqzKey(bytes32,bytes,bytes32,bytes)", ["w", "b", "w", "b"], dave.ua, dpk, dph, dsig),
+            "setPqzKey dave (ML-DSA-65 sig over PURPOSE_PQZ_KEY)")
+    w = words(call(reg, cd("pqzKeyOf(bytes32)", ["w"], dave.ua)))
+    check(w[1] == dph and int.from_bytes(w[2], "big") == 0, "dave pqzKeyOf: the added key's proof hash, unproven")
+    check(dec_bytes(call(reg, cd("pqzKeySigOf(bytes32)", ["w"], dave.ua))) == dsig, "dave pqzKeySigOf = the setPqzKey signature")
+    sd.send(reg, cd("storePqzPop(bytes32,bytes)", ["w", "b"], dave.ua, dproof),
+            f"storePqzPop dave (R_REG {len(dproof):,} B over PURPOSE_PQZ_KEY)")
+    w = words(call(reg, cd("pqzKeyOf(bytes32)", ["w"], dave.ua)))
+    check(w[1] == dph and int.from_bytes(w[2], "big") == 1, "dave pqzKeyOf: proven")
+    check([int.from_bytes(x, "big") for x in words(call(reg, cd("checkedOf(bytes32)", ["w"], dave.ua)))] == [1, 1, 0],
+          "dave checkedOf = (chain, chain, none)")
+    check(pqz_key(dave.ua) == dpk, "dave: the key a PQZ token reads (pqzKeyOf, proven) is the added key")
     # op 7 decoys (P6g op 7): five more PQZ holders
     DEC = [pqz_ua(f"decoy{i}", sk(f"pqz-decoy{i}"), sk(f"ml-decoy{i}")) for i in range(5)]
 
