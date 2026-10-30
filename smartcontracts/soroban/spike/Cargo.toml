@@ -1,0 +1,22 @@
+# T0 spike (plan SOR-D3): its own workspace, outside contracts/*, kept and never deployed outside the spike.
+# Part B's B0 and Part Z's Z0 extend it. Release profile = the main workspace's.
+[workspace]
+resolver = "3"
+members = ["ua-spike"]
+
+[workspace.package]
+rust-version = "1.91"
+
+[workspace.dependencies]
+soroban-sdk = "=30.0.0-rc.1"
+serde_json = "1"
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+debug-assertions = false
+panic = "abort"
+codegen-units = 1
+lto = true

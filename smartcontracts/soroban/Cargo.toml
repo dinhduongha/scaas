@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["contracts/*"]
+exclude = ["spike"]
 
 [workspace.package]
 rust-version = "1.91"
