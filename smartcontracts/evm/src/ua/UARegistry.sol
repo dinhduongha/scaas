@@ -981,18 +981,22 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return _native(id, UAKinds.PURPOSE_MEMBER, md, s.sig);
     }
 
-    /// CTR-UA-24: by code at call time. Empty ⇒ ECDSA; the 23-byte EIP-7702 designator ⇒ ECDSA, else ERC-1271 through
-    /// the delegate; other code ⇒ ERC-1271 only. Always over `uaAuthDigest`. OZ `tryRecover` refuses high s and a
-    /// recovered `address(0)`, so neither id 0 nor a garbage signature ever matches.
+    /// CTR-UA-24 as amended by owner ruling D1 (2026-10-30, "an EOA must really sign, no delegation"): by code at call
+    /// time. Empty or the 23-byte EIP-7702 designator (an EOA) ⇒ ECDSA by its own key only, never ERC-1271 through the
+    /// delegate; other code ⇒ ERC-1271 only. Always over `uaAuthDigest`. OZ `tryRecover` refuses high s and a recovered
+    /// `address(0)`, so neither id 0 nor a garbage signature ever matches.
     function _native(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory sig) private view returns (bool) {
-        address a = address(uint160(uint256(ua)));
         bytes32 h = uaAuthDigest(ua, purposeTag, digest);
+        return _byCode(address(uint160(uint256(ua))), h, h, sig);
+    }
+
+    /// The native rule (ruling D1): an EOA (no code, or the EIP-7702 designator `0xef0100 ‖ delegate`) ⇒ ECDSA over `e`
+    /// by its own key only; a contract ⇒ ERC-1271 over `h` only.
+    function _byCode(address a, bytes32 e, bytes32 h, bytes memory sig) private view returns (bool) {
         uint256 len = a.code.length;
-        bool designator = len == 23 && bytes3(a.code) == 0xef0100;
-        if (len == 0 || designator) {
-            (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(h, sig);
-            if (err == ECDSA.RecoverError.NoError && rec == a) return true;
-            if (len == 0) return false;
+        if (len == 0 || (len == 23 && bytes3(a.code) == 0xef0100)) {
+            (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(e, sig);
+            return err == ECDSA.RecoverError.NoError && rec == a;
         }
         return _1271(a, h, sig);
     }
@@ -1016,12 +1020,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// s, v 27 / 28: OZ `tryRecover`) over the EIP-191 `personal_sign` hash of `md`, never ERC-1271 through the delegate;
     /// other code (a contract wallet) ⇒ ERC-1271 `isValidSignature(md, sig)` only, at the same caps as `_native`.
     function _nativePortable(address a, bytes32 md, bytes memory sig) private view returns (bool) {
-        uint256 len = a.code.length;
-        if (len == 0 || (len == 23 && bytes3(a.code) == 0xef0100)) {
-            (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(MessageHashUtils.toEthSignedMessageHash(md), sig);
-            return err == ECDSA.RecoverError.NoError && rec == a;
-        }
-        return _1271(a, md, sig);
+        return _byCode(a, MessageHashUtils.toEthSignedMessageHash(md), md, sig);
     }
 
     function _verifierCall(uint256 cfg, bytes4 selector, bytes memory keyData, bytes32 message, bytes memory sig)

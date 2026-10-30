@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {SaltedEIP712} from "../../src/common/SaltedEIP712.sol";
@@ -505,8 +506,9 @@ contract UARegistryTest is UARegistryBase {
         assertEq(ret.length, 0, "undecodable auth: revert data");
     }
 
-    /// Native contract members: an ERC-1271 wallet (`evm-contract`) and a 7702-delegated EOA signing through its
-    /// delegate's 1271 (`evm-eoa`), both over `UAAuth(memberId, member, member_digest)`.
+    /// Native contract members: an ERC-1271 wallet (`evm-contract`) and a 7702-delegated EOA (`evm-eoa`), both over
+    /// `UAAuth(memberId, member, member_digest)`; ruling D1 (2026-10-30): the EOA signs with its own key only, its
+    /// delegate's 1271 is refused.
     function test_T_AUTH_2_msigContractMembers() public {
         address session = vm.addr(PK_B);
         MockWallet wallet = new MockWallet(session, 0, 0, address(0));
@@ -526,6 +528,9 @@ contract UARegistryTest is UARegistryBase {
             uint16 idx = _indexOf(d, id);
             s[idx] = UARegistry.MemberSig(idx, "", _ecdsa(PK_B, reg.uaAuthDigest(id, UAKinds.PURPOSE_MEMBER, md)));
         }
+        _expectUnauthorized(ua, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s)); // the EOA through its delegate
+        uint16 e = _indexOf(d, _pad(eoa));
+        s[e].sig = _ecdsa(PK_A, reg.uaAuthDigest(_pad(eoa), UAKinds.PURPOSE_MEMBER, md));
         reg.requireAuthorized(ua, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s));
         // a member signature under the structure's own purpose instead of `member` fails
         uint16 w = _indexOf(d, _pad(address(wallet)));
@@ -655,7 +660,8 @@ contract UARegistryTest is UARegistryBase {
         _expectUnauthorizedOn(rh, hua, UAKinds.PURPOSE_METATX, DIGEST, sig);
     }
 
-    /// CTR-UA-24: a 7702-delegated EOA signs with its base key, or through the delegate's 1271 within 50 k.
+    /// CTR-UA-24 as amended by owner ruling D1 (2026-10-30, "an EOA must really sign, no delegation"): a 7702-delegated
+    /// EOA signs with its base key only; the delegate's 1271 is never asked, even for a signature it accepts.
     function test_T_AUTH_3_eip7702() public {
         address eoa = vm.addr(PK_A);
         bytes32 ua = _pad(eoa);
@@ -665,7 +671,8 @@ contract UARegistryTest is UARegistryBase {
         vm.signAndAttachDelegation(address(delegate), PK_A);
         reg.requireAuthorized(ua, UAKinds.PURPOSE_METATX, DIGEST, _ecdsa(PK_A, h)); // base key
         assertEq(eoa.code.length, 23);
-        reg.requireAuthorized(ua, UAKinds.PURPOSE_METATX, DIGEST, _ecdsa(PK_B, h)); // delegate's 1271
+        assertEq(IERC1271(eoa).isValidSignature(h, _ecdsa(PK_B, h)), IERC1271.isValidSignature.selector, "the delegate accepts");
+        _expectUnauthorized(ua, UAKinds.PURPOSE_METATX, DIGEST, _ecdsa(PK_B, h)); // ruling D1: no delegate 1271
         _expectUnauthorized(ua, UAKinds.PURPOSE_METATX, DIGEST, _ecdsa(PK_A, DIGEST));
         // delegates: none (no 1271), wrong magic, reverting, out of gas, over 50 k
         address[5] memory bad = [

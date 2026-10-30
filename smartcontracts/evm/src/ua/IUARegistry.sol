@@ -198,7 +198,8 @@ interface IUARegistry is IERC5267 {
     /// Reverts UAUnauthorized unless `auth` authorizes `digest` for `ua` under `purposeTag`.
     /// Native ids (ua >> 160 == 0): ECDSA low-s (EOA) or ERC-1271 (50 k cap; 400 k for SmartKeyAccount clones, by the
     ///   immutable clone codehash) over uaAuthDigest(ua, purposeTag, digest) — never over the raw digest.
-    ///   Classified by code at call time: empty ⇒ ECDSA; 7702 designator ⇒ ECDSA, else 1271; other ⇒ 1271.
+    ///   Classified by code at call time (owner ruling D1, 2026-10-30): empty or the 7702 designator (an EOA) ⇒ ECDSA by
+    ///   its own key only, never 1271 through the delegate; other ⇒ 1271.
     /// Derived SIGNING: auth = abi.encode(bytes keyData, bytes sig); keyData empty for stored kinds (Zether
     ///   `zether-bls12381` included, UA-6 U8: a Schnorr by `x` on `Y`).
     ///   msig: sig = abi.encode(MemberSig[]), MemberSig{uint16 index; bytes keyData; bytes sig}.
