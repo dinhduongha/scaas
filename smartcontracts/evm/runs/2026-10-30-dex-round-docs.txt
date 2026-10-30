@@ -1,12 +1,12 @@
-# docs at commit a9a16187
+# docs at commit 9fbf5d31
 test_docs_check: ok
   note: accepted budget contracts/accounts.md: 2176 lines > 1.3 x 1100
-  note: accepted budget contracts/dex.md: 919 lines > 1.3 x 400
+  note: accepted budget contracts/dex.md: 922 lines > 1.3 x 400
   note: accepted budget contracts/metatx.md: 1222 lines > 1.3 x 650
   note: accepted budget contracts/pq-zero-knowledge.md: 2609 lines > 1.3 x 950
   note: accepted budget contracts/zether.md: 1814 lines > 1.3 x 700
-  note: accepted budget decisions.md: 8162 lines > 1.3 x 3000
-  note: accepted budget networks/README.md: 713 lines > 1.3 x 400
+  note: accepted budget decisions.md: 8167 lines > 1.3 x 3000
+  note: accepted budget networks/README.md: 715 lines > 1.3 x 400
   note: accepted budget networks/aptos.md: 729 lines > 1.3 x 500
   note: accepted budget networks/cosmos.md: 352 lines > 1.3 x 220
   note: accepted budget networks/evm.md: 320 lines > 1.3 x 200
