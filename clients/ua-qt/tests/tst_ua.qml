@@ -192,6 +192,30 @@ TestCase {
         compare(UaKinds.lastError, "UAPqzHolder")
         UaKinds.holderPopMessage(0x0101, ua, "0x", "0x", "0x", 1, "0x" + "00".repeat(1600))
         compare(UaKinds.lastError, "UAKemHolder")
+        // a proof hash of the wrong length is UAPqzPopHash, as in every other package (m-C4)
+        UaKinds.holderPopMessageH(0x0130, ua, "0x", k.pqzKey, "0x", "0x" + "07".repeat(31), 0, "")
+        compare(UaKinds.lastError, "UAPqzPopHash")
+        UaKinds.pqzKeyRecordMessage(0x0130, ua, "0x", k.pqzKey, "0x", "0x" + "07".repeat(31), false)
+        compare(UaKinds.lastError, "UAPqzPopHash")
+        // keccak256("evm:1099511627783"), as ua-py / ua-go
+        compare(UaKinds.chainKeyHash(1099511627783), "0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950")
+    }
+
+    function test_personalSign() {
+        const pp = vectors.load("portable.json")
+        const md = pp.registrations.find(r => r.name === "msig-pq-native").memberDigest
+        // known answer from the JS reference: prefix 0x19 + "Ethereum Signed Message:\n32" (28 bytes)
+        compare(md, "0x606d9a70c70d39e5d8d079c3ae31eefa6db574219dab56d6c776cb6731e61a7c")
+        compare(UaKinds.personalSignDigest(md), "0xe5d24987e9b4e710063a5432d6215eaead64d8dc073f7561726d21644d54c3d8")
+        compare(UaKinds.lastError, "")
+        verify(UaKinds.isPortablePurpose(pp.tags.PURPOSE_POP_V2.hash) && UaKinds.isPortablePurpose(pp.tags.PURPOSE_KEM.hash)
+               && UaKinds.isPortablePurpose(pp.tags.PURPOSE_PQZ_KEY.hash))
+        verify(!UaKinds.isPortablePurpose(UaKinds.purposeTag("metatx")) && !UaKinds.isPortablePurpose(UaKinds.purposeTag("pop")))
+        compare(UaKinds.lastError, "")
+        verify(!UaKinds.isPortablePurpose("0x" + "00".repeat(31)))
+        compare(UaKinds.lastError, "UAArgument")
+        UaKinds.personalSignDigest("0x" + "00".repeat(31))
+        compare(UaKinds.lastError, "UAArgument")
     }
 
     function test_pqzKeyRecord() {
@@ -219,7 +243,10 @@ TestCase {
             }
             UaKinds.pqzKeyRecordMessage(r.kind, r.ua, reg.keyData, r.pqzKey, "0x", r.pqzPopHash, true)
             compare(UaKinds.lastError, "UAPqzKeySet", r.name)
+            compare(UaKinds.pqzKeyDigest(r.ua, r.pqzKeyHash), r.pqzKeyDigest, r.name)
+            compare(UaKinds.pqzKeyRecordDigest(r.pqzKeyDigest, r.pqzPopHash), r.recordDigest, r.name)
         }
+        compare(UaKinds.pqzKeyRecordTag(), pp.tags.PQZ_KEY_RECORD_TAG.hash)
         compare(msigRows, 8)  // 4 msig rows, each with the proof bytes and hash-only
     }
 
@@ -230,6 +257,7 @@ TestCase {
             const d = UaKinds.kemRecordDigest(r.ua, Number(r.version), r.kemPk)
             compare(d, r.digest, r.id)
             compare(UaKinds.uaMessage(r.kind, UaKinds.purposeTag("kem"), d), r.message, r.id)
+            compare(UaKinds.kemRecordMessage(r.kind, r.ua, Number(r.version), r.kemPk), r.message, r.id)
             if (r.kind === 0x0120)
                 compare(UaKinds.memberDigest(r.ua, r.message), r.memberDigest, r.id)
         }
@@ -240,6 +268,11 @@ TestCase {
         compare(UaKinds.lastError, "UAKemKeyLength")
         UaKinds.kemRecordDigest(ua, 1, "0x" + "00".repeat(1601))
         compare(UaKinds.lastError, "UAKemKeyLength")
+        compare(UaKinds.kemRecordTag(), pp.tags.KEM_RECORD_TAG.hash)
+        // known answer at 2^53, the largest version a QML number carries exactly (ua-rs / ua-py pin 2^64 - 1)
+        compare(UaKinds.kemRecordDigest(ua, 9007199254740992, "0x" + "00".repeat(1600)), "0xff3acbe0a43298885ac3679368a3e0a38ceb9fdf63d4a03ed54a4a9d62e0348b")
+        UaKinds.kemRecordDigest(ua, 9007199254740994, "0x" + "00".repeat(1600))
+        compare(UaKinds.lastError, "UAArgument")
     }
 
     function test_structures() {

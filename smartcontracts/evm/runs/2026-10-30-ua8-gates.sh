@@ -102,6 +102,7 @@ clientkeys|node|the Zether PoP is portable (UA-8 P1): no chain field, over regis
 ua-qt|qt|test_portable
 ua-qt|qt|test_pqzKeyRecord
 ua-qt|qt|test_kemRecord
+ua-qt|qt|test_personalSign
 ua-py|unittest|test_portable
 ua-py|unittest|test_kem_record
 ua-py|unittest|test_pqz_key_record
