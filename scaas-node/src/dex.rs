@@ -1,8 +1,8 @@
 //! DEX order book (NODE-DEX-01, NODE-DEX-15): role-free `TradeOrder`s settled by `SCaaSDex.mtxSettle`
 //! (contracts/dex.md), one book per market, price-time priority, partial fills, IOC, fill-or-kill (`minFill = amount`).
 //! An incoming order that crosses is the taker of ONE settlement against the resting orders it crosses (its makers);
-//! every order fills at least `max(minFill, ceil(amount / 2))` per settlement unless the fill closes it, exactly as the
-//! token (`TradeLib.record`) and the DEX (`settleOne`) check. PURE (no I/O, tested bit for bit); RPC, the client store
+//! every order fills at least its signed `minFill` (0 = any amount; no 50 % floor) per settlement unless the fill closes
+//! it, exactly as the token (`TradeLib.record`) and the DEX (`settleOne`) check. PURE (no I/O, tested bit for bit); RPC, the client store
 //! and the gateway are in `dex::venue`.
 pub mod venue;
 
@@ -935,7 +935,7 @@ mod tests {
         assert!(p.rested.is_none());
     }
 
-    /// NODE-DEX-15: every order fills at least `max(minFill, ceil(amount / 2))` per settlement unless it closes.
+    /// NODE-DEX-15: every order fills at least its signed `minFill` per settlement unless it closes.
     #[test]
     fn the_minimum_fill_binds_makers_and_takers() {
         let mut b = Book::new(vec![market()]);
@@ -1019,6 +1019,20 @@ mod tests {
         let (bb, ba) = b.depth_min_fill(1, 10).unwrap();
         assert_eq!((bb.len(), ba.len()), (1, 1));
         assert_eq!(ba[0].price, price_str(U256::from(210), U256::from(100), 18, 6));
+    }
+
+    /// The bucket rule's edge: `min_in_base == min_base_amount` is a normal order, one more is in the bucket.
+    #[test]
+    fn depth_bucket_edge_is_min_in_base_equal_to_min_base_amount() {
+        let mut m = market();
+        m.min_base_amount = "10".into();
+        let mut b = Book::new(vec![m]);
+        put(&mut b, TradeOrder { minFill: U256::from(10), ..ask(1, 100, 200, 1) });
+        put(&mut b, TradeOrder { minFill: U256::from(11), ..ask(2, 100, 210, 1) });
+        let (_, asks) = b.depth(1, 10).unwrap();
+        let (_, big) = b.depth_min_fill(1, 10).unwrap();
+        assert_eq!((asks.len(), big.len()), (1, 1));
+        assert_eq!(big[0].price, price_str(U256::from(210), U256::from(100), 18, 6));
     }
 
     #[test]
