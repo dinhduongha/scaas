@@ -11,3 +11,8 @@
 - KEM scheme byte (2026-10-30, owner, CTR-UA-32): `portable.json` as it stood before the scheme byte (1,600-byte `kemPk` =
   ML-KEM-1024 `ek` ‖ X25519 `pk`, no scheme byte), which the registry now refuses. The live file prefixes every KEM key with
   scheme 1 (`0x01 ‖ ek ‖ pk`, 1,601 B, the same key material) and adds four KEM-key negatives; only the KEM-derived fields moved.
+- msig-pophash (2026-10-30, owner, CTR-UA-33): `msig-pophash/signatures.json` and `msig-pophash/pq_signatures.json` as they
+  stood before every `msig` `MemberSig` carried an empty `keyData` (the classical members of `signatures.json` `msig.sets`
+  and the p256 member of `pq_signatures.json` `msig.hybrid` carried their key data, which the registry now refuses: it
+  reads a registered member's key from its record). The live files change only those `MemberSig` blobs (the same
+  signatures) and add the negative set `derived-member-keydata`.

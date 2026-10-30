@@ -87,7 +87,10 @@ test('native EOA: UAAuth signatures verify, negatives fail', () => {
   assert.equal(hex(keccak_256(secp256k1.Point.fromBytes(pub).toBytes(false).subarray(1)).subarray(12)), N.address);
 });
 
-/** The registry's msig path (§1.9): auth = abi.encode(bytes keyData, bytes abi.encode(MemberSig[])). */
+/** The registered derived keys (id → keyData): the records the registry reads a member's key from (CTR-UA-33). */
+const registered = new Map(V.derived.map((r) => [r.ua, r.keyData]));
+/** The registry's msig path (§1.9): auth = abi.encode(bytes keyData, bytes abi.encode(MemberSig[])); every MemberSig
+ *  carries an empty keyData (native: R12; registered: CTR-UA-33, the key comes from the member's record). */
 function msigOk(structureUa, purposeTag, digest, auth) {
   return attempt(() => {
     const keyData = bytesAt(auth, 0, 0);
@@ -115,7 +118,8 @@ function msigOk(structureUa, purposeTag, digest, auth) {
       const sig = bytesAt(sigs, t, t + 64);
       const ok = ua.isNativeKind(kind)
         ? mkd.length === 0 && nativeOk(hex(id.subarray(12)), ua.uaAuthDigest(domain(V.msig.context, V.msig.generation), id, tag('member'), md), hex(sig))
-        : eq(ua.uaOf(kind, mkd), id) && verify(kind, hex(mkd), hex(ua.uaMessage(kind, tag('member'), md)), hex(sig));
+        : mkd.length === 0 && registered.has(hex(id))
+          && verify(kind, registered.get(hex(id)), hex(ua.uaMessage(kind, tag('member'), md)), hex(sig)); // CTR-UA-33
       if (!ok) return false;
       sum += weight;
     }
@@ -136,7 +140,7 @@ test('msig: structure id, members, every set gives its verdict', () => {
     assert.equal(hex(ua.memberDigest(B(M.ua), ua.uaMessage(0x0120, tag(s.purpose), B(s.digest)))), s.memberDigest);
     assert.equal(msigOk(B(M.ua), tag(s.purpose), B(s.digest), B(s.auth)), s.valid, s.name);
   }
-  assert.equal(M.sets.length, 9);
+  assert.equal(M.sets.length, 10);
   assert.equal(M.sets.filter((s) => s.valid).length, 2);
 });
 
