@@ -124,6 +124,9 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      changed: a hybrid's unsold taker remainder is refunded when the sold part meets its `minFill` and limit, else revert;
      DX10 / DX11 confirmed). Plan written (no owner review): `docs/superpowers/plans/2026-10-30-dex-round.md` (T1–T19, build
      branch `dex-round` from `main`).
+     **Status (paused 2026-10-30):** branch `dex-round` — T1 (floor removed), T2 (`InteractionFailed`), T3 (`mtxHybrid` /
+     `Via`) done and reviewed; T4 WIP `b45c4322` (DX7 refund + `restorePulled`, capacity restored per the owner; must also
+     forbid the `restorePulled` selectors in `_interact` — T3 review); then T5–T19.
   4. **UA-Soroban (UA base) + UA-8 step 2 (Soroban registry)**, plus **classical Zether on Soroban** (owner 2026-10-30;
      spec S13a: its own track and branch `zether-soroban` after `ua-soroban`, BLS12-381 host functions, measure the verifier
      first — a verify over the per-transaction budget is a STOP for the owner), in one round — shared ML-DSA verifier (CAP-0087 host
@@ -131,7 +134,13 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      Protocol 30 as soon as the stream is free (Stellar Core v30.0.0 stable, the SDK's ML-DSA wrapper merged 2026-10-19
      — check which soroban-sdk release carries it); only the testnet e2e runs after 2026-11-03 (Stellar testnet votes
      Protocol 30), as the last step of the round.
-     UA-Soroban spec accepted by the owner 2026-10-30: `docs/superpowers/specs/2026-10-30-ua-soroban-design.md`; plan next (no owner review) (S1–S18; it also
+     UA-Soroban spec accepted by the owner 2026-10-30: `docs/superpowers/specs/2026-10-30-ua-soroban-design.md`; plan next (no owner review)
+     **Status (paused 2026-10-30):** plan `docs/superpowers/plans/2026-10-30-ua-soroban.md` merged; branch `ua-soroban` T0
+     (Protocol 30 spike, HARD GATE) WIP `53e8501d`, nothing measured yet; then T1–T13, T14 testnet after 2026-11-03, then
+     `zether-soroban` Z0–Z10, then `ua8-soroban`. Before UA-Soroban T3: finish and merge branch `kem-scheme` (owner
+     2026-10-30: `kemPk` first byte = scheme id, 1 = ML-KEM-1024 + X25519 at 1,601 B, 2 reserved for ML-KEM-1024 + HQC +
+     X25519 after FIPS 207; done `90c79186` clientkeys + portable.json; left: EVM registry, forge tests, 9 clients, docs,
+     gates). (S1–S18; it also
      rules UA-8 Part B conflicts C11–C17; soroban-sdk 30.0.0-rc.1 carries the ML-DSA wrappers).
      UA-Soroban plan: `docs/superpowers/plans/2026-10-30-ua-soroban.md`; runs without owner review (Part UA-Soroban on `ua-soroban`,
      then UA-8 Part B and Part Z — classical Zether on Soroban, branch `zether-soroban`, S13a — after its merge).
