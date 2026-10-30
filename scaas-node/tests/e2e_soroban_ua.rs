@@ -479,6 +479,12 @@ async fn e2e_soroban_ua_dex_leg() {
     assert_eq!(bal(&st.token_b, "balance", "--id", &st.dex), 0);
 }
 
+/// S14 / spec §8 end to end: a validly signed `ua_relay` whose target would spend lane 0's own authority
+/// (`token.approve(lane 0, …)`) dies at SIMULATION with the host's `Error(Auth, …)`: the job carries the node's
+/// `SourceAccount` entry rooted at exactly the call, so the RPC simulates in enforcing mode and the host refuses the
+/// nested `lane.require_auth()` before the node's recorded-auth guard (`check_recorded_auth`) is reached. Nothing is
+/// signed or sent: the lane's sequence, its allowance and the UA's fee ref are unchanged. The node guard itself is
+/// covered by the T9 unit tests (`ua_metatx_refuses_extra_source_account_auth`), not here.
 #[tokio::test]
 #[ignore]
 async fn e2e_soroban_ua_lane_authority_not_lent() {
@@ -497,8 +503,10 @@ async fn e2e_soroban_ua_lane_authority_not_lent() {
                     h_addr(&st.router), i128v(fee), ScVal::U64(vu), addr(&lane0), PASSKEY.sign(&d, "metatx")];
     let seq = node.adapter.sequence(0).await.unwrap();
     let (state, last) = node.run(0, ua_job(601, &st.router, "ua_relay", args, vec![])).await;
-    println!("T10 lane authority not lent: job state {state}, reason {}", last["error"]);
+    println!("T10 lane authority not lent (host refusal at simulation): job state {state}, reason {}", last["error"]);
     assert_eq!(state, "dead", "refused before submission: {last}");
+    let reason = last["error"].as_str().unwrap_or_default();
+    assert!(reason.starts_with("simulation:") && reason.contains("Error(Auth,"), "the host's auth refusal at simulation: {reason}");
     assert!(report_of(&node.state.lock().unwrap(), 601, "signed").is_null(), "never signed");
     assert_eq!(node.adapter.sequence(0).await.unwrap(), seq, "the lane's sequence is unchanged");
     assert_eq!(view_i128(&st.token, "allowance", &["--from", &lane0, "--spender", &by]), 0, "no allowance from the lane");

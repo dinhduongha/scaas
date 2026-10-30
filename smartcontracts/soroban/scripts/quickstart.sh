@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The pinned local Stellar network at Protocol 30 (plan SOR-D4; spec S5, S17). One container at a time, `scaas-stellar`,
 # memory-capped. usage: quickstart.sh up|down|wait|cli
-#   up    start it (exit 3 when a `scaas-stellar` container already exists)
+#   up    start it (exit 3 when a `scaas-stellar` container already exists; any other failure removes what it created)
 #   down  stop and remove it (no-op when absent)
 #   wait  poll until protocolVersion == 30 and the testnet limits are applied (exit 1 after 10 min)
 #   cli   print the pinned stellar-cli binary (exit 1 with the install command when missing)
@@ -23,8 +23,10 @@ case "${1:-}" in
     if docker ps -a --format '{{.Names}}' | grep -qx "$NAME"; then
       echo "quickstart: container $NAME already exists (one quickstart at a time)" >&2; exit 3
     fi
+    # a run that fails after creating the container (port taken, start error) removes what it created
     docker run -d --rm --memory 3g --name "$NAME" -p "127.0.0.1:$PORT:8000" "$QS_IMAGE" \
-      --local --protocol-version 30 --limits testnet --enable core,rpc,horizon >/dev/null
+      --local --protocol-version 30 --limits testnet --enable core,rpc,horizon >/dev/null \
+      || { rc=$?; docker rm -f "$NAME" >/dev/null 2>&1 || true; echo "quickstart: up failed (docker run exit $rc)" >&2; exit "$rc"; }
     echo "quickstart: $NAME up ($QS_IMAGE), rpc $RPC_URL" ;;
   down)
     docker rm -f "$NAME" >/dev/null 2>&1 || true ;;

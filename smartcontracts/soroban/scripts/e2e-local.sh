@@ -15,7 +15,10 @@ export STELLAR_URL="${STELLAR_URL:-http://127.0.0.1:$port/rpc}"
 export STELLAR_PASSPHRASE="${STELLAR_PASSPHRASE:-Standalone Network ; February 2017}"
 export STELLAR_FRIENDBOT="${STELLAR_FRIENDBOT:-http://127.0.0.1:$port/friendbot}"
 
-echo "== e2e-local: $(git -C "$ROOT" rev-parse --short HEAD) $(date -u +%FT%TZ); $("$STELLAR_BIN" --version | head -1)"
+# the commit under test; "+uncommitted" when the tree (run logs aside) differs from it
+rev="$(git -C "$ROOT" rev-parse --short HEAD)"
+git -C "$ROOT" diff --quiet HEAD -- . ':!smartcontracts/soroban/runs' || rev="$rev+uncommitted"
+echo "== e2e-local: $rev $(date -u +%FT%TZ); $("$STELLAR_BIN" --version | head -1)"
 echo "== build Wasm"
 CARGO_BUILD_JOBS=2 "$ROOT/scripts/capped" "$ROOT/smartcontracts/scripts/build.sh" soroban
 echo "== registry interface"
