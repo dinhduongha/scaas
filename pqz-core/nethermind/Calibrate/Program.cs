@@ -15,7 +15,8 @@ using Nethermind.Pqz;
 // --ops: only the rows of these ops (comma list; P6-ANON S8 calibrates op 7 alone, the other rows stay as calibrated).
 // --keys a-b: only rows a..b of the sorted row list (after --ops); a > b: no row (fs3 Task 13: slices of one run).
 //   Calibrate cold                         (child: one cold OP_SELFTEST, prints its milliseconds)
-// t_ecMul = median of Nethermind's own BN254MulPrecompile.Run (EIP-196 vector, same process and JIT); per row
+// t_ecMul = median of Nethermind's own BN254MulPrecompile.Run (EIP-196 vector, same process and JIT; after 2 s warm-up,
+// the smallest of 5 repeats' medians); per row
 // t_row = max(p99 over n calls on the row's valid inputs (vectors + fresh proofs), p99 over n distinct adversarial
 // inputs); gas = 1000·⌈6000·t_row / t_ecMul / 1000⌉ (D6). Everything through PqzPrecompile.Run / MlDsa*.Run.
 if (args[0] == "cold")
@@ -80,9 +81,15 @@ static class Cal
         byte[] mulIn = Convert.FromHexString("2bd3e6d0f3b142924f5ca7b49ce5b9d54c4703d7ae5648e61d02268b1a0a9fb721611ce0a6af85915e2f1d70300909ce2e49dfad4a4619c8390cae66cefdb20400000000000000000000000000000000000000000000000011138ce750fa15c2");
         string mulOut = "070a8d6a982153cae4be29d434e8faef8a47b274a053f5a4ee2a6c9c13c31e5c031b8ce914eba3a9ffb989f9cdd5b0f01943074bf4f0f315690ec3cec6981afc";
         if (Convert.ToHexStringLower(BN254MulPrecompile.Instance.Run(mulIn, null!).Data!) != mulOut) throw new InvalidOperationException("BN254 mul vector");
-        List<double> ec = Time([mulIn], Math.Max(N * 10, 10_000), x => BN254MulPrecompile.Instance.Run(x, null!).IsSuccess);
+        // fs3 Task 13 option (c), 2026-10-31: one median right at process start was bimodal across processes (0.016 or
+        // 0.025 ms) while the rows, timed later in the same processes, varied <= 6 %: a start-up transient (tier-up /
+        // TieredPGO re-JIT, CPU ramp). So: 2 s of ecMul warm-up, then the smallest median of 5 repeats.
+        long w0 = Stopwatch.GetTimestamp();
+        while (Stopwatch.GetElapsedTime(w0).TotalSeconds < 2) BN254MulPrecompile.Instance.Run(mulIn, null!);
+        List<List<double>> reps = [.. Enumerable.Range(0, 5).Select(_ => Time([mulIn], Math.Max(N * 10, 10_000), x => BN254MulPrecompile.Instance.Run(x, null!).IsSuccess))];
+        List<double> ec = reps.MinBy(r => Pct(r, 0.5))!;
         double tEc = Pct(ec, 0.5);
-        W($"t_ecMul median {F(tEc)} ms (p99 {F(Pct(ec, 0.99))}, n {ec.Count}) ⇒ {F(6000 / tEc / 1e6)} M gas per ms");
+        W($"t_ecMul median {F(tEc)} ms (p99 {F(Pct(ec, 0.99))}, n {ec.Count}) ⇒ {F(6000 / tEc / 1e6)} M gas per ms; min of 5 medians after 2 s warm-up: {string.Join(" ", reps.Select(r => F(Pct(r, 0.5))))}");
 
         var corpus = File.ReadLines(corpusPath).Select(l => JsonNode.Parse(l)!.AsObject()).Select(o =>
             (kind: (string)o["kind"]!, name: (string)o["name"]!, id: (string)o["id"]!, form: (string)o["form"]!, input: Convert.FromHexString((string)o["input"]!), expect: (string)o["expect"]!)).ToList();
