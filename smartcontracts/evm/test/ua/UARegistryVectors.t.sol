@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -251,5 +252,73 @@ contract UARegistryVectorsTest is UARegistryBase {
         }
         assertEq(sets, 10, "msig sets");
         assertEq(valid, 2);
+    }
+
+    uint256 internal constant N_P256 = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551;
+
+    /// msig-pophash review M2: an msig whose `webauthn-p256` member (signatures.json derived[0]) is registered with its
+    /// PoP through the real `WebAuthnP256Verifier.verifyPop`, then signs a fresh assertion under `member` that the real
+    /// `verify` checks inside `requireAuthorized` (2-of-2 with the `p256` member, derived[1]). The same assertion off its
+    /// canonical encoding (CTR-UA-33 C), or carrying the member's key data (CTR-UA-33 A), is refused.
+    function test_msig_webauthnMember_realVerifier() public {
+        Member[] memory m = new Member[](2);
+        uint256[2] memory sk;
+        for (uint256 i; i < 2; ++i) {
+            uint16 kind = uint16(vm.parseJsonUint(sj, _d(i, "kind")));
+            assertEq(kind, i == 0 ? UAKinds.WEBAUTHN_P256 : 0x0101);
+            bytes memory k = vm.parseJsonBytes(sj, _d(i, "keyData"));
+            m[i] = Member(kind, reg.register(kind, k, _none(), vm.parseJsonBytes(sj, _d(i, "pop.sig")), ""), 1);
+            sk[i] = vm.parseJsonUint(sj, _d(i, "secret"));
+        }
+        bytes memory waKey = vm.parseJsonBytes(sj, _d(0, "keyData"));
+        bytes memory d = _msigKey(2, m); // sorts m by id
+        bytes32 ua = reg.register(UAKinds.MSIG, d, _none(), "", "");
+        bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX, digest);
+
+        UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](2);
+        bytes memory wa;
+        for (uint256 i; i < 2; ++i) {
+            bool isWa = m[i].kind == UAKinds.WEBAUTHN_P256;
+            bytes32 msg_ = UAKinds.uaMessage(m[i].kind, UAKinds.PURPOSE_MEMBER, md);
+            bytes memory sig = isWa ? _assertion(sk[0], bytes32(_slice32(waKey, 64)), msg_) : _p256(sk[1], msg_);
+            if (isWa) wa = sig;
+            s[i] = UARegistry.MemberSig(_indexOf(d, m[i].id), "", sig);
+        }
+        reg.requireAuthorized(ua, UAKinds.PURPOSE_METATX, digest, _msigAuth(d, s));
+
+        uint256 w = m[0].kind == UAKinds.WEBAUTHN_P256 ? 0 : 1;
+        s[w].sig = bytes.concat(wa, hex"00"); // a trailing byte: not the canonical encoding
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        reg.requireAuthorized(ua, UAKinds.PURPOSE_METATX, digest, _msigAuth(d, s));
+        (s[w].sig, s[w].keyData) = (wa, waKey);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        reg.requireAuthorized(ua, UAKinds.PURPOSE_METATX, digest, _msigAuth(d, s));
+    }
+
+    /// A WebAuthn assertion over `m` (flags UP | UV, any origin), canonical `abi.encode(authData, clientDataJSON, r, s)`.
+    function _assertion(uint256 pk, bytes32 rpIdHash, bytes32 m) internal pure returns (bytes memory) {
+        bytes memory a = abi.encodePacked(rpIdHash, bytes1(0x05), uint32(1));
+        bytes memory c = abi.encodePacked(
+            '{"type":"webauthn.get","challenge":"', Base64.encodeURL(abi.encodePacked(m)), '","origin":"https://m2.example"}'
+        );
+        (bytes32 r, bytes32 s) = _lowS(pk, sha256(abi.encodePacked(a, sha256(c))));
+        return abi.encode(a, c, r, s);
+    }
+
+    /// `p256` (0x0101): low-s `r ‖ s` over sha256(m).
+    function _p256(uint256 pk, bytes32 m) internal pure returns (bytes memory) {
+        (bytes32 r, bytes32 s) = _lowS(pk, sha256(abi.encodePacked(m)));
+        return abi.encodePacked(r, s);
+    }
+
+    function _lowS(uint256 pk, bytes32 h) internal pure returns (bytes32 r, bytes32 s) {
+        (r, s) = vm.signP256(pk, h);
+        if (uint256(s) > N_P256 / 2) s = bytes32(N_P256 - uint256(s));
+    }
+
+    function _slice32(bytes memory b, uint256 o) internal pure returns (uint256 w) {
+        assembly ("memory-safe") {
+            w := mload(add(add(b, 32), o))
+        }
     }
 }
