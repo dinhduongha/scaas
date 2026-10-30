@@ -373,13 +373,17 @@ fn ua_page(env: Env, kind: u32, start: u32, n: u32) -> Vec<BytesN<32>>;     // c
 
   Persistent keys `Ua(ua) → Registration`, `Key(key_hash) → ua`, `List(kind, i) → ua`, `Count(kind) → u32`; every write
   and every in-transaction read extends the entry (`extend_ttl(30 * DAY, 60 * DAY)`, `DAY = 17_280`). Event
-  `UaRegistered { #[topic] ua, #[topic] kind, record: Registration }`. `register` checks in spec §3's order;
+  `UaRegistered { #[topic] ua, #[topic] kind, record, checked }` where `record` is the `Registration` with `pop` replaced by
+  `pop_hash = keccak256(pop)` (`BytesN<32>`); `pop` stays in `Ua(ua)` (owner ruling 2026-10-30 after T0: the 16 384 B
+  contract-events limit). `register` checks in spec §3's order;
   `pop_checked = Chain`, `pqz_pop_checked = None`, `proven = false`, `signable` per spec §4 (`msig`: the summed weight of
   members Soroban can verify for signing — registered signable S3 members, 0x0011, 0x0012; `evm-eoa` and
   `evm-contract` weigh 0 — must reach the threshold); `index` = the list position (CTR-UA-29); `ledger` = the sequence.
   `msig` key data per CTR-UA-09 (threshold, members sorted strictly by id, `count ≤ 16`); a member is a registered S3
   single-key UA, 0x0011, 0x0012, `evm-eoa` 0x0001 or `evm-contract` 0x0002, else `MemberUnknown`; the `msig` `pop` is
-  `abi.encode(MemberSig[])` under purpose `member` (`member_digest(ua, uaMessage(MSIG, POP_V2, registrationDigest))`):
+  `abi.encode(MemberSig[])` under purpose `member` (`member_digest(ua, uaMessage(MSIG, POP_V2, registrationDigest))`),
+  a registered member's slot with an **empty `keyData`** (its key read from the member's record; non-empty ⇒ `Pop`;
+  owner ruling 2026-10-30 after T0):
   derived members by `verify::check`, `evm-eoa` by `personal_sign`, native Soroban members by
   `member.require_auth_for_args((ua, purpose, digest))` with an empty slot, an `evm-contract` slot ⇒ `NotVerifiable`
   (SOR-D6). `require_authorized`: `NotRegistered`, then `Unauthorized` unless `signable` and `purpose ∉ {POP_V2, KEM,

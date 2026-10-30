@@ -82,14 +82,15 @@ def members():
 MSIG_MSG = k256(b'scaas.t0.msig-pop')  # stands for the msig's uaMessage(MSIG, PURPOSE_POP_V2, registrationDigest)
 
 
-def msig(ms):
-    """(key_data, pop) of an msig over members `ms`, threshold = count, weight 1 each (CTR-UA-09, spec §3)."""
+def msig(ms, with_keys=False):
+    """(key_data, pop) of an msig over registered members `ms`, threshold = count, weight 1 each (CTR-UA-09, spec §3):
+    every MemberSig keyData empty (owner ruling 2026-10-30); `with_keys` builds the refused pre-ruling form."""
     n = len(ms)
     kd = n.to_bytes(2, 'big') + n.to_bytes(2, 'big') + b''.join(
         K_MLDSA65.to_bytes(2, 'big') + mid + (1).to_bytes(2, 'big') for mid, *_ in ms)
     member_digest = k256(tagged(K_MSIG, kd) + MSIG_MSG)
     pq = tagged(K_MLDSA65, ua_msg(K_MLDSA65, b'scaas.ua.purpose.member.v1', member_digest))
-    return kd, member_sigs([(i, pk, sk.sign(pq)) for i, (_, sk, pk, _) in enumerate(ms)])
+    return kd, member_sigs([(i, pk if with_keys else b'', sk.sign(pq)) for i, (_, sk, pk, _) in enumerate(ms)])
 
 
 PASSKEY = ec.derive_private_key(int.from_bytes(k256(b'scaas.t0.passkey'), 'big') % P256_N, ec.SECP256R1())
@@ -238,10 +239,12 @@ def simulate(cid, fn, args):
 def fixture(path):
     ms = members()[:3]
     kd, pop = msig(ms)
+    _, pop_keys = msig(ms, with_keys=True)
     with open(path, 'w') as f:
         json.dump({'note': 'measure.py fixture: msig n = 3 of ML-DSA-65 members (see measure.py docstring)',
                    'members': [{'pk': pk.hex(), 'pop': p.hex()} for _, _, pk, p in ms],
-                   'key_data': kd.hex(), 'msg': MSIG_MSG.hex(), 'pop': pop.hex()}, f, indent=1)
+                   'key_data': kd.hex(), 'msg': MSIG_MSG.hex(), 'pop': pop.hex(),
+                   'pop_with_key_data': pop_keys.hex()}, f, indent=1)
         f.write('\n')
 
 

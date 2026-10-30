@@ -80,9 +80,6 @@ fn spike_register_mldsa65_model_budget() {
 #[test]
 fn spike_msig3_mldsa65_model_budget() {
     let (env, c) = setup();
-    // the record-sized UaRegistered event of n = 3 exceeds testutils' 16 KiB events limit: lift the limits so the
-    // budget prints; the network run (measure.py) gives the verdict against the network's limits
-    env.cost_estimate().disable_resource_limits();
     let f: Value = serde_json::from_str(MSIG3).unwrap();
     let kd = b(&env, &hx(f["key_data"].as_str().unwrap()));
     let msg = BytesN::<32>::from_array(&env, &hx(f["msg"].as_str().unwrap()).try_into().unwrap());
@@ -95,6 +92,8 @@ fn spike_msig3_mldsa65_model_budget() {
     let mut bad = pop.clone();
     bad[pop.len() - 100] ^= 1; // inside the last member's signature
     assert!(c.try_msig_model(&kd, &msg, &b(&env, &bad)).is_err(), "a member's bad signature");
+    let with_keys = b(&env, &hx(f["pop_with_key_data"].as_str().unwrap()));
+    assert!(c.try_msig_model(&kd, &msg, &with_keys).is_err(), "non-empty keyData of a registered member");
     let mut long = pop.clone();
     long.extend_from_slice(&[0; 32]);
     assert!(c.try_msig_model(&kd, &msg, &b(&env, &long)).is_err(), "non-canonical MemberSig[]");

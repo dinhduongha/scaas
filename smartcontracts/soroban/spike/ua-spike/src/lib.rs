@@ -50,6 +50,22 @@ pub struct Registration {
     pub ledger: u32,
 }
 
+/// The `UaRegistered` data (owner ruling 2026-10-30): the `Registration` with `pop` replaced by `pop_hash`.
+#[contracttype]
+pub struct RegisteredEvent {
+    pub kind: u32,
+    pub key_data: Bytes,
+    pub attrs: UaAttrs,
+    pub pop_hash: BytesN<32>,
+    pub pop_checked: Checked,
+    pub pqz_pop_checked: Checked,
+    pub proven: bool,
+    pub signable: bool,
+    pub index: u32,
+    pub ledger: u32,
+    pub checked: Checked,
+}
+
 #[contracttype]
 pub enum Key {
     Ua(BytesN<32>),
@@ -126,7 +142,8 @@ fn mldsa_verify(env: &Env, kind: u32, pk: &Bytes, msg: &Bytes, sig: &Bytes) {
 }
 
 /// The `register` writes after its checks: `Ua(id)` (the full `Registration`), `List(kind, i)`, `Count(kind)` and the
-/// `UaRegistered` event (topics `ua`, `kind`; data the record and `checked`, spec §4).
+/// `UaRegistered` event (topics `ua`, `kind`; data the record with `pop_hash = keccak256(pop)` for `pop`, and
+/// `checked`: spec §4, owner ruling 2026-10-30).
 fn store(env: &Env, id: &BytesN<32>, kind: u32, key_data: Bytes, pop: Bytes) {
     let count_key = Key::Count(kind);
     let i: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
@@ -150,7 +167,20 @@ fn store(env: &Env, id: &BytesN<32>, kind: u32, key_data: Bytes, pop: Bytes) {
     put(env, &Key::Ua(id.clone()), &rec);
     put(env, &Key::List(kind, i), id);
     put(env, &count_key, &(i + 1));
-    env.events().publish((Symbol::new(env, "UaRegistered"), id.clone(), kind), (rec, Checked::Chain));
+    let ev = RegisteredEvent {
+        kind,
+        key_data: rec.key_data,
+        attrs: rec.attrs,
+        pop_hash: h(env, &rec.pop),
+        pop_checked: rec.pop_checked,
+        pqz_pop_checked: rec.pqz_pop_checked,
+        proven: rec.proven,
+        signable: rec.signable,
+        index: rec.index,
+        ledger: rec.ledger,
+        checked: Checked::Chain,
+    };
+    env.events().publish((Symbol::new(env, "UaRegistered"), id.clone(), kind), ev);
 }
 
 // --- ABI words (abi.encode of the EVM structures, spec §3) ---
@@ -468,8 +498,9 @@ impl UaSpike {
     }
 
     /// `register` of an `msig` (spec §3): `key_data` = CTR-UA-09 `u16 threshold ‖ u16 count ‖ count × (u16 kind ‖
-    /// bytes32 id ‖ u16 weight)`, ids strictly increasing; `pop` = `abi.encode(MemberSig[])`, canonical. Each member's
-    /// record is read, its `keyData` compared with the record, and its signature verified over
+    /// bytes32 id ‖ u16 weight)`, ids strictly increasing; `pop` = `abi.encode(MemberSig[])`, canonical, each
+    /// registered member's `keyData` empty (owner ruling 2026-10-30). Each member's record is read, its key taken
+    /// from the record, and its signature verified over
     /// `pq_msg(ua_msg(kind, member, keccak256(structureUA ‖ msg)))`, until the threshold weight. The record keeps `pop`.
     /// `msg` stands for the msig's own `uaMessage(MSIG, PURPOSE_POP_V2, registrationDigest)`.
     pub fn msig_model(env: Env, key_data: Bytes, msg: BytesN<32>, pop: Bytes) -> BytesN<32> {
@@ -499,9 +530,10 @@ impl UaSpike {
             let k = Key::Ua(mid);
             let rec: Registration = env.storage().persistent().get(&k).expect("MemberUnknown");
             bump(&env, &k);
-            assert!(rec.kind == kind && rec.key_data == kd, "MemberUnknown");
+            assert!(rec.kind == kind, "MemberUnknown");
+            assert!(kd.is_empty(), "Pop: keyData of a registered member");
             let pq: Bytes = tagged(&env, kind, &ua_msg(&env, kind, &member, &member_digest).into()).into();
-            mldsa_verify(&env, kind, &kd, &pq, &sig);
+            mldsa_verify(&env, kind, &rec.key_data, &pq, &sig);
             weight += word2(&key_data, o + 34);
         }
         assert!(weight >= threshold, "Pop: weight");

@@ -105,7 +105,7 @@ spend; a lane's authority spent by a call it did not mean to authorise; any admi
 | `ed25519` 0x0102 | `pk` (32) | `ed25519_verify(pk, ua_msg, sig)` | key validation (`y < p`, the eight small-order encodings refused) in the contract unless the `kinds.json` negatives show the host refuses them |
 | `secp256k1` 0x0108 | `x ‖ y` (64) | `secp256k1_recover(ua_msg, r‖s, v − 27) == 0x04‖x‖y`, `s ≤ n/2`, `v ∈ {27, 28}` | `ua_msg` is the host keccak's `Hash<32>`: no prehash, as EVM |
 | `mldsa44` 0x0130 / `mldsa65` 0x0131 | `pk` (1312 / 1952) | `crypto().ml_dsa_{44,65}_verify(pk, pq_msg, sig, ctx = empty)` (CAP-0087 `verify_sig_ml_dsa_{44,65}`; SDK PR #2138: key and signature as fixed-size `BytesN`, message and context `Bytes`, panics on failure) | sizes 1312 / 2420 and 1952 / 3309 B; FIPS 204 pure interface, empty context valid, exactly our CTR-UA-23 form; the exact Rust signature is recorded by T1 |
-| `msig` 0x0120 | CTR-UA-09 layout | members by S10; `auth` = `abi.encode(MemberSig[])` (`{u16 index, bytes keyData, bytes sig}`, UA8-D5) for derived and EVM members, canonical encoding only (re-encode and compare, as EVM m3); a Soroban native member's slot carries empty `keyData` / `sig` and is checked by the host | threshold by weight; ids strictly increasing; `count ≤ 16`; the largest `msig` that fits a transaction (size, CPU) is measured and published, a larger one fails to register here |
+| `msig` 0x0120 | CTR-UA-09 layout | members by S10; `auth` = `abi.encode(MemberSig[])` (`{u16 index, bytes keyData, bytes sig}`, UA8-D5) for derived and EVM members, canonical encoding only (re-encode and compare, as EVM m3); a **registered** member's slot carries an **empty `keyData`**: the registry reads that member's key from the member's own record (as EVM does for ML-DSA members, CTR-UA-17), a non-empty `keyData` for a registered member is refused (`Pop`); a Soroban native member's slot carries empty `keyData` / `sig` and is checked by the host (owner ruling 2026-10-30, T0: with the keys in `MemberSig`, a 3-member ML-DSA-65 `msig` overran the 16 384 B contract-events limit) | threshold by weight; ids strictly increasing; `count ≤ 16`; the largest `msig` that fits a transaction (size, CPU) is measured and published, a larger one fails to register here |
 
 `register` checks, in order: kind enabled (`KindDisabled`) → key data canonical (`KeyData`) → id (`IdInNativeSpace`) →
 not registered (`AlreadyRegistered`) → `keyHash` free (`KeyInUse`; `msig` has none) → `msig` members registered or
@@ -136,7 +136,9 @@ fn ua_count(env, kind) -> u32;  fn ua_at(env, kind, i) -> BytesN<32>;  fn ua_pag
 Errors (`contracterror`): `KindDisabled`, `KeyData`, `IdInNativeSpace`, `AlreadyRegistered`, `KeyInUse`,
 `MemberUnknown`, `Attrs` (UA-Soroban only), `Pop`, `NotRegistered`, `Unauthorized`, `NotVerifiable`, `RelayerNotListed`,
 plus Part B's `PqzHolder`, `KemHolder`, `KemVersion`, `KemKeyLength`, `PqzPopHash`. Events: `UaRegistered` (topics
-`ua`, `kind`; data the record and `checked`). `Registration.index` is the CTR-UA-29 list position (one rule on every
+`ua`, `kind`; data the record with `pop` replaced by `pop_hash = keccak256(pop)` (`BytesN<32>`), and `checked`; `pop`
+itself stays in the record in contract state; owner ruling 2026-10-30, T0: the full record overran
+`tx_max_contract_events_size_bytes` = 16 384 B for an `msig` of three ML-DSA-65 members). `Registration.index` is the CTR-UA-29 list position (one rule on every
 registry; there is no Soroban consumer of it yet).
 
 - **`require_authorized`** (CTR-UA-17's Soroban form): the record exists (`NotRegistered`) and is `signable`
