@@ -67,7 +67,18 @@ case "$FAMILY" in
            ST="${STELLAR_BIN:-stellar}"; W="$SC/soroban/target/wasm32v1-none/release"
            if [ "$C" = relay_fee ]; then
              S="${SOROBAN_SALT:-$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')}"
-             R="$("$ST" contract id wasm --network "$NET" --salt "$S" "$@")"
+             # `contract id wasm` takes only the source / RPC / config options: pass those of "$@" (a deploy-only
+             # option such as --alias or --inclusion-fee would make it fail)
+             I=(); A=("$@")
+             for ((i = 0; i < ${#A[@]}; i++)); do
+               case "${A[i]}" in
+                 -s|--source|--source-account|--rpc-url|--rpc-header|--network-passphrase|--config-dir|--hd-path)
+                   I+=("${A[i]}" "${A[i + 1]-}"); i=$((i + 1)) ;;
+                 --source=*|--source-account=*|--rpc-url=*|--rpc-header=*|--network-passphrase=*|--config-dir=*|--hd-path=*)
+                   I+=("${A[i]}") ;;
+               esac
+             done
+             R="$("$ST" contract id wasm --network "$NET" --salt "$S" "${I[@]}")"
              X="$("$ST" contract deploy --network "$NET" --wasm "$W/scaas_relay_executor.wasm" "$@" -- --router "$R")"
              got="$("$ST" contract deploy --network "$NET" --wasm "$W/scaas_relay_fee.wasm" --salt "$S" "$@" -- --executor "$X")"
              [ "$got" = "$R" ] || { echo "router id $got != derived $R (executor $X is bound to $R)" >&2; exit 1; }
