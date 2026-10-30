@@ -568,6 +568,8 @@ function kemKeyAt(bytes32 ua, uint64 version) external view returns (bytes memor
 
 # Part B — Soroban registry (UA-8 step 2)
 
+**4b plan pointer:** `docs/superpowers/plans/2026-10-30-soroban-4b-ua-base.md` builds the Part B items that spec rulings C11 / C13 / C16b / C17 move into 4b (its table "Part B items this plan builds"); where the two differ, that table and the 4b names win.
+
 **Starts only when** (a) the 4b Soroban spec exists (TODO step 2 "Specs") and (b) its UA base (UA ids, the
 `SmartKeyAccount` factory with the `UA(ua)` / `KEY(keyHash)` persistent entries, the classical kinds it verifies, the
 UA ledger) has landed on `main` (TODO step 4, one round with this part), and (c) Part A is merged. Names below follow
