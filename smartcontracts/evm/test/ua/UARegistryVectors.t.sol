@@ -259,7 +259,7 @@ contract UARegistryVectorsTest is UARegistryBase {
     /// msig-pophash review M2: an msig whose `webauthn-p256` member (signatures.json derived[0]) is registered with its
     /// PoP through the real `WebAuthnP256Verifier.verifyPop`, then signs a fresh assertion under `member` that the real
     /// `verify` checks inside `requireAuthorized` (2-of-2 with the `p256` member, derived[1]). The same assertion off its
-    /// canonical encoding (CTR-UA-33 C), or carrying the member's key data (CTR-UA-33 A), is refused.
+    /// canonical encoding (CTR-UA-33 C), or carrying the member's key data (CTR-UA-33 B), is refused.
     function test_msig_webauthnMember_realVerifier() public {
         Member[] memory m = new Member[](2);
         uint256[2] memory sk;
