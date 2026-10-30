@@ -121,7 +121,8 @@ def full_register_fits(to, data):
         est = int(rpc("eth_estimateGas", [{"to": to, "data": "0x" + data.hex()}]), 16)
     except RuntimeError:
         return False
-    return est <= int(rpc("eth_getBlockByNumber", ["latest", False])["gasLimit"], 16)
+    # 1023/1024: the next block's limit may step down by that much, and a block-sized tx would wait for it.
+    return est <= int(rpc("eth_getBlockByNumber", ["latest", False])["gasLimit"], 16) * 1023 // 1024
 
 
 # ------------------------------------------------------------------ the token API in one place (plan 5h Task 3b, spec
@@ -227,9 +228,10 @@ def words(h, n=None):
     return [b[i:i + 32] for i in range(0, len(b), 32)][:n]
 
 
-def dec_bytes(h):
+def dec_bytes(h, i=0):
+    """The `bytes` whose offset is head word `i` of the return data."""
     b = bytes.fromhex(h[2:])
-    o = int.from_bytes(b[0:32], "big")
+    o = int.from_bytes(b[32 * i:32 * i + 32], "big")
     n = int.from_bytes(b[o:o + 32], "big")
     return b[o + 32:o + 32 + n]
 
@@ -633,9 +635,9 @@ def run(kd, kr, ke):
         check(pk_of[1] == ph and int.from_bytes(pk_of[2], "big") == 1, f"{name} pqzKeyOf: proof hash set, proven")
         check([int.from_bytes(w, "big") for w in words(call(reg, cd("checkedOf(bytes32)", ["w"], ua)))] == [1, 1, 1],
               f"{name} checkedOf = (chain, chain, chain)")
-        kv = words(call(reg, cd("kemKeyOf(bytes32)", ["w"], ua)))
-        check(int.from_bytes(kv[0], "big") == 1 and kem in bytes.fromhex(call(reg, cd("kemKeyOf(bytes32)", ["w"], ua))[2:]),
-              f"{name} kemKeyOf: version 1, the initial key")
+        kr = call(reg, cd("kemKeyOf(bytes32)", ["w"], ua))
+        check(int.from_bytes(words(kr)[0], "big") == 1 and dec_bytes(kr, 1) == kem and dec_bytes(kr, 2) == b"",
+              f"{name} kemKeyOf = (1, kem, \"\")")
         check(int.from_bytes(words(call(reg, cd("kindOf(bytes32)", ["w"], ua)))[0], "big") == MLDSA65, f"{name} kindOf 0x0131")
         return UA(name=name, kind=MLDSA65, seed=mlseed, pk=pk, s=s, e=e, ua=ua)
 
