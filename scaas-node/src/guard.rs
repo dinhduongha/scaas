@@ -540,7 +540,7 @@ mod tests {
         assert_eq!(CALL_TABLE[6].0, crate::abi::ISCaaSDex::mtxExchangeCall::SELECTOR);
         assert_eq!(CALL_TABLE[7].0, crate::abi::ISCaaSDex::mtxExchangeViaCall::SELECTOR);
         // UA-8 (ruling R-node): the registry's writes, the selectors of IUARegistry (also pinned as hex literals in
-        // submit.rs `ua8_registry_writes_go_through_the_guard` and forge `test_ua8_writeSelectorsPinned`)
+        // submit.rs `ua8_registry_writes_are_call_jobs` and forge `test_ua8_writeSelectorsPinned`)
         assert_eq!(CALL_TABLE[11].0, sig("register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes)"));
         assert_eq!(CALL_TABLE[12].0, sig("setKemKey(bytes32,uint64,bytes,bytes)"));
         assert_eq!(CALL_TABLE[13].0, sig("storePqzPop(bytes32,bytes)"));

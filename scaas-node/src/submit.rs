@@ -1571,7 +1571,7 @@ mod tests {
     /// on a registry of another chain each is refused `CALL_TARGET_REFUSED` and nothing is sent. The selectors are
     /// pinned as literals here and in forge `test_ua8_writeSelectorsPinned`, so an ABI change fails on both sides.
     #[tokio::test]
-    async fn ua8_registry_writes_go_through_the_guard() {
+    async fn ua8_registry_writes_are_call_jobs() {
         use crate::abi::IUARegistry::*;
         assert_eq!(registerCall::SIGNATURE, "register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes)");
         assert_eq!(registerCall::SELECTOR, [0x0c, 0x93, 0x63, 0x61]);
