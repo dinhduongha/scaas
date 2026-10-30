@@ -47,7 +47,7 @@ typedef struct {
 /**
  * The portable PoP of a registration, as `scaas_ua_holder_pop_message` writes it (all hashes 32 bytes). `message` is
  * `ua_message(kind, POP_V2, registration_digest)`: what the signer's `pop` signs. `has_member_digest` (an `msig` only) says
- * `member_digest` is set: what each member signs under `member`; a code-less native member signs
+ * `member_digest` is set: what each member signs under `member`; a code-less or EIP-7702-designator native member signs
  * `scaas_ua_personal_sign_digest` of it (ruling C7).
  */
 typedef struct {
@@ -138,7 +138,7 @@ typedef struct {
 #define SCAAS_UA_ERR_INTERNAL 10
 
 /**
- * "UAPqzHolder": a PQZ key given for a kind that may not hold one (only 0x0130-0x0132 may).
+ * "UAPqzHolder": a PQZ key given for a kind that may not hold one (only 0x0130-0x0132 and a PQ-eligible msig may).
  */
 #define SCAAS_UA_ERR_PQZ_HOLDER 11
 
@@ -448,7 +448,7 @@ ScaasUaStatus scaas_ua_personal_sign_digest(const uint8_t *digest32,
                                             uint8_t *out32);
 
 /**
- * `*out = true` iff the 32-byte purpose tag is POP_V2, KEM or PQZ_KEY: the only ones a code-less native `msig` member signs
+ * `*out = true` iff the 32-byte purpose tag is POP_V2, KEM or PQZ_KEY: the only ones a code-less or EIP-7702-designator native `msig` member signs
  * by `personal_sign`.
  */
 ScaasUaStatus scaas_ua_is_portable_purpose(const uint8_t *tag32,

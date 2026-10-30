@@ -80,7 +80,7 @@ pub mod qobject {
         /// `keccak256(pqzKeyDigest ‖ pqzPopHash)`: what `setPqzKey`'s signature signs under `UAMessage(kind, PURPOSE_PQZ_KEY, ·)`.
         #[qinvokable] #[cxx_name = "pqzKeyRecordDigest"]
         fn pqz_key_record_digest(self: Pin<&mut Self>, key_digest: &QString, pqz_pop_hash: &QString) -> QString;
-        /// EIP-191 `personal_sign` of a 32-byte digest: what a code-less native `msig` member signs over the `memberDigest`
+        /// EIP-191 `personal_sign` of a 32-byte digest: what a code-less or EIP-7702-designator native `msig` member signs over the `memberDigest`
         /// of a portable record (POP_V2, KEM, PQZ_KEY; ruling C7).
         #[qinvokable] #[cxx_name = "personalSignDigest"]
         fn personal_sign_digest(self: Pin<&mut Self>, digest: &QString) -> QString;

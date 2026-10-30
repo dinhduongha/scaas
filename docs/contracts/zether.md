@@ -929,7 +929,7 @@ account's level); a replay needs that same `msg.sender` and yields the same reco
   `msg.sender` is a shared contract (a public multicall/forwarder), a front-runner can replay `schnorrPop` through that
   contract with `SMART_ACCOUNT_1271` pointing at its own always-true contract, giving the UA a foreign authority forever;
   **register only from an account you alone control** (an EOA, your own `SmartKeyAccount`, your own Safe;
-  `UniversalAccountRegistry.sol:96`) until the UA registry, whose PoP binds chain, registry and UA ([CTR-UA-07](accounts.md#CTR-UA-07)), replaces it. `SMART_ACCOUNT_1271`
+  `UniversalAccountRegistry.sol:96`) until the UA registry, whose portable PoP binds the UA and its record, not the chain or the registry ([CTR-UA-07](accounts.md#CTR-UA-07)), replaces it. `SMART_ACCOUNT_1271`
   calls `isValidSignature` with a 50 k cap (`UniversalAccountRegistry.sol:206`), so a passkey `SmartKeyAccount` (Solidity P-256 on a dev chain without
   P256VERIFY) cannot register (`InvalidProofOfPossession`; fail-closed, no loss). `AuthSchemeLib`'s leak predicate for `PQ_COMMITMENT`
   returns `true` (`AuthScheme.sol:58-60`) although the registry treats `PQ_COMMITMENT` exactly like `SELF_SCHNORR`

@@ -36,7 +36,7 @@ pub const SCAAS_UA_ERR_ARGUMENT: ScaasUaStatus = 8;
 pub const SCAAS_UA_ERR_BUFFER: ScaasUaStatus = 9;
 /// "UAInternal": a caught panic (a bug).
 pub const SCAAS_UA_ERR_INTERNAL: ScaasUaStatus = 10;
-/// "UAPqzHolder": a PQZ key given for a kind that may not hold one (only 0x0130-0x0132 may).
+/// "UAPqzHolder": a PQZ key given for a kind that may not hold one (only 0x0130-0x0132 and a PQ-eligible msig may).
 pub const SCAAS_UA_ERR_PQZ_HOLDER: ScaasUaStatus = 11;
 /// "UAKemHolder": a KEM record given for a kind that may not hold one.
 pub const SCAAS_UA_ERR_KEM_HOLDER: ScaasUaStatus = 12;
@@ -485,7 +485,7 @@ pub extern "C" fn scaas_ua_kem_record_message(
 
 /// The portable PoP of a registration, as `scaas_ua_holder_pop_message` writes it (all hashes 32 bytes). `message` is
 /// `ua_message(kind, POP_V2, registration_digest)`: what the signer's `pop` signs. `has_member_digest` (an `msig` only) says
-/// `member_digest` is set: what each member signs under `member`; a code-less native member signs
+/// `member_digest` is set: what each member signs under `member`; a code-less or EIP-7702-designator native member signs
 /// `scaas_ua_personal_sign_digest` of it (ruling C7).
 #[repr(C)]
 pub struct ScaasUaHolderPop {
@@ -662,7 +662,7 @@ pub extern "C" fn scaas_ua_personal_sign_digest(digest32: *const u8, out32: *mut
     run(|| put(out32.cast(), ua::personal_sign_digest(arr(digest32)?)))
 }
 
-/// `*out = true` iff the 32-byte purpose tag is POP_V2, KEM or PQZ_KEY: the only ones a code-less native `msig` member signs
+/// `*out = true` iff the 32-byte purpose tag is POP_V2, KEM or PQZ_KEY: the only ones a code-less or EIP-7702-designator native `msig` member signs
 /// by `personal_sign`.
 #[no_mangle]
 pub extern "C" fn scaas_ua_is_portable_purpose(tag32: *const u8, out: *mut bool) -> ScaasUaStatus {

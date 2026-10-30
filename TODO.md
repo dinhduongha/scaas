@@ -63,7 +63,14 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
          **final fix wave is done** (owner rulings 2026-10-30: R-node, R-cross-set, R-7702 superseded the same day by the EIP-7702
          ruling D1 (registry only), `docs/decisions.md` CTR-UA-31, CTR-UA-16, CTR-UA-07, CTR-UA-24; contracts / node / clientkeys /
          e2e.py `e6cdc13e` … `128becef`, runner / client pins / docs `2d819009` … `95b00fde`, integration and gate logs after them);
-         **next: the re-review of the fix wave**, then the owner's go to merge. Soroban (step 2, Part B) waits for the 4b spec and the Soroban UA base.
+         re-review: Ready with fixes (doc-level, fixed by the controller); owner go to merge 2026-10-30 (push only together with
+         `no7702`). UA-8 follow-ups (final review / re-review nits, not blocking): the node binds one registry per chain, so
+         generation-1 writes (e.g. `setKemKey` for a gen-1 record) are not relayable once a chain runs a gen 2; no test sends a bad
+         signature against a replaceable other-set PQZ key; ua-c layout check is circular (assert the Rust struct size); zether-prover
+         `pop` ignores leftover chain fields (clientkeys throws); ua-qt KEM version exact only to 2^53 (document it); py / C# / Go /
+         Dart small inconsistencies (part-2 n-C10); the metatx-split runner's commands changed under its committed logs (n-G4);
+         the `zetherPop` `popDigest` field name now means the portable digest (A3); doc nits n-D7 / n-J2 / n-V1
+         (`.superpowers/sdd/2026-10-30-ua8-portable-registrations/final-review-part2.md`). Soroban (step 2, Part B) waits for the 4b spec and the Soroban UA base.
      - **EIP-7702 work on branch `no7702` — the next item after the `ua8` merge, before the token-family rename** (owner rulings
        D1–D5 of 2026-10-30, after the 2026-10-29 EIP-7702 hot-wallet drain: "an EOA must really sign — no delegation at all; an EOA must
        not run code"; audit `scratchpad/eip7702/audit-2026-10-30.md`, moves into `docs/research` with the branch; `docs/decisions.md`
@@ -75,6 +82,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
        (`MetaTxBase._msgSender`, `SmartKeyAccount`, `SCaaSDex`, `OpenFactory` raw `msg.sender` checks); D3 guard only the relayer-binding
        check (`MtxPipelineLib`); D4 refuse designator relay targets and native-unwrap recipients (`UnderlyingLib`); D5 deployer- /
        registrar-chosen code checks use `isContract`. D6 (Algorand rekeyed sender) dropped: record only (`e7859ad1`, NET-ALL-83).
+       The audit moves into `docs/research` with the branch, and every public doc link to `scratchpad/eip7702/audit-2026-10-30.md`
+       is rewritten to it.
        **Chain level:** EIP-7702 **off on the SCaaS testnet 7622 at the fs3 Task 13 reset**, which must start from
        `/home/dockers/mba-chain-nethermind/genesis.json` (`eip7702TransitionTimestamp` removed 2026-10-30; backup
        `genesis.json.bak-pre-no7702-20261030`) — **never from a scratchpad genesis copy** (17 stale copies still enable 7702); **off on

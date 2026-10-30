@@ -311,7 +311,8 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   registered token nor the token factory ([NODE-JOB-19](../node/job-api.md#NODE-JOB-19)). The gateway's `~gateway` sponsor policy is
   specified to cover all four ([NODE-GW-03](../node/gateway.md#NODE-GW-03)), but the gateway route `POST /v1/ua/register` and the
   sponsor policy are **not built** (no route, no sponsor-policy code; `TODO.md`): today relaying goes through job-API `call` jobs
-  only. No new job kind, no fee form (there is no token to
+  only. The node binds one registry per chain: once a chain runs a generation 2, the writes that must go to generation 1 (e.g.
+  `setKemKey` for a generation-1 record) cannot be relayed (`TODO.md`). No new job kind, no fee form (there is no token to
   take a fee from; a relayer that wants payment arranges it off chain). A relayed PQ registration **splits** (`register` without
   `pqzPop`, then `storePqzPop`) when the full call's `eth_estimateGas` exceeds **min(block gas limit, the relayer's per-transaction cap)**
   (`max_gas_per_tx`, plus the protocol caps 2^32−1 and, before Amsterdam, 2^24) or the estimate itself is refused for gas ("… exceeds
@@ -335,7 +336,7 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
 - **Record.** `(ua, version, kemPk)`; the UA signs the chain-independent digest `kemRecordDigest = keccak256(abi.encode(KEM_RECORD_TAG,
   ua, uint256(version), keccak256(kemPk)))` as `uaMessage(kind, PURPOSE_KEM, kemRecordDigest)` with `PURPOSE_KEM =
   keccak256("scaas.ua.purpose.kem.v1")`. The signature has the `pop` format: the kind's raw signature for a single key,
-  `abi.encode(MemberSig[])` for an `msig` (members under `member`, a code-less native member by `personal_sign`, one with code by the
+  `abi.encode(MemberSig[])` for an `msig` (members under `member`, a code-less or EIP-7702-designator native member by `personal_sign`, one with code by the
   [CTR-UA-24](#CTR-UA-24) rule, [CTR-UA-07](#CTR-UA-07)),
   verified against the stored key data. The same bytes on every family.
 - **Versions start at 1** (`kemVersion = 0` with an empty `kemPk` means "no KEM record"); `setKemKey` refuses 0. Each `(ua, version)` is
@@ -1573,7 +1574,7 @@ New registration flow:
    `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, h, kemRecordHash))`) and its hash `pqzPopHash`, and the first KEM record
    `(kemVersion ≥ 1, kemPk)`. It computes `holderPopMessage(kind, …)` — `registrationDigest` wrapped as `uaMessage(kind, PURPOSE_POP_V2,
    ·)` — and signs it with the kind's signer (`UAKey.signUA("pop", …)`; MuSig2/FROST: a group signing session, plus the KeyAgg hints or the
-   DKG transcript; a PQ-eligible `msig`: the members' signatures over `memberDigest`, a code-less native member by `personal_sign`, one with code by
+   DKG transcript; a PQ-eligible `msig`: the members' signatures over `memberDigest`, a code-less or EIP-7702-designator native member by `personal_sign`, one with code by
    the [CTR-UA-24](#CTR-UA-24) rule). Nothing on the
    chain is read: no chain key, `chain_uid` or registry address is in the message, so the same `pop` serves every chain.
 3. Anyone submits `register(kind, keyData, attrs, pop, pqzPop)` (self-paid, a relayer job, or sponsored through the gateway route

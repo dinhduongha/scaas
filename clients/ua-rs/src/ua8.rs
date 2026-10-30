@@ -103,7 +103,7 @@ pub struct HolderPop {
     pub registration_digest: [u8; 32],
     /// `ua_message(kind, POP_V2, registration_digest)`: what the signer's `pop` signs (every kind).
     pub message: [u8; 32],
-    /// `msig` only: `member_digest(ua, message)`, what each member signs under `member` (a code-less native member by
+    /// `msig` only: `member_digest(ua, message)`, what each member signs under `member` (a code-less or EIP-7702-designator native member by
     /// [`personal_sign_digest`], ruling C7).
     pub member_digest: Option<[u8; 32]>,
 }
@@ -217,7 +217,7 @@ pub fn personal_sign_digest(digest: &[u8; 32]) -> [u8; 32] {
     keccak(&[b"\x19Ethereum Signed Message:\n32", digest])
 }
 
-/// The portable purposes (POP_V2, KEM, PQZ_KEY): the only ones a code-less native msig member signs by `personal_sign`.
+/// The portable purposes (POP_V2, KEM, PQZ_KEY): the only ones a code-less or EIP-7702-designator native msig member signs by `personal_sign`.
 pub fn is_portable_purpose(tag: &[u8; 32]) -> bool {
     [pop_v2_tag(), purpose_tag("kem").expect("kem"), purpose_tag("pqz-key").expect("pqz-key")].contains(tag)
 }
