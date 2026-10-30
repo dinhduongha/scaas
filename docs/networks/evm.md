@@ -45,7 +45,7 @@ Status: **BUILT** on the SCaaS testnet and anvil; public chains are seeded as `d
 
 - **BNB Smart Chain (56), Polygon PoS (137), Base (8453)** are seeded `draft` (owner 2026-10-11) from a sourced and
   RPC-probed survey of 2026-10-11 (live `eth_call`/`eth_estimateGas` probes): EIP-2537 (`0x0b`–`0x11`), EIP-7702 and
-  P-256 at `0x100` (EIP-7951) are live on all three, and the deterministic CREATE2 deployer `0x4e59…956c` exists on each
+  P-256 at `0x100` (EIP-7951) are live on all three (7702 accounts follow [§5](#5-eip-7702-accounts)), and the deterministic CREATE2 deployer `0x4e59…956c` exists on each
   mainnet and its main testnet (97, 80002, 84532). Differences that matter: **Polygon** allows 32,768-byte contracts
   (chain-specific, since Ahmedabad 2024-09-26) and a 33,554,432 per-transaction gas cap (2^25), while BSC and Base keep
   24,576 and 16,777,216 — SCaaS stays within the smaller values so CREATE2 addresses and transactions are the same
@@ -265,9 +265,19 @@ plus a voluntary migration.
 
 <a id="eip7702"></a>
 
-An EOA that delegated its code through EIP-7702 is still a native account: SCaaS classifies `from` by its code
-([CTR-UA-24](../contracts/accounts.md#CTR-UA-24)), on every path (owner ruling 2026-10-28): its base key signs, else
-ERC-1271 on its address runs the delegate under the 50 k cap.
+An EOA that delegated its code through EIP-7702 is still an EOA for SCaaS, on every path
+([CTR-UA-24](../contracts/accounts.md#CTR-UA-24), owner rulings D1–D5 of 2026-10-30, which supersede the 2026-10-28 ruling):
+it signs by ECDSA with its own key only, never through the delegate's ERC-1271; it cannot call SCaaS contracts directly
+while delegated (`CallerDelegated`; it uses relayed `mtx*` signed by its key, fee may be 0, or clears its delegation); and
+SCaaS never calls into it as a relay target or a native-coin unwrap recipient.
+
+<a id="NET-EVM-07"></a>**NET-EVM-07** — **EIP-7702 is off on SCaaS's own chains** (owner ruling 2026-10-30): EIP-7702 is **off** on the SCaaS testnet 7622 from its next reset (fs3 Task 13;
+the chainspec `eip7702TransitionTimestamp` line is removed, and a reset must start from that chainspec, never from an older
+genesis copy) and on the mainnet 22776 from its launch. A throwaway node with the new chainspec refused a type-4
+transaction (`InvalidTxType`) while legacy and EIP-1559 transfers mined (the check is the Source of NET-EVM-07 in
+[decisions.md](../decisions.md)). Customer chains (Ethereum and most L2s since Pectra, BSC,
+Polygon, Base, …) keep 7702, so the contract rule above applies on every chain; the forge tests are its proof, since the
+SCaaS testnet can no longer exercise 7702 after the reset.
 
 ## 6. Limitations
 
@@ -306,7 +316,7 @@ sequenceDiagram
   contract has no length cap; the node caps by policy (`max_pay_meta_bytes`, 2,048).
 - **Relay fee.** `src/metatx/MtxRelayFee.sol` (router) and its one-shot `MtxRelayExecutor`, deployed by `DeployBase` CREATE2;
   `relay` (address payer) and `uaRelay` (UA payer). The router refuses `t.to == EXECUTOR` (UA: `pad(EXECUTOR)`), a target with
-  no code (`RelayTargetNoCode`), and re-entry (a transient flag); it holds no balance after a call. `RelayFeePaid.payee` is
+  no code or an EIP-7702 designator (`RelayTargetNoCode`), and re-entry (a transient flag); it holds no balance after a call. `RelayFeePaid.payee` is
   `bytes32`. Clients: never pay or approve the executor; if the inner call is an mtx envelope with `MODE_RESTRICT_RELAYER`,
   its relayer is the executor or open.
 - **Split.** The relayed token paths run on `MtxPipelineLib` (DELEGATECALL to a linked library, ABI and digests unchanged).

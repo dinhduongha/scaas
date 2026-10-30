@@ -565,7 +565,8 @@ simulation decides. Sui verify follows the same rule as Aptos and Solana.
 <a id="INT-ERP-03"></a>**INT-ERP-03** — **Contract wallets: the ERP defers to node simulation.** The browser reports the
 `wallet_kind` (from `eth_getCode` through the wallet); for `contract` the ERP accepts the signature unverified and the
 node's simulation arbitrates. A 23-byte `0xef0100…` code is an EIP-7702 delegated **EOA**
-([CTR-UA-24](contracts/accounts.md#CTR-UA-24)).
+([CTR-UA-24](contracts/accounts.md#CTR-UA-24)): the ERP verifies its own key's ECDSA as for any EOA; a signature that
+does not recover is refused (the contracts never ask the delegate's ERC-1271, owner ruling D1, 2026-10-30).
 
 <a id="INT-ERP-13"></a>**INT-ERP-13** — **Hedera long-zero payers sign with their native ED25519 key.** A payer stored as
 `0.0.N` (long-zero) takes the native-key path: the ERP issues the raw 32-byte digest, receives a **64-byte** signature
@@ -862,8 +863,11 @@ key under a second kind (`UAKeyInUse`).
   across key changes is `SmartKeyAccount`.
 - EVM balances of derived UAs exist only on MetaToken v3 clones (`bytes32` ledger, events `UATransfer`,
   `UAMetaTransactionExecuted`); v1/v2 tokens accept native ids only ([CTR-UA-14](contracts/accounts.md#CTR-UA-14)).
-- EIP-7702 delegated EOAs are native EOAs ([CTR-UA-24](contracts/accounts.md#CTR-UA-24)): their key signs as an
-  EOA everywhere; the UA registry and v3 also accept an ERC-1271 signature through the delegate. Never register them.
+- EIP-7702 delegated EOAs are native EOAs ([CTR-UA-24](contracts/accounts.md#CTR-UA-24), owner rulings D1–D5,
+  2026-10-30): their own key signs as an EOA everywhere, and no path accepts an ERC-1271 signature through the
+  delegate. **While delegated, the account cannot call SCaaS contracts directly** (`CallerDelegated`): it pays and
+  transfers through relayed `mtx*` signed by its key (the fee may be 0), or clears its delegation first (a type-4
+  transaction authorising `address(0)`). Never register them.
 - Verifiable credentials stay optional ([CTR-UA-20](contracts/accounts.md#CTR-UA-20)). A BBS presentation is
   never legal evidence: workflows with legal recourse require the account-bound KB-JWT with `nonce` = deal reference /
   `intent_id`.

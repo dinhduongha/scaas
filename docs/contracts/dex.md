@@ -102,7 +102,9 @@ It is signed in the **sell token's own** domain — `("SCaaS MetaToken","1",…)
 `chainId`, `verifyingContract` = the token and `salt` = `chain_uid` ([CTR-MTX-02](metatx.md#CTR-MTX-02)) — so the
 token, chain and contract need no fields of their own. It is a different struct from `MetaTransaction`, not a second
 hash of it ([CTR-MTX-11](metatx.md#CTR-MTX-11)). The signer is an EOA (ECDSA low-s) or a contract (ERC-1271, e.g. a
-passkey `SmartKeyAccount`), told apart as in the token pipeline (an EIP-7702 designator is an EOA). `nonce` is not
+passkey `SmartKeyAccount`), told apart as in the token pipeline: an EIP-7702 designator is an EOA and signs by its own
+key only, its delegate's ERC-1271 is never asked ([CTR-UA-24](accounts.md#CTR-UA-24), owner ruling D1, 2026-10-30; the
+node's venue `valid_sig` follows the same rule). `nonce` is not
 consumed per fill: it is the cancel handle of its lane. `relayer ≠ 0` means only that address may submit the
 settlement — the meaning of `MetaTransaction.relayer`. Clients show `dex`, `relayer`, `destination` and the
 minimum fill (`minFill`) before signing, warn when `destination ≠ from`, default `relayer` to the venue node, and label the order
@@ -435,7 +437,10 @@ their per-fill DEX fee the same way (today a floor: Sui `dex.move:250-251`, Apto
 
 <a id="admin"></a>
 <a id="CTR-DEX-03"></a>**CTR-DEX-03** — `admin` is set once at creation ([CTR-DEX-24](#CTR-DEX-24)) and has no setter; in production a Safe/multisig
-(changing signers happens inside the Safe). The admin can do exactly four things: list or delist a market
+(changing signers happens inside the Safe). An admin that is an EIP-7702 designator is refused at every admin call
+(`_onlyAdmin` reverts `CallerDelegated(admin)`, owner ruling D2, 2026-10-30): it clears its delegation first. The order
+`relayer` binding, the settle submitter and solver interaction targets are not checked for a designator (owner rulings D3 /
+D4: open roles and solver-chosen targets, conservation-checked). The admin can do exactly four things: list or delist a market
 (`setMarket(base, quote, listed)`, `base ≠ quote`, neither 0, else `BadMarket(base, quote)` (review C6-9), which also records each token's kind, [CTR-DEX-18](#CTR-DEX-18); emit
 `MarketSet(base, quote, listed)`), set the fee split (`setFeeSplit(relayerSharePpm, treasury)`, `treasury ∉ {0,
 DEX}` unless the share is 100 %; emit `FeeSplitSet(relayerSharePpm, treasury)`), list or delist an exchange target or

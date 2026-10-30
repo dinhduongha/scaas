@@ -946,7 +946,8 @@ flowchart LR
   ([NET-ALL-02](docs/networks/README.md#NET-ALL-02)).
 - **Guessing "is this an ordinary account?" from code size fails**: a contract under construction has no code yet,
   and an account delegated with EIP-7702 has a few bytes of code but is still a key holder. The contract-only spender
-  rule now names each case and its treatment.
+  rule now names each case and its treatment; since the 2026-10-30 rulings a 7702 account signs by its own key only and
+  cannot call SCaaS directly while delegated ([CTR-UA-24](docs/contracts/accounts.md#CTR-UA-24)).
 - **A signed-message prefix shows 32 opaque bytes to the user.** EIP-712 shows every field.
 - **An owner on every token is an admin key over balances.** Prototype owners, admin moves and rescue functions are
   gone. A wrapper owned by its factory could not even be configured. Tokens are ownerless clones with roles fixed at

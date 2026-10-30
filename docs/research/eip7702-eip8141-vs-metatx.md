@@ -179,6 +179,22 @@ Unverified points to re-check before any decision: Hegotá's date; the final `AP
 8141 keeps one nonce per account; Base's Isthmus date; Hedera's 7702 status; which SCaaS-relevant wallets ship 7702
 delegates (MetaMask, Coinbase, Ambire were named in 2025 coverage **[unverified]**).
 
+### 5.1 Update 2026-10-30: the "Decide" row is decided
+
+After the 2026-10-29 EIP-7702 hot-wallet drain the owner ruled ("an EOA must really sign — no delegation at all; an
+EOA must not run code"), on the [EIP-7702 audit of 2026-10-30](eip7702-audit-2026-10-30.md):
+- **D1** a designator signs by ECDSA with its own key only, never ERC-1271 through the delegate (the `SigCheck` row above:
+  "ECDSA only"; passkey / session-key 7702 wallets cannot sign for SCaaS, their base key can);
+- **D2** a designator direct caller is refused (`CallerDelegated`) wherever the caller is authority; **D3** also the
+  bound relayer; **D4** no relay target or native-coin unwrap recipient is a designator; **D5** deployer- and
+  registrar-chosen code must be a contract (`isContract`);
+- 7702 is off on the SCaaS testnet 7622 (at its next reset) and on 22776 ([node check](eip7702-node-check-2026-10-30.md));
+  customer chains keep it, so the contract rule holds on every chain;
+- D6 (refuse Algorand rekeyed senders) was dropped the same day; non-EVM analogues are residual risks (NET-ALL-83).
+
+The `SmartKeyAccount`-as-7702-target study ("Prepare") is moot while delegated callers are refused. Normative text:
+[accounts.md](../contracts/accounts.md#CTR-UA-24) CTR-UA-24; records in [decisions.md](../decisions.md).
+
 ## 6. Sources
 
 - EIP-7702: https://eips.ethereum.org/EIPS/eip-7702

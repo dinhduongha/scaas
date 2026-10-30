@@ -160,7 +160,8 @@ EVM browser wallets are used only through open standards (EIP-1193, EIP-6963, EI
    user refused ⇒ a soft message, not an error.
 4. **EIP-1271 (contract wallets):** on chain `ERC20MetaTx._requireValidSignature` calls `isValidSignature` (magic
    `0x1626ba7e`) when `from` has code (`_isContract(from)`, first written as `from.code.length > 0`; an EIP-7702
-   designator counts as an EOA). A client without RPC does not know whether `from` has code, so the browser asks
+   designator counts as an EOA and signs by its own key only, its delegate's ERC-1271 is never asked,
+   [CTR-UA-24](../contracts/accounts.md#CTR-UA-24)). A client without RPC does not know whether `from` has code, so the browser asks
    `eth_getCode` through the wallet's own provider and sends a `wallet_kind` hint: `eoa` ⇒ the signature must recover to
    the wallet as before; `contract` ⇒ the signature is accepted unchecked and the node's simulation (a real
    `isValidSignature`) decides ([INT-ERP-03](../integration.md#INT-ERP-03)). A wrong hint opens no path to funds: an
@@ -339,6 +340,26 @@ its vectors):
    is not open;
 4. **TON**: do not queue an op at lane nonce `n + 1` behind a revocable order at `n`: a revoke moves the lane to `n + 2`,
    so the queued op fails.
+
+<a id="CLI-SGN-40"></a>**CLI-SGN-40** — **A wallet never signs an EIP-7702 authorization, and clientkeys never blind-signs a raw
+digest.** Owner rule 2026-10-30 after the EIP-7702 hot-wallet drain ([CTR-UA-24](../contracts/accounts.md#CTR-UA-24);
+the EIP-7702 audit of 2026-10-30, §9). Status: clientkeys **BUILT** (`b76b168c`). Wallet rules:
+1. never sign an EIP-7702 authorization (magic `0x05`, `keccak256(0x05 ‖ rlp([chainId, address, nonce]))`) or a type-4
+   transaction, and never anything with chain id 0;
+2. never sign a raw 32-byte digest whose preimage the wallet did not build and show;
+3. if the user's address has code `0xef0100…` (a 7702 delegation), warn and offer **"clear delegation"**: a type-4
+   transaction authorising `address(0)` on the current chain id, built by the wallet itself — the one allowed
+   authorization. SCaaS refuses a delegated direct caller (`CallerDelegated`), so its balances are safe but frozen for
+   direct calls until the delegation is cleared; relayed `mtx*` signed by its key still work (fee may be 0).
+
+clientkeys API (`seed.js`, exported by `seed-signer.js`): `signTyped(key, td)` signs `hashTypedData(td)` (preimage
+`0x1901 ‖ …`, never `0x05`), after the caller checked `td` (`checkPayment`, `checkOwnerCall`, …); `signKeyProof(key,
+challenge)` signs `keyProofMessage(challenge)`; `signDigest(key, digest, { allowRawDigest: true })` signs a raw digest
+only with the opt-in (else it throws), for a digest the caller built itself from a checked SCaaS message (a Merkle batch
+root, a digest a `check*` function returned). **Migration note (2026-10-30, no7702):** `signDigest(key, digest)` without the
+option now throws. An integrator that vendors the clientkeys bundle (`seed-signer.js`) switches at its next rebuild to
+`signTyped(key, typed)` after its `check*` call (the same bytes) and to `signKeyProof(key, challenge)` for key proofs, or
+passes `{ allowRawDigest: true }` where it builds the digest itself.
 
 <a id="portal-signer-rules"></a>**Portal signer rules.** A portal or ERP page that hosts a signer also:
 
@@ -658,8 +679,8 @@ offered; an app end-to-end test.
 | Passkeys | one credential per `rpId`; the same credential on several chains is the same kind (`webauthn-p256` or a family's native passkey) — allowed, the challenges are domain-separated digests | P-256 |
 
 In general form the tree is `m/7622'/0'/<account>'/<kind>'/<i>'`. `7622'` is the SCaaS BIP-43 purpose for UA trees (owner); the coin level is `0'` because a UA id is chain-independent
-(one derived key ⇒ the same UA on every chain). clientkeys API rules: `signDigest(key, digest)` is for **native** keys
-only; UA keys are `UAKey` objects from `deriveUAKey(seed, {kind, account, index})` whose only signing method is
+(one derived key ⇒ the same UA on every chain). clientkeys API rules: `signTyped` / `signKeyProof` / `signDigest(key, digest, { allowRawDigest: true })` are for
+**native** keys only ([CLI-SGN-40](#CLI-SGN-40): a raw digest needs the opt-in); UA keys are `UAKey` objects from `deriveUAKey(seed, {kind, account, index})` whose only signing method is
 `signUA(purpose, digest)` (it builds `ua_msg` itself), so no raw signature over arbitrary 32 bytes ever comes from a UA key;
 `deriveUAKey` refuses a `kind` whose curve group equals a native path's curve **and** whose path would equal it (impossible
 with `7622'`, asserted in tests) and refuses the Zether `use` indices 7/8 for non-Zether kinds; `deriveConfKey` accepts only
@@ -732,8 +753,8 @@ export function checkTerms(terms, shown)       // → frozen { payload, walletIn
 export function packSignature(checked, key, sig) // → { signature, publicKey } in the submit format
 ```
 
-The seed signer's `signFamily(key, family, checked)` signs `checked.signingBytes` (ed25519; secp256k1 `signDigest` for
-32-byte inputs) and packs the result; a wallet passes `checked.walletInput` to the wallet API, then compares what the
+The seed signer's `signFamily(key, family, checked)` signs `checked.signingBytes` (ed25519; secp256k1 `signDigest` with `{ allowRawDigest: true }` for
+32-byte inputs, [CLI-SGN-40](#CLI-SGN-40)) and packs the result; a wallet passes `checked.walletInput` to the wallet API, then compares what the
 wallet reports as signed against `checked.signingBytes`.
 
 | Family | `signingBytes` (seed) | `packSignature` |
@@ -771,7 +792,7 @@ Built entry points (BUILT; load only what the chosen signer needs):
 | Entry | Exports (main) | Use |
 |---|---|---|
 | `passkey-signer.js` | `passkeySupported`, `creationOptions` (PRF on), `requestOptions`, `publicKeyFromSpki`, `derToRS`, `encodeAssertion`, `hashTypedData`, `passkeySubjectKey`, `accountSignature`, `merkleBatch`, `checkOwnerCall`, `checkPayment`, `checkCall`, `checkTradeOrder`, `checkCancel`, `payLane`, `metaTransferTypedData`, `tradeOrderTypedData`, `orderCancelTypedData`, the UA ledger's `uaMetaTxTypedData`, `uaMetaTransferTypedData` and `padId` (UA-4, accounts.md CTR-UA-26), the pay-meta and relay-fee helpers `metaPayId`, `decodeMeta`, `checkPayMeta`, `buildMtxPayMeta`, `buildUaPayMeta`, `relayRef`, `mtxExecuteCalldata`, `buildRelayFee` ([CLI-SGN-38](#CLI-SGN-38), [CLI-SGN-39](#CLI-SGN-39)) (both bundles) | create a passkey, sign `challenge = digest`, encode for `SmartKeyAccount.isValidSignature` |
-| `seed-signer.js` | `normalizeMnemonic`, `wordsToEntropy`, `seedFromEntropy`, `deriveKey`, `signDigest`, `NETWORKS`, `createVault`, `openVault`, `enablePrf`, `rewrapPin`, `SeedBackup`, `wipe` | 24-word vault: generate, back up (3-word challenge), unlock by PRF or PIN, derive per family, sign digests |
+| `seed-signer.js` | `normalizeMnemonic`, `wordsToEntropy`, `seedFromEntropy`, `deriveKey`, `signTyped`, `signKeyProof`, `signDigest` (raw digest only with `{ allowRawDigest: true }`, [CLI-SGN-40](#CLI-SGN-40)), `NETWORKS`, `createVault`, `openVault`, `enablePrf`, `rewrapPin`, `SeedBackup`, `wipe` | 24-word vault: generate, back up (3-word challenge), unlock by PRF or PIN, derive per family, sign digests |
 | `zether-keys.js` (`zether.js`) | `deriveConfKey`, `confPublic` (the tagged UA, `zetherKind`), `zetherPop(curve, x)` (the UA registry PoP, CTR-UA-07; portable since UA-8, no chain context; `popMessage` removed in UA-3), `zetherOwnerAuth` (a self account's roll-over / mode signature), `sealConfKey`/`openConfKey`, `checkBalance`, cache helpers, `readBalance` | confidential keys and balance cache; proofs via the prover WASM `zetherCall(cmd, json)` (`keygen`, `encrypt`, `decrypt`, `decryptPending`, `checkBalance`, `proveTransfer`, `proveBurn`, `verifyTransfer`, `verifyBurn`, `pop`, `ownerAuth`, `fundCalldata`, `envelope`) |
 
 EVM extension wallets also use `wallet_switchEthereumChain`/`wallet_addEthereumChain`. A UA or role key signs only

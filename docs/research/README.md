@@ -41,6 +41,8 @@ output) are kept while the repository is private and are dropped before a public
 | [_REVIEW-01-UPGRADE.md](_REVIEW-01-UPGRADE.md) | Review: `01-token-factory` và toàn bộ cơ chế upgrade |
 | [_USER-DECISIONS.md](_USER-DECISIONS.md) | Quyết định của user + phát hiện từ code thật |
 | [eip7702-eip8141-vs-metatx.md](eip7702-eip8141-vs-metatx.md) | EIP-7702 and EIP-8141 compared with the SCaaS meta-transaction (2026-10-11) |
+| [eip7702-audit-2026-10-30.md](eip7702-audit-2026-10-30.md) | EIP-7702 audit after the 2026-10-29 hot-wallet drain: the signature path (ERC-1271 through a sweeper delegate) and the `msg.sender` path (delegate code calling as the EOA), every code check in `src`, the minimal enforcement design E1–E7, the owner's choices D1–D6, the tests that flip, non-EVM analogues, wallet guidance (2026-10-30) |
+| [eip7702-node-check-2026-10-30.md](eip7702-node-check-2026-10-30.md) | 7702-off chainspec check on a throwaway 7622 node: type-4 refused (`InvalidTxType`), legacy and EIP-1559 transfers mined, contrast run with 7702 on (2026-10-30) |
 | [pq-eips-vs-scaas.md](pq-eips-vs-scaas.md) | Post-quantum EIP drafts and SCaaS (2026-10-11) |
 | [pqz-core-e-s1.md](pqz-core-e-s1.md) | PQ Zether proof engine: the E-S1 `pqz-core` spike (P6d) (2026-10-13) |
 | [pqz-proof-alternatives.md](pqz-proof-alternatives.md) | PQ Zether proof system: LNP22, the hash-based fallback (STARK, Ligero) and other options (2026-10-13) |

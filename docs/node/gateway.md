@@ -207,12 +207,18 @@ block 0 is the `chain_uid`); every contract a meta-transaction, order entry or `
 
 ### <a id="eip-7702"></a>3.3 EIP-7702
 
-<a id="eip-7702"></a>The node never classifies a native EVM `from` by reading its code at accept
-([CTR-UA-24](../contracts/accounts.md#CTR-UA-24)). A local ECDSA check that recovers the address passes
-whether the code is empty or a 7702 designator (`0xef0100 ‖ address`); a signature that does not recover is an
-ERC-1271 candidate: refused for sponsoring on public doors (`BAD_SIGNATURE`,
-[sponsorship.md#evaluation](sponsorship.md#evaluation)), otherwise left to simulation, which runs the contract's own
-rule.
+<a id="eip-7702"></a>An EIP-7702 delegated `from` (code `0xef0100 ‖ address`) is an EOA: only its own key's ECDSA
+counts, never ERC-1271 through its delegate ([CTR-UA-24](../contracts/accounts.md#CTR-UA-24), owner ruling D1,
+2026-10-30). The node does not read a `from`'s code at accept. In code today:
+- `POST /v1/metatx` runs no local signature check: it simulates the call, and the contracts refuse a designator's
+  signature that does not recover (`MetaTxBadSignature` ⇒ `400 simulation: …`); a recovering one passes as for any EOA.
+- The mesh check (`check_evm`) is synchronous and has no chain access: `sig_kind = "eoa"` ⇒ a local low-s `ecrecover ==
+  from` (`BAD_SIGNATURE` otherwise), `"erc1271"` ⇒ no local check, left to simulation, which refuses a designator `from`.
+- The `~gateway` sponsor-policy door's local `BAD_SIGNATURE` check ([sponsorship.md#evaluation](sponsorship.md#evaluation))
+  is not built; when built, a designator `from` whose signature does not recover is `BAD_SIGNATURE`.
+- The DEX venue's `valid_sig` reads the signer's code and takes a designator by its key only
+  ([dex-venue.md](dex-venue.md#oog-pairs)); the gas guard gives a designator payer no ERC-1271 gas floor (`Chain::is_contract_at`,
+  `guard::gas`).
 
 ## 4. Intake
 

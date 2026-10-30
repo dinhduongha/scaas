@@ -314,8 +314,8 @@ submitting lane the order's `fee` from minted units. `mtxTrade` is never a job: 
    - 7b. Denylist: any listed party (`m.from`, `m.to`, op signer/payee, decoded `call` addresses) ⇒
      `403 SUBJECT_DENIED`, no order detail ([NODE-OPS-14](ops.md#NODE-OPS-14)).
    - 7c. Sponsorship match on job data only ([sponsorship.md#evaluation](sponsorship.md#evaluation)); on
-     `~gateway`/`~mesh` a matched metatx/op needs a valid local payer signature (`422 BAD_SIGNATURE`; EIP-7702
-     delegated payers per [gateway.md#eip-7702](gateway.md#eip-7702)); a matched job with `valid_until < now +
+     `~gateway`/`~mesh` a matched metatx/op needs a valid local payer signature (`422 BAD_SIGNATURE`; an EIP-7702
+     delegated payer signs by its own key only, per [gateway.md#eip-7702](gateway.md#eip-7702)); a matched job with `valid_until < now +
      p.min_valid_secs` is not sponsored (a sponsored job needs `valid_until ≥ now + min_valid_secs`) (`429 SPONSOR_TOO_SHORT` or unsponsored per `on_exhausted`).
 8. In one transaction: **re-check steps 1, 3, 4 from store rows with locking reads** ([NODE-JOB-14](#NODE-JOB-14)),
    then `SELECT … FOR UPDATE` by the idempotency tuple (all generations) — existing same generation: same hash ⇒

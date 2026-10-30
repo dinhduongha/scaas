@@ -364,7 +364,8 @@ Additions for the store-backed rulings (each lands with the change it covers):
   refused, `DUPLICATE_CALL {uid}`.
 - Chain binding (T-CHAIN at the node, [gateway.md#chain-binding](gateway.md#chain-binding)): genesis hash, registry
   code or `chainUid()` mismatch holds the chain; two `evm:7622` profiles with different `chain_uid`. A 7702-delegated
-  payer's ECDSA signature passes the local check.
+  payer's ECDSA signature passes the local check; a delegate (ERC-1271) signature is refused (venue key-only, contract
+  `MetaTxBadSignature` in simulation), and a designator payer gets no ERC-1271 gas floor (`guard::gas`, CTR-UA-24).
 - Planned: the [NODE-LANE-11](submit-lanes.md#NODE-LANE-11) batch journal and cost split over `outer_tx` (items never
   requeued alone after `signed`); unwrap terminal reverts; token kinds 0–4 (built) and flags 5–8 ([CTR-AS-17](../contracts/asset-suite.md#CTR-AS-17)), managed-market codes,
   `merkle_dist_vectors.json`.

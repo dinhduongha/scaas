@@ -76,23 +76,16 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
          Dart small inconsistencies (part-2 n-C10); the metatx-split runner's commands changed under its committed logs (n-G4);
          the `zetherPop` `popDigest` field name now means the portable digest (A3); doc nits n-D7 / n-J2 / n-V1
          (`.superpowers/sdd/2026-10-30-ua8-portable-registrations/final-review-part2.md`). Soroban (step 2, Part B) waits for the 4b spec and the Soroban UA base.
-     - **EIP-7702 work on branch `no7702` — the next item after the `ua8` merge, before the token-family rename** (owner rulings
-       D1–D5 of 2026-10-30, after the 2026-10-29 EIP-7702 hot-wallet drain: "an EOA must really sign — no delegation at all; an EOA must
-       not run code"; audit `scratchpad/eip7702/audit-2026-10-30.md`, moves into `docs/research` with the branch; `docs/decisions.md`
-       CTR-UA-24). On `ua8` only the registry is done (D1: a designator ⇒ own-key ECDSA, never ERC-1271, `0c113cfc`, `128becef`). On
-       `no7702`: D1 on the address path (`SigCheck.isValid` and its callers `MetaTxBase`, `MtxPipelineLib`, the DEX; `MtxRelayFee`
-       `isContract`; the node's DEX venue `valid_sig` and guard `has_code`; clientkeys `signDigest` → typed signing + wallet guidance;
-       flip `UALedger.t.sol test_7702_nativeFrom`, `UAReceiverFee.t.sol test_uaPayReceiverFee_7702Payee`, venue
-       `a_7702_maker_signs_with_its_key_or_its_delegate`); D2 refuse a designator caller wherever a caller is authority
-       (`MetaTxBase._msgSender`, `SmartKeyAccount`, `SCaaSDex`, `OpenFactory` raw `msg.sender` checks); D3 guard only the relayer-binding
-       check (`MtxPipelineLib`); D4 refuse designator relay targets and native-unwrap recipients (`UnderlyingLib`); D5 deployer- /
-       registrar-chosen code checks use `isContract`. D6 (Algorand rekeyed sender) dropped: record only (`e7859ad1`, NET-ALL-83).
-       The audit moves into `docs/research` with the branch, and every public doc link to `scratchpad/eip7702/audit-2026-10-30.md`
-       is rewritten to it.
-       **Chain level:** EIP-7702 **off on the SCaaS testnet 7622 at the fs3 Task 13 reset**, which must start from
-       `/home/dockers/mba-chain-nethermind/genesis.json` (`eip7702TransitionTimestamp` removed 2026-10-30; backup
-       `genesis.json.bak-pre-no7702-20261030`) — **never from a scratchpad genesis copy** (17 stale copies still enable 7702); **off on
-       mainnet 22776 at launch** (no config in the repo yet).
+     - **EIP-7702 on branch `no7702` — BUILT, next: review + merge into `main` + push** (one push with `ua8`, never `ua8`
+       alone: disclosure rule). Owner rulings D1–D5 of 2026-10-30 (after the 2026-10-29 EIP-7702 hot-wallet drain: "an EOA
+       must really sign — no delegation at all; an EOA must not run code"; audit `docs/research/eip7702-audit-2026-10-30.md`;
+       `docs/decisions.md` CTR-UA-24, CTR-MTX-25, CTR-MTX-18, CTR-MTX-27, CTR-TOK-03, NET-EVM-07, CLI-SGN-40). Rebased onto
+       `main` `06cedadc`: D1 `SigCheck` own-key ECDSA only for a designator `5ddc577d`; D2 refuse a designator caller where the
+       caller is authority + D3 bound relayer `6bb05818`; D4 relay target / native unwrap recipient + D5 deploy-time
+       `isContract` `955f5337`; DEX KAT + size baseline `684f5643`; clientkeys `signDigest` opt-in + `signTyped` /
+       `signKeyProof` `b76b168c`; node venue key-only + `is_contract_at` `dad611dc`; runner `20129a8b`; docs and gate logs
+       after them. D6 (Algorand rekeyed sender) dropped: record only (NET-ALL-83, `644cb40a`). Left as ruled: the DEX order
+       `relayer` binding, the `OpenFactory` creator, `TokenCall`'s code check, wallet `execute` / DEX interaction targets.
      - **Node:** follow-ups of the two merged branches — EVM node UA job path (`ua_metatx`; merged 2026-10-30), TON passkey relays (P-256
        in the node), relay-fee minimum before mainnet. **UA-8 (owner ruling R-node, 2026-10-30):** the gateway route
        `POST /v1/ua/register` and the `~gateway` sponsor policy for the four registry selectors (`register`, `setKemKey`,
@@ -103,6 +96,11 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      - **pqz-core:** fs3 Task 12 (final gate; merged 2026-10-30) → Task 6 (reproduction package; **DONE**, merged 2026-10-30
        `2b162239`: Docker quick run 252 ok / 0 FAIL, review clean); its heavy gate interleaves with
        the forge runs for the `capped` slots.
+       **fs3 Task 13 (7622 reset): EIP-7702 off** (owner ruling 2026-10-30, NET-EVM-07): the reset must start from
+       `/home/dockers/mba-chain-nethermind/genesis.json` (`eip7702TransitionTimestamp` removed 2026-10-30; backup
+       `genesis.json.bak-pre-no7702-20261030`) — **never from a scratchpad genesis copy** (17 stale copies still enable 7702);
+       after the reset a type-4 transaction must be refused (`InvalidTxType`). **Mainnet 22776: 7702 off at launch** (no
+       config in the repo yet).
      - **Specs (docs only):** the combined DEX spec (minFill code + `mtxHybrid` / `Via` + `mtxExchangeBatch`), the
        **4b spec for Soroban**, the governance matrix (§0).
   3. EVM contracts: **DEX, one round** — the 50 % minFill floor removed + `mtxHybrid` / `mtxHybridVia` +

@@ -100,9 +100,12 @@ One domain version, `"1"`, for every token.
 
 <a id="CTR-MTX-25"></a>**CTR-MTX-25** — One internal `SigCheck` (ECDSA low-s, ERC-1271 with the gas-cap rule, the HIP-632
 hook) is used by `MetaTxBase`, `SCaaSDex`, `MandateWallet` and `SmartKeyAccount`; `SigLib` is deleted. An EIP-7702
-delegated EOA follows [CTR-UA-24](accounts.md#CTR-UA-24) on the address path as on the UA path (owner ruling 2026-10-28;
-one function, `SigCheck.isValid`): its base key's ECDSA, else ERC-1271 on its address (the delegate) under the cap; a
-delegate-only signature is accepted on `mtxExecute`, the transfers, the DEX and the wallets alike.
+delegated EOA follows [CTR-UA-24](accounts.md#CTR-UA-24) on the address path as on the UA path (owner ruling D1,
+2026-10-30, built in `5ddc577d`; it supersedes the 2026-10-28 ruling "delegate-only signatures on both paths"):
+`SigCheck.isValid` takes no code or a designator (`!SigCheck.isContract(signer)`) as an EOA, ECDSA by its own key only, and
+never asks the delegate's ERC-1271; other code is ERC-1271 only, under the cap. `SigCheck.isDesignator` (exactly 23 bytes
+starting `0xef0100`), `isContract` (code, not a designator) and `requireNotDelegated` (reverts
+`CallerDelegated(address caller)`) are the one helper set for the caller and code checks below.
 
 <a id="metatxbase"></a>
 <a id="CTR-MTX-22"></a>**CTR-MTX-22** — **`MetaTxBase`: the generic base of every SCaaS contract** (owner). It holds
@@ -280,8 +283,8 @@ prefix:
 
 | Step | Check / action | Error |
 |---|---|---|
-| 1 | `MODE_RESTRICT_RELAYER` ⇒ `msg.sender == m.relayer`; `block.timestamp ≤ m.validUntil`; `validateMode(m.mode)`; `m.nonce == mtxNonce(from, batch)`; the fee-recipient binding; `from ≠ address(this)` (the `_selfSender` hook; overridden by `SmartKeyAccount`, which signs as itself, [CTR-ACC-10](accounts.md#CTR-ACC-10)) | `MetaTxUnauthorizedRelayer`, `MetaTxExpired`, `MetaTxUnknownMode`, `MetaTxBadNonce(expected, got)`, `SelfSender()` |
-| 2 | Signature over the digest (`_hashTypedDataV4(hashStruct(m))`) through the virtual `_requireValidSignature`: EOA ⇒ `ECDSA.tryRecover` (65 bytes, low-s); contract ⇒ ERC-1271 `isValidSignature` staticcall (50 000 gas; 400 000 for `SmartKeyAccount` clones, which verify P-256 in Solidity when no precompile, [CTR-ACC-05](accounts.md#CTR-ACC-05)) | `MetaTxBadSignature` |
+| 1 | `MODE_RESTRICT_RELAYER` ⇒ `msg.sender == m.relayer`, and that relayer is not an EIP-7702 designator (owner ruling D3, 2026-10-30); `block.timestamp ≤ m.validUntil`; `validateMode(m.mode)`; `m.nonce == mtxNonce(from, batch)`; the fee-recipient binding; `from ≠ address(this)` (the `_selfSender` hook; overridden by `SmartKeyAccount`, which signs as itself, [CTR-ACC-10](accounts.md#CTR-ACC-10)) | `MetaTxUnauthorizedRelayer`, `CallerDelegated(relayer)`, `MetaTxExpired`, `MetaTxUnknownMode`, `MetaTxBadNonce(expected, got)`, `SelfSender()` |
+| 2 | Signature over the digest (`_hashTypedDataV4(hashStruct(m))`) through the virtual `_requireValidSignature`: EOA (no code, or an EIP-7702 designator) ⇒ `ECDSA.tryRecover` (65 bytes, low-s); contract ⇒ ERC-1271 `isValidSignature` staticcall (50 000 gas; 400 000 for `SmartKeyAccount` clones, which verify P-256 in Solidity when no precompile, [CTR-ACC-05](accounts.md#CTR-ACC-05)) | `MetaTxBadSignature` |
 | 3 | Shape: `data.length ≥ 4`; `bytes4(data)` allowlisted; `data.length` equals the selector's static ABI length where it has one; the fee mode is allowed by the selector's fee class ([CTR-MTX-20](#CTR-MTX-20)) and by `supportedModes()` | `MtxSelectorNotAllowed(bytes4)`, `MtxDataShape(bytes4)`, `MtxFeeClass(bytes4, uint32 mode)`, `MetaTxUnknownMode` |
 | 4 | Write `mtxNonce = expected + 1` | — |
 | 5 | Execute: store the ticket (`sender = from`, `ticket = 1`, `binding = envelopeBinding(m)`), `address(this).call(data)`, clear the ticket, sender and binding (the binding is written on every self-call, 0 included, and cleared on exit, so a `mtxBatch` item never reads the previous item's; review C5-5); a failed call reverts **with its revert data** | inner errors, bubbled raw |
@@ -317,7 +320,11 @@ modifier nonReentrant() {
 ```
 
 `_msgSender()` returns the stored sender when `msg.sender == address(this)` and the ticket is live, else
-`msg.sender`; the ticket is live while it is non-zero (1 before the guarded entry, 2 inside the allowlisted body), so an
+`msg.sender`, after `SigCheck.requireNotDelegated(msg.sender)`: **a direct caller that is an EIP-7702 designator is
+refused** with `CallerDelegated(address caller)` (owner ruling D2 (a), 2026-10-30, [CTR-UA-24](accounts.md#CTR-UA-24),
+`6bb05818`; ≈ 313 gas per read for a warm caller, `test_requireNotDelegated_gas`). While delegated, an account acts through
+relayed `mtx*` signed by its own key (the fee may be 0) or clears its delegation first. The step-5 ticket branch is
+unchanged; the ticket is live while it is non-zero (1 before the guarded entry, 2 inside the allowlisted body), so an
 allowlisted body must never call `this` or forward calldata (anything it reaches through `this` sees the signer). The signer is never read from calldata, so no function can be fooled by 20 trailing bytes, and the only
 self-call path is step 5. Every allowlisted function is `nonReentrant` (a test pins it), so the one entry always
 consumes the ticket, a re-entry from an underlying's hook during the self-call reverts (`msg.sender` is the underlying,
@@ -330,7 +337,8 @@ exactly: the relayer binding, the default fee recipient and the event `relayer` 
 ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20); the `ua*` reads BUILT, UA-5b). A lint test greps the sources and pins that set
 (`MsgSenderLint`, as of UA-5b: `msg.sender` appears 8 times in `ERC20MetaTx` — the event relayer ×3, the default fee
 recipient ×3, the `mtxTrade` and `uaTrade` callers —, 4 times in `UnderlyingToken` for the `mtxWrap` and `uaWrap`
-submitter, never in `TradeLib`, whose caller is a parameter). Defence in
+submitter, never in `TradeLib`, whose caller is a parameter; with no7702, `MetaTxBase` 8 (the designator guard in
+`_msgSender()`) and `MtxPipelineLib` 5 (the relayer binding's designator guard)). Defence in
 depth: `from ≠ address(this)` (step 1), and `_update` refuses transfers and mints **to** `address(this)`
 (`TransferToSelf()`), because tokens parked at the token's own address are what a spoofed self-call would spend.
 
@@ -906,9 +914,12 @@ Steps (`relay`; `uaRelay` is the same with the UA struct and `uaExecuteTransfer`
    - `t.to` is not the executor (`to != EXECUTOR`; UA: `to != pad(EXECUTOR)`; controller call 2026-10-27, owner may
      override).
 
-   Then `target` must have code, else `RelayTargetNoCode(target)` (controller call 2026-10-27, owner may override): a
-   call to an address without code (a counterfactual target not yet deployed, an EOA, a precompile) succeeds, so the
-   payer would pay for an operation that did not happen (CTR-MTX-13).
+   Then `target` must be a contract (`SigCheck.isContract`: code, and not an EIP-7702 designator), else
+   `RelayTargetNoCode(target)` (controller call 2026-10-27; the designator half is owner ruling D4, 2026-10-30,
+   `955f5337`): a call to an address without code (a counterfactual target not yet deployed, an EOA, a precompile)
+   succeeds, so the payer would pay for an operation that did not happen (CTR-MTX-13). Before D4 a designator passed the
+   check: one pointing at a code-less address made the call succeed empty (the same bug), one pointing at code ran the
+   delegate as the executor's callee.
 3. The executor calls `target` with `callData` (no value). A failure reverts the whole transaction with the inner
    revert data.
 4. `token.mtxExecuteTransfer(t, sig)` (UA: `uaExecuteTransfer(t, auth)`). The token checks the payer's signature and
@@ -1000,6 +1011,8 @@ two events. (The plan's estimate was ≈ +200–230 k on Amsterdam.)
 - a target revert leaves no payment;
 - a second `relay` with the same `ref` fails (pay lane);
 - open mode pays `msg.sender`, and a bound payee is paid directly;
+- a target without code or with an EIP-7702 designator (to code or to a code-less address) is refused
+  (`RelayTargetNoCode`, `test_relay_targetDesignatorRefused`);
 - a UA payer works through `uaRelay`;
 - re-entry into the router is refused;
 - the target must exist as code / an executable program / an instantiated contract at relay time, on every family: a

@@ -462,7 +462,7 @@ Native kinds (no registration, no tag-derived id; listed so that structures and 
 
 | No. | Name | Native id | Families | Signature accepted |
 |---|---|---|---|---|
-| `0x0001` | `evm-eoa` | 20-byte address (incl. EIP-7702 delegated) | EVM, Hedera (ECDSA alias) | ECDSA low-s over the EIP-712 digest; 7702-delegated: in the registry ECDSA by its own key only (owner ruling D1, 2026-10-30); the address path (`SigCheck`) still also takes ERC-1271 of the delegate until branch `no7702` lands ([CTR-UA-24](#CTR-UA-24)) |
+| `0x0001` | `evm-eoa` | 20-byte address (incl. EIP-7702 delegated) | EVM, Hedera (ECDSA alias) | ECDSA low-s over the EIP-712 digest; 7702-delegated: ECDSA by its own key only on every path, never ERC-1271 of the delegate, and refused as a direct caller (`CallerDelegated`) (owner rulings D1 / D2, 2026-10-30; [CTR-UA-24](#CTR-UA-24)) |
 | `0x0002` | `evm-contract` | 20-byte address with code | EVM, Hedera | ERC-1271 `isValidSignature(digest, sig)`, 50 k gas (400 k for `SmartKeyAccount` clones) |
 | `0x0003` | `hedera-native` | long-zero address `0.0.N` | **Hedera only** (never a member on another EVM chain) | HIP-632 `isAuthorizedRaw` (64-byte ed25519), else as 0x0001/0x0002 (HIP-632 halts in a static frame: until a non-view path exists, `requireAuthorized` verifies it as 0x0001/0x0002) |
 | `0x0010` | `solana-ed25519` | 32-byte pubkey | Solana | ed25519 precompile instruction |
@@ -879,8 +879,7 @@ struct UAMetaTransfer {
 | views `balanceOfUA(bytes32)`, `uaNonce(bytes32, batch)`, `uaDigest(m)`, `uaTransferDigest(t)`, `registry()` | — | — | — | — |
 
 Rules: step 5 of the pipeline is ECDSA/1271 over the v3 EIP-712 digest when `from` is a native id (`from >> 160 == 0`),
-classified per [CTR-UA-24](#CTR-UA-24) (a 7702-delegated `from`: ECDSA, else 1271 — not v2's `_isContract` rule; this is the address-path rule, which still takes the
-delegate's 1271 until branch `no7702` lands), else
+classified per [CTR-UA-24](#CTR-UA-24) (no code or a 7702 designator: ECDSA by its own key only; other code: 1271), else
 `registry.requireAuthorized(from, PURPOSE_METATX, digest, auth)`. Selectors allowed in `UAMetaTransaction.data`: the
 UA allowlist (`unwrap(…)`, `unwrapToUA`, `burn`; with UA-5c the selectors above; on `PqzToken` its four PQZ selectors); **`approve`,
 `mtxTrade` and `uaTrade` are refused in every `ua*` function, for native `from` too** (`MetaTxUnknownOp`): a UA trades
@@ -1138,7 +1137,7 @@ interface IUARegistry is IERC5267 {
     function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes calldata auth) external view;
 }
 // constructor (the UA-2a UARegistry): error UAConfig(uint16 kind) — kind outside the code's table, duplicate, verifier
-//   without code, cap 0 or above the budget, a keyHash group the predecessor enables, a predecessor of another
+//   (or smartKeyAccountImpl) not a contract (no code or an EIP-7702 designator, owner ruling D5), cap 0 or above the budget, a keyHash group the predecessor enables, a predecessor of another
 //   chain/profile (kind 0 for the non-kind arguments)
 // UAAuth typehash = keccak256("UAAuth(bytes32 ua,bytes32 purpose,bytes32 digest)")
 // domain          = EIP712Domain("SCaaS UARegistry", "<generation, decimal>", block.chainid, address(this),
@@ -1368,34 +1367,54 @@ this table's set and the gen-1 default caps; a kind whose probe fails gets no ve
 <a id="eip7702"></a>
 <a id="CTR-UA-29"></a>**CTR-UA-29** — **The registry keeps an on-chain list of the UAs of each kind** (owner 2026-10-17). Purpose: wallets pick decoys for PQZ and classical Zether multi-recipient transfers (op 7 / Z-multi) from the UAs registered under the token's kind; on chain because event logs can be pruned on a long-running chain (EIP-4444), and in the registry because one UA serves many tokens and purposes. Every registration appends the UA at `uaCount(kind)` (assigned by the registry, `Record.index`, in the record's free 40 bits), every kind including `msig` (owner 2026-10-17: verified by its threshold as usual). Views `uaCount`, `uaAt`, `uaPage(kind, start, n)` (clipped at the end), `uaIndex`; how a wallet reads the list (all, ranges, random) is its own decision. **Decoy selection rule** (on-chain review W-C, 2026-10-19; controller proposal, owner may override): registration is permissionless, so an observer can register many UAs of a kind (a PQZ holder costs one PQ registration, ≈ 5 M gas, free on the SCaaS testnet) and recognise its own decoys; a wallet therefore draws decoys only from UAs active in the token (a pending entry, a debit or a rollover in the token within the wallet's look-back window), weighted by recency; the filter adds gas-level cost only (a pending entry from `mtxShield(sybil, 1)` costs about 52–74 k gas, the unit is recoverable, a rollover is permissionless, and a sybil picked once as a decoy is credited by the honest op 7 for free), a wallet that wants more counts only holder-authorised activity (a `sendCounter` move) in the window, and never from UAs registered after the wallet's last sync point (there is no on-chain grouping left to cap: one key per UA); threat S30. **PQZ-capable list:** a PQZ holder is also appended to the list of key `0x0142` (`uaCount(0x0142)`, `uaAt(0x0142, i)`, `uaPage(0x0142, …)`; no reverse index, `Record.index` stays the kind-list position; ≈ +27 k gas per holder registration), so PQZ decoy legs are drawn from one anonymity set of recipients that all have a PQZ key, across the signer kinds; it lives in the generation that enables `0x0142`. Classical Zether decoys keep using the `0x0141` list. Cost ≈ +27 k gas per registration (one new slot + the counter); registration stays relayable (no `msg.sender` state). A kind a generation does not enable is answered by its predecessor (a single-key kind lives in exactly one generation; `msig`, enabled in both, has one list per generation). Native ids are not listed and are never registered automatically (they cannot be decoys: no encryption key). Status: BUILT and deployed on the SCaaS testnet (2026-10-17: `UARegistry` `0x4bfb288c19f63b71ae22d326d39c865836c40d10` with the verifiers, factory and PQZ tokens redeployed; e2e 92 ok incl. the list checks, `smartcontracts/evm/runs/2026-10-17-p6g-op7-7622.txt`).
 
-<a id="CTR-UA-24"></a>**CTR-UA-24** — **EIP-7702 delegated EOAs are native EOAs whose key stays root; native
-classification is by code at verify time.** In the registry (`requireAuthorized` and `msig` native members, on the `UAAuth` path
-and on the portable path; one rule, `UARegistry._byCode`): empty code, or code that is exactly the EIP-7702 designator
-`0xef0100 ‖ delegate` (23 bytes) ⇒ ECDSA low-s by the address's own key only, **never ERC-1271 through the delegate**; any other
-code ⇒ ERC-1271 only (50 k; 400 k for `SmartKeyAccount` clones). A member's stated kind `0x0001`/`0x0002` is a label checked for
-MEMBER, never the dispatch. On `requireAuthorized` both legs are over `uaAuthDigest`; for an `msig` native member of a portable
-record (`pop` v2, `kem`, `pqz-key`; [CTR-UA-07](#CTR-UA-07)) the ECDSA is over the EIP-191 `personal_sign` hash of the chain-free
-`memberDigest` and ERC-1271 is `isValidSignature(memberDigest, sig)`. Owner ruling **D1** of 2026-10-30 ("an EOA must really sign —
-no delegation at all"), built in `0c113cfc` (portable path) and `128becef` (`requireAuthorized`, the shared `_byCode`); it supersedes
-ruling R-7702 of the same day (`cc965914`: a designator ⇒ root-key ECDSA first, then ERC-1271) and, for the registry, the owner
-ruling of 2026-10-28 (ECDSA, else ERC-1271 of the delegate).
+<a id="CTR-UA-24"></a>**CTR-UA-24** — **An EIP-7702 delegated EOA is an EOA everywhere: it signs by its own key only and never
+runs code for SCaaS.** One classification by code at verify time, on every EVM path: empty code, or code that is exactly the
+EIP-7702 designator `0xef0100 ‖ delegate` (23 bytes) ⇒ an EOA, ECDSA low-s by the address's own key only, **never ERC-1271
+through the delegate**; any other code ⇒ a contract, ERC-1271 only (50 k; 400 k for `SmartKeyAccount` clones). The paths:
+the registry (`requireAuthorized` and `msig` native members, on the `UAAuth` path and on the portable path; one rule,
+`UARegistry._byCode`), the address path (`SigCheck.isValid`: `mtxExecute*`, the transfers, pay-meta, the UA ledger's native
+`from` in `MtxPipelineLib`, the DEX orders / cancels, `mtxWrap` / `uaWrap`, `MandateWallet`, `SmartKeyAccount`) and the
+node's DEX venue (`valid_sig`). A member's stated kind `0x0001`/`0x0002` is a label checked for MEMBER, never the dispatch. On
+`requireAuthorized` both legs are over `uaAuthDigest`; for an `msig` native member of a portable record (`pop` v2, `kem`,
+`pqz-key`; [CTR-UA-07](#CTR-UA-07)) the ECDSA is over the EIP-191 `personal_sign` hash of the chain-free `memberDigest` and
+ERC-1271 is `isValidSignature(memberDigest, sig)`.
 
-The
-base key of a 7702 account controls it at protocol level (it can send a transaction itself, re-delegate or clear the
-delegation), so no signature rule of ours can make it weaker than root; refusing its ECDSA would add no security and
-break plain 7702 wallets. The delegate's ERC-1271 is refused because it lets whatever code the account is delegated to — a
-sweeper delegate after a phishing signature, as in the hot-wallet drain of 2026-10-29 — sign for the account; so a delegated
-wallet's session keys or passkeys do not sign for a registry id. **The address path is not changed yet:** `SigCheck.isValid`
-(`mtxExecute`, the transfers, the UA ledger's native `from` in `MtxPipelineLib`, the DEX, the wallets) and the node's DEX venue
-(`valid_sig`) still accept a designator's ECDSA, else ERC-1271 through its delegate (the owner ruling of 2026-10-28; before it, the
-address path took a 7702 account's base key only and refused its 1271 signatures), until branch `no7702` lands (EIP-7702 owner
-rulings D1–D5 of 2026-10-30, audit `scratchpad/eip7702/audit-2026-10-30.md`, to move into `docs/research` with that branch);
-until then the registry and the tokens apply different 7702 rules. (A 7702 account is still
-not a contract for allowances, `ERC20MetaTx` `CallerNotContract` / `SpenderNotContract`, CTR-TOK-01.) If a future EIP lets a 7702 account disable its base key, ECDSA acceptance for it
-must follow that EIP's flag (a new registry generation). Functional limit on the address path (until `no7702`): a 7702 account
-delegated to `SmartKeyAccount` code with P-256 keys needs about 280 k gas for its ERC-1271 check on a chain without the
-P-256 precompile, so it fails under the 50 k cap there (only a `SmartKeyAccount` clone, matched by codehash, gets 400 k);
-its base key still signs.
+**A designator direct caller is refused** (`SigCheck.CallerDelegated(address caller)`) wherever the caller is authority:
+`MetaTxBase._msgSender()` (so every token, `MandateWallet` and `SmartKeyAccount` entry that reads the direct caller: `transfer`,
+`approve`, `payWithFee*`, `transferToUA`, `wrap` / `unwrap`, `mtxShield`, `cancelNonce`, the owner and role functions), the
+`SmartKeyAccount` guardian (`initiateRecovery`, now through `_msgSender()`), the DEX admin (`SCaaSDex._onlyAdmin`), the
+`OpenFactory` registrar, and the bound relayer of a `MODE_RESTRICT_RELAYER` envelope (`MtxPipelineLib`). The pipeline's step-5
+ticket (self-call) is unchanged. **While an account is delegated it cannot call SCaaS contracts directly.** It still acts
+through relayed `mtx*` / `ua*` signed with its own key (the fee may be 0), or it first clears its delegation (a type-4
+transaction authorising `address(0)`, signed by its key). Open roles are unchanged: any submitter of a relayed call, the
+`mtxWrap` / `uaWrap` fee mint, the `MtxRelayFee` open-mode payee, the DEX settle submitter and its order-relayer binding, the
+`OpenFactory` creator. **SCaaS never calls into a designator where it picks the callee:** a `MtxRelayFee` target must be a
+contract (`RelayTargetNoCode`; before, a designator pointing at a code-less address passed and the payer paid for an empty
+call), a native-coin unwrap recipient (`unwrap`, the Zether / PQZ unshield-unwrap) that is a designator is refused
+(`UnwrapRecipientInvalid`), and every deployer-, registrar- or creator-chosen code dependency (`OpenFactory` DEX and token
+implementations, `UARegistry` `smartKeyAccountImpl` and kind verifiers, an underlying leg, the Zether / PQZ registry, verifiers
+and disclosure) must be a contract (`SigCheck.isContract`). Owner-chosen targets are left as they are: `MandateWallet` /
+`SmartKeyAccount` `execute` and DEX solver interactions.
+
+Owner rulings **D1–D5** of 2026-10-30 after the hot-wallet drain of 2026-10-29 ("an EOA must really sign — no delegation at
+all; an EOA must not run code"; the EIP-7702 audit of 2026-10-30 is the Source of these records in
+[decisions.md](../decisions.md)). Built: the
+registry in `0c113cfc` (portable path) and `128becef` (`requireAuthorized`, the shared `_byCode`); the rest on branch `no7702`:
+`SigCheck` (D1) `5ddc577d`, the caller refusal and the relayer binding (D2, D3) `6bb05818`, the relay target, the unwrap
+recipient and the deploy-time checks (D4, D5) `955f5337`, the node `dad611dc`, clientkeys `b76b168c`. It supersedes ruling
+R-7702 of the same day (`cc965914`: a designator ⇒ root-key ECDSA first, then ERC-1271) and the owner ruling of 2026-10-28
+(ECDSA, else ERC-1271 of the delegate, on both paths). Cost: one warm EXTCODESIZE per guarded call, 313 gas
+(`test_requireNotDelegated_gas`); a relayed call with a bound relayer +352 gas per item.
+
+The base key of a 7702 account controls it at protocol level (it can send a transaction itself, re-delegate or clear the
+delegation), so no signature rule of ours can make it weaker than root; refusing its ECDSA would add no security and break
+plain 7702 wallets. The delegate's ERC-1271 is refused, and a delegated caller is refused, because either lets whatever code the
+account is delegated to — a sweeper delegate after a phishing signature — sign or act for the account; so a delegated wallet's
+session keys or passkeys sign for nothing of ours. (A 7702 account is also not a contract for allowances, `ERC20MetaTx`
+`CallerNotContract` / `SpenderNotContract`, CTR-TOK-01; a delegated caller now gets `CallerDelegated` first.) If a future EIP
+lets a 7702 account disable its base key, ECDSA acceptance for it must follow that EIP's flag (a new registry generation).
+Chain level: EIP-7702 is off on the SCaaS testnet 7622 from the fs3 Task 13 reset and on the mainnet 22776 from its launch
+([NET-EVM-07](../networks/evm.md#NET-EVM-07)); customer chains keep 7702, so the contract rule above stays on every chain.
 
 A chain is identified by `(chain_key, chain_uid)` (`chain_key` is the mesh form `evm:<chainid>`, `chainKeyHash = keccak256(chain_key)`, computed from `block.chainid` in the constructor, never a constructor string), never by its chain id alone ([NET-ALL-22](../networks/README.md#NET-ALL-22)):
 `chain_uid` (`bytes32`, `≠ 0`) is the genesis block hash as the RPC reports it (EVM, Hedera), a **constructor
@@ -1714,7 +1733,7 @@ live in the separate `ComplianceRegistry`. This interface was replaced by `IUARe
 | S24 | Native send to a derived id on non-EVM (keyless address) | derived ids shown only as URN, never in the chain's address format | a user who converts the URN by hand |
 | S25 | Membership shown as consent | app rules (members confirm off chain); the MuSig2 PoP proves participation | `msig`/FROST groups found on chain without member confirmations |
 | S26 | Chain-id collision (7622 or any id shared by two networks): `UAAuth` or v3 signature replayed to a same-address registry/token there (a registration PoP is portable, so its replay is not an attack: it registers the same UA, S31) | `chain_uid` (genesis hash) in both EIP-712 domain salts, the cancel digest and the CREATE2 init code; the node binds registry, `chainUid()` and genesis hash per profile | a replica built from a copy of our profile on a colliding chain can copy our records; nothing of ours trusts it |
-| S27 | EIP-7702 delegated EOA: delegate policy bypassed by the base key | none needed: the base key is root at protocol level ([CTR-UA-24](#CTR-UA-24)); ECDSA accepted, 1271 fallback for delegated wallets, on the v3 address path too (owner ruling 2026-10-28) | a 7702 wallet's own policy binds only signatures that go through its delegate |
+| S27 | EIP-7702 delegated EOA: a sweeper delegate (after a phishing authorization) signs or acts for the account | the delegate never authorises: a designator signs by ECDSA with its own key only, never ERC-1271, on every path; a delegated direct caller is refused (`CallerDelegated`) wherever the caller is authority; no relay target or native unwrap recipient is a designator ([CTR-UA-24](#CTR-UA-24), owner rulings D1–D5 2026-10-30); 7702 off on 7622 / 22776 | a 7702 wallet's own policy (session keys, passkeys) signs for nothing of ours; a delegated account cannot call SCaaS directly until it clears its delegation (relayed `mtx*` signed by its key still work); the delegate still controls assets outside SCaaS |
 | S28 | Foreign-family native member (`hedera-native` on a non-Hedera EVM chain) | MEMBER per chain profile; `0x0003` only where `hederaNative()` | — |
 | S29 | Forwarded/brokered BBS presentation as legal evidence | bbs never accepted where the evidence trail applies; KB-JWT bound to the account and `intent_id` | — |
 | S30 | Decoy flooding: an observer registers many UAs of a kind and recognises its own decoys in a ring (on-chain review W-C) | the decoy selection rule of [CTR-UA-29](#CTR-UA-29): activity in the token, recency, sync point; the PQZ-capable list (`0x0142`) is one anonymity set | a patient observer who keeps its UAs active in the token (this costs gas only: a pending entry or a permissionless rollover counts as activity and the unit is recoverable, so the filter is not a transfer-cost bound), and a sybil decoy set now costs one PQ registration per decoy (≈ 5 M gas, free on the SCaaS testnet where node sponsorship quotas bound it, CTR-UA-25); the rule binds wallets, not the chain (P6h); the real bound is the one-time registration (recipient anonymity only) |
@@ -1931,7 +1950,7 @@ EVM tests:
 | T-AUTH-1 | `requireAuthorized` per kind × purpose; a wrong purpose fails; a wrong kind's tag fails |
 | T-AUTH-1b | a Zether UA via `requireAuthorized` with a Schnorr by `x` ⇒ accepted; a wrong key, wrong purpose or a Zether UA as an `msig` member ⇒ `UAUnauthorized` / `UAMemberUnknown` |
 | T-AUTH-2 | `msig` threshold/weights, duplicate member, unregistered member, nested structure, member ∉ MEMBER refused; a `MemberSig` after the threshold ⇒ `UAUnauthorized` |
-| T-AUTH-3 | native paths: EOA low-s over `UAAuth` (a raw-digest signature fails), 1271 gas caps incl. the `SmartKeyAccount` codehash in the registry, an ERC-7739 wallet against `eip712Domain()` (incl. `salt`); **EIP-7702 delegated accounts**, in the registry, v3's native path and the address path (`SigCheck.t.sol` `test_isValid_7702_*`, owner ruling 2026-10-28): ECDSA by the base key passes; a 1271 signature through a delegate that implements it passes within 50 k; a delegate without 1271, a wrong magic value, a reverting or gas-exhausting delegate ⇒ fail; a designator-length code that is not `0xef0100…` is treated as a contract (1271 only) |
+| T-AUTH-3 | native paths: EOA low-s over `UAAuth` (a raw-digest signature fails), 1271 gas caps incl. the `SmartKeyAccount` codehash in the registry, an ERC-7739 wallet against `eip712Domain()` (incl. `salt`); **EIP-7702 delegated accounts** ([CTR-UA-24](#CTR-UA-24), owner rulings D1–D5 2026-10-30), in the registry, v3's native path and the address path (`SigCheck.t.sol` `test_isValid_7702_*`, `UALedger` `test_7702_nativeFrom`, the parity rows `err_e7702_viaDelegate*`): ECDSA by the base key passes; the delegate's ERC-1271 fails even when it answers the magic value, and is never called; a designator-length code that is not `0xef0100…` is treated as a contract (1271 only); `Sweeper7702.t.sol`: a sweeper delegate's direct calls (`transfer`, `payWithFee`, `approve`, `mint`, `transferOwnership`, `cancelNonce`, `unwrap`, `MandateWallet.execute` / `setMandate` / `setPayee`) revert `CallerDelegated`, its signatures fail, plain EOA and contract callers are unchanged; a delegated bound relayer, guardian, DEX admin and registrar are refused; a designator relay target, native unwrap recipient, implementation or env dependency is refused |
 | T-CHAIN | two registries with the same `block.chainid` and different `chainUid` (and v3 clones bound to them): a native `UAAuth` and a v3 signature from one fail on the other (a registration PoP is portable and passes on both, [CTR-UA-07](#CTR-UA-07)); `eip712Domain()` returns `fields = 0x1f` and `salt = chainUid`; the constructor refuses `chainUid = 0` |
 | T-MEMBER | an `msig` with a `hedera-native` member registers in a `hederaNative` registry and is refused (`UAMemberUnknown`) in every other profile |
 | T-AUTH-4 | 63/64 starvation and out-of-gas inside every capped verifier `staticcall` ⇒ the check reverts, never passes; malformed/short returndata ⇒ revert |
@@ -2074,7 +2093,7 @@ raw message.
 `initiateRecovery(newKey)`; after `RECOVERY_DELAY = 2 days` anyone calls `completeRecovery(newKey)` ⇒ the key is
 **added** (recovery is for a LOST key; a STOLEN key could already spend through meta-transactions and needs no
 recovery). An existing key cancels through `mtxExecuteAsOwner(cancelRecovery)`; `setGuardian` cancels a pending recovery.
-The guardian may be a multisig contract. Watching `RecoveryInitiated` events is the owner's defence against a
+The guardian may be a multisig contract; an EIP-7702 delegated guardian is refused (`CallerDelegated`, [CTR-UA-24](#CTR-UA-24): it clears its delegation first). Watching `RecoveryInitiated` events is the owner's defence against a
 compromised guardian (the 2-day delay plus cancel by key). Where the key set is capped (Sui and Aptos `MAX_KEYS`, Solana
 8 keys) the recovery key needs a free slot: a full set refuses it (Solana already at `start_recovery`), so an owner who
 lost every key of a full set cannot be recovered; keep a slot free.

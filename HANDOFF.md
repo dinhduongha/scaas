@@ -84,7 +84,7 @@ no `capped` jobs.
   T20 closing gates (21 steps rc=0), final whole-branch review → fix wave (TON relayed-call pre-check I1, docs M1–M13) →
   3 re-review rounds (TON payment leg: LANE_TTL, balance, validity floor) → owner rulings 2026-10-28 (all controller
   proposals accepted; item 1 EIP-7702: delegate-only signatures accepted on BOTH paths, `SigCheck.isValid` follows
-  CTR-UA-24; Q1 risk acceptance reversed → payment validity floor kept; Solana recovery adds a key; no fee for a no-op;
+  CTR-UA-24 — superseded 2026-10-30 by the EIP-7702 owner rulings D1–D5, branch `no7702`; Q1 risk acceptance reversed → payment validity floor kept; Solana recovery adds a key; no fee for a no-op;
   immutable Sui / Aptos deploys) → review minors. Records in `docs/decisions.md`, TODO items for the follow-ups (EVM node
   UA path, TON passkey relays need P-256 in the node, relay-fee minimum before mainnet, e2e still owed incl. Sui
   make_immutable / Aptos immutable publish).

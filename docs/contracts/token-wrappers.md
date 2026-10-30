@@ -149,7 +149,7 @@ Checks (all revert at init, so a bad token is never born):
 
 | Check | Error |
 |---|---|
-| underlying `≠ address(this)`, and has code, or is `address(0)` = the native coin ([CTR-TOK-26](#CTR-TOK-26)) | `UnderlyingInvalid(u)` |
+| underlying `≠ address(this)`, and is a contract (code, not an EIP-7702 designator: `SigCheck.isContract`, owner ruling D5, 2026-10-30), or is `address(0)` = the native coin ([CTR-TOK-26](#CTR-TOK-26)) | `UnderlyingInvalid(u)` |
 | `decimals()` returns a `uint8` (staticcall); not checked for the native leg (18) | `DecimalsUnreadable(u)` |
 | `1 ≤ num, den < 2^96` | `RateInvalid(num, den)` |
 | rates fixed ⇒ no rate role | `RoleWithoutFeature(3)` (from `AdminLib.init`) |
@@ -176,6 +176,10 @@ wrap(uint256 amount) returns (uint256 minted)                  // sender = _msgS
 unwrap(uint256 wrapped, address recipient) returns (uint256 out)                    // minOut = 0; direct calls only
 unwrap(uint256 wrapped, address recipient, uint256 minOut) returns (uint256 out)
     require recipient ∉ {0, address(this), UA_POOL, SHIELD_POOL}  // UnwrapRecipientInvalid (SHIELD_POOL: review C5-4)
+    require U ≠ NATIVE or recipient is not an EIP-7702 designator  // UnwrapRecipientInvalid (owner ruling D4, 2026-10-30:
+                                                               //   no native coin into a delegate's code; also the
+                                                               //   Zether / PQZ unshield-unwrap; an ERC-20 leg runs no
+                                                               //   recipient code, so it may pay a designator)
     out    = mulDiv(wrapped, den, num)                         // floor
     require out > 0                                            // UnwrapTooSmall
     require out ≥ minOut                                       // UnwrapBelowMin(out, minOut)
@@ -579,7 +583,7 @@ check was dropped); the rule handles each one explicitly:
 | Case | `code.length` | Treated as | Why |
 |---|---|---|---|
 | Plain EOA | 0 | EOA | — |
-| EOA with an EIP-7702 delegation (`0xef0100 ‖ addr`, 23 bytes, starting `0xef0100`; Prague, available on the SCaaS testnet, chain 7622) | 23 | **EOA** | the code is only a designator; the EOA's private key still signs anything |
+| EOA with an EIP-7702 delegation (`0xef0100 ‖ addr`, 23 bytes, starting `0xef0100`; Prague; off on the SCaaS testnet 7622 from its next reset, live on most customer chains) | 23 | **EOA** (refused) | the code is only a designator; the EOA's private key still signs anything. As a caller it is refused even before this check: `_msgSender()` reverts `CallerDelegated(caller)` ([CTR-UA-24](accounts.md#CTR-UA-24), owner ruling D2, 2026-10-30); as a spender it gets `SpenderNotContract` |
 | Contract during its constructor | 0 | **EOA** (refused) | indistinguishable from an EOA at that moment; consequence: a contract **cannot** be approved or spend an allowance from its own constructor |
 | Deployed contract | > 0, not a designator | contract | — |
 
@@ -605,7 +609,8 @@ check was dropped); the rule handles each one explicitly:
   as an on-chain mandate ([CTR-ACC-06](mandates.md#CTR-ACC-06)).
 
 An earlier "EOA caller" form (`msg.sender == tx.origin && extcodesize == 0`) was dropped because `tx.origin` misjudges
-contracts in their constructor and 7702-delegated EOAs; the caller check uses the classifier above.
+contracts in their constructor and 7702-delegated EOAs; the caller check uses the classifier above (a 7702-delegated
+caller is refused earlier, by `_msgSender()`, [CTR-UA-24](accounts.md#CTR-UA-24)).
 
 ## <a id="factory"></a>6. Factory
 
@@ -776,17 +781,21 @@ Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
 
 - `constructor(address registrar, bytes32 chainUid, uint64 noticePeriod)`, `chainUid` non-zero (`ChainUidZero`).
   `publishEnv`, `publishDexEnv`, `deployImplementation`, `deployDexImplementation`, `deprecate`, `deprecateDex` and
-  `setKindEnabled` are registrar-only (`NotRegistrar`); envs and the catalogue are append-only (`EnvAlreadyPublished`,
+  `setKindEnabled` are registrar-only (`NotRegistrar`; a registrar that is an EIP-7702 designator gets
+  `CallerDelegated`, owner ruling D2, 2026-10-30); envs and the catalogue are append-only (`EnvAlreadyPublished`,
   `VersionAlreadyRegistered`, `DexVersionAlreadyRegistered`); env version 0 and release version 0 are refused.
 - **Deployment** ([CTR-TOK-03](#CTR-TOK-03)): `EnvUnknown`, `LibraryCodeHashMismatch`, the constructor's own error or
-  `DeployFailed`, then `kind()`, `factory()` and `chainUid()` read by staticcall: `ImplementationNotAContract`,
+  `DeployFailed`, then `kind()`, `factory()` and `chainUid()` read by staticcall: `ImplementationNotAContract` (also for an
+EIP-7702 designator: `SigCheck.isContract`, owner ruling D5, 2026-10-30; a designator implementation would be a mutable
+backdoor, since clones `DELEGATECALL` through it),
   `VersionKindMismatch(expected, got)` (`got = type(uint256).max` when there is no answer),
   `ImplementationFactoryMismatch`, `ChainUidMismatch`. The constructor refuses a notice period over 30 days
   (`NoticePeriodTooLong`). Kinds 6–7 do not exist (`NONE_ZETHER_PQZ` / `UNDERLYING_ZETHER_PQZ` dropped, plan 5h D21: `KindReserved` removed, the ABI decoder rejects them); kinds 2–5 are built (Zether P3, PQZ P6g; review W-Q, 2026-10-19: this text had kinds 4–7 reserved).
   The constructors check their env: a confidential kind needs its `deps` (`*_ZETHER`: four with code, a registry, the
   two verifiers of one `proofSystemId`, both fixed to `deps[2]`, two addresses, the transfer verifier answering
   `ringSize()` and the burn verifier not; `*_PQZ`: the verifier) and refuses a Hedera env
-  (`BadInit`).
+  (`BadInit`); "with code" means a contract, never an EIP-7702 designator (`SigCheck.isContract`, owner ruling D5,
+  2026-10-30; also the Zether inner-product verifier).
 - **Creation:** `createToken` (a deployed release: `VersionUnknown`; not deprecated: `VersionDeprecated`; past
   `usableFrom`: `VersionNotYetUsable`) and `createTokenUnregistered` (plain kinds only, `UnregisteredConfidentialKind`
   for 2–7; the implementation checks of a deployment, recorded with `version == 0`) refuse a disabled kind
