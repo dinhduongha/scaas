@@ -1,0 +1,5 @@
+native fast 8 rc=1
+wasm fast 8 rc=1
+wasm generic 8 rc=1
+native generic 8 rc=1
+rc=0

@@ -7,7 +7,7 @@
           "op": 7,
           "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
           "stmtLen": 260992,
-          "gas": 6145000,
+          "gas": 4044000,
           "legs": 8,
           "auditorOn": 1
         },
@@ -15,7 +15,7 @@
           "op": 7,
           "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
           "stmtLen": 223104,
-          "gas": 4438000,
+          "gas": 2887000,
           "legs": 8,
           "auditorOn": 0
         },
@@ -23,14 +23,14 @@
           "op": 7,
           "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
           "stmtLen": 167808,
-          "gas": 4751000,
+          "gas": 3169000,
           "legs": 4,
           "auditorOn": 1
         }
       ],
-      "selftestGas": 4438000,
-      "mldsa44Gas": 49000,
-      "mldsa65Gas": 69000
+      "selftestGas": 2887000,
+      "mldsa44Gas": 30000,
+      "mldsa65Gas": 47000
     }
   ]
 }

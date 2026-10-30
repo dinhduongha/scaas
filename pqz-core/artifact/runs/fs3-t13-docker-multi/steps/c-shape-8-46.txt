@@ -1,0 +1,3 @@
+shape 8 m 16384 k 4 6 done
+{"rel": "R_TXM8_0", "proof_bytes_last": 64603, "proof_bytes_
+rc=0

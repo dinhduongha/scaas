@@ -1,0 +1,18 @@
+# P6f calibration (2026-10-31-calib-ops18200) 2026-10-30 20:13:35Z  host ea199b3b12ab  cpus 4  .NET 10.0.13
+# libpqz_ffi.so /opt/pqz-calibrate/libpqz_ffi.so sha256 dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601; n = 1000 per set; cold self-test 0 processes
+# model name	: AMD Ryzen 5 7235HS
+t_ecMul median 0.016 ms (p99 0.022, n 10000) ⇒ 0.368 M gas per ms
+# rows 3: op 7 pqzl 260992 [8, 1]; op 7 pqzl 223104 [8, 0]; op 7 pqzl 167808 [4, 1]
+
+| op | id | stmtLen [M, auditorOn] | forms | valid n | p50 valid ms | p99 valid ms | p99 adversarial ms | worst adversarial set | t_row ms | gas | + calldata floor of the largest honest input (direct tx) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 7 | pqzl | 260992 [8, 1] | TRANSFER-MULTI+TRANSFER-MULTI | 22 (20 fresh) | 13.456 | 15.860 | 15.954 | stmt last word (22) | 15.954 | 5,873,000 | 11,649,110 (341,318 B) |
+| 7 | pqzl | 223104 [8, 0] | TRANSFER-MULTI | 21 (20 fresh) | 10.169 | 11.697 | 12.555 | stmt last word (21) | 12.555 | 4,622,000 | 9,798,950 (287,759 B) |
+| 7 | pqzl | 167808 [4, 1] | TRANSFER-MULTI | 21 (20 fresh) | 10.717 | 12.403 | 12.611 | proof bit flips (1000) | 12.611 | 4,642,000 | 7,980,630 (231,741 B) |
+
+OP_SELFTEST warm (cached): p50 0.000 ms, p99 0.004 ms; selftestGas = the smallest row = 4,622,000 (D6, R3)
+ML-DSA-44: 15 ACVP inputs, p50 0.110 ms, p99 0.134 ms ⇒ calibrated 50,000, EIP-8355 BASE 6,500 ⇒ mldsa44Gas 50,000
+ML-DSA-65: 15 ACVP inputs, p50 0.163 ms, p99 0.287 ms ⇒ calibrated 106,000, EIP-8355 BASE 9,000 ⇒ mldsa65Gas 106,000
+
+sanity: every t_row ≤ 60 ms; every honest and MAX_PROOF input fits a direct transaction
+# image scaas/nethermind-pqz:2.2.0-pqz6-calib sha256:3eac4e975f367a2e2d95b91ab4f416d8d907e62b6eae1469cf248211629a49a6; host load before: 1.06 1.16 0.92, after: 1.08 1.14 0.95

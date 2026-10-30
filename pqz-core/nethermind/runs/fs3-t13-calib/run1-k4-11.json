@@ -7,54 +7,54 @@
           "op": 2,
           "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
           "stmtLen": 56192,
-          "gas": 4447000
+          "gas": 2829000
         },
         {
           "op": 2,
           "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
           "stmtLen": 56192,
-          "gas": 3185000
+          "gas": 1910000
         },
         {
           "op": 3,
           "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
           "stmtLen": 18528,
-          "gas": 3146000
+          "gas": 2104000
         },
         {
           "op": 3,
           "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
           "stmtLen": 18528,
-          "gas": 1676000
+          "gas": 1067000
         },
         {
           "op": 4,
           "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
           "stmtLen": 37280,
-          "gas": 3261000
+          "gas": 2200000
         },
         {
           "op": 4,
           "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
           "stmtLen": 37280,
-          "gas": 1842000
+          "gas": 1196000
         },
         {
           "op": 5,
           "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
           "stmtLen": 37280,
-          "gas": 3281000
+          "gas": 2165000
         },
         {
           "op": 5,
           "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
           "stmtLen": 37280,
-          "gas": 1755000
+          "gas": 1198000
         }
       ],
-      "selftestGas": 1676000,
-      "mldsa44Gas": 49000,
-      "mldsa65Gas": 69000
+      "selftestGas": 1067000,
+      "mldsa44Gas": 32000,
+      "mldsa65Gas": 49000
     }
   ]
 }

@@ -1,0 +1,11 @@
+{
+  "schedules": [
+    {
+      "timestamp": "0x0",
+      "pqz": [],
+      "selftestGas": 9223372036854775807,
+      "mldsa44Gas": 31000,
+      "mldsa65Gas": 58000
+    }
+  ]
+}

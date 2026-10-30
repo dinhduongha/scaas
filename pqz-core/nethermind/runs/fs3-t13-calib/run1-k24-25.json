@@ -7,7 +7,7 @@
           "op": 7,
           "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
           "stmtLen": 93312,
-          "gas": 3255000,
+          "gas": 2019000,
           "legs": 2,
           "auditorOn": 0
         },
@@ -15,14 +15,14 @@
           "op": 7,
           "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
           "stmtLen": 74752,
-          "gas": 3468000,
+          "gas": 2046000,
           "legs": 1,
           "auditorOn": 0
         }
       ],
-      "selftestGas": 3255000,
-      "mldsa44Gas": 91000,
-      "mldsa65Gas": 72000
+      "selftestGas": 2019000,
+      "mldsa44Gas": 31000,
+      "mldsa65Gas": 44000
     }
   ]
 }

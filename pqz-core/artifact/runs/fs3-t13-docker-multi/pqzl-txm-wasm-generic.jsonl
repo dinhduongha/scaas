@@ -1,0 +1,55 @@
+{"init_ms":632.9,"init_arena":3083616,"verify":"generic"}
+{"timing":"R_TXM1 prove","n":3,"mean_ms":4092.906,"p50_ms":3554.774,"p99_ms":3554.774,"max_ms":5613.519}
+{"rel":"R_TXM1","proof_bytes_last":46672,"proof_bytes_max":46700,"arena_peak":283239328,"proofs_fnv":"2c0ed521"}
+{"timing":"R_TXM1 verify valid","n":3,"mean_ms":1258.555,"p50_ms":1260.122,"p99_ms":1260.122,"max_ms":1269.421}
+{"timing":"R_TXM1 verify adversarial","n":6,"mean_ms":632.158,"p50_ms":1247.144,"p99_ms":1250.41,"max_ms":1252.591}
+{"fails":0}
+{"init_ms":631.5,"init_arena":3083616,"verify":"generic"}
+{"timing":"R_TXM2 prove","n":3,"mean_ms":2854.33,"p50_ms":2529.928,"p99_ms":2529.928,"max_ms":3900.31}
+{"rel":"R_TXM2","proof_bytes_last":47504,"proof_bytes_max":47525,"arena_peak":296086928,"proofs_fnv":"7fe8f25b"}
+{"timing":"R_TXM2 verify valid","n":3,"mean_ms":1411.251,"p50_ms":1413.85,"p99_ms":1413.85,"max_ms":1415.173}
+{"timing":"R_TXM2 verify adversarial","n":6,"mean_ms":710.448,"p50_ms":1401.175,"p99_ms":1404.414,"max_ms":1409.432}
+{"fails":0}
+{"init_ms":637,"init_arena":3083616,"verify":"generic"}
+{"timing":"R_TXM4 prove","n":3,"mean_ms":5275.188,"p50_ms":4918.024,"p99_ms":4918.024,"max_ms":6737.645}
+{"rel":"R_TXM4","proof_bytes_last":63892,"proof_bytes_max":63907,"arena_peak":552213744,"proofs_fnv":"197814d8"}
+{"timing":"R_TXM4 verify valid","n":3,"mean_ms":2678.765,"p50_ms":2668.832,"p99_ms":2668.832,"max_ms":2707.293}
+{"timing":"R_TXM4 verify adversarial","n":6,"mean_ms":1374.094,"p50_ms":2708.12,"p99_ms":2717.969,"max_ms":2721.795}
+{"fails":0}
+{"init_ms":846.2,"init_arena":3083616,"verify":"generic"}
+{"timing":"R_TXM8 prove","n":3,"mean_ms":9641.402,"p50_ms":10177.365,"p99_ms":10177.365,"max_ms":11478.617}
+{"rel":"R_TXM8","proof_bytes_last":80295,"proof_bytes_max":80295,"arena_peak":927036880,"proofs_fnv":"922114b0"}
+{"timing":"R_TXM8 verify valid","n":3,"mean_ms":4972.457,"p50_ms":4973.829,"p99_ms":4973.829,"max_ms":4989.666}
+{"timing":"R_TXM8 verify adversarial","n":6,"mean_ms":2525.326,"p50_ms":4983.898,"p99_ms":4994.743,"max_ms":4999.351}
+{"fails":0}
+{"init_ms":832.6,"init_arena":3083616,"verify":"generic"}
+{"timing":"R_TXM1_0 prove","n":3,"mean_ms":1996.433,"p50_ms":2174.583,"p99_ms":2174.583,"max_ms":2274.82}
+{"rel":"R_TXM1_0","proof_bytes_last":46311,"proof_bytes_max":46348,"arena_peak":278193712,"proofs_fnv":"c1c53965"}
+{"timing":"R_TXM1_0 verify valid","n":3,"mean_ms":1173.869,"p50_ms":1176.886,"p99_ms":1176.886,"max_ms":1179.284}
+{"timing":"R_TXM1_0 verify adversarial","n":6,"mean_ms":596.658,"p50_ms":1164.446,"p99_ms":1173.893,"max_ms":1193.732}
+{"fails":0}
+{"init_ms":628.6,"init_arena":3083616,"verify":"generic"}
+{"timing":"R_TXM2_0 prove","n":3,"mean_ms":2329.2,"p50_ms":2440.711,"p99_ms":2440.711,"max_ms":2490.928}
+{"rel":"R_TXM2_0","proof_bytes_last":46841,"proof_bytes_max":46855,"arena_peak":285875184,"proofs_fnv":"2866f29d"}
+{"timing":"R_TXM2_0 verify valid","n":3,"mean_ms":1242.61,"p50_ms":1241.866,"p99_ms":1241.866,"max_ms":1244.72}
+{"timing":"R_TXM2_0 verify adversarial","n":6,"mean_ms":426.913,"p50_ms":21.068,"p99_ms":1246.623,"max_ms":1249.848}
+{"fails":0}
+{"init_ms":631.6,"init_arena":3083616,"verify":"generic"}
+{"timing":"R_TXM4_0 prove","n":3,"mean_ms":4010.195,"p50_ms":3789.231,"p99_ms":3789.231,"max_ms":5870.996}
+{"rel":"R_TXM4_0","proof_bytes_last":47865,"proof_bytes_max":47865,"arena_peak":301715744,"proofs_fnv":"2337f8c9"}
+{"timing":"R_TXM4_0 verify valid","n":3,"mean_ms":1437.461,"p50_ms":1434.622,"p99_ms":1434.622,"max_ms":1443.822}
+{"timing":"R_TXM4_0 verify adversarial","n":6,"mean_ms":723.033,"p50_ms":1424.691,"p99_ms":1424.778,"max_ms":1439.984}
+{"fails":0}
+{"init_ms":637.5,"init_arena":3083616,"verify":"generic"}
+{"timing":"R_TXM8_0 prove","n":3,"mean_ms":4902.86,"p50_ms":4721.834,"p99_ms":4721.834,"max_ms":6307.335}
+{"rel":"R_TXM8_0","proof_bytes_last":64611,"proof_bytes_max":64611,"arena_peak":567893328,"proofs_fnv":"ef14945e"}
+{"timing":"R_TXM8_0 verify valid","n":3,"mean_ms":2732.146,"p50_ms":2732.306,"p99_ms":2732.306,"max_ms":2735.576}
+{"timing":"R_TXM8_0 verify adversarial","n":6,"mean_ms":1387.087,"p50_ms":2736.463,"p99_ms":2737.882,"max_ms":2747.459}
+{"fails":0}
+{"init_ms":644.8,"init_arena":3083616,"verify":"generic"}
+{"init_ms":627.3,"init_arena":3083616,"verify":"generic"}
+{"timing":"R_TXM16_0 prove","n":3,"mean_ms":10616.861,"p50_ms":9786.718,"p99_ms":9786.718,"max_ms":12828.379}
+{"rel":"R_TXM16_0","proof_bytes_last":94645,"proof_bytes_max":94651,"arena_peak":1338568768,"proofs_fnv":"8531ceb8"}
+{"timing":"R_TXM16_0 verify valid","n":3,"mean_ms":6827.826,"p50_ms":6826.581,"p99_ms":6826.581,"max_ms":6852.845}
+{"timing":"R_TXM16_0 verify adversarial","n":6,"mean_ms":3454.04,"p50_ms":6807.277,"p99_ms":6809.712,"max_ms":6826.865}
+{"fails":0}

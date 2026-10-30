@@ -1,0 +1,83 @@
+# Op 7 R_TXM measurements (reproduce.sh --multi-bench)
+
+Machine: AMD Ryzen 5 7235HS (8 threads; flags aes vaes avx2), in Docker: True. Times are informational.
+
+## PQZL (research/pqzl-measure/txm-bench.sh, the L3 method)
+
+| M | auditor | built | proof bytes (max) | prove p50 native / wasm32 | generic verify p50 / p99 native | SV p99 portable / x86-64-v3 / wasm32 | wasm32 prove peak (no SV) |
+|---|---|---|---|---|---|---|---|
+| 1 | on | yes | 46,700 | 1,686 / 3,555 ms | 774 / 785 ms | 10.0 / 6.0 / 15.7 ms | 270.1 MiB |
+| 1 Rust | on | yes | 46,700 | 1,098 / 4,230 ms | 351 / 356 ms | 7.6 / – / 29.9 ms | 76.0 MiB |
+| 2 | on | yes | 47,532 | 1,453 / 2,530 ms | 890 / 900 ms | 10.4 / 7.1 / 16.3 ms | 282.4 MiB |
+| 2 Rust | on | yes | 47,532 | 836 / 2,477 ms | 405 / 412 ms | 8.6 / – / 32.4 ms | 76.3 MiB |
+| 4 | on | yes | 63,916 | 3,008 / 4,918 ms | 1,831 / 1,872 ms | 15.0 / 8.6 / 23.6 ms | 526.6 MiB |
+| 4 Rust | on | yes | 63,916 | 1,369 / 4,285 ms | 723 / 738 ms | 11.3 / – / 44.9 ms | 147.3 MiB |
+| 8 | on | yes | 80,317 | 5,012 / 10,177 ms | 3,947 / 3,985 ms | 19.3 / 11.5 / 31.2 ms | 884.1 MiB |
+| 8 Rust | on | yes | 80,317 | 2,106 / 10,085 ms | 1,391 / 1,414 ms | 14.9 / – / 59.3 ms | 213.3 MiB |
+| 1 | off | yes | 46,348 | 1,286 / 2,175 ms | 719 / 734 ms | 9.7 / 6.2 / 16.1 ms | 265.3 MiB |
+| 1 Rust | off | yes | 46,348 | 753 / 2,140 ms | 330 / 337 ms | 8.7 / – / 30.2 ms | 75.1 MiB |
+| 2 | off | yes | 46,855 | 1,286 / 2,441 ms | 777 / 788 ms | 9.9 / 6.2 / 16.3 ms | 272.6 MiB |
+| 2 Rust | off | yes | 46,855 | 720 / 2,319 ms | 364 / 366 ms | 8.0 / – / 30.5 ms | 74.4 MiB |
+| 4 | off | yes | 47,865 | 1,835 / 3,789 ms | 906 / 924 ms | 10.7 / 6.2 / 17.0 ms | 287.7 MiB |
+| 4 Rust | off | yes | 47,865 | 1,159 / 4,526 ms | 417 / 422 ms | 8.2 / – / 32.3 ms | 77.0 MiB |
+| 8 | off | yes | 64,624 | 2,933 / 4,722 ms | 1,951 / 1,985 ms | 14.8 / 8.9 / 25.5 ms | 541.6 MiB |
+| 8 Rust | off | yes | 64,624 | 1,400 / 3,946 ms | 824 / 835 ms | 11.6 / – / 48.7 ms | 155.9 MiB |
+| 16 | off | no (oversize, bench build only) | – | – / 9,787 ms | – / – ms | – / – / 37.4 ms | 1,276.6 MiB |
+| 16 Rust | off | no (oversize, bench build only) | 94,695 | 3,106 / 7,311 ms | 1,763 / 1,779 ms | 18.9 / – / 76.3 ms | 290.8 MiB |
+
+"Rust" rows: the Rust core (`pqzl/rust/`, its bench and wasm/run_wasm.mjs, the counts of the PQZL rows; wasm32 with the op 7 limit lifted, feature wasm-m8). Its wasm32 prove peak is the module's linear memory after the proves (one shape per process), the C one the arena peak; no x86-64-v3 build.
+
+## PQZH (Ligero, the proven preset; the H2 method of pqzh/ligero/runs/txm.sh)
+
+| M | auditor | built | proof bytes (max) | max_len_exact | prove p50 native / wasm32 | verify p50 / p99 native | verify p50 / p99 wasm32 | prove memory native heap / wasm32 linear |
+|---|---|---|---|---|---|---|---|---|
+| 1 | on | yes | 233,198 | 235,470 | 630 / 1,438 ms | 9.82 / 11.17 ms | 20.68 / 22.24 ms | 43.2 / 46.4 MiB |
+| 2 | on | yes | 232,622 | 235,470 | 623 / 1,441 ms | 10.11 / 11.60 ms | 21.48 / 23.15 ms | 43.2 / 46.8 MiB |
+| 4 | on | yes | 277,388 | 279,756 | 867 / 2,031 ms | 12.53 / 14.12 ms | 27.80 / 29.96 ms | 60.6 / 65.2 MiB |
+| 8 | on | no (oversize, bench build only) | 365,192 | 368,328 | 1,355 / 3,223 ms | 17.21 / 18.47 ms | 40.38 / 43.33 ms | 94.6 / 101.6 MiB |
+| 16 | on | no (oversize, bench build only) | 543,948 | 546,924 | 2,371 / 5,551 ms | 27.08 / 28.97 ms | 66.07 / 69.45 ms | 163.9 / 172.6 MiB |
+| 1 | off | yes | 231,864 | 234,744 | 639 / 1,434 ms | 9.45 / 10.48 ms | 19.88 / 21.40 ms | 42.9 / 65.8 MiB |
+| 2 | off | yes | 233,038 | 235,470 | 627 / 1,434 ms | 9.82 / 10.90 ms | 20.74 / 22.69 ms | 43.2 / 65.8 MiB |
+| 4 | off | yes | 232,974 | 235,470 | 630 / 1,462 ms | 10.15 / 11.50 ms | 21.56 / 23.15 ms | 43.2 / 65.8 MiB |
+| 8 | off | no (oversize, bench build only) | 276,524 | 279,756 | 860 / 1,979 ms | 12.41 / 13.74 ms | 27.91 / 29.39 ms | 60.6 / 173.7 MiB |
+| 16 | off | no (oversize, bench build only) | 366,206 | 369,054 | 1,384 / 3,197 ms | 17.69 / 19.29 ms | 41.23 / 42.88 ms | 94.9 / 173.7 MiB |
+
+## Checks: 29 ok, 6 FAIL
+
+| status | check | detail |
+|---|---|---|
+| FAIL | pqzl-txm.txt | see the file |
+| ok | pqzh-txm-build.txt | rc 0 |
+| ok | pqzh-txm-oversize-build.txt | rc 0 |
+| ok | pqzh-txm-wasm-build.txt | rc 0 |
+| ok | pqzh-txm-oversize-wasm-build.txt | rc 0 |
+| ok | pqzl-txm-native-generic.jsonl | fails 0, verifier disagreements 0 |
+| ok | pqzl-txm-native-fast.jsonl | fails 0, verifier disagreements 0 |
+| ok | pqzl-txm-x86v3-fast.jsonl | fails 0, verifier disagreements 0 |
+| ok | pqzl-txm-wasm-fast.jsonl | fails 0, verifier disagreements 0 |
+| ok | pqzl-txm-wasm-generic.jsonl | fails 0, verifier disagreements 0 |
+| ok | pqzl-txm-wasm-nosv.jsonl | fails 0, verifier disagreements 0 |
+| FAIL | rust-txm-native-generic.jsonl | fails 50, verifier disagreements 0 |
+| FAIL | rust-txm-native-fast.jsonl | fails 204, verifier disagreements 0 |
+| FAIL | rust-txm-wasm-generic.jsonl | fails 9, verifier disagreements 0 |
+| FAIL | rust-txm-wasm-fast.jsonl | fails 102, verifier disagreements 0 |
+| ok | rust-txm-build.txt | rc 0 |
+| FAIL | rust-txm.txt | see the file |
+| ok | pqzh-txm-native.jsonl | fails 0 (mutations accepted, panics, rc) |
+| ok | pqzh-txm-oversize.jsonl | fails 0 (mutations accepted, panics, rc) |
+| ok | pqzh-txm-wasm.jsonl | fails 0 (mutations accepted, panics, rc) |
+| ok | pqzh-txm-oversize-wasm.jsonl | fails 0 (mutations accepted, panics, rc) |
+| ok | pqzl R_TXM (1, on) measured | built shape |
+| ok | pqzl R_TXM (1, off) measured | built shape |
+| ok | pqzl R_TXM (2, on) measured | built shape |
+| ok | pqzl R_TXM (2, off) measured | built shape |
+| ok | pqzl R_TXM (4, on) measured | built shape |
+| ok | pqzl R_TXM (4, off) measured | built shape |
+| ok | pqzl R_TXM (8, on) measured | built shape |
+| ok | pqzl R_TXM (8, off) measured | built shape |
+| ok | pqzh R_TXM (1, on) measured | built shape |
+| ok | pqzh R_TXM (1, off) measured | built shape |
+| ok | pqzh R_TXM (2, on) measured | built shape |
+| ok | pqzh R_TXM (2, off) measured | built shape |
+| ok | pqzh R_TXM (4, on) measured | built shape |
+| ok | pqzh R_TXM (4, off) measured | built shape |

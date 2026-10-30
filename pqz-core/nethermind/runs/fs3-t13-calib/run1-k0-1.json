@@ -7,18 +7,18 @@
           "op": 1,
           "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
           "stmtLen": 93312,
-          "gas": 4467000
+          "gas": 3014000
         },
         {
           "op": 1,
           "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
           "stmtLen": 74752,
-          "gas": 4433000
+          "gas": 2947000
         }
       ],
-      "selftestGas": 4433000,
-      "mldsa44Gas": 45000,
-      "mldsa65Gas": 69000
+      "selftestGas": 2947000,
+      "mldsa44Gas": 32000,
+      "mldsa65Gas": 45000
     }
   ]
 }
