@@ -128,6 +128,9 @@ contract MockPredecessor {
     function keyOwner(bytes32 kh) external view returns (bytes32) {
         return kh == claimedKeyHash ? claimedOwner : bytes32(0);
     }
+
+    /// A UA-8 view: gen 2's constructor probes it (review n3).
+    function checkedOf(bytes32) external pure returns (uint8, uint8, uint8) {}
 }
 
 abstract contract UARegistryBase is Test {

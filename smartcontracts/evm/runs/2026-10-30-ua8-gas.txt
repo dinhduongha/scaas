@@ -80,7 +80,7 @@ storePqzPop again (no-op) n2048-kmax1024                        1,825,688       
 storePqzPop msig-pq on gen 2 (gen 1 record) n2048-kmax1024      1,825,688   44,002,800   45,828,488
 register msig-pq without pqzPop n2048-kmax1024                  1,655,704   40,310,910   41,966,614
 storePqzPop msig-pq on gen 1 n2048-kmax1024                     1,825,688   43,806,960   45,632,648
-registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024     136,098            0      136,098
+registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024     138,314            0      138,314
 registrationOf msig-pq on gen 1 n2048-kmax1024                     94,633            0       94,633
 register mldsa65 with pqzPop n2304-kmax4096                     3,609,496   87,947,460   91,556,956
 register mldsa65 without pqzPop n2304-kmax4096                  1,663,896   40,789,800   42,453,696
@@ -89,7 +89,7 @@ storePqzPop again (no-op) n2304-kmax4096                        1,967,000       
 storePqzPop msig-pq on gen 2 (gen 1 record) n2304-kmax4096      1,967,000   47,353,500   49,320,500
 register msig-pq without pqzPop n2304-kmax4096                  1,786,776   43,444,350   45,231,126
 storePqzPop msig-pq on gen 1 n2304-kmax4096                     1,967,000   47,157,660   49,124,660
-registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096     145,813            0      145,813
+registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096     148,029            0      148,029
 registrationOf msig-pq on gen 1 n2304-kmax4096                    100,549            0      100,549
 register mldsa65 with pqzPop n2560-kmax16384                    3,877,784   94,382,640   98,260,424
 register mldsa65 without pqzPop n2560-kmax16384                 1,794,968   43,923,240   45,718,208
@@ -98,7 +98,7 @@ storePqzPop again (no-op) n2560-kmax16384                       2,104,216       
 storePqzPop msig-pq on gen 2 (gen 1 record) n2560-kmax16384     2,104,216   50,655,240   52,759,456
 register msig-pq without pqzPop n2560-kmax16384                 1,917,848   46,577,790   48,495,638
 storePqzPop msig-pq on gen 1 n2560-kmax16384                    2,104,216   50,459,400   52,563,616
-registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384    155,912            0      155,912
+registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384    158,128            0      158,128
 registrationOf msig-pq on gen 1 n2560-kmax16384                   106,682            0      106,682
 register mldsa65 with pqzPop n2816-kmax65536                    4,197,272  102,297,330  106,494,602
 register mldsa65 without pqzPop n2816-kmax65536                 1,926,040   47,056,680   48,982,720
@@ -107,7 +107,7 @@ storePqzPop again (no-op) n2816-kmax65536                       2,292,632       
 storePqzPop msig-pq on gen 2 (gen 1 record) n2816-kmax65536     2,292,632   55,436,490   57,729,122
 register msig-pq without pqzPop n2816-kmax65536                 2,048,920   49,711,230   51,760,150
 storePqzPop msig-pq on gen 1 n2816-kmax65536                    2,292,632   55,240,650   57,533,282
-registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536    174,433            0      174,433
+registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536    176,649            0      176,649
 registrationOf msig-pq on gen 1 n2816-kmax65536                   120,870            0      120,870
 
 == Table 3: setKemKey (version 2). popOf = the `_reg` blob decode that setKemKey does (setKemKey does not read the PQZ proof, KEM record or PQZ key; it also reads the separately stored key prefix, UARegistry.sol:323-325, about 2 KB for mldsa65, a further ~4-5 % of the call, conclusion unchanged);
@@ -215,7 +215,7 @@ A6 n2 (PQZ proof 30,381 B at n2304-kmax4096): storePqzPop mldsa65 = 1,967,000 re
   proof as log data, 243,048, is under the floor) + 47,157,660 state = 49,124,660. 28,191 / 32,539 / 35,479 B at the other sets:
   1,825,688 / 2,104,216 / 2,292,632 regular, the same formula.
 A6 note, gen 2's gen-1 path (gen 2 reads gen 1's whole registrationOf, here the msig-pq/<set> record + KEM): registrationOf on gen 2
-  145,813 vs 100,549 on gen 1 at n2304-kmax4096 (+45 k, +45 %); storePqzPop msig-pq on gen 2 over a gen-1 record: state gas
+  148,029 vs 100,549 on gen 1 at n2304-kmax4096 (+47 k, +47 %); storePqzPop msig-pq on gen 2 over a gen-1 record: state gas
   47,353,500 vs 47,157,660 (+195,840 for the extra gen-2 record), regular unchanged (the floor).
 A7 m2, setKemKey decodes the whole registration blob: setKemKey reads only the `_reg` blob (keyData rest, pop, kem version),
   which popOf decodes alike; net of the view baseline (2,860) it costs 12,544 (mldsa65: 3.7 % of setKemKey's 342,936 regular),
@@ -223,3 +223,6 @@ A7 m2, setKemKey decodes the whole registration blob: setKemKey reads only the `
   separate), so these do not move with the set. 12 x slhdsa128s msig (96,832 B pop): 249,505 net of 6,327,192 (3.9 %; the
   calldata floor of the 12 x 7,856 B signature, ~6.2 M, dominates). A blob-read split would save at most ~3-4 % here.
   State gas of setKemKey is the KEM record write (pk + sig), not the read.
+Final fix wave (ruling R-cross-set, review m3): registrationOf on gen 2 over a gen-1 record +2,216 at every set (one more
+  SLOAD: a key gen 2 added in place of gen 1's is not given gen 1's proof), re-pinned; every other row unchanged. The msig
+  canonical-encoding check (re-encode + keccak of the MemberSig[] blob) is under the calldata floor in every measured row.

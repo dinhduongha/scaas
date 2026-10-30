@@ -54,7 +54,8 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///         to the `0x0142` list (UA8-D8); a key without its proof, or where the slot is empty, is stored unproven; anyone
 ///         may add the proof later (`storePqzPop`), and PQZ tokens take proven keys only (`pqzKeyOf`, UA8-D9). A record
 ///         registered without a PQZ key may get one later, once, by the UA's signed portable record (`setPqzKey`,
-///         ruling A1-I1). A PQ-eligible `msig` always registers with an m-of-n PoP (U5).
+///         ruling A1-I1), or replace a key this chain can never prove (another parameter set's length where slot 0x0142 has a
+///         verifier; ruling R-cross-set). A PQ-eligible `msig` always registers with an m-of-n PoP (U5).
 ///
 ///         UA-8 (portable registrations, spec 2026-10-25-ua8-portable-registrations): the PoP has no chain context, so
 ///         anyone may copy a registration to any registry; every `register` field is stored (UA8-D7): `keyData` once
@@ -85,7 +86,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// @notice A constructor argument is refused (kind outside this code's table, duplicate, verifier without code, cap
-    ///         0 or above the budget, a keyHash group the predecessor enables, a predecessor of another chain/profile).
+    ///         0 or above the budget, a keyHash group the predecessor enables, a predecessor of another chain/profile or
+    ///         without the UA-8 views).
     error UAConfig(uint16 kind);
 
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;
@@ -159,6 +161,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     mapping(bytes32 ua => address[]) private _pqzKeySig; // `setPqzKey`'s signature, written once
     mapping(bytes32 ua => mapping(uint64 version => address[])) private _kem; // `pk ‖ sig` (initial record: `sig` = "")
     mapping(bytes32 ua => uint64) private _kemMax; // the highest stored KEM version, 0 = none
+    /// Ruling R-cross-set: the `register` PQZ key (pointer) and proof hash a `setPqzKey` replaced (a key of another
+    /// set's length, never provable here), kept so `registrationOf` still returns the `register` arguments.
+    mapping(bytes32 ua => address) private _regPqzKey;
+    mapping(bytes32 ua => bytes32) private _regPqzPopHash;
 
     /// @param chainUid_ the chain's genesis hash (≠ 0, `SaltedEIP712.ChainUidZero`).
     /// @param predecessor_ 0 for generation 1, else the chain's gen-1 registry.
@@ -183,6 +189,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             if (p.generation() != 1 || p.chainUid() != chainUid_ || p.hederaNative() != hederaNative_) {
                 revert UAConfig(0);
             }
+            // review n3: gen 1 speaks the UA-8 views gen 2 forwards to (`pqzKeyOf`, `registrationOf`, `checkedOf`)
+            try p.checkedOf(0) {} catch { revert UAConfig(0); }
         }
         uint256[20] memory k;
         for (uint256 i; i < kinds_.length; ++i) {
@@ -297,8 +305,11 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     {
         if (_elsewhere(ua)) {
             (kind, keyData, attrs, pop, pqzPop) = IUARegistry(predecessor).registrationOf(ua);
-            // A5-c2 / A6-I1: gen 1's key proven here, its proof stored here
-            if (attrs.pqzKey.length != 0 && pqzPop.length == 0) pqzPop = SSTORE2.readChunks(_pqzPop[ua]);
+            // A5-c2 / A6-I1: gen 1's key proven here, its proof stored here (not a key this gen 2 added in its place,
+            // R-cross-set)
+            if (attrs.pqzKey.length != 0 && pqzPop.length == 0 && !_pqzKey[ua].added) {
+                pqzPop = SSTORE2.readChunks(_pqzPop[ua]);
+            }
             return (kind, keyData, attrs, pop, pqzPop);
         }
         Record memory r = _records[ua];
@@ -309,7 +320,12 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         (attrs.kemPk,) = _kemAt(ua, v);
         attrs.kemVersion = v;
         PqzKey memory k = _pqzKey[ua];
-        if (k.added) return (kind, keyData, attrs, pop, pqzPop); // A4-c3: not a `register` argument
+        if (k.added) {
+            // A4-c3: an added key is not a `register` argument; R-cross-set: the `register` key it replaced is (its
+            // proof was never stored: this chain refuses it)
+            (attrs.pqzKey, attrs.pqzPopHash) = (SSTORE2.read(_regPqzKey[ua]), _regPqzPopHash[ua]);
+            return (kind, keyData, attrs, pop, pqzPop);
+        }
         (attrs.pqzKey, attrs.pqzPopHash) = (SSTORE2.read(k.ptr), _pqzPopHash[ua]);
         pqzPop = SSTORE2.readChunks(_pqzPop[ua]);
     }
@@ -747,9 +763,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             (d,,) = _registration(ua, r.keyPtr);
         }
         _pqzHolder(kind, d, ua);
-        address pk = _pqzKey[ua].ptr;
-        if (host && pk == address(0)) (pk,,) = IUARegistry(predecessor).pqzKeyOf(ua); // gen 1's key counts
-        if (pk != address(0)) revert UAPqzKeySet(ua);
+        _pqzKeyFree(ua, host);
         bytes32 h = _pqzKeyHash(pqzKey);
         if (pqzPopHash == 0 || pqzPopHash == EMPTY_PROOF_HASH) revert UAPqzPopHash(ua);
         bytes32 rd = UAKinds.pqzKeyRecordDigest(UAKinds.pqzKeyDigest(ua, h), pqzPopHash);
@@ -758,6 +772,19 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         _pqzPopHash[ua] = pqzPopHash;
         _pqzKeySig[ua] = SSTORE2.writeChunks(sig);
         emit UAPqzKeyAdded(ua, h, pqzPopHash, pqzKey, sig);
+    }
+
+    /// `setPqzKey`'s `UAPqzKeySet` (ruling R-cross-set): the UA has a PQZ key here (gen 2 host: in either generation), and
+    /// it stays (write-once) unless this chain can never prove it: slot 0x0142 has a verifier and the key, unproven, is
+    /// not of this build's set length (`PqzSet.PK`, the verifier's own length check). Without the verifier nothing is
+    /// replaced (nothing can be proven here either way). A replaced `register` key is kept for `registrationOf`.
+    function _pqzKeyFree(bytes32 ua, bool host) private {
+        PqzKey memory old = _pqzKey[ua];
+        address pk = old.ptr;
+        if (host && pk == address(0)) (pk,,) = IUARegistry(predecessor).pqzKeyOf(ua); // gen 1's key counts
+        if (pk == address(0)) return;
+        if (old.proven || uint160(_cfg(UAKinds.PQZ_MLWE)) == 0 || pk.code.length - 1 == PqzSet.PK) revert UAPqzKeySet(ua);
+        if (!host && !old.added) (_regPqzKey[ua], _regPqzPopHash[ua]) = (pk, _pqzPopHash[ua]);
     }
 
     // ----- KEM records (P4, P5, P7; UA8-D3–D5, D11, D12) -----
@@ -915,15 +942,18 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     /// accounts.md §1.9 `msig` row: strictly increasing member indexes, stop at the threshold (a MemberSig after it
     /// fails, which keeps the registration bound sound), `member_digest = keccak256(ua ‖ ua_msg)`. `portable` (a portable
-    /// record's signature, `_sigOk` only — never `requireAuthorized`; rulings C7 / A1-I2 / A1-f1): a code-less native
-    /// member signs `member_digest` by EIP-191 `personal_sign`, one with code answers ERC-1271 over `member_digest`;
-    /// otherwise native members sign `UAAuth` (CTR-UA-24, CTR-MTX-14).
+    /// record's signature, `_sigOk` only — never `requireAuthorized`; rulings C7 / A1-I2 / A1-f1 / R-7702): `blob` must
+    /// be the canonical `abi.encode(MemberSig[])` (review m3), and a native member signs `member_digest` by EIP-191
+    /// `personal_sign` (code-less, or an EIP-7702 designator's root key) or answers ERC-1271 over `member_digest`
+    /// (`_nativePortable`); otherwise native members sign `UAAuth` (CTR-UA-24, CTR-MTX-14).
     function _msig(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory d, bytes memory blob, bool portable)
         private
         view
         returns (bool)
     {
         MemberSig[] memory sigs = abi.decode(blob, (MemberSig[]));
+        // review m3: a stored portable signature is the canonical encoding (the decoder ignores trailing bytes)
+        if (portable && keccak256(abi.encode(sigs)) != keccak256(blob)) return false;
         bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purposeTag, digest));
         (uint256 threshold, uint256 count) = (_u16(d, 0), _u16(d, 2));
         uint256 acc;
@@ -955,12 +985,16 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// the delegate; other code ⇒ ERC-1271 only. Always over `uaAuthDigest`. OZ `tryRecover` refuses high s and a
     /// recovered `address(0)`, so neither id 0 nor a garbage signature ever matches.
     function _native(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory sig) private view returns (bool) {
-        address a = address(uint160(uint256(ua)));
         bytes32 h = uaAuthDigest(ua, purposeTag, digest);
+        return _byCode(address(uint160(uint256(ua))), h, h, sig);
+    }
+
+    /// CTR-UA-24's order: empty code ⇒ ECDSA over `e`; the 23-byte EIP-7702 designator ⇒ ECDSA over `e` by the root
+    /// key, else ERC-1271 over `h`; other code ⇒ ERC-1271 over `h` only.
+    function _byCode(address a, bytes32 e, bytes32 h, bytes memory sig) private view returns (bool) {
         uint256 len = a.code.length;
-        bool designator = len == 23 && bytes3(a.code) == 0xef0100;
-        if (len == 0 || designator) {
-            (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(h, sig);
+        if (len == 0 || (len == 23 && bytes3(a.code) == 0xef0100)) {
+            (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(e, sig);
             if (err == ECDSA.RecoverError.NoError && rec == a) return true;
             if (len == 0) return false;
         }
@@ -981,15 +1015,12 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         );
     }
 
-    /// A native `msig` member of a portable record (no chain context): code-less ⇒ ECDSA (65-byte r ‖ s ‖ v, low s,
-    /// v 27 / 28: OZ `tryRecover`) over the EIP-191 `personal_sign` hash of `md`; any code (an EIP-7702 delegate, a
-    /// contract wallet) ⇒ ERC-1271 `isValidSignature(md, sig)` only, at the same caps as `_native`.
+    /// A native `msig` member of a portable record (no chain context), in CTR-UA-24's order (ruling R-7702): code-less
+    /// ⇒ ECDSA (65-byte r ‖ s ‖ v, low s, v 27 / 28: OZ `tryRecover`) over the EIP-191 `personal_sign` hash of `md`; an
+    /// EIP-7702 designator ⇒ that root-key ECDSA first, then ERC-1271 `isValidSignature(md, sig)` through the delegate;
+    /// other code (a contract wallet) ⇒ ERC-1271 only; at the same caps as `_native`.
     function _nativePortable(address a, bytes32 md, bytes memory sig) private view returns (bool) {
-        if (a.code.length == 0) {
-            (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(MessageHashUtils.toEthSignedMessageHash(md), sig);
-            return err == ECDSA.RecoverError.NoError && rec == a;
-        }
-        return _1271(a, md, sig);
+        return _byCode(a, MessageHashUtils.toEthSignedMessageHash(md), md, sig);
     }
 
     function _verifierCall(uint256 cfg, bytes4 selector, bytes memory keyData, bytes32 message, bytes memory sig)
