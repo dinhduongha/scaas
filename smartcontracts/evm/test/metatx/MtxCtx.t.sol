@@ -251,7 +251,7 @@ contract MtxCtxTest is PqzRegistryBase {
                 ++n;
             }
         }
-        assertEq(n, 7, "NONE, UNDERLYING, NONE_LEDGEROFF, NONE_PQZ, UNDERLYING_PQZ, NONE_ZETHER, UNDERLYING_ZETHER");
+        assertEq(n, 7, "NORMAL, WRAPPED, NORMAL_LEDGEROFF, NORMAL_PQZ, WRAPPED_PQZ, NORMAL_ZETHER, WRAPPED_ZETHER");
         _checkCtx(address(tok), "NONE+SKA");
         _checkCtx(address(htok), "NONE+HEDERA");
         assertTrue(MetaTokenBase(address(tok)).SMART_KEY_ACCOUNT_IMPL() != address(0));

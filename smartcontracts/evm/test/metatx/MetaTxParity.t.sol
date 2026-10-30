@@ -1874,16 +1874,16 @@ contract PlainRig is UALedgerBase, ParityCases {
         tok.mint(alice, 9_000_000);
         vm.prank(alice);
         tok.transferToUA(uaP, 2_000_000);
-        tks.push(Tk("NONE", address(tok), ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, uaP, 0, address(0), dex, 0, 0));
+        tks.push(Tk("NORMAL", address(tok), ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, uaP, 0, address(0), dex, 0, 0));
         // UNDERLYING: 10_000_000 wrapped units
         _wrapFor(alice, 10_000_000);
         vm.prank(alice);
         wrp.transferToUA(uaP, 2_000_000);
-        tks.push(Tk("UNDERLYING", address(wrp), ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, uaP, 1, address(und), dex, 0, 0));
+        tks.push(Tk("WRAPPED", address(wrp), ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, uaP, 1, address(und), dex, 0, 0));
         // NONE with no UA registry (the ledger off)
         address off = Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), "")));
         NormalToken(off).initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 10_000_000, alice, address(this))));
-        tks.push(Tk("NONE_LEDGEROFF", off, ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, 0, 2, address(0), dex, 0, 0));
+        tks.push(Tk("NORMAL_LEDGEROFF", off, ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, 0, 2, address(0), dex, 0, 0));
     }
 
     function _pDerivedAuth(Tk memory k, bytes32 purpose, bytes32 digest) internal view override returns (bytes memory) {
@@ -1916,7 +1916,7 @@ contract PqzRig is PqzFixture, ParityCases {
         address t = _pClone(address(normalImpl), _cfg(uint256(1) << 40));
         NormalPqzToken(t).mint(signer, 20_000_000);
         NormalPqzToken(t).mintToUA(uaD, 2_000_000);
-        tks.push(Tk("NONE_PQZ", t, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), uaD, 0, address(0), dex, 0, 0));
+        tks.push(Tk("NORMAL_PQZ", t, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), uaD, 0, address(0), dex, 0, 0));
         // WRAPPED_PQZ: one 1:1 leg
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         address impl = Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1,
@@ -1933,7 +1933,7 @@ contract PqzRig is PqzFixture, ParityCases {
         WrappedToken(payable(w)).wrap(20_000_000);
         WrappedToken(payable(w)).transferToUA(uaD, 2_000_000);
         vm.stopPrank();
-        tks.push(Tk("UNDERLYING_PQZ", w, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), uaD, 1, address(usd), dex, 0, 0));
+        tks.push(Tk("WRAPPED_PQZ", w, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), uaD, 1, address(usd), dex, 0, 0));
     }
 
     /// The test plays the factory: a CREATE clone (its address does not depend on the implementation's code).
@@ -2039,7 +2039,7 @@ contract ZetherRig is ZetherFixture, ParityCases {
         NormalZetherToken(t).mint(signer, 20_000_000);
         vm.prank(signer);
         MetaTokenBase(t).transferToUA(ZetherTypes.UA.unwrap(bob.ua), 2_000_000);
-        tks.push(Tk("NONE_ZETHER", t, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), ZetherTypes.UA.unwrap(bob.ua), 0, address(0), dex, 0, 0));
+        tks.push(Tk("NORMAL_ZETHER", t, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), ZetherTypes.UA.unwrap(bob.ua), 0, address(0), dex, 0, 0));
         // WRAPPED_ZETHER: one 1:1 leg
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         address impl = Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(),
@@ -2056,7 +2056,7 @@ contract ZetherRig is ZetherFixture, ParityCases {
         WrappedToken(payable(w)).wrap(20_000_000);
         WrappedToken(payable(w)).transferToUA(ZetherTypes.UA.unwrap(bob.ua), 2_000_000);
         vm.stopPrank();
-        tks.push(Tk("UNDERLYING_ZETHER", w, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), ZetherTypes.UA.unwrap(bob.ua), 1, address(usd), dex, 0, 0));
+        tks.push(Tk("WRAPPED_ZETHER", w, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), ZetherTypes.UA.unwrap(bob.ua), 1, address(usd), dex, 0, 0));
     }
 
     function _pClone(address impl, IFactoryToken.TokenConfig memory c) internal returns (address t) {
