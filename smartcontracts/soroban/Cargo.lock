@@ -1290,11 +1290,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "scaas-relay-executor"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
 name = "scaas-relay-fee"
 version = "0.1.0"
 dependencies = [
  "ed25519-dalek",
  "scaas-mandate",
+ "scaas-relay-executor",
  "scaas-token",
  "sha2",
  "soroban-ledger-snapshot",
