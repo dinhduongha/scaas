@@ -35,6 +35,9 @@ String? errCode(void Function() f) {
 
 List rows(Map<String, dynamic> m, String k) => m[k] as List;
 
+/// A KEM key of [n] bytes: the scheme byte, then zeros.
+Uint8List _kem(int n, [int scheme = 1]) => Uint8List(n)..[0] = scheme;
+
 void main() {
   setUpAll(() async {
     final path = Platform.environment['SCAAS_UA_LIB'] ?? 'rust/target/debug/libscaas_ua_frb.so';
@@ -280,12 +283,16 @@ void main() {
     }
     expect(rows(pv, 'kemRecords').length, 9);
     final u = U8Array32(Uint8List.fromList(List.filled(32, 1)));
-    expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.zero, kemPk: Uint8List(1600))), 'UAKemVersion');
-    expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.one, kemPk: Uint8List(1599))), 'UAKemKeyLength');
-    expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.one, kemPk: Uint8List(1601))), 'UAKemKeyLength');
-    expect(hx(kemRecordDigest(ua: u, version: (BigInt.one << 64) - BigInt.one, kemPk: Uint8List(1600))), '0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31'); // pins the 8-byte version word
+    expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.zero, kemPk: _kem(1601))), 'UAKemVersion');
+    expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.one, kemPk: _kem(1600))), 'UAKemKeyLength');
+    expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.one, kemPk: _kem(1602))), 'UAKemKeyLength');
+    expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.one, kemPk: Uint8List(0))), 'UAKemKeyLength');
+    for (final scheme in [0, 2, 255]) {
+      expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.one, kemPk: _kem(1601, scheme))), 'UAKemScheme');
+    }
+    expect(hx(kemRecordDigest(ua: u, version: (BigInt.one << 64) - BigInt.one, kemPk: _kem(1601))), '0x8c997440926a352465f61b53b75606d794efa60c66ac4a7a63f25369a15f7092'); // pins the 8-byte version word
     // m-C3: frb would wrap 2^64 + 1 to 1 and -1 to 2^64 - 1; the package refuses them (as ua-dart / JS)
-    final pk = Uint8List(1600), big = (BigInt.one << 64) + BigInt.one;
+    final pk = _kem(1601), big = (BigInt.one << 64) + BigInt.one;
     for (final bad in [BigInt.one << 64, big, -BigInt.one]) {
       expect(errCode(() => kemRecordDigest(ua: u, version: bad, kemPk: pk)), 'UAKemVersion', reason: '$bad');
       expect(errCode(() => kemRecordMessage(kind: 0x0130, ua: u, version: bad, kemPk: pk)), 'UAKemVersion', reason: '$bad');
@@ -383,7 +390,7 @@ void main() {
         sigLevel++; // signatures / native personal_sign: verified by the signature vectors
       }
     }
-    expect([run, sigLevel], [56, 7]);
+    expect([run, sigLevel], [60, 7]);
     final u = U8Array32(Uint8List.fromList(List.filled(32, 1))), key = Uint8List(16384), proof = Uint8List.fromList(List.filled(32, 7));
     HolderPop holder({required int kind, Uint8List? keyData, Uint8List? pqzKey, Uint8List? pqzPop, Uint8List? pqzPopHash, KemRecord? kem}) =>
         holderPopMessage(
@@ -397,7 +404,7 @@ void main() {
     expect(errCode(() => holder(kind: 0x0130, pqzKey: key, pqzPop: Uint8List(0))), 'UAPqzPopHash');
     expect(errCode(() => holder(kind: 0x0130, pqzKey: Uint8List(100), pqzPopHash: proof)), 'UAKeyData');
     expect(errCode(() => holder(kind: 0x0130, kem: KemRecord(version: BigInt.one, pk: Uint8List(0)))), 'UAKemKeyLength');
-    expect(errCode(() => holder(kind: 0x0101, kem: KemRecord(version: BigInt.one, pk: Uint8List(1600)))), 'UAKemHolder');
+    expect(errCode(() => holder(kind: 0x0101, kem: KemRecord(version: BigInt.one, pk: _kem(1601)))), 'UAKemHolder');
     // a zero-length proof hash is absent (same as no hash)
     expect(hx(holder(kind: 0x0130, pqzPopHash: Uint8List(0)).message), hx(holder(kind: 0x0130).message));
   });

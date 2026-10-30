@@ -193,13 +193,15 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(hx(ua.member_digest(u, m)), r['memberDigest'])
         self.assertEqual(len(P['kemRecords']), 9)
         u = bytes([1]) * 32
-        for args, code in (((u, 0, bytes(1600)), 'UAKemVersion'), ((u, 2**64, bytes(1600)), 'UAKemVersion'),
-                           ((u, 1, bytes(1599)), 'UAKemKeyLength'), ((u, 1, bytes(1601)), 'UAKemKeyLength'),
-                           ((u, 1, None), 'UAKemKeyLength')):
+        kem = lambda n, scheme=1: bytes([scheme]) + bytes(n - 1)  # scheme byte, zeros, n bytes in all
+        for args, code in (((u, 0, kem(1601)), 'UAKemVersion'), ((u, 2**64, kem(1601)), 'UAKemVersion'),
+                           ((u, 1, kem(1600)), 'UAKemKeyLength'), ((u, 1, kem(1602)), 'UAKemKeyLength'),
+                           ((u, 1, None), 'UAKemKeyLength'), ((u, 1, kem(1601, 0)), 'UAKemScheme'),
+                           ((u, 1, kem(1601, 2)), 'UAKemScheme'), ((u, 1, kem(1600, 255)), 'UAKemScheme')):
             with self.assertRaises(ua.UAError) as e:
                 ua.kem_record_digest(*args)
             self.assertEqual(e.exception.code, code)
-        self.assertEqual(hx(ua.kem_record_digest(u, 2**64 - 1, bytes(1600))), '0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31')  # pins the 8-byte version word
+        self.assertEqual(hx(ua.kem_record_digest(u, 2**64 - 1, kem(1601))), '0x8c997440926a352465f61b53b75606d794efa60c66ac4a7a63f25369a15f7092')  # pins the 8-byte version word
         self.assertEqual(hx(ua.chain_key_hash(2**40 + 7)), '0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950')  # keccak256("evm:1099511627783")
 
     def test_pqz_key_record(self):
@@ -281,7 +283,7 @@ class Vectors(unittest.TestCase):
                 run += 1
             else:
                 sig_level += 1  # signatures / native personal_sign: verified by the signature vectors
-        self.assertEqual((run, sig_level), (56, 7))
+        self.assertEqual((run, sig_level), (60, 7))
         u, key, proof = bytes([1]) * 32, bytes(16384), bytes([7]) * 32
         # malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
         for kd in (bytes([0, 2, 0]), bytes([0, 2, 0, 2, 9, 9])):
@@ -292,7 +294,7 @@ class Vectors(unittest.TestCase):
                            ((0x0130, u, b'', key, None, bytes(31)), 'UAPqzPopHash'),
                            ((0x0130, u, b'', bytes(100), None, proof), 'UAKeyData'),
                            ((0x0130, u, b'', None, None, None, (1, None)), 'UAKemKeyLength'),
-                           ((0x0101, u, b'', None, None, None, (1, bytes(1600))), 'UAKemHolder'),
+                           ((0x0101, u, b'', None, None, None, (1, bytes([1]) + bytes(1600))), 'UAKemHolder'),
                            ((0x0130, u, b'', key, b'', None), 'UAPqzPopHash')):
             with self.assertRaises(ua.UAError, msg=args) as e:
                 ua.holder_pop_message(*args[:3] + ((args[3] if len(args) > 3 else None),) + args[4:])
