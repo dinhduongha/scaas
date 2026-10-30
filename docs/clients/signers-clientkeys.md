@@ -384,7 +384,7 @@ on-chain rules are [NET-ALL-04](../networks/README.md#NET-ALL-04) and
 [CTR-ACC-08](../contracts/accounts.md#CTR-ACC-08). Tests use real WebAuthn vectors from a software authenticator
 (fixed P-256 key) and a public vector set where available. BUILT (EVM). `clients/clientkeys/src/passkey-signer.js`:
 `creationOptions` (PRF enabled by default), `requestOptions`, `derToRS`, `encodeAssertion = abi.encode(authenticatorData,
-clientDataJSON, r, s)`, `merkleBatch`, `accountSignature = abi.encode(keyIndex, bytes32[] proof, sig)`. `signCount` is not
+clientDataJSON, r, s)` (the canonical encoding, the only one any verifier accepts: [CTR-UA-33](../contracts/accounts.md#CTR-UA-33) C), `merkleBatch`, `accountSignature = abi.encode(keyIndex, bytes32[] proof, sig)`. `signCount` is not
 checked (synced passkeys always return 0).
 
 <a id="CLI-SGN-04"></a>**CLI-SGN-04** — **Each passkey gets a random 16-byte WebAuthn user handle.** Not one per partner;
