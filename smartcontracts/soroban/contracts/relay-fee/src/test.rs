@@ -2,7 +2,7 @@ extern crate std;
 
 use super::*;
 use ed25519_dalek::Signer as _;
-use scaas_mandate::{MandateWallet, MandateWalletClient};
+use scaas_mandate::{Holder, MandateWallet, MandateWalletClient};
 use scaas_token::{Token, TokenClient};
 use sha2::{Digest, Sha256};
 use soroban_sdk::testutils::{Address as _, Events as _, Ledger, MockAuth, MockAuthInvoke};
@@ -52,10 +52,10 @@ fn setup_with(env: Env) -> T {
     );
     let token = TokenClient::new(&env, &tid);
     let owner = Address::generate(&env);
-    let wid = env.register_at(&Address::from_str(&env, WALLET), MandateWallet, (owner.clone(),));
+    let wid = env.register_at(&Address::from_str(&env, WALLET), MandateWallet, (Holder::Addr(owner.clone()), None::<Address>));
     let wallet = MandateWalletClient::new(&env, &wid);
     // The mandate is the target's state: the fee-less call revokes it.
-    wallet.set_mandate(&tid, &Address::generate(&env), &100, &150, &3600, &(NOW + 86_400));
+    set_mandate(&env, &wallet, &tid);
     let router = RelayFeeClient::new(&env, &env.register(RelayFee, ()));
     token.mint(&owner, &100);
     T { env: env.clone(), token, wallet, router, owner, relayer: Address::generate(&env) }
@@ -63,12 +63,30 @@ fn setup_with(env: Env) -> T {
 
 type Res = Result<(), soroban_sdk::Error>;
 
+/// A native owner's `mtx_*` tail: lane 0x01 x 32, nonce 0 (not consumed for a native holder), no relayer, empty auth.
+fn tail(env: &Env) -> (BytesN<32>, u64, u64, Option<Address>, Bytes) {
+    (BytesN::from_array(env, &[1; 32]), 0, NOW + 60, None, Bytes::new(env))
+}
+
+/// `wallet.mtx_revoke(token, by, tail)` arguments.
+fn revoke_args(env: &Env, token: &Address, by: &Address) -> soroban_sdk::Vec<Val> {
+    let (lane, nonce, vu, relayer, auth) = tail(env);
+    (token.clone(), Holder::Addr(by.clone()), lane, nonce, vu, relayer, auth).into_val(env)
+}
+
+/// A native owner sets a mandate for a fresh native delegate (host auth mocked by the caller).
+fn set_mandate(env: &Env, wallet: &MandateWalletClient, token: &Address) {
+    let (lane, nonce, vu, relayer, auth) = tail(env);
+    let d = Holder::Addr(Address::generate(env));
+    wallet.mtx_set_mandate(token, &d, &100, &150, &3600, &(NOW + 86_400), &lane, &nonce, &vu, &relayer, &auth);
+}
+
 impl T {
     fn args(&self) -> soroban_sdk::Vec<Val> {
-        (self.token.address.clone(), self.owner.clone()).into_val(&self.env)
+        revoke_args(&self.env, &self.token.address, &self.owner)
     }
     fn func(&self) -> Symbol {
-        Symbol::new(&self.env, "revoke")
+        Symbol::new(&self.env, "mtx_revoke")
     }
     fn salt(&self, n: u8) -> BytesN<32> {
         BytesN::from_array(&self.env, &[n; 32])
@@ -146,7 +164,9 @@ fn relay_bound_payee() {
 fn relay_same_call_with_different_salts_and_replay() {
     let t = setup();
     let payee = Address::generate(&t.env);
-    let (f, a) = (Symbol::new(&t.env, "set_payee"), (t.token.address.clone(), payee, true).into_val(&t.env));
+    let (lane, nonce, vu, relayer, auth) = tail(&t.env);
+    let a = (t.token.address.clone(), Holder::Addr(payee), true, lane, nonce, vu, relayer, auth).into_val(&t.env);
+    let f = Symbol::new(&t.env, "mtx_set_payee");
     t.relay_call(&t.wallet.address, &f, &a, 1, &t.router.address, 5).unwrap();
     t.relay_call(&t.wallet.address, &f, &a, 2, &t.router.address, 5).unwrap();
     assert_eq!((t.token.balance(&t.owner), t.token.balance(&t.relayer)), (90, 10));
@@ -175,7 +195,7 @@ fn relay_target_failure_reverts_all() {
     let t = setup();
     // The call fails (a revoke by a stranger): the payment must not happen.
     let stranger = Address::generate(&t.env);
-    let bad: soroban_sdk::Vec<Val> = (t.token.address.clone(), stranger).into_val(&t.env);
+    let bad = revoke_args(&t.env, &t.token.address, &stranger);
     assert_eq!(t.relay_call(&t.wallet.address, &t.func(), &bad, 1, &t.router.address, 7), err(scaas_mandate::Error::NotAllowed));
     assert_eq!((t.token.balance(&t.owner), t.token.balance(&t.relayer)), (100, 0));
     assert!(!t.token.ref_used(&t.owner, &t.router.relay_ref(&t.wallet.address, &t.func(), &bad, &t.salt(1))));
@@ -220,7 +240,7 @@ fn soroban_router_bound_pay_refused_direct() {
         .into_val(&t.env);
     let (pay, revoke) = (
         MockAuthInvoke { contract: &t.token.address, fn_name: "pay", args: pay_args.clone(), sub_invokes: &[] },
-        MockAuthInvoke { contract: &t.wallet.address, fn_name: "revoke", args: t.args(), sub_invokes: &[] },
+        MockAuthInvoke { contract: &t.wallet.address, fn_name: "mtx_revoke", args: t.args(), sub_invokes: &[] },
     );
     let relay_root = MockAuthInvoke {
         contract: &t.router.address, fn_name: "relay", args: signed, sub_invokes: &[revoke, pay],
@@ -253,14 +273,16 @@ fn relay_ref_vectors() {
     // Independent construction:
     // keccak256("scaas.relayfee" || network id || xdr(target) || keccak256(xdr((func, args))) || salt).
     let e = &t.env;
-    let call = (t.func(), args.clone()).to_xdr(e);
+    // A pure ref computation over the pinned call: the router never runs it here.
+    let func = Symbol::new(e, "revoke");
+    let call = (func.clone(), args.clone()).to_xdr(e);
     let mut b = Bytes::from_slice(e, b"scaas.relayfee");
     b.append(&Bytes::from_array(e, &NETWORK));
     b.append(&t.wallet.address.clone().to_xdr(e));
     b.append(&e.crypto().keccak256(&call).to_bytes().into());
     b.append(&Bytes::from_array(e, &[9; 32]));
     let want = e.crypto().keccak256(&b).to_array();
-    let rf = |a: &soroban_sdk::Vec<Val>, s: u8| t.router.relay_ref(&t.wallet.address, &t.func(), a, &t.salt(s));
+    let rf = |a: &soroban_sdk::Vec<Val>, s: u8| t.router.relay_ref(&t.wallet.address, &func, a, &t.salt(s));
     assert_eq!(rf(&args, 9).to_array(), want);
     std::println!("ref {}", hex(&want));
     assert_eq!(hex(&want), VEC_REF);
@@ -268,7 +290,7 @@ fn relay_ref_vectors() {
     let other: soroban_sdk::Vec<Val> = (t.token.address.clone(), t.relayer.clone()).into_val(e);
     assert_ne!(rf(&other, 9).to_array(), want);
     assert_ne!(rf(&args, 8).to_array(), want);
-    assert_ne!(t.router.relay_ref(&t.token.address, &t.func(), &args, &t.salt(9)).to_array(), want);
+    assert_ne!(t.router.relay_ref(&t.token.address, &func, &args, &t.salt(9)).to_array(), want);
     assert_ne!(t.router.relay_ref(&t.wallet.address, &Symbol::new(e, "pay"), &args, &t.salt(9)).to_array(), want);
     e.ledger().with_mut(|l| l.network_id = [8; 32]);
     assert_ne!(rf(&args, 9).to_array(), want);
@@ -353,17 +375,17 @@ fn relay_g_account_payer_real_signed_entries() {
     let t = setup_with(Env::from_ledger_snapshot(snap));
     let e = &t.env;
     let (payer, relayer) = (account(e, ppk), account(e, rpk));
-    let wallet = MandateWalletClient::new(e, &e.register(MandateWallet, (payer.clone(),)));
-    wallet.set_mandate(&t.token.address, &Address::generate(e), &100, &150, &3600, &(NOW + 86_400));
+    let wallet = MandateWalletClient::new(e, &e.register(MandateWallet, (Holder::Addr(payer.clone()), None::<Address>)));
+    set_mandate(e, &wallet, &t.token.address);
     t.token.mint(&payer, &100);
-    let (f, to, salt) = (Symbol::new(e, "revoke"), t.router.address.clone(), t.salt(5));
-    let args: soroban_sdk::Vec<Val> = (t.token.address.clone(), payer.clone()).into_val(e);
+    let (f, to, salt) = (Symbol::new(e, "mtx_revoke"), t.router.address.clone(), t.salt(5));
+    let args = revoke_args(e, &t.token.address, &payer);
     let rf = t.router.relay_ref(&wallet.address, &f, &args, &salt);
     let signed: soroban_sdk::Vec<Val> = (wallet.address.clone(), f.clone(), args.clone(), salt.clone(), t.token.address.clone(), to.clone(), 7i128, NOW + 60).into_val(e);
     let pay_args: soroban_sdk::Vec<Val> = (payer.clone(), to.clone(), 7i128, rf.clone(), NOW + 60).into_val(e);
     let tree = |nonce: i64| {
         let subs = std::vec![
-            inv(e, &wallet.address, "revoke", args.clone(), std::vec![]),
+            inv(e, &wallet.address, "mtx_revoke", args.clone(), std::vec![]),
             inv(e, &t.token.address, "pay", pay_args.clone(), std::vec![]),
         ];
         signed_entry(&psk, nonce, inv(e, &t.router.address, "relay", signed.clone(), subs))
@@ -382,12 +404,12 @@ fn relay_g_account_payer_real_signed_entries() {
     assert_eq!((t.token.balance(&payer), t.token.balance(&relayer)), (93, 7));
     // Without the relayer's entry the router refuses (source auth is not implicit).
     e.mock_all_auths();
-    wallet.set_mandate(&t.token.address, &Address::generate(e), &100, &150, &3600, &(NOW + 86_400));
+    set_mandate(e, &wallet, &t.token.address);
     let salt2 = t.salt(6);
     let rf2 = t.router.relay_ref(&wallet.address, &f, &args, &salt2);
     let signed2: soroban_sdk::Vec<Val> = (wallet.address.clone(), f.clone(), args.clone(), salt2.clone(), t.token.address.clone(), to.clone(), 7i128, NOW + 60).into_val(e);
     let pay2: soroban_sdk::Vec<Val> = (payer.clone(), to.clone(), 7i128, rf2, NOW + 60).into_val(e);
-    let subs = std::vec![inv(e, &wallet.address, "revoke", args.clone(), std::vec![]), inv(e, &t.token.address, "pay", pay2, std::vec![])];
+    let subs = std::vec![inv(e, &wallet.address, "mtx_revoke", args.clone(), std::vec![]), inv(e, &t.token.address, "pay", pay2, std::vec![])];
     e.set_auths(&[signed_entry(&psk, 13, inv(e, &t.router.address, "relay", signed2, subs))]);
     let r = t.router.try_relay(&payer, &wallet.address, &f, &args, &salt2, &t.token.address, &to, &7, &(NOW + 60), &relayer);
     assert!(r.is_err());

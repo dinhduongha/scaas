@@ -1402,7 +1402,11 @@ dependencies = [
 name = "scaas-mandate"
 version = "0.1.0"
 dependencies = [
+ "ed25519-dalek",
  "scaas-token",
+ "scaas-ua-common",
+ "scaas-ua-registry",
+ "serde_json",
  "soroban-sdk",
 ]
 
