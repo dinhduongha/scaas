@@ -2495,7 +2495,7 @@ contract UARegistryUA8Test is UARegistryBase {
     function _pin(string memory name) internal pure returns (uint256, uint256) {
         bytes32 h = keccak256(bytes(name));
         // PINS: name -> (regular gas, state gas); the rows of all four sets (a set's rows carry its name)
-        if (h == keccak256("register webauthn-p256")) return (172117, 1751850);
+        if (h == keccak256("register webauthn-p256")) return (173018, 1751850);
         if (h == keccak256("register p256")) return (154657, 1213290);
         if (h == keccak256("register ed25519")) return (313806, 1164330);
         if (h == keccak256("register bip340")) return (151389, 1164330);

@@ -3692,7 +3692,7 @@ account, not a registry, outside the ruling) and the client mirrors (`clients/ua
 which still accept a non-canonical blob the registry refuses. Soroban: built on `ua-soroban` (T2b `657e71ab`, test
 `webauthn_blob_canonical_only`). Test: `EccVerifiers.t.sol` `test_WebAuthnCanonicalOnly` (trailing byte, each offset
 shifted, non-zero padding after each field, each length word beyond the data, fields swapped with offsets fixed up; RED on
-the old decoder). Status: decided (owner 2026-10-30); built on `msig-pophash` in the `msig-pophash: WebAuthn` commit.
+the old decoder). Status: decided (owner 2026-10-30); built on `msig-pophash` in `80be9314`.
 
 NEAR and Algorand (inventory 2026-10-30): no UA registry and no registration event; an `msig` member there is a key id
 inside the structure, never registered (no member record exists), and its signature carries its key in the family's own auth
