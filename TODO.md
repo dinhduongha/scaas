@@ -121,6 +121,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      Protocol 30 as soon as the stream is free (Stellar Core v30.0.0 stable, the SDK's ML-DSA wrapper merged 2026-10-19
      — check which soroban-sdk release carries it); only the testnet e2e runs after 2026-11-03 (Stellar testnet votes
      Protocol 30), as the last step of the round.
+     4b spec accepted by the owner 2026-10-30: `docs/superpowers/specs/2026-10-30-soroban-4b-ua-base-design.md`; plan next (no owner review) (S1–S18; it also
+     rules UA-8 Part B conflicts C11–C17; soroban-sdk 30.0.0-rc.1 carries the ML-DSA wrappers).
   5. fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) **together with Task 9 calibration**
      (owner 2026-10-29: one measurement run; it still needs the owner's go at run time, other heavy sessions stopped)
      and, where possible, the metatx-split e2e owed on a real node → Task 14 (wasm32 limb path).
