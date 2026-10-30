@@ -1,7 +1,7 @@
 //! cargo test --test e2e_soroban -- --ignored --nocapture
 //!
 //! Cần `stellar/quickstart` (local, core+rpc+horizon/friendbot) tại `$STELLAR_URL` (mặc định
-//! `http://127.0.0.1:31980`), CLI `stellar` ≥ 23 tại `$STELLAR_BIN`, và target `wasm32v1-none`.
+//! `http://127.0.0.1:31980`), CLI `stellar` ≥ 30 tại `$STELLAR_BIN`, và target `wasm32v1-none`.
 //! Chứng minh trên ledger thật với contract thật (R65, R62):
 //! 1. hai lane từ mnemonic 24 từ; chủ thể là ví seed `m/44'/148'/9'` (R32) chỉ KÝ auth entry, không gửi tx;
 //! 2. anti-lock: X (token 1) bị giữ, Y (token 2) qua `lane_step` thành công, rồi X thành công;
@@ -90,9 +90,10 @@ fn cli(args: &[&str]) -> String {
 
 fn wasm(name: &str) -> String {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/soroban");
-    let st = Command::new("cargo")
+    // soroban-sdk 30 refuses a plain `cargo build` for wasm: stellar-cli >= 30 builds the contract
+    let st = Command::new(std::env::var("STELLAR_BIN").unwrap_or_else(|_| "stellar".into()))
         .current_dir(dir)
-        .args(["build", "--target", "wasm32v1-none", "--release", "-p", &format!("scaas-{name}")])
+        .args(["contract", "build", "--package", &format!("scaas-{name}")])
         .status()
         .unwrap();
     assert!(st.success());

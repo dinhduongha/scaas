@@ -46,6 +46,11 @@ fn hex(b: &[u8]) -> std::string::String {
 }
 
 #[test]
+fn env_default_protocol_30() {
+    assert_eq!(Env::default().ledger().protocol_version(), 30);
+}
+
+#[test]
 fn cross_implementation_vector() {
     let (env, t, _) = setup();
     let (from, to) = (Address::from_str(&env, FROM), Address::from_str(&env, TO));
