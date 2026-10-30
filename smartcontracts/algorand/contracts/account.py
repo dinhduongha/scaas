@@ -3,9 +3,8 @@
 One app per deployment holds every subject's record; tokens, mandate and DEX check signers by an inner call to `verify`
 (synchronous), so keys are shared by every token. Subject = `Holder` (kind 0 a native address, 1 a UA id); a UA opens
 lazily on its first signed op (the key must derive the id, kinds.json), the relayer paying the record's MBR; a native
-address signs with its current authority (64-byte wallet signature, `common.verify_native`), or with keys it registered
-(`add_key_native`, sender = the address, never a rekeyed one: NET-ALG-24, owner rule 2026-10-30 — an address rekeyed
-to a LogicSig or a multisig, which has no ed25519 key, signs with keys it added before the rekey).
+address signs with its current authority (64-byte wallet signature, `common.verify_native`), or — rekeyed to a LogicSig
+or a multisig, which has no ed25519 key — with keys it registered (`add_key_native`, sender = the address).
 
 Record box `"s" ‖ kind ‖ id` (34 B name), rewritten at its new size (the relayer pays exactly the growth, §2 row 15; a
 shrink refunds nothing):
@@ -248,12 +247,8 @@ class AccountApp(arc4.ARC4Contract, name="Account"):
 
     @arc4.abimethod
     def add_key_native(self, key: KeyRecord, origin: arc4.DynamicBytes) -> None:
-        """The sender (a native address signing with its own key) adds a key directly. A rekeyed sender is refused
-        (NET-ALG-24, owner rule 2026-10-30, after EIP-7702): its authority may be code (a LogicSig or an app), which
-        on chain cannot be told from a rekey to another key, so every rekey is refused here."""
+        """The sender (a native address, whatever its authority: key, LogicSig or multisig) adds a key directly."""
         before = Global.current_application_address.min_balance
-        auth, _exists = op.AcctParamsGet.acct_auth_addr(Txn.sender)
-        assert auth == Global.zero_address, "add_key_native: a rekeyed sender is refused (NET-ALG-24)"
         h = Holder(arc4.UInt8(KIND_ADDRESS), Bytes32.from_bytes(Txn.sender.bytes))
         rec, exists = op.Box.get(rec_name(h))
         if not exists:

@@ -660,54 +660,35 @@ def test_keys_shared_by_two_tokens(token, dispenser, make, relayer):
 
 
 def test_rekeyed_address_signs_through_account_record(token, make, relayer):
-    """S:229-230 as amended by NET-ALG-24 (owner rule 2026-10-30, after EIP-7702): `add_key_native` refuses a rekeyed
-    sender — rekeyed to a LogicSig, a multisig or another ed25519 key alike (a rekey's target cannot be told apart on
-    chain); a key the address added with its own key before the rekey still signs through its record; a rekey back to
-    the address itself makes it a key-signed sender again. (Until 2026-10-30 this test had the LogicSig- and
-    multisig-rekeyed address add its key itself.)"""
+    """S:229-230: an address rekeyed to a LogicSig or a multisig has no ed25519 key; it adds a key itself
+    (`add_key_native`, sent under its authority) and signs through that record."""
     account, alice, bob = token.account, token.alice, make()
-    k = EdKey('alice-record')
-    run(alice, account, 'add_key_native', [k.record(), b''], mbr=rec_mbr(1), boxes=[account.name(native(alice))],
-        pay={'payer': relayer})                                         # not rekeyed: her own key adds it
     prog = base64.b64decode(ALGOD.compile('#pragma version 10\nint 1')['result'])
     lsig = transaction.LogicSigAccount(prog)
     wait(ALGOD.send_transaction(transaction.PaymentTxn(alice.addr, sp(), alice.addr, 0, rekey_to=lsig.address())
                                 .sign(alice.sk)))
-    with no('add_key_native: a rekeyed sender is refused'):            # the LogicSig (code) adds no key
-        run(alice, account, 'add_key_native', [EdKey('alice-2').record(), b''], mbr=SLOT,
-            boxes=[account.name(native(alice))], pay={'payer': relayer}, signer=LogicSigTransactionSigner(lsig),
-            budget_by=relayer)
-    assert account.record(native(alice))['keys'] == [k.id]
+    k = EdKey('alice-record')
+    run(alice, account, 'add_key_native', [k.record(), b''], mbr=rec_mbr(1), boxes=[account.name(native(alice))],
+        pay={'payer': relayer}, signer=LogicSigTransactionSigner(lsig), budget_by=relayer)
     o = token.op(alice, native(bob), 3, pay_ref=b'\x81' * 32, lane=b'\x81' * 32)
     with no('bad signature'):                                       # her wallet key no longer signs
         token.mtx(relayer, 'mtx_pay', o, alice.sign_op(digest(o)), ZERO_ADDR)
-    token.mtx(relayer, 'mtx_pay', o, k.auth(digest(o)), ZERO_ADDR)   # the key added before the rekey does
+    token.mtx(relayer, 'mtx_pay', o, k.auth(digest(o)), ZERO_ADDR)
     assert view(token, 'arc200_balanceOf', bob.addr) == 3
-    # rekeyed to a 2-of-2 multisig: refused too
+    # rekeyed to a 2-of-2 multisig
     dave, carol = make(1_000_000), make(1_000_000)
+    run(token.admin, token, 'mint', [dave.addr, 10], mbr=MBR_BALANCE, boxes=[b'b' + dave.key])
     msig = transaction.Multisig(1, 2, [dave.addr, carol.addr])
     wait(ALGOD.send_transaction(transaction.PaymentTxn(dave.addr, sp(), dave.addr, 0, rekey_to=msig.address())
                                 .sign(dave.sk)))
-    with no('add_key_native: a rekeyed sender is refused'):
-        run(dave, account, 'add_key_native', [EdKey('dave-record').record(), b''], mbr=rec_mbr(1),
-            boxes=[account.name(native(dave))], pay={'payer': relayer},
-            signer=MultisigTransactionSigner(msig, [dave.sk, carol.sk]), budget_by=relayer)
-    assert account.record(native(dave)) is None
-    # rekeyed to another ed25519 account: refused too; rekeyed back to itself: accepted
-    erin = make(1_000_000)
-    wait(ALGOD.send_transaction(transaction.PaymentTxn(erin.addr, sp(), erin.addr, 0, rekey_to=carol.addr)
-                                .sign(erin.sk)))
-    k3 = EdKey('erin-record')
-    with no('add_key_native: a rekeyed sender is refused'):
-        run(erin, account, 'add_key_native', [k3.record(), b''], mbr=rec_mbr(1), boxes=[account.name(native(erin))],
-            pay={'payer': relayer}, signer=carol.signer, budget_by=relayer)
-    wait(ALGOD.send_transaction(transaction.PaymentTxn(erin.addr, sp(), erin.addr, 0, rekey_to=erin.addr)
-                                .sign(carol.sk)))
-    run(erin, account, 'add_key_native', [k3.record(), b''], mbr=rec_mbr(1), boxes=[account.name(native(erin))],
-        pay={'payer': relayer})
-    assert account.record(native(erin))['keys'] == [k3.id]
+    k2 = EdKey('dave-record')
+    run(dave, account, 'add_key_native', [k2.record(), b''], mbr=rec_mbr(1), boxes=[account.name(native(dave))],
+        pay={'payer': relayer}, signer=MultisigTransactionSigner(msig, [dave.sk, carol.sk]), budget_by=relayer)
+    o = token.op(dave, native(bob), 4, pay_ref=b'\x82' * 32, lane=b'\x82' * 32)
+    token.mtx(relayer, 'mtx_pay', o, k2.auth(digest(o)), ZERO_ADDR)
+    assert view(token, 'arc200_balanceOf', bob.addr) == 7
     with no('no SCaaS key'):                                         # a native address without a record
-        o = token.op(bob, native(alice), 1, pay_ref=b'\x83' * 32, lane=b'\x83' * 32)
+        o = token.op(bob, native(dave), 1, pay_ref=b'\x83' * 32, lane=b'\x83' * 32)
         token.mtx(relayer, 'mtx_pay', o, k.auth(digest(o)), ZERO_ADDR, mbr=MBR_LANE)
 
 
