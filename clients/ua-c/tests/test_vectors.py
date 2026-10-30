@@ -19,7 +19,11 @@ S = json.loads((VEC / 'structures.json').read_text())
 PV = json.loads((VEC / 'portable.json').read_text())
 
 OK, ERR_KEY_DATA, ERR_ARGUMENT, ERR_BUFFER = 0, 1, 8, 9
-KEM_PK = 1600
+KEM_PK = 1601  # scheme byte + key
+
+
+def kem(n, scheme=1):
+    return bytes([scheme]) + bytes(n - 1)
 
 
 class Kind(C.Structure):
@@ -372,10 +376,12 @@ class Vectors(unittest.TestCase):
                     self.assertEqual(hx(out32(L.member_digest, ua, m)), r['memberDigest'])
         self.assertEqual(len(PV['kemRecords']), 9)
         u = bytes([1]) * 32
-        for v, pk, code in ((0, bytes(KEM_PK), 'UAKemVersion'), (1, bytes(KEM_PK - 1), 'UAKemKeyLength'),
-                            (1, bytes(KEM_PK + 1), 'UAKemKeyLength'), (1, b'', 'UAKemKeyLength')):
+        for v, pk, code in ((0, kem(KEM_PK), 'UAKemVersion'), (1, kem(KEM_PK - 1), 'UAKemKeyLength'),
+                            (1, kem(KEM_PK + 1), 'UAKemKeyLength'), (1, b'', 'UAKemKeyLength'),
+                            (1, kem(KEM_PK, 0), 'UAKemScheme'), (1, kem(KEM_PK, 2), 'UAKemScheme'),
+                            (1, kem(KEM_PK - 1, 255), 'UAKemScheme')):
             self.assertEqual(code_of(lambda: out32(L.kem_record_digest, u, v, pk, len(pk))), code)
-        self.assertEqual(hx(out32(L.kem_record_digest, u, 2**64 - 1, bytes(KEM_PK), KEM_PK)), '0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31')  # pins the 8-byte version word
+        self.assertEqual(hx(out32(L.kem_record_digest, u, 2**64 - 1, kem(KEM_PK), KEM_PK)), '0x8c997440926a352465f61b53b75606d794efa60c66ac4a7a63f25369a15f7092')  # pins the 8-byte version word
 
     def test_pqz_key_record(self):
         regs = PV['registrations']
@@ -455,7 +461,7 @@ class Vectors(unittest.TestCase):
                 run += 1
             else:
                 sig_level += 1  # signatures / native personal_sign: verified by the signature vectors
-        self.assertEqual((run, sig_level), (56, 7))
+        self.assertEqual((run, sig_level), (60, 7))
         u, key, proof = bytes([1]) * 32, bytes(16384), bytes([7]) * 32
         # malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
         for kdat in (bytes([0, 2, 0]), bytes([0, 2, 0, 2, 9, 9])):
@@ -464,7 +470,7 @@ class Vectors(unittest.TestCase):
                            ((0x0130, u, b'', key, b'', bytes(31)), 'UAPqzPopHash'),
                            ((0x0130, u, b'', bytes(100), b'', proof), 'UAKeyData'),
                            ((0x0130, u, b'', b'', b'', b'', 1, b''), 'UAKemKeyLength'),
-                           ((0x0101, u, b'', b'', b'', b'', 1, bytes(KEM_PK)), 'UAKemHolder')):
+                           ((0x0101, u, b'', b'', b'', b'', 1, kem(KEM_PK)), 'UAKemHolder')):
             self.assertEqual(code_of(lambda: holder(*args)), code, args[:2])
         # a NULL / zero-length proof hash is absent (same as no hash); an empty proof is no proof
         self.assertEqual(bytes(holder(0x0130, u).message), bytes(holder(0x0130, u, b'', b'', b'', b'').message))
