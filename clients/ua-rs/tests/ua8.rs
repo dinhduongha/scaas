@@ -126,7 +126,9 @@ fn kem_record_vectors() {
     assert_eq!(kem_record_digest(&ua, 0, &[0; 1600]), Err(UAError::KemVersion));
     assert_eq!(kem_record_digest(&ua, 1, &[0; 1599]), Err(UAError::KemKeyLength));
     assert_eq!(kem_record_digest(&ua, 1, &[0; 1601]), Err(UAError::KemKeyLength));
-    assert!(kem_record_digest(&ua, u64::MAX, &[0; 1600]).is_ok());
+    // known answers (ua-py / ua-go): the 8-byte version word and the decimal "evm:" chain key
+    assert_eq!(hx(&kem_record_digest(&ua, u64::MAX, &[0; 1600]).unwrap()), "0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31");
+    assert_eq!(hx(&chain_key_hash((1 << 40) + 7)), "0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950"); // keccak256("evm:1099511627783")
 }
 
 #[test]
@@ -284,8 +286,9 @@ fn native_member_personal_sign() {
     let got = native_recovered(r, &bytes(&r["pop"]), &md);
     assert_eq!(got.len(), 1);
     assert_eq!(got[0].1, Some(member_address(r, got[0].0)));
-    // the raw digest is not what it signs
-    assert_ne!(personal_sign_digest(&md), md);
+    // the raw digest is not what it signs; known answer from the JS reference (prefix 0x19 + "Ethereum Signed Message:\n32")
+    assert_eq!(hx(&md), "0x606d9a70c70d39e5d8d079c3ae31eefa6db574219dab56d6c776cb6731e61a7c");
+    assert_eq!(hx(&personal_sign_digest(&md)), "0xe5d24987e9b4e710063a5432d6215eaead64d8dc073f7561726d21644d54c3d8");
     assert!(is_portable_purpose(&pop_v2_tag()) && is_portable_purpose(&purpose_tag("kem").unwrap()) && is_portable_purpose(&purpose_tag("pqz-key").unwrap()));
     assert!(!is_portable_purpose(&purpose_tag("metatx").unwrap()) && !is_portable_purpose(&purpose_tag("pop").unwrap()));
 }
