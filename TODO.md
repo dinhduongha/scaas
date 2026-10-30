@@ -124,33 +124,14 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      changed: a hybrid's unsold taker remainder is refunded when the sold part meets its `minFill` and limit, else revert;
      DX10 / DX11 confirmed). Plan written (no owner review): `docs/superpowers/plans/2026-10-30-dex-round.md` (T1–T19, build
      branch `dex-round` from `main`).
-     **Status (paused 2026-10-30):** branch `dex-round` — T1 (floor removed), T2 (`InteractionFailed`), T3 (`mtxHybrid` /
-     `Via`) done and reviewed; T4 WIP `b45c4322` (DX7 refund + `restorePulled`, capacity restored per the owner; must also
-     forbid the `restorePulled` selectors in `_interact` — T3 review); then T5–T19.
-     **Status (2026-10-30, later):** T4–T9, T11, T12, T14 done and reviewed; T10 (Uniswap mainnet fork test, owner:
-     public dRPC `https://eth.drpc.org`, no key) in progress; then T13, T15–T19.
-     **After the DEX round (owner 2026-10-30): BNB Smart Chain venues.** Uniswap v3 / v4 on BNB Chain through the
-     existing `UniswapExecutor` (BSC factory, init-code hash, PoolManager in the constructor) and PancakeSwap v2 through
-     path (a) interactions; **`PancakeV3Executor`** for PancakeSwap v3 (callback `pancakeV3SwapCallback`, pool address
-     by CREATE2 from the separate PoolDeployer with Pancake's init-code hash; T7 review minor m3); a BSC fork test
-     (public archive RPCs without a key: Blast `https://bsc-mainnet.public.blastapi.io`, Tatum
-     `https://bsc-mainnet.gateway.tatum.io`; list in `scratchpad/public-rpc-providers.md`). PancakeSwap Infinity
-     (v4-like) not in scope.
-  4. **UA-Soroban (UA base) + UA-8 step 2 (Soroban registry)**, plus **classical Zether on Soroban** (owner 2026-10-30;
-     spec S13a: its own track and branch `zether-soroban` after `ua-soroban`, BLS12-381 host functions, measure the verifier
-     first — a verify over the per-transaction budget is a STOP for the owner), in one round — shared ML-DSA verifier (CAP-0087 host
-     functions) and vectors. **No waiting** (owner 2026-10-29): code and tests on a local network / quickstart at
-     Protocol 30 as soon as the stream is free (Stellar Core v30.0.0 stable, the SDK's ML-DSA wrapper merged 2026-10-19
-     — check which soroban-sdk release carries it); only the testnet e2e runs after 2026-11-03 (Stellar testnet votes
-     Protocol 30), as the last step of the round.
-     UA-Soroban spec accepted by the owner 2026-10-30: `docs/superpowers/specs/2026-10-30-ua-soroban-design.md`; plan next (no owner review)
-     **Status (paused 2026-10-30):** plan `docs/superpowers/plans/2026-10-30-ua-soroban.md` merged; branch `ua-soroban` T0
-     (Protocol 30 spike, HARD GATE) WIP `53e8501d`, nothing measured yet; then T1–T13, T14 testnet after 2026-11-03, then
-     `zether-soroban` Z0–Z10, then `ua8-soroban`. Branch `kem-scheme` **merged 2026-10-30** (`8b231bd5`, owner go;
-     `kemPk` first byte = scheme id, 1 = ML-KEM-1024 + X25519 at 1,601 B, 2 reserved for ML-KEM-1024 + HQC + X25519 after
-     FIPS 207; EVM registry, 10 clients, node fixtures, docs CTR-UA-32; UA gas pins re-pinned at all four sets; review +
-     re-review clean); `ua-soroban` rebases onto it before T3. (S1–S18; it also
-     rules UA-8 Part B conflicts C11–C17; soroban-sdk 30.0.0-rc.1 carries the ML-DSA wrappers).
+     **Status (2026-10-31): UA-Soroban built on branch `ua-soroban`** (tasks T0 to T10 incl. T2b WebAuthn canonical blob and
+     T6b mandate epoch, each reviewed; local Protocol 30 end-to-end run `e2e-local.sh` passed; docs T11 written). Decisions:
+     NET-SOR-17 to NET-SOR-26 in `docs/decisions.md` (spec rows S1-S18, plan SOR-D1 to SOR-D21). **Next:** the final review (T13), the owner's
+     go to merge (it does not touch 7622), then UA-8 Part B (`ua8-soroban`), Part Z (classical Zether, `zether-soroban`, Z0
+     measures first) and the Stellar testnet run (after 2026-11-03, SDK 30.0.0). Owed from the build: NODE-JOB-08 `lane_hint`
+     (a lane-bound UA or `relay_fee` job claimed by another lane goes dead on a two-lane chain) and a per-job resource-fee cap for
+     Soroban jobs (operator policy) are TODO items recorded on `main` (not repeated here; they meet at the merge); the CTR-ACC-07 epoch for NEAR, Algorand, Cosmos and Solana goes in each
+     family's own round. `kem-scheme` and `msig-pophash` are merged (CTR-UA-32, CTR-UA-33).
      UA-Soroban plan: `docs/superpowers/plans/2026-10-30-ua-soroban.md`; runs without owner review (Part UA-Soroban on `ua-soroban`,
      then UA-8 Part B and Part Z — classical Zether on Soroban, branch `zether-soroban`, S13a — after its merge).
   5. fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) **together with Task 9 calibration**

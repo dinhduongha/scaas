@@ -1,6 +1,6 @@
 # Soroban UA base (UA-Soroban) and the Soroban registry of UA-8 step 2 — design
 
-**Status:** accepted by the owner 2026-10-30 (S6 UA ledger in each token and S10 msig members confirmed as specified; every other §0 row stands as a controller proposal, owner may override); the plan follows without owner review. Nothing is built. Written from `main` at `920f13d0`. Rules are cited by
+**Status:** accepted by the owner 2026-10-30 (S6 UA ledger in each token and S10 msig members confirmed as specified; every other §0 row stands as a controller proposal, owner may override); the plan follows without owner review. **UA-Soroban built on branch `ua-soroban` (tasks T0 to T10 incl. T2b and T6b, each reviewed; local Protocol 30 end-to-end run passed; docs T11); next: the final review, the owner's go, then Part B (`ua8-soroban`), Part Z (`zether-soroban`) and the Stellar testnet run (after 2026-11-03).** Where the build differs from the text below, a Change note says so and cites the ruling; the decisions are in [decisions.md](../../decisions.md) (NET-SOR-17 to NET-SOR-26). Written from `main` at `920f13d0`. Rules are cited by
 ID, not restated. Every choice marked **controller call** is the controller's; the owner may override it. A choice
 that an owner ruling already decides cites the ruling.
 
@@ -122,7 +122,8 @@ Ed25519 verification", 16–57 KB transient memory).
 #[contracttype] pub struct UaAttrs { pub pqz_key: Bytes, pub pqz_pop_hash: BytesN<32>, pub kem_version: u64, pub kem_pk: Bytes }
 #[contracttype] pub struct Registration { pub kind: u32, pub key_data: Bytes, pub attrs: UaAttrs, pub pop: Bytes,
     pub pop_checked: Checked, pub pqz_pop_checked: Checked, pub proven: bool, pub signable: bool, pub index: u32, pub ledger: u32 }
-// persistent: Ua(ua) -> Registration; Key(key_hash) -> ua; List(kind, i) -> ua; Count(kind) -> u32
+// persistent: Ua(ua) -> Registration; Key(key_hash) -> ua; List(kind, i) -> ua; Count(kind) -> u32;
+//   Signer(ua) -> (kind, key_data)  (the fifth entry, write-once: a member check reads it, not the record with its `pop`; plan SOR-D19)
 // Part B adds: PqzK(ua), PqzP(ua), Kem(ua, version) -> (pk, sig, Checked), KemMax(ua)
 fn __constructor(env, relayers: Vec<Address>);                                    // may be empty; immutable (C13)
 fn register(env, kind: u32, key_data: Bytes, attrs: UaAttrs, pop: Bytes, pqz_pop: Bytes, relayer: Option<Address>) -> BytesN<32>;
