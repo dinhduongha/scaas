@@ -10,14 +10,16 @@
 W=$(cd "$(dirname "$0")/../../.." && pwd)
 cd "$W" || exit 2
 R=smartcontracts/evm/runs
-P=2026-10-27-metatx-split
-STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 sizes gen-set docs cargo-zether-prover zether-cross wasm-zether-prover cargo-scaas-node clientkeys ua-rs ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart soroban solana cosmos sui aptos ton near algorand e2e-near e2e-algorand named-tests"
-FAMILIES="soroban solana cosmos sui aptos ton near algorand e2e-near e2e-algorand"
+# P, STEPS, FAMILIES, NEW_TESTS: overridable, so 2026-10-30-ua8-gates.sh reuses this runner (same step contract)
+P=${P:-2026-10-27-metatx-split}
+STEPS=${STEPS-"forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 sizes gen-set docs cargo-zether-prover zether-cross wasm-zether-prover cargo-scaas-node clientkeys ua-rs ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart soroban solana cosmos sui aptos ton near algorand e2e-near e2e-algorand named-tests"}
+FAMILIES=${FAMILIES-"soroban solana cosmos sui aptos ton near algorand e2e-near e2e-algorand"}
 QT=/home/ha/usr/Qt/6.12.0/gcc_64
 export CAPPED_SLOTS=${CAPPED_SLOTS:-2} CAPPED_MEM=${CAPPED_MEM:-3G}
 
 run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
   case $1 in
+    forge-isolate) cd smartcontracts/evm && ../../scripts/capped forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' ;;
     forge-*) scripts/capped smartcontracts/evm/script/pqz/at-set.sh "${1#forge-}" test ;;
     sizes) cd smartcontracts/evm || return 1
       j=$(mktemp) && ../../scripts/capped forge build src --sizes --json > "$j" &&
@@ -40,14 +42,15 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
     cargo-scaas-node) cd scaas-node && ../scripts/capped cargo test -j2 ;;
     clientkeys) cd clients/clientkeys && ../../scripts/capped npm test ;;
     ua-rs) cd clients/ua-rs && ../../scripts/capped cargo test -j2 ;;
+    ua-rs-signers) cd clients/ua-rs && ../../scripts/capped cargo test -j2 --features signers ;;
     ua-qt) # as Task 18; build/ is git-ignored; ctest -V prints QtQuickTest's per-function PASS lines for named-tests
       QMAKE=$QT/bin/qmake6 LD_LIBRARY_PATH=$QT/lib QT_QPA_PLATFORM=offscreen scripts/capped sh -c \
         "cmake -S clients/ua-qt -B clients/ua-qt/build -DCMAKE_PREFIX_PATH=$QT && cmake --build clients/ua-qt/build -j2 &&
-         cd clients/ua-qt/build && ctest -V --output-on-failure" ;;
+         cd clients/ua-qt/build && ctest -V --no-tests=error --output-on-failure" ;;
     # near-algorand T22: the UA reproducers of Task 2 (commands: the ci.yml header), NEAR / Algorand, their node e2e
     ua-py) cd clients/ua-py && python3 -m unittest -v tests.test_vectors ;;
-    ua-go) cd clients/ua-go && ../../scripts/capped sh -c 'go vet ./... && go test ./...' ;;
-    ua-cs) cd clients/ua-cs && ../../scripts/capped dotnet test Scaas.Ua.Tests; rc=$?
+    ua-go) cd clients/ua-go && ../../scripts/capped sh -c 'go vet ./... && go test -v ./...' ;;
+    ua-cs) cd clients/ua-cs && ../../scripts/capped dotnet test Scaas.Ua.Tests --logger 'console;verbosity=normal'; rc=$?
       dotnet build-server shutdown >/dev/null 2>&1; return $rc ;; # VBCSCompiler would keep the capped slot
     ua-c) cd clients/ua-c && ../../scripts/capped sh -c 'cargo clippy -j2 --locked --all-targets -- -D warnings &&
         cargo build -j2 --locked && cargo test -j2 --locked &&
@@ -55,9 +58,11 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
         target/smoke && c++ -fsyntax-only -x c++ include/scaas_ua.h' && python3 -m unittest -v tests.test_vectors ;;
     ua-cxx) cd clients/ua-cxx && ../../scripts/capped sh -c 'cargo clippy -j2 --locked --all-targets -- -D warnings &&
         cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSCAAS_UA_CARGO_TARGET_DIR=$PWD/target &&
-        cmake --build build -j2 && ctest --test-dir build --output-on-failure' ;;
-    ua-dart) cd clients/ua-dart && ../../scripts/capped sh -c 'dart pub get && dart analyze && dart test && dart test -p node &&
+        cmake --build build -j2 && ctest --test-dir build --no-tests=error --output-on-failure' ;;
+    ua-dart) cd clients/ua-dart && ../../scripts/capped sh -c 'dart pub get && dart analyze && dart test -r expanded && dart test -r expanded -p node &&
         dart run test/vectors_test.dart' ;;
+    ua-dart-frb) cd clients/ua-dart-frb && ../../scripts/capped sh -c 'dart pub get --enforce-lockfile &&
+        cargo build -j2 --locked --manifest-path rust/Cargo.toml && dart test -r expanded' ;;
     soroban|solana|cosmos|sui|aptos|ton|near) CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh "$1" ;;
     # -rA: pytest's summary lists every "PASSED tests/<file>::<test>" for named-tests (the suite runs -q -s)
     algorand) PYTEST_ADDOPTS=-rA scripts/capped smartcontracts/scripts/test.sh algorand ;;
@@ -74,11 +79,13 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
 #   cargo  "test [<path>::]<name> ... ok"; a "::" in <name> may span module path segments
 #   move   "[ PASS    ] <addr>::<module>::<name>"
 #   jest   "✓ <name>"     node "✔ <name>"     qt "PASS   : <TestCase>::<name>()"
+#   go "--- PASS: <Test>"   cs "Passed <Test> [" (dotnet verbosity normal)   ctest "Test #n: <name> ... Passed"
+#   dart "<time> +n: <name>" (-r expanded)
 #   pytest "PASSED tests/<file>::<name>[<id>]" (-rA summary)   unittest "<name> (<class>) ... ok"
 # (the plan's test names, as the tasks built them: git diff of the test functions, merge-base..T19;
 #  near-algorand T22: the same for merge-base..T21, plus the existing tests its briefs name; final fix wave: its new
 #  tests)
-NEW_TESTS=$(cat <<'EOF'
+NEW_TESTS_DEFAULT=$(cat <<'EOF'
 forge|forge|test_parity
 forge|forge|test_isValid_7702_ctrUa24
 forge|forge|test_isValid_7702_badDelegates
@@ -730,6 +737,7 @@ ua-rs|cargo|natives_native_space_canonical_ids
 cargo-scaas-node|cargo|adapters::example_config_builds_every_family
 EOF
 )
+NEW_TESTS=${NEW_TESTS-$NEW_TESTS_DEFAULT}
 
 named_tests() { # every new test passed; no family log with 0 passed, a skipped suite, or a new test ignored
   local D=${NAMED_TESTS_LOG_DIR:-$R} miss=0 step form name re f n
@@ -750,6 +758,10 @@ named_tests() { # every new test passed; no family log with 0 passed, a skipped 
       node) norm "$D/$P-$step.txt" 2>/dev/null | grep -qxF "✔ $name" ;;
       qt) grep -qE "PASS +: ([A-Za-z_]+::)+${name}\(\)" "$D/$P-$step.txt" 2>/dev/null ;;
       pytest) grep -qE "^PASSED tests/${name}(\[[^ ]*\])?\$" "$D/$P-$step.txt" 2>/dev/null ;;
+      go) grep -qE "^--- PASS: ${name} \\(" "$D/$P-$step.txt" 2>/dev/null ;;
+      cs) grep -qE "^ *Passed ${name} \\[" "$D/$P-$step.txt" 2>/dev/null ;;
+      ctest) grep -qE "Test +#[0-9]+: ${name} \\.+ +Passed" "$D/$P-$step.txt" 2>/dev/null ;;
+      dart) sed -E 's/^[0-9:]+ \+[0-9]+( [-~][0-9]+)*: //' "$D/$P-$step.txt" 2>/dev/null | grep -qxF "$name" ;;
       unittest) grep -qE "^${name} \(.*\) \.\.\. ok\$" "$D/$P-$step.txt" 2>/dev/null ;;
     esac || { echo "named-tests: not passed in $step: $name"; miss=$((miss + 1)); }
   done <<< "$NEW_TESTS"
