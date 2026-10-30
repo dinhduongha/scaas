@@ -278,6 +278,10 @@ pub struct ChainCfg {
     /// The token factory (`OpenFactory`): never a `call` target (NODE-JOB-01).
     #[serde(default)]
     pub token_factory: Option<Address>,
+    /// The chain's UA registry (`UARegistry`, the generation that takes new registrations): the target of the call-table
+    /// rows `register` / `setKemKey` / `storePqzPop` / `setPqzKey` (UA-8, ruling R-node; unset: refused).
+    #[serde(default)]
+    pub ua_registry: Option<Address>,
     /// Ví lạnh nhận phí của meta-tx không ràng buộc `feeRecipient` (R84, EVM/Hedera); không phải khoá lane.
     /// Không đặt ⇒ ghi 0: contract trả phí cho `msg.sender` (lane gửi).
     #[serde(default)]
@@ -381,6 +385,7 @@ impl Default for ChainCfg {
             chain_uid: None,
             account_factory: None,
             token_factory: None,
+            ua_registry: None,
             fee_recipient: None,
             poll_ms: default_poll(),
             stuck_after_secs: default_stuck(),

@@ -202,6 +202,17 @@ sol! {
         error RelayTargetNoCode(address target);
     }
 
+    /// `UARegistry`'s four writes (accounts.md §1.8, UA-8; CTR-UA-07: anyone may relay them): the call-table rows on
+    /// `ua_registry`, and `register`'s `pqzPop` for the split rule ([`crate::guard::UA_REGISTER_SPLIT`]).
+    #[derive(Debug)]
+    interface IUARegistry {
+        struct UAAttrs { bytes pqzKey; bytes32 pqzPopHash; uint64 kemVersion; bytes kemPk; }
+        function register(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
+        function setKemKey(bytes32 ua, uint64 version, bytes kemPk, bytes sig) external;
+        function storePqzPop(bytes32 ua, bytes pqzPop) external;
+        function setPqzKey(bytes32 ua, bytes pqzKey, bytes32 pqzPopHash, bytes sig) external;
+    }
+
     /// `MandateWallet` errors (CTR-ACC-06/07): a `call` job's revert reason names them, so the client re-reads
     /// `epoch(token)` and re-signs on `StaleEpoch`.
     #[derive(Debug)]

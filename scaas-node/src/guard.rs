@@ -50,12 +50,14 @@ pub enum Rule {
     /// registered token's router-bound `MetaTransfer` for exactly this call, the inner target bound to this chain
     /// ([`relay_call_ok`]).
     RelayFee,
+    /// The chain's `UARegistry` (`ua_registry`), bound to this chain: its four writes (UA-8, ruling R-node).
+    UaRegistry,
 }
 
 /// The call table as built in P5: the rows whose contracts exist (`cast sig` of the Solidity signatures; pinned
 /// against the KAT calldata). `mtxExecuteAsOwner` is one selector on `SmartKeyAccount` and `MandateWallet`, so it takes
-/// the wallet's rule. Every other selector is refused.
-pub const CALL_TABLE: [([u8; 4], &str, Rule); 11] = [
+/// the wallet's rule. UA-8 (ruling R-node): the registry's four writes. Every other selector is refused.
+pub const CALL_TABLE: [([u8; 4], &str, Rule); 15] = [
     ([0x45, 0x9b, 0x5b, 0x50], "SmartKeyAccountFactory.deploy", Rule::AccountFactory),
     ([0xfd, 0xf2, 0xd3, 0x38], "mtxExecuteAsOwner", Rule::SelfAuth),
     ([0x3a, 0x5b, 0x07, 0x08], "HederaMandateWallet.mtxExecuteAsOwnerRaw", Rule::SelfAuth),
@@ -67,7 +69,22 @@ pub const CALL_TABLE: [([u8; 4], &str, Rule); 11] = [
     ([0x2d, 0xe6, 0x21, 0xd2], "SCaaSDex.mtxCancelOrders", Rule::Dex),
     (SEL_MTX_INVALIDATE_NONCES, "SCaaSDex.mtxInvalidateNonces", Rule::Dex),
     (<crate::abi::IMtxRelayFee::relayCall as alloy::sol_types::SolCall>::SELECTOR, "MtxRelayFee.relay", Rule::RelayFee),
+    (<crate::abi::IUARegistry::registerCall as alloy::sol_types::SolCall>::SELECTOR, "UARegistry.register", Rule::UaRegistry),
+    (<crate::abi::IUARegistry::setKemKeyCall as alloy::sol_types::SolCall>::SELECTOR, "UARegistry.setKemKey", Rule::UaRegistry),
+    (<crate::abi::IUARegistry::storePqzPopCall as alloy::sol_types::SolCall>::SELECTOR, "UARegistry.storePqzPop", Rule::UaRegistry),
+    (<crate::abi::IUARegistry::setPqzKeyCall as alloy::sol_types::SolCall>::SELECTOR, "UARegistry.setPqzKey", Rule::UaRegistry),
 ];
+
+/// The refusal of a relayed PQ registration (`register` with its `R_REG` proof) whose gas estimate is over the
+/// per-transaction cap ([`total_cap`]: `max_gas_per_tx`, the block gas limit) or that the chain's estimate refuses for
+/// gas: the client splits it into `register` without `pqzPop`, then `storePqzPop` (ruling R-node).
+pub const UA_REGISTER_SPLIT: &str = "UA_REGISTER_SPLIT";
+
+/// `register` calldata with a non-empty `pqzPop`.
+pub fn pq_register(data: &[u8]) -> bool {
+    use alloy::sol_types::SolCall;
+    crate::abi::IUARegistry::registerCall::abi_decode(data).is_ok_and(|c| !c.pqzPop.is_empty())
+}
 
 /// The token entries a `metatx` job may name (job-api.md, order and wrap entries).
 pub const ENTRIES: [[u8; 4]; 3] = [SEL_MTX_CANCEL_ORDER, SEL_MTX_INVALIDATE_NONCES, SEL_MTX_WRAP];
@@ -124,6 +141,7 @@ pub struct Facts {
     pub token_factory: bool,
     pub account_factory: bool,
     pub dex: bool,
+    pub ua_registry: bool,
     /// `chainUid()` equals this chain's (NODE-GW-07).
     pub bound: bool,
 }
@@ -137,6 +155,7 @@ pub fn allowed(rule: Rule, f: &Facts) -> bool {
             Rule::SelfAuth => true,
             Rule::Dex => f.dex,
             Rule::RelayFee => false, // never by facts: `relay_call_ok`
+            Rule::UaRegistry => f.ua_registry,
         }
 }
 
@@ -267,6 +286,7 @@ pub struct Guard {
     max_pay_meta_bytes: usize,
     token_factory: Option<Address>,
     account_factory: Option<Address>,
+    ua_registry: Option<Address>,
     dexes: Vec<Address>,
     bound: Mutex<HashSet<Address>>,
     tables: Mutex<HashMap<Address, Arc<Table>>>,
@@ -280,6 +300,7 @@ impl Guard {
             tokens,
             token_factory: cfg.token_factory,
             account_factory: cfg.account_factory,
+            ua_registry: cfg.ua_registry,
             dexes: cfg.dex.into_iter().collect(),
             bound: Default::default(),
             tables: Default::default(),
@@ -351,6 +372,7 @@ impl Guard {
             token_factory: self.token_factory == Some(w.to),
             account_factory: self.account_factory == Some(w.to),
             dex: self.dexes.contains(&w.to),
+            ua_registry: self.ua_registry == Some(w.to),
             bound: self.bound(chain, w.to).await?,
         };
         if allowed(rule, &facts) {
@@ -418,7 +440,18 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
         return Err(SimError::Revert(format!(
             "calldata floor {floor} above the 2^24 regular gas of a transaction ({} B; EIP-7976, EIP-7825)", w.data.len())));
     }
-    let est = chain.simulate(w.to, w.data.clone()).await?;
+    // ruling R-node: a relayed PQ registration that does not fit one transaction is refused with its own code
+    let split = !w.entry && w.meta.is_none() && pq_register(&w.data);
+    let refuse = |why: String| SimError::Revert(format!(
+        "{UA_REGISTER_SPLIT}: {why}; send register without pqzPop, then storePqzPop"));
+    let est = match chain.simulate(w.to, w.data.clone()).await {
+        Err(SimError::Revert(r)) if split && r.contains("exceeds allowance") => return Err(refuse(r)),
+        r => r?,
+    };
+    if split && est > total_cap(max, block) {
+        return Err(refuse(format!("gas {est} above the transaction cap {} (max_gas_per_tx {max}, block gas limit {})",
+            total_cap(max, block), block.limit)));
+    }
     if est > max {
         return Err(SimError::Revert(format!("gas {est} above max_gas_per_tx {max}")));
     }
@@ -506,6 +539,12 @@ mod tests {
         assert_eq!(CALL_TABLE[7].0, sig(&format!("mtxExchangeVia({plan},address,bytes)")));
         assert_eq!(CALL_TABLE[6].0, crate::abi::ISCaaSDex::mtxExchangeCall::SELECTOR);
         assert_eq!(CALL_TABLE[7].0, crate::abi::ISCaaSDex::mtxExchangeViaCall::SELECTOR);
+        // UA-8 (ruling R-node): the registry's writes, the selectors of IUARegistry (also pinned as hex literals in
+        // submit.rs `ua8_registry_writes_go_through_the_guard` and forge `test_ua8_writeSelectorsPinned`)
+        assert_eq!(CALL_TABLE[11].0, sig("register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes)"));
+        assert_eq!(CALL_TABLE[12].0, sig("setKemKey(bytes32,uint64,bytes,bytes)"));
+        assert_eq!(CALL_TABLE[13].0, sig("storePqzPop(bytes32,bytes)"));
+        assert_eq!(CALL_TABLE[14].0, sig("setPqzKey(bytes32,bytes,bytes32,bytes)"));
         // no token transfer, approval or meta-tx entry is a row: those reach a token only as `metatx` jobs
         for s in ["transfer(address,uint256)", "approve(address,uint256)", "transferFrom(address,address,uint256)"] {
             assert!(row(sig(s)).is_none(), "{s}");
@@ -515,7 +554,8 @@ mod tests {
         // and each row keeps its rule
         let rules: Vec<Rule> = CALL_TABLE.iter().map(|r| r.2).collect();
         assert_eq!(rules, [Rule::AccountFactory, Rule::SelfAuth, Rule::SelfAuth, Rule::SelfAuth, Rule::SelfAuth,
-            Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::RelayFee]);
+            Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::RelayFee,
+            Rule::UaRegistry, Rule::UaRegistry, Rule::UaRegistry, Rule::UaRegistry]);
         assert!(!allowed(Rule::RelayFee, &Facts { bound: true, ..Default::default() }), "never by facts");
     }
 
@@ -553,6 +593,10 @@ mod tests {
         assert!(!allowed(Rule::AccountFactory, &bound), "only the account factory");
         assert!(allowed(Rule::AccountFactory, &Facts { account_factory: true, ..bound }));
         assert!(!allowed(Rule::AccountFactory, &Facts { account_factory: true, bound: false, ..bound }));
+        assert!(!allowed(Rule::UaRegistry, &bound), "only the configured registry");
+        assert!(allowed(Rule::UaRegistry, &Facts { ua_registry: true, ..bound }));
+        assert!(!allowed(Rule::UaRegistry, &Facts { ua_registry: true, bound: false, ..bound }), "NODE-GW-07");
+        assert!(!allowed(Rule::UaRegistry, &Facts { ua_registry: true, token: true, ..bound }));
     }
 
     #[test]

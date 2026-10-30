@@ -1550,45 +1550,85 @@ mod tests {
         assert!(outcomes(ok(), vec![other], |_| {}).await.0[0].1.contains("unknown job kind"), "one job-kind rule");
     }
 
-    /// UA8-D16 / A11: the UA-8 registry writes (`register` with `UAAttrs`, `setKemKey`, `storePqzPop`, `setPqzKey`) are
-    /// ordinary `call` jobs: `Work` carries the registry as the target and the calldata byte for byte, no meta-tx and no
-    /// fee, and an unknown kind is still refused. The `call` path itself is unchanged by UA-8; this pins the new
-    /// calldata shapes (selectors and the `UAAttrs` tuple) the scripts and the relayer send.
-    #[test]
-    fn ua8_registry_writes_are_call_jobs() {
-        use alloy::sol;
-        sol! {
-            struct UAAttrs { bytes pqzKey; bytes32 pqzPopHash; uint64 kemVersion; bytes kemPk; }
-            function register(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop) returns (bytes32);
-            function setKemKey(bytes32 ua, uint64 version, bytes kemPk, bytes sig);
-            function storePqzPop(bytes32 ua, bytes pqzPop);
-            function setPqzKey(bytes32 ua, bytes pqzKey, bytes32 pqzPopHash, bytes sig);
-        }
+    /// The four UA-8 registry writes for `ua_registry`, with these sizes (a `register` with or without its proof).
+    fn ua8_writes(pqz_pop: usize) -> Vec<Vec<u8>> {
+        use crate::abi::IUARegistry::*;
+        let ua = B256::repeat_byte(0x11);
+        let b = |n: usize, v: u8| Bytes::from(vec![v; n]);
+        vec![
+            registerCall { kind: 0x0131, keyData: b(1952, 1), attrs: UAAttrs { pqzKey: b(18_432, 2),
+                pqzPopHash: B256::repeat_byte(3), kemVersion: 1, kemPk: b(1600, 4) }, pop: b(3309, 5), pqzPop: b(pqz_pop, 12) }
+                .abi_encode(),
+            setKemKeyCall { ua, version: 2, kemPk: b(1600, 6), sig: b(3309, 7) }.abi_encode(),
+            storePqzPopCall { ua, pqzPop: b(30_381, 8) }.abi_encode(),
+            setPqzKeyCall { ua, pqzKey: b(18_432, 9), pqzPopHash: B256::repeat_byte(10), sig: b(3309, 11) }.abi_encode(),
+        ]
+    }
+
+    /// UA8-D16 / ruling R-node: the UA-8 registry writes (`register` with `UAAttrs`, `setKemKey`, `storePqzPop`,
+    /// `setPqzKey`) are `call` jobs on the configured `ua_registry`: the guard's call table takes each there (bound to
+    /// this chain) and the lane sends it byte for byte (no meta-tx, no fee); on another target, without `ua_registry`, or
+    /// on a registry of another chain each is refused `CALL_TARGET_REFUSED` and nothing is sent. The selectors are
+    /// pinned as literals here and in forge `test_ua8_writeSelectorsPinned`, so an ABI change fails on both sides.
+    #[tokio::test]
+    async fn ua8_registry_writes_go_through_the_guard() {
+        use crate::abi::IUARegistry::*;
         assert_eq!(registerCall::SIGNATURE, "register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes)");
-        // the selectors of IUARegistry on ua8, also pinned in test_ua8_writeSelectorsPinned (UARegistryUA8.t.sol)
         assert_eq!(registerCall::SELECTOR, [0x0c, 0x93, 0x63, 0x61]);
         assert_eq!(setKemKeyCall::SELECTOR, [0x2d, 0x21, 0xc5, 0x8e]);
         assert_eq!(storePqzPopCall::SELECTOR, [0x7f, 0xac, 0x16, 0x1a]);
         assert_eq!(setPqzKeyCall::SELECTOR, [0xbd, 0xe7, 0x17, 0x60]);
-        let reg = Address::repeat_byte(0x5e);
-        let ua = B256::repeat_byte(0x11);
-        let b = |n: usize, v: u8| Bytes::from(vec![v; n]);
-        let writes: Vec<Vec<u8>> = vec![
-            registerCall { kind: 0x0141, keyData: b(96, 1), attrs: UAAttrs { pqzKey: b(1568, 2), pqzPopHash: B256::repeat_byte(3),
-                kemVersion: 1, kemPk: b(1600, 4) }, pop: b(65, 5), pqzPop: Bytes::new() }.abi_encode(),
-            setKemKeyCall { ua, version: 2, kemPk: b(1600, 6), sig: b(65, 7) }.abi_encode(),
-            storePqzPopCall { ua, pqzPop: b(4000, 8) }.abi_encode(),
-            setPqzKeyCall { ua, pqzKey: b(1568, 9), pqzPopHash: B256::repeat_byte(10), sig: b(65, 11) }.abi_encode(),
-        ];
-        for (i, data) in writes.into_iter().enumerate() {
-            let job: Job = serde_json::from_value(call_job(i as i64 + 1, reg, data.clone())).unwrap();
-            let w = work_from_job(&job, None).unwrap();
-            assert_eq!((w.to, w.data.to_vec(), w.meta.is_none(), w.entry), (reg, data, true, false), "write {i}");
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        let (reg, other) = (Address::repeat_byte(0x5e), Address::repeat_byte(0x5f));
+        let cfg = move |c: &mut ChainCfg| c.ua_registry = Some(reg);
+        let refused = |r: &[(String, String)]| r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("CALL_TARGET_REFUSED");
+        for (i, data) in ua8_writes(30_381).into_iter().enumerate() {
+            let (r, rpc) = outcomes(ok(), vec![call_job(9, reg, data.clone())], cfg).await;
+            assert_eq!(states_of(&r), ["signed", "broadcast"], "write {i}: {r:?}");
+            let sent = rpc.lock().unwrap().sent.clone();
+            assert_eq!((sent.len(), sent[0].1, sent[0].2.to_vec()), (1, reg, data.clone()), "write {i}: the calldata as given");
+            for (e, to, with_reg) in [(ok(), other, true), (ok(), reg, false), (Evm { uid: Some(0x25), ..ok() }, reg, true)] {
+                let (r, rpc) = outcomes(e, vec![call_job(9, to, data.clone())], move |c| if with_reg { cfg(c) }).await;
+                assert!(refused(&r), "write {i} on {to:#x}, ua_registry {with_reg}: {r:?}");
+                assert!(rpc.lock().unwrap().sent.is_empty());
+            }
         }
-        let mut other = call_job(9, reg, vec![0; 4]);
-        other["kind"] = json!("registry");
-        let job: Job = serde_json::from_value(other).unwrap();
-        assert!(work_from_job(&job, None).unwrap_err().to_string().contains("unknown job kind"));
+    }
+
+    /// Ruling R-node: a relayed PQ registration (`register` with its `R_REG` proof) whose estimate is over the transaction
+    /// cap — `max_gas_per_tx` (the SCaaS testnet's 64 M) or the chain's block gas limit — or that the chain's estimate
+    /// refuses for gas is refused `UA_REGISTER_SPLIT`, nothing sent: the client sends `register` without the proof, then
+    /// `storePqzPop`. Those halves, and a full registration under the cap, follow the ordinary gas rules.
+    #[tokio::test]
+    async fn ua8_relayed_pq_register_over_the_cap_is_split() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        let reg = Address::repeat_byte(0x5e);
+        let tn = move |c: &mut ChainCfg| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; };
+        let (full, bare) = (ua8_writes(30_381).remove(0), ua8_writes(0).remove(0));
+        let split = |r: &[(String, String)], why: &str| r.len() == 1 && r[0].0 == "dead"
+            && r[0].1.starts_with("UA_REGISTER_SPLIT: ") && r[0].1.contains(why) && r[0].1.ends_with("then storePqzPop");
+        // 84.8 M (the smallest full PQ registration measured) on the 200 M testnet, over the 64 M relayer cap
+        let (r, rpc) = outcomes(Evm { estimate: Some(84_800_000), ..ok() }, vec![call_job(9, reg, full.clone())], tn).await;
+        assert!(split(&r, "transaction cap 64000000 (max_gas_per_tx 64000000"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        // a 60 M block binds below a larger relayer cap
+        let (r, _) = outcomes(Evm { estimate: Some(60_000_001), block_gas: Some(60_000_000), ..ok() },
+            vec![call_job(9, reg, full.clone())], move |c| { tn(c); c.max_gas_per_tx = 200_000_000; }).await;
+        assert!(split(&r, "block gas limit 60000000"), "{r:?}");
+        // the chain's estimate refuses it for gas
+        let (r, _) = outcomes(Evm { sim: Some("estimate_oog"), ..ok() }, vec![call_job(9, reg, full.clone())], tn).await;
+        assert!(split(&r, "gas required exceeds allowance"), "{r:?}");
+        // under the cap a full registration goes in one transaction
+        let (r, _) = outcomes(Evm { estimate: Some(50_000_000), ..ok() }, vec![call_job(9, reg, full)], tn).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        // register without the proof (and every other write) keeps the ordinary refusal, never the split code
+        let (r, _) = outcomes(Evm { estimate: Some(40_000_000), ..ok() }, vec![call_job(9, reg, bare.clone())], tn).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        let (r, _) = outcomes(Evm { estimate: Some(64_000_001), ..ok() }, vec![call_job(9, reg, bare)], tn).await;
+        assert!(r[0].0 == "dead" && r[0].1.contains("above max_gas_per_tx 64000000") && !r[0].1.contains("UA_REGISTER_SPLIT"), "{r:?}");
+        let store = ua8_writes(0).remove(2);
+        let (r, _) = outcomes(Evm { estimate: Some(64_000_001), ..ok() }, vec![call_job(9, reg, store)], tn).await;
+        assert!(r[0].0 == "dead" && !r[0].1.contains("UA_REGISTER_SPLIT"), "{r:?}");
     }
 
     /// `max_pay_meta_bytes` (default 2,048, spec §9) caps the `meta` a pay-meta job relays; the config raises it.
