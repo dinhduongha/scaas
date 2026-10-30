@@ -37,8 +37,8 @@
 # pqz-ffi's wasm32 run ~0.6 GB; op 7: pqz-ffi prove up to ~0.9 GB per test thread, pqz-vectors --check ~1 GB;
 # --multi-bench: PQZL M = 16 ~1.6 GB).
 set -eu
-# the package is the frozen v3 set (owner 2026-10-21: one parameter set per build, pqz-core/params/sets/)
-export PQZ_SET=n2048-kmax1024
+# the package is the default set (owner 2026-10-21: one parameter set per build, pqz-core/params/sets/)
+export PQZ_SET=n2304-kmax4096
 cd "$(dirname "$0")/.."
 MODE=quick
 case "${1:-}" in
@@ -211,7 +211,7 @@ step "build (native, wasm, wasm without SV$( [ $X86 = 1 ] && echo ', native-x86v
   wc -c pqzl/build/wasm/pqz.wasm pqzl/build/wasm-nosv/wasm/pqz.wasm; } > "$OUT/build.txt" 2>&1
 step "KAT"
 pqzl/build/native/kat_dump > "$OUT/kat-pqz.json"
-python3 -I pqzl/kat/check.py params/sets/n2048-kmax1024/lazer-3330e48-kat.json "$OUT/kat-pqz.json" | tee "$OUT/kat.txt" || true
+python3 -I pqzl/kat/check.py params/sets/$PQZ_SET/lazer-3330e48-kat.json "$OUT/kat-pqz.json" | tee "$OUT/kat.txt" || true
 step "check_tbox_fixes.sh"
 pqzl/check_tbox_fixes.sh > "$OUT/tbox-fixes.txt" 2>&1 || true
 tail -1 "$OUT/tbox-fixes.txt"

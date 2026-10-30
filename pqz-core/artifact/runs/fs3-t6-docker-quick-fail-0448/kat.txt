@@ -1,0 +1,18 @@
+MISMATCH inputs_a
+MISMATCH inputs_b
+MISMATCH mul
+MISMATCH add
+MISMATCH sub
+MISMATCH neg
+MISMATCH scale
+MISMATCH auto
+MISMATCH mul_add_crt
+MISMATCH mul_sub_crt
+MISMATCH l2sqr_linf
+MISMATCH matvec
+MISMATCH dot
+MISMATCH vec_l2sqr
+MISMATCH decompose
+MISMATCH power2round
+MISMATCH urandom
+2/19 cases equal; golden: lazer-3330e48 (lazer 3330e48 static v4: -march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul, avx512f=1); checked: pqz-core

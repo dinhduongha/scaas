@@ -1,0 +1,4 @@
+   Compiling pqz-stmt v0.1.0 (/src/pqz-core/stmt)
+    Finished `release` profile [optimized] target(s) in 0.62s
+rlib bytes 223148
+pqz-stmt v0.1.0 (/src/pqz-core/stmt)
