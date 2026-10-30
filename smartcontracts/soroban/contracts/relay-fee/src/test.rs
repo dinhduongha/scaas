@@ -48,7 +48,7 @@ fn setup_with(env: Env) -> T {
     let tid = env.register_at(
         &Address::from_str(&env, TOKEN),
         Token,
-        (admin, 7u32, String::from_str(&env, "SCaaS"), String::from_str(&env, "BMB")),
+        (admin, 7u32, String::from_str(&env, "SCaaS"), String::from_str(&env, "BMB"), None::<Address>),
     );
     let token = TokenClient::new(&env, &tid);
     let owner = Address::generate(&env);

@@ -24,7 +24,7 @@ fn setup() -> T {
     });
     env.mock_all_auths();
     let admin = Address::generate(&env);
-    let tid = env.register(Token, (admin, 7u32, String::from_str(&env, "B"), String::from_str(&env, "B")));
+    let tid = env.register(Token, (admin, 7u32, String::from_str(&env, "B"), String::from_str(&env, "B"), None::<Address>));
     let token = TokenClient::new(&env, &tid);
     let owner = Address::generate(&env);
     let wid = env.register(MandateWallet, (owner.clone(),));

@@ -38,7 +38,7 @@ fn setup() -> T {
     let account = env.register(SmartKeyAccount, (Key::Ed25519(pk),));
     let admin = Address::generate(&env);
     let mk = |env: &Env| {
-        let id = env.register(Token, (admin.clone(), 7u32, SStr::from_str(env, "SCaaS"), SStr::from_str(env, "BMB")));
+        let id = env.register(Token, (admin.clone(), 7u32, SStr::from_str(env, "SCaaS"), SStr::from_str(env, "BMB"), None::<Address>));
         TokenClient::new(env, &id)
     };
     let (t1, t2) = (mk(&env), mk(&env));

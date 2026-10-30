@@ -100,10 +100,15 @@ fn wasm(name: &str) -> String {
     format!("{dir}/target/wasm32v1-none/release/scaas_{name}.wasm")
 }
 
-fn deploy_token(admin_secret: &str, admin: &str) -> String {
+/// The token's `registry: Option<Address>` is passed only when set (omitted = `None`, the UA ledger off).
+fn deploy_token(admin_secret: &str, admin: &str, registry: Option<&str>) -> String {
     let w = wasm("token");
-    cli(&["contract", "deploy", "--wasm", &w, "--source-account", admin_secret, "--",
-          "--admin", admin, "--decimals", "7", "--name", "SCaaS", "--symbol", "BMB"])
+    let mut args = vec!["contract", "deploy", "--wasm", &w, "--source-account", admin_secret, "--",
+                        "--admin", admin, "--decimals", "7", "--name", "SCaaS", "--symbol", "BMB"];
+    if let Some(r) = registry {
+        args.extend(["--registry", r]);
+    }
+    cli(&args)
 }
 
 fn allowed(from: &str, to: &str) -> bool {
@@ -277,7 +282,7 @@ async fn soroban_payments_anti_lock_fee_bump_and_finality() {
     for k in [&lane0, &lane1, &deployer, &subject] {
         fund(&g(k)).await;
     }
-    let (t1, t2) = (deploy_token(&secret(7), &g(&deployer)), deploy_token(&secret(7), &g(&deployer)));
+    let (t1, t2) = (deploy_token(&secret(7), &g(&deployer), None), deploy_token(&secret(7), &g(&deployer), None));
     for t in [&t1, &t2] {
         cli(&["contract", "invoke", "--id", t, "--source-account", &secret(7), "--", "mint", "--to", &g(&subject), "--amount", "1000000"]);
     }

@@ -36,7 +36,7 @@ fn setup() -> (Env, TokenClient<'static>, Address) {
     let id = env.register_at(
         &Address::from_str(&env, CONTRACT),
         Token,
-        (admin.clone(), 7u32, String::from_str(&env, "SCaaS"), String::from_str(&env, "BMB")),
+        (admin.clone(), 7u32, String::from_str(&env, "SCaaS"), String::from_str(&env, "BMB"), None::<Address>),
     );
     (env.clone(), TokenClient::new(&env, &id), admin)
 }
@@ -122,7 +122,7 @@ fn approve_only_to_contracts() {
     assert_eq!(t.try_approve(&a, &account, &10, &200).err().unwrap().unwrap(), Error::SpenderNotContract.into());
     let ghost = Address::generate(&env); // contract address with nothing deployed
     assert_eq!(t.try_approve(&a, &ghost, &10, &200).err().unwrap().unwrap(), Error::SpenderNotContract.into());
-    let spender = env.register(Token, (admin, 7u32, String::from_str(&env, "X"), String::from_str(&env, "X")));
+    let spender = env.register(Token, (admin, 7u32, String::from_str(&env, "X"), String::from_str(&env, "X"), None::<Address>));
     t.approve(&a, &spender, &10, &200);
     assert_eq!(t.allowance(&a, &spender), 10);
     t.transfer_from(&spender, &a, &account, &4);

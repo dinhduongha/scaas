@@ -28,6 +28,12 @@ pub enum Error {
     Expired = 5,
     RefUsed = 6,
     BadExpiration = 7,
+    UaLedgerOff = 8,
+    UaNotRegistered = 9,
+    UaNotReceivable = 10,
+    UaPoolNotPayable = 11,
+    BadNonce = 12,
+    BadOrder = 13,
 }
 
 #[contracttype]
@@ -40,6 +46,13 @@ enum Key {
     Balance(Address),
     Allowance(Address, Address),
     PayRef(Address, BytesN<32>),
+    /// The UA registry bound at construction (instance; `None` = the UA ledger is off, S16).
+    Registry,
+    /// Persistent, one entry per key (S11): a UA's balance and its lane nonces.
+    UaBalance(BytesN<32>),
+    UaNonce(BytesN<32>, BytesN<32>),
+    /// A `ua_cancel_nonce` digest already run (EVM `cancelUsed`): its signature names no nonce, so it runs once.
+    UaCancelUsed(BytesN<32>),
 }
 
 #[contracttype]
@@ -157,6 +170,13 @@ fn spend_allowance(env: &Env, from: &Address, spender: &Address, amount: i128) {
     env.storage().temporary().set(&k, &Allowance { amount: a.amount - amount, ..a });
 }
 
+/// Spec §5.1: the UA pool is the token's own address; no native path pays it (CTR-MTX-18).
+fn not_pool(env: &Env, a: &Address) {
+    if *a == env.current_contract_address() {
+        panic_with_error!(env, Error::UaPoolNotPayable);
+    }
+}
+
 /// R26: chỉ contract (Wasm hoặc Stellar Asset) được làm spender — không bao giờ một account thường.
 fn require_contract(env: &Env, spender: &Address) {
     match spender.executable() {
@@ -170,8 +190,9 @@ pub struct Token;
 
 #[contractimpl]
 impl Token {
-    pub fn __constructor(env: Env, admin: Address, decimals: u32, name: String, symbol: String) {
+    pub fn __constructor(env: Env, admin: Address, decimals: u32, name: String, symbol: String, registry: Option<Address>) {
         let s = env.storage().instance();
+        s.set(&Key::Registry, &registry);
         s.set(&Key::Admin, &admin);
         s.set(&Key::Decimals, &decimals);
         s.set(&Key::Name, &name);
@@ -185,6 +206,7 @@ impl Token {
     pub fn mint(env: Env, to: Address, amount: i128) {
         Self::admin(env.clone()).require_auth();
         check_amount(&env, amount);
+        not_pool(&env, &to);
         env.storage().instance().extend_ttl(TTL_MIN, TTL_BUMP);
         set_balance(&env, &to, balance_of(&env, &to) + amount);
         Mint { to, amount }.publish(&env);
@@ -251,6 +273,7 @@ impl Token {
     pub fn transfer(env: Env, from: Address, to: MuxedAddress, amount: i128) {
         from.require_auth();
         let to = to.address();
+        not_pool(&env, &to);
         move_funds(&env, &from, &to, amount);
         Transfer { from, to, amount }.publish(&env);
     }
@@ -258,6 +281,7 @@ impl Token {
     pub fn transfer_from(env: Env, spender: Address, from: Address, to: Address, amount: i128) {
         spender.require_auth();
         check_amount(&env, amount);
+        not_pool(&env, &to);
         spend_allowance(&env, &from, &spender, amount);
         move_funds(&env, &from, &to, amount);
         Transfer { from, to, amount }.publish(&env);
@@ -291,6 +315,14 @@ impl Token {
 impl Token {
     /// Thân chung của `pay` / `pay_meta`: hạn, `PayRef` một lần, chuyển tiền, `PaymentSettled`.
     fn settle_pay(env: &Env, from: &Address, to: &Address, amount: i128, pay_ref: &BytesN<32>, valid_until: u64) {
+        not_pool(env, to);
+        Self::use_pay_ref(env, from, pay_ref, valid_until);
+        move_funds(env, from, to, amount);
+        PaymentSettled { from: from.clone(), to: to.clone(), amount, pay_ref: pay_ref.clone() }.publish(env);
+    }
+
+    /// Expiry and `PayRef(from, pay_ref)` once (NET-SOR-09), shared by `pay`, `pay_meta` and `pay_to_ua`.
+    fn use_pay_ref(env: &Env, from: &Address, pay_ref: &BytesN<32>, valid_until: u64) {
         if env.ledger().timestamp() > valid_until {
             panic_with_error!(env, Error::Expired);
         }
@@ -302,8 +334,6 @@ impl Token {
         s.set(&k, &true);
         s.extend_ttl(&k, TTL_MIN, TTL_BUMP);
         env.storage().instance().extend_ttl(TTL_MIN, TTL_BUMP);
-        move_funds(env, from, to, amount);
-        PaymentSettled { from: from.clone(), to: to.clone(), amount, pay_ref: pay_ref.clone() }.publish(env);
     }
 
     fn burn_inner(env: &Env, from: Address, amount: i128) {
@@ -317,5 +347,9 @@ impl Token {
     }
 }
 
+mod ua;
+
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+mod test_ua;

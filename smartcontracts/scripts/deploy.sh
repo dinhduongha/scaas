@@ -24,6 +24,8 @@
 #                            0x2::package::make_immutable(UpgradeCap) (NET-SUI-15, owner ruling 2026-10-28): the cap
 #                            object is gone afterwards; the script stops if it cannot find or destroy it
 #   soroban <network> <contract>   stellar contract deploy of scaas_<contract>.wasm (build.sh soroban first); STELLAR_BIN overrides the CLI
+#                            constructor args after `--`; the token: --admin --decimals --name --symbol [--registry <C…>]
+#                            (--registry omitted = None: the UA ledger is off, UaLedgerOff)
 #   solana  <cluster-url> <program-keypair> <upgrade-authority-keypair>   solana/scripts/deploy.sh
 #   near    <rpc-url> [gate <account…>]   near/scripts/deploy.sh: token(s), dex, relayfee, relayexec as sub-accounts of
 #                            the funding account, initialised, every lane registered on every token, then every access

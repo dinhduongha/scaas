@@ -26,7 +26,7 @@ fn setup(fee_on: bool) -> T {
     env.mock_all_auths();
     let admin = Address::generate(&env);
     let mk = |s: &str| {
-        let id = env.register(Token, (admin.clone(), 7u32, String::from_str(&env, s), String::from_str(&env, s)));
+        let id = env.register(Token, (admin.clone(), 7u32, String::from_str(&env, s), String::from_str(&env, s), None::<Address>));
         TokenClient::new(&env, &id)
     };
     let (a, b) = (mk("A"), mk("B"));
@@ -135,7 +135,7 @@ fn cancelled_order_never_settles() {
 #[test]
 fn unknown_market_is_refused() {
     let t = setup(false);
-    let other = t.env.register(Token, (t.alice.clone(), 7u32, String::from_str(&t.env, "C"), String::from_str(&t.env, "C")));
+    let other = t.env.register(Token, (t.alice.clone(), 7u32, String::from_str(&t.env, "C"), String::from_str(&t.env, "C"), None::<Address>));
     let mut ask = t.ask(10, 0);
     ask.buy_token = other.clone();
     let mut bid = t.bid(10, 3, 0);
