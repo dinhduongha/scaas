@@ -3,6 +3,7 @@ extern crate std;
 use super::*;
 use ed25519_dalek::Signer as _;
 use scaas_mandate::{Holder, MandateWallet, MandateWalletClient};
+use scaas_relay_executor::{RelayExecutor, RelayExecutorClient};
 use scaas_ua_common::{h32, op_digest, UaAttrs, PURPOSE_METATX, PURPOSE_METATX_CANCEL, PURPOSE_POP_V2};
 use scaas_ua_registry::{UaRegistry, UaRegistryClient as RegClient};
 use scaas_token::{Token, TokenClient};
@@ -35,6 +36,12 @@ struct T {
     relayer: Address,
 }
 
+/// The router at `at` and its executor (bound both ways by their constructors).
+fn deploy_router(env: &Env, at: &Address) -> RelayFeeClient<'static> {
+    let x = env.register(RelayExecutor, (at.clone(),));
+    RelayFeeClient::new(env, &env.register_at(at, RelayFee, (x,)))
+}
+
 fn setup() -> T {
     setup_with(Env::default())
 }
@@ -58,7 +65,7 @@ fn setup_with(env: Env) -> T {
     let wallet = MandateWalletClient::new(&env, &wid);
     // The mandate is the target's state: the fee-less call revokes it.
     set_mandate(&env, &wallet, &tid);
-    let router = RelayFeeClient::new(&env, &env.register(RelayFee, ()));
+    let router = deploy_router(&env, &Address::generate(&env));
     token.mint(&owner, &100);
     T { env: env.clone(), token, wallet, router, owner, relayer: Address::generate(&env) }
 }
@@ -493,7 +500,7 @@ fn ua_setup() -> U {
     let admin = Address::generate(&env);
     let s = |x: &str| String::from_str(&env, x);
     let tid = env.register_at(&id("token"), Token, (admin.clone(), 7u32, s("SCaaS"), s("BMB"), Some(reg.address.clone())));
-    let router = RelayFeeClient::new(&env, &env.register_at(&id("router"), RelayFee, ()));
+    let router = deploy_router(&env, &id("router"));
     U { token: TokenClient::new(&env, &tid), reg, router, admin, relayer: Address::generate(&env), env }
 }
 
@@ -571,6 +578,37 @@ impl U {
     fn open(&self) -> Holder {
         Holder::Addr(self.router.address.clone())
     }
+
+    fn mint(&self, to: &Address, amount: i128) {
+        self.allow(&self.admin, &self.token.address, "mint", (to, amount).into_val(&self.env));
+        self.token.mint(to, &amount);
+    }
+
+    /// Native `router.relay(payer, token, f, args, salt, token, to, amount, NOW + 60, relayer)` with exactly the
+    /// payer's entry (rooted at this `relay`, `token.pay` its sub-invocation) and the relayer's.
+    fn relay_native(&self, payer: &Address, f: &str, args: &soroban_sdk::Vec<Val>, salt: &BytesN<32>, to: &Address, amount: i128) -> Res {
+        let (e, tk, vu) = (&self.env, &self.token.address, NOW + 60);
+        let f = Symbol::new(e, f);
+        let rf = self.router.relay_ref(tk, &f, args, salt);
+        let signed: soroban_sdk::Vec<Val> = (tk, &f, args, salt, tk, to, amount, vu).into_val(e);
+        let all: soroban_sdk::Vec<Val> = (payer, tk, &f, args, salt, tk, to, amount, vu, &self.relayer).into_val(e);
+        let pay = MockAuthInvoke { contract: tk, fn_name: "pay", args: (payer, to, amount, &rf, vu).into_val(e), sub_invokes: &[] };
+        let pay = [pay];
+        let root = MockAuthInvoke { contract: &self.router.address, fn_name: "relay", args: signed, sub_invokes: &pay };
+        let rroot = MockAuthInvoke { contract: &self.router.address, fn_name: "relay", args: all, sub_invokes: &[] };
+        e.mock_auths(&[MockAuth { address: payer, invoke: &root }, MockAuth { address: &self.relayer, invoke: &rroot }]);
+        match self.router.try_relay(payer, tk, &f, args, salt, tk, to, &amount, &vu, &self.relayer) {
+            Ok(r) => Ok(r.unwrap()),
+            Err(e) => Err(e.unwrap()),
+        }
+    }
+
+    /// A victim's router-bound fee: `token.ua_pay(u, open, 7, ref(u's cancel of lane 3), …, Some(router), auth)` args.
+    fn victim_ua_pay(&self, u: &Ua) -> (soroban_sdk::Vec<Val>, BytesN<32>) {
+        let (open, rf) = (self.open(), self.rf(&self.cancel_args(u, 3), 1));
+        let auth = self.fee_auth(u, &open, 7, &rf);
+        ((&u.id, &open, 7i128, &rf, NOW + 60, Some(self.router.address.clone()), auth).into_val(&self.env), rf)
+    }
 }
 
 /// Spec §5.4: the payer's UA signature names `relayer = Some(router)`, so the same `ua_pay` auth submitted directly to
@@ -603,6 +641,7 @@ fn ua_relay_open_mode_pays_submitter() {
     let all = e.events().all();
     assert_eq!(s.token.ua_nonce(&u.id, &b32(e, 3)), 1, "the target call ran");
     assert_eq!((s.token.ua_balance(&u.id), s.token.balance(&s.relayer), s.token.balance(&s.router.address)), (93, 7, 0));
+    assert_eq!(s.token.balance(&s.router.executor()), 0);
     assert!(s.token.ua_ref_used(&u.id, &rf));
     let d = event_data(&all, "RelayFeePaid");
     assert_eq!((d[0].clone(), d[1].clone()), (hv(e, Holder::Ua(u.id.clone())), hv(e, Holder::Addr(s.relayer.clone()))));
@@ -709,4 +748,80 @@ fn ua_ops_vectors_ua_relay_row() {
         n += 1;
     }
     assert_eq!((n, s.token.balance(&s.relayer), s.token.balance(&s.router.address)), (7, 700, 0));
+}
+
+/// T8 review (critical; controller ruling 2026-10-31): a relayer makes a victim's router-bound `ua_pay` the target of
+/// its own `ua_relay`. The router never calls a target as itself, so the victim's fee is not paid without the
+/// victim's call; nor does a target call reach a balance the router holds.
+#[test]
+fn ua_relay_victim_ua_pay_as_target_refused() {
+    let s = ua_setup();
+    let e = &s.env;
+    let (u, a, open) = (s.ua(1, 100), s.ua(2, 100), s.open());
+    let (vargs, vref) = s.victim_ua_pay(&u);
+    let (f, salt) = (Symbol::new(e, "ua_pay"), b32(e, 9));
+    let aauth = s.fee_auth(&a, &open, 1, &s.router.relay_ref(&s.token.address, &f, &vargs, &salt));
+    assert_eq!(s.relay_ua(&a.id, "ua_pay", &vargs, &salt, &open, 1, NOW + 60, &aauth), Err(auth_err()));
+    assert!(!s.token.ua_ref_used(&u.id, &vref));
+    assert_eq!((s.token.ua_balance(&u.id), s.token.ua_balance(&a.id)), (100, 100));
+    assert_eq!((s.token.balance(&s.router.address), s.token.balance(&s.relayer)), (0, 0));
+    // A balance on the router (sent by mistake) is not drained by a target `transfer(router, …)`.
+    s.mint(&s.router.address, 5);
+    let (targs, salt): (soroban_sdk::Vec<Val>, _) = ((&s.router.address, &s.relayer, 5i128).into_val(e), b32(e, 10));
+    let tauth = s.fee_auth(&a, &open, 1, &s.router.relay_ref(&s.token.address, &Symbol::new(e, "transfer"), &targs, &salt));
+    assert_eq!(s.relay_ua(&a.id, "transfer", &targs, &salt, &open, 1, NOW + 60, &tauth), Err(auth_err()));
+    assert_eq!((s.token.balance(&s.router.address), s.token.balance(&s.relayer)), (5, 0));
+}
+
+/// The same attack through native `relay` (any payer may front it): refused, the victim's fee untouched.
+#[test]
+fn relay_victim_ua_pay_as_target_refused() {
+    let s = ua_setup();
+    let e = &s.env;
+    let u = s.ua(1, 100);
+    let attacker = Address::generate(e);
+    s.mint(&attacker, 10);
+    let (vargs, vref) = s.victim_ua_pay(&u);
+    assert_eq!(s.relay_native(&attacker, "ua_pay", &vargs, &b32(e, 9), &s.router.address, 1), Err(auth_err()));
+    assert!(!s.token.ua_ref_used(&u.id, &vref));
+    assert_eq!((s.token.ua_balance(&u.id), s.token.balance(&attacker)), (100, 10));
+    assert_eq!((s.token.balance(&s.router.address), s.token.balance(&s.relayer)), (0, 0));
+}
+
+/// Controller ruling 2026-10-31: `exec` serves only its router; anyone else calling it directly is refused, so a
+/// router-bound authority is never reachable through the executor either.
+#[test]
+fn executor_exec_refuses_all_but_router() {
+    let s = ua_setup();
+    let e = &s.env;
+    let x = RelayExecutorClient::new(e, &s.router.executor());
+    assert_eq!(x.router(), s.router.address);
+    let u = s.ua(1, 100);
+    let (vargs, vref) = s.victim_ua_pay(&u);
+    let r = x.try_exec(&s.token.address, &Symbol::new(e, "ua_pay"), &vargs);
+    assert_eq!(r.err().unwrap().unwrap(), auth_err());
+    assert!(!s.token.ua_ref_used(&u.id, &vref));
+    // A caller that authorises itself does not stand in for the router.
+    let other = Address::generate(e);
+    let (f, bargs): (_, soroban_sdk::Vec<Val>) = (Symbol::new(e, "balance"), (&other,).into_val(e));
+    s.allow(&other, &x.address, "exec", (&s.token.address, &f, &bargs).into_val(e));
+    assert_eq!(x.try_exec(&s.token.address, &f, &bargs).err().unwrap().unwrap(), auth_err());
+}
+
+/// Controller ruling 2026-10-31: the fee never rests on the router or the executor; a `to` naming the executor is
+/// refused before any call, for `relay` and `ua_relay` (`to == router` is open mode).
+#[test]
+fn relay_payee_never_router_or_executor() {
+    let s = ua_setup();
+    let e = &s.env;
+    let (u, x) = (s.ua(1, 100), s.router.executor());
+    let args = s.cancel_args(&u, 3);
+    let to = Holder::Addr(x.clone());
+    assert_eq!(s.relay_cancel(&u, &args, 1, &to, 7, &s.fee_auth(&u, &to, 7, &s.rf(&args, 1))), err(Error::BadPayee));
+    let payer = Address::generate(e);
+    s.mint(&payer, 10);
+    assert_eq!(s.relay_native(&payer, CANCEL, &args, &b32(e, 1), &x, 1), err(Error::BadPayee));
+    // Open mode with the router or the executor as the relayer cannot happen: neither has `__check_auth`, so
+    // `relayer.require_auth()` fails first (the `BadPayee` check still covers it).
+    assert_eq!((s.token.ua_balance(&u.id), s.token.balance(&payer), s.token.balance(&x)), (100, 10, 0));
 }

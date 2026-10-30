@@ -37,7 +37,7 @@ Each row: the decision, the options weighed, the choice, why, and the cost if it
 | S5 | SDK and network pins | soroban-sdk 26.1.1 (today) / 29.0.1 (latest stable) / 30.0.0-rc.1 (2026-10-21, the first release with `Crypto::ml_dsa_{44,65,87}_verify`) / a git revision | **`soroban-sdk = "=30.0.0-rc.1"`** for the whole Soroban workspace (every crate rebuilds and re-tests); swapped to 30.0.0 when released, **before** the testnet e2e (this closes C16b). `stellar/quickstart` pinned by digest, run `--local --protocol-version 30 --limits testnet` | an RC API change before 30.0.0 means one more rebuild | controller call |
 | S6 | The UA ledger in Soroban tokens | (a) a per-UA custom account (`C…` contract at a salt = the UA, whose `__check_auth` asks the registry): every existing entry works unchanged; (b) a `Holder` enum in the existing entries (NEAR shape); (c) a `UaBalance(ua)` ledger with separate `ua_*` entries beside the native ones (EVM CTR-UA-18 / -26 shape) | **(c).** (a) is a contract per user per chain and gives a derived UA a native address, against CTR-UA-02 and NET-ALL-21; (b) changes the built `pay` / `pay_meta` and their cross vectors. The UA pool is the token's own address (§5.1) | more entry points in the token | controller call |
 | S7 | UA replay protection | (a) host-style random nonces in temporary storage; (b) lanes `UaNonce(ua, lane) → u64` in persistent storage, EVM `_uaNonce[ua][batch]` | **(b)**; `ua_pay` uses `lane = payLane(pay_ref)`, `nonce = 0` (CTR-MTX-26). Temporary entries are deleted on expiry, so (a) would re-open spent nonces (NET-ALL-01, CTR-MTX-04) | none found | controller call |
-| S8 | Relayer binding of UA entries | unbound (native Soroban today, NET-SOR-01) / `relayer: Option<Address>` | **`relayer: Option<Address>`**; `Some(r)` ⇒ `r.require_auth()`: a lane satisfies it by an explicit `SourceAccount` auth entry rooted at the call (as `relay-fee` today), the relay-fee router as the direct invoker. Needed for CTR-MTX-27's router marker | none found | controller call |
+| S8 | Relayer binding of UA entries | unbound (native Soroban today, NET-SOR-01) / `relayer: Option<Address>` | **`relayer: Option<Address>`**; `Some(r)` ⇒ `r.require_auth()`: a lane satisfies it by an explicit `SourceAccount` auth entry rooted at the call (as `relay-fee` today), the relay-fee router as the direct invoker of its own fee call (it never calls a target as itself: §5.4 Executor, controller ruling 2026-10-31). Needed for CTR-MTX-27's router marker | none found | controller call |
 | S9 | Which UAs may receive | any registered UA / only a UA that can spend on Soroban | **only a UA that can spend here**: registered, kind enabled, `pop` checked by the chain, and for `msig` the weight of members Soroban can verify for signing ≥ threshold (`Registration.signable`, computed at `register`). Else `UaNotReceivable`. CTR-UA-23: a registrable but unusable account can receive and never spend; UA-8 P11.5 | a few `msig` forms register for discovery only | controller call |
 | S10 | `msig` members on Soroban | the EVM MEMBER set; plus Soroban natives; plus EVM natives | **MEMBER = the enabled single-key kinds of S3, plus `stellar-account` 0x0011 and `soroban-contract` 0x0012** (verified by the host: `member.require_auth_for_args((ua, purpose, digest))`, Soroban's form of the EIP-712 `UAAuth`). An `msig` with a 0x0011 / 0x0012 member is a **Soroban-network-local record** (no other registry verifies those members, as EVM's 0x0003 is Hedera-only). **`evm-eoa` 0x0001 members** are verified for the portable purposes only (`pop` v2, `kem`: ECDSA over the EIP-191 `personal_sign` of `memberDigest`, by `secp256k1_recover`, exactly CTR-UA-07), and have **zero signing weight** for every other purpose (no Soroban signing form); `evm-contract` 0x0002 members are never chain-verified here (Part B: the part is `Relayer`) | an EVM `msig` that needs its EOA members to reach its threshold is discovery-only on Soroban (S9) | controller call |
 | S11 | Storage class and TTL | instance / persistent / temporary | **persistent, one entry per key**, for every record, balance, lane, pay ref and (Part B) KEM / PQZ entry; instance storage only for constructor constants; temporary only for SEP-41 allowances (a UA never holds one). TTL `extend_ttl(30 days, 60 days)` on each write and each in-transaction read (UA8-D22); **no node TTL job**; an archived entry is restored on its next use (§7) | rent for large entries (§7) | controller call (UA8-D22) |
@@ -218,19 +218,29 @@ bound (`order.relayer.require_auth()`).
 
 The router gains `ua_relay(payer: BytesN<32>, target, func, args, salt, token, to: Holder, amount, valid_until, relayer,
 auth)`: the same `ref` (`keccak256("scaas.relayfee" ‖ network id ‖ xdr(target) ‖ keccak256(xdr((func, args))) ‖
-salt)`), then `env.invoke_contract(target, func, args)`, then `token.ua_pay(payer, to, amount, ref, valid_until,
-Some(router), auth)`: the payer's UA signature covers `pay_ref = ref` and `relayer = router`, and only the router
-(the direct invoker) satisfies `router.require_auth()`. Open mode (`to == Holder::Addr(router)`) forwards to the
-submitting relayer as `relay` does. `RelayFeePaid`'s `payer` becomes a `Holder` (lossless id, the metatx-split §7.2
-rule; one event shape, a node decoder change).
+salt)`), then `executor.exec(target, func, args)`, then `token.ua_pay(payer, to, amount, ref, valid_until,
+Some(router), auth)`: the payer's UA signature covers `pay_ref = ref` and `relayer = router`, and only the router's
+own fee call satisfies `router.require_auth()`. Open mode (`to == Holder::Addr(router)`) forwards to the
+submitting relayer as `relay` does. `RelayFeePaid`'s `payer` and `payee` become `Holder` (lossless id, the
+metatx-split §7.2 rule; one event shape, a node decoder change).
+
+**Executor.** Change note, controller ruling 2026-10-31 after the T8 review: router executes through an executor (EVM
+parity), owner may override. Soroban grants a contract's authority to every contract it calls directly, so a router
+that called the target itself would let a relayer submit a victim's router-bound `ua_pay` (or a
+`token.transfer(router, …)`) as the target: a fee paid without its call, a router balance drained. The router
+(`relay` and `ua_relay`) therefore never calls a target as itself: it calls `executor.exec(target, func, args)` on
+`contracts/relay-executor`, which requires `router.require_auth()` (only the router, its direct invoker, satisfies
+it) and calls the target as the executor. Each constructor names the other (`RelayExecutor(router)`,
+`RelayFee(executor)`); `deploy.sh soroban <net> relay_fee` derives the router id from a salt first. `to` naming the
+executor, or a payee equal to the router or the executor, is `BadPayee`; neither holds anything after a call.
 
 ### 5.5 Conformance (CTR-MTX-27 and the cross-family rules)
 
 | Rule | Soroban UA form |
 |---|---|
 | Every state-changing mtx write relayable, fee may be 0 (owner 2026-10-20) | every `ua_*` / UA mandate / UA DEX entry and every registry write is submitted by a lane; no fee field (NET-ALL-28 table: none while non-EVM tokens charge none); payable through `relay` / `ua_relay` |
-| `ref` commits to the call, payment consumed only with it | `ua_relay` recomputes `ref` from the call it ran; `relayer = Some(router)` |
-| Never pay the router / marker | `to == Holder::Addr(router)` is open mode, not a credit; the token refuses its own address |
+| `ref` commits to the call, payment consumed only with it | `ua_relay` recomputes `ref` from the call it ran; `relayer = Some(router)`; the target runs through the executor, never as the router (§5.4 Executor) |
+| Never pay the router / marker | `to == Holder::Addr(router)` is open mode, not a credit; the token refuses its own address; `BadPayee` for the executor |
 | Target exists at relay time | as `relay` today (`TargetNoCode`); the registry is a deployed contract |
 | Explicit relayer authorisation | S8 |
 | Lanes non-pruning (NET-ALL-01, CTR-MTX-04) | persistent `UaNonce`; archived ≠ deleted (§7) |

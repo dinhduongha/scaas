@@ -17,6 +17,7 @@ scaas-ua-common = { path = "../ua-common" }
 soroban-sdk = { workspace = true, features = ["testutils"] }
 scaas-token = { path = "../token" }
 scaas-mandate = { path = "../mandate" }
+scaas-relay-executor = { path = "../relay-executor" }
 scaas-ua-registry = { path = "../ua-registry" }
 serde_json = { workspace = true }
 ed25519-dalek = "2"

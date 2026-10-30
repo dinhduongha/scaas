@@ -1,19 +1,24 @@
-//! CTR-MTX-27 trên Soroban: trả phí token cho một lời gọi không có phí riêng (stateless, không owner).
+//! CTR-MTX-27 trên Soroban: trả phí token cho một lời gọi không có phí riêng (không owner; chỉ lưu `executor`).
 //!
 //! `payer.require_auth_for_args((target, func, args, salt, token, to, amount, valid_until))` — auth entry của payer có
 //! gốc là chính lời gọi `relay`, với `token.pay` là sub-invocation duy nhất của khoản trả: chữ ký không cho phép
 //! `token.pay` gọi trực tiếp (host chỉ khớp cây gọi). `relayer` là nguồn của giao dịch.
 //! `relayer.require_auth()`: tx source KHÔNG tự thoả; node thêm auth entry `SourceAccount` gốc là chính lời gọi `relay`.
-//! Không cần executor: Soroban cấm contract re-entry, auth entry của khoản trả khác gốc ở lời gọi `relay` của nó.
+//!
+//! The target call goes through `executor.exec(target, func, args)` (EVM executor parity; controller ruling 2026-10-31
+//! after the T8 review): Soroban grants the router's authority to every contract the router calls directly, so a
+//! target called by the router itself could settle a victim's router-bound `ua_pay` or move a router balance. The
+//! token is called directly only for the fee (`pay` / `ua_pay`) and the open-mode forward. The executor is bound at
+//! construction (`__constructor(executor)`, the executor's own constructor names this router).
 //!
 //! `ua_relay` (spec §5.4): the payer is a UA; the fee is `token.ua_pay(payer, to, amount, ref, valid_until,
-//! Some(router), auth)`, whose UA signature covers `pay_ref = ref` and `relayer = router`, so only the router (the
-//! direct invoker) settles it. `RelayFeePaid` names `payer` and `payee` as `Holder` for both entries (SOR-D11).
+//! Some(router), auth)`, whose UA signature covers `pay_ref = ref` and `relayer = router`; only the router's own
+//! fee call satisfies `router.require_auth()`. `RelayFeePaid` names `payer` and `payee` as `Holder` (SOR-D11).
 #![no_std]
 use scaas_ua_common::Holder;
 use soroban_sdk::{
-    contract, contracterror, contractevent, contractimpl, panic_with_error, vec, xdr::ToXdr, Address, Bytes, BytesN,
-    Env, Executable, IntoVal, Symbol, Val, Vec,
+    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, vec, xdr::ToXdr, Address,
+    Bytes, BytesN, Env, Executable, IntoVal, Symbol, Val, Vec,
 };
 
 #[contracterror]
@@ -22,6 +27,20 @@ use soroban_sdk::{
 pub enum Error {
     /// Target không phải contract đã khởi tạo (chưa deploy, account thường): khoản trả sẽ mất mà việc không xảy ra.
     TargetNoCode = 1,
+    /// The fee would rest on the router or the executor (`to`, or the relayer in open mode).
+    BadPayee = 2,
+}
+
+const DAY: u32 = 17_280;
+
+#[contracttype]
+enum Key {
+    Executor,
+}
+
+fn executor(env: &Env) -> Address {
+    env.storage().instance().extend_ttl(30 * DAY, 60 * DAY);
+    env.storage().instance().get(&Key::Executor).unwrap()
 }
 
 /// `payer`, `payee`: `Holder` (SOR-D11: a UA payer of `ua_relay`, a UA bound payee); open mode: the payee is the
@@ -50,14 +69,20 @@ fn relay_ref(env: &Env, target: &Address, func: &Symbol, args: &Vec<Val>, salt: 
     env.crypto().keccak256(&b).into()
 }
 
-/// Runs `target.func(args)` after `TargetNoCode`; returns its `ref` (computed before the call).
-fn run(env: &Env, target: &Address, func: &Symbol, args: Vec<Val>, salt: &BytesN<32>) -> BytesN<32> {
+/// `BadPayee`, `TargetNoCode`, then `executor.exec(target, func, args)` (never as the router); returns its `ref`
+/// (computed before the call).
+fn run(env: &Env, to: &Holder, relayer: &Address, target: &Address, func: &Symbol, args: Vec<Val>, salt: &BytesN<32>) -> BytesN<32> {
+    let (me, exec) = (env.current_contract_address(), executor(env));
+    let payee = if *to == Holder::Addr(me.clone()) { Holder::Addr(relayer.clone()) } else { to.clone() };
+    if payee == Holder::Addr(me) || payee == Holder::Addr(exec.clone()) {
+        panic_with_error!(env, Error::BadPayee);
+    }
     // The target must be an instantiated contract, before any call (a call to nothing would "succeed").
     if !matches!(target.executable(), Some(Executable::Wasm(_)) | Some(Executable::StellarAsset)) {
         panic_with_error!(env, Error::TargetNoCode);
     }
     let call_ref = relay_ref(env, target, func, &args, salt);
-    env.invoke_contract::<Val>(target, func, args);
+    env.invoke_contract::<Val>(&exec, &Symbol::new(env, "exec"), vec![env, target.to_val(), func.to_val(), args.to_val()]);
     call_ref
 }
 
@@ -83,6 +108,15 @@ pub struct RelayFee;
 
 #[contractimpl]
 impl RelayFee {
+    /// The executor's constructor names this router (deploy: the router id first, see `deploy.sh soroban`).
+    pub fn __constructor(env: Env, executor: Address) {
+        env.storage().instance().set(&Key::Executor, &executor);
+    }
+
+    pub fn executor(env: Env) -> Address {
+        executor(&env)
+    }
+
     /// Chạy `target.func(args)` rồi `token.pay(payer, …, amount, ref, valid_until)`; lỗi nào cũng hoàn tác cả hai.
     /// Open mode (`to == router`): khoản trả về router rồi chuyển cho `relayer` (auth entry của payer phải biết
     /// trước người nhận, mà relayer chưa biết lúc ký). Bound payee: trả thẳng `to`.
@@ -92,7 +126,7 @@ impl RelayFee {
         let signed: Vec<Val> = (target.clone(), func.clone(), args.clone(), salt.clone(), token.clone(), to.clone(), amount, valid_until)
             .into_val(&env);
         payer.require_auth_for_args(signed);
-        let call_ref = run(&env, &target, &func, args, &salt);
+        let call_ref = run(&env, &Holder::Addr(to.clone()), &relayer, &target, &func, args, &salt);
         env.invoke_contract::<()>(
             &token,
             &Symbol::new(&env, "pay"),
@@ -108,7 +142,7 @@ impl RelayFee {
     pub fn ua_relay(env: Env, payer: BytesN<32>, target: Address, func: Symbol, args: Vec<Val>, salt: BytesN<32>,
                     token: Address, to: Holder, amount: i128, valid_until: u64, relayer: Address, auth: Bytes) {
         relayer.require_auth();
-        let call_ref = run(&env, &target, &func, args, &salt);
+        let call_ref = run(&env, &to, &relayer, &target, &func, args, &salt);
         let me = Some(env.current_contract_address());
         let a = (payer.clone(), to.clone(), amount, call_ref.clone(), valid_until, me, auth);
         env.invoke_contract::<()>(&token, &Symbol::new(&env, "ua_pay"), a.into_val(&env));
