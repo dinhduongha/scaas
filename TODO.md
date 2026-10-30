@@ -128,7 +128,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      `mtxHybridVia` with the taker's unsold remainder refunded and its capacity restored by `restorePulled` (CTR-DEX-27),
      `mtxExchangeBatch` and `InteractionFailed` (CTR-DEX-28), `UniswapExecutor` and the opt-in Uniswap fork test, 9 of 9 at
      block 22,000,000 (CTR-DEX-29), node `min_fill` + depth bucket + ABI and call-table rows, clientkeys `minFill` +
-     `bidMinFill` / `bidMinBase`; `SCaaSDex` 27,252 B. `main` merged in (kem-scheme, msig-pophash, webauthn-clients); the KAT regenerated
+     `bidMinFill` / `bidMinBase`; `SCaaSDex` 26,967 B. `main` merged in (kem-scheme, msig-pophash, webauthn-clients); the KAT regenerated
      (the UA registry changed on main), sizes and gas pins unchanged. **The TradeEngine EVM stream (step 6) is unblocked** (the contracts it drives are built).
      **After the DEX round (owner 2026-10-30): BNB Smart Chain venues.** Uniswap v3 / v4 on BNB Chain through the
      existing `UniswapExecutor` (BSC factory, init-code hash, PoolManager in the constructor) and PancakeSwap v2 through

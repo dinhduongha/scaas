@@ -276,8 +276,8 @@ gives `receiveFill ≥ sellFill · receiveAmount / amount`, and `receiveFill` is
 same guaranteed base. At a better price a fill of `minFill` quote buys more base, so a fill that buys exactly
 `minBase` base spends less than `minFill` and is refused: the review says "at least `minBase` at your limit price".
 `decimals` of both tokens are applied before the formula (amounts are raw units). The venue counts a bid's minimum
-the same way ([NODE-DEX-15](../node/dex-venue.md#NODE-DEX-15)). Status **BUILT** (DEX round, 2026-10-30, T14,
-T14 fix, T14 fix): the two helpers are exported from clientkeys `evm.js` — `bidMinFill(minBase, amount,
+the same way ([NODE-DEX-15](../node/dex-venue.md#NODE-DEX-15)). Status **BUILT** (DEX round, 2026-10-30, T14
+and its fix round): the two helpers are exported from clientkeys `evm.js` — `bidMinFill(minBase, amount,
 receiveAmount)` (refused above `amount` and for `amount = 0`) and `bidMinBase(minFill, amount, receiveAmount)` — with
 tests for the ceilings (exact and inexact divisions), the round trip and the zero guards.
 

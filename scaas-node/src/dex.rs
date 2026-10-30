@@ -1140,7 +1140,7 @@ mod tests {
         assert!(!settlement_ok(&ds(vec![leg.clone(), leg.clone()])), "DuplicateOrder");
         let wrong_token = (Resting { hash: B256::repeat_byte(9), sell: QUOTE, ..dm.clone() }, U256::from(2), U256::from(4));
         assert!(!settlement_ok(&ds(vec![leg.clone(), wrong_token])), "TokenMismatch");
-        // the taker's minimum: 4 of 8 quote is ceil(8/2); one leg of a taker whose minFill is 8 is below it
+        // the taker's minimum: 4 of 8 quote with minFill 0 settles; with minFill 8 it is below the taker's minimum
         let fok = PlannedSettlement { taker: Resting { order: TradeOrder { minFill: U256::from(8), ..dt.order.clone() }, ..dt.clone() },
             taker_fill: U256::from(4), ..ds(vec![leg.clone()]) };
         assert!(settlement_ok(&PlannedSettlement { taker_fill: U256::from(4), ..ds(vec![leg.clone()]) }));

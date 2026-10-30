@@ -117,8 +117,8 @@ does with it.
   mined): a maker joins only with a fill ≥ its `minFill` (or its whole remainder), else deeper makers are tried; a
   settlement needs the taker's `minFill`, else an IOC taker is cancelled and a GTC taker rests. An order fills in any
   number of settlements; the dust rule ([NODE-DEX-05](#NODE-DEX-05)) applies to remainders. **Junk fills are venue
-  policy:** no leg whose base-token amount is below the market's `min_base_amount` ([intake](#intake)) unless it closes
-  the order, no settlement worth less than its gas; `depth` / `ticker` keep an order whose minimum fill in base units (an ask's `minFill`, a bid's `ceil(minFill · receiveAmount / amount)`, [CLI-SGN-35](../clients/signers-clientkeys.md#CLI-SGN-35))
+  policy:** no maker leg whose base-token amount is below the market's `min_base_amount` ([intake](#intake)) unless it
+  closes the order, no settlement worth less than its gas; `depth` / `ticker` keep an order whose minimum fill in base units (an ask's `minFill`, a bid's `ceil(minFill · receiveAmount / amount)`, [CLI-SGN-35](../clients/signers-clientkeys.md#CLI-SGN-35))
   exceeds `min_base_amount` in a separate `min_fill` bucket, never in best bid / ask. Status **BUILT** (DEX round,
   2026-10-30, T11, `dex.rs`, `dex/venue.rs`): `min_fill` returns the signed `minFill`; the matcher skips a maker
   leg whose base amount is below the market's `min_base_amount` unless the leg closes the order on chain; `Book::depth`
