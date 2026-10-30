@@ -9,15 +9,21 @@ before a release. For the terms used here (relation, form, op, SV, `proofSystemI
 **Refreshed 2026-10-30 (fs3 Task 6) at the set `n2304-kmax4096`.** The package was made at the retired 2026-10-17 freeze
 (`n2048-kmax1024`, PQZL v2 `0x2e07e6ed…`, PQZH v1 `0x0a47a768…`, `runs/freeze-2026-10-17/`; both ids are refused today, the
 v2 transcript is the forgeable one fixed by the PQZL v3 Fiat–Shamir fix, decisions CTR-PQZ-09). `reproduce.sh` now exports
-`PQZ_SET=n2304-kmax4096` (its KAT check reads that set's own `lazer-3330e48-kat.json`; `--upstream` still builds the
-`n2048-kmax1024` headers), and `expected-results.json` carries the figures of the Docker quick run
+`PQZ_SET=n2304-kmax4096` (its KAT check reads that set's own `lazer-3330e48-kat.json`; `--upstream` compares the fork
+and upstream LaZer at one set, `n2048-kmax1024`: both sides are built and KAT-checked there), and `expected-results.json` carries the figures of the Docker quick run
 `runs/fs3-t6-docker-quick-fail-0448/` (`changes` entry "v3 transcript + D-2/D-3"): `relations.*.fnv` n = 1 / 2 / 3 from
 that run, n = 5 / 10 from `c-fnv-n5.jsonl` / `c-fnv-n10.jsonl` there (C `pqz_bench`), the proof sizes, `pqzh` figures of
 seeds 0 and 1 (seeds 2-4 need a `--full` refreeze), `ffi`, `txm` and `rust`. That run failed (106 ok, 137 FAIL) only
 because its image still held the 2026-10-18 `expected-results.json` and the `n2048-kmax1024` KAT path; its C hashes for
 n = 2 equal the per-set gate's (`../runs/gate/fin-fnv-c.txt`, all 14 relations), and the Rust core gives the same hashes
-for n = 1 / 3 / 5 / 10 and the eight op 7 shapes. **Docker quick run on the refreshed file: PASS, 252 ok, 0 FAIL, 0 warn,
-0 info** (`runs/fs3-t6-docker-quick/`, 2026-10-30, `--memory=4g`, 75 min; every hash equal to the 04:48 run's).
+for n = 1 / 3 / 5 / 10 and the eight op 7 shapes. The `pqzh` hashes and sizes have no gate anchor of their own: they
+rest on the reproduction in the PASS run and the in-run native = wasm32 check (`ffi.digest_lines`, which carry PQZH
+proofs through pqz-ffi, do equal the gate's). The values were written by
+`runs/fs3-t6-docker-quick-fail-0448/refreeze.py` from that run's committed files and the 2026-10-18 file
+(`python3 -I refreeze.py <base>` gives the committed `expected-results.json`); `refreshed` / `refresh_runs` name them,
+while `frozen` / `source_runs` stay the 2026-10-17 history. **Docker quick run on the refreshed file: PASS, 252 ok, 0 FAIL, 0 warn,
+0 info** (`runs/fs3-t6-docker-quick/`, 2026-10-30, `--memory=4g`, 75 min; every hash, proof size and digest line equal
+to the 04:48 run's).
 `--full`, `--upstream` and `--multi-bench` were not rerun and their sample sizes and `n2048-kmax1024` parts are still
 those of the 2026-10-17 freeze.
 
@@ -39,7 +45,9 @@ PQZH cross-checks, fuzz and the Rust core, at each of the four sets; logs `../ru
 **Nothing built is published**: no image, no wasm, no binaries. You build and run everything yourself, and the package
 compares your results with `expected-results.json`.
 
-## Status (2026-10-17): frozen
+## Status (2026-10-17): frozen, refreshed 2026-10-30
+
+Today's values are the 2026-10-30 refresh at `n2304-kmax4096` (the paragraph at the top); this section records the freeze.
 
 The reference values are frozen (the retired freeze above: history, not today's state). After gates A and B passed (`../gate.sh`, 2026-10-17), the freeze ran the package's
 `--full` mode on the host toolchain under the machine lock (AMD Ryzen 5 7235HS, Ubuntu 24.04, clang 18.1.3,
@@ -68,7 +76,7 @@ itself changes into `pqz-core/`).
 | quick (no argument) | every stage below with small sample sizes | yes |
 | `--full` | the same stages with the sample sizes of the frozen runs, plus the x86-64-v3 differential and `tamper.py` | yes |
 | `--multi-bench` | the measurement table of the multi-recipient transfer (`R_TXM`), including oversize shapes in benchmark builds; ~1 h, ~2 GB | its own checks (29 in the 2026-10-17 run) |
-| `--upstream [N]` | builds upstream LaZer `3330e48` and compares it with the fork on the same relations ([below](#--upstream-upstream-lazer-and-avx-512)) | no (comparison only) |
+| `--upstream [N]` | builds upstream LaZer `3330e48` and compares it with the fork on the same relations, both at `n2048-kmax1024` ([below](#--upstream-upstream-lazer-and-avx-512)) | no (comparison only) |
 | `--serve` | builds both wasm modules and serves a local browser demo (PQZL `R_TX`, PQZH any form) | no |
 
 ```mermaid
@@ -342,7 +350,8 @@ backend proves M = 8 in wasm32 (Task 12:
 
 `--upstream` builds upstream LaZer `3330e48` from source in two variants: x86-64-v3 (AVX2) and x86-64-v4 with
 AVX-512 IFMA / VBMI2. Each variant includes HEXL from LaZer's `third_party` zip, links the distribution's GMP /
-MPFR, and uses the flags of `../research/upstream/static/build.sh`. Then it does three things:
+MPFR, and uses the flags of `../research/upstream/static/build.sh`. Upstream and the fork are both built at the
+parameter set `n2048-kmax1024` (`reproduce.sh` sets `PQZ_SET` to it in this mode only). Then it does three things:
 
 1. It checks the upstream KAT dump against the golden `pqzl/kat/lazer-3330e48.json`.
 2. It runs the `R_REG` / `R_TX` cross-check bench through `../research/upstream/shim`. This compares upstream and the
@@ -389,7 +398,7 @@ History below.
 ## History (before the freeze)
 
 These notes record how the package and its provisional reference values got to the freeze, newest first. They are
-kept for the record; the current state is [Status](#status-2026-10-17-frozen) above. Branches named here are merged.
+kept for the record; the current state is [Status](#status-2026-10-17-frozen-refreshed-2026-10-30) above. Branches named here are merged.
 Run paths are given in the current pqz-core layout (the directories moved on 2026-10-15, branch `pqz-layout`).
 
 <details>

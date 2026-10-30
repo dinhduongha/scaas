@@ -33,6 +33,46 @@
   "artifact/runs/freeze-2026-10-17/wasm-generic.jsonl",
   "artifact/runs/freeze-2026-10-17/x86v3-fast.jsonl"
  ],
+ "refreshed": "2026-10-30 fs3 Task 6 (PQZL v3 transcript + D-2/D-3, n2304-kmax4096), see changes",
+ "refresh_runs": [
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/alone-wasm-nosv.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/c-fnv-n10.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/c-fnv-n5.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/diff-portable.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/ffi-bench.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/ffi-digests-native.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/ffi-digests-wasm.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/ffi-native.txt",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/ffi-test.txt",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/ffi-wasm-build.txt",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/kat.txt",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/native-fast.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/native-generic.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/pqzh-native.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/pqzh-nobench.txt",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/pqzh-test.txt",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/pqzh-wasm.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/pqzh-xcheck.txt",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/rust-build.txt",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/rust-fnv-native.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/rust-fnv-txm.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/rust-fnv-wasm.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/rust-host-bench-n1.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/rust-host-bench-n10.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/rust-keys-kat.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/rust-keys-pqz-kat.txt",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/stmt-xcheck.txt",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/sv-fixes.txt",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/tbox-fixes.txt",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/vectors-build.txt",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/vectors-check.txt",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/vectors-pqz-kat.txt",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/vectors-wasm.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/wasm-both.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/wasm-fast.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/wasm-generic.jsonl",
+  "artifact/runs/fs3-t6-docker-quick-fail-0448/x86v3-fast.jsonl"
+ ],
  "machine": {
   "cpu": "AMD Ryzen 5 7235HS",
   "flags": "aes vaes avx2",
@@ -722,15 +762,15 @@
     "2": "384ee242"
    }
   },
-  "txm_fnv_source": "pqz-core/artifact/runs/fs3-t6-docker-quick (Rust core, bench 2 per shape; the C core gives the same proofs at this set: gate fin-fnv-c.txt)",
+  "txm_fnv_source": "pqz-core/artifact/runs/fs3-t6-docker-quick-fail-0448 (Rust core, bench 2 per shape; the PASS run pqz-core/artifact/runs/fs3-t6-docker-quick gives the same hashes; the C core gives the same proofs at this set: gate fin-fnv-c.txt)",
   "keys_kat": {
    "n": 100,
    "sha256": "ad0c6c621889c914367e89e779e02c9a18233d7c38660e64482e13318595f633",
-   "source": "SHA-256 of the Rust keys KAT (pqz keys_kat 100) at n2304-kmax4096, run pqz-core/artifact/runs/fs3-t6-docker-quick"
+   "source": "SHA-256 of the Rust keys KAT (pqz keys_kat 100) at n2304-kmax4096, run pqz-core/artifact/runs/fs3-t6-docker-quick-fail-0448 (the PASS run pqz-core/artifact/runs/fs3-t6-docker-quick gives the same file; pqz_kat.py --c-keys: = C)"
   }
  },
  "changes": [
   "2026-10-18 (port plan Task 12): + rust (txm_fnv, keys_kat) for the \"Rust = C\" stage (the pqz-ffi and vectors stages run the Rust core, pqz-ffi's default backend, against the C values already here); every C value unchanged",
-  "2026-10-30 (fs3 Task 6): v3 transcript + D-2/D-3 at n2304-kmax4096 (reproduce.sh now PQZ_SET=n2304-kmax4096; the KAT check reads the set's own golden): relations.*.fnv (n = 1/2/3 from Docker quick run pqz-core/artifact/runs/fs3-t6-docker-quick, n = 5/10 from the C core's pqz_bench, c-fnv-n5/n10.jsonl in pqz-core/artifact/runs/fs3-t6-docker-quick-fail-0448, equal to the Rust core's bench 5 / 1 / 10; all values taken from that 04:48 run, which failed only against the stale file, and reproduced byte for byte by the PASS run pqz-core/artifact/runs/fs3-t6-docker-quick), proof_bytes_max, wasm_prove_peak_bytes, ratios, times, pqzh figures of seeds 0/1 only (seeds 2-4 need a --full refreeze), ffi.selftest + digest_lines, txm, rust.txm_fnv, rust.keys_kat; machine block unchanged"
+  "2026-10-30 (fs3 Task 6): v3 transcript + D-2/D-3 at n2304-kmax4096 (reproduce.sh now PQZ_SET=n2304-kmax4096; the KAT check reads the set's own golden). Every value is taken from the Docker quick run pqz-core/artifact/runs/fs3-t6-docker-quick-fail-0448 (04:48; it failed only against the stale 2026-10-18 file) by its refreeze.py; the PASS run pqz-core/artifact/runs/fs3-t6-docker-quick gives the same hashes, proof sizes and digest lines (times, ratios and memory peaks within tolerance): relations.*.fnv n = 1/2/3 from that run's C benches, n = 5/10 from the C core's pqz_bench there (c-fnv-n5/n10.jsonl; the Rust core gives the same hashes for n = 1/3/5/10), proof_bytes_max, wasm_prove_peak_bytes, ratios, times, pqzh figures of seeds 0/1 only (seeds 2-4 need a --full refreeze), ffi.selftest + digest_lines, txm, rust.txm_fnv, rust.keys_kat; machine block unchanged"
  ]
 }
