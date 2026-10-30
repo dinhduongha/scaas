@@ -1,5 +1,6 @@
-# ua-rs at commit 4adc323a
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.19s
+# ua-rs at commit f2e4fe9f
+   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.67s
      Running unittests src/lib.rs (target/debug/deps/scaas_ua-7e1156df1164ba41)
 
 running 2 tests
@@ -13,7 +14,7 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 1 test
 test dalek_verify_strict_matches_every_case ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
 
      Running tests/groups_verify.rs (target/debug/deps/groups_verify-b4c5ec9da21546d9)
 
@@ -23,23 +24,23 @@ test official_sections ... ok
 test group_negatives_refused ... ok
 test groups_register_and_sign ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
 
      Running tests/metatx.rs (target/debug/deps/metatx-9e130c413230c9fb)
 
 running 2 tests
-test relay_ref_matches_vector ... ok
 test meta_pay_id_vectors ... ok
+test relay_ref_matches_vector ... ok
 
 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
      Running tests/near_algorand.rs (target/debug/deps/near_algorand-b8602f7d4d1b810e)
 
 running 2 tests
-test near_vectors ... ok
 test algorand_vectors ... ok
+test near_vectors ... ok
 
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
      Running tests/signatures.rs (target/debug/deps/signatures-a1c2a7d311710f3d)
 
@@ -51,32 +52,32 @@ test msig_sets ... ok
 test derived_positives_verify ... ok
 test derived_negatives_refused ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.92s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.68s
 
      Running tests/ua8.rs (target/debug/deps/ua8-21f28f2691dd2c04)
 
 running 7 tests
 test malformed_msig_key_data ... ok
+test tags ... ok
 test native_member_personal_sign ... ok
 test kem_record_vectors ... ok
-test tags ... ok
 test pqz_key_record_vectors ... ok
 test negatives_refused ... ok
 test portable_vectors ... ok
 
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
 
      Running tests/vectors.rs (target/debug/deps/vectors-0191377074845c18)
 
 running 6 tests
-test natives_native_space_canonical_ids ... ok
 test messages ... ok
+test natives_native_space_canonical_ids ... ok
 test table_groups_purposes_constants ... ok
 test valid_rows ... ok
 test invalid_rows ... ok
 test structures ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
    Doc-tests scaas_ua
 

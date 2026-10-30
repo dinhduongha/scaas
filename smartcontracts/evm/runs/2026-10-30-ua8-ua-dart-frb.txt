@@ -1,4 +1,4 @@
-# ua-dart-frb at commit 4adc323a
+# ua-dart-frb at commit f2e4fe9f
 Resolving dependencies...
 Downloading packages...
   _fe_analyzer_shared 85.0.0 (111.0.0 available)
@@ -19,7 +19,7 @@ Downloading packages...
 Got dependencies!
 15 packages have newer versions incompatible with dependency constraints.
 Try `dart pub outdated` for more information.
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.28s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.10s
 00:00 [32m+0[0m: [1m[90mloading test/vectors_test.dart[0m[0m
 00:00 [32m+0[0m: test/vectors_test.dart: (setUpAll)[0m
 00:00 [32m+0[0m: test/vectors_test.dart: table, groups, purposes, constants[0m

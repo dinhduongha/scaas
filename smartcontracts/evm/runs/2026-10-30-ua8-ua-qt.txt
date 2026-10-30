@@ -1,20 +1,20 @@
-# ua-qt at commit 4adc323a
+# ua-qt at commit f2e4fe9f
 -- Could NOT find WrapVulkanHeaders (missing: Vulkan_INCLUDE_DIR) 
 -- Could NOT find WrapVulkanHeaders (missing: Vulkan_INCLUDE_DIR) 
 -- Rust Toolchain: 1.99.0-x86_64-unknown-linux-gnu
 -- Rust Target: x86_64-unknown-linux-gnu
 -- Using Corrosion as a subdirectory
 -- CXX-Qt Found crate(s): scaas_ua_qt
--- Configuring done (2.3s)
+-- Configuring done (1.7s)
 -- Generating done (0.0s)
 -- Build files have been written to: /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-qt/build
-[  0%] Built target tst_ua_autogen_timestamp_deps
 [  0%] Built target cargo-prebuild_scaas_ua_qt
-warning: failed to connect to jobserver from environment variable `MAKEFLAGS="s -j2 --jobserver-auth=3,4"`: cannot open file descriptor 3 from the jobserver environment variable value: Bad file descriptor (os error 9)
+[  0%] Built target tst_ua_autogen_timestamp_deps
 [  0%] Built target scaas_ua_qml_module_mock_obj_output
+warning: failed to connect to jobserver from environment variable `MAKEFLAGS="s -j2 --jobserver-auth=3,4"`: cannot open file descriptor 3 from the jobserver environment variable value: Bad file descriptor (os error 9)
 [ 25%] Built target tst_ua_autogen
    Compiling scaas_ua_qt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-qt)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.35s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.72s
 Copying byproducts `libscaas_ua_qt.a` to /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-qt/build
 [ 25%] Built target _cargo-build_scaas_ua_qt
 [ 25%] Built target cargo-build_scaas_ua_qt
@@ -51,6 +51,7 @@ test 1
 1: PASS   : ua::UaKinds::test_meta_pay_id_vectors()
 1: PASS   : ua::UaKinds::test_natives_native_space_canonical_ids()
 1: PASS   : ua::UaKinds::test_near_digest_and_relay_ref()
+1: PASS   : ua::UaKinds::test_personalSign()
 1: PASS   : ua::UaKinds::test_portable()
 1: PASS   : ua::UaKinds::test_pqzKeyRecord()
 1: PASS   : ua::UaKinds::test_relay_ref_matches_vector()
@@ -58,11 +59,11 @@ test 1
 1: PASS   : ua::UaKinds::test_table_groups_purposes_constants()
 1: PASS   : ua::UaKinds::test_valid_rows()
 1: PASS   : ua::UaKinds::cleanupTestCase()
-1: Totals: 19 passed, 0 failed, 0 skipped, 0 blacklisted, 1181ms
+1: Totals: 20 passed, 0 failed, 0 skipped, 0 blacklisted, 1048ms
 1: ********* Finished testing of ua *********
-1/1 Test #1: tst_ua ...........................   Passed    1.32 sec
+1/1 Test #1: tst_ua ...........................   Passed    1.22 sec
 
 100% tests passed, 0 tests failed out of 1
 
-Total Test time (real) =   1.32 sec
+Total Test time (real) =   1.22 sec
 rc=0
