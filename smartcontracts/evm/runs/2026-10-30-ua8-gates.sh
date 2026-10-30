@@ -8,7 +8,7 @@
 # cargo-scaas-node needs smartcontracts/algorand/out (git-ignored): ALGORAND_ARTIFACTS_CHECK=1 scripts/capped smartcontracts/scripts/build.sh algorand once per checkout.
 # Owner rule 2026-10-23: when a docker job is running (docker ps), run with CAPPED_SLOTS=1.
 P=2026-10-30-ua8
-STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 forge-isolate sizes docs cargo-zether-prover zether-cross wasm-zether-prover cargo-scaas-node clientkeys ua-rs ua-rs-signers ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb named-tests"
+STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 forge-isolate sizes docs cargo-zether-prover zether-cross wasm-zether-prover cargo-scaas-node node-e2e-anvil clientkeys ua-rs ua-rs-signers ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb named-tests"
 # the skipped / empty-suite check (base runner) over every client step; clientkeys keeps its 2 environmental skips
 # (the vendored-bundle tests), so it is checked by its named tests only
 FAMILIES="ua-rs ua-rs-signers ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb"

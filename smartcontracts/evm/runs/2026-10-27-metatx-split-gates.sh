@@ -40,6 +40,8 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
       [ $rc -eq 0 ] && grep -q "6 passed; 0 failed; 0 skipped" "$o" || { echo "zether-cross: not 6 passed / 0 skipped"; rc=1; }
       rm -f "$o"; return $rc ;;
     cargo-scaas-node) cd scaas-node && ../scripts/capped sh -c 'cargo clippy -j2 --all-targets -- -D warnings && cargo test -j2' ;;
+    # the anvil e2e CI runs (`cargo test --test e2e -- --ignored`); added 2026-10-30 after CI caught a stale register ABI there
+    node-e2e-anvil) cd scaas-node && ../scripts/capped cargo test -j2 --test e2e -- --ignored --test-threads=1 ;;
     clientkeys) cd clients/clientkeys && ../../scripts/capped npm test ;;
     ua-rs) cd clients/ua-rs && ../../scripts/capped cargo test -j2 ;;
     ua-rs-signers) cd clients/ua-rs && ../../scripts/capped cargo test -j2 --features signers ;;
