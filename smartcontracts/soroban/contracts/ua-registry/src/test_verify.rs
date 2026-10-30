@@ -63,28 +63,28 @@ fn setup() -> (Env, HarnessClient<'static>) {
     (env, c)
 }
 
-fn json(s: &str) -> Value {
+pub(super) fn json(s: &str) -> Value {
     serde_json::from_str(s).unwrap()
 }
 
-fn hx(v: &Value) -> StdVec<u8> {
+pub(super) fn hx(v: &Value) -> StdVec<u8> {
     let s = v.as_str().unwrap().trim_start_matches("0x");
     (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
 }
 
-fn b(env: &Env, v: &[u8]) -> Bytes {
+pub(super) fn b(env: &Env, v: &[u8]) -> Bytes {
     Bytes::from_slice(env, v)
 }
 
-fn n32(env: &Env, v: &Value) -> BytesN<32> {
+pub(super) fn n32(env: &Env, v: &Value) -> BytesN<32> {
     BytesN::from_array(env, &hx(v).try_into().unwrap())
 }
 
-fn kind_of(v: &Value) -> u32 {
+pub(super) fn kind_of(v: &Value) -> u32 {
     v.as_u64().map(|k| k as u32).unwrap_or_else(|| v.as_str().unwrap().parse().unwrap())
 }
 
-fn derived(file: &str, list: &str, name: &str) -> Value {
+pub(super) fn derived(file: &str, list: &str, name: &str) -> Value {
     json(file)[list].as_array().unwrap().iter().find(|r| r["name"] == name).unwrap().clone()
 }
 
@@ -405,7 +405,7 @@ fn passkey(env: &Env, digest: &BytesN<32>, tail: &str) -> (Bytes, Bytes) {
 }
 
 /// `abi.encode(bytes authenticatorData, bytes clientDataJSON, bytes32 r, bytes32 s)`.
-fn abi_encode_webauthn(a: &[u8], c: &[u8], rs: &[u8]) -> StdVec<u8> {
+pub(super) fn abi_encode_webauthn(a: &[u8], c: &[u8], rs: &[u8]) -> StdVec<u8> {
     let w = |v: usize| {
         let mut x = [0u8; 32];
         x[24..].copy_from_slice(&(v as u64).to_be_bytes());

@@ -1059,7 +1059,9 @@ dependencies = [
  "cfg-if",
  "ecdsa",
  "elliptic-curve",
+ "once_cell",
  "sha2",
+ "signature 2.2.0",
 ]
 
 [[package]]
@@ -1448,9 +1450,13 @@ dependencies = [
 name = "scaas-ua-registry"
 version = "0.1.0"
 dependencies = [
+ "ed25519-dalek",
+ "k256",
  "p256",
  "scaas-ua-common",
  "serde_json",
+ "sha2",
+ "soroban-ledger-snapshot",
  "soroban-sdk",
 ]
 

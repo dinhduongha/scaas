@@ -11,12 +11,19 @@ pub const SECP256K1: u32 = 0x0108;
 pub const MSIG: u32 = 0x0120;
 pub const MLDSA44: u32 = 0x0130;
 pub const MLDSA65: u32 = 0x0131;
+/// The `msig` members that are native ids (spec S10): `evm-eoa`, `evm-contract`, `stellar-account` (`G…`),
+/// `soroban-contract` (`C…`).
+pub const EVM_EOA: u32 = 0x0001;
+pub const EVM_CONTRACT: u32 = 0x0002;
+pub const STELLAR_ACCOUNT: u32 = 0x0011;
+pub const SOROBAN_CONTRACT: u32 = 0x0012;
 
 /// `keccak256("scaas.ua.msg.v1")`.
 pub const MSG_TAG: [u8; 32] = h32("30a5cfd6b1d0889ef4a90d8488fa5e6e615322735899e23243d69087b6b66349");
 
 /// `TAG(kind) = keccak256("scaas.ua.<name>.v1")` of the S3 kinds (pinned by `kinds.json`); any other kind is
 /// `KindDisabled` on Soroban (spec S3).
+#[cfg(test)] // the registry hashes `tag` inline; `TAG` pins it against `kinds.json`
 #[allow(non_snake_case)]
 pub fn TAG(env: &Env, kind: u32) -> BytesN<32> {
     BytesN::from_array(env, &tag(env, kind))
