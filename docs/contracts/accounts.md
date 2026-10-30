@@ -1751,7 +1751,7 @@ A registration with the proof in the call (84.8–109.1 M) does not fit a 60 M b
 `storePqzPop` (1.83 / 1.97 / 2.10 / 2.29 M), and the proof as log data (243,048 gas at `n2304-kmax4096`) sits under that floor; a repeated
 `storePqzPop` costs the same floor and no state gas. These rows use the `rreg` stand-in for the PQZ verifier, so **the real `R_REG`
 verify (≈ 3.65 M) is not in them**; adding it lifts `storePqzPop` at `n2816-kmax65536` to **≈ 59.9 M, right at a 60 M block** (the other sets
-keep headroom: `n2304-kmax4096` about 7 M). That concerns chains with a 60 M block, not the SCaaS testnet (200 M, genesis `0xbebc200`, where `e2e.py` takes the full path): a watch item measured in fs3 Task 13 before `n2816-kmax65536` is used on a 60 M-block chain ([TODO.md](../../TODO.md)). `setKemKey` (version 2): `mldsa65` 8.2 M,
+keep headroom: `n2304-kmax4096` about 7 M). That concerns chains with a 60 M block, not the SCaaS testnet (200 M, genesis `gasLimit` `0xbebc200`, where `e2e.py` takes the full path): a watch item measured in fs3 Task 13 before `n2816-kmax65536` is used on a 60 M-block chain ([TODO.md](../../TODO.md)). `setKemKey` (version 2): `mldsa65` 8.2 M,
 `fndsa512` 6.3 M, `msig-pq` 14.3 M (mostly the KEM record's state gas), of which the read of the registration blob is 3.7 % /
 0.4 % / 2.7 % of the regular gas (the separately stored key prefix, about 2 KB for `mldsa65`, adds 4–5 %); a 12-of-12 `slhdsa128s` `msig`
 (96,832 B signature) costs 158.3 M and is a test construction for a registration blob above 64 KiB, not a product row. `mldsa65`

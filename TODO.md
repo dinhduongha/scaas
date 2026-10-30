@@ -181,12 +181,11 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   a chain yet**. (2) **Watch item — `n2816-kmax65536` `storePqzPop` ≈ 59.9 M gas with the real `R_REG` verify** (57.5 M in the
   gas log with the `rreg` stand-in, plus ≈ 2.4 M regular gas for the ≈ 3.65 M verify), right at a 60 M block; `n2304-kmax4096`
   has ≈ 7 M headroom. Measure the real call (Task 13) before choosing `n2816-kmax65536` for a chain whose block limit is
-  60 M; this concerns 60 M-block chains, **not the SCaaS testnet (200 M, genesis `0xbebc200`)**. `e2e.py` takes the full path only when
+  60 M; this concerns 60 M-block chains, **not the SCaaS testnet (200 M, genesis `gasLimit` `0xbebc200`)**. `e2e.py` takes the full path only when
   `eth_estimateGas` of the full register is at most `gasLimit·1023/1024`, otherwise (or on an estimate error) `register` + `storePqzPop` (a full
   registration with the proof is 84.8–109.1 M). Coverage note: on the SCaaS testnet (200 M) `e2e.py` takes the **full** path, so the inline `register` + proof runs
   in Task 13; the path that has never run on a chain with the real `R_REG` verifier is the **split** one — `register` without `pqzPop`
-  then `storePqzPop`, and `setPqzKey` + `storePqzPop` over `PURPOSE_PQZ_KEY` — so run it once (one e2e pass with the full path disabled,
-  or an anvil with a 60 M limit). (3) **`pqz-core/stmt/src/lib.rs` doc comment**: it still names `popDigest`; UA-8 changed only the 32-byte
+  then `storePqzPop`, and `setPqzKey` + `storePqzPop` over `PURPOSE_PQZ_KEY` — so run it once on the SCaaS testnet with `e2e.py --split` (an anvil has no PQZ precompile). (3) **`pqz-core/stmt/src/lib.rs` doc comment**: it still names `popDigest`; UA-8 changed only the 32-byte
   message's pre-image (`uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, pqzKeyHash, kemRecordHash))`), not the `R_REG`
   relation, statement or precompile. Edit the comment with the next pqz-core change (a doc-only edit in a core file would
   force the full pqz-core gate; owner rule: full gate only for core changes). Decision: `docs/decisions.md` CTR-UA-31 (the plan decision

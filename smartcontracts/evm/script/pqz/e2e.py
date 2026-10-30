@@ -53,6 +53,7 @@ MLDSA44, MLDSA65, PQZ_MLWE, SECP256K1 = 0x0130, 0x0131, 0x0142, 0x0108
 CAP_ML, CAP_PQZ, BUDGET = 200_000, 4_500_000, 12_000_000
 FAILS, LOG = [], []
 RPC = None
+SPLIT = False  # --split: force the register + storePqzPop path
 
 
 def pack(b):
@@ -513,13 +514,14 @@ def bal(s_key, T):
 
 
 def main():
-    global RPC
+    global RPC, SPLIT
     ap = argparse.ArgumentParser()
     ap.add_argument("--rpc", default="http://127.0.0.1:8545")
     ap.add_argument("--log", default=os.path.join(EVM, "runs/2026-10-16-p6g-7622.txt"))
     ap.add_argument("--keys", default="1,2,3")
+    ap.add_argument("--split", action="store_true", help="always register without the proof, then storePqzPop")
     a = ap.parse_args()
-    RPC = a.rpc
+    RPC, SPLIT = a.rpc, a.split
     kd, kr, ke = (int(x) for x in a.keys.split(","))
     try:
         run(kd, kr, ke)
@@ -623,7 +625,7 @@ def run(kd, kr, ke):
         pop = pq.ml_sign(65, mlseed, kc(TAG[MLDSA65], portable("pop", kind=MLDSA65, ua=ua, pqzKey=pk, pqzPopHash=ph,
                                                                   kemVersion=1, kemPk=kem)))
         full_cd = cd(REGISTER, REGISTER_T, MLDSA65, mlpk, [pk, ph, 1, kem], pop, proof)
-        full = full_register_fits(reg, full_cd)
+        full = not SPLIT and full_register_fits(reg, full_cd)
         sd.send(reg, full_cd if full else cd(REGISTER, REGISTER_T, MLDSA65, mlpk, [pk, ph, 1, kem], pop, b""),
                 f"register {name} (mldsa65 + pqz-mlwe key + KEM v1, R_REG {len(proof):,} B, "
                 f"{'one call' if full else 'proof by storePqzPop'})")
