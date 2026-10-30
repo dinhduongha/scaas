@@ -1,4 +1,4 @@
-# T0 spike at commit 53e8501d 2026-10-30T18:07:47+07:00
+# T0 spike at commit ref/pre-token-tree-1846-g84a36883-dirty 2026-10-30T18:41:15+07:00
 # stellar-cli: stellar 30.0.0 (90a3d42d9327ccfaa0d301373766f45beae3e6d9) stellar-xdr 30.0.0 (3c2aa43d2ab54d429ae44aa5143d805bf5dba7e2) xdr (4f524bbac80c781c06e4fb5fc93a2d0d331d6705) 
 # soroban-sdk soroban-sdk-30.0.0-rc.1 host functions used (exact Rust signatures):
 #    pub fn ml_dsa_44_verify( &self, public_key: &BytesN<1312>, message: &Bytes, signature: &BytesN<2420>, context: &Bytes, ) {
@@ -11,7 +11,8 @@
 #   pub fn g2_mul(&self, p0: &Bls12381G2Affine, scalar: &Bls12381Fr) -> Bls12381G2Affine
 #   pub fn g2_msm(&self, vp: Vec<Bls12381G2Affine>, vs: Vec<Bls12381Fr>) -> Bls12381G2Affine
 #   pub fn pairing_check(&self, vp1: Vec<Bls12381G1Affine>, vp2: Vec<Bls12381G2Affine>) -> bool
-## unit tests (SDK testutils, protocol 30)
+# figures from soroban-sdk =30.0.0-rc.1 over soroban-env-host 30.0.0 (S5: re-pin to 30.0.0 when it ships)
+## unit tests (SDK testutils, protocol 30; full cargo output: runs/2026-10-30-ua-soroban-t0-cargo.txt)
 test test::spike_bls_add_mul_fr_budget ... BUDGET bls_add_mul n=1 (G1 add+mul, G2 add+mul): cpu=12618803 mem=8187
 BUDGET bls_add_mul n=10: cpu=126069086 mem=26331
 BUDGET bls_fr_ops n=100 (mul+add+inv): cpu=6263678 mem=224507
@@ -23,24 +24,24 @@ BUDGET bls_g2_msm n=8: cpu=35049203 mem=250999
 test test::spike_bls_pairing_budget ... BUDGET bls_pairing pairs=2: cpu=24078369 mem=156479
 test test::spike_mldsa44_verify_budget ... BUDGET verify_only mldsa44: cpu=1608400 mem=35238
 test test::spike_mldsa65_verify_budget ... BUDGET verify_only mldsa65: cpu=2572818 mem=54694
-test test::spike_msig3_mldsa65_model_budget ... BUDGET msig_model n=3 mldsa65: cpu=7953837 mem=370652
-test test::spike_register_mldsa65_model_budget ... BUDGET register_model mldsa65: cpu=2928714 mem=132810
-test test::spike_ua_pay_passkey_model_budget ... BUDGET ua_pay_model webauthn-p256: cpu=3282407 mem=65577
+test test::spike_msig3_mldsa65_model_budget ... BUDGET msig_model n=3 mldsa65: cpu=8297246 mem=447710
+test test::spike_register_mldsa65_model_budget ... BUDGET register_model mldsa65: cpu=2975057 mem=157367
+test test::spike_require_authorized_passkey_budget ... BUDGET require_authorized webauthn-p256: cpu=3152068 mem=45756
 test test::spike_zether_transfer_model_budget ... BUDGET zether_transfer_model m=1: cpu=536192183 mem=3972882
 BUDGET zether_transfer_model m=2: cpu=809727981 mem=6074460
 BUDGET zether_transfer_model m=4: cpu=1342855091 mem=10036392
 BUDGET zether_transfer_model m=8: cpu=2409274068 mem=17966446
-test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.20s
-   Compiling scaas-ua-spike v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/soroban-4b/smartcontracts/soroban/spike/ua-spike)
-    Finished `release` profile [optimized] target(s) in 0.84s
-## wasm 13998 bytes
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.22s
+test test::spike_ua_pay_passkey_model_budget ... BUDGET ua_pay_model webauthn-p256 -> mldsa65 UA (token + registry): cpu=3455226 mem=174252
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+## wasm: registry side 17408 bytes, token side 5576 bytes
 quickstart: scaas-stellar up (stellar/quickstart@sha256:e05d68bb3b2629a829310dc3434fc0ee3f801854bdfa1a7c8c362d2f1c9060f8), rpc http://127.0.0.1:31980/rpc
 quickstart: protocolVersion 30, testnet limits applied
 # image: stellar/quickstart@sha256:e05d68bb3b2629a829310dc3434fc0ee3f801854bdfa1a7c8c362d2f1c9060f8
 # v30.0.0
 # ledger protocol version: 30
 # stellar-rpc 30.0.0 (13e53516633c3ce1281c7edbacb607107d3a4e55) HEAD
-## spike contract CAJSOMPSYHK3KLEJRB5CFK3OMVLZUD655QJGPAUI5DMJOQSS64BF6CS6
+## spike contracts: registry side CBJEDXI5DHDSG7RJ5WU6FUYJKISPJSHDMS3CAPBXSQJ6D4U2Y7IB6MR4, token side CAOOPN3744BEIP7WI6LDOEP3HQGUW2AKYG2UUY5BUKGL2XGJFJLTH4GD
 ## zether_transfer_model: host operations counted from smartcontracts/evm/src/zether/ZetherVerifier.sol (auditor on)
 #   points: 96 B on Soroban (128 B on EVM); every EVM G1MSM (0x0c) becomes one bls12_381_g1_msm (subgroup check inside)
 #   transcript (ZetherTranscript.sol): absorb = 1 keccak, challenge = 3 keccak + a 512-bit reduction (2 Fr reductions, 1 mul, 1 add)
@@ -52,43 +53,45 @@ quickstart: protocolVersion 30, testnet limits applied
 #          about 540 Fr mul and 330 Fr add/sub (_bp1 sum y^i, _sVector, _bpVectorScalars, _bp2); MSMs of 5 and 144 points
 #   not modelled: the token's ciphertext reads / writes and its g1_add updates (Z0 measures the real verifier and token)
 ## network limits (stellar network settings): {"instructions": 400000000, "mem": 41943040, "read_bytes": 200000, "write_bytes": 132096, "entries": 400, "writes": 200, "tx_size": 132096, "largest_entry": 65536, "events": 16384}
-#   also: ledger_max_instructions=580000000 contract_max_size_bytes=131072
-## seeded 16 mldsa65 member records and the webauthn-p256 record
-| class | call | instructions | mem | read_bytes | write_bytes | entries | writes | tx_size | largest_entry | events | resource fee (stroops) | verdict |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| limit | network | 400000000 | 41943040 | 200000 | 132096 | 400 | 200 | 132096 | 65536 | 16384 | — | — |
-| GATE | register_model mldsa65 | 4070601 (1.0%) | n/a | 0 (0.0%) | 5856 (4.4%) | 6 (1.5%) | 4 (2.0%) | 6036 (4.6%) | 5460 (8.3%) | 5704 (34.8%) | 5680860 | within |
-| GATE | msig_model n=3 mldsa65 | 9979061 (2.5%) | n/a | 0 (0.0%) | 10472 (7.9%) | 8 (2.0%) | 3 (1.5%) | 6388 (4.8%) | 10236 (15.6%) | 5836 (35.6%) | 10108877 | within |
-| GATE | ua_pay_model webauthn-p256 | 4492407 (1.1%) | n/a | 0 (0.0%) | 460 (0.3%) | 6 (1.5%) | 3 (1.5%) | 1212 (0.9%) | 176 (0.3%) | 1060 (6.5%) | 338344 | within |
-| data | msig_model n=1 mldsa65 | 4083162 (1.0%) | n/a | 0 (0.0%) | 3784 (2.9%) | 6 (1.5%) | 3 (1.5%) | 6092 (4.6%) | 3548 (5.4%) | 5756 (35.1%) | 3688278 | within |
-| data | msig_model n=2 mldsa65 | 7025605 (1.8%) | n/a | 0 (0.0%) | 7128 (5.4%) | 7 (1.8%) | 3 (1.5%) | 6240 (4.7%) | 6892 (10.5%) | 5796 (35.4%) | 6898574 | within |
-| data | msig_model n=3 mldsa65 | 9979061 (2.5%) | n/a | 0 (0.0%) | 10472 (7.9%) | 8 (2.0%) | 3 (1.5%) | 6388 (4.8%) | 10236 (15.6%) | 5836 (35.6%) | 10108877 | within |
-| data | msig_model n=4 mldsa65 | 12926460 (3.2%) | n/a | 0 (0.0%) | 13816 (10.5%) | 9 (2.2%) | 3 (1.5%) | 6536 (4.9%) | 13580 (20.7%) | 5876 (35.9%) | 13319178 | within |
-| data | msig_model n=5 mldsa65 | 15879648 (4.0%) | n/a | 0 (0.0%) | 17164 (13.0%) | 10 (2.5%) | 3 (1.5%) | 6684 (5.1%) | 16928 (25.8%) | 5916 (36.1%) | 16533321 | within |
-| data | msig_model n=6 mldsa65 | 18833770 (4.7%) | n/a | 0 (0.0%) | 20508 (15.5%) | 11 (2.8%) | 3 (1.5%) | 6832 (5.2%) | 20272 (30.9%) | 5956 (36.4%) | 19743625 | within |
-| data | msig_model n=7 mldsa65 | 21788789 (5.4%) | n/a | 0 (0.0%) | 23852 (18.1%) | 12 (3.0%) | 3 (1.5%) | 6980 (5.3%) | 23616 (36.0%) | 5996 (36.6%) | 22953932 | within |
-| data | msig_model n=8 mldsa65 | 24746281 (6.2%) | n/a | 0 (0.0%) | 27196 (20.6%) | 13 (3.2%) | 3 (1.5%) | 7128 (5.4%) | 26960 (41.1%) | 6036 (36.8%) | 26164236 | within |
-| data | msig_model n=9 mldsa65 | 27705713 (6.9%) | n/a | 0 (0.0%) | 30544 (23.1%) | 14 (3.5%) | 3 (1.5%) | 7276 (5.5%) | 30308 (46.2%) | 6076 (37.1%) | 29378382 | within |
-| data | msig_model n=10 mldsa65 | 30666564 (7.7%) | n/a | 0 (0.0%) | 33888 (25.7%) | 15 (3.8%) | 3 (1.5%) | 7424 (5.6%) | 33652 (51.3%) | 6116 (37.3%) | 32588693 | within |
-| data | msig_model n=11 mldsa65 | 33639458 (8.4%) | n/a | 0 (0.0%) | 37232 (28.2%) | 16 (4.0%) | 3 (1.5%) | 7572 (5.7%) | 36996 (56.5%) | 6156 (37.6%) | 35799011 | within |
-| data | msig_model n=12 mldsa65 | 36606323 (9.2%) | n/a | 0 (0.0%) | 40576 (30.7%) | 17 (4.2%) | 3 (1.5%) | 7720 (5.8%) | 40340 (61.6%) | 6196 (37.8%) | 39009326 | within |
-| data | msig_model n=13 mldsa65 | 39578804 (9.9%) | n/a | 0 (0.0%) | 43924 (33.3%) | 18 (4.5%) | 3 (1.5%) | 7868 (6.0%) | 43688 (66.7%) | 6236 (38.1%) | 42223478 | within |
-| data | msig_model n=14 mldsa65 | 42552112 (10.6%) | n/a | 0 (0.0%) | 47268 (35.8%) | 19 (4.8%) | 3 (1.5%) | 8016 (6.1%) | 47032 (71.8%) | 6276 (38.3%) | 45433797 | within |
-| data | msig_model n=15 mldsa65 | 45527313 (11.4%) | n/a | 0 (0.0%) | 50612 (38.3%) | 20 (5.0%) | 3 (1.5%) | 8164 (6.2%) | 50376 (76.9%) | 6316 (38.5%) | 48644118 | within |
-| data | msig_model n=16 mldsa65 | 48504259 (12.1%) | n/a | 0 (0.0%) | 53956 (40.8%) | 21 (5.2%) | 3 (1.5%) | 8312 (6.3%) | 53720 (82.0%) | 6356 (38.8%) | 51854438 | within |
-| data | verify_only mldsa44 | 2426103 (0.6%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 4128 (3.1%) | 0 (0.0%) | 4008 (24.5%) | 30958 | within |
-| data | verify_only mldsa65 | 3485167 (0.9%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 5660 (4.3%) | 0 (0.0%) | 5540 (33.8%) | 39050 | within |
-| data | bls_g1_msm n=64 | 102104784 (25.5%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 308 (1.9%) | 84410 | within |
-| data | bls_g1_msm n=128 | 201066087 (50.3%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 308 (1.9%) | 153683 | within |
-| data | bls_g1_msm n=256 | 399039811 (99.8%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 308 (1.9%) | 292264 | within |
-| data | bls_g2_msm n=2 | 15806600 (4.0%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 404 (2.5%) | 24540 | within |
-| data | bls_g2_msm n=8 | 37128486 (9.3%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 404 (2.5%) | 39465 | within |
-| data | bls_pairing pairs=2 | 25692035 (6.4%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 212 (1.3%) | 30383 | within |
-| data | bls_add_mul n=1 | 13747645 (3.4%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 308 (1.9%) | 22560 | within |
-| data | bls_fr_ops n=100 | 9660140 (2.4%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 244 (1.5%) | 19340 | within |
+#   also: ledger_max_instructions=580000000 contract_max_size_bytes=131072 tx_max_disk_read_entries=200
+#   events = contract events + return value (the limited figure); diag_events = all simulation events, no limit
+## seeded 16 mldsa65 member records, the webauthn-p256 payer (receiver: an mldsa65 UA) and its balance
+| class | call | instructions | mem | read_bytes | write_bytes | entries | writes | tx_size | largest_entry | events | diag_events | resource fee (stroops) | verdict |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| limit | network | 400000000 | 41943040 | 200000 | 132096 | 400 | 200 | 132096 | 65536 | 16384 | — | — | — |
+| GATE | register_model mldsa65 | 4206098 (1.1%) | n/a | 0 (0.0%) | 6216 (4.7%) | 6 (1.5%) | 4 (2.0%) | 6036 (4.6%) | 5820 (8.9%) | 5900 (36.0%) | 11440 | 5959716 | within |
+| GATE | msig_model n=3 mldsa65 | 11373953 (2.8%) | n/a | 0 (0.0%) | 17384 (13.2%) | 8 (2.0%) | 3 (1.5%) | 17576 (13.3%) | 17148 (26.2%) | 17228 (105.2%) | 34088 | 16889248 | OVER: events |
+| GATE | ua_pay_model webauthn-p256 -> mldsa65 UA | 6043554 (1.5%) | n/a | 0 (0.0%) | 464 (0.4%) | 9 (2.2%) | 3 (1.5%) | 1612 (1.2%) | 176 (0.3%) | 692 (4.2%) | 2596 | 346426 | within |
+| data | msig_model n=1 mldsa65 | 4519790 (1.1%) | n/a | 0 (0.0%) | 6368 (4.8%) | 6 (1.5%) | 3 (1.5%) | 6344 (4.8%) | 6132 (9.4%) | 6212 (37.9%) | 12056 | 6202296 | within |
+| data | msig_model n=2 mldsa65 | 7930535 (2.0%) | n/a | 0 (0.0%) | 11876 (9.0%) | 7 (1.8%) | 3 (1.5%) | 11960 (9.1%) | 11640 (17.8%) | 11720 (71.5%) | 23072 | 11545763 | within |
+| data | msig_model n=3 mldsa65 | 11373953 (2.8%) | n/a | 0 (0.0%) | 17384 (13.2%) | 8 (2.0%) | 3 (1.5%) | 17576 (13.3%) | 17148 (26.2%) | 17228 (105.2%) | 34088 | 16889248 | OVER: events |
+| data | msig_model n=4 mldsa65 | 14812139 (3.7%) | n/a | 0 (0.0%) | 22892 (17.3%) | 9 (2.2%) | 3 (1.5%) | 23192 (17.6%) | 22656 (34.6%) | 22736 (138.8%) | 45104 | 22232734 | OVER: events |
+| data | msig_model n=5 mldsa65 | 18275239 (4.6%) | n/a | 0 (0.0%) | 28400 (21.5%) | 10 (2.5%) | 3 (1.5%) | 28808 (21.8%) | 28164 (43.0%) | 28244 (172.4%) | 56120 | 27576230 | OVER: events |
+| data | msig_model n=6 mldsa65 | 21732544 (5.4%) | n/a | 0 (0.0%) | 33908 (25.7%) | 11 (2.8%) | 3 (1.5%) | 34424 (26.1%) | 33672 (51.4%) | 33752 (206.0%) | 67136 | 32919730 | OVER: events |
+| data | msig_model n=7 mldsa65 | 25230586 (6.3%) | n/a | 0 (0.0%) | 39416 (29.8%) | 12 (3.0%) | 3 (1.5%) | 40040 (30.3%) | 39180 (59.8%) | 39260 (239.6%) | 78152 | 38263257 | OVER: events |
+| data | msig_model n=8 mldsa65 | 28725834 (7.2%) | n/a | 0 (0.0%) | 44924 (34.0%) | 13 (3.2%) | 3 (1.5%) | 45656 (34.6%) | 44688 (68.2%) | 44768 (273.2%) | 89168 | 43606778 | OVER: events |
+| data | msig_model n=9 mldsa65 | 32236946 (8.1%) | n/a | 0 (0.0%) | 50432 (38.2%) | 14 (3.5%) | 3 (1.5%) | 51272 (38.8%) | 50196 (76.6%) | 50276 (306.9%) | 100184 | 48950314 | OVER: events |
+| data | msig_model n=10 mldsa65 | 35775968 (8.9%) | n/a | 0 (0.0%) | 55940 (42.3%) | 15 (3.8%) | 3 (1.5%) | 56888 (43.1%) | 55704 (85.0%) | 55784 (340.5%) | 111200 | 54293865 | OVER: events |
+| data | msig_model n=11 mldsa65 | 39294332 (9.8%) | n/a | 0 (0.0%) | 61448 (46.5%) | 16 (4.0%) | 3 (1.5%) | 62504 (47.3%) | 61212 (93.4%) | 61292 (374.1%) | 122216 | 59637408 | OVER: events |
+| data | msig_model n=12 mldsa65 | 42888510 (10.7%) | n/a | 0 (0.0%) | 66956 (50.7%) | 17 (4.2%) | 3 (1.5%) | 68120 (51.6%) | 66720 (101.8%) | 66800 (407.7%) | 133232 | 64981001 | OVER: largest_entry,events |
+| data | msig_model n=13 mldsa65 | 46435177 (11.6%) | n/a | 0 (0.0%) | 72464 (54.9%) | 18 (4.5%) | 3 (1.5%) | 73736 (55.8%) | 72228 (110.2%) | 72308 (441.3%) | 144248 | 70324559 | OVER: largest_entry,events |
+| data | msig_model n=14 mldsa65 | 50020948 (12.5%) | n/a | 0 (0.0%) | 77972 (59.0%) | 19 (4.8%) | 3 (1.5%) | 79352 (60.1%) | 77736 (118.6%) | 77816 (475.0%) | 155264 | 75668147 | OVER: largest_entry,events |
+| data | msig_model n=15 mldsa65 | 53620280 (13.4%) | n/a | 0 (0.0%) | 83480 (63.2%) | 20 (5.0%) | 3 (1.5%) | 84968 (64.3%) | 83244 (127.0%) | 83324 (508.6%) | 166280 | 81011742 | OVER: largest_entry,events |
+| data | msig_model n=16 mldsa65 | 57240289 (14.3%) | n/a | 0 (0.0%) | 88988 (67.4%) | 21 (5.2%) | 3 (1.5%) | 90584 (68.6%) | 88752 (135.4%) | 88832 (542.2%) | 177296 | 86355354 | OVER: largest_entry,events |
+| data | verify_only mldsa44 | 2438231 (0.6%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 4128 (3.1%) | 0 (0.0%) | 4 (0.0%) | 4008 | 30966 | within |
+| data | verify_only mldsa65 | 3497295 (0.9%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 5660 (4.3%) | 0 (0.0%) | 4 (0.0%) | 5540 | 39059 | within |
+| data | bls_g1_msm n=64 | 102115958 (25.5%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 104 (0.6%) | 308 | 84418 | within |
+| data | bls_g1_msm n=128 | 201077261 (50.3%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 104 (0.6%) | 308 | 153691 | within |
+| data | bls_g1_msm n=256 | 399050985 (99.8%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 104 (0.6%) | 308 | 292272 | within |
+| data | bls_g2_msm n=2 | 15817774 (4.0%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 200 (1.2%) | 404 | 24548 | within |
+| data | bls_g2_msm n=8 | 37139661 (9.3%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 200 (1.2%) | 404 | 39473 | within |
+| data | bls_pairing pairs=2 | 25703168 (6.4%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 8 (0.0%) | 212 | 30391 | within |
+| data | bls_add_mul n=1 | 13758820 (3.4%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 104 (0.6%) | 308 | 22568 | within |
+| data | bls_fr_ops n=100 | 9671315 (2.4%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 40 (0.2%) | 244 | 19347 | within |
 | data | zether_transfer_model m=1 | SIMULATION FAILED: HostError: Error(Budget, ExceededLimit) DebugInfo not available  |
 | data | zether_transfer_model m=2 | SIMULATION FAILED: HostError: Error(Budget, ExceededLimit) DebugInfo not available  |
 | data | zether_transfer_model m=4 | SIMULATION FAILED: HostError: Error(Budget, ExceededLimit) DebugInfo not available  |
 | data | zether_transfer_model m=8 | SIMULATION FAILED: HostError: Error(Budget, ExceededLimit) DebugInfo not available  |
-## msig_model scan (data): largest n in 1..16 whose simulation fits every limit: 16
-## GATE: PASS (every UA-Soroban figure within the limits)
+## msig_model scan (data): largest n in 1..16 that fits every limit: 2; first over: n=3 (events)
+## submitted msig_model n=3 mldsa65: the network refused it:   result: TxFailed(             VecM(                 [                     OpInner(                         InvokeHostFunction(                             ResourceLimitExceeded,                         ),                     ),                 ],             ),         ),         ext: V0,     }, )
+## GATE: FAIL (1 gate call(s) failed or over a limit)
