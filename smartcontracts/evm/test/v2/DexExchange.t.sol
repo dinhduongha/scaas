@@ -534,6 +534,23 @@ contract DexExchangeTest is Test {
             abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, address(router), bytes4(0xabcdef00)));
     }
 
+    /// T4-sec: `restorePulled` (both overloads) from an interaction would run as the DEX, every leg's `dex`, and lower
+    /// a pulled order's `pulled` in the same transaction (an over-sell); it is refused.
+    function test_exchange_forbiddenSelector_restorePulled() public {
+        bytes4 nat = bytes4(keccak256("restorePulled((address,address,uint256,uint256,uint256,uint256,address,address,"
+            "address,uint8,uint256,uint256,uint256),uint256)"));
+        bytes4 ua = bytes4(keccak256("restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,"
+            "bytes32,uint8,uint256,uint256,uint256),uint256)"));
+        DexLegs.ExchangePlan memory p = _plan(_alice());
+        ISCaaSDex.Interaction[] memory route = _swap(address(a), address(b), 1000, 2000);
+        ITradeToken.TradeOrder memory o = _order(alice, address(b), 1000, 1900, 3_000);
+        _expectExchange(p, _cat(route, _ix(address(a), abi.encodeWithSelector(nat, o, 1000))),
+            abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, address(a), nat));
+        ITradeToken.UATradeOrder memory u;
+        _expectExchange(p, _cat(route, _ix(address(a), abi.encodeWithSelector(ua, u, 1000))),
+            abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, address(a), ua));
+    }
+
     /// `increaseAllowance` would raise an allowance the post-route reset (which only knows `approve`) never clears.
     function test_exchange_forbiddenSelector_increaseAllowance() public {
         assertEq(bytes4(keccak256("increaseAllowance(address,uint256)")), bytes4(0x39509351));

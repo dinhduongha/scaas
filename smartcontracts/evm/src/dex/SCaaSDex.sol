@@ -32,8 +32,8 @@ import {TokenCall} from "./TokenCall.sol";
 ///         capped by codehash, CTR-DEX-08) and pulls the fill through its `DexPuller` (CTR-DEX-22); `ESCROW` is refused.
 ///         Exchange path (CTR-DEX-20): the same orders against AMM routes instead of makers, each at a floor the
 ///         submitter commits to; every output above the floors is paid to the signers (CTR-DEX-21); interactions may
-///         not call the DEX, the puller or any `mtxTrade`, nor call `increaseAllowance` or Permit2 `approve`
-///         (controller ruling, pending the owner; other allowance-raising calls are not tracked),
+///         not call the DEX, the puller or any `mtxTrade` / `restorePulled`, nor call `increaseAllowance` or Permit2
+///         `approve` (controller ruling, pending the owner; other allowance-raising calls are not tracked),
 ///         listed targets only when a leg or the admin asks (CTR-DEX-23), and every allowance an `approve` interaction
 ///         grants is set back to 0 before the payout. UA legs (CTR-DEX-26): a leg is tagged — shape 0 a `TradeOrder`,
 ///         shape 1 a `UATradeOrder` (ids as `bytes32`) — and decoded into one form (`UATradeOrder` in memory, a native
@@ -58,6 +58,11 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     ///      every exchange interaction, so the only allowance a route grants is an `approve` the DEX resets to 0.
     bytes4 internal constant INCREASE_ALLOWANCE = 0x39509351;
     bytes4 internal constant PERMIT2_APPROVE = 0x87517c45;
+    /// @dev `restorePulled(TradeOrder,uint256)` and `restorePulled(UATradeOrder,uint256)` (DX7): refused on every
+    ///      interaction, which runs as the DEX (every order's `dex`) and could lower a pulled order's `pulled[h]` in the
+    ///      same transaction (an over-sell).
+    bytes4 internal constant RESTORE_PULLED = 0x58c18f87;
+    bytes4 internal constant UA_RESTORE_PULLED = 0x8c4a5df6;
     /// @dev ERC-1271 gas cap for this chain's `SmartKeyAccount` clones (CTR-ACC-05); other contracts get
     ///      `SigCheck.ERC1271_GAS` (50 000).
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;
@@ -449,8 +454,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     // ------------------------------------------------------------------ exchange path (CTR-DEX-20, -21, -23)
 
     /// @notice Path (a): the DEX makes each interaction (never on itself or its puller, never `mtxTrade`, `uaTrade`,
-    ///         `increaseAllowance` or Permit2 `approve` (controller ruling, pending the owner), listed when a leg or
-    ///         the admin asks); a failing one reverts the plan with `InteractionFailed` (index, target, at most 256 bytes of its data). Every allowance an `approve`
+    ///         `restorePulled`, `increaseAllowance` or Permit2 `approve` (controller ruling, pending the owner),
+    ///         listed when a leg or the admin asks); a failing one reverts the plan with `InteractionFailed` (index, target, at most 256 bytes of its data). Every allowance an `approve`
     ///         interaction granted is set back to 0 after the last interaction (controller ruling: the DEX keeps no
     ///         allowance past the route).
     function mtxExchange(ExchangePlan calldata p, Interaction[] calldata xs) external nonReentrant {
@@ -560,18 +565,50 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     }
 
     /// @dev Spec §4.2 steps 5-7: B's output at least `outsideFloor` (`InsufficientOutput`; the excess is the taker's
-    ///      surplus: B has one receiver); A must hold exactly the makers' receive and the taker's Path B refund (a
-    ///      leftover of `outsideSell` is `ConservationBroken(A)` until the DX7 refund); the makers paid as in
-    ///      `mtxSettle`, the taker as on the exchange path; conservation over every token.
+    ///      surplus: B has one receiver); A at least `base` = snapshot + the makers' receive + the taker's Path B
+    ///      refund, the rest the route's `leftover`, at most `outsideSell` (`ConservationBroken(A)`). DX7: a leftover
+    ///      is refunded to the taker fee-free if its sold part still satisfies its order (`_takerSoldCheck`), then
+    ///      restored to the order's capacity (not an IOC one: it stays closed); the makers paid as in `mtxSettle`, the
+    ///      taker as on the exchange path; conservation over every token.
     function _hybridOut(HybridPlan calldata p, Tok[] memory t, Calc memory taker, Calc[] memory makers,
         address submitter) private
     {
         _excess(t);
         Tok memory a = t[0];
-        if (_bal(a.token) != a.snap + a.refunds + taker.sold - p.outsideSell) revert ConservationBroken(a.token);
+        uint256 bal = _bal(a.token);
+        uint256 base = a.snap + a.refunds + taker.sold - p.outsideSell;
+        if (bal < base) revert ConservationBroken(a.token);
+        uint256 leftover = bal - base;
+        if (leftover > p.outsideSell) revert ConservationBroken(a.token);
+        if (leftover != 0) {
+            _takerSoldCheck(taker, leftover);
+            taker.sold -= leftover;
+            taker.refund += leftover;
+        }
         for (uint256 i; i < makers.length; ++i) _pay(p.ref, t[1].token, makers[i], submitter);
         _payExchange(p.ref, a.token, taker, t[1].excess, submitter);
+        if (leftover != 0 && taker.o.flags & TradeLib.IOC == 0) _restorePulled(a.token, taker, leftover);
         _conserve(t);
+    }
+
+    /// @dev DX7 (PD5): the taker's sold part `taker.sold − leftover` must satisfy its signed order, else the hybrid
+    ///      reverts with its hash: > 0 (`ZeroFill`), ≥ `minFill` (`BelowMinFill`; never the remainder clause: the sold
+    ///      part is below a fill the token allowed), within the limit on the floor `taker.recv` (`PriceLimit`; implied
+    ///      by the token's check of the larger fill at the pull, kept anyway).
+    function _takerSoldCheck(Calc memory taker, uint256 leftover) internal pure {
+        uint256 sold = taker.sold - leftover;
+        ITradeToken.UATradeOrder memory o = taker.o;
+        if (sold == 0) revert ZeroFill(taker.h);
+        if (sold < o.minFill) revert BelowMinFill(taker.h);
+        if (TradeLib.mulGt(sold, o.receiveAmount, taker.recv, o.amount)) revert PriceLimit(taker.h);
+    }
+
+    /// @dev DX7: the refunded leftover is fillable again — the token's `restorePulled`, or this DEX's own `TradeLib`
+    ///      state for an outside token.
+    function _restorePulled(address tokenA, Calc memory c, uint256 amount) private {
+        if (c.ua) ITradeToken(tokenA).restorePulled(c.o, amount);
+        else if (c.outside) TradeLib.restore(c.o, c.h, amount, address(this));
+        else ITradeToken(tokenA).restorePulled(_native(c.o), amount);
     }
 
     /// @dev Path (b)'s figures: per sold token Σ sellFill (the Path B remainders stay for the refunds), per receive
@@ -653,6 +690,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         }
         // controller ruling: no allowance may be raised outside `approve` (reset after the route)
         if (sel == INCREASE_ALLOWANCE || sel == PERMIT2_APPROVE) revert ForbiddenSelector(x.target, sel);
+        if (sel == RESTORE_PULLED || sel == UA_RESTORE_PULLED) revert ForbiddenSelector(x.target, sel);
         if (onlyListed && !s.exchangeTarget[x.target]) revert TargetNotListed(x.target);
         bytes memory data = x.data;
         address target = x.target;

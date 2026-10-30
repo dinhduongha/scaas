@@ -45,8 +45,20 @@ library TradeLib {
     // keccak256(abi.encode(uint256(keccak256("scaas.trade")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant _STORAGE = 0x2c9c6bfc4d8563261a812845f5cbef41fd06d0e8f173455fd0e077ab420e2f00;
 
+    // keccak256("scaas.trade.pulledInTx"): the EIP-1153 base of the per-order amount pulled in this transaction (DX7)
+    bytes32 private constant _PULLED_IN_TX = 0x2ca698c6c765bd574e7fcaf019f1f879dabafc254dbc4edea1a897c485aef9ea;
+
     function $() internal pure returns (TradeStorage storage s) {
         assembly ("memory-safe") { s.slot := _STORAGE }
+    }
+
+    /// @dev The transient slot of `h`'s amount pulled in this transaction (`record` adds, `restore` and `cancel` lower).
+    function _inTx(bytes32 h) private pure returns (bytes32 slot) {
+        assembly ("memory-safe") {
+            mstore(0, h)
+            mstore(0x20, _PULLED_IN_TX)
+            slot := keccak256(0, 0x40)
+        }
     }
 
     /// @dev EIP-712 struct hash of `o` (the token wraps it in its domain).
@@ -120,6 +132,8 @@ library TradeLib {
             }
         }
         s.pulled[h] = o.flags & IOC != 0 ? o.amount : p + move;
+        bytes32 t = _inTx(h);
+        assembly ("memory-safe") { tstore(t, add(tload(t), move)) }
         if (ua) emit ITradeToken.UATradeFilled(h, o.from, move, f.receiveFill, f.dexFee);
         else emit ITradeToken.TradeFilled(h, addr(o.from), move, f.receiveFill, f.dexFee);
     }
@@ -131,8 +145,26 @@ library TradeLib {
         return h1 > h2 || (h1 == h2 && l1 > l2);
     }
 
-    /// @notice After the `CancelOrder` signature: closed forever; an already closed order is a no-op.
+    /// @notice DX7 (`restorePulled`, owner 2026-10-30): `o.dex` gives back `amount` of what it pulled for `h` in this
+    ///         transaction (a hybrid's refunded leftover): `pulled[h]` is lower by it, fillable again. An IOC order stays
+    ///         closed (`OrderClosed`).
+    function restore(ITradeToken.UATradeOrder memory o, bytes32 h, uint256 amount, address caller) public {
+        if (caller != o.dex) revert ITradeToken.NotDex(caller);
+        if (o.flags & IOC != 0) revert ITradeToken.OrderClosed(h);
+        bytes32 t = _inTx(h);
+        uint256 inTx;
+        assembly ("memory-safe") { inTx := tload(t) }
+        if (amount > inTx) revert ITradeToken.RestoreExceedsPull(h);
+        assembly ("memory-safe") { tstore(t, sub(inTx, amount)) }
+        $().pulled[h] -= amount;
+        emit ITradeToken.PullRestored(h, amount);
+    }
+
+    /// @notice After the `CancelOrder` signature: closed forever; an already closed order is a no-op. Either way this
+    ///         transaction's pulls can no longer be restored (DX7).
     function cancel(bytes32 h, uint256 amount, bytes32 from, bool ua) public {
+        bytes32 t = _inTx(h);
+        assembly ("memory-safe") { tstore(t, 0) }
         TradeStorage storage s = $();
         if (s.pulled[h] >= amount) return;
         s.pulled[h] = amount;

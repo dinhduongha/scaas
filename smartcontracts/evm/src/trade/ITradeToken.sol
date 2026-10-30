@@ -60,6 +60,9 @@ interface ITradeToken {
         uint256 dexFee);
     event UAOrderCancelled(bytes32 indexed orderHash, bytes32 indexed from);
     event UANoncesInvalidated(bytes32 indexed from, uint256 indexed batch, uint256 minNonce);
+    /// @notice `o.dex` gave back `amount` of what it pulled for `h` in this transaction (DX7: a hybrid's unsold
+    ///         remainder, refunded to the signer); `pulled[h]` is lower by `amount`.
+    event PullRestored(bytes32 indexed orderHash, uint256 amount);
 
     error NotDex(address caller);
     error DexNotContract(address dex);
@@ -79,6 +82,8 @@ interface ITradeToken {
     error PriceLimit(bytes32 orderHash);
     error FeeAboveSigned(bytes32 orderHash);
     error EscrowFillShape(bytes32 orderHash);
+    /// @notice `restorePulled` above what `o.dex` pulled for the order in this transaction.
+    error RestoreExceedsPull(bytes32 orderHash);
     /// @notice `mtxInvalidateNonces`: strictly increasing, at most `2^128`.
     error MinNonceNotIncreasing(uint256 current, uint256 requested);
     error MinNonceAboveCap(uint256 requested);
@@ -97,6 +102,14 @@ interface ITradeToken {
     function uaCancelOrder(UATradeOrder calldata o, bytes calldata auth) external;
     /// @notice `UAInvalidateNonces(from, batch, minNonce)` under `trade`; raises the one floor of the id.
     function uaInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, bytes calldata auth) external;
+
+    /// @notice DX7 (owner 2026-10-30): only `o.dex`, at most what it pulled for the order in THIS transaction (a
+    ///         transient counter kept on every pull, EIP-1153); lowers `pulled[h]` by `amount` (the refunded part is
+    ///         fillable again). An IOC order stays closed (`OrderClosed`); a cancel in the same transaction clears the
+    ///         counter.
+    function restorePulled(TradeOrder calldata o, uint256 amount) external;
+    /// @notice `restorePulled` for a `UATradeOrder`.
+    function restorePulled(UATradeOrder calldata o, uint256 amount) external;
 
     function tradeOrderDigest(TradeOrder calldata o) external view returns (bytes32);
     function uaTradeOrderDigest(UATradeOrder calldata o) external view returns (bytes32);

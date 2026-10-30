@@ -98,6 +98,7 @@ interface ISCaaSDex {
     event TradeFilled(bytes32 indexed orderHash, address indexed from, uint256 sellFill, uint256 receiveFill,
         uint256 dexFee);
     event OrderCancelled(bytes32 indexed orderHash, address indexed from);
+    event PullRestored(bytes32 indexed orderHash, uint256 amount);
     event NoncesInvalidated(address indexed from, uint256 indexed batch, uint256 minNonce);
     event ExchangeTargetSet(address indexed target, bool listed);
     event ListedOnlySet(bool on);
@@ -151,6 +152,7 @@ interface ISCaaSDex {
     error ZeroFill(bytes32 orderHash);
     error FeeAboveSigned(bytes32 orderHash);
     error EscrowFillShape(bytes32 orderHash);
+    error RestoreExceedsPull(bytes32 orderHash);
     error MinNonceNotIncreasing(uint256 current, uint256 requested);
     error MinNonceAboveCap(uint256 requested);
     /// @notice `SigCheck`'s: the submitter left too little gas for a capped ERC-1271 call (CTR-DEX-08); it reverts the
@@ -190,7 +192,9 @@ interface ISCaaSDex {
     /// @notice Hybrid path (a): makers at their own price (`⌈fill · receiveAmount / amount⌉`, `mtxSettle`'s fee and
     ///         self-trade rule), the rest through the DEX's own interactions; the taker gets its floor
     ///         (`Σ maker fill + outsideFloor`, the fee once on it) plus everything the route returns above
-    ///         `outsideFloor`, fee-free. `LISTED_POOLS` is read from the taker only.
+    ///         `outsideFloor`, fee-free. `LISTED_POOLS` is read from the taker only. A part of `outsideSell` the route
+    ///         leaves (DX7) is refunded to the taker, fee-free, if its sold part still meets its order (`ZeroFill`,
+    ///         `BelowMinFill`, `PriceLimit` with its hash, else the plan reverts), and restored to its capacity.
     function mtxHybrid(HybridPlan calldata p, Interaction[] calldata interactions) external;
     /// @notice Hybrid path (b): `outsideSell` of A goes to `executor`, which must pay at least `outsideFloor` of B to
     ///         the DEX in `exchangeCallback(ref, [A], [outsideSell], [B], [outsideFloor], data)`.

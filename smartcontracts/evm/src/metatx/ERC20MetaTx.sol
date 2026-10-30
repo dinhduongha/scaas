@@ -167,6 +167,16 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         _uaMove(o.from, TradeLib.pad(o.dex), TradeLib.record(c, f, h, true));
     }
 
+    /// @notice DX7: only `o.dex`, at most what it pulled for the order in this transaction (`TradeLib.restore`); a
+    ///         direct read of the caller, never allowlisted.
+    function restorePulled(TradeOrder calldata o, uint256 amount) external nonReentrant {
+        TradeLib.restore(TradeLib.core(o), tradeOrderDigest(o), amount, msg.sender);
+    }
+
+    function restorePulled(UATradeOrder calldata o, uint256 amount) external nonReentrant {
+        TradeLib.restore(o, uaTradeOrderDigest(o), amount, msg.sender);
+    }
+
     /// @notice Cancel signatures never expire (CTR-DEX-02); anyone may submit one.
     function mtxCancelOrder(TradeOrder calldata o, bytes calldata sig) external nonReentrant {
         bytes32 h = tradeOrderDigest(o);
