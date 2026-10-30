@@ -30,7 +30,7 @@ library SigCheck {
     error CallerDelegated(address caller);
 
     /// @notice Code exactly `0xef0100 ‖ address` (23 bytes): an EIP-7702 delegation designator (EIP-3541: no deployed
-    ///         contract starts with `0xef`). Never true on Hedera today (no designators there).
+    ///         contract starts with `0xef`). The same rule on Hedera (HIP-1340, 7702 there, unverified: NET-ALL-83).
     function isDesignator(address a) internal view returns (bool d) {
         assembly ("memory-safe") {
             if eq(extcodesize(a), 23) {

@@ -1719,8 +1719,8 @@ mod tests {
         assert!(v.valid_sig(BASE, wallet, d, &sig).await.is_err());
     }
 
-    /// CTR-UA-24 on the venue too (owner ruling 2026-10-28): an EIP-7702 maker signs with its base key, or through its
-    /// delegate's ERC-1271 (called on the maker's address with the 50 k cap); a wrong answer is invalid.
+    /// CTR-UA-24 on the venue too (owner ruling 2026-10-30, D1, superseding 2026-10-28): an EIP-7702 maker signs with
+    /// its base key only; its delegate's ERC-1271 is never called, so a yes from it is invalid.
     #[tokio::test]
     async fn a_7702_maker_signs_with_its_key_only() {
         let maker = PrivateKeySigner::random();

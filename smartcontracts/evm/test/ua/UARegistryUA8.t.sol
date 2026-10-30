@@ -646,8 +646,9 @@ contract UARegistryUA8Test is UARegistryBase {
         a.requireAuthorized(m.ua, purpose, dg, auth);
     }
 
-    /// A native member with code (a contract wallet; an EIP-7702 delegate takes the same path) answers ERC-1271
-    /// `isValidSignature(memberDigest, sig)` in a portable pop; its key's `personal_sign` is not asked.
+    /// A native member with code (a contract wallet; not an EIP-7702 designator, which is an EOA: own key only, ruling
+    /// D1, `test_ua8_msigNativeMember7702Portable`) answers ERC-1271 `isValidSignature(memberDigest, sig)` in a
+    /// portable pop; its key's `personal_sign` is not asked.
     function test_ua8_msigNativeMemberWithCode1271() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
