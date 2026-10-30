@@ -835,8 +835,9 @@ kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, `secp256k1`, Schnorr
    with its proof over the cap is refused `UA_REGISTER_SPLIT`). Front-running yields the identical record or a revert. When the full call with the proof does not fit one
    transaction — its estimate exceeds the block gas limit for a direct submitter, or min(block gas limit, the relayer's per-transaction
    cap) through a relayer (the SCaaS testnet relayer cap is 64 M, so a relayed PQ registration splits there) — `register` goes without
-   `pqzPop` and `storePqzPop(ua, pqzPop)` follows. The **same call registers the UA on any other chain** (build it from the first
-   chain's logs or from `registrationOf`; [CTR-UA-31](contracts/accounts.md#CTR-UA-31)); later KEM versions come by `setKemKey`
+   `pqzPop` and `storePqzPop(ua, pqzPop)` follows. The **same call registers the UA on any other chain** (build it from
+   `registrationOf`, or from the first chain's logs plus `popOf`: the event carries `popHash`,
+   [CTR-UA-33](contracts/accounts.md#CTR-UA-33); [CTR-UA-31](contracts/accounts.md#CTR-UA-31)); later KEM versions come by `setKemKey`
    ([CTR-UA-32](contracts/accounts.md#CTR-UA-32)), a PQZ key by `setPqzKey` — ordinary `call` jobs, no fee.
 4. On the finalized `UARegistered` event the client reads `registrationOf(ua)` (the stored arguments equal what it sent),
    `pqzKeyOf(ua).proven` and `checkedOf(ua)`, and only then marks the account usable on that chain.
