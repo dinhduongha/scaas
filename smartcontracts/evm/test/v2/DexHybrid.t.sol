@@ -674,7 +674,7 @@ contract DexHybridTest is UADexBase {
 
     /// The token's `TradeFilled` shows the pulled fill 500; after the refund `pulled[h]` counts what the taker kept
     /// sold (460): the refunded 40 is restored (DX7, owner follow-up 2026-10-30).
-    function test_hybrid_refund_gtcTakerPulledKeepsTheFill() public {
+    function test_hybrid_refund_gtcTakerPulledIsTheSoldPart() public {
         ISCaaSDex.HybridPlan memory p = _refundPlan(0);
         bytes32 h = _h(p.taker);
         vm.expectEmit(address(A));
@@ -764,6 +764,16 @@ contract DexHybridTest is UADexBase {
         bytes memory cancelSig = _ecdsa(ALICE_PK, A.cancelOrderDigest(h));
         vm.expectRevert(_err(ITradeToken.RestoreExceedsPull.selector, h));
         r.pullCancelRestore(A, o, sig, 100, 180, cancelSig, 1);
+    }
+
+    /// A cancel that changes nothing (the order already closed by its full fill) still clears the counter (T4 review
+    /// m1): else a restore after it would reopen part of the closed order.
+    function test_restorePulled_noOpCancelClearsTheCounter() public {
+        (PullRestorer r, ITradeToken.TradeOrder memory o, bytes memory sig) = _restorer();
+        bytes32 h = A.tradeOrderDigest(o);
+        bytes memory cancelSig = _ecdsa(ALICE_PK, A.cancelOrderDigest(h));
+        vm.expectRevert(_err(ITradeToken.RestoreExceedsPull.selector, h));
+        r.pullCancelRestore(A, o, sig, 1000, 1800, cancelSig, 1);
     }
 
     /// A UA taker (shape 1) through the DEX: refunded into its ledger, its `pulled` restored; and the `UATradeOrder`
