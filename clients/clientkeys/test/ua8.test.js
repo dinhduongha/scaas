@@ -164,6 +164,16 @@ test('holder refusals', () => {
   assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), kemPk: kem.kemPk.slice(0, -2) }), code('UAKemKeyLength'));
   assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), kemVersion: 0 }), code('UAKemVersion'));
   assert.throws(() => ua.kemRecordDigest({ ua: kem.ua, version: 2n ** 64n, kemPk: kem.kemPk }), code('UAKemVersion'));
+  // the shared KATs (review part 2 I-C1): the mesh chain key and the top byte of the 8-byte KEM version word
+  assert.equal(hex(ua.chainKeyHash(2n ** 40n + 7n)), '0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950'); // keccak256("evm:1099511627783")
+  assert.equal(hex(ua.kemRecordDigest({ ua: new Uint8Array(32).fill(1), version: 2n ** 64n - 1n, kemPk: new Uint8Array(1600) })),
+    '0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31');
+  // the proof-hash rule (review part 2 m-J1): a zero-length hash is absent, a hash of another length is UAPqzPopHash
+  assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), pqzPopHash: new Uint8Array(0) }), code('UAPqzPopHash'), 'key without hash');
+  assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), pqzPopHash: mlz.attrs.pqzPopHash.slice(0, -2) }), code('UAPqzPopHash'));
+  assert.throws(() => ua.pqzKeyRecordMessage(0x0131, { ...args(mlz), pqzPopHash: '0x' }), code('UAPqzPopHash'));
+  const none = ua.holderPopMessage(0x0131, { ...args(mlz), pqzKey: undefined, pqzPopHash: new Uint8Array(0) });
+  assert.equal(hex(none.pqzPopHash), hex(new Uint8Array(32)), 'zero-length hash = absent');
   assert.throws(() => ua.purposeTag('metatx', 2), code('UAPurposeUnknown'));
   assert.equal(hex(ua.holderPopMessage(0x0131, withKem(row('mldsa65/n2048-kmax1024'))).kemRecordHash), kem.digest);
   assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), kemPk: undefined }), code('UAKemKeyLength'), 'kemPk omitted = empty');

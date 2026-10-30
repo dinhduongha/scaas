@@ -189,11 +189,13 @@ function pqzKeyHashOf(pqzKey) {
   return keyHashOf(0x0142, k);
 }
 const EMPTY_PROOF_HASH = hex(keccak_256(new Uint8Array(0)));
-/** The proof hash from the proof bytes or the hash alone (0 = absent); both given and different is `UAPqzPopHash`, and so is
- *  `keccak256("")` (an empty proof is no proof: ruling A6-m). */
+/** The proof hash from the proof bytes or the hash alone (absent = omitted, zero-length or all-zero); a hash of another
+ *  length, both given and different, and `keccak256("")` (an empty proof is no proof: ruling A6-m) are `UAPqzPopHash`. */
 function proofHashOf(pqzPop, pqzPopHash) {
   const proofHash = present(pqzPop) ? keccak_256(bytes(pqzPop)) : null;
-  const givenHash = pqzPopHash && sized(pqzPopHash, 32, 'pqzPopHash').some((b) => b !== 0) ? bytes(pqzPopHash) : null;
+  let givenHash = present(pqzPopHash) ? bytes(pqzPopHash) : null;
+  if (givenHash && givenHash.length !== 32) fail('UAPqzPopHash', `pqzPopHash of ${givenHash.length} bytes`);
+  if (givenHash && givenHash.every((b) => b === 0)) givenHash = null;
   if (proofHash && givenHash && hex(proofHash) !== hex(givenHash)) fail('UAPqzPopHash', 'pqzPop does not hash to pqzPopHash');
   const h = proofHash ?? givenHash ?? Z32;
   if (hex(h) === EMPTY_PROOF_HASH) fail('UAPqzPopHash', 'the hash of an empty proof');
