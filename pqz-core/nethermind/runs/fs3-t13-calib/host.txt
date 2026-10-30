@@ -1,0 +1,34 @@
+## before phase B, 2026-10-30T16:59:36Z
+3.62 1.39 0.66
+top - 23:59:36 up  6:05,  1 user,  load average: 3.62, 1.39, 0.66
+Tasks: 392 total,   1 running, 391 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.0 us, 12.0 sy,  0.0 ni, 85.0 id,  1.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem :  23711.4 total,    871.6 free,  11457.0 used,  12126.6 buff/cache     
+MiB Swap:  32768.0 total,  30844.2 free,   1923.8 used.  12254.4 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+1062890 ha        20   0   49.9g   4.5g  75268 S 100.0  19.2   2:10.53 csharp-ls
+      1 root      20   0   24056  13108   8692 S   0.0   0.1   0:05.31 systemd
+      2 root      20   0       0      0      0 S   0.0   0.0   0:00.01 kthreadd
+      3 root      20   0       0      0      0 S   0.0   0.0   0:00.00 pool_workqueue_release
+      4 root       0 -20       0      0      0 I   0.0   0.0   0:00.00 kworker/R-rcu_gp
+      5 root       0 -20       0      0      0 I   0.0   0.0   0:00.00 kworker/R-sync_wq
+      6 root       0 -20       0      0      0 I   0.0   0.0   0:00.00 kworker/R-kvfree_rcu_reclaim
+      7 root       0 -20       0      0      0 I   0.0   0.0   0:00.00 kworker/R-slub_flushwq
+      8 root       0 -20       0      0      0 I   0.0   0.0   0:00.00 kworker/R-netns
+     10 root       0 -20       0      0      0 I   0.0   0.0   0:00.00 kworker/0:0H-kblockd
+dbx-dbx-1 t8y2/dbx Up 6 hours
+redis-redis-1 bitnami/redis:7.4 Up 6 hours
+timescaledb-timescaledb-1 72d494dcc49e Up 6 hours
+/home/ha/.cache/r3-locks/heavy: free
+/home/ha/.cache/r3-locks/heavy.2: free
+/home/ha/.cache/r3-locks/heavy.3: free
+/home/ha/.cache/r3-locks/heavy.4: free
+
+## after run 1 rows, 2026-10-30T17:10:34Z: STOPPED (memory)
+4.84 2.88 1.72
+               total        used        free      shared  buff/cache   available
+Mem:           23711       22138         212         115        1777        1573
+Swap:          32767        5706       27061
+    PID    PPID %CPU   RSS     ELAPSED COMMAND
+1062890   12311 94.8 19544532    13:16 csharp-ls
