@@ -440,7 +440,16 @@ contract UARegistryUA8Test is UARegistryBase {
     // ----- Step 1 tests -----
 
     /// P1 / P10: the same arguments register on two registries with different chain ids, chain uids and addresses.
-    function test_ua8_copyBetweenRegistries() public {
+        /// A11 / UA8-D16: the four UA-8 registry writes keep these selectors; scaas-node's `ua8_registry_writes_are_call_jobs`
+    /// pins the same four literals, so an ABI change fails a test on both sides.
+    function test_ua8_writeSelectorsPinned() public pure {
+        assert(IUARegistry.register.selector == bytes4(0x0c936361));
+        assert(IUARegistry.setKemKey.selector == bytes4(0x2d21c58e));
+        assert(IUARegistry.storePqzPop.selector == bytes4(0x7fac161a));
+        assert(IUARegistry.setPqzKey.selector == bytes4(0xbde71760));
+    }
+
+function test_ua8_copyBetweenRegistries() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         UARegistry a = _regA(false);

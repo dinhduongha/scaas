@@ -1565,6 +1565,11 @@ mod tests {
             function setPqzKey(bytes32 ua, bytes pqzKey, bytes32 pqzPopHash, bytes sig);
         }
         assert_eq!(registerCall::SIGNATURE, "register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes)");
+        // the selectors of IUARegistry on ua8, also pinned in test_ua8_writeSelectorsPinned (UARegistryUA8.t.sol)
+        assert_eq!(registerCall::SELECTOR, [0x0c, 0x93, 0x63, 0x61]);
+        assert_eq!(setKemKeyCall::SELECTOR, [0x2d, 0x21, 0xc5, 0x8e]);
+        assert_eq!(storePqzPopCall::SELECTOR, [0x7f, 0xac, 0x16, 0x1a]);
+        assert_eq!(setPqzKeyCall::SELECTOR, [0xbd, 0xe7, 0x17, 0x60]);
         let reg = Address::repeat_byte(0x5e);
         let ua = B256::repeat_byte(0x11);
         let b = |n: usize, v: u8| Bytes::from(vec![v; n]);
