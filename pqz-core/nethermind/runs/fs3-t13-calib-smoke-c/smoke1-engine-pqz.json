@@ -1,0 +1,18 @@
+{
+  "schedules": [
+    {
+      "timestamp": "0x0",
+      "pqz": [
+        {
+          "op": 1,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 93312,
+          "gas": 4449000
+        }
+      ],
+      "selftestGas": 4449000,
+      "mldsa44Gas": 54000,
+      "mldsa65Gas": 94000
+    }
+  ]
+}
