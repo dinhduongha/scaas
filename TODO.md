@@ -187,8 +187,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   **Pre-freeze work order (owner 2026-10-31):** finish everything that changes contracts / the core, then freeze, then
   audit, then the clients. Order:
   1. T14 — UA-Soroban on the Stellar testnet (from 2026-11-03, SDK 30.0.0).
-  2. `ua8-soroban` (UA-8 Part B on Soroban), together with: the msig `pop` minimal form on **every** family (EVM
-     `UARegistry`, Soroban, NEAR, Algorand); the gen-1 registry kind set — **owner 2026-10-31: option (a)**, every
+  2. `ua8-soroban` (UA-8 Part B on Soroban), together with: the msig `pop` minimal form, built for EVM `UARegistry` and
+     Soroban (NEAR and Algorand have no UA registry yet — the rule is a requirement for their later UA rounds); the gen-1 registry kind set — **owner 2026-10-31: option (a)**, every
      gen-1 deploy carries every kind the chain can run (`DeployBase` already does; add a gate that refuses a gen-1
      deploy missing an EIP-2537 kind the probe passes; no `UARegistry` change); and the relay-fee minimum re-decision
      (owner decides there; if it changes contracts it lands before the freeze, if it is node config it goes with P6i).
@@ -200,8 +200,9 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      core change moves the timings; the owner stops other heavy sessions first; change the chainspec at the next SCaaS
      testnet reset if it differs materially). Again before the SCaaS mainnet only if the core / library changes again
      or the validator hardware differs.
-  7. **Freeze** the contracts of the built families (EVM + Soroban + NEAR + Algorand); later family rounds get an
-     add-on audit.
+  7. **Freeze** the contracts of EVM + Soroban (the families whose base and UA rounds are done). NEAR and Algorand
+     have only their base contracts (no UA round yet): they and every later family round get an add-on audit when
+     their UA rounds finish (owner 2026-10-31 correction).
   8. Contracts audit (plan draft `.superpowers/sdd/2026-10-31-contracts-audit/plan.md`; Codex / agy / Claude workflow —
      owner decides reviewers).
   9. P6h → P6i → P6j (below).
