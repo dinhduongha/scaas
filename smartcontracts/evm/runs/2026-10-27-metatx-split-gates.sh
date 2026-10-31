@@ -45,6 +45,20 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
     clientkeys) cd clients/clientkeys && ../../scripts/capped npm test ;;
     ua-rs) cd clients/ua-rs && ../../scripts/capped cargo test -j2 ;;
     ua-rs-signers) cd clients/ua-rs && ../../scripts/capped cargo test -j2 --features signers ;;
+    ua-rs-json) cd clients/ua-rs && ../../scripts/capped sh -c 'cargo clippy -j2 --all-targets --features json -- -D warnings && cargo test -j2 --features json' ;;
+    vectors-check) # typed-signing PG: each generator twice, the committed vector files must not move; groups.json = ua-rs write_groups_json
+      (cd clients/zether-prover && ../../scripts/capped cargo build -j2 --release --bin zether-cli) || return 1
+      for i in 1 2; do
+        (cd clients/clientkeys && ../../scripts/capped sh -c 'node scripts/ua-vectors.mjs && node scripts/ua-sig-vectors.mjs &&
+           node scripts/ua-portable-vectors.mjs && node scripts/soroban-ua-ops-vectors.mjs') || return 1
+        (cd clients/ua-rs && ../../scripts/capped cargo test -j2 --features signers --test groups -- --ignored write_groups_json) || return 1
+        (cd clients/zether-prover && target/release/zether-cli vectors vectors) || return 1
+        git diff --exit-code --stat -- smartcontracts/vectors/ua smartcontracts/soroban/vectors clients/zether-prover/vectors || return 1
+      done
+      for f in r33_keys schnorr_bls12381; do # the committed copies of the zether files
+        cmp clients/zether-prover/vectors/$f.json clients/clientkeys/test/vectors/$f.json &&
+          cmp clients/zether-prover/vectors/$f.json smartcontracts/evm/test/vectors/zether/s3/$f.json || return 1
+      done ;;
     ua-qt) # as Task 18; build/ is git-ignored; ctest -V prints QtQuickTest's per-function PASS lines for named-tests
       QMAKE=$QT/bin/qmake6 LD_LIBRARY_PATH=$QT/lib QT_QPA_PLATFORM=offscreen scripts/capped sh -c \
         "cmake -S clients/ua-qt -B clients/ua-qt/build -DCMAKE_PREFIX_PATH=$QT && cmake --build clients/ua-qt/build -j2 &&

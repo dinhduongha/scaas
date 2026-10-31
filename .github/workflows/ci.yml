@@ -6,7 +6,7 @@
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check
 #   clients/clientkeys:    npm ci --ignore-scripts; npm test
 #   clients/zether-prover: cargo test; ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke)
-#   clients/ua-rs:         cargo test; cargo clippy --all-targets -- -D warnings; the same with --features signers (groups.json signers + regeneration)
+#   clients/ua-rs:         cargo test; cargo clippy --all-targets -- -D warnings; the same with --features signers (groups.json signers + regeneration) and --features json (the JSON shim the wrappers call)
 #   clients/ua-py:         python3 -m unittest tests.test_vectors
 #   clients/ua-go:         go vet ./...; go test ./...
 #   clients/ua-cs:         dotnet test Scaas.Ua.Tests
@@ -205,10 +205,14 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: clippy (signers)
         run: cargo clippy --all-targets --features signers -- -D warnings
+      - name: clippy (json)
+        run: cargo clippy --all-targets --features json -- -D warnings
       - name: vectors
         run: cargo test
       - name: groups.json (signers, byte-for-byte regeneration, BIP-327 / RFC 9591 vectors)
         run: cargo test --features signers --test groups
+      - name: JSON shim (feature json)
+        run: cargo test --features json --test json
 
   ua-cxx:
     runs-on: ubuntu-latest
