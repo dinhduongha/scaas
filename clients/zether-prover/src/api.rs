@@ -653,13 +653,14 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
         "verifyTransfer" => verify_json::<C>(&gens(), v, false),
         "verifyTransferMulti" => verify_multi_json::<C>(&gens(), v),
         "verifyBurn" => verify_json::<C>(&gens(), v, true),
-        // The `register` PoP (UA-8 P1, portable: no chain, chainUid or registry; a Zether UA holds no PQZ key or KEM record).
+        // The `register` PoP (UA-8 P1, portable: no chain, chainUid or registry; a Zether UA holds no PQZ key or KEM record),
+        // over the typed `UARegistration` (typed-signing TS-D3); `popDigest` is the typed `UAPortableRecord` digest.
         "pop" => {
             let k = key::<C>(v)?;
-            let rd = schnorr::zether_registration_digest(&k.ua());
+            let rd = schnorr::zether_registration_digest::<C>(&k.ua());
             Ok(json!({
                 "kind": zether_kind::<C>(), "Y": hx(&k.encoded_y()), "UA": hx(&k.ua()),
-                "popDigest": hx(&schnorr::portable_pop_digest(&k.ua(), &[0u8; 32], &[0u8; 32])), "registrationDigest": hx(&rd),
+                "popDigest": hx(&schnorr::zether_record_digest::<C>(&k.ua())), "registrationDigest": hx(&rd),
                 "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::pop_tag(), &rd)),
                 "pop": hx(&schnorr::zether_pop(&k, rng)),
             }))

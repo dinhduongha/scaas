@@ -6,8 +6,8 @@ use rand_core::{CryptoRng, RngCore};
 
 use crate::abi::{self, Tok};
 use crate::curve::{
-    decode_point, decode_scalar, encode_point, encode_scalar, generator, keccak256, point_len, ua_of, zether_tag, Fr,
-    ZCurve, G,
+    decode_point, decode_scalar, encode_point, encode_scalar, generator, keccak256, point_len, ua_of, zether_kind, zether_tag,
+    Fr, ZCurve, G,
 };
 use crate::keys::ZetherKey;
 use crate::nonce::Nonces;
@@ -80,29 +80,65 @@ pub fn ua_message<C: ZCurve>(purpose: &[u8; 32], digest: &[u8; 32]) -> [u8; 32] 
     keccak256(&[keccak256(b"scaas.ua.msg.v1"), zether_tag::<C>(), *purpose, *digest].concat())
 }
 
-/// `keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)`, each hash 0 when absent (UA-8 P1; ua-rs `portable_pop_digest`).
-pub fn portable_pop_digest(ua: &[u8; 32], pqz_key_hash: &[u8; 32], kem_record_hash: &[u8; 32]) -> [u8; 32] {
-    keccak256(&[pop_tag(), *ua, *pqz_key_hash, *kem_record_hash].concat())
+// ---- The portable records as typed EIP-712 structs (typed-signing TS-D1 / TS-D3; ua-rs `ua8`, clientkeys `ua.js`) ----
+// The raw digests before typed-signing are in legacy/typed-signing/portable_raw.rs.
+
+const DOMAIN_TYPE: &str = "EIP712Domain(string name,string version)";
+const KEM_RECORD_TYPE: &str = "UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)";
+const PORTABLE_RECORD_TYPE: &str = "UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)\
+UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)";
+const REGISTRATION_TYPE: &str = "UARegistration(UAPortableRecord record,bytes32 pqzPopHash)\
+UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)\
+UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)";
+
+/// `DS_P` of the portable domain `{name: "SCaaS UA Portable", version: "1"}`: no chainId / verifyingContract / salt.
+pub fn portable_domain_separator() -> [u8; 32] {
+    keccak256(&[keccak256(DOMAIN_TYPE.as_bytes()), keccak256(b"SCaaS UA Portable"), keccak256(b"1")].concat())
 }
 
-/// `keccak256(portablePopDigest ‖ pqzPopHash)`: what `ua_message(kind, POP_V2, ·)` is taken over.
-pub fn registration_digest(portable: &[u8; 32], pqz_pop_hash: &[u8; 32]) -> [u8; 32] {
-    keccak256(&[*portable, *pqz_pop_hash].concat())
+fn typed(struct_hash: &[u8; 32]) -> [u8; 32] {
+    keccak256(&[&[0x19, 0x01][..], &portable_domain_separator(), struct_hash].concat())
 }
 
-/// The registration digest of a Zether UA: it holds no PQZ key, KEM record or PQZ proof (all hashes 0).
-pub fn zether_registration_digest(ua: &[u8; 32]) -> [u8; 32] {
-    registration_digest(&portable_pop_digest(ua, &[0u8; 32], &[0u8; 32]), &[0u8; 32])
+/// `hashStruct(UAKemRecord{ua, 0, 0, 0})`: "no KEM record" (TS-D2), the `kem` of a Zether UA's record.
+pub fn no_kem_record_hash(ua: &[u8; 32]) -> [u8; 32] {
+    keccak256(&[keccak256(KEM_RECORD_TYPE.as_bytes()), *ua, [0u8; 32], [0u8; 32], [0u8; 32]].concat())
+}
+
+fn portable_record_hash(ua: &[u8; 32], kind: u16, pqz_key_hash: &[u8; 32], kem_record_hash: &[u8; 32]) -> [u8; 32] {
+    keccak256(&[keccak256(PORTABLE_RECORD_TYPE.as_bytes()), *ua, abi::u256(kind as u64), *pqz_key_hash, *kem_record_hash].concat())
+}
+
+/// The typed `UAPortableRecord{ua, kind, pqzKeyHash, kem}` digest (`kem_record_hash` = `hashStruct(UAKemRecord)`).
+pub fn portable_record_digest(ua: &[u8; 32], kind: u16, pqz_key_hash: &[u8; 32], kem_record_hash: &[u8; 32]) -> [u8; 32] {
+    typed(&portable_record_hash(ua, kind, pqz_key_hash, kem_record_hash))
+}
+
+/// The typed `UARegistration{record, pqzPopHash}` digest: what `ua_message(kind, POP_V2, ·)` is taken over.
+pub fn registration_digest(ua: &[u8; 32], kind: u16, pqz_key_hash: &[u8; 32], kem_record_hash: &[u8; 32], pqz_pop_hash: &[u8; 32]) -> [u8; 32] {
+    let record = portable_record_hash(ua, kind, pqz_key_hash, kem_record_hash);
+    typed(&keccak256(&[keccak256(REGISTRATION_TYPE.as_bytes()), record, *pqz_pop_hash].concat()))
+}
+
+/// The typed `UAPortableRecord{UA, kind, 0, UAKemRecord{UA, 0, 0, 0}}` digest of a Zether UA (no PQZ key, no KEM record).
+pub fn zether_record_digest<C: ZCurve>(ua: &[u8; 32]) -> [u8; 32] {
+    portable_record_digest(ua, zether_kind::<C>(), &[0u8; 32], &no_kem_record_hash(ua))
+}
+
+/// The typed `UARegistration{UAPortableRecord{UA, kind, 0, UAKemRecord{UA, 0, 0, 0}}, 0}` digest of a Zether UA (TS-D3):
+/// it holds no PQZ key, KEM record or PQZ proof.
+pub fn zether_registration_digest<C: ZCurve>(ua: &[u8; 32]) -> [u8; 32] {
+    registration_digest(ua, zether_kind::<C>(), &[0u8; 32], &no_kem_record_hash(ua), &[0u8; 32])
 }
 
 /// The `pop` of `register(0x0141, Y, …)` (UA-8 P1, portable: no chain, chainUid or registry): Schnorr by `x` under the
-/// Zether tag over `ua_message(POP_V2, registration_digest(portable_pop_digest(UA(Y), 0, 0), 0))`.
+/// Zether tag over `ua_message(POP_V2, zether_registration_digest(UA(Y)))`.
 pub fn zether_pop<C: ZCurve, R: RngCore + CryptoRng>(key: &ZetherKey<C>, rng: &mut R) -> Vec<u8> {
-    sign(key, &ua_message::<C>(&pop_tag(), &zether_registration_digest(&key.ua())), rng)
+    sign(key, &ua_message::<C>(&pop_tag(), &zether_registration_digest::<C>(&key.ua())), rng)
 }
 
 pub fn verify_pop<C: ZCurve>(y: &G<C>, pop: &[u8]) -> Result<(), ZError> {
-    verify(y, &ua_message::<C>(&pop_tag(), &zether_registration_digest(&ua_of::<C>(y))), pop)
+    verify(y, &ua_message::<C>(&pop_tag(), &zether_registration_digest::<C>(&ua_of::<C>(y))), pop)
 }
 
 // ---- Legacy (backup, not delete): the chain-bound PoP before UA-8 (pop.v1) ----
@@ -392,6 +428,35 @@ mod tests {
         let s1 = sign(&k1, &keccak256(b"a"), &mut rng);
         let s2 = sign(&k1, &keccak256(b"b"), &mut rng);
         assert_ne!(s1[..point_len::<C>()], s2[..point_len::<C>()]);
+    }
+
+    /// typed-signing P4: the Zether PoP signs the typed `UARegistration{UAPortableRecord{UA, 0x0141, 0, UAKemRecord{UA, 0,
+    /// 0, 0}}, 0}` (TS-D1 / TS-D3), byte-identical with portable.json's `zether-bls12381` row (clientkeys, ua-rs, the registry).
+    #[test]
+    fn zether_registration_digest_pinned() {
+        type C = Bls12381;
+        assert_eq!(hex::encode(portable_domain_separator()), "9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1");
+        for (t, want) in [
+            (KEM_RECORD_TYPE, "0ab7989827627b89c268e88a0a0b06b62aefa70b0a466014931ca44acfa9a201"),
+            (PORTABLE_RECORD_TYPE, "0c1553cfab3c35326558484df79963dced75ead85272d2a85985f264757bfe7f"),
+            (REGISTRATION_TYPE, "c78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e"),
+        ] {
+            assert_eq!(hex::encode(keccak256(t.as_bytes())), want, "{t}");
+        }
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/vectors/ua/portable.json");
+        let pj: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let r = pj["registrations"].as_array().unwrap().iter().find(|r| r["name"] == "zether-bls12381").unwrap();
+        let h = |f: &str| hex::decode(&r[f].as_str().unwrap()[2..]).unwrap();
+        let h32 = |f: &str| -> [u8; 32] { h(f).try_into().unwrap() };
+        let ua = h32("ua");
+        assert_eq!(r["kind"], crate::curve::zether_kind::<C>());
+        assert_eq!(no_kem_record_hash(&ua), h32("kemRecordHash"));
+        assert_eq!(zether_record_digest::<C>(&ua), h32("portableRecordDigest"));
+        let rd = zether_registration_digest::<C>(&ua);
+        assert_eq!(rd, h32("registrationDigest"));
+        assert_eq!(ua_message::<C>(&pop_tag(), &rd), h32("popMessage"));
+        // the JS reference's PoP of that row verifies here
+        verify_pop(&decode_point::<C>(&h("keyData")).unwrap(), &h("pop")).unwrap();
     }
 
     /// Review C0-4: every statement point is in the challenge; moving any one of them moves `e`.

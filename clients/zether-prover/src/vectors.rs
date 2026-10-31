@@ -151,8 +151,8 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     transcripts.push(json!({"name": format!("burn_{}", C::NAME), "case": transcript_json::<C>(&t)}));
     files.push((format!("burn_{}.json", C::NAME), bv));
 
-    // Schnorr over the portable PoP message (UA-8 P1, no PQZ key or KEM record), fixed k.
-    let d = schnorr::zether_registration_digest(&from.ua());
+    // Schnorr over the portable PoP message (UA-8 P1, typed in typed-signing P4; no PQZ key or KEM record), fixed k.
+    let d = schnorr::zether_registration_digest::<C>(&from.ua());
     let msg = schnorr::ua_message::<C>(&schnorr::pop_tag(), &d);
     let k = Fr::<C>::from(0xcafe_f00d_u64);
     let (r, e, z) = schnorr::sign_with_k::<C>(&from.x, &msg, &k);
@@ -244,12 +244,13 @@ fn r33_curve<C: ZCurve>() -> Value {
                 "x": hx(&encode_scalar::<C>(&k.x)), "Y": hx(&k.encoded_y()), "UA": hx(&k.ua()),
             });
             if key_use == USE_CONF {
-                // the portable PoP (UA-8 P1: no chain, chainUid or registry; no PQZ key or KEM record)
+                // the portable PoP (UA-8 P1: no chain, chainUid or registry; no PQZ key or KEM record), over the typed
+                // `UARegistration` (typed-signing TS-D3); `popDigest` is the typed `UAPortableRecord` digest
                 let pop = schnorr::zether_pop(&k, &mut rng);
                 schnorr::verify_pop(&k.y, &pop).unwrap();
-                let rd = schnorr::zether_registration_digest(&k.ua());
+                let rd = schnorr::zether_registration_digest::<C>(&k.ua());
                 v["pop"] = json!({
-                    "kind": zether_kind::<C>(), "popDigest": hx(&schnorr::portable_pop_digest(&k.ua(), &[0u8; 32], &[0u8; 32])),
+                    "kind": zether_kind::<C>(), "popDigest": hx(&schnorr::zether_record_digest::<C>(&k.ua())),
                     "registrationDigest": hx(&rd), "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::pop_tag(), &rd)), "pop": hx(&pop),
                 });
             }

@@ -75,6 +75,8 @@ test('the Zether PoP is portable (UA-8 P1): no chain field, over the typed UAReg
       assert.ok(schnorrVerify(curve, fromHex(k.Y), fromHex(mine.uaMsg), fromHex(mine.pop)), `${curve} ${k.path}`);
       // the S3 vector's PoP (r33_keys.json, written by the zether-prover; typed in typed-signing P4) verifies over its own message
       assert.ok(schnorrVerify(curve, fromHex(k.Y), fromHex(k.pop.uaMsg), fromHex(k.pop.pop)), `${curve} ${k.path} S3`);
+      assert.deepEqual([k.pop.popDigest, k.pop.registrationDigest, k.pop.uaMsg], [mine.popDigest, mine.registrationDigest, mine.uaMsg],
+        `${curve} ${k.path}: the prover's digests are the typed ones`);
       // chain fields are not inputs any more: a caller still passing the old context gets an error, not a silent drop
       const ctx = { chainId: 7622, chainUid: '0x' + '25'.repeat(32), registry: '0x' + 'ab'.repeat(20) };
       assert.throws(() => zetherPop(curve, fromHex(k.x), ctx), /no chain context/);

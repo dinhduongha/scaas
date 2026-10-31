@@ -184,12 +184,12 @@ fn hex32(v: &serde_json::Value) -> [u8; 32] {
 }
 
 /// The UA identity vectors (UA-1, `smartcontracts/vectors/ua/`): the Zether kinds' `UA` (kinds.json `valid`), their PoP
-/// `ua_msg` (kinds.json `messages`) and `popDigest` (structures.json `pop`, contexts A and B) — one derivation for the
+/// `ua_msg` (kinds.json `messages`) and the typed portable digests (structures.json `pop`) — one derivation for the
 /// prover, the registry and the six UA libraries.
 #[test]
 fn ua_identity_matches_ua_vectors() {
     use zether_prover::curve::decode_point;
-    use zether_prover::schnorr::{pop_tag, portable_pop_digest, registration_digest, ua_message};
+    use zether_prover::schnorr::{portable_record_digest, registration_digest, ua_message};
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/vectors/ua/");
     let kinds: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(format!("{dir}kinds.json")).unwrap()).unwrap();
     let mut n = 0;
@@ -216,17 +216,18 @@ fn ua_identity_matches_ua_vectors() {
         n += 1;
     }
     let st: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(format!("{dir}structures.json")).unwrap()).unwrap();
+    // typed-signing: every kind's row (typed `UAPortableRecord` / `UARegistration`, TS-D1)
     for row in st["pop"].as_array().unwrap() {
         let (ua, pqz, kem) = (hex32(&row["ua"]), hex32(&row["pqzKeyHash"]), hex32(&row["kemRecordHash"]));
-        let portable = portable_pop_digest(&ua, &pqz, &kem);
-        assert_eq!(portable, hex32(&row["portablePopDigest"]));
-        assert_eq!(registration_digest(&portable, &hex32(&row["pqzPopHash"])), hex32(&row["registrationDigest"]));
+        let kind = row["kind"].as_u64().unwrap() as u16;
+        assert_eq!(portable_record_digest(&ua, kind, &pqz, &kem), hex32(&row["portableRecordDigest"]));
+        assert_eq!(registration_digest(&ua, kind, &pqz, &kem, &hex32(&row["pqzPopHash"])), hex32(&row["registrationDigest"]));
         n += 1;
     }
     assert!(n >= 7, "{n} rows");
 }
 
-/// The Zether kind's portable `pop` row of structures.json (UA-8 P1): `ua_message(0x0141, POP_V2, registrationDigest)` is
+/// The Zether kind's portable `pop` row of structures.json (UA-8 P1, typed in typed-signing P4): `ua_message(0x0141, POP_V2, registrationDigest)` is
 /// the message the prover signs, byte-identical with ua-rs / the JS reference.
 #[test]
 fn pop_matches_structures() {
@@ -235,13 +236,36 @@ fn pop_matches_structures() {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/vectors/ua/");
     let st: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(format!("{dir}structures.json")).unwrap()).unwrap();
     let row = st["pop"].as_array().unwrap().iter().find(|r| r["kind"] == 0x0141).expect("zether pop row");
-    assert_eq!(zether_registration_digest(&hex32(&row["ua"])), hex32(&row["registrationDigest"]));
+    assert_eq!(zether_registration_digest::<Bls12381>(&hex32(&row["ua"])), hex32(&row["registrationDigest"]));
     // portable.json: the tag and the message (`popMessage`) of the Zether registration, byte for byte
     let pj: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(format!("{dir}portable.json")).unwrap()).unwrap();
     assert_eq!(pop_tag(), hex32(&pj["tags"]["PURPOSE_POP_V2"]["hash"]), "pop.v2");
     let r = pj["registrations"].as_array().unwrap().iter().find(|r| r["name"] == "zether-bls12381").unwrap();
-    assert_eq!(hex32(&r["registrationDigest"]), zether_registration_digest(&hex32(&r["ua"])));
+    assert_eq!(hex32(&r["registrationDigest"]), zether_registration_digest::<Bls12381>(&hex32(&r["ua"])));
     assert_eq!(ua_message::<Bls12381>(&pop_tag(), &hex32(&r["registrationDigest"])), hex32(&r["popMessage"]));
+}
+
+/// typed-signing P4: the S3 PoPs of r33_keys.json (what clientkeys and the forge S3 suite read) sign the typed
+/// `UARegistration{UAPortableRecord{UA, 0x0141, 0, UAKemRecord{UA, 0, 0, 0}}, 0}` (TS-D3); `popDigest` is the typed
+/// `UAPortableRecord` digest.
+#[test]
+fn pop_over_typed_registration() {
+    use zether_prover::schnorr::{pop_tag, ua_message, verify_pop, zether_record_digest, zether_registration_digest};
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/vectors/r33_keys.json");
+    let r: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let mut n = 0;
+    for k in r["bls12381"]["keys"].as_array().unwrap().iter().filter(|k| k.get("pop").is_some()) {
+        let (ua, p) = (hex32(&k["UA"]), &k["pop"]);
+        assert_eq!(p["kind"], 0x0141);
+        assert_eq!(zether_record_digest::<Bls12381>(&ua), hex32(&p["popDigest"]));
+        let rd = zether_registration_digest::<Bls12381>(&ua);
+        assert_eq!(rd, hex32(&p["registrationDigest"]));
+        assert_eq!(ua_message::<Bls12381>(&pop_tag(), &rd), hex32(&p["uaMsg"]));
+        let y = decode_point::<Bls12381>(&hex::decode(&k["Y"].as_str().unwrap()[2..]).unwrap()).unwrap();
+        verify_pop(&y, &hex::decode(&p["pop"].as_str().unwrap()[2..]).unwrap()).unwrap();
+        n += 1;
+    }
+    assert!(n >= 2, "{n} PoPs");
 }
 
 /// BIP-39 salt is `"mnemonic" ‖ NFKD(passphrase)`. The expected seed is what @scure/bip39
