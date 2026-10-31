@@ -205,6 +205,7 @@ rebuilds the payload with `fam/<family>.js` and returns a frozen `checked` objec
 | Aptos | payload fields (op, from, to, amount, asset, window); `account == account_of(root, owner)`; `message` = the digest text; `application == location.origin` (portal: the configured `aptos_application`); `chainId`; `nonce == lane` |
 | Soroban | decode the invocation: contract = token, function, args (from, to, amount); `network_id` = the configured passphrase hash; `signature_expiration_ledger` ≤ current + window |
 | Cosmos, GRAM, Hedera ED25519 | the payload rebuilt from terms == `payload_hex`; `from`; chain/network; contract; amount |
+| Portable UA records (`UARegistration`, `UAKemRecord`, `UAPqzKeyRecord`; a native `msig` member) | the typed data rebuilt from the record's fields by `portableTypedData` ([CLI-SGN-41](#CLI-SGN-41)) equals what is shown: domain `name` + `version` only, `ua`, the `uint16 kind` with its name, the key and proof hashes. SPECIFIED for `checkTerms`; today the builder is the check |
 
 NEAR secp256k1 (kind `0x0108`, raw op digest): the token's `env::ecrecover` takes the recovery id, so the client sends
 `v ∈ {0, 1}` (a wallet's 27 / 28 minus 27; accounts.md §1.6 writes 27 / 28 for the EVM form) ([NET-NEAR-03](../networks/near.md#NET-NEAR-03)).
@@ -343,6 +344,21 @@ its vectors):
    is not open;
 4. **TON**: do not queue an op at lane nonce `n + 1` behind a revocable order at `n`: a revoke moves the lane to `n + 2`,
    so the queued op fails.
+
+<a id="CLI-SGN-41"></a>**CLI-SGN-41** — **A portable UA record is signed as typed data, and a registry call is built from named fields, by one
+builder per library** (owner 2026-10-31, the portable records and the explicit-parameter rule; builder names are controller calls, owner may
+override). Status: clientkeys, `ua-rs`, the wrappers and the reproducers **BUILT** (`typed-signing`). `portableTypedData(primaryType, message)` (`clients/clientkeys/src/ua.js`)
+returns the exact JSON for `eth_signTypedData_v4`: `{domain: {name, version}, types, primaryType, message}`, with `EIP712Domain` of `name` and
+`version` only ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)); `PORTABLE_DOMAIN`, `PORTABLE_TYPES`, `PORTABLE_TYPEHASH`, `portableDomainSeparator`, `kemRecordStruct`,
+`portableRecordStruct` are its parts, and `holderPopMessage` / `pqzKeyRecordMessage` return `typedData` next to the digests. A native `msig` member
+signs that JSON (`signTyped`), never `personal_sign` and never a raw digest; a derived member signs its `memberDigest` as before.
+`registrationArgs({kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit})` returns `{entry, args, kemFill}`, the
+[CTR-UA-36](../contracts/accounts.md#CTR-UA-36) call as named fields: `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost` for their kinds
+(the recommended path; the registry also takes `register` with packed key data for all but `msig`) and `register` for the rest, the
+KEM key in full, or the hash commit plus `kemFill` = `setKemKey(ua, 0, kem, UASig())` only when `registryCalldataLength` is over
+`REGISTER_CALLDATA_LIMIT` (261,909 B) or `kemCommit: true` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)). `kemKeyOf` / `kemPkOf`, `msigStructure`, `typedKey` and
+`uaSig` convert between the packed bytes and the typed forms. `portable.json` carries every row's `typedData` and `args`, so each library is checked
+against them ([ua-libraries.md](ua-libraries.md)).
 
 <a id="CLI-SGN-40"></a>**CLI-SGN-40** — **A wallet never signs an EIP-7702 authorization, and clientkeys refuses a raw
 digest unless the caller opts in.** Owner rule 2026-10-30 after the EIP-7702 hot-wallet drain
@@ -881,7 +897,7 @@ any signing scalar. BIP-32/SLIP-10 have no bn254 or BLS12-381, so derivation is 
 - The audit view/disclosure key (`ITransferDisclosure`): `<use> = 8`, on both trees.
 - Short forms: `m/12381/<coin>/<acct>/7` and `m/254/<coin>/<acct>/7` (`m/254/…`).
 - `y = g^x` (G1 of the curve); `UA = keccak256(TAG(kind) ‖ encodedY)` (`ZetherTypes.toUA`, tagged; `encodedY`: bn254 64 bytes
-  `x‖y`, BLS12-381 128 bytes per EIP-2537); the proof of possession binds chain, registry and UA
+  `x‖y`, BLS12-381 128 bytes per EIP-2537); the proof of possession binds the UA and its attributes, no chain
   ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07); an earlier Schnorr PoP over `keccak256(registry ‖ encodedY ‖
   account)` bound to the caller account is replaced; the legacy registry's (`legacy/ua3/`) challenge had no chain id). Zether protocol: [contracts/zether](../contracts/zether.md).
 - Stored like the seed: client only, encrypted at rest, never sent to a server or a relayer.
@@ -904,18 +920,18 @@ key oracle and the ML-DSA key in an HSM with FIPS 204 firmware where available. 
 next to `sealConfKey`/`openConfKey`. clientkeys uses `deriveUAKey(seed, {kind: 'mldsa65', account, index})` /
 `signUA('zether-auth', authDigest)` with a vetted JS/WASM ML-DSA package; **the register flow** builds the PQZ key from the
 sealed leaf (`openPqKey`), computes `h = keccak256(GROUP(pqz-mlwe) ‖ pqzKey)`, hands the leaf to the native prover for `pqzPop` (the `R_REG` proof over
-`pqzRegMessage(ua, pqzKey, kem)` = `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, h, kemRecordHash))`), then signs the signer's `pop`
-over `holderPopMessage(kind, {ua, keyData, pqzKey, pqzPop, kemVersion, kemPk})` (`registrationDigest`, which covers the proof's hash) and submits
-`register(kind, keyData, attrs, pop, pqzPop)`; **the PoP carries no chain context, so the same `pop` and `pqzPop` register the UA on any chain** and
+`pqzRegMessage({ua, kind, pqzKey, kemPk})` = `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kind, h, kemRecordHash))`), then signs the signer's `pop`
+over `holderPopMessage(kind, {ua, keyData, pqzKey, pqzPop, kemPk})` (`registrationDigest`, which covers the proof's hash; the KEM key is version 0) and submits
+the call `registrationArgs` builds ([CLI-SGN-41](#CLI-SGN-41)), `register(kind, keyData, attrs, pop, pqzPop)` or the kind's typed entry; **the PoP carries no chain context, so the same `pop` and `pqzPop` register the UA on any chain** and
 a copy elsewhere re-sends the fields unchanged (read from `registrationOf` or the logs). When `eth_estimateGas` of the full call exceeds the block gas
 limit (through a relayer: min(block gas limit, the relayer's per-transaction cap), owner 2026-10-30 ruling R-node) the client registers
 with an empty `pqzPop` and then calls `storePqzPop(ua, pqzPop)`. A PQ signer is registered together
 with its PQZ key by default; a holder registered without one may add it later, once, with `pqzKeyRecordMessage` + `setPqzKey` (**one PQZ key per UA,
 ever** on chains of one PQZ parameter set — a copied unproven key of another set's length may be replaced by `setPqzKey` where `0x0142`
 has a verifier (it then emits `UAPqzKeyAdded`; the replaced `register` key stays in `registrationOf`, so read the current key with
-`pqzKeyOf`), owner 2026-10-30 ruling R-cross-set; and one KEM key per KEM version, the initial record included; [accounts.md](../contracts/accounts.md#CTR-UA-16)). An `msig` quorum signs `memberDigest(ua, message)`; a native (EOA) member — code-less, or EIP-7702-delegated, always with its own key (owner 2026-10-30 ruling D1: the registry never takes a designator's ERC-1271) — signs
-`personalSignDigest(memberDigest)` through `personal_sign` for the three portable purposes only (`pop` v2, `kem`, `pqz-key`; `isPortablePurpose`), so the
-wallet shows a `personal_sign` prompt, not typed data. KEM versions come by `kemRecordMessage` + `setKemKey` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)); `kemPk` is `0x01 ‖ ML-KEM-1024 ek ‖ X25519 pk` (1,601 B: its first byte is the KEM scheme id, scheme 2 is reserved and refused with `UAKemScheme`; `KEM_SCHEME`, `KEM_PK_LENGTH`, `kemPkLength` in `ua.js`, the same constants in every client). An explicit export of the 32-byte leaf (never the
+`pqzKeyOf`), owner 2026-10-30 ruling R-cross-set; and one KEM key per KEM version, the initial record included; [accounts.md](../contracts/accounts.md#CTR-UA-16)). An `msig` quorum's derived members sign `memberDigest(ua, message)`; a native (EOA) member — code-less, or EIP-7702-delegated, always with its own key (owner 2026-10-30 ruling D1: the registry never takes a designator's ERC-1271) — signs
+the record's typed data through `eth_signTypedData_v4` for the three portable purposes only (`pop` v2, `kem`, `pqz-key`; `isPortablePurpose`), so the
+wallet shows the record's fields. KEM versions ≥ 1 come by `kemRecordMessage` + `setKemKey` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)); `kemPk` is `0x01 ‖ ML-KEM-1024 ek ‖ X25519 pk` (1,601 B: its first byte is the KEM scheme id, scheme 2 is reserved and refused with `UAKemScheme`; `KEM_SCHEME`, `KEM_PK_LENGTH`, `kemPkLength` in `ua.js`, the same constants in every client). An explicit export of the 32-byte leaf (never the
 seed) feeds the native prover or the organization's key oracle — PQ Zether proving is **not** in JS; envelopes reuse the
 existing `MetaTransaction` EIP-712 builder (address path, domain `("SCaaS PqzToken", "1", …)`) and the
 `UAMetaTransaction` builder (UA path, `salt = chainUid`) with `signUA('metatx', digest)` by the dedicated `mldsa65` fee UA — no new signing code; the UA

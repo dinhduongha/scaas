@@ -820,17 +820,16 @@ kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, `secp256k1`, Schnorr
 1. The client derives the key for the kind on its own path (`m/7622'/0'/<account>'/<kindNo>'/<i>'`; Zether conf keys
    keep `m/254|12381/<coin>/<account>/7`; passkeys are one credential per `rpId`), builds the normalised `keyData`,
    computes `ua = keccak256(keccak256("scaas.ua.<kind>.v1") ‖ keyData)` and checks `ua >> 160 ≠ 0`.
-2. It computes the portable PoP locally: `portablePopDigest = keccak256(abi.encode(PURPOSE_POP_V2, ua, pqzKeyHash,
-   kemRecordHash))` and `registrationDigest = keccak256(abi.encode(portablePopDigest, pqzPopHash))` bind the UA, its PQZ key,
+2. It computes the portable PoP locally: the typed EIP-712 records `portableRecordDigest` and `registrationDigest` bind the UA, its PQZ key,
    its first KEM record and the PQZ proof hash — **no chain, no registry, not the caller**
-   ([CTR-UA-07](contracts/accounts.md#CTR-UA-07)); the hashes are 0 for an absent attribute. The client signs
+   ([CTR-UA-07](contracts/accounts.md#CTR-UA-07)); an absent attribute is a zero hash, an absent KEM key the zero record. The client signs
    `uaMessage(kind, PURPOSE_POP_V2, registrationDigest)` with the kind's signer (`UAKey.signUA("pop", …)`; MuSig2/FROST: a group
-   signing session plus the KeyAgg hints or the DKG transcript; a PQ-eligible `msig`: its members, a native member by
-   `personal_sign`). A PQ holder with a PQZ key first makes the `R_REG` proof over `portablePopDigest`. The EIP-712 `salt =
+   signing session plus the KeyAgg hints or the DKG transcript; a PQ-eligible `msig`: its members, a native member over the typed
+   data with `eth_signTypedData_v4`). A PQ holder with a PQZ key first makes the `R_REG` proof over `portableRecordDigest`. The EIP-712 `salt =
    chain_uid` ([NET-ALL-22](networks/README.md#NET-ALL-22)) still guards every `UAAuth` and mtx signature, which stay chain-bound.
-3. **Anyone** submits `register(kind, keyData, attrs, pop, pqzPop)`: the subject self-paid, a relayer job, a sponsor,
-   or the node gateway `POST /v1/ua/register {chain, kind, keyData, attrs, pop, pqzPop?}` (gasless,
-   [NODE-GW-03](node/gateway.md#NODE-GW-03); the node relays all four registry writes, `register`, `setKemKey`, `storePqzPop` and `setPqzKey`, owner 2026-10-30
+3. **Anyone** submits `register(kind, keyData, attrs, pop, pqzPop)` or the kind's typed entry ([CTR-UA-36](contracts/accounts.md#CTR-UA-36); `registerMsig` for an `msig`): the subject self-paid, a relayer job, a sponsor,
+   or the node gateway `POST /v1/ua/register {chain, entry, …args}` (gasless,
+   [NODE-GW-03](node/gateway.md#NODE-GW-03); the node relays all eight registry writes, owner 2026-10-30
    ruling R-node: the node's call-table rows are built, the gateway route and its sponsor policy are not yet, `TODO.md`; a relayed `register`
    with its proof over the cap is refused `UA_REGISTER_SPLIT`). Front-running yields the identical record or a revert. When the full call with the proof does not fit one
    transaction — its estimate exceeds the block gas limit for a direct submitter, or min(block gas limit, the relayer's per-transaction

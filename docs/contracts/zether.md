@@ -964,7 +964,7 @@ other write of the account is a Zether Schnorr by `x` through `registry.requireA
 | Write | Purpose | `auth` |
 |---|---|---|
 | `mtxRollOverSigned`, `mtxSetRollOverMode` | `zether-owner` | `abi.encode(bytes(""), sig)`: Schnorr by `x` over `uaMessage(0x0141, PURPOSE_ZETHER_OWNER, digest)`, `Y` from the record; a registered Zether UA only, else `AccountNotRegistered` |
-| `register` PoP | `pop` (version 2) | Schnorr by `x` over `uaMessage(0x0141, PURPOSE_POP_V2, registrationDigest(portablePopDigest(UA, 0, 0), 0))` |
+| `register` PoP | `pop` (version 2) | Schnorr by `x` over `uaMessage(0x0141, PURPOSE_POP_V2, typed(UARegistration{UAPortableRecord{UA, 0x0141, 0, UAKemRecord{UA, 0, 0, 0}}, 0}))` |
 | UA-ledger writes of the account's public balance (`ua*`, `uaExecute(mtxShield)`, trade, mandates, receiver fee) | the write's purpose | the same Schnorr (`abi.encode(bytes(""), sig)`); `zether-bls12381` is a SIGNING UA, not an `msig` member (CTR-UA-14) |
 
 Schnorr (every curve):
@@ -977,7 +977,7 @@ verify:          z < r, R ≠ O, Y ≠ O, e ≠ 0, [z]G − R − [e]Y == O
 
 `UARegistry.register(0x0141, Y, attrs0, pop, "")` (`attrs0` = all absent) ([accounts.md §1.8](accounts.md#registry)): `Y` canonical, on
 the curve, in the subgroup, `≠ O` (BLS12-381 128 bytes in the EIP-2537 encoding); `pop` = the
-Schnorr above by `x` over `uaMessage(0x0141, PURPOSE_POP_V2, registrationDigest(portablePopDigest(UA, 0, 0), 0))`, which binds the UA
+Schnorr above by `x` over the typed registration ([CTR-UA-07](accounts.md#CTR-UA-07)), which binds the UA
 and nothing else — no chain key, no `chainUid`, no registry (UA-8, portable: the same `pop` registers the Zether UA on any chain,
 [CTR-UA-07](accounts.md#CTR-UA-07)) and never the caller, so anyone may relay it and a front-runner gets the
 identical record or a revert. The prover's `purpose_tag_v(p, version)` builds the `pop.v2` tag; `r33_keys.json` and `schnorr_bls12381.json` carry the portable PoP. A Zether UA holds no PQZ key (`UAPqzHolder`); BLS keys and signatures at

@@ -907,7 +907,7 @@ each library ≤ 24,576 B.
   `forge build src --sizes --json` as a ratchet (controller ruling, pending the owner): token implementations ≤ 20,480 B,
   other contracts ≤ 24,576 B, init code ≤ 49,152 B, and a contract named in `smartcontracts/evm/size-baseline.json`
   may exceed its limit but never its recorded size (UA-4, with the UA ledger: `NormalToken` 31,770 B, `WrappedToken` 39,189 B, `NormalZetherToken` 40,067 B, `WrappedZetherToken` 49,778 B, and its init code 51,473 B as the entry `WrappedZetherToken.init` over EIP-3860; owner decision 2026-10-11: optimise
-  later, wait for the Glamsterdam fork, code size is not a concern); the baseline does not tighten itself, so a smaller contract's entry is lowered by hand.
+  later, wait for the Glamsterdam fork, code size is not a concern; `UARegistry.init` 53,736 B, `typed-signing`: over EIP-3860, under Amsterdam's 131,072 B); the baseline does not tighten itself, so a smaller contract's entry is lowered by hand.
   Every token implementation now needs a chain with 64 KiB code (anvil `--code-size-limit 65536`, SCaaS testnet), and
   `deploy.sh` and the node e2e pass `--code-size-limit 65536` to `forge script` (`deploy.sh` also `--slow`: one tx per block; parallel broadcast can strand a deploy tx that doesn't fit the block's remaining gas).
   **Flag:** with P2a `NormalToken` is over its 20,480 B budget (still under EIP-170).

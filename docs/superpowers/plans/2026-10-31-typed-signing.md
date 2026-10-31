@@ -3,6 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status (2026-10-31):** Parts P and R built on branch `typed-signing` (P1–P8, P1b, X0, R1, R1b, R2) and documented (PD); PG / PRV next, then the owner's merge go; Part C after that. Owner ruling after R1b: `register` also takes `webauthn-p256` and the MuSig2 / FROST kinds beside their typed entries; only `msig` is refused there (decisions.md CTR-UA-36).
+
 **Goal:** every operation a user signs is a typed, readable EIP-712 struct whose fields are the operation's own
 explicit parameters — (P) the chain-free UA records (`register` PoP, `R_REG` message, KEM record, PQZ key record, `msig`
 member signatures, Zether PoP) under a domain with only `name` + `version`; (C) every chain-bound meta-transaction as a

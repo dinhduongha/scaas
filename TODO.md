@@ -102,9 +102,9 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
          `ua8` merge evidence is overwritten in the tree; git history keeps it (`06cedadc` and before).
      - **Node:** follow-ups of the two merged branches — EVM node UA job path (`ua_metatx`; merged 2026-10-30), TON passkey relays (P-256
        in the node), relay-fee minimum before mainnet. **UA-8 (owner ruling R-node, 2026-10-30):** the gateway route
-       `POST /v1/ua/register` and the `~gateway` sponsor policy for the four registry selectors (`register`, `setKemKey`,
+       `POST /v1/ua/register` and the `~gateway` sponsor policy for the eight registry selectors (CTR-UA-36: `register`, the four typed entries, `setKemKey`,
        `storePqzPop`, `setPqzKey`; NODE-GW-03, `sponsorship.md#admin`) **do not exist in code** — the ruling asked to extend them, but
-       there is no gateway route and no sponsor-policy code to extend; the node relays the four writes through job-API `call` jobs only
+       there is no gateway route and no sponsor-policy code to extend; the node relays the eight writes through job-API `call` jobs only
        (`Rule::UaRegistry`, `[[chains]] ua_registry`, `UA_REGISTER_SPLIT`, `64c233d4` on `ua8`). Build the route (calldata from the
        checked body, split rule) and the sponsor policy; optional: registry revert names (`UAPoP`, …) in `abi::decode_revert`.
      - **pqz-core:** fs3 Task 12 (final gate; merged 2026-10-30) → Task 6 (reproduction package; **DONE**, merged 2026-10-30
@@ -211,7 +211,20 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      no `paramSet`; **a named entry point per operation** (owner 2026-10-31, option B: `mtxUnwrap`, `mtxBurn`,
      `mtxSetMandate`, …, each with its own typehash; a generic `Execute` only for inherently arbitrary calls); code size
      kept under 64 KiB with the library split pattern. `UARegistry.kindName(uint16)` view. The portable part goes first:
-     `ua8-soroban` M2 / M3 / B1–B3 / B5 / B7 wait for it.
+     `ua8-soroban` M2 / M3 / B1–B3 / B5 / B7 wait for it. The explicit-parameter rule (owner 2026-10-31) joined the round:
+     plan `docs/superpowers/plans/2026-10-31-typed-signing.md`.
+     **Progress (2026-10-31):** Part P (typed portable records, `kindName`, native `msig` members over the typed digest, the `register` KEM key at
+     version 0), X0 (packed-blob inventory, calldata measured) and Part R (registry explicit ABI: `registerMsig`, `registerWebAuthn`, `registerMuSig2`,
+     `registerFrost`, `KemKey`, `UASig`, hash-committed KEM key filled by `setKemKey(ua, 0, …)`) built on branch `typed-signing`, docs done
+     (CTR-UA-07, -16, -32, -33, -35, -36, CLI-SGN-41); gates and whole-branch review (PG / PRV) next, then the owner's merge go. Not done: Part C
+     (named typed entries; until C2 the tokens keep `bytes auth`, converted by `UAKinds.uaSig`), Part N (node explicit job API).
+     **`ua8-soroban` hand-over, after merging `main` (TS-D9):** resolve `ua-portable-vectors.mjs`, `ua-signers.mjs`, `ua-rs/src/ua8.rs`, `portable.json`
+     by taking `main`'s typed code plus M1's minimal-slot code and regenerating; B1 adds the `UAPqzKey` / `UAPqzKeyRecord` typehashes on
+     `ua-common` `portable_digest` and the typed `kem_record_digest`, `pqz_key_digest`, `pqz_key_record_digest` (the helpers live in `ua-common`, not `digest.rs`);
+     B2 / B3: `register` passes the real `pqzKeyHash`, KEM record hash and `pqzPopHash` (zeros today), stores the `register` KEM key at version 0,
+     `set_kem_key` is write-once for every version and takes version 0 only to fill a hash-committed `register` (the EVM rule, owner KEM rulings 2–4);
+     a `kind_name` view (`KindUnknown` panic for an unknown id); `register`, `set_kem_key`, `set_pqz_key`, `require_authorized` with explicit
+     `contracttype` arguments (Part R's shapes; `msig` one typed form, as EVM); the Soroban packed-`Bytes` inventory of X0.
      **After the round merges (owner 2026-10-31):** reset the SCaaS testnet **without a backup** (owner 2026-10-31) and load the new contracts (deploy with
      every kind incl. `DEPLOY_ZETHER=1`, PQZ / Zether e2e, `verify-blockscout.sh`, Blockscout DB reset, records).
   3. **Done 2026-11-01:** Zether verifier one merged MSM (EVM) — before `zether-soroban`, so the Soroban verifier is merged-MSM from the
@@ -357,7 +370,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   applies only to `register` with its proof, and the proof cannot be split further (final fix A concern 1, part 1 m1). Measure the real call (Task 13) before choosing `n2816-kmax65536` for a chain whose block limit (or relayer cap) is
   60 M; this concerns 60 M-block chains, **not the SCaaS testnet (200 M, genesis `gasLimit` `0xbebc200`)**. `e2e.py` takes the full path only when
   `eth_estimateGas` of the full register is at most `gasLimit·1023/1024`, otherwise (or on an estimate error) `register` + `storePqzPop` (a full
-  registration with the proof is 84.8–109.1 M). Coverage note: on the SCaaS testnet (200 M) `e2e.py` takes the **full** path, so the inline `register` + proof runs
+  registration with the proof is 84.7–108.9 M). Coverage note: on the SCaaS testnet (200 M) `e2e.py` takes the **full** path, so the inline `register` + proof runs
   in Task 13; the paths that have never run on a chain with the real `R_REG` verifier are the **split** one — `register` without `pqzPop`
   then `storePqzPop`, which `e2e.py --split` forces — and the **later PQZ key**: `setPqzKey` + `storePqzPop` with the `R_REG` proof over
   `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, h))`, which `e2e.py` now has as its own step (`a651600f`: `dave`, an ML-DSA-65 UA
@@ -366,7 +379,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   when `setPqzKey` replaces an other-set key that `setPqzKey` itself stored, the old key, hash and signature are overwritten in
   state; the record survives only in its `UAPqzKeyAdded` log (and on the chains of its own set) — a replaced `register` key is kept
   for `registrationOf`. Watch: decide whether to keep it in state if logs get pruned (EIP-4444) before anyone copies it. (3) **`pqz-core/stmt/src/lib.rs` doc comment**: it still names `popDigest`; UA-8 changed only the 32-byte
-  message's pre-image (`uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, pqzKeyHash, kemRecordHash))`), not the `R_REG`
+  message's pre-image (`uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kind, pqzKeyHash, kemRecordHash))`, typed since `typed-signing`), not the `R_REG`
   relation, statement or precompile. Edit the comment with the next pqz-core change (a doc-only edit in a core file would
   force the full pqz-core gate; owner rule: full gate only for core changes). Decision: `docs/decisions.md` CTR-UA-31 (the plan decision
   "pqz-core untouched").
