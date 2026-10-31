@@ -204,6 +204,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      `mtxSetMandate`, …, each with its own typehash; a generic `Execute` only for inherently arbitrary calls); code size
      kept under 64 KiB with the library split pattern. `UARegistry.kindName(uint16)` view. The portable part goes first:
      `ua8-soroban` M2 / M3 / B1–B3 / B5 / B7 wait for it.
+     **After the round merges (owner 2026-10-31):** reset the SCaaS testnet and load the new contracts (deploy with
+     every kind incl. `DEPLOY_ZETHER=1`, PQZ / Zether e2e, `verify-blockscout.sh`, Blockscout DB reset, records).
   3. Zether verifier one merged MSM (EVM) — before `zether-soroban`, so the Soroban verifier is merged-MSM from the
      start (the Z0 estimate 536 M–2,409 M vs the 400 M limit depends on it).
   4. `zether-soroban` (Part Z; Z0 measures first).
