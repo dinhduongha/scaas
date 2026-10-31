@@ -1,5 +1,5 @@
 // SCaaS Universal Account identity layer (accounts.md §1.3–§1.6) for .NET client systems: the kind table, ids, keyHash,
-// purpose tags, ua_msg, the portable PoP and KEM record digests (UA-8), the registry's UAAuth digest, member digests, canonical ids and key-data validation.
+// purpose tags, ua_msg, the portable PoP / KEM record / PQZ key record (typed EIP-712 records, typed-signing TS-D1 … TS-D4), the registry's UAAuth digest, member digests, canonical ids and key-data validation.
 // The same rules live in Solidity (UAKinds.sol), JS (clientkeys ua.js), Rust (scaas-ua), Python and Go;
 // smartcontracts/vectors/ua pins all six. UNAUDITED.
 using System.Globalization;
@@ -183,28 +183,70 @@ public static partial class UA
     }
 
     public static readonly byte[] PopV2Tag = PurposeTag("pop", 2);
-    public static readonly byte[] KemRecordTag = Keccak256(Utf8("scaas.ua.kem-record.v1"));
     /// <summary>The 1,601-byte <c>0x01</c> ‖ ML-KEM-1024 ek ‖ X25519 pk the registry stores (UA-8 P7, CTR-UA-32); <c>kemPk[0]</c> is the scheme id.</summary>
     public const byte KemSchemeMlkem1024X25519 = 1;
     public const int KemPkLength = 1601;
 
-    /// <summary><c>keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)</c>, each hash 32 zero bytes when absent.</summary>
-    public static byte[] PortablePopDigest(byte[] ua, byte[] pqzKeyHash, byte[] kemRecordHash) =>
-        Keccak256(PopV2Tag, Sized(ua, 32, "ua"), Sized(pqzKeyHash, 32, "pqzKeyHash"), Sized(kemRecordHash, 32, "kemRecordHash"));
+    /// <summary>The portable EIP-712 domain (TS-D1): name and version only, no chainId / verifyingContract / salt (CTR-UA-07).</summary>
+    public const string PortableDomainType = "EIP712Domain(string name,string version)";
+    public const string PortableDomainName = "SCaaS UA Portable";
+    public const string PortableDomainVersion = "1";
+    /// <summary><c>DS_P = keccak256(keccak256(type) ‖ keccak256(name) ‖ keccak256(version))</c>.</summary>
+    public static readonly byte[] PortableDomainSeparator =
+        Keccak256(Keccak256(Utf8(PortableDomainType)), Keccak256(Utf8(PortableDomainName)), Keccak256(Utf8(PortableDomainVersion)));
 
-    /// <summary><c>keccak256(portablePopDigest ‖ pqzPopHash)</c>: what the signer's <c>pop</c> signs under <c>UAMessage(kind, POP_V2, ·)</c>.</summary>
-    public static byte[] RegistrationDigest(byte[] portable, byte[] pqzPopHash) =>
-        Keccak256(Sized(portable, 32, "portable"), Sized(pqzPopHash, 32, "pqzPopHash"));
+    const string KemType = "UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)";
+    const string RecordType = "UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)";
+    const string PqzKeyType = "UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)";
 
-    /// <summary><c>keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))</c>: version 1 … 2^64 − 1, <c>kemPk</c> = scheme byte ‖ key (<c>UAKemScheme</c> for an id other than 1).</summary>
-    public static byte[] KemRecordDigest(byte[] ua, ulong version, byte[] kemPk)
+    /// <summary>The EIP-712 <c>encodeType</c> of each portable struct (primary, then the referenced types sorted by name).</summary>
+    public static readonly IReadOnlyDictionary<string, string> PortableTypes = new Dictionary<string, string>
     {
-        if (version == 0) throw new UAException("UAKemVersion", "0");
+        ["UAKemRecord"] = KemType,
+        ["UAPortableRecord"] = RecordType + KemType,
+        ["UARegistration"] = "UARegistration(UAPortableRecord record,bytes32 pqzPopHash)" + KemType + RecordType,
+        ["UAPqzKey"] = PqzKeyType,
+        ["UAPqzKeyRecord"] = "UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)" + PqzKeyType,
+    };
+
+    public static byte[] PortableTypehash(string name) => Keccak256(Utf8(PortableTypes[name]));
+
+    /// <summary><c>keccak256(typehash(name) ‖ words)</c>: every portable field is a 32-byte word or a nested struct hash.</summary>
+    public static byte[] HashStruct(string name, params byte[][] words) =>
+        Keccak256([PortableTypehash(name), .. words.Select(w => Sized(w, 32, "word"))]);
+
+    /// <summary><c>keccak256(0x1901 ‖ DS_P ‖ structHash)</c>: what <c>eth_signTypedData_v4</c> returns for a portable record.</summary>
+    static byte[] Typed(byte[] structHash) => Keccak256(new byte[] { 0x19, 0x01 }, PortableDomainSeparator, structHash);
+
+    /// <summary><c>hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)})</c>: version 1 … 2^64 − 1,
+    /// <c>kemPk</c> = scheme byte ‖ key (<c>UAKemScheme</c> for an id other than 1). No record (version 0, no key) is the zero record
+    /// <c>UAKemRecord{ua, 0, 0, 0}</c> (TS-D2): the <c>kem</c> word of a <c>UAPortableRecord</c>.</summary>
+    public static byte[] KemRecordHash(byte[] ua, ulong version, byte[] kemPk)
+    {
         kemPk ??= []; // ponytail: a null key is an empty key (UAKemKeyLength), not a NullReferenceException
+        if (version == 0 && kemPk.Length == 0) return HashStruct("UAKemRecord", ua, new byte[32], new byte[32], new byte[32]);
+        if (version == 0) throw new UAException("UAKemVersion", "0");
         if (kemPk.Length > 0 && kemPk[0] != KemSchemeMlkem1024X25519) throw new UAException("UAKemScheme", kemPk[0].ToString(CultureInfo.InvariantCulture));
         if (kemPk.Length != KemPkLength) throw new UAException("UAKemKeyLength", kemPk.Length.ToString(CultureInfo.InvariantCulture));
-        return Keccak256(KemRecordTag, Sized(ua, 32, "ua"), Word(version), Keccak256(kemPk));
+        return HashStruct("UAKemRecord", ua, Word(version), Word(kemPk[0]), Keccak256(kemPk));
     }
+
+    /// <summary>The typed <c>UAKemRecord</c> digest <c>setKemKey</c> signs (a real record: version 0 is <c>UAKemVersion</c>).</summary>
+    public static byte[] KemRecordDigest(byte[] ua, ulong version, byte[] kemPk) =>
+        version == 0 ? throw new UAException("UAKemVersion", "0") : Typed(KemRecordHash(ua, version, kemPk));
+
+    /// <summary><c>hashStruct(UAPortableRecord{ua, kind, pqzKeyHash, kem})</c>; <paramref name="kemRecordHash"/> = <see cref="KemRecordHash"/> (the zero record's when none).</summary>
+    public static byte[] PortableRecordHash(byte[] ua, ushort kind, byte[] pqzKeyHash, byte[] kemRecordHash) =>
+        HashStruct("UAPortableRecord", ua, Word(kind), pqzKeyHash, kemRecordHash);
+
+    /// <summary>The typed <c>UAPortableRecord</c>: what R_REG proves over at <c>register</c> / the first <c>storePqzPop</c>.</summary>
+    public static byte[] PortableRecordDigest(byte[] ua, ushort kind, byte[] pqzKeyHash, byte[] kemRecordHash) =>
+        Typed(PortableRecordHash(ua, kind, pqzKeyHash, kemRecordHash));
+
+    /// <summary>The typed <c>UARegistration{record, pqzPopHash}</c>: what the signer's <c>pop</c> signs under <c>UAMessage(kind, POP_V2, ·)</c>
+    /// (and a native msig member signs itself, TS-D4).</summary>
+    public static byte[] RegistrationDigest(byte[] ua, ushort kind, byte[] pqzKeyHash, byte[] kemRecordHash, byte[] pqzPopHash) =>
+        Typed(HashStruct("UARegistration", PortableRecordHash(ua, kind, pqzKeyHash, kemRecordHash), pqzPopHash));
 
     /// <summary><c>UAMessage(kind, PURPOSE_KEM, KemRecordDigest(ua, version, kemPk))</c>: what the UA signs for <c>setKemKey</c>.</summary>
     public static byte[] KemRecordMessage(ushort kind, byte[] ua, ulong version, byte[] kemPk) =>
@@ -229,8 +271,10 @@ public static partial class UA
         return h.AsSpan().SequenceEqual(EmptyHash) ? throw new UAException("UAPqzPopHash", "empty proof") : h;
     }
 
-    /// <summary>The portable PoP of a registration as <see cref="HolderPopMessage"/> returns it; <c>MemberDigest</c> is set for an <c>msig</c> only.</summary>
-    public sealed record HolderPop(byte[] PqzKeyHash, byte[] PqzPopHash, byte[] KemRecordHash, byte[] PortablePopDigest,
+    /// <summary>The portable PoP of a registration as <see cref="HolderPopMessage"/> returns it: <c>KemRecordHash</c> = hashStruct(UAKemRecord)
+    /// (the zero record's when none), <c>PortableRecordDigest</c> / <c>RegistrationDigest</c> the typed records; <c>MemberDigest</c> is
+    /// set for an <c>msig</c> only (what a derived member signs; a native member signs <c>RegistrationDigest</c> itself, TS-D4).</summary>
+    public sealed record HolderPop(byte[] PqzKeyHash, byte[] PqzPopHash, byte[] KemRecordHash, byte[] PortableRecordDigest,
         byte[] RegistrationDigest, byte[] Message, byte[]? MemberDigest);
 
     /// <summary>The portable PoP message of a registration (UA-8 P1, P2). Attributes: <paramref name="pqzKey"/> with its proof
@@ -251,22 +295,19 @@ public static partial class UA
         var popHash = ProofHashOf(pqzPop, pqzPopHash);
         if ((pqzKey is not null) != popHash.Any(b => b != 0)) throw new UAException("UAPqzPopHash", "key and proof hash go together");
         var keyHash = pqzKey is null ? new byte[32] : PqzKeyHashOf(pqzKey);
-        var kemHash = kem is { } k ? KemRecordDigest(ua, k.Version, k.Pk) : new byte[32];
-        var portable = PortablePopDigest(ua, keyHash, kemHash);
-        var reg = RegistrationDigest(portable, popHash);
+        var kemHash = kem is { } k ? KemRecordHash(ua, k.Version, k.Pk) : KemRecordHash(ua, 0, []);
+        var reg = RegistrationDigest(ua, kind, keyHash, kemHash, popHash);
         var msg = UAMessage(kind, PopV2Tag, reg);
-        return new(keyHash, popHash, kemHash, portable, reg, msg, kind == 0x0120 ? MemberDigest(ua, msg) : null);
+        return new(keyHash, popHash, kemHash, PortableRecordDigest(ua, kind, keyHash, kemHash), reg, msg, kind == 0x0120 ? MemberDigest(ua, msg) : null);
     }
 
-    public static readonly byte[] PqzKeyRecordTag = Keccak256(Utf8("scaas.ua.pqz-key-record.v1"));
+    /// <summary>The typed <c>UAPqzKey{ua, pqzKeyHash}</c>: what a later PQZ key's R_REG proves over (no proof hash: no cycle).</summary>
+    public static byte[] PqzKeyDigest(byte[] ua, byte[] pqzKeyHash) => Typed(HashStruct("UAPqzKey", ua, pqzKeyHash));
 
-    /// <summary><c>keccak256(PQZ_KEY_RECORD_TAG ‖ ua ‖ pqzKeyHash)</c>: what a later PQZ key's R_REG proves over (no proof hash: no cycle).</summary>
-    public static byte[] PqzKeyDigest(byte[] ua, byte[] pqzKeyHash) =>
-        Keccak256(PqzKeyRecordTag, Sized(ua, 32, "ua"), Sized(pqzKeyHash, 32, "pqzKeyHash"));
-
-    /// <summary><c>keccak256(pqzKeyDigest ‖ pqzPopHash)</c>: what <c>setPqzKey</c>'s signature signs under <c>UAMessage(kind, PURPOSE_PQZ_KEY, ·)</c>.</summary>
-    public static byte[] PqzKeyRecordDigest(byte[] keyDigest, byte[] pqzPopHash) =>
-        Keccak256(Sized(keyDigest, 32, "pqzKeyDigest"), Sized(pqzPopHash, 32, "pqzPopHash"));
+    /// <summary>The typed <c>UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}</c>: what <c>setPqzKey</c>'s signature signs under
+    /// <c>UAMessage(kind, PURPOSE_PQZ_KEY, ·)</c> (and a native msig member signs itself, TS-D4).</summary>
+    public static byte[] PqzKeyRecordDigest(byte[] ua, byte[] pqzKeyHash, byte[] pqzPopHash) =>
+        Typed(HashStruct("UAPqzKeyRecord", HashStruct("UAPqzKey", ua, pqzKeyHash), pqzPopHash));
 
     /// <summary>The PQZ key record of <c>setPqzKey</c> (ruling A1-I1): <c>Message</c> is what the UA signs, <c>PqzRegMessage</c> what the key's R_REG proves over.</summary>
     public sealed record PqzKeyRecord(byte[] PqzKeyHash, byte[] PqzPopHash, byte[] PqzKeyDigest, byte[] RecordDigest, byte[] Message,
@@ -284,18 +325,18 @@ public static partial class UA
         var popHash = ProofHashOf(pqzPop, pqzPopHash);
         if (popHash.All(b => b == 0)) throw new UAException("UAPqzPopHash", "required");
         var keyDigest = PqzKeyDigest(ua, keyHash);
-        var recordDigest = PqzKeyRecordDigest(keyDigest, popHash);
+        var recordDigest = PqzKeyRecordDigest(ua, keyHash, popHash);
         var tag = PurposeTag("pqz-key");
         var msg = UAMessage(kind, tag, recordDigest);
         return new(keyHash, popHash, keyDigest, recordDigest, msg, UAMessage(0x0142, tag, keyDigest), kind == 0x0120 ? MemberDigest(ua, msg) : null);
     }
 
-    /// <summary>The message R_REG proves over: <c>UAMessage(0x0142, POP_V2, PortablePopDigest(ua, keyHash(0x0142, pqzKey), kemRecordHash))</c>.</summary>
-    public static byte[] PqzRegMessage(byte[] ua, byte[] pqzKey, (ulong Version, byte[] Pk)? kem = null)
+    /// <summary>The message R_REG proves over: <c>UAMessage(0x0142, POP_V2, PortableRecordDigest(ua, kind, keyHash(0x0142, pqzKey),
+    /// kemRecordHash))</c>, <paramref name="kind"/> the registering kind (TS-D3); <paramref name="kem"/> null / (0, empty) = no KEM record.</summary>
+    public static byte[] PqzRegMessage(ushort kind, byte[] ua, byte[] pqzKey, (ulong Version, byte[] Pk)? kem = null)
     {
-        if (kem is { Version: 0, Pk: null or { Length: 0 } }) kem = null; // (0, null) / (0, []) = absent
-        var kemHash = kem is { } k ? KemRecordDigest(ua, k.Version, k.Pk) : new byte[32];
-        return UAMessage(0x0142, PopV2Tag, PortablePopDigest(ua, PqzKeyHashOf(pqzKey), kemHash));
+        var kemHash = kem is { } k ? KemRecordHash(ua, k.Version, k.Pk) : KemRecordHash(ua, 0, []);
+        return UAMessage(0x0142, PopV2Tag, PortableRecordDigest(ua, kind, PqzKeyHashOf(pqzKey), kemHash));
     }
 
     /// <summary>True when the msig members outside kinds 0x0130-0x0133 weigh less than its threshold (CTR-PQZ-12).</summary>
@@ -320,18 +361,14 @@ public static partial class UA
             Keccak256(Utf8(d.Generation.ToString(CultureInfo.InvariantCulture))), Word(d.ChainId), AddressWord(d.Registry),
             Sized(d.ChainUid, 32, "chainUid"));
 
-    /// <summary>EIP-191 <c>personal_sign</c> of a 32-byte digest. What a code-less native (EOA) <c>msig</c> member signs over the
-    /// <c>MemberDigest</c> of a portable record only (POP_V2, KEM, PQZ_KEY; ruling C7).</summary>
-    public static byte[] PersonalSignDigest(byte[] digest) =>
-        Keccak256(Utf8("\u0019Ethereum Signed Message:\n32"), Sized(digest, 32, "digest"));
-
-    /// <summary>The portable purposes (POP_V2, KEM, PQZ_KEY): the only ones a code-less native msig member signs by <c>personal_sign</c>.</summary>
+    /// <summary>The portable purposes (POP_V2, KEM, PQZ_KEY): the only ones where a code-less native msig member signs the record's
+    /// typed digest itself (<c>eth_signTypedData_v4</c>, 65-byte r ‖ s ‖ v; a contract member answers ERC-1271 over it; TS-D4).</summary>
     public static bool IsPortablePurpose(byte[] tag) =>
         new[] { PopV2Tag, PurposeTag("kem"), PurposeTag("pqz-key") }.Any(t => t.AsSpan().SequenceEqual(tag));
 
     /// <summary>EIP-712 digest of <c>UAAuth(ua, purpose, digest)</c>: what native signers behind the registry sign, except that
-    /// under the three portable purposes (<see cref="IsPortablePurpose"/>) a code-less native msig member signs
-    /// <see cref="PersonalSignDigest"/> of the <see cref="MemberDigest"/> instead (CTR-MTX-14, ruling C7).</summary>
+    /// under the three portable purposes (<see cref="IsPortablePurpose"/>) a code-less native msig member signs the record's typed
+    /// digest instead (CTR-MTX-14, TS-D4).</summary>
     public static byte[] UAAuthDigest(Domain d, byte[] ua, byte[] purpose, byte[] digest) =>
         Keccak256(new byte[] { 0x19, 0x01 }, UAAuthDomainSeparator(d),
             Keccak256(Keccak256(Utf8(UAAuthType)), Sized(ua, 32, "ua"), Sized(purpose, 32, "purposeTag"), Sized(digest, 32, "digest")));

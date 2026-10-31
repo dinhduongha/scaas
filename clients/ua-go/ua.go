@@ -297,10 +297,7 @@ func addressWord(a [20]byte) []byte { return append(make([]byte, 12), a[:]...) }
 
 var (
 	// PopV2Tag is PURPOSE_POP_V2 = keccak256("scaas.ua.purpose.pop.v2").
-	PopV2Tag, _ = PurposeTagV("pop", 2)
-	// KemRecordTag and PqzKeyRecordTag tag the KEM record and the PQZ key record digests.
-	KemRecordTag     = Keccak256([]byte("scaas.ua.kem-record.v1"))
-	PqzKeyRecordTag  = Keccak256([]byte("scaas.ua.pqz-key-record.v1"))
+	PopV2Tag, _      = PurposeTagV("pop", 2)
 	kemPurpose, _    = PurposeTag("kem")
 	pqzKeyPurpose, _ = PurposeTag("pqz-key")
 )
@@ -312,19 +309,69 @@ const KemSchemeMlkem1024X25519 = 1
 // KemPkLength is the one KEM key the registry stores: 0x01 ‖ ML-KEM-1024 ek ‖ X25519 pk (X-Wing order).
 const KemPkLength = 1601
 
-// PortablePopDigest is keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash), each hash zero when absent (UA-8 P1: no chain).
-func PortablePopDigest(ua, pqzKeyHash, kemRecordHash [32]byte) [32]byte {
-	return Keccak256(PopV2Tag[:], ua[:], pqzKeyHash[:], kemRecordHash[:])
+// The portable EIP-712 domain (typed-signing TS-D1): name and version only, no chainId / verifyingContract / salt (the
+// records register a UA on every chain, CTR-UA-07).
+const (
+	PortableDomainType    = "EIP712Domain(string name,string version)"
+	PortableDomainName    = "SCaaS UA Portable"
+	PortableDomainVersion = "1"
+)
+
+const (
+	kemType    = "UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)"
+	recordType = "UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)"
+	pqzKeyType = "UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)"
+)
+
+var (
+	// PortableDomainSeparator is DS_P = keccak256(keccak256(type) ‖ keccak256(name) ‖ keccak256(version)).
+	PortableDomainSeparator = func() [32]byte {
+		t, n, v := Keccak256([]byte(PortableDomainType)), Keccak256([]byte(PortableDomainName)), Keccak256([]byte(PortableDomainVersion))
+		return Keccak256(t[:], n[:], v[:])
+	}()
+	// PortableTypes is the EIP-712 encodeType of each portable struct (primary, then the referenced types sorted by name).
+	PortableTypes = map[string]string{
+		"UAKemRecord":      kemType,
+		"UAPortableRecord": recordType + kemType,
+		"UARegistration":   "UARegistration(UAPortableRecord record,bytes32 pqzPopHash)" + kemType + recordType,
+		"UAPqzKey":         pqzKeyType,
+		"UAPqzKeyRecord":   "UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)" + pqzKeyType,
+	}
+)
+
+// PortableTypehash is keccak256(encodeType) of a portable struct by name (panics on another name).
+func PortableTypehash(name string) [32]byte {
+	t, ok := PortableTypes[name]
+	if !ok {
+		panic("not a portable struct: " + name)
+	}
+	return Keccak256([]byte(t))
 }
 
-// RegistrationDigest is keccak256(portablePopDigest ‖ pqzPopHash): what the signer's pop signs under UAMessage(kind, POP_V2, ·).
-func RegistrationDigest(portable, pqzPopHash [32]byte) [32]byte {
-	return Keccak256(portable[:], pqzPopHash[:])
+// HashStruct is keccak256(typehash(name) ‖ words): every portable field is a 32-byte word or a nested struct hash.
+func HashStruct(name string, words ...[32]byte) [32]byte {
+	th := PortableTypehash(name)
+	parts := [][]byte{th[:]}
+	for i := range words {
+		parts = append(parts, words[i][:])
+	}
+	return Keccak256(parts...)
 }
 
-// KemRecordDigest is keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk)): version 1 … 2^64 − 1, kemPk = scheme byte ‖ key (empty: UAKemKeyLength;
-// scheme not enabled: UAKemScheme; another length: UAKemKeyLength).
-func KemRecordDigest(ua [32]byte, version uint64, kemPk []byte) ([32]byte, error) {
+// typed is keccak256(0x1901 ‖ DS_P ‖ structHash): what eth_signTypedData_v4 returns for a portable record.
+func typed(structHash [32]byte) [32]byte {
+	return Keccak256([]byte{0x19, 0x01}, PortableDomainSeparator[:], structHash[:])
+}
+
+func w32(v uint64) (o [32]byte) { copy(o[:], word(v)); return }
+
+// KemRecordHash is hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)}): version 1 … 2^64 − 1,
+// kemPk = scheme byte ‖ key (empty: UAKemKeyLength; scheme not enabled: UAKemScheme; another length: UAKemKeyLength). No
+// record (version 0, no key) is the zero record UAKemRecord{ua, 0, 0, 0} (TS-D2): the kem word of a UAPortableRecord.
+func KemRecordHash(ua [32]byte, version uint64, kemPk []byte) ([32]byte, error) {
+	if version == 0 && len(kemPk) == 0 {
+		return HashStruct("UAKemRecord", ua, [32]byte{}, [32]byte{}, [32]byte{}), nil
+	}
 	if version == 0 {
 		return [32]byte{}, fail("UAKemVersion", "0")
 	}
@@ -334,8 +381,36 @@ func KemRecordDigest(ua [32]byte, version uint64, kemPk []byte) ([32]byte, error
 	if len(kemPk) != KemPkLength {
 		return [32]byte{}, fail("UAKemKeyLength", strconv.Itoa(len(kemPk)))
 	}
-	pk := Keccak256(kemPk)
-	return Keccak256(KemRecordTag[:], ua[:], word(version), pk[:]), nil
+	return HashStruct("UAKemRecord", ua, w32(version), w32(uint64(kemPk[0])), Keccak256(kemPk)), nil
+}
+
+// KemRecordDigest is the typed UAKemRecord digest setKemKey signs (a real record: version 0 is UAKemVersion).
+func KemRecordDigest(ua [32]byte, version uint64, kemPk []byte) ([32]byte, error) {
+	if version == 0 {
+		return [32]byte{}, fail("UAKemVersion", "0")
+	}
+	h, err := KemRecordHash(ua, version, kemPk)
+	if err != nil {
+		return h, err
+	}
+	return typed(h), nil
+}
+
+// PortableRecordHash is hashStruct(UAPortableRecord{ua, kind, pqzKeyHash, kem}), kemRecordHash = KemRecordHash (the zero
+// record's hash when there is none).
+func PortableRecordHash(ua [32]byte, kind uint16, pqzKeyHash, kemRecordHash [32]byte) [32]byte {
+	return HashStruct("UAPortableRecord", ua, w32(uint64(kind)), pqzKeyHash, kemRecordHash)
+}
+
+// PortableRecordDigest is the typed UAPortableRecord: what R_REG proves over at register / the first storePqzPop.
+func PortableRecordDigest(ua [32]byte, kind uint16, pqzKeyHash, kemRecordHash [32]byte) [32]byte {
+	return typed(PortableRecordHash(ua, kind, pqzKeyHash, kemRecordHash))
+}
+
+// RegistrationDigest is the typed UARegistration{record, pqzPopHash}: what the signer's pop signs under
+// UAMessage(kind, POP_V2, ·) (and a native msig member signs itself, TS-D4).
+func RegistrationDigest(ua [32]byte, kind uint16, pqzKeyHash, kemRecordHash, pqzPopHash [32]byte) [32]byte {
+	return typed(HashStruct("UARegistration", PortableRecordHash(ua, kind, pqzKeyHash, kemRecordHash), pqzPopHash))
 }
 
 // KemRecordMessage is what the UA signs for a KEM record: UAMessage(kind, PURPOSE_KEM, KemRecordDigest).
@@ -354,10 +429,10 @@ type Kem struct {
 }
 
 func (k *Kem) hash(ua [32]byte) ([32]byte, error) {
-	if k == nil || (k.Version == 0 && len(k.Pk) == 0) {
-		return [32]byte{}, nil
+	if k == nil {
+		return KemRecordHash(ua, 0, nil)
 	}
-	return KemRecordDigest(ua, k.Version, k.Pk)
+	return KemRecordHash(ua, k.Version, k.Pk)
 }
 
 // holds: a PQZ / KEM holder is a single-key PQ kind, or an msig whose key data is PQ-eligible (malformed key data is UAKeyData).
@@ -418,13 +493,14 @@ func proofHashOf(pqzPop, pqzPopHash []byte) ([32]byte, error) {
 	return h, nil
 }
 
-// HolderPop is the portable PoP of a registration (UA-8 P1, P2), as HolderPopMessage returns it. Message is
-// UAMessage(kind, POP_V2, RegistrationDigest): what the signer's pop signs (every kind). MemberDigest (msig only, else nil)
-// is MemberDigest(ua, Message): what each member signs under `member`; a code-less native member signs
-// PersonalSignDigest(MemberDigest) (ruling C7).
+// HolderPop is the portable PoP of a registration (UA-8 P1, P2; typed-signing TS-D3), as HolderPopMessage returns it.
+// KemRecordHash is hashStruct(UAKemRecord) (the zero record's when none), PortableRecordDigest the typed UAPortableRecord,
+// RegistrationDigest the typed UARegistration. Message is UAMessage(kind, POP_V2, RegistrationDigest): what the signer's pop
+// signs (every kind). MemberDigest (msig only, else nil) is MemberDigest(ua, Message): what each derived member signs under
+// `member`; a native member signs RegistrationDigest itself (eth_signTypedData_v4, TS-D4).
 type HolderPop struct {
-	PqzKeyHash, PqzPopHash, KemRecordHash, PortablePopDigest, RegistrationDigest, Message [32]byte
-	MemberDigest                                                                          *[32]byte
+	PqzKeyHash, PqzPopHash, KemRecordHash, PortableRecordDigest, RegistrationDigest, Message [32]byte
+	MemberDigest                                                                             *[32]byte
 }
 
 // HolderPopMessage is the portable PoP message of a registration. Attributes: pqzKey with its proof pqzPop (or only its hash
@@ -461,8 +537,8 @@ func HolderPopMessage(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopH
 	if r.KemRecordHash, err = kem.hash(ua); err != nil {
 		return nil, err
 	}
-	r.PortablePopDigest = PortablePopDigest(ua, r.PqzKeyHash, r.KemRecordHash)
-	r.RegistrationDigest = RegistrationDigest(r.PortablePopDigest, popHash)
+	r.PortableRecordDigest = PortableRecordDigest(ua, kind, r.PqzKeyHash, r.KemRecordHash)
+	r.RegistrationDigest = RegistrationDigest(ua, kind, r.PqzKeyHash, r.KemRecordHash, popHash)
 	if r.Message, err = UAMessage(kind, PopV2Tag, r.RegistrationDigest); err != nil {
 		return nil, err
 	}
@@ -473,8 +549,9 @@ func HolderPopMessage(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopH
 	return r, nil
 }
 
-// PqzRegMessage is the message R_REG proves over: UAMessage(0x0142, POP_V2, PortablePopDigest(ua, keyHash(0x0142, pqzKey), kemRecordHash)).
-func PqzRegMessage(ua [32]byte, pqzKey []byte, kem *Kem) ([32]byte, error) {
+// PqzRegMessage is the message R_REG proves over: UAMessage(0x0142, POP_V2, PortableRecordDigest(ua, kind, keyHash(0x0142,
+// pqzKey), kemRecordHash)), kind the registering kind (TS-D3); kem nil / {0, empty} = no KEM record.
+func PqzRegMessage(kind uint16, ua [32]byte, pqzKey []byte, kem *Kem) ([32]byte, error) {
 	kr, err := kem.hash(ua) // the KEM record first, as ua-rs and the JS
 	if err != nil {
 		return kr, err
@@ -483,17 +560,18 @@ func PqzRegMessage(ua [32]byte, pqzKey []byte, kem *Kem) ([32]byte, error) {
 	if err != nil {
 		return h, err
 	}
-	return UAMessage(0x0142, PopV2Tag, PortablePopDigest(ua, h, kr))
+	return UAMessage(0x0142, PopV2Tag, PortableRecordDigest(ua, kind, h, kr))
 }
 
-// PqzKeyDigest is keccak256(PQZ_KEY_RECORD_TAG ‖ ua ‖ pqzKeyHash): what a later PQZ key's R_REG proves over (no proof hash: no cycle).
+// PqzKeyDigest is the typed UAPqzKey{ua, pqzKeyHash}: what a later PQZ key's R_REG proves over (no proof hash: no cycle).
 func PqzKeyDigest(ua, pqzKeyHash [32]byte) [32]byte {
-	return Keccak256(PqzKeyRecordTag[:], ua[:], pqzKeyHash[:])
+	return typed(HashStruct("UAPqzKey", ua, pqzKeyHash))
 }
 
-// PqzKeyRecordDigest is keccak256(pqzKeyDigest ‖ pqzPopHash): what setPqzKey's signature signs under UAMessage(kind, PURPOSE_PQZ_KEY, ·).
-func PqzKeyRecordDigest(keyDigest, pqzPopHash [32]byte) [32]byte {
-	return Keccak256(keyDigest[:], pqzPopHash[:])
+// PqzKeyRecordDigest is the typed UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}: what setPqzKey's signature signs
+// under UAMessage(kind, PURPOSE_PQZ_KEY, ·) (and a native msig member signs itself, TS-D4).
+func PqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash [32]byte) [32]byte {
+	return typed(HashStruct("UAPqzKeyRecord", HashStruct("UAPqzKey", ua, pqzKeyHash), pqzPopHash))
 }
 
 // PqzKeyRecord is the PQZ key record of setPqzKey (ruling A1-I1), see PqzKeyRecordMessage. Message is what the UA signs,
@@ -527,7 +605,7 @@ func PqzKeyRecordMessage(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzP
 		return nil, fail("UAPqzPopHash", "a PQZ key record needs its proof hash")
 	}
 	r.PqzKeyDigest = PqzKeyDigest(ua, r.PqzKeyHash)
-	r.RecordDigest = PqzKeyRecordDigest(r.PqzKeyDigest, r.PqzPopHash)
+	r.RecordDigest = PqzKeyRecordDigest(ua, r.PqzKeyHash, r.PqzPopHash)
 	if r.Message, err = UAMessage(kind, pqzKeyPurpose, r.RecordDigest); err != nil {
 		return nil, err
 	}
@@ -541,14 +619,9 @@ func PqzKeyRecordMessage(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzP
 	return r, nil
 }
 
-// PersonalSignDigest is the EIP-191 personal_sign of a 32-byte digest: keccak256(0x19 ‖ "Ethereum Signed Message:\n32" ‖ digest).
-// A code-less native (EOA) msig member signs it over the MemberDigest of a portable record only (POP_V2, KEM, PQZ_KEY; ruling
-// C7); every other purpose stays UAAuth (CTR-MTX-14).
-func PersonalSignDigest(digest [32]byte) [32]byte {
-	return Keccak256([]byte("\x19Ethereum Signed Message:\n32"), digest[:])
-}
-
-// IsPortablePurpose: POP_V2, KEM, PQZ_KEY are the only purposes a code-less native msig member signs by personal_sign.
+// IsPortablePurpose: POP_V2, KEM, PQZ_KEY are the only purposes where a code-less native msig member signs the record's typed
+// digest itself (eth_signTypedData_v4, 65-byte r ‖ s ‖ v; a contract member answers ERC-1271 over it; TS-D4); every other
+// purpose stays UAAuth (CTR-MTX-14).
 func IsPortablePurpose(tag [32]byte) bool {
 	return tag == PopV2Tag || tag == kemPurpose || tag == pqzKeyPurpose
 }
@@ -567,8 +640,8 @@ func UAAuthDomainSeparator(d Domain) [32]byte {
 }
 
 // UAAuthDigest is the EIP-712 digest of UAAuth(ua, purpose, digest): what native signers behind the registry sign, except
-// that under the three portable purposes (IsPortablePurpose) a code-less native msig member signs PersonalSignDigest of the
-// MemberDigest instead (CTR-MTX-14, ruling C7).
+// that under the three portable purposes (IsPortablePurpose) a code-less native msig member signs the record's typed digest
+// instead (CTR-MTX-14, TS-D4).
 func UAAuthDigest(d Domain, ua, purpose, digest [32]byte) [32]byte {
 	t := Keccak256([]byte(UAAuthType))
 	s := Keccak256(t[:], ua[:], purpose[:], digest[:])

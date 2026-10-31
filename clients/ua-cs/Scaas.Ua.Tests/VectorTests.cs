@@ -143,9 +143,9 @@ public class VectorTests
         var ctx = s.GetProperty("contexts");
         foreach (var p in s.GetProperty("pop").EnumerateArray())
         {
-            var portable = UA.PortablePopDigest(B(p.GetProperty("ua")), B(p.GetProperty("pqzKeyHash")), B(p.GetProperty("kemRecordHash")));
-            Assert.Equal(p.GetProperty("portablePopDigest").GetString(), Hx(portable));
-            Assert.Equal(p.GetProperty("registrationDigest").GetString(), Hx(UA.RegistrationDigest(portable, B(p.GetProperty("pqzPopHash")))));
+            byte[] ua = B(p.GetProperty("ua")), h = B(p.GetProperty("pqzKeyHash")), kr = B(p.GetProperty("kemRecordHash"));
+            Assert.Equal(p.GetProperty("portableRecordDigest").GetString(), Hx(UA.PortableRecordDigest(ua, Kind(p), h, kr)));
+            Assert.Equal(p.GetProperty("registrationDigest").GetString(), Hx(UA.RegistrationDigest(ua, Kind(p), h, kr, B(p.GetProperty("pqzPopHash")))));
         }
         var kinds = Load("kinds.json");
         var pqzKey = B(kinds.GetProperty("pqzKey"));
@@ -155,14 +155,14 @@ public class VectorTests
             byte[] ua = B(r.GetProperty("ua")), kem = B(r.GetProperty("kemRecordHash"));
             var h = UA.KeyHashOf(0x0142, pqzKey)!;
             Assert.Equal(r.GetProperty("pqzKeyHash").GetString(), Hx(h));
-            var portable = UA.PortablePopDigest(ua, h, kem);
-            Assert.Equal(r.GetProperty("portablePopDigest").GetString(), Hx(portable));
+            var portable = UA.PortableRecordDigest(ua, Kind(r), h, kem);
+            Assert.Equal(r.GetProperty("portableRecordDigest").GetString(), Hx(portable));
             Assert.Equal(r.GetProperty("pqzRegMessage").GetString(), Hx(UA.UAMessage(0x0142, UA.PopV2Tag, portable)));
-            if (kem.Any(x => x != 0)) continue; // the row's KEM record hash is opaque; the real records are in portable.json
-            Assert.Equal(r.GetProperty("pqzRegMessage").GetString(), Hx(UA.PqzRegMessage(ua, pqzKey)));
+            if (Hx(kem) != Hx(UA.KemRecordHash(ua, 0, []))) continue; // the row's KEM record hash is opaque (a label); the real records are in portable.json
+            Assert.Equal(r.GetProperty("pqzRegMessage").GetString(), Hx(UA.PqzRegMessage(Kind(r), ua, pqzKey)));
             var got = UA.HolderPopMessage(Kind(r), ua, [], pqzKey, pqzPopHash: proof);
             Assert.Equal(r.GetProperty("pqzKeyHash").GetString(), Hx(got.PqzKeyHash));
-            Assert.Equal(r.GetProperty("portablePopDigest").GetString(), Hx(got.PortablePopDigest));
+            Assert.Equal(r.GetProperty("portableRecordDigest").GetString(), Hx(got.PortableRecordDigest));
             foreach (ushort bad in new ushort[] { 0x0101, 0x0133 })
                 Assert.Equal("UAPqzHolder", Assert.Throws<UAException>(() => UA.HolderPopMessage(bad, ua, [], pqzKey, pqzPopHash: proof)).Code);
         }
@@ -172,7 +172,8 @@ public class VectorTests
             Assert.Equal(r.GetProperty("eligible").GetBoolean(), UA.MsigPqzEligible(d));
             Assert.Equal(r.GetProperty("ua").GetString(), Hx(UA.DeriveUA(0x0120, d)));
             var h = r.GetProperty("eligible").GetBoolean() ? B(kinds.GetProperty("pqzKeyHash")) : new byte[32];
-            Assert.Equal(r.GetProperty("portablePopDigest").GetString(), Hx(UA.PortablePopDigest(B(r.GetProperty("ua")), h, new byte[32])));
+            var u = B(r.GetProperty("ua"));
+            Assert.Equal(r.GetProperty("portableRecordDigest").GetString(), Hx(UA.PortableRecordDigest(u, 0x0120, h, UA.KemRecordHash(u, 0, []))));
         }
         foreach (var a in s.GetProperty("uaAuth").EnumerateArray())
         {
@@ -199,6 +200,143 @@ public class VectorTests
             hashOnly || pop.Length == 0 ? null : pop, hash.All(x => x == 0) ? null : hash, ver == 0 && pk.Length == 0 ? null : (ver, pk));
     }
 
+    /// <summary>EIP-712 encodeType from a wallet's typed-data JSON: primary, then the referenced types sorted by name.</summary>
+    static string EncodeType(JsonElement types, string name)
+    {
+        var deps = new SortedSet<string>(StringComparer.Ordinal);
+        var todo = new Stack<string>([name]);
+        while (todo.Count > 0)
+            foreach (var f in types.GetProperty(todo.Pop()).EnumerateArray())
+            {
+                var ft = f.GetProperty("type").GetString()!;
+                if (types.TryGetProperty(ft, out _) && deps.Add(ft)) todo.Push(ft);
+            }
+        deps.Remove(name);
+        string One(string n) => n + "(" + string.Join(",", types.GetProperty(n).EnumerateArray()
+            .Select(f => f.GetProperty("type").GetString() + " " + f.GetProperty("name").GetString())) + ")";
+        return One(name) + string.Concat(deps.Select(One));
+    }
+
+    /// <summary>An independent EIP-712 hashStruct over the field types the portable records use.</summary>
+    static byte[] HashStructJson(JsonElement types, string name, JsonElement data)
+    {
+        var enc = new List<byte>(UA.Keccak256(System.Text.Encoding.UTF8.GetBytes(EncodeType(types, name))));
+        foreach (var f in types.GetProperty(name).EnumerateArray())
+        {
+            var ft = f.GetProperty("type").GetString()!;
+            var v = data.GetProperty(f.GetProperty("name").GetString()!);
+            enc.AddRange(ft switch
+            {
+                _ when types.TryGetProperty(ft, out _) => HashStructJson(types, ft, v),
+                "string" => UA.Keccak256(System.Text.Encoding.UTF8.GetBytes(v.GetString()!)),
+                "bytes32" => B(v),
+                "uint8" or "uint16" or "uint64" => Word(ulong.Parse(v.ToString())),
+                _ => throw new InvalidOperationException("field type " + ft),
+            });
+        }
+        return UA.Keccak256(enc.ToArray());
+    }
+
+    static byte[] Word(ulong v) { var w = new byte[32]; for (var i = 0; i < 8; i++) w[31 - i] = (byte)(v >> (8 * i)); return w; }
+
+    static string HashTypedData(JsonElement td, string? primary = null, JsonElement? message = null)
+    {
+        var t = td.GetProperty("types");
+        return Hx(UA.Keccak256(new byte[] { 0x19, 0x01 }, HashStructJson(t, "EIP712Domain", td.GetProperty("domain")),
+            HashStructJson(t, primary ?? td.GetProperty("primaryType").GetString()!, message ?? td.GetProperty("message"))));
+    }
+
+    static ulong U64(JsonElement e) => ulong.Parse(e.ToString());
+
+    /// <summary>TS-D1: the domain separator and the five typehashes pinned and re-derived; every row's typedData (the JSON
+    /// eth_signTypedData_v4 signs) hashes to its digest and its message carries the row's words (kind included).</summary>
+    [Fact]
+    public void PortableTyped()
+    {
+        var p = Load("portable.json");
+        var ty = p.GetProperty("typed");
+        const string ds = "0x9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1";
+        Assert.Equal(ds, Hx(UA.PortableDomainSeparator));
+        Assert.Equal(ds, ty.GetProperty("domainSeparator").GetString());
+        Assert.Equal(("EIP712Domain(string name,string version)", "SCaaS UA Portable", "1"), (UA.PortableDomainType, UA.PortableDomainName, UA.PortableDomainVersion));
+        Assert.Equal(UA.PortableDomainType, ty.GetProperty("domainType").GetString());
+        Assert.Equal((ty.GetProperty("domain").GetProperty("name").GetString(), ty.GetProperty("domain").GetProperty("version").GetString()),
+            (UA.PortableDomainName, UA.PortableDomainVersion));
+        Assert.Equal(ds, Hx(UA.Keccak256(UA.Keccak256(System.Text.Encoding.UTF8.GetBytes(UA.PortableDomainType)),
+            UA.Keccak256(System.Text.Encoding.UTF8.GetBytes(UA.PortableDomainName)), UA.Keccak256(System.Text.Encoding.UTF8.GetBytes(UA.PortableDomainVersion)))));
+        var pinned = new Dictionary<string, string>
+        {
+            ["UAKemRecord"] = "0x0ab7989827627b89c268e88a0a0b06b62aefa70b0a466014931ca44acfa9a201",
+            ["UAPortableRecord"] = "0x0c1553cfab3c35326558484df79963dced75ead85272d2a85985f264757bfe7f",
+            ["UARegistration"] = "0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e",
+            ["UAPqzKey"] = "0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00",
+            ["UAPqzKeyRecord"] = "0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567",
+        };
+        Assert.Equal(pinned.Count, ty.GetProperty("types").EnumerateObject().Count());
+        Assert.Equal(pinned.Count, UA.PortableTypes.Count);
+        foreach (var (name, th) in pinned)
+        {
+            Assert.Equal(th, Hx(UA.PortableTypehash(name)));
+            Assert.Equal(th, ty.GetProperty("types").GetProperty(name).GetProperty("typehash").GetString());
+            Assert.Equal(UA.PortableTypes[name], ty.GetProperty("types").GetProperty(name).GetProperty("type").GetString());
+        }
+        var n = 0;
+        foreach (var r in p.GetProperty("registrations").EnumerateArray())
+        {
+            var td = r.GetProperty("typedData");
+            var tt = td.GetProperty("types");
+            byte[] ua = B(r.GetProperty("ua")), pk = B(r.GetProperty("attrs").GetProperty("kemPk"));
+            var kind = Kind(r);
+            Assert.Equal("UARegistration", td.GetProperty("primaryType").GetString());
+            Assert.Equal(r.GetProperty("registrationDigest").GetString(), HashTypedData(td));
+            foreach (var x in new[] { "UARegistration", "UAPortableRecord", "UAKemRecord" }) Assert.Equal(UA.PortableTypes[x], EncodeType(tt, x));
+            var rec = td.GetProperty("message").GetProperty("record");
+            var kem = rec.GetProperty("kem");
+            Assert.Equal((kind, r.GetProperty("ua").GetString(), r.GetProperty("ua").GetString(), r.GetProperty("pqzKeyHash").GetString()),
+                (rec.GetProperty("kind").GetUInt16(), rec.GetProperty("ua").GetString(), kem.GetProperty("ua").GetString(), rec.GetProperty("pqzKeyHash").GetString()));
+            Assert.Equal(r.GetProperty("attrs").GetProperty("pqzPopHash").GetString(), td.GetProperty("message").GetProperty("pqzPopHash").GetString());
+            var v = U64(r.GetProperty("attrs").GetProperty("kemVersion"));
+            Assert.Equal(r.GetProperty("kemRecordHash").GetString(), Hx(HashStructJson(tt, "UAKemRecord", kem)));
+            Assert.Equal(r.GetProperty("kemRecordHash").GetString(), Hx(UA.KemRecordHash(ua, v, pk)));
+            // TS-D2: no KEM record = {ua, 0, 0, 0}
+            var want = pk.Length > 0 ? (v, (ulong)pk[0], Hx(UA.Keccak256(pk))) : (0UL, 0UL, Hx(new byte[32]));
+            Assert.Equal(want, (U64(kem.GetProperty("version")), U64(kem.GetProperty("scheme")), kem.GetProperty("kemPkHash").GetString()));
+            byte[] h = B(r.GetProperty("pqzKeyHash")), kr = B(r.GetProperty("kemRecordHash"));
+            Assert.Equal(Hx(HashStructJson(tt, "UAPortableRecord", rec)), Hx(UA.PortableRecordHash(ua, kind, h, kr)));
+            Assert.Equal(r.GetProperty("portableRecordDigest").GetString(), HashTypedData(td, "UAPortableRecord", rec)); // the R_REG record alone
+            Assert.Equal(r.GetProperty("portableRecordDigest").GetString(), Hx(UA.PortableRecordDigest(ua, kind, h, kr)));
+            n++;
+        }
+        foreach (var r in p.GetProperty("kemRecords").EnumerateArray())
+        {
+            var td = r.GetProperty("typedData");
+            var m = td.GetProperty("message");
+            byte[] ua = B(r.GetProperty("ua")), pk = B(r.GetProperty("kemPk"));
+            var v = U64(r.GetProperty("version"));
+            Assert.Equal("UAKemRecord", td.GetProperty("primaryType").GetString());
+            Assert.Equal(r.GetProperty("digest").GetString(), HashTypedData(td));
+            Assert.Equal(r.GetProperty("structHash").GetString(), Hx(HashStructJson(td.GetProperty("types"), "UAKemRecord", m)));
+            Assert.Equal(r.GetProperty("structHash").GetString(), Hx(UA.KemRecordHash(ua, v, pk)));
+            Assert.Equal((v, (ulong)pk[0], r.GetProperty("ua").GetString()), (U64(m.GetProperty("version")), U64(m.GetProperty("scheme")), m.GetProperty("ua").GetString()));
+            n++;
+        }
+        foreach (var r in p.GetProperty("pqzKeyRecords").EnumerateArray())
+        {
+            var td = r.GetProperty("typedData");
+            var m = td.GetProperty("message");
+            byte[] ua = B(r.GetProperty("ua")), h = B(r.GetProperty("pqzKeyHash")), ph = B(r.GetProperty("pqzPopHash"));
+            Assert.Equal("UAPqzKeyRecord", td.GetProperty("primaryType").GetString());
+            Assert.Equal(r.GetProperty("recordDigest").GetString(), HashTypedData(td));
+            Assert.Equal((r.GetProperty("ua").GetString(), r.GetProperty("pqzKeyHash").GetString(), r.GetProperty("pqzPopHash").GetString()),
+                (m.GetProperty("key").GetProperty("ua").GetString(), m.GetProperty("key").GetProperty("pqzKeyHash").GetString(), m.GetProperty("pqzPopHash").GetString()));
+            Assert.Equal(r.GetProperty("recordDigest").GetString(), Hx(UA.PqzKeyRecordDigest(ua, h, ph)));
+            Assert.Equal(r.GetProperty("pqzKeyDigest").GetString(), HashTypedData(td, "UAPqzKey", m.GetProperty("key")));
+            Assert.Equal(r.GetProperty("pqzKeyDigest").GetString(), Hx(UA.PqzKeyDigest(ua, h)));
+            n++;
+        }
+        Assert.Equal(p.GetProperty("registrations").GetArrayLength() + p.GetProperty("kemRecords").GetArrayLength() + p.GetProperty("pqzKeyRecords").GetArrayLength(), n);
+    }
+
     [Fact]
     public void PortableVectors()
     {
@@ -207,7 +345,7 @@ public class VectorTests
         Assert.Equal(t.GetProperty("PURPOSE_POP_V2").GetProperty("hash").GetString(), Hx(UA.PopV2Tag));
         Assert.Equal(t.GetProperty("PURPOSE_KEM").GetProperty("hash").GetString(), Hx(UA.PurposeTag("kem")));
         Assert.Equal(t.GetProperty("PURPOSE_PQZ_KEY").GetProperty("hash").GetString(), Hx(UA.PurposeTag("pqz-key")));
-        Assert.Equal(t.GetProperty("KEM_RECORD_TAG").GetProperty("hash").GetString(), Hx(UA.KemRecordTag));
+        Assert.False(t.TryGetProperty("KEM_RECORD_TAG", out _) || t.TryGetProperty("PQZ_KEY_RECORD_TAG", out _)); // raw record tags are legacy (TS-D3)
         int n = 0, withPqz = 0, msigs = 0;
         foreach (var r in p.GetProperty("registrations").EnumerateArray())
         {
@@ -221,11 +359,11 @@ public class VectorTests
                 Assert.Equal(r.GetProperty("pqzKeyHash").GetString(), Hx(h.PqzKeyHash));
                 Assert.Equal(r.GetProperty("attrs").GetProperty("pqzPopHash").GetString(), Hx(h.PqzPopHash));
                 Assert.Equal(r.GetProperty("kemRecordHash").GetString(), Hx(h.KemRecordHash));
-                Assert.Equal(r.GetProperty("portablePopDigest").GetString(), Hx(h.PortablePopDigest));
+                Assert.Equal(r.GetProperty("portableRecordDigest").GetString(), Hx(h.PortableRecordDigest));
                 Assert.Equal(r.GetProperty("registrationDigest").GetString(), Hx(h.RegistrationDigest));
                 Assert.Equal(r.GetProperty("popMessage").GetString(), Hx(h.Message));
-                Assert.Equal(Hx(UA.PortablePopDigest(ua, h.PqzKeyHash, h.KemRecordHash)), Hx(h.PortablePopDigest));
-                Assert.Equal(Hx(UA.RegistrationDigest(h.PortablePopDigest, h.PqzPopHash)), Hx(h.RegistrationDigest));
+                Assert.Equal(Hx(UA.PortableRecordDigest(ua, kind, h.PqzKeyHash, h.KemRecordHash)), Hx(h.PortableRecordDigest));
+                Assert.Equal(Hx(UA.RegistrationDigest(ua, kind, h.PqzKeyHash, h.KemRecordHash, h.PqzPopHash)), Hx(h.RegistrationDigest));
                 Assert.Equal(Hx(UA.UAMessage(kind, UA.PopV2Tag, h.RegistrationDigest)), Hx(h.Message));
                 Assert.Equal(Opt(r, "memberDigest"), h.MemberDigest is null ? "" : Hx(h.MemberDigest));
             }
@@ -235,14 +373,16 @@ public class VectorTests
             {
                 withPqz++;
                 var ver = ulong.Parse(a.GetProperty("kemVersion").ToString());
-                var kem = ver != 0 ? (ver, B(a.GetProperty("kemPk"))) : ((ulong, byte[])?)null;
-                Assert.Equal(r.GetProperty("pqzRegMessage").GetString(), Hx(UA.PqzRegMessage(ua, pk, kem)));
+                var got = UA.PqzRegMessage(kind, ua, pk, (ver, B(a.GetProperty("kemPk"))));
+                Assert.Equal(r.GetProperty("pqzRegMessage").GetString(), Hx(got));
+                // TS-D3: R_REG proves over the typed UAPortableRecord of the registering kind
+                Assert.Equal(Hx(UA.UAMessage(0x0142, UA.PopV2Tag, B(r.GetProperty("portableRecordDigest")))), Hx(got));
             }
             else Assert.True(B(r.GetProperty("pqzRegMessage")).All(x => x == 0));
             if (kind == 0x0120) msigs++;
             n++;
         }
-        Assert.Equal((25, 8, 6), (n, withPqz, msigs));
+        Assert.Equal((p.GetProperty("registrations").GetArrayLength(), 8, 6), (n, withPqz, msigs));
     }
 
     [Fact]
@@ -255,12 +395,13 @@ public class VectorTests
             var v = ulong.Parse(r.GetProperty("version").ToString());
             var d = UA.KemRecordDigest(ua, v, pk);
             Assert.Equal(r.GetProperty("digest").GetString(), Hx(d));
+            Assert.Equal(r.GetProperty("structHash").GetString(), Hx(UA.KemRecordHash(ua, v, pk)));
             var m = UA.KemRecordMessage(Kind(r), ua, v, pk);
             Assert.Equal(r.GetProperty("message").GetString(), Hx(m));
             Assert.Equal(Hx(UA.UAMessage(Kind(r), UA.PurposeTag("kem"), d)), Hx(m));
             if (Kind(r) == 0x0120) Assert.Equal(r.GetProperty("memberDigest").GetString(), Hx(UA.MemberDigest(ua, m)));
         }
-        Assert.Equal(9, p.GetProperty("kemRecords").GetArrayLength());
+        Assert.NotEqual(0, p.GetProperty("kemRecords").GetArrayLength());
         var u = Enumerable.Repeat((byte)1, 32).ToArray();
         static byte[] Kem(int n, byte scheme = 1) { var k = new byte[n]; k[0] = scheme; return k; } // scheme byte, zeros
         Assert.Equal("UAKemVersion", Assert.Throws<UAException>(() => UA.KemRecordDigest(u, 0, Kem(1601))).Code);
@@ -269,8 +410,15 @@ public class VectorTests
         Assert.Equal("UAKemKeyLength", Assert.Throws<UAException>(() => UA.KemRecordDigest(u, 1, null!)).Code);
         foreach (byte scheme in new byte[] { 0, 2, 255 })
             Assert.Equal("UAKemScheme", Assert.Throws<UAException>(() => UA.KemRecordDigest(u, 1, Kem(1601, scheme))).Code);
-        // known answers (ua-py / ua-go): the 8-byte version word and the decimal "evm:" chain key
-        Assert.Equal("0x8c997440926a352465f61b53b75606d794efa60c66ac4a7a63f25369a15f7092", Hx(UA.KemRecordDigest(u, ulong.MaxValue, Kem(1601))));
+        // TS-D2: (0, no key) is the zero record's hash (never a signed record); version 0 with a key is UAKemVersion
+        var th = UA.Keccak256(System.Text.Encoding.UTF8.GetBytes("UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)"));
+        Assert.Equal(Hx(UA.Keccak256(th, u, new byte[96])), Hx(UA.KemRecordHash(u, 0, [])));
+        Assert.Equal(Hx(UA.KemRecordHash(u, 0, [])), Hx(UA.KemRecordHash(u, 0, null!)));
+        Assert.Equal("UAKemVersion", Assert.Throws<UAException>(() => UA.KemRecordHash(u, 0, Kem(1601))).Code);
+        Assert.Equal("UAKemKeyLength", Assert.Throws<UAException>(() => UA.KemRecordHash(u, 1, [])).Code);
+        Assert.Equal("UAKemVersion", Assert.Throws<UAException>(() => UA.KemRecordDigest(u, 0, [])).Code);
+        // known answers shared with ua-rs / ua-py / ua-go: the 8-byte version word and the decimal "evm:" chain key
+        Assert.Equal("0xa0063a84b56d80c83688d8caf5aeb4be8fb4556928e8bc649686449573938f07", Hx(UA.KemRecordDigest(u, ulong.MaxValue, Kem(1601))));
         Assert.Equal("0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950", Hx(UA.ChainKeyHash((1UL << 40) + 7))); // keccak256("evm:1099511627783")
     }
 
@@ -278,7 +426,6 @@ public class VectorTests
     public void PqzKeyRecordVectors()
     {
         var p = Load("portable.json");
-        Assert.Equal(PqzKeyDigestHex(p, "PQZ_KEY_RECORD_TAG"), Hx(UA.PqzKeyRecordTag));
         var regs = p.GetProperty("registrations").EnumerateArray().ToList();
         var n = 0;
         var msigRows = 0;
@@ -298,7 +445,7 @@ public class VectorTests
                 Assert.Equal(r.GetProperty("message").GetString(), Hx(g.Message));
                 Assert.Equal(r.GetProperty("pqzRegMessage").GetString(), Hx(g.PqzRegMessage));
                 Assert.Equal(Hx(UA.PqzKeyDigest(ua, g.PqzKeyHash)), Hx(g.PqzKeyDigest));
-                Assert.Equal(Hx(UA.PqzKeyRecordDigest(g.PqzKeyDigest, g.PqzPopHash)), Hx(g.RecordDigest));
+                Assert.Equal(Hx(UA.PqzKeyRecordDigest(ua, g.PqzKeyHash, g.PqzPopHash)), Hx(g.RecordDigest));
                 Assert.Equal(kind == 0x0120, g.MemberDigest is not null);
                 Assert.Equal(r.TryGetProperty("memberDigest", out var md) ? md.GetString() : "", g.MemberDigest is null ? "" : Hx(g.MemberDigest));
                 if (kind == 0x0120) { msigRows++; Assert.Equal(Hx(UA.MemberDigest(ua, g.Message)), Hx(g.MemberDigest!)); }
@@ -307,32 +454,31 @@ public class VectorTests
             Assert.Equal("UAPqzKeySet", Assert.Throws<UAException>(() => UA.PqzKeyRecordMessage(kind, ua, kd, key, null, hash, true)).Code);
             n++;
         }
-        Assert.Equal(8, n);
+        Assert.Equal(p.GetProperty("pqzKeyRecords").GetArrayLength(), n);
         Assert.Equal(8, msigRows); // 4 msig rows, each run with the proof bytes and hash-only
     }
 
+    /// <summary>TS-D4: a native msig member signs the record's typed digest itself (what eth_signTypedData_v4 of typedData
+    /// returns), a derived member keeps MemberDigest(ua, message); only under the portable purposes.</summary>
     [Fact]
-    public void PersonalSignPortablePurposes()
+    public void NativeMemberTypedDigest()
     {
         var p = Load("portable.json");
         Assert.True(UA.IsPortablePurpose(UA.PopV2Tag) && UA.IsPortablePurpose(UA.PurposeTag("kem")) && UA.IsPortablePurpose(UA.PurposeTag("pqz-key")));
         Assert.False(UA.IsPortablePurpose(UA.PurposeTag("metatx")) || UA.IsPortablePurpose(UA.PurposeTag("pop")));
+        Assert.Null(typeof(UA).GetMethod("PersonalSignDigest")); // legacy/typed-signing
         var r = p.GetProperty("registrations").EnumerateArray().First(x => x.GetProperty("name").GetString() == "msig-pq-native");
-        var md = B(r.GetProperty("memberDigest"));
-        Assert.NotEqual(Hx(md), Hx(UA.PersonalSignDigest(md)));
-        // known answer from the JS reference; the prefix is 0x19 'E'... (28 bytes), not a C# "\x19E" escape (= U+019E)
-        var prefix = System.Text.Encoding.UTF8.GetBytes("\u0019Ethereum Signed Message:\n32");
-        Assert.Equal(28, prefix.Length);
-        Assert.Equal((byte)0x19, prefix[0]);
-        Assert.Equal((byte)0x45, prefix[1]);
-        Assert.Equal("0x606d9a70c70d39e5d8d079c3ae31eefa6db574219dab56d6c776cb6731e61a7c", Hx(md));
-        Assert.Equal("0xe5d24987e9b4e710063a5432d6215eaead64d8dc073f7561726d21644d54c3d8", Hx(UA.PersonalSignDigest(md)));
-        // native-personal-sign-under-metatx: valid personal_sign, but metatx is not a portable purpose (UAAuth there)
+        var h = Register(r);
+        Assert.Equal(Hx(h.RegistrationDigest), HashTypedData(r.GetProperty("typedData")));
+        Assert.Equal(Hx(UA.MemberDigest(B(r.GetProperty("ua")), h.Message)), Hx(h.MemberDigest!));
+        Assert.NotEqual(Hx(h.RegistrationDigest), Hx(h.MemberDigest!));
+        foreach (var k in p.GetProperty("pqzKeyRecords").EnumerateArray().Where(x => x.GetProperty("ua").GetString() == r.GetProperty("ua").GetString()))
+            Assert.Equal(k.GetProperty("recordDigest").GetString(), HashTypedData(k.GetProperty("typedData")));
+        // native-personal-sign-under-metatx: metatx is not a portable purpose (UAAuth there); personal_sign is refused (UAPoP)
         var n = p.GetProperty("negatives").EnumerateArray().First(x => x.GetProperty("name").GetString() == "native-personal-sign-under-metatx");
         Assert.False(UA.IsPortablePurpose(B(n.GetProperty("mutation").GetProperty("set").GetProperty("purposeTag"))));
+        Assert.Equal("UAPoP", p.GetProperty("negatives").EnumerateArray().First(x => x.GetProperty("name").GetString() == "native-member-personal-sign").GetProperty("error").GetString());
     }
-
-    static string PqzKeyDigestHex(JsonElement p, string tag) => p.GetProperty("tags").GetProperty(tag).GetProperty("hash").GetString()!;
 
     [Fact]
     public void HolderRefusals()
@@ -384,9 +530,9 @@ public class VectorTests
                 Assert.NotEqual(k.GetProperty("message").GetString(), Hx(msg));
                 run++;
             }
-            else sigLevel++; // signatures / native personal_sign: verified by the signature vectors
+            else sigLevel++; // signatures / native personal_sign / another record's pop: verified by the signature vectors
         }
-        Assert.Equal((60, 7), (run, sigLevel));
+        Assert.Equal((60, p.GetProperty("negatives").GetArrayLength() - 60), (run, sigLevel));
         // single-key non-holders refuse a PQZ key
         var u = Enumerable.Repeat((byte)1, 32).ToArray();
         var key = new byte[16384];
@@ -403,6 +549,6 @@ public class VectorTests
         // m-C5: a (0, null) KEM record is absent, as (0, []) and in the other packages (also for a non-holder)
         Assert.Equal(Hx(UA.HolderPopMessage(0x0130, u, []).Message), Hx(UA.HolderPopMessage(0x0130, u, [], kem: (0, null!)).Message));
         Assert.Equal(Hx(UA.HolderPopMessage(0x0101, u, new byte[64]).Message), Hx(UA.HolderPopMessage(0x0101, u, new byte[64], kem: (0, null!)).Message));
-        Assert.Equal(Hx(UA.PqzRegMessage(u, key)), Hx(UA.PqzRegMessage(u, key, (0, null!))));
+        Assert.Equal(Hx(UA.PqzRegMessage(0x0130, u, key)), Hx(UA.PqzRegMessage(0x0130, u, key, (0, null!))));
     }
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -217,14 +218,18 @@ func TestMessages(t *testing.T) {
 	}
 }
 
+// zeroKem is hashStruct(UAKemRecord{ua, 0, 0, 0}): no KEM record (TS-D2).
+func zeroKem(ua [32]byte) [32]byte { h, _ := KemRecordHash(ua, 0, nil); return h }
+
 func TestStructures(t *testing.T) {
 	s := load(t, "structures.json")
 	k := load(t, "kinds.json")
 	ctx := s["contexts"].(obj)
 	for _, p := range rows(s, "pop") {
-		portable := PortablePopDigest(b32(p["ua"]), b32(p["pqzKeyHash"]), b32(p["kemRecordHash"]))
-		reg := RegistrationDigest(portable, b32(p["pqzPopHash"]))
-		if hx(portable[:]) != p["portablePopDigest"] || hx(reg[:]) != p["registrationDigest"] {
+		ua, kd, h, kr := b32(p["ua"]), kind(p["kind"]), b32(p["pqzKeyHash"]), b32(p["kemRecordHash"])
+		portable := PortableRecordDigest(ua, kd, h, kr)
+		reg := RegistrationDigest(ua, kd, h, kr, b32(p["pqzPopHash"]))
+		if hx(portable[:]) != p["portableRecordDigest"] || hx(reg[:]) != p["registrationDigest"] {
 			t.Fatalf("pop %v", p["ua"])
 		}
 	}
@@ -233,18 +238,18 @@ func TestStructures(t *testing.T) {
 	for _, r := range rows(s, "pqzReg") {
 		ua, kem := b32(r["ua"]), b32(r["kemRecordHash"])
 		h, err := KeyHashOf(0x0142, pqzKey)
-		portable := PortablePopDigest(ua, *h, kem)
+		portable := PortableRecordDigest(ua, kind(r["kind"]), *h, kem)
 		msg, _ := UAMessage(0x0142, PopV2Tag, portable)
-		if err != nil || hx(h[:]) != r["pqzKeyHash"] || hx(portable[:]) != r["portablePopDigest"] || hx(msg[:]) != r["pqzRegMessage"] {
+		if err != nil || hx(h[:]) != r["pqzKeyHash"] || hx(portable[:]) != r["portableRecordDigest"] || hx(msg[:]) != r["pqzRegMessage"] {
 			t.Fatalf("pqzReg %v", r["ua"])
 		}
-		if kem != ([32]byte{}) {
-			continue // the row's KEM record hash is opaque; the real records are in portable.json
+		if kem != zeroKem(ua) {
+			continue // the row's KEM record hash is opaque (a label); the real records are in portable.json
 		}
-		m, err := PqzRegMessage(ua, pqzKey, nil)
+		m, err := PqzRegMessage(kind(r["kind"]), ua, pqzKey, nil)
 		got, err2 := HolderPopMessage(kind(r["kind"]), ua, nil, pqzKey, nil, proof, nil)
 		if err != nil || err2 != nil || hx(m[:]) != r["pqzRegMessage"] || hx(got.PqzKeyHash[:]) != r["pqzKeyHash"] ||
-			hx(got.PortablePopDigest[:]) != r["portablePopDigest"] {
+			hx(got.PortableRecordDigest[:]) != r["portableRecordDigest"] {
 			t.Fatalf("pqzReg holder %v", r["ua"])
 		}
 		for _, bad := range []uint16{0x0101, 0x0133} {
@@ -261,8 +266,8 @@ func TestStructures(t *testing.T) {
 		if got {
 			h = b32(k["pqzKeyHash"])
 		}
-		pd := PortablePopDigest(b32(r["ua"]), h, [32]byte{})
-		if err != nil || err2 != nil || got != r["eligible"] || hx(u[:]) != r["ua"] || hx(pd[:]) != r["portablePopDigest"] {
+		pd := PortableRecordDigest(b32(r["ua"]), 0x0120, h, zeroKem(b32(r["ua"])))
+		if err != nil || err2 != nil || got != r["eligible"] || hx(u[:]) != r["ua"] || hx(pd[:]) != r["portableRecordDigest"] {
 			t.Fatalf("pqzMsig %v", r["reason"])
 		}
 	}
@@ -311,13 +316,182 @@ func find(rs []obj, k string, v any) obj {
 	panic(fmt.Sprintf("no row with %s = %v", k, v))
 }
 
+// encodeType is EIP-712 encodeType from a wallet's typed-data JSON: primary, then the referenced types sorted by name.
+func encodeType(types obj, name string) string {
+	deps, todo := map[string]bool{}, []string{name}
+	for len(todo) > 0 {
+		n := todo[len(todo)-1]
+		todo = todo[:len(todo)-1]
+		for _, f := range types[n].([]any) {
+			ft := f.(obj)["type"].(string)
+			if _, ok := types[ft]; ok && !deps[ft] {
+				deps[ft] = true
+				todo = append(todo, ft)
+			}
+		}
+	}
+	one := func(n string) string {
+		fs := []string{}
+		for _, f := range types[n].([]any) {
+			fs = append(fs, f.(obj)["type"].(string)+" "+f.(obj)["name"].(string))
+		}
+		return n + "(" + strings.Join(fs, ",") + ")"
+	}
+	names := []string{}
+	for d := range deps {
+		if d != name {
+			names = append(names, d)
+		}
+	}
+	sort.Strings(names)
+	out := one(name)
+	for _, d := range names {
+		out += one(d)
+	}
+	return out
+}
+
+// hashStructJSON is an independent EIP-712 hashStruct over the field types the portable records use.
+func hashStructJSON(types obj, name string, data obj) [32]byte {
+	th := Keccak256([]byte(encodeType(types, name)))
+	enc := th[:]
+	for _, f := range types[name].([]any) {
+		ft, v := f.(obj)["type"].(string), data[f.(obj)["name"].(string)]
+		var w [32]byte
+		switch {
+		case types[ft] != nil:
+			w = hashStructJSON(types, ft, v.(obj))
+		case ft == "string":
+			w = Keccak256([]byte(v.(string)))
+		case ft == "bytes32":
+			w = b32(v)
+		case ft == "uint8" || ft == "uint16" || ft == "uint64":
+			copy(w[:], word(uint64(v.(float64))))
+		default:
+			panic("field type " + ft)
+		}
+		enc = append(enc, w[:]...)
+	}
+	return Keccak256(enc)
+}
+
+func hashTypedData(td obj) string {
+	types := td["types"].(obj)
+	ds := hashStructJSON(types, "EIP712Domain", td["domain"].(obj))
+	m := hashStructJSON(types, td["primaryType"].(string), td["message"].(obj))
+	d := Keccak256([]byte{0x19, 0x01}, ds[:], m[:])
+	return hx(d[:])
+}
+
+func with(td obj, primary string, msg any) obj {
+	out := obj{}
+	for k, v := range td {
+		out[k] = v
+	}
+	out["primaryType"], out["message"] = primary, msg
+	return out
+}
+
+// TestPortableTyped (TS-D1): the domain separator and the five typehashes pinned and re-derived; every row's typedData (the
+// JSON eth_signTypedData_v4 signs) hashes to its digest and its message carries the row's words (kind included).
+func TestPortableTyped(t *testing.T) {
+	p := load(t, "portable.json")
+	ty := p["typed"].(obj)
+	dom := ty["domain"].(obj)
+	const ds = "0x9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1"
+	derived := Keccak256(func() []byte {
+		a, b, c := Keccak256([]byte(PortableDomainType)), Keccak256([]byte(PortableDomainName)), Keccak256([]byte(PortableDomainVersion))
+		return append(append(a[:], b[:]...), c[:]...)
+	}())
+	if hx(PortableDomainSeparator[:]) != ds || ty["domainSeparator"] != ds || derived != PortableDomainSeparator ||
+		PortableDomainType != "EIP712Domain(string name,string version)" || ty["domainType"] != PortableDomainType ||
+		PortableDomainName != "SCaaS UA Portable" || dom["name"] != PortableDomainName || PortableDomainVersion != "1" || dom["version"] != PortableDomainVersion {
+		t.Fatal("domain")
+	}
+	pinned := map[string]string{
+		"UAKemRecord":      "0x0ab7989827627b89c268e88a0a0b06b62aefa70b0a466014931ca44acfa9a201",
+		"UAPortableRecord": "0x0c1553cfab3c35326558484df79963dced75ead85272d2a85985f264757bfe7f",
+		"UARegistration":   "0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e",
+		"UAPqzKey":         "0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00",
+		"UAPqzKeyRecord":   "0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567",
+	}
+	types := ty["types"].(obj)
+	if len(types) != len(pinned) || len(PortableTypes) != len(pinned) {
+		t.Fatal("type count")
+	}
+	for name, th := range pinned {
+		got := PortableTypehash(name)
+		if hx(got[:]) != th || types[name].(obj)["typehash"] != th || types[name].(obj)["type"] != PortableTypes[name] {
+			t.Fatalf("typehash %s", name)
+		}
+	}
+	n := 0
+	for _, r := range rows(p, "registrations") {
+		name, td, ua, kd := r["name"], r["typedData"].(obj), b32(r["ua"]), kind(r["kind"])
+		tt := td["types"].(obj)
+		for _, x := range []string{"UARegistration", "UAPortableRecord", "UAKemRecord"} {
+			if encodeType(tt, x) != PortableTypes[x] {
+				t.Fatalf("%v encodeType %s", name, x)
+			}
+		}
+		msg := td["message"].(obj)
+		rec := msg["record"].(obj)
+		kem := rec["kem"].(obj)
+		pk, v := bs(r["attrs"].(obj)["kemPk"]), u64(r["attrs"].(obj)["kemVersion"])
+		kh, err := KemRecordHash(ua, v, pk)
+		wantV, wantS, wantH := uint64(0), uint64(0), [32]byte{} // TS-D2: no KEM record = {ua, 0, 0, 0}
+		if len(pk) > 0 {
+			wantV, wantS, wantH = v, uint64(pk[0]), Keccak256(pk)
+		}
+		js := hashStructJSON(tt, "UAKemRecord", kem)
+		ph := PortableRecordHash(ua, kd, b32(r["pqzKeyHash"]), b32(r["kemRecordHash"]))
+		pd := PortableRecordDigest(ua, kd, b32(r["pqzKeyHash"]), b32(r["kemRecordHash"]))
+		if td["primaryType"] != "UARegistration" || hashTypedData(td) != r["registrationDigest"] ||
+			kind(rec["kind"]) != kd || rec["ua"] != r["ua"] || kem["ua"] != r["ua"] || rec["pqzKeyHash"] != r["pqzKeyHash"] ||
+			msg["pqzPopHash"] != r["attrs"].(obj)["pqzPopHash"] || err != nil || hx(kh[:]) != r["kemRecordHash"] || hx(js[:]) != r["kemRecordHash"] ||
+			u64(kem["version"]) != wantV || u64(kem["scheme"]) != wantS || b32(kem["kemPkHash"]) != wantH ||
+			ph != hashStructJSON(tt, "UAPortableRecord", rec) || hashTypedData(with(td, "UAPortableRecord", rec)) != r["portableRecordDigest"] ||
+			hx(pd[:]) != r["portableRecordDigest"] {
+			t.Fatalf("%v typed", name)
+		}
+		n++
+	}
+	for _, r := range rows(p, "kemRecords") {
+		td, ua, v, pk := r["typedData"].(obj), b32(r["ua"]), u64(r["version"]), bs(r["kemPk"])
+		m := td["message"].(obj)
+		sh, err := KemRecordHash(ua, v, pk)
+		js := hashStructJSON(td["types"].(obj), "UAKemRecord", m)
+		if td["primaryType"] != "UAKemRecord" || hashTypedData(td) != r["digest"] || err != nil || hx(sh[:]) != r["structHash"] ||
+			hx(js[:]) != r["structHash"] || u64(m["version"]) != v || u64(m["scheme"]) != uint64(pk[0]) || m["ua"] != r["ua"] {
+			t.Fatalf("%v typed", r["id"])
+		}
+		n++
+	}
+	for _, r := range rows(p, "pqzKeyRecords") {
+		td, ua, h, ph := r["typedData"].(obj), b32(r["ua"]), b32(r["pqzKeyHash"]), b32(r["pqzPopHash"])
+		m := td["message"].(obj)
+		key := m["key"].(obj)
+		rd, kd := PqzKeyRecordDigest(ua, h, ph), PqzKeyDigest(ua, h)
+		if td["primaryType"] != "UAPqzKeyRecord" || hashTypedData(td) != r["recordDigest"] || key["ua"] != r["ua"] ||
+			key["pqzKeyHash"] != r["pqzKeyHash"] || m["pqzPopHash"] != r["pqzPopHash"] || hx(rd[:]) != r["recordDigest"] ||
+			hashTypedData(with(td, "UAPqzKey", key)) != r["pqzKeyDigest"] || hx(kd[:]) != r["pqzKeyDigest"] {
+			t.Fatalf("%v typed", r["name"])
+		}
+		n++
+	}
+	if n != len(rows(p, "registrations"))+len(rows(p, "kemRecords"))+len(rows(p, "pqzKeyRecords")) {
+		t.Fatal("rows")
+	}
+}
+
 func TestPortable(t *testing.T) {
 	p := load(t, "portable.json")
 	tags := p["tags"].(obj)
 	tg := func(n string) string { return tags[n].(obj)["hash"].(string) }
 	kem, pqk := kemPurpose, pqzKeyPurpose
-	if hx(PopV2Tag[:]) != tg("PURPOSE_POP_V2") || hx(kem[:]) != tg("PURPOSE_KEM") || hx(pqk[:]) != tg("PURPOSE_PQZ_KEY") ||
-		hx(KemRecordTag[:]) != tg("KEM_RECORD_TAG") || hx(PqzKeyRecordTag[:]) != tg("PQZ_KEY_RECORD_TAG") {
+	_, raw1 := tags["KEM_RECORD_TAG"]
+	_, raw2 := tags["PQZ_KEY_RECORD_TAG"] // raw record tags are legacy (TS-D3)
+	if hx(PopV2Tag[:]) != tg("PURPOSE_POP_V2") || hx(kem[:]) != tg("PURPOSE_KEM") || hx(pqk[:]) != tg("PURPOSE_PQZ_KEY") || raw1 || raw2 {
 		t.Fatal("tags")
 	}
 	n, withPqz, msigs := 0, 0, 0
@@ -332,13 +506,13 @@ func TestPortable(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%v: %v", name, err)
 			}
-			portable := PortablePopDigest(ua, h.PqzKeyHash, h.KemRecordHash)
-			reg := RegistrationDigest(portable, h.PqzPopHash)
+			portable := PortableRecordDigest(ua, kind(r["kind"]), h.PqzKeyHash, h.KemRecordHash)
+			reg := RegistrationDigest(ua, kind(r["kind"]), h.PqzKeyHash, h.KemRecordHash, h.PqzPopHash)
 			msg, _ := UAMessage(kind(r["kind"]), PopV2Tag, reg)
 			if hx(h.PqzKeyHash[:]) != r["pqzKeyHash"] || hx(h.PqzPopHash[:]) != r["attrs"].(obj)["pqzPopHash"] ||
-				hx(h.KemRecordHash[:]) != r["kemRecordHash"] || hx(h.PortablePopDigest[:]) != r["portablePopDigest"] ||
+				hx(h.KemRecordHash[:]) != r["kemRecordHash"] || hx(h.PortableRecordDigest[:]) != r["portableRecordDigest"] ||
 				hx(h.RegistrationDigest[:]) != r["registrationDigest"] || hx(h.Message[:]) != r["popMessage"] ||
-				portable != h.PortablePopDigest || reg != h.RegistrationDigest || msg != h.Message ||
+				portable != h.PortableRecordDigest || reg != h.RegistrationDigest || msg != h.Message ||
 				hxp(h.MemberDigest) != opt(r, "memberDigest") {
 				t.Fatalf("%v (hashOnly %v)", name, hashOnly)
 			}
@@ -346,11 +520,10 @@ func TestPortable(t *testing.T) {
 		a := r["attrs"].(obj)
 		if pk := bs(a["pqzKey"]); len(pk) > 0 {
 			withPqz++
-			var kem *Kem
-			if v := u64(a["kemVersion"]); v != 0 {
-				kem = &Kem{v, bs(a["kemPk"])}
-			}
-			if m, err := PqzRegMessage(ua, pk, kem); err != nil || hx(m[:]) != r["pqzRegMessage"] {
+			kem := &Kem{u64(a["kemVersion"]), bs(a["kemPk"])}
+			m, err := PqzRegMessage(kind(r["kind"]), ua, pk, kem)
+			want, _ := UAMessage(0x0142, PopV2Tag, b32(r["portableRecordDigest"])) // TS-D3: R_REG over the typed UAPortableRecord
+			if err != nil || hx(m[:]) != r["pqzRegMessage"] || m != want {
 				t.Fatalf("%v pqzRegMessage", name)
 			}
 		} else if b32(r["pqzRegMessage"]) != ([32]byte{}) {
@@ -361,7 +534,7 @@ func TestPortable(t *testing.T) {
 		}
 		n++
 	}
-	if n != 25 || withPqz != 8 || msigs != 6 {
+	if n != len(rows(p, "registrations")) || withPqz != 8 || msigs != 6 {
 		t.Fatalf("counts %d %d %d", n, withPqz, msigs)
 	}
 }
@@ -372,8 +545,9 @@ func TestKemRecord(t *testing.T) {
 		ua, pk := b32(r["ua"]), bs(r["kemPk"])
 		d, err := KemRecordDigest(ua, u64(r["version"]), pk)
 		m, err2 := KemRecordMessage(kind(r["kind"]), ua, u64(r["version"]), pk)
+		sh, err3 := KemRecordHash(ua, u64(r["version"]), pk)
 		want, _ := UAMessage(kind(r["kind"]), kemPurpose, d)
-		if err != nil || err2 != nil || hx(d[:]) != r["digest"] || hx(m[:]) != r["message"] || m != want {
+		if err != nil || err2 != nil || err3 != nil || hx(d[:]) != r["digest"] || hx(sh[:]) != r["structHash"] || hx(m[:]) != r["message"] || m != want {
 			t.Fatalf("kem %v", r["id"])
 		}
 		if kind(r["kind"]) == 0x0120 {
@@ -382,7 +556,7 @@ func TestKemRecord(t *testing.T) {
 			}
 		}
 	}
-	if len(rows(p, "kemRecords")) != 9 {
+	if len(rows(p, "kemRecords")) == 0 {
 		t.Fatal("kem count")
 	}
 	u := bytes.Repeat([]byte{1}, 32)
@@ -398,8 +572,23 @@ func TestKemRecord(t *testing.T) {
 			t.Fatalf("kem %v: %v", c.code, err)
 		}
 	}
-	if d, err := KemRecordDigest(ua, ^uint64(0), kemKey(1601, 1)); err != nil || hx(d[:]) != "0x8c997440926a352465f61b53b75606d794efa60c66ac4a7a63f25369a15f7092" {
-		t.Fatal("max version") // pins the 8-byte version word
+	// TS-D2: (0, no key) is the zero record's hash (never a signed record); version 0 with a key is UAKemVersion
+	th := Keccak256([]byte("UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)"))
+	if zeroKem(ua) != Keccak256(th[:], ua[:], make([]byte, 96)) {
+		t.Fatal("zero KEM record")
+	}
+	if _, err := KemRecordHash(ua, 0, kemKey(1601, 1)); code(err) != "UAKemVersion" {
+		t.Fatal("version 0 with a key")
+	}
+	if _, err := KemRecordHash(ua, 1, nil); code(err) != "UAKemKeyLength" {
+		t.Fatal("version 1 without a key")
+	}
+	if _, err := KemRecordDigest(ua, 0, nil); code(err) != "UAKemVersion" {
+		t.Fatal("the zero record is not signed")
+	}
+	// known answer shared with ua-rs: pins the 8-byte version word
+	if d, err := KemRecordDigest(ua, ^uint64(0), kemKey(1601, 1)); err != nil || hx(d[:]) != "0xa0063a84b56d80c83688d8caf5aeb4be8fb4556928e8bc649686449573938f07" {
+		t.Fatal("max version")
 	}
 	if c := ChainKeyHash(1<<40 + 7); hx(c[:]) != "0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950" { // keccak256("evm:1099511627783")
 		t.Fatal("chain key hash")
@@ -428,7 +617,7 @@ func TestPqzKeyRecord(t *testing.T) {
 			}
 			if hx(g.PqzKeyHash[:]) != r["pqzKeyHash"] || hx(g.PqzPopHash[:]) != r["pqzPopHash"] || hx(g.PqzKeyDigest[:]) != r["pqzKeyDigest"] ||
 				hx(g.RecordDigest[:]) != r["recordDigest"] || hx(g.Message[:]) != r["message"] || hx(g.PqzRegMessage[:]) != r["pqzRegMessage"] ||
-				g.PqzKeyDigest != PqzKeyDigest(ua, g.PqzKeyHash) || g.RecordDigest != PqzKeyRecordDigest(g.PqzKeyDigest, g.PqzPopHash) ||
+				g.PqzKeyDigest != PqzKeyDigest(ua, g.PqzKeyHash) || g.RecordDigest != PqzKeyRecordDigest(ua, g.PqzKeyHash, g.PqzPopHash) ||
 				(g.MemberDigest != nil) != (k == 0x0120) || hxp(g.MemberDigest) != opt(r, "memberDigest") {
 				t.Fatalf("%v (hashOnly %v)", r["name"], hashOnly)
 			}
@@ -444,31 +633,34 @@ func TestPqzKeyRecord(t *testing.T) {
 		}
 		n++
 	}
-	if n != 8 || msigRows != 8 { // 4 msig rows, each with the proof bytes and hash-only
+	if n != len(rows(p, "pqzKeyRecords")) || msigRows != 8 { // 4 msig rows, each with the proof bytes and hash-only
 		t.Fatalf("counts %d %d", n, msigRows)
 	}
 }
 
-func TestPersonalSignPortablePurposes(t *testing.T) {
+// TestNativeMemberTypedDigest (TS-D4): a native msig member signs the record's typed digest itself (what
+// eth_signTypedData_v4 of typedData returns), a derived member keeps MemberDigest(ua, message); only under the portable purposes.
+func TestNativeMemberTypedDigest(t *testing.T) {
 	p := load(t, "portable.json")
 	metatx, pop := mustTag(t, "metatx"), mustTag(t, "pop")
 	if !IsPortablePurpose(PopV2Tag) || !IsPortablePurpose(kemPurpose) || !IsPortablePurpose(pqzKeyPurpose) || IsPortablePurpose(metatx) || IsPortablePurpose(pop) {
 		t.Fatal("IsPortablePurpose")
 	}
-	md := b32(find(rows(p, "registrations"), "name", "msig-pq-native")["memberDigest"])
-	// known answer from the JS reference (clientkeys ua.js); prefix = 0x19 + "Ethereum Signed Message:\n32" (28 bytes)
-	if hx(md[:]) != "0x606d9a70c70d39e5d8d079c3ae31eefa6db574219dab56d6c776cb6731e61a7c" {
-		t.Fatal("memberDigest")
+	r := find(rows(p, "registrations"), "name", "msig-pq-native")
+	h, err := register(r, false)
+	if err != nil || hashTypedData(r["typedData"].(obj)) != hx(h.RegistrationDigest[:]) || *h.MemberDigest != MemberDigest(b32(r["ua"]), h.Message) ||
+		*h.MemberDigest == h.RegistrationDigest {
+		t.Fatal("native member digest")
 	}
-	if ps := PersonalSignDigest(md); hx(ps[:]) != "0xe5d24987e9b4e710063a5432d6215eaead64d8dc073f7561726d21644d54c3d8" {
-		t.Fatalf("personalSignDigest %x", ps)
-	}
-	if len("\x19Ethereum Signed Message:\n32") != 28 {
-		t.Fatal("prefix length")
+	for _, k := range rows(p, "pqzKeyRecords") {
+		if k["ua"] == r["ua"] && hashTypedData(k["typedData"].(obj)) != k["recordDigest"] {
+			t.Fatalf("%v typed", k["name"])
+		}
 	}
 	n := find(rows(p, "negatives"), "name", "native-personal-sign-under-metatx")
-	if IsPortablePurpose(b32(n["mutation"].(obj)["set"].(obj)["purposeTag"])) {
-		t.Fatal("metatx is not portable")
+	if IsPortablePurpose(b32(n["mutation"].(obj)["set"].(obj)["purposeTag"])) ||
+		find(rows(p, "negatives"), "name", "native-member-personal-sign")["error"] != "UAPoP" {
+		t.Fatal("metatx is not portable; personal_sign refused")
 	}
 }
 
@@ -547,10 +739,10 @@ func TestHolderRefusals(t *testing.T) {
 			}
 			run++
 		default:
-			sigLevel++ // signatures / native personal_sign: verified by the signature vectors
+			sigLevel++ // signatures / native personal_sign / another record's pop: verified by the signature vectors
 		}
 	}
-	if run != 60 || sigLevel != 7 {
+	if run != 60 || sigLevel != len(rows(p, "negatives"))-60 {
 		t.Fatalf("negatives %d digest-layer, %d signature-level", run, sigLevel)
 	}
 	u, key, proof := b32(hx(bytes.Repeat([]byte{1}, 32))), make([]byte, 16384), bytes.Repeat([]byte{7}, 32)

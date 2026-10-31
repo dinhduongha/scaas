@@ -1,0 +1,368 @@
+// SCaaS Universal Account identity layer (accounts.md §1.3–§1.6) for .NET client systems: the kind table, ids, keyHash,
+// purpose tags, ua_msg, the portable PoP and KEM record digests (UA-8), the registry's UAAuth digest, member digests, canonical ids and key-data validation.
+// The same rules live in Solidity (UAKinds.sol), JS (clientkeys ua.js), Rust (scaas-ua), Python and Go;
+// smartcontracts/vectors/ua pins all six. UNAUDITED.
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
+using Org.BouncyCastle.Crypto.Digests;
+
+namespace Scaas.Ua;
+
+/// <summary>An error whose <see cref="Code"/> every implementation and the vector files share.</summary>
+public sealed class UAException(string code, string? reason = null)
+    : Exception(reason is null ? code : $"{code}: {reason}")
+{
+    public string Code { get; } = code;
+    public string? Reason { get; } = reason;
+}
+
+/// <summary>One row of the kind table; <c>Lengths</c> empty = variable-length key data; <c>Group</c> null = none.</summary>
+public sealed record Kind(ushort Number, string Name, bool Native, int[] Lengths, string? Group);
+
+public static partial class UA
+{
+    public static readonly Kind[] Kinds =
+    [
+        new(0x0001, "evm-eoa", true, [20], null),
+        new(0x0002, "evm-contract", true, [20], null),
+        new(0x0003, "hedera-native", true, [20], null),
+        new(0x0010, "solana-ed25519", true, [32], null),
+        new(0x0011, "stellar-account", true, [32], null),
+        new(0x0012, "soroban-contract", true, [32], null),
+        new(0x0013, "aptos-account", true, [32], null),
+        new(0x0014, "sui-address", true, [32], null),
+        new(0x0015, "cosmos-account", true, [20, 32], null),
+        new(0x0016, "ton-wallet", true, [32], null),
+        new(0x0017, "near-account", true, [32], null),
+        new(0x0018, "algorand-address", true, [32], null),
+        new(0x0100, "webauthn-p256", false, [96], "p256"),
+        new(0x0101, "p256", false, [64], "p256"),
+        new(0x0102, "ed25519", false, [32], "ed25519"),
+        new(0x0103, "bip340", false, [32], "secp256k1"),
+        new(0x0104, "schnorr-bn254", false, [64], "bn254-g1"),
+        new(0x0105, "schnorr-bls12381", false, [128], "bls12381-g1"),
+        new(0x0106, "bls12381-minsig", false, [256], "bls12381-g2"),
+        new(0x0107, "bls-bn254-minsig", false, [128], "bn254-g2"),
+        new(0x0110, "musig2-secp256k1", false, [], "secp256k1"),
+        new(0x0111, "frost-secp256k1", false, [], "secp256k1"),
+        new(0x0112, "musig2-bn254", false, [], "bn254-g1"),
+        new(0x0113, "frost-bn254", false, [], "bn254-g1"),
+        new(0x0120, "msig", false, [], null),
+        new(0x0130, "mldsa44", false, [1312], "mldsa44"),
+        new(0x0131, "mldsa65", false, [1952], "mldsa65"),
+        new(0x0132, "fndsa512", false, [897], "fndsa512"),
+        new(0x0133, "slhdsa128s", false, [32], "slhdsa128s"),
+        new(0x0141, "zether-bls12381", false, [128], "bls12381-g1"),
+        new(0x0108, "secp256k1", false, [64], "secp256k1"), // 2026-10-17, appended as in kinds.json
+    ];
+
+    /// <summary>Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.</summary>
+    public static readonly Kind[] Schemes = [new(0x0142, "pqz-mlwe", false, [16384, 18432, 20480, 22528], "pqz-mlwe")];
+
+    public static readonly string[] Groups =
+        ["p256", "ed25519", "secp256k1", "bn254-g1", "bls12381-g1", "bls12381-g2", "bn254-g2", "mldsa44", "mldsa65",
+         "fndsa512", "slhdsa128s", "pqz-mlwe"];
+
+    public static readonly string[] Purposes =
+        ["pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
+         "vc-anchor", "trade", "kem", "pqz-key"];
+
+    public const string DomainType =
+        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)";
+    public const string UAAuthType = "UAAuth(bytes32 ua,bytes32 purpose,bytes32 digest)";
+    public const string RegistryName = "SCaaS UARegistry";
+
+    public static byte[] Keccak256(params byte[][] parts)
+    {
+        var d = new KeccakDigest(256);
+        foreach (var p in parts) d.BlockUpdate(p, 0, p.Length);
+        var o = new byte[32];
+        d.DoFinal(o, 0);
+        return o;
+    }
+
+    static byte[] Utf8(string s) => Encoding.UTF8.GetBytes(s);
+
+    public static readonly byte[] MsgTag = Keccak256(Utf8("scaas.ua.msg.v1"));
+
+    public static Kind KindInfo(ushort kind) =>
+        Array.Find(Kinds, k => k.Number == kind) ?? throw new UAException("UAKindUnknown", $"0x{kind:x4}");
+
+    // tag / keyHash / message accept a kind or a scheme; id derivation and key-data validation accept kinds only
+    static Kind Tagged(ushort kind) => Array.Find(Schemes, s => s.Number == kind) ?? Derived(kind);
+
+    static Kind Derived(ushort kind)
+    {
+        if (Array.Find(Schemes, s => s.Number == kind) is { } s) throw new UAException("UAKindNotDerived", s.Name);
+        var k = KindInfo(kind);
+        return k.Native ? throw new UAException("UAKindNotDerived", k.Name) : k;
+    }
+
+    static bool SingleSigning(ushort k) => k is (>= 0x0100 and <= 0x0108) or (>= 0x0110 and <= 0x0113) or (>= 0x0130 and <= 0x0133);
+    public static bool IsNative(ushort kind) => Array.Exists(Kinds, k => k.Number == kind && k.Native);
+    public static bool IsZether(ushort kind) => kind == 0x0141;
+    public static bool IsSigning(ushort kind) => kind == 0x0120 || kind == 0x0141 || SingleSigning(kind);
+
+    /// <summary>Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512 (an msig per <see cref="MsigPqzEligible"/>).</summary>
+    public static bool IsPqzHolder(ushort kind) => kind is >= 0x0130 and <= 0x0132;
+    public static bool IsMember(ushort kind, bool hederaNative = false) =>
+        SingleSigning(kind) || kind is 0x0001 or 0x0002 || (hederaNative && kind == 0x0003);
+
+    public static string KindTagString(ushort kind) => $"scaas.ua.{Tagged(kind).Name}.v1";
+    public static byte[] Tag(ushort kind) => Keccak256(Utf8(KindTagString(kind)));
+
+    public static string GroupTagString(string group) =>
+        Array.IndexOf(Groups, group) >= 0 ? $"scaas.ua.group.{group}.v1" : throw new ArgumentException($"unknown keyHash group {group}");
+    public static byte[] GroupTag(string group) => Keccak256(Utf8(GroupTagString(group)));
+
+    /// <summary>Every purpose is v1; <c>pop</c> is also v2 (UA-8: the portable PoP).</summary>
+    public static byte[] PurposeTag(string purpose, uint version = 1) =>
+        Array.IndexOf(Purposes, purpose) >= 0 && (version == 1 || (purpose == "pop" && version == 2))
+            ? Keccak256(Utf8($"scaas.ua.purpose.{purpose}.v{version}")) : throw new UAException("UAPurposeUnknown", purpose);
+
+    static byte[] Sized(byte[] b, int n, string what) => b.Length == n ? b : throw new ArgumentException($"{what} must be {n} bytes");
+
+    /// <summary><c>keccak256(TAG(kind) ‖ keyData)</c>; no validation (see <see cref="DeriveUA"/>).</summary>
+    public static byte[] UAOf(ushort kind, byte[] keyData) => Keccak256(Tag(Derived(kind).Number), keyData);
+
+    public static bool InNativeSpace(byte[] id) => Sized(id, 32, "id").AsSpan(0, 12).IndexOfAnyExcept((byte)0) < 0;
+
+    /// <summary>Validate, derive, refuse an id whose top 96 bits are zero (CTR-UA-03).</summary>
+    public static byte[] DeriveUA(ushort kind, byte[] keyData, bool hederaNative = false)
+    {
+        ValidateKeyData(kind, keyData, hederaNative);
+        var ua = UAOf(kind, keyData);
+        return InNativeSpace(ua) ? throw new UAException("UAIdInNativeSpace", Convert.ToHexStringLower(ua)) : ua;
+    }
+
+    /// <summary>A native id left-padded to 32 bytes.</summary>
+    public static byte[] NativeId(ushort kind, byte[] raw)
+    {
+        var k = KindInfo(kind);
+        if (!k.Native) throw new UAException("UAKindNotNative", k.Name);
+        if (Array.IndexOf(k.Lengths, raw.Length) < 0) throw new UAException("UAKeyData", "length");
+        var id = new byte[32];
+        raw.CopyTo(id, 32 - raw.Length);
+        return id;
+    }
+
+    /// <summary><c>keccak256(GROUP(g) ‖ canonical pubkey)</c>, null for structures. Call on validated key data.</summary>
+    public static byte[]? KeyHashOf(ushort kind, byte[] keyData)
+    {
+        var k = Tagged(kind);
+        if (k.Group is null) return null;
+        var (lo, hi) = kind switch
+        {
+            0x0100 or 0x0101 or 0x0108 => (0, 32),
+            0x0110 or 0x0111 => (1, 33),
+            0x0112 or 0x0113 => (0, 64),
+            _ => (0, keyData.Length),
+        };
+        if (keyData.Length < hi) throw new UAException("UAKeyData", "length");
+        return Keccak256(GroupTag(k.Group), keyData[lo..hi]);
+    }
+
+    public static byte[] UAMessage(ushort kind, byte[] purpose, byte[] digest) =>
+        Keccak256(MsgTag, Tag(kind), Sized(purpose, 32, "purposeTag"), Sized(digest, 32, "digest"));
+
+    public static byte[] ChainKeyHash(ulong chainId) => Keccak256(Utf8("evm:" + chainId.ToString(CultureInfo.InvariantCulture)));
+
+    static byte[] Word(ulong v)
+    {
+        var w = new byte[32];
+        for (var i = 0; i < 8; i++) w[31 - i] = (byte)(v >> (8 * i));
+        return w;
+    }
+
+    static byte[] AddressWord(byte[] a)
+    {
+        var w = new byte[32];
+        Sized(a, 20, "registry").CopyTo(w, 12);
+        return w;
+    }
+
+    public static readonly byte[] PopV2Tag = PurposeTag("pop", 2);
+    public static readonly byte[] KemRecordTag = Keccak256(Utf8("scaas.ua.kem-record.v1"));
+    /// <summary>The 1,601-byte <c>0x01</c> ‖ ML-KEM-1024 ek ‖ X25519 pk the registry stores (UA-8 P7, CTR-UA-32); <c>kemPk[0]</c> is the scheme id.</summary>
+    public const byte KemSchemeMlkem1024X25519 = 1;
+    public const int KemPkLength = 1601;
+
+    /// <summary><c>keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)</c>, each hash 32 zero bytes when absent.</summary>
+    public static byte[] PortablePopDigest(byte[] ua, byte[] pqzKeyHash, byte[] kemRecordHash) =>
+        Keccak256(PopV2Tag, Sized(ua, 32, "ua"), Sized(pqzKeyHash, 32, "pqzKeyHash"), Sized(kemRecordHash, 32, "kemRecordHash"));
+
+    /// <summary><c>keccak256(portablePopDigest ‖ pqzPopHash)</c>: what the signer's <c>pop</c> signs under <c>UAMessage(kind, POP_V2, ·)</c>.</summary>
+    public static byte[] RegistrationDigest(byte[] portable, byte[] pqzPopHash) =>
+        Keccak256(Sized(portable, 32, "portable"), Sized(pqzPopHash, 32, "pqzPopHash"));
+
+    /// <summary><c>keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))</c>: version 1 … 2^64 − 1, <c>kemPk</c> = scheme byte ‖ key (<c>UAKemScheme</c> for an id other than 1).</summary>
+    public static byte[] KemRecordDigest(byte[] ua, ulong version, byte[] kemPk)
+    {
+        if (version == 0) throw new UAException("UAKemVersion", "0");
+        kemPk ??= []; // ponytail: a null key is an empty key (UAKemKeyLength), not a NullReferenceException
+        if (kemPk.Length > 0 && kemPk[0] != KemSchemeMlkem1024X25519) throw new UAException("UAKemScheme", kemPk[0].ToString(CultureInfo.InvariantCulture));
+        if (kemPk.Length != KemPkLength) throw new UAException("UAKemKeyLength", kemPk.Length.ToString(CultureInfo.InvariantCulture));
+        return Keccak256(KemRecordTag, Sized(ua, 32, "ua"), Word(version), Keccak256(kemPk));
+    }
+
+    /// <summary><c>UAMessage(kind, PURPOSE_KEM, KemRecordDigest(ua, version, kemPk))</c>: what the UA signs for <c>setKemKey</c>.</summary>
+    public static byte[] KemRecordMessage(ushort kind, byte[] ua, ulong version, byte[] kemPk) =>
+        UAMessage(kind, PurposeTag("kem"), KemRecordDigest(ua, version, kemPk));
+
+    static bool Holds(ushort kind, byte[] keyData) => IsPqzHolder(kind) || (kind == 0x0120 && keyData.Length > 0 && MsigPqzEligible(keyData));
+
+    static byte[] PqzKeyHashOf(byte[] pqzKey) =>
+        Schemes[0].Lengths.Contains(pqzKey.Length) ? KeyHashOf(0x0142, pqzKey)! : throw new UAException("UAKeyData", "PQZ key length");
+
+    static readonly byte[] EmptyHash = Keccak256();
+
+    /// <summary>Proof hash from the proof bytes and / or the hash (absent = 0); both given and different, or <c>keccak256("")</c>, is UAPqzPopHash.</summary>
+    static byte[] ProofHashOf(byte[]? pop, byte[]? hash)
+    {
+        var proof = pop is { Length: > 0 } ? Keccak256(pop) : null;
+        if (hash is { Length: 0 }) hash = null; // absent
+        if (hash is { Length: not 32 }) throw new UAException("UAPqzPopHash", "hash must be 32 bytes");
+        var given = hash is not null && hash.Any(b => b != 0) ? hash : null;
+        if (proof is not null && given is not null && !proof.AsSpan().SequenceEqual(given)) throw new UAException("UAPqzPopHash", "mismatch");
+        var h = proof ?? given ?? new byte[32];
+        return h.AsSpan().SequenceEqual(EmptyHash) ? throw new UAException("UAPqzPopHash", "empty proof") : h;
+    }
+
+    /// <summary>The portable PoP of a registration as <see cref="HolderPopMessage"/> returns it; <c>MemberDigest</c> is set for an <c>msig</c> only.</summary>
+    public sealed record HolderPop(byte[] PqzKeyHash, byte[] PqzPopHash, byte[] KemRecordHash, byte[] PortablePopDigest,
+        byte[] RegistrationDigest, byte[] Message, byte[]? MemberDigest);
+
+    /// <summary>The portable PoP message of a registration (UA-8 P1, P2). Attributes: <paramref name="pqzKey"/> with its proof
+    /// <paramref name="pqzPop"/> (or only its hash; a relayer may hold only that) and the initial KEM record; null / empty = absent.
+    /// Only holders may carry them (UAPqzHolder, UAKemHolder; an <c>msig</c> needs <paramref name="keyData"/> to show it is PQ-eligible);
+    /// a PQZ key always comes with its proof hash and only with it (UAPqzPopHash).</summary>
+    public static HolderPop HolderPopMessage(ushort kind, byte[] ua, byte[] keyData, byte[]? pqzKey = null, byte[]? pqzPop = null,
+        byte[]? pqzPopHash = null, (ulong Version, byte[] Pk)? kem = null)
+    {
+        if (pqzKey is { Length: 0 }) pqzKey = null;
+        if (kem is { Version: 0, Pk: null or { Length: 0 } }) kem = null; // (0, null) / (0, []) = absent
+        if (pqzKey is not null || kem is not null)
+        {
+            var holder = Holds(kind, keyData);
+            if (pqzKey is not null && !holder) throw new UAException("UAPqzHolder", $"0x{kind:x4} may not hold a PQZ key");
+            if (kem is not null && !holder) throw new UAException("UAKemHolder", $"0x{kind:x4} may not hold a KEM key");
+        }
+        var popHash = ProofHashOf(pqzPop, pqzPopHash);
+        if ((pqzKey is not null) != popHash.Any(b => b != 0)) throw new UAException("UAPqzPopHash", "key and proof hash go together");
+        var keyHash = pqzKey is null ? new byte[32] : PqzKeyHashOf(pqzKey);
+        var kemHash = kem is { } k ? KemRecordDigest(ua, k.Version, k.Pk) : new byte[32];
+        var portable = PortablePopDigest(ua, keyHash, kemHash);
+        var reg = RegistrationDigest(portable, popHash);
+        var msg = UAMessage(kind, PopV2Tag, reg);
+        return new(keyHash, popHash, kemHash, portable, reg, msg, kind == 0x0120 ? MemberDigest(ua, msg) : null);
+    }
+
+    public static readonly byte[] PqzKeyRecordTag = Keccak256(Utf8("scaas.ua.pqz-key-record.v1"));
+
+    /// <summary><c>keccak256(PQZ_KEY_RECORD_TAG ‖ ua ‖ pqzKeyHash)</c>: what a later PQZ key's R_REG proves over (no proof hash: no cycle).</summary>
+    public static byte[] PqzKeyDigest(byte[] ua, byte[] pqzKeyHash) =>
+        Keccak256(PqzKeyRecordTag, Sized(ua, 32, "ua"), Sized(pqzKeyHash, 32, "pqzKeyHash"));
+
+    /// <summary><c>keccak256(pqzKeyDigest ‖ pqzPopHash)</c>: what <c>setPqzKey</c>'s signature signs under <c>UAMessage(kind, PURPOSE_PQZ_KEY, ·)</c>.</summary>
+    public static byte[] PqzKeyRecordDigest(byte[] keyDigest, byte[] pqzPopHash) =>
+        Keccak256(Sized(keyDigest, 32, "pqzKeyDigest"), Sized(pqzPopHash, 32, "pqzPopHash"));
+
+    /// <summary>The PQZ key record of <c>setPqzKey</c> (ruling A1-I1): <c>Message</c> is what the UA signs, <c>PqzRegMessage</c> what the key's R_REG proves over.</summary>
+    public sealed record PqzKeyRecord(byte[] PqzKeyHash, byte[] PqzPopHash, byte[] PqzKeyDigest, byte[] RecordDigest, byte[] Message,
+        byte[] PqzRegMessage, byte[]? MemberDigest);
+
+    /// <summary>The signed, portable, write-once PQZ key record: accepted only by a registration without a PQZ key
+    /// (<paramref name="alreadySet"/> = it has one: UAPqzKeySet). Holder rules of <see cref="HolderPopMessage"/>; the key and its proof hash are both required.
+    /// Check order: UAPqzHolder, UAPqzKeySet, then UAKeyData / UAPqzPopHash.</summary>
+    public static PqzKeyRecord PqzKeyRecordMessage(ushort kind, byte[] ua, byte[] keyData, byte[] pqzKey, byte[]? pqzPop = null,
+        byte[]? pqzPopHash = null, bool alreadySet = false)
+    {
+        if (!Holds(kind, keyData)) throw new UAException("UAPqzHolder", $"0x{kind:x4} may not hold a PQZ key");
+        if (alreadySet) throw new UAException("UAPqzKeySet");
+        var keyHash = PqzKeyHashOf(pqzKey);
+        var popHash = ProofHashOf(pqzPop, pqzPopHash);
+        if (popHash.All(b => b == 0)) throw new UAException("UAPqzPopHash", "required");
+        var keyDigest = PqzKeyDigest(ua, keyHash);
+        var recordDigest = PqzKeyRecordDigest(keyDigest, popHash);
+        var tag = PurposeTag("pqz-key");
+        var msg = UAMessage(kind, tag, recordDigest);
+        return new(keyHash, popHash, keyDigest, recordDigest, msg, UAMessage(0x0142, tag, keyDigest), kind == 0x0120 ? MemberDigest(ua, msg) : null);
+    }
+
+    /// <summary>The message R_REG proves over: <c>UAMessage(0x0142, POP_V2, PortablePopDigest(ua, keyHash(0x0142, pqzKey), kemRecordHash))</c>.</summary>
+    public static byte[] PqzRegMessage(byte[] ua, byte[] pqzKey, (ulong Version, byte[] Pk)? kem = null)
+    {
+        if (kem is { Version: 0, Pk: null or { Length: 0 } }) kem = null; // (0, null) / (0, []) = absent
+        var kemHash = kem is { } k ? KemRecordDigest(ua, k.Version, k.Pk) : new byte[32];
+        return UAMessage(0x0142, PopV2Tag, PortablePopDigest(ua, PqzKeyHashOf(pqzKey), kemHash));
+    }
+
+    /// <summary>True when the msig members outside kinds 0x0130-0x0133 weigh less than its threshold (CTR-PQZ-12).</summary>
+    public static bool MsigPqzEligible(byte[] keyData)
+    {
+        var d = keyData;
+        if (d.Length < 4 || d.Length != 4 + 36 * ((d[2] << 8) | d[3])) throw new UAException("UAKeyData", "length");
+        var classical = 0;
+        for (var o = 4; o < d.Length; o += 36)
+        {
+            var k = (d[o] << 8) | d[o + 1];
+            if (k is < 0x0130 or > 0x0133) classical += (d[o + 34] << 8) | d[o + 35];
+        }
+        return classical < ((d[0] << 8) | d[1]);
+    }
+
+    /// <summary>The registry's EIP-712 domain ("SCaaS UARegistry", "&lt;generation&gt;", chainId, registry, salt = chainUid).</summary>
+    public sealed record Domain(uint Generation, ulong ChainId, byte[] Registry, byte[] ChainUid);
+
+    public static byte[] UAAuthDomainSeparator(Domain d) =>
+        Keccak256(Keccak256(Utf8(DomainType)), Keccak256(Utf8(RegistryName)),
+            Keccak256(Utf8(d.Generation.ToString(CultureInfo.InvariantCulture))), Word(d.ChainId), AddressWord(d.Registry),
+            Sized(d.ChainUid, 32, "chainUid"));
+
+    /// <summary>EIP-191 <c>personal_sign</c> of a 32-byte digest. What a code-less native (EOA) <c>msig</c> member signs over the
+    /// <c>MemberDigest</c> of a portable record only (POP_V2, KEM, PQZ_KEY; ruling C7).</summary>
+    public static byte[] PersonalSignDigest(byte[] digest) =>
+        Keccak256(Utf8("\u0019Ethereum Signed Message:\n32"), Sized(digest, 32, "digest"));
+
+    /// <summary>The portable purposes (POP_V2, KEM, PQZ_KEY): the only ones a code-less native msig member signs by <c>personal_sign</c>.</summary>
+    public static bool IsPortablePurpose(byte[] tag) =>
+        new[] { PopV2Tag, PurposeTag("kem"), PurposeTag("pqz-key") }.Any(t => t.AsSpan().SequenceEqual(tag));
+
+    /// <summary>EIP-712 digest of <c>UAAuth(ua, purpose, digest)</c>: what native signers behind the registry sign, except that
+    /// under the three portable purposes (<see cref="IsPortablePurpose"/>) a code-less native msig member signs
+    /// <see cref="PersonalSignDigest"/> of the <see cref="MemberDigest"/> instead (CTR-MTX-14, ruling C7).</summary>
+    public static byte[] UAAuthDigest(Domain d, byte[] ua, byte[] purpose, byte[] digest) =>
+        Keccak256(new byte[] { 0x19, 0x01 }, UAAuthDomainSeparator(d),
+            Keccak256(Keccak256(Utf8(UAAuthType)), Sized(ua, 32, "ua"), Sized(purpose, 32, "purposeTag"), Sized(digest, 32, "digest")));
+
+    public static byte[] MemberDigest(byte[] structureUa, byte[] uaMsg) =>
+        Keccak256(Sized(structureUa, 32, "structureUa"), Sized(uaMsg, 32, "uaMsg"));
+
+    [GeneratedRegex(@"\A0x([0-9a-fA-F]{40}|[0-9a-fA-F]{64})\z")]
+    private static partial Regex IdPattern();
+
+    /// <summary>Lower-case hex; a 32-byte id with the top 96 bits zero is written as its 20-byte native id (CTR-UA-03).</summary>
+    public static string CanonicalId(string text)
+    {
+        var m = IdPattern().Match(text);
+        if (!m.Success) throw new UAException("UAIdFormat", text);
+        var h = m.Groups[1].Value.ToLowerInvariant();
+        return "0x" + (h.Length == 64 && h.StartsWith(new string('0', 24), StringComparison.Ordinal) ? h[24..] : h);
+    }
+
+    /// <summary><c>u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ bytes32 id ‖ u16 weight)</c>.</summary>
+    public static byte[] EncodeMsig(ushort threshold, IReadOnlyList<(ushort Kind, byte[] Id, ushort Weight)> members)
+    {
+        var o = new List<byte> { (byte)(threshold >> 8), (byte)threshold, (byte)(members.Count >> 8), (byte)members.Count };
+        foreach (var (kind, id, weight) in members)
+        {
+            o.Add((byte)(kind >> 8));
+            o.Add((byte)kind);
+            o.AddRange(Sized(id, 32, "member id"));
+            o.Add((byte)(weight >> 8));
+            o.Add((byte)weight);
+        }
+        return [.. o];
+    }
+}

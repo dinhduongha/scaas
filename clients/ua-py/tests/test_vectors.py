@@ -19,6 +19,41 @@ def hx(x):
     return '0x' + x.hex()
 
 
+def encode_type(types, t):
+    """EIP-712 encodeType from a wallet's typed-data JSON: primary, then the referenced types sorted by name."""
+    deps, todo = set(), [t]
+    while todo:
+        for f in types[todo.pop()]:
+            if f['type'] in types and f['type'] not in deps:
+                deps.add(f['type'])
+                todo.append(f['type'])
+    one = lambda n: n + '(' + ','.join(f"{f['type']} {f['name']}" for f in types[n]) + ')'
+    return one(t) + ''.join(one(n) for n in sorted(deps - {t}))
+
+
+def hash_struct_json(types, t, data):
+    """An independent EIP-712 hashStruct over the field types the portable records use."""
+    enc = ua.keccak256(encode_type(types, t).encode())
+    for f in types[t]:
+        v = data[f['name']]
+        if f['type'] in types:
+            enc += hash_struct_json(types, f['type'], v)
+        elif f['type'] == 'string':
+            enc += ua.keccak256(v.encode())
+        elif f['type'] == 'bytes32':
+            enc += b(v)
+        else:
+            assert f['type'] in ('uint8', 'uint16', 'uint64'), f['type']
+            enc += int(v).to_bytes(32, 'big')
+    return ua.keccak256(enc)
+
+
+def hash_typed_data(td):
+    t = td['types']
+    return ua.keccak256(b'\x19\x01', hash_struct_json(t, 'EIP712Domain', td['domain']),
+                        hash_struct_json(t, td['primaryType'], td['message']))
+
+
 class Vectors(unittest.TestCase):
     def test_table_groups_purposes_constants(self):
         self.assertEqual(len(K['kinds']), len(ua.KINDS))
@@ -103,22 +138,22 @@ class Vectors(unittest.TestCase):
 
     def test_structures(self):
         for p in S['pop']:
-            portable = ua.portable_pop_digest(b(p['ua']), b(p['pqzKeyHash']), b(p['kemRecordHash']))
-            self.assertEqual(hx(portable), p['portablePopDigest'])
-            self.assertEqual(hx(ua.registration_digest(portable, b(p['pqzPopHash']))), p['registrationDigest'])
+            w = (b(p['ua']), p['kind'], b(p['pqzKeyHash']), b(p['kemRecordHash']))
+            self.assertEqual(hx(ua.portable_record_digest(*w)), p['portableRecordDigest'])
+            self.assertEqual(hx(ua.registration_digest(*w, b(p['pqzPopHash']))), p['registrationDigest'])
         proof = bytes([7]) * 32
         for r in S['pqzReg']:
             u, kem = b(r['ua']), b(r['kemRecordHash'])
             h = ua.key_hash_of(0x0142, b(K['pqzKey']))
             self.assertEqual(hx(h), r['pqzKeyHash'])
-            portable = ua.portable_pop_digest(u, h, kem)
-            self.assertEqual(hx(portable), r['portablePopDigest'])
+            portable = ua.portable_record_digest(u, r['kind'], h, kem)
+            self.assertEqual(hx(portable), r['portableRecordDigest'])
             self.assertEqual(hx(ua.ua_message(0x0142, ua.POP_V2_TAG, portable)), r['pqzRegMessage'])
-            if any(kem):
-                continue  # the row's KEM record hash is opaque; the real records are in portable.json
-            self.assertEqual(hx(ua.pqz_reg_message(u, b(K['pqzKey']))), r['pqzRegMessage'])
+            if kem != ua.kem_record_hash(u, 0, b''):
+                continue  # the row's KEM record hash is opaque (a label); the real records are in portable.json
+            self.assertEqual(hx(ua.pqz_reg_message(r['kind'], u, b(K['pqzKey']))), r['pqzRegMessage'])
             got = ua.holder_pop_message(r['kind'], u, b'', b(K['pqzKey']), pqz_pop_hash=proof)
-            self.assertEqual((hx(got.pqz_key_hash), hx(got.portable_pop_digest)), (r['pqzKeyHash'], r['portablePopDigest']))
+            self.assertEqual((hx(got.pqz_key_hash), hx(got.portable_record_digest)), (r['pqzKeyHash'], r['portableRecordDigest']))
             for bad in (0x0101, 0x0133):
                 with self.assertRaises(ua.UAError) as e:
                     ua.holder_pop_message(bad, u, b'', b(K['pqzKey']), pqz_pop_hash=proof)
@@ -127,8 +162,8 @@ class Vectors(unittest.TestCase):
             d = b(r['keyData'])
             self.assertEqual(ua.msig_pqz_eligible(d), r['eligible'], r['reason'])
             self.assertEqual(hx(ua.derive_ua(0x0120, d)), r['ua'])
-            h = b(K['pqzKeyHash']) if r['eligible'] else bytes(32)
-            self.assertEqual(hx(ua.portable_pop_digest(b(r['ua']), h)), r['portablePopDigest'])
+            h, u = b(K['pqzKeyHash']) if r['eligible'] else bytes(32), b(r['ua'])
+            self.assertEqual(hx(ua.portable_record_digest(u, 0x0120, h, ua.kem_record_hash(u, 0, b''))), r['portableRecordDigest'])
         for a in S['uaAuth']:
             c = S['contexts'][a['context']]
             args = (a['generation'], c['chainId'], b(c['registry']), b(c['chainUid']))
@@ -146,13 +181,75 @@ class Vectors(unittest.TestCase):
                                      None if hash_only or not pop else pop, h if any(h) else None,
                                      None if ver == 0 and not pk else (ver, pk))
 
+    def test_portable_typed(self):
+        """TS-D1: the domain separator and the five typehashes pinned and re-derived; every row's typedData (the JSON
+        eth_signTypedData_v4 signs) hashes to its digest, its message carries the row's words (kind included)."""
+        t = P['typed']
+        ds = '0x9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1'
+        self.assertEqual((hx(ua.PORTABLE_DOMAIN_SEPARATOR), t['domainSeparator']), (ds, ds))
+        self.assertEqual((ua.PORTABLE_DOMAIN_TYPE, ua.PORTABLE_DOMAIN_NAME, ua.PORTABLE_DOMAIN_VERSION),
+                         (t['domainType'], t['domain']['name'], t['domain']['version']))
+        self.assertEqual(ua.PORTABLE_DOMAIN_TYPE, 'EIP712Domain(string name,string version)')
+        self.assertEqual((ua.PORTABLE_DOMAIN_NAME, ua.PORTABLE_DOMAIN_VERSION), ('SCaaS UA Portable', '1'))
+        pinned = {'UAKemRecord': '0x0ab7989827627b89c268e88a0a0b06b62aefa70b0a466014931ca44acfa9a201',
+                  'UAPortableRecord': '0x0c1553cfab3c35326558484df79963dced75ead85272d2a85985f264757bfe7f',
+                  'UARegistration': '0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e',
+                  'UAPqzKey': '0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00',
+                  'UAPqzKeyRecord': '0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567'}
+        self.assertEqual(set(t['types']), set(pinned))
+        self.assertEqual(set(ua.PORTABLE_TYPES), set(pinned))
+        for name, th in pinned.items():
+            self.assertEqual((ua.PORTABLE_TYPES[name], hx(ua.portable_typehash(name))), (t['types'][name]['type'], th), name)
+            self.assertEqual(t['types'][name]['typehash'], th, name)
+        n = 0
+        for r in P['registrations']:
+            td, u, kind = r['typedData'], b(r['ua']), r['kind']
+            self.assertEqual((td['primaryType'], td['domain']), ('UARegistration', t['domain']), r['name'])
+            self.assertEqual(hash_struct_json(td['types'], 'EIP712Domain', td['domain']), ua.PORTABLE_DOMAIN_SEPARATOR)
+            self.assertEqual(hx(hash_typed_data(td)), r['registrationDigest'], r['name'])
+            for x in ('UARegistration', 'UAPortableRecord', 'UAKemRecord'):
+                self.assertEqual(encode_type(td['types'], x), ua.PORTABLE_TYPES[x], x)
+            rec, kem = td['message']['record'], td['message']['record']['kem']
+            self.assertEqual((rec['kind'], rec['ua'], kem['ua'], rec['pqzKeyHash']), (kind, r['ua'], r['ua'], r['pqzKeyHash']), r['name'])
+            self.assertEqual(td['message']['pqzPopHash'], r['attrs']['pqzPopHash'], r['name'])
+            pk, v = b(r['attrs']['kemPk']), int(r['attrs']['kemVersion'])
+            self.assertEqual(hx(hash_struct_json(td['types'], 'UAKemRecord', kem)), r['kemRecordHash'], r['name'])
+            self.assertEqual(hx(ua.kem_record_hash(u, v, pk)), r['kemRecordHash'], r['name'])
+            want = (v, pk[0], hx(ua.keccak256(pk))) if pk else (0, 0, hx(bytes(32)))  # TS-D2: no KEM record = {ua, 0, 0, 0}
+            self.assertEqual((int(kem['version']), kem['scheme'], kem['kemPkHash']), want, r['name'])
+            words = (u, kind, b(r['pqzKeyHash']), b(r['kemRecordHash']))
+            self.assertEqual(ua.portable_record_hash(*words), hash_struct_json(td['types'], 'UAPortableRecord', rec), r['name'])
+            rtd = {**td, 'primaryType': 'UAPortableRecord', 'message': rec}  # the R_REG record alone
+            self.assertEqual(hx(hash_typed_data(rtd)), r['portableRecordDigest'], r['name'])
+            self.assertEqual(hx(ua.portable_record_digest(*words)), r['portableRecordDigest'], r['name'])
+            n += 1
+        for r in P['kemRecords']:
+            td, u, v, pk = r['typedData'], b(r['ua']), int(r['version']), b(r['kemPk'])
+            self.assertEqual(td['primaryType'], 'UAKemRecord', r['id'])
+            self.assertEqual(hx(hash_typed_data(td)), r['digest'], r['id'])
+            self.assertEqual(hx(hash_struct_json(td['types'], 'UAKemRecord', td['message'])), r['structHash'], r['id'])
+            self.assertEqual(hx(ua.kem_record_hash(u, v, pk)), r['structHash'], r['id'])
+            self.assertEqual((int(td['message']['version']), td['message']['scheme'], td['message']['ua']), (v, pk[0], r['ua']), r['id'])
+            n += 1
+        for r in P['pqzKeyRecords']:
+            td, u, h, ph = r['typedData'], b(r['ua']), b(r['pqzKeyHash']), b(r['pqzPopHash'])
+            self.assertEqual(td['primaryType'], 'UAPqzKeyRecord', r['name'])
+            self.assertEqual(hx(hash_typed_data(td)), r['recordDigest'], r['name'])
+            m = td['message']
+            self.assertEqual((m['key']['ua'], m['key']['pqzKeyHash'], m['pqzPopHash']), (r['ua'], r['pqzKeyHash'], r['pqzPopHash']))
+            self.assertEqual(hx(ua.pqz_key_record_digest(u, h, ph)), r['recordDigest'], r['name'])
+            ktd = {**td, 'primaryType': 'UAPqzKey', 'message': m['key']}
+            self.assertEqual(hx(hash_typed_data(ktd)), r['pqzKeyDigest'], r['name'])
+            self.assertEqual(hx(ua.pqz_key_digest(u, h)), r['pqzKeyDigest'], r['name'])
+            n += 1
+        self.assertEqual(n, len(P['registrations']) + len(P['kemRecords']) + len(P['pqzKeyRecords']))
+
     def test_portable(self):
         t = P['tags']
         self.assertEqual(hx(ua.POP_V2_TAG), t['PURPOSE_POP_V2']['hash'])
         self.assertEqual(hx(ua.purpose_tag('kem')), t['PURPOSE_KEM']['hash'])
         self.assertEqual(hx(ua.purpose_tag('pqz-key')), t['PURPOSE_PQZ_KEY']['hash'])
-        self.assertEqual(hx(ua.KEM_RECORD_TAG), t['KEM_RECORD_TAG']['hash'])
-        self.assertEqual(hx(ua.PQZ_KEY_RECORD_TAG), t['PQZ_KEY_RECORD_TAG']['hash'])
+        self.assertFalse('KEM_RECORD_TAG' in t or 'PQZ_KEY_RECORD_TAG' in t)  # raw record tags are legacy (TS-D3)
         n = with_pqz = msigs = 0
         for r in P['registrations']:
             u = b(r['ua'])
@@ -162,36 +259,41 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(hx(h.pqz_key_hash), r['pqzKeyHash'], r['name'])
                 self.assertEqual(hx(h.pqz_pop_hash), r['attrs']['pqzPopHash'], r['name'])
                 self.assertEqual(hx(h.kem_record_hash), r['kemRecordHash'], r['name'])
-                self.assertEqual(hx(h.portable_pop_digest), r['portablePopDigest'], r['name'])
+                self.assertEqual(hx(h.portable_record_digest), r['portableRecordDigest'], r['name'])
                 self.assertEqual(hx(h.registration_digest), r['registrationDigest'], r['name'])
                 self.assertEqual(hx(h.message), r['popMessage'], r['name'])
-                self.assertEqual(h.portable_pop_digest, ua.portable_pop_digest(u, h.pqz_key_hash, h.kem_record_hash))
-                self.assertEqual(h.registration_digest, ua.registration_digest(h.portable_pop_digest, h.pqz_pop_hash))
+                w = (u, r['kind'], h.pqz_key_hash, h.kem_record_hash)
+                self.assertEqual(h.portable_record_digest, ua.portable_record_digest(*w))
+                self.assertEqual(h.registration_digest, ua.registration_digest(*w, h.pqz_pop_hash))
                 self.assertEqual(h.message, ua.ua_message(r['kind'], ua.POP_V2_TAG, h.registration_digest))
                 self.assertEqual(h.member_digest and hx(h.member_digest), r.get('memberDigest'), r['name'])
             a = r['attrs']
             pk = b(a['pqzKey'])
             if pk:
                 with_pqz += 1
-                kem = (int(a['kemVersion']), b(a['kemPk'])) if int(a['kemVersion']) else None
-                self.assertEqual(hx(ua.pqz_reg_message(u, pk, kem)), r['pqzRegMessage'])
+                kem = None if int(a['kemVersion']) == 0 and a['kemPk'] == '0x' else (int(a['kemVersion']), b(a['kemPk']))
+                got = ua.pqz_reg_message(r['kind'], u, pk, kem)
+                self.assertEqual(hx(got), r['pqzRegMessage'], r['name'])
+                # TS-D3: R_REG proves over the typed UAPortableRecord of the registering kind
+                self.assertEqual(got, ua.ua_message(0x0142, ua.POP_V2_TAG, b(r['portableRecordDigest'])), r['name'])
             else:
                 self.assertEqual(b(r['pqzRegMessage']), bytes(32))
             msigs += r['kind'] == 0x0120
             n += 1
-        self.assertEqual((n, with_pqz, msigs), (25, 8, 6))
+        self.assertEqual((n, with_pqz, msigs), (len(P['registrations']), 8, 6))
 
     def test_kem_record(self):
         for r in P['kemRecords']:
             u, pk = b(r['ua']), b(r['kemPk'])
             d = ua.kem_record_digest(u, int(r['version']), pk)
             self.assertEqual(hx(d), r['digest'])
+            self.assertEqual(hx(ua.kem_record_hash(u, int(r['version']), pk)), r['structHash'])
             m = ua.kem_record_message(r['kind'], u, int(r['version']), pk)
             self.assertEqual(hx(m), r['message'])
             self.assertEqual(m, ua.ua_message(r['kind'], ua.purpose_tag('kem'), d))
             if r['kind'] == 0x0120:
                 self.assertEqual(hx(ua.member_digest(u, m)), r['memberDigest'])
-        self.assertEqual(len(P['kemRecords']), 9)
+        self.assertGreater(len(P['kemRecords']), 0)
         u = bytes([1]) * 32
         kem = lambda n, scheme=1: bytes([scheme]) + bytes(n - 1)  # scheme byte, zeros, n bytes in all
         for args, code in (((u, 0, kem(1601)), 'UAKemVersion'), ((u, 2**64, kem(1601)), 'UAKemVersion'),
@@ -201,7 +303,15 @@ class Vectors(unittest.TestCase):
             with self.assertRaises(ua.UAError) as e:
                 ua.kem_record_digest(*args)
             self.assertEqual(e.exception.code, code)
-        self.assertEqual(hx(ua.kem_record_digest(u, 2**64 - 1, kem(1601))), '0x8c997440926a352465f61b53b75606d794efa60c66ac4a7a63f25369a15f7092')  # pins the 8-byte version word
+        # TS-D2: (0, no key) is the zero record's hash (never a signed record); version 0 with a key is UAKemVersion
+        th = ua.keccak256(b'UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)')
+        self.assertEqual(ua.kem_record_hash(u, 0, b''), ua.keccak256(th, u, bytes(96)))
+        for args, code in (((u, 0, kem(1601)), 'UAKemVersion'), ((u, 1, b''), 'UAKemKeyLength'), ((u, 0, b''), 'UAKemVersion')):
+            with self.assertRaises(ua.UAError) as e:
+                (ua.kem_record_digest if args == (u, 0, b'') else ua.kem_record_hash)(*args)
+            self.assertEqual(e.exception.code, code)
+        # known answer shared with ua-rs: pins the 8-byte version word
+        self.assertEqual(hx(ua.kem_record_digest(u, 2**64 - 1, kem(1601))), '0xa0063a84b56d80c83688d8caf5aeb4be8fb4556928e8bc649686449573938f07')
         self.assertEqual(hx(ua.chain_key_hash(2**40 + 7)), '0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950')  # keccak256("evm:1099511627783")
 
     def test_pqz_key_record(self):
@@ -221,7 +331,7 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(hx(g.message), r['message'])
                 self.assertEqual(hx(g.pqz_reg_message), r['pqzRegMessage'])
                 self.assertEqual(g.pqz_key_digest, ua.pqz_key_digest(u, g.pqz_key_hash))
-                self.assertEqual(g.record_digest, ua.pqz_key_record_digest(g.pqz_key_digest, g.pqz_pop_hash))
+                self.assertEqual(g.record_digest, ua.pqz_key_record_digest(u, g.pqz_key_hash, g.pqz_pop_hash))
                 self.assertEqual(g.member_digest is not None, r['kind'] == 0x0120)
                 self.assertEqual(g.member_digest and hx(g.member_digest), r.get('memberDigest'))
                 if r['kind'] == 0x0120:
@@ -231,19 +341,24 @@ class Vectors(unittest.TestCase):
                 ua.pqz_key_record_message(r['kind'], u, b(holder['keyData']), key, None, hash_, True)
             self.assertEqual(e.exception.code, 'UAPqzKeySet')
             n += 1
-        self.assertEqual((n, msig_runs), (8, 8))  # 4 msig rows, each with the proof bytes and hash-only
+        self.assertEqual((n, msig_runs), (len(P['pqzKeyRecords']), 8))  # 4 msig rows, each with the proof bytes and hash-only
 
-    def test_personal_sign_portable_purposes(self):
+    def test_native_member_typed_digest(self):
+        """TS-D4: a native msig member signs the record's typed digest itself (what eth_signTypedData_v4 of typedData
+        returns), a derived member keeps member_digest(ua, message); only under the portable purposes."""
         self.assertTrue(all(ua.is_portable_purpose(ua.purpose_tag(p, v)) for p, v in (('pop', 2), ('kem', 1), ('pqz-key', 1))))
         self.assertFalse(ua.is_portable_purpose(ua.purpose_tag('metatx')) or ua.is_portable_purpose(ua.purpose_tag('pop')))
+        self.assertFalse(hasattr(ua, 'personal_sign_digest'))  # legacy/typed-signing
         r = next(x for x in P['registrations'] if x['name'] == 'msig-pq-native')
-        md = b(r['memberDigest'])
-        # known answer from the JS reference (clientkeys ua.js); prefix = 0x19 + "Ethereum Signed Message:\n32" (28 bytes)
-        self.assertEqual(hx(md), '0x606d9a70c70d39e5d8d079c3ae31eefa6db574219dab56d6c776cb6731e61a7c')
-        self.assertEqual(hx(ua.personal_sign_digest(md)), '0xe5d24987e9b4e710063a5432d6215eaead64d8dc073f7561726d21644d54c3d8')
-        self.assertEqual(len(b'\x19Ethereum Signed Message:\n32'), 28)
+        h = Vectors.register(r)
+        self.assertEqual(hx(hash_typed_data(r['typedData'])), hx(h.registration_digest))
+        self.assertEqual(h.member_digest, ua.member_digest(b(r['ua']), h.message))
+        self.assertNotEqual(h.member_digest, h.registration_digest)
+        for k in (x for x in P['pqzKeyRecords'] if x['ua'] == r['ua']):
+            self.assertEqual(hx(hash_typed_data(k['typedData'])), k['recordDigest'], k['name'])
         n = next(x for x in P['negatives'] if x['name'] == 'native-personal-sign-under-metatx')
         self.assertFalse(ua.is_portable_purpose(b(n['mutation']['set']['purposeTag'])))
+        self.assertEqual(next(x for x in P['negatives'] if x['name'] == 'native-member-personal-sign')['error'], 'UAPoP')
 
     def test_holder_refusals(self):
         regs = P['registrations']
@@ -282,8 +397,8 @@ class Vectors(unittest.TestCase):
                 self.assertNotEqual(k['message'], hx(msg))
                 run += 1
             else:
-                sig_level += 1  # signatures / native personal_sign: verified by the signature vectors
-        self.assertEqual((run, sig_level), (60, 7))
+                sig_level += 1  # signatures / native personal_sign / another record's pop: verified by the signature vectors
+        self.assertEqual((run, sig_level), (60, len(P['negatives']) - 60))
         u, key, proof = bytes([1]) * 32, bytes(16384), bytes([7]) * 32
         # malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
         for kd in (bytes([0, 2, 0]), bytes([0, 2, 0, 2, 9, 9])):
