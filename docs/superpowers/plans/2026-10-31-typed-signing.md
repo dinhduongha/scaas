@@ -915,6 +915,11 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-42** (ty
   id and record and run the same `validateKeyData`. The owner accepts this as an exception to the explicit-parameter
   rule (a `keyData` blob bundling fields is still accepted). `msig` stays `registerMsig` only (its PoP is a
   `MemberSig[]`). Clients keep using the typed entries (`registrationArgs`).
+- **Hash-commit front-run, PRV M1 (owner ruling 2026-11-01, option (a)):** the full and the hash-commit form of a KEM
+  key sign the same `UAKemRecord`, so anyone can front-run a full `register` with the commit form of the same `pop`. No
+  contract check is added (a calldata bound in the contract would tie it to one chain's limit). Clients repair it: after
+  `register`, or on `UAAlreadyRegistered`, read `registrationOf`; when `attrs.kemPkHash != 0` and `kemKeyAt(ua, 0)` is
+  empty, send `setKemKey(ua, 0, key, UASig())`. Docs state that a front-run yields the same record or the commit form.
 - **KEM key at `register` (owner rulings 2026-10-31, for Part R / R1 and Part P's struct values):**
   1. The KEM key given at `register` **always has version (index) 0** — the first record; `register` takes no
      `kemVersion` argument any more. `setKemKey` adds later versions ≥ 1 (write-once per version, as today). "No KEM
