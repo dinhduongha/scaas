@@ -31,7 +31,7 @@ test('keys and ids: pq_kat.json\'s keys, ids from the kind table, the portable P
     assert.equal(hex(ua.deriveUA(r.kind, fromHex(r.keyData))), r.ua, r.name);
     const m = ua.holderPopMessage(r.kind, { ua: r.ua });
     for (const p of [r.pop, r.popOther]) {
-      assert.deepEqual([p.popDigest, p.registrationDigest, p.message], [m.portablePopDigest, m.registrationDigest, m.message].map(hex));
+      assert.deepEqual([p.popDigest, p.registrationDigest, p.message], [m.portableRecordDigest, m.registrationDigest, m.message].map(hex));
     }
     assert.deepEqual({ ...r.pop, context: r.popOther.context }, r.popOther, `${r.name}: one PoP for every chain`);
   }
@@ -60,7 +60,7 @@ test('every PoP and signature verifies with noble; every negative is refused', (
   for (const x of V.extraKeys) assert.ok(ok(x.kind, x.keyData, x.pop.message, x.pop.sig), `extra ${x.index}`);
 });
 
-test('UA-6 / UA-8: a holder registers its PQZ key in the same call: pop over registrationDigest(portablePopDigest(ua, h, 0), pqzPopHash)', () => {
+test('UA-6 / UA-8: a holder registers its PQZ key in the same call: pop over the typed UARegistration{record(ua, kind, h, no KEM), pqzPopHash}', () => {
   const h = hex(ua.keyHashOf(0x0142, fromHex(V.kinds[0].pqzKey)));
   assert.notEqual(h, '0x' + '00'.repeat(32));
   const holders = V.kinds.filter((r) => r.popPqz);
@@ -70,11 +70,11 @@ test('UA-6 / UA-8: a holder registers its PQZ key in the same call: pop over reg
     assert.equal(p.pqzKeyHash, h);
     assert.notEqual(p.pqzPopHash, '0x' + '00'.repeat(32), 'a PQZ key always comes with its proof hash');
     const hm = ua.holderPopMessage(r.kind, { ua: r.ua, pqzKey: r.pqzKey, pqzPopHash: p.pqzPopHash });
-    assert.deepEqual([p.popDigest, p.registrationDigest, p.message], [hm.portablePopDigest, hm.registrationDigest, hm.message].map(hex));
+    assert.deepEqual([p.popDigest, p.registrationDigest, p.message], [hm.portableRecordDigest, hm.registrationDigest, hm.message].map(hex));
     assert.notEqual(p.popDigest, r.pop.popDigest, 'h moves the digest');
     assert.ok(ok(r.kind, r.keyData, p.message, p.sig), `${r.name} pop with the key`);
     assert.ok(!ok(r.kind, r.keyData, p.message, r.pop.sig), `${r.name}: the plain pop is not the holder's pop`);
-    assert.equal(hex(ua.pqzRegMessage({ ua: r.ua, pqzKey: r.pqzKey })),
+    assert.equal(hex(ua.pqzRegMessage({ ua: r.ua, kind: r.kind, pqzKey: r.pqzKey })),
       hex(ua.uaMessage(0x0142, ua.POP_V2_TAG, fromHex(p.popDigest))), 'R_REG message');
   }
 });
@@ -107,7 +107,7 @@ test('msig structures: key data, id, member digest; every member signature verif
     assert.equal(ua.msigPqzEligible(fromHex(m.keyData)), true, m.name);
     const hm = ua.holderPopMessage(0x0120, { ua: m.ua, keyData: m.keyData, pqzKey: m.popPqz.pqzKey, pqzPopHash: m.popPqz.pqzPopHash });
     assert.deepEqual([m.popPqz.popDigest, m.popPqz.registrationDigest, m.popPqz.memberDigest],
-      [hm.portablePopDigest, hm.registrationDigest, hm.memberDigest].map(hex), m.name);
+      [hm.portableRecordDigest, hm.registrationDigest, hm.memberDigest].map(hex), m.name);
   }
 });
 

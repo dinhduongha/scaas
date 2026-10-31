@@ -13,6 +13,7 @@ import { hash_to_field } from '@noble/curves/abstract/hash-to-curve.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import * as ua from '../src/ua.js';
 import { hex, fromHex, concatBytes, utf8ToBytes, word } from '../src/bytes.js';
+import { portablePopDigest, registrationDigest } from '../legacy/typed-signing/ua-portable-raw.js';
 
 const V = JSON.parse(readFileSync(new URL('groups.json', dir)));
 const Pt = secp256k1.Point;
@@ -87,10 +88,11 @@ const verifyPop = (kind, kd, msg, pop) => valid(kind, kd) && attempt(() =>
 const verify = (kind, vk, msg, sig) => attempt(() =>
   (kind === 0x0110 ? sig.length === 64 && schnorr.verify(sig, msg, point(vk).toBytes(true).subarray(1)) : frostVerify(vk, msg, sig)));
 // groups.json is written by clients/ua-rs (tests/groups.rs): the PoPs are portable (UA-8 P1): popDigest = portablePopDigest,
-// message = uaMessage(kind, POP_V2, registrationDigest); contexts.A only serves the chain-bound negative (pop-chain-bound)
+// message = uaMessage(kind, POP_V2, registrationDigest); contexts.A only serves the chain-bound negative (pop-chain-bound).
+// Until typed-signing P2 regenerates groups.json on the typed records, its PoPs are the raw form (legacy/typed-signing).
 const popMsg = (kind, kd) => {
-  const d = ua.portablePopDigest({ ua: ua.uaOf(kind, kd) });
-  return [d, ua.uaMessage(kind, ua.POP_V2_TAG, ua.registrationDigest(d))];
+  const d = portablePopDigest({ ua: ua.uaOf(kind, kd) });
+  return [d, ua.uaMessage(kind, ua.POP_V2_TAG, registrationDigest(d))];
 };
 const secpGroups = V.groups.filter((g) => SECP.includes(g.kind));
 
