@@ -6,7 +6,7 @@
 > [docs/README.md](../README.md#status-tags): **BUILT**, **SPECIFIED**, **PLANNED**, and **Transitional (BUILT)** for
 > built code that still differs from the target.
 
-<p align="center"><img src="../assets/settlement-kinds.svg" width="860" alt="Settlement kinds by who checks them. The token: typed transfer and payment (built, v2 tiers), receiver pays (built, EVM and Hedera), signature wrap (built, P2a), confidential Zether (built, unaudited, dev chains only). Another contract takes part: generic gasless call through the selector allowlist (built), DEX order book (token side built, P2a), exchange against AMMs (built, P2c), mandate through MandateWallet (built), asset-suite action (specified, nothing built), tender (specified, nothing built). Also: gas sponsorship by node policy (specified; SponsorshipPool planned) and the non-EVM families (built as MetaOp v1; target specified)."></p>
+<p align="center"><img src="../assets/settlement-kinds.svg" width="860" alt="Settlement kinds by who checks them. The token: typed transfer and payment (built, v2 tiers), receiver pays (built, EVM and Hedera), signature wrap (built, P2a), confidential Zether (built, unaudited). Another contract takes part: generic gasless call through the selector allowlist (built), DEX order book (token side built, P2a), exchange against AMMs (built, P2c), mandate through MandateWallet (built), asset-suite action (specified, nothing built), tender (specified, nothing built). Also: gas sponsorship by node policy (specified; SponsorshipPool planned) and the non-EVM families (built as MetaOp v1; target specified)."></p>
 
 **Contents**
 
@@ -56,7 +56,7 @@ intent is a booked fact. Every kind below shares these properties:
 | Signature wrap | `mtxWrap` | holder signs a `TradeOrder` in the underlying's domain; any relayer | underlying and wrapper | order `fee` to the relayer, out of the minted units | tx | **BUILT** (P2a, `WrappedToken`) | [CTR-TOK-20](token-wrappers.md#CTR-TOK-20) |
 | DEX order book | `SCaaSDex.mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; token side `mtxTrade` | each party signs a `TradeOrder`; the venue lane | token (Path A) or DEX (Path B, outside legs); DEX conservation | one signed rate, split relayer / treasury by the DEX | tx, then the DEX watcher | token side **BUILT** (P2a); `SCaaSDex` **BUILT** (P2b-1 SCaaS legs, P2b-2 outside legs); `SCaaSDexV1` pair `settle` **BUILT** | [CTR-DEX-13](dex.md#CTR-DEX-13) to [-19](dex.md#CTR-DEX-19), [-22](dex.md#CTR-DEX-22), [-24](dex.md#CTR-DEX-24) |
 | Exchange against AMMs | `mtxExchange`, `mtxExchangeVia` | the same signed orders; the venue lane | token or DEX, DEX conservation | signed rate on the floor; surplus to the signers | tx; the DEX watcher reads no `ExchangeLegSettled` yet (**P7, SPECIFIED**) | **BUILT** (P2c, `SCaaSDex`) | [CTR-DEX-20](dex.md#CTR-DEX-20) to [-23](dex.md#CTR-DEX-23) |
-| Confidential (Zether) | `mtxConfidentialTransfer*`, `mtxShield`, `mtxUnshield`, roll-over; `mtxWrapShield`, `mtxUnshieldUnwrap` (`WRAPPED_ZETHER`) | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (the `*_ZETHER` kinds, P3; dev chains only); PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zero-knowledge.md](pq-zero-knowledge.md) |
+| Confidential (Zether) | `mtxConfidentialTransfer*`, `mtxShield`, `mtxUnshield`, roll-over; `mtxWrapShield`, `mtxUnshieldUnwrap` (`WRAPPED_ZETHER`) | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx | **BUILT, UNAUDITED** (the `*_ZETHER` kinds, P3); PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zero-knowledge.md](pq-zero-knowledge.md) |
 | Mandate | `payUnderMandate` (named `mtxPayUnderMandate`), `revoke` | delegate signs; any relayer | `MandateWallet` | NONE; relayer pays gas | tx | **BUILT** (P4: epoch, `mtx` names) | [CTR-ACC-06](mandates.md#CTR-ACC-06), [-07](mandates.md#CTR-ACC-07) |
 | Asset-suite action | forced transfer, freeze, `VestingGrant.release`, `Distribution` claim, `ExchangeOffer` | issuer / compliance role, or a permissionless claim | token or action contract | by action | tx | **SPECIFIED**, nothing built | [asset-suite.md](asset-suite.md) |
 | Tender | `commitBid` (deposit is a `MetaTransfer`), `revealBid`, `withdrawDeposit` | bidder signs only the deposit | tender and token | NONE | tx | **SPECIFIED**, nothing built | [CTR-TND-01](tender.md#CTR-TND-01), [-03](tender.md#CTR-TND-03) |
@@ -251,8 +251,8 @@ fails ([CTR-ZTH-06](zether.md#CTR-ZTH-06)). PQZ mirrors the names with `pqz` and
   fee ([CTR-ZTH-13](zether.md#CTR-ZTH-13)).
 - **Node:** re-encodes the dynamic arguments and refuses non-canonical `data` before computing the mesh `intent_id`
   ([NODE-JOB-20](../node/job-api.md#NODE-JOB-20)).
-- **Status:** BUILT (P3), UNAUDITED: the `*_ZETHER` kinds refuse to initialize outside chain ids 31337 and 1337
-  ([CTR-ZTH-02](zether.md#CTR-ZTH-02)); the SCaaS testnet is not on that list. The old `ZetherToken` with its own envelope and
+- **Status:** BUILT (P3), UNAUDITED: the `*_ZETHER` kinds run on every chain with the BLS12-381
+  precompiles once the registrar enables the kind ([CTR-ZTH-52](zether.md#CTR-ZTH-52), owner ruling 2026-10-31). The old `ZetherToken` with its own envelope and
   names is backed up in `smartcontracts/evm/legacy/p3/`.
 
 ### 3.8 Mandates

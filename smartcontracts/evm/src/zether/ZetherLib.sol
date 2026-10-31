@@ -8,7 +8,6 @@ import {IZetherToken} from "./IZetherToken.sol";
 import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
-import {ZetherSafety} from "./ZetherSafety.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
 
 /// @title The confidential layer of the `*_ZETHER` kinds (CTR-ZTH-44, CTR-TOK-24), in the ERC-7201 namespace
@@ -163,7 +162,7 @@ library ZetherLib {
 
     // ------------------------------------------------------------------ init
 
-    /// @notice The kind's `_init` (dev chains only, CTR-ZTH-02): `v` the release's transfer verifier (CTR-ZTH-20, running
+    /// @notice The kind's `_init` (every chain, CTR-ZTH-02 superseded 2026-10-31): `v` the release's transfer verifier (CTR-ZTH-20, running
     ///         on this chain: `VerifierUnsupportedOnThisChain`), scale, cap `≤ 2^54`, inner fee `< 2^64` and `< cap`,
     ///         `minDecoyFee < 2^64` with `confidentialFee + 16 · minDecoyFee` `< 2^64` and `< cap` (16 legs at most; no
     ///         chain-level floor, owner 2026-10-20),
@@ -171,7 +170,6 @@ library ZetherLib {
     ///         `disclosureMode` BUNDLE or COMPACT (CTR-ZTH-48), `auditorMode` NONE without a key, FULL or OPTIONAL with
     ///         one (CTR-ZTH-49).
     function init(IFactoryToken.ConfidentialConfig memory c, IZetherVerifier v) public {
-        ZetherSafety.requireDevChain();
         // the release's verifier must run here (an absent precompile answers success with empty output; moved from the
         // factory's creation gate, plan 5g-Z2)
         (bool ok, bytes memory r) = address(v).staticcall(abi.encodeCall(v.isSupportedOnThisChain, ()));

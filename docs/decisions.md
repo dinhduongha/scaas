@@ -2752,17 +2752,19 @@ Change (2026-10-13): owner — a constraint for when the suite is built: the reg
 **Cost if wrong.** Separate regulated kinds multiply implementations (three tiers times Hedera times Zether); a confidential balance can be frozen but not seized on public chains.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` §2 (T8, T11), §5.
 
-### CTR-ZTH-01 — Full classical Zether, unaudited, dev-chain gated
+### CTR-ZTH-01 — Full classical Zether, unaudited
 - old: R34(scope), UD:§12, UD:§12.2, UD:§12.3, UD:§12.4, UD:§12.7.6, UD:§15:D2, UD:§19:curve-param, UD:§20.1, UD:§25, UD:§25:flipped, UD:§25:ruling, canon:D1, canon:D2, canon:D17 · status: current · owner: yes · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-01 · superseded-by: —
 
 Change (2026-10-19): controller proposal (owner may override) — **on-chain review W-I, bn254 part (plan Task 5g, branch `rev2-chain-pqz`, commit `fa5ce5fe`; V1-07, P3 defence in depth):** `G1Bn254.add` / `mul` / `msm` / `isValid` and both `modexp` calls (`G1Bn254._modexp`, `ZetherVerifierBase._inv`) require the exact return size (64 / 32 bytes) after the call, as the BLS12-381 wrappers do; a chain without `0x05`–`0x07` answers "success, empty". The check is a separate statement after the `staticcall` (Yul evaluates `and(staticcall(…), eq(returndatasize(), n))` right to left, which read the previous call's size; caught by the full suite). Bytecode: both Zether verifiers and the UA verifiers built on `G1Bn254` (BLS min-sig, FROST, MuSig2, Schnorr bn254 / BLS12-381, Zether Schnorr): +5…27 B runtime and +5…32 B init (the `G1Bn254` users +5…17 B, `ZetherVerifierBn254` +27 B runtime / +32 B init; `runs/2026-10-19-5g-pqz-sizes.txt`). Test `ZetherCurvesReturnSize.t.sol`. Status: **done** (`fa5ce5fe`, merged `734b9c76`).
 
-**Why.** The owner wants full classical Zether now (identity visible, amounts hidden), built, unaudited and gated to dev chains, with bn254 and BLS12-381 verifiers. The curve is a property of each token (chosen by its verifier address), not a system setting: bn254 uses the Byzantium (2017) precompiles 0x06/0x07/0x08 with 64-byte G1 points; BLS12-381 needs the Prague precompiles 0x0b to 0x10 and 128-byte G1 points (measured with `eth_call` to 0x0b on Gnosis). rollOver is `PUBLIC` by default and `OWNER_ONLY` by opt-in, per `(account, token)`: owner signing protects only if it covers every path that advances the account sequence, so per account `accSeq[a]` advances without the owner's consent exactly when `mode[a] == PUBLIC`. The `PUBLIC` branch is safe because rollOver is a no-op when `pendingSeq[a] == lastRolledPendingSeq[a]`, so a griefer must fund the victim before each attempt.
-**Cost if wrong.** Unaudited cryptography on a public chain could mint; the gate (CTR-ZTH-02) is what prevents that.
+**Why.** The owner wants full classical Zether now (identity visible, amounts hidden), built and unaudited, with bn254 and BLS12-381 verifiers (BLS12-381 only since UA-6, CTR-ZTH-32); until 2026-10-31 it was gated to dev chains (CTR-ZTH-02), since the owner ruling of 2026-10-31 it is open on every chain with the curve's precompiles (CTR-ZTH-52). The curve is a property of each token (chosen by its verifier address), not a system setting: bn254 uses the Byzantium (2017) precompiles 0x06/0x07/0x08 with 64-byte G1 points; BLS12-381 needs the Prague precompiles 0x0b to 0x10 and 128-byte G1 points (measured with `eth_call` to 0x0b on Gnosis). rollOver is `PUBLIC` by default and `OWNER_ONLY` by opt-in, per `(account, token)`: owner signing protects only if it covers every path that advances the account sequence, so per account `accSeq[a]` advances without the owner's consent exactly when `mode[a] == PUBLIC`. The `PUBLIC` branch is safe because rollOver is a no-op when `pendingSeq[a] == lastRolledPendingSeq[a]`, so a griefer must fund the victim before each attempt.
+**Cost if wrong.** Unaudited cryptography on a public chain could mint; the dev-chain allowlist (CTR-ZTH-02) prevented that until the owner opened classical Zether on every chain (CTR-ZTH-52), so the guard now is the per-chain kind gate `setKindEnabled` (an admin act) and the UNAUDITED warning.
 **Source.** `history/specs/2026-10-03-blockchain-round3-design.md:546`, `research/_USER-DECISIONS.md:463`, `research/_USER-DECISIONS.md:483`, `research/_USER-DECISIONS.md:508`, `research/_USER-DECISIONS.md:537`, `research/_USER-DECISIONS.md:691`, `research/_USER-DECISIONS.md:860`, `research/_USER-DECISIONS.md:1060`, `research/_USER-DECISIONS.md:1093`, `research/_USER-DECISIONS.md:2630`, `research/_USER-DECISIONS.md:2638`, `research/_USER-DECISIONS.md:2653`, `research/_USER-DECISIONS.md:859`, `research/_USER-DECISIONS.md:864`
 
 ### CTR-ZTH-02 — Classical Zether gated to dev chains 31337/1337
-- old: RS2-1 · status: current · owner: no · date: 2026-10-07 · normative: contracts/zether.md#CTR-ZTH-02 · superseded-by: —
+- old: RS2-1 · status: superseded · owner: no · date: 2026-10-07 · normative: — · superseded-by: CTR-ZTH-52
+
+**What it said.** Classical Zether was gated by a hard-coded dev-chain allowlist (`ZetherSafety.isDevChain()`: chain ids 31337 / 1337) in the token's `initialize`, the proof verifier constructors and the registry's Zether Schnorr verifier; adding a chain was a code change and a new deployment.
 
 **Why.** A hard-coded dev-chain allowlist in every constructor keeps unaudited Zether off real networks even with a manual deploy.
 **Cost if wrong.** A configurable gate is one transaction away from production use.
@@ -2772,6 +2774,8 @@ Change (2026-10-20): owner 2026-10-20 (plan 5g-Z2) — the factory's Zether flag
 chain) is replaced by the generic kind gate `setKindEnabled` (kinds 2–3 start disabled); the dev-chain allowlist itself is
 unchanged and now enforced, for the factory path, in the token's `initialize` and the verifier constructors (a factory
 on a non-dev chain can enable the kind, but every creation reverts). Status: built on branch `rev2-zether-z2`, commit `0f88e66f` (plan Task 5g-Z2).
+
+Change (2026-10-31): owner ruling 2026-10-31 — classical Zether is open on every chain like PQZ (testnet 7622 and mainnet 22776); the dev-chain allowlist is removed; the factory kind gate `setKindEnabled` stays. `ZetherSafety` (`isDevChain`, `requireDevChain`, error `ZetherNotDevChain`) leaves `src/` for `smartcontracts/evm/legacy/zether-ungate/` with the revert tests it had; the verifiers, `ZetherLib.init`, `ZetherSchnorrBls12381Verifier` and `DeployBase` (`DEPLOY_ZETHER`, the `zether-bls12381` UA kind) run no chain-id check; the only chain requirement is the BLS12-381 precompiles `0x0b`–`0x10`, and `DEPLOY_ZETHER` still refuses Hedera. Superseded by CTR-ZTH-52. Status: done on branch `zether-ungate`.
 
 ### CTR-ZTH-03 — No epochs; verifier takes the full statement; fund from the public balance
 - old: RS2-2 · status: current · owner: no · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-03 · superseded-by: —
@@ -3043,7 +3047,11 @@ Change (2026-10-20, owner, plan review): the bn254 Zether line moves to `legacy/
 Change (2026-10-20, owner; UA-6 U10 accepted): **UA-6 moves the whole bn254 Zether line to `legacy/`** — the kind `zether-bn254` (0x0140) and its Schnorr verifier `ZetherSchnorrBn254Verifier`, `ZetherTypes.KIND_ZETHER_BN254` / `TAG_ZETHER_BN254`, registry slot 12, the bn254 token verifier instances and `proofSystemId`, `DeployBase` steps, fixtures switched to `useBls = true`, the bn254 rows of `kinds.json` / `signatures.json` and `r33_keys.json`, the bn254 KATs and prover-cross tests, and the clients' bn254 Zether paths move to `smartcontracts/evm/legacy/ua6/` and the clients' legacy folders (backup, not delete); the `bn254-g1` keyHash group stays (`schnorr-bn254`, `musig2-bn254`, `frost-bn254`). The earlier split ("kind with UA-6, tokens with plan Task 5h") is replaced because the Zether fixture registers bn254 accounts and the kind cannot leave while the bn254 token line runs; plan 5h drops its Z-BLS task. Spec §6. Status: decided; built in UA-6.
 
 ### CTR-ZTH-33 — the SCaaS testnet is not a classical-Zether dev chain
-- old: reorg:Q5(dev-chain) · status: open · owner: yes · date: 2026-10-07 · normative: contracts/zether.md#CTR-ZTH-33 · superseded-by: —
+- old: reorg:Q5(dev-chain) · status: superseded · owner: yes · date: 2026-10-07 · normative: — · superseded-by: CTR-ZTH-52
+
+**What it said.** The SCaaS testnet stayed off the classical-Zether dev-chain allowlist `{31337, 1337}` until the owner decided whether it counts as "dev".
+
+Change (2026-10-31): owner ruling 2026-10-31 — classical Zether is open on every chain like PQZ (testnet 7622 and mainnet 22776); the dev-chain allowlist is removed, so the open question is answered; the factory kind gate `setKindEnabled` stays. Superseded by CTR-ZTH-52. Status: done on branch `zether-ungate`.
 
 **Why.** Open owner decision: the SCaaS testnet is not a classical-Zether dev chain until the owner decides.
 **Cost if wrong.** Treating it as dev would put unaudited classical Zether on the shared private chain.
@@ -3218,6 +3226,14 @@ Change (2026-10-20, owner): **shielded value sits in a `SHIELD_POOL` sentinel in
 Change (2026-10-20, owner / controller proposal (owner may override)): UA-6 — the confidential account is the Zether UA itself, which is also a SIGNING UA on the UA ledger (Q1 / U8), so its public and confidential balances share one id; CTR-ZTH-51's statement that a PQ UA holder needs no classical key to use a Zether token still holds for the **public** side (a PQ UA may pay a shield into any Zether account), while the confidential side of classical Zether is classical by nature. **U9, `authSig` leaves the Zether entry points**: with `authRef` gone the argument could only be empty, so `zetherTransfer`, `…Compact`, `…NoBundle`, `…Single`, `zetherUnshield`, `zetherUnshieldUnwrap` and the `…ToUA` forms drop it (an ABI break either way), as do the prover API, `authDigest` and the `SCAAS-ZETHER-AUTH-V1` digest; the token checks `kindOf(from) == ZETHER_BLS12381` and verifies the proof (the `_authRef` read and the `authSig` calldata saved per spend). `zetherRollOverSigned` and `zetherSetRollOverMode` go through `requireAuthorized(ua, PURPOSE_ZETHER_OWNER, …)` with the same Schnorr bytes. Spec §5. Status: decided (Q1) / proposal (U9); built in UA-6 (branch `ua6`, commits c4ece459, 97fe4778; prover 93c5ead2, 1e961aea, 67ef75bc; the `…ToUA` forms are specified, UA-5c).
 
 Change (2026-10-20, controller record; owner may override): **UA-5c (a)(b) move into plan 5h part A** (owner: (a) confidential ops via the UA envelope and (b) unshield to a UA ride with the `mtx*` rename; (c)(d) follow as step 5c′ before the node relay). (b): **no separate `zetherUnshieldToUA` / `zetherUnshieldUnwrapToUA`** — `mtxUnshield(…, uint256 amount, bytes32 recipient)` carries the recipient as a `bytes32`: a native address is its zero-padded id (statement word unchanged, vectors unchanged), a derived UA id (non-zero top bits) must be a registered SIGNING UA and is credited on the UA ledger by a pool move `SHIELD_POOL → UA` (`_poolMove`; no mint), the pools are refused as recipient; unshield-unwrap to a UA pays a SCaaS ledger leg through `transferToUA` (`UALegNotLedger` otherwise); one proof binds one recipient id. This supersedes the two `…ToUA` entry points, the event `ZetherUnshieldedUA` and their allow-list rows in this rule's earlier text. (a): `mtxConfidentialTransfer*`, `mtxUnshield`, `mtxUnshieldUnwrap` join the Zether UA allow-list and `uaExecute` stores `SCAAS-ZETHER-UA-ENVELOPE-V1` bindings in the ticket (tested in both directions). Pool trust boundary as CTR-PQZ-15 change. The Zether pool path is built (Task 3z `7733910e`, merge `f8715b65`: shield / unshield / beneficiary fee through the pool, `_uaMove` refuses the pool); the rename, the one-function unshield and (a) are plan 5h Task 3b. Status: decided; BUILT on branch `pqz-state-b` (pool: Task 3z `7733910e`; rename, one-function unshield, (a) and (b): Task 3b, commits 61c60089..82793a58; docs reconciled in 1dcd8657).
+
+### CTR-ZTH-52 — Classical Zether open on every chain with the curve's precompiles
+- old: — · status: current · owner: yes · date: 2026-10-31 · normative: contracts/zether.md#CTR-ZTH-52 · superseded-by: —
+
+**Rule.** Owner ruling 2026-10-31: "Classical Zether is like PQZ: open it on the testnet and the mainnet. No lock." No contract or deploy script checks the chain id for classical Zether (the dev-chain allowlist of CTR-ZTH-02 is removed); the only chain requirement is capability, the BLS12-381 precompiles `0x0b`–`0x10` (EIP-2537): a chain without them fails the verifier deploy and the token's `initialize` (`VerifierUnsupportedOnThisChain`), and `DeployBase` registers `zether-bls12381` only where `UAPrecompileProbe` passes. The factory kind gate `setKindEnabled` stays (kinds 2–3 start disabled; enabling is an admin act per chain), the canonical verifiers stay pinned (CTR-ZTH-20), and Zether never runs on Hedera. Built on branch `zether-ungate`.
+**Why.** The SCaaS testnet 7622, the future mainnet 22776 and customer chains should run classical Zether as they run PQZ; a chain-id list cannot follow customer chains, while the precompiles are what the code actually needs.
+**Cost if wrong.** Unaudited classical Zether can be enabled on a production chain by its registrar; the kind gate and the UNAUDITED warning are what remain.
+**Source.** Owner ruling 2026-10-31 (controller brief, branch `zether-ungate`).
 
 ### CTR-ZTH-80 — Range bits 32 and DECRYPT_BOUND 2^40
 - old: R34(params) · status: superseded · owner: yes · date: 2026-10-03 · normative: — · superseded-by: CTR-ZTH-18, CTR-ZTH-19
@@ -8093,7 +8109,7 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 | R347 | NODE-LANE-19 | current |
 | R348 | NODE-STO-07 | current |
 | R349 | NODE-LANE-20 | current |
-| RS2-1 | CTR-ZTH-02 | current |
+| RS2-1 | CTR-ZTH-02 | superseded |
 | RS2-2 | CTR-ZTH-03 | current |
 | RS2-3 | CTR-ZTH-04 | current |
 | RS2-4 | CTR-ZTH-05 | current |
@@ -8405,7 +8421,7 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 | reorg:Q2 | ARCH-POS-07 | current |
 | reorg:Q3 | NET-TON-02 | current |
 | reorg:Q4 | NET-TON-03 | current |
-| reorg:Q5 | CTR-ZTH-32(curve), CTR-ZTH-33(dev-chain) | open (split) |
+| reorg:Q5 | CTR-ZTH-32(curve), CTR-ZTH-33(dev-chain) | open/superseded (split) |
 | reorg:Q6 | NODE-MESH-24 | open |
 | reorg:Q7 | NODE-IDX-07 | open |
 | reorg:Q8 | NODE-OPS-16 | current |

@@ -648,8 +648,8 @@ empty output — with no symptom until someone has deposited funds.
   in the constructor.
 - **Kind gate**: `setKindEnabled(kind, on)` (registrar); the plain kinds start on, the confidential kinds off (owner
   2026-10-20, plan 5g-Z2; it replaces `setZetherEnabled` / `setPqzEnabled`). The chain gates are the implementations':
-  a Zether `initialize` reverts outside chain ids 31337/1337 (`ZetherSafety`, [CTR-ZTH-02](zether.md#CTR-ZTH-02)) and
-  when the release's transfer verifier does not run on the chain; a PQZ `initialize` runs `PqzSafety` (allowlist and
+  a Zether `initialize` reverts when the release's transfer verifier does not run on the chain (no chain-id
+  allowlist, [CTR-ZTH-52](zether.md#CTR-ZTH-52)); a PQZ `initialize` runs `PqzSafety` (allowlist and
   precompile self-test). `OpenFactoryV1` (with its own gate) is in `legacy/p5/` (P5).
 - **Registrar** is an EOA by default (deployer); it must become a multisig before mainnet. Its only powers are
   `publishEnv`, `publishDexEnv`, `deployImplementation`, `deployDexImplementation`, `deprecate`, `deprecateDex` and
@@ -829,8 +829,8 @@ backdoor, since clones `DELEGATECALL` through it),
 The built interface is `IOpenFactory.sol` and the `TokenConfig` block of [CTR-TOK-25](#CTR-TOK-25); the event is
 `TokenCreated(token, creator, kind, version, implementation, features, lockedFeatures, owner, underlyings)`, the
 enum `TokenKind { NORMAL, WRAPPED, NORMAL_ZETHER, WRAPPED_ZETHER, NORMAL_PQZ, WRAPPED_PQZ }`. The deploy scripts publish env 1 of `NORMAL` and of the DEX and deploy `NormalToken` as
-version 1 of `NORMAL` and `SCaaSDex` as DEX version 1 through the factory (on a dev chain also both `*_ZETHER` kinds on
-env 1 = bn254 and env 2 = BLS12-381, the kinds enabled); `WrappedToken` is not deployed ([CTR-GEN-06](README.md#CTR-GEN-06), [CTR-TOK-24](#CTR-TOK-24)). Separate `AssetFactory` for action
+version 1 of `NORMAL` and `SCaaSDex` as DEX version 1 through the factory (with `DEPLOY_ZETHER=1` also both `*_ZETHER` kinds on
+the BLS12-381 env, the kinds enabled); `WrappedToken` is not deployed ([CTR-GEN-06](README.md#CTR-GEN-06), [CTR-TOK-24](#CTR-TOK-24)). Separate `AssetFactory` for action
 contracts: [asset-suite.md](asset-suite.md#templates).
 
 ## <a id="interfaces"></a>7. Interfaces

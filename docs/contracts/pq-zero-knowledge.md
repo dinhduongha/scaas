@@ -94,8 +94,7 @@ and nonces).
 <a id="scope-gate"></a>
 <a id="CTR-PQZ-01"></a>**CTR-PQZ-01** — **Scope and gate** (owner). PQZ is a separate token class (`PqzToken`, plus kind
 `0x0142` in the [UA registry](accounts.md#registry)), never an upgrade of `ZetherToken`.
-`PqzSafety.requireAllowedChain()`: `chainid ∈ {31337, 1337, 7622}` — a hard-coded list, like the classical dev gate
-([CTR-ZTH-02](zether.md#CTR-ZTH-02)); adding a chain is a code change with review. **And** every
+`PqzSafety.requireAllowedChain()`: `chainid ∈ {31337, 1337, 7622}` — a hard-coded list; adding a chain is a code change with review. **And** every
 constructor/`initialize` runs the precompile self-test ([self-test](#self-test)); a chain without the precompile (every
 public chain) fails it. **And** the chain is identified by `(chainid, chain_uid)` ([NET-ALL-22](../networks/README.md#NET-ALL-22)):
 `PqzToken.initialize` copies `registry.chainUid()` (the genesis hash, a registry constructor immutable, `≠ 0`) into an
@@ -116,8 +115,8 @@ above, plus a price calibration of its precompile ([CTR-PQZ-11](#CTR-PQZ-11)).
 an explicit patent grant; LNP22-family techniques come from IBM Research; GMP/MPFR are LGPL and must be absent from
 every shipped artifact after the engine rewrite; plus the chosen ML-DSA implementations' licences) **and** an
 independent cryptographic audit. Development and research continue without them; nothing deploys outside the
-allowlist or holds real funds until both are recorded as passed. Classical Zether's own gate on the SCaaS testnet is
-unaffected ([CTR-ZTH-33](zether.md#CTR-ZTH-33)).
+allowlist or holds real funds until both are recorded as passed. Classical Zether is a separate item with its own rule
+([CTR-ZTH-52](zether.md#CTR-ZTH-52)).
 
 The licence gate **G-LIC**: legal review of LaZer (MIT, no patent grant) and any code retained from it; LNP22-family IP (IBM
 Research); GMP (LGPLv3/GPLv2) and MPFR (LGPLv3): confirm from link maps that no shipped artifact (`libpqz.so`, WASM
@@ -2453,11 +2452,11 @@ service is the user's (or the organization's key oracle), never a third party's 
 <a id="migration"></a>
 <a id="CTR-PQZ-20"></a>**CTR-PQZ-20** — **Migration classical → PQZ** is `ZetherToken.mtxUnshield` to the owner's address then
 `PqzToken.mtxShield`; the amount is public on the SCaaS testnet once. No cross-system equality proof in v1. Classical Zether holds
-no production funds (dev-only gate), so only pilots migrate.
+no production funds (unaudited), so only pilots migrate.
 
 | Phase | What runs | HNDL status |
 |---|---|---|
-| H0 (today) | classical Zether on dev chains only ([CTR-ZTH-02](zether.md#CTR-ZTH-02)); the owner decides SCaaS testnet for classical Zether ([CTR-ZTH-33](zether.md#CTR-ZTH-33)) | exposed, but no production funds |
+| H0 (today) | classical Zether, unaudited, on every chain with the BLS12-381 precompiles once the kind is enabled ([CTR-ZTH-52](zether.md#CTR-ZTH-52), owner ruling 2026-10-31) | exposed, but no production funds |
 | H1 | PQZ on the SCaaS testnet behind [CTR-PQZ-01](#CTR-PQZ-01), dev and pilot only | amounts PQ-safe from first use |
 | H2 | pilots migrate classical → PQZ: `ZetherToken.mtxUnshield(…, ownerAddress)` then `PqzToken.mtxShield(ua, amount)` with `approve(PqzToken)` (spender is a contract, [CTR-TOK-01](token-wrappers.md#CTR-TOK-01)) | each migrated amount is public once on the SCaaS testnet |
 | H3 | release gates **G-LIC** (licence/patent clearance) and independent audit ([CTR-PQZ-01](#CTR-PQZ-01)) — both before any production or commercial use | — |

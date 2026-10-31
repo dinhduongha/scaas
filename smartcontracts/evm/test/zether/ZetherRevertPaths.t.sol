@@ -14,14 +14,8 @@ import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
-import {ZetherSafety} from "../../src/zether/ZetherSafety.sol";
 import {G1Bls12381} from "../../src/zether/ZetherCurves.sol";
-import {
-    ZetherVerifierBase,
-    ZetherInnerProductVerifierBls12381,
-    ZetherTransferVerifierBls12381,
-    ZetherBurnVerifierBls12381
-} from "../../src/zether/ZetherVerifier.sol";
+import {ZetherVerifierBase, ZetherTransferVerifierBls12381} from "../../src/zether/ZetherVerifier.sol";
 import {IZetherVerifier, IZetherBurnVerifier, IZetherInnerProductVerifier} from "../../src/zether/IZetherVerifier.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {Catalogue, pinned} from "../helpers/Catalogue.sol";
@@ -250,8 +244,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         }
     }
 
-    /// The confidential config at creation (CTR-ZTH-04, -09, -26); the kind's flags (CTR-ZTH-47); the dev-chain gate in
-    /// `initialize` (a clone made by hand, around the factory).
+    /// The confidential config at creation (CTR-ZTH-04, -09, -26); the kind's flags (CTR-ZTH-47).
     function test_initializeRevertPaths() public {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         vm.expectRevert(MetaTokenBase.NotFactory.selector);
@@ -291,12 +284,6 @@ contract ZetherRevertPathsTest is ZetherFixture {
         r.features |= 1 << AdminLib.WRAP_DISABLEABLE;
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.WRAP_DISABLEABLE));
         factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(r), "wrap");
-        // initialize outside a dev chain (a hand-made clone, around the factory gate)
-        address cl = Clones.clone(address(normalImpl));
-        vm.chainId(1);
-        vm.prank(address(factory));
-        vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));
-        NormalZetherToken(cl).initialize(address(this), 1, abi.encode(c));
     }
 
     /// The release's `Env.deps` (plan 5g-Z2, CTR-ZTH-20): four entries with code, a registry, the two verifiers of one
@@ -355,15 +342,6 @@ contract ZetherRevertPathsTest is ZetherFixture {
         // the same config on the honest release of the same env shape is accepted
         assertTrue(factory.isRegisteredToken(
             factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(_cfg(false, 1 << 40)), "supported")));
-    }
-
-    /// Review 5g-Z2 P2-3 (controller proposal 2): the registrar may enable a Zether kind anywhere, but on a non-dev
-    /// chain every `createToken` reverts with the implementation's gate.
-    function test_createToken_enabledKindOnANonDevChain_reverts() public {
-        assertTrue(factory.kindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
-        vm.chainId(1);
-        vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));
-        factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(_cfg(false, 1 << 40)), "mainnet");
     }
 
     /// CTR-ZTH-20 / plan 5g-Z2: the creator never names a verifier — the config has no field for it; the factory deploys
@@ -499,15 +477,23 @@ contract ZetherRevertPathsTest is ZetherFixture {
         assertEq(uint64(uint256(vm.load(address(tok), bytes32(uint256(a) + 4))) >> 64), 1, "pendingSeq");
     }
 
-    /// CTR-ZTH-02: the verifiers refuse to deploy outside the dev chains (as the registry and `initialize`).
-    function test_verifiersOnlyDeployOnDevChain() public {
-        vm.chainId(1);
-        vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));
-        new ZetherInnerProductVerifierBls12381();
-        vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));
-        new ZetherTransferVerifierBls12381(IZetherInnerProductVerifier(address(0)));
-        vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));
-        new ZetherBurnVerifierBls12381(IZetherInnerProductVerifier(address(0)));
+    /// Owner ruling 2026-10-31 (CTR-ZTH-02 superseded): classical Zether is open on every chain. On the SCaaS testnet
+    /// 7622 and the mainnet 22776 the whole stack deploys (the verifiers, the `zether-bls12381` UA verifier, the
+    /// release, a token through the factory's enabled kind) and a shield, roll-over and transfer go through.
+    function test_openOnTestnetAndMainnet() public {
+        uint256[2] memory ids = [uint256(7622), 22776];
+        for (uint256 i; i < ids.length; ++i) {
+            vm.chainId(ids[i]);
+            _deploy(false);
+            _fund(tok, alice, 500);
+            tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
+            _direct(tok, _proveTransfer(tok, alice, bob, 100, 500, _none(), 0), _none());
+            (uint256 a,) = _balances(tok, alice, 500);
+            (, uint256 p) = _balances(tok, bob, 500);
+            assertEq(a, 400);
+            assertEq(p, 100);
+            _assertConservation(tok, 500);
+        }
     }
 
     /// Provenance (CTR-TOK-17): the kind, the factory's record, the immutables, the curve, the parameters.

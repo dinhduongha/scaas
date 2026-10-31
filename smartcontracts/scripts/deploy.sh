@@ -8,14 +8,14 @@
 #                            CREATE2 deployer on the chain (NET-EVM-05). Writes evm/deployments/<chainid>.json (the
 #                            previous file is put back if the broadcast fails). Every chain gets the UA registry
 #                            (`ua_registry`; its EIP-2537 / bn254-G2 kinds by an eth_call precompile probe, the Zether
-#                            kinds on dev chains only, the PQ kinds on the dev chains and 7622 only: unaudited, P6c).
+#                            kind on every chain with EIP-2537, the PQ kinds on the dev chains and 7622 only: unaudited, P6c).
 #                            Always --disable-code-size-limit (forge 1.8.5 also applies EIP-3860 to the script contract itself); every token implementation
 #                            exceeds EIP-170 since the UA ledger (UA-4; owner: wait for Glamsterdam), so the chain needs
 #                            64 KiB code (anvil --code-size-limit 65536, chain 7622 maxCodeSize 0x10000); a chain at
 #                            24,576 refuses the deploy. Always --gas-estimate-multiplier 105: forge's default x1.30 on
 #                            the BLS inner-product verifier (~14 M, DEPLOY_ZETHER) exceeds the 2^24 per-transaction cap
 #                            (EIP-7825); the largest implementation, WrappedPqzToken (13,319,335 gas measured), is
-#                            deployed by script/pqz/e2e.py, not here. DEPLOY_ZETHER=1 (dev chains only) adds the Zether
+#                            deployed by script/pqz/e2e.py, not here. DEPLOY_ZETHER=1 (any chain but Hedera) adds the Zether
 #                            stack. --slow always (one tx per block: anvil automine can strand a large tx).
 #   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/hedera-<chainid>.json)
 #   aptos   <cli-profile>    aptos move deploy-object --address-name scaas; Move.toml upgrade_policy = "immutable"

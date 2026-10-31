@@ -23,8 +23,8 @@ import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {ZUID} from "./helpers/ZetherFixture.sol";
 import {zetherEnv} from "../helpers/Catalogue.sol";
 
-/// @notice `DeployBase` with `DEPLOY_ZETHER` on a dev chain deploys and registers the Zether stack (kinds 2 and 3, the
-///         gate on); without it (the default) or on any other chain (the e2e's 319xx, Hedera's 298) none of it.
+/// @notice `DeployBase` with `DEPLOY_ZETHER` deploys and registers the Zether stack (kinds 2 and 3, the gate on) on any
+///         chain but Hedera (owner ruling 2026-10-31: no dev-chain allowlist); without it (the default) none of it.
 /// F185: a CREATE2 deployer the stack test calls, so each deploy is its own transaction (`isolate`) and
 /// `vm.lastCallGas()` splits its regular gas from the EIP-8037 state gas.
 contract Create2Probe {
@@ -118,8 +118,8 @@ contract ZetherDeployTest is Test {
         assertEq(ZetherLayer(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z2")).minDecoyFee(), 1);
     }
 
-    /// Without `DEPLOY_ZETHER` no chain gets the stack (a plain anvil deploys as before P3); with it, a non-dev
-    /// chain refuses.
+    /// Without `DEPLOY_ZETHER` no chain gets the stack (a plain anvil deploys as before P3); with it the SCaaS testnet
+    /// 7622 and the mainnet 22776 get it (owner ruling 2026-10-31, CTR-ZTH-02 superseded) and Hedera refuses.
     function test_defaultOrOtherChains_noZether() public {
         uint256[4] memory ids = [uint256(31337), 31901, 298, 7622];
         for (uint256 i; i < ids.length; ++i) {
@@ -130,10 +130,27 @@ contract ZetherDeployTest is Test {
             assertEq(f.implementationOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1), address(0));
             assertEq(f.implementationOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1), address(0));
             assertEq(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1) == address(0), false, "the public kinds still");
-            if (i == 0) continue;
-            h = new DeployHarness();
-            vm.expectRevert("DEPLOY_ZETHER: dev chains only (CTR-ZTH-02)");
-            h.deploy(ZUID, true, ska);
+        }
+        vm.chainId(298);
+        DeployHarness hh = new DeployHarness();
+        vm.expectRevert("DEPLOY_ZETHER: not on Hedera (ZetherLayer refuses a Hedera env)");
+        hh.deploy(ZUID, true, ska, true);
+    }
+
+    function test_testnetAndMainnet_registerZether() public {
+        uint256[2] memory ids = [uint256(7622), 22776];
+        for (uint256 i; i < ids.length; ++i) {
+            vm.chainId(ids[i]);
+            DeployHarness h = new DeployHarness();
+            (OpenFactory f, string memory json) = h.deploy(ZUID, true, ska);
+            assertTrue(f.kindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
+            assertTrue(f.kindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER));
+            _checkCurve(f, h, json);
+            assertTrue(IUARegistry(vm.parseJsonAddress(json, ".ua_registry")).kindEnabled(UAKinds.ZETHER_BLS12381));
+            IFactoryToken.TokenConfig memory c;
+            (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << AdminLib.PAYABLE);
+            c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0);
+            assertTrue(f.isRegisteredToken(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z")));
         }
     }
 

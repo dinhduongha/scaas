@@ -11,7 +11,8 @@ import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.s
 
 /// @notice `DeployBase` deploys UA registry generation 1 on every chain (CTR-UA-22) with the per-chain kind set of
 ///         accounts.md §1.9: the precompile probe (`UAPrecompileProbe`: the kinds.json points outside the subgroup,
-///         the registry's caps) gates the EIP-2537 kinds and `bls-bn254-minsig`; the Zether kinds stay on the dev chains.
+///         the registry's caps) gates the EIP-2537 kinds (`zether-bls12381` among them, on every chain: owner ruling 2026-10-31)
+///         and `bls-bn254-minsig`.
 contract UADeployTest is Test {
     bytes32 constant UID = keccak256("scaas.ua3.deploy");
     uint16[12] internal EVERYWHERE = [0x0100, 0x0101, 0x0102, 0x0103, 0x0104, 0x0110, 0x0111, 0x0112, 0x0113, 0x0120, 0, 0];
@@ -76,17 +77,18 @@ contract UADeployTest is Test {
         }
     }
 
-    /// Chain 7622 (private, not dev): no Zether kind; `bls-bn254-minsig` and the PQ kinds stay. Another chain (the e2e's
-    /// 31901): no `bls-bn254-minsig`, no PQ kind either. Hedera 298: `hederaNative`, budget 10.5 M, no PQ kind.
+    /// Chain 7622 (private, not dev): `zether-bls12381` (owner ruling 2026-10-31), `bls-bn254-minsig` and the PQ kinds.
+    /// Another chain (the e2e's 31901): `zether-bls12381`, no `bls-bn254-minsig`, no PQ kind. Hedera 298: `hederaNative`,
+    /// budget 10.5 M, no PQ kind.
     function test_otherChains() public {
         IUARegistry r7622 = _registry(7622, false);
         bool[5] memory on = _kinds(r7622, [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);
-        assertTrue(on[0] && on[1] && on[2] && !on[3] && !on[4]);
+        assertTrue(on[0] && on[1] && on[2] && !on[3] && on[4]);
         _pq(r7622, true);
         assertFalse(r7622.kindEnabled(UAKinds.PQZ_MLWE));
         IUARegistry r31901 = _registry(31901, false);
         on = _kinds(r31901, [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);
-        assertTrue(on[0] && on[1] && !on[2] && !on[3] && !on[4]);
+        assertTrue(on[0] && on[1] && !on[2] && !on[3] && on[4]);
         _pq(r31901, false);
         IUARegistry h = _registry(298, true);
         assertTrue(h.hederaNative());

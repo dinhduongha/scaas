@@ -37,7 +37,6 @@ import {UAMldsaVerifier} from "../src/ua/MlDsa.sol";
 import {UAFndsaVerifier} from "../src/ua/FnDsa.sol";
 import {UASlhdsaVerifier} from "../src/ua/SlhDsa.sol";
 import {UAPrecompileProbe} from "./UAPrecompileProbe.sol";
-import {ZetherSafety} from "../src/zether/ZetherSafety.sol";
 import {ZetherDisclosure} from "../src/zether/ZetherDisclosure.sol";
 import {ZetherStatements} from "../src/zether/ZetherStatements.sol";
 import {
@@ -60,7 +59,8 @@ abstract contract DeployBase is Script {
     bytes32 internal salt;
     /// @notice The chain's genesis hash (`_chainUid`).
     bytes32 internal uid;
-    /// @notice `DEPLOY_ZETHER` env (default false): also deploy the Zether stack (`_deployZether`, dev chains only).
+    /// @notice `DEPLOY_ZETHER` env (default false): also deploy the Zether stack (`_deployZether`, any chain
+    ///         but Hedera; owner ruling 2026-10-31).
     bool internal deployZether;
     /// @notice `OpenFactory.noticePeriod` (plan 5g-Z2; owner ruling 2026-10-20): `NOTICE_PERIOD` env. Safe by default:
     ///         every chain not in `_isTestChain` is a mainnet (22776, Hedera 295, Ethereum, BSC, an unknown chain), with
@@ -167,12 +167,12 @@ abstract contract DeployBase is Script {
     ///         and the `SCaaSDex` release, each version 1; otherwise the registrar publishes and deploys them later from
     ///         the same init code. Writes `token_factory`, `implementation_normal`, `dex_implementation`, `ua_registry`,
     ///         `mtx_relay_fee`, `mtx_relay_executor`, `chain_uid` into the JSON object `"deploy"`; with `DEPLOY_ZETHER` also the Zether stack (`_deployZether`,
-    ///         dev chains only). NORMAL and `WRAPPED` both exceed EIP-170 (the UA ledger): deploy with
+    ///         not on Hedera). NORMAL and `WRAPPED` both exceed EIP-170 (the UA ledger): deploy with
     ///         `--code-size-limit 65536` (deploy.sh); `WRAPPED` is still not deployed here (owner: wait for Glamsterdam).
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
         internal returns (OpenFactory f)
     {
-        if (deployZether) require(ZetherSafety.isDevChain(), "DEPLOY_ZETHER: dev chains only (CTR-ZTH-02)");
+        if (deployZether) require(!isHedera, "DEPLOY_ZETHER: not on Hedera (ZetherLayer refuses a Hedera env)");
         f = new OpenFactory{salt: salt}(registrar, uid, noticePeriod);
         UARegistry reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
         _deployRelayFee();
@@ -227,7 +227,7 @@ abstract contract DeployBase is Script {
     ///         everywhere;
     ///         `schnorr-bls12381` and `bls12381-minsig` where `UAPrecompileProbe` passes EIP-2537; `bls-bn254-minsig` on
     ///         private chains (the dev chains and 7622) where it passes the bn254 G2 check; `zether-bls12381` with
-    ///         EIP-2537 on the dev chains only (CTR-ZTH-02; `zether-bn254` is in `legacy/ua6/`, UA-6 U10); the PQ
+    ///         EIP-2537 on every chain (owner ruling 2026-10-31; `zether-bn254` is in `legacy/ua6/`, UA-6 U10); the PQ
     ///         signing kinds (P6c) on the private chains (the dev chains and 7622) only — unaudited, CTR-UA-23 — ML-DSA
     ///         in Solidity on the registry's cached expanded key (no chain has an ML-DSA precompile yet; P6g passes chain
     ///         7622's to the verifier's probe); `pqz-mlwe` nowhere (its verifier is P6g's). Caps: the gen-1 defaults measured in
@@ -235,7 +235,7 @@ abstract contract DeployBase is Script {
     ///         (never "registrable but unusable", CTR-UA-23). JSON `ua_registry`. **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
     function _deployUARegistry(address smartKeyAccountImpl, bool isHedera) internal returns (UARegistry reg) {
         (bool bls, bool bnG2) = _precompiles();
-        bool dev = ZetherSafety.isDevChain();
+        bool dev = block.chainid == 31337 || block.chainid == 1337;
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](21);
         uint256 n;
         k[n++] = UARegistry.KindConfig(UAKinds.WEBAUTHN_P256, address(new WebAuthnP256Verifier{salt: salt}()), 400_000);
@@ -263,7 +263,7 @@ abstract contract DeployBase is Script {
         k[n++] = UARegistry.KindConfig(UAKinds.FROST_SECP256K1, address(new UAFrostSecp256k1Verifier{salt: salt}()), 50_000);
         k[n++] = UARegistry.KindConfig(UAKinds.MUSIG2_BN254, address(new Musig2Bn254Verifier{salt: salt}()), 50_000);
         k[n++] = UARegistry.KindConfig(UAKinds.FROST_BN254, address(new FrostBn254Verifier{salt: salt}()), 50_000);
-        if (dev && bls) {
+        if (bls) {
             k[n++] = UARegistry.KindConfig(
                 UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier{salt: salt}()), 70_000
             );

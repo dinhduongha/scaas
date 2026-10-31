@@ -5,7 +5,6 @@ import {
     IZetherVerifierCommon, IZetherVerifier, IZetherBurnVerifier, IZetherInnerProductVerifier
 } from "./IZetherVerifier.sol";
 import {ZetherTranscript as T} from "./ZetherTranscript.sol";
-import {ZetherSafety} from "./ZetherSafety.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {G1Bls12381} from "./ZetherCurves.sol";
 
@@ -145,7 +144,6 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
     error GeneratorStoreFailed();
 
     constructor() {
-        ZetherSafety.requireDevChain();
         uint256 p = _pointBytes();
         bytes memory blob = new bytes(NGEN * p);
         _put(blob, 0, _gen("h", 0), p);
@@ -343,7 +341,6 @@ abstract contract ZetherVerifierBase is ZetherCurve {
     error InnerProductMismatch(address innerProduct);
 
     constructor(IZetherInnerProductVerifier innerProduct_) {
-        ZetherSafety.requireDevChain();
         if (!SigCheck.isContract(address(innerProduct_)) || innerProduct_.proofSystemId() != proofSystemId()) {
             revert InnerProductMismatch(address(innerProduct_));
         }

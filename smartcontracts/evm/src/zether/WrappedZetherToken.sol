@@ -17,7 +17,7 @@ import {IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol"
 import {UAKinds} from "../ua/UAKinds.sol";
 
 /// @title Kind `WRAPPED_ZETHER` (CTR-TOK-21): the wrapper of 1–8 legs with the Zether layer (CTR-ZTH-44).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Dev chains only. The legs, rates, reserves, `wrap`/`unwrap`,
+/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Any chain with EIP-2537 (BLS12-381). The legs, rates, reserves, `wrap`/`unwrap`,
 ///         `mtxWrap` and the rate and guardian roles are `WrappedToken`'s (`WrappedLib`); the layer adds
 ///         `mtxWrapShield` (a leg's underlying straight into a shielded balance, minted to the pool) and
 ///         `mtxUnshieldUnwrap` (a shielded balance straight out to a leg's underlying, burnt from the pool; to an
@@ -27,8 +27,8 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         `amount·shieldScale` from it and pays `⌊amount·shieldScale·den/num⌋`, worth at most what it removes), and
 ///         `executeRate` checks it. Flags: `PAYABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE` (CTR-ZTH-47). Never on Hedera.
 contract WrappedZetherToken is WrappedToken, ZetherLayer, IConfidentialWrappedToken {
-    /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env` (Hedera off: no
-    ///      dev chain there); no `implArgs`.
+    /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env` (Hedera off: `ZetherLayer`
+    ///      refuses a Hedera env); no `implArgs`.
     constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
         WrappedToken(envVersion, env, implArgs)
         ZetherLayer(env)

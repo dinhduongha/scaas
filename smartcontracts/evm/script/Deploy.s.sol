@@ -11,7 +11,7 @@ import {DeployBase} from "./DeployBase.sol";
 ///      DEMO_SUPPLY (tuỳ chọn; 0 = không tạo token demo), DEMO_HOLDER (tuỳ chọn, nhận một nửa),
 ///      DEPLOY_SALT (tuỳ chọn; mặc định keccak256("scaas.deploy.v1"); chạy lại trên cùng chain cần salt mới),
 ///      CHAIN_UID (genesis hash, chain-uids.json; tuỳ chọn; phải bằng hash block 0 của RPC, mặc định chính hash đó).
-///      DEPLOY_ZETHER (tuỳ chọn, true/false; chỉ dev chain; cần cờ forge trong deploy.sh, docs/networks/evm.md).
+///      DEPLOY_ZETHER (tuỳ chọn, true/false; mọi chain trừ Hedera; cần cờ forge trong deploy.sh, docs/networks/evm.md).
 /// Ghi `deployments/<chainid>.json` (token factory, implementations, the DEX implementation, the SmartKeyAccount
 /// factory, `chain_uid`, the demo tokens) để seed client (`blockchain.token`) và config node; a DEX is a clone from
 /// `OpenFactory.createDex` (CTR-DEX-24). The v1 line (`OpenFactoryV1`, `MetaToken`, `MetaTxDex`, `SCaaSDexV1`) is in
