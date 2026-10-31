@@ -1,0 +1,237 @@
+version: "3.8"
+
+networks:
+  mba-net:
+    driver: bridge
+  # sealer <-> rpc P2P only (owner 2026-10-31 node split): internal (no gateway, no published port), no other container
+  # joins it, so the sealer is reachable from rpc alone; Blockscout and the rest of mba-net never reach the sealer.
+  # inhibit_ipv4: the host bridge gets no address on 10.76.24.0/24, so the host itself has no route to the sealer either
+  chain-p2p:
+    driver: bridge
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.inhibit_ipv4: "true"
+    ipam:
+      config:
+        - subnet: 10.76.24.0/24
+
+services:
+  # ------------------- Node split (owner 2026-10-31): sealer + rpc -------------------
+  # Start order: sealer, rpc, then Blockscout; stop in reverse. Admin JSON-RPC on each node's container loopback
+  # (127.0.0.1:8550, not published) through a sidecar in the node's network namespace:
+  #   docker run --rm --memory 64m --network container:mba_chain_sealer curlimages/curl:8.21.0 -s \
+  #     -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"clique_getSigners","params":[]}' http://127.0.0.1:8550
+  #   (the same with container:mba_chain_rpc for the RPC node)
+
+  # The Clique signer: the keystore + UnlockAccounts (Nethermind 2.2.0 reads the key's password through it), Mining on,
+  # pruned (flat state); JSON-RPC only on its container loopback; no published port; only on chain-p2p (static peer rpc).
+  sealer:
+    container_name: mba_chain_sealer
+    restart: unless-stopped
+    image: scaas/nethermind-pqz:2.2.0-pqz6
+    mem_limit: 1g   # 768m was too tight: 694 MiB total / 611 MiB anon during the PQZ e2e (2026-10-31; raised live by docker update)
+    volumes:
+      - ./data/nethermind_data:/nethermind/nethermind_datadir   # the single node's chain data (kept)
+      - ./genesis.json:/nethermind/genesis.json
+      - ./config.json:/nethermind/config.json
+      - ./jsonrpc.filter:/nethermind/jsonrpc.filter:ro   # refuses eth_sendTransaction / eth_sign / eth_signTransaction / eth_signTypedData* (owner 2026-10-31)
+      - ./password.txt:/nethermind/password.txt
+      - ./keystore:/nethermind/keystore
+    command: --config /nethermind/config.json
+      --datadir /nethermind/nethermind_datadir
+    networks:
+      chain-p2p:
+        ipv4_address: 10.76.24.10
+
+  # The public node (sentry): no key, Mining off, archive (Pruning.Mode None on the patricia backend, FlatDb off), full
+  # sync from the sealer. 8545 / 8546 public (Eth, Net, Web3, Subscribe), 8547 Docker-only for Blockscout, 8550 admin on
+  # its container loopback, P2P 30303 for external nodes (they peer with rpc, never with the sealer).
+  rpc:
+    container_name: mba_chain_rpc
+    restart: unless-stopped
+    image: scaas/nethermind-pqz:2.2.0-pqz6
+    mem_limit: 1536m
+    ports:
+      - "8545:8545"
+      - "8546:8546"
+      - "30303:30303/tcp"
+      - "30303:30303/udp"
+    volumes:
+      - ./data/nethermind_rpc_data:/nethermind/nethermind_datadir
+      - ./genesis.json:/nethermind/genesis.json:ro
+      - ./config.rpc.json:/nethermind/config.json:ro
+      - ./jsonrpc.filter:/nethermind/jsonrpc.filter:ro
+      - ./rpc-node.key:/nethermind/node.key:ro   # fixed P2P key (KeyStore.EnodeKeyFile): the enode stays the same across restarts
+    command: --config /nethermind/config.json
+      --datadir /nethermind/nethermind_datadir
+    networks:
+      mba-net: {}
+      chain-p2p:
+        ipv4_address: 10.76.24.11
+
+  # ------------------- Blockscout (owner 2026-10-31: ON, lean, with caps) -------------------
+  # Start AFTER sealer and rpc; restart: unless-stopped like every service (owner 2026-10-31; after a reboot Docker
+  # starts all services at once, so the start order is not enforced). Stop:
+  #   docker compose stop explorer-frontend explorer-backend explorer-db
+  # Lean: no internal transactions (no trace URL: the trace module is only on the node-loopback admin endpoint), no token
+  # instance / NFT metadata, block rewards, exchange rates / market history fetchers (the address coin balance
+  # fetcher stays ON, see below); small DB pools and indexer concurrency. Env names checked against blockscout 9.0.2
+  # (/app/releases/9.0.2/runtime.exs, /app/config/runtime/prod.exs, /app/apps/indexer/config/prod/nethermind.exs).
+  explorer-db:
+    container_name: mba_explorer_db
+    restart: unless-stopped
+    image: postgres:18
+    mem_limit: 1g
+    cpus: 1.0
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-blockscout}
+      PGDATA: ${PGDATA:-/var/lib/postgresql/18/docker}
+    volumes:
+      - ./data/explorer_db_data:/var/lib/postgresql/18/docker
+    networks:
+      - mba-net
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-blockscout}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  explorer-backend:
+    container_name: mba_explorer_backend
+    restart: unless-stopped
+    # 9.0.2 (ghcr.io …@sha256:7659f168…). Docker Hub's blockscout/blockscout:latest is the stale 7.0.2, whose
+    # ContractCode fetcher crash-loops on a pruned node (CaseClauseError {:ok, %{}}, ~300 / s, one core), 2026-10-31
+    image: ghcr.io/blockscout/blockscout:9.0.2
+    mem_limit: 2g
+    cpus: 1.5
+    depends_on:
+      explorer-db:
+        condition: service_healthy
+    environment:
+      MIX_ENV: "prod"
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD:?set in .env}@explorer-db:5432/blockscout?ssl=false"
+      # the rpc node's mba-net-only endpoint 8547 (Eth, Net, Web3, TxPool; config.rpc.json AdditionalRpcUrls, not published)
+      ETHEREUM_JSONRPC_HTTP_URL: "http://rpc:8547"
+      ETHEREUM_JSONRPC_WS_URL: "ws://rpc:8547"
+      # eth_getBalance goes to the trace URL (apps/indexer/config/prod/nethermind.exs method_to_url); without one 7.0.2
+      # disables archive balances and Indexer.Fetcher.ContractCode crashes in a loop (CaseClauseError {:ok, %{}}). No trace_* call is made:
+      # internal transactions and block rewards are off below
+      ETHEREUM_JSONRPC_TRACE_URL: "http://rpc:8547"
+      ETHEREUM_JSONRPC_PENDING_TRANSACTIONS_TYPE: "geth"   # txpool_content (TxPool), not parity_pendingTransactions
+      ETHEREUM_JSONRPC_VARIANT: "nethermind"
+      # block 0: its import needs the genesis balances at block 0, which the pruned single node (before the split) no
+      # longer had ("No state available"), and 7.0.2 then retried block 0 in a 0 ms loop (one core); start at block 1.
+      # The archive rpc node serves block 0 now; the index keeps starting at 1
+      FIRST_BLOCK: "1"
+      INDEXER_DISABLE_INTERNAL_TRANSACTIONS_FETCHER: "true"
+      INDEXER_DISABLE_BLOCK_REWARD_FETCHER: "true"
+      # address coin balance fetcher ON (owner 2026-10-31): with it disabled, 9.0.2's realtime block fetcher still calls
+      # Indexer.Fetcher.CoinBalance.Realtime, crashes after every import and the main-page block cache stops updating
+      INDEXER_DISABLE_TOKEN_INSTANCE_REALTIME_FETCHER: "true"
+      INDEXER_DISABLE_TOKEN_INSTANCE_RETRY_FETCHER: "true"
+      INDEXER_DISABLE_TOKEN_INSTANCE_SANITIZE_FETCHER: "true"
+      INDEXER_DISABLE_TOKEN_INSTANCE_REFETCH_FETCHER: "true"
+      INDEXER_DISABLE_TOKEN_INSTANCE_ERC_1155_SANITIZE_FETCHER: "true"
+      INDEXER_DISABLE_TOKEN_INSTANCE_ERC_721_SANITIZE_FETCHER: "true"
+      INDEXER_DISABLE_CATALOGED_TOKEN_UPDATER_FETCHER: "true"
+      INDEXER_DISABLE_BEACON_BLOB_FETCHER: "true"
+      DISABLE_MARKET: "true"
+      DISABLE_EXCHANGE_RATES: "true"
+      DISABLE_TOKEN_EXCHANGE_RATE: "true"
+      POOL_SIZE: "10"
+      POOL_SIZE_API: "5"
+      ACCOUNT_POOL_SIZE: "1"
+      MUD_POOL_SIZE: "1"
+      INDEXER_CATCHUP_BLOCKS_BATCH_SIZE: "10"
+      INDEXER_CATCHUP_BLOCKS_CONCURRENCY: "2"
+      INDEXER_RECEIPTS_BATCH_SIZE: "50"
+      INDEXER_RECEIPTS_CONCURRENCY: "2"
+      INDEXER_TOKEN_CONCURRENCY: "2"
+      INDEXER_TOKEN_BALANCES_BATCH_SIZE: "50"
+      INDEXER_TOKEN_BALANCES_CONCURRENCY: "2"
+      # contract verification through the local sc-verifier below (owner 2026-10-31); without the URL 9.0.2 defaults to
+      # Blockscout's hosted eth-bytecode-db. Sourcify integration stays off (its default)
+      MICROSERVICE_SC_VERIFIER_ENABLED: "true"
+      MICROSERVICE_SC_VERIFIER_TYPE: "sc_verifier"
+      MICROSERVICE_SC_VERIFIER_URL: "http://sc-verifier:8050/"
+      COIN: "MBA"
+      COIN_NAME: "MNB"
+      NETWORK_NAME: "MBANetwork"
+      CHAIN_ID: "7622"
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?set in .env}
+      # SCaaS testnet only: the per-IP API limit (default 500 / 15 min) locked the UI out during contract
+      # verification runs (HTTP 429 on every /api/v2 call) — off on this private chain (owner 2026-10-31)
+      API_RATE_LIMIT_DISABLED: "true"
+    command: sh -c "bin/blockscout eval \"Elixir.Explorer.ReleaseTasks.create_and_migrate()\" && bin/blockscout start"
+    volumes:
+      - ./data/explorer_app_data:/data
+      - ./data/explorer_app_data/logs/:/app/logs/
+      - ./data/explorer_app_data/dets/:/app/dets/
+    networks:
+      - mba-net
+    ports:
+      - "4000:4000"
+
+  # Blockscout smart-contract-verifier (owner 2026-10-31): Solidity only (Vyper, Sourcify, zkSync off), solc from
+  # binaries.soliditylang.org (the only outbound traffic), HTTP 8050 on mba-net only (no published port, gRPC off).
+  # Compilers run natively in this container: the docker executor would need the host Docker socket here. Verify all
+  # deployed contracts: smartcontracts/evm/script/verify-blockscout.sh (after every 7622 reset or deploy).
+  sc-verifier:
+    container_name: mba_sc_verifier
+    restart: unless-stopped
+    # TEMPORARY local build (owner ruling 2026-10-31 option (a)): blockscout-rs smart-contract-verifier v1.11.1 (9457af29)
+    # patched to accept evmVersion "amsterdam" and pass settings.experimental to solc; local only, never pushed.
+    # Build + how to return to upstream: ./sc-verifier/README.md. Upstream was
+    # ghcr.io/blockscout/smart-contract-verifier:v1.11.1@sha256:a7580f42b55c0aafad43a2acd979b60adddc1e9985a8cf01857179962f0fe063
+    image: scaas/sc-verifier:v1.11.1-amsterdam1
+    mem_limit: 768m
+    cpus: 1.0
+    environment:
+      SMART_CONTRACT_VERIFIER__SERVER__HTTP__ENABLED: "true"
+      SMART_CONTRACT_VERIFIER__SERVER__HTTP__ADDR: "0.0.0.0:8050"
+      SMART_CONTRACT_VERIFIER__SERVER__GRPC__ENABLED: "false"
+      SMART_CONTRACT_VERIFIER__SOLIDITY__ENABLED: "true"
+      SMART_CONTRACT_VERIFIER__SOLIDITY__FETCHER__LIST__LIST_URL: "https://binaries.soliditylang.org/linux-amd64/list.json"
+      SMART_CONTRACT_VERIFIER__VYPER__ENABLED: "false"
+      SMART_CONTRACT_VERIFIER__SOURCIFY__ENABLED: "false"
+      SMART_CONTRACT_VERIFIER__ZKSYNC_SOLIDITY__ENABLED: "false"
+      SMART_CONTRACT_VERIFIER__COMPILERS__EXECUTION__TYPE: "native"
+      SMART_CONTRACT_VERIFIER__COMPILERS__MAX_THREADS: "2"
+      SMART_CONTRACT_VERIFIER__METRICS__ENABLED: "false"
+      SMART_CONTRACT_VERIFIER__JAEGER__ENABLED: "false"
+    networks:
+      - mba-net
+
+  explorer-frontend:
+    container_name: mba_explorer_frontend
+    restart: unless-stopped
+    # v2.3.5 (org.opencontainers.image.version), pinned by digest 2026-10-31
+    image: ghcr.io/blockscout/frontend@sha256:4b69f44148414b55c6b8550bc3270c63c9f99e923d54ef0b307e762af6bac90a
+    mem_limit: 512m
+    cpus: 0.5
+    environment:
+      PORT: "3000"
+      NEXT_PUBLIC_API_HOST: "${EXPLORER_HOST:-192.168.1.72}"
+      NEXT_PUBLIC_API_PORT: "4000"
+      NEXT_PUBLIC_API_PROTOCOL: "http"
+      NEXT_PUBLIC_API_WEBSOCKET_PROTOCOL: "ws"
+      NEXT_PUBLIC_APP_HOST: "${EXPLORER_HOST:-192.168.1.72}"
+      NEXT_PUBLIC_APP_PORT: "8558"   # host port of the UI (owner 2026-10-31: not 3000)
+      NEXT_PUBLIC_APP_PROTOCOL: "http"
+      NEXT_PUBLIC_NETWORK_NAME: "MBANetwork"
+      NEXT_PUBLIC_NETWORK_SHORT_NAME: "MBA"
+      NEXT_PUBLIC_NETWORK_ID: "7622"
+      NEXT_PUBLIC_NETWORK_CURRENCY_NAME: "MNB"
+      NEXT_PUBLIC_NETWORK_CURRENCY_SYMBOL: "MBA"
+      NEXT_PUBLIC_NETWORK_CURRENCY_DECIMALS: "18"
+      NEXT_PUBLIC_IS_TESTNET: "true"
+    ports:
+      - "8558:3000"   # UI at http://<host>:8558; the container still listens on PORT 3000 (owner 2026-10-31)
+    networks:
+      - mba-net

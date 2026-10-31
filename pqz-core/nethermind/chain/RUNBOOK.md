@@ -298,17 +298,22 @@ Success: the head hash equals the rollback head written down in step 1. Then rep
 - `OP_SELFTEST` (op 6) = `d6c01fbc…6f68d` (images `2.2.0-pqz5` / `2.2.0-pqz6`, set `n2304-kmax4096`; `23d7a1db…c97c0` on `2.2.0-pqz4`, `ed910a2c…d205` before).
 
 A node fault (plan D4) stops the node with exit code 120 and the tag `PQZ-NODE-FAULT` in its log. The block in
-progress is never sealed; a restart (`docker compose up -d blockchain-node`) re-processes it. The node has no restart
-policy: choosing one is the owner's decision (owner step 3 of the P6f plan), so after a fault someone must restart it
-by hand.
+progress is never sealed; a restart re-processes it. **Restart policy (owner ruling 2026-10-31): `restart:
+unless-stopped` on every service of the stack, the sealer included**, so Docker restarts a node after exit 120 or any
+other crash by itself (by hand: `docker compose up -d sealer` or `rpc`). A deterministic fault caused by a pooled
+transaction can loop on the sealer: it restarts, `rpc` gossips the same transaction to it again, it faults again. So
+watch `RestartCount` (`chain/watch.sh` prints `restarts=` and a `WARN` line when it is not 0); on a loop the operator
+stops the sealer (`docker compose stop sealer`) and drops the transaction from `rpc`'s pool before starting it again.
+After a host reboot Docker starts every service at once: the start order of § Node split is not enforced, so check
+the health list there after a reboot.
 
 **No public RPC on the signer (review W-H, 2026-10-19; a rule, not a code change).** The exit path above runs in
 whatever thread calls the precompile, `eth_call`, `eth_estimateGas` and tracing included, and the PQZL verifier's
 process-wide lock is shared by RPC calls and block import. A node that serves RPC to anyone can therefore be stopped
 (a node fault inside an `eth_call`) or slowed (calls queueing on the lock) by its callers. So the signer's JSON-RPC
 must be reachable from the chain host only; public RPC goes to a follower behind the rate-limited proxy
-(`config.follower.json`, `nginx-rpc.conf`; the copy publishes it on `127.0.0.1:18545`), whose exit stops only that
-follower. **On the SCaaS testnet** the live `docker-compose.yml` (read 2026-10-19) publishes `8545:8545` and `8546:8546` on every
+(`config.follower.json`, `nginx-rpc.conf`; the copy publishes it on `127.0.0.1:18545`; P6f-era configs), whose exit
+stops only that follower. The live configs since the node split are in `scaas-testnet/`. **On the SCaaS testnet** the live `docker-compose.yml` (read 2026-10-19) publishes `8545:8545` and `8546:8546` on every
 host interface; **accepted for the testnet (owner 2026-10-19)**: no firewall or binding change. The rule above binds
 mainnet 22776. Since the node split (2026-10-31) 7622 follows it too: the sealer serves no RPC beyond its container
 loopback, and the public endpoints are on `rpc`. A start-up refusal
@@ -317,11 +322,13 @@ use an image built by `build-image.sh` from the reviewed commit.
 
 ### Owner steps outside this runbook
 
-- The follower node and the rate-limited public RPC that the rule above asks for on mainnet 22776 (not needed on the
-  SCaaS testnet, owner 2026-10-19). The copy's `docker-compose.copy.yml`, `config.follower.json` and `nginx-rpc.conf`
-  are the rehearsed configs.
-- A restart policy for the node (the live `docker-compose.yml` has none: after a host restart the node stays stopped
-  until someone runs `docker compose up -d blockchain-node`).
+- The follower node and public RPC: **done on the SCaaS testnet** by the node split of 2026-10-31 (§ Node split). The
+  reference configs for mainnet 22776 are the live ones copied into `scaas-testnet/` (`config.json` = the sealer,
+  `config.rpc.json`, `docker-compose.yml`; the calls filter is `jsonrpc.filter` here; secrets stay in the stack: `.env`,
+  `password.txt`, `keystore/`, `rpc-node.key`). Still a 22776 item: the TLS reverse proxy with rate limits in front of
+  `rpc`. The copy's `docker-compose.copy.yml`, `config.signer.json`, `config.follower.json` and `nginx-rpc.conf` are P6f
+  history (the rehearsal configs).
+- Restart policy: **done**, `restart: unless-stopped` on every service (owner ruling 2026-10-31, above).
 - When to delete the backups left in the live directory: `genesis.json.bak-pre-200m-20261022`,
   `data/nethermind_data.pre-200m-20261022`, `genesis.json.bak-pqz4-20261026`, `docker-compose.yml.bak-pqz4-20261026`
   (listed 2026-10-26; the dated `pqz-<TS>` / `op7-<TS>` directories of `/home/dockers/mba-chain-nethermind-backups/`
@@ -616,9 +623,11 @@ stays in `rpc`'s pool: the first PQZ e2e after the split stopped at a `mtxRollOv
 after a fresh session did not mine; a sealer-side reconnect (`admin_removePeer` / `admin_addPeer`) brought the mode back
 to `WaitingForBlock` and the stuck transfer mined at once. With the flag the sealer takes them in every mode (the
 sealer is the chain tip; "not synced" never applies to it). Keep it on any sole-signer sealer behind a sentry.
+
 **No native leak in the PQZ library (2026-10-31):** 20-min harness runs against the live image's `libpqz_ffi.so`
-kept anon memory flat or falling (< ≈ 45 B per honest verify); the sealer's 617 → 700 MiB plateau under the PQZ e2e
+kept anon memory flat or falling (< ≈ 50 B per honest verify); the sealer's 617 → 700 MiB plateau under the PQZ e2e
 reads as .NET heap warm-up. Log `../runs/2026-10-31-leak-harness.txt`, scripts `../leak/`.
+
 **`TxPool.MaxTxSize` 2 MiB = 2,097,152 on both nodes (owner ruling 2026-10-31; the default is 131,072 B, the split
 started with the old 1 MiB).** Reason: it matches `MaxRequestBodySize` 4 MiB, since `eth_sendRawTransaction` carries the
 transaction as hex (twice its size), so about 2 MiB is the largest raw transaction the RPC can take at all. It is
@@ -627,11 +636,13 @@ admission, so 2 MiB is harmless. The largest PQZ e2e transaction is 107,268 B of
 the default would accept); the 544 KB PQZH M = 16 auditor-on proof is a bench shape only (no gas row, the Rust core
 refuses the shape), not a transaction anyone sends. Checked 2026-10-31 after recreating sealer then rpc: a raw
 transaction of 2,097,263 B (request body 4,194,6xx B) → HTTP 413 `-32005 Request body too large. The max request body
-size is 4194304 bytes.`, so the body limit refuses it before the pool sees it. **The size limit is not what bounds a
-transaction on the SCaaS testnet: the regular-gas cap is** ([CTR-PQZ-06](../../../docs/contracts/pq-zero-knowledge.md#CTR-PQZ-06),
-[CTR-PQZ-11](../../../docs/contracts/pq-zero-knowledge.md#CTR-PQZ-11)). On Amsterdam (EIP-8037 on from timestamp 1)
+size is 4194304 bytes.`, so the body limit refuses it before the pool sees it.
+
+**The size limit is not what bounds a
+transaction on the SCaaS testnet: the regular-gas cap is** ([CTR-PQZ-11](../../../docs/contracts/pq-zero-knowledge.md#CTR-PQZ-11);
+decisions CTR-PQZ-06 Change 2026-10-21, the Amsterdam re-plan). On Amsterdam (EIP-8037 on from timestamp 1)
 Nethermind 2.2.0 caps a transaction's **regular gas** (intrinsic, the EIP-7976 calldata floor 15,000 + 64 per byte,
-execution) at 2^24 = 16,777,216; the **gasLimit** may go up to 2^32 − 1, and gas above 2^24 can pay only state gas
+execution) at 2^24 = 16,777,216; the **gasLimit** may go up to 2^32 − 1 within the block gas limit (200 M on the SCaaS testnet), and gas above 2^24 can pay only state gas
 (that is why `mtxPrepareAcc` with gasUsed 23.15 M and the 96.5 M release deploy mine). Hence at most
 (16,777,216 − 15,000) / 64 = 261,909 B of calldata per transaction: a 1.5 MiB calldata transaction is refused whatever
 its gas limit, `-32000 intrinsic gas too low: Intrinsic gas (execution 25180824, floor 100678296) exceeded cap of
@@ -664,11 +675,13 @@ config files; `admin_nodeInfo` on either sidecar prints them.
   # the same with --network container:mba_chain_rpc for the public node (admin_peers, admin_addPeer, txpool_*, trace_*)
   ```
 - **Start / stop order.** Start: `docker compose up -d sealer`, then `docker compose up -d rpc`, then Blockscout
-  (`docker compose up -d explorer-db explorer-backend explorer-frontend`). Stop in reverse:
-  `docker compose stop explorer-frontend explorer-backend explorer-db rpc sealer`. No restart policy on any of them
-  (owner step). `rpc` may restart on its own at any time (public RPC down meanwhile, blocks keep coming); a `sealer`
+  (`docker compose up -d sc-verifier explorer-db explorer-backend explorer-frontend`). Stop in reverse:
+  `docker compose stop explorer-frontend explorer-backend explorer-db sc-verifier rpc sealer`. Every service runs
+  `restart: unless-stopped` (owner ruling 2026-10-31, § PQZ node above); after a host reboot Docker starts them all at
+  once, so this order is not enforced. `rpc` may restart on its own at any time (public RPC down meanwhile, blocks keep coming); a `sealer`
   restart pauses blocks for about 10 s (measured 9–12 s).
-- **Health:** `eth_blockNumber` equal on both sidecars and on `http://192.168.1.72:8545`, advancing every 5 s;
+- **Health:** `RestartCount` 0 on every container (`chain/watch.sh` prints `restarts=`; a rising count is a crash
+  loop); `eth_blockNumber` equal on both sidecars and on `http://192.168.1.72:8545`, advancing every 5 s;
   `admin_peers` on each shows the other; `PQZ-START` in both logs (`docker logs mba_chain_sealer`, `mba_chain_rpc`); a transfer through 8545 mines within two
   blocks. The sealer's `debug_getSyncStage` reads `Disconnected` (log "Waiting for peers…") from about 10 minutes after
   each session start: expected, harmless with `AcceptTxWhenNotSynced` (checked 15 min after a restart: transfers mined).
@@ -734,7 +747,7 @@ config files; `admin_nodeInfo` on either sidecar prints them.
 
 Services `explorer-db` (postgres:18, `mem_limit` 1g, `cpus` 1.0), `explorer-backend` (`ghcr.io/blockscout/blockscout:9.0.2`,
 2g, 1.5), `explorer-frontend` (`ghcr.io/blockscout/frontend@sha256:4b69f44148414b55c6b8550bc3270c63c9f99e923d54ef0b307e762af6bac90a`,
-v2.3.5, 512m, 0.5); no restart policy; UI `http://192.168.1.72:8558` (owner 2026-10-31: not 3000; compose `8558:3000`,
+v2.3.5, 512m, 0.5); `restart: unless-stopped` (owner ruling 2026-10-31: a crashed backend had stayed down); UI `http://192.168.1.72:8558` (owner 2026-10-31: not 3000; compose `8558:3000`,
 `NEXT_PUBLIC_APP_PORT` 8558, the container listens on `PORT` 3000), API and WebSocket `http://192.168.1.72:4000` (the
 browser calls it directly; CORS `*`, `CHECK_ORIGIN` off). Host ports published by Blockscout: 8558 and 4000. The
 backend reads `rpc` over `http://rpc:8547` (before the split: the single node, `http://blockchain-node:8547`).
@@ -789,7 +802,7 @@ docker compose stop explorer-frontend explorer-backend explorer-db       # stop 
 Service `sc-verifier` (container `mba_sc_verifier`, image `scaas/sc-verifier:v1.11.1-amsterdam1`: a locally patched
 build of upstream v1.11.1, see below; upstream was
 `ghcr.io/blockscout/smart-contract-verifier:v1.11.1@sha256:a7580f42b55c0aafad43a2acd979b60adddc1e9985a8cf01857179962f0fe063`;
-512m, 1 CPU): HTTP 8050 on `mba-net` only (no published port, gRPC off), Solidity only (Vyper, Sourcify, zkSync off),
+768m since 2026-10-31 (512m before: the patched 31-contract run hit the 512 MiB `memory.peak`), 1 CPU): HTTP 8050 on `mba-net` only (no published port, gRPC off), Solidity only (Vyper, Sourcify, zkSync off),
 solc from `binaries.soliditylang.org` (the only outbound traffic; Blockscout's hosted eth-bytecode-db is not used),
 compilers run natively in the container (`SMART_CONTRACT_VERIFIER__COMPILERS__EXECUTION__TYPE=native`: the docker
 executor would need the host Docker socket inside it), at most 2 compiler threads. The backend uses it through
@@ -818,8 +831,8 @@ placeholders, a full match), forge under `scripts/capped`; skips verified addres
 exit 1 on any fail. It looks each address up first: Blockscout learns the code of a CREATE2 or factory child only on
 demand (internal transactions are off). API rate limit: the backend runs with `API_RATE_LIMIT_DISABLED: "true"`
 (2026-10-31: Blockscout's default per-IP limit, 500 `/api/v2` calls per 15 min, answered 429 to every caller, the UI
-included, during a verify run); the script stays gentle anyway (one address call per check, curl retries a 429 with a
-back-off, a pause between contracts, forge status polls every 10 s).
+included, during a verify run); the script stays gentle anyway (one address call per check, curl retries a 429 up to six
+times with a fixed 15 s delay, a pause between contracts, forge status polls every 10 s).
 
 - **Patched verifier (owner ruling 2026-10-31 option (a)), temporary until upstream supports Amsterdam.** Every
   contract here is compiled with `evmVersion` `amsterdam` + `experimental` (NET-EVM-06; solc 0.8.37). Upstream v1.11.1
@@ -837,5 +850,6 @@ back-off, a pause between contracts, forge status polls every 10 s).
 - **Measured (2026-10-31, `docker stats`, cgroup):** idle 0.02–0.03 % / 4.5 MiB. Patched image, the 31-contract run
   (about 3 min): up to 100.6 % (its 1-CPU cap) and 402 MiB; cgroup `memory.peak` reached the 512 MiB cap with page
   cache reclaimed (`memory.events` max 3, oom_kill 0); 351 MiB held afterwards. Upstream image before (all refused at
-  parse): ≤ 0.4 % / 6.8 MiB; one NormalToken compile peaked at 364 MiB. Run the script sequentially (as it does)
-  under the 512m cap.
+  parse): ≤ 0.4 % / 6.8 MiB; one NormalToken compile peaked at 364 MiB. The cap was then raised to 768m (stack
+  config, 2026-10-31); later runs sit at the 768 MiB cap with no OOM kill; owner: no further raise (verification is
+  occasional). Run the script sequentially (as it does).

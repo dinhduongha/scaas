@@ -167,7 +167,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      contracts/README, settlement, metatx, architecture, RUNBOOK); history / plans / reviews stay. The future mainnet
      is `scaas-mainnet`. After `fs3-t13-rollout` merges (it edits the RUNBOOK, `chain-uids.json`, `node.example.toml`);
      gates: forge with the renamed profile, node e2e, docs_check.
-  5. **Done 2026-10-31 (branch `fs3-t13-rollout`, not merged):** 7622 reset onto `2.2.0-pqz6` with the calibrated rows (option (b)),
+  5. **Done 2026-10-31 (branch `fs3-t13-rollout`):** 7622 reset onto `2.2.0-pqz6` with the calibrated rows (option (b)),
      the CREATE2 deployer in the genesis alloc, EIP-7702 off (type-4 refused), contracts redeployed (`Deploy.s.sol` + PQZ e2e
      full / `--split`, 0 failures), the node hardened (NET-EVM-08), Blockscout on (NET-EVM-09). Left: the option (c)
      re-calibration on a quiet host (compare with (b); chainspec only if it differs materially); 22776: TLS reverse proxy
@@ -421,8 +421,9 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   review — after the token-family rename (owner 2026-10-19).
 - [ ] **P6c owner step:** audit the PQ verifiers and the expanded-key cache (labelled unaudited; not a deploy gate, owner
   2026-10-31).
-- [ ] **P6f follow-ups (owner):** follower + public RPC, restart policy (the SCaaS testnet node has none), deleting backups; the
-  hourly `watch.sh` check is manual. (P6f done and live on the SCaaS testnet since 2026-10-16.)
+- [ ] **P6f follow-ups (owner):** deleting backups; the hourly `watch.sh` check is manual. Done on the SCaaS testnet
+  2026-10-31 (branch `fs3-t13-rollout`): follower + public RPC (node split, NET-EVM-10) and the restart policy
+  (`unless-stopped` on every service, owner ruling). (P6f done and live on the SCaaS testnet since 2026-10-16.)
 - [ ] **P6-PUB drafts** (owner 2026-10-14, session 4): after P6, the live precompiles and P6-ANON, the controller drafts
   the ePrint paper (LaTeX, citing the frozen package) and the ethresear.ch post (Markdown, results-first), kept private
   in `scratchpad/pub/` until the owner posts; the results mail to the LaZer maintainers

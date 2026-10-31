@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Verify every contract of one Deploy.s.sol broadcast and of the PQZ e2e runs on Blockscout (owner 2026-10-31, SCaaS
 # testnet 7622).
-# usage: verify-blockscout.sh [broadcast/Deploy.s.sol/<chainid>/run-latest.json [e2e-run-log ...]]
+# usage: verify-blockscout.sh [broadcast/Deploy.s.sol/<chainid>/run-latest.json [e2e-run-log ...]]  (paths relative to smartcontracts/evm)
 #   env BLOCKSCOUT_API (default http://192.168.1.72:4000/api), RPC (default http://192.168.1.72:8545),
 #   FOUNDRY_PROFILE (default private7622)
 # Run after every 7622 reset or deploy. Broadcast: the CREATE / CREATE2 rows and the contracts they create
@@ -27,6 +27,7 @@ set -uo pipefail
 case "${1:-}" in -h|--help) sed -n '2,6p' "${BASH_SOURCE[0]}"; exit 0;; esac
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 B="${1:-broadcast/Deploy.s.sol/7622/run-latest.json}"
+[ -f "$B" ] || { echo "no broadcast $B" >&2; exit 2; }
 API="${BLOCKSCOUT_API:-http://192.168.1.72:4000/api}"
 RPC="${RPC:-http://192.168.1.72:8545}"
 export FOUNDRY_PROFILE="${FOUNDRY_PROFILE:-private7622}"
@@ -117,6 +118,7 @@ for log in "${logs[@]}"; do
                 $0 ~ /^      [A-Za-z0-9_]+ (release )?at 0x[0-9a-fA-F]{40}/ { print $1, ($2 == "release" ? "release" : "-"), ($2 == "release" ? $4 : $3), tx }' "$log")
 done
 
+[ ${#table[@]} -gt 0 ] || { echo "nothing to verify: empty result table (chain $CHAIN)" >&2; exit 1; }
 printf '%s\n' "${table[@]}"
 echo "$(( ${#table[@]} - fails )) ok, $fails fail (chain $CHAIN, $API)"
 [ "$fails" -eq 0 ]

@@ -296,8 +296,9 @@ network only (`Eth`, `Net`, `Web3`, `TxPool`, for the explorer; not the `scaas-n
 TLS reverse proxy with rate limits and keeps the sealer key out of the RPC node.
 
 <a id="NET-EVM-09"></a>**NET-EVM-09** — **Blockscout runs on the SCaaS testnet, lean and capped** (owner ruling
-2026-10-31): `explorer-db` 1 GiB / 1 CPU, `explorer-backend` 2 GiB / 1.5 CPU, `explorer-frontend` 512 MiB / 0.5 CPU, no
-restart policy, started by hand after the node; it reads the node over the Docker-network endpoint only; internal
+2026-10-31): `explorer-db` 1 GiB / 1 CPU, `explorer-backend` 2 GiB / 1.5 CPU, `explorer-frontend` 512 MiB / 0.5 CPU,
+`restart: unless-stopped` like every service of the stack (owner ruling 2026-10-31, [NET-EVM-10](#NET-EVM-10)), started
+after the node; it reads the node over the Docker-network endpoint only; internal
 transactions, block rewards, token-instance metadata and market data are off; pending transactions and address coin
 balances are on (owner 2026-10-31: with the coin-balance fetcher disabled, Blockscout 9.0.2's live import crashes
 after every block and the home-page block list stops; on the pruned node its catch-up retried old-block balances
@@ -306,7 +307,7 @@ rerun after an outage longer than the pruning window; archive mode at the sealer
 the UI is published on host port 8558 (owner 2026-10-31: not 3000) and the API on 4000; the frontend image is pinned
 by digest; one-line stop in the RUNBOOK. Since the node split ([NET-EVM-10](#NET-EVM-10)) it reads the archive `rpc`
 node, and neither the code backfill nor the coin-balance cleanup is needed. Contract verification (owner ruling 2026-10-31): a local
-`smart-contract-verifier` (v1.11.1, 512 MiB / 1 CPU, `mba-net` only, Solidity only, solc from
+`smart-contract-verifier` (v1.11.1, 768 MiB since 2026-10-31: the patched 31-contract run hit 512 MiB; 1 CPU, `mba-net` only, Solidity only, solc from
 binaries.soliditylang.org, never Blockscout's hosted service) backs the backend, and
 `smartcontracts/evm/script/verify-blockscout.sh` verifies every `Deploy.s.sol` contract after each reset or deploy;
 upstream v1.11.1 rejects `evmVersion` `amsterdam` (NET-EVM-06), so the live stack uses a locally patched verifier
@@ -326,12 +327,15 @@ drops every transaction gossiped by `rpc` while blocks keep flowing. Both nodes 
 ruling 2026-10-31: it matches the 4 MiB `MaxRequestBodySize`, which carries at most a 2 MiB raw transaction as hex);
 it is harmless headroom, not a calldata enabler: on Amsterdam Nethermind 2.2.0 caps a transaction's regular gas
 (intrinsic, the EIP-7976 calldata floor 15,000 + 64 per byte, execution) at 2^24, while its gasLimit may reach 2^32 − 1
-and gas above 2^24 pays only state gas, so the floor refuses more than 261,909 B of calldata at pool admission
-([CTR-PQZ-06](../contracts/pq-zero-knowledge.md#CTR-PQZ-06), [CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11));
+within the block gas limit (200 M here) and gas above 2^24 pays only state gas, so the floor refuses more than 261,909 B of calldata at pool admission
+([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11); decisions CTR-PQZ-06 Change 2026-10-21, the Amsterdam re-plan);
 the largest PQZ e2e transaction is 107,268 B. Why: the key
 leaves the process that answers RPC; peers and callers that misbehave reach only `rpc`; Blockscout gets the old-block
 state a pruned node lacks. Topology, enodes, start / stop order and recovery: [RUNBOOK](../../pqz-core/nethermind/chain/RUNBOOK.md)
-§ Node split. Mainnet 22776: the same topology is proposed; the owner decides at launch.
+§ Node split. Every service runs `restart: unless-stopped` (owner ruling 2026-10-31): Docker restarts a node after a
+`PQZ-NODE-FAULT` exit 120; a fault caused by a pooled transaction can loop on the sealer (`rpc` gossips it again), so
+`watch.sh` reports `RestartCount`; after a reboot Docker starts every service at once. Live configs (no secrets):
+`pqz-core/nethermind/chain/scaas-testnet/`. Mainnet 22776: the same topology is proposed; the owner decides at launch.
 
 ## 6. Limitations
 

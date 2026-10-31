@@ -16,6 +16,8 @@ except Exception as e:
     print(f"head: no answer from the RPC ({e})")
 ' "$H"
 echo "container $C: $(docker inspect -f '{{.State.Status}} exit={{.State.ExitCode}} started={{.State.StartedAt}} restarts={{.RestartCount}}' "$C" 2>&1)"
+R=$(docker inspect -f '{{.RestartCount}}' "$C" 2>/dev/null)
+[ "${R:-0}" -gt 0 ] && echo "WARN $C restarted $R times (restart: unless-stopped): check for a crash loop"
 L=$(docker logs --since "$S" "$C" 2>&1)
 for t in PQZ-START PQZ-INPUT-PANIC PQZ-NODE-FAULT PQZ-REFUSE; do
   echo "$t since $S: $(printf '%s\n' "$L" | grep -c "$t")"
