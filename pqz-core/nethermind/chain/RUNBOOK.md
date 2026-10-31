@@ -645,10 +645,22 @@ docker compose stop explorer-frontend explorer-backend explorer-db       # stop 
 ```
 
 - **Lean env** (names checked against 9.0.2's `runtime.exs` / `prod.exs` / `apps/indexer/config/prod/nethermind.exs`):
-  off — internal transactions, block rewards, coin balances, token instances (realtime, retry, sanitize, refetch, ERC-721 /
+  off — internal transactions, block rewards, token instances (realtime, retry, sanitize, refetch, ERC-721 /
   1155 sanitize), cataloged token updater, beacon blobs, market / exchange rates; on — blocks, receipts, logs, token
-  transfers, token balances, pending transactions (`ETHEREUM_JSONRPC_PENDING_TRANSACTIONS_TYPE=geth`: `txpool_content`);
+  transfers, token balances, address coin balances, pending transactions (`ETHEREUM_JSONRPC_PENDING_TRANSACTIONS_TYPE=geth`: `txpool_content`);
   `POOL_SIZE` 10, `POOL_SIZE_API` 5, catch-up concurrency 2, receipts 2 × 50, token concurrency 2; `FIRST_BLOCK` 1.
+- **Coin balance fetcher on (owner 2026-10-31).** With `INDEXER_DISABLE_ADDRESS_COIN_BALANCE_FETCHER=true`, 9.0.2 does
+  not start `CoinBalance.Realtime` but its realtime block fetcher still calls it: every realtime import crashed after the
+  insert (`GenServer.call(Indexer.Fetcher.CoinBalance.Realtime …) no process`, 511 times in 3 h) and the home-page block
+  list (`/api/v2/main-page/blocks`) stopped updating while the DB kept indexing. Since the env line was removed (backup
+  `docker-compose.yml.bak-pre-coinbal-20261031-0818`, backend recreated): 0 crashes, the home list follows the DB tip
+  (≤ 1 block behind over 5 min), address pages show balances. **Measured cost (open):** before, backend 1.7 % median
+  (max 3.4) / 306 MiB, db 1.0 % (max 8.7) / 118 MiB; after, backend 149 % median (peak 155 %, its 1.5-CPU cap) /
+  347–362 MiB, db 1.0 % (peak 13.4) / 119–123 MiB, node about 60 % (was 1.5–3 %). Cause: the coin-balance catch-up
+  fetcher retries forever the 1,734 balances recorded at old blocks (block 1 … tip − 64) that the pruned node cannot
+  serve (`-32002 No state available`, about 10,900 failed lookups per 2 min, 1,349 distinct address@block). A cap
+  (`INDEXER_COIN_BALANCES_CONCURRENCY` / `INDEXER_COIN_BALANCES_BATCH_SIZE`) only slows the loop; the fix is pending
+  an owner ruling (see the phase C fix report).
 - **Pruned node.** The node keeps no old state (`Pruning.Mode` Hybrid: `eth_getBalance` / `eth_getCode` at an old block →
   `-32002 No state available`). Blockscout's ContractCode fetcher asks the code at the creation block, so for a
   contract created more than about 64 blocks before Blockscout sees it, it retries forever (one core; 7.0.2 also loops on

@@ -1461,3 +1461,33 @@ Indexer.Fetcher.CoinBalance.Realtime, {:buffer, …}) ** (EXIT) no process (fetc
 block fetcher still calls it; the steps after it (cache update / broadcast) are skipped, so only catch-up-imported blocks
 reach the main-page cache. Also seen: trace_block / trace_replayTransaction calls on 8547 (-32600 Trace disabled) and a
 MissingRangesManipulator crash on "No state available for block 375" (00:59:45Z). Left for an owner ruling.
+
+== R3 2026-10-31T01:18Z owner ruling: address coin balance fetcher ON (fixes R2)
+backup docker-compose.yml.bak-pre-coinbal-20261031-0818; removed INDEXER_DISABLE_ADDRESS_COIN_BALANCE_FETCHER: "true"; docker compose up -d --no-deps explorer-backend (started 01:21:13Z)
+-- before (01:19–01:21Z, 60 samples each, docker stats --no-stream):
+mba_explorer_backend cpu median 1.7 % max 3.4 %, mem 306 MiB; mba_explorer_db cpu median 1.0 % max 8.7 %, mem 118–119 MiB
+state 01:21:06Z: CoinBalance.Realtime crashes in the last 10 min 120; main-page head 1258, DB max 1381
+-- after (01:21:23–01:26:24Z, 150 samples each):
+mba_explorer_backend peak cpu 154.9 % mem 362 MiB; 2nd half cpu median 149.4 % max 154.4 %, mem median 347 MiB
+mba_explorer_db peak cpu 13.4 % mem 123 MiB; 2nd half cpu median 1.0 %, mem median 119 MiB
+mba_chain_node_nethermind 01:26:33Z: 61.8 % / 472 MiB (was 1.5–3 %)
+-- head tracking (node / DB / main-page; crash = CoinBalance.Realtime lines since the restart):
+01:21:43 node 1388 db 1388 main-page 1388 crash 0
+01:22:03 node 1392 db 1392 main-page 1392 crash 0
+01:22:23 node 1396 db 1396 main-page 1396 crash 0
+01:22:44 node 1400 db 1400 main-page 1400 crash 0
+01:23:04 node 1405 db 1404 main-page 1404 crash 0
+01:23:24 node 1409 db 1408 main-page 1408 crash 0
+01:23:44 node 1413 db 1412 main-page 1412 crash 0
+01:24:04 node 1417 db 1416 main-page 1416 crash 0
+01:24:24 node 1421 db 1420 main-page 1420 crash 0
+01:24:44 node 1425 db 1424 main-page 1424 crash 0
+01:25:04 node 1429 db 1429 main-page 1429 crash 0
+01:25:24 node 1433 db 1433 main-page 1433 crash 0
+01:25:44 node 1437 db 1437 main-page 1437 crash 0
+01:26:04 node 1441 db 1441 main-page 1441 crash 0
+01:26:24 node 1445 db 1445 main-page 1445 crash 0
+-- backend log 01:24:33–01:26:33Z: 10,946 lines, 10,927 = error coin_balance_catchup 'failed to fetch: <addr>@<block>: (-32002) No state available'
+   1,349 distinct address@block; address_coin_balances unfetched 1,734 (block 1 … tip-64: 1,734 all below the pruning window); retried forever
+-- balances: /api/v2/addresses/0x1efF47bc…A718 coin_balance 4999999999999047705783999978991 (= cast balance), block 1267; UI :8558/address/… 200
+open: CPU cost; a INDEXER_COIN_BALANCES_CONCURRENCY / _BATCH_SIZE cap only slows the loop (not applied, owner to rule)
