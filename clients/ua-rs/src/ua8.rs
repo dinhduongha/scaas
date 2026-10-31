@@ -228,6 +228,24 @@ pub fn personal_sign_digest(digest: &[u8; 32]) -> [u8; 32] {
     keccak(&[b"\x19Ethereum Signed Message:\n32", digest])
 }
 
+/// The minimal form of a stored `msig` signature (`pop` v2, KEM record, PQZ key record; owner 2026-10-31): with T = the
+/// signing slots' total weight and N the threshold, T >= N and T - weight(i) < N for every slot (each slot necessary), i.e.
+/// T - min(weight) < N. `indexes`: the `MemberSig` indexes; a set that is not strictly increasing within the members is
+/// not minimal (`Ok(false)`). Malformed key data is `UAKeyData`. Same rule as clientkeys `msigSlotsMinimal`.
+pub fn msig_slots_minimal(key_data: &[u8], indexes: &[u16]) -> Result<bool> {
+    let u16_at = |o: usize| key_data.get(o..o + 2).map(|s| u16::from_be_bytes([s[0], s[1]]) as u32);
+    let count = u16_at(2).ok_or(UAError::KeyData("length"))? as usize;
+    if key_data.len() != 4 + 36 * count {
+        return Err(UAError::KeyData("length"));
+    }
+    if !indexes.windows(2).all(|w| w[0] < w[1]) || indexes.iter().any(|&i| i as usize >= count) {
+        return Ok(false);
+    }
+    let weights: Vec<u32> = indexes.iter().filter_map(|&i| u16_at(4 + 36 * i as usize + 34)).collect();
+    let (total, n) = (weights.iter().sum::<u32>(), u16_at(0).unwrap_or(0));
+    Ok(total >= n && weights.iter().min().is_none_or(|m| total - m < n))
+}
+
 /// The portable purposes (POP_V2, KEM, PQZ_KEY): the only ones a code-less or EIP-7702-designator native msig member signs by `personal_sign`.
 pub fn is_portable_purpose(tag: &[u8; 32]) -> bool {
     [pop_v2_tag(), purpose_tag("kem").expect("kem"), purpose_tag("pqz-key").expect("pqz-key")].contains(tag)

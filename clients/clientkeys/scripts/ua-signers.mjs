@@ -124,6 +124,14 @@ export function encodeMemberSigs(list) {
   for (const t of tuples) { offsets.push(word(o)); o += t.length; }
   return concatBytes(word(32), word(list.length), ...offsets, ...tuples);
 }
+/** `encodeMemberSigs` for a portable purpose (`pop` v2, KEM record, PQZ key record) of the msig `keyData`: only a minimal
+ *  slot set (`ua.msigSlotsMinimal`, owner 2026-10-31), else `UAError('UAPoP')` — the registry's verdict. */
+export function portableMemberSigs(keyData, list) {
+  if (!ua.msigSlotsMinimal(keyData, list.map((s) => s.index))) {
+    throw new ua.UAError('UAPoP', `msig slots ${list.map((s) => s.index)} not minimal`);
+  }
+  return encodeMemberSigs(list);
+}
 export const PQ_MNEMONIC = 'bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author '
   + 'capable act festival slice deposit sauce coconut afford frown better'; // pq_kat.json's
 export const pqSeedBytes = seedFromWords(PQ_MNEMONIC);

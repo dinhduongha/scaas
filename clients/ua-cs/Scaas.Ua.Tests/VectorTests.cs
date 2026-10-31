@@ -342,6 +342,8 @@ public class VectorTests
         int run = 0, sigLevel = 0;
         foreach (var n in p.GetProperty("negatives").EnumerateArray())
         {
+            if (n.TryGetProperty("rule", out var rule) && rule.GetString() == "msig-minimal")
+                continue; // a registry rule over a full registration (msig minimal form), not a digest-layer row
             var entry = n.GetProperty("entry").GetString();
             var name = n.GetProperty("name").GetString();
             var m = n.GetProperty("mutation");

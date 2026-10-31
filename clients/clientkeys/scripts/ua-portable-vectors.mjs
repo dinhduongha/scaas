@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { hex, fromHex as B, keccak_256, utf8ToBytes, abiEncode, concatBytes } from '../src/bytes.js';
 import * as ua from '../src/ua.js';
 import { PQ_KINDS } from '../src/pq.js';
-import { SCHEMES, schemeSecret, ecdsa, nativeSk, nativeUa, encodeMemberSigs, pqKey, pqSignMsg, PQZ_SETS, pqzKeyOf, pqzPopOf,
+import { SCHEMES, schemeSecret, ecdsa, nativeSk, nativeUa, encodeMemberSigs, portableMemberSigs, pqKey, pqSignMsg, PQZ_SETS, pqzKeyOf, pqzPopOf,
   kemPublicKey } from './ua-signers.mjs';
 
 const OUT = fileURLToPath(new URL('../../../smartcontracts/vectors/ua/', import.meta.url));
@@ -40,16 +40,18 @@ const pq = (name, index = 0) => {
 };
 const native = { kind: 0x0001, ua: nativeUa };
 
-/** An msig over `members` ({ kind, ua, sign? } with a weight): sorted by id; `sign(md, indices)` = abi.encode(MemberSig[]),
+/** An msig over `members` ({ kind, ua, sign? } with a weight): sorted by id; `signMembers(md, indices)` = abi.encode(MemberSig[]),
  *  derived members over uaMessage(kind, member, md) with empty key data (stored kinds), a native member by EIP-191
- *  personal_sign of md (ruling C7: chain-free, no UAAuth domain). */
+ *  personal_sign of md (ruling C7: chain-free, no UAAuth domain); only a minimal slot set (owner 2026-10-31: every signature
+ *  this file stores is a portable one). `signRaw`: any set, for the negative only. */
 function msig(name, threshold, members) {
   const ms = members.map(([m, weight]) => ({ ...m, weight }))
     .sort((a, b) => (hex(a.ua) < hex(b.ua) ? -1 : 1)).map((m, index) => ({ ...m, index }));
   const keyData = ua.encodeMsig(threshold, ms.map((m) => ({ kind: m.kind, id: m.ua, weight: m.weight })));
-  const sign = (md, indices, nativeDigest = ua.personalSignDigest) => encodeMemberSigs(indices.map((i) => ({ index: i, keyData: NONE,
-    sig: ua.isNativeKind(ms[i].kind) ? ecdsa(nativeSk, nativeDigest(md)) : ms[i].sign(ua.uaMessage(ms[i].kind, MEMBER, md)) })));
-  return { ...signer(name, 0x0120, keyData, null), threshold, members: ms, signMembers: sign };
+  const list = (md, indices, nativeDigest = ua.personalSignDigest) => indices.map((i) => ({ index: i, keyData: NONE,
+    sig: ua.isNativeKind(ms[i].kind) ? ecdsa(nativeSk, nativeDigest(md)) : ms[i].sign(ua.uaMessage(ms[i].kind, MEMBER, md)) }));
+  return { ...signer(name, 0x0120, keyData, null), threshold, members: ms,
+    signMembers: (...a) => portableMemberSigs(keyData, list(...a)), signRaw: (...a) => encodeMemberSigs(list(...a)) };
 }
 
 const kemKeys = (base) => [1, 2, 3].map((v) => kemPublicKey(`${base} v${v}`));
@@ -66,7 +68,7 @@ const nativeMsig = msig('msig-pq-native', 2, [[native, 1], [ml1, 1]]);
 const KEM = { mldsa65: kemKeys('mldsa65'), fndsa512: kemKeys('fndsa512'), 'msig-pq': kemKeys('msig-pq') };
 
 /** One registration: the `register` arguments, every digest between them, and the signer's pop over the portable PoP. */
-function registration(s, { set = '', kem = false } = {}) {
+function registration(s, { set = '', kem = false, raw = false } = {}) {
   const pqzKey = set ? pqzKeyOf(set, PQZ_LABEL[s.name]) : NONE;
   const pqzPop = set ? pqzPopOf(set) : NONE;
   const kemVersion = kem ? 1 : 0;
@@ -74,7 +76,7 @@ function registration(s, { set = '', kem = false } = {}) {
   const m = ua.holderPopMessage(s.kind, { ua: s.ua, keyData: s.keyData, pqzKey, pqzPop, kemVersion, kemPk });
   const isMsig = s.kind === 0x0120;
   const popSigners = isMsig && ua.msigPqzEligible(s.keyData) ? s.members.map((x) => x.index).slice(0, 2) : [];
-  const pop = isMsig ? (popSigners.length ? s.signMembers(m.memberDigest, popSigners) : NONE) : s.sign(m.message, { pop: true });
+  const pop = isMsig ? (popSigners.length ? (raw ? s.signRaw : s.signMembers)(m.memberDigest, popSigners) : NONE) : s.sign(m.message, { pop: true });
   return {
     name: set ? `${s.name}/${set}` : s.name, kind: s.kind, kindName: ua.kindInfo(s.kind).name, set, keyData: hex(s.keyData),
     ua: hex(s.ua), attrs: { pqzKey: hex(pqzKey), pqzPopHash: hex(m.pqzPopHash), kemVersion, kemPk: hex(kemPk) },
@@ -188,6 +190,16 @@ const negatives = [
   neg('native-personal-sign-under-metatx', 'requireAuthorized', 'msig-pq-native', { purposeTag: hex(ua.purposeTag('metatx')),
     digest: hex(DIGEST), auth: hex(abiEncode(['bytes', 'bytes'], [nativeMsig.keyData, nativeMsig.signMembers(metatxMd, [0, 1])])) },
   'UAUnauthorized'),
+  // msig minimal form (owner 2026-10-31): not a mutation of a row; the full register arguments are in `registration`
+  { name: 'msig-pop-not-minimal', entry: 'register', rule: 'msig-minimal',
+    why: 'A stored msig signature (pop v2, KEM record, PQZ key record) is refused unless every slot is necessary: with T = '
+      + 'the slots\' total weight and N the threshold, T >= N and T - weight(i) < N for every slot (owner 2026-10-31). This '
+      + '2-of-(1, 2) msig over the registered mldsa65#1 and mldsa65#2 (the lower id weight 1) is signed by both slots: '
+      + 'every member signature verifies and the old rule accepts it (1, then 3 >= 2), but the weight-2 slot alone reaches '
+      + 'the threshold. Digest-only readers skip rule msig-minimal.',
+    registration: registration(msig('msig-pq-not-minimal', 2, [ml1, ml2].sort((a, b) => (hex(a.ua) < hex(b.ua) ? -1 : 1))
+      .map((m, i) => [m, i + 1])), { raw: true }),
+    error: 'UAPoP' },
 ];
 
 const tag = (t) => ({ tag: t, hash: hex(keccak_256(new TextEncoder().encode(t))) });

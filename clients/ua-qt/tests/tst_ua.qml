@@ -144,6 +144,7 @@ TestCase {
         // the portable.json negatives that are digest-layer rules (as ua-rs / ua-cs)
         let run = 0
         for (const n of pp.negatives) {
+            if (n.rule === "msig-minimal") continue // a registry rule over a full registration (msig minimal form)
             const m = n.mutation, set = m.set ?? {}
             const only = Object.keys(set).every(x => x.startsWith("attrs.") || x === "pqzPop")
             if ((n.entry === "register" || n.entry === "storePqzPop") && only) {

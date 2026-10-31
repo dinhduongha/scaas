@@ -346,6 +346,7 @@ void main() {
   test('holder refusals', () {
     var run = 0, sigLevel = 0;
     for (final n in rows(pv, 'negatives')) {
+      if (n['rule'] == 'msig-minimal') continue; // a registry rule over a full registration (msig minimal form)
       final entry = n['entry'], name = n['name'], err = n['error'];
       final m = n['mutation'] as Map, set = (m['set'] ?? <String, Object?>{}) as Map;
       if ((entry == 'register' || entry == 'storePqzPop') && set.keys.every((k) => (k as String).startsWith('attrs.') || k == 'pqzPop')) {

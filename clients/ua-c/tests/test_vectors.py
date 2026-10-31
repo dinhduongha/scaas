@@ -430,6 +430,8 @@ class Vectors(unittest.TestCase):
         regs = PV['registrations']
         run = sig_level = 0
         for n in PV['negatives']:
+            if n.get('rule') == 'msig-minimal':
+                continue  # a registry rule over a full registration (msig minimal form), not a digest-layer row
             m, err, s = n['mutation'], n['error'], n['mutation'].get('set', {})
             if n['entry'] in ('register', 'storePqzPop') and all(k.startswith('attrs.') or k == 'pqzPop' for k in s):
                 row = next(x for x in regs if x['name'] == m['row'])

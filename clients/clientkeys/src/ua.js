@@ -102,6 +102,25 @@ export function msigPqzEligible(keyData) {
   }
   return classical < u16(d, 0);
 }
+/** The minimal form of a stored `msig` signature (`pop` v2, KEM record, PQZ key record; owner 2026-10-31): with T = the
+ *  signing slots' total weight and N the threshold, T >= N and T − weight(i) < N for every slot (each slot necessary), i.e.
+ *  T − min(weight) < N. `indexes`: the MemberSig indexes; a set that is not strictly increasing within the members is not
+ *  minimal. Malformed key data is `UAKeyData`. */
+export function msigSlotsMinimal(keyData, indexes) {
+  const d = bytes(keyData);
+  need(d.length >= 4 && d.length === 4 + 36 * u16(d, 2), 'length');
+  let total = 0;
+  let min = Infinity;
+  let last = -1;
+  for (const i of indexes) {
+    if (!Number.isInteger(i) || i <= last || i >= u16(d, 2)) return false;
+    last = i;
+    const w = u16(d, 4 + 36 * i + 34);
+    total += w;
+    min = Math.min(min, w);
+  }
+  return total >= u16(d, 0) && total - min < u16(d, 0);
+}
 export const isMemberKind = (kind, hederaNative = false) =>
   singleSigning(kind) || kind === 0x0001 || kind === 0x0002 || (hederaNative && kind === 0x0003);
 

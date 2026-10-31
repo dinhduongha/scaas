@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import * as ua from '../src/ua.js';
 import { hex, keccak_256, utf8ToBytes, concatBytes, word } from '../src/bytes.js';
 import { portableJson } from '../scripts/ua-portable-vectors.mjs';
+import * as signers from '../scripts/ua-signers.mjs';
 import { B, nativeOk, bytesAt, sigOk, memberSigs, msigOk } from './ua-verify.js';
 
 import { dir } from './ua-vectors-dir.js';
@@ -180,6 +181,7 @@ test('holder refusals', () => {
     'UAPoP', 'UAPqzHolder', 'UAPqzKeySet', 'UAPqzPopHash', 'UAUnauthorized']);
   assert.deepEqual([...new Set(P.negatives.map((n) => n.entry))].sort(), ['register', 'requireAuthorized', 'setKemKey', 'setPqzKey', 'storePqzPop']);
   for (const n of P.negatives) {
+    if (n.rule === 'msig-minimal') continue; // a registry rule over a full registration, test 'portable.json msig rows are minimal'
     const set = n.mutation.set;
     if (n.entry === 'storePqzPop') {
       const r = row(n.mutation.row);
@@ -332,4 +334,64 @@ test('every portable pop verifies', () => {
       assert.ok(sigOk(k.kind, r.keyData, k.message, k.sig), `${k.name} v${k.version}`);
     }
   }
+});
+
+// msig minimal form (owner 2026-10-31; plan U8S-D1): a stored msig signature (pop v2, KEM record, PQZ key record) is accepted
+// only when every slot is necessary: T = the slots' total weight, N = the threshold, T >= N and T - weight(i) < N for each i.
+const msigKd = (t, ...weights) => ua.encodeMsig(t, weights.map((weight, i) => ({ kind: 0x0131, id: new Uint8Array(32).fill(0x10 + i), weight })));
+const isCode = (c) => (e) => e instanceof ua.UAError && e.code === c;
+
+test('msigSlotsMinimal: 2-of-(1,1) both slots minimal; 2-of-(1,2) both slots not; one slot of weight 2 minimal; below threshold not', () => {
+  assert.equal(ua.msigSlotsMinimal(msigKd(2, 1, 1), [0, 1]), true);
+  assert.equal(ua.msigSlotsMinimal(msigKd(2, 1, 2), [0, 1]), false);
+  assert.equal(ua.msigSlotsMinimal(msigKd(2, 1, 2), [1]), true);
+  assert.equal(ua.msigSlotsMinimal(msigKd(2, 1, 2), [0]), false);
+  assert.equal(ua.msigSlotsMinimal(msigKd(2, 1, 1), []), false);
+  assert.equal(ua.msigSlotsMinimal(msigKd(2, 1, 1, 1), [1, 2]), true);
+  assert.equal(ua.msigSlotsMinimal(msigKd(2, 1, 1, 1), [0, 1, 2]), false);
+  assert.equal(ua.msigSlotsMinimal(msigKd(3, 1, 1, 1, 2), [0, 3]), true); // 1 + 2: each necessary
+  assert.equal(ua.msigSlotsMinimal(msigKd(3, 1, 1, 1, 2), [0, 1, 3]), false); // 4 − 1 = 3 >= 3
+  // a set the registry refuses (unsorted, repeated, out of range) is not minimal; malformed key data is UAKeyData
+  for (const ix of [[1, 0], [0, 0], [0, 2]]) assert.equal(ua.msigSlotsMinimal(msigKd(2, 1, 1), ix), false, `${ix}`);
+  assert.equal(ua.msigSlotsMinimal(hex(msigKd(2, 1, 1)), [0, 1]), true, 'hex key data');
+  assert.throws(() => ua.msigSlotsMinimal(new Uint8Array(3), [0]), isCode('UAKeyData'));
+  assert.throws(() => ua.msigSlotsMinimal(msigKd(2, 1, 1).subarray(0, 40), [0]), isCode('UAKeyData'));
+});
+
+test('vector builders refuse a non-minimal portable set', () => {
+  const s = (index) => ({ index, keyData: new Uint8Array(0), sig: Uint8Array.of(index + 1) });
+  assert.throws(() => signers.portableMemberSigs(msigKd(2, 1, 2), [s(0), s(1)]), isCode('UAPoP'));
+  assert.deepEqual(signers.portableMemberSigs(msigKd(2, 1, 2), [s(1)]), signers.encodeMemberSigs([s(1)]));
+  assert.deepEqual(signers.portableMemberSigs(msigKd(2, 1, 1), [s(0), s(1)]), signers.encodeMemberSigs([s(0), s(1)]));
+});
+
+test('portable.json msig rows are minimal', () => {
+  const ix = (blob) => memberSigs(blob).map((s) => s.index);
+  let n = 0;
+  for (const r of P.registrations.filter((x) => x.kind === 0x0120 && x.pop !== '0x')) {
+    assert.ok(ua.msigSlotsMinimal(r.keyData, ix(r.pop)), r.name);
+    n++;
+  }
+  for (const k of [...P.kemRecords, ...P.pqzKeyRecords].filter((x) => x.kind === 0x0120)) {
+    assert.ok(ua.msigSlotsMinimal(regOf(k.ua).keyData, ix(k.sig)), k.id ?? k.name);
+    n++;
+  }
+  assert.equal(n, 12, '5 pops, 3 KEM records, 4 PQZ key records');
+  // the negative: 2-of-(1, 2) over the registered mldsa65#1 / #2 (lower id weight 1), both slots sign
+  const neg = P.negatives.find((x) => x.name === 'msig-pop-not-minimal') ?? assert.fail('no msig-pop-not-minimal');
+  assert.deepEqual([neg.entry, neg.rule, neg.error], ['register', 'msig-minimal', 'UAPoP']);
+  const r = neg.registration;
+  const [lo, hi] = [row('mldsa65#1'), row('mldsa65#2')].sort((a, b) => (a.ua < b.ua ? -1 : 1));
+  assert.deepEqual([r.kind, r.threshold, r.members.map((m) => [m.kind, m.id, m.weight])], [0x0120, 2, [[0x0131, lo.ua, 1], [0x0131, hi.ua, 2]]]);
+  assert.equal(r.ua, hex(ua.deriveUA(0x0120, B(r.keyData))));
+  assert.ok(ua.msigPqzEligible(B(r.keyData)));
+  assert.ok(!P.registrations.some((x) => x.ua === r.ua), 'not a registrations[] row');
+  assert.deepEqual([r.attrs.pqzKey, r.attrs.pqzPopHash, r.attrs.kemVersion, r.attrs.kemPk, r.pqzPop], ['0x', Z, 0, '0x', '0x']);
+  const m = ua.holderPopMessage(0x0120, args(r));
+  assert.deepEqual([m.portablePopDigest, m.registrationDigest, m.message, m.memberDigest].map(hex),
+    [r.portablePopDigest, r.registrationDigest, r.popMessage, r.memberDigest]);
+  assert.deepEqual([ix(r.pop), r.popSigners], [[0, 1], [0, 1]]);
+  assert.ok(msigOk(r, r.memberDigest, r.pop, keyOf), 'every member signature verifies; 1, then 3 >= 2 (the old rule)');
+  assert.equal(ua.msigSlotsMinimal(r.keyData, [0, 1]), false);
+  assert.equal(ua.msigSlotsMinimal(r.keyData, [1]), true, 'the weight-2 slot alone is the minimal set');
 });

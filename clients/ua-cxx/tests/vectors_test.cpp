@@ -340,6 +340,7 @@ static void holder_refusals() {
     auto& regs = p["registrations"];
     int run = 0, sigLevel = 0;
     for (auto& n : p["negatives"]) {
+        if (n.value("rule", "") == "msig-minimal") continue; // a registry rule over a full registration (msig minimal form)
         std::string entry = n["entry"].get<std::string>(), name = n["name"].get<std::string>(), err = n["error"].get<std::string>();
         auto& m = n["mutation"];
         json set = m.contains("set") ? m["set"] : json::object();

@@ -175,6 +175,9 @@ fn negatives_refused() {
     let p = load("portable.json");
     let (mut run, mut sig_level) = (0, 0);
     for n in arr(&p, "negatives") {
+        if n["rule"] == "msig-minimal" {
+            continue; // a registry rule over a full registration: portable_msig_rows_minimal
+        }
         let (name, entry, err) = (n["name"].as_str().unwrap(), n["entry"].as_str().unwrap(), n["error"].as_str().unwrap());
         let m = &n["mutation"];
         let mut row = arr(&p, "registrations").iter().find(|r| r["name"] == m["row"]).cloned().unwrap_or(Value::Null);
@@ -315,4 +318,70 @@ fn malformed_msig_key_data() {
     // no attributes: key data is not consulted; an msig without key data is not a holder
     assert!(holder_pop_message(0x0120, &ua, &[0, 2, 0], None, None, None, None).is_ok());
     assert_eq!(holder_pop_message(0x0120, &ua, &[], Some(&pk), None, Some(&proof), None).map(|_| ()), Err(UAError::PqzHolder(0x0120)));
+}
+
+/// The `MemberSig` indexes of an `abi.encode(MemberSig[])` blob, in order.
+fn sig_indexes(blob: &[u8]) -> Vec<u16> {
+    let list = word_at(blob, 0);
+    (0..word_at(blob, list)).map(|i| word_at(blob, list + 32 + word_at(blob, list + 32 + 32 * i)) as u16).collect()
+}
+
+/// msig minimal form (owner 2026-10-31; plan U8S-D1): T = the slots' total weight, N = the threshold; T >= N and
+/// T - weight(i) < N for every slot. Same table as clientkeys `msigSlotsMinimal`.
+#[test]
+fn msig_slots_minimal_cases() {
+    let kd = |t: u16, w: &[u16]| encode_msig(t, &w.iter().enumerate().map(|(i, w)| (0x0131, [0x10 + i as u8; 32], *w)).collect::<Vec<_>>());
+    for (t, w, ix, want) in [
+        (2, &[1, 1][..], &[0, 1][..], true),
+        (2, &[1, 2], &[0, 1], false),
+        (2, &[1, 2], &[1], true),
+        (2, &[1, 2], &[0], false),
+        (2, &[1, 1], &[], false),
+        (2, &[1, 1, 1], &[1, 2], true),
+        (2, &[1, 1, 1], &[0, 1, 2], false),
+        (3, &[1, 1, 1, 2], &[0, 3], true),
+        (3, &[1, 1, 1, 2], &[0, 1, 3], false),
+        // a set the registry refuses (unsorted, repeated, out of range) is not minimal
+        (2, &[1, 1], &[1, 0], false),
+        (2, &[1, 1], &[0, 0], false),
+        (2, &[1, 1], &[0, 2], false),
+    ] {
+        assert_eq!(ua8::msig_slots_minimal(&kd(t, w), ix), Ok(want), "{t}-of-{w:?} {ix:?}");
+    }
+    assert_eq!(ua8::msig_slots_minimal(&[0, 2, 0], &[0]), Err(UAError::KeyData("length")));
+    assert_eq!(ua8::msig_slots_minimal(&kd(2, &[1, 1])[..40], &[0]), Err(UAError::KeyData("length")));
+}
+
+#[test]
+fn portable_msig_rows_minimal() {
+    let p = load("portable.json");
+    let kd_of = |ua: &Value| bytes(&find(&p, "registrations", "ua", ua)["keyData"]);
+    let mut n = 0;
+    for r in arr(&p, "registrations").iter().filter(|r| r["kind"] == 0x0120 && r["pop"] != "0x") {
+        assert_eq!(ua8::msig_slots_minimal(&bytes(&r["keyData"]), &sig_indexes(&bytes(&r["pop"]))), Ok(true), "{}", r["name"]);
+        n += 1;
+    }
+    for k in arr(&p, "kemRecords").iter().chain(arr(&p, "pqzKeyRecords")).filter(|k| k["kind"] == 0x0120) {
+        assert_eq!(ua8::msig_slots_minimal(&kd_of(&k["ua"]), &sig_indexes(&bytes(&k["sig"]))), Ok(true), "{}", k);
+        n += 1;
+    }
+    assert_eq!(n, 12, "5 pops, 3 KEM records, 4 PQZ key records");
+    // the negative: 2-of-(1, 2) over the registered mldsa65#1 / #2 (lower id weight 1), both slots sign
+    let neg = find(&p, "negatives", "name", &"msig-pop-not-minimal".into());
+    assert_eq!((&neg["entry"], &neg["rule"], &neg["error"]), (&"register".into(), &"msig-minimal".into(), &"UAPoP".into()));
+    let r = &neg["registration"];
+    let kd = bytes(&r["keyData"]);
+    let mut ids = [&find(&p, "registrations", "name", &"mldsa65#1".into())["ua"], &find(&p, "registrations", "name", &"mldsa65#2".into())["ua"]]
+        .map(b32);
+    ids.sort();
+    assert_eq!(kd, encode_msig(2, &[(0x0131, ids[0], 1), (0x0131, ids[1], 2)]));
+    assert_eq!(ua_of(0x0120, &kd).unwrap(), b32(&r["ua"]));
+    assert!(arr(&p, "registrations").iter().all(|x| x["ua"] != r["ua"]), "not a registrations[] row");
+    let h = register(r, false).unwrap();
+    assert_eq!(hx(&h.registration_digest), r["registrationDigest"]);
+    assert_eq!(hx(&h.message), r["popMessage"]);
+    assert_eq!(h.member_digest.map(|d| hx(&d)), r["memberDigest"].as_str().map(String::from));
+    assert_eq!(sig_indexes(&bytes(&r["pop"])), [0, 1]);
+    assert_eq!(ua8::msig_slots_minimal(&kd, &[0, 1]), Ok(false));
+    assert_eq!(ua8::msig_slots_minimal(&kd, &[1]), Ok(true), "the weight-2 slot alone is the minimal set");
 }

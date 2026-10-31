@@ -485,6 +485,9 @@ func TestHolderRefusals(t *testing.T) {
 	regs := rows(p, "registrations")
 	run, sigLevel := 0, 0
 	for _, n := range rows(p, "negatives") {
+		if n["rule"] == "msig-minimal" {
+			continue // a registry rule over a full registration (msig minimal form), not a digest-layer row
+		}
 		name, entry, want := n["name"], n["entry"], n["error"]
 		m := n["mutation"].(obj)
 		set, _ := m["set"].(obj)
