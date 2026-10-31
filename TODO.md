@@ -154,6 +154,13 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      Algorand, Cosmos and Solana goes in each family's own round.
      UA-Soroban plan: `docs/superpowers/plans/2026-10-30-ua-soroban.md`; runs without owner review (Part UA-Soroban on `ua-soroban`,
      then UA-8 Part B and Part Z — classical Zether on Soroban, branch `zether-soroban`, S13a — after its merge).
+     **Zether verifier: one merged MSM (batch verification)** (owner 2026-10-31): fold every verification equation
+     (Σ-protocol + both Bulletproofs) into one random-linear-combination MSM — weights derived from the transcript, the two
+     BPs share `G_i` / `H_i`, ≈ 330 → ≈ 182 MSM points at M = 1, ≈ +24 instead of ≈ +164 per extra leg; proof bytes and
+     prover unchanged. Needed off-EVM (NEAR / Algorand paper estimates fit only this way); on EVM it keeps the verifiers
+     in sync and likely cuts gas (not measured). Do it when a `zether-near` / `zether-algorand` / `zether-soroban` track
+     needs it, or for EVM gas — measure first; on EVM a new verifier means a new implementation version (CTR-ZTH-20);
+     security review of the weight derivation and of which untrusted points need a subgroup check.
   5. fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) **together with Task 9 calibration**
      (owner 2026-10-29: one measurement run; it still needs the owner's go at run time, other heavy sessions stopped)
      and, where possible, the metatx-split e2e owed on a real node → Task 14 (wasm32 limb path).
