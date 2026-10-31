@@ -1,0 +1,36 @@
+# ua-cs at commit 00d2558f
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Scaas.Ua -> /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cs/Scaas.Ua/bin/Debug/net10.0/Scaas.Ua.dll
+  Scaas.Ua.Tests -> /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll
+Test run for /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll (.NETCoreApp,Version=v10.0)
+VSTest version 18.0.2 (x64)
+
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.13)
+[xUnit.net 00:00:00.09]   Discovering: Scaas.Ua.Tests
+[xUnit.net 00:00:00.13]   Discovered:  Scaas.Ua.Tests
+[xUnit.net 00:00:00.15]   Starting:    Scaas.Ua.Tests
+  Passed Scaas.Ua.Tests.VectorTests.KemRecordVectors [63 ms]
+  Passed Scaas.Ua.Tests.VectorTests.Structures [15 ms]
+  Passed Scaas.Ua.Tests.VectorTests.PortableVectors [56 ms]
+  Passed Scaas.Ua.Tests.VectorTests.TableGroupsPurposesConstants [11 ms]
+  Passed Scaas.Ua.Tests.VectorTests.PortableTyped [53 ms]
+  Passed Scaas.Ua.Tests.VectorTests.RegistrationHashCommitWhenOverLimit [41 ms]
+  Passed Scaas.Ua.Tests.VectorTests.HolderRefusals [103 ms]
+  Passed Scaas.Ua.Tests.VectorTests.PqzKeyRecordVectors [32 ms]
+  Passed Scaas.Ua.Tests.VectorTests.NativesNativeSpaceCanonicalIds [3 ms]
+  Passed Scaas.Ua.Tests.VectorTests.RegistrationArgsTyped [86 ms]
+  Passed Scaas.Ua.Tests.VectorTests.Messages [1 ms]
+  Passed Scaas.Ua.Tests.VectorTests.ValidRows [857 ms]
+  Passed Scaas.Ua.Tests.VectorTests.NativeMemberTypedDigest [16 ms]
+[xUnit.net 00:00:02.18]   Finished:    Scaas.Ua.Tests
+  Passed Scaas.Ua.Tests.VectorTests.InvalidRows [633 ms]
+  Passed Scaas.Ua.Tests.VectorTests.RegistrationArgsTypedKeys [15 ms]
+
+Test Run Successful.
+Total tests: 15
+     Passed: 15
+ Total time: 2.6485 Seconds
+rc=0

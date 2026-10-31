@@ -1,0 +1,49 @@
+# vectors-check at commit 00d2558f
+    Finished `release` profile [optimized] target(s) in 0.06s
+kinds.json: 34 valid, 199 invalid; structures.json written to /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/vectors/ua/
+signatures.json: 10 derived kinds (99 negatives), native 4+5, msig 10 sets, 15 BIP-340 official, 11 ed25519Rfc8032; ed25519_fuzz.json: 2144 cases (291 valid, noble zip215:false alone differs on 191); metatx3.json: 11 + 11 + 11 + 11 + 11 rows; pq_signatures.json: 4 kinds (33 negatives), msig 2 structures, metatx3 4 + 4 + 1; uatrade_kat.json: 11 rows + 3 mldsa65; written to /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/vectors/ua/
+portable.json: 25 registrations, 9 KEM records, 8 PQZ key records, 67 negatives; written to /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/vectors/ua/
+wrote /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/soroban/vectors/ua-ops.json
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running tests/groups.rs (target/debug/deps/groups-969d879406475d70)
+
+running 1 test
+test write_groups_json ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 5.91s
+
+vectors/transfer_bls12381.json
+vectors/transfer_noaud_bls12381.json
+vectors/burn_bls12381.json
+vectors/schnorr_bls12381.json
+vectors/disclosure_bls12381.json
+vectors/transfer_multi_bls12381.json
+vectors/transfer_multi_noaud_bls12381.json
+vectors/transcript_s3.json
+vectors/r33_keys.json
+vectors/r33_inputs.json
+vectors/envelope.json
+kinds.json: 34 valid, 199 invalid; structures.json written to /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/vectors/ua/
+signatures.json: 10 derived kinds (99 negatives), native 4+5, msig 10 sets, 15 BIP-340 official, 11 ed25519Rfc8032; ed25519_fuzz.json: 2144 cases (291 valid, noble zip215:false alone differs on 191); metatx3.json: 11 + 11 + 11 + 11 + 11 rows; pq_signatures.json: 4 kinds (33 negatives), msig 2 structures, metatx3 4 + 4 + 1; uatrade_kat.json: 11 rows + 3 mldsa65; written to /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/vectors/ua/
+portable.json: 25 registrations, 9 KEM records, 8 PQZ key records, 67 negatives; written to /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/vectors/ua/
+wrote /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/soroban/vectors/ua-ops.json
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running tests/groups.rs (target/debug/deps/groups-969d879406475d70)
+
+running 1 test
+test write_groups_json ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 5.87s
+
+vectors/transfer_bls12381.json
+vectors/transfer_noaud_bls12381.json
+vectors/burn_bls12381.json
+vectors/schnorr_bls12381.json
+vectors/disclosure_bls12381.json
+vectors/transfer_multi_bls12381.json
+vectors/transfer_multi_noaud_bls12381.json
+vectors/transcript_s3.json
+vectors/r33_keys.json
+vectors/r33_inputs.json
+vectors/envelope.json
+rc=0

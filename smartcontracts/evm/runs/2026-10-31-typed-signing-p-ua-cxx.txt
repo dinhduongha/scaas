@@ -1,0 +1,41 @@
+# ua-cxx at commit 00d2558f
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
+-- Using the multi-header code from /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cxx/build/_deps/json-src/include/
+-- Configuring done (0.2s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cxx/build
+[0/2] Re-checking globbed directories...
+ninja: no work to do.
+Internal ctest changing into directory: /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cxx/build
+Test project /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cxx/build
+      Start  1: table_groups_purposes_constants
+ 1/13 Test  #1: table_groups_purposes_constants ......   Passed    0.01 sec
+      Start  2: valid_rows
+ 2/13 Test  #2: valid_rows ...........................   Passed    0.01 sec
+      Start  3: invalid_rows
+ 3/13 Test  #3: invalid_rows .........................   Passed    0.01 sec
+      Start  4: natives_native_space_canonical_ids
+ 4/13 Test  #4: natives_native_space_canonical_ids ...   Passed    0.01 sec
+      Start  5: messages
+ 5/13 Test  #5: messages .............................   Passed    0.01 sec
+      Start  6: structures
+ 6/13 Test  #6: structures ...........................   Passed    0.01 sec
+      Start  7: portable
+ 7/13 Test  #7: portable .............................   Passed    0.06 sec
+      Start  8: kem_record
+ 8/13 Test  #8: kem_record ...........................   Passed    0.04 sec
+      Start  9: pqz_key_record
+ 9/13 Test  #9: pqz_key_record .......................   Passed    0.05 sec
+      Start 10: portable_purposes
+10/13 Test #10: portable_purposes ....................   Passed    0.04 sec
+      Start 11: holder_refusals
+11/13 Test #11: holder_refusals ......................   Passed    0.06 sec
+      Start 12: registration_args
+12/13 Test #12: registration_args ....................   Passed    0.17 sec
+      Start 13: set_key_args
+13/13 Test #13: set_key_args .........................   Passed    0.05 sec
+
+100% tests passed, 0 tests failed out of 13
+
+Total Test time (real) =   0.51 sec
+rc=0
