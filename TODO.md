@@ -209,7 +209,10 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   3. Zether verifier one merged MSM (EVM) — before `zether-soroban`, so the Soroban verifier is merged-MSM from the
      start (the Z0 estimate 536 M–2,409 M vs the 400 M limit depends on it).
   4. `zether-soroban` (Part Z; Z0 measures first).
-  5. C core crash at M = 16 (pqz-core; full gate).
+  5. C core crash at M = 16: **fixed on branch `pqz-core-m16` (not merged): the harness, not the core; no full gate.**
+     M = 16 exists only in the `OVERSIZE` bench. Three failures: an 8 MiB bench stack (SIGSEGV, wasm32 out of bounds),
+     a 3,072 MiB bench arena (SIGILL) and a divide by zero after a refused prove (SIGFPE). C = Rust at M = 16;
+     `pqz-core/STATUS.md` "R_TXM16 in the C bench". No core change, so item 6's timings do not move.
   6. Gas re-calibration on a quiet host (option (c), image `-calib`, 26 rows `n2304-kmax4096`; after item 5 because a
      core change moves the timings; the owner stops other heavy sessions first; change the chainspec at the next SCaaS
      testnet reset if it differs materially). Again before the SCaaS mainnet only if the core / library changes again

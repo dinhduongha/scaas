@@ -990,15 +990,19 @@ main (int argc, char **argv)
   int np = argc > 1 ? atoi (argv[1]) : 10, nv = argc > 2 ? atoi (argv[2]) : 100, fails = 0;
   int rels = argc > 3 ? atoi (argv[3]) : 63, checks = argc > 4 ? atoi (argv[4]) : 0;
 #ifdef PQZ_TXM_OVERSIZE
-  /* R_TXM16 needs up to 12.4 MiB of stack (the generic path; 8 MiB is the usual limit), as pqz-ffi's worker 16 MiB;
-     the main thread grows to the limit in force, so no re-exec */
+  /* R_TXM16 takes up to 12.4 MiB of stack, over the usual 8 MiB limit; 16 MiB as pqz-ffi's worker. The main thread
+     grows to the limit in force, so no re-exec */
   const rlim_t stack_bytes = (rlim_t)16 << 20;
-  struct rlimit rl;
-  if (getrlimit (RLIMIT_STACK, &rl) != 0
-      || (rl.rlim_cur < stack_bytes && (rl.rlim_cur = stack_bytes, setrlimit (RLIMIT_STACK, &rl) != 0)))
+  struct rlimit rl = { 0, 0 };
+  getrlimit (RLIMIT_STACK, &rl);
+  if (rl.rlim_cur < stack_bytes)
     {
-      printf ("{\"error\": \"stack limit\"}\n");
-      return 1;
+      rl.rlim_cur = stack_bytes;
+      if (setrlimit (RLIMIT_STACK, &rl) != 0)
+        {
+          printf ("{\"error\": \"stack limit\"}\n");
+          return 1;
+        }
     }
 #endif
   const char *amb = getenv ("PQZ_ARENA_MB");

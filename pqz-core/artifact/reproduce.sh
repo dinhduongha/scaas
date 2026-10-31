@@ -35,7 +35,7 @@
 # Output: $OUT (default artifact/out/<mode>-<UTC stamp>): results.md, results.json, every raw run file, log.txt.
 # Exit 0 = every check passed (quick / full / multi-bench). Memory: up to ~2 GB (the PQZL bench arena is 768 MiB;
 # pqz-ffi's wasm32 run ~0.6 GB; op 7: pqz-ffi prove up to ~0.9 GB per test thread, pqz-vectors --check ~1 GB;
-# --multi-bench: PQZL M = 16 ~1.6 GB).
+# --multi-bench: PQZL M = 16 ~3.1 GB).
 set -eu
 # the package is the default set (owner 2026-10-21: one parameter set per build, pqz-core/params/sets/)
 export PQZ_SET=n2304-kmax4096
