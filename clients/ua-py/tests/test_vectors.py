@@ -177,7 +177,6 @@ class Vectors(unittest.TestCase):
         """The holder call over a registration row's attrs (and the proof bytes, or only their hash)."""
         a = row['attrs']
         key, pop, h, pk = b(a['pqzKey']), b(row['pqzPop']), b(a['pqzPopHash']), b(a['kemPk'])
-        assert int(a['kemVersion']) == 0, 'register takes no KEM version (UAAttrs\' word: 0)'
         return ua.holder_pop_message(row['kind'], b(row['ua']), b(row['keyData']), key or None,
                                      None if hash_only or not pop else pop, h if any(h) else None, pk or None)
 
@@ -428,6 +427,102 @@ class Vectors(unittest.TestCase):
                 with self.assertRaises(ua.UAError) as c:
                     ua.native_id(0x0001, x)
                 self.assertEqual(c.exception.code, 'UAKeyData')
+
+
+def member_sigs(blob):
+    """``abi.encode(MemberSig[])`` (the vectors' byte form of an msig pop / sig) back to (index, keyData, sig) tuples."""
+    if not blob:
+        return []
+    w = lambda o: int.from_bytes(blob[o:o + 32], 'big')
+    base = w(0)
+    out = []
+    for i in range(w(base)):
+        t = base + 32 + w(base + 32 + 32 * i)
+        field = lambda k: blob[t + w(t + 32 * k) + 32:t + w(t + 32 * k) + 32 + w(t + w(t + 32 * k))]
+        out.append((w(t), field(1), field(2)))
+    return out
+
+
+def reg_input(row):
+    a, msig = row['attrs'], row['kind'] == 0x0120
+    return dict(kind=row['kind'], key_data=b(row['keyData']), pqz_key=b(a['pqzKey']), pqz_pop_hash=b(a['pqzPopHash']),
+                pqz_pop=b(row['pqzPop']), kem_pk=b(a['kemPk']), pop=member_sigs(b(row['pop'])) if msig else b(row['pop']))
+
+
+def record_sig(r):
+    s = b(r['sig'])
+    return ua.ua_sig(members=member_sigs(s)) if r['kind'] == 0x0120 else ua.ua_sig(signature=s)
+
+
+class TypedRegistryArgs(unittest.TestCase):
+    """typed-signing R1 / R1b: the registry's explicit arguments, as clientkeys registrationArgs and ua-rs registration_args."""
+
+    def test_registration_args_typed(self):
+        commits = 0
+        for row in P['registrations']:
+            args, fill = ua.registration_args(**reg_input(row), kem_commit=False)
+            self.assertEqual(args, row['args'], row['name'])
+            self.assertIsNone(fill, row['name'])
+            if 'kemCommit' not in row:
+                self.assertEqual(args['attrs']['kem'], ua.kem_key_of(b''), row['name'])
+                continue
+            args, fill = ua.registration_args(**reg_input(row), kem_commit=True)
+            self.assertEqual(args, row['kemCommit']['register'], row['name'])
+            self.assertEqual(fill, row['kemCommit']['fill'], row['name'])
+            commits += 1
+        self.assertEqual(commits, 9)
+        for k in P['kemRecords']:
+            self.assertEqual(ua.set_kem_key_args(b(k['ua']), k['version'], b(k['kemPk']), record_sig(k)), k['args'], k['id'])
+        for r in P['pqzKeyRecords']:
+            self.assertEqual(ua.set_pqz_key_args(b(r['ua']), b(r['pqzKey']), b(r['pqzPopHash']), record_sig(r)), r['args'], r['name'])
+        with self.assertRaises(ua.UAError) as e:
+            ua.kem_key_of(bytes([1] * 32))
+        self.assertEqual(e.exception.code, 'UAKemKeyLength')
+
+    def test_registration_hash_commit_when_over_limit(self):
+        """The hash commit only when the full call does not fit one transaction (owner 2026-10-31; X0: PQZH n2560-kmax16384
+        with a PQZ key and a KEM key): the figures of clientkeys, ua-rs and forge test_r1_kemHashCommitFits."""
+        gas = VEC.parents[1] / 'evm' / 'test' / 'vectors' / 'pqz-gas'
+        proof = lambda s: json.loads((gas / f'{s}.json').read_text())['pqzh']['REGISTER']['proof']
+        kem_pk = b'\x01' + b'\x5a' * 1600
+        inp = lambda s, n: dict(kind=0x0131, key_data=b'\x5a' * 1952, pqz_key=b'\x5a' * n, pqz_pop=b'\x5a' * proof(s),
+                                kem_pk=kem_pk, pop=b'\x5a' * 3309)
+        self.assertEqual(ua.REGISTER_CALLDATA_LIMIT, 261_909)
+        x = inp('n2560-kmax16384', 20480)
+        full, fill = ua.registration_args(**x, kem_commit=False)
+        self.assertEqual((ua.registry_calldata_length('register', full), fill), (262_116, None))
+        auto, fill = ua.registration_args(**x)
+        self.assertEqual(ua.registry_calldata_length('register', auto), 260_548)
+        self.assertEqual(ua.registry_calldata_length('setKemKey', fill), 2020)
+        self.assertEqual(fill['kem'], ua.kem_key_of(kem_pk))
+        self.assertEqual(fill['ua'], hx(ua.ua_of(0x0131, x['key_data'])))
+        self.assertIsNone(ua.registration_args(**inp('n2304-kmax4096', 18432))[1], 'under the limit: the full key')
+
+    def test_registration_args_typed_keys(self):
+        """R1b (TS-D13): webauthn-p256 / MuSig2 / FROST through registerWebAuthn / registerMuSig2 / registerFrost, typed keys
+        that assemble to the packed key data (kinds.json valid rows), calldata as cast 1.8.5 (no attributes, 32-byte pop)."""
+        n = 0
+        for v in K['valid']:
+            entry, size = {0x0100: ('registerWebAuthn', 580), 0x0110: ('registerMuSig2', 1124), 0x0112: ('registerMuSig2', 1124),
+                           0x0111: ('registerFrost', 2308), 0x0113: ('registerFrost', 2308)}.get(v['kind'], (None, 0))
+            if entry is None:
+                continue
+            d = b(v['keyData'])
+            args, _ = ua.registration_args(v['kind'], d, pop=bytes(32))
+            self.assertEqual((args['entry'], ua.registry_calldata_length(entry, args)), (entry, size), v['name'])
+            k = args['key']
+            if entry == 'registerWebAuthn':
+                packed = b(k['x']) + b(k['y']) + b(k['rpIdHash'])
+            elif entry == 'registerMuSig2':
+                self.assertEqual(args['kind'], v['kind'])
+                packed = b(k['aggKey']) + len(k['memberKeys']).to_bytes(2, 'big') + b''.join(map(b, k['memberKeys']))
+            else:
+                packed = b(k['groupKey']) + k['threshold'].to_bytes(2, 'big') + len(k['members']).to_bytes(2, 'big') + b''.join(
+                    b''.join(map(b, m['commitments'])) + b(m['r']) + b(m['z']) for m in k['members'])
+            self.assertEqual(packed, d, v['name'])
+            n += 1
+        self.assertEqual(n, 6)
+        self.assertEqual(ua.registration_args(0x0101, b(K['valid'][1]['keyData']))[0]['entry'], 'register')
 
 
 if __name__ == '__main__':

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -301,9 +302,6 @@ func u64(v any) uint64 { return uint64(v.(float64)) }
 func register(row obj, hashOnly bool) (*HolderPop, error) {
 	a := row["attrs"].(obj)
 	pop, hash, pk := bs(row["pqzPop"]), bs(a["pqzPopHash"]), bs(a["kemPk"])
-	if u64(a["kemVersion"]) != 0 {
-		return nil, fmt.Errorf("register takes no KEM version (UAAttrs' word: 0)")
-	}
 	if hashOnly {
 		pop = nil
 	}
@@ -790,4 +788,203 @@ func kemKey(n int, scheme byte) []byte {
 	k := make([]byte, n)
 	k[0] = scheme
 	return k
+}
+
+// memberSigs is abi.encode(MemberSig[]) (the vectors' byte form of an msig pop / sig) back to the typed list.
+func memberSigs(blob []byte) []MemberSig {
+	out := []MemberSig{}
+	if len(blob) == 0 {
+		return out
+	}
+	w := func(o int) int {
+		v := 0
+		for _, c := range blob[o+24 : o+32] {
+			v = v<<8 | int(c)
+		}
+		return v
+	}
+	base := w(0)
+	for i := 0; i < w(base); i++ {
+		t := base + 32 + w(base+32+32*i)
+		field := func(k int) []byte { o := t + w(t+32*k); return blob[o+32 : o+32+w(o)] }
+		out = append(out, MemberSig{Index: uint16(w(t)), KeyData: field(1), Sig: field(2)})
+	}
+	return out
+}
+
+func regInput(row obj) RegistrationInput {
+	a := row["attrs"].(obj)
+	in := RegistrationInput{Kind: kind(row["kind"]), KeyData: bs(row["keyData"]), PqzKey: bs(a["pqzKey"]), PqzPopHash: bs(a["pqzPopHash"]),
+		PqzPop: bs(row["pqzPop"]), KemPk: bs(a["kemPk"])}
+	if in.Kind == 0x0120 {
+		in.Members = memberSigs(bs(row["pop"]))
+	} else {
+		in.Pop = bs(row["pop"])
+	}
+	return in
+}
+
+func recordSig(r obj) UASig {
+	if kind(r["kind"]) == 0x0120 {
+		return NewUASig(nil, nil, memberSigs(bs(r["sig"])))
+	}
+	return NewUASig(nil, bs(r["sig"]), nil)
+}
+
+// sameJSON: the named JSON of v equals the vector row.
+func sameJSON(t *testing.T, name string, v, want any) {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("%s: named arguments differ", name)
+	}
+}
+
+// typed-signing R1 / R1b: the registry's explicit arguments, as clientkeys registrationArgs and ua-rs registration_args.
+func TestRegistrationArgsTyped(t *testing.T) {
+	p := load(t, "portable.json")
+	yes, no, commits := true, false, 0
+	for _, row := range rows(p, "registrations") {
+		name := row["name"].(string)
+		in := regInput(row)
+		in.KemCommit = &no
+		args, fill, err := RegistrationArgs(in)
+		if err != nil || fill != nil {
+			t.Fatal(name, err, fill)
+		}
+		sameJSON(t, name, args, row["args"])
+		c, ok := row["kemCommit"].(obj)
+		if !ok {
+			continue
+		}
+		in.KemCommit = &yes
+		if args, fill, err = RegistrationArgs(in); err != nil || fill == nil {
+			t.Fatal(name, err)
+		}
+		sameJSON(t, name, args, c["register"])
+		sameJSON(t, name, fill, c["fill"])
+		commits++
+	}
+	if commits != 9 {
+		t.Fatal(commits)
+	}
+	for _, k := range rows(p, "kemRecords") {
+		a, err := NewSetKemKeyArgs(b32(k["ua"]), u64(k["version"]), bs(k["kemPk"]), recordSig(k))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sameJSON(t, k["id"].(string), a, k["args"])
+	}
+	for _, r := range rows(p, "pqzKeyRecords") {
+		sameJSON(t, r["name"].(string), NewSetPqzKeyArgs(b32(r["ua"]), bs(r["pqzKey"]), b32(r["pqzPopHash"]), recordSig(r)), r["args"])
+	}
+	if _, err := KemKeyOf(bytes.Repeat([]byte{1}, 32)); code(err) != "UAKemKeyLength" {
+		t.Fatal(err)
+	}
+}
+
+// The hash commit only when the full call does not fit one transaction (owner 2026-10-31; X0: PQZH n2560-kmax16384 with a PQZ
+// key and a KEM key): the figures of clientkeys, ua-rs and forge test_r1_kemHashCommitFits.
+func TestRegistrationHashCommitWhenOverLimit(t *testing.T) {
+	proof := func(set string) int {
+		raw, err := os.ReadFile("../../smartcontracts/evm/test/vectors/pqz-gas/" + set + ".json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var g obj
+		if err := json.Unmarshal(raw, &g); err != nil {
+			t.Fatal(err)
+		}
+		return int(g["pqzh"].(obj)["REGISTER"].(obj)["proof"].(float64))
+	}
+	x5a := func(n int) []byte { return bytes.Repeat([]byte{0x5a}, n) }
+	kemPk := x5a(1601)
+	kemPk[0] = 1
+	input := func(set string, n int) RegistrationInput {
+		return RegistrationInput{Kind: 0x0131, KeyData: x5a(1952), PqzKey: x5a(n), PqzPop: x5a(proof(set)), KemPk: kemPk, Pop: x5a(3309)}
+	}
+	if RegisterCalldataLimit != 261_909 {
+		t.Fatal(RegisterCalldataLimit)
+	}
+	x, no := input("n2560-kmax16384", 20480), false
+	x.KemCommit = &no
+	full, fill, err := RegistrationArgs(x)
+	if err != nil || fill != nil || full.CalldataLength() != 262_116 {
+		t.Fatal(err, fill, full.CalldataLength())
+	}
+	x.KemCommit = nil
+	auto, fill, err := RegistrationArgs(x)
+	if err != nil || fill == nil || auto.CalldataLength() != 260_548 || fill.CalldataLength() != 2020 {
+		t.Fatal(err, fill)
+	}
+	id, _ := UAOf(0x0131, x.KeyData)
+	if !bytes.Equal(fill.UA, id[:]) || !bytes.Equal(fill.Kem.MlkemEk, kemPk[1:1569]) || !bytes.Equal(fill.Kem.X25519, kemPk[1569:]) {
+		t.Fatal("fill")
+	}
+	if _, fill, err = RegistrationArgs(input("n2304-kmax4096", 18432)); err != nil || fill != nil {
+		t.Fatal("under the limit: the full key", err)
+	}
+}
+
+// R1b (TS-D13): webauthn-p256 / MuSig2 / FROST through registerWebAuthn / registerMuSig2 / registerFrost, typed keys that assemble
+// to the packed key data (kinds.json valid rows), calldata as cast 1.8.5 (no attributes, 32-byte pop).
+func TestRegistrationArgsTypedKeys(t *testing.T) {
+	k := load(t, "kinds.json")
+	u16be := func(n int) []byte { return []byte{byte(n >> 8), byte(n)} }
+	n := 0
+	for _, v := range rows(k, "valid") {
+		var entry string
+		size := 0
+		switch kind(v["kind"]) {
+		case 0x0100:
+			entry, size = "registerWebAuthn", 580
+		case 0x0110, 0x0112:
+			entry, size = "registerMuSig2", 1124
+		case 0x0111, 0x0113:
+			entry, size = "registerFrost", 2308
+		default:
+			continue
+		}
+		d := bs(v["keyData"])
+		a, _, err := RegistrationArgs(RegistrationInput{Kind: kind(v["kind"]), KeyData: d, Pop: make([]byte, 32)})
+		if err != nil || a.Entry != entry || a.CalldataLength() != size {
+			t.Fatal(v["name"], err, a.CalldataLength())
+		}
+		var packed []byte
+		switch key := a.Key.(type) {
+		case *WebAuthnKey:
+			packed = append(append(append(packed, key.X...), key.Y...), key.RpIdHash...)
+		case *MuSig2Key:
+			packed = append(append(packed, key.AggKey...), u16be(len(key.MemberKeys))...)
+			for _, m := range key.MemberKeys {
+				packed = append(packed, m...)
+			}
+		case *FrostKey:
+			packed = append(append(append(packed, key.GroupKey...), u16be(int(key.Threshold))...), u16be(len(key.Members))...)
+			for _, m := range key.Members {
+				for _, c := range m.Commitments {
+					packed = append(packed, c...)
+				}
+				packed = append(append(packed, m.R...), m.Z...)
+			}
+		}
+		if !bytes.Equal(packed, d) {
+			t.Fatal(v["name"], "the typed key is the packed key data")
+		}
+		n++
+	}
+	if n != 6 {
+		t.Fatal(n)
+	}
+	a, _, err := RegistrationArgs(RegistrationInput{Kind: 0x0101, KeyData: bs(rows(k, "valid")[1]["keyData"])})
+	if err != nil || a.Entry != "register" {
+		t.Fatal(err)
+	}
 }

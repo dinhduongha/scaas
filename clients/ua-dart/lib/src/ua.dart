@@ -428,3 +428,166 @@ Uint8List encodeMsig(int threshold, List<(int, Uint8List, int)> members) {
   }
   return Uint8List.fromList(o);
 }
+
+// ----- the registry's explicit arguments (typed-signing R1 / R1b: TS-D10 … TS-D13; owner KEM rulings 2026-10-31) -----
+// Named JSON as clientkeys registrationArgs and the node job API: bytes as 0x-hex, numbers as ints.
+
+/// The largest calldata whose EIP-7976 floor (15,000 + 64 per byte) fits the EIP-7825 cap 2^24: 261,909 B.
+const registerCalldataLimit = ((1 << 24) - 15000) ~/ 64;
+
+String _hexOf(Iterable<int>? b) => '0x${(b ?? const <int>[]).map((x) => x.toRadixString(16).padLeft(2, '0')).join()}';
+final String _zeroWord = _hexOf(Uint8List(32));
+int _be16(Uint8List d, int o) {
+  if (d.length < o + 2) throw UAError('UAKeyData', 'length');
+  return d[o] << 8 | d[o + 1];
+}
+
+void _lengthIs(bool ok) {
+  if (!ok) throw UAError('UAKeyData', 'length');
+}
+
+/// `KemKey{scheme, mlkemEk, x25519}` (TS-D11) of `kemPk = scheme ‖ ek ‖ x25519`; null / empty = the empty key.
+Map<String, Object?> kemKeyOf(Uint8List? kemPk) {
+  final pk = kemPk ?? Uint8List(0);
+  if (pk.isEmpty) return {'scheme': 0, 'mlkemEk': '0x', 'x25519': _zeroWord};
+  if (pk.length < 33) throw UAError('UAKemKeyLength', '${pk.length}');
+  return {'scheme': pk[0], 'mlkemEk': _hexOf(pk.sublist(1, pk.length - 32)), 'x25519': _hexOf(pk.sublist(pk.length - 32))};
+}
+
+/// CTR-UA-09 key data as `MsigStructure{threshold, members: MsigMember{kind, id, weight}[]}` (TS-D10).
+Map<String, Object?> msigStructure(Object? keyData) {
+  final d = keyBytes(keyData);
+  _lengthIs(d.length >= 4 && d.length == 4 + 36 * _be16(d, 2));
+  return {
+    'threshold': _be16(d, 0),
+    'members': [
+      for (var o = 4; o < d.length; o += 36) {'kind': _be16(d, o), 'id': _hexOf(d.sublist(o + 2, o + 34)), 'weight': _be16(d, o + 34)},
+    ],
+  };
+}
+
+/// R1b (TS-D13): `WebAuthnKey{x, y, rpIdHash}` (0x0100), `MuSig2Key{aggKey, memberKeys}` (0x0110 / 0x0112) or `FrostKey{groupKey,
+/// threshold, members: FrostMember{commitments, r, z}[]}` (0x0111 / 0x0113) of packed key data (points of 33 B on secp256k1, 64 B on
+/// bn254); null for any other kind. The registry assembles the same bytes (same id).
+Map<String, Object?>? typedKey(int kind, Object? keyData) {
+  final d = keyBytes(keyData);
+  String at(int o, int n) => _hexOf(d.sublist(o, o + n));
+  if (kind == 0x0100) {
+    _lengthIs(d.length == 96);
+    return {'x': at(0, 32), 'y': at(32, 32), 'rpIdHash': at(64, 32)};
+  }
+  final s = const {0x0110: 33, 0x0111: 33, 0x0112: 64, 0x0113: 64}[kind];
+  if (s == null) return null;
+  if (kind == 0x0110 || kind == 0x0112) {
+    final n = _be16(d, s);
+    _lengthIs(d.length == s + 2 + n * s);
+    return {
+      'aggKey': at(0, s),
+      'memberKeys': [for (var i = 0; i < n; i++) at(s + 2 + i * s, s)],
+    };
+  }
+  final t = _be16(d, s), n = _be16(d, s + 2), per = (t + 1) * s + 32;
+  _lengthIs(d.length == s + 4 + n * per);
+  return {
+    'groupKey': at(0, s),
+    'threshold': t,
+    'members': [
+      for (var o = s + 4; o < d.length; o += per)
+        {
+          'commitments': [for (var j = 0; j < t; j++) at(o + j * s, s)],
+          'r': at(o + t * s, s),
+          'z': at(o + (t + 1) * s, 32),
+        },
+    ],
+  };
+}
+
+List<Map<String, Object?>> _memberSigsJson(List<(int, Uint8List?, Uint8List)> members) =>
+    [for (final (i, k, s) in members) {'index': i, 'keyData': _hexOf(k), 'sig': _hexOf(s)}];
+
+/// `UASig{keyData, signature, members}` (TS-D12) of `requireAuthorized` / `setKemKey` / `setPqzKey`: native — [signature]; a derived
+/// single key — [keyData] (empty for the stored kinds) + [signature]; an msig — [members] as (index, keyData, sig). A portable
+/// record's signature never has [keyData].
+Map<String, Object?> uaSig({Uint8List? keyData, Uint8List? signature, List<(int, Uint8List?, Uint8List)> members = const []}) =>
+    {'keyData': _hexOf(keyData), 'signature': _hexOf(signature), 'members': _memberSigsJson(members)};
+
+/// `setKemKey(ua, version, KemKey, UASig)`; [sig] a [uaSig] (empty for the version-0 hash-commit fill).
+Map<String, Object?> setKemKeyArgs(Uint8List ua, int version, Uint8List? kemPk, Map<String, Object?> sig) =>
+    {'ua': _hexOf(_sized(ua, 32, 'ua')), 'version': version, 'kem': kemKeyOf(kemPk), 'sig': sig};
+
+/// `setPqzKey(ua, pqzKey, pqzPopHash, UASig)`.
+Map<String, Object?> setPqzKeyArgs(Uint8List ua, Uint8List pqzKey, Uint8List pqzPopHash, Map<String, Object?> sig) => {
+      'ua': _hexOf(_sized(ua, 32, 'ua')),
+      'pqzKey': _hexOf(pqzKey),
+      'pqzPopHash': _hexOf(_sized(pqzPopHash, 32, 'pqzPopHash')),
+      'sig': sig,
+    };
+
+int _tail(Object? h) => 32 + ((h as String).length + 61) ~/ 64 * 32; // a `bytes` tail: length word + padded data
+int _bytesArr(Object? xs) => (xs as List).fold(32, (n, x) => n + 32 + _tail(x));
+int _kemLen(Object? k) => 96 + _tail((k as Map)['mlkemEk']);
+int _attrsLen(Object? a) => 128 + _tail((a as Map)['pqzKey']) + _kemLen(a['kem']);
+int _memberSigsLen(Object? ms) => (ms as List).fold(32, (n, m) => n + 32 + 96 + _tail(m['keyData']) + _tail(m['sig']));
+
+/// The ABI calldata length (selector included) of a `register` / `registerMsig` / `registerWebAuthn` / `registerMuSig2` /
+/// `registerFrost` / `setKemKey` call from its named arguments, as clientkeys `registryCalldataLength`.
+int registryCalldataLength(String entry, Map<String, Object?> a) {
+  if (entry == 'setKemKey') {
+    final s = a['sig'] as Map;
+    return 4 + 128 + _kemLen(a['kem']) + 96 + _tail(s['keyData']) + _tail(s['signature']) + _memberSigsLen(s['members']);
+  }
+  if (entry == 'registerMsig') {
+    return 4 + 128 + 96 + 96 * ((a['structure'] as Map)['members'] as List).length + _attrsLen(a['attrs']) + _memberSigsLen(a['pop']) + _tail(a['pqzPop']);
+  }
+  final rest = _attrsLen(a['attrs']) + _tail(a['pop']) + _tail(a['pqzPop']);
+  final k = a['key'] as Map?;
+  return switch (entry) {
+    'register' => 4 + 160 + _tail(a['keyData']) + rest,
+    'registerWebAuthn' => 4 + 192 + rest,
+    'registerMuSig2' => 4 + 160 + 64 + _tail(k!['aggKey']) + _bytesArr(k['memberKeys']) + rest,
+    'registerFrost' => (k!['members'] as List).fold(
+        4 + 160 + 96 + _tail(k['groupKey']) + 32 + rest, (n, m) => n + 32 + 96 + _bytesArr(m['commitments']) + _tail(m['r'])),
+    _ => throw ArgumentError('no calldata length for $entry'),
+  };
+}
+
+/// The registry call of a registration (TS-D10 … TS-D13), as clientkeys `registrationArgs`: `(args, kemFill)`, `args` the named
+/// arguments with `entry` — `register(kind, keyData, attrs, pop, pqzPop)`, `registerMsig(structure, attrs, pop, pqzPop)`,
+/// `registerWebAuthn(key, attrs, pop, pqzPop)` or `registerMuSig2` / `registerFrost(kind, key, attrs, pop, pqzPop)` — with
+/// `attrs = {pqzKey, pqzPopHash, kem: KemKey, kemPkHash}`. The KEM key is version 0 (owner 2026-10-31): in full, or, only when the
+/// full call is over [registerCalldataLimit] (X0: PQZH n2560-kmax16384 with a PQZ key) or [kemCommit] is true, the hash commit
+/// (`kem = {scheme, 0x, 0}`, `kemPkHash = keccak256(kemPk)`) plus `kemFill = setKemKey(ua, 0, kem, UASig())`, open to anyone (the
+/// pop signed the same record). [kemCommit] false forces the full key. [pop]: the signer's signature; [members]: an msig's.
+(Map<String, Object?>, Map<String, Object?>?) registrationArgs(int kind, Object? keyData,
+    {Uint8List? pqzKey,
+    Uint8List? pqzPopHash,
+    Uint8List? pqzPop,
+    Uint8List? kemPk,
+    Uint8List? pop,
+    List<(int, Uint8List?, Uint8List)> members = const [],
+    bool? kemCommit}) {
+  final d = keyBytes(keyData);
+  final popHash = (pqzKey?.isNotEmpty ?? false) || (pqzPopHash?.isNotEmpty ?? false) ? _proofHashOf(pqzPop, pqzPopHash) : Uint8List(32);
+  final attrs = <String, Object?>{'pqzKey': _hexOf(pqzKey), 'pqzPopHash': _hexOf(popHash), 'kem': kemKeyOf(kemPk), 'kemPkHash': _zeroWord};
+  final tail = <String, Object?>{'attrs': attrs, 'pqzPop': _hexOf(pqzPop)};
+  final key = typedKey(kind, d);
+  final args = <String, Object?>{
+    ...switch (kind) {
+      0x0120 => {'entry': 'registerMsig', 'structure': msigStructure(d)},
+      0x0100 => {'entry': 'registerWebAuthn', 'key': key},
+      0x0110 || 0x0112 => {'entry': 'registerMuSig2', 'kind': kind, 'key': key},
+      0x0111 || 0x0113 => {'entry': 'registerFrost', 'kind': kind, 'key': key},
+      _ => {'entry': 'register', 'kind': kind, 'keyData': _hexOf(d)},
+    },
+    ...tail,
+    'pop': kind == 0x0120 ? _memberSigsJson(members) : _hexOf(pop),
+  };
+  final full = kemPk ?? Uint8List(0);
+  if (full.isEmpty || !(kemCommit ?? registryCalldataLength(args['entry'] as String, args) > registerCalldataLimit)) return (args, null);
+  args['attrs'] = {
+    ...attrs,
+    'kem': {'scheme': full[0], 'mlkemEk': '0x', 'x25519': _zeroWord},
+    'kemPkHash': _hexOf(_k([full])),
+  };
+  return (args, setKemKeyArgs(uaOf(kind, d), 0, full, uaSig()));
+}

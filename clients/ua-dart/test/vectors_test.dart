@@ -42,6 +42,25 @@ UAError _err(void Function() f) {
   throw TestFailure('expected a UAError');
 }
 
+/// `abi.encode(MemberSig[])` (the vectors' byte form of an msig pop / sig) back to (index, keyData, sig) records.
+List<(int, Uint8List, Uint8List)> _memberSigs(Uint8List blob) {
+  if (blob.isEmpty) return const [];
+  int w(int o) => blob.sublist(o + 24, o + 32).fold(0, (v, c) => v * 256 + c);
+  final base = w(0);
+  return [
+    for (var i = 0; i < w(base); i++)
+      () {
+        final t = base + 32 + w(base + 32 + 32 * i);
+        Uint8List field(int k) {
+          final o = t + w(t + 32 * k);
+          return blob.sublist(o + 32, o + 32 + w(o));
+        }
+
+        return (w(t), field(1), field(2));
+      }(),
+  ];
+}
+
 /// A KEM key of [n] bytes: the scheme byte, then zeros.
 Uint8List _kem(int n, [int scheme = 1]) => Uint8List(n)..[0] = scheme;
 
@@ -267,7 +286,6 @@ void main() {
   HolderPop register(Map row, {bool hashOnly = false}) {
     final a = row['attrs'] as Map;
     final key = _b(a['pqzKey']), pop = _b(row['pqzPop']), hash = _b(a['pqzPopHash']), pk = _b(a['kemPk']);
-    expect(a['kemVersion'], 0, reason: 'register takes no KEM version (UAAttrs\' word: 0)');
     return holderPopMessage(_kind(row), _b(row['ua']),
         keyData: _b(row['keyData']),
         pqzKey: key.isEmpty ? null : key,
@@ -528,5 +546,106 @@ void main() {
     expect(_hx(holderPopMessage(0x0130, u, kemPk: Uint8List(0)).message), _hx(holderPopMessage(0x0130, u).message));
     // a zero-length proof hash is absent (same as no hash)
     expect(_hx(holderPopMessage(0x0130, u, pqzPopHash: Uint8List(0)).message), _hx(holderPopMessage(0x0130, u).message));
+  });
+
+  // typed-signing R1 / R1b: the registry's explicit arguments, as clientkeys registrationArgs and ua-rs registration_args
+  (Map<String, Object?>, Map<String, Object?>?) registerRow(Map row, {bool? kemCommit}) {
+    final a = row['attrs'] as Map;
+    final msig = _kind(row) == 0x0120;
+    return registrationArgs(_kind(row), _b(row['keyData']),
+        pqzKey: _b(a['pqzKey']),
+        pqzPopHash: _b(a['pqzPopHash']),
+        pqzPop: _b(row['pqzPop']),
+        kemPk: _b(a['kemPk']),
+        pop: msig ? null : _b(row['pop']),
+        members: msig ? _memberSigs(_b(row['pop'])) : const [],
+        kemCommit: kemCommit);
+  }
+
+  Map<String, Object?> recordSig(Map r) =>
+      _kind(r) == 0x0120 ? uaSig(members: _memberSigs(_b(r['sig']))) : uaSig(signature: _b(r['sig']));
+
+  test('registration args typed', () {
+    var commits = 0;
+    for (final row in regs) {
+      final name = row['name'] as String;
+      final (args, fill) = registerRow(row, kemCommit: false);
+      expect(args, row['args'], reason: name);
+      expect(fill, isNull, reason: name);
+      final c = row['kemCommit'] as Map?;
+      if (c == null) continue;
+      final (args2, fill2) = registerRow(row, kemCommit: true);
+      expect(args2, c['register'], reason: name);
+      expect(fill2, c['fill'], reason: name);
+      commits++;
+    }
+    expect(commits, 9);
+    for (final k in (p['kemRecords'] as List).cast<Map>()) {
+      expect(setKemKeyArgs(_b(k['ua']), k['version'] as int, _b(k['kemPk']), recordSig(k)), k['args'], reason: k['id'] as String);
+    }
+    for (final r in (p['pqzKeyRecords'] as List).cast<Map>()) {
+      expect(setPqzKeyArgs(_b(r['ua']), _b(r['pqzKey']), _b(r['pqzPopHash']), recordSig(r)), r['args'], reason: r['name'] as String);
+    }
+    expect(_err(() => kemKeyOf(Uint8List(32))).code, 'UAKemKeyLength');
+  });
+
+  // The hash commit only when the full call does not fit one transaction (owner 2026-10-31; X0: PQZH n2560-kmax16384 with a PQZ
+  // key and a KEM key): the figures of clientkeys, ua-rs and forge test_r1_kemHashCommitFits.
+  test('registration hash commit when over limit', () {
+    Uint8List x5a(int n) => Uint8List(n)..fillRange(0, n, 0x5a);
+    int proof(String set) => (_load('../../evm/test/vectors/pqz-gas/$set.json') as Map)['pqzh']['REGISTER']['proof'] as int;
+    final kemPk = x5a(1601)..[0] = 1;
+    (Map<String, Object?>, Map<String, Object?>?) call(String set, int n, {bool? kemCommit}) => registrationArgs(0x0131, x5a(1952),
+        pqzKey: x5a(n), pqzPop: x5a(proof(set)), kemPk: kemPk, pop: x5a(3309), kemCommit: kemCommit);
+    expect(registerCalldataLimit, 261909);
+    final (full, none) = call('n2560-kmax16384', 20480, kemCommit: false);
+    expect(registryCalldataLength('register', full), 262116);
+    expect(none, isNull);
+    final (auto, committed) = call('n2560-kmax16384', 20480);
+    final fill = committed!;
+    expect(registryCalldataLength('register', auto), 260548);
+    expect(registryCalldataLength('setKemKey', fill), 2020);
+    expect(fill['kem'], kemKeyOf(kemPk));
+    expect(fill['ua'], _hx(uaOf(0x0131, x5a(1952))));
+    expect(call('n2304-kmax4096', 18432).$2, isNull, reason: 'under the limit: the full key');
+  });
+
+  // R1b (TS-D13): webauthn-p256 / MuSig2 / FROST through registerWebAuthn / registerMuSig2 / registerFrost, typed keys that assemble
+  // to the packed key data (kinds.json valid rows), calldata as cast 1.8.5 (no attributes, 32-byte pop).
+  test('registration args typed keys', () {
+    final valid = (_load('kinds.json')['valid'] as List).cast<Map>();
+    List<int> be(int n) => [n >> 8, n & 0xff];
+    var n = 0;
+    for (final v in valid) {
+      final (entry, size) = switch (_kind(v)) {
+        0x0100 => ('registerWebAuthn', 580),
+        0x0110 || 0x0112 => ('registerMuSig2', 1124),
+        0x0111 || 0x0113 => ('registerFrost', 2308),
+        _ => ('', 0),
+      };
+      if (size == 0) continue;
+      final (a, _) = registrationArgs(_kind(v), _b(v['keyData']), pop: Uint8List(32));
+      expect(a['entry'], entry);
+      expect(registryCalldataLength(entry, a), size, reason: v['name'] as String);
+      final k = a['key'] as Map;
+      final packed = switch (entry) {
+        'registerWebAuthn' => [..._b(k['x']), ..._b(k['y']), ..._b(k['rpIdHash'])],
+        'registerMuSig2' => [..._b(k['aggKey']), ...be((k['memberKeys'] as List).length), for (final m in k['memberKeys'] as List) ..._b(m)],
+        _ => [
+            ..._b(k['groupKey']),
+            ...be(k['threshold'] as int),
+            ...be((k['members'] as List).length),
+            for (final m in (k['members'] as List).cast<Map>()) ...[
+              for (final c in m['commitments'] as List) ..._b(c),
+              ..._b(m['r']),
+              ..._b(m['z']),
+            ],
+          ],
+      };
+      expect(packed, _b(v['keyData']), reason: v['name'] as String);
+      n++;
+    }
+    expect(n, 6);
+    expect(registrationArgs(0x0101, _b(valid[1]['keyData'])).$1['entry'], 'register');
   });
 }

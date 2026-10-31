@@ -661,3 +661,159 @@ def validate_key_data(kind, key_data, hedera_native=False):
     elif kind == 0x0132:
         _fndsa(d)
     # mldsa44/65, slhdsa128s: the length is the whole check
+
+
+# ----- the registry's explicit arguments (typed-signing R1 / R1b: TS-D10 … TS-D13; owner KEM rulings 2026-10-31) -----
+# Named JSON as clientkeys registrationArgs and the node job API: bytes as 0x-hex, numbers as ints.
+
+def _hx(b):
+    return '0x' + bytes(b).hex()
+
+
+def _hb(h):
+    return bytes.fromhex(h[2:])
+
+
+_ZW = _hx(bytes(32))
+REGISTER_CALLDATA_LIMIT = ((1 << 24) - 15_000) // 64  # the largest calldata whose EIP-7976 floor fits the 2^24 cap: 261,909 B
+
+
+def kem_key_of(kem_pk):
+    """``KemKey{scheme, mlkemEk, x25519}`` (TS-D11) of ``kem_pk = scheme ‖ ek ‖ x25519``; None / b'' = the empty key."""
+    pk = _bytes(kem_pk) if kem_pk is not None else b''
+    if not pk:
+        return {'scheme': 0, 'mlkemEk': '0x', 'x25519': _ZW}
+    if len(pk) < 33:
+        raise UAError('UAKemKeyLength', str(len(pk)))
+    return {'scheme': pk[0], 'mlkemEk': _hx(pk[1:-32]), 'x25519': _hx(pk[-32:])}
+
+
+def msig_structure(key_data):
+    """CTR-UA-09 key data as ``MsigStructure{threshold, members: MsigMember{kind, id, weight}[]}`` (TS-D10)."""
+    d = _bytes(key_data)
+    _need(len(d) >= 4 and len(d) == 4 + 36 * _u16(d, 2), 'length')
+    return {'threshold': _u16(d, 0), 'members': [{'kind': _u16(d, o), 'id': _hx(d[o + 2:o + 34]), 'weight': _u16(d, o + 34)}
+                                                 for o in range(4, len(d), 36)]}
+
+
+def typed_key(kind, key_data):
+    """R1b (TS-D13): ``WebAuthnKey{x, y, rpIdHash}`` (0x0100), ``MuSig2Key{aggKey, memberKeys}`` (0x0110 / 0x0112) or
+    ``FrostKey{groupKey, threshold, members: FrostMember{commitments, r, z}[]}`` (0x0111 / 0x0113) of packed key data (points
+    of 33 B on secp256k1, 64 B on bn254); None for any other kind. The registry assembles the same bytes (same id)."""
+    d = _bytes(key_data)
+    at = lambda o, n: _hx(d[o:o + n])
+    if kind == 0x0100:
+        _need(len(d) == 96, 'length')
+        return {'x': at(0, 32), 'y': at(32, 32), 'rpIdHash': at(64, 32)}
+    s = {0x0110: 33, 0x0111: 33, 0x0112: 64, 0x0113: 64}.get(kind)
+    if s is None:
+        return None
+    if kind in (0x0110, 0x0112):
+        n = _u16(d, s)
+        _need(len(d) == s + 2 + n * s, 'length')
+        return {'aggKey': at(0, s), 'memberKeys': [at(s + 2 + i * s, s) for i in range(n)]}
+    t, n = _u16(d, s), _u16(d, s + 2)
+    per = (t + 1) * s + 32
+    _need(len(d) == s + 4 + n * per, 'length')
+    return {'groupKey': at(0, s), 'threshold': t, 'members': [
+        {'commitments': [at(o + j * s, s) for j in range(t)], 'r': at(o + t * s, s), 'z': at(o + (t + 1) * s, 32)}
+        for o in (s + 4 + i * per for i in range(n))]}
+
+
+def _member_sigs(members):
+    return [{'index': int(i), 'keyData': _hx(k or b''), 'sig': _hx(s)} for i, k, s in members]
+
+
+def ua_sig(key_data=b'', signature=b'', members=()):
+    """``UASig{keyData, signature, members}`` (TS-D12) of ``requireAuthorized`` / ``setKemKey`` / ``setPqzKey``: native —
+    ``signature``; a derived single key — ``key_data`` (empty for the stored kinds) + ``signature``; an msig — ``members`` as
+    (index, key_data, sig) tuples (key_data empty for stored kinds). A portable record's signature never has ``key_data``."""
+    return {'keyData': _hx(key_data or b''), 'signature': _hx(signature or b''), 'members': _member_sigs(members)}
+
+
+def set_kem_key_args(ua, version, kem_pk, sig):
+    """``setKemKey(ua, version, KemKey, UASig)``; ``sig`` a ua_sig (empty for the version-0 hash-commit fill)."""
+    return {'ua': _hx(_sized(ua, 32, 'ua')), 'version': int(version), 'kem': kem_key_of(kem_pk), 'sig': sig}
+
+
+def set_pqz_key_args(ua, pqz_key, pqz_pop_hash, sig):
+    """``setPqzKey(ua, pqzKey, pqzPopHash, UASig)``."""
+    return {'ua': _hx(_sized(ua, 32, 'ua')), 'pqzKey': _hx(_bytes(pqz_key)), 'pqzPopHash': _hx(_sized(pqz_pop_hash, 32, 'pqzPopHash')),
+            'sig': sig}
+
+
+def _tail(h):  # a `bytes` tail: length word + data padded to 32
+    return 32 + -(-(len(h) - 2) // 64) * 32
+
+
+def _bytes_arr(xs):  # a `bytes[]` tail
+    return 32 + sum(32 + _tail(x) for x in xs)
+
+
+def _kem_len(k):
+    return 96 + _tail(k['mlkemEk'])
+
+
+def _attrs_len(a):
+    return 128 + _tail(a['pqzKey']) + _kem_len(a['kem'])
+
+
+def _member_sigs_len(ms):
+    return 32 + sum(32 + 96 + _tail(m['keyData']) + _tail(m['sig']) for m in ms)
+
+
+def registry_calldata_length(entry, a):
+    """The ABI calldata length (selector included) of a ``register`` / ``registerMsig`` / ``registerWebAuthn`` /
+    ``registerMuSig2`` / ``registerFrost`` / ``setKemKey`` call from its named arguments, as clientkeys registryCalldataLength."""
+    if entry == 'setKemKey':
+        s = a['sig']
+        return 4 + 128 + _kem_len(a['kem']) + 96 + _tail(s['keyData']) + _tail(s['signature']) + _member_sigs_len(s['members'])
+    if entry == 'registerMsig':
+        return 4 + 128 + 96 + 96 * len(a['structure']['members']) + _attrs_len(a['attrs']) + _member_sigs_len(a['pop']) + _tail(a['pqzPop'])
+    rest = _attrs_len(a['attrs']) + _tail(a['pop']) + _tail(a['pqzPop'])
+    k = a.get('key')
+    if entry == 'register':
+        return 4 + 160 + _tail(a['keyData']) + rest
+    if entry == 'registerWebAuthn':
+        return 4 + 192 + rest
+    if entry == 'registerMuSig2':
+        return 4 + 160 + 64 + _tail(k['aggKey']) + _bytes_arr(k['memberKeys']) + rest
+    if entry == 'registerFrost':
+        return 4 + 160 + 96 + _tail(k['groupKey']) + 32 + sum(32 + 96 + _bytes_arr(m['commitments']) + _tail(m['r'])
+                                                               for m in k['members']) + rest
+    raise ValueError(f'no calldata length for {entry}')
+
+
+_TYPED_ENTRY = {0x0100: 'registerWebAuthn', 0x0110: 'registerMuSig2', 0x0112: 'registerMuSig2', 0x0111: 'registerFrost',
+                0x0113: 'registerFrost', 0x0120: 'registerMsig'}
+
+
+def registration_args(kind, key_data, pqz_key=None, pqz_pop_hash=None, pqz_pop=None, kem_pk=None, pop=None, kem_commit=None):
+    """The registry call of a registration (TS-D10 … TS-D13), as clientkeys registrationArgs: ``(args, kem_fill)``, ``args``
+    the named arguments with ``entry`` — ``register(kind, keyData, attrs, pop, pqzPop)``, ``registerMsig(structure, attrs, pop,
+    pqzPop)``, ``registerWebAuthn(key, attrs, pop, pqzPop)`` or ``registerMuSig2`` / ``registerFrost(kind, key, attrs, pop,
+    pqzPop)`` — with ``attrs = {pqzKey, pqzPopHash, kem: KemKey, kemPkHash}``. The KEM key is version 0 (owner 2026-10-31):
+    in full (``kemPkHash`` 0), or, only when the full call is over REGISTER_CALLDATA_LIMIT (X0: PQZH n2560-kmax16384 with a
+    PQZ key) or ``kem_commit=True``, the hash commit (``kem = {scheme, 0x, 0}``, ``kemPkHash = keccak256(kemPk)``) and then
+    ``kem_fill = setKemKey(ua, 0, kem, UASig())``, open to anyone (the pop signed the same record). ``kem_commit=False``
+    forces the full key. ``pop``: the signer's signature bytes, or for an msig (index, key_data, sig) member tuples."""
+    key_data = _bytes(key_data)
+    has = lambda v: v is not None and len(v) > 0
+    pop_hash = _proof_hash_of(pqz_pop, pqz_pop_hash) if has(pqz_key) or has(pqz_pop_hash) else bytes(32)
+    attrs = {'pqzKey': _hx(pqz_key or b''), 'pqzPopHash': _hx(pop_hash), 'kem': kem_key_of(kem_pk), 'kemPkHash': _ZW}
+    entry = _TYPED_ENTRY.get(kind, 'register')
+    tail = {'attrs': attrs, 'pqzPop': _hx(pqz_pop or b'')}
+    if entry == 'registerMsig':
+        args = {'entry': entry, 'structure': msig_structure(key_data), **tail, 'pop': _member_sigs(pop or ())}
+    elif entry == 'registerWebAuthn':
+        args = {'entry': entry, 'key': typed_key(kind, key_data), **tail, 'pop': _hx(pop or b'')}
+    elif entry == 'register':
+        args = {'entry': entry, 'kind': kind, 'keyData': _hx(key_data), **tail, 'pop': _hx(pop or b'')}
+    else:
+        args = {'entry': entry, 'kind': kind, 'key': typed_key(kind, key_data), **tail, 'pop': _hx(pop or b'')}
+    full = _bytes(kem_pk) if kem_pk is not None else b''
+    commit = kem_commit if kem_commit is not None else registry_calldata_length(entry, args) > REGISTER_CALLDATA_LIMIT
+    if not full or not commit:
+        return args, None
+    args['attrs'] = {**attrs, 'kem': {'scheme': full[0], 'mlkemEk': '0x', 'x25519': _ZW}, 'kemPkHash': _hx(keccak256(full))}
+    return args, set_kem_key_args(ua_of(kind, key_data), 0, full, ua_sig())
