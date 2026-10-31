@@ -466,8 +466,9 @@ Added by the controller after P2–P7 (2026-10-31). Runs after P3, before P5 and
   versions ≥ 1 unchanged. Step 2: FAIL in clientkeys, ua-rs, the four reproducers.
 - [ ] Step 3: implement; drop the `kemVersion` input of the register builders (always 0); regenerate the vectors.
   Step 4: PASS in every package of P1 / P2 / P6 / P7 (the vector tests read rows generically, so most only re-run);
-  P3's forge suites re-run on the new vectors (contract change to accept version 0 at `register` lands in R1 —
-  until then the EVM tests that register with a KEM key are known failures, listed in the report).
+  EVM in the same task (P3 done, R1 not started): `UARegistry` `_attrs` (accept version 0 with a key), `_record`
+  (store the initial key at version 0), `_kemHash`, `registrationOf`'s `kemVersion`, `setKemKey` version 0 still
+  refused until R1 adds the hash-commit fill; forge suites PASS on the new vectors, gas / size re-pinned.
 - [ ] Step 5: commit `typed-signing P1b: register KEM key at version 0, vectors regenerated`.
 
 ---
