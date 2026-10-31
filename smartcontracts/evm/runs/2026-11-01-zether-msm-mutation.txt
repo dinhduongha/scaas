@@ -18,7 +18,7 @@ E6 dropped from the fold                 RED: test_eachTransferEquationAloneRefu
 E7 dropped from the fold                 RED: test_eachTransferEquationAloneRefused
 E8 dropped from the fold                 RED: test_eachTransferEquationAloneRefused
 BP-1 dropped from the fold               RED: test_firstBpOneAloneRefused
-BP-2 dropped from the fold               RED: test_eachBpTwoAloneRefused (row as first run; the pattern then widened to verifyRange)
+BP-2 dropped from the fold               RED: test_eachBpTwoAloneRefused, test_verifyRangeAgrees, test_verifyRangeHonestAndTampered
 second BP: BP-1 dropped                  RED: test_secondBpOneAloneRefused
 no-auditor E7 dropped                    RED: test_eachTransferEquationAloneRefused_noAuditor
 burn E1 dropped                          RED: test_eachBurnEquationAloneRefused
