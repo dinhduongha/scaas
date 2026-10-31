@@ -2,7 +2,7 @@
 
 # Relay-fee minimum before mainnet: the options (R1, ua8-soroban)
 
-Status: **research, owner decision pending.** Owner ruling 2026-10-28 item 7 kept the flat
+Status: **decided — owner ruling 2026-10-31: option (c) on every family, option (d) ruled out; built with P6i.** Owner ruling 2026-10-28 item 7 kept the flat
 `params.relay_fee.min_amount` until before mainnet and asked for a re-decision then (TODO.md, "Relay-fee minimum before
 mainnet"; decisions.md, the 2026-10-28 owner-rulings entry, item 7). This note lists what exists, the four options, and
 what each costs. It builds nothing. Plan: `docs/superpowers/plans/2026-10-31-ua8-soroban.md` Task R1 (U8S-D10).
