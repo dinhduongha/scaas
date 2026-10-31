@@ -908,6 +908,11 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-42** (ty
 - **Registry typed views and order lane names (owner rulings 2026-10-31):** the typed views `msigOf`, `webAuthnKeyOf`,
   `muSig2KeyOf`, `frostKeyOf` stay next to the byte views `keyOf` / `registrationOf`. `TradeOrder.batch` / `nonce` keep
   their names in Part C; they are the order lane (`minNonce`), separate from the meta-tx lane (`nonces`).
+- **Packed `register` stays open next to the typed entries (owner ruling 2026-10-31, supersedes R1b's refusal):**
+  `register(kind, bytes keyData, …)` also takes `webauthn-p256` and the MuSig2 / FROST kinds; both forms give the same
+  id and record and run the same `validateKeyData`. The owner accepts this as an exception to the explicit-parameter
+  rule (a `keyData` blob bundling fields is still accepted). `msig` stays `registerMsig` only (its PoP is a
+  `MemberSig[]`). Clients keep using the typed entries (`registrationArgs`).
 - **KEM key at `register` (owner rulings 2026-10-31, for Part R / R1 and Part P's struct values):**
   1. The KEM key given at `register` **always has version (index) 0** — the first record; `register` takes no
      `kemVersion` argument any more. `setKemKey` adds later versions ≥ 1 (write-once per version, as today). "No KEM
