@@ -50,14 +50,14 @@ pub enum Rule {
     /// registered token's router-bound `MetaTransfer` for exactly this call, the inner target bound to this chain
     /// ([`relay_call_ok`]).
     RelayFee,
-    /// The chain's `UARegistry` (`ua_registry`), bound to this chain: its five writes (UA-8, ruling R-node; `registerMsig` since typed-signing R1).
+    /// The chain's `UARegistry` (`ua_registry`), bound to this chain: its writes (UA-8, ruling R-node; `registerMsig` since typed-signing R1, `registerWebAuthn` / `registerMuSig2` / `registerFrost` since R1b).
     UaRegistry,
 }
 
 /// The call table as built in P5: the rows whose contracts exist (`cast sig` of the Solidity signatures; pinned
 /// against the KAT calldata). `mtxExecuteAsOwner` is one selector on `SmartKeyAccount` and `MandateWallet`, so it takes
 /// the wallet's rule. UA-8 (ruling R-node): the registry's five writes. Every other selector is refused.
-pub const CALL_TABLE: [([u8; 4], &str, Rule); 20] = [
+pub const CALL_TABLE: [([u8; 4], &str, Rule); 23] = [
     ([0x45, 0x9b, 0x5b, 0x50], "SmartKeyAccountFactory.deploy", Rule::AccountFactory),
     ([0xfd, 0xf2, 0xd3, 0x38], "mtxExecuteAsOwner", Rule::SelfAuth),
     ([0x3a, 0x5b, 0x07, 0x08], "HederaMandateWallet.mtxExecuteAsOwnerRaw", Rule::SelfAuth),
@@ -78,6 +78,9 @@ pub const CALL_TABLE: [([u8; 4], &str, Rule); 20] = [
     (<crate::abi::ISCaaSDex::mtxHybridViaCall as alloy::sol_types::SolCall>::SELECTOR, "SCaaSDex.mtxHybridVia", Rule::Dex),
     (<crate::abi::ISCaaSDex::mtxExchangeBatchCall as alloy::sol_types::SolCall>::SELECTOR, "SCaaSDex.mtxExchangeBatch", Rule::Dex),
     (<crate::abi::IUARegistry::registerMsigCall as alloy::sol_types::SolCall>::SELECTOR, "UARegistry.registerMsig", Rule::UaRegistry),
+    (<crate::abi::IUARegistry::registerWebAuthnCall as alloy::sol_types::SolCall>::SELECTOR, "UARegistry.registerWebAuthn", Rule::UaRegistry),
+    (<crate::abi::IUARegistry::registerMuSig2Call as alloy::sol_types::SolCall>::SELECTOR, "UARegistry.registerMuSig2", Rule::UaRegistry),
+    (<crate::abi::IUARegistry::registerFrostCall as alloy::sol_types::SolCall>::SELECTOR, "UARegistry.registerFrost", Rule::UaRegistry),
 ];
 
 /// The refusal of a relayed PQ registration (`register` with its `R_REG` proof) whose gas estimate is over the
@@ -794,6 +797,10 @@ mod tests {
         assert_eq!(CALL_TABLE[14].0, sig("storePqzPop(bytes32,bytes)"));
         assert_eq!(CALL_TABLE[15].0, sig(&format!("setPqzKey(bytes32,bytes,bytes32,{ua_sig})")));
         assert_eq!(CALL_TABLE[19].0, sig(&format!("registerMsig((uint16,(uint16,bytes32,uint16)[]),{attrs},(uint16,bytes,bytes)[],bytes)")));
+        // typed-signing R1b (TS-D13): the typed single-key entries
+        assert_eq!(CALL_TABLE[20].0, sig(&format!("registerWebAuthn((bytes32,bytes32,bytes32),{attrs},bytes,bytes)")));
+        assert_eq!(CALL_TABLE[21].0, sig(&format!("registerMuSig2(uint16,(bytes,bytes[]),{attrs},bytes,bytes)")));
+        assert_eq!(CALL_TABLE[22].0, sig(&format!("registerFrost(uint16,(bytes,uint16,(bytes[],bytes,bytes32)[]),{attrs},bytes,bytes)")));
         // no token transfer, approval or meta-tx entry is a row: those reach a token only as `metatx` jobs
         for s in ["transfer(address,uint256)", "approve(address,uint256)", "transferFrom(address,address,uint256)"] {
             assert!(row(sig(s)).is_none(), "{s}");
@@ -805,7 +812,7 @@ mod tests {
         assert_eq!(rules, [Rule::AccountFactory, Rule::SelfAuth, Rule::SelfAuth, Rule::SelfAuth, Rule::SelfAuth,
             Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::RelayFee, Rule::RelayFee,
             Rule::UaRegistry, Rule::UaRegistry, Rule::UaRegistry, Rule::UaRegistry, Rule::Dex, Rule::Dex, Rule::Dex,
-            Rule::UaRegistry]);
+            Rule::UaRegistry, Rule::UaRegistry, Rule::UaRegistry, Rule::UaRegistry]);
         assert!(!allowed(Rule::RelayFee, &Facts { bound: true, ..Default::default() }), "never by facts");
     }
 

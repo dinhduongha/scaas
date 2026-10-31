@@ -1733,7 +1733,7 @@ mod tests {
         assert!(outcomes(ok(), vec![other], |_| {}).await.0[0].1.contains("unknown job kind"), "one job-kind rule");
     }
 
-    /// The five UA-8 registry writes for `ua_registry` (typed-signing R1's explicit ABI), with these sizes (a `register`
+    /// The UA-8 registry writes for `ua_registry` (typed-signing R1's explicit ABI, R1b's typed single-key entries), with these sizes (a `register`
     /// with or without its proof).
     fn ua8_writes(pqz_pop: usize) -> Vec<Vec<u8>> {
         use crate::abi::IUARegistry::*;
@@ -1745,6 +1745,8 @@ mod tests {
         let attrs = || UAAttrs { pqzKey: b(18_432, 2), pqzPopHash: B256::repeat_byte(3), kem: kem(4), kemPkHash: B256::ZERO };
         let members = |n: u16| (0..n).map(|i| MsigMember { kind: 0x0131, id: B256::repeat_byte(0x20 + i as u8), weight: 1 }).collect();
         let pops = |n: u16| (0..n).map(|i| MemberSig { index: i, keyData: Bytes::new(), sig: b(3309, 13) }).collect();
+        let none = || UAAttrs { pqzKey: Bytes::new(), pqzPopHash: B256::ZERO, kem: KemKey { scheme: 0, mlkemEk: Bytes::new(), x25519: B256::ZERO },
+            kemPkHash: B256::ZERO };
         vec![
             registerCall { kind: 0x0131, keyData: b(1952, 1), attrs: attrs(), pop: b(3309, 5), pqzPop: b(pqz_pop, 12) }
                 .abi_encode(),
@@ -1753,6 +1755,14 @@ mod tests {
             setPqzKeyCall { ua, pqzKey: b(18_432, 9), pqzPopHash: B256::repeat_byte(10), sig: sig(3309, 11) }.abi_encode(),
             registerMsigCall { structure: MsigStructure { threshold: 2, members: members(2) }, attrs: attrs(), pop: pops(2),
                 pqzPop: b(pqz_pop, 12) }.abi_encode(),
+            // typed-signing R1b (TS-D13): the typed single-key entries (no PQZ / KEM holders: empty attributes)
+            registerWebAuthnCall { key: WebAuthnKey { x: B256::repeat_byte(14), y: B256::repeat_byte(15), rpIdHash: B256::repeat_byte(16) },
+                attrs: none(), pop: b(640, 17), pqzPop: Bytes::new() }.abi_encode(),
+            registerMuSig2Call { kind: 0x0110, key: MuSig2Key { aggKey: b(33, 18), memberKeys: vec![b(33, 19), b(33, 20)] },
+                attrs: none(), pop: b(64, 21), pqzPop: Bytes::new() }.abi_encode(),
+            registerFrostCall { kind: 0x0111, key: FrostKey { groupKey: b(33, 22), threshold: 2, members: (0..3)
+                .map(|i| FrostMember { commitments: vec![b(33, 23 + i), b(33, 26 + i)], r: b(33, 29 + i), z: B256::repeat_byte(32 + i) })
+                .collect() }, attrs: none(), pop: b(64, 35), pqzPop: Bytes::new() }.abi_encode(),
         ]
     }
 
@@ -1767,6 +1777,9 @@ mod tests {
         assert_eq!(registerCall::SIGNATURE, "register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)");
         assert_eq!(registerCall::SELECTOR, [0x4e, 0x22, 0x9e, 0xfb]);
         assert_eq!(registerMsigCall::SELECTOR, [0x82, 0xb8, 0x6a, 0x46]);
+        assert_eq!(registerWebAuthnCall::SELECTOR, [0xee, 0x03, 0xa1, 0xfe]);
+        assert_eq!(registerMuSig2Call::SELECTOR, [0xe1, 0xed, 0xdc, 0xdf]);
+        assert_eq!(registerFrostCall::SELECTOR, [0x7b, 0xd6, 0x34, 0x10]);
         assert_eq!(setKemKeyCall::SELECTOR, [0xa0, 0x0c, 0xce, 0x2a]);
         assert_eq!(storePqzPopCall::SELECTOR, [0x7f, 0xac, 0x16, 0x1a]);
         assert_eq!(setPqzKeyCall::SELECTOR, [0x3c, 0x68, 0x97, 0xf1]);

@@ -265,7 +265,8 @@ sol! {
     /// `UARegistry`'s five writes (accounts.md §1.8, UA-8; CTR-UA-07: anyone may relay them): the call-table rows on
     /// `ua_registry`, and `register` / `registerMsig`'s `pqzPop` for the split rule ([`crate::guard::UA_REGISTER_SPLIT`]).
     /// typed-signing R1 (TS-D10 … TS-D12): the explicit ABI — `registerMsig` with a typed structure and `MemberSig[]`,
-    /// `KemKey`, `UASig`; a hash-committed KEM key is filled by `setKemKey(ua, 0, kem, UASig())`.
+    /// `KemKey`, `UASig`; a hash-committed KEM key is filled by `setKemKey(ua, 0, kem, UASig())`. R1b (TS-D13):
+    /// `registerWebAuthn` / `registerMuSig2` / `registerFrost` with typed keys (`register` refuses those kinds).
     #[derive(Debug)]
     interface IUARegistry {
         struct KemKey { uint8 scheme; bytes mlkemEk; bytes32 x25519; }
@@ -274,8 +275,15 @@ sol! {
         struct MsigStructure { uint16 threshold; MsigMember[] members; }
         struct MemberSig { uint16 index; bytes keyData; bytes sig; }
         struct UASig { bytes keyData; bytes signature; MemberSig[] members; }
+        struct WebAuthnKey { bytes32 x; bytes32 y; bytes32 rpIdHash; }
+        struct MuSig2Key { bytes aggKey; bytes[] memberKeys; }
+        struct FrostMember { bytes[] commitments; bytes r; bytes32 z; }
+        struct FrostKey { bytes groupKey; uint16 threshold; FrostMember[] members; }
         function register(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
         function registerMsig(MsigStructure structure, UAAttrs attrs, MemberSig[] pop, bytes pqzPop) external returns (bytes32);
+        function registerWebAuthn(WebAuthnKey key, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
+        function registerMuSig2(uint16 kind, MuSig2Key key, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
+        function registerFrost(uint16 kind, FrostKey key, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
         function setKemKey(bytes32 ua, uint64 version, KemKey kem, UASig sig) external;
         function storePqzPop(bytes32 ua, bytes pqzPop) external;
         function setPqzKey(bytes32 ua, bytes pqzKey, bytes32 pqzPopHash, UASig sig) external;
