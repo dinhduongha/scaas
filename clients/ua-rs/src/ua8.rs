@@ -276,3 +276,192 @@ pub fn pqz_key_record_message(
 pub fn is_portable_purpose(tag: &[u8; 32]) -> bool {
     [pop_v2_tag(), purpose_tag("kem").expect("kem"), purpose_tag("pqz-key").expect("pqz-key")].contains(tag)
 }
+
+// --- the registry's explicit arguments (typed-signing R1: TS-D10 … TS-D12; owner KEM rulings 2026-10-31) ---
+
+/// `KemKey{scheme, mlkemEk, x25519}` (TS-D11): the registry assembles `kem_pk = scheme ‖ ek ‖ x25519` (scheme 1: 1,601 B);
+/// the default (all zero / empty) is no key.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KemKey {
+    pub scheme: u8,
+    pub mlkem_ek: Vec<u8>,
+    pub x25519: [u8; 32],
+}
+impl KemKey {
+    /// The key of an assembled `kem_pk` (scheme byte, ek, the last 32 bytes); empty = no key; 1 … 32 bytes `KemKeyLength`.
+    pub fn from_kem_pk(kem_pk: &[u8]) -> Result<Self> {
+        match kem_pk.len() {
+            0 => Ok(Self::default()),
+            n if n < 33 => Err(UAError::KemKeyLength),
+            n => Ok(Self { scheme: kem_pk[0], mlkem_ek: kem_pk[1..n - 32].to_vec(), x25519: kem_pk[n - 32..].try_into().unwrap() }),
+        }
+    }
+    /// `scheme ‖ mlkem_ek ‖ x25519`, empty for no key.
+    pub fn kem_pk(&self) -> Vec<u8> {
+        if *self == Self::default() {
+            return vec![];
+        }
+        [&[self.scheme][..], &self.mlkem_ek, &self.x25519].concat()
+    }
+}
+/// An `msig` member (CTR-UA-09, TS-D10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MsigMember {
+    pub kind: u16,
+    pub id: [u8; 32],
+    pub weight: u16,
+}
+/// An `msig` structure (TS-D10); the registry assembles its CTR-UA-09 key data, so the id is the packed bytes'.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MsigStructure {
+    pub threshold: u16,
+    pub members: Vec<MsigMember>,
+}
+impl MsigStructure {
+    pub fn from_key_data(d: &[u8]) -> Result<Self> {
+        let u16at = |o: usize| u16::from_be_bytes([d[o], d[o + 1]]);
+        if d.len() < 4 || d.len() != 4 + 36 * u16at(2) as usize {
+            return Err(UAError::KeyData("length"));
+        }
+        let members = (0..u16at(2) as usize)
+            .map(|i| {
+                let o = 4 + 36 * i;
+                MsigMember { kind: u16at(o), id: d[o + 2..o + 34].try_into().unwrap(), weight: u16at(o + 34) }
+            })
+            .collect();
+        Ok(Self { threshold: u16at(0), members })
+    }
+    pub fn key_data(&self) -> Vec<u8> {
+        encode_msig(self.threshold, &self.members.iter().map(|m| (m.kind, m.id, m.weight)).collect::<Vec<_>>())
+    }
+}
+/// One `msig` member's signature (`key_data` always empty, CTR-UA-33).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MemberSig {
+    pub index: u16,
+    pub key_data: Vec<u8>,
+    pub sig: Vec<u8>,
+}
+/// A UA signature (TS-D12): native `signature`; derived single key `key_data` (empty for stored kinds) + `signature`; an
+/// msig `members`; a portable record's signature never carries `key_data`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct UASig {
+    pub key_data: Vec<u8>,
+    pub signature: Vec<u8>,
+    pub members: Vec<MemberSig>,
+}
+/// `register`'s attributes: the KEM key (version 0) in full (`kem`, `kem_pk_hash` 0) or as the hash commit (`kem` = its
+/// scheme only, `kem_pk_hash = keccak256(kem_pk)`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct UAAttrs {
+    pub pqz_key: Vec<u8>,
+    pub pqz_pop_hash: [u8; 32],
+    pub kem: KemKey,
+    pub kem_pk_hash: [u8; 32],
+}
+/// The typed registration call: `register(kind, keyData, attrs, pop, pqzPop)` or `registerMsig(structure, attrs, pop, pqzPop)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RegisterArgs {
+    Register { kind: u16, key_data: Vec<u8>, attrs: UAAttrs, pop: Vec<u8>, pqz_pop: Vec<u8> },
+    RegisterMsig { structure: MsigStructure, attrs: UAAttrs, pop: Vec<MemberSig>, pqz_pop: Vec<u8> },
+}
+/// `setKemKey(ua, version, kem, sig)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SetKemKeyArgs {
+    pub ua: [u8; 32],
+    pub version: u64,
+    pub kem: KemKey,
+    pub sig: UASig,
+}
+/// The largest calldata whose EIP-7976 floor (15,000 + 64 per byte) fits the EIP-7825 cap 2^24: 261,909 B.
+pub const REGISTER_CALLDATA_LIMIT: usize = ((1 << 24) - 15_000) / 64;
+
+fn tail_len(b: &[u8]) -> usize {
+    32 + b.len().div_ceil(32) * 32
+}
+fn kem_key_len(k: &KemKey) -> usize {
+    96 + tail_len(&k.mlkem_ek)
+}
+fn attrs_len(a: &UAAttrs) -> usize {
+    128 + tail_len(&a.pqz_key) + kem_key_len(&a.kem)
+}
+fn member_sigs_len(m: &[MemberSig]) -> usize {
+    32 + m.iter().map(|s| 32 + 96 + tail_len(&s.key_data) + tail_len(&s.sig)).sum::<usize>()
+}
+impl RegisterArgs {
+    /// The ABI calldata length, selector included.
+    pub fn calldata_len(&self) -> usize {
+        match self {
+            Self::Register { key_data, attrs, pop, pqz_pop, .. } => {
+                4 + 160 + tail_len(key_data) + attrs_len(attrs) + tail_len(pop) + tail_len(pqz_pop)
+            }
+            Self::RegisterMsig { structure, attrs, pop, pqz_pop } => {
+                4 + 128 + 96 + 96 * structure.members.len() + attrs_len(attrs) + member_sigs_len(pop) + tail_len(pqz_pop)
+            }
+        }
+    }
+}
+impl SetKemKeyArgs {
+    /// The ABI calldata length, selector included.
+    pub fn calldata_len(&self) -> usize {
+        4 + 128 + kem_key_len(&self.kem) + 96 + tail_len(&self.sig.key_data) + tail_len(&self.sig.signature)
+            + member_sigs_len(&self.sig.members)
+    }
+}
+/// The registration's inputs (empty = absent): `pop` the signer's signature (single keys), `members` an msig's member
+/// signatures; `kem_commit` forces the KEM form (`None`: the hash commit only when the full call is over
+/// [`REGISTER_CALLDATA_LIMIT`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RegistrationInput {
+    pub kind: u16,
+    pub key_data: Vec<u8>,
+    pub pqz_key: Vec<u8>,
+    pub pqz_pop_hash: [u8; 32],
+    pub pqz_pop: Vec<u8>,
+    pub kem_pk: Vec<u8>,
+    pub pop: Vec<u8>,
+    pub members: Vec<MemberSig>,
+    pub kem_commit: Option<bool>,
+}
+/// The typed registration and, for a hash-committed KEM key, the second call that stores it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Registration {
+    pub args: RegisterArgs,
+    pub kem_fill: Option<SetKemKeyArgs>,
+}
+
+/// The registry's explicit arguments (typed-signing R1; clientkeys `registrationArgs`): `register` / `registerMsig`, the KEM
+/// key (version 0, owner 2026-10-31) in full, or — only when the full call does not fit one transaction, or `kem_commit:
+/// Some(true)` — as the hash commit with the fill `setKemKey(ua, 0, kem, UASig::default())` (no signature: the pop signed the
+/// same `UAKemRecord{ua, 0, scheme, kemPkHash}`; anyone may send it). `pqz_pop_hash` defaults to `keccak256(pqz_pop)`.
+pub fn registration_args(i: &RegistrationInput) -> Result<Registration> {
+    let pqz_pop_hash = if i.pqz_key.is_empty() && zero32(&i.pqz_pop_hash) {
+        [0; 32]
+    } else {
+        proof_hash_of(Some(&i.pqz_pop), Some(&i.pqz_pop_hash))?
+    };
+    let kem = KemKey::from_kem_pk(&i.kem_pk)?;
+    let attrs = UAAttrs { pqz_key: i.pqz_key.clone(), pqz_pop_hash, kem: kem.clone(), kem_pk_hash: [0; 32] };
+    let build = |attrs: UAAttrs| -> Result<RegisterArgs> {
+        Ok(if i.kind == 0x0120 {
+            RegisterArgs::RegisterMsig {
+                structure: MsigStructure::from_key_data(&i.key_data)?, attrs, pop: i.members.clone(), pqz_pop: i.pqz_pop.clone(),
+            }
+        } else {
+            RegisterArgs::Register { kind: i.kind, key_data: i.key_data.clone(), attrs, pop: i.pop.clone(), pqz_pop: i.pqz_pop.clone() }
+        })
+    };
+    let full = build(attrs.clone())?;
+    let commit = !i.kem_pk.is_empty() && i.kem_commit.unwrap_or(full.calldata_len() > REGISTER_CALLDATA_LIMIT);
+    if !commit {
+        return Ok(Registration { args: full, kem_fill: None });
+    }
+    let hashed = UAAttrs { kem: KemKey { scheme: kem.scheme, ..Default::default() }, kem_pk_hash: keccak256(&i.kem_pk), ..attrs };
+    Ok(Registration {
+        args: build(hashed)?,
+        kem_fill: Some(SetKemKeyArgs { ua: ua_of(i.kind, &i.key_data)?, version: 0, kem, sig: UASig::default() }),
+    })
+}
+fn zero32(b: &[u8; 32]) -> bool {
+    b.iter().all(|x| *x == 0)
+}

@@ -91,7 +91,7 @@ fn register(row: &Value, hash_only: bool) -> Result<HolderPop> {
     let (key, pop, hash, pk) = (bytes(&a["pqzKey"]), bytes(&row["pqzPop"]), b32(&a["pqzPopHash"]), bytes(&a["kemPk"]));
     let opt = |b: &[u8]| (!b.is_empty()).then_some(b.to_vec());
     let (key, pop, pk) = (opt(&key), opt(&pop), opt(&pk));
-    assert_eq!(num(&a["kemVersion"]), 0, "register takes no KEM version (UAAttrs' word: 0)");
+    assert!(a.get("kemVersion").is_none(), "register takes no KEM version (typed-signing R1)");
     holder_pop_message(
         num(&row["kind"]) as u16,
         &b32(&row["ua"]),
@@ -509,4 +509,132 @@ fn malformed_msig_key_data() {
     // no attributes: key data is not consulted; an msig without key data is not a holder
     assert!(holder_pop_message(0x0120, &ua, &[0, 2, 0], None, None, None, None).is_ok());
     assert_eq!(holder_pop_message(0x0120, &ua, &[], Some(&pk), None, Some(&proof), None).map(|_| ()), Err(UAError::PqzHolder(0x0120)));
+}
+
+// --- typed-signing R1: the registry's explicit arguments (TS-D10 … TS-D12; owner KEM rulings 2026-10-31) ---
+
+fn kem_json(k: &KemKey) -> Value {
+    serde_json::json!({ "scheme": k.scheme, "mlkemEk": hx(&k.mlkem_ek), "x25519": hx(&k.x25519) })
+}
+fn member_sigs_json(m: &[MemberSig]) -> Value {
+    Value::Array(m.iter().map(|s| serde_json::json!({ "index": s.index, "keyData": hx(&s.key_data), "sig": hx(&s.sig) })).collect())
+}
+fn attrs_json(a: &UAAttrs) -> Value {
+    serde_json::json!({ "pqzKey": hx(&a.pqz_key), "pqzPopHash": hx(&a.pqz_pop_hash), "kem": kem_json(&a.kem), "kemPkHash": hx(&a.kem_pk_hash) })
+}
+fn args_json(r: &RegisterArgs) -> Value {
+    match r {
+        RegisterArgs::Register { kind, key_data, attrs, pop, pqz_pop } => serde_json::json!({ "entry": "register", "kind": kind,
+            "keyData": hx(key_data), "attrs": attrs_json(attrs), "pqzPop": hx(pqz_pop), "pop": hx(pop) }),
+        RegisterArgs::RegisterMsig { structure, attrs, pop, pqz_pop } => serde_json::json!({ "entry": "registerMsig",
+            "structure": { "threshold": structure.threshold, "members": structure.members.iter().map(|m| serde_json::json!({
+                "kind": m.kind, "id": hx(&m.id), "weight": m.weight })).collect::<Vec<_>>() },
+            "attrs": attrs_json(attrs), "pqzPop": hx(pqz_pop), "pop": member_sigs_json(pop) }),
+    }
+}
+fn fill_json(f: &SetKemKeyArgs) -> Value {
+    serde_json::json!({ "ua": hx(&f.ua), "version": f.version, "kem": kem_json(&f.kem), "sig": { "keyData": hx(&f.sig.key_data),
+        "signature": hx(&f.sig.signature), "members": member_sigs_json(&f.sig.members) } })
+}
+/// `abi.encode(MemberSig[])` (the vectors' byte form) back to the typed list.
+fn member_sigs(blob: &[u8]) -> Vec<MemberSig> {
+    if blob.is_empty() {
+        return vec![];
+    }
+    let w = |o: usize| usize::from_be_bytes(blob[o + 24..o + 32].try_into().unwrap());
+    let (base, n) = (w(0), w(w(0)));
+    (0..n)
+        .map(|i| {
+            let t = base + 32 + w(base + 32 + 32 * i);
+            let field = |k: usize| {
+                let o = t + w(t + 32 * k);
+                blob[o + 32..o + 32 + w(o)].to_vec()
+            };
+            MemberSig { index: w(t) as u16, key_data: field(1), sig: field(2) }
+        })
+        .collect()
+}
+fn reg_input(row: &Value) -> RegistrationInput {
+    let a = &row["attrs"];
+    let kind = num(&row["kind"]) as u16;
+    RegistrationInput {
+        kind,
+        key_data: bytes(&row["keyData"]),
+        pqz_key: bytes(&a["pqzKey"]),
+        pqz_pop_hash: b32(&a["pqzPopHash"]),
+        pqz_pop: bytes(&row["pqzPop"]),
+        kem_pk: bytes(&a["kemPk"]),
+        pop: if kind == 0x0120 { vec![] } else { bytes(&row["pop"]) },
+        members: if kind == 0x0120 { member_sigs(&bytes(&row["pop"])) } else { vec![] },
+        kem_commit: None,
+    }
+}
+
+#[test]
+fn registration_args_typed() {
+    let p = load("portable.json");
+    let mut commits = 0;
+    for row in arr(&p, "registrations") {
+        let name = row["name"].as_str().unwrap();
+        let full = registration_args(&RegistrationInput { kem_commit: Some(false), ..reg_input(row) }).unwrap();
+        assert_eq!(args_json(&full.args), row["args"], "{name}");
+        assert!(full.kem_fill.is_none(), "{name}");
+        let kem = match &full.args {
+            RegisterArgs::Register { attrs, .. } | RegisterArgs::RegisterMsig { attrs, .. } => attrs.kem.clone(),
+        };
+        assert_eq!(hx(&kem.kem_pk()), row["attrs"]["kemPk"].as_str().unwrap(), "{name}: KemKey assembles to kemPk");
+        if let RegisterArgs::RegisterMsig { structure, .. } = &full.args {
+            assert_eq!(structure.key_data(), bytes(&row["keyData"]), "{name}: the structure is the packed key data");
+            assert_eq!(&MsigStructure::from_key_data(&bytes(&row["keyData"])).unwrap(), structure);
+        }
+        if row.get("kemCommit").is_none() {
+            assert!(kem.kem_pk().is_empty(), "{name}");
+            continue;
+        }
+        let c = registration_args(&RegistrationInput { kem_commit: Some(true), ..reg_input(row) }).unwrap();
+        assert_eq!(args_json(&c.args), row["kemCommit"]["register"], "{name}");
+        assert_eq!(fill_json(c.kem_fill.as_ref().unwrap()), row["kemCommit"]["fill"], "{name}");
+        commits += 1;
+    }
+    assert_eq!(commits, 9);
+    for k in arr(&p, "kemRecords") {
+        let sig = bytes(&k["sig"]);
+        let s = if num(&k["kind"]) == 0x0120 { UASig { members: member_sigs(&sig), ..Default::default() } } else {
+            UASig { signature: sig, ..Default::default() }
+        };
+        let a = SetKemKeyArgs { ua: b32(&k["ua"]), version: num(&k["version"]), kem: KemKey::from_kem_pk(&bytes(&k["kemPk"])).unwrap(), sig: s };
+        assert_eq!(fill_json(&a), k["args"]);
+    }
+    assert_eq!(KemKey::from_kem_pk(&[]).unwrap(), KemKey::default());
+    assert!(KemKey::default().kem_pk().is_empty());
+    assert_eq!(KemKey::from_kem_pk(&[1; 32]), Err(UAError::KemKeyLength));
+}
+
+/// The hash commit only when the full call does not fit one transaction (owner 2026-10-31; X0: PQZH n2560-kmax16384 with a
+/// PQZ key and a KEM key): the same figures as clientkeys and ExplicitParamsCalldata.t.sol `test_r1_kemHashCommitFits`.
+#[test]
+fn registration_hash_commit_when_over_limit() {
+    let proof = |set: &str| {
+        let path = format!("{}/../../smartcontracts/evm/test/vectors/pqz-gas/{set}.json", env!("CARGO_MANIFEST_DIR"));
+        let g: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        num(&g["pqzh"]["REGISTER"]["proof"]) as usize
+    };
+    let mut kem_pk = vec![0x5a; 1601];
+    kem_pk[0] = 1;
+    let input = |set: &str, pqz: usize| RegistrationInput {
+        kind: 0x0131, key_data: vec![0x5a; 1952], pqz_key: vec![0x5a; pqz], pqz_pop: vec![0x5a; proof(set)],
+        kem_pk: kem_pk.clone(), pop: vec![0x5a; 3309], ..Default::default()
+    };
+    assert_eq!(REGISTER_CALLDATA_LIMIT, 261_909);
+    let x = input("n2560-kmax16384", 20480);
+    let full = registration_args(&RegistrationInput { kem_commit: Some(false), ..x.clone() }).unwrap();
+    assert_eq!(full.args.calldata_len(), 262_116);
+    let auto = registration_args(&x).unwrap();
+    assert_eq!(auto.args.calldata_len(), 260_548);
+    let fill = auto.kem_fill.expect("over the limit: the hash commit");
+    assert_eq!(fill.calldata_len(), 2020);
+    assert_eq!(fill.kem.kem_pk(), kem_pk);
+    assert_eq!(fill.ua, ua_of(0x0131, &x.key_data).unwrap());
+    let small = registration_args(&input("n2304-kmax4096", 18432)).unwrap();
+    assert!(small.kem_fill.is_none(), "under the limit: the full key");
 }
