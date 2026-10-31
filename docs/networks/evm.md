@@ -299,8 +299,9 @@ TLS reverse proxy with rate limits and keeps the sealer key out of the RPC node.
 restart policy, started by hand after the node; it reads the node over the Docker-network endpoint only; internal
 transactions, block rewards, token-instance metadata and market data are off; pending transactions and address coin
 balances are on (owner 2026-10-31: with the coin-balance fetcher disabled, Blockscout 9.0.2's live import crashes
-after every block and the home-page block list stops; on the pruned node its catch-up retries old-block balances,
-about 1.5 CPU, open);
+after every block and the home-page block list stops; on the pruned node its catch-up retried old-block balances
+forever, about 1.5 CPU, until a one-off cleanup of those rows, `blockscout-code-backfill.py --prune-coin-balances`,
+rerun after an outage longer than the pruning window; archive mode at the sealer / RPC node split is the root fix);
 the UI is published on host port 8558 (owner 2026-10-31: not 3000) and the API on 4000; the frontend image is pinned
 by digest; one-line stop in the RUNBOOK.
 

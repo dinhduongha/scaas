@@ -1491,3 +1491,31 @@ mba_chain_node_nethermind 01:26:33Z: 61.8 % / 472 MiB (was 1.5–3 %)
    1,349 distinct address@block; address_coin_balances unfetched 1,734 (block 1 … tip-64: 1,734 all below the pruning window); retried forever
 -- balances: /api/v2/addresses/0x1efF47bc…A718 coin_balance 4999999999999047705783999978991 (= cast balance), block 1267; UI :8558/address/… 200
 open: CPU cost; a INDEXER_COIN_BALANCES_CONCURRENCY / _BATCH_SIZE cap only slows the loop (not applied, owner to rule)
+
+== R4 2026-10-31T01:31Z owner ruling: one-off cleanup of unfetched coin balances (remedy 2; archive at the node split later)
+dry run of the delete script with expected=-1: BEGIN / ROLLBACK, 'rolled back: 1734 rows matched, backup has -1' (count unchanged)
+$ python3 -I pqz-core/nethermind/chain/blockscout-code-backfill.py --prune-coin-balances http://127.0.0.1:8545 /home/dockers/mba-chain-nethermind/address_coin_balances-unfetched-bak-20261031-0831.csv
+tip 1508, cutoff 1444: 1734 unfetched rows backed up to …/address_coin_balances-unfetched-bak-20261031-0831.csv
+BEGIN / COMMIT / deleted 1734
+backup: 1735 lines (header + 1734), sha256 5b8a72caf7fb57ad2ee3e89e050691f84cf0ad1045d2c64afc5053b97df7afeb
+left unfetched: 1 row at block 1508 (the head, fetched by the realtime fetcher); docker compose restart explorer-backend 01:31:47Z
+-- 5 min after (01:31:50–01:37Z; nostate / crash = lines in the last 30 s of the backend log):
+01:32:18 node 1515 db 1515 main-page 1515 nostate_last30s 0 crash_last30s 0 unfetched 0
+01:32:39 node 1520 db 1519 main-page 1519 nostate_last30s 0 crash_last30s 0 unfetched 0
+01:33:01 node 1524 db 1524 main-page 1524 nostate_last30s 0 crash_last30s 0 unfetched 0
+01:33:23 node 1528 db 1528 main-page 1528 nostate_last30s 0 crash_last30s 0 unfetched 0
+01:33:45 node 1533 db 1532 main-page 1532 nostate_last30s 0 crash_last30s 0 unfetched 1
+01:34:06 node 1537 db 1537 main-page 1537 nostate_last30s 0 crash_last30s 0 unfetched 1
+01:34:28 node 1541 db 1541 main-page 1541 nostate_last30s 0 crash_last30s 0 unfetched 0
+01:34:50 node 1546 db 1545 main-page 1545 nostate_last30s 0 crash_last30s 0 unfetched 1
+01:35:11 node 1550 db 1550 main-page 1550 nostate_last30s 0 crash_last30s 0 unfetched 0
+01:35:33 node 1554 db 1554 main-page 1554 nostate_last30s 0 crash_last30s 0 unfetched 0
+01:35:54 node 1559 db 1558 main-page 1558 nostate_last30s 0 crash_last30s 0 unfetched 0
+01:36:16 node 1563 db 1563 main-page 1563 nostate_last30s 0 crash_last30s 0 unfetched 0
+01:36:38 node 1567 db 1567 main-page 1567 nostate_last30s 0 crash_last30s 0 unfetched 0
+01:36:59 node 1572 db 1571 main-page 1571 nostate_last30s 0 crash_last30s 0 unfetched 0
+mba_explorer_backend n 140 peak cpu 6.4 mem 312 | 2nd half cpu med 2.0 max 6.4 mem med 301 MiB
+mba_explorer_db n 140 peak cpu 10.3 mem 122 | 2nd half cpu med 1.2 max 10.3 mem med 118 MiB
+mba_chain_node_nethermind n 140 peak cpu 8.5 mem 479 | 2nd half cpu med 1.9 max 3.2 mem med 478 MiB
+(R3, before the cleanup: backend 149 % median / 347 MiB, node 60–88 %; R1-era baseline: backend 1.7 % / 306 MiB, node 1.5–3 %)
+balance: /api/v2/addresses/0x1efF47bc…A718 4999999999999047705783999978991 = cast balance; UI :8558/address/… 200

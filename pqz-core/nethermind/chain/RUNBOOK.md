@@ -654,13 +654,20 @@ docker compose stop explorer-frontend explorer-backend explorer-db       # stop 
   insert (`GenServer.call(Indexer.Fetcher.CoinBalance.Realtime …) no process`, 511 times in 3 h) and the home-page block
   list (`/api/v2/main-page/blocks`) stopped updating while the DB kept indexing. Since the env line was removed (backup
   `docker-compose.yml.bak-pre-coinbal-20261031-0818`, backend recreated): 0 crashes, the home list follows the DB tip
-  (≤ 1 block behind over 5 min), address pages show balances. **Measured cost (open):** before, backend 1.7 % median
+  (≤ 1 block behind over 5 min), address pages show balances. **Measured cost, then closed by a cleanup:** before, backend 1.7 % median
   (max 3.4) / 306 MiB, db 1.0 % (max 8.7) / 118 MiB; after, backend 149 % median (peak 155 %, its 1.5-CPU cap) /
   347–362 MiB, db 1.0 % (peak 13.4) / 119–123 MiB, node about 60 % (was 1.5–3 %). Cause: the coin-balance catch-up
   fetcher retries forever the 1,734 balances recorded at old blocks (block 1 … tip − 64) that the pruned node cannot
   serve (`-32002 No state available`, about 10,900 failed lookups per 2 min, 1,349 distinct address@block). A cap
-  (`INDEXER_COIN_BALANCES_CONCURRENCY` / `INDEXER_COIN_BALANCES_BATCH_SIZE`) only slows the loop; the fix is pending
-  an owner ruling (see the phase C fix report).
+  (`INDEXER_COIN_BALANCES_CONCURRENCY` / `INDEXER_COIN_BALANCES_BATCH_SIZE`) would only slow the loop. **Cleanup (owner
+  2026-10-31):** `blockscout-code-backfill.py --prune-coin-balances http://127.0.0.1:8545 <backup.csv>` backs up, then
+  deletes in one transaction (rolled back unless the count equals the backup), the unfetched rows (`value_fetched_at`
+  NULL) more than 64 blocks behind the node's tip; then `docker compose restart explorer-backend` (the fetcher keeps its
+  queue in memory). Run it after a Blockscout outage longer than the pruning window (about 64 blocks, 5 min), or when
+  the backend log shows `coin_balance_catchup … No state available`. First run 2026-10-31 01:31Z: 1,734 rows deleted
+  (backup `$L/address_coin_balances-unfetched-bak-20261031-0831.csv`); after it, 0 `No state` errors in 5 min, backend
+  2.0 % median (peak 6.4) / 301 MiB, db 1.2 % / 118 MiB, node 1.9 % / 478 MiB, home list on the tip, balances right.
+  Root fix: archive mode at the sealer / RPC node split (separate task).
 - **Pruned node.** The node keeps no old state (`Pruning.Mode` Hybrid: `eth_getBalance` / `eth_getCode` at an old block →
   `-32002 No state available`). Blockscout's ContractCode fetcher asks the code at the creation block, so for a
   contract created more than about 64 blocks before Blockscout sees it, it retries forever (one core; 7.0.2 also loops on
