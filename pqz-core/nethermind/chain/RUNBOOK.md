@@ -775,3 +775,44 @@ docker compose stop explorer-frontend explorer-backend explorer-db       # stop 
 - **Measured (2026-10-31, `docker stats`):** catch-up of 740 blocks (before the backfill): backend 115–150 % CPU (the
   ContractCode loop), db ≤ 37.6 % / ≤ 216 MiB (log B2), frontend ≤ 51 % at start; steady state after the backfill, pending fetcher on:
   backend 1–5 % / 300 MiB, db 0.5–10 % / 103–109 MiB, frontend 0 % / 165 MiB.
+
+### Contract verification: sc-verifier (owner 2026-10-31)
+
+Service `sc-verifier` (container `mba_sc_verifier`, `ghcr.io/blockscout/smart-contract-verifier:v1.11.1@sha256:a7580f42b55c0aafad43a2acd979b60adddc1e9985a8cf01857179962f0fe063`,
+512m, 1 CPU): HTTP 8050 on `mba-net` only (no published port, gRPC off), Solidity only (Vyper, Sourcify, zkSync off),
+solc from `binaries.soliditylang.org` (the only outbound traffic; Blockscout's hosted eth-bytecode-db is not used),
+compilers run natively in the container (`SMART_CONTRACT_VERIFIER__COMPILERS__EXECUTION__TYPE=native`: the docker
+executor would need the host Docker socket inside it), at most 2 compiler threads. The backend uses it through
+`MICROSERVICE_SC_VERIFIER_ENABLED=true`, `MICROSERVICE_SC_VERIFIER_TYPE=sc_verifier`,
+`MICROSERVICE_SC_VERIFIER_URL=http://sc-verifier:8050/` (names from 9.0.2's `runtime.exs`; without the URL 9.0.2 is
+enabled by default and points at `https://eth-bytecode-db.services.blockscout.com/`). Start / stop with Blockscout:
+
+```sh
+docker compose up -d sc-verifier            # before explorer-backend
+docker compose stop sc-verifier
+```
+
+**After every 7622 reset or deploy run** `smartcontracts/evm/script/verify-blockscout.sh` (default
+`broadcast/Deploy.s.sol/7622/run-latest.json`; `BLOCKSCOUT_API`, `FOUNDRY_PROFILE` default `private7622`): one
+`forge verify-contract … --verifier blockscout` per CREATE / CREATE2 row and per factory child of the broadcast
+(MtxRelayExecutor, the SmartKeyAccount implementation, the NormalToken / SCaaSDex implementations), constructor
+arguments from the init code, no `--libraries` (the deployed metadata has none; the verifier matches the unlinked
+placeholders, a full match), forge under `scripts/capped`; skips verified addresses, prints ok / fail per contract,
+exit 1 on any fail. It looks each address up first: Blockscout learns the code of a CREATE2 or factory child only on
+demand (internal transactions are off). The PQZ e2e contracts (`script/pqz/e2e.py`) have no broadcast file and are
+not covered.
+
+- **Blocked (2026-10-31): sc-verifier v1.11.1 cannot verify the Amsterdam build.** Every contract here is compiled with
+  `evmVersion` `amsterdam` + `experimental` (NET-EVM-06; solc 0.8.37). v1.11.1 (the newest tag, also `latest` and
+  `main`) parses the standard JSON into `foundry-compilers-artifacts` 0.19, whose `EvmVersion` stops at `osaka`: every
+  request ends `content is not a valid standard json: settings.evmVersion: Unknown evm version: amsterdam`, and the
+  backend reports `Fail - Unable to verify`. First run: 0 ok, 31 fail, all with that message. Resubmitting as `osaka`
+  does not help: the code is the same but the metadata is not (the deployed CBOR carries `experimental`, which the
+  verifier drops), so no match. The inputs themselves are right: local solc 0.8.37 on the script's standard JSON gives
+  the deployed runtime code exactly (immutables and library addresses masked, metadata equal) for UARegistry,
+  MtxRelayExecutor, P256Verifier, NormalToken and SCaaSDex; the verifier gives NormalToken a FULL match with the
+  library placeholders when compiled as `osaka`. Needs an owner decision: a verifier build that accepts `amsterdam` and
+  passes `experimental` through, or upstream support.
+- **Measured (2026-10-31, `docker stats`, cgroup):** idle 0.02 % / 4.5 MiB; during the 31-contract run (all refused at
+  parse) ≤ 0.4 % / 6.8 MiB; one real compile (NormalToken, 5.1 s): 100 % (its 1-CPU cap), peak 364 MiB
+  (`memory.peak`), about 334 MiB kept afterwards. Run the script sequentially (as it does) under the 512m cap.

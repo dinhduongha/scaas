@@ -1,0 +1,52 @@
+# fs3 T13 verify, 2026-10-31: smartcontracts/evm/script/verify-blockscout.sh against 7622 (Blockscout 9.0.2 + sc-verifier v1.11.1 @sha256:a7580f42…e063)
+# start / end:
+10:21:49
+fail  AdminLib  0x5c13b2040a31c056fa3a8fc1fd4206242c883368  Details: `Fail - Unable to verify`
+fail  ZetherLib  0x8e28089a938e57e8f388af00b1961d60916b6b7c  Details: `Fail - Unable to verify`
+fail  WrappedLib  0x4327a7816a8a78180e69c9c7273705c45f23d89f  Details: `Fail - Unable to verify`
+fail  TradeLib  0x13b095390486773cf498858a7106b571f74e46db  Details: `Fail - Unable to verify`
+fail  HederaLib  0x277f412798d2742d90f5699a1d279aecdc69c224  Details: `Fail - Unable to verify`
+fail  MtxPipelineLib  0x649cb95bb756d88aacdaccfc8efb7a45f3fb3055  Details: `Fail - Unable to verify`
+fail  SmartKeyAccountFactory  0x3faf952d9cf16c5dec18d6571d366f614944619d  Details: `Fail - Unable to verify`
+fail  SmartKeyAccount  0x79991a4d6bc96d38b602968167cd584cec4a116e  Details: `Fail - Unable to verify`
+fail  OpenFactory  0xc037d039a21646060e5b4ae441c1138e87000bde  Details: `Fail - Unable to verify`
+fail  WebAuthnP256Verifier  0x1e70f0abc6c209d05ed2746c1613947c91e11628  Details: `Fail - Unable to verify`
+fail  P256Verifier  0x94e9eba0b09fc5d7bd2f19babcdbc67b423d62e6  Details: `Fail - Unable to verify`
+fail  Ed25519Verifier  0xe8ef243fe4605ce9ce9cf9ba7d7e8a5e30b14245  Details: `Fail - Unable to verify`
+fail  Bip340Verifier  0xc18ba5fe87c19b3b7704d8220e67848ee37d2d8b  Details: `Fail - Unable to verify`
+fail  Secp256k1Verifier  0xad62c7780eba1115f835f768d05ab3fcf611f3eb  Details: `Fail - Unable to verify`
+fail  SchnorrBn254Verifier  0xd175cf00c1d2cfe8c29a658f2435958193ab3ceb  Details: `Fail - Unable to verify`
+fail  SchnorrBls12381Verifier  0xf2b365f76400b0ac6ce03561931c494b04705923  Details: `Fail - Unable to verify`
+fail  BlsMinSigBls12381Verifier  0x1b895c645e506772b9b79f3936bc9d137d00c162  Details: `Fail - Unable to verify`
+fail  BlsMinSigBn254Verifier  0xc1aab80056190a54523b0a94c6c71f2811e59be8  Details: `Fail - Unable to verify`
+fail  Musig2Secp256k1Verifier  0xaf64d79f498ea788ffaac999cd2ee331e3197010  Details: `Fail - Unable to verify`
+fail  UAFrostSecp256k1Verifier  0x51b2339459cf64b455634d51e0479cdcefe3e409  Details: `Fail - Unable to verify`
+fail  Musig2Bn254Verifier  0x9cd954336c24a730019ae3b9777eeb46686892fa  Details: `Fail - Unable to verify`
+fail  FrostBn254Verifier  0x29cdcfc15e0fa73dbde19d79d0434e863238b80a  Details: `Fail - Unable to verify`
+fail  UAMldsaVerifier  0x0cd8084ca16b2da155c01d2ef0ead5ba17661fbc  Details: `Fail - Unable to verify`
+fail  UAMldsaVerifier  0x0f89bca833649cbc78b40ef49d8e783ef837b7dc  Details: `Fail - Unable to verify`
+fail  UAFndsaVerifier  0xd8f932580ec7ea9eee10418eab65ed2ff21a5424  Details: `Fail - Unable to verify`
+fail  UASlhdsaVerifier  0x4deee31a221696bb7613a55745600762df1aea57  Details: `Fail - Unable to verify`
+fail  UARegistry  0x06d03d563686e4cce533b2c392ec68faab119776  Details: `Fail - Unable to verify`
+fail  MtxRelayFee  0x7fb42079c44c185c131fd38ee59c18463b16fa48  Details: `Fail - Unable to verify`
+fail  MtxRelayExecutor  0xa9b8ab56e974b0495aec3280dc5e7db77b88c687  Details: `Fail - Unable to verify`
+fail  NormalToken  0xcdb98d83a09f696b7720842f91d9fb56dad6a551  Details: `Fail - Unable to verify`
+fail  SCaaSDex  0xe77d3d680bc1e35205f68cd1f1fc71230d3ed3d9  Details: `Fail - Unable to verify`
+0 ok, 31 fail (chain 7622, http://192.168.1.72:4000/api)
+exit=1
+10:25:04
+
+# backend log, verification errors in the run window (column numbers folded):
+     32 verification error: content is not a valid standard json: settings.evmVersion: Unknown evm version: amsterdam at line 1 column N   (31 script + 1 manual P256Verifier try)
+
+# direct sc-verifier calls (POST /api/v2/verifier/solidity/sources:verify-standard-json, v0.8.37+commit.f401782d):
+#   P256Verifier, forge standard JSON as is                 -> FAILURE Unknown evm version: amsterdam
+#   P256Verifier, evmVersion osaka (experimental kept)      -> FAILURE No contract could be verified with provided data (1.16 s)
+#   NormalToken, osaka without experimental/viaSSACFG, local osaka runtime code with library + immutable slots filled -> SUCCESS FULL (5.1 s)
+
+# local solc 0.8.37 on forge verify-contract --show-standard-json-input (no --libraries), runtime code vs cast code (immutables / library slots masked):
+#   UARegistry EXACT, MtxRelayExecutor EXACT, P256Verifier EXACT (2 immutable nibbles only), NormalToken EXACT, SCaaSDex EXACT
+#   NormalToken / SCaaSDex with --libraries: same length, metadata differs (settings.libraries enters the metadata) -> partial match at best
+#   P256Verifier as osaka: code equal, only the CBOR metadata differs
+
+# verifier docker stats: idle 0.02 % / 4.5 MiB; during the run (max of 63 samples) 0.35% 5.609MiB / 512MiB, max mem 6.754MiB; NormalToken compile: max 100.89% 222.9MiB / 512MiB, memory.peak 381517824 B (364 MiB), anon after 348647424 B
