@@ -116,7 +116,8 @@ TestCase {
         let withPqz = 0
         for (const r of pp.registrations) {
             const a = r.attrs
-            const h = JSON.parse(UaKinds.holderPopMessage(r.kind, r.ua, r.keyData, a.pqzKey, r.pqzPop, Number(a.kemVersion), a.kemPk))
+            compare(Number(a.kemVersion), 0, r.name)  // register takes no KEM version (UAAttrs' word: 0)
+            const h = JSON.parse(UaKinds.holderPopMessage(r.kind, r.ua, r.keyData, a.pqzKey, r.pqzPop, a.kemPk))
             compare(UaKinds.lastError, "", r.name)
             compare(h.pqzKeyHash, r.pqzKeyHash, r.name)
             compare(h.pqzPopHash, a.pqzPopHash, r.name)
@@ -125,12 +126,12 @@ TestCase {
             compare(h.registrationDigest, r.registrationDigest, r.name)
             compare(h.message, r.popMessage, r.name)
             compare(h.memberDigest ?? "", r.memberDigest ?? "", r.name)
-            compare(UaKinds.kemRecordHash(r.ua, Number(a.kemVersion), a.kemPk), r.kemRecordHash, r.name)
+            compare(UaKinds.kemRecordHash(r.ua, 0, a.kemPk), r.kemRecordHash, r.name)  // the register key: version 0
             compare(UaKinds.portableRecordDigest(r.ua, r.kind, h.pqzKeyHash, h.kemRecordHash), r.portableRecordDigest, r.name)
             compare(UaKinds.registrationDigest(r.ua, r.kind, h.pqzKeyHash, h.kemRecordHash, h.pqzPopHash), r.registrationDigest, r.name)
             if (a.pqzKey !== "0x") {
                 withPqz++
-                compare(UaKinds.pqzRegMessage(r.kind, r.ua, a.pqzKey, Number(a.kemVersion), a.kemPk), r.pqzRegMessage, r.name)
+                compare(UaKinds.pqzRegMessage(r.kind, r.ua, a.pqzKey, a.kemPk), r.pqzRegMessage, r.name)
                 // TS-D3: R_REG proves over the typed UAPortableRecord of the registering kind
                 compare(UaKinds.uaMessage(0x0142, UaKinds.purposeTagV("pop", 2), r.portableRecordDigest), r.pqzRegMessage, r.name)
             }
@@ -141,7 +142,7 @@ TestCase {
             const a = r.attrs
             if (a.pqzKey === "0x")
                 continue
-            const h = JSON.parse(UaKinds.holderPopMessageH(r.kind, r.ua, r.keyData, a.pqzKey, "0x", a.pqzPopHash, Number(a.kemVersion), a.kemPk))
+            const h = JSON.parse(UaKinds.holderPopMessageH(r.kind, r.ua, r.keyData, a.pqzKey, "0x", a.pqzPopHash, a.kemPk))
             compare(UaKinds.lastError, "", r.name)
             compare(h.message, r.popMessage, r.name)
         }
@@ -156,7 +157,7 @@ TestCase {
                     if (key.startsWith("attrs.")) row.attrs[key.slice(6)] = v; else row[key] = v
                 }
                 const a = row.attrs
-                const out = UaKinds.holderPopMessageH(row.kind, row.ua, row.keyData, a.pqzKey, row.pqzPop, a.pqzPopHash, Number(a.kemVersion), a.kemPk)
+                const out = UaKinds.holderPopMessageH(row.kind, row.ua, row.keyData, a.pqzKey, row.pqzPop, a.pqzPopHash, a.kemPk)
                 if (n.error === "UAPoP") {
                     compare(UaKinds.lastError, "", n.name)
                     verify(JSON.parse(out).message !== row.popMessage, n.name)
@@ -198,20 +199,22 @@ TestCase {
         const proof = "0x" + "07".repeat(32), ua = "0x" + "01".repeat(32)
         for (const bad of [0x0101, 0x0133]) {  // single-key non-holders refuse a PQZ key (on every pqzReg row's UA)
             for (const p of s.pqzReg) {
-                UaKinds.holderPopMessage(bad, p.ua, "0x", k.pqzKey, proof, 0, "")
+                UaKinds.holderPopMessage(bad, p.ua, "0x", k.pqzKey, proof, "")
                 compare(UaKinds.lastError, "UAPqzHolder")
             }
         }
-        UaKinds.holderPopMessage(0x0130, ua, "0x", k.pqzKey, "0x", 0, "")
+        UaKinds.holderPopMessage(0x0130, ua, "0x", k.pqzKey, "0x", "")
         compare(UaKinds.lastError, "UAPqzPopHash")  // a PQZ key without its proof
-        UaKinds.holderPopMessage(0x0120, ua, "0x000200", k.pqzKey, proof, 0, "")
+        UaKinds.holderPopMessage(0x0120, ua, "0x000200", k.pqzKey, proof, "")
         compare(UaKinds.lastError, "UAKeyData")
-        UaKinds.holderPopMessage(0x0120, ua, "0x", k.pqzKey, proof, 0, "")
+        UaKinds.holderPopMessage(0x0120, ua, "0x", k.pqzKey, proof, "")
         compare(UaKinds.lastError, "UAPqzHolder")
-        UaKinds.holderPopMessage(0x0101, ua, "0x", "0x", "0x", 1, "0x" + "00".repeat(1600))
+        UaKinds.holderPopMessage(0x0101, ua, "0x", "0x", "0x", "0x01" + "00".repeat(1600))
         compare(UaKinds.lastError, "UAKemHolder")
+        UaKinds.holderPopMessage(0x0130, ua, "0x", "0x", "0x", "0x00" + "00".repeat(1600))
+        compare(UaKinds.lastError, "UAKemScheme")  // version 0 with scheme 0
         // a proof hash of the wrong length is UAPqzPopHash, as in every other package (m-C4)
-        UaKinds.holderPopMessageH(0x0130, ua, "0x", k.pqzKey, "0x", "0x" + "07".repeat(31), 0, "")
+        UaKinds.holderPopMessageH(0x0130, ua, "0x", k.pqzKey, "0x", "0x" + "07".repeat(31), "")
         compare(UaKinds.lastError, "UAPqzPopHash")
         UaKinds.pqzKeyRecordMessage(0x0130, ua, "0x", k.pqzKey, "0x", "0x" + "07".repeat(31), false)
         compare(UaKinds.lastError, "UAPqzPopHash")
@@ -276,6 +279,11 @@ TestCase {
         const kem = (n, scheme = "01") => "0x" + scheme + "00".repeat(n - 1) // scheme byte, zeros, n bytes in all
         UaKinds.kemRecordDigest(ua, 0, kem(1601))
         compare(UaKinds.lastError, "UAKemVersion")
+        // owner 2026-10-31: version 0 with a key is the register key's record (scheme != 0), never a setKemKey record
+        verify(UaKinds.kemRecordHash(ua, 0, kem(1601)) !== UaKinds.kemRecordHash(ua, 0, "0x"))
+        compare(UaKinds.lastError, "")
+        UaKinds.kemRecordHash(ua, 0, kem(1601, "00"))
+        compare(UaKinds.lastError, "UAKemScheme")
         UaKinds.kemRecordDigest(ua, 1, kem(1600))
         compare(UaKinds.lastError, "UAKemKeyLength")
         UaKinds.kemRecordDigest(ua, 1, kem(1602))
@@ -303,8 +311,8 @@ TestCase {
             compare(UaKinds.uaMessage(0x0142, UaKinds.purposeTagV("pop", 2), p.portableRecordDigest), p.pqzRegMessage)
             if (p.kemRecordHash !== UaKinds.kemRecordHash(p.ua, 0, "0x"))
                 continue  // an opaque label; the real records are in portable.json
-            compare(UaKinds.pqzRegMessage(p.kind, p.ua, k.pqzKey, 0, ""), p.pqzRegMessage)
-            const h = JSON.parse(UaKinds.holderPopMessage(p.kind, p.ua, "0x", k.pqzKey, "0x" + "07".repeat(32), 0, ""))
+            compare(UaKinds.pqzRegMessage(p.kind, p.ua, k.pqzKey, ""), p.pqzRegMessage)
+            const h = JSON.parse(UaKinds.holderPopMessage(p.kind, p.ua, "0x", k.pqzKey, "0x" + "07".repeat(32), ""))
             compare(h.pqzKeyHash, p.pqzKeyHash)
             compare(h.portableRecordDigest, p.portableRecordDigest)
         }

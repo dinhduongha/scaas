@@ -102,7 +102,7 @@ abstract class ScaasUaApi extends BaseApi {
     Uint8List? pqzKey,
     Uint8List? pqzPop,
     Uint8List? pqzPopHash,
-    KemRecord? kemRecord,
+    Uint8List? kemPk,
   });
 
   bool crateApiUaInNativeSpace({required U8Array32 id});
@@ -198,7 +198,7 @@ abstract class ScaasUaApi extends BaseApi {
     required PlatformInt64 kind,
     required U8Array32 ua,
     required List<int> pqzKey,
-    KemRecord? kemRecord,
+    Uint8List? kemPk,
   });
 
   U8Array32 crateApiUaPurposeTag({required String purpose});
@@ -413,7 +413,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
     Uint8List? pqzKey,
     Uint8List? pqzPop,
     Uint8List? pqzPopHash,
-    KemRecord? kemRecord,
+    Uint8List? kemPk,
   }) {
     return handler.executeSync(
       SyncTask(
@@ -425,7 +425,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_opt_list_prim_u_8_strict(pqzKey, serializer);
           sse_encode_opt_list_prim_u_8_strict(pqzPop, serializer);
           sse_encode_opt_list_prim_u_8_strict(pqzPopHash, serializer);
-          sse_encode_opt_box_autoadd_kem_record(kemRecord, serializer);
+          sse_encode_opt_list_prim_u_8_strict(kemPk, serializer);
           return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
         },
         codec: SseCodec(
@@ -433,7 +433,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           decodeErrorData: sse_decode_ua_error,
         ),
         constMeta: kCrateApiUaHolderPopMessageConstMeta,
-        argValues: [kind, ua, keyData, pqzKey, pqzPop, pqzPopHash, kemRecord],
+        argValues: [kind, ua, keyData, pqzKey, pqzPop, pqzPopHash, kemPk],
         apiImpl: this,
       ),
     );
@@ -448,7 +448,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       "pqzKey",
       "pqzPop",
       "pqzPopHash",
-      "kemRecord",
+      "kemPk",
     ],
   );
 
@@ -1062,7 +1062,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
     required PlatformInt64 kind,
     required U8Array32 ua,
     required List<int> pqzKey,
-    KemRecord? kemRecord,
+    Uint8List? kemPk,
   }) {
     return handler.executeSync(
       SyncTask(
@@ -1071,7 +1071,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_i_64(kind, serializer);
           sse_encode_u_8_array_32(ua, serializer);
           sse_encode_list_prim_u_8_loose(pqzKey, serializer);
-          sse_encode_opt_box_autoadd_kem_record(kemRecord, serializer);
+          sse_encode_opt_list_prim_u_8_strict(kemPk, serializer);
           return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30)!;
         },
         codec: SseCodec(
@@ -1079,7 +1079,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           decodeErrorData: sse_decode_ua_error,
         ),
         constMeta: kCrateApiUaPqzRegMessageConstMeta,
-        argValues: [kind, ua, pqzKey, kemRecord],
+        argValues: [kind, ua, pqzKey, kemPk],
         apiImpl: this,
       ),
     );
@@ -1087,7 +1087,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
 
   TaskConstMeta get kCrateApiUaPqzRegMessageConstMeta => const TaskConstMeta(
     debugName: "pqz_reg_message",
-    argNames: ["kind", "ua", "pqzKey", "kemRecord"],
+    argNames: ["kind", "ua", "pqzKey", "kemPk"],
   );
 
   @override
@@ -1362,12 +1362,6 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
-  KemRecord dco_decode_box_autoadd_kem_record(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dco_decode_kem_record(raw);
-  }
-
-  @protected
   UaDomain dco_decode_box_autoadd_ua_domain(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_ua_domain(raw);
@@ -1394,18 +1388,6 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   PlatformInt64 dco_decode_i_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dcoDecodeI64(raw);
-  }
-
-  @protected
-  KemRecord dco_decode_kem_record(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
-    return KemRecord(
-      version: dco_decode_u_64(arr[0]),
-      pk: dco_decode_list_prim_u_8_strict(arr[1]),
-    );
   }
 
   @protected
@@ -1454,12 +1436,6 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   String? dco_decode_opt_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_String(raw);
-  }
-
-  @protected
-  KemRecord? dco_decode_opt_box_autoadd_kem_record(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw == null ? null : dco_decode_box_autoadd_kem_record(raw);
   }
 
   @protected
@@ -1588,12 +1564,6 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
-  KemRecord sse_decode_box_autoadd_kem_record(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_kem_record(deserializer));
-  }
-
-  @protected
   UaDomain sse_decode_box_autoadd_ua_domain(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_ua_domain(deserializer));
@@ -1624,14 +1594,6 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getPlatformInt64();
-  }
-
-  @protected
-  KemRecord sse_decode_kem_record(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_version = sse_decode_u_64(deserializer);
-    var var_pk = sse_decode_list_prim_u_8_strict(deserializer);
-    return KemRecord(version: var_version, pk: var_pk);
   }
 
   @protected
@@ -1691,19 +1653,6 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_String(deserializer));
-    } else {
-      return null;
-    }
-  }
-
-  @protected
-  KemRecord? sse_decode_opt_box_autoadd_kem_record(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    if (sse_decode_bool(deserializer)) {
-      return (sse_decode_box_autoadd_kem_record(deserializer));
     } else {
       return null;
     }
@@ -1847,15 +1796,6 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
-  void sse_encode_box_autoadd_kem_record(
-    KemRecord self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_kem_record(self, serializer);
-  }
-
-  @protected
   void sse_encode_box_autoadd_ua_domain(
     UaDomain self,
     SseSerializer serializer,
@@ -1880,13 +1820,6 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putPlatformInt64(self);
-  }
-
-  @protected
-  void sse_encode_kem_record(KemRecord self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_u_64(self.version, serializer);
-    sse_encode_list_prim_u_8_strict(self.pk, serializer);
   }
 
   @protected
@@ -1950,19 +1883,6 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_String(self, serializer);
-    }
-  }
-
-  @protected
-  void sse_encode_opt_box_autoadd_kem_record(
-    KemRecord? self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    sse_encode_bool(self != null, serializer);
-    if (self != null) {
-      sse_encode_box_autoadd_kem_record(self, serializer);
     }
   }
 

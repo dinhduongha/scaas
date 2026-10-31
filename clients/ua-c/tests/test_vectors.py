@@ -60,8 +60,8 @@ for name, res, args in [
     ('portable_domain_separator', st, [P]), ('kem_record_hash', st, [u8, u64, u8, sz, P]),
     ('portable_record_digest', st, [u8, u16, u8, u8, P]), ('registration_digest', st, [u8, u16, u8, u8, u8, P]),
     ('kem_record_digest', st, [u8, u64, u8, sz, P]), ('kem_record_message', st, [u16, u8, u64, u8, sz, P]),
-    ('holder_pop_message', st, [u16, u8, u8, sz, u8, sz, u8, sz, u8, sz, u64, u8, sz, P]),
-    ('pqz_reg_message', st, [u16, u8, u8, sz, u64, u8, sz, P]), ('pqz_key_digest', st, [u8, u8, P]),
+    ('holder_pop_message', st, [u16, u8, u8, sz, u8, sz, u8, sz, u8, sz, u8, sz, P]),
+    ('pqz_reg_message', st, [u16, u8, u8, sz, u8, sz, P]), ('pqz_key_digest', st, [u8, u8, P]),
     ('pqz_key_record_digest', st, [u8, u8, u8, P]),
     ('pqz_key_record_message', st, [u16, u8, u8, sz, u8, sz, u8, sz, u8, sz, bl, P]),
     ('is_portable_purpose', st, [u8, P]), ('msig_pqz_eligible', st, [u8, sz, P]),
@@ -153,9 +153,9 @@ def member(kind, ua_id, weight):
     return Member(kind, (C.c_uint8 * 32)(*ua_id), weight)
 
 
-def holder(kind, ua, key_data=b'', key=b'', pop=b'', pop_hash=b'', ver=0, kem_pk=b''):
+def holder(kind, ua, key_data=b'', key=b'', pop=b'', pop_hash=b'', kem_pk=b''):
     o = HolderPop()
-    ok(L.holder_pop_message(kind, ua, key_data, len(key_data), key, len(key), pop, len(pop), pop_hash, len(pop_hash), ver, kem_pk,
+    ok(L.holder_pop_message(kind, ua, key_data, len(key_data), key, len(key), pop, len(pop), pop_hash, len(pop_hash), kem_pk,
                             len(kem_pk), C.byref(o)))
     return o
 
@@ -176,7 +176,8 @@ def register(row, hash_only=False):
     a = row['attrs']
     pop = b'' if hash_only else b(row['pqzPop'])
     h = b(a['pqzPopHash'])
-    return holder(row['kind'], b(row['ua']), b(row['keyData']), b(a['pqzKey']), pop, h if any(h) else b'', int(a['kemVersion']), b(a['kemPk']))
+    assert int(a['kemVersion']) == 0, 'register takes no KEM version (UAAttrs\' word: 0)'
+    return holder(row['kind'], b(row['ua']), b(row['keyData']), b(a['pqzKey']), pop, h if any(h) else b'', b(a['kemPk']))
 
 
 class Vectors(unittest.TestCase):
@@ -295,7 +296,7 @@ class Vectors(unittest.TestCase):
             self.assertEqual(hx(out32(L.ua_message, 0x0142, out32(L.purpose_tag_v, b'pop', 2), portable)), p['pqzRegMessage'])
             if kem != out32(L.kem_record_hash, ua, 0, None, 0):
                 continue  # the row's KEM record hash is opaque; the real records are in portable.json
-            self.assertEqual(hx(out32(L.pqz_reg_message, p['kind'], ua, pk, len(pk), 0, None, 0)), p['pqzRegMessage'])
+            self.assertEqual(hx(out32(L.pqz_reg_message, p['kind'], ua, pk, len(pk), None, 0)), p['pqzRegMessage'])
             got = holder(p['kind'], ua, b'', pk, b'', proof)
             self.assertEqual((hx(bytes(got.pqz_key_hash)), hx(bytes(got.portable_record_digest))), (p['pqzKeyHash'], p['portableRecordDigest']))
             for bad in (0x0101, 0x0133):
@@ -354,10 +355,10 @@ class Vectors(unittest.TestCase):
                     self.assertEqual(mh(h), r.get('memberDigest', ''))
                 a = r['attrs']
                 pk, kpk = b(a['pqzKey']), b(a['kemPk'])
-                self.assertEqual(hx(out32(L.kem_record_hash, ua, int(a['kemVersion']), kpk, len(kpk))), r['kemRecordHash'])
+                self.assertEqual(hx(out32(L.kem_record_hash, ua, 0, kpk, len(kpk))), r['kemRecordHash'])  # the register key: version 0
                 if pk:
                     with_pqz += 1
-                    self.assertEqual(hx(out32(L.pqz_reg_message, r['kind'], ua, pk, len(pk), int(a['kemVersion']), kpk, len(kpk))), r['pqzRegMessage'])
+                    self.assertEqual(hx(out32(L.pqz_reg_message, r['kind'], ua, pk, len(pk), kpk, len(kpk))), r['pqzRegMessage'])
                     # TS-D3: R_REG proves over the typed UAPortableRecord of the registering kind
                     self.assertEqual(hx(out32(L.ua_message, 0x0142, out32(L.purpose_tag_v, b'pop', 2), b(r['portableRecordDigest']))), r['pqzRegMessage'])
                 else:
@@ -386,6 +387,10 @@ class Vectors(unittest.TestCase):
                             (1, kem(KEM_PK - 1, 255), 'UAKemScheme')):
             self.assertEqual(code_of(lambda: out32(L.kem_record_digest, u, v, pk, len(pk))), code)
         self.assertEqual(code_of(lambda: out32(L.kem_record_hash, u, 1, b'', 0)), 'UAKemKeyLength')
+        # owner 2026-10-31: version 0 with a key is the register key's record (scheme != 0), never a setKemKey record
+        # (the version-0 words against portable.json's registrations with a KEM key, above)
+        self.assertNotEqual(out32(L.kem_record_hash, u, 0, kem(KEM_PK), KEM_PK), out32(L.kem_record_hash, u, 0, None, 0))
+        self.assertEqual(code_of(lambda: out32(L.kem_record_hash, u, 0, kem(KEM_PK, 0), KEM_PK)), 'UAKemScheme')
         # (0, no key) = the zero record UAKemRecord{ua, 0, 0, 0} (TS-D2): checked on every registration row without a KEM key
         self.assertEqual(hx(out32(L.kem_record_digest, u, 2**64 - 1, kem(KEM_PK), KEM_PK)), '0xa0063a84b56d80c83688d8caf5aeb4be8fb4556928e8bc649686449573938f07')  # pins the 8-byte version word
 
@@ -486,8 +491,9 @@ class Vectors(unittest.TestCase):
         for args, code in (((0x0120, u, b'', key, b'', proof), 'UAPqzHolder'),
                            ((0x0130, u, b'', key, b'', bytes(31)), 'UAPqzPopHash'),
                            ((0x0130, u, b'', bytes(100), b'', proof), 'UAKeyData'),
-                           ((0x0130, u, b'', b'', b'', b'', 1, b''), 'UAKemKeyLength'),
-                           ((0x0101, u, b'', b'', b'', b'', 1, kem(KEM_PK)), 'UAKemHolder')):
+                           ((0x0130, u, b'', b'', b'', b'', kem(KEM_PK - 1)), 'UAKemKeyLength'),
+                           ((0x0130, u, b'', b'', b'', b'', kem(KEM_PK, 0)), 'UAKemScheme'),
+                           ((0x0101, u, b'', b'', b'', b'', kem(KEM_PK)), 'UAKemHolder')):
             self.assertEqual(code_of(lambda: holder(*args)), code, args[:2])
         # a NULL / zero-length proof hash is absent (same as no hash); an empty proof is no proof
         self.assertEqual(bytes(holder(0x0130, u).message), bytes(holder(0x0130, u, b'', b'', b'', b'').message))
@@ -543,12 +549,12 @@ class Abi(unittest.TestCase):
             'in_native_space id NULL': L.in_native_space(None, C.byref(bl())),
             'in_native_space out NULL': L.in_native_space(bytes(32), None),
             'ua_message digest NULL': L.ua_message(0x0102, bytes(32), None, o),
-            'holder_pop_message pqz_pop_hash NULL len 32': L.holder_pop_message(0x0130, bytes(32), b'', 0, b'', 0, b'', 0, None, 32, 0, b'', 0, C.byref(HolderPop())),
+            'holder_pop_message pqz_pop_hash NULL len 32': L.holder_pop_message(0x0130, bytes(32), b'', 0, b'', 0, b'', 0, None, 32, b'', 0, C.byref(HolderPop())),
             'pqz_key_record_message out NULL': L.pqz_key_record_message(0x0130, bytes(32), b'', 0, bytes(16384), 16384, b'', 0, bytes([7]) * 32, 32, False, None),
             'portable_record_digest ua NULL': L.portable_record_digest(None, 0x0130, bytes(32), bytes(32), o),
             'registration_digest pqz_pop_hash NULL': L.registration_digest(bytes(32), 0x0130, bytes(32), bytes(32), None, o),
             'portable_domain_separator out NULL': L.portable_domain_separator(None),
-            'holder_pop_message out NULL': L.holder_pop_message(0x0130, bytes(32), b'', 0, b'', 0, b'', 0, b'', 0, 0, b'', 0, None),
+            'holder_pop_message out NULL': L.holder_pop_message(0x0130, bytes(32), b'', 0, b'', 0, b'', 0, b'', 0, b'', 0, None),
             'domain separator chain_uid NULL': L.ua_auth_domain_separator(1, 1, bytes(20), None, o),
             'member_digest NULL': L.member_digest(None, bytes(32), o),
             'canonical_id text NULL': L.canonical_id(None, o, C.byref(n)),

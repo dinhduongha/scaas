@@ -166,7 +166,8 @@ pub fn portable_domain_separator() -> [u8; 32] {
     scaas_ua::ua8::PORTABLE_DOMAIN_SEPARATOR
 }
 /// `hashStruct(UAKemRecord{ua, version, scheme, kemPkHash})`, the `kem` word of a portable record; `(0, [])` is the zero record
-/// `UAKemRecord{ua, 0, 0, 0}` (no KEM record), otherwise the rules of [`kem_record_digest`].
+/// `UAKemRecord{ua, 0, 0, 0}` (no KEM record), `(0, key)` the `register` key's record (owner 2026-10-31), otherwise the rules
+/// of [`kem_record_digest`].
 #[frb(sync)]
 pub fn kem_record_hash(ua: [u8; 32], version: u64, kem_pk: Vec<u8>) -> R<[u8; 32]> {
     Ok(scaas_ua::ua8::kem_record_hash(&ua, version, &kem_pk)?)
@@ -181,15 +182,6 @@ pub fn portable_record_digest(ua: [u8; 32], kind: i64, pqz_key_hash: [u8; 32], k
 #[frb(sync)]
 pub fn registration_digest(ua: [u8; 32], kind: i64, pqz_key_hash: [u8; 32], kem_record_hash: [u8; 32], pqz_pop_hash: [u8; 32]) -> R<[u8; 32]> {
     Ok(scaas_ua::ua8::registration_digest(&ua, k(kind)?, &pqz_key_hash, &kem_record_hash, &pqz_pop_hash))
-}
-/// A KEM record attribute `(version >= 1, 1,601-byte key: scheme byte 1 first)`; `None`, or `(0, [])`, = absent. `version` is a `u64` (a Dart
-/// `BigInt`: 1 ... 2^64 - 1).
-pub struct KemRecord {
-    pub version: u64,
-    pub pk: Vec<u8>,
-}
-fn kem(k: &Option<KemRecord>) -> Option<(u64, &[u8])> {
-    k.as_ref().map(|k| (k.version, k.pk.as_slice()))
 }
 /// typed `UAKemRecord{ua, version, scheme, kemPkHash}` that `setKemKey` signs (`UAKemVersion` for 0, `UAKemScheme` unless the first byte is 1, `UAKemKeyLength` unless 1,601 bytes).
 #[frb(sync)]
@@ -221,7 +213,8 @@ pub struct HolderPop {
     pub member_digest: Option<[u8; 32]>,
 }
 /// The portable PoP message of a registration. Attributes: `pqz_key` with its proof `pqz_pop` (or only its hash `pqz_pop_hash`;
-/// null / empty = absent) and the initial KEM record; only holders carry them (`UAPqzHolder`, `UAKemHolder`; an `msig` needs
+/// null / empty = absent) and the initial KEM key `kem_pk` (1,601 bytes, scheme byte 1 first; its record is always version 0,
+/// owner 2026-10-31; null / empty = absent); only holders carry them (`UAPqzHolder`, `UAKemHolder`; an `msig` needs
 /// `key_data` to show it is PQ-eligible); a PQZ key always comes with its proof hash and only with it (`UAPqzPopHash`).
 #[frb(sync)]
 pub fn holder_pop_message(
@@ -231,10 +224,10 @@ pub fn holder_pop_message(
     pqz_key: Option<Vec<u8>>,
     pqz_pop: Option<Vec<u8>>,
     pqz_pop_hash: Option<Vec<u8>>,
-    kem_record: Option<KemRecord>,
+    kem_pk: Option<Vec<u8>>,
 ) -> R<HolderPop> {
     let h = hash(&pqz_pop_hash)?;
-    let r = scaas_ua::holder_pop_message(k(kind)?, &ua, &key_data, pqz_key.as_deref(), pqz_pop.as_deref(), h.as_ref(), kem(&kem_record))?;
+    let r = scaas_ua::holder_pop_message(k(kind)?, &ua, &key_data, pqz_key.as_deref(), pqz_pop.as_deref(), h.as_ref(), kem_pk.as_deref())?;
     Ok(HolderPop {
         pqz_key_hash: r.pqz_key_hash,
         pqz_pop_hash: r.pqz_pop_hash,
@@ -246,10 +239,10 @@ pub fn holder_pop_message(
     })
 }
 /// The message `R_REG` proves over: `ua_message(0x0142, POP_V2, portable_record_digest(ua, kind, key_hash(pqz_key),
-/// kem_record_hash))`, `kind` the registering kind.
+/// kem_record_hash))`, `kind` the registering kind, `kem_pk` the register KEM key (version 0; null / empty = none).
 #[frb(sync)]
-pub fn pqz_reg_message(kind: i64, ua: [u8; 32], pqz_key: Vec<u8>, kem_record: Option<KemRecord>) -> R<[u8; 32]> {
-    Ok(scaas_ua::pqz_reg_message(k(kind)?, &ua, &pqz_key, kem(&kem_record))?)
+pub fn pqz_reg_message(kind: i64, ua: [u8; 32], pqz_key: Vec<u8>, kem_pk: Option<Vec<u8>>) -> R<[u8; 32]> {
+    Ok(scaas_ua::pqz_reg_message(k(kind)?, &ua, &pqz_key, kem_pk.as_deref())?)
 }
 /// typed `UAPqzKey{ua, pqzKeyHash}`: what a later PQZ key's `R_REG` proves over.
 #[frb(sync)]

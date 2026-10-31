@@ -258,7 +258,7 @@ fn wire__crate__api__ua__holder_pop_message_impl(
             let api_pqz_key = <Option<Vec<u8>>>::sse_decode(&mut deserializer);
             let api_pqz_pop = <Option<Vec<u8>>>::sse_decode(&mut deserializer);
             let api_pqz_pop_hash = <Option<Vec<u8>>>::sse_decode(&mut deserializer);
-            let api_kem_record = <Option<crate::api::ua::KemRecord>>::sse_decode(&mut deserializer);
+            let api_kem_pk = <Option<Vec<u8>>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, crate::api::ua::UAError>((move || {
                 let output_ok = crate::api::ua::holder_pop_message(
@@ -268,7 +268,7 @@ fn wire__crate__api__ua__holder_pop_message_impl(
                     api_pqz_key,
                     api_pqz_pop,
                     api_pqz_pop_hash,
-                    api_kem_record,
+                    api_kem_pk,
                 )?;
                 std::result::Result::Ok(output_ok)
             })())
@@ -1001,11 +1001,11 @@ fn wire__crate__api__ua__pqz_reg_message_impl(
             let api_kind = <i64>::sse_decode(&mut deserializer);
             let api_ua = <[u8; 32]>::sse_decode(&mut deserializer);
             let api_pqz_key = <Vec<u8>>::sse_decode(&mut deserializer);
-            let api_kem_record = <Option<crate::api::ua::KemRecord>>::sse_decode(&mut deserializer);
+            let api_kem_pk = <Option<Vec<u8>>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, crate::api::ua::UAError>((move || {
                 let output_ok =
-                    crate::api::ua::pqz_reg_message(api_kind, api_ua, api_pqz_key, api_kem_record)?;
+                    crate::api::ua::pqz_reg_message(api_kind, api_ua, api_pqz_key, api_kem_pk)?;
                 std::result::Result::Ok(output_ok)
             })())
         },
@@ -1349,18 +1349,6 @@ impl SseDecode for i64 {
     }
 }
 
-impl SseDecode for crate::api::ua::KemRecord {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_version = <u64>::sse_decode(deserializer);
-        let mut var_pk = <Vec<u8>>::sse_decode(deserializer);
-        return crate::api::ua::KemRecord {
-            version: var_version,
-            pk: var_pk,
-        };
-    }
-}
-
 impl SseDecode for crate::api::ua::KindInfo {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1420,17 +1408,6 @@ impl SseDecode for Option<String> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<String>::sse_decode(deserializer));
-        } else {
-            return None;
-        }
-    }
-}
-
-impl SseDecode for Option<crate::api::ua::KemRecord> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        if (<bool>::sse_decode(deserializer)) {
-            return Some(<crate::api::ua::KemRecord>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -1663,22 +1640,6 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::ua::HolderPop> for crate::api
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::api::ua::KemRecord {
-    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [
-            self.version.into_into_dart().into_dart(),
-            self.pk.into_into_dart().into_dart(),
-        ]
-        .into_dart()
-    }
-}
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::ua::KemRecord {}
-impl flutter_rust_bridge::IntoIntoDart<crate::api::ua::KemRecord> for crate::api::ua::KemRecord {
-    fn into_into_dart(self) -> crate::api::ua::KemRecord {
-        self
-    }
-}
-// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::ua::KindInfo {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -1789,14 +1750,6 @@ impl SseEncode for i64 {
     }
 }
 
-impl SseEncode for crate::api::ua::KemRecord {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <u64>::sse_encode(self.version, serializer);
-        <Vec<u8>>::sse_encode(self.pk, serializer);
-    }
-}
-
 impl SseEncode for crate::api::ua::KindInfo {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1844,16 +1797,6 @@ impl SseEncode for Option<String> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <String>::sse_encode(value, serializer);
-        }
-    }
-}
-
-impl SseEncode for Option<crate::api::ua::KemRecord> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <bool>::sse_encode(self.is_some(), serializer);
-        if let Some(value) = self {
-            <crate::api::ua::KemRecord>::sse_encode(value, serializer);
         }
     }
 }

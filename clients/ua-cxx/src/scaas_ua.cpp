@@ -108,17 +108,17 @@ const Bytes& orNone(const std::optional<Bytes>& b) { return b ? *b : kNone; }
 std::optional<Bytes> memberOf(bool has, const rust::Vec<uint8_t>& v) { return has ? std::optional<Bytes>(bytes(v)) : std::nullopt; }
 }  // namespace
 HolderPop holderPopMessage(uint16_t kind, const Bytes& ua, const Bytes& keyData, const std::optional<Bytes>& pqzKey,
-                           const std::optional<Bytes>& pqzPop, const std::optional<Bytes>& pqzPopHash, const std::optional<Kem>& kem) {
+                           const std::optional<Bytes>& pqzPop, const std::optional<Bytes>& pqzPopHash, const std::optional<Bytes>& kemPk) {
     return call([&] {
         auto r = ffi::holder_pop_message(kind, sl(ua), sl(keyData), sl(orNone(pqzKey)), sl(orNone(pqzPop)), sl(orNone(pqzPopHash)),
-                                         kem ? kem->first : 0, sl(kem ? kem->second : kNone));
+                                         sl(orNone(kemPk)));
         return HolderPop{bytes(r.pqz_key_hash),   bytes(r.pqz_pop_hash), bytes(r.kem_record_hash),
                          bytes(r.portable_record_digest), bytes(r.registration_digest), bytes(r.message),
                          memberOf(r.has_member_digest, r.member_digest)};
     });
 }
-Bytes pqzRegMessage(uint16_t kind, const Bytes& ua, const Bytes& key, const std::optional<Kem>& kem) {
-    return call([&] { return bytes(ffi::pqz_reg_message(kind, sl(ua), sl(key), kem ? kem->first : 0, sl(kem ? kem->second : kNone))); });
+Bytes pqzRegMessage(uint16_t kind, const Bytes& ua, const Bytes& key, const std::optional<Bytes>& kemPk) {
+    return call([&] { return bytes(ffi::pqz_reg_message(kind, sl(ua), sl(key), sl(orNone(kemPk)))); });
 }
 Bytes pqzKeyDigest(const Bytes& ua, const Bytes& pqzKeyHash) { return call([&] { return bytes(ffi::pqz_key_digest(sl(ua), sl(pqzKeyHash))); }); }
 Bytes pqzKeyRecordDigest(const Bytes& ua, const Bytes& pqzKeyHash, const Bytes& pqzPopHash) {

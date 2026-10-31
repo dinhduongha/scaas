@@ -94,8 +94,8 @@ mod ffi {
         fn registration_digest(ua: &[u8], kind: u16, pqz_key_hash: &[u8], kem_record_hash: &[u8], pqz_pop_hash: &[u8]) -> Result<Vec<u8>>;
         fn kem_record_digest(ua: &[u8], version: u64, kem_pk: &[u8]) -> Result<Vec<u8>>;
         fn kem_record_message(kind: u16, ua: &[u8], version: u64, kem_pk: &[u8]) -> Result<Vec<u8>>;
-        // Optional inputs: an empty slice is absent (a proof hash of another length than 32 is UAPqzPopHash); the KEM record
-        // (0, empty) is absent.
+        // Optional inputs: an empty slice is absent (a proof hash of another length than 32 is UAPqzPopHash); the register
+        // KEM key's record is version 0 (owner 2026-10-31).
         #[allow(clippy::too_many_arguments)]
         fn holder_pop_message(
             kind: u16,
@@ -104,10 +104,9 @@ mod ffi {
             pqz_key: &[u8],
             pqz_pop: &[u8],
             pqz_pop_hash: &[u8],
-            kem_version: u64,
             kem_pk: &[u8],
         ) -> Result<HolderPop>;
-        fn pqz_reg_message(kind: u16, ua: &[u8], pqz_key: &[u8], kem_version: u64, kem_pk: &[u8]) -> Result<Vec<u8>>;
+        fn pqz_reg_message(kind: u16, ua: &[u8], pqz_key: &[u8], kem_pk: &[u8]) -> Result<Vec<u8>>;
         fn pqz_key_digest(ua: &[u8], pqz_key_hash: &[u8]) -> Result<Vec<u8>>;
         fn pqz_key_record_digest(ua: &[u8], pqz_key_hash: &[u8], pqz_pop_hash: &[u8]) -> Result<Vec<u8>>;
         #[allow(clippy::too_many_arguments)]
@@ -249,16 +248,13 @@ fn opt_hash(h: &[u8]) -> R<Option<[u8; 32]>> {
 fn opt(b: &[u8]) -> Option<&[u8]> {
     Some(b).filter(|b| !b.is_empty())
 }
-fn kem(version: u64, pk: &[u8]) -> Option<(u64, &[u8])> {
-    Some((version, pk)).filter(|(v, k)| *v != 0 || !k.is_empty())
-}
 #[allow(clippy::too_many_arguments)]
 fn holder_pop_message(
-    kind: u16, ua_id: &[u8], key_data: &[u8], pqz_key: &[u8], pqz_pop: &[u8], pqz_pop_hash: &[u8], kem_version: u64, kem_pk: &[u8],
+    kind: u16, ua_id: &[u8], key_data: &[u8], pqz_key: &[u8], pqz_pop: &[u8], pqz_pop_hash: &[u8], kem_pk: &[u8],
 ) -> R<HolderPop> {
     guard(|| {
         let h = opt_hash(pqz_pop_hash)?;
-        let r = ua::holder_pop_message(kind, &a(ua_id)?, key_data, opt(pqz_key), opt(pqz_pop), h.as_ref(), kem(kem_version, kem_pk))?;
+        let r = ua::holder_pop_message(kind, &a(ua_id)?, key_data, opt(pqz_key), opt(pqz_pop), h.as_ref(), opt(kem_pk))?;
         Ok(HolderPop {
             pqz_key_hash: r.pqz_key_hash.to_vec(),
             pqz_pop_hash: r.pqz_pop_hash.to_vec(),
@@ -271,8 +267,8 @@ fn holder_pop_message(
         })
     })
 }
-fn pqz_reg_message(kind: u16, ua_id: &[u8], pqz_key: &[u8], kem_version: u64, kem_pk: &[u8]) -> R<Vec<u8>> {
-    guard(|| Ok(ua::pqz_reg_message(kind, &a(ua_id)?, pqz_key, kem(kem_version, kem_pk))?.to_vec()))
+fn pqz_reg_message(kind: u16, ua_id: &[u8], pqz_key: &[u8], kem_pk: &[u8]) -> R<Vec<u8>> {
+    guard(|| Ok(ua::pqz_reg_message(kind, &a(ua_id)?, pqz_key, opt(kem_pk))?.to_vec()))
 }
 fn pqz_key_digest(ua_id: &[u8], pqz_key_hash: &[u8]) -> R<Vec<u8>> {
     guard(|| Ok(ua::ua8::pqz_key_digest(&a(ua_id)?, &a(pqz_key_hash)?).to_vec()))

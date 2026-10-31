@@ -214,12 +214,11 @@ static std::string mh(const std::optional<Bytes>& m) { return m ? hx(*m) : ""; }
 static HolderPop registerRow(const json& row, bool hashOnly = false) {
     auto& a = row["attrs"];
     Bytes key = bytes(a["pqzKey"]), pop = bytes(row["pqzPop"]), hash = bytes(a["pqzPopHash"]), pk = bytes(a["kemPk"]);
-    uint64_t ver = a["kemVersion"].get<uint64_t>();
+    CHECK(a["kemVersion"].get<uint64_t>() == 0, "register takes no KEM version (UAAttrs' word: 0)");
     std::optional<Bytes> popArg = (hashOnly || pop.empty()) ? std::nullopt : std::optional<Bytes>(pop);
     std::optional<Bytes> hashArg = hash == Bytes(32) ? std::nullopt : std::optional<Bytes>(hash);
-    std::optional<Kem> kem = (ver == 0 && pk.empty()) ? std::nullopt : std::optional<Kem>(Kem{ver, pk});
     return holderPopMessage(kind(row["kind"]), bytes(row["ua"]), bytes(row["keyData"]),
-                            key.empty() ? std::nullopt : std::optional<Bytes>(key), popArg, hashArg, kem);
+                            key.empty() ? std::nullopt : std::optional<Bytes>(key), popArg, hashArg, pk);
 }
 static const json& byName(const json& rows, const char* key, const std::string& v) {
     for (auto& r : rows) if (r[key].get<std::string>() == v) return r;
@@ -255,12 +254,10 @@ static void portable() {
         }
         auto& a = r["attrs"];
         Bytes pk = bytes(a["pqzKey"]), kpk = bytes(a["kemPk"]);
-        uint64_t ver = a["kemVersion"].get<uint64_t>();
-        CHECK(hx(kemRecordHash(ua, ver, kpk)) == r["kemRecordHash"].get<std::string>(), name);
+        CHECK(hx(kemRecordHash(ua, 0, kpk)) == r["kemRecordHash"].get<std::string>(), name);  // the register key: version 0
         if (!pk.empty()) {
             ++withPqz;
-            std::optional<Kem> kem = kpk.empty() ? std::nullopt : std::optional<Kem>(Kem{ver, kpk});
-            CHECK(hx(pqzRegMessage(kind(r["kind"]), ua, pk, kem)) == r["pqzRegMessage"].get<std::string>(), name);
+            CHECK(hx(pqzRegMessage(kind(r["kind"]), ua, pk, kpk)) == r["pqzRegMessage"].get<std::string>(), name);
             // TS-D3: R_REG proves over the typed UAPortableRecord of the registering kind
             CHECK(hx(uaMessage(0x0142, purposeTag("pop", 2), bytes(r["portableRecordDigest"]))) == r["pqzRegMessage"].get<std::string>(), name);
         } else {
@@ -292,6 +289,10 @@ static void kem_record() {
     CHECK(code_of([&] { kemRecordDigest(u, 1, kem(kKemPkLength + 1)); }) == "UAKemKeyLength", "long key");
     CHECK(code_of([&] { kemRecordDigest(u, 1, Bytes{}); }) == "UAKemKeyLength", "empty key");
     CHECK(code_of([&] { kemRecordHash(u, 1, Bytes{}); }) == "UAKemKeyLength", "empty key (hash)");
+    // owner 2026-10-31: version 0 with a key is the register key's record (scheme != 0; its words against portable.json's
+    // registrations above), never a setKemKey record
+    CHECK(kemRecordHash(u, 0, kem(kKemPkLength)) != kemRecordHash(u, 0, Bytes{}), "version 0 with a key");
+    CHECK(code_of([&] { kemRecordHash(u, 0, kem(kKemPkLength, 0)); }) == "UAKemScheme", "version 0, scheme 0");
     for (uint8_t scheme : {0, 2, 255}) CHECK(code_of([&] { kemRecordDigest(u, 1, kem(kKemPkLength, scheme)); }) == "UAKemScheme", "scheme not enabled");
     CHECK(hx(kemRecordDigest(u, UINT64_MAX, kem(kKemPkLength))) == "0xa0063a84b56d80c83688d8caf5aeb4be8fb4556928e8bc649686449573938f07", "max version");  // pins the 8-byte version word
 }
@@ -402,8 +403,10 @@ static void holder_refusals() {
     CHECK(code_of([&] { holderPopMessage(0x0130, u, {}, key, std::nullopt, Bytes(31)); }) == "UAPqzPopHash", "31-byte hash");
     CHECK(code_of([&] { holderPopMessage(0x0130, u, {}, key, Bytes{}); }) == "UAPqzPopHash", "empty proof is no proof");
     CHECK(code_of([&] { holderPopMessage(0x0130, u, {}, Bytes(100), std::nullopt, proof); }) == "UAKeyData", "key length");
-    CHECK(code_of([&] { holderPopMessage(0x0130, u, {}, std::nullopt, std::nullopt, std::nullopt, Kem{1, Bytes{}}); }) == "UAKemKeyLength", "kem key");
-    CHECK(code_of([&] { holderPopMessage(0x0101, u, {}, std::nullopt, std::nullopt, std::nullopt, Kem{1, Bytes(kKemPkLength, 1)}); }) == "UAKemHolder", "kem holder");
+    CHECK(code_of([&] { holderPopMessage(0x0130, u, {}, std::nullopt, std::nullopt, std::nullopt, Bytes(kKemPkLength - 1, 1)); }) == "UAKemKeyLength", "kem key");
+    CHECK(code_of([&] { holderPopMessage(0x0130, u, {}, std::nullopt, std::nullopt, std::nullopt, Bytes(kKemPkLength, 0)); }) == "UAKemScheme", "kem scheme 0");
+    CHECK(code_of([&] { holderPopMessage(0x0101, u, {}, std::nullopt, std::nullopt, std::nullopt, Bytes(kKemPkLength, 1)); }) == "UAKemHolder", "kem holder");
+    CHECK(holderPopMessage(0x0130, u, {}).message == holderPopMessage(0x0130, u, {}, std::nullopt, std::nullopt, std::nullopt, Bytes{}).message, "empty KEM key is absent");
     // a zero-length proof hash is absent (same as no hash)
     CHECK(holderPopMessage(0x0130, u, {}).message == holderPopMessage(0x0130, u, {}, std::nullopt, std::nullopt, Bytes{}).message, "empty hash is absent");
 }

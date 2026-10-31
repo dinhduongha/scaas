@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `arg`, `hash`, `k`, `kem`, `n`
+// These functions are ignored because they are not marked as `pub`: `arg`, `hash`, `k`, `n`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`, `from`, `try_from`
 
 KindInfo kindInfo({required PlatformInt64 kind}) =>
@@ -115,7 +115,8 @@ U8Array32 portableDomainSeparator() =>
     ScaasUa.instance.api.crateApiUaPortableDomainSeparator();
 
 /// `hashStruct(UAKemRecord{ua, version, scheme, kemPkHash})`, the `kem` word of a portable record; `(0, [])` is the zero record
-/// `UAKemRecord{ua, 0, 0, 0}` (no KEM record), otherwise the rules of [`kem_record_digest`].
+/// `UAKemRecord{ua, 0, 0, 0}` (no KEM record), `(0, key)` the `register` key's record (owner 2026-10-31), otherwise the rules
+/// of [`kem_record_digest`].
 U8Array32 kemRecordHash({
   required U8Array32 ua,
   required BigInt version,
@@ -180,7 +181,8 @@ U8Array32 kemRecordMessage({
 );
 
 /// The portable PoP message of a registration. Attributes: `pqz_key` with its proof `pqz_pop` (or only its hash `pqz_pop_hash`;
-/// null / empty = absent) and the initial KEM record; only holders carry them (`UAPqzHolder`, `UAKemHolder`; an `msig` needs
+/// null / empty = absent) and the initial KEM key `kem_pk` (1,601 bytes, scheme byte 1 first; its record is always version 0,
+/// owner 2026-10-31; null / empty = absent); only holders carry them (`UAPqzHolder`, `UAKemHolder`; an `msig` needs
 /// `key_data` to show it is PQ-eligible); a PQZ key always comes with its proof hash and only with it (`UAPqzPopHash`).
 HolderPop holderPopMessage({
   required PlatformInt64 kind,
@@ -189,7 +191,7 @@ HolderPop holderPopMessage({
   Uint8List? pqzKey,
   Uint8List? pqzPop,
   Uint8List? pqzPopHash,
-  KemRecord? kemRecord,
+  Uint8List? kemPk,
 }) => ScaasUa.instance.api.crateApiUaHolderPopMessage(
   kind: kind,
   ua: ua,
@@ -197,21 +199,21 @@ HolderPop holderPopMessage({
   pqzKey: pqzKey,
   pqzPop: pqzPop,
   pqzPopHash: pqzPopHash,
-  kemRecord: kemRecord,
+  kemPk: kemPk,
 );
 
 /// The message `R_REG` proves over: `ua_message(0x0142, POP_V2, portable_record_digest(ua, kind, key_hash(pqz_key),
-/// kem_record_hash))`, `kind` the registering kind.
+/// kem_record_hash))`, `kind` the registering kind, `kem_pk` the register KEM key (version 0; null / empty = none).
 U8Array32 pqzRegMessage({
   required PlatformInt64 kind,
   required U8Array32 ua,
   required List<int> pqzKey,
-  KemRecord? kemRecord,
+  Uint8List? kemPk,
 }) => ScaasUa.instance.api.crateApiUaPqzRegMessage(
   kind: kind,
   ua: ua,
   pqzKey: pqzKey,
-  kemRecord: kemRecord,
+  kemPk: kemPk,
 );
 
 /// typed `UAPqzKey{ua, pqzKeyHash}`: what a later PQZ key's `R_REG` proves over.
@@ -338,26 +340,6 @@ class HolderPop {
           registrationDigest == other.registrationDigest &&
           message == other.message &&
           memberDigest == other.memberDigest;
-}
-
-/// A KEM record attribute `(version >= 1, 1,601-byte key: scheme byte 1 first)`; `None`, or `(0, [])`, = absent. `version` is a `u64` (a Dart
-/// `BigInt`: 1 ... 2^64 - 1).
-class KemRecord {
-  final BigInt version;
-  final Uint8List pk;
-
-  const KemRecord({required this.version, required this.pk});
-
-  @override
-  int get hashCode => version.hashCode ^ pk.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is KemRecord &&
-          runtimeType == other.runtimeType &&
-          version == other.version &&
-          pk == other.pk;
 }
 
 class KindInfo {

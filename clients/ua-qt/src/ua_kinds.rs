@@ -63,21 +63,22 @@ pub mod qobject {
         #[qinvokable] #[cxx_name = "kemRecordDigest"]
         fn kem_record_digest(self: Pin<&mut Self>, ua: &QString, version: f64, kem_pk: &QString) -> QString;
         /// JSON `{pqzKeyHash, pqzPopHash, kemRecordHash, portableRecordDigest, registrationDigest, message[, memberDigest]}`.
-        /// `key_data` is needed for an `msig` ("0x" otherwise); `pqz_key` / `pqz_pop` "" or "0x" = absent; `kem_version` 0 with
-        /// an empty `kem_pk` = no KEM record. A key for a non-holder is `UAPqzHolder` / `UAKemHolder`.
+        /// `key_data` is needed for an `msig` ("0x" otherwise); `pqz_key` / `pqz_pop` / `kem_pk` "" or "0x" = absent; the KEM
+        /// key's record is always version 0 (owner 2026-10-31). A key for a non-holder is `UAPqzHolder` / `UAKemHolder`.
         #[qinvokable] #[cxx_name = "holderPopMessage"]
-        fn holder_pop_message(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, kem_version: f64, kem_pk: &QString) -> QString;
+        fn holder_pop_message(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, kem_pk: &QString) -> QString;
         /// As `holderPopMessage`, with only the proof's hash (`pqz_pop_hash` 32 bytes, "0x" = absent) next to or instead of the proof bytes.
         #[qinvokable] #[cxx_name = "holderPopMessageH"]
-        fn holder_pop_message_h(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, kem_version: f64, kem_pk: &QString) -> QString;
+        fn holder_pop_message_h(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, kem_pk: &QString) -> QString;
         /// The `setPqzKey` record (ruling A1-I1), JSON `{pqzKeyHash, pqzPopHash, pqzKeyDigest, recordDigest, message, pqzRegMessage[, memberDigest]}`:
         /// `message` is what the UA signs, `pqzRegMessage` what the key's `R_REG` proves over. `pqz_pop` bytes and / or `pqz_pop_hash`
         /// ("0x" = absent); `already_set` = the registration has a PQZ key (`UAPqzKeySet`).
         #[qinvokable] #[cxx_name = "pqzKeyRecordMessage"]
         fn pqz_key_record_message(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, already_set: bool) -> QString;
-        /// What the PQZ key's `R_REG` proves over: `UAMessage(0x0142, POP_V2, portableRecordDigest(…))` of the registering `kind`.
+        /// What the PQZ key's `R_REG` proves over: `UAMessage(0x0142, POP_V2, portableRecordDigest(…))` of the registering `kind`,
+        /// `kem_pk` the register KEM key (version 0; "" or "0x" = none).
         #[qinvokable] #[cxx_name = "pqzRegMessage"]
-        fn pqz_reg_message(self: Pin<&mut Self>, kind: i32, ua: &QString, pqz_key: &QString, kem_version: f64, kem_pk: &QString) -> QString;
+        fn pqz_reg_message(self: Pin<&mut Self>, kind: i32, ua: &QString, pqz_key: &QString, kem_pk: &QString) -> QString;
         /// `UAMessage(kind, PURPOSE_KEM, kemRecordDigest(ua, version, kemPk))`: what the UA signs for `setKemKey`.
         #[qinvokable] #[cxx_name = "kemRecordMessage"]
         fn kem_record_message(self: Pin<&mut Self>, kind: i32, ua: &QString, version: f64, kem_pk: &QString) -> QString;
@@ -289,16 +290,15 @@ impl qobject::UaKinds {
     pub fn kem_record_digest(self: Pin<&mut Self>, ua: &QString, version: f64, kem_pk: &QString) -> QString {
         self.hex(|| Ok(from_ua(ua::ua8::kem_record_digest(&fixed(ua)?, id(version)?, &bytes(kem_pk)?))?.to_vec()))
     }
-    pub fn holder_pop_message(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, kem_version: f64, kem_pk: &QString) -> QString {
-        self.holder_pop_message_h(kind, ua, key_data, pqz_key, pqz_pop, &QString::from("0x"), kem_version, kem_pk)
+    pub fn holder_pop_message(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, kem_pk: &QString) -> QString {
+        self.holder_pop_message_h(kind, ua, key_data, pqz_key, pqz_pop, &QString::from("0x"), kem_pk)
     }
-    pub fn holder_pop_message_h(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, kem_version: f64, kem_pk: &QString) -> QString {
+    pub fn holder_pop_message_h(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, kem_pk: &QString) -> QString {
         QString::from(&self.run(|| {
             let (pk, pop, kpk) = (key(pqz_key)?, bytes(pqz_pop)?, bytes(kem_pk)?);
             let hash = optional_hash(pqz_pop_hash)?;
-            let kem = (id(kem_version)? != 0 || !kpk.is_empty()).then(|| (id(kem_version).unwrap_or(0), kpk));
             let h = from_ua(ua::ua8::holder_pop_message(
-                k(kind)?, &fixed(ua)?, &key(key_data)?, Some(&pk[..]), Some(&pop[..]), hash.as_ref(), kem.as_ref().map(|(v, p)| (*v, &p[..])),
+                k(kind)?, &fixed(ua)?, &key(key_data)?, Some(&pk[..]), Some(&pop[..]), hash.as_ref(), Some(&kpk[..]),
             ))?;
             let mut o = serde_json::json!({
                 "pqzKeyHash": hx(&h.pqz_key_hash), "pqzPopHash": hx(&h.pqz_pop_hash), "kemRecordHash": hx(&h.kem_record_hash),
@@ -326,11 +326,10 @@ impl qobject::UaKinds {
             Ok(o.to_string())
         }))
     }
-    pub fn pqz_reg_message(self: Pin<&mut Self>, kind: i32, ua: &QString, pqz_key: &QString, kem_version: f64, kem_pk: &QString) -> QString {
+    pub fn pqz_reg_message(self: Pin<&mut Self>, kind: i32, ua: &QString, pqz_key: &QString, kem_pk: &QString) -> QString {
         self.hex(|| {
             let kpk = bytes(kem_pk)?;
-            let kem = (id(kem_version)? != 0 || !kpk.is_empty()).then(|| (id(kem_version).unwrap_or(0), kpk));
-            Ok(from_ua(ua::ua8::pqz_reg_message(k(kind)?, &fixed(ua)?, &key(pqz_key)?, kem.as_ref().map(|(v, p)| (*v, &p[..]))))?.to_vec())
+            Ok(from_ua(ua::ua8::pqz_reg_message(k(kind)?, &fixed(ua)?, &key(pqz_key)?, Some(&kpk[..])))?.to_vec())
         })
     }
     pub fn kem_record_message(self: Pin<&mut Self>, kind: i32, ua: &QString, version: f64, kem_pk: &QString) -> QString {

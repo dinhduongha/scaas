@@ -27,9 +27,6 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
-  KemRecord dco_decode_box_autoadd_kem_record(dynamic raw);
-
-  @protected
   UaDomain dco_decode_box_autoadd_ua_domain(dynamic raw);
 
   @protected
@@ -37,9 +34,6 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   PlatformInt64 dco_decode_i_64(dynamic raw);
-
-  @protected
-  KemRecord dco_decode_kem_record(dynamic raw);
 
   @protected
   KindInfo dco_decode_kind_info(dynamic raw);
@@ -59,9 +53,6 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
-
-  @protected
-  KemRecord? dco_decode_opt_box_autoadd_kem_record(dynamic raw);
 
   @protected
   Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
@@ -110,9 +101,6 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
-  KemRecord sse_decode_box_autoadd_kem_record(SseDeserializer deserializer);
-
-  @protected
   UaDomain sse_decode_box_autoadd_ua_domain(SseDeserializer deserializer);
 
   @protected
@@ -120,9 +108,6 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
-
-  @protected
-  KemRecord sse_decode_kem_record(SseDeserializer deserializer);
 
   @protected
   KindInfo sse_decode_kind_info(SseDeserializer deserializer);
@@ -142,11 +127,6 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
-
-  @protected
-  KemRecord? sse_decode_opt_box_autoadd_kem_record(
-    SseDeserializer deserializer,
-  );
 
   @protected
   Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer);
@@ -198,12 +178,6 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
-  void sse_encode_box_autoadd_kem_record(
-    KemRecord self,
-    SseSerializer serializer,
-  );
-
-  @protected
   void sse_encode_box_autoadd_ua_domain(
     UaDomain self,
     SseSerializer serializer,
@@ -214,9 +188,6 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_kem_record(KemRecord self, SseSerializer serializer);
 
   @protected
   void sse_encode_kind_info(KindInfo self, SseSerializer serializer);
@@ -244,12 +215,6 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_opt_box_autoadd_kem_record(
-    KemRecord? self,
-    SseSerializer serializer,
-  );
 
   @protected
   void sse_encode_opt_list_prim_u_8_strict(

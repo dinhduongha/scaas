@@ -223,7 +223,7 @@ void main() {
   HolderPop register(Map row, {bool hashOnly = false}) {
     final a = row['attrs'] as Map;
     final key = bytes(a['pqzKey']), pop = bytes(row['pqzPop']), hash = bytes(a['pqzPopHash']), pk = bytes(a['kemPk']);
-    final ver = BigInt.from(a['kemVersion'] as int);
+    expect(a['kemVersion'], 0, reason: 'register takes no KEM version (UAAttrs\' word: 0)');
     return holderPopMessage(
         kind: row['kind'],
         ua: b32(row['ua']),
@@ -231,7 +231,7 @@ void main() {
         pqzKey: key.isEmpty ? null : key,
         pqzPop: hashOnly || pop.isEmpty ? null : pop,
         pqzPopHash: hash.every((x) => x == 0) ? null : hash,
-        kemRecord: ver == BigInt.zero && pk.isEmpty ? null : KemRecord(version: ver, pk: pk));
+        kemPk: pk.isEmpty ? null : pk);
   }
 
   test('portable', () {
@@ -261,11 +261,11 @@ void main() {
         expect(hx(uaMessage(kind: r['kind'], purpose: purposeTagV(purpose: 'pop', version: 2), digest: h.registrationDigest)), hx(h.message));
         expect(hxn(h.memberDigest) ?? '', r['memberDigest'] ?? '', reason: name);
       }
-      final a = r['attrs'] as Map, pk = bytes(a['pqzKey']), kpk = bytes(a['kemPk']), v = BigInt.from(a['kemVersion'] as int);
+      final a = r['attrs'] as Map, pk = bytes(a['pqzKey']), kpk = bytes(a['kemPk']), v = BigInt.zero; // the register KEM key: version 0
       expect(hx(kemRecordHash(ua: ua, version: v, kemPk: kpk)), r['kemRecordHash'], reason: name);
       if (pk.isNotEmpty) {
         withPqz++;
-        expect(hx(pqzRegMessage(kind: r['kind'], ua: ua, pqzKey: pk, kemRecord: kpk.isEmpty ? null : KemRecord(version: v, pk: kpk))),
+        expect(hx(pqzRegMessage(kind: r['kind'], ua: ua, pqzKey: pk, kemPk: kpk.isEmpty ? null : kpk)),
             r['pqzRegMessage'], reason: name);
         // TS-D3: R_REG proves over the typed UAPortableRecord of the registering kind
         expect(hx(uaMessage(kind: 0x0142, purpose: purposeTagV(purpose: 'pop', version: 2), digest: b32(r['portableRecordDigest']))),
@@ -293,6 +293,10 @@ void main() {
     }
     final u = U8Array32(Uint8List.fromList(List.filled(32, 1)));
     expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.zero, kemPk: _kem(1601))), 'UAKemVersion');
+    // owner 2026-10-31: version 0 with a key is the register key's record (scheme != 0; its words against portable.json's
+    // registrations above), never a setKemKey record
+    expect(hx(kemRecordHash(ua: u, version: BigInt.zero, kemPk: _kem(1601))), isNot(hx(kemRecordHash(ua: u, version: BigInt.zero, kemPk: Uint8List(0)))));
+    expect(errCode(() => kemRecordHash(ua: u, version: BigInt.zero, kemPk: _kem(1601, 0))), 'UAKemScheme');
     expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.one, kemPk: _kem(1600))), 'UAKemKeyLength');
     expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.one, kemPk: _kem(1602))), 'UAKemKeyLength');
     expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.one, kemPk: Uint8List(0))), 'UAKemKeyLength');
@@ -306,8 +310,6 @@ void main() {
       expect(errCode(() => kemRecordDigest(ua: u, version: bad, kemPk: pk)), 'UAKemVersion', reason: '$bad');
       expect(errCode(() => kemRecordHash(ua: u, version: bad, kemPk: pk)), 'UAKemVersion', reason: '$bad');
       expect(errCode(() => kemRecordMessage(kind: 0x0130, ua: u, version: bad, kemPk: pk)), 'UAKemVersion', reason: '$bad');
-      expect(errCode(() => holderPopMessage(kind: 0x0130, ua: u, keyData: Uint8List(0), kemRecord: KemRecord(version: bad, pk: pk))), 'UAKemVersion', reason: '$bad');
-      expect(errCode(() => pqzRegMessage(kind: 0x0130, ua: u, pqzKey: Uint8List(16384), kemRecord: KemRecord(version: bad, pk: pk))), 'UAKemVersion', reason: '$bad');
     }
   });
 
@@ -412,9 +414,9 @@ void main() {
     expect(run + sigLevel, rows(pv, 'negatives').length);
     expect(run > 0 && sigLevel > 0, isTrue);
     final u = U8Array32(Uint8List.fromList(List.filled(32, 1))), key = Uint8List(16384), proof = Uint8List.fromList(List.filled(32, 7));
-    HolderPop holder({required int kind, Uint8List? keyData, Uint8List? pqzKey, Uint8List? pqzPop, Uint8List? pqzPopHash, KemRecord? kem}) =>
+    HolderPop holder({required int kind, Uint8List? keyData, Uint8List? pqzKey, Uint8List? pqzPop, Uint8List? pqzPopHash, Uint8List? kemPk}) =>
         holderPopMessage(
-            kind: kind, ua: u, keyData: keyData ?? Uint8List(0), pqzKey: pqzKey, pqzPop: pqzPop, pqzPopHash: pqzPopHash, kemRecord: kem);
+            kind: kind, ua: u, keyData: keyData ?? Uint8List(0), pqzKey: pqzKey, pqzPop: pqzPop, pqzPopHash: pqzPopHash, kemPk: kemPk);
     // malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
     for (final kd in [Uint8List.fromList([0, 2, 0]), Uint8List.fromList([0, 2, 0, 2, 9, 9])]) {
       expect(errCode(() => holder(kind: 0x0120, keyData: kd, pqzKey: key, pqzPopHash: proof)), 'UAKeyData');
@@ -423,8 +425,10 @@ void main() {
     expect(errCode(() => holder(kind: 0x0130, pqzKey: key, pqzPopHash: Uint8List(31))), 'UAPqzPopHash');
     expect(errCode(() => holder(kind: 0x0130, pqzKey: key, pqzPop: Uint8List(0))), 'UAPqzPopHash');
     expect(errCode(() => holder(kind: 0x0130, pqzKey: Uint8List(100), pqzPopHash: proof)), 'UAKeyData');
-    expect(errCode(() => holder(kind: 0x0130, kem: KemRecord(version: BigInt.one, pk: Uint8List(0)))), 'UAKemKeyLength');
-    expect(errCode(() => holder(kind: 0x0101, kem: KemRecord(version: BigInt.one, pk: _kem(1601)))), 'UAKemHolder');
+    expect(errCode(() => holder(kind: 0x0130, kemPk: _kem(1600))), 'UAKemKeyLength');
+    expect(errCode(() => holder(kind: 0x0130, kemPk: _kem(1601, 0))), 'UAKemScheme');
+    expect(errCode(() => holder(kind: 0x0101, kemPk: _kem(1601))), 'UAKemHolder');
+    expect(hx(holder(kind: 0x0130, kemPk: Uint8List(0)).message), hx(holder(kind: 0x0130).message));
     // a zero-length proof hash is absent (same as no hash)
     expect(hx(holder(kind: 0x0130, pqzPopHash: Uint8List(0)).message), hx(holder(kind: 0x0130).message));
   });

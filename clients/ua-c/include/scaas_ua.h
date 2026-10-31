@@ -148,7 +148,7 @@ typedef struct {
 #define SCAAS_UA_ERR_KEM_HOLDER 12
 
 /**
- * "UAKemVersion": a KEM record version of 0.
+ * "UAKemVersion": a `setKemKey` record of version 0 (version 0 is the `register` key's) or past 2^64 − 1.
  */
 #define SCAAS_UA_ERR_KEM_VERSION 13
 
@@ -341,8 +341,8 @@ ScaasUaStatus scaas_ua_portable_domain_separator(uint8_t *out32);
 
 /**
  * `hashStruct(UAKemRecord{ua, version, scheme: kem_pk[0], kemPkHash: keccak256(kem_pk)})`: the `kem` word of a portable
- * record. Version 0 with an empty key is the zero record `UAKemRecord{ua, 0, 0, 0}` (no KEM record); otherwise the rules of
- * `scaas_ua_kem_record_digest`.
+ * record. Version 0 with an empty key is the zero record `UAKemRecord{ua, 0, 0, 0}` (no KEM record); version 0 with a key
+ * is the `register` key's record (owner 2026-10-31); otherwise the rules of `scaas_ua_kem_record_digest`.
  */
 ScaasUaStatus scaas_ua_kem_record_hash(const uint8_t *ua32,
                                        uint64_t version,
@@ -394,7 +394,8 @@ ScaasUaStatus scaas_ua_kem_record_message(uint16_t kind,
 /**
  * The portable PoP message of a registration (UA-8 P1, P2) into `*out`. `key_data` (needed for an `msig`, to show it is
  * PQ-eligible), `pqz_key` with its proof `pqz_pop` (or only the 32-byte `pqz_pop_hash`; NULL / length 0 = absent) and the
- * initial KEM record `(kem_version, kem_pk)` (`0` and empty = absent). Only holders carry a key or a record
+ * initial KEM key `kem_pk` (its record is always version 0, owner 2026-10-31; NULL / length 0 = absent). Only holders carry
+ * a key or a record
  * (`SCAAS_UA_ERR_PQZ_HOLDER`, `SCAAS_UA_ERR_KEM_HOLDER`); a PQZ key always comes with its proof hash and only with it
  * (`SCAAS_UA_ERR_PQZ_POP_HASH`).
  */
@@ -408,20 +409,18 @@ ScaasUaStatus scaas_ua_holder_pop_message(uint16_t kind,
                                           size_t pqz_pop_len,
                                           const uint8_t *pqz_pop_hash,
                                           size_t pqz_pop_hash_len,
-                                          uint64_t kem_version,
                                           const uint8_t *kem_pk,
                                           size_t kem_pk_len,
                                           ScaasUaHolderPop *out);
 
 /**
  * The 32-byte message `R_REG` proves over: `ua_message(0x0142, POP_V2, portable_record_digest(ua, kind, key_hash(pqz_key),
- * kem_record_hash))`, `kind` the registering kind; the KEM record `(kem_version, kem_pk)` is `0` and empty when absent.
+ * kem_record_hash))`, `kind` the registering kind; `kem_pk` the register KEM key (version 0), NULL / length 0 when absent.
  */
 ScaasUaStatus scaas_ua_pqz_reg_message(uint16_t kind,
                                        const uint8_t *ua32,
                                        const uint8_t *pqz_key,
                                        size_t pqz_key_len,
-                                       uint64_t kem_version,
                                        const uint8_t *kem_pk,
                                        size_t kem_pk_len,
                                        uint8_t *out32);

@@ -40,7 +40,7 @@ pub const SCAAS_UA_ERR_INTERNAL: ScaasUaStatus = 10;
 pub const SCAAS_UA_ERR_PQZ_HOLDER: ScaasUaStatus = 11;
 /// "UAKemHolder": a KEM record given for a kind that may not hold one.
 pub const SCAAS_UA_ERR_KEM_HOLDER: ScaasUaStatus = 12;
-/// "UAKemVersion": a KEM record version of 0.
+/// "UAKemVersion": a `setKemKey` record of version 0 (version 0 is the `register` key's) or past 2^64 − 1.
 pub const SCAAS_UA_ERR_KEM_VERSION: ScaasUaStatus = 13;
 /// "UAKemKeyLength": a KEM key that is empty or not 1,601 bytes (scheme byte + key).
 pub const SCAAS_UA_ERR_KEM_KEY_LENGTH: ScaasUaStatus = 14;
@@ -440,8 +440,8 @@ pub extern "C" fn scaas_ua_portable_domain_separator(out32: *mut u8) -> ScaasUaS
 }
 
 /// `hashStruct(UAKemRecord{ua, version, scheme: kem_pk[0], kemPkHash: keccak256(kem_pk)})`: the `kem` word of a portable
-/// record. Version 0 with an empty key is the zero record `UAKemRecord{ua, 0, 0, 0}` (no KEM record); otherwise the rules of
-/// `scaas_ua_kem_record_digest`.
+/// record. Version 0 with an empty key is the zero record `UAKemRecord{ua, 0, 0, 0}` (no KEM record); version 0 with a key
+/// is the `register` key's record (owner 2026-10-31); otherwise the rules of `scaas_ua_kem_record_digest`.
 #[no_mangle]
 pub extern "C" fn scaas_ua_kem_record_hash(
     ua32: *const u8,
@@ -537,14 +537,11 @@ fn opt_hash<'a>(p: *const u8, len: usize) -> R<Option<&'a [u8; 32]>> {
 fn opt_bytes<'a>(p: *const u8, len: usize) -> R<Option<&'a [u8]>> {
     Ok(Some(bytes(p, len)?).filter(|b| !b.is_empty()))
 }
-/// The optional KEM record: `version == 0` with an empty key = absent.
-fn opt_kem<'a>(version: u64, pk: *const u8, len: usize) -> R<Option<(u64, &'a [u8])>> {
-    Ok(Some((version, bytes(pk, len)?)).filter(|(v, k)| *v != 0 || !k.is_empty()))
-}
 
 /// The portable PoP message of a registration (UA-8 P1, P2) into `*out`. `key_data` (needed for an `msig`, to show it is
 /// PQ-eligible), `pqz_key` with its proof `pqz_pop` (or only the 32-byte `pqz_pop_hash`; NULL / length 0 = absent) and the
-/// initial KEM record `(kem_version, kem_pk)` (`0` and empty = absent). Only holders carry a key or a record
+/// initial KEM key `kem_pk` (its record is always version 0, owner 2026-10-31; NULL / length 0 = absent). Only holders carry
+/// a key or a record
 /// (`SCAAS_UA_ERR_PQZ_HOLDER`, `SCAAS_UA_ERR_KEM_HOLDER`); a PQZ key always comes with its proof hash and only with it
 /// (`SCAAS_UA_ERR_PQZ_POP_HASH`).
 #[no_mangle]
@@ -560,7 +557,6 @@ pub extern "C" fn scaas_ua_holder_pop_message(
     pqz_pop_len: usize,
     pqz_pop_hash: *const u8,
     pqz_pop_hash_len: usize,
-    kem_version: u64,
     kem_pk: *const u8,
     kem_pk_len: usize,
     out: *mut ScaasUaHolderPop,
@@ -573,7 +569,7 @@ pub extern "C" fn scaas_ua_holder_pop_message(
             opt_bytes(pqz_key, pqz_key_len)?,
             opt_bytes(pqz_pop, pqz_pop_len)?,
             opt_hash(pqz_pop_hash, pqz_pop_hash_len)?,
-            opt_kem(kem_version, kem_pk, kem_pk_len)?,
+            opt_bytes(kem_pk, kem_pk_len)?,
         )?;
         put(
             out,
@@ -592,7 +588,7 @@ pub extern "C" fn scaas_ua_holder_pop_message(
 }
 
 /// The 32-byte message `R_REG` proves over: `ua_message(0x0142, POP_V2, portable_record_digest(ua, kind, key_hash(pqz_key),
-/// kem_record_hash))`, `kind` the registering kind; the KEM record `(kem_version, kem_pk)` is `0` and empty when absent.
+/// kem_record_hash))`, `kind` the registering kind; `kem_pk` the register KEM key (version 0), NULL / length 0 when absent.
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn scaas_ua_pqz_reg_message(
@@ -600,13 +596,12 @@ pub extern "C" fn scaas_ua_pqz_reg_message(
     ua32: *const u8,
     pqz_key: *const u8,
     pqz_key_len: usize,
-    kem_version: u64,
     kem_pk: *const u8,
     kem_pk_len: usize,
     out32: *mut u8,
 ) -> ScaasUaStatus {
     run(|| {
-        let m = ua::pqz_reg_message(kind, arr(ua32)?, bytes(pqz_key, pqz_key_len)?, opt_kem(kem_version, kem_pk, kem_pk_len)?)?;
+        let m = ua::pqz_reg_message(kind, arr(ua32)?, bytes(pqz_key, pqz_key_len)?, opt_bytes(kem_pk, kem_pk_len)?)?;
         put(out32.cast(), m)
     })
 }

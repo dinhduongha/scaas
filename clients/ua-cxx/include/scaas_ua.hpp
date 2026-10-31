@@ -39,8 +39,6 @@ struct Member {
     Bytes id;  // 32 bytes
     uint16_t weight;
 };
-// A KEM record attribute: (version >= 1, 1,601-byte key, scheme byte first). nullopt, or (0, empty), = absent.
-using Kem = std::pair<uint64_t, Bytes>;
 // The portable PoP of a registration (UA-8 P1, P2); every hash is 32 bytes, 0 when absent.
 struct HolderPop {
     Bytes pqzKeyHash, pqzPopHash, kemRecordHash, portableRecordDigest, registrationDigest;
@@ -91,7 +89,8 @@ Bytes chainKeyHash(uint64_t chainId);
 // domain EIP712Domain(string name,string version) = ("SCaaS UA Portable", "1"): no chain id, verifying contract or salt.
 Bytes portableDomainSeparator();
 // hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], keccak256(kemPk)}), the kem word of a portable record; (0, empty) is the
-// zero record UAKemRecord{ua, 0, 0, 0} (no KEM record), otherwise the rules of kemRecordDigest.
+// zero record UAKemRecord{ua, 0, 0, 0} (no KEM record), (0, key) the register key's record (owner 2026-10-31), otherwise the rules
+// of kemRecordDigest.
 Bytes kemRecordHash(const Bytes& ua, uint64_t version, const Bytes& kemPk);
 // typed(UAPortableRecord{ua, kind, pqzKeyHash, kem}): what R_REG proves over at register; pqzKeyHash 32 zero bytes without a key.
 Bytes portableRecordDigest(const Bytes& ua, uint16_t kind, const Bytes& pqzKeyHash, const Bytes& kemRecordHash);
@@ -101,15 +100,16 @@ Bytes registrationDigest(const Bytes& ua, uint16_t kind, const Bytes& pqzKeyHash
 Bytes kemRecordDigest(const Bytes& ua, uint64_t version, const Bytes& kemPk);
 Bytes kemRecordMessage(uint16_t kind, const Bytes& ua, uint64_t version, const Bytes& kemPk);  // uaMessage(kind, PURPOSE_KEM, digest)
 // The portable PoP message of a registration. pqzKey with its proof pqzPop (or only its hash pqzPopHash; a relayer may hold only
-// that; an empty hash is absent, another length than 32 is UAPqzPopHash) and the initial KEM record; nullopt = absent. Only
+// that; an empty hash is absent, another length than 32 is UAPqzPopHash) and the initial KEM key kemPk (1,601 bytes, scheme byte
+// first; its record is always version 0, owner 2026-10-31); nullopt / empty = absent. Only
 // holders carry them (UAPqzHolder, UAKemHolder; an msig needs keyData to show it is PQ-eligible); a PQZ key always comes with its
 // proof hash and only with it (UAPqzPopHash).
 HolderPop holderPopMessage(uint16_t kind, const Bytes& ua, const Bytes& keyData, const std::optional<Bytes>& pqzKey = std::nullopt,
                            const std::optional<Bytes>& pqzPop = std::nullopt, const std::optional<Bytes>& pqzPopHash = std::nullopt,
-                           const std::optional<Kem>& kem = std::nullopt);
+                           const std::optional<Bytes>& kemPk = std::nullopt);
 // The message R_REG proves over: uaMessage(0x0142, POP_V2, portableRecordDigest(ua, kind, keyHash(0x0142, pqzKey), kemRecordHash)),
-// kind the registering kind.
-Bytes pqzRegMessage(uint16_t kind, const Bytes& ua, const Bytes& pqzKey, const std::optional<Kem>& kem = std::nullopt);
+// kind the registering kind, kemPk the register KEM key (version 0).
+Bytes pqzRegMessage(uint16_t kind, const Bytes& ua, const Bytes& pqzKey, const std::optional<Bytes>& kemPk = std::nullopt);
 Bytes pqzKeyDigest(const Bytes& ua, const Bytes& pqzKeyHash);  // typed(UAPqzKey{ua, pqzKeyHash})
 // typed(UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}): what setPqzKey's signature signs under uaMessage(kind, PURPOSE_PQZ_KEY, ·)
 Bytes pqzKeyRecordDigest(const Bytes& ua, const Bytes& pqzKeyHash, const Bytes& pqzPopHash);
