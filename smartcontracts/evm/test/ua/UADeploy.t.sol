@@ -6,6 +6,7 @@ import {DeployHarness} from "../helpers/DeployHarness.sol";
 import {UAPrecompileProbe} from "../../script/UAPrecompileProbe.sol";
 import {Bls12381} from "../../src/common/Bls12381.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 
@@ -154,5 +155,72 @@ contract UADeployTest is Test {
         // the gate reads the chain's block gas limit
         if (block.gaslimit < conf) vm.expectRevert();
         h.requireGas("WrappedPqzToken");
+    }
+
+    /// U8S-D9 (owner 2026-10-31, option (a)): a gen-1 registry built in-test with the EIP-2537 kinds given (verifier: any
+    /// code), budget 12 M.
+    function _gen1(bool schnorrBls, bool blsMinSig, bool zether, bool hedera) internal returns (IUARegistry) {
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](3);
+        uint256 n;
+        if (schnorrBls) k[n++] = UARegistry.KindConfig(UAKinds.SCHNORR_BLS12381, address(this), 70_000);
+        if (blsMinSig) k[n++] = UARegistry.KindConfig(UAKinds.BLS12381_MINSIG, address(this), 200_000);
+        if (zether) k[n++] = UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(this), 70_000);
+        assembly ("memory-safe") {
+            mstore(k, n)
+        }
+        return IUARegistry(address(new UARegistry(UID, address(0), hedera, 12_000_000, address(0), true, k)));
+    }
+
+    function _missing(string memory kind) internal pure returns (bytes memory) {
+        return bytes(string.concat("gen-1 registry: EIP-2537 kind ", kind, " the probe passes is missing"));
+    }
+
+    /// The probe passes EIP-2537 and the registry lacks `zether-bls12381` 0x0141 (not Hedera): refused; all three: passes.
+    function test_gen1KindGate_refusesMissingZether() public {
+        DeployHarness h = new DeployHarness();
+        IUARegistry reg = _gen1(true, true, false, false);
+        vm.expectRevert(_missing("0x0141"));
+        h.checkGen1Kinds(reg, true, false);
+        h.checkGen1Kinds(_gen1(true, true, true, false), true, false);
+    }
+
+    /// Without `schnorr-bls12381` 0x0105 or without `bls12381-minsig` 0x0106: refused, naming the kind.
+    function test_gen1KindGate_refusesMissingSchnorrBls() public {
+        DeployHarness h = new DeployHarness();
+        IUARegistry reg = _gen1(false, true, true, false);
+        vm.expectRevert(_missing("0x0105"));
+        h.checkGen1Kinds(reg, true, false);
+        reg = _gen1(true, false, true, false);
+        vm.expectRevert(_missing("0x0106"));
+        h.checkGen1Kinds(reg, true, false);
+    }
+
+    /// The probe does not pass EIP-2537: nothing is required (Hedera or not).
+    function test_gen1KindGate_noBlsPasses() public {
+        DeployHarness h = new DeployHarness();
+        h.checkGen1Kinds(_gen1(false, false, false, false), false, false);
+        h.checkGen1Kinds(_gen1(false, false, false, true), false, true);
+    }
+
+    /// Hedera: no Zether token can exist there (`ZetherLayer`), so 0x0141 is not required; 0x0105 / 0x0106 still are.
+    function test_gen1KindGate_hederaExempts0141() public {
+        DeployHarness h = new DeployHarness();
+        h.checkGen1Kinds(_gen1(true, true, false, true), true, true);
+        IUARegistry reg = _gen1(false, true, false, true);
+        vm.expectRevert(_missing("0x0105"));
+        h.checkGen1Kinds(reg, true, true);
+    }
+
+    /// `_deployUARegistry` runs the gate on the registry it deployed (dev chain 31337: passes, `test_devChain` unchanged).
+    /// The registry's CREATE2 address is learnt from a first deploy, then the state is reverted and the deploy repeated.
+    function test_gen1KindGate_deployPathRunsIt() public {
+        uint256 s = vm.snapshotState();
+        address reg = address(_registry(31337, false));
+        vm.revertToState(s);
+        vm.expectCall(reg, abi.encodeCall(IUARegistry.generation, ()));
+        vm.expectCall(reg, abi.encodeCall(IUARegistry.kindEnabled, (UAKinds.SCHNORR_BLS12381)));
+        vm.expectCall(reg, abi.encodeCall(IUARegistry.kindEnabled, (UAKinds.BLS12381_MINSIG)));
+        vm.expectCall(reg, abi.encodeCall(IUARegistry.kindEnabled, (UAKinds.ZETHER_BLS12381)));
+        assertEq(address(_registry(31337, false)), reg);
     }
 }

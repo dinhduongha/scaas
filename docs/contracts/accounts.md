@@ -1397,6 +1397,18 @@ address 0 = disabled); the chain profile publishes them; clients read `kindEnabl
 or building a structure. `DeployBase` (`_deployUARegistry`, UA-3) deploys generation 1 on every chain it runs on with
 this table's set and the gen-1 default caps; a kind whose probe fails gets no verifier (CTR-UA-23).
 
+<a id="gen1-kind-gate"></a>**Gen-1 kind gate** (owner ruling 2026-10-31, option (a); **BUILT**, ua8-soroban G1): every gen-1 deploy
+carries every kind the chain can run. `DeployBase._checkGen1Kinds(reg, bls, isHedera)` runs in `_deployUARegistry` right
+after the registry's constructor and before the `chainUid()` gate: when the probe passes EIP-2537, the generation-1
+registry must enable `schnorr-bls12381` 0x0105, `bls12381-minsig` 0x0106 and, except on Hedera (no Zether token can
+exist there, `ZetherLayer`), `zether-bls12381` 0x0141, else the script reverts `gen-1 registry: EIP-2537 kind <k> the
+probe passes is missing` and nothing is broadcast. No `UARegistry` change. A probe whose RPC call fails reports no
+EIP-2537 and the gate requires nothing (the stated rule; owner open question). Soroban (controller call, owner may override; no code): its kinds are
+compiled in and it has no generations — a new kind is a new registry deployment with new tokens bound to it
+([NET-SOR-17](../networks/soroban.md#NET-SOR-17)); the rule there is "a Soroban registry meant to stay (mainnet) is
+deployed from a build carrying every kind built for Soroban at that time" (so after `zether-soroban`). Tests:
+`UADeploy.t.sol` `test_gen1KindGate_*`.
+
 ### 1.10 EIP-7702 and chain identity
 
 <a id="eip7702"></a>
