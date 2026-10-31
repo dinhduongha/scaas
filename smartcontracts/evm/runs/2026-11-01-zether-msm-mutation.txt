@@ -1,0 +1,43 @@
+zether-msm mutation run (runs/2026-11-01-zether-msm-mutation.py), 2026-11-01, on the committed merged verifier.
+Each row removes one check or weight; every row must go red. Rows ran one at a time, in five calls.
+
+rho constant: every weight 1             RED: test_cancellingPairRefused
+rho skips the proof bytes                RED: test_cancellingPairRefused
+no rho == 0 check                        RED: test_zeroRhoRefused
+E3-form weight does not advance          RED: test_eachTransferEquationAloneRefused
+z canonical check removed                RED: test_nonCanonicalScalarRejected
+BP scalar canonical check removed        RED: test_mutatedSolidityRows
+A of each proof left out of the MSM      RED: test_everyTransferPointReachesTheMsm
+T2 term dropped                          RED: test_pointCountPerForm
+E1 dropped from the fold                 RED: test_eachTransferEquationAloneRefused
+E2 dropped from the fold                 RED: test_eachTransferEquationAloneRefused
+E3 dropped from the fold                 RED: test_eachTransferEquationAloneRefused
+E4 dropped from the fold                 RED: test_eachTransferEquationAloneRefused
+E5 dropped from the fold                 RED: test_eachTransferEquationAloneRefused
+E6 dropped from the fold                 RED: test_eachTransferEquationAloneRefused
+E7 dropped from the fold                 RED: test_eachTransferEquationAloneRefused
+E8 dropped from the fold                 RED: test_eachTransferEquationAloneRefused
+BP-1 dropped from the fold               RED: test_firstBpOneAloneRefused
+BP-2 dropped from the fold               RED: test_eachBpTwoAloneRefused (row as first run; the pattern then widened to verifyRange)
+second BP: BP-1 dropped                  RED: test_secondBpOneAloneRefused
+no-auditor E7 dropped                    RED: test_eachTransferEquationAloneRefused_noAuditor
+burn E1 dropped                          RED: test_eachBurnEquationAloneRefused
+burn E5 dropped                          RED: test_eachBurnEquationAloneRefused
+burn E8 dropped                          RED: test_eachBurnEquationAloneRefused
+multi E3_0 dropped                       RED: test_eachMultiEquationAloneRefused
+multi E6_0 dropped                       RED: test_eachMultiEquationAloneRefused
+multi E6p_1 dropped                      RED: test_eachMultiEquationAloneRefused
+multi E7_1 dropped                       RED: test_eachMultiEquationAloneRefused
+multi E4 dropped                         RED: test_eachMultiEquationAloneRefused
+multi E8 dropped                         RED: test_eachMultiEquationAloneRefused
+first caller point not in the MSM        RED: test_everyBurnPointReachesTheMsm, test_everyMultiPointReachesTheMsm, test_everyTransferPointReachesTheMsm
+A_Vv and A_Vb out of the MSM             RED: test_lowOrderPairAcrossEquationsRefused
+zero-scalar slots dropped from the MSM   RED: test_zeroScalarSlotStillChecked
+wrong modulus in _term                   RED: test_sharedGeneratorsAddModR
+
+Not mutated: test_precompilesOnTheLowOrderPoint (it pins the precompiles, there is no verifier check to remove).
+
+Three earlier runs are void and not listed. A "$" in the test pattern matched nothing, so eight rows ran no test and read as
+green; the script now treats that as an error. Then three runs overlapped on the same source and one left a mutant in src: the
+script now takes a lock and refuses a source that differs from HEAD. "A_Vv out of the MSM" alone stayed green, rightly: the
+pair's other point still reached G1MSM, so the row was widened to both.
