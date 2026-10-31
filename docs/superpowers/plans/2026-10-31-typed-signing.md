@@ -553,6 +553,23 @@ Part C (one move per entry); until then `MtxPipelineLib` decodes the old blob in
   default set; `sizes`; gas pins (old → new).
 - [ ] Step 5: commit `typed-signing R1: UARegistry explicit ABI (registerMsig, KemKey, UASig, MemberSig[])`.
 
+### Task R1b: typed single-key `keyData` entries (Appendix X row 12, signed off)
+
+Added by the controller after R1 (2026-10-31): R1 built `registerMsig` but not the three other bundled-`keyData` kinds.
+
+**Files:** `smartcontracts/evm/src/ua/{IUARegistry,UARegistry,UAKinds}.sol`, `test/ua/**`, clientkeys `src/ua.js` +
+generators, ua-rs `src/ua8.rs`, `portable.json` (`args` rows of these kinds), size / gas pins, `dex_order_kat.json`
+if bytecode moves, scaas-node call table / selector pins.
+
+- `registerWebAuthn(WebAuthnKey key, UAAttrs attrs, bytes pop, bytes pqzPop)`, `registerMuSig2(MuSig2Key …)`,
+  `registerFrost(FrostKey …)` with the Appendix X structs; the registry reassembles the packed bytes, so ids,
+  digests and `registrationOf` bytes stay identical; `register(kind, …)` for these kinds reverts `UAKeyData(kind)`
+  (one accepted form, as `registerMsig`). Views returning the typed key where R1 added `msigOf` (one per kind only if
+  size allows; else report). Every other kind keeps `register(kind, bytes keyData, …)`.
+- Tests: ids equal the packed-keyData ids of every vector row of these kinds; the packed form refused; whole suite at
+  four sets; sizes (STOP if UARegistry nears 64 KiB or a module split is needed); `GAS_REPIN=1`.
+- Commit `typed-signing R1b: registerWebAuthn / registerMuSig2 / registerFrost typed key entries`.
+
 ### Task R2: reproducers + Soroban tests on the typed registry arguments
 
 **Files:** the P6 / P7 packages (argument builders where they build `register` / `setKemKey` calls), Soroban tests that
