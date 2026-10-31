@@ -4595,14 +4595,15 @@ no family spec silently skips one, while the answers keep each chain's real mech
 ### NET-EVM-02 — Private reference chain id is 7622
 - old: CR-PD-6, owner:2026-10-07:chain-7622 · status: current · owner: yes · date: 2026-10-07 · normative: networks/evm.md#NET-EVM-02 · superseded-by: —
 
-**Rule.** The private reference chain is chain id 7622; its identity is the pair (chain id 7622, genesis hash `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464`), profile `private7622`.
+**Rule.** The private reference chain is chain id 7622; its identity is the pair (chain id 7622, genesis hash `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464`), profile `scaas-testnet`.
 **Why.** Chain id 9000 is also Evmos Testnet, and replay protection is only as good as the chain id; the genesis hash pins the chain beyond the registry convention.
 **Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 918; [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 39.
+**Change (2026-10-31, owner ruling, branch `scaas-testnet-rename`): the SCaaS testnet's identifier is `scaas-testnet`.** Rename `private7622` → `scaas-testnet` everywhere it is a current identifier, replacing the owner's 2026-10-07 name: the Foundry profile `[profile.scaas-testnet]` (`FOUNDRY_PROFILE=scaas-testnet`; Foundry 1.8.5 accepts the hyphen), the directory `smartcontracts/evm/src/chains/scaas-testnet/`, the `chain-uids.json` key, the default profile of `verify-blockscout.sh`, the deploy scripts, CI and the node's end-to-end tests. In prose the chain is "the SCaaS testnet" (bare chain ids are avoided; "chain id 7622" is given once where a legend needs it). The future mainnet, chain id 22776, will be `scaas-mainnet`; nothing is created for it yet. History (`docs/history`, `docs/superpowers`, `docs/reviews`, `docs/research`, `legacy/`, `runs/`, `COMPLETED.md`, `HANDOFF.md`) keeps the old name. No hashed constant or test-vector preimage contained the old string, so no deployed digest changes. Status: **BUILT**.
 
 ### NET-EVM-03 — First target chain is the private PoA chain
 - old: UD:§16, UD:§16:roadmap · status: current · owner: yes · date: 2026-08-30 · normative: networks/evm.md#NET-EVM-03 · superseded-by: —
 
-**Rule.** The first target chain is the private PoA chain; public chains follow, and CI builds the `private7622` profile.
+**Rule.** The first target chain is the private PoA chain; public chains follow, and CI builds the `scaas-testnet` profile.
 **Why.** Owner decision: the private chain goes first because gas is not a constraint there (minimum gas price 0) and its Prague fork has EIP-2537 BLS12-381 from genesis, which confidential transfers need.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 889; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 929.
 
@@ -4624,7 +4625,7 @@ no family spec silently skips one, while the answers keep each chain's real mech
 ### NET-EVM-06 — Every profile compiles for Amsterdam (Glamsterdam required on every chain)
 - old: — · status: current · owner: yes · date: 2026-10-21 · normative: networks/evm.md#NET-EVM-06 · superseded-by: —
 
-**Rule.** Every Foundry profile (default, private7622, zether, gnosis, celo, bsc, polygon, base) uses `evm_version = "amsterdam"` (Foundry 1.8.5, `experimental = true`); every chain that runs these contracts requires Glamsterdam, and a public chain is deployed only after its fork. No contract reads `block.slotnum` (EIP-7843 is off on the SCaaS testnet: Clique has no slot).
+**Rule.** Every Foundry profile (default, scaas-testnet, zether, gnosis, celo, bsc, polygon, base) uses `evm_version = "amsterdam"` (Foundry 1.8.5, `experimental = true`); every chain that runs these contracts requires Glamsterdam, and a public chain is deployed only after its fork. No contract reads `block.slotnum` (EIP-7843 is off on the SCaaS testnet: Clique has no slot).
 **Why.** The SCaaS testnet runs Nethermind 2.2.0 with Amsterdam from block 1, and owner ruling 2026-10-21 makes Glamsterdam mandatory everywhere, so one set of gas bounds priced as the chain prices them is enough.
 **Cost if wrong.** Gas bounds pinned for another schedule would pass in CI and fail on the chain.
 **Source.** Owner 2026-10-21 (Task F185, "Đồng ý").

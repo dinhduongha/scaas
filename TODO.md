@@ -161,12 +161,10 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      in sync and likely cuts gas (not measured). Do it when a `zether-near` / `zether-algorand` / `zether-soroban` track
      needs it, or for EVM gas — measure first; on EVM a new verifier means a new implementation version (CTR-ZTH-20);
      security review of the weight derivation and of which untrusted points need a subgroup check.
-     **Rename `private7622` → `scaas-testnet`** (owner 2026-10-31; replaces the 2026-10-07 name in NET-EVM-02): the
-     Foundry profile, `src/chains/private7622/`, the `chain-uids.json` key, `node.example.toml`, seeds, env var names,
-     test vectors, CI (`FOUNDRY_PROFILE`), `scaas-node/tests/e2e*.rs` and current docs (NET-EVM-01/02/06, decisions,
-     contracts/README, settlement, metatx, architecture, RUNBOOK); history / plans / reviews stay. The future mainnet
-     is `scaas-mainnet`. After `fs3-t13-rollout` merges (it edits the RUNBOOK, `chain-uids.json`, `node.example.toml`);
-     gates: forge with the renamed profile, node e2e, docs_check.
+     **Done 2026-10-31 (branch `scaas-testnet-rename`): the SCaaS testnet's identifier is `scaas-testnet`** (owner
+     2026-10-31, Change entry in NET-EVM-02): the Foundry profile, `src/chains/scaas-testnet/`, the `chain-uids.json` key,
+     CI, the deploy / verify scripts, `scaas-node/tests/e2e*.rs` and current docs; history / plans / reviews keep the old
+     name. No hashed constant or vector preimage held it. The future mainnet will be `scaas-mainnet`.
   5. **Done 2026-10-31 (branch `fs3-t13-rollout`):** 7622 reset onto `2.2.0-pqz6` with the calibrated rows (option (b)),
      the CREATE2 deployer in the genesis alloc, EIP-7702 off (type-4 refused), contracts redeployed (`Deploy.s.sol` + PQZ e2e
      full / `--split`, 0 failures), the node hardened (NET-EVM-08), Blockscout on (NET-EVM-09). Left: the option (c)
@@ -688,7 +686,7 @@ Owner/operator gates from `docs/history/HANDOFF-blockchain.md` §1 (O1–O8 are 
   gossip (UA-4, UA-5a, UA-5b open lists in COMPLETED.md).
 - [ ] **UA-5** UA parity (owner 2026-10-13; record `docs/history/specs/2026-10-13-ua-parity-design.md`; rules
   CTR-UA-27/28, CTR-DEX-25/26, CTR-ZTH-51, CTR-ACC-12): UA-5a and UA-5b done (COMPLETED.md); left UA-5c below. Each
-  phase ends with the size gate and the full forge suite (default and `private7622`).
+  phase ends with the size gate and the full forge suite (default and `scaas-testnet`).
   - [ ] **UA-5c split (owner 2026-10-20):** (a) confidential ops via the UA envelope + (b) unshield to a UA → 5h part A;
     (c) generic UA pipeline in `MetaTxBase` + (d) `MandateWallet` `bytes32` → step 5c′ before the node relay (5c);
     `zetherShield` via `uaExecute` already built in UA-6.

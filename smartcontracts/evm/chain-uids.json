@@ -4,8 +4,8 @@
   "method": "eth_chainId + eth_getBlockByNumber(\"0x0\").hash",
   "chains": [
     {
-      "key": "private7622",
-      "name": "SCaaS private chain",
+      "key": "scaas-testnet",
+      "name": "SCaaS testnet",
       "chainId": 7622,
       "testnet": false,
       "chainUid": "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164",

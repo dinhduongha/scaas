@@ -1183,7 +1183,7 @@ and a `MetaTransaction` runs only the signer's own call, and the DEX holds no ba
 
 ## 15. Conformance
 
-Foundry (`forge test`, default profile and `private7622`):
+Foundry (`forge test`, default profile and `scaas-testnet`):
 
 - Every allowlisted selector through `mtxExecute` and through the alias; `mtxSelectors()` pinned; every allowlisted
   function `nonReentrant`; a non-allowlisted selector (incl. `transfer` and `pay`), a short `data`, a wrong static

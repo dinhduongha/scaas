@@ -464,7 +464,7 @@ passed; `codesize`: 65,536 B deployed at once in block 46 (100,504,388 gas), 65,
 holds two interleaved check runs started at the same time with the same key: one hit a nonce clash ("replacement
 transaction underpriced"), the other passed fully — an operator slip, not a chain fault. Redeployed by the checks: the
 probe contract of `e2e.py e2e` and the two `codesize` contracts; nothing else (the PQZ / UA stack is redeployed with
-plan fs3 Task 13). Afterwards `smartcontracts/evm/chain-uids.json` `private7622`, `scaas-node/node.example.toml` and
+plan fs3 Task 13). Afterwards `smartcontracts/evm/chain-uids.json` `scaas-testnet`, `scaas-node/node.example.toml` and
 `docs/networks/evm.md` carry the new genesis hash (commit `00d791b0`). A gas-less `eth_call` of a call with total gas
 > 2^24 and regular < 2^24 succeeds on the reset chain (`../runs/2026-10-22-testnet-gasless-call.txt`).
 
@@ -478,7 +478,7 @@ sh pqz-core/nethermind/runs/2026-10-22-testnet-reset-200m.sh check   # head, blo
 (predicted by the throwaway run with the live genesis) and `gasLimit` 200,000,000 from block 0, probe and e2e all checks
 passed, `codesize` deploys 65,536 B at once (no ramp). After it: record block 1's hash and the image id in this section
 and in `../README.md`; the genesis hash is the new `chainUid` of chain 7622 (`smartcontracts/evm/chain-uids.json`
-`private7622`, the chain profile's `genesis_hash`, every contract that pins `chainUid`); everything deployed on the old
+`scaas-testnet`, the chain profile's `genesis_hash`, every contract that pins `chainUid`); everything deployed on the old
 chain is gone and is redeployed by its own scripts (`smartcontracts/evm/script/pqz/e2e.py` for the PQZ stack). The test
 vectors that use `0x24e43dcb…c464` as a fixed `chainUid` keep it (a test constant, not the live chain's).
 
@@ -568,7 +568,7 @@ option (b), the CREATE2 deployer in the genesis alloc, Blockscout on with caps, 
    without dave, who joins 0x0131 at his ML-DSA-65 `register` and 0x0142 when `storePqzPop` proves his key
    (UARegistry `_pqzProof`; `setPqzKey` alone lists nothing) — a script expectation, fixed in `e2e.py`), `--split` (265 ok,
    0 FAIL), and after the hardening the full run again through the public RPC (256 ok, 0 FAIL);
-   `PRIVATE_KEY=0x…04 FOUNDRY_PROFILE=private7622 CHAIN_UID=0xf1f491ab…3164 scripts/capped smartcontracts/scripts/deploy.sh
+   `PRIVATE_KEY=0x…04 FOUNDRY_PROFILE=scaas-testnet CHAIN_UID=0xf1f491ab…3164 scripts/capped smartcontracts/scripts/deploy.sh
    evm http://127.0.0.1:8545`: 31 transactions, all status 1, through the genesis CREATE2 deployer (UA registry with 21
    kinds, OpenFactory, MtxRelayFee + executor, the NormalToken and SCaaSDex releases); `deployments/7622.json`
    (git-ignored; copy in `smartcontracts/evm/runs/2026-10-31-fs3-t13-deploy-7622.txt`). UniswapExecutor: no deploy
@@ -818,7 +818,7 @@ docker compose stop sc-verifier
 **After every 7622 reset or deploy run, and after each PQZ e2e run** `smartcontracts/evm/script/verify-blockscout.sh`
 (`[broadcast [e2e-run-log …]]`, default `broadcast/Deploy.s.sol/7622/run-latest.json` and every `runs/*.txt` whose
 `# P6g e2e on chain 7622` header names the current genesis hash; `BLOCKSCOUT_API`, `RPC` default
-`http://192.168.1.72:8545`, `FOUNDRY_PROFILE` default `private7622`): one `forge verify-contract … --verifier blockscout`
+`http://192.168.1.72:8545`, `FOUNDRY_PROFILE` default `scaas-testnet`): one `forge verify-contract … --verifier blockscout`
 per CREATE / CREATE2 row and per factory child of the broadcast (MtxRelayExecutor, the SmartKeyAccount implementation,
 the NormalToken / SCaaSDex implementations), constructor arguments from the init code; for the PQZ e2e
 (`script/pqz/e2e.py`, no broadcast file; `deployments/7622-pqz.json` holds only its last run) every

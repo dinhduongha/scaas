@@ -18,7 +18,7 @@ Status: **BUILT** on the SCaaS testnet and anvil; public chains are seeded as `d
 
 | Chain | Chain id | Profile | Gas | Finality gate | Status |
 |---|---|---|---|---|---|
-| SCaaS testnet (private reference chain) | 7622 | `private7622` (Solidity `amsterdam`, [NET-EVM-06](#NET-EVM-06)) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
+| SCaaS testnet (private reference chain) | 7622 | `scaas-testnet` (Solidity `amsterdam`, [NET-EVM-06](#NET-EVM-06)) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
 | Anvil (tests) | 31337 (also 1337) | — | — | depth | BUILT (dev only) |
 | Gnosis Chain | 100 | `gnosis` (`amsterdam`; Pectra since 2025-04-30, then Fusaka; deploy after its Glamsterdam fork) | native xDAI (stable value) | `tag finalized` (~160–240 s), quorum ≥ 2 independent RPCs | seeded `draft` until the operator gate passes |
 | Celo | 42220 | `celo` (`amsterdam`; the chain's fork level is not re-measured; deploy after its Glamsterdam fork) | CELO; fee currencies optional | `l1_batch` (PLANNED) | seeded `draft` |
@@ -72,14 +72,16 @@ is always the hard value. Gas is never assumed: Zether-sized transactions do not
 <a id="NET-EVM-02"></a>**NET-EVM-02** — **The private reference chain is chain id 7622; its identity is the pair
 (chain id 7622, genesis hash `0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164` since the 2026-10-31 reset (fs3 Task 13: the CREATE2 deployer in the genesis alloc, EIP-7702 off; `0xa17faef4…2ac2` from 2026-10-22, genesis gas limit 200 M); the client test vectors keep
 the earlier `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464` as a fixed constant), profile
-`private7622`.** Owner ruling 2026-10-07. Chain id `0x1dc6`; the chain was reset with a new genesis when it moved
+`scaas-testnet`.** Owner ruling 2026-10-07; the name `scaas-testnet` is owner ruling 2026-10-31 (it replaces the
+2026-10-07 name). Chain id `0x1dc6`; the chain was reset with a new genesis when it moved
 from 9000, which is also Evmos Testnet — replay protection is only as good as the chain id, so every signer and node
 also binds the genesis hash ([NET-ALL-22](README.md#NET-ALL-22)). Genesis hashes of the live EVM chains, two sources each (7622: one, its own local RPC), are in [`chain-uids.json`](../../smartcontracts/evm/chain-uids.json). Nodes bind the profile to the genesis hash, not to
-the chain id alone. The profile, seeds, environment variable names and test vectors use `private7622`; the chain's
-directory is `src/chains/private7622`.
+the chain id alone. The profile, seeds, environment variable names and test vectors use `scaas-testnet`; the chain's
+directory is `src/chains/scaas-testnet`. In prose the chain is "the SCaaS testnet". The future mainnet, chain id 22776,
+will be `scaas-mainnet`.
 
 <a id="NET-EVM-03"></a>**NET-EVM-03** — **The first target chain is the private PoA chain; public chains follow, and
-CI builds the `private7622` profile.** Owner decision. Gas is free there, so gas is not a constraint for the first
+CI builds the `scaas-testnet` profile.** Owner decision. Gas is free there, so gas is not a constraint for the first
 deployments (confidential payments run there first), and precompile measurements need no faucet.
 
 <a id="NET-EVM-04"></a>**NET-EVM-04** — **A single-signer PoA chain is named honestly.** With one Clique signer the
@@ -183,7 +185,7 @@ owner decides at the 22776 launch.
 <a id="NET-EVM-06"></a>**NET-EVM-06** — **Every Foundry profile compiles for the `amsterdam` EVM: every chain that runs these contracts
 requires Glamsterdam, and a public chain is deployed only after its own fork.** Owner ruling 2026-10-21; status **BUILT**.
 The SCaaS testnet (7622) runs Nethermind 2.2.0 with Amsterdam from block 1, and the test suite runs on Foundry 1.8.5,
-which needs `experimental = true` for `evm_version = "amsterdam"`; the profiles `default`, `private7622`, `zether`,
+which needs `experimental = true` for `evm_version = "amsterdam"`; the profiles `default`, `scaas-testnet`, `zether`,
 `gnosis`, `celo`, `bsc`, `polygon` and `base` all set it, with one set of gas bounds. No contract reads `block.slotnum`
 (EIP-7843): Clique has no slot, so the opcode is off on the testnet. The bytecode equals the earlier `osaka` build apart
 from the metadata; the gas bounds of the tests moved with Amsterdam's prices (EIP-8037 state gas, EIP-8038 storage writes,

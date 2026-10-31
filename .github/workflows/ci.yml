@@ -1,6 +1,6 @@
 # R52 (GA 2.1#4): contracts and the relay node. Mirrors the local commands:
 #   smartcontracts/evm: forge test; forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' (cold gas);
-#                  FOUNDRY_PROFILE=private7622 forge build;
+#                  FOUNDRY_PROFILE=scaas-testnet forge build;
 #                  forge build src --sizes --json > /tmp/sizes.json; python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check
@@ -56,8 +56,8 @@ jobs:
           python3 ../../scripts/size_gate.py --self-test
           forge build src --sizes --json > /tmp/sizes.json || true
           python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json
-      - name: forge build (private7622 profile)
-        run: FOUNDRY_PROFILE=private7622 forge build
+      - name: forge build (scaas-testnet profile)
+        run: FOUNDRY_PROFILE=scaas-testnet forge build
 
   node:
     runs-on: ubuntu-latest

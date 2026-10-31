@@ -3,7 +3,7 @@
 # testnet 7622).
 # usage: verify-blockscout.sh [broadcast/Deploy.s.sol/<chainid>/run-latest.json [e2e-run-log ...]]  (paths relative to smartcontracts/evm)
 #   env BLOCKSCOUT_API (default http://192.168.1.72:4000/api), RPC (default http://192.168.1.72:8545),
-#   FOUNDRY_PROFILE (default private7622)
+#   FOUNDRY_PROFILE (default scaas-testnet)
 # Run after every 7622 reset or deploy. Broadcast: the CREATE / CREATE2 rows and the contracts they create
 # (additionalContracts: MtxRelayExecutor, the SmartKeyAccount implementation, the token / DEX implementations); the
 # constructor arguments are the tail of each init code after the artifact's creation bytecode.
@@ -30,7 +30,7 @@ B="${1:-broadcast/Deploy.s.sol/7622/run-latest.json}"
 [ -f "$B" ] || { echo "no broadcast $B" >&2; exit 2; }
 API="${BLOCKSCOUT_API:-http://192.168.1.72:4000/api}"
 RPC="${RPC:-http://192.168.1.72:8545}"
-export FOUNDRY_PROFILE="${FOUNDRY_PROFILE:-private7622}"
+export FOUNDRY_PROFILE="${FOUNDRY_PROFILE:-scaas-testnet}"
 CAPPED="$(git rev-parse --show-toplevel)/scripts/capped"
 CHAIN="$(jq -r .chain "$B")"
 ENV_T='(address,bytes32,address,address,bool,address[],address[],bytes32[])'
