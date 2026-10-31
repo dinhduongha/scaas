@@ -688,12 +688,12 @@ with every envelope word ABI-encoded — never `encodePacked` on `uint32 mode`),
 `WrappedToken`, `mtxShield` on `WrappedPqzToken` and `WrappedZetherToken`, `mtxSetMandate`), the generic entries kept
 (owner 2026-10-31: nothing is freed, so the projection counts only added bytes); run log `runs/2026-10-31-typed-signing-c0-sizes.txt`.
 
-- [ ] Step 1: tests `test_c0_unwrapTyped` (a wallet-made `Unwrap` signature executes; the same op through the kept
+- [x] Step 1: tests `test_c0_unwrapTyped` (a wallet-made `Unwrap` signature executes; the same op through the kept
   `mtxExecute` still executes and shares the `(from, batch)` nonce lane, so one signature cannot run twice), `test_c0_shieldTyped` (PQZ, Zether), `test_c0_setMandateTyped`.
-- [ ] Step 2: `forge build --sizes`; record per contract: entry cost (bytes per `mtx` / `ua` entry), freed bytes, and a
+- [x] Step 2: `forge build --sizes`; record per contract: entry cost (bytes per `mtx` / `ua` entry), freed bytes, and a
   projection for the full Part C entry list (C2–C6 counts: `WrappedPqzToken` ≈ 18 `mtx` + 11 `ua` entries,
   `WrappedZetherToken` ≈ 19 + 13, `NormalToken` 2 + 1, …).
-- [ ] Step 2b: **size audit (owner 2026-10-31: C0 extended; measure and report only, adopt nothing).** Structural
+- [x] Step 2b: **size audit (owner 2026-10-31: C0 extended; measure and report only, adopt nothing).** Structural
   levers only, no byte-shaving (owner rule). For the seven tokens + `UARegistry`: a per-contract breakdown (which
   libraries / internal functions / modifiers are inlined, bytes each, what is duplicated across entries). Then try on
   `WrappedPqzToken` (and project to the others), each lever alone on a scratch copy, recording runtime size, the gas
@@ -704,11 +704,15 @@ with every envelope word ABI-encoded — never `encodePacked` on `uint32 mode`),
      profile (200 → 50 / 1); 5. `via_ir = true` (measure only: build time, size, gas). Report a table (lever × contract:
      bytes saved, gas delta per call, effort, risk) in the run log and `docs/research/evm-size-levers.md`, with a
      recommendation; the owner chooses which levers C2–C6 use.
-- [ ] Step 3: **decision gate (TS-D18):** every projected runtime ≤ 65,536 B (with or without the levers the owner
+- [x] Step 3: **decision gate (TS-D18):** every projected runtime ≤ 65,536 B (with or without the levers the owner
   picks) ⇒ continue with pattern A; else STOP and report to the controller (owner decides B′ / dropping
   proof-authorised envelope entries). Either way stop after Step 2b for the owner's lever choice.
-- [ ] Step 4: commit `typed-signing C0: named-entry pattern and size projection` (the spike code is kept as the start
+- [x] Step 4: commit `typed-signing C0: named-entry pattern and size projection` (the spike code is kept as the start
   of C2–C5).
+- **C0 result (2026-11-01):** the stop rule applied. Without a lever `WrappedPqzToken` and `WrappedZetherToken` end about
+  11.9 KB and 12.8 KB over 65,536 B; `docs/research/evm-size-levers.md` has the table and the recommended set. C1 waits for
+  the owner's lever choice. Findings for C3 / C4 are in §7 of that note (Appendix X.3's `mtxUnshield` Envelope shape does
+  not fit the legacy code generator's stack).
 
 ### Task C1: clientkeys typed builders + `typed_ops.json`
 

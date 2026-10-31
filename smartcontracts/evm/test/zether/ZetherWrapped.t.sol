@@ -429,7 +429,7 @@ contract ZetherWrappedTest is ZetherFixture {
         z.mtxWrap(address(pts), o, sig);
         assertEq(z.balanceOf(payer), 20 * SCALE);
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
-            from: payer, data: abi.encodeCall(ZetherLayer.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 20)), batch: 2, nonce: 0,
+            from: payer, data: abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 20)), batch: 2, nonce: 0,
             validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer, fee: 0,
             feeRecipient: address(0)
         });
@@ -542,7 +542,7 @@ contract ZetherWrappedTest is ZetherFixture {
         assertEq(a[13], 0);
         assertEq(c[14], 2, "unwrapToUA AMOUNT(1)");
         assertEq(a[14], 1);
-        assertEq(s[6], ZetherLayer.mtxShield.selector);
+        assertEq(s[6], IConfidentialToken.mtxShield.selector);
         assertEq(s[7], ZetherLayer.mtxConfidentialTransfer.selector);
         assertEq(s[8], ZetherLayer.mtxConfidentialTransferCompact.selector);
         assertEq(s[9], ZetherLayer.mtxConfidentialTransferSingle.selector);

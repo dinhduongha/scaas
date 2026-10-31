@@ -25,6 +25,7 @@ import {Catalogue, zetherEnv} from "../../helpers/Catalogue.sol";
 import {ZetherVerifierBase} from "../../../src/zether/ZetherVerifier.sol";
 import {IUARegistry} from "../../../src/ua/IUARegistry.sol";
 import {UACall} from "../../ua/UACall.sol";
+import {IConfidentialToken} from "../../../src/confidential/IConfidentialToken.sol";
 
 bytes32 constant ZUID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 
@@ -354,7 +355,7 @@ abstract contract ZetherFixture is Test {
     /// @dev The calldata of the Zether-layer op `sel` on `tok` for an envelope with binding `b`: shield 3 to bob, else
     ///      10 from alice's acc balance `bal` (to bob, or unshielded to 0xB0C). Used to relay every listed selector once.
     function _zetherOpCall(bytes4 sel, uint256 bal, bytes32 b) internal view returns (bytes memory) {
-        if (sel == ZetherLayer.mtxShield.selector) return abi.encodeCall(ZetherLayer.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 3));
+        if (sel == IConfidentialToken.mtxShield.selector) return abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 3));
         if (sel == ZetherLayer.mtxRollOver.selector) return abi.encodeCall(ZetherLayer.mtxRollOver, (ZetherTypes.UA.unwrap(alice.ua), 1));
         if (sel == ZetherLayer.mtxRollOverBatch.selector) {
             ZetherTypes.UA[] memory one = new ZetherTypes.UA[](1);

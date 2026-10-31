@@ -18,12 +18,12 @@ contract ConfidentialSelectorsTest is Test {
             IConfidentialToken.mtxUnshield.selector, IConfidentialToken.mtxRollOver.selector
         ];
         bytes4[6] memory z = [
-            ZetherLayer.mtxShield.selector, ZetherLayer.mtxConfidentialTransfer.selector,
+            IConfidentialToken.mtxShield.selector, ZetherLayer.mtxConfidentialTransfer.selector,
             ZetherLayer.mtxConfidentialTransferCompact.selector, ZetherLayer.mtxConfidentialTransferSingle.selector,
             ZetherLayer.mtxUnshield.selector, ZetherLayer.mtxRollOver.selector
         ];
         bytes4[6] memory p = [
-            PqzLayer.mtxShield.selector, PqzLayer.mtxConfidentialTransfer.selector,
+            IConfidentialToken.mtxShield.selector, PqzLayer.mtxConfidentialTransfer.selector,
             PqzLayer.mtxConfidentialTransferCompact.selector, PqzLayer.mtxConfidentialTransferSingle.selector,
             PqzLayer.mtxUnshield.selector, PqzLayer.mtxRollOver.selector
         ];

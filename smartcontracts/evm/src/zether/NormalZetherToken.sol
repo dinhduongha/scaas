@@ -11,6 +11,7 @@ import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {ZetherLayer} from "./ZetherLayer.sol";
 import {ZetherLib} from "./ZetherLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 
 /// @title Kind `NORMAL_ZETHER` (CTR-TOK-21): the standalone token with the Zether layer (CTR-ZTH-44).
 /// @notice **UNAUDITED.** Any chain with EIP-2537 (BLS12-381). `MINTABLE` mints public units only; shielded
@@ -64,7 +65,7 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
         a = new uint8[](11);
         (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
-        (s[2], c[2]) = (this.mtxShield.selector, FEE_CLASS_ABSOLUTE);
+        (s[2], c[2]) = (IConfidentialToken.mtxShield.selector, FEE_CLASS_ABSOLUTE);
         (s[3], c[3]) = (this.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
         (s[4], c[4]) = (this.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
         (s[5], c[5]) = (this.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);

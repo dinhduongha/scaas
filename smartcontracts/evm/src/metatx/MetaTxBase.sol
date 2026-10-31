@@ -125,25 +125,33 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
 
     // ------------------------------------------------------------------ pipeline (CTR-MTX-17)
 
-    /// @dev Every entry (generic, alias, batch, later the named builders) goes through here.
+    /// @dev Every generic entry (generic, alias, batch, the wallets' builders) goes through here.
     function _execute(MetaTxLib.MetaTransaction memory m, bytes calldata signature)
-        internal virtual returns (bytes memory ret)
+        internal virtual returns (bytes memory)
     {
-        bytes32 digest = _checkIntent(m, signature);            // 1, 2
+        return _run(m, _hashTypedDataV4(MtxPipelineLib._structHash(MetaTxLib.METATX_TYPEHASH, _envelopeOf(m))), signature);
+    }
+
+    /// @dev A named entry (TS-D14), `sel` a static-shape op: the same pipeline, lanes and self-call as `_execute`, over
+    ///      the entry's own struct (`typehash`, `args` = the op's parameters as ABI words, also the call's arguments).
+    function _named(bytes32 typehash, bytes4 sel, MetaTxLib.Envelope calldata e, bytes memory args, bytes calldata sig)
+        internal virtual returns (bytes memory)
+    {
+        MetaTxLib.MetaTransaction memory m = _metaOf(e, abi.encodePacked(sel, args));
+        return _run(m, _hashTypedDataV4(MtxPipelineLib._namedHash(typehash, _envelopeOf(m, 0), args)), sig);
+    }
+
+    /// @dev CTR-MTX-17 over the digest of the entry's struct.
+    function _run(MetaTxLib.MetaTransaction memory m, bytes32 digest, bytes calldata signature)
+        private returns (bytes memory ret)
+    {
+        _checkEnvelope(MetaTxLib.pad(m.from), m.batch, m.nonce, m.validUntil, m.mode, m.relayer); // 1
+        _requireValidSignature(m.from, digest, signature);      // 2
         uint256 basis = _checkCall(m.data, m.mode);             // 3
         _useNonce(MetaTxLib.pad(m.from), m.batch);              // 4
         ret = _selfCall(MetaTxLib.pad(m.from), m.data, _envelopeBinding(m)); // 5
         uint256 fee = _chargeFee(m.from, basis, m);             // 6
         emit MetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, digest, _feeRecipientOf(m), fee); // 7
-    }
-
-    /// @dev Steps 1 (cheap) and 2 (signature).
-    function _checkIntent(MetaTxLib.MetaTransaction memory m, bytes calldata signature)
-        internal view returns (bytes32 digest)
-    {
-        _checkEnvelope(MetaTxLib.pad(m.from), m.batch, m.nonce, m.validUntil, m.mode, m.relayer);
-        digest = _hashTypedDataV4(MtxPipelineLib._structHash(MetaTxLib.METATX_TYPEHASH, _envelopeOf(m)));
-        _requireValidSignature(m.from, digest, signature);
     }
 
     /// @dev Step 1 on the shared lane space (CTR-MTX-15, CTR-UA-26): the common envelope of every signed struct
@@ -182,8 +190,22 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
 
     /// @dev The envelope of `m` for `MtxPipelineLib._structHash`: `from` padded, `data` as its hash.
     function _envelopeOf(MetaTxLib.MetaTransaction memory m) internal pure returns (MtxPipelineLib.Envelope memory) {
-        return MtxPipelineLib.Envelope(MetaTxLib.pad(m.from), keccak256(m.data), m.batch, m.nonce, m.validUntil, m.mode,
-            m.relayer, m.fee, m.feeRecipient);
+        return _envelopeOf(m, keccak256(m.data));
+    }
+
+    function _envelopeOf(MetaTxLib.MetaTransaction memory m, bytes32 dataHash)
+        internal pure returns (MtxPipelineLib.Envelope memory)
+    {
+        return MtxPipelineLib.Envelope(MetaTxLib.pad(m.from), dataHash, m.batch, m.nonce, m.validUntil, m.mode, m.relayer,
+            m.fee, m.feeRecipient);
+    }
+
+    /// @dev The `MetaTransaction` a named entry runs as (the binding hooks and the fee read it).
+    function _metaOf(MetaTxLib.Envelope calldata e, bytes memory data)
+        internal pure returns (MetaTxLib.MetaTransaction memory)
+    {
+        return MetaTxLib.MetaTransaction(e.from, data, e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee,
+            e.feeRecipient);
     }
 
     /// @dev Step 5: store the ticket (and the envelope binding, when the contract has one), call self, clear the ticket;

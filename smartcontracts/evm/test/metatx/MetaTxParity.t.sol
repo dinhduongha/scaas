@@ -34,6 +34,7 @@ import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue, pqzEnv, plainEnv} from "../helpers/Catalogue.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 
 // =====================================================================================================================
 // The parity fixture of the metatx split (spec 2026-10-27-metatx-split-design.md R1, plan Task 1).
@@ -1956,7 +1957,7 @@ contract PqzRig is PqzFixture, ParityCases {
 
     function _pExtras(Tk memory k) internal override {
         PqzLayer t = PqzLayer(k.t);
-        bytes memory shield = abi.encodeCall(PqzLayer.mtxShield, (alice, 10));
+        bytes memory shield = abi.encodeCall(IConfidentialToken.mtxShield, (alice, 10));
         _pX(k, "ok_shield_noFee", _pMt(k, shield, 0, P_RR, 0, address(0)));
         _pX(k, "ok_shield_fixedFee", _pMt(k, shield, 0, P_RR | P_RF | P_FIX, 7, k.feeTo));
         _pX(k, "err_percentFeeRefused", _pMt(k, shield, 0, P_RR | P_PCT, 100, address(0)));
@@ -2080,7 +2081,7 @@ contract ZetherRig is ZetherFixture, ParityCases {
     function _pExtras(Tk memory k) internal override {
         ZetherLayer t = ZetherLayer(k.t);
         bytes32 bUa = ZetherTypes.UA.unwrap(bob.ua);
-        bytes memory shield = abi.encodeCall(ZetherLayer.mtxShield, (bUa, 10));
+        bytes memory shield = abi.encodeCall(IConfidentialToken.mtxShield, (bUa, 10));
         _pX(k, "ok_shield_noFee", _pMt(k, shield, 0, P_RR, 0, address(0)));
         _pX(k, "ok_shield_fixedFee", _pMt(k, shield, 0, P_RR | P_RF | P_FIX, 7, k.feeTo));
         _pX(k, "err_percentFeeRefused", _pMt(k, shield, 0, P_RR | P_PCT, 100, address(0)));

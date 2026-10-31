@@ -203,6 +203,40 @@ library MetaTxLib {
         ));
     }
 
+    /// @notice TS-D14: the signed fields of a named entry around the op's own explicit parameters, in the struct
+    ///         `<Op>(address from,<op params>,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)`. The lanes of `MetaTransaction`.
+    struct Envelope {
+        address from;
+        uint256 batch;
+        uint256 nonce;
+        uint256 validUntil;
+        uint32  mode;
+        address relayer;
+        uint256 fee;
+        address feeRecipient;
+    }
+
+    /// @notice The `ua*` twin of `Envelope`: `from` a native id or a registered SIGNING UA.
+    struct UAEnvelope {
+        bytes32 from;
+        uint256 batch;
+        uint256 nonce;
+        uint256 validUntil;
+        uint32  mode;
+        address relayer;
+        uint256 fee;
+        address feeRecipient;
+    }
+
+    /// @dev The struct of `mtxShield(Envelope, …)` on the Zether and PQZ kinds.
+    bytes32 internal constant SHIELD_TYPEHASH = keccak256(
+        "Shield(address from,bytes32 toUA,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+
+    bytes32 internal constant UA_SHIELD_TYPEHASH = keccak256(
+        "UAShield(bytes32 from,bytes32 toUA,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+
     /// @notice Đọc cách tính phí từ nửa byte sau của `mode`.
     /// @dev Trả về `FeeMode` để `FeePolicy` dùng nguyên như cũ — enum vẫn là kiểu
     ///      chuẩn tắc của tầng phí, chỉ không còn là một trường riêng trong struct.

@@ -68,22 +68,17 @@ library MtxPipelineLib {
     ///         Address path: envelope (`SelfSender`), digest, signature, call shape, nonce, fee. UA path: ledger on,
     ///         envelope, digest, `authorize(PURPOSE_METATX)`, `MetaTxUnknownOp`, call shape, nonce, fee.
     function preCall(Ctx calldata c, Envelope calldata e, CallFacts calldata f, bool ua, bytes calldata auth)
-        external returns (Out memory o)
+        external returns (Out memory)
     {
-        if (ua && c.registry == address(0)) revert IUALedger.UALedgerOff();
-        if (_checkEnvelope(e.from, e.batch, e.nonce, e.validUntil, e.mode, e.relayer)) revert IMetaTx.SelfSender();
-        o.digest = MessageHashUtils.toTypedDataHash(
-            c.domainSeparator, _structHash(ua ? MetaTxLib.UAMETATX_TYPEHASH : MetaTxLib.METATX_TYPEHASH, e));
-        if (ua) {
-            _authorize(c, e.from, UAKinds.PURPOSE_METATX, o.digest, auth);
-            if (f.len < 4 || !f.uaAllowed) revert IUALedger.MetaTxUnknownOp(f.sel);
-        } else {
-            _requireSignature(c, _native(e.from), o.digest, auth);
-        }
-        _checkCall(f.sel, f.len, f.feeClass, f.amountArg, f.staticLen, e.mode, MetaTxLib.MODE_KNOWN_MASK);
-        _useNonce(e.from, e.batch);
-        (o.fee, o.feeTo) = _callFee(
-            f.feeClass, f.basis, e.mode, e.fee, e.feeRecipient == address(0) ? msg.sender : e.feeRecipient);
+        return _pre(c, e, _structHash(ua ? MetaTxLib.UAMETATX_TYPEHASH : MetaTxLib.METATX_TYPEHASH, e), f, ua, auth);
+    }
+
+    /// @notice `preCall` of a named entry (TS-D14): the same steps, the same lanes, over the entry's own struct
+    ///         (`_namedHash`); `args` = the op's parameters as struct words. `e.dataHash` is unused (0).
+    function preNamed(Ctx calldata c, bytes32 typehash, Envelope calldata e, bytes calldata args, CallFacts calldata f,
+        bool ua, bytes calldata auth) external returns (Out memory)
+    {
+        return _pre(c, e, _namedHash(typehash, e, args), f, ua, auth);
     }
 
     /// @notice CTR-MTX-23 steps 1-4 of the typed path. `t` in the UAMetaTransfer layout; the address path passes padded
@@ -156,6 +151,15 @@ library MtxPipelineLib {
             _canon(e.mode, MetaTxLib.MODE_RESTRICT_RELAYER, e.relayer), e.fee,
             _canon(e.mode, MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT, e.feeRecipient)
         ));
+    }
+
+    /// @dev The EIP-712 struct hash of a named entry's `<Op>(from,<op params>,batch,nonce,validUntil,mode,relayer,fee,
+    ///      feeRecipient)`, every envelope word ABI-encoded, relayer and fee recipient as in `_structHash`.
+    function _namedHash(bytes32 typehash, Envelope memory e, bytes memory args) internal pure returns (bytes32) {
+        return keccak256(bytes.concat(abi.encode(typehash, e.from), args, abi.encode(
+            e.batch, e.nonce, e.validUntil, e.mode, _canon(e.mode, MetaTxLib.MODE_RESTRICT_RELAYER, e.relayer), e.fee,
+            _canon(e.mode, MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT, e.feeRecipient)
+        )));
     }
 
     /// @dev The EIP-712 struct hash of a `MetaTransfer` (`ua = false`, padded ids) / `UAMetaTransfer`.
@@ -242,6 +246,25 @@ library MtxPipelineLib {
     }
 
     // ------------------------------------------------------------------ private
+
+    /// @dev The steps of `preCall` and `preNamed` over either struct hash.
+    function _pre(Ctx calldata c, Envelope calldata e, bytes32 structHash, CallFacts calldata f, bool ua,
+        bytes calldata auth) private returns (Out memory o)
+    {
+        if (ua && c.registry == address(0)) revert IUALedger.UALedgerOff();
+        if (_checkEnvelope(e.from, e.batch, e.nonce, e.validUntil, e.mode, e.relayer)) revert IMetaTx.SelfSender();
+        o.digest = MessageHashUtils.toTypedDataHash(c.domainSeparator, structHash);
+        if (ua) {
+            _authorize(c, e.from, UAKinds.PURPOSE_METATX, o.digest, auth);
+            if (f.len < 4 || !f.uaAllowed) revert IUALedger.MetaTxUnknownOp(f.sel);
+        } else {
+            _requireSignature(c, _native(e.from), o.digest, auth);
+        }
+        _checkCall(f.sel, f.len, f.feeClass, f.amountArg, f.staticLen, e.mode, MetaTxLib.MODE_KNOWN_MASK);
+        _useNonce(e.from, e.batch);
+        (o.fee, o.feeTo) = _callFee(
+            f.feeClass, f.basis, e.mode, e.fee, e.feeRecipient == address(0) ? msg.sender : e.feeRecipient);
+    }
 
     /// @dev EOA, ERC-1271 (cap by the clone code hash) or, on Hedera, HIP-632 for a 64-byte signature from an address
     ///      without code (through `HederaLib`, in the token's context).

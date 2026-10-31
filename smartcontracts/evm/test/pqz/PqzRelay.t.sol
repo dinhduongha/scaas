@@ -13,6 +13,7 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
+import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 
 /// Relaying (CTR-PQZ-15 / -21, P6g plan D4): the address path binds the envelope into the statement (header word 17), the
 /// UA path with an `mldsa65` fee UA likewise with its own tag, PQZ selectors are never batched, `PERCENT` is refused.
@@ -44,7 +45,7 @@ contract PqzRelayTest is PqzFixture {
     function test_v1BindingAndFee() public {
         _public(tok, signer, 10 * SCALE + 7);
         // mtxShield from the signer's public balance, relayed with a fixed fee
-        MetaTxLib.MetaTransaction memory m = _m(abi.encodeCall(PqzLayer.mtxShield, (alice, 10)), 0, 7);
+        MetaTxLib.MetaTransaction memory m = _m(abi.encodeCall(IConfidentialToken.mtxShield, (alice, 10)), 0, 7);
         bytes memory sg = _sig(m);
         vm.prank(relayer);
         tok.mtxExecute(m, sg);
@@ -81,18 +82,18 @@ contract PqzRelayTest is PqzFixture {
 
     function test_percentAndBatchRefused() public {
         _public(tok, signer, 10 * SCALE);
-        MetaTxLib.MetaTransaction memory m = _m(abi.encodeCall(PqzLayer.mtxShield, (alice, 1)), 0, 0);
+        MetaTxLib.MetaTransaction memory m = _m(abi.encodeCall(IConfidentialToken.mtxShield, (alice, 1)), 0, 0);
         m.mode = MetaTxLib.MODE_FEE_PERCENT;
         m.fee = 100;
         bytes memory sg = _sig(m);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, PqzLayer.mtxShield.selector, m.mode));
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, IConfidentialToken.mtxShield.selector, m.mode));
         tok.mtxExecute(m, sg);
-        m = _m(abi.encodeCall(PqzLayer.mtxShield, (alice, 1)), 0, 0);
+        m = _m(abi.encodeCall(IConfidentialToken.mtxShield, (alice, 1)), 0, 0);
         MetaTxLib.MetaTransaction[] memory ms = new MetaTxLib.MetaTransaction[](1);
         ms[0] = m;
         bytes[] memory sigs = new bytes[](1);
         sigs[0] = _sig(m);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxNotBatchable.selector, PqzLayer.mtxShield.selector));
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxNotBatchable.selector, IConfidentialToken.mtxShield.selector));
         tok.mtxBatch(ms, sigs);
         // a non-PQZ selector still batches
         m = _m(abi.encodeWithSignature("burn(uint256)", 1), 0, 0);
@@ -107,7 +108,7 @@ contract PqzRelayTest is PqzFixture {
         minted += 20 * SCALE + 5;
         MetaTxLib.UAMetaTransaction memory m;
         m.from = fee;
-        m.data = abi.encodeCall(PqzLayer.mtxShield, (alice, 20));
+        m.data = abi.encodeCall(IConfidentialToken.mtxShield, (alice, 20));
         m.validUntil = block.timestamp + 1 hours;
         m.mode = MetaTxLib.MODE_FEE_FIXED;
         m.fee = 5;
@@ -151,7 +152,7 @@ contract PqzRelayTest is PqzFixture {
         minted += 3 * SCALE;
         MetaTxLib.UAMetaTransaction memory h;
         h.from = alice;
-        h.data = abi.encodeCall(PqzLayer.mtxShield, (bob, 3));
+        h.data = abi.encodeCall(IConfidentialToken.mtxShield, (bob, 3));
         h.validUntil = block.timestamp + 1 hours;
         vm.mockCall(ML65, bytes(""), abi.encode(uint256(0))); // every ML-DSA verification now fails
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, alice));

@@ -8,6 +8,7 @@ import {MetaTxBase} from "../metatx/MetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {AdminLib} from "../metatx/AdminLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {PqzLayer} from "./PqzLayer.sol";
 import {PqzCore} from "./PqzCore.sol";
@@ -71,7 +72,7 @@ contract NormalPqzToken is NormalToken, PqzLayer {
         a = new uint8[](10);
         (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
-        (s[2], c[2]) = (this.mtxShield.selector, FEE_CLASS_ABSOLUTE);
+        (s[2], c[2]) = (IConfidentialToken.mtxShield.selector, FEE_CLASS_ABSOLUTE);
         (s[3], c[3]) = (this.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
         (s[4], c[4]) = (this.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
         (s[5], c[5]) = (this.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);

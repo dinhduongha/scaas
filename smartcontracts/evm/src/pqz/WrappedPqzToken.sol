@@ -15,7 +15,7 @@ import {PqzCore} from "./PqzCore.sol";
 import {PqzBurnLib} from "./PqzBurnLib.sol";
 import {PqzStateLib} from "./PqzStateLib.sol";
 import {PqzViewLib} from "./PqzViewLib.sol";
-import {IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
+import {IConfidentialToken, IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
 
 /// @title Kind `WRAPPED_PQZ` (CTR-TOK-21, CTR-PQZ-22): the wrapper of 1–8 legs with the PQZ layer (P6g plan D1).
 /// @notice **UNAUDITED.** Any chain whose `PQZ` precompile passes the self-test (`PqzSafety`); never on Hedera.
@@ -155,7 +155,7 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IConfidentialWrappedToken {
         (s[5], c[5]) = (SEL_ADD_RESERVE, FEE_CLASS_ABSOLUTE);
         (s[6], c[6]) = (SEL_WRAP_TO_UA, FEE_CLASS_ABSOLUTE);
         (s[7], c[7], a[7]) = (SEL_UNWRAP_TO_UA, FEE_CLASS_AMOUNT, 1);
-        (s[8], c[8]) = (this.mtxShield.selector, FEE_CLASS_ABSOLUTE);
+        (s[8], c[8]) = (IConfidentialToken.mtxShield.selector, FEE_CLASS_ABSOLUTE);
         (s[9], c[9]) = (this.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
         (s[10], c[10]) = (this.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
         (s[11], c[11]) = (this.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);

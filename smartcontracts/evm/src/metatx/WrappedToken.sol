@@ -7,6 +7,7 @@ import {WrappedLib} from "./WrappedLib.sol";
 import {IWrappedToken} from "./IWrappedToken.sol";
 import {MetaTxBase} from "./MetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
+import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 
 /// @title Kind `WRAPPED` (CTR-TOK-21): a wrapper of 1–8 legs, each an ERC-20 or the native coin (CTR-TOK-26), at
@@ -27,6 +28,10 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     bytes4 internal constant SEL_ADD_RESERVE = bytes4(keccak256("addReserve(address,uint256)"));
     bytes4 internal constant SEL_WRAP_TO_UA = bytes4(keccak256("wrapToUA(address,uint256,bytes32)"));
     bytes4 internal constant SEL_UNWRAP_TO_UA = bytes4(keccak256("unwrapToUA(address,uint256,bytes32,uint256)"));
+
+    bytes32 internal constant UNWRAP_TYPEHASH = keccak256(
+        "Unwrap(address from,uint256 wrapped,address recipient,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
 
     /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env`; this kind takes
     ///      no `implArgs`.
@@ -92,6 +97,13 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     function addReserve(address u, uint256 amount) external payable nonReentrant {
         address from = _msgSender();
         emit ReserveAdded(from, u, WrappedLib.addReserve(WrappedLib.indexOf(u), amount, from, msg.value));
+    }
+
+    /// @notice The signed `unwrap(wrapped, recipient, minOut)` (TS-D14), `AMOUNT(0)` as on the generic path.
+    function mtxUnwrap(MetaTxLib.Envelope calldata e, uint256 wrapped, address recipient, uint256 minOut,
+        bytes calldata sig) external nonReentrant returns (bytes memory)
+    {
+        return _named(UNWRAP_TYPEHASH, SEL_UNWRAP_MIN, e, abi.encode(wrapped, recipient, minOut), sig);
     }
 
     /// @notice Signature wrap of a SCaaS underlying (CTR-TOK-20): mints `minted − fee` to `o.destination` (or

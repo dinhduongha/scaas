@@ -1,0 +1,129 @@
+# typed-signing C0 sizes (Steps 2, 2b, 3), on da70cee7 + the C0 tree; runtime bytes; ceiling 65,536 B
+# reproduce: runs/2026-10-31-typed-signing-c0-mock.py (scratch copy only), -c0-sizemap.py, -c0-irgas.t.sol
+# gas and suites: default set n2304-kmax4096; forge gas is deterministic; build times are indicative (shared machine)
+
+== Sizes per build
+build                                    N       W NZether WZether    NPqz    WPqz   UAReg  Mandate SmartKey
+HEAD (before C0)                     39889   49652   49952   61808   50652   62616   46716    16171    19845
+spike                                39945   50770   51536   63864   52236   64638   46716    17461    19864
+static mock                          41457   54557   52796   72825   54084   74396   46716    17614    20651
+full mock                            41457   54557   61708   83448   60424   82726   46716    17614    20651
+-- each lever alone on the spike
+L1 external libs                     39955   50780   51546   60156   52246   61071   46716    17461    19864
+L2 shared modifier                   34248   43405   44376   54748   45241   55667   46716    15633    18181
+L2 variant calldata slice            39945   50817   51627   63924   52288   64659   46716    17473    19864
+L3 views behind fallback             39943   47306   49974   58834   47611   56274   46716    17461    19864
+L4 runs 50                           39278   49728   50366   62833   51426   63664   46260    17347    19735
+L4 runs 1                            39058   49457   50104   62432   51036   63214   46143    17299    19653
+-- each lever alone on the full mock
+L1                                   41467   54567   61718   79284   60434   78735   46716    17614    20651
+L2                                   35480   46016   52224   69761   51353   65165   46716    15786    18968
+L2 variant slice                     41564   54432   61765   83282   60457   82533   46716    17622    20726
+L3                                   41479   51237   60197   77786   55974   73406   46716    17614    20651
+L4 runs 50                           40788   53415   59730   81623   59437   81616   46260    17500    20522
+L4 runs 1                            40580   53084   59319   81192   59027   81190   46143    17452    20428
+B' module                            41457   54557   52535   72117   53394   73398   46716    17614    20651
+no envelope, proof-authorised        41457   54557   53119   72908   54052   74267   46716    17614    20651
+-- combinations on the full mock
+L2 + L1                              35490   46026   52234   61704   51363   61378   46716    15786    18968
+L2 + L3                              35502   42696   50713   60335   46903   56422   46716    15786    18968
+L2 + L1 + L3                         35512   42706   50723   58332   46913   54409   46716    15786    18968
+L2 + runs 50                         34786   44837   50221   63506   50341   63780   46260    15647    18814
+L2 + runs 1                          34578   44506   49810   63009   49931   63295   46143    15599    18720
+L2 + B'                              35480   46016   45363   57641   46387   58888   46716    15786    18968
+
+via_ir, solc on the contract alone (forge build src is killed by the 4 GB scope, see L5)
+build                                    N       W NZether WZether    NPqz    WPqz   UAReg
+spike via_ir                         36090   43672   46745   56189   47227   56206   46071
+full mock via_ir                     38061   49711   59341   80099   58036   79182       -
+full mock L2 + via_ir                33441   43150   52077   65130   52419   64172       -
+
+== Jump width above 64 KiB
+The assembler widens every jump target from PUSH2 to PUSH3 once code passes 65,535 B. Full mock:
+WrappedPqzToken 82,726 B: 5,294 PUSH3, 471 PUSH2 => about 77,430 B at PUSH2 width
+WrappedZetherToken 83,448 B: 5,151 PUSH3, 529 PUSH2 => about 78,300 B at PUSH2 width
+So any figure above 65,536 B carries about 5.2 KB of width: what has to go is the PUSH2-width excess.
+
+== Entry cost, measured on WrappedPqzToken (spike 64,638 B): three-argument static entries
+              1 entry   2 entries  4 entries
+mtx           64,979    65,235     70,167 (over 64 KiB: the jump width)
+ua            64,979    65,239     70,172
+L2 mtx        55,885    56,018     56,292
+L2 ua         55,885    56,022     56,296
+First entry of a new argument shape +341 B (+218 B with L2), each further one +256 B mtx, +260 B ua
+(+133 to +137 B with L2). Mixed arity 1, 2, 4, 5 under L2: +219 B per entry, a new ABI decoder per shape.
+Fixed: spike over HEAD, NormalToken +56 B (the refactor of `_execute` / `_uaExecute`).
+
+== Projection per contract (remaining entries from the plan's tables and `_uaAllowed`)
+contract              HEAD   spike  left mtx+ua  entry-cost floor  full mock (PUSH2 width)  over 65,536?
+NormalToken          39889   39945        2+1           40,717     41,457                   under
+WrappedToken         49652   50770        7+3           53,342     54,557                   under
+NormalZetherToken    49952   51536       10+9           56,436     61,708                   under (3,828 B left)
+WrappedZetherToken   61808   63864       17+12          71,336     83,448 (78,300)          OVER by 12,760 at PUSH2 width
+NormalPqzToken       50652   52236        9+8           56,620     60,424                   under (5,112 B left)
+WrappedPqzToken      62616   64638       16+11          71,594     82,726 (77,430)          OVER by 11,900 at PUSH2 width
+MandateWallet        16171   17461        6+0           about 19,000   not mocked (C5)       under
+SmartKeyAccount      19845   19864        7+0           about 21,700   not mocked (C5)       under
+UARegistry           46716   46716        none          46,716     46,716                   under, no Part C entry
+Entry-cost floor = spike + left mtx x 256 + left ua x 260: static entries only, no typed struct coders.
+Plan counts: WrappedPqzToken 18 + 12 by `_uaAllowed` (the plan says about 11); six token kinds exist (the plan says seven).
+
+== Step 3 decision gate (TS-D18)
+Without levers: STOP, WrappedPqzToken and WrappedZetherToken exceed 65,536 B. The spike itself leaves 898 B and 1,672 B.
+With L2 + L1 every contract fits (WrappedZetherToken 61,704 B, WrappedPqzToken 61,378 B): pattern A stands if the owner takes them.
+Stopped here for the owner's lever choice; no lever is on the branch; C1 not started.
+
+== Gas per lever against the spike
+lever         mtxUnwrap / mtxExecute(unwrap)  mtxTransfer / mtxExecuteTransfer  PQZ table, 93 rows (min / median / max)
+spike         152,569 / 151,967               87,762 / 88,227                   reference
+L1            0 / 0                           0 / 0                             -12 / 0 / +22
+L2            -2 / -2                         -48 / -48                         -12 / 0 / +10
+L4 runs 50    +853 / +686                     +263 / +130                       0 / +652 / +20,869
+L4 runs 1     +2,369 / +2,470                 +563 / +1,443                     0 / +4,388 / +21,248
+L3            entries unchanged; a read through the fallback 2,259 -> 5,341 (+3,082, minimal contracts), never on chain
+L5 sample     transfer 46,439 -> 47,309 (+870); mtxExecuteTransfer 84,336 -> 83,765 (-571);
+              mtxExecute(unwrap) 151,967 -> 148,968 (-2,999); mtxUnwrap 152,545 -> 148,993 (-3,552)
+The largest L4 rows are `register` (the registry's own code, not the tokens).
+
+== Suites per lever, whole default set less test/fork, 1,729 tests; failures beyond the spike's own
+Reference: the spike's three failures before this commit's baseline and KAT update (two pinned sizes, DexKat); in the
+lever runs three more are the scratch runner's own (`out-*` directories, LayoutTest, LinkClosure one test, WrappedTest).
+L1            1: LinkClosure test_libraryOpcodes (ZetherLib now holds a DELEGATECALL: the lever chains two libraries)
+L2            0 (the two size pins pass, the code shrinks)
+L2 variant    not run (no size gain)
+L3            not run: tests stop compiling, 47 views by name at about 720 call sites in 69 files (an upper bound)
+L4 runs 50    5: UAFrost test_gas, UARegistryUA8 test_T_GAS_setKemKey / _register_ua8PerKind / _storePqzPop, MetaTxGasV2 test_gasE_warmFixedRestricted
+L4 runs 1     15: MetaTxGasV2 8, UAGas 3 (test_T_GAS_msigAtBudget and test_T_GAS_memberPopSizeFree fail "authorizes with verifyBudget", a behaviour, not a pin),
+              UARegistryUA8 2, UAFrost 1, MtxSplitOverhead 1
+L5            not run: forge build of src, and of the test tree in sparse mode at 6 GB, is killed by the OOM killer. Not raised (oomd).
+              Gas above is a sample from runs/2026-10-31-typed-signing-c0-irgas.t.sol on the public tokens only.
+              Build time (indicative): 2 to 10 s per token alone; legacy, whole src 15 to 30 s, whole tree about 130 s.
+
+== Gates of the commit
+forge default set less test/fork: 149 suites, 1,719 passed, 0 failed, 10 skipped of 1,729
+isolated pins test/ua/{UAGas,UARegistryGroups}: 22 passed, 0 failed
+size gate: 0 errors, 46 contracts
+clientkeys test/evm.test.js: 22 passed; scaas-node `kat` filter: 5 passed
+dex_order_kat.json rewritten (token CREATE2 address moved with the bytecode)
+
+== debit_min_gas (not re-pinned, owner ruling 2026-11-01; CG re-measures after C2)
+set                 pinned      before C0   spike       move
+n2048-kmax1024      6,826,921   6,833,298   6,833,978   +680
+n2304-kmax4096      6,998,368   7,004,731   7,005,424   +693
+n2560-kmax16384     7,168,690   7,175,039   7,175,745   +706
+n2816-kmax65536     7,358,343   7,364,677   7,365,397   +720
+
+== Size audit, spike (solc functionDebugData; the source map for the modifier)
+contract              total  before first routine  routines  Yul utilities  nonReentrant  mtxSelectors  uaSig + decoder
+NormalToken           39945                  3561     26698           9686          3327           302              516
+WrappedToken          50770                  5920     33686          11164          4273          1123              516
+NormalZetherToken     51536                  4883     34853          11800          4151          1192              516
+WrappedZetherToken    63864                  7217     43408          13239          5263          2203              516
+NormalPqzToken        52236                  4799     35649          11788          4055          1094              516
+WrappedPqzToken       64638                  7493     43830          13315          5181          2104              516
+UARegistry            46716                  2389     35484           8843             0             0                0
+The source map under-charges the modifier: L2 frees 8,971 B on WrappedPqzToken, about 120 B on each of its about 75 guarded entries.
+WrappedPqzToken, largest routines: mtxSelectors 2,104; uaPayReceiverFee 889; mtxPayReceiverFee 880; uaCancelNonce 722;
+uaTrade 689; mtxTrade 625; mtxWrapShield 592; unwrapToUA 550; initialize 539; uaUnwrap 523; both _mtxRule 919.
+Init-only ABI coders: TokenConfig encoder 368, decoder 359, plus Leg, ConfidentialConfig, Roles, RateConfig decoders 506.
+rc=0

@@ -5,6 +5,7 @@ import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
 import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {IZetherToken} from "./IZetherToken.sol";
+import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
@@ -134,6 +135,19 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         ZetherLib.shield(ZetherTypes.UA.wrap(toUA), amount, _REGISTRY, m);
         _poolMove(m == MetaTxLib.UA_POOL ? _ticketSubject() : MetaTxLib.pad(m), MetaTxLib.pad(MetaTxLib.SHIELD_POOL),
             amount * ZetherLib.$().shieldScale);
+    }
+
+    /// @notice The signed `mtxShield` (TS-D14, TS-D16).
+    function mtxShield(MetaTxLib.Envelope calldata e, bytes32 toUA, uint256 amount, bytes calldata sig)
+        external nonReentrant returns (bytes memory)
+    {
+        return _named(MetaTxLib.SHIELD_TYPEHASH, IConfidentialToken.mtxShield.selector, e, abi.encode(toUA, amount), sig);
+    }
+
+    function uaShield(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, bytes calldata auth)
+        external nonReentrant returns (bytes memory)
+    {
+        return _namedUA(MetaTxLib.UA_SHIELD_TYPEHASH, IConfidentialToken.mtxShield.selector, e, abi.encode(toUA, amount), auth);
     }
 
     // ------------------------------------------------------------------ transfer (CTR-ZTH-37, CTR-ZTH-38)
@@ -277,7 +291,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     ///      listed too (owner 2026-10-20: every mtx* write is relayable; the fee may be 0); the signed ones keep
     ///      checking their own owner signature. The same set is on the UA allowlist (CTR-ZTH-51).
     function _isZetherOp(bytes4 sel) internal pure returns (bool) {
-        return sel == this.mtxShield.selector || sel == this.mtxConfidentialTransfer.selector
+        return sel == IConfidentialToken.mtxShield.selector || sel == this.mtxConfidentialTransfer.selector
             || sel == this.mtxConfidentialTransferCompact.selector
             || sel == this.mtxConfidentialTransferSingle.selector || sel == this.mtxUnshield.selector
             || sel == this.mtxRollOver.selector || sel == this.mtxRollOverBatch.selector

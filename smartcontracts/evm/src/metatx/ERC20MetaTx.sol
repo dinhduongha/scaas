@@ -252,10 +252,22 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
     /// @dev CTR-MTX-17 on the library: 1-4 and the fee amount in `preCall` (the fee is checked before the call, owner
     ///      2026-10-27), 5 the self-call, 6 the fee move, 7 the event. `data` stays here: the library gets its hash.
     function _execute(MetaTxLib.MetaTransaction memory m, bytes calldata signature)
-        internal override returns (bytes memory ret)
+        internal override returns (bytes memory)
     {
-        MtxPipelineLib.Out memory o =
-            MtxPipelineLib.preCall(_mtxCtx(), _envelopeOf(m), _callFacts(m.data, false), false, signature); // 1-4
+        return _settle(m, MtxPipelineLib.preCall(_mtxCtx(), _envelopeOf(m), _callFacts(m.data, false), false, signature));
+    }
+
+    /// @dev `_execute` of a named entry (TS-D14): 1-4 in `preNamed` over the entry's own struct, the rest shared.
+    function _named(bytes32 typehash, bytes4 sel, MetaTxLib.Envelope calldata e, bytes memory args, bytes calldata sig)
+        internal override returns (bytes memory)
+    {
+        MetaTxLib.MetaTransaction memory m = _metaOf(e, abi.encodePacked(sel, args));
+        return _settle(m, MtxPipelineLib.preNamed(
+            _mtxCtx(), typehash, _envelopeOf(m, 0), args, _callFacts(m.data, false), false, sig));
+    }
+
+    /// @dev Steps 5-7 of the address path.
+    function _settle(MetaTxLib.MetaTransaction memory m, MtxPipelineLib.Out memory o) private returns (bytes memory ret) {
         ret = _selfCall(MetaTxLib.pad(m.from), m.data, _envelopeBinding(m));                                 // 5
         if (o.fee != 0) _transfer(m.from, o.feeTo, o.fee);                                                    // 6
         emit MetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, o.digest, o.feeTo, o.fee);         // 7
@@ -385,9 +397,24 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
     ///      ledger check, 1 envelope, 2 authorization, 3 the UA allowlist (`MetaTxUnknownOp`), the address path's shape
     ///      and fee class and the fee amount, 4 nonce; then 5 self-call under the id, 6 fee from the signer's ledger,
     ///      7 event.
-    function _uaExecute(MetaTxLib.UAMetaTransaction memory m, bytes calldata auth) internal returns (bytes memory ret) {
-        MtxPipelineLib.Out memory o =
-            MtxPipelineLib.preCall(_mtxCtx(), _uaEnvelopeOf(m), _callFacts(m.data, true), true, auth); // 1-4
+    function _uaExecute(MetaTxLib.UAMetaTransaction memory m, bytes calldata auth) internal returns (bytes memory) {
+        return _uaSettle(m, MtxPipelineLib.preCall(_mtxCtx(), _uaEnvelopeOf(m), _callFacts(m.data, true), true, auth));
+    }
+
+    /// @dev `_uaExecute` of a named `ua*` entry (TS-D14), the twin of `_named`.
+    function _namedUA(bytes32 typehash, bytes4 sel, MetaTxLib.UAEnvelope calldata e, bytes memory args, bytes calldata auth)
+        internal returns (bytes memory)
+    {
+        MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(e.from, abi.encodePacked(sel, args), e.batch,
+            e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient);
+        return _uaSettle(m, MtxPipelineLib.preNamed(
+            _mtxCtx(), typehash, _uaEnvelopeOf(m, 0), args, _callFacts(m.data, true), true, auth));
+    }
+
+    /// @dev Steps 5-7 of the UA path.
+    function _uaSettle(MetaTxLib.UAMetaTransaction memory m, MtxPipelineLib.Out memory o)
+        private returns (bytes memory ret)
+    {
         ret = _selfCall(m.from, m.data, _uaEnvelopeBinding(m));                                         // 5
         if (o.fee != 0) _uaMove(m.from, MetaTxLib.pad(o.feeTo), o.fee);                                // 6
         emit UAMetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, o.digest, o.feeTo, o.fee); // 7
@@ -397,8 +424,14 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
     function _uaEnvelopeOf(MetaTxLib.UAMetaTransaction memory m)
         internal pure returns (MtxPipelineLib.Envelope memory)
     {
-        return MtxPipelineLib.Envelope(m.from, keccak256(m.data), m.batch, m.nonce, m.validUntil, m.mode, m.relayer,
-            m.fee, m.feeRecipient);
+        return _uaEnvelopeOf(m, keccak256(m.data));
+    }
+
+    function _uaEnvelopeOf(MetaTxLib.UAMetaTransaction memory m, bytes32 dataHash)
+        internal pure returns (MtxPipelineLib.Envelope memory)
+    {
+        return MtxPipelineLib.Envelope(m.from, dataHash, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee,
+            m.feeRecipient);
     }
 
     /// @notice The envelope binding a proof inside the UA path's self-call carries (CTR-PQZ-15, P6g plan D4,

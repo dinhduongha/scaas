@@ -14,6 +14,7 @@ import {UAPqzVerifier} from "../../src/pqz/UAPqzVerifier.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UACall} from "../ua/UACall.sol";
+import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 
 /// Task 7b: a stand-in for a precompile with a known price: burns `B` gas, answers 1 (`_precompiles`).
 contract GasBurner {
@@ -401,15 +402,15 @@ contract PqzStatePinGasTest is PqzSlots {
     // ------------------------------------------------------------------ the shield (D18)
 
     function test_gas_shield_firstEntry() public {
-        _log("mtxShield, the account's first entry (append)", _gas(abi.encodeCall(tok.mtxShield, (eve, 5))));
+        _log("mtxShield, the account's first entry (append)", _gas(abi.encodeCall(IConfidentialToken.mtxShield, (eve, 5))));
     }
 
     function test_gas_shield_append() public {
-        _log("mtxShield, append (tail of an earlier block)", _gas(abi.encodeCall(tok.mtxShield, (bob, 5))));
+        _log("mtxShield, append (tail of an earlier block)", _gas(abi.encodeCall(IConfidentialToken.mtxShield, (bob, 5))));
     }
 
     function test_gas_shield_merge() public {
-        uint256 g = _gas(abi.encodeCall(tok.mtxShield, (frank, 5)));
+        uint256 g = _gas(abi.encodeCall(IConfidentialToken.mtxShield, (frank, 5)));
         assertEq(tok.pqzAccount(frank).pendingCount, 1, "merged");
         _log("mtxShield, merge (TRIVIAL tail of this block)", g);
     }

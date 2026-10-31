@@ -13,7 +13,7 @@ import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherLayer} from "./ZetherLayer.sol";
 import {ZetherLib} from "./ZetherLib.sol";
-import {IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
+import {IConfidentialToken, IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 
 /// @title Kind `WRAPPED_ZETHER` (CTR-TOK-21): the wrapper of 1–8 legs with the Zether layer (CTR-ZTH-44).
@@ -153,7 +153,7 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IConfidentialWrappedTo
         (s[3], c[3]) = (SEL_WRAP_LEG, FEE_CLASS_ABSOLUTE);
         (s[4], c[4], a[4]) = (SEL_UNWRAP_LEG, FEE_CLASS_AMOUNT, 1);
         (s[5], c[5]) = (SEL_ADD_RESERVE, FEE_CLASS_ABSOLUTE);
-        (s[6], c[6]) = (this.mtxShield.selector, FEE_CLASS_ABSOLUTE);
+        (s[6], c[6]) = (IConfidentialToken.mtxShield.selector, FEE_CLASS_ABSOLUTE);
         (s[7], c[7]) = (this.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
         (s[8], c[8]) = (this.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
         (s[9], c[9]) = (this.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);

@@ -12,6 +12,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
+import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 
 /// @notice Zether through the one meta-transaction base (CTR-ZTH-34): every confidential op is an allowlisted self-call
 ///         of `mtxExecute` whose statement carries the envelope binding (`ZTX_V1_RELAYED`); a direct call proves with
@@ -106,7 +107,7 @@ contract ZetherRelayTest is ZetherFixture {
         assertTrue(_holds(tok, alice, 460 - 60 - FEE, true));
         // mtxShield, relayed: the SIGNER's public units, not the relayer's
         _public(tok, payer, 7 * SCALE);
-        m = _mt(abi.encodeCall(ZetherLayer.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 7)), 3, RR | FIX, 4);
+        m = _mt(abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 7)), 3, RR | FIX, 4);
         uint256 before = tok.balanceOf(payer);
         _exec(m, _sign(PAYER_PK, m));
         assertEq(tok.balanceOf(payer), before - 7 * SCALE - 4, "shield and outer fee, both from the signer");
@@ -195,7 +196,7 @@ contract ZetherRelayTest is ZetherFixture {
             else if (s[i] == NormalToken.burn.selector) m.data = abi.encodeCall(NormalToken.burn, (7));
             else {
                 m.data = _zetherOpCall(s[i], bal, tok.envelopeBinding(m));
-                if (s[i] != ZetherLayer.mtxShield.selector && s[i] != ZetherLayer.mtxRollOver.selector
+                if (s[i] != IConfidentialToken.mtxShield.selector && s[i] != ZetherLayer.mtxRollOver.selector
                     && s[i] != ZetherLayer.mtxRollOverBatch.selector) bal -= 10;
             }
             _exec(m, _sign(PAYER_PK, m));
@@ -260,7 +261,7 @@ contract ZetherRelayTest is ZetherFixture {
     function test_allowlistPinned() public {
         (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = tok.mtxSelectors();
         bytes4[11] memory want = [
-            IMetaTx.cancelNonce.selector, NormalToken.burn.selector, ZetherLayer.mtxShield.selector,
+            IMetaTx.cancelNonce.selector, NormalToken.burn.selector, IConfidentialToken.mtxShield.selector,
             ZetherLayer.mtxConfidentialTransfer.selector, ZetherLayer.mtxConfidentialTransferCompact.selector,
             ZetherLayer.mtxConfidentialTransferSingle.selector,
             ZetherLayer.mtxUnshield.selector, ZetherLayer.mtxRollOver.selector, ZetherLayer.mtxRollOverBatch.selector,
@@ -272,7 +273,7 @@ contract ZetherRelayTest is ZetherFixture {
             assertEq(c[i], i == 1 ? 2 : 1, "burn AMOUNT, the rest ABSOLUTE");
             assertEq(a[i], 0);
         }
-        assertEq(bytes4(keccak256("mtxShield(bytes32,uint256)")), ZetherLayer.mtxShield.selector);
+        assertEq(bytes4(keccak256("mtxShield(bytes32,uint256)")), IConfidentialToken.mtxShield.selector);
         assertEq(bytes4(keccak256("mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)")), ZetherLayer.mtxConfidentialTransfer.selector);
         assertEq(bytes4(keccak256("mtxConfidentialTransferCompact(bytes,bytes,bytes,bytes32,bytes)")), ZetherLayer.mtxConfidentialTransferCompact.selector);
         assertEq(bytes4(keccak256("mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)")),
@@ -293,7 +294,7 @@ contract ZetherRelayTest is ZetherFixture {
     function test_batch_eachItemItsOwnBinding() public {
         _public(tok, payer, 5 * SCALE);
         MetaTxLib.MetaTransaction[] memory ms = new MetaTxLib.MetaTransaction[](2);
-        ms[0] = _mt(abi.encodeCall(ZetherLayer.mtxShield, (ZetherTypes.UA.unwrap(carol.ua), 5)), 4, RR, 0);
+        ms[0] = _mt(abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(carol.ua), 5)), 4, RR, 0);
         ms[1] = _mt("", 4, RR | FIX, 2);
         ms[1].nonce = 1;
         Tx memory t = _proveTransfer(tok, alice, bob, 100, 500, _none(), tok.envelopeBinding(ms[1]));
@@ -312,7 +313,7 @@ contract ZetherRelayTest is ZetherFixture {
         uint256 ownerPk = 0x0DD;
         Mock1271Wallet w = new Mock1271Wallet(vm.addr(ownerPk));
         _public(tok, address(w), 3 * SCALE);
-        MetaTxLib.MetaTransaction memory m = _mt(abi.encodeCall(ZetherLayer.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 3)), 1, RR, 0);
+        MetaTxLib.MetaTransaction memory m = _mt(abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 3)), 1, RR, 0);
         m.from = address(w);
         bytes memory sig = _sign(ownerPk, m);
         vm.prank(relayer);

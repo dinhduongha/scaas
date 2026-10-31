@@ -6,6 +6,7 @@ import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {ZetherTypes} from "../zether/ZetherTypes.sol";
 import {IPqzToken} from "./IPqzToken.sol";
+import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 import {PqzCore} from "./PqzCore.sol";
 import {PqzBurnLib} from "./PqzBurnLib.sol";
 import {PqzStateLib} from "./PqzStateLib.sol";
@@ -169,6 +170,19 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function mtxShield(bytes32 toUA, uint256 amount) external nonReentrant {
         PqzStateLib.shield(toUA, amount, _msgSender(), _REGISTRY);
         _toPool(amount);
+    }
+
+    /// @notice The signed `mtxShield` (TS-D14, TS-D16).
+    function mtxShield(MetaTxLib.Envelope calldata e, bytes32 toUA, uint256 amount, bytes calldata sig)
+        external nonReentrant returns (bytes memory)
+    {
+        return _named(MetaTxLib.SHIELD_TYPEHASH, IConfidentialToken.mtxShield.selector, e, abi.encode(toUA, amount), sig);
+    }
+
+    function uaShield(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, bytes calldata auth)
+        external nonReentrant returns (bytes memory)
+    {
+        return _namedUA(MetaTxLib.UA_SHIELD_TYPEHASH, IConfidentialToken.mtxShield.selector, e, abi.encode(toUA, amount), auth);
     }
 
     // ------------------------------------------------------------------ transfer (§7.4, CTR-PQZ-23, CTR-PQZ-25)
@@ -348,7 +362,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     /// @dev The PQZ ops of both kinds (CTR-PQZ-21): allowlisted `ABSOLUTE` on both paths, never batched; includes the
     ///      permissionless `mtxRollOver` / `mtxPrepareAcc` (relayed, owner 2026-10-20; the fee may be 0).
     function _isPqzOp(bytes4 sel) internal pure virtual returns (bool) {
-        return sel == this.mtxShield.selector || sel == this.mtxConfidentialTransfer.selector
+        return sel == IConfidentialToken.mtxShield.selector || sel == this.mtxConfidentialTransfer.selector
             || sel == this.mtxConfidentialTransferCompact.selector
             || sel == this.mtxConfidentialTransferSingle.selector
             || sel == this.mtxConfidentialTransferSingleCompact.selector || sel == this.mtxUnshield.selector
@@ -361,6 +375,6 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
 
     /// @dev `mtxShield`, `mtxRollOver`, `mtxPrepareAcc` have a static shape (68 bytes); the others carry `bytes`.
     function _pqzRule(bytes4 sel) internal pure returns (MtxRule memory) {
-        return MtxRule(FEE_CLASS_ABSOLUTE, 0, (sel == this.mtxShield.selector || sel == this.mtxRollOver.selector || sel == this.mtxPrepareAcc.selector) ? 68 : 0);
+        return MtxRule(FEE_CLASS_ABSOLUTE, 0, (sel == IConfidentialToken.mtxShield.selector || sel == this.mtxRollOver.selector || sel == this.mtxPrepareAcc.selector) ? 68 : 0);
     }
 }

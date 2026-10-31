@@ -170,6 +170,15 @@ contract MandateWallet is MetaTxBase, IERC1271 {
         return _named(owner, data, 0, nonce, validUntil, sig);
     }
 
+    /// @notice The owner's signed `setMandate` (TS-D14): struct `SetMandate`, submitted by anyone.
+    function mtxSetMandate(MetaTxLib.Envelope calldata e, address token, address delegate, uint128 maxPerPayment,
+        uint128 maxPerPeriod, uint64 periodSeconds, uint64 expiry, bytes calldata sig)
+        external nonReentrant returns (bytes memory)
+    {
+        return _named(_SET_MANDATE_TYPEHASH, MandateWallet.setMandate.selector, e,
+            abi.encode(token, delegate, maxPerPayment, maxPerPeriod, periodSeconds, expiry), sig);
+    }
+
     // ------------------------------------------------------------------ views
 
     function mandatePayLane(bytes32 entryRef) public pure returns (uint256) {
@@ -205,6 +214,9 @@ contract MandateWallet is MetaTxBase, IERC1271 {
 
     bytes4 private constant _REVOKE_OWNER = bytes4(keccak256("revoke(address)"));
     bytes4 private constant _REVOKE_SIGNED = bytes4(keccak256("revoke(address,uint64)"));
+    bytes32 private constant _SET_MANDATE_TYPEHASH = keccak256(
+        "SetMandate(address from,address token,address delegate,uint128 maxPerPayment,uint128 maxPerPeriod,uint64 periodSeconds,uint64 expiry,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
 
     function _mtxRule(bytes4 sel) internal view override returns (MtxRule memory) {
         if (sel == MandateWallet.payUnderMandate.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 164);

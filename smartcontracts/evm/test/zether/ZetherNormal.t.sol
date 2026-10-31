@@ -730,7 +730,7 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         tok.uaExecuteTransfer(t, auth);
         assertEq(tok.balanceOfUA(b), 10 * SCALE);
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
-            from: a, data: abi.encodeCall(ZetherLayer.mtxShield, (ZetherTypes.UA.unwrap(alice.ua), 40)), batch: 1, nonce: tok.uaNonce(a, 1),
+            from: a, data: abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(alice.ua), 40)), batch: 1, nonce: tok.uaNonce(a, 1),
             validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer, fee: 0,
             feeRecipient: address(0)
         });

@@ -105,7 +105,7 @@ contract PqzSharedTest is PqzFixture {
             IMetaTx.cancelNonce.selector, bytes4(keccak256("wrap(uint256)")), bytes4(keccak256("unwrap(uint256,address,uint256)")),
             bytes4(keccak256("wrap(address,uint256)")), bytes4(keccak256("unwrap(address,uint256,address,uint256)")),
             WrappedToken.addReserve.selector, WrappedToken.wrapToUA.selector, WrappedToken.unwrapToUA.selector,
-            PqzLayer.mtxShield.selector, PqzLayer.mtxConfidentialTransfer.selector, PqzLayer.mtxConfidentialTransferCompact.selector,
+            IConfidentialToken.mtxShield.selector, PqzLayer.mtxConfidentialTransfer.selector, PqzLayer.mtxConfidentialTransferCompact.selector,
             PqzLayer.mtxUnshield.selector, WrappedPqzToken.mtxWrapShield.selector, WrappedPqzToken.mtxUnshieldUnwrap.selector,
             PqzLayer.mtxConfidentialTransferSingle.selector, PqzLayer.mtxConfidentialTransferSingleCompact.selector,
             PqzLayer.mtxRollOver.selector, PqzLayer.mtxPrepareAcc.selector
@@ -160,7 +160,7 @@ contract PqzSharedTest is PqzFixture {
     function test_allowlists_normalKind() public {
         (bytes4[] memory s, uint8[] memory c,) = NormalPqzToken(address(tok)).mtxSelectors();
         bytes4[10] memory want = [
-            IMetaTx.cancelNonce.selector, NormalToken.burn.selector, PqzLayer.mtxShield.selector,
+            IMetaTx.cancelNonce.selector, NormalToken.burn.selector, IConfidentialToken.mtxShield.selector,
             PqzLayer.mtxConfidentialTransfer.selector, PqzLayer.mtxConfidentialTransferCompact.selector,
             PqzLayer.mtxUnshield.selector, PqzLayer.mtxConfidentialTransferSingle.selector,
             PqzLayer.mtxConfidentialTransferSingleCompact.selector, PqzLayer.mtxRollOver.selector,

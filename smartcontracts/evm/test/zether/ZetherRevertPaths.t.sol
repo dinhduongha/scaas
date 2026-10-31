@@ -27,6 +27,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {UACall} from "../ua/UACall.sol";
+import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 
 /// `NORMAL_ZETHER` with one guarded call-out to the caller (`reenter`): a frame that holds the guard.
 contract GuardHarness is NormalZetherToken {
@@ -171,7 +172,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         vm.etch(address(normalImpl), address(new GuardHarness(_zenv())).code);
         ZetherTypes.UA n = _none();
         bytes[9] memory calls = [
-            abi.encodeCall(ZetherLayer.mtxShield, (ZetherTypes.UA.unwrap(alice.ua), 1)),
+            abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(alice.ua), 1)),
             abi.encodeCall(ZetherLayer.mtxConfidentialTransfer, ("", "", bytes(""), ZetherTypes.UA.unwrap(n), bytes(""))),
             abi.encodeCall(ZetherLayer.mtxConfidentialTransferCompact, ("", "", bytes(""), ZetherTypes.UA.unwrap(n), bytes(""))),
             abi.encodeCall(ZetherLayer.mtxConfidentialTransferSingle, ("", "", bytes(""), ZetherTypes.UA.unwrap(n), bytes(""))),
