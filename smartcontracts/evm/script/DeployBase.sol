@@ -172,7 +172,11 @@ abstract contract DeployBase is Script {
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
         internal returns (OpenFactory f)
     {
-        if (deployZether) require(!isHedera, "DEPLOY_ZETHER: not on Hedera (ZetherLayer refuses a Hedera env)");
+        if (deployZether) {
+            require(!isHedera, "DEPLOY_ZETHER: not on Hedera (ZetherLayer refuses a Hedera env)");
+            (bool bls,) = _precompiles(); // fail before deploying anything (CTR-ZTH-52: the only chain requirement)
+            require(bls, "DEPLOY_ZETHER: the chain has no EIP-2537 (BLS12-381 precompiles)");
+        }
         f = new OpenFactory{salt: salt}(registrar, uid, noticePeriod);
         UARegistry reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
         _deployRelayFee();
@@ -227,7 +231,7 @@ abstract contract DeployBase is Script {
     ///         everywhere;
     ///         `schnorr-bls12381` and `bls12381-minsig` where `UAPrecompileProbe` passes EIP-2537; `bls-bn254-minsig` on
     ///         private chains (the dev chains and 7622) where it passes the bn254 G2 check; `zether-bls12381` with
-    ///         EIP-2537 on every chain (owner ruling 2026-10-31; `zether-bn254` is in `legacy/ua6/`, UA-6 U10); the PQ
+    ///         EIP-2537 on every chain but Hedera (owner ruling 2026-10-31; `zether-bn254` is in `legacy/ua6/`, UA-6 U10); the PQ
     ///         signing kinds (P6c) on the private chains (the dev chains and 7622) only — unaudited, CTR-UA-23 — ML-DSA
     ///         in Solidity on the registry's cached expanded key (no chain has an ML-DSA precompile yet; P6g passes chain
     ///         7622's to the verifier's probe); `pqz-mlwe` nowhere (its verifier is P6g's). Caps: the gen-1 defaults measured in
@@ -263,7 +267,7 @@ abstract contract DeployBase is Script {
         k[n++] = UARegistry.KindConfig(UAKinds.FROST_SECP256K1, address(new UAFrostSecp256k1Verifier{salt: salt}()), 50_000);
         k[n++] = UARegistry.KindConfig(UAKinds.MUSIG2_BN254, address(new Musig2Bn254Verifier{salt: salt}()), 50_000);
         k[n++] = UARegistry.KindConfig(UAKinds.FROST_BN254, address(new FrostBn254Verifier{salt: salt}()), 50_000);
-        if (bls) {
+        if (bls && !isHedera) { // never on Hedera: no Zether token can exist there (`ZetherLayer`)
             k[n++] = UARegistry.KindConfig(
                 UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier{salt: salt}()), 70_000
             );
@@ -306,7 +310,8 @@ abstract contract DeployBase is Script {
         if (underlying) l[5] = address(WrappedLib);
     }
 
-    /// @notice Dev chains only (CTR-ZTH-02; elsewhere the verifiers refuse to deploy): `ZetherStatements`,
+    /// @notice Any chain but Hedera (CTR-ZTH-52; `_deployTokenFactory` requires the EIP-2537 probe first, and a chain
+    ///         without EIP-2537 would revert at the inner-product verifier): `ZetherStatements`,
     ///         `ZetherDisclosure`, the BLS12-381 inner-product verifier (the generators, ~14 M gas) and the transfer and
     ///         burn verifiers on it (classical Zether is BLS12-381 only, CTR-ZTH-32; the bn254 steps are in
     ///         `legacy/ua6/`); when the deployer is the registrar, an env of `NORMAL_ZETHER` and `WRAPPED_ZETHER`

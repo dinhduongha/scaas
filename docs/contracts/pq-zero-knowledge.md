@@ -6,8 +6,8 @@ Status: **SPECIFIED, UNAUDITED — NOT FOR PRODUCTION FUNDS**; nothing of PQZ is
 both proof systems), the precompile boundary `pqz-ffi` and the frozen vectors are built (P6d, P6e; byte layouts in
 [serialization v1](#serialization)), and the token contracts are built on the test chains, including the state redesign of plan 5h
 part A (ciphertexts in state, unbounded ordered queue, proof-free shield, `SHIELD_POOL`, `mtx*` names; today's parameters, §7);
-the 16k parameters and their one `proofSystemId` bump (part B), node integration and clients are not (classical Zether is BUILT on
-dev chains, [zether.md](zether.md)). Every size, proof length and gas figure below marked *estimate* is replaced by
+the 16k parameters and their one `proofSystemId` bump (part B), node integration and clients are not (classical Zether is BUILT,
+unaudited, [CTR-ZTH-52](zether.md#CTR-ZTH-52)). Every size, proof length and gas figure below marked *estimate* is replaced by
 measurement before the parameters freeze. Notation: `R = Z[X]/(X^64 + 1)`, `R_q = R/qR`; `s`, `r`, `e` are vectors in
 `R^32` (2048 integer coefficients); `a^T b` for vectors in `R_q^32` is `Σ_j a_j·b_j ∈ R_q`; `x[i]` is coefficient `i`
 of a ring element; `‖·‖` is the ℓ2 norm over all integer coefficients (centred representatives); `be8(x)` = 8-byte

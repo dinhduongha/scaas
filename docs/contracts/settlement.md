@@ -346,7 +346,7 @@ ingest fault never blocks payment booking ([NODE-DEX-04](../node/dex-venue.md#NO
 | EVM chain | Profile | Gate | Status |
 |---|---|---|---|
 | Private reference chain, id 7622 | `private7622` | depth 1, quorum 1 (single-provider trust, reported as such) | **BUILT** |
-| Anvil, 31337 / 1337 | none | depth | **BUILT** (dev only; the only chains Zether accepts) |
+| Anvil, 31337 / 1337 | none | depth | **BUILT** (dev only) |
 | Gnosis Chain, 100 | `gnosis` | tag `finalized`, ~160-240 s, quorum >= 2 | seeded `draft` |
 | BNB Smart Chain, 56 | `bsc` | tag `finalized`, ~1 s, quorum >= 2 | seeded `draft` |
 | Polygon PoS, 137 | `polygon` | tag `finalized` (milestones, ~3-6 s); `safe` unsupported | seeded `draft` |

@@ -92,6 +92,7 @@ contract UADeployTest is Test {
         _pq(r31901, false);
         IUARegistry h = _registry(298, true);
         assertTrue(h.hederaNative());
+        assertFalse(h.kindEnabled(UAKinds.ZETHER_BLS12381), "never on Hedera (CTR-ZTH-52)");
         assertEq(h.verifyBudget(), 10_500_000);
         _pq(h, false);
     }
@@ -101,10 +102,15 @@ contract UADeployTest is Test {
         vm.chainId(31337);
         DeployHarness h = new DeployHarness();
         h.force(false, false);
-        (, string memory json) = h.deploy(UID, true, ska, false);
+        (, string memory json) = h.deploy(UID, false, ska, false);
         IUARegistry reg = IUARegistry(vm.parseJsonAddress(json, ".ua_registry"));
         bool[5] memory on = _kinds(reg, [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);
         assertTrue(!on[0] && !on[1] && !on[2] && !on[3] && !on[4], "none of these");
+        // `DEPLOY_ZETHER` on a chain without EIP-2537 stops before deploying anything (CTR-ZTH-52)
+        h = new DeployHarness();
+        h.force(false, true);
+        vm.expectRevert("DEPLOY_ZETHER: the chain has no EIP-2537 (BLS12-381 precompiles)");
+        h.deploy(UID, true, ska, false);
     }
 
     /// C5-1 (NET-EVM-06): a release deploys only where the chain's block gas limit covers its state gas (1,530 per byte

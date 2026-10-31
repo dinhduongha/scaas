@@ -51,7 +51,7 @@ terminator.
 
 <a id="scope"></a>
 <a id="CTR-ZTH-01"></a>**CTR-ZTH-01** — **Full classical Zether** (owner): the `*_ZETHER` kinds clone through the factory,
-verifiers for bn254 **and** BLS12-381 (the curve is a deploy-time parameter of each token: the verifiers are release
+BLS12-381 verifiers (the bn254 line is in `legacy/ua6/`, [CTR-ZTH-32](#CTR-ZTH-32); the curve is a deploy-time parameter of each token: the verifiers are release
 immutables of the factory since 5g-Z2, so the release fixes the curve; there is no setter and no system-wide curve; the prover is generic over the curve), ElGamal
 `acc/pending` balances, two `mtxRollOver` modes (`PUBLIC` default, `OWNER_ONLY` opt-in per account, with an on-chain
 `accSeq`), shield/transfer/unshield, Bulletproofs with exactly two range statements, envelope binding to the meta-tx, public
@@ -871,7 +871,7 @@ infinity are refused ([CTR-UA-01](accounts.md#CTR-UA-01)). Using one secret as b
 not a registry check. `Y` is stored with SSTORE2: `keyOf(UA)` serves the sender's storage-only recovery
 ([CTR-ZTH-50](#CTR-ZTH-50)). No key rotation: a new key = a new UA ([CTR-UA-13](accounts.md#CTR-UA-13)). The registry's
 interface is [accounts.md §1.8](accounts.md#registry); the Zether Schnorr verifier (`ZetherSchnorrBls12381Verifier`)
-deploys on every chain; `DeployBase` registers it where `UAPrecompileProbe` passes EIP-2537.
+deploys on every chain; `DeployBase` registers it where `UAPrecompileProbe` passes EIP-2537, never on Hedera.
 
 <a id="legacy-zether-registry"></a>
 
@@ -1177,7 +1177,9 @@ and customer chains alike. The only chain requirement is capability: BLS12-381 n
 (EIP-2537). A chain without them fails the call: the inner-product verifier's constructor (the generators) reverts, a
 token's `initialize` reverts `VerifierUnsupportedOnThisChain` (the release's transfer verifier answers
 `isSupportedOnThisChain()`), and `DeployBase` registers the UA kind `zether-bls12381` only where `UAPrecompileProbe`
-passes EIP-2537. Never on Hedera (`ZetherLayer` refuses a Hedera env; `DEPLOY_ZETHER` refuses a Hedera deploy).
+passes EIP-2537 (`DEPLOY_ZETHER` refuses such a chain before deploying anything). Never on Hedera (`ZetherLayer` refuses a
+Hedera env; `DEPLOY_ZETHER` refuses a Hedera deploy; the Hedera registry gets no `zether-bls12381`; regression test
+`test/zether/ZetherNoEip2537.t.sol`).
 
 - `OpenFactory.kindEnabled(NORMAL_ZETHER / WRAPPED_ZETHER)` starts `false`; `setKindEnabled` (registrar) is the
   generic gate of every kind (plan 5g-Z2): enabling the Zether kinds is an admin act per chain; creating a `*_ZETHER`

@@ -815,7 +815,7 @@ backdoor, since clones `DELEGATECALL` through it),
   `underlyings()`), `getWrapperCount/At`, `deployCountFor/deployedFor`. Every leg is indexed, `address(0)` for the
   native coin.
 - **Confidential creation (BUILT, P3; 5g-Z2).** The chain and verifier gates are the implementation's `initialize`
-  (moved from the factory, owner 2026-10-20): a Zether token (`ZetherLib.init`) reverts outside a dev chain, and with
+  (moved from the factory, owner 2026-10-20): a Zether token (`ZetherLib.init`) reverts with
   `IZetherToken.VerifierUnsupportedOnThisChain(verifier, curveName)` when the release's transfer verifier's
   `isSupportedOnThisChain()` is false or unanswered, so a BLS12-381 verifier cannot serve a chain without EIP-2537; a
   PQZ token (`PqzStateLib.init`) requires the precompile and its self-test (`PqzSafety`), on any chain id.

@@ -119,8 +119,9 @@ contract ZetherDeployTest is Test {
     }
 
     /// Without `DEPLOY_ZETHER` no chain gets the stack (a plain anvil deploys as before P3); with it the SCaaS testnet
-    /// 7622 and the mainnet 22776 get it (owner ruling 2026-10-31, CTR-ZTH-02 superseded) and Hedera refuses.
-    function test_defaultOrOtherChains_noZether() public {
+    /// 7622 and the mainnet 22776 get it (owner ruling 2026-10-31, CTR-ZTH-02 superseded, `test_testnetAndMainnet_…`)
+    /// and Hedera refuses `DEPLOY_ZETHER`.
+    function test_defaultNoZether_hederaRefusesZether() public {
         uint256[4] memory ids = [uint256(31337), 31901, 298, 7622];
         for (uint256 i; i < ids.length; ++i) {
             vm.chainId(ids[i]);
