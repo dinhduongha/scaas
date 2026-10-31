@@ -218,6 +218,12 @@ def over_cap(cd_hex):
     return AMS and intrinsic(bytes.fromhex(cd_hex))[1] > CAP
 
 
+def first_honest(rows):
+    """The first honest input whose probe calldata fits 2^24 (Amsterdam: a PQZH op 1 input of 280+ KB does not, and an
+    eth_call carrying it fails before the precompile, so it cannot serve as the base of the miss probes)."""
+    return bytes.fromhex(next(r["input"] for r in rows if r["kind"] == "honest" and not over_cap(probe_cd(PQZ, bytes.fromhex(r["input"])))))
+
+
 def refused(f):
     """f() is refused with the EIP-8037 intrinsic-gas cap error."""
     try:
@@ -310,7 +316,7 @@ def cmd_probe(a, expect_fail=False):
     check(want <= est < want + sch.gas(b) // 2 and est > max(std, floor),
           f"eth_estimateGas direct to PQZ, {est_row['name'][:40]} ({len(b):,} B): {est:,} >= max(standard + row {std + sch.gas(b):,}, "
           f"floor {floor:,}) = {want:,} (+{(est - want) * 100 / want:.1f} %; an empty account would be {max(std, floor):,})")
-    h = bytes.fromhex(next(r for r in rows if r["kind"] == "honest")["input"])
+    h = first_honest(rows)
     for name, b in (("unknown id", h[:40] + bytes([h[40] ^ 1]) + h[41:]), ("short (68 B)", h[:68]), ("empty", b""),
                     ("unknown op 9", bytes([9]) + h[1:])):
         word, used, rlen = call_probe(PQZ, b)
@@ -339,7 +345,7 @@ def cmd_stock(a):
     """G2: a stock node ignores engine.Pqz; after T every probe answers nothing."""
     st = rpc("eth_call", [{"to": PQZ, "data": "0x0600000000"}, "latest"])
     log(f"stock image after T: OP_SELFTEST eth_call = {st!r}")
-    h = bytes.fromhex(next(r for r in corpus() if r["kind"] == "honest")["input"])
+    h = first_honest(corpus())
     for addr, b in ((PQZ, bytes.fromhex("0600000000")), (PQZ, h), (ML44, bytes(3800))):
         word, used, rlen = call_probe(addr, b)
         log(f"stock image after T: probe.call({addr}) word {word} rlen {rlen} gas {used}")

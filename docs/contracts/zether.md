@@ -1236,10 +1236,12 @@ could carry a fake verifier (`true` for every proof ⇒ `mtxUnshield` drains the
   [CLI-SGN-10](../clients/signers-clientkeys.md#CLI-SGN-10). Status: contracts **BUILT** (5g-Z1, 5g-Z2), clients and gateway
   **SPECIFIED**.
 
-Production gates (owner/operator): an independent cryptographic audit (Σ-Bulletproofs, transcript, inner-product
-argument, registry PoP) **before** the dev gate is lifted; the curve decision ([CTR-ZTH-32](#CTR-ZTH-32)); gas
-optimization before public chains (the bn254 transfer exceeds the 2.5 M kill criterion); client screens show the
-UNAUDITED warning ([README](README.md#production-gates-unaudited)).
+Open work (owner/operator; none of it is a deploy gate, owner ruling 2026-10-31): there is no dev gate to lift — the
+kind is open on every chain with EIP-2537 once `setKindEnabled` turns it on ([CTR-ZTH-52](#CTR-ZTH-52)); an independent
+cryptographic audit (Σ-Bulletproofs, transcript, inner-product argument, registry PoP) is still wanted, and until one is
+recorded the label stays **UNAUDITED** and client screens show the warning
+([README](README.md#production-gates-unaudited)); the curve is decided, BLS12-381 only ([CTR-ZTH-32](#CTR-ZTH-32)), the
+bn254 line is legacy (`smartcontracts/evm/legacy/ua6/`); gas optimization continues ([§19](#gas-measured)).
 
 ## 17. Client decryption and limits
 
@@ -1833,7 +1835,7 @@ Zether envelopes (`metatx`/`ua_metatx` jobs naming a PQ Zether token are never e
 |---|---|
 | Soroban | host functions for BLS12-381 (CAP-59) and BN254 (CAP-74, protocol 25) + Poseidon ⇒ a Bulletproofs/ElGamal verifier is feasible in principle, but one transaction's CPU budget (~100 M instructions) may not suffice for an `n = 64` Bulletproofs range proof ⇒ to be measured; Groth16 (one pairing check) over a Zether-like circuit is the more realistic candidate |
 | GRAM | TVM has BLS12-381 (`BLS_*`, pairing, MSM) since 2024 but **no** bn254; a port is mathematically feasible (a BLS12-381 verifier in TVM opcodes, ElGamal on G1), but the asynchronous actor model breaks the assumption that one transaction reads and updates several balances (a transfer reads/writes both parties' balances in one transaction) ⇒ the confidential balances would have to live in **one** contract (losing the jetton's sharding), at hundreds of thousands to millions of gas per transfer; if ever needed, a single-contract `ZetherTon` on BLS12-381 |
-| Hedera | the same Solidity runs on HSCS, but its throttle (an estimated ~15 M gas/s for contract calls network-wide) makes high-frequency confidential payments impractical; bn254 variant only, gas-limit charge: [networks/hedera.md](../networks/hedera.md#wrappers) |
+| Hedera | never: HSCS has no BLS12-381 precompiles (EIP-2537) and classical Zether is BLS12-381 only ([CTR-ZTH-32](#CTR-ZTH-32); the bn254 line is legacy, `smartcontracts/evm/legacy/ua6/`); `ZetherLayer` refuses a Hedera env and `DEPLOY_ZETHER` a Hedera deploy ([CTR-ZTH-52](#CTR-ZTH-52)); notes: [networks/hedera.md](../networks/hedera.md#wrappers) |
 | Cosmos | BLS12-381 variant: [networks/cosmos.md](../networks/cosmos.md#limitations) |
 | Sui | Groth16 path: [networks/sui.md](../networks/sui.md#limitations) |
 | Aptos | Ristretto255, native `confidential_asset`: [networks/aptos.md](../networks/aptos.md#limitations) |

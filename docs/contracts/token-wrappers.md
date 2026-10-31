@@ -552,8 +552,8 @@ immutable: see the administration bullet below.
 - **The four regulated controls are flags 5–8** on the ordinary kinds ([CTR-AS-17](asset-suite.md#CTR-AS-17)), not separate kinds; their rules (caps, cooldowns, orders, receiver-only allowlist, the shape-step plus `_update` check) are
   unchanged and live in `AdminLib`. A token with none of the flags is fully permissionless. Confidential kinds refuse
   flags 5–8 (`FeatureInvalidForKind`).
-- Flags valid on confidential kinds: `PAYABLE`; `MINTABLE`/`BURNABLE` (`NORMAL_ZETHER`); `RATE_ADJUSTABLE`/
-  `WRAP_DISABLEABLE` (`WRAPPED_ZETHER`).
+- Flags valid on confidential kinds: `PAYABLE`; `MINTABLE`/`BURNABLE` (`NORMAL_ZETHER`, `NORMAL_PQZ`); `RATE_ADJUSTABLE`/
+  `WRAP_DISABLEABLE` (`WRAPPED_ZETHER`, `WRAPPED_PQZ`) (`AdminLib._validFor`).
 
 <a id="permissionless-vs-controlled"></a>
 
