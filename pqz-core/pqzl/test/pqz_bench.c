@@ -7,7 +7,8 @@
  *   rel: bit mask, 1 = R_REG, 2 = R_TX, 4 = R_BURN, 8 = R_DS, 16 = R_DR, 32 = R_TX0 (default 63), 64 << t = R_TXM
  *   (op 7) shape TXB[t] (64 (1, on), 128 (2, on), 256 (4, on), 512 (8, on), 1024 .. 8192 the same off; with
  *   -DPQZ_TXM_OVERSIZE 16384 (16, on), 32768 (16, off)); n_verify = 0 also skips the adversarial verifies;
- *   checks = 1: the R_TXM variants and negatives (txm_check). PQZ_ARENA_MB: arena size (default 768 MiB)
+ *   checks = 1: the R_TXM variants and negatives (txm_check). PQZ_ARENA_MB: arena size (default 768 MiB; R_TXM16
+ *   needs up to 3,830 MiB, n2048-kmax1024 (16, on); too small stops the process, pqz.h)
  *   PQZ_VERIFY=fast (native) / step_set_fast (wasm): time pqz_verify_fast instead of pqz_verify (P6-SV; builds with
  *   PQZ_SV only, the default of build.sh)
  */
@@ -21,6 +22,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef PQZ_TXM_OVERSIZE
+#include <sys/resource.h>
+#endif
 #else
 void *memcpy (void *d, const void *s, size_t n);
 void *memset (void *d, int c, size_t n);
@@ -590,6 +594,8 @@ verify_bad (int rel, int kind, unsigned seed)
   uint8_t op = OPS[rel];
   int rc;
   xs ^= seed * 0x9E3779B97F4A7C15ULL;
+  if (len == 0)
+    return 0; /* no proof to tamper with: the prove was refused (R_TXM16 over PQZ_MAX_PROOF) */
   memcpy (bad, pf, len);
   if (kind == 0)
     {
@@ -983,6 +989,18 @@ main (int argc, char **argv)
 {
   int np = argc > 1 ? atoi (argv[1]) : 10, nv = argc > 2 ? atoi (argv[2]) : 100, fails = 0;
   int rels = argc > 3 ? atoi (argv[3]) : 63, checks = argc > 4 ? atoi (argv[4]) : 0;
+#ifdef PQZ_TXM_OVERSIZE
+  /* R_TXM16 needs up to 12.4 MiB of stack (the generic path; 8 MiB is the usual limit), as pqz-ffi's worker 16 MiB;
+     the main thread grows to the limit in force, so no re-exec */
+  const rlim_t stack_bytes = (rlim_t)16 << 20;
+  struct rlimit rl;
+  if (getrlimit (RLIMIT_STACK, &rl) != 0
+      || (rl.rlim_cur < stack_bytes && (rl.rlim_cur = stack_bytes, setrlimit (RLIMIT_STACK, &rl) != 0)))
+    {
+      printf ("{\"error\": \"stack limit\"}\n");
+      return 1;
+    }
+#endif
   const char *amb = getenv ("PQZ_ARENA_MB");
   const size_t arena_bytes = amb != NULL ? (size_t)atoi (amb) << 20 : ARENA_BYTES;
   void *arena = malloc (arena_bytes);

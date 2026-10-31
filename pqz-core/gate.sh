@@ -12,7 +12,7 @@
 # PQZ_SET: the parameter set (owner 2026-10-21: pqz-core/params/sets/<set>/, one set per library build; default
 # n2304-kmax4096, the frozen v3 set is n2048-kmax1024); named in the summary.
 # Steps: KAT 19/19 (against the set's upstream LaZer golden file), check_tbox_fixes, check_sv_fixes, the PQZL
-# differential (SV vs generic, z21), C = Rust = wasm32 on the bench proofs (fnv), the vectors job (pqz-vectors --check,
+# differential (SV vs generic, z21), C = Rust = wasm32 on the bench proofs (fnv), the OVERSIZE bench's R_TXM16 shapes end in a report, no signal (oversize), the vectors job (pqz-vectors --check,
 # pqz_kat.py --check, tamper, pqz-ffi selftest vectors, wasm32 replay), the pqz-ffi job (tests, symbol scans, native =
 # wasm32 digests), cargo test of pqz-stmt and Ligero, the PQZH cross-checks (C = Rust statement / witness bytes: the
 # STARK backup's at n2048-kmax1024, Ligero's at every set with PQZH), the fuzz targets (build, then
@@ -178,6 +178,7 @@ step tbox tbox
 step sv sv
 step diff diffs
 step fnv fnv
+step oversize pqzl/test/txm_oversize.sh
 if [ "$CORE_ONLY" = True ]; then
   skip vectors core_only; skip ffi core_only
 else

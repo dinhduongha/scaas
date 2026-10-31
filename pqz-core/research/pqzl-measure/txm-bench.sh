@@ -9,7 +9,7 @@
 set -eu
 cd "$(dirname "$0")/../../pqzl" # the PQZL core: build/, src/, test/, kat/
 R=../research/pqzl-measure/runs/$1
-export PQZ_ARENA_MB=${ARENA_MB:-3072}
+export PQZ_ARENA_MB=${ARENA_MB:-3900} # R_TXM16's peak: 3,830 MiB at most (n2048-kmax1024 (16, on)); wasm32's 4 GiB holds it
 NP=${NP:-10} NV=${NV:-30} NF=${NF:-200} NPW=${NPW:-3} NVW=${NVW:-3}
 export B=build/ov OVERSIZE=1
 ./build.sh native > "$R-build.txt" 2>&1
