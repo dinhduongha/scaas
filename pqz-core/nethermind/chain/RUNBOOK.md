@@ -17,6 +17,7 @@ owner, or the controller session the owner has allowed to back up, reset and dep
 | [Image 2.2.0-pqz4: per-set ids, 32-bit addresses](#image-220-pqz4-on-the-scaas-testnet-executed-2026-10-25) — reset (path B, no backup) onto the plan 5h Task 8d part 1 library (`n2304-kmax4096`) with provisional rows | 2026-10-25 | `../runs/2026-10-25-pqz4-live.txt` |
 | [Image 2.2.0-pqz5: the R0 review fix part b ids](#image-220-pqz5-on-the-scaas-testnet-executed-2026-10-26) — reset (path B, no backup) onto the part b library (`n2304-kmax4096`, PQZL v5 / PQZH v3) with provisional rows | 2026-10-26 | `../runs/2026-10-26-pqz5-live.txt` |
 | [Node split: sealer + rpc](#node-split-sealer--rpc-owner-2026-10-31) — the single node split into a key-holding `sealer` (no port, internal network) and a key-less archive `rpc` (public RPC, sentry for external nodes); Blockscout on `rpc` | 2026-10-31 | `../runs/2026-10-31-pqz6-live.txt` § S |
+| [Zether on the SCaaS testnet](#zether-on-the-scaas-testnet-executed-2026-10-31) — the whole contract stack again with a new CREATE2 salt and `DEPLOY_ZETHER=1` beside the phase C set (no reset), the Zether e2e, Blockscout verification | 2026-10-31 | `smartcontracts/evm/runs/2026-10-31-zether-testnet-*-7622.txt` |
 
 The commands below are the ones that were executed. Steps marked *live only* ran on the SCaaS testnet itself; everything else
 ran on the copy. Plan: [P6f](../../../docs/superpowers/plans/2026-10-14-p6f-precompiles.md) Tasks 7, 8, 10; spec:
@@ -569,13 +570,92 @@ option (b), the CREATE2 deployer in the genesis alloc, Blockscout on with caps, 
    (UARegistry `_pqzProof`; `setPqzKey` alone lists nothing) — a script expectation, fixed in `e2e.py`), `--split` (265 ok,
    0 FAIL), and after the hardening the full run again through the public RPC (256 ok, 0 FAIL);
    `PRIVATE_KEY=0x…04 FOUNDRY_PROFILE=scaas-testnet CHAIN_UID=0xf1f491ab…3164 scripts/capped smartcontracts/scripts/deploy.sh
-   evm http://127.0.0.1:8545`: 31 transactions, all status 1, through the genesis CREATE2 deployer (UA registry with 21
-   kinds, OpenFactory, MtxRelayFee + executor, the NormalToken and SCaaSDex releases); `deployments/7622.json`
+   evm http://127.0.0.1:8545`: 31 transactions, all status 1, through the genesis CREATE2 deployer (UA registry with 17
+   `KindConfig`s + `msig`: no `zether-bls12381`, no `0x0142` — the run predates the branch's rebase onto `zether-ungate`;
+   OpenFactory, MtxRelayFee + executor, the NormalToken and SCaaSDex releases); `deployments/7622.json`
    (git-ignored; copy in `smartcontracts/evm/runs/2026-10-31-fs3-t13-deploy-7622.txt`). UniswapExecutor: no deploy
-   script (plan decision PD7).
+   script (plan decision PD7). **Superseded 2026-10-31** by the [salt-v2 set with Zether](#zether-on-the-scaas-testnet-executed-2026-10-31)
+   (kept on chain, still verified on Blockscout).
 
 Rollback (to pqz5, the old chain): stop the stack, put `backup-pqz5-20261031-0621/{genesis.json,config.json,
 docker-compose.yml}` back, replace `data/nethermind_data` with the backup's copy (alpine `cp -a`), start the node.
+
+## Zether on the SCaaS testnet (executed 2026-10-31)
+
+*Live only;* branch `zether-testnet` (controller decision, option B: the owner allowed the controller to redeploy on the
+SCaaS testnet; no reset). Logs `smartcontracts/evm/runs/2026-10-31-zether-testnet-deploy-7622.txt`, `…-e2e-7622.txt`,
+`…-verify-7622.txt`.
+
+**Why a second stack.** The phase C registry `0x06d03D563686E4cce533b2c392EC68fAaB119776` has 17 `KindConfig`s + `msig`
+and no `zether-bls12381` (0x0141): the phase C run predates the branch's rebase onto `zether-ungate`. A registry's kinds
+are constructor immutables (CTR-UA-15), and a generation 2 cannot add 0x0141: `_groupInPredecessor` keeps in gen 1 every
+single-key kind whose keyHash group gen 1 enables, and `schnorr-bls12381` (0x0105) shares the group `bls12381-g1`. Checked
+on the live chain: `eth_call --create` of the registry's init code (from the phase C broadcast) as gen 2 with predecessor
+`0x06d0…9776` and `[(0x0141, <contract>, 70000)]` reverts `UAConfig(321)`; the control `[(0x0142, …)]` constructs. A
+Zether env needs a registry with 0x0141, so the whole set was deployed again (`TODO.md`: the design finding, for the
+owner before 22776's gen-1 registry and for the audit).
+
+1. Deploy: `PRIVATE_KEY=<key 4, the phase C deployer and registrar> DEPLOY_SALT=keccak256("scaas.deploy.v2")
+   DEPLOY_ZETHER=1 FOUNDRY_PROFILE=scaas-testnet CHAIN_UID=0xf1f491ab…3164 scripts/capped smartcontracts/scripts/deploy.sh evm
+   http://192.168.1.72:8545` (the public `rpc`; signed locally, `eth_sendRawTransaction`): 40 transactions, all status 1,
+   **gasUsed 716,134,332** (forge's estimate 810,592,383), blocks 5157–5235. AdminLib, TradeLib and HederaLib were already
+   on chain at their CREATE2 addresses (same code) and were reused; every other contract is new.
+2. The new set (`deployments/7622.json`, git-ignored; copy in the deploy log):
+
+   | Contract | Address |
+   |---|---|
+   | UARegistry (gen 1; 18 `KindConfig`s + `msig`: phase C's 17 and `zether-bls12381`) = `ua_registry` = `zether_registry` | `0x6814a54f49919c79f15f93181AAb73E36AaE7b79` |
+   | OpenFactory (`noticePeriod` 600 s; kinds 0, 2, 3 enabled) | `0xFa48604eDFf8C75130E9820Fd8022eEE9A839626` |
+   | NormalToken release (kind 0 v1) | `0xCb5A2f47D0619F6b56A9A7190ea5BEf6Ce8c9670` |
+   | NormalZetherToken release (kind 2 v1) | `0x2a150Dee38128c3722fc5868AD7209536Acc65f3` |
+   | WrappedZetherToken release (kind 3 v1) | `0xcB7a1690a759a9a793377e87cAfF5Dc4A1c27a1D` |
+   | SCaaSDex release (DEX v1) | `0x9CEcD49Bc87a1Ab2839ED052Dfcb822243E5B691` |
+   | ZetherTransferVerifierBls12381 | `0x989640d95ed6CEA44a4915AEDb40d0114CB03476` |
+   | ZetherBurnVerifierBls12381 | `0x5De1De29d658eFcF3A8B0a7b29f4196ccFEc8b28` |
+   | ZetherInnerProductVerifierBls12381 (generators in the SSTORE2 data contract `0x12f21507d35bAFBF4d0c0778E147354283c2cf5B`) | `0x1010d98Fc13943Ccdb82a664Db24353c0aB9e148` |
+   | ZetherSchnorrBls12381Verifier (UA kind 0x0141, cap 70,000) | `0x05c7f8b751C7B22cBD3a8A8449f4dC47DaeC9B3B` |
+   | ZetherDisclosure | `0xbC37b9B6a32Ece60aD8c9b0bFD69dFc7d64AD893` |
+   | ZetherStatements | `0xF0279b8b5B455802AA0bd5B8AbDdb1E6659bd4d8` |
+   | ZetherLib / WrappedLib / MtxPipelineLib | `0xD212702BF26d833f1904736C90354492d8eD2801` / `0xBfb57C6354384d9ba15966039ae5F823CaB92c60` / `0x9aabC1959D99b5C2F1021DA8BCeD5807eDDc4C01` |
+   | MtxRelayFee / its executor | `0x738720b3Fa18aB3E04eB2d5dbB600427f9CD6A5D` / `0x81e86a75de7E23b7b9a9d1C78313A868589ABe69` |
+   | SmartKeyAccountFactory / implementation | `0xbbFcF863ADc64cD6a2701C3e3d6D5edC895282A5` / `0xB2d07a27A1f7e187DFeAc6c0b458210F55dC3AB6` |
+
+   The UA verifiers of the other kinds are listed in the deploy log. **Superseded:** the phase C set (registry
+   `0x06d03D56…9776`, OpenFactory `0xC037D039a21646060E5b4ae441c1138e87000BDE`, NormalToken `0xCDb98d83…a551`, SCaaSDex
+   `0xe77d3D68…D3D9`, MtxRelayFee `0x7FB42079…fa48`, SmartKeyAccountFactory `0x3fAF952D…619D`) stays on chain and verified on
+   Blockscout; nothing new is built on it (2026-10-31; reason above).
+3. The releases are usable `noticePeriod` (600 s) after `deployImplementation`; the e2e started after that.
+4. E2E: `RPC=http://192.168.1.72:8545 PRIVATE_KEY=<key 4> FOUNDRY_PROFILE=scaas-testnet scripts/capped scripts/e2e-zether.sh`
+   (needs `cargo build --release --bin zether-cli` in `clients/zether-prover`, and `clients/clientkeys/node_modules`):
+   six `zether-bls12381` UAs with clientkeys PoPs; `NORMAL_ZETHER` token `0x1161E91cAD5a3a3511Ea1E490f51a63cDaF348d3`
+   (BUNDLE, no auditor, scale 1): shield 1234, roll-over, single transfer 100, Compact M = 4 (50 + 3 decoys), BUNDLE M = 2
+   (25 + 1 decoy), roll-over, unshield 200, the disclosure view (`SENDER_S`: 100 true, 101 false); `MockERC20`
+   `0x1CE9b1Dc4e13b893D3785F4467A27ac56Da2c619` and `WRAPPED_ZETHER` token `0x7d3150B5669ff4C8657b00a131ff59486746afcB`:
+   wrap-shield 500, roll-over. Every balance decrypted in the simulation and again from the chain's state (`check()`):
+   alice 859, bob 150, carol pending 25, decoys 0, wrapped alice 500. 20 transactions, all status 1. Gas (regular / state
+   from `gasSplit`, each call re-run isolated on a fork just before it; regular + state − refund = the receipt's gasUsed
+   for all 19 calls): register 205,514 / 1,545,300 (first 1,643,220); shield (first credit) 177,242 / 783,360; roll-over
+   205,112 / 587,520 (refund 58,080); single 3,582,332 / 2,839,680; Compact M = 4 8,388,464 / 8,141,130; BUNDLE M = 2
+   5,374,393 / 3,623,040; unshield 1,698,539 / 0; wrap-shield 246,991 / 1,077,120 (refund 11,616). Against
+   [zether.md §19](../../../docs/contracts/zether.md#gas-measured) (auditor out, every leg fresh): Compact M = 4 8,493,722 /
+   9,805,770, BUNDLE M = 2 5,479,837 / 5,287,680 — the regular gas matches within ~1–2 %; the state gas is lower here
+   because some legs were already credited.
+5. Verification: `smartcontracts/evm/script/verify-blockscout.sh` (default: this deploy's broadcast, the Zether e2e
+   broadcast, the PQZ e2e logs on this genesis): **144 ok, 14 skip, 0 fail** — the 36 new contracts of the deploy and the
+   e2e's `MockERC20` verified, all full matches (evm `amsterdam`); the two Zether token clones `eip1167`, linked to their
+   verified releases; the PQZ e2e's 105 rows (95 contracts, 10 clones) as before; 14 SSTORE2 data contracts (the generators, registry
+   records, a memo) listed as `skip`. Blockscout 9.0.2 had not fetched the clones' code after 8 minutes (internal
+   transactions off; its on-demand ContractCode fetch returned nothing): the script now sends one verification request
+   for such a clone against its implementation's source, which makes Blockscout fetch the code (the request itself
+   fails: a 45-byte proxy). Decoding checked through the API the UI uses: the single transfer tx `0xdcccd38d…ffee` shows
+   `mtxConfidentialTransferSingle(bytes payload, …)` on "Zether E2E" (`eip1167`), the shield tx's logs decode as
+   `Shielded(toUA, from, amount 1234, index 1)` and `Transfer`.
+
+**Re-run after a reset** (a fresh chain: the default salt works; on a chain that already holds a set with the same salt,
+pass a new `DEPLOY_SALT`): (1) `deploy.sh evm` with `DEPLOY_ZETHER=1` as in step 1; (2) wait the factory's `noticePeriod`
+(600 s on 7622) after the releases; (3) `scripts/e2e-zether.sh` with `RPC` and `PRIVATE_KEY` as in step 4 (UAs already
+registered are skipped; a new run makes new tokens: `E2E_SALT` defaults from the block number); (4)
+`verify-blockscout.sh`.
 
 ## 7622 node layout and access (owner 2026-10-31)
 
@@ -816,7 +896,8 @@ docker compose stop sc-verifier
 ```
 
 **After every 7622 reset or deploy run, and after each PQZ e2e run** `smartcontracts/evm/script/verify-blockscout.sh`
-(`[broadcast [e2e-run-log …]]`, default `broadcast/Deploy.s.sol/7622/run-latest.json` and every `runs/*.txt` whose
+(`[broadcast.json …] [e2e-run-log …]`, default `broadcast/Deploy.s.sol/7622/run-latest.json`, the Zether e2e's
+`broadcast/ZetherE2E.s.sol/7622/run-latest.json` when present, and every `runs/*.txt` whose
 `# P6g e2e on chain 7622` header names the current genesis hash; `BLOCKSCOUT_API`, `RPC` default
 `http://192.168.1.72:8545`, `FOUNDRY_PROFILE` default `scaas-testnet`): one `forge verify-contract … --verifier blockscout`
 per CREATE / CREATE2 row and per factory child of the broadcast (MtxRelayExecutor, the SmartKeyAccount implementation,

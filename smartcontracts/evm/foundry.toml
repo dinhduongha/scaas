@@ -36,6 +36,7 @@ fs_permissions = [
   { access = "read", path = "../vectors" },
   { access = "read-write", path = "../vectors/metatx" },
   { access = "read", path = "./size-baseline.json" },
+  { access = "read", path = "./broadcast" }, # script/ZetherE2E.s.sol gasSplit (the e2e broadcast)
 ]
 
 [invariant]

@@ -1,0 +1,18 @@
+# zether-testnet gates, 2026-10-31 14:14 +0700, branch zether-testnet on 27d77467
+## scripts/capped forge test --match-path 'test/zether/*' (default profile; only scripts and foundry.toml fs_permissions changed, no src/test .sol)
+Ran 20 test suites in 32.32s (138.13s CPU time): 237 tests passed, 0 failed, 4 skipped (241 total tests)
+## FOUNDRY_PROFILE=scaas-testnet scripts/capped scripts/e2e-zether.sh (local anvil 31337: deploy + run + check + gasSplit)
+ok    disclosure view: verifyTransferAmount(single, 100, SENDER_S) = true, 101 = false
+ok    chain: alice: decrypted acc 859, pending 0
+ok    chain: bob: decrypted acc 150, pending 0
+ok    chain: carol: decrypted acc 0, pending 25
+ok    chain: decoy 1: decrypted acc 0, pending 0
+ok    chain: decoy 2: decrypted acc 0, pending 0
+ok    chain: decoy 3: decrypted acc 0, pending 0
+ok    chain: alice (wrapped): decrypted acc 500, pending 0
+ok    chain: disclosure view verifyTransferAmount(single, 100, SENDER_S) = true
+e2e-zether: passed
+## python3 -I scripts/docs_check.py check / facts check
+check: 0 error(s), 4 warning(s), 16 note(s)
+facts check: 8852 facts, 10 miss(es), 387 pending
+(the 10 fact misses are main's: the same 10 on main)

@@ -3237,6 +3237,8 @@ Change (2026-10-20, controller record; owner may override): **UA-5c (a)(b) move 
 **Cost if wrong.** Unaudited classical Zether can be enabled on a production chain by its registrar; the kind gate and the UNAUDITED warning are what remain.
 **Source.** Owner ruling 2026-10-31 (controller brief, branch `zether-ungate`).
 
+Change (2026-10-31): status — **built on the SCaaS testnet** (branch `zether-testnet`): the Zether stack (BLS12-381 verifiers, `ZetherStatements`, `ZetherDisclosure`, the `NORMAL_ZETHER` / `WRAPPED_ZETHER` releases, both kinds enabled, the UA kind `zether-bls12381`) deployed with `DEPLOY_ZETHER=1` as a second full stack (salt v2, controller decision): the phase C registry of the same day had no `zether-bls12381`, its kinds are constructor immutables and a generation 2 refuses 0x0141 (`schnorr-bls12381` 0x0105 in gen 1 shares the keyHash group `bls12381-g1`; TODO). The on-chain e2e (`scripts/e2e-zether.sh`: shield, single and multi-recipient transfers with decoys, roll-over, unshield, the disclosure view, a wrapped token) passed; addresses in the RUNBOOK.
+
 ### CTR-ZTH-80 — Range bits 32 and DECRYPT_BOUND 2^40
 - old: R34(params) · status: superseded · owner: yes · date: 2026-10-03 · normative: — · superseded-by: CTR-ZTH-18, CTR-ZTH-19
 

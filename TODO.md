@@ -300,8 +300,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 - [ ] **UA-8 items owed to fs3 Task 13 and the next core change (2026-10-30, A12):** (1) **the SCaaS testnet's `UARegistry`
   is redeployed once in Task 13** with the UA-8 registry (`register(kind, keyData, attrs, pop, pqzPop)`, `storePqzPop`,
   `setPqzKey`, `setKemKey`, the views; the old chain-bound registry is not compatible — all chains are test-only, no
-  migration); the e2e scripts (`script/pqz/e2e.py`, `scripts/e2e-zether.sh`) were rewritten on it and have **not run against
-  a chain yet**. (2) **Watch item — `n2816-kmax65536` `storePqzPop` ≈ 59.9 M gas with the real `R_REG` verify** (57.5 M in the
+  migration); the e2e scripts (`script/pqz/e2e.py`, `scripts/e2e-zether.sh`) were rewritten on it; both have run on the
+  SCaaS testnet (`e2e.py` in Task 13, `e2e-zether.sh` on branch `zether-testnet`, 2026-10-31). (2) **Watch item — `n2816-kmax65536` `storePqzPop` ≈ 59.9 M gas with the real `R_REG` verify** (57.5 M in the
   gas log with the `rreg` stand-in, plus ≈ 2.4 M regular gas for the ≈ 3.65 M verify), right at a 60 M block; **the gen-2 variant**
   (`storePqzPop` on a gen 2 that enables `0x0142` for a gen-1 record, 57,729,122 in the gas log with the stand-in) is **≈ 60.1 M, above a
   60 M block** (a gen-1 PQ holder's key could then never be proven on such a chain); `n2304-kmax4096`
@@ -446,6 +446,16 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 
 ### Recorded, not scheduled
 
+- [ ] **A gen-1 UA registry without `zether-bls12381` can never add it** (found 2026-10-31 on the SCaaS testnet, branch
+  `zether-testnet`; a finding, not a ruling; **owner decision before the SCaaS mainnet 22776 deploys its gen-1 registry**;
+  note it for the contracts audit). Kinds are constructor immutables (CTR-UA-15), and `UARegistry._groupInPredecessor`
+  refuses in gen 2 every single-key kind whose keyHash group gen 1 enables: `zether-bls12381` (0x0141) shares the group
+  `bls12381-g1` with `schnorr-bls12381` (0x0105), so a gen 2 in front of a gen 1 with 0x0105 reverts `UAConfig(321)`
+  (checked on the live chain by `eth_call --create`; the control 0x0142 constructs). The phase C registry (deployed before
+  the branch's rebase onto `zether-ungate`) hit this, and the SCaaS testnet got a second full stack (salt v2) instead.
+  Options for the owner: (a) every gen-1 deploy carries every kind the chain can run (`DeployBase` does today; a gate that
+  refuses a gen-1 deploy missing an EIP-2537 kind the probe passes), or (b) relax the group rule for 0x0141 (a Zether UA
+  is `UA(Y)`, its own id; whether 0x0105 and 0x0141 may hold the same key is the question for the audit).
 - [ ] **DEX: drop the 50 % minimum-fill floor + four matching modes** (built on `dex-round`, see the status below) (owner 2026-10-29; research
   [docs/research/dex-matching-modes.md](docs/research/dex-matching-modes.md)): (a) owner decision: `MIN_FILL_PPM` goes,
   the per-fill minimum is the signer's `minFill` only (§6.3: new CTR-DEX-14 text, then `TradeLib`, `SCaaSDex` Path B,

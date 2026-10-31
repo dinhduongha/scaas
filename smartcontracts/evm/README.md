@@ -74,8 +74,8 @@ reached by DELEGATECALL and does not count towards a token's size; `internal` li
 ## Deploying
 
 `script/Deploy.s.sol` (with `DeployBase.sol`) deploys the factory, the token catalogue, the UA registry generation 1
-with the per-chain kinds (`UAPrecompileProbe`) and writes `deployments/<chainid>.json`; `script/ZetherE2E.s.sol` for
-the dev chains. Chain 7622's PQZ stack is deployed and exercised end to end by `script/pqz/e2e.py` (logs in `runs/`,
+with the per-chain kinds (`UAPrecompileProbe`) and writes `deployments/<chainid>.json`; `script/ZetherE2E.s.sol` is the
+classical Zether e2e (`scripts/e2e-zether.sh`: an anvil, or the SCaaS testnet with `RPC`). Chain 7622's PQZ stack is deployed and exercised end to end by `script/pqz/e2e.py` (logs in `runs/`,
 e.g. the live addresses of the latest run at the end of each log).
 
 ## Design notes
