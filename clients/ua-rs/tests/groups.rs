@@ -86,12 +86,19 @@ fn contexts() -> (Value, Env) {
     let contexts = json!({ "A": s["contexts"]["A"] }); // only the chain-bound negative (pop-chain-bound) uses it
     (contexts, Env { a: ctx("A"), digest: unhex(&s["digest"]).try_into().unwrap() })
 }
-/// `(ua, portablePopDigest, ua_msg)` of key data (UA-8: the portable PoP has no chain context; `_c` is kept for the callers).
+/// `(ua, portableRecordDigest, ua_msg)` of key data (UA-8: the portable PoP has no chain context, `_c` is kept for the
+/// callers; typed-signing TS-D1 / TS-D3: typed `UAPortableRecord{ua, kind, 0, UAKemRecord{ua, 0, 0, 0}}` and
+/// `UARegistration{record, 0}`).
 fn pop_of(kind: u16, kd: &[u8], _c: &Ctx) -> ([u8; 32], [u8; 32], [u8; 32]) {
     let ua = ua_of(kind, kd).unwrap();
-    let pd = scaas_ua::ua8::portable_pop_digest(&ua, &[0; 32], &[0; 32]);
-    let rd = scaas_ua::ua8::registration_digest(&pd, &[0; 32]);
+    let (pd, rd) = typed_pop(kind, &ua);
     (ua, pd, ua_message(kind, &scaas_ua::ua8::pop_v2_tag(), &rd).unwrap())
+}
+/// `(portableRecordDigest, registrationDigest)` of a group UA (no PQZ key, no KEM record).
+fn typed_pop(kind: u16, ua: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
+    use scaas_ua::ua8::{kem_record_hash, portable_record_digest, registration_digest};
+    let no_kem = kem_record_hash(ua, 0, &[]).unwrap();
+    (portable_record_digest(ua, kind, &[0; 32], &no_kem), registration_digest(ua, kind, &[0; 32], &no_kem, &[0; 32]))
 }
 /// The message of a pre-UA-8 chain-bound PoP of context `c` (legacy `pop_digest_v1`, purpose `pop` v1): offered as a
 /// portable PoP it must be refused.
@@ -331,7 +338,7 @@ fn musig_row<C: MusigKind>(label: &str, n: usize, role: &str, e: &Env) -> Value 
         "members": g.pks.iter().map(|p| hx(p)).collect::<Vec<_>>(), "L": hx(&g.ka.l), "coefficients": coefs,
         "hints": hints.chunks(64).map(hx).collect::<Vec<_>>(), "dkg": [],
         "keyData": hx(&kd), "ua": hx(&ua), "keyHash": hx(&key_hash_of(kind, &kd).unwrap().unwrap()), "vk": hx(vk),
-        "pop": { "popDigest": hx(&pd), "registrationDigest": hx(&scaas_ua::ua8::registration_digest(&pd, &[0; 32])), "message": hx(&m), "sig": hx(&sig), "blob": hx(&blob) },
+        "pop": { "popDigest": hx(&pd), "registrationDigest": hx(&typed_pop(kind, &ua).1), "message": hx(&m), "sig": hx(&sig), "blob": hx(&blob) },
         "sigs": sigs, "negatives": negs,
     })
 }
@@ -540,7 +547,7 @@ fn frost_row<C: Ciphersuite>(kind: u16, label: &str, (t, n): (u16, u16), role: &
         "secrets": shares, "groupSecret": hx(&ss::<C>(&secret)),
         "members": [], "L": "0x", "coefficients": [], "hints": [], "dkg": dkg_rows::<C>(&kd, w),
         "keyData": hx(&kd), "ua": hx(&ua), "keyHash": hx(&key_hash_of(kind, &kd).unwrap().unwrap()), "vk": hx(&vk),
-        "pop": { "popDigest": hx(&pd), "registrationDigest": hx(&scaas_ua::ua8::registration_digest(&pd, &[0; 32])), "message": hx(&m), "signers": first, "sig": hx(&sig), "blob": hx(&sig) },
+        "pop": { "popDigest": hx(&pd), "registrationDigest": hx(&typed_pop(kind, &ua).1), "message": hx(&m), "signers": first, "sig": hx(&sig), "blob": hx(&sig) },
         "sigs": sigs, "negatives": negs,
     })
 }
@@ -669,6 +676,30 @@ const OUT: &str = "../../smartcontracts/vectors/ua/groups.json";
 #[ignore = "writes smartcontracts/vectors/ua/groups.json"]
 fn write_groups_json() {
     std::fs::write(root(OUT), generate()).unwrap();
+}
+
+/// typed-signing P2: every group's PoP (and every `register` negative's message) is over the typed portable records.
+#[test]
+fn portable_pop_rows() {
+    let v = read_json(OUT);
+    let (mut pops, mut negs) = (0, 0);
+    for g in v["groups"].as_array().unwrap() {
+        let kind = g["kind"].as_u64().unwrap() as u16;
+        let ua: [u8; 32] = unhex(&g["ua"]).try_into().unwrap();
+        let (pd, rd) = typed_pop(kind, &ua);
+        assert_eq!((hx(&pd), hx(&rd)), (g["pop"]["popDigest"].as_str().unwrap().into(), g["pop"]["registrationDigest"].as_str().unwrap().into()), "{}", g["name"]);
+        assert_eq!(hx(&ua_message(kind, &scaas_ua::ua8::pop_v2_tag(), &rd).unwrap()), g["pop"]["message"], "{}", g["name"]);
+        pops += 1;
+        for x in g["negatives"].as_array().unwrap().iter().filter(|x| x["entry"] == "register") {
+            let ua: [u8; 32] = unhex(&x["ua"]).try_into().unwrap();
+            let (pd, rd) = typed_pop(kind, &ua);
+            assert_eq!(hx(&pd), x["popDigest"], "{} {}", g["name"], x["name"]);
+            assert_eq!(hx(&ua_message(kind, &scaas_ua::ua8::pop_v2_tag(), &rd).unwrap()), x["message"], "{} {}", g["name"], x["name"]);
+            negs += 1;
+        }
+    }
+    assert_eq!(pops, 20);
+    println!("{pops} group PoPs, {negs} register negatives over the typed records");
 }
 
 #[test]

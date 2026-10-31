@@ -1,8 +1,8 @@
 // UNAUDITED. Superseded (typed-signing P1, 2026-10-31): the raw portable digests of src/ua.js as they stood before the typed
 // EIP-712 records (UA-8 P1 / P7 / ruling A1-I1, C7). Reference only; the typed forms live in src/ua.js (TS-D1 … TS-D4).
 // Load-bearing (keep it): scripts/ua-portable-vectors.mjs signs `personalSignDigest` for the `native-member-personal-sign`
-// negative (the old native msig member form must be refused), test/ua8.test.js checks that negative with it, and
-// test/ua-groups.test.js reads `portablePopDigest` / `registrationDigest` until groups.json is regenerated (typed-signing P2).
+// negative (the old native msig member form must be refused) and test/ua8.test.js checks that negative with it
+// (test/ua-groups.test.js read the raw PoP until typed-signing P2 regenerated groups.json on the typed records).
 import { keccak_256, concatBytes, utf8ToBytes, word } from '../../src/bytes.js';
 import { POP_V2_TAG, KEM_TAG, uaMessage } from '../../src/ua.js';
 
