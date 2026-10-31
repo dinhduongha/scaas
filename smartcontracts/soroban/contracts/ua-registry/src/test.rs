@@ -859,15 +859,31 @@ fn member_large_pop_same_budget() {
     assert!(large.1 > normal.1 + 16_384, "a whole-record read would scale with the pop");
 }
 
-/// T3 review m2: `native_address` rebuilds the `Address` of a `C…` (0x0012) and a `G…` (0x0011) id from its 32 bytes.
+/// T3 review m2: `stellar_account` rebuilds the `Address` of a `G…` (0x0011) id from its 32 bytes.
 #[test]
-fn native_address_round_trip() {
+fn stellar_account_round_trip() {
     use soroban_sdk::xdr::ToXdr as _;
     let env = new_env();
     let g = Address::from_str(&env, "GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6");
-    for (kind, a) in [(digest::SOROBAN_CONTRACT, Address::generate(&env)), (digest::STELLAR_ACCOUNT, g)] {
-        let x = a.clone().to_xdr(&env);
-        let id: [u8; 32] = vecu8(&x.slice(x.len() - 32..)).try_into().unwrap();
-        assert_eq!(crate::native_address(&env, kind, &id), a);
-    }
+    let x = g.clone().to_xdr(&env);
+    let id: [u8; 32] = vecu8(&x.slice(x.len() - 32..)).try_into().unwrap();
+    assert_eq!(crate::stellar_account(&env, &id), g);
+}
+
+/// S10, owner ruling 2026-10-31 (final review A-I1): a `soroban-contract` (`C…`) member is `MemberUnknown`, also
+/// when the other member alone reaches the threshold (a contract calling the registry would meet its slot by invoker
+/// auth); the same `pop` registers the `msig` without it.
+#[test]
+fn msig_soroban_contract_member_refused() {
+    use soroban_sdk::xdr::ToXdr as _;
+    let (env, c) = setup();
+    let e = ed(9);
+    e.register(&env, &c);
+    let x = c.address.clone().to_xdr(&env);
+    let cid: [u8; 32] = vecu8(&x.slice(x.len() - 32..)).try_into().unwrap();
+    let m = msig(&env, 1, &[(0x0102, e.ua(&env).to_array(), 1), (0x0012, cid, 1)]);
+    let pop = member_sigs(&env, &[m.slot(&env, &e, PURPOSE_POP_V2, &reg_digest(&env, &m.ua))]);
+    assert_eq!(err(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &pop, &Bytes::new(&env), &None)), Error::MemberUnknown);
+    let m = msig(&env, 1, &[(0x0102, e.ua(&env).to_array(), 1)]);
+    m.register(&env, &c, &member_sigs(&env, &[m.slot(&env, &e, PURPOSE_POP_V2, &reg_digest(&env, &m.ua))]));
 }

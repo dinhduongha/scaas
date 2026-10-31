@@ -11,8 +11,8 @@ pub const SECP256K1: u32 = 0x0108;
 pub const MSIG: u32 = 0x0120;
 pub const MLDSA44: u32 = 0x0130;
 pub const MLDSA65: u32 = 0x0131;
-/// The `msig` members that are native ids (spec S10): `evm-eoa`, `evm-contract`, `stellar-account` (`G…`),
-/// `soroban-contract` (`C…`).
+/// The `msig` members that are native ids (spec S10): `evm-eoa`, `evm-contract`, `stellar-account` (`G…`).
+/// `soroban-contract` (`C…`) passes the layout and is `MemberUnknown` (owner ruling 2026-10-31: invoker auth).
 pub const EVM_EOA: u32 = 0x0001;
 pub const EVM_CONTRACT: u32 = 0x0002;
 pub const STELLAR_ACCOUNT: u32 = 0x0011;

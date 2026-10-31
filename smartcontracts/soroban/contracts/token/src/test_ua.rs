@@ -781,3 +781,76 @@ fn ua_ops_vectors_token_rows() {
     }
     assert_eq!((digests, calls), (7 * 7, 5 * 7));
 }
+
+// ---------- S10 owner ruling 2026-10-31: no `soroban-contract` (C…) msig member ----------
+
+/// `TAG(msig)` and purpose `member` (CTR-UA-12 / -23).
+const MSIG_TAG: [u8; 32] = h32("0c74d89236d93351f72ba09e86363f0ce977ca1f492ea24ebf6314231157fdd4");
+const PURPOSE_MEMBER_R: [u8; 32] = h32("fbd8600564b68d09f75fe5d3e6acb8fe3c5a3a4cb20da6988723433beff5212a");
+
+/// `abi.encode(MemberSig[])` with empty `keyData` in every slot.
+fn ms_slots(env: &Env, slots: &[(u32, StdVec<u8>)]) -> Bytes {
+    let w = |v: usize| {
+        let mut x = [0u8; 32];
+        x[24..].copy_from_slice(&(v as u64).to_be_bytes());
+        x
+    };
+    let pad = |v: &[u8]| {
+        let mut x = v.to_vec();
+        x.resize(v.len().div_ceil(32) * 32, 0);
+        x
+    };
+    let (mut heads, mut tails) = (StdVec::new(), StdVec::new());
+    let mut off = 32 * slots.len();
+    for (i, sig) in slots {
+        heads.extend_from_slice(&w(off));
+        let mut t = StdVec::new();
+        t.extend_from_slice(&w(*i as usize));
+        t.extend_from_slice(&w(96));
+        t.extend_from_slice(&w(96 + 32));
+        t.extend_from_slice(&w(0));
+        t.extend_from_slice(&w(sig.len()));
+        t.extend_from_slice(&pad(sig));
+        off += t.len();
+        tails.extend_from_slice(&t);
+    }
+    let mut out = w(32).to_vec();
+    out.extend_from_slice(&w(slots.len()));
+    out.extend_from_slice(&heads);
+    out.extend_from_slice(&tails);
+    Bytes::from_slice(env, &out)
+}
+
+/// Final review A-I1 (the reviewer's repro): a 1-of-2 `msig` of (ed25519 UA, the token's `C…`) was registered by the
+/// ed25519 member's `pop` and then drained by anyone through `ua_transfer`, the token's empty slot met by Soroban
+/// invoker auth (the token calls the registry). `soroban-contract` (0x0012) is no `msig` member: `MemberUnknown`.
+#[test]
+fn msig_member_equal_to_token_refused() {
+    use soroban_sdk::xdr::ToXdr as _;
+    let s = setup();
+    let env = &s.env;
+    let u1 = s.ua(1);
+    let tx = s.t.address.clone().to_xdr(env);
+    let mut tid = [0u8; 32];
+    tx.slice(tx.len() - 32..).copy_into_slice(&mut tid);
+    let mut m = vec![(ED25519 as u16, u1.id.to_array(), 1u16), (0x0012u16, tid, 1u16)];
+    m.sort_by_key(|x| x.1);
+    let mut kd = 1u16.to_be_bytes().to_vec();
+    kd.extend_from_slice(&2u16.to_be_bytes());
+    for (k, id, w) in &m {
+        kd.extend_from_slice(&k.to_be_bytes());
+        kd.extend_from_slice(id);
+        kd.extend_from_slice(&w.to_be_bytes());
+    }
+    let kd = Bytes::from_slice(env, &kd);
+    let ua = s.reg.ua_of(&0x0120, &kd);
+    let idx = |id: &[u8; 32]| m.iter().position(|x| &x.1 == id).unwrap() as u32;
+    let z = [0u8; 32];
+    let rd = keccak(env, &[&keccak(env, &[&PURPOSE_POP_V2, &ua.to_array(), &z, &z]), &z]);
+    let md = keccak(env, &[&ua.to_array(), &keccak(env, &[&MSG_TAG, &MSIG_TAG, &PURPOSE_POP_V2, &rd])]);
+    let sig = u1.sk.sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_MEMBER_R, &md])).to_bytes().to_vec();
+    let pop = ms_slots(env, &[(idx(&u1.id.to_array()), sig)]);
+    let r = s.reg.try_register(&0x0120, &kd, &no_attrs(env), &pop, &Bytes::new(env), &None);
+    assert_eq!(r.err(), Some(Ok(soroban_sdk::Error::from_contract_error(scaas_ua_registry::Error::MemberUnknown as u32))));
+    assert!(!s.reg.receivable(&ua));
+}

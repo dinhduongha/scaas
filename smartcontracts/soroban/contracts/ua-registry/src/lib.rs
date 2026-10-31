@@ -138,7 +138,8 @@ fn member(d: &Bytes, i: u32) -> (u32, [u8; 32], u32) {
 }
 
 /// The member kinds the `msig` layout admits (EVM `UAKinds.isMember` without `hedera-native`, plus the Soroban natives):
-/// any other kind is `KeyData`; a kind of this set that Soroban does not enable is `MemberUnknown` (step 6).
+/// any other kind is `KeyData`; a kind of this set that Soroban does not enable is `MemberUnknown` (step 6), and so is
+/// `soroban-contract` (S10, owner ruling 2026-10-31: a `C…` member would be authorised by Soroban invoker auth).
 fn layout_member_ok(kind: u32, id: &[u8; 32]) -> bool {
     match kind {
         EVM_EOA | EVM_CONTRACT => in_native_space(id),
@@ -201,9 +202,11 @@ pub(crate) fn key_hash(env: &Env, kind: u32, d: &Bytes) -> Option<BytesN<32>> {
     Some(env.crypto().keccak256(&b).into())
 }
 
-/// Step 6 (S10): each member is native (`evm-eoa`, `evm-contract`, `G…`, `C…`) or a registered signable single-key UA
-/// of its stated kind, else `MemberUnknown`. Returns `signable`: the weight Soroban can verify for signing (derived
-/// members and the Soroban natives; the EVM natives weigh 0) reaches the threshold.
+/// Step 6 (S10): each member is native (`evm-eoa`, `evm-contract`, `G…`) or a registered signable single-key UA of its
+/// stated kind, else `MemberUnknown`. A `soroban-contract` (`C…`) member is `MemberUnknown` (owner ruling 2026-10-31,
+/// final review: a contract that calls the registry, such as the token, would meet its own slot by invoker auth).
+/// Returns `signable`: the weight Soroban can verify for signing (derived members and `G…`; the EVM natives weigh 0)
+/// reaches the threshold.
 fn check_members(env: &Env, d: &Bytes) -> bool {
     let (threshold, count) = (u16_at(d, 0), u16_at(d, 2));
     let mut weight = 0;
@@ -211,7 +214,8 @@ fn check_members(env: &Env, d: &Bytes) -> bool {
         let (kind, id, w) = member(d, i);
         match kind {
             EVM_EOA | EVM_CONTRACT => {}
-            STELLAR_ACCOUNT | SOROBAN_CONTRACT => weight += w,
+            STELLAR_ACCOUNT => weight += w,
+            SOROBAN_CONTRACT => fail(env, Error::MemberUnknown),
             _ => match get::<(u32, Bytes)>(env, &Key::Signer(BytesN::from_array(env, &id))) {
                 Some((k, _)) if k == kind => weight += w,
                 _ => fail(env, Error::MemberUnknown),
@@ -221,15 +225,10 @@ fn check_members(env: &Env, d: &Bytes) -> bool {
     weight >= threshold
 }
 
-/// A Soroban native member's `Address` from its 32-byte id: the XDR `ScVal::Address` of an ed25519 account (`G…`) or
-/// a contract (`C…`).
-fn native_address(env: &Env, kind: u32, id: &[u8; 32]) -> Address {
+/// A `stellar-account` (`G…`) member's `Address` from its 32-byte ed25519 key: the XDR `ScVal::Address` of the account.
+fn stellar_account(env: &Env, id: &[u8; 32]) -> Address {
     let mut b = Bytes::from_array(env, &[0, 0, 0, 18]); // SCV_ADDRESS
-    if kind == STELLAR_ACCOUNT {
-        b.extend_from_array(&[0, 0, 0, 0, 0, 0, 0, 0]); // SC_ADDRESS_TYPE_ACCOUNT, PUBLIC_KEY_TYPE_ED25519
-    } else {
-        b.extend_from_array(&[0, 0, 0, 1]); // SC_ADDRESS_TYPE_CONTRACT
-    }
+    b.extend_from_array(&[0, 0, 0, 0, 0, 0, 0, 0]); // SC_ADDRESS_TYPE_ACCOUNT, PUBLIC_KEY_TYPE_ED25519
     b.extend_from_array(id);
     Address::from_xdr(env, &b).unwrap_or_else(|_| fail(env, Error::Pop))
 }
@@ -237,7 +236,7 @@ fn native_address(env: &Env, kind: u32, id: &[u8; 32]) -> Address {
 /// An `msig` signature over `(ua, purpose, digest)`: `auth` = canonical `abi.encode(MemberSig[])`, strictly increasing
 /// indexes below `count`, members under purpose `member` over `member_digest(ua, ua_message(MSIG, purpose, digest))`
 /// until the threshold (a slot after it fails). A registered member's slot carries an empty `keyData` (its key read
-/// from `Signer(id)` alone; non-empty ⇒ `Pop`); a `G…` / `C…` member's slot is empty and checked by the host over
+/// from `Signer(id)` alone; non-empty ⇒ `Pop`); a `G…` member's slot is empty and checked by the host over
 /// `(ua, purpose, digest)`; an `evm-eoa` member signs `personal_sign(member_digest)` for `portable` (the `pop` at
 /// `register`) only; an `evm-contract` slot, and an `evm-eoa` slot outside `portable`, is `NotVerifiable` (SOR-D6).
 /// A slot past the threshold or an unmet threshold is `short`.
@@ -262,12 +261,12 @@ fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, diges
                 let id20: BytesN<20> = Bytes::from_array(env, &id).slice(12..32).try_into().unwrap();
                 verify::check_evm_eoa_personal_sign(env, &id20, &md, &s.sig);
             }
-            STELLAR_ACCOUNT | SOROBAN_CONTRACT => {
+            STELLAR_ACCOUNT => {
                 if !s.sig.is_empty() {
                     fail(env, Error::Pop);
                 }
                 let args = (ua.clone(), purpose.clone(), digest.clone()).into_val(env);
-                native_address(env, kind, &id).require_auth_for_args(args);
+                stellar_account(env, &id).require_auth_for_args(args);
             }
             _ => {
                 let (_, key) = get::<(u32, Bytes)>(env, &Key::Signer(BytesN::from_array(env, &id)))
