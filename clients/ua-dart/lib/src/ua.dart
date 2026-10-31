@@ -186,12 +186,13 @@ Uint8List _typed(Uint8List structHash) => _k([Uint8List.fromList([0x19, 0x01]), 
 
 final _two64 = BigInt.one << 64;
 
-/// `hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)})`: version 1 … 2^64 − 1 (a [BigInt]:
-/// a Dart int cannot hold it on the VM or in JS), `kemPk` = scheme byte ‖ key (`UAKemScheme` for an id other than 1). No
-/// record (version 0, no key) is the zero record `UAKemRecord{ua, 0, 0, 0}` (TS-D2): the `kem` word of a `UAPortableRecord`.
+/// `hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)})`: version 0 … 2^64 − 1 (a [BigInt]:
+/// a Dart int cannot hold it on the VM or in JS; version 0 = the key given at `register`, owner 2026-10-31), `kemPk` = scheme
+/// byte ‖ key (`UAKemScheme` for an id other than 1, 0 included). No key (version 0, no key) is the zero record
+/// `UAKemRecord{ua, 0, 0, 0}` (TS-D2: a present record has scheme ≠ 0): the `kem` word of a `UAPortableRecord`.
 Uint8List kemRecordHash(Uint8List ua, BigInt version, Uint8List kemPk) {
   if (version == BigInt.zero && kemPk.isEmpty) return hashStruct('UAKemRecord', [ua, Uint8List(32), Uint8List(32), Uint8List(32)]);
-  if (version < BigInt.one || version >= _two64) throw UAError('UAKemVersion', '$version');
+  if (version < BigInt.zero || version >= _two64) throw UAError('UAKemVersion', '$version');
   if (kemPk.isNotEmpty && kemPk[0] != kemSchemeMlkem1024X25519) throw UAError('UAKemScheme', '${kemPk[0]}');
   if (kemPk.length != kemPkLength) throw UAError('UAKemKeyLength', '${kemPk.length}');
   final v = Uint8List(32);
@@ -203,7 +204,7 @@ Uint8List kemRecordHash(Uint8List ua, BigInt version, Uint8List kemPk) {
   return hashStruct('UAKemRecord', [ua, v, _word(kemPk[0]), _k([kemPk])]);
 }
 
-/// The typed `UAKemRecord` digest `setKemKey` signs (a real record: version 0 is `UAKemVersion`).
+/// The typed `UAKemRecord` digest `setKemKey` signs (versions ≥ 1: version 0 is the `register` key, `UAKemVersion` here).
 Uint8List kemRecordDigest(Uint8List ua, BigInt version, Uint8List kemPk) {
   if (version == BigInt.zero) throw UAError('UAKemVersion', '0');
   return _typed(kemRecordHash(ua, version, kemPk));
@@ -226,10 +227,8 @@ Uint8List registrationDigest(Uint8List ua, int kind, Uint8List pqzKeyHash, Uint8
 Uint8List kemRecordMessage(int kind, Uint8List ua, BigInt version, Uint8List kemPk) =>
     uaMessage(kind, purposeTag('kem'), kemRecordDigest(ua, version, kemPk));
 
-/// A KEM record attribute; `null` or `(0, empty)` = absent.
-typedef Kem = (BigInt version, Uint8List pk);
-
-Uint8List _kemHash(Uint8List ua, Kem? kem) => kemRecordHash(ua, kem?.$1 ?? BigInt.zero, kem?.$2 ?? Uint8List(0));
+/// The register KEM key's record: always version 0 (owner 2026-10-31); `null` / empty = the zero record.
+Uint8List _kemHash(Uint8List ua, Uint8List? kemPk) => kemRecordHash(ua, BigInt.zero, kemPk ?? Uint8List(0));
 
 /// A PQZ / KEM holder: a single-key PQ kind, or an `msig` whose key data is PQ-eligible (malformed key data is UAKeyData).
 bool _holds(int kind, Uint8List keyData) {
@@ -274,13 +273,14 @@ typedef HolderPop = ({
 });
 
 /// The portable PoP message of a registration. Attributes: [pqzKey] with its proof [pqzPop] (or only its hash [pqzPopHash]; a
-/// relayer may hold only that) and the initial KEM record [kem] (`version >= 1`, key); null / `(0, empty)` = absent. Only
+/// relayer may hold only that) and the initial KEM key [kemPk] (its record is always version 0, owner 2026-10-31); null /
+/// empty = absent. Only
 /// holders may carry them (UAPqzHolder, UAKemHolder; an `msig` needs [keyData] to show it is PQ-eligible); a PQZ key always
 /// comes with its proof hash and only with it (UAPqzPopHash).
 HolderPop holderPopMessage(int kind, Uint8List ua,
-    {Uint8List? keyData, Object? pqzKey, Uint8List? pqzPop, Uint8List? pqzPopHash, Kem? kem}) {
+    {Uint8List? keyData, Object? pqzKey, Uint8List? pqzPop, Uint8List? pqzPopHash, Uint8List? kemPk}) {
   final hasKey = pqzKey != null && keyBytes(pqzKey).isNotEmpty;
-  final hasKem = kem != null && (kem.$1 != BigInt.zero || kem.$2.isNotEmpty);
+  final hasKem = kemPk != null && kemPk.isNotEmpty;
   if ((hasKey || hasKem) && !_holds(kind, keyData ?? Uint8List(0))) {
     throw hasKey
         ? UAError('UAPqzHolder', '${_kindHex(kind)} may not hold a PQZ key')
@@ -289,7 +289,7 @@ HolderPop holderPopMessage(int kind, Uint8List ua,
   final popHash = _proofHashOf(pqzPop, pqzPopHash);
   if (hasKey != !_isZero(popHash)) throw UAError('UAPqzPopHash', 'a PQZ key comes with its proof hash and only with it');
   final kh = hasKey ? _pqzKeyHashOf(pqzKey) : Uint8List(32);
-  final kr = _kemHash(ua, kem);
+  final kr = _kemHash(ua, kemPk);
   final reg = registrationDigest(ua, kind, kh, kr, popHash);
   final msg = uaMessage(kind, popV2Tag, reg);
   return (
@@ -304,9 +304,9 @@ HolderPop holderPopMessage(int kind, Uint8List ua,
 }
 
 /// The message `R_REG` proves over: `uaMessage(0x0142, POP_V2, portableRecordDigest(ua, kind, keyHash(0x0142, pqzKey),
-/// kemRecordHash))`, [kind] the registering kind (TS-D3); [kem] null / `(0, empty)` = no KEM record.
-Uint8List pqzRegMessage(int kind, Uint8List ua, Object? pqzKey, [Kem? kem]) {
-  final kr = _kemHash(ua, kem); // the KEM record first, as ua-rs and the JS
+/// kemRecordHash))`, [kind] the registering kind (TS-D3); [kemPk] the register KEM key (version 0), null / empty = none.
+Uint8List pqzRegMessage(int kind, Uint8List ua, Object? pqzKey, [Uint8List? kemPk]) {
+  final kr = _kemHash(ua, kemPk); // the KEM record first, as ua-rs and the JS
   return uaMessage(0x0142, popV2Tag, portableRecordDigest(ua, kind, _pqzKeyHashOf(pqzKey), kr));
 }
 

@@ -262,12 +262,13 @@ def _typed(struct_hash):
 
 
 def kem_record_hash(ua, version, kem_pk):
-    """``hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)})``: version 1 … 2^64 − 1,
-    ``kem_pk`` = scheme byte ‖ key. No record (version 0, no key) is the zero record ``UAKemRecord{ua, 0, 0, 0}`` (TS-D2)."""
+    """``hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)})``: version 0 … 2^64 − 1
+    (version 0 = the key given at ``register``, owner 2026-10-31), ``kem_pk`` = scheme byte ‖ key. No key (version 0, no
+    key) is the zero record ``UAKemRecord{ua, 0, 0, 0}`` (TS-D2: a present record has scheme ≠ 0)."""
     pk = _bytes(kem_pk) if kem_pk is not None else b''
     if version == 0 and not pk:
         return hash_struct('UAKemRecord', ua, bytes(32), bytes(32), bytes(32))
-    if not 1 <= version < 2**64:
+    if not 0 <= version < 2**64:
         raise UAError('UAKemVersion', str(version))
     if pk and pk[0] != KEM_SCHEME_MLKEM1024_X25519:
         raise UAError('UAKemScheme', str(pk[0]))
@@ -277,7 +278,7 @@ def kem_record_hash(ua, version, kem_pk):
 
 
 def kem_record_digest(ua, version, kem_pk):
-    """The typed ``UAKemRecord`` digest ``setKemKey`` signs (a real record: version 0 is UAKemVersion)."""
+    """The typed ``UAKemRecord`` digest ``setKemKey`` signs (versions ≥ 1: version 0 is the ``register`` key, UAKemVersion here)."""
     if version == 0:
         raise UAError('UAKemVersion', '0')
     return _typed(kem_record_hash(ua, version, kem_pk))
@@ -342,15 +343,14 @@ UAPortableRecord, ``registration_digest`` the typed UARegistration. ``member_dig
 ``registration_digest`` itself (eth_signTypedData_v4, TS-D4)."""
 
 
-def holder_pop_message(kind, ua, key_data=b'', pqz_key=None, pqz_pop=None, pqz_pop_hash=None, kem=None):
+def holder_pop_message(kind, ua, key_data=b'', pqz_key=None, pqz_pop=None, pqz_pop_hash=None, kem_pk=None):
     """The portable PoP of a registration (UA-8 P1, P2): a HolderPop. ``pqz_key`` with its proof ``pqz_pop`` (or only its hash
-    ``pqz_pop_hash``) and the initial KEM record ``kem = (version >= 1, kem_pk)``; None / (0, b'') = absent. Only holders
+    ``pqz_pop_hash``) and the initial KEM key ``kem_pk`` (its record is always version 0, owner 2026-10-31); None / b'' = absent. Only holders
     carry them (UAPqzHolder, UAKemHolder; an msig needs ``key_data`` to show it is PQ-eligible); a PQZ key always comes with
     its proof hash and only with it (UAPqzPopHash)."""
     if pqz_key is not None and len(pqz_key) == 0:
         pqz_key = None
-    if kem is not None and kem[0] == 0 and (kem[1] is None or len(kem[1]) == 0):
-        kem = None
+    kem = kem_pk if kem_pk is not None and len(kem_pk) else None
     if (pqz_key is not None or kem is not None) and not _holds(kind, key_data):
         if pqz_key is not None:
             raise UAError('UAPqzHolder', f'0x{kind:04x} may not hold a PQZ key')
@@ -359,17 +359,17 @@ def holder_pop_message(kind, ua, key_data=b'', pqz_key=None, pqz_pop=None, pqz_p
     if (pqz_key is not None) != any(pop_hash):
         raise UAError('UAPqzPopHash', 'a PQZ key comes with its proof hash and only with it')
     kh = _pqz_key_hash_of(pqz_key) if pqz_key is not None else bytes(32)
-    kr = kem_record_hash(ua, *(kem or (0, b'')))
+    kr = kem_record_hash(ua, 0, kem)
     reg = registration_digest(ua, kind, kh, kr, pop_hash)
     msg = ua_message(kind, POP_V2_TAG, reg)
     return HolderPop(kh, pop_hash, kr, portable_record_digest(ua, kind, kh, kr), reg, msg,
                      member_digest(ua, msg) if kind == 0x0120 else None)
 
 
-def pqz_reg_message(kind, ua, pqz_key, kem=None):
+def pqz_reg_message(kind, ua, pqz_key, kem_pk=None):
     """The message R_REG proves over: ``ua_message(0x0142, POP_V2, portable_record_digest(ua, kind, keyHash(pqz_key),
-    kem_record_hash))``, ``kind`` the registering kind (TS-D3); ``kem`` None / (0, b'') = no KEM record."""
-    kr = kem_record_hash(ua, *(kem or (0, b'')))
+    kem_record_hash))``, ``kind`` the registering kind (TS-D3); ``kem_pk`` the register KEM key (version 0), None = none."""
+    kr = kem_record_hash(ua, 0, kem_pk)
     return ua_message(0x0142, POP_V2_TAG, portable_record_digest(ua, kind, _pqz_key_hash_of(pqz_key), kr))
 
 

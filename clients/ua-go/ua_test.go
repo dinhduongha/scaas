@@ -300,11 +300,14 @@ func u64(v any) uint64 { return uint64(v.(float64)) }
 // register is the holder call over a registration row's attrs (and the proof bytes, or only their hash).
 func register(row obj, hashOnly bool) (*HolderPop, error) {
 	a := row["attrs"].(obj)
-	pop, hash, pk, ver := bs(row["pqzPop"]), bs(a["pqzPopHash"]), bs(a["kemPk"]), u64(a["kemVersion"])
+	pop, hash, pk := bs(row["pqzPop"]), bs(a["pqzPopHash"]), bs(a["kemPk"])
+	if u64(a["kemVersion"]) != 0 {
+		return nil, fmt.Errorf("register takes no KEM version (UAAttrs' word: 0)")
+	}
 	if hashOnly {
 		pop = nil
 	}
-	return HolderPopMessage(kind(row["kind"]), b32(row["ua"]), bs(row["keyData"]), bs(a["pqzKey"]), pop, hash, &Kem{ver, pk})
+	return HolderPopMessage(kind(row["kind"]), b32(row["ua"]), bs(row["keyData"]), bs(a["pqzKey"]), pop, hash, pk)
 }
 
 func find(rs []obj, k string, v any) obj {
@@ -437,7 +440,7 @@ func TestPortableTyped(t *testing.T) {
 		msg := td["message"].(obj)
 		rec := msg["record"].(obj)
 		kem := rec["kem"].(obj)
-		pk, v := bs(r["attrs"].(obj)["kemPk"]), u64(r["attrs"].(obj)["kemVersion"])
+		pk, v := bs(r["attrs"].(obj)["kemPk"]), uint64(0) // the register KEM key is version 0 (owner 2026-10-31)
 		kh, err := KemRecordHash(ua, v, pk)
 		wantV, wantS, wantH := uint64(0), uint64(0), [32]byte{} // TS-D2: no KEM record = {ua, 0, 0, 0}
 		if len(pk) > 0 {
@@ -520,8 +523,7 @@ func TestPortable(t *testing.T) {
 		a := r["attrs"].(obj)
 		if pk := bs(a["pqzKey"]); len(pk) > 0 {
 			withPqz++
-			kem := &Kem{u64(a["kemVersion"]), bs(a["kemPk"])}
-			m, err := PqzRegMessage(kind(r["kind"]), ua, pk, kem)
+			m, err := PqzRegMessage(kind(r["kind"]), ua, pk, bs(a["kemPk"]))
 			want, _ := UAMessage(0x0142, PopV2Tag, b32(r["portableRecordDigest"])) // TS-D3: R_REG over the typed UAPortableRecord
 			if err != nil || hx(m[:]) != r["pqzRegMessage"] || m != want {
 				t.Fatalf("%v pqzRegMessage", name)
@@ -572,13 +574,18 @@ func TestKemRecord(t *testing.T) {
 			t.Fatalf("kem %v: %v", c.code, err)
 		}
 	}
-	// TS-D2: (0, no key) is the zero record's hash (never a signed record); version 0 with a key is UAKemVersion
+	// TS-D2: (0, no key) is the zero record's hash; owner 2026-10-31: version 0 with a key is the register key's record
+	// (scheme != 0: scheme 0 is UAKemScheme), never a setKemKey record (UAKemVersion)
 	th := Keccak256([]byte("UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)"))
 	if zeroKem(ua) != Keccak256(th[:], ua[:], make([]byte, 96)) {
 		t.Fatal("zero KEM record")
 	}
-	if _, err := KemRecordHash(ua, 0, kemKey(1601, 1)); code(err) != "UAKemVersion" {
+	pk0 := Keccak256(kemKey(1601, 1))
+	if h, err := KemRecordHash(ua, 0, kemKey(1601, 1)); err != nil || h != Keccak256(th[:], ua[:], make([]byte, 32), word(1), pk0[:]) {
 		t.Fatal("version 0 with a key")
+	}
+	if _, err := KemRecordHash(ua, 0, kemKey(1601, 0)); code(err) != "UAKemScheme" {
+		t.Fatal("version 0 with scheme 0")
 	}
 	if _, err := KemRecordHash(ua, 1, nil); code(err) != "UAKemKeyLength" {
 		t.Fatal("version 1 without a key")
@@ -742,7 +749,7 @@ func TestHolderRefusals(t *testing.T) {
 			sigLevel++ // signatures / native personal_sign / another record's pop: verified by the signature vectors
 		}
 	}
-	if run != 60 || sigLevel != len(rows(p, "negatives"))-60 {
+	if run != 57 || sigLevel != len(rows(p, "negatives"))-57 {
 		t.Fatalf("negatives %d digest-layer, %d signature-level", run, sigLevel)
 	}
 	u, key, proof := b32(hx(bytes.Repeat([]byte{1}, 32))), make([]byte, 16384), bytes.Repeat([]byte{7}, 32)
@@ -755,17 +762,18 @@ func TestHolderRefusals(t *testing.T) {
 	for _, c := range []struct {
 		kind               uint16
 		kd, key, pop, hash []byte
-		kem                *Kem
+		kemPk              []byte
 		code               string
 	}{
 		{0x0120, nil, key, nil, proof, nil, "UAPqzHolder"},
 		{0x0130, nil, key, nil, make([]byte, 31), nil, "UAPqzPopHash"},
 		{0x0130, nil, key, []byte{}, nil, nil, "UAPqzPopHash"},
 		{0x0130, nil, make([]byte, 100), nil, proof, nil, "UAKeyData"},
-		{0x0130, nil, nil, nil, nil, &Kem{1, nil}, "UAKemKeyLength"},
-		{0x0101, nil, nil, nil, nil, &Kem{1, kemKey(1601, 1)}, "UAKemHolder"},
+		{0x0130, nil, nil, nil, nil, kemKey(1600, 1), "UAKemKeyLength"},
+		{0x0130, nil, nil, nil, nil, kemKey(1601, 0), "UAKemScheme"},
+		{0x0101, nil, nil, nil, nil, kemKey(1601, 1), "UAKemHolder"},
 	} {
-		if _, err := HolderPopMessage(c.kind, u, c.kd, c.key, c.pop, c.hash, c.kem); code(err) != c.code {
+		if _, err := HolderPopMessage(c.kind, u, c.kd, c.key, c.pop, c.hash, c.kemPk); code(err) != c.code {
 			t.Fatalf("refusal %+v: %v", c, err)
 		}
 	}

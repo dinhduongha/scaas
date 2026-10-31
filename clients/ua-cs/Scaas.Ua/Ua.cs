@@ -218,20 +218,21 @@ public static partial class UA
     /// <summary><c>keccak256(0x1901 ‖ DS_P ‖ structHash)</c>: what <c>eth_signTypedData_v4</c> returns for a portable record.</summary>
     static byte[] Typed(byte[] structHash) => Keccak256(new byte[] { 0x19, 0x01 }, PortableDomainSeparator, structHash);
 
-    /// <summary><c>hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)})</c>: version 1 … 2^64 − 1,
-    /// <c>kemPk</c> = scheme byte ‖ key (<c>UAKemScheme</c> for an id other than 1). No record (version 0, no key) is the zero record
-    /// <c>UAKemRecord{ua, 0, 0, 0}</c> (TS-D2): the <c>kem</c> word of a <c>UAPortableRecord</c>.</summary>
+    /// <summary><c>hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)})</c>: version 0 … 2^64 − 1
+    /// (version 0 = the key given at <c>register</c>, owner 2026-10-31), <c>kemPk</c> = scheme byte ‖ key (<c>UAKemScheme</c> for an
+    /// id other than 1, 0 included). No key (version 0, no key) is the zero record <c>UAKemRecord{ua, 0, 0, 0}</c> (TS-D2: a present
+    /// record has scheme ≠ 0): the <c>kem</c> word of a <c>UAPortableRecord</c>.</summary>
     public static byte[] KemRecordHash(byte[] ua, ulong version, byte[] kemPk)
     {
         kemPk ??= []; // ponytail: a null key is an empty key (UAKemKeyLength), not a NullReferenceException
         if (version == 0 && kemPk.Length == 0) return HashStruct("UAKemRecord", ua, new byte[32], new byte[32], new byte[32]);
-        if (version == 0) throw new UAException("UAKemVersion", "0");
         if (kemPk.Length > 0 && kemPk[0] != KemSchemeMlkem1024X25519) throw new UAException("UAKemScheme", kemPk[0].ToString(CultureInfo.InvariantCulture));
         if (kemPk.Length != KemPkLength) throw new UAException("UAKemKeyLength", kemPk.Length.ToString(CultureInfo.InvariantCulture));
         return HashStruct("UAKemRecord", ua, Word(version), Word(kemPk[0]), Keccak256(kemPk));
     }
 
-    /// <summary>The typed <c>UAKemRecord</c> digest <c>setKemKey</c> signs (a real record: version 0 is <c>UAKemVersion</c>).</summary>
+    /// <summary>The typed <c>UAKemRecord</c> digest <c>setKemKey</c> signs (versions ≥ 1: version 0 is the <c>register</c> key,
+    /// <c>UAKemVersion</c> here).</summary>
     public static byte[] KemRecordDigest(byte[] ua, ulong version, byte[] kemPk) =>
         version == 0 ? throw new UAException("UAKemVersion", "0") : Typed(KemRecordHash(ua, version, kemPk));
 
@@ -278,14 +279,15 @@ public static partial class UA
         byte[] RegistrationDigest, byte[] Message, byte[]? MemberDigest);
 
     /// <summary>The portable PoP message of a registration (UA-8 P1, P2). Attributes: <paramref name="pqzKey"/> with its proof
-    /// <paramref name="pqzPop"/> (or only its hash; a relayer may hold only that) and the initial KEM record; null / empty = absent.
+    /// <paramref name="pqzPop"/> (or only its hash; a relayer may hold only that) and the initial KEM key <paramref name="kemPk"/>
+    /// (its record is always version 0, owner 2026-10-31); null / empty = absent.
     /// Only holders may carry them (UAPqzHolder, UAKemHolder; an <c>msig</c> needs <paramref name="keyData"/> to show it is PQ-eligible);
     /// a PQZ key always comes with its proof hash and only with it (UAPqzPopHash).</summary>
     public static HolderPop HolderPopMessage(ushort kind, byte[] ua, byte[] keyData, byte[]? pqzKey = null, byte[]? pqzPop = null,
-        byte[]? pqzPopHash = null, (ulong Version, byte[] Pk)? kem = null)
+        byte[]? pqzPopHash = null, byte[]? kemPk = null)
     {
         if (pqzKey is { Length: 0 }) pqzKey = null;
-        if (kem is { Version: 0, Pk: null or { Length: 0 } }) kem = null; // (0, null) / (0, []) = absent
+        var kem = kemPk is { Length: > 0 } ? kemPk : null; // null / [] = absent
         if (pqzKey is not null || kem is not null)
         {
             var holder = Holds(kind, keyData);
@@ -295,7 +297,7 @@ public static partial class UA
         var popHash = ProofHashOf(pqzPop, pqzPopHash);
         if ((pqzKey is not null) != popHash.Any(b => b != 0)) throw new UAException("UAPqzPopHash", "key and proof hash go together");
         var keyHash = pqzKey is null ? new byte[32] : PqzKeyHashOf(pqzKey);
-        var kemHash = kem is { } k ? KemRecordHash(ua, k.Version, k.Pk) : KemRecordHash(ua, 0, []);
+        var kemHash = KemRecordHash(ua, 0, kem ?? []);
         var reg = RegistrationDigest(ua, kind, keyHash, kemHash, popHash);
         var msg = UAMessage(kind, PopV2Tag, reg);
         return new(keyHash, popHash, kemHash, PortableRecordDigest(ua, kind, keyHash, kemHash), reg, msg, kind == 0x0120 ? MemberDigest(ua, msg) : null);
@@ -332,10 +334,10 @@ public static partial class UA
     }
 
     /// <summary>The message R_REG proves over: <c>UAMessage(0x0142, POP_V2, PortableRecordDigest(ua, kind, keyHash(0x0142, pqzKey),
-    /// kemRecordHash))</c>, <paramref name="kind"/> the registering kind (TS-D3); <paramref name="kem"/> null / (0, empty) = no KEM record.</summary>
-    public static byte[] PqzRegMessage(ushort kind, byte[] ua, byte[] pqzKey, (ulong Version, byte[] Pk)? kem = null)
+    /// kemRecordHash))</c>, <paramref name="kind"/> the registering kind (TS-D3); <paramref name="kemPk"/> the register KEM key (version 0), null / empty = none.</summary>
+    public static byte[] PqzRegMessage(ushort kind, byte[] ua, byte[] pqzKey, byte[]? kemPk = null)
     {
-        var kemHash = kem is { } k ? KemRecordHash(ua, k.Version, k.Pk) : KemRecordHash(ua, 0, []);
+        var kemHash = KemRecordHash(ua, 0, kemPk ?? []);
         return UAMessage(0x0142, PopV2Tag, PortableRecordDigest(ua, kind, PqzKeyHashOf(pqzKey), kemHash));
     }
 

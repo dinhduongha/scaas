@@ -195,9 +195,9 @@ public class VectorTests
     {
         var a = row.GetProperty("attrs");
         byte[] key = B(a.GetProperty("pqzKey")), pop = B(row.GetProperty("pqzPop")), hash = B(a.GetProperty("pqzPopHash")), pk = B(a.GetProperty("kemPk"));
-        var ver = ulong.Parse(a.GetProperty("kemVersion").ToString());
+        Assert.Equal(0UL, ulong.Parse(a.GetProperty("kemVersion").ToString())); // register takes no KEM version (UAAttrs' word: 0)
         return UA.HolderPopMessage(Kind(row), B(row.GetProperty("ua")), B(row.GetProperty("keyData")), key.Length == 0 ? null : key,
-            hashOnly || pop.Length == 0 ? null : pop, hash.All(x => x == 0) ? null : hash, ver == 0 && pk.Length == 0 ? null : (ver, pk));
+            hashOnly || pop.Length == 0 ? null : pop, hash.All(x => x == 0) ? null : hash, pk);
     }
 
     /// <summary>EIP-712 encodeType from a wallet's typed-data JSON: primary, then the referenced types sorted by name.</summary>
@@ -295,7 +295,7 @@ public class VectorTests
             Assert.Equal((kind, r.GetProperty("ua").GetString(), r.GetProperty("ua").GetString(), r.GetProperty("pqzKeyHash").GetString()),
                 (rec.GetProperty("kind").GetUInt16(), rec.GetProperty("ua").GetString(), kem.GetProperty("ua").GetString(), rec.GetProperty("pqzKeyHash").GetString()));
             Assert.Equal(r.GetProperty("attrs").GetProperty("pqzPopHash").GetString(), td.GetProperty("message").GetProperty("pqzPopHash").GetString());
-            var v = U64(r.GetProperty("attrs").GetProperty("kemVersion"));
+            var v = 0UL; // the register KEM key is version 0 (owner 2026-10-31)
             Assert.Equal(r.GetProperty("kemRecordHash").GetString(), Hx(HashStructJson(tt, "UAKemRecord", kem)));
             Assert.Equal(r.GetProperty("kemRecordHash").GetString(), Hx(UA.KemRecordHash(ua, v, pk)));
             // TS-D2: no KEM record = {ua, 0, 0, 0}
@@ -372,8 +372,7 @@ public class VectorTests
             if (pk.Length > 0)
             {
                 withPqz++;
-                var ver = ulong.Parse(a.GetProperty("kemVersion").ToString());
-                var got = UA.PqzRegMessage(kind, ua, pk, (ver, B(a.GetProperty("kemPk"))));
+                var got = UA.PqzRegMessage(kind, ua, pk, B(a.GetProperty("kemPk")));
                 Assert.Equal(r.GetProperty("pqzRegMessage").GetString(), Hx(got));
                 // TS-D3: R_REG proves over the typed UAPortableRecord of the registering kind
                 Assert.Equal(Hx(UA.UAMessage(0x0142, UA.PopV2Tag, B(r.GetProperty("portableRecordDigest")))), Hx(got));
@@ -410,11 +409,15 @@ public class VectorTests
         Assert.Equal("UAKemKeyLength", Assert.Throws<UAException>(() => UA.KemRecordDigest(u, 1, null!)).Code);
         foreach (byte scheme in new byte[] { 0, 2, 255 })
             Assert.Equal("UAKemScheme", Assert.Throws<UAException>(() => UA.KemRecordDigest(u, 1, Kem(1601, scheme))).Code);
-        // TS-D2: (0, no key) is the zero record's hash (never a signed record); version 0 with a key is UAKemVersion
+        // TS-D2: (0, no key) is the zero record's hash; owner 2026-10-31: version 0 with a key is the register key's record
+        // (scheme != 0: scheme 0 is UAKemScheme), never a setKemKey record (UAKemVersion)
         var th = UA.Keccak256(System.Text.Encoding.UTF8.GetBytes("UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)"));
         Assert.Equal(Hx(UA.Keccak256(th, u, new byte[96])), Hx(UA.KemRecordHash(u, 0, [])));
         Assert.Equal(Hx(UA.KemRecordHash(u, 0, [])), Hx(UA.KemRecordHash(u, 0, null!)));
-        Assert.Equal("UAKemVersion", Assert.Throws<UAException>(() => UA.KemRecordHash(u, 0, Kem(1601))).Code);
+        var one = new byte[32];
+        one[31] = 1;
+        Assert.Equal(Hx(UA.Keccak256(th, u, new byte[32], one, UA.Keccak256(Kem(1601)))), Hx(UA.KemRecordHash(u, 0, Kem(1601))));
+        Assert.Equal("UAKemScheme", Assert.Throws<UAException>(() => UA.KemRecordHash(u, 0, Kem(1601, 0))).Code);
         Assert.Equal("UAKemKeyLength", Assert.Throws<UAException>(() => UA.KemRecordHash(u, 1, [])).Code);
         Assert.Equal("UAKemVersion", Assert.Throws<UAException>(() => UA.KemRecordDigest(u, 0, [])).Code);
         // known answers shared with ua-rs / ua-py / ua-go: the 8-byte version word and the decimal "evm:" chain key
@@ -532,7 +535,7 @@ public class VectorTests
             }
             else sigLevel++; // signatures / native personal_sign / another record's pop: verified by the signature vectors
         }
-        Assert.Equal((60, p.GetProperty("negatives").GetArrayLength() - 60), (run, sigLevel));
+        Assert.Equal((57, p.GetProperty("negatives").GetArrayLength() - 57), (run, sigLevel));
         // single-key non-holders refuse a PQZ key
         var u = Enumerable.Repeat((byte)1, 32).ToArray();
         var key = new byte[16384];
@@ -545,10 +548,12 @@ public class VectorTests
         Assert.Equal("UAPqzPopHash", Assert.Throws<UAException>(() => UA.HolderPopMessage(0x0130, u, [], key, pqzPopHash: new byte[31])).Code);
         // n3: a zero-length proof hash is absent (same as no hash)
         Assert.Equal(Hx(UA.HolderPopMessage(0x0130, u, []).Message), Hx(UA.HolderPopMessage(0x0130, u, [], null, null, []).Message));
-        Assert.Equal("UAKemKeyLength", Assert.Throws<UAException>(() => UA.HolderPopMessage(0x0130, u, [], kem: (1, null!))).Code);
-        // m-C5: a (0, null) KEM record is absent, as (0, []) and in the other packages (also for a non-holder)
-        Assert.Equal(Hx(UA.HolderPopMessage(0x0130, u, []).Message), Hx(UA.HolderPopMessage(0x0130, u, [], kem: (0, null!)).Message));
-        Assert.Equal(Hx(UA.HolderPopMessage(0x0101, u, new byte[64]).Message), Hx(UA.HolderPopMessage(0x0101, u, new byte[64], kem: (0, null!)).Message));
-        Assert.Equal(Hx(UA.PqzRegMessage(0x0130, u, key)), Hx(UA.PqzRegMessage(0x0130, u, key, (0, null!))));
+        static byte[] Kem(int n, byte scheme = 1) { var k = new byte[n]; k[0] = scheme; return k; } // scheme byte, zeros
+        Assert.Equal("UAKemKeyLength", Assert.Throws<UAException>(() => UA.HolderPopMessage(0x0130, u, [], kemPk: Kem(1600))).Code);
+        Assert.Equal("UAKemScheme", Assert.Throws<UAException>(() => UA.HolderPopMessage(0x0130, u, [], kemPk: Kem(1601, 0))).Code);
+        // m-C5: a null KEM key is absent, as [] and in the other packages (also for a non-holder)
+        Assert.Equal(Hx(UA.HolderPopMessage(0x0130, u, []).Message), Hx(UA.HolderPopMessage(0x0130, u, [], kemPk: []).Message));
+        Assert.Equal(Hx(UA.HolderPopMessage(0x0101, u, new byte[64]).Message), Hx(UA.HolderPopMessage(0x0101, u, new byte[64], kemPk: []).Message));
+        Assert.Equal(Hx(UA.PqzRegMessage(0x0130, u, key)), Hx(UA.PqzRegMessage(0x0130, u, key, [])));
     }
 }

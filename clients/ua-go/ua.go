@@ -365,15 +365,13 @@ func typed(structHash [32]byte) [32]byte {
 
 func w32(v uint64) (o [32]byte) { copy(o[:], word(v)); return }
 
-// KemRecordHash is hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)}): version 1 … 2^64 − 1,
-// kemPk = scheme byte ‖ key (empty: UAKemKeyLength; scheme not enabled: UAKemScheme; another length: UAKemKeyLength). No
-// record (version 0, no key) is the zero record UAKemRecord{ua, 0, 0, 0} (TS-D2): the kem word of a UAPortableRecord.
+// KemRecordHash is hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)}): version 0 … 2^64 − 1
+// (version 0 = the key given at register, owner 2026-10-31), kemPk = scheme byte ‖ key (empty: UAKemKeyLength; scheme not
+// enabled, 0 included: UAKemScheme; another length: UAKemKeyLength). No key (version 0, no key) is the zero record
+// UAKemRecord{ua, 0, 0, 0} (TS-D2: a present record has scheme ≠ 0): the kem word of a UAPortableRecord.
 func KemRecordHash(ua [32]byte, version uint64, kemPk []byte) ([32]byte, error) {
 	if version == 0 && len(kemPk) == 0 {
 		return HashStruct("UAKemRecord", ua, [32]byte{}, [32]byte{}, [32]byte{}), nil
-	}
-	if version == 0 {
-		return [32]byte{}, fail("UAKemVersion", "0")
 	}
 	if len(kemPk) > 0 && kemPk[0] != KemSchemeMlkem1024X25519 {
 		return [32]byte{}, fail("UAKemScheme", strconv.Itoa(int(kemPk[0])))
@@ -384,7 +382,7 @@ func KemRecordHash(ua [32]byte, version uint64, kemPk []byte) ([32]byte, error) 
 	return HashStruct("UAKemRecord", ua, w32(version), w32(uint64(kemPk[0])), Keccak256(kemPk)), nil
 }
 
-// KemRecordDigest is the typed UAKemRecord digest setKemKey signs (a real record: version 0 is UAKemVersion).
+// KemRecordDigest is the typed UAKemRecord digest setKemKey signs (versions ≥ 1: version 0 is the register key, UAKemVersion here).
 func KemRecordDigest(ua [32]byte, version uint64, kemPk []byte) ([32]byte, error) {
 	if version == 0 {
 		return [32]byte{}, fail("UAKemVersion", "0")
@@ -420,19 +418,6 @@ func KemRecordMessage(kind uint16, ua [32]byte, version uint64, kemPk []byte) ([
 		return d, err
 	}
 	return UAMessage(kind, kemPurpose, d)
-}
-
-// Kem is a KEM record attribute; nil or {0, empty} = absent.
-type Kem struct {
-	Version uint64
-	Pk      []byte
-}
-
-func (k *Kem) hash(ua [32]byte) ([32]byte, error) {
-	if k == nil {
-		return KemRecordHash(ua, 0, nil)
-	}
-	return KemRecordHash(ua, k.Version, k.Pk)
 }
 
 // holds: a PQZ / KEM holder is a single-key PQ kind, or an msig whose key data is PQ-eligible (malformed key data is UAKeyData).
@@ -504,11 +489,12 @@ type HolderPop struct {
 }
 
 // HolderPopMessage is the portable PoP message of a registration. Attributes: pqzKey with its proof pqzPop (or only its hash
-// pqzPopHash; a relayer may hold only that) and the initial KEM record; nil / empty = absent. Only holders may carry them
+// pqzPopHash; a relayer may hold only that) and the initial KEM key kemPk (its record is always version 0, owner 2026-10-31);
+// nil / empty = absent. Only holders may carry them
 // (UAPqzHolder, UAKemHolder; an msig needs keyData to show it is PQ-eligible); a PQZ key always comes with its proof hash and
 // only with it (UAPqzPopHash).
-func HolderPopMessage(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopHash []byte, kem *Kem) (*HolderPop, error) {
-	hasKem := kem != nil && (kem.Version != 0 || len(kem.Pk) != 0)
+func HolderPopMessage(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopHash, kemPk []byte) (*HolderPop, error) {
+	hasKem := len(kemPk) != 0
 	if len(pqzKey) > 0 || hasKem {
 		ok, err := holds(kind, keyData)
 		if err != nil {
@@ -534,7 +520,7 @@ func HolderPopMessage(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopH
 			return nil, err
 		}
 	}
-	if r.KemRecordHash, err = kem.hash(ua); err != nil {
+	if r.KemRecordHash, err = KemRecordHash(ua, 0, kemPk); err != nil {
 		return nil, err
 	}
 	r.PortableRecordDigest = PortableRecordDigest(ua, kind, r.PqzKeyHash, r.KemRecordHash)
@@ -550,9 +536,9 @@ func HolderPopMessage(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopH
 }
 
 // PqzRegMessage is the message R_REG proves over: UAMessage(0x0142, POP_V2, PortableRecordDigest(ua, kind, keyHash(0x0142,
-// pqzKey), kemRecordHash)), kind the registering kind (TS-D3); kem nil / {0, empty} = no KEM record.
-func PqzRegMessage(kind uint16, ua [32]byte, pqzKey []byte, kem *Kem) ([32]byte, error) {
-	kr, err := kem.hash(ua) // the KEM record first, as ua-rs and the JS
+// pqzKey), kemRecordHash)), kind the registering kind (TS-D3); kemPk the register KEM key (version 0), nil / empty = none.
+func PqzRegMessage(kind uint16, ua [32]byte, pqzKey, kemPk []byte) ([32]byte, error) {
+	kr, err := KemRecordHash(ua, 0, kemPk) // the KEM record first, as ua-rs and the JS
 	if err != nil {
 		return kr, err
 	}

@@ -176,10 +176,10 @@ class Vectors(unittest.TestCase):
     def register(row, hash_only=False):
         """The holder call over a registration row's attrs (and the proof bytes, or only their hash)."""
         a = row['attrs']
-        key, pop, h, pk, ver = b(a['pqzKey']), b(row['pqzPop']), b(a['pqzPopHash']), b(a['kemPk']), int(a['kemVersion'])
+        key, pop, h, pk = b(a['pqzKey']), b(row['pqzPop']), b(a['pqzPopHash']), b(a['kemPk'])
+        assert int(a['kemVersion']) == 0, 'register takes no KEM version (UAAttrs\' word: 0)'
         return ua.holder_pop_message(row['kind'], b(row['ua']), b(row['keyData']), key or None,
-                                     None if hash_only or not pop else pop, h if any(h) else None,
-                                     None if ver == 0 and not pk else (ver, pk))
+                                     None if hash_only or not pop else pop, h if any(h) else None, pk or None)
 
     def test_portable_typed(self):
         """TS-D1: the domain separator and the five typehashes pinned and re-derived; every row's typedData (the JSON
@@ -212,7 +212,7 @@ class Vectors(unittest.TestCase):
             rec, kem = td['message']['record'], td['message']['record']['kem']
             self.assertEqual((rec['kind'], rec['ua'], kem['ua'], rec['pqzKeyHash']), (kind, r['ua'], r['ua'], r['pqzKeyHash']), r['name'])
             self.assertEqual(td['message']['pqzPopHash'], r['attrs']['pqzPopHash'], r['name'])
-            pk, v = b(r['attrs']['kemPk']), int(r['attrs']['kemVersion'])
+            pk, v = b(r['attrs']['kemPk']), 0  # the register KEM key is version 0 (owner 2026-10-31)
             self.assertEqual(hx(hash_struct_json(td['types'], 'UAKemRecord', kem)), r['kemRecordHash'], r['name'])
             self.assertEqual(hx(ua.kem_record_hash(u, v, pk)), r['kemRecordHash'], r['name'])
             want = (v, pk[0], hx(ua.keccak256(pk))) if pk else (0, 0, hx(bytes(32)))  # TS-D2: no KEM record = {ua, 0, 0, 0}
@@ -271,8 +271,7 @@ class Vectors(unittest.TestCase):
             pk = b(a['pqzKey'])
             if pk:
                 with_pqz += 1
-                kem = None if int(a['kemVersion']) == 0 and a['kemPk'] == '0x' else (int(a['kemVersion']), b(a['kemPk']))
-                got = ua.pqz_reg_message(r['kind'], u, pk, kem)
+                got = ua.pqz_reg_message(r['kind'], u, pk, b(a['kemPk']) or None)
                 self.assertEqual(hx(got), r['pqzRegMessage'], r['name'])
                 # TS-D3: R_REG proves over the typed UAPortableRecord of the registering kind
                 self.assertEqual(got, ua.ua_message(0x0142, ua.POP_V2_TAG, b(r['portableRecordDigest'])), r['name'])
@@ -303,10 +302,12 @@ class Vectors(unittest.TestCase):
             with self.assertRaises(ua.UAError) as e:
                 ua.kem_record_digest(*args)
             self.assertEqual(e.exception.code, code)
-        # TS-D2: (0, no key) is the zero record's hash (never a signed record); version 0 with a key is UAKemVersion
+        # TS-D2: (0, no key) is the zero record's hash; owner 2026-10-31: version 0 with a key is the register key's record
+        # (scheme != 0: scheme 0 is UAKemScheme), never a setKemKey record (UAKemVersion)
         th = ua.keccak256(b'UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)')
         self.assertEqual(ua.kem_record_hash(u, 0, b''), ua.keccak256(th, u, bytes(96)))
-        for args, code in (((u, 0, kem(1601)), 'UAKemVersion'), ((u, 1, b''), 'UAKemKeyLength'), ((u, 0, b''), 'UAKemVersion')):
+        self.assertEqual(ua.kem_record_hash(u, 0, kem(1601)), ua.keccak256(th, u, bytes(32), (1).to_bytes(32, 'big'), ua.keccak256(kem(1601))))
+        for args, code in (((u, 0, kem(1601, 0)), 'UAKemScheme'), ((u, 1, b''), 'UAKemKeyLength'), ((u, 0, b''), 'UAKemVersion')):
             with self.assertRaises(ua.UAError) as e:
                 (ua.kem_record_digest if args == (u, 0, b'') else ua.kem_record_hash)(*args)
             self.assertEqual(e.exception.code, code)
@@ -398,7 +399,7 @@ class Vectors(unittest.TestCase):
                 run += 1
             else:
                 sig_level += 1  # signatures / native personal_sign / another record's pop: verified by the signature vectors
-        self.assertEqual((run, sig_level), (60, len(P['negatives']) - 60))
+        self.assertEqual((run, sig_level), (57, len(P['negatives']) - 57))
         u, key, proof = bytes([1]) * 32, bytes(16384), bytes([7]) * 32
         # malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
         for kd in (bytes([0, 2, 0]), bytes([0, 2, 0, 2, 9, 9])):
@@ -408,8 +409,9 @@ class Vectors(unittest.TestCase):
         for args, code in (((0x0120, u, b'', key), 'UAPqzHolder'),
                            ((0x0130, u, b'', key, None, bytes(31)), 'UAPqzPopHash'),
                            ((0x0130, u, b'', bytes(100), None, proof), 'UAKeyData'),
-                           ((0x0130, u, b'', None, None, None, (1, None)), 'UAKemKeyLength'),
-                           ((0x0101, u, b'', None, None, None, (1, bytes([1]) + bytes(1600))), 'UAKemHolder'),
+                           ((0x0130, u, b'', None, None, None, bytes([1]) + bytes(1599)), 'UAKemKeyLength'),
+                           ((0x0130, u, b'', None, None, None, bytes(1601)), 'UAKemScheme'),
+                           ((0x0101, u, b'', None, None, None, bytes([1]) + bytes(1600)), 'UAKemHolder'),
                            ((0x0130, u, b'', key, b'', None), 'UAPqzPopHash')):
             with self.assertRaises(ua.UAError, msg=args) as e:
                 ua.holder_pop_message(*args[:3] + ((args[3] if len(args) > 3 else None),) + args[4:])
