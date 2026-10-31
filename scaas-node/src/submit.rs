@@ -1733,19 +1733,26 @@ mod tests {
         assert!(outcomes(ok(), vec![other], |_| {}).await.0[0].1.contains("unknown job kind"), "one job-kind rule");
     }
 
-    /// The four UA-8 registry writes for `ua_registry`, with these sizes (a `register` with or without its proof).
+    /// The five UA-8 registry writes for `ua_registry` (typed-signing R1's explicit ABI), with these sizes (a `register`
+    /// with or without its proof).
     fn ua8_writes(pqz_pop: usize) -> Vec<Vec<u8>> {
         use crate::abi::IUARegistry::*;
         let ua = B256::repeat_byte(0x11);
         let b = |n: usize, v: u8| Bytes::from(vec![v; n]);
-        let kem = |v: u8| Bytes::from([vec![1u8], vec![v; 1600]].concat()); // scheme 1 key: 0x01 ‖ 1,600 bytes (CTR-UA-32)
+        // scheme 1 key: 0x01 ‖ ek (1,568 B) ‖ x25519 (CTR-UA-32, TS-D11)
+        let kem = |v: u8| KemKey { scheme: 1, mlkemEk: b(1568, v), x25519: B256::repeat_byte(v) };
+        let sig = |n: usize, v: u8| UASig { keyData: Bytes::new(), signature: b(n, v), members: vec![] };
+        let attrs = || UAAttrs { pqzKey: b(18_432, 2), pqzPopHash: B256::repeat_byte(3), kem: kem(4), kemPkHash: B256::ZERO };
+        let members = |n: u16| (0..n).map(|i| MsigMember { kind: 0x0131, id: B256::repeat_byte(0x20 + i as u8), weight: 1 }).collect();
+        let pops = |n: u16| (0..n).map(|i| MemberSig { index: i, keyData: Bytes::new(), sig: b(3309, 13) }).collect();
         vec![
-            registerCall { kind: 0x0131, keyData: b(1952, 1), attrs: UAAttrs { pqzKey: b(18_432, 2),
-                pqzPopHash: B256::repeat_byte(3), kemVersion: 0, kemPk: kem(4) }, pop: b(3309, 5), pqzPop: b(pqz_pop, 12) }
+            registerCall { kind: 0x0131, keyData: b(1952, 1), attrs: attrs(), pop: b(3309, 5), pqzPop: b(pqz_pop, 12) }
                 .abi_encode(),
-            setKemKeyCall { ua, version: 2, kemPk: kem(6), sig: b(3309, 7) }.abi_encode(),
+            setKemKeyCall { ua, version: 2, kem: kem(6), sig: sig(3309, 7) }.abi_encode(),
             storePqzPopCall { ua, pqzPop: b(30_381, 8) }.abi_encode(),
-            setPqzKeyCall { ua, pqzKey: b(18_432, 9), pqzPopHash: B256::repeat_byte(10), sig: b(3309, 11) }.abi_encode(),
+            setPqzKeyCall { ua, pqzKey: b(18_432, 9), pqzPopHash: B256::repeat_byte(10), sig: sig(3309, 11) }.abi_encode(),
+            registerMsigCall { structure: MsigStructure { threshold: 2, members: members(2) }, attrs: attrs(), pop: pops(2),
+                pqzPop: b(pqz_pop, 12) }.abi_encode(),
         ]
     }
 
@@ -1757,11 +1764,12 @@ mod tests {
     #[tokio::test]
     async fn ua8_registry_writes_are_call_jobs() {
         use crate::abi::IUARegistry::*;
-        assert_eq!(registerCall::SIGNATURE, "register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes)");
-        assert_eq!(registerCall::SELECTOR, [0x0c, 0x93, 0x63, 0x61]);
-        assert_eq!(setKemKeyCall::SELECTOR, [0x2d, 0x21, 0xc5, 0x8e]);
+        assert_eq!(registerCall::SIGNATURE, "register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)");
+        assert_eq!(registerCall::SELECTOR, [0x4e, 0x22, 0x9e, 0xfb]);
+        assert_eq!(registerMsigCall::SELECTOR, [0x82, 0xb8, 0x6a, 0x46]);
+        assert_eq!(setKemKeyCall::SELECTOR, [0xa0, 0x0c, 0xce, 0x2a]);
         assert_eq!(storePqzPopCall::SELECTOR, [0x7f, 0xac, 0x16, 0x1a]);
-        assert_eq!(setPqzKeyCall::SELECTOR, [0xbd, 0xe7, 0x17, 0x60]);
+        assert_eq!(setPqzKeyCall::SELECTOR, [0x3c, 0x68, 0x97, 0xf1]);
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
         let (reg, other) = (Address::repeat_byte(0x5e), Address::repeat_byte(0x5f));
         let cfg = move |c: &mut ChainCfg| c.ua_registry = Some(reg);

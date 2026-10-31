@@ -262,15 +262,23 @@ sol! {
         function getL1Fee(bytes _data) external view returns (uint256);
     }
 
-    /// `UARegistry`'s four writes (accounts.md §1.8, UA-8; CTR-UA-07: anyone may relay them): the call-table rows on
-    /// `ua_registry`, and `register`'s `pqzPop` for the split rule ([`crate::guard::UA_REGISTER_SPLIT`]).
+    /// `UARegistry`'s five writes (accounts.md §1.8, UA-8; CTR-UA-07: anyone may relay them): the call-table rows on
+    /// `ua_registry`, and `register` / `registerMsig`'s `pqzPop` for the split rule ([`crate::guard::UA_REGISTER_SPLIT`]).
+    /// typed-signing R1 (TS-D10 … TS-D12): the explicit ABI — `registerMsig` with a typed structure and `MemberSig[]`,
+    /// `KemKey`, `UASig`; a hash-committed KEM key is filled by `setKemKey(ua, 0, kem, UASig())`.
     #[derive(Debug)]
     interface IUARegistry {
-        struct UAAttrs { bytes pqzKey; bytes32 pqzPopHash; uint64 kemVersion; bytes kemPk; }
+        struct KemKey { uint8 scheme; bytes mlkemEk; bytes32 x25519; }
+        struct UAAttrs { bytes pqzKey; bytes32 pqzPopHash; KemKey kem; bytes32 kemPkHash; }
+        struct MsigMember { uint16 kind; bytes32 id; uint16 weight; }
+        struct MsigStructure { uint16 threshold; MsigMember[] members; }
+        struct MemberSig { uint16 index; bytes keyData; bytes sig; }
+        struct UASig { bytes keyData; bytes signature; MemberSig[] members; }
         function register(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
-        function setKemKey(bytes32 ua, uint64 version, bytes kemPk, bytes sig) external;
+        function registerMsig(MsigStructure structure, UAAttrs attrs, MemberSig[] pop, bytes pqzPop) external returns (bytes32);
+        function setKemKey(bytes32 ua, uint64 version, KemKey kem, UASig sig) external;
         function storePqzPop(bytes32 ua, bytes pqzPop) external;
-        function setPqzKey(bytes32 ua, bytes pqzKey, bytes32 pqzPopHash, bytes sig) external;
+        function setPqzKey(bytes32 ua, bytes pqzKey, bytes32 pqzPopHash, UASig sig) external;
     }
 
     /// `MandateWallet` errors (CTR-ACC-06/07): a `call` job's revert reason names them, so the client re-reads

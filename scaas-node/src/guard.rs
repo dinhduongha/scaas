@@ -50,14 +50,14 @@ pub enum Rule {
     /// registered token's router-bound `MetaTransfer` for exactly this call, the inner target bound to this chain
     /// ([`relay_call_ok`]).
     RelayFee,
-    /// The chain's `UARegistry` (`ua_registry`), bound to this chain: its four writes (UA-8, ruling R-node).
+    /// The chain's `UARegistry` (`ua_registry`), bound to this chain: its five writes (UA-8, ruling R-node; `registerMsig` since typed-signing R1).
     UaRegistry,
 }
 
 /// The call table as built in P5: the rows whose contracts exist (`cast sig` of the Solidity signatures; pinned
 /// against the KAT calldata). `mtxExecuteAsOwner` is one selector on `SmartKeyAccount` and `MandateWallet`, so it takes
-/// the wallet's rule. UA-8 (ruling R-node): the registry's four writes. Every other selector is refused.
-pub const CALL_TABLE: [([u8; 4], &str, Rule); 19] = [
+/// the wallet's rule. UA-8 (ruling R-node): the registry's five writes. Every other selector is refused.
+pub const CALL_TABLE: [([u8; 4], &str, Rule); 20] = [
     ([0x45, 0x9b, 0x5b, 0x50], "SmartKeyAccountFactory.deploy", Rule::AccountFactory),
     ([0xfd, 0xf2, 0xd3, 0x38], "mtxExecuteAsOwner", Rule::SelfAuth),
     ([0x3a, 0x5b, 0x07, 0x08], "HederaMandateWallet.mtxExecuteAsOwnerRaw", Rule::SelfAuth),
@@ -77,6 +77,7 @@ pub const CALL_TABLE: [([u8; 4], &str, Rule); 19] = [
     (<crate::abi::ISCaaSDex::mtxHybridCall as alloy::sol_types::SolCall>::SELECTOR, "SCaaSDex.mtxHybrid", Rule::Dex),
     (<crate::abi::ISCaaSDex::mtxHybridViaCall as alloy::sol_types::SolCall>::SELECTOR, "SCaaSDex.mtxHybridVia", Rule::Dex),
     (<crate::abi::ISCaaSDex::mtxExchangeBatchCall as alloy::sol_types::SolCall>::SELECTOR, "SCaaSDex.mtxExchangeBatch", Rule::Dex),
+    (<crate::abi::IUARegistry::registerMsigCall as alloy::sol_types::SolCall>::SELECTOR, "UARegistry.registerMsig", Rule::UaRegistry),
 ];
 
 /// The refusal of a relayed PQ registration (`register` with its `R_REG` proof) whose gas estimate is over the
@@ -84,10 +85,11 @@ pub const CALL_TABLE: [([u8; 4], &str, Rule); 19] = [
 /// gas: the client splits it into `register` without `pqzPop`, then `storePqzPop` (ruling R-node).
 pub const UA_REGISTER_SPLIT: &str = "UA_REGISTER_SPLIT";
 
-/// `register` calldata with a non-empty `pqzPop`.
+/// `register` / `registerMsig` calldata with a non-empty `pqzPop`.
 pub fn pq_register(data: &[u8]) -> bool {
     use alloy::sol_types::SolCall;
     crate::abi::IUARegistry::registerCall::abi_decode(data).is_ok_and(|c| !c.pqzPop.is_empty())
+        || crate::abi::IUARegistry::registerMsigCall::abi_decode(data).is_ok_and(|c| !c.pqzPop.is_empty())
 }
 
 /// The token entries a `metatx` job may name (job-api.md, order and wrap entries).
@@ -785,10 +787,13 @@ mod tests {
         assert_eq!(CALL_TABLE[7].0, crate::abi::ISCaaSDex::mtxExchangeViaCall::SELECTOR);
         // UA-8 (ruling R-node): the registry's writes, the selectors of IUARegistry (also pinned as hex literals in
         // submit.rs `ua8_registry_writes_are_call_jobs` and forge `test_ua8_writeSelectorsPinned`)
-        assert_eq!(CALL_TABLE[12].0, sig("register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes)"));
-        assert_eq!(CALL_TABLE[13].0, sig("setKemKey(bytes32,uint64,bytes,bytes)"));
+        // typed-signing R1: the explicit ABI (TS-D10 … TS-D12)
+        let (attrs, ua_sig) = ("(bytes,bytes32,(uint8,bytes,bytes32),bytes32)", "(bytes,bytes,(uint16,bytes,bytes)[])");
+        assert_eq!(CALL_TABLE[12].0, sig(&format!("register(uint16,bytes,{attrs},bytes,bytes)")));
+        assert_eq!(CALL_TABLE[13].0, sig(&format!("setKemKey(bytes32,uint64,(uint8,bytes,bytes32),{ua_sig})")));
         assert_eq!(CALL_TABLE[14].0, sig("storePqzPop(bytes32,bytes)"));
-        assert_eq!(CALL_TABLE[15].0, sig("setPqzKey(bytes32,bytes,bytes32,bytes)"));
+        assert_eq!(CALL_TABLE[15].0, sig(&format!("setPqzKey(bytes32,bytes,bytes32,{ua_sig})")));
+        assert_eq!(CALL_TABLE[19].0, sig(&format!("registerMsig((uint16,(uint16,bytes32,uint16)[]),{attrs},(uint16,bytes,bytes)[],bytes)")));
         // no token transfer, approval or meta-tx entry is a row: those reach a token only as `metatx` jobs
         for s in ["transfer(address,uint256)", "approve(address,uint256)", "transferFrom(address,address,uint256)"] {
             assert!(row(sig(s)).is_none(), "{s}");
@@ -799,7 +804,8 @@ mod tests {
         let rules: Vec<Rule> = CALL_TABLE.iter().map(|r| r.2).collect();
         assert_eq!(rules, [Rule::AccountFactory, Rule::SelfAuth, Rule::SelfAuth, Rule::SelfAuth, Rule::SelfAuth,
             Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::RelayFee, Rule::RelayFee,
-            Rule::UaRegistry, Rule::UaRegistry, Rule::UaRegistry, Rule::UaRegistry, Rule::Dex, Rule::Dex, Rule::Dex]);
+            Rule::UaRegistry, Rule::UaRegistry, Rule::UaRegistry, Rule::UaRegistry, Rule::Dex, Rule::Dex, Rule::Dex,
+            Rule::UaRegistry]);
         assert!(!allowed(Rule::RelayFee, &Facts { bound: true, ..Default::default() }), "never by facts");
     }
 
