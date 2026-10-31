@@ -262,7 +262,10 @@ const note = [
   + 'setKemKey(ua, 0, kem, sig = UASig{0x, 0x, []}), open to anyone (owner 2026-10-31: only when the full key does not fit one '
   + 'transaction; every version write-once); kemRecords[i].args = setKemKey(ua, version, kem, sig) and pqzKeyRecords[i].args = '
   + 'setPqzKey(ua, pqzKey, pqzPopHash, sig) with sig = UASig{keyData, signature, members} (a single key: signature = sig; an msig: '
-  + 'members, never keyData). attrs.kemVersion is gone (R1).',
+  + 'members, never keyData). attrs.kemVersion is gone (R1). typed-signing R1b (TS-D13): the webauthn-p256 row\'s args = '
+  + 'registerWebAuthn(key = {x, y, rpIdHash}, attrs, pop, pqzPop), the registry assembling keyData = x | y | rpIdHash (register(0x0100, '
+  + '...) is refused); MuSig2 / FROST keys register by registerMuSig2 / registerFrost(kind, key, attrs, pop, pqzPop) (clientkeys '
+  + 'typedKey; no row here).',
   'Rows: registrations[i] = register(kind, keyData, attrs, pop, pqzPop); kemRecords[i] = setKemKey(ua, version, kemPk, sig) '
   + '(id = name/vN, versions 1-3, each its own key; version 0 is the registration\'s key, stored by register, never by setKemKey: '
   + 'UAKemVersion; every version is write-once); pqzKeyRecords[i] = setPqzKey(ua, pqzKey, pqzPopHash, sig) '

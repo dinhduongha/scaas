@@ -377,7 +377,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     /// The `keyRest` of a record held here, read alone (msig-pophash I1: never the blob's `pop`, whose length the
     /// member does not bound): the blob `abi.encode(keyRest, pop)` has `keyRest`'s length at 0x40 and its bytes from
-    /// 0x60, in chunk 0 (key data of a non-stored kind: at most 256 B, an `msig` 580 B; chunks 32,768 B).
+    /// 0x60, in chunk 0 (key data of a non-stored kind: at most 256 B, an `msig` 580 B, a FROST rest at most 17,924 B;
+    /// chunks 32,768 B).
     function _keyRest(bytes32 ua) private view returns (bytes memory) {
         address p = _reg[ua][0];
         return SSTORE2.read(p, 0x60, uint256(bytes32(SSTORE2.read(p, 0x40, 32))));
@@ -399,6 +400,47 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         for (uint256 i; i < n; ++i) {
             uint256 o = 4 + 36 * i;
             s.members[i] = MsigMember(uint16(_u16(d, o)), bytes32(_word(d, o + 2)), uint16(_u16(d, o + 34)));
+        }
+    }
+
+    /// TS-D13: the typed keys of `webauthn-p256` / MuSig2 / FROST records (empty for any other id).
+    function webAuthnKeyOf(bytes32 ua) external view returns (WebAuthnKey memory k) {
+        if (_elsewhere(ua)) return IUARegistry(predecessor).webAuthnKeyOf(ua);
+        if (_records[ua].kind != UAKinds.WEBAUTHN_P256) return k;
+        bytes memory d = _keyRest(ua);
+        (k.x, k.y, k.rpIdHash) = (bytes32(_word(d, 0)), bytes32(_word(d, 32)), bytes32(_word(d, 64)));
+    }
+
+    function muSig2KeyOf(bytes32 ua) external view returns (MuSig2Key memory k) {
+        if (_elsewhere(ua)) return IUARegistry(predecessor).muSig2KeyOf(ua);
+        Record memory r = _records[ua];
+        if (r.kind != UAKinds.MUSIG2_SECP256K1 && r.kind != UAKinds.MUSIG2_BN254) return k;
+        (uint256 size, bytes memory d) = (_vkLength(r.kind), _keyRest(ua)); // u16 n ‖ n × key
+        k.aggKey = SSTORE2.read(r.keyPtr);
+        k.memberKeys = new bytes[](_u16(d, 0));
+        for (uint256 i; i < k.memberKeys.length; ++i) {
+            k.memberKeys[i] = _cut(d, 2 + i * size, size);
+        }
+    }
+
+    function frostKeyOf(bytes32 ua) external view returns (FrostKey memory k) {
+        if (_elsewhere(ua)) return IUARegistry(predecessor).frostKeyOf(ua);
+        Record memory r = _records[ua];
+        if (r.kind != UAKinds.FROST_SECP256K1 && r.kind != UAKinds.FROST_BN254) return k;
+        (uint256 size, bytes memory d) = (_vkLength(r.kind), _keyRest(ua)); // u16 t ‖ u16 n ‖ n × member
+        k.groupKey = SSTORE2.read(r.keyPtr);
+        uint256 t = _u16(d, 0);
+        k.threshold = uint16(t);
+        k.members = new FrostMember[](_u16(d, 2));
+        for (uint256 i; i < k.members.length; ++i) {
+            uint256 o = 4 + i * ((t + 1) * size + 32);
+            FrostMember memory m = k.members[i];
+            m.commitments = new bytes[](t);
+            for (uint256 j; j < t; ++j) {
+                m.commitments[j] = _cut(d, o + j * size, size);
+            }
+            m.r = _cut(d, o + t * size, size);
+            m.z = bytes32(_word(d, o + (t + 1) * size));
         }
     }
 
@@ -590,12 +632,70 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     // ----- register (accounts.md §1.8 steps 1–8, UA-8) -----
 
     /// Registers `keyData` of a single-key `kind` with its attributes (accounts.md §1.8, UA-8 P2); `UAPoP` when the PoP
-    /// fails. The structure `msig` registers through `registerMsig` only (`UAKeyData(0x0120)` here: one accepted form).
+    /// fails. The structure `msig` registers through `registerMsig` only, `webauthn-p256` / MuSig2 / FROST through
+    /// `registerWebAuthn` / `registerMuSig2` / `registerFrost` (typed-signing TS-D13; `UAKeyData(kind)` here: one
+    /// accepted form).
     function register(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
         bytes calldata pqzPop) external returns (bytes32 ua)
     {
-        if (kind == UAKinds.MSIG) revert UAKeyData(kind);
+        if (kind == UAKinds.MSIG || kind == UAKinds.WEBAUTHN_P256 || _vkLength(kind) == 33 || _vkLength(kind) == 64) {
+            revert UAKeyData(kind);
+        }
         return _register(kind, keyData, attrs, pop, new MemberSig[](0), pqzPop);
+    }
+
+    /// TS-D13: `register` of a `webauthn-p256` key from its fields (`x ‖ y ‖ rpIdHash` assembled here).
+    function registerWebAuthn(WebAuthnKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
+        bytes calldata pqzPop) external returns (bytes32 ua)
+    {
+        return _register(UAKinds.WEBAUTHN_P256, abi.encodePacked(key.x, key.y, key.rpIdHash), attrs, pop,
+            new MemberSig[](0), pqzPop);
+    }
+
+    /// TS-D13: `register` of a MuSig2 group key from its points (`aggKey ‖ u16 n ‖ n × key` assembled here).
+    function registerMuSig2(uint16 kind, MuSig2Key calldata key, UAAttrs calldata attrs, bytes calldata pop,
+        bytes calldata pqzPop) external returns (bytes32 ua)
+    {
+        if (kind != UAKinds.MUSIG2_SECP256K1 && kind != UAKinds.MUSIG2_BN254) revert UAKeyData(kind);
+        if (uint160(_cfg(kind)) == 0) revert UAKindDisabled(kind); // step 1 before the key's fields (step 2)
+        uint256 size = _vkLength(kind);
+        bytes[] calldata m = key.memberKeys;
+        bytes memory d = abi.encodePacked(_point(kind, key.aggKey, size), uint16(m.length));
+        for (uint256 i; i < m.length; ++i) {
+            d = bytes.concat(d, _point(kind, m[i], size));
+        }
+        return _register(kind, d, attrs, pop, new MemberSig[](0), pqzPop);
+    }
+
+    /// TS-D13: `register` of a FROST group key from its fields (`groupKey ‖ u16 t ‖ u16 n ‖ n × (t commitments ‖ r ‖ z)`
+    /// assembled here; each member has exactly `threshold` commitments).
+    function registerFrost(uint16 kind, FrostKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
+        bytes calldata pqzPop) external returns (bytes32 ua)
+    {
+        if (kind != UAKinds.FROST_SECP256K1 && kind != UAKinds.FROST_BN254) revert UAKeyData(kind);
+        if (uint160(_cfg(kind)) == 0) revert UAKindDisabled(kind); // step 1 before the key's fields (step 2)
+        FrostMember[] calldata m = key.members;
+        bytes memory d = abi.encodePacked(_point(kind, key.groupKey, _vkLength(kind)), key.threshold, uint16(m.length));
+        for (uint256 i; i < m.length; ++i) {
+            d = bytes.concat(d, _frostMember(kind, m[i], key.threshold));
+        }
+        return _register(kind, d, attrs, pop, new MemberSig[](0), pqzPop);
+    }
+
+    /// One FROST member's bytes `t commitments ‖ r ‖ z` (exactly `t` commitments).
+    function _frostMember(uint16 kind, FrostMember calldata m, uint256 t) private pure returns (bytes memory d) {
+        uint256 size = _vkLength(kind);
+        if (m.commitments.length != t) revert UAKeyData(kind);
+        for (uint256 j; j < t; ++j) {
+            d = bytes.concat(d, _point(kind, m.commitments[j], size));
+        }
+        d = bytes.concat(d, _point(kind, m.r, size), m.z);
+    }
+
+    /// One point of a typed key: exactly `size` bytes (its validity is `validateKeyData`'s, on the assembled bytes).
+    function _point(uint16 kind, bytes calldata p, uint256 size) private pure returns (bytes calldata) {
+        if (p.length != size) revert UAKeyData(kind);
+        return p;
     }
 
     /// TS-D10: `register` of an `msig` from its typed structure (the CTR-UA-09 bytes assembled here) and its typed

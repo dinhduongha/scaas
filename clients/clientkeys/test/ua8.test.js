@@ -545,6 +545,10 @@ test('register args typed', () => {
       const st = r.args.structure;
       assert.equal(hex(ua.encodeMsig(st.threshold, st.members.map((m) => ({ ...m, id: B(m.id) })))), r.keyData, `${r.name}: same id`);
       assert.deepEqual(ua.msigStructure(r.keyData), st);
+    } else if (r.kind === 0x0100) {
+      // R1b (TS-D13): the webauthn-p256 key as its fields, assembled x | y | rpIdHash by the registry
+      assert.equal(r.args.entry, 'registerWebAuthn');
+      assert.equal(r.args.key.x + r.args.key.y.slice(2) + r.args.key.rpIdHash.slice(2), r.keyData, `${r.name}: same id`);
     } else {
       assert.equal(r.args.entry, 'register');
     }
@@ -596,4 +600,34 @@ test('register hash-commit only when the full call does not fit (X0: PQZH n2560-
   assert.equal(small.kemFill, null, 'under the limit: the full key');
   assert.equal(ua.kemPkOf(small.args.attrs.kem).length, 1601);
   assert.equal(ua.registrationArgs({ ...at('n2304-kmax4096', 18432), kemCommit: true }).args.attrs.kemPkHash, hex(keccak_256(kemPk)));
+});
+
+// --- typed-signing R1b (TS-D13, Appendix X row 12): webauthn-p256 / MuSig2 / FROST keys as typed fields ---
+
+test('register args typed keys (registerWebAuthn / registerMuSig2 / registerFrost)', () => {
+  const K = JSON.parse(readFileSync(new URL('kinds.json', dir), 'utf8'));
+  const cat = (...a) => concatBytes(...a.map(B));
+  const u16b = (v) => Uint8Array.of(v >> 8, v & 0xff);
+  // the packed key data rebuilt from the typed key here (independent of ua.js), and the calldata lengths cast 1.8.5 gave
+  // for these rows with no attributes, a 32-byte pop and no pqzPop (smartcontracts/evm test_registerTypedKeysSameId rows)
+  const packed = (e, a) => e === 'registerWebAuthn' ? cat(a.key.x, a.key.y, a.key.rpIdHash)
+    : e === 'registerMuSig2' ? concatBytes(B(a.key.aggKey), u16b(a.key.memberKeys.length), ...a.key.memberKeys.map(B))
+      : concatBytes(B(a.key.groupKey), u16b(a.key.threshold), u16b(a.key.members.length),
+        ...a.key.members.flatMap((m) => [...m.commitments.map(B), B(m.r), B(m.z)]));
+  const want = { 0x0100: ['registerWebAuthn', 580], 0x0110: ['registerMuSig2', 1124], 0x0112: ['registerMuSig2', 1124],
+    0x0111: ['registerFrost', 2308], 0x0113: ['registerFrost', 2308] };
+  let n = 0;
+  for (const v of K.valid) {
+    if (!want[v.kind]) continue;
+    const r = ua.registrationArgs({ kind: v.kind, keyData: v.keyData, pop: hex(new Uint8Array(32)) });
+    assert.equal(r.entry, want[v.kind][0], v.name);
+    assert.equal(hex(packed(r.entry, r.args)), v.keyData, `${v.name}: the typed key is the packed key data`);
+    assert.equal(r.entry === 'registerWebAuthn' ? undefined : r.args.kind, r.entry === 'registerWebAuthn' ? undefined : v.kind);
+    assert.equal(ua.registryCalldataLength(r.entry, r.args), want[v.kind][1], v.name);
+    assert.deepEqual(Object.keys(r.args), [...(r.entry === 'registerWebAuthn' ? [] : ['kind']), 'key', 'attrs', 'pqzPop', 'pop']);
+    n++;
+  }
+  assert.equal(n, 6);
+  // a single key of another kind stays register(kind, keyData, …)
+  assert.equal(ua.registrationArgs({ kind: 0x0101, keyData: K.valid[1].keyData, pop: '0x01' }).entry, 'register');
 });

@@ -113,6 +113,88 @@ contract UARegistryTest is UARegistryBase {
         assertEq(reg.keyHashOf(UAKinds.MSIG, d), 0);
     }
 
+    /// typed-signing R1b (TS-D13, Appendix X row 12): every kinds.json `valid` row of `webauthn-p256`, `musig2-*` and
+    /// `frost-*` registers through its typed entry (`registerWebAuthn` / `registerMuSig2` / `registerFrost`) with the id
+    /// of the packed key data (kinds.json `ua`); `register(kind, keyData, …)` is refused (`UAKeyData(kind)`: one accepted
+    /// form); `registrationOf` keeps the packed bytes; the typed views give the key back (empty for another kind; gen 2
+    /// forwards). groups.json / portable.json / signatures.json rows run the same entries through `UACall.register`.
+    function test_registerTypedKeysSameId() public {
+        uint16[5] memory ks = [0x0100, 0x0110, 0x0111, 0x0112, 0x0113];
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](5);
+        for (uint256 i; i < 5; ++i) {
+            c[i] = UARegistry.KindConfig(ks[i], address(mock), 400_000);
+        }
+        UARegistry r = _deploy(address(0x5ce01b), chainUidA, address(0), false, BUDGET, address(0), false, c);
+        UARegistry g2 = _deploy(address(0x5ce02b), chainUidA, address(r), false, BUDGET, address(0), false,
+            new UARegistry.KindConfig[](0));
+        string memory j = _kindsJson();
+        uint256 n;
+        for (uint256 i; vm.keyExistsJson(j, string.concat(".valid[", vm.toString(i), "]")); ++i) {
+            string memory row = string.concat(".valid[", vm.toString(i), "]");
+            uint16 kind = uint16(vm.parseJsonUint(j, string.concat(row, ".kind")));
+            if (kind != UAKinds.WEBAUTHN_P256 && (kind < UAKinds.MUSIG2_SECP256K1 || kind > UAKinds.FROST_BN254)) continue;
+            bytes memory d = vm.parseJsonBytes(j, string.concat(row, ".keyData"));
+            bytes32 ua = vm.parseJsonBytes32(j, string.concat(row, ".ua"));
+            bytes memory pop = _pop(r, kind, d);
+            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, kind));
+            r.register(kind, d, _none(), pop, "");
+            assertEq(_registerTyped(r, kind, d, pop), ua, vm.toString(i));
+            (uint16 k, bytes memory got,,,) = r.registrationOf(ua);
+            assertEq(k, kind);
+            assertEq(got, d);
+            _assertTypedViews(r, kind, ua, d);
+            _assertTypedViews(g2, kind, ua, d);
+            ++n;
+        }
+        assertEq(n, 6, "webauthn-p256 x2, musig2-secp256k1, frost-secp256k1, musig2-bn254, frost-bn254");
+        _assertTypedViews(r, 0, keccak256("unregistered"), "");
+        // the explicit fields are checked: the other family's kind, a short point, a member without t commitments
+        bytes memory fd = vm.parseJsonBytes(j, ".valid[9].keyData");
+        IUARegistry.FrostKey memory f = UACall.frostKey(fd, 33);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MUSIG2_SECP256K1));
+        r.registerMuSig2(UAKinds.MUSIG2_SECP256K1, UACall.muSig2Key(fd, 33), _none(), "", "");
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.FROST_SECP256K1));
+        r.registerFrost(UAKinds.FROST_SECP256K1, UACall.frostKey(vm.parseJsonBytes(j, ".valid[8].keyData"), 33),
+            _none(), "", "");
+        f.members[0].commitments[0] = bytes.concat(f.members[0].commitments[0], f.members[0].commitments[1]);
+        f.members[0].commitments[1] = "";
+        assertEq(UACall.keyData(f), fd, "the same packed bytes");
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.FROST_SECP256K1));
+        r.registerFrost(UAKinds.FROST_SECP256K1, f, _none(), "", "");
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.FROST_SECP256K1));
+        r.registerMuSig2(UAKinds.FROST_SECP256K1, UACall.muSig2Key(vm.parseJsonBytes(j, ".valid[8].keyData"), 33),
+            _none(), "", "");
+    }
+
+    /// The typed entry of `kind`, called directly (the key data's typed form round-trips its bytes).
+    function _registerTyped(UARegistry r, uint16 kind, bytes memory d, bytes memory pop) internal returns (bytes32) {
+        if (kind == UAKinds.WEBAUTHN_P256) {
+            assertEq(UACall.keyData(UACall.webAuthnKey(d)), d);
+            return r.registerWebAuthn(UACall.webAuthnKey(d), _none(), pop, "");
+        }
+        uint256 size = UACall.pointSize(kind);
+        if (kind == UAKinds.MUSIG2_SECP256K1 || kind == UAKinds.MUSIG2_BN254) {
+            assertEq(UACall.keyData(UACall.muSig2Key(d, size)), d);
+            return r.registerMuSig2(kind, UACall.muSig2Key(d, size), _none(), pop, "");
+        }
+        assertEq(UACall.keyData(UACall.frostKey(d, size)), d);
+        return r.registerFrost(kind, UACall.frostKey(d, size), _none(), pop, "");
+    }
+
+    /// `webAuthnKeyOf` / `muSig2KeyOf` / `frostKeyOf`: `kind`'s view is the typed key of `d`, the other two are empty.
+    function _assertTypedViews(UARegistry r, uint16 kind, bytes32 ua, bytes memory d) internal view {
+        IUARegistry.WebAuthnKey memory w;
+        IUARegistry.MuSig2Key memory m;
+        IUARegistry.FrostKey memory f;
+        uint256 size = UACall.pointSize(kind);
+        if (kind == UAKinds.WEBAUTHN_P256) w = UACall.webAuthnKey(d);
+        else if (kind == UAKinds.MUSIG2_SECP256K1 || kind == UAKinds.MUSIG2_BN254) m = UACall.muSig2Key(d, size);
+        else if (kind != 0) f = UACall.frostKey(d, size);
+        assertEq(abi.encode(r.webAuthnKeyOf(ua)), abi.encode(w), "webAuthnKeyOf");
+        assertEq(abi.encode(r.muSig2KeyOf(ua)), abi.encode(m), "muSig2KeyOf");
+        assertEq(abi.encode(r.frostKeyOf(ua)), abi.encode(f), "frostKeyOf");
+    }
+
     /// kinds.json `invalid` rows of every kind this registry enables (msig members unregistered: the layout fails first).
     function test_T_REG_2_negativeKeyData() public {
         string memory j = _kindsJson();
@@ -143,9 +225,14 @@ contract UARegistryTest is UARegistryBase {
     function test_T_REG_2_negativeRegistry() public {
         // disabled kinds: natives, out-of-scope kinds, unknown
         uint16[9] memory off = [0x0001, 0x0003, 0x0111, 0x0110, 0x0113, 0x0131, 0x0140, 0x0142, 0x0121];
+        IUARegistry.MuSig2Key memory noMuSig2;
+        IUARegistry.FrostKey memory noFrost;
         for (uint256 i; i < off.length; ++i) {
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, off[i]));
-            UACall.register(reg, off[i], hex"00", _none(), "", "");
+            // typed-signing R1b: MuSig2 / FROST through their typed entries (the kind is checked before the key's fields)
+            if (off[i] == 0x0110) reg.registerMuSig2(off[i], noMuSig2, _none(), "", "");
+            else if (off[i] == 0x0111 || off[i] == 0x0113) reg.registerFrost(off[i], noFrost, _none(), "", "");
+            else UACall.register(reg, off[i], hex"00", _none(), "", "");
         }
         bytes memory p = _key(0x0101);
         bytes32 ua = reg.uaOf(0x0101, p);

@@ -87,7 +87,9 @@ library UACall {
         m = abi.decode(pop, (IUARegistry.MemberSig[]));
     }
 
-    /// `register`, or `registerMsig` for kind `msig` (key data and pop in their byte forms).
+    /// `register`, or the typed entry of kind `msig` / `webauthn-p256` / MuSig2 / FROST (key data and pop in their byte
+    /// forms; typed-signing R1 / R1b). Key data the typed form cannot express (a wrong length) goes to `register`, which
+    /// refuses these kinds (`UAKeyData(kind)`), as the typed entry refuses the layout.
     function register(
         IUARegistry r,
         uint16 kind,
@@ -97,6 +99,16 @@ library UACall {
         bytes memory pqzPop
     ) internal returns (bytes32) {
         if (kind == UAKinds.MSIG) return r.registerMsig(structure(keyData_), a, members(pop), pqzPop);
+        if (kind == UAKinds.WEBAUTHN_P256 && keyData_.length == 96) {
+            return r.registerWebAuthn(webAuthnKey(keyData_), a, pop, pqzPop);
+        }
+        uint256 size = pointSize(kind);
+        if ((kind == UAKinds.MUSIG2_SECP256K1 || kind == UAKinds.MUSIG2_BN254) && muSig2Layout(keyData_, size)) {
+            return r.registerMuSig2(kind, muSig2Key(keyData_, size), a, pop, pqzPop);
+        }
+        if ((kind == UAKinds.FROST_SECP256K1 || kind == UAKinds.FROST_BN254) && frostLayout(keyData_, size)) {
+            return r.registerFrost(kind, frostKey(keyData_, size), a, pop, pqzPop);
+        }
         return r.register(kind, keyData_, a, pop, pqzPop);
     }
 
@@ -111,7 +123,99 @@ library UACall {
         if (kind == UAKinds.MSIG) {
             return abi.encodeCall(IUARegistry.registerMsig, (structure(keyData_), a, members(pop), pqzPop));
         }
+        if (kind == UAKinds.WEBAUTHN_P256 && keyData_.length == 96) {
+            return abi.encodeCall(IUARegistry.registerWebAuthn, (webAuthnKey(keyData_), a, pop, pqzPop));
+        }
+        uint256 size = pointSize(kind);
+        if ((kind == UAKinds.MUSIG2_SECP256K1 || kind == UAKinds.MUSIG2_BN254) && muSig2Layout(keyData_, size)) {
+            return abi.encodeCall(IUARegistry.registerMuSig2, (kind, muSig2Key(keyData_, size), a, pop, pqzPop));
+        }
+        if ((kind == UAKinds.FROST_SECP256K1 || kind == UAKinds.FROST_BN254) && frostLayout(keyData_, size)) {
+            return abi.encodeCall(IUARegistry.registerFrost, (kind, frostKey(keyData_, size), a, pop, pqzPop));
+        }
         return abi.encodeCall(IUARegistry.register, (kind, keyData_, a, pop, pqzPop));
+    }
+
+    // ----- typed-signing R1b (TS-D13): the typed single keys, from and to their packed key data (no validation) -----
+
+    /// The point length of a MuSig2 / FROST kind: 33 B (secp256k1 compressed) or 64 B (bn254).
+    function pointSize(uint16 kind) internal pure returns (uint256) {
+        return kind == UAKinds.MUSIG2_BN254 || kind == UAKinds.FROST_BN254 ? 64 : 33;
+    }
+
+    function webAuthnKey(bytes memory d) internal pure returns (IUARegistry.WebAuthnKey memory k) {
+        (k.x, k.y, k.rpIdHash) = (_w(d, 0), _w(d, 32), _w(d, 64));
+    }
+
+    function keyData(IUARegistry.WebAuthnKey memory k) internal pure returns (bytes memory) {
+        return abi.encodePacked(k.x, k.y, k.rpIdHash);
+    }
+
+    /// `aggKey ‖ u16 n ‖ n × key` with whole points.
+    function muSig2Layout(bytes memory d, uint256 size) internal pure returns (bool) {
+        return d.length >= size + 2 && d.length == size + 2 + _u16(d, size) * size;
+    }
+
+    function muSig2Key(bytes memory d, uint256 size) internal pure returns (IUARegistry.MuSig2Key memory k) {
+        k.aggKey = _slice(d, 0, size);
+        k.memberKeys = new bytes[](_u16(d, size));
+        for (uint256 i; i < k.memberKeys.length; ++i) {
+            k.memberKeys[i] = _slice(d, size + 2 + i * size, size);
+        }
+    }
+
+    function keyData(IUARegistry.MuSig2Key memory k) internal pure returns (bytes memory d) {
+        d = abi.encodePacked(k.aggKey, uint16(k.memberKeys.length));
+        for (uint256 i; i < k.memberKeys.length; ++i) {
+            d = bytes.concat(d, k.memberKeys[i]);
+        }
+    }
+
+    /// `groupKey ‖ u16 t ‖ u16 n ‖ n × (t commitments ‖ R_i ‖ z_i)` with whole points.
+    function frostLayout(bytes memory d, uint256 size) internal pure returns (bool) {
+        if (d.length < size + 4) return false;
+        return d.length == size + 4 + _u16(d, size + 2) * ((_u16(d, size) + 1) * size + 32);
+    }
+
+    function frostKey(bytes memory d, uint256 size) internal pure returns (IUARegistry.FrostKey memory k) {
+        k.groupKey = _slice(d, 0, size);
+        uint256 t = _u16(d, size);
+        k.threshold = uint16(t);
+        k.members = new IUARegistry.FrostMember[](_u16(d, size + 2));
+        for (uint256 i; i < k.members.length; ++i) {
+            uint256 o = size + 4 + i * ((t + 1) * size + 32);
+            IUARegistry.FrostMember memory m = k.members[i];
+            m.commitments = new bytes[](t);
+            for (uint256 j; j < t; ++j) {
+                m.commitments[j] = _slice(d, o + j * size, size);
+            }
+            m.r = _slice(d, o + t * size, size);
+            m.z = _w(d, o + (t + 1) * size);
+        }
+    }
+
+    function keyData(IUARegistry.FrostKey memory k) internal pure returns (bytes memory d) {
+        d = abi.encodePacked(k.groupKey, k.threshold, uint16(k.members.length));
+        for (uint256 i; i < k.members.length; ++i) {
+            IUARegistry.FrostMember memory m = k.members[i];
+            for (uint256 j; j < m.commitments.length; ++j) {
+                d = bytes.concat(d, m.commitments[j]);
+            }
+            d = bytes.concat(d, m.r, m.z);
+        }
+    }
+
+    function _w(bytes memory d, uint256 o) private pure returns (bytes32 v) {
+        assembly ("memory-safe") {
+            v := mload(add(add(d, 32), o))
+        }
+    }
+
+    function _slice(bytes memory d, uint256 o, uint256 n) private pure returns (bytes memory r) {
+        r = new bytes(n);
+        assembly ("memory-safe") {
+            mcopy(add(r, 32), add(add(d, 32), o), n)
+        }
     }
 
     /// A portable record's signature (`setKemKey`, `setPqzKey`) from its stored byte form: an `msig`'s

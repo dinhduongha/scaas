@@ -428,6 +428,34 @@ export function msigStructure(keyData) {
     return { kind: u16(d, o), id: hex(d.subarray(o + 2, o + 34)), weight: u16(d, o + 34) };
   }) };
 }
+/** typed-signing R1b (TS-D13): the typed key of packed key data — `webauthn-p256` `WebAuthnKey{x, y, rpIdHash}`; MuSig2
+ *  `MuSig2Key{aggKey, memberKeys}`; FROST `FrostKey{groupKey, threshold, members: FrostMember{commitments, r, z}[]}` (points
+ *  of 33 B on secp256k1, 64 B on bn254); null for any other kind. The registry assembles the same bytes (same id). */
+export function typedKey(kind, keyData) {
+  const k = Number(kind);
+  const d = bytes(keyData);
+  const at = (o, n) => hex(d.subarray(o, o + n));
+  if (k === 0x0100) {
+    need(d.length === 96, 'length');
+    return { x: at(0, 32), y: at(32, 32), rpIdHash: at(64, 32) };
+  }
+  const s = k === 0x0110 || k === 0x0111 ? 33 : k === 0x0112 || k === 0x0113 ? 64 : 0;
+  if (s === 0) return null;
+  if (k === 0x0110 || k === 0x0112) {
+    need(d.length >= s + 2 && d.length === s + 2 + u16(d, s) * s, 'length');
+    return { aggKey: at(0, s), memberKeys: Array.from({ length: u16(d, s) }, (_, i) => at(s + 2 + i * s, s)) };
+  }
+  need(d.length >= s + 4, 'length');
+  const [t, n] = [u16(d, s), u16(d, s + 2)];
+  const per = (t + 1) * s + 32;
+  need(d.length === s + 4 + n * per, 'length');
+  return { groupKey: at(0, s), threshold: t, members: Array.from({ length: n }, (_, i) => {
+    const o = s + 4 + i * per;
+    return { commitments: Array.from({ length: t }, (_, j) => at(o + j * s, s)), r: at(o + t * s, s), z: at(o + (t + 1) * s, 32) };
+  }) };
+}
+const TYPED_ENTRY = { 0x0100: 'registerWebAuthn', 0x0110: 'registerMuSig2', 0x0112: 'registerMuSig2', 0x0111: 'registerFrost',
+  0x0113: 'registerFrost' };
 const memberSigJson = ({ index, keyData = '0x', sig }) => ({ index: Number(index), keyData: hex(orEmpty(keyData)), sig: hex(bytes(sig)) });
 /** A `UASig{keyData, signature, members}` (TS-D12): native — `signature`; a derived single key — `keyData` (empty for the stored
  *  kinds) + `signature`; an msig — `members` ({index, keyData (empty), sig}); a portable record's signature never has `keyData`. */
@@ -441,9 +469,17 @@ const tailLen = (b) => 32 + pad32(bytes(b).length); // a `bytes` tail: length wo
 const kemKeyLen = (k) => 96 + tailLen(k.mlkemEk);
 const attrsLen = (a) => 128 + tailLen(a.pqzKey) + kemKeyLen(a.kem);
 const memberSigsLen = (m) => 32 + m.reduce((n, x) => n + 32 + 96 + tailLen(x.keyData) + tailLen(x.sig), 0);
-/** The ABI calldata length of a `register` / `registerMsig` / `setKemKey` call from its typed arguments (selector included). */
+const bytesArrLen = (xs) => 32 + xs.reduce((n, x) => n + 32 + tailLen(x), 0); // a `bytes[]` tail
+const muSig2Len = (k) => 64 + tailLen(k.aggKey) + bytesArrLen(k.memberKeys);
+const frostLen = (k) => 96 + tailLen(k.groupKey) + 32 + k.members.reduce((n, m) => n + 32 + 96 + bytesArrLen(m.commitments) + tailLen(m.r), 0);
+/** The ABI calldata length of a `register` / `registerMsig` / `registerWebAuthn` / `registerMuSig2` / `registerFrost` /
+ *  `setKemKey` call from its typed arguments (selector included). */
 export function registryCalldataLength(entry, a) {
   if (entry === 'register') return 4 + 160 + tailLen(a.keyData) + attrsLen(a.attrs) + tailLen(a.pop) + tailLen(a.pqzPop);
+  const rest = () => attrsLen(a.attrs) + tailLen(a.pop) + tailLen(a.pqzPop);
+  if (entry === 'registerWebAuthn') return 4 + 192 + rest();
+  if (entry === 'registerMuSig2') return 4 + 160 + muSig2Len(a.key) + rest();
+  if (entry === 'registerFrost') return 4 + 160 + frostLen(a.key) + rest();
   if (entry === 'registerMsig') {
     return 4 + 128 + (64 + 32 + 96 * a.structure.members.length) + attrsLen(a.attrs) + memberSigsLen(a.pop) + tailLen(a.pqzPop);
   }
@@ -452,8 +488,9 @@ export function registryCalldataLength(entry, a) {
 }
 
 /**
- * The typed arguments of the registration (TS-D10 … TS-D12): `{ entry: 'register' | 'registerMsig', args, kemFill }`, `args`
- * the named JSON of `register(kind, keyData, attrs, pop, pqzPop)` or `registerMsig(structure, attrs, pop, pqzPop)` with
+ * The typed arguments of the registration (TS-D10 … TS-D13): `{ entry, args, kemFill }`, `args` the named JSON of
+ * `register(kind, keyData, attrs, pop, pqzPop)`, `registerMsig(structure, attrs, pop, pqzPop)`, `registerWebAuthn(key, attrs,
+ * pop, pqzPop)` (`webauthn-p256`) or `registerMuSig2` / `registerFrost(kind, key, attrs, pop, pqzPop)` (`typedKey`) with
  * `attrs = { pqzKey, pqzPopHash, kem: KemKey, kemPkHash }`. The KEM key is version 0 (owner 2026-10-31) in one of two forms:
  * the full key (`kem`, `kemPkHash` 0) or, only when the full call would not fit one transaction (`registryCalldataLength` over
  * `REGISTER_CALLDATA_LIMIT`; X0: PQZH n2560-kmax16384 with a PQZ key) or when `kemCommit: true`, the hash commit (`kem` =
@@ -468,10 +505,12 @@ export function registrationArgs({ kind, keyData, pqzKey, pqzPopHash, pqzPop, ke
   const attrs = { pqzKey: hex(orEmpty(pqzKey)), pqzPopHash: hex(hasPqz || present(pqzPopHash) ? proofHashOf(pqzPop, pqzPopHash) : Z32),
     kem: kemKeyOf(kemPk), kemPkHash: ZW };
   const msig = k === 0x0120;
-  const entry = msig ? 'registerMsig' : 'register';
+  const entry = msig ? 'registerMsig' : TYPED_ENTRY[k] ?? 'register';
   const common = { attrs, pqzPop: hex(orEmpty(pqzPop)) };
   const args = msig ? { structure: msigStructure(keyData), ...common, pop: (pop ?? []).map(memberSigJson) }
-    : { kind: k, keyData: hex(bytes(keyData)), ...common, pop: hex(orEmpty(pop)) };
+    : entry === 'registerWebAuthn' ? { key: typedKey(k, keyData), ...common, pop: hex(orEmpty(pop)) }
+      : entry !== 'register' ? { kind: k, key: typedKey(k, keyData), ...common, pop: hex(orEmpty(pop)) }
+        : { kind: k, keyData: hex(bytes(keyData)), ...common, pop: hex(orEmpty(pop)) };
   // a scheme byte alone (no key bytes) would read as a commit: refuse a malformed key before choosing
   const full = orEmpty(kemPk);
   const commit = full.length !== 0 && (kemCommit ?? registryCalldataLength(entry, args) > REGISTER_CALLDATA_LIMIT);

@@ -245,7 +245,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         Group[4] memory gs = _mains();
         for (uint256 k; k < 4; ++k) {
             Group memory g = gs[k];
-            bytes memory call = abi.encodeCall(reg.register, (g.kind, g.keyData, _none(), g.pop, ""));
+            bytes memory call = UACall.registerCall(g.kind, g.keyData, _none(), g.pop, "");
             (uint256 lo, uint256 hi) = (20_000, 8_000_000); // lo fails, hi succeeds
             while (hi - lo > 250) {
                 uint256 mid = (lo + hi) / 2;

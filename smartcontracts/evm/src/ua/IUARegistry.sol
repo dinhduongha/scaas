@@ -53,6 +53,37 @@ interface IUARegistry is IERC5267 {
         MsigMember[] members;
     }
 
+    /// A `webauthn-p256` key (typed-signing TS-D13, Appendix X row 12): the P-256 point and the relying party's
+    /// `rpIdHash`; the registry assembles the key data `x ‖ y ‖ rpIdHash` (96 B), so the id and every digest are the
+    /// packed bytes'.
+    struct WebAuthnKey {
+        bytes32 x;
+        bytes32 y;
+        bytes32 rpIdHash;
+    }
+
+    /// A MuSig2 group key (TS-D13): `aggKey` and the n sorted member keys, each one point (`musig2-secp256k1`: 33 B
+    /// compressed, `musig2-bn254`: 64 B); assembled `aggKey ‖ u16 n ‖ n × key`.
+    struct MuSig2Key {
+        bytes aggKey;
+        bytes[] memberKeys;
+    }
+
+    /// One FROST member (TS-D13): its `threshold` Feldman commitments, the PoK nonce point `r` (R_i) and response `z`.
+    struct FrostMember {
+        bytes[] commitments;
+        bytes r;
+        bytes32 z;
+    }
+
+    /// A FROST group key (TS-D13): points of 33 B (`frost-secp256k1`) or 64 B (`frost-bn254`); assembled `groupKey ‖
+    /// u16 threshold ‖ u16 n ‖ n × (threshold commitments ‖ r ‖ z)`.
+    struct FrostKey {
+        bytes groupKey;
+        uint16 threshold;
+        FrostMember[] members;
+    }
+
     /// A KEM public key (TS-D11): scheme 1 = ML-KEM-1024 `mlkemEk` (1,568 B) + X25519 `x25519`. The registry assembles
     /// `kemPk = scheme ‖ mlkemEk ‖ x25519` (1,601 B) for storage and `kemPkHash = keccak256(kemPk)`. All zero / empty =
     /// no key.
@@ -167,7 +198,8 @@ interface IUARegistry is IERC5267 {
     /// EIP-712 digest of UAAuth(ua, purposeTag, digest) under this registry's domain: what native signers sign.
     function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
 
-    /// A single-key kind (every derived kind but `msig`, which is `registerMsig`; `UAKeyData(0x0120)` here). `pop`: the
+    /// A single-key kind (every derived kind but `msig`, `webauthn-p256`, MuSig2 and FROST, which register through
+    /// `registerMsig` / `registerWebAuthn` / `registerMuSig2` / `registerFrost`; `UAKeyData(kind)` here). `pop`: the
     /// kind's signature over `uaMessage(kind, PURPOSE_POP_V2, registrationDigest(ua, kind, pqzKeyHash, kemRecordHash,
     /// attrs.pqzPopHash))`. `attrs`: only a holder
     /// (`mldsa44`, `mldsa65`, `fndsa512`, a PQ-eligible `msig`; UA-6 U3, UA8-D12) carries a PQZ key or a KEM record.
@@ -184,6 +216,20 @@ interface IUARegistry is IERC5267 {
     /// by ECDSA with its own key only, never ERC-1271 through the delegate; a contract by ERC-1271 over it). Stored as
     /// `abi.encode(pop)` (`popOf`, `registrationOf`; "" for none).
     function registerMsig(MsigStructure calldata structure, UAAttrs calldata attrs, MemberSig[] calldata pop,
+        bytes calldata pqzPop) external returns (bytes32 ua);
+    /// `register` for `webauthn-p256` from its typed key (typed-signing TS-D13; `register(0x0100, …)` reverts
+    /// `UAKeyData(0x0100)`: one accepted form). The registry assembles `x ‖ y ‖ rpIdHash`; `pop` as `register`'s (one
+    /// WebAuthn assertion).
+    function registerWebAuthn(WebAuthnKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
+        bytes calldata pqzPop) external returns (bytes32 ua);
+    /// `register` for `kind` `musig2-secp256k1` (0x0110) or `musig2-bn254` (0x0112) from its typed key (TS-D13; another
+    /// kind, or a point of the wrong length, `UAKeyData(kind)`; `register` of these kinds reverts `UAKeyData(kind)`).
+    function registerMuSig2(uint16 kind, MuSig2Key calldata key, UAAttrs calldata attrs, bytes calldata pop,
+        bytes calldata pqzPop) external returns (bytes32 ua);
+    /// `register` for `kind` `frost-secp256k1` (0x0111) or `frost-bn254` (0x0113) from its typed key (TS-D13; another
+    /// kind, a point of the wrong length or a member without `threshold` commitments, `UAKeyData(kind)`; `register` of
+    /// these kinds reverts `UAKeyData(kind)`).
+    function registerFrost(uint16 kind, FrostKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
         bytes calldata pqzPop) external returns (bytes32 ua);
 
     /// Anyone (UA8-D8, P8): the `R_REG` proof of the UA's PQZ key, given later (or again) — `UAPqzPopHash` unless
@@ -242,6 +288,11 @@ interface IUARegistry is IERC5267 {
         bytes memory pop, bytes memory pqzPop);
     /// The typed structure of an `msig` (TS-D10); empty (threshold 0, no members) for any other id.
     function msigOf(bytes32 ua) external view returns (MsigStructure memory);
+    /// The typed key of a `webauthn-p256` / MuSig2 / FROST UA (TS-D13); empty for any other id (gen 2 forwards gen-1
+    /// records).
+    function webAuthnKeyOf(bytes32 ua) external view returns (WebAuthnKey memory);
+    function muSig2KeyOf(bytes32 ua) external view returns (MuSig2Key memory);
+    function frostKeyOf(bytes32 ua) external view returns (FrostKey memory);
     function popOf(bytes32 ua) external view returns (bytes memory);
     function pqzPopOf(bytes32 ua) external view returns (bytes memory);
     /// `setPqzKey`'s signature; empty when the key came with `register` (its consent is the `pop`) or there is none.

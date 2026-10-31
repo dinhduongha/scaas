@@ -114,3 +114,6 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   KEM rulings 2026-10-31): `register` for every kind incl. the packed `msig` key data and `abi.encode(MemberSig[])` pop,
   `UAAttrs{pqzKey, pqzPopHash, kemVersion, kemPk}`, `setKemKey(…, bytes kemPk, bytes sig)`, `setPqzKey(…, bytes sig)`,
   `requireAuthorized(…, bytes auth)` and `kemKeyOf` / `kemKeyAt` returning bytes. Not built.
+  `IUARegistryPackedKeys.sol` — `register` as it stood after typed-signing R1 and before R1b (TS-D13): the packed key
+  data of `webauthn-p256`, MuSig2 and FROST, now `registerWebAuthn` / `registerMuSig2` / `registerFrost` (typed keys, the
+  same assembled bytes and ids; `register` refuses those kinds). Not built.
