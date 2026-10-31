@@ -688,8 +688,20 @@ with every envelope word ABI-encoded — never `encodePacked` on `uint32 mode`),
 - [ ] Step 2: `forge build --sizes`; record per contract: entry cost (bytes per `mtx` / `ua` entry), freed bytes, and a
   projection for the full Part C entry list (C2–C6 counts: `WrappedPqzToken` ≈ 18 `mtx` + 11 `ua` entries,
   `WrappedZetherToken` ≈ 19 + 13, `NormalToken` 2 + 1, …).
-- [ ] Step 3: **decision gate (TS-D18):** every projected runtime ≤ 65,536 B ⇒ continue with pattern A; else STOP and
-  report to the controller (owner decides B′ / dropping proof-authorised envelope entries).
+- [ ] Step 2b: **size audit (owner 2026-10-31: C0 extended; measure and report only, adopt nothing).** Structural
+  levers only, no byte-shaving (owner rule). For the seven tokens + `UARegistry`: a per-contract breakdown (which
+  libraries / internal functions / modifiers are inlined, bytes each, what is duplicated across entries). Then try on
+  `WrappedPqzToken` (and project to the others), each lever alone on a scratch copy, recording runtime size, the gas
+  change of the affected entry tests (`forge test --gas-report` / the pinned gas tests) and the suites that break:
+  1. hot-path-free `internal` library code → `external` linked libraries (DELEGATECALL; admin, cancel, rare paths,
+     complex views first); 2. code duplicated by modifiers / internal helpers called from many entries → one shared
+     private function; 3. views → a lens contract or a module behind `fallback`; 4. `optimizer_runs` for the token
+     profile (200 → 50 / 1); 5. `via_ir = true` (measure only: build time, size, gas). Report a table (lever × contract:
+     bytes saved, gas delta per call, effort, risk) in the run log and `docs/research/evm-size-levers.md`, with a
+     recommendation; the owner chooses which levers C2–C6 use.
+- [ ] Step 3: **decision gate (TS-D18):** every projected runtime ≤ 65,536 B (with or without the levers the owner
+  picks) ⇒ continue with pattern A; else STOP and report to the controller (owner decides B′ / dropping
+  proof-authorised envelope entries). Either way stop after Step 2b for the owner's lever choice.
 - [ ] Step 4: commit `typed-signing C0: named-entry pattern and size projection` (the spike code is kept as the start
   of C2–C5).
 
