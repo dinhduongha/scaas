@@ -829,7 +829,8 @@ pub fn job_call(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &Relay
 /// `transfer` to either (argument 1), `approve` to either as spender (argument 1; an amount 0 withdraws, allowed),
 /// `transfer_from` with either as spender or `to` (arguments 0, 2), a `Holder::Addr` of either as the `to` / payee
 /// (argument 1) of `ua_pay` / `ua_pay_meta` / `ua_transfer` (outside `ua_relay`), `mtx_mandate_pay`, `mtx_withdraw`,
-/// `mtx_set_payee` (unless it withdraws the approval), or as either order's `destination` of `settle`; for `relay` /
+/// `mtx_set_payee` (unless it withdraws the approval), the delegate (argument 1) of `mtx_set_mandate` (an executor
+/// delegate is anyone's: `relay` runs `mtx_mandate_pay` as it), or as either order's `destination` of `settle`; for `relay` /
 /// `ua_relay`, the relayed target call by the same rule. Coins on the router are stranded; the executor runs targets as
 /// itself, so the next relay could take whatever it holds or is approved.
 pub fn pays_router(call: &InvokeContractArgs, policy: &RelayFeePolicy) -> bool {
@@ -845,7 +846,7 @@ pub fn pays_router(call: &InvokeContractArgs, policy: &RelayFeePolicy) -> bool {
         b"pay" | b"pay_meta" | b"transfer" => to == Some(&ScVal::Address(x.clone())),
         b"approve" => to == Some(&ScVal::Address(x.clone())) && a.get(2).and_then(scval_i128) != Some(0),
         b"transfer_from" => [0, 2].iter().any(|&i| a.get(i) == Some(&ScVal::Address(x.clone()))),
-        b"ua_pay" | b"ua_pay_meta" | b"ua_transfer" | b"mtx_mandate_pay" | b"mtx_withdraw" => to == Some(&holder_addr(x)),
+        b"ua_pay" | b"ua_pay_meta" | b"ua_transfer" | b"mtx_mandate_pay" | b"mtx_withdraw" | b"mtx_set_mandate" => to == Some(&holder_addr(x)),
         b"mtx_set_payee" => to == Some(&holder_addr(x)) && a.get(2) != Some(&ScVal::Bool(false)),
         b"settle" => a.iter().take(2).any(|o| field(o, "destination") == Some(&holder_addr(x))),
         _ => false,
@@ -1785,6 +1786,36 @@ mod tests {
         assert!(check_recorded_auth(&json!({"results": [{"xdr": "AAAAAQ=="}]}), &call).is_ok(), "nothing recorded");
     }
 
+    /// Final review A-I1 note (spec §8): a lane that is a `G…` member of an `msig` never lends that membership to a job.
+    /// The entry the node attaches for `relayer = this lane` is root-only (the host, simulating in enforcing mode, then
+    /// refuses the registry's nested `lane.require_auth_for_args((ua, purpose, digest))`), and a recorded lane entry
+    /// carrying a `registry.require_authorized` sub-invocation fails the job before signing.
+    #[test]
+    fn ua_metatx_lane_entry_root_only_no_member_auth() {
+        let p = policy();
+        for (contract, f, args) in ua_ops(addr(LANE)) {
+            if matches!(f, "ua_cancel_nonce" | "ua_cancel") {
+                continue; // no relayer argument
+            }
+            let (call, auth, _) = ua_metatx_job(&NET7, &ua_op(contract, f, args), &lane(), &p).unwrap();
+            let src = source_entries(&auth);
+            assert_eq!(src.len(), 1, "{f}");
+            assert!(src[0].root_invocation.sub_invocations.is_empty(), "{f}: root only");
+            let member = SorobanAuthorizationEntry {
+                credentials: SorobanCredentials::SourceAccount,
+                root_invocation: SorobanAuthorizedInvocation {
+                    function: SorobanAuthorizedFunction::ContractFn(call.clone()),
+                    sub_invocations: vec![inv(CONTRACT, "require_authorized", vec![byt(&UA), byt(&[0x51; 32]), byt(&[0x52; 32])], vec![])]
+                        .try_into()
+                        .unwrap(),
+                },
+            };
+            let sim = json!({"results": [{"xdr": "AAAAAQ==", "auth": [json!(member.to_xdr_base64(Limits::none()).unwrap())]}]});
+            let e = check_recorded_auth(&sim, &call).unwrap_err().to_string();
+            assert!(e.contains("lane"), "{f}: {e}");
+        }
+    }
+
     /// CTR-MTX-27: outside `ua_relay`, a UA pay to the router (or its executor) strands the coins: refused.
     #[test]
     fn pays_router_covers_ua_pay() {
@@ -1802,8 +1833,9 @@ mod tests {
                 assert!(e.contains("router"), "{f} to {to}: {e}");
             }
         }
-        // every other entry that pays or approves a holder: the mandate's payee / withdrawal `to`, settle's destinations
-        for f in ["mtx_mandate_pay", "mtx_withdraw", "mtx_set_payee"] {
+        // every other entry that pays or approves a holder: the mandate's payee / withdrawal `to` / delegate (final review
+        // B-I1: a delegate equal to the executor lets anyone run `mtx_mandate_pay` through `relay`), settle's destinations
+        for f in ["mtx_mandate_pay", "mtx_withdraw", "mtx_set_payee", "mtx_set_mandate"] {
             for to in [WALLET2, ex.as_str()] {
                 let (contract, _, mut args) = ua_ops(ScVal::Void).into_iter().find(|o| o.1 == f).unwrap();
                 args[1] = h_addr(to);
@@ -1815,6 +1847,9 @@ mod tests {
                 }
             }
         }
+        let (contract, _, mut args) = ua_ops(ScVal::Void).into_iter().find(|o| o.1 == "mtx_set_mandate").unwrap();
+        args[1] = h_addr(LANE);
+        assert!(ua_metatx_job(&NET7, &ua_op(contract, "mtx_set_mandate", args), &lane(), &p).is_ok(), "an ordinary delegate");
         for to in [WALLET2, ex.as_str()] {
             for i in 0..2 {
                 let (_, _, mut args) = ua_ops(ScVal::Void).pop().unwrap();
