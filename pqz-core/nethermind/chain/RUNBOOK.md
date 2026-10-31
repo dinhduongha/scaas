@@ -618,17 +618,22 @@ to `WaitingForBlock` and the stuck transfer mined at once. With the flag the sea
 sealer is the chain tip; "not synced" never applies to it). Keep it on any sole-signer sealer behind a sentry.
 **`TxPool.MaxTxSize` 2 MiB = 2,097,152 on both nodes (owner ruling 2026-10-31; the default is 131,072 B, the split
 started with the old 1 MiB).** Reason: it matches `MaxRequestBodySize` 4 MiB, since `eth_sendRawTransaction` carries the
-transaction as hex (twice its size), so about 2 MiB is the largest raw transaction the RPC can take at all; the largest
-measured PQZ transaction is a PQZH M = 16 auditor-on proof of 544 KB (the PQZ e2e's largest is 107,268 B of calldata,
-op 7 with M = 8, which even the default would accept). Checked 2026-10-31 after recreating sealer then rpc: a raw
+transaction as hex (twice its size), so about 2 MiB is the largest raw transaction the RPC can take at all. It is
+headroom, not a calldata enabler: the calldata floor (below) already refuses anything above about 262 KB at pool
+admission, so 2 MiB is harmless. The largest PQZ e2e transaction is 107,268 B of calldata (op 7 with M = 8, which even
+the default would accept); the 544 KB PQZH M = 16 auditor-on proof is a bench shape only (no gas row, the Rust core
+refuses the shape), not a transaction anyone sends. Checked 2026-10-31 after recreating sealer then rpc: a raw
 transaction of 2,097,263 B (request body 4,194,6xx B) → HTTP 413 `-32005 Request body too large. The max request body
 size is 4194304 bytes.`, so the body limit refuses it before the pool sees it. **The size limit is not what bounds a
-transaction on 7622: Amsterdam's per-transaction gas cap is.** A 1.5 MiB calldata transaction is refused whatever its
-gas limit, `-32000 intrinsic gas too low: Intrinsic gas (execution 25180824, floor 100678296) exceeded cap of
-16777216` (EIP-7976 calldata floor 64 gas / byte, EIP-7825 cap 2^24); 240,000 B of calldata mined (block 2585),
-250,000 B with a 16,000,000 gas limit was refused (intrinsic gas too low). So about 262 KB of calldata is the most one
-transaction can carry here, and the 544 KB PQZH M = 16 proof cannot go in one transaction under Amsterdam (the probe
-already records M = 8 inputs above 2^24 as refused).
+transaction on the SCaaS testnet: the regular-gas cap is** ([CTR-PQZ-06](../../../docs/contracts/pq-zero-knowledge.md#CTR-PQZ-06),
+[CTR-PQZ-11](../../../docs/contracts/pq-zero-knowledge.md#CTR-PQZ-11)). On Amsterdam (EIP-8037 on from timestamp 1)
+Nethermind 2.2.0 caps a transaction's **regular gas** (intrinsic, the EIP-7976 calldata floor 15,000 + 64 per byte,
+execution) at 2^24 = 16,777,216; the **gasLimit** may go up to 2^32 − 1, and gas above 2^24 can pay only state gas
+(that is why `mtxPrepareAcc` with gasUsed 23.15 M and the 96.5 M release deploy mine). Hence at most
+(16,777,216 − 15,000) / 64 = 261,909 B of calldata per transaction: a 1.5 MiB calldata transaction is refused whatever
+its gas limit, `-32000 intrinsic gas too low: Intrinsic gas (execution 25180824, floor 100678296) exceeded cap of
+16777216`; 240,000 B of calldata mined (block 2585); 250,000 B with a 16,000,000 gas limit was refused because its
+floor (16,015,000) exceeds that gas limit, not the cap (the probe already records M = 8 inputs above 2^24 as refused).
 
 Both: `Network.FilterPeersByRecentIp` false (with the default a node drops a restarted peer's reconnects from the same
 IP for minutes, seen on the copy), the calls filter `jsonrpc.filter`, the same chainspec. The full enodes are in the two

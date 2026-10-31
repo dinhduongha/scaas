@@ -1988,7 +1988,11 @@ reset of 2026-10-22 the SCaaS testnet runs **200,000,000** (genesis `gasLimit` `
 bound no longer follows from the gas limit (the producer's EIP-7934 check holds it).
 
 Node and client limits on the SCaaS testnet: Nethermind `TxPool.MaxTxSize`
-1,048,576 and `Blocks.TargetBlockGasLimit` 200,000,000 in the node's `config.json` (80,000,000 at P6f), JSON-RPC defaults kept (P6f D8), node `max_gas_per_tx = 64_000_000` (owner 2026-10-22; `max_gas_per_tx = 16_000_000` at P6f), gateway body limit 1 MiB on job
+2,097,152 since the node split (owner ruling 2026-10-31, [NET-EVM-10](../networks/evm.md#NET-EVM-10); 1,048,576 before): it
+matches the 4 MiB `MaxRequestBodySize`, which carries at most a 2 MiB raw transaction as hex; it is headroom, not a
+calldata enabler, since on Amsterdam the regular-gas cap of 2^24 against the EIP-7976 floor (15,000 + 64 per byte)
+already refuses more than 261,909 B of calldata at pool admission (gas above 2^24 pays only state gas; the largest PQZ
+e2e transaction is 107,268 B), and `Blocks.TargetBlockGasLimit` 200,000,000 in the node's `config.json` (80,000,000 at P6f), JSON-RPC defaults kept (P6f D8), node `max_gas_per_tx = 64_000_000` (owner 2026-10-22; `max_gas_per_tx = 16_000_000` at P6f), gateway body limit 1 MiB on job
 submissions to the `pqz` chain profile only (64 KiB elsewhere) — recommendations to node operators
 ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)). This keeps gas an honest capacity meter: ≈ 28 transfers per 5 s block (at 80 M) while
 the floor binds, ≈ 10 at the 50 ms verify kill threshold; ≈ 45 GB/day of archive growth at sustained full load. The

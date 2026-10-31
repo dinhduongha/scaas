@@ -323,8 +323,12 @@ the public 8545 / 8546, the Docker-only 8547 for Blockscout and its own loopback
 **external nodes connect to `rpc` (the sentry), never to the sealer**; both nodes have fixed node keys. The sealer runs `TxPool.AcceptTxWhenNotSynced` true: as the sole signer it has no
 peer ahead of it, its sync mode turns `Disconnected` about 10 minutes after each session starts, and Nethermind then
 drops every transaction gossiped by `rpc` while blocks keep flowing. Both nodes run `TxPool.MaxTxSize` 2 MiB (owner
-ruling 2026-10-31: the 4 MiB request body carries at most a 2 MiB raw transaction as hex; the PQZH M = 16 auditor-on
-proof is 544 KB), although Amsterdam's per-transaction gas cap already limits a transaction to about 262 KB of calldata. Why: the key
+ruling 2026-10-31: it matches the 4 MiB `MaxRequestBodySize`, which carries at most a 2 MiB raw transaction as hex);
+it is harmless headroom, not a calldata enabler: on Amsterdam Nethermind 2.2.0 caps a transaction's regular gas
+(intrinsic, the EIP-7976 calldata floor 15,000 + 64 per byte, execution) at 2^24, while its gasLimit may reach 2^32 − 1
+and gas above 2^24 pays only state gas, so the floor refuses more than 261,909 B of calldata at pool admission
+([CTR-PQZ-06](../contracts/pq-zero-knowledge.md#CTR-PQZ-06), [CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11));
+the largest PQZ e2e transaction is 107,268 B. Why: the key
 leaves the process that answers RPC; peers and callers that misbehave reach only `rpc`; Blockscout gets the old-block
 state a pruned node lacks. Topology, enodes, start / stop order and recovery: [RUNBOOK](../../pqz-core/nethermind/chain/RUNBOOK.md)
 § Node split. Mainnet 22776: the same topology is proposed; the owner decides at launch.
