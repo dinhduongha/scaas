@@ -184,6 +184,27 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      **Owner 2026-10-30: timing and the 7622 reset are approved; run them after the three running streams are merged
      (`dex-round`, `ua-soroban`, `kem-scheme`)**, with no agent running during the two calibration runs (about 45–60 min
      quiet; the whole Task 13 + Task 9 about 2–3 h).
+  **Pre-freeze work order (owner 2026-10-31):** finish everything that changes contracts / the core, then freeze, then
+  audit, then the clients. Order:
+  1. T14 — UA-Soroban on the Stellar testnet (from 2026-11-03, SDK 30.0.0).
+  2. `ua8-soroban` (UA-8 Part B on Soroban), together with: the msig `pop` minimal form on **every** family (EVM
+     `UARegistry`, Soroban, NEAR, Algorand); the gen-1 registry kind set — **owner 2026-10-31: option (a)**, every
+     gen-1 deploy carries every kind the chain can run (`DeployBase` already does; add a gate that refuses a gen-1
+     deploy missing an EIP-2537 kind the probe passes; no `UARegistry` change); and the relay-fee minimum re-decision
+     (owner decides there; if it changes contracts it lands before the freeze, if it is node config it goes with P6i).
+  3. Zether verifier one merged MSM (EVM) — before `zether-soroban`, so the Soroban verifier is merged-MSM from the
+     start (the Z0 estimate 536 M–2,409 M vs the 400 M limit depends on it).
+  4. `zether-soroban` (Part Z; Z0 measures first).
+  5. C core crash at M = 16 (pqz-core; full gate).
+  6. Gas re-calibration on a quiet host (option (c), image `-calib`, 26 rows `n2304-kmax4096`; after item 5 because a
+     core change moves the timings; the owner stops other heavy sessions first; change the chainspec at the next SCaaS
+     testnet reset if it differs materially). Again before the SCaaS mainnet only if the core / library changes again
+     or the validator hardware differs.
+  7. **Freeze** the contracts of the built families (EVM + Soroban + NEAR + Algorand); later family rounds get an
+     add-on audit.
+  8. Contracts audit (plan draft `.superpowers/sdd/2026-10-31-contracts-audit/plan.md`; Codex / agy / Claude workflow —
+     owner decides reviewers).
+  9. P6h → P6i → P6j (below).
   6. P6h (clients + WASM) → P6i (node) → P6j (review) → P6-PUB drafts. In parallel: TradeEngine EVM ∥ non-EVM 1 × N (the TradeEngine stream is unblocked: the DEX round contracts are built on `dex-round`; open follow-ups: NODE-DEX-15's "no settlement worth less than its gas", the `UniswapExecutor` deploy script with the first Uniswap chain)
      (DEX).
   7. UA-7 PQ chat sessions (needs UA-8's KEM keys); then the next UA-Soroban / UA-8 plans in the family order (each spec answers the checklist [NET-ALL-84](docs/networks/README.md#NET-ALL-84))
@@ -402,7 +423,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   p99 51.0 ms vs 60 ms; D6 `pqz-core/pqzl/rust/runs/d6/results-d6.md`) — Task 14, own branch; (4) M = 16 Rust rows
   (`--multi-bench`) — Task 13; (5) deferred minors (heap check in `verify_only` C-M5, pqz-ffi OOM and fallible `Ctx`
   tests, panic-path test, `PQZL_MEM_*` echo, gate PASS line file, two-limb S3 oracle) — Task 5e.
-- [ ] **Rename token family** (BUILT on branch `token-rename` 2026-10-30, merge pending; owner 2026-10-13 / -18 / -19: right after the PQZL Rust port follow-ups, before P6h /
+- [x] **Rename token family** — DONE (merged into `main` with `d4550552`, 2026-10-30; was: BUILT on branch `token-rename`, merge pending; owner 2026-10-13 / -18 / -19: right after the PQZL Rust port follow-ups, before P6h /
   P6i / P6j / P6-PUB): `UnderlyingToken` → `WrappedToken`, `NoUnderlyingToken` → `NormalToken`, the whole family
   (`UnderlyingZetherToken` / `NoUnderlyingZetherToken`, `UnderlyingLib`, `IUnderlyingToken`, `TokenKind` `NONE` →
   `NORMAL`, `UNDERLYING` → `WRAPPED` and the `_ZETHER` / `_PQZ` / `_ZETHER_PQZ` variants); names only (enum numbers, ABI,
