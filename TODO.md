@@ -164,6 +164,13 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      (DEX).
   7. UA-7 PQ chat sessions (needs UA-8's KEM keys); then the next UA-Soroban / UA-8 plans in the family order (each spec answers the checklist [NET-ALL-84](docs/networks/README.md#NET-ALL-84))
      NEAR → Cosmos / Sui / Aptos / Solana → Algorand (`fndsa512` once AVM v14 ships `falcon_verify` Falcon-DET-512, the same key signing deterministically there; no Falcon-DET-1024 kind, owner 2026-10-30) → TON (registry design first).
+     **msig `pop` minimal form, every family (owner 2026-10-31: do it together with UA-8 Part B `ua8-soroban`):** a
+     submitted msig `pop` that carries more member signatures than needed can be front-run with a slot removed and
+     still register the same id with other `pop` bytes / `pop_hash` (no authority gained; CTR-UA-07 "identical record or
+     revert" broken; EVM `UARegistry._msig` and the Soroban registry alike — UA-Soroban final review A m1). Rule: with
+     T = the slots' total weight and N the threshold, require T >= N and, for every slot i, T - weight(i) < N (each
+     slot necessary); clientkeys / ua-rs build only minimal sets; regenerate msig vector rows; one registry change
+     with Part B's so the 4-set gas re-pin and the DEX KAT regeneration happen once.
      **Soroban job fee cap (owner question, from UA-Soroban T10 2026-10-31):** the node has no per-job resource-fee cap
      on Soroban jobs. A first call to a fresh contract pays its 60-day TTL rent (measured 50–90 M stroops vs ≈0.7 M
      warm); `deploy.sh` now warms every contract at deploy (controller ruling), but an operator cap per job / per lane
