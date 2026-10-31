@@ -91,7 +91,7 @@ fn register(row: &Value, hash_only: bool) -> Result<HolderPop> {
     let (key, pop, hash, pk) = (bytes(&a["pqzKey"]), bytes(&row["pqzPop"]), b32(&a["pqzPopHash"]), bytes(&a["kemPk"]));
     let opt = |b: &[u8]| (!b.is_empty()).then_some(b.to_vec());
     let (key, pop, pk) = (opt(&key), opt(&pop), opt(&pk));
-    let kem = (num(&a["kemVersion"]) != 0 || pk.is_some()).then(|| (num(&a["kemVersion"]), pk.clone().unwrap_or_default()));
+    assert_eq!(num(&a["kemVersion"]), 0, "register takes no KEM version (UAAttrs' word: 0)");
     holder_pop_message(
         num(&row["kind"]) as u16,
         &b32(&row["ua"]),
@@ -99,7 +99,7 @@ fn register(row: &Value, hash_only: bool) -> Result<HolderPop> {
         key.as_deref(),
         if hash_only { None } else { pop.as_deref() },
         (!zero(&hash)).then_some(&hash),
-        kem.as_ref().map(|(v, p)| (*v, &p[..])),
+        pk.as_deref(), // the register KEM key: version 0 (owner 2026-10-31)
     )
 }
 
@@ -177,7 +177,7 @@ fn portable_rows_typed() {
         assert_eq!(rec["pqzKeyHash"], r["pqzKeyHash"], "{}", r["name"]);
         assert_eq!(td["message"]["pqzPopHash"], r["attrs"]["pqzPopHash"], "{}", r["name"]);
         assert_eq!(hx(&hash_struct(&td["types"], "UAKemRecord", kem)), r["kemRecordHash"], "{}", r["name"]);
-        let (pk, v) = (bytes(&r["attrs"]["kemPk"]), num(&r["attrs"]["kemVersion"]));
+        let (pk, v) = (bytes(&r["attrs"]["kemPk"]), 0); // the register KEM key is version 0 (owner 2026-10-31)
         assert_eq!(hx(&kem_record_hash(&ua, v, &pk).unwrap()), r["kemRecordHash"], "{}", r["name"]);
         if pk.is_empty() {
             // TS-D2: no KEM record = UAKemRecord{ua, 0, 0, 0}
@@ -244,8 +244,8 @@ fn portable_vectors() {
         let pk = bytes(&r["attrs"]["pqzKey"]);
         if !pk.is_empty() {
             with_pqz += 1;
-            let kem = (num(&r["attrs"]["kemVersion"]) != 0).then(|| (num(&r["attrs"]["kemVersion"]), bytes(&r["attrs"]["kemPk"])));
-            let got = pqz_reg_message(kind, &ua, &pk, kem.as_ref().map(|(v, p)| (*v, &p[..]))).unwrap();
+            let kem = bytes(&r["attrs"]["kemPk"]);
+            let got = pqz_reg_message(kind, &ua, &pk, (!kem.is_empty()).then_some(&kem[..])).unwrap();
             assert_eq!(hx(&got), r["pqzRegMessage"], "{}", r["name"]);
             // TS-D3: R_REG proves over the typed UAPortableRecord of the registering kind
             assert_eq!(got, ua_message(PQZ_SCHEME, &pop_v2_tag(), &b32(&r["portableRecordDigest"])).unwrap(), "{}", r["name"]);
@@ -281,10 +281,14 @@ fn kem_record_vectors() {
     assert_eq!(kem_record_digest(&ua, 1, &kem(1, 1600)), Err(UAError::KemKeyLength));
     assert_eq!(kem_record_digest(&ua, 1, &kem(1, 1602)), Err(UAError::KemKeyLength));
     assert_eq!(kem_record_digest(&ua, 1, &[]), Err(UAError::KemKeyLength));
-    // TS-D2: (0, no key) is the zero record's hash (never a signed record); version 0 with a key is UAKemVersion
+    // TS-D2: (0, no key) is the zero record's hash; owner 2026-10-31: version 0 with a key is the register key's record
+    // (scheme != 0: scheme 0 is UAKemScheme), never a setKemKey record (UAKemVersion)
     let th = keccak256(b"UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)");
     assert_eq!(kem_record_hash(&ua, 0, &[]).unwrap(), keccak256(&[th, ua, [0; 32], [0; 32], [0; 32]].concat()));
-    assert_eq!(kem_record_hash(&ua, 0, &kem(1, 1601)), Err(UAError::KemVersion));
+    let mut one = [0u8; 32];
+    one[31] = 1;
+    assert_eq!(kem_record_hash(&ua, 0, &kem(1, 1601)).unwrap(), keccak256(&[th, ua, [0; 32], one, keccak256(&kem(1, 1601))].concat()));
+    assert_eq!(kem_record_hash(&ua, 0, &kem(0, 1601)), Err(UAError::KemScheme));
     assert_eq!(kem_record_hash(&ua, 1, &[]), Err(UAError::KemKeyLength));
     assert_eq!(kem_record_digest(&ua, 0, &[]), Err(UAError::KemVersion));
     // CTR-UA-32: scheme 1 only; 0, the reserved 2 and an unknown id are UAKemScheme, whatever the length
@@ -425,7 +429,7 @@ fn negatives_refused() {
             _ => sig_level += 1, // PQ / classical signatures: verified by the signature vectors (no verifier in this crate)
         }
     }
-    assert_eq!((run, sig_level), (65, 5), "{} negatives", arr(&p, "negatives").len());
+    assert_eq!((run, sig_level), (62, 5), "{} negatives", arr(&p, "negatives").len());
     println!("{run} digest-layer negatives refused, {sig_level} signature-level");
 }
 
@@ -499,7 +503,7 @@ fn malformed_msig_key_data() {
     for kd in [&[0u8, 2, 0][..], &[0, 2, 0, 2, 9, 9][..]] {
         let want = Err(UAError::KeyData("length"));
         assert_eq!(holder_pop_message(0x0120, &ua, kd, Some(&pk), None, Some(&proof), None).map(|_| ()), want);
-        assert_eq!(holder_pop_message(0x0120, &ua, kd, None, None, None, Some((1, &[0; 1600]))).map(|_| ()), want);
+        assert_eq!(holder_pop_message(0x0120, &ua, kd, None, None, None, Some(&[0; 1600])).map(|_| ()), want);
         assert_eq!(pqz_key_record_message(0x0120, &ua, kd, &pk, None, Some(&proof), false).map(|_| ()), want);
     }
     // no attributes: key data is not consulted; an msig without key data is not a holder

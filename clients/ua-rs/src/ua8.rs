@@ -64,16 +64,14 @@ fn typed(struct_hash: &[u8; 32]) -> [u8; 32] {
 }
 
 /// `hashStruct(UAKemRecord{ua, version, scheme: kem_pk[0], kemPkHash: keccak256(kem_pk)})` over the whole scheme-1 key:
-/// version 1 … 2^64 − 1, `kem_pk` = scheme byte ‖ key (empty: `KemKeyLength`; scheme not enabled: `KemScheme`; another
-/// length: `KemKeyLength`). No record (`version` 0 and no key) is the zero record `UAKemRecord{ua, 0, 0, 0}` (TS-D2); the
-/// `kem` word of a `UAPortableRecord`.
+/// version 0 … 2^64 − 1 (version 0 = the key given at `register`, owner 2026-10-31), `kem_pk` = scheme byte ‖ key (empty:
+/// `KemKeyLength`; scheme not enabled, 0 included: `KemScheme`; another length: `KemKeyLength`). No key (`version` 0 and no
+/// key) is the zero record `UAKemRecord{ua, 0, 0, 0}` (TS-D2: a present record has scheme ≠ 0); the `kem` word of a
+/// `UAPortableRecord`.
 pub fn kem_record_hash(ua: &[u8; 32], version: u64, kem_pk: &[u8]) -> Result<[u8; 32]> {
     let th = portable_typehash("UAKemRecord");
     if version == 0 && kem_pk.is_empty() {
         return Ok(keccak(&[&th, ua, &[0; 32], &[0; 32], &[0; 32]]));
-    }
-    if version == 0 {
-        return Err(UAError::KemVersion);
     }
     let scheme = match kem_pk.first() {
         None => return Err(UAError::KemKeyLength),
@@ -85,7 +83,7 @@ pub fn kem_record_hash(ua: &[u8; 32], version: u64, kem_pk: &[u8]) -> Result<[u8
     }
     Ok(keccak(&[&th, ua, &word(version), &word(scheme as u64), &keccak256(kem_pk)]))
 }
-/// The typed `UAKemRecord` digest `setKemKey` signs (a real record: version 0 is `KemVersion`).
+/// The typed `UAKemRecord` digest `setKemKey` signs (versions ≥ 1: version 0 is the `register` key, `KemVersion` here).
 pub fn kem_record_digest(ua: &[u8; 32], version: u64, kem_pk: &[u8]) -> Result<[u8; 32]> {
     if version == 0 {
         return Err(UAError::KemVersion);
@@ -179,15 +177,15 @@ pub struct HolderPop {
 }
 
 /// The portable PoP message of a registration. Attributes: `pqz_key` with its proof `pqz_pop` (or only its hash
-/// `pqz_pop_hash`; a relayer may hold only that) and the initial KEM record `(version >= 1, kem_pk)`; `None` / `(0, [])` =
-/// absent. Only holders may carry them (`PqzHolder`, `KemHolder`; an `msig` needs `key_data` to show it is PQ-eligible); a
+/// `pqz_pop_hash`; a relayer may hold only that) and the initial KEM key `kem_pk` (its record is always version 0, owner
+/// 2026-10-31: no version input); `None` / empty = absent. Only holders may carry them (`PqzHolder`, `KemHolder`; an `msig` needs `key_data` to show it is PQ-eligible); a
 /// PQZ key always comes with its proof hash and only with it (`PqzPopHash`).
 pub fn holder_pop_message(
     kind: u16, ua: &[u8; 32], key_data: &[u8], pqz_key: Option<&[u8]>, pqz_pop: Option<&[u8]>, pqz_pop_hash: Option<&[u8; 32]>,
-    kem: Option<(u64, &[u8])>,
+    kem_pk: Option<&[u8]>,
 ) -> Result<HolderPop> {
     let pqz_key = pqz_key.filter(|k| !k.is_empty());
-    let kem = kem.filter(|(v, pk)| *v != 0 || !pk.is_empty());
+    let kem = kem_pk.filter(|pk| !pk.is_empty());
     if pqz_key.is_some() || kem.is_some() {
         let holder = holds(kind, key_data)?;
         if pqz_key.is_some() && !holder {
@@ -202,8 +200,7 @@ pub fn holder_pop_message(
         return Err(UAError::PqzPopHash);
     }
     let pqz_key_hash = pqz_key.map(pqz_key_hash_of).transpose()?.unwrap_or([0; 32]);
-    let (kem_version, kem_pk) = kem.unwrap_or((0, &[]));
-    let kem_record_hash = kem_record_hash(ua, kem_version, kem_pk)?;
+    let kem_record_hash = kem_record_hash(ua, 0, kem.unwrap_or(&[]))?;
     let registration = registration_digest(ua, kind, &pqz_key_hash, &kem_record_hash, &pop_hash);
     let message = ua_message(kind, &pop_v2_tag(), &registration)?;
     Ok(HolderPop {
@@ -218,10 +215,9 @@ pub fn holder_pop_message(
 }
 
 /// The message `R_REG` proves over: `ua_message(0x0142, POP_V2, portable_record_digest(ua, kind, key_hash(pqz_key),
-/// kem_record_hash))`, `kind` the registering kind (TS-D3); `kem` `None` / `(0, [])` = no KEM record.
-pub fn pqz_reg_message(kind: u16, ua: &[u8; 32], pqz_key: &[u8], kem: Option<(u64, &[u8])>) -> Result<[u8; 32]> {
-    let (kem_version, kem_pk) = kem.unwrap_or((0, &[]));
-    let kem_record_hash = kem_record_hash(ua, kem_version, kem_pk)?;
+/// kem_record_hash))`, `kind` the registering kind (TS-D3); `kem_pk` the register KEM key (version 0), `None` / empty = none.
+pub fn pqz_reg_message(kind: u16, ua: &[u8; 32], pqz_key: &[u8], kem_pk: Option<&[u8]>) -> Result<[u8; 32]> {
+    let kem_record_hash = kem_record_hash(ua, 0, kem_pk.unwrap_or(&[]))?;
     ua_message(PQZ_SCHEME, &pop_v2_tag(), &portable_record_digest(ua, kind, &pqz_key_hash_of(pqz_key)?, &kem_record_hash))
 }
 
