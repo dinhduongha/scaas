@@ -98,3 +98,8 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   the self-test `requirePqz` stays in `src/`), and the tests with the allowlist cases: `test/pqz/PqzCt.t.sol`
   (`test_safetyAllowlist`), `test/pqz/PqzNormal.t.sol` (`test_createToken_enabledKindOnAForbiddenChain_reverts`),
   `test/pqz/UAPqzVerifier.t.sol` (the 22776 constructor revert). Not built.
+- `zether-msm/`: the per-equation classical Zether verifier as it stood on `main` before branch `zether-msm` folded every
+  equation into one MSM (CTR-ZTH-53; owner: backup, not delete): `ZetherVerifier.sol` (eight Σ MSMs and two per
+  Bulletproof, `verifyRange` called per proof) and its `IZetherVerifier.sol`, imports re-pointed at `src/`. **The one
+  exception to "not compiled" above:** `test/zether/helpers/ZetherLegacyVerifiers.sol` imports them, so the differential
+  suite `test/zether/ZetherMsmDifferential.t.sol` runs old and new side by side. Never deployed.
