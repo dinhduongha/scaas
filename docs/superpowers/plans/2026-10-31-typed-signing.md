@@ -857,3 +857,17 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-42** (ty
   owner ruling per form).
 - Rollback point: branch `pre-typed-signing` and tag `ref/pre-typed-signing` at main `10ac1417` (the last packed /
   generic-envelope "economy" version).
+- **KEM key at `register` (owner rulings 2026-10-31, for Part R / R1 and Part P's struct values):**
+  1. The KEM key given at `register` **always has version (index) 0** — the first record; `register` takes no
+     `kemVersion` argument any more. `setKemKey` adds later versions ≥ 1 (write-once per version, as today). "No KEM
+     key" is then told by the record itself, not by version 0: `UAKemRecord{ua, 0, scheme 0, kemPkHash 0}` = absent;
+     a present version-0 record has `scheme ≠ 0`. `kemKeyOf` returns the highest stored version; `kemKeyAt(ua, 0)` is
+     the registration key.
+  2. **Hash-commit only when the full key does not fit one transaction.** Normally `register` carries the full
+     `KemKey` (as today). Only when the registration transaction would not fit (X0 found one case: PQZH
+     `n2560-kmax16384` with a PQZ key and a KEM key, 175 B over the calldata floor today) does the client send
+     `register` with the KEM record's hash only (the PoP signs the same `UAKemRecord{ua,0,scheme,kemPkHash}`), and a
+     second transaction `storeKemKey(bytes32 ua, KemKey key)` — open to anyone, no new signature, the pattern of
+     `storePqzPop` — stores version 0 after checking `hash(key) == kemPkHash`. Until then `kemKeyOf` / `kemKeyAt(ua, 0)`
+     return nothing (registered, KEM not usable yet); the full key always ends up in contract state (P2 / UA-8 copy).
+     Soroban: the same rule in `ua8-soroban` B2 / B3 (it already has `store_pqz_pop`).
