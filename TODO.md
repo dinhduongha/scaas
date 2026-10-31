@@ -192,8 +192,9 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      gen-1 deploy carries every kind the chain can run (`DeployBase` already does; add a gate that refuses a gen-1
      deploy missing an EIP-2537 kind the probe passes; no `UARegistry` change); and the relay-fee minimum re-decision
      (owner decides there; if it changes contracts it lands before the freeze, if it is node config it goes with P6i).
-  2d. **NOT on this branch** — `pre-typed-signing` is the economy path without the typed-signing round; its full
-     next steps are in `ROADMAP-pre-typed-signing.md`. (On `main`: **`typed-signing` round** (owner 2026-10-31, before the freeze; inventory and decisions in the private note
+  2d. **Skipped on this branch** — `pre-typed-signing` is the economy path without the typed-signing round; how to
+     roll back, the differences from `main` and every step to the SCaaS mainnet are in
+     [ROADMAP-pre-typed-signing.md](ROADMAP-pre-typed-signing.md). (On `main`: **`typed-signing` round** (owner 2026-10-31, before the freeze; inventory and decisions in the private note
      `scratchpad/eip712-inventory.md`):** every user-signed operation becomes a typed, readable EIP-712 struct — the
      EOA-visible paths (named typed entry points instead of opaque `MetaTransaction.data`: wrap,
      unwrap, wrapToUA, unwrapToUA, burn, addReserve, cancelNonce, shield, MandateWallet setMandate / setPayee / revoke,
