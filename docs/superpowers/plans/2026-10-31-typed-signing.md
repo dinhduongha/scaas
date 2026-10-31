@@ -6,7 +6,7 @@
 **Goal:** every operation a user signs is a typed, readable EIP-712 struct whose fields are the operation's own
 explicit parameters — (P) the chain-free UA records (`register` PoP, `R_REG` message, KEM record, PQZ key record, `msig`
 member signatures, Zether PoP) under a domain with only `name` + `version`; (C) every chain-bound meta-transaction as a
-**named entry point per operation** with its own typehash (no generic `mtxExecute` / hex `data` path left on tokens), the
+**named entry point per operation** with its own typehash (the generic `mtxExecute` / `mtxBatch` / `uaExecute` / `uaBatch` stay beside them, owner 2026-10-31), the
 UA twins, the trade / DEX cancels, receiver fee, relay fee, wrap-by-signature, Zether owner ops and PQZ auth; (X) every
 entry point takes **explicit named parameters** (REST/JSON-style), never a packed blob of several fields; (N) the node's
 job API takes explicit JSON fields per operation and builds the calldata / XDR itself.
@@ -196,23 +196,24 @@ House rules for every task:
 
 **Part C (named typed entry points; controller calls unless marked)**
 
-- **TS-D14 Named entries replace the generic path (owner option B).** On every contract on `MetaTxBase`: removed
-  `mtxExecute`, `executeMetaTransaction` (EIP-1776 alias), `mtxBatch`, `mtxExecuteWithFee`, `uaExecute`, `uaBatch`,
-  `mtxDigest(MetaTransaction)`, `uaDigest(UAMetaTransaction)`, `mtxSelectors()`, `_uaAllowed`, the
-  `MetaTransaction` / `UAMetaTransaction` structs and typehashes (→ legacy). Every op that was allowlisted gets
+- **TS-D14 Named entries added beside the kept generic path (owner option B; owner ruling 2026-10-31 on the plan:
+  keep `mtxExecute`, `mtxBatch`, `uaExecute`, `uaBatch`).** Every op that was allowlisted gets
   `mtx<Op>(MetaTxLib.Envelope e, <explicit op params>, bytes sig)` and, where it was UA-allowed,
   `ua<Op>(MetaTxLib.UAEnvelope e, <params>, UASig auth)`. `Envelope { address from; uint256 batch; uint256 nonce;
   uint256 validUntil; uint32 mode; address relayer; uint256 fee; address feeRecipient; }` (`UAEnvelope`: `bytes32 from`).
   Struct of op `<Op>`: `<Op>(address from,<op params>,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)`,
   UA twin `UA<Op>(bytes32 from,…)` (same canonical-zero rule for `relayer` / `feeRecipient` as today, `MetaTxLib.canon`).
-  The direct (non-meta) functions stay as they are. Mechanism: the entry builds the op's call and runs the existing
-  ticket self-call (`_selfCall`, as `uaUnwrap` does today), so the op bodies and `_msgSender()` semantics are unchanged;
-  the fee class / amount argument move from the `_mtxRule` table into each entry's call of the shared helper.
-- **TS-D15 Batching (controller call, owner may override; open question 1).** No generic batch remains: EIP-712 arrays
-  are homogeneous, so a typed batch of mixed operations is not expressible. Kept: `mtxBatchTransfer` /
-  `uaBatchTransfer` (homogeneous typed transfers). Dropped: `mtxBatch` / `uaBatch` (CTR-MTX-11 atomic mixed batches).
-  Each operation is signed and relayed on its own (the node's lanes give the parallelism); a homogeneous
-  `mtxBatch<Op>(Envelope[]…)` is added later only for a named use case.
+  **Kept as they are (owner):** the four generic entries `mtxExecute`, `mtxBatch`, `uaExecute`, `uaBatch` with the
+  `MetaTransaction` / `UAMetaTransaction` structs, typehashes, `mtxDigest` / `uaDigest`, `mtxSelectors`, `_mtxRule` and
+  `_uaAllowed` (the generic path still serves every allowlisted op and atomic mixed batches, CTR-MTX-11). Clients and the
+  node build the named typed entry by default and use the generic path only for a mixed batch or an op with no named
+  entry. Controller call, owner may override: `executeMetaTransaction` (EIP-1776 alias) and `mtxExecuteWithFee` are
+  removed (→ legacy) — they duplicate `mtxExecute`. The direct (non-meta) functions stay as they are. Mechanism: the
+  named entry builds the op's call and runs the existing ticket self-call (`_selfCall`, as `uaUnwrap` does today), so the
+  op bodies and `_msgSender()` semantics are unchanged; nonces are shared with the generic path (one `(from, batch)`
+  lane, so the same op cannot be replayed through the other entry).
+- **TS-D15 Batching.** `mtxBatch` / `uaBatch` stay (owner); `mtxBatchTransfer` / `uaBatchTransfer` stay. No typed
+  mixed batch (EIP-712 arrays are homogeneous); a homogeneous `mtxBatch<Op>(Envelope[]…)` only for a named use case.
 - **TS-D16 Entry names (controller call).** Entry = `mtx` / `ua` + struct name. Where the existing *operation* function
   already carries that name (the confidential ops `mtxShield`, `mtxConfidentialTransfer*`, `mtxUnshield*`, `mtxRollOver*`,
   `mtxSetRollOverMode`, `mtxPrepareAcc`, `mtxWrapShield`), the signed entry is an **overload** whose first parameter is
@@ -639,11 +640,11 @@ salt = chain uid).
 `keccak256(typehash ‖ from ‖ args ‖ batch ‖ nonce ‖ validUntil ‖ mode ‖ canon(relayer) ‖ fee ‖ canon(feeRecipient))`
 with every envelope word ABI-encoded — never `encodePacked` on `uint32 mode`), `src/metatx/MetaTxBase.sol`
 (`_named(…)` helper: pre → `_selfCall` → fee → event); the entries for **one** op per kind (`mtxUnwrap` on
-`WrappedToken`, `mtxShield` on `WrappedPqzToken` and `WrappedZetherToken`, `mtxSetMandate`) and the removal of the
-generic entries on those kinds; run log `runs/2026-10-31-typed-signing-c0-sizes.txt`.
+`WrappedToken`, `mtxShield` on `WrappedPqzToken` and `WrappedZetherToken`, `mtxSetMandate`), the generic entries kept
+(owner 2026-10-31: nothing is freed, so the projection counts only added bytes); run log `runs/2026-10-31-typed-signing-c0-sizes.txt`.
 
-- [ ] Step 1: tests `test_c0_unwrapTyped` (a wallet-made `Unwrap` signature executes; the old `mtxExecute` selector is
-  gone), `test_c0_shieldTyped` (PQZ, Zether), `test_c0_setMandateTyped`.
+- [ ] Step 1: tests `test_c0_unwrapTyped` (a wallet-made `Unwrap` signature executes; the same op through the kept
+  `mtxExecute` still executes and shares the `(from, batch)` nonce lane, so one signature cannot run twice), `test_c0_shieldTyped` (PQZ, Zether), `test_c0_setMandateTyped`.
 - [ ] Step 2: `forge build --sizes`; record per contract: entry cost (bytes per `mtx` / `ua` entry), freed bytes, and a
   projection for the full Part C entry list (C2–C6 counts: `WrappedPqzToken` ≈ 18 `mtx` + 11 `ua` entries,
   `WrappedZetherToken` ≈ 19 + 13, `NormalToken` 2 + 1, …).
@@ -685,7 +686,7 @@ tests `test/metatx/*`, `test/v2/*` that used `mtxExecute` / `uaExecute` / `mtxBa
   `test_relayFeeRouterRunsNamedEntry` (router + executor call `mtxUnwrap` with fee 0).
 - [ ] Steps 2–4: FAIL → implement → `test/metatx`, `test/v2`, `test/ua` PASS; whole suite (default set); `sizes`
   (STOP rule TS-D18); gas pins old → new.
-- [ ] Step 5: commit `typed-signing C2: named typed entries on the base and public tokens; generic mtxExecute path removed`.
+- [ ] Step 5: commit `typed-signing C2: named typed entries on the base and public tokens; named typed entries added; generic mtxExecute / mtxBatch / uaExecute / uaBatch kept`.
 
 ### Task C3: classical Zether
 
@@ -841,3 +842,14 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-42** (ty
 6. **`kindName` on an unknown id (TS-D5):** default — revert `UAKindUnknown`; alternative — empty string.
 7. **`0x0108` in MetaMask (decision 7):** still pending; this plan does not build it.
 8. **A packed fallback for a calldata-flagged form (X0 Step 2):** only with the owner's ruling.
+
+
+## Owner rulings on this plan (2026-10-31)
+- Approved, except: **keep `mtxExecute`, `mtxBatch`, `uaExecute`, `uaBatch`** (TS-D14 / TS-D15 rewritten; C2's
+  removals limited to `executeMetaTransaction` and `mtxExecuteWithFee`, controller call).
+- Open questions 1–8: the defaults stand (no generic typed batch; existing Zether / PQZ names with an `Envelope` first
+  parameter; one `bytes signature` per kind; over 64 KiB → module behind `fallback`; Part R lands with Part P;
+  `kindName` reverts `UAKindUnknown` on an unknown id; `0x0108` in MetaMask not built; a packed fallback only on an
+  owner ruling per form).
+- Rollback point: branch `pre-typed-signing` and tag `ref/pre-typed-signing` at main `10ac1417` (the last packed /
+  generic-envelope "economy" version).
