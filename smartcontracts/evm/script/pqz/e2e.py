@@ -714,8 +714,10 @@ def run(kd, kr, ke):
     except RuntimeError:
         check(True, "secp256k1 signature over another digest is refused (UAUnauthorized)")
 
-    # the per-kind list (CTR-UA-29, owner 2026-10-17): every UA of a kind in registration order
-    for kind, uas in ((PQZ_MLWE, [u.ua for u in list(U.values()) + DEC]), (MLDSA65, [u.ua for u in [feeua] + list(U.values()) + DEC]),
+    # the per-kind list (CTR-UA-29, owner 2026-10-17): every UA of a kind in registration order; dave (registered after
+    # carol, before the decoys) joins the 0x0142 list with his setPqzKey (first real-node run 2026-10-31: fs3 Task 13)
+    for kind, uas in ((PQZ_MLWE, [u.ua for u in list(U.values()) + [dave] + DEC]),
+                      (MLDSA65, [u.ua for u in [feeua] + list(U.values()) + [dave] + DEC]),
                       (MLDSA44, [ml44.ua]), (SECP256K1, [sec_ua])):
         n = int.from_bytes(words(call(reg, cd("uaCount(uint16)", ["w"], kind)))[0], "big")
         at = [words(call(reg, cd("uaAt(uint16,uint256)", ["w", "w"], kind, i)))[0] for i in range(n)]

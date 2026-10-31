@@ -8,17 +8,19 @@ Amsterdam (Glamsterdam) since its reset on 2026-10-21. The SCaaS testnet is a te
 code is unaudited. What PQZ is and how the library works: the parent [pqz-core README](../README.md), §3
 ["Two proof systems, one precompile"](../README.md#3-two-proof-systems-one-precompile).
 
-- **Image:** the plugin ships in the local Docker image `scaas/nethermind-pqz:2.2.0-pqz5` (built locally, never
-  pushed; live on the SCaaS testnet since 2026-10-26): Nethermind 2.2.0 + the reviewed library `dd0e7668…e5601` (set
-  `n2304-kmax4096`, the proofSystemIds of the R0 review fix part b, PQZL v5 `0xef1ffbcb…` / PQZH v3 `0x046859a8…`,
-  `pqz_max_input()` 524,288; built from `349b96b8`), with provisional `engine.Pqz` rows
-  (`chain/engine-pqz-provisional-n2304.json`) until the calibration of plan 5h Task 9. History: `1.39.0-pqz1` (2026-10-16), `1.39.0-pqz2` (2026-10-17, the
+- **Image:** the plugin ships in the local Docker image `scaas/nethermind-pqz:2.2.0-pqz6` (built locally, never
+  pushed; live on the SCaaS testnet since 2026-10-31, `sha256:656d91d6…3e83`): Nethermind 2.2.0 + the reviewed library
+  `dd0e7668…e5601` (byte-identical to pqz5's; set `n2304-kmax4096`, PQZL v5 `0xef1ffbcb…` / PQZH v3 `0x046859a8…`,
+  `pqz_max_input()` 524,288) + the plan 5h Task 8d part 2b plugin (`id_check_head` in `PQZ-START`; the right
+  `scaas.pqz.selftest` label `d6c01fbc…`), with the **calibrated** `engine.Pqz` rows (`chain/engine-pqz.json`, plan 5h
+  Task 9 / fs3 Task 13, [§ Prices](#prices-calibrated-2026-10-31)). History: `1.39.0-pqz1` (2026-10-16), `1.39.0-pqz2` (2026-10-17, the
   multi-recipient transfer, P6-ANON S8; C PQZL core), `1.39.0-pqz3` (2026-10-19, never ran on the testnet),
   `2.2.0-pqz3` (2026-10-21; library `16dd99ce…` from `1adbd563`), `2.2.0-pqz4` (2026-10-25; library `0894d191…` from
-  `54c7c88e`, the plan 5h Task 8d ids PQZL v4 / PQZH v2), `2.2.0-pqz5` (2026-10-26). The `2.2.0-pqz5` image carries
+  `54c7c88e`, the plan 5h Task 8d ids PQZL v4 / PQZH v2), `2.2.0-pqz5` (2026-10-26, provisional rows × 1.3),
+  `2.2.0-pqz6` (2026-10-31, calibrated rows). The `2.2.0-pqz5` image carries
   pqz4's `scaas.pqz.selftest` label `23d7a1db…` (a Dockerfile literal then; the plugin's own start-up check uses the
   right hash `d6c01fbc…`); since plan 5h Task 8d part 2b `build-image.sh` passes the set's `SelfTest.ExpectedHash`
-  as the label and checks it after the build (no image built with it yet).
+  as the label and checks it after the build (`2.2.0-pqz6` is the first image built so).
 - **Nethermind 2.2.0 (2026-10-21):** the first release with Glamsterdam on Hoodi; 64 KiB contracts (EIP-7954) and
   200 M-gas blocks. What the port changed and what Amsterdam's gas rules mean for our pins (`ROLL_MAX`, op 7 M = 8,
   the precompile gas): [§ Nethermind 2.2.0 and Amsterdam](#nethermind-220-and-amsterdam-2026-10-21) and
@@ -98,7 +100,7 @@ T a new-library node starts once its head reaches T − 1 — in practice after 
 data copy past T,
 `pq-zero-knowledge.md` §9.1); it then logs
 `PQZ-START` (library SHA-256, self-test, `max_input`, the OpenSSL version, the ML-DSA KAT hash, the set, addresses,
-schedules; since plan 5h Task 8d part 2b, not yet in the live `2.2.0-pqz5` image, also the head the id check read:
+schedules; since plan 5h Task 8d part 2b, live since `2.2.0-pqz6` (2026-10-31), also the head the id check read:
 `id_check_head=<timestamp> (block <n>)`, or `(genesis, empty database)`, `runs/2026-10-26-t8d2b-startup-n2304-kmax4096.txt`;
 with a non-zero genesis timestamp 16 both paths log `id_check_head=16`, `runs/2026-10-26-t8d2b-fix-startup-ts16-n2304-kmax4096.txt`.
 The runs show the field on an empty database and on one whose head is block 0 only: a head past genesis needs produced
@@ -158,9 +160,10 @@ scripts/capped sh -c 'cd pqz-core/nethermind && dotnet Harness/bin/Release/net10
 scripts/capped pqz-core/nethermind/harness.sh 60 1h                                         # the same, in the base image's runtime
 # 6. Build the image (with CALIB=1 also the calib target)
 CALIB=1 scripts/capped pqz-core/nethermind/build-image.sh pqz1                               # runs/<date>-image-pqz1.txt (+ calib target)
-#    ... the image live on the SCaaS testnet since 2026-10-26: the reviewed library from its own commit, the plugin from the work tree
-FFI_REV=349b96b8 scripts/capped pqz-core/nethermind/build-image.sh pqz5   # 2.2.0-pqz5 (runs/2026-10-26-image-pqz5.txt)
-# 7. Calibrate the gas prices, once, on the chain host (last run 2026-10-15 / 17 at the retired ids; plan 5h Task 9 next)
+#    ... the image live on the SCaaS testnet since 2026-10-31 (library byte-identical to pqz5's, plugin of plan 5h Task 8d part 2b)
+CALIB=1 scripts/capped pqz-core/nethermind/build-image.sh pqz6   # 2.2.0-pqz6 + -calib (runs/2026-10-30-image-pqz6.txt)
+# 7. Calibrate the gas prices on the chain host (2026-10-31: two runs in slices, runs/2026-10-30-fs3-t13-calib-step.sh, then
+#    runs/2026-10-31-fs3-t13-rows-one-baseline.py: the rows of chain/engine-pqz.json; see § Prices)
 scripts/capped pqz-core/nethermind/calibrate.sh pqz1                                       # ONE run: runs/<date>-calib.txt, chain/engine-pqz.json
 ```
 
@@ -177,7 +180,7 @@ Dockerfile's `ffi` stage with `--build-arg PQZ_SET=<set>`, logs `runs/2026-10-26
 b), and `PQZ_SET=<set> build-image.sh <label>` builds that set's library, plugin and image (the `calib` target and
 `fresh-proofs`, which iterates both ids, stay the default set's). Provisional testnet rows per set:
 `chain/engine-pqz-provisional-<n>.json` (`n2048` / `n2304` / `n2560` / `n2816`, the R0 fix ids; the SCaaS testnet's live
-`2.2.0-pqz5` runs `engine-pqz-provisional-n2304.json` since 2026-10-26).
+`2.2.0-pqz5` ran `engine-pqz-provisional-n2304.json` 2026-10-26 to 2026-10-31; `2.2.0-pqz6` runs the calibrated `engine-pqz.json`).
 
 **The reviewed library (review W-G, 2026-10-19).** `build-image.sh` reads `ExpectedLibrarySha256` from
 `Nethermind.Pqz/SelfTest.cs`, builds `libpqz_ffi.so` (the `ffi-export` target) and stops with `FAIL the built library is
@@ -185,9 +188,9 @@ not the reviewed one` unless the two hashes are equal; the Dockerfile checks the
 value and the plugin refuses to start with any other library. A change to the library is therefore: build, review the
 new hash (the failure line prints it), set it in `SelfTest.cs`, commit, build again (the `ffi` stage comes from the
 cache). Since the R0 review fix part b `SelfTest.cs` holds one reviewed hash per set; at `n2304-kmax4096` it is
-`dd0e7668…e5601`, the library of `2.2.0-pqz5`. `clang` in the Dockerfile is pinned to exact Debian 12 package versions.
+`dd0e7668…e5601`, the library of `2.2.0-pqz5` and `2.2.0-pqz6`. `clang` in the Dockerfile is pinned to exact Debian 12 package versions.
 
-The commands show the first image label, `pqz1`; the live image is `pqz5` (above). History: the multi-recipient
+The commands show the first image label, `pqz1`; the live image is `pqz6` (above). History: the multi-recipient
 calibration of 2026-10-17 was `calibrate.sh pqz2 --ops 7`: it writes only the op 7 rows
 (`runs/2026-10-17-calib-ops7*`) and leaves `chain/engine-pqz.json` unchanged, because those rows join the live rows in
 a second schedule.
@@ -263,6 +266,47 @@ allowlist) for `-f Dockerfile`; the default build sends 16 MB (`runs/2026-10-22-
 `e2e.py burst` / `fill` pick the largest input under the calldata floor and size `tx.gas` by `intrinsic()` (M2; not
 run: Task 13 drills). Not done (owner's go): the 200 M block load rehearsal (M3), timing / gas calibration.
 
+<a id="prices-calibrated-2026-10-31"></a>
+## Prices (calibrated 2026-10-31)
+
+`chain/engine-pqz.json` = `runs/2026-10-31-fs3-t13-rows-one-baseline-engine-pqz.json`, live on the SCaaS testnet since
+2026-10-31 (image `2.2.0-pqz6`). Rule (owner 2026-10-31, option (b)): every row from its logged `t_row` (max of the
+valid and adversarial p99, two calibration runs) at one ecMul baseline `t_ecMul` = 0.016 ms, `gas = 1000·⌈6000·t_row /
+0.016 / 1000⌉`, then `min(provisional, max(run 1, run 2))`; `selftestGas` = the smallest row; ML-DSA unchanged. Gas of a
+call = row + 3 per input word. Record: `runs/2026-10-31-fs3-t13-rows-one-baseline.md`.
+
+| op | system | stmtLen | M | auditor | provisional (× 1.3, pqz5) | calibrated (pqz6) | change |
+|---|---|---|---|---|---|---|---|
+| 1 | PQZH | 74,752 |  |  | 5,227,000 | 4,530,000 | -13.3 % |
+| 1 | PQZH | 93,312 |  |  | 5,492,000 | 4,634,000 | -15.6 % |
+| 1 | PQZL | 74,752 |  |  | 6,790,000 | 3,088,000 | -54.5 % |
+| 1 | PQZL | 93,312 |  |  | 7,032,000 | 3,149,000 | -55.2 % |
+| 2 | PQZH | 56,192 |  |  | 4,859,000 | 4,392,000 | -9.6 % |
+| 2 | PQZL | 56,192 |  |  | 4,840,000 | 3,109,000 | -35.8 % |
+| 3 | PQZH | 18,528 |  |  | 4,319,000 | 3,314,000 | -23.3 % |
+| 3 | PQZL | 18,528 |  |  | 3,504,000 | 1,721,000 | -50.9 % |
+| 4 | PQZH | 37,280 |  |  | 4,268,000 | 3,409,000 | -20.1 % |
+| 4 | PQZL | 37,280 |  |  | 3,381,000 | 1,839,000 | -45.6 % |
+| 5 | PQZH | 37,280 |  |  | 3,745,000 | 3,392,000 | -9.4 % |
+| 5 | PQZL | 37,280 |  |  | 3,337,000 | 1,851,000 | -44.5 % |
+| 7 | PQZH | 74,752 | 1 | off | 5,608,000 | 4,485,000 | -20.0 % |
+| 7 | PQZH | 93,312 | 1 | on | 5,023,000 | 4,669,000 | -7.0 % |
+| 7 | PQZH | 93,312 | 2 | off | 5,740,000 | 4,569,000 | -20.4 % |
+| 7 | PQZH | 112,000 | 2 | on | 5,201,000 | 4,865,000 | -6.5 % |
+| 7 | PQZH | 130,432 | 4 | off | 6,360,000 | 4,857,000 | -23.6 % |
+| 7 | PQZH | 167,808 | 4 | on | 6,416,000 | 6,159,000 | -4.0 % |
+| 7 | PQZL | 74,752 | 1 | off | 5,139,000 | 3,158,000 | -38.5 % |
+| 7 | PQZL | 93,312 | 1 | on | 4,712,000 | 3,205,000 | -32.0 % |
+| 7 | PQZL | 93,312 | 2 | off | 4,975,000 | 3,196,000 | -35.8 % |
+| 7 | PQZL | 112,000 | 2 | on | 4,823,000 | 3,204,000 | -33.6 % |
+| 7 | PQZL | 130,432 | 4 | off | 5,164,000 | 3,282,000 | -36.4 % |
+| 7 | PQZL | 167,808 | 4 | on | 5,357,000 | 4,891,000 | -8.7 % |
+| 7 | PQZL | 223,104 | 8 | off | 6,941,000 | 4,709,000 | -32.2 % |
+| 7 | PQZL | 260,992 | 8 | on | 8,030,000 | 6,242,000 | -22.3 % |
+| 6 (`OP_SELFTEST`) | — | — | | | 3,337,000 | 1,721,000 | -48.4 % |
+
+ML-DSA-44 / -65: 49,000 / 68,000 + 6 per message word (unchanged).
+
 ## Runbook
 
 [chain/RUNBOOK.md](chain/RUNBOOK.md) has every step, in order, for:
@@ -281,8 +325,11 @@ run: Task 13 drills). Not done (owner's go): the 200 M block load rehearsal (M3)
   provisional rows. Executed on 2026-10-25, log `runs/2026-10-25-pqz4-live.txt`.
 - **Image `2.2.0-pqz5`**: reset (path B, no backup) onto the R0 review fix part b library (PQZL v5 / PQZH v3) with
   provisional rows. Executed on 2026-10-26, log `runs/2026-10-26-pqz5-live.txt`.
+- **Image `2.2.0-pqz6`** (fs3 Task 13 + plan 5h Task 9): reset (path B, backed up) with the calibrated rows, the CREATE2
+  deployer in the genesis alloc and EIP-7702 off; the contracts redeployed; the node hardened; Blockscout on. Executed on
+  2026-10-31, log `runs/2026-10-31-pqz6-live.txt`; layout and access in RUNBOOK § 7622 node layout and access.
 
-## Results (2026-10-15 to 2026-10-26)
+## Results (2026-10-15 to 2026-10-31)
 
 | Task | Result | Log |
 |---|---|---|
@@ -298,6 +345,7 @@ run: Task 13 drills). Not done (owner's go): the 200 M block load rehearsal (M3)
 | Image `2.2.0-pqz4` (plan 5h Task 8d part 1) | image `sha256:55037b0b…`, library `0894d191…`, set `n2304-kmax4096`, 26 provisional rows; SCaaS testnet reset on path B 2026-10-25; probe 398 ok / 0 FAIL | `runs/2026-10-25-*` |
 | Image `2.2.0-pqz5` (R0 review fix part b) | tests 49 / 49 at `n2304-kmax4096` and `n2816-kmax65536`; image `sha256:4d906b55…`, library `dd0e7668…`, PQZL v5 / PQZH v3; SCaaS testnet reset on path B 2026-10-26: `PQZ-START`, genesis hash `0xa17faef4…2ac2` unchanged, probe 420 ok / 0 FAIL, e2e 84 ok / 0 FAIL | `runs/2026-10-26-r01b-*`, `runs/2026-10-26-*pqz5*` |
 | plan 5h Task 8d part 2b (not in an image yet) | tests 51 / 51 at `n2304-kmax4096` and `n2816-kmax65536` (the input-panic child process and `IdCheckHead` added); start-up runs with the `id_check_head` field on an empty and on an initialised database (head block 0; with genesis timestamp 0 and 16; no head past genesis); `docker build --check` of the Dockerfile: no warnings | `runs/2026-10-26-t8d2b-*` |
+| Image `2.2.0-pqz6` + calibration (fs3 Task 13, plan 5h Task 9) | image `sha256:656d91d6…`, library `dd0e7668…` (= pqz5's), plugin `bf38997a…`; two calibration runs, rows from one ecMul baseline 0.016 ms (option (b)), 26 rows −4…−55 % against the provisional rows, 0 above them, `selftestGas` 1,721,000; native p99 ≤ 16.6 ms (60 ms limit); SCaaS testnet reset on path B 2026-10-31 (genesis `0xf1f491ab…3164`): `PQZ-START` 26 rows, probe 420 ok / 0 FAIL, node e2e 84 ok / 0 FAIL, type-4 refused (`InvalidTxType`), PQZ contract e2e full 254 ok (2 stale list checks, fixed) / `--split` 265 ok / via the hardened public RPC 256 ok, 0 FAIL; `Deploy.s.sol` 31 txs (MtxRelayFee, DEX release) | `runs/2026-10-3[01]-*fs3-t13*`, `runs/2026-10-31-pqz6-live.txt` |
 
 In this table, "path A" and "path B" are the two ways to switch the precompiles on (a future timestamp, or from
 genesis; see the [runbook](chain/RUNBOOK.md)); "probe" and "e2e" count the checks that passed in `chain/probe.sh` (read-only

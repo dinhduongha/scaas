@@ -70,7 +70,7 @@ is always the hard value. Gas is never assumed: Zether-sized transactions do not
 <a id="private-chain"></a><a id="private-7622"></a>
 
 <a id="NET-EVM-02"></a>**NET-EVM-02** — **The private reference chain is chain id 7622; its identity is the pair
-(chain id 7622, genesis hash `0xa17faef497fa29ec90603969dad0176ea18fd1cc2eaf0f9f4fa2dacc9c952ac2` since the 2026-10-22 reset (genesis gas limit 200 M); the client test vectors keep
+(chain id 7622, genesis hash `0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164` since the 2026-10-31 reset (fs3 Task 13: the CREATE2 deployer in the genesis alloc, EIP-7702 off; `0xa17faef4…2ac2` from 2026-10-22, genesis gas limit 200 M); the client test vectors keep
 the earlier `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464` as a fixed constant), profile
 `private7622`.** Owner ruling 2026-10-07. Chain id `0x1dc6`; the chain was reset with a new genesis when it moved
 from 9000, which is also Evmos Testnet — replay protection is only as good as the chain id, so every signer and node
@@ -174,7 +174,10 @@ the chain profiles of the node and the clients ([NET-ALL-24](README.md#NET-ALL-2
 the deployer's nonce, so the same contract lands at unrelated addresses on each chain and a missed transaction shifts
 every later address; with CREATE2 the address follows from what was deployed. Cost: a fixed-salt deployer must exist on
 each chain before the first deployment, and a redeploy with the same init code collides with the first (a new
-version needs a new salt or new code).
+version needs a new salt or new code). On SCaaS's own chains the deployer is in the genesis `alloc` (owner 2026-10-31): the SCaaS testnet 7622 carries
+the deterministic deployment proxy's runtime code at `0x4e59b44847b379578588920cA78FbF26c0B4956C` from its 2026-10-31
+reset (its keyless pre-EIP-155 deploy transaction, a fixed 100,000 gas, cannot pay Amsterdam's code-deposit state gas);
+mainnet 22776's launch chainspec does the same.
 
 <a id="NET-EVM-06"></a>**NET-EVM-06** — **Every Foundry profile compiles for the `amsterdam` EVM: every chain that runs these contracts
 requires Glamsterdam, and a public chain is deployed only after its own fork.** Owner ruling 2026-10-21; status **BUILT**.
@@ -276,7 +279,24 @@ genesis copy) and on the mainnet 22776 from its launch. A throwaway node with th
 transaction (`InvalidTxType`) while legacy and EIP-1559 transfers mined (the check is the Source of NET-EVM-07 in
 [decisions.md](../decisions.md)). Customer chains (Ethereum and most L2s since Pectra, BSC,
 Polygon, Base, …) keep 7702, so the contract rule above applies on every chain; the forge tests are its proof, since the
-SCaaS testnet can no longer exercise 7702 after the reset.
+SCaaS testnet can no longer exercise 7702 after the reset. Verified on 7622 after the 2026-10-31 reset: a type-4 transaction is refused with `-32000 InvalidTxType`.
+
+<a id="NET-EVM-08"></a>**NET-EVM-08** — **The SCaaS testnet's node never signs for an RPC caller** (owner ruling 2026-10-31):
+one node (the Clique sealer) with three JSON-RPC endpoints — public `8545` / `8546` (`Eth`, `Net`, `Web3`, `Subscribe`;
+request limits `MaxBatchSize` 100, `MaxRequestBodySize` 4 MiB, `GasCap` = the block gas limit, `Timeout` 20 s,
+`RequestQueueLimit` 500), the operator's `8550` on the host loopback only (`Admin`, `Clique`, `Debug`, `Trace`,
+`Parity`, `TxPool`, `Eth`, `Net`, `Web3`), and `8547` on the Docker network only (`Eth`, `Net`, `Web3`, `TxPool`, for
+the explorer) — `Personal` nowhere, and a calls filter that refuses `eth_sendTransaction`, `eth_sign`,
+`eth_signTransaction` and `eth_signTypedData*` on every endpoint (Nethermind 2.2.0 needs the sealer account in
+`UnlockAccounts` to read its key, so the wallet methods are refused instead). Layout, checks and rollback:
+[RUNBOOK](../../pqz-core/nethermind/chain/RUNBOOK.md) § 7622 node layout and access. Mainnet 22776 additionally gets a
+TLS reverse proxy with rate limits and keeps the sealer key out of the RPC node.
+
+<a id="NET-EVM-09"></a>**NET-EVM-09** — **Blockscout runs on the SCaaS testnet, lean and capped** (owner ruling
+2026-10-31): `explorer-db` 1 GiB / 1 CPU, `explorer-backend` 2 GiB / 1.5 CPU, `explorer-frontend` 512 MiB / 0.5 CPU, no
+restart policy, started by hand after the node; it reads the node over the Docker-network endpoint only; internal
+transactions, block rewards, coin balances, token-instance metadata and market data are off, pending transactions on;
+one-line stop in the RUNBOOK.
 
 ## 6. Limitations
 

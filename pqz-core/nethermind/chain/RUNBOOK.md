@@ -293,7 +293,7 @@ Success: the head hash equals the rollback head written down in step 1. Then rep
 - `PQZ-START` is present in the log, and there is no `PQZ-REFUSE` or `PQZ-NODE-FAULT`.
 - The head advances every 5 s.
 - `eth_chainId` = `0x1dc6`.
-- `OP_SELFTEST` (op 6) = `d6c01fbc…6f68d` (image `2.2.0-pqz5`, set `n2304-kmax4096`; `23d7a1db…c97c0` on `2.2.0-pqz4`, `ed910a2c…d205` before).
+- `OP_SELFTEST` (op 6) = `d6c01fbc…6f68d` (images `2.2.0-pqz5` / `2.2.0-pqz6`, set `n2304-kmax4096`; `23d7a1db…c97c0` on `2.2.0-pqz4`, `ed910a2c…d205` before).
 
 A node fault (plan D4) stops the node with exit code 120 and the tag `PQZ-NODE-FAULT` in its log. The block in
 progress is never sealed; a restart (`docker compose up -d blockchain-node`) re-processes it. The node has no restart
@@ -527,3 +527,107 @@ branch `pqz-16k` at `349b96b8` (part b merged).
 
 Rollback: stop, put the two `.bak-pqz4-20261026` files back, empty `data/nethermind_data`, start (a fresh pqz4 chain;
 the old pqz4 data is gone). Not done here: contracts (fs3 Task 13), the calibration (Task 9).
+
+## Image 2.2.0-pqz6 on the SCaaS testnet (executed 2026-10-31)
+
+*Live only;* fs3 Task 13 + plan 5h Task 9. Owner 2026-10-30: timing and the 7622 reset approved; owner 2026-10-31: rows
+option (b), the CREATE2 deployer in the genesis alloc, Blockscout on with caps, the node hardened. Log
+`../runs/2026-10-31-pqz6-live.txt`; the phase A / B / C commands in `../runs/2026-10-30-fs3-t13-plan.txt`.
+
+1. Image `scaas/nethermind-pqz:2.2.0-pqz6` = `sha256:656d91d6…3e83` (`CALIB=1 build-image.sh pqz6`, 2026-10-30): library
+   `dd0e7668…e5601` (byte-identical to pqz5's), plugin of plan 5h Task 8d part 2b, label `scaas.pqz.selftest` `d6c01fbc…`.
+2. Rows: `chain/engine-pqz.json` = `runs/2026-10-31-fs3-t13-rows-one-baseline-engine-pqz.json` (README § Prices).
+3. Backups (stack directory `L=/home/dockers/mba-chain-nethermind`): `genesis.json.bak-pre-pqz6-20261031`,
+   `docker-compose.yml.bak-pre-pqz6-20261031`, and `backup-pqz5-20261031-0621/` (genesis, config, compose, password,
+   keystore and the pqz5 chain data through `alpine:3 cp -a`; sha256 manifests of the 150 data files identical).
+4. Genesis alloc: `0x4e59b44847b379578588920cA78FbF26c0B4956C` = `{"balance": "0", "nonce": "1", "code":
+   "0x7fff…ffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3"}`, the runtime code of the
+   deterministic deployment proxy (github.com/Arachnid/deterministic-deployment-proxy, the code anvil also puts there;
+   `keccak256` = `0x2fa86add…4989`), added to `$L/genesis.json` before the patch. Then
+   `patch-chainspec.py $L/genesis.json chain/engine-pqz.json 0x0 <out> --testnet-reset` (engine.Pqz replaced, params and
+   header unchanged, `grep -c 7702` = 0 before and after), installed; compose image pqz5 → pqz6; data dir emptied.
+5. `docker compose up -d blockchain-node` by hand (restart policy `no`). `PQZ-START sha256=dd0e7668… selftest=d6c01fbc…
+   id_check_head=0 (genesis, empty database) set=n2304-kmax4096`, 26 rows at the new prices; **genesis hash
+   `0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164`** (the alloc changes the state root; new
+   `chainUid`, `smartcontracts/evm/chain-uids.json`); `cast code 0x4e59…956C` = the proxy code.
+6. Probe 420 ok / 0 FAIL; node e2e (`--key 0x…04 --no-ua`) 84 ok / 0 FAIL.
+7. EIP-7702 off: `cast send --auth … --gas-limit 200000` → `-32000 InvalidTxType: Transaction type in Custom is not
+   supported`; a distinct raw type-4 transaction (`0x04f8…`) through `cast publish` → the same; an EIP-1559 transfer
+   mined (block 67).
+8. Contracts: `smartcontracts/evm/script/pqz/e2e.py` full (254 ok, 2 FAIL: the per-kind list checks expected the lists
+   without dave, whose `setPqzKey` path joins both lists — a script expectation, fixed in `e2e.py`), `--split` (265 ok,
+   0 FAIL), and after the hardening the full run again through the public RPC (256 ok, 0 FAIL);
+   `PRIVATE_KEY=0x…04 FOUNDRY_PROFILE=private7622 CHAIN_UID=0xf1f491ab…3164 scripts/capped smartcontracts/scripts/deploy.sh
+   evm http://127.0.0.1:8545`: 31 transactions, all status 1, through the genesis CREATE2 deployer (UA registry with 21
+   kinds, OpenFactory, MtxRelayFee + executor, the NormalToken and SCaaSDex releases); `deployments/7622.json`
+   (git-ignored; copy in `smartcontracts/evm/runs/2026-10-31-fs3-t13-deploy-7622.txt`). UniswapExecutor: no deploy
+   script (plan decision PD7).
+
+Rollback (to pqz5, the old chain): stop the stack, put `backup-pqz5-20261031-0621/{genesis.json,config.json,
+docker-compose.yml}` back, replace `data/nethermind_data` with the backup's copy (alpine `cp -a`), start the node.
+
+## 7622 node layout and access (owner 2026-10-31)
+
+One node (the Clique sealer); its JSON-RPC split into three endpoints. Host = `192.168.1.72` (the chain host's LAN
+address; `DinhHa`).
+
+| Endpoint | Bound | Modules | For |
+|---|---|---|---|
+| `http://<host>:8545`, `ws://<host>:8546` | LAN (compose `8545:8545`, `8546:8546`) | Eth, Net, Web3, Subscribe | wallets, `scaas-node`, the e2e scripts, deploys (`eth_sendRawTransaction`) |
+| `http://127.0.0.1:8550` (http + ws) | host loopback only (compose `127.0.0.1:8550:8550`; `AdditionalRpcUrls` `http://0.0.0.0:8550\|http;ws\|Eth;Net;Web3;TxPool;Debug;Trace;Parity;Clique;Admin`) | admin set | the operator on the host: `admin_*`, `clique_*`, `debug_*`, `trace_*`, `txpool_*` |
+| `http://blockchain-node:8547` (http + ws) | `mba-net` docker network only (not published) | Eth, Net, Web3, TxPool | Blockscout (blocks, receipts, `txpool_content` for pending transactions) |
+| P2P `30303` | LAN (unchanged) | — | none today (discovery off) |
+
+- **Wallet methods refused everywhere.** `KeyStore.UnlockAccounts` must stay: Nethermind 2.2.0 reads the sealer key's
+  password through it (without it start-up fails in `NodeKeyManager.LoadKeyForAccount`: "Cannot read keys when …
+  console input has been redirected"), and the node's other key file (`keystore/node.key.plain1`) is not the sealer
+  (it started with node address `0xea3205e8…` and sealed nothing). So `JsonRpc.CallsFilterFilePath` =
+  `/nethermind/jsonrpc.filter` (compose mounts `$L/jsonrpc.filter`, a copy is `chain/jsonrpc.filter`) holds one regex,
+  `^(?!eth_(sendtransaction|sign|signtransaction|signtypeddata.*)$).*$`: Nethermind matches every call's method name,
+  lower-cased, against it, on every endpoint and transport, batches included; the four wallet methods get `-32601 the
+  method … does not exist/is not available`. `personal` is enabled nowhere. `eth_accounts` still lists the sealer
+  address (read-only).
+- **Limits on all endpoints:** `MaxBatchSize` 100, `MaxRequestBodySize` 4,194,304 (largest e2e request: about 140 KB of
+  hex; `TxPool.MaxTxSize` 1 MiB = 2 MiB of hex), `GasCap` 200,000,000 (= the block gas limit; the largest e2e
+  estimate is the `WrappedPqzToken` release, 96.5 M gas used, just under the default cap of 100 M), `Timeout` 20,000 ms,
+  `RequestQueueLimit` 500.
+- **Admin from another machine:** `ssh -N -L 8550:127.0.0.1:8550 <user>@192.168.1.72`, then `http://127.0.0.1:8550` there.
+- **Checks (2026-10-31, log above):** from the LAN address and from the host, `eth_sendTransaction`, `eth_sign`,
+  `eth_signTransaction`, `eth_signTypedData(_v4)`, upper-case variants and the same inside a batch → `-32601`;
+  `personal_*`, `admin_*`, `debug_*`, `trace_*`, `clique_*`, `txpool_*`, `parity_*` on 8545 / 8546 → `-32600 … namespace
+  … is disabled`; `192.168.1.72:8550`, `192.168.1.72:8547`, `127.0.0.1:8547` and a container on the default bridge →
+  connection refused; on 8550 `admin_nodeInfo`, `clique_getSigners`, `trace_block`, `txpool_status` answer; an EIP-1559
+  transfer through `eth_sendRawTransaction` on 8545 mined; blocks every 5 s; probe 420 / 0 and the PQZ e2e 256 / 0 through
+  `http://192.168.1.72:8545`.
+- **Rollback:** `cp config.json.bak-pre-hardening-20261031 config.json; cp docker-compose.yml.bak-pre-hardening-20261031
+  docker-compose.yml; docker compose up -d blockchain-node` (the single-endpoint layout; Blockscout services are then
+  commented out again).
+- **TODO for mainnet 22776 (not built):** a reverse proxy with TLS and rate limits in front of 8545 / 8546; the sealer
+  key out of the RPC node's wallet (a sentry RPC node, or a key file used only for sealing).
+
+### Blockscout (owner 2026-10-31: on, lean, with caps)
+
+Services `explorer-db` (postgres:18, `mem_limit` 1g, `cpus` 1.0), `explorer-backend` (`ghcr.io/blockscout/blockscout:9.0.2`,
+2g, 1.5), `explorer-frontend` (`ghcr.io/blockscout/frontend:latest`, 512m, 0.5); no restart policy; UI
+`http://192.168.1.72:3000`, API `http://192.168.1.72:4000`. The backend reads the node over `http://blockchain-node:8547`.
+
+```sh
+cd /home/dockers/mba-chain-nethermind
+docker compose up -d explorer-db explorer-backend explorer-frontend      # start (after the node)
+docker compose stop explorer-frontend explorer-backend explorer-db       # stop (the index stays in data/explorer_*)
+```
+
+- **Lean env** (names checked against 9.0.2's `runtime.exs` / `prod.exs` / `apps/indexer/config/prod/nethermind.exs`):
+  off — internal transactions, block rewards, coin balances, token instances (realtime, retry, sanitize, refetch, ERC-721 /
+  1155 sanitize), cataloged token updater, beacon blobs, market / exchange rates; on — blocks, receipts, logs, token
+  transfers, token balances, pending transactions (`ETHEREUM_JSONRPC_PENDING_TRANSACTIONS_TYPE=geth`: `txpool_content`);
+  `POOL_SIZE` 10, `POOL_SIZE_API` 5, catch-up concurrency 2, receipts 2 × 50, token concurrency 2; `FIRST_BLOCK` 1.
+- **Pruned node.** The node keeps no old state (`Pruning.Mode` Hybrid: `eth_getBalance` / `eth_getCode` at an old block →
+  `-32002 No state available`). Blockscout's ContractCode fetcher asks the code at the creation block, so for a
+  contract created more than about 64 blocks before Blockscout sees it, it retries forever (one core; 7.0.2 also loops on
+  block 0). After a Blockscout outage that spans contract deploys, run
+  `python3 -I pqz-core/nethermind/chain/blockscout-code-backfill.py http://127.0.0.1:8545` (code at latest, rows marked
+  done), then `docker compose restart explorer-backend`. At the next reset consider `Pruning.Mode` `None` (archive).
+- **Measured (2026-10-31, `docker stats`):** catch-up of 740 blocks (before the backfill): backend 115–150 % CPU (the
+  ContractCode loop), db ≤ 6 %, 140 MiB, frontend ≤ 51 % at start; steady state after the backfill, pending fetcher on:
+  backend 1–5 % / 300 MiB, db 0.5–10 % / 103–109 MiB, frontend 0 % / 165 MiB.

@@ -8,12 +8,12 @@
       "name": "SCaaS private chain",
       "chainId": 7622,
       "testnet": false,
-      "chainUid": "0xa17faef497fa29ec90603969dad0176ea18fd1cc2eaf0f9f4fa2dacc9c952ac2",
+      "chainUid": "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164",
       "genesisTimestamp": null,
       "sources": [
-        "http://127.0.0.1:8545 (eth_getBlockByNumber 0x0, 2026-10-22)"
+        "http://127.0.0.1:8545 (eth_getBlockByNumber 0x0, 2026-10-31)"
       ],
-      "note": "SCaaS testnet reset 2026-10-22 (genesis gasLimit 200 M, pqz-core/nethermind/runs/2026-10-22-testnet-200m.txt); resets again at plan fs3 Task 13. Client test vectors keep the earlier 0x24e43dcb…c464 as a fixed constant (owner 2026-10-22)"
+      "note": "SCaaS testnet reset 2026-10-31 (plan fs3 Task 13: image 2.2.0-pqz6, calibrated rows, the CREATE2 deployer 0x4e59b448… in the genesis alloc, EIP-7702 off; pqz-core/nethermind/runs/2026-10-31-pqz6-live.txt); before it 0xa17faef4…2ac2 (2026-10-22 reset, genesis gasLimit 200 M). Client test vectors keep the earlier 0x24e43dcb…c464 as a fixed constant (owner 2026-10-22)"
     },
     {
       "key": "ethereum",
