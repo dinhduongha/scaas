@@ -458,6 +458,10 @@ passed), `smartcontracts/evm/script/ZetherE2E.s.sol` (if it builds a PoP), `test
 
 ### Task X0: inventory every packed blob, give each a typed signature, measure calldata
 
+**Done 2026-10-31:** results in [2026-10-31-typed-signing-appendix-x.md](2026-10-31-typed-signing-appendix-x.md) (Appendix X:
+typed structs, exact entries and EIP-712 strings, the 22-row inventory, calldata per set and path; test
+`smartcontracts/evm/test/v2/ExplicitParamsCalldata.t.sol`, logs `smartcontracts/evm/runs/2026-10-31-typed-signing-x0-calldata-*.txt`).
+
 **Files:** append **Appendix X** to this plan (the table below completed, exact Solidity signatures and EIP-712 type
 strings for every confidential op); add `smartcontracts/evm/test/v2/ExplicitParamsCalldata.t.sol` (measurement only) and
 its run log `smartcontracts/evm/runs/2026-10-31-typed-signing-x0-calldata-<set>.txt`.
