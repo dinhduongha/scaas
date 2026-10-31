@@ -802,7 +802,8 @@ named_tests() { # every new test passed; no family log with 0 passed, a skipped 
             if (p) { if (a == pa + 1 && x == px) ok++; p = 0 }
             if (t == n) { p = 1; pa = a; px = x; seen++ } }
           END { exit !(seen > 0 && ok == seen) }' ;;
-      unittest) grep -qE "^${name} \(.*\) \.\.\. ok\$" "$D/$P-$step.txt" 2>/dev/null ;;
+      # a test with a docstring prints its name, then "<docstring> ... ok" on the next line
+      unittest) grep -A1 -E "^${name} \(.*\)( \.\.\. ok)?\$" "$D/$P-$step.txt" 2>/dev/null | grep -qE " \.\.\. ok\$" ;;
     esac || { echo "named-tests: not passed in $step: $name"; miss=$((miss + 1)); }
   done <<< "$NEW_TESTS"
   for s in $FAMILIES; do
