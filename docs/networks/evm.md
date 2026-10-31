@@ -221,19 +221,19 @@ not charge EIP-8037, so it says nothing here; the one run over a real client (76
 
 | Kind (contract) | Runtime | State gas | Deploy gate | Simulated | `tx.gas` (× 1.05) |
 |---|---|---|---|---|---|
-| `NORMAL` (`NormalToken`) | 39,889 B | 61.0 M | **77.8 M** | 66.5 M | 69.8 M |
+| `NORMAL` (`NormalToken`) | 39,889 B | 61.0 M | 77.8 M | 66.5 M | 69.8 M |
 | `WRAPPED` (`WrappedToken`) | 49,652 B | 76.0 M | 92.7 M | | |
 | `NORMAL_ZETHER` (`NormalZetherToken`) | 49,952 B | 76.4 M | 93.2 M | 83.1 M | 87.3 M |
 | `NORMAL_PQZ` (`NormalPqzToken`) | 50,652 B | 77.5 M | 94.3 M | | |
 | `WRAPPED_ZETHER` (`WrappedZetherToken`) | 61,808 B | 94.6 M | 111.3 M | 108.7 M | **114.1 M** |
 | `WRAPPED_PQZ` (`WrappedPqzToken`) | 62,616 B | 95.8 M | **112.6 M** | 103.9 M | 109.1 M |
 | the DEX (`SCaaSDex`) | 26,967 B | 41.3 M | 58.0 M | 45.2 M | 47.5 M |
-| information: `UARegistry` (one deployment, no gate) | 46,716 B | 71.5 M | none | 77.2 M | **81.1 M** |
+| `UARegistry` (one deployment per generation) | 46,716 B | 71.5 M | **88.3 M** | 77.2 M | **81.1 M** |
 | information: `MtxPipelineLib` (linked library of every release) | 9,063 B | 13.9 M | none (30.6 M by the formula) | 16.0 M | 16.8 M |
 | information: `MtxRelayFee` (CTR-MTX-27 router; its `MtxRelayExecutor` 554 B) | 2,982 B | 4.6 M | none (21.3 M by the formula) | 6.6 M | 6.9 M |
 
-`UARegistry` was 46,734 B when simulated (18 B less since, not re-measured); the simulation's state gas for it is 71.7 M. The information rows have no gate of their own: the library is smaller than every implementation that links it, so the implementation's gate binds (spec §4, controller call), and the owner has not ruled on one for the registry, which is still the largest transaction of a plain deploy. So a plain stack (`Deploy.s.sol`: `NormalToken`, the DEX, the registry) asks about **81.1 M** of block gas limit, above its largest gate (77.8 M), and the full stack about **114.1 M** (`WrappedZetherToken`'s transaction, above its 111.3 M gate). At 100 M the plain stack deploys (32 blocks) and `DEPLOY_ZETHER` is refused by the gate before sending. A chain with an Ethereum-like 60 M block holds no kind at all: at 60 M and 36 M forge's simulation of `Deploy.s.sol` runs out of gas in the `UARegistry` creation and sends nothing, and `NormalToken` (gate 77.8 M) would not fit either. Such a chain needs a raised block gas limit (no gas price or limit is assumed: the check below reads the chain's actual
-value). **Deploy gate:** `DeployBase._requireReleaseGas(contract)` (called before each `deployImplementation` /
+`UARegistry` was 46,734 B when simulated (18 B less since, not re-measured); the simulation's state gas for it is 71.7 M. The information rows have no gate of their own: the library is smaller than every implementation that links it, so the implementation's gate binds (spec §4, controller call). The registry has one (owner ruling 2026-11-01), the largest of a plain deploy. So a plain stack (`Deploy.s.sol`: `NormalToken`, the DEX, the registry) asks about **81.1 M** of block gas limit under its **88.3 M** gate, and the full stack about **114.1 M** (`WrappedZetherToken`'s transaction, above its 111.3 M gate). At 100 M the plain stack deploys (32 blocks) and `DEPLOY_ZETHER` is refused by the gate before sending. A chain with an Ethereum-like 60 M block holds no kind at all: at 60 M and 36 M the `UARegistry` gate refuses `Deploy.s.sol` and nothing is sent (forge's simulation runs out of gas in that creation without the gate), and `NormalToken` (gate 77.8 M) would not fit either. Such a chain needs a raised block gas limit (no gas price or limit is assumed: the check below reads the chain's actual
+value). **Deploy gate:** `DeployBase._requireReleaseGas(contract)` (called before the `UARegistry` creation and each `deployImplementation` /
 `deployDexImplementation`) and `script/pqz/e2e.py` read `block.gaslimit` (`eth_getBlockByNumber`) and refuse before
 sending when it is below the kind's need; the sizes come from the baseline file at run time, so the figures follow the
 ratchet. The deploy tests assert regular + state gas against the same budget next to the 2^24 check.

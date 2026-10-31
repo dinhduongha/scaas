@@ -216,7 +216,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      **Progress (2026-10-31):** Part P (typed portable records, `kindName`, native `msig` members over the typed digest, the `register` KEM key at
      version 0), X0 (packed-blob inventory, calldata measured) and Part R (registry explicit ABI: `registerMsig`, `registerWebAuthn`, `registerMuSig2`,
      `registerFrost`, `KemKey`, `UASig`, hash-committed KEM key filled by `setKemKey(ua, 0, …)`) built on branch `typed-signing`, docs done
-     (CTR-UA-07, -16, -32, -33, -35, -36, CLI-SGN-41); gates and whole-branch review (PG / PRV) next, then the owner's merge go. Not done: Part C
+     (CTR-UA-07, -16, -32, -33, -35, -36, CLI-SGN-41); gates and whole-branch review (PG / PRV) done, merged on the owner's go (2026-11-01). Not done: Part C
      (named typed entries; until C2 the tokens keep `bytes auth`, converted by `UAKinds.uaSig`), Part N (node explicit job API).
      **`ua8-soroban` hand-over, after merging `main` (TS-D9):** resolve `ua-portable-vectors.mjs`, `ua-signers.mjs`, `ua-rs/src/ua8.rs`, `portable.json`
      by taking `main`'s typed code plus M1's minimal-slot code and regenerating; B1 adds the `UAPqzKey` / `UAPqzKeyRecord` typehashes on

@@ -923,6 +923,14 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-42** (ty
   contract check is added (a calldata bound in the contract would tie it to one chain's limit). Clients repair it: after
   `register`, or on `UAAlreadyRegistered`, read `registrationOf`; when `attrs.kemPkHash != 0` and `kemKeyAt(ua, 0)` is
   empty, send `setKemKey(ua, 0, key, UASig())`. Docs state that a front-run yields the same record or the commit form.
+- **`debit_min_gas` not re-pinned after R1c (owner ruling 2026-11-01, option (a)):** the Part P + R work moved the
+  measured figure about +6.3 k at every set (pinned -> measured: n2048-kmax1024 6,826,921 -> 6,833,298; n2304-kmax4096
+  6,998,368 -> 7,004,731; n2560-kmax16384 7,168,690 -> 7,175,039; n2816-kmax65536 7,358,343 -> 7,364,677). `set.toml`
+  keeps the pinned figures; Part C changes the same path, so CG re-measures after C2 and re-pins once, with the full
+  gate that a set-parameter change needs. Until then the pinned floor is below the measured minimum by that amount.
+- **`UARegistry` deploy gate (owner ruling 2026-11-01):** the registry gets a gate like the releases:
+  `_requireReleaseGas("UARegistry")` in `DeployBase` and `require_release_gas("UARegistry")` in `e2e.py`, need 88.3 M
+  (46,716 B × 1,530 + 2^24), test `test_registryDeployGate`, NET-EVM-06.
 - **KEM key at `register` (owner rulings 2026-10-31, for Part R / R1 and Part P's struct values):**
   1. The KEM key given at `register` **always has version (index) 0** — the first record; `register` takes no
      `kemVersion` argument any more. `setKemKey` adds later versions ≥ 1 (write-once per version, as today). "No KEM

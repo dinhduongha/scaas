@@ -11,10 +11,14 @@ contract DeployHarness is DeployBase {
     bool internal forced;
     bool internal forcedBls;
     bool internal forcedBnG2;
+    uint256 internal gateLimit;
 
     function force(bool bls12381, bool bn254G2) external {
         (forced, forcedBls, forcedBnG2) = (true, bls12381, bn254G2);
     }
+
+    /// Stands in for `block.gaslimit` at the deploy gate (no cheatcode sets it); 0 = the chain's own.
+    function limitBlockGas(uint256 limit) external { gateLimit = limit; }
 
     function deploy(bytes32 uid_, bool zether, address ska) external returns (OpenFactory f, string memory json) {
         return deploy(uid_, zether, ska, false);
@@ -44,6 +48,11 @@ contract DeployHarness is DeployBase {
     function pqKindFits(uint64 cap, uint64 budget) external pure returns (bool) { return _pqKindFits(cap, budget); }
 
     function defaultNotice(uint256 chainId) external pure returns (uint256) { return _defaultNotice(chainId); }
+
+    function _requireReleaseGas(string memory name) internal view override {
+        if (gateLimit == 0) super._requireReleaseGas(name);
+        else _checkReleaseGas(name, gateLimit);
+    }
 
     function _precompiles() internal override returns (bool, bool) {
         if (forced) return (forcedBls, forcedBnG2);

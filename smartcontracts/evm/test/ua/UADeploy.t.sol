@@ -155,4 +155,19 @@ contract UADeployTest is Test {
         if (block.gaslimit < conf) vm.expectRevert();
         h.requireGas("WrappedPqzToken");
     }
+
+    /// NET-EVM-06: the registry is the largest transaction of a plain deploy, so its gate binds there, not `NormalToken`'s.
+    function test_registryDeployGate() public {
+        DeployHarness h = new DeployHarness();
+        uint256 need = h.gasNeed("UARegistry");
+        assertEq(need, vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".UARegistry") * 1530 + 16_777_216);
+        assertGt(need, h.gasNeed("NormalToken"));
+        assertGt(need, h.gasNeed("SCaaSDex"));
+        h.limitBlockGas(need - 1);
+        vm.expectRevert(bytes(string.concat("block gas limit ", vm.toString(need - 1), " < ", vm.toString(need),
+            " needed to deploy the UARegistry release (NET-EVM-06)")));
+        h.deploy(UID, false, ska);
+        h.limitBlockGas(need);
+        h.deploy(UID, false, ska);
+    }
 }
