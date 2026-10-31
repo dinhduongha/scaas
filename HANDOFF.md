@@ -50,7 +50,14 @@ feasibility, separate), `dero-he-vs-zether.md` (owner: DERO anonymity not needed
 supports Amsterdam; mandate epoch on every family; Soroban per-job fee cap + lane_hint; msig pop minimal form with UA-8
 Part B; BSC venues (PancakeV3Executor) after the DEX round.
 
-**Next:** (1) finish `zether-testnet` → review → merge; (2) prepare the contracts audit (scope since the 2026-10-27
+**Later the same day:** `zether-testnet` merged (`bcb0e1b5`): classical Zether live on the SCaaS testnet — the gen-1
+registry of phase C lacked 0x0141 (kinds fixed at construction; gen 2 refuses 0x0141 because 0x0105 shares the
+bls12381-g1 group), so the controller redeployed a full stack v2 beside phase C (salt `scaas.deploy.v2`, no reset,
+716 M gas; registry `0x6814…7b79`, factory `0xFa48…9626`); on-chain e2e (register, shield, single, Compact M = 4,
+BUNDLE M = 2, rollover, unshield, disclosure, wrapped) all ok; 144 verified. `deployments/7622.json` (git-ignored)
+restored in the main checkout from the deploy log. TODO: owner decision on the gen-1 kind set before the SCaaS mainnet.
+
+**Next:** (1) done; (2) prepare the contracts audit (scope since the 2026-10-27
 review: UA-8, kem-scheme, msig-pophash, webauthn, DEX round, ua-soroban, zether-ungate; layout as part 2: frozen
 detached worktree, units, agy in parallel, Claude workflow, one triage) and **stop for the owner before Codex**.
 
