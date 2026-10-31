@@ -192,6 +192,16 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      gen-1 deploy carries every kind the chain can run (`DeployBase` already does; add a gate that refuses a gen-1
      deploy missing an EIP-2537 kind the probe passes; no `UARegistry` change); and the relay-fee minimum re-decision
      (owner decides there; if it changes contracts it lands before the freeze, if it is node config it goes with P6i).
+  2d. **`typed-signing` round (owner 2026-10-31, before the freeze; inventory and decisions in the private note
+     `scratchpad/eip712-inventory.md`):** every user-signed operation becomes a typed, readable EIP-712 struct — the
+     EOA-visible paths (per-selector structs instead of opaque `MetaTransaction.data` for static-argument calls: wrap,
+     unwrap, wrapToUA, unwrapToUA, burn, addReserve, cancelNonce, shield, MandateWallet setMandate / setPayee / revoke,
+     SmartKeyAccount key ops; nested `CancelOrder(TradeOrder)`, `ReceiverFee(MetaTransfer)`; dedicated `RelayFee` and
+     `WrapOrder`), the UA paths (`UA*` twins, `UACancelNonce`, Zether rollover / set-mode, `PqzAuth`) and the portable
+     records (domain with only `name` + `version`; `UAPortableRecord`, `UAKemRecord`, `UARegistration`, `UAPqzKey`,
+     `UAPqzKeyRecord`; native EOA msig members sign the typed record). `kind` is `uint16` (name from the kind table),
+     no `paramSet`; `MetaTransaction` stays the fallback for dynamic-argument calls. The portable part goes first:
+     `ua8-soroban` M2 / M3 / B1–B3 / B5 / B7 wait for it.
   3. Zether verifier one merged MSM (EVM) — before `zether-soroban`, so the Soroban verifier is merged-MSM from the
      start (the Z0 estimate 536 M–2,409 M vs the 400 M limit depends on it).
   4. `zether-soroban` (Part Z; Z0 measures first).
