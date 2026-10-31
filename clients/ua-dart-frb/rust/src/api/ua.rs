@@ -24,6 +24,15 @@ impl From<scaas_ua::UAError> for UAError {
     }
 }
 
+impl From<scaas_ua::json::JsonError> for UAError {
+    fn from(e: scaas_ua::json::JsonError) -> Self {
+        match e {
+            scaas_ua::json::JsonError::Argument => arg(),
+            scaas_ua::json::JsonError::Ua(e) => e.into(),
+        }
+    }
+}
+
 type R<T> = Result<T, UAError>;
 
 fn arg() -> UAError {
@@ -319,10 +328,19 @@ pub fn canonical_id(text: String) -> R<String> {
 /// hash-committed key (null otherwise). `UAArgument` when the input is not this JSON.
 #[frb(sync)]
 pub fn registration_args(input: String) -> R<String> {
-    crate::registration::registration_args_json(&input).map_err(|e| match e {
-        crate::registration::JsonError::Argument => arg(),
-        crate::registration::JsonError::Ua(e) => e.into(),
-    })
+    Ok(scaas_ua::json::registration_args_json(&input)?)
+}
+/// `setKemKey`'s explicit arguments, JSON in and out. `input`: `{ua, version, kemPk, sig}`, `sig` the `UASig` `{keyData, signature,
+/// members: [{index, keyData, sig}]}` (absent: empty, the version-0 fill of a hash commit). Out: `{ua, version, kem, sig}`.
+#[frb(sync)]
+pub fn set_kem_key_args(input: String) -> R<String> {
+    Ok(scaas_ua::json::set_kem_key_args_json(&input)?)
+}
+/// `setPqzKey`'s explicit arguments, JSON in and out. `input`: `{ua, pqzKey, pqzPopHash, sig}`, `sig` as [`set_kem_key_args`]. Out:
+/// the same fields, `sig` complete.
+#[frb(sync)]
+pub fn set_pqz_key_args(input: String) -> R<String> {
+    Ok(scaas_ua::json::set_pqz_key_args_json(&input)?)
 }
 /// Members are `(kind, id, weight)`; a kind outside 0..=0xFFFF is `UAKindUnknown`, a threshold or weight outside u16 (or
 /// more than 65535 members) is `UAArgument`.

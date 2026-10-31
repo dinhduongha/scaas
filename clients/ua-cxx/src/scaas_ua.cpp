@@ -22,6 +22,14 @@ auto call(F&& f) -> decltype(f()) {
         throw translate(e);
     }
 }
+template <class F>
+std::string jsonCall(F&& f) {
+    try {
+        return call([&] { return std::string(f()); });
+    } catch (const std::invalid_argument&) {  // input that is not UTF-8
+        throw Error("UAArgument", "");
+    }
+}
 Bytes bytes(const rust::Vec<uint8_t>& v) { return Bytes(v.begin(), v.end()); }
 rust::Slice<const uint8_t> sl(const Bytes& b) { return {b.data(), b.size()}; }
 std::optional<Bytes> opt(const rust::Vec<uint8_t>& v) {
@@ -150,11 +158,13 @@ std::string canonicalId(const std::string& t) {
     }
 }
 std::string registrationArgs(const std::string& input) {
-    try {
-        return call([&] { return std::string(ffi::registration_args(input)); });
-    } catch (const std::invalid_argument&) {
-        throw Error("UAArgument", "");
-    }
+    return jsonCall([&] { return ffi::registration_args(input); });
+}
+std::string setKemKeyArgs(const std::string& input) {
+    return jsonCall([&] { return ffi::set_kem_key_args(input); });
+}
+std::string setPqzKeyArgs(const std::string& input) {
+    return jsonCall([&] { return ffi::set_pqz_key_args(input); });
 }
 Bytes encodeMsig(uint16_t th, const std::vector<Member>& ms) {
     std::vector<ffi::Member> v;

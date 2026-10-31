@@ -2,8 +2,6 @@
 //! cxx bridge over `scaas-ua`. Byte data crosses as `&[u8]` / `Vec<u8>`; fixed-size inputs are length-checked here, so a
 //! malformed call is an `Err` (thrown as `rust::Error` in C++), never UB. Fallible calls return `Result`; the message is
 //! `UAError`'s Display (`"<code>"` or `"UAKeyData: <reason>"`), which `include/scaas_ua.hpp` turns into code + reason.
-mod registration;
-
 use scaas_ua as ua;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
@@ -16,6 +14,14 @@ impl core::fmt::Display for UaErr {
 impl From<ua::UAError> for UaErr {
     fn from(e: ua::UAError) -> Self {
         UaErr(e.to_string())
+    }
+}
+impl From<ua::json::JsonError> for UaErr {
+    fn from(e: ua::json::JsonError) -> Self {
+        match e {
+            ua::json::JsonError::Argument => UaErr("UAArgument".into()),
+            ua::json::JsonError::Ua(e) => e.into(),
+        }
     }
 }
 type R<T> = Result<T, UaErr>;
@@ -137,6 +143,8 @@ mod ffi {
         fn canonical_id(text: &str) -> Result<String>;
         fn encode_msig(threshold: u16, members: &[Member]) -> Result<Vec<u8>>;
         fn registration_args(input: &str) -> Result<String>;
+        fn set_kem_key_args(input: &str) -> Result<String>;
+        fn set_pqz_key_args(input: &str) -> Result<String>;
     }
 }
 use ffi::{HolderPop, KindInfo, Member, PqzKeyRecord};
@@ -327,12 +335,13 @@ fn canonical_id(text: &str) -> R<String> {
     guard(|| Ok(ua::canonical_id(text)?))
 }
 fn registration_args(input: &str) -> R<String> {
-    guard(|| {
-        registration::registration_args_json(input).map_err(|e| match e {
-            registration::JsonError::Argument => UaErr("UAArgument".into()),
-            registration::JsonError::Ua(e) => e.into(),
-        })
-    })
+    guard(|| Ok(ua::json::registration_args_json(input)?))
+}
+fn set_kem_key_args(input: &str) -> R<String> {
+    guard(|| Ok(ua::json::set_kem_key_args_json(input)?))
+}
+fn set_pqz_key_args(input: &str) -> R<String> {
+    guard(|| Ok(ua::json::set_pqz_key_args_json(input)?))
 }
 fn encode_msig(threshold: u16, members: &[Member]) -> R<Vec<u8>> {
     guard(|| {

@@ -1115,6 +1115,7 @@ dependencies = [
  "ed25519-dalek",
  "k256",
  "p256",
+ "serde_json",
  "sha2",
  "sha3",
 ]
@@ -1125,7 +1126,6 @@ version = "0.1.0"
 dependencies = [
  "flutter_rust_bridge",
  "scaas-ua",
- "serde_json",
 ]
 
 [[package]]

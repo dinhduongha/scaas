@@ -501,6 +501,41 @@ TestCase {
         }
     }
 
+    // a record row's UASig: its sig, an msig's as the typed member list; absent fields are empty
+    function recordSig(r) {
+        return r.kind === 0x0120 ? { members: r.args.sig.members } : { signature: r.sig }
+    }
+
+    function test_set_key_args() {
+        const pp = vectors.load("portable.json")
+        compare(pp.kemRecords.length, 9)
+        for (const k of pp.kemRecords) {
+            const o = UaKinds.setKemKeyArgs(JSON.stringify({ ua: k.ua, version: k.version, kemPk: k.kemPk, sig: recordSig(k) }))
+            compare(UaKinds.lastError, "", k.id)
+            compare(JSON.parse(o), k.args, k.id)
+        }
+        compare(pp.pqzKeyRecords.length, 8)
+        for (const r of pp.pqzKeyRecords) {
+            const o = UaKinds.setPqzKeyArgs(JSON.stringify({ ua: r.ua, pqzKey: r.pqzKey, pqzPopHash: r.pqzPopHash, sig: recordSig(r) }))
+            compare(UaKinds.lastError, "", r.name)
+            compare(JSON.parse(o), r.args, r.name)
+        }
+        const ua = "0x" + "11".repeat(32)
+        for (const [bad, code] of [["not json", "UAArgument"],
+                                   ['{"ua": "0x11", "version": 1}', "UAArgument"],
+                                   [JSON.stringify({ ua }), "UAArgument"],
+                                   [JSON.stringify({ ua, version: 1, kemPk: "0x0101" }), "UAKemKeyLength"]]) {
+            compare(UaKinds.setKemKeyArgs(bad), "", bad)
+            compare(UaKinds.lastError, code, bad)
+        }
+        for (const [bad, code] of [["not json", "UAArgument"],
+                                   [JSON.stringify({ ua, pqzPopHash: "0x01" }), "UAPqzPopHash"],
+                                   [JSON.stringify({ ua, pqzPopHash: ua, sig: "0x01" }), "UAArgument"]]) {
+            compare(UaKinds.setPqzKeyArgs(bad), "", bad)
+            compare(UaKinds.lastError, code, bad)
+        }
+    }
+
     function test_encode_msig() {
         const id = "0x" + "11".repeat(32)
         compare(UaKinds.encodeMsig(2, JSON.stringify([[256, id, 1], [257, id, 1]])),

@@ -14,7 +14,7 @@ namespace scaas::ua {
 using Bytes = std::vector<uint8_t>;
 
 // code(): UAKeyData, UAIdInNativeSpace, UAKindUnknown, UAKindNotDerived, UAKindNotNative, UAIdFormat, UAPurposeUnknown, UAPqzHolder, UAKemHolder,
-// UAKemVersion, UAKemKeyLength, UAKemScheme, UAPqzPopHash, UAPqzKeySet, UAArgument (registrationArgs only).
+// UAKemVersion, UAKemKeyLength, UAKemScheme, UAPqzPopHash, UAPqzKeySet, UAArgument (the JSON calls only).
 // reason(): the label after "UAKeyData: " (empty for every other code).
 class Error : public std::runtime_error {
 public:
@@ -132,5 +132,10 @@ Bytes encodeMsig(uint16_t threshold, const std::vector<Member>& members);
 // kemFillCalldataLength}: args.entry names the registry entry, kemFill is the setKemKey(ua, 0, …) that stores a hash-committed key
 // (null otherwise). UAArgument when the input is not this JSON.
 std::string registrationArgs(const std::string& input);
+// setKemKey's explicit arguments, JSON in and out. In: {ua, version, kemPk, sig}, sig the UASig {keyData, signature, members: [{index,
+// keyData, sig}]} (absent: empty, the version-0 fill of a hash commit). Out: {ua, version, kem, sig}.
+std::string setKemKeyArgs(const std::string& input);
+// setPqzKey's explicit arguments, JSON in and out. In: {ua, pqzKey, pqzPopHash, sig}, sig as setKemKeyArgs. Out: the same fields, sig complete.
+std::string setPqzKeyArgs(const std::string& input);
 
 }  // namespace scaas::ua

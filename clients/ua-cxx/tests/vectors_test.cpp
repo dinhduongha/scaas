@@ -473,13 +473,42 @@ static void registration_args() {
         CHECK(code_of([&] { registrationArgs(bad.first); }) == bad.second, bad.first);
 }
 
+// a record row's UASig: its sig, an msig's as the typed member list; absent fields are empty
+static json recordSig(const json& r) {
+    if (r["kind"] == 0x0120) return {{"members", r["args"]["sig"]["members"]}};
+    return {{"signature", r["sig"]}};
+}
+
+static void set_key_args() {
+    json p = load("portable.json");
+    CHECK(p["kemRecords"].size() == 9, "kemRecords");
+    for (auto& k : p["kemRecords"]) {
+        json i = {{"ua", k["ua"]}, {"version", k["version"]}, {"kemPk", k["kemPk"]}, {"sig", recordSig(k)}};
+        CHECK(json::parse(setKemKeyArgs(i.dump())) == k["args"], k["id"].get<std::string>());
+    }
+    CHECK(p["pqzKeyRecords"].size() == 8, "pqzKeyRecords");
+    for (auto& r : p["pqzKeyRecords"]) {
+        json i = {{"ua", r["ua"]}, {"pqzKey", r["pqzKey"]}, {"pqzPopHash", r["pqzPopHash"]}, {"sig", recordSig(r)}};
+        CHECK(json::parse(setPqzKeyArgs(i.dump())) == r["args"], r["name"].get<std::string>());
+    }
+    std::string ua = "\"" + hexOf("11", 32) + "\"";
+    for (auto& bad : std::vector<std::pair<std::string, std::string>>{
+             {"not json", "UAArgument"}, {R"({"ua": "0x11", "version": 1})", "UAArgument"}, {"{\"ua\": " + ua + "}", "UAArgument"},
+             {"{\"ua\": " + ua + R"(, "version": 1, "kemPk": "0x0101"})", "UAKemKeyLength"}})
+        CHECK(code_of([&] { setKemKeyArgs(bad.first); }) == bad.second, bad.first);
+    for (auto& bad : std::vector<std::pair<std::string, std::string>>{
+             {"not json", "UAArgument"}, {"{\"ua\": " + ua + R"(, "pqzPopHash": "0x01"})", "UAPqzPopHash"},
+             {"{\"ua\": " + ua + ", \"pqzPopHash\": " + ua + R"(, "sig": "0x01"})", "UAArgument"}})
+        CHECK(code_of([&] { setPqzKeyArgs(bad.first); }) == bad.second, bad.first);
+}
+
 int main(int argc, char** argv) {
     std::map<std::string, void (*)()> tests{
         {"table_groups_purposes_constants", table_groups_purposes_constants}, {"valid_rows", valid_rows},
         {"invalid_rows", invalid_rows}, {"natives_native_space_canonical_ids", natives_native_space_canonical_ids},
         {"messages", messages}, {"structures", structures}, {"portable", portable}, {"kem_record", kem_record},
         {"pqz_key_record", pqz_key_record}, {"portable_purposes", portable_purposes},
-        {"holder_refusals", holder_refusals}, {"registration_args", registration_args}};
+        {"holder_refusals", holder_refusals}, {"registration_args", registration_args}, {"set_key_args", set_key_args}};
     if (argc != 2 || !tests.count(argv[1])) { std::fprintf(stderr, "usage: vectors_test <name>\n"); return 2; }
     try { tests[argv[1]](); } catch (const std::exception& e) { std::fprintf(stderr, "exception: %s\n", e.what()); return 1; }
     return failures ? 1 : 0;

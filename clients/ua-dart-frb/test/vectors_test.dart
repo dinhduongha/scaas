@@ -505,4 +505,37 @@ void main() {
       expect(errCode(() => registrationArgs(input: bad)), code, reason: bad);
     }
   });
+
+  /// A record row's `UASig`: its `sig`, an msig's as the typed member list; absent fields are empty.
+  Map recordSig(Map r) => r['kind'] == 0x0120 ? {'members': r['args']['sig']['members']} : {'signature': r['sig']};
+
+  test('set key args', () {
+    final kems = rows(pv, 'kemRecords'), pqz = rows(pv, 'pqzKeyRecords');
+    expect(kems, hasLength(9));
+    for (final k in kems) {
+      final i = {'ua': k['ua'], 'version': k['version'], 'kemPk': k['kemPk'], 'sig': recordSig(k)};
+      expect(jsonDecode(setKemKeyArgs(input: jsonEncode(i))), k['args'], reason: k['id']);
+    }
+    expect(pqz, hasLength(8));
+    for (final r in pqz) {
+      final i = {'ua': r['ua'], 'pqzKey': r['pqzKey'], 'pqzPopHash': r['pqzPopHash'], 'sig': recordSig(r)};
+      expect(jsonDecode(setPqzKeyArgs(input: jsonEncode(i))), r['args'], reason: r['name']);
+    }
+    final ua = '0x${'11' * 32}';
+    for (final (bad, code) in [
+      ('not json', 'UAArgument'),
+      ('{"ua": "0x11", "version": 1}', 'UAArgument'),
+      (jsonEncode({'ua': ua}), 'UAArgument'),
+      (jsonEncode({'ua': ua, 'version': 1, 'kemPk': '0x0101'}), 'UAKemKeyLength'),
+    ]) {
+      expect(errCode(() => setKemKeyArgs(input: bad)), code, reason: bad);
+    }
+    for (final (bad, code) in [
+      ('not json', 'UAArgument'),
+      (jsonEncode({'ua': ua, 'pqzPopHash': '0x01'}), 'UAPqzPopHash'),
+      (jsonEncode({'ua': ua, 'pqzPopHash': ua, 'sig': '0x01'}), 'UAArgument'),
+    ]) {
+      expect(errCode(() => setPqzKeyArgs(input: bad)), code, reason: bad);
+    }
+  });
 }

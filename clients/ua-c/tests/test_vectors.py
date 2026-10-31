@@ -67,7 +67,7 @@ for name, res, args in [
     ('is_portable_purpose', st, [u8, P]), ('msig_pqz_eligible', st, [u8, sz, P]),
     ('ua_auth_domain_separator', st, [u32, u64, u8, u8, P]),
     ('ua_auth_digest', st, [u32, u64, u8, u8, u8, u8, u8, P]), ('member_digest', st, [u8, u8, P]),
-    ('canonical_id', st, [u8, P, P]), ('encode_msig', st, [u16, P, sz, P, P]), ('registration_args', st, [u8, P, P]),
+    ('canonical_id', st, [u8, P, P]), ('encode_msig', st, [u16, P, sz, P, P]), ('registration_args', st, [u8, P, P]), ('set_kem_key_args', st, [u8, P, P]), ('set_pqz_key_args', st, [u8, P, P]),
 ]:
     f = getattr(LIB, 'scaas_ua_' + name)
     f.restype, f.argtypes = res, args
@@ -190,9 +190,14 @@ def reg_args(i):
     return json.loads(text(L.registration_args, json.dumps(i).encode()))
 
 
+def record_sig(r):
+    """A record row's `UASig`: its `sig`, an msig's as the typed member list; absent fields are empty."""
+    return {'members': r['args']['sig']['members']} if r['kind'] == 0x0120 else {'signature': r['sig']}
+
+
 class Vectors(unittest.TestCase):
     def test_table_groups_purposes_constants(self):
-        self.assertEqual(L.abi_version(), 4)
+        self.assertEqual(L.abi_version(), 5)
         self.assertEqual(L.kind_count(), len(K['kinds']))
         for i, r in enumerate(K['kinds']):
             with self.subTest(r['name']):
@@ -473,6 +478,26 @@ class Vectors(unittest.TestCase):
                           (b'{"kind": 305, "pqzKey": "0x01", "pqzPopHash": "0x01", "pqzPop": "0x01"}', 'UAPqzPopHash')):
             self.assertEqual(code_of(lambda: text(L.registration_args, bad)), code, bad)
         self.assertEqual(code_of(lambda: text(L.registration_args, None)), 'UAArgument')
+
+    def test_set_key_args(self):
+        self.assertEqual(len(PV['kemRecords']), 9)
+        for k in PV['kemRecords']:
+            i = {'ua': k['ua'], 'version': k['version'], 'kemPk': k['kemPk'], 'sig': record_sig(k)}
+            self.assertEqual(json.loads(text(L.set_kem_key_args, json.dumps(i).encode())), k['args'], k['id'])
+        self.assertEqual(len(PV['pqzKeyRecords']), 8)
+        for r in PV['pqzKeyRecords']:
+            i = {'ua': r['ua'], 'pqzKey': r['pqzKey'], 'pqzPopHash': r['pqzPopHash'], 'sig': record_sig(r)}
+            self.assertEqual(json.loads(text(L.set_pqz_key_args, json.dumps(i).encode())), r['args'], r['name'])
+        ua = '"0x' + '11' * 32 + '"'
+        for fn, bad, code in ((L.set_kem_key_args, b'not json', 'UAArgument'), (L.set_pqz_key_args, b'not json', 'UAArgument'),
+                              (L.set_kem_key_args, b'{"ua": "0x11", "version": 1}', 'UAArgument'),
+                              (L.set_kem_key_args, f'{{"ua": {ua}}}'.encode(), 'UAArgument'),
+                              (L.set_kem_key_args, f'{{"ua": {ua}, "version": 1, "kemPk": "0x0101"}}'.encode(), 'UAKemKeyLength'),
+                              (L.set_pqz_key_args, f'{{"ua": {ua}, "pqzPopHash": "0x01"}}'.encode(), 'UAPqzPopHash'),
+                              (L.set_pqz_key_args, f'{{"ua": {ua}, "pqzPopHash": {ua}, "sig": "0x01"}}'.encode(), 'UAArgument')):
+            self.assertEqual(code_of(lambda: text(fn, bad)), code, bad)
+        self.assertEqual(code_of(lambda: text(L.set_kem_key_args, None)), 'UAArgument')
+        self.assertEqual(code_of(lambda: text(L.set_pqz_key_args, None)), 'UAArgument')
 
     def test_portable_purposes(self):
         def portable(tag):

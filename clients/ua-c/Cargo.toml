@@ -10,8 +10,7 @@ description = "C ABI (cbindgen header) over scaas-ua. UNAUDITED."
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-scaas-ua = { path = "../ua-rs" }
-serde_json = "=1.0.154"
+scaas-ua = { path = "../ua-rs", features = ["json"] }
 
 [dev-dependencies]
 cbindgen = { version = "=0.28.0", default-features = false }

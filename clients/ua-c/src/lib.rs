@@ -3,8 +3,6 @@
 //! The caller owns every buffer, so no Rust allocation crosses the ABI. Every export runs inside `guard` (the one
 //! `catch_unwind`): a panic never unwinds into C. Status-returning exports go through `run`, which also sets the
 //! thread-local `scaas_ua_last_error` detail. UNAUDITED.
-mod registration;
-
 use scaas_ua as ua;
 use std::cell::RefCell;
 use std::ffi::{c_char, CStr, CString};
@@ -13,7 +11,7 @@ use std::sync::OnceLock;
 use std::{ptr, slice};
 
 /// Bumped on any breaking signature or layout change; compare with `scaas_ua_abi_version()`.
-pub const SCAAS_UA_ABI_VERSION: u32 = 4;
+pub const SCAAS_UA_ABI_VERSION: u32 = 5;
 
 /// The result of every fallible call: `SCAAS_UA_OK` or one of `SCAAS_UA_ERR_*`.
 pub type ScaasUaStatus = i32;
@@ -103,11 +101,11 @@ impl From<ua::UAError> for Fail {
 fn argument(what: &str) -> Fail {
     Fail(SCAAS_UA_ERR_ARGUMENT, format!("UAArgument: {what}"))
 }
-impl From<registration::JsonError> for Fail {
-    fn from(e: registration::JsonError) -> Self {
+impl From<ua::json::JsonError> for Fail {
+    fn from(e: ua::json::JsonError) -> Self {
         match e {
-            registration::JsonError::Argument => argument("JSON"),
-            registration::JsonError::Ua(e) => e.into(),
+            ua::json::JsonError::Argument => argument("JSON"),
+            ua::json::JsonError::Ua(e) => e.into(),
         }
     }
 }
@@ -750,6 +748,13 @@ pub extern "C" fn scaas_ua_canonical_id(text: *const c_char, out: *mut c_char, o
     })
 }
 
+fn json_call(f: fn(&str) -> ua::json::JsonResult<String>, input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    run(|| {
+        let t = std::str::from_utf8(cstr(input)?).map_err(|_| argument("JSON"))?;
+        write_str(out, out_len, &f(t)?)
+    })
+}
+
 /// The registry's explicit arguments of a registration, JSON in and out (NUL-terminated; `*out_len` counts the NUL).
 /// `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit}` (bytes as "0x..." hex, an absent field is
 /// empty, an msig's `pop` is `[{index, keyData, sig}]`, `kemCommit` true / false forces the KEM form, absent: the hash commit
@@ -758,10 +763,22 @@ pub extern "C" fn scaas_ua_canonical_id(text: *const c_char, out: *mut c_char, o
 /// that stores a hash-committed key (null otherwise). `SCAAS_UA_ERR_ARGUMENT` when the input is not this JSON.
 #[no_mangle]
 pub extern "C" fn scaas_ua_registration_args(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
-    run(|| {
-        let t = std::str::from_utf8(cstr(input)?).map_err(|_| argument("JSON"))?;
-        write_str(out, out_len, &registration::registration_args_json(t)?)
-    })
+    json_call(ua::json::registration_args_json, input, out, out_len)
+}
+
+/// `setKemKey`'s explicit arguments, JSON in and out as `scaas_ua_registration_args`. `input`: `{ua, version, kemPk, sig}`, `sig`
+/// the `UASig` `{keyData, signature, members: [{index, keyData, sig}]}` (absent: empty, the version-0 fill of a hash commit).
+/// Out: `{ua, version, kem, sig}`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_set_kem_key_args(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    json_call(ua::json::set_kem_key_args_json, input, out, out_len)
+}
+
+/// `setPqzKey`'s explicit arguments, JSON in and out as `scaas_ua_registration_args`. `input`: `{ua, pqzKey, pqzPopHash, sig}`,
+/// `sig` as in `scaas_ua_set_kem_key_args`. Out: the same fields, `sig` complete.
+#[no_mangle]
+pub extern "C" fn scaas_ua_set_pqz_key_args(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    json_call(ua::json::set_pqz_key_args_json, input, out, out_len)
 }
 
 /// The `msig` key data for `n` members (`members` may be NULL when `n == 0`): 4 + 36 * n bytes.

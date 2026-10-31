@@ -23,7 +23,7 @@
 /**
  * Bumped on any breaking signature or layout change; compare with `scaas_ua_abi_version()`.
  */
-#define SCAAS_UA_ABI_VERSION 4
+#define SCAAS_UA_ABI_VERSION 5
 
 /**
  * The result of every fallible call: `SCAAS_UA_OK` or one of `SCAAS_UA_ERR_*`.
@@ -510,6 +510,23 @@ ScaasUaStatus scaas_ua_canonical_id(const char *text, char *out, size_t *out_len
 ScaasUaStatus scaas_ua_registration_args(const char *input,
                                          char *out,
                                          size_t *out_len);
+
+/**
+ * `setKemKey`'s explicit arguments, JSON in and out as `scaas_ua_registration_args`. `input`: `{ua, version, kemPk, sig}`, `sig`
+ * the `UASig` `{keyData, signature, members: [{index, keyData, sig}]}` (absent: empty, the version-0 fill of a hash commit).
+ * Out: `{ua, version, kem, sig}`.
+ */
+ScaasUaStatus scaas_ua_set_kem_key_args(const char *input,
+                                        char *out,
+                                        size_t *out_len);
+
+/**
+ * `setPqzKey`'s explicit arguments, JSON in and out as `scaas_ua_registration_args`. `input`: `{ua, pqzKey, pqzPopHash, sig}`,
+ * `sig` as in `scaas_ua_set_kem_key_args`. Out: the same fields, `sig` complete.
+ */
+ScaasUaStatus scaas_ua_set_pqz_key_args(const char *input,
+                                        char *out,
+                                        size_t *out_len);
 
 /**
  * The `msig` key data for `n` members (`members` may be NULL when `n == 0`): 4 + 36 * n bytes.

@@ -8,7 +8,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `arg`, `hash`, `k`, `n`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`, `from`, `try_from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`, `from`, `from`, `try_from`
 
 KindInfo kindInfo({required PlatformInt64 kind}) =>
     ScaasUa.instance.api.crateApiUaKindInfo(kind: kind);
@@ -293,6 +293,16 @@ String canonicalId({required String text}) =>
 /// hash-committed key (null otherwise). `UAArgument` when the input is not this JSON.
 String registrationArgs({required String input}) =>
     ScaasUa.instance.api.crateApiUaRegistrationArgs(input: input);
+
+/// `setKemKey`'s explicit arguments, JSON in and out. `input`: `{ua, version, kemPk, sig}`, `sig` the `UASig` `{keyData, signature,
+/// members: [{index, keyData, sig}]}` (absent: empty, the version-0 fill of a hash commit). Out: `{ua, version, kem, sig}`.
+String setKemKeyArgs({required String input}) =>
+    ScaasUa.instance.api.crateApiUaSetKemKeyArgs(input: input);
+
+/// `setPqzKey`'s explicit arguments, JSON in and out. `input`: `{ua, pqzKey, pqzPopHash, sig}`, `sig` as [`set_kem_key_args`]. Out:
+/// the same fields, `sig` complete.
+String setPqzKeyArgs({required String input}) =>
+    ScaasUa.instance.api.crateApiUaSetPqzKeyArgs(input: input);
 
 /// Members are `(kind, id, weight)`; a kind outside 0..=0xFFFF is `UAKindUnknown`, a threshold or weight outside u16 (or
 /// more than 65535 members) is `UAArgument`.

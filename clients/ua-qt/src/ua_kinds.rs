@@ -127,6 +127,15 @@ pub mod qobject {
         /// hash-committed key (null otherwise).
         #[qinvokable] #[cxx_name = "registrationArgs"]
         fn registration_args(self: Pin<&mut Self>, input: &QString) -> QString;
+        /// `setKemKey`'s explicit arguments, JSON in and out. `input`: `{ua, version, kemPk, sig}`, `sig` the `UASig` `{keyData,
+        /// signature, members: [{index, keyData, sig}]}` (absent: empty, the version-0 fill of a hash commit). Out: `{ua, version,
+        /// kem, sig}`.
+        #[qinvokable] #[cxx_name = "setKemKeyArgs"]
+        fn set_kem_key_args(self: Pin<&mut Self>, input: &QString) -> QString;
+        /// `setPqzKey`'s explicit arguments, JSON in and out. `input`: `{ua, pqzKey, pqzPopHash, sig}`, `sig` as `setKemKeyArgs`.
+        /// Out: the same fields, `sig` complete.
+        #[qinvokable] #[cxx_name = "setPqzKeyArgs"]
+        fn set_pqz_key_args(self: Pin<&mut Self>, input: &QString) -> QString;
     }
 }
 
@@ -147,6 +156,12 @@ const ARG: &str = "UAArgument";
 
 fn from_ua<T>(r: ua::Result<T>) -> Res<T> {
     r.map_err(|e| e.code())
+}
+fn from_json(r: ua::json::JsonResult<String>) -> Res<String> {
+    r.map_err(|e| match e {
+        ua::json::JsonError::Argument => ARG,
+        ua::json::JsonError::Ua(e) => e.code(),
+    })
 }
 fn s(q: &QString) -> String {
     String::from(q)
@@ -388,12 +403,13 @@ impl qobject::UaKinds {
         QString::from(&self.run(|| from_ua(ua::canonical_id(&s(text)))))
     }
     pub fn registration_args(self: Pin<&mut Self>, input: &QString) -> QString {
-        QString::from(&self.run(|| {
-            crate::registration::registration_args_json(&s(input)).map_err(|e| match e {
-                crate::registration::JsonError::Argument => ARG,
-                crate::registration::JsonError::Ua(e) => e.code(),
-            })
-        }))
+        QString::from(&self.run(|| from_json(ua::json::registration_args_json(&s(input)))))
+    }
+    pub fn set_kem_key_args(self: Pin<&mut Self>, input: &QString) -> QString {
+        QString::from(&self.run(|| from_json(ua::json::set_kem_key_args_json(&s(input)))))
+    }
+    pub fn set_pqz_key_args(self: Pin<&mut Self>, input: &QString) -> QString {
+        QString::from(&self.run(|| from_json(ua::json::set_pqz_key_args_json(&s(input)))))
     }
     pub fn encode_msig(self: Pin<&mut Self>, threshold: i32, members: &QString) -> QString {
         self.hex(|| {
