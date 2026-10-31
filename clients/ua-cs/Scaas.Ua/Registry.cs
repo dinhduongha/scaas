@@ -1,6 +1,5 @@
 // The registry's explicit arguments (typed-signing R1 / R1b: TS-D10 … TS-D13; owner KEM rulings 2026-10-31), as clientkeys
 // registrationArgs and ua-rs registration_args. RegistryJson gives the named JSON of clientkeys and the node job API.
-using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -84,12 +83,13 @@ public static partial class UA
     /// <summary>The named JSON of any value here: bytes as 0x-hex, numbers as numbers.</summary>
     public static string RegistryJson(object args) => JsonSerializer.Serialize(args, args.GetType(), RegistryJsonOptions);
 
-    /// <summary>Splits an assembled <c>kemPk</c>; null / empty = the empty key.</summary>
+    /// <summary>Splits an assembled <c>kemPk</c>; null / empty = the empty key; a malformed key is refused as the registry does
+    /// (<see cref="KemRecordHash"/>: UAKemScheme, UAKemKeyLength).</summary>
     public static KemKey KemKeyOf(byte[]? kemPk)
     {
         var pk = kemPk ?? [];
         if (pk.Length == 0) return new(0, [], new byte[32]);
-        if (pk.Length < 33) throw new UAException("UAKemKeyLength", pk.Length.ToString(CultureInfo.InvariantCulture));
+        KemRecordHash(new byte[32], 0, pk);
         return new(pk[0], pk[1..^32], pk[^32..]);
     }
 
@@ -127,8 +127,10 @@ public static partial class UA
             [.. Enumerable.Range(0, t).Select(j => d[(o + j * s)..(o + (j + 1) * s)])], d[(o + t * s)..(o + (t + 1) * s)], d[(o + (t + 1) * s)..(o + per)]))]);
     }
 
-    /// <summary><c>setKemKey(ua, version, kem, sig)</c>; <paramref name="sig"/> empty for the version-0 hash-commit fill.</summary>
-    public static SetKemKeyArgs NewSetKemKeyArgs(byte[] ua, ulong version, byte[]? kemPk, UASig sig) => new(Sized(ua, 32, "ua"), version, KemKeyOf(kemPk), sig);
+    /// <summary><c>setKemKey(ua, version, kem, sig)</c>; <paramref name="sig"/> empty for the version-0 hash-commit fill; no key is no call.</summary>
+    public static SetKemKeyArgs NewSetKemKeyArgs(byte[] ua, ulong version, byte[]? kemPk, UASig sig) => kemPk is { Length: > 0 }
+        ? new(Sized(ua, 32, "ua"), version, KemKeyOf(kemPk), sig)
+        : throw new UAException("UAKemKeyLength", "0");
 
     /// <summary><c>setPqzKey(ua, pqzKey, pqzPopHash, sig)</c>.</summary>
     public static SetPqzKeyArgs NewSetPqzKeyArgs(byte[] ua, byte[] pqzKey, byte[] pqzPopHash, UASig sig) =>

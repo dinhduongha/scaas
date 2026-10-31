@@ -602,6 +602,28 @@ test('register hash-commit only when the full call does not fit (X0: PQZH n2560-
   assert.equal(ua.registrationArgs({ ...at('n2304-kmax4096', 18432), kemCommit: true }).args.attrs.kemPkHash, hex(keccak_256(kemPk)));
 });
 
+test('a malformed KEM key is refused before a form is chosen', () => {
+  const r = P.registrations.find((x) => x.kemCommit);
+  const kemPk = (head, n) => concatBytes(Uint8Array.of(head), new Uint8Array(n - 1).fill(0x5a));
+  for (const kemCommit of [true, false, undefined]) {
+    assert.throws(() => ua.registrationArgs({ ...regInput(r), kemPk: kemPk(1, 40), kemCommit }), { code: 'UAKemKeyLength' });
+    assert.throws(() => ua.registrationArgs({ ...regInput(r), kemPk: kemPk(2, 1601), kemCommit }), { code: 'UAKemScheme' });
+  }
+  assert.throws(() => ua.kemKeyOf(kemPk(1, 1600)), { code: 'UAKemKeyLength' });
+});
+
+test('kem repair after a front-run hash commit (PRV M1)', () => {
+  const r = P.registrations.find((x) => x.kemCommit);
+  const none = ua.kemKeyOf('0x');
+  const key = r.attrs.kemPk;
+  const hash = r.kemCommit.register.attrs.kemPkHash;
+  assert.equal(ua.kemRepair({ ua: r.ua, kemPkHash: Z, stored: r.args.attrs.kem, kemPk: key }), null, 'never committed, full key');
+  assert.equal(ua.kemRepair({ ua: r.ua, kemPkHash: Z, stored: none, kemPk: key }), null, 'never committed, no key');
+  assert.equal(ua.kemRepair({ ua: r.ua, kemPkHash: hash, stored: r.args.attrs.kem, kemPk: key }), null, 'committed and filled');
+  assert.deepEqual(ua.kemRepair({ ua: r.ua, kemPkHash: hash, stored: none, kemPk: key }), r.kemCommit.fill);
+  assert.throws(() => ua.kemRepair({ ua: r.ua, kemPkHash: hash, stored: none, kemPk: '0x' }), { code: 'UAKemKeyLength' });
+});
+
 // --- typed-signing R1b (TS-D13, Appendix X row 12): webauthn-p256 / MuSig2 / FROST keys as typed fields ---
 
 test('register args typed keys (registerWebAuthn / registerMuSig2 / registerFrost)', () => {

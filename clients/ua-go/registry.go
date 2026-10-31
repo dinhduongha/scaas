@@ -2,7 +2,6 @@ package ua
 
 import (
 	"encoding/hex"
-	"fmt"
 )
 
 // The registry's explicit arguments (typed-signing R1 / R1b: TS-D10 … TS-D13; owner KEM rulings 2026-10-31), as clientkeys
@@ -23,13 +22,14 @@ type KemKey struct {
 	X25519  Hex   `json:"x25519"`
 }
 
-// KemKeyOf splits an assembled kemPk; empty = the empty key.
+// KemKeyOf splits an assembled kemPk; empty = the empty key; a malformed key is refused as the registry does (KemRecordHash:
+// UAKemScheme, UAKemKeyLength).
 func KemKeyOf(kemPk []byte) (KemKey, error) {
 	if len(kemPk) == 0 {
 		return KemKey{X25519: make(Hex, 32)}, nil
 	}
-	if len(kemPk) < 33 {
-		return KemKey{}, fail("UAKemKeyLength", fmt.Sprint(len(kemPk)))
+	if _, err := KemRecordHash([32]byte{}, 0, kemPk); err != nil {
+		return KemKey{}, err
 	}
 	return KemKey{kemPk[0], kemPk[1 : len(kemPk)-32], kemPk[len(kemPk)-32:]}, nil
 }
@@ -178,8 +178,11 @@ type SetKemKeyArgs struct {
 	Sig     UASig  `json:"sig"`
 }
 
-// NewSetKemKeyArgs builds setKemKey's arguments; sig empty for the version-0 hash-commit fill.
+// NewSetKemKeyArgs builds setKemKey's arguments; sig empty for the version-0 hash-commit fill; no key is no call.
 func NewSetKemKeyArgs(ua [32]byte, version uint64, kemPk []byte, sig UASig) (*SetKemKeyArgs, error) {
+	if len(kemPk) == 0 {
+		return nil, fail("UAKemKeyLength", "0")
+	}
 	kem, err := KemKeyOf(kemPk)
 	if err != nil {
 		return nil, err

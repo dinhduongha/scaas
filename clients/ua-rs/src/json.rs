@@ -144,8 +144,11 @@ pub fn registration_args_json(t: &str) -> JsonResult<String> {
 pub fn set_kem_key_args_json(t: &str) -> JsonResult<String> {
     let v = parse(t)?;
     let (ua, version) = (ua_in(&v["ua"])?, v["version"].as_u64().ok_or(Argument)?);
-    let a = SetKemKeyArgs { ua, version, kem: KemKey::from_kem_pk(&unhex(&v["kemPk"])?)?, sig: sig_in(&v["sig"])? };
-    Ok(fill_json(&a).to_string())
+    let (kem_pk, sig) = (unhex(&v["kemPk"])?, sig_in(&v["sig"])?);
+    if kem_pk.is_empty() {
+        return Err(UAError::KemKeyLength.into()); // the empty key is `register`'s "none", never a `setKemKey`
+    }
+    Ok(fill_json(&SetKemKeyArgs { ua, version, kem: KemKey::from_kem_pk(&kem_pk)?, sig }).to_string())
 }
 
 pub fn set_pqz_key_args_json(t: &str) -> JsonResult<String> {

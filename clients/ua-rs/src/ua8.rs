@@ -288,13 +288,14 @@ pub struct KemKey {
     pub x25519: [u8; 32],
 }
 impl KemKey {
-    /// The key of an assembled `kem_pk` (scheme byte, ek, the last 32 bytes); empty = no key; 1 … 32 bytes `KemKeyLength`.
+    /// The key of an assembled `kem_pk` (scheme byte, ek, the last 32 bytes); empty = no key; a malformed key is refused as the
+    /// registry does ([`kem_record_hash`]: `KemScheme`, `KemKeyLength`).
     pub fn from_kem_pk(kem_pk: &[u8]) -> Result<Self> {
-        match kem_pk.len() {
-            0 => Ok(Self::default()),
-            n if n < 33 => Err(UAError::KemKeyLength),
-            n => Ok(Self { scheme: kem_pk[0], mlkem_ek: kem_pk[1..n - 32].to_vec(), x25519: kem_pk[n - 32..].try_into().unwrap() }),
-        }
+        kem_record_hash(&[0; 32], 0, kem_pk)?;
+        Ok(match kem_pk.len() {
+            0 => Self::default(),
+            n => Self { scheme: kem_pk[0], mlkem_ek: kem_pk[1..n - 32].to_vec(), x25519: kem_pk[n - 32..].try_into().unwrap() },
+        })
     }
     /// `scheme ‖ mlkem_ek ‖ x25519`, empty for no key.
     pub fn kem_pk(&self) -> Vec<u8> {
@@ -536,6 +537,17 @@ impl SetKemKeyArgs {
         4 + 128 + kem_key_len(&self.kem) + 96 + tail_len(&self.sig.key_data) + tail_len(&self.sig.signature)
             + member_sigs_len(&self.sig.members)
     }
+}
+/// The repair of a front-run hash commit (PRV M1, owner 2026-11-01, option (a); CTR-UA-07): both forms of a KEM key sign the
+/// same record, so anyone can land the commit form of a full `register`. After `register`, or on `UAAlreadyRegistered`, the
+/// client reads `registrationOf(ua).attrs.kemPkHash` and `kemKeyAt(ua, 0).kem` (`stored`) and sends what this returns:
+/// `setKemKey(ua, 0, kem, UASig())` when the commit is unfilled, equal to the `kem_fill` of a `kem_commit` registration.
+pub fn kem_repair(ua: &[u8; 32], kem_pk_hash: &[u8; 32], stored: &KemKey, kem_pk: &[u8]) -> Result<Option<SetKemKeyArgs>> {
+    if *kem_pk_hash == [0; 32] || *stored != KemKey::default() {
+        return Ok(None);
+    }
+    kem_record_hash(ua, 1, kem_pk)?; // a fill needs a key: version 0 alone has a no-key record
+    Ok(Some(SetKemKeyArgs { ua: *ua, version: 0, kem: KemKey::from_kem_pk(kem_pk)?, sig: UASig::default() }))
 }
 /// The registration's inputs (empty = absent): `pop` the signer's signature (single keys), `members` an msig's member
 /// signatures; `kem_commit` forces the KEM form (`None`: the hash commit only when the full call is over

@@ -446,11 +446,12 @@ void _lengthIs(bool ok) {
   if (!ok) throw UAError('UAKeyData', 'length');
 }
 
-/// `KemKey{scheme, mlkemEk, x25519}` (TS-D11) of `kemPk = scheme ‖ ek ‖ x25519`; null / empty = the empty key.
+/// `KemKey{scheme, mlkemEk, x25519}` (TS-D11) of `kemPk = scheme ‖ ek ‖ x25519`; null / empty = the empty key; a malformed key is
+/// refused as the registry does ([kemRecordHash]: `UAKemScheme`, `UAKemKeyLength`).
 Map<String, Object?> kemKeyOf(Uint8List? kemPk) {
   final pk = kemPk ?? Uint8List(0);
   if (pk.isEmpty) return {'scheme': 0, 'mlkemEk': '0x', 'x25519': _zeroWord};
-  if (pk.length < 33) throw UAError('UAKemKeyLength', '${pk.length}');
+  kemRecordHash(Uint8List(32), BigInt.zero, pk);
   return {'scheme': pk[0], 'mlkemEk': _hexOf(pk.sublist(1, pk.length - 32)), 'x25519': _hexOf(pk.sublist(pk.length - 32))};
 }
 
@@ -511,9 +512,11 @@ List<Map<String, Object?>> _memberSigsJson(List<(int, Uint8List?, Uint8List)> me
 Map<String, Object?> uaSig({Uint8List? keyData, Uint8List? signature, List<(int, Uint8List?, Uint8List)> members = const []}) =>
     {'keyData': _hexOf(keyData), 'signature': _hexOf(signature), 'members': _memberSigsJson(members)};
 
-/// `setKemKey(ua, version, KemKey, UASig)`; [sig] a [uaSig] (empty for the version-0 hash-commit fill).
-Map<String, Object?> setKemKeyArgs(Uint8List ua, int version, Uint8List? kemPk, Map<String, Object?> sig) =>
-    {'ua': _hexOf(_sized(ua, 32, 'ua')), 'version': version, 'kem': kemKeyOf(kemPk), 'sig': sig};
+/// `setKemKey(ua, version, KemKey, UASig)`; [sig] a [uaSig] (empty for the version-0 hash-commit fill); no key is no call.
+Map<String, Object?> setKemKeyArgs(Uint8List ua, int version, Uint8List? kemPk, Map<String, Object?> sig) {
+  if (kemPk == null || kemPk.isEmpty) throw UAError('UAKemKeyLength', '0');
+  return {'ua': _hexOf(_sized(ua, 32, 'ua')), 'version': version, 'kem': kemKeyOf(kemPk), 'sig': sig};
+}
 
 /// `setPqzKey(ua, pqzKey, pqzPopHash, UASig)`.
 Map<String, Object?> setPqzKeyArgs(Uint8List ua, Uint8List pqzKey, Uint8List pqzPopHash, Map<String, Object?> sig) => {

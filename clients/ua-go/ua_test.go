@@ -890,6 +890,23 @@ func TestRegistrationArgsTyped(t *testing.T) {
 	}
 }
 
+// PRV L6: the registry's KEM key check runs before a form is chosen; a setKemKey without a key is no call.
+func TestMalformedKemRefused(t *testing.T) {
+	kem := func(head byte, n int) []byte { k := bytes.Repeat([]byte{0x5a}, n); k[0] = head; return k }
+	yes, no := true, false
+	for _, commit := range []*bool{&yes, &no, nil} {
+		for want, kemPk := range map[string][]byte{"UAKemKeyLength": kem(1, 40), "UAKemScheme": kem(2, 1601)} {
+			in := RegistrationInput{Kind: 0x0130, KeyData: bytes.Repeat([]byte{0x5a}, 1312), KemPk: kemPk, KemCommit: commit}
+			if _, _, err := RegistrationArgs(in); code(err) != want {
+				t.Fatal(want, err)
+			}
+		}
+	}
+	if _, err := NewSetKemKeyArgs([32]byte{1}, 1, nil, NewUASig(nil, nil, nil)); code(err) != "UAKemKeyLength" {
+		t.Fatal(err)
+	}
+}
+
 // The hash commit only when the full call does not fit one transaction (owner 2026-10-31; X0: PQZH n2560-kmax16384 with a PQZ
 // key and a KEM key): the figures of clientkeys, ua-rs and forge test_r1_kemHashCommitFits.
 func TestRegistrationHashCommitWhenOverLimit(t *testing.T) {

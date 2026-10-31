@@ -80,6 +80,10 @@ fn refusals() {
     assert_eq!(bad_kem(json!({ "ua": ua })), JsonError::Argument, "version is required");
     assert_eq!(bad_kem(json!({ "ua": ua, "version": "1" })), JsonError::Argument);
     assert_eq!(bad_kem(json!({ "ua": ua, "version": 1, "kemPk": "0x0101" })), JsonError::Ua(UAError::KemKeyLength));
+    assert_eq!(bad_kem(json!({ "ua": ua, "version": 1 })), JsonError::Ua(UAError::KemKeyLength), "no key is no setKemKey");
+    assert_eq!(bad_kem(json!({ "ua": ua, "version": 0 })), JsonError::Ua(UAError::KemKeyLength), "nor a fill");
+    let short = format!("0x01{}", "5a".repeat(39));
+    assert_eq!(bad_kem(json!({ "ua": ua, "version": 1, "kemPk": short })), JsonError::Ua(UAError::KemKeyLength));
     let pop = format!("0x{}", "22".repeat(32));
     assert_eq!(bad_pqz(json!({ "ua": "0x", "pqzPopHash": pop })), JsonError::Argument);
     assert_eq!(bad_pqz(json!({ "ua": ua, "pqzPopHash": "0x01" })), JsonError::Ua(UAError::PqzPopHash));

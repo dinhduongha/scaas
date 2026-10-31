@@ -586,7 +586,18 @@ void main() {
     for (final r in (p['pqzKeyRecords'] as List).cast<Map>()) {
       expect(setPqzKeyArgs(_b(r['ua']), _b(r['pqzKey']), _b(r['pqzPopHash']), recordSig(r)), r['args'], reason: r['name'] as String);
     }
-    expect(_err(() => kemKeyOf(Uint8List(32))).code, 'UAKemKeyLength');
+    expect(_err(() => kemKeyOf(Uint8List(32))).code, 'UAKemScheme');
+  });
+
+  // PRV L6: the registry's KEM key check runs before a form is chosen; a setKemKey without a key is no call.
+  test('malformed kem refused', () {
+    Uint8List kem(int head, int n) => (Uint8List(n)..fillRange(0, n, 0x5a))..[0] = head;
+    final keyData = Uint8List(1312)..fillRange(0, 1312, 0x5a);
+    for (final commit in [true, false, null]) {
+      expect(_err(() => registrationArgs(0x0130, keyData, kemPk: kem(1, 40), kemCommit: commit)).code, 'UAKemKeyLength');
+      expect(_err(() => registrationArgs(0x0130, keyData, kemPk: kem(2, 1601), kemCommit: commit)).code, 'UAKemScheme');
+    }
+    expect(_err(() => setKemKeyArgs(Uint8List(32), 1, null, uaSig())).code, 'UAKemKeyLength');
   });
 
   // The hash commit only when the full call does not fit one transaction (owner 2026-10-31; X0: PQZH n2560-kmax16384 with a PQZ

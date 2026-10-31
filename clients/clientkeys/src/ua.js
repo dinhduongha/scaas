@@ -407,11 +407,12 @@ export function encodeMsig(threshold, members) {
 // --- the registry's explicit arguments (typed-signing R1: TS-D10 … TS-D12; owner KEM rulings 2026-10-31) ---
 
 const ZW = hex(Z32);
-/** `KemKey{scheme, mlkemEk, x25519}` (TS-D11) of an assembled `kemPk = scheme ‖ ek ‖ x25519`; absent = the empty key. */
+/** `KemKey{scheme, mlkemEk, x25519}` (TS-D11) of an assembled `kemPk = scheme ‖ ek ‖ x25519`; absent = the empty key; a
+ *  malformed key is refused as the registry does (`kemRecordStruct`: `UAKemScheme`, `UAKemKeyLength`). */
 export function kemKeyOf(kemPk) {
   const pk = orEmpty(kemPk);
   if (pk.length === 0) return { scheme: 0, mlkemEk: '0x', x25519: ZW };
-  if (pk.length < 33) fail('UAKemKeyLength', String(pk.length));
+  kemRecordStruct({ ua: Z32, kemPk: pk });
   return { scheme: pk[0], mlkemEk: hex(pk.subarray(1, pk.length - 32)), x25519: hex(pk.subarray(pk.length - 32)) };
 }
 /** `scheme ‖ mlkemEk ‖ x25519`, empty for the empty key (what the registry stores and hashes). */
@@ -511,13 +512,24 @@ export function registrationArgs({ kind, keyData, pqzKey, pqzPopHash, pqzPop, ke
     : entry === 'registerWebAuthn' ? { key: typedKey(k, keyData), ...common, pop: hex(orEmpty(pop)) }
       : entry !== 'register' ? { kind: k, key: typedKey(k, keyData), ...common, pop: hex(orEmpty(pop)) }
         : { kind: k, keyData: hex(bytes(keyData)), ...common, pop: hex(orEmpty(pop)) };
-  // a scheme byte alone (no key bytes) would read as a commit: refuse a malformed key before choosing
-  const full = orEmpty(kemPk);
+  const full = orEmpty(kemPk); // well-formed or absent: `kemKeyOf` refused the rest before a form is chosen
   const commit = full.length !== 0 && (kemCommit ?? registryCalldataLength(entry, args) > REGISTER_CALLDATA_LIMIT);
   if (!commit) return { entry, args, kemFill: null };
   const ua = uaOf(k, keyData);
   args.attrs = { ...attrs, kem: { scheme: full[0], mlkemEk: '0x', x25519: ZW }, kemPkHash: hex(keccak_256(full)) };
   return { entry, args, kemFill: { ua: hex(ua), version: 0, kem: attrs.kem, sig: uaSig() } };
+}
+
+/**
+ * The repair of a front-run hash commit (PRV M1, owner 2026-11-01, option (a); CTR-UA-07): both forms of a KEM key sign the
+ * same record, so anyone can land the commit form of a full `register`. After `register`, or on `UAAlreadyRegistered`, the
+ * client reads `registrationOf(ua).attrs.kemPkHash` and `kemKeyAt(ua, 0).kem` (`stored`) and sends what this returns:
+ * `setKemKey(ua, 0, kem, UASig())` when the commit is unfilled, equal to `registrationArgs(…, kemCommit: true).kemFill`; else null.
+ */
+export function kemRepair({ ua, kemPkHash, stored, kemPk }) {
+  if (hex(sized(kemPkHash, 32, 'kemPkHash')) === ZW || kemPkOf(stored).length !== 0) return null;
+  const record = kemRecordStruct({ ua, version: 1, kemPk }); // a fill needs a key: version 0 alone has a no-key record
+  return { ua: record.ua, version: 0, kem: kemKeyOf(kemPk), sig: uaSig() };
 }
 
 // --- key-data validation (§1.6 "Validation at registration") ---

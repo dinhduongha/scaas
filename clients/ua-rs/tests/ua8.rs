@@ -647,6 +647,36 @@ fn registration_hash_commit_when_over_limit() {
     assert!(small.kem_fill.is_none(), "under the limit: the full key");
 }
 
+/// PRV L6: the registry's KEM key check runs before a form is chosen: a commit of a malformed key could only revert at its fill.
+#[test]
+fn registration_refuses_malformed_kem() {
+    let p = load("portable.json");
+    let row = arr(&p, "registrations").iter().find(|r| r.get("kemCommit").is_some()).unwrap();
+    let with = |head: u8, n: usize, kem_commit| {
+        let mut kem_pk = vec![0x5a; n];
+        kem_pk[0] = head;
+        registration_args(&RegistrationInput { kem_pk, kem_commit, ..reg_input(row) }).unwrap_err()
+    };
+    for commit in [Some(true), Some(false), None] {
+        assert_eq!(with(1, 40, commit), UAError::KemKeyLength);
+        assert_eq!(with(2, 1601, commit), UAError::KemScheme);
+    }
+}
+
+/// PRV M1 (owner 2026-11-01, option (a)): a client repairs a front-run hash commit from what it reads.
+#[test]
+fn kem_repair_fills_a_front_run_commit() {
+    let p = load("portable.json");
+    let row = arr(&p, "registrations").iter().find(|r| r.get("kemCommit").is_some()).unwrap();
+    let (ua, key) = (b32(&row["ua"]), bytes(&row["attrs"]["kemPk"]));
+    let (hash, stored, none) = (b32(&row["kemCommit"]["register"]["attrs"]["kemPkHash"]), KemKey::from_kem_pk(&key).unwrap(), KemKey::default());
+    assert_eq!(kem_repair(&ua, &[0; 32], &stored, &key).unwrap(), None, "never committed, full key");
+    assert_eq!(kem_repair(&ua, &[0; 32], &none, &key).unwrap(), None, "never committed, no key");
+    assert_eq!(kem_repair(&ua, &hash, &stored, &key).unwrap(), None, "committed and filled");
+    assert_eq!(fill_json(&kem_repair(&ua, &hash, &none, &key).unwrap().unwrap()), row["kemCommit"]["fill"]);
+    assert_eq!(kem_repair(&ua, &hash, &none, &[]), Err(UAError::KemKeyLength));
+}
+
 /// typed-signing R1b (TS-D13, Appendix X row 12): `webauthn-p256` / MuSig2 / FROST register through `registerWebAuthn` /
 /// `registerMuSig2` / `registerFrost` with typed keys that assemble to the packed key data (kinds.json `valid` rows), the
 /// calldata lengths cast 1.8.5 gave (no attributes, a 32-byte pop, no pqzPop; as clientkeys and forge

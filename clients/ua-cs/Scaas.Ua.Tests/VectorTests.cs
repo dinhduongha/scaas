@@ -610,7 +610,22 @@ public class VectorTests
             SameJson(UA.NewSetKemKeyArgs(B(k.GetProperty("ua")), k.GetProperty("version").GetUInt64(), B(k.GetProperty("kemPk")), RecordSig(k)), k.GetProperty("args"));
         foreach (var r in p.GetProperty("pqzKeyRecords").EnumerateArray())
             SameJson(UA.NewSetPqzKeyArgs(B(r.GetProperty("ua")), B(r.GetProperty("pqzKey")), B(r.GetProperty("pqzPopHash")), RecordSig(r)), r.GetProperty("args"));
-        Assert.Equal("UAKemKeyLength", Assert.Throws<UAException>(() => UA.KemKeyOf(new byte[32])).Code);
+        Assert.Equal("UAKemScheme", Assert.Throws<UAException>(() => UA.KemKeyOf(new byte[32])).Code);
+    }
+
+    /// <summary>PRV L6: the registry's KEM key check runs before a form is chosen; a setKemKey without a key is no call.</summary>
+    [Fact]
+    public void MalformedKemRefused()
+    {
+        static byte[] Kem(byte head, int n) { var k = Enumerable.Repeat((byte)0x5a, n).ToArray(); k[0] = head; return k; }
+        string Code(byte[] kemPk, bool? commit) => Assert.Throws<UAException>(() =>
+            UA.RegistrationArgs(0x0130, Enumerable.Repeat((byte)0x5a, 1312).ToArray(), kemPk: kemPk, kemCommit: commit)).Code;
+        foreach (var commit in new bool?[] { true, false, null })
+        {
+            Assert.Equal("UAKemKeyLength", Code(Kem(1, 40), commit));
+            Assert.Equal("UAKemScheme", Code(Kem(2, 1601), commit));
+        }
+        Assert.Equal("UAKemKeyLength", Assert.Throws<UAException>(() => UA.NewSetKemKeyArgs(new byte[32], 1, null, new UA.UASig())).Code);
     }
 
     /// <summary>The hash commit only when the full call does not fit one transaction (owner 2026-10-31; X0: PQZH n2560-kmax16384 with a

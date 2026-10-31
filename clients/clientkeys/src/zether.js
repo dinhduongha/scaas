@@ -189,8 +189,9 @@ const ZETHER_PURPOSES = ['metatx', 'metatx-cancel', 'keyop', 'receiver-fee', 'vp
 /**
  * The `sig` a Zether UA gives every UA-ledger write (metatx, metatx-cancel, keyop, receiver-fee, vp, vc-anchor, trade,
  * zether-owner): Schnorr by `x` over `uaMessage(0x0141, purpose, digest)`, returned RAW as `R‖z` (160 bytes); the
- * registry reads `Y` from its record. `requireAuthorized` wants `abi.encode(bytes(""), sig)`: use `zetherOwnerAuth`
- * for the owner ops. Spends carry no signature: the proof alone authorizes them (UA-6).
+ * registry reads `Y` from its record. A token's `bytes auth` wants `abi.encode(bytes(""), sig)` (`zetherOwnerAuth` for
+ * the owner ops), `requireAuthorized` takes `UASig{signature: sig}` (`uaSig` in ua.js). Spends carry no signature: the
+ * proof alone authorizes them (UA-6).
  */
 export function zetherSign(curve, x, purpose, digest) {
   if (purpose === 'pop') throw new Error('the PoP has its own signer: zetherPop');

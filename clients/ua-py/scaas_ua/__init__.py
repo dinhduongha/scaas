@@ -679,12 +679,12 @@ REGISTER_CALLDATA_LIMIT = ((1 << 24) - 15_000) // 64  # the largest calldata who
 
 
 def kem_key_of(kem_pk):
-    """``KemKey{scheme, mlkemEk, x25519}`` (TS-D11) of ``kem_pk = scheme ‖ ek ‖ x25519``; None / b'' = the empty key."""
+    """``KemKey{scheme, mlkemEk, x25519}`` (TS-D11) of ``kem_pk = scheme ‖ ek ‖ x25519``; None / b'' = the empty key; a
+    malformed key is refused as the registry does (``kem_record_hash``: UAKemScheme, UAKemKeyLength)."""
     pk = _bytes(kem_pk) if kem_pk is not None else b''
     if not pk:
         return {'scheme': 0, 'mlkemEk': '0x', 'x25519': _ZW}
-    if len(pk) < 33:
-        raise UAError('UAKemKeyLength', str(len(pk)))
+    kem_record_hash(bytes(32), 0, pk)
     return {'scheme': pk[0], 'mlkemEk': _hx(pk[1:-32]), 'x25519': _hx(pk[-32:])}
 
 
@@ -732,7 +732,9 @@ def ua_sig(key_data=b'', signature=b'', members=()):
 
 
 def set_kem_key_args(ua, version, kem_pk, sig):
-    """``setKemKey(ua, version, KemKey, UASig)``; ``sig`` a ua_sig (empty for the version-0 hash-commit fill)."""
+    """``setKemKey(ua, version, KemKey, UASig)``; ``sig`` a ua_sig (empty for the version-0 hash-commit fill); no key is no call."""
+    if not kem_pk:
+        raise UAError('UAKemKeyLength', '0')
     return {'ua': _hx(_sized(ua, 32, 'ua')), 'version': int(version), 'kem': kem_key_of(kem_pk), 'sig': sig}
 
 

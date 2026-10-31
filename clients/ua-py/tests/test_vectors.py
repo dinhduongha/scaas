@@ -479,6 +479,19 @@ class TypedRegistryArgs(unittest.TestCase):
             ua.kem_key_of(bytes([1] * 32))
         self.assertEqual(e.exception.code, 'UAKemKeyLength')
 
+    def test_malformed_kem_refused(self):
+        """PRV L6: the registry's KEM key check runs before a form is chosen; a setKemKey without a key is no call."""
+        r = next(x for x in P['registrations'] if 'kemCommit' in x)
+        kem = lambda head, n: bytes([head]) + b'\x5a' * (n - 1)
+        for commit in (True, False, None):
+            for kem_pk, code in ((kem(1, 40), 'UAKemKeyLength'), (kem(2, 1601), 'UAKemScheme')):
+                with self.assertRaises(ua.UAError) as e:
+                    ua.registration_args(0x0130, b'\x5a' * 1312, kem_pk=kem_pk, kem_commit=commit)
+                self.assertEqual(e.exception.code, code)
+        with self.assertRaises(ua.UAError) as e:
+            ua.set_kem_key_args(b(r['ua']), 1, None, ua.ua_sig())
+        self.assertEqual(e.exception.code, 'UAKemKeyLength')
+
     def test_registration_hash_commit_when_over_limit(self):
         """The hash commit only when the full call does not fit one transaction (owner 2026-10-31; X0: PQZH n2560-kmax16384
         with a PQZ key and a KEM key): the figures of clientkeys, ua-rs and forge test_r1_kemHashCommitFits."""
