@@ -88,8 +88,8 @@ library UACall {
     }
 
     /// `register`, or the typed entry of kind `msig` / `webauthn-p256` / MuSig2 / FROST (key data and pop in their byte
-    /// forms; typed-signing R1 / R1b). Key data the typed form cannot express (a wrong length) goes to `register`, which
-    /// refuses these kinds (`UAKeyData(kind)`), as the typed entry refuses the layout.
+    /// forms; typed-signing R1 / R1b). Key data the typed form cannot express (a wrong length) goes to `register`, whose
+    /// `validateKeyData` refuses it (`UAKeyData(kind)`), as the typed entry refuses the layout.
     function register(
         IUARegistry r,
         uint16 kind,

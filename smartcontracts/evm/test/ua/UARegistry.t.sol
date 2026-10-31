@@ -115,9 +115,10 @@ contract UARegistryTest is UARegistryBase {
 
     /// typed-signing R1b (TS-D13, Appendix X row 12): every kinds.json `valid` row of `webauthn-p256`, `musig2-*` and
     /// `frost-*` registers through its typed entry (`registerWebAuthn` / `registerMuSig2` / `registerFrost`) with the id
-    /// of the packed key data (kinds.json `ua`); `register(kind, keyData, …)` is refused (`UAKeyData(kind)`: one accepted
-    /// form); `registrationOf` keeps the packed bytes; the typed views give the key back (empty for another kind; gen 2
-    /// forwards). groups.json / portable.json / signatures.json rows run the same entries through `UACall.register`.
+    /// of the packed key data (kinds.json `ua`); `register(kind, keyData, …)` takes the packed form too (owner 2026-10-31:
+    /// same id, same record, so a key registered by one form is `UAAlreadyRegistered` by the other); `registrationOf`
+    /// keeps the packed bytes; the typed views give the key back (empty for another kind; gen 2 forwards). groups.json /
+    /// portable.json / signatures.json rows run the same entries through `UACall.register`.
     function test_registerTypedKeysSameId() public {
         uint16[5] memory ks = [0x0100, 0x0110, 0x0111, 0x0112, 0x0113];
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](5);
@@ -127,6 +128,7 @@ contract UARegistryTest is UARegistryBase {
         UARegistry r = _deploy(address(0x5ce01b), chainUidA, address(0), false, BUDGET, address(0), false, c);
         UARegistry g2 = _deploy(address(0x5ce02b), chainUidA, address(r), false, BUDGET, address(0), false,
             new UARegistry.KindConfig[](0));
+        UARegistry packed = _deploy(address(0x5ce03b), chainUidA, address(0), false, BUDGET, address(0), false, c);
         string memory j = _kindsJson();
         uint256 n;
         for (uint256 i; vm.keyExistsJson(j, string.concat(".valid[", vm.toString(i), "]")); ++i) {
@@ -136,12 +138,13 @@ contract UARegistryTest is UARegistryBase {
             bytes memory d = vm.parseJsonBytes(j, string.concat(row, ".keyData"));
             bytes32 ua = vm.parseJsonBytes32(j, string.concat(row, ".ua"));
             bytes memory pop = _pop(r, kind, d);
-            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, kind));
-            r.register(kind, d, _none(), pop, "");
             assertEq(_registerTyped(r, kind, d, pop), ua, vm.toString(i));
             (uint16 k, bytes memory got,,,) = r.registrationOf(ua);
             assertEq(k, kind);
             assertEq(got, d);
+            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAAlreadyRegistered.selector, ua));
+            r.register(kind, d, _none(), pop, "");
+            _assertPackedForm(packed, kind, d, ua);
             _assertTypedViews(r, kind, ua, d);
             _assertTypedViews(g2, kind, ua, d);
             ++n;
@@ -164,6 +167,15 @@ contract UARegistryTest is UARegistryBase {
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.FROST_SECP256K1));
         r.registerMuSig2(UAKinds.FROST_SECP256K1, UACall.muSig2Key(vm.parseJsonBytes(j, ".valid[8].keyData"), 33),
             _none(), "", "");
+    }
+
+    /// The packed form of `register` gives the typed entry's id and record.
+    function _assertPackedForm(UARegistry r, uint16 kind, bytes memory d, bytes32 ua) internal {
+        assertEq(r.register(kind, d, _none(), _pop(r, kind, d), ""), ua, "the packed form, the same id");
+        (uint16 k, bytes memory got,,,) = r.registrationOf(ua);
+        assertEq(k, kind);
+        assertEq(got, d);
+        _assertTypedViews(r, kind, ua, d);
     }
 
     /// The typed entry of `kind`, called directly (the key data's typed form round-trips its bytes).

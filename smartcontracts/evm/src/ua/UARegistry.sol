@@ -632,15 +632,13 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     // ----- register (accounts.md §1.8 steps 1–8, UA-8) -----
 
     /// Registers `keyData` of a single-key `kind` with its attributes (accounts.md §1.8, UA-8 P2); `UAPoP` when the PoP
-    /// fails. The structure `msig` registers through `registerMsig` only, `webauthn-p256` / MuSig2 / FROST through
-    /// `registerWebAuthn` / `registerMuSig2` / `registerFrost` (typed-signing TS-D13; `UAKeyData(kind)` here: one
-    /// accepted form).
+    /// fails. The structure `msig` registers through `registerMsig` only (`UAKeyData(kind)` here: its PoP is a
+    /// `MemberSig[]`); `webauthn-p256` / MuSig2 / FROST also through their packed key data, next to `registerWebAuthn` /
+    /// `registerMuSig2` / `registerFrost` (owner 2026-10-31; TS-D13): same bytes, same id, same record.
     function register(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
         bytes calldata pqzPop) external returns (bytes32 ua)
     {
-        if (kind == UAKinds.MSIG || kind == UAKinds.WEBAUTHN_P256 || _vkLength(kind) == 33 || _vkLength(kind) == 64) {
-            revert UAKeyData(kind);
-        }
+        if (kind == UAKinds.MSIG) revert UAKeyData(kind);
         return _register(kind, keyData, attrs, pop, new MemberSig[](0), pqzPop);
     }
 
