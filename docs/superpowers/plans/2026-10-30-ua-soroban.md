@@ -381,10 +381,11 @@ fn ua_page(env: Env, kind: u32, start: u32, n: u32) -> Vec<BytesN<32>>;     // c
   `pop_hash = keccak256(pop)` (`BytesN<32>`); `pop` stays in `Ua(ua)` (owner ruling 2026-10-30 after T0: the 16 384 B
   contract-events limit). `register` checks in spec §3's order;
   `pop_checked = Chain`, `pqz_pop_checked = None`, `proven = false`, `signable` per spec §4 (`msig`: the summed weight of
-  members Soroban can verify for signing — registered signable S3 members, 0x0011, 0x0012; `evm-eoa` and
+  members Soroban can verify for signing — registered signable S3 members, 0x0011; `evm-eoa` and
   `evm-contract` weigh 0 — must reach the threshold); `index` = the list position (CTR-UA-29); `ledger` = the sequence.
   `msig` key data per CTR-UA-09 (threshold, members sorted strictly by id, `count ≤ 16`); a member is a registered S3
-  single-key UA, 0x0011, 0x0012, `evm-eoa` 0x0001 or `evm-contract` 0x0002, else `MemberUnknown`; the `msig` `pop` is
+  single-key UA, 0x0011, `evm-eoa` 0x0001 or `evm-contract` 0x0002, else `MemberUnknown` (0x0012 dropped from MEMBER:
+  owner ruling 2026-10-31 after the final review, Soroban invoker auth, NET-SOR-18); the `msig` `pop` is
   `abi.encode(MemberSig[])` under purpose `member` (`member_digest(ua, uaMessage(MSIG, POP_V2, registrationDigest))`),
   a registered member's slot with an **empty `keyData`** (its key read from the member's record; non-empty ⇒ `Pop`;
   owner ruling 2026-10-30 after T0):
