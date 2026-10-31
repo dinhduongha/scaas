@@ -4,11 +4,12 @@
 //! construction (S16, C13).
 #![no_std]
 use scaas_ua_common::{
-    h32, Checked, Registration, UaAttrs, PURPOSE_KEM, PURPOSE_MEMBER, PURPOSE_POP_V2, PURPOSE_PQZ_KEY,
+    h32, kem_record_hash, portable_record_hash, registration_digest, Checked, Registration, UaAttrs, PURPOSE_KEM,
+    PURPOSE_MEMBER, PURPOSE_POP_V2, PURPOSE_PQZ_KEY,
 };
 use soroban_sdk::{
-    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, xdr::FromXdr, Address,
-    Bytes, BytesN, Env, IntoVal, TryFromVal, Val, Vec,
+    contract, contracterror, contractevent, contractimpl, contracttype, crypto::Hash, panic_with_error, xdr::FromXdr,
+    Address, Bytes, BytesN, Env, IntoVal, TryFromVal, Val, Vec,
 };
 
 pub(crate) mod abi;
@@ -237,10 +238,11 @@ fn stellar_account(env: &Env, id: &[u8; 32]) -> Address {
 /// indexes below `count`, members under purpose `member` over `member_digest(ua, ua_message(MSIG, purpose, digest))`
 /// until the threshold (a slot after it fails). A registered member's slot carries an empty `keyData` (its key read
 /// from `Signer(id)` alone; non-empty ⇒ `Pop`); a `G…` member's slot is empty and checked by the host over
-/// `(ua, purpose, digest)`; an `evm-eoa` member signs `personal_sign(member_digest)` for `portable` (the `pop` at
-/// `register`) only; an `evm-contract` slot, and an `evm-eoa` slot outside `portable`, is `NotVerifiable` (SOR-D6).
-/// A slot past the threshold or an unmet threshold is `short`.
-fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, digest: &BytesN<32>, auth: &Bytes, portable: bool, short: Error) {
+/// `(ua, purpose, digest)`; an `evm-eoa` member signs the record's typed digest `portable` itself (ECDSA, the `pop` at
+/// `register` only; typed-signing TS-D4, `eth_signTypedData_v4`, no `personal_sign`); an `evm-contract` slot, and an
+/// `evm-eoa` slot outside `portable`, is `NotVerifiable` (SOR-D6). A slot past the threshold or an unmet threshold is
+/// `short`.
+fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, digest: &BytesN<32>, auth: &Bytes, portable: Option<&Hash<32>>, short: Error) {
     let sigs = abi::decode_member_sigs(env, auth);
     let md = member_digest(env, ua, &ua_message(env, MSIG, purpose, digest));
     let pm = BytesN::from_array(env, &PURPOSE_MEMBER);
@@ -256,10 +258,10 @@ fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, diges
         }
         match kind {
             EVM_CONTRACT => fail(env, Error::NotVerifiable),
-            EVM_EOA if !portable => fail(env, Error::NotVerifiable),
             EVM_EOA => {
+                let typed = portable.unwrap_or_else(|| fail(env, Error::NotVerifiable));
                 let id20: BytesN<20> = Bytes::from_array(env, &id).slice(12..32).try_into().unwrap();
-                verify::check_evm_eoa_personal_sign(env, &id20, &md, &s.sig);
+                verify::check_evm_eoa(env, &id20, typed, &s.sig);
             }
             STELLAR_ACCOUNT => {
                 if !s.sig.is_empty() {
@@ -333,11 +335,15 @@ impl UaRegistry {
         if attrs != empty_attrs(&env) || !pqz_pop.is_empty() {
             fail(&env, Error::Attrs);
         }
+        // typed(UARegistration{UAPortableRecord{ua, kind, 0, UAKemRecord{ua, 0, 0, 0}}, 0}) (TS-D1): no attributes on
+        // UA-Soroban, so no PQZ key and the zero KEM record.
         let zero = BytesN::from_array(&env, &[0; 32]);
-        let reg = registration_digest(&env, &portable_pop_digest(&env, &ua, &zero, &zero), &zero);
+        let rec = portable_record_hash(&env, &ua, kind, &zero, &kem_record_hash(&env, &ua, 0, 0, &zero));
+        let typed = registration_digest(&env, &rec, &zero);
+        let reg = typed.to_bytes();
         let pv2 = BytesN::from_array(&env, &PURPOSE_POP_V2);
         if kind == MSIG {
-            check_msig(&env, &ua, &key_data, &pv2, &reg, &pop, true, Error::Pop);
+            check_msig(&env, &ua, &key_data, &pv2, &reg, &pop, Some(&typed), Error::Pop);
         } else {
             verify::check(&env, kind, &key_data, &ua_message(&env, kind, &pv2, &reg), &pop);
         }
@@ -397,7 +403,7 @@ impl UaRegistry {
         env.storage().persistent().extend_ttl(&Key::Ua(ua.clone()), TTL_MIN, TTL_BUMP);
         bump_instance(&env);
         if kind == MSIG {
-            check_msig(&env, &ua, &key, &purpose, &digest, &auth, false, Error::Unauthorized);
+            check_msig(&env, &ua, &key, &purpose, &digest, &auth, None, Error::Unauthorized);
         } else {
             verify::check(&env, kind, &key, &ua_message(&env, kind, &purpose, &digest), &auth);
         }

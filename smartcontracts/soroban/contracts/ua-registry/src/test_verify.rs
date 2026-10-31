@@ -42,8 +42,11 @@ impl Harness {
         verify::ed25519_key_ok(&pk.to_array())
     }
 
-    pub fn eoa(env: Env, id20: BytesN<20>, member_digest: BytesN<32>, sig: Bytes) {
-        verify::check_evm_eoa_personal_sign(&env, &id20, &member_digest, &sig);
+    /// The `evm-eoa` member check over typed(`UARegistration`) of `(ua, kind)` without attributes.
+    pub fn eoa(env: Env, id20: BytesN<20>, ua: BytesN<32>, kind: u32, sig: Bytes) {
+        let z = BytesN::from_array(&env, &[0; 32]);
+        let rec = portable_record_hash(&env, &ua, kind, &z, &kem_record_hash(&env, &ua, 0, 0, &z));
+        verify::check_evm_eoa(&env, &id20, &registration_digest(&env, &rec, &z), &sig);
     }
 
     /// `(index, keyData length, sig length)` of each decoded member.
@@ -184,24 +187,33 @@ fn ua_message_matches_kinds_json() {
     assert!(seen >= S3.len());
 }
 
-/// Every `registrations[]` row: `portablePopDigest` and `registrationDigest` (kind-independent), and `popMessage` for
-/// the rows of an S3 kind (`ua_message` knows the TAGs of the S3 kinds only: every other kind is `KindDisabled`). The
-/// row's id is `ua_of` for the S3 kinds; an `msig` row's `memberDigest` is `member_digest(ua, popMessage)`.
+/// Every `registrations[]` row: `kemRecordHash` (the zero record without a KEM key, else the version-0 registration
+/// key), `portableRecordDigest` and `registrationDigest` (typed, TS-D1), and `popMessage` for the rows of an S3 kind
+/// (`ua_message` knows the TAGs of the S3 kinds only: every other kind is `KindDisabled`). The row's id is `ua_of` for
+/// the S3 kinds; an `msig` row's `memberDigest` is `member_digest(ua, popMessage)`.
 #[test]
 fn portable_digests_match_portable_json() {
     let env = Env::default();
     let (mut all, mut s3) = (0, 0);
     for r in json(PORTABLE)["registrations"].as_array().unwrap() {
-        let ua = n32(&env, &r["ua"]);
-        let portable = digest::portable_pop_digest(&env, &ua, &n32(&env, &r["pqzKeyHash"]), &n32(&env, &r["kemRecordHash"]));
-        assert_eq!(portable.to_array().to_vec(), hx(&r["portablePopDigest"]), "portablePopDigest of {}", r["name"]);
+        let (ua, kind, a) = (n32(&env, &r["ua"]), kind_of(&r["kind"]), &r["attrs"]);
+        let kem_pk = hx(&a["kemPk"]);
+        let kem = if kem_pk.is_empty() {
+            kem_record_hash(&env, &ua, 0, 0, &BytesN::from_array(&env, &[0; 32]))
+        } else {
+            let h = env.crypto().keccak256(&b(&env, &kem_pk)).into();
+            kem_record_hash(&env, &ua, a["kemVersion"].as_u64().unwrap(), kem_pk[0], &h)
+        };
+        assert_eq!(a["kemVersion"].as_u64(), Some(0), "the registration KEM key is version 0: {}", r["name"]);
+        assert_eq!(kem.to_array().to_vec(), hx(&r["kemRecordHash"]), "kemRecordHash of {}", r["name"]);
+        let rec = portable_record_hash(&env, &ua, kind, &n32(&env, &r["pqzKeyHash"]), &kem);
+        assert_eq!(portable_digest(&env, &rec).to_array().to_vec(), hx(&r["portableRecordDigest"]), "portableRecordDigest of {}", r["name"]);
         let pqz_pop = hx(&r["pqzPop"]);
         let pqz_pop_hash = if pqz_pop.is_empty() { [0u8; 32] } else { env.crypto().keccak256(&b(&env, &pqz_pop)).to_array() };
         assert_eq!(pqz_pop_hash.to_vec(), hx(&r["attrs"]["pqzPopHash"]), "pqzPopHash of {}", r["name"]);
-        let reg = digest::registration_digest(&env, &portable, &BytesN::from_array(&env, &pqz_pop_hash));
+        let reg: BytesN<32> = registration_digest(&env, &rec, &BytesN::from_array(&env, &pqz_pop_hash)).into();
         assert_eq!(reg.to_array().to_vec(), hx(&r["registrationDigest"]), "registrationDigest of {}", r["name"]);
         all += 1;
-        let kind = kind_of(&r["kind"]);
         if S3.contains(&kind) {
             assert_eq!(digest::ua_of(&env, kind, &b(&env, &hx(&r["keyData"]))), ua, "ua of {}", r["name"]);
             let pv2 = BytesN::from_array(&env, &PURPOSE_POP_V2);
@@ -363,9 +375,10 @@ fn member_sigs_abi_canonical_only() {
     assert!(c.try_decode(&b(&env, &big)).is_err(), "index above u16");
 }
 
-/// S10: the `msig-pq-native` member 0 (`evm-eoa`) signs `memberDigest` by EIP-191 `personal_sign`.
+/// S10 / TS-D4: the `msig-pq-native` member 0 (`evm-eoa`) signs the row's `registrationDigest` itself (ECDSA over the
+/// typed digest, `eth_signTypedData_v4`); its `memberDigest` and EIP-191 forms are refused.
 #[test]
-fn evm_eoa_member_personal_sign_recovers() {
+fn evm_eoa_member_typed_recovers() {
     let (env, c) = setup();
     let r = derived(PORTABLE, "registrations", "msig-pq-native");
     let pop = b(&env, &hx(&r["pop"]));
@@ -374,11 +387,41 @@ fn evm_eoa_member_personal_sign_recovers() {
     let id = hx(&r["keyData"])[6..38].to_vec(); // member 0: u16 kind ‖ bytes32 id ‖ u16 weight after the u16 header pair
     assert_eq!(id[..12], [0u8; 12]);
     let id20 = BytesN::from_array(&env, &id[12..].try_into().unwrap());
-    let md = n32(&env, &r["memberDigest"]);
-    c.eoa(&id20, &md, &m0.sig);
-    let other = BytesN::from_array(&env, &[7; 32]);
-    assert!(c.try_eoa(&id20, &other, &m0.sig).is_err(), "another digest");
-    assert!(c.try_eoa(&BytesN::from_array(&env, &[9; 20]), &md, &m0.sig).is_err(), "another address");
+    let ua = n32(&env, &r["ua"]);
+    c.eoa(&id20, &ua, &0x0120, &m0.sig);
+    assert!(c.try_eoa(&id20, &BytesN::from_array(&env, &[7; 32]), &0x0120, &m0.sig).is_err(), "another record");
+    assert!(c.try_eoa(&id20, &ua, &0x0131, &m0.sig).is_err(), "another kind");
+    assert!(c.try_eoa(&BytesN::from_array(&env, &[9; 20]), &ua, &0x0120, &m0.sig).is_err(), "another address");
+}
+
+/// TS-D1: the portable typehashes are `keccak256` of their EIP-712 type strings, as `portable.json` `typed.types`.
+#[test]
+fn portable_typehashes_pinned() {
+    let env = Env::default();
+    let t = &json(PORTABLE)["typed"]["types"];
+    for (name, th) in [
+        ("UAKemRecord", UA_KEM_RECORD_TYPEHASH),
+        ("UAPortableRecord", UA_PORTABLE_RECORD_TYPEHASH),
+        ("UARegistration", UA_REGISTRATION_TYPEHASH),
+    ] {
+        let ty = t[name]["type"].as_str().unwrap();
+        assert_eq!(env.crypto().keccak256(&b(&env, ty.as_bytes())).to_array(), th, "{name}");
+        assert_eq!(th.to_vec(), hx(&t[name]["typehash"]), "{name}");
+    }
+}
+
+/// TS-D1: `hashStruct(EIP712Domain{name: "SCaaS UA Portable", version: "1"})`, as `portable.json` `typed`.
+#[test]
+fn domain_separator_pinned() {
+    let env = Env::default();
+    let p = json(PORTABLE);
+    let k = |s: &str| env.crypto().keccak256(&b(&env, s.as_bytes())).to_array();
+    assert_eq!(p["typed"]["domainType"], "EIP712Domain(string name,string version)");
+    assert_eq!(p["typed"]["domain"]["name"], "SCaaS UA Portable");
+    assert_eq!(p["typed"]["domain"]["version"], "1");
+    let ds = [k("EIP712Domain(string name,string version)"), k("SCaaS UA Portable"), k("1")].concat();
+    assert_eq!(env.crypto().keccak256(&b(&env, &ds)).to_array(), PORTABLE_DOMAIN_SEPARATOR);
+    assert_eq!(PORTABLE_DOMAIN_SEPARATOR.to_vec(), hx(&p["typed"]["domainSeparator"]));
 }
 
 // --- WebAuthn: in-test P-256 signatures over clientDataJSON variants ---

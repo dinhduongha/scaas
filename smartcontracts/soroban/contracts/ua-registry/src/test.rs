@@ -80,10 +80,11 @@ fn no_attrs(env: &Env) -> UaAttrs {
     UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: n(env, [0; 32]), kem_version: 0, kem_pk: Bytes::new(env) }
 }
 
-/// `registrationDigest` of a record without attributes (UA8-D1): what its `pop` signs under purpose `pop` v2.
-fn reg_digest(env: &Env, ua: &BytesN<32>) -> BytesN<32> {
+/// typed(`UARegistration`) of a record without attributes (TS-D1, the zero KEM record): what its `pop` signs under
+/// purpose `pop` v2.
+fn reg_digest(env: &Env, ua: &BytesN<32>, kind: u32) -> BytesN<32> {
     let z = n(env, [0; 32]);
-    digest::registration_digest(env, &digest::portable_pop_digest(env, ua, &z, &z), &z)
+    registration_digest(env, &portable_record_hash(env, ua, kind, &z, &kem_record_hash(env, ua, 0, 0, &z)), &z).into()
 }
 
 fn msg(env: &Env, kind: u32, purpose: [u8; 32], d: &BytesN<32>) -> [u8; 32] {
@@ -220,7 +221,7 @@ impl Sk {
     }
     fn pop(&self, env: &Env) -> Bytes {
         let ua = self.ua(env);
-        self.sign(env, &msg(env, self.kind(), PURPOSE_POP_V2, &reg_digest(env, &ua)))
+        self.sign(env, &msg(env, self.kind(), PURPOSE_POP_V2, &reg_digest(env, &ua, self.kind())))
     }
     fn register(&self, env: &Env, c: &UaRegistryClient) -> BytesN<32> {
         c.register(&self.kind(), &self.key_data(env), &no_attrs(env), &self.pop(env), &Bytes::new(env), &None)
@@ -306,7 +307,7 @@ fn member_sigs(env: &Env, slots: &[(u32, StdVec<u8>, StdVec<u8>)]) -> Bytes {
 // ---------- register ----------
 
 #[test]
-fn register_portable_pop_from_portable_json() {
+fn register_rows_from_portable_json() {
     let (env, c) = setup();
     for name in S3_ROWS.iter() {
         let r = portable(&env, name);
@@ -378,6 +379,11 @@ fn register_attrs_refused_4b() {
     portable(&env, "mldsa65#1").on(&c);
     portable(&env, "mldsa65#2").on(&c);
     assert_eq!(portable(&env, "msig-pq/n2304-kmax4096").refused(&c), Error::Attrs);
+    // A KEM key alone (version 0, the registration key: owner ruling 2026-10-31) is an attribute too.
+    let mut r = portable(&env, "p256");
+    r.attrs.kem_pk = portable(&env, "fndsa512").attrs.kem_pk;
+    assert_eq!(r.attrs.kem_version, 0);
+    assert_eq!(r.refused(&c), Error::Attrs);
     // A pqz_pop without attrs is an attribute too.
     let mut r = portable(&env, "p256");
     r.pqz_pop = b(&env, &[1]);
@@ -394,7 +400,7 @@ fn register_unverifiable_part_refused_4b() {
     let mut contract_id = [0u8; 32];
     contract_id[12..].copy_from_slice(&[0x22; 20]);
     let m = msig(&env, 2, &[(0x0002, contract_id, 1), (0x0102, e.ua(&env).to_array(), 1)]);
-    let rd = reg_digest(&env, &m.ua);
+    let rd = reg_digest(&env, &m.ua, 0x0120);
     let pop = member_sigs(&env, &[(m.index(&contract_id), vec![], vec![1; 65]), m.slot(&env, &e, PURPOSE_POP_V2, &rd)]);
     for r in [None, Some(relayer)] {
         let got = err(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &pop, &Bytes::new(&env), &r));
@@ -481,7 +487,7 @@ fn msig_member_unknown_refused() {
     let (e, p) = (ed(2), Sk::P256(p256k(3)));
     let pua = p.register(&env, &c);
     let m = msig(&env, 1, &[(0x0102, e.ua(&env).to_array(), 1)]);
-    let pop = member_sigs(&env, &[m.slot(&env, &e, PURPOSE_POP_V2, &reg_digest(&env, &m.ua))]);
+    let pop = member_sigs(&env, &[m.slot(&env, &e, PURPOSE_POP_V2, &reg_digest(&env, &m.ua, 0x0120))]);
     assert_eq!(err(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &pop, &Bytes::new(&env), &None)), Error::MemberUnknown);
     let m = msig(&env, 1, &[(0x0100, pua.to_array(), 1)]);
     assert_eq!(err(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &pop, &Bytes::new(&env), &None)), Error::MemberUnknown);
@@ -495,7 +501,7 @@ fn msig_2of3(env: &Env, c: &UaRegistryClient) -> (Msig, Sk, Sk) {
     let q = portable(env, "mldsa65#1");
     q.on(c);
     let m = msig(env, 2, &[(0x0102, e.ua(env).to_array(), 1), (0x0101, p.ua(env).to_array(), 1), (0x0131, q.ua.to_array(), 1)]);
-    let rd = reg_digest(env, &m.ua);
+    let rd = reg_digest(env, &m.ua, 0x0120);
     let mut slots = vec![m.slot(env, &e, PURPOSE_POP_V2, &rd), m.slot(env, &p, PURPOSE_POP_V2, &rd)];
     slots.sort_by_key(|s| s.0);
     let ua = m.register(env, c, &member_sigs(env, &slots));
@@ -635,7 +641,7 @@ fn msig_soroban_native_member_host_auth() {
     let c = deploy(&env, &[]);
     let m = msig(&env, 1, &[(0x0011, gpk, 1)]);
     let empty_slot = member_sigs(&env, &[(0, vec![], vec![])]);
-    let rd = reg_digest(&env, &m.ua);
+    let rd = reg_digest(&env, &m.ua, 0x0120);
     let pv2 = n(&env, PURPOSE_POP_V2);
     // register: the G member authorises (ua, pop v2, registrationDigest).
     assert!(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &empty_slot, &Bytes::new(&env), &None).is_err());
@@ -658,7 +664,7 @@ fn msig_soroban_native_member_host_auth() {
     assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &d, &member_sigs(&env, &[(0, vec![], vec![1])]))), Error::Pop);
 }
 
-/// `personal_sign(member_digest)` of an EOA key and its 20-byte address as a native-space id.
+/// An EOA key's 20-byte address as a native-space id.
 fn eoa(env: &Env, sk: &k256::ecdsa::SigningKey) -> [u8; 32] {
     let pt = sk.verifying_key().to_encoded_point(false);
     let h = env.crypto().keccak256(&b(env, &pt.as_bytes()[1..])).to_array();
@@ -666,17 +672,19 @@ fn eoa(env: &Env, sk: &k256::ecdsa::SigningKey) -> [u8; 32] {
     id[12..].copy_from_slice(&h[12..]);
     id
 }
+/// EIP-191 `personal_sign` of a 32-byte message (the pre-typed-signing member form, now refused).
 fn personal_sign(env: &Env, sk: &k256::ecdsa::SigningKey, md: &BytesN<32>) -> StdVec<u8> {
     let mut m = b"\x19Ethereum Signed Message:\n32".to_vec();
     m.extend_from_slice(&md.to_array());
     k1_sign(sk, &env.crypto().keccak256(&b(env, &m)).to_array())
 }
 
-/// S10: an `evm-eoa` member signs the portable `pop` (EIP-191 `personal_sign`) and never counts for signing.
+/// S10 / TS-D4: an `evm-eoa` member signs the record's typed digest itself (`eth_signTypedData_v4`, ECDSA, no
+/// `personal_sign`), for the portable `pop` only, and never counts for signing.
 #[test]
-fn msig_evm_eoa_member_portable_only() {
+fn msig_evm_eoa_member_typed_digest() {
     let (env, c) = setup();
-    // EVM's msig-pq-native registers by its personal_sign pop (members evm-eoa + mldsa65#1, 2-of-2).
+    // EVM's msig-pq-native registers by its typed pop (members evm-eoa + mldsa65#1, 2-of-2).
     portable(&env, "mldsa65#1").on(&c);
     let r = portable(&env, "msig-pq-native");
     let ua = r.on(&c);
@@ -686,14 +694,32 @@ fn msig_evm_eoa_member_portable_only() {
     e.register(&env, &c);
     let id = eoa(&env, &k);
     let m = msig(&env, 1, &[(0x0001, id, 1), (0x0102, e.ua(&env).to_array(), 1)]);
-    let rd = reg_digest(&env, &m.ua);
-    let pop = member_sigs(&env, &[(m.index(&id), vec![], personal_sign(&env, &k, &m.md(&env, PURPOSE_POP_V2, &rd)))]);
+    let rd = reg_digest(&env, &m.ua, 0x0120);
+    let pop = member_sigs(&env, &[(m.index(&id), vec![], k1_sign(&k, &rd.to_array()))]);
     m.register(&env, &c, &pop);
     assert!(c.receivable(&m.ua));
     let (pm, d) = (n(&env, PURPOSE_METATX), n(&env, [0x61; 32]));
-    let eoa_slot = member_sigs(&env, &[(m.index(&id), vec![], personal_sign(&env, &k, &m.md(&env, PURPOSE_METATX, &d)))]);
+    let eoa_slot = member_sigs(&env, &[(m.index(&id), vec![], k1_sign(&k, &m.md(&env, PURPOSE_METATX, &d).to_array()))]);
     assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &d, &eoa_slot)), Error::NotVerifiable);
     c.require_authorized(&m.ua, &pm, &d, &member_sigs(&env, &[m.slot(&env, &e, PURPOSE_METATX, &d)]));
+}
+
+/// TS-D4: the EIP-191 `personal_sign` member forms (over `member_digest`, as before typed-signing, or over the typed
+/// digest) and an ECDSA signature over `member_digest` are each `Pop`.
+#[test]
+fn msig_evm_eoa_personal_sign_refused() {
+    let (env, c) = setup();
+    let (k, e) = (k1(8), ed(9));
+    e.register(&env, &c);
+    let id = eoa(&env, &k);
+    let m = msig(&env, 1, &[(0x0001, id, 1), (0x0102, e.ua(&env).to_array(), 1)]);
+    let rd = reg_digest(&env, &m.ua, 0x0120);
+    let md = m.md(&env, PURPOSE_POP_V2, &rd);
+    for sig in [personal_sign(&env, &k, &md), personal_sign(&env, &k, &rd), k1_sign(&k, &md.to_array())] {
+        let pop = member_sigs(&env, &[(m.index(&id), vec![], sig)]);
+        assert_eq!(err(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &pop, &Bytes::new(&env), &None)), Error::Pop);
+    }
+    assert_eq!(c.record_of(&m.ua), None);
 }
 
 #[test]
@@ -726,7 +752,7 @@ fn require_authorized_each_kind_and_purpose() {
     for row in rows {
         let (kind, kd) = (kind_of(&row["kind"]), b(&env, &hx(&row["keyData"])));
         let ua = n32(&env, &row["ua"]);
-        assert_eq!(row["pop"]["registrationDigest"].as_str().unwrap(), format!("0x{}", hex(&reg_digest(&env, &ua).to_array())));
+        assert_eq!(row["pop"]["registrationDigest"].as_str().unwrap(), format!("0x{}", hex(&reg_digest(&env, &ua, kind).to_array())));
         assert_eq!(c.register(&kind, &kd, &no_attrs(&env), &b(&env, &hx(&row["pop"]["sig"])), &Bytes::new(&env), &None), ua);
         for s in row["sigs"].as_array().unwrap() {
             let (p, d, sig) = (n32(&env, &s["purposeTag"]), n32(&env, &s["digest"]), b(&env, &hx(&s["sig"])));
@@ -764,7 +790,7 @@ fn require_authorized_refuses_portable_purposes() {
         assert_eq!(err(c.try_require_authorized(&ua, &n(&env, p), &d, &sig)), Error::Unauthorized);
     }
     // The registration pop itself, replayed through require_authorized.
-    let rd = reg_digest(&env, &ua);
+    let rd = reg_digest(&env, &ua, s.kind());
     assert_eq!(err(c.try_require_authorized(&ua, &n(&env, PURPOSE_POP_V2), &rd, &s.pop(&env))), Error::Unauthorized);
 }
 
@@ -839,10 +865,10 @@ fn member_large_pop_same_budget() {
         let (env, c) = setup();
         let s = Sk::Wa(p256k(51));
         let (ua, Sk::Wa(k)) = (s.ua(&env), &s) else { unreachable!() };
-        let pop = webauthn_sig(&env, k, &msg(&env, 0x0100, PURPOSE_POP_V2, &reg_digest(&env, &ua)), ext);
+        let pop = webauthn_sig(&env, k, &msg(&env, 0x0100, PURPOSE_POP_V2, &reg_digest(&env, &ua, 0x0100)), ext);
         c.register(&0x0100, &s.key_data(&env), &no_attrs(&env), &b(&env, &pop), &Bytes::new(&env), &None);
         let m = msig(&env, 1, &[(0x0100, ua.to_array(), 1)]);
-        m.register(&env, &c, &member_sigs(&env, &[m.slot(&env, &s, PURPOSE_POP_V2, &reg_digest(&env, &m.ua))]));
+        m.register(&env, &c, &member_sigs(&env, &[m.slot(&env, &s, PURPOSE_POP_V2, &reg_digest(&env, &m.ua, 0x0120))]));
         let d = n(&env, [0xb1; 32]);
         let auth = member_sigs(&env, &[m.slot(&env, &s, PURPOSE_METATX, &d)]);
         c.require_authorized(&m.ua, &n(&env, PURPOSE_METATX), &d, &auth);
@@ -882,8 +908,8 @@ fn msig_soroban_contract_member_refused() {
     let x = c.address.clone().to_xdr(&env);
     let cid: [u8; 32] = vecu8(&x.slice(x.len() - 32..)).try_into().unwrap();
     let m = msig(&env, 1, &[(0x0102, e.ua(&env).to_array(), 1), (0x0012, cid, 1)]);
-    let pop = member_sigs(&env, &[m.slot(&env, &e, PURPOSE_POP_V2, &reg_digest(&env, &m.ua))]);
+    let pop = member_sigs(&env, &[m.slot(&env, &e, PURPOSE_POP_V2, &reg_digest(&env, &m.ua, 0x0120))]);
     assert_eq!(err(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &pop, &Bytes::new(&env), &None)), Error::MemberUnknown);
     let m = msig(&env, 1, &[(0x0102, e.ua(&env).to_array(), 1)]);
-    m.register(&env, &c, &member_sigs(&env, &[m.slot(&env, &e, PURPOSE_POP_V2, &reg_digest(&env, &m.ua))]));
+    m.register(&env, &c, &member_sigs(&env, &[m.slot(&env, &e, PURPOSE_POP_V2, &reg_digest(&env, &m.ua, 0x0120))]));
 }
