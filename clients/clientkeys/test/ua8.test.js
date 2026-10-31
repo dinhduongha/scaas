@@ -22,8 +22,8 @@ const Z = `0x${'00'.repeat(32)}`;
 const h = (s) => keccak_256(utf8ToBytes(s));
 const row = (name) => P.registrations.find((r) => r.name === name) ?? assert.fail(`no row ${name}`);
 const SETS = ['n2048-kmax1024', 'n2304-kmax4096', 'n2560-kmax16384', 'n2816-kmax65536'];
-const args = (r) => ({ ua: r.ua, keyData: r.keyData, pqzKey: r.attrs.pqzKey, pqzPopHash: r.attrs.pqzPopHash,
-  kemVersion: r.attrs.kemVersion, kemPk: r.attrs.kemPk });
+// the register builders take no KEM version: the register key is always version 0 (owner 2026-10-31, KEM items 1–4)
+const args = (r) => ({ ua: r.ua, keyData: r.keyData, pqzKey: r.attrs.pqzKey, pqzPopHash: r.attrs.pqzPopHash, kemPk: r.attrs.kemPk });
 
 // TS-D1, pinned here as literals (re-derived with cast 1.8.5 in the plan; every implementation pins the same values)
 const DS_P = '0x9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1';
@@ -94,7 +94,7 @@ test('typed digest equals hashTypedData(portableTypedData(…)) for every row', 
     assert.deepEqual(m.typedData, r.typedData, r.name);
     assert.equal(r.typedData.message.pqzPopHash, r.attrs.pqzPopHash, r.name);
     assert.deepEqual(r.typedData.message.record, ua.portableRecordStruct({ ua: r.ua, kind: r.kind, pqzKeyHash: r.pqzKeyHash,
-      kem: ua.kemRecordStruct({ ua: r.ua, version: r.attrs.kemVersion, kemPk: r.attrs.kemPk }) }), r.name);
+      kem: ua.kemRecordStruct({ ua: r.ua, version: 0, kemPk: r.attrs.kemPk }) }), r.name);
   }
   for (const k of P.kemRecords) {
     assert.equal(td('UAKemRecord', k.typedData.message, k.typedData, k.id), k.digest, k.id);
@@ -117,10 +117,19 @@ test('no-KEM record is {ua,0,0,0}', () => {
     n++;
   }
   assert.ok(n > 10);
-  // version 0 is never a valid record (UAKemVersion), so the zero record is unambiguous; it is no setKemKey record
-  const u = row('fndsa512').ua;
-  assert.throws(() => ua.kemRecordDigest({ ua: u, version: 0, kemPk: '0x' }), (e) => e.code === 'UAKemVersion');
-  assert.throws(() => ua.kemRecordHash({ ua: u, version: 0, kemPk: row('fndsa512').attrs.kemPk }), (e) => e.code === 'UAKemVersion');
+  // owner 2026-10-31 (KEM items 1–4): the register key is version 0; absence is the zero record {ua, 0, 0, 0}, a present
+  // version-0 record has scheme ≠ 0 (version 0 with scheme 0 is UAKemScheme); version 0 is no setKemKey record (until R1)
+  const f = row('fndsa512');
+  const pk = B(f.attrs.kemPk);
+  assert.ok(P.registrations.every((r) => r.attrs.kemVersion === 0), 'register takes no KEM version (UAAttrs\' word: 0)');
+  assert.deepEqual(ua.kemRecordStruct({ ua: f.ua, version: 0, kemPk: f.attrs.kemPk }),
+    { ua: f.ua, version: 0, scheme: 1, kemPkHash: hex(keccak_256(pk)) });
+  assert.equal(hex(ua.kemRecordHash({ ua: f.ua, version: 0, kemPk: f.attrs.kemPk })), f.kemRecordHash);
+  assert.equal(f.kemRecordHash, hex(kemHand(f.ua, 0, 1, hex(keccak_256(pk)))));
+  assert.throws(() => ua.kemRecordHash({ ua: f.ua, version: 0, kemPk: Uint8Array.from([0, ...pk.subarray(1)]) }),
+    (e) => e.code === 'UAKemScheme');
+  assert.throws(() => ua.kemRecordDigest({ ua: f.ua, version: 0, kemPk: '0x' }), (e) => e.code === 'UAKemVersion');
+  assert.throws(() => ua.kemRecordDigest({ ua: f.ua, version: 0, kemPk: f.attrs.kemPk }), (e) => e.code === 'UAKemVersion');
 });
 
 test('kind field equals the row\'s kind', () => {
@@ -227,10 +236,14 @@ test('kem record digest matches the hand-built words', () => {
     const ks = P.kemRecords.filter((k) => k.name === name);
     assert.deepEqual(ks.map((k) => k.version), [1, 2, 3], name);
     assert.equal(new Set(ks.map((k) => k.kemPk)).size, 3, `${name}: a key per version`);
-    // the registration's initial record is version 1 of the same key
+    // the registration's initial record is version 0 of its own key (none of v1-v3's; owner 2026-10-31, KEM item 1);
+    // attrs.kemVersion is UAAttrs' word until R1 drops it: always 0
     for (const r of P.registrations.filter((x) => x.name === name || x.name.startsWith(`${name}/`))) {
-      assert.deepEqual([r.attrs.kemVersion, r.attrs.kemPk, r.kemRecordHash], [1, ks[0].kemPk, ks[0].structHash], r.name);
-      assert.deepEqual(r.typedData.message.record.kem, ks[0].typedData.message, r.name);
+      const kem = { ua: r.ua, version: 0, scheme: 1, kemPkHash: hex(keccak_256(B(r.attrs.kemPk))) };
+      assert.equal(r.attrs.kemVersion, 0, r.name);
+      assert.ok(ks.every((k) => k.kemPk !== r.attrs.kemPk), `${r.name}: a key of its own at version 0`);
+      assert.equal(r.kemRecordHash, hex(kemHand(r.ua, 0, 1, kem.kemPkHash)), r.name);
+      assert.deepEqual(r.typedData.message.record.kem, kem, r.name);
     }
   }
 });
@@ -256,7 +269,7 @@ test('holder refusals', () => {
   const code = (c) => (e) => e instanceof ua.UAError && e.code === c;
   const kem = P.kemRecords[0];
   const mlz = row('mldsa65/n2048-kmax1024');
-  const withKem = (r) => ({ ...args(r), kemVersion: 1, kemPk: kem.kemPk });
+  const withKem = (r) => ({ ...args(r), kemPk: kem.kemPk });
   const withPqz = (r) => ({ ...args(r), pqzKey: mlz.attrs.pqzKey, pqzPopHash: mlz.attrs.pqzPopHash });
   assert.throws(() => ua.holderPopMessage(0x0108, withKem(row('secp256k1'))), code('UAKemHolder'));
   assert.throws(() => ua.holderPopMessage(0x0133, withPqz(row('slhdsa128s'))), code('UAPqzHolder'));
@@ -267,7 +280,8 @@ test('holder refusals', () => {
   assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), pqzKey: undefined }), code('UAPqzPopHash'));
   assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), pqzPop: mlz.pqzPop.slice(0, -2) }), code('UAPqzPopHash'));
   assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), kemPk: kem.kemPk.slice(0, -2) }), code('UAKemKeyLength'));
-  assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), kemVersion: 0 }), code('UAKemVersion'));
+  assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), kemPk: Uint8Array.from([0, ...B(kem.kemPk).subarray(1)]) }),
+    code('UAKemScheme'), 'version 0 with scheme 0');
   assert.throws(() => ua.kemRecordDigest({ ua: kem.ua, version: 2n ** 64n, kemPk: kem.kemPk }), code('UAKemVersion'));
   // the shared KATs (review part 2 I-C1): the mesh chain key and the top byte of the 8-byte KEM version word; the KEM key is
   // scheme 1 with a zero key (0x01 ‖ 1,600 zero bytes, CTR-UA-32)
@@ -285,8 +299,10 @@ test('holder refusals', () => {
   const none = ua.holderPopMessage(0x0131, { ...args(mlz), pqzKey: undefined, pqzPopHash: new Uint8Array(0) });
   assert.equal(hex(none.pqzPopHash), hex(new Uint8Array(32)), 'zero-length hash = absent');
   assert.throws(() => ua.purposeTag('metatx', 2), code('UAPurposeUnknown'));
-  assert.equal(hex(ua.holderPopMessage(0x0131, withKem(row('mldsa65/n2048-kmax1024'))).kemRecordHash), kem.structHash);
-  assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), kemPk: undefined }), code('UAKemKeyLength'), 'kemPk omitted = empty');
+  assert.equal(hex(ua.holderPopMessage(0x0131, withKem(mlz)).kemRecordHash), hex(kemHand(mlz.ua, 0, 1, hex(keccak_256(B(kem.kemPk))))),
+    'the register key is version 0');
+  assert.equal(hex(ua.holderPopMessage(0x0131, { ...args(mlz), kemPk: undefined }).kemRecordHash), hex(ua.kemRecordHash({ ua: mlz.ua })),
+    'kemPk omitted = no KEM key: the zero record');
   assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), pqzKey: new Uint8Array(32) }), code('UAKeyData'), 'no set has this key length');
   assert.deepEqual(ua.PQZ_KEY_LENGTHS, SETS.map((x) => P.sets[x].pqzKeyLength));
   // the PQZ key record (setPqzKey): the same holder rules, a key of a set's length, its proof hash
@@ -301,7 +317,7 @@ test('holder refusals', () => {
   assert.throws(() => ua.pqzKeyRecordMessage(0x0132, { ...recArgs(fr), pqzKey: fr.pqzKey.slice(0, -2) }), code('UAKeyData'));
   // every negative, by entry point (the note's table): register's attribute errors as holderPopMessage refusals, UAPoP as
   // a pop that does not verify on the row's (moved) digest, storePqzPop / setPqzKey / setKemKey / requireAuthorized below
-  assert.deepEqual([...new Set(P.negatives.map((n) => n.error))].sort(), ['UAKemHolder', 'UAKemKeyLength', 'UAKemScheme', 'UAKemVersion', 'UAKeyData',
+  assert.deepEqual([...new Set(P.negatives.map((n) => n.error))].sort(), ['UAKemHolder', 'UAKemKeyLength', 'UAKemScheme', 'UAKeyData',
     'UAPoP', 'UAPqzHolder', 'UAPqzKeySet', 'UAPqzPopHash', 'UAUnauthorized']);
   assert.deepEqual([...new Set(P.negatives.map((n) => n.entry))].sort(), ['register', 'requireAuthorized', 'setKemKey', 'setPqzKey', 'storePqzPop']);
   for (const n of P.negatives) {

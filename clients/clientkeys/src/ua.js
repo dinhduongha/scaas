@@ -241,15 +241,15 @@ const u16w = (kind) => {
 const num = (v) => (v <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(v) : v.toString(10));
 
 /** The KEM record's struct (`UAKemRecord` message): `{ ua, version, scheme: kemPk[0], kemPkHash: keccak256(kemPk) }` over
- *  the whole scheme-1 key (UA-8 P7, CTR-UA-32: version 1 … 2^64 − 1; empty `UAKemKeyLength`, a scheme not enabled
- *  `UAKemScheme`, another length `UAKemKeyLength`). No record (version 0 / absent and no key) is the zero record
- *  `{ ua, 0, 0, 0 }` (TS-D2: version 0 is never a valid record). */
+ *  the whole scheme-1 key (UA-8 P7, CTR-UA-32: version 0 … 2^64 − 1, version 0 = the key given at `register`, owner
+ *  2026-10-31; empty `UAKemKeyLength`, a scheme not enabled (0 included) `UAKemScheme`, another length `UAKemKeyLength`).
+ *  No key (version 0, absent key) is the zero record `{ ua, 0, 0, 0 }` (TS-D2): a present record has `scheme ≠ 0`. */
 export function kemRecordStruct({ ua, version = 0, kemPk }) {
   const u = h32(ua, 'ua');
   if (!present(kemPk) && Number(version ?? 0) === 0) return { ua: u, version: 0, scheme: 0, kemPkHash: hex(Z32) };
   let v;
   try { v = BigInt(version); } catch { fail('UAKemVersion', String(version)); }
-  if (v < 1n || v >= 1n << 64n) fail('UAKemVersion', String(version));
+  if (v < 0n || v >= 1n << 64n) fail('UAKemVersion', String(version));
   const pk = orEmpty(kemPk);
   if (pk.length === 0) fail('UAKemKeyLength', '0');
   const n = kemPkLength(pk[0]);
@@ -260,7 +260,7 @@ export function kemRecordStruct({ ua, version = 0, kemPk }) {
 const kemHash = (k) => keccak_256(concatBytes(TH.UAKemRecord, fromHex(k.ua), word(k.version), word(k.scheme), fromHex(k.kemPkHash)));
 /** `hashStruct(UAKemRecord)`: the `kem` word of a `UAPortableRecord`; the zero record when there is none. */
 export const kemRecordHash = (record) => kemHash(kemRecordStruct(record));
-/** The typed `UAKemRecord` digest `setKemKey` signs (a real record: version 0 is `UAKemVersion`). */
+/** The typed `UAKemRecord` digest `setKemKey` signs (versions ≥ 1: version 0 is the `register` key, `UAKemVersion` here). */
 export function kemRecordDigest({ ua, version, kemPk }) {
   if (Number(version ?? 0) === 0) fail('UAKemVersion', String(version));
   return typed(kemRecordHash({ ua, version, kemPk }));
@@ -309,20 +309,20 @@ const holds = (kind, keyData) => isPqzHolder(kind) || (kind === 0x0120 && presen
  * pqzKeyHash, kem}, pqzPopHash}` JSON (`eth_signTypedData_v4`), `registrationDigest = hashTypedData(typedData)`, `message =
  * uaMessage(kind, POP_V2, registrationDigest)` (every kind signs it; an `msig` also returns `memberDigest = memberDigest(ua,
  * message)`, what each derived member signs under `member`; a native member signs `registrationDigest` itself, TS-D4). The
- * attributes: `pqzKey` with its proof `pqzPop` (or only its hash `pqzPopHash`), and the initial KEM record (`kemVersion` ≥ 1,
- * `kemPk`); absent = omitted / empty / 0. Only holders may carry them (`UAPqzHolder`, `UAKemHolder`; an `msig` needs
+ * attributes: `pqzKey` with its proof `pqzPop` (or only its hash `pqzPopHash`), and the initial KEM key `kemPk` (its record is
+ * always version 0, owner 2026-10-31; no version input); absent = omitted / empty. Only holders may carry them (`UAPqzHolder`, `UAKemHolder`; an `msig` needs
  * `keyData` to show it is PQ-eligible); a PQZ key always comes with its proof hash and only with it (`UAPqzPopHash`).
  */
-export function holderPopMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopHash, kemVersion = 0, kemPk } = {}) {
+export function holderPopMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopHash, kemPk } = {}) {
   const hasPqz = present(pqzKey);
-  const hasKem = Number(kemVersion) !== 0 || present(kemPk);
+  const hasKem = present(kemPk);
   const k = `0x${Number(kind).toString(16).padStart(4, '0')}`;
   if (hasPqz && !holds(kind, keyData)) fail('UAPqzHolder', `${k} may not hold a PQZ key`);
   if (hasKem && !holds(kind, keyData)) fail('UAKemHolder', `${k} may not hold a KEM key`);
   const popHash = proofHashOf(pqzPop, pqzPopHash);
   if (hasPqz !== (popHash !== Z32)) fail('UAPqzPopHash', hasPqz ? 'a PQZ key needs its proof hash' : 'a proof hash without a PQZ key');
   const pqzKeyHash = hasPqz ? pqzKeyHashOf(pqzKey) : Z32;
-  const kem = kemRecordStruct({ ua, version: kemVersion, kemPk });
+  const kem = kemRecordStruct({ ua, version: 0, kemPk });
   const kh = kemHash(kem);
   const words = { ua, kind, pqzKeyHash, kemRecordHash: kh };
   const registration = registrationDigest({ ...words, pqzPopHash: popHash });
@@ -334,11 +334,11 @@ export function holderPopMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopHash
 }
 
 /** The message `R_REG` proves over: `uaMessage(0x0142, POP_V2, portableRecordDigest(ua, kind, keyHash(0x0142, pqzKey),
- *  kemRecordHash))`, `kind` the registering kind (the record of the registration, TS-D3). */
-export function pqzRegMessage({ ua, kind, pqzKey, kemVersion = 0, kemPk }) {
+ *  kemRecordHash))`, `kind` the registering kind (the record of the registration, TS-D3), the KEM record version 0. */
+export function pqzRegMessage({ ua, kind, pqzKey, kemPk }) {
   if (kind === undefined || kind === null) throw new Error('pqzRegMessage needs the registering kind');
   return uaMessage(0x0142, POP_V2_TAG, portableRecordDigest({ ua, kind, pqzKeyHash: pqzKeyHashOf(pqzKey),
-    kemRecordHash: kemRecordHash({ ua, version: kemVersion, kemPk }) }));
+    kemRecordHash: kemRecordHash({ ua, version: 0, kemPk }) }));
 }
 
 /**
