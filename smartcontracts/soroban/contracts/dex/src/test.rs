@@ -405,7 +405,7 @@ impl U {
 }
 
 fn no_attrs(env: &Env) -> UaAttrs {
-    UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: BytesN::from_array(env, &[0; 32]), kem_version: 0, kem_pk: Bytes::new(env) }
+    UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: BytesN::from_array(env, &[0; 32]), kem_pk: Bytes::new(env) }
 }
 
 /// Property 5 (T7): one UA signature fills an order in three settles up to `sell_amount`; a fourth is `Overfill`; another

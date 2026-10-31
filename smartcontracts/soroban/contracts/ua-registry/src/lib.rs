@@ -284,7 +284,7 @@ fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, diges
 }
 
 fn empty_attrs(env: &Env) -> UaAttrs {
-    UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: BytesN::from_array(env, &[0; 32]), kem_version: 0, kem_pk: Bytes::new(env) }
+    UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: BytesN::from_array(env, &[0; 32]), kem_pk: Bytes::new(env) }
 }
 
 fn bump_instance(env: &Env) {

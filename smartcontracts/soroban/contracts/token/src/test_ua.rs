@@ -82,7 +82,7 @@ fn err<V: core::fmt::Debug, C: core::fmt::Debug>(r: Result<V, Result<soroban_sdk
 }
 
 fn no_attrs(env: &Env) -> UaAttrs {
-    UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: n(env, [0; 32]), kem_version: 0, kem_pk: Bytes::new(env) }
+    UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: n(env, [0; 32]), kem_pk: Bytes::new(env) }
 }
 
 fn keccak(env: &Env, parts: &[&[u8]]) -> [u8; 32] {

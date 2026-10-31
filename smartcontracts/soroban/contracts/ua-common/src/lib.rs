@@ -25,7 +25,6 @@ pub enum Checked {
 pub struct UaAttrs {
     pub pqz_key: Bytes,
     pub pqz_pop_hash: BytesN<32>,
-    pub kem_version: u64,
     pub kem_pk: Bytes,
 }
 

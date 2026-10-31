@@ -77,7 +77,7 @@ fn vecu8(x: &Bytes) -> StdVec<u8> {
 }
 
 fn no_attrs(env: &Env) -> UaAttrs {
-    UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: n(env, [0; 32]), kem_version: 0, kem_pk: Bytes::new(env) }
+    UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: n(env, [0; 32]), kem_pk: Bytes::new(env) }
 }
 
 /// typed(`UARegistration`) of a record without attributes (TS-D1, the zero KEM record): what its `pop` signs under
@@ -111,7 +111,6 @@ fn portable(env: &Env, name: &str) -> Reg {
         attrs: UaAttrs {
             pqz_key: b(env, &hx(&a["pqzKey"])),
             pqz_pop_hash: n32(env, &a["pqzPopHash"]),
-            kem_version: a["kemVersion"].as_u64().unwrap(),
             kem_pk: b(env, &hx(&a["kemPk"])),
         },
         pop: b(env, &hx(&r["pop"])),
@@ -382,7 +381,6 @@ fn register_attrs_refused_4b() {
     // A KEM key alone (version 0, the registration key: owner ruling 2026-10-31) is an attribute too.
     let mut r = portable(&env, "p256");
     r.attrs.kem_pk = portable(&env, "fndsa512").attrs.kem_pk;
-    assert_eq!(r.attrs.kem_version, 0);
     assert_eq!(r.refused(&c), Error::Attrs);
     // A pqz_pop without attrs is an attribute too.
     let mut r = portable(&env, "p256");

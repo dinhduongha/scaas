@@ -202,9 +202,8 @@ fn portable_digests_match_portable_json() {
             kem_record_hash(&env, &ua, 0, 0, &BytesN::from_array(&env, &[0; 32]))
         } else {
             let h = env.crypto().keccak256(&b(&env, &kem_pk)).into();
-            kem_record_hash(&env, &ua, a["kemVersion"].as_u64().unwrap(), kem_pk[0], &h)
+            kem_record_hash(&env, &ua, 0, kem_pk[0], &h)
         };
-        assert_eq!(a["kemVersion"].as_u64(), Some(0), "the registration KEM key is version 0: {}", r["name"]);
         assert_eq!(kem.to_array().to_vec(), hx(&r["kemRecordHash"]), "kemRecordHash of {}", r["name"]);
         let rec = portable_record_hash(&env, &ua, kind, &n32(&env, &r["pqzKeyHash"]), &kem);
         assert_eq!(portable_digest(&env, &rec).to_array().to_vec(), hx(&r["portableRecordDigest"]), "portableRecordDigest of {}", r["name"]);

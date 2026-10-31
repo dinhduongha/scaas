@@ -575,7 +575,7 @@ impl U {
         let rec = portable_record_hash(env, &id, ED25519, &z, &kem_record_hash(env, &id, 0, 0, &z));
         let reg_digest = registration_digest(env, &rec, &z).to_array();
         let pop = sk.sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_POP_V2, &reg_digest])).to_bytes();
-        let attrs = UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: b32(env, 0), kem_version: 0, kem_pk: Bytes::new(env) };
+        let attrs = UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: b32(env, 0), kem_pk: Bytes::new(env) };
         self.reg.register(&ED25519, &kd, &attrs, &Bytes::from_array(env, &pop), &Bytes::new(env), &None);
         if funds > 0 {
             self.mint_ua(&id, funds);
@@ -769,7 +769,7 @@ fn ua_ops_vectors_ua_relay_row() {
     let (e, o) = (&s.env, ops());
     for r in o["registrations"].as_array().unwrap() {
         let kind = r["kind"].as_u64().unwrap() as u32;
-        let attrs = UaAttrs { pqz_key: Bytes::new(e), pqz_pop_hash: b32(e, 0), kem_version: 0, kem_pk: Bytes::new(e) };
+        let attrs = UaAttrs { pqz_key: Bytes::new(e), pqz_pop_hash: b32(e, 0), kem_pk: Bytes::new(e) };
         let ua = s.reg.register(&kind, &Bytes::from_slice(e, &hx(&r["keyData"])), &attrs, &Bytes::from_slice(e, &hx(&r["pop"])), &Bytes::new(e), &None);
         assert_eq!(ua.to_array().to_vec(), hx(&r["ua"]), "{}", r["name"]);
         s.mint_ua(&ua, 1_000);
