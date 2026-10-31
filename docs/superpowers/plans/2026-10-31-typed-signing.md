@@ -115,7 +115,8 @@ House rules for every task:
   `typed(s) = keccak256(0x1901 ‖ DS_P ‖ hashStruct(s))`.
 - **TS-D2 "No KEM record" encoding.** No initial KEM record ⇒ the nested `kem` is `UAKemRecord{ua, 0, 0, 0}`
   (`version 0` is never a valid record, `UAKemVersion`, so the zero record is unambiguous). Replaces today's
-  `kemRecordHash = 0`.
+  `kemRecordHash = 0`. *Superseded in part by the owner KEM rulings of 2026-10-31 (item 1, Global Constraints):*
+  *version 0 is the `register` key; the zero record stays unambiguous because a present record has `scheme ≠ 0`.*
 - **TS-D3 What signs what (the `ua_msg` wrapper kept, owner decision 2; purpose tags unchanged, the struct type adds the
   record type).**
   | Record | Signed / proven message | Who |
@@ -184,7 +185,9 @@ House rules for every task:
 - **TS-D11 KEM key explicit.** `struct KemKey { uint8 scheme; bytes mlkemEk; bytes32 x25519; }` (scheme-1: 1,568-byte
   ek); `UAAttrs { bytes pqzKey; bytes32 pqzPopHash; uint64 kemVersion; KemKey kem; }`; `setKemKey(bytes32 ua, uint64
   version, KemKey kem, UASig sig)`. The registry assembles `scheme ‖ ek ‖ x25519` (1,601 B) for storage and for
-  `kemPkHash` (byte-identical digests); `kemKeyOf` / `kemKeyAt` return `KemKey`.
+  `kemPkHash` (byte-identical digests); `kemKeyOf` / `kemKeyAt` return `KemKey`. *`UAAttrs` superseded by the owner KEM*
+  *rulings of 2026-10-31 (items 1, 2): no `kemVersion`, `UAAttrs { bytes pqzKey; bytes32 pqzPopHash; KemKey kem; bytes32*
+  *kemPkHash; }`.*
 - **TS-D12 Signatures explicit.** `struct MemberSig { uint16 index; bytes keyData; bytes sig; }` (exists) is passed as
   `MemberSig[]`, never `abi.encode`d into `bytes`. `struct UASig { bytes keyData; bytes signature; MemberSig[] members; }`
   replaces the `bytes auth` = `abi.encode(keyData, sig)` blob of `requireAuthorized` and every `ua*` entry (native: only

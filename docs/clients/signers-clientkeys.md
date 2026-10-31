@@ -356,7 +356,10 @@ signs that JSON (`signTyped`), never `personal_sign` and never a raw digest; a d
 [CTR-UA-36](../contracts/accounts.md#CTR-UA-36) call as named fields: `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost` for their kinds
 (the recommended path; the registry also takes `register` with packed key data for all but `msig`) and `register` for the rest, the
 KEM key in full, or the hash commit plus `kemFill` = `setKemKey(ua, 0, kem, UASig())` only when `registryCalldataLength` is over
-`REGISTER_CALLDATA_LIMIT` (261,909 B) or `kemCommit: true` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)). `kemKeyOf` / `kemPkOf`, `msigStructure`, `typedKey` and
+`REGISTER_CALLDATA_LIMIT` (261,909 B) or `kemCommit: true` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)). A front-runner can land the commit form of a full
+`register`, so after `register`, or on `UAAlreadyRegistered`, a client reads `registrationOf` and `kemKeyAt(ua, 0)` and sends what
+`kemRepair({ua, kemPkHash, stored, kemPk})` returns: that fill when `attrs.kemPkHash != 0` and the stored key is empty, else null. `kemKeyOf` (which refuses a malformed key
+as the registry does, before a form is chosen) / `kemPkOf`, `msigStructure`, `typedKey` and
 `uaSig` convert between the packed bytes and the typed forms. `portable.json` carries every row's `typedData` and `args`, so each library is checked
 against them ([ua-libraries.md](ua-libraries.md)).
 

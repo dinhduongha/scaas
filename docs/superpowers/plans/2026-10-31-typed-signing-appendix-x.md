@@ -69,6 +69,8 @@ struct ZetherBurn { uint64 accSeq; uint64 sendCounter; uint256 validUntilBlock; 
 
 // Registry (TS-D10 / TS-D11 / TS-D13)
 struct KemKey { uint8 scheme; bytes mlkemEk; bytes32 x25519; }              // assembled scheme ‖ ek(1,568) ‖ x25519 = 1,601 B
+// Superseded by the owner KEM rulings of 2026-10-31 (plan Global Constraints, items 1, 2): no kemVersion, kemPkHash added:
+// struct UAAttrs { bytes pqzKey; bytes32 pqzPopHash; KemKey kem; bytes32 kemPkHash; }
 struct UAAttrs { bytes pqzKey; bytes32 pqzPopHash; uint64 kemVersion; KemKey kem; } // no KEM: KemKey(0, "", 0)
 struct MsigMember { uint16 kind; bytes32 id; uint16 weight; }
 struct MsigStructure { uint16 threshold; MsigMember[] members; }

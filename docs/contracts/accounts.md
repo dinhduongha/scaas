@@ -240,7 +240,9 @@ The PQZ key and the KEM record are the fields not implied by `keyData`; the sign
 front-runner can neither strip them (the PoP over the real hashes fails over the zero record) nor swap them (another key changes the
 hash). The `R_REG` proof is over the same portable record under the kind tag `0x0142`, so it is bound to the signer's
 id (a proof made for another UA fails) and to nothing else. `register` derives no state from `msg.sender` or from any unsigned
-argument, so **anyone** may submit it (gasless, relayable) and front-running yields the identical record or a revert. A
+argument, so **anyone** may submit it (gasless, relayable) and a front-run yields the identical record, the hash-commit form of
+it, or a revert: both forms of a KEM key sign the same `UAKemRecord`, so the form is the submitter's choice ([CTR-UA-32](#CTR-UA-32)
+has the client's repair; owner 2026-11-01, option (a)). A
 future field taken from `msg.sender` or left unsigned would turn front-running into capture; tests T-REG-3/3b guard it.
 
 Registration, and the copy of it to a second chain (the copy sends the same fields; a client or a relayer service can do
@@ -261,7 +263,7 @@ sequenceDiagram
     Note over R,B: later, by anyone, from logs or from A's state (registrationOf)
     R->>B: the same register call, byte for byte
     B->>B: the same checks on B's own verifiers
-    Note over A,B: a front-runner gets the identical record or a revert
+    Note over A,B: a front-runner gets the identical record, its hash-commit form, or a revert
 ```
 
 <a id="rogue-key"></a>
@@ -422,6 +424,11 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   empty, the PoP signed the record, as `storePqzPop`), stored after `keccak256(kemPk) == kemPkHash` (`UAKemKeyHash`). Until then
   `kemKeyOf` / `kemKeyAt(ua, 0)` return nothing and `checkedOf`'s `kem` reads `NONE` (registered, KEM not usable yet); `registrationOf` keeps the
   committed form, filled or not, so a copy of the record stays byte-identical. The full key always ends up in contract state.
+- **A front-run of a full `register` may land the commit form; the client repairs it** (owner 2026-11-01, option (a)). The two forms
+  sign the same record, so anyone can submit the commit form with the same `pop`. No contract check refuses it (a calldata bound in the
+  contract would tie it to one chain's limit). The record is the same; only the key is not stored yet. **Client rule:** after `register`, or
+  on `UAAlreadyRegistered`, read `registrationOf`; when `attrs.kemPkHash != 0` and `kemKeyAt(ua, 0)` is empty, send
+  `setKemKey(ua, 0, key, UASig())` (clientkeys `kemRepair`, ua-rs `kem_repair`).
 - **Holders.** Only PQ signers: `mldsa44`, `mldsa65`, `fndsa512`, or an `msig` whose non-PQ weight (members outside `0x0130`–`0x0133`)
   is below its threshold (`slhdsa128s` is not a direct holder); other kinds revert `UAKemHolder`. The `msig` PQZ debit gas bound
   ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12)) applies to the PQZ key only, not to the KEM record.
@@ -1858,7 +1865,7 @@ live in the separate `ComplianceRegistry`. This interface was replaced by `IUARe
 | S2 | Cross-kind collision (same point, two kinds) | the tag in the id; `keyOwner` per group | none |
 | S3 | Rogue key in aggregates | per kind ([CTR-UA-08](#CTR-UA-08)); `msig` members registered with PoP; MuSig2 KeyAgg **recomputed on chain** + n-of-n PoP; FROST DKG PoKs and `Y = Σ C_i0` **checked on chain** + group PoP | the attestation-only list: FROST share distribution, distinct parties, real `t`; MuSig2 key ↔ person |
 | S4 | Registering someone else's key | PoP over a chain+registry+UA digest | none |
-| S5 | Front-running `register` (incl. stripping or swapping the PQZ key) | every record field follows from signed data: the signer's PoP binds the PQZ key hash, `R_REG` is over the same digest; the client checks `recordOf(ua)`'s PQZ pointer; T-REG-3/3b | the victim's relayer may lose one transaction's gas (economically reversed) |
+| S5 | Front-running `register` (incl. stripping or swapping the PQZ key) | every record field follows from signed data: the signer's PoP binds the PQZ key hash, `R_REG` is over the same digest; the client checks `recordOf(ua)`'s PQZ pointer; a front-run yields the same record, its hash-commit form, or a revert, and the client fills a commit form ([CTR-UA-32](#CTR-UA-32)); T-REG-3/3b | the victim's relayer may lose one transaction's gas (economically reversed); a commit form leaves the KEM key unusable until the fill |
 | S6 | Spam registrations (state growth, sponsored pools) | sponsorship policy at the node; no on-chain invite gate in v1 | self-paid spam pays its own gas |
 | S7 | Key reuse across purposes | four layers | a foreign wallet reusing an EOA key for `bip340` (layer 4 cannot be enforced on chain) |
 | S8 | Cross-protocol / cross-purpose replay | tagged `ua_msg`; digests domain-separated | none |
@@ -2088,7 +2095,7 @@ EVM tests:
 |---|---|
 | T-REG-1 | every kind: register with the vector PoP ⇒ record, event, `keyOwner` |
 | T-REG-2 | every negative vector reverts with its error |
-| T-REG-3 | the same `register` calldata from two senders ⇒ identical storage diff |
+| T-REG-3 | the same `register` calldata from two senders ⇒ identical storage diff; the hash-commit form of the same `pop` registers the same id, `kemKeyAt(ua, 0)` empty until anyone sends `setKemKey(ua, 0, key, UASig())` |
 | T-REG-3b | (portable PoP) a PQZ key or KEM record stripped or swapped by a front-runner ⇒ `UAPoP`; `R_REG` over another UA's digest ⇒ `UAPoP`; the same PQZ key on two UAs (an `msig` and an ML-DSA UA) ⇒ `UAKeyInUse` once both are proven (an unproven listing blocks nobody); a non-holder (`secp256k1`, `slhdsa128s`, Zether, classical-dominant `msig`) with a key ⇒ `UAPqzHolder`; a PQ-eligible `msig` without `pop` ⇒ `UAPoP`; a `pqzKey` where `0x0142` is disabled ⇒ stored unproven, and `UAKindDisabled(0x0142)` on a gen 2 in front of a gen 1 that enables it; gen-2 `recordOf` forwards the pointer; `uaCount(0x0142)` order |
 | T-REG-3c | UA-8 (`test/ua/UARegistryUA8.t.sol`): `registrationOf` returns exactly the `register` arguments after later `setKemKey`s; the same registration is accepted on two registries with different chain ids, `chainUid`s and addresses (the copy from state); the `pop` covers every attribute; `storePqzPop` (hash check, no-op, proves on a registry with the verifier); `setPqzKey` once, portable; `setKemKey` any order, write-once, 1,601 B (scheme byte + key), holders; an `msig` with a native member signs the typed digest; the gen-2-over-gen-1 paths; `checkedOf` |
 | T-REG-4 | a gen-2 registry sees gen-1 records; `UAKeyInUse` across generations; gen 2 refuses (`UAKindDisabled`) every kind or keyHash group gen 1 enables, so registering in gen 1 after gen 2 for a shared group is impossible by construction; `msig` re-enabled in gen 2 gives the same `kind` and `keyPtr` (its own `registeredAt`); SCaaS testnet `mldsa65` + PQZ key in gen 1 |

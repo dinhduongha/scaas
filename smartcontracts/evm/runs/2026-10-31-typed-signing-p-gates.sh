@@ -13,8 +13,8 @@ STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n28
 # clientkeys keeps its 2 environmental skips, so it is checked by its named tests only
 FAMILIES="soroban ua-rs ua-rs-signers ua-rs-json ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb"
 # "<step>|<form>|<name>": every test name added by P1-P8, P1b, X0, R1, R1b, R1c, R2, R2c (test functions, merge-base 9f88f43b..HEAD;
-# renamed tests by their new names), in its tool's pass form (forms: see the base runner). Last block: the node's UA-8 write
-# tests, which keep their names over the new call table and sizes (R1, R1b, P1b).
+# renamed tests by their new names), in its tool's pass form (forms: see the base runner). Before the last block: the PRV fix
+# wave's tests (M1, L6, L7). Last block: the node's UA-8 write tests, which keep their names over the new call table and sizes (R1, R1b, P1b).
 NEW_TESTS=$(cat <<'NAMES'
 forge|forge|test_noKemRecordIsZeroRecord
 forge|forge|test_portableDomainSeparatorPinned
@@ -107,6 +107,16 @@ ua-dart|dart|registration hash commit when over limit
 ua-dart-frb|dart|portable purposes
 ua-dart-frb|dart|registration args
 ua-dart-frb|dart|set key args
+forge|forge|test_storePqzPopAfterKemHashCommit
+forge|forge|test_storePqzPopAfterKemHashCommitGen2Host
+clientkeys|node|a malformed KEM key is refused before a form is chosen
+clientkeys|node|kem repair after a front-run hash commit (PRV M1)
+ua-rs|cargo|registration_refuses_malformed_kem
+ua-rs|cargo|kem_repair_fills_a_front_run_commit
+ua-py|unittest|test_malformed_kem_refused
+ua-go|go|TestMalformedKemRefused
+ua-cs|cs|MalformedKemRefused
+ua-dart|dart|malformed kem refused
 cargo-scaas-node|cargo|submit::ua8_registry_writes_are_call_jobs
 cargo-scaas-node|cargo|submit::ua8_relayed_pq_register_over_the_cap_is_split
 NAMES
