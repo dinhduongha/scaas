@@ -431,13 +431,13 @@ contract UARegistryUA8Test is UARegistryBase {
         assertEq(ptr.code, row.attrs.pqzKey.length == 0 ? bytes("") : bytes.concat(hex"00", row.attrs.pqzKey));
         assertEq(ph, row.attrs.pqzPopHash);
         (uint64 v, bytes memory pk, bytes memory sig) = r.kemKeyOf(row.ua);
-        assertEq(v, row.attrs.kemVersion);
+        assertEq(v, 0, "the register KEM key is version 0 (owner 2026-10-31)");
         assertEq(pk, row.attrs.kemPk);
         assertEq(sig, "", "the initial KEM record has no signature (UA8-D4)");
         (uint8 cp, uint8 cq, uint8 ck) = r.checkedOf(row.ua);
         assertEq(cp, UAKinds.CHECKED_CHAIN);
         assertEq(cq, proven ? UAKinds.CHECKED_CHAIN : UAKinds.CHECKED_NONE);
-        assertEq(ck, row.attrs.kemVersion != 0 ? UAKinds.CHECKED_CHAIN : UAKinds.CHECKED_NONE);
+        assertEq(ck, row.attrs.kemPk.length != 0 ? UAKinds.CHECKED_CHAIN : UAKinds.CHECKED_NONE);
     }
 
     /// The rows an `msig` names as members (registered first) and nothing else: p256, schnorr-bn254, bls-bn254-minsig
@@ -735,13 +735,13 @@ contract UARegistryUA8Test is UARegistryBase {
     /// with error `UAPoP`) is `UAPoP`.
     function test_ua8_popCoversAttrs() public {
         // + native-member-personal-sign, record-kind-mismatch, kem-record-as-registration (typed-signing P1)
-        assertEq(_runNegatives(_errs("UAPoP", "", "", "")), 23, "UAPoP negatives");
+        assertEq(_runNegatives(_errs("UAPoP", "", "", "")), 22, "UAPoP negatives");
     }
 
     /// The attribute shape: a PQZ key with its proof hash and only with it, proof bytes hashing to it, a PQZ key of a
-    /// set's length, a KEM version ≥ 1 with a 1,601-byte scheme-1 key — before the PoP. Also: proof bytes without a key.
+    /// set's length, a 1,601-byte scheme-1 KEM key — before the PoP. Also: proof bytes without a key.
     function test_ua8_attrsShapeRefused() public {
-        assertEq(_runNegatives(_errs("UAPqzPopHash", "UAKeyData", "UAKemKeyLength", "UAKemVersion")), 18);
+        assertEq(_runNegatives(_errs("UAPqzPopHash", "UAKeyData", "UAKemKeyLength", "")), 16);
         Row[] memory rows = _rows();
         UARegistry a = _deploy(address(0x5ce60), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
         Row memory p = rows[P256_ROW];
@@ -761,7 +761,6 @@ contract UARegistryUA8Test is UARegistryBase {
         Row[] memory rows = _rows();
         UARegistry a = _deploy(address(0x5ce61), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
         Row memory s = rows[SLH_ROW];
-        s.attrs.kemVersion = 1;
         s.attrs.kemPk = rows[FNDSA_ROW].attrs.kemPk;
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemHolder.selector, s.ua));
         a.register(s.kind, s.keyData, s.attrs, s.pop, s.pqzPop);
@@ -797,10 +796,10 @@ contract UARegistryUA8Test is UARegistryBase {
         uint256[2] memory vk = [uint256(0), 1952]; // p256 is not stored (its keyData all in the blob); mldsa65 is
         for (uint256 i; i < 2; ++i) {
             Row memory x = xs[i];
-            uint64 v = x.attrs.kemVersion;
+            uint64 v = 0; // the register KEM key is version 0 (owner 2026-10-31)
             vm.expectEmit(true, true, false, true, address(a));
             emit IUARegistry.UARegistered(x.ua, x.kind, x.keyData, x.attrs, keccak256(x.pop), x.pqzPop, UAKinds.CHECKED_CHAIN,
-                UAKinds.CHECKED_NONE, v == 0 ? UAKinds.CHECKED_NONE : UAKinds.CHECKED_CHAIN);
+                UAKinds.CHECKED_NONE, x.attrs.kemPk.length == 0 ? UAKinds.CHECKED_NONE : UAKinds.CHECKED_CHAIN);
             vm.startStateDiffRecording();
             a.register(x.kind, x.keyData, x.attrs, x.pop, x.pqzPop);
             (uint256 created, uint256 bytes_) = _created(vm.stopAndReturnStateDiff());
@@ -887,7 +886,7 @@ contract UARegistryUA8Test is UARegistryBase {
             _reg(g1, x);
             _assertRecord(g2, x);
             assertEq(keccak256(_stored(g2, x.ua)), keccak256(_stored(g1, x.ua)));
-            (bytes memory pk, bytes memory sig) = g2.kemKeyAt(x.ua, 1);
+            (bytes memory pk, bytes memory sig) = g2.kemKeyAt(x.ua, 0);
             assertEq(abi.encode(pk, sig), abi.encode(x.attrs.kemPk, bytes("")));
             (address p1, bytes32 h1, bool v1) = g1.pqzKeyOf(x.ua);
             (address p2, bytes32 h2, bool v2) = g2.pqzKeyOf(x.ua);
@@ -1380,7 +1379,7 @@ contract UARegistryUA8Test is UARegistryBase {
         assertTrue(_proven(g2p, m.ua));
         assertEq(g2p.keyOwner(h), m.ua);
         assertEq(g1.keyOwner(h), bytes32(0));
-        _checkedEq(g2p, m.ua, 1, 1, m.attrs.kemVersion != 0 ? 1 : 0);
+        _checkedEq(g2p, m.ua, 1, 1, m.attrs.kemPk.length != 0 ? 1 : 0);
     }
 
     /// `msig` key records: each `mldsa65` member's signature over the record's `memberDigest`.
@@ -1415,7 +1414,7 @@ contract UARegistryUA8Test is UARegistryBase {
         assertEq(zp, ptr);
         assertEq(r.pqzKeySigOf(k.ua), k.sig);
         assertEq(r.pqzPopOf(k.ua), proof);
-        _checkedEq(r, k.ua, 1, proven ? 1 : 0, base.attrs.kemVersion != 0 ? 1 : 0);
+        _checkedEq(r, k.ua, 1, proven ? 1 : 0, base.attrs.kemPk.length != 0 ? 1 : 0);
         assertEq(r.keyOwner(_h(k.pqzKey)), proven ? k.ua : bytes32(0));
         assertEq(r.uaCount(UAKinds.PQZ_MLWE), proven ? 1 : 0);
     }
@@ -1553,7 +1552,7 @@ contract UARegistryUA8Test is UARegistryBase {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory s = _squatter(rows, _pqzRow(rows));
-        assertEq(s.attrs.kemVersion, 0);
+        assertEq(s.attrs.kemPk.length, 0);
         assertEq(s.pqzRegMessage, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2,
             UAKinds.portableRecordDigest(s.ua, s.kind, _h(s.attrs.pqzKey), UAKinds.kemRecordHash(s.ua, 0, ""))));
         UARegistry p = _regA(true);
@@ -1603,8 +1602,8 @@ contract UARegistryUA8Test is UARegistryBase {
         assertEq(g2.keyOwner(h), m.ua);
         assertEq(g1.keyOwner(h), bytes32(0));
         assertEq(g2.uaAt(UAKinds.PQZ_MLWE, 0), m.ua);
-        _checkedEq(g2, m.ua, 1, 1, m.attrs.kemVersion != 0 ? 1 : 0);
-        _checkedEq(g1, m.ua, 1, 0, m.attrs.kemVersion != 0 ? 1 : 0);
+        _checkedEq(g2, m.ua, 1, 1, m.attrs.kemPk.length != 0 ? 1 : 0);
+        _checkedEq(g1, m.ua, 1, 0, m.attrs.kemPk.length != 0 ? 1 : 0);
         assertEq(g2.pqzPopOf(m.ua), m.pqzPop);
         assertEq(g1.pqzPopOf(m.ua), "");
         assertEq(keccak256(_stored(g2, m.ua)), keccak256(_args(m)), "gen 2's registrationOf: gen 1's record + its proof");
@@ -1767,7 +1766,7 @@ contract UARegistryUA8Test is UARegistryBase {
         assertEq(zp, ptr);
         assertEq(r.pqzKeySigOf(x.ua), sig);
         assertEq(r.pqzPopOf(x.ua), proven ? x.pqzPop : bytes(""));
-        _checkedEq(r, x.ua, 1, proven ? 1 : 0, x.attrs.kemVersion != 0 ? 1 : 0);
+        _checkedEq(r, x.ua, 1, proven ? 1 : 0, x.attrs.kemPk.length != 0 ? 1 : 0);
         assertEq(r.keyOwner(_h(x.attrs.pqzKey)), proven ? x.ua : bytes32(0));
         assertEq(r.uaCount(UAKinds.PQZ_MLWE), proven ? 1 : 0);
     }
@@ -2019,18 +2018,18 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// P4 / UA8-D5: anyone submits the UA's signed KEM record (fndsa512, its real verifier); `kemKeyAt` returns the
-    /// written bytes, `kemKeyOf` the highest version; the initial record (v1, from `register`) keeps its empty `sig`.
+    /// written bytes, `kemKeyOf` the highest version; the initial record (v0, from `register`) keeps its empty `sig`.
     function test_ua8_setKemKeyByThirdParty() public {
         Row[] memory rows = _rows();
         KemRec[] memory ks = _kemRecs();
-        KemRec memory k1 = _kemRec(ks, "fndsa512/v1");
         KemRec memory k2 = _kemRec(ks, "fndsa512/v2");
         UARegistry a = _regA(false);
         _reg(a, rows[FNDSA_ROW]);
         vm.prank(address(0xBEEF), address(0xBEEF));
         a.setKemKey(k2.ua, 2, k2.kemPk, k2.sig);
         _assertKemAt(a, k2.ua, 2, k2.kemPk, k2.sig);
-        _assertKemAt(a, k2.ua, 1, k1.kemPk, "");
+        _assertKemAt(a, k2.ua, 0, rows[FNDSA_ROW].attrs.kemPk, "");
+        _assertKemAt(a, k2.ua, 1, "", "");
         _assertKemAt(a, k2.ua, 3, "", "");
         _assertKemOf(a, k2.ua, 2, k2.kemPk, k2.sig);
         _checkedEq(a, k2.ua, 1, 0, 1);
@@ -2038,7 +2037,7 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// P1 / P10: every portable.json `kemRecords` row lands on two registries (other chain id, uid, address) with the
-    /// same bytes; v1 is each UA's initial record from `register`, so its `setKemKey` is `UAKemVersion` (UA8-D4).
+    /// same bytes; each UA's initial record from `register` is version 0, so every v1-v3 lands (owner 2026-10-31).
     function test_ua8_kemCopyBetweenRegistries() public {
         Row[] memory rows = _rows();
         KemRec[] memory ks = _kemRecs();
@@ -2053,12 +2052,6 @@ contract UARegistryUA8Test is UARegistryBase {
             UARegistry[2] memory rs = [a, b];
             for (uint256 j; j < 2; ++j) {
                 vm.chainId(j == 0 ? 31337 : 7622);
-                if (k.version == _kemBase(rows, k).attrs.kemVersion) {
-                    vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemVersion.selector, k.ua, k.version));
-                    rs[j].setKemKey(k.ua, k.version, k.kemPk, k.sig);
-                    _assertKemAt(rs[j], k.ua, k.version, k.kemPk, "");
-                    continue;
-                }
                 vm.prank(address(0xC0B1E5), address(0xC0B1E5));
                 rs[j].setKemKey(k.ua, k.version, k.kemPk, k.sig);
                 _assertKemAt(rs[j], k.ua, k.version, k.kemPk, k.sig);
@@ -2066,7 +2059,7 @@ contract UARegistryUA8Test is UARegistryBase {
             }
         }
         vm.chainId(31337);
-        assertEq(written, 12, "v2 and v3 of three UAs on two registries");
+        assertEq(written, 18, "v1, v2 and v3 of three UAs on two registries");
         for (uint256 i; i < ks.length; ++i) {
             (bytes memory pa, bytes memory sa) = a.kemKeyAt(ks[i].ua, ks[i].version);
             (bytes memory pb, bytes memory sb) = b.kemKeyAt(ks[i].ua, ks[i].version);
@@ -2083,7 +2076,7 @@ contract UARegistryUA8Test is UARegistryBase {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = rows[ML65_1];
-        assertEq(x.attrs.kemVersion, 0);
+        assertEq(x.attrs.kemPk.length, 0);
         UARegistry a = _regA(false);
         _reg(a, x);
         _assertKemOf(a, x.ua, 0, "", "");
@@ -2121,7 +2114,8 @@ contract UARegistryUA8Test is UARegistryBase {
         _assertKemAt(a, x.ua, 3, pk, sig);
     }
 
-    /// UA8-D3: version 0 is never a record (`UAKemVersion(ua, 0)`), even validly signed.
+    /// `setKemKey` never writes version 0 (the `register` key's slot, owner 2026-10-31; R1's hash-commit fill aside): on a
+    /// UA registered without a KEM key it is `UAKemVersion(ua, 0)`, even validly signed.
     function test_ua8_kemVersionZeroRefused() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
@@ -2417,7 +2411,7 @@ contract UARegistryUA8Test is UARegistryBase {
             g1.setKemKey(k.ua, k.version, k.kemPk, k.sig);
             _assertKemOf(g2, k.ua, k.version, k.kemPk, k.sig);
             _assertKemAt(g2, k.ua, k.version, k.kemPk, k.sig);
-            _assertKemAt(g2, k.ua, 1, base.attrs.kemPk, "");
+            _assertKemAt(g2, k.ua, 0, base.attrs.kemPk, "");
             if (k.kind == UAKinds.MSIG) {
                 // a record gen 2 holds (members on gen 1): the same bytes land on gen 2
                 vm.revertToState(snap);
@@ -2431,29 +2425,55 @@ contract UARegistryUA8Test is UARegistryBase {
         }
     }
 
-    /// UA8-D4 / ruling C2: `register`'s initial KEM record occupies its version — `setKemKey` of it is `UAKemVersion`
-    /// (the vector's signed v1, and other bytes); `kemKeyAt` returns it with an empty `sig` (its consent is the pop),
-    /// and `registrationOf` keeps returning the `register` arguments after later records.
+    /// Owner 2026-10-31 (KEM items 1, 4): `register`'s KEM key is version 0, write-once — `setKemKey` of version 0
+    /// (its own bytes, other bytes) is `UAKemVersion(ua, 0)` and leaves it unchanged; `kemKeyAt(ua, 0)` returns it with an
+    /// empty `sig` (its consent is the pop), `kemKeyOf` it until a later version lands; a stored v1 is write-once too;
+    /// `registrationOf` keeps returning the `register` arguments (kemVersion 0) after later records.
     function test_ua8_kemInitialVersionFromRegister() public {
         Row[] memory rows = _rows();
         KemRec[] memory ks = _kemRecs();
         Row memory x = rows[FNDSA_ROW];
         KemRec memory k1 = _kemRec(ks, "fndsa512/v1");
         KemRec memory k3 = _kemRec(ks, "fndsa512/v3");
-        assertEq(x.attrs.kemVersion, 1);
-        assertEq(x.attrs.kemPk, k1.kemPk);
+        assertEq(x.attrs.kemVersion, 0);
+        assertTrue(keccak256(x.attrs.kemPk) != keccak256(k1.kemPk), "v0 is a key of its own");
         UARegistry a = _regA(false);
         _reg(a, x);
+        _assertKemAt(a, x.ua, 0, x.attrs.kemPk, "");
+        _assertKemOf(a, x.ua, 0, x.attrs.kemPk, "");
+        _checkedEq(a, x.ua, 1, 0, 1);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemVersion.selector, x.ua, 0));
+        a.setKemKey(x.ua, 0, x.attrs.kemPk, "");
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemVersion.selector, x.ua, 0));
+        a.setKemKey(x.ua, 0, k1.kemPk, k1.sig);
+        _assertKemAt(a, x.ua, 0, x.attrs.kemPk, "");
+        a.setKemKey(x.ua, 1, k1.kemPk, k1.sig);
+        _assertKemOf(a, x.ua, 1, k1.kemPk, k1.sig);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemVersion.selector, x.ua, 1));
         a.setKemKey(x.ua, 1, k1.kemPk, k1.sig);
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemVersion.selector, x.ua, 1));
-        a.setKemKey(x.ua, 1, k3.kemPk, k3.sig);
-        _assertKemAt(a, x.ua, 1, k1.kemPk, "");
-        _assertKemOf(a, x.ua, 1, k1.kemPk, "");
         a.setKemKey(x.ua, 3, k3.kemPk, k3.sig);
         _assertKemOf(a, x.ua, 3, k3.kemPk, k3.sig);
-        _assertKemAt(a, x.ua, 1, k1.kemPk, "");
+        _assertKemAt(a, x.ua, 0, x.attrs.kemPk, "");
+        _assertKemAt(a, x.ua, 1, k1.kemPk, k1.sig);
         assertEq(keccak256(_stored(a, x.ua)), keccak256(_args(x)), "registrationOf: the register args (C2)");
+    }
+
+    /// Owner 2026-10-31 (KEM item 1): `register` takes no KEM version — `UAAttrs.kemVersion` (the ABI word until the
+    /// explicit ABI drops it) other than 0 is `UAKemVersion(ua, v)`, with a key or without, before the PoP.
+    function test_ua8_registerKemVersionNotZeroRefused() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        UARegistry a = _regA(false);
+        Row[2] memory xs = [rows[FNDSA_ROW], rows[P256_ROW]];
+        for (uint256 i; i < 2; ++i) {
+            Row memory x = xs[i];
+            x.attrs.kemVersion = 1;
+            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemVersion.selector, x.ua, 1));
+            a.register(x.kind, x.keyData, x.attrs, x.pop, x.pqzPop);
+            x.attrs.kemVersion = 0;
+            _reg(a, x);
+            _assertRecord(a, x);
+        }
     }
 
     // ----- helpers -----
@@ -2556,7 +2576,9 @@ contract UARegistryUA8Test is UARegistryBase {
         if (k == keccak256("UAKemScheme")) {
             return abi.encodeWithSelector(IUARegistry.UAKemScheme.selector, uint8(x.attrs.kemPk[0]));
         }
-        if (k == keccak256("UAKemVersion")) return abi.encodeWithSelector(IUARegistry.UAKemVersion.selector, x.ua, 0);
+        if (k == keccak256("UAKemVersion")) {
+            return abi.encodeWithSelector(IUARegistry.UAKemVersion.selector, x.ua, x.attrs.kemVersion);
+        }
         revert(string.concat("unmapped error ", e));
     }
 
@@ -2582,7 +2604,8 @@ contract UARegistryUA8Test is UARegistryBase {
     // ----- A8: gas figures (UA-8 `register`, `storePqzPop`, `setKemKey`) -----
     // The pins below are regression guards only: each is the first measured run (forge 1.8.5, `--isolate`, evm
     // amsterdam) "/ 1.0", not a derived bound; re-pinned (GAS_REPIN=1, the four sets) by typed-signing P3 where the
-    // typed portable digests moved them (old -> new in its commit message). Regular gas = `gasTotalUsed`, EIP-8037 state gas = `gasStateUsed`
+    // typed portable digests moved them, and by P1b (the register KEM key at version 0: `_kemMax` written by the first
+    // `setKemKey`, not by `register`) (old -> new in their commit messages). Regular gas = `gasTotalUsed`, EIP-8037 state gas = `gasStateUsed`
     // (the log `runs/2026-10-30-ua8-gas.txt` has the table). The `mldsa65` precompile is the exact-input mock, so its
     // verify gas is the mock's, and the 0x0142 verifier is the `rreg` stand-in: both verifies are not real figures.
 
@@ -2606,94 +2629,94 @@ contract UARegistryUA8Test is UARegistryBase {
     function _pin(string memory name) internal pure returns (uint256, uint256) {
         bytes32 h = keccak256(bytes(name));
         // PINS: name -> (regular gas, state gas); the rows of all four sets (a set's rows carry its name)
-        if (h == keccak256("register webauthn-p256")) return (174142, 1751850);
-        if (h == keccak256("register p256")) return (155802, 1213290);
-        if (h == keccak256("register ed25519")) return (315329, 1164330);
-        if (h == keccak256("register bip340")) return (152617, 1164330);
-        if (h == keccak256("register secp256k1")) return (151516, 1262250);
-        if (h == keccak256("register schnorr-bn254")) return (166983, 1262250);
-        if (h == keccak256("register schnorr-bls12381")) return (194068, 1458090);
-        if (h == keccak256("register bls12381-minsig")) return (329903, 1604970);
-        if (h == keccak256("register bls-bn254-minsig")) return (344755, 1311210);
-        if (h == keccak256("register zether-bls12381")) return (206673, 1643220);
-        if (h == keccak256("register mldsa44")) return (4338200, 6930900);
+        if (h == keccak256("register webauthn-p256")) return (174169, 1751850);
+        if (h == keccak256("register p256")) return (155829, 1213290);
+        if (h == keccak256("register ed25519")) return (315356, 1164330);
+        if (h == keccak256("register bip340")) return (152644, 1164330);
+        if (h == keccak256("register secp256k1")) return (151543, 1262250);
+        if (h == keccak256("register schnorr-bn254")) return (167010, 1262250);
+        if (h == keccak256("register schnorr-bls12381")) return (194095, 1458090);
+        if (h == keccak256("register bls12381-minsig")) return (329930, 1604970);
+        if (h == keccak256("register bls-bn254-minsig")) return (344782, 1311210);
+        if (h == keccak256("register zether-bls12381")) return (206700, 1643220);
+        if (h == keccak256("register mldsa44")) return (4338227, 6930900);
         if (h == keccak256("register mldsa65#1")) return (381848, 9280980);
         if (h == keccak256("register mldsa65#2")) return (381848, 9183060);
-        if (h == keccak256("register mldsa65/n2048-kmax1024")) return (3339160, 81366930);
-        if (h == keccak256("register fndsa512")) return (2812331, 6531570);
-        if (h == keccak256("register slhdsa128s")) return (1113108, 13295700);
-        if (h == keccak256("register msig-classical")) return (145878, 1164330);
-        if (h == keccak256("register msig-pq/n2048-kmax1024")) return (3462040, 83923560);
+        if (h == keccak256("register mldsa65/n2048-kmax1024")) return (3339160, 81269010);
+        if (h == keccak256("register fndsa512")) return (2731189, 6433650);
+        if (h == keccak256("register slhdsa128s")) return (1113135, 13295700);
+        if (h == keccak256("register msig-classical")) return (145905, 1164330);
+        if (h == keccak256("register msig-pq/n2048-kmax1024")) return (3462040, 83825640);
         if (h == keccak256("register msig-pq-native")) return (297880, 6892650);
-        if (h == keccak256("setKemKey mldsa65/v2 n2048-kmax1024")) return (344984, 7893270);
+        if (h == keccak256("setKemKey mldsa65/v2 n2048-kmax1024")) return (344984, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024")) return (15404, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2048-kmax1024")) return (2501301, 3849480);
+        if (h == keccak256("setKemKey fndsa512/v2 n2048-kmax1024")) return (2501301, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024")) return (13464, 0);
-        if (h == keccak256("setKemKey msig-pq/v2 n2048-kmax1024")) return (586648, 13699620);
+        if (h == keccak256("setKemKey msig-pq/v2 n2048-kmax1024")) return (586648, 13797540);
         if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2048-kmax1024")) return (18640, 0);
         if (h == keccak256("setKemKey msig-12-slhdsa128s (96,832 B pop)")) return (6329240, 151930530);
         if (h == keccak256("popOf (the blob setKemKey decodes) msig-12-slhdsa128s (96,832 B pop)")) return (252365, 0);
         if (h == keccak256("popOf unregistered (view baseline)")) return (2860, 0);
-        if (h == keccak256("register mldsa65 with pqzPop n2048-kmax1024")) return (3339160, 81464850);
-        if (h == keccak256("register mldsa65 without pqzPop n2048-kmax1024")) return (1534872, 37657890);
+        if (h == keccak256("register mldsa65 with pqzPop n2048-kmax1024")) return (3339160, 81366930);
+        if (h == keccak256("register mldsa65 without pqzPop n2048-kmax1024")) return (1534872, 37559970);
         if (h == keccak256("storePqzPop mldsa65 n2048-kmax1024")) return (1825688, 43806960);
         if (h == keccak256("storePqzPop again (no-op) n2048-kmax1024")) return (1825688, 0);
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2048-kmax1024")) return (1825688, 44002800);
-        if (h == keccak256("register msig-pq without pqzPop n2048-kmax1024")) return (1657752, 40312440);
+        if (h == keccak256("register msig-pq without pqzPop n2048-kmax1024")) return (1657752, 40214520);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2048-kmax1024")) return (1825688, 43806960);
-        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024")) return (138383, 0);
-        if (h == keccak256("registrationOf msig-pq on gen 1 n2048-kmax1024")) return (94678, 0);
-        if (h == keccak256("register mldsa65/n2304-kmax4096")) return (3611544, 87851070);
-        if (h == keccak256("register msig-pq/n2304-kmax4096")) return (3734424, 90407700);
-        if (h == keccak256("setKemKey mldsa65/v2 n2304-kmax4096")) return (344984, 7893270);
+        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024")) return (138333, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 1 n2048-kmax1024")) return (94628, 0);
+        if (h == keccak256("register mldsa65/n2304-kmax4096")) return (3611544, 87753150);
+        if (h == keccak256("register msig-pq/n2304-kmax4096")) return (3734424, 90309780);
+        if (h == keccak256("setKemKey mldsa65/v2 n2304-kmax4096")) return (344984, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096")) return (15404, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2304-kmax4096")) return (2501301, 3849480);
+        if (h == keccak256("setKemKey fndsa512/v2 n2304-kmax4096")) return (2501301, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096")) return (13464, 0);
-        if (h == keccak256("setKemKey msig-pq/v2 n2304-kmax4096")) return (586648, 13699620);
+        if (h == keccak256("setKemKey msig-pq/v2 n2304-kmax4096")) return (586648, 13797540);
         if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2304-kmax4096")) return (18640, 0);
-        if (h == keccak256("register mldsa65 with pqzPop n2304-kmax4096")) return (3611544, 87948990);
-        if (h == keccak256("register mldsa65 without pqzPop n2304-kmax4096")) return (1665944, 40791330);
+        if (h == keccak256("register mldsa65 with pqzPop n2304-kmax4096")) return (3611544, 87851070);
+        if (h == keccak256("register mldsa65 without pqzPop n2304-kmax4096")) return (1665944, 40693410);
         if (h == keccak256("storePqzPop mldsa65 n2304-kmax4096")) return (1967000, 47157660);
         if (h == keccak256("storePqzPop again (no-op) n2304-kmax4096")) return (1967000, 0);
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2304-kmax4096")) return (1967000, 47353500);
-        if (h == keccak256("register msig-pq without pqzPop n2304-kmax4096")) return (1788824, 43445880);
+        if (h == keccak256("register msig-pq without pqzPop n2304-kmax4096")) return (1788824, 43347960);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2304-kmax4096")) return (1967000, 47157660);
-        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096")) return (148103, 0);
-        if (h == keccak256("registrationOf msig-pq on gen 1 n2304-kmax4096")) return (100597, 0);
-        if (h == keccak256("register mldsa65/n2560-kmax16384")) return (3879832, 94286250);
-        if (h == keccak256("register msig-pq/n2560-kmax16384")) return (4002712, 96842880);
-        if (h == keccak256("setKemKey mldsa65/v2 n2560-kmax16384")) return (344984, 7893270);
+        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096")) return (148053, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 1 n2304-kmax4096")) return (100547, 0);
+        if (h == keccak256("register mldsa65/n2560-kmax16384")) return (3879832, 94188330);
+        if (h == keccak256("register msig-pq/n2560-kmax16384")) return (4002712, 96744960);
+        if (h == keccak256("setKemKey mldsa65/v2 n2560-kmax16384")) return (344984, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2560-kmax16384")) return (15404, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2560-kmax16384")) return (2501301, 3849480);
+        if (h == keccak256("setKemKey fndsa512/v2 n2560-kmax16384")) return (2501301, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384")) return (13464, 0);
-        if (h == keccak256("setKemKey msig-pq/v2 n2560-kmax16384")) return (586648, 13699620);
+        if (h == keccak256("setKemKey msig-pq/v2 n2560-kmax16384")) return (586648, 13797540);
         if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2560-kmax16384")) return (18640, 0);
-        if (h == keccak256("register mldsa65 with pqzPop n2560-kmax16384")) return (3879832, 94384170);
-        if (h == keccak256("register mldsa65 without pqzPop n2560-kmax16384")) return (1797016, 43924770);
+        if (h == keccak256("register mldsa65 with pqzPop n2560-kmax16384")) return (3879832, 94286250);
+        if (h == keccak256("register mldsa65 without pqzPop n2560-kmax16384")) return (1797016, 43826850);
         if (h == keccak256("storePqzPop mldsa65 n2560-kmax16384")) return (2104216, 50459400);
         if (h == keccak256("storePqzPop again (no-op) n2560-kmax16384")) return (2104216, 0);
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2560-kmax16384")) return (2104216, 50655240);
-        if (h == keccak256("register msig-pq without pqzPop n2560-kmax16384")) return (1919896, 46579320);
+        if (h == keccak256("register msig-pq without pqzPop n2560-kmax16384")) return (1919896, 46481400);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2560-kmax16384")) return (2104216, 50459400);
-        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384")) return (158208, 0);
-        if (h == keccak256("registrationOf msig-pq on gen 1 n2560-kmax16384")) return (106733, 0);
-        if (h == keccak256("register mldsa65/n2816-kmax65536")) return (4199320, 102200940);
-        if (h == keccak256("register msig-pq/n2816-kmax65536")) return (4322200, 104757570);
-        if (h == keccak256("setKemKey mldsa65/v2 n2816-kmax65536")) return (344984, 7893270);
+        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384")) return (158158, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 1 n2560-kmax16384")) return (106683, 0);
+        if (h == keccak256("register mldsa65/n2816-kmax65536")) return (4199320, 102103020);
+        if (h == keccak256("register msig-pq/n2816-kmax65536")) return (4322200, 104659650);
+        if (h == keccak256("setKemKey mldsa65/v2 n2816-kmax65536")) return (344984, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2816-kmax65536")) return (15404, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2816-kmax65536")) return (2501301, 3849480);
+        if (h == keccak256("setKemKey fndsa512/v2 n2816-kmax65536")) return (2501301, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536")) return (13464, 0);
-        if (h == keccak256("setKemKey msig-pq/v2 n2816-kmax65536")) return (586648, 13699620);
+        if (h == keccak256("setKemKey msig-pq/v2 n2816-kmax65536")) return (586648, 13797540);
         if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2816-kmax65536")) return (18640, 0);
-        if (h == keccak256("register mldsa65 with pqzPop n2816-kmax65536")) return (4199320, 102298860);
-        if (h == keccak256("register mldsa65 without pqzPop n2816-kmax65536")) return (1928088, 47058210);
+        if (h == keccak256("register mldsa65 with pqzPop n2816-kmax65536")) return (4199320, 102200940);
+        if (h == keccak256("register mldsa65 without pqzPop n2816-kmax65536")) return (1928088, 46960290);
         if (h == keccak256("storePqzPop mldsa65 n2816-kmax65536")) return (2292632, 55240650);
         if (h == keccak256("storePqzPop again (no-op) n2816-kmax65536")) return (2292632, 0);
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2816-kmax65536")) return (2292632, 55436490);
-        if (h == keccak256("register msig-pq without pqzPop n2816-kmax65536")) return (2050968, 49712760);
+        if (h == keccak256("register msig-pq without pqzPop n2816-kmax65536")) return (2050968, 49614840);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2816-kmax65536")) return (2292632, 55240650);
-        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536")) return (176734, 0);
-        if (h == keccak256("registrationOf msig-pq on gen 1 n2816-kmax65536")) return (120925, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536")) return (176684, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 1 n2816-kmax65536")) return (120875, 0);
         return (0, 0); // an unpinned name fails its check
     }
 

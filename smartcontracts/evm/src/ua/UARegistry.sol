@@ -156,14 +156,15 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     mapping(uint16 kind => mapping(uint256 i => bytes32 ua)) private _uaAt;
 
     /// The registration blob (UA8-D7): `abi.encode(bytes keyRest, bytes pop, uint64 kemVersion)`, `keyRest` = the key
-    /// data after the stored kinds' `keyPtr` prefix (all of it for the other kinds), `kemVersion` the initial KEM
-    /// version (0 = none; ruling C2). `keyData` = `SSTORE2.read(keyPtr) ‖ keyRest`: stored once.
+    /// data after the stored kinds' `keyPtr` prefix (all of it for the other kinds), `kemVersion` always 0 (the
+    /// `register` KEM key is version 0, owner 2026-10-31; the word goes with `UAAttrs.kemVersion` in R1). `keyData` =
+    /// `SSTORE2.read(keyPtr) ‖ keyRest`: stored once.
     mapping(bytes32 ua => address[]) private _reg;
     mapping(bytes32 ua => bytes32) private _pqzPopHash; // the PQZ key's proof hash (`attrs.pqzPopHash`)
     mapping(bytes32 ua => address[]) private _pqzPop; // the R_REG proof bytes, written once
     mapping(bytes32 ua => address[]) private _pqzKeySig; // `setPqzKey`'s signature, written once
     mapping(bytes32 ua => mapping(uint64 version => address[])) private _kem; // `pk ‖ sig` (initial record: `sig` = "")
-    mapping(bytes32 ua => uint64) private _kemMax; // the highest stored KEM version, 0 = none
+    mapping(bytes32 ua => uint64) private _kemMax; // the highest stored KEM version (0: none, or the register key only)
     /// Ruling R-cross-set: the `register` PQZ key (pointer) and proof hash a `setPqzKey` replaced (a key of another
     /// set's length, never provable here), kept so `registrationOf` still returns the `register` arguments.
     mapping(bytes32 ua => address) private _regPqzKey;
@@ -343,10 +344,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         Record memory r = _records[ua];
         kind = r.kind;
         if (kind == 0) return (kind, keyData, attrs, pop, pqzPop);
-        uint64 v;
-        (keyData, pop, v) = _registration(ua, r.keyPtr);
-        (attrs.kemPk,) = _kemAt(ua, v);
-        attrs.kemVersion = v;
+        (keyData, pop,) = _registration(ua, r.keyPtr);
+        (attrs.kemPk,) = _kemAt(ua, 0); // the register KEM key is version 0 (`attrs.kemVersion` 0)
         PqzKey memory k = _pqzKey[ua];
         if (k.added) {
             // A4-c3: an added key is not a `register` argument; R-cross-set: the `register` key it replaced is (its
@@ -406,13 +405,18 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             return (pop, pqzPop, kem);
         }
         if (_records[ua].kind == 0) return (pop, pqzPop, kem);
-        return (UAKinds.CHECKED_CHAIN, _checked(_pqzKey[ua].proven), _checked(_kemMax[ua] != 0));
+        return (UAKinds.CHECKED_CHAIN, _checked(_pqzKey[ua].proven), _checked(_hasKem(ua)));
     }
 
     function kemKeyOf(bytes32 ua) external view returns (uint64 version, bytes memory pk, bytes memory sig) {
         if (_elsewhere(ua)) return IUARegistry(predecessor).kemKeyOf(ua);
         version = _kemMax[ua];
         (pk, sig) = _kemAt(ua, version);
+    }
+
+    /// A KEM key stored here: the `register` key (version 0) or a `setKemKey` one (`_kemMax` ≥ 1).
+    function _hasKem(bytes32 ua) private view returns (bool) {
+        return _kemMax[ua] != 0 || _kem[ua][0].length != 0;
     }
 
     function kemKeyAt(bytes32 ua, uint64 version) external view returns (bytes memory pk, bytes memory sig) {
@@ -585,7 +589,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// Step 8: the record, `keyPtr` (stored kinds), the keyHash (single keys), the kind's list, the initial KEM record
-    /// (UA8-D4), the registration blob (UA8-D7).
+    /// at version 0 (UA8-D4; owner 2026-10-31: `_kemMax` stays 0), the registration blob (UA8-D7).
     function _record(bytes32 ua, uint16 kind, bytes calldata keyData, bytes32 kh, UAAttrs calldata attrs,
         bytes calldata pop) private
     {
@@ -593,12 +597,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         address ptr = vl == 0 ? address(0) : SSTORE2.write(keyData[0:vl]);
         _records[ua] = Record(kind, uint40(block.timestamp), ptr, _list(kind, ua));
         if (kh != 0) _keyOwner[kh] = ua; // msig: none
-        uint64 v = attrs.kemVersion;
-        if (v != 0) {
-            _kem[ua][v] = SSTORE2.writeChunks(attrs.kemPk);
-            _kemMax[ua] = v;
-        }
-        _reg[ua] = SSTORE2.writeChunks(abi.encode(keyData[vl:], pop, v));
+        if (attrs.kemPk.length != 0) _kem[ua][0] = SSTORE2.writeChunks(attrs.kemPk);
+        _reg[ua] = SSTORE2.writeChunks(abi.encode(keyData[vl:], pop, uint64(0)));
     }
 
     /// Step 8, the event: every argument (`pop` as `keccak256(pop)`, CTR-UA-33) and the three `checkedOf` values (read
@@ -606,7 +606,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     function _registered(bytes32 ua, uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
         bytes calldata pqzPop) private
     {
-        (uint8 q, uint8 k) = (_checked(_pqzKey[ua].proven), _checked(_kemMax[ua] != 0));
+        (uint8 q, uint8 k) = (_checked(_pqzKey[ua].proven), _checked(_kem[ua][0].length != 0));
         emit UARegistered(ua, kind, keyData, attrs, keccak256(pop), pqzPop, UAKinds.CHECKED_CHAIN, q, k);
     }
 
@@ -644,8 +644,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// a kind (or an `msig` that is not PQ-eligible) that may not hold the key, and `UAPqzHolder` for an `msig` PQZ holder
     /// whose worst-case authorization, with a gen-2 registry's forwarding hold, + `PqzSet.PQZ_DEBIT_MIN_GAS` exceeds
     /// 2^24; `UAPqzPopHash` unless a PQZ key comes with a proof hash and only with it, and given proof bytes hash to it;
-    /// `UAKeyData(0x0142)` for a PQZ key of no parameter set's length; `UAKemVersion` for version 0 with a key,
-    /// `UAKemKeyLength` for a KEM key other than the scheme-1 length (1,601 B); `UAKemScheme` for a scheme id not enabled; `UAKindDisabled(0x0142)` for a PQZ key on a gen 2 whose gen 1
+    /// `UAKeyData(0x0142)` for a PQZ key of no parameter set's length; `UAKemVersion(ua, v)` for a `kemVersion` other
+    /// than 0 (`register`'s KEM key is version 0, owner 2026-10-31), `UAKemKeyLength` for a KEM key other than the
+    /// scheme-1 length (1,601 B); `UAKemScheme` for a scheme id not enabled; `UAKindDisabled(0x0142)` for a PQZ key on a gen 2 whose gen 1
     /// enables 0x0142 (ruling A5-I1). The PQZ key's owner (`UAKeyInUse`) is step 7, for a proven key.
     function _attrs(uint16 kind, bytes memory d, bytes32 ua, UAAttrs calldata attrs, bytes calldata pqzPop)
         private
@@ -653,18 +654,15 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         returns (bytes32 record, bytes32 h)
     {
         bool pqz = attrs.pqzKey.length != 0;
-        uint64 v = attrs.kemVersion;
-        bool kem = v != 0 || attrs.kemPk.length != 0;
+        bool kem = attrs.kemPk.length != 0;
         if (pqz) _pqzHolder(kind, d, ua);
         if (kem && !_holder(kind, d)) revert UAKemHolder(ua);
         if (pqz != (attrs.pqzPopHash != 0) || attrs.pqzPopHash == EMPTY_PROOF_HASH) revert UAPqzPopHash(ua);
         if (pqzPop.length != 0 && keccak256(pqzPop) != attrs.pqzPopHash) revert UAPqzPopHash(ua);
         if (pqz) h = _pqzKeyHash(attrs.pqzKey);
-        if (kem) {
-            if (v == 0) revert UAKemVersion(ua, 0);
-            _checkKemPk(attrs.kemPk);
-        }
-        record = UAKinds.portableRecordHash(ua, kind, h, UAKinds.kemRecordHash(ua, v, attrs.kemPk));
+        if (attrs.kemVersion != 0) revert UAKemVersion(ua, attrs.kemVersion);
+        if (kem) _checkKemPk(attrs.kemPk);
+        record = UAKinds.portableRecordHash(ua, kind, h, UAKinds.kemRecordHash(ua, 0, attrs.kemPk));
     }
 
     /// A PQZ / KEM holder (UA-6 U3, UA8-D12): `mldsa44`, `mldsa65`, `fndsa512`, a PQ-eligible `msig`.
@@ -777,19 +775,13 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, d);
     }
 
-    /// The initial KEM record's struct hash (the zero record = none) that `register`'s PoP signed: from the blob, or gen
-    /// 1's record.
+    /// The initial KEM record's struct hash (the zero record = none) that `register`'s PoP signed: version 0, stored
+    /// here or gen 1's.
     function _kemHash(bytes32 ua, bool host) private view returns (bytes32) {
-        uint64 v;
         bytes memory kemPk;
-        if (host) {
-            (,, UAAttrs memory a,,) = IUARegistry(predecessor).registrationOf(ua);
-            (v, kemPk) = (a.kemVersion, a.kemPk);
-        } else {
-            (,, v) = abi.decode(SSTORE2.readChunks(_reg[ua]), (bytes, bytes, uint64));
-            (kemPk,) = _kemAt(ua, v);
-        }
-        return UAKinds.kemRecordHash(ua, v, kemPk);
+        if (host) (kemPk,) = IUARegistry(predecessor).kemKeyAt(ua, 0);
+        else (kemPk,) = _kemAt(ua, 0);
+        return UAKinds.kemRecordHash(ua, 0, kemPk);
     }
 
     /// Where `storePqzPop` / `setPqzKey` write (ruling A6-I1): false = the record is here; true = gen 1 holds it and this

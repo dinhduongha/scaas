@@ -22,8 +22,9 @@ interface IUARegistry is IERC5267 {
         uint40 index; // the UA's position in its kind's list (`uaAt`)
     }
 
-    /// The registration attributes, exactly as `register` takes them; empty / 0 = absent. `kemVersion` ≥ 1 with a
-    /// 1,601-byte `kemPk` (scheme byte 0x01 ‖ ek ‖ x25519 pk) is the initial KEM record (UA8-D3, D4); `pqzPopHash = keccak256(pqzPop)` whenever `pqzKey` is set.
+    /// The registration attributes, exactly as `register` takes them; empty / 0 = absent. A 1,601-byte `kemPk` (scheme
+    /// byte 0x01 ‖ ek ‖ x25519 pk) is the initial KEM record, always version 0 (UA8-D3, D4; owner 2026-10-31):
+    /// `kemVersion` must be 0 (`UAKemVersion` otherwise; the field goes in R1); `pqzPopHash = keccak256(pqzPop)` whenever `pqzKey` is set.
     struct UAAttrs {
         bytes pqzKey;
         bytes32 pqzPopHash;
@@ -66,7 +67,7 @@ interface IUARegistry is IERC5267 {
     error UAIndex(uint16 kind, uint256 i); // uaAt past the kind's count
     error UANotIndexed(bytes32 ua); // uaIndex of an unregistered id
     error UAKemHolder(bytes32 ua); // kind / structure may not hold a KEM key (UA8-D12)
-    error UAKemVersion(bytes32 ua, uint64 version); // 0 (with a key), or already stored
+    error UAKemVersion(bytes32 ua, uint64 version); // register: ≠ 0; setKemKey: 0 or already stored (write-once)
     error UAKemKeyLength(uint256 length); // empty, or ≠ 1,601 for scheme 1
     error UAKemScheme(uint8 scheme); // first byte of kemPk: not an enabled KEM scheme (1 only; 2 reserved)
     /// A PQZ key without its proof hash or a proof hash without a key (`register`; a zero hash in `setPqzKey`), a proof
@@ -165,8 +166,8 @@ interface IUARegistry is IERC5267 {
     /// UAs may list one key) and no revocation (P7). Stored `pk ‖ sig` (SSTORE2 chunks), `kemKeyOf` follows the highest
     /// version, `UAKemKeySet` with the bytes. Check order: an id this registry does not hold (`UAUnauthorized`: an
     /// unregistered id, and on gen 2 a gen-1 record, which goes to gen 1, UA8-D11) → holder (`UAKemHolder`: `mldsa44`,
-    /// `mldsa65`, `fndsa512`, a PQ-eligible `msig`; UA8-D12) → version 0 or stored, the initial record from `register`
-    /// included (`UAKemVersion`, UA8-D4) → `kemPk` of scheme 1 (`UAKemScheme`) and 1,601 B (`UAKemKeyLength`) → signature (`UAUnauthorized`).
+    /// `mldsa65`, `fndsa512`, a PQ-eligible `msig`; UA8-D12) → version 0 (the `register` key's, owner 2026-10-31) or a
+    /// stored one (`UAKemVersion`, UA8-D4: every version write-once) → `kemPk` of scheme 1 (`UAKemScheme`) and 1,601 B (`UAKemKeyLength`) → signature (`UAUnauthorized`).
     function setKemKey(bytes32 ua, uint64 version, bytes calldata kemPk, bytes calldata sig) external;
 
     /// `pqzKey`: the SSTORE2 pointer of the UA's PQZ key, proven or not (UA8-D9: a directory), 0 = none (gen 2 forwards
@@ -189,7 +190,8 @@ interface IUARegistry is IERC5267 {
     /// The three parts (P11.3, ruling C8), `UAKinds.CHECKED_*`: `pop` = CHAIN; `pqzPop` = CHAIN iff proven, else NONE (no
     /// key, or not yet proven); `kem` = CHAIN once a KEM record is stored, else NONE; all NONE for an unregistered id.
     function checkedOf(bytes32 ua) external view returns (uint8 pop, uint8 pqzPop, uint8 kem);
-    /// The highest stored version (0, "", "" without one); `sig` is "" for the initial record (UA8-D4).
+    /// The highest stored version: (0, "", "") without one, (0, pk, "") for the `register` key alone (version 0, empty
+    /// `sig`: its consent is the pop, UA8-D4).
     function kemKeyOf(bytes32 ua) external view returns (uint64 version, bytes memory pk, bytes memory sig);
     /// ("", "") for a version not stored.
     function kemKeyAt(bytes32 ua, uint64 version) external view returns (bytes memory pk, bytes memory sig);

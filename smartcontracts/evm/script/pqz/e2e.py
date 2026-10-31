@@ -103,7 +103,7 @@ CK = (os.path.join(ROOT, "clients/clientkeys") if os.path.isdir(os.path.join(ROO
 _PORTABLE_JS = """
 const U = await import(process.argv[1] + '/src/ua.js'), B = await import(process.argv[1] + '/src/bytes.js');
 const a = JSON.parse(process.argv[2]), h = (k) => (a[k] === undefined ? undefined : B.fromHex(a[k]));
-const o = { ua: h('ua'), pqzKey: h('pqzKey'), kemVersion: a.kemVersion ?? 0, kemPk: h('kemPk') };
+const o = { ua: h('ua'), pqzKey: h('pqzKey'), kemPk: h('kemPk') };
 console.log(B.hex(a.fn === 'reg' ? U.pqzRegMessage(o) : a.fn === 'kem' ? U.kemRecordMessage(a.kind, { ua: o.ua, version: a.kemVersion, kemPk: o.kemPk })
   : a.fn === 'keyreg' ? U.uaMessage(0x0142, U.PQZ_KEY_TAG, U.pqzKeyDigest({ ua: o.ua, pqzKeyHash: U.keyHashOf(0x0142, o.pqzKey) }))
   : a.fn === 'keyrec' ? U.pqzKeyRecordMessage(a.kind, { ua: o.ua, pqzKey: o.pqzKey, pqzPopHash: h('pqzPopHash') }).message
@@ -621,20 +621,20 @@ def run(kd, kr, ke):
         return u
 
     def pqz_ua(name, seed, mlseed):
-        """A PQZ holder (UA-6, UA-8): an ML-DSA-65 UA with the pqz-mlwe key and KEM v1 as attributes; ONE register call, or
+        """A PQZ holder (UA-6, UA-8): an ML-DSA-65 UA with the pqz-mlwe key and KEM v0 as attributes; ONE register call, or
         `register` without the proof + `storePqzPop` when the full call does not fit the chain's block."""
         pk, s, e, _ = K.keygen(seed)
         mlpk = pq.ml_pk(65, mlseed)
         ua = words(call(reg, cd("uaOf(uint16,bytes)", ["w", "b"], MLDSA65, mlpk)))[0]
-        kem = b"\x01" + (kc("kem", mlseed) * 50)[:1600]  # the initial KEM record, version 1 (UA8-D3; scheme byte 1 + any 1,600 bytes here)
-        proof = pq.prove(3, K.build_register(portable("reg", ua=ua, pqzKey=pk, kemVersion=1, kemPk=kem), pk), K.i8(s) + K.i16(e))
+        kem = b"\x01" + (kc("kem", mlseed) * 50)[:1600]  # the register KEM key, version 0 (owner 2026-10-31; scheme byte 1 + any 1,600 bytes here)
+        proof = pq.prove(3, K.build_register(portable("reg", ua=ua, pqzKey=pk, kemPk=kem), pk), K.i8(s) + K.i16(e))
         ph = kc(proof)
         pop = pq.ml_sign(65, mlseed, kc(TAG[MLDSA65], portable("pop", kind=MLDSA65, ua=ua, pqzKey=pk, pqzPopHash=ph,
-                                                                  kemVersion=1, kemPk=kem)))
-        full_cd = cd(REGISTER, REGISTER_T, MLDSA65, mlpk, [pk, ph, 1, kem], pop, proof)
+                                                                  kemPk=kem)))
+        full_cd = cd(REGISTER, REGISTER_T, MLDSA65, mlpk, [pk, ph, 0, kem], pop, proof)
         full = not SPLIT and full_register_fits(reg, full_cd)
-        sd.send(reg, full_cd if full else cd(REGISTER, REGISTER_T, MLDSA65, mlpk, [pk, ph, 1, kem], pop, b""),
-                f"register {name} (mldsa65 + pqz-mlwe key + KEM v1, R_REG {len(proof):,} B, "
+        sd.send(reg, full_cd if full else cd(REGISTER, REGISTER_T, MLDSA65, mlpk, [pk, ph, 0, kem], pop, b""),
+                f"register {name} (mldsa65 + pqz-mlwe key + KEM v0, R_REG {len(proof):,} B, "
                 f"{'one call' if full else 'proof by storePqzPop'})")
         if not full:
             sd.send(reg, cd("storePqzPop(bytes32,bytes)", ["w", "b"], ua, proof), f"storePqzPop {name}")
@@ -645,8 +645,8 @@ def run(kd, kr, ke):
         check([int.from_bytes(w, "big") for w in words(call(reg, cd("checkedOf(bytes32)", ["w"], ua)))] == [1, 1, 1],
               f"{name} checkedOf = (chain, chain, chain)")
         kr = call(reg, cd("kemKeyOf(bytes32)", ["w"], ua))
-        check(int.from_bytes(words(kr)[0], "big") == 1 and dec_bytes(kr, 1) == kem and dec_bytes(kr, 2) == b"",
-              f"{name} kemKeyOf = (1, kem, \"\")")
+        check(int.from_bytes(words(kr)[0], "big") == 0 and dec_bytes(kr, 1) == kem and dec_bytes(kr, 2) == b"",
+              f"{name} kemKeyOf = (0, kem, \"\")")
         check(int.from_bytes(words(call(reg, cd("kindOf(bytes32)", ["w"], ua)))[0], "big") == MLDSA65, f"{name} kindOf 0x0131")
         return UA(name=name, kind=MLDSA65, seed=mlseed, pk=pk, s=s, e=e, ua=ua)
 
