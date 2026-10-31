@@ -581,7 +581,7 @@ and burn verifiers fold Σ; the inner-product verifier (`verifyFold`) adds the r
 3. **Which points need a subgroup check: every untrusted one, and on EVM the MSM does it.** EIP-2537: G1ADD (`0x0b`)
    checks encoding and on-curve, "no subgroup check"; G1MSM (`0x0c`) also errors on "on the G1 elliptic curve but not in
    the correct subgroup", every input, and "MSMs and pairings MUST perform a subgroup check"; scalars need not be `< r`.
-   The EIP has no zero-scalar exception and does not state one either way, so it was tested: `(0, 2)`, a point of order 3,
+   The EIP states no exception for a zero scalar, and a skip would be silent, so it was tested: `(0, 2)`, a point of order 3,
    passes `0x0b` and fails `0x0c` with scalar 0 at k = 1 and k = 2, in forge (`test_precompilesOnTheLowOrderPoint`) and on
    the SCaaS testnet's Nethermind 2.2.0 (read-only `eth_call`, 2026-11-01). So:
    - **Every untrusted point is in the input, and stays there.** A slot is never dropped for a zero scalar: `z_x = 0`
