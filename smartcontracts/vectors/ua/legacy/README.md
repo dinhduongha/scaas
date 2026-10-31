@@ -20,3 +20,8 @@
   `webauthn-p256` `abi-*` negatives (the canonical WebAuthn blob re-encoded off the canonical layout: trailing byte, each
   offset shifted, non-zero padding after each field, each length word beyond the data, fields swapped). The live file only
   appends those rows to `derived[0].negatives` (91 → 99 derived negatives).
+- typed-signing (2026-10-31, owner: typed EIP-712 for the portable records, domain `EIP712Domain(string name,string version)`
+  = ("SCaaS UA Portable", "1"), TS-D1 / TS-D7): `typed-signing/{portable,signatures,pq_signatures,structures,groups,kinds}.json`
+  as they stood before the round (raw portable digests `portablePopDigest` / `registrationDigest` / `kemRecordDigest` /
+  `pqzKeyDigest` / `pqzKeyRecordDigest`, native EOA `msig` members over `personal_sign(md)`; the `ref/pre-typed-signing`
+  tag holds the same bytes). Every file is copied whether or not it moves; the live files carry the typed digests.
