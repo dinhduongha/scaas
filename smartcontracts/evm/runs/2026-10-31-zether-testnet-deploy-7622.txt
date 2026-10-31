@@ -1,0 +1,126 @@
+# zether-testnet, 2026-10-31: option B (controller decision): the whole stack again beside the phase C set, new CREATE2 salt, with the Zether stack.
+# PRIVATE_KEY=<key 4, the phase C deployer and the OpenFactory registrar> DEPLOY_SALT=keccak256("scaas.deploy.v2")=0xbd3f4bdc32ba5db3fa99db087c3933df31983284c5135d720e65fb719ae62669 DEPLOY_ZETHER=1 FOUNDRY_PROFILE=scaas-testnet CHAIN_UID=0xf1f491ab…3164 scripts/capped smartcontracts/scripts/deploy.sh evm http://192.168.1.72:8545
+# source: branch zether-testnet at 27d77467 (main); why: the phase C registry 0x06d03D56…9776 lacks zether-bls12381 (0x0141), its kinds are constructor immutables, and a gen-2 registry refuses 0x0141 (UAConfig(321): schnorr-bls12381 0x0105 in gen 1 shares the keyHash group bls12381-g1; eth_call --create check, see the RUNBOOK)
+Script ran successfully.
+
+== Logs ==
+  {"chain_uid":"0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164","dex_implementation":"0x9CEcD49Bc87a1Ab2839ED052Dfcb822243E5B691","implementation_normal":"0xCb5A2f47D0619F6b56A9A7190ea5BEf6Ce8c9670","implementation_normal_zether_bls12381":"0x2a150Dee38128c3722fc5868AD7209536Acc65f3","implementation_wrapped_zether_bls12381":"0xcB7a1690a759a9a793377e87cAfF5Dc4A1c27a1D","mtx_relay_executor":"0x81e86a75de7E23b7b9a9d1C78313A868589ABe69","mtx_relay_fee":"0x738720b3Fa18aB3E04eB2d5dbB600427f9CD6A5D","smart_key_account_factory":"0xbbFcF863ADc64cD6a2701C3e3d6D5edC895282A5","smart_key_account_implementation":"0xB2d07a27A1f7e187DFeAc6c0b458210F55dC3AB6","token_factory":"0xFa48604eDFf8C75130E9820Fd8022eEE9A839626","ua_registry":"0x6814a54f49919c79f15f93181AAb73E36AaE7b79","zether_burn_verifier_bls12381":"0x5De1De29d658eFcF3A8B0a7b29f4196ccFEc8b28","zether_disclosure":"0xbC37b9B6a32Ece60aD8c9b0bFD69dFc7d64AD893","zether_inner_product_verifier_bls12381":"0x1010d98Fc13943Ccdb82a664Db24353c0aB9e148","zether_registry":"0x6814a54f49919c79f15f93181AAb73E36AaE7b79","zether_statements":"0xF0279b8b5B455802AA0bd5B8AbDdb1E6659bd4d8","zether_verifier_bls12381":"0x989640d95ed6CEA44a4915AEDb40d0114CB03476"}
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 7622
+
+Estimated max fee per gas: 0.000000001 gwei
+Estimated base fee per gas: 0 gwei
+Estimated max priority fee per gas: 0.000000001 gwei
+
+Estimated total gas used for script: 810592383
+
+Estimated amount required: 0.000000000810592383 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+
+
+
+## transactions (receipts: gasUsed = regular + state; Nethermind 2.2.0 receipts carry no split)
+ok    CREATE2 ZetherLib  0xd212702bf26d833f1904736c90354492d8ed2801: 0xef35f0d4c30a23fa696c735b672383f7b6d48a721a06b56ad6e0143519e21af1 block 5157 gasUsed 28654804
+ok    CREATE2 WrappedLib  0xbfb57c6354384d9ba15966039ae5f823cab92c60: 0xa0d6fa634df58b18df97d1a81a2cc74e42246fabc60634606dc67ace6e59979f block 5159 gasUsed 21984542
+ok    CREATE2 MtxPipelineLib  0x9aabc1959d99b5c2f1021da8bced5807eddc4c01: 0xe10ec0fde4d0ed5641477eadf1e396953c10933454c60a2360a50c9d270791a2 block 5161 gasUsed 12496070
+ok    CREATE2 SmartKeyAccountFactory  0xbbfcf863adc64cd6a2701c3e3d6d5edc895282a5: 0x280c2b559ac9037ecdd9890040c2e16f3148a1f646d5d90b1860a9e2bf33f51e block 5163 gasUsed 33185279
+ok    CREATE2 OpenFactory  0xfa48604edff8c75130e9820fd8022eee9a839626: 0xa73452edc41b6a34b57dd7605ccb15d884b8dda64104d687eb26fb882ee0ed8c block 5165 gasUsed 24533023
+ok    CREATE2 WebAuthnP256Verifier  0xb61630547b478c508cb433ad1332177c3167e8c8: 0x04d71c649f3181ee2483036df6fea668355634817652bb8abbd908561e3eaddb block 5167 gasUsed 9043723
+ok    CREATE2 P256Verifier  0x777b0ceada403a04cf0a466d71b18cb52fdd9b90: 0x2f44fcd8dac83d7583d03d65541d7e1eaac0439efca35af9b8690efbf7a3dafa block 5169 gasUsed 5215294
+ok    CREATE2 Ed25519Verifier  0xe22b4539d15ecdaebe1b505a6e5941803e325399: 0xde02760e8fade86a3e62f43581f4250e8d92261e383969ecae569af1bd80fa1a block 5171 gasUsed 27344592
+ok    CREATE2 Bip340Verifier  0x42ac4b059691d2083ade859ba27f3f3b329951f3: 0x5c3de49aa214d00e9024d82b758e080e107f806eedd3a6c3d6596e0b06a6c56c block 5173 gasUsed 2489674
+ok    CREATE2 Secp256k1Verifier  0xce5d2ac5b043d3608aa98e5f9d63be1cfba875b2: 0x2776a26a8829d9926a4186f337b1913f184deb34aff6d89a4212a21121f4991d block 5175 gasUsed 1583472
+ok    CREATE2 SchnorrBn254Verifier  0xc8d04be2a26b07c6f70608adc912818e8ec4f3f2: 0x6fd7231c23cc86fb514015ca75d6940c41e21e6a83ad993331d461135c325ac1 block 5177 gasUsed 5666661
+ok    CREATE2 SchnorrBls12381Verifier  0x2cf2d991291188e7c37bc284144feca3b8d40fcf: 0x4eecd6fb2d02fa6dbc03978d598da07b7f18a482630d71c78dcf6bb60e598bf9 block 5179 gasUsed 5666661
+ok    CREATE2 BlsMinSigBls12381Verifier  0x81e66f20a425a99f0d5bb3e146d0d3ab7fbb077c: 0x16857ccd1a7f91af9f463a15b45fc3eb2ce5ac7f7e69000e8639003f50f989be block 5181 gasUsed 7602446
+ok    CREATE2 BlsMinSigBn254Verifier  0x8819639b267b2adcb71ef787820865627eb2da67: 0xfbe0cc55c9585025e3e0b61e132331bc0650dd67b91660e04f7beeee8ccf80cb block 5183 gasUsed 4650274
+ok    CREATE2 Musig2Secp256k1Verifier  0x70ece0d2b8c968237c9d4a7d521bc6c2d66005a9: 0x75baa6e02dee8dee6f5ec18ce0311bcf51cd1ce8a134e87be8317fa08dc6bab9 block 5185 gasUsed 6031284
+ok    CREATE2 UAFrostSecp256k1Verifier  0x1a13de680a0157d44448039591717980d8977f30: 0xa1ffe1135e3fc13c7a4d43ff922e7e8b7b6faf6d03945f1229fe6ac0e5022a74 block 5187 gasUsed 7283321
+ok    CREATE2 Musig2Bn254Verifier  0xa1f117cc59cf960b1d96fd3607a8d3b7702b3b73: 0xac2502424aea4db1030dbf326b3b8c52da3ab5ec3d110e4d9178abd3b66ad457 block 5189 gasUsed 8385970
+ok    CREATE2 FrostBn254Verifier  0x71095755a6fbceef5760a564034c4d50b6f9a2b1: 0xaf524b35275aa50af4092505cbf1333210ab601763a193919826edcf6b0540ef block 5191 gasUsed 7317589
+ok    CREATE2 ZetherSchnorrBls12381Verifier  0x05c7f8b751c7b22cbd3a8a8449f4dc47daec9b3b: 0xc4b91138c56ba82ccecae54d641b729757f9355a84e8e7e84bb0eed858401fbd block 5193 gasUsed 5682027
+ok    CREATE2 UAMldsaVerifier  0x533cb14505082708e17142ed5325361d34b3f165: 0x475e07fab9d20bbb569528fcfd03c89dd74e921d53956837a454e0677ce1f9c6 block 5195 gasUsed 17606472
+ok    CREATE2 UAMldsaVerifier  0x8c3b1ebc9d3d1dbc0f2d30510d5f4ea820338870: 0x600292551806b60f69cf90b083bd0693af177ee83e93df2cb9707a5835442bb2 block 5197 gasUsed 17606535
+ok    CREATE2 UAFndsaVerifier  0x752bd9a5c8801b37eb8d6f9454c9ba101c79a6b3: 0x95eabc029ec655723917bc04508e9f7d2858b783fa4c7a109197eb0e144f5d0b block 5199 gasUsed 9159411
+ok    CREATE2 UASlhdsaVerifier  0xdc6966bf32be73154c59ebb0a04410d1265d7493: 0x25cb5d10c89f25a7d3722f1ed36a3d5da70b8520ee4d8709e82b17a5cd4c1a71 block 5201 gasUsed 3711963
+ok    CREATE2 UARegistry  0x6814a54f49919c79f15f93181aab73e36aae7b79: 0x7c0bb345f2d039147ba91791650d5a9d69e124802713e77311c54f21bb2713f4 block 5203 gasUsed 58201991
+ok    CREATE2 MtxRelayFee  0x738720b3fa18ab3e04eb2d5dbb600427f9cd6a5d: 0x0735b207c1b572799e149a6a42366430f549cd9c1be5022b87fae3d8ce0164c3 block 5205 gasUsed 5876737
+ok    CALL OpenFactory publishEnv(uint8,uint16,(address,bytes32,address,address,bool,address[],address[],bytes32[])) 0xfa48604edff8c75130e9820fd8022eee9a839626: 0x27240f17c005f155800cb5f43a9a5519de7f7a9cc4d2786d1c8cade9253b3efe block 5207 gasUsed 1797789
+ok    CALL OpenFactory deployImplementation(uint8,uint64,uint16,bytes,bytes) 0xfa48604edff8c75130e9820fd8022eee9a839626: 0x44deed6bdcc319bffc776bf8c86b2e77b50927fa2be8ef5c04d39572f9d1f6a8 block 5209 gasUsed 61088072
+ok    CALL OpenFactory publishDexEnv(uint16,(address,bytes32,address,address,bool,address[],address[],bytes32[])) 0xfa48604edff8c75130e9820fd8022eee9a839626: 0x4726cd55d2c68603d37a044579bb66d0347a3d73644e7d6f7c56a8c93f7c3a53 block 5211 gasUsed 1023599
+ok    CALL OpenFactory deployDexImplementation(uint64,uint16,bytes,bytes) 0xfa48604edff8c75130e9820fd8022eee9a839626: 0x343246a636cae87f19c99f04b4ed04b096e1e9a6b3e1844c063b56f0a9d916f2 block 5213 gasUsed 42553812
+ok    CREATE2 ZetherStatements  0xf0279b8b5b455802aa0bd5b8abddb1e6659bd4d8: 0xf6baaa18eb33731f5111a375cc481c4515b29e5072a15424bdddd389ffbe93d8 block 5215 gasUsed 14706731
+ok    CREATE2 ZetherDisclosure  0xbc37b9b6a32ece60ad8c9b0bfd69dfc7d64ad893: 0xee770f5b965976c6d4c32120d4e1f5b6cd8df25d9e25c67ffca41055603f6f6b block 5217 gasUsed 8110894
+ok    CREATE2 ZetherInnerProductVerifierBls12381  0x1010d98fc13943ccdb82a664db24353c0ab9e148: 0xc91e0c6f051bf55c4d31ecb8c4c13b7f5e6ea97485df6fe44b0e4a8f9dd41d8c block 5219 gasUsed 44521372
+ok    CREATE2 ZetherTransferVerifierBls12381  0x989640d95ed6cea44a4915aedb40d0114cb03476: 0x7c2e7ec7a3e8ff606a9da47b186d156f36964f62b8b549ae4ab97236d6b531c5 block 5221 gasUsed 19299647
+ok    CREATE2 ZetherBurnVerifierBls12381  0x5de1de29d658efcf3a8b0a7b29f4196ccfec8b28: 0xb4540b88fba6f9360fa44d64d3f0fc7d21918d026bc6bb5f2d8540c6e76087b5 block 5223 gasUsed 8646194
+ok    CALL OpenFactory publishEnv(uint8,uint16,(address,bytes32,address,address,bool,address[],address[],bytes32[])) 0xfa48604edff8c75130e9820fd8022eee9a839626: 0xe1ca26cd49e70c01d96d404b9088203b9806b51907472b22e05b0dfbf9b712c4 block 5225 gasUsed 2570686
+ok    CALL OpenFactory publishEnv(uint8,uint16,(address,bytes32,address,address,bool,address[],address[],bytes32[])) 0xfa48604edff8c75130e9820fd8022eee9a839626: 0x390d863d40f295c0d83050e61092bf779908e485b598a9e15a4171778ded2f94 block 5227 gasUsed 2792618
+ok    CALL OpenFactory deployImplementation(uint8,uint64,uint16,bytes,bytes) 0xfa48604edff8c75130e9820fd8022eee9a839626: 0x9a1326eb285239fe80dd5ebcdd50bd5ed4335ad10a077d9f80f96422997b8088 block 5229 gasUsed 76810988
+ok    CALL OpenFactory deployImplementation(uint8,uint64,uint16,bytes,bytes) 0xfa48604edff8c75130e9820fd8022eee9a839626: 0x1b97f5d77bce32e286caffc2370b035d281aef140be3cba3872f9ef3a32c8798 block 5231 gasUsed 95172307
+ok    CALL OpenFactory setKindEnabled(uint8,bool) 0xfa48604edff8c75130e9820fd8022eee9a839626: 0x8356808fc7841f9628db9be6f3e9e16c756d711f7344a3e457d69ea4ae006cf5 block 5233 gasUsed 29904
+ok    CALL OpenFactory setKindEnabled(uint8,bool) 0xfa48604edff8c75130e9820fd8022eee9a839626: 0xf1e12a1bdbefe2a3b69f85914228f2047f11145cab222c4099056328fc3f76eb block 5235 gasUsed 29904
+
+## factory children (additionalContracts)
+      SmartKeyAccount at 0xb2d07a27a1f7e187dfeac6c0b458210f55dc3ab6
+      MtxRelayExecutor at 0x81e86a75de7e23b7b9a9d1c78313a868589abe69
+      NormalToken at 0xcb5a2f47d0619f6b56a9a7190ea5bef6ce8c9670
+      SCaaSDex at 0x9cecd49bc87a1ab2839ed052dfcb822243e5b691
+      ? at 0x12f21507d35bafbf4d0c0778e147354283c2cf5b
+      NormalZetherToken at 0x2a150dee38128c3722fc5868ad7209536acc65f3
+      WrappedZetherToken at 0xcb7a1690a759a9a793377e87caff5dc4a1c27a1d
+
+total: 40 transactions, all status 0x1, gasUsed 716134332, blocks 5157–5235
+
+## deployments/7622.json (git-ignored)
+{
+  "chain_uid": "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164",
+  "dex_implementation": "0x9CEcD49Bc87a1Ab2839ED052Dfcb822243E5B691",
+  "implementation_normal": "0xCb5A2f47D0619F6b56A9A7190ea5BEf6Ce8c9670",
+  "implementation_normal_zether_bls12381": "0x2a150Dee38128c3722fc5868AD7209536Acc65f3",
+  "implementation_wrapped_zether_bls12381": "0xcB7a1690a759a9a793377e87cAfF5Dc4A1c27a1D",
+  "mtx_relay_executor": "0x81e86a75de7E23b7b9a9d1C78313A868589ABe69",
+  "mtx_relay_fee": "0x738720b3Fa18aB3E04eB2d5dbB600427f9CD6A5D",
+  "smart_key_account_factory": "0xbbFcF863ADc64cD6a2701C3e3d6D5edC895282A5",
+  "smart_key_account_implementation": "0xB2d07a27A1f7e187DFeAc6c0b458210F55dC3AB6",
+  "token_factory": "0xFa48604eDFf8C75130E9820Fd8022eEE9A839626",
+  "ua_registry": "0x6814a54f49919c79f15f93181AAb73E36AaE7b79",
+  "zether_burn_verifier_bls12381": "0x5De1De29d658eFcF3A8B0a7b29f4196ccFEc8b28",
+  "zether_disclosure": "0xbC37b9B6a32Ece60aD8c9b0bFD69dFc7d64AD893",
+  "zether_inner_product_verifier_bls12381": "0x1010d98Fc13943Ccdb82a664Db24353c0aB9e148",
+  "zether_registry": "0x6814a54f49919c79f15f93181AAb73E36AaE7b79",
+  "zether_statements": "0xF0279b8b5B455802AA0bd5B8AbDdb1E6659bd4d8",
+  "zether_verifier_bls12381": "0x989640d95ed6CEA44a4915AEDb40d0114CB03476"
+}## code size and checks
+0x9CEcD49Bc87a1Ab2839ED052Dfcb822243E5B691 26967 B
+0xCb5A2f47D0619F6b56A9A7190ea5BEf6Ce8c9670 38916 B
+0x2a150Dee38128c3722fc5868AD7209536Acc65f3 49037 B
+0xcB7a1690a759a9a793377e87cAfF5Dc4A1c27a1D 60893 B
+0x81e86a75de7E23b7b9a9d1C78313A868589ABe69 554 B
+0x738720b3Fa18aB3E04eB2d5dbB600427f9CD6A5D 2982 B
+0xbbFcF863ADc64cD6a2701C3e3d6D5edC895282A5 1264 B
+0xB2d07a27A1f7e187DFeAc6c0b458210F55dC3AB6 19845 B
+0xFa48604eDFf8C75130E9820Fd8022eEE9A839626 15651 B
+0x6814a54f49919c79f15f93181AAb73E36AaE7b79 37365 B
+0x5De1De29d658eFcF3A8B0a7b29f4196ccFEc8b28 5444 B
+0xbC37b9B6a32Ece60aD8c9b0bFD69dFc7d64AD893 5107 B
+0x1010d98Fc13943Ccdb82a664Db24353c0aB9e148 7445 B
+0xF0279b8b5B455802AA0bd5B8AbDdb1E6659bd4d8 9371 B
+0x989640d95ed6CEA44a4915AEDb40d0114CB03476 12331 B
+UARegistry.kindEnabled(0x0141 zether-bls12381) = true, verifyCap = 70000 [7e4]
+UARegistry kinds enabled: 0x0100 0x0101 0x0102 0x0103 0x0104 0x0105 0x0106 0x0107 0x0108 0x0110 0x0111 0x0112 0x0113 0x0120 0x0130 0x0131 0x0132 0x0133 0x0141 
+OpenFactory kind 0: kindEnabled true, release v1 (0xCb5A2f47D0619F6b56A9A7190ea5BEf6Ce8c9670, 1, 0x02d36c20876fd2903171e7f83b907c4e44d800d61c32ba1789b470166903186f, 1793429425 [1.793e9], false)
+OpenFactory kind 2: kindEnabled true, release v1 (0x2a150Dee38128c3722fc5868AD7209536Acc65f3, 1, 0xba2284fd1d7cb7d989fdb9d77c5839bd40c018a05ca27e196b8dcaf9f6019647, 1793429525 [1.793e9], false)
+OpenFactory kind 3: kindEnabled true, release v1 (0xcB7a1690a759a9a793377e87cAfF5Dc4A1c27a1D, 1, 0xbd074bde60c71ab8591695e422662c1b6f7df58960041c9a25ca085ee8843b84, 1793429535 [1.793e9], false)
+OpenFactory registrar 0x1efF47bc3a10a45D4B230B5d10E37751FE6AA718, noticePeriod 600 s

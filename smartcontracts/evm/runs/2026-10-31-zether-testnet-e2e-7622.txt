@@ -1,0 +1,78 @@
+# Zether e2e on chain 7622 (SCaaS testnet), 2026-10-31 13:52:44 +0700; genesis 0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164; head 5356
+# RPC=http://192.168.1.72:8545 PRIVATE_KEY=<key 4, the deployer of the salt-v2 set> FOUNDRY_PROFILE=scaas-testnet scripts/capped scripts/e2e-zether.sh (branch zether-testnet; zether-cli built from the branch; deployments/7622.json = runs/2026-10-31-zether-testnet-deploy-7622.txt)
+## run (broadcast, chain 7622, sender 0x1efF47bc3a10a45D4B230B5d10E37751FE6AA718)
+ok    6 zether-bls12381 UAs registered (clientkeys PoPs)
+      NORMAL_ZETHER token at 0x1161E91cAD5a3a3511Ea1E490f51a63cDaF348d3
+ok    shield 1234 to alice: decrypted acc 0, pending 1234
+ok    alice roll-over: decrypted acc 1234, pending 0
+ok    single transfer alice -> bob 100 entryRef 0xfed6c01171fc2fa69833a61917cda7173eddf475da69c8cab3ab9513b1e59583
+ok    alice after the single transfer: decrypted acc 1134, pending 0
+ok    bob after the single transfer: decrypted acc 0, pending 100
+ok    disclosure view: verifyTransferAmount(single, 100, SENDER_S) = true, 101 = false
+ok    multi transfer Compact M = 4 (bob 50 + 3 decoys) entryRef 0xda365aae7087ff9fe98392be620b418c4bf86517c855681b3c1041bd0e144eb2
+ok    alice after the Compact M = 4 transfer: decrypted acc 1084, pending 0
+ok    bob after the Compact M = 4 transfer: decrypted acc 0, pending 150
+ok    decoy 1 (Compact): decrypted acc 0, pending 0
+ok    decoy 2 (Compact): decrypted acc 0, pending 0
+ok    decoy 3 (Compact): decrypted acc 0, pending 0
+ok    multi transfer BUNDLE M = 2 (carol 25 + 1 decoy) entryRef 0xd86f4b38b4996c29f4e4e515065608e076772cc13ba49605caedcf45c18c293a
+ok    alice after the BUNDLE M = 2 transfer: decrypted acc 1059, pending 0
+ok    carol after the BUNDLE M = 2 transfer: decrypted acc 0, pending 25
+ok    bob roll-over: decrypted acc 150, pending 0
+ok    unshield 200 to the deployer (public +200): decrypted acc 859, pending 0
+      MockERC20 at 0x1CE9b1Dc4e13b893D3785F4467A27ac56Da2c619
+      WRAPPED_ZETHER token at 0x7d3150B5669ff4C8657b00a131ff59486746afcB
+ok    wrap-shield 500 to alice + roll-over (wrapped): decrypted acc 500, pending 0
+{"entry_bundle_m2":"0xd86f4b38b4996c29f4e4e515065608e076772cc13ba49605caedcf45c18c293a","entry_compact_m4":"0xda365aae7087ff9fe98392be620b418c4bf86517c855681b3c1041bd0e144eb2","entry_single":"0xfed6c01171fc2fa69833a61917cda7173eddf475da69c8cab3ab9513b1e59583","normal_zether_token":"0x1161E91cAD5a3a3511Ea1E490f51a63cDaF348d3","s_single":"0x2f9ccad2dd1959632de34d5d492437b76912206edd48b9d490613645a65749ca","underlying_erc20":"0x1CE9b1Dc4e13b893D3785F4467A27ac56Da2c619","wrapped_zether_token":"0x7d3150B5669ff4C8657b00a131ff59486746afcB"}
+## check (the chain's state)
+ok    chain: alice: decrypted acc 859, pending 0
+ok    chain: bob: decrypted acc 150, pending 0
+ok    chain: carol: decrypted acc 0, pending 25
+ok    chain: decoy 1: decrypted acc 0, pending 0
+ok    chain: decoy 2: decrypted acc 0, pending 0
+ok    chain: decoy 3: decrypted acc 0, pending 0
+ok    chain: alice (wrapped): decrypted acc 500, pending 0
+ok    chain: disclosure view verifyTransferAmount(single, 100, SENDER_S) = true
+## gas per transaction (broadcast/ZetherE2E.s.sol/7622/run-latest.json; gasUsed = the receipt's, regular + state)
+ok    tx register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes) -> 0x6814a54f49919c79f15f93181aab73e36aae7b79: 0x6933b0758b60b10d11560f728b7e10bbf4482711a30f5c54948bac3620d5e379 block 5362 gasUsed 1848746 (calldata 740 B)
+ok    tx register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes) -> 0x6814a54f49919c79f15f93181aab73e36aae7b79: 0x38b24f1a06618df18d4b0a1c0ce15cb06ade2024c636d9e1deb9c12f7bd171ba block 5364 gasUsed 1750814 (calldata 740 B)
+ok    tx register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes) -> 0x6814a54f49919c79f15f93181aab73e36aae7b79: 0xc3b6e138152181216831fd343fdd263314be7e258aeb2f40f7123c95dd0e6cc3 block 5366 gasUsed 1750826 (calldata 740 B)
+ok    tx register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes) -> 0x6814a54f49919c79f15f93181aab73e36aae7b79: 0xad3a51ac1487324b86cd0c7dbb0f9aedb98c0ec4d6bd70db85e628de91323ba4 block 5368 gasUsed 1750826 (calldata 740 B)
+ok    tx register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes) -> 0x6814a54f49919c79f15f93181aab73e36aae7b79: 0xafa4e34f8cec59a26e8abb6699db83d722d0f283cbfb3e2905982cce6e72854c block 5370 gasUsed 1750814 (calldata 740 B)
+ok    tx register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes) -> 0x6814a54f49919c79f15f93181aab73e36aae7b79: 0x6fd8e42eddf87e4d9ac2b44770f3b73ef4beabcd1fc9e7c2366e2f9dc81b027e block 5372 gasUsed 1750838 (calldata 740 B)
+ok    tx createToken(uint8,uint64,bytes,bytes32) -> 0xfa48604edff8c75130e9820fd8022eee9a839626: 0x76b20cfc6127f2a7f593dfc8d4b497b3e265424ff4e0661f71835cd60c7878d7 block 5374 gasUsed 1795975 (calldata 1156 B)
+ok    tx mtxShield(bytes32,uint256) -> 0x1161e91cad5a3a3511ea1e490f51a63cdaf348d3: 0xe059c1c7b9e8228ffa3d6ca52bef10c816f2d8b4cd71b0c9e0533bfb9660f425 block 5376 gasUsed 960602 (calldata 68 B)
+ok    tx mtxRollOver(bytes32,uint256) -> 0x1161e91cad5a3a3511ea1e490f51a63cdaf348d3: 0xe7ad8a5e5197e9dd9cf774e783ae581e33e97bf81e6a2ee7d84ab14de4b87723 block 5378 gasUsed 734552 (calldata 68 B)
+ok    tx mtxConfidentialTransferSingle(bytes,bytes,bytes,bytes32,bytes) -> 0x1161e91cad5a3a3511ea1e490f51a63cdaf348d3: 0xdcccd38dd81a8a278da5b2443f10f6ab3e4be8616d960b463d8fdd286141ffee block 5380 gasUsed 6422012 (calldata 7076 B)
+ok    tx mtxConfidentialTransferCompact(bytes,bytes,bytes,bytes32,bytes) -> 0x1161e91cad5a3a3511ea1e490f51a63cdaf348d3: 0xd6ae8ef6229e75ae0c6ab2af1b47ad7267741cc88eb6eb8f5516ffe56d9aad68 block 5382 gasUsed 16529594 (calldata 17988 B)
+ok    tx mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes) -> 0x1161e91cad5a3a3511ea1e490f51a63cdaf348d3: 0x516753fbb59122693a687e177e57cc79002bfd7fd8fe3d7ce34ded017ce764a6 block 5384 gasUsed 8997433 (calldata 10884 B)
+ok    tx mtxRollOver(bytes32,uint256) -> 0x1161e91cad5a3a3511ea1e490f51a63cdaf348d3: 0x78584b0890d56768276126032d634f939d0e967f5d4ae3e6f67883bc1a44a3c6 block 5386 gasUsed 1167985 (calldata 68 B)
+ok    tx mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32) -> 0x1161e91cad5a3a3511ea1e490f51a63cdaf348d3: 0x1115bf3cd0513983f0dea99a6a6cdc4da1f9b7efa7b99bbb894638c9d3430639 block 5388 gasUsed 1698539 (calldata 3396 B)
+ok    tx CREATE -> 0x1ce9b1dc4e13b893d3785f4467a27ac56da2c619: 0x34c1e8a3f4b17514a84363c5c35e1523179ffcb76f12919b9e191136196a836c block 5390 gasUsed 3395354 (calldata 2863 B)
+ok    tx mint(address,uint256) -> 0x1ce9b1dc4e13b893d3785f4467a27ac56da2c619: 0xedb11c31cd6e9b213e5844f53f84e9554cda1e68a90e5bd02aaf4ad6169ded74 block 5392 gasUsed 238419 (calldata 68 B)
+ok    tx createToken(uint8,uint64,bytes,bytes32) -> 0xfa48604edff8c75130e9820fd8022eee9a839626: 0x0f15cd86128d2a1066148f2ed94c9a76a34ed2bb3f945fe705987d940e5f30d0 block 5394 gasUsed 2476973 (calldata 1252 B)
+ok    tx approve(address,uint256) -> 0x1ce9b1dc4e13b893d3785f4467a27ac56da2c619: 0x861fa1e5464b8ddd98edc18b1f8ea5674d2c8c23c8b19f968ef2c39bc65cc762 block 5396 gasUsed 128226 (calldata 68 B)
+ok    tx mtxWrapShield(address,uint256,bytes32) -> 0x7d3150b5669ff4c8657b00a131ff59486746afcb: 0xf17e5f49bf63aacc2877d24ab80850cd68e17b60b1f50fe99d710d232177c3a4 block 5398 gasUsed 1312495 (calldata 100 B)
+ok    tx mtxRollOver(bytes32,uint256) -> 0x7d3150b5669ff4c8657b00a131ff59486746afcb: 0x111a0e4bcde682e8913ca87ad3ad0582364968081b900757afd8131365d5ce24 block 5400 gasUsed 734596 (calldata 68 B)
+e2e-zether: passed
+## regular / state gas per call (script/ZetherE2E.s.sol gasSplit, run after the e2e: each call re-run isolated on a fork of the archive rpc just before it; net = regular + state - refund, equal to the receipt's gasUsed for all 19 calls; the MockERC20 CREATE is not re-run)
+ok    register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes) 0x6933b0758b60b10d11560f728b7e10bbf4482711a30f5c54948bac3620d5e379 regular 205526 state 1643220 refund 0 net 1848746
+ok    register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes) 0x38b24f1a06618df18d4b0a1c0ce15cb06ade2024c636d9e1deb9c12f7bd171ba regular 205514 state 1545300 refund 0 net 1750814
+ok    register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes) 0xc3b6e138152181216831fd343fdd263314be7e258aeb2f40f7123c95dd0e6cc3 regular 205526 state 1545300 refund 0 net 1750826
+ok    register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes) 0xad3a51ac1487324b86cd0c7dbb0f9aedb98c0ec4d6bd70db85e628de91323ba4 regular 205526 state 1545300 refund 0 net 1750826
+ok    register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes) 0xafa4e34f8cec59a26e8abb6699db83d722d0f283cbfb3e2905982cce6e72854c regular 205514 state 1545300 refund 0 net 1750814
+ok    register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes) 0x6fd8e42eddf87e4d9ac2b44770f3b73ef4beabcd1fc9e7c2366e2f9dc81b027e regular 205538 state 1545300 refund 0 net 1750838
+ok    createToken(uint8,uint64,bytes,bytes32) 0x76b20cfc6127f2a7f593dfc8d4b497b3e265424ff4e0661f71835cd60c7878d7 regular 270565 state 1525410 refund 0 net 1795975
+ok    mtxShield(bytes32,uint256) 0xe059c1c7b9e8228ffa3d6ca52bef10c816f2d8b4cd71b0c9e0533bfb9660f425 regular 177242 state 783360 refund 0 net 960602
+ok    mtxRollOver(bytes32,uint256) 0xe7ad8a5e5197e9dd9cf774e783ae581e33e97bf81e6a2ee7d84ab14de4b87723 regular 205112 state 587520 refund 58080 net 734552
+ok    mtxConfidentialTransferSingle(bytes,bytes,bytes,bytes32,bytes) 0xdcccd38dd81a8a278da5b2443f10f6ab3e4be8616d960b463d8fdd286141ffee regular 3582332 state 2839680 refund 0 net 6422012
+ok    mtxConfidentialTransferCompact(bytes,bytes,bytes,bytes32,bytes) 0xd6ae8ef6229e75ae0c6ab2af1b47ad7267741cc88eb6eb8f5516ffe56d9aad68 regular 8388464 state 8141130 refund 0 net 16529594
+ok    mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes) 0x516753fbb59122693a687e177e57cc79002bfd7fd8fe3d7ce34ded017ce764a6 regular 5374393 state 3623040 refund 0 net 8997433
+ok    mtxRollOver(bytes32,uint256) 0x78584b0890d56768276126032d634f939d0e967f5d4ae3e6f67883bc1a44a3c6 regular 304945 state 979200 refund 116160 net 1167985
+ok    mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32) 0x1115bf3cd0513983f0dea99a6a6cdc4da1f9b7efa7b99bbb894638c9d3430639 regular 1698539 state 0 refund 0 net 1698539
+ok    mint(address,uint256) 0xedb11c31cd6e9b213e5844f53f84e9554cda1e68a90e5bd02aaf4ad6169ded74 regular 42579 state 195840 refund 0 net 238419
+ok    createToken(uint8,uint64,bytes,bytes32) 0x0f15cd86128d2a1066148f2ed94c9a76a34ed2bb3f945fe705987d940e5f30d0 regular 364043 state 2112930 refund 0 net 2476973
+ok    approve(address,uint256) 0x861fa1e5464b8ddd98edc18b1f8ea5674d2c8c23c8b19f968ef2c39bc65cc762 regular 30306 state 97920 refund 0 net 128226
+ok    mtxWrapShield(address,uint256,bytes32) 0xf17e5f49bf63aacc2877d24ab80850cd68e17b60b1f50fe99d710d232177c3a4 regular 246991 state 1077120 refund 11616 net 1312495
+ok    mtxRollOver(bytes32,uint256) 0x111a0e4bcde682e8913ca87ad3ad0582364968081b900757afd8131365d5ce24 regular 205156 state 587520 refund 58080 net 734596
+e2e-zether: passed (EXIT 0)
