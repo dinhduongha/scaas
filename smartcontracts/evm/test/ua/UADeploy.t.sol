@@ -66,8 +66,8 @@ contract UADeployTest is Test {
         _pq(reg, true);
     }
 
-    /// P6c: the PQ signing kinds with the gen-1 caps (each ≤ 50 % of the budget) on the private chains, none elsewhere;
-    /// the ML-DSA verifiers in Solidity (the registry's expanded-key cache).
+    /// P6c: the PQ signing kinds with the gen-1 caps (each ≤ 50 % of the budget) on every chain whose budget holds them
+    /// (owner ruling 2026-10-31: no chain-id lock); the ML-DSA verifiers in Solidity (the registry's expanded-key cache).
     function _pq(IUARegistry reg, bool on) internal view {
         uint64[4] memory caps = [uint64(4_250_000), 5_950_000, 2_500_000, 1_400_000];
         for (uint16 k = UAKinds.MLDSA44; k <= UAKinds.SLHDSA128S; ++k) {
@@ -77,24 +77,30 @@ contract UADeployTest is Test {
         }
     }
 
-    /// Chain 7622 (private, not dev): `zether-bls12381` (owner ruling 2026-10-31), `bls-bn254-minsig` and the PQ kinds.
-    /// Another chain (the e2e's 31901): `zether-bls12381`, no `bls-bn254-minsig`, no PQ kind. Hedera 298: `hederaNative`,
-    /// budget 10.5 M, no PQ kind.
+    /// Owner ruling 2026-10-31: no chain-id lock for any kind. Chain 7622, the mainnet 22776, the e2e's 31901 and an
+    /// arbitrary id get every kind whose requirement the chain meets (here: the probe passes, the budget is 12 M).
+    /// Hedera 298: `hederaNative`, budget 10.5 M, so `mldsa65` (cap 5.95 M > 50 %) stays off, the other PQ kinds on; no
+    /// `zether-bls12381` (no Zether token on Hedera).
     function test_otherChains() public {
         IUARegistry r7622 = _registry(7622, false);
         bool[5] memory on = _kinds(r7622, [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);
         assertTrue(on[0] && on[1] && on[2] && !on[3] && on[4]);
         _pq(r7622, true);
         assertFalse(r7622.kindEnabled(UAKinds.PQZ_MLWE));
-        IUARegistry r31901 = _registry(31901, false);
-        on = _kinds(r31901, [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);
-        assertTrue(on[0] && on[1] && !on[2] && !on[3] && on[4]);
-        _pq(r31901, false);
+        uint256[3] memory ids = [uint256(31901), 22776, 987654321];
+        for (uint256 i; i < ids.length; ++i) {
+            IUARegistry r = _registry(ids[i], false);
+            on = _kinds(r, [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);
+            assertTrue(on[0] && on[1] && on[2] && !on[3] && on[4]);
+            _pq(r, true);
+        }
         IUARegistry h = _registry(298, true);
         assertTrue(h.hederaNative());
         assertFalse(h.kindEnabled(UAKinds.ZETHER_BLS12381), "never on Hedera (CTR-ZTH-52)");
         assertEq(h.verifyBudget(), 10_500_000);
-        _pq(h, false);
+        assertTrue(h.kindEnabled(UAKinds.MLDSA44) && h.kindEnabled(UAKinds.FNDSA512) && h.kindEnabled(UAKinds.SLHDSA128S));
+        assertFalse(h.kindEnabled(UAKinds.MLDSA65), "cap over half the Hedera budget");
+        assertEq(h.verifyCap(UAKinds.MLDSA65), 0);
     }
 
     /// A chain whose precompiles fail the probe gets none of the kinds that need them (never registrable but unusable).
@@ -106,6 +112,7 @@ contract UADeployTest is Test {
         IUARegistry reg = IUARegistry(vm.parseJsonAddress(json, ".ua_registry"));
         bool[5] memory on = _kinds(reg, [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);
         assertTrue(!on[0] && !on[1] && !on[2] && !on[3] && !on[4], "none of these");
+        _pq(reg, true); // the PQ kinds need no precompile
         // `DEPLOY_ZETHER` on a chain without EIP-2537 stops before deploying anything (CTR-ZTH-52)
         h = new DeployHarness();
         h.force(false, true);

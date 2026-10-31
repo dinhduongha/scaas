@@ -242,7 +242,7 @@ implementation as DEX version 1 (a DEX is a `createDex` clone) and `SmartKeyAcco
 kind-`NORMAL` demo tokens; the v1 line left the deploy in P5 (`legacy/p5/`) ([deploy](../contracts/README.md#build-ci-and-pins)).
 Since UA-3 it also deploys the UA registry generation 1 with its verifiers on every chain (first, since UA-4: the token implementations take its address; `_deployUARegistry`; budget
 12 M, Hedera 10.5 M): the EIP-2537 kinds and `bls-bn254-minsig` only where `script/UAPrecompileProbe.sol`, asked
-through an `eth_call` with no `to` (the node's own precompiles), passes (the Zether kind `zether-bls12381` among them, on every chain but Hedera); `bls-bn254-minsig` only on private chains; the PQ signing kinds (P6c, unaudited) only on the dev chains and the SCaaS testnet, ML-DSA in
+through an `eth_call` with no `to` (the node's own precompiles), passes (the Zether kind `zether-bls12381` among them, on every chain but Hedera); no chain-id lock for any kind (owner ruling 2026-10-31); the PQ signing kinds (P6c, unaudited) wherever the kind's cap is ≤ 50 % of the budget (all four at 12 M; on Hedera `mldsa65` stays off), ML-DSA in
 Solidity on the registry's expanded-key cache: an ML-DSA UA's cache parts (`cacheExpandedKey`, one transaction each,
 ≤ 13.5 M gas) come before its `register` ([accounts.md §1.9](../contracts/accounts.md#verifiers)).
 

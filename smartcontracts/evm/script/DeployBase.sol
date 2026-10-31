@@ -229,17 +229,18 @@ abstract contract DeployBase is Script {
     /// @notice UA registry generation 1 (accounts.md §1.8, CTR-UA-22) on every chain, with per-chain enablement (§1.9):
     ///         `webauthn-p256`, `p256`, `ed25519`, `bip340`, `secp256k1`, `schnorr-bn254`, the four group kinds and `msig`
     ///         everywhere;
-    ///         `schnorr-bls12381` and `bls12381-minsig` where `UAPrecompileProbe` passes EIP-2537; `bls-bn254-minsig` on
-    ///         private chains (the dev chains and 7622) where it passes the bn254 G2 check; `zether-bls12381` with
+    ///         `schnorr-bls12381` and `bls12381-minsig` where `UAPrecompileProbe` passes EIP-2537; `bls-bn254-minsig` where
+    ///         it passes the bn254 G2 check (no chain-id lock, owner ruling 2026-10-31); `zether-bls12381` with
     ///         EIP-2537 on every chain but Hedera (owner ruling 2026-10-31; `zether-bn254` is in `legacy/ua6/`, UA-6 U10); the PQ
-    ///         signing kinds (P6c) on the private chains (the dev chains and 7622) only — unaudited, CTR-UA-23 — ML-DSA
+    ///         signing kinds (P6c; unaudited, CTR-UA-23) on every chain where the kind's cap is at most half the chain's
+    ///         verify budget (owner ruling 2026-10-31: no chain-id lock; Hedera's 10.5 M budget leaves `mldsa65` off) — ML-DSA
     ///         in Solidity on the registry's cached expanded key (no chain has an ML-DSA precompile yet; P6g passes chain
     ///         7622's to the verifier's probe); `pqz-mlwe` nowhere (its verifier is P6g's). Caps: the gen-1 defaults measured in
     ///         `test/ua/UAGas.t.sol` and `test/ua/PqGas.t.sol` (accounts.md §1.15). A disabled kind gets no verifier
     ///         (never "registrable but unusable", CTR-UA-23). JSON `ua_registry`. **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
     function _deployUARegistry(address smartKeyAccountImpl, bool isHedera) internal returns (UARegistry reg) {
         (bool bls, bool bnG2) = _precompiles();
-        bool dev = block.chainid == 31337 || block.chainid == 1337;
+        uint64 budget = isHedera ? UA_VERIFY_BUDGET_HEDERA : UA_VERIFY_BUDGET;
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](21);
         uint256 n;
         k[n++] = UARegistry.KindConfig(UAKinds.WEBAUTHN_P256, address(new WebAuthnP256Verifier{salt: salt}()), 400_000);
@@ -256,7 +257,7 @@ abstract contract DeployBase is Script {
                 UAKinds.BLS12381_MINSIG, address(new BlsMinSigBls12381Verifier{salt: salt}()), 200_000
             );
         }
-        if (bnG2 && (dev || block.chainid == 7622)) {
+        if (bnG2) {
             k[n++] = UARegistry.KindConfig(
                 UAKinds.BLS_BN254_MINSIG, address(new BlsMinSigBn254Verifier{salt: salt}()), 345_000
             );
@@ -272,20 +273,26 @@ abstract contract DeployBase is Script {
                 UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier{salt: salt}()), 70_000
             );
         }
-        if (dev || block.chainid == 7622) {
+        // the PQ signing kinds (CTR-UA-23): wherever the kind's cap stays within half the chain's verify budget
+        if (CAP_MLDSA44 <= budget / 2) {
             k[n++] = UARegistry.KindConfig(
                 UAKinds.MLDSA44, address(new UAMldsaVerifier{salt: salt}(UAKinds.MLDSA44, address(0), "", "")), CAP_MLDSA44
             );
+        }
+        if (CAP_MLDSA65 <= budget / 2) {
             k[n++] = UARegistry.KindConfig(
                 UAKinds.MLDSA65, address(new UAMldsaVerifier{salt: salt}(UAKinds.MLDSA65, address(0), "", "")), CAP_MLDSA65
             );
+        }
+        if (CAP_FNDSA512 <= budget / 2) {
             k[n++] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new UAFndsaVerifier{salt: salt}()), CAP_FNDSA512);
+        }
+        if (CAP_SLHDSA128S <= budget / 2) {
             k[n++] = UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new UASlhdsaVerifier{salt: salt}()), CAP_SLHDSA128S);
         }
         assembly ("memory-safe") {
             mstore(k, n)
         }
-        uint64 budget = isHedera ? UA_VERIFY_BUDGET_HEDERA : UA_VERIFY_BUDGET;
         reg = new UARegistry{salt: salt}(uid, address(0), isHedera, budget, smartKeyAccountImpl, true, k);
         _gate(address(reg));
         vm.serializeAddress("deploy", "ua_registry", address(reg));
