@@ -2,7 +2,6 @@
 pragma solidity ^0.8.24;
 
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {SaltedEIP712} from "../common/SaltedEIP712.sol";
 import {SigCheck} from "../common/SigCheck.sol";
@@ -252,12 +251,33 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return UAKinds.keyHashOf(kind, keyData);
     }
 
-    function portablePopDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 kemRecordHash) external pure returns (bytes32) {
-        return UAKinds.portablePopDigest(ua, pqzKeyHash, kemRecordHash);
+    /// TS-D5: the name of a kind id of the table (enabled or not); an unknown id reverts `UAKindUnknown(kind)`.
+    function kindName(uint16 kind) external pure returns (string memory) {
+        return UAKinds.name(kind);
     }
 
-    function registrationDigest(bytes32 portable, bytes32 pqzPopHash) external pure returns (bytes32) {
-        return UAKinds.registrationDigest(portable, pqzPopHash);
+    function portableDomainSeparator() external pure returns (bytes32) {
+        return UAKinds.PORTABLE_DOMAIN_SEPARATOR;
+    }
+
+    function portableRecordDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash_)
+        external
+        pure
+        returns (bytes32)
+    {
+        return UAKinds.portableRecordDigest(ua, kind, pqzKeyHash, kemRecordHash_);
+    }
+
+    function kemRecordHash(bytes32 ua, uint64 version, bytes calldata kemPk) external pure returns (bytes32) {
+        return UAKinds.kemRecordHash(ua, version, kemPk);
+    }
+
+    function registrationDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash_, bytes32 pqzPopHash)
+        external
+        pure
+        returns (bytes32)
+    {
+        return UAKinds.registrationDigest(ua, kind, pqzKeyHash, kemRecordHash_, pqzPopHash);
     }
 
     function kemRecordDigest(bytes32 ua, uint64 version, bytes calldata kemPk) external pure returns (bytes32) {
@@ -268,8 +288,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return UAKinds.pqzKeyDigest(ua, pqzKeyHash);
     }
 
-    function pqzKeyRecordDigest(bytes32 keyDigest, bytes32 pqzPopHash) external pure returns (bytes32) {
-        return UAKinds.pqzKeyRecordDigest(keyDigest, pqzPopHash);
+    function pqzKeyRecordDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 pqzPopHash) external pure returns (bytes32) {
+        return UAKinds.pqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash);
     }
 
     function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32) {
@@ -558,10 +578,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bytes calldata pop,
         bytes calldata pqzPop
     ) private {
-        (bytes32 portable, bytes32 h) = _attrs(kind, d, ua, attrs, pqzPop); // 5
-        bytes32 rd = UAKinds.registrationDigest(portable, attrs.pqzPopHash);
+        (bytes32 record, bytes32 h) = _attrs(kind, d, ua, attrs, pqzPop); // 5
+        bytes32 rd = UAKinds.portableDigest(UAKinds.registrationHash(record, attrs.pqzPopHash));
         if (!_sigOk(kind, d, ua, UAKinds.PURPOSE_POP_V2, rd, pop)) revert UAPoP(); // 6
-        _pqzAttach(ua, attrs, pqzPop, h, portable); // 7
+        _pqzAttach(ua, attrs, pqzPop, h, UAKinds.portableDigest(record)); // 7
     }
 
     /// Step 8: the record, `keyPtr` (stored kinds), the keyHash (single keys), the kind's list, the initial KEM record
@@ -620,7 +640,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// Step 5 (UA-6 U3, UA-8 P2 / P7 / P8): the attributes, checked before the PoP in portable.json's order. Returns the
-    /// portable PoP digest and the PQZ keyHash `h` (group `pqz-mlwe`, 0 without a key). `UAPqzHolder` / `UAKemHolder` for
+    /// `UAPortableRecord` struct hash (typed-signing TS-D1; the zero KEM record without one, TS-D2) and the PQZ keyHash `h` (group `pqz-mlwe`, 0 without a key). `UAPqzHolder` / `UAKemHolder` for
     /// a kind (or an `msig` that is not PQ-eligible) that may not hold the key, and `UAPqzHolder` for an `msig` PQZ holder
     /// whose worst-case authorization, with a gen-2 registry's forwarding hold, + `PqzSet.PQZ_DEBIT_MIN_GAS` exceeds
     /// 2^24; `UAPqzPopHash` unless a PQZ key comes with a proof hash and only with it, and given proof bytes hash to it;
@@ -630,7 +650,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     function _attrs(uint16 kind, bytes memory d, bytes32 ua, UAAttrs calldata attrs, bytes calldata pqzPop)
         private
         view
-        returns (bytes32 portable, bytes32 h)
+        returns (bytes32 record, bytes32 h)
     {
         bool pqz = attrs.pqzKey.length != 0;
         uint64 v = attrs.kemVersion;
@@ -640,13 +660,11 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         if (pqz != (attrs.pqzPopHash != 0) || attrs.pqzPopHash == EMPTY_PROOF_HASH) revert UAPqzPopHash(ua);
         if (pqzPop.length != 0 && keccak256(pqzPop) != attrs.pqzPopHash) revert UAPqzPopHash(ua);
         if (pqz) h = _pqzKeyHash(attrs.pqzKey);
-        bytes32 kemHash;
         if (kem) {
             if (v == 0) revert UAKemVersion(ua, 0);
             _checkKemPk(attrs.kemPk);
-            kemHash = UAKinds.kemRecordDigest(ua, v, attrs.kemPk);
         }
-        portable = UAKinds.portablePopDigest(ua, h, kemHash);
+        record = UAKinds.portableRecordHash(ua, kind, h, UAKinds.kemRecordHash(ua, v, attrs.kemPk));
     }
 
     /// A PQZ / KEM holder (UA-6 U3, UA8-D12): `mldsa44`, `mldsa65`, `fndsa512`, a PQ-eligible `msig`.
@@ -696,7 +714,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// Step 7, the PQZ key (UA8-D8): the key (SSTORE2) and its proof hash; with `pqzPop`, the proof bytes, and where
-    /// slot 0x0142 has a verifier `R_REG` over `uaMessage(0x0142, PURPOSE_POP_V2, portable)` (it refuses a key of
+    /// slot 0x0142 has a verifier `R_REG` over `uaMessage(0x0142, PURPOSE_POP_V2, portable)` (`portable` = typed
+    /// `UAPortableRecord`) (it refuses a key of
     /// another set's length or with a coefficient `≥ q`; `UAPoP`), capped with the hold, then the proven key's owner
     /// (`UAKeyInUse`, either generation), `keyOwner(h)`, the `0x0142` list.
     function _pqzAttach(bytes32 ua, UAAttrs calldata attrs, bytes calldata pqzPop, bytes32 h, bytes32 portable) private {
@@ -743,7 +762,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key);
         bytes32 message = k.added
             ? UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyDigest(ua, h))
-            : UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, UAKinds.portablePopDigest(ua, h, _kemHash(ua, host)));
+            : _registerKeyMessage(ua, h, host);
         if (host) {
             _pqzKey[ua] = k;
             _pqzPopHash[ua] = ph;
@@ -751,7 +770,15 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         _pqzProof(ua, key, pqzPop, h, message, pqzPop);
     }
 
-    /// The initial KEM record's digest (0 = none) that `register`'s PoP signed: from the blob, or gen 1's record.
+    /// The R_REG message of a `register` key: `uaMessage(0x0142, PURPOSE_POP_V2, typed(UAPortableRecord))` with the
+    /// registering kind from either generation (a gen-1 record on its gen-2 host: `kindOf` reads gen 1).
+    function _registerKeyMessage(bytes32 ua, bytes32 h, bool host) private view returns (bytes32) {
+        bytes32 d = UAKinds.portableRecordDigest(ua, kindOf(ua), h, _kemHash(ua, host));
+        return UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, d);
+    }
+
+    /// The initial KEM record's struct hash (the zero record = none) that `register`'s PoP signed: from the blob, or gen
+    /// 1's record.
     function _kemHash(bytes32 ua, bool host) private view returns (bytes32) {
         uint64 v;
         bytes memory kemPk;
@@ -762,7 +789,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             (,, v) = abi.decode(SSTORE2.readChunks(_reg[ua]), (bytes, bytes, uint64));
             (kemPk,) = _kemAt(ua, v);
         }
-        return v == 0 ? bytes32(0) : UAKinds.kemRecordDigest(ua, v, kemPk);
+        return UAKinds.kemRecordHash(ua, v, kemPk);
     }
 
     /// Where `storePqzPop` / `setPqzKey` write (ruling A6-I1): false = the record is here; true = gen 1 holds it and this
@@ -789,7 +816,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         _pqzKeyFree(ua, host);
         bytes32 h = _pqzKeyHash(pqzKey);
         if (pqzPopHash == 0 || pqzPopHash == EMPTY_PROOF_HASH) revert UAPqzPopHash(ua);
-        bytes32 rd = UAKinds.pqzKeyRecordDigest(UAKinds.pqzKeyDigest(ua, h), pqzPopHash);
+        bytes32 rd = UAKinds.pqzKeyRecordDigest(ua, h, pqzPopHash);
         if (!_sigOk(kind, d, ua, UAKinds.PURPOSE_PQZ_KEY, rd, sig)) revert UAUnauthorized(ua);
         _pqzKey[ua] = PqzKey(SSTORE2.write(pqzKey), false, true);
         _pqzPopHash[ua] = pqzPopHash;
@@ -833,7 +860,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     /// Step 6 (and `setKemKey`, `setPqzKey`): a portable record's signature `sig` over `uaMessage(kind, purpose, digest)`.
     /// `msig`: `sig` empty unless PQ-eligible, then the m-of-n `MemberSig[]` (members under `member`, U5; a native member
-    /// by `personal_sign` or ERC-1271, `_msig`'s `portable`); single keys: the kind's verifier (`verifyPop`). Only the
+    /// over the typed `digest` itself, by ECDSA or ERC-1271, `_msig`'s `portable`); single keys: the kind's verifier (`verifyPop`). Only the
     /// portable purposes (POP_V2, KEM, PQZ_KEY; rulings A1-f1, A5-m3) reach this chain-free path; any other purpose
     /// reverts `UAUnauthorized` (writes stay on `requireAuthorized`, UAAuth for native members).
     function _sigOk(uint16 kind, bytes memory d, bytes32 ua, bytes32 purpose, bytes32 digest, bytes calldata sig)
@@ -972,9 +999,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// accounts.md §1.9 `msig` row: strictly increasing member indexes, stop at the threshold (a MemberSig after it
     /// fails, which keeps the registration bound sound), `member_digest = keccak256(ua ‖ ua_msg)`. `portable` (a portable
     /// record's signature, `_sigOk` only — never `requireAuthorized`; rulings C7 / A1-I2 / A1-f1, owner 2026-10-30): `blob`
-    /// must be the canonical `abi.encode(MemberSig[])` (review m3), and a native member signs `member_digest` by EIP-191
-    /// `personal_sign` (an EOA: code-less or an EIP-7702 designator, its own key only) or, a contract, answers ERC-1271
-    /// over `member_digest` (`_nativePortable`); otherwise native members sign `UAAuth` (CTR-UA-24, CTR-MTX-14).
+    /// must be the canonical `abi.encode(MemberSig[])` (review m3), and a native member signs the record's typed digest
+    /// `digest` itself (typed-signing TS-D4, owner decision 4: `eth_signTypedData_v4`; an EOA: code-less or an EIP-7702
+    /// designator, its own key only) or, a contract, answers ERC-1271 over `digest` (`_nativePortable`); otherwise native
+    /// members sign `UAAuth` (CTR-UA-24, CTR-MTX-14). Derived members sign `member_digest` under `member` in both.
     function _msig(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory d, bytes memory blob, bool portable)
         private
         view
@@ -984,6 +1012,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         // review m3: a stored portable signature is the canonical encoding (the decoder ignores trailing bytes)
         if (portable && keccak256(abi.encode(sigs)) != keccak256(blob)) return false;
         bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purposeTag, digest));
+        if (!portable) digest = 0; // from here: the typed digest a native member signs, on the portable path only
         (uint256 threshold, uint256 count) = (_u16(d, 0), _u16(d, 2));
         uint256 acc;
         uint256 next; // lowest index the next MemberSig may use
@@ -991,23 +1020,21 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             MemberSig memory s = sigs[i];
             if (acc >= threshold || s.index < next || s.index >= count) return false;
             next = uint256(s.index) + 1;
-            uint256 o = 4 + 36 * uint256(s.index);
-            if (!_memberOk(uint16(_u16(d, o)), bytes32(_word(d, o + 2)), md, s, portable)) return false;
-            acc += _u16(d, o + 34);
+            if (!_memberOk(d, md, digest, s)) return false;
+            acc += _u16(d, 4 + 36 * uint256(s.index) + 34);
         }
         return acc >= threshold;
     }
 
-    /// One `msig` member's signature over `md` under `member`, without key data (native: none; registered: `_derived`
-    /// reads the member's record, CTR-UA-33); `portable`: `_msig`.
-    function _memberOk(uint16 kind, bytes32 id, bytes32 md, MemberSig memory s, bool portable)
-        private
-        view
-        returns (bool)
-    {
+    /// The signature `s` of member `s.index` of the structure `d` over `md` under `member`, without key data (native:
+    /// none; registered: `_derived` reads the member's record, CTR-UA-33); a native member of a portable record over its
+    /// typed digest `typed` (≠ 0 only on the portable path, `_msig`).
+    function _memberOk(bytes memory d, bytes32 md, bytes32 typed, MemberSig memory s) private view returns (bool) {
+        uint256 o = 4 + 36 * uint256(s.index);
+        (uint16 kind, bytes32 id) = (uint16(_u16(d, o)), bytes32(_word(d, o + 2)));
         if (!UAKinds.isNative(kind)) return _derived(id, kind, UAKinds.PURPOSE_MEMBER, md, s.keyData, s.sig);
         if (s.keyData.length != 0) return false;
-        if (portable) return _nativePortable(address(uint160(uint256(id))), md, s.sig);
+        if (typed != 0) return _nativePortable(address(uint160(uint256(id))), typed, s.sig);
         return _native(id, UAKinds.PURPOSE_MEMBER, md, s.sig);
     }
 
@@ -1045,11 +1072,12 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// A native `msig` member of a portable record (no chain context; owner ruling 2026-10-30, "an EOA must really sign,
-    /// no delegation"): code-less or an EIP-7702 designator (an EOA) ⇒ ECDSA by its own key only (65-byte r ‖ s ‖ v, low
-    /// s, v 27 / 28: OZ `tryRecover`) over the EIP-191 `personal_sign` hash of `md`, never ERC-1271 through the delegate;
-    /// other code (a contract wallet) ⇒ ERC-1271 `isValidSignature(md, sig)` only, at the same caps as `_native`.
-    function _nativePortable(address a, bytes32 md, bytes memory sig) private view returns (bool) {
-        return _byCode(a, MessageHashUtils.toEthSignedMessageHash(md), md, sig);
+    /// no delegation"; typed-signing TS-D4, owner decision 4): code-less or an EIP-7702 designator (an EOA) ⇒ ECDSA by
+    /// its own key only (65-byte r ‖ s ‖ v, low s, v 27 / 28: OZ `tryRecover`) over the record's typed digest (what
+    /// `eth_signTypedData_v4` returns; no EIP-191), never ERC-1271 through the delegate; other code (a contract wallet)
+    /// ⇒ ERC-1271 `isValidSignature(digest, sig)` only, at the same caps as `_native`.
+    function _nativePortable(address a, bytes32 digest, bytes memory sig) private view returns (bool) {
+        return _byCode(a, digest, digest, sig);
     }
 
     function _verifierCall(uint256 cfg, bytes4 selector, bytes memory keyData, bytes32 message, bytes memory sig)

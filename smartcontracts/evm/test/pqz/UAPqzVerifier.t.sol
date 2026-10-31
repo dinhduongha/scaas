@@ -112,7 +112,7 @@ contract UAPqzVerifierTest is PqzRegistryBase {
     }
 
     /// UA-6: an `mldsa65` holder registers with its PQZ key in one call; `R_REG` reaches the precompile over
-    /// the portable `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(signerUA, h, 0))` (UA-8 P1); proven, the key
+    /// the portable `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(signerUA, 0x0131, h, zero KEM record))` (UA-8 P1, typed); proven, the key
     /// is the UA's (`keyOwner`); the signer signs for its PQZ account (purpose `zether-auth`).
     function test_registerPqzKey() public {
         _registryStack();

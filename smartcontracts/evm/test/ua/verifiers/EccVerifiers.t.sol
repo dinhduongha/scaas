@@ -173,9 +173,9 @@ contract EccVerifiersTest is Test {
         view
     {
         // UA-8: the portable PoP (no chain context), the same in every context
-        bytes32 popDigest = UAKinds.portablePopDigest(ua, 0, 0);
-        assertEq(popDigest, vm.parseJsonBytes32(j, string.concat(p, ".popDigest")), p);
-        bytes32 rd = UAKinds.registrationDigest(popDigest, 0);
+        bytes32 kh = UAKinds.kemRecordHash(ua, 0, "");
+        assertEq(UAKinds.portableRecordDigest(ua, kind, 0, kh), vm.parseJsonBytes32(j, string.concat(p, ".popDigest")), p);
+        bytes32 rd = UAKinds.registrationDigest(ua, kind, 0, kh, 0);
         assertEq(rd, vm.parseJsonBytes32(j, string.concat(p, ".registrationDigest")), p);
         bytes32 m = vm.parseJsonBytes32(j, string.concat(p, ".message"));
         assertEq(m, UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, rd), p);

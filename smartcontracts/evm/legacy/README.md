@@ -106,3 +106,7 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   aside, and `script/verify-blockscout.sh` globs `out/*/<name>.json`. **The one exception to "not compiled" above:**
   `test/zether/helpers/ZetherLegacyVerifiers.sol` imports them, so the differential suite
   `test/zether/ZetherMsmDifferential.t.sol` runs old and new side by side. Never deployed.
+- `typed-signing/`: `UAKindsPortableRaw.sol` — the raw UA-8 portable digests (`portablePopDigest`, `registrationDigest`,
+  `kemRecordDigest`, `pqzKeyDigest`, `pqzKeyRecordDigest`), the record tags `KEM_RECORD_TAG` / `PQZ_KEY_RECORD_TAG` and
+  UARegistry's `personal_sign` path for a native `msig` member of a portable record, as they stood in `src/ua/` before
+  typed-signing P3 replaced them by typed EIP-712 records (TS-D1 … TS-D4). Not built.

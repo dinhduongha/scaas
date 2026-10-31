@@ -4,7 +4,8 @@ pragma solidity ^0.8.24;
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 /// @title UA identity layer (accounts.md §1.3–§1.6): kind table, tags, ids, keyHash, purpose tags, `ua_msg`, the UA-8
-///        portable digests (`portablePopDigest`, `registrationDigest`, `kemRecordDigest`, the PQZ key record), the
+///        portable records as typed EIP-712 structs (typed-signing TS-D1: `UARegistration`, `UAPortableRecord`,
+///        `UAKemRecord`, `UAPqzKey`, `UAPqzKeyRecord` under the domain ("SCaaS UA Portable", "1")), the
 ///        registry's `UAAuth` digest, member digests and key-data validation.
 /// @notice The same rules are implemented by clientkeys `ua.js`, `clients/ua-rs`, `clients/ua-py`, `clients/ua-go` and
 ///         `clients/ua-cs`; `smartcontracts/vectors/ua/kinds.json` and `structures.json` pin all six.
@@ -54,14 +55,28 @@ library UAKinds {
     bytes32 internal constant PURPOSE_VC_ANCHOR = keccak256("scaas.ua.purpose.vc-anchor.v1");
     /// @notice `UATradeOrder`, `CancelOrder` over a UA order hash, `UAInvalidateNonces` (dex.md CTR-DEX-25; UA-5b).
     bytes32 internal constant PURPOSE_TRADE = keccak256("scaas.ua.purpose.trade.v1");
-    /// UA-8 portable registrations (P1, P7; UA8-D1): the PoP purpose v2 (no chain context), the KEM record's purpose and
-    /// tag, the later PQZ key record's (`setPqzKey`, ruling A1-I1) purpose and tag. `PURPOSE_POP` (v1) was the chain-bound
-    /// PoP's (`popDigest`, in `legacy/ua8/` since UA-8 Task A5); `register` refuses it.
+    /// UA-8 portable registrations (P1, P7; UA8-D1): the PoP purpose v2 (no chain context), the KEM record's purpose, the
+    /// later PQZ key record's (`setPqzKey`, ruling A1-I1) purpose. `PURPOSE_POP` (v1) was the chain-bound PoP's
+    /// (`popDigest`, in `legacy/ua8/` since UA-8 Task A5); `register` refuses it. The record tags of the raw digests
+    /// (`KEM_RECORD_TAG`, `PQZ_KEY_RECORD_TAG`) are in `legacy/typed-signing/` (TS-D3: the struct type names the record).
     bytes32 internal constant PURPOSE_POP_V2 = keccak256("scaas.ua.purpose.pop.v2");
     bytes32 internal constant PURPOSE_KEM = keccak256("scaas.ua.purpose.kem.v1");
-    bytes32 internal constant KEM_RECORD_TAG = keccak256("scaas.ua.kem-record.v1");
     bytes32 internal constant PURPOSE_PQZ_KEY = keccak256("scaas.ua.purpose.pqz-key.v1");
-    bytes32 internal constant PQZ_KEY_RECORD_TAG = keccak256("scaas.ua.pqz-key-record.v1");
+    /// typed-signing TS-D1 (owner 2026-10-31 decisions 2 + 8): the portable domain `EIP712Domain(string name,string
+    /// version)` = ("SCaaS UA Portable", "1"), no chain id, verifying contract or salt (a record registers a UA on every
+    /// chain, CTR-UA-07); `kind` is `uint16` (its name: `name(kind)`, the registry's `kindName`).
+    bytes32 internal constant PORTABLE_DOMAIN_SEPARATOR = 0x9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1;
+    bytes32 internal constant UA_KEM_RECORD_TYPEHASH =
+        keccak256("UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)");
+    bytes32 internal constant UA_PORTABLE_RECORD_TYPEHASH = keccak256(
+        "UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)"
+    );
+    bytes32 internal constant UA_REGISTRATION_TYPEHASH = keccak256(
+        "UARegistration(UAPortableRecord record,bytes32 pqzPopHash)UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)"
+    );
+    bytes32 internal constant UA_PQZ_KEY_TYPEHASH = keccak256("UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)");
+    bytes32 internal constant UA_PQZ_KEY_RECORD_TYPEHASH =
+        keccak256("UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)");
     /// First byte of `kemPk` = the KEM scheme id (CTR-UA-32). Scheme 1 = ML-KEM-1024 + X25519; 2 (ML-KEM-1024 + HQC +
     /// X25519, after FIPS 207) is reserved and refused until enabled.
     uint8 internal constant KEM_SCHEME_MLKEM1024_X25519 = 1;
@@ -235,35 +250,82 @@ library UAKinds {
         return keccak256(abi.encodePacked("evm:", Strings.toString(chainId)));
     }
 
-    // UA-8 digests (UA8-D1): keccak256 of 32-byte words, no chain id, no chain uid, no registry; each hash 0 when absent.
-    // The registry checks the attributes (holder, version ≥ 1, 1,601-byte scheme-1 key) before it hashes them.
+    // The portable records (UA-8 UA8-D1; typed-signing TS-D1 … TS-D3): EIP-712 structs under the portable domain, no
+    // chain id, no chain uid, no registry. The registry checks the attributes (holder, version ≥ 1, 1,601-byte scheme-1
+    // key) before it hashes them. `pqzKeyHash = keyHashOf(0x0142, pqzKey)`, `pqzPopHash = keccak256(pqzPop)`, each 0
+    // when absent.
 
-    /// `keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)`; `pqzKeyHash = keyHashOf(0x0142, pqzKey)`,
-    /// `kemRecordHash = kemRecordDigest` of the initial KEM record. R_REG proves over `uaMessage(0x0142, PURPOSE_POP_V2, ·)`.
-    function portablePopDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 kemRecordHash) internal pure returns (bytes32) {
-        return keccak256(abi.encode(PURPOSE_POP_V2, ua, pqzKeyHash, kemRecordHash));
+    /// `keccak256(0x1901 ‖ PORTABLE_DOMAIN_SEPARATOR ‖ structHash)`: what `eth_signTypedData_v4` returns for the record.
+    function portableDigest(bytes32 structHash) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(hex"1901", PORTABLE_DOMAIN_SEPARATOR, structHash));
     }
 
-    /// `keccak256(portablePopDigest ‖ pqzPopHash)`, `pqzPopHash = keccak256(pqzPop)`: the `pop` (an msig's members through
-    /// `memberDigest`) signs `uaMessage(kind, PURPOSE_POP_V2, ·)` of it.
-    function registrationDigest(bytes32 portable, bytes32 pqzPopHash) internal pure returns (bytes32) {
-        return keccak256(abi.encode(portable, pqzPopHash));
+    /// `hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)})` over the whole key; no
+    /// record (version 0, no key) is the zero record `UAKemRecord{ua, 0, 0, 0}` (TS-D2: version 0 is never a record).
+    function kemRecordHash(bytes32 ua, uint64 version, bytes memory kemPk) internal pure returns (bytes32) {
+        if (version == 0 && kemPk.length == 0) return keccak256(abi.encode(UA_KEM_RECORD_TYPEHASH, ua, 0, 0, bytes32(0)));
+        uint8 scheme = kemPk.length == 0 ? 0 : uint8(kemPk[0]); // an empty key never reaches a record (UAKemKeyLength)
+        return keccak256(abi.encode(UA_KEM_RECORD_TYPEHASH, ua, version, scheme, keccak256(kemPk)));
     }
 
-    /// `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))`, signed as `uaMessage(kind, PURPOSE_KEM, ·)`.
+    /// `hashStruct(UAPortableRecord{ua, kind, pqzKeyHash, kem})`, `kemHash = kemRecordHash` of the initial KEM record.
+    function portableRecordHash(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemHash)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return keccak256(abi.encode(UA_PORTABLE_RECORD_TYPEHASH, ua, kind, pqzKeyHash, kemHash));
+    }
+
+    /// `hashStruct(UARegistration{record, pqzPopHash})`, `recordHash = portableRecordHash`.
+    function registrationHash(bytes32 recordHash, bytes32 pqzPopHash) internal pure returns (bytes32) {
+        return keccak256(abi.encode(UA_REGISTRATION_TYPEHASH, recordHash, pqzPopHash));
+    }
+
+    /// `hashStruct(UAPqzKey{ua, pqzKeyHash})`.
+    function pqzKeyHash_(bytes32 ua, bytes32 pqzKeyHash) internal pure returns (bytes32) {
+        return keccak256(abi.encode(UA_PQZ_KEY_TYPEHASH, ua, pqzKeyHash));
+    }
+
+    /// `hashStruct(UAPqzKeyRecord{key, pqzPopHash})`, `keyHash = pqzKeyHash_`.
+    function pqzKeyRecordHash(bytes32 keyHash, bytes32 pqzPopHash) internal pure returns (bytes32) {
+        return keccak256(abi.encode(UA_PQZ_KEY_RECORD_TYPEHASH, keyHash, pqzPopHash));
+    }
+
+    /// typed(`UAPortableRecord`): R_REG proves over `uaMessage(0x0142, PURPOSE_POP_V2, ·)` of it (`register`, the first
+    /// `storePqzPop`), `kind` the registering kind.
+    function portableRecordDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemHash)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return portableDigest(portableRecordHash(ua, kind, pqzKeyHash, kemHash));
+    }
+
+    /// typed(`UARegistration`): the `pop` signs `uaMessage(kind, PURPOSE_POP_V2, ·)` of it (an msig's derived members
+    /// through `memberDigest`, a native member the digest itself, TS-D4).
+    function registrationDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemHash, bytes32 pqzPopHash)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return portableDigest(registrationHash(portableRecordHash(ua, kind, pqzKeyHash, kemHash), pqzPopHash));
+    }
+
+    /// typed(`UAKemRecord`), signed as `uaMessage(kind, PURPOSE_KEM, ·)` (`setKemKey`).
     function kemRecordDigest(bytes32 ua, uint64 version, bytes memory kemPk) internal pure returns (bytes32) {
-        return keccak256(abi.encode(KEM_RECORD_TAG, ua, uint256(version), keccak256(kemPk)));
+        return portableDigest(kemRecordHash(ua, version, kemPk));
     }
 
-    /// `keccak256(PQZ_KEY_RECORD_TAG ‖ ua ‖ pqzKeyHash)`: a later PQZ key's R_REG proves over
-    /// `uaMessage(0x0142, PURPOSE_PQZ_KEY, ·)` (no proof hash: no cycle).
+    /// typed(`UAPqzKey`): a later PQZ key's R_REG proves over `uaMessage(0x0142, PURPOSE_PQZ_KEY, ·)` (no proof hash:
+    /// no cycle).
     function pqzKeyDigest(bytes32 ua, bytes32 pqzKeyHash) internal pure returns (bytes32) {
-        return keccak256(abi.encode(PQZ_KEY_RECORD_TAG, ua, pqzKeyHash));
+        return portableDigest(pqzKeyHash_(ua, pqzKeyHash));
     }
 
-    /// `keccak256(pqzKeyDigest ‖ pqzPopHash)`: `setPqzKey`'s signature signs `uaMessage(kind, PURPOSE_PQZ_KEY, ·)`.
-    function pqzKeyRecordDigest(bytes32 keyDigest, bytes32 pqzPopHash) internal pure returns (bytes32) {
-        return keccak256(abi.encode(keyDigest, pqzPopHash));
+    /// typed(`UAPqzKeyRecord`): `setPqzKey`'s signature signs `uaMessage(kind, PURPOSE_PQZ_KEY, ·)`.
+    function pqzKeyRecordDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 pqzPopHash) internal pure returns (bytes32) {
+        return portableDigest(pqzKeyRecordHash(pqzKeyHash_(ua, pqzKeyHash), pqzPopHash));
     }
 
     function uaAuthDomainSeparator(uint256 generation, uint256 chainId, address registry, bytes32 chainUid)

@@ -109,7 +109,7 @@ abstract contract PqzRegistryBase is PqzMock {
 
     /// A PQZ account (UA-6): the `mldsa65` UA of the filler key `seed ‖ 0…` registered with the PQZ key `pk` and its
     /// proof `0xaa` in one call (UA-8: `attrs.pqzPopHash = keccak256(0xaa)`; `R_REG` over the portable message
-    /// `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, h, 0))`, op 3 mocked by the caller), so the key is proven.
+    /// `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, 0x0131, h, zero KEM record))`, op 3 mocked by the caller), so the key is proven.
     function _pqzUA(bytes memory pk, uint8 seed) internal returns (bytes32) {
         return reg.register(UAKinds.MLDSA65, _mlPk(seed), _pqzAttrs(pk), new bytes(ML65_SIG), hex"aa");
     }
@@ -121,6 +121,6 @@ abstract contract PqzRegistryBase is PqzMock {
     /// The portable `R_REG` message of the `mldsa65` UA `ua` holding PQZ key `pk` (no KEM record).
     function _pqzRegMessage(bytes32 ua, bytes memory pk) internal pure returns (bytes32) {
         return UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2,
-            UAKinds.portablePopDigest(ua, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pk), 0));
+            UAKinds.portableRecordDigest(ua, UAKinds.MLDSA65, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pk), UAKinds.kemRecordHash(ua, 0, "")));
     }
 }

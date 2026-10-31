@@ -61,7 +61,7 @@ contract UARegistryPqzBoundTest is UARegistryBase {
     function _holder(UARegistry r, bytes memory d, bytes32 ua, bytes[] memory keys, uint16[] memory ks) internal {
         bytes memory pqz = _pk(0x0142, ++n);
         bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pqz);
-        bytes memory rReg = _sig(pqz, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, UAKinds.portablePopDigest(ua, h, 0)));
+        bytes memory rReg = _sig(pqz, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, UAKinds.portableRecordDigest(ua, UAKinds.MSIG, h, UAKinds.kemRecordHash(ua, 0, ""))));
         IUARegistry.UAAttrs memory a = IUARegistry.UAAttrs(pqz, keccak256(rReg), 0, "");
         r.register(UAKinds.MSIG, d, a, _memberSigs(d, ua, a, keys, ks), rReg);
         assertEq(r.uaCount(UAKinds.PQZ_MLWE), 1);
@@ -72,7 +72,7 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         pure
         returns (bytes memory)
     {
-        bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_POP_V2, _regDigest(ua, a));
+        bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_POP_V2, _regDigest(ua, UAKinds.MSIG, a));
         UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](ks.length);
         for (uint256 i; i < ks.length; ++i) {
             bytes32 id = UAKinds.uaOf(ks[i], keys[i]);

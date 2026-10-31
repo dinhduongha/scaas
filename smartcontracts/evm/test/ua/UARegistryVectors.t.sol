@@ -77,10 +77,11 @@ contract UARegistryVectorsTest is UARegistryBase {
         uint16 kind = uint16(vm.parseJsonUint(sj, _d(i, "kind")));
         bytes memory k = vm.parseJsonBytes(sj, _d(i, "keyData"));
         bytes32 ua = vm.parseJsonBytes32(sj, _d(i, "ua"));
-        // UA-8: the portable PoP (`pop.popDigest` = portablePopDigest), the same under context B (`popOther`); the
+        // UA-8: the portable PoP (`pop.popDigest` = the typed portableRecordDigest), the same under context B (`popOther`); the
         // pre-UA-8 chain-bound PoP, the v1 purpose and SIG-DST signatures offered as PoP: refused (negatives)
-        assertEq(reg.portablePopDigest(ua, 0, 0), vm.parseJsonBytes32(sj, _d(i, "pop.popDigest")));
-        assertEq(reg.registrationDigest(reg.portablePopDigest(ua, 0, 0), 0), vm.parseJsonBytes32(sj, _d(i, "pop.registrationDigest")));
+        bytes32 kh = reg.kemRecordHash(ua, 0, "");
+        assertEq(reg.portableRecordDigest(ua, kind, 0, kh), vm.parseJsonBytes32(sj, _d(i, "pop.popDigest")));
+        assertEq(reg.registrationDigest(ua, kind, 0, kh, 0), vm.parseJsonBytes32(sj, _d(i, "pop.registrationDigest")));
         assertEq(vm.parseJsonBytes(sj, _d(i, "popOther.sig")), vm.parseJsonBytes(sj, _d(i, "pop.sig")), "portable");
         for (uint256 n; _hasNeg(i, n); ++n) {
             if (vm.parseJsonBool(sj, _neg(i, n, "verifyPop"))) {

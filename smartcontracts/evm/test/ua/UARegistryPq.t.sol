@@ -195,7 +195,7 @@ contract UARegistryPqTest is UARegistryBase {
         string memory name = vm.parseJsonString(pj, _row(i, "name"));
         bytes memory pk = vm.parseJsonBytes(pj, _row(i, "keyData"));
         ua = vm.parseJsonBytes32(pj, _row(i, "ua"));
-        assertEq(r.portablePopDigest(ua, 0, 0), vm.parseJsonBytes32(pj, _row(i, "pop.popDigest")));
+        assertEq(r.portableRecordDigest(ua, kind, 0, r.kemRecordHash(ua, 0, "")), vm.parseJsonBytes32(pj, _row(i, "pop.popDigest")));
         bytes memory pop = vm.parseJsonBytes(pj, _row(i, "pop.sig"));
         if (kind == 0x0130 || kind == 0x0131) {
             _popRefused(r, kind, pk, pop); // no cache yet: the FIPS 204 key exceeds the cap
@@ -258,8 +258,9 @@ contract UARegistryPqTest is UARegistryBase {
         bytes32 h = vm.parseJsonBytes32(pj, _row(i, "popPqz.pqzKeyHash"));
         if (kind == 0x0130 || kind == 0x0131) _cache(r, kind, pk, vm.parseJsonString(pj, _row(i, "name")));
         assertEq(UAKinds.keyHashOf(UAKinds.PQZ_MLWE, a.pqzKey), h);
-        assertEq(r.portablePopDigest(ua, h, 0), vm.parseJsonBytes32(pj, _row(i, "popPqz.popDigest")));
-        assertEq(r.registrationDigest(r.portablePopDigest(ua, h, 0), a.pqzPopHash),
+        bytes32 kh = r.kemRecordHash(ua, 0, "");
+        assertEq(r.portableRecordDigest(ua, kind, h, kh), vm.parseJsonBytes32(pj, _row(i, "popPqz.popDigest")));
+        assertEq(r.registrationDigest(ua, kind, h, kh, a.pqzPopHash),
             vm.parseJsonBytes32(pj, _row(i, "popPqz.registrationDigest")));
         _pqzNegatives(r, pj, i, kind, pk, a);
         bytes memory pop = vm.parseJsonBytes(pj, _row(i, "popPqz.sig"));
@@ -407,7 +408,7 @@ contract UARegistryPqTest is UARegistryBase {
         MockVerifier burner = new MockVerifier(0, 5_901_000);
         (UARegistry r, bytes memory d) = _burnMembers(REG_A, address(burner), 5_911_000);
         bytes32 id = r.uaOf(UAKinds.MSIG, d);
-        bytes32 ua = r.register(UAKinds.MSIG, d, _none(), _burnSigs(r, d, id, UAKinds.PURPOSE_POP_V2, _regDigest(id, _none())), "");
+        bytes32 ua = r.register(UAKinds.MSIG, d, _none(), _burnSigs(r, d, id, UAKinds.PURPOSE_POP_V2, _regDigest(id, UAKinds.MSIG)), "");
         r.requireAuthorized{gas: BUDGET}(
             ua, UAKinds.PURPOSE_METATX, DIGEST, abi.encode(d, _burnSigs(r, d, ua, UAKinds.PURPOSE_METATX, DIGEST))
         );

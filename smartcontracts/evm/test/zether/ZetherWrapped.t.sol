@@ -605,7 +605,7 @@ contract ZetherWrappedTest is ZetherFixture {
     function _signingUA() internal returns (bytes32 ua) {
         bytes memory y = ZetherKeys.pub(0xA07, false);
         ua = UAKinds.uaOf(UAKinds.SCHNORR_BN254, y);
-        bytes32 m = reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(UAKinds.portablePopDigest(ua, 0, 0), 0));
+        bytes32 m = reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(ua, UAKinds.SCHNORR_BN254, 0, UAKinds.kemRecordHash(ua, 0, ""), 0));
         reg.register(UAKinds.SCHNORR_BN254, y, IUARegistry.UAAttrs("", 0, 0, ""), ZetherKeys.sign("scaas.ua.schnorr.v1", 0xA07, m, false), "");
     }
 

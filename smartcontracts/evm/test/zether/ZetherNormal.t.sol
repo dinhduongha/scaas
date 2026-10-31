@@ -677,7 +677,7 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         uint256 x = 0xBEEF1;
         bytes memory y = ZetherKeys.pub(x, false);
         bytes32 other = reg.uaOf(UAKinds.SCHNORR_BN254, y);
-        bytes32 pd = UAKinds.registrationDigest(UAKinds.portablePopDigest(other, 0, 0), 0); // UA-8: portable
+        bytes32 pd = UAKinds.registrationDigest(other, UAKinds.SCHNORR_BN254, 0, UAKinds.kemRecordHash(other, 0, ""), 0); // UA-8: portable
         vm.prank(address(0xB0B));
         reg.register(
             UAKinds.SCHNORR_BN254,
