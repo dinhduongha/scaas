@@ -778,7 +778,9 @@ docker compose stop explorer-frontend explorer-backend explorer-db       # stop 
 
 ### Contract verification: sc-verifier (owner 2026-10-31)
 
-Service `sc-verifier` (container `mba_sc_verifier`, `ghcr.io/blockscout/smart-contract-verifier:v1.11.1@sha256:a7580f42b55c0aafad43a2acd979b60adddc1e9985a8cf01857179962f0fe063`,
+Service `sc-verifier` (container `mba_sc_verifier`, image `scaas/sc-verifier:v1.11.1-amsterdam1`: a locally patched
+build of upstream v1.11.1, see below; upstream was
+`ghcr.io/blockscout/smart-contract-verifier:v1.11.1@sha256:a7580f42b55c0aafad43a2acd979b60adddc1e9985a8cf01857179962f0fe063`;
 512m, 1 CPU): HTTP 8050 on `mba-net` only (no published port, gRPC off), Solidity only (Vyper, Sourcify, zkSync off),
 solc from `binaries.soliditylang.org` (the only outbound traffic; Blockscout's hosted eth-bytecode-db is not used),
 compilers run natively in the container (`SMART_CONTRACT_VERIFIER__COMPILERS__EXECUTION__TYPE=native`: the docker
@@ -802,17 +804,18 @@ exit 1 on any fail. It looks each address up first: Blockscout learns the code o
 demand (internal transactions are off). The PQZ e2e contracts (`script/pqz/e2e.py`) have no broadcast file and are
 not covered.
 
-- **Blocked (2026-10-31): sc-verifier v1.11.1 cannot verify the Amsterdam build.** Every contract here is compiled with
-  `evmVersion` `amsterdam` + `experimental` (NET-EVM-06; solc 0.8.37). v1.11.1 (the newest tag, also `latest` and
-  `main`) parses the standard JSON into `foundry-compilers-artifacts` 0.19, whose `EvmVersion` stops at `osaka`: every
-  request ends `content is not a valid standard json: settings.evmVersion: Unknown evm version: amsterdam`, and the
-  backend reports `Fail - Unable to verify`. First run: 0 ok, 31 fail, all with that message. Resubmitting as `osaka`
-  does not help: the code is the same but the metadata is not (the deployed CBOR carries `experimental`, which the
-  verifier drops), so no match. The inputs themselves are right: local solc 0.8.37 on the script's standard JSON gives
-  the deployed runtime code exactly (immutables and library addresses masked, metadata equal) for UARegistry,
-  MtxRelayExecutor, P256Verifier, NormalToken and SCaaSDex; the verifier gives NormalToken a FULL match with the
-  library placeholders when compiled as `osaka`. Needs an owner decision: a verifier build that accepts `amsterdam` and
-  passes `experimental` through, or upstream support.
-- **Measured (2026-10-31, `docker stats`, cgroup):** idle 0.02 % / 4.5 MiB; during the 31-contract run (all refused at
-  parse) ≤ 0.4 % / 6.8 MiB; one real compile (NormalToken, 5.1 s): 100 % (its 1-CPU cap), peak 364 MiB
-  (`memory.peak`), about 334 MiB kept afterwards. Run the script sequentially (as it does) under the 512m cap.
+- **Patched verifier (owner ruling 2026-10-31 option (a)), temporary until upstream supports Amsterdam.** Every
+  contract here is compiled with `evmVersion` `amsterdam` + `experimental` (NET-EVM-06; solc 0.8.37). Upstream v1.11.1
+  (the newest tag, also `latest` and `main`) parses the standard JSON into `foundry-compilers-artifacts` 0.19, whose
+  `EvmVersion` stops at `osaka` and whose settings drop `experimental` (which solc needs for amsterdam and writes into
+  the CBOR metadata): 0 of 31 verified (`Unknown evm version: amsterdam`). The live stack uses a locally patched
+  verifier image (built outside the repo, `/home/dockers/mba-chain-nethermind/sc-verifier/`: patch, `build.sh`, README;
+  blockscout-rs `9457af29` + the two foundry-compilers 0.19.10 crates with `amsterdam` and `experimental` passed
+  through, no verifier code change). Result: 31 ok, 0 fail, every contract a full match (evm amsterdam, experimental
+  true). To return to upstream: `sc-verifier/check-image.sh <image>` must print `SUCCESS OK FULL`, then swap the image
+  back (steps in that README).
+- **Measured (2026-10-31, `docker stats`, cgroup):** idle 0.02–0.03 % / 4.5 MiB. Patched image, the 31-contract run
+  (about 3 min): up to 100.6 % (its 1-CPU cap) and 402 MiB; cgroup `memory.peak` reached the 512 MiB cap with page
+  cache reclaimed (`memory.events` max 3, oom_kill 0); 351 MiB held afterwards. Upstream image before (all refused at
+  parse): ≤ 0.4 % / 6.8 MiB; one NormalToken compile peaked at 364 MiB. Run the script sequentially (as it does)
+  under the 512m cap.

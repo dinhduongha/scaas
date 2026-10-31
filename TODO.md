@@ -176,6 +176,10 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      **Node split done 2026-10-31 (branch `fs3-t13-rollout`, owner ruling):** 7622 runs `sealer` (key, pruned, no port,
      internal network) + `rpc` (no key, archive, public RPC, the sentry for external nodes); NET-EVM-10; Blockscout on the
      archive `rpc`, its code backfill and coin-balance cleanup no longer needed. The metatx-split real-node e2e items (TODO below) are all non-EVM families.
+     **Contract verification on 2026-10-31** (owner ruling option (a)): a locally patched sc-verifier image (built outside the
+     repo, `/home/dockers/mba-chain-nethermind/sc-verifier/`), 31 of 31 contracts a full match. **TODO: switch to upstream
+     sc-verifier when it supports amsterdam** (each new release: `sc-verifier/check-image.sh <image>` → `SUCCESS OK FULL`,
+     then the README's return steps).
      Was: fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) **together with Task 9 calibration**
      (owner 2026-10-29: one measurement run; it still needs the owner's go at run time, other heavy sessions stopped)
      and, where possible, the metatx-split e2e owed on a real node → Task 14 (wasm32 limb path).

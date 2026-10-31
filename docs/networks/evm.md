@@ -306,11 +306,12 @@ rerun after an outage longer than the pruning window; archive mode at the sealer
 the UI is published on host port 8558 (owner 2026-10-31: not 3000) and the API on 4000; the frontend image is pinned
 by digest; one-line stop in the RUNBOOK. Since the node split ([NET-EVM-10](#NET-EVM-10)) it reads the archive `rpc`
 node, and neither the code backfill nor the coin-balance cleanup is needed. Contract verification (owner ruling 2026-10-31): a local
-`smart-contract-verifier` (v1.11.1, pinned by digest, 512 MiB / 1 CPU, `mba-net` only, Solidity only, solc from
+`smart-contract-verifier` (v1.11.1, 512 MiB / 1 CPU, `mba-net` only, Solidity only, solc from
 binaries.soliditylang.org, never Blockscout's hosted service) backs the backend, and
 `smartcontracts/evm/script/verify-blockscout.sh` verifies every `Deploy.s.sol` contract after each reset or deploy;
-blocked for now: v1.11.1 rejects `evmVersion` `amsterdam` (NET-EVM-06), so 0 of 31 contracts verify (RUNBOOK
-§ Contract verification).
+upstream v1.11.1 rejects `evmVersion` `amsterdam` (NET-EVM-06), so the live stack uses a locally patched verifier
+image (built outside the repo, `/home/dockers/mba-chain-nethermind/sc-verifier/`), temporary until upstream supports
+Amsterdam (owner ruling 2026-10-31 option (a)): 31 of 31 contracts verified, full match (RUNBOOK § Contract verification).
 
 <a id="NET-EVM-10"></a>**NET-EVM-10** — **The SCaaS testnet runs two nodes: a `sealer` and a public `rpc`** (owner
 ruling 2026-10-31): in the stack's one `docker-compose.yml`, both on the PQZ image. `sealer` holds the Clique key

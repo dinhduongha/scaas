@@ -50,3 +50,77 @@ exit=1
 #   P256Verifier as osaka: code equal, only the CBOR metadata differs
 
 # verifier docker stats: idle 0.02 % / 4.5 MiB; during the run (max of 63 samples) 0.35% 5.609MiB / 512MiB, max mem 6.754MiB; NormalToken compile: max 100.89% 222.9MiB / 512MiB, memory.peak 381517824 B (364 MiB), anon after 348647424 B
+
+# ---- re-run 2026-10-31 with the locally patched verifier (owner ruling option (a)) ----
+# image scaas/sc-verifier:v1.11.1-amsterdam1 (sha256:378febd1f7fa24ce3b2098032a55cbde80ff9e104cdcaff5c096ff7873981296), built outside the repo:
+# /home/dockers/mba-chain-nethermind/sc-verifier/ (blockscout-rs 9457af29 + foundry-compilers 0.19.10 patched: amsterdam, settings.experimental)
+# ./script/verify-blockscout.sh   (start 11:42:41)
+  ok    AdminLib  0x5c13b2040a31c056fa3a8fc1fd4206242c883368
+  ok    ZetherLib  0x8e28089a938e57e8f388af00b1961d60916b6b7c
+  ok    WrappedLib  0x4327a7816a8a78180e69c9c7273705c45f23d89f
+  ok    TradeLib  0x13b095390486773cf498858a7106b571f74e46db
+  ok    HederaLib  0x277f412798d2742d90f5699a1d279aecdc69c224
+  ok    MtxPipelineLib  0x649cb95bb756d88aacdaccfc8efb7a45f3fb3055
+  ok    SmartKeyAccountFactory  0x3faf952d9cf16c5dec18d6571d366f614944619d
+  ok    SmartKeyAccount  0x79991a4d6bc96d38b602968167cd584cec4a116e
+  ok    OpenFactory  0xc037d039a21646060e5b4ae441c1138e87000bde
+  ok    WebAuthnP256Verifier  0x1e70f0abc6c209d05ed2746c1613947c91e11628
+  ok    P256Verifier  0x94e9eba0b09fc5d7bd2f19babcdbc67b423d62e6
+  ok    Ed25519Verifier  0xe8ef243fe4605ce9ce9cf9ba7d7e8a5e30b14245
+  ok    Bip340Verifier  0xc18ba5fe87c19b3b7704d8220e67848ee37d2d8b
+  ok    Secp256k1Verifier  0xad62c7780eba1115f835f768d05ab3fcf611f3eb
+  ok    SchnorrBn254Verifier  0xd175cf00c1d2cfe8c29a658f2435958193ab3ceb
+  ok    SchnorrBls12381Verifier  0xf2b365f76400b0ac6ce03561931c494b04705923
+  ok    BlsMinSigBls12381Verifier  0x1b895c645e506772b9b79f3936bc9d137d00c162
+  ok    BlsMinSigBn254Verifier  0xc1aab80056190a54523b0a94c6c71f2811e59be8
+  ok    Musig2Secp256k1Verifier  0xaf64d79f498ea788ffaac999cd2ee331e3197010
+  ok    UAFrostSecp256k1Verifier  0x51b2339459cf64b455634d51e0479cdcefe3e409
+  ok    Musig2Bn254Verifier  0x9cd954336c24a730019ae3b9777eeb46686892fa
+  ok    FrostBn254Verifier  0x29cdcfc15e0fa73dbde19d79d0434e863238b80a
+  ok    UAMldsaVerifier  0x0cd8084ca16b2da155c01d2ef0ead5ba17661fbc
+  ok    UAMldsaVerifier  0x0f89bca833649cbc78b40ef49d8e783ef837b7dc
+  ok    UAFndsaVerifier  0xd8f932580ec7ea9eee10418eab65ed2ff21a5424
+  ok    UASlhdsaVerifier  0x4deee31a221696bb7613a55745600762df1aea57
+  ok    UARegistry  0x06d03d563686e4cce533b2c392ec68faab119776
+  ok    MtxRelayFee  0x7fb42079c44c185c131fd38ee59c18463b16fa48
+  ok    MtxRelayExecutor  0xa9b8ab56e974b0495aec3280dc5e7db77b88c687
+  ok    NormalToken  0xcdb98d83a09f696b7720842f91d9fb56dad6a551
+  ok    SCaaSDex  0xe77d3d680bc1e35205f68cd1f1fc71230d3ed3d9
+  31 ok, 0 fail (chain 7622, http://192.168.1.72:4000/api)
+exit=0
+  11:45:36
+# match type (GET /api/v2/smart-contracts/<addr>: is_fully_verified, is_partially_verified, evm_version, compiler_version, compiler_settings.experimental):
+  AdminLib  0x5c13b2040a31c056fa3a8fc1fd4206242c883368  true false amsterdam v0.8.37+commit.f401782d true
+  ZetherLib  0x8e28089a938e57e8f388af00b1961d60916b6b7c  true false amsterdam v0.8.37+commit.f401782d true
+  WrappedLib  0x4327a7816a8a78180e69c9c7273705c45f23d89f  true false amsterdam v0.8.37+commit.f401782d true
+  TradeLib  0x13b095390486773cf498858a7106b571f74e46db  true false amsterdam v0.8.37+commit.f401782d true
+  HederaLib  0x277f412798d2742d90f5699a1d279aecdc69c224  true false amsterdam v0.8.37+commit.f401782d true
+  MtxPipelineLib  0x649cb95bb756d88aacdaccfc8efb7a45f3fb3055  true false amsterdam v0.8.37+commit.f401782d true
+  SmartKeyAccountFactory  0x3faf952d9cf16c5dec18d6571d366f614944619d  true false amsterdam v0.8.37+commit.f401782d true
+  SmartKeyAccount  0x79991a4d6bc96d38b602968167cd584cec4a116e  true false amsterdam v0.8.37+commit.f401782d true
+  OpenFactory  0xc037d039a21646060e5b4ae441c1138e87000bde  true false amsterdam v0.8.37+commit.f401782d true
+  WebAuthnP256Verifier  0x1e70f0abc6c209d05ed2746c1613947c91e11628  true false amsterdam v0.8.37+commit.f401782d true
+  P256Verifier  0x94e9eba0b09fc5d7bd2f19babcdbc67b423d62e6  true false amsterdam v0.8.37+commit.f401782d true
+  Ed25519Verifier  0xe8ef243fe4605ce9ce9cf9ba7d7e8a5e30b14245  true false amsterdam v0.8.37+commit.f401782d true
+  Bip340Verifier  0xc18ba5fe87c19b3b7704d8220e67848ee37d2d8b  true false amsterdam v0.8.37+commit.f401782d true
+  Secp256k1Verifier  0xad62c7780eba1115f835f768d05ab3fcf611f3eb  true false amsterdam v0.8.37+commit.f401782d true
+  SchnorrBn254Verifier  0xd175cf00c1d2cfe8c29a658f2435958193ab3ceb  true false amsterdam v0.8.37+commit.f401782d true
+  SchnorrBls12381Verifier  0xf2b365f76400b0ac6ce03561931c494b04705923  true false amsterdam v0.8.37+commit.f401782d true
+  BlsMinSigBls12381Verifier  0x1b895c645e506772b9b79f3936bc9d137d00c162  true false amsterdam v0.8.37+commit.f401782d true
+  BlsMinSigBn254Verifier  0xc1aab80056190a54523b0a94c6c71f2811e59be8  true false amsterdam v0.8.37+commit.f401782d true
+  Musig2Secp256k1Verifier  0xaf64d79f498ea788ffaac999cd2ee331e3197010  true false amsterdam v0.8.37+commit.f401782d true
+  UAFrostSecp256k1Verifier  0x51b2339459cf64b455634d51e0479cdcefe3e409  true false amsterdam v0.8.37+commit.f401782d true
+  Musig2Bn254Verifier  0x9cd954336c24a730019ae3b9777eeb46686892fa  true false amsterdam v0.8.37+commit.f401782d true
+  FrostBn254Verifier  0x29cdcfc15e0fa73dbde19d79d0434e863238b80a  true false amsterdam v0.8.37+commit.f401782d true
+  UAMldsaVerifier  0x0cd8084ca16b2da155c01d2ef0ead5ba17661fbc  true false amsterdam v0.8.37+commit.f401782d true
+  UAMldsaVerifier  0x0f89bca833649cbc78b40ef49d8e783ef837b7dc  true false amsterdam v0.8.37+commit.f401782d true
+  UAFndsaVerifier  0xd8f932580ec7ea9eee10418eab65ed2ff21a5424  true false amsterdam v0.8.37+commit.f401782d true
+  UASlhdsaVerifier  0x4deee31a221696bb7613a55745600762df1aea57  true false amsterdam v0.8.37+commit.f401782d true
+  UARegistry  0x06d03d563686e4cce533b2c392ec68faab119776  true false amsterdam v0.8.37+commit.f401782d true
+  MtxRelayFee  0x7fb42079c44c185c131fd38ee59c18463b16fa48  true false amsterdam v0.8.37+commit.f401782d true
+  MtxRelayExecutor  0xa9b8ab56e974b0495aec3280dc5e7db77b88c687  true false amsterdam v0.8.37+commit.f401782d true
+  NormalToken  0xcdb98d83a09f696b7720842f91d9fb56dad6a551  true false amsterdam v0.8.37+commit.f401782d true
+  SCaaSDex  0xe77d3d680bc1e35205f68cd1f1fc71230d3ed3d9  true false amsterdam v0.8.37+commit.f401782d true
+# summary: 31 full, 0 partial
+# verifier docker stats: idle 0.03 % / 4.5 MiB; during the run (88 samples) max 100.59 % / 402 MiB, median CPU 0.03 %;
+#   cgroup memory.peak 536870912 B (= the 512 MiB cap; memory.events max 3, oom 0, oom_kill 0), after: anon 351948800 B, 0.02 % / 351 MiB
