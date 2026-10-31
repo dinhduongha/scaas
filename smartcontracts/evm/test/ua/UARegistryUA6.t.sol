@@ -61,14 +61,15 @@ contract UARegistryUA6Test is UARegistryBase {
         return UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pqzKey);
     }
 
-    /// The `R_REG` stand-in over the portable `uaMessage(0x0142, POP_V2, portablePopDigest(ua, h, 0))` (UA-8 P1).
-    function _rReg(bytes32 ua, bytes memory pqzKey) internal pure returns (bytes memory) {
-        return _sig(pqzKey, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, UAKinds.portablePopDigest(ua, _h(pqzKey), 0)));
+    /// The `R_REG` stand-in over the portable `uaMessage(0x0142, POP_V2, portableRecordDigest(ua, kind, h, zero KEM record))` (UA-8 P1, typed-signing TS-D3).
+    function _rReg(bytes32 ua, uint16 kind, bytes memory pqzKey) internal pure returns (bytes memory) {
+        bytes32 d = UAKinds.portableRecordDigest(ua, kind, _h(pqzKey), UAKinds.kemRecordHash(ua, 0, ""));
+        return _sig(pqzKey, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, d));
     }
 
     /// The attributes of `ua` holding `pqzKey` with its `R_REG` stand-in (`pqzPopHash = keccak256(rReg)`).
-    function _a(bytes32 ua, bytes memory pqzKey) internal pure returns (IUARegistry.UAAttrs memory) {
-        return IUARegistry.UAAttrs(pqzKey, keccak256(_rReg(ua, pqzKey)), 0, "");
+    function _a(bytes32 ua, uint16 kind, bytes memory pqzKey) internal pure returns (IUARegistry.UAAttrs memory) {
+        return IUARegistry.UAAttrs(pqzKey, keccak256(_rReg(ua, kind, pqzKey)), 0, "");
     }
 
     /// A PQZ key with the proof hash of the filler `0x01` (holder checks run before the PoP).
@@ -83,8 +84,8 @@ contract UARegistryUA6Test is UARegistryBase {
 
     function _holder(uint16 kind, bytes memory pk, bytes memory pqzKey) internal returns (bytes32) {
         bytes32 ua = r.uaOf(kind, pk);
-        IUARegistry.UAAttrs memory a = _a(ua, pqzKey);
-        return r.register(kind, pk, a, _sPop(kind, pk, a), _rReg(ua, pqzKey));
+        IUARegistry.UAAttrs memory a = _a(ua, kind, pqzKey);
+        return r.register(kind, pk, a, _sPop(kind, pk, a), _rReg(ua, kind, pqzKey));
     }
 
     /// `{mlUa wm, p256Ua wp}` with `threshold`.
@@ -103,7 +104,7 @@ contract UARegistryUA6Test is UARegistryBase {
         view
         returns (bytes memory)
     {
-        bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_POP_V2, _regDigest(ua, a));
+        bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_POP_V2, _regDigest(ua, UAKinds.MSIG, a));
         uint16 mi = _indexOf(d, mlUa);
         uint16 pi = _indexOf(d, p256Ua);
         UARegistry.MemberSig memory ms = UARegistry.MemberSig(mi, "", _sig(mlKey, r.uaMessage(0x0131, UAKinds.PURPOSE_MEMBER, md)));
@@ -128,7 +129,7 @@ contract UARegistryUA6Test is UARegistryBase {
         bytes memory y = ZetherKeys.pub(ZX, true);
         ua = r.uaOf(UAKinds.ZETHER_BLS12381, y);
         bytes memory pop =
-            ZetherKeys.schnorr(ZX, r.uaMessage(UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(UAKinds.portablePopDigest(ua, 0, 0), 0)), true);
+            ZetherKeys.schnorr(ZX, r.uaMessage(UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(ua, UAKinds.ZETHER_BLS12381, 0, UAKinds.kemRecordHash(ua, 0, ""), 0)), true);
         assertEq(r.register(UAKinds.ZETHER_BLS12381, y, _none(), pop, ""), ua);
     }
 
@@ -190,21 +191,21 @@ contract UARegistryUA6Test is UARegistryBase {
         bytes memory pk = _pk(0x0131, 1);
         bytes32 ua = r.uaOf(0x0131, pk);
         bytes memory key = _pk(0x0142, 1);
-        IUARegistry.UAAttrs memory a = _a(ua, key);
+        IUARegistry.UAAttrs memory a = _a(ua, 0x0131, key);
         bytes memory pop = _sPop(0x0131, pk, a);
         // stripped: the PoP over h ≠ 0 fails with h = 0
         vm.expectRevert(IUARegistry.UAPoP.selector);
         r.register(0x0131, pk, _none(), pop, "");
         // swapped key (with a valid R_REG for it): the PoP binds h and the proof hash
-        bytes memory rReg2 = _rReg(ua, _pk(0x0142, 2));
+        bytes memory rReg2 = _rReg(ua, 0x0131, _pk(0x0142, 2));
         vm.expectRevert(IUARegistry.UAPoP.selector);
-        r.register(0x0131, pk, _a(ua, _pk(0x0142, 2)), pop, rReg2);
+        r.register(0x0131, pk, _a(ua, 0x0131, _pk(0x0142, 2)), pop, rReg2);
         _frontRunOther(pk, key);
         // a PoP signed over h = 0 submitted with a key; an R_REG without a key
         bytes memory pop0 = _sPop(0x0131, pk, _none());
         vm.expectRevert(IUARegistry.UAPoP.selector);
-        r.register(0x0131, pk, a, pop0, _rReg(ua, key));
-        bytes memory rReg = _rReg(ua, key);
+        r.register(0x0131, pk, a, pop0, _rReg(ua, 0x0131, key));
+        bytes memory rReg = _rReg(ua, 0x0131, key);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzPopHash.selector, ua));
         r.register(0x0131, pk, _none(), pop0, rReg);
         // a key without its R_REG registers unproven (UA8-D8: it claims nothing)
@@ -222,7 +223,7 @@ contract UARegistryUA6Test is UARegistryBase {
 
     /// R_REG over another UA's digest, with a PoP that covers its hash: the proof is refused (`UAPoP`).
     function _frontRunOther(bytes memory pk, bytes memory key) internal {
-        bytes memory rRegOther = _rReg(mlUa, key);
+        bytes memory rRegOther = _rReg(mlUa, 0x0131, key);
         IUARegistry.UAAttrs memory aOther = IUARegistry.UAAttrs(key, keccak256(rRegOther), 0, "");
         bytes memory popOther = _sPop(0x0131, pk, aOther);
         vm.expectRevert(IUARegistry.UAPoP.selector);
@@ -235,15 +236,15 @@ contract UARegistryUA6Test is UARegistryBase {
         (bytes memory d, bytes32 ua) = _msig(2, 1, 1); // PQ-eligible: classical weight 1 < 2
         bytes memory key = _pk(0x0142, 3);
         bytes32 h = _h(key);
-        IUARegistry.UAAttrs memory a = _a(ua, key);
-        bytes memory rReg = _rReg(ua, key);
+        IUARegistry.UAAttrs memory a = _a(ua, UAKinds.MSIG, key);
+        bytes memory rReg = _rReg(ua, UAKinds.MSIG, key);
         // without pop, with or without a key
         vm.expectRevert(IUARegistry.UAPoP.selector);
         r.register(UAKinds.MSIG, d, _none(), "", "");
         vm.expectRevert(IUARegistry.UAPoP.selector);
         r.register(UAKinds.MSIG, d, a, "", rReg);
         // pop over another key
-        bytes memory other = _msigPop(d, ua, _a(ua, _pk(0x0142, 4)), true);
+        bytes memory other = _msigPop(d, ua, _a(ua, UAKinds.MSIG, _pk(0x0142, 4)), true);
         vm.expectRevert(IUARegistry.UAPoP.selector);
         r.register(UAKinds.MSIG, d, a, other, rReg);
         // below the threshold (one member of weight 1, t = 2)
@@ -281,14 +282,14 @@ contract UARegistryUA6Test is UARegistryBase {
         bytes memory key = _pk(0x0142, 5);
         bytes32 h = _h(key);
         (bytes memory d, bytes32 msUa) = _msig(2, 1, 1);
-        IUARegistry.UAAttrs memory msA = _a(msUa, key);
+        IUARegistry.UAAttrs memory msA = _a(msUa, UAKinds.MSIG, key);
         bytes memory msPop = _msigPop(d, msUa, msA, true);
-        bytes memory msReg = _rReg(msUa, key);
+        bytes memory msReg = _rReg(msUa, UAKinds.MSIG, key);
         bytes memory pk = _pk(0x0131, 5);
         bytes32 mua = r.uaOf(0x0131, pk);
-        IUARegistry.UAAttrs memory mA = _a(mua, key);
+        IUARegistry.UAAttrs memory mA = _a(mua, 0x0131, key);
         bytes memory mPop = _sPop(0x0131, pk, mA);
-        bytes memory mReg = _rReg(mua, key);
+        bytes memory mReg = _rReg(mua, 0x0131, key);
         uint256 snap = vm.snapshotState();
         // ML-DSA first, then the msig (both proven: one UA per proven key, UA8-D8)
         r.register(0x0131, pk, mA, mPop, mReg);
@@ -322,9 +323,9 @@ contract UARegistryUA6Test is UARegistryBase {
         // a gen-2 msig with a key and its proof: 0x0142 lives in gen 1 only (ruling A5-I1), so gen 2 refuses the key
         (bytes memory d, bytes32 msUa) = _msig(2, 1, 1);
         bytes memory key = _pk(0x0142, 10);
-        IUARegistry.UAAttrs memory a = _a(msUa, key);
+        IUARegistry.UAAttrs memory a = _a(msUa, UAKinds.MSIG, key);
         bytes memory pop = _msigPop(d, msUa, a, true);
-        bytes memory rReg = _rReg(msUa, key);
+        bytes memory rReg = _rReg(msUa, UAKinds.MSIG, key);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, UAKinds.PQZ_MLWE));
         g2.register(UAKinds.MSIG, d, a, pop, rReg);
         // without the key the structure registers in gen 2 as before
@@ -338,9 +339,9 @@ contract UARegistryUA6Test is UARegistryBase {
         UARegistry g2 = new UARegistry(chainUidA, address(r), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
         (bytes memory d, bytes32 msUa) = _msig(2, 1, 1);
         bytes memory key = _pk(0x0142, 20);
-        IUARegistry.UAAttrs memory a = _a(msUa, key);
+        IUARegistry.UAAttrs memory a = _a(msUa, UAKinds.MSIG, key);
         bytes memory pop = _msigPop(d, msUa, a, true);
-        bytes memory rReg = _rReg(msUa, key);
+        bytes memory rReg = _rReg(msUa, UAKinds.MSIG, key);
         vm.prank(address(0x6219EF), address(0x6219EF));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, UAKinds.PQZ_MLWE));
         g2.register(UAKinds.MSIG, d, a, pop, rReg);
@@ -364,12 +365,12 @@ contract UARegistryUA6Test is UARegistryBase {
         bytes memory pk = _pk(0x0131, 77);
         bytes32 ua = n.uaOf(0x0131, pk);
         bytes memory key = _pk(0x0142, 77);
-        IUARegistry.UAAttrs memory a = _a(ua, key);
-        n.register(0x0131, pk, a, _pop(n, 0x0131, pk, a), _rReg(ua, key));
+        IUARegistry.UAAttrs memory a = _a(ua, 0x0131, key);
+        n.register(0x0131, pk, a, _pop(n, 0x0131, pk, a), _rReg(ua, 0x0131, key));
         (, bytes32 ph, bool proven) = n.pqzKeyOf(ua);
         assertEq(ph, a.pqzPopHash);
         assertFalse(proven);
-        assertEq(n.pqzPopOf(ua), _rReg(ua, key));
+        assertEq(n.pqzPopOf(ua), _rReg(ua, 0x0131, key));
         assertEq(n.keyOwner(_h(key)), bytes32(0));
         assertEq(n.uaCount(UAKinds.PQZ_MLWE), 0);
     }
@@ -454,8 +455,8 @@ contract UARegistryUA6Test is UARegistryBase {
         r.register(0x0130, _pk(0x0130, 12), _none(), _sPop(0x0130, _pk(0x0130, 12), _none()), "");
         (bytes memory d, bytes32 b) = _msig(2, 1, 1);
         bytes memory key = _pk(0x0142, 12);
-        IUARegistry.UAAttrs memory ab = _a(b, key);
-        r.register(UAKinds.MSIG, d, ab, _msigPop(d, b, ab, true), _rReg(b, key));
+        IUARegistry.UAAttrs memory ab = _a(b, UAKinds.MSIG, key);
+        r.register(UAKinds.MSIG, d, ab, _msigPop(d, b, ab, true), _rReg(b, UAKinds.MSIG, key));
         bytes32 c = _holder(0x0132, _pk(0x0132, 13), _pk(0x0142, 13));
         assertEq(r.uaCount(UAKinds.PQZ_MLWE), 3);
         bytes32[] memory page = r.uaPage(UAKinds.PQZ_MLWE, 0, 10);

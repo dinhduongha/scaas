@@ -38,10 +38,10 @@ contract UARegistryZetherTest is UARegistryBase {
         c[base.length] = UARegistry.KindConfig(ZK, address(zbls), 70_000);
     }
 
-    /// The Zether PoP: Schnorr by `x` under the Zether tag over the portable `uaMessage(0x0141, POP_V2, registrationDigest(portablePopDigest(ua, 0, 0), 0))` (UA-8).
+    /// The Zether PoP: Schnorr by `x` under the Zether tag over the portable `uaMessage(0x0141, POP_V2, registrationDigest(ua, 0x0141, 0, zero KEM record, 0))` (UA-8, typed-signing TS-D3).
     function _zpop(UARegistry r, uint256 x) internal view returns (bytes memory) {
         bytes32 ua = r.uaOf(ZK, ZetherKeys.pub(x, true));
-        return ZetherKeys.schnorr(x, r.uaMessage(ZK, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(UAKinds.portablePopDigest(ua, 0, 0), 0)), true);
+        return ZetherKeys.schnorr(x, r.uaMessage(ZK, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(ua, ZK, 0, UAKinds.kemRecordHash(ua, 0, ""), 0)), true);
     }
 
     function _zregister(UARegistry r, uint256 x) internal returns (bytes32) {

@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IUAPopVerifier} from "../../src/ua/IUAVerifier.sol";
@@ -470,6 +471,32 @@ contract UARegistryUA8Test is UARegistryBase {
         assert(IUARegistry.setPqzKey.selector == bytes4(0xbde71760));
     }
 
+    /// TS-D5 (owner 2026-10-31): `kindName` answers every kind id of kinds.json (and the scheme 0x0142), enabled or not.
+    function test_kindNameEveryKind() public {
+        UARegistry a = _regA(false);
+        string memory j = vm.readFile("../vectors/ua/kinds.json");
+        uint256 n;
+        for (; vm.keyExistsJson(j, string.concat(".kinds[", vm.toString(n), "]")); ++n) {
+            string memory p = string.concat(".kinds[", vm.toString(n), "]");
+            uint16 kind = uint16(vm.parseJsonUint(j, string.concat(p, ".kind")));
+            assertEq(a.kindName(kind), vm.parseJsonString(j, string.concat(p, ".name")));
+        }
+        assertEq(n, 31);
+        assertEq(a.kindName(uint16(vm.parseJsonUint(j, ".schemes[0].kind"))), vm.parseJsonString(j, ".schemes[0].name"));
+        assertFalse(a.kindEnabled(0x0011));
+        assertEq(a.kindName(0x0011), "stellar-account");
+    }
+
+    /// TS-D5: an unknown id reverts `UAKindUnknown(kind)`.
+    function test_kindNameUnknownReverts() public {
+        UARegistry a = _regA(false);
+        uint16[4] memory unknown = [uint16(0x0000), 0x0109, 0x0140, 0xffff];
+        for (uint256 i; i < 4; ++i) {
+            vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindUnknown.selector, unknown[i]));
+            a.kindName(unknown[i]);
+        }
+    }
+
     /// P1 / P10: the same arguments register on two registries with different chain ids, chain uids and addresses.
     function test_ua8_copyBetweenRegistries() public {
         Row[] memory rows = _rows();
@@ -584,11 +611,12 @@ contract UARegistryUA8Test is UARegistryBase {
         assertEq(keccak256(_stored(a, m.ua)), keccak256(_stored(b, m.ua)));
     }
 
-    /// Ruling C7 (D6 overridden): a code-less native member signs the portable message by `personal_sign`, so the
-    /// same native-member `msig` registration is accepted on two registries with different chain ids. A UAAuth-framed
-    /// native signature inside a portable pop, a malformed `personal_sign` (high s, 64 bytes, v 0 / 1) are `UAPoP`; a
-    /// `personal_sign` member signature never passes `requireAuthorized`, under any purpose.
-    function test_ua8_msigNativeMemberPersonalSignPortable() public {
+    /// Ruling C7 (D6 overridden) as amended by typed-signing TS-D4 (owner decision 4): a code-less native member signs
+    /// the record's typed digest (`eth_signTypedData_v4` of the `UARegistration`), so the same native-member `msig`
+    /// registration is accepted on two registries with different chain ids. A UAAuth-framed native signature inside a
+    /// portable pop, a malformed signature (high s, 64 bytes, v 0 / 1) are `UAPoP`; the portable member signature never
+    /// passes `requireAuthorized`, under any purpose.
+    function test_msigNativeMemberTypedDigest() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory m = rows[MSIG_NATIVE_ROW];
@@ -596,21 +624,56 @@ contract UARegistryUA8Test is UARegistryBase {
         UARegistry b = _regB();
         _members(a, rows);
         _members(b, rows);
-        _malformedPersonalSign(a, m);
+        // the vector's native member signature recovers to the member over the typed registration digest
+        bytes32 rd = _regDigest(m.ua, UAKinds.MSIG, m.attrs);
+        assertEq(UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_POP_V2, rd), m.popMessage);
+        UARegistry.MemberSig[] memory s = abi.decode(m.pop, (UARegistry.MemberSig[]));
+        (uint16 k0, bytes32 id0) = _member(m.keyData, s[0].index);
+        assertEq(k0, UAKinds.EVM_EOA, "member 0 is the native one");
+        assertEq(ECDSA.recover(rd, s[0].sig), address(uint160(uint256(id0))));
+        _malformedNativeSig(a, m);
         Neg memory g = _neg("native-uaauth-in-portable-pop");
         vm.expectRevert(IUARegistry.UAPoP.selector);
         a.register(m.kind, m.keyData, m.attrs, g.values[0], m.pqzPop);
-        // the vector's personal_sign pop: accepted on A and on B
+        // the vector's typed pop: accepted on A and on B
         _reg(a, m);
         vm.chainId(7622);
         _reg(b, m);
         vm.chainId(31337);
         assertEq(keccak256(_stored(a, m.ua)), keccak256(_stored(b, m.ua)));
-        _personalSignNotForRequireAuthorized(a, m);
+        _portableNotForRequireAuthorized(a, m, rd);
     }
 
-    /// High s, 64 bytes, v 0 and v 1 for the native member's `personal_sign`: `UAPoP`.
-    function _malformedPersonalSign(UARegistry a, Row memory m) internal {
+    /// TS-D4: the pre-typed native member form is refused (`UAPoP`): portable.json's `native-member-personal-sign`
+    /// (EIP-191 `personal_sign` of `memberDigest`), and the member's own key by `personal_sign` of the typed digest or
+    /// over the raw `memberDigest`.
+    function test_msigNativeMemberPersonalSignRefused() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        Row memory m = rows[MSIG_NATIVE_ROW];
+        UARegistry a = _regA(false);
+        _members(a, rows);
+        Neg memory g = _neg("native-member-personal-sign");
+        assertEq(g.err, "UAPoP");
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        a.register(m.kind, m.keyData, m.attrs, g.values[0], m.pqzPop);
+        uint256 sk = _nativeSk();
+        bytes32 rd = _regDigest(m.ua, UAKinds.MSIG, m.attrs);
+        bytes32 md = UAKinds.memberDigest(m.ua, m.popMessage);
+        bytes32[3] memory wrong =
+            [MessageHashUtils.toEthSignedMessageHash(md), MessageHashUtils.toEthSignedMessageHash(rd), md];
+        UARegistry.MemberSig[] memory s = abi.decode(m.pop, (UARegistry.MemberSig[]));
+        for (uint256 i; i < 3; ++i) {
+            s[0].sig = _ecdsa(sk, wrong[i]);
+            bytes memory pop = abi.encode(s);
+            vm.expectRevert(IUARegistry.UAPoP.selector);
+            a.register(m.kind, m.keyData, m.attrs, pop, m.pqzPop);
+        }
+        _reg(a, m);
+    }
+
+    /// High s, 64 bytes, v 0 and v 1 for the native member's typed signature: `UAPoP`.
+    function _malformedNativeSig(UARegistry a, Row memory m) internal {
         UARegistry.MemberSig[] memory s = abi.decode(m.pop, (UARegistry.MemberSig[]));
         (uint16 k0,) = _member(m.keyData, s[0].index);
         assertEq(k0, UAKinds.EVM_EOA, "member 0 is the native one");
@@ -633,9 +696,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// `requireAuthorized` keeps UAAuth for native members: the very pop as an auth under PURPOSE_POP_V2 is refused, the
     /// same set with the member's UAAuth signature passes; portable.json's personal_sign member under metatx is refused.
-    function _personalSignNotForRequireAuthorized(UARegistry a, Row memory m) internal {
-        bytes32 rd = UAKinds.registrationDigest(UAKinds.portablePopDigest(m.ua, 0, 0), 0);
-        assertEq(UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_POP_V2, rd), m.popMessage);
+    function _portableNotForRequireAuthorized(UARegistry a, Row memory m, bytes32 rd) internal {
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, m.ua));
         a.requireAuthorized(m.ua, UAKinds.PURPOSE_POP_V2, rd, abi.encode(m.keyData, m.pop));
         UARegistry.MemberSig[] memory s = abi.decode(m.pop, (UARegistry.MemberSig[]));
@@ -647,9 +708,9 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// A native member with code (a contract wallet; not an EIP-7702 designator, which is an EOA: own key only, ruling
-    /// D1, `test_ua8_msigNativeMember7702Portable`) answers ERC-1271 `isValidSignature(memberDigest, sig)` in a
-    /// portable pop; its key's `personal_sign` is not asked.
-    function test_ua8_msigNativeMemberWithCode1271() public {
+    /// D1, `test_ua8_msigNativeMember7702Portable`) answers ERC-1271 `isValidSignature(typedDigest, sig)` in a portable
+    /// pop (TS-D4); its key's signature is not asked, and a wallet signature over `memberDigest` is refused.
+    function test_msigContractMember1271OverTypedDigest() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory m = rows[MSIG_NATIVE_ROW];
@@ -660,16 +721,21 @@ contract UARegistryUA8Test is UARegistryBase {
         MockWallet w = new MockWallet(vm.addr(ownerSk), 0, 0, address(a));
         vm.etch(address(uint160(uint256(id))), address(w).code);
         vm.expectRevert(IUARegistry.UAPoP.selector);
-        a.register(m.kind, m.keyData, m.attrs, m.pop, m.pqzPop); // the personal_sign pop: code ⇒ ERC-1271 only
+        a.register(m.kind, m.keyData, m.attrs, m.pop, m.pqzPop); // the key's typed pop: code ⇒ ERC-1271 only
         UARegistry.MemberSig[] memory s = abi.decode(m.pop, (UARegistry.MemberSig[]));
         s[0].sig = _ecdsa(ownerSk, UAKinds.memberDigest(m.ua, m.popMessage));
+        bytes memory overMd = abi.encode(s);
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        a.register(m.kind, m.keyData, m.attrs, overMd, m.pqzPop);
+        s[0].sig = _ecdsa(ownerSk, _regDigest(m.ua, UAKinds.MSIG, m.attrs));
         assertEq(a.register(m.kind, m.keyData, m.attrs, abi.encode(s), m.pqzPop), m.ua);
     }
 
     /// Review focus 2: stripping or swapping `pqzKey`, `pqzPopHash`, `kemVersion` or `kemPk` (portable.json negatives
     /// with error `UAPoP`) is `UAPoP`.
     function test_ua8_popCoversAttrs() public {
-        assertEq(_runNegatives(_errs("UAPoP", "", "", "")), 20, "UAPoP negatives");
+        // + native-member-personal-sign, record-kind-mismatch, kem-record-as-registration (typed-signing P1)
+        assertEq(_runNegatives(_errs("UAPoP", "", "", "")), 23, "UAPoP negatives");
     }
 
     /// The attribute shape: a PQZ key with its proof hash and only with it, proof bytes hashing to it, a PQZ key of a
@@ -919,8 +985,8 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// Owner ruling 2026-10-30 ("an EOA must really sign, no delegation"; supersedes R-7702 and A5-m m2): a native member
     /// with an EIP-7702 designator (an EOA delegated to a wallet) in a portable pop is an EOA: only its own key's
-    /// `personal_sign` (the vector's pop) is accepted; ERC-1271 through the delegate is never asked, even for a signature
-    /// the delegate itself accepts, and the own key over the raw digest is refused (`UAPoP`).
+    /// signature over the typed digest (the vector's pop, TS-D4) is accepted; ERC-1271 through the delegate is never
+    /// asked, even for a signature the delegate itself accepts, and the own key over `memberDigest` is refused (`UAPoP`).
     function test_ua8_msigNativeMember7702Portable() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
@@ -931,18 +997,19 @@ contract UARegistryUA8Test is UARegistryBase {
         _delegate(m, sk, 0x5E55);
         UARegistry.MemberSig[] memory s = abi.decode(m.pop, (UARegistry.MemberSig[]));
         bytes32 md = UAKinds.memberDigest(m.ua, m.popMessage);
-        s[0].sig = _ecdsa(0x5E55, md);
+        bytes32 rd = _regDigest(m.ua, UAKinds.MSIG, m.attrs);
+        s[0].sig = _ecdsa(0x5E55, rd);
         (, bytes32 id) = _member(m.keyData, 0);
-        assertEq(IERC1271(address(uint160(uint256(id)))).isValidSignature(md, s[0].sig), IERC1271.isValidSignature.selector,
+        assertEq(IERC1271(address(uint160(uint256(id)))).isValidSignature(rd, s[0].sig), IERC1271.isValidSignature.selector,
             "the delegate would accept it");
         bytes memory viaDelegate = abi.encode(s);
         vm.expectRevert(IUARegistry.UAPoP.selector);
         a.register(m.kind, m.keyData, m.attrs, viaDelegate, m.pqzPop);
-        s[0].sig = _ecdsa(sk, md); // the EOA's own key over the raw digest, not personal_sign
+        s[0].sig = _ecdsa(sk, md); // the EOA's own key over `memberDigest`, not the typed digest
         bytes memory raw = abi.encode(s);
         vm.expectRevert(IUARegistry.UAPoP.selector);
         a.register(m.kind, m.keyData, m.attrs, raw, m.pqzPop);
-        _reg(a, m); // the own key's personal_sign, with the designator in place
+        _reg(a, m); // the own key over the typed digest, with the designator in place
     }
 
     /// The native member of `m` (secret `sk`) delegates by EIP-7702 to a wallet owned by `sessionSk`.
@@ -956,7 +1023,7 @@ contract UARegistryUA8Test is UARegistryBase {
         assertEq(bytes3(eoa.code), bytes3(0xef0100));
     }
 
-    /// m3: `_sigOk`, the chain-free signature path (personal_sign native members), accepts only the portable purposes
+    /// m3: `_sigOk`, the chain-free signature path (native members over the typed digest), accepts only the portable purposes
     /// POP_V2, KEM and PQZ_KEY; any other purpose reverts `UAUnauthorized`, for every kind.
     function test_ua8_sigOkPortablePurposesOnly() public {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
@@ -1212,10 +1279,10 @@ contract UARegistryUA8Test is UARegistryBase {
     function _squatter(Row[] memory rows, Row memory x) internal returns (Row memory s) {
         s = _apply(rows[ML65_1], Neg("", "", "", "", new string[](0), new bytes[](0)));
         s.attrs = IUARegistry.UAAttrs(x.attrs.pqzKey, x.attrs.pqzPopHash, 0, "");
-        bytes32 portable = UAKinds.portablePopDigest(s.ua, _h(x.attrs.pqzKey), 0);
+        bytes32 record = UAKinds.portableRecordHash(s.ua, UAKinds.MLDSA65, _h(x.attrs.pqzKey), UAKinds.kemRecordHash(s.ua, 0, ""));
         s.popMessage = UAKinds.uaMessage(UAKinds.MLDSA65, UAKinds.PURPOSE_POP_V2,
-            UAKinds.registrationDigest(portable, s.attrs.pqzPopHash));
-        s.pqzRegMessage = UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, portable);
+            UAKinds.portableDigest(UAKinds.registrationHash(record, s.attrs.pqzPopHash)));
+        s.pqzRegMessage = UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, UAKinds.portableDigest(record));
         s.pop = new bytes(3309);
         s.pop[0] = 0x5a;
         s.pqzPop = x.pqzPop;
@@ -1327,7 +1394,7 @@ contract UARegistryUA8Test is UARegistryBase {
         _reg(r, base);
         bytes32 h = _h(k.pqzKey);
         bytes32 kd = UAKinds.pqzKeyDigest(k.ua, h);
-        assertEq(UAKinds.uaMessage(k.kind, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyRecordDigest(kd, k.pqzPopHash)), k.message);
+        assertEq(UAKinds.uaMessage(k.kind, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyRecordDigest(k.ua, h, k.pqzPopHash)), k.message);
         assertEq(UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, kd), k.pqzRegMessage);
         vm.expectEmit(true, false, false, true, address(r));
         emit IUARegistry.UAPqzKeyAdded(k.ua, h, k.pqzPopHash, k.pqzKey, k.sig);
@@ -1354,7 +1421,7 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// Ruling A1-I1: every portable.json `pqzKeyRecords` row (fndsa512, msig-pq-native with its native member's
-    /// personal_sign; four sets) adds its key to a registration without one: unproven, `pqzKeySigOf` the record's
+    /// the typed digest; four sets) adds its key to a registration without one: unproven, `pqzKeySigOf` the record's
     /// signature, `registrationOf` unchanged (A4-c3). The set's proof (`storePqzPop`) is stored unproven without the
     /// verifier and proves over `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest)` with it.
     function test_ua8_setPqzKeyFromVectors() public {
@@ -1480,14 +1547,15 @@ contract UARegistryUA8Test is UARegistryBase {
     // ----- A6 fix 1 (review A6: I1 → ruling A6-I1; m2) -----
 
     /// m2: `storePqzPop` for a key from `register` without a KEM record proves over exactly
-    /// `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, keyHash, 0))` (the stand-in accepts only that input).
+    /// `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kind, keyHash, zero KEM record))` (the stand-in
+    /// accepts only that input).
     function test_ua8_storePqzPopNoKemExactMessage() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory s = _squatter(rows, _pqzRow(rows));
         assertEq(s.attrs.kemVersion, 0);
         assertEq(s.pqzRegMessage, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2,
-            UAKinds.portablePopDigest(s.ua, _h(s.attrs.pqzKey), 0)));
+            UAKinds.portableRecordDigest(s.ua, s.kind, _h(s.attrs.pqzKey), UAKinds.kemRecordHash(s.ua, 0, ""))));
         UARegistry p = _regA(true);
         p.register(s.kind, s.keyData, s.attrs, s.pop, "");
         _allowPqz(s);
@@ -1550,8 +1618,37 @@ contract UARegistryUA8Test is UARegistryBase {
         g2.setPqzKey(m.ua, m.attrs.pqzKey, m.attrs.pqzPopHash, hex"01"); // the gen-1 key counts
     }
 
+    /// typed-signing TS-D3: the R_REG message of a `register` key names the registering kind (`UAPortableRecord.kind`);
+    /// a gen 2 proving a gen-1 record's key (ruling A6-I1) takes the kind from gen 1 (`kindOf`): the stand-in accepts
+    /// exactly the row's `pqzRegMessage` (kind `mldsa65`), not the same record under another kind.
+    function test_storePqzPopGen2HostKindFromGen1() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        UARegistry g1 = _regA(false);
+        UARegistry g2 = _gen2Pqz(address(0x5cebc), g1);
+        Row memory x = _pqzRow(rows);
+        assertEq(x.kind, UAKinds.MLDSA65);
+        g1.register(x.kind, x.keyData, x.attrs, x.pop, "");
+        assertEq(g2.kindOf(x.ua), UAKinds.MLDSA65);
+        bytes32 h = _h(x.attrs.pqzKey);
+        bytes32 kh = UAKinds.kemRecordHash(x.ua, x.attrs.kemVersion, x.attrs.kemPk);
+        assertEq(x.pqzRegMessage, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2,
+            g2.portableRecordDigest(x.ua, UAKinds.MLDSA65, h, kh)));
+        // the same record under another kind is another message: refused by the stand-in
+        bytes32 other = UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2,
+            UAKinds.portableRecordDigest(x.ua, UAKinds.MLDSA44, h, kh));
+        assertTrue(other != x.pqzRegMessage);
+        vm.mockCall(rreg, abi.encodeCall(IUAPopVerifier.verifyPop, (x.attrs.pqzKey, other, x.pqzPop)), abi.encode(uint256(1)));
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        g2.storePqzPop(x.ua, x.pqzPop);
+        _allowPqz(x);
+        g2.storePqzPop(x.ua, x.pqzPop);
+        assertTrue(_proven(g2, x.ua));
+        assertEq(g2.keyOwner(h), x.ua);
+    }
+
     /// Ruling A6-I1, the other key origin: `setPqzKey` on gen 2 for a gen-1 record without a PQZ key (fndsa512: the
-    /// signature checked by gen 1; msig-pq-native: members on gen 1, the native one by personal_sign), then its proof
+    /// signature checked by gen 1; msig-pq-native: members on gen 1, the native one over the typed digest), then its proof
     /// over the PURPOSE_PQZ_KEY message; the attachment is gen 2's, gen 1 has no key. A token bound to gen 2 takes it.
     function test_ua8_gen2SetPqzKeyForGen1Record() public {
         Row[] memory rows = _rows();
@@ -1645,7 +1742,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// `setPqzKey` of this build's `mldsa65/<set>` key for its UA, signed (mocked precompile) over the record's message.
     function _setThisSetKey(UARegistry r, Row memory x) internal returns (bytes memory sig) {
         bytes32 h = _h(x.attrs.pqzKey);
-        bytes32 rd = UAKinds.pqzKeyRecordDigest(UAKinds.pqzKeyDigest(x.ua, h), x.attrs.pqzPopHash);
+        bytes32 rd = UAKinds.pqzKeyRecordDigest(x.ua, h, x.attrs.pqzPopHash);
         sig = _ml65Sig(x.keyData, UAKinds.uaMessage(UAKinds.MLDSA65, UAKinds.PURPOSE_PQZ_KEY, rd));
         vm.expectEmit(true, false, false, true, address(r));
         emit IUARegistry.UAPqzKeyAdded(x.ua, h, x.attrs.pqzPopHash, x.attrs.pqzKey, sig);
@@ -2086,7 +2183,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// The m-of-n record signature (U5; rulings C7, A1-I2): portable.json's `msig-pq` v2 (2-of-2 `mldsa65` members)
     /// lands, one member alone does not. A 2-of-3 PQ-eligible `msig` (two `mldsa65` members, one code-less native
-    /// member signing by `personal_sign` under PURPOSE_KEM) takes every 2-member subset and refuses a single member,
+    /// member signing the typed `UAKemRecord` digest) takes every 2-member subset and refuses a single member,
     /// out-of-order members and the native member's UAAuth (EIP-712) signature.
     function test_ua8_kemMsigMofN() public {
         Row[] memory rows = _rows();
@@ -2118,8 +2215,7 @@ contract UARegistryUA8Test is UARegistryBase {
         mm[2] = Member(UAKinds.EVM_EOA, _pad(vm.addr(sk)), 1);
         d = _msigKey(2, mm);
         ua = UAKinds.uaOf(UAKinds.MSIG, d);
-        bytes memory pop =
-            _msigSigs(rows, d, ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_POP_V2, _regDigest(ua, _none())), 0, 1, sk);
+        bytes memory pop = _msigSigs(rows, d, ua, UAKinds.PURPOSE_POP_V2, _regDigest(ua, UAKinds.MSIG), 0, 1, sk);
         assertEq(a.register(UAKinds.MSIG, d, _none(), pop, ""), ua);
     }
 
@@ -2129,8 +2225,8 @@ contract UARegistryUA8Test is UARegistryBase {
     {
         uint8[2][3] memory pairs = [[0, 1], [0, 2], [1, 2]];
         for (uint64 v = 1; v <= 3; ++v) {
-            bytes32 m = UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_KEM, UAKinds.kemRecordDigest(ua, v, pk));
-            bytes memory sig = _msigSigs(rows, d, ua, m, pairs[v - 1][0], pairs[v - 1][1], sk);
+            bytes32 kd = UAKinds.kemRecordDigest(ua, v, pk);
+            bytes memory sig = _msigSigs(rows, d, ua, UAKinds.PURPOSE_KEM, kd, pairs[v - 1][0], pairs[v - 1][1], sk);
             UARegistry.MemberSig[] memory p = abi.decode(sig, (UARegistry.MemberSig[]));
             UARegistry.MemberSig[] memory bad = new UARegistry.MemberSig[](1);
             bad[0] = p[1];
@@ -2146,8 +2242,8 @@ contract UARegistryUA8Test is UARegistryBase {
         }
     }
 
-    /// The native member's UAAuth signature instead of `personal_sign` is refused (chain-bound); its `personal_sign`
-    /// lands.
+    /// The native member's UAAuth signature (chain-bound) and its `personal_sign` of `memberDigest` (the pre-typed form)
+    /// instead of its signature over the typed `UAKemRecord` digest are refused; the typed signature lands (TS-D4).
     function _kemNativeUAAuth(UARegistry a, Row[] memory rows, bytes memory d, bytes32 ua, bytes memory pk, uint256 sk)
         internal
     {
@@ -2156,41 +2252,52 @@ contract UARegistryUA8Test is UARegistryBase {
             (uint16 kind,) = _member(d, i);
             if (kind == UAKinds.EVM_EOA) ni = i;
         }
-        bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_KEM,
-            UAKinds.kemRecordDigest(ua, 4, pk)));
-        bytes32 m4 = UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_KEM, UAKinds.kemRecordDigest(ua, 4, pk));
+        bytes32 kd = UAKinds.kemRecordDigest(ua, 4, pk);
+        bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_KEM, kd));
         uint256 other = ni == 0 ? 1 : 0;
         UARegistry.MemberSig[] memory q = abi.decode(
-            _msigSigs(rows, d, ua, m4, other < ni ? other : ni, other < ni ? ni : other, sk), (UARegistry.MemberSig[])
+            _msigSigs(rows, d, ua, UAKinds.PURPOSE_KEM, kd, other < ni ? other : ni, other < ni ? ni : other, sk),
+            (UARegistry.MemberSig[])
         );
         uint256 qn = q[0].index == ni ? 0 : 1;
+        bytes memory typedSig = q[qn].sig;
         q[qn].sig = _nativeSig(a, sk, UAKinds.PURPOSE_MEMBER, md);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
         a.setKemKey(ua, 4, pk, abi.encode(q));
         q[qn].sig = _ecdsa(sk, MessageHashUtils.toEthSignedMessageHash(md));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        a.setKemKey(ua, 4, pk, abi.encode(q));
+        q[qn].sig = typedSig;
         a.setKemKey(ua, 4, pk, abi.encode(q));
         _assertKemOf(a, ua, 4, pk, abi.encode(q));
     }
 
-    /// The `MemberSig[]` of members `i < j` of the `msig` `d` over `uaMsg` (portable): an `mldsa65` member under `member`
-    /// (mocked), a native member by `personal_sign` of `memberDigest` with `sk`.
-    function _msigSigs(Row[] memory rows, bytes memory d, bytes32 ua, bytes32 uaMsg, uint256 i, uint256 j, uint256 sk)
-        internal
-        returns (bytes memory)
-    {
-        bytes32 md = UAKinds.memberDigest(ua, uaMsg);
+    /// The `MemberSig[]` of members `i < j` of the `msig` `d` over the portable record's typed digest `typed` under
+    /// `purpose`: an `mldsa65` member under `member` over `memberDigest(ua, uaMessage(MSIG, purpose, typed))` (mocked), a
+    /// native member over `typed` itself with `sk` (TS-D4).
+    function _msigSigs(
+        Row[] memory rows,
+        bytes memory d,
+        bytes32 ua,
+        bytes32 purpose,
+        bytes32 typed,
+        uint256 i,
+        uint256 j,
+        uint256 sk
+    ) internal returns (bytes memory) {
+        bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purpose, typed));
         UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](2);
-        s[0] = UARegistry.MemberSig(uint16(i), "", _memberSig(rows, d, i, md, sk));
-        s[1] = UARegistry.MemberSig(uint16(j), "", _memberSig(rows, d, j, md, sk));
+        s[0] = UARegistry.MemberSig(uint16(i), "", _memberSig(rows, d, i, md, typed, sk));
+        s[1] = UARegistry.MemberSig(uint16(j), "", _memberSig(rows, d, j, md, typed, sk));
         return abi.encode(s);
     }
 
-    function _memberSig(Row[] memory rows, bytes memory d, uint256 index, bytes32 md, uint256 sk)
+    function _memberSig(Row[] memory rows, bytes memory d, uint256 index, bytes32 md, bytes32 typed, uint256 sk)
         internal
         returns (bytes memory)
     {
         (uint16 kind, bytes32 id) = _member(d, index);
-        if (kind == UAKinds.EVM_EOA) return _ecdsa(sk, MessageHashUtils.toEthSignedMessageHash(md));
+        if (kind == UAKinds.EVM_EOA) return _ecdsa(sk, typed);
         return _ml65Sig(_byUa(rows, id).keyData, UAKinds.uaMessage(UAKinds.MLDSA65, UAKinds.PURPOSE_MEMBER, md));
     }
 
@@ -2398,12 +2505,15 @@ contract UARegistryUA8Test is UARegistryBase {
         Neg[] memory negs = this.loadNegs();
         UARegistry a = _regA(false);
         _members(a, rows);
+        // a negative on a member row (record-kind-mismatch: p256) runs where that row is not registered yet
+        UARegistry fresh = _deploy(address(0x5ce6f), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
         for (uint256 i; i < negs.length; ++i) {
             Neg memory g = negs[i];
             if (keccak256(bytes(g.entry)) != keccak256("register") || !_in(g.err, errs)) continue;
             Row memory x = _apply(_find(rows, g.row), g);
+            UARegistry t = a.kindOf(x.ua) != 0 ? fresh : a;
             vm.expectRevert(_expected(g.err, x));
-            a.register(x.kind, x.keyData, x.attrs, x.pop, x.pqzPop);
+            t.register(x.kind, x.keyData, x.attrs, x.pop, x.pqzPop);
             ++n;
         }
     }
@@ -2471,7 +2581,8 @@ contract UARegistryUA8Test is UARegistryBase {
 
     // ----- A8: gas figures (UA-8 `register`, `storePqzPop`, `setKemKey`) -----
     // The pins below are regression guards only: each is the first measured run (forge 1.8.5, `--isolate`, evm
-    // amsterdam) "/ 1.0", not a derived bound. Regular gas = `gasTotalUsed`, EIP-8037 state gas = `gasStateUsed`
+    // amsterdam) "/ 1.0", not a derived bound; re-pinned (GAS_REPIN=1, the four sets) by typed-signing P3 where the
+    // typed portable digests moved them (old -> new in its commit message). Regular gas = `gasTotalUsed`, EIP-8037 state gas = `gasStateUsed`
     // (the log `runs/2026-10-30-ua8-gas.txt` has the table). The `mldsa65` precompile is the exact-input mock, so its
     // verify gas is the mock's, and the 0x0142 verifier is the `rreg` stand-in: both verifies are not real figures.
 
@@ -2495,28 +2606,28 @@ contract UARegistryUA8Test is UARegistryBase {
     function _pin(string memory name) internal pure returns (uint256, uint256) {
         bytes32 h = keccak256(bytes(name));
         // PINS: name -> (regular gas, state gas); the rows of all four sets (a set's rows carry its name)
-        if (h == keccak256("register webauthn-p256")) return (173018, 1751850);
-        if (h == keccak256("register p256")) return (154657, 1213290);
-        if (h == keccak256("register ed25519")) return (313806, 1164330);
-        if (h == keccak256("register bip340")) return (151389, 1164330);
-        if (h == keccak256("register secp256k1")) return (150351, 1262250);
-        if (h == keccak256("register schnorr-bn254")) return (165847, 1262250);
-        if (h == keccak256("register schnorr-bls12381")) return (192908, 1458090);
-        if (h == keccak256("register bls12381-minsig")) return (328741, 1604970);
-        if (h == keccak256("register bls-bn254-minsig")) return (343714, 1311210);
-        if (h == keccak256("register zether-bls12381")) return (205514, 1643220);
-        if (h == keccak256("register mldsa44")) return (4341359, 6930900);
+        if (h == keccak256("register webauthn-p256")) return (174142, 1751850);
+        if (h == keccak256("register p256")) return (155802, 1213290);
+        if (h == keccak256("register ed25519")) return (315329, 1164330);
+        if (h == keccak256("register bip340")) return (152617, 1164330);
+        if (h == keccak256("register secp256k1")) return (151516, 1262250);
+        if (h == keccak256("register schnorr-bn254")) return (166983, 1262250);
+        if (h == keccak256("register schnorr-bls12381")) return (194068, 1458090);
+        if (h == keccak256("register bls12381-minsig")) return (329903, 1604970);
+        if (h == keccak256("register bls-bn254-minsig")) return (344755, 1311210);
+        if (h == keccak256("register zether-bls12381")) return (206673, 1643220);
+        if (h == keccak256("register mldsa44")) return (4338200, 6930900);
         if (h == keccak256("register mldsa65#1")) return (381848, 9280980);
         if (h == keccak256("register mldsa65#2")) return (381848, 9183060);
         if (h == keccak256("register mldsa65/n2048-kmax1024")) return (3339160, 81366930);
-        if (h == keccak256("register fndsa512")) return (2740970, 6531570);
-        if (h == keccak256("register slhdsa128s")) return (1084058, 13295700);
-        if (h == keccak256("register msig-classical")) return (144722, 1164330);
+        if (h == keccak256("register fndsa512")) return (2812331, 6531570);
+        if (h == keccak256("register slhdsa128s")) return (1113108, 13295700);
+        if (h == keccak256("register msig-classical")) return (145878, 1164330);
         if (h == keccak256("register msig-pq/n2048-kmax1024")) return (3462040, 83923560);
         if (h == keccak256("register msig-pq-native")) return (297880, 6892650);
         if (h == keccak256("setKemKey mldsa65/v2 n2048-kmax1024")) return (344984, 7893270);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024")) return (15404, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2048-kmax1024")) return (2496354, 3849480);
+        if (h == keccak256("setKemKey fndsa512/v2 n2048-kmax1024")) return (2501301, 3849480);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024")) return (13464, 0);
         if (h == keccak256("setKemKey msig-pq/v2 n2048-kmax1024")) return (586648, 13699620);
         if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2048-kmax1024")) return (18640, 0);
@@ -2530,13 +2641,13 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2048-kmax1024")) return (1825688, 44002800);
         if (h == keccak256("register msig-pq without pqzPop n2048-kmax1024")) return (1657752, 40312440);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2048-kmax1024")) return (1825688, 43806960);
-        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024")) return (138427, 0);
-        if (h == keccak256("registrationOf msig-pq on gen 1 n2048-kmax1024")) return (94700, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024")) return (138383, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 1 n2048-kmax1024")) return (94678, 0);
         if (h == keccak256("register mldsa65/n2304-kmax4096")) return (3611544, 87851070);
         if (h == keccak256("register msig-pq/n2304-kmax4096")) return (3734424, 90407700);
         if (h == keccak256("setKemKey mldsa65/v2 n2304-kmax4096")) return (344984, 7893270);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096")) return (15404, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2304-kmax4096")) return (2496354, 3849480);
+        if (h == keccak256("setKemKey fndsa512/v2 n2304-kmax4096")) return (2501301, 3849480);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096")) return (13464, 0);
         if (h == keccak256("setKemKey msig-pq/v2 n2304-kmax4096")) return (586648, 13699620);
         if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2304-kmax4096")) return (18640, 0);
@@ -2547,13 +2658,13 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2304-kmax4096")) return (1967000, 47353500);
         if (h == keccak256("register msig-pq without pqzPop n2304-kmax4096")) return (1788824, 43445880);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2304-kmax4096")) return (1967000, 47157660);
-        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096")) return (148147, 0);
-        if (h == keccak256("registrationOf msig-pq on gen 1 n2304-kmax4096")) return (100619, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096")) return (148103, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 1 n2304-kmax4096")) return (100597, 0);
         if (h == keccak256("register mldsa65/n2560-kmax16384")) return (3879832, 94286250);
         if (h == keccak256("register msig-pq/n2560-kmax16384")) return (4002712, 96842880);
         if (h == keccak256("setKemKey mldsa65/v2 n2560-kmax16384")) return (344984, 7893270);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2560-kmax16384")) return (15404, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2560-kmax16384")) return (2496354, 3849480);
+        if (h == keccak256("setKemKey fndsa512/v2 n2560-kmax16384")) return (2501301, 3849480);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384")) return (13464, 0);
         if (h == keccak256("setKemKey msig-pq/v2 n2560-kmax16384")) return (586648, 13699620);
         if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2560-kmax16384")) return (18640, 0);
@@ -2564,13 +2675,13 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2560-kmax16384")) return (2104216, 50655240);
         if (h == keccak256("register msig-pq without pqzPop n2560-kmax16384")) return (1919896, 46579320);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2560-kmax16384")) return (2104216, 50459400);
-        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384")) return (158252, 0);
-        if (h == keccak256("registrationOf msig-pq on gen 1 n2560-kmax16384")) return (106755, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384")) return (158208, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 1 n2560-kmax16384")) return (106733, 0);
         if (h == keccak256("register mldsa65/n2816-kmax65536")) return (4199320, 102200940);
         if (h == keccak256("register msig-pq/n2816-kmax65536")) return (4322200, 104757570);
         if (h == keccak256("setKemKey mldsa65/v2 n2816-kmax65536")) return (344984, 7893270);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2816-kmax65536")) return (15404, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2816-kmax65536")) return (2496354, 3849480);
+        if (h == keccak256("setKemKey fndsa512/v2 n2816-kmax65536")) return (2501301, 3849480);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536")) return (13464, 0);
         if (h == keccak256("setKemKey msig-pq/v2 n2816-kmax65536")) return (586648, 13699620);
         if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2816-kmax65536")) return (18640, 0);
@@ -2581,8 +2692,8 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2816-kmax65536")) return (2292632, 55436490);
         if (h == keccak256("register msig-pq without pqzPop n2816-kmax65536")) return (2050968, 49712760);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2816-kmax65536")) return (2292632, 55240650);
-        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536")) return (176778, 0);
-        if (h == keccak256("registrationOf msig-pq on gen 1 n2816-kmax65536")) return (120947, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536")) return (176734, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 1 n2816-kmax65536")) return (120925, 0);
         return (0, 0); // an unpinned name fails its check
     }
 

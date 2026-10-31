@@ -161,10 +161,10 @@ abstract contract ZetherFixture is Test {
         return UAKinds.ZETHER_BLS12381;
     }
 
-    /// the portable `uaMessage(kind, POP_V2, registrationDigest(portablePopDigest(UA(Y), 0, 0), 0))` (UA-8), what the Zether key signs to register (CTR-UA-07).
+    /// the portable `uaMessage(kind, POP_V2, registrationDigest(UA(Y), kind, 0, zero KEM record, 0))` (UA-8, typed-signing TS-D3), what the Zether key signs to register (CTR-UA-07).
     function _popMsg(bytes memory y) internal view returns (bytes32) {
         bytes32 ua = ZetherTypes.UA.unwrap(ZetherTypes.toUA(y));
-        return reg.uaMessage(_zkind(), UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(UAKinds.portablePopDigest(ua, 0, 0), 0));
+        return reg.uaMessage(_zkind(), UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(ua, _zkind(), 0, UAKinds.kemRecordHash(ua, 0, ""), 0));
     }
 
     /// An owner op (roll-over, mode; `requireAuthorized` under `zether-owner`, UA-6 U9):

@@ -144,11 +144,11 @@ contract UARegistryTest is UARegistryBase {
         bytes memory p = _key(0x0101);
         bytes32 ua = reg.uaOf(0x0101, p);
         // wrong-tag PoP, PoP for another PQZ keyHash, a PoP over the metatx purpose, over the pre-UA-8 purpose (v1)
-        bytes32 rd = _regDigest(ua, _none());
+        bytes32 rd = _regDigest(ua, 0x0101);
         bytes memory wrongTag = _sig(p, reg.uaMessage(0x0100, UAKinds.PURPOSE_POP_V2, rd));
         bytes memory otherKeyHash = _sig(
             p,
-            reg.uaMessage(0x0101, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(UAKinds.portablePopDigest(ua, bytes32(uint256(1)), 0), 0))
+            reg.uaMessage(0x0101, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(ua, 0x0101, bytes32(uint256(1)), UAKinds.kemRecordHash(ua, 0, ""), 0))
         );
         bytes memory metatx = _sig(p, reg.uaMessage(0x0101, UAKinds.PURPOSE_METATX, rd));
         bytes memory v1 = _sig(p, reg.uaMessage(0x0101, UAKinds.PURPOSE_POP, rd));
@@ -919,14 +919,13 @@ contract UARegistryTest is UARegistryBase {
         uint256 n;
         for (; vm.keyExistsJson(s, string.concat(".pop[", vm.toString(n), "]")); ++n) {
             string memory p = string.concat(".pop[", vm.toString(n), "]");
-            bytes32 d = r.portablePopDigest(
-                vm.parseJsonBytes32(s, string.concat(p, ".ua")),
-                vm.parseJsonBytes32(s, string.concat(p, ".pqzKeyHash")),
-                vm.parseJsonBytes32(s, string.concat(p, ".kemRecordHash"))
-            );
-            assertEq(d, vm.parseJsonBytes32(s, string.concat(p, ".portablePopDigest")));
+            bytes32 ua = vm.parseJsonBytes32(s, string.concat(p, ".ua"));
+            uint16 kind = uint16(vm.parseJsonUint(s, string.concat(p, ".kind")));
+            bytes32 h = vm.parseJsonBytes32(s, string.concat(p, ".pqzKeyHash"));
+            bytes32 kh = vm.parseJsonBytes32(s, string.concat(p, ".kemRecordHash"));
+            assertEq(r.portableRecordDigest(ua, kind, h, kh), vm.parseJsonBytes32(s, string.concat(p, ".portableRecordDigest")));
             assertEq(
-                r.registrationDigest(d, vm.parseJsonBytes32(s, string.concat(p, ".pqzPopHash"))),
+                r.registrationDigest(ua, kind, h, kh, vm.parseJsonBytes32(s, string.concat(p, ".pqzPopHash"))),
                 vm.parseJsonBytes32(s, string.concat(p, ".registrationDigest"))
             );
         }

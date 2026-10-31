@@ -86,7 +86,7 @@ contract PairingVerifiersTest is Test {
 
     /// UA-8: the portable PoP message (no chain context), the same in every context.
     function _popMessage(uint16 kind, bytes32 ua) internal pure returns (bytes32) {
-        return UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(UAKinds.portablePopDigest(ua, 0, 0), 0));
+        return UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(ua, kind, 0, UAKinds.kemRecordHash(ua, 0, ""), 0));
     }
 
     function _bls(uint16 k) internal pure returns (bool) {

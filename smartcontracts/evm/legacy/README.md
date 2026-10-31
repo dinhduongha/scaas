@@ -98,3 +98,7 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   the self-test `requirePqz` stays in `src/`), and the tests with the allowlist cases: `test/pqz/PqzCt.t.sol`
   (`test_safetyAllowlist`), `test/pqz/PqzNormal.t.sol` (`test_createToken_enabledKindOnAForbiddenChain_reverts`),
   `test/pqz/UAPqzVerifier.t.sol` (the 22776 constructor revert). Not built.
+- `typed-signing/`: `UAKindsPortableRaw.sol` — the raw UA-8 portable digests (`portablePopDigest`, `registrationDigest`,
+  `kemRecordDigest`, `pqzKeyDigest`, `pqzKeyRecordDigest`), the record tags `KEM_RECORD_TAG` / `PQZ_KEY_RECORD_TAG` and
+  UARegistry's `personal_sign` path for a native `msig` member of a portable record, as they stood in `src/ua/` before
+  typed-signing P3 replaced them by typed EIP-712 records (TS-D1 … TS-D4). Not built.

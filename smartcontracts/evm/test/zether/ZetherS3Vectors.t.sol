@@ -301,9 +301,9 @@ contract ZetherS3VectorsTest is Test {
                 abi.encode(keccak256(abi.encode("s3 chain", i)), address(0), false, uint64(12_000_000), address(0), false, k), at);
             IUARegistry reg = IUARegistry(at);
             assertEq(reg.uaOf(kind, y), ua);
-            bytes32 d = reg.portablePopDigest(ua, 0, 0);
-            assertEq(d, j.readBytes32(string.concat(key, ".pop.popDigest")));
-            bytes32 rd = reg.registrationDigest(d, 0);
+            bytes32 kh = reg.kemRecordHash(ua, 0, "");
+            assertEq(reg.portableRecordDigest(ua, kind, 0, kh), j.readBytes32(string.concat(key, ".pop.popDigest")));
+            bytes32 rd = reg.registrationDigest(ua, kind, 0, kh, 0);
             assertEq(rd, j.readBytes32(string.concat(key, ".pop.registrationDigest")));
             assertEq(reg.uaMessage(kind, UAKinds.PURPOSE_POP_V2, rd), j.readBytes32(string.concat(key, ".pop.uaMsg")));
             vm.expectRevert(IUARegistry.UAPoP.selector);

@@ -192,7 +192,7 @@ contract Ed25519VerifierTest is Test {
             bytes32 m = vm.parseJsonBytes32(sj, string.concat(p, ".message"));
             // UA-8: the portable PoP message, the same in both contexts
             bytes32 ua = vm.parseJsonBytes32(sj, string.concat(d, ".ua"));
-            assertEq(m, UAKinds.uaMessage(0x0102, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(UAKinds.portablePopDigest(ua, 0, 0), 0)));
+            assertEq(m, UAKinds.uaMessage(0x0102, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(ua, 0x0102, 0, UAKinds.kemRecordHash(ua, 0, ""), 0)));
             assertTrue(v.verifyPop(k, m, vm.parseJsonBytes(sj, string.concat(p, ".sig"))), pops[i]);
         }
         uint256 n;

@@ -87,23 +87,42 @@ interface IUARegistry is IERC5267 {
     function hederaNative() external view returns (bool); // Hedera profile: 0x0003 ∈ MEMBER
     function uaOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32);
     function keyHashOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32); // 0 for structures
-    /// UA8-D1 (`UAKinds`): `pqzKeyHash = keyHashOf(0x0142, pqzKey)`, `kemRecordHash = kemRecordDigest(ua, kemVersion,
-    /// kemPk)`, each 0 when absent.
-    function portablePopDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 kemRecordHash) external pure returns (bytes32);
-    function registrationDigest(bytes32 portable, bytes32 pqzPopHash) external pure returns (bytes32);
+    /// typed-signing TS-D5 (owner 2026-10-31): the name of a kind id of the table (`UAKinds.name`; enabled or not, a name
+    /// table, not an enablement view); an unknown id reverts `UAKindUnknown(kind)` (an app reads a revert as "unknown").
+    function kindName(uint16 kind) external pure returns (string memory);
+    /// The portable records as typed EIP-712 structs (typed-signing TS-D1 … TS-D3, TS-D6; `UAKinds`) under the domain
+    /// `EIP712Domain(string name,string version)` = ("SCaaS UA Portable", "1"): `pqzKeyHash = keyHashOf(0x0142,
+    /// pqzKey)`, `pqzPopHash = keccak256(pqzPop)`, each 0 when absent; `kemRecordHash = hashStruct(UAKemRecord{ua,
+    /// version, kemPk[0], keccak256(kemPk)})`, the zero record `UAKemRecord{ua, 0, 0, 0}` for version 0 with no key.
+    function portableDomainSeparator() external pure returns (bytes32);
+    /// typed(`UAPortableRecord{ua, kind, pqzKeyHash, kem}`), `kind` the registering kind: what R_REG proves over.
+    function portableRecordDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash)
+        external
+        pure
+        returns (bytes32);
+    function kemRecordHash(bytes32 ua, uint64 version, bytes calldata kemPk) external pure returns (bytes32);
+    /// typed(`UARegistration{record, pqzPopHash}`): what `register`'s `pop` signs.
+    function registrationDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash, bytes32 pqzPopHash)
+        external
+        pure
+        returns (bytes32);
+    /// typed(`UAKemRecord`): what `setKemKey`'s `sig` signs.
     function kemRecordDigest(bytes32 ua, uint64 version, bytes calldata kemPk) external pure returns (bytes32);
+    /// typed(`UAPqzKey{ua, pqzKeyHash}`): what a later PQZ key's R_REG proves over.
     function pqzKeyDigest(bytes32 ua, bytes32 pqzKeyHash) external pure returns (bytes32);
-    function pqzKeyRecordDigest(bytes32 keyDigest, bytes32 pqzPopHash) external pure returns (bytes32);
+    /// typed(`UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}`): what `setPqzKey`'s `sig` signs.
+    function pqzKeyRecordDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 pqzPopHash) external pure returns (bytes32);
     function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32);
     /// EIP-712 digest of UAAuth(ua, purposeTag, digest) under this registry's domain: what native signers sign.
     function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
 
-    /// `pop`: the kind's signature (an msig: the canonical `abi.encode(MemberSig[])` over `memberDigest`, other bytes are
-    /// `UAPoP`; a native member that is an EOA — code-less or an EIP-7702 designator — by EIP-191 `personal_sign` with its
-    /// own key only, never ERC-1271 through the delegate; a contract by ERC-1271 over `memberDigest`) over `uaMessage(kind, PURPOSE_POP_V2,
-    /// registrationDigest(portablePopDigest(ua, pqzKeyHash, kemRecordHash), attrs.pqzPopHash))`. `attrs`: only a holder
+    /// `pop`: the kind's signature over `uaMessage(kind, PURPOSE_POP_V2, registrationDigest(ua, kind, pqzKeyHash,
+    /// kemRecordHash, attrs.pqzPopHash))` (an msig: the canonical `abi.encode(MemberSig[])`, other bytes are `UAPoP`; its
+    /// derived members sign `memberDigest` under `member`; a native member signs the typed `registrationDigest` itself
+    /// (typed-signing TS-D4, `eth_signTypedData_v4`): an EOA — code-less or an EIP-7702 designator — by ECDSA with its own
+    /// key only, never ERC-1271 through the delegate; a contract by ERC-1271 over it). `attrs`: only a holder
     /// (`mldsa44`, `mldsa65`, `fndsa512`, a PQ-eligible `msig`; UA-6 U3, UA8-D12) carries a PQZ key or a KEM record.
-    /// `pqzPop`: the `R_REG` proof over `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(...))`, optional (empty: the
+    /// `pqzPop`: the `R_REG` proof over `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(...))`, optional (empty: the
     /// key is stored unproven, `storePqzPop` later; also unproven where the `0x0142` slot is empty, UA8-D8). The attribute
     /// checks (holder, proof hash, PQZ key length, KEM version, KEM key length) come before the PoP (portable.json
     /// `negatives`). Anyone may submit; the same bytes register on every registry.
@@ -113,7 +132,7 @@ interface IUARegistry is IERC5267 {
     /// Anyone (UA8-D8, P8): the `R_REG` proof of the UA's PQZ key, given later (or again) — `UAPqzPopHash` unless
     /// `keccak256(pqzPop)` is the stored `pqzPopHash` (so also for a UA without a PQZ key); a no-op (no event) once proof
     /// bytes are stored. Else the bytes are stored and, where slot `0x0142` has a verifier, checked over the key's `R_REG`
-    /// message — `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(...))` for a key from `register`,
+    /// message — `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kindOf(ua), ...))` for a key from `register`,
     /// `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, pqzKeyHash))` for one from `setPqzKey` — (`UAPoP` on failure),
     /// then the key's owner (`UAKeyInUse`), `keyOwner`, the `0x0142` list, `proven`; `UAPqzPopStored` with the bytes.
     /// Empty `pqzPop`: `UAPqzPopHash` (ruling A6-m). `UAUnauthorized` for an id this registry does not hold (gen 2: a
@@ -125,7 +144,7 @@ interface IUARegistry is IERC5267 {
     /// replaces a stored key this chain can never prove (ruling R-cross-set: slot 0x0142 has a verifier and the key,
     /// unproven, is not of this build's parameter set's length — e.g. a registration copied from a chain of another set);
     /// a key of this chain's set stays write-once, and without the verifier nothing is replaced. A replaced `register` key
-    /// stays in `registrationOf`. `sig` in the `pop` format over `uaMessage(kind, PURPOSE_PQZ_KEY, pqzKeyRecordDigest(pqzKeyDigest(ua, pqzKeyHash), pqzPopHash))`;
+    /// stays in `registrationOf`. `sig` in the `pop` format over `uaMessage(kind, PURPOSE_PQZ_KEY, pqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash))`;
     /// the key is stored unproven, and its `R_REG` (over `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, pqzKeyHash))`)
     /// comes by `storePqzPop`. The key's bytes are stored once, at the SSTORE2 pointer `pqzKeyOf(ua).ptr` (as `recordOf`'s:
     /// `eth_getCode(ptr)` without its leading STOP byte), and carried by `UAPqzKeyAdded`. On a gen 2 that enables 0x0142

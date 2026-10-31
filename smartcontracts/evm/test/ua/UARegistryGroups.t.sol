@@ -71,7 +71,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
     }
 
     function _popMsg(UARegistry r, uint16 kind, bytes memory keyData) internal view returns (bytes32) {
-        return r.uaMessage(kind, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(UAKinds.portablePopDigest(r.uaOf(kind, keyData), 0, 0), 0));
+        return r.uaMessage(kind, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(r.uaOf(kind, keyData), kind, 0, UAKinds.kemRecordHash(r.uaOf(kind, keyData), 0, ""), 0));
     }
 
     /// Registers `g` on `r` with the groups.json PoP (UA-8: portable, the same bytes on every registry).

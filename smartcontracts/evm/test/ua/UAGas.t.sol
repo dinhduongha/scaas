@@ -270,8 +270,8 @@ contract UAGasTest is UARegistryBase {
     /// A8 (UA-8, D7): `register` also writes the whole registration as SSTORE2 code (state gas 1,164,330 for ed25519,
     /// 1,311,210 for bls-bn254-minsig), so the least call gas is 1,460,619 / 1,635,814. REGRESSION GUARDS ONLY: pinned
     /// from the first measured run on this build ("/ 1.0"), not derived bounds. Full table: runs/2026-10-30-ua8-gas.txt.
-    uint256 internal constant HEADROOM_ED25519 = 1_460_619;
-    uint256 internal constant HEADROOM_BLS_BN254 = 1_635_814;
+    uint256 internal constant HEADROOM_ED25519 = 1_461_571;
+    uint256 internal constant HEADROOM_BLS_BN254 = 1_636_290;
 
     function _leastGas(address r, bytes memory call, uint256 bound) internal returns (uint256 hi) {
         GasProbe p = new GasProbe();
@@ -563,7 +563,7 @@ contract UAGasTest is UARegistryBase {
         (bool ok2,) = address(r).call(call);
         assertTrue(ok2);
         emit log_named_uint("register bls-bn254-minsig: gas used", g - gasleft());
-        assertLe(hi, HEADROOM_BLS_BN254); // F185: was 500,000 (452,440 on Osaka); A8: the UA-8 record, 1,635,814
+        assertLe(hi, HEADROOM_BLS_BN254); // F185: was 500,000 (452,440 on Osaka); A8: the UA-8 record, 1,635,814; typed-signing P3 (typed portable digest): 1,636,290
     }
 
     /// UA-2b `ed25519`: the least frame gas of the verifier on its most expensive accepted input (every Straus window
@@ -613,6 +613,6 @@ contract UAGasTest is UARegistryBase {
         g = gasleft();
         r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, dg, auth);
         emit log_named_uint("requireAuthorized ed25519", g - gasleft());
-        assertLe(hi, HEADROOM_ED25519); // F185: was cap + 100,000 (288,524 on Osaka); A8: the UA-8 record, 1,460,619
+        assertLe(hi, HEADROOM_ED25519); // F185: was cap + 100,000 (288,524 on Osaka); A8: the UA-8 record, 1,460,619; typed-signing P3 (typed portable digest): 1,461,571
     }
 }

@@ -63,7 +63,7 @@ abstract contract UALedgerBase is UARegistryBase {
             UAKinds.ZETHER_BLS12381,
             y,
             _none(),
-            ZetherKeys.schnorr(ZX, lreg.uaMessage(UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(UAKinds.portablePopDigest(z, 0, 0), 0)), true),
+            ZetherKeys.schnorr(ZX, lreg.uaMessage(UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_POP_V2, _regDigest(z, UAKinds.ZETHER_BLS12381)), true),
             ""
         );
         (alice, bob) = (vm.addr(ALICE_PK), vm.addr(BOB_PK));

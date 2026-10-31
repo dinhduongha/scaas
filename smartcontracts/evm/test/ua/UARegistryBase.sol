@@ -219,12 +219,16 @@ abstract contract UARegistryBase is Test {
     /// No attributes (UA-8 `UAAttrs`: empty / 0 = absent).
     function _none() internal pure returns (IUARegistry.UAAttrs memory) {}
 
-    /// The UA-8 registration digest (portable, no chain context): `registrationDigest(portablePopDigest(ua, pqzKeyHash,
-    /// kemRecordHash), pqzPopHash)` of `a`.
-    function _regDigest(bytes32 ua, IUARegistry.UAAttrs memory a) internal pure returns (bytes32) {
+    /// The UA-8 registration digest (portable, no chain context; typed-signing TS-D1): typed `UARegistration{
+    /// UAPortableRecord{ua, kind, pqzKeyHash, kem}, pqzPopHash}` of `a` (the zero KEM record without one).
+    function _regDigest(bytes32 ua, uint16 kind, IUARegistry.UAAttrs memory a) internal pure returns (bytes32) {
         bytes32 h = a.pqzKey.length == 0 ? bytes32(0) : UAKinds.keyHashOf(UAKinds.PQZ_MLWE, a.pqzKey);
-        bytes32 k = a.kemVersion == 0 ? bytes32(0) : UAKinds.kemRecordDigest(ua, a.kemVersion, a.kemPk);
-        return UAKinds.registrationDigest(UAKinds.portablePopDigest(ua, h, k), a.pqzPopHash);
+        return UAKinds.registrationDigest(ua, kind, h, UAKinds.kemRecordHash(ua, a.kemVersion, a.kemPk), a.pqzPopHash);
+    }
+
+    /// The registration digest of a UA without attributes (`_regDigest(ua, kind, _none())`).
+    function _regDigest(bytes32 ua, uint16 kind) internal pure returns (bytes32) {
+        return _regDigest(ua, kind, _none());
     }
 
     /// The stand-in PoP of `keyData` (no attributes) on any registry: the same bytes everywhere (UA-8 P1).
@@ -239,7 +243,7 @@ abstract contract UARegistryBase is Test {
     {
         bytes32 ua = UAKinds.uaOf(kind, keyData);
         r; // the PoP has no registry context (UA-8 P1); the parameter keeps the call sites
-        return _sig(keyData, UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, _regDigest(ua, a)));
+        return _sig(keyData, UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, _regDigest(ua, kind, a)));
     }
 
     function _register(UARegistry r, uint16 kind, bytes memory keyData) internal returns (bytes32) {
