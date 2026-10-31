@@ -46,7 +46,7 @@ mod ffi {
         pqz_key_hash: Vec<u8>,
         pqz_pop_hash: Vec<u8>,
         kem_record_hash: Vec<u8>,
-        portable_pop_digest: Vec<u8>,
+        portable_record_digest: Vec<u8>,
         registration_digest: Vec<u8>,
         message: Vec<u8>,
         has_member_digest: bool,
@@ -74,8 +74,6 @@ mod ffi {
         fn msg_tag() -> Vec<u8>;
         fn purpose_tag(purpose: &str) -> Result<Vec<u8>>;
         fn purpose_tag_v(purpose: &str, version: u32) -> Result<Vec<u8>>;
-        fn kem_record_tag() -> Vec<u8>;
-        fn pqz_key_record_tag() -> Vec<u8>;
         fn ua_of(kind: u16, key_data: &[u8]) -> Result<Vec<u8>>;
         fn derive_ua(kind: u16, key_data: &[u8], hedera_native: bool) -> Result<Vec<u8>>;
         fn native_id(kind: u16, raw: &[u8]) -> Result<Vec<u8>>;
@@ -90,8 +88,10 @@ mod ffi {
         fn is_member(kind: u16, hedera_native: bool) -> bool;
         fn ua_message(kind: u16, purpose: &[u8], digest: &[u8]) -> Result<Vec<u8>>;
         fn chain_key_hash(chain_id: u64) -> Vec<u8>;
-        fn portable_pop_digest(ua: &[u8], pqz_key_hash: &[u8], kem_record_hash: &[u8]) -> Result<Vec<u8>>;
-        fn registration_digest(portable: &[u8], pqz_pop_hash: &[u8]) -> Result<Vec<u8>>;
+        fn portable_domain_separator() -> Vec<u8>;
+        fn kem_record_hash(ua: &[u8], version: u64, kem_pk: &[u8]) -> Result<Vec<u8>>;
+        fn portable_record_digest(ua: &[u8], kind: u16, pqz_key_hash: &[u8], kem_record_hash: &[u8]) -> Result<Vec<u8>>;
+        fn registration_digest(ua: &[u8], kind: u16, pqz_key_hash: &[u8], kem_record_hash: &[u8], pqz_pop_hash: &[u8]) -> Result<Vec<u8>>;
         fn kem_record_digest(ua: &[u8], version: u64, kem_pk: &[u8]) -> Result<Vec<u8>>;
         fn kem_record_message(kind: u16, ua: &[u8], version: u64, kem_pk: &[u8]) -> Result<Vec<u8>>;
         // Optional inputs: an empty slice is absent (a proof hash of another length than 32 is UAPqzPopHash); the KEM record
@@ -107,9 +107,9 @@ mod ffi {
             kem_version: u64,
             kem_pk: &[u8],
         ) -> Result<HolderPop>;
-        fn pqz_reg_message(ua: &[u8], pqz_key: &[u8], kem_version: u64, kem_pk: &[u8]) -> Result<Vec<u8>>;
+        fn pqz_reg_message(kind: u16, ua: &[u8], pqz_key: &[u8], kem_version: u64, kem_pk: &[u8]) -> Result<Vec<u8>>;
         fn pqz_key_digest(ua: &[u8], pqz_key_hash: &[u8]) -> Result<Vec<u8>>;
-        fn pqz_key_record_digest(key_digest: &[u8], pqz_pop_hash: &[u8]) -> Result<Vec<u8>>;
+        fn pqz_key_record_digest(ua: &[u8], pqz_key_hash: &[u8], pqz_pop_hash: &[u8]) -> Result<Vec<u8>>;
         #[allow(clippy::too_many_arguments)]
         fn pqz_key_record_message(
             kind: u16,
@@ -120,7 +120,6 @@ mod ffi {
             pqz_pop_hash: &[u8],
             already_set: bool,
         ) -> Result<PqzKeyRecord>;
-        fn personal_sign_digest(digest: &[u8]) -> Result<Vec<u8>>;
         fn is_portable_purpose(tag: &[u8]) -> Result<bool>;
         fn ua_auth_domain_separator(generation: u32, chain_id: u64, registry: &[u8], chain_uid: &[u8]) -> Result<Vec<u8>>;
         #[allow(clippy::too_many_arguments)]
@@ -180,12 +179,6 @@ fn purpose_tag(purpose: &str) -> R<Vec<u8>> {
 fn purpose_tag_v(purpose: &str, version: u32) -> R<Vec<u8>> {
     guard(|| Ok(ua::purpose_tag_v(purpose, version)?.to_vec()))
 }
-fn kem_record_tag() -> Vec<u8> {
-    ua::ua8::kem_record_tag().to_vec()
-}
-fn pqz_key_record_tag() -> Vec<u8> {
-    ua::ua8::pqz_key_record_tag().to_vec()
-}
 fn ua_of(kind: u16, key_data: &[u8]) -> R<Vec<u8>> {
     guard(|| Ok(ua::ua_of(kind, key_data)?.to_vec()))
 }
@@ -228,11 +221,17 @@ fn ua_message(kind: u16, purpose: &[u8], digest: &[u8]) -> R<Vec<u8>> {
 fn chain_key_hash(chain_id: u64) -> Vec<u8> {
     ua::chain_key_hash(chain_id).to_vec()
 }
-fn portable_pop_digest(ua_id: &[u8], pqz_key_hash: &[u8], kem_record_hash: &[u8]) -> R<Vec<u8>> {
-    guard(|| Ok(ua::ua8::portable_pop_digest(&a(ua_id)?, &a(pqz_key_hash)?, &a(kem_record_hash)?).to_vec()))
+fn portable_domain_separator() -> Vec<u8> {
+    ua::ua8::PORTABLE_DOMAIN_SEPARATOR.to_vec()
 }
-fn registration_digest(portable: &[u8], pqz_pop_hash: &[u8]) -> R<Vec<u8>> {
-    guard(|| Ok(ua::ua8::registration_digest(&a(portable)?, &a(pqz_pop_hash)?).to_vec()))
+fn kem_record_hash(ua_id: &[u8], version: u64, kem_pk: &[u8]) -> R<Vec<u8>> {
+    guard(|| Ok(ua::ua8::kem_record_hash(&a(ua_id)?, version, kem_pk)?.to_vec()))
+}
+fn portable_record_digest(ua_id: &[u8], kind: u16, pqz_key_hash: &[u8], kem_record_hash: &[u8]) -> R<Vec<u8>> {
+    guard(|| Ok(ua::ua8::portable_record_digest(&a(ua_id)?, kind, &a(pqz_key_hash)?, &a(kem_record_hash)?).to_vec()))
+}
+fn registration_digest(ua_id: &[u8], kind: u16, pqz_key_hash: &[u8], kem_record_hash: &[u8], pqz_pop_hash: &[u8]) -> R<Vec<u8>> {
+    guard(|| Ok(ua::ua8::registration_digest(&a(ua_id)?, kind, &a(pqz_key_hash)?, &a(kem_record_hash)?, &a(pqz_pop_hash)?).to_vec()))
 }
 fn kem_record_digest(ua_id: &[u8], version: u64, kem_pk: &[u8]) -> R<Vec<u8>> {
     guard(|| Ok(ua::ua8::kem_record_digest(&a(ua_id)?, version, kem_pk)?.to_vec()))
@@ -264,7 +263,7 @@ fn holder_pop_message(
             pqz_key_hash: r.pqz_key_hash.to_vec(),
             pqz_pop_hash: r.pqz_pop_hash.to_vec(),
             kem_record_hash: r.kem_record_hash.to_vec(),
-            portable_pop_digest: r.portable_pop_digest.to_vec(),
+            portable_record_digest: r.portable_record_digest.to_vec(),
             registration_digest: r.registration_digest.to_vec(),
             message: r.message.to_vec(),
             has_member_digest: r.member_digest.is_some(),
@@ -272,14 +271,14 @@ fn holder_pop_message(
         })
     })
 }
-fn pqz_reg_message(ua_id: &[u8], pqz_key: &[u8], kem_version: u64, kem_pk: &[u8]) -> R<Vec<u8>> {
-    guard(|| Ok(ua::pqz_reg_message(&a(ua_id)?, pqz_key, kem(kem_version, kem_pk))?.to_vec()))
+fn pqz_reg_message(kind: u16, ua_id: &[u8], pqz_key: &[u8], kem_version: u64, kem_pk: &[u8]) -> R<Vec<u8>> {
+    guard(|| Ok(ua::pqz_reg_message(kind, &a(ua_id)?, pqz_key, kem(kem_version, kem_pk))?.to_vec()))
 }
 fn pqz_key_digest(ua_id: &[u8], pqz_key_hash: &[u8]) -> R<Vec<u8>> {
     guard(|| Ok(ua::ua8::pqz_key_digest(&a(ua_id)?, &a(pqz_key_hash)?).to_vec()))
 }
-fn pqz_key_record_digest(key_digest: &[u8], pqz_pop_hash: &[u8]) -> R<Vec<u8>> {
-    guard(|| Ok(ua::ua8::pqz_key_record_digest(&a(key_digest)?, &a(pqz_pop_hash)?).to_vec()))
+fn pqz_key_record_digest(ua_id: &[u8], pqz_key_hash: &[u8], pqz_pop_hash: &[u8]) -> R<Vec<u8>> {
+    guard(|| Ok(ua::ua8::pqz_key_record_digest(&a(ua_id)?, &a(pqz_key_hash)?, &a(pqz_pop_hash)?).to_vec()))
 }
 fn pqz_key_record_message(
     kind: u16, ua_id: &[u8], key_data: &[u8], pqz_key: &[u8], pqz_pop: &[u8], pqz_pop_hash: &[u8], already_set: bool,
@@ -298,9 +297,6 @@ fn pqz_key_record_message(
             member_digest: r.member_digest.map(|m| m.to_vec()).unwrap_or_default(),
         })
     })
-}
-fn personal_sign_digest(digest: &[u8]) -> R<Vec<u8>> {
-    guard(|| Ok(ua::personal_sign_digest(&a(digest)?).to_vec()))
 }
 fn is_portable_purpose(tag: &[u8]) -> R<bool> {
     guard(|| Ok(ua::ua8::is_portable_purpose(&a(tag)?)))

@@ -45,15 +45,24 @@ pub mod qobject {
         fn ua_message(self: Pin<&mut Self>, kind: i32, purpose: &QString, digest: &QString) -> QString;
         /// `chain_id` is a JS number: exact up to 2^53.
         #[qinvokable] #[cxx_name = "chainKeyHash"] fn chain_key_hash(self: Pin<&mut Self>, chain_id: f64) -> QString;
-        /// `keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)`; a hash is 32 zero bytes when absent.
-        #[qinvokable] #[cxx_name = "portablePopDigest"]
-        fn portable_pop_digest(self: Pin<&mut Self>, ua: &QString, pqz_key_hash: &QString, kem_record_hash: &QString) -> QString;
+        /// The portable EIP-712 domain separator `DS_P` (`EIP712Domain(string name,string version)` = ("SCaaS UA Portable", "1"),
+        /// no chain; typed-signing TS-D1): every portable digest is `keccak256(0x1901 ‖ DS_P ‖ hashStruct)`.
+        #[qinvokable] #[cxx_name = "portableDomainSeparator"] fn portable_domain_separator(self: Pin<&mut Self>) -> QString;
+        /// `hashStruct(UAKemRecord{ua, version, scheme, kemPkHash})`, the `kem` word of a portable record; (0, "0x") is the zero
+        /// record `UAKemRecord{ua, 0, 0, 0}` (no KEM record), otherwise the rules of `kemRecordDigest`.
+        #[qinvokable] #[cxx_name = "kemRecordHash"]
+        fn kem_record_hash(self: Pin<&mut Self>, ua: &QString, version: f64, kem_pk: &QString) -> QString;
+        /// typed `UAPortableRecord{ua, kind, pqzKeyHash, kem}`: what `R_REG` proves over at `register`; a hash is 32 zero bytes when absent.
+        #[qinvokable] #[cxx_name = "portableRecordDigest"]
+        fn portable_record_digest(self: Pin<&mut Self>, ua: &QString, kind: i32, pqz_key_hash: &QString, kem_record_hash: &QString) -> QString;
+        /// typed `UARegistration{record, pqzPopHash}`: what the signer's `pop` signs under `UAMessage(kind, POP_V2, ·)` (and a
+        /// native `msig` member signs itself, TS-D4).
         #[qinvokable] #[cxx_name = "registrationDigest"]
-        fn registration_digest(self: Pin<&mut Self>, portable: &QString, pqz_pop_hash: &QString) -> QString;
-        /// `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))`; `version` is a JS number (exact up to 2^53).
+        fn registration_digest(self: Pin<&mut Self>, ua: &QString, kind: i32, pqz_key_hash: &QString, kem_record_hash: &QString, pqz_pop_hash: &QString) -> QString;
+        /// typed `UAKemRecord{ua, version, scheme, kemPkHash}` that `setKemKey` signs; `version` is a JS number (exact up to 2^53).
         #[qinvokable] #[cxx_name = "kemRecordDigest"]
         fn kem_record_digest(self: Pin<&mut Self>, ua: &QString, version: f64, kem_pk: &QString) -> QString;
-        /// JSON `{pqzKeyHash, pqzPopHash, kemRecordHash, portablePopDigest, registrationDigest, message[, memberDigest]}`.
+        /// JSON `{pqzKeyHash, pqzPopHash, kemRecordHash, portableRecordDigest, registrationDigest, message[, memberDigest]}`.
         /// `key_data` is needed for an `msig` ("0x" otherwise); `pqz_key` / `pqz_pop` "" or "0x" = absent; `kem_version` 0 with
         /// an empty `kem_pk` = no KEM record. A key for a non-holder is `UAPqzHolder` / `UAKemHolder`.
         #[qinvokable] #[cxx_name = "holderPopMessage"]
@@ -66,25 +75,21 @@ pub mod qobject {
         /// ("0x" = absent); `already_set` = the registration has a PQZ key (`UAPqzKeySet`).
         #[qinvokable] #[cxx_name = "pqzKeyRecordMessage"]
         fn pqz_key_record_message(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, already_set: bool) -> QString;
-        /// What the PQZ key's `R_REG` proves over.
+        /// What the PQZ key's `R_REG` proves over: `UAMessage(0x0142, POP_V2, portableRecordDigest(…))` of the registering `kind`.
         #[qinvokable] #[cxx_name = "pqzRegMessage"]
-        fn pqz_reg_message(self: Pin<&mut Self>, ua: &QString, pqz_key: &QString, kem_version: f64, kem_pk: &QString) -> QString;
+        fn pqz_reg_message(self: Pin<&mut Self>, kind: i32, ua: &QString, pqz_key: &QString, kem_version: f64, kem_pk: &QString) -> QString;
         /// `UAMessage(kind, PURPOSE_KEM, kemRecordDigest(ua, version, kemPk))`: what the UA signs for `setKemKey`.
         #[qinvokable] #[cxx_name = "kemRecordMessage"]
         fn kem_record_message(self: Pin<&mut Self>, kind: i32, ua: &QString, version: f64, kem_pk: &QString) -> QString;
-        #[qinvokable] #[cxx_name = "kemRecordTag"] fn kem_record_tag(self: Pin<&mut Self>) -> QString;
-        #[qinvokable] #[cxx_name = "pqzKeyRecordTag"] fn pqz_key_record_tag(self: Pin<&mut Self>) -> QString;
-        /// `keccak256(PQZ_KEY_RECORD_TAG ‖ ua ‖ pqzKeyHash)`: what a later PQZ key's `R_REG` proves over.
+        /// typed `UAPqzKey{ua, pqzKeyHash}`: what a later PQZ key's `R_REG` proves over.
         #[qinvokable] #[cxx_name = "pqzKeyDigest"]
         fn pqz_key_digest(self: Pin<&mut Self>, ua: &QString, pqz_key_hash: &QString) -> QString;
-        /// `keccak256(pqzKeyDigest ‖ pqzPopHash)`: what `setPqzKey`'s signature signs under `UAMessage(kind, PURPOSE_PQZ_KEY, ·)`.
+        /// typed `UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}`: what `setPqzKey`'s signature signs under
+        /// `UAMessage(kind, PURPOSE_PQZ_KEY, ·)` (and a native `msig` member signs itself, TS-D4).
         #[qinvokable] #[cxx_name = "pqzKeyRecordDigest"]
-        fn pqz_key_record_digest(self: Pin<&mut Self>, key_digest: &QString, pqz_pop_hash: &QString) -> QString;
-        /// EIP-191 `personal_sign` of a 32-byte digest: what a code-less or EIP-7702-designator native `msig` member signs over the `memberDigest`
-        /// of a portable record (POP_V2, KEM, PQZ_KEY; ruling C7).
-        #[qinvokable] #[cxx_name = "personalSignDigest"]
-        fn personal_sign_digest(self: Pin<&mut Self>, digest: &QString) -> QString;
-        /// True for the three portable purposes (POP_V2, KEM, PQZ_KEY); false (see `lastError`) for a tag that is not 32 bytes.
+        fn pqz_key_record_digest(self: Pin<&mut Self>, ua: &QString, pqz_key_hash: &QString, pqz_pop_hash: &QString) -> QString;
+        /// True for the three portable purposes (POP_V2, KEM, PQZ_KEY), where a native `msig` member signs the record's typed
+        /// digest itself (TS-D4); false (see `lastError`) for a tag that is not 32 bytes.
         #[qinvokable] #[cxx_name = "isPortablePurpose"]
         fn is_portable_purpose(self: Pin<&mut Self>, tag: &QString) -> bool;
         #[qinvokable] #[cxx_name = "uaAuthDomainSeparator"]
@@ -267,11 +272,19 @@ impl qobject::UaKinds {
     pub fn chain_key_hash(self: Pin<&mut Self>, chain_id: f64) -> QString {
         self.hex(|| Ok(ua::chain_key_hash(id(chain_id)?).to_vec()))
     }
-    pub fn portable_pop_digest(self: Pin<&mut Self>, ua: &QString, pqz_key_hash: &QString, kem_record_hash: &QString) -> QString {
-        self.hex(|| Ok(ua::ua8::portable_pop_digest(&fixed(ua)?, &fixed(pqz_key_hash)?, &fixed(kem_record_hash)?).to_vec()))
+    pub fn portable_domain_separator(self: Pin<&mut Self>) -> QString {
+        self.hex(|| Ok(ua::ua8::PORTABLE_DOMAIN_SEPARATOR.to_vec()))
     }
-    pub fn registration_digest(self: Pin<&mut Self>, portable: &QString, pqz_pop_hash: &QString) -> QString {
-        self.hex(|| Ok(ua::ua8::registration_digest(&fixed(portable)?, &fixed(pqz_pop_hash)?).to_vec()))
+    pub fn kem_record_hash(self: Pin<&mut Self>, ua: &QString, version: f64, kem_pk: &QString) -> QString {
+        self.hex(|| Ok(from_ua(ua::ua8::kem_record_hash(&fixed(ua)?, id(version)?, &bytes(kem_pk)?))?.to_vec()))
+    }
+    pub fn portable_record_digest(self: Pin<&mut Self>, ua: &QString, kind: i32, pqz_key_hash: &QString, kem_record_hash: &QString) -> QString {
+        self.hex(|| Ok(ua::ua8::portable_record_digest(&fixed(ua)?, k(kind)?, &fixed(pqz_key_hash)?, &fixed(kem_record_hash)?).to_vec()))
+    }
+    pub fn registration_digest(self: Pin<&mut Self>, ua: &QString, kind: i32, pqz_key_hash: &QString, kem_record_hash: &QString, pqz_pop_hash: &QString) -> QString {
+        self.hex(|| {
+            Ok(ua::ua8::registration_digest(&fixed(ua)?, k(kind)?, &fixed(pqz_key_hash)?, &fixed(kem_record_hash)?, &fixed(pqz_pop_hash)?).to_vec())
+        })
     }
     pub fn kem_record_digest(self: Pin<&mut Self>, ua: &QString, version: f64, kem_pk: &QString) -> QString {
         self.hex(|| Ok(from_ua(ua::ua8::kem_record_digest(&fixed(ua)?, id(version)?, &bytes(kem_pk)?))?.to_vec()))
@@ -289,7 +302,7 @@ impl qobject::UaKinds {
             ))?;
             let mut o = serde_json::json!({
                 "pqzKeyHash": hx(&h.pqz_key_hash), "pqzPopHash": hx(&h.pqz_pop_hash), "kemRecordHash": hx(&h.kem_record_hash),
-                "portablePopDigest": hx(&h.portable_pop_digest), "registrationDigest": hx(&h.registration_digest), "message": hx(&h.message),
+                "portableRecordDigest": hx(&h.portable_record_digest), "registrationDigest": hx(&h.registration_digest), "message": hx(&h.message),
             });
             if let Some(m) = h.member_digest {
                 o["memberDigest"] = hx(&m).into();
@@ -313,30 +326,21 @@ impl qobject::UaKinds {
             Ok(o.to_string())
         }))
     }
-    pub fn pqz_reg_message(self: Pin<&mut Self>, ua: &QString, pqz_key: &QString, kem_version: f64, kem_pk: &QString) -> QString {
+    pub fn pqz_reg_message(self: Pin<&mut Self>, kind: i32, ua: &QString, pqz_key: &QString, kem_version: f64, kem_pk: &QString) -> QString {
         self.hex(|| {
             let kpk = bytes(kem_pk)?;
             let kem = (id(kem_version)? != 0 || !kpk.is_empty()).then(|| (id(kem_version).unwrap_or(0), kpk));
-            Ok(from_ua(ua::ua8::pqz_reg_message(&fixed(ua)?, &key(pqz_key)?, kem.as_ref().map(|(v, p)| (*v, &p[..]))))?.to_vec())
+            Ok(from_ua(ua::ua8::pqz_reg_message(k(kind)?, &fixed(ua)?, &key(pqz_key)?, kem.as_ref().map(|(v, p)| (*v, &p[..]))))?.to_vec())
         })
     }
     pub fn kem_record_message(self: Pin<&mut Self>, kind: i32, ua: &QString, version: f64, kem_pk: &QString) -> QString {
         self.hex(|| Ok(from_ua(ua::ua8::kem_record_message(k(kind)?, &fixed(ua)?, id(version)?, &bytes(kem_pk)?))?.to_vec()))
     }
-    pub fn kem_record_tag(self: Pin<&mut Self>) -> QString {
-        self.hex(|| Ok(ua::ua8::kem_record_tag().to_vec()))
-    }
-    pub fn pqz_key_record_tag(self: Pin<&mut Self>) -> QString {
-        self.hex(|| Ok(ua::ua8::pqz_key_record_tag().to_vec()))
-    }
     pub fn pqz_key_digest(self: Pin<&mut Self>, ua: &QString, pqz_key_hash: &QString) -> QString {
         self.hex(|| Ok(ua::ua8::pqz_key_digest(&fixed(ua)?, &fixed(pqz_key_hash)?).to_vec()))
     }
-    pub fn pqz_key_record_digest(self: Pin<&mut Self>, key_digest: &QString, pqz_pop_hash: &QString) -> QString {
-        self.hex(|| Ok(ua::ua8::pqz_key_record_digest(&fixed(key_digest)?, &fixed(pqz_pop_hash)?).to_vec()))
-    }
-    pub fn personal_sign_digest(self: Pin<&mut Self>, digest: &QString) -> QString {
-        self.hex(|| Ok(ua::ua8::personal_sign_digest(&fixed(digest)?).to_vec()))
+    pub fn pqz_key_record_digest(self: Pin<&mut Self>, ua: &QString, pqz_key_hash: &QString, pqz_pop_hash: &QString) -> QString {
+        self.hex(|| Ok(ua::ua8::pqz_key_record_digest(&fixed(ua)?, &fixed(pqz_key_hash)?, &fixed(pqz_pop_hash)?).to_vec()))
     }
     pub fn is_portable_purpose(self: Pin<&mut Self>, tag: &QString) -> bool {
         self.run(|| Ok(ua::ua8::is_portable_purpose(&fixed(tag)?)))

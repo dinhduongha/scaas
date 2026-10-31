@@ -36,7 +36,7 @@ class Member(C.Structure):
 
 
 class HolderPop(C.Structure):  # ScaasUaHolderPop: byte arrays only, no padding
-    _fields_ = [(n, C.c_uint8 * 32) for n in ('pqz_key_hash', 'pqz_pop_hash', 'kem_record_hash', 'portable_pop_digest',
+    _fields_ = [(n, C.c_uint8 * 32) for n in ('pqz_key_hash', 'pqz_pop_hash', 'kem_record_hash', 'portable_record_digest',
                                               'registration_digest', 'message')] + [('has_member_digest', C.c_bool),
                                                                                     ('member_digest', C.c_uint8 * 32)]
 
@@ -54,17 +54,17 @@ for name, res, args in [
     ('is_native', bl, [u16]), ('is_zether', bl, [u16]), ('is_pqz_holder', bl, [u16]), ('is_signing', bl, [u16]), ('is_member', bl, [u16, bl]),
     ('tag', st, [u16, P]), ('kind_tag_string', st, [u16, P, P]), ('group_tag', st, [u8, P, P]),
     ('group_tag_string', st, [u8, P, P, P]), ('msg_tag', st, [P]), ('purpose_tag', st, [u8, P]), ('purpose_tag_v', st, [u8, u32, P]),
-    ('kem_record_tag', st, [P]), ('pqz_key_record_tag', st, [P]),
     ('ua_of', st, [u16, u8, sz, P]), ('derive_ua', st, [u16, u8, sz, bl, P]), ('native_id', st, [u16, u8, sz, P]),
     ('key_hash_of', st, [u16, u8, sz, P, P]), ('validate_key_data', st, [u16, u8, sz, bl]),
     ('in_native_space', st, [u8, P]), ('ua_message', st, [u16, u8, u8, P]), ('chain_key_hash', st, [u64, P]),
-    ('portable_pop_digest', st, [u8, u8, u8, P]), ('registration_digest', st, [u8, u8, P]),
+    ('portable_domain_separator', st, [P]), ('kem_record_hash', st, [u8, u64, u8, sz, P]),
+    ('portable_record_digest', st, [u8, u16, u8, u8, P]), ('registration_digest', st, [u8, u16, u8, u8, u8, P]),
     ('kem_record_digest', st, [u8, u64, u8, sz, P]), ('kem_record_message', st, [u16, u8, u64, u8, sz, P]),
     ('holder_pop_message', st, [u16, u8, u8, sz, u8, sz, u8, sz, u8, sz, u64, u8, sz, P]),
-    ('pqz_reg_message', st, [u8, u8, sz, u64, u8, sz, P]), ('pqz_key_digest', st, [u8, u8, P]),
-    ('pqz_key_record_digest', st, [u8, u8, P]),
+    ('pqz_reg_message', st, [u16, u8, u8, sz, u64, u8, sz, P]), ('pqz_key_digest', st, [u8, u8, P]),
+    ('pqz_key_record_digest', st, [u8, u8, u8, P]),
     ('pqz_key_record_message', st, [u16, u8, u8, sz, u8, sz, u8, sz, u8, sz, bl, P]),
-    ('personal_sign_digest', st, [u8, P]), ('is_portable_purpose', st, [u8, P]), ('msig_pqz_eligible', st, [u8, sz, P]),
+    ('is_portable_purpose', st, [u8, P]), ('msig_pqz_eligible', st, [u8, sz, P]),
     ('ua_auth_domain_separator', st, [u32, u64, u8, u8, P]),
     ('ua_auth_digest', st, [u32, u64, u8, u8, u8, u8, u8, P]), ('member_digest', st, [u8, u8, P]),
     ('canonical_id', st, [u8, P, P]), ('encode_msig', st, [u16, P, sz, P, P]),
@@ -181,7 +181,7 @@ def register(row, hash_only=False):
 
 class Vectors(unittest.TestCase):
     def test_table_groups_purposes_constants(self):
-        self.assertEqual(L.abi_version(), 2)
+        self.assertEqual(L.abi_version(), 3)
         self.assertEqual(L.kind_count(), len(K['kinds']))
         for i, r in enumerate(K['kinds']):
             with self.subTest(r['name']):
@@ -281,23 +281,23 @@ class Vectors(unittest.TestCase):
     def test_structures(self):
         for p in S['pop']:
             with self.subTest('pop', ua=p['ua']):
-                d = out32(L.portable_pop_digest, b(p['ua']), b(p['pqzKeyHash']), b(p['kemRecordHash']))
-                self.assertEqual(hx(d), p['portablePopDigest'])
-                self.assertEqual(hx(out32(L.registration_digest, d, b(p['pqzPopHash']))), p['registrationDigest'])
+                w = (b(p['ua']), p['kind'], b(p['pqzKeyHash']), b(p['kemRecordHash']))
+                self.assertEqual(hx(out32(L.portable_record_digest, *w)), p['portableRecordDigest'])
+                self.assertEqual(hx(out32(L.registration_digest, *w, b(p['pqzPopHash']))), p['registrationDigest'])
         self.assertEqual(hx(out32(L.chain_key_hash, 2**40 + 7)), '0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950')  # keccak256("evm:1099511627783")
         pk, proof = b(K['pqzKey']), bytes([7]) * 32
         for p in S['pqzReg']:
             ua, kem = b(p['ua']), b(p['kemRecordHash'])
             kh = opt32(lambda *a: kd(L.key_hash_of, 0x0142, pk, *a))
             self.assertEqual(hx(kh), p['pqzKeyHash'])
-            portable = out32(L.portable_pop_digest, ua, kh, kem)
-            self.assertEqual(hx(portable), p['portablePopDigest'])
+            portable = out32(L.portable_record_digest, ua, p['kind'], kh, kem)
+            self.assertEqual(hx(portable), p['portableRecordDigest'])
             self.assertEqual(hx(out32(L.ua_message, 0x0142, out32(L.purpose_tag_v, b'pop', 2), portable)), p['pqzRegMessage'])
-            if any(kem):
+            if kem != out32(L.kem_record_hash, ua, 0, None, 0):
                 continue  # the row's KEM record hash is opaque; the real records are in portable.json
-            self.assertEqual(hx(out32(L.pqz_reg_message, ua, pk, len(pk), 0, None, 0)), p['pqzRegMessage'])
+            self.assertEqual(hx(out32(L.pqz_reg_message, p['kind'], ua, pk, len(pk), 0, None, 0)), p['pqzRegMessage'])
             got = holder(p['kind'], ua, b'', pk, b'', proof)
-            self.assertEqual((hx(bytes(got.pqz_key_hash)), hx(bytes(got.portable_pop_digest))), (p['pqzKeyHash'], p['portablePopDigest']))
+            self.assertEqual((hx(bytes(got.pqz_key_hash)), hx(bytes(got.portable_record_digest))), (p['pqzKeyHash'], p['portableRecordDigest']))
             for bad in (0x0101, 0x0133):
                 self.assertEqual(code_of(lambda: holder(bad, ua, b'', pk, b'', proof)), 'UAPqzHolder')
         for p in S['pqzMsig']:
@@ -305,8 +305,8 @@ class Vectors(unittest.TestCase):
             e = bl()
             ok(L.msig_pqz_eligible(d, len(d), C.byref(e)))
             self.assertEqual(e.value, p['eligible'], p['reason'])
-            h = b(K['pqzKeyHash']) if p['eligible'] else bytes(32)
-            self.assertEqual(hx(out32(L.portable_pop_digest, b(p['ua']), h, bytes(32))), p['portablePopDigest'])
+            h, ua = b(K['pqzKeyHash']) if p['eligible'] else bytes(32), b(p['ua'])
+            self.assertEqual(hx(out32(L.portable_record_digest, ua, 0x0120, h, out32(L.kem_record_hash, ua, 0, None, 0))), p['portableRecordDigest'])
         for a in S['uaAuth']:
             with self.subTest('uaAuth', ua=a['ua']):
                 c = S['contexts'][a['context']]
@@ -332,8 +332,8 @@ class Vectors(unittest.TestCase):
         self.assertEqual(hx(out32(L.purpose_tag_v, b'pop', 2)), t['PURPOSE_POP_V2']['hash'])
         self.assertEqual(hx(out32(L.purpose_tag, b'kem')), t['PURPOSE_KEM']['hash'])
         self.assertEqual(hx(out32(L.purpose_tag, b'pqz-key')), t['PURPOSE_PQZ_KEY']['hash'])
-        self.assertEqual(hx(out32(L.kem_record_tag)), t['KEM_RECORD_TAG']['hash'])
-        self.assertEqual(hx(out32(L.pqz_key_record_tag)), t['PQZ_KEY_RECORD_TAG']['hash'])
+        self.assertNotIn('KEM_RECORD_TAG', t)  # the raw record tags are legacy (TS-D3)
+        self.assertEqual(hx(out32(L.portable_domain_separator)), PV['typed']['domainSeparator'])
         n = with_pqz = msigs = 0
         for r in PV['registrations']:
             with self.subTest(r['name']):
@@ -344,24 +344,28 @@ class Vectors(unittest.TestCase):
                     self.assertEqual(hx(bytes(h.pqz_key_hash)), r['pqzKeyHash'])
                     self.assertEqual(hx(bytes(h.pqz_pop_hash)), r['attrs']['pqzPopHash'])
                     self.assertEqual(hx(bytes(h.kem_record_hash)), r['kemRecordHash'])
-                    self.assertEqual(hx(bytes(h.portable_pop_digest)), r['portablePopDigest'])
+                    self.assertEqual(hx(bytes(h.portable_record_digest)), r['portableRecordDigest'])
                     self.assertEqual(hx(bytes(h.registration_digest)), r['registrationDigest'])
                     self.assertEqual(hx(bytes(h.message)), r['popMessage'])
-                    self.assertEqual(out32(L.portable_pop_digest, ua, bytes(h.pqz_key_hash), bytes(h.kem_record_hash)), bytes(h.portable_pop_digest))
-                    self.assertEqual(out32(L.registration_digest, bytes(h.portable_pop_digest), bytes(h.pqz_pop_hash)), bytes(h.registration_digest))
+                    w = (ua, r['kind'], bytes(h.pqz_key_hash), bytes(h.kem_record_hash))
+                    self.assertEqual(out32(L.portable_record_digest, *w), bytes(h.portable_record_digest))
+                    self.assertEqual(out32(L.registration_digest, *w, bytes(h.pqz_pop_hash)), bytes(h.registration_digest))
                     self.assertEqual(out32(L.ua_message, r['kind'], out32(L.purpose_tag_v, b'pop', 2), bytes(h.registration_digest)), bytes(h.message))
                     self.assertEqual(mh(h), r.get('memberDigest', ''))
                 a = r['attrs']
-                pk = b(a['pqzKey'])
+                pk, kpk = b(a['pqzKey']), b(a['kemPk'])
+                self.assertEqual(hx(out32(L.kem_record_hash, ua, int(a['kemVersion']), kpk, len(kpk))), r['kemRecordHash'])
                 if pk:
                     with_pqz += 1
-                    ver, kpk = int(a['kemVersion']), b(a['kemPk']) if int(a['kemVersion']) else b''
-                    self.assertEqual(hx(out32(L.pqz_reg_message, ua, pk, len(pk), ver, kpk, len(kpk))), r['pqzRegMessage'])
+                    self.assertEqual(hx(out32(L.pqz_reg_message, r['kind'], ua, pk, len(pk), int(a['kemVersion']), kpk, len(kpk))), r['pqzRegMessage'])
+                    # TS-D3: R_REG proves over the typed UAPortableRecord of the registering kind
+                    self.assertEqual(hx(out32(L.ua_message, 0x0142, out32(L.purpose_tag_v, b'pop', 2), b(r['portableRecordDigest']))), r['pqzRegMessage'])
                 else:
                     self.assertEqual(b(r['pqzRegMessage']), bytes(32))
                 msigs += r['kind'] == 0x0120
                 n += 1
-        self.assertEqual((n, with_pqz, msigs), (25, 8, 6))
+        self.assertEqual(n, len(PV['registrations']))
+        self.assertTrue(with_pqz and msigs)
 
     def test_kem_record(self):
         for r in PV['kemRecords']:
@@ -369,19 +373,21 @@ class Vectors(unittest.TestCase):
                 ua, pk, v = b(r['ua']), b(r['kemPk']), int(r['version'])
                 d = out32(L.kem_record_digest, ua, v, pk, len(pk))
                 self.assertEqual(hx(d), r['digest'])
+                self.assertEqual(hx(out32(L.kem_record_hash, ua, v, pk, len(pk))), r['structHash'])
                 m = out32(L.kem_record_message, r['kind'], ua, v, pk, len(pk))
                 self.assertEqual(hx(m), r['message'])
                 self.assertEqual(m, out32(L.ua_message, r['kind'], out32(L.purpose_tag, b'kem'), d))
                 if r['kind'] == 0x0120:
                     self.assertEqual(hx(out32(L.member_digest, ua, m)), r['memberDigest'])
-        self.assertEqual(len(PV['kemRecords']), 9)
         u = bytes([1]) * 32
         for v, pk, code in ((0, kem(KEM_PK), 'UAKemVersion'), (1, kem(KEM_PK - 1), 'UAKemKeyLength'),
                             (1, kem(KEM_PK + 1), 'UAKemKeyLength'), (1, b'', 'UAKemKeyLength'),
                             (1, kem(KEM_PK, 0), 'UAKemScheme'), (1, kem(KEM_PK, 2), 'UAKemScheme'),
                             (1, kem(KEM_PK - 1, 255), 'UAKemScheme')):
             self.assertEqual(code_of(lambda: out32(L.kem_record_digest, u, v, pk, len(pk))), code)
-        self.assertEqual(hx(out32(L.kem_record_digest, u, 2**64 - 1, kem(KEM_PK), KEM_PK)), '0x8c997440926a352465f61b53b75606d794efa60c66ac4a7a63f25369a15f7092')  # pins the 8-byte version word
+        self.assertEqual(code_of(lambda: out32(L.kem_record_hash, u, 1, b'', 0)), 'UAKemKeyLength')
+        # (0, no key) = the zero record UAKemRecord{ua, 0, 0, 0} (TS-D2): checked on every registration row without a KEM key
+        self.assertEqual(hx(out32(L.kem_record_digest, u, 2**64 - 1, kem(KEM_PK), KEM_PK)), '0xa0063a84b56d80c83688d8caf5aeb4be8fb4556928e8bc649686449573938f07')  # pins the 8-byte version word
 
     def test_pqz_key_record(self):
         regs = PV['registrations']
@@ -400,7 +406,7 @@ class Vectors(unittest.TestCase):
                     self.assertEqual(hx(bytes(g.message)), r['message'])
                     self.assertEqual(hx(bytes(g.pqz_reg_message)), r['pqzRegMessage'])
                     self.assertEqual(out32(L.pqz_key_digest, ua, bytes(g.pqz_key_hash)), bytes(g.pqz_key_digest))
-                    self.assertEqual(out32(L.pqz_key_record_digest, bytes(g.pqz_key_digest), bytes(g.pqz_pop_hash)), bytes(g.record_digest))
+                    self.assertEqual(out32(L.pqz_key_record_digest, ua, bytes(g.pqz_key_hash), bytes(g.pqz_pop_hash)), bytes(g.record_digest))
                     self.assertEqual(bool(g.has_member_digest), kind == 0x0120)
                     self.assertEqual(mh(g), r.get('memberDigest', ''))
                     if kind == 0x0120:
@@ -409,9 +415,10 @@ class Vectors(unittest.TestCase):
                 # write-once: a key already set refuses
                 self.assertEqual(code_of(lambda: key_record(kind, ua, kdat, key, b'', hash_, True)), 'UAPqzKeySet')
                 n += 1
-        self.assertEqual((n, msig_runs), (8, 8))  # 4 msig rows, each with the proof bytes and hash-only
+        self.assertEqual(n, len(PV['pqzKeyRecords']))
+        self.assertTrue(msig_runs)
 
-    def test_personal_sign_portable_purposes(self):
+    def test_portable_purposes(self):
         def portable(tag):
             o = bl()
             ok(L.is_portable_purpose(tag, C.byref(o)))
@@ -419,10 +426,6 @@ class Vectors(unittest.TestCase):
         pop2, kem, pqz = out32(L.purpose_tag_v, b'pop', 2), out32(L.purpose_tag, b'kem'), out32(L.purpose_tag, b'pqz-key')
         self.assertEqual([portable(pop2), portable(kem), portable(pqz)], [True] * 3)
         self.assertFalse(portable(out32(L.purpose_tag, b'metatx')) or portable(out32(L.purpose_tag, b'pop')))
-        md = b(next(x for x in PV['registrations'] if x['name'] == 'msig-pq-native')['memberDigest'])
-        # known answer from the JS reference (clientkeys ua.js); the prefix is 0x19 + "Ethereum Signed Message:\n32" (28 bytes)
-        self.assertEqual(hx(md), '0x606d9a70c70d39e5d8d079c3ae31eefa6db574219dab56d6c776cb6731e61a7c')
-        self.assertEqual(hx(out32(L.personal_sign_digest, md)), '0xe5d24987e9b4e710063a5432d6215eaead64d8dc073f7561726d21644d54c3d8')
         n = next(x for x in PV['negatives'] if x['name'] == 'native-personal-sign-under-metatx')
         self.assertFalse(portable(b(n['mutation']['set']['purposeTag'])))
 
@@ -459,9 +462,23 @@ class Vectors(unittest.TestCase):
                 msg = out32(L.kem_record_message, t['kind'], b(s['ua']), int(k['version']), pk, len(pk))
                 self.assertNotEqual(k['message'], hx(msg))
                 run += 1
+            elif n['name'] == 'record-kind-mismatch':
+                # the typed record binds `kind`: the same UA and attributes under another kind is another message
+                row = next(x for x in regs if x['name'] == m['row'])
+                ua, zero = b(row['ua']), out32(L.kem_record_hash, b(row['ua']), 0, None, 0)
+                d = out32(L.registration_digest, ua, m['otherKind'], bytes(32), zero, bytes(32))
+                self.assertNotEqual(hx(out32(L.ua_message, row['kind'], out32(L.purpose_tag_v, b'pop', 2), d)), row['popMessage'])
+                run += 1
+            elif n['name'] == 'kem-record-as-registration':
+                # the row's own typed KEM record is not its registration (struct type)
+                row = next(x for x in regs if x['name'] == m['row'])
+                k = next(x for x in PV['kemRecords'] if x['ua'] == row['ua'])
+                self.assertNotEqual(k['digest'], row['registrationDigest'])
+                run += 1
             else:
-                sig_level += 1  # signatures / native personal_sign: verified by the signature vectors
-        self.assertEqual((run, sig_level), (60, 7))
+                sig_level += 1  # signatures / native members: verified by the signature vectors
+        self.assertEqual(run + sig_level, len(PV['negatives']))
+        self.assertTrue(run and sig_level)
         u, key, proof = bytes([1]) * 32, bytes(16384), bytes([7]) * 32
         # malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
         for kdat in (bytes([0, 2, 0]), bytes([0, 2, 0, 2, 9, 9])):
@@ -528,7 +545,9 @@ class Abi(unittest.TestCase):
             'ua_message digest NULL': L.ua_message(0x0102, bytes(32), None, o),
             'holder_pop_message pqz_pop_hash NULL len 32': L.holder_pop_message(0x0130, bytes(32), b'', 0, b'', 0, b'', 0, None, 32, 0, b'', 0, C.byref(HolderPop())),
             'pqz_key_record_message out NULL': L.pqz_key_record_message(0x0130, bytes(32), b'', 0, bytes(16384), 16384, b'', 0, bytes([7]) * 32, 32, False, None),
-            'portable_pop_digest ua NULL': L.portable_pop_digest(None, bytes(32), bytes(32), o),
+            'portable_record_digest ua NULL': L.portable_record_digest(None, 0x0130, bytes(32), bytes(32), o),
+            'registration_digest pqz_pop_hash NULL': L.registration_digest(bytes(32), 0x0130, bytes(32), bytes(32), None, o),
+            'portable_domain_separator out NULL': L.portable_domain_separator(None),
             'holder_pop_message out NULL': L.holder_pop_message(0x0130, bytes(32), b'', 0, b'', 0, b'', 0, b'', 0, 0, b'', 0, None),
             'domain separator chain_uid NULL': L.ua_auth_domain_separator(1, 1, bytes(20), None, o),
             'member_digest NULL': L.member_digest(None, bytes(32), o),

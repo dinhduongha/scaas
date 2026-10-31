@@ -40,7 +40,7 @@ if(BUILD_TESTING)
   target_link_libraries(vectors_test PRIVATE ScaasUa::scaas_ua nlohmann_json::nlohmann_json)
   target_compile_definitions(vectors_test PRIVATE SCAAS_UA_VECTORS_DIR="${SCAAS_UA_VECTORS_DIR}")
   foreach(t table_groups_purposes_constants valid_rows invalid_rows natives_native_space_canonical_ids messages structures portable kem_record pqz_key_record
-                 personal_sign_portable_purposes holder_refusals)
+                 portable_purposes holder_refusals)
     add_test(NAME ${t} COMMAND vectors_test ${t})
   endforeach()
 endif()

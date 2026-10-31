@@ -161,22 +161,22 @@ static void structures() {
     Bytes pk = bytes(load("kinds.json")["pqzKey"]);
     Bytes proof(32, 7);
     for (auto& p : s["pop"]) {
-        Bytes portable = portablePopDigest(bytes(p["ua"]), bytes(p["pqzKeyHash"]), bytes(p["kemRecordHash"]));
-        CHECK(hx(portable) == p["portablePopDigest"].get<std::string>(), "portablePopDigest");
-        CHECK(hx(registrationDigest(portable, bytes(p["pqzPopHash"]))) == p["registrationDigest"].get<std::string>(), "registrationDigest");
+        Bytes ua = bytes(p["ua"]), kh = bytes(p["pqzKeyHash"]), kr = bytes(p["kemRecordHash"]);
+        CHECK(hx(portableRecordDigest(ua, kind(p["kind"]), kh, kr)) == p["portableRecordDigest"].get<std::string>(), "portableRecordDigest");
+        CHECK(hx(registrationDigest(ua, kind(p["kind"]), kh, kr, bytes(p["pqzPopHash"]))) == p["registrationDigest"].get<std::string>(), "registrationDigest");
     }
     CHECK(hx(chainKeyHash(0x10000000007ULL)) == "0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950", "chainKeyHash");  // keccak256("evm:1099511627783")
     for (auto& p : s["pqzReg"]) {
         Bytes ua = bytes(p["ua"]), kem = bytes(p["kemRecordHash"]), h = *keyHashOf(0x0142, pk);
         CHECK(hx(h) == p["pqzKeyHash"].get<std::string>(), "pqzReg keyHash");
-        Bytes portable = portablePopDigest(ua, h, kem);
-        CHECK(hx(portable) == p["portablePopDigest"].get<std::string>(), "pqzReg portable");
+        Bytes portable = portableRecordDigest(ua, kind(p["kind"]), h, kem);
+        CHECK(hx(portable) == p["portableRecordDigest"].get<std::string>(), "pqzReg portable");
         CHECK(hx(uaMessage(0x0142, purposeTag("pop", 2), portable)) == p["pqzRegMessage"].get<std::string>(), "pqzReg message");
-        if (kem != Bytes(32)) continue;  // the row's KEM record hash is opaque; the real records are in portable.json
-        CHECK(hx(pqzRegMessage(ua, pk)) == p["pqzRegMessage"].get<std::string>(), "pqzRegMessage");
+        if (kem != kemRecordHash(ua, 0, {})) continue;  // the row's KEM record hash is opaque; the real records are in portable.json
+        CHECK(hx(pqzRegMessage(kind(p["kind"]), ua, pk)) == p["pqzRegMessage"].get<std::string>(), "pqzRegMessage");
         auto got = holderPopMessage(kind(p["kind"]), ua, {}, pk, std::nullopt, proof);
         CHECK(hx(got.pqzKeyHash) == p["pqzKeyHash"].get<std::string>(), "holder pqzKeyHash");
-        CHECK(hx(got.portablePopDigest) == p["portablePopDigest"].get<std::string>(), "holder portable");
+        CHECK(hx(got.portableRecordDigest) == p["portableRecordDigest"].get<std::string>(), "holder portable");
         CHECK(code_of([&] { holderPopMessage(0x0101, ua, {}, pk, std::nullopt, proof); }) == "UAPqzHolder", "classical holder");
         CHECK(code_of([&] { holderPopMessage(0x0133, ua, {}, pk, std::nullopt, proof); }) == "UAPqzHolder", "slhdsa holder");
     }
@@ -185,8 +185,9 @@ static void structures() {
         Bytes d = bytes(p["keyData"]);
         CHECK(msigPqzEligible(d) == p["eligible"].get<bool>(), p["reason"].get<std::string>());
         CHECK(hx(deriveUA(0x0120, d, false)) == p["ua"].get<std::string>(), "pqzMsig ua");
-        CHECK(hx(portablePopDigest(bytes(p["ua"]), p["eligible"].get<bool>() ? eligibleHash : Bytes(32), Bytes(32))) ==
-                  p["portablePopDigest"].get<std::string>(), "pqzMsig portable");
+        Bytes ua = bytes(p["ua"]);
+        CHECK(hx(portableRecordDigest(ua, 0x0120, p["eligible"].get<bool>() ? eligibleHash : Bytes(32), kemRecordHash(ua, 0, {}))) ==
+                  p["portableRecordDigest"].get<std::string>(), "pqzMsig portable");
     }
     for (auto& a : s["uaAuth"]) {
         auto& c = s["contexts"][a["context"].get<std::string>()];
@@ -232,8 +233,8 @@ static void portable() {
     CHECK(hx(purposeTag("pop", 2)) == t["PURPOSE_POP_V2"]["hash"].get<std::string>(), "POP_V2");
     CHECK(hx(purposeTag("kem")) == t["PURPOSE_KEM"]["hash"].get<std::string>(), "KEM");
     CHECK(hx(purposeTag("pqz-key")) == t["PURPOSE_PQZ_KEY"]["hash"].get<std::string>(), "PQZ_KEY");
-    CHECK(hx(kemRecordTag()) == t["KEM_RECORD_TAG"]["hash"].get<std::string>(), "KEM_RECORD_TAG");
-    CHECK(hx(pqzKeyRecordTag()) == t["PQZ_KEY_RECORD_TAG"]["hash"].get<std::string>(), "PQZ_KEY_RECORD_TAG");
+    CHECK(!t.contains("KEM_RECORD_TAG"), "the raw record tags are legacy (TS-D3)");
+    CHECK(hx(portableDomainSeparator()) == p["typed"]["domainSeparator"].get<std::string>(), "DS_P");
     int n = 0, withPqz = 0, msigs = 0;
     for (auto& r : p["registrations"]) {
         std::string name = r["name"].get<std::string>();
@@ -244,28 +245,31 @@ static void portable() {
             CHECK(hx(h.pqzKeyHash) == r["pqzKeyHash"].get<std::string>(), name);
             CHECK(hx(h.pqzPopHash) == r["attrs"]["pqzPopHash"].get<std::string>(), name);
             CHECK(hx(h.kemRecordHash) == r["kemRecordHash"].get<std::string>(), name);
-            CHECK(hx(h.portablePopDigest) == r["portablePopDigest"].get<std::string>(), name);
+            CHECK(hx(h.portableRecordDigest) == r["portableRecordDigest"].get<std::string>(), name);
             CHECK(hx(h.registrationDigest) == r["registrationDigest"].get<std::string>(), name);
             CHECK(hx(h.message) == r["popMessage"].get<std::string>(), name);
-            CHECK(portablePopDigest(ua, h.pqzKeyHash, h.kemRecordHash) == h.portablePopDigest, name);
-            CHECK(registrationDigest(h.portablePopDigest, h.pqzPopHash) == h.registrationDigest, name);
+            CHECK(portableRecordDigest(ua, kind(r["kind"]), h.pqzKeyHash, h.kemRecordHash) == h.portableRecordDigest, name);
+            CHECK(registrationDigest(ua, kind(r["kind"]), h.pqzKeyHash, h.kemRecordHash, h.pqzPopHash) == h.registrationDigest, name);
             CHECK(uaMessage(kind(r["kind"]), purposeTag("pop", 2), h.registrationDigest) == h.message, name);
             CHECK(mh(h.memberDigest) == opt_hex(r, "memberDigest"), name);
         }
         auto& a = r["attrs"];
-        Bytes pk = bytes(a["pqzKey"]);
+        Bytes pk = bytes(a["pqzKey"]), kpk = bytes(a["kemPk"]);
+        uint64_t ver = a["kemVersion"].get<uint64_t>();
+        CHECK(hx(kemRecordHash(ua, ver, kpk)) == r["kemRecordHash"].get<std::string>(), name);
         if (!pk.empty()) {
             ++withPqz;
-            uint64_t ver = a["kemVersion"].get<uint64_t>();
-            std::optional<Kem> kem = ver ? std::optional<Kem>(Kem{ver, bytes(a["kemPk"])}) : std::nullopt;
-            CHECK(hx(pqzRegMessage(ua, pk, kem)) == r["pqzRegMessage"].get<std::string>(), name);
+            std::optional<Kem> kem = kpk.empty() ? std::nullopt : std::optional<Kem>(Kem{ver, kpk});
+            CHECK(hx(pqzRegMessage(kind(r["kind"]), ua, pk, kem)) == r["pqzRegMessage"].get<std::string>(), name);
+            // TS-D3: R_REG proves over the typed UAPortableRecord of the registering kind
+            CHECK(hx(uaMessage(0x0142, purposeTag("pop", 2), bytes(r["portableRecordDigest"]))) == r["pqzRegMessage"].get<std::string>(), name);
         } else {
             CHECK(bytes(r["pqzRegMessage"]) == Bytes(32), name);
         }
         if (kind(r["kind"]) == 0x0120) ++msigs;
         ++n;
     }
-    CHECK(n == 25 && withPqz == 8 && msigs == 6, "registration counts");
+    CHECK(n == int(p["registrations"].size()) && withPqz && msigs, "registration counts");
 }
 
 static void kem_record() {
@@ -276,19 +280,20 @@ static void kem_record() {
         uint64_t v = r["version"].get<uint64_t>();
         Bytes d = kemRecordDigest(ua, v, pk), m = kemRecordMessage(kind(r["kind"]), ua, v, pk);
         CHECK(hx(d) == r["digest"].get<std::string>(), id);
+        CHECK(hx(kemRecordHash(ua, v, pk)) == r["structHash"].get<std::string>(), id);
         CHECK(hx(m) == r["message"].get<std::string>(), id);
         CHECK(m == uaMessage(kind(r["kind"]), purposeTag("kem"), d), id);
         if (kind(r["kind"]) == 0x0120) CHECK(hx(memberDigest(ua, m)) == r["memberDigest"].get<std::string>(), id);
     }
-    CHECK(p["kemRecords"].size() == 9, "kemRecords size");
     Bytes u(32, 1);
     auto kem = [](size_t n, uint8_t scheme = 1) { Bytes k(n); k[0] = scheme; return k; };  // scheme byte, zeros
     CHECK(code_of([&] { kemRecordDigest(u, 0, kem(kKemPkLength)); }) == "UAKemVersion", "version 0");
     CHECK(code_of([&] { kemRecordDigest(u, 1, kem(kKemPkLength - 1)); }) == "UAKemKeyLength", "short key");
     CHECK(code_of([&] { kemRecordDigest(u, 1, kem(kKemPkLength + 1)); }) == "UAKemKeyLength", "long key");
     CHECK(code_of([&] { kemRecordDigest(u, 1, Bytes{}); }) == "UAKemKeyLength", "empty key");
+    CHECK(code_of([&] { kemRecordHash(u, 1, Bytes{}); }) == "UAKemKeyLength", "empty key (hash)");
     for (uint8_t scheme : {0, 2, 255}) CHECK(code_of([&] { kemRecordDigest(u, 1, kem(kKemPkLength, scheme)); }) == "UAKemScheme", "scheme not enabled");
-    CHECK(hx(kemRecordDigest(u, UINT64_MAX, kem(kKemPkLength))) == "0x8c997440926a352465f61b53b75606d794efa60c66ac4a7a63f25369a15f7092", "max version");  // pins the 8-byte version word
+    CHECK(hx(kemRecordDigest(u, UINT64_MAX, kem(kKemPkLength))) == "0xa0063a84b56d80c83688d8caf5aeb4be8fb4556928e8bc649686449573938f07", "max version");  // pins the 8-byte version word
 }
 
 static void pqz_key_record() {
@@ -310,7 +315,7 @@ static void pqz_key_record() {
             CHECK(hx(g.message) == r["message"].get<std::string>(), name);
             CHECK(hx(g.pqzRegMessage) == r["pqzRegMessage"].get<std::string>(), name);
             CHECK(pqzKeyDigest(ua, g.pqzKeyHash) == g.pqzKeyDigest, name);
-            CHECK(pqzKeyRecordDigest(g.pqzKeyDigest, g.pqzPopHash) == g.recordDigest, name);
+            CHECK(pqzKeyRecordDigest(ua, g.pqzKeyHash, g.pqzPopHash) == g.recordDigest, name);
             CHECK(g.memberDigest.has_value() == (k == 0x0120), name);
             CHECK(mh(g.memberDigest) == opt_hex(r, "memberDigest"), name);
             if (k == 0x0120) { ++msigRows; CHECK(memberDigest(ua, g.message) == *g.memberDigest, name); }
@@ -319,18 +324,13 @@ static void pqz_key_record() {
         CHECK(code_of([&] { pqzKeyRecordMessage(k, ua, kd, key, std::nullopt, hash, true); }) == "UAPqzKeySet", name);
         ++n;
     }
-    CHECK(n == 8 && msigRows == 8, "pqzKeyRecords counts");  // 4 msig rows, each with the proof bytes and hash-only
+    CHECK(n == int(p["pqzKeyRecords"].size()) && msigRows, "pqzKeyRecords counts");
 }
 
-static void personal_sign_portable_purposes() {
+static void portable_purposes() {
     json p = load("portable.json");
     CHECK(isPortablePurpose(purposeTag("pop", 2)) && isPortablePurpose(purposeTag("kem")) && isPortablePurpose(purposeTag("pqz-key")), "portable");
     CHECK(!isPortablePurpose(purposeTag("metatx")) && !isPortablePurpose(purposeTag("pop")), "not portable");
-    Bytes md = bytes(byName(p["registrations"], "name", "msig-pq-native")["memberDigest"]);
-    // known answer from the JS reference (clientkeys ua.js); the prefix is 0x19 + "Ethereum Signed Message:\n32" (28 bytes);
-    // personalSignDigest builds it in Rust, so no C++ "\x19E" escape (greedy hex) is involved
-    CHECK(hx(md) == "0x606d9a70c70d39e5d8d079c3ae31eefa6db574219dab56d6c776cb6731e61a7c", "memberDigest");
-    CHECK(hx(personalSignDigest(md)) == "0xe5d24987e9b4e710063a5432d6215eaead64d8dc073f7561726d21644d54c3d8", "personalSignDigest");
     auto& n = byName(p["negatives"], "name", "native-personal-sign-under-metatx");
     CHECK(!isPortablePurpose(bytes(n["mutation"]["set"]["purposeTag"])), "metatx is UAAuth");
 }
@@ -377,11 +377,23 @@ static void holder_refusals() {
             Bytes msg = kemRecordMessage(kind(t["kind"]), bytes(set["ua"]), k["version"].get<uint64_t>(), bytes(k["kemPk"]));
             CHECK(hx(msg) != k["message"].get<std::string>(), name);
             ++run;
+        } else if (name == "record-kind-mismatch") {
+            // the typed record binds `kind`: the same UA and attributes under another kind is another message
+            const json& row = byName(regs, "name", m["row"].get<std::string>());
+            Bytes ua = bytes(row["ua"]);
+            Bytes d = registrationDigest(ua, kind(m["otherKind"]), Bytes(32), kemRecordHash(ua, 0, {}), Bytes(32));
+            CHECK(hx(uaMessage(kind(row["kind"]), purposeTag("pop", 2), d)) != row["popMessage"].get<std::string>(), name);
+            ++run;
+        } else if (name == "kem-record-as-registration") {
+            // the row's own typed KEM record is not its registration (struct type)
+            const json& row = byName(regs, "name", m["row"].get<std::string>());
+            CHECK(byName(p["kemRecords"], "ua", row["ua"].get<std::string>())["digest"] != row["registrationDigest"], name);
+            ++run;
         } else {
-            ++sigLevel;  // signatures / native personal_sign: verified by the signature vectors
+            ++sigLevel;  // signatures / native members: verified by the signature vectors
         }
     }
-    CHECK(run == 60 && sigLevel == 7, "negatives counts");
+    CHECK(run + sigLevel == int(p["negatives"].size()) && run && sigLevel, "negatives counts");
     Bytes u(32, 1), key(16384), proof(32, 7);
     // malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
     for (Bytes kd : {Bytes{0, 2, 0}, Bytes{0, 2, 0, 2, 9, 9}})
@@ -401,7 +413,7 @@ int main(int argc, char** argv) {
         {"table_groups_purposes_constants", table_groups_purposes_constants}, {"valid_rows", valid_rows},
         {"invalid_rows", invalid_rows}, {"natives_native_space_canonical_ids", natives_native_space_canonical_ids},
         {"messages", messages}, {"structures", structures}, {"portable", portable}, {"kem_record", kem_record},
-        {"pqz_key_record", pqz_key_record}, {"personal_sign_portable_purposes", personal_sign_portable_purposes},
+        {"pqz_key_record", pqz_key_record}, {"portable_purposes", portable_purposes},
         {"holder_refusals", holder_refusals}};
     if (argc != 2 || !tests.count(argv[1])) { std::fprintf(stderr, "usage: vectors_test <name>\n"); return 2; }
     try { tests[argv[1]](); } catch (const std::exception& e) { std::fprintf(stderr, "exception: %s\n", e.what()); return 1; }
