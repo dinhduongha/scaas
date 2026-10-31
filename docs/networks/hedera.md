@@ -331,11 +331,11 @@ makes every `unwrap` revert (the wrapper holds no HBAR), locking the reserve. v2
 Forge tests (`HederaV2.t.sol`, mock `0x167`): any custom fee ⇒ creation reverts; every HTS leg is associated; a
 failed or undecodable query ⇒ `HtsQueryFailed`.
 
-Classical Zether on Hedera is feasible for the bn254 variant only: HSCS has the bn254 precompiles (`0x06`–`0x08`) but
-not BLS12-381 (EIP-2537). The 15 M gas per transaction cap fits one Bulletproofs verification (several million gas,
-estimate), but Hedera charges ≥ 80 % of the gas limit at a fixed price, so a confidential transfer costs much more
-than a plain one; to be measured when a Zether deployment exists. ED25519 accounts sign only the meta-tx envelope, so
-the proof is independent of the signing key.
+Classical Zether never runs on Hedera: HSCS has the bn254 precompiles (`0x06`–`0x08`) but not BLS12-381 (EIP-2537),
+and classical Zether is BLS12-381 only ([CTR-ZTH-32](../contracts/zether.md#CTR-ZTH-32); the bn254 line is legacy,
+`smartcontracts/evm/legacy/ua6/`). `ZetherLayer` refuses a Hedera env, `DEPLOY_ZETHER` a Hedera deploy, and the Hedera
+registry gets no `zether-bls12381` ([CTR-ZTH-52](../contracts/zether.md#CTR-ZTH-52)). PQZ never runs on Hedera either
+(`PqzLayer` refuses a Hedera env; HSCS has no `PQZ` precompile).
 
 ## <a id="conformance"></a>9. Conformance
 

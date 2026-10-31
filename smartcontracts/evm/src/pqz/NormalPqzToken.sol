@@ -14,7 +14,8 @@ import {PqzCore} from "./PqzCore.sol";
 import {PqzStateLib} from "./PqzStateLib.sol";
 
 /// @title Kind `NORMAL_PQZ` (CTR-TOK-21, CTR-PQZ-22): the standalone token with the PQZ layer (P6g plan D1).
-/// @notice **UNAUDITED.** Chains 31337 / 1337 / 7622 only. `MINTABLE` mints public units
+/// @notice **UNAUDITED.** Any chain whose `PQZ` precompile passes the self-test (`PqzSafety`); never on Hedera.
+///         `MINTABLE` mints public units
 ///         only; shielded value exists only through `mtxShield`, which moves public units to `SHIELD_POOL` (D19). Flags: `PAYABLE`,
 ///         `MINTABLE`, `BURNABLE`. Built by `OpenFactory.createToken` with `conf` set and `legs`, `rate` empty.
 contract NormalPqzToken is NormalToken, PqzLayer {

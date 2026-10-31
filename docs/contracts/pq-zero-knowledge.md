@@ -1261,7 +1261,8 @@ the bytes from state. The node's indexer normalizes `MetaTransactionExecuted`, `
 `ITransferDisclosure` is kept with **three kinds, `SENDER_S`, `RECEIVER_X`, `AUDITOR`; no `SENDER_CP`** (owner
 2026-10-13). Classical Zether added `SENDER_CP` ([CTR-ZTH-40](zether.md#CTR-ZTH-40)) because its `SENDER_S` hands over `s`,
 which opens every leg of a multi-recipient transfer, decoys included; PQZ's `SENDER_S` is already a zero-knowledge proof
-that reveals neither `r` nor noise, and a PQZ transfer has one recipient, so a one-leg sender proof would add nothing;
+that reveals neither `r` nor noise and opens one leg only (leg `j` of an op 7 multi-recipient transfer with decoys,
+[CTR-PQZ-25](#CTR-PQZ-25) / [CTR-PQZ-26](#CTR-PQZ-26); leg 0 of an op 1 single transfer), so a one-leg sender proof would add nothing;
 the opening is the proof alone (D11 / D13). The bundle bytes are read from state, the op blob (`pqzEntryBlob`, D11), and
 `transferCiphertextHash(entryRef)` is the stored `R`'s hash. Shared randomness and decryption noise must not leak
 ([CTR-PQZ-04](#CTR-PQZ-04)).
@@ -2468,7 +2469,8 @@ would make every transfer carry two proof systems for the benefit of balances th
 
 Per-family availability: EVM SCaaS testnet (Nethermind, ours) **v1**; dev chains 31337/1337 tests only (anvil cannot host
 the precompile: forge tests mock it with `vm.mockCall` on KAT inputs; end-to-end on a SCaaS testnet copy); other private
-EVM chains not in v1 (later via the co-processor seam); public EVM never without an owner ruling; Cosmos SDK private
+EVM chains and public EVM chains: open wherever the `PQZ` precompile passes the self-test, with no chain-id allowlist
+(owner ruling 2026-10-31, [CTR-PQZ-01](#CTR-PQZ-01)) — today no other chain has the precompile; Cosmos SDK private
 chains feasible later (a Go module calling `libpqz` via cgo); Hedera, Soroban, Sui, Aptos, Solana, GRAM no
 ([networks/README.md](../networks/README.md#availability)).
 
