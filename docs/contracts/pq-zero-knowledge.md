@@ -69,7 +69,7 @@ module-lattice assumptions:
 | Relaying | ERC-20 on the one base `ERC20MetaTx`: allowlisted self-calls through `mtxExecute`, outer fee `NONE`/`FIXED` from the public balance, `envelopeBinding` in the statement ([CTR-ZTH-34](zether.md#CTR-ZTH-34); built: `ZetherMetaTx` with `OP_ZTRANSFER`/`OP_ZBURN`) | the same base, self-call and rules ([CTR-PQZ-15](#CTR-PQZ-15), [CTR-PQZ-21](#CTR-PQZ-21)), plus the UA path's `UAMetaTransaction` so a PQ UA pays the outer fee |
 | Decryption | BSGS discrete log, device cache, `zether-read-balance` | direct rounding, microseconds, exact; no BSGS, no cache needed ([CTR-PQZ-16](#CTR-PQZ-16)) |
 | State | points in storage | every ciphertext in contract state (one SSTORE2 op blob per debit, one slot per pending entry, a materialised `acc`), an unbounded ordered pending queue; public amounts (`mtxShield`) as TRIVIAL queue entries, value held in `SHIELD_POOL`; public keys in SSTORE2 ([CTR-PQZ-07](#CTR-PQZ-07), [CTR-PQZ-06](#CTR-PQZ-06)) |
-| Chains | dev allowlist 31337/1337 | allowlist 31337/1337/**7622** **and** a constructor self-test through the precompile **and** the registry's `chain_uid` in every statement ([CTR-PQZ-01](#CTR-PQZ-01), [NET-ALL-22](../networks/README.md#NET-ALL-22)) |
+| Chains | any chain with the BLS12-381 precompiles ([CTR-ZTH-52](zether.md#CTR-ZTH-52)) | no chain-id allowlist (owner ruling 2026-10-31): a constructor self-test through the precompile **and** the registry's `chain_uid` in every statement ([CTR-PQZ-01](#CTR-PQZ-01), [NET-ALL-22](../networks/README.md#NET-ALL-22)) |
 
 **Cost.** Ciphertext 16,512 B, public key 16,384 B at `n2048-kmax1024` (18,432 / 20,480 / 22,528 B at the other sets), transfer proof 42,762 B in PQZL and ≈ 231 KB in PQZH (the
 frozen vectors, [sizes](#44-sizes)). A PQZL transfer is ≈ 77 KB of
@@ -94,9 +94,10 @@ and nonces).
 <a id="scope-gate"></a>
 <a id="CTR-PQZ-01"></a>**CTR-PQZ-01** — **Scope and gate** (owner). PQZ is a separate token class (`PqzToken`, plus kind
 `0x0142` in the [UA registry](accounts.md#registry)), never an upgrade of `ZetherToken`.
-`PqzSafety.requireAllowedChain()`: `chainid ∈ {31337, 1337, 7622}` — a hard-coded list; adding a chain is a code change with review. **And** every
-constructor/`initialize` runs the precompile self-test ([self-test](#self-test)); a chain without the precompile (every
-public chain) fails it. **And** the chain is identified by `(chainid, chain_uid)` ([NET-ALL-22](../networks/README.md#NET-ALL-22)):
+No chain-id allowlist (owner ruling 2026-10-31: PQZ is open on every chain that meets the requirements): the gate is
+capability only — every constructor/`initialize` runs the precompile self-test ([self-test](#self-test)), whatever the
+chain id; a chain without the precompile (today every chain but the SCaaS testnet), or with one built for another set,
+fails it. **And** the chain is identified by `(chainid, chain_uid)` ([NET-ALL-22](../networks/README.md#NET-ALL-22)):
 `PqzToken.initialize` copies `registry.chainUid()` (the genesis hash, a registry constructor immutable, `≠ 0`) into an
 immutable `chainUid`, which enters every statement and `entryRef`, so no proof, authorization or disclosure verifies on
 another chain with the same chain id; the UA registration PoP is portable and carries no chain (UA-8, [CTR-UA-07](accounts.md#CTR-UA-07)); the chain binding lives in the statements and tokens above and in the registry's `UAAuth` domain.
@@ -107,15 +108,15 @@ the owner's named target and runs our client. The owner moved the private chain 
 is also Evmos Testnet, a public chain; 7622 is not assumed unique either, hence `chain_uid`. The self-test is what
 keeps PQZ off chains whose client is not ours. **Public chains** (owner, 2026-10-08): PQZ is meant for public
 chains too, and the route there is a lattice-verification precompile **on that chain**, which SCaaS waits for — no
-Solidity verifier split over transactions, no STARK-wrapped proof and no SCaaS appchain is planned. Until a public chain
-offers such a precompile, the allowlist and the self-test stay; adding that chain is then a code change with review, as
-above, plus a price calibration of its precompile ([CTR-PQZ-11](#CTR-PQZ-11)).
+Solidity verifier split over transactions, no STARK-wrapped proof and no SCaaS appchain is planned. Once a chain
+offers such a precompile and passes the self-test, PQZ runs there with no code change; the price calibration of its
+precompile ([CTR-PQZ-11](#CTR-PQZ-11)) is that chain's part.
 
 **Release gates before any production or commercial use** (owner): **licence/patent clearance**, gate **G-LIC** (LaZer is MIT without
 an explicit patent grant; LNP22-family techniques come from IBM Research; GMP/MPFR are LGPL and must be absent from
 every shipped artifact after the engine rewrite; plus the chosen ML-DSA implementations' licences) **and** an
-independent cryptographic audit. Development and research continue without them; nothing deploys outside the
-allowlist or holds real funds until both are recorded as passed. Classical Zether is a separate item with its own rule
+independent cryptographic audit. Development and research continue without them; nothing holds real funds until both are
+recorded as passed. Classical Zether is a separate item with its own rule
 ([CTR-ZTH-52](zether.md#CTR-ZTH-52)).
 
 The licence gate **G-LIC**: legal review of LaZer (MIT, no patent grant) and any code retained from it; LNP22-family IP (IBM
@@ -2200,7 +2201,7 @@ disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 
 | Contract | Role | Notes |
 |---|---|---|
-| `PqzSafety` (library) | [CTR-PQZ-01](#CTR-PQZ-01) allowlist + self-test helper | BUILT (P6g D2): {31337, 1337, 7622}; `selfTest` = op 6 answers exactly the build's set's hash (`PqzSet.SELFTEST`: `n2304-kmax4096` `0x23d7a1db…c97c0`, `n2048-kmax1024` `0xed910a2c…d205`, `n2560-kmax16384` `0x167c772e…45e7`, `n2816-kmax65536` `0x0aa1dfe2…1882`); the set's ids only, at `0x…5caa0f01` (plan 5h Task 8d part 2) |
+| `PqzSafety` (library) | [CTR-PQZ-01](#CTR-PQZ-01) self-test helper (no chain allowlist since the owner ruling of 2026-10-31) | BUILT (P6g D2): `selfTest` = op 6 answers exactly the build's set's hash (`PqzSet.SELFTEST`: `n2304-kmax4096` `0x23d7a1db…c97c0`, `n2048-kmax1024` `0xed910a2c…d205`, `n2560-kmax16384` `0x167c772e…45e7`, `n2816-kmax65536` `0x0aa1dfe2…1882`); the set's ids only, at `0x…5caa0f01` (plan 5h Task 8d part 2) |
 | `UAPqzVerifier` | UA `IUAPopVerifier` for `0x0142` | BUILT (P6g D3; plan 5h Task 8d part 2: the set's ids, sizes and probe hashes from `PqzSet`, so a new id or set is a new instance, hence a new `Env` version of `NORMAL_PQZ` / `WRAPPED_PQZ` and new releases): stateless; precompile and `proofSystemId` immutable; `pk < q` checked; constructor self-test + `R_REG` probe; also a PQZ release's `verifier` (D9): an implementation constructor argument, one of `OpenFactory`'s canonical PQZ verifiers (5g-Z1, [CTR-ZTH-20](zether.md#CTR-ZTH-20)) |
 | `UAMldsaVerifier` | UA verifier for `mldsa44`/`mldsa65` (BUILT, P6a: EIP-8355 precompile by probe, else Solidity) | stateless; used by the UA `UARegistry` |
 | `ERC20MetaTx` (the one token base) | ERC20 + EIP712 + `IERC20MetaTx`, both structs, the address and UA paths, UA ledger | [CTR-MTX-07](metatx.md#CTR-MTX-07); `PqzToken --sizes` ≤ 24,576 B, else the `ua*` entry points move to a `fallback` decoder as MetaToken v3 |
@@ -2224,7 +2225,7 @@ taking `binding`, `disclosureStatement(bytes32,uint256,uint256,uint8)`,
 `verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)`. There is no view `fallback`: views stay direct token functions (owner ruling).
 
 Errors (plus
-`IERC20MetaTx`'s, the UA `UA*`, `PercentFeeForbiddenOnConfidential`, `MtxNotBatchable`, `ShieldPoolNotPayable`): `NotAllowedChain`,
+`IERC20MetaTx`'s, the UA `UA*`, `PercentFeeForbiddenOnConfidential`, `MtxNotBatchable`, `ShieldPoolNotPayable`):
 `SelfTestFailed`, `NonCanonical`, `PendingRange`, `InlineTooFar`, `UnitsInvariant` (the debit-time `unitsOf(T) > K_MAX` assert;
 unreachable unless accounting is broken), `RollOverRange`, `CapReached`, `RollTooYoung`, `AccNotPrepared`, `ZeroU`,
 `DecoyFeeOutOfRange`, `UnknownEntry`, `Expired`, `ProofRejected`, `AuthRejected`, `AmountOutOfRange`, `AmountNotScaled`,
@@ -2304,7 +2305,8 @@ into code under EIP-170) as an argument, requires `keccak256(psid ‖ message �
 (`PROBE_PQZL` / `PROBE_PQZH`), requires `OP_REGISTER` on it to return 1, then flips one proof bit in memory and requires
 0 (`UAPqzProbe`). `PqzToken.initialize` takes no vector: bound to `PQZ`, whose self-test already covers those verdicts,
 the probe would add nothing (a 45–200 KB argument on every token creation). `UAMldsaVerifier` probes `MLDSA65` with one valid and one invalid vector and falls back to Solidity on a mismatch; the SCaaS testnet deploy requires the probe to pass. Any other mismatch ⇒ `SelfTestFailed`.
-This, not the allowlist alone, is what keeps PQZ off chains whose client is not ours.
+This self-test, not the chain id, is what keeps PQZ off chains whose client is not ours (no chain allowlist since the
+owner ruling of 2026-10-31).
 
 The chain profile, the private-chain runbook and the node's `pqz` profile flag
 (`pqz = { genesis_hash = "0x…", registry = "0x…", tokens = ["0x…"] }`, probe `has_pqz_precompile`, genesis hash ==

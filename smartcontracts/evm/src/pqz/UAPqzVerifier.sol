@@ -36,7 +36,6 @@ contract UAPqzVerifier is IUAPopVerifier {
     error UAPqzProbe();
 
     constructor(address pqz, bytes32 psid, bytes memory probePk, bytes32 probeMessage, bytes memory probeProof) {
-        PqzSafety.requireAllowedChain();
         PqzSafety.requirePqz(pqz, psid);
         bytes32 h = keccak256(abi.encodePacked(psid, probeMessage, probePk, probeProof));
         if (h != (psid == PqzSafety.PQZL_ID ? PROBE_PQZL : PROBE_PQZH)) revert UAPqzProbe();
@@ -57,10 +56,11 @@ contract UAPqzVerifier is IUAPopVerifier {
         return verifyPop(keyData, message, sig);
     }
 
-    /// @notice An allowed chain and the precompile's self-test now (a view for off-chain callers; the on-chain gate is `PqzStateLib.init`: `requireAllowedChain`,
-    ///         `requirePqz`; `OpenFactory.setKindEnabled` has no chain gate since 5g-Z2, P6g plan D2).
+    /// @notice The precompile's self-test now, on any chain id (a view for off-chain callers; the on-chain gate is
+    ///         `PqzStateLib.init`: `requirePqz`; `OpenFactory.setKindEnabled` has no chain gate since 5g-Z2, P6g plan D2;
+    ///         no chain allowlist since the owner ruling of 2026-10-31).
     function isSupportedOnThisChain() external view returns (bool) {
-        return PqzSafety.isAllowedChain() && PqzSafety.selfTest(PRECOMPILE);
+        return PqzSafety.selfTest(PRECOMPILE);
     }
 
     /// @dev `u8(3) ‖ be32(STMT_REGISTER) ‖ opTag ‖ psid ‖ message ‖ pk ‖ proof`; true only on exactly the word 1.

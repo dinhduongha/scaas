@@ -649,8 +649,8 @@ empty output — with no symptom until someone has deposited funds.
 - **Kind gate**: `setKindEnabled(kind, on)` (registrar); the plain kinds start on, the confidential kinds off (owner
   2026-10-20, plan 5g-Z2; it replaces `setZetherEnabled` / `setPqzEnabled`). The chain gates are the implementations':
   a Zether `initialize` reverts when the release's transfer verifier does not run on the chain (no chain-id
-  allowlist, [CTR-ZTH-52](zether.md#CTR-ZTH-52)); a PQZ `initialize` runs `PqzSafety` (allowlist and
-  precompile self-test). `OpenFactoryV1` (with its own gate) is in `legacy/p5/` (P5).
+  allowlist, [CTR-ZTH-52](zether.md#CTR-ZTH-52)); a PQZ `initialize` runs `PqzSafety` (the
+  precompile self-test; no chain allowlist). `OpenFactoryV1` (with its own gate) is in `legacy/p5/` (P5).
 - **Registrar** is an EOA by default (deployer); it must become a multisig before mainnet. Its only powers are
   `publishEnv`, `publishDexEnv`, `deployImplementation`, `deployDexImplementation`, `deprecate`, `deprecateDex` and
   `setKindEnabled`.
@@ -818,7 +818,7 @@ backdoor, since clones `DELEGATECALL` through it),
   (moved from the factory, owner 2026-10-20): a Zether token (`ZetherLib.init`) reverts outside a dev chain, and with
   `IZetherToken.VerifierUnsupportedOnThisChain(verifier, curveName)` when the release's transfer verifier's
   `isSupportedOnThisChain()` is false or unanswered, so a BLS12-381 verifier cannot serve a chain without EIP-2537; a
-  PQZ token (`PqzStateLib.init`) requires the allowlisted chain, the precompile and its self-test (`PqzSafety`).
+  PQZ token (`PqzStateLib.init`) requires the precompile and its self-test (`PqzSafety`), on any chain id.
   `ConfidentialConfig` has no verifier field.
 - **Trust the index only for registered versions** (`isRegisteredToken(token)`, `versionOf(token).version != 0`): the
   factory indexes what the config says, and an unregistered implementation (version 0) may do anything else with it.

@@ -92,3 +92,9 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `test_createToken_enabledKindOnANonDevChain_reverts`, the hand-made clone in `test_initializeRevertPaths`),
   `test/zether/ZetherDeploy.t.sol` (`DEPLOY_ZETHER: dev chains only`), `test/ua/UARegistryZether.t.sol` (the 7622
   constructor revert). The factory's per-kind gate `setKindEnabled` stays. Not built.
+  The same branch removed PQZ's chain-id allowlist (a separate item; owner ruling 2026-10-31: no chain lock for PQZ,
+  capability only): `src/pqz/PqzSafety.sol` as it stood (`isAllowedChain` = 31337 / 1337 / 7622,
+  `requireAllowedChain`, error `NotAllowedChain`, called by `PqzStateLib.init` and the `UAPqzVerifier` constructor;
+  the self-test `requirePqz` stays in `src/`), and the tests with the allowlist cases: `test/pqz/PqzCt.t.sol`
+  (`test_safetyAllowlist`), `test/pqz/PqzNormal.t.sol` (`test_createToken_enabledKindOnAForbiddenChain_reverts`),
+  `test/pqz/UAPqzVerifier.t.sol` (the 22776 constructor revert). Not built.

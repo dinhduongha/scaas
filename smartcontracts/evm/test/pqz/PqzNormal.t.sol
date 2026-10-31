@@ -470,13 +470,21 @@ contract PqzNormalTest is PqzFixture {
         }
     }
 
-    /// Review 5g-Z2 P2-3 (controller proposal 2): the kind enabled, but on a chain outside PQZ's allowlist (22776, the
-    /// mainnet) every `createToken` reverts with the implementation's gate.
-    function test_createToken_enabledKindOnAForbiddenChain_reverts() public {
+    /// Owner ruling 2026-10-31 (no chain lock; capability only): with the kind enabled, `createToken` works at any chain
+    /// id where the precompile's self-test passes (22776, the mainnet; an arbitrary id) and is refused where it fails.
+    function test_createToken_anyChainId_selfTestDecides() public {
         assertTrue(factory.kindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ));
-        vm.chainId(22776);
-        vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotAllowedChain.selector, 22776));
-        factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(1 << 40)), "mainnet");
+        uint256[2] memory ids = [uint256(22776), 987654321];
+        for (uint256 i; i < ids.length; ++i) {
+            vm.chainId(ids[i]);
+            _mockSelfTest();
+            assertTrue(factory.isRegisteredToken(
+                factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(1 << 40)), bytes32(ids[i]))));
+            vm.mockCall(PQZ, hex"0600000000", abi.encode(bytes32(0)));
+            vm.expectRevert(abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ));
+            factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(1 << 40)), bytes32(ids[i] + 1));
+        }
+        _mockSelfTest();
     }
 
     /// UA-6 (RF6): a registered `mldsa65` UA without a PQZ key is no PQZ account: as sender, leg,
