@@ -871,3 +871,8 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-42** (ty
      `storePqzPop` — stores version 0 after checking `hash(key) == kemPkHash`. Until then `kemKeyOf` / `kemKeyAt(ua, 0)`
      return nothing (registered, KEM not usable yet); the full key always ends up in contract state (P2 / UA-8 copy).
      Soroban: the same rule in `ua8-soroban` B2 / B3 (it already has `store_pqz_pop`).
+  3. **No separate `storeKemKey` (owner 2026-10-31): `setKemKey` takes version 0** when version 0 holds only the
+     committed hash (registered by hash, key not stored yet). Then `setKemKey(ua, 0, KemKey, sig)` stores it after
+     checking `hash(key) == kemPkHash`; the PoP already signed that record, so `sig` must be empty and the call is
+     open to anyone (as `storePqzPop`). Version 0 already stored, or never committed → `UAKemVersion(ua, 0)`.
+     Versions ≥ 1 keep today's rule (holder signature, write-once). Replaces the `storeKemKey` of item 2.
