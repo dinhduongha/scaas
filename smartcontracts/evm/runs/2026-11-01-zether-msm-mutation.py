@@ -91,7 +91,7 @@ ROWS = [
     ('multi E4 dropped', drop4(3), MULTI),
     ('multi E8 dropped', drop4(5), MULTI),
     ('first caller point not in the MSM', [('_copy(pts, SLOT_EXT * b.p, sigma.points, 0, sigma.points.length);',
-                                            '_copy(pts, (SLOT_EXT + 1) * b.p, sigma.points, b.p, sigma.points.length - b.p);')], 'test_every'),
+                                            '_copy(pts, (SLOT_EXT + 1) * b.p, sigma.points, b.p, sigma.points.length - b.p);')], r'test_every(Transfer|Burn|Multi)Point'),
     ('A_Vv out of the MSM', [('_copy(pts, SLOT_EXT * b.p, sigma.points, 0, sigma.points.length);',
                               '_copy(pts, SLOT_EXT * b.p, sigma.points, 0, sigma.points.length); _put(pts, SLOT_EXT + 8, new bytes(b.p), b.p);')],
      'test_lowOrderPairAcrossEquationsRefused'),
@@ -113,7 +113,7 @@ def run(pat):
     fail = sorted(set(re.findall(r'^\[FAIL[^\n]*\] (\w+)', out, re.M)))
     if ran == 0:
         return 'NO TEST RAN', False
-    return (f'RED ({ran} ran): ' + ', '.join(fail)[:80], True) if fail else (f'still GREEN ({ran} ran)', False)
+    return (f'RED ({ran} ran): ' + ', '.join(fail), True) if fail else (f'still GREEN ({ran} ran)', False)
 
 
 lock = open('/tmp/zether-msm-mutation.lock', 'w')
