@@ -616,6 +616,9 @@ stays in `rpc`'s pool: the first PQZ e2e after the split stopped at a `mtxRollOv
 after a fresh session did not mine; a sealer-side reconnect (`admin_removePeer` / `admin_addPeer`) brought the mode back
 to `WaitingForBlock` and the stuck transfer mined at once. With the flag the sealer takes them in every mode (the
 sealer is the chain tip; "not synced" never applies to it). Keep it on any sole-signer sealer behind a sentry.
+**No native leak in the PQZ library (2026-10-31):** 20-min harness runs against the live image's `libpqz_ffi.so`
+kept anon memory flat or falling (< ≈ 45 B per honest verify); the sealer's 617 → 700 MiB plateau under the PQZ e2e
+reads as .NET heap warm-up. Log `../runs/2026-10-31-leak-harness.txt`, scripts `../leak/`.
 **`TxPool.MaxTxSize` 2 MiB = 2,097,152 on both nodes (owner ruling 2026-10-31; the default is 131,072 B, the split
 started with the old 1 MiB).** Reason: it matches `MaxRequestBodySize` 4 MiB, since `eth_sendRawTransaction` carries the
 transaction as hex (twice its size), so about 2 MiB is the largest raw transaction the RPC can take at all. It is
