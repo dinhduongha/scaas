@@ -17,7 +17,7 @@ rules: `docs/contracts/` (start at `docs/contracts/README.md`); reasons and old 
 | Accounts and wallets | `account/SmartKeyAccount.sol` (+ factory), `wallet/MandateWallet.sol` | built |
 | Hedera | `hedera/` | built; HIP-632 / long-zero helpers for the Hedera profile ([networks/hedera.md](../../docs/networks/hedera.md)) |
 | Shared | `common/` (`MetaTxLib`, `FeePolicy`, `SigCheck`, `SaltedEIP712`, `SSTORE2`, curves and hashes) | built |
-| Chain notes | `chains/{private7622,gnosis,celo}/` | notes |
+| Chain notes | `chains/{scaas-testnet,gnosis,celo}/` | notes |
 
 `legacy/` keeps superseded lines for reference (`legacy/README.md`): not compiled, not tested, never deployed.
 
@@ -41,7 +41,7 @@ and `IERC20(asset).balanceOf(wrapper)` shows what each holds. `getWrapper` keys 
 forge build
 forge test                                # the whole suite
 forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol'   # gas bounds, cold
-FOUNDRY_PROFILE=private7622 forge build
+FOUNDRY_PROFILE=scaas-testnet forge build
 ```
 
 On a shared machine run heavy jobs under `scripts/capped` (repo root). `lib/` is not committed; the libraries are
@@ -66,7 +66,7 @@ reached by DELEGATECALL and does not count towards a token's size; `internal` li
 
 | Profile | EVM | Why |
 |---|---|---|
-| `default`, `private7622` | osaka | SCaaS testnet: private Nethermind (Clique, one signer), Fusaka + BPO2, EIP-2537 live, the `PQZ` and ML-DSA precompiles (`src/chains/private7622/`) |
+| `default`, `scaas-testnet` | osaka | SCaaS testnet: private Nethermind (Clique, one signer), Fusaka + BPO2, EIP-2537 live, the `PQZ` and ML-DSA precompiles (`src/chains/scaas-testnet/`) |
 | `gnosis`, `celo` | osaka | Pectra, then Fusaka; EIP-2537 measured live |
 | `bsc`, `polygon`, `base` | osaka | drafts ([networks/evm.md](../../docs/networks/evm.md) §1) |
 | `zether` | osaka | the Zether suite (`FOUNDRY_PROFILE=zether forge test --match-path 'test/zether/*'`) |

@@ -88,7 +88,7 @@ fn deploy(rpc: &str, chain_id: u64, holder: Address) -> Value {
         .env("PRIVATE_KEY", DEPLOYER)
         .env("DEMO_SUPPLY", "1000000000000")
         .env("DEMO_HOLDER", format!("{holder:#x}"))
-        .env("FOUNDRY_PROFILE", "private7622")
+        .env("FOUNDRY_PROFILE", "scaas-testnet")
         .status()
         .expect("forge in PATH");
     assert!(status.success(), "forge script failed");
@@ -603,7 +603,7 @@ async fn create(rpc: &str, from: &PrivateKeySigner, to: Address, data: Vec<u8>) 
 /// (`forge script` compiles only the script's own sources, so the deploy leaves no test artifacts).
 async fn deploy_outside_token(rpc: &str, from: &PrivateKeySigner) -> Address {
     let sc = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm");
-    let built = Command::new("forge").current_dir(sc).args(["build", "test/helpers/Mocks.sol"]).env("FOUNDRY_PROFILE", "private7622").status();
+    let built = Command::new("forge").current_dir(sc).args(["build", "test/helpers/Mocks.sol"]).env("FOUNDRY_PROFILE", "scaas-testnet").status();
     assert!(built.expect("forge in PATH").success(), "forge build test/helpers/Mocks.sol failed");
     let raw = std::fs::read_to_string(format!("{sc}/out/Mocks.sol/MockERC20.json")).expect("forge build output of test/helpers/Mocks.sol");
     let v: Value = serde_json::from_str(&raw).unwrap();

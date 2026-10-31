@@ -49,7 +49,7 @@ fail_on_revert = true
 # không EIP-2537. Đã sửa chainspec và đo lại: PUSH0/TLOAD/MCOPY/BASEFEE/CLZ đều sống,
 # cả 7 precompile BLS12-381 trả đúng số byte, base fee dính 0 nên gas vẫn miễn phí.
 # Chi tiết: /home/dockers/mba-chain-nethermind/README-chainspec.md
-[profile.private7622]
+[profile.scaas-testnet]
 evm_version = "amsterdam"
 
 # Zether (S2): BLS12-381 cần EIP-2537 (Prague trở lên); profile ghim Amsterdam như default.
