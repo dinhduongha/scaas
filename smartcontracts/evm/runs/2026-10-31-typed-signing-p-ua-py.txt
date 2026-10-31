@@ -1,4 +1,6 @@
-# ua-py at commit 00d2558f
+# ua-py at commit 80f45c56
+test_malformed_kem_refused (tests.test_vectors.TypedRegistryArgs.test_malformed_kem_refused)
+PRV L6: the registry's KEM key check runs before a form is chosen; a setKemKey without a key is no call. ... ok
 test_registration_args_typed (tests.test_vectors.TypedRegistryArgs.test_registration_args_typed) ... ok
 test_registration_args_typed_keys (tests.test_vectors.TypedRegistryArgs.test_registration_args_typed_keys)
 R1b (TS-D13): webauthn-p256 / MuSig2 / FROST through registerWebAuthn / registerMuSig2 / registerFrost, typed keys ... ok
@@ -21,7 +23,7 @@ test_table_groups_purposes_constants (tests.test_vectors.Vectors.test_table_grou
 test_valid_rows (tests.test_vectors.Vectors.test_valid_rows) ... ok
 
 ----------------------------------------------------------------------
-Ran 16 tests in 0.189s
+Ran 17 tests in 0.456s
 
 OK
 rc=0

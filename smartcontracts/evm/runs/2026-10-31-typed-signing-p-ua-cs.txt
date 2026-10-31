@@ -1,4 +1,4 @@
-# ua-cs at commit 00d2558f
+# ua-cs at commit 80f45c56
   Determining projects to restore...
   All projects are up-to-date for restore.
   Scaas.Ua -> /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cs/Scaas.Ua/bin/Debug/net10.0/Scaas.Ua.dll
@@ -8,29 +8,30 @@ VSTest version 18.0.2 (x64)
 
 Starting test execution, please wait...
 A total of 1 test files matched the specified pattern.
-[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.13)
-[xUnit.net 00:00:00.09]   Discovering: Scaas.Ua.Tests
-[xUnit.net 00:00:00.13]   Discovered:  Scaas.Ua.Tests
-[xUnit.net 00:00:00.15]   Starting:    Scaas.Ua.Tests
-  Passed Scaas.Ua.Tests.VectorTests.KemRecordVectors [63 ms]
-  Passed Scaas.Ua.Tests.VectorTests.Structures [15 ms]
-  Passed Scaas.Ua.Tests.VectorTests.PortableVectors [56 ms]
-  Passed Scaas.Ua.Tests.VectorTests.TableGroupsPurposesConstants [11 ms]
-  Passed Scaas.Ua.Tests.VectorTests.PortableTyped [53 ms]
-  Passed Scaas.Ua.Tests.VectorTests.RegistrationHashCommitWhenOverLimit [41 ms]
-  Passed Scaas.Ua.Tests.VectorTests.HolderRefusals [103 ms]
-  Passed Scaas.Ua.Tests.VectorTests.PqzKeyRecordVectors [32 ms]
-  Passed Scaas.Ua.Tests.VectorTests.NativesNativeSpaceCanonicalIds [3 ms]
-  Passed Scaas.Ua.Tests.VectorTests.RegistrationArgsTyped [86 ms]
-  Passed Scaas.Ua.Tests.VectorTests.Messages [1 ms]
-  Passed Scaas.Ua.Tests.VectorTests.ValidRows [857 ms]
-  Passed Scaas.Ua.Tests.VectorTests.NativeMemberTypedDigest [16 ms]
-[xUnit.net 00:00:02.18]   Finished:    Scaas.Ua.Tests
-  Passed Scaas.Ua.Tests.VectorTests.InvalidRows [633 ms]
-  Passed Scaas.Ua.Tests.VectorTests.RegistrationArgsTypedKeys [15 ms]
+[xUnit.net 00:00:00.01] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.13)
+[xUnit.net 00:00:00.19]   Discovering: Scaas.Ua.Tests
+[xUnit.net 00:00:00.26]   Discovered:  Scaas.Ua.Tests
+[xUnit.net 00:00:00.30]   Starting:    Scaas.Ua.Tests
+  Passed Scaas.Ua.Tests.VectorTests.KemRecordVectors [138 ms]
+  Passed Scaas.Ua.Tests.VectorTests.Structures [29 ms]
+  Passed Scaas.Ua.Tests.VectorTests.MalformedKemRefused [6 ms]
+  Passed Scaas.Ua.Tests.VectorTests.PortableVectors [100 ms]
+  Passed Scaas.Ua.Tests.VectorTests.TableGroupsPurposesConstants [20 ms]
+  Passed Scaas.Ua.Tests.VectorTests.PortableTyped [78 ms]
+  Passed Scaas.Ua.Tests.VectorTests.RegistrationHashCommitWhenOverLimit [64 ms]
+  Passed Scaas.Ua.Tests.VectorTests.HolderRefusals [185 ms]
+  Passed Scaas.Ua.Tests.VectorTests.PqzKeyRecordVectors [54 ms]
+  Passed Scaas.Ua.Tests.VectorTests.NativesNativeSpaceCanonicalIds [15 ms]
+  Passed Scaas.Ua.Tests.VectorTests.RegistrationArgsTyped [286 ms]
+  Passed Scaas.Ua.Tests.VectorTests.Messages [9 ms]
+[xUnit.net 00:00:04.15]   Finished:    Scaas.Ua.Tests
+  Passed Scaas.Ua.Tests.VectorTests.ValidRows [1 s]
+  Passed Scaas.Ua.Tests.VectorTests.NativeMemberTypedDigest [47 ms]
+  Passed Scaas.Ua.Tests.VectorTests.InvalidRows [966 ms]
+  Passed Scaas.Ua.Tests.VectorTests.RegistrationArgsTypedKeys [47 ms]
 
 Test Run Successful.
-Total tests: 15
-     Passed: 15
- Total time: 2.6485 Seconds
+Total tests: 16
+     Passed: 16
+ Total time: 5.9745 Seconds
 rc=0

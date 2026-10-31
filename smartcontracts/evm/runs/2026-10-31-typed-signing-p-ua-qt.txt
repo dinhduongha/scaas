@@ -1,4 +1,4 @@
-# ua-qt at commit 00d2558f
+# ua-qt at commit 80f45c56
 -- Could NOT find WrapVulkanHeaders (missing: Vulkan_INCLUDE_DIR) 
 -- Could NOT find WrapVulkanHeaders (missing: Vulkan_INCLUDE_DIR) 
 -- Rust Toolchain: 1.99.0-x86_64-unknown-linux-gnu
@@ -8,13 +8,14 @@
 -- Configuring done (1.3s)
 -- Generating done (0.0s)
 -- Build files have been written to: /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-qt/build
-[  0%] Built target tst_ua_autogen_timestamp_deps
 [  0%] Built target cargo-prebuild_scaas_ua_qt
-[  0%] Built target scaas_ua_qml_module_mock_obj_output
+[  0%] Built target tst_ua_autogen_timestamp_deps
 warning: failed to connect to jobserver from environment variable `MAKEFLAGS="s -j2 --jobserver-auth=3,4"`: cannot open file descriptor 3 from the jobserver environment variable value: Bad file descriptor (os error 9)
+[  0%] Built target scaas_ua_qml_module_mock_obj_output
 [ 25%] Built target tst_ua_autogen
+   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
    Compiling scaas_ua_qt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-qt)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.82s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.68s
 Copying byproducts `libscaas_ua_qt.a` to /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-qt/build
 [ 25%] Built target _cargo-build_scaas_ua_qt
 [ 25%] Built target cargo-build_scaas_ua_qt
@@ -61,11 +62,11 @@ test 1
 1: PASS   : ua::UaKinds::test_table_groups_purposes_constants()
 1: PASS   : ua::UaKinds::test_valid_rows()
 1: PASS   : ua::UaKinds::cleanupTestCase()
-1: Totals: 22 passed, 0 failed, 0 skipped, 0 blacklisted, 2051ms
+1: Totals: 22 passed, 0 failed, 0 skipped, 0 blacklisted, 1957ms
 1: ********* Finished testing of ua *********
-1/1 Test #1: tst_ua ...........................   Passed    2.17 sec
+1/1 Test #1: tst_ua ...........................   Passed    2.08 sec
 
 100% tests passed, 0 tests failed out of 1
 
-Total Test time (real) =   2.18 sec
+Total Test time (real) =   2.08 sec
 rc=0
