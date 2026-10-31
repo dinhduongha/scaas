@@ -1,0 +1,109 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.17s
+     Running unittests src/lib.rs (target/debug/deps/scaas_ua_spike-d4d9a8ce81d3423e)
+
+running 16 tests
+test test::spike_bls_add_mul_fr_budget ... BUDGET bls_add_mul n=1 (G1 add+mul, G2 add+mul): cpu=12618803 mem=8187
+BUDGET bls_add_mul n=10: cpu=126069086 mem=26331
+BUDGET bls_fr_ops n=100 (mul+add+inv): cpu=6263678 mem=224507
+Writing test snapshot file for test "test::spike_bls_add_mul_fr_budget" to "test_snapshots/test/spike_bls_add_mul_fr_budget.1.json".
+ok
+test test::spike_bls_g1_msm_budget ... BUDGET bls_g1_msm n=64: cpu=97047488 mem=333350
+BUDGET bls_g1_msm n=128: cpu=191655195 mem=616668
+BUDGET bls_g1_msm n=256: cpu=380919761 mem=1379911
+Writing test snapshot file for test "test::spike_bls_g1_msm_budget" to "test_snapshots/test/spike_bls_g1_msm_budget.1.json".
+ok
+test test::spike_bls_g2_msm_budget ... BUDGET bls_g2_msm n=2: cpu=14598707 mem=232022
+BUDGET bls_g2_msm n=8: cpu=35049203 mem=250999
+Writing test snapshot file for test "test::spike_bls_g2_msm_budget" to "test_snapshots/test/spike_bls_g2_msm_budget.1.json".
+ok
+test test::spike_bls_pairing_budget ... BUDGET bls_pairing pairs=2: cpu=24078369 mem=156479
+Writing test snapshot file for test "test::spike_bls_pairing_budget" to "test_snapshots/test/spike_bls_pairing_budget.1.json".
+ok
+test test::spike_keccak_budget ... BUDGET keccak_model n=1 len=64: cpu=23775 mem=6123
+BUDGET keccak_model n=100 len=64: cpu=1170393 mem=34635
+BUDGET keccak_model n=100 len=256: cpu=2066693 mem=53835
+BUDGET keccak_model n=1 len=8192: cpu=403188 mem=14251
+Writing test snapshot file for test "test::spike_keccak_budget" to "test_snapshots/test/spike_keccak_budget.1.json".
+ok
+test test::spike_mldsa44_verify_budget ... BUDGET verify_only mldsa44: cpu=1608400 mem=35238
+Writing test snapshot file for test "test::spike_mldsa44_verify_budget" to "test_snapshots/test/spike_mldsa44_verify_budget.1.json".
+ok
+test test::spike_mldsa65_verify_budget ... BUDGET verify_only mldsa65: cpu=2572818 mem=54694
+Writing test snapshot file for test "test::spike_mldsa65_verify_budget" to "test_snapshots/test/spike_mldsa65_verify_budget.1.json".
+ok
+test test::spike_msig3_mldsa65_model_budget ... BUDGET msig_model n=3 mldsa65: cpu=8925749 mem=588604
+Writing test snapshot file for test "test::spike_msig3_mldsa65_model_budget" to "test_snapshots/test/spike_msig3_mldsa65_model_budget.1.json".
+ok
+test test::spike_msig_pqz_kem_model_budget ... BUDGET register_pqz_kem_model msig n=2 mldsa65 n2816-kmax65536 full: cpu=8959327 mem=328880
+Writing test snapshot file for test "test::spike_msig_pqz_kem_model_budget" to "test_snapshots/test/spike_msig_pqz_kem_model_budget.1.json".
+BUDGET register_pqz_kem_model msig n=4 mldsa65 n2816-kmax65536 full: cpu=14706212 mem=651033
+Writing test snapshot file for test "test::spike_msig_pqz_kem_model_budget" to "test_snapshots/test/spike_msig_pqz_kem_model_budget.2.json".
+BUDGET register_pqz_kem_model msig n=8 mldsa65 n2816-kmax65536 full: cpu=26340378 mem=1683407
+Writing test snapshot file for test "test::spike_msig_pqz_kem_model_budget" to "test_snapshots/test/spike_msig_pqz_kem_model_budget.3.json".
+BUDGET register_pqz_kem_model msig n=16 mldsa65 n2816-kmax65536 full: cpu=50054314 mem=5285739
+Writing test snapshot file for test "test::spike_msig_pqz_kem_model_budget" to "test_snapshots/test/spike_msig_pqz_kem_model_budget.4.json".
+ok
+test test::spike_register_mldsa65_model_budget ... BUDGET register_model mldsa65: cpu=3135351 mem=157407
+Writing test snapshot file for test "test::spike_register_mldsa65_model_budget" to "test_snapshots/test/spike_register_mldsa65_model_budget.1.json".
+ok
+test test::spike_register_pqz_kem_model_budget ... BUDGET register_pqz_kem_model mldsa65 n2048-kmax1024 full: cpu=5611059 mem=453854
+BUDGET register_pqz_kem_model msig-pq n=2 n2048-kmax1024 full: cpu=8453116 mem=610388
+Writing test snapshot file for test "test::spike_register_pqz_kem_model_budget" to "test_snapshots/test/spike_register_pqz_kem_model_budget.2.json".
+Writing test snapshot file for test "test::spike_register_pqz_kem_model_budget" to "test_snapshots/test/spike_register_pqz_kem_model_budget.1.json".
+BUDGET register_pqz_kem_model mldsa65 n2304-kmax4096 full: cpu=5810261 mem=472860
+BUDGET register_pqz_kem_model msig-pq n=2 n2304-kmax4096 full: cpu=8652318 mem=629394
+Writing test snapshot file for test "test::spike_register_pqz_kem_model_budget" to "test_snapshots/test/spike_register_pqz_kem_model_budget.4.json".
+Writing test snapshot file for test "test::spike_register_pqz_kem_model_budget" to "test_snapshots/test/spike_register_pqz_kem_model_budget.3.json".
+BUDGET register_pqz_kem_model mldsa65 n2560-kmax16384 full: cpu=6007962 mem=491726
+BUDGET register_pqz_kem_model msig-pq n=2 n2560-kmax16384 full: cpu=8850019 mem=648260
+Writing test snapshot file for test "test::spike_register_pqz_kem_model_budget" to "test_snapshots/test/spike_register_pqz_kem_model_budget.6.json".
+Writing test snapshot file for test "test::spike_register_pqz_kem_model_budget" to "test_snapshots/test/spike_register_pqz_kem_model_budget.5.json".
+BUDGET register_pqz_kem_model mldsa65 n2816-kmax65536 full: cpu=6242324 mem=513726
+BUDGET register_pqz_kem_model msig-pq n=2 n2816-kmax65536 full: cpu=9084381 mem=670260
+Writing test snapshot file for test "test::spike_register_pqz_kem_model_budget" to "test_snapshots/test/spike_register_pqz_kem_model_budget.8.json".
+Writing test snapshot file for test "test::spike_register_pqz_kem_model_budget" to "test_snapshots/test/spike_register_pqz_kem_model_budget.7.json".
+ok
+test test::spike_register_split_and_store_pqz_pop_budget ... BUDGET register_pqz_kem_model mldsa65 n2048-kmax1024 split: cpu=4247070 mem=327795
+BUDGET store_pqz_pop_model n2048-kmax1024: cpu=1449258 mem=189529
+Writing test snapshot file for test "test::spike_register_split_and_store_pqz_pop_budget" to "test_snapshots/test/spike_register_split_and_store_pqz_pop_budget.1.json".
+BUDGET register_pqz_kem_model mldsa65 n2304-kmax4096 split: cpu=4343598 mem=338035
+BUDGET store_pqz_pop_model n2304-kmax4096: cpu=1551932 mem=198295
+Writing test snapshot file for test "test::spike_register_split_and_store_pqz_pop_budget" to "test_snapshots/test/spike_register_split_and_store_pqz_pop_budget.2.json".
+BUDGET register_pqz_kem_model mldsa65 n2560-kmax16384 split: cpu=4440126 mem=348275
+BUDGET store_pqz_pop_model n2560-kmax16384: cpu=1653105 mem=206921
+Writing test snapshot file for test "test::spike_register_split_and_store_pqz_pop_budget" to "test_snapshots/test/spike_register_split_and_store_pqz_pop_budget.3.json".
+BUDGET register_pqz_kem_model mldsa65 n2816-kmax65536 split: cpu=4536654 mem=358515
+BUDGET store_pqz_pop_model n2816-kmax65536: cpu=1790939 mem=218681
+Writing test snapshot file for test "test::spike_register_split_and_store_pqz_pop_budget" to "test_snapshots/test/spike_register_split_and_store_pqz_pop_budget.4.json".
+ok
+test test::spike_require_authorized_passkey_budget ... BUDGET require_authorized webauthn-p256: cpu=3152086 mem=45824
+Writing test snapshot file for test "test::spike_require_authorized_passkey_budget" to "test_snapshots/test/spike_require_authorized_passkey_budget.1.json".
+ok
+test test::spike_set_kem_key_model_budget ... BUDGET set_kem_key_model v1 n=1: cpu=3129467 mem=96072
+BUDGET set_kem_key_model v1 n=16: cpu=46396129 mem=5100751
+Writing test snapshot file for test "test::spike_set_kem_key_model_budget" to "test_snapshots/test/spike_set_kem_key_model_budget.1.json".
+ok
+test test::spike_set_pqz_key_model_budget ... BUDGET set_pqz_key_model n2816-kmax65536 n=1: cpu=3972982 mem=125527
+BUDGET set_pqz_key_model n2816-kmax65536 n=16: cpu=47228320 mem=5128726
+Writing test snapshot file for test "test::spike_set_pqz_key_model_budget" to "test_snapshots/test/spike_set_pqz_key_model_budget.1.json".
+ok
+test test::spike_zether_transfer_model_budget ... BUDGET zether_transfer_model m=1: cpu=536192183 mem=3972882
+BUDGET zether_transfer_model m=2: cpu=809727981 mem=6074460
+BUDGET zether_transfer_model m=4: cpu=1342855091 mem=10036392
+BUDGET zether_transfer_model m=8: cpu=2409274068 mem=17966446
+Writing test snapshot file for test "test::spike_zether_transfer_model_budget" to "test_snapshots/test/spike_zether_transfer_model_budget.1.json".
+ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.89s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_ua_spike_token-3e620c5d0f94a950)
+
+running 1 test
+test test::spike_ua_pay_passkey_model_budget ... BUDGET ua_pay_model webauthn-p256 -> mldsa65 UA (token + registry): cpu=3456687 mem=175612
+Writing test snapshot file for test "test::spike_ua_pay_passkey_model_budget" to "test_snapshots/test/spike_ua_pay_passkey_model_budget.1.json".
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+    Finished `release` profile [optimized] target(s) in 0.09s
+    Finished `release` profile [optimized] target(s) in 0.08s

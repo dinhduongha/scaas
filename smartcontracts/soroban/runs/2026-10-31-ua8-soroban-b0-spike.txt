@@ -1,0 +1,319 @@
+# spike (ua8-soroban-b0) at commit ref/pre-token-tree-2015-gfad97f0a 2026-10-31T16:45:56+07:00
+# stellar-cli: stellar 30.0.0 (90a3d42d9327ccfaa0d301373766f45beae3e6d9) stellar-xdr 30.0.0 (3c2aa43d2ab54d429ae44aa5143d805bf5dba7e2) xdr (4f524bbac80c781c06e4fb5fc93a2d0d331d6705) 
+# soroban-sdk soroban-sdk-30.0.0-rc.1 host functions used (exact Rust signatures):
+#    pub fn ml_dsa_44_verify( &self, public_key: &BytesN<1312>, message: &Bytes, signature: &BytesN<2420>, context: &Bytes, ) {
+#    pub fn ml_dsa_65_verify( &self, public_key: &BytesN<1952>, message: &Bytes, signature: &BytesN<3309>, context: &Bytes, ) {
+#    pub fn secp256r1_verify( &self, public_key: &BytesN<65>, message_digest: &Hash<32>, signature: &BytesN<64>, ) {
+#   pub fn g1_add(&self, p0: &Bls12381G1Affine, p1: &Bls12381G1Affine) -> Bls12381G1Affine
+#   pub fn g1_mul(&self, p0: &Bls12381G1Affine, scalar: &Bls12381Fr) -> Bls12381G1Affine
+#   pub fn g1_msm(&self, vp: Vec<Bls12381G1Affine>, vs: Vec<Bls12381Fr>) -> Bls12381G1Affine
+#   pub fn g2_add(&self, p0: &Bls12381G2Affine, p1: &Bls12381G2Affine) -> Bls12381G2Affine
+#   pub fn g2_mul(&self, p0: &Bls12381G2Affine, scalar: &Bls12381Fr) -> Bls12381G2Affine
+#   pub fn g2_msm(&self, vp: Vec<Bls12381G2Affine>, vs: Vec<Bls12381Fr>) -> Bls12381G2Affine
+#   pub fn pairing_check(&self, vp1: Vec<Bls12381G1Affine>, vp2: Vec<Bls12381G2Affine>) -> bool
+# figures from soroban-sdk =30.0.0-rc.1 over soroban-env-host 30.0.0 (S5: re-pin to 30.0.0 when it ships)
+## unit tests (SDK testutils, protocol 30; full cargo output: runs/2026-10-31-ua8-soroban-b0-cargo.txt)
+test test::spike_bls_add_mul_fr_budget ... BUDGET bls_add_mul n=1 (G1 add+mul, G2 add+mul): cpu=12618803 mem=8187
+BUDGET bls_add_mul n=10: cpu=126069086 mem=26331
+BUDGET bls_fr_ops n=100 (mul+add+inv): cpu=6263678 mem=224507
+ok
+test test::spike_bls_g1_msm_budget ... BUDGET bls_g1_msm n=64: cpu=97047488 mem=333350
+BUDGET bls_g1_msm n=128: cpu=191655195 mem=616668
+BUDGET bls_g1_msm n=256: cpu=380919761 mem=1379911
+ok
+test test::spike_bls_g2_msm_budget ... BUDGET bls_g2_msm n=2: cpu=14598707 mem=232022
+BUDGET bls_g2_msm n=8: cpu=35049203 mem=250999
+ok
+test test::spike_bls_pairing_budget ... BUDGET bls_pairing pairs=2: cpu=24078369 mem=156479
+ok
+test test::spike_keccak_budget ... BUDGET keccak_model n=1 len=64: cpu=23775 mem=6123
+BUDGET keccak_model n=100 len=64: cpu=1170393 mem=34635
+BUDGET keccak_model n=100 len=256: cpu=2066693 mem=53835
+BUDGET keccak_model n=1 len=8192: cpu=403188 mem=14251
+ok
+test test::spike_mldsa44_verify_budget ... BUDGET verify_only mldsa44: cpu=1608400 mem=35238
+ok
+test test::spike_mldsa65_verify_budget ... BUDGET verify_only mldsa65: cpu=2572818 mem=54694
+ok
+test test::spike_msig3_mldsa65_model_budget ... BUDGET msig_model n=3 mldsa65: cpu=8925749 mem=588604
+ok
+test test::spike_msig_pqz_kem_model_budget ... BUDGET register_pqz_kem_model msig n=2 mldsa65 n2816-kmax65536 full: cpu=8959327 mem=328880
+BUDGET register_pqz_kem_model msig n=4 mldsa65 n2816-kmax65536 full: cpu=14706212 mem=651033
+BUDGET register_pqz_kem_model msig n=8 mldsa65 n2816-kmax65536 full: cpu=26340378 mem=1683407
+BUDGET register_pqz_kem_model msig n=16 mldsa65 n2816-kmax65536 full: cpu=50054314 mem=5285739
+ok
+test test::spike_register_mldsa65_model_budget ... BUDGET register_model mldsa65: cpu=3135351 mem=157407
+ok
+test test::spike_register_pqz_kem_model_budget ... BUDGET register_pqz_kem_model mldsa65 n2048-kmax1024 full: cpu=5611059 mem=453854
+BUDGET register_pqz_kem_model msig-pq n=2 n2048-kmax1024 full: cpu=8453116 mem=610388
+BUDGET register_pqz_kem_model mldsa65 n2304-kmax4096 full: cpu=5810261 mem=472860
+BUDGET register_pqz_kem_model msig-pq n=2 n2304-kmax4096 full: cpu=8652318 mem=629394
+BUDGET register_pqz_kem_model mldsa65 n2560-kmax16384 full: cpu=6007962 mem=491726
+BUDGET register_pqz_kem_model msig-pq n=2 n2560-kmax16384 full: cpu=8850019 mem=648260
+BUDGET register_pqz_kem_model mldsa65 n2816-kmax65536 full: cpu=6242324 mem=513726
+BUDGET register_pqz_kem_model msig-pq n=2 n2816-kmax65536 full: cpu=9084381 mem=670260
+ok
+test test::spike_register_split_and_store_pqz_pop_budget ... BUDGET register_pqz_kem_model mldsa65 n2048-kmax1024 split: cpu=4247070 mem=327795
+BUDGET store_pqz_pop_model n2048-kmax1024: cpu=1449258 mem=189529
+BUDGET register_pqz_kem_model mldsa65 n2304-kmax4096 split: cpu=4343598 mem=338035
+BUDGET store_pqz_pop_model n2304-kmax4096: cpu=1551932 mem=198295
+BUDGET register_pqz_kem_model mldsa65 n2560-kmax16384 split: cpu=4440126 mem=348275
+BUDGET store_pqz_pop_model n2560-kmax16384: cpu=1653105 mem=206921
+BUDGET register_pqz_kem_model mldsa65 n2816-kmax65536 split: cpu=4536654 mem=358515
+BUDGET store_pqz_pop_model n2816-kmax65536: cpu=1790939 mem=218681
+ok
+test test::spike_require_authorized_passkey_budget ... BUDGET require_authorized webauthn-p256: cpu=3152086 mem=45824
+ok
+test test::spike_set_kem_key_model_budget ... BUDGET set_kem_key_model v1 n=1: cpu=3129467 mem=96072
+BUDGET set_kem_key_model v1 n=16: cpu=46396129 mem=5100751
+ok
+test test::spike_set_pqz_key_model_budget ... BUDGET set_pqz_key_model n2816-kmax65536 n=1: cpu=3972982 mem=125527
+BUDGET set_pqz_key_model n2816-kmax65536 n=16: cpu=47228320 mem=5128726
+ok
+test test::spike_zether_transfer_model_budget ... BUDGET zether_transfer_model m=1: cpu=536192183 mem=3972882
+BUDGET zether_transfer_model m=2: cpu=809727981 mem=6074460
+BUDGET zether_transfer_model m=4: cpu=1342855091 mem=10036392
+BUDGET zether_transfer_model m=8: cpu=2409274068 mem=17966446
+ok
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.87s
+test test::spike_ua_pay_passkey_model_budget ... BUDGET ua_pay_model webauthn-p256 -> mldsa65 UA (token + registry): cpu=3456687 mem=175612
+ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+## wasm: registry side 27983 bytes, token side 5576 bytes
+quickstart: scaas-stellar up (stellar/quickstart@sha256:e05d68bb3b2629a829310dc3434fc0ee3f801854bdfa1a7c8c362d2f1c9060f8), rpc http://127.0.0.1:31980/rpc
+quickstart: protocolVersion 30, testnet limits applied
+# image: stellar/quickstart@sha256:e05d68bb3b2629a829310dc3434fc0ee3f801854bdfa1a7c8c362d2f1c9060f8
+# v30.0.0
+# ledger protocol version: 30
+# stellar-rpc 30.0.0 (13e53516633c3ce1281c7edbacb607107d3a4e55) HEAD
+ℹ️  Uploading contract WASM…
+❌ error: Account not found: GDOO62JKHFOIMQWEP44HIQILBVOI4OJWMET45YBYK2UUFBSGCZ3HIRZS
+# (the run above stopped at the deploy: 'Account not found' after friendbot reported the account funded; re-run below)
+# spike (ua8-soroban-b0) at commit ref/pre-token-tree-2015-gfad97f0a 2026-10-31T16:48:42+07:00
+# stellar-cli: stellar 30.0.0 (90a3d42d9327ccfaa0d301373766f45beae3e6d9) stellar-xdr 30.0.0 (3c2aa43d2ab54d429ae44aa5143d805bf5dba7e2) xdr (4f524bbac80c781c06e4fb5fc93a2d0d331d6705) 
+# soroban-sdk soroban-sdk-30.0.0-rc.1 host functions used (exact Rust signatures):
+#    pub fn ml_dsa_44_verify( &self, public_key: &BytesN<1312>, message: &Bytes, signature: &BytesN<2420>, context: &Bytes, ) {
+#    pub fn ml_dsa_65_verify( &self, public_key: &BytesN<1952>, message: &Bytes, signature: &BytesN<3309>, context: &Bytes, ) {
+#    pub fn secp256r1_verify( &self, public_key: &BytesN<65>, message_digest: &Hash<32>, signature: &BytesN<64>, ) {
+#   pub fn g1_add(&self, p0: &Bls12381G1Affine, p1: &Bls12381G1Affine) -> Bls12381G1Affine
+#   pub fn g1_mul(&self, p0: &Bls12381G1Affine, scalar: &Bls12381Fr) -> Bls12381G1Affine
+#   pub fn g1_msm(&self, vp: Vec<Bls12381G1Affine>, vs: Vec<Bls12381Fr>) -> Bls12381G1Affine
+#   pub fn g2_add(&self, p0: &Bls12381G2Affine, p1: &Bls12381G2Affine) -> Bls12381G2Affine
+#   pub fn g2_mul(&self, p0: &Bls12381G2Affine, scalar: &Bls12381Fr) -> Bls12381G2Affine
+#   pub fn g2_msm(&self, vp: Vec<Bls12381G2Affine>, vs: Vec<Bls12381Fr>) -> Bls12381G2Affine
+#   pub fn pairing_check(&self, vp1: Vec<Bls12381G1Affine>, vp2: Vec<Bls12381G2Affine>) -> bool
+# figures from soroban-sdk =30.0.0-rc.1 over soroban-env-host 30.0.0 (S5: re-pin to 30.0.0 when it ships)
+## unit tests (SDK testutils, protocol 30; full cargo output: runs/2026-10-31-ua8-soroban-b0-cargo.txt)
+test test::spike_bls_add_mul_fr_budget ... BUDGET bls_add_mul n=1 (G1 add+mul, G2 add+mul): cpu=12618803 mem=8187
+BUDGET bls_add_mul n=10: cpu=126069086 mem=26331
+BUDGET bls_fr_ops n=100 (mul+add+inv): cpu=6263678 mem=224507
+ok
+test test::spike_bls_g1_msm_budget ... BUDGET bls_g1_msm n=64: cpu=97047488 mem=333350
+BUDGET bls_g1_msm n=128: cpu=191655195 mem=616668
+BUDGET bls_g1_msm n=256: cpu=380919761 mem=1379911
+ok
+test test::spike_bls_g2_msm_budget ... BUDGET bls_g2_msm n=2: cpu=14598707 mem=232022
+BUDGET bls_g2_msm n=8: cpu=35049203 mem=250999
+ok
+test test::spike_bls_pairing_budget ... BUDGET bls_pairing pairs=2: cpu=24078369 mem=156479
+ok
+test test::spike_keccak_budget ... BUDGET keccak_model n=1 len=64: cpu=23775 mem=6123
+BUDGET keccak_model n=100 len=64: cpu=1170393 mem=34635
+BUDGET keccak_model n=100 len=256: cpu=2066693 mem=53835
+BUDGET keccak_model n=1 len=8192: cpu=403188 mem=14251
+ok
+test test::spike_mldsa44_verify_budget ... BUDGET verify_only mldsa44: cpu=1608400 mem=35238
+ok
+test test::spike_mldsa65_verify_budget ... BUDGET verify_only mldsa65: cpu=2572818 mem=54694
+ok
+test test::spike_msig3_mldsa65_model_budget ... BUDGET msig_model n=3 mldsa65: cpu=8925749 mem=588604
+ok
+test test::spike_msig_pqz_kem_model_budget ... BUDGET register_pqz_kem_model msig n=2 mldsa65 n2816-kmax65536 full: cpu=8959327 mem=328880
+BUDGET register_pqz_kem_model msig n=4 mldsa65 n2816-kmax65536 full: cpu=14706212 mem=651033
+BUDGET register_pqz_kem_model msig n=8 mldsa65 n2816-kmax65536 full: cpu=26340378 mem=1683407
+BUDGET register_pqz_kem_model msig n=16 mldsa65 n2816-kmax65536 full: cpu=50054314 mem=5285739
+ok
+test test::spike_register_mldsa65_model_budget ... BUDGET register_model mldsa65: cpu=3135351 mem=157407
+ok
+test test::spike_register_pqz_kem_model_budget ... BUDGET register_pqz_kem_model mldsa65 n2048-kmax1024 full: cpu=5611059 mem=453854
+BUDGET register_pqz_kem_model msig-pq n=2 n2048-kmax1024 full: cpu=8453116 mem=610388
+BUDGET register_pqz_kem_model mldsa65 n2304-kmax4096 full: cpu=5810261 mem=472860
+BUDGET register_pqz_kem_model msig-pq n=2 n2304-kmax4096 full: cpu=8652318 mem=629394
+BUDGET register_pqz_kem_model mldsa65 n2560-kmax16384 full: cpu=6007962 mem=491726
+BUDGET register_pqz_kem_model msig-pq n=2 n2560-kmax16384 full: cpu=8850019 mem=648260
+BUDGET register_pqz_kem_model mldsa65 n2816-kmax65536 full: cpu=6242324 mem=513726
+BUDGET register_pqz_kem_model msig-pq n=2 n2816-kmax65536 full: cpu=9084381 mem=670260
+ok
+test test::spike_register_split_and_store_pqz_pop_budget ... BUDGET register_pqz_kem_model mldsa65 n2048-kmax1024 split: cpu=4247070 mem=327795
+BUDGET store_pqz_pop_model n2048-kmax1024: cpu=1449258 mem=189529
+BUDGET register_pqz_kem_model mldsa65 n2304-kmax4096 split: cpu=4343598 mem=338035
+BUDGET store_pqz_pop_model n2304-kmax4096: cpu=1551932 mem=198295
+BUDGET register_pqz_kem_model mldsa65 n2560-kmax16384 split: cpu=4440126 mem=348275
+BUDGET store_pqz_pop_model n2560-kmax16384: cpu=1653105 mem=206921
+BUDGET register_pqz_kem_model mldsa65 n2816-kmax65536 split: cpu=4536654 mem=358515
+BUDGET store_pqz_pop_model n2816-kmax65536: cpu=1790939 mem=218681
+ok
+test test::spike_require_authorized_passkey_budget ... BUDGET require_authorized webauthn-p256: cpu=3152086 mem=45824
+ok
+test test::spike_set_kem_key_model_budget ... BUDGET set_kem_key_model v1 n=1: cpu=3129467 mem=96072
+BUDGET set_kem_key_model v1 n=16: cpu=46396129 mem=5100751
+ok
+test test::spike_set_pqz_key_model_budget ... BUDGET set_pqz_key_model n2816-kmax65536 n=1: cpu=3972982 mem=125527
+BUDGET set_pqz_key_model n2816-kmax65536 n=16: cpu=47228320 mem=5128726
+ok
+test test::spike_zether_transfer_model_budget ... BUDGET zether_transfer_model m=1: cpu=536192183 mem=3972882
+BUDGET zether_transfer_model m=2: cpu=809727981 mem=6074460
+BUDGET zether_transfer_model m=4: cpu=1342855091 mem=10036392
+BUDGET zether_transfer_model m=8: cpu=2409274068 mem=17966446
+ok
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.89s
+test test::spike_ua_pay_passkey_model_budget ... BUDGET ua_pay_model webauthn-p256 -> mldsa65 UA (token + registry): cpu=3456687 mem=175612
+ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+## wasm: registry side 27983 bytes, token side 5576 bytes
+quickstart: scaas-stellar up (stellar/quickstart@sha256:e05d68bb3b2629a829310dc3434fc0ee3f801854bdfa1a7c8c362d2f1c9060f8), rpc http://127.0.0.1:31980/rpc
+quickstart: protocolVersion 30, testnet limits applied
+# image: stellar/quickstart@sha256:e05d68bb3b2629a829310dc3434fc0ee3f801854bdfa1a7c8c362d2f1c9060f8
+# v30.0.0
+# ledger protocol version: 30
+# stellar-rpc 30.0.0 (13e53516633c3ce1281c7edbacb607107d3a4e55) HEAD
+## spike contracts: registry side CAQ5HA4CSQ2P24ZRH7T3DSPULSTCSJT75OEOZ6SB64H5UAJTCFVL2BZ3, token side CDNMPM3ENKTGBF6H6IV3DPIB2UTHSA3JVDLUTQ6P2YX5ADXHIPIY3XQH
+## zether_transfer_model: host operations counted from smartcontracts/evm/src/zether/ZetherVerifier.sol (auditor on)
+#   points: 96 B on Soroban (128 B on EVM); every EVM G1MSM (0x0c) becomes one bls12_381_g1_msm (subgroup check inside)
+#   transcript (ZetherTranscript.sol): absorb = 1 keccak, challenge = 3 keccak + a 512-bit reduction (2 Fr reductions, 1 mul, 1 add)
+#   m = 1, verifyTransfer: ctx absorbs statement (512 + 9P) and sigma (10P), 1 challenge; 2 keccak (Y_f != Y_t);
+#          Sigma MSMs E1..E8 = 3,3,4,4,6,4,4,4 points; 2 range proofs
+#   m > 1, verifyTransferMulti: statement 512 + 6P + 32 + 4Pm, sigma (6 + 5m)P; 1 + 3m keccak (Y_f, Y_tj, C_aud/D_aud);
+#          Sigma MSMs E1 E2 E4 E5 E8 = 3,3,4,6,4 + per leg E3_j E6_j E6'_j E7_j = 4,4,3,4; m + 1 range proofs
+#   per range proof (verifyRange, n = 64, k = 6): 9 absorbs + 10 challenges; 7 Fr inversions (y, u_1..u_6);
+#          about 540 Fr mul and 330 Fr add/sub (_bp1 sum y^i, _sVector, _bpVectorScalars, _bp2); MSMs of 5 and 144 points
+#   not modelled: the token's ciphertext reads / writes and its g1_add updates (Z0 measures the real verifier and token)
+## network limits (stellar network settings): {"instructions": 400000000, "mem": 41943040, "read_bytes": 200000, "write_bytes": 132096, "entries": 400, "writes": 200, "tx_size": 132096, "largest_entry": 65536, "events": 16384}
+#   also: ledger_max_instructions=580000000 contract_max_size_bytes=131072 tx_max_disk_read_entries=200
+#   events = contract events + return value (the limited figure); diag_events = all simulation events, no limit
+## seeded 16 mldsa65 member records, the webauthn-p256 payer (receiver: an mldsa65 UA) and its balance
+## B0: registered (split) 4 single mldsa65 UAs (one per set) and an msig of 16 at n2816-kmax65536; an msig of 16 without attributes
+| class | call | instructions | mem | read_bytes | write_bytes | entries | writes | tx_size | largest_entry | events | diag_events | resource fee (stroops) | verdict |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| limit | network | 400000000 | 41943040 | 200000 | 132096 | 400 | 200 | 132096 | 65536 | 16384 | — | — | — |
+| GATE | register_model mldsa65 | 4431889 (1.1%) | n/a | 0 (0.0%) | 6216 (4.7%) | 6 (1.5%) | 4 (2.0%) | 6036 (4.6%) | 5820 (8.9%) | 2628 (16.0%) | 8168 | 5941502 | within |
+| GATE | msig_model n=3 mldsa65 | 11739672 (2.9%) | n/a | 0 (0.0%) | 11528 (8.7%) | 8 (2.0%) | 3 (1.5%) | 11720 (8.9%) | 11292 (17.2%) | 788 (4.8%) | 11792 | 11053338 | within |
+| GATE | ua_pay_model webauthn-p256 -> mldsa65 UA | 6097667 (1.5%) | n/a | 0 (0.0%) | 464 (0.4%) | 9 (2.2%) | 3 (1.5%) | 1612 (1.2%) | 176 (0.3%) | 692 (4.2%) | 2596 | 346464 | within |
+| data | msig_model n=1 mldsa65 | 4695475 (1.2%) | n/a | 0 (0.0%) | 4416 (3.3%) | 6 (1.5%) | 3 (1.5%) | 4392 (3.3%) | 4180 (6.4%) | 716 (4.4%) | 4608 | 4191104 | within |
+| data | msig_model n=2 mldsa65 | 8203177 (2.1%) | n/a | 0 (0.0%) | 7972 (6.0%) | 7 (1.8%) | 3 (1.5%) | 8056 (6.1%) | 7736 (11.8%) | 752 (4.6%) | 8200 | 7622209 | within |
+| data | msig_model n=3 mldsa65 | 11739672 (2.9%) | n/a | 0 (0.0%) | 11528 (8.7%) | 8 (2.0%) | 3 (1.5%) | 11720 (8.9%) | 11292 (17.2%) | 788 (4.8%) | 11792 | 11053338 | within |
+| data | msig_model n=4 mldsa65 | 15266543 (3.8%) | n/a | 0 (0.0%) | 15084 (11.4%) | 9 (2.2%) | 3 (1.5%) | 15384 (11.6%) | 14848 (22.7%) | 824 (5.0%) | 15384 | 14484458 | within |
+| data | msig_model n=5 mldsa65 | 18812896 (4.7%) | n/a | 0 (0.0%) | 18640 (14.1%) | 10 (2.5%) | 3 (1.5%) | 19048 (14.4%) | 18404 (28.1%) | 860 (5.2%) | 18976 | 17915589 | within |
+| data | msig_model n=6 mldsa65 | 22348888 (5.6%) | n/a | 0 (0.0%) | 22196 (16.8%) | 11 (2.8%) | 3 (1.5%) | 22712 (17.2%) | 21960 (33.5%) | 896 (5.5%) | 22568 | 21346718 | within |
+| data | msig_model n=7 mldsa65 | 25921048 (6.5%) | n/a | 0 (0.0%) | 25752 (19.5%) | 12 (3.0%) | 3 (1.5%) | 26376 (20.0%) | 25516 (38.9%) | 932 (5.7%) | 26160 | 24777867 | within |
+| data | msig_model n=8 mldsa65 | 29485848 (7.4%) | n/a | 0 (0.0%) | 29308 (22.2%) | 13 (3.2%) | 3 (1.5%) | 30040 (22.7%) | 29072 (44.4%) | 968 (5.9%) | 29752 | 28209018 | within |
+| data | msig_model n=9 mldsa65 | 33061942 (8.3%) | n/a | 0 (0.0%) | 32864 (24.9%) | 14 (3.5%) | 3 (1.5%) | 33704 (25.5%) | 32628 (49.8%) | 1004 (6.1%) | 33344 | 31640172 | within |
+| data | msig_model n=10 mldsa65 | 36661381 (9.2%) | n/a | 0 (0.0%) | 36420 (27.6%) | 15 (3.8%) | 3 (1.5%) | 37368 (28.3%) | 36184 (55.2%) | 1040 (6.3%) | 36936 | 35071339 | within |
+| data | msig_model n=11 mldsa65 | 40236282 (10.1%) | n/a | 0 (0.0%) | 39976 (30.3%) | 16 (4.0%) | 3 (1.5%) | 41032 (31.1%) | 39740 (60.6%) | 1076 (6.6%) | 40528 | 38502495 | within |
+| data | msig_model n=12 mldsa65 | 43882606 (11.0%) | n/a | 0 (0.0%) | 43532 (33.0%) | 17 (4.2%) | 3 (1.5%) | 44696 (33.8%) | 43296 (66.1%) | 1112 (6.8%) | 44120 | 41933697 | within |
+| data | msig_model n=13 mldsa65 | 47475986 (11.9%) | n/a | 0 (0.0%) | 47088 (35.6%) | 18 (4.5%) | 3 (1.5%) | 48360 (36.6%) | 46852 (71.5%) | 1148 (7.0%) | 47712 | 45364867 | within |
+| data | msig_model n=14 mldsa65 | 51103902 (12.8%) | n/a | 0 (0.0%) | 50644 (38.3%) | 19 (4.8%) | 3 (1.5%) | 52024 (39.4%) | 50408 (76.9%) | 1184 (7.2%) | 51304 | 48796057 | within |
+| data | msig_model n=15 mldsa65 | 54740810 (13.7%) | n/a | 0 (0.0%) | 54200 (41.0%) | 20 (5.0%) | 3 (1.5%) | 55688 (42.2%) | 53964 (82.3%) | 1220 (7.4%) | 54896 | 52227252 | within |
+| data | msig_model n=16 mldsa65 | 58393829 (14.6%) | n/a | 0 (0.0%) | 57756 (43.7%) | 21 (5.2%) | 3 (1.5%) | 59352 (44.9%) | 57520 (87.8%) | 1256 (7.7%) | 58488 | 55658462 | within |
+| data | verify_only mldsa44 | 2462400 (0.6%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 4128 (3.1%) | 0 (0.0%) | 4 (0.0%) | 4008 | 30983 | within |
+| data | verify_only mldsa65 | 3521464 (0.9%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 5660 (4.3%) | 0 (0.0%) | 4 (0.0%) | 5540 | 39076 | within |
+| data | bls_g1_msm n=64 | 102140128 (25.5%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 104 (0.6%) | 308 | 84435 | within |
+| data | bls_g1_msm n=128 | 201101431 (50.3%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 104 (0.6%) | 308 | 153708 | within |
+| data | bls_g1_msm n=256 | 399075155 (99.8%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 104 (0.6%) | 308 | 292289 | within |
+| data | bls_g2_msm n=2 | 15841944 (4.0%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 200 (1.2%) | 404 | 24565 | within |
+| data | bls_g2_msm n=8 | 37163831 (9.3%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 200 (1.2%) | 404 | 39490 | within |
+| data | bls_pairing pairs=2 | 25727650 (6.4%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 8 (0.0%) | 212 | 30408 | within |
+| data | bls_add_mul n=1 | 13782990 (3.4%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 104 (0.6%) | 308 | 22585 | within |
+| data | bls_fr_ops n=100 | 9695485 (2.4%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 340 (0.3%) | 0 (0.0%) | 40 (0.2%) | 244 | 19364 | within |
+| data | zether_transfer_model m=1 | SIMULATION FAILED: HostError: Error(Budget, ExceededLimit) DebugInfo not available  |
+| data | zether_transfer_model m=2 | SIMULATION FAILED: HostError: Error(Budget, ExceededLimit) DebugInfo not available  |
+| data | zether_transfer_model m=4 | SIMULATION FAILED: HostError: Error(Budget, ExceededLimit) DebugInfo not available  |
+| data | zether_transfer_model m=8 | SIMULATION FAILED: HostError: Error(Budget, ExceededLimit) DebugInfo not available  |
+| data | B0 register mldsa65 n2048-kmax1024 full | 8995278 (2.2%) | n/a | 0 (0.0%) | 55168 (41.8%) | 11 (2.8%) | 9 (4.5%) | 52912 (40.1%) | 28320 (43.2%) | 2628 (16.0%) | 54492 | 53150854 | within |
+| GATE | B0 register mldsa65 n2048-kmax1024 split | 6519041 (1.6%) | n/a | 0 (0.0%) | 26848 (20.3%) | 10 (2.5%) | 8 (4.0%) | 24612 (18.6%) | 16600 (25.3%) | 2628 (16.0%) | 26300 | 25843736 | within |
+| GATE | B0 store_pqz_pop mldsa65 n2048-kmax1024 | 3474630 (0.9%) | n/a | 0 (0.0%) | 28320 (21.4%) | 4 (1.0%) | 1 (0.5%) | 28796 (21.8%) | 28320 (43.2%) | 160 (1.0%) | 28628 | 27320536 | within |
+| data | B0 register msig n=2 n2048-kmax1024 full | 12503148 (3.1%) | n/a | 0 (0.0%) | 55048 (41.7%) | 12 (3.0%) | 8 (4.0%) | 54944 (41.6%) | 28320 (43.2%) | 752 (4.6%) | 54532 | 53031996 | within |
+| data | B0 register msig n=2 n2048-kmax1024 split | 10012908 (2.5%) | n/a | 0 (0.0%) | 26728 (20.2%) | 11 (2.8%) | 7 (3.5%) | 26644 (20.2%) | 16600 (25.3%) | 752 (4.6%) | 26340 | 25724866 | within |
+| data | B0 register msig n=4 n2048-kmax1024 full | 19279557 (4.8%) | n/a | 0 (0.0%) | 62232 (47.1%) | 14 (3.5%) | 8 (4.0%) | 62280 (47.1%) | 28320 (43.2%) | 824 (5.0%) | 61716 | 59963143 | within |
+| data | B0 register msig n=4 n2048-kmax1024 split | 16794672 (4.2%) | n/a | 0 (0.0%) | 33912 (25.7%) | 13 (3.2%) | 7 (3.5%) | 33980 (25.7%) | 16600 (25.3%) | 824 (5.0%) | 33524 | 32656019 | within |
+| data | B0 register msig n=8 n2048-kmax1024 full | 32995956 (8.2%) | n/a | 0 (0.0%) | 76600 (58.0%) | 18 (4.5%) | 8 (4.0%) | 76952 (58.3%) | 29072 (44.4%) | 968 (5.9%) | 76084 | 73825551 | within |
+| data | B0 register msig n=8 n2048-kmax1024 split | 30498913 (7.6%) | n/a | 0 (0.0%) | 48280 (36.5%) | 17 (4.2%) | 7 (3.5%) | 48652 (36.8%) | 29072 (44.4%) | 968 (5.9%) | 47892 | 46518416 | within |
+| data | B0 register msig n=16 n2048-kmax1024 full | 60858248 (15.2%) | n/a | 0 (0.0%) | 105336 (79.7%) | 26 (6.5%) | 8 (4.0%) | 106296 (80.5%) | 57520 (87.8%) | 1256 (7.7%) | 104820 | 101550660 | within |
+| data | B0 register msig n=16 n2048-kmax1024 split | 58350372 (14.6%) | n/a | 0 (0.0%) | 77016 (58.3%) | 25 (6.2%) | 7 (3.5%) | 77996 (59.0%) | 57520 (87.8%) | 1256 (7.7%) | 76628 | 74243519 | within |
+| data | B0 register mldsa65 n2304-kmax4096 full | 9354129 (2.3%) | n/a | 0 (0.0%) | 59408 (45.0%) | 11 (2.8%) | 9 (4.5%) | 57152 (43.3%) | 30512 (46.6%) | 2628 (16.0%) | 58732 | 57238403 | within |
+| GATE | B0 register mldsa65 n2304-kmax4096 split | 6692729 (1.7%) | n/a | 0 (0.0%) | 28896 (21.9%) | 10 (2.5%) | 8 (4.0%) | 26660 (20.2%) | 18648 (28.5%) | 2628 (16.0%) | 28348 | 27818100 | within |
+| GATE | B0 store_pqz_pop mldsa65 n2304-kmax4096 | 3659793 (0.9%) | n/a | 0 (0.0%) | 30512 (23.1%) | 4 (1.0%) | 1 (0.5%) | 30988 (23.5%) | 30512 (46.6%) | 160 (1.0%) | 30820 | 29433720 | within |
+| data | B0 register msig n=2 n2304-kmax4096 full | 12862000 (3.2%) | n/a | 0 (0.0%) | 59288 (44.9%) | 12 (3.0%) | 8 (4.0%) | 59184 (44.8%) | 30512 (46.6%) | 752 (4.6%) | 58772 | 57119544 | within |
+| data | B0 register msig n=2 n2304-kmax4096 split | 10186597 (2.5%) | n/a | 0 (0.0%) | 28776 (21.8%) | 11 (2.8%) | 7 (3.5%) | 28692 (21.7%) | 18648 (28.5%) | 752 (4.6%) | 28388 | 27699229 | within |
+| data | B0 register msig n=4 n2304-kmax4096 full | 19638408 (4.9%) | n/a | 0 (0.0%) | 66472 (50.3%) | 14 (3.5%) | 8 (4.0%) | 66520 (50.4%) | 30512 (46.6%) | 824 (5.0%) | 65956 | 64050691 | within |
+| data | B0 register msig n=4 n2304-kmax4096 split | 16968361 (4.2%) | n/a | 0 (0.0%) | 35960 (27.2%) | 13 (3.2%) | 7 (3.5%) | 36028 (27.3%) | 18648 (28.5%) | 824 (5.0%) | 35572 | 34630377 | within |
+| data | B0 register msig n=8 n2304-kmax4096 full | 33354807 (8.3%) | n/a | 0 (0.0%) | 80840 (61.2%) | 18 (4.5%) | 8 (4.0%) | 81192 (61.5%) | 30512 (46.6%) | 968 (5.9%) | 80324 | 77913098 | within |
+| data | B0 register msig n=8 n2304-kmax4096 split | 30672601 (7.7%) | n/a | 0 (0.0%) | 50328 (38.1%) | 17 (4.2%) | 7 (3.5%) | 50700 (38.4%) | 29072 (44.4%) | 968 (5.9%) | 49940 | 48492779 | within |
+| data | B0 register msig n=16 n2304-kmax4096 full | 61217099 (15.3%) | n/a | 0 (0.0%) | 109576 (83.0%) | 26 (6.5%) | 8 (4.0%) | 110536 (83.7%) | 57520 (87.8%) | 1256 (7.7%) | 109060 | 105638208 | within |
+| data | B0 register msig n=16 n2304-kmax4096 split | 58524060 (14.6%) | n/a | 0 (0.0%) | 79064 (59.9%) | 25 (6.2%) | 7 (3.5%) | 80044 (60.6%) | 57520 (87.8%) | 1256 (7.7%) | 78676 | 76217882 | within |
+| data | B0 register mldsa65 n2560-kmax16384 full | 9710132 (2.4%) | n/a | 0 (0.0%) | 63612 (48.2%) | 11 (2.8%) | 9 (4.5%) | 61356 (46.4%) | 32668 (49.8%) | 2628 (16.0%) | 62936 | 61291245 | within |
+| GATE | B0 register mldsa65 n2560-kmax16384 split | 6866418 (1.7%) | n/a | 0 (0.0%) | 30944 (23.4%) | 10 (2.5%) | 8 (4.0%) | 28708 (21.7%) | 20696 (31.6%) | 2628 (16.0%) | 30396 | 29792460 | within |
+| GATE | B0 store_pqz_pop mldsa65 n2560-kmax16384 | 3842109 (1.0%) | n/a | 0 (0.0%) | 32668 (24.7%) | 4 (1.0%) | 1 (0.5%) | 33144 (25.1%) | 32668 (49.8%) | 160 (1.0%) | 32976 | 31512201 | within |
+| data | B0 register msig n=2 n2560-kmax16384 full | 13218003 (3.3%) | n/a | 0 (0.0%) | 63492 (48.1%) | 12 (3.0%) | 8 (4.0%) | 63388 (48.0%) | 32668 (49.8%) | 752 (4.6%) | 62976 | 61172385 | within |
+| data | B0 register msig n=2 n2560-kmax16384 split | 10360285 (2.6%) | n/a | 0 (0.0%) | 30824 (23.3%) | 11 (2.8%) | 7 (3.5%) | 30740 (23.3%) | 20696 (31.6%) | 752 (4.6%) | 30436 | 29673594 | within |
+| data | B0 register msig n=4 n2560-kmax16384 full | 19994411 (5.0%) | n/a | 0 (0.0%) | 70676 (53.5%) | 14 (3.5%) | 8 (4.0%) | 70724 (53.5%) | 32668 (49.8%) | 824 (5.0%) | 70160 | 68103534 | within |
+| data | B0 register msig n=4 n2560-kmax16384 split | 17142049 (4.3%) | n/a | 0 (0.0%) | 38008 (28.8%) | 13 (3.2%) | 7 (3.5%) | 38076 (28.8%) | 20696 (31.6%) | 824 (5.0%) | 37620 | 36604743 | within |
+| data | B0 register msig n=8 n2560-kmax16384 full | 33710811 (8.4%) | n/a | 0 (0.0%) | 85044 (64.4%) | 18 (4.5%) | 8 (4.0%) | 85396 (64.6%) | 32668 (49.8%) | 968 (5.9%) | 84528 | 81965939 | within |
+| data | B0 register msig n=8 n2560-kmax16384 split | 30846289 (7.7%) | n/a | 0 (0.0%) | 52376 (39.6%) | 17 (4.2%) | 7 (3.5%) | 52748 (39.9%) | 29072 (44.4%) | 968 (5.9%) | 51988 | 50467139 | within |
+| data | B0 register msig n=16 n2560-kmax16384 full | 61573104 (15.4%) | n/a | 0 (0.0%) | 113780 (86.1%) | 26 (6.5%) | 8 (4.0%) | 114740 (86.9%) | 57520 (87.8%) | 1256 (7.7%) | 113264 | 109691056 | within |
+| data | B0 register msig n=16 n2560-kmax16384 split | 58697748 (14.7%) | n/a | 0 (0.0%) | 81112 (61.4%) | 25 (6.2%) | 7 (3.5%) | 82092 (62.1%) | 57520 (87.8%) | 1256 (7.7%) | 80724 | 78192248 | within |
+| data | B0 register mldsa65 n2816-kmax65536 full | 10132296 (2.5%) | n/a | 0 (0.0%) | 68600 (51.9%) | 11 (2.8%) | 9 (4.5%) | 66344 (50.2%) | 35608 (54.3%) | 2628 (16.0%) | 67924 | 66099898 | within |
+| GATE | B0 register mldsa65 n2816-kmax65536 split | 7040106 (1.8%) | n/a | 0 (0.0%) | 32992 (25.0%) | 10 (2.5%) | 8 (4.0%) | 30756 (23.3%) | 22744 (34.7%) | 2628 (16.0%) | 32444 | 31766824 | within |
+| GATE | B0 store_pqz_pop mldsa65 n2816-kmax65536 | 4090584 (1.0%) | n/a | 0 (0.0%) | 35608 (27.0%) | 4 (1.0%) | 1 (0.5%) | 36084 (27.3%) | 35608 (54.3%) | 160 (1.0%) | 35916 | 34346490 | within |
+| data | B0 register msig n=2 n2816-kmax65536 full | 13640166 (3.4%) | n/a | 0 (0.0%) | 68480 (51.8%) | 12 (3.0%) | 8 (4.0%) | 68376 (51.8%) | 35608 (54.3%) | 752 (4.6%) | 67964 | 65981038 | within |
+| data | B0 register msig n=2 n2816-kmax65536 split | 10533973 (2.6%) | n/a | 0 (0.0%) | 32872 (24.9%) | 11 (2.8%) | 7 (3.5%) | 32788 (24.8%) | 22744 (34.7%) | 752 (4.6%) | 32484 | 31647953 | within |
+| data | B0 register msig n=4 n2816-kmax65536 full | 20416575 (5.1%) | n/a | 0 (0.0%) | 75664 (57.3%) | 14 (3.5%) | 8 (4.0%) | 75712 (57.3%) | 35608 (54.3%) | 824 (5.0%) | 75148 | 72912187 | within |
+| data | B0 register msig n=4 n2816-kmax65536 split | 17315737 (4.3%) | n/a | 0 (0.0%) | 40056 (30.3%) | 13 (3.2%) | 7 (3.5%) | 40124 (30.4%) | 22744 (34.7%) | 824 (5.0%) | 39668 | 38579107 | within |
+| data | B0 register msig n=8 n2816-kmax65536 full | 34132974 (8.5%) | n/a | 0 (0.0%) | 90032 (68.2%) | 18 (4.5%) | 8 (4.0%) | 90384 (68.4%) | 35608 (54.3%) | 968 (5.9%) | 89516 | 86774593 | within |
+| data | B0 register msig n=8 n2816-kmax65536 split | 31019978 (7.8%) | n/a | 0 (0.0%) | 54424 (41.2%) | 17 (4.2%) | 7 (3.5%) | 54796 (41.5%) | 29072 (44.4%) | 968 (5.9%) | 54036 | 52441503 | within |
+| data | B0 register msig n=16 n2816-kmax65536 full | 61995267 (15.5%) | n/a | 0 (0.0%) | 118768 (89.9%) | 26 (6.5%) | 8 (4.0%) | 119728 (90.6%) | 57520 (87.8%) | 1256 (7.7%) | 118252 | 114499704 | within |
+| data | B0 register msig n=16 n2816-kmax65536 split | 58871437 (14.7%) | n/a | 0 (0.0%) | 83160 (63.0%) | 25 (6.2%) | 7 (3.5%) | 84140 (63.7%) | 57520 (87.8%) | 1256 (7.7%) | 82772 | 80166612 | within |
+| data | B0 store_pqz_pop msig n=16 n2816-kmax65536 | 5952723 (1.5%) | n/a | 0 (0.0%) | 35608 (27.0%) | 4 (1.0%) | 1 (0.5%) | 36084 (27.3%) | 35608 (54.3%) | 160 (1.0%) | 35916 | 34347793 | within |
+| GATE | B0 set_kem_key v1 mldsa65 | 4485792 (1.1%) | n/a | 0 (0.0%) | 5240 (4.0%) | 5 (1.2%) | 2 (1.0%) | 5664 (4.3%) | 5104 (7.8%) | 300 (1.8%) | 5512 | 5078427 | within |
+| GATE | B0 set_pqz_key n2816-kmax65536 mldsa65 | 6111866 (1.5%) | n/a | 0 (0.0%) | 26056 (19.7%) | 4 (1.0%) | 1 (0.5%) | 26492 (20.1%) | 26056 (39.8%) | 348 (2.1%) | 26512 | 25140785 | within |
+| data | B0 set_kem_key v1 msig n=16 | 57356814 (14.3%) | n/a | 0 (0.0%) | 58312 (44.1%) | 21 (5.2%) | 2 (1.0%) | 60528 (45.8%) | 58176 (88.8%) | 300 (1.8%) | 58584 | 56284649 | within |
+| data | B0 set_pqz_key n2816-kmax65536 msig n=16 | 58949537 (14.7%) | n/a | 0 (0.0%) | 79128 (59.9%) | 20 (5.0%) | 1 (0.5%) | 81356 (61.6%) | 79128 (120.7%) | 348 (2.1%) | 79584 | 76346983 | OVER: largest_entry |
+| data | B0 keccak_model n=1 len=64 | 691871 (0.2%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 348 (0.3%) | 0 (0.0%) | 40 (0.2%) | 264 | 13098 | within |
+| data | B0 keccak_model n=100 len=64 | 2135858 (0.5%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 348 (0.3%) | 0 (0.0%) | 40 (0.2%) | 264 | 14109 | within |
+| data | B0 keccak_model n=100 len=256 | 3068010 (0.8%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 348 (0.3%) | 0 (0.0%) | 40 (0.2%) | 264 | 14761 | within |
+| data | B0 keccak_model n=1 len=8192 | 1071284 (0.3%) | n/a | 0 (0.0%) | 0 (0.0%) | 2 (0.5%) | 0 (0.0%) | 348 (0.3%) | 0 (0.0%) | 40 (0.2%) | 264 | 13363 | within |
+## msig_model scan (data): largest n in 1..16 that fits every limit: 16; first over: none up to 16
+## B0 (UA8-D21 case per set; GATE = the single-key split register + store_pqz_pop, C12):
+##   n2048-kmax1024: single mldsa65 full in one register; largest msig n (ML-DSA-65 members) with PQZ + KEM: 16 in one register, 16 with the split
+##   n2304-kmax4096: single mldsa65 full in one register; largest msig n (ML-DSA-65 members) with PQZ + KEM: 16 in one register, 16 with the split
+##   n2560-kmax16384: single mldsa65 full in one register; largest msig n (ML-DSA-65 members) with PQZ + KEM: 16 in one register, 16 with the split
+##   n2816-kmax65536: single mldsa65 full in one register; largest msig n (ML-DSA-65 members) with PQZ + KEM: 16 in one register, 16 with the split
+##   keccak256 on the network: ~14585 instructions per 64 B hash, ~24001 per 256 B hash; the costliest B0 register (B0 register msig n=16 n2816-kmax65536 full) uses 61995267 of 400000000 instructions: headroom ~14082 hashes of 256 B
+## GATE: PASS (every UA-Soroban and B0 gate figure within the limits)
+## B0 verdict (plan ua8-soroban B0 Step 5; C12, UA8-D21), run above: run.sh rc=0
+#   GATE PASS. Single-key mldsa65 with PQZ key + proof + KEM v1 fits in ONE `register` at every set (largest:
+#   n2816-kmax65536, tx 66,344 B = 50.2 %, write 68,600 B = 51.9 %, largest entry PqzP 35,608 B = 54.3 %, 10.1 M
+#   instructions = 2.5 %); the split (`register` without the proof + `store_pqz_pop`) also fits; no STOP.
+#   UA8-D21 case: full in one `register` for every set; `store_pqz_pop` stays for a proof stored later (U8S-D6), not
+#   needed for size. msig of n ML-DSA-65 members with PQZ + KEM: n = 16 (the CTR-UA-09 maximum) fits in one `register`
+#   at every set (n2816-kmax65536: tx 119,728 B = 90.6 %, write 118,768 B = 89.9 %, largest entry Ua 57,520 B = 87.8 %,
+#   62.0 M instructions = 15.5 %).
+#   FINDING (data, not a STOP): `set_pqz_key` of an msig n = 16 at n2816-kmax65536 writes PqzK = (key 22,528 B ‖ sig
+#   56,384 B) = 79,128 B > 65,536 B contract_data_entry_size_bytes. With the U8S-D3 layout (key and sig in one PqzK
+#   entry; figure linear in n: MemberSig[] = 64 + 3,520 n B, entry ≈ key + sig + 216 B as measured) the largest msig n
+#   for `set_pqz_key` is 13 at n2048-kmax1024 / n2304-kmax4096 and 12 at n2560-kmax16384 / n2816-kmax65536 (derived,
+#   not simulated). Keeping the signature in its own entry (e.g. `PqzS(ua)`, ≤ 56,600 B at n = 16) lifts it to 16 at
+#   every set; B3's call (controller / owner). Kem(ua, v) with an n = 16 msig signature is 58,176 B (88.8 %): fits.
+#   keccak256 headroom (for the typed EIP-712 records under discussion): on the network ~14.6 K instructions per extra
+#   64 B hash, ~24 K per 256 B hash (keccak_model rows); the costliest call (msig n = 16 full register, 62.0 M) leaves
+#   ~338 M instructions = ~14,000 hashes of 256 B. A few more hashes per record (or one more per msig member) change
+#   no verdict; hashing does not touch tx size, write bytes or entry sizes.
+#   Keccak calls per call today (constant tags): single register 11 (ua_of, key_hash, keccak(pqz_pop) 35.5 KB,
+#   pqz key hash 22.5 KB, keccak(kem_pk), kem_record_digest, portable_pop_digest, registration_digest, ua_message,
+#   pq_message, pop_hash for the event); msig register 9 + member_digest + 2 per member (ua_message, pq_message);
+#   set_kem_key 6 (kem_pk, kem_record_digest, ua_message, pq_message, 2 event hashes), msig 6 + 2n (member_digest for
+#   pq_message, 2 per member); set_pqz_key 6 (pqz key hash 22.5 KB, pqz_key_digest, record digest, ua_message,
+#   pq_message, sig_hash), msig 6 + 2n; store_pqz_pop 1.
+#   memory: the RPC reports no memBytes (n/a); SDK testutils: at most 5.3 MB (msig n = 16) of the 41.9 MB limit.
+#   pins: soroban-sdk =30.0.0-rc.1 and the quickstart image digest unchanged (no new pin).
+rc=0
