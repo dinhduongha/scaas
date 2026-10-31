@@ -6,9 +6,12 @@
 //! tác (cùng công thức với Odoo/adapter) và phát trong `MetaTransactionExecuted` để Odoo chốt op.
 #![no_std]
 use soroban_sdk::{
-    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, xdr::ToXdr, Address,
-    Bytes, BytesN, Env, Executable, MuxedAddress, String, Symbol,
+    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, Address,
+    Bytes, BytesN, Env, Executable, MuxedAddress, String,
 };
+/// The op digest (`MetaOp` v1, NET-SOR-16) and `meta_pay_id` (CTR-MTX-26), shared with the UA-Soroban contracts.
+pub use scaas_ua_common::op_digest;
+use scaas_ua_common::meta_pay_id;
 
 const DAY: u32 = 17_280;
 const TTL_BUMP: u32 = 60 * DAY;
@@ -25,6 +28,12 @@ pub enum Error {
     Expired = 5,
     RefUsed = 6,
     BadExpiration = 7,
+    UaLedgerOff = 8,
+    UaNotRegistered = 9,
+    UaNotReceivable = 10,
+    UaPoolNotPayable = 11,
+    BadNonce = 12,
+    BadOrder = 13,
 }
 
 #[contracttype]
@@ -37,6 +46,15 @@ enum Key {
     Balance(Address),
     Allowance(Address, Address),
     PayRef(Address, BytesN<32>),
+    /// The UA registry bound at construction (instance; `None` = the UA ledger is off, S16).
+    Registry,
+    /// Persistent, one entry per key (S11): a UA's balance and its lane nonces.
+    UaBalance(BytesN<32>),
+    UaNonce(BytesN<32>, BytesN<32>),
+    /// A `ua_cancel_nonce` digest already run (EVM `cancelUsed`): its signature names no nonce, so it runs once.
+    UaCancelUsed(BytesN<32>),
+    /// `ua_trade`'s running total per order digest, `≤ sell_amount` (controller ruling 2026-10-30, EVM `pulled[h]`).
+    UaPulled(BytesN<32>),
 }
 
 #[contracttype]
@@ -104,27 +122,6 @@ pub struct Burn {
     pub amount: i128,
 }
 
-/// Digest thao tác (`MetaOp` v1 trên Soroban): sha256(XDR của
-/// `Vec[Symbol("scaas_metaop_v1"), BytesN32(network_id), Address(contract), Symbol(fn), Vec(args)]`).
-/// Python (`fam_soroban.op_digest`) và adapter Rust tính cùng giá trị — vector chéo trong test.
-pub fn op_digest(env: &Env, function: &str, args: soroban_sdk::Vec<soroban_sdk::Val>) -> BytesN<32> {
-    let v = (
-        Symbol::new(env, "scaas_metaop_v1"),
-        env.ledger().network_id(),
-        env.current_contract_address(),
-        Symbol::new(env, function),
-        args,
-    );
-    env.crypto().sha256(&v.to_xdr(env)).into()
-}
-
-fn meta_pay_id(env: &Env, salt: &BytesN<32>, meta: &Bytes) -> BytesN<32> {
-    let mut b = Bytes::from_slice(env, b"scaas.pay.meta");
-    b.append(&salt.clone().into());
-    b.append(&env.crypto().keccak256(meta).to_bytes().into());
-    env.crypto().keccak256(&b).into()
-}
-
 fn check_amount(env: &Env, amount: i128) {
     if amount < 0 {
         panic_with_error!(env, Error::NegativeAmount);
@@ -175,6 +172,13 @@ fn spend_allowance(env: &Env, from: &Address, spender: &Address, amount: i128) {
     env.storage().temporary().set(&k, &Allowance { amount: a.amount - amount, ..a });
 }
 
+/// Spec §5.1: the UA pool is the token's own address; no native path pays it (CTR-MTX-18).
+fn not_pool(env: &Env, a: &Address) {
+    if *a == env.current_contract_address() {
+        panic_with_error!(env, Error::UaPoolNotPayable);
+    }
+}
+
 /// R26: chỉ contract (Wasm hoặc Stellar Asset) được làm spender — không bao giờ một account thường.
 fn require_contract(env: &Env, spender: &Address) {
     match spender.executable() {
@@ -188,8 +192,9 @@ pub struct Token;
 
 #[contractimpl]
 impl Token {
-    pub fn __constructor(env: Env, admin: Address, decimals: u32, name: String, symbol: String) {
+    pub fn __constructor(env: Env, admin: Address, decimals: u32, name: String, symbol: String, registry: Option<Address>) {
         let s = env.storage().instance();
+        s.set(&Key::Registry, &registry);
         s.set(&Key::Admin, &admin);
         s.set(&Key::Decimals, &decimals);
         s.set(&Key::Name, &name);
@@ -203,6 +208,7 @@ impl Token {
     pub fn mint(env: Env, to: Address, amount: i128) {
         Self::admin(env.clone()).require_auth();
         check_amount(&env, amount);
+        not_pool(&env, &to);
         env.storage().instance().extend_ttl(TTL_MIN, TTL_BUMP);
         set_balance(&env, &to, balance_of(&env, &to) + amount);
         Mint { to, amount }.publish(&env);
@@ -214,7 +220,7 @@ impl Token {
         from.require_auth();
         Self::settle_pay(&env, &from, &to, amount, &pay_ref, valid_until);
         let args = (from.clone(), to, amount, pay_ref, valid_until);
-        let digest = op_digest(&env, "pay", soroban_sdk::IntoVal::into_val(&args, &env));
+        let digest = op_digest(&env, &env.current_contract_address(), "pay", soroban_sdk::IntoVal::into_val(&args, &env));
         MetaTransactionExecuted { from, digest }.publish(&env);
     }
 
@@ -226,7 +232,7 @@ impl Token {
         PaymentMeta { pay_id: pay_ref.clone(), meta: meta.clone() }.publish(&env);
         Self::settle_pay(&env, &from, &to, amount, &pay_ref, valid_until);
         let args = (from.clone(), to, amount, salt, meta, valid_until);
-        let digest = op_digest(&env, "pay_meta", soroban_sdk::IntoVal::into_val(&args, &env));
+        let digest = op_digest(&env, &env.current_contract_address(), "pay_meta", soroban_sdk::IntoVal::into_val(&args, &env));
         MetaTransactionExecuted { from, digest }.publish(&env);
     }
 
@@ -269,6 +275,7 @@ impl Token {
     pub fn transfer(env: Env, from: Address, to: MuxedAddress, amount: i128) {
         from.require_auth();
         let to = to.address();
+        not_pool(&env, &to);
         move_funds(&env, &from, &to, amount);
         Transfer { from, to, amount }.publish(&env);
     }
@@ -276,6 +283,7 @@ impl Token {
     pub fn transfer_from(env: Env, spender: Address, from: Address, to: Address, amount: i128) {
         spender.require_auth();
         check_amount(&env, amount);
+        not_pool(&env, &to);
         spend_allowance(&env, &from, &spender, amount);
         move_funds(&env, &from, &to, amount);
         Transfer { from, to, amount }.publish(&env);
@@ -309,6 +317,14 @@ impl Token {
 impl Token {
     /// Thân chung của `pay` / `pay_meta`: hạn, `PayRef` một lần, chuyển tiền, `PaymentSettled`.
     fn settle_pay(env: &Env, from: &Address, to: &Address, amount: i128, pay_ref: &BytesN<32>, valid_until: u64) {
+        not_pool(env, to);
+        Self::use_pay_ref(env, from, pay_ref, valid_until);
+        move_funds(env, from, to, amount);
+        PaymentSettled { from: from.clone(), to: to.clone(), amount, pay_ref: pay_ref.clone() }.publish(env);
+    }
+
+    /// Expiry and `PayRef(from, pay_ref)` once (NET-SOR-09), shared by `pay`, `pay_meta` and `pay_to_ua`.
+    fn use_pay_ref(env: &Env, from: &Address, pay_ref: &BytesN<32>, valid_until: u64) {
         if env.ledger().timestamp() > valid_until {
             panic_with_error!(env, Error::Expired);
         }
@@ -320,8 +336,6 @@ impl Token {
         s.set(&k, &true);
         s.extend_ttl(&k, TTL_MIN, TTL_BUMP);
         env.storage().instance().extend_ttl(TTL_MIN, TTL_BUMP);
-        move_funds(env, from, to, amount);
-        PaymentSettled { from: from.clone(), to: to.clone(), amount, pay_ref: pay_ref.clone() }.publish(env);
     }
 
     fn burn_inner(env: &Env, from: Address, amount: i128) {
@@ -335,5 +349,9 @@ impl Token {
     }
 }
 
+mod ua;
+
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+mod test_ua;

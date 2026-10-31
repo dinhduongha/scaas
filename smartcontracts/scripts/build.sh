@@ -10,7 +10,7 @@ build() {
     evm)     (cd "$SC/evm" && forge build) ;;
     aptos)   aptos move compile --package-dir "$SC/move/aptos" --dev --skip-fetch-latest-git-deps ;;
     sui)     sui move build --path "$SC/move/sui" ;;
-    soroban) (cd "$SC/soroban" && cargo build --target wasm32v1-none --release) ;;
+    soroban) (cd "$SC/soroban" && stellar contract build) ;;  # soroban-sdk 30 refuses plain cargo for wasm: needs stellar-cli >= 30
     cosmos)  "$SC/cosmos/build-wasm.sh" ;;
     ton)     (cd "$SC/ton" && { [ -d node_modules ] || npm ci; } && npm run build) ;;
     solana)  (export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"; cd "$SC/solana" && cargo build-sbf) ;;

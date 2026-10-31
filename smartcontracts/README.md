@@ -9,7 +9,7 @@ smartcontracts/
 │                 (private7622, gnosis, celo); Hedera lives here too (src|test|script/hedera)
 ├── move/aptos/   Aptos Move package `scaas` (+ testfa/, wrapcheck/); scripts/devnet.sh, vector generators
 ├── move/sui/     Sui Move package `scaas` (+ demo_coin/); scripts/gen_vectors.py
-├── soroban/      Stellar Soroban cargo workspace (contracts/*)
+├── soroban/      Stellar Soroban cargo workspace (contracts/*); wasm needs stellar-cli >= 30
 ├── cosmos/       CosmWasm cargo workspace; build-wasm.sh -> artifacts/
 ├── ton/          Tact + jest (npm); shim/ = sandbox server for the e2e
 ├── solana/       cargo workspace (programs/*), LiteSVM tests; scripts/devnet.sh, scripts/deploy.sh

@@ -145,13 +145,13 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      — check which soroban-sdk release carries it); only the testnet e2e runs after 2026-11-03 (Stellar testnet votes
      Protocol 30), as the last step of the round.
      UA-Soroban spec accepted by the owner 2026-10-30: `docs/superpowers/specs/2026-10-30-ua-soroban-design.md`; plan next (no owner review)
-     **Status (paused 2026-10-30):** plan `docs/superpowers/plans/2026-10-30-ua-soroban.md` merged; branch `ua-soroban` T0
-     (Protocol 30 spike, HARD GATE) WIP `53e8501d`, nothing measured yet; then T1–T13, T14 testnet after 2026-11-03, then
-     `zether-soroban` Z0–Z10, then `ua8-soroban`. Branch `kem-scheme` **merged 2026-10-30** (`8b231bd5`, owner go;
-     `kemPk` first byte = scheme id, 1 = ML-KEM-1024 + X25519 at 1,601 B, 2 reserved for ML-KEM-1024 + HQC + X25519 after
-     FIPS 207; EVM registry, 10 clients, node fixtures, docs CTR-UA-32; UA gas pins re-pinned at all four sets; review +
-     re-review clean); `ua-soroban` rebases onto it before T3. (S1–S18; it also
-     rules UA-8 Part B conflicts C11–C17; soroban-sdk 30.0.0-rc.1 carries the ML-DSA wrappers).
+     **Status (2026-10-31): UA-Soroban built on branch `ua-soroban`** (tasks T0 to T10 incl. T2b WebAuthn canonical blob and
+     T6b mandate epoch, each reviewed; local Protocol 30 end-to-end run passed; docs T11). Decisions: NET-SOR-17 to NET-SOR-26 in
+     `docs/decisions.md` (spec rows S1-S18, plan SOR-D1 to SOR-D21). **Next:** the final review, the owner's go to merge, then UA-8
+     Part B (`ua8-soroban`), Part Z (classical Zether, `zether-soroban`, Z0 measures first) and the Stellar testnet run (after
+     2026-11-03, SDK 30.0.0). Branches `kem-scheme` and `msig-pophash` are merged (CTR-UA-32, CTR-UA-33). NODE-JOB-08 `lane_hint` and
+     a per-job resource-fee cap for Soroban jobs are TODO items recorded on `main` (not repeated here); the CTR-ACC-07 epoch for NEAR,
+     Algorand, Cosmos and Solana goes in each family's own round.
      UA-Soroban plan: `docs/superpowers/plans/2026-10-30-ua-soroban.md`; runs without owner review (Part UA-Soroban on `ua-soroban`,
      then UA-8 Part B and Part Z — classical Zether on Soroban, branch `zether-soroban`, S13a — after its merge).
   5. fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) **together with Task 9 calibration**

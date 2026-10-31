@@ -1,0 +1,282 @@
+== e2e-local: 6db31663 2026-10-30T23:13:51Z; stellar 30.0.0 (90a3d42d9327ccfaa0d301373766f45beae3e6d9)
+== build Wasm
+== build soroban
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/dex/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.18s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_dex.wasm (13610 bytes optimized (original size was 16967 bytes))
+    Wasm Hash: 72ef4d0537beafb074c016466345653e048094aabb74574076d1db13ca274051
+    Wasm Size: 13610 bytes optimized (original size was 16967 bytes)
+    Exported Functions: 8 found
+      • __constructor
+      • cancel
+      • filled
+      • market
+      • order_hash
+      • set_market
+      • settle
+      • ua_cancel
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/token/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+   Compiling scaas-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/soroban-4b/smartcontracts/soroban/contracts/token)
+    Finished `release` profile [optimized] target(s) in 1.34s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_token.wasm (25289 bytes optimized (original size was 29720 bytes))
+    Wasm Hash: aa7f3498d8b246d918f6d653ae519df264aed5af89540758259b480a2daf0b08
+    Wasm Size: 25289 bytes optimized (original size was 29720 bytes)
+    Exported Functions: 30 found
+      • __constructor
+      • admin
+      • allowance
+      • approve
+      • balance
+      • burn
+      • burn_from
+      • decimals
+      • meta_pay_id
+      • mint
+      • mint_to_ua
+      • name
+      • pay
+      • pay_meta
+      • pay_to_ua
+      • ref_used
+      • registry
+      • symbol
+      • transfer
+      • transfer_from
+      • transfer_to_ua
+      • ua_balance
+      • ua_burn
+      • ua_cancel_nonce
+      • ua_nonce
+      • ua_pay
+      • ua_pay_meta
+      • ua_ref_used
+      • ua_trade
+      • ua_transfer
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/ua-registry/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.10s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_ua_registry.wasm (21501 bytes optimized (original size was 25127 bytes))
+    Wasm Hash: 977c80e98002f37894fbb80c95c5332a8f4217dbd479a11a64f0795fb35b30e4
+    Wasm Size: 21501 bytes optimized (original size was 25127 bytes)
+    Exported Functions: 12 found
+      • __constructor
+      • key_owner
+      • receivable
+      • record_of
+      • register
+      • registration_of
+      • relayers
+      • require_authorized
+      • ua_at
+      • ua_count
+      • ua_of
+      • ua_page
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/mandate/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.08s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_mandate.wasm (15371 bytes optimized (original size was 17814 bytes))
+    Wasm Hash: d8be14a70303f572d16bd6de3ad44a3cb89d41ccc220fc4633dbb03b398f0f19
+    Wasm Size: 15371 bytes optimized (original size was 17814 bytes)
+    Exported Functions: 12 found
+      • __constructor
+      • epoch
+      • mandate
+      • mtx_mandate_pay
+      • mtx_revoke
+      • mtx_set_mandate
+      • mtx_set_payee
+      • mtx_withdraw
+      • owner
+      • paid
+      • registry
+      • ua_nonce
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/relay-executor/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.09s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_relay_executor.wasm (1187 bytes optimized (original size was 1316 bytes))
+    Wasm Hash: e23732b60b42551e811c796609c60b8c6499205f1d2af816d558f6c4ba6c9c00
+    Wasm Size: 1187 bytes optimized (original size was 1316 bytes)
+    Exported Functions: 3 found
+      • __constructor
+      • exec
+      • router
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/relay-fee/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.09s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_relay_fee.wasm (6847 bytes optimized (original size was 7792 bytes))
+    Wasm Hash: c2888a86c8a356ef87c8fc227ff07f944fa193db947586620a6c6e13c9e20204
+    Wasm Size: 6847 bytes optimized (original size was 7792 bytes)
+    Exported Functions: 5 found
+      • __constructor
+      • executor
+      • relay
+      • relay_ref
+      • ua_relay
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/smart-key-account/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.09s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_smart_key_account.wasm (10529 bytes optimized (original size was 11975 bytes))
+    Wasm Hash: f02a6780eee4d41ba0489b8b8a258f42bc71be69ab9951ae5239c76d374c705d
+    Wasm Size: 10529 bytes optimized (original size was 11975 bytes)
+    Exported Functions: 5 found
+      • __check_auth
+      • __constructor
+      • add_key
+      • keys
+      • remove_key
+✅ Build Complete
+
+== registry interface
+ℹ️  Loading contract spec from file...
+registry interface: ok
+== quickstart
+quickstart: scaas-stellar up (stellar/quickstart@sha256:e05d68bb3b2629a829310dc3434fc0ee3f801854bdfa1a7c8c362d2f1c9060f8), rpc http://127.0.0.1:31980/rpc
+quickstart: protocolVersion 30, testnet limits applied
+== cargo test --test e2e_soroban
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.25s
+     Running tests/e2e_soroban.rs (target/debug/deps/e2e_soroban-5129c6e0beac1bda)
+
+running 1 test
+test soroban_payments_anti_lock_fee_bump_and_finality ... ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/token/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+   Compiling scaas-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/soroban-4b/smartcontracts/soroban/contracts/token)
+    Finished `release` profile [optimized] target(s) in 1.41s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_token.wasm (25289 bytes optimized (original size was 29720 bytes))
+    Wasm Hash: 103c11c7ed9e10f0b7e287f7e90eaa5eba00b4a29ca07c864a99505d756c4548
+    Wasm Size: 25289 bytes optimized (original size was 29720 bytes)
+    Exported Functions: 30 found
+      • __constructor
+      • admin
+      • allowance
+      • approve
+      • balance
+      • burn
+      • burn_from
+      • decimals
+      • meta_pay_id
+      • mint
+      • mint_to_ua
+      • name
+      • pay
+      • pay_meta
+      • pay_to_ua
+      • ref_used
+      • registry
+      • symbol
+      • transfer
+      • transfer_from
+      • transfer_to_ua
+      • ua_balance
+      • ua_burn
+      • ua_cancel_nonce
+      • ua_nonce
+      • ua_pay
+      • ua_pay_meta
+      • ua_ref_used
+      • ua_trade
+      • ua_transfer
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/token/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.07s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_token.wasm (25289 bytes optimized (original size was 29720 bytes))
+    Wasm Hash: 103c11c7ed9e10f0b7e287f7e90eaa5eba00b4a29ca07c864a99505d756c4548
+    Wasm Size: 25289 bytes optimized (original size was 29720 bytes)
+    Exported Functions: 30 found
+      • __constructor
+      • admin
+      • allowance
+      • approve
+      • balance
+      • burn
+      • burn_from
+      • decimals
+      • meta_pay_id
+      • mint
+      • mint_to_ua
+      • name
+      • pay
+      • pay_meta
+      • pay_to_ua
+      • ref_used
+      • registry
+      • symbol
+      • transfer
+      • transfer_from
+      • transfer_to_ua
+      • ua_balance
+      • ua_burn
+      • ua_cancel_nonce
+      • ua_nonce
+      • ua_pay
+      • ua_pay_meta
+      • ua_ref_used
+      • ua_trade
+      • ua_transfer
+✅ Build Complete
+
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 18.65s
+
+== cargo test --test e2e_soroban_ua
+   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/soroban-4b/scaas-node)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.61s
+     Running tests/e2e_soroban_ua.rs (target/debug/deps/e2e_soroban_ua-692f8bf6ee0560ea)
+
+running 6 tests
+test e2e_soroban_ua_dex_leg ... deploy.sh soroban local ua_registry: CDAQG4VG2KURI7BA5WAMQYEE6GDNUDOBHZHK2EJJZEKAE7YSKXBG6HAD
+deploy.sh soroban local token: CBKDQKRVKUAYNBLCELMPZOHL6WQLIVQGKUFT5VR63KEIUW33XXY74XSE
+deploy.sh soroban local token: CAYOKXQGLHY76IPHCAA5PXTD34LTMB4KA5BZX6ZATIW3FXVIXIRQCU72
+deploy.sh soroban local relay_fee: CD3BCQXCQXLXPT6LQKJE22AQDZ4DPOPIZ6WUOB5JDFXQ3UEINXSQT5ZE
+deploy.sh soroban local mandate: CBPNRJC4KRCYGKAUYQWMPDYMVCFJKN6AFK7PXIDFWVJMXHQ2K232QJLG
+deploy.sh soroban local dex: CDNK3TRU54OZBIHXJ25LVRO5BN6M5R6AKPDK4FQQETUSWM7SW5KLWTSM
+T10 stack: registry CDAQG4VG2KURI7BA5WAMQYEE6GDNUDOBHZHK2EJJZEKAE7YSKXBG6HAD token CBKDQKRVKUAYNBLCELMPZOHL6WQLIVQGKUFT5VR63KEIUW33XXY74XSE token_b CAYOKXQGLHY76IPHCAA5PXTD34LTMB4KA5BZX6ZATIW3FXVIXIRQCU72 router CD3BCQXCQXLXPT6LQKJE22AQDZ4DPOPIZ6WUOB5JDFXQ3UEINXSQT5ZE executor CDFRSONO56GGSLC4S7IBOBJOHSN4Q73VZEG65TVWI4KN2CFU2HR7DPY6 mandate CBPNRJC4KRCYGKAUYQWMPDYMVCFJKN6AFK7PXIDFWVJMXHQ2K232QJLG dex CDNK3TRU54OZBIHXJ25LVRO5BN6M5R6AKPDK4FQQETUSWM7SW5KLWTSM
+T10 register webauthn-p256 (lane 0 via CLI): tx e3e3b03a789aa8b2a161e599fef73a042b6980793f829692c3a7a5f71bdeebf0 ledger 118 cpu_insns 4738660 resource_fee 1663541 fee_charged 1441492 stroops
+T10 register mldsa65#2 (lane 0 via CLI): tx 0a37c65638d50920574becaf5fa3abf8d3f157ee63d011faf0f6f0d5d528f23d ledger 120 cpu_insns 4629926 resource_fee 8065064 fee_charged 7010351 stroops
+T10 set_market (fees off): tx 1681d1e2c5447f2f0c5a9fdaf7f4cb826924dfcc4ae8656d93746611272673b2 ledger 123 cpu_insns 699990 resource_fee 216984 fee_charged 181402 stroops
+T10 mint_to_ua (mldsa65, token A): tx fae8df23696feaa374cef7d5eed7aa6624264f11c66c3722af146b848d81767d ledger 125 cpu_insns 1635527 resource_fee 309016 fee_charged 261920 stroops
+T10 mint (taker, token B): tx bddc5685083f03012f1b6bd375682d66dcee3a605cc97c6ac56700c4221e6f71 ledger 126 cpu_insns 782084 resource_fee 162283 fee_charged 133724 stroops
+T10 approve (taker -> DEX, token B): tx 00d1eda1391d9574255043c8a50fd93d51382123e1a4026e840dbc5d074672c6 ledger 128 cpu_insns 806529 resource_fee 22364 fee_charged 12182 stroops
+T10 settle UA maker (mldsa65) vs native taker (ua_metatx job, lane 0): tx 7fd2c2d964b78f6c30dccc7eb2b27f65768caa2defe0f1c85d243adc6b0dff1c ledger 131 cpu_insns 10478846 resource_fee 1444831 fee_charged 1093539 stroops
+ok
+test e2e_soroban_ua_lane_authority_not_lent ... T10 mint_to_ua (passkey): tx 40cb6d1a7f321266fc31cfb3387f764ae3164f41b7ddcdf803004f37f140594d ledger 133 cpu_insns 1602635 resource_fee 168070 fee_charged 139355 stroops
+T10 lane authority not lent (host refusal at simulation): job state dead, reason "simulation: HostError: Error(Auth, InvalidAction)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CD3BCQXCQXLXPT6LQKJE22AQDZ4DPOPIZ6WUOB5JDFXQ3UEINXSQT5ZE, topics:[error, Error(Auth, InvalidAction)], data:\"escalating error to VM trap from failed host function call: call\"\n   1: [Diagnostic Event] co"
+ok
+test e2e_soroban_ua_mandate_pays_ua_payee ... T10 mtx_set_mandate (native owner, delegate = passkey UA): tx 1a7a2627129eaae44596785d4db0e42a992bfaec698e3eaabf6d842d7cf67afb ledger 135 cpu_insns 877102 resource_fee 584982 fee_charged 501952 stroops
+T10 mtx_set_payee (native owner, payee = mldsa65 UA): tx aa43b72b723158ef10ff59a40543441808b20142165560fee6f942c0af91b397 ledger 136 cpu_insns 733512 resource_fee 209018 fee_charged 174554 stroops
+T10 mint (to the mandate): tx ba6b0c7878cebb9fc97fc1a0beb87992da5bda85c486097b13e4514237d47deb ledger 137 cpu_insns 780791 resource_fee 158370 fee_charged 130315 stroops
+T10 mtx_mandate_pay passkey delegate -> mldsa65 payee (ua_metatx job, lane 1): tx 3600a06ffcca4e4f2a747a4f1cebd7756eeea54cacaca6c10f1449dc7395679a ledger 139 cpu_insns 7322365 resource_fee 393288 fee_charged 293424 stroops
+T10 mandate PaymentSettled row: {"amount":"5000","block_hash":"0x2fa53814c6a0210914f514e6f70f8cfb3d0a85e8e9371aac1459342e3701d42e","block_number":139,"contract":"CBKDQKRVKUAYNBLCELMPZOHL6WQLIVQGKUFT5VR63KEIUW33XXY74XSE","entry_ref":"0xee011e141c12c45f3b467d3d0aa58d30b9bed8618b6ace008dc8d7ed176a069a","event":"PaymentSettled","from":"CBPNRJC4KRCYGKAUYQWMPDYMVCFJKN6AFK7PXIDFWVJMXHQ2K232QJLG","log_index":2,"to":"0xab3b7198a4753f06b0a9b0e4fdffd92759ea2f3c7031ccd1b87c2f666e1b4428","tx_hash":"0x3600a06ffcca4e4f2a747a4f1cebd7756eeea54cacaca6c10f1449dc7395679a"}
+ok
+test e2e_soroban_ua_register_passkey_and_mldsa65 ... T10 register webauthn-p256: ua 0x766d7245671c64dafe1478ea07b04c23350bffdf6a823ae6c492813e564136e3 tx e3e3b03a789aa8b2a161e599fef73a042b6980793f829692c3a7a5f71bdeebf0 ledger 118 cpu_insns 4738660 resource_fee 1663541 fee_charged 1441492 stroops
+T10 register mldsa65#2: ua 0xab3b7198a4753f06b0a9b0e4fdffd92759ea2f3c7031ccd1b87c2f666e1b4428 tx 0a37c65638d50920574becaf5fa3abf8d3f157ee63d011faf0f6f0d5d528f23d ledger 120 cpu_insns 4629926 resource_fee 8065064 fee_charged 7010351 stroops
+ok
+test e2e_soroban_ua_relay_fee ... T10 mint_to_ua (passkey): tx f8d2534bb6f183859aae74801cf4492fdfd05e835b997695399c38264ed4217d ledger 142 cpu_insns 1637824 resource_fee 23337 fee_charged 13504 stroops
+T10 ua_relay passkey fee, open mode (ua_metatx job, lane 0): tx 3e9e60f2119a3e67dc5e8bcfd3e242991f9fa29e1e2d06b72e26d1dfde73ee0c ledger 145 cpu_insns 7866684 resource_fee 584250 fee_charged 437890 stroops
+T10 ua_relay fee row (PaymentSettled + RelayFeePaid): {"amount":"250","block_hash":"0x0f8826bf6fcbee035f40d4551507ea2c14f256794c11e1ce84196f7af2a1d2ee","block_number":145,"contract":"CBKDQKRVKUAYNBLCELMPZOHL6WQLIVQGKUFT5VR63KEIUW33XXY74XSE","entry_ref":"0x2f3e77a8393f545297d3c797f3ef72144bbb5b92269c02fe2a9c23880dad4497","event":"PaymentSettled","from":"0x766d7245671c64dafe1478ea07b04c23350bffdf6a823ae6c492813e564136e3","log_index":2,"relay_payee":"GB3TCCIC6KLYKM72PX7KA6RNYC2BHC7DQYDMEAAN7PDMUZQD7UKJGSSY","relay_target":"CBKDQKRVKUAYNBLCELMPZOHL6WQLIVQGKUFT5VR63KEIUW33XXY74XSE","to":"CD3BCQXCQXLXPT6LQKJE22AQDZ4DPOPIZ6WUOB5JDFXQ3UEINXSQT5ZE","tx_hash":"0x3e9e60f2119a3e67dc5e8bcfd3e242991f9fa29e1e2d06b72e26d1dfde73ee0c"}
+ok
+test e2e_soroban_ua_transfer_to_ua_and_ua_pay_relayed ... T10 mint (native): tx f7ef2bb7cfde66e18c636419cc6e5024bbe08d3ab4746cbe1b1bf0e7d00fc4f3 ledger 147 cpu_insns 782084 resource_fee 162283 fee_charged 133724 stroops
+T10 transfer_to_ua (native -> passkey UA): tx 2ff844a4d6e93ce58155910374e5be0c8822d8942dc35275d6f871c9a1993e7a ledger 149 cpu_insns 1760883 resource_fee 27267 fee_charged 17394 stroops
+T10 ua_pay passkey -> mldsa65 (ua_metatx job, lane 0): tx 2a0f456befcaaaa941f8113227ae2dd80a7a0abee68b94c52b4704b2fbfb9130 ledger 151 cpu_insns 6057908 resource_fee 240224 fee_charged 176511 stroops
+T10 ua_pay rows: {"amount":"1000","block_hash":"0x1ecb0f8a7c504e3cced5756cc1c56931fb4367d0ebfb43c63f068beb51b54831","block_number":151,"contract":"CBKDQKRVKUAYNBLCELMPZOHL6WQLIVQGKUFT5VR63KEIUW33XXY74XSE","entry_ref":"0x5a083aeb8b6b099fd3f29e327483fce2926996982f867b0e23bc50fd5a3b4ea8","event":"PaymentSettled","from":"0x766d7245671c64dafe1478ea07b04c23350bffdf6a823ae6c492813e564136e3","log_index":1,"to":"0xab3b7198a4753f06b0a9b0e4fdffd92759ea2f3c7031ccd1b87c2f666e1b4428","tx_hash":"0x2a0f456befcaaaa941f8113227ae2dd80a7a0abee68b94c52b4704b2fbfb9130"}
+ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 70.84s
+
+== e2e-local: PASS

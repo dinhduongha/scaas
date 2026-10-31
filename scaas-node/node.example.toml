@@ -152,9 +152,12 @@ rpc_urls = ["https://soroban-testnet.stellar.org"]
 lanes = [0, 1]
 finality = { mode = "instant", quorum = 1 }      # SCP: a closed ledger is final
 # fee_bump_lane = i: lane i's account pays every lane's fee (CAP-15 fee bump); base_fee in stroops.
+# max_deposit_per_job (stroops; absent = 0 = none): the most resource fee (with the node's 15 % margin) a job may
+# declare when its simulation restores archived entries (Protocol 23 auto-restore; the lane pays, spec §7).
+# dex = "C…": the SCaaS DEX whose settle / ua_cancel ua_metatx jobs this node serves (absent = none).
 # relay_fee = { router = "C…", min_amount = N }: the relay-fee router (deploy.sh soroban <net> relay_fee); its
 # executor is read once from router.executor() and refused as a payee like the router.
-params = { network_passphrase = "Test SDF Network ; September 2015", base_fee = 100 }
+params = { network_passphrase = "Test SDF Network ; September 2015", base_fee = 100, max_deposit_per_job = 10000000 }
 
 [[chains]]                                       # Pi Network: Soroban family, Stellar-compatible
 family = "soroban"

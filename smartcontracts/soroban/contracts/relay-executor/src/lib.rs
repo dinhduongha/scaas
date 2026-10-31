@@ -1,8 +1,8 @@
 //! CTR-MTX-27 executor of the relay-fee router (EVM `MtxRelayFee`'s executor parity; controller ruling 2026-10-31
-//! after the UA-Soroban T8 review): the router never calls a target as itself. Soroban grants a contract's authority
-//! to every contract it calls directly, so a target called by the router would see `router.require_auth()` satisfied
-//! (a router balance drained by a target `transfer(router, …)`). The router calls `exec`, and the target sees this
-//! executor as its invoker. Holds nothing: the router refuses it as a payee.
+//! after the T8 review): the router never calls a target as itself. Soroban grants a contract's authority to every
+//! contract it calls directly, so a target called by the router would see `router.require_auth()` satisfied (a
+//! router-bound `ua_pay` settled without its call, a router balance drained). The router calls `exec`, and the
+//! target sees this executor as its invoker. Holds nothing: the router refuses it as a payee.
 #![no_std]
 use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Symbol, Val, Vec};
 

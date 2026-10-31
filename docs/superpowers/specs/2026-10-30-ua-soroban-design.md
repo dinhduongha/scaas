@@ -1,6 +1,6 @@
 # Soroban UA base (UA-Soroban) and the Soroban registry of UA-8 step 2 — design
 
-**Status:** accepted by the owner 2026-10-30 (S6 UA ledger in each token and S10 msig members confirmed as specified; every other §0 row stands as a controller proposal, owner may override); the plan follows without owner review. Nothing is built. Written from `main` at `920f13d0`. Rules are cited by
+**Status:** accepted by the owner 2026-10-30 (S6 UA ledger in each token and S10 msig members confirmed as specified; every other §0 row stands as a controller proposal, owner may override); the plan follows without owner review. **UA-Soroban built on branch `ua-soroban` (tasks T0 to T10 incl. T2b and T6b, each reviewed; local Protocol 30 end-to-end run passed; docs T11); next: the final review, the owner's go, then Part B (`ua8-soroban`), Part Z (`zether-soroban`) and the Stellar testnet run (after 2026-11-03).** Where the build differs from the text below, a Change note says so and cites the ruling; the decisions are in [decisions.md](../../decisions.md) (NET-SOR-17 to NET-SOR-26). Written from `main` at `920f13d0`. Rules are cited by
 ID, not restated. Every choice marked **controller call** is the controller's; the owner may override it. A choice
 that an owner ruling already decides cites the ruling.
 
@@ -37,9 +37,9 @@ Each row: the decision, the options weighed, the choice, why, and the cost if it
 | S5 | SDK and network pins | soroban-sdk 26.1.1 (today) / 29.0.1 (latest stable) / 30.0.0-rc.1 (2026-10-21, the first release with `Crypto::ml_dsa_{44,65,87}_verify`) / a git revision | **`soroban-sdk = "=30.0.0-rc.1"`** for the whole Soroban workspace (every crate rebuilds and re-tests); swapped to 30.0.0 when released, **before** the testnet e2e (this closes C16b). `stellar/quickstart` pinned by digest, run `--local --protocol-version 30 --limits testnet` | an RC API change before 30.0.0 means one more rebuild | controller call |
 | S6 | The UA ledger in Soroban tokens | (a) a per-UA custom account (`C…` contract at a salt = the UA, whose `__check_auth` asks the registry): every existing entry works unchanged; (b) a `Holder` enum in the existing entries (NEAR shape); (c) a `UaBalance(ua)` ledger with separate `ua_*` entries beside the native ones (EVM CTR-UA-18 / -26 shape) | **(c).** (a) is a contract per user per chain and gives a derived UA a native address, against CTR-UA-02 and NET-ALL-21; (b) changes the built `pay` / `pay_meta` and their cross vectors. The UA pool is the token's own address (§5.1) | more entry points in the token | controller call |
 | S7 | UA replay protection | (a) host-style random nonces in temporary storage; (b) lanes `UaNonce(ua, lane) → u64` in persistent storage, EVM `_uaNonce[ua][batch]` | **(b)**; `ua_pay` uses `lane = payLane(pay_ref)`, `nonce = 0` (CTR-MTX-26). Temporary entries are deleted on expiry, so (a) would re-open spent nonces (NET-ALL-01, CTR-MTX-04) | none found | controller call |
-| S8 | Relayer binding of UA entries | unbound (native Soroban today, NET-SOR-01) / `relayer: Option<Address>` | **`relayer: Option<Address>`**; `Some(r)` ⇒ `r.require_auth()`: a lane satisfies it by an explicit `SourceAccount` auth entry rooted at the call (as `relay-fee` today), the relay-fee router as the direct invoker. Needed for CTR-MTX-27's router marker | none found | controller call |
+| S8 | Relayer binding of UA entries | unbound (native Soroban today, NET-SOR-01) / `relayer: Option<Address>` | **`relayer: Option<Address>`**; `Some(r)` ⇒ `r.require_auth()`: a lane satisfies it by an explicit `SourceAccount` auth entry rooted at the call (as `relay-fee` today), the relay-fee router as the direct invoker of its own fee call (it never calls a target as itself: §5.4 Executor, controller ruling 2026-10-31). Needed for CTR-MTX-27's router marker | none found | controller call |
 | S9 | Which UAs may receive | any registered UA / only a UA that can spend on Soroban | **only a UA that can spend here**: registered, kind enabled, `pop` checked by the chain, and for `msig` the weight of members Soroban can verify for signing ≥ threshold (`Registration.signable`, computed at `register`). Else `UaNotReceivable`. CTR-UA-23: a registrable but unusable account can receive and never spend; UA-8 P11.5 | a few `msig` forms register for discovery only | controller call |
-| S10 | `msig` members on Soroban | the EVM MEMBER set; plus Soroban natives; plus EVM natives | **MEMBER = the enabled single-key kinds of S3, plus `stellar-account` 0x0011 and `soroban-contract` 0x0012** (verified by the host: `member.require_auth_for_args((ua, purpose, digest))`, Soroban's form of the EIP-712 `UAAuth`). An `msig` with a 0x0011 / 0x0012 member is a **Soroban-network-local record** (no other registry verifies those members, as EVM's 0x0003 is Hedera-only). **`evm-eoa` 0x0001 members** are verified for the portable purposes only (`pop` v2, `kem`: ECDSA over the EIP-191 `personal_sign` of `memberDigest`, by `secp256k1_recover`, exactly CTR-UA-07), and have **zero signing weight** for every other purpose (no Soroban signing form); `evm-contract` 0x0002 members are never chain-verified here (Part B: the part is `Relayer`) | an EVM `msig` that needs its EOA members to reach its threshold is discovery-only on Soroban (S9) | controller call |
+| S10 | `msig` members on Soroban | the EVM MEMBER set; plus Soroban natives; plus EVM natives | **MEMBER = the enabled single-key kinds of S3, plus `stellar-account` 0x0011** (verified by the host: `member.require_auth_for_args((ua, purpose, digest))`, Soroban's form of the EIP-712 `UAAuth`). Change note, owner ruling 2026-10-31, after the final review: 0x0012 dropped from MEMBER (invoker auth). Soroban counts a contract's authority as given for any `require_auth` in a contract it calls directly; the token, the mandate and the DEX call `registry.require_authorized` directly, so a `soroban-contract` member that is one of them met its own empty slot for free (final review A-I1: a 1-of-2 `msig` of an ed25519 UA and the token's `C…` was drained by anyone through `ua_transfer`; the same through a mandate owner or delegate and the DEX's `ua_cancel`). MEMBER is now the enabled single-key kinds of S3 plus `stellar-account` 0x0011 only (an account is never an invoker); an `msig` with a 0x0012 member is refused at `register` with `MemberUnknown`, and `clientkeys` refuses one when building. A `C…` account stays a native subject and holder (§8); it is not an `msig` member. Built 2026-10-31. An `msig` with a 0x0011 member is a **Soroban-network-local record** (no other registry verifies those members, as EVM's 0x0003 is Hedera-only). **`evm-eoa` 0x0001 members** are verified for the portable purposes only (`pop` v2, `kem`: ECDSA over the EIP-191 `personal_sign` of `memberDigest`, by `secp256k1_recover`, exactly CTR-UA-07), and have **zero signing weight** for every other purpose (no Soroban signing form); `evm-contract` 0x0002 members are never chain-verified here (Part B: the part is `Relayer`) | an EVM `msig` that needs its EOA members to reach its threshold is discovery-only on Soroban (S9) | controller call |
 | S11 | Storage class and TTL | instance / persistent / temporary | **persistent, one entry per key**, for every record, balance, lane, pay ref and (Part B) KEM / PQZ entry; instance storage only for constructor constants; temporary only for SEP-41 allowances (a UA never holds one). TTL `extend_ttl(30 days, 60 days)` on each write and each in-transaction read (UA8-D22); **no node TTL job**; an archived entry is restored on its next use (§7) | rent for large entries (§7) | controller call (UA8-D22) |
 | S12 | Who pays fees, rent and restores | the user / the relayer | **the relayer** (lane); users and UAs hold no XLM. Reimbursement: the relay-fee router (`ua_relay`, §5.4) or the node's sponsorship policy; registry writes have no fee form (UA-8 P9) | relayer cost on spam (CTR-UA-25: node sponsorship limits) | owner precedent 2026-10-28 (NEAR / Algorand: "the relayer pays storage"), applied here |
 | S13a | Classical Zether (not post-quantum) | a later item; in this round | **in this round, its own track** (owner 2026-10-30: "classical Zether for Soroban too"). Classical Zether was never built on Soroban. Port the EVM classical Zether (BLS12-381, the `*_zether_bls12381` token kinds `NormalZetherToken` / `WrappedZetherToken`) to Soroban on the BLS12-381 host functions (CAP-59), with the same proof bytes as `clients/zether-prover` (one prover, two verifiers; shared vectors), feature parity with the EVM classical Zether token (shield / unshield, transfers incl. multi-recipient, auditor, disclosure) unless the measurement forces a cut; ciphertexts stay in contract state (never-lose rule). **Measure first** (T0): a verify that does not fit the per-transaction CPU / memory budget is a **STOP** for the owner (options: split the verification over transactions, a smaller range, Groth16 over a Zether-like circuit, wait for cheaper host functions). The Zether PoP kind 0x0141 is enabled on the Soroban registry together with the token (until then S3 keeps it off). Branch `zether-soroban` after `ua-soroban` (it needs the UA ledger and the registry) | a verifier that does not fit; the measurement decides before any token code | owner 2026-10-30 (in scope); the port design is a controller proposal, owner may override |
@@ -105,7 +105,7 @@ spend; a lane's authority spent by a call it did not mean to authorise; any admi
 | `ed25519` 0x0102 | `pk` (32) | `ed25519_verify(pk, ua_msg, sig)` | key validation (`y < p`, the eight small-order encodings refused) in the contract unless the `kinds.json` negatives show the host refuses them |
 | `secp256k1` 0x0108 | `x ‖ y` (64) | `secp256k1_recover(ua_msg, r‖s, v − 27) == 0x04‖x‖y`, `s ≤ n/2`, `v ∈ {27, 28}` | `ua_msg` is the host keccak's `Hash<32>`: no prehash, as EVM |
 | `mldsa44` 0x0130 / `mldsa65` 0x0131 | `pk` (1312 / 1952) | `crypto().ml_dsa_{44,65}_verify(pk, pq_msg, sig, ctx = empty)` (CAP-0087 `verify_sig_ml_dsa_{44,65}`; SDK PR #2138: key and signature as fixed-size `BytesN`, message and context `Bytes`, panics on failure) | sizes 1312 / 2420 and 1952 / 3309 B; FIPS 204 pure interface, empty context valid, exactly our CTR-UA-23 form; the exact Rust signature is recorded by T1 |
-| `msig` 0x0120 | CTR-UA-09 layout | members by S10; `auth` = `abi.encode(MemberSig[])` (`{u16 index, bytes keyData, bytes sig}`, UA8-D5) for derived and EVM members, canonical encoding only (re-encode and compare, as EVM m3); a Soroban native member's slot carries empty `keyData` / `sig` and is checked by the host | threshold by weight; ids strictly increasing; `count ≤ 16`; the largest `msig` that fits a transaction (size, CPU) is measured and published, a larger one fails to register here |
+| `msig` 0x0120 | CTR-UA-09 layout | members by S10; `auth` = `abi.encode(MemberSig[])` (`{u16 index, bytes keyData, bytes sig}`, UA8-D5) for derived and EVM members, canonical encoding only (re-encode and compare, as EVM m3); a **registered** member's slot carries an **empty `keyData`**: the registry reads that member's key from the member's own record (as EVM does for ML-DSA members, CTR-UA-17), a non-empty `keyData` for a registered member is refused (`Pop`); a Soroban native (`G…`) member's slot carries empty `keyData` / `sig` and is checked by the host (owner ruling 2026-10-30, T0: with the keys in `MemberSig`, a 3-member ML-DSA-65 `msig` overran the 16 384 B contract-events limit). Change note, owner ruling 2026-10-31, after the final review: 0x0012 dropped from MEMBER (invoker auth): a `soroban-contract` member is `MemberUnknown` at `register` (S10) | threshold by weight; ids strictly increasing; `count ≤ 16`; the largest `msig` that fits a transaction (size, CPU) is measured and published, a larger one fails to register here |
 
 `register` checks, in order: kind enabled (`KindDisabled`) → key data canonical (`KeyData`) → id (`IdInNativeSpace`) →
 not registered (`AlreadyRegistered`) → `keyHash` free (`KeyInUse`; `msig` has none) → `msig` members registered or
@@ -122,7 +122,8 @@ Ed25519 verification", 16–57 KB transient memory).
 #[contracttype] pub struct UaAttrs { pub pqz_key: Bytes, pub pqz_pop_hash: BytesN<32>, pub kem_version: u64, pub kem_pk: Bytes }
 #[contracttype] pub struct Registration { pub kind: u32, pub key_data: Bytes, pub attrs: UaAttrs, pub pop: Bytes,
     pub pop_checked: Checked, pub pqz_pop_checked: Checked, pub proven: bool, pub signable: bool, pub index: u32, pub ledger: u32 }
-// persistent: Ua(ua) -> Registration; Key(key_hash) -> ua; List(kind, i) -> ua; Count(kind) -> u32
+// persistent: Ua(ua) -> Registration; Key(key_hash) -> ua; List(kind, i) -> ua; Count(kind) -> u32;
+//   Signer(ua) -> (kind, key_data)  (the fifth entry, write-once: a member check reads it, not the record with its `pop`; plan SOR-D19)
 // Part B adds: PqzK(ua), PqzP(ua), Kem(ua, version) -> (pk, sig, Checked), KemMax(ua)
 fn __constructor(env, relayers: Vec<Address>);                                    // may be empty; immutable (C13)
 fn register(env, kind: u32, key_data: Bytes, attrs: UaAttrs, pop: Bytes, pqz_pop: Bytes, relayer: Option<Address>) -> BytesN<32>;
@@ -136,7 +137,9 @@ fn ua_count(env, kind) -> u32;  fn ua_at(env, kind, i) -> BytesN<32>;  fn ua_pag
 Errors (`contracterror`): `KindDisabled`, `KeyData`, `IdInNativeSpace`, `AlreadyRegistered`, `KeyInUse`,
 `MemberUnknown`, `Attrs` (UA-Soroban only), `Pop`, `NotRegistered`, `Unauthorized`, `NotVerifiable`, `RelayerNotListed`,
 plus Part B's `PqzHolder`, `KemHolder`, `KemVersion`, `KemKeyLength`, `PqzPopHash`. Events: `UaRegistered` (topics
-`ua`, `kind`; data the record and `checked`). `Registration.index` is the CTR-UA-29 list position (one rule on every
+`ua`, `kind`; data the record with `pop` replaced by `pop_hash = keccak256(pop)` (`BytesN<32>`), and `checked`; `pop`
+itself stays in the record in contract state; owner ruling 2026-10-30, T0: the full record overran
+`tx_max_contract_events_size_bytes` = 16 384 B for an `msig` of three ML-DSA-65 members). `Registration.index` is the CTR-UA-29 list position (one rule on every
 registry; there is no Soroban consumer of it yet).
 
 - **`require_authorized`** (CTR-UA-17's Soroban form): the record exists (`NotRegistered`) and is `signable`
@@ -156,14 +159,14 @@ registry; there is no Soroban consumer of it yet).
 |---|---|---|
 | `ua_balance(ua) -> i128`, `ua_nonce(ua, lane) -> u64`, `ua_ref_used(ua, pay_ref) -> bool`, `registry() -> Option<Address>` | view | `balanceOfUA`, `uaNonce` |
 | `transfer_to_ua(from: Address, to: BytesN<32>, amount)` | `from.require_auth()` | `transferToUA` (CTR-UA-28) |
-| `pay_to_ua(from: Address, to: BytesN<32>, amount, pay_ref, valid_until)` | `from.require_auth()`; `PayRef(from, pay_ref)` once | `payWithFeeToUA` (the receiver axis; the mandate pays a UA payee through it) |
+| `pay_to_ua(from: Address, to: BytesN<32>, amount, pay_ref, valid_until)` | `from.require_auth()`; `PayRef(from, pay_ref)` once; emits the native `MetaTransactionExecuted { from, digest = op_digest(token, "pay_to_ua", args) }` as `pay` does (controller ruling 2026-10-30, owner may override) | `payWithFeeToUA` (the receiver axis; the mandate pays a UA payee through it) |
 | `mint_to_ua(to, amount)` | admin | `mintToUA` |
 | `ua_transfer(from: BytesN<32>, to: Holder, amount, lane: BytesN<32>, nonce: u64, valid_until: u64, relayer: Option<Address>, auth: Bytes)` | `registry.require_authorized(from, PURPOSE_METATX, digest, auth)`, lane nonce | `uaTransfer` / `uaExecuteTransfer` |
 | `ua_pay(from, to: Holder, amount, pay_ref, valid_until, relayer, auth)` | as above, `lane = payLane(pay_ref)`, `nonce = 0` | `uaPay` |
 | `ua_pay_meta(from, to, amount, salt, meta, valid_until, relayer, auth)` | `pay_ref = metaPayId(salt, meta)`; `PaymentMeta` before the settlement event | `uaPayMeta` (CTR-MTX-26) |
 | `ua_burn(from, amount, lane, nonce, valid_until, relayer, auth)` | as `ua_transfer` | `uaExecute(burn)` |
-| `ua_cancel_nonce(ua, lane, valid_until, auth)` | purpose `metatx-cancel` | `uaCancelNonce` |
-| `ua_trade(dex: Address, order: Order, auth: Bytes, amount)` | `dex.require_auth()` (the DEX is the direct invoker), purpose `trade` over the order digest | `uaTrade` (CTR-DEX-25 / -26) |
+| `ua_cancel_nonce(ua, lane, valid_until, auth)` | purpose `metatx-cancel`; the signature names no nonce, so each digest runs once: persistent `UaCancelUsed(digest)`, checked before the signature, a replay `BadNonce` (EVM `cancelUsed`; controller ruling 2026-10-30, owner may override) | `uaCancelNonce` |
+| `ua_trade(dex: Address, order: Order, auth: Bytes, amount)` | `dex` a deployed Wasm contract, `dex.require_auth()` (the DEX is the direct invoker), purpose `trade` over the order digest; `order.maker == Holder::Ua`, `order.sell_token == token`, a running persistent `UaPulled(order digest) + amount ≤ sell_amount`; else `BadOrder` (EVM `DexNotContract` / `pulled[h]` parity; controller ruling 2026-10-30, owner may override) | `uaTrade` (CTR-DEX-25 / -26) |
 
 Rules (CTR-UA-27 parity, Soroban form):
 
@@ -188,9 +191,16 @@ Rules (CTR-UA-27 parity, Soroban form):
 Owner, delegate and each payee become `Holder` (EVM UA-5c, CTR-ACC-12 `bytes32` ids). Funds stay in the mandate's own
 native balance. A native owner or delegate keeps host authorisation; a UA owner signs `mtx_set_mandate`,
 `mtx_set_payee`, `mtx_revoke`, `mtx_withdraw` (purpose `metatx`, mandate-own lanes `UaNonce(ua, lane)`); a UA
-delegate signs `mtx_mandate_pay(token, payee, amount, pay_ref, valid_until, relayer, auth)`. A UA payee is paid by
+delegate signs `mtx_mandate_pay(token, payee, amount, pay_ref, epoch, valid_until, relayer, auth)`. A UA payee is paid by
 `token.pay_to_ua(self, …)`, a withdrawal to a UA owner by `transfer_to_ua`. `pay_ref` once per mandate as today. The
 NET-SOR-16 renames apply (new deployment).
+
+**Epoch (CTR-ACC-07 parity).** Change note, owner ruling 2026-10-30 (one rule on every family; built in T6b): the
+mandate keeps `epoch(token) -> u64`, +1 on every `mtx_set_mandate` and every revoke; the delegate's
+`mtx_revoke(token, by, epoch, lane, nonce, valid_until, relayer, auth)` and `mtx_mandate_pay` name it in their signed
+arguments (the UA `op_digest`, a native delegate's `require_auth_for_args`) and are refused `StaleEpoch` unless
+`epoch == epoch(token)`, so an unused delegate signature dies when the owner revokes and re-sets the mandate. The
+owner's `mtx_revoke` carries the argument unchecked; the other owner entries are unchanged.
 
 ### 5.3 DEX
 
@@ -200,26 +210,38 @@ so the order type changes in this deployment anyway). A native maker keeps `requ
 calls the sell token's `ua_trade(dex, order, auth, fill)`, which verifies the UA (purpose `trade`) and moves `fill`
 from the UA ledger to the DEX; proceeds go to `destination` (`transfer_to_ua` from the DEX for a UA). A UA signature is
 not consumed by the host, so a UA order fills partially without re-signing; `filled[order_hash]` bounds it
-(NET-SOR-05's overfill rule), `ua_cancel(order, auth)` sets `filled = sell_amount`, and the settling relayer stays
+(NET-SOR-05's overfill rule), and the token bounds it again on its own: `ua_trade` refuses a `dex` that is not a
+deployed contract and keeps `UaPulled(order digest) ≤ sell_amount` (EVM `pulled[h]` parity, one rule on every family;
+controller ruling 2026-10-30, owner may override), so a wrong or malicious DEX pulls at most the signed amount; `ua_cancel(order, auth)` sets `filled = sell_amount`, and the settling relayer stays
 bound (`order.relayer.require_auth()`).
 
 ### 5.4 Relay fee (CTR-MTX-27)
 
 The router gains `ua_relay(payer: BytesN<32>, target, func, args, salt, token, to: Holder, amount, valid_until, relayer,
 auth)`: the same `ref` (`keccak256("scaas.relayfee" ‖ network id ‖ xdr(target) ‖ keccak256(xdr((func, args))) ‖
-salt)`), then `env.invoke_contract(target, func, args)`, then `token.ua_pay(payer, to, amount, ref, valid_until,
-Some(router), auth)`: the payer's UA signature covers `pay_ref = ref` and `relayer = router`, and only the router
-(the direct invoker) satisfies `router.require_auth()`. Open mode (`to == Holder::Addr(router)`) forwards to the
-submitting relayer as `relay` does. `RelayFeePaid`'s `payer` becomes a `Holder` (lossless id, the metatx-split §7.2
-rule; one event shape, a node decoder change).
+salt)`), then `executor.exec(target, func, args)`, then `token.ua_pay(payer, to, amount, ref, valid_until,
+Some(router), auth)`: the payer's UA signature covers `pay_ref = ref` and `relayer = router`, and only the router's
+own fee call satisfies `router.require_auth()`. Open mode (`to == Holder::Addr(router)`) forwards to the
+submitting relayer as `relay` does. `RelayFeePaid`'s `payer` and `payee` become `Holder` (lossless id, the
+metatx-split §7.2 rule; one event shape, a node decoder change).
+
+**Executor.** Change note, controller ruling 2026-10-31 after the T8 review: router executes through an executor (EVM
+parity), owner may override. Soroban grants a contract's authority to every contract it calls directly, so a router
+that called the target itself would let a relayer submit a victim's router-bound `ua_pay` (or a
+`token.transfer(router, …)`) as the target: a fee paid without its call, a router balance drained. The router
+(`relay` and `ua_relay`) therefore never calls a target as itself: it calls `executor.exec(target, func, args)` on
+`contracts/relay-executor`, which requires `router.require_auth()` (only the router, its direct invoker, satisfies
+it) and calls the target as the executor. Each constructor names the other (`RelayExecutor(router)`,
+`RelayFee(executor)`); `deploy.sh soroban <net> relay_fee` derives the router id from a salt first. `to` naming the
+executor, or a payee equal to the router or the executor, is `BadPayee`; neither holds anything after a call.
 
 ### 5.5 Conformance (CTR-MTX-27 and the cross-family rules)
 
 | Rule | Soroban UA form |
 |---|---|
 | Every state-changing mtx write relayable, fee may be 0 (owner 2026-10-20) | every `ua_*` / UA mandate / UA DEX entry and every registry write is submitted by a lane; no fee field (NET-ALL-28 table: none while non-EVM tokens charge none); payable through `relay` / `ua_relay` |
-| `ref` commits to the call, payment consumed only with it | `ua_relay` recomputes `ref` from the call it ran; `relayer = Some(router)` |
-| Never pay the router / marker | `to == Holder::Addr(router)` is open mode, not a credit; the token refuses its own address |
+| `ref` commits to the call, payment consumed only with it | `ua_relay` recomputes `ref` from the call it ran; `relayer = Some(router)`; the target runs through the executor, never as the router (§5.4 Executor) |
+| Never pay the router / marker | `to == Holder::Addr(router)` is open mode, not a credit; the token refuses its own address; `BadPayee` for the executor |
 | Target exists at relay time | as `relay` today (`TargetNoCode`); the registry is a deployed contract |
 | Explicit relayer authorisation | S8 |
 | Lanes non-pruning (NET-ALL-01, CTR-MTX-04) | persistent `UaNonce`; archived ≠ deleted (§7) |
@@ -266,8 +288,9 @@ rule; one event shape, a node decoder change).
 - **`G…` accounts** cannot hand authority to code: their signers are ed25519 keys, pre-authorised transaction hashes
   and hash-x preimages; the host checks thresholds. A `G…` subject's authority is its keys.
 - **`C…` accounts** are contract accounts (`__check_auth`), like an EVM contract with ERC-1271 (0x0002): a contract is
-  its own authority, not a key account delegating to code, so SCaaS accepts them as natives and as `msig` members
-  (S10). SCaaS's own `C…` account is `SmartKeyAccount`.
+  its own authority, not a key account delegating to code, so SCaaS accepts them as natives. Change note, owner ruling
+  2026-10-31, after the final review: 0x0012 dropped from MEMBER (invoker auth): a `C…` is no `msig` member (S10).
+  SCaaS's own `C…` account is `SmartKeyAccount`.
 - **A UA is a key or a set of keys** checked by the registry's own code (§3); no kind delegates to a contract, and the
   registry never accepts an arbitrary verifier address (kinds are compiled in, S3, S16).
 - **The node never lends a lane's authority.** A simulation in recording mode returns every auth entry the call
@@ -362,7 +385,8 @@ Two choices are worth the owner's look because they shape the code most:
 1. **S6** — the UA ledger with separate `ua_*` entries (EVM shape), not a per-UA custom-account contract. Confirm, or
    choose the custom account (no token changes, but a contract per UA per chain and a native address for a derived UA).
 2. **S10** — Soroban native `msig` members (0x0011 / 0x0012) make Soroban-network-local records, and an EVM `msig`'s
-   EOA members have no signing weight on Soroban. Confirm, or drop native members (simpler, fewer forms).
+   EOA members have no signing weight on Soroban. Confirm, or drop native members (simpler, fewer forms). (Owner
+   ruling 2026-10-31, after the final review: 0x0012 dropped from MEMBER (invoker auth); 0x0011 stays.)
 
 ## 14. Sources (read 2026-10-30)
 

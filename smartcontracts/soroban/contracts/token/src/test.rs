@@ -6,7 +6,7 @@ use soroban_sdk::xdr::{
     self, HashIdPreimage, HashIdPreimageSorobanAuthorization, InvokeContractArgs, Limits, ScVal,
     SorobanAuthorizedFunction, SorobanAuthorizedInvocation, WriteXdr,
 };
-use soroban_sdk::{Bytes, IntoVal, TryFromVal, Val};
+use soroban_sdk::{Bytes, IntoVal, Symbol, TryFromVal, Val};
 
 pub const NETWORK: &str = "Standalone Network ; February 2017";
 pub const CONTRACT: &str = "CARCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEVQO";
@@ -36,13 +36,18 @@ fn setup() -> (Env, TokenClient<'static>, Address) {
     let id = env.register_at(
         &Address::from_str(&env, CONTRACT),
         Token,
-        (admin.clone(), 7u32, String::from_str(&env, "SCaaS"), String::from_str(&env, "BMB")),
+        (admin.clone(), 7u32, String::from_str(&env, "SCaaS"), String::from_str(&env, "BMB"), None::<Address>),
     );
     (env.clone(), TokenClient::new(&env, &id), admin)
 }
 
 fn hex(b: &[u8]) -> std::string::String {
     b.iter().map(|x| std::format!("{x:02x}")).collect()
+}
+
+#[test]
+fn env_default_protocol_30() {
+    assert_eq!(Env::default().ledger().protocol_version(), 30);
 }
 
 #[test]
@@ -70,7 +75,7 @@ fn cross_implementation_vector() {
     })
     .to_xdr(Limits::none())
     .unwrap();
-    let digest = env.as_contract(&t.address, || op_digest(&env, "pay", args.clone()));
+    let digest = op_digest(&env, &t.address, "pay", args.clone());
     std::println!("preimage {}\npreimage_sha256 {}\ndigest {}", hex(&pre), hex(&sha256(&pre)), hex(&digest.to_array()));
     assert_eq!(hex(&sha256(&pre)), VEC_PREIMAGE_SHA256);
     assert_eq!(hex(&digest.to_array()), VEC_DIGEST);
@@ -117,7 +122,7 @@ fn approve_only_to_contracts() {
     assert_eq!(t.try_approve(&a, &account, &10, &200).err().unwrap().unwrap(), Error::SpenderNotContract.into());
     let ghost = Address::generate(&env); // contract address with nothing deployed
     assert_eq!(t.try_approve(&a, &ghost, &10, &200).err().unwrap().unwrap(), Error::SpenderNotContract.into());
-    let spender = env.register(Token, (admin, 7u32, String::from_str(&env, "X"), String::from_str(&env, "X")));
+    let spender = env.register(Token, (admin, 7u32, String::from_str(&env, "X"), String::from_str(&env, "X"), None::<Address>));
     t.approve(&a, &spender, &10, &200);
     assert_eq!(t.allowance(&a, &spender), 10);
     t.transfer_from(&spender, &a, &account, &4);

@@ -8,6 +8,8 @@ import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256, sha512 } from '@noble/hashes/sha2.js';
 import { schnorrVerify as zetherVerify } from '../src/zether.js';
+import { PQ_KINDS, pqMessage } from '../src/pq.js';
+import * as ua from '../src/ua.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url } from '../src/bytes.js';
 export const int = (b) => BigInt(hex(b));
 export const B = (h) => fromHex(h);
@@ -151,4 +153,40 @@ export function nativeOk(address, h, sig) {
     const pub = secp256k1.recoverPublicKey(concatBytes(Uint8Array.of(s[64] - 27), s.subarray(0, 64)), h, { prehash: false });
     return eq(keccak_256(secp256k1.Point.fromBytes(pub).toBytes(false).subarray(1)).subarray(12), B(address));
   });
+}
+
+// --- shared by test/ua8.test.js (portable.json) and test/soroban.test.js (ua-ops.json) ---
+export const pqName = (kind) => Object.keys(PQ_KINDS).find((n) => PQ_KINDS[n].kind === kind);
+/** A derived kind's signature over a 32-byte ua_msg: test/ua-verify.js (classical, BLS pop DST) or noble (PQ). */
+export function sigOk(kind, keyData, msg, sig) {
+  const n = pqName(kind);
+  if (!n) return verify(kind, keyData, msg, sig, true);
+  return attempt(() => PQ_KINDS[n].alg.verify(B(sig), PQ_KINDS[n].pq ? pqMessage(n, B(msg)) : B(msg), B(keyData)));
+}
+/** `abi.decode(blob, (MemberSig[]))`, MemberSig = (uint16 index, bytes keyData, bytes sig). */
+export function memberSigs(blob) {
+  const b = B(blob);
+  const a = wordAt(b, 0);
+  const base = a + 32;
+  return Array.from({ length: wordAt(b, a) }, (_, i) => {
+    const t = base + wordAt(b, base + 32 * i);
+    return { index: wordAt(b, t), keyData: bytesAt(b, t, t + 32), sig: bytesAt(b, t, t + 64) };
+  });
+}
+/** An msig signature: indices strictly increasing, each member verifies over `memberDigest` (derived members by key data
+ *  from `keyOf`, under `member`; a native member by EIP-191 personal_sign, no key data), weight at least the threshold. */
+export function msigOk(r, md, blob, keyOf) {
+  let weight = 0;
+  let last = -1;
+  for (const s of memberSigs(blob)) {
+    const m = r.members[s.index];
+    if (!m || s.index <= last) return false;
+    last = s.index;
+    const ok = ua.isNativeKind(m.kind)
+      ? s.keyData.length === 0 && nativeOk(`0x${m.id.slice(26)}`, ua.personalSignDigest(B(md)), hex(s.sig))
+      : s.keyData.length === 0 && sigOk(m.kind, keyOf(m.id), hex(ua.uaMessage(m.kind, ua.purposeTag('member'), B(md))), hex(s.sig));
+    if (!ok) return false;
+    weight += m.weight;
+  }
+  return weight >= r.threshold;
 }

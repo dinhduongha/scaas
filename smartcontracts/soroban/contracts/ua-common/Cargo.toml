@@ -1,0 +1,13 @@
+[package]
+name = "scaas-ua-common"
+version = "0.1.0"
+edition = "2021"
+rust-version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }

@@ -1,0 +1,56 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running unittests src/lib.rs (target/debug/deps/scaas_ua_spike-3bfd193c125ccb0d)
+
+running 10 tests
+test test::spike_bls_add_mul_fr_budget ... BUDGET bls_add_mul n=1 (G1 add+mul, G2 add+mul): cpu=12618803 mem=8187
+BUDGET bls_add_mul n=10: cpu=126069086 mem=26331
+BUDGET bls_fr_ops n=100 (mul+add+inv): cpu=6263678 mem=224507
+Writing test snapshot file for test "test::spike_bls_add_mul_fr_budget" to "test_snapshots/test/spike_bls_add_mul_fr_budget.1.json".
+ok
+test test::spike_bls_g1_msm_budget ... BUDGET bls_g1_msm n=64: cpu=97047488 mem=333350
+BUDGET bls_g1_msm n=128: cpu=191655195 mem=616668
+BUDGET bls_g1_msm n=256: cpu=380919761 mem=1379911
+Writing test snapshot file for test "test::spike_bls_g1_msm_budget" to "test_snapshots/test/spike_bls_g1_msm_budget.1.json".
+ok
+test test::spike_bls_g2_msm_budget ... BUDGET bls_g2_msm n=2: cpu=14598707 mem=232022
+BUDGET bls_g2_msm n=8: cpu=35049203 mem=250999
+Writing test snapshot file for test "test::spike_bls_g2_msm_budget" to "test_snapshots/test/spike_bls_g2_msm_budget.1.json".
+ok
+test test::spike_bls_pairing_budget ... BUDGET bls_pairing pairs=2: cpu=24078369 mem=156479
+Writing test snapshot file for test "test::spike_bls_pairing_budget" to "test_snapshots/test/spike_bls_pairing_budget.1.json".
+ok
+test test::spike_mldsa44_verify_budget ... BUDGET verify_only mldsa44: cpu=1608400 mem=35238
+Writing test snapshot file for test "test::spike_mldsa44_verify_budget" to "test_snapshots/test/spike_mldsa44_verify_budget.1.json".
+ok
+test test::spike_mldsa65_verify_budget ... BUDGET verify_only mldsa65: cpu=2572818 mem=54694
+Writing test snapshot file for test "test::spike_mldsa65_verify_budget" to "test_snapshots/test/spike_mldsa65_verify_budget.1.json".
+ok
+test test::spike_msig3_mldsa65_model_budget ... BUDGET msig_model n=3 mldsa65: cpu=8913540 mem=586768
+Writing test snapshot file for test "test::spike_msig3_mldsa65_model_budget" to "test_snapshots/test/spike_msig3_mldsa65_model_budget.1.json".
+ok
+test test::spike_register_mldsa65_model_budget ... BUDGET register_model mldsa65: cpu=3135351 mem=157407
+Writing test snapshot file for test "test::spike_register_mldsa65_model_budget" to "test_snapshots/test/spike_register_mldsa65_model_budget.1.json".
+ok
+test test::spike_require_authorized_passkey_budget ... BUDGET require_authorized webauthn-p256: cpu=3152068 mem=45756
+Writing test snapshot file for test "test::spike_require_authorized_passkey_budget" to "test_snapshots/test/spike_require_authorized_passkey_budget.1.json".
+ok
+test test::spike_zether_transfer_model_budget ... BUDGET zether_transfer_model m=1: cpu=536192183 mem=3972882
+BUDGET zether_transfer_model m=2: cpu=809727981 mem=6074460
+BUDGET zether_transfer_model m=4: cpu=1342855091 mem=10036392
+BUDGET zether_transfer_model m=8: cpu=2409274068 mem=17966446
+Writing test snapshot file for test "test::spike_zether_transfer_model_budget" to "test_snapshots/test/spike_zether_transfer_model_budget.1.json".
+ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.29s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_ua_spike_token-3e620c5d0f94a950)
+
+running 1 test
+test test::spike_ua_pay_passkey_model_budget ... BUDGET ua_pay_model webauthn-p256 -> mldsa65 UA (token + registry): cpu=3455226 mem=174252
+Writing test snapshot file for test "test::spike_ua_pay_passkey_model_budget" to "test_snapshots/test/spike_ua_pay_passkey_model_budget.1.json".
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+    Finished `release` profile [optimized] target(s) in 0.08s
+    Finished `release` profile [optimized] target(s) in 0.08s

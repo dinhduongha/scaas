@@ -326,6 +326,7 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
 - **A submitter's choice of signatures.** For an `msig` any quorum's signatures are valid, so a front-runner that holds a
   quorum's signatures can submit a different valid subset first: the stored `pop` / `sig` differs, the key, the version and
   the id do not. Nothing depends on which valid subset is stored.
+- **Family status.** EVM: built (UA-8 Part A). Soroban: the registry and the portable `register` (empty `attrs`) are **BUILT** in UA-Soroban on branch `ua-soroban` ([NET-SOR-17](../networks/soroban.md#NET-SOR-17)); the KEM records, PQZ attributes, `checked = Relayer` and the relayer-checked mode are Part B (`ua8-soroban`, next, after the owner's go on `ua-soroban`). Other families: their own UA family rounds.
 
 <a id="CTR-UA-33"></a>**CTR-UA-33** — **The registration event carries `popHash`; `msig` members sign without key data; WebAuthn blobs canonical only** (owner 2026-10-30;
 [decisions.md](../decisions.md)). One rule on every family that has a UA registry:
@@ -499,7 +500,7 @@ Native kinds (no registration, no tag-derived id; listed so that structures and 
 | `0x0003` | `hedera-native` | long-zero address `0.0.N` | **Hedera only** (never a member on another EVM chain) | HIP-632 `isAuthorizedRaw` (64-byte ed25519), else as 0x0001/0x0002 (HIP-632 halts in a static frame: until a non-view path exists, `requireAuthorized` verifies it as 0x0001/0x0002) |
 | `0x0010` | `solana-ed25519` | 32-byte pubkey | Solana | ed25519 precompile instruction |
 | `0x0011` | `stellar-account` | 32-byte `G…` pubkey | Soroban (Stellar, Pi) | host `require_auth` |
-| `0x0012` | `soroban-contract` | 32-byte `C…` id | Soroban | `__check_auth` |
+| `0x0012` | `soroban-contract` | 32-byte `C…` id | Soroban | `__check_auth`; never an `msig` member on Soroban (owner ruling 2026-10-31: a contract that calls the registry would meet its own slot by invoker auth; [NET-SOR-18](../networks/soroban.md#NET-SOR-18)) |
 | `0x0013` | `aptos-account` | 32-byte address | Aptos | native auth key (ed25519, SingleKey, MultiKey, WebAuthn) |
 | `0x0014` | `sui-address` | 32-byte address | Sui | native flags 0/1/2/6, native multisig, zkLogin |
 | `0x0015` | `cosmos-account` | 20- or 32-byte account | Cosmos | ADR-036 secp256k1; native multisig |
@@ -1010,7 +1011,7 @@ Non-EVM families ([NET-ALL-20](../networks/README.md#NET-ALL-20)):
 
 | Family | Today (subject) | With UA |
 |---|---|---|
-| Soroban | `Address` (`G…`, `C…`); `SmartKeyAccount` keys `Ed25519`, `Passkey` (1-of-N) | native kinds unchanged; `webauthn-p256` key ids follow the derivation when the account binds them; seed role keys of a `C…` account use `kindNo` 18; registry = the account factory's persistent map |
+| Soroban | `Address` (`G…`, `C…`); `SmartKeyAccount` keys `Ed25519`, `Passkey` (1-of-N) | native kinds unchanged; `webauthn-p256` key ids follow the derivation when the account binds them; seed role keys of a `C…` account use `kindNo` 18; registry = `UaRegistry` (a stand-alone contract, persistent entries, [NET-SOR-17](../networks/soroban.md#NET-SOR-17)); derived ids shown only as the URN, the UA ledger is in the token ([NET-SOR-20](../networks/soroban.md#NET-SOR-20)) |
 | Aptos | `owner: address`; account keys ed25519 / WebAuthn | native unchanged; non-native owner keys keyed by UA id; `account_of(ua)` for passkey-first accounts |
 | Sui | native address (flags 0/1/2/6) | native unchanged (Sui passkeys are native, flag 6); `Registry<T>` gains a `key_owner` table |
 | Solana | `owner: [u8;32]`; passkey owner `sha256("scaas.owner.p256" ‖ pk33)` | passkey owner = `webauthn-p256` UA id, stored with `owner_kind`, shown only as URN; PDA `["acct", ua]`; PDA `["ukey", keyHash]` enforces keyHash uniqueness |
@@ -1335,7 +1336,7 @@ Other families:
 |---|---|---|---|
 | Hedera | the EVM registry with `hederaNative = true` (`0x0003` members via HIP-632; HIP-632 `isAuthorizedRaw` halts in a STATICCALL frame, so a native Hedera Ed25519 owner cannot be verified through a static ERC-1271 call: `HederaMandateWallet` fails closed, integrators verify on a non-static path) | yes | HSCS has the bn254 precompiles; EIP-2537 per probe; budget 10.5 M (15 M cap) |
 | Cosmos | `ua-registry` CosmWasm contract; tokens query it (`WasmQuery::Smart`) | yes | software keccak; secp256k1/P-256 host verify; derived ids shown as URN, never the account HRP |
-| Soroban | persistent entries in the `SmartKeyAccount` factory (`UA(ua)`, `KEY(keyHash)`), TTL extended by the node like other persistent state | yes | `secp256r1_verify`, `ed25519_verify` host functions |
+| Soroban | `UaRegistry` contract, persistent entries (`Ua(ua)`, `Key(keyHash)`, `Signer(ua)`, `List`, `Count`), TTL extended by use (every write and in-transaction read), **no node job** ([NET-SOR-22](../networks/soroban.md#NET-SOR-22)) | yes | `secp256r1_verify`, `ed25519_verify` host functions |
 | Sui | `Registry<T>`: `Table<vector<u8>, address>` for `key_owner`; account objects keyed by UA | yes | native verify functions |
 | Aptos | resource under the package root: `Table<vector<u8>, address>` | yes | pure-Move P-256 (UNAUDITED) |
 | Solana | PDAs `["ua", ua]` (record) and `["ukey", keyHash]` (claim) | yes | precompile-instruction verification |
