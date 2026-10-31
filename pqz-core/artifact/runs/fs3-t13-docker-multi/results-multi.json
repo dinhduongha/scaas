@@ -1,0 +1,646 @@
+{
+ "pqzl": {
+  "1,on": {
+   "m": 1,
+   "aud": true,
+   "proof_bytes_max_native": 46700,
+   "prove_p50_ms_native": 1685.593,
+   "verify_p50_ms_native": 774.4,
+   "verify_p99_ms_native": 785.317,
+   "sv_p99_ms_native": 9.951,
+   "sv_p99_ms_x86v3": 5.96,
+   "sv_p99_ms_wasm": 15.694,
+   "proof_bytes_max_wasm": 46700,
+   "prove_p50_ms_wasm": 3554.774,
+   "verify_p50_ms_wasm": 1260.122,
+   "verify_p99_ms_wasm": 1260.122,
+   "wasm_prove_peak_bytes": 283239328
+  },
+  "2,on": {
+   "m": 2,
+   "aud": true,
+   "proof_bytes_max_native": 47532,
+   "prove_p50_ms_native": 1453.455,
+   "verify_p50_ms_native": 890.421,
+   "verify_p99_ms_native": 899.558,
+   "sv_p99_ms_native": 10.435,
+   "sv_p99_ms_x86v3": 7.075,
+   "sv_p99_ms_wasm": 16.344,
+   "proof_bytes_max_wasm": 47525,
+   "prove_p50_ms_wasm": 2529.928,
+   "verify_p50_ms_wasm": 1413.85,
+   "verify_p99_ms_wasm": 1413.85,
+   "wasm_prove_peak_bytes": 296086928
+  },
+  "4,on": {
+   "m": 4,
+   "aud": true,
+   "proof_bytes_max_native": 63916,
+   "prove_p50_ms_native": 3007.811,
+   "verify_p50_ms_native": 1830.994,
+   "verify_p99_ms_native": 1871.906,
+   "sv_p99_ms_native": 15.031,
+   "sv_p99_ms_x86v3": 8.642,
+   "sv_p99_ms_wasm": 23.573,
+   "proof_bytes_max_wasm": 63907,
+   "prove_p50_ms_wasm": 4918.024,
+   "verify_p50_ms_wasm": 2668.832,
+   "verify_p99_ms_wasm": 2717.969,
+   "wasm_prove_peak_bytes": 552213744
+  },
+  "8,on": {
+   "m": 8,
+   "aud": true,
+   "proof_bytes_max_native": 80317,
+   "prove_p50_ms_native": 5011.618,
+   "verify_p50_ms_native": 3947.373,
+   "verify_p99_ms_native": 3984.685,
+   "sv_p99_ms_native": 19.327,
+   "sv_p99_ms_x86v3": 11.538,
+   "sv_p99_ms_wasm": 31.19,
+   "proof_bytes_max_wasm": 80295,
+   "prove_p50_ms_wasm": 10177.365,
+   "verify_p50_ms_wasm": 4973.829,
+   "verify_p99_ms_wasm": 4994.743,
+   "wasm_prove_peak_bytes": 927036880
+  },
+  "1,off": {
+   "m": 1,
+   "aud": false,
+   "proof_bytes_max_native": 46348,
+   "prove_p50_ms_native": 1286.177,
+   "verify_p50_ms_native": 719.48,
+   "verify_p99_ms_native": 733.621,
+   "sv_p99_ms_native": 9.66,
+   "sv_p99_ms_x86v3": 6.179,
+   "sv_p99_ms_wasm": 16.069,
+   "proof_bytes_max_wasm": 46348,
+   "prove_p50_ms_wasm": 2174.583,
+   "verify_p50_ms_wasm": 1176.886,
+   "verify_p99_ms_wasm": 1176.886,
+   "wasm_prove_peak_bytes": 278193712
+  },
+  "2,off": {
+   "m": 2,
+   "aud": false,
+   "proof_bytes_max_native": 46855,
+   "prove_p50_ms_native": 1286.476,
+   "verify_p50_ms_native": 776.824,
+   "verify_p99_ms_native": 788.091,
+   "sv_p99_ms_native": 9.934,
+   "sv_p99_ms_x86v3": 6.242,
+   "sv_p99_ms_wasm": 16.317,
+   "proof_bytes_max_wasm": 46855,
+   "prove_p50_ms_wasm": 2440.711,
+   "verify_p50_ms_wasm": 1241.866,
+   "verify_p99_ms_wasm": 1246.623,
+   "wasm_prove_peak_bytes": 285875184
+  },
+  "4,off": {
+   "m": 4,
+   "aud": false,
+   "proof_bytes_max_native": 47865,
+   "prove_p50_ms_native": 1834.831,
+   "verify_p50_ms_native": 905.586,
+   "verify_p99_ms_native": 923.975,
+   "sv_p99_ms_native": 10.715,
+   "sv_p99_ms_x86v3": 6.236,
+   "sv_p99_ms_wasm": 17.014,
+   "proof_bytes_max_wasm": 47865,
+   "prove_p50_ms_wasm": 3789.231,
+   "verify_p50_ms_wasm": 1434.622,
+   "verify_p99_ms_wasm": 1434.622,
+   "wasm_prove_peak_bytes": 301715744
+  },
+  "8,off": {
+   "m": 8,
+   "aud": false,
+   "proof_bytes_max_native": 64624,
+   "prove_p50_ms_native": 2933.17,
+   "verify_p50_ms_native": 1951.101,
+   "verify_p99_ms_native": 1985.286,
+   "sv_p99_ms_native": 14.838,
+   "sv_p99_ms_x86v3": 8.915,
+   "sv_p99_ms_wasm": 25.49,
+   "proof_bytes_max_wasm": 64611,
+   "prove_p50_ms_wasm": 4721.834,
+   "verify_p50_ms_wasm": 2732.306,
+   "verify_p99_ms_wasm": 2737.882,
+   "wasm_prove_peak_bytes": 567893328
+  },
+  "16,off": {
+   "m": 16,
+   "aud": false,
+   "sv_p99_ms_wasm": 37.366,
+   "proof_bytes_max_wasm": 94651,
+   "prove_p50_ms_wasm": 9786.718,
+   "verify_p50_ms_wasm": 6826.581,
+   "verify_p99_ms_wasm": 6826.581,
+   "wasm_prove_peak_bytes": 1338568768
+  }
+ },
+ "pqzh": {
+  "1,on": {
+   "m": 1,
+   "aud": true,
+   "src_native": "native",
+   "max_len_exact": 235470,
+   "proof_bytes_max": 233198,
+   "prove_p50_ms_native": 629.572,
+   "prove_memory_mib_native": 43.2,
+   "verify_p50_ms_native": 9.817,
+   "verify_p99_ms_native": 11.171,
+   "src_wasm": "wasm",
+   "prove_p50_ms_wasm": 1438.277,
+   "prove_memory_mib_wasm": 46.4375,
+   "verify_p50_ms_wasm": 20.682,
+   "verify_p99_ms_wasm": 22.242
+  },
+  "2,on": {
+   "m": 2,
+   "aud": true,
+   "src_native": "native",
+   "max_len_exact": 235470,
+   "proof_bytes_max": 232622,
+   "prove_p50_ms_native": 623.157,
+   "prove_memory_mib_native": 43.2,
+   "verify_p50_ms_native": 10.106,
+   "verify_p99_ms_native": 11.595,
+   "src_wasm": "wasm",
+   "prove_p50_ms_wasm": 1441.377,
+   "prove_memory_mib_wasm": 46.75,
+   "verify_p50_ms_wasm": 21.475,
+   "verify_p99_ms_wasm": 23.149
+  },
+  "4,on": {
+   "m": 4,
+   "aud": true,
+   "src_native": "native",
+   "max_len_exact": 279756,
+   "proof_bytes_max": 277388,
+   "prove_p50_ms_native": 866.722,
+   "prove_memory_mib_native": 60.6,
+   "verify_p50_ms_native": 12.532,
+   "verify_p99_ms_native": 14.122,
+   "src_wasm": "wasm",
+   "prove_p50_ms_wasm": 2030.907,
+   "prove_memory_mib_wasm": 65.1875,
+   "verify_p50_ms_wasm": 27.805,
+   "verify_p99_ms_wasm": 29.963
+  },
+  "1,off": {
+   "m": 1,
+   "aud": false,
+   "src_native": "native",
+   "max_len_exact": 234744,
+   "proof_bytes_max": 231864,
+   "prove_p50_ms_native": 639.203,
+   "prove_memory_mib_native": 42.9,
+   "verify_p50_ms_native": 9.449,
+   "verify_p99_ms_native": 10.478,
+   "src_wasm": "wasm",
+   "prove_p50_ms_wasm": 1434.029,
+   "prove_memory_mib_wasm": 65.75,
+   "verify_p50_ms_wasm": 19.884,
+   "verify_p99_ms_wasm": 21.402
+  },
+  "2,off": {
+   "m": 2,
+   "aud": false,
+   "src_native": "native",
+   "max_len_exact": 235470,
+   "proof_bytes_max": 233038,
+   "prove_p50_ms_native": 626.788,
+   "prove_memory_mib_native": 43.2,
+   "verify_p50_ms_native": 9.817,
+   "verify_p99_ms_native": 10.898,
+   "src_wasm": "wasm",
+   "prove_p50_ms_wasm": 1433.927,
+   "prove_memory_mib_wasm": 65.75,
+   "verify_p50_ms_wasm": 20.738,
+   "verify_p99_ms_wasm": 22.691
+  },
+  "4,off": {
+   "m": 4,
+   "aud": false,
+   "src_native": "native",
+   "max_len_exact": 235470,
+   "proof_bytes_max": 232974,
+   "prove_p50_ms_native": 630.08,
+   "prove_memory_mib_native": 43.2,
+   "verify_p50_ms_native": 10.15,
+   "verify_p99_ms_native": 11.501,
+   "src_wasm": "wasm",
+   "prove_p50_ms_wasm": 1461.875,
+   "prove_memory_mib_wasm": 65.75,
+   "verify_p50_ms_wasm": 21.557,
+   "verify_p99_ms_wasm": 23.149
+  },
+  "8,on": {
+   "m": 8,
+   "aud": true,
+   "src_native": "oversize",
+   "max_len_exact": 368328,
+   "proof_bytes_max": 365192,
+   "prove_p50_ms_native": 1354.659,
+   "prove_memory_mib_native": 94.6,
+   "verify_p50_ms_native": 17.21,
+   "verify_p99_ms_native": 18.47,
+   "src_wasm": "oversize-wasm",
+   "prove_p50_ms_wasm": 3222.586,
+   "prove_memory_mib_wasm": 101.625,
+   "verify_p50_ms_wasm": 40.382,
+   "verify_p99_ms_wasm": 43.33
+  },
+  "16,on": {
+   "m": 16,
+   "aud": true,
+   "src_native": "oversize",
+   "max_len_exact": 546924,
+   "proof_bytes_max": 543948,
+   "prove_p50_ms_native": 2370.916,
+   "prove_memory_mib_native": 163.9,
+   "verify_p50_ms_native": 27.076,
+   "verify_p99_ms_native": 28.966,
+   "src_wasm": "oversize-wasm",
+   "prove_p50_ms_wasm": 5550.597,
+   "prove_memory_mib_wasm": 172.625,
+   "verify_p50_ms_wasm": 66.072,
+   "verify_p99_ms_wasm": 69.454
+  },
+  "8,off": {
+   "m": 8,
+   "aud": false,
+   "src_native": "oversize",
+   "max_len_exact": 279756,
+   "proof_bytes_max": 276524,
+   "prove_p50_ms_native": 860.47,
+   "prove_memory_mib_native": 60.6,
+   "verify_p50_ms_native": 12.415,
+   "verify_p99_ms_native": 13.743,
+   "src_wasm": "oversize-wasm",
+   "prove_p50_ms_wasm": 1979.246,
+   "prove_memory_mib_wasm": 173.6875,
+   "verify_p50_ms_wasm": 27.914,
+   "verify_p99_ms_wasm": 29.386
+  },
+  "16,off": {
+   "m": 16,
+   "aud": false,
+   "src_native": "oversize",
+   "max_len_exact": 369054,
+   "proof_bytes_max": 366206,
+   "prove_p50_ms_native": 1384.209,
+   "prove_memory_mib_native": 94.9,
+   "verify_p50_ms_native": 17.692,
+   "verify_p99_ms_native": 19.288,
+   "src_wasm": "oversize-wasm",
+   "prove_p50_ms_wasm": 3197.003,
+   "prove_memory_mib_wasm": 173.6875,
+   "verify_p50_ms_wasm": 41.23,
+   "verify_p99_ms_wasm": 42.876
+  }
+ },
+ "checks": [
+  [
+   "FAIL",
+   "pqzl-txm.txt",
+   "see the file"
+  ],
+  [
+   "ok",
+   "pqzh-txm-build.txt",
+   "rc 0"
+  ],
+  [
+   "ok",
+   "pqzh-txm-oversize-build.txt",
+   "rc 0"
+  ],
+  [
+   "ok",
+   "pqzh-txm-wasm-build.txt",
+   "rc 0"
+  ],
+  [
+   "ok",
+   "pqzh-txm-oversize-wasm-build.txt",
+   "rc 0"
+  ],
+  [
+   "ok",
+   "pqzl-txm-native-generic.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "pqzl-txm-native-fast.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "pqzl-txm-x86v3-fast.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "pqzl-txm-wasm-fast.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "pqzl-txm-wasm-generic.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "pqzl-txm-wasm-nosv.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "FAIL",
+   "rust-txm-native-generic.jsonl",
+   "fails 50, verifier disagreements 0"
+  ],
+  [
+   "FAIL",
+   "rust-txm-native-fast.jsonl",
+   "fails 204, verifier disagreements 0"
+  ],
+  [
+   "FAIL",
+   "rust-txm-wasm-generic.jsonl",
+   "fails 9, verifier disagreements 0"
+  ],
+  [
+   "FAIL",
+   "rust-txm-wasm-fast.jsonl",
+   "fails 102, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "rust-txm-build.txt",
+   "rc 0"
+  ],
+  [
+   "FAIL",
+   "rust-txm.txt",
+   "see the file"
+  ],
+  [
+   "ok",
+   "pqzh-txm-native.jsonl",
+   "fails 0 (mutations accepted, panics, rc)"
+  ],
+  [
+   "ok",
+   "pqzh-txm-oversize.jsonl",
+   "fails 0 (mutations accepted, panics, rc)"
+  ],
+  [
+   "ok",
+   "pqzh-txm-wasm.jsonl",
+   "fails 0 (mutations accepted, panics, rc)"
+  ],
+  [
+   "ok",
+   "pqzh-txm-oversize-wasm.jsonl",
+   "fails 0 (mutations accepted, panics, rc)"
+  ],
+  [
+   "ok",
+   "pqzl R_TXM (1, on) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzl R_TXM (1, off) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzl R_TXM (2, on) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzl R_TXM (2, off) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzl R_TXM (4, on) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzl R_TXM (4, off) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzl R_TXM (8, on) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzl R_TXM (8, off) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzh R_TXM (1, on) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzh R_TXM (1, off) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzh R_TXM (2, on) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzh R_TXM (2, off) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzh R_TXM (4, on) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzh R_TXM (4, off) measured",
+   "built shape"
+  ]
+ ],
+ "machine": {
+  "cpu": "AMD Ryzen 5 7235HS",
+  "flags": "aes vaes avx2",
+  "threads": 8,
+  "os": "Ubuntu 24.04.5 LTS",
+  "kernel": "7.0.0-38-generic",
+  "cc": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+  "wasm_ld": "Ubuntu LLD 18.1.3",
+  "node": "v26.8.1",
+  "python": "3.12.3",
+  "docker": true,
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)"
+ },
+ "rust": {
+  "1,on": {
+   "m": 1,
+   "aud": true,
+   "proof_bytes_max_native": 46700,
+   "prove_p50_ms_native": 1098.234,
+   "verify_p50_ms_native": 351.18,
+   "verify_p99_ms_native": 355.954,
+   "sv_p99_ms_native": 7.639,
+   "proof_bytes_max_wasm": 46700,
+   "wasm_prove_peak_bytes": 79691776,
+   "prove_p50_ms_wasm": 4230.043,
+   "verify_p50_ms_wasm": 799.301,
+   "verify_p99_ms_wasm": 799.301,
+   "sv_p99_ms_wasm": 29.921
+  },
+  "2,on": {
+   "m": 2,
+   "aud": true,
+   "proof_bytes_max_native": 47532,
+   "prove_p50_ms_native": 835.98,
+   "verify_p50_ms_native": 404.562,
+   "verify_p99_ms_native": 411.842,
+   "sv_p99_ms_native": 8.596,
+   "proof_bytes_max_wasm": 47525,
+   "wasm_prove_peak_bytes": 80019456,
+   "prove_p50_ms_wasm": 2476.981,
+   "verify_p50_ms_wasm": 881.884,
+   "verify_p99_ms_wasm": 882.725,
+   "sv_p99_ms_wasm": 32.421
+  },
+  "4,on": {
+   "m": 4,
+   "aud": true,
+   "proof_bytes_max_native": 63916,
+   "prove_p50_ms_native": 1368.779,
+   "verify_p50_ms_native": 723.002,
+   "verify_p99_ms_native": 738.29,
+   "sv_p99_ms_native": 11.31,
+   "proof_bytes_max_wasm": 63907,
+   "wasm_prove_peak_bytes": 154468352,
+   "prove_p50_ms_wasm": 4285.266,
+   "verify_p50_ms_wasm": 1487.677,
+   "verify_p99_ms_wasm": 1487.677,
+   "sv_p99_ms_wasm": 44.885
+  },
+  "8,on": {
+   "m": 8,
+   "aud": true,
+   "proof_bytes_max_native": 80317,
+   "prove_p50_ms_native": 2105.984,
+   "verify_p50_ms_native": 1390.814,
+   "verify_p99_ms_native": 1414.18,
+   "sv_p99_ms_native": 14.92,
+   "proof_bytes_max_wasm": 80295,
+   "wasm_prove_peak_bytes": 223674368,
+   "prove_p50_ms_wasm": 10085.249,
+   "verify_p50_ms_wasm": 2561.065,
+   "verify_p99_ms_wasm": 2565.514,
+   "sv_p99_ms_wasm": 59.263
+  },
+  "1,off": {
+   "m": 1,
+   "aud": false,
+   "proof_bytes_max_native": 46348,
+   "prove_p50_ms_native": 753.193,
+   "verify_p50_ms_native": 329.719,
+   "verify_p99_ms_native": 336.597,
+   "sv_p99_ms_native": 8.7,
+   "proof_bytes_max_wasm": 46348,
+   "wasm_prove_peak_bytes": 78774272,
+   "prove_p50_ms_wasm": 2140.007,
+   "verify_p50_ms_wasm": 762.406,
+   "verify_p99_ms_wasm": 762.406,
+   "sv_p99_ms_wasm": 30.172
+  },
+  "2,off": {
+   "m": 2,
+   "aud": false,
+   "proof_bytes_max_native": 46855,
+   "prove_p50_ms_native": 719.664,
+   "verify_p50_ms_native": 363.896,
+   "verify_p99_ms_native": 366.493,
+   "sv_p99_ms_native": 7.971,
+   "proof_bytes_max_wasm": 46855,
+   "wasm_prove_peak_bytes": 78053376,
+   "prove_p50_ms_wasm": 2318.788,
+   "verify_p50_ms_wasm": 805.234,
+   "verify_p99_ms_wasm": 805.234,
+   "sv_p99_ms_wasm": 30.492
+  },
+  "4,off": {
+   "m": 4,
+   "aud": false,
+   "proof_bytes_max_native": 47865,
+   "prove_p50_ms_native": 1158.665,
+   "verify_p50_ms_native": 417.378,
+   "verify_p99_ms_native": 421.954,
+   "sv_p99_ms_native": 8.191,
+   "proof_bytes_max_wasm": 47865,
+   "wasm_prove_peak_bytes": 80740352,
+   "prove_p50_ms_wasm": 4525.913,
+   "verify_p50_ms_wasm": 906.266,
+   "verify_p99_ms_wasm": 908.157,
+   "sv_p99_ms_wasm": 32.269
+  },
+  "8,off": {
+   "m": 8,
+   "aud": false,
+   "proof_bytes_max_native": 64624,
+   "prove_p50_ms_native": 1399.775,
+   "verify_p50_ms_native": 824.057,
+   "verify_p99_ms_native": 835.323,
+   "sv_p99_ms_native": 11.615,
+   "proof_bytes_max_wasm": 64611,
+   "wasm_prove_peak_bytes": 163446784,
+   "prove_p50_ms_wasm": 3946.45,
+   "verify_p50_ms_wasm": 1575.474,
+   "verify_p99_ms_wasm": 1581.827,
+   "sv_p99_ms_wasm": 48.667
+  },
+  "16,on": {
+   "m": 16,
+   "aud": true,
+   "proof_bytes_max_native": 0,
+   "prove_p50_ms_native": 5326.953,
+   "verify_p50_ms_native": 27.459,
+   "verify_p99_ms_native": 28.747,
+   "sv_p99_ms_native": 0.97,
+   "proof_bytes_max_wasm": 0,
+   "wasm_prove_peak_bytes": 582025216,
+   "prove_p50_ms_wasm": 13605.683,
+   "verify_p50_ms_wasm": 34.157,
+   "verify_p99_ms_wasm": 34.157,
+   "sv_p99_ms_wasm": 1.562
+  },
+  "16,off": {
+   "m": 16,
+   "aud": false,
+   "proof_bytes_max_native": 94695,
+   "prove_p50_ms_native": 3105.593,
+   "verify_p50_ms_native": 1763.089,
+   "verify_p99_ms_native": 1778.86,
+   "sv_p99_ms_native": 18.884,
+   "proof_bytes_max_wasm": 94651,
+   "wasm_prove_peak_bytes": 304939008,
+   "prove_p50_ms_wasm": 7311.323,
+   "verify_p50_ms_wasm": 3191.651,
+   "verify_p99_ms_wasm": 3191.651,
+   "sv_p99_ms_wasm": 76.26
+  }
+ }
+}

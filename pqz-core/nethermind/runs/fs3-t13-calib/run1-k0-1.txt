@@ -1,0 +1,17 @@
+# P6f calibration (2026-10-31-calib-ops010) 2026-10-30 19:58:18Z  host e902f0acafcc  cpus 4  .NET 10.0.13
+# libpqz_ffi.so /opt/pqz-calibrate/libpqz_ffi.so sha256 dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601; n = 1000 per set; cold self-test 0 processes
+# model name	: AMD Ryzen 5 7235HS
+t_ecMul median 0.025 ms (p99 0.033, n 10000) ⇒ 0.244 M gas per ms
+# rows 2: op 1 pqzh 93312; op 1 pqzh 74752
+
+| op | id | stmtLen [M, auditorOn] | forms | valid n | p50 valid ms | p99 valid ms | p99 adversarial ms | worst adversarial set | t_row ms | gas | + calldata floor of the largest honest input (direct tx) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | pqzh | 93312 | TRANSFER | 22 (20 fresh) | 10.803 | 12.356 | 1.357 | proof bit flips (1000) | 12.356 | 3,014,000 | 12,967,520 (342,845 B) |
+| 1 | pqzh | 74752 | TRANSFER0 | 22 (20 fresh) | 10.626 | 12.080 | 1.365 | negative.json (17) | 12.080 | 2,947,000 | 12,354,870 (323,997 B) |
+
+OP_SELFTEST warm (cached): p50 0.000 ms, p99 0.004 ms; selftestGas = the smallest row = 2,947,000 (D6, R3)
+ML-DSA-44: 15 ACVP inputs, p50 0.110 ms, p99 0.130 ms ⇒ calibrated 32,000, EIP-8355 BASE 6,500 ⇒ mldsa44Gas 32,000
+ML-DSA-65: 15 ACVP inputs, p50 0.163 ms, p99 0.183 ms ⇒ calibrated 45,000, EIP-8355 BASE 9,000 ⇒ mldsa65Gas 45,000
+
+sanity: every t_row ≤ 60 ms; every honest and MAX_PROOF input fits a direct transaction
+# image scaas/nethermind-pqz:2.2.0-pqz6-calib sha256:3eac4e975f367a2e2d95b91ab4f416d8d907e62b6eae1469cf248211629a49a6; host load before: 0.74 0.46 0.27, after: 0.98 0.55 0.31

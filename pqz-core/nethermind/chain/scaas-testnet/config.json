@@ -1,0 +1,73 @@
+{
+  "Init": {
+    "ChainSpecPath": "/nethermind/genesis.json",
+    "BaseDbPath": "/nethermind/nethermind_datadir",
+    "EnableUnsecuredDevWallet": false,
+    "DiscoveryEnabled": false,
+    "KzgSetupPath": "/nethermind/kzg_trusted_setup.txt",
+    "PeerManagerEnabled": true,
+    "MemoryHint": 512000000
+  },
+  "Pruning": {
+    "CacheMb": 128,
+    "DirtyCacheMb": 64
+  },
+  "FlatDb": {
+    "BlockCacheSizeBudget": 134217728,
+    "TrieCacheMemoryBudget": 134217728
+  },
+  "JsonRpc": {
+    "Enabled": true,
+    "Host": "127.0.0.1",
+    "Port": 8550,
+    "WebSocketsPort": 8550,
+    "EnabledModules": [
+      "Eth",
+      "Net",
+      "Web3",
+      "TxPool",
+      "Debug",
+      "Trace",
+      "Parity",
+      "Clique",
+      "Admin"
+    ],
+    "MaxBatchSize": 100,
+    "MaxRequestBodySize": 4194304,
+    "GasCap": 200000000,
+    "Timeout": 20000,
+    "RequestQueueLimit": 500,
+    "CallsFilterFilePath": "/nethermind/jsonrpc.filter"
+  },
+  "KeyStore": {
+    "KeyStoreDirectory": "/nethermind/keystore",
+    "PasswordFiles": [
+      "/nethermind/password.txt"
+    ],
+    "EnodeAccount": "0xdE36845Cc887783397b2808c13f2Ed95DC2646BB",
+    "UnlockAccounts": [
+      "0xdE36845Cc887783397b2808c13f2Ed95DC2646BB"
+    ]
+  },
+  "Network": {
+    "StaticPeers": "enode://daa72efa1376e41b62e43c22991b185a80e0731048b60a9ac7ea26a4f14c15ac4e9084f9df1eed3063aaecb967de472a440090745e2384dbf93f597a8d385737@10.76.24.11:30303",
+    "OnlyStaticPeers": true,
+    "MaxActivePeers": 4,
+    "FilterPeersByRecentIp": false,
+    "ExternalIp": "10.76.24.10"
+  },
+  "Mining": {
+    "Enabled": true
+  },
+  "Merge": {
+    "Enabled": false
+  },
+  "Plugins": {},
+  "TxPool": {
+    "MaxTxSize": 2097152,
+    "AcceptTxWhenNotSynced": true
+  },
+  "Blocks": {
+    "TargetBlockGasLimit": 200000000
+  }
+}

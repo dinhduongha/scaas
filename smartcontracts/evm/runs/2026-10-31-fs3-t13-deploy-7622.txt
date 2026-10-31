@@ -1,0 +1,54 @@
+# fs3 T13 phase C, 2026-10-31: PRIVATE_KEY=0x…04 FOUNDRY_PROFILE=private7622 CHAIN_UID=0xf1f491ab…3164 scripts/capped smartcontracts/scripts/deploy.sh evm http://127.0.0.1:8545 (CREATE2 deployer 0x4e59b448… from the genesis alloc)
+No files changed, compilation skipped
+Script ran successfully.
+
+== Logs ==
+  {"chain_uid":"0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164","dex_implementation":"0xe77d3D680bc1e35205f68cd1F1Fc71230d3eD3D9","implementation_normal":"0xCDb98d83A09f696b7720842f91D9FB56daD6a551","mtx_relay_executor":"0xa9B8AB56e974b0495aeC3280dC5E7DB77B88C687","mtx_relay_fee":"0x7FB42079C44c185c131fd38EE59C18463b16fa48","smart_key_account_factory":"0x3fAF952D9Cf16c5deC18D6571D366f614944619D","smart_key_account_implementation":"0x79991A4d6Bc96d38b602968167cd584cEC4A116e","token_factory":"0xC037D039a21646060E5b4ae441c1138e87000BDE","ua_registry":"0x06d03D563686E4cce533b2c392EC68fAaB119776"}
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 7622
+
+Estimated max fee per gas: 1 gwei
+Estimated base fee per gas: 0 gwei
+Estimated max priority fee per gas: 1 gwei
+
+Estimated total gas used for script: 508401591
+
+Estimated amount required: 0.508401591 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout/smartcontracts/evm/broadcast/Deploy.s.sol/7622/run-latest.json
+
+Sensitive values saved to: /home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout/smartcontracts/evm/cache/Deploy.s.sol/7622/run-latest.json
+
+
+## deployments/7622.json (git-ignored)
+{
+  "chain_uid": "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164",
+  "dex_implementation": "0xe77d3D680bc1e35205f68cd1F1Fc71230d3eD3D9",
+  "implementation_normal": "0xCDb98d83A09f696b7720842f91D9FB56daD6a551",
+  "mtx_relay_executor": "0xa9B8AB56e974b0495aeC3280dC5E7DB77B88C687",
+  "mtx_relay_fee": "0x7FB42079C44c185c131fd38EE59C18463b16fa48",
+  "smart_key_account_factory": "0x3fAF952D9Cf16c5deC18D6571D366f614944619D",
+  "smart_key_account_implementation": "0x79991A4d6Bc96d38b602968167cd584cEC4A116e",
+  "token_factory": "0xC037D039a21646060E5b4ae441c1138e87000BDE",
+  "ua_registry": "0x06d03D563686E4cce533b2c392EC68fAaB119776"
+}
+## code size at each address
+0xe77d3D680bc1e35205f68cd1F1Fc71230d3eD3D9 26967 B
+0xCDb98d83A09f696b7720842f91D9FB56daD6a551 38916 B
+0xa9B8AB56e974b0495aeC3280dC5E7DB77B88C687 554 B
+0x7FB42079C44c185c131fd38EE59C18463b16fa48 2982 B
+0x3fAF952D9Cf16c5deC18D6571D366f614944619D 1264 B
+0x79991A4d6Bc96d38b602968167cd584cEC4A116e 19845 B
+0xC037D039a21646060E5b4ae441c1138e87000BDE 15651 B
+0x06d03D563686E4cce533b2c392EC68fAaB119776 37365 B

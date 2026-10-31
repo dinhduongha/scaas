@@ -1,0 +1,3 @@
+shape 5 m 2048 k 1 done
+{"rel": "R_TXM2_0", "proof_bytes_last": 46817, "proof_bytes_
+rc=0

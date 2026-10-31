@@ -254,7 +254,7 @@ PQZ parameters.
 | Block gas limit | 200,000,000 since the reset of 2026-10-22 (genesis `gasLimit` `0xbebc200`, `TargetBlockGasLimit` 200,000,000); 16,777,216 at the time of this table, then an 80 M target (P6f) | gas meters block capacity ([CTR-PQZ-11](#CTR-PQZ-11)) |
 | [EIP-7623](https://eips.ethereum.org/EIPS/eip-7623) calldata floor | `10 × tokens`, token = zero byte 1 / non-zero byte 4 ⇒ 40 gas per non-zero byte | dominates PQZ cost once verification is native |
 | [EIP-7934](https://eips.ethereum.org/EIPS/eip-7934) | RLP block ≤ 8,388,608 B | a block can carry at most `gasLimit / 10` calldata bytes (all-zero calldata at the floor); the former 80 M target kept that ≤ 8.0 MB; at today's 200 M limit the gas limit alone no longer bounds a block under 8,388,608 B, so the block producer's own EIP-7934 check is what holds it |
-| Tx-pool size limit | 128 KiB is the common client default (geth/reth); Nethermind `TxPool.MaxTxSize` to be confirmed | transfers with inline credits exceed it ([CTR-PQZ-11](#CTR-PQZ-11)) |
+| Tx-pool size limit | 128 KiB is the common client default (geth/reth); Nethermind default `TxPool.MaxTxSize` 131,072; the SCaaS testnet runs 2,097,152 (2 MiB, owner 2026-10-31, [NET-EVM-10](../networks/evm.md#NET-EVM-10)) | transfers with inline credits exceed it ([CTR-PQZ-11](#CTR-PQZ-11)) |
 | Missing transition keys | Nethermind silently ignores unknown keys; `eip1108Transition` was once missing and made `ecMul` 6.4× dearer with no symptom | every PQZ activation is **probed**, never trusted ([CTR-PQZ-10](#CTR-PQZ-10)) |
 
 ## 4. Encryption scheme MLWE-BFV-add
@@ -1988,7 +1988,11 @@ reset of 2026-10-22 the SCaaS testnet runs **200,000,000** (genesis `gasLimit` `
 bound no longer follows from the gas limit (the producer's EIP-7934 check holds it).
 
 Node and client limits on the SCaaS testnet: Nethermind `TxPool.MaxTxSize`
-1,048,576 and `Blocks.TargetBlockGasLimit` 200,000,000 in the node's `config.json` (80,000,000 at P6f), JSON-RPC defaults kept (P6f D8), node `max_gas_per_tx = 64_000_000` (owner 2026-10-22; `max_gas_per_tx = 16_000_000` at P6f), gateway body limit 1 MiB on job
+2,097,152 since the node split (owner ruling 2026-10-31, [NET-EVM-10](../networks/evm.md#NET-EVM-10); 1,048,576 before): it
+matches the 4 MiB `MaxRequestBodySize`, which carries at most a 2 MiB raw transaction as hex; it is headroom, not a
+calldata enabler, since on Amsterdam the regular-gas cap of 2^24 against the EIP-7976 floor (15,000 + 64 per byte)
+already refuses more than 261,909 B of calldata at pool admission (gas above 2^24 pays only state gas; the largest PQZ
+e2e transaction is 107,268 B), and `Blocks.TargetBlockGasLimit` 200,000,000 in the node's `config.json` (80,000,000 at P6f), JSON-RPC defaults kept (P6f D8), node `max_gas_per_tx = 64_000_000` (owner 2026-10-22; `max_gas_per_tx = 16_000_000` at P6f), gateway body limit 1 MiB on job
 submissions to the `pqz` chain profile only (64 KiB elsewhere) — recommendations to node operators
 ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)). This keeps gas an honest capacity meter: ≈ 28 transfers per 5 s block (at 80 M) while
 the floor binds, ≈ 10 at the 50 ms verify kill threshold; ≈ 45 GB/day of archive growth at sustained full load. The
@@ -2275,7 +2279,7 @@ split, never a silent acceptance (fail closed).
    the formula, not with "it answered" (the `eip1108` lesson).
 3. Roll the signer and every follower to the image before the timestamp (or reset the testnet with `engine.Pqz` from
    genesis, owner 2026-10-15); then repeat step 2 on the live chain.
-4. Set `TargetBlockGasLimit` to 200 M (genesis `gasLimit` `0xbebc200` since the reset of 2026-10-22; 80 M at P6f) and `TxPool.MaxTxSize` to 1 MiB ([CTR-PQZ-11](#CTR-PQZ-11)).
+4. Set `TargetBlockGasLimit` to 200 M (genesis `gasLimit` `0xbebc200` since the reset of 2026-10-22; 80 M at P6f) and `TxPool.MaxTxSize` to 2 MiB (2,097,152; matches `MaxRequestBodySize` 4 MiB) ([CTR-PQZ-11](#CTR-PQZ-11)).
 5. **RPC topology.** The signer exposes no public RPC; a follower node serves all public `eth_call`, `eth_estimateGas`
    and node pre-simulation, and the signer peers only with our followers. A crash on a crafted `eth_call` then takes
    down a follower, not block production (defence in depth only, since an included transaction runs on every node).

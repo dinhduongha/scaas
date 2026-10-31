@@ -1,0 +1,9 @@
+uid=1000(ubuntu) gid=1000(ubuntu) groups=1000(ubuntu)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+include
+native
+wasm
+writable
+8
+MemTotal:       24280472 kB
+rc=0

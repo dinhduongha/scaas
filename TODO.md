@@ -167,7 +167,20 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      contracts/README, settlement, metatx, architecture, RUNBOOK); history / plans / reviews stay. The future mainnet
      is `scaas-mainnet`. After `fs3-t13-rollout` merges (it edits the RUNBOOK, `chain-uids.json`, `node.example.toml`);
      gates: forge with the renamed profile, node e2e, docs_check.
-  5. fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) **together with Task 9 calibration**
+  5. **Done 2026-10-31 (branch `fs3-t13-rollout`):** 7622 reset onto `2.2.0-pqz6` with the calibrated rows (option (b)),
+     the CREATE2 deployer in the genesis alloc, EIP-7702 off (type-4 refused), contracts redeployed (`Deploy.s.sol` + PQZ e2e
+     full / `--split`, 0 failures), the node hardened (NET-EVM-08), Blockscout on (NET-EVM-09). Left: the option (c)
+     re-calibration on a quiet host (compare with (b); chainspec only if it differs materially); 22776: TLS reverse proxy
+     with rate limits, and the same `sealer` + `rpc` topology as 7622 proposed (owner decides at launch); an external
+     signer for the sealer still to check (Nethermind 2.2.0 `Mining.Signer` / `Nethermind.ExternalSigner.Plugin`, not tried).
+     **Node split done 2026-10-31 (branch `fs3-t13-rollout`, owner ruling):** 7622 runs `sealer` (key, pruned, no port,
+     internal network) + `rpc` (no key, archive, public RPC, the sentry for external nodes); NET-EVM-10; Blockscout on the
+     archive `rpc`, its code backfill and coin-balance cleanup no longer needed. The metatx-split real-node e2e items (TODO below) are all non-EVM families.
+     **Contract verification on 2026-10-31** (owner ruling option (a)): a locally patched sc-verifier image (built outside the
+     repo, `/home/dockers/mba-chain-nethermind/sc-verifier/`), the 31 `Deploy.s.sol` contracts and the 95 of the five PQZ e2e runs a full match, their 10 token clones linked (EIP-1167). **TODO: switch to upstream
+     sc-verifier when it supports amsterdam** (each new release: `sc-verifier/check-image.sh <image>` → `SUCCESS OK FULL`,
+     then the README's return steps).
+     Was: fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) **together with Task 9 calibration**
      (owner 2026-10-29: one measurement run; it still needs the owner's go at run time, other heavy sessions stopped)
      and, where possible, the metatx-split e2e owed on a real node → Task 14 (wasm32 limb path).
      **Owner 2026-10-30: timing and the 7622 reset are approved; run them after the three running streams are merged
@@ -408,8 +421,9 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   review — after the token-family rename (owner 2026-10-19).
 - [ ] **P6c owner step:** audit the PQ verifiers and the expanded-key cache (labelled unaudited; not a deploy gate, owner
   2026-10-31).
-- [ ] **P6f follow-ups (owner):** follower + public RPC, restart policy (the SCaaS testnet node has none), deleting backups; the
-  hourly `watch.sh` check is manual. (P6f done and live on the SCaaS testnet since 2026-10-16.)
+- [ ] **P6f follow-ups (owner):** deleting backups; the hourly `watch.sh` check is manual. Done on the SCaaS testnet
+  2026-10-31 (branch `fs3-t13-rollout`): follower + public RPC (node split, NET-EVM-10) and the restart policy
+  (`unless-stopped` on every service, owner ruling). (P6f done and live on the SCaaS testnet since 2026-10-16.)
 - [ ] **P6-PUB drafts** (owner 2026-10-14, session 4): after P6, the live precompiles and P6-ANON, the controller drafts
   the ePrint paper (LaTeX, citing the frozen package) and the ethresear.ch post (Markdown, results-first), kept private
   in `scratchpad/pub/` until the owner posts; the results mail to the LaZer maintainers

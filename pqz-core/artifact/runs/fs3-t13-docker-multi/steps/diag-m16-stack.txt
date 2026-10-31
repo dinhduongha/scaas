@@ -1,0 +1,9 @@
+8 MiB stack rc=139
+unlimited
+unlimited stack rc=132
+==> /out/diag-m16-stack-unlimited.jsonl <==
+Illegal instruction (core dumped)
+
+==> /out/diag-m16-stack8m.jsonl <==
+Segmentation fault (core dumped)
+rc=0

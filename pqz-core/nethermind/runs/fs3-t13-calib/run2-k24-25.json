@@ -1,0 +1,28 @@
+{
+  "schedules": [
+    {
+      "timestamp": "0x0",
+      "pqz": [
+        {
+          "op": 7,
+          "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+          "stmtLen": 93312,
+          "gas": 3137000,
+          "legs": 2,
+          "auditorOn": 0
+        },
+        {
+          "op": 7,
+          "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+          "stmtLen": 74752,
+          "gas": 3041000,
+          "legs": 1,
+          "auditorOn": 0
+        }
+      ],
+      "selftestGas": 3041000,
+      "mldsa44Gas": 47000,
+      "mldsa65Gas": 74000
+    }
+  ]
+}

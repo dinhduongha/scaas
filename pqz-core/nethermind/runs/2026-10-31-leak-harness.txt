@@ -1,0 +1,46 @@
+# PQZ native memory-leak test, 2026-10-31 (owner request 2026-10-31; branch fs3-t13-rollout, Task 13 final)
+# Verdict: NO LEAK. All four runs CLEAN, 0 panics (status 3 PQZ-INPUT-PANIC = 0), anon memory flat or falling.
+
+## Method
+- Harness: the repo P/Invoke boundary harness (pqz-core/nethermind/Harness, as run by harness.sh), built with ref.sh
+  assemblies in the pinned SDK container (mcr.microsoft.com/dotnet/sdk:10.0.402-resolute@sha256:6924c5c6…ca92).
+- Run in the pinned base image nethermind/nethermind:2.2.0@sha256:5cc0061e…0a38 (.NET 10.0.13, MLDsa.IsSupported=True),
+  container --memory 2g --cpus 4, scripts pqz-core/nethermind/leak/run.sh (start) + leak/sample.sh (sampler); the
+  copies in the repo take S from the environment (the run used a session scratch dir).
+- Library: libpqz_ffi.so copied from the live SCaaS testnet image, sha256
+  dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601, parameter set n2304-kmax4096.
+- Corpus: the regenerated corpus (main, docs-drift 2026-10-31): 877 PQZ inputs (51 valid) + 38 ML-DSA inputs (7 valid);
+  run D used only the 51 valid PQZ lines. Harness mutates each input (bitflips, byterun, extend, idswap, lenfield,
+  opswap, random, stmtflip, tailflip, truncate) plus 1 GC-pressure thread; seed 7622.
+- Sampling: the container's cgroup memory.stat anon / file (MiB) every 30 s (plus docker stats).
+- Nothing touched the live stack; no transaction sent.
+
+## Runs (anon MiB, t in s since container start; first sample is before the corpus load)
+A  20 min, 8 threads, full corpus. Harness log lost (terminal filter kept only "status 3 ... 0"); samples kept.
+   3/18 34/576 159/576 314/577 470/576 626/575 781/576 936/575 1091/576 1184/575
+   -> 576 -> 575, slope -0.05 MiB/min
+B  20 min, 8 threads, full corpus: 2,123,245 inputs (1769/s), pqz 01 honest 23,482 (= byte-equal honest inputs,
+   with the unedited copies ≈ 47 k verifies), mldsa44/65 01 4,106 / 5,501, GC gen0/1/2 605,651/605,649/605,648. CLEAN.
+   1/14 32/540 156/542 312/541 467/541 622/541 686/541 730/507 792/485 863/427 1018/431 1173/433
+   -> 540 -> 433: memory returned to the OS mid-run (t ≈ 700–860 s); after that trim anon rose 427 -> 433 over the
+   last ≈ 5 min (t 863–1173 s, the run ended there), so B alone does not bound a leak; overall slope -7.6 MiB/min
+C  5 min, 1 thread, full corpus: 304,240 inputs (1014/s), pqz 01 honest 3,303. CLEAN.
+   1/18 32/613 94/611 157/612 219/613 281/613  -> 613 -> 613
+D  5 min, 8 threads, the 51 honest PQZ inputs only: 136,363 inputs, pqz 01 honest 6,332 + 6,332 unedited
+   = 12,664 verifies. CLEAN.
+   1/6 32/211 63/213 125/215 156/208 218/211 281/212  -> 211 -> 212 (noise ±4)
+Smoke (0.5 min, 8 threads): 44,827 inputs, CLEAN.
+
+## Bound
+It rests on run A: anon 576–577 -> 575 over the 17 min after warm-up (t 159–1184 s), at 1 MiB sample resolution.
+Run A's own counts were lost with its log; at run B's rate (23,482 honest 01 per 20 min, ≈ 20 k in 17 min) that is
+< ≈ 50 B retained per honest verify, i.e. none measurable. The mutated / rejected paths are covered by the same runs (≈ 1.8 M "out 00" per 20 min).
+
+## Code
+pqz_precompile writes its result into a 32-byte caller-owned buffer; no Rust-allocated memory crosses to C#. The
+production cdylib (pqz-core/ffi/src, non-bin) has no Box::leak / mem::forget / into_raw (Box::leak appears only in the
+pqz-vectors bin and the wasm builds, not in the library Nethermind loads).
+
+## Node reading (inference)
+The sealer's anon rise 617 -> 700 MiB under the PQZ e2e, then plateau, is consistent with .NET heap / allocator
+warm-up, not a native leak (inference: the node itself was not measured with this method).

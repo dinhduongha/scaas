@@ -1,0 +1,2 @@
+runs/2026-10-31-fs3-t13-rows-one-baseline-engine-pqz.json: 26 rows matched, T_EC 0.016 ms, selftestGas 3,337,000 -> 1,721,000; table runs/2026-10-31-fs3-t13-rows-one-baseline.md
+no row measured above live

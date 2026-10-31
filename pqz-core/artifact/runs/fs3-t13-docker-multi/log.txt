@@ -1,0 +1,102 @@
+== 20:20:35 init load before 0.65 0.94 0.94
+   20:21:07 init rc=0 load after 1.04 1.01 0.96
+== 20:21:16 c-build-1 load before 0.88 0.98 0.95
+   20:21:50 c-build-1 rc=0 load after 1.18 1.04 0.98
+== 20:21:50 c-build-2 load before 1.18 1.04 0.98
+   20:22:02 c-build-2 rc=0 load after 1.15 1.04 0.98
+== 20:22:14 c-shape-0 load before 0.89 0.99 0.96
+   20:24:23 c-shape-0 rc=0 load after 1.24 1.13 1.01
+== 20:24:47 c-shape-1-123456 load before 1.67 1.24 1.06
+   DEFERRED (1-min load 1.67 > 1.5)
+== 20:24:58 c-shape-1-123456 load before 1.50 1.22 1.05
+   20:26:58 c-shape-1-123456 rc=0 load after 1.23 1.19 1.06
+== 20:27:14 c-shape-2-123456 load before 0.88 1.11 1.03
+   20:31:07 c-shape-2-123456 rc=0 load after 1.30 1.23 1.10
+== 20:31:31 c-shape-3-2346 load before 1.10 1.20 1.09
+   20:33:01 c-shape-3-2346 rc=0 load after 1.02 1.14 1.08
+== 20:33:08 c-shape-3-5 load before 0.94 1.12 1.07
+   20:34:23 c-shape-3-5 rc=0 load after 1.10 1.14 1.08
+== 20:34:23 c-shape-3-1 load before 1.10 1.14 1.08
+   20:39:19 c-shape-3-1 rc=0 load after 1.30 1.16 1.10
+== 20:39:31 c-shape-4-2346 load before 1.10 1.12 1.09
+   20:39:58 c-shape-4-2346 rc=0 load after 1.06 1.11 1.09
+== 20:40:07 c-shape-4-51 load before 0.90 1.07 1.08
+   20:41:24 c-shape-4-51 rc=0 load after 1.13 1.09 1.08
+== 20:41:36 c-shape-5-23465 load before 0.88 1.03 1.06
+   20:42:22 c-shape-5-23465 rc=0 load after 0.95 1.03 1.06
+== 20:42:22 c-shape-5-1 load before 0.95 1.03 1.06
+   20:43:22 c-shape-5-1 rc=0 load after 0.98 1.02 1.05
+== 20:43:22 c-shape-6-23465 load before 0.98 1.02 1.05
+   20:44:18 c-shape-6-23465 rc=0 load after 1.03 1.03 1.05
+== 20:44:19 c-shape-6-1 load before 1.03 1.03 1.05
+   20:45:34 c-shape-6-1 rc=0 load after 1.08 1.05 1.06
+== 20:45:34 c-shape-7-2346 load before 1.08 1.05 1.06
+   20:46:23 c-shape-7-2346 rc=0 load after 1.03 1.04 1.05
+== 20:46:24 c-shape-7-5 load before 1.03 1.04 1.05
+   20:47:04 c-shape-7-5 rc=0 load after 1.02 1.03 1.05
+== 20:47:04 c-shape-7-1 load before 1.02 1.03 1.05
+   20:49:33 c-shape-7-1 rc=0 load after 1.11 1.09 1.07
+== 20:49:41 c-shape-8-23 load before 0.94 1.05 1.06
+   20:50:08 c-shape-8-23 rc=0 load after 0.96 1.05 1.05
+== 20:50:08 c-shape-8-46 load before 0.96 1.05 1.05
+   20:50:39 c-shape-8-46 rc=0 load after 1.33 1.12 1.08
+== 20:50:40 c-shape-8-5 load before 1.33 1.12 1.08
+   20:50:56 c-shape-8-5 rc=0 load after 1.26 1.11 1.08
+== 20:50:56 c-shape-8-1 load before 1.26 1.11 1.08
+   20:51:09 c-shape-8-1 rc=0 load after 1.22 1.11 1.08
+== 20:51:23 c-shape-9-123456 load before 1.09 1.09 1.07
+   20:54:18 c-shape-9-123456 rc=0 load after 1.03 1.06 1.06
+== 20:54:43 diag-m16-stack load before 0.89 1.02 1.05
+   20:54:47 diag-m16-stack rc=0 load after 0.90 1.02 1.04
+== 20:54:56 diag-m16-stack load before 0.76 0.98 1.03
+   20:55:23 diag-m16-stack rc=0 load after 0.93 1.00 1.04
+== 20:55:36 c-all-native load before 0.72 0.95 1.02
+   20:57:43 c-all-native rc=0 load after 1.08 1.02 1.03
+== 20:57:43 c-all-wasm load before 1.08 1.02 1.03
+   21:03:18 c-all-wasm rc=0 load after 1.05 1.07 1.04
+== 21:03:24 h-build load before 0.88 1.03 1.03
+   21:03:30 h-build rc=0 load after 0.97 1.05 1.04
+== 21:03:35 h-build-ov load before 0.90 1.03 1.03
+   21:03:40 h-build-ov rc=0 load after 0.98 1.05 1.04
+== 21:03:40 h-build-wasm load before 0.98 1.05 1.04
+   21:03:46 h-build-wasm rc=0 load after 0.99 1.05 1.04
+== 21:03:51 h-build-ov-wasm load before 0.91 1.03 1.03
+   21:03:57 h-build-ov-wasm rc=0 load after 0.91 1.03 1.03
+== 21:03:57 h-native load before 0.91 1.03 1.03
+   21:05:48 h-native rc=0 load after 0.99 1.02 1.02
+== 21:05:57 h-oversize load before 0.84 0.98 1.01
+   21:06:52 h-oversize rc=0 load after 1.23 1.05 1.03
+== 21:06:53 h-wasm load before 1.23 1.05 1.03
+   21:09:34 h-wasm rc=0 load after 1.09 1.06 1.03
+== 21:09:35 h-oversize-wasm load before 1.09 1.06 1.03
+   21:11:18 h-oversize-wasm rc=0 load after 1.03 1.05 1.02
+== 21:11:25 r-build load before 0.87 1.02 1.01
+   21:11:37 r-build rc=0 load after 0.97 1.03 1.02
+== 21:11:44 r-shape-0-2431 load before 0.82 1.00 1.00
+   21:13:03 r-shape-0-2431 rc=0 load after 0.95 1.00 1.00
+== 21:13:24 r-shape-1-2431 load before 0.68 0.93 0.98
+   21:14:29 r-shape-1-2431 rc=0 load after 1.11 1.01 1.00
+== 21:14:29 r-shape-2-2431 load before 1.11 1.01 1.00
+   21:16:20 r-shape-2-2431 rc=0 load after 1.18 1.11 1.04
+== 21:16:21 r-shape-3-243 load before 1.18 1.11 1.04
+   21:17:47 r-shape-3-243 rc=0 load after 1.04 1.08 1.04
+== 21:17:47 r-shape-3-1 load before 1.04 1.08 1.04
+   21:19:37 r-shape-3-1 rc=0 load after 1.10 1.08 1.04
+== 21:19:37 r-shape-4-2431 load before 1.10 1.08 1.04
+   21:20:34 r-shape-4-2431 rc=0 load after 1.16 1.11 1.05
+== 21:20:34 r-shape-5-2431 load before 1.16 1.11 1.05
+   21:21:32 r-shape-5-2431 rc=0 load after 1.30 1.15 1.07
+== 21:21:33 r-shape-6-2431 load before 1.30 1.15 1.07
+   21:22:49 r-shape-6-2431 rc=0 load after 1.21 1.16 1.08
+== 21:22:49 r-shape-7-243 load before 1.21 1.16 1.08
+   21:23:39 r-shape-7-243 rc=0 load after 1.14 1.15 1.08
+== 21:23:39 r-shape-7-1 load before 1.14 1.15 1.08
+   21:24:45 r-shape-7-1 rc=0 load after 1.04 1.11 1.07
+== 21:24:45 r-shape-8-24 load before 1.04 1.11 1.07
+   21:25:11 r-shape-8-24 rc=0 load after 1.18 1.14 1.08
+== 21:25:29 r-shape-8-31 load before 0.91 1.08 1.06
+   21:27:13 r-shape-8-31 rc=0 load after 1.16 1.12 1.08
+== 21:27:16 r-shape-9-2431 load before 1.15 1.12 1.08
+   21:31:00 r-shape-9-2431 rc=0 load after 1.27 1.29 1.17
+== 21:31:07 table load before 1.17 1.27 1.17
+   21:31:07 table rc=0 load after 1.17 1.27 1.17

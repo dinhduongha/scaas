@@ -1,0 +1,2 @@
+rust shape 8 m 16384 k 3 1 done
+rc=0

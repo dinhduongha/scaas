@@ -1,0 +1,60 @@
+{
+  "schedules": [
+    {
+      "timestamp": "0x0",
+      "pqz": [
+        {
+          "op": 7,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 167808,
+          "gas": 3918000,
+          "legs": 4,
+          "auditorOn": 1
+        },
+        {
+          "op": 7,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 130432,
+          "gas": 3112000,
+          "legs": 4,
+          "auditorOn": 0
+        },
+        {
+          "op": 7,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 112000,
+          "gas": 3124000,
+          "legs": 2,
+          "auditorOn": 1
+        },
+        {
+          "op": 7,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 93312,
+          "gas": 3025000,
+          "legs": 1,
+          "auditorOn": 1
+        },
+        {
+          "op": 7,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 93312,
+          "gas": 2938000,
+          "legs": 2,
+          "auditorOn": 0
+        },
+        {
+          "op": 7,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 74752,
+          "gas": 2906000,
+          "legs": 1,
+          "auditorOn": 0
+        }
+      ],
+      "selftestGas": 2906000,
+      "mldsa44Gas": 31000,
+      "mldsa65Gas": 45000
+    }
+  ]
+}

@@ -1,0 +1,278 @@
+# fs3 T13 verify, 2026-10-31: smartcontracts/evm/script/verify-blockscout.sh against 7622 (Blockscout 9.0.2 + sc-verifier v1.11.1 @sha256:a7580f42…e063)
+# start / end:
+10:21:49
+fail  AdminLib  0x5c13b2040a31c056fa3a8fc1fd4206242c883368  Details: `Fail - Unable to verify`
+fail  ZetherLib  0x8e28089a938e57e8f388af00b1961d60916b6b7c  Details: `Fail - Unable to verify`
+fail  WrappedLib  0x4327a7816a8a78180e69c9c7273705c45f23d89f  Details: `Fail - Unable to verify`
+fail  TradeLib  0x13b095390486773cf498858a7106b571f74e46db  Details: `Fail - Unable to verify`
+fail  HederaLib  0x277f412798d2742d90f5699a1d279aecdc69c224  Details: `Fail - Unable to verify`
+fail  MtxPipelineLib  0x649cb95bb756d88aacdaccfc8efb7a45f3fb3055  Details: `Fail - Unable to verify`
+fail  SmartKeyAccountFactory  0x3faf952d9cf16c5dec18d6571d366f614944619d  Details: `Fail - Unable to verify`
+fail  SmartKeyAccount  0x79991a4d6bc96d38b602968167cd584cec4a116e  Details: `Fail - Unable to verify`
+fail  OpenFactory  0xc037d039a21646060e5b4ae441c1138e87000bde  Details: `Fail - Unable to verify`
+fail  WebAuthnP256Verifier  0x1e70f0abc6c209d05ed2746c1613947c91e11628  Details: `Fail - Unable to verify`
+fail  P256Verifier  0x94e9eba0b09fc5d7bd2f19babcdbc67b423d62e6  Details: `Fail - Unable to verify`
+fail  Ed25519Verifier  0xe8ef243fe4605ce9ce9cf9ba7d7e8a5e30b14245  Details: `Fail - Unable to verify`
+fail  Bip340Verifier  0xc18ba5fe87c19b3b7704d8220e67848ee37d2d8b  Details: `Fail - Unable to verify`
+fail  Secp256k1Verifier  0xad62c7780eba1115f835f768d05ab3fcf611f3eb  Details: `Fail - Unable to verify`
+fail  SchnorrBn254Verifier  0xd175cf00c1d2cfe8c29a658f2435958193ab3ceb  Details: `Fail - Unable to verify`
+fail  SchnorrBls12381Verifier  0xf2b365f76400b0ac6ce03561931c494b04705923  Details: `Fail - Unable to verify`
+fail  BlsMinSigBls12381Verifier  0x1b895c645e506772b9b79f3936bc9d137d00c162  Details: `Fail - Unable to verify`
+fail  BlsMinSigBn254Verifier  0xc1aab80056190a54523b0a94c6c71f2811e59be8  Details: `Fail - Unable to verify`
+fail  Musig2Secp256k1Verifier  0xaf64d79f498ea788ffaac999cd2ee331e3197010  Details: `Fail - Unable to verify`
+fail  UAFrostSecp256k1Verifier  0x51b2339459cf64b455634d51e0479cdcefe3e409  Details: `Fail - Unable to verify`
+fail  Musig2Bn254Verifier  0x9cd954336c24a730019ae3b9777eeb46686892fa  Details: `Fail - Unable to verify`
+fail  FrostBn254Verifier  0x29cdcfc15e0fa73dbde19d79d0434e863238b80a  Details: `Fail - Unable to verify`
+fail  UAMldsaVerifier  0x0cd8084ca16b2da155c01d2ef0ead5ba17661fbc  Details: `Fail - Unable to verify`
+fail  UAMldsaVerifier  0x0f89bca833649cbc78b40ef49d8e783ef837b7dc  Details: `Fail - Unable to verify`
+fail  UAFndsaVerifier  0xd8f932580ec7ea9eee10418eab65ed2ff21a5424  Details: `Fail - Unable to verify`
+fail  UASlhdsaVerifier  0x4deee31a221696bb7613a55745600762df1aea57  Details: `Fail - Unable to verify`
+fail  UARegistry  0x06d03d563686e4cce533b2c392ec68faab119776  Details: `Fail - Unable to verify`
+fail  MtxRelayFee  0x7fb42079c44c185c131fd38ee59c18463b16fa48  Details: `Fail - Unable to verify`
+fail  MtxRelayExecutor  0xa9b8ab56e974b0495aec3280dc5e7db77b88c687  Details: `Fail - Unable to verify`
+fail  NormalToken  0xcdb98d83a09f696b7720842f91d9fb56dad6a551  Details: `Fail - Unable to verify`
+fail  SCaaSDex  0xe77d3d680bc1e35205f68cd1f1fc71230d3ed3d9  Details: `Fail - Unable to verify`
+0 ok, 31 fail (chain 7622, http://192.168.1.72:4000/api)
+exit=1
+10:25:04
+
+# backend log, verification errors in the run window (column numbers folded):
+     32 verification error: content is not a valid standard json: settings.evmVersion: Unknown evm version: amsterdam at line 1 column N   (31 script + 1 manual P256Verifier try)
+
+# direct sc-verifier calls (POST /api/v2/verifier/solidity/sources:verify-standard-json, v0.8.37+commit.f401782d):
+#   P256Verifier, forge standard JSON as is                 -> FAILURE Unknown evm version: amsterdam
+#   P256Verifier, evmVersion osaka (experimental kept)      -> FAILURE No contract could be verified with provided data (1.16 s)
+#   NormalToken, osaka without experimental/viaSSACFG, local osaka runtime code with library + immutable slots filled -> SUCCESS FULL (5.1 s)
+
+# local solc 0.8.37 on forge verify-contract --show-standard-json-input (no --libraries), runtime code vs cast code (immutables / library slots masked):
+#   UARegistry EXACT, MtxRelayExecutor EXACT, P256Verifier EXACT (2 immutable nibbles only), NormalToken EXACT, SCaaSDex EXACT
+#   NormalToken / SCaaSDex with --libraries: same length, metadata differs (settings.libraries enters the metadata) -> partial match at best
+#   P256Verifier as osaka: code equal, only the CBOR metadata differs
+
+# verifier docker stats: idle 0.02 % / 4.5 MiB; during the run (max of 63 samples) 0.35% 5.609MiB / 512MiB, max mem 6.754MiB; NormalToken compile: max 100.89% 222.9MiB / 512MiB, memory.peak 381517824 B (364 MiB), anon after 348647424 B
+
+# ---- re-run 2026-10-31 with the locally patched verifier (owner ruling option (a)) ----
+# image scaas/sc-verifier:v1.11.1-amsterdam1 (sha256:378febd1f7fa24ce3b2098032a55cbde80ff9e104cdcaff5c096ff7873981296), built outside the repo:
+# /home/dockers/mba-chain-nethermind/sc-verifier/ (blockscout-rs 9457af29 + foundry-compilers 0.19.10 patched: amsterdam, settings.experimental)
+# ./script/verify-blockscout.sh   (start 11:42:41)
+  ok    AdminLib  0x5c13b2040a31c056fa3a8fc1fd4206242c883368
+  ok    ZetherLib  0x8e28089a938e57e8f388af00b1961d60916b6b7c
+  ok    WrappedLib  0x4327a7816a8a78180e69c9c7273705c45f23d89f
+  ok    TradeLib  0x13b095390486773cf498858a7106b571f74e46db
+  ok    HederaLib  0x277f412798d2742d90f5699a1d279aecdc69c224
+  ok    MtxPipelineLib  0x649cb95bb756d88aacdaccfc8efb7a45f3fb3055
+  ok    SmartKeyAccountFactory  0x3faf952d9cf16c5dec18d6571d366f614944619d
+  ok    SmartKeyAccount  0x79991a4d6bc96d38b602968167cd584cec4a116e
+  ok    OpenFactory  0xc037d039a21646060e5b4ae441c1138e87000bde
+  ok    WebAuthnP256Verifier  0x1e70f0abc6c209d05ed2746c1613947c91e11628
+  ok    P256Verifier  0x94e9eba0b09fc5d7bd2f19babcdbc67b423d62e6
+  ok    Ed25519Verifier  0xe8ef243fe4605ce9ce9cf9ba7d7e8a5e30b14245
+  ok    Bip340Verifier  0xc18ba5fe87c19b3b7704d8220e67848ee37d2d8b
+  ok    Secp256k1Verifier  0xad62c7780eba1115f835f768d05ab3fcf611f3eb
+  ok    SchnorrBn254Verifier  0xd175cf00c1d2cfe8c29a658f2435958193ab3ceb
+  ok    SchnorrBls12381Verifier  0xf2b365f76400b0ac6ce03561931c494b04705923
+  ok    BlsMinSigBls12381Verifier  0x1b895c645e506772b9b79f3936bc9d137d00c162
+  ok    BlsMinSigBn254Verifier  0xc1aab80056190a54523b0a94c6c71f2811e59be8
+  ok    Musig2Secp256k1Verifier  0xaf64d79f498ea788ffaac999cd2ee331e3197010
+  ok    UAFrostSecp256k1Verifier  0x51b2339459cf64b455634d51e0479cdcefe3e409
+  ok    Musig2Bn254Verifier  0x9cd954336c24a730019ae3b9777eeb46686892fa
+  ok    FrostBn254Verifier  0x29cdcfc15e0fa73dbde19d79d0434e863238b80a
+  ok    UAMldsaVerifier  0x0cd8084ca16b2da155c01d2ef0ead5ba17661fbc
+  ok    UAMldsaVerifier  0x0f89bca833649cbc78b40ef49d8e783ef837b7dc
+  ok    UAFndsaVerifier  0xd8f932580ec7ea9eee10418eab65ed2ff21a5424
+  ok    UASlhdsaVerifier  0x4deee31a221696bb7613a55745600762df1aea57
+  ok    UARegistry  0x06d03d563686e4cce533b2c392ec68faab119776
+  ok    MtxRelayFee  0x7fb42079c44c185c131fd38ee59c18463b16fa48
+  ok    MtxRelayExecutor  0xa9b8ab56e974b0495aec3280dc5e7db77b88c687
+  ok    NormalToken  0xcdb98d83a09f696b7720842f91d9fb56dad6a551
+  ok    SCaaSDex  0xe77d3d680bc1e35205f68cd1f1fc71230d3ed3d9
+  31 ok, 0 fail (chain 7622, http://192.168.1.72:4000/api)
+exit=0
+  11:45:36
+# match type (GET /api/v2/smart-contracts/<addr>: is_fully_verified, is_partially_verified, evm_version, compiler_version, compiler_settings.experimental):
+  AdminLib  0x5c13b2040a31c056fa3a8fc1fd4206242c883368  true false amsterdam v0.8.37+commit.f401782d true
+  ZetherLib  0x8e28089a938e57e8f388af00b1961d60916b6b7c  true false amsterdam v0.8.37+commit.f401782d true
+  WrappedLib  0x4327a7816a8a78180e69c9c7273705c45f23d89f  true false amsterdam v0.8.37+commit.f401782d true
+  TradeLib  0x13b095390486773cf498858a7106b571f74e46db  true false amsterdam v0.8.37+commit.f401782d true
+  HederaLib  0x277f412798d2742d90f5699a1d279aecdc69c224  true false amsterdam v0.8.37+commit.f401782d true
+  MtxPipelineLib  0x649cb95bb756d88aacdaccfc8efb7a45f3fb3055  true false amsterdam v0.8.37+commit.f401782d true
+  SmartKeyAccountFactory  0x3faf952d9cf16c5dec18d6571d366f614944619d  true false amsterdam v0.8.37+commit.f401782d true
+  SmartKeyAccount  0x79991a4d6bc96d38b602968167cd584cec4a116e  true false amsterdam v0.8.37+commit.f401782d true
+  OpenFactory  0xc037d039a21646060e5b4ae441c1138e87000bde  true false amsterdam v0.8.37+commit.f401782d true
+  WebAuthnP256Verifier  0x1e70f0abc6c209d05ed2746c1613947c91e11628  true false amsterdam v0.8.37+commit.f401782d true
+  P256Verifier  0x94e9eba0b09fc5d7bd2f19babcdbc67b423d62e6  true false amsterdam v0.8.37+commit.f401782d true
+  Ed25519Verifier  0xe8ef243fe4605ce9ce9cf9ba7d7e8a5e30b14245  true false amsterdam v0.8.37+commit.f401782d true
+  Bip340Verifier  0xc18ba5fe87c19b3b7704d8220e67848ee37d2d8b  true false amsterdam v0.8.37+commit.f401782d true
+  Secp256k1Verifier  0xad62c7780eba1115f835f768d05ab3fcf611f3eb  true false amsterdam v0.8.37+commit.f401782d true
+  SchnorrBn254Verifier  0xd175cf00c1d2cfe8c29a658f2435958193ab3ceb  true false amsterdam v0.8.37+commit.f401782d true
+  SchnorrBls12381Verifier  0xf2b365f76400b0ac6ce03561931c494b04705923  true false amsterdam v0.8.37+commit.f401782d true
+  BlsMinSigBls12381Verifier  0x1b895c645e506772b9b79f3936bc9d137d00c162  true false amsterdam v0.8.37+commit.f401782d true
+  BlsMinSigBn254Verifier  0xc1aab80056190a54523b0a94c6c71f2811e59be8  true false amsterdam v0.8.37+commit.f401782d true
+  Musig2Secp256k1Verifier  0xaf64d79f498ea788ffaac999cd2ee331e3197010  true false amsterdam v0.8.37+commit.f401782d true
+  UAFrostSecp256k1Verifier  0x51b2339459cf64b455634d51e0479cdcefe3e409  true false amsterdam v0.8.37+commit.f401782d true
+  Musig2Bn254Verifier  0x9cd954336c24a730019ae3b9777eeb46686892fa  true false amsterdam v0.8.37+commit.f401782d true
+  FrostBn254Verifier  0x29cdcfc15e0fa73dbde19d79d0434e863238b80a  true false amsterdam v0.8.37+commit.f401782d true
+  UAMldsaVerifier  0x0cd8084ca16b2da155c01d2ef0ead5ba17661fbc  true false amsterdam v0.8.37+commit.f401782d true
+  UAMldsaVerifier  0x0f89bca833649cbc78b40ef49d8e783ef837b7dc  true false amsterdam v0.8.37+commit.f401782d true
+  UAFndsaVerifier  0xd8f932580ec7ea9eee10418eab65ed2ff21a5424  true false amsterdam v0.8.37+commit.f401782d true
+  UASlhdsaVerifier  0x4deee31a221696bb7613a55745600762df1aea57  true false amsterdam v0.8.37+commit.f401782d true
+  UARegistry  0x06d03d563686e4cce533b2c392ec68faab119776  true false amsterdam v0.8.37+commit.f401782d true
+  MtxRelayFee  0x7fb42079c44c185c131fd38ee59c18463b16fa48  true false amsterdam v0.8.37+commit.f401782d true
+  MtxRelayExecutor  0xa9b8ab56e974b0495aec3280dc5e7db77b88c687  true false amsterdam v0.8.37+commit.f401782d true
+  NormalToken  0xcdb98d83a09f696b7720842f91d9fb56dad6a551  true false amsterdam v0.8.37+commit.f401782d true
+  SCaaSDex  0xe77d3d680bc1e35205f68cd1f1fc71230d3ed3d9  true false amsterdam v0.8.37+commit.f401782d true
+# summary: 31 full, 0 partial
+# verifier docker stats: idle 0.03 % / 4.5 MiB; during the run (88 samples) max 100.59 % / 402 MiB, median CPU 0.03 %;
+#   cgroup memory.peak 536870912 B (= the 512 MiB cap; memory.events max 3, oom 0, oom_kill 0), after: anon 351948800 B, 0.02 % / 351 MiB
+
+# ---- 2026-10-31: extended to the PQZ e2e runs (script reads runs/*.txt with this genesis; 5 logs) ----
+# ./script/verify-blockscout.sh   (run 4; runs 1-3 aborted / hit Blockscout's API rate limit (429) and forge's
+#   verified-twin skip, fixed: --skip-is-verified-check, gentle polling)
+  12:25:18
+  ok    AdminLib  0x5c13b2040a31c056fa3a8fc1fd4206242c883368  (already verified)   [full=true partial=false amsterdam]
+  ok    ZetherLib  0x8e28089a938e57e8f388af00b1961d60916b6b7c  (already verified)   [full=true partial=false amsterdam]
+  ok    WrappedLib  0x4327a7816a8a78180e69c9c7273705c45f23d89f  (already verified)   [full=true partial=false amsterdam]
+  ok    TradeLib  0x13b095390486773cf498858a7106b571f74e46db  (already verified)   [full=true partial=false amsterdam]
+  ok    HederaLib  0x277f412798d2742d90f5699a1d279aecdc69c224  (already verified)   [full=true partial=false amsterdam]
+  ok    MtxPipelineLib  0x649cb95bb756d88aacdaccfc8efb7a45f3fb3055  (already verified)   [full=true partial=false amsterdam]
+  ok    SmartKeyAccountFactory  0x3faf952d9cf16c5dec18d6571d366f614944619d  (already verified)   [full=true partial=false amsterdam]
+  ok    SmartKeyAccount  0x79991a4d6bc96d38b602968167cd584cec4a116e  (already verified)   [full=true partial=false amsterdam]
+  ok    OpenFactory  0xc037d039a21646060e5b4ae441c1138e87000bde  (already verified)   [full=true partial=false amsterdam]
+  ok    WebAuthnP256Verifier  0x1e70f0abc6c209d05ed2746c1613947c91e11628  (already verified)   [full=true partial=false amsterdam]
+  ok    P256Verifier  0x94e9eba0b09fc5d7bd2f19babcdbc67b423d62e6  (already verified)   [full=true partial=false amsterdam]
+  ok    Ed25519Verifier  0xe8ef243fe4605ce9ce9cf9ba7d7e8a5e30b14245  (already verified)   [full=true partial=false amsterdam]
+  ok    Bip340Verifier  0xc18ba5fe87c19b3b7704d8220e67848ee37d2d8b  (already verified)   [full=true partial=false amsterdam]
+  ok    Secp256k1Verifier  0xad62c7780eba1115f835f768d05ab3fcf611f3eb  (already verified)   [full=true partial=false amsterdam]
+  ok    SchnorrBn254Verifier  0xd175cf00c1d2cfe8c29a658f2435958193ab3ceb  (already verified)   [full=true partial=false amsterdam]
+  ok    SchnorrBls12381Verifier  0xf2b365f76400b0ac6ce03561931c494b04705923  (already verified)   [full=true partial=false amsterdam]
+  ok    BlsMinSigBls12381Verifier  0x1b895c645e506772b9b79f3936bc9d137d00c162  (already verified)   [full=true partial=false amsterdam]
+  ok    BlsMinSigBn254Verifier  0xc1aab80056190a54523b0a94c6c71f2811e59be8  (already verified)   [full=true partial=false amsterdam]
+  ok    Musig2Secp256k1Verifier  0xaf64d79f498ea788ffaac999cd2ee331e3197010  (already verified)   [full=true partial=false amsterdam]
+  ok    UAFrostSecp256k1Verifier  0x51b2339459cf64b455634d51e0479cdcefe3e409  (already verified)   [full=true partial=false amsterdam]
+  ok    Musig2Bn254Verifier  0x9cd954336c24a730019ae3b9777eeb46686892fa  (already verified)   [full=true partial=false amsterdam]
+  ok    FrostBn254Verifier  0x29cdcfc15e0fa73dbde19d79d0434e863238b80a  (already verified)   [full=true partial=false amsterdam]
+  ok    UAMldsaVerifier  0x0cd8084ca16b2da155c01d2ef0ead5ba17661fbc  (already verified)   [full=true partial=false amsterdam]
+  ok    UAMldsaVerifier  0x0f89bca833649cbc78b40ef49d8e783ef837b7dc  (already verified)   [full=true partial=false amsterdam]
+  ok    UAFndsaVerifier  0xd8f932580ec7ea9eee10418eab65ed2ff21a5424  (already verified)   [full=true partial=false amsterdam]
+  ok    UASlhdsaVerifier  0x4deee31a221696bb7613a55745600762df1aea57  (already verified)   [full=true partial=false amsterdam]
+  ok    UARegistry  0x06d03d563686e4cce533b2c392ec68faab119776  (already verified)   [full=true partial=false amsterdam]
+  ok    MtxRelayFee  0x7fb42079c44c185c131fd38ee59c18463b16fa48  (already verified)   [full=true partial=false amsterdam]
+  ok    MtxRelayExecutor  0xa9b8ab56e974b0495aec3280dc5e7db77b88c687  (already verified)   [full=true partial=false amsterdam]
+  ok    NormalToken  0xcdb98d83a09f696b7720842f91d9fb56dad6a551  (already verified)   [full=true partial=false amsterdam]
+  ok    SCaaSDex  0xe77d3d680bc1e35205f68cd1f1fc71230d3ed3d9  (already verified)   [full=true partial=false amsterdam]
+  ok    UAMldsaVerifier  0xb89f5ea477a189865ec22cd3e17a405bd6b57425  (already verified)   [full=true partial=false amsterdam]
+  ok    UAMldsaVerifier  0x791d4b3e768a7948b0dbc7023918e9295c9563c0  (already verified)   [full=true partial=false amsterdam]
+  ok    UAPqzVerifier  0x296ff170a06b2500be7111989f1cef8282c1c485  (already verified)   [full=true partial=false amsterdam]
+  ok    Secp256k1Verifier  0x63ef63c4d758a11de3fb50b118d022e48fd8f9ce   [full=true partial=false amsterdam]
+  ok    UARegistry  0x9d41738a5e35ca3aa9d197627dbbbb37a716bb53  (already verified)   [full=true partial=false amsterdam]
+  ok    OpenFactory  0x0a7ac5f09bdce63ee6104b4c84e67c3ba96e0d54  (already verified)   [full=true partial=false amsterdam]
+  ok    AdminLib  0x2e6a1eed2e71e3f48b1888548921ea2c5fc8776d  (already verified)   [full=true partial=false amsterdam]
+  ok    HederaLib  0x6df7caa3e92978afb0a932ae0803642ae37b4402  (already verified)   [full=true partial=false amsterdam]
+  ok    MtxPipelineLib  0x64460c061f0a15c8c047d7cfd182d4f1159f8ef8  (already verified)   [full=true partial=false amsterdam]
+  ok    TradeLib  0x7557ef69d9966853a02745e1cebc30b51e3cf1ea  (already verified)   [full=true partial=false amsterdam]
+  ok    NormalToken (release kind 0 v1)  0x2d562e0fa833e0490dca020e295d286ae0fc7563  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzBurnLib  0xe786129ff91f013c125908661b4d7c797f57a515  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzStateLib  0x09bd329fafb0f975562cf97c5cdc04b485a2b4d1  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzTransferLib  0x344504538b2381b8559bea6cb81c4db6e52bbe9b  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzViewLib  0x31fb8888350ea7bc2ffbc8765cce2d0932093cd8  (already verified)   [full=true partial=false amsterdam]
+  ok    NormalPqzToken (release kind 4 v1)  0x5d2430f239f0271142443d635a3182398e807420  (already verified)   [full=true partial=false amsterdam]
+  ok    WrappedLib  0xd14aefec64ecda8e0d52b622d87f1855cd16c8f8  (already verified)   [full=true partial=false amsterdam]
+  ok    WrappedPqzToken (release kind 5 v1)  0xac6f6406a29d8dd18b977ed9704f2824d858099a  (already verified)   [full=true partial=false amsterdam]
+  ok    MockERC20  0x8663683eafed913c468f647822c3697bcc0d1989  (already verified)   [full=true partial=false amsterdam]
+  ok    pqUSD  0x61be8427bd9b27dbcf7309e5385f4da1c7d1b85d  eip1167 clone of 0x5d2430f239f0271142443d635a3182398e807420 (verified)
+  ok    pqW  0x23fadce42c0b0ec5b844b5edda6b9a23a30b2276  eip1167 clone of 0xac6f6406a29d8dd18b977ed9704f2824d858099a (verified)
+  ok    UAMldsaVerifier  0x31b90435ba29c94003b3b2a49fa5be494365e110   [full=true partial=false amsterdam]
+  ok    UAMldsaVerifier  0xf4afbf1c2d450e48a93471a6e0e8dd75c7f8d85e   [full=true partial=false amsterdam]
+  ok    UAPqzVerifier  0xb746da069437762746d4d320812dafcf1a0031fd   [full=true partial=false amsterdam]
+  ok    Secp256k1Verifier  0x2c1f9ef0d302209c6cf4ea02320b49f172124f6c   [full=true partial=false amsterdam]
+  ok    UARegistry  0x7f2411e50b5736e934bf1a1b9276e4d9a1ab2ce1  (already verified)   [full=true partial=false amsterdam]
+  ok    OpenFactory  0x5db5e2a5cc725b9de732ee2ff7ef34a13710769d   [full=true partial=false amsterdam]
+  ok    AdminLib  0x1def6908e68c514cb90ef16b2a8d7b099c6ce44d  (already verified)   [full=true partial=false amsterdam]
+  ok    HederaLib  0x1eac0ceb44c9f8543bea3b479896d56010820a97  (already verified)   [full=true partial=false amsterdam]
+  ok    MtxPipelineLib  0x45559858994a6d3424e7cb80d5b7501e70d148ed  (already verified)   [full=true partial=false amsterdam]
+  ok    TradeLib  0x271db7c81efc16935a10307435cafda742b5e2a5  (already verified)   [full=true partial=false amsterdam]
+  ok    NormalToken (release kind 0 v1)  0xd665f724ffb26647ce7bf59a9cbdeeecf0f83811  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzBurnLib  0x86e950bdafc79cd923102c2d3290d44a1b7dd4d8  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzStateLib  0x714ccc3b390adfb3193c04cb9e065ac4f05b5c75  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzTransferLib  0xe8e85bf86fa949f51244258bfb1cc4e356c3c7b9  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzViewLib  0x896312dd3b8fc9377683b18cbab48494fcd2cd7c  (already verified)   [full=true partial=false amsterdam]
+  ok    NormalPqzToken (release kind 4 v1)  0x8587f6d4c4e86e14908c5011b059a57b485d0fb6  (already verified)   [full=true partial=false amsterdam]
+  ok    WrappedLib  0xd818b250da9b0d347bac155f4e295c8978968f2d  (already verified)   [full=true partial=false amsterdam]
+  ok    WrappedPqzToken (release kind 5 v1)  0x489be110aa02710ba4374e4ce0ddcb587b721804  (already verified)   [full=true partial=false amsterdam]
+  ok    MockERC20  0x7e33ff73c9f3aff7a29bc20cdadfc43244ac431c   [full=true partial=false amsterdam]
+  ok    pqUSD  0x1ca13345845a55e64bd96dbc05b79d92f6885324  eip1167 clone of 0x8587f6d4c4e86e14908c5011b059a57b485d0fb6 (verified)
+  ok    pqW  0xf62fed9524dc62b70fce4d5ef0304f1846aab9a0  eip1167 clone of 0x489be110aa02710ba4374e4ce0ddcb587b721804 (verified)
+  ok    UAMldsaVerifier  0x1e1887f6a81e7dca2d9b0abeeab35e974def98c4   [full=true partial=false amsterdam]
+  ok    UAMldsaVerifier  0x5b060d7053ed660a7192c5ec4a5b05fc30f1ccd1   [full=true partial=false amsterdam]
+  ok    UAPqzVerifier  0x66c933da617c9368c36540c58d504c7e4138c3e5   [full=true partial=false amsterdam]
+  ok    Secp256k1Verifier  0x813003f4a8229cc6ce8a501edf31df57a536d9b8   [full=true partial=false amsterdam]
+  ok    UARegistry  0x1f6a70fe23a9978ce0d7208687855b5e5a1eb84a  (already verified)   [full=true partial=false amsterdam]
+  ok    OpenFactory  0x64ecb45625154c94c7f8ae8d73c94a06198f794c   [full=true partial=false amsterdam]
+  ok    AdminLib  0x827c54b95d943225d5864bd9ad68c7d7dbdbc5f0  (already verified)   [full=true partial=false amsterdam]
+  ok    HederaLib  0x8aaadb22b6fbc877d1a5d2257d252d125f55b696  (already verified)   [full=true partial=false amsterdam]
+  ok    MtxPipelineLib  0x2bde0893b92ebbf12c2242932450efdc6991c3a8  (already verified)   [full=true partial=false amsterdam]
+  ok    TradeLib  0xc1df5019941aee4b2fc3604e872397784c9aef67  (already verified)   [full=true partial=false amsterdam]
+  ok    NormalToken (release kind 0 v1)  0xaefe53757d5be7757e2df22c58597f52f22a889a  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzBurnLib  0x1f5e2240d77e7c4ca54764e41b46b1d9cb7d20a1  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzStateLib  0xf5b73d3bed8fe41853a3c54795d617e2716af2bf  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzTransferLib  0x2d88c33fd8a134f9e74e1986a008ffb50686fe45  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzViewLib  0x063607853d8c331390395fc3d7fd5ea55b798cc6  (already verified)   [full=true partial=false amsterdam]
+  ok    NormalPqzToken (release kind 4 v1)  0x5bd9682913965ca853c95f67f51c34029f8ffcad  (already verified)   [full=true partial=false amsterdam]
+  ok    WrappedLib  0xfa15b62cc9d2846b26459ca1a55d9f680fbc1d30  (already verified)   [full=true partial=false amsterdam]
+  ok    WrappedPqzToken (release kind 5 v1)  0x47bc958ae3de905bfc613b8b92ca9516695cd70f  (already verified)   [full=true partial=false amsterdam]
+  ok    MockERC20  0x8857ddc2d807e678387cc644779a51c50fd73e00   [full=true partial=false amsterdam]
+  ok    pqUSD  0x47870cb4c3f4c7a59c6152e8acd3029f2554998e  eip1167 clone of 0x5bd9682913965ca853c95f67f51c34029f8ffcad (verified)
+  ok    pqW  0xe3c39d3cf4609ede7a0c91bda2f7ab6196394803  eip1167 clone of 0x47bc958ae3de905bfc613b8b92ca9516695cd70f (verified)
+  ok    UAMldsaVerifier  0xf5b492adbc2ef7ae61825a69e34dc75e2e3a83e4   [full=true partial=false amsterdam]
+  ok    UAMldsaVerifier  0x2bf6c838250b295102ddefcafb31b3059bdd1708   [full=true partial=false amsterdam]
+  ok    UAPqzVerifier  0x47ba5987bf3e9a6e7134a42c0a1b0f0cefb4f35b   [full=true partial=false amsterdam]
+  ok    Secp256k1Verifier  0xbac145cc64fa58adfa3b3b209b75937bca76f4ee   [full=true partial=false amsterdam]
+  ok    UARegistry  0xa3a6f0fdd72ae9936c44ce36151cb4db3e9949d1  (already verified)   [full=true partial=false amsterdam]
+  ok    OpenFactory  0x040fee7daab727d6afb8efe6b770b15c0b2a89f6   [full=true partial=false amsterdam]
+  ok    AdminLib  0x2c877cd85d8384d5dc98886eb6ac25b18fdde358  (already verified)   [full=true partial=false amsterdam]
+  ok    HederaLib  0xef8c52b4cc95591da893a4b317afcf50e3d4ed63  (already verified)   [full=true partial=false amsterdam]
+  ok    MtxPipelineLib  0x93bbda52672c13c15b06f23527050dcdb1062436  (already verified)   [full=true partial=false amsterdam]
+  ok    TradeLib  0x91e5e0974177ddf5d5ea259282f167d30df7442d  (already verified)   [full=true partial=false amsterdam]
+  ok    NormalToken (release kind 0 v1)  0xc5ae67c2bc83c52bfb76a655fbf5d53d5d4c36bc   [full=true partial=false amsterdam]
+  ok    PqzBurnLib  0x56dd67b7c0a88a3e046829bef3e4138d65d9f6aa  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzStateLib  0x9a8c5008e9920d969f5241b9425606bea7146b25  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzTransferLib  0xb4431369bc6d511eaf461743af7979c3f955992e  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzViewLib  0xbb093a1c23a44802e9da884260c8872511dbc983  (already verified)   [full=true partial=false amsterdam]
+  ok    NormalPqzToken (release kind 4 v1)  0xa1c4051a7ffff36292e2602855ace5ebba3c0434   [full=true partial=false amsterdam]
+  ok    WrappedLib  0xcfda8dd5a33b5bca870dc7252a540197b65afe4c  (already verified)   [full=true partial=false amsterdam]
+  ok    WrappedPqzToken (release kind 5 v1)  0x0947e1e39a202d6fddf71a6046b8b951ac03e4d8  (already verified)   [full=true partial=false amsterdam]
+  ok    MockERC20  0x4cdf169aad3444ee604288ea7a7d871b55758183   [full=true partial=false amsterdam]
+  ok    pqUSD  0xce68c8227b30cf6bab8934c8e5fc8eda41b22b23  eip1167 clone of 0xa1c4051a7ffff36292e2602855ace5ebba3c0434 (verified)
+  ok    pqW  0xad52da04198f93a7c8f6b21f029e67d8664e46c3  eip1167 clone of 0x0947e1e39a202d6fddf71a6046b8b951ac03e4d8 (verified)
+  ok    UAMldsaVerifier  0xf2e246bb76df876cef8b38ae84130f4f55de395b   [full=true partial=false amsterdam]
+  ok    UAMldsaVerifier  0x2946259e0334f33a064106302415ad3391bed384   [full=true partial=false amsterdam]
+  ok    UAPqzVerifier  0xde09e74d4888bc4e65f589e8c13bce9f71ddf4c7   [full=true partial=false amsterdam]
+  ok    Secp256k1Verifier  0x51a240271ab8ab9f9a21c82d9a85396b704e164d   [full=true partial=false amsterdam]
+  ok    UARegistry  0xb9816fc57977d5a786e654c7cf76767be63b966e  (already verified)   [full=true partial=false amsterdam]
+  ok    OpenFactory  0x6d411e0a54382ed43f02410ce1c7a7c122afa6e1   [full=true partial=false amsterdam]
+  ok    AdminLib  0x5cf7f96627f3c9903763d128a1cc5d97556a6b99  (already verified)   [full=true partial=false amsterdam]
+  ok    HederaLib  0xa3183498b579bd228aa2b62101c40cc1da978f24  (already verified)   [full=true partial=false amsterdam]
+  ok    MtxPipelineLib  0x63f58053c9499e1104a6f6c6d2581d6d83067eeb  (already verified)   [full=true partial=false amsterdam]
+  ok    TradeLib  0x66a15edcc3b50a663e72f1457ffd49b9ae284ddc  (already verified)   [full=true partial=false amsterdam]
+  ok    NormalToken (release kind 0 v1)  0xbc95fa7ad0a1c61c187b1bd737b45e029dd865d7  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzBurnLib  0xd30c8839c1145609e564b986f667b273ddcb8496  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzStateLib  0xd24260c102b5d128cbefa0f655e5be3c2370677c  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzTransferLib  0x7758f98c1c487e5653795470eeab6c4698be541b  (already verified)   [full=true partial=false amsterdam]
+  ok    PqzViewLib  0x510c6297cc30a058f41eb4af1bfc9953ead8b577  (already verified)   [full=true partial=false amsterdam]
+  ok    NormalPqzToken (release kind 4 v1)  0xf65fb1345f3cc2ef4ee17f49d1f4ad456cef80da  (already verified)   [full=true partial=false amsterdam]
+  ok    WrappedLib  0xbfce6b877ebff977bb6e80b24fbbb7bc4ebca4df  (already verified)   [full=true partial=false amsterdam]
+  ok    WrappedPqzToken (release kind 5 v1)  0x68123b6809ca8edee9e582b02f959e9ae8e55237  (already verified)   [full=true partial=false amsterdam]
+  ok    MockERC20  0x1dccf77fe491282eb61b3b920189d7ec9ce3b221   [full=true partial=false amsterdam]
+  ok    pqUSD  0x660915316c8bffe97f6002ee364a48082808b5bc  eip1167 clone of 0xf65fb1345f3cc2ef4ee17f49d1f4ad456cef80da (verified)
+  ok    pqW  0x92b9d9c90617a94283ea5c49087c3072b3061afa  eip1167 clone of 0x68123b6809ca8edee9e582b02f959e9ae8e55237 (verified)
+  136 ok, 0 fail (chain 7622, http://192.168.1.72:4000/api)
+exit=0
+  12:31:22
+# match types: 126 full, 0 partial (every non-clone row); the 10 clones: proxy_type eip1167, implementation verified
+# + one-off: PqzPrecompileProbe 0x060cc26038E69D73552679103271eCA6E37D4CE6 (pqz-core pqz6 live run) verified by hand, full
+# latest-transactions list (GET /api/v2/transactions, method field): latest 200: 43 raw selectors before, 0 after;
+#   all 440 listed: 27 raw selectors left, all to the CREATE2 deployer 0x4e59b44847b379578588920cA78FbF26c0B4956C
+#   (calldata = salt + init code; selectors 0xc0621b4e x21, 0x00000000 x6); no method (not hex): 81 contract creations,
+#   25 plain sends to 0x…dEaD, 2 direct calls to the PQZ precompile 0x…5caa0f01, 1 send to an EOA
+# verifier (mem_limit 768m) during runs 3+4 (302 samples): max 101.3 % CPU, 768 MiB (the cap; memory.events max 21220,
+#   oom_kill 0); after: 0.04 % / 656 MiB

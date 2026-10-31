@@ -70,7 +70,7 @@ is always the hard value. Gas is never assumed: Zether-sized transactions do not
 <a id="private-chain"></a><a id="private-7622"></a>
 
 <a id="NET-EVM-02"></a>**NET-EVM-02** — **The private reference chain is chain id 7622; its identity is the pair
-(chain id 7622, genesis hash `0xa17faef497fa29ec90603969dad0176ea18fd1cc2eaf0f9f4fa2dacc9c952ac2` since the 2026-10-22 reset (genesis gas limit 200 M); the client test vectors keep
+(chain id 7622, genesis hash `0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164` since the 2026-10-31 reset (fs3 Task 13: the CREATE2 deployer in the genesis alloc, EIP-7702 off; `0xa17faef4…2ac2` from 2026-10-22, genesis gas limit 200 M); the client test vectors keep
 the earlier `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464` as a fixed constant), profile
 `private7622`.** Owner ruling 2026-10-07. Chain id `0x1dc6`; the chain was reset with a new genesis when it moved
 from 9000, which is also Evmos Testnet — replay protection is only as good as the chain id, so every signer and node
@@ -174,7 +174,11 @@ the chain profiles of the node and the clients ([NET-ALL-24](README.md#NET-ALL-2
 the deployer's nonce, so the same contract lands at unrelated addresses on each chain and a missed transaction shifts
 every later address; with CREATE2 the address follows from what was deployed. Cost: a fixed-salt deployer must exist on
 each chain before the first deployment, and a redeploy with the same init code collides with the first (a new
-version needs a new salt or new code).
+version needs a new salt or new code). On the SCaaS testnet the deployer is in the genesis `alloc` (owner ruling
+2026-10-30 for the 7622 reset): 7622 carries the deterministic deployment proxy's runtime code at
+`0x4e59b44847b379578588920cA78FbF26c0B4956C` from its 2026-10-31 reset (its keyless pre-EIP-155 deploy transaction, a
+fixed 100,000 gas, cannot pay Amsterdam's code-deposit state gas). The same alloc is proposed for mainnet 22776; the
+owner decides at the 22776 launch.
 
 <a id="NET-EVM-06"></a>**NET-EVM-06** — **Every Foundry profile compiles for the `amsterdam` EVM: every chain that runs these contracts
 requires Glamsterdam, and a public chain is deployed only after its own fork.** Owner ruling 2026-10-21; status **BUILT**.
@@ -276,7 +280,62 @@ genesis copy) and on the mainnet 22776 from its launch. A throwaway node with th
 transaction (`InvalidTxType`) while legacy and EIP-1559 transfers mined (the check is the Source of NET-EVM-07 in
 [decisions.md](../decisions.md)). Customer chains (Ethereum and most L2s since Pectra, BSC,
 Polygon, Base, …) keep 7702, so the contract rule above applies on every chain; the forge tests are its proof, since the
-SCaaS testnet can no longer exercise 7702 after the reset.
+SCaaS testnet can no longer exercise 7702 after the reset. Verified on 7622 after the 2026-10-31 reset: a type-4 transaction is refused with `-32000 InvalidTxType`.
+
+<a id="NET-EVM-08"></a>**NET-EVM-08** — **The SCaaS testnet's node never signs for an RPC caller** (owner ruling 2026-10-31):
+since the node split ([NET-EVM-10](#NET-EVM-10)) the endpoints below are on the key-less `rpc` node and the sealer
+answers only on its own container loopback; before it, one node (the Clique sealer) with three JSON-RPC endpoints — public `8545` / `8546` (`Eth`, `Net`, `Web3`, `Subscribe`;
+request limits `MaxBatchSize` 100, `MaxRequestBodySize` 4 MiB, `GasCap` = the block gas limit, `Timeout` 20 s,
+`RequestQueueLimit` 500), the operator's `8550` bound to the node container's own loopback and not published
+(`Admin`, `Clique`, `Debug`, `Trace`, `Parity`, `TxPool`, `Eth`, `Net`, `Web3`; reached from the host through a
+sidecar container in the node's network namespace, so no other container reaches it), and `8547` on the Docker
+network only (`Eth`, `Net`, `Web3`, `TxPool`, for the explorer; not the `scaas-node` gateway port) — `Personal` nowhere, and a calls filter that refuses `eth_sendTransaction`, `eth_sign`,
+`eth_signTransaction` and `eth_signTypedData*` on every endpoint (Nethermind 2.2.0 needs the sealer account in
+`UnlockAccounts` to read its key, so the wallet methods are refused instead). Layout, checks and rollback:
+[RUNBOOK](../../pqz-core/nethermind/chain/RUNBOOK.md) § 7622 node layout and access. Mainnet 22776 additionally gets a
+TLS reverse proxy with rate limits and keeps the sealer key out of the RPC node.
+
+<a id="NET-EVM-09"></a>**NET-EVM-09** — **Blockscout runs on the SCaaS testnet, lean and capped** (owner ruling
+2026-10-31): `explorer-db` 1 GiB / 1 CPU, `explorer-backend` 2 GiB / 1.5 CPU, `explorer-frontend` 512 MiB / 0.5 CPU,
+`restart: unless-stopped` like every service of the stack (owner ruling 2026-10-31, [NET-EVM-10](#NET-EVM-10)), started
+after the node; it reads the node over the Docker-network endpoint only; internal
+transactions, block rewards, token-instance metadata and market data are off; pending transactions and address coin
+balances are on (owner 2026-10-31: with the coin-balance fetcher disabled, Blockscout 9.0.2's live import crashes
+after every block and the home-page block list stops; on the pruned node its catch-up retried old-block balances
+forever, about 1.5 CPU, until a one-off cleanup of those rows, `blockscout-code-backfill.py --prune-coin-balances`,
+rerun after an outage longer than the pruning window; archive mode at the sealer / RPC node split is the root fix);
+the UI is published on host port 8558 (owner 2026-10-31: not 3000) and the API on 4000; the frontend image is pinned
+by digest; one-line stop in the RUNBOOK. Since the node split ([NET-EVM-10](#NET-EVM-10)) it reads the archive `rpc`
+node, and neither the code backfill nor the coin-balance cleanup is needed. Contract verification (owner ruling 2026-10-31): a local
+`smart-contract-verifier` (v1.11.1, 768 MiB since 2026-10-31: the patched 31-contract run hit 512 MiB; 1 CPU, `mba-net` only, Solidity only, solc from
+binaries.soliditylang.org, never Blockscout's hosted service) backs the backend, and
+`smartcontracts/evm/script/verify-blockscout.sh` verifies every `Deploy.s.sol` contract after each reset or deploy;
+upstream v1.11.1 rejects `evmVersion` `amsterdam` (NET-EVM-06), so the live stack uses a locally patched verifier
+image (built outside the repo, `/home/dockers/mba-chain-nethermind/sc-verifier/`), temporary until upstream supports
+Amsterdam (owner ruling 2026-10-31 option (a)): the 31 `Deploy.s.sol` contracts and the PQZ e2e contracts verified, full match; the e2e tokens are EIP-1167 clones Blockscout links to their verified implementations (RUNBOOK § Contract verification).
+
+<a id="NET-EVM-10"></a>**NET-EVM-10** — **The SCaaS testnet runs two nodes: a `sealer` and a public `rpc`** (owner
+ruling 2026-10-31): in the stack's one `docker-compose.yml`, both on the PQZ image. `sealer` holds the Clique key
+(keystore + `UnlockAccounts`, Mining on), stays pruned and small (1 GiB cap; 768 MiB proved too tight under the PQZ e2e), publishes no port, serves JSON-RPC only
+on its container loopback (admin through a sidecar) and sits on an internal Docker network shared with `rpc` alone
+(no gateway, no host address), its one static peer. `rpc` has no key and no unlocked account, Mining off, runs
+archive (`Pruning.Mode` `None` on the patricia backend, `FlatDb.Enabled` false), full-syncs from `sealer`, carries
+the public 8545 / 8546, the Docker-only 8547 for Blockscout and its own loopback 8550, and the P2P port 30303:
+**external nodes connect to `rpc` (the sentry), never to the sealer**; both nodes have fixed node keys. The sealer runs `TxPool.AcceptTxWhenNotSynced` true: as the sole signer it has no
+peer ahead of it, its sync mode turns `Disconnected` about 10 minutes after each session starts, and Nethermind then
+drops every transaction gossiped by `rpc` while blocks keep flowing. Both nodes run `TxPool.MaxTxSize` 2 MiB (owner
+ruling 2026-10-31: it matches the 4 MiB `MaxRequestBodySize`, which carries at most a 2 MiB raw transaction as hex);
+it is harmless headroom, not a calldata enabler: on Amsterdam Nethermind 2.2.0 caps a transaction's regular gas
+(intrinsic, the EIP-7976 calldata floor 15,000 + 64 per byte, execution) at 2^24, while its gasLimit may reach 2^32 − 1
+within the block gas limit (200 M here) and gas above 2^24 pays only state gas, so the floor refuses more than 261,909 B of calldata at pool admission
+([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11); decisions CTR-PQZ-06 Change 2026-10-21, the Amsterdam re-plan);
+the largest PQZ e2e transaction is 107,268 B. Why: the key
+leaves the process that answers RPC; peers and callers that misbehave reach only `rpc`; Blockscout gets the old-block
+state a pruned node lacks. Topology, enodes, start / stop order and recovery: [RUNBOOK](../../pqz-core/nethermind/chain/RUNBOOK.md)
+§ Node split. Every service runs `restart: unless-stopped` (owner ruling 2026-10-31): Docker restarts a node after a
+`PQZ-NODE-FAULT` exit 120; a fault caused by a pooled transaction can loop on the sealer (`rpc` gossips it again), so
+`watch.sh` reports `RestartCount`; after a reboot Docker starts every service at once. Live configs (no secrets):
+`pqz-core/nethermind/chain/scaas-testnet/`. Mainnet 22776: the same topology is proposed; the owner decides at launch.
 
 ## 6. Limitations
 

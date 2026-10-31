@@ -1,0 +1,182 @@
+# phase B: calib image rebuilt with Calibrate --keys (commit d031f7d0826f3e4435c90e5c533112930cb2baac); the node image 2.2.0-pqz6 is unchanged; same args as build-image.sh's calib step, 2026-10-30T16:58:15Z
+$ docker build -f Dockerfile --progress plain --resource memory=4g --build-arg PQZ_SET=n2304-kmax4096 --target calib --build-arg COMMIT=d031f7d0826f3e4435c90e5c533112930cb2baac --build-arg FFI_SHA256=dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601 --build-arg SELFTEST=d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d -t scaas/nethermind-pqz:2.2.0-pqz6-calib <root>
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 6.60kB done
+#1 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 1.5s
+
+#3 docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#3 CACHED
+
+#4 [internal] load metadata for docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+#4 DONE 0.0s
+
+#5 [internal] load metadata for mcr.microsoft.com/dotnet/sdk:10.0.402-resolute@sha256:6924c5c6564690089a67509f5a6ae85d7afa28d7f0f6466ec1b8a5439764ca92
+#5 DONE 0.0s
+
+#6 [internal] load metadata for docker.io/nethermind/nethermind:2.2.0@sha256:5cc0061e6a317e9249e1e1f537a0a40a2036525c62f1cb250943432f4c000a38
+#6 DONE 0.0s
+
+#7 [rust  1/14] FROM docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+#7 DONE 0.0s
+
+#8 [plugin 1/6] FROM mcr.microsoft.com/dotnet/sdk:10.0.402-resolute@sha256:6924c5c6564690089a67509f5a6ae85d7afa28d7f0f6466ec1b8a5439764ca92
+#8 DONE 0.0s
+
+#9 [base 1/1] FROM docker.io/nethermind/nethermind:2.2.0@sha256:5cc0061e6a317e9249e1e1f537a0a40a2036525c62f1cb250943432f4c000a38
+#9 DONE 0.0s
+
+#10 [internal] load build context
+#10 transferring context:
+#10 transferring context: 1.96MB 0.2s done
+#10 DONE 0.2s
+
+#11 [plugin 4/6] COPY pqz-core/nethermind/Directory.Build.props pqz-core/nethermind/Directory.Build.targets ./
+#11 CACHED
+
+#12 [plugin 2/6] WORKDIR /src/pqz-core/nethermind
+#12 CACHED
+
+#13 [plugin 3/6] COPY --from=base /nethermind ref
+#13 CACHED
+
+#14 [plugin 5/6] COPY pqz-core/nethermind/Nethermind.Pqz Nethermind.Pqz
+#14 CACHED
+
+#15 [plugin 6/6] RUN dotnet build Nethermind.Pqz/Nethermind.Pqz.csproj -c Release -m:2 -p:PqzSet=n2304-kmax4096 -o /out  && ls -la /out
+#15 CACHED
+
+#16 [calibtool 1/2] COPY pqz-core/nethermind/Calibrate Calibrate
+#16 DONE 0.0s
+
+#17 [ffisrc 1/1] COPY . /
+#17 DONE 0.3s
+
+#18 [calibtool 2/2] RUN dotnet build Calibrate/Calibrate.csproj -c Release -m:2 -o /opt/pqz-calibrate
+#18 ...
+
+#19 [rust 11/14] COPY --from=ffisrc /pqz-core/stmt pqz-core/stmt
+#19 CACHED
+
+#20 [rust  8/14] COPY --from=ffisrc /pqz-core/pqzl/params pqz-core/pqzl/params
+#20 CACHED
+
+#21 [node 5/8] COPY pqz-core/NOTICE /nethermind/plugins/NOTICE-pqz-core.txt
+#21 CACHED
+
+#22 [rust  6/14] COPY --from=ffisrc /pqz-core/pqzl/src pqz-core/pqzl/src
+#22 CACHED
+
+#23 [rust  4/14] COPY --from=ffisrc /LICENSE ./
+#23 CACHED
+
+#24 [rust  3/14] WORKDIR /src
+#24 CACHED
+
+#25 [rust 10/14] COPY --from=ffisrc /pqz-core/pqzl/rust pqz-core/pqzl/rust
+#25 CACHED
+
+#26 [rust 14/14] COPY --from=ffisrc /smartcontracts/vectors/pqz smartcontracts/vectors/pqz
+#26 CACHED
+
+#27 [node 3/8] COPY --from=ffi /out/libpqz_ffi.so /nethermind/plugins/
+#27 CACHED
+
+#28 [rust 12/14] COPY --from=ffisrc /pqz-core/pqzh/ligero pqz-core/pqzh/ligero
+#28 CACHED
+
+#29 [rust 13/14] COPY --from=ffisrc /pqz-core/ffi pqz-core/ffi
+#29 CACHED
+
+#30 [node 4/8] COPY pqz-core/nethermind/NOTICE-pqz.txt /nethermind/plugins/
+#30 CACHED
+
+#31 [rust  2/14] RUN apt-get update && apt-get install -y --no-install-recommends clang=1:14.0-55.7~deb12u1 clang-14=1:14.0.6-12       libclang-cpp14=1:14.0.6-12 libllvm14=1:14.0.6-12 && rm -rf /var/lib/apt/lists/*
+#31 CACHED
+
+#32 [rust  9/14] COPY --from=ffisrc /pqz-core/params/sets pqz-core/params/sets
+#32 CACHED
+
+#33 [rust  7/14] COPY --from=ffisrc /pqz-core/pqzl/lazer pqz-core/pqzl/lazer
+#33 CACHED
+
+#34 [node 2/8] COPY --from=plugin /out/Nethermind.Pqz.dll /nethermind/plugins/
+#34 CACHED
+
+#35 [rust  5/14] COPY --from=ffisrc /pqz-core/pqzl/check_symbols.sh pqz-core/pqzl/
+#35 CACHED
+
+#36 [ffi 1/1] RUN cd pqz-core/ffi && cargo build --release --locked -j 2 --no-default-features --features pqzl-rust,set-n2304-kmax4096  && mkdir /out && cp target/release/libpqz_ffi.so /out/  && sha256sum /out/libpqz_ffi.so
+#36 CACHED
+
+#37 [node 6/8] COPY pqz-core/pqzl/lazer/LICENSE /nethermind/plugins/LICENSE-lazer.txt
+#37 CACHED
+
+#38 [node 7/8] RUN echo "dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601  /nethermind/plugins/libpqz_ffi.so" | sha256sum -c -
+#38 0.199 /nethermind/plugins/libpqz_ffi.so: OK
+#38 ...
+
+#18 [calibtool 2/2] RUN dotnet build Calibrate/Calibrate.csproj -c Release -m:2 -o /opt/pqz-calibrate
+#18 13.73   Determining projects to restore...
+#18 ...
+
+#38 [node 7/8] RUN echo "dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601  /nethermind/plugins/libpqz_ffi.so" | sha256sum -c -
+#38 DONE 13.4s
+
+#39 [node 8/8] RUN echo "d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d" | grep -Eqx '[0-9a-f]{64}' || { echo "SELFTEST build arg missing or not 64 hex digits" >&2; exit 1; }
+#39 DONE 0.2s
+
+#18 [calibtool 2/2] RUN dotnet build Calibrate/Calibrate.csproj -c Release -m:2 -o /opt/pqz-calibrate
+#18 ...
+
+#40 [fresh 1/2] COPY pqz-core/nethermind/fresh-proofs pqz-core/nethermind/fresh-proofs
+#40 CACHED
+
+#41 [fresh 2/2] RUN cd pqz-core/nethermind/fresh-proofs && cargo build --release --locked -j 2  && mkdir /out && ./target/release/pqz-fresh-proofs 20 > /out/fresh.jsonl
+#41 CACHED
+
+#18 [calibtool 2/2] RUN dotnet build Calibrate/Calibrate.csproj -c Release -m:2 -o /opt/pqz-calibrate
+#18 14.32   Restored /src/pqz-core/nethermind/Calibrate/Calibrate.csproj (in 91 ms).
+#18 14.33   1 of 2 projects are up-to-date for restore.
+#18 14.67   Nethermind.Pqz -> /opt/pqz-calibrate/Nethermind.Pqz.dll
+#18 22.30   Calibrate -> /opt/pqz-calibrate/Calibrate.dll
+#18 22.31 
+#18 22.31 Build succeeded.
+#18 22.31     0 Warning(s)
+#18 22.31     0 Error(s)
+#18 22.31 
+#18 22.31 Time Elapsed 00:00:21.73
+#18 DONE 22.4s
+
+#42 [calib 1/5] COPY --from=calibtool /opt/pqz-calibrate /opt/pqz-calibrate
+#42 DONE 6.0s
+
+#43 [calib 2/5] COPY --from=fresh /out/fresh.jsonl /opt/pqz-calibrate/data/
+#43 DONE 15.8s
+
+#44 [calib 3/5] COPY pqz-core/nethermind/bin/corpus.jsonl /opt/pqz-calibrate/data/
+#44 DONE 26.1s
+
+#45 [calib 4/5] COPY smartcontracts/vectors/ua/pq_external.json /opt/pqz-calibrate/data/ua/
+#45 DONE 0.2s
+
+#46 [calib 5/5] RUN cp /nethermind/plugins/libpqz_ffi.so /opt/pqz-calibrate/
+#46 DONE 0.2s
+
+#47 exporting to image
+#47 exporting layers
+#47 exporting layers 0.5s done
+#47 writing image sha256:3eac4e975f367a2e2d95b91ab4f416d8d907e62b6eae1469cf248211629a49a6 0.0s done
+#47 naming to docker.io/scaas/nethermind-pqz:2.2.0-pqz6-calib done
+#47 DONE 0.6s
+[rc=0]
+calib image sha256:3eac4e975f367a2e2d95b91ab4f416d8d907e62b6eae1469cf248211629a49a6 created 2026-10-30T23:59:28.086491335+07:00
+node image sha256:656d91d692b0be5396b4e9d239ed48d6cae5cb2e681d98f2250db27dbcb63e83 (unchanged)
+$ docker run --rm --memory 1g scaas/nethermind-pqz:2.2.0-pqz6-calib cold
+125.326 d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d
+[rc=0]
+calib image library dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601, plugin bf38997a40730576675e75537793251a1497285d0807a035a0f54b5bc4eb594e (= the node image's: yes)

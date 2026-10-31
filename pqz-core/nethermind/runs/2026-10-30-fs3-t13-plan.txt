@@ -1,0 +1,129 @@
+# fs3 Task 13 + plan 5h Task 9: SCaaS testnet (7622) roll-out with gas re-calibration. Commands of phases B and C
+# (phase A, 2026-10-30: image 2.2.0-pqz6 + calib image built, rows script prepared; report
+# .superpowers/sdd/2026-10-30-fs3-t13/phase-a-report.md). Every command from the work tree
+#   W=/home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout ; cd $W
+# Rules: heavy commands via scripts/capped (never wrapped in timeout), Docker with --memory, foreground, no polling
+# loops, never git stash. A command longer than the shell tool's 10-minute limit is moved to the background by the
+# harness, which notifies when it ends: wait for that notice, do not poll and do not start a second copy.
+# Logs: pqz-core/nethermind/runs/ (B) and the live log named in C.
+
+########## PHASE B: calibration (ONLY after the controller says the host is quiet) ##########
+# B0. Host state before (into the run record; the calibration log also records load before / after itself)
+D=$(date +%F)                                             # calibrate.sh names its files by the start date
+H=pqz-core/nethermind/runs/$D-fs3-t13-host.txt
+{ date -u +%FT%TZ; cut -d' ' -f1-3 /proc/loadavg; top -bn1 -w 200 | sed -n '1,20p'; docker ps --format '{{.Names}} {{.Image}} {{.Status}}'
+  for f in ~/.cache/r3-locks/heavy*; do printf '%s: ' "$f"; fuser "$f" 2>&1 || echo free; done; } > $H 2>&1; cat $H
+#    go on only with nothing else under scripts/capped, no copy chain / docker build, and load (1 min) well below 2
+
+# B1. Calibration run 1 (all forms of n2304-kmax4096 in the calib image; ~25-40 min). calibrate.sh with no --ops writes
+#     runs/$D-calib.txt and runs/$D-calib-engine-pqz.json and copies the latter to chain/engine-pqz.json (overwritten
+#     again in B4): rename both to run1 at once, before run 2 overwrites them
+scripts/capped pqz-core/nethermind/calibrate.sh pqz6
+(cd pqz-core/nethermind/runs && mv $D-calib.txt $D-calib-run1.txt && mv $D-calib-engine-pqz.json $D-calib-run1-engine-pqz.json)
+tail -1 pqz-core/nethermind/runs/$D-calib-run1.txt         # "# image ... host load before: ..., after: ..."
+
+# B2. Calibration run 2 (same image, right after run 1; ~25-40 min)
+scripts/capped pqz-core/nethermind/calibrate.sh pqz6
+(cd pqz-core/nethermind/runs && mv $D-calib.txt $D-calib-run2.txt && mv $D-calib-engine-pqz.json $D-calib-run2-engine-pqz.json)
+tail -1 pqz-core/nethermind/runs/$D-calib-run2.txt
+
+# B3. M = 16 Rust rows (fs3 Task 13 item 4: the package's --multi-bench with its Rust step; op 7 M = 1..16 C, Rust and
+#     PQZH, native and wasm32; bench-only shapes, no gas row). Image pqz-core-artifact:fs3-t13 (built in phase A from
+#     a399e7f7). Timing-sensitive like B1 / B2: same quiet host. ~60-90 min (44 min on 2026-10-17 without the Rust step)
+mkdir -p pqz-core/artifact/runs/fs3-t13-docker-multi
+scripts/capped docker run --rm --memory=4g --memory-swap=4g --network none -u "$(id -u):$(id -g)" \
+  -v "$W/pqz-core/artifact/runs:/out" -e OUT=/out/fs3-t13-docker-multi pqz-core-artifact:fs3-t13 --multi-bench \
+  > pqz-core/artifact/runs/fs3-t13-docker-multi-console.txt 2>&1; echo rc=$?
+tail -3 pqz-core/artifact/runs/fs3-t13-docker-multi/summary.txt    # RESULT: PASS; results-multi.md has the Rust M = 16 rows
+
+# B4. Row rule (runs/2026-10-30-fs3-t13-rows.py: new = min(live, max(run 1, run 2)) on every PQZ row of both proof
+#     systems and on selftestGas, ML-DSA prices live; FAILS unless live and both runs have the same 26 keys, and if any
+#     t_row (native p99, valid or adversarial) > 60 ms; WARN lines = rows measured above live, kept at live)
+cd pqz-core/nethermind
+python3 -I runs/2026-10-30-fs3-t13-rows.py chain/engine-pqz-provisional-n2304.json \
+  runs/$D-calib-run1-engine-pqz.json runs/$D-calib-run2-engine-pqz.json runs/$D-calib-run1.txt runs/$D-calib-run2.txt \
+  runs/$D-fs3-t13-rows-engine-pqz.json | tee runs/$D-fs3-t13-rows.txt
+cp runs/$D-fs3-t13-rows-engine-pqz.json chain/engine-pqz.json   # the calibrated schedule (was the retired 2026-10-15/17 one)
+python3 -I runs/2026-10-19-calib-timing.py runs/$D-calib-run1.txt runs/$D-calib-run2.txt   # p50 / p99 / p99 adv per row, run 2 next to run 1
+cd $W
+# B5. 60 ms p99 verify limit per form (plan 5h Task 9; decisions 2026-10-14: adversarial on the chain host, also the
+#     bound for wasm32): native = B4 (every form, both runs); wasm32 op 7 (the named risk, R_TXM M = 8) = results-multi.md
+#     of B3 (Rust and C wasm32 verify p99 per M); wasm32 ops 1-5 = artifact/runs/fs3-t6-docker-quick/results.md
+#     (2026-10-30, n2304-kmax4096, small samples) unless the controller wants a --full run (~70+ min more)
+grep -n "t_row\|sanity" pqz-core/nethermind/runs/$D-calib-run1.txt pqz-core/nethermind/runs/$D-calib-run2.txt | tail -4
+grep -n "wasm" pqz-core/artifact/runs/fs3-t13-docker-multi/results-multi.md | head -40
+# B6. Host state after: repeat B0 into $D-fs3-t13-host.txt (>>), then report to the controller (rows, WARNs, timings).
+
+########## PHASE C: roll-out (host need not be quiet) ##########
+L=/home/dockers/mba-chain-nethermind
+TS=$(date +%Y%m%d-%H%M)
+G=0xa17faef497fa29ec90603969dad0176ea18fd1cc2eaf0f9f4fa2dacc9c952ac2   # genesis hash expected unchanged (params-only edits)
+K4=0x0000000000000000000000000000000000000000000000000000000000000004  # test key 0x…04 (= 0x1eff47bc…a718), funded in genesis
+LOG=pqz-core/nethermind/runs/$(date +%F)-pqz6-live.txt                  # tee every step's output into it
+
+# C0. Node state (stopped since 2026-10-28: "Exited (130)"; stop it first if it runs)
+docker inspect -f '{{.State.Status}} exit {{.State.ExitCode}} since {{.State.FinishedAt}}, image {{.Config.Image}}' mba_chain_node_nethermind
+(cd $L && docker compose stop blockchain-node)            # only if running
+
+# C1. Backup of the stack (chainspec, config, compose, password, keystore, chain data; data is root-owned: alpine)
+docker run --rm --memory 256m -v $L:/l alpine:3 sh -c "set -e; B=/l/backup-pqz5-$TS; mkdir \$B
+  cp -a /l/genesis.json /l/config.json /l/docker-compose.yml /l/password.txt /l/keystore /l/data/nethermind_data \$B/
+  (cd /l/data/nethermind_data && find . -type f | sort | xargs sha256sum) > /tmp/a
+  (cd \$B/nethermind_data && find . -type f | sort | xargs sha256sum) > /tmp/b
+  cmp /tmp/a /tmp/b && echo \"data backup identical: \$(wc -l < /tmp/a) files\"; du -s /l/data/nethermind_data \$B"
+
+# C2. Chainspec: ONLY from $L/genesis.json (7702 off; never a scratchpad genesis copy)
+grep -c 7702 $L/genesis.json                              # must print 0
+S=/home/ha/work/ainative/scaas/scratchpad/fs3-t13; mkdir -p $S
+python3 -I pqz-core/nethermind/chain/patch-chainspec.py $L/genesis.json pqz-core/nethermind/chain/engine-pqz.json 0x0 \
+  $S/genesis.pqz6.json --testnet-reset                    # expect: engine.Pqz replaced, params changed: none, genesis header changed: none
+grep -c 7702 $S/genesis.pqz6.json                         # must print 0
+
+# C3. Install: genesis, compose image pqz5 -> pqz6, empty chain data (backup in C1)
+cp $S/genesis.pqz6.json $L/genesis.json && diff $L/backup-pqz5-$TS/genesis.json $L/genesis.json
+sed -i 's#scaas/nethermind-pqz:2.2.0-pqz5#scaas/nethermind-pqz:2.2.0-pqz6#' $L/docker-compose.yml && diff $L/backup-pqz5-$TS/docker-compose.yml $L/docker-compose.yml
+docker run --rm --memory 256m -v $L/data:/d alpine:3 sh -c 'rm -rf /d/nethermind_data && mkdir /d/nethermind_data'
+
+# C4. Start by hand (no restart policy), health after ~30 s (one check, no loop)
+(cd $L && docker compose up -d blockchain-node)
+docker logs mba_chain_node_nethermind 2>&1 | grep -E "PQZ-START|PQZ-REFUSE|PQZ-NODE-FAULT|Genesis hash" | cut -c1-900
+#    expect PQZ-START sha256=dd0e7668… selftest=d6c01fbc… max_input=524288 set=n2304-kmax4096, 26 rows (the new prices),
+#    id_check_head=0 (genesis, empty database); Genesis hash $G
+python3 -I pqz-core/nethermind/chain/e2e.py head --rpc http://127.0.0.1:8545
+
+# C5. Probe (expect 0 FAIL)
+PQZ_SET=n2304-kmax4096 python3 -I pqz-core/nethermind/chain/e2e.py probe --engine pqz-core/nethermind/chain/engine-pqz.json \
+  --rpc http://127.0.0.1:8545 --genesis-hash $G
+
+# C6. Node e2e (as pqz5: --no-ua, the UA verifiers come with the contracts in C9)
+PQZ_SET=n2304-kmax4096 python3 -I pqz-core/nethermind/chain/e2e.py e2e --engine pqz-core/nethermind/chain/engine-pqz.json \
+  --rpc http://127.0.0.1:8545 --key $K4 --no-ua
+
+# C7. EIP-7702 off: a type-4 transaction is refused (NET-EVM-07; method of docs/research/eip7702-node-check-2026-10-30.md)
+cast send --rpc-url http://127.0.0.1:8545 --private-key $K4 --auth 0x000000000000000000000000000000000000dEaD \
+  0x000000000000000000000000000000000000dEaD             # eth_estimateGas: -32603 "EIP-7702 is not enabled"
+cast send --rpc-url http://127.0.0.1:8545 --private-key $K4 --auth 0x000000000000000000000000000000000000dEaD \
+  --gas-limit 200000 0x000000000000000000000000000000000000dEaD   # expect -32000 "InvalidTxType" (REFUSED)
+cast send --rpc-url http://127.0.0.1:8545 --private-key $K4 --value 1 0x000000000000000000000000000000000000dEaD  # EIP-1559 transfer mines
+
+# C8. Builds for the contract e2e (the work tree's smartcontracts/evm/lib holds uncommitted symlinks to the main
+#     checkout's forge-std / openzeppelin-contracts)
+scripts/capped sh -c 'cd smartcontracts/evm && forge build'
+scripts/capped sh -c 'cd pqz-core/ffi && cargo build --release --offline -j2 --features prove --example pqz_prove'
+
+# C9. PQZ contracts on the real node (UARegistry, UAPqzVerifier, ML-DSA / secp256k1 verifiers, OpenFactory, the PQZ
+#     tokens with the MtxPipelineLib link closure = the metatx-split e2e on a real node; setPqzKey + storePqzPop path
+#     inside the full run): full, then --split (register without the proof, then storePqzPop)
+python3 -I smartcontracts/evm/script/pqz/e2e.py --rpc http://127.0.0.1:8545 --log smartcontracts/evm/runs/$(date +%F)-fs3-t13-pqz-7622.txt
+python3 -I smartcontracts/evm/script/pqz/e2e.py --rpc http://127.0.0.1:8545 --split --log smartcontracts/evm/runs/$(date +%F)-fs3-t13-pqz-7622-split.txt
+
+# C10. MtxRelayFee + DEX: NOT deployed by script/pqz/e2e.py; they come from script/Deploy.s.sol (deploy.sh evm), which
+#      needs the CREATE2 deployer 0x4e59b448… on the chain. Check first; see the phase A report's concern before going on
+cast code 0x4e59b44847b379578588920ca78fbf26c0b4956c --rpc-url http://127.0.0.1:8545   # 0x = absent (not in the genesis alloc)
+#      if the controller has a deployer path: PRIVATE_KEY=<key> FOUNDRY_PROFILE=private7622 CHAIN_UID=$G \
+#        smartcontracts/scripts/deploy.sh evm http://127.0.0.1:8545   (writes smartcontracts/evm/deployments/7622.json)
+
+# C11. Records: docs/decisions.md (calibration + roll-out entry, decisions in full), chain/RUNBOOK.md section
+#      "Image 2.2.0-pqz6 on the SCaaS testnet (executed <date>)", README.md image line / history / prices / results table,
+#      pq-zero-knowledge.md ~1293 / 1320 / 1504 (Rust crate = production core, fs3 Task 13 item 2), TODO.md;
+#      commit on branch fs3-t13 from main (no push); no container of ours left running except the node.

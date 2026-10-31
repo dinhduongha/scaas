@@ -1,0 +1,196 @@
+{
+  "schedules": [
+    {
+      "timestamp": "0x0",
+      "pqz": [
+        {
+          "op": 1,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 74752,
+          "gas": 2947000
+        },
+        {
+          "op": 1,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 93312,
+          "gas": 3014000
+        },
+        {
+          "op": 1,
+          "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+          "stmtLen": 74752,
+          "gas": 2980000
+        },
+        {
+          "op": 1,
+          "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+          "stmtLen": 93312,
+          "gas": 2981000
+        },
+        {
+          "op": 2,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 56192,
+          "gas": 4311000
+        },
+        {
+          "op": 2,
+          "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+          "stmtLen": 56192,
+          "gas": 3052000
+        },
+        {
+          "op": 3,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 18528,
+          "gas": 3253000
+        },
+        {
+          "op": 3,
+          "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+          "stmtLen": 18528,
+          "gas": 1689000
+        },
+        {
+          "op": 4,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 37280,
+          "gas": 3346000
+        },
+        {
+          "op": 4,
+          "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+          "stmtLen": 37280,
+          "gas": 1743000
+        },
+        {
+          "op": 5,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 37280,
+          "gas": 3330000
+        },
+        {
+          "op": 5,
+          "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+          "stmtLen": 37280,
+          "gas": 1817000
+        },
+        {
+          "op": 7,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 74752,
+          "gas": 4309000,
+          "legs": 1,
+          "auditorOn": 0
+        },
+        {
+          "op": 7,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 93312,
+          "gas": 4506000,
+          "legs": 1,
+          "auditorOn": 1
+        },
+        {
+          "op": 7,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 93312,
+          "gas": 4485000,
+          "legs": 2,
+          "auditorOn": 0
+        },
+        {
+          "op": 7,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 112000,
+          "gas": 4776000,
+          "legs": 2,
+          "auditorOn": 1
+        },
+        {
+          "op": 7,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 130432,
+          "gas": 4768000,
+          "legs": 4,
+          "auditorOn": 0
+        },
+        {
+          "op": 7,
+          "id": "0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
+          "stmtLen": 167808,
+          "gas": 6046000,
+          "legs": 4,
+          "auditorOn": 1
+        },
+        {
+          "op": 7,
+          "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+          "stmtLen": 74752,
+          "gas": 3041000,
+          "legs": 1,
+          "auditorOn": 0
+        },
+        {
+          "op": 7,
+          "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+          "stmtLen": 93312,
+          "gas": 2068000,
+          "legs": 1,
+          "auditorOn": 1
+        },
+        {
+          "op": 7,
+          "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+          "stmtLen": 93312,
+          "gas": 3137000,
+          "legs": 2,
+          "auditorOn": 0
+        },
+        {
+          "op": 7,
+          "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+          "stmtLen": 112000,
+          "gas": 2084000,
+          "legs": 2,
+          "auditorOn": 1
+        },
+        {
+          "op": 7,
+          "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+          "stmtLen": 130432,
+          "gas": 2118000,
+          "legs": 4,
+          "auditorOn": 0
+        },
+        {
+          "op": 7,
+          "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+          "stmtLen": 167808,
+          "gas": 4642000,
+          "legs": 4,
+          "auditorOn": 1
+        },
+        {
+          "op": 7,
+          "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+          "stmtLen": 223104,
+          "gas": 4622000,
+          "legs": 8,
+          "auditorOn": 0
+        },
+        {
+          "op": 7,
+          "id": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+          "stmtLen": 260992,
+          "gas": 5873000,
+          "legs": 8,
+          "auditorOn": 1
+        }
+      ],
+      "selftestGas": 1689000,
+      "mldsa44Gas": 49000,
+      "mldsa65Gas": 68000
+    }
+  ]
+}

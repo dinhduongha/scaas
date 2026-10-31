@@ -1,0 +1,21 @@
+# P6f calibration (2026-10-31-calib-ops12170) 2026-10-30 20:01:33Z  host 3ad7d6365312  cpus 4  .NET 10.0.13
+# libpqz_ffi.so /opt/pqz-calibrate/libpqz_ffi.so sha256 dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601; n = 1000 per set; cold self-test 0 processes
+# model name	: AMD Ryzen 5 7235HS
+t_ecMul median 0.025 ms (p99 0.031, n 10000) ⇒ 0.243 M gas per ms
+# rows 6: op 7 pqzh 167808 [4, 1]; op 7 pqzh 130432 [4, 0]; op 7 pqzh 112000 [2, 1]; op 7 pqzh 93312 [1, 1]; op 7 pqzh 93312 [2, 0]; op 7 pqzh 74752 [1, 0]
+
+| op | id | stmtLen [M, auditorOn] | forms | valid n | p50 valid ms | p99 valid ms | p99 adversarial ms | worst adversarial set | t_row ms | gas | + calldata floor of the largest honest input (direct tx) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 7 | pqzh | 167808 [4, 1] | TRANSFER-MULTI | 21 (20 fresh) | 14.190 | 16.126 | 1.746 | proof bit flips (1000) | 16.126 | 3,918,000 | 17,154,790 (462,013 B) **> EIP-7825** |
+| 7 | pqzh | 130432 [4, 0] | TRANSFER-MULTI+TRANSFER-MULTI | 22 (20 fresh) | 11.374 | 12.808 | 1.643 | negative.json (12) | 12.808 | 3,112,000 | 14,189,470 (380,365 B) |
+| 7 | pqzh | 112000 [2, 1] | TRANSFER-MULTI | 21 (20 fresh) | 11.332 | 12.858 | 1.410 | proof bit flips (1000) | 12.858 | 3,124,000 | 13,584,770 (361,805 B) |
+| 7 | pqzh | 93312 [1, 1] | TRANSFER-MULTI | 21 (20 fresh) | 10.793 | 12.450 | 1.402 | proof bit flips (1000) | 12.450 | 3,025,000 | 12,966,840 (342,717 B) |
+| 7 | pqzh | 93312 [2, 0] | TRANSFER-MULTI+TRANSFER-MULTI | 22 (20 fresh) | 10.816 | 12.094 | 1.352 | proof bit flips (1000) | 12.094 | 2,938,000 | 12,945,170 (342,269 B) |
+| 7 | pqzh | 74752 [1, 0] | TRANSFER-MULTI | 21 (20 fresh) | 10.620 | 11.959 | 1.379 | negative.json (12) | 11.959 | 2,906,000 | 12,358,510 (324,061 B) |
+
+OP_SELFTEST warm (cached): p50 0.000 ms, p99 0.001 ms; selftestGas = the smallest row = 2,906,000 (D6, R3)
+ML-DSA-44: 15 ACVP inputs, p50 0.110 ms, p99 0.124 ms ⇒ calibrated 31,000, EIP-8355 BASE 6,500 ⇒ mldsa44Gas 31,000
+ML-DSA-65: 15 ACVP inputs, p50 0.163 ms, p99 0.183 ms ⇒ calibrated 45,000, EIP-8355 BASE 9,000 ⇒ mldsa65Gas 45,000
+
+NOTE op 7 pqzh stmtLen 167808: an input at MAX_PROOF (429,957 B, all non-zero) as a direct tx needs 17,219,280 gas > 16,777,216 (P6g note; honest proofs: 17,154,790)
+# image scaas/nethermind-pqz:2.2.0-pqz6-calib sha256:3eac4e975f367a2e2d95b91ab4f416d8d907e62b6eae1469cf248211629a49a6; host load before: 1.04 0.76 0.43, after: 1.02 0.84 0.50
