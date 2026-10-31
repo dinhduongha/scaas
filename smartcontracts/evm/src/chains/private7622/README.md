@@ -27,8 +27,8 @@ be `berlin`. The chainspec was rewritten with Nethermind keys; details in
 `/home/dockers/mba-chain-nethermind/README-chainspec.md`. Lesson kept: Nethermind ignores unknown transition keys
 without a log line, so every activation is **probed**, never trusted (`TRAPS.md` §"Private chain").
 
-Classical Zether is open on every chain with EIP-2537, this one included (owner ruling 2026-10-31, CTR-ZTH-52). Post-quantum
-Zether runs on any chain whose `PQZ` precompile passes the self-test (CTR-PQZ-01) — today only this chain
+Classical Zether is open on every chain with EIP-2537, this one included (owner ruling 2026-10-31, CTR-ZTH-52). PQZ (post-quantum
+zero knowledge, a separate item from classical Zether) runs on any chain whose `PQZ` precompile passes the self-test (CTR-PQZ-01) — today only this chain
 (`docs/history/specs/2026-10-06-pq-zether-design.md`, precompiles `0x…0F01`/`0x…0F10`).
 
 ## gasLimit có đủ không
