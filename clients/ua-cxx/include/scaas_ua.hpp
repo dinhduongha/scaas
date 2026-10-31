@@ -14,7 +14,7 @@ namespace scaas::ua {
 using Bytes = std::vector<uint8_t>;
 
 // code(): UAKeyData, UAIdInNativeSpace, UAKindUnknown, UAKindNotDerived, UAKindNotNative, UAIdFormat, UAPurposeUnknown, UAPqzHolder, UAKemHolder,
-// UAKemVersion, UAKemKeyLength, UAKemScheme, UAPqzPopHash, UAPqzKeySet.
+// UAKemVersion, UAKemKeyLength, UAKemScheme, UAPqzPopHash, UAPqzKeySet, UAArgument (registrationArgs only).
 // reason(): the label after "UAKeyData: " (empty for every other code).
 class Error : public std::runtime_error {
 public:
@@ -126,5 +126,11 @@ Bytes uaAuthDigest(const Domain& d, const Bytes& ua, const Bytes& purposeTag, co
 Bytes memberDigest(const Bytes& structureUa, const Bytes& uaMsg);
 std::string canonicalId(const std::string& text);
 Bytes encodeMsig(uint16_t threshold, const std::vector<Member>& members);
+// The registry's explicit arguments of a registration, JSON in and out. In: {kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop,
+// kemCommit}: bytes as "0x…" hex, an absent field is empty, an msig's pop is [{index, keyData, sig}], kemCommit true / false forces the
+// KEM form (absent: the hash commit only when the full call is over 261,909 B). Out: {args, kemFill, calldataLength,
+// kemFillCalldataLength}: args.entry names the registry entry, kemFill is the setKemKey(ua, 0, …) that stores a hash-committed key
+// (null otherwise). UAArgument when the input is not this JSON.
+std::string registrationArgs(const std::string& input);
 
 }  // namespace scaas::ua

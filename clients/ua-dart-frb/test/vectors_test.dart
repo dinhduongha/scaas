@@ -223,7 +223,6 @@ void main() {
   HolderPop register(Map row, {bool hashOnly = false}) {
     final a = row['attrs'] as Map;
     final key = bytes(a['pqzKey']), pop = bytes(row['pqzPop']), hash = bytes(a['pqzPopHash']), pk = bytes(a['kemPk']);
-    expect(a['kemVersion'], 0, reason: 'register takes no KEM version (UAAttrs\' word: 0)');
     return holderPopMessage(
         kind: row['kind'],
         ua: b32(row['ua']),
@@ -431,5 +430,79 @@ void main() {
     expect(hx(holder(kind: 0x0130, kemPk: Uint8List(0)).message), hx(holder(kind: 0x0130).message));
     // a zero-length proof hash is absent (same as no hash)
     expect(hx(holder(kind: 0x0130, pqzPopHash: Uint8List(0)).message), hx(holder(kind: 0x0130).message));
+  });
+
+  /// clientkeys registrationArgs' input of a registration row; an msig's pop is its typed member list.
+  Map<String, dynamic> regInput(Map r) => {
+        'kind': r['kind'],
+        'keyData': r['keyData'],
+        'pqzKey': r['attrs']['pqzKey'],
+        'pqzPopHash': r['attrs']['pqzPopHash'],
+        'pqzPop': r['pqzPop'],
+        'kemPk': r['attrs']['kemPk'],
+        'pop': r['args']['pop'],
+      };
+  Map<String, dynamic> regArgs(Map<String, dynamic> i) => jsonDecode(registrationArgs(input: jsonEncode(i)));
+
+  test('registration args', () {
+    var commits = 0;
+    for (final r in regs) {
+      final name = r['name'] as String;
+      final a = regArgs({...regInput(r), 'kemCommit': false});
+      expect(a['args'], r['args'], reason: name);
+      expect(a['kemFill'], isNull, reason: name);
+      expect(a['kemFillCalldataLength'], isNull, reason: name);
+      expect(regArgs(regInput(r))['args'], r['args'], reason: '$name: under the limit, the full key');
+      if (r['attrs']['kemPk'] == '0x') {
+        expect((r as Map).containsKey('kemCommit'), isFalse, reason: name);
+        continue;
+      }
+      final c = regArgs({...regInput(r), 'kemCommit': true});
+      expect(c['args'], r['kemCommit']['register'], reason: name);
+      expect(c['kemFill'], r['kemCommit']['fill'], reason: name);
+      expect(c['kemFillCalldataLength'], 2020, reason: name);
+      commits++;
+    }
+    expect(commits, regs.where((r) => (r as Map).containsKey('kemCommit')).length);
+    expect(commits, greaterThan(0));
+    const typed = {
+      0x0100: ('registerWebAuthn', 580),
+      0x0110: ('registerMuSig2', 1124),
+      0x0112: ('registerMuSig2', 1124),
+      0x0111: ('registerFrost', 2308),
+      0x0113: ('registerFrost', 2308),
+    };
+    final valid = rows(load('kinds.json'), 'valid');
+    final keyed = valid.where((v) => typed.containsKey(v['kind'])).toList();
+    expect(keyed.length, 6);
+    for (final v in keyed) {
+      // no attributes, a 32-byte pop (cast 1.8.5)
+      final a = regArgs({'kind': v['kind'], 'keyData': v['keyData'], 'pop': '0x${'00' * 32}'});
+      expect((a['args']['entry'], a['calldataLength']), typed[v['kind']], reason: v['name']);
+    }
+    expect(regArgs({'kind': 0x0101, 'keyData': valid[1]['keyData']})['args']['entry'], 'register');
+    // the hash commit only over 261,909 B (PQZH n2560-kmax16384's sizes; ua-rs registration_hash_commit_when_over_limit)
+    final x = {
+      'kind': 0x0131,
+      'keyData': '0x${'5a' * 1952}',
+      'pqzKey': '0x${'5a' * 20480}',
+      'pqzPop': '0x${'5a' * 234238}',
+      'kemPk': '0x01${'5a' * 1600}',
+      'pop': '0x${'5a' * 3309}',
+    };
+    expect(regArgs({...x, 'kemCommit': false})['calldataLength'], 262116);
+    final auto = regArgs(x);
+    expect([auto['calldataLength'], auto['kemFillCalldataLength'], auto['kemFill']['version']], [260548, 2020, 0]);
+    for (final (bad, code) in [
+      ('not json', 'UAArgument'),
+      ('{"kind": 65536}', 'UAArgument'),
+      ('{"kind": 257, "keyData": "0xzz"}', 'UAArgument'),
+      ('{"kind": 288, "keyData": "0x00020000", "pop": "0x"}', 'UAArgument'),
+      ('{"kind": 288, "keyData": "0x000200"}', 'UAKeyData'),
+      ('{"kind": 305, "kemPk": "0x0101"}', 'UAKemKeyLength'),
+      ('{"kind": 305, "pqzKey": "0x01", "pqzPopHash": "0x01", "pqzPop": "0x01"}', 'UAPqzPopHash'),
+    ]) {
+      expect(errCode(() => registrationArgs(input: bad)), code, reason: bad);
+    }
   });
 }

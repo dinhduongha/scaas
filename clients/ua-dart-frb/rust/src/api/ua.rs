@@ -312,6 +312,18 @@ pub fn member_digest(structure_ua: [u8; 32], ua_msg: [u8; 32]) -> [u8; 32] {
 pub fn canonical_id(text: String) -> R<String> {
     Ok(scaas_ua::canonical_id(&text)?)
 }
+/// The registry's explicit arguments of a registration, JSON in and out. `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk,
+/// pop, kemCommit}` (bytes as "0x…" hex, an absent field is empty, an msig's `pop` is `[{index, keyData, sig}]`, `kemCommit`
+/// true / false forces the KEM form; absent: the hash commit only when the full call is over 261,909 B). Out: `{args, kemFill,
+/// calldataLength, kemFillCalldataLength}`, `args.entry` the registry entry, `kemFill` the `setKemKey(ua, 0, …)` of a
+/// hash-committed key (null otherwise). `UAArgument` when the input is not this JSON.
+#[frb(sync)]
+pub fn registration_args(input: String) -> R<String> {
+    crate::registration::registration_args_json(&input).map_err(|e| match e {
+        crate::registration::JsonError::Argument => arg(),
+        crate::registration::JsonError::Ua(e) => e.into(),
+    })
+}
 /// Members are `(kind, id, weight)`; a kind outside 0..=0xFFFF is `UAKindUnknown`, a threshold or weight outside u16 (or
 /// more than 65535 members) is `UAArgument`.
 #[frb(sync)]

@@ -286,6 +286,14 @@ U8Array32 memberDigest({
 String canonicalId({required String text}) =>
     ScaasUa.instance.api.crateApiUaCanonicalId(text: text);
 
+/// The registry's explicit arguments of a registration, JSON in and out. `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk,
+/// pop, kemCommit}` (bytes as "0x…" hex, an absent field is empty, an msig's `pop` is `[{index, keyData, sig}]`, `kemCommit`
+/// true / false forces the KEM form; absent: the hash commit only when the full call is over 261,909 B). Out: `{args, kemFill,
+/// calldataLength, kemFillCalldataLength}`, `args.entry` the registry entry, `kemFill` the `setKemKey(ua, 0, …)` of a
+/// hash-committed key (null otherwise). `UAArgument` when the input is not this JSON.
+String registrationArgs({required String input}) =>
+    ScaasUa.instance.api.crateApiUaRegistrationArgs(input: input);
+
 /// Members are `(kind, id, weight)`; a kind outside 0..=0xFFFF is `UAKindUnknown`, a threshold or weight outside u16 (or
 /// more than 65535 members) is `UAArgument`.
 Uint8List encodeMsig({

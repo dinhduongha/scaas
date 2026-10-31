@@ -3,6 +3,8 @@
 //! The caller owns every buffer, so no Rust allocation crosses the ABI. Every export runs inside `guard` (the one
 //! `catch_unwind`): a panic never unwinds into C. Status-returning exports go through `run`, which also sets the
 //! thread-local `scaas_ua_last_error` detail. UNAUDITED.
+mod registration;
+
 use scaas_ua as ua;
 use std::cell::RefCell;
 use std::ffi::{c_char, CStr, CString};
@@ -11,7 +13,7 @@ use std::sync::OnceLock;
 use std::{ptr, slice};
 
 /// Bumped on any breaking signature or layout change; compare with `scaas_ua_abi_version()`.
-pub const SCAAS_UA_ABI_VERSION: u32 = 3;
+pub const SCAAS_UA_ABI_VERSION: u32 = 4;
 
 /// The result of every fallible call: `SCAAS_UA_OK` or one of `SCAAS_UA_ERR_*`.
 pub type ScaasUaStatus = i32;
@@ -100,6 +102,14 @@ impl From<ua::UAError> for Fail {
 }
 fn argument(what: &str) -> Fail {
     Fail(SCAAS_UA_ERR_ARGUMENT, format!("UAArgument: {what}"))
+}
+impl From<registration::JsonError> for Fail {
+    fn from(e: registration::JsonError) -> Self {
+        match e {
+            registration::JsonError::Argument => argument("JSON"),
+            registration::JsonError::Ua(e) => e.into(),
+        }
+    }
 }
 
 thread_local! {
@@ -737,6 +747,20 @@ pub extern "C" fn scaas_ua_canonical_id(text: *const c_char, out: *mut c_char, o
     run(|| {
         let t = std::str::from_utf8(cstr(text)?).map_err(|_| ua::UAError::IdFormat)?;
         write_str(out, out_len, &ua::canonical_id(t)?)
+    })
+}
+
+/// The registry's explicit arguments of a registration, JSON in and out (NUL-terminated; `*out_len` counts the NUL).
+/// `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit}` (bytes as "0x..." hex, an absent field is
+/// empty, an msig's `pop` is `[{index, keyData, sig}]`, `kemCommit` true / false forces the KEM form, absent: the hash commit
+/// only when the full call is over 261,909 B). Out: `{args, kemFill, calldataLength, kemFillCalldataLength}`, `args.entry` =
+/// `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2` or `registerFrost`, `kemFill` the `setKemKey(ua, 0, ...)`
+/// that stores a hash-committed key (null otherwise). `SCAAS_UA_ERR_ARGUMENT` when the input is not this JSON.
+#[no_mangle]
+pub extern "C" fn scaas_ua_registration_args(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    run(|| {
+        let t = std::str::from_utf8(cstr(input)?).map_err(|_| argument("JSON"))?;
+        write_str(out, out_len, &registration::registration_args_json(t)?)
     })
 }
 

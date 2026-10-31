@@ -67,7 +67,7 @@ for name, res, args in [
     ('is_portable_purpose', st, [u8, P]), ('msig_pqz_eligible', st, [u8, sz, P]),
     ('ua_auth_domain_separator', st, [u32, u64, u8, u8, P]),
     ('ua_auth_digest', st, [u32, u64, u8, u8, u8, u8, u8, P]), ('member_digest', st, [u8, u8, P]),
-    ('canonical_id', st, [u8, P, P]), ('encode_msig', st, [u16, P, sz, P, P]),
+    ('canonical_id', st, [u8, P, P]), ('encode_msig', st, [u16, P, sz, P, P]), ('registration_args', st, [u8, P, P]),
 ]:
     f = getattr(LIB, 'scaas_ua_' + name)
     f.restype, f.argtypes = res, args
@@ -176,13 +176,23 @@ def register(row, hash_only=False):
     a = row['attrs']
     pop = b'' if hash_only else b(row['pqzPop'])
     h = b(a['pqzPopHash'])
-    assert int(a['kemVersion']) == 0, 'register takes no KEM version (UAAttrs\' word: 0)'
     return holder(row['kind'], b(row['ua']), b(row['keyData']), b(a['pqzKey']), pop, h if any(h) else b'', b(a['kemPk']))
+
+
+def reg_input(row, **kw):
+    """clientkeys `registrationArgs`' input of a registration row; an msig's pop is its typed member list."""
+    a = row['attrs']
+    return {'kind': row['kind'], 'keyData': row['keyData'], 'pqzKey': a['pqzKey'], 'pqzPopHash': a['pqzPopHash'],
+            'pqzPop': row['pqzPop'], 'kemPk': a['kemPk'], 'pop': row['args']['pop'], **kw}
+
+
+def reg_args(i):
+    return json.loads(text(L.registration_args, json.dumps(i).encode()))
 
 
 class Vectors(unittest.TestCase):
     def test_table_groups_purposes_constants(self):
-        self.assertEqual(L.abi_version(), 3)
+        self.assertEqual(L.abi_version(), 4)
         self.assertEqual(L.kind_count(), len(K['kinds']))
         for i, r in enumerate(K['kinds']):
             with self.subTest(r['name']):
@@ -422,6 +432,47 @@ class Vectors(unittest.TestCase):
                 n += 1
         self.assertEqual(n, len(PV['pqzKeyRecords']))
         self.assertTrue(msig_runs)
+
+    def test_registration_args(self):
+        commits = 0
+        for r in PV['registrations']:
+            with self.subTest(r['name']):
+                a = reg_args(reg_input(r, kemCommit=False))
+                self.assertEqual(a['args'], r['args'])
+                self.assertIsNone(a['kemFill'])
+                self.assertIsNone(a['kemFillCalldataLength'])
+                self.assertEqual(reg_args(reg_input(r))['args'], r['args'])  # under the limit: the full key
+                if r['attrs']['kemPk'] == '0x':
+                    self.assertNotIn('kemCommit', r)
+                    continue
+                c = reg_args(reg_input(r, kemCommit=True))
+                self.assertEqual(c['args'], r['kemCommit']['register'])
+                self.assertEqual(c['kemFill'], r['kemCommit']['fill'])
+                self.assertEqual(c['kemFillCalldataLength'], 2020)
+                commits += 1
+        self.assertEqual(commits, sum('kemCommit' in r for r in PV['registrations']))
+        self.assertGreater(commits, 0)
+        typed = {0x0100: ('registerWebAuthn', 580), 0x0110: ('registerMuSig2', 1124), 0x0112: ('registerMuSig2', 1124),
+                 0x0111: ('registerFrost', 2308), 0x0113: ('registerFrost', 2308)}
+        rows = [v for v in K['valid'] if v['kind'] in typed]
+        self.assertEqual(len(rows), 6)
+        for v in rows:  # no attributes, a 32-byte pop (cast 1.8.5)
+            a = reg_args({'kind': v['kind'], 'keyData': v['keyData'], 'pop': '0x' + '00' * 32})
+            self.assertEqual((a['args']['entry'], a['calldataLength']), typed[v['kind']], v['name'])
+        self.assertEqual(reg_args({'kind': 0x0101, 'keyData': K['valid'][1]['keyData']})['args']['entry'], 'register')
+        # the hash commit only over 261,909 B (PQZH n2560-kmax16384's sizes; ua-rs registration_hash_commit_when_over_limit)
+        x = {'kind': 0x0131, 'keyData': '0x' + '5a' * 1952, 'pqzKey': '0x' + '5a' * 20480, 'pqzPop': '0x' + '5a' * 234238,
+             'kemPk': '0x01' + '5a' * 1600, 'pop': '0x' + '5a' * 3309}
+        self.assertEqual(reg_args({**x, 'kemCommit': False})['calldataLength'], 262116)
+        auto = reg_args(x)
+        self.assertEqual((auto['calldataLength'], auto['kemFillCalldataLength']), (260548, 2020))
+        self.assertEqual(auto['kemFill']['version'], 0)
+        for bad, code in ((b'not json', 'UAArgument'), (b'{"kind": 65536}', 'UAArgument'),
+                          (b'{"kind": 257, "keyData": "0xzz"}', 'UAArgument'), (b'{"kind": 288, "keyData": "0x00020000", "pop": "0x"}', 'UAArgument'),
+                          (b'{"kind": 288, "keyData": "0x000200"}', 'UAKeyData'), (b'{"kind": 305, "kemPk": "0x0101"}', 'UAKemKeyLength'),
+                          (b'{"kind": 305, "pqzKey": "0x01", "pqzPopHash": "0x01", "pqzPop": "0x01"}', 'UAPqzPopHash')):
+            self.assertEqual(code_of(lambda: text(L.registration_args, bad)), code, bad)
+        self.assertEqual(code_of(lambda: text(L.registration_args, None)), 'UAArgument')
 
     def test_portable_purposes(self):
         def portable(tag):

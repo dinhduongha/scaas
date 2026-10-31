@@ -741,6 +741,7 @@ version = "0.1.0"
 dependencies = [
  "cbindgen",
  "scaas-ua",
+ "serde_json",
 ]
 
 [[package]]

@@ -11,6 +11,7 @@ crate-type = ["staticlib"]
 
 [dependencies]
 scaas-ua = { path = "../ua-rs" }
+serde_json = "=1.0.145"
 cxx = "=1.0.202"
 
 [build-dependencies]

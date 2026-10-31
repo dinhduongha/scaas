@@ -149,6 +149,13 @@ std::string canonicalId(const std::string& t) {
         throw Error("UAIdFormat", "");
     }
 }
+std::string registrationArgs(const std::string& input) {
+    try {
+        return call([&] { return std::string(ffi::registration_args(input)); });
+    } catch (const std::invalid_argument&) {
+        throw Error("UAArgument", "");
+    }
+}
 Bytes encodeMsig(uint16_t th, const std::vector<Member>& ms) {
     std::vector<ffi::Member> v;
     for (auto& m : ms) v.push_back(conv(m));

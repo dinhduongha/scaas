@@ -23,7 +23,7 @@
 /**
  * Bumped on any breaking signature or layout change; compare with `scaas_ua_abi_version()`.
  */
-#define SCAAS_UA_ABI_VERSION 3
+#define SCAAS_UA_ABI_VERSION 4
 
 /**
  * The result of every fallible call: `SCAAS_UA_OK` or one of `SCAAS_UA_ERR_*`.
@@ -498,6 +498,18 @@ ScaasUaStatus scaas_ua_member_digest(const uint8_t *structure_ua32,
  * The canonical form of an id (NUL-terminated); non-UTF-8 text is `SCAAS_UA_ERR_ID_FORMAT`.
  */
 ScaasUaStatus scaas_ua_canonical_id(const char *text, char *out, size_t *out_len);
+
+/**
+ * The registry's explicit arguments of a registration, JSON in and out (NUL-terminated; `*out_len` counts the NUL).
+ * `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit}` (bytes as "0x..." hex, an absent field is
+ * empty, an msig's `pop` is `[{index, keyData, sig}]`, `kemCommit` true / false forces the KEM form, absent: the hash commit
+ * only when the full call is over 261,909 B). Out: `{args, kemFill, calldataLength, kemFillCalldataLength}`, `args.entry` =
+ * `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2` or `registerFrost`, `kemFill` the `setKemKey(ua, 0, ...)`
+ * that stores a hash-committed key (null otherwise). `SCAAS_UA_ERR_ARGUMENT` when the input is not this JSON.
+ */
+ScaasUaStatus scaas_ua_registration_args(const char *input,
+                                         char *out,
+                                         size_t *out_len);
 
 /**
  * The `msig` key data for `n` members (`members` may be NULL when `n == 0`): 4 + 36 * n bytes.

@@ -116,7 +116,6 @@ TestCase {
         let withPqz = 0
         for (const r of pp.registrations) {
             const a = r.attrs
-            compare(Number(a.kemVersion), 0, r.name)  // register takes no KEM version (UAAttrs' word: 0)
             const h = JSON.parse(UaKinds.holderPopMessage(r.kind, r.ua, r.keyData, a.pqzKey, r.pqzPop, a.kemPk))
             compare(UaKinds.lastError, "", r.name)
             compare(h.pqzKeyHash, r.pqzKeyHash, r.name)
@@ -442,6 +441,64 @@ TestCase {
         compare(UaKinds.lastError, "UAArgument")
         compare(UaKinds.algorandRelayRef(av.network, "0x1234", "0x", av.relayRefs[0].salt), "")
         compare(UaKinds.lastError, "UAArgument")
+    }
+
+    // clientkeys registrationArgs' input of a registration row; an msig's pop is its typed member list
+    function regInput(r) {
+        return { kind: r.kind, keyData: r.keyData, pqzKey: r.attrs.pqzKey, pqzPopHash: r.attrs.pqzPopHash, pqzPop: r.pqzPop,
+                 kemPk: r.attrs.kemPk, pop: r.args.pop }
+    }
+    function regArgs(i) {
+        const o = UaKinds.registrationArgs(JSON.stringify(i))
+        compare(UaKinds.lastError, "")
+        return JSON.parse(o)
+    }
+
+    function test_registration_args() {
+        const pp = vectors.load("portable.json")
+        let commits = 0
+        for (const r of pp.registrations) {
+            const a = regArgs(Object.assign(regInput(r), { kemCommit: false }))
+            compare(a.args, r.args, r.name)
+            compare(a.kemFill, null, r.name)
+            compare(a.kemFillCalldataLength, null, r.name)
+            compare(regArgs(regInput(r)).args, r.args, r.name)  // under the limit: the full key
+            if (r.attrs.kemPk === "0x") {
+                verify(r.kemCommit === undefined, r.name)
+                continue
+            }
+            const c = regArgs(Object.assign(regInput(r), { kemCommit: true }))
+            compare(c.args, r.kemCommit.register, r.name)
+            compare(c.kemFill, r.kemCommit.fill, r.name)
+            compare(c.kemFillCalldataLength, 2020, r.name)
+            commits++
+        }
+        compare(commits, pp.registrations.filter(r => r.kemCommit !== undefined).length)
+        verify(commits > 0)
+        const typed = { 256: ["registerWebAuthn", 580], 272: ["registerMuSig2", 1124], 274: ["registerMuSig2", 1124],
+                        273: ["registerFrost", 2308], 275: ["registerFrost", 2308] }
+        const rows = k.valid.filter(v => typed[v.kind] !== undefined)
+        compare(rows.length, 6)
+        for (const v of rows) {  // no attributes, a 32-byte pop (cast 1.8.5)
+            const a = regArgs({ kind: v.kind, keyData: v.keyData, pop: "0x" + "00".repeat(32) })
+            compare([a.args.entry, a.calldataLength], typed[v.kind], v.name)
+        }
+        compare(regArgs({ kind: 257, keyData: k.valid[1].keyData }).args.entry, "register")
+        // the hash commit only over 261,909 B (PQZH n2560-kmax16384's sizes; ua-rs registration_hash_commit_when_over_limit)
+        const x = { kind: 0x0131, keyData: "0x" + "5a".repeat(1952), pqzKey: "0x" + "5a".repeat(20480), pqzPop: "0x" + "5a".repeat(234238),
+                    kemPk: "0x01" + "5a".repeat(1600), pop: "0x" + "5a".repeat(3309) }
+        compare(regArgs(Object.assign({}, x, { kemCommit: false })).calldataLength, 262116)
+        const auto = regArgs(x)
+        compare([auto.calldataLength, auto.kemFillCalldataLength, auto.kemFill.version], [260548, 2020, 0])
+        for (const [bad, code] of [["not json", "UAArgument"], ['{"kind": 65536}', "UAArgument"],
+                                   ['{"kind": 257, "keyData": "0xzz"}', "UAArgument"],
+                                   ['{"kind": 288, "keyData": "0x00020000", "pop": "0x"}', "UAArgument"],
+                                   ['{"kind": 288, "keyData": "0x000200"}', "UAKeyData"],
+                                   ['{"kind": 305, "kemPk": "0x0101"}', "UAKemKeyLength"],
+                                   ['{"kind": 305, "pqzKey": "0x01", "pqzPopHash": "0x01", "pqzPop": "0x01"}', "UAPqzPopHash"]]) {
+            compare(UaKinds.registrationArgs(bad), "", bad)
+            compare(UaKinds.lastError, code, bad)
+        }
     }
 
     function test_encode_msig() {

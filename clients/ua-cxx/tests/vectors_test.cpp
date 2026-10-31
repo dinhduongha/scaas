@@ -214,7 +214,6 @@ static std::string mh(const std::optional<Bytes>& m) { return m ? hx(*m) : ""; }
 static HolderPop registerRow(const json& row, bool hashOnly = false) {
     auto& a = row["attrs"];
     Bytes key = bytes(a["pqzKey"]), pop = bytes(row["pqzPop"]), hash = bytes(a["pqzPopHash"]), pk = bytes(a["kemPk"]);
-    CHECK(a["kemVersion"].get<uint64_t>() == 0, "register takes no KEM version (UAAttrs' word: 0)");
     std::optional<Bytes> popArg = (hashOnly || pop.empty()) ? std::nullopt : std::optional<Bytes>(pop);
     std::optional<Bytes> hashArg = hash == Bytes(32) ? std::nullopt : std::optional<Bytes>(hash);
     return holderPopMessage(kind(row["kind"]), bytes(row["ua"]), bytes(row["keyData"]),
@@ -411,13 +410,76 @@ static void holder_refusals() {
     CHECK(holderPopMessage(0x0130, u, {}).message == holderPopMessage(0x0130, u, {}, std::nullopt, std::nullopt, Bytes{}).message, "empty hash is absent");
 }
 
+// clientkeys registrationArgs' input of a registration row; an msig's pop is its typed member list.
+static json regInput(const json& r) {
+    auto& a = r["attrs"];
+    return {{"kind", r["kind"]}, {"keyData", r["keyData"]}, {"pqzKey", a["pqzKey"]}, {"pqzPopHash", a["pqzPopHash"]},
+            {"pqzPop", r["pqzPop"]}, {"kemPk", a["kemPk"]}, {"pop", r["args"]["pop"]}};
+}
+static json regArgs(const json& i) { return json::parse(registrationArgs(i.dump())); }
+static std::string hexOf(const char* byte, size_t n) {
+    std::string s = "0x";
+    for (size_t i = 0; i < n; ++i) s += byte;
+    return s;
+}
+
+static void registration_args() {
+    json p = load("portable.json"), k = load("kinds.json");
+    int commits = 0, withCommit = 0;
+    for (auto& r : p["registrations"]) {
+        std::string name = r["name"];
+        json i = regInput(r), o = i;
+        o["kemCommit"] = false;
+        json a = regArgs(o);
+        CHECK(a["args"] == r["args"], name);
+        CHECK(a["kemFill"].is_null() && a["kemFillCalldataLength"].is_null(), name);
+        CHECK(regArgs(i)["args"] == r["args"], name + ": under the limit, the full key");
+        withCommit += r.contains("kemCommit");
+        if (r["attrs"]["kemPk"] == "0x") { CHECK(!r.contains("kemCommit"), name); continue; }
+        o["kemCommit"] = true;
+        json c = regArgs(o);
+        CHECK(c["args"] == r["kemCommit"]["register"], name);
+        CHECK(c["kemFill"] == r["kemCommit"]["fill"], name);
+        CHECK(c["kemFillCalldataLength"] == 2020, name);
+        ++commits;
+    }
+    CHECK(commits == withCommit && commits > 0, "kemCommit rows");
+    int typed = 0;
+    for (auto& v : k["valid"]) {  // no attributes, a 32-byte pop (cast 1.8.5)
+        uint16_t n = kind(v["kind"]);
+        std::string entry = n == 0x0100 ? "registerWebAuthn" : n == 0x0110 || n == 0x0112 ? "registerMuSig2"
+                          : n == 0x0111 || n == 0x0113 ? "registerFrost" : "";
+        if (entry.empty()) continue;
+        json a = regArgs({{"kind", n}, {"keyData", v["keyData"]}, {"pop", hexOf("00", 32)}});
+        CHECK(a["args"]["entry"] == entry, entry);
+        CHECK(a["calldataLength"] == (n == 0x0100 ? 580 : entry == "registerMuSig2" ? 1124 : 2308), entry);
+        ++typed;
+    }
+    CHECK(typed == 6, "typed key rows");
+    CHECK(regArgs({{"kind", 0x0101}, {"keyData", k["valid"][1]["keyData"]}})["args"]["entry"] == "register", "p256 stays register");
+    // the hash commit only over 261,909 B (PQZH n2560-kmax16384's sizes; ua-rs registration_hash_commit_when_over_limit)
+    json x = {{"kind", 0x0131}, {"keyData", hexOf("5a", 1952)}, {"pqzKey", hexOf("5a", 20480)}, {"pqzPop", hexOf("5a", 234238)},
+              {"kemPk", "0x01" + hexOf("5a", 1600).substr(2)}, {"pop", hexOf("5a", 3309)}};
+    json full = x;
+    full["kemCommit"] = false;
+    CHECK(regArgs(full)["calldataLength"] == 262116, "full");
+    json aut = regArgs(x);
+    CHECK(aut["calldataLength"] == 260548 && aut["kemFillCalldataLength"] == 2020 && aut["kemFill"]["version"] == 0, "auto");
+    for (auto& bad : std::vector<std::pair<std::string, std::string>>{
+             {"not json", "UAArgument"}, {R"({"kind": 65536})", "UAArgument"}, {R"({"kind": 257, "keyData": "0xzz"})", "UAArgument"},
+             {R"({"kind": 288, "keyData": "0x00020000", "pop": "0x"})", "UAArgument"}, {R"({"kind": 288, "keyData": "0x000200"})", "UAKeyData"},
+             {R"({"kind": 305, "kemPk": "0x0101"})", "UAKemKeyLength"},
+             {R"({"kind": 305, "pqzKey": "0x01", "pqzPopHash": "0x01", "pqzPop": "0x01"})", "UAPqzPopHash"}})
+        CHECK(code_of([&] { registrationArgs(bad.first); }) == bad.second, bad.first);
+}
+
 int main(int argc, char** argv) {
     std::map<std::string, void (*)()> tests{
         {"table_groups_purposes_constants", table_groups_purposes_constants}, {"valid_rows", valid_rows},
         {"invalid_rows", invalid_rows}, {"natives_native_space_canonical_ids", natives_native_space_canonical_ids},
         {"messages", messages}, {"structures", structures}, {"portable", portable}, {"kem_record", kem_record},
         {"pqz_key_record", pqz_key_record}, {"portable_purposes", portable_purposes},
-        {"holder_refusals", holder_refusals}};
+        {"holder_refusals", holder_refusals}, {"registration_args", registration_args}};
     if (argc != 2 || !tests.count(argv[1])) { std::fprintf(stderr, "usage: vectors_test <name>\n"); return 2; }
     try { tests[argv[1]](); } catch (const std::exception& e) { std::fprintf(stderr, "exception: %s\n", e.what()); return 1; }
     return failures ? 1 : 0;

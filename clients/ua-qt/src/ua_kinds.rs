@@ -120,6 +120,13 @@ pub mod qobject {
         /// `members` is a JSON array of `[kind, "0x<id32>", weight]`.
         #[qinvokable] #[cxx_name = "encodeMsig"]
         fn encode_msig(self: Pin<&mut Self>, threshold: i32, members: &QString) -> QString;
+        /// The registry's explicit arguments of a registration, JSON in and out. `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop,
+        /// kemPk, pop, kemCommit}` (an absent field is empty, an msig's `pop` is `[{index, keyData, sig}]`, `kemCommit` true / false
+        /// forces the KEM form; absent: the hash commit only when the full call is over 261,909 B). Out: `{args, kemFill,
+        /// calldataLength, kemFillCalldataLength}`, `args.entry` the registry entry, `kemFill` the `setKemKey(ua, 0, …)` of a
+        /// hash-committed key (null otherwise).
+        #[qinvokable] #[cxx_name = "registrationArgs"]
+        fn registration_args(self: Pin<&mut Self>, input: &QString) -> QString;
     }
 }
 
@@ -379,6 +386,14 @@ impl qobject::UaKinds {
     }
     pub fn canonical_id(self: Pin<&mut Self>, text: &QString) -> QString {
         QString::from(&self.run(|| from_ua(ua::canonical_id(&s(text)))))
+    }
+    pub fn registration_args(self: Pin<&mut Self>, input: &QString) -> QString {
+        QString::from(&self.run(|| {
+            crate::registration::registration_args_json(&s(input)).map_err(|e| match e {
+                crate::registration::JsonError::Argument => ARG,
+                crate::registration::JsonError::Ua(e) => e.code(),
+            })
+        }))
     }
     pub fn encode_msig(self: Pin<&mut Self>, threshold: i32, members: &QString) -> QString {
         self.hex(|| {

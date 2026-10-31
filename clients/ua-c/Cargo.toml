@@ -11,6 +11,7 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 scaas-ua = { path = "../ua-rs" }
+serde_json = "=1.0.154"
 
 [dev-dependencies]
 cbindgen = { version = "=0.28.0", default-features = false }
