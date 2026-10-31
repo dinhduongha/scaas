@@ -161,6 +161,12 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      in sync and likely cuts gas (not measured). Do it when a `zether-near` / `zether-algorand` / `zether-soroban` track
      needs it, or for EVM gas — measure first; on EVM a new verifier means a new implementation version (CTR-ZTH-20);
      security review of the weight derivation and of which untrusted points need a subgroup check.
+     **Rename `private7622` → `scaas-testnet`** (owner 2026-10-31; replaces the 2026-10-07 name in NET-EVM-02): the
+     Foundry profile, `src/chains/private7622/`, the `chain-uids.json` key, `node.example.toml`, seeds, env var names,
+     test vectors, CI (`FOUNDRY_PROFILE`), `scaas-node/tests/e2e*.rs` and current docs (NET-EVM-01/02/06, decisions,
+     contracts/README, settlement, metatx, architecture, RUNBOOK); history / plans / reviews stay. The future mainnet
+     is `scaas-mainnet`. After `fs3-t13-rollout` merges (it edits the RUNBOOK, `chain-uids.json`, `node.example.toml`);
+     gates: forge with the renamed profile, node e2e, docs_check.
   5. fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) **together with Task 9 calibration**
      (owner 2026-10-29: one measurement run; it still needs the owner's go at run time, other heavy sessions stopped)
      and, where possible, the metatx-split e2e owed on a real node → Task 14 (wasm32 limb path).
