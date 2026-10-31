@@ -1,0 +1,1 @@
+typed-signing backup (2026-10-31): `r33_keys.json` and `schnorr_bls12381.json` before the typed portable PoP (raw `zether_registration_digest`; the typed `UARegistration` digest under the "SCaaS UA Portable" domain replaces it, TS-D1 / TS-D3). Superseded; kept for reference (`ref/pre-typed-signing` holds the same bytes).
