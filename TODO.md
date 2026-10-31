@@ -393,7 +393,8 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 (2026-10-17) — details in COMPLETED.md.
 - [ ] **P6h** clients and WASM (browser wallet bundle builds with `SV=0`, owner 2026-10-13), **P6i** node, **P6j**
   review — after the token-family rename (owner 2026-10-19).
-- [ ] **P6c owner step:** audit the PQ verifiers and the expanded-key cache before any public chain enables a PQ kind.
+- [ ] **P6c owner step:** audit the PQ verifiers and the expanded-key cache (labelled unaudited; not a deploy gate, owner
+  2026-10-31).
 - [ ] **P6f follow-ups (owner):** follower + public RPC, restart policy (the SCaaS testnet node has none), deleting backups; the
   hourly `watch.sh` check is manual. (P6f done and live on the SCaaS testnet since 2026-10-16.)
 - [ ] **P6-PUB drafts** (owner 2026-10-14, session 4): after P6, the live precompiles and P6-ANON, the controller drafts
