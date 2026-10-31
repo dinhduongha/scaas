@@ -283,7 +283,8 @@ Polygon, Base, …) keep 7702, so the contract rule above applies on every chain
 SCaaS testnet can no longer exercise 7702 after the reset. Verified on 7622 after the 2026-10-31 reset: a type-4 transaction is refused with `-32000 InvalidTxType`.
 
 <a id="NET-EVM-08"></a>**NET-EVM-08** — **The SCaaS testnet's node never signs for an RPC caller** (owner ruling 2026-10-31):
-one node (the Clique sealer) with three JSON-RPC endpoints — public `8545` / `8546` (`Eth`, `Net`, `Web3`, `Subscribe`;
+since the node split ([NET-EVM-10](#NET-EVM-10)) the endpoints below are on the key-less `rpc` node and the sealer
+answers only on its own container loopback; before it, one node (the Clique sealer) with three JSON-RPC endpoints — public `8545` / `8546` (`Eth`, `Net`, `Web3`, `Subscribe`;
 request limits `MaxBatchSize` 100, `MaxRequestBodySize` 4 MiB, `GasCap` = the block gas limit, `Timeout` 20 s,
 `RequestQueueLimit` 500), the operator's `8550` bound to the node container's own loopback and not published
 (`Admin`, `Clique`, `Debug`, `Trace`, `Parity`, `TxPool`, `Eth`, `Net`, `Web3`; reached from the host through a
@@ -303,7 +304,24 @@ after every block and the home-page block list stops; on the pruned node its cat
 forever, about 1.5 CPU, until a one-off cleanup of those rows, `blockscout-code-backfill.py --prune-coin-balances`,
 rerun after an outage longer than the pruning window; archive mode at the sealer / RPC node split is the root fix);
 the UI is published on host port 8558 (owner 2026-10-31: not 3000) and the API on 4000; the frontend image is pinned
-by digest; one-line stop in the RUNBOOK.
+by digest; one-line stop in the RUNBOOK. Since the node split ([NET-EVM-10](#NET-EVM-10)) it reads the archive `rpc`
+node, and neither the code backfill nor the coin-balance cleanup is needed.
+
+<a id="NET-EVM-10"></a>**NET-EVM-10** — **The SCaaS testnet runs two nodes: a `sealer` and a public `rpc`** (owner
+ruling 2026-10-31): in the stack's one `docker-compose.yml`, both on the PQZ image. `sealer` holds the Clique key
+(keystore + `UnlockAccounts`, Mining on), stays pruned and small (1 GiB cap; 768 MiB proved too tight under the PQZ e2e), publishes no port, serves JSON-RPC only
+on its container loopback (admin through a sidecar) and sits on an internal Docker network shared with `rpc` alone
+(no gateway, no host address), its one static peer. `rpc` has no key and no unlocked account, Mining off, runs
+archive (`Pruning.Mode` `None` on the patricia backend, `FlatDb.Enabled` false), full-syncs from `sealer`, carries
+the public 8545 / 8546, the Docker-only 8547 for Blockscout and its own loopback 8550, and the P2P port 30303:
+**external nodes connect to `rpc` (the sentry), never to the sealer**; both nodes have fixed node keys. The sealer runs `TxPool.AcceptTxWhenNotSynced` true: as the sole signer it has no
+peer ahead of it, its sync mode turns `Disconnected` about 10 minutes after each session starts, and Nethermind then
+drops every transaction gossiped by `rpc` while blocks keep flowing. Both nodes run `TxPool.MaxTxSize` 2 MiB (owner
+ruling 2026-10-31: the 4 MiB request body carries at most a 2 MiB raw transaction as hex; the PQZH M = 16 auditor-on
+proof is 544 KB), although Amsterdam's per-transaction gas cap already limits a transaction to about 262 KB of calldata. Why: the key
+leaves the process that answers RPC; peers and callers that misbehave reach only `rpc`; Blockscout gets the old-block
+state a pruned node lacks. Topology, enodes, start / stop order and recovery: [RUNBOOK](../../pqz-core/nethermind/chain/RUNBOOK.md)
+§ Node split. Mainnet 22776: the same topology is proposed; the owner decides at launch.
 
 ## 6. Limitations
 

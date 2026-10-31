@@ -1519,3 +1519,501 @@ mba_explorer_db n 140 peak cpu 10.3 mem 122 | 2nd half cpu med 1.2 max 10.3 mem 
 mba_chain_node_nethermind n 140 peak cpu 8.5 mem 479 | 2nd half cpu med 1.9 max 3.2 mem med 478 MiB
 (R3, before the cleanup: backend 149 % median / 347 MiB, node 60–88 %; R1-era baseline: backend 1.7 % / 306 MiB, node 1.5–3 %)
 balance: /api/v2/addresses/0x1efF47bc…A718 4999999999999047705783999978991 = cast balance; UI :8558/address/… 200
+
+== S (node split) 2026-10-31 (owner ruling: sealer + rpc in the same docker-compose.yml; rpc archive; sentry for external peers)
+Stack L=/home/dockers/mba-chain-nethermind. Backups: docker-compose.yml / config.json / jsonrpc.filter / genesis.json .bak-pre-split-20261031-0844;
+config.rpc.json.bak-pre-onedialer-20261031-0919, .bak-pre-onlystatic-20261031-0921, .bak-onlystatic-noStatic-…; config.json.bak-pre-acceptnotsynced-…;
+docker-compose.yml.bak-pre-sealer1g-…; config.json / config.rpc.json .bak-pre-maxtx2m-…; data copy data/nethermind_data.pre-split-20261031 (211 files).
+Config names checked against the image (nethermind --help): Pruning.Mode, FlatDb.Enabled, Network.StaticPeers / OnlyStaticPeers /
+MaxActivePeers / ExternalIp / FilterPeersByRecentIp, KeyStore.EnodeKeyFile, Init.MemoryHint, Mining.Enabled, TxPool.AcceptTxWhenNotSynced.
+-- S1 phase 1 01:45:02Z: rpc started without ports (compose override 'ports: !reset []'), old node attached to chain-p2p as 10.76.24.10
+   (docker network connect); rpc: 'State backend: patricia (flat DB disabled)', 'Using archive mode State Db config', blocks 0..1670 in ~15 s;
+   block 0x680 hash/stateRoot equal on both; eth_getBalance(0x7e5f…, 0x1) = 0x3f1bdf10116048a59340000000 on rpc, -32002 No state on the node.
+   Sealer config dry run (--network none, tmpfs datadir, --Mining.Enabled false): unlocked, PQZ-START, JSON-RPC on 127.0.0.1:8550 only, filter on.
+-- S2 switch (docker stop node, data copy, config.json -> sealer, rm container, up sealer, up rpc with ports, recreate explorer-backend):
+head before stop: 1704 1793411279 at 2026-10-31T01:48:03Z
+mba_chain_node_nethermind
+stopped 2026-10-31T01:48:03Z
+34384	/d/nethermind_data
+34376	/d/nethermind_data.pre-split-20261031
+211
+211
+data copied 2026-10-31T01:48:04Z
+mba_chain_node_nethermind
+ Container mba_chain_sealer Creating 
+ Container mba_chain_sealer Created 
+ Container mba_chain_sealer Starting 
+ Container mba_chain_sealer Started 
+ Container mba_chain_rpc Recreate 
+ Container mba_chain_rpc Recreated 
+ Container mba_chain_rpc Starting 
+ Container mba_chain_rpc Started 
+both up 2026-10-31T01:48:05Z
+1703 1793411274 01:47:54
+1704 1793411279 01:47:59
+1705 1793411291 01:48:11
+1706 1793411296 01:48:16
+ Container mba_explorer_backend Recreate 
+ Container mba_explorer_backend Recreated 
+ Container mba_explorer_backend Starting 
+ Container mba_explorer_backend Started 
+2026-10-31T01:48:33Z
+-- S3 network recreate with com.docker.network.bridge.inhibit_ipv4 (first checks: host tcp 10.76.24.10:30303 rc=0, i.e. reachable):
+network recreate (inhibit_ipv4) start 2026-10-31T01:50:48Z head {"jsonrpc":"2.0","result":"0x6c8","id":1}
+mba_chain_rpc
+mba_chain_sealer
+mba_chain_rpc
+mba_chain_sealer
+mba-chain-nethermind_chain-p2p
+ Network mba-chain-nethermind_chain-p2p Creating 
+ Network mba-chain-nethermind_chain-p2p Creating 
+ Network mba-chain-nethermind_chain-p2p Created 
+ Network mba-chain-nethermind_chain-p2p Created 
+ Container mba_chain_sealer Creating 
+ Container mba_chain_sealer Created 
+ Container mba_chain_sealer Starting 
+ Container mba_chain_sealer Started 
+ Container mba_chain_rpc Creating 
+ Container mba_chain_rpc Created 
+ Container mba_chain_rpc Starting 
+ Container mba_chain_rpc Started 
+internal=true opts=map[com.docker.network.bridge.inhibit_ipv4:true]
+up 2026-10-31T01:50:50Z
+host has no 10.76.24 address
+1734 01:50:36
+1735 01:50:41
+1736 01:50:46
+1737 01:50:55
+-- S4 checks (script and output; scratch split-checks.sh):
+2026-10-31T01:51:03Z
+rpc mba-net IP 192.168.0.2; sealer chain-p2p IP 10.76.24.10
+== published ports: sealer [] rpc [8545/tcp -> 0.0.0.0:8545 8545/tcp -> [::]:8545 8546/tcp -> 0.0.0.0:8546 8546/tcp -> [::]:8546 30303/tcp -> 0.0.0.0:30303 30303/tcp -> [::]:30303 30303/udp -> 0.0.0.0:30303 30303/udp -> [::]:30303 ]
+== networks: sealer mba-chain-nethermind_chain-p2p=10.76.24.10  rpc mba-chain-nethermind_chain-p2p=10.76.24.11 mba-chain-nethermind_mba-net=192.168.0.2 
+== chain-p2p members: mba_chain_rpc mba_chain_sealer  internal=true
+== heads: sealer / rpc / public
+{"jsonrpc":"2.0","result":"0x6ca","id":1} rc=0
+{"jsonrpc":"2.0","result":"0x6ca","id":1} rc=0
+{"jsonrpc":"2.0","result":"0x6ca","id":1} rc=0
+== peers (sidecar admin_peers: enode, inbound)
+mba_chain_sealer: [('enode://daa72efa1376e41b…@10.76.24.11:30303', None)]
+mba_chain_rpc: [('enode://a4f1adb3164ee2c2…@10.76.24.10:30303', None)]
+== admin via sidecar: clique_getSigners on both, admin_nodeInfo enodes
+{"jsonrpc":"2.0","result":["0xde36845cc887783397b2808c13f2ed95dc2646bb"],"id":1} rc=0
+"enode":"enode://a4f1adb3164ee2c2e69d73a23ab88ec166dfd2afdc735bd2a6988f3e11999ed0d78f907808c5f42ffe8f9126306541c7542f1ef81c69d34d1b28999f840ee442@10.76.24.10:30303"
+{"jsonrpc":"2.0","result":["0xde36845cc887783397b2808c13f2ed95dc2646bb"],"id":1} rc=0
+"enode":"enode://daa72efa1376e41b62e43c22991b185a80e0731048b60a9ac7ea26a4f14c15ac4e9084f9df1eed3063aaecb967de472a440090745e2384dbf93f597a8d385737@192.168.1.72:30303"
+== eth_accounts on rpc: 8545 host, 8545 LAN, 8547 mba-net, 8550 sidecar (8546 ws below)
+{"jsonrpc":"2.0","result":[],"id":1} rc=0
+{"jsonrpc":"2.0","result":[],"id":1} rc=0
+{"jsonrpc":"2.0","result":[],"id":1} rc=0
+{"jsonrpc":"2.0","result":[],"id":1} rc=0
+== sealer unreachable: from the host (10.76.24.10 8550 / 8545 / 30303), from mba-net (name sealer, IP), from explorer-backend
+ rc=28
+ rc=28
+host tcp 10.76.24.10:30303 rc=124
+ rc=28
+ rc=28
+mba-net nc 10.76.24.10:30303 rc=1
+explorer-backend 10.76.24.10:30303 rc=28
+== LAN address: nothing of the sealer (8550 / 8547 refused; 8545 is rpc)
+ rc=7
+ rc=7
+== rpc 8547 from mba-net (Blockscout path): eth_blockNumber, txpool_status
+{"jsonrpc":"2.0","result":"0x6d2","id":1} rc=0
+{"jsonrpc":"2.0","result":{"pending":"0x0","queued":"0x0"},"id":1} rc=0
+== namespaces on public 8545
+admin_nodeInfo: {"jsonrpc":"2.0","error":{"code":-32600,"message":"The method 'admin_nodeInfo' is found but the namespace 'Adm
+clique_getSigners: {"jsonrpc":"2.0","error":{"code":-32600,"message":"The method 'clique_getSigners' is found but the namespace '
+debug_getBadBlocks: {"jsonrpc":"2.0","error":{"code":-32600,"message":"The method 'debug_getBadBlocks' is found but the namespace 
+trace_block: {"jsonrpc":"2.0","error":{"code":-32600,"message":"The method 'trace_block' is found but the namespace 'Trace'
+txpool_status: {"jsonrpc":"2.0","error":{"code":-32600,"message":"The method 'txpool_status' is found but the namespace 'TxPo
+personal_listAccounts: {"jsonrpc":"2.0","error":{"code":-32600,"message":"The method 'personal_listAccounts' is found but the namespa
+parity_enode: {"jsonrpc":"2.0","error":{"code":-32600,"message":"The method 'parity_enode' is found but the namespace 'Parit
+== filter eth_sendTransaction: rpc 8545 / 8547 / 8550, sealer 8550
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sendTransaction does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sendTransaction does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sendTransaction does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sendTransaction does not exist/is not available"},"id":1} rc=0
+== filter ETH_SENDTRANSACTION: rpc 8545 / 8547 / 8550, sealer 8550
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method ETH_SENDTRANSACTION does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method ETH_SENDTRANSACTION does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method ETH_SENDTRANSACTION does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method ETH_SENDTRANSACTION does not exist/is not available"},"id":1} rc=0
+== filter eth_sign: rpc 8545 / 8547 / 8550, sealer 8550
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sign does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sign does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sign does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sign does not exist/is not available"},"id":1} rc=0
+== filter eth_signTransaction: rpc 8545 / 8547 / 8550, sealer 8550
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_signTransaction does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_signTransaction does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_signTransaction does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_signTransaction does not exist/is not available"},"id":1} rc=0
+== filter eth_signTypedData_v4: rpc 8545 / 8547 / 8550, sealer 8550
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_signTypedData_v4 does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_signTypedData_v4 does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_signTypedData_v4 does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_signTypedData_v4 does not exist/is not available"},"id":1} rc=0
+== filter batch on 8545
+[{"jsonrpc":"2.0","result":"0x1dc6","id":1},{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sendTransaction does not exist/is not available"},"id":1}] rc=0
+== archive on rpc (8547 from mba-net): eth_getBalance at blocks 0 and 1 (key 0x…01 address), eth_getCode at block 0x300
+{"jsonrpc":"2.0","result":"0x3f1bdf10116048a59340000000","id":1} rc=0
+{"jsonrpc":"2.0","result":"0x3f1bdf10116048a59340000000","id":1} rc=0
+{"jsonrpc":"2.0","result":"0x608060405234801561000f575f5ffd5b5060043610610055575f3560e01c8
+== the same on the sealer (pruned): eth_getBalance at block 1
+{"jsonrpc":"2.0","error":{"code":-32002,"message":"No state available for block 1 (0x5f54d6953eb025933d332c9d29915ac88202f4e9091eb2c4477fb359c5794f83)"},"id":1} rc=0
+-- S5 WS, tx path, type-4:
+2026-10-31T01:51:56Z
+-- WS 8546
+eth_chainId "0x1dc6"
+eth_accounts []
+eth_sendTransaction: Error: server returned an error response: error code -32601: the method eth_sendTransaction does not exist/is not available
+eth_sign: Error: server returned an error response: error code -32601: the method eth_sign does not exist/is not available
+ETH_SIGNTRANSACTION: Error: server returned an error response: error code -32601: the method ETH_SIGNTRANSACTION does not exist/is not available
+eth_signTypedData_v4: Error: server returned an error response: error code -32601: the method eth_signTypedData_v4 does not exist/is not available
+admin_nodeInfo: Error: server returned an error response: error code -32600: The method 'admin_nodeInfo' is found but the namespace 'Admin' is disabled for 
+-- EIP-1559 transfer through public 8545 (signed locally, eth_sendRawTransaction)
+from 0x1efF47bc3a10a45D4B230B5d10E37751FE6AA718
+type 0x2 status 0x1 block 1751 tx 0xf943674e9bfae27e26d2fe62ca6ac33e7c73aa515a5921ef6ced6f92d772a475
+block 1751 signer (clique_getBlockSigner on the sealer via sidecar): {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params"},"id":1}
+-- type-4 (EIP-7702) through public 8545
+cast send --auth: Error: server returned an error response: error code -32000: transaction invalid, InvalidTxType: Transaction type in Custom is not supported.
+block 1751 hash  signer: {"jsonrpc":"2.0","error":{"code":-32602,"message":"missing value for required argument 0"},"id":1}
+block 1751 hash 0xab0ac2c672345cd8f565a5d6381188a1dcc7dad6f4f955c7919acc8ece14a77c signer: {"jsonrpc":"2.0","result":"0xde36845cc887783397b2808c13f2ed95dc2646bb","id":1}
+-- S6 probe through http://192.168.1.72:8545: 420 ok / 0 FAIL; probe: all checks passed; rc=0
+-- S7 Blockscout on rpc:8547:
+2026-10-31T01:54:00Z
+node tip: 1774
+api main-page blocks head: 1773 2026-10-31T01:53:55.000000Z
+api stats: {'total_blocks': '1773', 'total_transactions': '303', 'total_addresses': '86'}
+DB max(block): 1773
+DB unfetched coin balances: 0
+DB contracts without code (created contract addresses with NULL contract_code): 0
+backend log since recreate: 'No state' 0, errors 0, CoinBalance crashes 0
+UI: 200
+01:57:28Z Blockscout /api/v2/transactions?filter=pending: 1 item 0x27a64d7b46830a00935efe646e1d51ed453ff1c5c63a51d1fcacd734426682dd result pending
+later mined: status 0x1 block 1817
+blockscout now: success 1817
+   coin balances: the 1,734 rows deleted by the 01:31Z cleanup re-inserted from address_coin_balances-unfetched-bak-20261031-0831.csv
+   (temp table, insert … on conflict do nothing: COPY 1734, INSERT 0 1734), backend restarted 01:54:32Z; 01:54:59Z: unfetched 0, No state 0;
+   spot check value = cast balance at the block for 0x7e5f…@109, @137, 0x1eff…@311. => code backfill and --prune-coin-balances not needed with rpc.
+-- S8 first PQZ e2e (01:53:47–02:06:50Z): 127 ok, 1 FAIL (aborted: no receipt for mtxRollOver 0x50d04bb5…51e4, nonce 255); log
+   smartcontracts/evm/runs/2026-10-31-fs3-t13-pqz-7622-node-split-1fail-sealer-not-synced.txt. The tx sat in rpc's pool (pending 1), sealer pool 0;
+   eth_sendRawTransaction of the same raw tx on the sealer sidecar was accepted as new and mined in block 1970.
+-- S9 diagnosis: sealer log 'Waiting for peers... 650s' first at 02:01:44Z (start 01:50:54Z) = when gossip stopped; decompiled 2.2.0
+   (ilspycmd): SyncedTxGossipPolicy listens only if (syncMode & WaitingForBlock) != 0 unless TxPool.AcceptTxWhenNotSynced;
+   Eth62ProtocolHandler: 'TransactionsMessage ignored, syncing' (trace). A one-dialer change (rpc no static peer, OnlyStaticPeers) did not fix it:
+== burst 1 (right after the one-dialer restart) 2026-10-31T02:22:11Z
+tx 1 0xa971b79f39… status 0x1 block 2114 dt 9.2 s
+tx 2 0x1c02ec0e7e… status 0x1 block 2116 dt 10.8 s
+tx 3 0x9c429e55b3… status 0x1 block 2118 dt 9.0 s
+tx 4 0xe65e0c5584… status 0x1 block 2120 dt 10.8 s
+tx 5 0x182d3092b5… status 0x1 block 2122 dt 9.0 s
+tx 6 0x78e9616019… status 0x1 block 2124 dt 10.8 s
+big calldata 60000 B 0x0305a46462… status 0x1 block 2126 gasUsed 3855000
+pools: rpc {"jsonrpc":"2.0","result":{"pending":"0x0","queued":"0x0"},"id":1} sealer {"jsonrpc":"2.0","result":{"pending":"0x0","queued":"0x0"},"id":1}
+== burst 2 (late check, ~12 min after the one-dialer restart at 02:21:50Z) 2026-10-31T02:34:15Z
+tx 1 NOT MINED in 30 s rc=1
+mba_chain_rpc: [('a4f1adb3164e', '10.76.24.10:33760', 'inbound')]
+mba_chain_sealer: [('daa72efa1376', '10.76.24.11:30303', 'outbound')]
+sealer "Waiting for peers" lines since 02:21:50Z: 8
+   sealer-side reconnect (admin_removePeer/admin_addPeer of rpc via the sealer sidecar):
+02:35:23
+before: sealer stage {"jsonrpc":"2.0","result":{"currentStage":"Disconnected"},"id":1} rpc pool {"jsonrpc":"2.0","result":{"pending":"0x1","queued":"0x0"},"id":1}
+{"jsonrpc":"2.0","result":true,"id":1}
+{"jsonrpc":"2.0","result":true,"id":1}
+02:35:29 sealer stage WaitingForBlock rpc pool 0x1 sealer pool 0x1
+02:35:33 sealer stage WaitingForBlock rpc pool 0x1 sealer pool 0x1
+02:35:38 sealer stage WaitingForBlock rpc pool 0x0 sealer pool 0x0
+02:35:42 sealer stage WaitingForBlock rpc pool 0x0 sealer pool 0x0
+02:35:47 sealer stage WaitingForBlock rpc pool 0x0 sealer pool 0x0
+02:35:51 sealer stage WaitingForBlock rpc pool 0x0 sealer pool 0x0
+02:35:56 sealer stage WaitingForBlock rpc pool 0x0 sealer pool 0x0
+02:36:01 sealer stage WaitingForBlock rpc pool 0x0 sealer pool 0x0
+mba_chain_rpc: [('a4f1adb3164e', '10.76.24.10:30303', 'outbound')]
+mba_chain_sealer: [('daa72efa1376', '10.76.24.11:53784', 'inbound')]
+   config.rpc.json restored to mutual static peers (02:36:31Z).
+-- S10 fix 02:38:18Z: sealer config.json TxPool.AcceptTxWhenNotSynced true (controller go), sealer recreated:
+head 2305 at 2026-10-31T02:38:18Z
+ Container mba_chain_sealer Recreate 
+ Container mba_chain_sealer Recreated 
+ Container mba_chain_sealer Starting 
+ Container mba_chain_sealer Started 
+2026-10-31T02:38:18Z
+2304 02:38:10
+2305 02:38:15
+2306 02:38:24
+2307 
+2308 
+mba_chain_rpc: [('a4f1adb3164e', '10.76.24.10:48042', 'inbound')]
+mba_chain_sealer: [('daa72efa1376', '10.76.24.11:30303', 'outbound')]
+== burst 3 (right after the sealer fix restart 02:38:18Z) 2026-10-31T02:38:34Z
+tx 1 0x7a79ac0055… status 0x1 block 2310 dt 10.9 s
+tx 2 0x57c86347d1… status 0x1 block 2312 dt 9.0 s
+tx 3 0xd545156070… status 0x1 block 2314 dt 10.8 s
+tx 4 0x37acabb80b… status 0x1 block 2316 dt 9.0 s
+tx 5 0x64f32e95bf… status 0x1 block 2318 dt 10.8 s
+big calldata 60000 B 0x99d5e182fe… status 0x1 block 2320 gasUsed 3855000
+pools: rpc {"jsonrpc":"2.0","result":{"pending":"0x0","queued":"0x0"},"id":1} sealer {"jsonrpc":"2.0","result":{"pending":"0x0","queued":"0x0"},"id":1}
+sealer stage {"jsonrpc":"2.0","result":{"currentStage":"WaitingForBlock"},"id":1}
+-- S11 PQZ e2e after the fix (02:39:44–02:51:44Z): 256 ok / 0 FAIL, rc 0, elapsed 720 s; log smartcontracts/evm/runs/2026-10-31-fs3-t13-pqz-7622-node-split.txt
+-- S12 15 min after the fix restart:
+02:53:39
+sealer debug_getSyncStage (15 min after the 02:38:18Z restart): {"jsonrpc":"2.0","result":{"currentStage":"Disconnected"},"id":1}
+sealer 'Waiting for peers' lines since restart: 24, first: 31 Oct 02:49:43 | Waiting for peers... 680s 
+== burst 4 (late check, >15 min after the sealer fix restart) 2026-10-31T02:53:40Z
+tx 1 0xfe3bd43200… status 0x1 block 2491 dt 9.0 s
+tx 2 0xfd941646c0… status 0x1 block 2493 dt 10.8 s
+tx 3 0xd47de1a74a… status 0x1 block 2495 dt 9.0 s
+pools: rpc {"jsonrpc":"2.0","result":{"pending":"0x0","queued":"0x0"},"id":1} sealer {"jsonrpc":"2.0","result":{"pending":"0x0","queued":"0x0"},"id":1}
+mba_chain_rpc: [('a4f1adb3164e', '10.76.24.10:48042', 'inbound')]
+mba_chain_sealer: [('daa72efa1376', '10.76.24.11:30303', 'outbound')]
+-- S13 memory: controller raised the sealer live to 1g at 02:44Z (docker update; 694 MiB total / 611 MiB anon of 768m during the e2e); compose mem_limit 1g.
+   cgroup memory.stat every 90 s (anon / file / current), during and after the e2e:
+02:44:19 mba_chain_sealer anon=617MiB file=83MiB current=711MiB
+02:44:19 mba_chain_rpc anon=356MiB file=84MiB current=448MiB
+02:45:49 mba_chain_sealer anon=620MiB file=85MiB current=716MiB
+02:45:50 mba_chain_rpc anon=383MiB file=86MiB current=473MiB
+02:47:20 mba_chain_sealer anon=632MiB file=87MiB current=729MiB
+02:47:20 mba_chain_rpc anon=408MiB file=87MiB current=499MiB
+02:48:50 mba_chain_sealer anon=661MiB file=88MiB current=760MiB
+02:48:50 mba_chain_rpc anon=480MiB file=88MiB current=577MiB
+02:50:21 mba_chain_sealer anon=670MiB file=90MiB current=771MiB
+02:50:21 mba_chain_rpc anon=514MiB file=89MiB current=609MiB
+02:51:51 mba_chain_sealer anon=700MiB file=91MiB current=801MiB
+02:51:51 mba_chain_rpc anon=563MiB file=90MiB current=658MiB
+02:53:22 mba_chain_sealer anon=696MiB file=91MiB current=797MiB
+02:53:22 mba_chain_rpc anon=566MiB file=90MiB current=665MiB
+02:54:53 mba_chain_sealer anon=688MiB file=91MiB current=786MiB
+02:54:53 mba_chain_rpc anon=576MiB file=90MiB current=673MiB
+02:56:23 mba_chain_sealer anon=686MiB file=91MiB current=788MiB
+02:56:23 mba_chain_rpc anon=584MiB file=90MiB current=679MiB
+02:57:54 mba_chain_sealer anon=693MiB file=91MiB current=792MiB
+02:57:54 mba_chain_rpc anon=591MiB file=90MiB current=691MiB
+02:59:24 mba_chain_sealer anon=700MiB file=91MiB current=799MiB
+02:59:24 mba_chain_rpc anon=595MiB file=90MiB current=695MiB
+03:00:55 mba_chain_sealer anon=539MiB file=91MiB current=641MiB
+03:00:55 mba_chain_rpc anon=359MiB file=76MiB current=441MiB
+03:02:25 mba_chain_sealer anon=537MiB file=94MiB current=637MiB
+03:02:25 mba_chain_rpc anon=386MiB file=79MiB current=470MiB
+   docker stats 5 min after the e2e (02:54:20–02:59:32Z, 15 samples):
+mba_chain_sealer n 15 cpu median 1.9 % max 6.2 | mem median 776 MiB min 772 max 786
+mba_chain_rpc n 15 cpu median 2.1 % max 5.7 | mem median 671 MiB min 660 max 682
+mba_explorer_backend n 15 cpu median 1.9 % max 3.7 | mem median 317 MiB min 317 max 319
+mba_explorer_db n 15 cpu median 5.7 % max 9.3 | mem median 134 MiB min 133 max 135
+mba_explorer_frontend n 15 cpu median 0.0 % max 0.0 | mem median 183 MiB min 183 max 183
+   during the first e2e (01:56–02:07Z, 768m): sealer 566–602 MiB, rpc 612–734 MiB, oom_kill 0. Single node before: up to 1.13 GiB.
+-- S14 owner ruling TxPool.MaxTxSize 2097152 on both; sealer then rpc recreated:
+sealer recreate 2026-10-31T03:00:08Z head 2566
+sealer mem 1073741824
+rpc recreate 2026-10-31T03:00:17Z
+03:00:23
+mba_chain_rpc: [('a4f1adb3164e', '10.76.24.10:30303', 'outbound')]
+mba_chain_sealer: [('daa72efa1376', '10.76.24.11:43270', 'inbound')]
+mba_chain_sealer stage {"jsonrpc":"2.0","result":{"currentStage":"WaitingForBlock"},"id":1} MaxTxSize log: TxPool.MaxTxSize = "0x200000"
+mba_chain_rpc stage {"jsonrpc":"2.0","result":{"currentStage":"WaitingForBlock"},"id":1} MaxTxSize log: TxPool.MaxTxSize = "0x200000"
+2565 02:59:59
+2566 03:00:04
+2567 03:00:15
+2568 03:00:20
+== burst 5 (after MaxTxSize 2 MiB, sealer + rpc recreated) 2026-10-31T03:00:30Z
+tx 1 0xd3d170a2ed… status 0x1 block 2572 dt 10.9 s
+tx 2 0x080a49a6bf… status 0x1 block 2574 dt 9.0 s
+tx 3 0xa39ace1f73… status 0x1 block 2576 dt 10.8 s
+pools: rpc {"jsonrpc":"2.0","result":{"pending":"0x0","queued":"0x0"},"id":1} sealer {"jsonrpc":"2.0","result":{"pending":"0x0","queued":"0x0"},"id":1}
+calldata 250,000 B, raw tx 250,109 B, request body 500,299 B, gas 16,000,000: {"jsonrpc": "2.0", "error": {"code": -32000, "message": "transaction invalid, intrinsic gas too low"}, "id": 1}
+calldata 1,572,864 B, raw tx 1,572,974 B, request body 3,146,029 B, gas 16,777,216: {"jsonrpc": "2.0", "error": {"code": -32000, "message": "transaction invalid, intrinsic gas too low: Intrinsic gas (execution 25180824, floor 100678296) exceeded cap of 16777216."}, "id": 1}
+calldata 1,572,864 B, raw tx 1,572,974 B, request body 3,146,029 B, gas 120,000,000: {"jsonrpc": "2.0", "error": {"code": -32000, "message": "transaction invalid, intrinsic gas too low: Intrinsic gas (execution 25180824, floor 100678296) exceeded cap of 16777216."}, "id": 1}
+calldata 2,097,153 B, raw tx 2,097,263 B, request body 4,194,607 B, gas 16,777,216: {"connection_error": "[Errno 32] Broken pipe"}
+calldata 240,000 B, raw tx 240,110 B, request body 480,301 B, gas 16,777,216: {"jsonrpc": "2.0", "result": "0x310dfe6ab8f8b08446368ef8c123fd5c67ce57859b3bd1e4b50d3485a9e1e81a", "id": 1}
+240,000 B tx block: 2585
+raw tx of 2,097,263 B (calldata 2,097,153 B) via curl, body 4,194,6xx B: HTTP 413 {"code":-32005,"message":"Request body too large. The max request body size is 4194304 bytes."}
+-- S15 final config: diff config.json (single node -> sealer):
+8c8,17
+<     "PeerManagerEnabled": true
+---
+>     "PeerManagerEnabled": true,
+>     "MemoryHint": 512000000
+>   },
+>   "Pruning": {
+>     "CacheMb": 128,
+>     "DirtyCacheMb": 64
+>   },
+>   "FlatDb": {
+>     "BlockCacheSizeBudget": 134217728,
+>     "TrieCacheMemoryBudget": 134217728
+12,14c21,23
+<     "Host": "0.0.0.0",
+<     "Port": 8545,
+<     "WebSocketsPort": 8546,
+---
+>     "Host": "127.0.0.1",
+>     "Port": 8550,
+>     "WebSocketsPort": 8550,
+19,23c28,33
+<       "Subscribe"
+<     ],
+<     "AdditionalRpcUrls": [
+<       "http://127.0.0.1:8550|http;ws|Eth;Net;Web3;TxPool;Debug;Trace;Parity;Clique;Admin",
+<       "http://0.0.0.0:8547|http;ws|Eth;Net;Web3;TxPool"
+---
+>       "TxPool",
+>       "Debug",
+>       "Trace",
+>       "Parity",
+>       "Clique",
+>       "Admin"
+41a52,58
+>   "Network": {
+>     "StaticPeers": "enode://daa72efa1376e41b62e43c22991b185a80e0731048b60a9ac7ea26a4f14c15ac4e9084f9df1eed3063aaecb967de472a440090745e2384dbf93f597a8d385737@10.76.24.11:30303",
+>     "OnlyStaticPeers": true,
+>     "MaxActivePeers": 4,
+>     "FilterPeersByRecentIp": false,
+>     "ExternalIp": "10.76.24.10"
+>   },
+50c67,68
+<     "MaxTxSize": 1048576
+---
+>     "MaxTxSize": 2097152,
+>     "AcceptTxWhenNotSynced": true
+55c73
+< }
+\ No newline at end of file
+---
+> }
+-- config.rpc.json:
+{
+  "Init": {
+    "ChainSpecPath": "/nethermind/genesis.json",
+    "BaseDbPath": "/nethermind/nethermind_datadir",
+    "EnableUnsecuredDevWallet": false,
+    "DiscoveryEnabled": false,
+    "KzgSetupPath": "/nethermind/kzg_trusted_setup.txt",
+    "PeerManagerEnabled": true,
+    "MemoryHint": 1000000000
+  },
+  "Pruning": {
+    "Mode": "None"
+  },
+  "FlatDb": {
+    "Enabled": false
+  },
+  "JsonRpc": {
+    "Enabled": true,
+    "Host": "0.0.0.0",
+    "Port": 8545,
+    "WebSocketsPort": 8546,
+    "EnabledModules": [
+      "Eth",
+      "Net",
+      "Web3",
+      "Subscribe"
+    ],
+    "AdditionalRpcUrls": [
+      "http://127.0.0.1:8550|http;ws|Eth;Net;Web3;TxPool;Debug;Trace;Parity;Clique;Admin",
+      "http://0.0.0.0:8547|http;ws|Eth;Net;Web3;TxPool"
+    ],
+    "MaxBatchSize": 100,
+    "MaxRequestBodySize": 4194304,
+    "GasCap": 200000000,
+    "Timeout": 20000,
+    "RequestQueueLimit": 500,
+    "CallsFilterFilePath": "/nethermind/jsonrpc.filter"
+  },
+  "KeyStore": {
+    "EnodeKeyFile": "/nethermind/node.key"
+  },
+  "Network": {
+    "StaticPeers": "enode://a4f1adb3164ee2c2e69d73a23ab88ec166dfd2afdc735bd2a6988f3e11999ed0d78f907808c5f42ffe8f9126306541c7542f1ef81c69d34d1b28999f840ee442@10.76.24.10:30303",
+    "MaxActivePeers": 25,
+    "FilterPeersByRecentIp": false,
+    "ExternalIp": "192.168.1.72"
+  },
+  "Mining": {
+    "Enabled": false
+  },
+  "Merge": {
+    "Enabled": false
+  },
+  "Plugins": {},
+  "TxPool": {
+    "MaxTxSize": 2097152
+  },
+  "Blocks": {
+    "TargetBlockGasLimit": 200000000
+  }
+}
+-- docker-compose.yml (networks, sealer, rpc; Blockscout URLs):
+networks:
+  mba-net:
+    driver: bridge
+  # sealer <-> rpc P2P only (owner 2026-10-31 node split): internal (no gateway, no published port), no other container
+  # joins it, so the sealer is reachable from rpc alone; Blockscout and the rest of mba-net never reach the sealer.
+  # inhibit_ipv4: the host bridge gets no address on 10.76.24.0/24, so the host itself has no route to the sealer either
+  chain-p2p:
+    driver: bridge
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.inhibit_ipv4: "true"
+    ipam:
+      config:
+        - subnet: 10.76.24.0/24
+
+services:
+  # ------------------- Node split (owner 2026-10-31): sealer + rpc -------------------
+  # Start order: sealer, rpc, then Blockscout; stop in reverse. Admin JSON-RPC on each node's container loopback
+  # (127.0.0.1:8550, not published) through a sidecar in the node's network namespace:
+  #   docker run --rm --memory 64m --network container:mba_chain_sealer curlimages/curl:8.21.0 -s \
+  #     -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"clique_getSigners","params":[]}' http://127.0.0.1:8550
+  #   (the same with container:mba_chain_rpc for the RPC node)
+
+  # The Clique signer: the keystore + UnlockAccounts (Nethermind 2.2.0 reads the key's password through it), Mining on,
+  # pruned (flat state); JSON-RPC only on its container loopback; no published port; only on chain-p2p (static peer rpc).
+  sealer:
+    container_name: mba_chain_sealer
+    image: scaas/nethermind-pqz:2.2.0-pqz6
+    mem_limit: 1g   # 768m was too tight: 694 MiB total / 611 MiB anon during the PQZ e2e (2026-10-31; raised live by docker update)
+    volumes:
+      - ./data/nethermind_data:/nethermind/nethermind_datadir   # the single node's chain data (kept)
+      - ./genesis.json:/nethermind/genesis.json
+      - ./config.json:/nethermind/config.json
+      - ./jsonrpc.filter:/nethermind/jsonrpc.filter:ro   # refuses eth_sendTransaction / eth_sign / eth_signTransaction / eth_signTypedData* (owner 2026-10-31)
+      - ./password.txt:/nethermind/password.txt
+      - ./keystore:/nethermind/keystore
+    command: --config /nethermind/config.json
+      --datadir /nethermind/nethermind_datadir
+    networks:
+      chain-p2p:
+        ipv4_address: 10.76.24.10
+
+  # The public node (sentry): no key, Mining off, archive (Pruning.Mode None on the patricia backend, FlatDb off), full
+  # sync from the sealer. 8545 / 8546 public (Eth, Net, Web3, Subscribe), 8547 Docker-only for Blockscout, 8550 admin on
+  # its container loopback, P2P 30303 for external nodes (they peer with rpc, never with the sealer).
+  rpc:
+    container_name: mba_chain_rpc
+    image: scaas/nethermind-pqz:2.2.0-pqz6
+    mem_limit: 1536m
+    ports:
+      - "8545:8545"
+      - "8546:8546"
+      - "30303:30303/tcp"
+      - "30303:30303/udp"
+    volumes:
+      - ./data/nethermind_rpc_data:/nethermind/nethermind_datadir
+      - ./genesis.json:/nethermind/genesis.json:ro
+      - ./config.rpc.json:/nethermind/config.json:ro
+      - ./jsonrpc.filter:/nethermind/jsonrpc.filter:ro
+      - ./rpc-node.key:/nethermind/node.key:ro   # fixed P2P key (KeyStore.EnodeKeyFile): the enode stays the same across restarts
+    command: --config /nethermind/config.json
+      --datadir /nethermind/nethermind_datadir
+    networks:
+      mba-net: {}
+      chain-p2p:
+        ipv4_address: 10.76.24.11
+
+  # ------------------- Blockscout (owner 2026-10-31: ON, lean, with caps) -------------------
+3 matches in 3 files:
+
+115:0:"http://rpc:8547"
+116:0:"ws://rpc:8547"
+120:0:"http://rpc:8547"

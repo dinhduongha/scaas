@@ -170,9 +170,12 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   5. **Done 2026-10-31 (branch `fs3-t13-rollout`, not merged):** 7622 reset onto `2.2.0-pqz6` with the calibrated rows (option (b)),
      the CREATE2 deployer in the genesis alloc, EIP-7702 off (type-4 refused), contracts redeployed (`Deploy.s.sol` + PQZ e2e
      full / `--split`, 0 failures), the node hardened (NET-EVM-08), Blockscout on (NET-EVM-09). Left: the option (c)
-     re-calibration on a quiet host (compare with (b); chainspec only if it differs materially); `Pruning.Mode` None
-     (archive) at the next 7622 reset (Blockscout needs historical state); 22776: TLS reverse proxy with rate limits and the
-     sealer key out of the RPC node. The metatx-split real-node e2e items (TODO below) are all non-EVM families.
+     re-calibration on a quiet host (compare with (b); chainspec only if it differs materially); 22776: TLS reverse proxy
+     with rate limits, and the same `sealer` + `rpc` topology as 7622 proposed (owner decides at launch); an external
+     signer for the sealer still to check (Nethermind 2.2.0 `Mining.Signer` / `Nethermind.ExternalSigner.Plugin`, not tried).
+     **Node split done 2026-10-31 (branch `fs3-t13-rollout`, owner ruling):** 7622 runs `sealer` (key, pruned, no port,
+     internal network) + `rpc` (no key, archive, public RPC, the sentry for external nodes); NET-EVM-10; Blockscout on the
+     archive `rpc`, its code backfill and coin-balance cleanup no longer needed. The metatx-split real-node e2e items (TODO below) are all non-EVM families.
      Was: fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) **together with Task 9 calibration**
      (owner 2026-10-29: one measurement run; it still needs the owner's go at run time, other heavy sessions stopped)
      and, where possible, the metatx-split e2e owed on a real node → Task 14 (wasm32 limb path).

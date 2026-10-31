@@ -16,6 +16,7 @@ owner, or the controller session the owner has allowed to back up, reset and dep
 | [Genesis gasLimit 200 M](#genesis-gaslimit-200-m-on-the-scaas-testnet-executed-2026-10-22) — the same chain reset with a 200 M genesis block | 2026-10-22 | `../runs/2026-10-22-testnet-200m.txt` |
 | [Image 2.2.0-pqz4: per-set ids, 32-bit addresses](#image-220-pqz4-on-the-scaas-testnet-executed-2026-10-25) — reset (path B, no backup) onto the plan 5h Task 8d part 1 library (`n2304-kmax4096`) with provisional rows | 2026-10-25 | `../runs/2026-10-25-pqz4-live.txt` |
 | [Image 2.2.0-pqz5: the R0 review fix part b ids](#image-220-pqz5-on-the-scaas-testnet-executed-2026-10-26) — reset (path B, no backup) onto the part b library (`n2304-kmax4096`, PQZL v5 / PQZH v3) with provisional rows | 2026-10-26 | `../runs/2026-10-26-pqz5-live.txt` |
+| [Node split: sealer + rpc](#node-split-sealer--rpc-owner-2026-10-31) — the single node split into a key-holding `sealer` (no port, internal network) and a key-less archive `rpc` (public RPC, sentry for external nodes); Blockscout on `rpc` | 2026-10-31 | `../runs/2026-10-31-pqz6-live.txt` § S |
 
 The commands below are the ones that were executed. Steps marked *live only* ran on the SCaaS testnet itself; everything else
 ran on the copy. Plan: [P6f](../../../docs/superpowers/plans/2026-10-14-p6f-precompiles.md) Tasks 7, 8, 10; spec:
@@ -39,7 +40,7 @@ the licence inventory) — with `engine.Pqz` in its genesis from block 0 and the
 
 | Term | Meaning |
 |---|---|
-| chain host | the machine that runs the SCaaS testnet: live directory `/home/dockers/mba-chain-nethermind`, container `mba_chain_node_nethermind`, RPC `http://127.0.0.1:8545` |
+| chain host | the machine that runs the SCaaS testnet: live directory `/home/dockers/mba-chain-nethermind`, container `mba_chain_node_nethermind` (service `blockchain-node`) until 2026-10-31, then `mba_chain_sealer` + `mba_chain_rpc` (services `sealer`, `rpc`; [node split](#node-split-sealer--rpc-owner-2026-10-31)), RPC `http://127.0.0.1:8545`; the procedures below ran on the single node and keep its names |
 | copy | a replica of the SCaaS testnet with a throwaway signer key, run from `scratchpad/p6f-copy` (containers `pqzcopy-*`) |
 | chainspec | the chain's JSON configuration (`genesis.json`); the precompiles are switched on by its `engine.Pqz` section |
 | schedule, T | one entry of `engine.Pqz.schedules`: gas prices that apply from its timestamp T on |
@@ -309,7 +310,8 @@ must be reachable from the chain host only; public RPC goes to a follower behind
 (`config.follower.json`, `nginx-rpc.conf`; the copy publishes it on `127.0.0.1:18545`), whose exit stops only that
 follower. **On the SCaaS testnet** the live `docker-compose.yml` (read 2026-10-19) publishes `8545:8545` and `8546:8546` on every
 host interface; **accepted for the testnet (owner 2026-10-19)**: no firewall or binding change. The rule above binds
-mainnet 22776. A start-up refusal
+mainnet 22776. Since the node split (2026-10-31) 7622 follows it too: the sealer serves no RPC beyond its container
+loopback, and the public endpoints are on `rpc`. A start-up refusal
 `PQZ-REFUSE … sha256 … != the reviewed …` means the image's `libpqz_ffi.so` is not the reviewed build (review W-G):
 use an image built by `build-image.sh` from the reviewed commit.
 
@@ -570,18 +572,106 @@ docker-compose.yml}` back, replace `data/nethermind_data` with the backup's copy
 
 ## 7622 node layout and access (owner 2026-10-31)
 
-One node (the Clique sealer); its JSON-RPC split into three endpoints. Host = `192.168.1.72` (the chain host's LAN
-address; `DinhHa`).
+Two nodes since the node split (owner 2026-10-31, [NET-EVM-10](../../../docs/networks/evm.md#NET-EVM-10)): `sealer`
+(the Clique signer, container `mba_chain_sealer`) and `rpc` (the public node, container `mba_chain_rpc`), both in the
+stack's one `docker-compose.yml`, both image `scaas/nethermind-pqz:2.2.0-pqz6`. Host = `192.168.1.72` (the chain host's
+LAN address; `DinhHa`). The single node before the split (container `mba_chain_node_nethermind`, service
+`blockchain-node`, one key-holding node serving every endpoint) is described in the bullets marked *single node* below.
 
-| Endpoint | Bound | Modules | For |
-|---|---|---|---|
-| `http://<host>:8545`, `ws://<host>:8546` | LAN (compose `8545:8545`, `8546:8546`) | Eth, Net, Web3, Subscribe | wallets, `scaas-node`, the e2e scripts, deploys (`eth_sendRawTransaction`) |
-| `http://127.0.0.1:8550` (http + ws) | the node container's own loopback only (`AdditionalRpcUrls` `http://127.0.0.1:8550\|http;ws\|Eth;Net;Web3;TxPool;Debug;Trace;Parity;Clique;Admin`; not published): no other container, not the host, not the LAN | admin set | the operator on the host through a sidecar in the node's network namespace (below): `admin_*`, `clique_*`, `debug_*`, `trace_*`, `txpool_*` |
-| `http://blockchain-node:8547` (http + ws) | the `mba-net` Docker network and the host's bridge address (`<node mba-net IP>:8547`); not published, not on the LAN | Eth, Net, Web3, TxPool | Blockscout (blocks, receipts, `txpool_content` for pending transactions) |
-| P2P `30303` | LAN (unchanged) | — | none today (discovery off) |
+| Endpoint | Node | Bound | Modules | For |
+|---|---|---|---|---|
+| `http://<host>:8545`, `ws://<host>:8546` | `rpc` | LAN (compose `8545:8545`, `8546:8546`) | Eth, Net, Web3, Subscribe | wallets, `scaas-node`, the e2e scripts, deploys (`eth_sendRawTransaction`) |
+| `http://rpc:8547` (http + ws) | `rpc` | the `mba-net` Docker network and the host's bridge address (`<rpc mba-net IP>:8547`); not published, not on the LAN | Eth, Net, Web3, TxPool | Blockscout (blocks, receipts, archive balances and code, `txpool_content` for pending transactions) |
+| `http://127.0.0.1:8550` (http + ws) | `rpc` | its container's own loopback (`AdditionalRpcUrls`); not published | admin set | the operator through a sidecar in `mba_chain_rpc`'s network namespace |
+| `http://127.0.0.1:8550` (http + ws) | `sealer` | its container's own loopback (`JsonRpc.Host` `127.0.0.1`, `Port` / `WebSocketsPort` 8550, the only endpoint); not published | admin set (Eth, Net, Web3, TxPool, Debug, Trace, Parity, Clique, Admin) | the operator through a sidecar in `mba_chain_sealer`'s network namespace (`clique_*` votes) |
+| P2P `30303` tcp + udp | `rpc` | LAN (compose `30303:30303/tcp`, `/udp`) | — | external nodes (they peer with `rpc` only) |
+| P2P `30303` | `sealer` | the internal network `chain-p2p` only (`10.76.24.10`) | — | `rpc` (`10.76.24.11`) only |
 
-Port 8547 here is the node's Docker-only Blockscout endpoint, not the `scaas-node` gateway default `127.0.0.1:8547`
-(likewise 8550 here is the node container's admin endpoint, not the `scaas-node` mesh bus default `0.0.0.0:8550`).
+Port 8547 here is `rpc`'s Docker-only Blockscout endpoint, not the `scaas-node` gateway default `127.0.0.1:8547`
+(likewise 8550 here is a node container's admin endpoint, not the `scaas-node` mesh bus default `0.0.0.0:8550`).
+
+### Node split: sealer + rpc (owner 2026-10-31)
+
+| | `sealer` | `rpc` |
+|---|---|---|
+| Container / service | `mba_chain_sealer` / `sealer` | `mba_chain_rpc` / `rpc` |
+| Config | `$L/config.json` | `$L/config.rpc.json` |
+| Data | `$L/data/nethermind_data` (the single node's chain data, kept; flat state, pruned) | `$L/data/nethermind_rpc_data` (full sync from `sealer`; patricia state, archive: `Pruning.Mode` `None`, `FlatDb.Enabled` false) |
+| Key | `keystore/` + `PasswordFiles` + `UnlockAccounts` + `EnodeAccount` = the sealer `0xdE36…46BB`; `Mining.Enabled` true | no keystore, no unlocked account (`eth_accounts` = `[]`), `Mining.Enabled` false; P2P key `KeyStore.EnodeKeyFile` = `$L/rpc-node.key` (32 random bytes, mounted read-only) |
+| Enode | `enode://a4f1adb3…e442@10.76.24.10:30303` (from the sealer key: Nethermind 2.2.0 signs Clique blocks with the node key, so the sealer's enode key is the signer key) | `enode://daa72efa…5737@192.168.1.72:30303` (`Network.ExternalIp` = the LAN address) |
+| P2P | discovery off; `Network.StaticPeers` = `rpc`; `OnlyStaticPeers` true; `MaxActivePeers` 4; `ExternalIp` `10.76.24.10` | discovery off; `StaticPeers` = `sealer`; `MaxActivePeers` 25; accepts inbound peers |
+| Networks | `chain-p2p` only | `chain-p2p` + `mba-net` |
+| TxPool | `MaxTxSize` 2 MiB; **`AcceptTxWhenNotSynced` true** (below) | `MaxTxSize` 2 MiB |
+| Memory | `mem_limit` 1g (768m at the split was too tight: 694 MiB total / 611 MiB anon under the PQZ e2e 5 min after a restart; raised 2026-10-31); `Init.MemoryHint` 512 MB, `Pruning.CacheMb` 128, `DirtyCacheMb` 64, `FlatDb.BlockCacheSizeBudget` / `TrieCacheMemoryBudget` 128 MiB | `mem_limit` 1536m; `Init.MemoryHint` 1 GB |
+
+**The sealer accepts gossiped transactions although "not synced" (`TxPool.AcceptTxWhenNotSynced` true, found
+2026-10-31).** A sole signer never sees a peer ahead of it: `rpc` only ever has the sealer's own blocks, so in the
+sealer's sync peer pool `rpc` is "Sleeping", and about 10–12 minutes after each session starts the sealer's sync mode
+turns `Disconnected` (log "Waiting for peers… Ns", `debug_getSyncStage` → `Disconnected`). Nethermind 2.2.0's
+`SyncedTxGossipPolicy` then stops listening to gossiped transactions unless the mode includes `WaitingForBlock` or
+`AcceptTxWhenNotSynced` is true, and `Eth62ProtocolHandler` drops them ("TransactionsMessage ignored, syncing", trace
+level only). Blocks keep flowing (sealer → `rpc`), so nothing looks wrong, but every transaction sent to the public RPC
+stays in `rpc`'s pool: the first PQZ e2e after the split stopped at a `mtxRollOver` with no receipt (log
+`smartcontracts/evm/runs/2026-10-31-fs3-t13-pqz-7622-node-split-1fail-sealer-not-synced.txt`), and a transfer sent 12 min
+after a fresh session did not mine; a sealer-side reconnect (`admin_removePeer` / `admin_addPeer`) brought the mode back
+to `WaitingForBlock` and the stuck transfer mined at once. With the flag the sealer takes them in every mode (the
+sealer is the chain tip; "not synced" never applies to it). Keep it on any sole-signer sealer behind a sentry.
+**`TxPool.MaxTxSize` 2 MiB = 2,097,152 on both nodes (owner ruling 2026-10-31; the default is 131,072 B, the split
+started with the old 1 MiB).** Reason: it matches `MaxRequestBodySize` 4 MiB, since `eth_sendRawTransaction` carries the
+transaction as hex (twice its size), so about 2 MiB is the largest raw transaction the RPC can take at all; the largest
+measured PQZ transaction is a PQZH M = 16 auditor-on proof of 544 KB (the PQZ e2e's largest is 107,268 B of calldata,
+op 7 with M = 8, which even the default would accept). Checked 2026-10-31 after recreating sealer then rpc: a raw
+transaction of 2,097,263 B (request body 4,194,6xx B) → HTTP 413 `-32005 Request body too large. The max request body
+size is 4194304 bytes.`, so the body limit refuses it before the pool sees it. **The size limit is not what bounds a
+transaction on 7622: Amsterdam's per-transaction gas cap is.** A 1.5 MiB calldata transaction is refused whatever its
+gas limit, `-32000 intrinsic gas too low: Intrinsic gas (execution 25180824, floor 100678296) exceeded cap of
+16777216` (EIP-7976 calldata floor 64 gas / byte, EIP-7825 cap 2^24); 240,000 B of calldata mined (block 2585),
+250,000 B with a 16,000,000 gas limit was refused (intrinsic gas too low). So about 262 KB of calldata is the most one
+transaction can carry here, and the 544 KB PQZH M = 16 proof cannot go in one transaction under Amsterdam (the probe
+already records M = 8 inputs above 2^24 as refused).
+
+Both: `Network.FilterPeersByRecentIp` false (with the default a node drops a restarted peer's reconnects from the same
+IP for minutes, seen on the copy), the calls filter `jsonrpc.filter`, the same chainspec. The full enodes are in the two
+config files; `admin_nodeInfo` on either sidecar prints them.
+
+- **The sealer is reachable from `rpc` only.** `chain-p2p` is `internal: true` (no gateway) with
+  `com.docker.network.bridge.inhibit_ipv4` (the host bridge gets no address on `10.76.24.0/24`, so the host has no route
+  to it either; without that option the host reached `10.76.24.10:30303`); only `sealer` and `rpc` join it; the sealer
+  publishes no port and its JSON-RPC binds its own loopback. So the LAN, the host and every `mba-net` container
+  (Blockscout) cannot reach it; the operator reaches its admin endpoint through the sidecar only. Transactions reach it
+  over P2P from `rpc`'s pool; blocks go back the same way.
+- **External nodes connect to `rpc`, never to the sealer.** `rpc` is the sentry: an external follower (or a future second
+  signer's node) sets `rpc`'s enode as its static peer, `enode://daa72efa1376e41b62e43c22991b185a80e0731048b60a9ac7ea26a4f14c15ac4e9084f9df1eed3063aaecb967de472a440090745e2384dbf93f597a8d385737@192.168.1.72:30303`
+  (stable: fixed key file), with the 7622 chainspec (`$L/genesis.json`; a follower needs its
+  `eip4895TransitionTimestamp` and `maximumExtraDataSize`, which the live chainspec has, [NET-EVM-02 traps](../../../docs/networks/evm.md#private-chain)),
+  or the operator adds it from `rpc`'s side with `admin_addPeer` through the `rpc` sidecar. Why: the sealer then has
+  one peer it knows, no inbound connection from anyone else and no public RPC, so a peer or a caller that misbehaves
+  (P2P flood, an `eth_call` that trips the PQZ node-fault exit, calls queueing on the PQZL lock) hits `rpc`, not block
+  production; and the key lives only in the process that seals.
+- **Admin via a sidecar on each node** (image pinned, no other way in):
+  ```sh
+  docker run --rm --memory 64m --network container:mba_chain_sealer curlimages/curl:8.21.0 -s \
+    -H 'content-type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"clique_getSigners","params":[]}' http://127.0.0.1:8550
+  # the same with --network container:mba_chain_rpc for the public node (admin_peers, admin_addPeer, txpool_*, trace_*)
+  ```
+- **Start / stop order.** Start: `docker compose up -d sealer`, then `docker compose up -d rpc`, then Blockscout
+  (`docker compose up -d explorer-db explorer-backend explorer-frontend`). Stop in reverse:
+  `docker compose stop explorer-frontend explorer-backend explorer-db rpc sealer`. No restart policy on any of them
+  (owner step). `rpc` may restart on its own at any time (public RPC down meanwhile, blocks keep coming); a `sealer`
+  restart pauses blocks for about 10 s (measured 9–12 s).
+- **Health:** `eth_blockNumber` equal on both sidecars and on `http://192.168.1.72:8545`, advancing every 5 s;
+  `admin_peers` on each shows the other; `PQZ-START` in both logs (`docker logs mba_chain_sealer`, `mba_chain_rpc`); a transfer through 8545 mines within two
+  blocks. The sealer's `debug_getSyncStage` reads `Disconnected` (log "Waiting for peers…") from about 10 minutes after
+  each session start: expected, harmless with `AcceptTxWhenNotSynced` (checked 15 min after a restart: transfers mined).
+- **Recovery.** `rpc` lost or corrupt: stop it, move `data/nethermind_rpc_data` aside (alpine `mv`, never delete without
+  the owner), start it: it re-syncs from the sealer (1,670 blocks in about 15 s on 2026-10-31). Sealer down: the chain
+  stops until it is back (one signer); restart it, check `Sealed block` in its log. Rollback to the single node:
+  `cp config.json.bak-pre-split-20261031-0844 config.json; cp docker-compose.yml.bak-pre-split-20261031-0844
+  docker-compose.yml`, `docker compose stop rpc sealer`, `docker rm mba_chain_rpc mba_chain_sealer`,
+  `docker compose up -d blockchain-node`, then `docker compose up -d --no-deps explorer-backend`; the sealer's data dir is
+  the single node's (copy before the split: `data/nethermind_data.pre-split-20261031`).
+- **Split executed 2026-10-31 (fs3 Task 13 follow-up):** log `../runs/2026-10-31-pqz6-live.txt` § S (node split).
 
 - **Wallet methods refused everywhere.** `KeyStore.UnlockAccounts` must stay: Nethermind 2.2.0 reads the sealer key's
   password through it (without it start-up fails in `NodeKeyManager.LoadKeyForAccount`: "Cannot read keys when …
@@ -590,13 +680,14 @@ Port 8547 here is the node's Docker-only Blockscout endpoint, not the `scaas-nod
   `/nethermind/jsonrpc.filter` (compose mounts `$L/jsonrpc.filter`, a copy is `chain/jsonrpc.filter`) holds one regex,
   `^(?!eth_(sendtransaction|sign|signtransaction|signtypeddata.*)$).*$`: Nethermind matches every call's method name,
   lower-cased, against it, on every endpoint and transport, batches included; the four wallet methods get `-32601 the
-  method … does not exist/is not available`. `personal` is enabled nowhere. `eth_accounts` still lists the sealer
-  address (read-only).
-- **Limits on all endpoints:** `MaxBatchSize` 100, `MaxRequestBodySize` 4,194,304 (largest e2e request: about 140 KB of
-  hex; `TxPool.MaxTxSize` 1 MiB = 2 MiB of hex), `GasCap` 200,000,000 (= the block gas limit; the largest e2e
+  method … does not exist/is not available`. `personal` is enabled nowhere. Since the split the key is only in the
+  sealer, whose one endpoint is its container loopback (filter on there too); `rpc` has no account (`eth_accounts` =
+  `[]` on 8545, 8546, 8547, 8550). *Single node:* `eth_accounts` listed the sealer address (read-only).
+- **Limits on all endpoints (both nodes):** `MaxBatchSize` 100, `MaxRequestBodySize` 4,194,304 (largest e2e request: about 140 KB of
+  hex; `TxPool.MaxTxSize` 2 MiB = 4 MiB of hex, the body limit), `GasCap` 200,000,000 (= the block gas limit; the largest e2e
   estimate is the `WrappedPqzToken` release, 96.5 M gas used, just under the default cap of 100 M), `Timeout` 20,000 ms,
   `RequestQueueLimit` 500.
-- **Admin endpoint: container loopback + sidecar (owner 2026-10-31).** The admin URL binds `127.0.0.1:8550` inside the node
+- **Admin endpoint: container loopback + sidecar (owner 2026-10-31; *single node* below, per node since the split, above).** The admin URL binds `127.0.0.1:8550` inside the node
   container and is not published. A `0.0.0.0` bind with a `127.0.0.1:8550:8550` publish limited only the host port:
   every container on `mba-net` (the three Blockscout services, two of them reachable from the LAN) answered `admin_*` /
   `clique_*` / `debug_*` on `<node mba-net IP>:8550` (review I1). Admin calls run on the host from a throwaway sidecar
@@ -607,14 +698,14 @@ Port 8547 here is the node's Docker-only Blockscout endpoint, not the `scaas-nod
     -d '{"jsonrpc":"2.0","id":1,"method":"clique_getSigners","params":[]}' http://127.0.0.1:8550
   ```
   From another machine: `ssh <user>@192.168.1.72` and run the sidecar there.
-- **Checks (2026-10-31, log above):** from the LAN address and from the host, `eth_sendTransaction`, `eth_sign`,
+- **Checks, *single node* (2026-10-31, log above):** from the LAN address and from the host, `eth_sendTransaction`, `eth_sign`,
   `eth_signTransaction`, `eth_signTypedData(_v4)`, upper-case variants and the same inside a batch → `-32601`;
   `personal_*`, `admin_*`, `debug_*`, `trace_*`, `clique_*`, `txpool_*`, `parity_*` on 8545 / 8546 → `-32600 … namespace
   … is disabled`; `192.168.1.72:8550`, `192.168.1.72:8547`, `127.0.0.1:8547` and a container on the default bridge →
   connection refused; on 8550 `admin_nodeInfo`, `clique_getSigners`, `trace_block`, `txpool_status` answer; an EIP-1559
   transfer through `eth_sendRawTransaction` on 8545 mined; blocks every 5 s; probe 420 / 0 and the PQZ e2e 256 / 0 through
   `http://192.168.1.72:8545`.
-- **Checks after the loopback bind (2026-10-31 08:07 +07, node container recreated only, one 8 s block gap):** the
+- **Checks after the loopback bind, *single node* (2026-10-31 08:07 +07, node container recreated only, one 8 s block gap):** the
   head advances; `clique_getSigners` on 8550 → connection refused from a container on `mba-net` (by IP `192.168.0.2` and
   by name `blockchain-node`), from inside `mba_explorer_backend`, from the host (`127.0.0.1`, the bridge address) and from
   the LAN address (before the change the `mba-net` container got the signer list); through the sidecar
@@ -623,11 +714,13 @@ Port 8547 here is the node's Docker-only Blockscout endpoint, not the `scaas-nod
   (WebSocket), 8547 and 8550; Blockscout indexes new blocks and showed a tip-0 transaction as `pending` before its
   replacement mined. Backups `config.json.bak-pre-i1-20261031-0806`, `docker-compose.yml.bak-pre-i1-20261031-0806`;
   rollback: copy both back and `docker compose up -d --no-deps blockchain-node explorer-frontend`.
-- **Rollback:** `cp config.json.bak-pre-hardening-20261031 config.json; cp docker-compose.yml.bak-pre-hardening-20261031
+- **Rollback, *single node*, to before the hardening:** `cp config.json.bak-pre-hardening-20261031 config.json; cp docker-compose.yml.bak-pre-hardening-20261031
   docker-compose.yml; docker compose up -d blockchain-node` (the single-endpoint layout; Blockscout services are then
   commented out again).
-- **TODO for mainnet 22776 (not built):** a reverse proxy with TLS and rate limits in front of 8545 / 8546; the sealer
-  key out of the RPC node's wallet (a sentry RPC node, or a key file used only for sealing).
+- **TODO for mainnet 22776 (not built):** a reverse proxy with TLS and rate limits in front of 8545 / 8546; the same
+  sealer + rpc split proposed (owner decides at launch); an external signer for the sealer still to check (Nethermind
+  2.2.0 has `Mining.Signer`, "the URL of an external signer like Clef", and ships `Nethermind.ExternalSigner.Plugin`; not
+  tried).
 
 ### Blockscout (owner 2026-10-31: on, lean, with caps)
 
@@ -636,7 +729,7 @@ Services `explorer-db` (postgres:18, `mem_limit` 1g, `cpus` 1.0), `explorer-back
 v2.3.5, 512m, 0.5); no restart policy; UI `http://192.168.1.72:8558` (owner 2026-10-31: not 3000; compose `8558:3000`,
 `NEXT_PUBLIC_APP_PORT` 8558, the container listens on `PORT` 3000), API and WebSocket `http://192.168.1.72:4000` (the
 browser calls it directly; CORS `*`, `CHECK_ORIGIN` off). Host ports published by Blockscout: 8558 and 4000. The
-backend reads the node over `http://blockchain-node:8547`.
+backend reads `rpc` over `http://rpc:8547` (before the split: the single node, `http://blockchain-node:8547`).
 
 ```sh
 cd /home/dockers/mba-chain-nethermind
@@ -667,8 +760,12 @@ docker compose stop explorer-frontend explorer-backend explorer-db       # stop 
   the backend log shows `coin_balance_catchup … No state available`. First run 2026-10-31 01:31Z: 1,734 rows deleted
   (backup `$L/address_coin_balances-unfetched-bak-20261031-0831.csv`); after it, 0 `No state` errors in 5 min, backend
   2.0 % median (peak 6.4) / 301 MiB, db 1.2 % / 118 MiB, node 1.9 % / 478 MiB, home list on the tip, balances right.
-  Root fix: archive mode at the sealer / RPC node split (separate task).
-- **Pruned node.** The node keeps no old state (`Pruning.Mode` Hybrid: `eth_getBalance` / `eth_getCode` at an old block →
+  Root fix: archive mode at the sealer / RPC node split. **Since the split (2026-10-31) not needed:** the 1,734 deleted
+  rows were put back from the backup CSV (`\copy` into a temp table, `insert … on conflict do nothing`) and the backend
+  restarted; the catch-up fetched all 1,734 from the archive `rpc` within about 25 s with 0 `No state` errors (values
+  equal to `eth_getBalance` at those blocks). Keep the mode only for a Blockscout pointed at a pruned node.
+- **Pruned node (*single node*, before the split; `rpc` is archive since 2026-10-31, so neither cleanup is needed:
+  `eth_getBalance` / `eth_getCode` at block 0 and 1 answer, the DB has 0 created contracts without code).** The node keeps no old state (`Pruning.Mode` Hybrid: `eth_getBalance` / `eth_getCode` at an old block →
   `-32002 No state available`). Blockscout's ContractCode fetcher asks the code at the creation block, so for a
   contract created more than about 64 blocks before Blockscout sees it, it retries forever (one core; 7.0.2 also loops on
   block 0). After a Blockscout outage that spans contract deploys, run
