@@ -66,20 +66,20 @@ contract UADeployTest is Test {
         _pq(reg, true);
     }
 
-    /// P6c: the PQ signing kinds with the gen-1 caps (each ≤ 50 % of the budget) on every chain whose budget holds them
-    /// (owner ruling 2026-10-31: no chain-id lock); the ML-DSA verifiers in Solidity (the registry's expanded-key cache).
+    /// P6c: the PQ signing kinds with the gen-1 caps on every chain whose budget holds them at ≤ 66 % (owner rulings
+    /// 2026-10-31: no chain-id lock, 66 % instead of 50 %); the ML-DSA verifiers in Solidity (the expanded-key cache).
     function _pq(IUARegistry reg, bool on) internal view {
         uint64[4] memory caps = [uint64(4_250_000), 5_950_000, 2_500_000, 1_400_000];
         for (uint16 k = UAKinds.MLDSA44; k <= UAKinds.SLHDSA128S; ++k) {
             assertEq(reg.kindEnabled(k), on);
             assertEq(reg.verifyCap(k), on ? caps[k - UAKinds.MLDSA44] : 0);
-            assertLe(reg.verifyCap(k), reg.verifyBudget() / 2);
+            assertLe(uint256(reg.verifyCap(k)) * 100, uint256(reg.verifyBudget()) * 66);
         }
     }
 
     /// Owner ruling 2026-10-31: no chain-id lock for any kind. Chain 7622, the mainnet 22776, the e2e's 31901 and an
     /// arbitrary id get every kind whose requirement the chain meets (here: the probe passes, the budget is 12 M).
-    /// Hedera 298: `hederaNative`, budget 10.5 M, so `mldsa65` (cap 5.95 M > 50 %) stays off, the other PQ kinds on; no
+    /// Hedera 298: `hederaNative`, budget 10.5 M, all four PQ kinds (66 % = 6.93 M ≥ `mldsa65`'s 5.95 M); no
     /// `zether-bls12381` (no Zether token on Hedera).
     function test_otherChains() public {
         IUARegistry r7622 = _registry(7622, false);
@@ -98,9 +98,18 @@ contract UADeployTest is Test {
         assertTrue(h.hederaNative());
         assertFalse(h.kindEnabled(UAKinds.ZETHER_BLS12381), "never on Hedera (CTR-ZTH-52)");
         assertEq(h.verifyBudget(), 10_500_000);
-        assertTrue(h.kindEnabled(UAKinds.MLDSA44) && h.kindEnabled(UAKinds.FNDSA512) && h.kindEnabled(UAKinds.SLHDSA128S));
-        assertFalse(h.kindEnabled(UAKinds.MLDSA65), "cap over half the Hedera budget");
-        assertEq(h.verifyCap(UAKinds.MLDSA65), 0);
+        _pq(h, true);
+    }
+
+    /// The 66 % rule at its boundary (owner ruling 2026-10-31), integer-exact: 12 M allows 7,920,000, not one more;
+    /// Hedera's 10.5 M allows 6,930,000.
+    function test_pqKindThreshold66() public {
+        DeployHarness h = new DeployHarness();
+        assertTrue(h.pqKindFits(7_920_000, 12_000_000));
+        assertFalse(h.pqKindFits(7_920_001, 12_000_000));
+        assertTrue(h.pqKindFits(6_930_000, 10_500_000));
+        assertFalse(h.pqKindFits(6_930_001, 10_500_000));
+        assertTrue(h.pqKindFits(5_950_000, 10_500_000), "mldsa65 on Hedera");
     }
 
     /// A chain whose precompiles fail the probe gets none of the kinds that need them (never registrable but unusable).

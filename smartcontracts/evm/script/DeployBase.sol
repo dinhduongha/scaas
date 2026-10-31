@@ -77,7 +77,7 @@ abstract contract DeployBase is Script {
     ///         1/64, so the least working caps are 4,174,074 / 5,893,303 warm, ~5 k more cold, and the caps leave ~73 k (~1.7 %) /
     ///         ~52 k (~0.9 %) over the cold minimum, pinned by `PqGas.t.sol`; ML-DSA-65's
     ///         cap keeps the treasury {mldsa65 ×3} t=2 over the budget), FN-DSA (2.27–2.35 M measured) + ~6 %,
-    ///         SLH-DSA above its 1.32 M worst case. Each ≤ 50 % of the 12 M budget.
+    ///         SLH-DSA above its 1.32 M worst case. Each ≤ 50 % of the 12 M budget (the deploy rule is ≤ 66 %, `_pqKindFits`).
     uint64 internal constant CAP_MLDSA44 = 4_250_000;
     uint64 internal constant CAP_MLDSA65 = 5_950_000;
     uint64 internal constant CAP_FNDSA512 = 2_500_000;
@@ -232,12 +232,19 @@ abstract contract DeployBase is Script {
     ///         `schnorr-bls12381` and `bls12381-minsig` where `UAPrecompileProbe` passes EIP-2537; `bls-bn254-minsig` where
     ///         it passes the bn254 G2 check (no chain-id lock, owner ruling 2026-10-31); `zether-bls12381` with
     ///         EIP-2537 on every chain but Hedera (owner ruling 2026-10-31; `zether-bn254` is in `legacy/ua6/`, UA-6 U10); the PQ
-    ///         signing kinds (P6c; unaudited, CTR-UA-23) on every chain where the kind's cap is at most half the chain's
-    ///         verify budget (owner ruling 2026-10-31: no chain-id lock; Hedera's 10.5 M budget leaves `mldsa65` off) — ML-DSA
+    ///         signing kinds (P6c; unaudited, CTR-UA-23) on every chain where the kind's cap is at most 66 % of the chain's
+    ///         verify budget (`_pqKindFits`; owner rulings 2026-10-31: no chain-id lock, 66 % instead of 50 %) — ML-DSA
     ///         in Solidity on the registry's cached expanded key (no chain has an ML-DSA precompile yet; P6g passes chain
     ///         7622's to the verifier's probe); `pqz-mlwe` nowhere (its verifier is P6g's). Caps: the gen-1 defaults measured in
     ///         `test/ua/UAGas.t.sol` and `test/ua/PqGas.t.sol` (accounts.md §1.15). A disabled kind gets no verifier
     ///         (never "registrable but unusable", CTR-UA-23). JSON `ua_registry`. **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
+    /// @notice The PQ signing kinds' deploy rule (owner ruling 2026-10-31, CTR-UA-23): the kind's cap is at most 66 % of the
+    ///         chain's verify budget, integer-exact as `cap * 100 <= budget * 66` (12 M: 7.92 M; Hedera 10.5 M: 6.93 M). The
+    ///         registry's own `cap <= budget` check is separate and unchanged.
+    function _pqKindFits(uint64 cap, uint64 budget) internal pure returns (bool) {
+        return uint256(cap) * 100 <= uint256(budget) * 66;
+    }
+
     function _deployUARegistry(address smartKeyAccountImpl, bool isHedera) internal returns (UARegistry reg) {
         (bool bls, bool bnG2) = _precompiles();
         uint64 budget = isHedera ? UA_VERIFY_BUDGET_HEDERA : UA_VERIFY_BUDGET;
@@ -273,21 +280,21 @@ abstract contract DeployBase is Script {
                 UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier{salt: salt}()), 70_000
             );
         }
-        // the PQ signing kinds (CTR-UA-23): wherever the kind's cap stays within half the chain's verify budget
-        if (CAP_MLDSA44 <= budget / 2) {
+        // the PQ signing kinds (CTR-UA-23): wherever the kind's cap is at most 66 % of the chain's verify budget
+        if (_pqKindFits(CAP_MLDSA44, budget)) {
             k[n++] = UARegistry.KindConfig(
                 UAKinds.MLDSA44, address(new UAMldsaVerifier{salt: salt}(UAKinds.MLDSA44, address(0), "", "")), CAP_MLDSA44
             );
         }
-        if (CAP_MLDSA65 <= budget / 2) {
+        if (_pqKindFits(CAP_MLDSA65, budget)) {
             k[n++] = UARegistry.KindConfig(
                 UAKinds.MLDSA65, address(new UAMldsaVerifier{salt: salt}(UAKinds.MLDSA65, address(0), "", "")), CAP_MLDSA65
             );
         }
-        if (CAP_FNDSA512 <= budget / 2) {
+        if (_pqKindFits(CAP_FNDSA512, budget)) {
             k[n++] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new UAFndsaVerifier{salt: salt}()), CAP_FNDSA512);
         }
-        if (CAP_SLHDSA128S <= budget / 2) {
+        if (_pqKindFits(CAP_SLHDSA128S, budget)) {
             k[n++] = UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new UASlhdsaVerifier{salt: salt}()), CAP_SLHDSA128S);
         }
         assembly ("memory-safe") {
