@@ -335,6 +335,97 @@ impl MsigStructure {
         encode_msig(self.threshold, &self.members.iter().map(|m| (m.kind, m.id, m.weight)).collect::<Vec<_>>())
     }
 }
+/// A `webauthn-p256` key (typed-signing TS-D13): the registry assembles `x ‖ y ‖ rp_id_hash` (96 B).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WebAuthnKey {
+    pub x: [u8; 32],
+    pub y: [u8; 32],
+    pub rp_id_hash: [u8; 32],
+}
+/// A MuSig2 group key (TS-D13): points of 33 B (`musig2-secp256k1`) or 64 B (`musig2-bn254`); assembled
+/// `agg_key ‖ u16 n ‖ n × key`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MuSig2Key {
+    pub agg_key: Vec<u8>,
+    pub member_keys: Vec<Vec<u8>>,
+}
+/// One FROST member (TS-D13): `threshold` commitments, R_i, z_i.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FrostMember {
+    pub commitments: Vec<Vec<u8>>,
+    pub r: Vec<u8>,
+    pub z: [u8; 32],
+}
+/// A FROST group key (TS-D13): assembled `group_key ‖ u16 threshold ‖ u16 n ‖ n × (commitments ‖ r ‖ z)`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FrostKey {
+    pub group_key: Vec<u8>,
+    pub threshold: u16,
+    pub members: Vec<FrostMember>,
+}
+/// The point length of a MuSig2 / FROST kind (33 B secp256k1, 64 B bn254), 0 for any other kind.
+fn point_size(kind: u16) -> usize {
+    match kind {
+        0x0110 | 0x0111 => 33,
+        0x0112 | 0x0113 => 64,
+        _ => 0,
+    }
+}
+impl WebAuthnKey {
+    pub fn from_key_data(d: &[u8]) -> Result<Self> {
+        if d.len() != 96 {
+            return Err(UAError::KeyData("length"));
+        }
+        Ok(Self { x: d[..32].try_into().unwrap(), y: d[32..64].try_into().unwrap(), rp_id_hash: d[64..].try_into().unwrap() })
+    }
+    pub fn key_data(&self) -> Vec<u8> {
+        [self.x, self.y, self.rp_id_hash].concat()
+    }
+}
+impl MuSig2Key {
+    /// The key of `kind`'s packed key data (whole points; their validity is the registry's).
+    pub fn from_key_data(kind: u16, d: &[u8]) -> Result<Self> {
+        let s = point_size(kind);
+        if s == 0 || d.len() < s + 2 || d.len() != s + 2 + u16::from_be_bytes([d[s], d[s + 1]]) as usize * s {
+            return Err(UAError::KeyData("length"));
+        }
+        Ok(Self { agg_key: d[..s].to_vec(), member_keys: d[s + 2..].chunks(s).map(<[u8]>::to_vec).collect() })
+    }
+    pub fn key_data(&self) -> Vec<u8> {
+        [self.agg_key.clone(), (self.member_keys.len() as u16).to_be_bytes().to_vec(), self.member_keys.concat()].concat()
+    }
+}
+impl FrostKey {
+    /// The key of `kind`'s packed key data (whole points; their validity is the registry's).
+    pub fn from_key_data(kind: u16, d: &[u8]) -> Result<Self> {
+        let s = point_size(kind);
+        if s == 0 || d.len() < s + 4 {
+            return Err(UAError::KeyData("length"));
+        }
+        let (t, n) = (u16::from_be_bytes([d[s], d[s + 1]]) as usize, u16::from_be_bytes([d[s + 2], d[s + 3]]) as usize);
+        let per = (t + 1) * s + 32;
+        if d.len() != s + 4 + n * per {
+            return Err(UAError::KeyData("length"));
+        }
+        let members = d[s + 4..]
+            .chunks(per)
+            .map(|m| FrostMember {
+                commitments: m[..t * s].chunks(s).map(<[u8]>::to_vec).collect(),
+                r: m[t * s..(t + 1) * s].to_vec(),
+                z: m[(t + 1) * s..].try_into().unwrap(),
+            })
+            .collect();
+        Ok(Self { group_key: d[..s].to_vec(), threshold: t as u16, members })
+    }
+    pub fn key_data(&self) -> Vec<u8> {
+        let mut o = [self.group_key.clone(), self.threshold.to_be_bytes().to_vec(), (self.members.len() as u16).to_be_bytes().to_vec()]
+            .concat();
+        for m in &self.members {
+            o.extend([m.commitments.concat(), m.r.clone(), m.z.to_vec()].concat());
+        }
+        o
+    }
+}
 /// One `msig` member's signature (`key_data` always empty, CTR-UA-33).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MemberSig {
@@ -359,11 +450,16 @@ pub struct UAAttrs {
     pub kem: KemKey,
     pub kem_pk_hash: [u8; 32],
 }
-/// The typed registration call: `register(kind, keyData, attrs, pop, pqzPop)` or `registerMsig(structure, attrs, pop, pqzPop)`.
+/// The typed registration call: `register(kind, keyData, attrs, pop, pqzPop)`, `registerMsig(structure, attrs, pop,
+/// pqzPop)`, `registerWebAuthn(key, attrs, pop, pqzPop)` (`webauthn-p256`), `registerMuSig2` / `registerFrost(kind, key,
+/// attrs, pop, pqzPop)` (typed-signing TS-D13).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RegisterArgs {
     Register { kind: u16, key_data: Vec<u8>, attrs: UAAttrs, pop: Vec<u8>, pqz_pop: Vec<u8> },
     RegisterMsig { structure: MsigStructure, attrs: UAAttrs, pop: Vec<MemberSig>, pqz_pop: Vec<u8> },
+    RegisterWebAuthn { key: WebAuthnKey, attrs: UAAttrs, pop: Vec<u8>, pqz_pop: Vec<u8> },
+    RegisterMuSig2 { kind: u16, key: MuSig2Key, attrs: UAAttrs, pop: Vec<u8>, pqz_pop: Vec<u8> },
+    RegisterFrost { kind: u16, key: FrostKey, attrs: UAAttrs, pop: Vec<u8>, pqz_pop: Vec<u8> },
 }
 /// `setKemKey(ua, version, kem, sig)`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -388,6 +484,9 @@ fn attrs_len(a: &UAAttrs) -> usize {
 fn member_sigs_len(m: &[MemberSig]) -> usize {
     32 + m.iter().map(|s| 32 + 96 + tail_len(&s.key_data) + tail_len(&s.sig)).sum::<usize>()
 }
+fn bytes_arr_len(xs: &[Vec<u8>]) -> usize {
+    32 + xs.iter().map(|x| 32 + tail_len(x)).sum::<usize>()
+}
 impl RegisterArgs {
     /// The ABI calldata length, selector included.
     pub fn calldata_len(&self) -> usize {
@@ -398,6 +497,36 @@ impl RegisterArgs {
             Self::RegisterMsig { structure, attrs, pop, pqz_pop } => {
                 4 + 128 + 96 + 96 * structure.members.len() + attrs_len(attrs) + member_sigs_len(pop) + tail_len(pqz_pop)
             }
+            Self::RegisterWebAuthn { attrs, pop, pqz_pop, .. } => 4 + 192 + attrs_len(attrs) + tail_len(pop) + tail_len(pqz_pop),
+            Self::RegisterMuSig2 { key, attrs, pop, pqz_pop, .. } => {
+                4 + 160 + 64 + tail_len(&key.agg_key) + bytes_arr_len(&key.member_keys) + attrs_len(attrs) + tail_len(pop)
+                    + tail_len(pqz_pop)
+            }
+            Self::RegisterFrost { key, attrs, pop, pqz_pop, .. } => {
+                let members: usize =
+                    key.members.iter().map(|m| 32 + 96 + bytes_arr_len(&m.commitments) + tail_len(&m.r)).sum();
+                4 + 160 + 96 + tail_len(&key.group_key) + 32 + members + attrs_len(attrs) + tail_len(pop) + tail_len(pqz_pop)
+            }
+        }
+    }
+    /// The registration attributes.
+    pub fn attrs(&self) -> &UAAttrs {
+        match self {
+            Self::Register { attrs, .. }
+            | Self::RegisterMsig { attrs, .. }
+            | Self::RegisterWebAuthn { attrs, .. }
+            | Self::RegisterMuSig2 { attrs, .. }
+            | Self::RegisterFrost { attrs, .. } => attrs,
+        }
+    }
+    /// The packed key data the registry assembles (the id's input).
+    pub fn key_data(&self) -> Vec<u8> {
+        match self {
+            Self::Register { key_data, .. } => key_data.clone(),
+            Self::RegisterMsig { structure, .. } => structure.key_data(),
+            Self::RegisterWebAuthn { key, .. } => key.key_data(),
+            Self::RegisterMuSig2 { key, .. } => key.key_data(),
+            Self::RegisterFrost { key, .. } => key.key_data(),
         }
     }
 }
@@ -430,7 +559,8 @@ pub struct Registration {
     pub kem_fill: Option<SetKemKeyArgs>,
 }
 
-/// The registry's explicit arguments (typed-signing R1; clientkeys `registrationArgs`): `register` / `registerMsig`, the KEM
+/// The registry's explicit arguments (typed-signing R1 / R1b; clientkeys `registrationArgs`): `register` / `registerMsig` /
+/// `registerWebAuthn` / `registerMuSig2` / `registerFrost`, the KEM
 /// key (version 0, owner 2026-10-31) in full, or — only when the full call does not fit one transaction, or `kem_commit:
 /// Some(true)` — as the hash commit with the fill `setKemKey(ua, 0, kem, UASig::default())` (no signature: the pop signed the
 /// same `UAKemRecord{ua, 0, scheme, kemPkHash}`; anyone may send it). `pqz_pop_hash` defaults to `keccak256(pqz_pop)`.
@@ -443,12 +573,19 @@ pub fn registration_args(i: &RegistrationInput) -> Result<Registration> {
     let kem = KemKey::from_kem_pk(&i.kem_pk)?;
     let attrs = UAAttrs { pqz_key: i.pqz_key.clone(), pqz_pop_hash, kem: kem.clone(), kem_pk_hash: [0; 32] };
     let build = |attrs: UAAttrs| -> Result<RegisterArgs> {
-        Ok(if i.kind == 0x0120 {
-            RegisterArgs::RegisterMsig {
-                structure: MsigStructure::from_key_data(&i.key_data)?, attrs, pop: i.members.clone(), pqz_pop: i.pqz_pop.clone(),
+        let (kind, pop, pqz_pop) = (i.kind, i.pop.clone(), i.pqz_pop.clone());
+        Ok(match kind {
+            0x0120 => RegisterArgs::RegisterMsig {
+                structure: MsigStructure::from_key_data(&i.key_data)?, attrs, pop: i.members.clone(), pqz_pop,
+            },
+            0x0100 => RegisterArgs::RegisterWebAuthn { key: WebAuthnKey::from_key_data(&i.key_data)?, attrs, pop, pqz_pop },
+            0x0110 | 0x0112 => {
+                RegisterArgs::RegisterMuSig2 { kind, key: MuSig2Key::from_key_data(kind, &i.key_data)?, attrs, pop, pqz_pop }
             }
-        } else {
-            RegisterArgs::Register { kind: i.kind, key_data: i.key_data.clone(), attrs, pop: i.pop.clone(), pqz_pop: i.pqz_pop.clone() }
+            0x0111 | 0x0113 => {
+                RegisterArgs::RegisterFrost { kind, key: FrostKey::from_key_data(kind, &i.key_data)?, attrs, pop, pqz_pop }
+            }
+            _ => RegisterArgs::Register { kind, key_data: i.key_data.clone(), attrs, pop, pqz_pop },
         })
     };
     let full = build(attrs.clone())?;

@@ -530,6 +530,16 @@ fn args_json(r: &RegisterArgs) -> Value {
             "structure": { "threshold": structure.threshold, "members": structure.members.iter().map(|m| serde_json::json!({
                 "kind": m.kind, "id": hx(&m.id), "weight": m.weight })).collect::<Vec<_>>() },
             "attrs": attrs_json(attrs), "pqzPop": hx(pqz_pop), "pop": member_sigs_json(pop) }),
+        RegisterArgs::RegisterWebAuthn { key, attrs, pop, pqz_pop } => serde_json::json!({ "entry": "registerWebAuthn",
+            "key": { "x": hx(&key.x), "y": hx(&key.y), "rpIdHash": hx(&key.rp_id_hash) },
+            "attrs": attrs_json(attrs), "pqzPop": hx(pqz_pop), "pop": hx(pop) }),
+        RegisterArgs::RegisterMuSig2 { kind, key, attrs, pop, pqz_pop } => serde_json::json!({ "entry": "registerMuSig2",
+            "kind": kind, "key": { "aggKey": hx(&key.agg_key), "memberKeys": key.member_keys.iter().map(|k| hx(k)).collect::<Vec<_>>() },
+            "attrs": attrs_json(attrs), "pqzPop": hx(pqz_pop), "pop": hx(pop) }),
+        RegisterArgs::RegisterFrost { kind, key, attrs, pop, pqz_pop } => serde_json::json!({ "entry": "registerFrost",
+            "kind": kind, "key": { "groupKey": hx(&key.group_key), "threshold": key.threshold, "members": key.members.iter().map(|m| serde_json::json!({
+                "commitments": m.commitments.iter().map(|c| hx(c)).collect::<Vec<_>>(), "r": hx(&m.r), "z": hx(&m.z) })).collect::<Vec<_>>() },
+            "attrs": attrs_json(attrs), "pqzPop": hx(pqz_pop), "pop": hx(pop) }),
     }
 }
 fn fill_json(f: &SetKemKeyArgs) -> Value {
@@ -579,9 +589,7 @@ fn registration_args_typed() {
         let full = registration_args(&RegistrationInput { kem_commit: Some(false), ..reg_input(row) }).unwrap();
         assert_eq!(args_json(&full.args), row["args"], "{name}");
         assert!(full.kem_fill.is_none(), "{name}");
-        let kem = match &full.args {
-            RegisterArgs::Register { attrs, .. } | RegisterArgs::RegisterMsig { attrs, .. } => attrs.kem.clone(),
-        };
+        let kem = full.args.attrs().kem.clone();
         assert_eq!(hx(&kem.kem_pk()), row["attrs"]["kemPk"].as_str().unwrap(), "{name}: KemKey assembles to kemPk");
         if let RegisterArgs::RegisterMsig { structure, .. } = &full.args {
             assert_eq!(structure.key_data(), bytes(&row["keyData"]), "{name}: the structure is the packed key data");
@@ -637,4 +645,48 @@ fn registration_hash_commit_when_over_limit() {
     assert_eq!(fill.ua, ua_of(0x0131, &x.key_data).unwrap());
     let small = registration_args(&input("n2304-kmax4096", 18432)).unwrap();
     assert!(small.kem_fill.is_none(), "under the limit: the full key");
+}
+
+/// typed-signing R1b (TS-D13, Appendix X row 12): `webauthn-p256` / MuSig2 / FROST register through `registerWebAuthn` /
+/// `registerMuSig2` / `registerFrost` with typed keys that assemble to the packed key data (kinds.json `valid` rows), the
+/// calldata lengths cast 1.8.5 gave (no attributes, a 32-byte pop, no pqzPop; as clientkeys and forge
+/// `test_registerTypedKeysSameId`); any other single key stays `register`.
+#[test]
+fn registration_args_typed_keys() {
+    let k = load("kinds.json");
+    let mut n = 0;
+    for v in arr(&k, "valid") {
+        let kind = num(&v["kind"]) as u16;
+        let (entry, len) = match kind {
+            0x0100 => ("registerWebAuthn", 580),
+            0x0110 | 0x0112 => ("registerMuSig2", 1124),
+            0x0111 | 0x0113 => ("registerFrost", 2308),
+            _ => continue,
+        };
+        let d = bytes(&v["keyData"]);
+        let r = registration_args(&RegistrationInput { kind, key_data: d.clone(), pop: vec![0; 32], ..Default::default() }).unwrap();
+        assert_eq!(args_json(&r.args)["entry"], entry);
+        assert_eq!(r.args.calldata_len(), len, "{}", v["name"]);
+        let packed = match &r.args {
+            RegisterArgs::RegisterWebAuthn { key, .. } => [key.x, key.y, key.rp_id_hash].concat(),
+            RegisterArgs::RegisterMuSig2 { key, .. } => {
+                [key.agg_key.clone(), (key.member_keys.len() as u16).to_be_bytes().to_vec(), key.member_keys.concat()].concat()
+            }
+            RegisterArgs::RegisterFrost { key, .. } => {
+                let mut o = [key.group_key.clone(), key.threshold.to_be_bytes().to_vec(), (key.members.len() as u16).to_be_bytes().to_vec()].concat();
+                for m in &key.members {
+                    o.extend([m.commitments.concat(), m.r.clone(), m.z.to_vec()].concat());
+                }
+                o
+            }
+            _ => unreachable!(),
+        };
+        assert_eq!(packed, d, "{}: the typed key is the packed key data", v["name"]);
+        assert_eq!(r.args.key_data(), d);
+        n += 1;
+    }
+    assert_eq!(n, 6);
+    let p256 = &arr(&k, "valid")[1];
+    let r = registration_args(&RegistrationInput { kind: 0x0101, key_data: bytes(&p256["keyData"]), ..Default::default() }).unwrap();
+    assert!(matches!(r.args, RegisterArgs::Register { .. }));
 }
