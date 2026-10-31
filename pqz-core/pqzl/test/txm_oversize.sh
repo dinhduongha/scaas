@@ -2,7 +2,9 @@
 # R_TXM16 regression: the OVERSIZE bench (M = 16, measurement only) ends each shape in its own report on the default
 # 8 MiB soft stack limit, native and wasm32. A shape proves (fails 0) or is refused with PQZ_ERR_INPUT (3: its encoding
 # is over PQZ_MAX_PROOF, as the Rust core's Input); a signal or a wasm trap (no "fails" line) is a failure. Per set:
-#   [PQZ_SET=<set>] scripts/capped pqz-core/pqzl/test/txm_oversize.sh
+#   [PQZ_SET=<set>] CAPPED_MEM=5G scripts/capped pqz-core/pqzl/test/txm_oversize.sh
+# Not a gate step: (16, on) keeps up to 3.74 GiB resident (n2048-kmax1024) and systemd-oomd killed it under the default
+# 4 GB cap beside other heavy work. Run it on a quiet host when the bench, its build or the set's sizes change.
 set -eu
 cd "$(dirname "$0")/.."
 B=build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG}/ov

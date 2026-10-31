@@ -1465,12 +1465,16 @@ the full prove. The Rust core refuses the same shapes with `Input`.
 **C = Rust at M = 16** (2 proofs per shape, native C against the Rust `oversize` bench, `pqzl/runs/m16-<set>.txt`): the
 same refusals, `fails` equal, and `proofs_fnv` equal on every shape that proves (n2304-kmax4096 (16, off): `d86946b3`).
 
-**Regression test:** `pqzl/test/txm_oversize.sh`, gate step `oversize`: both shapes, native generic and specialised
+**Regression test:** `pqzl/test/txm_oversize.sh`, run by hand and not a gate step (below): both shapes, native generic and specialised
 and wasm32 generic, each must end in its own report on an 8 MiB soft limit. Green on all four sets. Before the fix 5
 of the 6 failed at n2304-kmax4096. `pqzl/runs/m16-red.txt` puts each part back in turn, and each goes red alone: the
 native stack (four SIGSEGV), the empty-proof guard (SIGFPE, wasm32 `remainder by zero`), the wasm32 stack
 (`memory access out of bounds`, which also confirms that trap is the stack) and the arena (SIGILL). The x86-64-v3
 bench, not in the test, behaves the same at n2304-kmax4096 (`pqzl/runs/m16-final.txt`).
+
+It keeps up to 3.74 GiB resident (n2048-kmax1024 (16, on)). At `CAPPED_MEM=5G` it passed on all four sets; under the
+default 4 GB cap at n2048-kmax1024, beside another session's `solc`, systemd-oomd killed its scope in the wasm32 case.
+A bench-only shape is not worth that risk inside an hours-long gate, so the gate does not run it.
 
 **Why not the core.** Moving `vR_` / `vR` into the arena also works and would drop most of the stack at every shape,
 but it changes `lazer/`, moves arena peaks by the same few MiB against the tight wasm32 budget (`pqz-ffi`'s
