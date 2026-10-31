@@ -794,15 +794,24 @@ docker compose up -d sc-verifier            # before explorer-backend
 docker compose stop sc-verifier
 ```
 
-**After every 7622 reset or deploy run** `smartcontracts/evm/script/verify-blockscout.sh` (default
-`broadcast/Deploy.s.sol/7622/run-latest.json`; `BLOCKSCOUT_API`, `FOUNDRY_PROFILE` default `private7622`): one
-`forge verify-contract … --verifier blockscout` per CREATE / CREATE2 row and per factory child of the broadcast
-(MtxRelayExecutor, the SmartKeyAccount implementation, the NormalToken / SCaaSDex implementations), constructor
-arguments from the init code, no `--libraries` (the deployed metadata has none; the verifier matches the unlinked
+**After every 7622 reset or deploy run, and after each PQZ e2e run** `smartcontracts/evm/script/verify-blockscout.sh`
+(`[broadcast [e2e-run-log …]]`, default `broadcast/Deploy.s.sol/7622/run-latest.json` and every `runs/*.txt` whose
+`# P6g e2e on chain 7622` header names the current genesis hash; `BLOCKSCOUT_API`, `RPC` default
+`http://192.168.1.72:8545`, `FOUNDRY_PROFILE` default `private7622`): one `forge verify-contract … --verifier blockscout`
+per CREATE / CREATE2 row and per factory child of the broadcast (MtxRelayExecutor, the SmartKeyAccount implementation,
+the NormalToken / SCaaSDex implementations), constructor arguments from the init code; for the PQZ e2e
+(`script/pqz/e2e.py`, no broadcast file; `deployments/7622-pqz.json` holds only its last run) every
+`<Name> at 0x…` line of its run logs (constructor arguments from the creation transaction) and every
+`<Name> release at 0x…` (an OpenFactory release: arguments `abi.encode(envVersion, env, implArgs)` rebuilt from the
+factory's `releaseOf` / `envOf`); its tokens (pqUSD, pqW) are EIP-1167 clones of those releases (`Clones` in
+`OpenFactory.createToken`), not verified themselves: the row checks Blockscout's `proxy_type` `eip1167` and its
+implementation link. No `--libraries` (the deployed metadata has none; the verifier matches the unlinked
 placeholders, a full match), forge under `scripts/capped`; skips verified addresses, prints ok / fail per contract,
 exit 1 on any fail. It looks each address up first: Blockscout learns the code of a CREATE2 or factory child only on
-demand (internal transactions are off). The PQZ e2e contracts (`script/pqz/e2e.py`) have no broadcast file and are
-not covered.
+demand (internal transactions are off). API rate limit: the backend runs with `API_RATE_LIMIT_DISABLED: "true"`
+(2026-10-31: Blockscout's default per-IP limit, 500 `/api/v2` calls per 15 min, answered 429 to every caller, the UI
+included, during a verify run); the script stays gentle anyway (one address call per check, curl retries a 429 with a
+back-off, a pause between contracts, forge status polls every 10 s).
 
 - **Patched verifier (owner ruling 2026-10-31 option (a)), temporary until upstream supports Amsterdam.** Every
   contract here is compiled with `evmVersion` `amsterdam` + `experimental` (NET-EVM-06; solc 0.8.37). Upstream v1.11.1
@@ -811,8 +820,11 @@ not covered.
   the CBOR metadata): 0 of 31 verified (`Unknown evm version: amsterdam`). The live stack uses a locally patched
   verifier image (built outside the repo, `/home/dockers/mba-chain-nethermind/sc-verifier/`: patch, `build.sh`, README;
   blockscout-rs `9457af29` + the two foundry-compilers 0.19.10 crates with `amsterdam` and `experimental` passed
-  through, no verifier code change). Result: 31 ok, 0 fail, every contract a full match (evm amsterdam, experimental
-  true). To return to upstream: `sc-verifier/check-image.sh <image>` must print `SUCCESS OK FULL`, then swap the image
+  through, no verifier code change). Result (Deploy.s.sol only): 31 ok, 0 fail, every contract a full match (evm amsterdam, experimental
+  true); with the PQZ e2e logs (five runs on this genesis) 136 ok, 0 fail: 126 contracts all full matches, 10 token
+  clones `eip1167` with their implementation. Calls that keep a raw selector in the transaction list: the CREATE2
+  deployer `0x4e59b448…956C` (raw bytecode, its calldata is salt + init code, not an ABI call), and contracts outside
+  the broadcast and the e2e logs (the node's `PqzPrecompileProbe` from the pqz6 live run was verified once by hand). To return to upstream: `sc-verifier/check-image.sh <image>` must print `SUCCESS OK FULL`, then swap the image
   back (steps in that README).
 - **Measured (2026-10-31, `docker stats`, cgroup):** idle 0.02–0.03 % / 4.5 MiB. Patched image, the 31-contract run
   (about 3 min): up to 100.6 % (its 1-CPU cap) and 402 MiB; cgroup `memory.peak` reached the 512 MiB cap with page

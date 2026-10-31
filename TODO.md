@@ -177,7 +177,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      internal network) + `rpc` (no key, archive, public RPC, the sentry for external nodes); NET-EVM-10; Blockscout on the
      archive `rpc`, its code backfill and coin-balance cleanup no longer needed. The metatx-split real-node e2e items (TODO below) are all non-EVM families.
      **Contract verification on 2026-10-31** (owner ruling option (a)): a locally patched sc-verifier image (built outside the
-     repo, `/home/dockers/mba-chain-nethermind/sc-verifier/`), 31 of 31 contracts a full match. **TODO: switch to upstream
+     repo, `/home/dockers/mba-chain-nethermind/sc-verifier/`), the 31 `Deploy.s.sol` contracts and the 95 of the five PQZ e2e runs a full match, their 10 token clones linked (EIP-1167). **TODO: switch to upstream
      sc-verifier when it supports amsterdam** (each new release: `sc-verifier/check-image.sh <image>` → `SUCCESS OK FULL`,
      then the README's return steps).
      Was: fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) **together with Task 9 calibration**
