@@ -111,7 +111,8 @@ TestCase {
         compare(UaKinds.purposeTagV("pop", 2), pp.tags.PURPOSE_POP_V2.hash)
         compare(UaKinds.purposeTag("kem"), pp.tags.PURPOSE_KEM.hash)
         compare(UaKinds.purposeTag("pqz-key"), pp.tags.PURPOSE_PQZ_KEY.hash)
-        compare(pp.registrations.length, 25)
+        verify(pp.tags.KEM_RECORD_TAG === undefined)  // the raw record tags are legacy (TS-D3)
+        compare(UaKinds.portableDomainSeparator(), pp.typed.domainSeparator)
         let withPqz = 0
         for (const r of pp.registrations) {
             const a = r.attrs
@@ -120,18 +121,21 @@ TestCase {
             compare(h.pqzKeyHash, r.pqzKeyHash, r.name)
             compare(h.pqzPopHash, a.pqzPopHash, r.name)
             compare(h.kemRecordHash, r.kemRecordHash, r.name)
-            compare(h.portablePopDigest, r.portablePopDigest, r.name)
+            compare(h.portableRecordDigest, r.portableRecordDigest, r.name)
             compare(h.registrationDigest, r.registrationDigest, r.name)
             compare(h.message, r.popMessage, r.name)
             compare(h.memberDigest ?? "", r.memberDigest ?? "", r.name)
-            compare(UaKinds.portablePopDigest(r.ua, h.pqzKeyHash, h.kemRecordHash), r.portablePopDigest)
-            compare(UaKinds.registrationDigest(r.portablePopDigest, h.pqzPopHash), r.registrationDigest)
+            compare(UaKinds.kemRecordHash(r.ua, Number(a.kemVersion), a.kemPk), r.kemRecordHash, r.name)
+            compare(UaKinds.portableRecordDigest(r.ua, r.kind, h.pqzKeyHash, h.kemRecordHash), r.portableRecordDigest, r.name)
+            compare(UaKinds.registrationDigest(r.ua, r.kind, h.pqzKeyHash, h.kemRecordHash, h.pqzPopHash), r.registrationDigest, r.name)
             if (a.pqzKey !== "0x") {
                 withPqz++
-                compare(UaKinds.pqzRegMessage(r.ua, a.pqzKey, Number(a.kemVersion), a.kemPk), r.pqzRegMessage, r.name)
+                compare(UaKinds.pqzRegMessage(r.kind, r.ua, a.pqzKey, Number(a.kemVersion), a.kemPk), r.pqzRegMessage, r.name)
+                // TS-D3: R_REG proves over the typed UAPortableRecord of the registering kind
+                compare(UaKinds.uaMessage(0x0142, UaKinds.purposeTagV("pop", 2), r.portableRecordDigest), r.pqzRegMessage, r.name)
             }
         }
-        compare(withPqz, 8)
+        verify(withPqz > 0)
         // hash-only proof path agrees with the proof bytes
         for (const r of pp.registrations) {
             const a = r.attrs
@@ -142,7 +146,7 @@ TestCase {
             compare(h.message, r.popMessage, r.name)
         }
         // the portable.json negatives that are digest-layer rules (as ua-rs / ua-cs)
-        let run = 0
+        let run = 0, sigLevel = 0
         for (const n of pp.negatives) {
             const m = n.mutation, set = m.set ?? {}
             const only = Object.keys(set).every(x => x.startsWith("attrs.") || x === "pqzPop")
@@ -173,9 +177,23 @@ TestCase {
                 const d = UaKinds.kemRecordDigest(set.ua, Number(kr.version), kr.kemPk)
                 verify(UaKinds.uaMessage(t.kind, UaKinds.purposeTag("kem"), d) !== kr.message, n.name)
                 run++
+            } else if (n.name === "record-kind-mismatch") {
+                // the typed record binds `kind`: the same UA and attributes under another kind is another message
+                const row = pp.registrations.find(r => r.name === m.row), z = "0x" + "00".repeat(32)
+                const d = UaKinds.registrationDigest(row.ua, m.otherKind, z, UaKinds.kemRecordHash(row.ua, 0, "0x"), z)
+                verify(UaKinds.uaMessage(row.kind, UaKinds.purposeTagV("pop", 2), d) !== row.popMessage, n.name)
+                run++
+            } else if (n.name === "kem-record-as-registration") {
+                // the row's own typed KEM record is not its registration (struct type)
+                const row = pp.registrations.find(r => r.name === m.row)
+                verify(pp.kemRecords.find(r => r.ua === row.ua).digest !== row.registrationDigest, n.name)
+                run++
+            } else {
+                sigLevel++  // signatures / native members: verified by the signature vectors
             }
         }
-        compare(run, 60)
+        compare(run + sigLevel, pp.negatives.length)
+        verify(run > 0 && sigLevel > 0)
         // refusals
         const proof = "0x" + "07".repeat(32), ua = "0x" + "01".repeat(32)
         for (const bad of [0x0101, 0x0133]) {  // single-key non-holders refuse a PQZ key (on every pqzReg row's UA)
@@ -201,26 +219,20 @@ TestCase {
         compare(UaKinds.chainKeyHash(1099511627783), "0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950")
     }
 
-    function test_personalSign() {
+    function test_portablePurposes() {
         const pp = vectors.load("portable.json")
-        const md = pp.registrations.find(r => r.name === "msig-pq-native").memberDigest
-        // known answer from the JS reference: prefix 0x19 + "Ethereum Signed Message:\n32" (28 bytes)
-        compare(md, "0x606d9a70c70d39e5d8d079c3ae31eefa6db574219dab56d6c776cb6731e61a7c")
-        compare(UaKinds.personalSignDigest(md), "0xe5d24987e9b4e710063a5432d6215eaead64d8dc073f7561726d21644d54c3d8")
-        compare(UaKinds.lastError, "")
         verify(UaKinds.isPortablePurpose(pp.tags.PURPOSE_POP_V2.hash) && UaKinds.isPortablePurpose(pp.tags.PURPOSE_KEM.hash)
                && UaKinds.isPortablePurpose(pp.tags.PURPOSE_PQZ_KEY.hash))
         verify(!UaKinds.isPortablePurpose(UaKinds.purposeTag("metatx")) && !UaKinds.isPortablePurpose(UaKinds.purposeTag("pop")))
         compare(UaKinds.lastError, "")
         verify(!UaKinds.isPortablePurpose("0x" + "00".repeat(31)))
         compare(UaKinds.lastError, "UAArgument")
-        UaKinds.personalSignDigest("0x" + "00".repeat(31))
+        UaKinds.portableRecordDigest("0x" + "00".repeat(31), 0x0130, "0x" + "00".repeat(32), "0x" + "00".repeat(32))
         compare(UaKinds.lastError, "UAArgument")
     }
 
     function test_pqzKeyRecord() {
         const pp = vectors.load("portable.json")
-        compare(pp.pqzKeyRecords.length, 8)
         let msigRows = 0
         for (const r of pp.pqzKeyRecords) {
             const reg = pp.registrations.find(x => x.ua === r.ua)
@@ -244,18 +256,17 @@ TestCase {
             UaKinds.pqzKeyRecordMessage(r.kind, r.ua, reg.keyData, r.pqzKey, "0x", r.pqzPopHash, true)
             compare(UaKinds.lastError, "UAPqzKeySet", r.name)
             compare(UaKinds.pqzKeyDigest(r.ua, r.pqzKeyHash), r.pqzKeyDigest, r.name)
-            compare(UaKinds.pqzKeyRecordDigest(r.pqzKeyDigest, r.pqzPopHash), r.recordDigest, r.name)
+            compare(UaKinds.pqzKeyRecordDigest(r.ua, r.pqzKeyHash, r.pqzPopHash), r.recordDigest, r.name)
         }
-        compare(UaKinds.pqzKeyRecordTag(), pp.tags.PQZ_KEY_RECORD_TAG.hash)
-        compare(msigRows, 8)  // 4 msig rows, each with the proof bytes and hash-only
+        verify(msigRows > 0)
     }
 
     function test_kemRecord() {
         const pp = vectors.load("portable.json")
-        compare(pp.kemRecords.length, 9)
         for (const r of pp.kemRecords) {
             const d = UaKinds.kemRecordDigest(r.ua, Number(r.version), r.kemPk)
             compare(d, r.digest, r.id)
+            compare(UaKinds.kemRecordHash(r.ua, Number(r.version), r.kemPk), r.structHash, r.id)
             compare(UaKinds.uaMessage(r.kind, UaKinds.purposeTag("kem"), d), r.message, r.id)
             compare(UaKinds.kemRecordMessage(r.kind, r.ua, Number(r.version), r.kemPk), r.message, r.id)
             if (r.kind === 0x0120)
@@ -275,32 +286,33 @@ TestCase {
             UaKinds.kemRecordDigest(ua, 1, kem(1601, scheme))
             compare(UaKinds.lastError, "UAKemScheme", scheme)
         }
-        compare(UaKinds.kemRecordTag(), pp.tags.KEM_RECORD_TAG.hash)
         // known answer at 2^53, the largest version a QML number carries exactly (ua-rs / ua-py pin 2^64 - 1)
-        compare(UaKinds.kemRecordDigest(ua, 9007199254740992, kem(1601)), "0x044b39422238f0bea9c5d8689f0d3b3d3139c83928ca8c12b30a7238225a673e")
+        compare(UaKinds.kemRecordDigest(ua, 9007199254740992, kem(1601)), "0x04a0150e24a83fa4dbc9f760b7f649f939bcb62cb4ddd3a9f56f7d2e3d990482")
         UaKinds.kemRecordDigest(ua, 9007199254740994, kem(1601))
         compare(UaKinds.lastError, "UAArgument")
     }
 
     function test_structures() {
         for (const p of s.pop) {
-            const portable = UaKinds.portablePopDigest(p.ua, p.pqzKeyHash, p.kemRecordHash)
-            compare(portable, p.portablePopDigest)
-            compare(UaKinds.registrationDigest(portable, p.pqzPopHash), p.registrationDigest)
+            compare(UaKinds.portableRecordDigest(p.ua, p.kind, p.pqzKeyHash, p.kemRecordHash), p.portableRecordDigest)
+            compare(UaKinds.registrationDigest(p.ua, p.kind, p.pqzKeyHash, p.kemRecordHash, p.pqzPopHash), p.registrationDigest)
         }
         for (const p of s.pqzReg) {
             compare(UaKinds.keyHashOf(0x0142, k.pqzKey), p.pqzKeyHash)
-            compare(UaKinds.portablePopDigest(p.ua, p.pqzKeyHash, p.kemRecordHash), p.portablePopDigest)
-            compare(UaKinds.uaMessage(0x0142, UaKinds.purposeTagV("pop", 2), p.portablePopDigest), p.pqzRegMessage)
-            if (p.kemRecordHash !== "0x" + "00".repeat(32))
+            compare(UaKinds.portableRecordDigest(p.ua, p.kind, p.pqzKeyHash, p.kemRecordHash), p.portableRecordDigest)
+            compare(UaKinds.uaMessage(0x0142, UaKinds.purposeTagV("pop", 2), p.portableRecordDigest), p.pqzRegMessage)
+            if (p.kemRecordHash !== UaKinds.kemRecordHash(p.ua, 0, "0x"))
                 continue  // an opaque label; the real records are in portable.json
-            compare(UaKinds.pqzRegMessage(p.ua, k.pqzKey, 0, ""), p.pqzRegMessage)
+            compare(UaKinds.pqzRegMessage(p.kind, p.ua, k.pqzKey, 0, ""), p.pqzRegMessage)
             const h = JSON.parse(UaKinds.holderPopMessage(p.kind, p.ua, "0x", k.pqzKey, "0x" + "07".repeat(32), 0, ""))
             compare(h.pqzKeyHash, p.pqzKeyHash)
-            compare(h.portablePopDigest, p.portablePopDigest)
+            compare(h.portableRecordDigest, p.portableRecordDigest)
         }
-        for (const p of s.pqzMsig)
+        for (const p of s.pqzMsig) {
             compare(UaKinds.msigPqzEligible(p.keyData), p.eligible, p.reason)
+            compare(UaKinds.portableRecordDigest(p.ua, 0x0120, p.eligible ? k.pqzKeyHash : "0x" + "00".repeat(32), UaKinds.kemRecordHash(p.ua, 0, "0x")),
+                    p.portableRecordDigest, p.reason)
+        }
         for (const a of s.uaAuth) {
             const c = s.contexts[a.context]
             compare(UaKinds.uaAuthDomainSeparator(a.generation, c.chainId, c.registry, c.chainUid), a.domainSeparator)

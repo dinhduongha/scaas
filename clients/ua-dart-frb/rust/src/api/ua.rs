@@ -102,14 +102,6 @@ pub fn purpose_tag_v(purpose: String, version: i64) -> R<[u8; 32]> {
     Ok(scaas_ua::purpose_tag_v(&purpose, n(version)?)?)
 }
 #[frb(sync)]
-pub fn kem_record_tag() -> [u8; 32] {
-    scaas_ua::ua8::kem_record_tag()
-}
-#[frb(sync)]
-pub fn pqz_key_record_tag() -> [u8; 32] {
-    scaas_ua::ua8::pqz_key_record_tag()
-}
-#[frb(sync)]
 pub fn ua_of(kind: i64, key_data: Vec<u8>) -> R<[u8; 32]> {
     Ok(scaas_ua::ua_of(k(kind)?, &key_data)?)
 }
@@ -167,15 +159,28 @@ pub fn ua_message(kind: i64, purpose: [u8; 32], digest: [u8; 32]) -> R<[u8; 32]>
 pub fn chain_key_hash(chain_id: i64) -> R<[u8; 32]> {
     Ok(scaas_ua::chain_key_hash(n(chain_id)?))
 }
-/// `keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqz_key_hash ‖ kem_record_hash)`, each hash 32 zero bytes when absent (UA-8 P1: no chain).
+/// The portable EIP-712 domain separator `DS_P` (`EIP712Domain(string name,string version)` = ("SCaaS UA Portable", "1"), no
+/// chain; typed-signing TS-D1): every portable digest is `keccak256(0x1901 ‖ DS_P ‖ hashStruct)`.
 #[frb(sync)]
-pub fn portable_pop_digest(ua: [u8; 32], pqz_key_hash: [u8; 32], kem_record_hash: [u8; 32]) -> [u8; 32] {
-    scaas_ua::ua8::portable_pop_digest(&ua, &pqz_key_hash, &kem_record_hash)
+pub fn portable_domain_separator() -> [u8; 32] {
+    scaas_ua::ua8::PORTABLE_DOMAIN_SEPARATOR
 }
-/// `keccak256(portable_pop_digest ‖ pqz_pop_hash)`: what the signer's `pop` signs under `ua_message(kind, POP_V2, ·)`.
+/// `hashStruct(UAKemRecord{ua, version, scheme, kemPkHash})`, the `kem` word of a portable record; `(0, [])` is the zero record
+/// `UAKemRecord{ua, 0, 0, 0}` (no KEM record), otherwise the rules of [`kem_record_digest`].
 #[frb(sync)]
-pub fn registration_digest(portable: [u8; 32], pqz_pop_hash: [u8; 32]) -> [u8; 32] {
-    scaas_ua::ua8::registration_digest(&portable, &pqz_pop_hash)
+pub fn kem_record_hash(ua: [u8; 32], version: u64, kem_pk: Vec<u8>) -> R<[u8; 32]> {
+    Ok(scaas_ua::ua8::kem_record_hash(&ua, version, &kem_pk)?)
+}
+/// typed `UAPortableRecord{ua, kind, pqzKeyHash, kem}`: what `R_REG` proves over at `register`; a hash is 32 zero bytes when absent.
+#[frb(sync)]
+pub fn portable_record_digest(ua: [u8; 32], kind: i64, pqz_key_hash: [u8; 32], kem_record_hash: [u8; 32]) -> R<[u8; 32]> {
+    Ok(scaas_ua::ua8::portable_record_digest(&ua, k(kind)?, &pqz_key_hash, &kem_record_hash))
+}
+/// typed `UARegistration{record, pqzPopHash}`: what the signer's `pop` signs under `ua_message(kind, POP_V2, ·)` (and a native
+/// `msig` member signs itself, TS-D4).
+#[frb(sync)]
+pub fn registration_digest(ua: [u8; 32], kind: i64, pqz_key_hash: [u8; 32], kem_record_hash: [u8; 32], pqz_pop_hash: [u8; 32]) -> R<[u8; 32]> {
+    Ok(scaas_ua::ua8::registration_digest(&ua, k(kind)?, &pqz_key_hash, &kem_record_hash, &pqz_pop_hash))
 }
 /// A KEM record attribute `(version >= 1, 1,601-byte key: scheme byte 1 first)`; `None`, or `(0, [])`, = absent. `version` is a `u64` (a Dart
 /// `BigInt`: 1 ... 2^64 - 1).
@@ -186,7 +191,7 @@ pub struct KemRecord {
 fn kem(k: &Option<KemRecord>) -> Option<(u64, &[u8])> {
     k.as_ref().map(|k| (k.version, k.pk.as_slice()))
 }
-/// `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kem_pk))` (`UAKemVersion` for 0, `UAKemScheme` unless the first byte is 1, `UAKemKeyLength` unless 1,601 bytes).
+/// typed `UAKemRecord{ua, version, scheme, kemPkHash}` that `setKemKey` signs (`UAKemVersion` for 0, `UAKemScheme` unless the first byte is 1, `UAKemKeyLength` unless 1,601 bytes).
 #[frb(sync)]
 pub fn kem_record_digest(ua: [u8; 32], version: u64, kem_pk: Vec<u8>) -> R<[u8; 32]> {
     Ok(scaas_ua::ua8::kem_record_digest(&ua, version, &kem_pk)?)
@@ -204,13 +209,13 @@ fn hash(h: &Option<Vec<u8>>) -> R<Option<[u8; 32]>> {
     }
 }
 /// The portable PoP of a registration (UA-8 P1, P2). `message = ua_message(kind, POP_V2, registration_digest)`: what the signer's
-/// `pop` signs (every kind). `member_digest` (an `msig` only) is what each member signs under `member`; a code-less native
-/// member signs `personal_sign_digest(member_digest)` (ruling C7).
+/// `pop` signs (every kind). `member_digest` (an `msig` only) is what each derived member signs under `member`; a native
+/// member signs `registration_digest` itself (TS-D4).
 pub struct HolderPop {
     pub pqz_key_hash: [u8; 32],
     pub pqz_pop_hash: [u8; 32],
     pub kem_record_hash: [u8; 32],
-    pub portable_pop_digest: [u8; 32],
+    pub portable_record_digest: [u8; 32],
     pub registration_digest: [u8; 32],
     pub message: [u8; 32],
     pub member_digest: Option<[u8; 32]>,
@@ -234,26 +239,28 @@ pub fn holder_pop_message(
         pqz_key_hash: r.pqz_key_hash,
         pqz_pop_hash: r.pqz_pop_hash,
         kem_record_hash: r.kem_record_hash,
-        portable_pop_digest: r.portable_pop_digest,
+        portable_record_digest: r.portable_record_digest,
         registration_digest: r.registration_digest,
         message: r.message,
         member_digest: r.member_digest,
     })
 }
-/// The message `R_REG` proves over: `ua_message(0x0142, POP_V2, portable_pop_digest(ua, key_hash(pqz_key), kem_record_hash))`.
+/// The message `R_REG` proves over: `ua_message(0x0142, POP_V2, portable_record_digest(ua, kind, key_hash(pqz_key),
+/// kem_record_hash))`, `kind` the registering kind.
 #[frb(sync)]
-pub fn pqz_reg_message(ua: [u8; 32], pqz_key: Vec<u8>, kem_record: Option<KemRecord>) -> R<[u8; 32]> {
-    Ok(scaas_ua::pqz_reg_message(&ua, &pqz_key, kem(&kem_record))?)
+pub fn pqz_reg_message(kind: i64, ua: [u8; 32], pqz_key: Vec<u8>, kem_record: Option<KemRecord>) -> R<[u8; 32]> {
+    Ok(scaas_ua::pqz_reg_message(k(kind)?, &ua, &pqz_key, kem(&kem_record))?)
 }
-/// `keccak256(PQZ_KEY_RECORD_TAG ‖ ua ‖ pqz_key_hash)`: what a later PQZ key's `R_REG` proves over.
+/// typed `UAPqzKey{ua, pqzKeyHash}`: what a later PQZ key's `R_REG` proves over.
 #[frb(sync)]
 pub fn pqz_key_digest(ua: [u8; 32], pqz_key_hash: [u8; 32]) -> [u8; 32] {
     scaas_ua::ua8::pqz_key_digest(&ua, &pqz_key_hash)
 }
-/// `keccak256(pqz_key_digest ‖ pqz_pop_hash)`: what `setPqzKey`'s signature signs under `ua_message(kind, PURPOSE_PQZ_KEY, ·)`.
+/// typed `UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}`: what `setPqzKey`'s signature signs under
+/// `ua_message(kind, PURPOSE_PQZ_KEY, ·)` (and a native `msig` member signs itself, TS-D4).
 #[frb(sync)]
-pub fn pqz_key_record_digest(key_digest: [u8; 32], pqz_pop_hash: [u8; 32]) -> [u8; 32] {
-    scaas_ua::ua8::pqz_key_record_digest(&key_digest, &pqz_pop_hash)
+pub fn pqz_key_record_digest(ua: [u8; 32], pqz_key_hash: [u8; 32], pqz_pop_hash: [u8; 32]) -> [u8; 32] {
+    scaas_ua::ua8::pqz_key_record_digest(&ua, &pqz_key_hash, &pqz_pop_hash)
 }
 /// The PQZ key record of `setPqzKey` (ruling A1-I1): `message` is what the UA signs, `pqz_reg_message` what the key's `R_REG`
 /// proves over; `member_digest` as in [`HolderPop`].
@@ -290,14 +297,8 @@ pub fn pqz_key_record_message(
         member_digest: r.member_digest,
     })
 }
-/// EIP-191 `personal_sign` of a 32-byte digest: `keccak256(0x19 ‖ "Ethereum Signed Message:\n32" ‖ digest)`. A code-less native
-/// (EOA) `msig` member signs it over the `member_digest` of a portable record only (POP_V2, KEM, PQZ_KEY; ruling C7); every
-/// other purpose stays UAAuth.
-#[frb(sync)]
-pub fn personal_sign_digest(digest: [u8; 32]) -> [u8; 32] {
-    scaas_ua::personal_sign_digest(&digest)
-}
-/// POP_V2, KEM, PQZ_KEY: the only purposes a code-less native `msig` member signs by `personal_sign`.
+/// POP_V2, KEM, PQZ_KEY: the only purposes where a code-less native `msig` member signs the record's typed digest itself
+/// (`eth_signTypedData_v4`, TS-D4); every other purpose stays UAAuth.
 #[frb(sync)]
 pub fn is_portable_purpose(tag: [u8; 32]) -> bool {
     scaas_ua::ua8::is_portable_purpose(&tag)

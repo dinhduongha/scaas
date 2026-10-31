@@ -5,11 +5,11 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart' show
 
 import 'src/rust/api/ua.dart' as g;
 
-export 'src/rust/api/ua.dart' hide kemRecordDigest, kemRecordMessage, holderPopMessage, pqzRegMessage;
+export 'src/rust/api/ua.dart' hide kemRecordHash, kemRecordDigest, kemRecordMessage, holderPopMessage, pqzRegMessage;
 export 'src/rust/frb_generated.dart' show ScaasUa;
 
 // A KEM version is a Rust u64, and flutter_rust_bridge encodes a BigInt with toSigned(64): 2^64 + 1 would reach Rust as 1
-// and -1 as 2^64 - 1. These four keep the generated signatures and refuse such a version first (UAKemVersion, as ua-dart
+// and -1 as 2^64 - 1. These five keep the generated signatures and refuse such a version first (UAKemVersion, as ua-dart
 // and the JS reference).
 BigInt _v(BigInt v) => v.isNegative || v.bitLength > 64 ? throw const g.UAError(code: 'UAKemVersion', reason: '') : v;
 g.KemRecord? _k(g.KemRecord? k) {
@@ -17,7 +17,12 @@ g.KemRecord? _k(g.KemRecord? k) {
   return k;
 }
 
-/// `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kem_pk))` (`UAKemVersion` for 0 or outside 1 ... 2^64 - 1,
+/// `hashStruct(UAKemRecord{ua, version, scheme, kemPkHash})`, the `kem` word of a portable record; `(0, [])` is the zero record
+/// `UAKemRecord{ua, 0, 0, 0}` (no KEM record), otherwise the rules of [kemRecordDigest].
+g.U8Array32 kemRecordHash({required g.U8Array32 ua, required BigInt version, required List<int> kemPk}) =>
+    g.kemRecordHash(ua: ua, version: _v(version), kemPk: kemPk);
+
+/// The typed `UAKemRecord` digest `setKemKey` signs (`UAKemVersion` for 0 or outside 1 ... 2^64 - 1,
 /// `UAKemScheme` unless the first byte is 1, `UAKemKeyLength` unless 1,601 bytes).
 g.U8Array32 kemRecordDigest({required g.U8Array32 ua, required BigInt version, required List<int> kemPk}) =>
     g.kemRecordDigest(ua: ua, version: _v(version), kemPk: kemPk);
@@ -40,6 +45,7 @@ g.HolderPop holderPopMessage({
     g.holderPopMessage(
         kind: kind, ua: ua, keyData: keyData, pqzKey: pqzKey, pqzPop: pqzPop, pqzPopHash: pqzPopHash, kemRecord: _k(kemRecord));
 
-/// The message `R_REG` proves over (see the generated `pqzRegMessage`); a KEM version outside 0 ... 2^64 - 1 is `UAKemVersion`.
-g.U8Array32 pqzRegMessage({required g.U8Array32 ua, required List<int> pqzKey, g.KemRecord? kemRecord}) =>
-    g.pqzRegMessage(ua: ua, pqzKey: pqzKey, kemRecord: _k(kemRecord));
+/// The message `R_REG` proves over for the registering `kind` (see the generated `pqzRegMessage`); a KEM version outside
+/// 0 ... 2^64 - 1 is `UAKemVersion`.
+g.U8Array32 pqzRegMessage({required PlatformInt64 kind, required g.U8Array32 ua, required List<int> pqzKey, g.KemRecord? kemRecord}) =>
+    g.pqzRegMessage(kind: kind, ua: ua, pqzKey: pqzKey, kemRecord: _k(kemRecord));
