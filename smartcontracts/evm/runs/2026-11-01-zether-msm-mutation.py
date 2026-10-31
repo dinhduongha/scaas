@@ -9,6 +9,8 @@ import fcntl, re, subprocess, sys
 
 SRC = 'src/zether/ZetherVerifier.sol'
 ALONE = r'test_eachTransferEquationAloneRefused\(\)'
+BURN = 'test_eachBurnEquationAloneRefused'
+MULTI = 'test_eachMultiEquationAloneRefused'
 E3 = '''for (uint256 i; i < 3; ++i) _term(x.f, slots[i], x.w, s[i], x.r);
         x.w = mulmod(x.w, x.rho, x.r);'''
 E4 = '''for (uint256 i; i < 4; ++i) _term(x.f, slots[i], x.w, s[i], x.r);
@@ -65,7 +67,39 @@ ROWS = [
     ('BP-2 dropped from the fold', [
         ('''uint256 w = b.wt;
         uint256 a = b.at;''', '''uint256 w = 0; b.wt = 0;
-        uint256 a = b.at;''')], 'test_eachBpTwoAloneRefused'),
+        uint256 a = b.at;''')], r'test_(eachBpTwoAloneRefused|verifyRange)'),
+    ('second BP: BP-1 dropped', [
+        ('''uint256 w = b.wt;
+        uint256 z2 = mulmod(b.z, b.z, r);
+        uint256 sumY;''', '''uint256 w = b.at == sigmaEnd(b) ? b.wt : 0;
+        uint256 z2 = mulmod(b.z, b.z, r);
+        uint256 sumY;'''),
+        ('''_term(b.f, b.at + 3, w, _negS(mulmod(b.x, b.x, r), r), r);
+        b.wt = mulmod(w, b.rho, r);''', '''_term(b.f, b.at + 3, w, _negS(mulmod(b.x, b.x, r), r), r);
+        b.wt = mulmod(b.wt, b.rho, r);'''),
+        ('''    struct BP {''', '''    function sigmaEnd(BP memory b) private pure returns (uint256) { return b.f.length - 32; }
+
+    struct BP {''')], 'test_secondBpOneAloneRefused'),
+    ('no-auditor E7 dropped', drop4(8), 'test_eachTransferEquationAloneRefused_noAuditor'),
+    ('burn E1 dropped', drop3(1), BURN),
+    ('burn E5 dropped', drop4(2), BURN),
+    ('burn E8 dropped', drop4(3), BURN),
+    ('multi E3_0 dropped', drop4(7), MULTI),
+    ('multi E6_0 dropped', drop4(8), MULTI),
+    ('multi E6p_1 dropped', drop3(14), MULTI),
+    ('multi E7_1 dropped', drop4(15), MULTI),
+    ('multi E4 dropped', drop4(3), MULTI),
+    ('multi E8 dropped', drop4(5), MULTI),
+    ('first caller point not in the MSM', [('_copy(pts, SLOT_EXT * b.p, sigma.points, 0, sigma.points.length);',
+                                            '_copy(pts, (SLOT_EXT + 1) * b.p, sigma.points, b.p, sigma.points.length - b.p);')], 'test_every'),
+    ('A_Vv out of the MSM', [('_copy(pts, SLOT_EXT * b.p, sigma.points, 0, sigma.points.length);',
+                              '_copy(pts, SLOT_EXT * b.p, sigma.points, 0, sigma.points.length); _put(pts, SLOT_EXT + 8, new bytes(b.p), b.p);')],
+     'test_lowOrderPairAcrossEquationsRefused'),
+    ('zero-scalar slots dropped from the MSM', [('return (_isZero(_msm(pts, b.f)), st);',
+                                                 'for (uint256 i; i < b.f.length; ++i) if (b.f[i] == 0) _put(pts, i, new bytes(b.p), b.p);\n        return (_isZero(_msm(pts, b.f)), st);')],
+     'test_zeroScalarSlotStillChecked'),
+    ('wrong modulus in _term', [('f[slot] = addmod(f[slot], mulmod(w, s, r), r);', 'f[slot] = addmod(f[slot], mulmod(w, s, r), r - 2);')],
+     'test_sharedGeneratorsAddModR'),
 ]
 
 
