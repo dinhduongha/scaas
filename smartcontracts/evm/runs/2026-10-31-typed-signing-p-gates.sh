@@ -8,7 +8,7 @@
 # the tree would be dirty): smartcontracts/evm/lib, clients/clientkeys/node_modules, smartcontracts/algorand/out.
 # cargo-scaas-node needs CAPPED_MEM=6G.
 P=2026-10-31-typed-signing-p
-STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 forge-isolate sizes docs cargo-zether-prover zether-cross wasm-zether-prover cargo-scaas-node clientkeys ua-rs ua-rs-signers ua-rs-json ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb soroban vectors-check named-tests"
+STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 forge-isolate sizes docs cargo-zether-prover zether-cross wasm-zether-prover cargo-scaas-node node-e2e-anvil clientkeys ua-rs ua-rs-signers ua-rs-json ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb soroban vectors-check named-tests"
 # the skipped / empty-suite check (base runner): the one chain family this round touches + the client steps, as UA-8;
 # clientkeys keeps its 2 environmental skips, so it is checked by its named tests only
 FAMILIES="soroban ua-rs ua-rs-signers ua-rs-json ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb"
