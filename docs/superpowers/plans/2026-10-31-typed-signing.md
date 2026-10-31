@@ -905,6 +905,9 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-42** (ty
   owner ruling per form).
 - Rollback point: branch `pre-typed-signing` and tag `ref/pre-typed-signing` at main `10ac1417` (the last packed /
   generic-envelope "economy" version).
+- **Registry typed views and order lane names (owner rulings 2026-10-31):** the typed views `msigOf`, `webAuthnKeyOf`,
+  `muSig2KeyOf`, `frostKeyOf` stay next to the byte views `keyOf` / `registrationOf`. `TradeOrder.batch` / `nonce` keep
+  their names in Part C; they are the order lane (`minNonce`), separate from the meta-tx lane (`nonces`).
 - **KEM key at `register` (owner rulings 2026-10-31, for Part R / R1 and Part P's struct values):**
   1. The KEM key given at `register` **always has version (index) 0** — the first record; `register` takes no
      `kemVersion` argument any more. `setKemKey` adds later versions ≥ 1 (write-once per version, as today). "No KEM
