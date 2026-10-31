@@ -41,7 +41,7 @@ function single(name, index) {
 function msig() {
   const members = [single('ed25519', 0), single('p256', 0), single('mldsa65', 1)]
     .sort((a, b) => (hex(a.ua) < hex(b.ua) ? -1 : 1)).map((m, index) => ({ ...m, index, weight: 1 }));
-  const keyData = ua.encodeMsig(2, members.map((m) => ({ kind: m.kind, id: m.ua, weight: m.weight })));
+  const keyData = s.encodeMsig(2, members.map((m) => ({ kind: m.kind, id: m.ua, weight: m.weight })));
   const id = ua.uaOf(0x0120, keyData);
   const sign = (m) => encodeMemberSigs([0, 1].map((i) => ({ index: i, keyData: NONE,
     sig: members[i].sign(ua.uaMessage(members[i].kind, MEMBER, ua.memberDigest(id, m))) })));

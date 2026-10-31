@@ -48,7 +48,8 @@ Binding rules of the spec (quoted or restated without change):
   persistent storage, `ua_pay` uses `lane = payLane(pay_ref)`, `nonce = 0`; `relayer: Option<Address>`, `Some(r)` ⇒
   `r.require_auth()`; only a UA that can spend here may receive (`UaNotReceivable`).
 - S10: MEMBER = the enabled single-key kinds plus `stellar-account` 0x0011 and `soroban-contract` 0x0012 (host-verified,
-  `member.require_auth_for_args((ua, purpose, digest))`); `evm-eoa` 0x0001 members verified for the portable purposes
+  `member.require_auth_for_args((ua, purpose, digest))`; Change note, owner ruling 2026-10-31, after the final review:
+  0x0012 dropped from MEMBER (invoker auth), a 0x0012 member is `MemberUnknown`); `evm-eoa` 0x0001 members verified for the portable purposes
   only and "zero signing weight for every other purpose"; `evm-contract` 0x0002 members "never chain-verified here".
 - S11: "persistent, one entry per key"; instance storage only for constructor constants; temporary only for SEP-41
   allowances; "`extend_ttl(30 days, 60 days)` on each write and each in-transaction read"; "no node TTL job".

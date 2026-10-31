@@ -65,7 +65,7 @@ case "$FAMILY" in
            # --gas-budget: older Sui CLIs require it (SUI_GAS_BUDGET, MIST)
            exec sui client --client.env "$NET" call --package 0x2 --module package --function make_immutable --args "$cap" \
              --gas-budget "${SUI_GAS_BUDGET:-50000000}" ;;
-  soroban) C="${1:?contract (token|mandate|dex|smart_key_account|relay_fee)}"; shift
+  soroban) C="${1:?contract (token|mandate|dex|smart_key_account|relay_fee|ua_registry)}"; shift
            ST="${STELLAR_BIN:-stellar}"; W="$SC/soroban/target/wasm32v1-none/release"
            # `contract id wasm` / `contract extend` take only the source / RPC / config options: pass those of "$@" before
            # `--` (a deploy-only option such as --alias or --inclusion-fee would make them fail)

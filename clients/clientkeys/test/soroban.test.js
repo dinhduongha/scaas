@@ -120,3 +120,18 @@ test('soroban URN: derived ids never as strkey; a native send to a URN is refuse
   const id = B(V.registrations[0].ua);
   assert.deepEqual(sor.parseRecipient(strkey(6 << 3, id)), { addr: strkey(6 << 3, id) });
 });
+
+test('soroban URN: any-case urn:scaas:ua: prefix is a UA form, never a strkey (NET-SOR-17)', () => {
+  const id = 'ab'.repeat(32);
+  for (const t of [`URN:SCAAS:UA:v1:ed25519:${id}`, `Urn:Scaas:Ua:v1:ed25519:${id}`, `urn:scaas:ua:v1:ED25519:${id}`,
+    `urn:scaas:ua:v1:ed25519:${id.toUpperCase()}`]) {
+    assert.throws(() => sor.assertNativeRecipient(t), (e) => e instanceof ua.UAError && e.code === 'UaNotNative', t);
+    assert.throws(() => sor.parseRecipient(t), (e) => e instanceof ua.UAError && e.code === 'UAIdFormat', t);
+  }
+});
+
+test('soroban msig: a soroban-contract (C…) member is refused when building (S10, owner ruling 2026-10-31)', () => {
+  const m = (kind, b) => ({ kind, id: new Uint8Array(32).fill(b), weight: 1 });
+  assert.throws(() => sor.encodeMsig(1, [m(0x0102, 1), m(0x0012, 2)]), (e) => e instanceof ua.UAError && e.code === 'MemberUnknown');
+  assert.deepEqual(sor.encodeMsig(1, [m(0x0011, 1), m(0x0102, 2)]), ua.encodeMsig(1, [m(0x0011, 1), m(0x0102, 2)]));
+});

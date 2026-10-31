@@ -23,10 +23,14 @@ case "${1:-}" in
     if docker ps -a --format '{{.Names}}' | grep -qx "$NAME"; then
       echo "quickstart: container $NAME already exists (one quickstart at a time)" >&2; exit 3
     fi
-    # a run that fails after creating the container (port taken, start error) removes what it created
-    docker run -d --rm --memory 3g --name "$NAME" -p "127.0.0.1:$PORT:8000" "$QS_IMAGE" \
+    # a run that fails after creating the container (port taken, start error) removes what it created, by the id docker
+    # wrote to the cidfile: never by name (another process may have created `scaas-stellar` since the check above)
+    cid=$(mktemp -u "${TMPDIR:-/tmp}/scaas-stellar.XXXXXX.cid")
+    docker run -d --rm --cidfile "$cid" --memory 3g --name "$NAME" -p "127.0.0.1:$PORT:8000" "$QS_IMAGE" \
       --local --protocol-version 30 --limits testnet --enable core,rpc,horizon >/dev/null \
-      || { rc=$?; docker rm -f "$NAME" >/dev/null 2>&1 || true; echo "quickstart: up failed (docker run exit $rc)" >&2; exit "$rc"; }
+      || { rc=$?; [ -s "$cid" ] && docker rm -f "$(cat "$cid")" >/dev/null 2>&1; rm -f "$cid"
+           echo "quickstart: up failed (docker run exit $rc)" >&2; exit "$rc"; }
+    rm -f "$cid"
     echo "quickstart: $NAME up ($QS_IMAGE), rpc $RPC_URL" ;;
   down)
     docker rm -f "$NAME" >/dev/null 2>&1 || true ;;

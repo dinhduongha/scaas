@@ -6,7 +6,7 @@ import { base32 } from '@scure/base';
 import { sha256, concatBytes, utf8ToBytes, fromHex, hex } from './bytes.js';
 import { be } from './metaop.js';
 import { strkey } from './seed.js';
-import { UAError, KINDS, kindInfo, uaMessage } from './ua.js';
+import { UAError, KINDS, kindInfo, uaMessage, encodeMsig as encodeMsigKeyData } from './ua.js';
 
 // ScValType discriminants (Stellar-contract.x)
 const TYPE = { bool: 0, void: 1, u32: 3, u64: 5, i128: 10, bytes: 13, symbol: 15, vec: 16, map: 17, address: 18 };
@@ -93,7 +93,10 @@ export function uaUrn(kind, id) {
   return `urn:scaas:ua:v1:${k.name}:${hex(b).slice(2)}`;
 }
 
-/** A recipient as typed: a `G…` / `C…` strkey ⇒ `{ addr }`, a UA URN ⇒ `{ ua, kind }`; anything else throws. */
+const URN_PREFIX = /^urn:scaas:ua:/i;
+
+/** A recipient as typed: a `G…` / `C…` strkey ⇒ `{ addr }`, a UA URN ⇒ `{ ua, kind }`; anything else throws. A
+ *  `urn:scaas:ua:` prefix in any case that is not the lower-case URN is `UAIdFormat`, never a strkey error. */
 export function parseRecipient(text) {
   const m = URN.exec(String(text));
   if (m) {
@@ -101,13 +104,24 @@ export function parseRecipient(text) {
     if (!k || k.native) throw new UAError('UAKindNotDerived', m[1]);
     return { ua: fromHex(m[2]), kind: k.kind };
   }
+  if (URN_PREFIX.test(String(text))) throw new UAError('UAIdFormat', 'a UA URN is lower case: urn:scaas:ua:v1:<kind>:<hex32>');
   decodeStrkey(text);
   return { addr: String(text) };
 }
 
-/** A native payment or SEP-41 `transfer` goes to a strkey only: a UA URN is `UaNotNative` (pay the token's UA entry). */
+/** A native payment or SEP-41 `transfer` goes to a strkey only: a UA URN (any case) is `UaNotNative` (pay the token's
+ *  UA entry). */
 export function assertNativeRecipient(text) {
+  if (URN_PREFIX.test(String(text))) throw new UAError('UaNotNative', 'a native send cannot go to a UA (NET-ALL-21): use transfer_to_ua / pay_to_ua');
   const r = parseRecipient(text);
   if (r.ua) throw new UAError('UaNotNative', 'a native send cannot go to a UA (NET-ALL-21): use transfer_to_ua / pay_to_ua');
   return r.addr;
+}
+
+/** A Soroban `msig`'s key data (CTR-UA-09, `ua.encodeMsig`): a `soroban-contract` (`C…`, 0x0012) member is
+ *  `MemberUnknown`, as in the registry (spec S10, owner ruling 2026-10-31: a contract that calls the registry would
+ *  meet its own slot by Soroban invoker auth). Members: `G…` accounts (0x0011) and registered derived UAs. */
+export function encodeMsig(threshold, members) {
+  if (members.some((m) => m.kind === 0x0012)) throw new UAError('MemberUnknown', 'a soroban-contract (C…) msig member is refused on Soroban (S10)');
+  return encodeMsigKeyData(threshold, members);
 }

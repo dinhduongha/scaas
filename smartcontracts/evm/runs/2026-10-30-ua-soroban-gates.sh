@@ -13,7 +13,7 @@ STEPS="docs soroban clientkeys cargo-scaas-node soroban-spike-local e2e-soroban-
 FAMILIES="soroban soroban-spike-local e2e-soroban-local"
 # "<step>|<form>|<name>": every test added by Tasks T0-T10 (T2b, T6b included; the names as in the code now, from the
 # tasks' commits), in its tool's pass form (forms: see the base runner); then main's router-fix test kept at the merge
-# and the two node tests of the carried router-fix review fixes.
+# and the two node tests of the carried router-fix review fixes; then the final fix wave's tests (2026-10-31).
 NEW_TESTS=$(cat <<'NAMES'
 soroban-spike-local|cargo|spike_ua_pay_passkey_model_budget
 soroban-spike-local|cargo|spike_bls_add_mul_fr_budget
@@ -87,7 +87,7 @@ soroban|cargo|msig_evm_eoa_member_portable_only
 soroban|cargo|msig_member_unknown_refused
 soroban|cargo|msig_soroban_native_member_host_auth
 soroban|cargo|msig_unsignable_not_receivable
-soroban|cargo|native_address_round_trip
+soroban|cargo|stellar_account_round_trip
 soroban|cargo|register_any_submitter
 soroban|cargo|register_attrs_refused_4b
 soroban|cargo|register_disabled_kind_refused
@@ -154,6 +154,11 @@ e2e-soroban-local|cargo|e2e_soroban_ua_transfer_to_ua_and_ua_pay_relayed
 soroban|cargo|relay_victim_pay_as_target_then_drain_refused
 cargo-scaas-node|cargo|node_refuses_approvals_to_router_or_executor
 cargo-scaas-node|cargo|missing_executor_is_a_config_error
+soroban|cargo|msig_soroban_contract_member_refused
+soroban|cargo|msig_member_equal_to_token_refused
+clientkeys|node|soroban URN: any-case urn:scaas:ua: prefix is a UA form, never a strkey (NET-SOR-17)
+clientkeys|node|soroban msig: a soroban-contract (C…) member is refused when building (S10, owner ruling 2026-10-31)
+cargo-scaas-node|cargo|ua_metatx_lane_entry_root_only_no_member_auth
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"
