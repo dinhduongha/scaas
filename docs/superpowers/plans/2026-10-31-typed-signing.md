@@ -452,6 +452,24 @@ passed), `smartcontracts/evm/script/ZetherE2E.s.sol` (if it builds a PoP), `test
   `portable()` against `portable.json`) — FAIL. Step 3: implement. Step 4: PASS; forge PQZ tests that use the helper — PASS.
 - [ ] Step 5: commit `typed-signing P8: e2e.py and test helpers on the typed portable messages`.
 
+### Task P1b: register KEM key at version 0 (owner rulings, KEM items 1–4)
+
+Added by the controller after P2–P7 (2026-10-31). Runs after P3, before P5 and R1.
+
+**Files:** `clients/clientkeys/src/ua.js` (+ scripts / tests), `clients/ua-rs/src/ua8.rs` (+ tests), the P7 reproducers
+(`clients/{ua-py,ua-go,ua-cs,ua-dart}`), the P6 wrappers only where they pass a KEM version through; regenerate
+`smartcontracts/vectors/ua/{portable,structures}.json` (and `groups.json` if it moves) and their copies.
+
+- [ ] Step 1: failing tests — a registration KEM record is `UAKemRecord{ua, 0, scheme, kemPkHash}` with `scheme ≠ 0`;
+  "no KEM key" is the zero record `{ua, 0, 0, 0}`; version 0 with a key is accepted (today every library rejects it
+  with `UAKemVersion`), version 0 with `scheme = 0` and a non-empty key is refused; `setKemKey` record digests for
+  versions ≥ 1 unchanged. Step 2: FAIL in clientkeys, ua-rs, the four reproducers.
+- [ ] Step 3: implement; drop the `kemVersion` input of the register builders (always 0); regenerate the vectors.
+  Step 4: PASS in every package of P1 / P2 / P6 / P7 (the vector tests read rows generically, so most only re-run);
+  P3's forge suites re-run on the new vectors (contract change to accept version 0 at `register` lands in R1 —
+  until then the EVM tests that register with a KEM key are known failures, listed in the report).
+- [ ] Step 5: commit `typed-signing P1b: register KEM key at version 0, vectors regenerated`.
+
 ---
 
 # Part X0 — explicit-parameter inventory and calldata measurement (gates R1 and Part C)
