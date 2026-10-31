@@ -16,7 +16,7 @@ import {UAPqzVerifier} from "./UAPqzVerifier.sol";
 
 /// @title The PQZ layer of the `*_PQZ` kinds (CTR-PQZ-15, CTR-PQZ-22; P6g plan D1), in the ERC-7201 namespace
 ///        `scaas.pqz`: statements, the precompile call, account updates, rollover, shield / burn, entries, disclosure.
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** External library, run by `DELEGATECALL` (`address(this)` is the
+/// @notice **UNAUDITED.** External library, run by `DELEGATECALL` (`address(this)` is the
 ///         token); the token keeps the public ERC-20 side and the entry points (`PqzLayer`). Byte layouts:
 ///         pq-zero-knowledge.md §7.4–§7.9 and §8.1; every size from the build's parameter set (`PqzSet`, one set per
 ///         build). Ciphertexts live in state (plan 5h D1–D3, CTR-PQZ-07): one SSTORE2 op

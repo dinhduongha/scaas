@@ -18,7 +18,7 @@ bytes32 constant KEYAGG_COEF_TAG = 0xbfc904034d1c88e8c80e22e53d24566d64824ed6427
 ///         `x(P_i) < N` required); the hints are summed in Jacobian coordinates (no inversion: `Q` is lifted with one
 ///         MODEXP and compared projectively, x and parity); then BIP-340 by `x(Q)` over `m`. A degenerate partial sum
 ///         (`S == ±H_i`, never met by an honest group) gives `Z = 0` and fails closed. Malformed input returns false,
-///         never reverts. **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
+///         never reverts. **UNAUDITED.**
 contract Musig2Secp256k1Verifier is IUAPopVerifier {
     uint256 private constant _P = Bip340.P;
     uint256 private constant _N = Bip340.N;

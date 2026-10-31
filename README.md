@@ -7,7 +7,7 @@
 <p align="center">
   <a href="docs/README.md#status-tags"><img alt="Status: specified, partly built, not deployed" src="https://img.shields.io/badge/status-specified%20%C2%B7%20partly%20built%20%C2%B7%20not%20deployed-0969da"></a>
   <a href="#12-chains-and-families"><img alt="Six chain families" src="https://img.shields.io/badge/chain%20families-6-8250df"></a>
-  <a href="#11-confidential-amounts-zether-and-pq-zether"><img alt="Zether: unaudited, not for production funds" src="https://img.shields.io/badge/Zether-unaudited-d1242f"></a>
+  <a href="#11-confidential-amounts-zether-and-pq-zether"><img alt="Zether: unaudited" src="https://img.shields.io/badge/Zether-unaudited-d1242f"></a>
 </p>
 
 **SCaaS treats a smart-contract chain as infrastructure, its smart contracts as API services, and each contract
@@ -822,7 +822,7 @@ stay visible.** Auditors can still see that company A paid company B, and disclo
 named auditor opens any single transfer.
 
 > [!WARNING]
-> Zether is BUILT but **unaudited — not for production funds**: development chains only, until an independent audit.
+> Zether is BUILT but **unaudited**: open on every chain with EIP-2537 once the kind is enabled (owner ruling 2026-10-31).
 > PQ Zether is SPECIFIED, also unaudited.
 
 | | Zether (classical) | PQ Zether |
@@ -833,8 +833,8 @@ named auditor opens any single transfer.
 | Authorization | The Zether key UA itself (Schnorr by `x`, the proof authorizes a spend) | The post-quantum signing UA that carries the PQZ key: ML-DSA-65 by default, or a multisig whose non-PQ weight is below the threshold (CTR-UA-30, UA-6) |
 | Gas per transfer | ≈ 3.3 M (measured) | ≈ 2.8 M (estimate; calldata-bound, ≈ 77 KB per transfer) |
 | Gasless | Yes — `IERC20MetaTx` envelope, public fee | Yes — the same envelope, plus a post-quantum payer |
-| Where | Development chains only, until an independent audit | Private/PoA chains only (SCaaS testnet), behind a precompile self-test |
-| Status | BUILT, **unaudited — not for production funds** | SPECIFIED, **unaudited** |
+| Where | Every EVM chain with EIP-2537 (BLS12-381), kind enabled per chain (owner ruling 2026-10-31) | Any chain whose `PQZ` precompile passes the self-test (today the SCaaS testnet; no chain-id lock, owner ruling 2026-10-31) |
+| Status | BUILT, **unaudited** | SPECIFIED, **unaudited** |
 
 Read more: [docs/contracts/zether.md](docs/contracts/zether.md), [docs/contracts/pq-zero-knowledge.md](docs/contracts/pq-zero-knowledge.md),
 [docs/contracts/accounts.md](docs/contracts/accounts.md).

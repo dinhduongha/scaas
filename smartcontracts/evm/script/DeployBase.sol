@@ -237,7 +237,7 @@ abstract contract DeployBase is Script {
     ///         in Solidity on the registry's cached expanded key (no chain has an ML-DSA precompile yet; P6g passes chain
     ///         7622's to the verifier's probe); `pqz-mlwe` nowhere (its verifier is P6g's). Caps: the gen-1 defaults measured in
     ///         `test/ua/UAGas.t.sol` and `test/ua/PqGas.t.sol` (accounts.md §1.15). A disabled kind gets no verifier
-    ///         (never "registrable but unusable", CTR-UA-23). JSON `ua_registry`. **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
+    ///         (never "registrable but unusable", CTR-UA-23). JSON `ua_registry`. **UNAUDITED.**
     /// @notice The PQ signing kinds' deploy rule (owner ruling 2026-10-31, CTR-UA-23): the kind's cap is at most 66 % of the
     ///         chain's verify budget, integer-exact as `cap * 100 <= budget * 66` (12 M: 7.92 M; Hedera 10.5 M: 6.93 M). The
     ///         registry's own `cap <= budget` check is separate and unchanged.
@@ -332,7 +332,7 @@ abstract contract DeployBase is Script {
     ///         (version 1; `deps` = transfer, burn, inner-product verifier, disclosure, CTR-ZTH-20) and the two releases
     ///         on it, then the kinds enabled. JSON `zether_registry` (= `ua_registry`), `zether_statements`,
     ///         `zether_disclosure`, `zether_{inner_product_,,burn_}verifier_bls12381`,
-    ///         `implementation_{normal,wrapped}_zether_bls12381`. **UNAUDITED — NOT FOR PRODUCTION FUNDS.** The
+    ///         `implementation_{normal,wrapped}_zether_bls12381`. **UNAUDITED.** The
     ///         implementations exceed EIP-170 and the BLS inner-product verifier takes ~14 M gas: anvil
     ///         `--code-size-limit 65536`, forge script `--code-size-limit 65536 --gas-estimate-multiplier 105` (deploy.sh
     ///         passes both; docs/networks/evm.md).

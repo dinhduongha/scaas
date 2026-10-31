@@ -8,7 +8,7 @@ import {IZetherVerifier} from "./IZetherVerifier.sol";
 import {ZetherTranscript} from "./ZetherTranscript.sol";
 
 /// @title Tiết lộ có chọn lọc cho MỌI Zether token (owner Z13): không state, không admin, không nâng cấp.
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Đọc từ token qua view (`transferEntry`, `verifier`,
+/// @notice **UNAUDITED.** Đọc từ token qua view (`transferEntry`, `verifier`,
 ///         `auditorKey`, `chainUid`); đường cong do verifier của token quyết. Tách khỏi token (CTR-ZTH-43).
 ///         Challenge ràng địa chỉ TOKEN, không phải contract này: opening không phụ thuộc nơi deploy.
 contract ZetherDisclosure is ITransferDisclosure {

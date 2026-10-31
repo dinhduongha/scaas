@@ -73,7 +73,7 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///
 ///         Open in UA-2a: HIP-632 (`hedera-native` members' 64-byte ed25519 signatures) needs a non-static CALL, which a
 ///         `view` `requireAuthorized` cannot make; such members verify as ECDSA/1271 only.
-///         UNAUDITED — NOT FOR PRODUCTION FUNDS.
+///         UNAUDITED.
 contract UARegistry is IUARegistry, SaltedEIP712 {
     struct KindConfig {
         uint16 kind;

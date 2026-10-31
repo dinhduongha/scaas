@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 /// @title The confidential-token interface both layers implement: the classical Zether (`NORMAL_ZETHER`,
 ///        `WRAPPED_ZETHER`) and the post-quantum PQZ (`NORMAL_PQZ`, `WRAPPED_PQZ`) (plan 5h D20, CTR-ZTH-45).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** One selector per function across both layers, no layer argument.
+/// @notice **UNAUDITED.** One selector per function across both layers, no layer argument.
 ///         Ids are `bytes32` UAs. Every proof-taking entry point takes `(payload, proof, auth, beneficiary, accHint[,
 ///         …])`: PQZ — `auth` the signing UA's own signature over the statement digest, `beneficiary` equal to the
 ///         payload's (`BeneficiaryMismatch`), `accHint` the optional materialised `acc`, packed at

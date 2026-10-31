@@ -2,7 +2,7 @@
 
 The SCaaS contracts of the EVM family (Foundry; the other families are under `smartcontracts/<family>/`). Normative
 rules: `docs/contracts/` (start at `docs/contracts/README.md`); reasons and old ids: `docs/decisions.md`
-(`python3 scripts/docs_check.py resolve <id>`). **Unaudited — not for production funds.**
+(`python3 scripts/docs_check.py resolve <id>`). **Unaudited.**
 
 ## What is here
 

@@ -17,7 +17,7 @@ import {IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol"
 import {UAKinds} from "../ua/UAKinds.sol";
 
 /// @title Kind `WRAPPED_ZETHER` (CTR-TOK-21): the wrapper of 1–8 legs with the Zether layer (CTR-ZTH-44).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Any chain with EIP-2537 (BLS12-381). The legs, rates, reserves, `wrap`/`unwrap`,
+/// @notice **UNAUDITED.** Any chain with EIP-2537 (BLS12-381). The legs, rates, reserves, `wrap`/`unwrap`,
 ///         `mtxWrap` and the rate and guardian roles are `WrappedToken`'s (`WrappedLib`); the layer adds
 ///         `mtxWrapShield` (a leg's underlying straight into a shielded balance, minted to the pool) and
 ///         `mtxUnshieldUnwrap` (a shielded balance straight out to a leg's underlying, burnt from the pool; to an

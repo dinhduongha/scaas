@@ -14,7 +14,7 @@ import {PqzSet, PQZ_ACC_WORDS} from "./PqzSet.sol";
 
 /// @title init, shield, rollover, prepare-acc and the state views (the account state; D14): one of the four `DELEGATECALL` libraries of the PQZ release (plan 5h D14), in the ERC-7201
 ///        namespace `scaas.pqz`; the shared steps are `internal` in `PqzCore`, compiled into each.
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** `address(this)` is the token.
+/// @notice **UNAUDITED.** `address(this)` is the token.
 library PqzStateLib {
     /// @notice The kind's `_init` (P6g plan D9): `verifier` the release's `UAPqzVerifier` (CTR-ZTH-20: the creator never
     ///         chooses one; precompile and proof system: exactly `PqzSafety.PQZ`, PQZL or PQZH,

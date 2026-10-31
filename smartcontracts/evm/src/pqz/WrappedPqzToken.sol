@@ -18,7 +18,7 @@ import {PqzViewLib} from "./PqzViewLib.sol";
 import {IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
 
 /// @title Kind `WRAPPED_PQZ` (CTR-TOK-21, CTR-PQZ-22): the wrapper of 1–8 legs with the PQZ layer (P6g plan D1).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Chains 31337 / 1337 / 7622 only. Legs, rates, reserves,
+/// @notice **UNAUDITED.** Chains 31337 / 1337 / 7622 only. Legs, rates, reserves,
 ///         `wrap` / `unwrap` and the roles are `WrappedToken`'s; the layer adds `mtxWrapShield` (a leg's underlying
 ///         into a TRIVIAL pending entry, the public-equivalent minted to `SHIELD_POOL`; plan 5h D18, D19) and
 ///         `mtxUnshieldUnwrap` (a burn: `amount · shieldScale` burnt from `SHIELD_POOL`, then paid out of a leg's

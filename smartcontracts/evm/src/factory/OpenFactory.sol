@@ -20,7 +20,7 @@ import {SigCheck} from "../common/SigCheck.sol";
 ///         longer creatable (owner 2026-10-20). Creation clones by `CREATE2` with the salt scoped by the creator and
 ///         calls `initialize(creator, version, initArgs)` in the same call; `initArgs` and every kind-specific check
 ///         (flags, legs, the Zether / PQZ verifier and chain gates) are the implementation's. The registrar's key is the
-///         trust root for code (a multisig / UA msig before mainnet). **Zether is UNAUDITED — NOT FOR PRODUCTION FUNDS.**
+///         trust root for code (a multisig / UA msig before mainnet). **Zether is UNAUDITED.**
 contract OpenFactory is IOpenFactory {
     struct Info {
         address creator;

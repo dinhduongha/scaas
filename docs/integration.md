@@ -628,7 +628,7 @@ a separate income), after checking `receivedFloor + surplus ≥ limitReceive`.
 from disclosed amounts, with an audit key per company.** The ERP issues confidential payment requests on Zether tokens,
 reconciles from the amount the counterparty discloses (`ITransferDisclosure` opening) and holds the token's auditor key
 per company. The token keeps ElGamal `acc/pending` balances with a decrypt bound of 2^40; design history:
-[zether design](history/specs/2026-10-03-zether-design.md). Zether is **UNAUDITED — NOT FOR PRODUCTION FUNDS** and runs on every chain with the BLS12-381
+[zether design](history/specs/2026-10-03-zether-design.md). Zether is **UNAUDITED** and runs on every chain with the BLS12-381
 precompiles once enabled ([contracts/zether](contracts/zether.md)).
 
 ## 11. Procure-to-pay

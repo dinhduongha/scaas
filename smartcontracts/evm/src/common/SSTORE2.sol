@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 /// @title Bytes stored once as contract code (SSTORE2): runtime = `0x00` (STOP) ‖ data, so the data contract cannot
 ///        be called into anything; read back with EXTCODECOPY (accounts.md CTR-UA-17 `keyPtr`).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** It holds UA key records and the Zether / PQZ ciphertext records
+/// @notice **UNAUDITED.** It holds UA key records and the Zether / PQZ ciphertext records
 ///         (`R`, sender memos, stored keys), so it is in the audit scope of every confidential token.
 library SSTORE2 {
     error SSTORE2WriteFailed();

@@ -10,7 +10,7 @@ import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 
 /// @title The confidential layer of the kinds `NORMAL_ZETHER` and `WRAPPED_ZETHER` (CTR-ZTH-44, CTR-ZTH-45): ElGamal
 ///        `acc`/`pending` balances over the token's public ERC-20 balance.
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Byte-exact contract with the prover: `docs/contracts/zether.md`.
+/// @notice **UNAUDITED.** Byte-exact contract with the prover: `docs/contracts/zether.md`.
 ///         The token is also an `IERC20MetaTx` on the one meta-transaction base: every proof-carrying entry point is a
 ///         direct call (statement `ZTX_V1_DIRECT`, binding 0) or an allowlisted self-call of `mtxExecute` / `uaExecute`
 ///         whose envelope binding the statement carries (`ZTX_V1_RELAYED`, CTR-ZTH-34, CTR-ZTH-51). The shared entry points

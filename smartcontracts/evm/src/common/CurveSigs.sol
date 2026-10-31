@@ -7,7 +7,7 @@ import {ZetherTranscript} from "../zether/ZetherTranscript.sol";
 import {G1Bn254, G1Bls12381} from "../zether/ZetherCurves.sol";
 
 /// @title Schnorr on bn254 / BLS12-381 G1 and BLS min-sig on both curves, with the tag / DST / label as a parameter.
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Shared by the UA verifiers (`src/ua/verifiers/`: the UA Schnorr
+/// @notice **UNAUDITED.** Shared by the UA verifiers (`src/ua/verifiers/`: the UA Schnorr
 ///         tag, the Zether Schnorr tag of the Zether kinds, the BLS DSTs / labels). Returns false on a wrong signature and on a malformed bn254 G1 point
 ///         (checked in Solidity). A malformed BLS12-381 point (non-canonical, off the curve, outside the subgroup) or a
 ///         malformed bn254 G2 key makes a precompile fail — consuming all the gas it was given — and the curve helpers

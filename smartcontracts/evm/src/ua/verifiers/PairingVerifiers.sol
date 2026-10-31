@@ -13,7 +13,7 @@ import {CurveSigs} from "../../common/CurveSigs.sol";
 ///         so without it a malformed point would burn 63/64 of the caller's gas. A call that cannot give `check` its
 ///         full `CHECK_GAS` reverts `UAKinds.UAVerifyGas` (a statement about the gas, never `false` about the key).
 ///         For well-sized inputs the worst case of any call is `CHECK_GAS` + the wrapper (oversized calldata only shortens the inner
-///         budget and fails the length checks). **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
+///         budget and fails the length checks). **UNAUDITED.**
 abstract contract UASafeVerifier is IUAPopVerifier {
     uint256 public immutable CHECK_GAS;
 

@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {PqzSet} from "./PqzSet.sol";
 
 /// @title The PQZ chain gate (CTR-PQZ-01, CTR-PQZ-10; P6g plan D2): the precompile self-test, nothing else.
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** No chain-id allowlist (owner ruling 2026-10-31: PQZ is open on every
+/// @notice **UNAUDITED.** No chain-id allowlist (owner ruling 2026-10-31: PQZ is open on every
 ///         chain that meets the requirements). A chain id alone proves nothing (a missing chainspec key looks exactly
 ///         like an enabled one), so every deploy asks the precompile for its frozen self-test hash: a chain without the
 ///         `PQZ` precompile, or with one built for another set, is refused by that, whatever its id.

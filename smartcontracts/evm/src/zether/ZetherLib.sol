@@ -12,7 +12,7 @@ import {SSTORE2} from "../common/SSTORE2.sol";
 
 /// @title The confidential layer of the `*_ZETHER` kinds (CTR-ZTH-44, CTR-TOK-24), in the ERC-7201 namespace
 ///        `scaas.zether`: statements, verifier calls, account updates, roll-over, shield / unshield, disclosure entries.
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** External library: the token keeps the ERC-20 side (it moves the
+/// @notice **UNAUDITED.** External library: the token keeps the ERC-20 side (it moves the
 ///         public units a shield takes into `SHIELD_POOL` and pays out of it what an unshield gives; D19) and the entry points
 ///         (`ZetherLayer`); the logic runs here by `DELEGATECALL`, so `address(this)` is the token. One implementation
 ///         for every curve: points are `bytes`, the group operations and the proofs go through the release's verifier

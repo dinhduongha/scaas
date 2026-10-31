@@ -7,7 +7,7 @@ import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherLib} from "./ZetherLib.sol";
 
 /// @title The prover views of every Zether token (CTR-ZTH-46): the statement a token will build at this block.
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Stateless, no admin, no upgrade, one instance for every token on
+/// @notice **UNAUDITED.** Stateless, no admin, no upgrade, one instance for every token on
 ///         every curve (as `ZetherDisclosure`). It reads the token's views (`verifier`, `registry`, `chainUid`,
 ///         `confidentialFee`, `minDecoyFee`, `maxDecryptableShielded`, `auditorKey`, `auditorMode`, `disclosureMode`, `accountState`)
 ///         and runs the token's own builders (`ZetherLib`, internal), so the bytes are the token's, with the same cheap

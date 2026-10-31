@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {HashToCurve} from "../common/HashToCurve.sol";
 
 /// @title Phép nhóm G1 của bn254 qua precompile EIP-196 (0x06 add, 0x07 mul).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Điểm là `bytes` 64 byte `x ‖ y`, vô cực = 64 byte 0
+/// @notice **UNAUDITED.** Điểm là `bytes` 64 byte `x ‖ y`, vô cực = 64 byte 0
 ///         (đặc tả `2026-10-03-zether-design.md` §2). Cofactor 1: on-curve là đủ, và precompile tự từ
 ///         chối điểm sai/không chính tắc, nên mọi hàm ở đây revert `BadPoint` thay vì trả rác. Mọi lời gọi precompile
 ///         đòi đúng số byte trả về (review W-I): một chain thiếu 0x05/0x06/0x07 trả "thành công, rỗng", nên chỉ cờ
@@ -151,7 +151,7 @@ library G1Bn254 {
 }
 
 /// @title Phép nhóm G1 của BLS12-381 qua EIP-2537 (0x0b G1ADD, 0x0c G1MSM).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Điểm 128 byte (mỗi Fp 64 byte, 16 byte 0 đầu).
+/// @notice **UNAUDITED.** Điểm 128 byte (mỗi Fp 64 byte, 16 byte 0 đầu).
 ///         G1ADD chỉ kiểm on-curve; **G1MSM kiểm subgroup** — nên `isValid`, `msm` đều đi qua 0x0c.
 library G1Bls12381 {
     uint256 internal constant R = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001;

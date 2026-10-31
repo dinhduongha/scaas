@@ -1,6 +1,6 @@
 # Zether — confidential amounts (classical)
 
-**Status: BUILT, UNAUDITED — NOT FOR PRODUCTION FUNDS.** The kinds `NORMAL_ZETHER` (`NormalZetherToken`) and
+**Status: BUILT, UNAUDITED.** The kinds `NORMAL_ZETHER` (`NormalZetherToken`) and
 `WRAPPED_ZETHER` (`WrappedZetherToken`) on the one meta-transaction base (`ZetherLayer` + `ZetherLib`),
 `ZetherStatements`, `ZetherDisclosure`, per curve the transfer, burn and inner-product verifiers
 (`ZetherTransferVerifier*`, `ZetherBurnVerifier*`, `ZetherInnerProductVerifier*`, [CTR-ZTH-20](#CTR-ZTH-20)), `ZetherCurves`,
@@ -60,7 +60,7 @@ fee scalars, the `ITransferDisclosure` selective-disclosure interface (open the 
 stored per transfer), a Rust prover compiled to WASM for client proving, relayer support, and **mandatory tests**.
 
 The
-`UNAUDITED — NOT FOR PRODUCTION FUNDS` gate applies: the factory's kind flag and the deploy flag are off by default on
+`UNAUDITED` gate applies: the factory's kind flag and the deploy flag are off by default on
 every chain, and NatSpec and client screens carry the warning. Non-EVM families: feasibility only. The statement and transcript are
 frozen byte-exact in this file. Classical Zether runs on BLS12-381 only ([CTR-ZTH-32](#CTR-ZTH-32)); the bn254 line
 (a second curve cost twice the verifier audit and ~1.3× prover work, with no interop between curves) is in
@@ -1185,7 +1185,7 @@ Hedera env; `DEPLOY_ZETHER` refuses a Hedera deploy; the Hedera registry gets no
   generic gate of every kind (plan 5g-Z2): enabling the Zether kinds is an admin act per chain; creating a `*_ZETHER`
   token reverts when the kind is off (`KindDisabled`).
 - The release's verifiers stay pinned ([CTR-ZTH-20](#CTR-ZTH-20)).
-- The NatSpec of every Zether contract carries **UNAUDITED — NOT FOR PRODUCTION FUNDS**.
+- The NatSpec of every Zether contract carries **UNAUDITED**.
 
 <a id="parameters"></a>
 <a id="CTR-ZTH-32"></a>**CTR-ZTH-32** — **Classical Zether is BLS12-381 only** (owner). BLS12-381 is more secure

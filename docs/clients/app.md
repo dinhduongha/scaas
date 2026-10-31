@@ -597,7 +597,7 @@ books.** Owner decision (non-EVM DEX books after EVM). The DEX module is generic
 beneficiary})` (`validUntilBlock`: required since `…/v3`, the last block the token accepts the proof in, [zether expiry](../contracts/zether.md#valid-until)) with `x` from `openConfKey` **inside** the worker; the result is `opData` for the `OP_ZTRANSFER` envelope
 (gateway) or `directCalldata`; the proof alone authorizes the spend. Balance: open the cache, then `checkBalance` against the current `acc`; on a miss run BSGS on the delta; after own
 operations update with `setCachedBalance` / `cacheAfterDebit` / `cacheAfterRollOver`; above the device bound (2^44) show a
-banner ([zether balance](signers-clientkeys.md#zether-balance)). Every Zether screen carries "UNAUDITED — NOT FOR PRODUCTION FUNDS".
+banner ([zether balance](signers-clientkeys.md#zether-balance)). Every Zether screen carries "UNAUDITED".
 
 <a id="zether-worker"></a><a id="CLI-APP-13"></a>**CLI-APP-13** — **Zether runs in one session worker.** The worker runs the
 prover (`wasm-bindgen --target web`) and opens the conf vault itself (`openConfKey`), so `x` never enters the main realm; it

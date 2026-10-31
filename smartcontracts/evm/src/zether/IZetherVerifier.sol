@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 /// @title Verifier ZK — inject bằng địa chỉ, KHÔNG import thẳng vào token.
 ///
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
+/// @notice **UNAUDITED.**
 ///
 ///         Hai curve cùng được hỗ trợ, không ưu tiên cái nào; mỗi implementation token gắn một curve qua
 ///         verifier immutable của nó, nên token đã deploy **không đổi được verifier** (đổi verifier dưới một số dư

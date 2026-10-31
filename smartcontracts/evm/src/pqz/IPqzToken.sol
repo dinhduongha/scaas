@@ -5,7 +5,7 @@ import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 
 /// @title Events, errors, the account view and the PQZ-only entry points of the PQZ layer (pq-zero-knowledge.md §7.1,
 ///        §7.8, §9.4); the shared entry points and events are `IConfidentialToken`'s (plan 5h D20).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** `bytes32` ids are signing UAs holding a PQZ key (UA-6 U7).
+/// @notice **UNAUDITED.** `bytes32` ids are signing UAs holding a PQZ key (UA-6 U7).
 interface IPqzToken is IConfidentialToken {
     /// @notice `pqzAccount` (pq-zero-knowledge.md §9.4; plan 5h D2 / D3, D13): the counters, the `acc` reference (`accBlob`,
     ///         0 for `Trivial(0)`; ignored while `flags & 1`, the materialised `acc`), `flags` (1 MATERIALISED, 2 / 4 the

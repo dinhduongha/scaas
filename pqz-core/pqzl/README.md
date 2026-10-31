@@ -5,7 +5,7 @@ lattice proof (LNP22: ABDLOP commitments plus LaZer's "tbox" proof), and its sec
 MSIS and MLWE. Proofs are small: an `R_TX` transfer proof is 46,670 B at the default parameter set `n2304-kmax4096`
 (42,783 B at `n2048-kmax1024`; every set and relation: [params/sets/README.md](../params/sets/README.md), from the
 gate's `runs/gate/<set>-fnv-c.jsonl`). Verify and prove times are not final: they wait on the calibration of plan 5h
-Task 9. Unaudited, not for production funds.
+Task 9. Unaudited.
 
 This directory holds the C core: a fork of IBM's [LaZer](https://github.com/lazer-crypto/lazer) (commit `3330e48`,
 MIT) with six layers rewritten so that it runs without GMP, MPFR, HEXL, floating point, `malloc`, `abort` or stdio —

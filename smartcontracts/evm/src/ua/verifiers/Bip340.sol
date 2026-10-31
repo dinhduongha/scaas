@@ -8,7 +8,7 @@ pragma solidity ^0.8.24;
 ///         returns `address(P_x⁻¹·(−e·P_x·P + s·P_x·G)) = address(R)` (v = 27 selects P's even-y lift); the expected
 ///         `R` is `r` lifted to even y with one MODEXP (`p ≡ 3 mod 4`). Off-curve `P` or `r`, `P ≥ p`, `r ≥ p`, `s ≥ n`
 ///         and a wrong signature length return false. Not covered (probability ~2⁻¹²⁸ each, fail closed): `P_x ≥ n`
-///         (ecrecover refuses r ≥ n) and `e == 0`. **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
+///         (ecrecover refuses r ≥ n) and `e == 0`. **UNAUDITED.**
 library Bip340 {
     uint256 internal constant P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F;
     uint256 internal constant N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;

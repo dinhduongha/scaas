@@ -23,7 +23,7 @@ interface IInnerProductBound {
 
 /// @title The Zether layer of the kinds `NORMAL_ZETHER` and `WRAPPED_ZETHER` (CTR-ZTH-44): the entry points of
 ///        CTR-ZTH-45 and the views; the state and the logic are `ZetherLib` (`scaas.zether`).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Open on every chain (owner ruling 2026-10-31; the factory kind gate stays). A layer over the
+/// @notice **UNAUDITED.** Open on every chain (owner ruling 2026-10-31; the factory kind gate stays). A layer over the
 ///         public ERC-20 balance: `mtxShield` moves public units to `SHIELD_POOL`, `mtxUnshield` moves them back (D19: no
 ///         burn, no mint; to an address or a signing UA, CTR-ZTH-51); the confidential layer
 ///         keeps no underlying of its own. The registry (the base's, `ERC20MetaTx`), the disclosure contract and the

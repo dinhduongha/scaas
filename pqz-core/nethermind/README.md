@@ -5,7 +5,7 @@ Ethereum client (no change to Nethermind itself) that adds three **precompiles**
 addresses that run native code instead of EVM bytecode. One of them, `PQZ`, hands each proof to the PQZ library
 `libpqz_ffi.so`; the other two check ML-DSA signatures. It runs today on the SCaaS testnet (chain id 7622), which runs
 Amsterdam (Glamsterdam) since its reset on 2026-10-21. The SCaaS testnet is a test chain whose data may be reset; the
-code is unaudited and not for production funds. What PQZ is and how the library works: the parent [pqz-core README](../README.md), §3
+code is unaudited. What PQZ is and how the library works: the parent [pqz-core README](../README.md), §3
 ["Two proof systems, one precompile"](../README.md#3-two-proof-systems-one-precompile).
 
 - **Image:** the plugin ships in the local Docker image `scaas/nethermind-pqz:2.2.0-pqz5` (built locally, never

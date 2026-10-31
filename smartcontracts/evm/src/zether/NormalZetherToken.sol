@@ -13,7 +13,7 @@ import {ZetherLib} from "./ZetherLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 
 /// @title Kind `NORMAL_ZETHER` (CTR-TOK-21): the standalone token with the Zether layer (CTR-ZTH-44).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Any chain with EIP-2537 (BLS12-381). `MINTABLE` mints public units only; shielded
+/// @notice **UNAUDITED.** Any chain with EIP-2537 (BLS12-381). `MINTABLE` mints public units only; shielded
 ///         value exists only through `mtxShield`, which moves public units to `SHIELD_POOL`. Flags: `PAYABLE`, `MINTABLE`, `BURNABLE`
 ///         (the regulated flags are refused, CTR-ZTH-47). Built by `OpenFactory.createToken` with `conf` set and `legs`,
 ///         `rate` empty. Never on Hedera (`ZetherLayer` refuses a Hedera env).

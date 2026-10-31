@@ -5,7 +5,7 @@ import {IUAPopVerifier} from "../IUAVerifier.sol";
 import {HashToCurve} from "../../common/HashToCurve.sol";
 
 /// @title RFC 9591 FROST(secp256k1, SHA-256) verification and the frost-core DKG proof of knowledge (accounts.md §1.6.1).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Elements are SEC1 compressed (33), scalars 32-byte big-endian.
+/// @notice **UNAUDITED.** Elements are SEC1 compressed (33), scalars 32-byte big-endian.
 ///         `H(m, label) = int(expand_message_xmd_SHA256(m, "FROST-secp256k1-SHA256-v1" ‖ label, 48)) mod N`
 ///         (RFC 9591 §6.5 `hash_to_field`; labels `chal` for H2, `dkg` for the ZF frost-core `HDKG`).
 ///         Every `z·G − c·Q == R` check is one `ecrecover(−z·x(Q), v(Q), x(Q), −c·x(Q))`, which returns

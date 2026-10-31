@@ -559,7 +559,7 @@ pre-migration aborts when any chain is still `pull`, and the final node refuses 
 outside these docs):
 
 - **Audits**: a third-party audit of every contract family before it holds real funds; confidential-payment contracts
-  stay behind their dev gate until an independent cryptographic audit ([contracts/README.md#production-gates-unaudited](../contracts/README.md#production-gates-unaudited)).
+  carry the UNAUDITED label and the factory's per-kind gate (no chain-id gate, owner ruling 2026-10-31; [contracts/README.md#production-gates-unaudited](../contracts/README.md#production-gates-unaudited)).
   The factory registrar is a multisig, not an EOA, before mainnet.
 - **Chain enablement** (`draft → active`, tooling PLANNED): only after (1) a working simulation path, (2) 7 days of
   measured finality depth on the real network, (3) ≥ 2 independent RPC endpoints for the quorum

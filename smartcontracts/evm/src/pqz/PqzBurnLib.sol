@@ -12,7 +12,7 @@ import {PqzCore} from "./PqzCore.sol";
 
 /// @title burn, refresh and the unwrap debit (D14): one of the four `DELEGATECALL` libraries of the PQZ release (plan 5h D14), in the ERC-7201
 ///        namespace `scaas.pqz`; the shared steps are `internal` in `PqzCore`, compiled into each.
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** `address(this)` is the token.
+/// @notice **UNAUDITED.** `address(this)` is the token.
 library PqzBurnLib {
     /// @notice `R_BURN`: the debit with `amount` public (0 = refresh); the token then moves `paid` (D19)
     ///         and pays `amount · shieldScale`.
