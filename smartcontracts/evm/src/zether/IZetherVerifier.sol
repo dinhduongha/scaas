@@ -73,14 +73,36 @@ interface IZetherBurnVerifier is IZetherVerifierCommon {
 }
 
 /// @title The inner-product (Bulletproof) verifier of a curve (CTR-ZTH-20 split, candidate (2)): it holds the NUMS
-///        generators and checks the 64-bit range proofs for the curve's transfer and burn verifiers, which fix it in
-///        their constructor.
+///        generators, checks the 64-bit range proofs for the curve's transfer and burn verifiers, which fix it in their
+///        constructor, and runs the one MSM of the merged check (zether.md §9.1, CTR-ZTH-53).
 interface IZetherInnerProductVerifier is IZetherVerifierCommon {
+    /// @notice The caller's side of the merged check, before the range proofs. A fold slot is a position of
+    ///         `G ‖ Hb ‖ U ‖ G_0..63 ‖ H_0..63 ‖ points`.
+    /// @param rho the fold challenge, `≠ 0` or the call answers false.
+    /// @param weight the weight of the first range-proof equation: `ρ^e` after the caller's `e` equations.
+    /// @param points the caller's untrusted points, concatenated, slots from 131.
+    /// @param scalars the caller's weighted sum per slot, `131 + points` entries.
+    /// @param commitments the slot of each range proof's commitment `V`, in proof order.
+    struct SigmaFold {
+        uint256 rho;
+        uint256 weight;
+        bytes points;
+        uint256[] scalars;
+        uint256[] commitments;
+    }
+
     /// @notice The SSTORE2 data contract of the generator blob (`0x00 ‖ blob`).
     function generatorStore() external view returns (address);
 
-    /// @notice One range proof (`n = 64`) of `V` on the running transcript `st`; returns the verdict and the new state.
+    /// @notice One range proof (`n = 64`) of `V` on the running transcript `st`, its two equations folded alone; returns the
+    ///         verdict and the new state.
     /// @dev Precondition: `V` is not absorbed here; `st` must already bind `V` (the caller absorbs it, as `_ctx` does
     ///      as `"sigma.commit"`). With an unbound `st` the proof is a weak-Fiat-Shamir forgery target.
     function verifyRange(bytes32 st, bytes calldata V, bytes calldata proof) external view returns (bool, bytes32);
+
+    /// @notice The merged check: `rangeProofs` (`BP(64)` concatenated) on the running transcript `st`, their equations added to
+    ///         `sigma`, and one MSM that must equal `O`.
+    /// @dev A pure function of its inputs. The caller owns the soundness of `sigma`: `st` must bind the commitments, and `ρ`
+    ///      must hash the full statement and the full proof, this one's `rangeProofs` included (zether.md §9.1).
+    function verifyFold(bytes32 st, SigmaFold calldata sigma, bytes calldata rangeProofs) external view returns (bool);
 }

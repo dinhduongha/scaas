@@ -33,6 +33,26 @@ contract ZetherProver {
 
     uint256 constant HEADER = 512; // zether.md §7: chainUid is word 3, salt word 13, memoHash word 14, validUntilBlock word 15
 
+    /// @dev A cheating prover (zether-msm), both 0 = honest. `tamperCommit = i + 1`: `[1]G` on Σ point `i` before it is
+    ///      absorbed, so everything else stays honest under the new challenges and only that point's equation fails.
+    ///      `tamperT1 = rid`: the same on `T1` of the range proof `rid`, which only its BP-1 reads.
+    uint256 public tamperCommit;
+    uint256 public tamperT1;
+
+    function setTamper(uint256 commit, uint256 t1) external {
+        (tamperCommit, tamperT1) = (commit, t1);
+    }
+
+    /// @dev `pts` with `[1]G` added to its point `i`.
+    function _offset(Env memory e, bytes memory pts, uint256 i) internal view returns (bytes memory) {
+        _copy(pts, i * e.p, e.v.g1Add(_slice(pts, i * e.p, e.p), e.g), 0, e.p);
+        return pts;
+    }
+
+    function _tampered(Env memory e, bytes memory commits) internal view returns (bytes memory) {
+        return tamperCommit == 0 ? commits : _offset(e, commits, tamperCommit - 1);
+    }
+
     function _env(IZetherVerifier v, bytes32 seed) internal view returns (Env memory e) {
         e.v = v;
         e.r = v.groupOrder();
@@ -86,7 +106,7 @@ contract ZetherProver {
         bytes memory s = statement;
         uint256[6] memory k;
         for (uint256 i; i < 6; ++i) k[i] = _rand(e, "sigma.k", i); // k_x k_v k_s k_b k_gv k_gb
-        bytes memory commits = _transferCommits(e, s, w, k);
+        bytes memory commits = _tampered(e, _transferCommits(e, s, w, k));
         bytes32 st = T.absorb(T.init(), "statement", s);
         st = T.absorb(st, "sigma.commit", commits);
         uint256 c;
@@ -174,7 +194,7 @@ contract ZetherProver {
     {
         uint256[] memory k = new uint256[](4 + 3 * w.v.length); // k_x k_s k_b k_gb (k_vj k_gvj k_tj)_j
         for (uint256 i; i < k.length; ++i) k[i] = _rand(e, "multi.k", i);
-        bytes memory commits = _multiCommits(e, statement, w, k);
+        bytes memory commits = _tampered(e, _multiCommits(e, statement, w, k));
         st = T.absorb(T.absorb(T.init(), "statement", statement), "sigma.commit", commits);
         uint256 c;
         (st, c) = T.challenge(st, "sigma.c", e.r);
@@ -271,7 +291,7 @@ contract ZetherProver {
         Env memory e = _env(v, w.seed);
         uint256[6] memory k;
         for (uint256 i; i < 3; ++i) k[i] = _rand(e, "burn.k", i); // k_x k_b k_gb
-        bytes memory commits = _burnCommits(e, statement, w.bPrime, w.gammaB, k);
+        bytes memory commits = _tampered(e, _burnCommits(e, statement, w.bPrime, w.gammaB, k));
         bytes32 st = T.absorb(T.init(), "statement", statement);
         st = T.absorb(st, "sigma.commit", commits);
         uint256 c;
@@ -328,6 +348,7 @@ contract ZetherProver {
         (st, q.y) = T.challenge(st, "bp.y", e.r);
         (st, q.z) = T.challenge(st, "bp.z", e.r);
         _polys(e, q);
+        if (tamperT1 == e.rid) q.T12 = _offset(e, q.T12, 0);
         st = T.absorb(st, "bp.T", q.T12);
         (st, q.x) = T.challenge(st, "bp.x", e.r);
         _evalAt(e.r, q);

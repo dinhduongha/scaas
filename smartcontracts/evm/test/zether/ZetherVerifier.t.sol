@@ -144,7 +144,7 @@ contract ZetherVerifierTest is Test {
         Case memory k = Case(bls, 1000, 300, 5, true);
         bytes memory st = _transferStatement(k, k.amount);
         bytes memory pr = _proveTransfer(k, st, k.amount);
-        uint256 p = 64;
+        uint256 p = 128;
         // một bit ở: V_v, A_bal, z_x, z_gb, BP#1 A, BP#1 L1, BP#1 R6, BP#1 τ_x, BP#2 R6, BP#2 b
         // (n_v = 64: BP#1 = 16P + 160, cùng khuôn BP#2)
         uint256[10] memory offs = [uint256(5), 6 * p + 9, 10 * p + 31, 10 * p + 191, 10 * p + 192 + 40,
@@ -263,14 +263,12 @@ contract ZetherVerifierTest is Test {
         Case memory k = Case(bls, 1000, 300, 5, false);
         bytes memory st = _transferStatement(k, k.amount);
         bytes memory pr = _proveTransfer(k, st, k.amount);
-        // z_x + r: cùng điểm, khác byte — phải bị từ chối (chống malleability)
+        // z_x + r (the word after the ten Σ points): cùng điểm, khác byte — phải bị từ chối (chống malleability)
         uint256 zx;
-        assembly { zx := mload(add(add(pr, 32), 640)) }
+        assembly { zx := mload(add(add(pr, 32), 1280)) }
         uint256 alias_ = zx + bls.groupOrder();
-        if (alias_ > zx) {
-            assembly { mstore(add(add(pr, 32), 640), alias_) }
-            assertFalse(bls.verifyTransfer(st, pr));
-        }
+        assembly { mstore(add(add(pr, 32), 1280), alias_) }
+        assertFalse(bls.verifyTransfer(st, pr));
     }
 
     // ------------------------------------------------------------------ burn
