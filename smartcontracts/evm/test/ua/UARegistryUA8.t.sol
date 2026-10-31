@@ -2703,6 +2703,40 @@ contract UARegistryUA8Test is UARegistryBase {
         }
     }
 
+    /// PRV L7, `_kemHash`'s commit branch for a record here: `storePqzPop` after a hash-committed `register` proves over the
+    /// row's own `pqzRegMessage` (the committed record is the same record), the key not filled yet (`mldsa65`) or filled
+    /// (a PQ-eligible `msig`). The stand-in verifier accepts exactly that message.
+    function test_storePqzPopAfterKemHashCommit() public {
+        Row[] memory rows = _rows();
+        UARegistry a = _regA(true);
+        Row[3] memory h = _kemHolders(a, rows);
+        for (uint256 i = 1; i < 3; ++i) {
+            Row memory x = h[i];
+            assertEq(UACall.register(a, x.kind, x.keyData, UACall.commit(x.attrs), x.pop, ""), x.ua, x.name);
+            if (i == 2) a.setKemKey(x.ua, 0, x.attrs.kem, _noSig());
+            _allowPqz(x);
+            a.storePqzPop(x.ua, x.pqzPop);
+            assertTrue(_proven(a, x.ua), x.name);
+        }
+    }
+
+    /// PRV L7, `_kemHash`'s commit branch on a gen-2 host: gen 2 proves a gen-1 record's hash-committed `register` key, the
+    /// commit read from gen 1's `registrationOf`, unfilled (`mldsa65`) or filled there (a PQ-eligible `msig`).
+    function test_storePqzPopAfterKemHashCommitGen2Host() public {
+        Row[] memory rows = _rows();
+        UARegistry g1 = _regA(false);
+        Row[3] memory h = _kemHolders(g1, rows);
+        UARegistry g2 = _gen2Pqz(address(0x5cebd), g1);
+        for (uint256 i = 1; i < 3; ++i) {
+            Row memory x = h[i];
+            assertEq(UACall.register(g1, x.kind, x.keyData, UACall.commit(x.attrs), x.pop, ""), x.ua, x.name);
+            if (i == 2) g1.setKemKey(x.ua, 0, x.attrs.kem, _noSig());
+            _allowPqz(x);
+            g2.storePqzPop(x.ua, x.pqzPop);
+            assertTrue(_proven(g2, x.ua), x.name);
+        }
+    }
+
     /// Owner 2026-10-31 (KEM item 4): every version is write-once. `setKemKey` on version 0 stored by `register`, on
     /// version 0 after the hash-commit fill, and on a stored version ≥ 1 each revert `UAKemVersion` and leave the stored
     /// key unchanged — the same key again and another key, signed or not.

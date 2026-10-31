@@ -205,8 +205,11 @@ interface IUARegistry is IERC5267 {
     /// (`mldsa44`, `mldsa65`, `fndsa512`, a PQ-eligible `msig`; UA-6 U3, UA8-D12) carries a PQZ key or a KEM record.
     /// `pqzPop`: the `R_REG` proof over `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(...))`, optional (empty: the
     /// key is stored unproven, `storePqzPop` later; also unproven where the `0x0142` slot is empty, UA8-D8). The attribute
-    /// checks (holder, proof hash, PQZ key length, KEM version, KEM key length) come before the PoP (portable.json
-    /// `negatives`). Anyone may submit; the same arguments register on every registry.
+    /// checks (holder, proof hash, PQZ key length, KEM key length) come before the PoP (portable.json `negatives`). Anyone
+    /// may submit; the same arguments register on every registry, and so does the hash-commit form of the same `pop`
+    /// (PRV M1, owner 2026-11-01): a front-run yields the same record, its hash-commit form or a revert; after `register`
+    /// or `UAAlreadyRegistered` a client reads `registrationOf`, and when `attrs.kemPkHash != 0` and `kemKeyAt(ua, 0)` is
+    /// empty sends `setKemKey(ua, 0, key, UASig())`.
     function register(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
         bytes calldata pqzPop) external returns (bytes32 ua);
     /// `register` for the structure `msig` (typed-signing TS-D10): the key data is assembled from `s` (CTR-UA-09), so the

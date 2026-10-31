@@ -827,8 +827,9 @@ library PqzCore {
             if (err.length == 4 && bytes4(err) == UAKinds.UAVerifyGas.selector) revert UAKinds.UAVerifyGas();
             revert IPqzToken.AuthRejected();
         }
-        // typed-signing R1 (until C2 types `authSig`): the `UASig` copies are dead after the call; the verifier call
-        // below reuses their memory, so the conversion adds no memory growth on top of the statement buffer
+        // typed-signing R1 (until C2 types `authSig`): the `UASig` copies are dead after the call, so the free pointer
+        // goes back to `fmp` (read after `buf`). The conversion still raises the memory high-water mark past the statement
+        // buffer once; the verifier call below reuses that memory
         assembly ("memory-safe") { mstore(0x40, fmp) }
         assembly ("memory-safe") {
             calldatacopy(add(add(buf, 37), len), proof.offset, proof.length)

@@ -252,7 +252,7 @@ library UAKinds {
     }
 
     // The portable records (UA-8 UA8-D1; typed-signing TS-D1 … TS-D3): EIP-712 structs under the portable domain, no
-    // chain id, no chain uid, no registry. The registry checks the attributes (holder, version ≥ 1, 1,601-byte scheme-1
+    // chain id, no chain uid, no registry. The registry checks the attributes (holder, scheme, 1,601-byte scheme-1
     // key) before it hashes them. `pqzKeyHash = keyHashOf(0x0142, pqzKey)`, `pqzPopHash = keccak256(pqzPop)`, each 0
     // when absent.
 
@@ -262,7 +262,8 @@ library UAKinds {
     }
 
     /// `hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)})` over the whole key; no
-    /// record (version 0, no key) is the zero record `UAKemRecord{ua, 0, 0, 0}` (TS-D2: version 0 is never a record).
+    /// record (version 0, no key) is the zero record `UAKemRecord{ua, 0, 0, 0}` (a present record has scheme ≠ 0, owner
+    /// 2026-10-31: version 0 is the `register` key).
     function kemRecordHash(bytes32 ua, uint64 version, bytes memory kemPk) internal pure returns (bytes32) {
         if (version == 0 && kemPk.length == 0) return kemRecordHash(ua, 0, 0, 0);
         uint8 scheme = kemPk.length == 0 ? 0 : uint8(kemPk[0]); // an empty key never reaches a record (UAKemKeyLength)

@@ -1228,7 +1228,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         (uint16 kind, bytes32 id) = (uint16(_u16(d, o)), bytes32(_word(d, o + 2)));
         if (!UAKinds.isNative(kind)) return _derived(id, kind, UAKinds.PURPOSE_MEMBER, md, s.keyData, s.sig);
         if (s.keyData.length != 0) return false;
-        if (typed != 0) return _nativePortable(address(uint160(uint256(id))), typed, s.sig);
+        if (typed != 0) return _byCode(address(uint160(uint256(id))), typed, s.sig);
         return _native(id, UAKinds.PURPOSE_MEMBER, md, s.sig);
     }
 
@@ -1237,18 +1237,20 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// delegate; other code ⇒ ERC-1271 only. Always over `uaAuthDigest`. OZ `tryRecover` refuses high s and a recovered
     /// `address(0)`, so neither id 0 nor a garbage signature ever matches.
     function _native(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory sig) private view returns (bool) {
-        bytes32 h = uaAuthDigest(ua, purposeTag, digest);
-        return _byCode(address(uint160(uint256(ua))), h, h, sig);
+        return _byCode(address(uint160(uint256(ua))), uaAuthDigest(ua, purposeTag, digest), sig);
     }
 
-    /// The native rule (ruling D1): an EOA (no code, or the EIP-7702 designator `0xef0100 ‖ delegate`) ⇒ ECDSA over `e`
-    /// by its own key only; a contract ⇒ ERC-1271 over `h` only.
-    function _byCode(address a, bytes32 e, bytes32 h, bytes memory sig) private view returns (bool) {
+    /// The native rule (ruling D1; owner ruling 2026-10-30, "an EOA must really sign, no delegation"): an EOA (no code, or
+    /// the EIP-7702 designator `0xef0100 ‖ delegate`) ⇒ ECDSA over `digest` by its own key only (65-byte r ‖ s ‖ v, low s, v
+    /// 27 / 28: OZ `tryRecover`), never ERC-1271 through the delegate; other code ⇒ ERC-1271 `isValidSignature(digest, sig)`
+    /// only. `digest` is `uaAuthDigest` for `_native`, or a portable record's typed digest for a native `msig` member (what
+    /// `eth_signTypedData_v4` returns, no EIP-191, no chain context; typed-signing TS-D4, owner decision 4).
+    function _byCode(address a, bytes32 digest, bytes memory sig) private view returns (bool) {
         if (!SigCheck.isContract(a)) {
-            (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(e, sig);
+            (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, sig);
             return err == ECDSA.RecoverError.NoError && rec == a;
         }
-        return _1271(a, h, sig);
+        return _1271(a, digest, sig);
     }
 
     /// ERC-1271 at 50 k, 400 k for a `SmartKeyAccount` clone (by its immutable codehash).
@@ -1265,14 +1267,6 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         );
     }
 
-    /// A native `msig` member of a portable record (no chain context; owner ruling 2026-10-30, "an EOA must really sign,
-    /// no delegation"; typed-signing TS-D4, owner decision 4): code-less or an EIP-7702 designator (an EOA) ⇒ ECDSA by
-    /// its own key only (65-byte r ‖ s ‖ v, low s, v 27 / 28: OZ `tryRecover`) over the record's typed digest (what
-    /// `eth_signTypedData_v4` returns; no EIP-191), never ERC-1271 through the delegate; other code (a contract wallet)
-    /// ⇒ ERC-1271 `isValidSignature(digest, sig)` only, at the same caps as `_native`.
-    function _nativePortable(address a, bytes32 digest, bytes memory sig) private view returns (bool) {
-        return _byCode(a, digest, digest, sig);
-    }
 
     function _verifierCall(uint256 cfg, bytes4 selector, bytes memory keyData, bytes32 message, bytes memory sig)
         private
