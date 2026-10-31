@@ -1,3 +1,59 @@
+## Session 2026-10-31 (UA-Soroban merged, SCaaS testnet rolled out, PQZ / Zether unlocked) — resume here
+
+**State:** `main` = this note on top of `27d77467`; origin = `63e49509` (pushed 2026-10-31 on the owner's "push"); the
+`scaas-testnet` rename merge and this note are local. Running at the time of writing: branch `zether-testnet`
+(classical Zether deployed + e2e + verified on the SCaaS testnet; brief `.superpowers/sdd/2026-10-31-zether-testnet/brief.md`).
+Owner 2026-10-31: **continue automatically up to the contracts audit with Codex / agy / Claude, then stop** for the owner
+(Codex credits ran out on 2026-10-27, owner: no refill — ask before any Codex run).
+
+**Merged today (all on `main`):**
+- `ua-soroban` (`d9af46c3`): UA on Soroban (registry, token UA ledger, mandate epoch, DEX, relay-fee router + executor,
+  node `ua_metatx`, clientkeys); owner ruling A-I1 option (b): `soroban-contract` 0x0012 is not an msig MEMBER (invoker
+  auth); router/executor refused as a mandate delegate. Next on Soroban: T14 Stellar testnet run (from 2026-11-03), then
+  `ua8-soroban` (with the msig pop minimal form on every family), then `zether-soroban` (Z0 measures first).
+- `zether-ungate` (`ea2c5c94`), owner rulings 2026-10-31:
+  - classical Zether has no chain-id lock: open on every chain with EIP-2537 (BLS12-381 only; Hedera refused) — CTR-ZTH-52
+    supersedes CTR-ZTH-02 / -33;
+  - PQZ has no chain-id allowlist: gated by the precompile self-test only — CTR-PQZ-01 Change;
+  - UA kinds enabled by capability, no `dev` flag: `bls-bn254-minsig` by the bn254 G2 probe; PQ signing kinds
+    (mldsa44/65, fndsa512, slhdsa128s) where cap ≤ 66 % of the chain's verify budget (was 50 %; Hedera now gets all four)
+    — CTR-UA-23 Changes;
+  - an audit is not a deploy gate for the PQ kinds or ed25519 (audit still required before real funds / the SCaaS
+    mainnet launch, TODO.md:14);
+  - the label is just "UNAUDITED" (was "UNAUDITED — NOT FOR PRODUCTION FUNDS"; DEX KAT regenerated).
+- `docs-drift-1031` (`6582329f`): stale chain-lock / audit / bn254 / one-recipient text; PQZ corpus regenerated
+  (`PQZ_SET=n2304-kmax4096 corpus.py`, 877 inputs / 51 valid); `e2e.py` `first_honest()`.
+- `fs3-t13-rollout` (`63e49509`), the SCaaS testnet roll-out (owner rulings 2026-10-31 throughout):
+  - reset onto `2.2.0-pqz6` with option (b) calibrated rows (one ecMul baseline 0.016 ms; option (c) built, re-measure on
+    a quiet host later), CREATE2 deployer `0x4e59…` in the genesis alloc (proposed for 22776, owner decides at launch);
+  - node: sealer (key, pruned, internal `chain-p2p` only, `AcceptTxWhenNotSynced` — sole Clique signer goes
+    `Disconnected` after ~10 min and would drop gossiped txs, 1 GiB) + rpc (archive, no key, public 8545/8546/30303,
+    Docker-only 8547 for Blockscout, admin 8550 on the container loopback via sidecar), calls filter, `MaxTxSize` 2 MiB,
+    `restart: unless-stopped` everywhere (option (b); watch `RestartCount`);
+  - Blockscout 9.0.2 (UI port 8558, API 4000), coin-balance fetcher on, `API_RATE_LIMIT_DISABLED`, patched
+    `sc-verifier` for Amsterdam (built in `/home/dockers/mba-chain-nethermind/sc-verifier/`, temporary until upstream;
+    `check-image.sh` tests upstream readiness), `verify-blockscout.sh` 136 / 136 verified (Deploy.s.sol + PQZ e2e);
+  - PQZ native leak test: no leak (< ≈ 50 B per verify), `pqz-core/nethermind/runs/2026-10-31-leak-harness.txt`;
+  - gas facts recorded: Amsterdam caps REGULAR gas at 2^24 (calldata ≤ 261,909 B); gasLimit may exceed it for state gas;
+  - reference configs `pqz-core/nethermind/chain/scaas-testnet/` (secret-free) for 22776.
+- `scaas-testnet-rename` (`27d77467`): `private7622` → `scaas-testnet` (profile, chain dir, chain-uids key, CI, docs).
+
+**Live stack** `/home/dockers/mba-chain-nethermind` is now its own git repo (owner): secrets in `.env` / `password.txt` /
+`keystore` (ignored); backups `*.bak-*` ignored.
+
+**Private notes (scratchpad/, git-ignored):** `audit-scope.md` (full external-audit scope by risk tier),
+`zether-vs-pqz.md` (Classical Zether vs PQZL vs PQZH), `zether-families.md` (Soroban plan; NEAR and Algorand
+feasibility, separate), `dero-he-vs-zether.md` (owner: DERO anonymity not needed), `mina-protocol.md` (no HE),
+`deleted-branches-2026-10-31.txt` (SHAs of the 7 branches the owner had deleted; only `metatx-lib` kept).
+
+**TODO added today:** Zether verifier one merged MSM (batch verification); switch to the upstream sc-verifier when it
+supports Amsterdam; mandate epoch on every family; Soroban per-job fee cap + lane_hint; msig pop minimal form with UA-8
+Part B; BSC venues (PancakeV3Executor) after the DEX round.
+
+**Next:** (1) finish `zether-testnet` → review → merge; (2) prepare the contracts audit (scope since the 2026-10-27
+review: UA-8, kem-scheme, msig-pophash, webauthn, DEX round, ua-soroban, zether-ungate; layout as part 2: frozen
+detached worktree, units, agy in parallel, Claude workflow, one triage) and **stop for the owner before Codex**.
+
 ## Session 2026-10-30 (part 3: paused for shutdown) — resume here
 
 **State (owner paused 2026-10-30 to shut down):** nothing running — every agent stopped, no Docker container of ours,
