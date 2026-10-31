@@ -40,10 +40,11 @@ test('derived kinds: key data, ids, portable PoP messages, every signature verif
   for (const r of V.derived) {
     const kd = B(r.keyData);
     assert.equal(hex(ua.deriveUA(r.kind, kd)), r.ua, r.name);
-    // UA-8: the portable PoP, the same on every context (popDigest = portablePopDigest, message over registrationDigest)
+    // UA-8: the portable PoP, the same on every context (popDigest = portableRecordDigest, message over registrationDigest;
+    // typed records, typed-signing TS-D1)
     const m = ua.holderPopMessage(r.kind, { ua: r.ua });
     for (const p of [r.pop, r.popOther]) {
-      assert.deepEqual([p.popDigest, p.registrationDigest, p.message], [m.portablePopDigest, m.registrationDigest, m.message].map(hex),
+      assert.deepEqual([p.popDigest, p.registrationDigest, p.message], [m.portableRecordDigest, m.registrationDigest, m.message].map(hex),
         `${r.name} pop ${p.context}`);
       assert.ok(verify(r.kind, r.keyData, p.message, p.sig, true), `${r.name} pop ${p.context}`);
     }

@@ -1,15 +1,18 @@
 // UNAUDITED. UA identity layer (accounts.md §1.3–§1.6; CTR-UA-02…05, 07, 09, 11, 12): the kind table, ids, keyHash, purpose tags,
-// ua_msg, the portable PoP and KEM record digests (UA-8 P1, P7), the registry's UAAuth digest, member digests, canonical ids
-// and key-data validation. The same rules live in Solidity (src/ua/UAKinds.sol), Rust (clients/ua-rs), Python (clients/ua-py),
+// ua_msg, the portable records as typed EIP-712 structs under the name + version domain (typed-signing TS-D1 … TS-D4: the
+// register PoP, R_REG, KEM and PQZ key records), the registry's UAAuth digest, member digests, canonical ids and key-data
+// validation. The same rules live in Solidity (src/ua/UAKinds.sol), Rust (clients/ua-rs), Python (clients/ua-py),
 // Go (clients/ua-go) and C# (clients/ua-cs); smartcontracts/vectors/ua/kinds.json, structures.json and portable.json, written
 // by scripts/ua-vectors.mjs and scripts/ua-portable-vectors.mjs from this file, pin all six. No signing here (UAKey and the
-// signers are UA F3). The chain-bound PoP before UA-8 is in legacy/ua8/ua-pop-v1.js.
+// signers are UA F3). The chain-bound PoP before UA-8 is in legacy/ua8/ua-pop-v1.js, the raw portable digests before the
+// typed records in legacy/typed-signing/ua-portable-raw.js.
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { p256 } from '@noble/curves/nist.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bn254 } from '@noble/curves/bn254.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { keccak_256, concatBytes, utf8ToBytes, fromHex, hex, word } from './bytes.js';
+import { encodeType } from './evm.js';
 
 /** An error whose `code` every implementation and the vector files share. */
 export class UAError extends Error {
@@ -126,10 +129,8 @@ export const purposeTag = (p, version = 1) => tagHash(purposeTagString(p, versio
 export const POP_TAG = purposeTag('pop');
 export const POP_V2_TAG = purposeTag('pop', 2);
 export const KEM_TAG = purposeTag('kem');
-export const KEM_RECORD_TAG = tagHash('scaas.ua.kem-record.v1');
-/** A PQZ key attached after `register` (`setPqzKey`, ruling A1-I1): its purpose and record tag. */
+/** A PQZ key attached after `register` (`setPqzKey`, ruling A1-I1): its purpose. */
 export const PQZ_KEY_TAG = purposeTag('pqz-key');
-export const PQZ_KEY_RECORD_TAG = tagHash('scaas.ua.pqz-key-record.v1');
 /** The KEM scheme byte, `kemPk[0]` (CTR-UA-32): 1 = ML-KEM-1024 + X25519 (X-Wing order), `kemPk = 0x01 ‖ ek (1,568 B) ‖
  *  X25519 pk (32 B)`; 2 = ML-KEM-1024 + HQC + X25519, reserved (after FIPS 207), refused today (`UAKemScheme`). */
 export const KEM_SCHEME = Object.freeze({ mlkem1024X25519: 1, mlkem1024HqcX25519: 2 });
@@ -207,17 +208,45 @@ function proofHashOf(pqzPop, pqzPopHash) {
   return h;
 }
 
-/** `keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)` (UA-8 P1): no chain id, no chain uid, no registry. */
-export const portablePopDigest = ({ ua, pqzKeyHash = Z32, kemRecordHash = Z32 }) =>
-  keccak_256(concatBytes(POP_V2_TAG, sized(ua, 32, 'ua'), sized(pqzKeyHash, 32, 'pqzKeyHash'), sized(kemRecordHash, 32, 'kemRecordHash')));
+// --- the portable records, typed (typed-signing TS-D1 … TS-D4; owner 2026-10-31 decisions 2, 4, 8) ---
 
-/** `keccak256(portablePopDigest ‖ pqzPopHash)`: what the signer's `pop` signs (under `uaMessage(kind, POP_V2, ·)`). */
-export const registrationDigest = (portable, pqzPopHash = Z32) =>
-  keccak_256(concatBytes(sized(portable, 32, 'portablePopDigest'), sized(pqzPopHash, 32, 'pqzPopHash')));
+/** The portable EIP-712 domain: name and version only, no chainId / verifyingContract / salt (the records register a UA
+ *  on every chain, CTR-UA-07). */
+export const PORTABLE_DOMAIN = Object.freeze({ name: 'SCaaS UA Portable', version: '1' });
+const field = (name, type) => Object.freeze({ name, type });
+/** The portable structs (EIP-712 `types`); `kind` is `uint16` (the name is looked up in the kind table), no string field. */
+export const PORTABLE_TYPES = Object.freeze({
+  EIP712Domain: Object.freeze([field('name', 'string'), field('version', 'string')]),
+  UAKemRecord: Object.freeze([field('ua', 'bytes32'), field('version', 'uint64'), field('scheme', 'uint8'), field('kemPkHash', 'bytes32')]),
+  UAPortableRecord: Object.freeze([field('ua', 'bytes32'), field('kind', 'uint16'), field('pqzKeyHash', 'bytes32'), field('kem', 'UAKemRecord')]),
+  UARegistration: Object.freeze([field('record', 'UAPortableRecord'), field('pqzPopHash', 'bytes32')]),
+  UAPqzKey: Object.freeze([field('ua', 'bytes32'), field('pqzKeyHash', 'bytes32')]),
+  UAPqzKeyRecord: Object.freeze([field('key', 'UAPqzKey'), field('pqzPopHash', 'bytes32')]),
+});
+/** `keccak256(encodeType(T))` per struct (primary type, then the referenced types sorted by name). */
+export const PORTABLE_TYPEHASH = Object.freeze(Object.fromEntries(Object.keys(PORTABLE_TYPES)
+  .map((t) => [t, tagHash(encodeType(PORTABLE_TYPES, t))])));
+const TH = PORTABLE_TYPEHASH;
+const DS_P = keccak_256(concatBytes(TH.EIP712Domain, tagHash(PORTABLE_DOMAIN.name), tagHash(PORTABLE_DOMAIN.version)));
+/** `DS_P = 0x9a2c…4ca1`: `hashStruct(EIP712Domain{name: "SCaaS UA Portable", version: "1"})`. */
+export const portableDomainSeparator = () => DS_P.slice();
+/** `keccak256(0x1901 ‖ DS_P ‖ structHash)`: what `eth_signTypedData_v4` returns for a portable record. */
+const typed = (structHash) => keccak_256(concatBytes(Uint8Array.of(0x19, 0x01), DS_P, structHash));
+const h32 = (v, what) => hex(sized(v, 32, what));
+const u16w = (kind) => {
+  const k = Number(kind);
+  if (!Number.isInteger(k) || k < 0 || k > 0xffff) throw new Error('kind must be a uint16');
+  return k;
+};
+const num = (v) => (v <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(v) : v.toString(10));
 
-/** `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))` (UA-8 P7): version 1 … 2^64 − 1; `kemPk` = scheme byte
- *  ‖ key, the registry's check: empty is `UAKemKeyLength`, a scheme not enabled `UAKemScheme`, another length `UAKemKeyLength`. */
-export function kemRecordDigest({ ua, version, kemPk }) {
+/** The KEM record's struct (`UAKemRecord` message): `{ ua, version, scheme: kemPk[0], kemPkHash: keccak256(kemPk) }` over
+ *  the whole scheme-1 key (UA-8 P7, CTR-UA-32: version 1 … 2^64 − 1; empty `UAKemKeyLength`, a scheme not enabled
+ *  `UAKemScheme`, another length `UAKemKeyLength`). No record (version 0 / absent and no key) is the zero record
+ *  `{ ua, 0, 0, 0 }` (TS-D2: version 0 is never a valid record). */
+export function kemRecordStruct({ ua, version = 0, kemPk }) {
+  const u = h32(ua, 'ua');
+  if (!present(kemPk) && Number(version ?? 0) === 0) return { ua: u, version: 0, scheme: 0, kemPkHash: hex(Z32) };
   let v;
   try { v = BigInt(version); } catch { fail('UAKemVersion', String(version)); }
   if (v < 1n || v >= 1n << 64n) fail('UAKemVersion', String(version));
@@ -226,23 +255,63 @@ export function kemRecordDigest({ ua, version, kemPk }) {
   const n = kemPkLength(pk[0]);
   if (n === 0) fail('UAKemScheme', String(pk[0]));
   if (pk.length !== n) fail('UAKemKeyLength', String(pk.length));
-  return keccak_256(concatBytes(KEM_RECORD_TAG, sized(ua, 32, 'ua'), word(v), keccak_256(pk)));
+  return { ua: u, version: num(v), scheme: pk[0], kemPkHash: hex(keccak_256(pk)) };
 }
-
+const kemHash = (k) => keccak_256(concatBytes(TH.UAKemRecord, fromHex(k.ua), word(k.version), word(k.scheme), fromHex(k.kemPkHash)));
+/** `hashStruct(UAKemRecord)`: the `kem` word of a `UAPortableRecord`; the zero record when there is none. */
+export const kemRecordHash = (record) => kemHash(kemRecordStruct(record));
+/** The typed `UAKemRecord` digest `setKemKey` signs (a real record: version 0 is `UAKemVersion`). */
+export function kemRecordDigest({ ua, version, kemPk }) {
+  if (Number(version ?? 0) === 0) fail('UAKemVersion', String(version));
+  return typed(kemRecordHash({ ua, version, kemPk }));
+}
 /** What the UA signs for a KEM record: `uaMessage(kind, PURPOSE_KEM, kemRecordDigest(ua, version, kemPk))`; an `msig`'s
- *  members sign `memberDigest(ua, ·)` of it under `member`. */
+ *  derived members sign `memberDigest(ua, ·)` of it under `member`, a native member the typed digest itself. */
 export const kemRecordMessage = (kind, record) => uaMessage(kind, KEM_TAG, kemRecordDigest(record));
+
+/** The `UAPortableRecord` message: `{ ua, kind, pqzKeyHash, kem }`, `kem` a `kemRecordStruct`. */
+export const portableRecordStruct = ({ ua, kind, pqzKeyHash = Z32, kem }) =>
+  ({ ua: h32(ua, 'ua'), kind: u16w(kind), pqzKeyHash: h32(pqzKeyHash, 'pqzKeyHash'), kem });
+const recordHash = ({ ua, kind, pqzKeyHash = Z32, kemRecordHash: kh }) => keccak_256(concatBytes(TH.UAPortableRecord,
+  sized(ua, 32, 'ua'), word(u16w(kind)), sized(pqzKeyHash, 32, 'pqzKeyHash'), kh === undefined ? kemRecordHash({ ua }) : sized(kh, 32, 'kemRecordHash')));
+/** The typed `UAPortableRecord` digest over its words (`kemRecordHash` = `hashStruct(UAKemRecord)`, default the zero record):
+ *  what R_REG proves over at `register` / the first `storePqzPop`. */
+export const portableRecordDigest = (words) => typed(recordHash(words));
+/** The typed `UARegistration{record, pqzPopHash}` digest: what the signer's `pop` signs under `uaMessage(kind, POP_V2, ·)`. */
+export const registrationDigest = ({ pqzPopHash = Z32, ...words }) =>
+  typed(keccak_256(concatBytes(TH.UARegistration, recordHash(words), sized(pqzPopHash, 32, 'pqzPopHash'))));
+const pqzKeyHash_ = ({ ua, pqzKeyHash }) => keccak_256(concatBytes(TH.UAPqzKey, sized(ua, 32, 'ua'), sized(pqzKeyHash, 32, 'pqzKeyHash')));
+/** The typed `UAPqzKey{ua, pqzKeyHash}` digest: what a later PQZ key's R_REG proves over (no proof hash: no cycle). */
+export const pqzKeyDigest = (key) => typed(pqzKeyHash_(key));
+/** The typed `UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}` digest: what `setPqzKey`'s signature signs. */
+export const pqzKeyRecordDigest = ({ ua, pqzKeyHash, pqzPopHash }) =>
+  typed(keccak_256(concatBytes(TH.UAPqzKeyRecord, pqzKeyHash_({ ua, pqzKeyHash }), sized(pqzPopHash, 32, 'pqzPopHash'))));
+
+/** The exact JSON a wallet signs with `eth_signTypedData_v4` for a portable record: `{ domain: { name, version }, types:
+ *  { EIP712Domain, <primaryType>, <referenced types> }, primaryType, message }`; its `hashTypedData` is the record's digest. */
+export function portableTypedData(primaryType, message) {
+  if (primaryType === 'EIP712Domain' || !PORTABLE_TYPES[primaryType]) throw new Error(`not a portable struct: ${primaryType}`);
+  const types = { EIP712Domain: PORTABLE_TYPES.EIP712Domain.map((f) => ({ ...f })) };
+  const walk = (t) => {
+    types[t] = PORTABLE_TYPES[t].map((f) => ({ ...f }));
+    for (const f of PORTABLE_TYPES[t]) if (PORTABLE_TYPES[f.type] && !types[f.type]) walk(f.type);
+  };
+  walk(primaryType);
+  return { domain: { ...PORTABLE_DOMAIN }, types, primaryType, message };
+}
 
 /** A PQZ / KEM holder (UA-6 U3, UA-8 P7): mldsa44, mldsa65, fndsa512, or an `msig` whose `keyData` is PQ-eligible. */
 const holds = (kind, keyData) => isPqzHolder(kind) || (kind === 0x0120 && present(keyData) && msigPqzEligible(keyData));
 
 /**
- * The portable PoP of a registration (UA-8 P1, P2): `{ pqzKeyHash, pqzPopHash, kemRecordHash, portablePopDigest,
- * registrationDigest, message }`, `message = uaMessage(kind, POP_V2, registrationDigest)` (every kind signs it; an `msig`
- * also returns `memberDigest = memberDigest(ua, message)`, what each member signs under `member`, a native member by EIP-191
- * `personal_sign`). The attributes: `pqzKey` with its proof `pqzPop` (or only its hash `pqzPopHash`), and the initial KEM record
- * (`kemVersion` ≥ 1, `kemPk`); absent = omitted / empty / 0. Only holders may carry them (`UAPqzHolder`, `UAKemHolder`; an
- * `msig` needs `keyData` to show it is PQ-eligible); a PQZ key always comes with its proof hash and only with it (`UAPqzPopHash`).
+ * The portable PoP of a registration (UA-8 P1, P2; typed-signing TS-D3): `{ pqzKeyHash, pqzPopHash, kemRecordHash,
+ * portableRecordDigest, registrationDigest, message, typedData }`, `typedData` the `UARegistration{UAPortableRecord{ua, kind,
+ * pqzKeyHash, kem}, pqzPopHash}` JSON (`eth_signTypedData_v4`), `registrationDigest = hashTypedData(typedData)`, `message =
+ * uaMessage(kind, POP_V2, registrationDigest)` (every kind signs it; an `msig` also returns `memberDigest = memberDigest(ua,
+ * message)`, what each derived member signs under `member`; a native member signs `registrationDigest` itself, TS-D4). The
+ * attributes: `pqzKey` with its proof `pqzPop` (or only its hash `pqzPopHash`), and the initial KEM record (`kemVersion` ≥ 1,
+ * `kemPk`); absent = omitted / empty / 0. Only holders may carry them (`UAPqzHolder`, `UAKemHolder`; an `msig` needs
+ * `keyData` to show it is PQ-eligible); a PQZ key always comes with its proof hash and only with it (`UAPqzPopHash`).
  */
 export function holderPopMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopHash, kemVersion = 0, kemPk } = {}) {
   const hasPqz = present(pqzKey);
@@ -253,34 +322,32 @@ export function holderPopMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopHash
   const popHash = proofHashOf(pqzPop, pqzPopHash);
   if (hasPqz !== (popHash !== Z32)) fail('UAPqzPopHash', hasPqz ? 'a PQZ key needs its proof hash' : 'a proof hash without a PQZ key');
   const pqzKeyHash = hasPqz ? pqzKeyHashOf(pqzKey) : Z32;
-  const kemRecordHash = hasKem ? kemRecordDigest({ ua, version: kemVersion, kemPk }) : Z32;
-  const portable = portablePopDigest({ ua, pqzKeyHash, kemRecordHash });
-  const registration = registrationDigest(portable, popHash);
+  const kem = kemRecordStruct({ ua, version: kemVersion, kemPk });
+  const kh = kemHash(kem);
+  const words = { ua, kind, pqzKeyHash, kemRecordHash: kh };
+  const registration = registrationDigest({ ...words, pqzPopHash: popHash });
   const message = uaMessage(kind, POP_V2_TAG, registration);
-  return { pqzKeyHash, pqzPopHash: popHash, kemRecordHash, portablePopDigest: portable, registrationDigest: registration, message,
-    ...(kind === 0x0120 ? { memberDigest: memberDigest(ua, message) } : {}) };
+  const typedData = portableTypedData('UARegistration',
+    { record: portableRecordStruct({ ua, kind, pqzKeyHash, kem }), pqzPopHash: hex(popHash) });
+  return { pqzKeyHash, pqzPopHash: popHash, kemRecordHash: kh, portableRecordDigest: portableRecordDigest(words),
+    registrationDigest: registration, message, typedData, ...(kind === 0x0120 ? { memberDigest: memberDigest(ua, message) } : {}) };
 }
 
-/** The message `R_REG` proves over: `uaMessage(0x0142, POP_V2, portablePopDigest(ua, keyHash(0x0142, pqzKey), kemRecordHash))`. */
-export function pqzRegMessage({ ua, pqzKey, kemVersion = 0, kemPk }) {
-  const hasKem = Number(kemVersion) !== 0 || present(kemPk);
-  const kemRecordHash = hasKem ? kemRecordDigest({ ua, version: kemVersion, kemPk }) : Z32;
-  return uaMessage(0x0142, POP_V2_TAG, portablePopDigest({ ua, pqzKeyHash: pqzKeyHashOf(pqzKey), kemRecordHash }));
+/** The message `R_REG` proves over: `uaMessage(0x0142, POP_V2, portableRecordDigest(ua, kind, keyHash(0x0142, pqzKey),
+ *  kemRecordHash))`, `kind` the registering kind (the record of the registration, TS-D3). */
+export function pqzRegMessage({ ua, kind, pqzKey, kemVersion = 0, kemPk }) {
+  if (kind === undefined || kind === null) throw new Error('pqzRegMessage needs the registering kind');
+  return uaMessage(0x0142, POP_V2_TAG, portableRecordDigest({ ua, kind, pqzKeyHash: pqzKeyHashOf(pqzKey),
+    kemRecordHash: kemRecordHash({ ua, version: kemVersion, kemPk }) }));
 }
-
-/** `keccak256(PQZ_KEY_RECORD_TAG ‖ ua ‖ pqzKeyHash)`: what a later PQZ key's `R_REG` proves over (no proof hash: no cycle). */
-export const pqzKeyDigest = ({ ua, pqzKeyHash }) =>
-  keccak_256(concatBytes(PQZ_KEY_RECORD_TAG, sized(ua, 32, 'ua'), sized(pqzKeyHash, 32, 'pqzKeyHash')));
-/** `keccak256(pqzKeyDigest ‖ pqzPopHash)`: what `setPqzKey`'s signature signs under `uaMessage(kind, PURPOSE_PQZ_KEY, ·)`. */
-export const pqzKeyRecordDigest = (keyDigest, pqzPopHash) =>
-  keccak_256(concatBytes(sized(keyDigest, 32, 'pqzKeyDigest'), sized(pqzPopHash, 32, 'pqzPopHash')));
 
 /**
  * The PQZ key record of `setPqzKey(ua, pqzKey, pqzPopHash, sig)` (ruling A1-I1): signed, portable, write-once, accepted only
  * by a registration without a PQZ key (a PQZ key is set once per chain; a client gives a UA one PQZ key, ever).
- * `{ pqzKeyHash, pqzPopHash, pqzKeyDigest, recordDigest, message, pqzRegMessage }` (+ `memberDigest` for an msig), with
- * `message = uaMessage(kind, PURPOSE_PQZ_KEY, recordDigest)` and `pqzRegMessage = uaMessage(0x0142, PURPOSE_PQZ_KEY,
- * pqzKeyDigest)`. The holder rules of `holderPopMessage` (`UAPqzHolder`); the key and its proof hash are both required.
+ * `{ pqzKeyHash, pqzPopHash, pqzKeyDigest, recordDigest, message, pqzRegMessage, typedData }` (+ `memberDigest` for an msig),
+ * `recordDigest` = the typed `UAPqzKeyRecord` digest = `hashTypedData(typedData)`, `message = uaMessage(kind, PURPOSE_PQZ_KEY,
+ * recordDigest)`, `pqzRegMessage = uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest)` (the typed `UAPqzKey`). The holder rules
+ * of `holderPopMessage` (`UAPqzHolder`); the key and its proof hash are both required.
  */
 export function pqzKeyRecordMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopHash } = {}) {
   if (!holds(kind, keyData)) fail('UAPqzHolder', `0x${Number(kind).toString(16).padStart(4, '0')} may not hold a PQZ key`);
@@ -288,23 +355,17 @@ export function pqzKeyRecordMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopH
   const popHash = proofHashOf(pqzPop, pqzPopHash);
   if (popHash === Z32) fail('UAPqzPopHash', 'a PQZ key needs its proof hash');
   const keyDigest = pqzKeyDigest({ ua, pqzKeyHash });
-  const recordDigest = pqzKeyRecordDigest(keyDigest, popHash);
+  const recordDigest = pqzKeyRecordDigest({ ua, pqzKeyHash, pqzPopHash: popHash });
   const message = uaMessage(kind, PQZ_KEY_TAG, recordDigest);
+  const typedData = portableTypedData('UAPqzKeyRecord', { key: { ua: h32(ua, 'ua'), pqzKeyHash: hex(pqzKeyHash) }, pqzPopHash: hex(popHash) });
   return { pqzKeyHash, pqzPopHash: popHash, pqzKeyDigest: keyDigest, recordDigest, message,
-    pqzRegMessage: uaMessage(0x0142, PQZ_KEY_TAG, keyDigest), ...(kind === 0x0120 ? { memberDigest: memberDigest(ua, message) } : {}) };
+    pqzRegMessage: uaMessage(0x0142, PQZ_KEY_TAG, keyDigest), typedData, ...(kind === 0x0120 ? { memberDigest: memberDigest(ua, message) } : {}) };
 }
 
-/** The portable purposes (POP_V2, KEM, PQZ_KEY): the only ones a code-less native msig member signs by EIP-191
- *  `personal_sign` (ruling C7 / A1-I2); every other purpose stays UAAuth (CTR-MTX-14). */
+/** The portable purposes (POP_V2, KEM, PQZ_KEY): the only ones where a code-less native msig member signs the record's typed
+ *  digest itself (`eth_signTypedData_v4`, 65-byte r ‖ s ‖ v, low-s, v 27 / 28; a contract member answers ERC-1271
+ *  `isValidSignature(typedDigest, sig)`; TS-D4); every other purpose stays UAAuth (CTR-MTX-14). */
 export const isPortablePurpose = (tag) => [POP_V2_TAG, KEM_TAG, PQZ_KEY_TAG].some((t) => hex(t) === hex(sized(tag, 32, 'purposeTag')));
-
-/** EIP-191 `personal_sign` of a 32-byte digest: `keccak256("\x19Ethereum Signed Message:\n32" ‖ digest)`, what a native EOA
- *  `msig` member (code-less, or an EIP-7702 designator: its own key, never its delegate; owner ruling 2026-10-30) signs, as
- *  65-byte r ‖ s ‖ v (low-s, v 27 / 28), over the `memberDigest` of a portable record only (`isPortablePurpose`); a contract
- *  wallet member answers ERC-1271 `isValidSignature(memberDigest, sig)` instead, and every other purpose stays UAAuth
- *  (CTR-MTX-14). */
-export const personalSignDigest = (digest) =>
-  keccak_256(concatBytes(utf8ToBytes('\x19Ethereum Signed Message:\n32'), sized(digest, 32, 'digest')));
 
 export function uaAuthDomainSeparator({ generation, chainId, registry, chainUid }) {
   if (!Number.isInteger(generation) || generation < 1) throw new Error('generation must be a positive integer');

@@ -11,7 +11,7 @@ import {
 } from '../src/zether.js';
 import { deriveKey, seedFromWords, NETWORKS } from '../src/seed.js';
 import { fromHex, hex, abiEncode } from '../src/bytes.js';
-import { uaMessage, purposeTag, holderPopMessage, portablePopDigest, registrationDigest, POP_V2_TAG } from '../src/ua.js';
+import { uaMessage, purposeTag, holderPopMessage, portableRecordDigest, registrationDigest, POP_V2_TAG } from '../src/ua.js';
 import { dir } from './ua-vectors-dir.js';
 
 const vec = (f) => JSON.parse(readFileSync(new URL(`./vectors/${f}`, import.meta.url)));
@@ -63,17 +63,17 @@ test('conf/disclosure keys from the mnemonic == S3 (x, Y, UA, path) on both curv
   }
 });
 
-test('the Zether PoP is portable (UA-8 P1): no chain field, over registrationDigest(portablePopDigest(UA, 0, 0), 0)', () => {
+test('the Zether PoP is portable (UA-8 P1): no chain field, over the typed UARegistration{record(UA, 0x0141, 0, no KEM), 0}', () => {
   for (const curve of ['bls12381']) {
     for (const k of R33[curve].keys.filter((x) => x.pop)) {
       assert.equal(zetherKind(curve), k.pop.kind);
       const mine = zetherPop(curve, fromHex(k.x));
       const hp = holderPopMessage(0x0141, { ua: k.UA });
       assert.deepEqual([mine.UA, mine.popDigest, mine.registrationDigest, mine.uaMsg],
-        [k.UA, hex(hp.portablePopDigest), hex(hp.registrationDigest), hex(hp.message)]);
-      assert.equal(hex(hp.message), hex(uaMessage(0x0141, POP_V2_TAG, registrationDigest(portablePopDigest({ ua: k.UA })))));
+        [k.UA, hex(hp.portableRecordDigest), hex(hp.registrationDigest), hex(hp.message)]);
+      assert.equal(hex(hp.message), hex(uaMessage(0x0141, POP_V2_TAG, registrationDigest({ ua: k.UA, kind: 0x0141 }))));
       assert.ok(schnorrVerify(curve, fromHex(k.Y), fromHex(mine.uaMsg), fromHex(mine.pop)), `${curve} ${k.path}`);
-      // the S3 vector's PoP (r33_keys.json, regenerated on the portable PoP by the zether-prover in UA-8 A3) verifies over its own message
+      // the S3 vector's PoP (r33_keys.json, written by the zether-prover; typed in typed-signing P4) verifies over its own message
       assert.ok(schnorrVerify(curve, fromHex(k.Y), fromHex(k.pop.uaMsg), fromHex(k.pop.pop)), `${curve} ${k.path} S3`);
       // chain fields are not inputs any more: a caller still passing the old context gets an error, not a silent drop
       const ctx = { chainId: 7622, chainUid: '0x' + '25'.repeat(32), registry: '0x' + 'ab'.repeat(20) };
@@ -85,7 +85,7 @@ test('the Zether PoP is portable (UA-8 P1): no chain field, over registrationDig
     }
   }
   const z = S.pop.find((p) => p.kind === 0x0141);
-  assert.equal(hex(portablePopDigest({ ua: z.ua })), z.portablePopDigest, 'structures.json: the Zether row');
+  assert.equal(hex(portableRecordDigest({ ua: z.ua, kind: 0x0141 })), z.portableRecordDigest, 'structures.json: the Zether row');
 });
 
 test('owner op: abi.encode(bytes(""), Schnorr over uaMessage(kind, zether-owner, digest))', () => {

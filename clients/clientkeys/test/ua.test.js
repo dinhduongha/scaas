@@ -40,13 +40,13 @@ test('valid rows derive, invalid rows fail with their code', () => {
   }
 });
 
-test('digests: portable pop (UA-8, no chain context), UAAuth, member', () => {
-  assert.equal(S.version, 2);
+test('digests: portable pop (UA-8, no chain context; typed records), UAAuth, member', () => {
+  assert.equal(S.version, 3);
   for (const p of S.pop) {
     assert.equal('context' in p, false);
-    const d = ua.portablePopDigest({ ua: p.ua, pqzKeyHash: p.pqzKeyHash, kemRecordHash: p.kemRecordHash });
-    assert.equal(hex(d), p.portablePopDigest);
-    assert.equal(hex(ua.registrationDigest(d, fromHex(p.pqzPopHash))), p.registrationDigest);
+    const w = { ua: p.ua, kind: p.kind, pqzKeyHash: p.pqzKeyHash, kemRecordHash: p.kemRecordHash };
+    assert.equal(hex(ua.portableRecordDigest(w)), p.portableRecordDigest);
+    assert.equal(hex(ua.registrationDigest({ ...w, pqzPopHash: p.pqzPopHash })), p.registrationDigest);
   }
   assert.ok(S.pop.some((p) => p.kind === 0x0141), 'the Zether row');
   for (const a of S.uaAuth) {
@@ -118,19 +118,22 @@ test('UA-6: PQZ holders, msig eligibility, pop digest and R_REG message', () => 
   const proof = Uint8Array.of(0xaa);
   const h = ua.keyHashOf(0x0142, key);
   const z = new Uint8Array(32);
-  assert.equal(hex(ua.portablePopDigest({ ua: u })), hex(ua.portablePopDigest({ ua: u, pqzKeyHash: z, kemRecordHash: z })), 'absent = 0');
-  assert.notEqual(hex(ua.portablePopDigest({ ua: u, pqzKeyHash: h })), hex(ua.portablePopDigest({ ua: u })));
+  const none = ua.kemRecordHash({ ua: u }); // no KEM record = the zero record UAKemRecord{u, 0, 0, 0} (TS-D2)
+  assert.equal(hex(ua.portableRecordDigest({ ua: u, kind: 0x0130 })),
+    hex(ua.portableRecordDigest({ ua: u, kind: 0x0130, pqzKeyHash: z, kemRecordHash: none })), 'absent = 0 / the zero record');
+  assert.notEqual(hex(ua.portableRecordDigest({ ua: u, kind: 0x0130, kemRecordHash: z })), hex(ua.portableRecordDigest({ ua: u, kind: 0x0130 })));
+  assert.notEqual(hex(ua.portableRecordDigest({ ua: u, kind: 0x0130, pqzKeyHash: h })), hex(ua.portableRecordDigest({ ua: u, kind: 0x0130 })));
   const hp = ua.holderPopMessage(0x0130, { ua: u, pqzKey: key, pqzPop: proof });
   assert.equal(hex(hp.pqzKeyHash), hex(h));
   assert.equal(hex(hp.pqzPopHash), hex(keccak_256(proof)));
   assert.equal(hex(hp.message), hex(ua.uaMessage(0x0130, ua.POP_V2_TAG,
-    ua.registrationDigest(ua.portablePopDigest({ ua: u, pqzKeyHash: h }), keccak_256(proof)))));
+    ua.registrationDigest({ ua: u, kind: 0x0130, pqzKeyHash: h, pqzPopHash: keccak_256(proof) }))));
   assert.throws(() => ua.holderPopMessage(0x0101, { ua: u, pqzKey: key, pqzPop: proof }), (e) => e.code === 'UAPqzHolder');
   assert.throws(() => ua.holderPopMessage(0x0133, { ua: u, pqzKey: key, pqzPop: proof }), (e) => e.code === 'UAPqzHolder');
   assert.equal(hex(ua.holderPopMessage(0x0130, { ua: u }).registrationDigest),
-    hex(ua.registrationDigest(ua.portablePopDigest({ ua: u }))), 'no key: the plain pop');
-  assert.equal(hex(ua.pqzRegMessage({ ua: u, pqzKey: key })),
-    hex(ua.uaMessage(0x0142, ua.POP_V2_TAG, ua.portablePopDigest({ ua: u, pqzKeyHash: h }))));
+    hex(ua.registrationDigest({ ua: u, kind: 0x0130 })), 'no key: the plain pop');
+  assert.equal(hex(ua.pqzRegMessage({ ua: u, kind: 0x0130, pqzKey: key })),
+    hex(ua.uaMessage(0x0142, ua.POP_V2_TAG, ua.portableRecordDigest({ ua: u, kind: 0x0130, pqzKeyHash: h }))));
 });
 
 test('UA-6 vectors: schemes, holder flags, pqz_reg_message and msig eligibility rows', () => {
@@ -144,13 +147,14 @@ test('UA-6 vectors: schemes, holder flags, pqz_reg_message and msig eligibility 
   for (const p of S.pop) assert.equal('authRef' in p, false);
   for (const r of S.pqzReg) {
     assert.equal(r.pqzKeyHash, K.pqzKeyHash);
-    assert.equal(hex(ua.portablePopDigest({ ua: r.ua, pqzKeyHash: r.pqzKeyHash, kemRecordHash: r.kemRecordHash })), r.portablePopDigest);
-    assert.equal(hex(ua.uaMessage(0x0142, ua.POP_V2_TAG, fromHex(r.portablePopDigest))), r.pqzRegMessage);
+    assert.equal(hex(ua.portableRecordDigest({ ua: r.ua, kind: r.kind, pqzKeyHash: r.pqzKeyHash, kemRecordHash: r.kemRecordHash })),
+      r.portableRecordDigest);
+    assert.equal(hex(ua.uaMessage(0x0142, ua.POP_V2_TAG, fromHex(r.portableRecordDigest))), r.pqzRegMessage);
   }
   assert.equal(new Set(S.pqzReg.map((r) => r.pqzRegMessage)).size, S.pqzReg.length);
   for (const r of S.pqzMsig) {
     const pqzKeyHash = r.eligible ? fromHex(K.pqzKeyHash) : new Uint8Array(32);
-    assert.equal(hex(ua.portablePopDigest({ ua: r.ua, pqzKeyHash })), r.portablePopDigest, r.reason);
+    assert.equal(hex(ua.portableRecordDigest({ ua: r.ua, kind: 0x0120, pqzKeyHash })), r.portableRecordDigest, r.reason);
   }
   for (const r of S.pqzMsig) assert.equal(ua.msigPqzEligible(r.keyData), r.eligible, r.reason);
   assert.ok(S.pqzMsig.some((r) => r.eligible) && S.pqzMsig.some((r) => !r.eligible));

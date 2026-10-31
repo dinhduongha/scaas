@@ -18,7 +18,7 @@ export function evmAddress(uncompressed) {
 // ------------------------------------------------------------------ EIP-712 (structs, nested structs)
 
 /** EIP-712 `encodeType`: the primary type, then every struct it references, sorted by name. */
-function encodeType(types, primary) {
+export function encodeType(types, primary) {
   const deps = new Set();
   const walk = (t) => types[t].forEach((f) => {
     if (types[f.type] && f.type !== primary && !deps.has(f.type)) { deps.add(f.type); walk(f.type); }
