@@ -164,20 +164,23 @@ contract PqzCtTest is PqzMock {
 
     // ------------------------------------------------------------------ PqzSafety
 
-    function test_safetyAllowlist() public {
-        assertTrue(PqzSafety.isAllowedChain()); // 31337
-        vm.chainId(7622);
-        assertTrue(PqzSafety.isAllowedChain());
-        vm.chainId(1337);
-        assertTrue(PqzSafety.isAllowedChain());
-        vm.chainId(22776);
-        assertFalse(PqzSafety.isAllowedChain());
-        vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotAllowedChain.selector, 22776));
-        this.requireChain();
+    /// Owner ruling 2026-10-31: no chain allowlist; the self-test alone decides, whatever the chain id.
+    function test_safetyNoChainLock() public {
+        uint256[4] memory ids = [uint256(31337), 7622, 22776, 987654321];
+        for (uint256 i; i < ids.length; ++i) {
+            vm.chainId(ids[i]);
+            vm.clearMockedCalls();
+            assertFalse(PqzSafety.selfTest(PQZ), "no precompile: refused");
+            vm.expectRevert(abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ));
+            this.requireSelfTest();
+            vm.mockCall(PQZ, hex"0600000000", abi.encode(PqzSafety.SELFTEST));
+            assertTrue(PqzSafety.selfTest(PQZ), "precompile: accepted");
+            this.requireSelfTest();
+        }
     }
 
-    function requireChain() external view {
-        PqzSafety.requireAllowedChain();
+    function requireSelfTest() external view {
+        PqzSafety.requireSelfTest(PQZ);
     }
 
     /// The ids at the build's set (plan 5h Task 8d, CTR-PQZ-09): its PQZL id, its PQZH id only where the set has PQZH;

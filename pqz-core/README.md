@@ -10,7 +10,7 @@ independent proof systems, the code that reads and checks statements, and the on
 calls to verify a proof. Each operation (transfer, burn, register, …) has its own fixed relation; PQZ is not a
 general-purpose zero-knowledge system.
 
-> **Status:** built, **unaudited — not for production funds**. Current ids: PQZL `…/v5` and PQZH `…/v3`, one pair per
+> **Status:** built, **unaudited**. Current ids: PQZL `…/v5` and PQZH `…/v3`, one pair per
 > parameter set (R0 review fix, 2026-10-25). Four parameter sets: `n2048-kmax1024`, `n2304-kmax4096` (the default),
 > `n2560-kmax16384` and `n2816-kmax65536` (no PQZH) ([params/sets/README.md](params/sets/README.md)). The SCaaS testnet
 > runs `n2304-kmax4096` (image `scaas/nethermind-pqz:2.2.0-pqz5`, since 2026-10-26). Sizes and gas at every set are

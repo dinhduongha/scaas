@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 /// @title Kiểu dùng chung của tầng bảo mật.
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
+/// @notice **UNAUDITED.**
 ///
 ///         Classical Zether runs on BLS12-381 only since UA-6 (CTR-ZTH-32; the bn254 line is in `legacy/ua6/`). Points
 ///         stay `bytes` (128 bytes, EIP-2537) encoded per `IZetherVerifier.proofSystemId()` — gói một bó điểm vào một

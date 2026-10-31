@@ -922,7 +922,7 @@ The configuration wizard (in the app and any client system) works over `IOpenFac
 | Loyalty / rewards | `createToken` kind `NORMAL` (built; the v1 factory also has `createMetaToken(1, 0, initData, salt)`) | name, symbol, decimals, `minter` = issuer's mint contract or treasury multisig, fee 0 | **BUILT** |
 | Internal 1:1 money | `createToken` kind `WRAPPED`, one leg, `num = den = 1` (built; the v1 factory also has `createMetaToken(1, underlying, …)`) | underlying stablecoin; wrap/unwrap through the clone | **BUILT** |
 | Wrapper with a rate | `createToken` kind `WRAPPED` (built) | underlying, `num/den`, fixed or adjustable (rate role, delay, step) | **BUILT** |
-| Confidential money | `createZetherToken(1, underlying, verifier, initData, salt)` on `OpenFactoryV1` (`createToken` of kind `NORMAL_ZETHER`/`WRAPPED_ZETHER` with P3) | `registry`, `shieldScale`, `maxDecryptableShielded ≤ 2^54`, `confidentialFee`, auditor key | **BUILT** (dev chains only) |
+| Confidential money | `createZetherToken(1, underlying, verifier, initData, salt)` on `OpenFactoryV1` (`createToken` of kind `NORMAL_ZETHER`/`WRAPPED_ZETHER` with P3) | `registry`, `shieldScale`, `maxDecryptableShielded ≤ 2^54`, `confidentialFee`, auditor key | **BUILT** (unaudited) |
 | Multi-underlying money (e.g. xDAI/USDC/USDT) | `createToken` kind `WRAPPED` with 2–8 legs (built: 1–8 legs) | 2–8 underlyings, per-leg rates, guardian | **BUILT** |
 | Vesting / streaming | `VestingGrant` clone per grant | cliff, duration, interval or tranches, approver, revocability | **SPECIFIED** |
 | Controlled / security / bond | `createToken` with flags 5–8 + `Distribution` / `ExchangeOffer` | issuer and compliance contracts, the flags, `ComplianceRegistry` + `requiredFlags`, `termsHash` | **SPECIFIED** |

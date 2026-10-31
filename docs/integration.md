@@ -628,8 +628,8 @@ a separate income), after checking `receivedFloor + surplus ≥ limitReceive`.
 from disclosed amounts, with an audit key per company.** The ERP issues confidential payment requests on Zether tokens,
 reconciles from the amount the counterparty discloses (`ITransferDisclosure` opening) and holds the token's auditor key
 per company. The token keeps ElGamal `acc/pending` balances with a decrypt bound of 2^40; design history:
-[zether design](history/specs/2026-10-03-zether-design.md). Zether is **UNAUDITED — NOT FOR PRODUCTION FUNDS** and runs on dev chains
-([contracts/zether](contracts/zether.md)).
+[zether design](history/specs/2026-10-03-zether-design.md). Zether is **UNAUDITED** and runs on every chain with the BLS12-381
+precompiles once enabled ([contracts/zether](contracts/zether.md)).
 
 ## 11. Procure-to-pay
 
@@ -919,14 +919,14 @@ factory call plus optional action contracts ([CTR-AS-14](contracts/asset-suite.m
 | Loyalty points (tier 1) | `createToken(NORMAL, version, abi.encode(cfg), salt)` on `OpenFactory` (built, P1e; the v1 `OpenFactoryV1.createMetaToken` is in `legacy/p5`, not deployed) | `minter` = the issuer's mint contract or multisig; earn rules in the ERP trigger `mint` jobs; fee 0 | **BUILT** |
 | Internal 1:1 money (tier 2) | `createToken(WRAPPED, version, abi.encode(cfg), salt)` with one leg, `num = den = 1` (built) | Journal per (company, token) for accounting; wrap/unwrap by holders | **BUILT** |
 | Wrapper with a rate, multi-underlying (tiers 2/3, v2) | `createToken(WRAPPED, version, abi.encode(cfg), salt)` with 1–8 `cfg.legs` (built: `WrappedToken`, not yet deployed by the script: over EIP-170) | rates fixed or adjustable (contract rate-role holder), optional guardian | **BUILT** (contracts; client fields SPECIFIED) |
-| Confidential money | `createToken(NORMAL_ZETHER or WRAPPED_ZETHER, version, abi.encode(cfg), salt)` with `cfg.conf` (auditor key; the verifiers are the release's, `shieldScale`, `maxShielded`, `confidentialFee`) on `OpenFactory` (built, P3) | dev chains only until audit; curve decision; auditor key custody | **BUILT** (dev chains) |
+| Confidential money | `createToken(NORMAL_ZETHER or WRAPPED_ZETHER, version, abi.encode(cfg), salt)` with `cfg.conf` (auditor key; the verifiers are the release's, `shieldScale`, `maxShielded`, `confidentialFee`) on `OpenFactory` (built, P3) | unaudited (no chain lock, kind gate per chain); auditor key custody | **BUILT** |
 | Regulated tokens (flags 5–8, [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17)), vesting (`VestingGrant`), distributions, `ExchangeOffer` | `createToken` with flags 5–8 ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); counterfactual clones via `predict*` | issuer/compliance contracts, `ComplianceRegistry`, `termsHash` disclosure | **SPECIFIED** |
 | NFT kinds | — | — | **PLANNED** |
 
 After creation: read `predictAddress` before, verify `isToken`, `creatorOf`, `versionOf` after (decoders know
 the built kinds 0–4; flags 5–8 are fields, [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17)); register the token on the node (`POST /v1/admin/chains/{key}/tokens`) and in the client
 (`PUT /v1/tokens/{chain}`), record the EIP-712 domain from `eip712Domain()` (target: with `salt` = the chain's
-`chain_uid`, checked against the chain profile). Built: one factory, `OpenFactory` (CTR-TOK-25), with `createToken` of kinds `NORMAL`, `WRAPPED` and, on dev chains, `NORMAL_ZETHER`, `WRAPPED_ZETHER` (P3); the v1 factory
+`chain_uid`, checked against the chain profile). Built: one factory, `OpenFactory` (CTR-TOK-25), with `createToken` of kinds `NORMAL`, `WRAPPED`, `NORMAL_ZETHER`, `WRAPPED_ZETHER` (P3); the v1 factory
 (`OpenFactoryV1`: `createMetaToken`) stays until the node and clientkeys move (P5). Gasless token operations other than transfer and payment are `mtxExecute` self-calls on the token's
 allowlist; role calls such as `mint` stay `call` jobs through the role holder's contract.
 

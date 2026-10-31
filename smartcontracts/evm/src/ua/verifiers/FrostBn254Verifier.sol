@@ -7,7 +7,7 @@ import {G1Bn254} from "../../zether/ZetherCurves.sol";
 import {SCHNORR_TAG} from "./PairingVerifiers.sol";
 
 /// @title UA verifier for `frost-bn254` (0x0113, accounts.md §1.6.1, §1.9): FROST(bn254, keccak256).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** `verify(Y, ua_msg, R ‖ z)`: the `schnorr-bn254` check
+/// @notice **UNAUDITED.** `verify(Y, ua_msg, R ‖ z)`: the `schnorr-bn254` check
 ///         (`CurveSigs.schnorr` under `"scaas.ua.schnorr.v1"`; the ciphersuite's H2 is that challenge), `Y` (64) the
 ///         stored group key. `verifyPop(keyData, msg, sig)`: key data = `Y (64) ‖ u16 t ‖ u16 n ‖ n × (t × C_ik (64) ‖
 ///         R_i (64) ‖ μ_i (32))`, 2 ≤ t ≤ n ≤ 16, participant `i = 1..n`; for each `i`: `C_i0`, `R_i` canonical and on

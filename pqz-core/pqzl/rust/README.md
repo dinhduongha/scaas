@@ -10,7 +10,7 @@ against the C core (vectors re-proved byte-equal, the C oracle tests, the 2 h fu
 "Rust = C" stage). Owner 2026-10-18: this crate is the production PQZL core of the `PQZ` precompile; `pqz-ffi` builds
 it by default (feature `pqzl-rust`, Task 11), the C core is the opt-in reference. Branch `pqzl-rust` merged into `main`
 2026-10-19 (`5952951a`); the SCaaS testnet's node image (`2.2.0-pqz5` since 2026-10-26, set `n2304-kmax4096`;
-`pqz-core/nethermind/README.md`) builds `pqz-ffi` with `pqzl-rust`. Unaudited, not for production funds.
+`pqz-core/nethermind/README.md`) builds `pqz-ffi` with `pqzl-rust`. Unaudited.
 
 Parameter sets (owner 2026-10-21): one set per build, the cargo feature `set-<set>` (default `set-n2304-kmax4096`;
 another set: `--no-default-features --features sv,set-<set>`). The set's constants (`rust/set.rs`) and relation

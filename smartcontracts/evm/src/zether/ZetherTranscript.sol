@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 /// @title Transcript Fiat-Shamir và hash-to-scalar (đặc tả §4).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Một transcript duy nhất cho Σ và cả hai
+/// @notice **UNAUDITED.** Một transcript duy nhất cho Σ và cả hai
 ///         Bulletproof. Mỗi absorb có tiền tố độ dài nhãn và độ dài dữ liệu ⇒ không có hai chuỗi
 ///         thông điệp khác nhau cho cùng một trạng thái (`"AB"‖"C"` ≠ `"A"‖"BC"`).
 library ZetherTranscript {

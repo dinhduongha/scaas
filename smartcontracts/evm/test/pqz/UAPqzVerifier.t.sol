@@ -30,13 +30,24 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         new UAPqzVerifier(PQZ, PQZL_ID, pk, m, regProof);
         vm.expectRevert(UAPqzVerifier.UAPqzProbe.selector);
         new UAPqzVerifier(PQZ, PQZL_ID, pk, m, "");
-        // no self-test, other chain
+        // no self-test: refused on any chain id (owner ruling 2026-10-31: no chain allowlist)
         vm.clearMockedCalls();
         vm.expectRevert(abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ));
         new UAPqzVerifier(PQZ, PQZL_ID, pk, m, regProof);
         vm.chainId(22776);
-        vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotAllowedChain.selector, 22776));
+        vm.expectRevert(abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ));
         new UAPqzVerifier(PQZ, PQZL_ID, pk, m, regProof);
+        assertFalse(v.isSupportedOnThisChain(), "no precompile");
+    }
+
+    /// Owner ruling 2026-10-31: the verifier deploys and answers at any chain id where the self-test passes.
+    function test_anyChainId() public {
+        uint256[2] memory ids = [uint256(22776), 987654321];
+        for (uint256 i; i < ids.length; ++i) {
+            vm.chainId(ids[i]);
+            UAPqzVerifier v = _newPqzVerifier(PQZL_ID);
+            assertTrue(v.isSupportedOnThisChain());
+        }
     }
 
     /// Plan 5h Task 8d: at a set without PQZH its (zero) id is no proof system: refused like any other.

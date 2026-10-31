@@ -19,7 +19,7 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 | [mandates.md](mandates.md) | `MandateWallet`: delegated, capped payment from the payer's own wallet; auto-pay client integration | **BUILT**; revocation epoch **SPECIFIED** |
 | [settlement.md](settlement.md) | map of every settlement kind: entry points, who checks what, fees, finality (adds no rules) | overview |
 
-<p align="center"><img src="../assets/token-axes.svg" width="860" alt="Token model on two axes. Kind = confidential layer: NORMAL and WRAPPED (plain, built in P1), NORMAL_ZETHER and WRAPPED_ZETHER (built in P3, unaudited, dev chains only), NORMAL_PQZ and WRAPPED_PQZ (built on the private chains, unaudited); the combined kinds NORMAL_ZETHER_PQZ and WRAPPED_ZETHER_PQZ were dropped on 2026-10-20. Who signs = the account: an EOA (ECDSA, built), a SmartKeyAccount (ERC-1271, built) or a Universal Account with a PQ key mldsa44, mldsa65 or fndsa512 through the UA ledger in the token base (specified, not built); every kind accepts the same intents from each."></p>
+<p align="center"><img src="../assets/token-axes.svg" width="860" alt="Token model on two axes. Kind = confidential layer: NORMAL and WRAPPED (plain, built in P1), NORMAL_ZETHER and WRAPPED_ZETHER (built in P3, unaudited), NORMAL_PQZ and WRAPPED_PQZ (built on the private chains, unaudited); the combined kinds NORMAL_ZETHER_PQZ and WRAPPED_ZETHER_PQZ were dropped on 2026-10-20. Who signs = the account: an EOA (ECDSA, built), a SmartKeyAccount (ERC-1271, built) or a Universal Account with a PQ key mldsa44, mldsa65 or fndsa512 through the UA ledger in the token base (specified, not built); every kind accepts the same intents from each."></p>
 
 How the families relate:
 
@@ -187,14 +187,12 @@ families carry stronger gates, enforced in code:
 
 | Gate | Rule | Status |
 |---|---|---|
-| Classical Zether dev gate | `ZetherSafety.isDevChain()`: `chainid ∈ {31337 (anvil/hardhat), 1337 (geth --dev)}`, a hard-coded allowlist; `OpenFactory.kindEnabled` starts `false` for kinds 2–3 (`setKindEnabled`, registrar; plan 5g-Z2); `createToken` of kinds 2–3 reverts when the kind is off, `createTokenUnregistered` always; the kinds' `initialize` (outside a dev chain, or with a verifier unsupported on the chain), both verifier constructors and the built `UniversalAccountRegistry` revert outside a dev chain too, so a manual deploy cannot bypass it ([CTR-ZTH-02](zether.md#CTR-ZTH-02)) | **BUILT** |
-| Adding a chain to the classical allowlist | a code change of `ZetherSafety` plus a new deployment, after the cryptographic audit | — |
-| SCaaS testnet as a classical Zether dev chain | whether the SCaaS testnet counts as "dev": not a dev chain until the owner decides ([CTR-ZTH-33](zether.md#CTR-ZTH-33)) | open |
+| Classical Zether chain gate | none by chain id (owner ruling 2026-10-31): open on every chain with the BLS12-381 precompiles `0x0b`–`0x10`; a chain without them fails the verifier deploy and `initialize` (`VerifierUnsupportedOnThisChain`); `OpenFactory.kindEnabled` starts `false` for kinds 2–3 (`setKindEnabled`, registrar; plan 5g-Z2), enabling is an admin act per chain; `createToken` of kinds 2–3 reverts when the kind is off, `createTokenUnregistered` always; never on Hedera ([CTR-ZTH-52](zether.md#CTR-ZTH-52)) | **BUILT** |
 | Production curve for classical Zether | bn254 vs BLS12-381; BLS12-381 is more secure and **not** cheaper ([CTR-ZTH-32](zether.md#CTR-ZTH-32)) | open |
-| Cryptographic audit | independent audit of the Σ-Bulletproofs protocol, the transcript, the inner-product argument and the registry PoP **before** any dev gate is lifted | open |
+| Cryptographic audit | independent audit of the Σ-Bulletproofs protocol, the transcript, the inner-product argument and the registry PoP **before** production funds | open |
 | Gas before public chains | the bn254 transfer (3.33 M execution gas) exceeds the 2.5 M per-transfer kill criterion; optimization is required before a public chain | open |
-| PQ Zether gate | hard-coded allowlist (31337, 1337 and the SCaaS testnet) **and** a constructor precompile self-test; `OpenFactory.kindEnabled` starts `false` for kinds 4–5; release gates: **G-LIC** (licences/patents) and audit ([CTR-PQZ-01](pq-zero-knowledge.md#CTR-PQZ-01)) | **SPECIFIED** |
-| Clients | every Zether and PQ Zether contract carries **UNAUDITED — NOT FOR PRODUCTION FUNDS** in its NatSpec; client chain/token screens show an UNAUDITED warning | **BUILT** (NatSpec) |
+| PQ Zether gate | no chain-id allowlist (owner ruling 2026-10-31): the constructor / `initialize` precompile self-test on any chain id; `OpenFactory.kindEnabled` starts `false` for kinds 4–5; release gates: **G-LIC** (licences/patents) and audit ([CTR-PQZ-01](pq-zero-knowledge.md#CTR-PQZ-01)) | **SPECIFIED** |
+| Clients | every Zether and PQ Zether contract carries **UNAUDITED** in its NatSpec; client chain/token screens show an UNAUDITED warning | **BUILT** (NatSpec) |
 
 ## <a id="build-ci-and-pins"></a>5. Build, CI and pins
 
@@ -221,7 +219,7 @@ own job (Move test, Soroban, CosmWasm, Tact, Solana) as the family is added.
 `REGISTRAR` optional, `DEMO_SUPPLY`/`DEMO_HOLDER` optional) reads the genesis hash from the RPC and deploys, through
 the CREATE2 deployer ([CTR-GEN-06](#CTR-GEN-06)), `SmartKeyAccountFactory`, `OpenFactory` with the token
 implementations (each taking the factory address and `chain_uid`) registered as version 1 of their kinds, and
-the `SCaaSDex` implementation (registered as DEX version 1; built, no clone) and `SCaaSDexV1(registrar)` (its constructor takes the admin, here the registrar; unsalted domain); optionally a tier-1 demo token (**SPECIFIED**); with `DEPLOY_ZETHER=1`, dev chains only, also the Zether stack (built, P3; [flags](../networks/evm.md#deployments)).
+the `SCaaSDex` implementation (registered as DEX version 1; built, no clone) and `SCaaSDexV1(registrar)` (its constructor takes the admin, here the registrar; unsalted domain); optionally a tier-1 demo token (**SPECIFIED**); with `DEPLOY_ZETHER=1` (any chain but Hedera), also the Zether stack (built, P3; [flags](../networks/evm.md#deployments)).
 
 It writes
 `deployments/<chainid>.json` to seed the node's chain configuration and client chain data. Production: every contract

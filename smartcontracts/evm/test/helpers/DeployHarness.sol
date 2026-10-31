@@ -41,6 +41,8 @@ contract DeployHarness is DeployBase {
         return _checkedNotice(chainId, notice);
     }
 
+    function pqKindFits(uint64 cap, uint64 budget) external pure returns (bool) { return _pqKindFits(cap, budget); }
+
     function defaultNotice(uint256 chainId) external pure returns (uint256) { return _defaultNotice(chainId); }
 
     function _precompiles() internal override returns (bool, bool) {

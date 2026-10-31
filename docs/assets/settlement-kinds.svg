@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="t d">
   <title id="t">Settlement kinds</title>
-  <desc id="d">Twelve settlement kinds grouped by who checks them. The token checks: typed transfer and payment (built, v2 tiers), receiver pays (built on EVM and Hedera), signature wrap (built, P2a), confidential Zether (built, unaudited, dev chains only). Other contracts take part: generic gasless call through the selector allowlist (built), DEX order book (token side built, P2a), exchange against AMMs (built, P2c), mandate through MandateWallet (built), asset-suite actions (specified, nothing built), tender (specified, nothing built). Elsewhere: gas sponsorship by node policy (specified; SponsorshipPool planned) and the non-EVM families (built as MetaOp v1; target specified).</desc>
+  <desc id="d">Twelve settlement kinds grouped by who checks them. The token checks: typed transfer and payment (built, v2 tiers), receiver pays (built on EVM and Hedera), signature wrap (built, P2a), confidential Zether (built, unaudited, any chain with EIP-2537). Other contracts take part: generic gasless call through the selector allowlist (built), DEX order book (token side built, P2a), exchange against AMMs (built, P2c), mandate through MandateWallet (built), asset-suite actions (specified, nothing built), tender (specified, nothing built). Elsewhere: gas sponsorship by node policy (specified; SponsorshipPool planned) and the non-EVM families (built as MetaOp v1; target specified).</desc>
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
@@ -44,7 +44,7 @@
   <text class="b" x="40" y="382">Confidential (Zether)</text>
   <text class="s" x="40" y="404">built: transferConfidential*, fund, burn</text>
   <rect x="40" y="414" width="110" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="95" y="426" text-anchor="middle" fill="#1a7f37">BUILT, UNAUDITED</text>
-  <text class="s" x="156" y="426">dev chains only</text>
+  <text class="s" x="156" y="426">EIP-2537 chains</text>
   <rect x="332" y="78" width="612" height="288" rx="12" fill="#dbeafe" stroke="#3b82f6"/>
   <text class="tier" x="346" y="102">Another contract takes part in the check</text>
   <rect class="card" stroke="#3b82f6" x="344" y="112" width="288" height="76" rx="8"/>

@@ -37,7 +37,6 @@ import {UAMldsaVerifier} from "../src/ua/MlDsa.sol";
 import {UAFndsaVerifier} from "../src/ua/FnDsa.sol";
 import {UASlhdsaVerifier} from "../src/ua/SlhDsa.sol";
 import {UAPrecompileProbe} from "./UAPrecompileProbe.sol";
-import {ZetherSafety} from "../src/zether/ZetherSafety.sol";
 import {ZetherDisclosure} from "../src/zether/ZetherDisclosure.sol";
 import {ZetherStatements} from "../src/zether/ZetherStatements.sol";
 import {
@@ -60,7 +59,8 @@ abstract contract DeployBase is Script {
     bytes32 internal salt;
     /// @notice The chain's genesis hash (`_chainUid`).
     bytes32 internal uid;
-    /// @notice `DEPLOY_ZETHER` env (default false): also deploy the Zether stack (`_deployZether`, dev chains only).
+    /// @notice `DEPLOY_ZETHER` env (default false): also deploy the Zether stack (`_deployZether`, any chain
+    ///         but Hedera; owner ruling 2026-10-31).
     bool internal deployZether;
     /// @notice `OpenFactory.noticePeriod` (plan 5g-Z2; owner ruling 2026-10-20): `NOTICE_PERIOD` env. Safe by default:
     ///         every chain not in `_isTestChain` is a mainnet (22776, Hedera 295, Ethereum, BSC, an unknown chain), with
@@ -77,7 +77,7 @@ abstract contract DeployBase is Script {
     ///         1/64, so the least working caps are 4,174,074 / 5,893,303 warm, ~5 k more cold, and the caps leave ~73 k (~1.7 %) /
     ///         ~52 k (~0.9 %) over the cold minimum, pinned by `PqGas.t.sol`; ML-DSA-65's
     ///         cap keeps the treasury {mldsa65 ×3} t=2 over the budget), FN-DSA (2.27–2.35 M measured) + ~6 %,
-    ///         SLH-DSA above its 1.32 M worst case. Each ≤ 50 % of the 12 M budget.
+    ///         SLH-DSA above its 1.32 M worst case. Each ≤ 50 % of the 12 M budget (the deploy rule is ≤ 66 %, `_pqKindFits`).
     uint64 internal constant CAP_MLDSA44 = 4_250_000;
     uint64 internal constant CAP_MLDSA65 = 5_950_000;
     uint64 internal constant CAP_FNDSA512 = 2_500_000;
@@ -167,12 +167,16 @@ abstract contract DeployBase is Script {
     ///         and the `SCaaSDex` release, each version 1; otherwise the registrar publishes and deploys them later from
     ///         the same init code. Writes `token_factory`, `implementation_normal`, `dex_implementation`, `ua_registry`,
     ///         `mtx_relay_fee`, `mtx_relay_executor`, `chain_uid` into the JSON object `"deploy"`; with `DEPLOY_ZETHER` also the Zether stack (`_deployZether`,
-    ///         dev chains only). NORMAL and `WRAPPED` both exceed EIP-170 (the UA ledger): deploy with
+    ///         not on Hedera). NORMAL and `WRAPPED` both exceed EIP-170 (the UA ledger): deploy with
     ///         `--code-size-limit 65536` (deploy.sh); `WRAPPED` is still not deployed here (owner: wait for Glamsterdam).
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
         internal returns (OpenFactory f)
     {
-        if (deployZether) require(ZetherSafety.isDevChain(), "DEPLOY_ZETHER: dev chains only (CTR-ZTH-02)");
+        if (deployZether) {
+            require(!isHedera, "DEPLOY_ZETHER: not on Hedera (ZetherLayer refuses a Hedera env)");
+            (bool bls,) = _precompiles(); // fail before deploying anything (CTR-ZTH-52: the only chain requirement)
+            require(bls, "DEPLOY_ZETHER: the chain has no EIP-2537 (BLS12-381 precompiles)");
+        }
         f = new OpenFactory{salt: salt}(registrar, uid, noticePeriod);
         UARegistry reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
         _deployRelayFee();
@@ -225,17 +229,25 @@ abstract contract DeployBase is Script {
     /// @notice UA registry generation 1 (accounts.md §1.8, CTR-UA-22) on every chain, with per-chain enablement (§1.9):
     ///         `webauthn-p256`, `p256`, `ed25519`, `bip340`, `secp256k1`, `schnorr-bn254`, the four group kinds and `msig`
     ///         everywhere;
-    ///         `schnorr-bls12381` and `bls12381-minsig` where `UAPrecompileProbe` passes EIP-2537; `bls-bn254-minsig` on
-    ///         private chains (the dev chains and 7622) where it passes the bn254 G2 check; `zether-bls12381` with
-    ///         EIP-2537 on the dev chains only (CTR-ZTH-02; `zether-bn254` is in `legacy/ua6/`, UA-6 U10); the PQ
-    ///         signing kinds (P6c) on the private chains (the dev chains and 7622) only — unaudited, CTR-UA-23 — ML-DSA
+    ///         `schnorr-bls12381` and `bls12381-minsig` where `UAPrecompileProbe` passes EIP-2537; `bls-bn254-minsig` where
+    ///         it passes the bn254 G2 check (no chain-id lock, owner ruling 2026-10-31); `zether-bls12381` with
+    ///         EIP-2537 on every chain but Hedera (owner ruling 2026-10-31; `zether-bn254` is in `legacy/ua6/`, UA-6 U10); the PQ
+    ///         signing kinds (P6c; unaudited, CTR-UA-23) on every chain where the kind's cap is at most 66 % of the chain's
+    ///         verify budget (`_pqKindFits`; owner rulings 2026-10-31: no chain-id lock, 66 % instead of 50 %) — ML-DSA
     ///         in Solidity on the registry's cached expanded key (no chain has an ML-DSA precompile yet; P6g passes chain
     ///         7622's to the verifier's probe); `pqz-mlwe` nowhere (its verifier is P6g's). Caps: the gen-1 defaults measured in
     ///         `test/ua/UAGas.t.sol` and `test/ua/PqGas.t.sol` (accounts.md §1.15). A disabled kind gets no verifier
-    ///         (never "registrable but unusable", CTR-UA-23). JSON `ua_registry`. **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
+    ///         (never "registrable but unusable", CTR-UA-23). JSON `ua_registry`. **UNAUDITED.**
+    /// @notice The PQ signing kinds' deploy rule (owner ruling 2026-10-31, CTR-UA-23): the kind's cap is at most 66 % of the
+    ///         chain's verify budget, integer-exact as `cap * 100 <= budget * 66` (12 M: 7.92 M; Hedera 10.5 M: 6.93 M). The
+    ///         registry's own `cap <= budget` check is separate and unchanged.
+    function _pqKindFits(uint64 cap, uint64 budget) internal pure returns (bool) {
+        return uint256(cap) * 100 <= uint256(budget) * 66;
+    }
+
     function _deployUARegistry(address smartKeyAccountImpl, bool isHedera) internal returns (UARegistry reg) {
         (bool bls, bool bnG2) = _precompiles();
-        bool dev = ZetherSafety.isDevChain();
+        uint64 budget = isHedera ? UA_VERIFY_BUDGET_HEDERA : UA_VERIFY_BUDGET;
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](21);
         uint256 n;
         k[n++] = UARegistry.KindConfig(UAKinds.WEBAUTHN_P256, address(new WebAuthnP256Verifier{salt: salt}()), 400_000);
@@ -252,7 +264,7 @@ abstract contract DeployBase is Script {
                 UAKinds.BLS12381_MINSIG, address(new BlsMinSigBls12381Verifier{salt: salt}()), 200_000
             );
         }
-        if (bnG2 && (dev || block.chainid == 7622)) {
+        if (bnG2) {
             k[n++] = UARegistry.KindConfig(
                 UAKinds.BLS_BN254_MINSIG, address(new BlsMinSigBn254Verifier{salt: salt}()), 345_000
             );
@@ -263,25 +275,31 @@ abstract contract DeployBase is Script {
         k[n++] = UARegistry.KindConfig(UAKinds.FROST_SECP256K1, address(new UAFrostSecp256k1Verifier{salt: salt}()), 50_000);
         k[n++] = UARegistry.KindConfig(UAKinds.MUSIG2_BN254, address(new Musig2Bn254Verifier{salt: salt}()), 50_000);
         k[n++] = UARegistry.KindConfig(UAKinds.FROST_BN254, address(new FrostBn254Verifier{salt: salt}()), 50_000);
-        if (dev && bls) {
+        if (bls && !isHedera) { // never on Hedera: no Zether token can exist there (`ZetherLayer`)
             k[n++] = UARegistry.KindConfig(
                 UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier{salt: salt}()), 70_000
             );
         }
-        if (dev || block.chainid == 7622) {
+        // the PQ signing kinds (CTR-UA-23): wherever the kind's cap is at most 66 % of the chain's verify budget
+        if (_pqKindFits(CAP_MLDSA44, budget)) {
             k[n++] = UARegistry.KindConfig(
                 UAKinds.MLDSA44, address(new UAMldsaVerifier{salt: salt}(UAKinds.MLDSA44, address(0), "", "")), CAP_MLDSA44
             );
+        }
+        if (_pqKindFits(CAP_MLDSA65, budget)) {
             k[n++] = UARegistry.KindConfig(
                 UAKinds.MLDSA65, address(new UAMldsaVerifier{salt: salt}(UAKinds.MLDSA65, address(0), "", "")), CAP_MLDSA65
             );
+        }
+        if (_pqKindFits(CAP_FNDSA512, budget)) {
             k[n++] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new UAFndsaVerifier{salt: salt}()), CAP_FNDSA512);
+        }
+        if (_pqKindFits(CAP_SLHDSA128S, budget)) {
             k[n++] = UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new UASlhdsaVerifier{salt: salt}()), CAP_SLHDSA128S);
         }
         assembly ("memory-safe") {
             mstore(k, n)
         }
-        uint64 budget = isHedera ? UA_VERIFY_BUDGET_HEDERA : UA_VERIFY_BUDGET;
         reg = new UARegistry{salt: salt}(uid, address(0), isHedera, budget, smartKeyAccountImpl, true, k);
         _gate(address(reg));
         vm.serializeAddress("deploy", "ua_registry", address(reg));
@@ -306,14 +324,15 @@ abstract contract DeployBase is Script {
         if (underlying) l[5] = address(WrappedLib);
     }
 
-    /// @notice Dev chains only (CTR-ZTH-02; elsewhere the verifiers refuse to deploy): `ZetherStatements`,
+    /// @notice Any chain but Hedera (CTR-ZTH-52; `_deployTokenFactory` requires the EIP-2537 probe first, and a chain
+    ///         without EIP-2537 would revert at the inner-product verifier): `ZetherStatements`,
     ///         `ZetherDisclosure`, the BLS12-381 inner-product verifier (the generators, ~14 M gas) and the transfer and
     ///         burn verifiers on it (classical Zether is BLS12-381 only, CTR-ZTH-32; the bn254 steps are in
     ///         `legacy/ua6/`); when the deployer is the registrar, an env of `NORMAL_ZETHER` and `WRAPPED_ZETHER`
     ///         (version 1; `deps` = transfer, burn, inner-product verifier, disclosure, CTR-ZTH-20) and the two releases
     ///         on it, then the kinds enabled. JSON `zether_registry` (= `ua_registry`), `zether_statements`,
     ///         `zether_disclosure`, `zether_{inner_product_,,burn_}verifier_bls12381`,
-    ///         `implementation_{normal,wrapped}_zether_bls12381`. **UNAUDITED — NOT FOR PRODUCTION FUNDS.** The
+    ///         `implementation_{normal,wrapped}_zether_bls12381`. **UNAUDITED.** The
     ///         implementations exceed EIP-170 and the BLS inner-product verifier takes ~14 M gas: anvil
     ///         `--code-size-limit 65536`, forge script `--code-size-limit 65536 --gas-estimate-multiplier 105` (deploy.sh
     ///         passes both; docs/networks/evm.md).

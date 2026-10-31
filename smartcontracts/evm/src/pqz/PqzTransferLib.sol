@@ -12,7 +12,7 @@ import {PqzCore} from "./PqzCore.sol";
 
 /// @title op 1 and op 7 transfers (D14): one of the four `DELEGATECALL` libraries of the PQZ release (plan 5h D14), in the ERC-7201
 ///        namespace `scaas.pqz`; the shared steps are `internal` in `PqzCore`, compiled into each.
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** `address(this)` is the token.
+/// @notice **UNAUDITED.** `address(this)` is the token.
 library PqzTransferLib {
     /// @notice One-recipient transfer: checks, statement, `authSig`, proof, then the debit, the credit, the entry by
     ///         `mode` (BUNDLE or commit-reveal HASH; NONE retired, D11). Returns `paid`: the token moves exactly it

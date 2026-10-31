@@ -13,7 +13,7 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 ///         bn254 pairing precompile (G2 on the twist and in the subgroup). Each precompile call is capped at 2× its EIP
 ///         price (G1MSM 24 000, G2MSM 45 000, pairing 158 000), so a failing call cannot burn the caller's gas; a call
 ///         starting with less gas than the cap plus 1/64 reverts `UAVerifyGas`, never `UAKeyData`.
-///         UNAUDITED — NOT FOR PRODUCTION FUNDS.
+///         UNAUDITED.
 library UAKinds {
     uint16 internal constant EVM_EOA = 0x0001;
     uint16 internal constant EVM_CONTRACT = 0x0002;

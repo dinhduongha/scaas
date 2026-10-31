@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 /// @title Selective disclosure: chứng minh "tôi đã gửi ĐÚNG số tiền này, trong ĐÚNG
 ///        giao dịch này" mà không công khai gì khác.
 ///
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Hiện thực: `ZetherDisclosure` — contract RIÊNG, không
+/// @notice **UNAUDITED.** Hiện thực: `ZetherDisclosure` — contract RIÊNG, không
 ///         state, một bản phục vụ mọi Zether token trên mọi đường cong (owner Z13); token chỉ xuất bundle thô
 ///         (`transferEntry`) và địa chỉ `disclosure()`. Định dạng `opening` và challenge Chaum-Pedersen:
 ///         `2026-10-03-zether-design.md` §12, spec multi-recipient §5.1.

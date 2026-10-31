@@ -7,7 +7,7 @@ size: at the default set `n2304-kmax4096` an `R_TX` proof is at most 251,608 B (
 sizes`) against PQZL's 46,670 B (both: `../params/sets/README.md`). Verify times wait on the calibration of plan
 5h Task 9 (the backend study's figures are history: [pqzh-ligero.md](../../docs/research/pqzh-ligero.md)). The same
 `PQZ` precompile accepts both; the `proofSystemId` inside each statement says which system made the proof. PQZH
-exists at three of the four parameter sets (not at `n2816-kmax65536`). Unaudited, not for production funds.
+exists at three of the four parameter sets (not at `n2816-kmax65536`). Unaudited.
 
 PQZH uses **Ligero** over the field F_q (q of the parameter set, the same q as the encryption: 2^42 − 215 at
 `n2048-kmax1024`, 61,275,424,977,257 at `n2304-kmax4096`, 2^50 − 42,310,535 at `n2560-kmax16384`), with evaluation

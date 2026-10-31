@@ -4,7 +4,6 @@ pragma solidity ^0.8.24;
 import {IUAPopVerifier} from "../IUAVerifier.sol";
 import {UAKinds} from "../UAKinds.sol";
 import {CurveSigs} from "../../common/CurveSigs.sol";
-import {ZetherSafety} from "../../zether/ZetherSafety.sol";
 
 /// @title A UA verifier that answers false instead of reverting (accounts.md §1.9, CTR-UA-17).
 /// @notice `verify` / `verifyPop` run `check` through an external self-call capped at `CHECK_GAS` under `try`, so a
@@ -14,7 +13,7 @@ import {ZetherSafety} from "../../zether/ZetherSafety.sol";
 ///         so without it a malformed point would burn 63/64 of the caller's gas. A call that cannot give `check` its
 ///         full `CHECK_GAS` reverts `UAKinds.UAVerifyGas` (a statement about the gas, never `false` about the key).
 ///         For well-sized inputs the worst case of any call is `CHECK_GAS` + the wrapper (oversized calldata only shortens the inner
-///         budget and fails the length checks). **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
+///         budget and fails the length checks). **UNAUDITED.**
 abstract contract UASafeVerifier is IUAPopVerifier {
     uint256 public immutable CHECK_GAS;
 
@@ -112,12 +111,10 @@ bytes constant ZETHER_SCHNORR_TAG = "SCAAS-ZETHER-SCHNORR-V1";
 
 /// @title `zether-bls12381` (0x0141): `Y` (128, EIP-2537), `sig = R ‖ z` (160) under the Zether Schnorr tag (accounts.md
 ///        §1.9), never the UA one, so a Zether key never yields a `schnorr-bls12381` signature (S13); `verifyPop` =
-///        `verify`. Dev chains only, like every Zether contract (zether.md CTR-ZTH-02). The `zether-bn254` verifier is in
+///        `verify`. Every chain with EIP-2537, like every Zether contract (owner ruling 2026-10-31). The `zether-bn254` verifier is in
 ///        `legacy/ua6/` (U10).
 contract ZetherSchnorrBls12381Verifier is UASafeVerifier {
-    constructor() UASafeVerifier(60_000) {
-        ZetherSafety.requireDevChain();
-    }
+    constructor() UASafeVerifier(60_000) {}
 
     function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool)
         external view override returns (bool)

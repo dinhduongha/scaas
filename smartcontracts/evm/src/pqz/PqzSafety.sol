@@ -3,13 +3,14 @@ pragma solidity ^0.8.24;
 
 import {PqzSet} from "./PqzSet.sol";
 
-/// @title The PQZ chain gate (CTR-PQZ-01, CTR-PQZ-10; P6g plan D2): a hard-coded allowlist and the precompile self-test.
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** The allowlist is code, not a parameter: adding a chain is a reviewed
-///         change and a new deploy (as `ZetherSafety`). A chain id alone proves nothing (a missing chainspec key looks
-///         exactly like an enabled one), so every deploy also asks the precompile for its frozen self-test hash.
+/// @title The PQZ chain gate (CTR-PQZ-01, CTR-PQZ-10; P6g plan D2): the precompile self-test, nothing else.
+/// @notice **UNAUDITED.** No chain-id allowlist (owner ruling 2026-10-31: PQZ is open on every
+///         chain that meets the requirements). A chain id alone proves nothing (a missing chainspec key looks exactly
+///         like an enabled one), so every deploy asks the precompile for its frozen self-test hash: a chain without the
+///         `PQZ` precompile, or with one built for another set, is refused by that, whatever its id.
 library PqzSafety {
     /// @notice The `PQZ` precompile (CTR-PQZ-10; the 32-bit form `0x…5caa0f01` of plan 5h Task 8d, spec §12 item 9), the
-    ///         same address on the dev chains.
+    ///         same address on every chain.
     address internal constant PQZ = 0x000000000000000000000000000000005caa0f01;
     /// @notice `OP_SELFTEST` (P6e D13, the set's `selftest.json`): the precompile's answer to the input `06 00000000` at
     ///         the build's parameter set (`PqzSet`: a precompile built for another set answers another hash).
@@ -20,19 +21,9 @@ library PqzSafety {
     bytes32 internal constant PQZL_ID = PqzSet.PQZL_ID;
     bytes32 internal constant PQZH_ID = PqzSet.PQZH_ID;
 
-    error NotAllowedChain(uint256 chainId);
     error SelfTestFailed(address pqz);
     /// @notice Not the `PQZ` precompile, or a proof system it does not verify (review W-B, 2026-10-19).
     error NotPqz(address pqz, bytes32 psid);
-
-    /// @notice 31337 (anvil), 1337 (geth --dev), 7622 (the SCaaS testnet with the PQZ precompile).
-    function isAllowedChain() internal view returns (bool) {
-        return block.chainid == 31337 || block.chainid == 1337 || block.chainid == 7622;
-    }
-
-    function requireAllowedChain() internal view {
-        if (!isAllowedChain()) revert NotAllowedChain(block.chainid);
-    }
 
     /// @notice True iff `pqz` answers exactly `06 00000000` with exactly the 32-byte frozen hash. An empty account, a
     ///         revert, another length or another word is false.

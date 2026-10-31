@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.90"
 publish = false
-description = "Zether client: R33 conf keys, lifted ElGamal, Sigma + Bulletproofs prover/verifier (BLS12-381; bn254 behind the legacy `bn254` feature), WASM. UNAUDITED - NOT FOR PRODUCTION FUNDS."
+description = "Zether client: R33 conf keys, lifted ElGamal, Sigma + Bulletproofs prover/verifier (BLS12-381; bn254 behind the legacy `bn254` feature), WASM. UNAUDITED."
 
 [lib]
 crate-type = ["cdylib", "rlib"]

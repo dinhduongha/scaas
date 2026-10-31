@@ -213,7 +213,7 @@ not `https:` (dev builds allow `http://localhost|127.0.0.1|[::1]`, and `"self"`/
 the page itself is `http:` on those hosts); userinfo in a URL; **RPC secrets** — a query string, a path segment matching
 `/(api[-_]?key|token|secret|auth)/i`, any path segment of ≥ 20 characters from `[A-Za-z0-9_-]` (Infura `/v3/<hex>`, Alchemy
 `/v2/<key>`), any subdomain label of ≥ 20 characters (QuickNode); `dev: true` on a non-dev chain (an id outside 31337/1337,
-or a network outside `localnet`/`standalone`/`local`); `zetherTokens` on a non-dev chain; a curated token without
+or a network outside `localnet`/`standalone`/`local`); a curated token without
 `decimals` or with `decimals > 36`; a `passkey.rpId` that is not a registrable suffix of `location.hostname` (`localhost`
 only when the hostname is `localhost`, `127.0.0.1` never); a `gatewayNode` naming a node without `gateway`; a non-`https`
 `nodes[].oidc[].issuer`. Unknown fields warn.
@@ -303,7 +303,7 @@ There is no RPC override in production builds. Why: a third-party RPC can forge 
 and chain.
 
 EVM-chain specifics: Gnosis 100 — `finalized` ~160–240 s, the final badge waits for the `finalized` tag; Celo 42220 — no
-CIP-64, CELO gas only; SCaaS testnet — base fee 0, `private: true`, Zether gated, no public explorer links, and the RPC must
+CIP-64, CELO gas only; SCaaS testnet — base fee 0, `private: true`, Zether, no public explorer links, and the RPC must
 send CORS for the app origin; anvil 31337 — `dev: true`, the dev key in dev builds, Zether; everywhere — RIP-7212 presence
 changes passkey/UA P-256 cost, so the gas estimate is shown before a self-paid passkey intent. Hedera: the create wizard
 reads `getTokenCustomFees` / `getTokenKey(FEE_SCHEDULE)` through the HTS precompile and warns
@@ -597,13 +597,13 @@ books.** Owner decision (non-EVM DEX books after EVM). The DEX module is generic
 beneficiary})` (`validUntilBlock`: required since `…/v3`, the last block the token accepts the proof in, [zether expiry](../contracts/zether.md#valid-until)) with `x` from `openConfKey` **inside** the worker; the result is `opData` for the `OP_ZTRANSFER` envelope
 (gateway) or `directCalldata`; the proof alone authorizes the spend. Balance: open the cache, then `checkBalance` against the current `acc`; on a miss run BSGS on the delta; after own
 operations update with `setCachedBalance` / `cacheAfterDebit` / `cacheAfterRollOver`; above the device bound (2^44) show a
-banner ([zether balance](signers-clientkeys.md#zether-balance)). Every Zether screen carries "UNAUDITED — dev chains only".
+banner ([zether balance](signers-clientkeys.md#zether-balance)). Every Zether screen carries "UNAUDITED".
 
 <a id="zether-worker"></a><a id="CLI-APP-13"></a>**CLI-APP-13** — **Zether runs in one session worker.** The worker runs the
 prover (`wasm-bindgen --target web`) and opens the conf vault itself (`openConfKey`), so `x` never enters the main realm; it
 keeps `x` and the BSGS table for the session and is terminated on lock, after 5 min idle or 5 min hidden. Defaults
-`tableBits 22, boundBits 44`; `allowLargeTable` only by explicit choice. Zether shows only on chains 31337/1337 with a
-configured ZetherToken ([CTR-ZTH-02](../contracts/zether.md#CTR-ZTH-02); whether the SCaaS testnet joins is an open owner question).
+`tableBits 22, boundBits 44`; `allowLargeTable` only by explicit choice. Zether shows on any EVM chain with a
+configured ZetherToken ([CTR-ZTH-52](../contracts/zether.md#CTR-ZTH-52); no chain allowlist, owner ruling 2026-10-31).
 Post-quantum Zether (PQZ) tokens configured on the SCaaS testnet run in the same worker
 ([CTR-PQZ-18](../contracts/pq-zero-knowledge.md#CTR-PQZ-18)).
 
@@ -625,7 +625,7 @@ Post-quantum Zether (PQZ) tokens configured on the SCaaS testnet run in the same
 | Rate admin (calldata) / guardian | ✓ | ✓ | — | — | — | — | — | — |
 | Regulated tokens (flags 5–8) | view-only | view-only | — | — | — | — | — | — |
 | DEX book, place, cancel | G (venue); on-chain cancel S | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable |
-| Zether | ✓ 31337/1337 only | — | — | — | — | — | — | — |
+| Zether | ✓ | — | — | — | — | — | — | — |
 | Passkey | ✓ SmartKeyAccount / UA | ✓ SmartKeyAccount / UA | — | planned (third) | planned (first) | planned (fourth, unaudited) | — | planned (second) |
 | Seed vault | ✓ | ✓ ECDSA + ED25519 | ✓ | ✓ (Pi 314159) | ✓ | ✓ | ✓ | ✓ (OCMS kind 1) |
 | Extension wallet | EIP-6963 | MetaMask on the relay | Keplr, Leap | Freighter | Wallet Standard | AIP-62 | GRAM JS bridge | Wallet Standard |

@@ -1,7 +1,7 @@
 //! Zether client library (R34): R33 conf keys, lifted ElGamal + BSGS, Sigma + Bulletproofs
 //! prover and a native verifier mirror, over bn254 and BLS12-381 G1.
 //!
-//! UNAUDITED — NOT FOR PRODUCTION FUNDS.
+//! UNAUDITED.
 
 // (statement, proof, witness) tuples are the API shape; a type alias per curve adds nothing.
 #![allow(clippy::type_complexity)]

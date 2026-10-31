@@ -9,7 +9,7 @@ import {PqzSet} from "./PqzSet.sol";
 /// @title PQZ key PoK verifier of slot 0x0142 (UA-6 U10; CTR-PQZ-13, pq-zero-knowledge.md §7.2 step 6; P6g plan D3): the PoP is an `R_REG`
 ///        proof through the `PQZ` precompile, op 3, on `opTag(REGISTER) ‖ PROOF_SYSTEM_ID ‖ message ‖ pk` (`96 + PK` bytes at
 ///        the build's parameter set, `PqzSet`; plan 5h Task 8d part 2: the set's ids, probe and sizes).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Stateless; the precompile and the proof system are immutables. The
+/// @notice **UNAUDITED.** Stateless; the precompile and the proof system are immutables. The
 ///         constructor runs only on an allowed chain (`PqzSafety`), for exactly the `PQZ` precompile and one of the set's
 ///         proof systems (PQZL; PQZH where the set has it), after the precompile's self-test and an `R_REG` probe through this contract's own `verify`
 ///         (the pinned vector of that proof system ⇒ true, the same proof with one bit flipped ⇒ false), so a deployed
@@ -36,7 +36,6 @@ contract UAPqzVerifier is IUAPopVerifier {
     error UAPqzProbe();
 
     constructor(address pqz, bytes32 psid, bytes memory probePk, bytes32 probeMessage, bytes memory probeProof) {
-        PqzSafety.requireAllowedChain();
         PqzSafety.requirePqz(pqz, psid);
         bytes32 h = keccak256(abi.encodePacked(psid, probeMessage, probePk, probeProof));
         if (h != (psid == PqzSafety.PQZL_ID ? PROBE_PQZL : PROBE_PQZH)) revert UAPqzProbe();
@@ -57,10 +56,11 @@ contract UAPqzVerifier is IUAPopVerifier {
         return verifyPop(keyData, message, sig);
     }
 
-    /// @notice An allowed chain and the precompile's self-test now (a view for off-chain callers; the on-chain gate is `PqzStateLib.init`: `requireAllowedChain`,
-    ///         `requirePqz`; `OpenFactory.setKindEnabled` has no chain gate since 5g-Z2, P6g plan D2).
+    /// @notice The precompile's self-test now, on any chain id (a view for off-chain callers; the on-chain gate is
+    ///         `PqzStateLib.init`: `requirePqz`; `OpenFactory.setKindEnabled` has no chain gate since 5g-Z2, P6g plan D2;
+    ///         no chain allowlist since the owner ruling of 2026-10-31).
     function isSupportedOnThisChain() external view returns (bool) {
-        return PqzSafety.isAllowedChain() && PqzSafety.selfTest(PRECOMPILE);
+        return PqzSafety.selfTest(PRECOMPILE);
     }
 
     /// @dev `u8(3) ‖ be32(STMT_REGISTER) ‖ opTag ‖ psid ‖ message ‖ pk ‖ proof`; true only on exactly the word 1.

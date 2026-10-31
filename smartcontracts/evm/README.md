@@ -2,15 +2,15 @@
 
 The SCaaS contracts of the EVM family (Foundry; the other families are under `smartcontracts/<family>/`). Normative
 rules: `docs/contracts/` (start at `docs/contracts/README.md`); reasons and old ids: `docs/decisions.md`
-(`python3 scripts/docs_check.py resolve <id>`). **Unaudited — not for production funds.**
+(`python3 scripts/docs_check.py resolve <id>`). **Unaudited.**
 
 ## What is here
 
 | Area | Files (`src/`) | Status |
 |---|---|---|
 | Token kinds `NORMAL` / `WRAPPED` | `metatx/NormalToken.sol`, `metatx/WrappedToken.sol` on `MetaTokenBase` (`MetaTxBase`, `ERC20MetaTx`, `WrappedLib`, `AdminLib`) | built; EIP-1167 clones; meta-tx (address path and UA path), UA ledger, wrapper legs ([token-wrappers.md](../../docs/contracts/token-wrappers.md), [metatx.md](../../docs/contracts/metatx.md)) |
-| Zether kinds `NORMAL_ZETHER` / `WRAPPED_ZETHER` | `zether/` (`ZetherLayer`, `ZetherLib`, `ZetherStatements`, per curve the transfer / burn / inner-product verifiers (`ZetherTransferVerifier*`, `ZetherBurnVerifier*`, `ZetherInnerProductVerifier*`), `ZetherDisclosure`) | built; dev chains 31337 / 1337 only (`ZetherSafety`) ([zether.md](../../docs/contracts/zether.md)) |
-| PQZ kinds `NORMAL_PQZ` / `WRAPPED_PQZ` | `pqz/` (`PqzLayer`, `PqzStateLib`, `PqzTransferLib`, `PqzBurnLib`, `PqzViewLib`, `PqzCore`, `PqzCt`, `UAPqzVerifier`, `PqzSafety`) | built; chains 31337 / 1337 / 7622 (`PqzSafety`); op 7 multi-recipient transfers (`pqzTransfer*`) and op 1 single (`pqzTransferSingle*`) over the `PQZ` precompile ([pq-zero-knowledge.md](../../docs/contracts/pq-zero-knowledge.md)) |
+| Zether kinds `NORMAL_ZETHER` / `WRAPPED_ZETHER` | `zether/` (`ZetherLayer`, `ZetherLib`, `ZetherStatements`, per curve the transfer / burn / inner-product verifiers (`ZetherTransferVerifier*`, `ZetherBurnVerifier*`, `ZetherInnerProductVerifier*`), `ZetherDisclosure`) | built; unaudited, any chain with EIP-2537 ([zether.md](../../docs/contracts/zether.md)) |
+| PQZ kinds `NORMAL_PQZ` / `WRAPPED_PQZ` | `pqz/` (`PqzLayer`, `PqzStateLib`, `PqzTransferLib`, `PqzBurnLib`, `PqzViewLib`, `PqzCore`, `PqzCt`, `UAPqzVerifier`, `PqzSafety`) | built; any chain whose `PQZ` precompile passes the self-test (`PqzSafety`); op 7 multi-recipient transfers (`pqzTransfer*`) and op 1 single (`pqzTransferSingle*`) over the `PQZ` precompile ([pq-zero-knowledge.md](../../docs/contracts/pq-zero-knowledge.md)) |
 | Factory | `factory/OpenFactory.sol` (`IOpenFactory`, `IFactoryToken`) | built; open creation, versioned catalogue, the Zether / PQZ gates |
 | Universal Accounts | `ua/UARegistry.sol`, `ua/UAKinds.sol`, `ua/verifiers/`, the PQ verifiers (`MlDsa`, `FnDsa`, `SlhDsa`) | built; admin-free registry, kinds `0x0100`–`0x0108`, groups, `msig`, Zether / PQZ kinds, per-kind list ([accounts.md](../../docs/contracts/accounts.md)) |
 | DEX | `dex/SCaaSDex.sol` (`DexPuller`), `trade/` | built; clone per DEX, `mtxSettle` one taker / many makers ([dex.md](../../docs/contracts/dex.md)) |

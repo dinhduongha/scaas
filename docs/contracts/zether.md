@@ -1,13 +1,13 @@
 # Zether — confidential amounts (classical)
 
-**Status: BUILT, UNAUDITED — NOT FOR PRODUCTION FUNDS.** The kinds `NORMAL_ZETHER` (`NormalZetherToken`) and
+**Status: BUILT, UNAUDITED.** The kinds `NORMAL_ZETHER` (`NormalZetherToken`) and
 `WRAPPED_ZETHER` (`WrappedZetherToken`) on the one meta-transaction base (`ZetherLayer` + `ZetherLib`),
 `ZetherStatements`, `ZetherDisclosure`, per curve the transfer, burn and inner-product verifiers
 (`ZetherTransferVerifier*`, `ZetherBurnVerifier*`, `ZetherInnerProductVerifier*`, [CTR-ZTH-20](#CTR-ZTH-20)), `ZetherCurves`,
-`ZetherTranscript`, `ZetherSafety` and the Rust prover `zether-prover` exist with tests (P3;
+`ZetherTranscript` and the Rust prover `zether-prover` exist with tests (P3;
 `smartcontracts/evm/src/zether/**`); the accounts are UAs of the UA registry's Zether kinds (UA-3,
-[registry](#registry)). Every Zether contract and the Zether Schnorr verifiers of the registry refuse to deploy or
-initialize outside chain ids 31337/1337, and the factory's kind gate starts off for kinds 2–3 (`setKindEnabled`, [safety
+[registry](#registry)). Classical Zether is open on every chain with the BLS12-381 precompiles (no chain-id allowlist,
+owner ruling 2026-10-31), and the factory's kind gate starts off for kinds 2–3 (`setKindEnabled`, [safety
 gate](#safety-gate)). Post-quantum confidential balances are a separate class ([pq-zero-knowledge.md](pq-zero-knowledge.md)). Relaying is
 the generic self-call ([relaying](#envelope)), `chainUid` is in every chain-bound digest; the built `ZetherToken` with its
 `ZetherMetaTx` envelope is backed up, not built, in `smartcontracts/evm/legacy/p3/`. **Built (P3b):** the storage and auditor modes, the salted `s` and the sender memo ([CTR-ZTH-38](#CTR-ZTH-38), [CTR-ZTH-48](#CTR-ZTH-48)–[CTR-ZTH-50](#CTR-ZTH-50), [CTR-ZTH-30](#CTR-ZTH-30)).
@@ -51,7 +51,7 @@ terminator.
 
 <a id="scope"></a>
 <a id="CTR-ZTH-01"></a>**CTR-ZTH-01** — **Full classical Zether** (owner): the `*_ZETHER` kinds clone through the factory,
-verifiers for bn254 **and** BLS12-381 (the curve is a deploy-time parameter of each token: the verifiers are release
+BLS12-381 verifiers (the bn254 line is in `legacy/ua6/`, [CTR-ZTH-32](#CTR-ZTH-32); the curve is a deploy-time parameter of each token: the verifiers are release
 immutables of the factory since 5g-Z2, so the release fixes the curve; there is no setter and no system-wide curve; the prover is generic over the curve), ElGamal
 `acc/pending` balances, two `mtxRollOver` modes (`PUBLIC` default, `OWNER_ONLY` opt-in per account, with an on-chain
 `accSeq`), shield/transfer/unshield, Bulletproofs with exactly two range statements, envelope binding to the meta-tx, public
@@ -60,8 +60,8 @@ fee scalars, the `ITransferDisclosure` selective-disclosure interface (open the 
 stored per transfer), a Rust prover compiled to WASM for client proving, relayer support, and **mandatory tests**.
 
 The
-`UNAUDITED — NOT FOR PRODUCTION FUNDS` gate applies: the factory/deploy flag is off by default on non-dev chains, and
-NatSpec and client screens carry the warning. Non-EVM families: feasibility only. The statement and transcript are
+`UNAUDITED` gate applies: the factory's kind flag and the deploy flag are off by default on
+every chain, and NatSpec and client screens carry the warning. Non-EVM families: feasibility only. The statement and transcript are
 frozen byte-exact in this file. Classical Zether runs on BLS12-381 only ([CTR-ZTH-32](#CTR-ZTH-32)); the bn254 line
 (a second curve cost twice the verifier audit and ~1.3× prover work, with no interop between curves) is in
 `smartcontracts/evm/legacy/ua6/`; its figures are kept in the "Legacy bn254" notes of §3 and §19.
@@ -184,7 +184,7 @@ all-zero `pad16`. The prover **never** outputs a non-canonical point; `UA = kecc
 - bn254: cofactor 1 — on-curve suffices; the precompiles `0x06/0x07` revert on a bad point. Every call to `0x05`,
   `0x06`, `0x07` also requires the exact return size (64 bytes, `modexp` 32), as the BLS12-381 wrappers do: a chain
   without them answers "success, empty", which on the success flag alone would read the zeros left in memory as a
-  result (review W-I, 2026-10-19; defence in depth behind `isSupportedOnThisChain` and the dev-chain gate).
+  result (review W-I, 2026-10-19; defence in depth behind `isSupportedOnThisChain`).
 - BLS12-381: G1ADD checks **only** on-curve; G1MSM also checks the subgroup. The verifier feeds **every** externally
   received point into at least one G1MSM (every check equation is an MSM), so the subgroup check is implicit. The
   registry forces the key `Y` through a G1MSM with k=1 at registration.
@@ -871,7 +871,7 @@ infinity are refused ([CTR-UA-01](accounts.md#CTR-UA-01)). Using one secret as b
 not a registry check. `Y` is stored with SSTORE2: `keyOf(UA)` serves the sender's storage-only recovery
 ([CTR-ZTH-50](#CTR-ZTH-50)). No key rotation: a new key = a new UA ([CTR-UA-13](accounts.md#CTR-UA-13)). The registry's
 interface is [accounts.md §1.8](accounts.md#registry); the Zether Schnorr verifier (`ZetherSchnorrBls12381Verifier`)
-deploys on dev chains only.
+deploys on every chain; `DeployBase` registers it where `UAPrecompileProbe` passes EIP-2537, never on Hedera.
 
 <a id="legacy-zether-registry"></a>
 
@@ -1031,7 +1031,7 @@ The single format keeps its one auditor copy under `s` (one leg, no cross-leg di
 "underlying must be an ERC-20" rule of v1). `ZetherLayer` (abstract, in the token) holds the ERC-7201 `scaas.zether`
 storage (per-UA `acc`/`pending`, counters, `totalShielded`, disclosure entries) and the external stubs of
 [CTR-ZTH-45](#CTR-ZTH-45); the logic is `ZetherLib`. The verifier (curve) and the auditor key are chosen at creation and
-immutable; the registry address is an implementation immutable; the dev-chain gate `ZetherSafety` stays
+immutable; the registry address is an implementation immutable; the kind gate stays
 ([safety gate](#safety-gate)). `ZetherDisclosure` stays as built but for `chainUid` in its challenge (P3, controller
 ruling, pending the owner; [CTR-ZTH-43](#CTR-ZTH-43)); the prover views move to
 `ZetherStatements` ([CTR-ZTH-46](#CTR-ZTH-46)).
@@ -1163,32 +1163,29 @@ node's simulation gate).
 
 <a id="chains"></a>
 <a id="CTR-ZTH-27"></a>**CTR-ZTH-27** — *Open (owner).* The owner put the private chain in scope as the **first**
-target for confidential payments (where gas is not a blocking constraint); the private reference chain is the SCaaS testnet (chain id 7622), but
-classical Zether is gated to the dev chain ids 31337/1337 ([CTR-ZTH-02](#CTR-ZTH-02)) and whether the SCaaS testnet counts as a dev
-chain is open ([CTR-ZTH-33](#CTR-ZTH-33)). Post-quantum Zether serves the private chain instead
-([pq-zero-knowledge.md](pq-zero-knowledge.md)).
+target for confidential payments (where gas is not a blocking constraint); the private reference chain is the SCaaS testnet (chain id 7622).
+Classical Zether runs there as on every chain with the curve's precompiles ([CTR-ZTH-52](#CTR-ZTH-52)); post-quantum
+Zether is a separate class on the same chain ([pq-zero-knowledge.md](pq-zero-knowledge.md)).
 
 ## <a id="safety-gate"></a>16. Safety gate
 
 <a id="safety-gate"></a>
 <a id="dev-gate"></a>
-<a id="CTR-ZTH-02"></a>**CTR-ZTH-02** — **Classical Zether is gated to dev chains**: a hard-coded allowlist
-`ZetherSafety.isDevChain()`: `chainid ∈ {31337 (anvil/hardhat), 1337 (geth --dev)}`; the factory's kind gate is off by
-default; the check is in `initialize` and in the constructors of the proof verifiers and of the registry's
-Zether Schnorr verifiers (the UA registry itself deploys on every chain; without those verifiers its Zether kinds are
-disabled). Adding a chain = a change
-of `ZetherSafety` + a new deployment, after the cryptographic audit.
+<a id="CTR-ZTH-52"></a>**CTR-ZTH-52** — **Classical Zether is open on every chain that has the curve's precompiles**
+(owner ruling 2026-10-31): no chain-id check in any contract or script — the SCaaS testnet 7622, the SCaaS mainnet 22776
+and customer chains alike. The only chain requirement is capability: BLS12-381 needs the Prague precompiles `0x0b`–`0x10`
+(EIP-2537). A chain without them fails the call: the inner-product verifier's constructor (the generators) reverts, a
+token's `initialize` reverts `VerifierUnsupportedOnThisChain` (the release's transfer verifier answers
+`isSupportedOnThisChain()`), and `DeployBase` registers the UA kind `zether-bls12381` only where `UAPrecompileProbe`
+passes EIP-2537 (`DEPLOY_ZETHER` refuses such a chain before deploying anything). Never on Hedera (`ZetherLayer` refuses a
+Hedera env; `DEPLOY_ZETHER` refuses a Hedera deploy; the Hedera registry gets no `zether-bls12381`; regression test
+`test/zether/ZetherNoEip2537.t.sol`).
 
 - `OpenFactory.kindEnabled(NORMAL_ZETHER / WRAPPED_ZETHER)` starts `false`; `setKindEnabled` (registrar) is the
-  generic gate of every kind (plan 5g-Z2, owner 2026-10-20: it replaces `setZetherEnabled`, which only worked on a dev
-  chain); creating a `*_ZETHER` token reverts when the kind is off (`KindDisabled`) **or**, in the token's `initialize`,
-  when the chain is not a dev chain (built, P3; 5g-Z2).
-- The kinds' `initialize`, the constructors of the proof verifiers and of `ZetherSchnorrBls12381Verifier` also
-  revert outside a dev chain (a manual deploy cannot bypass it).
-- The NatSpec of every Zether contract carries **UNAUDITED — NOT FOR PRODUCTION FUNDS**.
-
-<a id="CTR-ZTH-33"></a>**CTR-ZTH-33** — *Open (owner).* **The SCaaS testnet is not a classical-Zether dev chain**:
-`ZetherSafety`'s allowlist stays `{31337, 1337}` until the owner decides whether the private chain counts as "dev".
+  generic gate of every kind (plan 5g-Z2): enabling the Zether kinds is an admin act per chain; creating a `*_ZETHER`
+  token reverts when the kind is off (`KindDisabled`).
+- The release's verifiers stay pinned ([CTR-ZTH-20](#CTR-ZTH-20)).
+- The NatSpec of every Zether contract carries **UNAUDITED**.
 
 <a id="parameters"></a>
 <a id="CTR-ZTH-32"></a>**CTR-ZTH-32** — **Classical Zether is BLS12-381 only** (owner). BLS12-381 is more secure

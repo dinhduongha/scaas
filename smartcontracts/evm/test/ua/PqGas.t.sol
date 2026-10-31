@@ -46,8 +46,8 @@ contract MlDsaExpanded {
 
 /// T-GAS for the PQ kinds (accounts.md CTR-UA-23): execution gas of one `verify` call (the registry's capped
 /// `staticcall`), valid signature; SLH-DSA also at its worst case. `forge test --match-contract PqGasTest -vv` prints the
-/// numbers. Budget on EIP-7825 chains: `UA_VERIFY_BUDGET` = 12,000,000; an enabled kind on a public chain ≤ ~50 % =
-/// 6,000,000. The bounds are the values measured on 2026-10-12 (solc 0.8.37, osaka) plus ~10 %.
+/// numbers. Budget on EIP-7825 chains: `UA_VERIFY_BUDGET` = 12,000,000; a PQ kind is enabled where its cap is ≤ 66 % =
+/// 7,920,000 (owner ruling 2026-10-31; was ~50 %). The bounds are the values measured on 2026-10-12 (solc 0.8.37, osaka) plus ~10 %.
 contract PqGasTest is Test {
     function _kat() internal view returns (string memory) {
         return vm.readFile("../vectors/ua/pq_kat.json");

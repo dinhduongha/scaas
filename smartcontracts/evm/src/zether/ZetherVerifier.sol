@@ -5,7 +5,6 @@ import {
     IZetherVerifierCommon, IZetherVerifier, IZetherBurnVerifier, IZetherInnerProductVerifier
 } from "./IZetherVerifier.sol";
 import {ZetherTranscript as T} from "./ZetherTranscript.sol";
-import {ZetherSafety} from "./ZetherSafety.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {G1Bls12381} from "./ZetherCurves.sol";
 
@@ -136,7 +135,7 @@ abstract contract ZetherCurve is IZetherVerifierCommon {
 
 /// @title Verifier Σ-Bullets cho Zether: the inner-product side (§8.2), shared by the transfer and burn verifiers of a
 ///        curve (owner 2026-10-19, CTR-ZTH-20, candidate (2): no duplicated Bulletproof code).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Generator NUMS tính trong constructor theo §3 rồi ghi vào một data
+/// @notice **UNAUDITED.** Generator NUMS tính trong constructor theo §3 rồi ghi vào một data
 ///         contract (SSTORE2): ai cũng tính lại được, không có hằng số nào để tin. Trên BLS12-381 MSM đi qua 0x0c nên mọi
 ///         điểm đầu vào được kiểm subgroup ngầm.
 abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVerifier {
@@ -145,7 +144,6 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
     error GeneratorStoreFailed();
 
     constructor() {
-        ZetherSafety.requireDevChain();
         uint256 p = _pointBytes();
         bytes memory blob = new bytes(NGEN * p);
         _put(blob, 0, _gen("h", 0), p);
@@ -313,7 +311,7 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
 }
 
 /// @title Verifier Σ-Bullets cho Zether, độc lập đường cong (đặc tả §6–§9): the Σ-protocol side.
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Một Σ-protocol (R1 khoá, R2–R4 ciphertext cùng `s`, R5 số dư, R9
+/// @notice **UNAUDITED.** Một Σ-protocol (R1 khoá, R2–R4 ciphertext cùng `s`, R5 số dư, R9
 ///         auditor: `s` ở định dạng một người nhận, `t_j` riêng mỗi leg ở định dạng nhiều người nhận, liên kết Σ-Bullets) và các Bulletproof (`n_v = n_b = 64`, ruling RS-NV64-1) trên **một**
 ///         transcript; mọi phương trình là một MSM phải bằng `O`. Split (owner 2026-10-19, CTR-ZTH-20): a transfer
 ///         verifier and a burn verifier per curve share this base (the checks are the internal `_verify*`; the compiler
@@ -343,7 +341,6 @@ abstract contract ZetherVerifierBase is ZetherCurve {
     error InnerProductMismatch(address innerProduct);
 
     constructor(IZetherInnerProductVerifier innerProduct_) {
-        ZetherSafety.requireDevChain();
         if (!SigCheck.isContract(address(innerProduct_)) || innerProduct_.proofSystemId() != proofSystemId()) {
             revert InnerProductMismatch(address(innerProduct_));
         }
@@ -676,7 +673,7 @@ abstract contract ZetherBurnVerifierBase is ZetherVerifierBase, IZetherBurnVerif
 }
 
 /// @title Verifier Zether trên BLS12-381 (EIP-2537, cần Prague).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** 117–126 bit; điểm 128 byte; subgroup check nằm
+/// @notice **UNAUDITED.** 117–126 bit; điểm 128 byte; subgroup check nằm
 ///         trong mọi G1MSM.
 abstract contract ZetherBls12381Curve is ZetherCurve {
     bytes internal constant GEN_DST = "SCAAS-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_";

@@ -114,7 +114,7 @@ flowchart LR
 - **`SmartKeyAccount`** ([CTR-ACC-11](../contracts/accounts.md#CTR-ACC-11); built code still at
   `smartcontracts/evm/src/account/SubjectAccount.sol`, renamed in P4): `KeyKind` `{NONE, P256_WEBAUTHN, SECP256K1}`,
   guardian recovery, key changes by its own `MetaTransaction` ([CTR-ACC-09](../contracts/accounts.md#CTR-ACC-09), [CTR-ACC-10](../contracts/accounts.md#CTR-ACC-10)). No PQ key.
-- **Confidentiality.** Classical Zether is dev-only ([CTR-ZTH-02](../contracts/zether.md#CTR-ZTH-02)); a quantum
+- **Confidentiality.** Classical Zether is unaudited and open on every chain with EIP-2537 ([CTR-ZTH-52](../contracts/zether.md#CTR-ZTH-52)); a quantum
   adversary could read balances and forge proofs. PQ Zether (`PqzToken`, MLWE encryption, LNP22 proofs) is specified
   for the SCaaS testnet only, behind an allowlist and a precompile self-test; precompiles `PQZ` at `0x…0F01` and `MLDSA65` at
   `0x…0F10` ("EIP-8355's layout plus a context field"), placed off 0x12/0x13 on purpose (2026-10-15, P6f: moved to

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" role="img" aria-labelledby="t d">
   <title id="t">Token model: two axes</title>
-  <desc id="d">Axis 1, the kind, fixes the confidential layer: rows NORMAL (standalone) and WRAPPED (wrapper of one to eight legs), columns plain (NORMAL and WRAPPED, built in P1), ZETHER (NORMAL_ZETHER and WRAPPED_ZETHER, built in P3, unaudited, dev chains only), PQZ (NORMAL_PQZ and WRAPPED_PQZ, built on the private chains, unaudited). The combined ZETHER_PQZ kinds (ids 6 and 7) were dropped on 2026-10-20; their ids are not reused. Axis 2, who signs, belongs to the account: an EOA (ECDSA), a SmartKeyAccount (ERC-1271), or a Universal Account with a post-quantum key (mldsa44, mldsa65, fndsa512) through the UA ledger in the token base (specified, not built). Every kind accepts the same intents from every signer.</desc>
+  <desc id="d">Axis 1, the kind, fixes the confidential layer: rows NORMAL (standalone) and WRAPPED (wrapper of one to eight legs), columns plain (NORMAL and WRAPPED, built in P1), ZETHER (NORMAL_ZETHER and WRAPPED_ZETHER, built in P3, unaudited, BLS12-381), PQZ (NORMAL_PQZ and WRAPPED_PQZ, built on the private chains, unaudited). The combined ZETHER_PQZ kinds (ids 6 and 7) were dropped on 2026-10-20; their ids are not reused. Axis 2, who signs, belongs to the account: an EOA (ECDSA), a SmartKeyAccount (ERC-1271), or a Universal Account with a post-quantum key (mldsa44, mldsa65, fndsa512) through the UA ledger in the token base (specified, not built). Every kind accepts the same intents from every signer.</desc>
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
@@ -49,9 +49,9 @@
   <text class="s" x="366" y="282">identities visible; amounts and</text>
   <text class="s" x="366" y="298">balances ElGamal-encrypted;</text>
   <text class="s" x="366" y="314">Σ-protocol + 2 Bulletproofs</text>
-  <text class="s" x="366" y="330">on bn254 / BLS12-381</text>
+  <text class="s" x="366" y="330">on BLS12-381</text>
   <rect x="366" y="344" width="110" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="421" y="356" text-anchor="middle" fill="#1a7f37">BUILT, UNAUDITED</text>
-  <text class="s" x="366" y="376">classical Zether, dev chains</text>
+  <text class="s" x="366" y="376">classical Zether, EIP-2537 chains</text>
   <rect x="552" y="262" width="188" height="122" rx="8" fill="#f6fef9" stroke="#16a34a"/>
   <text class="s" x="562" y="282">the same shape on module-LWE;</text>
   <text class="s" x="562" y="298">one lattice proof per operation;</text>

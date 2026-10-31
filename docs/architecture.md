@@ -493,7 +493,7 @@ Verification and disclosure sit **outside** the token: one verifier per curve, t
 `ZetherStatements` serve every Zether token ([CTR-ZTH-43](contracts/zether.md#CTR-ZTH-43),
 [CTR-ZTH-46](contracts/zether.md#CTR-ZTH-46)). That keeps each token under EIP-170 and gives a checker one canonical
 contract to call. Confidential kinds refuse the regulated flags ([CTR-ZTH-47](contracts/zether.md#CTR-ZTH-47)), and
-classical Zether is gated to development chains until its audit ([CTR-ZTH-02](contracts/zether.md#CTR-ZTH-02)).
+classical Zether is open on every chain with the BLS12-381 precompiles, unaudited, behind the per-chain kind gate ([CTR-ZTH-52](contracts/zether.md#CTR-ZTH-52)).
 
 <a id="trading"></a>
 ### 4.5 Trading

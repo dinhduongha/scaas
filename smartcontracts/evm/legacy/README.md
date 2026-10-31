@@ -83,3 +83,18 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   backup, not delete), taken from `main` commit `c2cfc223`: `TradeLib.sol`, `SCaaSDex.sol`, `ISCaaSDex.sol` whole, and
   `FloorTests.txt` (`test_minFill_oddAmountRoundsTheHalfUp`, `test_minFillPpm_halvingEncodesIt`). Superseded by: the 50 %
   minimum-fill floor (`MIN_FILL_PPM`) is gone; the signer's `minFill` is the only per-fill minimum. Not built.
+- `zether-ungate/`: the classical-Zether dev-chain gate before branch `zether-ungate` removed it (owner ruling
+  2026-10-31: classical Zether is open on every chain like PQZ, testnet 7622 and mainnet 22776; CTR-ZTH-02 superseded;
+  owner: backup, not delete), taken from `main` commit `d9af46c3`: `src/zether/ZetherSafety.sol` whole (`isDevChain`
+  = chain id 31337 / 1337, `requireDevChain`, error `ZetherNotDevChain`; called by the Zether verifier constructors,
+  `ZetherLib.init`, `ZetherSchnorrBls12381Verifier` and `DeployBase`), and the tests as they stood with the
+  off-dev-chain revert cases: `test/zether/ZetherRevertPaths.t.sol` (`test_verifiersOnlyDeployOnDevChain`,
+  `test_createToken_enabledKindOnANonDevChain_reverts`, the hand-made clone in `test_initializeRevertPaths`),
+  `test/zether/ZetherDeploy.t.sol` (`DEPLOY_ZETHER: dev chains only`), `test/ua/UARegistryZether.t.sol` (the 7622
+  constructor revert). The factory's per-kind gate `setKindEnabled` stays. Not built.
+  The same branch removed PQZ's chain-id allowlist (a separate item; owner ruling 2026-10-31: no chain lock for PQZ,
+  capability only): `src/pqz/PqzSafety.sol` as it stood (`isAllowedChain` = 31337 / 1337 / 7622,
+  `requireAllowedChain`, error `NotAllowedChain`, called by `PqzStateLib.init` and the `UAPqzVerifier` constructor;
+  the self-test `requirePqz` stays in `src/`), and the tests with the allowlist cases: `test/pqz/PqzCt.t.sol`
+  (`test_safetyAllowlist`), `test/pqz/PqzNormal.t.sol` (`test_createToken_enabledKindOnAForbiddenChain_reverts`),
+  `test/pqz/UAPqzVerifier.t.sol` (the 22776 constructor revert). Not built.

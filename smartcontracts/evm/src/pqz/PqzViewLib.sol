@@ -12,7 +12,7 @@ import {PqzCore} from "./PqzCore.sol";
 
 /// @title statement views and disclosure (D14): one of the four `DELEGATECALL` libraries of the PQZ release (plan 5h D14), in the ERC-7201
 ///        namespace `scaas.pqz`; the shared steps are `internal` in `PqzCore`, compiled into each.
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** `address(this)` is the token.
+/// @notice **UNAUDITED.** `address(this)` is the token.
 library PqzViewLib {
     /// @notice The statement an entry point would build for `payload` (`op` 7 multi, 1 single, 2 burn / refresh with
     ///         `e.amount`, `e.recipient`), after every cheap check; a transfer payload with the memo is commit-reveal.
