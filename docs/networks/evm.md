@@ -174,10 +174,11 @@ the chain profiles of the node and the clients ([NET-ALL-24](README.md#NET-ALL-2
 the deployer's nonce, so the same contract lands at unrelated addresses on each chain and a missed transaction shifts
 every later address; with CREATE2 the address follows from what was deployed. Cost: a fixed-salt deployer must exist on
 each chain before the first deployment, and a redeploy with the same init code collides with the first (a new
-version needs a new salt or new code). On SCaaS's own chains the deployer is in the genesis `alloc` (owner 2026-10-31): the SCaaS testnet 7622 carries
-the deterministic deployment proxy's runtime code at `0x4e59b44847b379578588920cA78FbF26c0B4956C` from its 2026-10-31
-reset (its keyless pre-EIP-155 deploy transaction, a fixed 100,000 gas, cannot pay Amsterdam's code-deposit state gas);
-mainnet 22776's launch chainspec does the same.
+version needs a new salt or new code). On the SCaaS testnet the deployer is in the genesis `alloc` (owner ruling
+2026-10-30 for the 7622 reset): 7622 carries the deterministic deployment proxy's runtime code at
+`0x4e59b44847b379578588920cA78FbF26c0B4956C` from its 2026-10-31 reset (its keyless pre-EIP-155 deploy transaction, a
+fixed 100,000 gas, cannot pay Amsterdam's code-deposit state gas). The same alloc is proposed for mainnet 22776; the
+owner decides at the 22776 launch.
 
 <a id="NET-EVM-06"></a>**NET-EVM-06** — **Every Foundry profile compiles for the `amsterdam` EVM: every chain that runs these contracts
 requires Glamsterdam, and a public chain is deployed only after its own fork.** Owner ruling 2026-10-21; status **BUILT**.
@@ -284,9 +285,10 @@ SCaaS testnet can no longer exercise 7702 after the reset. Verified on 7622 afte
 <a id="NET-EVM-08"></a>**NET-EVM-08** — **The SCaaS testnet's node never signs for an RPC caller** (owner ruling 2026-10-31):
 one node (the Clique sealer) with three JSON-RPC endpoints — public `8545` / `8546` (`Eth`, `Net`, `Web3`, `Subscribe`;
 request limits `MaxBatchSize` 100, `MaxRequestBodySize` 4 MiB, `GasCap` = the block gas limit, `Timeout` 20 s,
-`RequestQueueLimit` 500), the operator's `8550` on the host loopback only (`Admin`, `Clique`, `Debug`, `Trace`,
-`Parity`, `TxPool`, `Eth`, `Net`, `Web3`), and `8547` on the Docker network only (`Eth`, `Net`, `Web3`, `TxPool`, for
-the explorer) — `Personal` nowhere, and a calls filter that refuses `eth_sendTransaction`, `eth_sign`,
+`RequestQueueLimit` 500), the operator's `8550` bound to the node container's own loopback and not published
+(`Admin`, `Clique`, `Debug`, `Trace`, `Parity`, `TxPool`, `Eth`, `Net`, `Web3`; reached from the host through a
+sidecar container in the node's network namespace, so no other container reaches it), and `8547` on the Docker
+network only (`Eth`, `Net`, `Web3`, `TxPool`, for the explorer; not the `scaas-node` gateway port) — `Personal` nowhere, and a calls filter that refuses `eth_sendTransaction`, `eth_sign`,
 `eth_signTransaction` and `eth_signTypedData*` on every endpoint (Nethermind 2.2.0 needs the sealer account in
 `UnlockAccounts` to read its key, so the wallet methods are refused instead). Layout, checks and rollback:
 [RUNBOOK](../../pqz-core/nethermind/chain/RUNBOOK.md) § 7622 node layout and access. Mainnet 22776 additionally gets a
@@ -296,7 +298,8 @@ TLS reverse proxy with rate limits and keeps the sealer key out of the RPC node.
 2026-10-31): `explorer-db` 1 GiB / 1 CPU, `explorer-backend` 2 GiB / 1.5 CPU, `explorer-frontend` 512 MiB / 0.5 CPU, no
 restart policy, started by hand after the node; it reads the node over the Docker-network endpoint only; internal
 transactions, block rewards, coin balances, token-instance metadata and market data are off, pending transactions on;
-one-line stop in the RUNBOOK.
+the UI is published on host port 8558 (owner 2026-10-31: not 3000) and the API on 4000; the frontend image is pinned
+by digest; one-line stop in the RUNBOOK.
 
 ## 6. Limitations
 

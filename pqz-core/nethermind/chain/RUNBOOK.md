@@ -65,7 +65,8 @@ The plugin refuses a first timestamp *before* genesis; a timestamp equal to gene
 (`../Nethermind.Pqz.Test/chainspecs/genesis-7622.json`) with a throwaway signer key in `extraData`. The stock image
 first produces some history on it. The live directory is never read beyond read-only `cat` / `ls` /
 `docker image inspect`, and no live data or key material is copied. As a result the copy's genesis hash is its own,
-not the SCaaS testnet's (`0x24e43dcb…c464` then, `0xa17faef4…2ac2` since the 200 M genesis reset of 2026-10-22); on the
+not the SCaaS testnet's (`0x24e43dcb…c464` then, `0xa17faef4…2ac2` since the 200 M genesis reset of 2026-10-22,
+`0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164` since the `2.2.0-pqz6` reset of 2026-10-31); on the
 live chain, step 2 of the probe checks the live hash.
 
 **Changes the copy needed** (found in runs `2026-10-1[56]-copy-*.txt`):
@@ -555,7 +556,8 @@ option (b), the CREATE2 deployer in the genesis alloc, Blockscout on with caps, 
    supported`; a distinct raw type-4 transaction (`0x04f8…`) through `cast publish` → the same; an EIP-1559 transfer
    mined (block 67).
 8. Contracts: `smartcontracts/evm/script/pqz/e2e.py` full (254 ok, 2 FAIL: the per-kind list checks expected the lists
-   without dave, whose `setPqzKey` path joins both lists — a script expectation, fixed in `e2e.py`), `--split` (265 ok,
+   without dave, who joins 0x0131 at his ML-DSA-65 `register` and 0x0142 when `storePqzPop` proves his key
+   (UARegistry `_pqzProof`; `setPqzKey` alone lists nothing) — a script expectation, fixed in `e2e.py`), `--split` (265 ok,
    0 FAIL), and after the hardening the full run again through the public RPC (256 ok, 0 FAIL);
    `PRIVATE_KEY=0x…04 FOUNDRY_PROFILE=private7622 CHAIN_UID=0xf1f491ab…3164 scripts/capped smartcontracts/scripts/deploy.sh
    evm http://127.0.0.1:8545`: 31 transactions, all status 1, through the genesis CREATE2 deployer (UA registry with 21
@@ -574,9 +576,12 @@ address; `DinhHa`).
 | Endpoint | Bound | Modules | For |
 |---|---|---|---|
 | `http://<host>:8545`, `ws://<host>:8546` | LAN (compose `8545:8545`, `8546:8546`) | Eth, Net, Web3, Subscribe | wallets, `scaas-node`, the e2e scripts, deploys (`eth_sendRawTransaction`) |
-| `http://127.0.0.1:8550` (http + ws) | host loopback only (compose `127.0.0.1:8550:8550`; `AdditionalRpcUrls` `http://0.0.0.0:8550\|http;ws\|Eth;Net;Web3;TxPool;Debug;Trace;Parity;Clique;Admin`) | admin set | the operator on the host: `admin_*`, `clique_*`, `debug_*`, `trace_*`, `txpool_*` |
-| `http://blockchain-node:8547` (http + ws) | `mba-net` docker network only (not published) | Eth, Net, Web3, TxPool | Blockscout (blocks, receipts, `txpool_content` for pending transactions) |
+| `http://127.0.0.1:8550` (http + ws) | the node container's own loopback only (`AdditionalRpcUrls` `http://127.0.0.1:8550\|http;ws\|Eth;Net;Web3;TxPool;Debug;Trace;Parity;Clique;Admin`; not published): no other container, not the host, not the LAN | admin set | the operator on the host through a sidecar in the node's network namespace (below): `admin_*`, `clique_*`, `debug_*`, `trace_*`, `txpool_*` |
+| `http://blockchain-node:8547` (http + ws) | the `mba-net` Docker network and the host's bridge address (`<node mba-net IP>:8547`); not published, not on the LAN | Eth, Net, Web3, TxPool | Blockscout (blocks, receipts, `txpool_content` for pending transactions) |
 | P2P `30303` | LAN (unchanged) | — | none today (discovery off) |
+
+Port 8547 here is the node's Docker-only Blockscout endpoint, not the `scaas-node` gateway default `127.0.0.1:8547`
+(likewise 8550 here is the node container's admin endpoint, not the `scaas-node` mesh bus default `0.0.0.0:8550`).
 
 - **Wallet methods refused everywhere.** `KeyStore.UnlockAccounts` must stay: Nethermind 2.2.0 reads the sealer key's
   password through it (without it start-up fails in `NodeKeyManager.LoadKeyForAccount`: "Cannot read keys when …
@@ -591,7 +596,17 @@ address; `DinhHa`).
   hex; `TxPool.MaxTxSize` 1 MiB = 2 MiB of hex), `GasCap` 200,000,000 (= the block gas limit; the largest e2e
   estimate is the `WrappedPqzToken` release, 96.5 M gas used, just under the default cap of 100 M), `Timeout` 20,000 ms,
   `RequestQueueLimit` 500.
-- **Admin from another machine:** `ssh -N -L 8550:127.0.0.1:8550 <user>@192.168.1.72`, then `http://127.0.0.1:8550` there.
+- **Admin endpoint: container loopback + sidecar (owner 2026-10-31).** The admin URL binds `127.0.0.1:8550` inside the node
+  container and is not published. A `0.0.0.0` bind with a `127.0.0.1:8550:8550` publish limited only the host port:
+  every container on `mba-net` (the three Blockscout services, two of them reachable from the LAN) answered `admin_*` /
+  `clique_*` / `debug_*` on `<node mba-net IP>:8550` (review I1). Admin calls run on the host from a throwaway sidecar
+  that shares the node's network namespace (image pinned):
+  ```sh
+  docker run --rm --memory 64m --network container:mba_chain_node_nethermind curlimages/curl:8.21.0 -s \
+    -H 'content-type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"clique_getSigners","params":[]}' http://127.0.0.1:8550
+  ```
+  From another machine: `ssh <user>@192.168.1.72` and run the sidecar there.
 - **Checks (2026-10-31, log above):** from the LAN address and from the host, `eth_sendTransaction`, `eth_sign`,
   `eth_signTransaction`, `eth_signTypedData(_v4)`, upper-case variants and the same inside a batch → `-32601`;
   `personal_*`, `admin_*`, `debug_*`, `trace_*`, `clique_*`, `txpool_*`, `parity_*` on 8545 / 8546 → `-32600 … namespace
@@ -599,6 +614,15 @@ address; `DinhHa`).
   connection refused; on 8550 `admin_nodeInfo`, `clique_getSigners`, `trace_block`, `txpool_status` answer; an EIP-1559
   transfer through `eth_sendRawTransaction` on 8545 mined; blocks every 5 s; probe 420 / 0 and the PQZ e2e 256 / 0 through
   `http://192.168.1.72:8545`.
+- **Checks after the loopback bind (2026-10-31 08:07 +07, node container recreated only, one 8 s block gap):** the
+  head advances; `clique_getSigners` on 8550 → connection refused from a container on `mba-net` (by IP `192.168.0.2` and
+  by name `blockchain-node`), from inside `mba_explorer_backend`, from the host (`127.0.0.1`, the bridge address) and from
+  the LAN address (before the change the `mba-net` container got the signer list); through the sidecar
+  `clique_getSigners`, `admin_nodeInfo` and `txpool_status` answer; 8545 / 8546 and 8547 (from `mba-net`) answer as
+  before, 8547 refused on the LAN address; the wallet methods (incl. upper case and a batch) → `-32601` on 8545, 8546
+  (WebSocket), 8547 and 8550; Blockscout indexes new blocks and showed a tip-0 transaction as `pending` before its
+  replacement mined. Backups `config.json.bak-pre-i1-20261031-0806`, `docker-compose.yml.bak-pre-i1-20261031-0806`;
+  rollback: copy both back and `docker compose up -d --no-deps blockchain-node explorer-frontend`.
 - **Rollback:** `cp config.json.bak-pre-hardening-20261031 config.json; cp docker-compose.yml.bak-pre-hardening-20261031
   docker-compose.yml; docker compose up -d blockchain-node` (the single-endpoint layout; Blockscout services are then
   commented out again).
@@ -608,8 +632,11 @@ address; `DinhHa`).
 ### Blockscout (owner 2026-10-31: on, lean, with caps)
 
 Services `explorer-db` (postgres:18, `mem_limit` 1g, `cpus` 1.0), `explorer-backend` (`ghcr.io/blockscout/blockscout:9.0.2`,
-2g, 1.5), `explorer-frontend` (`ghcr.io/blockscout/frontend:latest`, 512m, 0.5); no restart policy; UI
-`http://192.168.1.72:3000`, API `http://192.168.1.72:4000`. The backend reads the node over `http://blockchain-node:8547`.
+2g, 1.5), `explorer-frontend` (`ghcr.io/blockscout/frontend@sha256:4b69f44148414b55c6b8550bc3270c63c9f99e923d54ef0b307e762af6bac90a`,
+v2.3.5, 512m, 0.5); no restart policy; UI `http://192.168.1.72:8558` (owner 2026-10-31: not 3000; compose `8558:3000`,
+`NEXT_PUBLIC_APP_PORT` 8558, the container listens on `PORT` 3000), API and WebSocket `http://192.168.1.72:4000` (the
+browser calls it directly; CORS `*`, `CHECK_ORIGIN` off). Host ports published by Blockscout: 8558 and 4000. The
+backend reads the node over `http://blockchain-node:8547`.
 
 ```sh
 cd /home/dockers/mba-chain-nethermind
@@ -626,8 +653,9 @@ docker compose stop explorer-frontend explorer-backend explorer-db       # stop 
   `-32002 No state available`). Blockscout's ContractCode fetcher asks the code at the creation block, so for a
   contract created more than about 64 blocks before Blockscout sees it, it retries forever (one core; 7.0.2 also loops on
   block 0). After a Blockscout outage that spans contract deploys, run
-  `python3 -I pqz-core/nethermind/chain/blockscout-code-backfill.py http://127.0.0.1:8545` (code at latest, rows marked
-  done), then `docker compose restart explorer-backend`. At the next reset consider `Pruning.Mode` `None` (archive).
+  `python3 -I pqz-core/nethermind/chain/blockscout-code-backfill.py http://127.0.0.1:8545` (code at latest, only the
+  transactions it selected marked done, empty code left NULL, RPC code checked to be hex; `--self-test` checks the SQL
+  builder), then `docker compose restart explorer-backend`. At the next reset consider `Pruning.Mode` `None` (archive).
 - **Measured (2026-10-31, `docker stats`):** catch-up of 740 blocks (before the backfill): backend 115–150 % CPU (the
-  ContractCode loop), db ≤ 6 %, 140 MiB, frontend ≤ 51 % at start; steady state after the backfill, pending fetcher on:
+  ContractCode loop), db ≤ 37.6 % / ≤ 216 MiB (log B2), frontend ≤ 51 % at start; steady state after the backfill, pending fetcher on:
   backend 1–5 % / 300 MiB, db 0.5–10 % / 103–109 MiB, frontend 0 % / 165 MiB.

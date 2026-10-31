@@ -1348,3 +1348,116 @@ blockscout shows 0xa4e59aaa463f7c46a15e85c798a911b418916b98ae7310f40899883ba42c5
 00:29:50 mba_chain_node_nethermind cpu 1.45% mem 689.2MiB / 4GiB
                total        used        free      shared  buff/cache   available
 Mem:           23711        8936         802         260       14626       14775
+
+== R1 2026-10-31T01:06Z review fix I1: admin URL on the container loopback, 8550 publish dropped; UI 3000 -> 8558; frontend pinned by digest
+backups: config.json.bak-pre-i1-20261031-0806 docker-compose.yml.bak-pre-i1-20261031-0806
+before (container on mba-chain-nethermind_mba-net -> 192.168.0.2:8550 clique_getSigners):
+{"jsonrpc":"2.0","result":["0xde36845cc887783397b2808c13f2ed95dc2646bb"],"id":1} rc=0
+config.json AdditionalRpcUrls[0]: http://0.0.0.0:8550|… -> http://127.0.0.1:8550|…; compose: - "127.0.0.1:8550:8550" removed
+docker compose up -d --no-deps blockchain-node (01:07:28Z); node log: JSON-RPC is listening on http://0.0.0.0:8545 ; http://0.0.0.0:8546 ; http://127.0.0.1:8550 ; http://0.0.0.0:8547
+block gap: 1218 01:07:26 -> 1219 01:07:34 (8 s), then every 5 s
+-- check script:
+#!/bin/bash
+# I1 / port checks after the 7622 node restart (fs3 T13 phase C fix, 2026-10-31)
+NET=mba-chain-nethermind_mba-net; CURL=curlimages/curl:8.21.0
+IP=$(docker inspect mba_chain_node_nethermind --format "{{(index .NetworkSettings.Networks \"$NET\").IPAddress}}")
+j(){ printf '{"jsonrpc":"2.0","id":1,"method":"%s","params":%s}' "$1" "${2:-[]}"; }
+side(){ docker run --rm --memory 64m --network container:mba_chain_node_nethermind $CURL -s -m 5 -H 'content-type: application/json' -d "$1" http://127.0.0.1:8550; echo " rc=$?"; }
+onnet(){ docker run --rm --memory 64m --network $NET $CURL -s -m 5 -H 'content-type: application/json' -d "$1" "$2"; echo " rc=$?"; }
+host(){ curl -s -m 5 -H 'content-type: application/json' -d "$1" "$2"; echo " rc=$?"; }
+echo "node mba-net IP: $IP"; date -u +%FT%TZ
+echo "== chain advances (8545)"; host "$(j eth_blockNumber)" http://127.0.0.1:8545
+echo "== 8550 from a container on mba-net ($IP:8550, clique_getSigners)"; onnet "$(j clique_getSigners)" http://$IP:8550
+echo "== 8550 by name blockchain-node:8550"; onnet "$(j clique_getSigners)" http://blockchain-node:8550
+echo "== 8550 from the host loopback"; host "$(j clique_getSigners)" http://127.0.0.1:8550
+echo "== 8550 from the host LAN address"; host "$(j clique_getSigners)" http://192.168.1.72:8550
+echo "== 8550 from the host bridge path ($IP:8550)"; host "$(j clique_getSigners)" http://$IP:8550
+echo "== 8550 from inside explorer-backend (busybox/erl?)"; docker exec mba_explorer_backend sh -c "command -v curl wget nc" ; docker exec mba_explorer_backend sh -c "wget -q -T 5 -O - --header 'content-type: application/json' --post-data '$(j clique_getSigners)' http://$IP:8550; echo \" rc=\$?\"" 2>&1
+echo "== sidecar: clique_getSigners"; side "$(j clique_getSigners)"
+echo "== sidecar: admin_nodeInfo (enode only)"; side "$(j admin_nodeInfo)" | grep -o '"enode":"[^@]*@' | cut -c1-40; 
+echo "== sidecar: txpool_status"; side "$(j txpool_status)"
+echo "== 8545 LAN: eth_chainId"; host "$(j eth_chainId)" http://192.168.1.72:8545
+echo "== 8547 from mba-net: eth_blockNumber, txpool_status"; onnet "$(j eth_blockNumber)" http://blockchain-node:8547; onnet "$(j txpool_status)" http://blockchain-node:8547
+echo "== 8547 from the LAN address"; host "$(j eth_blockNumber)" http://192.168.1.72:8547
+for m in eth_sendTransaction ETH_SENDTRANSACTION eth_sign eth_signTransaction eth_signTypedData_v4; do
+  echo "== filter $m: 8545 / 8547 / 8550"; host "$(j $m)" http://192.168.1.72:8545; onnet "$(j $m)" http://blockchain-node:8547; side "$(j $m)"
+done
+echo "== filter batch on 8545"; host "[$(j eth_chainId),$(j eth_sendTransaction)]" http://192.168.1.72:8545
+-- output:
+node mba-net IP: 192.168.0.2
+2026-10-31T01:08:37Z
+== chain advances (8545)
+{"jsonrpc":"2.0","result":"0x4cf","id":1} rc=0
+== 8550 from a container on mba-net (192.168.0.2:8550, clique_getSigners)
+ rc=7
+== 8550 by name blockchain-node:8550
+ rc=7
+== 8550 from the host loopback
+ rc=7
+== 8550 from the host LAN address
+ rc=7
+== 8550 from the host bridge path (192.168.0.2:8550)
+ rc=7
+== 8550 from inside explorer-backend (busybox/erl?)
+/usr/bin/curl
+wget: can't connect to remote host (192.168.0.2): Connection refused
+ rc=1
+== sidecar: clique_getSigners
+{"jsonrpc":"2.0","result":["0xde36845cc887783397b2808c13f2ed95dc2646bb"],"id":1} rc=0
+== sidecar: admin_nodeInfo (enode only)
+"enode":"enode://a4f1adb3164ee2c2e69d73a
+== sidecar: txpool_status
+{"jsonrpc":"2.0","result":{"pending":"0x0","queued":"0x0"},"id":1} rc=0
+== 8545 LAN: eth_chainId
+{"jsonrpc":"2.0","result":"0x1dc6","id":1} rc=0
+== 8547 from mba-net: eth_blockNumber, txpool_status
+{"jsonrpc":"2.0","result":"0x4d0","id":1} rc=0
+{"jsonrpc":"2.0","result":{"pending":"0x0","queued":"0x0"},"id":1} rc=0
+== 8547 from the LAN address
+ rc=7
+== filter eth_sendTransaction: 8545 / 8547 / 8550
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sendTransaction does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sendTransaction does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sendTransaction does not exist/is not available"},"id":1} rc=0
+== filter ETH_SENDTRANSACTION: 8545 / 8547 / 8550
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method ETH_SENDTRANSACTION does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method ETH_SENDTRANSACTION does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method ETH_SENDTRANSACTION does not exist/is not available"},"id":1} rc=0
+== filter eth_sign: 8545 / 8547 / 8550
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sign does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sign does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sign does not exist/is not available"},"id":1} rc=0
+== filter eth_signTransaction: 8545 / 8547 / 8550
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_signTransaction does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_signTransaction does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_signTransaction does not exist/is not available"},"id":1} rc=0
+== filter eth_signTypedData_v4: 8545 / 8547 / 8550
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_signTypedData_v4 does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_signTypedData_v4 does not exist/is not available"},"id":1} rc=0
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_signTypedData_v4 does not exist/is not available"},"id":1} rc=0
+== filter batch on 8545
+[{"jsonrpc":"2.0","result":"0x1dc6","id":1},{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sendTransaction does not exist/is not available"},"id":1}] rc=0
+-- WebSocket 8546 filter + Blockscout pending (script: python websockets + cast, key 0x…04):
+ws 8546 eth_chainId {"jsonrpc":"2.0","result":"0x1dc6","id":1}
+ws 8546 eth_sendTransaction {"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sendTransaction does not exist/is not available"},"id":1}
+ws 8546 eth_sign {"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sign does not exist/is not available"},"id":1}
+ws 8546 ETH_SIGNTRANSACTION {"jsonrpc":"2.0","error":{"code":-32601,"message":"the method ETH_SIGNTRANSACTION does not exist/is not available"},"id":1}
+ws 8546 eth_signTypedData_v4 {"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_signTypedData_v4 does not exist/is not available"},"id":1}
+ws 8546 batch [{"jsonrpc":"2.0","result":"0x1dc6","id":1},{"jsonrpc":"2.0","error":{"code":-32601,"message":"the method eth_sendTransaction does not exist/is not available"},"id":2}]
+pending tx 0x9f0dfc7a620ce7dc1b055a7c1a5e966356b27c9ce4201fd55a6f2a14158c5f67 nonce 87
+blockscout shows 0x9f0dfc7a620ce7dc1b055a7c1a5e966356b27c9ce4201fd55a6f2a14158c5f67 result pending block None nonce 87
+replacement mined: status 0x1 block 1267 tx 0xd1f37c22822108073060b46c9dd1323bec8e53c34e4620cd226a01d02758dcb8
+-- explorer-frontend recreated (compose up -d --no-deps explorer-frontend): image ghcr.io/blockscout/frontend@sha256:4b69f44148414b55c6b8550bc3270c63c9f99e923d54ef0b307e762af6bac90a (v2.3.5, image id 458ba36d…), ports 8558:3000, NEXT_PUBLIC_APP_PORT 8558
+UI: GET :8558/ 200; /address/0x06d03D56…9776 200 (page contains the address); /tx/0x8c466717…5718 200; envs.js NEXT_PUBLIC_APP_PORT "8558", API 192.168.1.72:4000; :3000 connection refused (curl rc 7); ss: 8558 and 4000 listen, 3000 not
+backend CORS: access-control-allow-origin * ; CHECK_ORIGIN unset (false) -> no backend change
+
+== R2 2026-10-31T01:15Z observation (pre-existing since the 9.0.2 start 00:27Z, not caused by R1): main-page cache stale
+api /api/v2/main-page/blocks head 1128 (00:59:56) while the DB had 1244; after `docker compose restart explorer-backend`
+(01:10Z) head 1255, then stuck again at 1258 (01:10:49) while the DB reached 1305 (01:14:45). Blocks, transactions and
+addresses are indexed (DB max(number) follows the node; /api/v2/blocks/<n>, /tx, /address answer). Every realtime import
+logs: Task started from Indexer.Block.Realtime.Fetcher terminating ** (stop) exited in: GenServer.call(
+Indexer.Fetcher.CoinBalance.Realtime, {:buffer, …}) ** (EXIT) no process (fetcher.ex:550 async_import_remaining_block_data)
+— 511 times in 3 h. INDEXER_DISABLE_ADDRESS_COIN_BALANCE_FETCHER=true does not start CoinBalance.Realtime, but the realtime
+block fetcher still calls it; the steps after it (cache update / broadcast) are skipped, so only catch-up-imported blocks
+reach the main-page cache. Also seen: trace_block / trace_replayTransaction calls on 8547 (-32600 Trace disabled) and a
+MissingRangesManipulator crash on "No state available for block 375" (00:59:45Z). Left for an owner ruling.

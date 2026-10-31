@@ -715,7 +715,8 @@ def run(kd, kr, ke):
         check(True, "secp256k1 signature over another digest is refused (UAUnauthorized)")
 
     # the per-kind list (CTR-UA-29, owner 2026-10-17): every UA of a kind in registration order; dave (registered after
-    # carol, before the decoys) joins the 0x0142 list with his setPqzKey (first real-node run 2026-10-31: fs3 Task 13)
+    # carol, before the decoys) joins the 0x0131 list at his ML-DSA-65 register and the 0x0142 list when storePqzPop
+    # proves his key (setPqzKey alone lists nothing, UA8-D8; first real-node run 2026-10-31: fs3 Task 13)
     for kind, uas in ((PQZ_MLWE, [u.ua for u in list(U.values()) + [dave] + DEC]),
                       (MLDSA65, [u.ua for u in [feeua] + list(U.values()) + [dave] + DEC]),
                       (MLDSA44, [ml44.ua]), (SECP256K1, [sec_ua])):
