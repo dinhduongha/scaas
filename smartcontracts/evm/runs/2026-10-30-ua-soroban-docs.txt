@@ -1,4 +1,4 @@
-# docs at commit d717a82f
+# docs at commit 2964af35
 test_docs_check: ok
   note: accepted budget contracts/accounts.md: 2177 lines > 1.3 x 1100
   note: accepted budget contracts/dex.md: 922 lines > 1.3 x 400
