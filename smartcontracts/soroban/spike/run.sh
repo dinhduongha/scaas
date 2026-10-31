@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # T0 spike (plan UA-Soroban T0): the unit tests, the Wasm, then the network figures on the pinned Protocol 30 quickstart.
-# Run with CAPPED_SLOTS=1 (a docker container runs). Writes runs/<date>-ua-soroban-t0-settings.json; the caller tees the log.
+# Run with CAPPED_SLOTS=1 (a docker container runs). Writes runs/<date>-<SPIKE_TAG>-{settings.json,cargo.txt} (SPIKE_TAG default
+# ua-soroban-t0; B0 of ua8-soroban runs it with SPIKE_TAG=ua8-soroban-b0); the caller tees the log.
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd "$HERE/../../.." && pwd)
 QS="$HERE/../scripts/quickstart.sh"
 RUNS="$HERE/../runs"
 DATE=${SPIKE_DATE:-$(date +%F)}
+TAG=${SPIKE_TAG:-ua-soroban-t0}
 STELLAR_BIN=${STELLAR_BIN:-$("$QS" cli)}
 export STELLAR_BIN
 export SPIKE_RPC=http://127.0.0.1:${QS_PORT:-31980}/rpc
@@ -17,7 +19,7 @@ trap 'rm -rf "$SPIKE_CFG"' EXIT   # `quickstart.sh down` joins it only once this
 trap 'exit 130' INT TERM
 NET=(--rpc-url "$SPIKE_RPC" --network-passphrase "$SPIKE_PASSPHRASE")
 
-echo "# T0 spike at commit $(git -C "$ROOT" describe --always --dirty) $(date -Is)"
+echo "# spike ($TAG) at commit $(git -C "$ROOT" describe --always --dirty) $(date -Is)"
 echo "# stellar-cli: $("$STELLAR_BIN" --version | tr '\n' ' ')"
 cd "$HERE"
 SDK=$(cargo metadata --format-version 1 --manifest-path "$HERE/Cargo.toml" 2>/dev/null \
@@ -29,12 +31,12 @@ for f in ml_dsa_44_verify ml_dsa_65_verify secp256r1_verify; do
 done
 grep -hE 'pub fn (g1_add|g1_mul|g1_msm|g2_add|g2_mul|g2_msm|pairing_check)\(' "$SDK/crypto/bls12_381.rs" | sed 's/ {$//; s/^ */#   /'
 echo "# figures from soroban-sdk =30.0.0-rc.1 over soroban-env-host 30.0.0 (S5: re-pin to 30.0.0 when it ships)"
-echo "## unit tests (SDK testutils, protocol 30; full cargo output: runs/$DATE-ua-soroban-t0-cargo.txt)"
-"$ROOT/scripts/capped" cargo test -j2 -- --nocapture --test-threads=1 2>&1 | tee "$RUNS/$DATE-ua-soroban-t0-cargo.txt" \
+echo "## unit tests (SDK testutils, protocol 30; full cargo output: runs/$DATE-$TAG-cargo.txt)"
+"$ROOT/scripts/capped" cargo test -j2 -- --nocapture --test-threads=1 2>&1 | tee "$RUNS/$DATE-$TAG-cargo.txt" \
   | grep -E 'BUDGET|^test |^(ok|FAILED)$|test result|panicked|^warning|^error'   # a result after --nocapture output stands alone
 # soroban-sdk 30 refuses a plain cargo build for Wasm: the CLI (>= 30) shakes the contract spec
 CARGO_BUILD_JOBS=2 "$ROOT/scripts/capped" "$STELLAR_BIN" contract build --manifest-path "$HERE/Cargo.toml" --quiet \
-  >>"$RUNS/$DATE-ua-soroban-t0-cargo.txt" 2>&1
+  >>"$RUNS/$DATE-$TAG-cargo.txt" 2>&1
 WASM="$HERE/target/wasm32v1-none/release/scaas_ua_spike.wasm"
 TOKEN_WASM="$HERE/target/wasm32v1-none/release/scaas_ua_spike_token.wasm"
 echo "## wasm: registry side $(stat -c %s "$WASM") bytes, token side $(stat -c %s "$TOKEN_WASM") bytes"
@@ -44,7 +46,7 @@ trap '"$QS" down; rm -rf "$SPIKE_CFG"' EXIT
 "$QS" wait
 echo "# image: $(grep -o 'stellar/quickstart@sha256:[0-9a-f]*' "$QS")"
 docker exec scaas-stellar sh -c 'stellar-core version | head -2; stellar-rpc version | head -1' | sed 's/^/# /'
-"$STELLAR_BIN" network settings "${NET[@]}" --output json > "$RUNS/$DATE-ua-soroban-t0-settings.json"
+"$STELLAR_BIN" network settings "${NET[@]}" --output json > "$RUNS/$DATE-$TAG-settings.json"
 funded=
 for i in $(seq 1 30); do   # friendbot comes up after the RPC
   "$STELLAR_BIN" keys generate spike --config-dir "$SPIKE_CFG" "${NET[@]}" --fund --overwrite >/dev/null 2>&1 && { funded=1; break; }
@@ -63,4 +65,4 @@ SPIKE_ID=$(deploy "$WASM")
 SPIKE_TOKEN=$(deploy "$TOKEN_WASM" -- --registry "$SPIKE_ID")
 export SPIKE_ID SPIKE_TOKEN
 echo "## spike contracts: registry side $SPIKE_ID, token side $SPIKE_TOKEN"
-python3 -I "$HERE/measure.py" "$RUNS/$DATE-ua-soroban-t0-settings.json"
+python3 -I "$HERE/measure.py" "$RUNS/$DATE-$TAG-settings.json"

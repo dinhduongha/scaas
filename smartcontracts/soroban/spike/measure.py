@@ -6,6 +6,9 @@ usage: measure.py <settings.json>   (env: STELLAR_BIN, SPIKE_ID, SPIKE_TOKEN, SP
        measure.py fixture <out.json> (the msig n = 3 fixture of the unit tests)
 Exit 1 when a GATE call (register_model, msig_model n=3, ua_pay_model) fails to simulate or is over a limit; the other
 calls are data (the msig scan, the BLS12-381 primitives, the Zether model: the S13a estimate, Z0 decides).
+B0 (plan ua8-soroban B0, C12): GATE = per parameter set the single-key mldsa65 `register` with PQZ + KEM split from its
+proof and the `store_pqz_pop` that follows, and single-key `set_kem_key` / `set_pqz_key`; data = the full single-key
+`register`, the msig rows (the largest n is published as the Soroban maximum, not a STOP) and the keccak256 cost.
 
 Fixtures made here (portable.json holds one mldsa65 key): 16 ML-DSA-65 member keys from fixed seeds
 keccak256("scaas.t0.member" ‖ i) and a P-256 passkey from a fixed scalar, signed with `cryptography` (OpenSSL ML-DSA,
@@ -93,6 +96,51 @@ def msig(ms, with_keys=False):
     return kd, member_sigs([(i, pk if with_keys else b'', sk.sign(pq)) for i, (_, sk, pk, _) in enumerate(ms)])
 
 
+# --- B0 (plan ua8-soroban B0): the full PQZ + KEM registration, the split, set_kem_key, set_pqz_key ---
+SETS = ('n2048-kmax1024', 'n2304-kmax4096', 'n2560-kmax16384', 'n2816-kmax65536')
+POP_V2, KEM, PQZ_KEY = b'scaas.ua.purpose.pop.v2', b'scaas.ua.purpose.kem.v1', b'scaas.ua.purpose.pqz-key.v1'
+GROUP_PQZ = k256(b'scaas.ua.group.pqz-mlwe.v1')
+
+
+def attrs_json(a):
+    """`UaAttrs` as the CLI's JSON (hex bytes) from a portable.json `attrs` (or None = empty attributes)."""
+    a = a or {'pqzKey': '0x', 'pqzPopHash': '0x' + '00' * 32, 'kemVersion': 0, 'kemPk': '0x'}
+    return {'pqz_key': a['pqzKey'][2:], 'pqz_pop_hash': a['pqzPopHash'][2:], 'kem_version': a['kemVersion'],
+            'kem_pk': a['kemPk'][2:]}
+
+
+def kem_record_digest(ua, version, kem_pk):
+    return k256(k256(b'scaas.ua.kem-record.v1') + ua + w(version) + k256(kem_pk))
+
+
+def reg_digest(ua, a):
+    """UA8-D1 registration digest of portable.json `attrs` `a` (None = none)."""
+    if not a:
+        return k256(k256(k256(POP_V2) + ua + bytes(64)) + bytes(32))
+    pk = bytes.fromhex(a['pqzKey'][2:])
+    pqz_key_hash = k256(GROUP_PQZ + pk) if pk else bytes(32)
+    kem = kem_record_digest(ua, a['kemVersion'], bytes.fromhex(a['kemPk'][2:])) if a['kemVersion'] else bytes(32)
+    return k256(k256(k256(POP_V2) + ua + pqz_key_hash + kem) + bytes.fromhex(a['pqzPopHash'][2:]))
+
+
+def ua_sig(signers, ua, purpose, digest):
+    """The stored signature of a UA over `ua_message(kind, purpose, digest)`: a single ML-DSA-65 signer (`signers` =
+    (sk,)) or an msig whose every member signs (`signers` = members, threshold reached only by all: minimal)."""
+    if len(signers) == 1:
+        return signers[0].sign(tagged(K_MLDSA65, ua_msg(K_MLDSA65, purpose, digest)))
+    md = k256(ua + ua_msg(K_MSIG, purpose, digest))
+    pq = tagged(K_MLDSA65, ua_msg(K_MLDSA65, b'scaas.ua.purpose.member.v1', md))
+    return member_sigs([(i, b'', sk.sign(pq)) for i, (_, sk, _, _) in enumerate(signers)])
+
+
+def msig_kd(ms, weight=1):
+    """CTR-UA-09 key data and id of an msig over `ms`, every member `weight`, threshold = the total (minimal)."""
+    n = len(ms)
+    kd = (n * weight).to_bytes(2, 'big') + n.to_bytes(2, 'big') + b''.join(
+        K_MLDSA65.to_bytes(2, 'big') + mid + weight.to_bytes(2, 'big') for mid, *_ in ms)
+    return kd, tagged(K_MSIG, kd)
+
+
 PASSKEY = ec.derive_private_key(int.from_bytes(k256(b'scaas.t0.passkey'), 'big') % P256_N, ec.SECP256R1())
 RP_HASH = hashlib.sha256(b'scaas.example').digest()
 
@@ -147,13 +195,14 @@ def cli(*args, stdin=None):
 
 
 def argv(args):
-    """A `bytes` value goes through `--<name>-file-path` (raw bytes; an argument may not exceed 128 KiB)."""
+    """A `bytes` value goes through `--<name>-file-path` (raw bytes, empty allowed; an argument may not exceed 128 KiB),
+    a `dict` (a contract struct, B0's `UaAttrs`) the same way as JSON."""
     out = []
     for a in args:
-        if isinstance(a, bytes):
+        if isinstance(a, (bytes, dict)):
             p = os.path.join(CFG, 'arg%d.bin' % len(out))
             with open(p, 'wb') as f:
-                f.write(a)
+                f.write(a if isinstance(a, bytes) else json.dumps(a).encode())
             out[-1] += '-file-path'
             out.append(p)
         else:
@@ -312,12 +361,72 @@ def main():
     data += [('data', 'zether_transfer_model m=%d' % m, reg, 'zether_transfer_model', ['--m', str(m)])
              for m in (1, 2, 4, 8)]
 
+    # B0 targets (submitted): per set a fresh single ML-DSA-65 UA registered split (PQZ key + KEM v1, no proof) for
+    # store_pqz_pop; an msig of 16 registered split at n2816-kmax65536 (weight 3); an msig of 16 without attributes
+    # (weight 2, another id) and member 0's seeded record for set_kem_key / set_pqz_key
+    rows = {x: next(r for r in portable['registrations'] if r['name'] == 'mldsa65/' + x) for x in SETS}
+    b0, singles = [], {}
+    for x in SETS:
+        sk = mldsa.MLDSA65PrivateKey.from_seed_bytes(k256(b'scaas.b0.single' + x.encode()))
+        pk = sk.public_key().public_bytes_raw()
+        ua, a = tagged(K_MLDSA65, pk), rows[x]['attrs']
+        invoke(reg, 'register_pqz_kem_model', ['--kind', str(K_MLDSA65), '--key_data', pk, '--attrs', attrs_json(a),
+               '--pop', ua_sig((sk,), ua, POP_V2, reg_digest(ua, a)), '--pqz_pop', b''], 'send')
+        singles[x] = ua
+    a16 = rows[SETS[-1]]['attrs']
+    kd16, ua16 = msig_kd(ms, 3)  # weight 3: not the weight-1 msig the register rows simulate
+    invoke(reg, 'register_pqz_kem_model', ['--kind', str(K_MSIG), '--key_data', kd16, '--attrs', attrs_json(a16),
+           '--pop', ua_sig(ms, ua16, POP_V2, reg_digest(ua16, a16)), '--pqz_pop', b''], 'send')
+    kd16e, ua16e = msig_kd(ms, 2)
+    invoke(reg, 'register_pqz_kem_model', ['--kind', str(K_MSIG), '--key_data', kd16e, '--attrs', attrs_json(None),
+           '--pop', ua_sig(ms, ua16e, POP_V2, reg_digest(ua16e, None)), '--pqz_pop', b''], 'send')
+    print('## B0: registered (split) 4 single mldsa65 UAs (one per set) and an msig of 16 at %s; an msig of 16 without '
+          'attributes' % SETS[-1])
+
+    def reg_args(x, n, split, kd=None):
+        """`register_pqz_kem_model` of set `x`: n = 0 the portable.json mldsa65/<set> row, else an msig of n."""
+        r = rows[x]
+        pqz_pop = b'' if split else bytes.fromhex(r['pqzPop'][2:])
+        if n == 0:
+            return ['--kind', str(K_MLDSA65), '--key_data', h(r['keyData']), '--attrs', attrs_json(r['attrs']),
+                    '--pop', bytes.fromhex(h(r['pop'])), '--pqz_pop', pqz_pop]
+        mkd, ua = msig_kd(ms[:n])
+        return ['--kind', str(K_MSIG), '--key_data', mkd, '--attrs', attrs_json(r['attrs']),
+                '--pop', ua_sig(ms[:n], ua, POP_V2, reg_digest(ua, r['attrs'])), '--pqz_pop', pqz_pop]
+
+    def reg_label(x, n, split):
+        return 'B0 register %s %s %s' % ('mldsa65' if n == 0 else 'msig n=%d' % n, x, 'split' if split else 'full')
+
+    for x in SETS:
+        b0.append(('data', reg_label(x, 0, False), reg, 'register_pqz_kem_model', reg_args(x, 0, False)))
+        b0.append(('GATE', reg_label(x, 0, True), reg, 'register_pqz_kem_model', reg_args(x, 0, True)))
+        b0.append(('GATE', 'B0 store_pqz_pop mldsa65 %s' % x, reg, 'store_pqz_pop_model',
+                   ['--ua', singles[x].hex(), '--pqz_pop', bytes.fromhex(rows[x]['pqzPop'][2:])]))
+        for n in (2, 4, 8, 16):
+            for split in (False, True):
+                b0.append(('data', reg_label(x, n, split), reg, 'register_pqz_kem_model', reg_args(x, n, split)))
+    b0.append(('data', 'B0 store_pqz_pop msig n=16 %s' % SETS[-1], reg, 'store_pqz_pop_model',
+               ['--ua', ua16.hex(), '--pqz_pop', bytes.fromhex(rows[SETS[-1]]['pqzPop'][2:])]))
+    kem_pk = bytes.fromhex(a16['kemPk'][2:])
+    pqz_key, pqz_pop_hash = bytes.fromhex(a16['pqzKey'][2:]), bytes.fromhex(a16['pqzPopHash'][2:])
+    for cls, who, ua, signers in (('GATE', 'mldsa65', ms[0][0], (ms[0][1],)), ('data', 'msig n=16', ua16e, ms)):
+        b0.append((cls, 'B0 set_kem_key v1 %s' % who, reg, 'set_kem_key_model',
+                   ['--ua', ua.hex(), '--version', '1', '--kem_pk', kem_pk,
+                    '--sig', ua_sig(signers, ua, KEM, kem_record_digest(ua, 1, kem_pk))]))
+        kdig = k256(k256(b'scaas.ua.pqz-key-record.v1') + ua + k256(GROUP_PQZ + pqz_key))
+        b0.append((cls, 'B0 set_pqz_key %s %s' % (SETS[-1], who), reg, 'set_pqz_key_model',
+                   ['--ua', ua.hex(), '--pqz_key', pqz_key, '--pqz_pop_hash', pqz_pop_hash.hex(),
+                    '--sig', ua_sig(signers, ua, PQZ_KEY, k256(kdig + pqz_pop_hash))]))
+    keccaks = [(1, 64), (100, 64), (100, 256), (1, 8192)]
+    b0 += [('data', 'B0 keccak_model n=%d len=%d' % nl, reg, 'keccak_model', ['--n', str(nl[0]), '--len', str(nl[1])])
+           for nl in keccaks]
+
     keys = list(L)
     print('| class | call | ' + ' | '.join(keys) + ' | diag_events | resource fee (stroops) | verdict |')
     print('|---|---|' + '---|' * (len(keys) + 3))
     print('| limit | network | ' + ' | '.join(str(L[k]) for k in keys) + ' | — | — | — |')
-    bad, msig_fit, msig_stop, gate_over = 0, 0, None, []
-    for cls, label, cid, fn, args in calls + data:
+    bad, msig_fit, msig_stop, gate_over, res = 0, 0, None, [], {}
+    for cls, label, cid, fn, args in calls + data + b0:
         scan = cls == 'data' and fn == 'msig_model'
         n = len(args[1]) // 36 if scan else 0  # key data 4 + 36n
         try:
@@ -325,6 +434,7 @@ def main():
         except SimError as e:  # the network refused it: a figure
             print('| %s | %s | SIMULATION FAILED: %s |' % (cls, label, str(e).replace('\n', ' ')[:300]))
             bad += cls == 'GATE'
+            res[label] = (None, ['simulation failed'])
             if scan and msig_stop is None:
                 msig_stop = (n, ['simulation failed'])
             continue
@@ -333,6 +443,7 @@ def main():
             bad += cls == 'GATE'
             continue
         over = [k for k in keys if f[k] is not None and f[k] > L[k]]
+        res[label] = (f, over)
         bad += cls == 'GATE' and bool(over)
         if cls == 'GATE' and over:
             gate_over.append((label, cid, fn, args))
@@ -346,13 +457,45 @@ def main():
                                                  f['fee'], 'OVER: ' + ','.join(over) if over else 'within'))
     print('## msig_model scan (data): largest n in 1..16 that fits every limit: %d; first over: %s' % (
         msig_fit, 'n=%d (%s)' % (msig_stop[0], ','.join(msig_stop[1])) if msig_stop else 'none up to 16'))
+    print('## B0 (UA8-D21 case per set; GATE = the single-key split register + store_pqz_pop, C12):')
+    fits = lambda label: label in res and res[label][0] is not None and not res[label][1]
+    for x in SETS:
+        single = 'full in one register' if fits(reg_label(x, 0, False)) else (
+            'split (store_pqz_pop separately)' if fits(reg_label(x, 0, True)) else 'STOP: over even after the split')
+        largest = {}
+        for split in (False, True):
+            ok = [n for n in (2, 4, 8, 16) if fits(reg_label(x, n, split))]
+            n = max(ok, default=0)
+            if n in (2, 4, 8):  # the next measured n is over: scan the n between (data)
+                for m in range(n + 1, 2 * n):
+                    label = reg_label(x, m, split)
+                    try:
+                        f = simulate(reg, 'register_pqz_kem_model', reg_args(x, m, split))
+                    except Exception as e:  # noqa: BLE001
+                        print('| data | %s | SIMULATION FAILED: %s |' % (label, str(e).replace('\n', ' ')[:300]))
+                        break
+                    over = [k for k in keys if f[k] is not None and f[k] > L[k]]
+                    print('| data | %s | %s |' % (label, 'OVER: ' + ','.join(over) if over else 'within'))
+                    if over:
+                        break
+                    n = m
+            largest[split] = n
+        print('##   %s: single mldsa65 %s; largest msig n (ML-DSA-65 members) with PQZ + KEM: %d in one register, %d with '
+              'the split' % (x, single, largest[False], largest[True]))
+    k = {nl: res.get('B0 keccak_model n=%d len=%d' % nl, (None,))[0] for nl in keccaks}
+    if all(k.values()):
+        top = max((f['instructions'], label) for label, (f, _) in res.items() if f and label.startswith('B0 register'))
+        per = {ln: (k[(100, ln)]['instructions'] - k[(1, 64)]['instructions']) / 99 for ln in (64, 256)}
+        print('##   keccak256 on the network: ~%d instructions per 64 B hash, ~%d per 256 B hash; the costliest B0 register '
+              '(%s) uses %d of %d instructions: headroom ~%d hashes of 256 B' % (
+                  per[64], per[256], top[1], top[0], L['instructions'], (L['instructions'] - top[0]) // per[256]))
     for label, cid, fn, args in gate_over:  # simulation does not refuse every limit: submit the call to show the outcome
         try:
             invoke(cid, fn, args, 'send')
             print('## submitted %s: the network ACCEPTED it' % label)
         except RuntimeError as e:
             print('## submitted %s: the network refused it: %s' % (label, str(e).replace('\n', ' ')[-300:]))
-    print('## GATE: %s' % ('FAIL (%d gate call(s) failed or over a limit)' % bad if bad else 'PASS (every UA-Soroban figure within the limits)'))
+    print('## GATE: %s' % ('FAIL (%d gate call(s) failed or over a limit)' % bad if bad else 'PASS (every UA-Soroban and B0 gate figure within the limits)'))
     sys.exit(1 if bad else 0)
 
 
