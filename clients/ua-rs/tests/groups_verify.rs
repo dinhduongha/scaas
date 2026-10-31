@@ -20,11 +20,13 @@ fn b32(v: &Value) -> [u8; 32] {
 fn arr(v: &Value) -> &Vec<Value> {
     v.as_array().unwrap()
 }
-/// `(portablePopDigest, message)` of a group key (UA-8: no chain context).
+/// `(portableRecordDigest, message)` of a group key (UA-8: no chain context; typed-signing: the typed records, no PQZ key,
+/// the zero KEM record).
 fn pop_message(_v: &Value, kind: u16, kd: &[u8]) -> ([u8; 32], [u8; 32]) {
     let ua = ua_of(kind, kd).unwrap();
-    let pd = ua8::portable_pop_digest(&ua, &[0; 32], &[0; 32]);
-    (pd, ua_message(kind, &ua8::pop_v2_tag(), &ua8::registration_digest(&pd, &[0; 32])).unwrap())
+    let no_kem = ua8::kem_record_hash(&ua, 0, &[]).unwrap();
+    let pd = ua8::portable_record_digest(&ua, kind, &[0; 32], &no_kem);
+    (pd, ua_message(kind, &ua8::pop_v2_tag(), &ua8::registration_digest(&ua, kind, &[0; 32], &no_kem, &[0; 32])).unwrap())
 }
 
 #[test]
