@@ -24,6 +24,7 @@
 # Skips verified addresses; prints one ok/fail row per contract; exit 1 on any fail. Blockscout learns the code of a
 # CREATE2 / factory child only on demand (internal transactions are off), so each address is looked up first.
 set -uo pipefail
+case "${1:-}" in -h|--help) sed -n '2,6p' "${BASH_SOURCE[0]}"; exit 0;; esac
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 B="${1:-broadcast/Deploy.s.sol/7622/run-latest.json}"
 API="${BLOCKSCOUT_API:-http://192.168.1.72:4000/api}"
