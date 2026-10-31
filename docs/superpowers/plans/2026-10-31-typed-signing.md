@@ -879,5 +879,8 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-42** (ty
   4. **`setKemKey` never overwrites a stored key (owner 2026-10-31).** Every version, 0 included, is write-once: a
      version that already holds a key reverts `UAKemVersion(ua, version)`; a new key always goes to a new version
      (≥ 1), and older versions stay readable through `kemKeyAt` (old ciphertexts keep decrypting). No replace, delete
-     or "rotate in place" path, on EVM and Soroban alike. R1 / B3 test: a second `setKemKey` on the same version
-     (0 after the hash-commit fill, and ≥ 1) reverts and leaves the stored key unchanged.
+     or "rotate in place" path, on EVM and Soroban alike. Version 0 is normally stored by `register` itself (full
+     `KemKey` in the registration transaction); only when that transaction does not fit (PQZH) does `register` commit
+     the hash and `setKemKey(ua, 0, …)` fill it later (item 3). R1 / B3 tests: a `setKemKey` on version 0 stored by
+     `register`, on version 0 after the hash-commit fill, and on a stored version ≥ 1 each revert and leave the
+     stored key unchanged.
