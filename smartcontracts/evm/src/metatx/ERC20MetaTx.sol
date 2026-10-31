@@ -376,7 +376,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         bytes32 d = uaCancelDigest(ua, batch, validUntil);
         UALedgerStorage storage $ = _ua();
         if ($.cancelUsed[d]) revert UACancelUsed();
-        IUARegistry(_REGISTRY).requireAuthorized(ua, UAKinds.PURPOSE_METATX_CANCEL, d, auth);
+        IUARegistry(_REGISTRY).requireAuthorized(ua, UAKinds.PURPOSE_METATX_CANCEL, d, UAKinds.uaSig(ua, auth)); // R1 → C2
         $.cancelUsed[d] = true;
         emit UANonceCancelled(ua, batch, _bumpNonce(ua, batch));
     }

@@ -8,6 +8,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {SchnorrBls12381Verifier, ZetherSchnorrBls12381Verifier} from "../../src/ua/verifiers/PairingVerifiers.sol";
 import {ZetherKeys} from "../zether/helpers/ZetherKeys.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
+import {UACall} from "./UACall.sol";
 
 /// accounts.md CTR-UA-07, CTR-UA-16, §1.8 for the Zether kind 0x0141 (UA-3; UA-6: the Zether key is the UA, no
 /// `authRef`, a SIGNING UA through `requireAuthorized`, U8/U9; `zether-bn254` and `requireZetherAuthorized` are in
@@ -45,7 +46,7 @@ contract UARegistryZetherTest is UARegistryBase {
     }
 
     function _zregister(UARegistry r, uint256 x) internal returns (bytes32) {
-        return r.register(ZK, ZetherKeys.pub(x, true), _none(), _zpop(r, x), "");
+        return UACall.register(r, ZK, ZetherKeys.pub(x, true), _none(), _zpop(r, x), "");
     }
 
     /// A Zether UA's signature: `abi.encode(bytes(""), Schnorr by x over uaMessage(0x0141, purpose, digest))`.
@@ -55,7 +56,7 @@ contract UARegistryZetherTest is UARegistryBase {
 
     function _expectUnauthorized(bytes32 ua, bytes32 purpose, bytes memory auth) internal {
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
-        zreg.requireAuthorized(ua, purpose, DIGEST, auth);
+        zreg.requireAuthorized(ua, purpose, DIGEST, UACall.auth(ua, auth));
     }
 
     // ----- register -----
@@ -68,7 +69,7 @@ contract UARegistryZetherTest is UARegistryBase {
         vm.expectEmit(true, true, false, true, address(zreg));
         emit IUARegistry.UARegistered(ua, ZK, y, _none(), keccak256(pop), "", 1, 0, 0);
         uint256 g = gasleft();
-        assertEq(zreg.register(ZK, y, _none(), pop, ""), ua);
+        assertEq(UACall.register(zreg, ZK, y, _none(), pop, ""), ua);
         console.log("register zether-bls12381", g - gasleft());
         (IUARegistry.Record memory rec, address pqzKey) = zreg.recordOf(ua);
         assertEq(rec.kind, ZK);
@@ -78,7 +79,7 @@ contract UARegistryZetherTest is UARegistryBase {
         assertEq(zreg.kindOf(ua), ZK);
         assertEq(zreg.keyOwner(UAKinds.keyHashOf(ZK, y)), ua);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAAlreadyRegistered.selector, ua));
-        zreg.register(ZK, y, _none(), pop, "");
+        UACall.register(zreg, ZK, y, _none(), pop, "");
         assertEq(zreg.keyOf(bytes32(uint256(1) << 200)).length, 0, "unregistered: empty");
     }
 
@@ -89,7 +90,7 @@ contract UARegistryZetherTest is UARegistryBase {
         bytes32 kh = UAKinds.keyHashOf(UAKinds.SCHNORR_BLS12381, y);
         bytes memory pop = _pop(zreg, UAKinds.SCHNORR_BLS12381, y);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyInUse.selector, kh, ua));
-        zreg.register(UAKinds.SCHNORR_BLS12381, y, _none(), pop, "");
+        UACall.register(zreg, UAKinds.SCHNORR_BLS12381, y, _none(), pop, "");
     }
 
     // ----- requireAuthorized (UA-6 U8/U9: no requireZetherAuthorized) -----
@@ -99,8 +100,9 @@ contract UARegistryZetherTest is UARegistryBase {
     function test_zetherOwnerOpThroughRequireAuthorized() public {
         bytes32 ua = _zregister(zreg, X1);
         bytes memory owner = _zauth(X1, UAKinds.PURPOSE_ZETHER_OWNER, DIGEST);
+        IUARegistry.UASig memory au102 = UACall.auth(ua, owner); // converted before the measurement
         uint256 g = gasleft();
-        zreg.requireAuthorized(ua, UAKinds.PURPOSE_ZETHER_OWNER, DIGEST, owner);
+        zreg.requireAuthorized(ua, UAKinds.PURPOSE_ZETHER_OWNER, DIGEST, au102);
         console.log("owner op zether-bls12381 (requireAuthorized)", g - gasleft());
         _expectUnauthorized(ua, UAKinds.PURPOSE_ZETHER_OWNER, _zauth(X1, UAKinds.PURPOSE_ZETHER_AUTH, DIGEST));
         _expectUnauthorized(ua, UAKinds.PURPOSE_ZETHER_OWNER, _zauth(X2, UAKinds.PURPOSE_ZETHER_OWNER, DIGEST));
@@ -108,8 +110,12 @@ contract UARegistryZetherTest is UARegistryBase {
         (, bytes memory sig) = abi.decode(owner, (bytes, bytes));
         bytes memory withY = abi.encode(ZetherKeys.pub(X1, true), sig); // stored kind: Y in auth is refused
         _expectUnauthorized(ua, UAKinds.PURPOSE_ZETHER_OWNER, withY);
-        vm.expectRevert(bytes("")); // an auth that does not ABI-decode fails closed without data (as UA-2a)
-        zreg.requireAuthorized(ua, UAKinds.PURPOSE_ZETHER_OWNER, DIGEST, "");
+        // an auth that does not ABI-decode (here: none at all) fails closed without data (as UA-2a)
+        (bool ok, bytes memory ret) = address(zreg).staticcall(
+            abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, ua, UAKinds.PURPOSE_ZETHER_OWNER, DIGEST)
+        );
+        assertFalse(ok);
+        assertEq(ret.length, 0);
         bytes32 ghost = UAKinds.uaOf(ZK, ZetherKeys.pub(X2, true));
         _expectUnauthorized(ghost, UAKinds.PURPOSE_ZETHER_OWNER, _zauth(X2, UAKinds.PURPOSE_ZETHER_OWNER, DIGEST));
     }
@@ -126,13 +132,13 @@ contract UARegistryZetherTest is UARegistryBase {
         (, address pqzKey) = gen2.recordOf(z);
         assertEq(pqzKey, address(0));
         assertEq(gen2.keyOf(z), ZetherKeys.pub(X2, true));
-        gen2.requireAuthorized(z, UAKinds.PURPOSE_METATX, DIGEST, _zauth(X2, UAKinds.PURPOSE_METATX, DIGEST));
+        gen2.requireAuthorized(z, UAKinds.PURPOSE_METATX, DIGEST, UACall.auth(z, _zauth(X2, UAKinds.PURPOSE_METATX, DIGEST)));
         bytes memory other = _zauth(X1, UAKinds.PURPOSE_METATX, DIGEST);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, z));
-        gen2.requireAuthorized(z, UAKinds.PURPOSE_METATX, DIGEST, other);
+        gen2.requireAuthorized(z, UAKinds.PURPOSE_METATX, DIGEST, UACall.auth(z, other));
         bytes memory y = ZetherKeys.pub(X1, true);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, ZK));
-        gen2.register(ZK, y, _none(), "", "");
+        UACall.register(gen2, ZK, y, _none(), "", "");
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
         c[0] = UARegistry.KindConfig(ZK, address(zbls), 70_000);
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, ZK));

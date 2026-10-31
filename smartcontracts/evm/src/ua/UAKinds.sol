@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import {IUARegistry} from "./IUARegistry.sol";
 
 /// @title UA identity layer (accounts.md §1.3–§1.6): kind table, tags, ids, keyHash, purpose tags, `ua_msg`, the UA-8
 ///        portable records as typed EIP-712 structs (typed-signing TS-D1: `UARegistration`, `UAPortableRecord`,
@@ -263,9 +264,43 @@ library UAKinds {
     /// `hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)})` over the whole key; no
     /// record (version 0, no key) is the zero record `UAKemRecord{ua, 0, 0, 0}` (TS-D2: version 0 is never a record).
     function kemRecordHash(bytes32 ua, uint64 version, bytes memory kemPk) internal pure returns (bytes32) {
-        if (version == 0 && kemPk.length == 0) return keccak256(abi.encode(UA_KEM_RECORD_TYPEHASH, ua, 0, 0, bytes32(0)));
+        if (version == 0 && kemPk.length == 0) return kemRecordHash(ua, 0, 0, 0);
         uint8 scheme = kemPk.length == 0 ? 0 : uint8(kemPk[0]); // an empty key never reaches a record (UAKemKeyLength)
-        return keccak256(abi.encode(UA_KEM_RECORD_TYPEHASH, ua, version, scheme, keccak256(kemPk)));
+        return kemRecordHash(ua, version, scheme, keccak256(kemPk));
+    }
+
+    /// `hashStruct(UAKemRecord{ua, version, scheme, kemPkHash})` from its words: a hash-committed `register` key
+    /// (typed-signing R1, owner 2026-10-31), the zero record for `(0, 0, 0)`.
+    function kemRecordHash(bytes32 ua, uint64 version, uint8 scheme, bytes32 kemPkHash) internal pure returns (bytes32) {
+        return keccak256(abi.encode(UA_KEM_RECORD_TYPEHASH, ua, version, scheme, kemPkHash));
+    }
+
+    /// The assembled KEM key `scheme ‖ mlkemEk ‖ x25519` of a `KemKey` (TS-D11; scheme 1: 1,601 B); "" for the empty key
+    /// (scheme 0, no ek, x25519 0).
+    function kemPk(IUARegistry.KemKey memory k) internal pure returns (bytes memory) {
+        if (k.scheme == 0 && k.mlkemEk.length == 0 && k.x25519 == 0) return "";
+        return abi.encodePacked(k.scheme, k.mlkemEk, k.x25519);
+    }
+
+    /// `TAG(msig)`: the tag of the only structure kind (the tokens' `uaSig` without the name table).
+    bytes32 internal constant MSIG_TAG = keccak256("scaas.ua.msig.v1");
+
+    /// typed-signing R1, until C2 types the tokens' `auth` parameters: a token's pre-R1 `bytes auth` as the registry's
+    /// `UASig` — a native id's raw signature as `signature`; a derived id's `abi.encode(keyData, sig)` as `keyData` +
+    /// `signature`, or, where `keyData` is the id's own `msig` structure (`keccak256(TAG(msig) ‖ keyData) == ua`), `sig`
+    /// = `abi.encode(MemberSig[])` as `members` (the structure itself is read from the record). A malformed blob reverts
+    /// with empty data (the ABI decoder).
+    function uaSig(bytes32 ua, bytes memory auth) internal pure returns (IUARegistry.UASig memory s) {
+        if (inNativeSpace(ua)) {
+            s.signature = auth;
+            return s;
+        }
+        (bytes memory k, bytes memory sig) = abi.decode(auth, (bytes, bytes));
+        if (k.length != 0 && keccak256(abi.encodePacked(MSIG_TAG, k)) == ua) {
+            s.members = abi.decode(sig, (IUARegistry.MemberSig[]));
+        } else {
+            (s.keyData, s.signature) = (k, sig);
+        }
     }
 
     /// `hashStruct(UAPortableRecord{ua, kind, pqzKeyHash, kem})`, `kemHash = kemRecordHash` of the initial KEM record.

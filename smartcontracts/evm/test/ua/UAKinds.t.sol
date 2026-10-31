@@ -376,7 +376,7 @@ contract UAKindsTest is Test {
             assertEq(h, vm.parseJsonBytes32(j, string.concat(r, ".pqzKeyHash")), name_);
             bytes32 d = UAKinds.kemRecordHash(
                 ua,
-                uint64(vm.parseJsonUint(j, string.concat(r, ".attrs.kemVersion"))),
+                0, // the register KEM key is version 0 (owner 2026-10-31; typed-signing R1 dropped attrs.kemVersion)
                 vm.parseJsonBytes(j, string.concat(r, ".attrs.kemPk"))
             );
             assertEq(d, vm.parseJsonBytes32(j, string.concat(r, ".kemRecordHash")), name_);

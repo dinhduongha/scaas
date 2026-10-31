@@ -820,11 +820,16 @@ library PqzCore {
         bytes32 h;
         assembly ("memory-safe") { h := keccak256(add(buf, 37), len) }
         bytes32 d = keccak256(abi.encodePacked("SCAAS-PQZ-AUTH-V1", h));
-        try IUARegistry(o.registry).requireAuthorized(o.from, UAKinds.PURPOSE_ZETHER_AUTH, d, authSig) {}
+        uint256 fmp;
+        assembly ("memory-safe") { fmp := mload(0x40) }
+        try IUARegistry(o.registry).requireAuthorized(o.from, UAKinds.PURPOSE_ZETHER_AUTH, d, UAKinds.uaSig(o.from, authSig)) {}
         catch (bytes memory err) {
             if (err.length == 4 && bytes4(err) == UAKinds.UAVerifyGas.selector) revert UAKinds.UAVerifyGas();
             revert IPqzToken.AuthRejected();
         }
+        // typed-signing R1 (until C2 types `authSig`): the `UASig` copies are dead after the call; the verifier call
+        // below reuses their memory, so the conversion adds no memory growth on top of the statement buffer
+        assembly ("memory-safe") { mstore(0x40, fmp) }
         assembly ("memory-safe") {
             calldatacopy(add(add(buf, 37), len), proof.offset, proof.length)
         }

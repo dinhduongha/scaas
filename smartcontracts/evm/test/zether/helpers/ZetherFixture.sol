@@ -24,6 +24,7 @@ import {ZetherKeys} from "./ZetherKeys.sol";
 import {Catalogue, zetherEnv} from "../../helpers/Catalogue.sol";
 import {ZetherVerifierBase} from "../../../src/zether/ZetherVerifier.sol";
 import {IUARegistry} from "../../../src/ua/IUARegistry.sol";
+import {UACall} from "../../ua/UACall.sol";
 
 bytes32 constant ZUID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 
@@ -154,7 +155,7 @@ abstract contract ZetherFixture is Test {
         u.evm = evm;
         bytes memory pop = ZetherKeys.schnorr(x, _popMsg(u.y), bls);
         vm.prank(evm);
-        u.ua = ZetherTypes.UA.wrap(reg.register(_zkind(), u.y, IUARegistry.UAAttrs("", 0, 0, ""), pop, ""));
+        u.ua = ZetherTypes.UA.wrap(UACall.register(reg, _zkind(), u.y, UACall.attrs("", 0, ""), pop, ""));
     }
 
     function _zkind() internal pure returns (uint16) {

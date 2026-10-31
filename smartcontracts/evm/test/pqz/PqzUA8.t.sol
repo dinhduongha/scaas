@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {UACall} from "../ua/UACall.sol";
 
 /// UA-8 Task A6 (UA8-D8, D9; ruling A5-c1): a PQZ token holds only proven PQZ keys. `PqzCore._keyPtr` reads
 /// `pqzKeyOf(ua)` and refuses an unproven key with `AccountNotRegistered(ua)`, as for a UA without a key.
@@ -15,7 +16,7 @@ contract PqzUA8Test is PqzFixture {
 
     /// An `mldsa65` UA registered with a PQZ key and its proof hash but without the proof bytes: unproven.
     function _unproven(uint8 seed) internal returns (bytes32 u) {
-        u = reg.register(UAKinds.MLDSA65, _mlPk(seed), _pqzAttrs(_pk(seed)), new bytes(ML65_SIG), "");
+        u = UACall.register(reg, UAKinds.MLDSA65, _mlPk(seed), _pqzAttrs(_pk(seed)), new bytes(ML65_SIG), "");
         (address ptr,, bool proven) = reg.pqzKeyOf(u);
         assertTrue(ptr != address(0), "the key is stored");
         assertFalse(proven);
@@ -63,7 +64,7 @@ contract PqzUA8Test is PqzFixture {
     /// `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, keyHash))`, is stored by `storePqzPop`.
     function test_ua8_pqzTokenSetPqzKeyThenProve() public {
         bytes32 u = _mldsaUA(32);
-        reg.setPqzKey(u, _pk(32), keccak256(hex"bb"), new bytes(ML65_SIG));
+        reg.setPqzKey(u, _pk(32), keccak256(hex"bb"), UACall.sig(new bytes(ML65_SIG)));
         _assertNoAccount(u);
         reg.storePqzPop(u, hex"bb");
         (,, bool proven) = reg.pqzKeyOf(u);

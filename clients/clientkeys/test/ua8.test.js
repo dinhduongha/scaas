@@ -121,7 +121,7 @@ test('no-KEM record is {ua,0,0,0}', () => {
   // version-0 record has scheme ≠ 0 (version 0 with scheme 0 is UAKemScheme); version 0 is no setKemKey record (until R1)
   const f = row('fndsa512');
   const pk = B(f.attrs.kemPk);
-  assert.ok(P.registrations.every((r) => r.attrs.kemVersion === 0), 'register takes no KEM version (UAAttrs\' word: 0)');
+  assert.ok(P.registrations.every((r) => !('kemVersion' in r.attrs)), 'register takes no KEM version (typed-signing R1)');
   assert.deepEqual(ua.kemRecordStruct({ ua: f.ua, version: 0, kemPk: f.attrs.kemPk }),
     { ua: f.ua, version: 0, scheme: 1, kemPkHash: hex(keccak_256(pk)) });
   assert.equal(hex(ua.kemRecordHash({ ua: f.ua, version: 0, kemPk: f.attrs.kemPk })), f.kemRecordHash);
@@ -236,11 +236,9 @@ test('kem record digest matches the hand-built words', () => {
     const ks = P.kemRecords.filter((k) => k.name === name);
     assert.deepEqual(ks.map((k) => k.version), [1, 2, 3], name);
     assert.equal(new Set(ks.map((k) => k.kemPk)).size, 3, `${name}: a key per version`);
-    // the registration's initial record is version 0 of its own key (none of v1-v3's; owner 2026-10-31, KEM item 1);
-    // attrs.kemVersion is UAAttrs' word until R1 drops it: always 0
+    // the registration's initial record is version 0 of its own key (none of v1-v3's; owner 2026-10-31, KEM item 1)
     for (const r of P.registrations.filter((x) => x.name === name || x.name.startsWith(`${name}/`))) {
       const kem = { ua: r.ua, version: 0, scheme: 1, kemPkHash: hex(keccak_256(B(r.attrs.kemPk))) };
-      assert.equal(r.attrs.kemVersion, 0, r.name);
       assert.ok(ks.every((k) => k.kemPk !== r.attrs.kemPk), `${r.name}: a key of its own at version 0`);
       assert.equal(r.kemRecordHash, hex(kemHand(r.ua, 0, 1, kem.kemPkHash)), r.name);
       assert.deepEqual(r.typedData.message.record.kem, kem, r.name);
@@ -528,4 +526,74 @@ test('every portable pop verifies', () => {
       assert.ok(sigOk(k.kind, r.keyData, k.message, k.sig), `${k.name} v${k.version}`);
     }
   }
+});
+
+// --- typed-signing R1: the registry's explicit arguments (TS-D10 … TS-D12; owner KEM rulings 2026-10-31) ---
+
+const memberList = (pop) => (pop === '0x' ? [] : memberSigs(pop).map((m) => ({ index: m.index, keyData: hex(m.keyData), sig: hex(m.sig) })));
+const regInput = (r) => ({ kind: r.kind, keyData: r.keyData, pqzKey: r.attrs.pqzKey, pqzPopHash: r.attrs.pqzPopHash, pqzPop: r.pqzPop,
+  kemPk: r.attrs.kemPk, pop: r.kind === 0x0120 ? memberList(r.pop) : r.pop });
+
+test('register args typed', () => {
+  for (const r of P.registrations) {
+    const a = ua.registrationArgs({ ...regInput(r), kemCommit: false });
+    assert.deepEqual({ entry: a.entry, ...a.args }, r.args, r.name);
+    assert.equal(a.kemFill, null, r.name);
+    assert.equal(hex(ua.kemPkOf(r.args.attrs.kem)), r.attrs.kemPk, `${r.name}: KemKey assembles to kemPk`);
+    if (r.kind === 0x0120) {
+      assert.equal(r.args.entry, 'registerMsig');
+      const st = r.args.structure;
+      assert.equal(hex(ua.encodeMsig(st.threshold, st.members.map((m) => ({ ...m, id: B(m.id) })))), r.keyData, `${r.name}: same id`);
+      assert.deepEqual(ua.msigStructure(r.keyData), st);
+    } else {
+      assert.equal(r.args.entry, 'register');
+    }
+    // a KEM row also carries its hash-commit form: the same pop signs it (the record words are the same)
+    if (r.attrs.kemPk === '0x') {
+      assert.equal(r.kemCommit, undefined, r.name);
+      continue;
+    }
+    const c = ua.registrationArgs({ ...regInput(r), kemCommit: true });
+    assert.deepEqual({ register: { entry: c.entry, ...c.args }, fill: c.kemFill }, r.kemCommit, r.name);
+    assert.equal(c.args.attrs.kemPkHash, hex(keccak_256(B(r.attrs.kemPk))));
+    assert.deepEqual(c.args.attrs.kem, { scheme: 1, mlkemEk: '0x', x25519: Z });
+    assert.deepEqual(c.kemFill, { ua: r.ua, version: 0, kem: r.args.attrs.kem, sig: { keyData: '0x', signature: '0x', members: [] } });
+    assert.equal(hex(ua.kemRecordHash({ ua: r.ua, version: 0, kemPk: r.attrs.kemPk })), r.kemRecordHash, 'one record, both forms');
+  }
+  for (const k of P.kemRecords) {
+    assert.deepEqual(k.args, { ua: k.ua, version: k.version, kem: ua.kemKeyOf(k.kemPk),
+      sig: ua.uaSig(k.kind === 0x0120 ? { members: memberList(k.sig) } : { signature: k.sig }) }, k.id);
+  }
+  for (const k of P.pqzKeyRecords) {
+    assert.deepEqual(k.args, { ua: k.ua, pqzKey: k.pqzKey, pqzPopHash: k.pqzPopHash,
+      sig: ua.uaSig(k.kind === 0x0120 ? { members: memberList(k.sig) } : { signature: k.sig }) }, k.name);
+  }
+  assert.deepEqual(ua.kemKeyOf('0x'), { scheme: 0, mlkemEk: '0x', x25519: Z });
+  assert.equal(ua.kemPkOf(ua.kemKeyOf('0x')).length, 0);
+});
+
+test('register hash-commit only when the full call does not fit (X0: PQZH n2560-kmax16384, PQZ key + KEM key)', () => {
+  // the X0 measuring rows (ExplicitParamsCalldata.t.sol test_r1_kemHashCommitFits): an mldsa65 UA, its PQZ key, the set's PQZH
+  // R_REG proof length (smartcontracts/evm/test/vectors/pqz-gas/<set>.json), a scheme-1 KEM key
+  const fill = (n) => new Uint8Array(n).fill(0x5a);
+  const kemPk = concatBytes(Uint8Array.of(1), fill(1600));
+  const at = (set, pqzKeyLength) => {
+    const g = JSON.parse(readFileSync(new URL(`../../../smartcontracts/evm/test/vectors/pqz-gas/${set}.json`, import.meta.url), 'utf8'));
+    return { kind: 0x0131, keyData: fill(1952), pqzKey: fill(pqzKeyLength), pqzPop: fill(g.pqzh.REGISTER.proof), kemPk, pop: fill(3309) };
+  };
+  const len = (a) => ua.registryCalldataLength(a.entry, a.args);
+  const x = at('n2560-kmax16384', 20480);
+  const full = ua.registrationArgs({ ...x, kemCommit: false });
+  assert.equal(len(full), 262116, 'the X0 figure: 175 B over before R1, 207 B over on the explicit ABI');
+  assert.ok(len(full) > ua.REGISTER_CALLDATA_LIMIT);
+  assert.equal(ua.REGISTER_CALLDATA_LIMIT, 261909);
+  const auto = ua.registrationArgs(x);
+  assert.notEqual(auto.kemFill, null, 'over the limit: the hash commit is chosen');
+  assert.equal(len(auto), 260548);
+  assert.equal(ua.registryCalldataLength('setKemKey', auto.kemFill), 2020);
+  assert.equal(hex(ua.kemPkOf(auto.kemFill.kem)), hex(kemPk));
+  const small = ua.registrationArgs(at('n2304-kmax4096', 18432));
+  assert.equal(small.kemFill, null, 'under the limit: the full key');
+  assert.equal(ua.kemPkOf(small.args.attrs.kem).length, 1601);
+  assert.equal(ua.registrationArgs({ ...at('n2304-kmax4096', 18432), kemCommit: true }).args.attrs.kemPkHash, hex(keccak_256(kemPk)));
 });

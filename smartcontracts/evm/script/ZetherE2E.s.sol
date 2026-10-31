@@ -192,7 +192,8 @@ contract ZetherE2E is Script {
             bytes memory pop;
             (ys[i], uas[i], pop) = _pop(xs[i]);
             if (reg.kindOf(uas[i]) == 0) {
-                require(reg.register(UAKinds.ZETHER_BLS12381, ys[i], IUARegistry.UAAttrs("", 0, 0, ""), pop, "") == uas[i], "register");
+                IUARegistry.UAAttrs memory none; // no attributes (typed-signing R1: no KEM version word)
+                require(reg.register(UAKinds.ZETHER_BLS12381, ys[i], none, pop, "") == uas[i], "register");
             }
             require(reg.kindOf(uas[i]) == UAKinds.ZETHER_BLS12381, "the Zether UA is not registered");
         }

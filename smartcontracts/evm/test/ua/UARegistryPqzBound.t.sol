@@ -7,6 +7,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
+import {UACall} from "./UACall.sol";
 
 /// Review2 T2 (C0-5): an `msig` PQZ holder is admitted only if its worst-case authorization (register step 4's bound)
 /// plus `PqzSet.PQZ_DEBIT_MIN_GAS` (the cheapest PQZL debit, full relayed transaction) fits 2^24 (EIP-7825); else
@@ -62,8 +63,8 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         bytes memory pqz = _pk(0x0142, ++n);
         bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pqz);
         bytes memory rReg = _sig(pqz, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, UAKinds.portableRecordDigest(ua, UAKinds.MSIG, h, UAKinds.kemRecordHash(ua, 0, ""))));
-        IUARegistry.UAAttrs memory a = IUARegistry.UAAttrs(pqz, keccak256(rReg), 0, "");
-        r.register(UAKinds.MSIG, d, a, _memberSigs(d, ua, a, keys, ks), rReg);
+        IUARegistry.UAAttrs memory a = UACall.attrs(pqz, keccak256(rReg), "");
+        UACall.register(r, UAKinds.MSIG, d, a, _memberSigs(d, ua, a, keys, ks), rReg);
         assertEq(r.uaCount(UAKinds.PQZ_MLWE), 1);
     }
 
@@ -73,10 +74,10 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         returns (bytes memory)
     {
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_POP_V2, _regDigest(ua, UAKinds.MSIG, a));
-        UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](ks.length);
+        IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](ks.length);
         for (uint256 i; i < ks.length; ++i) {
             bytes32 id = UAKinds.uaOf(ks[i], keys[i]);
-            s[i] = UARegistry.MemberSig(_indexOf(d, id), "", _sig(keys[i], UAKinds.uaMessage(ks[i], UAKinds.PURPOSE_MEMBER, md)));
+            s[i] = IUARegistry.MemberSig(_indexOf(d, id), "", _sig(keys[i], UAKinds.uaMessage(ks[i], UAKinds.PURPOSE_MEMBER, md)));
         }
         for (uint256 i = 1; i < s.length; ++i) {
             for (uint256 j = i; j > 0 && s[j - 1].index > s[j].index; --j) (s[j - 1], s[j]) = (s[j], s[j - 1]);
@@ -90,10 +91,10 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         UARegistry r = _regs(address(0x5CA7001), [uint16(0x0131), 0x0132, 0x0133], [uint64(200_000), 2_500_000, 1_400_000]);
         (bytes memory d, bytes32 ua,,) = _members(r, 0x0132, 4, true, 5);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
-        r.register(UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 900)), hex"01", hex"01");
+        UACall.register(r, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 900)), hex"01", hex"01");
         (d, ua,,) = _members(r, 0x0132, 4, false, 4);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
-        r.register(UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 901)), hex"01", hex"01");
+        UACall.register(r, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 901)), hex"01", hex"01");
     }
 
     /// 2-of-2 `mldsa65` registers at PQZL with a PQZ key.
@@ -105,7 +106,7 @@ contract UARegistryPqzBoundTest is UARegistryBase {
 
     /// A PQZ key with the proof hash of the filler proof `0x01` (the holder check comes before the PoP).
     function _pqzOnly(bytes memory pqz) internal pure returns (IUARegistry.UAAttrs memory) {
-        return IUARegistry.UAAttrs(pqz, keccak256(hex"01"), 0, "");
+        return UACall.attrs(pqz, keccak256(hex"01"), "");
     }
 
     /// 2-of-2 worst case at cap `c`, the gen-2 forwarding hold (w / 63 + margin) and the cheapest debit.
@@ -130,6 +131,6 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         UARegistry r2 = _regs(address(0x5CA7004), [uint16(0x0131), 0x0132, 0x0133], [uint64(lo + 1), 2_500_000, 1_400_000]);
         (d, ua, keys, ks) = _members(r2, 0x0131, 2, false, 2);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
-        r2.register(UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 902)), hex"01", hex"01");
+        UACall.register(r2, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 902)), hex"01", hex"01");
     }
 }

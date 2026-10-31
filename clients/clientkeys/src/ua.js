@@ -404,6 +404,83 @@ export function encodeMsig(threshold, members) {
   return out;
 }
 
+// --- the registry's explicit arguments (typed-signing R1: TS-D10 … TS-D12; owner KEM rulings 2026-10-31) ---
+
+const ZW = hex(Z32);
+/** `KemKey{scheme, mlkemEk, x25519}` (TS-D11) of an assembled `kemPk = scheme ‖ ek ‖ x25519`; absent = the empty key. */
+export function kemKeyOf(kemPk) {
+  const pk = orEmpty(kemPk);
+  if (pk.length === 0) return { scheme: 0, mlkemEk: '0x', x25519: ZW };
+  if (pk.length < 33) fail('UAKemKeyLength', String(pk.length));
+  return { scheme: pk[0], mlkemEk: hex(pk.subarray(1, pk.length - 32)), x25519: hex(pk.subarray(pk.length - 32)) };
+}
+/** `scheme ‖ mlkemEk ‖ x25519`, empty for the empty key (what the registry stores and hashes). */
+export function kemPkOf({ scheme, mlkemEk, x25519 }) {
+  if (Number(scheme) === 0 && bytes(mlkemEk).length === 0 && hex(sized(x25519, 32, 'x25519')) === ZW) return new Uint8Array(0);
+  return concatBytes(Uint8Array.of(Number(scheme)), bytes(mlkemEk), sized(x25519, 32, 'x25519'));
+}
+/** CTR-UA-09 key data as its typed `MsigStructure{threshold, members: MsigMember{kind, id, weight}[]}` (TS-D10). */
+export function msigStructure(keyData) {
+  const d = bytes(keyData);
+  need(d.length >= 4 && d.length === 4 + 36 * u16(d, 2), 'length');
+  return { threshold: u16(d, 0), members: Array.from({ length: u16(d, 2) }, (_, i) => {
+    const o = 4 + 36 * i;
+    return { kind: u16(d, o), id: hex(d.subarray(o + 2, o + 34)), weight: u16(d, o + 34) };
+  }) };
+}
+const memberSigJson = ({ index, keyData = '0x', sig }) => ({ index: Number(index), keyData: hex(orEmpty(keyData)), sig: hex(bytes(sig)) });
+/** A `UASig{keyData, signature, members}` (TS-D12): native — `signature`; a derived single key — `keyData` (empty for the stored
+ *  kinds) + `signature`; an msig — `members` ({index, keyData (empty), sig}); a portable record's signature never has `keyData`. */
+export const uaSig = ({ keyData, signature, members = [] } = {}) =>
+  ({ keyData: hex(orEmpty(keyData)), signature: hex(orEmpty(signature)), members: members.map(memberSigJson) });
+
+/** The largest calldata whose EIP-7976 floor (15,000 + 64 per byte) fits the EIP-7825 transaction cap 2^24: 261,909 B. */
+export const REGISTER_CALLDATA_LIMIT = Math.floor(((1 << 24) - 15_000) / 64);
+const pad32 = (n) => Math.ceil(n / 32) * 32;
+const tailLen = (b) => 32 + pad32(bytes(b).length); // a `bytes` tail: length word + padded data
+const kemKeyLen = (k) => 96 + tailLen(k.mlkemEk);
+const attrsLen = (a) => 128 + tailLen(a.pqzKey) + kemKeyLen(a.kem);
+const memberSigsLen = (m) => 32 + m.reduce((n, x) => n + 32 + 96 + tailLen(x.keyData) + tailLen(x.sig), 0);
+/** The ABI calldata length of a `register` / `registerMsig` / `setKemKey` call from its typed arguments (selector included). */
+export function registryCalldataLength(entry, a) {
+  if (entry === 'register') return 4 + 160 + tailLen(a.keyData) + attrsLen(a.attrs) + tailLen(a.pop) + tailLen(a.pqzPop);
+  if (entry === 'registerMsig') {
+    return 4 + 128 + (64 + 32 + 96 * a.structure.members.length) + attrsLen(a.attrs) + memberSigsLen(a.pop) + tailLen(a.pqzPop);
+  }
+  if (entry === 'setKemKey') return 4 + 128 + kemKeyLen(a.kem) + 96 + tailLen(a.sig.keyData) + tailLen(a.sig.signature) + memberSigsLen(a.sig.members);
+  throw new Error(`no calldata length for ${entry}`);
+}
+
+/**
+ * The typed arguments of the registration (TS-D10 … TS-D12): `{ entry: 'register' | 'registerMsig', args, kemFill }`, `args`
+ * the named JSON of `register(kind, keyData, attrs, pop, pqzPop)` or `registerMsig(structure, attrs, pop, pqzPop)` with
+ * `attrs = { pqzKey, pqzPopHash, kem: KemKey, kemPkHash }`. The KEM key is version 0 (owner 2026-10-31) in one of two forms:
+ * the full key (`kem`, `kemPkHash` 0) or, only when the full call would not fit one transaction (`registryCalldataLength` over
+ * `REGISTER_CALLDATA_LIMIT`; X0: PQZH n2560-kmax16384 with a PQZ key) or when `kemCommit: true`, the hash commit (`kem` =
+ * `{scheme, '0x', 0}`, `kemPkHash = keccak256(kemPk)`); then `kemFill` is the second call, `setKemKey(ua, 0, kem, UASig())` (no
+ * signature: the pop signed the same `UAKemRecord{ua, 0, scheme, kemPkHash}`; anyone may send it). `kemCommit: false` forces the
+ * full key. `pop`: the signer's signature bytes, or for an msig the member signatures `[{index, keyData, sig}]` (empty: none).
+ * `pqzPopHash` defaults to `keccak256(pqzPop)` with a PQZ key.
+ */
+export function registrationArgs({ kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit } = {}) {
+  const k = Number(kind);
+  const hasPqz = present(pqzKey);
+  const attrs = { pqzKey: hex(orEmpty(pqzKey)), pqzPopHash: hex(hasPqz || present(pqzPopHash) ? proofHashOf(pqzPop, pqzPopHash) : Z32),
+    kem: kemKeyOf(kemPk), kemPkHash: ZW };
+  const msig = k === 0x0120;
+  const entry = msig ? 'registerMsig' : 'register';
+  const common = { attrs, pqzPop: hex(orEmpty(pqzPop)) };
+  const args = msig ? { structure: msigStructure(keyData), ...common, pop: (pop ?? []).map(memberSigJson) }
+    : { kind: k, keyData: hex(bytes(keyData)), ...common, pop: hex(orEmpty(pop)) };
+  // a scheme byte alone (no key bytes) would read as a commit: refuse a malformed key before choosing
+  const full = orEmpty(kemPk);
+  const commit = full.length !== 0 && (kemCommit ?? registryCalldataLength(entry, args) > REGISTER_CALLDATA_LIMIT);
+  if (!commit) return { entry, args, kemFill: null };
+  const ua = uaOf(k, keyData);
+  args.attrs = { ...attrs, kem: { scheme: full[0], mlkemEk: '0x', x25519: ZW }, kemPkHash: hex(keccak_256(full)) };
+  return { entry, args, kemFill: { ua: hex(ua), version: 0, kem: attrs.kem, sig: uaSig() } };
+}
+
 // --- key-data validation (§1.6 "Validation at registration") ---
 
 const SECP_P = secp256k1.Point.Fp.ORDER;

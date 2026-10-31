@@ -669,7 +669,8 @@ library ZetherLib {
     ///      points: any other kind or an unregistered id reverts `AccountNotRegistered`), its Schnorr by `x` through `requireAuthorized` under
     ///      `zether-owner`, `sig = abi.encode(bytes(""), schnorrSig)` (UA-6 U9; `Y` from the record).
     function _requireOwner(Env memory e, ZetherTypes.UA ua, bytes32 digest, bytes calldata sig) private view {
-        IUARegistry(e.registry).requireAuthorized(ZetherTypes.UA.unwrap(ua), UAKinds.PURPOSE_ZETHER_OWNER, digest, sig);
+        bytes32 u = ZetherTypes.UA.unwrap(ua);
+        IUARegistry(e.registry).requireAuthorized(u, UAKinds.PURPOSE_ZETHER_OWNER, digest, UAKinds.uaSig(u, sig)); // R1 → C2
     }
 
     /// @dev The proof is the spending authority (knowledge of `x`; UA-6 U9: no registry call, `from` registered by

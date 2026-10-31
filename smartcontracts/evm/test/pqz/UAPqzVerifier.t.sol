@@ -8,6 +8,7 @@ import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {UACall} from "../ua/UACall.sol";
 
 /// `UAPqzVerifier` (P6g plan Task 3, D3) and the `pqz-mlwe` kind in a gen-1 registry.
 contract UAPqzVerifierTest is PqzRegistryBase {
@@ -134,7 +135,7 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         assertEq(reg.keyOwner(h), ua);
         (,, bool proven) = reg.pqzKeyOf(ua);
         assertTrue(proven);
-        reg.requireAuthorized(ua, UAKinds.PURPOSE_ZETHER_AUTH, keccak256("d"), _mlAuth());
+        reg.requireAuthorized(ua, UAKinds.PURPOSE_ZETHER_AUTH, keccak256("d"), UACall.auth(ua, _mlAuth()));
     }
 
     function test_registerRefused() public {
@@ -146,7 +147,7 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(1)));
         // 0x0142 is not a kind (UA-6)
         vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindNotDerived.selector, UAKinds.PQZ_MLWE));
-        reg.register(UAKinds.PQZ_MLWE, pk, IUARegistry.UAAttrs("", 0, 0, ""), hex"aa", "");
+        UACall.register(reg, UAKinds.PQZ_MLWE, pk, UACall.attrs("", 0, ""), hex"aa", "");
         // non-canonical key: the verifier refuses before the precompile ⇒ UAPoP; a key of no set's length: the registry
         // refuses it first (UA-8: a key may be stored unproven, so its length is checked without the verifier)
         bytes memory bad = bytes.concat(pk);

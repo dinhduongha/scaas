@@ -8,6 +8,7 @@ import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {IConfidentialToken, IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
+import {UACall} from "../ua/UACall.sol";
 
 /// typed-signing X0 (measurement only, no contract change): the calldata of every confidential op and of the PQZ
 /// registration in today's packed form next to the explicit-parameter form proposed in the plan's Appendix X, per
@@ -165,6 +166,14 @@ contract ExplicitParamsCalldataTest is Test {
         bytes32 pqzPopHash;
         uint64 kemVersion;
         KemKey kem;
+    }
+
+    /// The registry's `UAAttrs` before typed-signing R1 (X0's "today"; `register` selector 0x0c936361).
+    struct UAAttrsPacked {
+        bytes pqzKey;
+        bytes32 pqzPopHash;
+        uint64 kemVersion;
+        bytes kemPk;
     }
 
     struct WrappedUnwrapArgs {
@@ -459,12 +468,12 @@ contract ExplicitParamsCalldataTest is Test {
         bytes memory rp = _rnd(4, _proofLen("REGISTER"));
         for (uint256 kem; kem < 2; ++kem) {
             bytes memory kemPk = kem == 1 ? bytes.concat(bytes1(0x01), _rnd(6, 1600)) : bytes("");
-            IUARegistry.UAAttrs memory at = IUARegistry.UAAttrs(_rnd(7, PK), keccak256(rp), uint64(kem), kemPk);
+            UAAttrsPacked memory at = UAAttrsPacked(_rnd(7, PK), keccak256(rp), uint64(kem), kemPk);
             UAAttrsT memory tt = UAAttrsT(_rnd(7, PK), keccak256(rp), uint64(kem),
                 kem == 1 ? KemKey(1, _cut(kemPk, 1, 1568), bytes32(_cut(kemPk, 1569, 32))) : KemKey(0, "", 0));
             { uint256 m0 = _fmp();
                 _row(kem == 1 ? "register, PQZ key + KEM key (direct)" : "register, PQZ key, no KEM key (direct)", false,
-                    abi.encodeCall(IUARegistry.register, (0x0131, _rnd(10, ML65_PK), at, new bytes(ML65_SIG), rp)),
+                    abi.encodeWithSelector(bytes4(0x0c936361), uint16(0x0131), _rnd(10, ML65_PK), at, new bytes(ML65_SIG), rp),
                     abi.encodeWithSelector(_sel("register"), uint16(0x0131), _rnd(10, ML65_PK), tt, new bytes(ML65_SIG), rp));
                 _reset(m0); }
         }
@@ -563,6 +572,37 @@ contract ExplicitParamsCalldataTest is Test {
             _pqzRows();
         }
         _zetherRows();
+    }
+
+    /// typed-signing R1 (owner 2026-10-31, KEM items 2-3): the X0 over-limit registration — PQZH `n2560-kmax16384`,
+    /// an `mldsa65` UA with a PQZ key, its `R_REG` proof and a scheme-1 KEM key, 175 B over the floor in one call — fits
+    /// as `register` with the KEM record's hash only (`UAAttrs.kemPkHash`, `kem` = its scheme) and then
+    /// `setKemKey(ua, 0, key, UASig())` (no signature: the PoP signed the record). Every set: both calls under the floor
+    /// (EIP-7976 15,000 + 64 per byte, against 2^24 EIP-7825); the full form, measured on the explicit ABI, is over
+    /// exactly at `n2560-kmax16384` (the set with the largest PQZH proof). PQZH proofs where the set has them, else PQZL.
+    function test_r1_kemHashCommitFits() public {
+        gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
+        sys = PqzSet.HAS_PQZH ? "pqzh" : "pqzl";
+        bytes memory rp = _rnd(4, _proofLen("REGISTER"));
+        bytes memory kemPk = bytes.concat(bytes1(0x01), _rnd(6, 1600));
+        bytes memory pk = _rnd(10, ML65_PK);
+        IUARegistry.UAAttrs memory full = UACall.attrs(_rnd(7, PK), keccak256(rp), kemPk);
+        IUARegistry.UAAttrs memory hashOnly = UACall.commit(full);
+        IUARegistry.UASig memory none;
+        bytes memory f = abi.encodeCall(IUARegistry.register, (0x0131, pk, full, new bytes(ML65_SIG), rp));
+        bytes memory c = abi.encodeCall(IUARegistry.register, (0x0131, pk, hashOnly, new bytes(ML65_SIG), rp));
+        bytes memory fill = abi.encodeCall(IUARegistry.setKemKey, (keccak256("ua"), 0, full.kem, none));
+        uint256 limit = (CAP - 15_000) / 64; // the largest calldata whose floor fits
+        console2.log(string.concat("R1 ", PqzSet.NAME, " ", sys, " register + KEM key (full) B / hash commit B / setKemKey v0 B / limit B"));
+        console2.log(f.length, c.length, fill.length, limit);
+        assertEq(f.length - c.length, 1568, "the commit drops the ek bytes (x25519 is a static word; kemPkHash was 0)");
+        assertLe(c.length, limit, "register with the KEM hash fits");
+        assertLe(fill.length, limit, "setKemKey v0 fits");
+        if (keccak256(bytes(PqzSet.NAME)) == keccak256("n2560-kmax16384")) {
+            assertGt(f.length, limit, "X0: the full form is over at n2560-kmax16384");
+        } else {
+            assertLe(f.length, limit, "the full form fits at this set");
+        }
     }
 
     /// The explicit forms reassemble today's bytes exactly (Review Focus 5 at the ABI level; the contracts' own

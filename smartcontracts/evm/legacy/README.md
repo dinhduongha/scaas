@@ -110,3 +110,7 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `kemRecordDigest`, `pqzKeyDigest`, `pqzKeyRecordDigest`), the record tags `KEM_RECORD_TAG` / `PQZ_KEY_RECORD_TAG` and
   UARegistry's `personal_sign` path for a native `msig` member of a portable record, as they stood in `src/ua/` before
   typed-signing P3 replaced them by typed EIP-712 records (TS-D1 … TS-D4). Not built.
+  `IUARegistryPacked.sol` — `src/ua/IUARegistry.sol` before typed-signing R1 (registry explicit ABI, TS-D10 … TS-D12; owner
+  KEM rulings 2026-10-31): `register` for every kind incl. the packed `msig` key data and `abi.encode(MemberSig[])` pop,
+  `UAAttrs{pqzKey, pqzPopHash, kemVersion, kemPk}`, `setKemKey(…, bytes kemPk, bytes sig)`, `setPqzKey(…, bytes sig)`,
+  `requireAuthorized(…, bytes auth)` and `kemKeyOf` / `kemKeyAt` returning bytes. Not built.

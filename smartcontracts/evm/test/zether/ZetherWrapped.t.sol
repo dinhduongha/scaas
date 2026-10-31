@@ -25,6 +25,7 @@ import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {UACall} from "../ua/UACall.sol";
 
 /// A leg that calls back into the token when the token pays it out or pulls it (an ERC-777-style hook).
 contract HookLeg is MockERC20 {
@@ -606,7 +607,7 @@ contract ZetherWrappedTest is ZetherFixture {
         bytes memory y = ZetherKeys.pub(0xA07, false);
         ua = UAKinds.uaOf(UAKinds.SCHNORR_BN254, y);
         bytes32 m = reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(ua, UAKinds.SCHNORR_BN254, 0, UAKinds.kemRecordHash(ua, 0, ""), 0));
-        reg.register(UAKinds.SCHNORR_BN254, y, IUARegistry.UAAttrs("", 0, 0, ""), ZetherKeys.sign("scaas.ua.schnorr.v1", 0xA07, m, false), "");
+        UACall.register(reg, UAKinds.SCHNORR_BN254, y, UACall.attrs("", 0, ""), ZetherKeys.sign("scaas.ua.schnorr.v1", 0xA07, m, false), "");
     }
 
     /// UA-5a (CTR-UA-26): `NORMAL_ZETHER` inherits `burn` on the UA allowlist from `NormalToken`; a derived signer
