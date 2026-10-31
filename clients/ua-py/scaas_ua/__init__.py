@@ -1,5 +1,5 @@
 """SCaaS Universal Account identity layer (accounts.md §1.3–§1.6) for client systems: the kind table, ids, keyHash,
-purpose tags, ua_msg, the portable PoP / KEM record / PQZ key record digests, the registry's UAAuth digest, member digests, canonical ids and key-data validation.
+purpose tags, ua_msg, the portable PoP / KEM record / PQZ key record (typed EIP-712 records, typed-signing TS-D1 … TS-D4), the registry's UAAuth digest, member digests, canonical ids and key-data validation.
 The same rules live in Solidity (UAKinds.sol), JS (clientkeys ua.js), Rust (scaas-ua), Go and C#;
 smartcontracts/vectors/ua pins all six. secp256k1, P-256, ed25519 and bn254 G1 are integer arithmetic here; bn254 G2
 and BLS12-381 use py_ecc. Public inputs only: nothing here is constant-time. UNAUDITED."""
@@ -163,8 +163,6 @@ def purpose_tag(purpose, version=1):
 
 POP_TAG = purpose_tag('pop')  # v1, a registry constant (kinds.json); the portable PoP is POP_V2_TAG
 POP_V2_TAG = purpose_tag('pop', 2)
-KEM_RECORD_TAG = keccak256(b'scaas.ua.kem-record.v1')
-PQZ_KEY_RECORD_TAG = keccak256(b'scaas.ua.pqz-key-record.v1')
 KEM_SCHEME_MLKEM1024_X25519 = 1  # kemPk[0] (CTR-UA-32); 2 = ML-KEM-1024 + HQC + X25519 is reserved (UAKemScheme)
 KEM_PK_LENGTH = 1601  # 0x01 ‖ ML-KEM-1024 ek ‖ X25519 pk (X-Wing order)
 DOMAIN_TYPEHASH = keccak256(b'EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)')
@@ -230,27 +228,75 @@ def _word(n):
     return int(n).to_bytes(32, 'big')
 
 
-def portable_pop_digest(ua, pqz_key_hash=bytes(32), kem_record_hash=bytes(32)):
-    """``keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)``, each hash 0 when absent (UA-8 P1: no chain)."""
-    return keccak256(POP_V2_TAG, _sized(ua, 32, 'ua'), _sized(pqz_key_hash, 32, 'pqzKeyHash'),
-                     _sized(kem_record_hash, 32, 'kemRecordHash'))
+# The portable EIP-712 domain (TS-D1): name and version only, no chainId / verifyingContract / salt (CTR-UA-07).
+PORTABLE_DOMAIN_TYPE = 'EIP712Domain(string name,string version)'
+PORTABLE_DOMAIN_NAME = 'SCaaS UA Portable'
+PORTABLE_DOMAIN_VERSION = '1'
+PORTABLE_DOMAIN_SEPARATOR = keccak256(keccak256(PORTABLE_DOMAIN_TYPE.encode()), keccak256(PORTABLE_DOMAIN_NAME.encode()),
+                                      keccak256(PORTABLE_DOMAIN_VERSION.encode()))
+_KEM_TYPE = 'UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)'
+_RECORD_TYPE = 'UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)'
+_PQZ_KEY_TYPE = 'UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)'
+# encodeType of each portable struct: primary, then the referenced types sorted by name
+PORTABLE_TYPES = {
+    'UAKemRecord': _KEM_TYPE,
+    'UAPortableRecord': _RECORD_TYPE + _KEM_TYPE,
+    'UARegistration': 'UARegistration(UAPortableRecord record,bytes32 pqzPopHash)' + _KEM_TYPE + _RECORD_TYPE,
+    'UAPqzKey': _PQZ_KEY_TYPE,
+    'UAPqzKeyRecord': 'UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)' + _PQZ_KEY_TYPE,
+}
 
 
-def registration_digest(portable, pqz_pop_hash=bytes(32)):
-    """``keccak256(portablePopDigest ‖ pqzPopHash)``: what the signer's pop signs under ``ua_message(kind, POP_V2, ·)``."""
-    return keccak256(_sized(portable, 32, 'portablePopDigest'), _sized(pqz_pop_hash, 32, 'pqzPopHash'))
+def portable_typehash(name):
+    return keccak256(PORTABLE_TYPES[name].encode())
 
 
-def kem_record_digest(ua, version, kem_pk):
-    """``keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))``: version 1 … 2^64 − 1, ``kem_pk`` = scheme byte ‖ key."""
+def hash_struct(name, *words):
+    """``keccak256(typehash(name) ‖ words)``: every portable field is a 32-byte word or a nested struct hash."""
+    return keccak256(portable_typehash(name), *(_sized(w, 32, 'word') for w in words))
+
+
+def _typed(struct_hash):
+    """``keccak256(0x1901 ‖ DS_P ‖ structHash)``: what ``eth_signTypedData_v4`` returns for a portable record."""
+    return keccak256(b'\x19\x01', PORTABLE_DOMAIN_SEPARATOR, struct_hash)
+
+
+def kem_record_hash(ua, version, kem_pk):
+    """``hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)})``: version 1 … 2^64 − 1,
+    ``kem_pk`` = scheme byte ‖ key. No record (version 0, no key) is the zero record ``UAKemRecord{ua, 0, 0, 0}`` (TS-D2)."""
+    pk = _bytes(kem_pk) if kem_pk is not None else b''
+    if version == 0 and not pk:
+        return hash_struct('UAKemRecord', ua, bytes(32), bytes(32), bytes(32))
     if not 1 <= version < 2**64:
         raise UAError('UAKemVersion', str(version))
-    pk = _bytes(kem_pk) if kem_pk is not None else b''
     if pk and pk[0] != KEM_SCHEME_MLKEM1024_X25519:
         raise UAError('UAKemScheme', str(pk[0]))
     if len(pk) != KEM_PK_LENGTH:
         raise UAError('UAKemKeyLength', str(len(pk)))
-    return keccak256(KEM_RECORD_TAG, _sized(ua, 32, 'ua'), _word(version), keccak256(pk))
+    return hash_struct('UAKemRecord', ua, _word(version), _word(pk[0]), keccak256(pk))
+
+
+def kem_record_digest(ua, version, kem_pk):
+    """The typed ``UAKemRecord`` digest ``setKemKey`` signs (a real record: version 0 is UAKemVersion)."""
+    if version == 0:
+        raise UAError('UAKemVersion', '0')
+    return _typed(kem_record_hash(ua, version, kem_pk))
+
+
+def portable_record_hash(ua, kind, pqz_key_hash, kem_record_hash_):
+    """``hashStruct(UAPortableRecord{ua, kind, pqzKeyHash, kem})``; ``kem_record_hash_`` = kem_record_hash (the zero record's when none)."""
+    return hash_struct('UAPortableRecord', ua, _word(kind), pqz_key_hash, kem_record_hash_)
+
+
+def portable_record_digest(ua, kind, pqz_key_hash, kem_record_hash_):
+    """The typed ``UAPortableRecord``: what R_REG proves over at ``register`` / the first ``storePqzPop``."""
+    return _typed(portable_record_hash(ua, kind, pqz_key_hash, kem_record_hash_))
+
+
+def registration_digest(ua, kind, pqz_key_hash, kem_record_hash_, pqz_pop_hash):
+    """The typed ``UARegistration{record, pqzPopHash}``: what the signer's pop signs under ``ua_message(kind, POP_V2, ·)``
+    (and a native msig member signs itself, TS-D4)."""
+    return _typed(hash_struct('UARegistration', portable_record_hash(ua, kind, pqz_key_hash, kem_record_hash_), pqz_pop_hash))
 
 
 def kem_record_message(kind, ua, version, kem_pk):
@@ -288,10 +334,12 @@ def _proof_hash_of(pqz_pop, pqz_pop_hash):
     return h
 
 
-HolderPop = namedtuple('HolderPop', 'pqz_key_hash pqz_pop_hash kem_record_hash portable_pop_digest registration_digest '
+HolderPop = namedtuple('HolderPop', 'pqz_key_hash pqz_pop_hash kem_record_hash portable_record_digest registration_digest '
                                     'message member_digest')
-HolderPop.__doc__ = """``member_digest`` (msig only, else None) is ``member_digest(ua, message)``: what each member signs under
-``member``; a code-less native member signs ``personal_sign(member_digest)`` (ruling C7, ``personal_sign_digest``)."""
+HolderPop.__doc__ = """``kem_record_hash`` is hashStruct(UAKemRecord) (the zero record's when none), ``portable_record_digest`` the typed
+UAPortableRecord, ``registration_digest`` the typed UARegistration. ``member_digest`` (msig only, else None) is
+``member_digest(ua, message)``: what each derived member signs under ``member``; a native member signs
+``registration_digest`` itself (eth_signTypedData_v4, TS-D4)."""
 
 
 def holder_pop_message(kind, ua, key_data=b'', pqz_key=None, pqz_pop=None, pqz_pop_hash=None, kem=None):
@@ -311,29 +359,29 @@ def holder_pop_message(kind, ua, key_data=b'', pqz_key=None, pqz_pop=None, pqz_p
     if (pqz_key is not None) != any(pop_hash):
         raise UAError('UAPqzPopHash', 'a PQZ key comes with its proof hash and only with it')
     kh = _pqz_key_hash_of(pqz_key) if pqz_key is not None else bytes(32)
-    kr = kem_record_digest(ua, *kem) if kem is not None else bytes(32)
-    portable = portable_pop_digest(ua, kh, kr)
-    reg = registration_digest(portable, pop_hash)
+    kr = kem_record_hash(ua, *(kem or (0, b'')))
+    reg = registration_digest(ua, kind, kh, kr, pop_hash)
     msg = ua_message(kind, POP_V2_TAG, reg)
-    return HolderPop(kh, pop_hash, kr, portable, reg, msg, member_digest(ua, msg) if kind == 0x0120 else None)
+    return HolderPop(kh, pop_hash, kr, portable_record_digest(ua, kind, kh, kr), reg, msg,
+                     member_digest(ua, msg) if kind == 0x0120 else None)
 
 
-def pqz_reg_message(ua, pqz_key, kem=None):
-    """The message R_REG proves over: ``ua_message(0x0142, POP_V2, portable_pop_digest(ua, keyHash(pqz_key), kem_record_hash))``."""
-    if kem is not None and kem[0] == 0 and (kem[1] is None or len(kem[1]) == 0):
-        kem = None
-    kr = kem_record_digest(ua, *kem) if kem is not None else bytes(32)
-    return ua_message(0x0142, POP_V2_TAG, portable_pop_digest(ua, _pqz_key_hash_of(pqz_key), kr))
+def pqz_reg_message(kind, ua, pqz_key, kem=None):
+    """The message R_REG proves over: ``ua_message(0x0142, POP_V2, portable_record_digest(ua, kind, keyHash(pqz_key),
+    kem_record_hash))``, ``kind`` the registering kind (TS-D3); ``kem`` None / (0, b'') = no KEM record."""
+    kr = kem_record_hash(ua, *(kem or (0, b'')))
+    return ua_message(0x0142, POP_V2_TAG, portable_record_digest(ua, kind, _pqz_key_hash_of(pqz_key), kr))
 
 
 def pqz_key_digest(ua, pqz_key_hash):
-    """``keccak256(PQZ_KEY_RECORD_TAG ‖ ua ‖ pqzKeyHash)``: what a later PQZ key's R_REG proves over (no proof hash: no cycle)."""
-    return keccak256(PQZ_KEY_RECORD_TAG, _sized(ua, 32, 'ua'), _sized(pqz_key_hash, 32, 'pqzKeyHash'))
+    """The typed ``UAPqzKey{ua, pqzKeyHash}``: what a later PQZ key's R_REG proves over (no proof hash: no cycle)."""
+    return _typed(hash_struct('UAPqzKey', ua, pqz_key_hash))
 
 
-def pqz_key_record_digest(key_digest, pqz_pop_hash):
-    """``keccak256(pqzKeyDigest ‖ pqzPopHash)``: what ``setPqzKey``'s signature signs under ``ua_message(kind, PURPOSE_PQZ_KEY, ·)``."""
-    return keccak256(_sized(key_digest, 32, 'pqzKeyDigest'), _sized(pqz_pop_hash, 32, 'pqzPopHash'))
+def pqz_key_record_digest(ua, pqz_key_hash, pqz_pop_hash):
+    """The typed ``UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}``: what ``setPqzKey``'s signature signs under
+    ``ua_message(kind, PURPOSE_PQZ_KEY, ·)`` (and a native msig member signs itself, TS-D4)."""
+    return _typed(hash_struct('UAPqzKeyRecord', hash_struct('UAPqzKey', ua, pqz_key_hash), pqz_pop_hash))
 
 
 PqzKeyRecord = namedtuple('PqzKeyRecord', 'pqz_key_hash pqz_pop_hash pqz_key_digest record_digest message pqz_reg_message '
@@ -353,21 +401,15 @@ def pqz_key_record_message(kind, ua, key_data, pqz_key, pqz_pop=None, pqz_pop_ha
     if not any(pop_hash):
         raise UAError('UAPqzPopHash', 'a PQZ key record needs its proof hash')
     kd = pqz_key_digest(ua, kh)
-    rd = pqz_key_record_digest(kd, pop_hash)
+    rd = pqz_key_record_digest(ua, kh, pop_hash)
     tag = purpose_tag('pqz-key')
     msg = ua_message(kind, tag, rd)
     return PqzKeyRecord(kh, pop_hash, kd, rd, msg, ua_message(0x0142, tag, kd), member_digest(ua, msg) if kind == 0x0120 else None)
 
 
-def personal_sign_digest(digest):
-    """EIP-191 ``personal_sign`` of a 32-byte digest: ``keccak256(0x19 ‖ "Ethereum Signed Message:\\n32" ‖ digest)``. A code-less
-    native (EOA) msig member signs this over the ``member_digest`` of a portable record only (POP_V2, KEM, PQZ_KEY; ruling
-    C7); every other purpose stays UAAuth (CTR-MTX-14)."""
-    return keccak256(b'\x19Ethereum Signed Message:\n32', _sized(digest, 32, 'digest'))
-
-
 def is_portable_purpose(purpose_tag_bytes):
-    """POP_V2, KEM, PQZ_KEY: the only purposes a code-less native msig member signs by ``personal_sign``."""
+    """POP_V2, KEM, PQZ_KEY: the only purposes where a code-less native msig member signs the record's typed digest itself
+    (eth_signTypedData_v4, 65-byte r ‖ s ‖ v; a contract member answers ERC-1271 over it; TS-D4)."""
     return bytes(purpose_tag_bytes) in (POP_V2_TAG, purpose_tag('kem'), purpose_tag('pqz-key'))
 
 
@@ -382,8 +424,8 @@ def ua_auth_domain_separator(generation, chain_id, registry, chain_uid):
 
 def ua_auth_digest(generation, chain_id, registry, chain_uid, ua, purpose, digest):
     """EIP-712 digest of ``UAAuth(ua, purpose, digest)`` under the registry's domain: what native signers sign,
-    except that under the three portable purposes (``is_portable_purpose``) a code-less native msig member signs
-    ``personal_sign_digest(member_digest)`` instead (CTR-MTX-14, ruling C7)."""
+    except that under the three portable purposes (``is_portable_purpose``) a code-less native msig member signs the
+    record's typed digest instead (CTR-MTX-14, TS-D4)."""
     s = keccak256(UAAUTH_TYPEHASH, _sized(ua, 32, 'ua'), _sized(purpose, 32, 'purposeTag'), _sized(digest, 32, 'digest'))
     return keccak256(b'\x19\x01', ua_auth_domain_separator(generation, chain_id, registry, chain_uid), s)
 

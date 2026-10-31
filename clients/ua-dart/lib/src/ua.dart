@@ -53,8 +53,6 @@ Uint8List purposeTag(String purpose, [int version = 1]) {
 
 /// PURPOSE_POP_V2: the portable proof of possession (UA-8 P1).
 final Uint8List popV2Tag = purposeTag('pop', 2);
-final Uint8List kemRecordTag = _k([_utf8('scaas.ua.kem-record.v1')]);
-final Uint8List pqzKeyRecordTag = _k([_utf8('scaas.ua.pqz-key-record.v1')]);
 
 /// `kemPk[0]` of the one enabled KEM scheme (CTR-UA-32); 2 (ML-KEM-1024 + HQC + X25519, after FIPS 207) is reserved (`UAKemScheme`).
 const kemSchemeMlkem1024X25519 = 1;
@@ -153,19 +151,46 @@ bool _same(Uint8List a, Uint8List b) {
 
 String _kindHex(int kind) => '0x${kind.toRadixString(16).padLeft(4, '0')}';
 
-/// `keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)`, each hash 32 zero bytes when absent (UA-8 P1: no chain).
-Uint8List portablePopDigest(Uint8List ua, Uint8List pqzKeyHash, Uint8List kemRecordHash) =>
-    _k([popV2Tag, _sized(ua, 32, 'ua'), _sized(pqzKeyHash, 32, 'pqzKeyHash'), _sized(kemRecordHash, 32, 'kemRecordHash')]);
+/// The portable EIP-712 domain (typed-signing TS-D1): name and version only, no chainId / verifyingContract / salt (the
+/// records register a UA on every chain, CTR-UA-07).
+const portableDomainType = 'EIP712Domain(string name,string version)';
+const portableDomainName = 'SCaaS UA Portable';
+const portableDomainVersion = '1';
 
-/// `keccak256(portablePopDigest ‖ pqzPopHash)`: what the signer's `pop` signs under `uaMessage(kind, POP_V2, ·)`.
-Uint8List registrationDigest(Uint8List portable, Uint8List pqzPopHash) =>
-    _k([_sized(portable, 32, 'portablePopDigest'), _sized(pqzPopHash, 32, 'pqzPopHash')]);
+/// `DS_P = keccak256(keccak256(type) ‖ keccak256(name) ‖ keccak256(version))`.
+final Uint8List portableDomainSeparator =
+    _k([for (final x in [portableDomainType, portableDomainName, portableDomainVersion]) _k([_utf8(x)])]);
+
+const _kemType = 'UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)';
+const _recordType = 'UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)';
+const _pqzKeyType = 'UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)';
+
+/// The EIP-712 `encodeType` of each portable struct (primary, then the referenced types sorted by name).
+const portableTypes = {
+  'UAKemRecord': _kemType,
+  'UAPortableRecord': _recordType + _kemType,
+  'UARegistration': 'UARegistration(UAPortableRecord record,bytes32 pqzPopHash)' + _kemType + _recordType,
+  'UAPqzKey': _pqzKeyType,
+  'UAPqzKeyRecord': 'UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)' + _pqzKeyType,
+};
+
+Uint8List portableTypehash(String name) =>
+    _k([_utf8(portableTypes[name] ?? (throw ArgumentError('not a portable struct: $name')))]);
+
+/// `keccak256(typehash(name) ‖ words)`: every portable field is a 32-byte word or a nested struct hash.
+Uint8List hashStruct(String name, List<Uint8List> words) =>
+    _k([portableTypehash(name), for (final w in words) _sized(w, 32, 'word')]);
+
+/// `keccak256(0x1901 ‖ DS_P ‖ structHash)`: what `eth_signTypedData_v4` returns for a portable record.
+Uint8List _typed(Uint8List structHash) => _k([Uint8List.fromList([0x19, 0x01]), portableDomainSeparator, structHash]);
 
 final _two64 = BigInt.one << 64;
 
-/// `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))`: version 1 … 2^64 − 1 (a [BigInt]: a Dart int
-/// cannot hold it on the VM or in JS), `kemPk` = scheme byte ‖ key (`UAKemScheme` for an id other than 1).
-Uint8List kemRecordDigest(Uint8List ua, BigInt version, Uint8List kemPk) {
+/// `hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)})`: version 1 … 2^64 − 1 (a [BigInt]:
+/// a Dart int cannot hold it on the VM or in JS), `kemPk` = scheme byte ‖ key (`UAKemScheme` for an id other than 1). No
+/// record (version 0, no key) is the zero record `UAKemRecord{ua, 0, 0, 0}` (TS-D2): the `kem` word of a `UAPortableRecord`.
+Uint8List kemRecordHash(Uint8List ua, BigInt version, Uint8List kemPk) {
+  if (version == BigInt.zero && kemPk.isEmpty) return hashStruct('UAKemRecord', [ua, Uint8List(32), Uint8List(32), Uint8List(32)]);
   if (version < BigInt.one || version >= _two64) throw UAError('UAKemVersion', '$version');
   if (kemPk.isNotEmpty && kemPk[0] != kemSchemeMlkem1024X25519) throw UAError('UAKemScheme', '${kemPk[0]}');
   if (kemPk.length != kemPkLength) throw UAError('UAKemKeyLength', '${kemPk.length}');
@@ -175,8 +200,27 @@ Uint8List kemRecordDigest(Uint8List ua, BigInt version, Uint8List kemPk) {
     v[i] = (x & BigInt.from(0xff)).toInt();
     x >>= 8;
   }
-  return _k([kemRecordTag, _sized(ua, 32, 'ua'), v, _k([kemPk])]);
+  return hashStruct('UAKemRecord', [ua, v, _word(kemPk[0]), _k([kemPk])]);
 }
+
+/// The typed `UAKemRecord` digest `setKemKey` signs (a real record: version 0 is `UAKemVersion`).
+Uint8List kemRecordDigest(Uint8List ua, BigInt version, Uint8List kemPk) {
+  if (version == BigInt.zero) throw UAError('UAKemVersion', '0');
+  return _typed(kemRecordHash(ua, version, kemPk));
+}
+
+/// `hashStruct(UAPortableRecord{ua, kind, pqzKeyHash, kem})`; [kemRecordHash] = [kemRecordHash] (the zero record's when none).
+Uint8List portableRecordHash(Uint8List ua, int kind, Uint8List pqzKeyHash, Uint8List kemRecordHash) =>
+    hashStruct('UAPortableRecord', [ua, _word(kind), pqzKeyHash, kemRecordHash]);
+
+/// The typed `UAPortableRecord`: what `R_REG` proves over at `register` / the first `storePqzPop`.
+Uint8List portableRecordDigest(Uint8List ua, int kind, Uint8List pqzKeyHash, Uint8List kemRecordHash) =>
+    _typed(portableRecordHash(ua, kind, pqzKeyHash, kemRecordHash));
+
+/// The typed `UARegistration{record, pqzPopHash}`: what the signer's `pop` signs under `uaMessage(kind, POP_V2, ·)` (and a
+/// native msig member signs itself, TS-D4).
+Uint8List registrationDigest(Uint8List ua, int kind, Uint8List pqzKeyHash, Uint8List kemRecordHash, Uint8List pqzPopHash) =>
+    _typed(hashStruct('UARegistration', [portableRecordHash(ua, kind, pqzKeyHash, kemRecordHash), pqzPopHash]));
 
 /// What the UA signs for a KEM record: `uaMessage(kind, PURPOSE_KEM, kemRecordDigest)`.
 Uint8List kemRecordMessage(int kind, Uint8List ua, BigInt version, Uint8List kemPk) =>
@@ -185,8 +229,7 @@ Uint8List kemRecordMessage(int kind, Uint8List ua, BigInt version, Uint8List kem
 /// A KEM record attribute; `null` or `(0, empty)` = absent.
 typedef Kem = (BigInt version, Uint8List pk);
 
-Uint8List _kemHash(Uint8List ua, Kem? kem) =>
-    kem == null || (kem.$1 == BigInt.zero && kem.$2.isEmpty) ? Uint8List(32) : kemRecordDigest(ua, kem.$1, kem.$2);
+Uint8List _kemHash(Uint8List ua, Kem? kem) => kemRecordHash(ua, kem?.$1 ?? BigInt.zero, kem?.$2 ?? Uint8List(0));
 
 /// A PQZ / KEM holder: a single-key PQ kind, or an `msig` whose key data is PQ-eligible (malformed key data is UAKeyData).
 bool _holds(int kind, Uint8List keyData) {
@@ -215,15 +258,16 @@ Uint8List _proofHashOf(Uint8List? pqzPop, Uint8List? pqzPopHash) {
   return h;
 }
 
-/// The portable PoP of a registration (UA-8 P1, P2), as [holderPopMessage] returns it. [message] is
-/// `uaMessage(kind, POP_V2, registrationDigest)`: what the signer's `pop` signs (every kind). [memberDigest] (msig only, else
-/// null) is `memberDigest(ua, message)`, what each member signs under `member`; a code-less native member signs
-/// [personalSignDigest] of it (ruling C7).
+/// The portable PoP of a registration (UA-8 P1, P2; typed-signing TS-D3), as [holderPopMessage] returns it. `kemRecordHash`
+/// is hashStruct(UAKemRecord) (the zero record's when none), `portableRecordDigest` / `registrationDigest` the typed records.
+/// `message` is `uaMessage(kind, POP_V2, registrationDigest)`: what the signer's `pop` signs (every kind). `memberDigest`
+/// (msig only, else null) is `memberDigest(ua, message)`, what each derived member signs under `member`; a native member signs
+/// `registrationDigest` itself (eth_signTypedData_v4, TS-D4).
 typedef HolderPop = ({
   Uint8List pqzKeyHash,
   Uint8List pqzPopHash,
   Uint8List kemRecordHash,
-  Uint8List portablePopDigest,
+  Uint8List portableRecordDigest,
   Uint8List registrationDigest,
   Uint8List message,
   Uint8List? memberDigest,
@@ -246,33 +290,33 @@ HolderPop holderPopMessage(int kind, Uint8List ua,
   if (hasKey != !_isZero(popHash)) throw UAError('UAPqzPopHash', 'a PQZ key comes with its proof hash and only with it');
   final kh = hasKey ? _pqzKeyHashOf(pqzKey) : Uint8List(32);
   final kr = _kemHash(ua, kem);
-  final portable = portablePopDigest(ua, kh, kr);
-  final reg = registrationDigest(portable, popHash);
+  final reg = registrationDigest(ua, kind, kh, kr, popHash);
   final msg = uaMessage(kind, popV2Tag, reg);
   return (
     pqzKeyHash: kh,
     pqzPopHash: popHash,
     kemRecordHash: kr,
-    portablePopDigest: portable,
+    portableRecordDigest: portableRecordDigest(ua, kind, kh, kr),
     registrationDigest: reg,
     message: msg,
     memberDigest: kind == 0x0120 ? memberDigest(ua, msg) : null,
   );
 }
 
-/// The message `R_REG` proves over: `uaMessage(0x0142, POP_V2, portablePopDigest(ua, keyHash(0x0142, pqzKey), kemRecordHash))`.
-Uint8List pqzRegMessage(Uint8List ua, Object? pqzKey, [Kem? kem]) {
+/// The message `R_REG` proves over: `uaMessage(0x0142, POP_V2, portableRecordDigest(ua, kind, keyHash(0x0142, pqzKey),
+/// kemRecordHash))`, [kind] the registering kind (TS-D3); [kem] null / `(0, empty)` = no KEM record.
+Uint8List pqzRegMessage(int kind, Uint8List ua, Object? pqzKey, [Kem? kem]) {
   final kr = _kemHash(ua, kem); // the KEM record first, as ua-rs and the JS
-  return uaMessage(0x0142, popV2Tag, portablePopDigest(ua, _pqzKeyHashOf(pqzKey), kr));
+  return uaMessage(0x0142, popV2Tag, portableRecordDigest(ua, kind, _pqzKeyHashOf(pqzKey), kr));
 }
 
-/// `keccak256(PQZ_KEY_RECORD_TAG ‖ ua ‖ pqzKeyHash)`: what a later PQZ key's `R_REG` proves over (no proof hash: no cycle).
-Uint8List pqzKeyDigest(Uint8List ua, Uint8List pqzKeyHash) =>
-    _k([pqzKeyRecordTag, _sized(ua, 32, 'ua'), _sized(pqzKeyHash, 32, 'pqzKeyHash')]);
+/// The typed `UAPqzKey{ua, pqzKeyHash}`: what a later PQZ key's `R_REG` proves over (no proof hash: no cycle).
+Uint8List pqzKeyDigest(Uint8List ua, Uint8List pqzKeyHash) => _typed(hashStruct('UAPqzKey', [ua, pqzKeyHash]));
 
-/// `keccak256(pqzKeyDigest ‖ pqzPopHash)`: what `setPqzKey`'s signature signs under `uaMessage(kind, PURPOSE_PQZ_KEY, ·)`.
-Uint8List pqzKeyRecordDigest(Uint8List keyDigest, Uint8List pqzPopHash) =>
-    _k([_sized(keyDigest, 32, 'pqzKeyDigest'), _sized(pqzPopHash, 32, 'pqzPopHash')]);
+/// The typed `UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}`: what `setPqzKey`'s signature signs under
+/// `uaMessage(kind, PURPOSE_PQZ_KEY, ·)` (and a native msig member signs itself, TS-D4).
+Uint8List pqzKeyRecordDigest(Uint8List ua, Uint8List pqzKeyHash, Uint8List pqzPopHash) =>
+    _typed(hashStruct('UAPqzKeyRecord', [hashStruct('UAPqzKey', [ua, pqzKeyHash]), pqzPopHash]));
 
 /// The PQZ key record of `setPqzKey` (ruling A1-I1), see [pqzKeyRecordMessage]. [message] is what the UA signs,
 /// [pqzRegMessage] what the key's `R_REG` proves over.
@@ -296,7 +340,7 @@ PqzKeyRecord pqzKeyRecordMessage(int kind, Uint8List ua, Uint8List keyData, Obje
   final popHash = _proofHashOf(pqzPop, pqzPopHash);
   if (_isZero(popHash)) throw UAError('UAPqzPopHash', 'a PQZ key record needs its proof hash');
   final kd = pqzKeyDigest(ua, kh);
-  final rd = pqzKeyRecordDigest(kd, popHash);
+  final rd = pqzKeyRecordDigest(ua, kh, popHash);
   final tag = purposeTag('pqz-key');
   final msg = uaMessage(kind, tag, rd);
   return (
@@ -310,13 +354,9 @@ PqzKeyRecord pqzKeyRecordMessage(int kind, Uint8List ua, Uint8List keyData, Obje
   );
 }
 
-/// EIP-191 `personal_sign` of a 32-byte digest: `keccak256(0x19 ‖ "Ethereum Signed Message:\n32" ‖ digest)`. A code-less
-/// native (EOA) `msig` member signs it over the `memberDigest` of a portable record only (POP_V2, KEM, PQZ_KEY; ruling C7);
-/// every other purpose stays UAAuth (CTR-MTX-14).
-Uint8List personalSignDigest(Uint8List digest) =>
-    _k([Uint8List.fromList([0x19, ..._utf8('Ethereum Signed Message:\n32')]), _sized(digest, 32, 'digest')]);
-
-/// POP_V2, KEM, PQZ_KEY: the only purposes a code-less native `msig` member signs by `personal_sign`.
+/// POP_V2, KEM, PQZ_KEY: the only purposes where a code-less native `msig` member signs the record's typed digest itself
+/// (eth_signTypedData_v4, 65-byte r ‖ s ‖ v; a contract member answers ERC-1271 over it; TS-D4); every other purpose stays
+/// UAAuth (CTR-MTX-14).
 bool isPortablePurpose(Uint8List tag) =>
     [popV2Tag, purposeTag('kem'), purposeTag('pqz-key')].any((t) => _same(t, tag));
 
@@ -349,8 +389,8 @@ Uint8List uaAuthDomainSeparator(Domain d) => _k([
     ]);
 
 /// EIP-712 digest of UAAuth(ua, purpose, digest): what native signers behind the registry sign, except that
-/// under the three portable purposes ([isPortablePurpose]) a code-less native msig member signs [personalSignDigest] of the
-/// [memberDigest] instead (CTR-MTX-14, ruling C7).
+/// under the three portable purposes ([isPortablePurpose]) a code-less native msig member signs the record's typed digest
+/// instead (CTR-MTX-14, TS-D4).
 Uint8List uaAuthDigest(Domain d, Uint8List ua, Uint8List purpose, Uint8List digest) => _k([
       Uint8List.fromList([0x19, 0x01]),
       uaAuthDomainSeparator(d),
