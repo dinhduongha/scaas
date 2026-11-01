@@ -48,7 +48,7 @@ if [[ "$want" == *" inner "* ]]; then
   run inner-takes-the-fee-recipient scaas-node/src/typed.rs 'let c = Op::parse(c, None)?;' 'let c = Op::parse(c, fee_recipient)?;' relay_fee_call_object
 fi
 if [[ "$want" == *" generic "* ]]; then
-  run generic-runner-digest-only scaas-node/src/adapter.rs '|| adapter.call_key(&j).is_some_and(|c| inflight.contains(&c))' '' the_generic_runner_keys_on_the_bytes_too
+  run generic-runner-digest-only scaas-node/src/adapter.rs '|| adapter.call_key(&j).is_some_and(|c| inflight.contains(&c))' '' the_hedera_lane_skips_bytes_already_in_flight
 fi
 if [[ "$want" == *" deadline "* ]]; then
   run deadline-job-overrides scaas-node/src/typed.rs '(Some(x), Some(y)) => x.min(y),' '(Some(_), Some(y)) => y,' a_job_deadline_never_outlives_the_signed_one
@@ -60,4 +60,10 @@ if [[ "$want" == *" uadoor "* ]]; then
   run ua-entry-at-the-door scaas-node/src/gateway.rs '    if ua {
         return bad("FEATURE_UNSUPPORTED' '    if ua && r.chain == 0 {
         return bad("FEATURE_UNSUPPORTED' ua_entries_stay_off_the_gateway_door
+fi
+if [[ "$want" == *" hedera "* ]]; then
+  run hedera-drops-call-key scaas-node/src/adapters/hedera.rs 'self.inner.call_key(job)' 'self.inner.call_key(job).filter(|_| job.id < 0)' the_hedera_lane_skips_bytes_already_in_flight
+fi
+if [[ "$want" == *" sigbound "* ]]; then
+  run op-signature-unbounded scaas-node/src/gateway.rs 'if let Some(Err(e)) = r.op.get("signature")' 'if let Some(Err(e)) = r.op.get("nothing")' door_a_takes_registered_tokens_only
 fi

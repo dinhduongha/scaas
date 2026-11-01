@@ -691,8 +691,8 @@ pub struct Typed {
     pub struct_hash: Option<B256>,
     /// The struct `MetaTransactionExecuted` reports when it is not `struct_hash`: a receiver fee's payment.
     pub lane_hash: Option<B256>,
-    /// `(native signer, 65-byte signature)` when the signature can be checked here; `None`: a derived UA, a member set, a
-    /// key of an account.
+    /// `(native signer, signature)` when the signer is known here (the guard recovers a 65-byte one, any other length is the
+    /// contract's); `None`: a derived UA, a member set, a key of an account.
     pub signer: Option<(Address, Bytes)>,
     /// A payment's payee as an id: never the relay-fee router or executor.
     pub payee: Option<B256>,

@@ -1576,10 +1576,11 @@ pub(crate) mod tests {
         assert_eq!(n, 123, "every row with an entry, but the relay fees (relay_fee_call_object)");
     }
 
-    /// The generic lane runner (Hedera) holds the bytes too: a job whose call flies under another claimed `contract` is skipped
-    /// before the claim; the same job with the set free is claimed (the control); a plain entry has no key of its own.
+    /// `EvmAdapter::call_key`, which the Hedera adapter delegates to (`the_hedera_lane_skips_bytes_already_in_flight` is the
+    /// production path): a job whose call flies under another claimed `contract` is skipped before the claim; the same job with the
+    /// set free is claimed (the control); a plain entry has no key of its own.
     #[tokio::test]
-    async fn the_generic_runner_keys_on_the_bytes_too() {
+    async fn evm_call_key_follows_the_bytes() {
         use crate::adapter::ChainAdapter;
         let ua = |contract: &str| -> Value {
             json!({"id": 9, "kind": "ua_metatx", "op": {"entry": "uaBurn", "contract": contract, "token": format!("{TOKEN:#x}"), "args": {"amount": "5"},
@@ -1598,7 +1599,8 @@ pub(crate) mod tests {
         let held = InflightSet::default();
         let _flying = held.try_acquire_op(B256::repeat_byte(0x71), w.call_key()).unwrap();
         let (odoo, o) = fake_odoo(Fake { jobs: vec![ua("pqz")], tokens: toks(), ..Default::default() }).await;
-        crate::adapter::step_once(&a, &odoo, 0, "n#0", None, &held).await.unwrap();
+        // bounded both ways: if `call_key` regresses the job is claimed and follows a transaction until its `validUntil`
+        let _ = tokio::time::timeout(Duration::from_secs(2), crate::adapter::step_once(&a, &odoo, 0, "n#0", None, &held)).await;
         assert_eq!(o.lock().unwrap().claims, 0, "skipped before the claim");
         let (odoo, o) = fake_odoo(Fake { jobs: vec![ua("pqz")], tokens: toks(), ..Default::default() }).await;
         // the claimed job goes on to wait for a receipt the fake never gives: only the claim is this test's

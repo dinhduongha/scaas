@@ -131,13 +131,14 @@ pub trait ChainAdapter: Send + Sync {
     async fn op_consumed(&self, _job: &Job) -> Result<Option<bool>> {
         Ok(None)
     }
-    /// G2's in-flight key of a claimed job. Default: the job's own digest; an EVM meta-tx answers the token's
-    /// the typed digest the node computes, never the job's field (review T2 m6). `Revert` = no key (its simulation answers for it).
-    /// The second half of G2's key where a job's digest does not fix its bytes: an EVM op (`Work::call_key`); `None` elsewhere.
+    /// The second half of G2's key where a job's digest does not fix its bytes: an EVM op (`Work::call_key`, EVM and Hedera);
+    /// `None` elsewhere.
     fn call_key(&self, _job: &Job) -> Option<alloy::primitives::B256> {
         None
     }
 
+    /// G2's in-flight key of a claimed job. Default: the job's own digest; an EVM meta-tx answers the typed digest the node
+    /// computes, never the job's field (review T2 m6). `Revert` = no key (its simulation answers for it).
     async fn digest(&self, job: &Job) -> std::result::Result<Option<alloy::primitives::B256>, SimError> {
         Ok(job_digest(job))
     }

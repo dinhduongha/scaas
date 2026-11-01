@@ -154,6 +154,10 @@ impl ChainAdapter for HederaAdapter {
         Ok(Some(self.inner.lane(0)?.subject_nonce(&m).await? > m.nonce))
     }
 
+    fn call_key(&self, job: &Job) -> Option<B256> {
+        self.inner.call_key(job)
+    }
+
     async fn digest(&self, job: &Job) -> std::result::Result<Option<B256>, SimError> {
         self.inner.digest(job).await
     }
@@ -296,6 +300,7 @@ mod tests {
     use alloy::sol_types::SolError;
     use crate::abi::IToken;
     use crate::guard;
+    use crate::submit::InflightSet;
     use axum::routing::post;
     use std::sync::{Arc, Mutex};
 
@@ -309,6 +314,8 @@ mod tests {
         sent: Vec<String>,
         jobs: Vec<Value>,
         reports: Vec<Value>,
+        /// `relay_claim` calls.
+        claims: u32,
         /// `eth_getBlockByNumber` (Null = a pruned RPC: the pin is trusted).
         block0: Value,
         /// `eth_getBlockByNumber` answers this JSON-RPC error instead; `block0_reads` counts the asks.
@@ -364,7 +371,10 @@ mod tests {
         let mut n = s.lock().unwrap();
         axum::Json(match method.as_str() {
             "relay_poll" => Value::Array(std::mem::take(&mut n.jobs)),
-            "relay_claim" => b["job_ids"].clone(),
+            "relay_claim" => {
+                n.claims += 1;
+                b["job_ids"].clone()
+            }
             "relay_report" => {
                 n.reports.push(b);
                 json!({"ok": true})
@@ -490,6 +500,35 @@ mod tests {
         let (states, s) = step_with(Net { balance: "0x1", ..Default::default() }, j).await;
         assert_eq!(states, ["dead"]);
         assert!(last_error(&s).contains("unknown job kind"), "{}", last_error(&s));
+    }
+
+    /// G2 on the one EVM-style family of the generic runner: an op whose bytes fly under another claimed `contract` has another
+    /// digest and the same `call_key`, so the Hedera adapter skips it before the claim. With the set free it is claimed (the
+    /// control). Bounded: past the claim the job would follow a transaction the fake never finishes.
+    #[tokio::test]
+    async fn the_hedera_lane_skips_bytes_already_in_flight() {
+        let bound = std::time::Duration::from_secs(2);
+        let z = format!("{:#x}", Address::ZERO);
+        let ua = |contract: &str| json!({"id": 9, "kind": "ua_metatx", "op": {"entry": "uaBurn", "contract": contract,
+            "token": format!("{:#x}", Address::repeat_byte(0x70)), "args": {"amount": "5"},
+            "envelope": {"from": format!("{:#x}", B256::repeat_byte(0xaa)), "batch": "9", "nonce": "0", "validUntil": "4000000000",
+                "mode": 0, "relayer": z, "fee": "0", "feeRecipient": z},
+            "auth": {"keyData": "0x", "signature": format!("0x{}", "22".repeat(96)), "members": []}}});
+        let net = |j: Value| Net { balance: "0x1", jobs: vec![j], ..Default::default() };
+        let (a, o, s) = adapter(net(ua("pqz"))).await;
+        let job: Job = serde_json::from_value(ua("pqz")).unwrap();
+        let key = work_from_job(&serde_json::from_value(ua("token")).unwrap(), None).unwrap().call_key();
+        assert_eq!(a.call_key(&job), Some(key), "the claim moves the digest, not the bytes");
+        let held = InflightSet::default();
+        let _flying = held.try_acquire_op(B256::repeat_byte(0x71), key).unwrap();
+        tokio::time::timeout(bound, crate::adapter::step_once(&a, &o, 0, "n#0", None, &held)).await.expect("nothing to wait on").unwrap();
+        {
+            let n = s.lock().unwrap();
+            assert_eq!((n.claims, n.reports.len()), (0, 0), "skipped before the claim");
+        }
+        let (a, o, s) = adapter(net(ua("pqz"))).await;
+        let _ = tokio::time::timeout(bound, crate::adapter::step_once(&a, &o, 0, "n#0", None, &InflightSet::default())).await;
+        assert_eq!(s.lock().unwrap().claims, 1, "the control");
     }
 
     /// Review T4 I2: the Hedera lane path keeps N6 (an invalidation already in force is done, never dead), N2 (a lane

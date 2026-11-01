@@ -1816,8 +1816,7 @@ mod tests {
         assert_eq!(v.fault(&s).await, vec![oh(&ask)], "its own revert names it");
     }
 
-    /// A revert whose words name no leg (an amount, a zero) names nobody: the makers' health and each SCaaS leg's own
-    /// pull decide, and the taker fills at the next maker instead of a 503 loop.
+    /// `contract_of` is read before the book moves: an unreadable kind leaves the order where it is, and each kind reaches the job.
     #[tokio::test]
     async fn a_cancel_needs_the_token_kind_and_keeps_the_book_without_it() {
         let maker = PrivateKeySigner::from_bytes(&B256::repeat_byte(0x61)).unwrap();
@@ -1840,6 +1839,8 @@ mod tests {
         }
     }
 
+    /// A revert whose words name no leg (an amount, a zero) names nobody: the makers' health and each SCaaS leg's own
+    /// pull decide, and the taker fills at the next maker instead of a 503 loop.
     #[tokio::test]
     async fn revert_words_that_name_no_leg_are_no_names() {
         let taker = PrivateKeySigner::random();

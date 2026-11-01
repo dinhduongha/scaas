@@ -233,6 +233,10 @@ async fn post_op(State(s): State<AppState>, Json(r): Json<OpReq>) -> Reply {
     if let Err(e) = chain_of(&s, r.chain, w.to) {
         return e;
     }
+    // the bound of `/v1/metatx`
+    if let Some(Err(e)) = r.op.get("signature").and_then(Value::as_str).map(sig_bytes) {
+        return e;
+    }
     if let Err(e) = fresh(U256::from(w.valid_until)) {
         return e;
     }
@@ -352,6 +356,7 @@ mod tests {
     use axum::http::Request;
     use crate::metatx::{Domain, MetaTransfer, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER};
     use alloy::primitives::B256;
+    use alloy::signers::SignerSync;
     use tower::ServiceExt;
 
     /// R55 (review S1-7): lane đứng ⇒ gateway trả 503 ngay, không nhận rồi để hết hạn trong kênh.
@@ -497,6 +502,20 @@ mod tests {
         assert!(work_of(r, None).unwrap_err().1 .0["error"].as_str().unwrap().starts_with("HEX_DATA_REFUSED"));
     }
 
+    /// `Unwrap` of the vector under a deadline the clock never reaches (the vector's own runs out on 2027-01-15), signed again by
+    /// the vector's key, so these tests do not expire. The vector's bytes are `typed_ops_kat_every_entry`'s.
+    fn live_unwrap(v: &Value) -> Value {
+        let d = &v["ops"]["Unwrap"]["domains"]["token"]["domain"];
+        let mut op = crate::typed::testkit::op_of("Unwrap", "token", v).unwrap();
+        op.as_object_mut().unwrap().remove("validUntil");
+        op["envelope"]["validUntil"] = json!("4000000000");
+        let chain: u64 = d["chainId"].as_str().unwrap().parse().unwrap();
+        let digest = crate::typed::Op::parse(&op, None).unwrap().typed.digest_on(chain, d["salt"].as_str().unwrap().parse().unwrap()).unwrap();
+        let key: alloy::signers::local::PrivateKeySigner = v["key"]["private"].as_str().unwrap().parse().unwrap();
+        op["signature"] = json!(format!("0x{}", alloy::hex::encode(key.sign_hash_sync(&digest).unwrap().as_bytes())));
+        op
+    }
+
     const FACTORY: Address = Address::repeat_byte(0xf1);
     const REGISTRY: Address = Address::repeat_byte(0xf2);
     const DEX: Address = Address::repeat_byte(0xf3);
@@ -567,24 +586,39 @@ mod tests {
             "validUntil": until, "args": {"data": "0x", "nonce": "0", "validUntil": until, "sig": "0x"}});
         let mut unregistered = crate::typed::testkit::op_of("Unwrap", "token", &v).unwrap();
         unregistered["token"] = json!(format!("{:#x}", Address::repeat_byte(0x99)));
-        unregistered["validUntil"] = json!(until);
-        for (what, op) in [("deploy", deploy), ("register", register), ("mtxSettle", settle), ("a wallet", owner), ("an unregistered contract", unregistered)] {
+        // on a registered fee token, but the call goes to the router: a relay fee is a job
+        let relay = json!({"entry": "mtxRelayFee", "contract": "token", "token": format!("{token:#x}"),
+            "call": crate::typed::testkit::op_of("Burn", "token", &v).unwrap(), "signature": format!("0x{}", "11".repeat(65)),
+            "args": {"from": zero, "payee": zero, "value": "1", "validUntil": until, "relayer": format!("{:#x}", Address::repeat_byte(0xf4))}});
+        for (what, op) in [("deploy", deploy), ("register", register), ("mtxSettle", settle), ("a wallet", owner), ("a relay fee", relay),
+            ("an unregistered contract", unregistered)] {
             let (app, mut rx, log) = gateway("0x", vec![token]).await;
             let (st, body) = post_op_body(app, chain, &op).await;
             assert_eq!(st, StatusCode::BAD_REQUEST, "{what}: {body}");
             assert!(body.contains("token not served"), "{what}: {body}");
             assert!(rx.try_recv().is_err(), "{what}: nothing queued");
-            assert!(log.lock().unwrap().iter().all(|m| m != "eth_estimateGas"), "{what}: zero simulations");
+            assert!(log.lock().unwrap().is_empty(), "{what}: zero simulations, no chain read at all");
         }
         // the signed deadline holds: the vector's `validUntil` passed by now in the envelope below
         let mut late = crate::typed::testkit::op_of("Unwrap", "token", &v).unwrap();
         late["envelope"]["validUntil"] = json!((now() - 1).to_string());
         late["validUntil"] = json!(until);
-        let (app, mut rx, _) = gateway("0x", vec![token]).await;
+        let (app, mut rx, log) = gateway("0x", vec![token]).await;
         let (st, body) = post_op_body(app, chain, &late).await;
         assert_eq!(st, StatusCode::BAD_REQUEST, "{body}");
         assert!(body.contains("expired"), "{body}");
         assert!(rx.try_recv().is_err());
+        assert!(log.lock().unwrap().is_empty());
+        // the signature bound of `/v1/metatx`, one length each side of it; `the_gateway_checks_…` is the control at 65
+        for n in [64, 2049] {
+            let mut op = live_unwrap(&v);
+            op["signature"] = json!(format!("0x{}", "ab".repeat(n)));
+            let (app, mut rx, log) = gateway("0x", vec![token]).await;
+            let (st, body) = post_op_body(app, chain, &op).await;
+            assert_eq!(st, StatusCode::BAD_REQUEST, "{n}: {body}");
+            assert!(body.contains("signature length"), "{n}: {body}");
+            assert!(rx.try_recv().is_err() && log.lock().unwrap().is_empty(), "{n}");
+        }
     }
 
     /// The old door had no UA path: a `ua*` entry on a registered token is refused before the guard, zero simulations, nothing
@@ -603,10 +637,10 @@ mod tests {
             assert_eq!(st, StatusCode::BAD_REQUEST, "{name}: {body}");
             assert!(body.contains("FEATURE_UNSUPPORTED"), "{name}: {body}");
             assert!(rx.try_recv().is_err(), "{name}: nothing queued");
-            assert!(log.lock().unwrap().is_empty(), "{name}: no chain read at all: {:?}", log.lock().unwrap());
+            assert!(log.lock().unwrap().is_empty(), "{name}: no chain read at all");
         }
         let (app, mut rx, _) = gateway("0x", vec![token]).await;
-        let (st, body) = post_op_body(app, chain, &crate::typed::testkit::op_of("Unwrap", "token", &v).unwrap()).await;
+        let (st, body) = post_op_body(app, chain, &live_unwrap(&v)).await;
         assert_eq!(st, StatusCode::ACCEPTED, "the mtx twin: {body}");
         assert!(rx.try_recv().is_ok());
     }
@@ -620,14 +654,15 @@ mod tests {
         let d = &v["ops"]["Unwrap"]["domains"]["token"];
         let token: Address = d["domain"]["verifyingContract"].as_str().unwrap().parse().unwrap();
         let chain: u64 = d["domain"]["chainId"].as_str().unwrap().parse().unwrap();
-        let op = crate::typed::testkit::op_of("Unwrap", "token", &v).unwrap();
+        let op = live_unwrap(&v);
         let (app, mut rx, log) = gateway("0x", vec![token]).await;
         let (st, body) = post_op_body(app, chain, &op).await;
         assert_eq!(st, StatusCode::ACCEPTED, "{body}");
         let w = rx.try_recv().unwrap();
-        assert_eq!(w.data.len(), crate::typed::Op::parse(&op, None).unwrap().data.len());
-        assert!(w.digest().is_some(), "the digest reached the lane");
-        assert_eq!(format!("{:#x}", w.digest().unwrap()), d["digest"].as_str().unwrap());
+        let p = crate::typed::Op::parse(&op, None).unwrap();
+        assert_eq!(w.data, p.data);
+        let uid = d["domain"]["salt"].as_str().unwrap().parse().unwrap();
+        assert_eq!(w.digest(), p.typed.digest_on(chain, uid), "the digest reached the lane");
         assert!(log.lock().unwrap().iter().all(|m| m != "eth_getCode"), "a good signature needs no chain read");
         // another row's signature, same key: the digest differs, so the signer does
         let mut bad_op = op.clone();
@@ -637,7 +672,8 @@ mod tests {
         assert_eq!(st, StatusCode::BAD_REQUEST);
         assert!(body.contains("BAD_SIGNATURE"), "{body}");
         assert!(rx.try_recv().is_err(), "nothing queued");
-        assert!(log.lock().unwrap().iter().all(|m| m != "eth_estimateGas"), "nothing simulated");
+        let calls = |m: &str| log.lock().unwrap().iter().filter(|x| *x == m).count();
+        assert_eq!((calls("eth_estimateGas"), calls("eth_call")), (0, 1), "nothing simulated: the one eth_call is the guard's chainUid()");
         let (app, mut rx, _) = gateway("0x60", vec![token]).await;
         let (st, body) = post_op_body(app, chain, &bad_op).await;
         assert_eq!(st, StatusCode::ACCEPTED, "a contract signer: {body}");
