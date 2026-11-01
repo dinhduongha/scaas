@@ -233,12 +233,18 @@ fn relayed_and_disclosure_bls12_381() {
 
 #[test]
 fn entry_point_selectors_match_the_spec() {
-    // CTR-ZTH-45 / plan 5h D20: the shared `IConfidentialToken` names; the multi-recipient default is
-    // `mtxConfidentialTransfer`, the single format `mtxConfidentialTransferSingle` (payload, proof, auth, beneficiary,
-    // accHint; Zether: `auth` and `accHint` empty).
-    assert_eq!(hex::encode(selector("mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)")), "5dc7af97");
-    assert_eq!(hex::encode(selector("mtxConfidentialTransferSingle(bytes,bytes,bytes,bytes32,bytes)")), "ebc62fbb");
-    assert_eq!(hex::encode(selector("mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)")), "a85a2deb");
+    // The head of what each builder emits, against the compiled ABI: `ZetherTypedRowsTest.test_zetherEntrySelectorPins`
+    // pins the same four-byte words to `IZetherToken`'s and `IConfidentialToken`'s `.selector`.
+    let head = |d: Vec<u8>| hex::encode(&d[..4]);
+    let none = [0u8; 32];
+    let single = vec![0u8; 96 + 16 + 6 * 128];
+    let mut multi = vec![0u8; 176 + 7 * 128];
+    multi[143] = 1; // M = 1
+    let burn = vec![0u8; 96 + 128];
+    assert_eq!(head(transfer_single_call(&single, &[], &none)), "923dc4c9");
+    assert_eq!(head(transfer_multi_call("mtxConfidentialTransfer", &multi, &[], &none)), "42459440");
+    assert_eq!(head(transfer_multi_call("mtxConfidentialTransferCompact", &multi, &[], &none)), "3624c406");
+    assert_eq!(head(unshield_call(&burn, &[], &none, &none, 1)), "52da3629");
     assert_eq!(hex::encode(selector("mtxShield(bytes32,uint256)")), "e9385800");
 }
 

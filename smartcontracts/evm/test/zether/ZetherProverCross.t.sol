@@ -12,7 +12,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 ///         token's statement builder (`ZetherStatements`, the same `ZetherLib` code the token runs) returns the
 ///         prover's `statement` byte for byte, the prover's calldata settles, the stored form is the prover's and the
 ///         sender recovers `R` and `s` from storage alone. One cell per stored form, disclosure mode, auditor mode and
-///         binding, on BLS12-381 (the bn254 suite is in `legacy/ua6/`). Opt-in, it needs the binary:
+///         binding, on BLS12-381 (the bn254 suite is in `legacy/ua6/`). Skipped without the binary (CI's `zether-prover` job has it):
 ///         `cargo build --release --bin zether-cli` (clients/zether-prover), then
 ///         `ZETHER_CLI=<path>/zether-cli forge test --ffi --match-path test/zether/ZetherProverCross.t.sol`.
 abstract contract ZetherProverCrossSuite is ZetherFixture {
@@ -166,6 +166,39 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         vm.prank(relayer);
         bytes memory ret = t.mtxExecute(mt, abi.encodePacked(r, s, v));
         _settled(t, out, abi.decode(ret, (bytes32)), ZetherTypes.TransferMode.HASH);
+    }
+
+    /// @dev Typed-signing C3 review T3: the token's builder from the explicit struct against the prover, for every recipient count that
+    ///      changes the statement's shape, every auditor setting and both forms; bytes only (`_settled` knows three legs). M stops at 7,
+    ///      the most every cell can send: the prover refuses M = 8 in the dearest form (EIP-7825 cap, `check_gas`).
+    function test_statementDifferential() public {
+        ZetherLayer none = _token(0, 0, false, "d-none");
+        ZetherLayer opt = _token(0, 2, true, "d-opt");
+        ZetherLayer full = _token(0, 1, true, "d-full");
+        uint256[5] memory ms = [uint256(1), 2, 3, 4, 7];
+        string memory r = ',"recipients":[';
+        uint256 done;
+        for (uint256 k; k < ms.length; ++k) {
+            for (; done < ms[k]; ++done) {
+                User memory u = _user(0xE00 + done, address(uint160(0xF00 + done)));
+                r = string.concat(r, done == 0 ? "{" : ",{", _q("yTo", vm.toString(u.y)), ',"amount":1}');
+            }
+            string memory legs = string.concat(r, "]");
+            _statement(none, "none", false, legs);
+            _statement(opt, "optional", false, legs);
+            _statement(opt, "optional", true, legs);
+            _statement(full, "full", true, legs);
+        }
+    }
+
+    function _statement(ZetherLayer t, string memory am, bool aud, string memory legs) internal {
+        string[2] memory forms = ["bundle", "compact"];
+        for (uint256 f; f < 2; ++f) {
+            string memory out = _cli("proveTransferMulti", _req(t, "bundle", am, aud, string.concat(",", _q("mode", forms[f]), legs)));
+            assertEq(out.readString(".mode"), forms[f], "form");
+            assertEq(stm.transferStatement(address(t), _zMulti(out.readBytes(".payload"), carol.ua), _mode(forms[f]), 0),
+                out.readBytes(".statement"), string.concat("statement ", am, " ", forms[f]));
+        }
     }
 
     /// @dev The single format (BUNDLE/FULL): `transferStatementSingle`, the stored record.

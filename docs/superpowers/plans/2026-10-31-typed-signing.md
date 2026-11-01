@@ -987,10 +987,13 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-35 / -36
 - **Wallet builders stay (owner ruling 2026-11-01):** the flat `mtxPayUnderMandate(token, …)`, `mtxRevoke`, `mtxExecuteAsOwner` and
   `mtxExecuteAsOwnerRaw` stay beside the named entries: they sign the generic `MetaTransaction`, add no digest, and `mandate_pay_kat`
   and `mandate_revoke_kat` depend on them.
-- **C3 review fix round, still owed (2026-11-01, paused):** no critical, high or medium finding. L1: the prover's `ownerAuth` returns the old
-  packed blob (`clients/zether-prover/src/api.rs:666-674`, `schnorr.rs:170-175`). T1: typed reverts at `ZetherTyped.t.sol:468,473,508`. T2:
-  owner rows stop at `AccountNotRegistered`, add row tests. T3: a kept statement differential over M and auditor settings. T4: the vacuous
-  selector test `envelope_disclosure.rs:236-242`. T5: `transferMemo` NatSpec `17 + 40·M`.
+- **C3 review fix round, done (2026-11-01):** no critical, high or medium finding. L1: the prover's `ownerAuth` returns `sig`, the raw R‖z of
+  `UASig.signature` (was `auth`, the old packed blob). T1: typed `UAUnauthorized` reverts in `test_zetherSetRollOverModeTyped` and
+  `test_zetherOwnerRollOverTyped`. T2: `test_typedOpsVectors_ZetherRollOver` / `_ZetherSetRollOverMode`: the row's struct hash and calldata, then a
+  real owner signs the row's typehash in the token's domain and the entry passes. T3: `ZetherProverCross.test_statementDifferential`, M = 1, 2, 3, 4,
+  7 by four auditor settings by two forms; M stops at 7 because the prover refuses M = 8 in the dearest form (EIP-7825 cap); CI's `zether-prover`
+  job now runs the suite. T4: the selector test reads the heads of the builders' calldata, `test_zetherEntrySelectorPins` pins the same words to the
+  compiled ABI. T5: `transferMemo` is `17 + 40·M`. Mutations: both owner typehashes and a statement word order, all caught.
 - **`UARegistry` deploy gate (owner ruling 2026-11-01):** the registry gets a gate like the releases:
   `_requireReleaseGas("UARegistry")` in `DeployBase` and `require_release_gas("UARegistry")` in `e2e.py`, need 88.3 M
   (46,716 B × 1,530 + 2^24), test `test_registryDeployGate`, NET-EVM-06.

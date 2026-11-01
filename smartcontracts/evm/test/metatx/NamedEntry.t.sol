@@ -128,10 +128,14 @@ function checkRow(string memory j, string memory op, string memory kind) pure {
 
 /// The contract's own digest of the row's struct hash: an entry accepts this signature only if it hashes what clientkeys hashed.
 function onChain(string memory j, string memory op, address c) view returns (bytes memory) {
-    (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) = IERC5267(c).eip712Domain();
-    bytes32 sep = keccak256(abi.encode(SALTED_DOMAIN, keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt));
-    return ecdsa(rowKey(j), keccak256(abi.encodePacked(hex"1901", sep,
+    return ecdsa(rowKey(j), keccak256(abi.encodePacked(hex"1901", domainOf(c),
         VM.parseJsonBytes32(j, string.concat(".ops.", op, ".structHash")))));
+}
+
+/// The contract's own domain separator, from its ERC-5267 fields.
+function domainOf(address c) view returns (bytes32) {
+    (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) = IERC5267(c).eip712Domain();
+    return keccak256(abi.encode(SALTED_DOMAIN, keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt));
 }
 
 string constant UNWRAP_FIELDS = '{"name":"from","type":"address"},{"name":"wrapped","type":"uint256"},{"name":"recipient","type":"address"},{"name":"minOut","type":"uint256"}';

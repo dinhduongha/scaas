@@ -371,7 +371,7 @@ struct Source {
 
 /// The source of a recovery: `payload` (the transfer's calldata argument, any entry) or `entry` =
 /// `transferEntry(entryRef)` with `sendCounter`: the record `R` (single: `16 + 4P` bytes exactly, multi `16 + 5P·M`; every
-/// form keeps `R` in state, review C0-3) and, for a commit-reveal entry, `memo` = `transferMemo(entryRef)` (`49 + 40·M`).
+/// form keeps `R` in state, review C0-3) and, for a commit-reveal entry, `memo` = `transferMemo(entryRef)` (`17 + 40·M`).
 fn recovery_source<C: ZCurve>(v: &Value) -> R<Source> {
     let p = point_len::<C>();
     if v.get("payload").is_some_and(|x| !x.is_null()) {
@@ -663,13 +663,13 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
                 "pop": hx(&schnorr::zether_pop(&k, rng)),
             }))
         }
-        // A self account's owner op (roll-over, mode): `sig` for `mtxRollOverSigned` / `mtxSetRollOverMode`.
+        // A self account's owner op (roll-over, mode): `sig` is the raw R‖z of `UASig{signature: sig}` for `mtxRollOverSigned` / `mtxSetRollOverMode`.
         "ownerAuth" => {
             let k = key::<C>(v)?;
             let d = fixed::<32>(v, "digest")?;
             Ok(json!({
                 "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::purpose_tag("zether-owner"), &d)),
-                "auth": hx(&schnorr::owner_auth(&k, &d, rng)),
+                "sig": hx(&schnorr::owner_auth(&k, &d, rng)),
             }))
         }
         // The Zether UA signs every UA-ledger write (UA-6): `sig` = Schnorr by x over `ua_message(purpose, digest)`.

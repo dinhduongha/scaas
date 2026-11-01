@@ -5,7 +5,7 @@
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check
 #   clients/clientkeys:    npm ci --ignore-scripts; npm test
-#   clients/zether-prover: cargo test; ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke)
+#   clients/zether-prover: cargo test; ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke); zether-cli against the tokens (ZetherProverCross)
 #   clients/ua-rs:         cargo test; cargo clippy --all-targets -- -D warnings; the same with --features signers (groups.json signers + regeneration) and --features json (the JSON shim the wrappers call)
 #   clients/ua-py:         python3 -m unittest tests.test_vectors
 #   clients/ua-go:         go vet ./...; go test ./...
@@ -187,6 +187,15 @@ jobs:
         run: cargo test
       - name: wasm build and node smoke
         run: WASM_BINDGEN=wasm-bindgen ./wasm-smoke.sh
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.5
+      - name: prover against the tokens (statement differential)
+        run: |
+          cargo build --release --bin zether-cli
+          cd ../../smartcontracts/evm
+          ../../scripts/evm_libs.sh install
+          ZETHER_CLI=$PWD/../../clients/zether-prover/target/release/zether-cli forge test --ffi --match-path test/zether/ZetherProverCross.t.sol
 
   ua-rs:
     runs-on: ubuntu-latest

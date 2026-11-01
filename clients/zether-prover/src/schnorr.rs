@@ -167,11 +167,10 @@ pub fn verify_pop_v1<C: ZCurve>(y: &G<C>, chain_id: u64, chain_uid: &[u8; 32], r
     verify(y, &ua_message::<C>(&purpose_tag("pop"), &d), pop)
 }
 
-/// The `sig` of an owner op (`mtxRollOverSigned`, `mtxSetRollOverMode`):
-/// `abi.encode(bytes(""), Schnorr by x over ua_message(zether-owner, digest))` — the registry reads `Y` from its record.
+/// `UASig.signature` of an owner op (`mtxRollOverSigned`, `mtxSetRollOverMode`): the raw Schnorr by x over
+/// `ua_message(zether-owner, digest)`; `keyData` stays empty, the registry reads `Y` from its record.
 pub fn owner_auth<C: ZCurve, R: RngCore + CryptoRng>(key: &ZetherKey<C>, digest: &[u8; 32], rng: &mut R) -> Vec<u8> {
-    let sig = sign(key, &ua_message::<C>(&purpose_tag("zether-owner"), digest), rng);
-    abi::encode(&[Tok::Bytes(vec![]), Tok::Bytes(sig)])
+    sign(key, &ua_message::<C>(&purpose_tag("zether-owner"), digest), rng)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -412,11 +411,10 @@ mod tests {
         assert!(verify_pop(&k1.y, &pop1).is_err());
         // the owner op signs zether-owner: not a PoP, not the raw digest
         let d = keccak256(b"rollover");
-        let auth_blob = owner_auth(&k1, &d, &mut rng);
-        let sig = &auth_blob[auth_blob.len() - (point_len::<C>() + 32)..]; // the second `bytes`, a multiple of 32 long
-        assert_eq!(auth_blob.len(), 32 * 4 + sig.len(), "abi.encode(bytes(\"\"), sig)");
-        verify(&k1.y, &ua_message::<C>(&purpose_tag("zether-owner"), &d), sig).unwrap();
-        assert!(verify(&k1.y, &d, sig).is_err());
+        let sig = owner_auth(&k1, &d, &mut rng);
+        assert_eq!(sig.len(), point_len::<C>() + 32, "raw R || z, no abi wrapping");
+        verify(&k1.y, &ua_message::<C>(&purpose_tag("zether-owner"), &d), &sig).unwrap();
+        assert!(verify(&k1.y, &d, &sig).is_err());
 
         // Nonce reuse leaks x: (z1 - z2)/(e1 - e2) — the reason nonces are hedged.
         let k = Fr::<C>::from(12345u64);

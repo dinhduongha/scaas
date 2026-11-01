@@ -101,7 +101,11 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
         assert_eq!(pop["UA"], a["UA"]);
         assert_eq!(pop["popDigest"].as_str().unwrap().len(), 66);
         let own = call("ownerAuth", json!({"curve": curve, "key": k0, "digest": "0x".to_string() + &"77".repeat(32)}));
-        assert!(own["auth"].as_str().unwrap().len() > 2 + 2 * 128);
+        let own_raw = hex::decode(&own["sig"].as_str().unwrap()[2..]).unwrap();
+        assert_eq!(own_raw.len(), 128 + 32, "R || z, what `UASig.signature` carries");
+        let own_y = zether_prover::curve::decode_point::<zether_prover::curve::Bls12381>(&hex::decode(&a["Y"].as_str().unwrap()[2..]).unwrap()).unwrap();
+        let own_m: [u8; 32] = hex::decode(&own["uaMsg"].as_str().unwrap()[2..]).unwrap().try_into().unwrap();
+        zether_prover::schnorr::verify::<zether_prover::curve::Bls12381>(&own_y, &own_m, &own_raw).unwrap();
         let sig = call("uaSig", json!({"curve": curve, "key": k0, "purpose": "metatx", "digest": "0x".to_string() + &"78".repeat(32)}));
         let digest: [u8; 32] = [0x78; 32];
         let m = zether_prover::schnorr::ua_message::<zether_prover::curve::Bls12381>(&zether_prover::schnorr::purpose_tag("metatx"), &digest);

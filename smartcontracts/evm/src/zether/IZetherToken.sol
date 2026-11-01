@@ -177,7 +177,7 @@ interface IZetherToken is IConfidentialToken {
     ///         `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j ‖ D_aud_j` (review C0-1); the single format `B = Y_t ‖ C_out ‖ D_out ‖
     ///         C_aud` (`16 + 4P` bytes).
     function transferEntry(bytes32 entryRef) external view returns (bytes memory R);
-    /// @notice The sender memo of a commit-reveal entry (`49 + 40·M` bytes, CTR-ZTH-50), empty otherwise.
+    /// @notice The sender memo of a commit-reveal entry (`17 + 40·M` bytes, CTR-ZTH-50), empty otherwise.
     function transferMemo(bytes32 entryRef) external view returns (bytes memory);
     /// @notice Σ of every `acc` and `pending` exponent (shielded units); `totalSupply()` counts public units only.
     function totalShielded() external view returns (uint256);

@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {stdJson} from "forge-std/StdJson.sol";
 import {ZetherFixture} from "./helpers/ZetherFixture.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
-import {VM, E_TYPES, TYPED_OPS, n, a, h, eJson, domainJson, ecdsa, checkRow, onChain, rowEnvelope, rowEnvelope2, msgField, domainField}
+import {VM, E_TYPES, TYPED_OPS, n, a, h, eJson, domainJson, ecdsa, checkRow, onChain, domainOf, rowEnvelope, rowEnvelope2, msgField, domainField}
     from "../metatx/NamedEntry.t.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
@@ -465,12 +465,12 @@ contract ZetherTypedTest is ZetherNamedBase {
         assertEq(tok.accountState(alice.ua).modeNonce, 1);
 
         // the digest binds `modeNonce`: no replay
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, aId));
         tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, s);
 
-        // bound to this token's domain: another token's owner digest does not pass
+        // bound to this token's domain: another token's owner digest does not pass (`modeNonce` 0 there, so only the domain differs)
         ZetherLayer other = _newToken(true, "other");
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, aId));
         other.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, s);
     }
 
@@ -505,7 +505,7 @@ contract ZetherTypedTest is ZetherNamedBase {
         _fund(tok, alice, 20);
         seq = tok.accountState(alice.ua).pendingSeq;
         IUARegistry.UASig memory s = _ownerSig(alice, _rollOverDigest(aId, acc, seq, until));
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, aId));
         tok.mtxRollOverSigned(alice.ua, seq, until, s);
     }
 
@@ -1028,6 +1028,69 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
         _reach(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), j.readBytes32(_p(op, "ua")),
             uint8(j.readUint(_p(op, "rollOverMode"))), uint64(j.readUint(_p(op, "validUntilBlock"))), _owner(op), _uaSigOf(op)),
             IZetherToken.AccountNotRegistered.selector);
+    }
+
+    /// The owner's inner rows: the row's struct hash is its fields under its own typehash, its calldata is the direct entry's, and a
+    /// real owner signing that typehash in the token's domain passes `requireAuthorized` through the row's `abi`.
+    function _ownerRow(string memory op, bytes memory fields, bytes memory built) internal view returns (bytes32 th) {
+        checkRow(j, op, "zether");
+        th = j.readBytes32(string.concat(".ops.", op, ".typehash"));
+        assertEq(keccak256(bytes.concat(abi.encode(th), fields)), j.readBytes32(string.concat(".ops.", op, ".structHash")), "structHash");
+        assertEq(built, j.readBytes(domainField(op, "zether", "calldata")), "calldata");
+    }
+
+    function _rowSig(string memory op) internal view returns (IUARegistry.UASig memory s) {
+        s.signature = _sig(op);
+    }
+
+    function _ownerOf(bytes32 th, bytes memory fields) internal view returns (IUARegistry.UASig memory) {
+        return _ownerSig(alice, keccak256(abi.encodePacked(hex"1901", domainOf(address(tok)), keccak256(bytes.concat(abi.encode(th), fields)))));
+    }
+
+    function test_typedOpsVectors_ZetherRollOver() public {
+        string memory op = "ZetherRollOver";
+        string memory sigOf = j.readString(domainField(op, "zether", "abi"));
+        (uint64 rowSeq, uint64 until) = (uint64(j.readUint(_p(op, "expectedPendingSeq"))), uint64(j.readUint(_p(op, "validUntilBlock"))));
+        bytes32 rowUa = j.readBytes32(_p(op, "ua"));
+        bytes32 th = _ownerRow(op, abi.encode(rowUa, uint64(j.readUint(_p(op, "accSeq"))), rowSeq, until),
+            abi.encodeWithSignature(sigOf, rowUa, rowSeq, until, _rowSig(op)));
+
+        _rollOverThrough(sigOf, th, until);
+    }
+
+    function _rollOverThrough(string memory sigOf, bytes32 th, uint64 until) internal {
+        _fund(tok, alice, 20);
+        bytes32 ua = ZetherTypes.UA.unwrap(alice.ua);
+        IZetherToken.AccountState memory st = tok.accountState(alice.ua);
+        IUARegistry.UASig memory s = _ownerOf(th, abi.encode(ua, st.accSeq, st.pendingSeq, until));
+        (bool ok, bytes memory ret) = address(tok).call(abi.encodeWithSignature(sigOf, ua, st.pendingSeq, until, s));
+        assertTrue(ok, string(ret));
+        assertEq(tok.accountState(alice.ua).accSeq, st.accSeq + 1);
+    }
+
+    function test_typedOpsVectors_ZetherSetRollOverMode() public {
+        string memory op = "ZetherSetRollOverMode";
+        string memory sigOf = j.readString(domainField(op, "zether", "abi"));
+        (uint8 mode, uint64 until) = (uint8(j.readUint(_p(op, "mode"))), uint64(j.readUint(_p(op, "validUntilBlock"))));
+        bytes32 rowUa = j.readBytes32(_p(op, "ua"));
+        bytes32 th = _ownerRow(op, abi.encode(rowUa, mode, uint64(j.readUint(_p(op, "modeNonce"))), until),
+            abi.encodeWithSignature(sigOf, rowUa, mode, until, _rowSig(op)));
+
+        bytes32 ua = ZetherTypes.UA.unwrap(alice.ua);
+        (bool ok, bytes memory ret) = address(tok).call(abi.encodeWithSignature(sigOf, ua, mode, until,
+            _ownerOf(th, abi.encode(ua, mode, uint64(0), until))));
+        assertTrue(ok, string(ret));
+        assertEq(uint8(tok.accountState(alice.ua).mode), mode);
+        assertEq(tok.accountState(alice.ua).modeNonce, 1);
+    }
+
+    /// The other half of `entry_point_selectors_match_the_spec` (zether-prover): the head of each builder's calldata is this ABI's.
+    function test_zetherEntrySelectorPins() public pure {
+        assertEq(IZetherToken.mtxConfidentialTransferSingle.selector, bytes4(0x923dc4c9));
+        assertEq(IZetherToken.mtxConfidentialTransfer.selector, bytes4(0x42459440));
+        assertEq(IZetherToken.mtxConfidentialTransferCompact.selector, bytes4(0x3624c406));
+        assertEq(IZetherToken.mtxUnshield.selector, bytes4(0x52da3629));
+        assertEq(IConfidentialToken.mtxShield.selector, bytes4(0xe9385800));
     }
 
     function test_typedOpsVectors_RollOver() public {
