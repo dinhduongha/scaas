@@ -1,0 +1,232 @@
+# B4 mutants, each on lib.rs at the B4 code, run, restored, compared with cmp; filtered to the failing tests, lines capped at 200 characters.
+# Asked for: "list" (relayer list membership), "chain-*" (chain parts verified whatever relayer says, one per place). The others are extra.
+
+# mutant list
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.85s
+test test_ua8::ua8_relayer_evm_contract_slot ... FAILED
+test test_ua8::ua8_relayer_msig_mixed_members ... FAILED
+test test_ua8::ua8_relayer_unlisted_refused ... FAILED
+thread 'test_ua8::ua8_relayer_evm_contract_slot' (294370) panicked at contracts/ua-registry/src/test.rs:68:18:
+thread 'test_ua8::ua8_relayer_msig_mixed_members' (294382) panicked at contracts/ua-registry/src/test.rs:68:18:
+thread 'test_ua8::ua8_relayer_unlisted_refused' (294389) panicked at contracts/ua-registry/src/test.rs:68:18:
+test result: FAILED. 123 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.15s
+rc=101
+cmp mutant list: identical
+
+# mutant chain-register
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.93s
+test test_ua8::ua8_negatives_from_portable_json ... FAILED
+test test_ua8::ua8_relayer_mode_still_verifies_chain_parts ... FAILED
+thread 'test_ua8::ua8_negatives_from_portable_json' (295759) panicked at contracts/ua-registry/src/test_ua8.rs:224:18:
+thread 'test_ua8::ua8_relayer_mode_still_verifies_chain_parts' (295862) panicked at contracts/ua-registry/src/test_ua8.rs:224:18:
+test result: FAILED. 124 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.17s
+rc=101
+cmp mutant chain-register: identical
+
+# mutant chain-portable
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.85s
+test test_ua8::ua8_relayer_mode_still_verifies_chain_parts ... FAILED
+test test_ua8::ua8_set_pqz_key_negatives ... FAILED
+thread 'test_ua8::ua8_relayer_mode_still_verifies_chain_parts' (297136) panicked at contracts/ua-registry/src/test_ua8.rs:1319:5:
+  left: Ok(Ok(()))
+ right: Err(Ok(Error(Context, InvalidAction)))
+thread 'test_ua8::ua8_set_pqz_key_negatives' (297180) panicked at contracts/ua-registry/src/test_ua8.rs:910:13:
+  left: Ok(Ok(()))
+ right: Err(Ok(Error(Context, InvalidAction)))
+test result: FAILED. 124 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.93s
+rc=101
+cmp mutant chain-portable: identical
+
+# mutant chain-slot
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.79s
+test test_ua8::ua8_negatives_from_portable_json ... FAILED
+test test_ua8::ua8_relayer_msig_mixed_members ... FAILED
+thread 'test_ua8::ua8_negatives_from_portable_json' (298401) panicked at contracts/ua-registry/src/test_ua8.rs:224:18:
+thread 'test_ua8::ua8_relayer_msig_mixed_members' (298501) panicked at contracts/ua-registry/src/test_ua8.rs:1355:5:
+  left: Ok(Ok(BytesN<32>(3, 42, 30, 228, 245, 58, 186, 183, 169, 21, 105, 56, 154, 255, 215, 84, 166, 69, 138, 68, 61, 163, 127, 25, 245, 61, 92, 179, 145, 244, 116, 89)))
+ right: Err(Ok(Error(Context, InvalidAction)))
+test result: FAILED. 124 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.87s
+rc=101
+cmp mutant chain-slot: identical
+
+# mutant chain-eoa-slot
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.01s
+test test_ua8::ua8_relayer_mode_still_verifies_chain_parts ... FAILED
+test test_ua8::ua8_negatives_from_portable_json ... FAILED
+thread 'test_ua8::ua8_relayer_mode_still_verifies_chain_parts' (299801) panicked at contracts/ua-registry/src/test.rs:66:61:
+thread 'test_ua8::ua8_negatives_from_portable_json' (299717) panicked at contracts/ua-registry/src/test_ua8.rs:224:18:
+test result: FAILED. 124 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.94s
+rc=101
+cmp mutant chain-eoa-slot: identical
+
+# mutant auth
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.74s
+test test_ua8::ua8_register_relayer_slots_largest_fit ... FAILED
+test test_ua8::ua8_relayer_checked_every_offchain_kind ... FAILED
+test test_ua8::ua8_relayer_must_authorise ... FAILED
+thread 'test_ua8::ua8_register_relayer_slots_largest_fit' (301186) panicked at contracts/ua-registry/src/test_ua8.rs:1842:5:
+  left: 0
+ right: 1
+thread 'test_ua8::ua8_relayer_checked_every_offchain_kind' (301194) panicked at contracts/ua-registry/src/test_ua8.rs:1246:51:
+thread 'test_ua8::ua8_relayer_must_authorise' (301216) panicked at contracts/ua-registry/src/test_ua8.rs:1213:5:
+  left: Ok(Ok(BytesN<32>(128, 111, 93, 142, 200, 82, 104, 2, 245, 214, 170, 26, 118, 59, 139, 220, 212, 167, 15, 43, 99, 66, 117, 6, 82, 37, 85, 233, 184, 15, 153, 54)))
+ right: Err(Ok(Error(Context, InvalidAction)))
+test result: FAILED. 123 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.80s
+rc=101
+cmp mutant auth: identical
+
+# mutant signable
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test test_ua::ua8_relayer_checked_ua_authorises_nothing ... FAILED
+thread 'test_ua::ua8_relayer_checked_ua_authorises_nothing' (302163) panicked at contracts/token/src/test_ua.rs:209:5:
+test result: FAILED. 31 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s
+test test_ua8::ua8_relayer_checked_every_offchain_kind ... FAILED
+test test_ua8::ua8_relayer_checked_ua_authorises_nothing ... FAILED
+test test_ua8::ua8_relayer_group_kinds_typed ... FAILED
+test test_ua8::ua8_relayer_msig_signable_counts_chain_members ... FAILED
+thread 'test_ua8::ua8_relayer_checked_every_offchain_kind' (302317) panicked at contracts/ua-registry/src/test_ua8.rs:1261:9:
+  left: ContractEvent { ext: V0, contract_id: Some(ContractId(Hash(0000000000000000000000000000000000000000000000000000000000000002))), type_: Contract, body: V0(ContractEventV0 { topics: VecM([Symbol
+ right: ContractEvent { ext: V0, contract_id: Some(ContractId(Hash(0000000000000000000000000000000000000000000000000000000000000002))), type_: Contract, body: V0(ContractEventV0 { topics: VecM([Symbol
+thread 'test_ua8::ua8_relayer_checked_ua_authorises_nothing' (302332) panicked at contracts/ua-registry/src/test_ua8.rs:1573:13:
+  left: KindDisabled
+ right: Unauthorized
+thread 'test_ua8::ua8_relayer_group_kinds_typed' (302337) panicked at contracts/ua-registry/src/test_ua8.rs:1667:9:
+  left: (Bytes(3, 1, 58, 158, 160, 123, 28, 88, 102, 189, 229, 119, 151, 59, 237, 228, 126, 93, 146, 188, 138, 84, 165, 142, 133, 32, 166, 245, 95, 229, 184, 248, 152, 0, 3, 2, 189, 51, 144, 160, 85, 
+ right: (Bytes(3, 1, 58, 158, 160, 123, 28, 88, 102, 189, 229, 119, 151, 59, 237, 228, 126, 93, 146, 188, 138, 84, 165, 142, 133, 32, 166, 245, 95, 229, 184, 248, 152, 0, 3, 2, 189, 51, 144, 160, 85, 
+thread 'test_ua8::ua8_relayer_msig_signable_counts_chain_members' (302348) panicked at contracts/ua-registry/src/test_ua8.rs:1400:5:
+  left: KindDisabled
+ right: Unauthorized
+test result: FAILED. 122 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.71s
+rc=101
+cmp mutant signable: identical
+
+# mutant member-weight
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.73s
+test test_ua8::ua8_relayer_classical_msig_row ... FAILED
+test test_ua8::ua8_relayer_msig_mixed_members ... FAILED
+thread 'test_ua8::ua8_relayer_classical_msig_row' (303724) panicked at contracts/ua-registry/src/test_ua8.rs:1610:5:
+  left: (Chain, true, 0)
+ right: (Chain, false, 0)
+thread 'test_ua8::ua8_relayer_msig_mixed_members' (303736) panicked at contracts/ua-registry/src/test_ua8.rs:1359:5:
+  left: (Relayer(Contract(CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM)), true)
+ right: (Relayer(Contract(CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM)), false)
+test result: FAILED. 124 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.59s
+rc=101
+cmp mutant member-weight: identical
+
+# mutant member-kind
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.71s
+test test_ua8::ua8_relayer_msig_member_rules ... FAILED
+thread 'test_ua8::ua8_relayer_msig_member_rules' (304922) panicked at contracts/ua-registry/src/test.rs:68:18:
+test result: FAILED. 125 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.15s
+rc=101
+cmp mutant member-kind: identical
+
+# mutant writer
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s
+test test_ua8::ua8_relayer_list_immutable ... FAILED
+thread 'test_ua8::ua8_relayer_list_immutable' (306157) panicked at contracts/ua-registry/src/test_ua8.rs:1592:5:
+  left: ["__constructor", "add_relayer", "checked_of", "kem_key_at", "kem_key_of", "key_owner", "kind_name", "pop_of", "pqz_key_of", "pqz_key_sig_of", "pqz_pop_of", "receivable", "record_of", "registe
+ right: ["__constructor", "checked_of", "kem_key_at", "kem_key_of", "key_owner", "kind_name", "pop_of", "pqz_key_of", "pqz_key_sig_of", "pqz_pop_of", "receivable", "record_of", "register", "register_f
+test result: FAILED. 125 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.15s
+rc=101
+cmp mutant writer: identical
+
+# mutant one-attest
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.73s
+test test_ua8::ua8_register_relayer_slots_largest_fit ... FAILED
+test test_ua8::ua8_register_relayer_slots_over_limit - should panic ... FAILED
+test test_ua8::ua8_set_pqz_key_relayer_slots_largest_fit ... FAILED
+test test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2048 - should panic ... FAILED
+test test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2816 - should panic ... FAILED
+thread 'test_ua8::ua8_register_relayer_slots_largest_fit' (307346) panicked at contracts/ua-registry/src/test_ua8.rs:1841:43:
+thread 'test_ua8::ua8_register_relayer_slots_over_limit' (307347) panicked at contracts/ua-registry/src/test_ua8.rs:1850:43:
+thread 'test_ua8::ua8_set_pqz_key_relayer_slots_largest_fit' (307408) panicked at contracts/ua-registry/src/test_ua8.rs:1807:43:
+thread 'test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2048' (307441) panicked at contracts/ua-registry/src/test_ua8.rs:1807:43:
+thread 'test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2816' (307473) panicked at contracts/ua-registry/src/test_ua8.rs:1807:43:
+test result: FAILED. 121 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.69s
+rc=101
+cmp mutant one-attest: identical
+
+# mutant fill
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.74s
+test test_ua8::ua8_relayer_register_parts_take_pop_checked ... FAILED
+thread 'test_ua8::ua8_relayer_register_parts_take_pop_checked' (308711) panicked at contracts/ua-registry/src/test_ua8.rs:1531:5:
+  left: Some((0, KemKey { scheme: 1, mlkem_ek: Bytes(186, 19, 52, 132, 218, 154, 185, 252, 26, 160, 179, 62, 62, 72, 52, 12, 252, 111, 218, 114, 194, 199, 44, 189, 236, 134, 10, 24, 22, 142, 213, 204,
+ right: Some((0, KemKey { scheme: 1, mlkem_ek: Bytes(186, 19, 52, 132, 218, 154, 185, 252, 26, 160, 179, 62, 62, 72, 52, 12, 252, 111, 218, 114, 194, 199, 44, 189, 236, 134, 10, 24, 22, 142, 213, 204,
+test result: FAILED. 125 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.78s
+rc=101
+cmp mutant fill: identical
+
+# mutant attrs-chain
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+test test_ua8::ua8_relayer_fndsa512_kem_and_pqz ... FAILED
+thread 'test_ua8::ua8_relayer_fndsa512_kem_and_pqz' (310175) panicked at contracts/ua-registry/src/test_ua8.rs:1471:5:
+  left: Some((KemKey { scheme: 1, mlkem_ek: Bytes(186, 19, 52, 132, 218, 154, 185, 252, 26, 160, 179, 62, 62, 72, 52, 12, 252, 111, 218, 114, 194, 199, 44, 189, 236, 134, 10, 24, 22, 142, 213, 204, 13
+ right: Some((KemKey { scheme: 1, mlkem_ek: Bytes(186, 19, 52, 132, 218, 154, 185, 252, 26, 160, 179, 62, 62, 72, 52, 12, 252, 111, 218, 114, 194, 199, 44, 189, 236, 134, 10, 24, 22, 142, 213, 204, 13
+test result: FAILED. 125 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.85s
+rc=101
+cmp mutant attrs-chain: identical
+
+# mutant portable-gate
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.77s
+test test_ua8::ua8_relayer_msig_signable_counts_chain_members ... FAILED
+thread 'test_ua8::ua8_relayer_msig_signable_counts_chain_members' (311566) panicked at contracts/ua-registry/src/test_ua8.rs:1400:5:
+  left: NotVerifiable
+ right: Unauthorized
+test result: FAILED. 125 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.86s
+rc=101
+cmp mutant portable-gate: identical
+
+# mutant guards
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s
+test test_ua8::ua8_relayer_group_typed_rules ... FAILED
+thread 'test_ua8::ua8_relayer_group_typed_rules' (312705) panicked at contracts/ua-registry/src/test.rs:68:18:
+test result: FAILED. 125 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.89s
+rc=101
+cmp mutant guards: identical
+
+# mutant guards2
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.75s
+test test_ua8::ua8_relayer_group_typed_rules ... FAILED
+thread 'test_ua8::ua8_relayer_group_typed_rules' (313838) panicked at contracts/ua-registry/src/test.rs:68:18:
+test result: FAILED. 125 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.96s
+rc=101
+cmp mutant guards2: identical
+
+# mutant kem-part
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.69s
+test test_ua8::ua8_relayer_bad_record_takes_slot_marked ... FAILED
+test test_ua8::ua8_relayer_fndsa512_kem_and_pqz ... FAILED
+test test_ua8::ua8_relayer_must_authorise ... FAILED
+test test_ua8::ua8_relayer_unlisted_refused ... FAILED
+test test_ua8::ua8_set_pqz_key_negatives ... FAILED
+thread 'test_ua8::ua8_relayer_bad_record_takes_slot_marked' (315191) panicked at contracts/ua-registry/src/test_ua8.rs:1552:5:
+  left: Some((KemKey { scheme: 1, mlkem_ek: Bytes(57, 236, 161, 255, 193, 12, 109, 243, 169, 64, 92, 60, 92, 100, 80, 113, 20, 63, 121, 72, 3, 24, 26, 90, 236, 148, 96, 73, 155, 41, 199, 188, 43, 170,
+ right: Some((KemKey { scheme: 1, mlkem_ek: Bytes(57, 236, 161, 255, 193, 12, 109, 243, 169, 64, 92, 60, 92, 100, 80, 113, 20, 63, 121, 72, 3, 24, 26, 90, 236, 148, 96, 73, 155, 41, 199, 188, 43, 170,
+thread 'test_ua8::ua8_relayer_fndsa512_kem_and_pqz' (315197) panicked at contracts/ua-registry/src/test.rs:68:18:
+thread 'test_ua8::ua8_relayer_must_authorise' (315220) panicked at contracts/ua-registry/src/test_ua8.rs:1224:5:
+  left: Ok(Ok(()))
+ right: Err(Ok(Error(Context, InvalidAction)))
+thread 'test_ua8::ua8_relayer_unlisted_refused' (315223) panicked at contracts/ua-registry/src/test.rs:68:18:
+thread 'test_ua8::ua8_set_pqz_key_negatives' (315234) panicked at contracts/ua-registry/src/test.rs:68:18:
+test result: FAILED. 121 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.60s
+rc=101
+cmp mutant kem-part: identical
+

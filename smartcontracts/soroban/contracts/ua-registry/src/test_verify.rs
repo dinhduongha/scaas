@@ -570,8 +570,9 @@ fn webauthn_blob_canonical_only() {
     }
 }
 
-/// `ua_message` for any kind: the registry knows the S3 TAGs only, so a derived kind (`fndsa512`) takes its TAG from
-/// `kinds.json` and the CTR-UA-12 formula is applied here.
+/// `ua_message` for any kind, test-only: a derived kind (`fndsa512`) takes its TAG from `kinds.json` and the CTR-UA-12
+/// formula is applied here. The registry never builds that kind's message: its id takes the TAG, a relayer attests its
+/// signature off chain.
 fn msg_of(env: &Env, kind: u32, purpose: [u8; 32], d: &BytesN<32>) -> StdVec<u8> {
     if S3.contains(&kind) {
         return digest::ua_message(env, kind, &BytesN::from_array(env, &purpose), d).to_array().to_vec();

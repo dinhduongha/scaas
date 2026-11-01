@@ -1,12 +1,13 @@
 //! `UaRegistry` (spec §3, §4): the UA records of a Soroban network and the per-kind verifiers. `ua_message` is always
 //! computed here, never taken from an argument, and the SDK's `hazmat` feature is never enabled (spec §2): the
 //! host-hash-only `Hash<32>` type carries it into the verifiers. No admin, no upgrade, the relayer list fixed at
-//! construction (S16, C13).
+//! construction (S16, C13). A part the chain cannot verify is stored only on a listed relayer's auth and marked with its
+//! id (P11, U8S-D8): such an attestation is never a signature, so it never makes a key able to authorise.
 #![no_std]
 use scaas_ua_common::{
     h32, kem_pk, kem_pk_record_hash, kem_record_digest, kem_record_hash, portable_record_hash, pqz_key_hash,
-    pqz_key_record_digest, registration_digest, Checked, KemKey, MemberSig, MsigStructure, Registration, UaAttrs, UaSig,
-    WebAuthnKey, PURPOSE_KEM, PURPOSE_MEMBER, PURPOSE_POP_V2, PURPOSE_PQZ_KEY,
+    pqz_key_record_digest, registration_digest, Checked, FrostKey, KemKey, MemberSig, MsigStructure, MuSig2Key, Registration,
+    UaAttrs, UaSig, WebAuthnKey, PURPOSE_KEM, PURPOSE_MEMBER, PURPOSE_POP_V2, PURPOSE_PQZ_KEY,
 };
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contracttype, crypto::Hash, panic_with_error, xdr::FromXdr,
@@ -137,6 +138,12 @@ const GROUP_ED25519: [u8; 32] = h32("68b4870b8635a91eb90f5a22ac6c350df50d0ca1f9b
 const GROUP_SECP256K1: [u8; 32] = h32("c9cbec9e3b9b4bf3014d4b68eb88e8d49c151a734c4c73503f7cadf2c8ff2b6e");
 const GROUP_MLDSA44: [u8; 32] = h32("97a431380a20af85ba723ef86a2744e0b7f438ae5ef677d03c595ab697478065");
 const GROUP_MLDSA65: [u8; 32] = h32("ce664790de9584777bd32d6bbce84b26b1a479d86be05f03ba5120eae90d40b2");
+const GROUP_BN254_G1: [u8; 32] = h32("8cf87f06e45b58fb9da912f12ece897bac88c2018da2c7b86056b954f5a1727b");
+const GROUP_BN254_G2: [u8; 32] = h32("68a782d8ba5132c00f8b1f53883b465e3b7b14fcca363ab84ff92754c752aa8d");
+const GROUP_BLS12381_G1: [u8; 32] = h32("b99dd1845a1f879279bd9b2cc7716250b1d33bb76a8c4fc8d449681842ed3bf2");
+const GROUP_BLS12381_G2: [u8; 32] = h32("3d6646a6b9ee5a5cd8d394330578fb341709fd60ed2650b50f03e40a49b4a46a");
+const GROUP_FNDSA512: [u8; 32] = h32("98ab6b49ea930e51296f1a3c6c172339d24402fcdb5b58ff37ddc0e28f450f7a");
+const GROUP_SLHDSA128S: [u8; 32] = h32("863cfc243666ba3fca5731a5e7092d62b8cc0f35807b62e9115a270d99fcb2de");
 /// The field primes, big-endian: key coordinates must be canonical (`< p`).
 const P256_P: [u8; 32] = h32("ffffffff00000001000000000000000000000000ffffffffffffffffffffffff");
 const SECP256K1_P: [u8; 32] = h32("fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f");
@@ -200,8 +207,8 @@ fn member(d: &Bytes, i: u32) -> (u32, [u8; 32], u32) {
 }
 
 /// The member kinds the `msig` layout admits (EVM `UAKinds.isMember` without `hedera-native`, plus the Soroban natives):
-/// any other kind is `KeyData`; a kind of this set that Soroban does not enable is `MemberUnknown` (step 6), and so is
-/// `soroban-contract` (S10, owner ruling 2026-10-31: a `C…` member would be authorised by Soroban invoker auth).
+/// any other kind is `KeyData`; `soroban-contract` is `MemberUnknown` (step 6; S10, owner ruling 2026-10-31: a `C…` member
+/// would be authorised by Soroban invoker auth).
 fn layout_member_ok(kind: u32, id: &[u8; 32]) -> bool {
     match kind {
         EVM_EOA | EVM_CONTRACT => in_native_space(id),
@@ -245,8 +252,32 @@ fn pq_eligible(d: &Bytes) -> bool {
     classical < threshold
 }
 
+/// U8S-D8: the kinds registered through the relayer-checked mode, never signers (S3, P11.5).
+fn relayer_checked(kind: u32) -> bool {
+    matches!(kind, BIP340..=BLS_BN254_MINSIG | MUSIG2_SECP256K1..=FROST_BN254 | FNDSA512 | SLHDSA128S | ZETHER_BLS12381)
+}
+
+/// `aggKey ‖ u16 n ‖ n × key`, `n` in 2..=16 (EVM `_musig2`; its point checks and member order are the relayer's, U8S-D8).
+fn musig2_layout_ok(d: &Bytes, size: u32) -> bool {
+    if d.len() < size + 2 {
+        return false;
+    }
+    let n = u16_at(d, size);
+    (2..=16).contains(&n) && d.len() == size + 2 + n * size
+}
+
+/// `groupKey ‖ u16 t ‖ u16 n ‖ n × (t commitments ‖ r ‖ z)`, `2 <= t <= n <= 16` (EVM `_frost`, its layout only).
+fn frost_layout_ok(d: &Bytes, size: u32) -> bool {
+    if d.len() < size + 4 {
+        return false;
+    }
+    let (t, n) = (u16_at(d, size), u16_at(d, size + 2));
+    2 <= t && t <= n && n <= 16 && d.len() == size + 4 + n * ((t + 1) * size + 32)
+}
+
 /// Step 2: key data canonical (`KeyData`). P-256 / secp256k1 on-curve and the ed25519 "not a point" case are left to
-/// the host's verify of the `pop` (a host error, plan finding F1).
+/// the host's verify of the `pop` (a host error, plan finding F1). A relayer-checked kind: length and layout only, its
+/// canonical form is the relayer's check (U8S-D8, `scaas_ua::keydata`).
 fn check_key_data(env: &Env, kind: u32, d: &Bytes) {
     let coords = |p: &[u8; 32]| word(d, 0) < *p && word(d, 32) < *p;
     let ok = match kind {
@@ -256,6 +287,15 @@ fn check_key_data(env: &Env, kind: u32, d: &Bytes) {
         ED25519 => d.len() == 32 && verify::ed25519_key_ok(&word(d, 0)),
         MLDSA44 => d.len() == 1312,
         MLDSA65 => d.len() == 1952,
+        BIP340 | SLHDSA128S => d.len() == 32,
+        SCHNORR_BN254 => d.len() == 64,
+        SCHNORR_BLS12381 | BLS_BN254_MINSIG | ZETHER_BLS12381 => d.len() == 128,
+        BLS12381_MINSIG => d.len() == 256,
+        FNDSA512 => d.len() == 897,
+        MUSIG2_SECP256K1 => musig2_layout_ok(d, 33),
+        MUSIG2_BN254 => musig2_layout_ok(d, 64),
+        FROST_SECP256K1 => frost_layout_ok(d, 33),
+        FROST_BN254 => frost_layout_ok(d, 64),
         _ => msig_layout_ok(d),
     };
     if !ok {
@@ -263,14 +303,24 @@ fn check_key_data(env: &Env, kind: u32, d: &Bytes) {
     }
 }
 
-/// CTR-UA-11: `keccak256(GROUP(g) ‖ canonical pubkey)` (x alone for the ECDSA kinds), `None` for `msig`.
+/// CTR-UA-11: `keccak256(GROUP(g) ‖ canonical pubkey)` (x alone for the ECDSA kinds and a compressed secp256k1 group key,
+/// the group key alone of a MuSig2 / FROST record), `None` for `msig`.
 pub(crate) fn key_hash(env: &Env, kind: u32, d: &Bytes) -> Option<BytesN<32>> {
     let (group, key) = match kind {
         WEBAUTHN_P256 | P256 => (GROUP_P256, d.slice(0..32)),
         SECP256K1 => (GROUP_SECP256K1, d.slice(0..32)),
+        BIP340 => (GROUP_SECP256K1, d.clone()),
+        MUSIG2_SECP256K1 | FROST_SECP256K1 => (GROUP_SECP256K1, d.slice(1..33)),
         ED25519 => (GROUP_ED25519, d.clone()),
+        SCHNORR_BN254 => (GROUP_BN254_G1, d.clone()),
+        MUSIG2_BN254 | FROST_BN254 => (GROUP_BN254_G1, d.slice(0..64)),
+        BLS_BN254_MINSIG => (GROUP_BN254_G2, d.clone()),
+        SCHNORR_BLS12381 | ZETHER_BLS12381 => (GROUP_BLS12381_G1, d.clone()),
+        BLS12381_MINSIG => (GROUP_BLS12381_G2, d.clone()),
         MLDSA44 => (GROUP_MLDSA44, d.clone()),
         MLDSA65 => (GROUP_MLDSA65, d.clone()),
+        FNDSA512 => (GROUP_FNDSA512, d.clone()),
+        SLHDSA128S => (GROUP_SLHDSA128S, d.clone()),
         _ => return None,
     };
     let mut b = Bytes::from_array(env, &group);
@@ -278,11 +328,11 @@ pub(crate) fn key_hash(env: &Env, kind: u32, d: &Bytes) -> Option<BytesN<32>> {
     Some(env.crypto().keccak256(&b).into())
 }
 
-/// Step 6 (S10): each member is native (`evm-eoa`, `evm-contract`, `G…`) or a registered signable single-key UA of its
-/// stated kind, else `MemberUnknown`. A `soroban-contract` (`C…`) member is `MemberUnknown` (owner ruling 2026-10-31,
-/// final review: a contract that calls the registry, such as the token, would meet its own slot by invoker auth).
-/// Returns `signable`: the weight Soroban can verify for signing (derived members and `G…`; the EVM natives weigh 0)
-/// reaches the threshold.
+/// Step 6 (S10): each member is native (`evm-eoa`, `evm-contract`, `G…`) or a registered single-key UA of its stated
+/// kind, else `MemberUnknown`. A `soroban-contract` (`C…`) member is `MemberUnknown` (owner ruling 2026-10-31, final
+/// review: a contract that calls the registry, such as the token, would meet its own slot by invoker auth). Returns
+/// `signable`: the weight Soroban can verify for signing (`Signer` members and `G…`; the EVM natives and relayer-checked
+/// members weigh 0, U8S-D8) reaches the threshold.
 fn check_members(env: &Env, d: &Bytes) -> bool {
     let (threshold, count) = (u16_at(d, 0), u16_at(d, 2));
     let mut weight = 0;
@@ -292,6 +342,11 @@ fn check_members(env: &Env, d: &Bytes) -> bool {
             EVM_EOA | EVM_CONTRACT => {}
             STELLAR_ACCOUNT => weight += w,
             SOROBAN_CONTRACT => fail(env, Error::MemberUnknown),
+            k if relayer_checked(k) => {
+                if !get::<Registration>(env, &Key::Ua(BytesN::from_array(env, &id))).is_some_and(|r| r.kind == k) {
+                    fail(env, Error::MemberUnknown);
+                }
+            }
             _ => match get::<(u32, Bytes)>(env, &Key::Signer(BytesN::from_array(env, &id))) {
                 Some((k, _)) if k == kind => weight += w,
                 _ => fail(env, Error::MemberUnknown),
@@ -309,21 +364,37 @@ fn stellar_account(env: &Env, id: &[u8; 32]) -> Address {
     Address::from_xdr(env, &b).unwrap_or_else(|_| fail(env, Error::Pop))
 }
 
+/// P11 rules 2, 3 (U8S-D8): a part the chain cannot verify, on the authority of `relayer`: `NotVerifiable` without one,
+/// `RelayerNotListed` outside the constructor's list, its `require_auth` over this very call, and the mark stored with the
+/// part. A part the chain verifies never comes here: it stays open to anyone, and `relayer` is not asked.
+fn attest(env: &Env, relayer: &Option<Address>) -> Checked {
+    let Some(r) = relayer else { fail(env, Error::NotVerifiable) };
+    let list: Vec<Address> = env.storage().instance().get(&Key::Relayers).unwrap();
+    if !list.contains(r) {
+        fail(env, Error::RelayerNotListed);
+    }
+    r.require_auth();
+    Checked::Relayer(r.clone())
+}
+
 /// An `msig` signature over `(ua, purpose, digest)`: `sigs` with strictly increasing indexes below `count`, members under
 /// purpose `member` over `member_digest(ua, ua_message(MSIG, purpose, digest))` until the threshold (a slot after it
 /// fails). A registered member's slot carries an empty `keyData` (its key read
 /// from `Signer(id)` alone; non-empty ⇒ `short`); a `G…` member's slot is empty and checked by the host over
 /// `(ua, purpose, digest)`; an `evm-eoa` member signs the record's typed digest `portable` itself (ECDSA, a portable
-/// record only; typed-signing TS-D4, `eth_signTypedData_v4`, no `personal_sign`); an `evm-contract` slot, and an
-/// `evm-eoa` slot outside `portable`, is `NotVerifiable` (SOR-D6). A slot past the threshold, a refused slot signature or
-/// an unmet threshold is `short`. `portable` is a stored signature, so it is minimal too (owner 2026-10-31, U8S-D1, every
-/// slot's weight counts, native ones included): with T the slots' total weight and N the threshold, T - min(weight) < N,
-/// else `short`.
-fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, digest: &BytesN<32>, sigs: &Vec<MemberSig>, portable: Option<&Hash<32>>, short: Error) {
+/// record only; typed-signing TS-D4, `eth_signTypedData_v4`, no `personal_sign`); an `evm-eoa` slot outside `portable` is
+/// `NotVerifiable` (SOR-D6). In `portable` an `evm-contract` slot or a relayer-checked member's slot is a part the chain
+/// cannot verify (U8S-D8): `attest` once for all of them, its bytes stored unread. Outside `portable` nothing attests: an
+/// `evm-contract` slot is `NotVerifiable`, a relayer-checked member has no `Signer`, so `short`. A slot past the threshold, a
+/// refused slot signature or an unmet threshold is `short`. `portable` is a stored signature, so it is minimal too (owner
+/// 2026-10-31, U8S-D1, every slot's weight counts, native ones included): with T the slots' total weight and N the
+/// threshold, T - min(weight) < N, else `short`. Returns who checked the signature.
+#[allow(clippy::too_many_arguments)]
+fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, digest: &BytesN<32>, sigs: &Vec<MemberSig>, portable: Option<&Hash<32>>, relayer: &Option<Address>, short: Error) -> Checked {
     let md = member_digest(env, ua, &ua_message(env, MSIG, purpose, digest));
     let pm = BytesN::from_array(env, &PURPOSE_MEMBER);
     let (threshold, count) = (u16_at(d, 0), u16_at(d, 2));
-    let (mut acc, mut w_min, mut next) = (0, u32::MAX, 0);
+    let (mut acc, mut w_min, mut next, mut checked) = (0, u32::MAX, 0, Checked::Chain);
     for s in sigs.iter() {
         if acc >= threshold || s.index < next || s.index >= count {
             fail(env, short);
@@ -334,6 +405,11 @@ fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, diges
             fail(env, short);
         }
         match kind {
+            k if portable.is_some() && (k == EVM_CONTRACT || relayer_checked(k)) => {
+                if checked == Checked::Chain {
+                    checked = attest(env, relayer);
+                }
+            }
             EVM_CONTRACT => fail(env, Error::NotVerifiable),
             EVM_EOA => {
                 let typed = portable.unwrap_or_else(|| fail(env, Error::NotVerifiable));
@@ -359,6 +435,7 @@ fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, diges
     if acc < threshold || (portable.is_some() && acc - w_min >= threshold) {
         fail(env, short);
     }
+    checked
 }
 
 fn zero(env: &Env) -> BytesN<32> {
@@ -376,19 +453,23 @@ fn sig_fields_ok(kind: u32, s: &UaSig) -> bool {
 }
 
 /// EVM `_portableOk` + `_portableBytes` for a later portable record (`set_kem_key` ≥ 1, `set_pqz_key`): its signature over
-/// `(ua, purpose, rd)`, `Unauthorized`, an `msig` under `check_msig`'s portable rule (U8S-D1); returns the bytes stored for
-/// it, the `signature` or EVM's `abi.encode(MemberSig[])`.
-fn check_portable(env: &Env, kind: u32, d: &Bytes, ua: &BytesN<32>, purpose: [u8; 32], rd: &Hash<32>, sig: &UaSig) -> Bytes {
+/// `(ua, purpose, rd)`, `Unauthorized`, an `msig` under `check_msig`'s portable rule (U8S-D1), a relayer-checked kind on
+/// `attest`; returns the bytes stored for it, the `signature` or EVM's `abi.encode(MemberSig[])`, and who checked them.
+#[allow(clippy::too_many_arguments)]
+fn check_portable(env: &Env, kind: u32, d: &Bytes, ua: &BytesN<32>, purpose: [u8; 32], rd: &Hash<32>, sig: &UaSig, relayer: &Option<Address>) -> (Bytes, Checked) {
     if !sig_fields_ok(kind, sig) {
         fail(env, Error::Unauthorized);
     }
     let (p, digest) = (BytesN::from_array(env, &purpose), rd.to_bytes());
     if kind == MSIG {
-        check_msig(env, ua, d, &p, &digest, &sig.members, Some(rd), Error::Unauthorized);
-        return abi::encode_member_sigs(env, &sig.members);
+        let checked = check_msig(env, ua, d, &p, &digest, &sig.members, Some(rd), relayer, Error::Unauthorized);
+        return (abi::encode_member_sigs(env, &sig.members), checked);
+    }
+    if relayer_checked(kind) {
+        return (sig.signature.clone(), attest(env, relayer));
     }
     verify::check(env, kind, d, &ua_message(env, kind, &p, &digest), &sig.signature, Error::Unauthorized);
-    sig.signature.clone()
+    (sig.signature.clone(), Checked::Chain)
 }
 
 /// A PQZ key is of one of the four set lengths (`KeyData`, U8S-D6: Soroban has no set of its own).
@@ -478,6 +559,62 @@ fn msig_key_data(env: &Env, s: &MsigStructure) -> Bytes {
     d
 }
 
+/// `p`, exactly one point of `size` bytes, appended (EVM `_point`: its validity is not checked here).
+fn push_point(env: &Env, d: &mut Bytes, p: &Bytes, size: u32) {
+    if p.len() != size {
+        fail(env, Error::KeyData);
+    }
+    d.append(p);
+}
+
+/// `aggKey ‖ u16 n ‖ n × key` of a typed key (EVM `registerMuSig2`): `KeyData` for another kind, a point of the wrong length
+/// or a count its `u16` cannot hold; the layout itself is `check_key_data`'s.
+fn musig2_key_data(env: &Env, kind: u32, key: &MuSig2Key) -> Bytes {
+    let size = match kind {
+        MUSIG2_SECP256K1 => 33,
+        MUSIG2_BN254 => 64,
+        _ => fail(env, Error::KeyData),
+    };
+    if key.member_keys.len() > 16 {
+        fail(env, Error::KeyData);
+    }
+    let mut d = Bytes::new(env);
+    push_point(env, &mut d, &key.agg_key, size);
+    d.extend_from_slice(&(key.member_keys.len() as u16).to_be_bytes());
+    for p in key.member_keys.iter() {
+        push_point(env, &mut d, &p, size);
+    }
+    d
+}
+
+/// `groupKey ‖ u16 t ‖ u16 n ‖ n × (t commitments ‖ r ‖ z)` of a typed key (EVM `registerFrost`): as `musig2_key_data`, and
+/// every member has exactly `threshold` commitments.
+fn frost_key_data(env: &Env, kind: u32, key: &FrostKey) -> Bytes {
+    let size = match kind {
+        FROST_SECP256K1 => 33,
+        FROST_BN254 => 64,
+        _ => fail(env, Error::KeyData),
+    };
+    if key.threshold > 0xFFFF || key.members.len() > 16 {
+        fail(env, Error::KeyData);
+    }
+    let mut d = Bytes::new(env);
+    push_point(env, &mut d, &key.group_key, size);
+    d.extend_from_slice(&(key.threshold as u16).to_be_bytes());
+    d.extend_from_slice(&(key.members.len() as u16).to_be_bytes());
+    for m in key.members.iter() {
+        if m.commitments.len() != key.threshold {
+            fail(env, Error::KeyData);
+        }
+        for c in m.commitments.iter() {
+            push_point(env, &mut d, &c, size);
+        }
+        push_point(env, &mut d, &m.r, size);
+        d.extend_from_array(&m.z.to_array());
+    }
+    d
+}
+
 /// `x ‖ y ‖ rp_id_hash` of a typed key (EVM `registerWebAuthn`).
 fn webauthn_key_data(env: &Env, key: &WebAuthnKey) -> Bytes {
     let mut d = Bytes::from_array(env, &key.x.to_array());
@@ -489,9 +626,12 @@ fn webauthn_key_data(env: &Env, key: &WebAuthnKey) -> Bytes {
 /// The portable form (UA-8 P1; spec §3 order, EVM `_register`): kind enabled → key data → id → not registered → keyHash
 /// free → `msig` members → attributes → `pop` (`sig`, or an `msig`'s `members`) → store, list, events. Nothing is read
 /// from the submitter (CTR-UA-07). The PQZ key and proof and the KEM key stay in state (`PqzK`, `PqzP`, `Kem(ua, 0)`),
-/// unproven (U8S-D3, U8S-D6: no verifier, no `Key` entry); the events carry hashes (U8S-D4).
-fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: Bytes, members: Vec<MemberSig>, pqz_pop: Bytes) -> BytesN<32> {
-    if ![WEBAUTHN_P256, P256, ED25519, SECP256K1, MSIG, MLDSA44, MLDSA65].contains(&kind) {
+/// unproven (U8S-D3, U8S-D6: no verifier, no `Key` entry); the events carry hashes (U8S-D4). The `pop` of a relayer-checked
+/// kind, and an `msig` slot the chain cannot verify, is `attest`ed instead; the `pop`'s `Checked` marks the attributes it
+/// signed too; such a kind is never `signable` (U8S-D8, P11.5).
+#[allow(clippy::too_many_arguments)]
+fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: Bytes, members: Vec<MemberSig>, pqz_pop: Bytes, relayer: &Option<Address>) -> BytesN<32> {
+    if ![WEBAUTHN_P256, P256, ED25519, SECP256K1, MSIG, MLDSA44, MLDSA65].contains(&kind) && !relayer_checked(kind) {
         fail(env, Error::KindDisabled);
     }
     check_key_data(env, kind, &key_data);
@@ -508,20 +648,23 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
             fail(env, Error::KeyInUse);
         }
     }
-    let signable = kind != MSIG || check_members(env, &key_data);
+    let signable = !relayer_checked(kind) && (kind != MSIG || check_members(env, &key_data));
     let (pk, pqz_hash, rec) = check_attrs(env, kind, &key_data, &ua, &attrs, &pqz_pop);
     let typed = registration_digest(env, &rec, &attrs.pqz_pop_hash);
     let reg = typed.to_bytes();
     let pv2 = BytesN::from_array(env, &PURPOSE_POP_V2);
-    if kind == MSIG {
-        if pq_eligible(&key_data) {
-            check_msig(env, &ua, &key_data, &pv2, &reg, &members, Some(&typed), Error::Pop);
-        } else if !members.is_empty() {
-            fail(env, Error::Pop); // classical-dominant: its members proved theirs, as EVM (U8S-D2)
-        }
-    } else {
+    let checked = if relayer_checked(kind) {
+        attest(env, relayer)
+    } else if kind != MSIG {
         verify::check(env, kind, &key_data, &ua_message(env, kind, &pv2, &reg), &sig, Error::Pop);
-    }
+        Checked::Chain
+    } else if pq_eligible(&key_data) {
+        check_msig(env, &ua, &key_data, &pv2, &reg, &members, Some(&typed), relayer, Error::Pop)
+    } else if members.is_empty() {
+        Checked::Chain
+    } else {
+        fail(env, Error::Pop) // classical-dominant: its members proved theirs, as EVM (U8S-D2)
+    };
     let pop = if kind == MSIG { abi::encode_member_sigs(env, &members) } else { sig };
 
     let index = get::<u32>(env, &Key::Count(kind)).unwrap_or(0);
@@ -537,16 +680,16 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
     let sig_hash = BytesN::from_array(env, &EMPTY_HASH);
     if !attrs.pqz_key.is_empty() {
         let pqz_pop_hash = attrs.pqz_pop_hash.clone();
-        put(env, &Key::PqzK(ua.clone()), &(attrs.pqz_key.clone(), no_sig.clone(), Checked::Chain, pqz_pop_hash.clone()));
-        UaPqzKeySet { ua: ua.clone(), pqz_key_hash: pqz_hash, pqz_pop_hash, sig_hash: sig_hash.clone(), checked: Checked::Chain }.publish(env);
+        put(env, &Key::PqzK(ua.clone()), &(attrs.pqz_key.clone(), no_sig.clone(), checked.clone(), pqz_pop_hash.clone()));
+        UaPqzKeySet { ua: ua.clone(), pqz_key_hash: pqz_hash, pqz_pop_hash, sig_hash: sig_hash.clone(), checked: checked.clone() }.publish(env);
     }
     if !pqz_pop.is_empty() {
         put(env, &Key::PqzP(ua.clone()), &pqz_pop);
         UaPqzPopStored { ua: ua.clone(), pqz_pop_hash: attrs.pqz_pop_hash.clone() }.publish(env);
     }
     if !pk.is_empty() {
-        put(env, &Key::Kem(ua.clone(), 0), &(pk.clone(), no_sig, Checked::Chain));
-        UaKemKeySet { ua: ua.clone(), version: 0, kem_pk_hash: env.crypto().keccak256(&pk).into(), sig_hash, checked: Checked::Chain }.publish(env);
+        put(env, &Key::Kem(ua.clone(), 0), &(pk.clone(), no_sig, checked.clone()));
+        UaKemKeySet { ua: ua.clone(), version: 0, kem_pk_hash: env.crypto().keccak256(&pk).into(), sig_hash, checked: checked.clone() }.publish(env);
     }
     let kem = KemKey { scheme: if attrs.kem_pk_hash != zero(env) { attrs.kem.scheme } else { 0 }, ..KemKey::none(env) };
     let attrs = UaAttrs { pqz_key: Bytes::new(env), kem, ..attrs };
@@ -556,7 +699,7 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
         key_data: key_data.clone(),
         attrs: attrs.clone(),
         pop_hash: env.crypto().keccak256(&pop).into(),
-        pop_checked: Checked::Chain,
+        pop_checked: checked.clone(),
         pqz_pop_checked: Checked::None,
         proven: false,
         signable,
@@ -568,7 +711,7 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
         key_data,
         attrs,
         pop,
-        pop_checked: Checked::Chain,
+        pop_checked: checked.clone(),
         pqz_pop_checked: Checked::None,
         proven: false,
         signable,
@@ -577,7 +720,7 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
     };
     put(env, &Key::Ua(ua.clone()), &r);
     bump_instance(env);
-    UaRegistered { ua: ua.clone(), kind, record, checked: Checked::Chain }.publish(env);
+    UaRegistered { ua: ua.clone(), kind, record, checked }.publish(env);
     ua
 }
 
@@ -596,7 +739,8 @@ impl UaRegistry {
     }
 
     /// A single-key `kind` (`register_record`); `msig` only through `register_msig` (`KeyData`, as EVM). `relayer` is
-    /// accepted and ignored for chain-verified parts (SOR-D6).
+    /// accepted and ignored for chain-verified parts (SOR-D6), and the authority for a relayer-checked kind's `pop`
+    /// (U8S-D8, `attest`).
     pub fn register(
         env: Env,
         kind: u32,
@@ -606,12 +750,11 @@ impl UaRegistry {
         pqz_pop: Bytes,
         relayer: Option<Address>,
     ) -> BytesN<32> {
-        let _ = relayer;
         if kind == MSIG {
             fail(&env, Error::KeyData);
         }
         let members = Vec::new(&env);
-        register_record(&env, kind, key_data, attrs, pop, members, pqz_pop)
+        register_record(&env, kind, key_data, attrs, pop, members, pqz_pop, &relayer)
     }
 
     /// A `webauthn-p256` key from its fields (EVM `registerWebAuthn`, TS-D13): `x ‖ y ‖ rp_id_hash` is assembled here, so
@@ -624,10 +767,9 @@ impl UaRegistry {
         pqz_pop: Bytes,
         relayer: Option<Address>,
     ) -> BytesN<32> {
-        let _ = relayer;
         let d = webauthn_key_data(&env, &key);
         let members = Vec::new(&env);
-        register_record(&env, WEBAUTHN_P256, d, attrs, pop, members, pqz_pop)
+        register_record(&env, WEBAUTHN_P256, d, attrs, pop, members, pqz_pop, &relayer)
     }
 
     /// An `msig` from its typed structure and member signatures (EVM `registerMsig`, TS-D10): the CTR-UA-09 key data is
@@ -640,9 +782,23 @@ impl UaRegistry {
         pqz_pop: Bytes,
         relayer: Option<Address>,
     ) -> BytesN<32> {
-        let _ = relayer;
         let d = msig_key_data(&env, &structure);
-        register_record(&env, MSIG, d, attrs, Bytes::new(&env), pop, pqz_pop)
+        register_record(&env, MSIG, d, attrs, Bytes::new(&env), pop, pqz_pop, &relayer)
+    }
+
+    /// `register` of `musig2-secp256k1` / `musig2-bn254` from its typed key (EVM `registerMuSig2`, TS-D13; U8S-D8): `aggKey ‖
+    /// u16 n ‖ n × key` is assembled here, the same id and record as the packed `register`, which stays, as EVM.
+    pub fn register_musig2(env: Env, kind: u32, key: MuSig2Key, attrs: UaAttrs, pop: Bytes, pqz_pop: Bytes, relayer: Option<Address>) -> BytesN<32> {
+        let d = musig2_key_data(&env, kind, &key);
+        let members = Vec::new(&env);
+        register_record(&env, kind, d, attrs, pop, members, pqz_pop, &relayer)
+    }
+
+    /// `register` of `frost-secp256k1` / `frost-bn254` from its typed key (EVM `registerFrost`, TS-D13; U8S-D8), likewise.
+    pub fn register_frost(env: Env, kind: u32, key: FrostKey, attrs: UaAttrs, pop: Bytes, pqz_pop: Bytes, relayer: Option<Address>) -> BytesN<32> {
+        let d = frost_key_data(&env, kind, &key);
+        let members = Vec::new(&env);
+        register_record(&env, kind, d, attrs, pop, members, pqz_pop, &relayer)
     }
 
     /// CTR-UA-17's Soroban form: `NotRegistered`, then `Unauthorized` unless `signable` and `purpose` is not a portable
@@ -664,7 +820,7 @@ impl UaRegistry {
         env.storage().persistent().extend_ttl(&Key::Ua(ua.clone()), TTL_MIN, TTL_BUMP);
         bump_instance(&env);
         if kind == MSIG {
-            check_msig(&env, &ua, &key, &purpose, &digest, &auth.members, None, Error::Unauthorized);
+            check_msig(&env, &ua, &key, &purpose, &digest, &auth.members, None, &None, Error::Unauthorized);
         } else {
             verify::check(&env, kind, &key, &ua_message(&env, kind, &purpose, &digest), &auth.signature, Error::Unauthorized);
         }
@@ -713,9 +869,9 @@ impl UaRegistry {
     /// over `ua_message(kind, PURPOSE_KEM, kem_record_digest(ua, version, pk))`. Version 0 only fills the key `register`
     /// committed by hash, with no `sig` (the `pop` signed it): a key given in whole is not refillable (TS-D9). Check order:
     /// `NotRegistered` → `KemHolder` → `KemVersion` → the key (`KemScheme`, `KemKeyLength`) → signature (`Unauthorized`) /
-    /// the commit (`KemKeyHash`). `relayer` as in `register`.
+    /// the commit (`KemKeyHash`). `relayer` as in `register`; a filled commit keeps `pop_checked`: the chain compares the
+    /// hash, the `pop` signed it.
     pub fn set_kem_key(env: Env, ua: BytesN<32>, version: u64, kem: KemKey, sig: UaSig, relayer: Option<Address>) {
-        let _ = relayer;
         let r = record(&env, &ua);
         if !holder(r.kind, &r.key_data) {
             fail(&env, Error::KemHolder);
@@ -731,35 +887,35 @@ impl UaRegistry {
         }
         check_kem_pk(&env, kem.scheme, &pk);
         let kem_pk_hash = BytesN::from(env.crypto().keccak256(&pk));
-        let stored = if version == 0 {
+        let (stored, checked) = if version == 0 {
             if !sig.is_empty() {
                 fail(&env, Error::Unauthorized);
             }
             if kem_pk_hash != committed {
                 fail(&env, Error::KemKeyHash);
             }
-            Bytes::new(&env)
+            (Bytes::new(&env), r.pop_checked)
         } else {
             let rd = kem_record_digest(&env, &ua, version, &pk);
-            let stored = check_portable(&env, r.kind, &r.key_data, &ua, PURPOSE_KEM, &rd, &sig);
+            let part = check_portable(&env, r.kind, &r.key_data, &ua, PURPOSE_KEM, &rd, &sig, &relayer);
             if version > get::<u64>(&env, &Key::KemMax(ua.clone())).unwrap_or(0) {
                 put(&env, &Key::KemMax(ua.clone()), &version);
             }
-            stored
+            part
         };
         let sig_hash = env.crypto().keccak256(&stored).into();
-        put(&env, &k, &(pk, stored, Checked::Chain));
+        put(&env, &k, &(pk, stored, checked.clone()));
         bump_instance(&env);
-        UaKemKeySet { ua, version, kem_pk_hash, sig_hash, checked: Checked::Chain }.publish(&env);
+        UaKemKeySet { ua, version, kem_pk_hash, sig_hash, checked }.publish(&env);
     }
 
     /// EVM `setPqzKey` without a verifier (U8S-D6): anyone, a holder without a key gets one, unproven, write-once, no `Key`
     /// entry; `sig` over `ua_message(kind, PURPOSE_PQZ_KEY, pqz_key_record_digest(ua, pqzKeyHash, pqz_pop_hash))`. Check
     /// order: `NotRegistered` → `PqzHolder` → `PqzKeySet` → the key's length (`KeyData`) → a zero or `keccak256("")` proof
-    /// hash (`PqzPopHash`) → signature (`Unauthorized`). `PqzK` holds key and signature in one entry, so the signing
-    /// ML-DSA-65 slots are at most 13 at n2048-kmax1024 / n2304-kmax4096, 12 at the larger sets (B0: 65,536 B an entry).
+    /// hash (`PqzPopHash`) → signature (`Unauthorized`). `relayer` as in `register`. `PqzK` holds key and signature in one
+    /// entry of 65,536 B (B0), so an `msig`'s signing slots are bounded in bytes, `key + 64 + Σ (192 + sig padded to 32)`: 13 /
+    /// 12 ML-DSA-65 slots, 6 / 5 relayer-checked `slhdsa128s` slots.
     pub fn set_pqz_key(env: Env, ua: BytesN<32>, pqz_key: Bytes, pqz_pop_hash: BytesN<32>, sig: UaSig, relayer: Option<Address>) {
-        let _ = relayer;
         let r = record(&env, &ua);
         if !holder(r.kind, &r.key_data) {
             fail(&env, Error::PqzHolder);
@@ -774,11 +930,11 @@ impl UaRegistry {
         }
         let pqz_key_hash = pqz_key_hash(&env, &pqz_key);
         let rd = pqz_key_record_digest(&env, &ua, &pqz_key_hash, &pqz_pop_hash);
-        let stored = check_portable(&env, r.kind, &r.key_data, &ua, PURPOSE_PQZ_KEY, &rd, &sig);
+        let (stored, checked) = check_portable(&env, r.kind, &r.key_data, &ua, PURPOSE_PQZ_KEY, &rd, &sig, &relayer);
         let sig_hash = env.crypto().keccak256(&stored).into();
-        put(&env, &k, &(pqz_key, stored, Checked::Chain, pqz_pop_hash.clone()));
+        put(&env, &k, &(pqz_key, stored, checked.clone(), pqz_pop_hash.clone()));
         bump_instance(&env);
-        UaPqzKeySet { ua, pqz_key_hash, pqz_pop_hash, sig_hash, checked: Checked::Chain }.publish(&env);
+        UaPqzKeySet { ua, pqz_key_hash, pqz_pop_hash, sig_hash, checked }.publish(&env);
     }
 
     /// EVM `storePqzPop` without a verifier (U8S-D6): anyone, `NotRegistered`, then `PqzPopHash` for an empty proof or one
@@ -850,6 +1006,16 @@ impl UaRegistry {
     /// `ua_of` of `register_webauthn`'s typed key.
     pub fn ua_of_webauthn(env: Env, key: WebAuthnKey) -> BytesN<32> {
         digest::ua_of(&env, WEBAUTHN_P256, &webauthn_key_data(&env, &key))
+    }
+
+    /// `ua_of` of `register_musig2`'s typed key.
+    pub fn ua_of_musig2(env: Env, kind: u32, key: MuSig2Key) -> BytesN<32> {
+        digest::ua_of(&env, kind, &musig2_key_data(&env, kind, &key))
+    }
+
+    /// `ua_of` of `register_frost`'s typed key.
+    pub fn ua_of_frost(env: Env, kind: u32, key: FrostKey) -> BytesN<32> {
+        digest::ua_of(&env, kind, &frost_key_data(&env, kind, &key))
     }
 
     /// `signable`; `false` for an unregistered id too (SOR-D15).

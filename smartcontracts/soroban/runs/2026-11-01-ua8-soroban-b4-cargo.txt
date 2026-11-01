@@ -1,0 +1,48 @@
+$ CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban
+== test soroban
+     Running unittests src/lib.rs (target/debug/deps/scaas_dex-7068acbd67a99c46)
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+     Running unittests src/lib.rs (target/debug/deps/scaas_mandate-a1aee3bee4707973)
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.28s
+     Running unittests src/lib.rs (target/debug/deps/scaas_relay_executor-bad4d0d6468963df)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/lib.rs (target/debug/deps/scaas_relay_fee-6360ea88c0e5227b)
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+     Running unittests src/lib.rs (target/debug/deps/scaas_smart_key_account-b312b7c5707f177a)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+     Running unittests src/lib.rs (target/debug/deps/scaas_token-6c586c645c90f0e4)
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s
+     Running unittests src/lib.rs (target/debug/deps/scaas_ua_common-4655ed0507a585d4)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/lib.rs (target/debug/deps/scaas_ua_registry-dbecadbefa297ecc)
+test result: ok. 126 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.08s
+rc=0
+$ scripts/capped smartcontracts/scripts/build.sh soroban
+    Finished `release` profile [optimized] target(s) in 0.08s
+    Wasm File: target/wasm32v1-none/release/scaas_relay_executor.wasm (1187 bytes optimized (original size was 1316 bytes))
+    Wasm Hash: e23732b60b42551e811c796609c60b8c6499205f1d2af816d558f6c4ba6c9c00
+    Wasm Size: 1187 bytes optimized (original size was 1316 bytes)
+    Finished `release` profile [optimized] target(s) in 0.48s
+    Wasm File: target/wasm32v1-none/release/scaas_relay_fee.wasm (7630 bytes optimized (original size was 8585 bytes))
+    Wasm Hash: 37330478cb2c3fc0c66a788f2efe8784edda1d5f9b1fd6b03a334cac97991a27
+    Wasm Size: 7630 bytes optimized (original size was 8585 bytes)
+    Finished `release` profile [optimized] target(s) in 0.08s
+    Wasm File: target/wasm32v1-none/release/scaas_smart_key_account.wasm (10529 bytes optimized (original size was 11975 bytes))
+    Wasm Hash: f02a6780eee4d41ba0489b8b8a258f42bc71be69ab9951ae5239c76d374c705d
+    Wasm Size: 10529 bytes optimized (original size was 11975 bytes)
+rc=0
+$ smartcontracts/soroban/scripts/check-registry-interface.sh smartcontracts/soroban/target/wasm32v1-none/release/scaas_ua_registry.wasm
+ℹ️  Loading contract spec from file...
+registry interface: ok
+rc=0
+14694 scaas_dex.wasm
+16554 scaas_mandate.wasm
+1187 scaas_relay_executor.wasm
+7630 scaas_relay_fee.wasm
+10529 scaas_smart_key_account.wasm
+26651 scaas_token.wasm
+49097 scaas_ua_registry.wasm
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token   (after one test-only line, no contract change)
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.69s
+test result: ok. 126 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.65s
+rc=0

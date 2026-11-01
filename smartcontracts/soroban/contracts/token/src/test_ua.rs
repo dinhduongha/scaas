@@ -189,6 +189,31 @@ impl T {
 
 // ---------- the entries ----------
 
+/// P11.5: a relayer-checked UA has no way to spend. The registry refuses `ua_transfer`'s authorisation (its `Unauthorized`,
+/// #10; the token's own #10 is about a receiver, and `to` is an address), before any balance; a `Chain` UA with no funds
+/// passes that step and stops at its balance.
+#[test]
+fn ua8_relayer_checked_ua_authorises_nothing() {
+    let s = setup();
+    let env = &s.env;
+    let relayer = Address::generate(env);
+    let reg = RegClient::new(env, &env.register(UaRegistry, (SVec::from_array(env, [relayer.clone()]),)));
+    let name = |x: &str| String::from_str(env, x);
+    let t = TokenClient::new(env, &env.register(Token, (s.admin.clone(), 7u32, name("SCaaS"), name("BMB"), Some(reg.address.clone()))));
+    let portable: Value = serde_json::from_str(PORTABLE).unwrap();
+    let row = portable["registrations"].as_array().unwrap().iter().find(|r| r["name"] == "slhdsa128s").unwrap();
+    let (kd, pop, none) = (Bytes::from_slice(env, &hx(&row["keyData"])), Bytes::from_slice(env, &hx(&row["pop"])), Bytes::new(env));
+    let by = Some(relayer.clone());
+    allow(env, &relayer, &reg.address, "register", (0x0133u32, &kd, no_attrs(env), &pop, &none, &by).into_val(env));
+    let ua = reg.register(&0x0133, &kd, &no_attrs(env), &pop, &none, &by);
+    assert!(!reg.receivable(&ua));
+
+    let to = Holder::Addr(Address::generate(env));
+    let got = t.try_ua_transfer(&ua, &to, &1, &n(env, [9; 32]), &0, &(NOW + 10), &None, &UaSig::single(env, pop));
+    assert_eq!(got, Err(Ok(soroban_sdk::Error::from_contract_error(10))));
+    assert_eq!(s.transfer(&s.ua(3), &to, 1, [9; 32], 0, NOW + 10, &None), Err(Error::InsufficientBalance));
+}
+
 #[test]
 fn transfer_to_ua_then_ua_transfer() {
     let s = setup();

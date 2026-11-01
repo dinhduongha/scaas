@@ -3,7 +3,8 @@
 The Soroban half of the explicit-parameter inventory (typed-signing X0, hand-over TS-D9). It replaces
 [Appendix X.7](../superpowers/plans/2026-10-31-typed-signing-appendix-x.md), which was a first pass made before
 `ua8-soroban` B2 and B3 changed the registry. Taken from the code at `ua8-soroban` B3 by listing every `pub fn` of every
-`#[contractimpl]` under `smartcontracts/soroban/contracts/`, then every `Bytes` field of the `contracttype` arguments.
+`#[contractimpl]` under `smartcontracts/soroban/contracts/`, then every `Bytes` field of the `contracttype` arguments; B4
+added the relayer-checked kinds to the `ua-registry` table.
 
 **Outcome.** No bundle is left on `ua-registry` without a typed form. One bundle remains on another contract: `meta` on
 the token. It is listed for the owner and is unchanged.
@@ -16,12 +17,16 @@ Classes are Appendix X.1's: *bundles fields* becomes typed; *one crypto object* 
 | Entry and argument | Layout | Class | Outcome |
 |---|---|---|---|
 | `register.key_data`, `ua_of.key_data`: `p256`, `secp256k1` | `x ‖ y`, one point | one crypto object | stays, as EVM row 12 |
-| same: `ed25519`, `mldsa44`, `mldsa65` | one public key | one crypto object | stays |
+| same: `ed25519`, `mldsa44`, `mldsa65`, and the relayer-checked `bip340`, `schnorr-bn254`, `schnorr-bls12381`, `bls12381-minsig`, `bls-bn254-minsig`, `fndsa512`, `slhdsa128s`, `zether-bls12381` | one public key | one crypto object | stays |
 | same: `webauthn-p256` | `x ‖ y ‖ rp_id_hash` | bundles | typed twins `register_webauthn(WebAuthnKey, …)` (B2), `ua_of_webauthn` (B3); the packed form stays accepted, as EVM `register` |
 | same: `msig` | CTR-UA-09 `u16 t ‖ u16 n ‖ n × (u16 kind ‖ id ‖ u16 weight)` | bundles | `register_msig(MsigStructure, …)` (B2), `ua_of_msig` (B3); `register(0x0120, …)` is `KeyData`; `ua_of(0x0120, …)` keeps the packed form, as EVM `uaOf` |
+| same: `musig2-secp256k1`, `musig2-bn254` | `aggKey ‖ u16 n ‖ n × key` | bundles | typed twins `register_musig2(kind, MuSig2Key, …)`, `ua_of_musig2` (B4); the packed form stays accepted, as EVM `register` |
+| same: `frost-secp256k1`, `frost-bn254` | `groupKey ‖ u16 t ‖ u16 n ‖ n × (t commitments ‖ r ‖ z)` | bundles | typed twins `register_frost(kind, FrostKey, …)`, `ua_of_frost` (B4); the packed form stays accepted, as EVM `register` |
 | `register.pop`, `register_webauthn.pop` | one signature | one crypto object | stays; the WebAuthn form is one assertion, `abi.encode(authenticatorData, clientDataJSON, r, s)` (TS-D12 open question 3 default; X.7 row 3 closed this way, as EVM) |
 | `register_msig.pop` | was `abi.encode(MemberSig[])` | bundles | `Vec<MemberSig>` (B2) |
 | `register*.pqz_pop`, `store_pqz_pop.pqz_pop` | one `R_REG` proof | one crypto object | stays |
+| `register_musig2.pop`, `register_frost.pop` | one signature | one crypto object | stays |
+| `MuSig2Key.agg_key`, `.member_keys[]`, `FrostKey.group_key`, `FrostMember.commitments[]`, `.r` | one point | one crypto object | stay. `Bytes`, not `BytesN`: a wrong length must be `KeyData`, not a host conversion error, and the size is the kind's |
 | `UaAttrs.pqz_key`, `set_pqz_key.pqz_key` | one PQZ key | one crypto object | stays |
 | `KemKey.mlkem_ek` | one ML-KEM-1024 key | one crypto object | stays. `Bytes`, not X.7's `BytesN<1568>`: a wrong length must be `KemKeyLength`, not a host conversion error |
 | `UaAttrs.kem_pk`, `set_kem_key.kem_pk` (brief) | `scheme ‖ ek ‖ x25519` | bundles | `KemKey` (B2 for `UaAttrs`, B3 for `set_kem_key`, `kem_key_of`, `kem_key_at`) |

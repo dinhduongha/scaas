@@ -39,14 +39,14 @@ const PURPOSES: [[u8; 32]; 4] = [PURPOSE_METATX, PURPOSE_TRADE, PURPOSE_METATX_C
 
 // ---------- setup ----------
 
-fn new_env() -> Env {
+pub(crate) fn new_env() -> Env {
     let env = Env::default();
     env.cost_estimate().budget().reset_unlimited();
     env.ledger().with_mut(|l| l.network_id = NETWORK);
     env
 }
 
-fn deploy(env: &Env, relayers: &[Address]) -> UaRegistryClient<'static> {
+pub(crate) fn deploy(env: &Env, relayers: &[Address]) -> UaRegistryClient<'static> {
     let mut v = SVec::new(env);
     for r in relayers {
         v.push_back(r.clone());
@@ -155,16 +155,22 @@ pub(crate) fn portable_row(env: &Env, r: &Value) -> Reg {
 
 impl Reg {
     /// `register`, or `register_msig` of an `msig` row (one typed form, as EVM).
-    pub(crate) fn tried(&self, c: &UaRegistryClient) -> Tried {
+    pub(crate) fn tried_by(&self, c: &UaRegistryClient, relayer: &Option<Address>) -> Tried {
         if self.kind != 0x0120 {
-            return c.try_register(&self.kind, &self.kd, &self.attrs, &self.pop, &self.pqz_pop, &None);
+            return c.try_register(&self.kind, &self.kd, &self.attrs, &self.pop, &self.pqz_pop, relayer);
         }
         let env = &c.env;
         let s = structure_of(env, &vecu8(&self.kd)).unwrap();
-        c.try_register_msig(&s, &self.attrs, &members_of(env, &self.pop), &self.pqz_pop, &None)
+        c.try_register_msig(&s, &self.attrs, &members_of(env, &self.pop), &self.pqz_pop, relayer)
+    }
+    pub(crate) fn tried(&self, c: &UaRegistryClient) -> Tried {
+        self.tried_by(c, &None)
+    }
+    pub(crate) fn on_by(&self, c: &UaRegistryClient, relayer: &Option<Address>) -> BytesN<32> {
+        self.tried_by(c, relayer).unwrap().unwrap()
     }
     pub(crate) fn on(&self, c: &UaRegistryClient) -> BytesN<32> {
-        self.tried(c).unwrap().unwrap()
+        self.on_by(c, &None)
     }
     pub(crate) fn refused(&self, c: &UaRegistryClient) -> Error {
         err(self.tried(c))
@@ -395,14 +401,20 @@ fn register_front_run_identical() {
     assert_eq!(c.ua_count(&r.kind), 1);
 }
 
+/// Only the kinds outside U8S-D8 stay `KindDisabled`: the natives (they register nothing), the scheme `pqz-mlwe` and ids of
+/// no kind. A listed relayer changes nothing here, and the U8S-D8 kinds beside them do not stop at this rule
+/// (`ua8_relayer_kind_without_relayer_not_verifiable`).
 #[test]
 fn register_disabled_kind_refused() {
-    let (env, c) = setup();
-    for name in ["bip340", "fndsa512", "slhdsa128s", "zether-bls12381"] {
-        assert_eq!(portable(&env, name).refused(&c), Error::KindDisabled, "{name}");
+    let env = new_env();
+    let relayer = Address::generate(&env);
+    let c = deploy(&env, &[relayer.clone()]);
+    let (d, none) = (b(&env, &[1; 32]), Bytes::new(&env));
+    for kind in [0x0001, 0x0011, 0x0012, 0x0109, 0x0114, 0x0134, 0x0140, 0x0142, 0x0143] {
+        for r in [None, Some(relayer.clone())] {
+            assert_eq!(err(c.try_register(&kind, &d, &no_attrs(&env), &none, &none, &r)), Error::KindDisabled, "{kind:#x}");
+        }
     }
-    let e = err(c.try_register(&0x0011, &b(&env, &[1; 32]), &no_attrs(&env), &Bytes::new(&env), &Bytes::new(&env), &None));
-    assert_eq!(e, Error::KindDisabled, "a native kind registers nothing");
 }
 
 /// T3's `register_attrs_refused_4b` under the UA-8 rule: PQZ / KEM attributes register on a holder; on a non-holder, and a
@@ -425,21 +437,17 @@ fn register_attrs_accepted() {
     assert_eq!(r.refused(&c), Error::PqzPopHash);
 }
 
+/// Without a relayer an `evm-contract` slot is `NotVerifiable` at the slot; with one, `ua8_relayer_evm_contract_slot`.
 #[test]
-fn register_unverifiable_part_refused_4b() {
-    let env = new_env();
-    let relayer = Address::generate(&env);
-    let c = deploy(&env, &[relayer.clone()]);
+fn register_unverifiable_part_refused() {
+    let (env, c) = setup();
     let q = portable(&env, "mldsa65#1");
     q.on(&c);
     let mut contract_id = [0u8; 32];
     contract_id[12..].copy_from_slice(&[0x22; 20]);
     let m = msig(&env, 2, &[(0x0002, contract_id, 1), (0x0131, q.ua.to_array(), 1)]);
     let pop = member_sigs(&env, &[(m.index(&contract_id), vec![], vec![1; 65])]);
-    for r in [None, Some(relayer)] {
-        let got = err(c.try_register_msig(&m.s, &no_attrs(&env), &pop, &Bytes::new(&env), &r));
-        assert_eq!(got, Error::NotVerifiable);
-    }
+    assert_eq!(err(c.try_register_msig(&m.s, &no_attrs(&env), &pop, &Bytes::new(&env), &None)), Error::NotVerifiable);
 }
 
 /// No key has a derived id with 96 zero top bits, so `register`'s `IdInNativeSpace` is shown on its predicate, which

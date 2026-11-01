@@ -117,6 +117,34 @@ pub struct MsigStructure {
     pub members: Vec<MsigMember>,
 }
 
+/// A MuSig2 group key (EVM `MuSig2Key`, TS-D13): `agg_key` and the sorted member keys, each one point (`musig2-secp256k1`:
+/// 33 B compressed, `musig2-bn254`: 64 B); the registry assembles `agg_key ‖ u16 n ‖ n × key`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MuSig2Key {
+    pub agg_key: Bytes,
+    pub member_keys: Vec<Bytes>,
+}
+
+/// One FROST member (EVM `FrostMember`, TS-D13): its `threshold` Feldman commitments, the PoK nonce point `r` and response `z`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FrostMember {
+    pub commitments: Vec<Bytes>,
+    pub r: Bytes,
+    pub z: BytesN<32>,
+}
+
+/// A FROST group key (EVM `FrostKey`, TS-D13): points of 33 B (`frost-secp256k1`) or 64 B (`frost-bn254`); the registry
+/// assembles `group_key ‖ u16 threshold ‖ u16 n ‖ n × (threshold commitments ‖ r ‖ z)`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FrostKey {
+    pub group_key: Bytes,
+    pub threshold: u32,
+    pub members: Vec<FrostMember>,
+}
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Registration {
