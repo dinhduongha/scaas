@@ -397,7 +397,7 @@ reversible lever instead of suspending a namespace or pausing a token. Empty by 
 
 <a id="alerts"></a>Rule file `scaas/ops/prometheus/scaas-rules.yml` (recommended). Every alert carries `severity` and
 `runbook` (anchor in [runbooks.md#incidents](runbooks.md#incidents)). `$STORE_MOUNT` is the filesystem holding the
-store (set per deployment).
+store and `$FEE_BUMP_CHAINS` a regex of the chains that set `params.fee_bump_lane`, empty when none (both set per deployment).
 
 ```yaml
 groups:

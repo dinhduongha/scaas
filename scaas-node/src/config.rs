@@ -584,6 +584,9 @@ impl Config {
                 c.canonical(&t.address).with_context(|| format!("chain {key}: token {}", t.address))?;
             }
             c.relay_params().with_context(|| format!("chain {key}"))?;
+            if !(1..=100).contains(&c.breaker.call_budget_pct) {
+                bail!("chain {key}: breaker.call_budget_pct is a share of the budget, 1 to 100");
+            }
             // NET-SOR-14: a Soroban job is free to the client and its fee is the lane's, so the limits are the operator's to name.
             let set = |v: Option<u128>| v.is_some_and(|v| v > 0);
             if c.family == "soroban" && self.modules.submit && !(set(c.breaker.gas_budget_per_hour) && set(c.breaker.min_relayer_balance)) {
@@ -1073,6 +1076,13 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
             assert!(e.contains("gas_budget_per_hour") && e.contains("min_relayer_balance"), "{bad}: {e}");
         }
         check("[modules]\nsubmit = false\n", "").unwrap();
+        for ok in [1, 100] {
+            check("", &format!("breaker = {{ gas_budget_per_hour = 1, min_relayer_balance = 1, call_budget_pct = {ok} }}")).unwrap();
+        }
+        for bad in [0, 101] {
+            let e = check("", &format!("breaker = {{ gas_budget_per_hour = 1, min_relayer_balance = 1, call_budget_pct = {bad} }}")).unwrap_err();
+            assert!(e.to_string().contains("call_budget_pct"), "{bad}: {e}");
+        }
     }
 
     #[test]

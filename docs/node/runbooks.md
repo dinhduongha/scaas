@@ -351,8 +351,8 @@ answers with that limit stated. `ScaasDenylistChanged` is checked against the or
 
 <a id="rb-14-runway"></a>
 
-1. `scaas-node addresses --config $CFG`; fund from treasury to the float target (~50 tx); the `balance_floor` breaker
-   closes on the next 15 s sample.
+1. `scaas-node addresses --config $CFG`; fund from treasury to the float target (~50 tx), on a chain with `fee_bump_lane` the
+   fee account, the only account that pays; the `balance_floor` breaker closes on the next 15 s sample.
 2. Runway falling at flat volume ⇒ fee regime changed (base-fee spike, rollup L1 data fee): finance reviews budget.
 3. Sponsor budget exhausted: the policy follows `on_exhausted`; the sponsor owner raises it (`adm PATCH
    /v1/admin/sponsorship/policies/$ID`) or accepts rejects.

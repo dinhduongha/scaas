@@ -171,6 +171,20 @@ impl std::fmt::Display for Rejected {
 
 impl std::error::Error for Rejected {}
 
+/// `submit`'s error when the network refuses a transaction for good, at no fee, and a rebuilt one would be refused the same: the
+/// job's own state, so it ends on its claim. The queue is per chain and oldest first, so back in it the job would hold every lane
+/// and every job behind it. Only Soroban's `txSOROBAN_INVALID` today.
+#[derive(Debug)]
+pub struct Refused(pub String);
+
+impl std::fmt::Display for Refused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "refused for good: {}", self.0)
+    }
+}
+
+impl std::error::Error for Refused {}
+
 /// The pay kinds every family serves (CTR-MTX-26 / -27); a family adds its own wrapper kinds, if any.
 pub const PAY_KINDS: [&str; 2] = ["pay_meta", "relay_fee"];
 
@@ -211,8 +225,8 @@ const STATUS_POLL: Duration = Duration::from_millis(500);
 const BACKOFF_MIN: Duration = Duration::from_secs(1);
 const BACKOFF_MAX: Duration = Duration::from_secs(60);
 const EXPIRY_GRACE: u64 = 30;
-/// `relay_poll`'s limit while `call` jobs are stopped.
-const HELD_CALLS_POLL: u32 = 100;
+/// `relay_poll`'s limit while `call` jobs are stopped: the most the client hands out, its own clamp.
+const HELD_CALLS_POLL: u32 = 50;
 
 async fn report(odoo: &Odoo, r: Report) -> bool {
     match odoo.relay_report(&r).await {
@@ -397,6 +411,22 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
             }
             Ok(TxStatus::Unknown) | Err(_) => {
                 // Hỏi trạng thái TRƯỚC: bị từ chối khi gửi lại có thể vì tx lần trước đã vào khối.
+                if let Some(r) = sent.as_ref().err().and_then(|e| e.downcast_ref::<Refused>()) {
+                    if consumed {
+                        return None;
+                    }
+                    // as a simulation that refused: `consumed` first, and an unreadable answer goes back
+                    let (state, error) = match adapter.op_consumed(f.job).await {
+                        Ok(Some(true)) => ("consumed", "unknown".to_string()),
+                        Ok(_) => ("dead", r.to_string()),
+                        Err(e) => {
+                            report(odoo, Report { error: Some(format!("op_consumed: {e:#}")), ..rep(job, "queued") }).await;
+                            return Some(format!("op_consumed: {e:#}"));
+                        }
+                    };
+                    report(odoo, Report { error: Some(error), ..rep(job, state) }).await;
+                    return None;
+                }
                 if let Some(r) = sent.as_ref().err().and_then(|e| e.downcast_ref::<Rejected>()) {
                     if consumed {
                         return None;
@@ -485,8 +515,8 @@ async fn step_once(
         return Ok(Step::Idle);
     }
     let held = calls_stopped(adapter, breaker);
-    // ponytail: the queue is oldest first, so a wider read reaches a payment behind stopped `call` jobs; past this many a payment
-    // waits for the window. A `relay_poll` kind filter on the consumer is the upgrade.
+    // ponytail: the pull path has no notion of kind, so a wider read reaches a payment behind stopped `call` jobs. A backlog over
+    // 50 can hide a payment across windows here; the node's own queue claims by kind (NODE-JOB-21, SPECIFIED).
     let jobs = odoo.relay_poll_ref(adapter.chain_key().into(), if held { HELD_CALLS_POLL } else { 5 }).await?;
     let mut job = None;
     for j in jobs {
@@ -719,7 +749,8 @@ pub(crate) mod tests {
                 "node_config" => serde_json::json!({"finality_mode": "instant", "finality_depth": 0, "finality_quorum": 1,
                     "indexed_block": 0, "tokens": o.tokens, "journal_max_nonce": null,
                     "inflight": if o.inflight.is_null() { serde_json::json!([]) } else { o.inflight.clone() }}),
-                "relay_poll" if o.repeat => Value::Array(o.jobs.iter().take(b["limit"].as_u64().unwrap() as usize).cloned().collect()),
+                // the client's own clamp on `limit`
+                "relay_poll" if o.repeat => Value::Array(o.jobs.iter().take(b["limit"].as_u64().unwrap().min(50) as usize).cloned().collect()),
                 "relay_poll" => Value::Array(std::mem::take(&mut o.jobs)),
                 "relay_claim" => {
                     o.claims += 1;
@@ -885,6 +916,8 @@ pub(crate) mod tests {
         consumed_unreadable: std::sync::atomic::AtomicU32,
         /// `subject`'s key, a relay-fee job's.
         subject: Option<alloy::primitives::B256>,
+        /// `submit` answers `Refused`.
+        refused: bool,
     }
 
     fn racy(build_revert: bool, consumed: Option<bool>, sends: &[bool], statuses: &[TxStatus]) -> Racy {
@@ -898,6 +931,7 @@ pub(crate) mod tests {
             fee_unreadable: false,
             consumed_unreadable: Default::default(),
             subject: None,
+            refused: false,
         }
     }
 
@@ -924,6 +958,9 @@ pub(crate) mod tests {
         }
         async fn submit(&self, _: &Signed) -> Result<()> {
             self.submits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if self.refused {
+                return Err(Refused("for good".into()).into());
+            }
             match self.sends.lock().unwrap().pop_front() {
                 Some(true) => Ok(()),
                 _ => Err(anyhow::anyhow!("timeout")),
@@ -1060,6 +1097,23 @@ pub(crate) mod tests {
         assert_eq!((states.last().map(String::as_str), open, unread), (Some("mined"), None, 1));
         let (states, open, unread) = metered(racy(false, None, &[true], &[TxStatus::Reverted { reason: "boom".into() }]), 1).await;
         assert_eq!((states.last().map(String::as_str), open, unread), (Some("reverted"), None, 0));
+    }
+
+    /// A send the network refuses for good ends the job on its one claim, `consumed` if the op already ran, and is not a retry: it
+    /// must not hold the queue. An unreadable `op_consumed` is the one case that goes back, as at `build`.
+    #[tokio::test]
+    async fn a_refused_send_ends_the_job() {
+        let run = |consumed: Option<bool>, unreadable: u32| async move {
+            let a = Racy { refused: true, consumed_unreadable: unreadable.into(), ..racy(false, consumed, &[], &[TxStatus::Unknown]) };
+            let job = serde_json::json!({"id": 5, "kind": "signed_op", "op": {}});
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![job], tokens: serde_json::json!([]), ..Default::default() }).await;
+            let retry = matches!(step_once(&a, &odoo, 0, "n#0", None, &InflightSet::default()).await.unwrap(), Step::Retry(_));
+            let last = o.lock().unwrap().reports.last().unwrap()["chain_state"].as_str().unwrap().to_string();
+            (last, retry, a.submits.load(std::sync::atomic::Ordering::SeqCst))
+        };
+        assert_eq!(run(None, 0).await, ("dead".to_string(), false, 1));
+        assert_eq!(run(Some(true), 0).await, ("consumed".to_string(), false, 1));
+        assert_eq!(run(None, 1).await, ("queued".to_string(), true, 1));
     }
 
     /// The `call` share is Soroban's: another family's `call` job (Hedera's run on this runner) still runs to the whole budget.

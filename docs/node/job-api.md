@@ -387,6 +387,14 @@ The lane scheduler leases queued rows of its chain with `hold = 0` and `lane_hin
 ≤ 10 per round, skipping digests already in flight; after a restart, queued jobs are not leased for
 `lease_hold_after_start_secs` (15 s), so queued cancels land first.
 
+<a id="NODE-JOB-21"></a>**NODE-JOB-21** — **The node's own queue claims by kind: a stopped kind never hides another**
+(owner decision 2026-11-02; SPECIFIED). A kind can be stopped on a lane while others run, today Soroban `call` jobs at
+`breaker.call_budget_pct` of the hour's budget. The scheduler leases past a stopped kind inside the store, so its queued rows
+take no slot of the round and the oldest job of a running kind is always reached, however long the backlog. Each namespace has a
+`call` quota (`max_live_call_jobs`, beside `max_live_jobs`; over it `429 QUOTA` at `POST /v1/jobs`), so one namespace's backlog
+of free jobs stays bounded. This is the node's guarantee, not a consumer's: the node is open and any consumer can run it. The
+built legacy pull path has a limit of its own, [NODE-JOB-10](#NODE-JOB-10).
+
 ## 8. Lane pinning
 
 <a id="lane-pinning"></a><a id="NODE-JOB-08"></a>**NODE-JOB-08** — **Relayer-bound jobs are pinned to their lane**: a
@@ -711,13 +719,17 @@ the flag and the client's service methods; the final node refuses the legacy sec
 rejected: the in-flight journal lives in the client, so a hard cut means importing it (a one-off path that can
 double-sign) or a stop-the-world drain (≥ one `valid_until` window per chain, payers re-sign), with no rollback.
 
+Limit of this path: `relay_poll` hands a chain's oldest jobs and clamps `limit` to 50, with no notion of kind. So while Soroban
+`call` jobs are stopped the node reads 50 and skips them, and a backlog over 50 `call` jobs can hide a payment, across windows
+while it lasts. [NODE-JOB-21](#NODE-JOB-21) is the node's own queue, which has no such limit.
+
 Transitional (BUILT). The node pulls work from the client database over the client's JSON-RPC (`POST
 /json/2/<model>/<method>`, `Authorization: Bearer <api key>`, database header), and reports outcomes back:
 
 | Method | Caller key | In | Out / effect |
 |---|---|---|---|
 | `node_config` | relay worker or indexer | `evm_chain_number, relayer_address?` | chain params, finality, `indexed_block`, token `[{address, decimals}]`, `journal_max_nonce` and `inflight` (jobs `nonce_leased/signed/broadcast` of the relayer, with payload) for cold start |
-| `relay_poll` | relay worker | `evm_chain_number, limit` | `queued` jobs with the full meta-tx (struct + signature + token) |
+| `relay_poll` | relay worker | `evm_chain_number, limit` (clamped to 50) | `queued` jobs with the full meta-tx (struct + signature + token), oldest first |
 | `relay_claim` | relay worker | `job_ids, worker` | the ids claimed (CAS `UPDATE … WHERE chain_state='queued' RETURNING id`) |
 | `relay_report` | relay worker | `job_id, chain_state, tx_hash?, outer_nonce?, error?` | transition per the client's allowed-transition table |
 | `chain_event_ingest` | indexer | `evm_chain_number, from_block, to_block, to_block_hash, events[]` | record events + apply effects + advance the cursor, **one transaction** |

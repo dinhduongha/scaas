@@ -26,10 +26,10 @@ use stellar_xdr::{
     ReadXdr, ScAddress, ScMap, ScMapEntry, ScSymbol, ScVal, ScVec, SequenceNumber, Signature, SignatureHint,
     SorobanAddressCredentials, SorobanAuthorizationEntry, SorobanAuthorizedFunction, SorobanAuthorizedInvocation, SorobanCredentials,
     SorobanTransactionData, SorobanTransactionDataExt, TimeBounds, TimePoint, Transaction, TransactionEnvelope, TransactionExt,
-    TransactionResult, TransactionV1Envelope, Uint256, WriteXdr,
+    InnerTransactionResultResult, TransactionResult, TransactionResultResult, TransactionV1Envelope, Uint256, WriteXdr,
 };
 
-use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, TxStatus};
+use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Refused, Rejected, Signed, TxStatus};
 use crate::chain::SimError;
 use crate::config::ChainCfg;
 use crate::odoo::Job;
@@ -538,6 +538,16 @@ impl SorobanAdapter {
     }
 }
 
+/// `txSOROBAN_INVALID`, plain or inside a fee bump's `txFEE_BUMP_INNER_FAILED`. Bytes that do not decode are not it.
+fn soroban_invalid(error_result: &Value) -> bool {
+    let Some(r) = error_result.as_str().and_then(|x| TransactionResult::from_xdr_base64(x, Limits::len(1 << 16)).ok()) else { return false };
+    match r.result {
+        TransactionResultResult::TxSorobanInvalid => true,
+        TransactionResultResult::TxFeeBumpInnerFailed(p) => matches!(p.result.result, InnerTransactionResultResult::TxSorobanInvalid),
+        _ => false,
+    }
+}
+
 /// `simulateTransaction` answered `error`: the host refused the call (not a transport failure).
 #[derive(Debug)]
 struct SimRefused(String);
@@ -605,7 +615,7 @@ impl ChainAdapter for SorobanAdapter {
         let mut tx = tx;
         tx.fee = u32::try_from(self.base_fee as i64 + data.resource_fee).map_err(|_| SimError::Revert("fee overflow".into()))?;
         tx.ext = TransactionExt::V1(data);
-        // simulation does not see this limit, and `sendTransaction` would answer `ERROR`, which requeues: this job's own state
+        // simulation does not see this limit, and `sendTransaction` would refuse it: this job's own state, named here
         let size = Self::envelope_size(&tx).map_err(rv)?;
         let limit = self.tx_max_size().await?;
         if size > limit {
@@ -656,8 +666,9 @@ impl ChainAdapter for SorobanAdapter {
         let r = self.rpc("sendTransaction", json!({"transaction": env.to_xdr_base64(Limits::none())?})).await?;
         match r["status"].as_str() {
             Some("PENDING") | Some("DUPLICATE") => Ok(()),
-            // ERROR = CheckTx-equivalent refusal (bad seq/auth/fee/malformed): the same bytes never pass ⇒ rebuild.
-            // TRY_AGAIN_LATER (queue full) and transport errors stay retryable.
+            // ERROR = CheckTx-equivalent refusal (bad seq/auth/fee/malformed): the same bytes never pass ⇒ rebuild, except
+            // `txSOROBAN_INVALID`, which a rebuild never passes either. TRY_AGAIN_LATER (queue full) and transport errors stay retryable.
+            Some("ERROR") if soroban_invalid(&r["errorResultXdr"]) => Err(Refused(format!("sendTransaction ERROR: {}", r["errorResultXdr"])).into()),
             Some("ERROR") => Err(Rejected(format!("sendTransaction ERROR: {}", r["errorResultXdr"])).into()),
             other => bail!("sendTransaction {}: {}", other.unwrap_or("?"), r["errorResultXdr"]),
         }
@@ -693,7 +704,8 @@ impl ChainAdapter for SorobanAdapter {
         if r.get("latestLedger").is_none() {
             bail!("getLedgerEntries without latestLedger: {r}");
         }
-        let Some(x) = r["entries"][0]["xdr"].as_str() else { return Ok(Some(0)) };
+        let Some(e) = r["entries"].get(0) else { return Ok(Some(0)) };
+        let x = e["xdr"].as_str().ok_or_else(|| anyhow!("account entry without xdr"))?;
         match LedgerEntryData::from_xdr_base64(x, Limits::len(1 << 16))? {
             LedgerEntryData::Account(a) => Ok(Some(u128::try_from(a.balance)?)),
             _ => bail!("not an account entry"),
@@ -3011,6 +3023,10 @@ mod tests {
 
     /// The quickstart's `tx_max_size_bytes`.
     const TX_MAX: u32 = 132_096;
+    /// `errorResultXdr` as the real host answers a transaction over that limit (`e2e_ua8_tx_size_limit`, `EDGE`): `txSOROBAN_INVALID`,
+    /// and under a fee bump `txFEE_BUMP_INNER_FAILED` around it.
+    const ERROR_SOROBAN_INVALID: &str = "AAAAAAALbzj////vAAAAAA==";
+    const ERROR_BUMP_SOROBAN_INVALID: &str = "AAAAAAALb5z////zWRfjyUlWVTv+F87wskTRYnPObfe1KCBhWRpVN3xSsFoAAAAAAAAAAP///+8AAAAAAAAAAA==";
     /// The quickstart's `contract_data_entry_size_bytes`.
     const ENTRY_MAX: u32 = 65_536;
 
@@ -3032,15 +3048,17 @@ mod tests {
         entry_limit: Option<u32>,
         /// The accounts that exist, each `(public key, balance)`; `None` = every account, with no balance.
         accounts: Option<Vec<([u8; 32], i64)>>,
-        /// `sendTransaction` answers `ERROR` to everything.
-        refuses: bool,
+        /// `sendTransaction` answers `ERROR` with this `errorResultXdr`.
+        refuses: Option<String>,
         /// `getLedgerEntries` answers a JSON body with no result.
         no_entries_result: bool,
+        /// `getLedgerEntries` answers an entry with no `xdr`.
+        bare_entry: bool,
     }
 
     impl Default for Net {
         fn default() -> Self {
-            Self { tx: json!({"status": "SUCCESS", "ledger": 5}), entry_limit: Some(ENTRY_MAX), accounts: None, refuses: false, no_entries_result: false }
+            Self { tx: json!({"status": "SUCCESS", "ledger": 5}), entry_limit: Some(ENTRY_MAX), accounts: None, refuses: None, no_entries_result: false, bare_entry: false }
         }
     }
 
@@ -3060,8 +3078,12 @@ mod tests {
                             }
                             e => e,
                         };
-                        let over = env.to_xdr(Limits::none()).unwrap().len() > limit.unwrap_or(TX_MAX) as usize || net.lock().unwrap().refuses;
-                        Some(if over { json!({"status": "ERROR", "errorResultXdr": "txSOROBAN_INVALID"}) } else { json!({"status": "PENDING"}) })
+                        let over = env.to_xdr(Limits::none()).unwrap().len() > limit.unwrap_or(TX_MAX) as usize;
+                        let refused = net.lock().unwrap().refuses.clone().or(over.then(|| ERROR_SOROBAN_INVALID.to_string()));
+                        Some(match refused {
+                            Some(x) => json!({"status": "ERROR", "errorResultXdr": x}),
+                            None => json!({"status": "PENDING"}),
+                        })
                     }
                     Some("getLedgerEntries") => {
                         let net = net.lock().unwrap();
@@ -3085,6 +3107,8 @@ mod tests {
                         }
                         Some(if net.no_entries_result {
                             Value::Null
+                        } else if net.bare_entry {
+                            json!({"entries": [{}], "latestLedger": 5})
                         } else {
                             json!({"entries": entries.iter().map(|x| json!({"xdr": x})).collect::<Vec<_>>(), "latestLedger": 5})
                         })
@@ -4332,6 +4356,9 @@ mod tests {
         assert_eq!(a.lane_balance(1).await.unwrap(), Some(70), "no fee bump: the other account pays nothing here");
         net.lock().unwrap().no_entries_result = true;
         assert!(a.lane_balance(1).await.is_err(), "no result is no answer");
+        net.lock().unwrap().no_entries_result = false;
+        net.lock().unwrap().bare_entry = true;
+        assert!(a.lane_balance(1).await.is_err(), "an entry with no xdr is no answer");
         let (a, _, net) = spend_adapter(answer, Net { accounts: Some(vec![(one, 1_000), (two, 70)]), ..Net::default() }, true).await;
         assert_eq!(a.lane_balance(1).await.unwrap(), Some(1_000), "the fee account alone");
         assert_eq!(a.lane_balance(0).await.unwrap(), Some(1_000), "the fee account's own lane");
@@ -4354,11 +4381,56 @@ mod tests {
         assert!(lane_run(a, 1, floor, &calls, 300).await.0 > 0);
     }
 
+    /// The `errorResultXdr` of a refusal.
+    fn refusal(result: stellar_xdr::TransactionResultResult) -> String {
+        stellar_xdr::TransactionResult { fee_charged: 100, result, ext: stellar_xdr::TransactionResultExt::V0 }.to_xdr_base64(Limits::none()).unwrap()
+    }
+
+    /// `txSOROBAN_INVALID` never passes, and the queue is per chain and oldest first: a job back in it would hold every lane. So the
+    /// head job goes `dead` on its one claim and the next job runs.
+    #[tokio::test]
+    async fn soroban_invalid_ends_the_head_job_and_the_next_runs() {
+        use crate::adapter::tests::{fake_odoo, Fake};
+        for error in [ERROR_SOROBAN_INVALID, ERROR_BUMP_SOROBAN_INVALID] {
+            let net = Net { refuses: Some(error.to_string()), tx: json!({"status": "NOT_FOUND"}), ..Net::default() };
+            let (a, calls, net) = spend_adapter(registry(vec![], vec![]), net, false).await;
+            let jobs = vec![call_of(7), call_of(8)];
+            let (odoo, o) = fake_odoo(Fake { jobs, repeat: true, tokens: json!([]), ..Default::default() }).await;
+            crate::adapter::lane_step(a.as_ref(), &odoo, 0, "n#0").await.unwrap();
+            {
+                let mut f = o.lock().unwrap();
+                let last = f.reports.last().unwrap();
+                assert_eq!((&last["job_id"], &last["chain_state"], f.claims), (&json!(7), &json!("dead"), 1), "{:?}", f.reports);
+                assert!(last["error"].as_str().unwrap().contains("sendTransaction ERROR"), "{last}");
+                f.jobs.retain(|j| j["id"] != 7);
+            }
+            *net.lock().unwrap() = Net::default();
+            crate::adapter::lane_step(a.as_ref(), &odoo, 0, "n#0").await.unwrap();
+            let f = o.lock().unwrap();
+            assert_eq!((&f.reports.last().unwrap()["job_id"], &f.reports.last().unwrap()["chain_state"]), (&json!(8), &json!("mined")));
+            assert_eq!(sends(&calls), 2);
+        }
+    }
+
+    /// The one change, another code: what a rebuilt transaction can pass stays `Rejected`, back to the queue, the lane backing off.
+    #[tokio::test]
+    async fn only_soroban_invalid_is_for_good() {
+        use stellar_xdr::TransactionResultResult as R;
+        for result in [R::TxBadSeq, R::TxInsufficientFee] {
+            let net = Net { refuses: Some(refusal(result)), tx: json!({"status": "NOT_FOUND"}), ..Net::default() };
+            let (a, _, _) = spend_adapter(registry(vec![], vec![]), net, false).await;
+            let job: Job = serde_json::from_value(call_of(7)).unwrap();
+            let signed = a.sign(a.build(&job, 0).await.unwrap(), 0, 1).await.unwrap();
+            let e = a.submit(&signed).await.unwrap_err();
+            assert!(e.downcast_ref::<Rejected>().is_some() && e.downcast_ref::<crate::adapter::Refused>().is_none(), "{e:#}");
+        }
+    }
+
     /// `sendTransaction` answers `ERROR` to every send (`Rejected`, back to the queue, oldest first, so the same job again): the lane
     /// backs off instead of looping at RPC speed, whatever the cause.
     #[tokio::test]
     async fn rejected_send_backs_off() {
-        let (a, calls, _) = spend_adapter(registry(vec![], vec![]), Net { refuses: true, tx: json!({"status": "NOT_FOUND"}), ..Net::default() }, false).await;
+        let (a, calls, _) = spend_adapter(registry(vec![], vec![]), Net { refuses: Some(refusal(stellar_xdr::TransactionResultResult::TxBadSeq)), tx: json!({"status": "NOT_FOUND"}), ..Net::default() }, false).await;
         let (sent, states, _) = lane_run(a, 0, Default::default(), &calls, 2_500).await;
         assert!((1..=3).contains(&sent), "{sent} sends in 2.5 s");
         assert!(states.contains(&"queued".to_string()), "{states:?}");
@@ -4594,5 +4666,17 @@ mod tests {
         let mut jobs: Vec<Value> = (0..20).map(call_of).collect();
         jobs.push(pay_of(&a, 99));
         assert_eq!(budget_step(&a, &spent_lane(BUDGET / 2, 50), jobs).await, (vec![99], 1));
+    }
+
+    /// The limit of the legacy pull path, pinned: the client clamps `relay_poll` at 50, so a payment behind 50 stopped `call` jobs is
+    /// not seen on this path, across windows while the backlog lasts. The node's own queue claims by kind (NODE-JOB-21).
+    #[tokio::test]
+    async fn a_backlog_over_the_read_hides_a_payment_on_the_pull_path() {
+        let (a, _, _) = spend_adapter(registry(vec![], vec![]), Net::default(), false).await;
+        let mut jobs: Vec<Value> = (0..49).map(call_of).collect();
+        jobs.push(pay_of(&a, 99));
+        assert_eq!(budget_step(&a, &spent_lane(BUDGET / 2, 50), jobs.clone()).await, (vec![99], 1), "the 50th job is read");
+        jobs.insert(0, call_of(100));
+        assert_eq!(budget_step(&a, &spent_lane(BUDGET / 2, 50), jobs).await, (vec![], 0), "the 51st is not");
     }
 }
