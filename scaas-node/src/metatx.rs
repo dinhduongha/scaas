@@ -10,8 +10,9 @@ use anyhow::{anyhow, bail, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub use crate::abi::{MetaTransaction, MetaTransfer, UAMetaTransaction, UAMetaTransfer};
+pub use crate::abi::{MetaTransaction, MetaTransfer, UAMetaTransaction, UAMetaTransfer, UASig};
 use crate::abi::{IToken, IUALedger};
+use alloy::sol_types::SolValue;
 
 pub const MODE_RESTRICT_RELAYER: u32 = 0x01;
 pub const MODE_RESTRICT_FEE_RECIPIENT: u32 = 0x02;
@@ -119,7 +120,7 @@ fn b32(s: &str) -> Result<B256> {
     B256::from_str(s).map_err(|e| anyhow!("bytes32 {s}: {e}"))
 }
 
-fn check_mode(mode: u32) -> Result<()> {
+pub(crate) fn check_mode(mode: u32) -> Result<()> {
     if mode & !MODE_KNOWN_MASK != 0 || (mode & MODE_FEE_MASK) >> 4 > 2 {
         bail!("unknown mode bits {mode:#x}");
     }
@@ -492,17 +493,27 @@ impl UaMtx {
         }
     }
 
-    /// The relayed calldata: `uaExecute(m, auth)` or `uaExecuteTransfer(t, auth)`.
-    pub fn calldata(&self, auth: Bytes) -> Bytes {
+    /// The struct hash the digest is over (`MetaTxLib.hashStruct`, unbound fields zero).
+    pub fn struct_hash(&self) -> B256 {
+        let mut c = self.clone();
+        c.unbound(None, None);
+        match c {
+            Self::Call(m) => m.eip712_hash_struct(),
+            Self::Transfer(t) => t.eip712_hash_struct(),
+        }
+    }
+
+    /// The relayed calldata: `uaExecuteTransfer(t, auth)`; `uaExecute` keeps `bytes auth` (TS-D14), the encoded `UASig`.
+    pub fn calldata(&self, auth: UASig) -> Bytes {
         match self.clone() {
-            Self::Call(m) => IUALedger::uaExecuteCall { m, auth }.abi_encode().into(),
+            Self::Call(m) => IUALedger::uaExecuteCall { m, auth: auth.abi_encode().into() }.abi_encode().into(),
             Self::Transfer(t) => IUALedger::uaExecuteTransferCall { t, auth }.abi_encode().into(),
         }
     }
 
     /// A UA pay-meta job (CTR-MTX-26) as [`Mtx::pay_meta_calldata`]: `uaPayMeta`, or for an off-chain meta the plain
     /// `uaExecuteTransfer` of the same struct.
-    pub fn pay_meta_calldata(&self, salt: B256, meta: Bytes, auth: Bytes, on_chain: bool) -> Result<Bytes> {
+    pub fn pay_meta_calldata(&self, salt: B256, meta: Bytes, auth: UASig, on_chain: bool) -> Result<Bytes> {
         let Self::Transfer(t) = self else { bail!("a pay-meta job is a transfer struct") };
         pay_meta_shape(t.entryRef, t.batch, t.nonce, &salt, &meta)?;
         if !on_chain {
@@ -513,9 +524,9 @@ impl UaMtx {
     }
 
     /// Inverse of `calldata` and `pay_meta_calldata`: `(mtx, auth)`, `None` for any other call.
-    pub fn from_calldata(data: &[u8]) -> Option<(Self, Bytes)> {
+    pub fn from_calldata(data: &[u8]) -> Option<(Self, UASig)> {
         if let Ok(c) = IUALedger::uaExecuteCall::abi_decode(data) {
-            return Some((Self::Call(c.m), c.auth));
+            return Some((Self::Call(c.m), UASig::abi_decode(&c.auth).ok()?));
         }
         if let Ok(c) = IUALedger::uaPayMetaCall::abi_decode(data) {
             let id = meta_pay_id(&c.salt, &c.meta);
@@ -681,7 +692,8 @@ mod tests {
                 assert_eq!(m.from(), s(&x["from"]).parse::<B256>().unwrap());
                 let (k, w) = m.to_wire();
                 assert_eq!((k, UaMtx::from_wire(Some(k), &w).unwrap()), (kind, m.clone()), "wire round-trip");
-                let auth: Bytes = alloy::hex::decode(&s(&x["auth"])[2..]).unwrap().into();
+                let auth = UASig { keyData: Bytes::new(), signature: alloy::hex::decode(&s(&x["auth"])[2..]).unwrap().into(), members: vec![] };
+                assert_eq!(format!("{:#x}", m.struct_hash()), s(&x["structHash"]), "{sec} {}", x["name"]);
                 assert_eq!(UaMtx::from_calldata(&m.calldata(auth.clone())), Some((m, auth)));
                 n += 1;
             }
@@ -722,7 +734,7 @@ mod tests {
             batch: pay_lane(&id), nonce: U256::ZERO, validUntil: U256::from(1_800_000_300u64), mode: MODE_RESTRICT_RELAYER,
             relayer: Address::repeat_byte(2), fee: U256::ZERO, feeRecipient: Address::ZERO };
         let m = UaMtx::Transfer(t.clone());
-        let auth = Bytes::from_static(&[7; 65]);
+        let auth = UASig { keyData: Bytes::new(), signature: Bytes::from_static(&[7; 65]), members: vec![] };
         let on = m.pay_meta_calldata(salt, meta.clone(), auth.clone(), true).unwrap();
         assert_eq!(on[..4], IUALedger::uaPayMetaCall::SELECTOR);
         assert_eq!(UaMtx::from_calldata(&on), Some((m.clone(), auth.clone())), "uaPayMeta is its UAMetaTransfer");
@@ -733,8 +745,8 @@ mod tests {
         }
         let call = UaMtx::Call(UAMetaTransaction { from: t.from, data: Bytes::new(), batch: U256::ZERO, nonce: U256::ZERO,
             validUntil: t.validUntil, mode: 0, relayer: Address::ZERO, fee: U256::ZERO, feeRecipient: Address::ZERO });
-        assert!(call.pay_meta_calldata(salt, meta, auth, true).is_err(), "a call struct is no pay-meta");
-        assert_eq!(UaMtx::from_calldata(&call.calldata(Bytes::new())).map(|x| x.0), Some(call));
+        assert!(call.pay_meta_calldata(salt, meta, auth.clone(), true).is_err(), "a call struct is no pay-meta");
+        assert_eq!(UaMtx::from_calldata(&call.calldata(auth.clone())).map(|x| x.0), Some(call.clone()));
         assert!(UaMtx::from_calldata(&IToken::mtxNonceCall { from: Address::ZERO, batch: U256::ZERO }.abi_encode()).is_none());
     }
 }

@@ -20,6 +20,7 @@ plus code-specific fields (the gateway's contract is
 5. [Routes](#5-routes)
    - 5.1 [`POST /v1/jobs`](#post-v1jobs)
    - 5.2 [Meta-transaction data](#52-meta-transaction-data)
+   - 5.3 [Named entries](#named-entries)
 6. [Intake](#intake)
 7. [Lease](#7-lease)
 8. [Lane pinning](#8-lane-pinning)
@@ -117,10 +118,10 @@ means "the node holds a job under this key", never "dead".
 {"jobs": [{
   "origin": {"scope": "6f1c…:1", "producer": "payment.request", "key": "0x8d…", "generation": 0},
   "client_ref": "erp:1234", "chain_key": "evm:7622", "kind": "metatx",
-  "payload": {"token": "0x…", "digest": "0x…", "signature": "0x…",
-              "metatx": {"from": "0x…", "to": "0x…", "value": "100", "data": "0x", "batch": "7", "nonce": "0",
-                         "validUntil": "1790000300", "mode": 1, "relayer": "0x…", "fee": "0",
-                         "feeRecipient": "0x0000000000000000000000000000000000000000"}},
+  "payload": {"op": {"entry": "mtxUnwrap", "contract": "token", "token": "0x…",
+                     "envelope": {"from": "0x…", "batch": "7", "nonce": "0", "validUntil": "1790000300", "mode": 1,
+                                  "relayer": "0x…", "fee": "0", "feeRecipient": "0x0000000000000000000000000000000000000000"},
+                     "args": {"wrapped": "100", "recipient": "0x…", "minOut": "99"}, "signature": "0x…"}},
   "bus": {"scope": "restricted", "private_window_secs": 120}}]}
 ```
 
@@ -139,23 +140,26 @@ Payload by kind:
 
 | Kind | Payload |
 |---|---|
-| `metatx` | `{token, signature, struct: "call"\|"transfer", metatx: {…}}`: `struct = call` carries the 9 fields of `MetaTransaction` (`data` = an allowlisted self-call, [NODE-JOB-20](#NODE-JOB-20)), `struct = transfer` the 11 fields of `MetaTransfer` (`entryRef = 0` transfer, else payment) ([CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)); `uint256` as decimal strings; addresses lowercase; `token` is any registered SCaaS contract on `MetaTxBase` for `call` (tokens, `MandateWallet`, `SmartKeyAccount`, contracts built on SCaaS), a token for `transfer`. Idempotency and the mesh `intent_id` are the struct's digest; one `(from, batch, nonce)` lane space spans both structs. The token's other signed entry points travel as `metatx` jobs too, with `entry` naming them ([order and wrap entries](#metatx-entries)). May carry `receiver_fee: {fee, feeRecipient, validUntil, signature}` ([sponsorship.md#receiver-pays](sponsorship.md#receiver-pays); not built in the node: such a job is `dead`, never relayed without it); incl. v1 envelopes of a `PqzToken` |
+| `metatx` | One named entry: `{op: {entry, contract, token, envelope, args, signature}}` ([named entries](#named-entries)); the node builds the calldata and the typed digest from the one parse. A token transfer or payment keeps its explicit struct: `{token, contract?, signature, struct: "transfer", metatx: {…}}`, the 11 fields of `MetaTransfer` (`entryRef = 0` transfer, else payment, [CTR-MTX-23](../contracts/metatx.md#CTR-MTX-23)); `contract` = `token` \| `zether` \| `pqz` (absent = `token`) names its digest's domain. `uint256` as decimal strings; addresses lowercase. Idempotency and the mesh `intent_id` are the typed digest; one `(from, batch, nonce)` lane space spans every entry and the struct. Hex is refused on every kind (`HEX_DATA_REFUSED`, [NODE-JOB-20](#NODE-JOB-20)). `receiver_fee` on a job is `dead`, never relayed without it: receiver-pays is the entry `mtxPayReceiverFee` ([sponsorship.md#receiver-pays](sponsorship.md#receiver-pays)) |
 | `signed_op` | `{op: {op_kind: "call"\|"transfer", function?, payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"\|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload` (non-EVM `MetaCall`/`MetaTransfer`, [NET-ALL-26](../networks/README.md#NET-ALL-26), or Soroban auth payload); as built `op_kind: "pay"` over `MetaOp` v1 |
-| `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.mtxPayUnderMandate(...)`, `SmartKeyAccountFactory.deploy(...)`; the signature lives inside the calldata; selector and target must match a row of the [call table](#call-table); no native value |
-| `ua_metatx` (EVM outbox path **BUILT**, node-ua-jobs 2026-10-30; the rest SPECIFIED; `kind = ua_metatx`) | MetaToken v3 `UAMetaTransaction` or `UAMetaTransfer` ([CTR-UA-26](../contracts/accounts.md#CTR-UA-26)) with `from: bytes32` and its `auth`: `{token, struct: "call"\|"transfer", m: WireUAMetaTransaction\|WireUAMetaTransfer, auth}` (the address structs' wire fields, `from` / `to` as bytes32; `metatx`, `signature`, `entry`, `call` refused); same lifecycle as `metatx`; idempotency on `(chain, token, from, batch, nonce)`; digest = `uaDigest` / `uaTransferDigest` (incl. v3 envelopes of a `PqzToken`). Built: relayed as `uaExecute` / `uaExecuteTransfer` (or `uaPayMeta`, [pay-meta](#paymeta-relayfee-jobs)) on a registered token whose UA ledger is on (`registry() ≠ 0`, else `FEATURE_UNSUPPORTED`); the selector, kind and registration are the exact call's simulation (tokens publish no UA allowlist); a refused simulation is `consumed` when `uaNonce(from, batch)` has passed the nonce, the in-flight key is the token's UA digest. Not built: the gateway route and record cache ([gateway.md](gateway.md#ua-cache)), mesh `evm.ua_meta_tx`, `uaBatch*` / `uaCancelNonce` / `uaPayReceiverFee` jobs. **Soroban (BUILT, UA-Soroban T9; [NET-SOR-23](../networks/soroban.md#NET-SOR-23)):** `{op: {contract, function, args: "<hex XDR ScVec>" (every argument, `auth` last), auth?: [{payload, from, signature}], valid_until?}}`, no `op.kind`; `op.valid_until` is optional and never read (the signed argument decides, [NET-SOR-15](../networks/soroban.md#NET-SOR-15)); `function` is allow-listed per contract class (token `ua_transfer`, `ua_pay`, `ua_pay_meta`, `ua_burn`, `ua_cancel_nonce`; router `ua_relay`; DEX `settle`, `ua_cancel`; mandate `mtx_set_mandate`, `mtx_set_payee`, `mtx_revoke`, `mtx_withdraw`, `mtx_mandate_pay`) with the exact arity; a lane-bound `relayer` gets one `SourceAccount` entry rooted at the call and any other recorded `SourceAccount` entry fails the job; a payee, destination or mandate delegate that is the router or the executor is refused; a delegate job refused `StaleEpoch` returns the signed and the current epoch, the client re-signs; the digest is recomputed and is the job id; archived entries are restored within `params.max_deposit_per_job` (stroops; absent = none) |
+| `call` | A plain entry, no typed struct of its own: `{op: {entry, token, args, validUntil}}` (`token` = the target; `SmartKeyAccountFactory.deploy`, the registry's writes, the DEX's settlement entries, `mtxExecuteAsOwner`), every argument named JSON; the signature, if any, is one of the `args`; entry and target must match the [call table](#call-table); no native value |
+| `ua_metatx` (EVM outbox path **BUILT**, node-ua-jobs 2026-10-30; the rest SPECIFIED; `kind = ua_metatx`) | A `ua*` named entry: `{op: {entry, contract, token, envelope, args, auth}}` with `auth` the `UASig` object `{keyData, signature, members: [{index, keyData, sig}]}` ([named entries](#named-entries)), or a transfer on the UA ledger: `{token, contract?, struct: "transfer", m: WireUAMetaTransfer, auth}` (the address struct's wire fields, `from` / `to` as bytes32; `metatx`, `signature` refused). Same lifecycle as `metatx`; idempotency on `(chain, token, from, batch, nonce)`; digest = the typed digest the node computes. Built: relayed on a registered token whose UA ledger is on (`registry() ≠ 0`, else `FEATURE_UNSUPPORTED`); the kind and registration are the exact call's simulation; a refused simulation is `consumed` when `uaNonce(from, batch)` has passed the nonce. Not built: the record cache ([gateway.md](gateway.md#ua-cache)), mesh `evm.ua_meta_tx`. **Soroban (BUILT, UA-Soroban T9; [NET-SOR-23](../networks/soroban.md#NET-SOR-23)):** `{op: {contract, function, args: "<hex XDR ScVec>" (every argument, `auth` last), auth?: [{payload, from, signature}], valid_until?}}`, no `op.kind`; `op.valid_until` is optional and never read (the signed argument decides, [NET-SOR-15](../networks/soroban.md#NET-SOR-15)); `function` is allow-listed per contract class (token `ua_transfer`, `ua_pay`, `ua_pay_meta`, `ua_burn`, `ua_cancel_nonce`; router `ua_relay`; DEX `settle`, `ua_cancel`; mandate `mtx_set_mandate`, `mtx_set_payee`, `mtx_revoke`, `mtx_withdraw`, `mtx_mandate_pay`) with the exact arity; a lane-bound `relayer` gets one `SourceAccount` entry rooted at the call and any other recorded `SourceAccount` entry fails the job; a payee, destination or mandate delegate that is the router or the executor is refused; a delegate job refused `StaleEpoch` returns the signed and the current epoch, the client re-signs; the digest is recomputed and is the job id; archived entries are restored within `params.max_deposit_per_job` (stroops; absent = none) |
 | `pqz_call` (SPECIFIED; private chain only) | **Direct open calls only**: `{chain, contract, selector ∈ {mtxConfidentialTransfer, mtxUnshield, mtxRollOver}, calldata}` to a configured PQZ token (direct `mtxShield` moves the caller's public units into the pool and `mtxWrapShield` pulls the caller's underlying: neither is a node job; `mtxRollOver` and `mtxPrepareAcc` are allowlisted self-calls too, so a keeper may call them directly or relay them as ordinary `metatx` jobs, owner 2026-10-20); stored like `call`: `digest` NULL, `call_hash` set |
-| PQZ envelopes (SPECIFIED) | **No new kind** ([CTR-PQZ-15](../contracts/pq-zero-knowledge.md#CTR-PQZ-15)): a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` or `ua_metatx` jobs with `struct = call` (domain `("SCaaS PqzToken", "1", chainId, token, chainUid)`), `m.data` = the direct calldata of `mtxConfidentialTransfer`/`mtxUnshield`/`mtxShield` (opaque to the client) ([CTR-PQZ-21](../contracts/pq-zero-knowledge.md#CTR-PQZ-21)); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `mtxUnshield` paying the underlying to `recipient` |
+| PQZ and Zether ops | **No new kind** ([CTR-PQZ-15](../contracts/pq-zero-knowledge.md#CTR-PQZ-15)): every envelope op is a named entry, `metatx` or `ua_metatx`, `contract` = `pqz` or `zether`, the explicit struct as JSON in `args` ([named entries](#named-entries)); `pqzAuth`, `ownerSig` are `UASig` objects in `args`, unsigned by the envelope; outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile |
 
 <a id="paymeta-relayfee-jobs"></a>**Pay-meta and relay-fee jobs ([CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26), [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); BUILT, metatx-split T17).** No new job kind.
 - *EVM, address payers.* A pay-meta job is a `metatx` job with `struct = transfer` that also carries `salt` (32 B) and `meta`
   (hex). Before any simulation the node checks `entryRef == metaPayId(salt, meta)`, `batch == payLane(entryRef)`, `nonce == 0`
   and `len(meta) <= max_pay_meta_bytes` (chain `params`, default 2,048), then relays `mtxPayMeta` (on-chain meta) or the plain
-  `mtxExecuteTransfer` (off-chain meta). A relay-fee job is a `call` job to the configured `MtxRelayFee`
-  (`params.relay_fee.router`) with selector `relay`; it has its own call-table row ([call table](#call-table)).
+  `mtxExecuteTransfer` (off-chain meta). A relay-fee job is the named entry `mtxRelayFee` with `call`
+  ([named entries](#named-entries)): `{entry: "mtxRelayFee", contract, token: <fee token>, args: {from, payee, value, validUntil,
+  relayer: <router>}, call: {entry, contract, token, envelope, args, signature}, signature}`. The node builds the inner calldata
+  from `call`, `target` and `callDataHash` from it, and sends the router's `relay` to `args.relayer`, which must be
+  `params.relay_fee.router`; a hex call is refused.
   *EVM, UA payers* (BUILT, node-ua-jobs 2026-10-30): a UA pay-meta job is a `ua_metatx` job with `struct = transfer`,
   `salt` and `meta`, the same checks on ids, relayed as `uaPayMeta` (off-chain meta: `uaExecuteTransfer`); a UA relay-fee job
-  is a `call` job with selector `uaRelay` (call-table row `MtxRelayFee.uaRelay`, the router's shape on ids: the payee never
-  `pad(executor)`, open mode `t.to = pad(router)`).
+  is the entry `uaRelayFee` on a `ua_metatx` job, `from` and `payee` as ids, `auth` a `UASig`, sent as `uaRelay` (the payee never
+  `pad(executor)`, open mode `payee = pad(router)`).
 - *EVM, the fee covers the quote.* After the simulation, a relay fee that reaches this lane (open mode or bound to it) must be
   worth, at `params.relay_fee.min_wei_value[token]`, at least the quote: the gas limit × the job's **fee ceiling**
   (`FEE_HEADROOM` = 2 × the max fee per gas of its first send) + 2 × the L1 data fee on an OP-stack chain
@@ -208,8 +212,8 @@ Payload by kind:
   gain, then the exact group on its own budget, one bare budget call appended per "dynamic cost budget exceeded" up to 16
   transactions ([NET-ALG-17](../networks/algorand.md#NET-ALG-17)). Quote = the group's fee + its exact MBR payments, no
   resend term; a refused group costs nothing. There is no refund, so `op_consumed` answers for every job kind.
-- *Job errors:* `CALL_TARGET_REFUSED` (not the configured router), `TOKEN_NOT_SERVED`, `RELAY_FEE_SHAPE` (ref, lane, nonce, relayer,
-  fee NONE, payee not the executor), `RELAY_FEE_REFUSED` (fee below `min_amount` or bound elsewhere; EVM: below the quote at
+- *Job errors:* `CALL_TARGET_REFUSED` (not the configured router), `TOKEN_NOT_SERVED`, `RELAY_FEE_SHAPE` (the payee is the executor;
+  the `RelayFee` struct signs everything else), `RELAY_FEE_REFUSED` (fee below `min_amount` or bound elsewhere; EVM: below the quote at
   `min_wei_value` (retried), or a `uaRelay` on a token without one, or an OP-stack chain whose oracle does not answer),
   `SUBJECT_HELD` (EVM: retried), `PAYEE_REFUSED` (EVM: a `MetaTransfer` / `UAMetaTransfer` to the
   relay-fee router or its executor), `PAY_META_TOO_LONG` (EVM: `mtxPayMeta` / `uaPayMeta`'s `meta` above `max_pay_meta_bytes`),
@@ -226,56 +230,99 @@ Payload by kind:
   bytes32 id in `from_ua` / `to_ua` (`relay_payee_ua` for a derived payee), because the client's ingest takes 20-byte
   addresses only on EVM (fix 1, review C1). Joins compare the ids (`*_ua` when present), never `UA_POOL`.
 
-`payload` is exactly what every adapter `build` consumes today; `work_from_job` and the family adapters are
-unchanged. A W3C `traceparent` header applies to every item of the batch ([NODE-OPS-09](ops.md#NODE-OPS-09)).
+`payload` is exactly what every adapter `build` consumes. A W3C `traceparent` header applies to every item of the batch ([NODE-OPS-09](ops.md#NODE-OPS-09)).
 
 ### 5.2 Meta-transaction data
 
-<a id="selector-table"></a><a id="NODE-JOB-20"></a>**NODE-JOB-20** — **The node reads a meta-transaction's `data`
-through the implementation's published selector allowlist.** Status: intake **BUILT** (P5). On EVM and Hedera every SCaaS
-contract's `mtxExecute` (alias `executeMetaTransaction`) runs a **self-call** of one of the contract's own functions
-whose selector is on that implementation's fixed allowlist ([CTR-MTX-17](../contracts/metatx.md#CTR-MTX-17)); a
-token's transfers and payments are `MetaTransfer`s with no `data` to read ([CTR-MTX-23](../contracts/metatx.md#CTR-MTX-23)). The node keeps, per registered implementation, the table
-`mtxSelectors() → (selector, fee class, amount argument)`, read once when the implementation is registered on the
-chain and cached (implementations are immutable, so the table never changes). It uses it for:
-
-- **Intake.** A self-call whose selector is not in the table of the contract's implementation, a `data` length that is
-  not the selector's static ABI length, or a fee mode the selector's fee class or the contract's `supportedModes()`
-  does not allow ⇒ `422 SELECTOR_NOT_ALLOWED` (the reason in `detail`), before any simulation. For selectors with
-  dynamic arguments (`mtxConfidentialTransfer` and `mtxUnshield`) the node decodes and re-encodes the arguments and refuses
-  non-canonical `data` (`422 BAD_PAYLOAD`) before it computes the digest and the mesh `intent_id`, so one intent has one
-  identity.
-- **Pricing and display.** The fee basis is the selector's amount argument (fee class `AMOUNT(i)`); `ABSOLUTE`
-  selectors carry a fixed fee or none. Feeds, the job view and the gateway show the decoded call (selector name and
-  arguments), never raw bytes alone.
-- **Breaker.** Self-calls that pass simulation and fail on chain count per `(from, selector)`
-  ([NODE-LANE-25](submit-lanes.md#NODE-LANE-25)); a `MetaTransfer` counts as selector `transfer` (`entryRef = 0`) or
-  `pay`.
+<a id="selector-table"></a><a id="NODE-JOB-20"></a>**NODE-JOB-20** — **The node never reads client hex: it builds the call.**
+Status: **BUILT** (typed-signing N1, owner Option B, 2026-10-31: "explicit named JSON fields per operation instead of opaque
+hex blobs; the node builds the XDR / calldata"). On EVM and Hedera a job names an entry of the node's table and its fields
+([named entries](#named-entries)); the guard allows a selector per contract kind, and nothing else
+([call table](#call-table)). `data` / `calldata` as a field of an op, a `metatx` or `m` body, a `call: {calldata}` object or
+`struct = call` is refused by name on every job kind and at the gateway: `HEX_DATA_REFUSED`. A `bytes` field an entry declares
+(`Execute.data`, `proof`, `ciphertext`) is a named parameter and passes. The contracts keep `mtxExecute` / `mtxBatch` /
+`uaExecute` / `uaBatch` and their `mtxSelectors()` for other callers (owner 2026-10-31); the node relays no hex through them.
 
 Non-EVM families: the node keeps per registered contract the `mtx_` entries it relays (`function`,
 [NET-ALL-27](../networks/README.md#NET-ALL-27)); a `signed_op` naming another function ⇒ `422 SELECTOR_NOT_ALLOWED`, and
 the breaker counts per `(from, function)`.
 
-No role function (mint, rate administration, guardian) is on any allowlist, so a role holder never calls one through a
-token's gateway: it acts through its own contract ([NODE-JOB-19](#NODE-JOB-19)). Why: a fixed op list made every new
-operation (wrap, burn, reserve top-up, confidential funding) impossible to relay; a published per-implementation table
-keeps the node's view exact without a node release per operation. Cost: one table read per registered implementation.
+No role function (mint, rate administration, guardian) is an entry, so a role holder never calls one through a token: it
+acts through its own contract ([NODE-JOB-19](#NODE-JOB-19)). Why: a fixed table is a node release per operation, and hex a
+client built is what the lane would sign; the owner chose the release. Not built: pricing by the decoded call, the breaker per
+`(from, selector)`.
 
-Built (P5, `scaas-node/src/guard.rs`): before simulation, cached per contract — the selector listed, an `AMOUNT`
-selector's basis argument present, no `PERCENT` fee on an `ABSOLUTE` selector, the mode inside `supportedModes()` (the
-static length stays the contract's check); it runs in `Submitter::submit` and again on jobs rebuilt after a restart, and a `MetaTransfer` or an order or wrap entry on an unregistered token (an entry: or unlisted DEX) is `TOKEN_NOT_SERVED`. Not built: canonical re-encoding of dynamic `data`, pricing, the breaker.
+### <a id="named-entries"></a><a id="metatx-entries"></a>5.3 Named entries
 
-<a id="metatx-entries"></a>**Order and wrap entries** (BUILT, P5). Besides `mtxExecute`, three token entry points carry their
-own signature and run as `metatx` jobs, `payload.entry` naming them (default `mtxExecute`; a deadline in `validUntil`):
+Status: **BUILT** (typed-signing N1, `scaas-node/src/typed.rs`). One table: every row is an entry, its struct and its arguments in
+order. `typed_ops_kat_every_entry` pins the rows against [`smartcontracts/vectors/typed/typed_ops.json`](../../smartcontracts/vectors/typed/typed_ops.json):
+encodeType, struct hash, digest, selector, calldata. Whoever reads this API next (an ERP backend, a payment service) builds this
+JSON; the struct names are the vector file's keys.
 
-| `entry` | Target | Payload | Node digest (idempotency) |
-|---|---|---|---|
-| `mtxCancelOrder` | the order's sell token | `{token, entry, order: TradeOrder, signature}` | the `CancelOrder` digest in the token's domain |
-| `mtxInvalidateNonces` | a registered token | `{token, entry, from, batch, newMin, signature}` | the `InvalidateNonces` digest in the token's domain |
-| `mtxWrap` | a registered wrapper whose underlying is a registered token | `{token: wrapper, entry, underlying, order: TradeOrder, signature}` | the order's `TradeOrder` digest in the **underlying's** domain |
+```json
+{"entry": "mtxUnwrap", "contract": "token", "token": "0x…",
+ "envelope": {"from": "0x…", "batch": "7", "nonce": "0", "validUntil": "1790000300", "mode": 1, "relayer": "0x…", "fee": "0",
+              "feeRecipient": "0x…"},
+ "args": {"wrapped": "100", "recipient": "0x…", "minOut": "99"},
+ "signature": "0x…"}
+```
 
-`mtxWrap` requires `order.dex = order.receiveToken = token` and `order.relayer ∈ {0, the lane}`; the wrapper pays the
-submitting lane the order's `fee` from minted units. `mtxTrade` is never a job: only a DEX or a wrapper calls it.
+| Key | Rule |
+|---|---|
+| `entry` | The contract function: `mtxUnwrap`, `uaUnshield`, … |
+| `contract` | The target's kind: `token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `registry`, `factory`. Names the rule and the EIP-712 domain (`SCaaS MetaToken`, `SCaaS ZetherToken`, `SCaaS PqzToken`, `SCaaS MandateWallet`, `SCaaS SmartKeyAccount`, `SCaaS Dex`). May be left out when the entry exists on one kind |
+| `struct` | Only when an entry has two rows on a kind (`ENTRY_AMBIGUOUS`): `CancelOrder` / `CancelWrapOrder`, `CancelUAOrder` / `CancelUAWrapOrder`, `RollOverSigned` / `ZetherRollOver`, `SetRollOverMode` / `ZetherSetRollOverMode`, `CancelDexOrder` / `mtxCancelOrders` |
+| `token` | The call's target; a `RelayFee`'s fee token; a wrap order's wrapper |
+| `envelope` | `from` + `batch`, `nonce`, `validUntil`, `mode`, `relayer`, `fee`, `feeRecipient`, on every entry whose struct ends with them; exactly these keys |
+| `args` | The struct's other fields under their struct names, plus what the entry takes unsigned; exactly these keys, nested structs as objects, arrays as arrays. An entry with no envelope has its whole struct here |
+| `signature` | Hex, an entry that takes `bytes` (`uaShield` too: its `auth` is `bytes`) |
+| `auth` | The object: `UASig` `{keyData, signature, members: [{index, keyData, sig}]}` on `ua*`, `AccountSig` `{keyIndex, proof, signature}` on the account's own entries |
+| `validUntil` | Job deadline, decimal string: required when the op signs none (an owner rollover, `mtxCancelOrders`, a plain entry without one), else it overrides the signed one for the job only |
+
+Values: `uint` as canonical decimal strings (`uint8`, `uint16`, `uint32` may be JSON numbers), addresses `0x` + 20 bytes, `bytes32` /
+`bytes16` `0x` + exact length, `bytes` `0x`-hex, `bool` as JSON. Anything else is `BAD_PAYLOAD` naming the path. An unbound `relayer` /
+`feeRecipient` is normalized ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) and hashed as 0, as `MetaTxLib.canon`.
+
+| Kind | Entries |
+|---|---|
+| Base, every token | `mtxCancelNonce` (also `wallet`, `account`; `args.lane`), `mtxBurn`, `uaBurn`, `uaCancelNonce` (`args`: `ua`, `batch`, `validUntil`, no envelope) |
+| Wrapped | `mtxWrap`, `mtxWrapLeg`, `mtxUnwrap`, `uaUnwrap`, `mtxUnwrapLeg`, `uaUnwrapLeg`, `mtxAddReserve`, `mtxWrapToUA`, `mtxUnwrapToUA`, `uaUnwrapToUA` |
+| Orders | `mtxWrapOrder` / `uaWrapOrder` (`token` = wrapper; `args` = the whole order + `underlying`; the digest is in the **underlying's** domain), `mtxCancelOrder` / `uaCancelOrder` (`args.order`), `mtxInvalidateNonces` (`token` or `dex`; `args`: `from`, `batch`, `minNonce`), `uaInvalidateNonces`, `mtxCancelOrders` on `dex` |
+| Receiver fee | `mtxPayReceiverFee` / `uaPayReceiverFee`: `args`: `payment` (the `MetaTransfer` / `UAMetaTransfer`), `payerSig` (hex / `UASig`), `fee`, `feeRecipient`, `validUntil`; `signature` / `auth` is the payee's |
+| Zether (`zether`) | `mtxShield`, `uaShield`, `mtxWrapShield`, `mtxRollOver`, `uaRollOver`, `mtxConfidentialTransferSingle`, `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`, `mtxUnshield`, `mtxUnshieldUnwrap` and `ua*` twins, `mtxRollOverSigned` / `mtxSetRollOverMode` (+ `args.ownerSig`) and twins, `mtxRollOverBatch`, `uaRollOverBatch` |
+| PQZ (`pqz`) | `mtxShield`, `uaShield`, `mtxWrapShield`, `mtxRollOver`, `uaRollOver`, `mtxPrepareAcc`, `uaPrepareAcc`, `mtxConfidentialTransferSingle`, `…SingleCompact`, `mtxConfidentialTransfer`, `…Compact`, `mtxUnshield`, `mtxUnshieldUnwrap` and `ua*` twins (+ `args.pqzAuth`, a `UASig`) |
+| `MandateWallet` (`wallet`) | `mtxSetMandate`, `mtxSetPayee`, `mtxRevokeMandate`, `mtxPayUnderMandate`, `mtxDelegateRevoke`, `mtxExecute` (`args.data` is `bytes`), plain `mtxExecuteAsOwner`, `mtxExecuteAsOwnerRaw` |
+| `SmartKeyAccount` (`account`) | `mtxAddKey`, `mtxRemoveKey`, `mtxRotateKey`, `mtxSetGuardian`, `mtxCancelRecovery`, `mtxExecute`, plain `mtxExecuteAsOwner` |
+| Relay fee | `mtxRelayFee`, `uaRelayFee` with `call` ([above](#paymeta-relayfee-jobs)) |
+| `dex`, plain | `mtxSettle`, `mtxExchange`, `mtxExchangeVia`, `mtxExchangeBatch`, `mtxHybrid`, `mtxHybridVia`, `mtxCancelOrders`: legs as `{sellToken, shape, order, uaOrder, sig, auth, fill}` |
+| `registry`, plain | `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`, `setKemKey`, `storePqzPop`, `setPqzKey` |
+| `factory`, plain | `deploy` |
+
+**Mandate lanes.** `mtxPayUnderMandate` runs with `batch = mandatePayLane(entryRef)`, `mtxDelegateRevoke` with
+`batch = mandateRevokeLane(token, epoch)`, both at nonce 0 (a revoke is the kill switch, it must not queue behind a pending nonce on
+a shared lane); anything else is `MANDATE_LANE`, nothing sent.
+
+**The digest is the key.** The node computes the typed digest from the op, in the domain `(name of contract, "1", chainId, target,
+chain_uid)`: no chain view. It is the job's in-flight key and what `MetaTransactionExecuted.digest` is compared to. The bytes sent are a
+second key, held with it: `contract` is not in the calldata, so one call never flies twice under another claim.
+
+**The signature pre-check** (every path, before the simulation). For a native signer (`from`, `ua`, `order.from`, a receiver fee's
+payee) with a 65-byte signature the node recovers over its digest. Recovered to the signer: good. To anyone else: an account without code
+is `BAD_SIGNATURE`, nothing simulated or sent; one with code is an ERC-1271 signer, its simulation answers. A derived UA, a member set
+or an account key is the simulation's.
+
+Gateway: `POST /v1/op {chain, op}` takes the same object (`/v1/metatx` keeps `MetaTransfer`; `struct = call` is refused).
+
+| Refusal | When |
+|---|---|
+| `HEX_DATA_REFUSED` | `data` / `calldata` where no entry declares one, `call: {calldata}`, `struct = call` |
+| `UNKNOWN_ENTRY` | no such entry on that kind (a `transfer`, `mtxTrade`) |
+| `ENTRY_AMBIGUOUS` | `contract` or `struct` needed |
+| `OP_KIND_MISMATCH` | a `ua*` entry on a job that is not `ua_metatx`, or the reverse |
+| `BAD_PAYLOAD` | a field missing, unknown, or not its type (the path is named) |
+| `MANDATE_LANE` | above |
+| `BAD_SIGNATURE` | above |
+| `CALL_TARGET_REFUSED` / `TOKEN_NOT_SERVED` | the target does not meet the kind's rule ([call table](#call-table)) |
 
 ## <a id="intake"></a>6. Intake
 
@@ -291,8 +338,7 @@ submitting lane the order's `fee` from minted units. `mtxTrade` is never a job: 
 3. token registered + active and in the namespace subset (empty = none unless `all_tokens`,
    [NODE-JOB-12](#NODE-JOB-12)) ⇒ `422 UNKNOWN_TOKEN` (the registered-token rule of
    [NODE-MESH-13](mesh.md#NODE-MESH-13) for every origin).
-   - 3a. `metatx`: the `data` shape and selector against the implementation's allowlist ⇒ `422 SELECTOR_NOT_ALLOWED`;
-     non-canonical dynamic `data` ⇒ `422 BAD_PAYLOAD` ([NODE-JOB-20](#NODE-JOB-20)).
+   - 3a. Hex `data` / `calldata` ⇒ `422 HEX_DATA_REFUSED`; an entry not in the table ⇒ `422 UNKNOWN_ENTRY` ([NODE-JOB-20](#NODE-JOB-20)).
 4. `kind = call` requires `allow_call` ⇒ `403 CALL_NOT_ALLOWED`, **and** its selector and target must match the
    [call table](#call-table) ⇒ `403 CALL_TARGET_REFUSED` (re-checked at lease).
    - 4a. Native value the job makes the lane send beyond fees ≤ `chain.max_value_out` (GRAM 0.05 GRAM above the fixed
@@ -427,10 +473,9 @@ migrates from the legacy pull path gets `allow_call = true` (mandates and subjec
 ## <a id="call-table"></a>11. Call table
 
 <a id="call-table"></a><a id="NODE-JOB-01"></a>**NODE-JOB-01** — **`call` jobs are limited to a selector/target
-table.** A `call` job carries calldata the client built; a lane signs it as `msg.sender`. The node executes one only
-if its 4-byte selector is in the table **and** the target meets the row's rule; **never** when the target is a
-registered token of the chain (any kind) or the token factory (a token's own signed entry points travel only as
-`metatx` jobs, [NODE-JOB-20](#NODE-JOB-20)); `call` jobs carry no native value. Lane keys never hold
+table.** A lane signs a job as `msg.sender`. The node builds a job's call from a row of [its table](#named-entries) and runs it
+only if the target meets the rule of the contract kind the op names: a token entry on a registered token, a wallet's or account's
+entry **never** on a registered token (any kind) or the token factory, and the rows below; `call` jobs carry no native value. Lane keys never hold
 a role on any contract ([NODE-GEN-01](README.md#NODE-GEN-01), owner 2026-10-07): a role-restricted call reaches its
 target only through a Safe of the role holders (the `Safe.execTransaction` row, [NODE-JOB-19](#NODE-JOB-19)), and the
 lane only relays an `execTransaction` the role holders already signed.
@@ -461,7 +506,7 @@ equals `chain.chain_uid` ([NODE-GW-07](gateway.md#NODE-GW-07)); a mismatch ⇒ `
 |---|---|---|
 | `SmartKeyAccountFactory.deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)` | the chain's account factory (`chain_contract.kind = account_factory`) | client subject-account onboarding |
 | `SmartKeyAccount.mtxExecuteAsOwner(bytes,uint256,uint256,bytes)` (built in P4) | runtime code = EIP-1167 clone of that factory's `IMPLEMENTATION` (checked at lease, cached); the account address is predicted per chain (the factory's constructor takes `chain_uid`, so the same owner has a different account address on each chain) | client subject accounts; role holders that are subject accounts |
-| `MandateWallet.mtxPayUnderMandate`, `mtxRevoke` (both epoch-bound: the job re-reads `epoch(token)` and re-signs on `StaleEpoch`, [CTR-ACC-07](../contracts/mandates.md#CTR-ACC-07)), `mtxExecuteAsOwner`; `HederaMandateWallet.mtxExecuteAsOwnerRaw` | any address that is not a registered token and whose `chainUid()` equals `chain.chain_uid` (self-authenticating: the target checks the delegate/owner signature; a wallet is deployed per user with a deployer-chosen value, so it is read at lease and cached) | client payment requests, auto-pay |
+| `MandateWallet` named entries (`mtxPayUnderMandate`, `mtxDelegateRevoke`, both epoch-bound: the job re-reads `epoch(token)` and re-signs on `StaleEpoch`, [CTR-ACC-07](../contracts/mandates.md#CTR-ACC-07)), `mtxExecuteAsOwner`; `HederaMandateWallet.mtxExecuteAsOwnerRaw` | any address that is not a registered token and whose `chainUid()` equals `chain.chain_uid` (self-authenticating: the target checks the delegate/owner signature; a wallet is deployed per user with a deployer-chosen value, so it is read at lease and cached) | client payment requests, auto-pay |
 | `SCaaSDex.mtxSettle` / `mtxExchange` / `mtxExchangeVia` / `mtxHybrid` / `mtxHybridVia` / `mtxExchangeBatch` ([CTR-DEX-20](../contracts/dex.md#CTR-DEX-20), [-27](../contracts/dex.md#CTR-DEX-27), [-28](../contracts/dex.md#CTR-DEX-28), BUILT on the new `SCaaSDex` (P2c); the node side, [NODE-DEX-17](dex-venue.md#NODE-DEX-17), SPECIFIED) / `mtxCancelOrders` / `mtxInvalidateNonces` | a DEX on the chain profile's DEX list (`chain_contract.kind = dex`, [NET-ALL-24](../networks/README.md#NET-ALL-24)); never any other address | DEX venue (`~dex`) |
 | `UARegistry.register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`, `setKemKey`, `storePqzPop`, `setPqzKey` (the UA registry, deployed on every chain since UA-3; `deployments/<chainid>.json` `ua_registry`; the eight writes of [CTR-UA-36](../contracts/accounts.md#CTR-UA-36), each relayable by anyone, owner 2026-10-30 ruling R-node, built on `ua8` in `64c233d4`, the typed rows in `typed-signing` Part R; one registry per chain, so once a chain runs a generation 2 the writes for generation-1 records are not relayable; a relayed `register` / `registerMsig` with its proof over min(`max_gas_per_tx`, block gas limit) is refused `UA_REGISTER_SPLIT`) | `Rule::UaRegistry`: the chain's `[[chains]] ua_registry` (unset ⇒ refused), bound to this chain ([NODE-GW-03](gateway.md#NODE-GW-03)) | namespaces with `allow_call`, relayers; the node gateway once `POST /v1/ua/register` is built |
 | `SealedBidTender.commitBid`, `revealBid`, `withdrawDeposit`, `settleTender` | `chain_contract.kind = tender` | client tender flows ([contracts/tender.md](../contracts/tender.md)) |
@@ -471,10 +516,10 @@ equals `chain.chain_uid` ([NODE-GW-07](gateway.md#NODE-GW-07)); a mismatch ⇒ `
 
 `pqz_call` jobs are not `call` jobs: their own selector list is in the kinds table above.
 
-Built (P5, `guard.rs`, every lane before simulation; refusal `dead` with `CALL_TARGET_REFUSED` on the pull path): the
-account factory, wallet and DEX rows (`mtxExecuteAsOwner` is one selector on the account and the wallet: the wallet's
-rule), the DEX rows on the chain's `dex`, each target bound (`chainUid()`). Rows whose contracts are not built (UA
-registry, tender, vesting, distribution, `ExchangeOffer`, `Safe`) are absent, so their selectors are refused.
+Built (`guard.rs`, every lane before simulation; refusal `dead` with `CALL_TARGET_REFUSED`): the allow-list is the table of
+`typed.rs`, per selector and contract kind. `guard_allows_every_named_entry_only` sends every entry of `typed_ops.json` through the
+guard on its rule's target and on one it excludes, and every selector outside the table on every kind. Rows whose contracts are not
+built (tender, vesting, distribution, `ExchangeOffer`, `Safe`) are absent, so their selectors are refused.
 
 ## 12. Job states
 
@@ -588,7 +633,7 @@ cancels 2 rps (burst 10).
 | 409 | `IDEMPOTENCY_MISMATCH`, `PREVIOUS_GENERATION_LIVE`, `SUPERSEDED` (all with `uid`), `DUPLICATE_DIGEST`, `DUPLICATE_CALL` (with `uid`), `TOO_LATE` (with `state`, `published`), `CHAIN_HALTED` | [intake](#intake), [cancel](#cancel) |
 | 410 | `CURSOR_EXPIRED` | [indexer-feeds.md#cursors](indexer-feeds.md#cursors) |
 | 413 | `TOO_LARGE` | body > 1 MiB |
-| 422 | `BAD_PAYLOAD`, `UNKNOWN_CHAIN`, `UNKNOWN_TOKEN`, `EXPIRED`, `VALID_TOO_LONG`, `RELAYER_NOT_OURS`, `FEATURE_UNSUPPORTED`, `UA_NOT_REGISTERED`, `BAD_SIGNATURE`, `VALUE_OUT_TOO_HIGH`, `DEPOSIT_NOT_ALLOWED` | per item; `BAD_PAYLOAD` also when a job field differs from the signed payload |
+| 422 | `BAD_PAYLOAD`, `HEX_DATA_REFUSED`, `UNKNOWN_ENTRY`, `ENTRY_AMBIGUOUS`, `OP_KIND_MISMATCH`, `MANDATE_LANE`, `UNKNOWN_CHAIN`, `UNKNOWN_TOKEN`, `EXPIRED`, `VALID_TOO_LONG`, `RELAYER_NOT_OURS`, `FEATURE_UNSUPPORTED`, `UA_NOT_REGISTERED`, `BAD_SIGNATURE`, `VALUE_OUT_TOO_HIGH`, `DEPOSIT_NOT_ALLOWED` | per item; `BAD_PAYLOAD` also when a job field differs from the signed payload |
 | 429 | `RATE_LIMITED`, `QUOTA`, `SPONSOR_BUDGET`, `SPONSOR_RATE`, `SPONSOR_TOO_SHORT` (all three with `policy`), `SUBJECT_THROTTLED` (with `retry_after`) | per key: POST 20 rps (burst 40), GET 10 rps, tombstone-creating cancels 2 rps (burst 10); `Retry-After` |
 | 503 | `NOT_READY`, `STORE_FULL`, `NOT_OWNER` | store not open; `max_rows`; fencing lost |
 

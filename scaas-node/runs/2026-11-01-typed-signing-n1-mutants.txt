@@ -1,0 +1,14 @@
+restored scaas-node/src/guard.rs
+KILLED sig-precheck-accepts-all by the_gateway_checks_the_typed_signature_before_the_simulation (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 484 filtered out; finished in 0.07s | thread 'gateway::tests::the_gateway_checks_the_typed_signature_before_the_simulation' (1664446) panicked at src/gateway.rs:559:9: 
+restored scaas-node/src/guard.rs
+KILLED allowlist-drops-a-row by guard_allows_every_named_entry_only (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 484 filtered out; finished in 0.23s | thread 'guard::tests::guard_allows_every_named_entry_only' (1664993) panicked at src/guard.rs:842:66: UAPqzUnshield on pqz is a missing row: Policy("CALL_TARGET_REFUSED: 0xefb2d957 is no named entry of a \"pqz\" contract") 
+restored scaas-node/src/guard.rs
+KILLED allowlist-opens-any-selector by guard_allows_every_named_entry_only (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 484 filtered out; finished in 0.43s | thread 'guard::tests::guard_allows_every_named_entry_only' (1665513) panicked at src/guard.rs:871:51: 
+restored scaas-node/src/dex.rs
+KILLED dex-leg-drops-the-sig by dex::tests (rc=101): test result: FAILED. 26 passed; 1 failed; 0 ignored; 0 measured; 458 filtered out; finished in 0.01s | thread 'dex::tests::kat_hashes_and_calldata_match_forge' (1666005) panicked at src/dex.rs:899:9: 
+restored scaas-node/src/dex.rs
+KILLED dex-leg-other-shape by dex::tests (rc=101): test result: FAILED. 25 passed; 2 failed; 0 ignored; 0 measured; 458 filtered out; finished in 0.02s | thread 'dex::tests::a_planned_settlement_encodes_as_the_dex_reads_it' (1666490) panicked at src/dex.rs:1359:9: thread 'dex::tests::kat_hashes_and_calldata_match_forge' (1666498) panicked at src/dex.rs:899:9: 
+restored scaas-node/src/submit.rs
+KILLED dedup-key-follows-the-claim by dedup_by_typed_digest (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 484 filtered out; finished in 0.07s | thread 'submit::tests::dedup_by_typed_digest' (1667301) panicked at src/submit.rs:1629:9: assertion `left == right` failed: one call, one send 
+restored scaas-node/src/submit.rs
+KILLED dedup-no-digest-key by one_digest_is_signed_once (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 484 filtered out; finished in 0.03s | thread 'submit::tests::one_digest_is_signed_once_across_lanes_and_released_on_transient_errors' (1667886) panicked at src/submit.rs:1372:9: 

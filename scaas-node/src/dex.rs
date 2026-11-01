@@ -9,11 +9,11 @@ pub mod venue;
 use std::collections::HashMap;
 
 use alloy::primitives::{keccak256, Address, Bytes, B256, U256, U512};
-use alloy::sol_types::{Eip712Domain, SolStruct, SolValue};
+use alloy::sol_types::{Eip712Domain, SolStruct};
 use anyhow::{anyhow, bail, Result};
 use serde::{Deserialize, Serialize};
 
-pub use crate::abi::{CancelOrder, DexOrder, ISCaaSDex, InvalidateNonces, Leg, Settlement, TradeOrder};
+pub use crate::abi::{CancelDexOrder, CancelOrder, DexLeg, DexOrder, ISCaaSDex, InvalidateNonces, Settlement, TradeOrder, UASig, UATradeOrder};
 use crate::metatx::{addr, uint};
 
 pub const FLAG_IOC: u8 = 1;
@@ -53,8 +53,14 @@ pub fn dex_order_hash(dex_domain: &Eip712Domain, sell: Address, o: &TradeOrder) 
     DexOrder { sellToken: sell, order: o.clone() }.eip712_signing_hash(dex_domain)
 }
 
-pub fn cancel_digest(d: &Eip712Domain, h: B256) -> B256 {
-    CancelOrder { orderHash: h }.eip712_signing_hash(d)
+/// `CancelOrder(TradeOrder order)` (typed-signing C6, nested) in the sell token's domain.
+pub fn cancel_digest(d: &Eip712Domain, o: &TradeOrder) -> B256 {
+    CancelOrder { order: o.clone() }.eip712_signing_hash(d)
+}
+
+/// `CancelDexOrder(DexOrder order)` in the DEX's domain: an outside-token order.
+pub fn cancel_dex_digest(d: &Eip712Domain, sell: Address, o: &TradeOrder) -> B256 {
+    CancelDexOrder { order: DexOrder { sellToken: sell, order: o.clone() } }.eip712_signing_hash(d)
 }
 
 pub fn invalidate_digest(d: &Eip712Domain, from: Address, batch: U256, min: U256) -> B256 {
@@ -219,9 +225,11 @@ pub struct PlannedSettlement {
 
 impl PlannedSettlement {
     pub fn to_settlement(&self) -> Settlement {
-        // shape 0: the book holds `TradeOrder`s only (UA intake waits for UA F5, C5b-11)
-        let leg = |r: &Resting, fill: U256| Leg {
-            sellToken: r.sell, shape: 0, order: r.order.abi_encode().into(), sig: r.sig.clone(), fill,
+        // shape 0: the book holds `TradeOrder`s only (UA intake waits for UA F5, C5b-11); every word comes from the parsed
+        // order, the unused `uaOrder` / `auth` stay zero (`SCaaSDex` reads the pair of the shape)
+        let leg = |r: &Resting, fill: U256| DexLeg {
+            sellToken: r.sell, shape: 0, order: r.order.clone(), uaOrder: empty_ua_order(), sig: r.sig.clone(),
+            auth: UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] }, fill,
         };
         Settlement {
             r#ref: self.tag,
@@ -238,6 +246,12 @@ impl PlannedSettlement {
     pub fn valid_until(&self) -> U256 {
         self.makers.iter().map(|(m, _, _)| m.order.validUntil).chain([self.taker.order.validUntil]).min().unwrap_or_default()
     }
+}
+
+fn empty_ua_order() -> UATradeOrder {
+    UATradeOrder { from: B256::ZERO, receiveToken: Address::ZERO, amount: U256::ZERO, receiveAmount: U256::ZERO, minFill: U256::ZERO,
+        fee: U256::ZERO, relayer: Address::ZERO, dex: Address::ZERO, destination: B256::ZERO, flags: 0, batch: U256::ZERO,
+        nonce: U256::ZERO, validUntil: U256::ZERO }
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -867,16 +881,22 @@ mod tests {
         assert_eq!(format!("{hm:#x}"), word(&k, "dex_order_hash"));
         let td = domain("SCaaS MetaToken", 7622, a("token"), uid);
         assert_eq!(format!("{:#x}", trade_order_hash(&td, &taker)), word(&k, "taker_order_hash"));
-        assert_eq!(format!("{:#x}", cancel_digest(&dd, hm)), word(&k, "cancel_digest"));
+        assert_eq!(format!("{:#x}", cancel_dex_digest(&dd, a("outside_token"), &maker)), word(&k, "cancel_digest"));
         assert_eq!(format!("{:#x}", invalidate_digest(&dd, maker.from, U256::from(1), U256::from(5))),
             word(&k, "invalidate_digest"));
         // the calldata: decode forge's, re-encode it here, byte for byte
         let settle = hex_bytes(&word(&k, "settle_calldata")).unwrap();
         let c = ISCaaSDex::mtxSettleCall::abi_decode(&settle).unwrap();
         assert_eq!((c.s[0].makers[0].shape, c.s[0].taker.shape), (0, 0));
-        assert_eq!(TradeOrder::abi_decode(&c.s[0].makers[0].order).unwrap(), maker);
-        assert_eq!(TradeOrder::abi_decode(&c.s[0].taker.order).unwrap(), taker);
+        assert_eq!(c.s[0].makers[0].order, maker);
+        assert_eq!(c.s[0].taker.order, taker);
         assert_eq!(ISCaaSDex::mtxSettleCall { s: c.s.clone() }.abi_encode(), settle.to_vec());
+        // the venue's legs from parsed fields only: forge's bytes again
+        let rest = |l: &DexLeg| Resting { hash: B256::ZERO, sell: l.sellToken, order: l.order.clone(), sig: l.sig.clone(), remaining: l.fill, seq: 0 };
+        assert_eq!(c.s.len(), 1);
+        let planned = PlannedSettlement { tag: c.s[0].r#ref, market_id: 1, taker: rest(&c.s[0].taker), taker_fill: c.s[0].taker.fill,
+            makers: c.s[0].makers.iter().map(|m| (rest(m), m.fill, U256::ZERO)).collect() };
+        assert_eq!(ISCaaSDex::mtxSettleCall { s: vec![planned.to_settlement()] }.abi_encode(), settle.to_vec());
         let cancel = hex_bytes(&word(&k, "cancel_orders_calldata")).unwrap();
         let c = ISCaaSDex::mtxCancelOrdersCall::abi_decode(&cancel).unwrap();
         assert_eq!((c.orders[0].sellToken, &c.orders[0].order), (a("outside_token"), &maker));
@@ -892,7 +912,7 @@ mod tests {
             B256::from_str(&word(&k, "salt")).unwrap());
         let h = trade_order_hash(&td, &o);
         assert_eq!(format!("{h:#x}"), word(&k, "order_hash"));
-        assert_eq!(format!("{:#x}", cancel_digest(&td, h)), word(&k, "cancel_digest"));
+        assert_eq!(format!("{:#x}", cancel_digest(&td, &o)), word(&k, "cancel_digest"));
         assert_eq!(format!("{:#x}", invalidate_digest(&td, o.from, U256::from(7), U256::from(43))), word(&k, "invalidate_digest"));
     }
 
@@ -1336,10 +1356,12 @@ mod tests {
         let st = s.to_settlement();
         assert_eq!((st.r#ref, st.taker.sellToken, st.taker.fill), (s.tag, QUOTE, U256::from(20)));
         assert_eq!((st.makers[0].sellToken, st.makers[0].fill), (BASE, U256::from(10)));
-        assert_eq!((st.taker.shape, st.makers[0].shape), (0, 0), "shape 0: abi.encode(TradeOrder)");
-        assert_eq!(st.taker.order.len(), 13 * 32);
-        assert_eq!(TradeOrder::abi_decode(&st.makers[0].order).unwrap(), s.makers[0].0.order);
-        assert_eq!(&ISCaaSDex::mtxSettleCall { s: vec![st] }.abi_encode()[..4], &[0x04, 0x03, 0xb1, 0x3c]);
+        assert_eq!((st.taker.shape, st.makers[0].shape), (0, 0), "shape 0: `order` + `sig`");
+        assert_eq!((&st.taker.order, &st.makers[0].order), (&s.taker.order, &s.makers[0].0.order));
+        assert_eq!((&st.taker.sig, &st.makers[0].sig), (&s.taker.sig, &s.makers[0].0.sig));
+        assert_eq!(st.makers[0].uaOrder, empty_ua_order(), "the pair of the other shape stays zero");
+        assert!(st.taker.auth.signature.is_empty() && st.taker.auth.keyData.is_empty() && st.taker.auth.members.is_empty());
+        assert_eq!(ISCaaSDex::mtxSettleCall { s: vec![st] }.abi_encode()[..4], crate::guard::SEL_MTX_SETTLE);
     }
 
     /// Review T3 I1 (the reviewer's PoC `poc_second_fill_of_an_unmined_remainder`): a remainder whose first settlement

@@ -18,7 +18,7 @@ use crate::chain::{Chain, SimError};
 use crate::dex::venue::{Venue, VenueError};
 use crate::dex::WireOrder;
 use crate::metatx::Mtx;
-use crate::submit::{now, MetaRef, Work};
+use crate::submit::{now, transfer_typed, work_of_op, MetaRef, Work};
 
 #[derive(Clone)]
 pub struct GwChain {
@@ -40,15 +40,25 @@ pub struct AppState {
     pub chains: Arc<HashMap<u64, GwChain>>,
 }
 
-/// `POST /v1/metatx {chain, token, struct?, m, signature}`: `struct` = `call` | `transfer` (default `transfer`).
+/// `POST /v1/metatx {chain, token, contract?, m, signature}`: a `MetaTransfer` (`contract`: its token kind, default `token`).
+/// `struct = call` is refused: a named entry goes to `POST /v1/op`.
 #[derive(Deserialize)]
 pub struct SignedReq {
     pub chain: u64,
     pub token: Address,
     #[serde(default, rename = "struct")]
     pub struct_: Option<String>,
+    #[serde(default)]
+    pub contract: Option<String>,
     pub m: Value,
     pub signature: String,
+}
+
+/// `POST /v1/op {chain, op}`: one named entry as explicit JSON (job-api.md).
+#[derive(Deserialize)]
+pub struct OpReq {
+    pub chain: u64,
+    pub op: Value,
 }
 
 /// `POST /v1/dex/orders`: the `TradeOrder` and its sell token (the token's domain signs a SCaaS order, the DEX's an
@@ -105,6 +115,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .route("/v1/metatx", post(post_metatx))
+        .route("/v1/op", post(post_op))
         .merge(dex_routes())
         .layer(DefaultBodyLimit::max(64 * 1024))
         .layer(GlobalConcurrencyLimitLayer::new(32))
@@ -112,10 +123,15 @@ pub fn router(state: AppState) -> Router {
 }
 
 fn chain_of(s: &AppState, id: u64, token: Address) -> Result<&GwChain, Reply> {
-    let c = s.chains.get(&id).ok_or_else(|| bad("unknown chain"))?;
+    let c = open_chain(s, id)?;
     if !c.tokens.read().map(|t| t.contains(&token)).unwrap_or(false) {
         return Err(bad("token not served by this relayer"));
     }
+    Ok(c)
+}
+
+fn open_chain(s: &AppState, id: u64) -> Result<&GwChain, Reply> {
+    let c = s.chains.get(&id).ok_or_else(|| bad("unknown chain"))?;
     let open = c.breaker.as_ref().and_then(|k| k.lock().ok().and_then(|mut k| k.open(now())));
     if let Some(b) = open {
         return Err((StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error": format!("circuit breaker open: {b}")}))));
@@ -147,29 +163,33 @@ async fn enqueue(c: &GwChain, w: Work, status: &str) -> Reply {
     (StatusCode::ACCEPTED, Json(json!({"status": status})))
 }
 
-/// Nơi duy nhất dựng `Work` từ request; chuẩn hoá R84 ở đây, trước mô phỏng.
+/// The one place a transfer request becomes `Work`; R84 normalization here, before the simulation.
 fn work_of(r: SignedReq, fee_recipient: Option<Address>) -> Result<Work, Reply> {
+    if r.struct_.as_deref() == Some("call") {
+        return Err(bad(crate::typed::hex_refused("struct = call")));
+    }
+    if r.m.get("data").is_some() {
+        return Err(bad(crate::typed::hex_refused("m.data")));
+    }
     let mut m = Mtx::from_wire(r.struct_.as_deref(), &r.m).map_err(bad)?;
     m.normalize(fee_recipient);
     let sig = sig_bytes(&r.signature)?;
-    if m.valid_until() <= U256::from(now()) {
-        return Err(bad("expired"));
-    }
-    let valid_until = m.valid_until().saturating_to();
+    let typed = transfer_typed(r.contract.as_deref(), r.token, m.struct_hash(), Some((m.from(), sig.clone()))).map_err(bad)?;
+    let valid_until = fresh(m.valid_until())?;
     let meta = Some(MetaRef::of(r.token, &m, None));
-    Ok(Work { job_id: None, to: r.token, data: m.calldata(sig), valid_until, meta, entry: false })
+    Ok(Work { job_id: None, to: r.token, data: m.calldata(sig), valid_until, meta, entry: false, typed: Some(typed) })
 }
 
-async fn post_metatx(State(s): State<AppState>, Json(r): Json<SignedReq>) -> Reply {
-    let c = match chain_of(&s, r.chain, r.token) {
-        Ok(c) => c,
-        Err(e) => return e,
-    };
-    let mut w = match work_of(r, c.fee_recipient) {
-        Ok(w) => w,
-        Err(e) => return e,
-    };
-    // the lane runs the same guard again; here a refusal is the client's 400 before any simulation, never a 202
+fn fresh(valid_until: U256) -> Result<u64, Reply> {
+    if valid_until <= U256::from(now()) {
+        return Err(bad("expired"));
+    }
+    Ok(valid_until.saturating_to())
+}
+
+/// The guard (the same one the lane runs again): a refusal is the client's 400 before any simulation, never a 202; then the
+/// simulation; G2: the typed digest computed here keeps one intent sent twice from being two outer transactions.
+async fn relay(c: &GwChain, mut w: Work) -> Reply {
     if let Err(e) = c.guard.check(&c.chain, &w).await {
         return match SimError::from(e) {
             SimError::Revert(r) => bad(r),
@@ -179,13 +199,36 @@ async fn post_metatx(State(s): State<AppState>, Json(r): Json<SignedReq>) -> Rep
     if let Err(e) = c.chain.simulate(w.to, w.data.clone()).await {
         return sim_reply(e);
     }
-    // G2: digest thật của token ⇒ cùng một intent gửi hai lần không thành hai tx vỏ (tập in-flight của chain).
-    let Some((m, _)) = Mtx::from_calldata(&w.data) else { return bad("not a meta-transaction") };
-    match c.chain.mtx_digest(w.to, m).await {
-        Ok(d) => w.meta = w.meta.map(|r| MetaRef { digest: Some(d), ..r }),
-        Err(e) => return sim_reply(e),
+    if let Err(e) = crate::guard::fill_digest(&c.chain, &mut w).await {
+        return sim_reply(e);
     }
     enqueue(c, w, "queued").await
+}
+
+async fn post_metatx(State(s): State<AppState>, Json(r): Json<SignedReq>) -> Reply {
+    let c = match chain_of(&s, r.chain, r.token) {
+        Ok(c) => c,
+        Err(e) => return e,
+    };
+    match work_of(r, c.fee_recipient) {
+        Ok(w) => relay(c, w).await,
+        Err(e) => e,
+    }
+}
+
+async fn post_op(State(s): State<AppState>, Json(r): Json<OpReq>) -> Reply {
+    let c = match open_chain(&s, r.chain) {
+        Ok(c) => c,
+        Err(e) => return e,
+    };
+    let w = match work_of_op(None, &r.op, c.fee_recipient) {
+        Ok((w, _)) => w,
+        Err(e) => return bad(format!("{e:#}")),
+    };
+    if let Err(e) = fresh(U256::from(w.valid_until)) {
+        return e;
+    }
+    relay(c, w).await
 }
 
 // ---------------------------------------------------------------------------------- DEX (R35)
@@ -299,7 +342,7 @@ mod tests {
     use super::*;
     use axum::body::Body;
     use axum::http::Request;
-    use crate::metatx::{Domain, MetaTransaction, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER};
+    use crate::metatx::{Domain, MetaTransfer, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER};
     use alloy::primitives::B256;
     use tower::ServiceExt;
 
@@ -370,11 +413,13 @@ mod tests {
         assert!(rx.try_recv().is_err(), "nothing queued");
     }
 
-    /// A `call` request (`MetaTransaction`): `cancelNonce(1)` with a FIXED fee.
+    /// A transfer request with a FIXED fee.
     fn req(mode: u32) -> SignedReq {
-        let m = Mtx::Call(MetaTransaction {
+        let m = Mtx::Transfer(MetaTransfer {
             from: Address::repeat_byte(0xab),
-            data: alloy::hex::decode("cfdd7aea0000000000000000000000000000000000000000000000000000000000000001").unwrap().into(),
+            to: Address::repeat_byte(0x5e),
+            value: U256::from(1),
+            entryRef: B256::ZERO,
             batch: U256::from(7),
             nonce: U256::ZERO,
             validUntil: U256::from(99_999_999_999u64),
@@ -384,7 +429,7 @@ mod tests {
             feeRecipient: Address::repeat_byte(0x77),
         });
         let (kind, wire) = m.to_wire();
-        SignedReq { chain: 7, token: Address::repeat_byte(0xcd), struct_: Some(kind.into()), m: wire,
+        SignedReq { chain: 7, token: Address::repeat_byte(0xcd), struct_: Some(kind.into()), contract: None, m: wire,
                     signature: format!("0x{}", "11".repeat(65)) }
     }
 
@@ -429,11 +474,100 @@ mod tests {
         assert!(work_of(r, None).is_ok());
     }
 
-    /// `struct` absent = `transfer`; a call body without `struct` is refused, never misread.
+    /// `struct` absent = `transfer`; `struct = call` and a `data` field are refused by name, a transfer passes.
     #[test]
-    fn the_struct_is_named_or_a_transfer() {
+    fn hex_data_is_refused_at_the_gateway() {
+        work_of(req(0x20), None).unwrap();
         let mut r = req(0);
         r.struct_ = None;
-        assert!(work_of(r, None).is_err());
+        assert!(work_of(r, None).is_ok());
+        let mut r = req(0);
+        r.struct_ = Some("call".into());
+        assert!(work_of(r, None).unwrap_err().1 .0["error"].as_str().unwrap().starts_with("HEX_DATA_REFUSED"));
+        let mut r = req(0);
+        r.m["data"] = json!("0x1234");
+        assert!(work_of(r, None).unwrap_err().1 .0["error"].as_str().unwrap().starts_with("HEX_DATA_REFUSED"));
+    }
+
+    /// A chain for `POST /v1/op`: bound to `uid`, `code` = what `eth_getCode` answers; `(gateway, lane receiver, RPC methods)`.
+    async fn gateway(code: &'static str, tokens: Vec<Address>) -> (Router, mpsc::Receiver<Work>, Arc<Mutex<Vec<String>>>) {
+        let log: Arc<Mutex<Vec<String>>> = Default::default();
+        let l2 = log.clone();
+        let uid = crate::typed::testkit::vectors()["ops"]["Unwrap"]["domains"]["token"]["domain"]["salt"].clone();
+        let app = axum::Router::new().route("/", post(move |Json(r): Json<Value>| {
+            let (l2, uid) = (l2.clone(), uid.clone());
+            async move {
+                let m = r["method"].as_str().unwrap().to_string();
+                l2.lock().unwrap().push(m.clone());
+                Json(match m.as_str() {
+                    "eth_getBlockByNumber" => json!({"jsonrpc": "2.0", "id": r["id"], "result": null}),
+                    "eth_call" => json!({"jsonrpc": "2.0", "id": r["id"], "result": uid}),
+                    "eth_getCode" => json!({"jsonrpc": "2.0", "id": r["id"], "result": code}),
+                    "eth_estimateGas" => json!({"jsonrpc": "2.0", "id": r["id"], "result": "0x5208"}),
+                    _ => json!({"jsonrpc": "2.0", "id": r["id"], "error": {"code": -32603, "message": "no"}}),
+                })
+            }
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let v = crate::typed::testkit::vectors();
+        let d = &v["ops"]["Unwrap"]["domains"]["token"]["domain"];
+        let cfg = crate::config::ChainCfg { evm_chain_number: d["chainId"].as_str().unwrap().parse().unwrap(), rpc_urls: vec![url],
+            chain_uid: Some(d["salt"].as_str().unwrap().parse().unwrap()), ..Default::default() };
+        let tokens = Arc::new(RwLock::new(tokens));
+        let (tx, rx) = mpsc::channel(4);
+        let gw = GwChain { chain: Arc::new(Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap()),
+            tx, tokens: tokens.clone(), dex: None, breaker: None, fee_recipient: None,
+            guard: Arc::new(crate::guard::Guard::new(&cfg, tokens).unwrap()) };
+        (router(AppState { chains: Arc::new([(cfg.evm_chain_number, gw)].into_iter().collect()) }), rx, log)
+    }
+
+    async fn post_op_body(app: Router, chain: u64, op: &Value) -> (StatusCode, String) {
+        let body = json!({"chain": chain, "op": op});
+        let req = Request::builder().method("POST").uri("/v1/op").header("content-type", "application/json")
+            .body(Body::from(body.to_string())).unwrap();
+        let r = app.oneshot(req).await.unwrap();
+        let s = r.status();
+        (s, String::from_utf8_lossy(&axum::body::to_bytes(r.into_body(), 4096).await.unwrap()).into_owned())
+    }
+
+    /// The pre-check: the positive control queues; one changed thing each: a signature of another op on an account
+    /// without code is `BAD_SIGNATURE`, nothing simulated, nothing queued; the same bytes from a contract signer go on to the
+    /// simulation (ERC-1271).
+    #[tokio::test]
+    async fn the_gateway_checks_the_typed_signature_before_the_simulation() {
+        let v = crate::typed::testkit::vectors();
+        let d = &v["ops"]["Unwrap"]["domains"]["token"];
+        let token: Address = d["domain"]["verifyingContract"].as_str().unwrap().parse().unwrap();
+        let chain: u64 = d["domain"]["chainId"].as_str().unwrap().parse().unwrap();
+        let mut op = crate::typed::testkit::op_of("Unwrap", "token", &v).unwrap();
+        op["validUntil"] = json!((now() + 300).to_string());
+        let (app, mut rx, log) = gateway("0x", vec![token]).await;
+        let (st, body) = post_op_body(app, chain, &op).await;
+        assert_eq!(st, StatusCode::ACCEPTED, "{body}");
+        let w = rx.try_recv().unwrap();
+        assert_eq!(w.data.len(), crate::typed::Op::parse(&op, None).unwrap().data.len());
+        assert!(w.digest().is_some(), "the digest reached the lane");
+        assert_eq!(format!("{:#x}", w.digest().unwrap()), d["digest"].as_str().unwrap());
+        assert!(log.lock().unwrap().iter().all(|m| m != "eth_getCode"), "a good signature needs no chain read");
+        // another row's signature, same key: the digest differs, so the signer does
+        let mut bad_op = op.clone();
+        bad_op["signature"] = v["ops"]["Burn"]["domains"]["token"]["signature"].clone();
+        let (app, mut rx, log) = gateway("0x", vec![token]).await;
+        let (st, body) = post_op_body(app, chain, &bad_op).await;
+        assert_eq!(st, StatusCode::BAD_REQUEST);
+        assert!(body.contains("BAD_SIGNATURE"), "{body}");
+        assert!(rx.try_recv().is_err(), "nothing queued");
+        assert!(log.lock().unwrap().iter().all(|m| m != "eth_estimateGas"), "nothing simulated");
+        let (app, mut rx, _) = gateway("0x60", vec![token]).await;
+        let (st, body) = post_op_body(app, chain, &bad_op).await;
+        assert_eq!(st, StatusCode::ACCEPTED, "a contract signer: {body}");
+        assert!(rx.try_recv().is_ok());
+        // a wrong kind claim changes the digest: the same refusal
+        let mut lie = op.clone();
+        lie["contract"] = json!("zether");
+        let (app, _, _) = gateway("0x", vec![token]).await;
+        assert!(post_op_body(app, chain, &lie).await.1.contains("BAD_SIGNATURE"));
     }
 }

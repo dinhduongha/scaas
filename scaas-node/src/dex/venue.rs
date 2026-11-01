@@ -159,7 +159,7 @@ fn state_of(r: &Resting) -> &'static str {
 }
 
 /// An on-chain cancel waiting for the next sync: `(market, sell token, its kind, order, CancelOrder signature)`.
-type PendingCancel = (i64, Address, u8, TradeOrder, Bytes);
+type PendingCancel = (i64, Address, u8, TradeOrder, Bytes, &'static str);
 
 #[derive(Default)]
 struct CancelQueue {
@@ -269,6 +269,16 @@ impl Venue {
 
     pub fn relayer(&self) -> Address {
         self.chain.address()
+    }
+
+    /// The token's kind for a job's typed digest, from its EIP-712 domain (`eip712Domain()`, immutable); an unreadable one
+    /// is `token`: the job's digest is then only a key, the lane's check answers.
+    async fn contract_of(&self, token: Address) -> &'static str {
+        match view(&self.chain, token, IToken::eip712DomainCall {}).await {
+            Ok(d) if d.name == "SCaaS ZetherToken" => "zether",
+            Ok(d) if d.name == "SCaaS PqzToken" => "pqz",
+            _ => "token",
+        }
     }
 
     fn kind(&self, token: Address) -> u8 {
@@ -606,8 +616,8 @@ impl Venue {
         let r = book.get(h).cloned().ok_or_else(|| bad("order is not in the book"))?;
         let kind = self.kind(r.sell);
         let digest = match kind {
-            KIND_SCAAS => view(&self.chain, r.sell, IToken::cancelOrderDigestCall { orderHash: h }).await,
-            _ => view(&self.chain, self.dex, ISCaaSDex::cancelOrderDigestCall { orderHash: h }).await,
+            KIND_SCAAS => view(&self.chain, r.sell, IToken::cancelOrderDigestCall { o: r.order.clone() }).await,
+            _ => view(&self.chain, self.dex, ISCaaSDex::cancelDexOrderDigestCall { sellToken: r.sell, o: r.order.clone() }).await,
         }
         .map_err(down)?;
         if !self.valid_sig(self.verifier(r.sell), r.order.from, digest, &sig).await.map_err(down)? {
@@ -619,9 +629,10 @@ impl Venue {
         let mut commit = Commit::default();
         commit.order(market_id, &r, "cancelled");
         self.commit_or_reload(&mut book, next, commit).await?;
+        let contract = self.contract_of(r.sell).await;
         if let Ok(mut q) = self.cancels.lock() {
             if q.allow(r.order.from, now()) {
-                q.pending.push((market_id, r.sell, kind, r.order, sig));
+                q.pending.push((market_id, r.sell, kind, r.order, sig, contract));
             }
         }
         Ok(())
@@ -665,14 +676,8 @@ impl Venue {
         let allowed = self.cancels.lock().map(|mut q| q.allow(from, now())).unwrap_or(false);
         if job_needed && allowed {
             let valid_until = (now() + CANCEL_JOB_SECS).to_string();
-            commit.jobs.push(if outside {
-                json!({"kind": "invalidate", "market_id": market_id, "target": format!("{:#x}", self.dex),
-                       "calldata": hex_of(&call), "valid_until": valid_until, "tags": []})
-            } else {
-                json!({"kind": "metatx", "entry": "mtxInvalidateNonces", "market_id": market_id,
-                       "token": format!("{sell:#x}"), "from": format!("{from:#x}"), "batch": batch.to_string(),
-                       "newMin": min.to_string(), "signature": hex_of(&sig), "validUntil": valid_until})
-            });
+            let contract = if outside { "dex" } else { self.contract_of(sell).await };
+            commit.jobs.push(json!({"kind": "metatx", "market_id": market_id, "op": invalidate_op(contract, target, from, batch, min, &sig, &valid_until)}));
         }
         self.commit_or_reload(&mut book, next, commit).await?;
         Ok(gone.len())
@@ -1021,6 +1026,17 @@ fn by_market<T: Clone>(items: &[T], market: impl Fn(&T) -> i64) -> Vec<Vec<T>> {
     v.chunk_by(|a, b| market(a) == market(b)).map(<[T]>::to_vec).collect()
 }
 
+/// A `mtxInvalidateNonces` op (job-api.md) on a token or the DEX.
+fn invalidate_op(contract: &str, target: Address, from: Address, batch: U256, min: U256, sig: &[u8], valid_until: &str) -> Value {
+    json!({"entry": "mtxInvalidateNonces", "contract": contract, "token": format!("{target:#x}"), "validUntil": valid_until,
+           "args": {"from": format!("{from:#x}"), "batch": batch.to_string(), "minNonce": min.to_string()}, "signature": hex_of(sig)})
+}
+
+/// A plain DEX entry as its named op: the job carries fields, never bytes; a table row is what `abi_encode` just wrote.
+fn dex_op(dex: Address, data: &[u8], valid_until: &str) -> Value {
+    crate::typed::call_op("dex", dex, data, valid_until).expect("a DEX table row")
+}
+
 /// One `mtxSettle` job per market: the client attaches a job to its market's company (review agy F3).
 fn settle_jobs(dex: Address, ss: &[PlannedSettlement]) -> Vec<Value> {
     by_market(ss, |s| s.market_id)
@@ -1030,7 +1046,7 @@ fn settle_jobs(dex: Address, ss: &[PlannedSettlement]) -> Vec<Value> {
             let valid_until = ss.iter().map(PlannedSettlement::valid_until).min().unwrap_or_default();
             json!({
                 "kind": "settle", "market_id": ss[0].market_id, "target": format!("{dex:#x}"),
-                "calldata": hex_of(&ISCaaSDex::mtxSettleCall { s }.abi_encode()),
+                "op": dex_op(dex, &ISCaaSDex::mtxSettleCall { s }.abi_encode(), &valid_until.to_string()),
                 "valid_until": valid_until.to_string(),
                 "tags": ss.iter().map(|s| format!("{:#x}", s.tag)).collect::<Vec<_>>(),
             })
@@ -1045,19 +1061,20 @@ fn cancel_jobs(dex: Address, pending: &[PendingCancel]) -> Vec<Value> {
     let mut jobs: Vec<Value> = pending
         .iter()
         .filter(|p| p.2 == KIND_SCAAS)
-        .map(|(m, sell, _, o, sig)| {
-            json!({"kind": "metatx", "entry": "mtxCancelOrder", "market_id": m, "token": format!("{sell:#x}"),
-                   "order": WireOrder::from_sol(o), "signature": hex_of(sig), "validUntil": valid_until})
+        .map(|(m, sell, _, o, sig, contract)| {
+            json!({"kind": "metatx", "market_id": m, "op": {"entry": "mtxCancelOrder", "struct": "CancelOrder", "contract": contract,
+                   "token": format!("{sell:#x}"), "args": {"order": WireOrder::from_sol(o)}, "signature": hex_of(sig),
+                   "validUntil": valid_until}})
         })
         .collect();
     let outside: Vec<PendingCancel> = pending.iter().filter(|p| p.2 != KIND_SCAAS).cloned().collect();
     for m in by_market(&outside, |p| p.0) {
         for chunk in m.chunks(CANCEL_BATCH) {
-            let orders = chunk.iter().map(|(_, s, _, o, _)| DexOrder { sellToken: *s, order: o.clone() }).collect();
+            let orders = chunk.iter().map(|(_, s, _, o, _, _)| DexOrder { sellToken: *s, order: o.clone() }).collect();
             let sigs = chunk.iter().map(|p| p.4.clone()).collect();
             jobs.push(json!({
                 "kind": "cancel", "market_id": chunk[0].0, "target": format!("{dex:#x}"),
-                "calldata": hex_of(&ISCaaSDex::mtxCancelOrdersCall { orders, sigs }.abi_encode()),
+                "op": dex_op(dex, &ISCaaSDex::mtxCancelOrdersCall { orders, sigs }.abi_encode(), &valid_until),
                 "valid_until": valid_until, "tags": [],
             }));
         }
@@ -1296,12 +1313,16 @@ mod tests {
             jobs.iter().map(|j| (j["market_id"].as_i64().unwrap(), j["tags"].as_array().unwrap().len())).collect();
         assert_eq!(seen, vec![(1, 2), (2, 1)]);
         assert_eq!(jobs[0]["valid_until"], "1", "the earliest leg's deadline");
-        let c = |m: i64, from: u8, kind: u8| (m, BASE, kind, rest(from, BASE, QUOTE).order, Bytes::from_static(&[1]));
+        let c = |m: i64, from: u8, kind: u8| (m, BASE, kind, rest(from, BASE, QUOTE).order, Bytes::from_static(&[1]), "token");
         let jobs = cancel_jobs(dex, &[c(1, 1, KIND_SCAAS), c(2, 2, KIND_OUTSIDE), c(1, 3, KIND_OUTSIDE)]);
         let kinds: Vec<(&str, i64)> = jobs.iter().map(|j| (j["kind"].as_str().unwrap(), j["market_id"].as_i64().unwrap())).collect();
         assert_eq!(kinds, vec![("metatx", 1), ("cancel", 1), ("cancel", 2)]);
-        assert_eq!((jobs[0]["entry"].as_str(), jobs[0]["token"].as_str()), (Some("mtxCancelOrder"), Some(&*format!("{BASE:#x}"))));
+        assert_eq!((jobs[0]["op"]["entry"].as_str(), jobs[0]["op"]["token"].as_str()), (Some("mtxCancelOrder"), Some(&*format!("{BASE:#x}"))));
         assert_eq!(jobs[1]["target"], format!("{dex:#x}"));
+        for j in &jobs {
+            assert!(j.get("calldata").is_none(), "named fields, never hex");
+            crate::typed::Op::parse(&j["op"], None).unwrap_or_else(|e| panic!("{j}: {e:#}"));
+        }
     }
 
     // ------------------------------------------------------------------ the venue on a fake chain (review T3 C1, I2)
@@ -1386,7 +1407,7 @@ mod tests {
                     let legs = |s: &crate::abi::Settlement| -> Vec<(Address, TradeOrder)> {
                         std::iter::once(&s.taker).chain(&s.makers).map(|l| {
                             assert_eq!(l.shape, 0, "the venue sends shape-0 legs only (C5b-11)");
-                            (l.sellToken, TradeOrder::abi_decode(&l.order).unwrap())
+                            (l.sellToken, l.order.clone())
                         }).collect()
                     };
                     if sel == IToken::tradeOrderDigestCall::SELECTOR {

@@ -132,7 +132,7 @@ pub trait ChainAdapter: Send + Sync {
         Ok(None)
     }
     /// G2's in-flight key of a claimed job. Default: the job's own digest; an EVM meta-tx answers the token's
-    /// `mtxDigest`, never the job's field (review T2 m6). `Revert` = no key (its simulation answers for it).
+    /// the typed digest the node computes, never the job's field (review T2 m6). `Revert` = no key (its simulation answers for it).
     async fn digest(&self, job: &Job) -> std::result::Result<Option<alloy::primitives::B256>, SimError> {
         Ok(job_digest(job))
     }
@@ -668,7 +668,13 @@ pub(crate) mod tests {
     }
     pub(crate) type Shared = Arc<std::sync::Mutex<Fake>>;
 
-    pub(crate) async fn fake_odoo(fake: Fake) -> (Odoo, Shared) {
+    pub(crate) async fn fake_odoo(mut fake: Fake) -> (Odoo, Shared) {
+        fake.jobs = fake.jobs.into_iter().map(crate::submit::tests::resign).collect();
+        if let Some(a) = fake.inflight.as_array_mut() {
+            for j in a {
+                j["payload"] = crate::submit::tests::resign(j["payload"].clone());
+            }
+        }
         use axum::extract::{Path, State};
         use axum::Json;
         async fn h(State(s): State<Shared>, Path((_m, method)): Path<(String, String)>, Json(b): Json<Value>) -> Json<Value> {

@@ -335,7 +335,7 @@ mod tests {
                     None => ok(n.block0.clone()),
                 }
             }
-            "eth_getCode" => ok(json!("0x")),
+            "eth_getCode" => ok(json!("0x60")), // the test jobs' signer: its simulation answers (`guard::Guard::check`)
             "eth_call" => {
                 let input = b["params"][0]["input"].as_str().or(b["params"][0]["data"].as_str()).unwrap_or_default().to_string();
                 match &n.invalidate_revert {
@@ -496,9 +496,9 @@ mod tests {
     /// whose RPC block 0 is not the pinned chain_uid never starts) and I1 (only registered tokens).
     #[tokio::test]
     async fn the_hedera_lane_keeps_n6_n2_and_registration() {
-        let inv = |token: Address| json!({"id": 8, "kind": "metatx", "entry": "mtxInvalidateNonces", "token": format!("{token:#x}"),
-            "from": format!("{:#x}", Address::repeat_byte(1)), "batch": "1", "newMin": "9",
-            "signature": format!("0x{}", "11".repeat(65)), "validUntil": (now() + 300).to_string()});
+        let inv = |token: Address| json!({"id": 8, "kind": "metatx", "op": {"entry": "mtxInvalidateNonces", "contract": "token",
+            "token": format!("{token:#x}"), "args": {"from": format!("{:#x}", Address::repeat_byte(1)), "batch": "1", "minNonce": "9"},
+            "signature": format!("0x{}", "11".repeat(65)), "validUntil": (now() + 300).to_string()}});
         let already = IToken::MinNonceNotIncreasing { current: U256::from(9), requested: U256::from(9) }.abi_encode();
         let net = || Net { balance: "0x1", invalidate_revert: Some(already.clone()), ..Default::default() };
         let (states, s) = step_with(net(), inv(Address::repeat_byte(0x70))).await;

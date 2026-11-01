@@ -12,7 +12,6 @@ use alloy::transports::TransportError;
 use anyhow::{anyhow, Result};
 
 use crate::abi::{decode_revert, IToken, IUALedger};
-use crate::metatx::{Mtx, UaMtx};
 use crate::submit::MetaRef;
 use crate::config::ChainCfg;
 
@@ -220,32 +219,7 @@ impl Chain {
         self.view(m.token, IToken::mtxNonceCall { from: Address::from_word(m.from), batch: m.batch }).await
     }
 
-    /// `mtxDigest(m)` / `mtxTransferDigest(t)`: exactly the digest the contract emits in `MetaTransactionExecuted` (R78).
-    pub async fn mtx_digest(&self, token: Address, m: Mtx) -> std::result::Result<B256, SimError> {
-        match m {
-            Mtx::Call(m) => self.call_view(token, IToken::mtxDigestCall { m }).await,
-            Mtx::Transfer(t) => self.call_view(token, IToken::mtxTransferDigestCall { t }).await,
-        }
-    }
-
-    /// `uaDigest(m)` / `uaTransferDigest(t)`: the digest of `UAMetaTransactionExecuted`.
-    pub async fn ua_digest(&self, token: Address, m: UaMtx) -> std::result::Result<B256, SimError> {
-        match m {
-            UaMtx::Call(m) => self.call_view(token, IUALedger::uaDigestCall { m }).await,
-            UaMtx::Transfer(t) => self.call_view(token, IUALedger::uaTransferDigestCall { t }).await,
-        }
-    }
-
-    /// The token's digest of a relayed `mtxExecute*` / `mtxPayMeta` or `uaExecute*` / `uaPayMeta` calldata; `None` for
-    /// any other call.
-    pub async fn digest_of(&self, token: Address, data: &[u8]) -> Option<std::result::Result<B256, SimError>> {
-        if let Some((m, _)) = Mtx::from_calldata(data) {
-            return Some(self.mtx_digest(token, m).await);
-        }
-        Some(self.ua_digest(token, UaMtx::from_calldata(data)?.0).await)
-    }
-
-/// `MetaTransactionExecuted` (a UA subject: `UAMetaTransactionExecuted`) of `(from, batch, nonce)` trong `lookback`
+    /// `MetaTransactionExecuted` (a UA subject: `UAMetaTransactionExecuted`) of `(from, batch, nonce)` trong `lookback`
     /// khối gần nhất ⇒ `(digest, relayer)` (§8.5). Both events index `from`, `relayer`, `batch` alike.
     pub async fn meta_executed(&self, m: &MetaRef, lookback: u64) -> Result<Option<(B256, Address)>> {
         let latest = self.primary().get_block_number().await?;

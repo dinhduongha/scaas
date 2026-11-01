@@ -873,6 +873,8 @@ reset (work order item 6) deploys the new contracts (controller call).
   `hex_data_refused`, `guard_allows_every_named_entry_only`, `relay_fee_call_object`, `dedup_by_typed_digest`;
   `cargo-scaas-node` + `node-e2e-anvil` steps PASS; commit `typed-signing N1: node explicit job API for the named entries`.
 
+- **N1 result (2026-11-02):** `scaas-node/src/typed.rs`: one table of 77 typed rows (74 structs of `typed_ops.json`, `Execute` twice, the two invalidations) and 18 plain ones, one parser; digest and calldata come from one parse (`digest_and_calldata_cannot_diverge`), every row equal to the vector (`typed_ops_kat_every_entry`). The guard's allow-list is that table per contract kind, both directions through `Guard::check` (`guard_allows_every_named_entry_only`). Hex is refused on every kind (`HEX_DATA_REFUSED`), mandate lanes enforced (`MANDATE_LANE`), relay fees take a named `call` and go through the router, the signature pre-check runs on every path, the in-flight key is the typed digest held with the bytes. `node-e2e-anvil` passes on the real contracts: named `mtxCancelNonce`, `mtxRelayFee`, `uaRelayFee`, `mtxCancelOrder`, `mtxSettle`. Job shapes: `docs/node/job-api.md` §5.3. Controller calls: decisions.md, the N1 entry of 2026-11-02. Superseded code: `scaas-node/legacy/typed-signing/`. Consumers follow: `op` on every EVM job, `op` instead of `calldata` on the venue's `settle` / `cancel` / `invalidate` jobs, `auth` as an object.
+
 ### Task N2: Soroban jobs explicit
 
 **Files:** `scaas-node/src/adapters/soroban.rs`, `docs/node/job-api.md` (Soroban rows), tests.

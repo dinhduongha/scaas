@@ -1,6 +1,7 @@
 //! ABI — copied from `smartcontracts/evm/src` (`IMetaTx`, `IERC20MetaTx`, `IERC20Payment`, `ITradeToken`, `MetaTxLib`,
 //! `ISCaaSDex`, `MandateWallet`, `IUARegistry`), never inferred: one wrong `indexed` is one wrong topic. Pinned by the forge KATs
-//! (`metatx_kat.json`, `metatransfer_kat.json`, `trade_kat.json`, `dex_order_kat.json`: digests and relayed calldata).
+//! (`metatx_kat.json`, `metatransfer_kat.json`, `trade_kat.json`, `dex_order_kat.json`: digests and relayed calldata). The
+//! named typed entries are not here: they are data, `crate::typed`.
 // `sol!` builds a constructor per event; `LegSettled` / `UALegSettled` have ten fields.
 #![allow(clippy::too_many_arguments)]
 
@@ -58,14 +59,25 @@ sol! {
         uint256 validUntil;
     }
 
-    /// `ISCaaSDex.Leg` (CTR-DEX-26): one order in one settlement, tagged; `shape` 0 = `order` is
-    /// `abi.encode(TradeOrder)`, 1 = `abi.encode(UATradeOrder)`; `fill` = its sell fill in this call.
+    /// `IUARegistry.MemberSig` / `UASig` (typed-signing R1): a UA's authorization, explicit fields on every named entry.
     #[derive(Debug, PartialEq, Eq)]
-    struct Leg { address sellToken; uint8 shape; bytes order; bytes sig; uint256 fill; }
+    struct MemberSig { uint16 index; bytes keyData; bytes sig; }
+    #[derive(Debug, PartialEq, Eq)]
+    struct UASig { bytes keyData; bytes signature; MemberSig[] members; }
 
-    /// `ISCaaSDex.ExchangeLeg` (CTR-DEX-20, -26): an exchange-path order, tagged as `Leg`.
+    /// `ISCaaSDex.DexLeg` (CTR-DEX-26, typed-signing C6): one order in one settlement, explicit fields; `shape` 0 reads
+    /// `order` + `sig`, 1 reads `uaOrder` + `auth`, the other pair stays zero; `fill` = its sell fill in this call.
     #[derive(Debug, PartialEq, Eq)]
-    struct ExchangeLeg { address sellToken; uint8 shape; bytes order; bytes sig; uint256 sellFill; uint256 receiveFill; }
+    struct DexLeg {
+        address sellToken; uint8 shape; TradeOrder order; UATradeOrder uaOrder; bytes sig; UASig auth; uint256 fill;
+    }
+
+    /// `ISCaaSDex.ExchangeLeg` (CTR-DEX-20, -26): an exchange-path order, tagged as `DexLeg`.
+    #[derive(Debug, PartialEq, Eq)]
+    struct ExchangeLeg {
+        address sellToken; uint8 shape; TradeOrder order; UATradeOrder uaOrder; bytes sig; UASig auth; uint256 sellFill;
+        uint256 receiveFill;
+    }
 
     /// `ISCaaSDex.ExchangePlan` / `Interaction` (CTR-DEX-20): the exchange path's argument shapes.
     #[derive(Debug, PartialEq, Eq)]
@@ -74,7 +86,7 @@ sol! {
     struct Interaction { address target; bytes data; }
     /// `ISCaaSDex.HybridPlan`: makers at their own price plus an outside part (floor `outsideFloor`).
     #[derive(Debug, PartialEq, Eq)]
-    struct HybridPlan { bytes32 ref; Leg taker; Leg[] makers; uint256 outsideSell; uint256 outsideFloor; address[] extraTokens; }
+    struct HybridPlan { bytes32 ref; DexLeg taker; DexLeg[] makers; uint256 outsideSell; uint256 outsideFloor; address[] extraTokens; }
 
     /// An outside-token order (CTR-DEX-18): the `TradeOrder` signed in the DEX's domain with its sell token.
     #[derive(Debug, PartialEq, Eq)]
@@ -82,9 +94,11 @@ sol! {
 
     /// One taker against one or more makers (CTR-DEX-16); `ref` is the submitter's (the venue's trade tag).
     #[derive(Debug, PartialEq, Eq)]
-    struct Settlement { bytes32 ref; Leg taker; Leg[] makers; }
+    struct Settlement { bytes32 ref; DexLeg taker; DexLeg[] makers; }
 
-    struct CancelOrder { bytes32 orderHash; }
+    /// The nested cancels (typed-signing C6): the whole order is signed, in the sell token's domain or (`CancelDexOrder`) the DEX's.
+    struct CancelOrder { TradeOrder order; }
+    struct CancelDexOrder { DexOrder order; }
     struct InvalidateNonces { address from; uint256 batch; uint256 minNonce; }
 
     /// `SCaaSDex` (a clone per DEX, `createDex`): what the venue sends and reads.
@@ -102,7 +116,7 @@ sol! {
         function mtxCancelOrders(DexOrder[] orders, bytes[] sigs) external;
         function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes sig) external;
         function dexOrderDigest(address sellToken, TradeOrder o) external view returns (bytes32);
-        function cancelOrderDigest(bytes32 orderHash) external view returns (bytes32);
+        function cancelDexOrderDigest(address sellToken, TradeOrder o) external view returns (bytes32);
         function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) external view returns (bytes32);
         function pulled(bytes32 orderHash) external view returns (uint256);
         function minNonce(address from, uint256 batch) external view returns (uint256);
@@ -145,8 +159,6 @@ sol! {
     #[derive(Debug)]
     interface IToken {
         function mtxNonce(address from, uint256 batch) external view returns (uint256);
-        function mtxDigest(MetaTransaction m) external view returns (bytes32);
-        function mtxTransferDigest(MetaTransfer t) external view returns (bytes32);
         function mtxExecute(MetaTransaction m, bytes signature) external returns (bytes);
         function mtxExecuteTransfer(MetaTransfer t, bytes signature) external returns (bool);
         /// CTR-MTX-26 (`IMetaTokenV2`): `mtxPay` with `payId = metaPayId(salt, meta)`; `PaymentMeta` first.
@@ -161,12 +173,13 @@ sol! {
         function mtxTrade(TradeOrder o, bytes sig, TradeFill f) external;
         function mtxCancelOrder(TradeOrder o, bytes sig) external;
         function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes sig) external;
-        function mtxWrap(address underlying, TradeOrder o, bytes sig) external;
         /// `ITradeToken.UANoncesInvalidated`: `uaInvalidateNonces`; `from` is the id (a native address zero-padded).
         event UANoncesInvalidated(bytes32 indexed from, uint256 indexed batch, uint256 minNonce);
         function allowance(address owner, address spender) external view returns (uint256);
         function tradeOrderDigest(TradeOrder o) external view returns (bytes32);
-        function cancelOrderDigest(bytes32 orderHash) external view returns (bytes32);
+        function cancelOrderDigest(TradeOrder o) external view returns (bytes32);
+        function eip712Domain() external view returns (bytes1 fields, string name, string version, uint256 chainId,
+            address verifyingContract, bytes32 salt, uint256[] extensions);
         function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) external view returns (bytes32);
         function pulled(bytes32 orderHash) external view returns (uint256);
         function minNonce(address from, uint256 batch) external view returns (uint256);
@@ -219,13 +232,11 @@ sol! {
     interface IUALedger {
         function registry() external view returns (address);
         function uaNonce(bytes32 ua, uint256 batch) external view returns (uint256);
-        function uaDigest(UAMetaTransaction m) external view returns (bytes32);
-        function uaTransferDigest(UAMetaTransfer t) external view returns (bytes32);
         function uaExecute(UAMetaTransaction m, bytes auth) external returns (bytes);
-        function uaExecuteTransfer(UAMetaTransfer t, bytes auth) external returns (bool);
+        function uaExecuteTransfer(UAMetaTransfer t, UASig auth) external returns (bool);
         /// CTR-MTX-26 (`IMetaTokenV2`): `uaPay` with `payId = metaPayId(salt, meta)`; `PaymentMeta` first.
         function uaPayMeta(bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes meta, uint256 validUntil,
-            uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes auth) external returns (bool);
+            uint32 mode, address relayer, uint256 fee, address feeRecipient, UASig auth) external returns (bool);
         function transferToUA(bytes32 to, uint256 amount) external returns (bool);
         function balanceOfUA(bytes32 ua) external view returns (uint256);
         event UAMetaTransactionExecuted(bytes32 indexed from, address indexed relayer, uint256 indexed batch,
@@ -243,11 +254,19 @@ sol! {
         error UAUnauthorized(bytes32 ua);
     }
 
+    /// `ITradeToken.uaInvalidateNonces`: its selector, for an invalidation already in force.
+    #[derive(Debug)]
+    interface ITokenUa {
+        function uaInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, UASig auth) external;
+    }
+
     /// `MtxRelayFee` (CTR-MTX-27): a token fee to the relayer for a fee-less call; `uaRelay` for a UA payer.
     #[derive(Debug)]
     interface IMtxRelayFee {
-        function relay(address target, bytes callData, address token, MetaTransfer t, bytes sig) external;
-        function uaRelay(address target, bytes callData, address token, UAMetaTransfer t, bytes auth) external;
+        function relay(address target, bytes callData, address token, address from, address payee, uint256 value,
+            uint256 validUntil, bytes sig) external;
+        function uaRelay(address target, bytes callData, address token, bytes32 from, bytes32 payee, uint256 value,
+            uint256 validUntil, UASig auth) external;
         function relayRef(address target, bytes callData) external view returns (bytes32);
         function EXECUTOR() external view returns (address);
         event RelayFeePaid(bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer,
@@ -273,8 +292,6 @@ sol! {
         struct UAAttrs { bytes pqzKey; bytes32 pqzPopHash; KemKey kem; bytes32 kemPkHash; }
         struct MsigMember { uint16 kind; bytes32 id; uint16 weight; }
         struct MsigStructure { uint16 threshold; MsigMember[] members; }
-        struct MemberSig { uint16 index; bytes keyData; bytes sig; }
-        struct UASig { bytes keyData; bytes signature; MemberSig[] members; }
         struct WebAuthnKey { bytes32 x; bytes32 y; bytes32 rpIdHash; }
         struct MuSig2Key { bytes aggKey; bytes[] memberKeys; }
         struct FrostMember { bytes[] commitments; bytes r; bytes32 z; }

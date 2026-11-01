@@ -96,12 +96,10 @@ impl ChainAdapter for EvmAdapter {
     }
 
     async fn digest(&self, job: &Job) -> std::result::Result<Option<B256>, SimError> {
-        let Ok(w) = work_from_job(job, self.fee_recipient) else { return Ok(None) };
+        let Ok(mut w) = work_from_job(job, self.fee_recipient) else { return Ok(None) };
         let chain = self.lane(0).map_err(|e| SimError::Transport(e.to_string()))?;
-        match chain.digest_of(w.to, &w.data).await {
-            None => Ok(job_digest(job)),
-            Some(d) => d.map(Some),
-        }
+        guard::fill_digest(chain, &mut w).await?;
+        Ok(w.digest().or_else(|| job_digest(job)))
     }
 
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {

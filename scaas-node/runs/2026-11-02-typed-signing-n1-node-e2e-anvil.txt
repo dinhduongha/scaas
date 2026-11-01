@@ -1,0 +1,13 @@
+# node-e2e-anvil at commit 890f291a + the N1 tree
+test a_peer_landing_our_intent_makes_the_job_consumed_never_dead ... ok
+test dex_fill_below_half_settles_on_anvil ... [2m2026-11-01T17:24:37.517403Z[0m [32m INFO[0m [2
+ok
+test dex_order_book_settles_partial_fills_persists_and_cancels ... No files changed, compilation ski
+ok
+test evm_adapter_runs_the_generic_lane_runner_on_two_mnemonic_lanes ... ok
+test outbox_payment_reaches_chain_and_comes_back_final ... [2m2026-11-01T17:25:13.328432Z[0m [32m
+ok
+test ua_pay_meta_and_relay_fee_jobs_on_anvil ... [2m2026-11-01T17:25:25.765712Z[0m [32m INFO[0m 
+ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 78.47s
+rc=0
