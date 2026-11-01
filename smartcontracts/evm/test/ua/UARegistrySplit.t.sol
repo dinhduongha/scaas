@@ -474,24 +474,39 @@ contract UARegistrySplitTest is UARegistryBase {
             abi.encodeWithSelector(IUARegistry.UAKeyInUse.selector, UAKinds.keyHashOf(0x0100, w), pUa));
     }
 
-    function _groupNegatives(SplitDiff.Run memory r, address at) internal {
-        IUARegistry.MuSig2Key memory mk;
-        mk.aggKey = hex"01";
-        bytes memory wrongPoint = abi.encodeWithSelector(IUARegistry.UAKeyData.selector, uint16(0x0110));
-        r.refused("MuSig2: another kind", at, abi.encodeCall(IUARegistry.registerMuSig2, (uint16(0x0111), mk, _none(), "", "")),
+    /// Each one change from the fresh typed call that ends its list and passes, on a registry that has not seen the group.
+    function _groupNegatives(SplitDiff.Run memory r) internal {
+        _deploy(R5, chainUidA, address(0), false, BUDGET, address(0), true, _all(false));
+        uint16 ms = 0x0110;
+        bytes memory d = _keyOf(ms);
+        bytes memory pop = _pop(UARegistry(address(0)), ms, d);
+        IUARegistry.MuSig2Key memory mk = UACall.muSig2Key(d, UACall.pointSize(ms));
+        r.refused("MuSig2: another kind", R5, abi.encodeCall(IUARegistry.registerMuSig2, (uint16(0x0111), mk, _none(), pop, "")),
             abi.encodeWithSelector(IUARegistry.UAKeyData.selector, uint16(0x0111)));
-        r.refused("MuSig2: point size", at, abi.encodeCall(IUARegistry.registerMuSig2, (uint16(0x0110), mk, _none(), "", "")), wrongPoint);
-        IUARegistry.FrostKey memory fk;
-        fk.groupKey = hex"01";
-        r.refused("FROST: another kind", at, abi.encodeCall(IUARegistry.registerFrost, (uint16(0x0110), fk, _none(), "", "")),
-            wrongPoint);
-        r.refused("FROST: point size", at, abi.encodeCall(IUARegistry.registerFrost, (uint16(0x0111), fk, _none(), "", "")),
-            abi.encodeWithSelector(IUARegistry.UAKeyData.selector, uint16(0x0111)));
-        fk.groupKey = new bytes(33);
-        fk.threshold = 1;
-        fk.members = new IUARegistry.FrostMember[](1);
-        r.refused("FROST: commitments", at, abi.encodeCall(IUARegistry.registerFrost, (uint16(0x0111), fk, _none(), "", "")),
-            abi.encodeWithSelector(IUARegistry.UAKeyData.selector, uint16(0x0111)));
+        bytes memory agg = mk.aggKey;
+        mk.aggKey = bytes.concat(agg, hex"00");
+        r.refused("MuSig2: point size", R5, abi.encodeCall(IUARegistry.registerMuSig2, (ms, mk, _none(), pop, "")),
+            abi.encodeWithSelector(IUARegistry.UAKeyData.selector, ms));
+        mk.aggKey = agg;
+        r.write("MuSig2: the base call passes", R5, abi.encodeCall(IUARegistry.registerMuSig2, (ms, mk, _none(), pop, "")));
+
+        uint16 fr = 0x0111;
+        d = _keyOf(fr);
+        pop = _pop(UARegistry(address(0)), fr, d);
+        IUARegistry.FrostKey memory fk = UACall.frostKey(d, UACall.pointSize(fr));
+        r.refused("FROST: another kind", R5, abi.encodeCall(IUARegistry.registerFrost, (ms, fk, _none(), pop, "")),
+            abi.encodeWithSelector(IUARegistry.UAKeyData.selector, ms));
+        agg = fk.groupKey;
+        fk.groupKey = bytes.concat(agg, hex"00");
+        r.refused("FROST: point size", R5, abi.encodeCall(IUARegistry.registerFrost, (fr, fk, _none(), pop, "")),
+            abi.encodeWithSelector(IUARegistry.UAKeyData.selector, fr));
+        fk.groupKey = agg;
+        bytes[] memory c = fk.members[0].commitments;
+        fk.members[0].commitments = new bytes[](c.length + 1);
+        r.refused("FROST: commitments", R5, abi.encodeCall(IUARegistry.registerFrost, (fr, fk, _none(), pop, "")),
+            abi.encodeWithSelector(IUARegistry.UAKeyData.selector, fr));
+        fk.members[0].commitments = c;
+        r.write("FROST: the base call passes", R5, abi.encodeCall(IUARegistry.registerFrost, (fr, fk, _none(), pop, "")));
     }
 
     function _attachmentNegatives(SplitDiff.Run memory r, address at, bytes32 h2) internal {
@@ -619,12 +634,12 @@ contract UARegistrySplitTest is UARegistryBase {
         uint16[5] memory k = [ML44, ML65, FN, SLH, uint16(0x0101)];
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](5);
         for (uint256 i; i < 5; ++i) c[i] = UARegistry.KindConfig(k[i], address(new MockVerifier(uint8(i + 1), 0)), 400_000);
-        _deploy(R5, chainUidA, address(0), false, BUDGET, address(0), true, c);
+        _deploy(R3, chainUidA, address(0), false, BUDGET, address(0), true, c);
         for (uint256 i; i < 4; ++i) {
-            r.refused(string.concat("verifier mode ", vm.toString(i + 1)), R5, _plain(k[i], _pk(k[i], 80)),
+            r.refused(string.concat("verifier mode ", vm.toString(i + 1)), R3, _plain(k[i], _pk(k[i], 80)),
                 abi.encodePacked(IUARegistry.UAPoP.selector));
         }
-        r.refused("verifier mode 5, out of gas", R5, _plain(0x0101, _key(0x0101)), abi.encodePacked(IUARegistry.UAPoP.selector));
+        r.refused("verifier mode 5, out of gas", R3, _plain(0x0101, _key(0x0101)), abi.encodePacked(IUARegistry.UAPoP.selector));
     }
 
     /// Calldata the ABI decoder refuses, and trailing bytes it ignores.
@@ -816,7 +831,7 @@ contract UARegistrySplitTest is UARegistryBase {
         _packedRegistry(r);
         _cache(r, R1);
         _registerNegatives(r, R1);
-        _groupNegatives(r, R1);
+        _groupNegatives(r);
         _attachmentNegatives(r, R1, h2);
         _msigNegatives(r, R1);
         _debitBound(r, R1);
