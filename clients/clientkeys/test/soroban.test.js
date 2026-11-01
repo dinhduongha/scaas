@@ -72,7 +72,7 @@ test('soroban ua-ops: every auth verifies under its kind', () => {
   for (const r of V.registrations) {
     assert.equal(hex(ua.uaOf(r.kind, B(r.keyData))), r.ua, r.name);
     const m = ua.holderPopMessage(r.kind, { ua: B(r.ua), keyData: B(r.keyData) });
-    assert.ok(r.kind === 0x0120 ? msigOk(r, hex(m.memberDigest), r.pop, keyOf) : sigOk(r.kind, r.keyData, hex(m.message), r.pop), r.name);
+    assert.ok(r.kind === 0x0120 ? r.pop === '0x' && !ua.msigPqzEligible(B(r.keyData)) : sigOk(r.kind, r.keyData, hex(m.message), r.pop), r.name);
   }
   for (const e of V.entries) {
     assert.equal(e.purposeTag, hex(ua.purposeTag(e.purpose)), e.name);

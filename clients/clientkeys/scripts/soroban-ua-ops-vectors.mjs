@@ -129,8 +129,8 @@ const registrationRow = (sg) => {
   const m = ua.holderPopMessage(sg.kind, { ua: sg.ua, keyData: sg.keyData });
   return { name: sg.name, kind: sg.kind, kindName: 'msig', keyData: hex(sg.keyData), ua: hex(sg.ua),
     threshold: sg.threshold, members: sg.members.map((x) => ({ index: x.index, kind: x.kind, id: hex(x.ua), weight: x.weight })),
-    registrationDigest: hex(m.registrationDigest), popMessage: hex(m.message), memberDigest: hex(m.memberDigest), popSigners: [0, 1],
-    pop: hex(sg.sign(m.message)) };
+    registrationDigest: hex(m.registrationDigest), popMessage: hex(m.message), memberDigest: hex(m.memberDigest), popSigners: [],
+    pop: '0x' }; // classical-dominant (2 of its 3 weights): no pop of its own, as EVM (U8S-D2)
 };
 
 function build() {
@@ -163,7 +163,7 @@ function build() {
     'mtx_* are signed by the mandate owner (mtx_set_mandate) and the delegate (mtx_mandate_pay, epoch 1 = after the',
     'first mtx_set_mandate, CTR-ACC-07). registrations[i] =',
     'register(kind, keyData, empty attrs, pop, empty pqz_pop, None) (portable, no network); the single-key rows are',
-    'portable.json\'s; mldsa65 signs as mldsa65#2, mldsa65#1 is an msig member.',
+    'portable.json\'s; mldsa65 signs as mldsa65#2, mldsa65#1 is an msig member; the msig is classical-dominant: empty pop.',
   ].join(' ');
   return { note, version: 1, network: { passphrase: PASSPHRASE, networkId: hex(NET) }, contracts: C, registrations, entries };
 }

@@ -170,6 +170,20 @@ fn msig_layout_ok(d: &Bytes) -> bool {
     threshold != 0 && threshold <= total
 }
 
+/// EVM `_pqEligible` (CTR-PQZ-12): the members outside 0x0130–0x0133 weigh less than the threshold, so a PQ member must
+/// sign. Only such an `msig` has a `pop` of its own (U8S-D2, CTR-UA-07).
+fn pq_eligible(d: &Bytes) -> bool {
+    let (threshold, count) = (u16_at(d, 0), u16_at(d, 2));
+    let mut classical = 0;
+    for i in 0..count {
+        let (kind, _, w) = member(d, i);
+        if !(0x0130..=0x0133).contains(&kind) {
+            classical += w;
+        }
+    }
+    classical < threshold
+}
+
 /// Step 2: key data canonical (`KeyData`). P-256 / secp256k1 on-curve and the ed25519 "not a point" case are left to
 /// the host's verify of the `pop` (a host error, plan finding F1).
 fn check_key_data(env: &Env, kind: u32, d: &Bytes) {
@@ -241,13 +255,14 @@ fn stellar_account(env: &Env, id: &[u8; 32]) -> Address {
 /// `(ua, purpose, digest)`; an `evm-eoa` member signs the record's typed digest `portable` itself (ECDSA, the `pop` at
 /// `register` only; typed-signing TS-D4, `eth_signTypedData_v4`, no `personal_sign`); an `evm-contract` slot, and an
 /// `evm-eoa` slot outside `portable`, is `NotVerifiable` (SOR-D6). A slot past the threshold or an unmet threshold is
-/// `short`.
+/// `short`. `portable` is a stored signature, so it is minimal too (owner 2026-10-31, U8S-D1, every slot's weight counts,
+/// native ones included): with T the slots' total weight and N the threshold, T - min(weight) < N, else `short`.
 fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, digest: &BytesN<32>, auth: &Bytes, portable: Option<&Hash<32>>, short: Error) {
     let sigs = abi::decode_member_sigs(env, auth);
     let md = member_digest(env, ua, &ua_message(env, MSIG, purpose, digest));
     let pm = BytesN::from_array(env, &PURPOSE_MEMBER);
     let (threshold, count) = (u16_at(d, 0), u16_at(d, 2));
-    let mut acc = 0;
+    let (mut acc, mut w_min) = (0, u32::MAX);
     for s in sigs.iter() {
         if acc >= threshold || s.index >= count {
             fail(env, short);
@@ -277,8 +292,9 @@ fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, diges
             }
         }
         acc += w;
+        w_min = w_min.min(w);
     }
-    if acc < threshold {
+    if acc < threshold || (portable.is_some() && acc - w_min >= threshold) {
         fail(env, short);
     }
 }
@@ -343,7 +359,11 @@ impl UaRegistry {
         let reg = typed.to_bytes();
         let pv2 = BytesN::from_array(&env, &PURPOSE_POP_V2);
         if kind == MSIG {
-            check_msig(&env, &ua, &key_data, &pv2, &reg, &pop, Some(&typed), Error::Pop);
+            if pq_eligible(&key_data) {
+                check_msig(&env, &ua, &key_data, &pv2, &reg, &pop, Some(&typed), Error::Pop);
+            } else if !pop.is_empty() {
+                fail(&env, Error::Pop); // classical-dominant: its members proved theirs, as EVM (U8S-D2)
+            }
         } else {
             verify::check(&env, kind, &key_data, &ua_message(&env, kind, &pv2, &reg), &pop);
         }

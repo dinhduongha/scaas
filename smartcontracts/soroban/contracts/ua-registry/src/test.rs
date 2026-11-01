@@ -4,6 +4,7 @@ extern crate std;
 use std::{format, vec, vec::Vec as StdVec};
 
 use ed25519_dalek::Signer as _;
+use ml_dsa::Keypair as _;
 use serde_json::Value;
 use sha2::{Digest as _, Sha256};
 use soroban_sdk::{
@@ -150,6 +151,7 @@ enum Sk {
     P256(p256::ecdsa::SigningKey),
     Wa(p256::ecdsa::SigningKey),
     K1(k256::ecdsa::SigningKey),
+    Ml(std::boxed::Box<ml_dsa::SigningKey<ml_dsa::MlDsa65>>),
 }
 
 fn ed(seed: u8) -> Sk {
@@ -157,6 +159,10 @@ fn ed(seed: u8) -> Sk {
 }
 fn p256k(seed: u8) -> p256::ecdsa::SigningKey {
     p256::ecdsa::SigningKey::from_bytes(&[seed; 32].into()).unwrap()
+}
+/// An in-test `mldsa65` key: an in-test `msig` of a PQ majority needs a real member signature over its own digest.
+fn ml(seed: u8) -> Sk {
+    Sk::Ml(std::boxed::Box::new(ml_dsa::SigningKey::from_seed(&ml_dsa::Seed::from([seed; 32]))))
 }
 fn k1(seed: u8) -> k256::ecdsa::SigningKey {
     k256::ecdsa::SigningKey::from_bytes(&[seed; 32].into()).unwrap()
@@ -191,6 +197,7 @@ impl Sk {
             Sk::P256(_) => 0x0101,
             Sk::Ed(_) => 0x0102,
             Sk::K1(_) => 0x0108,
+            Sk::Ml(_) => 0x0131,
         }
     }
     fn key_data(&self, env: &Env) -> Bytes {
@@ -199,6 +206,7 @@ impl Sk {
             Sk::P256(k) => k.verifying_key().to_encoded_point(false).as_bytes()[1..].to_vec(),
             Sk::Wa(k) => [&k.verifying_key().to_encoded_point(false).as_bytes()[1..], &RP[..]].concat(),
             Sk::K1(k) => k.verifying_key().to_encoded_point(false).as_bytes()[1..].to_vec(),
+            Sk::Ml(k) => k.verifying_key().encode().as_slice().to_vec(),
         };
         b(env, &v)
     }
@@ -215,6 +223,10 @@ impl Sk {
             }
             Sk::Wa(k) => webauthn_sig(env, k, m, 0),
             Sk::K1(k) => k1_sign(k, m),
+            Sk::Ml(k) => {
+                let pq = env.crypto().keccak256(&b(env, &[digest::TAG(env, 0x0131).to_array(), *m].concat())).to_array();
+                k.expanded_key().sign_deterministic(&pq, &[]).unwrap().encode().as_slice().to_vec()
+            }
         };
         b(env, &v)
     }
@@ -393,13 +405,12 @@ fn register_unverifiable_part_refused_4b() {
     let env = new_env();
     let relayer = Address::generate(&env);
     let c = deploy(&env, &[relayer.clone()]);
-    let e = ed(1);
-    e.register(&env, &c);
+    let q = portable(&env, "mldsa65#1");
+    q.on(&c);
     let mut contract_id = [0u8; 32];
     contract_id[12..].copy_from_slice(&[0x22; 20]);
-    let m = msig(&env, 2, &[(0x0002, contract_id, 1), (0x0102, e.ua(&env).to_array(), 1)]);
-    let rd = reg_digest(&env, &m.ua, 0x0120);
-    let pop = member_sigs(&env, &[(m.index(&contract_id), vec![], vec![1; 65]), m.slot(&env, &e, PURPOSE_POP_V2, &rd)]);
+    let m = msig(&env, 2, &[(0x0002, contract_id, 1), (0x0131, q.ua.to_array(), 1)]);
+    let pop = member_sigs(&env, &[(m.index(&contract_id), vec![], vec![1; 65])]);
     for r in [None, Some(relayer)] {
         let got = err(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &pop, &Bytes::new(&env), &r));
         assert_eq!(got, Error::NotVerifiable);
@@ -491,7 +502,7 @@ fn msig_member_unknown_refused() {
     assert_eq!(err(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &pop, &Bytes::new(&env), &None)), Error::MemberUnknown);
 }
 
-/// A 2-of-3 `msig` of an in-test ed25519 key, an in-test P-256 key and `mldsa65#1`.
+/// A 2-of-3 `msig` of an in-test ed25519 key, an in-test P-256 key and `mldsa65#1`: classical-dominant, an empty `pop`.
 fn msig_2of3(env: &Env, c: &UaRegistryClient) -> (Msig, Sk, Sk) {
     let (e, p) = (ed(4), Sk::P256(p256k(5)));
     e.register(env, c);
@@ -499,10 +510,7 @@ fn msig_2of3(env: &Env, c: &UaRegistryClient) -> (Msig, Sk, Sk) {
     let q = portable(env, "mldsa65#1");
     q.on(c);
     let m = msig(env, 2, &[(0x0102, e.ua(env).to_array(), 1), (0x0101, p.ua(env).to_array(), 1), (0x0131, q.ua.to_array(), 1)]);
-    let rd = reg_digest(env, &m.ua, 0x0120);
-    let mut slots = vec![m.slot(env, &e, PURPOSE_POP_V2, &rd), m.slot(env, &p, PURPOSE_POP_V2, &rd)];
-    slots.sort_by_key(|s| s.0);
-    let ua = m.register(env, c, &member_sigs(env, &slots));
+    let ua = m.register(env, c, &Bytes::new(env));
     assert_eq!(ua, m.ua);
     let rec = c.record_of(&ua).unwrap();
     assert!(rec.signable && rec.pop_checked == Checked::Chain);
@@ -637,15 +645,24 @@ fn msig_soroban_native_member_host_auth() {
     env.cost_estimate().budget().reset_unlimited();
     env.ledger().with_mut(|l| l.network_id = NETWORK);
     let c = deploy(&env, &[]);
+    let q = ml(10);
+    q.register(&env, &c);
+    // register, PQ-eligible (a PQ majority): the G member authorises (ua, pop v2, registrationDigest) beside the PQ member.
+    let m = msig(&env, 2, &[(0x0011, gpk, 1), (0x0131, q.ua(&env).to_array(), 1)]);
+    let rd = reg_digest(&env, &m.ua, 0x0120);
+    let mut slots = vec![(m.index(&gpk), vec![], vec![]), m.slot(&env, &q, PURPOSE_POP_V2, &rd)];
+    slots.sort_by_key(|s| s.0);
+    let pop = member_sigs(&env, &slots);
+    assert!(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &pop, &Bytes::new(&env), &None).is_err());
+    let args: SVec<Val> = (m.ua.clone(), n(&env, PURPOSE_POP_V2), rd).into_val(&env);
+    env.set_auths(&[signed_entry(&env, &gsk, 1, &c.address, "register", args)]);
+    m.register(&env, &c, &pop);
+    assert!(c.record_of(&m.ua).unwrap().signable);
+    // A sole G member is classical-dominant: an empty `pop`, its host auth is the signing check.
+    env.set_auths(&[]);
     let m = msig(&env, 1, &[(0x0011, gpk, 1)]);
     let empty_slot = member_sigs(&env, &[(0, vec![], vec![])]);
-    let rd = reg_digest(&env, &m.ua, 0x0120);
-    let pv2 = n(&env, PURPOSE_POP_V2);
-    // register: the G member authorises (ua, pop v2, registrationDigest).
-    assert!(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &empty_slot, &Bytes::new(&env), &None).is_err());
-    let args: SVec<Val> = (m.ua.clone(), pv2, rd).into_val(&env);
-    env.set_auths(&[signed_entry(&env, &gsk, 1, &c.address, "register", args)]);
-    m.register(&env, &c, &empty_slot);
+    m.register(&env, &c, &Bytes::new(&env));
     assert!(c.record_of(&m.ua).unwrap().signable);
     // require_authorized: the same member over (ua, metatx, digest).
     let (pm, d) = (n(&env, PURPOSE_METATX), n(&env, [0x51; 32]));
@@ -687,14 +704,12 @@ fn msig_evm_eoa_member_typed_digest() {
     let r = portable(&env, "msig-pq-native");
     let ua = r.on(&c);
     assert!(!c.record_of(&ua).unwrap().signable, "the EOA's weight does not count for signing");
-    // In-test: 1-of-2 (evm-eoa, ed25519), registered by the EOA alone; signing needs the ed25519 member.
+    // In-test: 1-of-2 (evm-eoa, ed25519), classical-dominant, an empty `pop`; signing needs the ed25519 member.
     let (k, e) = (k1(6), ed(7));
     e.register(&env, &c);
     let id = eoa(&env, &k);
     let m = msig(&env, 1, &[(0x0001, id, 1), (0x0102, e.ua(&env).to_array(), 1)]);
-    let rd = reg_digest(&env, &m.ua, 0x0120);
-    let pop = member_sigs(&env, &[(m.index(&id), vec![], k1_sign(&k, &rd.to_array()))]);
-    m.register(&env, &c, &pop);
+    m.register(&env, &c, &Bytes::new(&env));
     assert!(c.receivable(&m.ua));
     let (pm, d) = (n(&env, PURPOSE_METATX), n(&env, [0x61; 32]));
     let eoa_slot = member_sigs(&env, &[(m.index(&id), vec![], k1_sign(&k, &m.md(&env, PURPOSE_METATX, &d).to_array()))]);
@@ -707,10 +722,11 @@ fn msig_evm_eoa_member_typed_digest() {
 #[test]
 fn msig_evm_eoa_personal_sign_refused() {
     let (env, c) = setup();
-    let (k, e) = (k1(8), ed(9));
-    e.register(&env, &c);
+    let k = k1(8);
+    let q = portable(&env, "mldsa65#1");
+    q.on(&c);
     let id = eoa(&env, &k);
-    let m = msig(&env, 1, &[(0x0001, id, 1), (0x0102, e.ua(&env).to_array(), 1)]);
+    let m = msig(&env, 2, &[(0x0001, id, 1), (0x0131, q.ua.to_array(), 1)]); // PQ-eligible: a member-signed `pop`
     let rd = reg_digest(&env, &m.ua, 0x0120);
     let md = m.md(&env, PURPOSE_POP_V2, &rd);
     for sig in [personal_sign(&env, &k, &md), personal_sign(&env, &k, &rd), k1_sign(&k, &md.to_array())] {
@@ -866,7 +882,7 @@ fn member_large_pop_same_budget() {
         let pop = webauthn_sig(&env, k, &msg(&env, 0x0100, PURPOSE_POP_V2, &reg_digest(&env, &ua, 0x0100)), ext);
         c.register(&0x0100, &s.key_data(&env), &no_attrs(&env), &b(&env, &pop), &Bytes::new(&env), &None);
         let m = msig(&env, 1, &[(0x0100, ua.to_array(), 1)]);
-        m.register(&env, &c, &member_sigs(&env, &[m.slot(&env, &s, PURPOSE_POP_V2, &reg_digest(&env, &m.ua, 0x0120))]));
+        m.register(&env, &c, &Bytes::new(&env));
         let d = n(&env, [0xb1; 32]);
         let auth = member_sigs(&env, &[m.slot(&env, &s, PURPOSE_METATX, &d)]);
         c.require_authorized(&m.ua, &n(&env, PURPOSE_METATX), &d, &auth);
@@ -896,7 +912,7 @@ fn stellar_account_round_trip() {
 
 /// S10, owner ruling 2026-10-31 (final review A-I1): a `soroban-contract` (`C…`) member is `MemberUnknown`, also
 /// when the other member alone reaches the threshold (a contract calling the registry would meet its slot by invoker
-/// auth); the same `pop` registers the `msig` without it.
+/// auth); the `msig` without it registers, classical-dominant, with an empty `pop`.
 #[test]
 fn msig_soroban_contract_member_refused() {
     use soroban_sdk::xdr::ToXdr as _;
@@ -906,8 +922,109 @@ fn msig_soroban_contract_member_refused() {
     let x = c.address.clone().to_xdr(&env);
     let cid: [u8; 32] = vecu8(&x.slice(x.len() - 32..)).try_into().unwrap();
     let m = msig(&env, 1, &[(0x0102, e.ua(&env).to_array(), 1), (0x0012, cid, 1)]);
-    let pop = member_sigs(&env, &[m.slot(&env, &e, PURPOSE_POP_V2, &reg_digest(&env, &m.ua, 0x0120))]);
-    assert_eq!(err(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &pop, &Bytes::new(&env), &None)), Error::MemberUnknown);
+    assert_eq!(err(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &Bytes::new(&env), &Bytes::new(&env), &None)), Error::MemberUnknown);
     let m = msig(&env, 1, &[(0x0102, e.ua(&env).to_array(), 1)]);
-    m.register(&env, &c, &member_sigs(&env, &[m.slot(&env, &e, PURPOSE_POP_V2, &reg_digest(&env, &m.ua, 0x0120))]));
+    m.register(&env, &c, &Bytes::new(&env));
+}
+
+// ---------- U8S-D1 (owner 2026-10-31): a stored msig signature is minimal; U8S-D2: a classical-dominant msig has no `pop` ----------
+
+/// portable.json `msig-pop-not-minimal`: both slots verify and the old rule passes (1, then 3 >= 2), but the weight-2
+/// slot alone reaches the threshold: `Pop`. The weight-1 slot alone is below it; the weight-2 slot alone registers.
+#[test]
+fn msig_pop_not_minimal_refused() {
+    let (env, c) = setup();
+    portable(&env, "mldsa65#1").on(&c);
+    portable(&env, "mldsa65#2").on(&c);
+    let neg = derived(PORTABLE, "negatives", "msig-pop-not-minimal");
+    assert_eq!(neg["error"], "UAPoP");
+    let (kd, pop) = (b(&env, &hx(&neg["registration"]["keyData"])), b(&env, &hx(&neg["registration"]["pop"])));
+    let refused = |pop: &Bytes| err(c.try_register(&0x0120, &kd, &no_attrs(&env), pop, &Bytes::new(&env), &None));
+    assert_eq!(refused(&pop), Error::Pop);
+    let slots = crate::abi::decode_member_sigs(&env, &pop);
+    let alone = |i: u32| member_sigs(&env, &[(i, vec![], vecu8(&slots.get(i).unwrap().sig))]);
+    assert_eq!(refused(&alone(0)), Error::Pop);
+    let ua = c.register(&0x0120, &kd, &no_attrs(&env), &alone(1), &Bytes::new(&env), &None);
+    assert_eq!(ua, n32(&env, &neg["registration"]["ua"]));
+}
+
+/// Every slot counts its member's weight, a native one too: 2-of-(`G…` 1, `mldsa65` 2) with the `G…` member's host auth
+/// present is `Pop`, as its slot is not needed; the PQ slot alone registers.
+#[test]
+fn msig_g_member_redundant_slot_refused() {
+    let gsk = ed25519_dalek::SigningKey::from_bytes(&[12; 32]);
+    let gpk = gsk.verifying_key().to_bytes();
+    let mut snap: soroban_ledger_snapshot::LedgerSnapshot = Env::default().to_ledger_snapshot();
+    snap.ledger_entries.push(ledger_account(gpk));
+    let env = Env::from_ledger_snapshot(snap);
+    env.cost_estimate().budget().reset_unlimited();
+    env.ledger().with_mut(|l| l.network_id = NETWORK);
+    let c = deploy(&env, &[]);
+    let q = ml(13);
+    q.register(&env, &c);
+    let m = msig(&env, 2, &[(0x0011, gpk, 1), (0x0131, q.ua(&env).to_array(), 2)]);
+    let rd = reg_digest(&env, &m.ua, 0x0120);
+    let pq = m.slot(&env, &q, PURPOSE_POP_V2, &rd);
+    assert_eq!(m.index(&gpk), 0, "the G slot first: the threshold is not met before the PQ slot");
+    let slots = vec![(0, vec![], vec![]), pq.clone()];
+    let args: SVec<Val> = (m.ua.clone(), n(&env, PURPOSE_POP_V2), rd).into_val(&env);
+    env.set_auths(&[signed_entry(&env, &gsk, 1, &c.address, "register", args)]);
+    assert_eq!(err(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &member_sigs(&env, &slots), &Bytes::new(&env), &None)), Error::Pop);
+    env.set_auths(&[]);
+    m.register(&env, &c, &member_sigs(&env, &[pq]));
+}
+
+/// U8S-D1 scope: a transaction authorisation is not stored and keeps the old rule: 2-of-(1, 2) signed by both slots
+/// passes `require_authorized`, lower index first; a slot after the threshold still fails.
+#[test]
+fn msig_require_authorized_keeps_rule() {
+    let (env, c) = setup();
+    let (e, p) = (ed(14), Sk::P256(p256k(15)));
+    e.register(&env, &c);
+    p.register(&env, &c);
+    let mut ids = [(0x0102u16, e.ua(&env).to_array()), (0x0101u16, p.ua(&env).to_array())];
+    ids.sort_by_key(|x| x.1);
+    let (d, pm) = (n(&env, [0x71; 32]), n(&env, PURPOSE_METATX));
+    let m = msig(&env, 2, &[(ids[0].0, ids[0].1, 1), (ids[1].0, ids[1].1, 2)]);
+    m.register(&env, &c, &Bytes::new(&env));
+    c.require_authorized(&m.ua, &pm, &d, &member_sigs(&env, &two_slots(&env, &m, &e, &p, PURPOSE_METATX, &d)));
+    let m = msig(&env, 2, &[(ids[0].0, ids[0].1, 2), (ids[1].0, ids[1].1, 1)]);
+    m.register(&env, &c, &Bytes::new(&env));
+    let auth = member_sigs(&env, &two_slots(&env, &m, &e, &p, PURPOSE_METATX, &d));
+    assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &d, &auth)), Error::Unauthorized);
+}
+
+/// U8S-D2, as EVM (CTR-UA-07): `ed25519` (2) + `mldsa65#1` (1), threshold 2: the classical weight reaches the threshold,
+/// so an empty `pop` registers (`Chain`, signable by member weight) and a member-signed `pop` is `Pop`.
+#[test]
+fn msig_classical_dominant_empty_pop() {
+    let (env, c) = setup();
+    let e = ed(16);
+    e.register(&env, &c);
+    let q = portable(&env, "mldsa65#1");
+    q.on(&c);
+    let m = msig(&env, 2, &[(0x0102, e.ua(&env).to_array(), 2), (0x0131, q.ua.to_array(), 1)]);
+    let pop = member_sigs(&env, &[m.slot(&env, &e, PURPOSE_POP_V2, &reg_digest(&env, &m.ua, 0x0120))]);
+    assert_eq!(err(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &pop, &Bytes::new(&env), &None)), Error::Pop);
+    m.register(&env, &c, &Bytes::new(&env));
+    let rec = c.record_of(&m.ua).unwrap();
+    assert!(rec.signable && rec.pop_checked == Checked::Chain && rec.pop.is_empty());
+    // the rule is EVM's: a portable.json msig row has a `pop` exactly when it is PQ-eligible
+    for row in json(PORTABLE)["registrations"].as_array().unwrap().iter().filter(|r| r["kind"] == 0x0120) {
+        let (kd, pop) = (b(&env, &hx(&row["keyData"])), hx(&row["pop"]));
+        assert_eq!(crate::pq_eligible(&kd), !pop.is_empty(), "{}", row["name"]);
+    }
+}
+
+/// U8S-D2: the copied record is the EVM `register` argument form: `registration_of` returns the empty `pop`, so the bytes
+/// of a classical-dominant `msig` are one record on both families (`msig-classical` on EVM has `pop` empty too).
+#[test]
+fn msig_classical_dominant_matches_evm_bytes() {
+    let (env, c) = setup();
+    assert!(portable(&env, "msig-classical").pop.is_empty());
+    let e = ed(17);
+    e.register(&env, &c);
+    let m = msig(&env, 1, &[(0x0102, e.ua(&env).to_array(), 1)]);
+    let ua = m.register(&env, &c, &Bytes::new(&env));
+    assert_eq!(c.registration_of(&ua), Some((0x0120, m.kd.clone(), no_attrs(&env), Bytes::new(&env), Bytes::new(&env))));
 }
