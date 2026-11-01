@@ -723,17 +723,23 @@ fn msig_evm_eoa_member_typed_digest() {
 fn msig_evm_eoa_personal_sign_refused() {
     let (env, c) = setup();
     let k = k1(8);
-    let q = portable(&env, "mldsa65#1");
-    q.on(&c);
+    let q = ml(9);
+    q.register(&env, &c);
     let id = eoa(&env, &k);
-    let m = msig(&env, 2, &[(0x0001, id, 1), (0x0131, q.ua.to_array(), 1)]); // PQ-eligible: a member-signed `pop`
+    let m = msig(&env, 2, &[(0x0001, id, 1), (0x0131, q.ua(&env).to_array(), 1)]); // PQ-eligible: a member-signed `pop`
     let rd = reg_digest(&env, &m.ua, 0x0120);
     let md = m.md(&env, PURPOSE_POP_V2, &rd);
+    // The PQ slot always verifies, so each form decides by its own validity: an accepted one would reach the threshold.
+    let pop = |sig: StdVec<u8>| {
+        let mut slots = [(m.index(&id), vec![], sig), m.slot(&env, &q, PURPOSE_POP_V2, &rd)];
+        slots.sort_by_key(|s| s.0);
+        member_sigs(&env, &slots)
+    };
     for sig in [personal_sign(&env, &k, &md), personal_sign(&env, &k, &rd), k1_sign(&k, &md.to_array())] {
-        let pop = member_sigs(&env, &[(m.index(&id), vec![], sig)]);
-        assert_eq!(err(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &pop, &Bytes::new(&env), &None)), Error::Pop);
+        assert_eq!(err(c.try_register(&0x0120, &m.kd, &no_attrs(&env), &pop(sig), &Bytes::new(&env), &None)), Error::Pop);
     }
     assert_eq!(c.record_of(&m.ua), None);
+    assert_eq!(m.register(&env, &c, &pop(k1_sign(&k, &rd.to_array()))), m.ua, "the typed form registers");
 }
 
 #[test]
@@ -941,6 +947,7 @@ fn msig_pop_not_minimal_refused() {
     let (kd, pop) = (b(&env, &hx(&neg["registration"]["keyData"])), b(&env, &hx(&neg["registration"]["pop"])));
     let refused = |pop: &Bytes| err(c.try_register(&0x0120, &kd, &no_attrs(&env), pop, &Bytes::new(&env), &None));
     assert_eq!(refused(&pop), Error::Pop);
+    assert_eq!(refused(&Bytes::new(&env)), Error::Pop, "PQ-eligible: an empty `pop` is refused (U8S-D2's other branch)");
     let slots = crate::abi::decode_member_sigs(&env, &pop);
     let alone = |i: u32| member_sigs(&env, &[(i, vec![], vecu8(&slots.get(i).unwrap().sig))]);
     assert_eq!(refused(&alone(0)), Error::Pop);
