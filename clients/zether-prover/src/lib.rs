@@ -16,6 +16,7 @@ pub mod keys;
 pub mod nonce;
 pub mod schnorr;
 pub mod transcript;
+pub mod typed;
 pub mod vectors;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;

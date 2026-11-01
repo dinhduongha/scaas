@@ -26,6 +26,7 @@ use crate::elgamal::{
 /// Largest wasm table without `allowLargeTable` (2^24 entries, 256 MiB).
 const WASM_TABLE_BITS_DEFAULT_MAX: u32 = 24;
 use crate::envelope::{self, MetaTx};
+use crate::typed;
 use crate::keys::{seed_from_mnemonic, ZetherKey};
 use crate::schnorr;
 use crate::zether::{
@@ -704,11 +705,15 @@ pub fn call(cmd: &str, input: &str) -> R<String> {
             json!({"binding": hx(&envelope::envelope_binding(chain, &uid, &token, &m)),
                    "digest": hx(&envelope::digest(chain, &uid, &token, &m))})
         }
-        // typed-signing C7: the typed digest of a Zether owner op (roll-over, roll-over mode and their UA-ledger twins); `ownerAuth` signs it
-        "ownerDigest" => {
+        // typed-signing C7: the typed digest of any Zether op (`typed::OPS`: transfers, unshield, roll-overs, owner ops, ...);
+        // `ownerAuth` signs the owner ones, the subject's ECDSA / UA signature the rest. `message` is the struct, named fields.
+        "typedDigest" => {
             let op = get(&v, "op")?.as_str().ok_or("`op` must be a string")?;
-            envelope::owner_digest(op, num(&v, "chainId")?, &fixed::<32>(&v, "chainUid")?, &fixed::<20>(&v, "token")?, get(&v, "message")?)?
+            typed::typed_digest(op, num(&v, "chainId")?, &fixed::<32>(&v, "chainUid")?, &fixed::<20>(&v, "token")?, get(&v, "message")?)?
         }
+        // typed-signing C7: a prover build as a named relayed entry (`mtxConfidentialTransferSingle(Envelope, ZetherSingle, proof, sig)`, ...):
+        // the typed `message`, the `digest` the wallet signs and, with `sig`, the `calldata`. The generic `envelope` path stays.
+        "namedCall" => typed::named_call(&v)?,
         _ => match get(&v, "curve")?.as_str() {
             #[cfg(feature = "bn254")]
             Some("bn254") => by_curve::<Bn254>(cmd, &v, &mut OsRng)?,

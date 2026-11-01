@@ -1,6 +1,7 @@
 //! Minimal Solidity `abi.encode` for static 32-byte words, dynamic `bytes`, a dynamic array of static elements and a
 //! dynamic tuple. A static tuple is its words in place (`words`).
 
+#[derive(Clone)]
 pub enum Tok {
     Word([u8; 32]),
     Bytes(Vec<u8>),
