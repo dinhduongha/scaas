@@ -1,6 +1,6 @@
 {
  "file": "statement_refresh.json",
- "description": "Statements (pq-zether.md 7.2, 7.7, 7.9; serialization v1, P6e plan D15 / R6) built from keygen seeds and Enc parameters: header / words (ints, or hex bytes left-padded to a 32-byte word: addresses 20 B, salt 16 B; opTag, proofSystemId and auditorOn follow from the form and id), objects (keys by KeyGen seed; T = Enc + Trivial(plus_trivial); out = u || v_j; a disclosure's u, v = leg of an Enc), stmt = the bytes under the PQZL id (the PQZH statement differs only in bytes 32..63), keccak256 and authDigest = keccak256(SCAAS-PQZ-AUTH-V1 || keccak256(stmt)) per id; transfers: entryRef, the disclosure bundle R = salt || u || v_t || [v_a] || toUA.",
+ "description": "Statements (pq-zether.md 7.2, 7.7, 7.9; serialization v1, P6e plan D15 / R6) built from keygen seeds and Enc parameters: header / words (ints, or hex bytes left-padded to a 32-byte word: addresses 20 B, salt 16 B; opTag, proofSystemId and auditorOn follow from the form and id), objects (keys by KeyGen seed; T = Enc + Trivial(plus_trivial); out = u || v_j; a disclosure's u, v = leg of an Enc), stmt = the bytes under the PQZL id (the PQZH statement differs only in bytes 32..63), keccak256 per id and, on a debit (a register or disclosure statement authorises nothing), auth_digest = the EIP-712 digest of the typed PqzAuth(op, the 20 header words, bodyHash = keccak256(stmt[640..])) under the token's domain (name SCaaS PqzToken, version 1, the header's chainId, token, chainUid as salt); transfers: entryRef, the disclosure bundle R = salt || u || v_t || [v_a] || toUA.",
  "generator": "pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11",
  "rows": [
   {
@@ -44,8 +44,8 @@
     "pqzh": "9b07504bd63822108ad9634d9f123664a5be1a546b20def4bd0c39cc21eaf83c"
    },
    "auth_digest": {
-    "pqzl": "f8f76813db3a75802bd22d6670060be6ef9d0d4ab62598104527d7124c0b2208",
-    "pqzh": "5d31b7aa50eabcb99783e3925d26981ceb63ca60094152a06dd21f6aae6bf306"
+    "pqzl": "2aacbba3eae6da0f11973ad3f5930c2ebc41b7cb624fff0bef84855a5df25be9",
+    "pqzh": "e80722f8a49d5c4c650633b98d5033787203331e6fbe6dcdaa7dee6fe6ffd4cd"
    }
   }
  ]

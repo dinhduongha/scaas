@@ -8,7 +8,9 @@
   "mldsa65|pqzh-M4-on": 10477652,
   "fndsa512|S": 8116679,
   "fndsa512|pqzl-M8-on": 13066631,
-  "fndsa512|pqzh-M4-on": 12703869
+  "fndsa512|pqzh-M4-on": 12703869,
+  "typed|pqzl-M8-on": 19211,
+  "typed|pqzh-M4-on": 21492
  },
  "n2048-kmax1024": {
   "ecdsa|S": 4767560,
@@ -19,6 +21,8 @@
   "mldsa65|pqzh-M4-on": 10076640,
   "fndsa512|S": 7095723,
   "fndsa512|pqzl-M8-on": 13235874,
-  "fndsa512|pqzh-M4-on": 12303066
+  "fndsa512|pqzh-M4-on": 12303066,
+  "typed|pqzl-M8-on": 24229,
+  "typed|pqzh-M4-on": 20839
  }
 }

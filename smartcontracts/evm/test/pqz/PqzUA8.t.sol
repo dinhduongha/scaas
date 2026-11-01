@@ -32,10 +32,10 @@ contract PqzUA8Test is PqzFixture {
         bytes memory out = _out(60, true);
         bytes memory pl = _payload(1, 0, alice, u, bytes32(0), out, "");
         vm.expectRevert(err); // credit to `u`
-        tok.mtxConfidentialTransferSingle(pl, hex"01", _mlAuth(), _benT(pl), "");
+        tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "");
         pl = _payload(0, 0, u, bob, bytes32(0), out, "");
         vm.expectRevert(err); // `u` as sender
-        tok.mtxConfidentialTransferSingle(pl, hex"01", _mlAuth(), _benT(pl), "");
+        tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "");
     }
 
     function test_ua8_pqzTokenRefusesUnproven() public {

@@ -253,8 +253,21 @@ fn with_id(stmt: &[u8], id: &Word) -> Vec<u8> {
     s
 }
 
-fn auth_digest(stmt: &[u8]) -> Word {
-    keccak(&[b"SCAAS-PQZ-AUTH-V1", &keccak(&[stmt])])
+const PQZ_AUTH_TYPE: &[u8] = b"PqzAuth(uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,\
+bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,\
+bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash)";
+const EIP712_DOMAIN_TYPE: &[u8] = b"EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)";
+
+/// The typed `PqzAuth` of a debit statement (typed-signing TS-D19, TS-D20; the token's `PqzCore.authDigest`): hashStruct =
+/// typehash, op, the 640 header bytes as words, bodyHash = keccak256(stmt[640..]), under the token's EIP-712 domain, whose
+/// chainId, verifyingContract and salt (chainUid) are the statement's own words 2, 3 and 16.
+fn auth_digest(op: u8, stmt: &[u8]) -> Word {
+    let domain = keccak(&[&keccak(&[EIP712_DOMAIN_TYPE]), &keccak(&[b"SCaaS PqzToken"]), &keccak(&[b"1"]), &stmt[64..96], &stmt[96..128],
+        &stmt[512..544]]);
+    let mut o = [0u8; 32];
+    o[31] = op;
+    let h = keccak(&[&keccak(&[PQZ_AUTH_TYPE]), &o, &stmt[..640], &keccak(&[&stmt[640..]])]);
+    keccak(&[b"\x19\x01", &domain, &h])
 }
 
 /// the ids whose proofs this build writes: PQZL, and PQZH where it is compiled in
@@ -501,8 +514,11 @@ fn stmt_json(form: Form, stmt: &[u8], fields: J, objects: J, mut extra: Vec<(&'s
         ("stmt_bytes", J::from(stmt.len())),
         ("stmt", hx(stmt)),
         ("stmt_keccak", ids(&|s| keccak(&[s]))),
-        ("auth_digest", ids(&|s| auth_digest(s))),
     ];
+    // only a debit is authorised: a register or disclosure row has no `PqzAuth`
+    if form.op() <= st::OP_BURN {
+        v.push(("auth_digest", ids(&|s| auth_digest(form.op(), s))));
+    }
     v.append(&mut extra);
     v
 }
@@ -1720,7 +1736,7 @@ fn multi_rows() -> Vec<MRow> {
                 ("stmt_bytes", J::from(s.len())),
                 ("stmt", hx(&s)),
                 ("stmt_keccak", idsj(&|x| keccak(&[x]))),
-                ("auth_digest", idsj(&|x| auth_digest(x))),
+                ("auth_digest", idsj(&|x| auth_digest(st::OP_TRANSFER_MULTI, x))),
                 ("entry_ref", hx(&entry_ref(&f))),
             ];
             MRow { case, m, aud, ids, stmt: s, wit: w, rnd: [0xB0 + idx as u8; 32], header, memo, json }
@@ -1977,7 +1993,9 @@ fn generate() -> (Vec<(String, String)>, bool) {
              parameters: header / words (ints, or hex bytes left-padded to a 32-byte word: addresses 20 B, salt 16 B; opTag, proofSystemId and auditorOn \
              follow from the form and id), objects (keys by KeyGen seed; T = Enc + Trivial(plus_trivial); out = u || v_j; \
              a disclosure's u, v = leg of an Enc), stmt = the bytes under the PQZL id (the PQZH statement differs only in \
-             bytes 32..63), keccak256 and authDigest = keccak256(SCAAS-PQZ-AUTH-V1 || keccak256(stmt)) per id; transfers: \
+             bytes 32..63), keccak256 per id and, on a debit (a register or disclosure statement authorises nothing), auth_digest = the EIP-712 digest of the \
+             typed PqzAuth(op, the 20 header words, bodyHash = keccak256(stmt[640..])) under the token's domain (name SCaaS PqzToken, version 1, the \
+             header's chainId, token, chainUid as salt); transfers: \
              entryRef, the disclosure bundle R = salt || u || v_t || [v_a] || toUA.",
             vec![("rows", J::A(rows))],
         ));

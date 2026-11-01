@@ -1,6 +1,6 @@
 {
  "file": "statement_transfer.json",
- "description": "Statements (pq-zether.md 7.2, 7.7, 7.9; serialization v1, P6e plan D15 / R6) built from keygen seeds and Enc parameters: header / words (ints, or hex bytes left-padded to a 32-byte word: addresses 20 B, salt 16 B; opTag, proofSystemId and auditorOn follow from the form and id), objects (keys by KeyGen seed; T = Enc + Trivial(plus_trivial); out = u || v_j; a disclosure's u, v = leg of an Enc), stmt = the bytes under the PQZL id (the PQZH statement differs only in bytes 32..63), keccak256 and authDigest = keccak256(SCAAS-PQZ-AUTH-V1 || keccak256(stmt)) per id; transfers: entryRef, the disclosure bundle R = salt || u || v_t || [v_a] || toUA.",
+ "description": "Statements (pq-zether.md 7.2, 7.7, 7.9; serialization v1, P6e plan D15 / R6) built from keygen seeds and Enc parameters: header / words (ints, or hex bytes left-padded to a 32-byte word: addresses 20 B, salt 16 B; opTag, proofSystemId and auditorOn follow from the form and id), objects (keys by KeyGen seed; T = Enc + Trivial(plus_trivial); out = u || v_j; a disclosure's u, v = leg of an Enc), stmt = the bytes under the PQZL id (the PQZH statement differs only in bytes 32..63), keccak256 per id and, on a debit (a register or disclosure statement authorises nothing), auth_digest = the EIP-712 digest of the typed PqzAuth(op, the 20 header words, bodyHash = keccak256(stmt[640..])) under the token's domain (name SCaaS PqzToken, version 1, the header's chainId, token, chainUid as salt); transfers: entryRef, the disclosure bundle R = salt || u || v_t || [v_a] || toUA.",
  "generator": "pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11",
  "rows": [
   {
@@ -51,7 +51,7 @@
     "pqzl": "ba2670dd0a8ce64b4ce77d42c7c26771d36993c86af44a22ecf2d95334502d72"
    },
    "auth_digest": {
-    "pqzl": "c2389dc7d0f7e95efe4ee6024dcce523efec591265d85390c14cf95ebf5b5ae0"
+    "pqzl": "043ec07436677e3dfc796237a8c8b18a2659f80433dde6f38de37c09dbc327f5"
    },
    "entry_ref": "7622577914877e788d47ac0474c2f005652f73201fb3fb809ea7c02eedb82720",
    "bundle_bytes": 22832,
@@ -102,7 +102,7 @@
     "pqzl": "67355d000cab2f976c0ca023036a3204f085911b5fd10a200408e4dc3f7e3a82"
    },
    "auth_digest": {
-    "pqzl": "4e519b649e9c7ead9eeca88a6549de3fcb24312432d212b12fefdf20a29f0d4e"
+    "pqzl": "05c5366e250f3d142e505f4b92be0a04ca7e9f8cdbe2f3229986867bff17d858"
    },
    "entry_ref": "7622577914877e788d47ac0474c2f005652f73201fb3fb809ea7c02eedb82720",
    "bundle_bytes": 22704,

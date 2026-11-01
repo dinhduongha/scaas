@@ -16,8 +16,10 @@ import {PqzCore} from "./PqzCore.sol";
 import {PqzBurnLib} from "./PqzBurnLib.sol";
 import {PqzStateLib} from "./PqzStateLib.sol";
 import {PqzViewLib} from "./PqzViewLib.sol";
-import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
+import {PqzWrappedLib} from "./PqzWrappedLib.sol";
+import {IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
 import {IPqzWrappedToken} from "./IPqzToken.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title Kind `WRAPPED_PQZ` (CTR-TOK-21, CTR-PQZ-22): the wrapper of 1–8 legs with the PQZ layer (P6g plan D1).
 /// @notice **UNAUDITED.** Any chain whose `PQZ` precompile passes the self-test (`PqzSafety`); never on Hedera.
@@ -28,6 +30,16 @@ import {IPqzWrappedToken} from "./IPqzToken.sol";
 ///         reserve to an address or, through a SCaaS ledger leg, to a UA), as on `WRAPPED_ZETHER`. Reserve invariant
 ///         `Σ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply()` (the shielded value is the pool's public units).
 contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
+    bytes32 private constant WRAP_SHIELD_TYPEHASH = keccak256(
+        "WrapShield(address from,address underlying,uint256 amountIn,bytes32 toUA,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+    bytes32 private constant UNSHIELD_UNWRAP_TYPEHASH = keccak256(
+        "PqzUnshieldUnwrap(address from,PqzBurnArgs args,Unwrap unwrap,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,bytes u,bytes vFrom)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)"
+    );
+    bytes32 private constant UA_UNSHIELD_UNWRAP_TYPEHASH = keccak256(
+        "UAPqzUnshieldUnwrap(bytes32 from,PqzBurnArgs args,Unwrap unwrap,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,bytes u,bytes vFrom)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)"
+    );
+
     /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env`, whose
     ///      `deps[ENV_PQZ_VERIFIER]` is the release's `UAPqzVerifier` (CTR-ZTH-20 / CTR-PQZ-10); no `implArgs`.
     constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
@@ -46,10 +58,11 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
         return AdminLib.KIND_WRAPPED_PQZ;
     }
 
-    function _init(TokenConfig memory cfg) internal override(WrappedToken, MetaTokenBase) {
-        _requireUnused(cfg, true, false, false, false);
-        WrappedLib.initToken(cfg, false, AdminLib.KIND_WRAPPED_PQZ);
-        PqzStateLib.init(cfg.conf, _REGISTRY, PQZ_VERIFIER);
+    /// @dev Never reached: `_initRaw` is the kind's init.
+    function _init(TokenConfig memory) internal override(WrappedToken, MetaTokenBase) {}
+
+    function _initRaw(bytes calldata initArgs) internal override {
+        PqzWrappedLib.init(initArgs, _REGISTRY, PQZ_VERIFIER);
     }
 
     // ------------------------------------------------------------------ wrap-shield / unshield-unwrap (CTR-PQZ-22)
@@ -66,19 +79,49 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
         _poolMove(bytes32(0), MetaTxLib.pad(MetaTxLib.SHIELD_POOL), minted);
     }
 
+    /// @notice The signed `mtxWrapShield`; as on the generic path, relayed it takes no coin (the native leg reverts).
+    function mtxWrapShield(MetaTxLib.Envelope calldata e, address underlying, uint256 amountIn, bytes32 toUA, bytes calldata sig)
+        external nonReentrant returns (bytes memory)
+    {
+        return _named(WRAP_SHIELD_TYPEHASH, IConfidentialWrappedToken.mtxWrapShield.selector, e, abi.encode(underlying, amountIn, toUA), sig);
+    }
+
     /// @notice The burn of `x.amount` (statement: `amount`, `recipient`; `envelopeBinding` binds `x.underlying` and
     ///         `x.minOut`, direct P6g D12, relayed folded with the envelope's D15), `amount · shieldScale` burnt from
     ///         `SHIELD_POOL`, txFee to the beneficiary, then leg `x.underlying` pays `⌊amount·shieldScale·den/num⌋ ≥
     ///         minOut` to `x.recipient`: an address, or a derived UA through the leg's `transferToUA` (`UALegNotLedger`
     ///         otherwise).
-    function mtxUnshieldUnwrap(bytes calldata payload, bytes calldata proof, bytes calldata auth, bytes32 beneficiary,
-        bytes calldata accHint, Unwrap calldata x) external nonReentrant
+    function mtxUnshieldUnwrap(PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof,
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external nonReentrant
     {
-        _ben(payload, 128, beneficiary);
-        _burn(_envUnwrap(x, _ticketBinding()), payload, proof, auth, accHint);
+        _burn(_envUnwrap(x, _ticketBinding()), b, proof, pqzAuth, accHint);
         uint256 wrapped = x.amount * PqzCore.$().shieldScale;
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped);
         WrappedLib.payOutTo(WrappedLib.indexOf(x.underlying), x.recipient, wrapped, x.minOut);
+    }
+
+    /// @notice The signed form, the `Unwrap` leg a nested struct.
+    function mtxUnshieldUnwrap(MetaTxLib.Envelope calldata e, PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof,
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, bytes calldata sig) external nonReentrant returns (bytes memory)
+    {
+        (bytes memory words, bytes memory data) = _unwrapCall(b, x, proof, pqzAuth, accHint);
+        return _namedCall(UNSHIELD_UNWRAP_TYPEHASH, e, words, data, sig);
+    }
+
+    function uaUnshieldUnwrap(MetaTxLib.UAEnvelope calldata e, PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof,
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth)
+        external nonReentrant returns (bytes memory)
+    {
+        (bytes memory words, bytes memory data) = _unwrapCall(b, x, proof, pqzAuth, accHint);
+        return _namedCallUA(UA_UNSHIELD_UNWRAP_TYPEHASH, e, words, data, auth);
+    }
+
+    /// @dev The words the struct hashes (TS-D17) and the op's call.
+    function _unwrapCall(PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint) private pure returns (bytes memory, bytes memory)
+    {
+        return (abi.encode(PqzViewLib.hashBurn(b), PqzViewLib.hashUnwrap(x), keccak256(proof), keccak256(accHint)),
+            abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (b, x, proof, pqzAuth, accHint)));
     }
 
     /// @notice The `envelopeBinding` word of a direct `mtxUnshieldUnwrap` (P6g plan D12).
@@ -87,10 +130,10 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
     }
 
     /// @notice The burn statement of `mtxUnshieldUnwrap` (`binding` 0 = direct, else the relayed call's envelope binding).
-    function unshieldUnwrapStatement(bytes calldata payload, Unwrap calldata x, bytes32 binding)
+    function unshieldUnwrapStatement(PqzBurnArgs calldata b, Unwrap calldata x, bytes32 binding)
         external view returns (bytes memory)
     {
-        return PqzViewLib.statementOf(2, _envUnwrap(x, binding), payload);
+        return PqzViewLib.burnStatement(_envUnwrap(x, binding), b);
     }
 
     /// @dev The binding word: `unwrapBinding(u, minOut)` direct, `keccak256(abi.encode(envelope, unwrapBinding(u,
@@ -131,7 +174,8 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
     }
 
     function _isPqzOp(bytes4 sel) internal pure override returns (bool) {
-        return PqzLayer._isPqzOp(sel) || sel == this.mtxWrapShield.selector || sel == this.mtxUnshieldUnwrap.selector;
+        return PqzLayer._isPqzOp(sel) || sel == IConfidentialWrappedToken.mtxWrapShield.selector
+            || sel == IPqzWrappedToken.mtxUnshieldUnwrap.selector;
     }
 
     function _batchable(bytes4 sel) internal view override(MetaTxBase, PqzLayer) returns (bool) {
@@ -146,37 +190,17 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
         public pure override(WrappedToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
-        s = new bytes4[](18);
-        c = new uint8[](18);
-        a = new uint8[](18);
-        (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
-        (s[1], c[1]) = (SEL_WRAP, FEE_CLASS_ABSOLUTE);
-        (s[2], c[2]) = (SEL_UNWRAP_MIN, FEE_CLASS_AMOUNT);
-        (s[3], c[3]) = (SEL_WRAP_LEG, FEE_CLASS_ABSOLUTE);
-        (s[4], c[4], a[4]) = (SEL_UNWRAP_LEG, FEE_CLASS_AMOUNT, 1);
-        (s[5], c[5]) = (SEL_ADD_RESERVE, FEE_CLASS_ABSOLUTE);
-        (s[6], c[6]) = (SEL_WRAP_TO_UA, FEE_CLASS_ABSOLUTE);
-        (s[7], c[7], a[7]) = (SEL_UNWRAP_TO_UA, FEE_CLASS_AMOUNT, 1);
-        (s[8], c[8]) = (IConfidentialToken.mtxShield.selector, FEE_CLASS_ABSOLUTE);
-        (s[9], c[9]) = (this.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
-        (s[10], c[10]) = (this.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[11], c[11]) = (this.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
-        (s[12], c[12]) = (this.mtxWrapShield.selector, FEE_CLASS_ABSOLUTE);
-        (s[13], c[13]) = (this.mtxUnshieldUnwrap.selector, FEE_CLASS_ABSOLUTE);
-        (s[14], c[14]) = (this.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
-        (s[15], c[15]) = (this.mtxConfidentialTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[16], c[16]) = (this.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
-        (s[17], c[17]) = (this.mtxPrepareAcc.selector, FEE_CLASS_ABSOLUTE);
+        return PqzWrappedLib.selectors();
     }
 
     function _mtxRule(bytes4 sel) internal view override(WrappedToken, MetaTxBase) returns (MtxRule memory) {
-        if (sel == this.mtxWrapShield.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 100);
+        if (sel == IConfidentialWrappedToken.mtxWrapShield.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 100);
         if (_isPqzOp(sel)) return _pqzRule(sel);
         return WrappedToken._mtxRule(sel);
     }
 
     /// @notice The leg paths of `WrappedToken` and the PQZ ops; not `mtxWrapShield` (the pool holds no leg).
     function _uaAllowed(bytes4 sel) internal view override(WrappedToken, UAMetaTxBase) returns (bool) {
-        return (_isPqzOp(sel) && sel != this.mtxWrapShield.selector) || WrappedToken._uaAllowed(sel);
+        return (_isPqzOp(sel) && sel != IConfidentialWrappedToken.mtxWrapShield.selector) || WrappedToken._uaAllowed(sel);
     }
 }

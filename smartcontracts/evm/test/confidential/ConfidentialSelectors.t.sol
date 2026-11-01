@@ -14,15 +14,11 @@ contract ConfidentialSelectorsTest is Test {
 
     function test_sharedSelectorsEqualOnBothLayers() public pure {
         assertEq(IConfidentialToken.mtxShield.selector ^ IConfidentialToken.mtxRollOver.selector, type(IConfidentialToken).interfaceId);
-        assertEq(type(IConfidentialToken).interfaceId, bytes4(0xc68b926b) ^ PACKED_TRANSFERS);
+        assertEq(type(IConfidentialToken).interfaceId, bytes4(0x69d6bb06));
         assertEq(IConfidentialWrappedToken.mtxWrapShield.selector, type(IConfidentialWrappedToken).interfaceId);
         assertEq(type(IPqzWrappedToken).interfaceId, IPqzWrappedToken.mtxUnshieldUnwrap.selector);
         assertEq(type(IZetherWrappedToken).interfaceId, IZetherWrappedToken.mtxUnshieldUnwrap.selector);
     }
-
-    /// The five selectors `IConfidentialToken` held until typed-signing C3, now PQZ's until C4.
-    bytes4 constant PACKED_TRANSFERS = IPqzToken.mtxConfidentialTransfer.selector ^ IPqzToken.mtxConfidentialTransferCompact.selector
-        ^ IPqzToken.mtxConfidentialTransferSingle.selector ^ IPqzToken.mtxUnshield.selector;
 
     /// The shared ABI, ids `bytes32`.
     function test_signaturesPinned() public pure {
@@ -35,18 +31,23 @@ contract ConfidentialSelectorsTest is Test {
         assertEq(IConfidentialToken.Unshielded.selector, keccak256("Unshielded(bytes32,uint256,bytes32,address)"));
     }
 
-    /// The PQZ layer's packed entries, unchanged until typed-signing C4.
-    function test_pqzPackedSignaturesPinned() public pure {
-        assertEq(IPqzToken.mtxConfidentialTransfer.selector,
-            bytes4(keccak256("mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)")));
+    /// The PQZ layer's explicit entries (Appendix X.3); `IPqzToken` has the direct forms only, the signed ones are `PqzLayer`'s,
+    /// read from `typed_ops.json` in `PqzTyped.t.sol`.
+    function test_pqzExplicitSignaturesPinned() public pure {
+        string memory tail = ",bytes,(bytes,bytes,(uint16,bytes,bytes)[]),bytes)";
+        string memory single = "(uint64,uint256,uint256,bytes32,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes)";
+        string memory multi = "(uint64,uint256,uint256,bytes32,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)";
+        string memory burn = "(uint64,uint256,uint256,bytes32,bytes32,bytes,bytes)";
+        assertEq(IPqzToken.mtxConfidentialTransfer.selector, bytes4(keccak256(bytes(string.concat("mtxConfidentialTransfer(", multi, tail)))));
         assertEq(IPqzToken.mtxConfidentialTransferCompact.selector,
-            bytes4(keccak256("mtxConfidentialTransferCompact(bytes,bytes,bytes,bytes32,bytes)")));
+            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferCompact(", multi, tail)))));
         assertEq(IPqzToken.mtxConfidentialTransferSingle.selector,
-            bytes4(keccak256("mtxConfidentialTransferSingle(bytes,bytes,bytes,bytes32,bytes)")));
-        assertEq(IPqzToken.mtxUnshield.selector,
-            bytes4(keccak256("mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)")));
+            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferSingle(", single, tail)))));
+        assertEq(IPqzToken.mtxConfidentialTransferSingleCompact.selector,
+            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferSingleCompact(", single, tail)))));
+        assertEq(IPqzToken.mtxUnshield.selector, bytes4(keccak256(bytes(string.concat("mtxUnshield(", burn, ",uint256,bytes32", tail)))));
         assertEq(IPqzWrappedToken.mtxUnshieldUnwrap.selector,
-            bytes4(keccak256("mtxUnshieldUnwrap(bytes,bytes,bytes,bytes32,bytes,(address,bytes32,uint256,uint256))")));
+            bytes4(keccak256(bytes(string.concat("mtxUnshieldUnwrap(", burn, ",(address,bytes32,uint256,uint256)", tail)))));
     }
 
     /// The Zether layer's explicit entries (Appendix X.3); `IZetherToken` has the direct forms only, the signed ones are

@@ -8,6 +8,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UACall} from "../ua/UACall.sol";
+import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 
 /// metatx-split T5 (spec §3.6, §10 R9; owner variant A 2026-10-21): the split's relayed overhead must not grow with the
 /// envelope's `data` size. For each accepted fee-UA kind (ECDSA address path, `mldsa65` and `fndsa512` on `uaExecute`) the
@@ -16,6 +17,9 @@ import {UACall} from "../ua/UACall.sol";
 /// `PqzStateGas.t.sol`'s gas table does (the precompile at the set's row price, ML-DSA-65 68,006, `fndsa512` 2.3 M
 /// stand-ins). The pre-split figures are the same test run on 2ceda92d (`test/vectors/metatx-overhead-presplit.json`).
 /// Asserted: (largest − pre-split) − (smallest − pre-split) <= 8,000 per kind. `MTX_OV_PRESPLIT=1`: log only.
+/// typed-signing C4: the largest envelopes' op is on explicit parameters, whose per-leg ABI decoding is the op's own cost, the
+/// same on all three pipelines (the JSON's `typed|<id>`: this test on the C3 bytecode against the C4 bytecode, the largest of the
+/// three kinds; `smallest` moved 14 to 62 gas). It is taken off the largest, so the bound stays on the pipeline.
 /// Run: `scripts/capped smartcontracts/evm/script/pqz/at-set.sh <set> test --match-contract MtxSplitOverheadTest -vv`
 /// (log: runs/2026-10-27-metatx-split-overhead.txt). It inherits `PqzStatePinGasTest`'s tests; select this contract.
 contract MtxSplitOverheadTest is PqzStatePinGasTest {
@@ -44,7 +48,7 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
             feeUA = k == 2 ? fnFee2 : mlFee;
             feeSigLen = k == 2 ? 666 : ML65_SIG;
             kind = k == 0 ? "ecdsa" : k == 1 ? "mldsa65" : "fndsa512";
-            sMeas = _meas(abi.encodeCall(tok.mtxRollOver, (alice, 1)), 0);
+            sMeas = _meas(abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, 1)), 0);
             console2.log(string.concat("MEAS ", PqzSet.NAME, " ", kind, " S"), sMeas);
             _large("pqzl", "M8-on", 8);
             if (PqzSet.HAS_PQZH) _large("pqzh", "M4-on", 4);
@@ -57,7 +61,7 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
         string memory id = string.concat(sys, "-", key);
         console2.log(string.concat("MEAS ", PqzSet.NAME, " ", kind, " ", id), l);
         if (logOnly) return;
-        uint256 ovL = l - _pre(id, false) ;
+        uint256 ovL = l - _pre(id, false) - vm.parseJsonUint(pre, string.concat(".", PqzSet.NAME, "['typed|", id, "']"));
         uint256 ovS = sMeas - _pre("", true);
         uint256 d = ovL > ovS ? ovL - ovS : 0;
         console2.log(string.concat("OVERHEAD ", PqzSet.NAME, " ", kind, " ", id, " smallest / largest / difference"), ovS, ovL, d);

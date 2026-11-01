@@ -17,6 +17,7 @@ import {PqzStateLib} from "../../src/pqz/PqzStateLib.sol";
 import {PqzTransferLib} from "../../src/pqz/PqzTransferLib.sol";
 import {PqzBurnLib} from "../../src/pqz/PqzBurnLib.sol";
 import {PqzViewLib} from "../../src/pqz/PqzViewLib.sol";
+import {PqzWrappedLib} from "../../src/pqz/PqzWrappedLib.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {ZUID} from "../zether/helpers/ZetherFixture.sol";
 import {closureLibs} from "../helpers/Catalogue.sol";
@@ -28,7 +29,7 @@ contract LinkClosureTest is Test {
     IOpenFactory.TokenKind constant NORMAL = IOpenFactory.TokenKind.NORMAL;
     string[] internal names = [
         "AdminLib", "HederaLib", "TradeLib", "MtxPipelineLib", "WrappedLib", "ZetherLib", "ZetherWrappedLib",
-        "PqzStateLib", "PqzTransferLib", "PqzBurnLib", "PqzViewLib"
+        "PqzStateLib", "PqzTransferLib", "PqzBurnLib", "PqzViewLib", "PqzWrappedLib"
     ];
 
     function _addr(string memory n) internal pure returns (address a) {
@@ -44,6 +45,7 @@ contract LinkClosureTest is Test {
         if (h == keccak256("PqzTransferLib")) return address(PqzTransferLib);
         if (h == keccak256("PqzBurnLib")) return address(PqzBurnLib);
         if (h == keccak256("PqzViewLib")) return address(PqzViewLib);
+        if (h == keccak256("PqzWrappedLib")) return address(PqzWrappedLib);
         revert(string.concat("unknown library ", n));
     }
 
@@ -111,7 +113,8 @@ contract LinkClosureTest is Test {
     /// R6: over every library of every closure, PUSH data skipped, from the start to the last `INVALID` (solc puts its
     /// trailing data and the CBOR metadata after it): no SELFDESTRUCT (0xff), no CALLCODE (0xf2); DELEGATECALL (0xf4)
     /// only in `MtxPipelineLib` (exactly 2, -> `HederaLib`), in `WrappedLib` (exactly 1, -> `AdminLib`, its own link
-    /// reference) and in `ZetherWrappedLib` (exactly 2, -> `WrappedLib`, `ZetherLib`, its init: size lever 1, owner 2026-11-01).
+    /// reference), in `ZetherWrappedLib` (exactly 2, -> `WrappedLib`, `ZetherLib`, its init: size lever 1, owner 2026-11-01)
+    /// and in `PqzWrappedLib` (exactly 2, -> `WrappedLib`, `PqzStateLib`, the same).
     function test_libraryOpcodes() public view {
         for (uint256 n; n < names.length; ++n) {
             string memory name = names[n];
@@ -120,7 +123,7 @@ contract LinkClosureTest is Test {
             assertFalse(destruct, string.concat(name, ": SELFDESTRUCT"));
             assertFalse(callcode, string.concat(name, ": CALLCODE"));
             bytes32 h = keccak256(bytes(name));
-            uint256 want = h == keccak256("MtxPipelineLib") || h == keccak256("ZetherWrappedLib") ? 2
+            uint256 want = h == keccak256("MtxPipelineLib") || h == keccak256("ZetherWrappedLib") || h == keccak256("PqzWrappedLib") ? 2
                 : h == keccak256("WrappedLib") ? 1 : 0;
             assertEq(delegates, want, string.concat(name, ": DELEGATECALL count"));
         }

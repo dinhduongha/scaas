@@ -199,24 +199,30 @@ def full_register_fits(to, data):
 
 
 # ------------------------------------------------------------------ the token API in one place (plan 5h Task 3b, spec
-# §5.11): the shared `mtx*` names and the shared signature `(payload, proof, auth, beneficiary, accHint[, trailing])`.
-# Checked against the built ABI (Task 4b); mtxRollOver / mtxPrepareAcc are relayable (Task R) but this script calls them directly.
-SH_S, SH_T = "bytes,bytes,bytes,bytes32,bytes", ["b", "b", "b", "w", "b"]  # payload, proof, auth, beneficiary, accHint
-UNWRAP_S = "(address,bytes32,uint256,uint256)"  # IConfidentialToken.Unwrap(underlying, recipient, amount, minOut), a calldata struct
+# §5.11; typed-signing C4: the explicit parameters of Appendix X.3, `(args, proof, pqzAuth, accHint)`). Checked against the built
+# ABI (Task 4b); mtxRollOver / mtxPrepareAcc are relayable (Task R) but this script calls them directly.
+TRANSFER_S = "(uint64,uint256,uint256,bytes32,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes)"  # IPqzToken.PqzTransferArgs
+TRANSFER_T = ("t", ["w"] * 7 + ["b"] * 5)
+MULTI_S = "(uint64,uint256,uint256,bytes32,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)"  # PqzMultiArgs, PqzLeg
+MULTI_T = ("t", ["w"] * 7 + [("a", "b"), ("a", ("t", ["w", "b", "b"])), "b", "b"])
+BURN_S = "(uint64,uint256,uint256,bytes32,bytes32,bytes,bytes)"  # PqzBurnArgs
+BURN_T = ("t", ["w"] * 5 + ["b", "b"])
+AUTH_S, AUTH_T = f"bytes,{UASIG_S},bytes", ["b", UASIG_T, "b"]  # proof, pqzAuth, accHint: after the op's own parameters
+UNWRAP_S = "(address,bytes32,uint256,uint256)"  # IConfidentialWrappedToken.Unwrap(underlying, recipient, amount, minOut), a calldata struct
 API = dict(
     shield="mtxShield(bytes32,uint256)",
     wrapShield="mtxWrapShield(address,uint256,bytes32)",
-    transfer=f"mtxConfidentialTransfer({SH_S})",  # op 7 (M legs)
-    transferSingle=f"mtxConfidentialTransferSingle({SH_S})",  # op 1
-    unshield=f"mtxUnshield({SH_S},uint256,bytes32)",  # trailing: amount, recipient id (zero-padded address = native)
-    unshieldUnwrap=f"mtxUnshieldUnwrap({SH_S},{UNWRAP_S})",
+    transfer=f"mtxConfidentialTransfer({MULTI_S},{AUTH_S})",  # op 7 (M legs)
+    transferSingle=f"mtxConfidentialTransferSingle({TRANSFER_S},{AUTH_S})",  # op 1
+    unshield=f"mtxUnshield({BURN_S},uint256,bytes32,{AUTH_S})",  # amount, recipient id (zero-padded address = native)
+    unshieldUnwrap=f"mtxUnshieldUnwrap({BURN_S},{UNWRAP_S},{AUTH_S})",
     rollOver="mtxRollOver(bytes32,uint256)",
     prepareAcc="mtxPrepareAcc(bytes32,uint256)",
     # views (names kept by 3b); the recipient word of the burn statements is a bytes32 id since UA-5c (b)
-    burnStmt="burnStatement(bytes,uint256,bytes32,bytes32)",
-    unwrapStmt=f"unshieldUnwrapStatement(bytes,{UNWRAP_S},bytes32)",
-    singleStmt="transferSingleStatement(bytes,bytes32)",
-    multiStmt="transferStatement(bytes,bytes32)",
+    burnStmt=f"burnStatement({BURN_S},uint256,bytes32,bytes32)",
+    unwrapStmt=f"unshieldUnwrapStatement({BURN_S},{UNWRAP_S},bytes32)",
+    singleStmt=f"transferSingleStatement({TRANSFER_S},bytes32)",
+    multiStmt=f"transferStatement({MULTI_S},bytes32)",
     discStmt="disclosureStatement(bytes32,uint256,uint256,uint8)",
     verifyAmt="verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)",
     # events carrying the entry reference as topic 1 (as built, IConfidentialToken; only topic 0 is looked up here)
@@ -488,7 +494,7 @@ def ml_sig(pq, signer, purpose, digest):
 
 
 def ml_auth(pq, signer, purpose, digest):
-    """The tokens' `bytes auth` (until typed-signing C2): `abi.encode(bytes(""), sig)`."""
+    """The `bytes auth` of the generic `uaExecute` (TS-D14): `abi.encode(bytes(""), sig)`."""
     return encs(["b", "b"], ml_sig(pq, signer, purpose, digest)[:2])
 
 
@@ -1020,13 +1026,15 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=b"\0" * 32, send=T
     p = stt["pendingCount"]
     compact = int(call(tok, cd("disclosureMode()", [])), 16) == 1
     salt = os.urandom(16)
-    memo = salt + os.urandom(41) if compact else b""  # ponytail: memo body random (the token stores it unread);
+    sealed = os.urandom(41) if compact else b""  # ponytail: memo body random (the token stores it unread, after `salt`);
     # the CTR-ZTH-50 HKDF memo is the client's (P6h)
     fee = FEE if ben != b"\0" * 32 else 0
     ben_ua = ben.ua if isinstance(ben, UA) else ben
     blen = K.CT_BYTES + K.V_BYTES * (2 if aud_on else 1)
-    hdr = lambda out: W(p) + W(10**9) + W(shield_in) + frm.ua + to.ua + ben_ua + salt + out + memo  # noqa: E731
-    view = lambda pl: dec_bytes(call(tok, cd(API["singleStmt"], ["b", "w"], pl, binding)))  # noqa: E731
+    v3 = K.PK_BYTES + K.V_BYTES  # `out` = u ‖ v_t ‖ v_f ‖ [v_a]
+    hdr = lambda out: [p, 10**9, shield_in, frm.ua, to.ua, ben_ua, salt + bytes(16), out[:K.PK_BYTES], out[K.PK_BYTES:v3],  # noqa: E731
+                       out[v3:v3 + K.V_BYTES], out[v3 + K.V_BYTES:], sealed]
+    view = lambda t: dec_bytes(call(tok, cd(API["singleStmt"], [TRANSFER_T, "w"], t, binding)))  # noqa: E731
     st0 = view(hdr(probe(blen)))
     tOff = K.HEADER_BYTES + K.PK_BYTES * (3 if aud_on else 2)
     T = st0[tOff:tOff + K.CT_BYTES]
@@ -1047,12 +1055,11 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=b"\0" * 32, send=T
     check(stmt[tOff:tOff + K.CT_BYTES] == T and stmt[-len(out):] == out, f"{C.name} statement of {what}: T and out as built")
     wit = K.i8(frm.s) + K.i16(frm.e) + K.i8(r_) + K.i16(e1) + b"".join(K.i16(x) for x in e2) + bytes(K.digits(v)) + bytes(K.digits(rest))
     proof = pq.prove(1, stmt, wit)
-    ad = kc("SCAAS-PQZ-AUTH-V1", keccak256(stmt))
-    auth = ml_auth(pq, frm, P_ZAUTH, ad)
+    auth = ml_sig(pq, frm, P_ZAUTH, K.auth_digest(1, stmt))
     hint = C.hint(frm)
-    data = cd(API["transferSingle"], SH_T, pl, proof, auth, ben_ua, hint)
+    data = cd(API["transferSingle"], [TRANSFER_T] + AUTH_T, pl, proof, auth, hint)
     log(f"      {what}: balance {b} → {rest} (+{v} to {to.name}, fee {fee}, shieldIn {shield_in}), p {p}, rolled {stt['rolled']}, "
-        f"hint {len(hint)} B, proof {len(proof):,} B, auth {len(auth):,} B")
+        f"hint {len(hint)} B, proof {len(proof):,} B, auth {len(auth[1]):,} B")
     # the client's next state: the sender's acc is the new reference u ‖ v_f; the credit is the recipient's
     C.set_next(bal=[(frm, shield_in - v - fee), (to, v)], pub=[(ben, FEE)] if fee else [], acc={frm.ua: u + vs[1]},
                total=shield_in - fee)
@@ -1067,25 +1074,33 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=b"\0" * 32, send=T
     return rc, ref, bundle, (r_, e1, e2)
 
 
+def multi_args(p, frm, ben, decoy, salt, uas, g, aud_on, out, sealed):
+    """`PqzMultiArgs` of `out` = u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖ v_f ‖ [v_{a,0} … v_{a,M−1}]; each leg its UA and parts."""
+    pk, vb, m = K.PK_BYTES, K.V_BYTES, len(uas)
+    us = [out[pk * i:pk * (i + 1)] for i in range(g)]
+    o = pk * g
+    legs = [[uas[j], out[o + vb * j:o + vb * (j + 1)], out[o + vb * (m + 1 + j):o + vb * (m + 2 + j)] if aud_on else b""] for j in range(m)]
+    return [p, 10**9, 0, frm, ben, decoy, salt + bytes(16), us, legs, out[o + vb * m:o + vb * (m + 1)], sealed]
+
+
 def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what):
     """An op 7 transfer (CTR-PQZ-26) at `p = pendingCount`, legs [(UA, amount)] (decoys: amount 0), proved over the
-    token's own statement; payload `p ‖ validUntil ‖ shieldIn ‖ from ‖ ben ‖ M ‖ decoyFee ‖ salt ‖ UA_0…`, header fee word
-    `txFee + M · decoyFee` (the proof binds the decoyFee); returns (receipt, entryRef, bundle, enc)."""
+    token's own statement; header fee word `txFee + M · decoyFee` (the proof binds the decoyFee); returns (receipt,
+    entryRef, bundle, enc)."""
     tok = C.tok
     stt = C.state(frm)
     p = stt["pendingCount"]
     m, g = len(legs), K.groups(len(legs), aud_on)  # R0-1: S_AUD legs per group with the auditor, 4 without
     compact = int(call(tok, cd("disclosureMode()", [])), 16) == 1
     salt = os.urandom(16)
-    memo = salt + os.urandom(2 + 40 * m) if compact else b""  # ponytail: memo body random, as transfer()
+    sealed = os.urandom(2 + 40 * m) if compact else b""  # ponytail: memo body random, as transfer()
     mind = int(call(tok, cd("minDecoyFee()", [])), 16)
     assert DEC_FEE >= mind, (DEC_FEE, mind)
     fee = (FEE if ben != b"\0" * 32 else 0) + m * DEC_FEE
     ben_ua = ben.ua if isinstance(ben, UA) else ben
     olen = K.PK_BYTES * g + K.V_BYTES * (m + 1) + (K.V_BYTES * m if aud_on else 0)
-    hdr = lambda out: (W(p) + W(10**9) + W(0) + frm.ua + ben_ua + W(m) + W(DEC_FEE) + salt  # noqa: E731
-                       + b"".join(u.ua for u, _ in legs) + out + memo)
-    view = lambda pl: dec_bytes(call(tok, cd(API["multiStmt"], ["b", "w"], pl, b"\0" * 32)))  # noqa: E731
+    hdr = lambda out: multi_args(p, frm.ua, ben_ua, DEC_FEE, salt, [u.ua for u, _ in legs], g, aud_on, out, sealed)  # noqa: E731
+    view = lambda t: dec_bytes(call(tok, cd(API["multiStmt"], [MULTI_T, "w"], t, b"\0" * 32)))  # noqa: E731
     tOff = K.HEADER_BYTES + K.PK_BYTES * (1 + m + (1 if aud_on else 0))
     T = view(hdr(probe(olen)))[tOff:tOff + K.CT_BYTES]
     b = bal(frm.s, T)
@@ -1106,9 +1121,9 @@ def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what):
     t0 = time.time()
     proof = pq.prove(7, stmt, wit)
     tp = time.time() - t0
-    auth = ml_auth(pq, frm, P_ZAUTH, kc("SCAAS-PQZ-AUTH-V1", keccak256(stmt)))
+    auth = ml_sig(pq, frm, P_ZAUTH, K.auth_digest(7, stmt))
     hint = C.hint(frm)
-    data = cd(API["transfer"], SH_T, pl, proof, auth, ben_ua, hint)
+    data = cd(API["transfer"], [MULTI_T] + AUTH_T, pl, proof, auth, hint)
     log(f"      {what}: M {m}, balance {b} → {rest}, header fee {fee}, hint {len(hint)} B, proof {len(proof):,} B in {tp:.2f} s, "
         f"calldata {len(data):,} B")
     newacc = e["us"][0] + e["v_f"]
@@ -1131,12 +1146,12 @@ def burn(pq, s, C, frm, amount, recipient, what, unwrap=None):
     stt = C.state(frm)
     p = stt["pendingCount"]
     rcp = W(recipient) if recipient else b"\0" * 32
-    hdr = lambda out: W(p) + W(10**9) + W(0) + frm.ua + b"\0" * 32 + out  # noqa: E731
+    hdr = lambda out: [p, 10**9, 0, frm.ua, b"\0" * 32, out[:K.PK_BYTES], out[K.PK_BYTES:]]  # noqa: E731
     if unwrap:
         x = [unwrap[0], rcp, amount, unwrap[1]]
-        view = lambda pl: dec_bytes(call(tok, cd(API["unwrapStmt"], ["b", UNWRAP, "w"], pl, x, 0)))  # noqa: E731
+        view = lambda t: dec_bytes(call(tok, cd(API["unwrapStmt"], [BURN_T, UNWRAP, "w"], t, x, 0)))  # noqa: E731
     else:
-        view = lambda pl: dec_bytes(call(tok, cd(API["burnStmt"], ["b", "w", "w", "w"], pl, amount, rcp, 0)))  # noqa: E731
+        view = lambda t: dec_bytes(call(tok, cd(API["burnStmt"], [BURN_T, "w", "w", "w"], t, amount, rcp, 0)))  # noqa: E731
     tOff = K.HEADER_BYTES + K.PK_BYTES
     T = view(hdr(probe(K.CT_BYTES)))[tOff:tOff + K.CT_BYTES]
     b = bal(frm.s, T)
@@ -1147,12 +1162,12 @@ def burn(pq, s, C, frm, amount, recipient, what, unwrap=None):
     stmt = view(pl)
     wit = K.i8(frm.s) + K.i16(frm.e) + K.i8(r_) + K.i16(e1) + K.i16(e2[0]) + bytes(K.digits(rest))
     proof = pq.prove(2, stmt, wit)
-    auth = ml_auth(pq, frm, P_ZAUTH, kc("SCAAS-PQZ-AUTH-V1", keccak256(stmt)))
+    auth = ml_sig(pq, frm, P_ZAUTH, K.auth_digest(2, stmt))
     hint = C.hint(frm)
     if unwrap:
-        data = cd(API["unshieldUnwrap"], SH_T + [UNWRAP], pl, proof, auth, b"\0" * 32, hint, x)
+        data = cd(API["unshieldUnwrap"], [BURN_T, UNWRAP] + AUTH_T, pl, x, proof, auth, hint)
     else:
-        data = cd(API["unshield"], SH_T + ["w", "w"], pl, proof, auth, b"\0" * 32, hint, amount, rcp)
+        data = cd(API["unshield"], [BURN_T, "w", "w"] + AUTH_T, pl, amount, rcp, proof, auth, hint)
     log(f"      {what}: balance {b} → {rest}, p {p}, rolled {stt['rolled']}, hint {len(hint)} B, proof {len(proof):,} B")
     s.send(tok, data, f"{C.name} {what}")
     C.set_next(bal=[(frm, -amount)], acc={frm.ua: u + vs[0]}, total=-amount)

@@ -19,6 +19,7 @@ import {UALedgerBase} from "../ua/UALedgerBase.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
+import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
@@ -1946,8 +1947,8 @@ contract PqzRig is PqzFixture, ParityCases {
 
     /// Prepare `acc` words (anyone, idempotent), relayed.
     function _pRelayedPrepare(Tk memory k) internal {
-        _pX(k, "ok_prepareAcc", _pMt(k, abi.encodeCall(PqzLayer.mtxPrepareAcc, (bob, 0)), 0, P_RR, 0, address(0)));
-        _pX(k, "ok_prepareAcc_again", _pMt(k, abi.encodeCall(PqzLayer.mtxPrepareAcc, (bob, 0)), 0, P_RR, 0, address(0)));
+        _pX(k, "ok_prepareAcc", _pMt(k, abi.encodeCall(IPqzToken.mtxPrepareAcc, (bob, 0)), 0, P_RR, 0, address(0)));
+        _pX(k, "ok_prepareAcc_again", _pMt(k, abi.encodeCall(IPqzToken.mtxPrepareAcc, (bob, 0)), 0, P_RR, 0, address(0)));
     }
 
     /// A relayed op 1 (single transfer, proof mocked): the statement carries the envelope binding of its own path.
@@ -1955,13 +1956,13 @@ contract PqzRig is PqzFixture, ParityCases {
         PqzLayer t = PqzLayer(k.t);
         bytes memory out = _out(1, true);
         bytes memory pl = _payloadFor(t, alice, bob, bytes32(0), out);
-        bytes memory data = abi.encodeCall(PqzLayer.mtxConfidentialTransferSingle, (pl, hex"c0de", _mlAuth(), _benT(pl), bytes("")));
+        bytes memory data = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes("")));
         MetaTxLib.MetaTransaction memory m = _pMt(k, data, 0, P_RR | P_FIX, 3, address(0));
         _pX(k, "ok_transferSingle_addr", m);
         _pMx(k, "mtxExecute", "err_transferSingle_replay", "", IMetaTx.mtxExecute.selector, m, _pSgM(k, m), k.relayer);
         out = _out(2, true);
         pl = _payloadFor(t, alice, bob, bytes32(0), out);
-        data = abi.encodeCall(PqzLayer.mtxConfidentialTransferSingle, (pl, hex"c0de", _mlAuth(), _benT(pl), bytes("")));
+        data = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes("")));
         MetaTxLib.UAMetaTransaction memory u = _pUm(k, MetaTxLib.pad(k.signer), data, 0, P_RR, 0, address(0));
         _pU(k, "ok_transferSingle_ua", u);
         // op 7, two recipients (alice's debit; bob and carol credited)
@@ -1970,12 +1971,12 @@ contract PqzRig is PqzFixture, ParityCases {
         (rec[0], rec[1]) = (bob, carol);
         out = _blob(11, _outLen(2, true));
         pl = _mpayload(t.pqzAccount(alice).pendingCount, 0, alice, bytes32(0), rec, out, bytes(""));
-        data = abi.encodeCall(PqzLayer.mtxConfidentialTransfer, (pl, hex"c0de", _mlAuth(), _benM(pl), bytes("")));
+        data = abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (_ms(pl), hex"c0de", _pqAuth(), bytes("")));
         _pX(k, "ok_transferMulti_addr", _pMt(k, data, 0, P_RR | P_FIX, 3, address(0)));
         // the precompile rejects the proof: the whole envelope reverts, its nonce unused
         out = _out(3, true);
         pl = _payloadFor(t, alice, bob, bytes32(0), out);
-        data = abi.encodeCall(PqzLayer.mtxConfidentialTransferSingle, (pl, hex"c0de", _mlAuth(), _benT(pl), bytes("")));
+        data = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes("")));
         _mockOp(1, 0);
         _pX(k, "err_transferSingle_proofRejected", _pMt(k, data, 0, P_RR, 0, address(0)));
         _mockOp(1, 1);

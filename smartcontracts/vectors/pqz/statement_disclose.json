@@ -1,6 +1,6 @@
 {
  "file": "statement_disclose.json",
- "description": "Statements (pq-zether.md 7.2, 7.7, 7.9; serialization v1, P6e plan D15 / R6) built from keygen seeds and Enc parameters: header / words (ints, or hex bytes left-padded to a 32-byte word: addresses 20 B, salt 16 B; opTag, proofSystemId and auditorOn follow from the form and id), objects (keys by KeyGen seed; T = Enc + Trivial(plus_trivial); out = u || v_j; a disclosure's u, v = leg of an Enc), stmt = the bytes under the PQZL id (the PQZH statement differs only in bytes 32..63), keccak256 and authDigest = keccak256(SCAAS-PQZ-AUTH-V1 || keccak256(stmt)) per id; transfers: entryRef, the disclosure bundle R = salt || u || v_t || [v_a] || toUA.",
+ "description": "Statements (pq-zether.md 7.2, 7.7, 7.9; serialization v1, P6e plan D15 / R6) built from keygen seeds and Enc parameters: header / words (ints, or hex bytes left-padded to a 32-byte word: addresses 20 B, salt 16 B; opTag, proofSystemId and auditorOn follow from the form and id), objects (keys by KeyGen seed; T = Enc + Trivial(plus_trivial); out = u || v_j; a disclosure's u, v = leg of an Enc), stmt = the bytes under the PQZL id (the PQZH statement differs only in bytes 32..63), keccak256 per id and, on a debit (a register or disclosure statement authorises nothing), auth_digest = the EIP-712 digest of the typed PqzAuth(op, the 20 header words, bodyHash = keccak256(stmt[640..])) under the token's domain (name SCaaS PqzToken, version 1, the header's chainId, token, chainUid as salt); transfers: entryRef, the disclosure bundle R = salt || u || v_t || [v_a] || toUA.",
  "generator": "pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11",
  "rows": [
   {
@@ -31,10 +31,6 @@
    "stmt_keccak": {
     "pqzl": "9bd5bf4e583c75b0bb8db7b2deaa8372d9b66dd427375037908a7cc881f4b7ae",
     "pqzh": "caaef74430de1532cd42c93f6cdaebf6dc5167e4603d4469e961acbb520a8428"
-   },
-   "auth_digest": {
-    "pqzl": "ad46ad2e71f357cec34a858ebe40a9566927ddb5f0e2c490fb0ffa4c0c171122",
-    "pqzh": "5e479cc2786fae1c2837b21c92ecbc62c23a6d460489ef908f835373c3164a47"
    }
   },
   {
@@ -65,10 +61,6 @@
    "stmt_keccak": {
     "pqzl": "86c826f4e1a410097adf3d11d2ee9312aa6579ccebe36757775b25ecf0368a51",
     "pqzh": "9819dd51a85887870b0708792224e0d9844a3b0e69502046c8c90c2a17b435c8"
-   },
-   "auth_digest": {
-    "pqzl": "77bc277a473c85c597650b2869bdcbbda8fcda122345cfda699f8b9ff1e59e5e",
-    "pqzh": "0f2da09a8f0c67e81b21c83816547d734db533030f09c96e132851a7cffeeff7"
    }
   },
   {
@@ -99,10 +91,6 @@
    "stmt_keccak": {
     "pqzl": "be049b3bce921816b51d3a9ab08b01a78ba08232a3bdae94f39077fb546199a3",
     "pqzh": "dd8f42a65ce58b18306b7d33670013b83729fead1425c09a5bbb5613e6361c54"
-   },
-   "auth_digest": {
-    "pqzl": "09166310d63aa2e0251e808bb428b768530b6b8045ea86d7fad0c4769eb0296a",
-    "pqzh": "7a659ab98c2677f26d0473388f67bc6d9a7cfe45bccfe43d2b601cf2b41485cd"
    }
   }
  ]

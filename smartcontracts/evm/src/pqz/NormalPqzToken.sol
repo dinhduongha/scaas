@@ -14,6 +14,7 @@ import {SigCheck} from "../common/SigCheck.sol";
 import {PqzLayer} from "./PqzLayer.sol";
 import {PqzCore} from "./PqzCore.sol";
 import {PqzStateLib} from "./PqzStateLib.sol";
+import {IPqzToken} from "./IPqzToken.sol";
 
 /// @title Kind `NORMAL_PQZ` (CTR-TOK-21, CTR-PQZ-22): the standalone token with the PQZ layer (P6g plan D1).
 /// @notice **UNAUDITED.** Any chain whose `PQZ` precompile passes the self-test (`PqzSafety`); never on Hedera.
@@ -74,13 +75,13 @@ contract NormalPqzToken is NormalToken, PqzLayer {
         (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
         (s[2], c[2]) = (IConfidentialToken.mtxShield.selector, FEE_CLASS_ABSOLUTE);
-        (s[3], c[3]) = (this.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
-        (s[4], c[4]) = (this.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[5], c[5]) = (this.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
-        (s[6], c[6]) = (this.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
-        (s[7], c[7]) = (this.mtxConfidentialTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[8], c[8]) = (this.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
-        (s[9], c[9]) = (this.mtxPrepareAcc.selector, FEE_CLASS_ABSOLUTE);
+        (s[3], c[3]) = (IPqzToken.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
+        (s[4], c[4]) = (IPqzToken.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
+        (s[5], c[5]) = (IPqzToken.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
+        (s[6], c[6]) = (IPqzToken.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
+        (s[7], c[7]) = (IPqzToken.mtxConfidentialTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
+        (s[8], c[8]) = (IConfidentialToken.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
+        (s[9], c[9]) = (IPqzToken.mtxPrepareAcc.selector, FEE_CLASS_ABSOLUTE);
     }
 
     function _mtxRule(bytes4 sel) internal view override(NormalToken, MetaTxBase) returns (MtxRule memory) {

@@ -2,11 +2,73 @@
 pragma solidity ^0.8.24;
 
 import {IConfidentialToken, IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title Events, errors, the account view and the PQZ-only entry points of the PQZ layer (pq-zero-knowledge.md §7.1,
 ///        §7.8, §9.4); the shared entry points and events are `IConfidentialToken`'s (plan 5h D20).
-/// @notice **UNAUDITED.** `bytes32` ids are signing UAs holding a PQZ key (UA-6 U7).
+/// @notice **UNAUDITED.** `bytes32` ids are signing UAs holding a PQZ key (UA-6 U7). The debits take explicit parameters
+///         (TS-D17); `pqzAuth` is the holder's own signature over the typed `PqzAuth` of the statement (TS-D19), and the
+///         signed overloads and `ua*` twins are `PqzLayer`'s (TS-D14, TS-D16).
 interface IPqzToken is IConfidentialToken {
+    /// @notice The explicit parameters of op 1 (Appendix X.2): each `u`, `v` a ciphertext part of `PK` or `V` bytes in
+    ///         64-bit lanes. `vAuditor` empty: auditor off. `sealedMemo` the memo after its clear salt, 41 bytes on
+    ///         commit-reveal (the memo is `salt ‖ sealedMemo`), else empty.
+    struct PqzTransferArgs {
+        uint64 p;
+        uint256 validUntilBlock;
+        uint256 shieldIn;
+        bytes32 fromUA;
+        bytes32 toUA;
+        bytes32 beneficiaryUA;
+        bytes16 salt;
+        bytes u;
+        bytes vTo;
+        bytes vFrom;
+        bytes vAuditor;
+        bytes sealedMemo;
+    }
+
+    /// @notice An op 7 leg: its UA with its parts. `vAuditor` empty on every leg (auditor off) or on none.
+    struct PqzLeg {
+        bytes32 ua;
+        bytes v;
+        bytes vAuditor;
+    }
+
+    /// @notice Op 7; `M` is `legs.length`. `u`: `G` randomness groups, `⌈M / S_AUD⌉` with the auditor, `⌈M / 4⌉` without.
+    ///         `sealedMemo` `2 + 40·M` bytes on commit-reveal, else empty.
+    struct PqzMultiArgs {
+        uint64 p;
+        uint256 validUntilBlock;
+        uint256 shieldIn;
+        bytes32 fromUA;
+        bytes32 beneficiaryUA;
+        uint256 decoyFee;
+        bytes16 salt;
+        bytes[] u;
+        PqzLeg[] legs;
+        bytes vFrom;
+        bytes sealedMemo;
+    }
+
+    /// @notice A burn, refresh or unshield-unwrap: the amount and the recipient are the entry's.
+    struct PqzBurnArgs {
+        uint64 p;
+        uint256 validUntilBlock;
+        uint256 shieldIn;
+        bytes32 fromUA;
+        bytes32 beneficiaryUA;
+        bytes u;
+        bytes vFrom;
+    }
+
+    /// @notice `amount` and `recipient` of the signed `mtxUnshield` and `uaUnshield`: one calldata struct keeps those two
+    ///         within the legacy code generator's stack (evm-size-levers.md §7); the signed struct keeps both fields flat.
+    struct Payout {
+        uint256 amount;
+        bytes32 recipient;
+    }
+
     /// @notice `pqzAccount` (pq-zero-knowledge.md §9.4; plan 5h D2 / D3, D13): the counters, the `acc` reference (`accBlob`,
     ///         0 for `Trivial(0)`; ignored while `flags & 1`, the materialised `acc`), `flags` (1 MATERIALISED, 2 / 4 the
     ///         prepared halves), `accHash` (the keccak of the materialised `acc`'s
@@ -41,6 +103,7 @@ interface IPqzToken is IConfidentialToken {
     error AccountNotRegistered(bytes32 ua);
     error AmountOutOfRange(uint256 amount, uint256 max);
     error AmountNotScaled(uint256 minted, uint256 shieldScale);
+    /// @notice A part of the wrong length for the op, the form or the auditor copies (`length`, its length).
     error BadPayload(uint256 length);
     error NonCanonical();
     error Expired(uint256 validUntilBlock);
@@ -56,7 +119,6 @@ interface IPqzToken is IConfidentialToken {
     error AuditorForbidden();
     /// F-4: with the auditor copies on, the auditor UA is neither the sender nor a recipient (op 1, op 7)
     error AuditorAsParty(bytes32 ua);
-    error MemoSaltMismatch();
     error TransferEntryDisabled(uint8 disclosureMode);
     error AuthRejected();
     error ProofRejected();
@@ -72,53 +134,24 @@ interface IPqzToken is IConfidentialToken {
     error UnknownEntry(bytes32 entryRef);
     /// @notice An op 7 `decoyFee` below the token's `minDecoyFee`, or `≥ 2^64` (owner 2026-10-20).
     error DecoyFeeOutOfRange(uint256 decoyFee, uint256 minDecoyFee);
-    /// @notice The shared `beneficiary` argument is not the payload's beneficiary word (plan 5h D20).
-    error BeneficiaryMismatch(bytes32 payload, bytes32 given);
 
     /// @notice Multi-recipient, in the token's default storage mode.
-    function mtxConfidentialTransfer(
-        bytes calldata payload,
-        bytes calldata proof,
-        bytes calldata auth,
-        bytes32 beneficiary,
-        bytes calldata accHint
-    ) external returns (bytes32 entryRef);
+    function mtxConfidentialTransfer(PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint) external returns (bytes32 entryRef);
     /// @notice Multi-recipient, commit-reveal on every token.
-    function mtxConfidentialTransferCompact(
-        bytes calldata payload,
-        bytes calldata proof,
-        bytes calldata auth,
-        bytes32 beneficiary,
-        bytes calldata accHint
-    ) external returns (bytes32 entryRef);
+    function mtxConfidentialTransferCompact(PqzMultiArgs calldata t, bytes calldata proof,
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external returns (bytes32 entryRef);
     /// @notice Single-recipient, in the token's default storage mode.
-    function mtxConfidentialTransferSingle(
-        bytes calldata payload,
-        bytes calldata proof,
-        bytes calldata auth,
-        bytes32 beneficiary,
-        bytes calldata accHint
-    ) external returns (bytes32 entryRef);
+    function mtxConfidentialTransferSingle(PqzTransferArgs calldata t, bytes calldata proof,
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external returns (bytes32 entryRef);
+    /// @notice Single-recipient, commit-reveal on every token.
+    function mtxConfidentialTransferSingleCompact(PqzTransferArgs calldata t, bytes calldata proof,
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external returns (bytes32 entryRef);
     /// @notice `amount` shielded units out as `amount · shieldScale` public units from `SHIELD_POOL` to `recipient`: a
     ///         native address as its zero-padded id, or a registered SIGNING UA (credited on the UA ledger); the pools
     ///         are refused. PQZ: `amount = 0` with `recipient = 0` is a refresh.
-    function mtxUnshield(
-        bytes calldata payload,
-        bytes calldata proof,
-        bytes calldata auth,
-        bytes32 beneficiary,
-        bytes calldata accHint,
-        uint256 amount,
-        bytes32 recipient
-    ) external;
-    /// @notice Single-recipient, commit-reveal on every token.
-    function mtxConfidentialTransferSingleCompact(
-        bytes calldata payload,
-        bytes calldata proof,
-        bytes calldata auth,
-        bytes32 beneficiary,
-        bytes calldata accHint
-    ) external returns (bytes32 entryRef);
+    function mtxUnshield(PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes calldata proof,
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external;
     /// @notice The account (pq-zero-knowledge.md §9.4): counters, the `acc` reference, `accUnits`, flags, `sendCounter`, `accHash`.
     function pqzAccount(bytes32 ua) external view returns (AccountState memory);
     /// @notice Pending slot `i`: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`; 0 once deleted.
@@ -133,17 +166,11 @@ interface IPqzToken is IConfidentialToken {
     function mtxPrepareAcc(bytes32 ua, uint256 half) external;
 }
 
-/// @title `mtxUnshieldUnwrap` of `WRAPPED_PQZ`, out of the shared interface (typed-signing Appendix X.3).
+/// @title `mtxUnshieldUnwrap` of `WRAPPED_PQZ`, its explicit form (typed-signing Appendix X.3).
 interface IPqzWrappedToken is IConfidentialWrappedToken {
     /// @notice `mtxUnshield`'s debit of `x.amount`, then leg `x.underlying` pays `⌊amount·shieldScale·den/num⌋ ≥ minOut`
     ///         to `x.recipient`: a native address, or a derived UA in the leg's own UA ledger (`transferToUA`;
     ///         `UALegNotLedger` otherwise).
-    function mtxUnshieldUnwrap(
-        bytes calldata payload,
-        bytes calldata proof,
-        bytes calldata auth,
-        bytes32 beneficiary,
-        bytes calldata accHint,
-        Unwrap calldata x
-    ) external;
+    function mtxUnshieldUnwrap(IPqzToken.PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof,
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external;
 }

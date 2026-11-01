@@ -16,6 +16,7 @@ import {PqzStateLib} from "../../src/pqz/PqzStateLib.sol";
 import {PqzTransferLib} from "../../src/pqz/PqzTransferLib.sol";
 import {PqzBurnLib} from "../../src/pqz/PqzBurnLib.sol";
 import {PqzViewLib} from "../../src/pqz/PqzViewLib.sol";
+import {PqzWrappedLib} from "../../src/pqz/PqzWrappedLib.sol";
 
 /// @notice A plain release environment (plan 5g-Z2): no dependencies, no pinned libraries.
 function plainEnv(address factory, address ska, bytes32 uid, address registry, bool hedera)
@@ -51,7 +52,8 @@ function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory
     bool zth = kind == IOpenFactory.TokenKind.NORMAL_ZETHER || kind == IOpenFactory.TokenKind.WRAPPED_ZETHER;
     bool pqz = kind == IOpenFactory.TokenKind.NORMAL_PQZ || kind == IOpenFactory.TokenKind.WRAPPED_PQZ;
     bool zwr = kind == IOpenFactory.TokenKind.WRAPPED_ZETHER;
-    l = new address[](4 + (und ? 1 : 0) + (zth ? 1 : 0) + (zwr ? 1 : 0) + (pqz ? 4 : 0));
+    bool pwr = kind == IOpenFactory.TokenKind.WRAPPED_PQZ;
+    l = new address[](4 + (und ? 1 : 0) + (zth ? 1 : 0) + (zwr ? 1 : 0) + (pqz ? 4 : 0) + (pwr ? 1 : 0));
     (l[0], l[1], l[2], l[3]) = (address(AdminLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
     uint256 n = 4;
     if (und) l[n++] = address(WrappedLib);
@@ -60,7 +62,9 @@ function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory
     if (pqz) {
         (l[n], l[n + 1], l[n + 2], l[n + 3]) =
             (address(PqzStateLib), address(PqzTransferLib), address(PqzBurnLib), address(PqzViewLib));
+        n += 4;
     }
+    if (pwr) l[n] = address(PqzWrappedLib);
 }
 
 /// @notice `e` with `kind`'s link closure pinned (libraries and their code hashes).

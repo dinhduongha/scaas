@@ -18,14 +18,14 @@ library PqzBurnLib {
     ///         and pays `amount · shieldScale`.
     function unshield(
         PqzCore.Env memory e,
-        bytes calldata payload,
+        IPqzToken.PqzBurnArgs calldata b,
         bytes calldata hint,
         bytes calldata proof,
-        bytes calldata authSig
+        IUARegistry.UASig calldata authSig
     ) public returns (PqzCore.Paid memory paid) {
-        (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareBurn(e, payload, hint, proof.length);
+        (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareBurn(e, b, hint, proof.length);
         PqzCore._check(o, buf, proof, authSig);
-        PqzCore._settleBurn(o, payload[PqzCore.B_OUT:PqzCore.B_OUT + PqzCt.CT]);
+        PqzCore._settleBurn(o, b);
         paid = PqzCore._paid(o);
     }
 }
