@@ -108,6 +108,11 @@ pub const UA_PORTABLE_RECORD_TYPEHASH: [u8; 32] = h32("0c1553cfab3c35326558484df
 /// `keccak256("UARegistration(UAPortableRecord record,bytes32 pqzPopHash)" ‖ UAKemRecord type ‖ UAPortableRecord type)`.
 pub const UA_REGISTRATION_TYPEHASH: [u8; 32] = h32("c78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e");
 
+/// `keccak256("UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)")`.
+pub const UA_PQZ_KEY_TYPEHASH: [u8; 32] = h32("827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00");
+/// `keccak256("UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)" ‖ UAPqzKey type)`.
+pub const UA_PQZ_KEY_RECORD_TYPEHASH: [u8; 32] = h32("aba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567");
+
 /// A `uint` ABI word (`abi.encode` of `uint8` / `uint16` / `uint64`).
 fn uint_word(v: u64) -> [u8; 32] {
     let mut w = [0u8; 32];
@@ -148,6 +153,27 @@ pub fn portable_record_hash(env: &Env, ua: &BytesN<32>, kind: u32, pqz_key_hash:
 pub fn registration_digest(env: &Env, record_hash: &BytesN<32>, pqz_pop_hash: &BytesN<32>) -> Hash<32> {
     let s = keccak_words(env, &[&UA_REGISTRATION_TYPEHASH, &record_hash.to_array(), &pqz_pop_hash.to_array()]);
     portable_digest(env, &s.into())
+}
+
+/// typed(`UAKemRecord`) of the KEM key `kem_pk` (`scheme` = its first byte, `kemPkHash` = its keccak256), signed as
+/// `ua_message(kind, PURPOSE_KEM, ·)` by `set_kem_key`. EVM `UAKinds.kemRecordDigest`.
+pub fn kem_record_digest(env: &Env, ua: &BytesN<32>, version: u64, kem_pk: &Bytes) -> BytesN<32> {
+    let scheme = kem_pk.get(0).unwrap_or(0);
+    let h: BytesN<32> = env.crypto().keccak256(kem_pk).into();
+    portable_digest(env, &kem_record_hash(env, ua, version, scheme, &h)).into()
+}
+
+/// typed(`UAPqzKey`): a later PQZ key's own proof signs `ua_message(0x0142, PURPOSE_PQZ_KEY, ·)` of it (no proof hash).
+pub fn pqz_key_digest(env: &Env, ua: &BytesN<32>, pqz_key_hash: &BytesN<32>) -> BytesN<32> {
+    let s = keccak_words(env, &[&UA_PQZ_KEY_TYPEHASH, &ua.to_array(), &pqz_key_hash.to_array()]);
+    portable_digest(env, &s.into()).into()
+}
+
+/// typed(`UAPqzKeyRecord{key, pqzPopHash}`): `set_pqz_key`'s signature signs `ua_message(kind, PURPOSE_PQZ_KEY, ·)` of it.
+pub fn pqz_key_record_digest(env: &Env, ua: &BytesN<32>, pqz_key_hash: &BytesN<32>, pqz_pop_hash: &BytesN<32>) -> BytesN<32> {
+    let k = keccak_words(env, &[&UA_PQZ_KEY_TYPEHASH, &ua.to_array(), &pqz_key_hash.to_array()]);
+    let s = keccak_words(env, &[&UA_PQZ_KEY_RECORD_TYPEHASH, &k.to_array(), &pqz_pop_hash.to_array()]);
+    portable_digest(env, &s.into()).into()
 }
 
 /// NET-SOR-16's op digest (spec §2): `sha256(xdr(Vec[Symbol("scaas_metaop_v1"), network_id, contract, Symbol(fn),

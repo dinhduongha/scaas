@@ -569,3 +569,76 @@ fn webauthn_blob_canonical_only() {
         assert!(c.try_check(&0x0100, &kd, &p, &digest, &b(&env, &blob)).is_err(), "{name}");
     }
 }
+
+/// `ua_message` for any kind: the registry knows the S3 TAGs only, so a derived kind (`fndsa512`) takes its TAG from
+/// `kinds.json` and the CTR-UA-12 formula is applied here.
+fn msg_of(env: &Env, kind: u32, purpose: [u8; 32], d: &BytesN<32>) -> StdVec<u8> {
+    if S3.contains(&kind) {
+        return digest::ua_message(env, kind, &BytesN::from_array(env, &purpose), d).to_array().to_vec();
+    }
+    let tag = json(KINDS)["kinds"].as_array().unwrap().iter().find(|k| k["kind"] == kind).unwrap()["TAG"].clone();
+    let mut m = Bytes::from_array(env, &digest::MSG_TAG);
+    m.append(&b(env, &hx(&tag)));
+    m.extend_from_array(&purpose);
+    m.extend_from_array(&d.to_array());
+    env.crypto().keccak256(&m).to_array().to_vec()
+}
+
+/// The `kemRecords[]` typed digests and their `ua_message(kind, PURPOSE_KEM, ·)`.
+#[test]
+fn kem_record_digests_match_portable_json() {
+    let env = Env::default();
+    let rows = json(PORTABLE)["kemRecords"].as_array().unwrap().clone();
+    assert!(!rows.is_empty());
+    for r in &rows {
+        let (ua, kind) = (n32(&env, &r["ua"]), kind_of(&r["kind"]));
+        let d = kem_record_digest(&env, &ua, r["version"].as_u64().unwrap(), &b(&env, &hx(&r["kemPk"])));
+        assert_eq!(d.to_array().to_vec(), hx(&r["digest"]), "digest of {}", r["id"]);
+        assert_eq!(msg_of(&env, kind, PURPOSE_KEM, &d), hx(&r["message"]), "message of {}", r["id"]);
+    }
+}
+
+/// The `pqzKeyRecords[]` typed digests: `pqzKeyDigest` (the PQZ key's own proof), `recordDigest` and `message`.
+#[test]
+fn pqz_key_record_digests_match_portable_json() {
+    let env = Env::default();
+    let rows = json(PORTABLE)["pqzKeyRecords"].as_array().unwrap().clone();
+    assert!(!rows.is_empty());
+    for r in &rows {
+        let (ua, kind) = (n32(&env, &r["ua"]), kind_of(&r["kind"]));
+        let (kh, ph) = (n32(&env, &r["pqzKeyHash"]), n32(&env, &r["pqzPopHash"]));
+        assert_eq!(pqz_key_digest(&env, &ua, &kh).to_array().to_vec(), hx(&r["pqzKeyDigest"]), "pqzKeyDigest of {}", r["name"]);
+        let d = pqz_key_record_digest(&env, &ua, &kh, &ph);
+        assert_eq!(d.to_array().to_vec(), hx(&r["recordDigest"]), "recordDigest of {}", r["name"]);
+        assert_eq!(msg_of(&env, kind, PURPOSE_PQZ_KEY, &d), hx(&r["message"]), "message of {}", r["name"]);
+    }
+}
+
+/// The `registrations[]` rows with a PQZ key or a KEM key: `pqzKeyHash`, `kemRecordHash`, `portableRecordDigest`
+/// and `registrationDigest` from the row's own attributes.
+#[test]
+fn portable_digests_with_attrs_match() {
+    let env = Env::default();
+    let mut seen = 0;
+    for r in json(PORTABLE)["registrations"].as_array().unwrap() {
+        let a = &r["attrs"];
+        let (pqz_key, kem_pk) = (hx(&a["pqzKey"]), hx(&a["kemPk"]));
+        if pqz_key.is_empty() && kem_pk.is_empty() {
+            continue;
+        }
+        let ua = n32(&env, &r["ua"]);
+        let zero = BytesN::from_array(&env, &[0; 32]);
+        let kem = if kem_pk.is_empty() {
+            kem_record_hash(&env, &ua, 0, 0, &zero)
+        } else {
+            kem_record_hash(&env, &ua, 0, kem_pk[0], &env.crypto().keccak256(&b(&env, &kem_pk)).into())
+        };
+        assert_eq!(kem.to_array().to_vec(), hx(&r["kemRecordHash"]), "kemRecordHash of {}", r["name"]);
+        let rec = portable_record_hash(&env, &ua, kind_of(&r["kind"]), &n32(&env, &r["pqzKeyHash"]), &kem);
+        assert_eq!(portable_digest(&env, &rec).to_array().to_vec(), hx(&r["portableRecordDigest"]), "{}", r["name"]);
+        let reg = registration_digest(&env, &rec, &n32(&env, &a["pqzPopHash"]));
+        assert_eq!(reg.to_array().to_vec(), hx(&r["registrationDigest"]), "registrationDigest of {}", r["name"]);
+        seen += 1;
+    }
+    assert!(seen > 0);
+}
