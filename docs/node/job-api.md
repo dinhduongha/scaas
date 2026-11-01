@@ -462,6 +462,47 @@ lane is bounded by the spend breaker ([NET-SOR-14](../networks/soroban.md#NET-SO
 owner question. A `call` job that carries the call in a field other than `op` is `job without op` and fails closed; consumers
 follow this interface.
 
+<a id="soroban-ua-metatx-jobs"></a>**Soroban `ua_metatx` jobs** (`ua8-soroban` N2; BUILT; [NET-SOR-23](../networks/soroban.md#NET-SOR-23); the
+owner's explicit-parameter rule of 2026-10-31 replaced hex XDR `op.args`). Payload: `{kind: "ua_metatx", op: {contract, function,
+args, auth?, valid_until?}}`, any other field refused. The node builds the `InvokeContractArgs` from `args`, in the contract's
+order, and takes the op digest (the job id), `valid_until` and every check from that one value.
+
+- `args`: every argument by the contract's name, `auth` included, each required, any other refused.
+- Values by contract type: `BytesN<32>` and `Bytes` are `0x…` hex; `i128` a decimal string; `u32` a number; `u64` a number or a decimal
+  string (a client that cannot write one past 2^53, such as an order `salt`); `bool` a boolean; `Address` a `G…` or `C…`; `Option<Address>`
+  null or an address; `Symbol` a string; `Holder` `{"Addr": "G…"}` or `{"Ua": "0x…"}`; `UaSig` `{key_data, signature, members}`, as a
+  `call` job's `sig`; `Order` `{maker, destination, relayer, sell_token, sell_amount, buy_token, buy_amount, max_fee_ppm, expiry, salt}`.
+- `ua_relay`'s `args` is the relayed call's arguments, whose types the contract does not declare: a list of `{type, value}`, `type` one of
+  the names above without `Option<Address>`, `Vec<Val>` (a list of `{type, value}`), `Map` (a `#[contracttype]` struct,
+  `{field: {type, value}}`) or `Void` (`value` null). A target that takes any other type (`String`, `u128`, …) cannot be relayed.
+- `op.auth`: `[{payload, from, signature}]`, a native leg's signed authorization (the node never builds these and a job never
+  names a `SourceAccount` entry; the lane's own entry is the node's). `op.valid_until` is optional and never read.
+
+| Contract | `function` | `args` |
+|---|---|---|
+| token | `ua_transfer` | `from, to, amount, lane, nonce, valid_until, relayer, auth` |
+| token | `ua_pay` | `from, to, amount, pay_ref, valid_until, relayer, auth` |
+| token | `ua_pay_meta` | `from, to, amount, salt, meta, valid_until, relayer, auth` |
+| token | `ua_burn` | `from, amount, lane, nonce, valid_until, relayer, auth` |
+| token | `ua_cancel_nonce` | `ua, lane, valid_until, auth` |
+| router | `ua_relay` | `payer, target, func, args, salt, token, to, amount, valid_until, relayer, auth` |
+| DEX | `settle` | `maker, taker, maker_fill, maker_auth, taker_auth` |
+| DEX | `ua_cancel` | `order, auth` |
+| mandate | `mtx_set_mandate` | `token, delegate, max_per_payment, max_per_period, period_seconds, expiry, lane, nonce, valid_until, relayer, auth` |
+| mandate | `mtx_set_payee` | `token, payee, allowed, lane, nonce, valid_until, relayer, auth` |
+| mandate | `mtx_revoke` | `token, by, epoch, lane, nonce, valid_until, relayer, auth` |
+| mandate | `mtx_withdraw` | `token, to, amount, lane, nonce, valid_until, relayer, auth` |
+| mandate | `mtx_mandate_pay` | `token, payee, amount, pay_ref, epoch, valid_until, relayer, auth` |
+
+<a id="soroban-hex-refused"></a>**No blob on any Soroban job.** `op.args` as a string, `op.extra.call` at all, or a string where a job has
+named fields (an `auth`, an order, a holder, a relayed list) is `HEX_ARGS_REFUSED`: the job goes `dead` on its one claim and nothing is
+sent. A `signed_op` has no call of its own: the call is the invocation the subject signed. Its relay fee (`op.kind = "relay_fee"`) is
+built from that signed root, the eight `relay` arguments, with `payer` the signer and `relayer` this lane, so the job carries `payload`,
+`from`, `signature`, `contract`, `valid_until` and `ref`, and no `extra.call`. A multi-party DEX `settle` is a `ua_metatx` job, its native legs
+in `op.auth`. What stays hex is what a native account signed: `payload` (the `HashIdPreimage` XDR of `signed_op`, `extra.auth[]` and
+`op.auth[]`, whose nonce and invocation the node reads from those bytes) and a `C…` subject's `signature` (the `ScVal` its
+`__check_auth` reads).
+
 ## <a id="call-table"></a>11. Call table
 
 <a id="call-table"></a><a id="NODE-JOB-01"></a>**NODE-JOB-01** — **`call` jobs are limited to a selector/target

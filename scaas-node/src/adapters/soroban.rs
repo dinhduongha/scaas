@@ -4,10 +4,11 @@
 //! Nonce auth là ngẫu nhiên (host ghi cặp (địa chỉ, nonce) đã dùng) ⇒ không head-of-line (R62).
 //! Tuỳ chọn fee-bump (CAP-15): `params.fee_bump_lane = i` ⇒ account của lane `i` trả phí cho mọi lane.
 //! Thiết kế: `docs/history/specs/2026-10-03-net-soroban.md`.
-//! UA-Soroban (spec `2026-10-30-ua-soroban-design.md` §8, §9): `ua_metatx` jobs (`ua_metatx_job`), the lane-authority
+//! UA-Soroban (spec `2026-10-30-ua-soroban-design.md` §8, §9): `ua_metatx` jobs (`ua_metatx_job`, named fields, `UA_FNS`), the lane-authority
 //! rule (`check_recorded_auth`), Protocol 23 auto-restore within `params.max_deposit_per_job` (`sim_data`), UA events.
 //! UA-8 (UA8-D23): `call` jobs for the registry writes (`ua8_call_job`), the off-chain check before a relayer's attestation
-//! (`ua8_precheck`).
+//! (`ua8_precheck`). Every job names its fields and the node builds the XDR (owner 2026-10-31): a blob where a field belongs is
+//! `HEX_ARGS_REFUSED`; what stays hex is what a native account signed (`payload`).
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::{Mutex, OnceLock};
@@ -20,7 +21,7 @@ use scaas_ua::UAError;
 use sha2::{Digest, Sha256};
 use stellar_xdr::{
     AccountId, ConfigSettingEntry, ConfigSettingId, DecoratedSignature, FeeBumpTransaction, FeeBumpTransactionEnvelope, FeeBumpTransactionExt,
-    FeeBumpTransactionInnerTx, HashIdPreimage, HostFunction, InvokeContractArgs, InvokeHostFunctionOp, LedgerEntry, LedgerEntryData,
+    FeeBumpTransactionInnerTx, HashIdPreimage, HostFunction, Int128Parts, InvokeContractArgs, InvokeHostFunctionOp, LedgerEntry, LedgerEntryData,
     LedgerKey, LedgerKeyAccount, LedgerKeyConfigSetting, Limits, Memo, MuxedAccount, Operation, OperationBody, Preconditions, PublicKey,
     ReadXdr, ScAddress, ScMap, ScMapEntry, ScSymbol, ScVal, ScVec, SequenceNumber, Signature, SignatureHint,
     SorobanAddressCredentials, SorobanAuthorizationEntry, SorobanAuthorizedFunction, SorobanAuthorizedInvocation, SorobanCredentials,
@@ -128,20 +129,16 @@ pub fn auth_entry(network: &[u8; 32], payload: &str, from: &str, signature: &str
     ))
 }
 
-/// Lời gọi host + auth entry từ op `signed_op`. Mặc định lời gọi = invocation chủ thể đã ký; `extra.call` (XDR hex
-/// `InvokeContractArgs`) + `extra.auth` (chữ ký bổ sung) cho thao tác nhiều bên như DEX `settle` (R8-5).
+/// The host call and auth entries of a `signed_op`: the call is the invocation the subject signed; `extra.auth` adds
+/// co-signers' entries (NET-SOR-07). The call never comes from the job (`HEX_ARGS_REFUSED`, `job_tx`).
 pub fn host_call(network: &[u8; 32], op: &Value) -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>)> {
     let s = |v: &Value, k: &str| v[k].as_str().map(str::to_owned).ok_or_else(|| anyhow!("op.{k} missing"));
-    let (main, signed) = auth_entry(network, &s(op, "payload")?, &s(op, "from")?, &s(op, "signature")?)?;
+    let (main, call) = auth_entry(network, &s(op, "payload")?, &s(op, "from")?, &s(op, "signature")?)?;
     let contract = ScAddress::from_str(&s(op, "contract")?).map_err(|_| anyhow!("bad contract"))?;
     let mut auth = vec![main];
     for a in op["extra"]["auth"].as_array().into_iter().flatten() {
         auth.push(auth_entry(network, &s(a, "payload")?, &s(a, "from")?, &s(a, "signature")?)?.0);
     }
-    let call = match op["extra"]["call"].as_str() {
-        Some(x) => InvokeContractArgs::from_xdr(unhex(x)?, Limits::len(65_536))?,
-        None => signed,
-    };
     if call.contract_address != contract {
         bail!("op targets {} but its call is to {}", op["contract"], call.contract_address);
     }
@@ -894,28 +891,18 @@ fn op_bytes(op: &Value, k: &str) -> Result<Vec<u8>> {
     unhex(op[k].as_str().ok_or_else(|| anyhow!("op.{k} missing"))?.trim_start_matches("0x"))
 }
 
-/// The signed invocation of `op.payload`.
-fn signed_call(network: &[u8; 32], op: &Value) -> Result<InvokeContractArgs> {
-    let s = |k: &str| op[k].as_str().ok_or_else(|| anyhow!("op.{k} missing"));
-    Ok(auth_entry(network, s("payload")?, s("from")?, s("signature")?)?.1)
-}
-
 /// Pay-meta job: the signed invocation is the token's `pay_meta`; `op.salt` / `op.meta` must be the signed
 /// arguments (the auth entry covers them), `op.pay_ref` (when given) the commitment, `meta` within the cap.
 pub fn pay_meta_job(network: &[u8; 32], op: &Value, max_meta: usize) -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>)> {
     let (call, auth) = host_call(network, op)?;
-    let signed = signed_call(network, op)?;
-    if signed.function_name.0.as_slice() != b"pay_meta" || signed.args.len() != 6 {
+    if call.function_name.0.as_slice() != b"pay_meta" || call.args.len() != 6 {
         bail!("pay-meta job must sign pay_meta(from, to, amount, salt, meta, valid_until)");
-    }
-    if call != signed {
-        bail!("the executed call is not the signed pay_meta");
     }
     let (salt, meta) = (op_bytes(op, "salt")?, op_bytes(op, "meta")?);
     if meta.len() > max_meta {
         bail!("meta is {} B, above max_pay_meta_bytes {max_meta}", meta.len());
     }
-    if bytes_arg(&signed.args[3]) != Some(&salt[..]) || bytes_arg(&signed.args[4]) != Some(&meta[..]) {
+    if bytes_arg(&call.args[3]) != Some(&salt[..]) || bytes_arg(&call.args[4]) != Some(&meta[..]) {
         bail!("op.salt / op.meta differ from the signed pay_meta arguments");
     }
     if !op["pay_ref"].is_null() && op_bytes(op, "pay_ref")? != meta_pay_id(&salt, &meta) {
@@ -1016,39 +1003,30 @@ pub fn pays_router(call: &InvokeContractArgs, policy: &RelayFeePolicy) -> bool {
     })
 }
 
-/// Relay-fee job: `extra.call` is the router's `relay(payer, target, func, args, salt, token, to, amount,
-/// valid_until, relayer)`; the payer's signed root is the same call with the eight `require_auth_for_args`
-/// arguments (no payer, no relayer) and the token's `pay` (carrying `ref`) as sub-invocation. Checks the policy,
-/// `ref` against the call bytes, the relayer against this lane (`relayer` is the transaction source) and the signed
-/// tree against the executed call. Soroban does not satisfy `relayer.require_auth()` from the transaction source
-/// alone: the returned auth carries an explicit `SourceAccount` entry rooted at the same call.
+/// Relay-fee job: the payer's signed root is the router's `relay` with the eight `require_auth_for_args` arguments (`target, func,
+/// args, salt, token, to, amount, valid_until`) and the token's `pay` (carrying `ref`) as sub-invocation. The node builds the
+/// call from that root: `relay(payer, …, relayer)`, `payer` the signer and `relayer` this lane (the transaction source), so no
+/// second copy of the call exists to differ from the signed one. Checks the policy, `ref` against the call bytes and the signed
+/// tree against the call. Soroban does not satisfy `relayer.require_auth()` from the transaction source alone: the returned
+/// auth carries an explicit `SourceAccount` entry rooted at the same call.
 pub fn relay_fee_job(
     network: &[u8; 32],
     op: &Value,
     lane: &ScAddress,
     policy: &RelayFeePolicy,
 ) -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>, [u8; 32])> {
-    let (call, mut auth) = host_call(network, op)?;
-    if op["extra"]["call"].is_null() {
-        bail!("relay-fee job needs extra.call (the router call)");
-    }
+    let (signed, mut auth) = host_call(network, op)?;
     let SorobanCredentials::Address(cred) = &auth[0].credentials else { bail!("payer entry has no address credentials") };
-    let SorobanAuthorizedFunction::ContractFn(root) = &auth[0].root_invocation.function else { bail!("signed root is not a contract call") };
-    if call.function_name.0.as_slice() != b"relay" || call.args.len() != 10 || root.function_name.0.as_slice() != b"relay" {
-        bail!("relay-fee job must call relay(payer, target, func, args, salt, token, to, amount, valid_until, relayer)");
+    if signed.function_name.0.as_slice() != b"relay" || signed.args.len() != 8 {
+        bail!("relay-fee job must sign relay(target, func, args, salt, token, to, amount, valid_until)");
     }
-    if root.contract_address != call.contract_address || root.args.as_slice() != &call.args[1..9] {
-        bail!("the signed root is not this relay call");
-    }
-    if policy.router.as_ref() != Some(&call.contract_address) {
+    if policy.router.as_ref() != Some(&signed.contract_address) {
         bail!("relay target is not the configured router");
     }
-    if call.args[0] != ScVal::Address(cred.address.clone()) {
-        bail!("payer argument is not the signer");
-    }
-    if call.args[9] != ScVal::Address(lane.clone()) {
-        bail!("relayer argument is not this lane");
-    }
+    let mut args = vec![ScVal::Address(cred.address.clone())];
+    args.extend(signed.args.iter().cloned());
+    args.push(ScVal::Address(lane.clone()));
+    let call = InvokeContractArgs { args: args.try_into()?, ..signed };
     if pays_router(&call, policy) {
         bail!("the relayed call pays or approves the relay-fee router or its executor (CTR-MTX-27)");
     }
@@ -1102,10 +1080,16 @@ fn source_entry(call: &InvokeContractArgs) -> SorobanAuthorizationEntry {
 
 /// The job's call, auth and `valid_until` by `job.kind` (S15): `ua_metatx` ⇒ `ua_metatx_job` (`valid_until` from the
 /// signed arguments), `call` ⇒ `ua8_call_job` (`op.valid_until`), none / `signed_op` ⇒ `job_call` (`op.valid_until`); any
-/// other kind is refused.
+/// other kind is refused. No kind takes its call as a blob: `op.args` is named fields and `op.extra.call` is gone.
 pub fn job_tx(network: &[u8; 32], kind: Option<&str>, op: &Value, lane: &ScAddress, policy: &RelayFeePolicy)
     -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>, u64)>
 {
+    if op["args"].is_string() {
+        return Err(hex_refused("op.args"));
+    }
+    if !op["extra"]["call"].is_null() {
+        return Err(hex_refused("op.extra.call"));
+    }
     match kind {
         Some("ua_metatx") => {
             let (call, auth, _) = ua_metatx_job(network, op, lane, policy)?;
@@ -1141,51 +1125,71 @@ enum Class {
     Mandate,
 }
 
-/// One allow-listed `ua_metatx` function (spec §9.1): its contract class, arity (with `auth`, the last argument; `settle`
-/// has two order auths) and the indexes of `valid_until` (`None`: the orders' `expiry`), `relayer` (`Option<Address>`;
-/// `ua_relay`'s an `Address`), the UA signer `from` (`BytesN<32>`, `mtx_revoke`'s `by` a `Holder`; `None` with a lane =
-/// the mandate's owner), its `lane` (the nonce follows it) and `pay_ref`.
+/// One allow-listed `ua_metatx` function (spec §9.1): its contract class, its arguments in the contract's order, name and
+/// type (`ua_value`), `auth` last (`settle` has two order auths), and the indexes of `valid_until` (`None`: the orders' `expiry`),
+/// `relayer` (`Option<Address>`; `ua_relay`'s an `Address`), the UA signer `from` (`BytesN<32>`, `mtx_revoke`'s `by` a `Holder`;
+/// `None` with a lane = the mandate's owner) and its `lane` (the nonce follows it).
 struct UaFn {
     name: &'static str,
     class: Class,
-    arity: usize,
+    args: &'static [(&'static str, &'static str)],
     valid_until: Option<usize>,
     relayer: Option<usize>,
     from: Option<usize>,
     lane: Option<usize>,
-    pay_ref: Option<usize>,
 }
 
-#[allow(clippy::too_many_arguments)]
-const fn uf(name: &'static str, class: Class, arity: usize, valid_until: Option<usize>, relayer: Option<usize>, from: Option<usize>,
-            lane: Option<usize>, pay_ref: Option<usize>) -> UaFn {
-    UaFn { name, class, arity, valid_until, relayer, from, lane, pay_ref }
+const fn uf(name: &'static str, class: Class, args: &'static [(&'static str, &'static str)], valid_until: Option<usize>, relayer: Option<usize>,
+            from: Option<usize>, lane: Option<usize>) -> UaFn {
+    UaFn { name, class, args, valid_until, relayer, from, lane }
 }
 
-/// The contracts' signatures (T5–T8, T6b's `epoch` in the delegate entries).
+const ID: &str = "BytesN<32>";
+const OPT: &str = "Option<Address>";
+
+/// The contracts' signatures (T5–T8, T6b's `epoch` in the delegate entries): the one table of the `ua_metatx` job API.
 const UA_FNS: [UaFn; 13] = [
-    uf("ua_transfer", Class::Token, 8, Some(5), Some(6), Some(0), Some(3), None),
-    uf("ua_pay", Class::Token, 7, Some(4), Some(5), Some(0), None, Some(3)),
-    uf("ua_pay_meta", Class::Token, 8, Some(5), Some(6), Some(0), None, None),
-    uf("ua_burn", Class::Token, 7, Some(4), Some(5), Some(0), Some(2), None),
-    uf("ua_cancel_nonce", Class::Token, 4, Some(2), None, Some(0), None, None),
-    uf("ua_relay", Class::Router, 11, Some(8), Some(9), Some(0), None, None),
-    uf("settle", Class::Dex, 5, None, None, None, None, None),
-    uf("ua_cancel", Class::Dex, 2, None, None, None, None, None),
-    uf("mtx_set_mandate", Class::Mandate, 11, Some(8), Some(9), None, Some(6), None),
-    uf("mtx_set_payee", Class::Mandate, 8, Some(5), Some(6), None, Some(3), None),
-    uf("mtx_revoke", Class::Mandate, 8, Some(5), Some(6), Some(1), Some(3), None),
-    uf("mtx_withdraw", Class::Mandate, 8, Some(5), Some(6), None, Some(3), None),
-    uf("mtx_mandate_pay", Class::Mandate, 8, Some(5), Some(6), None, None, Some(3)),
+    uf("ua_transfer", Class::Token, &[("from", ID), ("to", "Holder"), ("amount", "i128"), ("lane", ID), ("nonce", "u64"), ("valid_until", "u64"), ("relayer", OPT),
+                                      ("auth", "UaSig")], Some(5), Some(6), Some(0), Some(3)),
+    uf("ua_pay", Class::Token, &[("from", ID), ("to", "Holder"), ("amount", "i128"), ("pay_ref", ID), ("valid_until", "u64"), ("relayer", OPT), ("auth", "UaSig")],
+       Some(4), Some(5), Some(0), None),
+    uf("ua_pay_meta", Class::Token, &[("from", ID), ("to", "Holder"), ("amount", "i128"), ("salt", ID), ("meta", "Bytes"), ("valid_until", "u64"), ("relayer", OPT),
+                                      ("auth", "UaSig")], Some(5), Some(6), Some(0), None),
+    uf("ua_burn", Class::Token, &[("from", ID), ("amount", "i128"), ("lane", ID), ("nonce", "u64"), ("valid_until", "u64"), ("relayer", OPT), ("auth", "UaSig")],
+       Some(4), Some(5), Some(0), Some(2)),
+    uf("ua_cancel_nonce", Class::Token, &[("ua", ID), ("lane", ID), ("valid_until", "u64"), ("auth", "UaSig")], Some(2), None, Some(0), None),
+    uf("ua_relay", Class::Router, &[("payer", ID), ("target", "Address"), ("func", "Symbol"), ("args", "Vec<Val>"), ("salt", ID), ("token", "Address"), ("to", "Holder"),
+                                    ("amount", "i128"), ("valid_until", "u64"), ("relayer", "Address"), ("auth", "UaSig")], Some(8), Some(9), Some(0), None),
+    uf("settle", Class::Dex, &[("maker", "Order"), ("taker", "Order"), ("maker_fill", "i128"), ("maker_auth", "UaSig"), ("taker_auth", "UaSig")], None, None, None, None),
+    uf("ua_cancel", Class::Dex, &[("order", "Order"), ("auth", "UaSig")], None, None, None, None),
+    uf("mtx_set_mandate", Class::Mandate, &[("token", "Address"), ("delegate", "Holder"), ("max_per_payment", "i128"), ("max_per_period", "i128"), ("period_seconds", "u64"),
+                                            ("expiry", "u64"), ("lane", ID), ("nonce", "u64"), ("valid_until", "u64"), ("relayer", OPT), ("auth", "UaSig")],
+       Some(8), Some(9), None, Some(6)),
+    uf("mtx_set_payee", Class::Mandate, &[("token", "Address"), ("payee", "Holder"), ("allowed", "bool"), ("lane", ID), ("nonce", "u64"), ("valid_until", "u64"),
+                                          ("relayer", OPT), ("auth", "UaSig")], Some(5), Some(6), None, Some(3)),
+    uf("mtx_revoke", Class::Mandate, &[("token", "Address"), ("by", "Holder"), ("epoch", "u64"), ("lane", ID), ("nonce", "u64"), ("valid_until", "u64"), ("relayer", OPT),
+                                       ("auth", "UaSig")], Some(5), Some(6), Some(1), Some(3)),
+    uf("mtx_withdraw", Class::Mandate, &[("token", "Address"), ("to", "Holder"), ("amount", "i128"), ("lane", ID), ("nonce", "u64"), ("valid_until", "u64"), ("relayer", OPT),
+                                         ("auth", "UaSig")], Some(5), Some(6), None, Some(3)),
+    uf("mtx_mandate_pay", Class::Mandate, &[("token", "Address"), ("payee", "Holder"), ("amount", "i128"), ("pay_ref", ID), ("epoch", "u64"), ("valid_until", "u64"),
+                                            ("relayer", OPT), ("auth", "UaSig")], Some(5), Some(6), None, None),
 ];
 
-/// SOR-D14's op: `{contract, function, args: "<hex XDR ScVec>" (every argument, `auth` included), auth?: [{payload,
-/// from, signature}]}` ⇒ the call and its table row (function first, then arity).
+/// `ua-common`'s `Order`.
+const ORDER: [(&str, &str); 10] = [("maker", "Holder"), ("destination", "Holder"), ("relayer", "Address"), ("sell_token", "Address"), ("sell_amount", "i128"),
+                                   ("buy_token", "Address"), ("buy_amount", "i128"), ("max_fee_ppm", "u32"), ("expiry", "u64"), ("salt", "u64")];
+
+/// The `ua_metatx` op (SOR-D14, the explicit parameters of owner 2026-10-31): `{contract, function, args, auth?: [{payload, from,
+/// signature}], valid_until?}`, `args` every argument by name, `auth` included, any other field refused ⇒ the call and its table
+/// row. The digest and the XDR both come from this one call.
 fn ua_call(op: &Value) -> Result<(InvokeContractArgs, &'static UaFn)> {
     let s = |k: &str| op[k].as_str().ok_or_else(|| anyhow!("op.{k} missing"));
     // decision (C): the kind is `job.kind`; an `op.kind` here is a misrouted job, never ignored
     if op.get("kind").is_some_and(|k| !k.is_null()) {
         bail!("a ua_metatx op carries no op.kind (got {})", op["kind"]);
+    }
+    if let Some(k) = op.as_object().and_then(|o| o.keys().find(|k| !["contract", "function", "args", "auth", "valid_until", "kind"].contains(&k.as_str()))) {
+        bail!("op: unknown field {k}");
     }
     let function = s("function")?;
     let f = UA_FNS.iter().find(|f| f.name == function).ok_or_else(|| anyhow!("{function:?} is not a ua_metatx function"))?;
@@ -1193,12 +1197,8 @@ fn ua_call(op: &Value) -> Result<(InvokeContractArgs, &'static UaFn)> {
         Ok(a @ ScAddress::Contract(_)) => a,
         _ => bail!("op.contract is not a Soroban contract address (C…)"),
     };
-    let raw = op_bytes(op, "args")?;
-    let args = ScVec::from_xdr(&raw, Limits { depth: 64, len: raw.len() })?;
-    if args.len() != f.arity {
-        bail!("{function} takes {} arguments, not {}", f.arity, args.len());
-    }
-    Ok((InvokeContractArgs { contract_address: contract, function_name: ScSymbol(function.try_into()?), args: args.0 }, f))
+    let args = args_of(function, f.args, &op["args"])?;
+    Ok((InvokeContractArgs { contract_address: contract, function_name: ScSymbol(function.try_into()?), args: args.try_into()? }, f))
 }
 
 fn field<'a>(v: &'a ScVal, k: &str) -> Option<&'a ScVal> {
@@ -1339,11 +1339,6 @@ pub fn ua_metatx_job(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &
     if f.name == "ua_relay" {
         ua_relay_policy(&call, lane, policy)?;
     }
-    if let Some(i) = f.pay_ref {
-        if a.get(i).and_then(bytes_arg).map(<[u8]>::len) != Some(32) {
-            bail!("{}: pay_ref is 32 bytes", f.name);
-        }
-    }
     let digest = ua_digest(network, &call, f)?.unwrap_or_default();
     let s = |v: &Value, k: &str| v[k].as_str().map(str::to_owned).ok_or_else(|| anyhow!("op.auth[].{k} missing"));
     let mut auth = Vec::new();
@@ -1452,17 +1447,27 @@ enum Ua8Write {
     StorePop { ua: [u8; 32], pqz_pop: Vec<u8> },
 }
 
-/// `v`'s named fields, every one required, no other (explicit parameters, owner 2026-10-31).
-fn named<'a, const N: usize>(v: &'a Value, what: &str, names: [&str; N]) -> Result<[&'a Value; N]> {
+/// A blob where a job has named fields, on any job kind and at any level (explicit parameters, owner 2026-10-31).
+const HEX_ARGS_REFUSED: &str = "HEX_ARGS_REFUSED";
+
+fn hex_refused(what: &str) -> anyhow::Error {
+    anyhow!("{HEX_ARGS_REFUSED}: {what} takes named fields, not a hex blob")
+}
+
+/// `v`'s named fields in `names`' order, every one required, no other (explicit parameters, owner 2026-10-31).
+fn fields<'a>(v: &'a Value, what: &str, names: &[&str]) -> Result<Vec<&'a Value>> {
+    if v.is_string() {
+        return Err(hex_refused(what));
+    }
     let o = v.as_object().ok_or_else(|| anyhow!("{what} is an object of named fields"))?;
     if let Some(k) = o.keys().find(|k| !names.contains(&k.as_str())) {
         bail!("{what}: unknown field {k}");
     }
-    let mut out = [&Value::Null; N];
-    for (slot, n) in out.iter_mut().zip(names) {
-        *slot = o.get(n).ok_or_else(|| anyhow!("{what}: {n} missing"))?;
-    }
-    Ok(out)
+    names.iter().map(|n| o.get(*n).ok_or_else(|| anyhow!("{what}: {n} missing"))).collect()
+}
+
+fn named<'a, const N: usize>(v: &'a Value, what: &str, names: [&str; N]) -> Result<[&'a Value; N]> {
+    fields(v, what, &names)?.try_into().map_err(|_| anyhow!("{what}: one value per name"))
 }
 
 fn hex_of(v: &Value) -> Result<Vec<u8>> {
@@ -1479,6 +1484,9 @@ fn num_of<T: TryFrom<u64>>(v: &Value) -> Result<T> {
 }
 
 fn list_of<T>(v: &Value, one: impl Fn(&Value) -> Result<T>) -> Result<Vec<T>> {
+    if v.is_string() {
+        return Err(hex_refused("a list"));
+    }
     v.as_array().ok_or_else(|| anyhow!("{v} is not a list"))?.iter().map(one).collect()
 }
 
@@ -1533,8 +1541,71 @@ fn frost_of(v: &Value) -> Result<FrostKey> {
 fn relayer_of(v: &Value) -> Result<Option<ScAddress>> {
     match v {
         Value::Null => Ok(None),
-        _ => v.as_str().and_then(|s| ScAddress::from_str(s).ok()).map(Some).ok_or_else(|| anyhow!("relayer {v} is null or an address")),
+        _ => address_of(v).map(Some).with_context(|| format!("relayer {v} is null or an address")),
     }
+}
+
+fn address_of(v: &Value) -> Result<ScAddress> {
+    v.as_str().and_then(|s| ScAddress::from_str(s).ok()).ok_or_else(|| anyhow!("{v} is not an address"))
+}
+
+/// `Holder::Addr` or `Holder::Ua`, named as the contract's variants.
+fn holder_of(v: &Value) -> Result<ScVal> {
+    if v.is_string() {
+        return Err(hex_refused("a holder"));
+    }
+    match v.as_object().filter(|o| o.len() == 1).map(|o| (o.get("Addr"), o.get("Ua"))) {
+        Some((Some(a), _)) => Ok(holder_addr(&address_of(a)?)),
+        Some((_, Some(u))) => sc_vec(vec![ScVal::Symbol(ScSymbol("Ua".try_into()?)), sc_bytes(&b32_of(u)?)?]),
+        _ => bail!("a holder is {{\"Addr\": \"G…\"}} or {{\"Ua\": \"0x…\"}}, not {v}"),
+    }
+}
+
+/// One value of a contract type, spelled as the contract and `ua-ops.json` spell it. `i128` is a decimal string, as every amount
+/// the node reports; `u64` a number or, for a client that cannot write one past 2^53, a decimal string. `Void` and `Map` (a
+/// `#[contracttype]` struct, `{field: {type, value}}`) serve a relayed call's arguments, whose types the contract does not declare.
+// ponytail: the types the repo's contracts take; a relayed target with another (`String`, `u128`, …) is refused here, one line each.
+fn ua_value(ty: &str, v: &Value) -> Result<ScVal> {
+    Ok(match ty {
+        ID => sc_bytes(&b32_of(v)?)?,
+        "Bytes" => sc_bytes(&hex_of(v)?)?,
+        "i128" => {
+            let n: i128 = v.as_str().and_then(|s| s.parse().ok()).ok_or_else(|| anyhow!("{v} is not an i128 as a decimal string"))?;
+            ScVal::I128(Int128Parts { hi: (n >> 64) as i64, lo: n as u64 })
+        }
+        "u32" => ScVal::U32(num_of(v)?),
+        "u64" => ScVal::U64(match v.as_str() {
+            Some(s) => s.parse().with_context(|| format!("{v} is not a u64"))?,
+            None => num_of(v)?,
+        }),
+        "bool" => ScVal::Bool(v.as_bool().ok_or_else(|| anyhow!("{v} is not a bool"))?),
+        "Address" => ScVal::Address(address_of(v)?),
+        OPT => relayer_of(v)?.map_or(ScVal::Void, ScVal::Address),
+        "Symbol" => ScVal::Symbol(ScSymbol(v.as_str().ok_or_else(|| anyhow!("{v} is not a symbol"))?.try_into()?)),
+        "Holder" => holder_of(v)?,
+        "UaSig" => sc_sig(&sig_of(v)?)?,
+        "Order" => sc_map(ORDER.iter().map(|f| f.0).zip(args_of("order", &ORDER, v)?).collect())?,
+        "Vec<Val>" => sc_vec(list_of(v, relayed_of)?)?,
+        "Void" if v.is_null() => ScVal::Void,
+        "Map" => {
+            let o = v.as_object().ok_or_else(|| anyhow!("{v} is not a map"))?;
+            sc_map(o.iter().map(|(k, x)| Ok((k.as_str(), relayed_of(x)?))).collect::<Result<_>>()?)?
+        }
+        _ => bail!("{ty} value {v}: unknown type or value"),
+    })
+}
+
+/// One argument of a relayed call (`Vec<Val>`): it names its own type, `{type, value}`.
+fn relayed_of(v: &Value) -> Result<ScVal> {
+    let [ty, value] = named(v, "relayed argument", ["type", "value"])?;
+    ua_value(ty.as_str().ok_or_else(|| anyhow!("a relayed argument's type is a string, not {ty}"))?, value)
+}
+
+/// `table`'s values from `v`'s named fields, in `table`'s order: an entry's arguments, a struct's fields.
+fn args_of(what: &str, table: &[(&str, &str)], v: &Value) -> Result<Vec<ScVal>> {
+    let names: Vec<&str> = table.iter().map(|f| f.0).collect();
+    let values = fields(v, what, &names)?;
+    table.iter().zip(values).map(|((name, ty), x)| ua_value(ty, x).with_context(|| format!("{what}.{name}"))).collect()
 }
 
 /// UA8-D23, S15, the explicit parameters of owner 2026-10-31: `op = {contract, function, args, valid_until}`, `args` the
@@ -1598,8 +1669,12 @@ fn sc_list(l: &[Vec<u8>]) -> Result<ScVal> {
     sc_vec(l.iter().map(|b| sc_bytes(b)).collect::<Result<_>>()?)
 }
 
+fn sc_struct<const N: usize>(fields: [(&str, ScVal); N]) -> Result<ScVal> {
+    sc_map(fields.into())
+}
+
 /// A `#[contracttype]` struct: a map sorted by field name.
-fn sc_struct<const N: usize>(mut fields: [(&str, ScVal); N]) -> Result<ScVal> {
+fn sc_map(mut fields: Vec<(&str, ScVal)>) -> Result<ScVal> {
     fields.sort_by_key(|f| f.0);
     let e: Vec<ScMapEntry> = fields.into_iter().map(|(k, val)| Ok(ScMapEntry { key: ScVal::Symbol(ScSymbol(k.try_into()?)), val })).collect::<Result<_>>()?;
     Ok(ScVal::Map(Some(ScMap(e.try_into()?))))
@@ -1994,40 +2069,31 @@ mod tests {
         assert!(pay_meta_job(&network_id(NETWORK), &op, 2048).is_err(), "foreign network");
     }
 
-    fn relay_job(token_pay_ref: &[u8], relayer: &str, target_in_call: &str, op_ref: &[u8]) -> Value {
-        relay_job_with(token_pay_ref, relayer, target_in_call, op_ref, sym("revoke"))
+    fn relay_job(token_pay_ref: &[u8], op_ref: &[u8]) -> Value {
+        relay_job_with(token_pay_ref, op_ref, sym("revoke"))
     }
 
-    fn relay_job_with(token_pay_ref: &[u8], relayer: &str, target_in_call: &str, op_ref: &[u8], func: ScVal) -> Value {
-        relay_job_to(token_pay_ref, relayer, target_in_call, op_ref, func, WALLET2)
+    fn relay_job_with(token_pay_ref: &[u8], op_ref: &[u8], func: ScVal) -> Value {
+        relay_job_to(token_pay_ref, op_ref, func, WALLET2)
     }
 
     /// `to` = the payee: the router (open mode, the default), the lane, or anyone else (bound).
-    fn relay_job_to(token_pay_ref: &[u8], relayer: &str, target_in_call: &str, op_ref: &[u8], func: ScVal, payee: &str) -> Value {
-        relay_job_args(token_pay_ref, relayer, target_in_call, op_ref, func, payee, vec![addr(CONTRACT), addr(OWNER)])
+    fn relay_job_to(token_pay_ref: &[u8], op_ref: &[u8], func: ScVal, payee: &str) -> Value {
+        relay_job_args(token_pay_ref, op_ref, func, payee, vec![addr(CONTRACT), addr(OWNER)])
     }
 
     /// `relay_job_to` with the target call's arguments given.
-    fn relay_job_args(token_pay_ref: &[u8], relayer: &str, target_in_call: &str, op_ref: &[u8], func: ScVal, payee: &str,
-                      args: Vec<ScVal>) -> Value {
-        let token = CONTRACT;
-        let to = addr(payee);
-        let signed = vec![addr(WALLET), func, vecv(args.clone()), byt(&SALT), addr(token), to.clone(), i128v(7), ScVal::U64(1_800_000_300)];
-        let pay = inv(token, "pay", vec![addr(OWNER), to.clone(), i128v(7), byt(token_pay_ref), ScVal::U64(1_800_000_300)], vec![]);
-        let root = inv(WALLET2, "relay", signed.clone(), vec![pay]);
-        let mut full = vec![addr(OWNER)];
-        let mut sg = signed;
-        sg[0] = addr(target_in_call);
-        full.extend(sg);
-        full.push(addr(relayer));
-        let call = InvokeContractArgs {
-            contract_address: ScAddress::from_str(WALLET2).unwrap(),
-            function_name: ScSymbol("relay".try_into().unwrap()),
-            args: full.try_into().unwrap(),
-        };
-        json!({"kind": "relay_fee", "payload": payload(NET7, root), "from": OWNER, "signature": sig(), "contract": WALLET2,
-               "valid_until": 1_800_000_300u64, "ref": format!("0x{}", hex(op_ref)),
-               "extra": {"call": hex(&call.to_xdr(Limits::none()).unwrap())}})
+    fn relay_job_args(token_pay_ref: &[u8], op_ref: &[u8], func: ScVal, payee: &str, args: Vec<ScVal>) -> Value {
+        relay_job_on(NET7, token_pay_ref, op_ref, func, payee, args)
+    }
+
+    /// The job on `net`: the signed root and the job's `ref`, nothing else names the call.
+    fn relay_job_on(net: [u8; 32], token_pay_ref: &[u8], op_ref: &[u8], func: ScVal, payee: &str, args: Vec<ScVal>) -> Value {
+        let (token, to) = (CONTRACT, addr(payee));
+        let signed = vec![addr(WALLET), func, vecv(args), byt(&SALT), addr(token), to.clone(), i128v(7), ScVal::U64(1_800_000_300)];
+        let pay = inv(token, "pay", vec![addr(OWNER), to, i128v(7), byt(token_pay_ref), ScVal::U64(1_800_000_300)], vec![]);
+        json!({"kind": "relay_fee", "payload": payload(net, inv(WALLET2, "relay", signed, vec![pay])), "from": OWNER, "signature": sig(), "contract": WALLET2,
+               "valid_until": 1_800_000_300u64, "ref": format!("0x{}", hex(op_ref)), "extra": {}})
     }
     const WALLET2: &str = "CBCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEJ5HZ"; // the router
     const LANE: &str = "GAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTHCM6";
@@ -2064,7 +2130,7 @@ mod tests {
         // the payee rule
         let args = vec![addr(CONTRACT), addr(OWNER)];
         let rf = relay_ref(&NET7, &ScAddress::from_str(WALLET).unwrap(), &ScSymbol("revoke".try_into().unwrap()), &args, &SALT);
-        let to = |payee: &str| relay_job_to(&rf, LANE, WALLET, &rf, sym("revoke"), payee);
+        let to = |payee: &str| relay_job_to(&rf, &rf, sym("revoke"), payee);
         assert!(relay_fee_job(&NET7, &to(LANE), &lane, &policy()).is_ok(), "bound to this lane");
         let e = relay_fee_job(&NET7, &to(WALLET), &lane, &policy()).err().unwrap().to_string();
         assert!(e.contains("relay_bound_payee"), "{e}");
@@ -2099,9 +2165,12 @@ mod tests {
         assert_eq!(hex(&rf), VEC_REF, "same ref as the contract's test");
         assert_ne!(rf, relay_ref(&NET7, &ScAddress::from_str(WALLET).unwrap(), &revoke, &args, &[8; 32]), "salt is in the ref");
         let lane = ScAddress::from_str(LANE).unwrap();
-        let ok = relay_job(&rf, LANE, WALLET, &rf);
+        let ok = relay_job(&rf, &rf);
         let (call, auth, got) = relay_fee_job(&NET7, &ok, &lane, &policy()).unwrap();
         assert_eq!((call.function_name.0.as_slice(), call.args.len(), got), (&b"relay"[..], 10, rf));
+        // N2: built from the signed root, the call a job used to send as `extra.call`: the payer the signer, the relayer this lane
+        assert_eq!(call.args.as_slice(), [addr(OWNER), addr(WALLET), sym("revoke"), vecv(args.clone()), byt(&SALT), addr(CONTRACT), addr(WALLET2), i128v(7),
+                                          ScVal::U64(1_800_000_300), addr(LANE)]);
         // The payer's entry plus the explicit source-account entry (source auth is not implicit), rooted at the call.
         assert_eq!(auth.len(), 2);
         assert!(matches!(auth[0].credentials, SorobanCredentials::Address(_)));
@@ -2110,16 +2179,12 @@ mod tests {
         assert!(auth[1].root_invocation.sub_invocations.is_empty());
         let bad = |o: Value| relay_fee_job(&NET7, &o, &lane, &policy()).is_err();
         // The payment's ref is not the call's; the job's declared ref is not the call's.
-        assert!(bad(relay_job(&[9; 32], LANE, WALLET, &rf)));
-        assert!(bad(relay_job(&rf, LANE, WALLET, &[9; 32])));
-        // The relayer argument is not this lane (the router marker).
-        assert!(bad(relay_job(&rf, FROM, WALLET, &rf)));
-        // The executed call differs from the signed one.
-        assert!(bad(relay_job(&rf, LANE, CONTRACT, &rf)));
-        // No explicit call: refused.
-        let mut bare = ok.clone();
-        bare["extra"] = json!({});
-        assert!(bad(bare));
+        assert!(bad(relay_job(&[9; 32], &rf)));
+        assert!(bad(relay_job(&rf, &[9; 32])));
+        // A signed root that is not the eight arguments of `relay`.
+        let mut short = ok.clone();
+        short["payload"] = json!(payload(NET7, inv(WALLET2, "relay", vec![addr(WALLET)], vec![])));
+        assert!(bad(short));
         // Policy: other router, unregistered token, fee below the minimum.
         let other = RelayFeePolicy { router: Some(ScAddress::from_str(WALLET).unwrap()), ..policy() };
         assert!(relay_fee_job(&NET7, &ok, &lane, &other).is_err());
@@ -2137,7 +2202,7 @@ mod tests {
     fn relay_fee_job_survives_non_utf8_symbol() {
         let weird = ScVal::Symbol(ScSymbol(StringM::<32>::try_from(vec![0xffu8; 32]).unwrap()));
         let lane = ScAddress::from_str(LANE).unwrap();
-        let o = relay_job_with(&[1; 32], LANE, WALLET, &[2; 32], weird);
+        let o = relay_job_with(&[1; 32], &[2; 32], weird);
         assert!(relay_fee_job(&NET7, &o, &lane, &policy()).is_err());
     }
 
@@ -2175,12 +2240,18 @@ mod tests {
             e("sell_amount", i128v(5)), e("sell_token", addr(CONTRACT)),
         ].try_into().unwrap())))
     }
+    /// A `ua_metatx` op as a client writes it: each argument by its name in `UA_FNS`. One of the wrong type, or none, is `null` or
+    /// missing, which the parser refuses.
     fn ua_op(contract: &str, function: &str, args: Vec<ScVal>) -> Value {
-        let a = ScVec(args.try_into().unwrap()).to_xdr(Limits::none()).unwrap();
-        json!({"contract": contract, "function": function, "args": format!("0x{}", hex(&a))})
+        let table = UA_FNS.iter().find(|f| f.name == function).map_or(&[][..], |f| f.args);
+        let named: serde_json::Map<String, Value> = table.iter().zip(&args).map(|((k, t), v)| (k.to_string(), job_value(t, v))).collect();
+        json!({"contract": contract, "function": function, "args": named})
+    }
+    fn ua_sig(signature: &[u8]) -> ScVal {
+        sc_struct([("key_data", byt(&[])), ("members", vecv(vec![])), ("signature", byt(signature))]).unwrap()
     }
     fn auth_arg() -> ScVal {
-        byt(&[0xaa; 8])
+        ua_sig(&[0xaa; 8])
     }
     /// One well-formed op per allow-listed function, `relayer` as given (`Void` = None).
     fn ua_ops(relayer: ScVal) -> Vec<(&'static str, &'static str, Vec<ScVal>)> {
@@ -2198,7 +2269,7 @@ mod tests {
             (MANDATE, "mtx_withdraw", vec![addr(CONTRACT), h_ua(UA), i128v(5), l.clone(), u64v(0), u64v(VU), r.clone(), a.clone()]),
             (MANDATE, "mtx_mandate_pay", vec![addr(CONTRACT), h_addr(WALLET), i128v(5), rf.clone(), u64v(1), u64v(VU), r, a.clone()]),
             (DEX, "ua_cancel", vec![order(h_ua(UA), LANE, VU), a.clone()]),
-            (DEX, "settle", vec![order(h_ua(UA), LANE, VU), order(h_addr(FROM), LANE, VU + 9), i128v(5), a, byt(&[])]),
+            (DEX, "settle", vec![order(h_ua(UA), LANE, VU), order(h_addr(FROM), LANE, VU + 9), i128v(5), a, ua_sig(&[])]),
         ]
     }
     /// `router.ua_relay(payer, target, func, args, salt, token, to, amount, valid_until, relayer, auth)`.
@@ -2210,8 +2281,56 @@ mod tests {
         auth.iter().filter(|e| matches!(e.credentials, SorobanCredentials::SourceAccount)).collect()
     }
 
-    /// SOR-D14: the shared `ua-ops.json` rows rebuilt as jobs give the vector's op digest (the job id); `ua_relay`'s is
-    /// the inner `token.ua_pay` with `pay_ref = ref` and `relayer = Some(router)`.
+    /// One value of a job in its JSON, `ty` the contract's type name as `UA_FNS` and `ua-ops.json` spell it: what a client writes.
+    /// A value of another type comes out `null`, which the parser refuses.
+    fn job_value(ty: &str, v: &ScVal) -> Value {
+        let h0 = |b: &[u8]| json!(format!("0x{}", hex(b)));
+        let of = |k: &str, t: &str| field(v, k).map_or(Value::Null, |x| job_value(t, x));
+        match (ty, v) {
+            ("Address" | "Option<Address>", ScVal::Address(a)) => json!(a.to_string()),
+            ("BytesN<32>" | "Bytes", ScVal::Bytes(b)) => h0(b.as_slice()),
+            ("i128", ScVal::I128(_)) => json!(scval_i128(v).unwrap().to_string()),
+            ("u64", ScVal::U64(n)) => json!(n),
+            ("u32", ScVal::U32(n)) => json!(n),
+            ("bool", ScVal::Bool(b)) => json!(b),
+            ("Symbol", ScVal::Symbol(_)) => json!(scval_str(v).unwrap()),
+            ("Holder", _) => match holder(v) {
+                Some(Holder::Addr(a)) => json!({"Addr": a.to_string()}),
+                Some(Holder::Ua(u)) => json!({"Ua": format!("0x{}", hex(u))}),
+                None => Value::Null,
+            },
+            ("Order", ScVal::Map(_)) => Value::Object(ORDER.iter().map(|(k, t)| (k.to_string(), of(k, t))).collect()),
+            ("UaSig", ScVal::Map(_)) => {
+                let slots: Vec<ScVal> = match field(v, "members") {
+                    Some(ScVal::Vec(Some(m))) => m.to_vec(),
+                    _ => vec![],
+                };
+                let slot = |m: &ScVal| json!({"index": field(m, "index").map(|i| job_value("u32", i)), "key_data": field(m, "key_data").map(|b| job_value("Bytes", b)), "sig": field(m, "sig").map(|b| job_value("Bytes", b))});
+                json!({"key_data": of("key_data", "Bytes"), "signature": of("signature", "Bytes"), "members": slots.iter().map(slot).collect::<Vec<_>>()})
+            }
+            ("Vec<Val>", ScVal::Vec(Some(l))) => Value::Array(l.iter().map(relayed).collect()),
+            _ => Value::Null,
+        }
+    }
+    /// One argument of a relayed call in its JSON: no declared type, so it names its own.
+    fn relayed(v: &ScVal) -> Value {
+        let ty = match v {
+            ScVal::Address(_) => "Address",
+            ScVal::Bytes(_) => "Bytes",
+            ScVal::I128(_) => "i128",
+            ScVal::U64(_) => "u64",
+            ScVal::U32(_) => "u32",
+            ScVal::Bool(_) => "bool",
+            ScVal::Symbol(_) => "Symbol",
+            ScVal::Vec(_) => "Vec<Val>",
+            other => panic!("not a relayed value in these tests: {other:?}"),
+        };
+        json!({"type": ty, "value": job_value(ty, v)})
+    }
+
+    /// N2: every row of `ua-ops.json` as a job built from the row's own names and types, never its XDR: the node's XDR is the
+    /// row's, argument by argument and in the row's order, and its digest the row's (the digest the contracts compute). `ua_relay`'s
+    /// digest is the inner `token.ua_pay`, with `pay_ref = ref` and `relayer = Some(router)`.
     #[test]
     fn ua_metatx_digest_matches_ua_ops_vectors() {
         let v: Value = serde_json::from_str(include_str!("../../../smartcontracts/soroban/vectors/ua-ops.json")).unwrap();
@@ -2227,28 +2346,217 @@ mod tests {
                 continue; // `ua_trade`'s order digest: signed by the maker, run by the DEX, never a job
             }
             for row in e["perKind"].as_array().unwrap() {
-                let mut args: Vec<ScVal> = row["args"].as_array().unwrap().iter().map(|a| xdr(&a["xdr"])).collect();
+                let list = row["args"].as_array().unwrap();
+                let mut want: Vec<ScVal> = list.iter().map(|a| xdr(&a["xdr"])).collect();
+                let mut fields: serde_json::Map<String, Value> =
+                    list.iter().map(|a| (a["name"].as_str().unwrap().to_string(), job_value(a["type"].as_str().unwrap(), &xdr(&a["xdr"])))).collect();
                 let auth = xdr(&row["authXdr"]);
                 let (contract, function) = if e["name"] == "ua_relay" {
                     let r = &e["relay"];
-                    assert_eq!(args[3], byt(&strip(&r["ref"])), "the vector's pay_ref is its relay ref");
-                    let inner = r["args"].as_array().unwrap().iter().map(|a| xdr(&a["xdr"])).collect();
-                    args = vec![args[0].clone(), addr(r["target"].as_str().unwrap()), sym(r["func"].as_str().unwrap()), vecv(inner),
-                                byt(&strip(&r["salt"])), addr(e["contract"].as_str().unwrap()), args[1].clone(), args[2].clone(),
-                                args[4].clone(), addr(LANE)];
+                    assert_eq!(want[3], byt(&strip(&r["ref"])), "the vector's pay_ref is its relay ref");
+                    let inner: Vec<ScVal> = r["args"].as_array().unwrap().iter().map(|a| xdr(&a["xdr"])).collect();
+                    let outer = json!({"payer": fields["from"], "target": r["target"], "func": r["func"], "args": inner.iter().map(relayed).collect::<Vec<_>>(),
+                                       "salt": r["salt"], "token": e["contract"], "to": fields["to"], "amount": fields["amount"],
+                                       "valid_until": fields["valid_until"], "relayer": LANE});
+                    fields = outer.as_object().unwrap().clone();
+                    want = vec![want[0].clone(), addr(r["target"].as_str().unwrap()), sym(r["func"].as_str().unwrap()), vecv(inner),
+                                byt(&strip(&r["salt"])), addr(e["contract"].as_str().unwrap()), want[1].clone(), want[2].clone(),
+                                want[4].clone(), addr(LANE)];
                     (c["router"].as_str().unwrap(), "ua_relay")
                 } else {
                     (e["contract"].as_str().unwrap(), e["fn"].as_str().unwrap())
                 };
-                args.push(auth);
-                let (call, _, digest) = ua_metatx_job(&net, &ua_op(contract, function, args), &lane(), &policy)
-                    .unwrap_or_else(|x| panic!("{} {}: {x:#}", e["name"], row["kind"]));
+                fields.insert("auth".into(), job_value("UaSig", &auth));
+                want.push(auth);
+                let op = json!({"contract": contract, "function": function, "args": fields});
+                let (call, _, digest) = ua_metatx_job(&net, &op, &lane(), &policy).unwrap_or_else(|x| panic!("{} {}: {x:#}", e["name"], row["kind"]));
                 assert_eq!(call.contract_address.to_string(), contract);
+                assert_eq!(call.function_name.0.as_slice(), function.as_bytes());
+                assert_eq!(call.args.as_slice(), want.as_slice(), "{} {}: the node's XDR is the row's", e["name"], row["kind"]);
                 assert_eq!(format!("0x{}", hex(&digest)), row["digest"].as_str().unwrap(), "{} {}", e["name"], row["kind"]);
                 n += 1;
             }
         }
         assert_eq!(n, 12 * 7, "every job row of the vector file");
+    }
+
+    /// N2: a job as a client writes it, by hand: the node builds the XDR from the named fields, in the contract's order, a struct's
+    /// fields sorted, whatever order the job writes them in; `valid_until` comes from those same fields.
+    #[test]
+    fn soroban_job_explicit_args_build_xdr() {
+        let (p, ua, zero) = (policy(), format!("0x{}", hex(&UA)), format!("0x{}", hex(&[1; 32])));
+        let build = |op: Value| job_tx(&NET7, Some("ua_metatx"), &op, &lane(), &p).unwrap();
+        let slot = sc_struct([("index", ScVal::U32(1)), ("key_data", byt(&[])), ("sig", byt(&[0xcc]))]).unwrap();
+        let sig = json!({"signature": "0xaabb", "members": [{"sig": "0xcc", "index": 1, "key_data": "0x"}], "key_data": "0x"});
+        let want_sig = sc_struct([("key_data", byt(&[])), ("members", vecv(vec![slot])), ("signature", byt(&[0xaa, 0xbb]))]).unwrap();
+
+        // the widest i128, a u64 past 2^53 as a decimal string, a UA holder, the relayer null
+        let max = i128::MAX.to_string();
+        let (call, auth, vu) = build(json!({"contract": CONTRACT, "function": "ua_transfer", "args": {
+            "auth": sig, "relayer": null, "valid_until": VU, "nonce": "18446744073709551615", "lane": zero, "amount": max, "to": {"Ua": ua}, "from": ua}}));
+        let big = ScVal::I128(stellar_xdr::Int128Parts { hi: i64::MAX, lo: u64::MAX });
+        assert_eq!(call.args.as_slice(), [byt(&UA), h_ua(UA), big, byt(&[1; 32]), u64v(u64::MAX), u64v(VU), ScVal::Void, want_sig.clone()]);
+        assert_eq!(call.function_name.0.as_slice(), b"ua_transfer");
+        assert_eq!((auth.len(), vu), (0, VU));
+
+        // a relayed call of any shape: each argument names its type
+        let target = [addr(LANE), byt(&[3]), i128v(5), u64v(1), ScVal::U32(2), ScVal::Bool(true), sym("x"), ScVal::Void, vecv(vec![addr(OWNER)]), h_ua(UA), want_sig.clone(),
+                      sc_struct([("a", ScVal::U32(1)), ("b", byt(&[2]))]).unwrap()];
+        let typed = json!([{"type": "Address", "value": LANE}, {"type": "Bytes", "value": "0x03"}, {"type": "i128", "value": "5"}, {"type": "u64", "value": 1},
+                           {"type": "u32", "value": 2}, {"type": "bool", "value": true}, {"type": "Symbol", "value": "x"}, {"type": "Void", "value": null},
+                           {"type": "Vec<Val>", "value": [{"type": "Address", "value": OWNER}]}, {"type": "Holder", "value": {"Ua": ua}}, {"type": "UaSig", "value": sig},
+                           {"type": "Map", "value": {"b": {"type": "Bytes", "value": "0x02"}, "a": {"type": "u32", "value": 1}}}]);
+        let (call, auth, _) = build(json!({"contract": WALLET2, "function": "ua_relay", "args": {
+            "payer": ua, "target": WALLET, "func": "revoke", "args": typed, "salt": zero, "token": CONTRACT, "to": {"Addr": WALLET2}, "amount": "7",
+            "valid_until": VU, "relayer": LANE, "auth": sig}}));
+        assert_eq!(call.args.as_slice(), [byt(&UA), addr(WALLET), sym("revoke"), vecv(target.to_vec()), byt(&[1; 32]), addr(CONTRACT), h_addr(WALLET2), i128v(7),
+                                          u64v(VU), addr(LANE), want_sig.clone()]);
+        assert_eq!(auth.len(), 1, "the lane's own entry");
+
+        // two orders, one UA and one native, with their signatures: the earlier expiry bounds the job
+        let leg = |maker: Value, expiry: u64| json!({"salt": 1, "expiry": expiry, "max_fee_ppm": 0, "buy_amount": "5", "buy_token": WALLET, "sell_amount": "5",
+                                                     "sell_token": CONTRACT, "relayer": LANE, "destination": maker, "maker": maker});
+        let none = json!({"key_data": "0x", "signature": "0x", "members": []});
+        let (call, _, vu) = build(json!({"contract": DEX, "function": "settle", "args": {
+            "maker": leg(json!({"Ua": ua}), VU + 9), "taker": leg(json!({"Addr": FROM}), VU), "maker_fill": "5", "maker_auth": sig, "taker_auth": none}}));
+        let empty = sc_struct([("key_data", byt(&[])), ("members", vecv(vec![])), ("signature", byt(&[]))]).unwrap();
+        assert_eq!(call.args.as_slice(), [order(h_ua(UA), LANE, VU + 9), order(h_addr(FROM), LANE, VU), i128v(5), want_sig.clone(), empty]);
+        assert_eq!(vu, VU);
+
+        // a bool and a Holder::Addr; the digest is over what was built, `auth` left out
+        let op = json!({"contract": MANDATE, "function": "mtx_set_payee", "args": {
+            "token": CONTRACT, "payee": {"Addr": WALLET}, "allowed": true, "lane": zero, "nonce": 3, "valid_until": VU, "relayer": null, "auth": sig}});
+        let (call, _, d) = ua_metatx_job(&NET7, &op, &lane(), &p).unwrap();
+        let signed = [addr(CONTRACT), h_addr(WALLET), ScVal::Bool(true), byt(&[1; 32]), u64v(3), u64v(VU), ScVal::Void];
+        assert_eq!(call.args.as_slice()[..7], signed);
+        assert_eq!(d, op_digest(&NET7, &sc(MANDATE), &call.function_name, &signed).unwrap());
+    }
+
+    /// One `lane_step` of `job`: what it sent, its last state and error.
+    async fn job_step(a: &SorobanAdapter, calls: &Arc<Mutex<Vec<String>>>, job: Value) -> (usize, String, String) {
+        use crate::adapter::tests::{fake_odoo, Fake};
+        let before = sends(calls);
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job], tokens: json!([]), ..Default::default() }).await;
+        crate::adapter::lane_step(a, &odoo, 0, "n#0").await.unwrap();
+        let f = o.lock().unwrap();
+        let last = f.reports.last().unwrap();
+        (sends(calls) - before, last["chain_state"].as_str().unwrap().to_string(), last["error"].as_str().unwrap_or_default().to_string())
+    }
+
+    /// N2, the owner's explicit parameters: a blob where a job has named fields is `HEX_ARGS_REFUSED` on every Soroban job kind, at
+    /// every level. Each case is a job that passes, with one thing changed: the job goes `dead` on its one claim and nothing is sent.
+    #[tokio::test]
+    async fn soroban_hex_args_refused() {
+        let hexed = |args: Vec<ScVal>| json!(format!("0x{}", hex(&ScVec(args.try_into().unwrap()).to_xdr(Limits::none()).unwrap())));
+        let call_xdr = json!(hex(&InvokeContractArgs { contract_address: sc(CONTRACT), function_name: ScSymbol("pay".try_into().unwrap()), args: Default::default() }
+            .to_xdr(Limits::none()).unwrap()));
+        let answer: Answer = Arc::new(|c| match c.function_name.0.as_slice() {
+            b"executor" => view_ok(ScVal::Address(executor())),
+            _ => view_ok(ScVal::Void),
+        });
+        let net = network_id("x");
+        let (a, calls) = stub_adapter(answer, true).await;
+        let refused = async |job: Value, what: &str| {
+            let (sent, state, error) = job_step(&a, &calls, job).await;
+            assert_eq!((sent, state.as_str()), (0, "dead"), "{what}: {error}");
+            assert!(error.contains(HEX_ARGS_REFUSED), "{what}: {error}");
+        };
+
+        // ua_metatx: `ua_pay`, relayer None
+        let (c, f, args) = ua_ops(ScVal::Void).remove(1);
+        let ua = ua_op(c, f, args.clone());
+        let job = |op: &Value| json!({"id": 7, "kind": "ua_metatx", "op": op});
+        assert_eq!(job_step(&a, &calls, job(&ua)).await.0, 1, "the passing job");
+        let mut o = ua.clone();
+        o["args"] = hexed(args);
+        refused(job(&o), "op.args").await;
+        for (k, v) in [("auth", hexed(vec![auth_arg()])), ("to", hexed(vec![h_ua(UA)]))] {
+            let mut o = ua.clone();
+            o["args"][k] = v;
+            refused(job(&o), k).await;
+        }
+        let mut o = ua.clone();
+        o["extra"] = json!({"call": call_xdr});
+        refused(job(&o), "extra.call on a ua_metatx").await;
+        // a relayed call's arguments, an order
+        let lane0 = stub_lane();
+        let relay = ua_op(WALLET2, "ua_relay", ua_relay_args(h_addr(WALLET2), &lane0));
+        assert_eq!(job_step(&a, &calls, job(&relay)).await.0, 1, "the passing ua_relay");
+        let mut o = relay.clone();
+        o["args"]["args"] = hexed(vec![addr(OWNER)]);
+        refused(job(&o), "a relayed call's args").await;
+        let cancel = ua_op(CONTRACT, "ua_cancel_nonce", ua_ops(ScVal::Void).remove(4).2);
+        let mut o = cancel.clone();
+        o["function"] = json!("ua_cancel");
+        o["contract"] = json!(DEX);
+        o["args"] = json!({"order": hexed(vec![]), "auth": cancel["args"]["auth"]});
+        assert!(format!("{:#}", ua_metatx_job(&net, &o, &lane(), &policy()).unwrap_err()).contains(HEX_ARGS_REFUSED), "an order");
+
+        // signed_op: a plain pay, and the relay fee
+        let pay = json!({"payload": payload(net, inv(CONTRACT, "pay", vec![addr(FROM), addr(WALLET), i128v(1), byt(&[3; 32]), ScVal::U64(1)], vec![])),
+                         "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": crate::submit::now() + 60, "extra": {}});
+        let signed = |op: &Value| json!({"id": 7, "kind": "signed_op", "op": op});
+        assert_eq!(job_step(&a, &calls, signed(&pay)).await.0, 1, "the passing signed_op");
+        let mut o = pay.clone();
+        o["extra"]["call"] = call_xdr.clone();
+        refused(signed(&o), "extra.call on a signed_op").await;
+        let mut o = pay.clone();
+        o["args"] = hexed(vec![]);
+        refused(signed(&o), "op.args on a signed_op").await;
+        let rf = relay_ref(&net, &sc(WALLET), &ScSymbol("revoke".try_into().unwrap()), &[addr(CONTRACT), addr(OWNER)], &SALT);
+        let mut fee = relay_job_on(net, &rf, &rf, sym("revoke"), &stub_lane(), vec![addr(CONTRACT), addr(OWNER)]);
+        fee["valid_until"] = json!(crate::submit::now() + 60);
+        assert_eq!(job_step(&a, &calls, signed(&fee)).await.0, 1, "the passing relay fee");
+        fee["extra"]["call"] = call_xdr.clone();
+        refused(signed(&fee), "extra.call on a relay fee").await;
+
+        // call: `store_pqz_pop`
+        let (a8, calls8) = ua8_adapter(Arc::new(|_| view_ok(ScVal::Void))).await;
+        let mut write = ops(&NONE).remove(7);
+        write["valid_until"] = json!(crate::submit::now() + 60);
+        let job8 = |op: &Value| json!({"id": 7, "kind": "call", "op": op});
+        assert_eq!(job_step(&a8, &calls8, job8(&write)).await.0, 1, "the passing call job");
+        for (k, v) in [("args", hexed(vec![byt(&UA), byt(&[1])])), ("extra", json!({"call": call_xdr}))] {
+            let mut o = write.clone();
+            o[k] = v;
+            let (sent, state, error) = job_step(&a8, &calls8, job8(&o)).await;
+            assert_eq!((sent, state.as_str()), (0, "dead"), "{k}: {error}");
+            assert!(error.contains(HEX_ARGS_REFUSED), "{k}: {error}");
+        }
+    }
+
+    type Change = fn(&mut Value);
+
+    /// N2: the parser's own refusals, one change from a passing job each: dead on its one claim, nothing sent.
+    #[tokio::test]
+    async fn soroban_job_bad_fields_refused() {
+        let (a, calls) = stub_adapter(Arc::new(|_| view_ok(ScVal::Void)), false).await;
+        let (c, f, args) = ua_ops(ScVal::Void).remove(0);
+        let ok = ua_op(c, f, args);
+        let job = |op: &Value| json!({"id": 7, "kind": "ua_metatx", "op": op});
+        assert_eq!(job_step(&a, &calls, job(&ok)).await.0, 1, "the passing job");
+        let cases: &[(Change, &str)] = &[
+            (|o| o["extra"] = json!({}), "unknown field"),
+            (|o| o["args"]["memo"] = json!(1), "unknown field"),
+            (|o| { o["args"].as_object_mut().unwrap().remove("nonce"); }, "nonce missing"),
+            (|o| o["args"]["amount"] = json!(5), "i128"),
+            (|o| o["args"]["amount"] = json!("5.5"), "i128"),
+            (|o| o["args"]["amount"] = json!("170141183460469231731687303715884105728"), "i128"),
+            (|o| o["args"]["to"] = json!({"Addr": WALLET, "Ua": "0x00"}), "holder"),
+            (|o| o["args"]["to"] = json!({"Id": WALLET}), "holder"),
+            (|o| o["args"]["to"] = json!({"Addr": "not a strkey"}), "address"),
+            (|o| o["args"]["from"] = json!("0x77"), "not 32 bytes"),
+            (|o| o["args"]["from"] = json!("77"), "0x"),
+            (|o| o["args"]["nonce"] = json!(-1), "number"),
+            (|o| o["args"]["auth"]["members"] = json!([{"index": 70000, "key_data": "0x", "sig": "0x"}]), "number"),
+        ];
+        for (i, (change, why)) in cases.iter().enumerate() {
+            let mut o = ok.clone();
+            change(&mut o);
+            let (sent, state, error) = job_step(&a, &calls, job(&o)).await;
+            assert_eq!((sent, state.as_str()), (0, "dead"), "case {i}: {error}");
+            assert!(error.contains(why), "case {i}: {error}");
+        }
     }
 
     /// Spec §9.1: token functions on a registered token, `ua_relay` on the router, `settle` / `ua_cancel` on
@@ -2334,7 +2642,7 @@ mod tests {
         assert_eq!(source_entries(&auth).len(), 1);
         assert_eq!(auth[0].root_invocation.function, SorobanAuthorizedFunction::ContractFn(call));
         assert!(ua_metatx_job(&NET7, &ua_op(WALLET2, "ua_relay", ua_relay_args(h_addr(WALLET2), FROM)), &lane(), &p).is_err());
-        let foreign = vec![order(h_ua(UA), LANE, VU), order(h_addr(FROM), FROM, VU), i128v(5), auth_arg(), byt(&[])];
+        let foreign = vec![order(h_ua(UA), LANE, VU), order(h_addr(FROM), FROM, VU), i128v(5), auth_arg(), ua_sig(&[])];
         assert!(ua_metatx_job(&NET7, &ua_op(DEX, "settle", foreign), &lane(), &p).unwrap_err().to_string().contains("relayer"));
         // valid_until comes from the signed arguments (NET-SOR-15): settle's earlier order expiry
         let (_, _, settle) = ua_ops(ScVal::Void).pop().unwrap();
@@ -2509,7 +2817,7 @@ mod tests {
                 assert!(e.contains("router"), "{f} {x}: {e}");
                 // relay_fee: the relayed target call
                 let rf = relay_ref(&NET7, &sc(WALLET), &ScSymbol(f.try_into().unwrap()), &args, &SALT);
-                let job = relay_job_args(&rf, LANE, WALLET, &rf, sym(f), LANE, args.clone());
+                let job = relay_job_args(&rf, &rf, sym(f), LANE, args.clone());
                 let e = relay_fee_job(&NET7, &job, &lane(), &p).unwrap_err().to_string();
                 assert!(e.contains("router"), "relay {f} {x}: {e}");
                 // ua_relay: the same
@@ -2523,11 +2831,11 @@ mod tests {
         // the relayed target paying the router is refused too (the T8 attack shape: a victim's pay to the router)
         let args = vec![addr(FROM), addr(WALLET2), i128v(5), byt(&[3; 32]), u64v(VU)];
         let rf = relay_ref(&NET7, &sc(WALLET), &ScSymbol("pay".try_into().unwrap()), &args, &SALT);
-        assert!(relay_fee_job(&NET7, &relay_job_args(&rf, LANE, WALLET, &rf, sym("pay"), LANE, args), &lane(), &p).is_err());
+        assert!(relay_fee_job(&NET7, &relay_job_args(&rf, &rf, sym("pay"), LANE, args), &lane(), &p).is_err());
         // an ordinary relayed call still passes
         let args = vec![addr(CONTRACT), addr(OWNER)];
         let rf = relay_ref(&NET7, &sc(WALLET), &ScSymbol("revoke".try_into().unwrap()), &args, &SALT);
-        assert!(relay_fee_job(&NET7, &relay_job_args(&rf, LANE, WALLET, &rf, sym("revoke"), LANE, args), &lane(), &p).is_ok());
+        assert!(relay_fee_job(&NET7, &relay_job_args(&rf, &rf, sym("revoke"), LANE, args), &lane(), &p).is_ok());
     }
 
     /// Router-fix review (carried): a configured router without `executor()` (an old stateless router, or not the
@@ -2576,8 +2884,8 @@ mod tests {
         let rf = relay_ref(&NET7, &sc(WALLET), &ScSymbol("revoke".try_into().unwrap()), &a, &SALT);
         let sponsored = RelayFeePolicy { params: crate::config::RelayParams { relay_bound_payee: true, ..rp(5) }, ..policy() };
         sponsored.executor.set(executor()).unwrap();
-        assert!(relay_fee_job(&NET7, &relay_job_to(&rf, LANE, WALLET, &rf, sym("revoke"), WALLET), &lane(), &sponsored).is_ok());
-        let e = relay_fee_job(&NET7, &relay_job_to(&rf, LANE, WALLET, &rf, sym("revoke"), &ex), &lane(), &sponsored).unwrap_err().to_string();
+        assert!(relay_fee_job(&NET7, &relay_job_to(&rf, &rf, sym("revoke"), WALLET), &lane(), &sponsored).is_ok());
+        let e = relay_fee_job(&NET7, &relay_job_to(&rf, &rf, sym("revoke"), &ex), &lane(), &sponsored).unwrap_err().to_string();
         assert!(e.contains("executor"), "{e}");
     }
 
@@ -3894,28 +4202,29 @@ mod tests {
             o["meta"] = json!(sig);
             let _ = pay_meta_job(&net, &o, 2048);
             let _ = relay_fee_job(&net, &o, &lane, &policy());
-            // A well-formed job with one byte of its call mutated.
+            // A well-formed job with one byte of its signed payload mutated.
             let rf = [1u8; 32];
-            let mut v = relay_job(&rf, LANE, WALLET, &rf);
-            let mut c = unhex(v["extra"]["call"].as_str().unwrap()).unwrap();
+            let mut v = relay_job(&rf, &rf);
+            let mut c = unhex(v["payload"].as_str().unwrap()).unwrap();
             let n = c.len();
             c[i % n] = b;
-            v["extra"]["call"] = json!(hex(&c));
+            v["payload"] = json!(hex(&c));
             let _ = relay_fee_job(&NET7, &v, &lane, &policy());
         }
 
-        /// A well-formed `ua_metatx` op with one byte of its arguments mutated: refused or built, never a panic.
+        /// A well-formed `ua_metatx` op with one byte of its JSON mutated: refused or built, never a panic.
         #[test]
         fn ua_metatx_job_never_panics(k in 0usize..13, i in any::<usize>(), b in any::<u8>()) {
             let mut ops = ua_ops(addr(LANE));
             ops.push((WALLET2, "ua_relay", ua_relay_args(h_addr(WALLET2), LANE)));
             let (c, f, args) = ops.swap_remove(k % ops.len());
-            let mut a = ScVec(args.try_into().unwrap()).to_xdr(Limits::none()).unwrap();
+            let mut a = serde_json::to_vec(&ua_op(c, f, args)).unwrap();
             let n = a.len();
             a[i % n] = b;
-            let o = json!({"contract": c, "function": f, "args": hex(&a)});
-            let _ = ua_metatx_job(&NET7, &o, &lane(), &policy());
-            let _ = job_tx(&NET7, Some("ua_metatx"), &o, &lane(), &policy());
+            if let Ok(o) = serde_json::from_slice::<Value>(&a) {
+                let _ = ua_metatx_job(&NET7, &o, &lane(), &policy());
+                let _ = job_tx(&NET7, Some("ua_metatx"), &o, &lane(), &policy());
+            }
         }
 
         /// A registry write's untrusted bytes: refused or checked, never a panic.

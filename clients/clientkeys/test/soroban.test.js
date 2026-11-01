@@ -61,7 +61,12 @@ test('soroban ua-ops.json reproduced byte for byte', () => {
     const out = execFileSync(process.execPath, [fileURLToPath(new URL('../scripts/soroban-sign.mjs', import.meta.url)),
       kind, index, p.digest, e.purpose], { encoding: 'utf8' });
     const r = V.registrations.find((x) => x.ua === p.ua);
-    assert.deepEqual(JSON.parse(out), { ua: p.ua, keyData: r.keyData, auth: p.auth, authXdr: p.authXdr }, kind);
+    const { sig, ...signed } = JSON.parse(out);
+    assert.deepEqual(signed, { ua: p.ua, keyData: r.keyData, auth: p.auth, authXdr: p.authXdr }, kind);
+    // the job's named `UaSig` is the entry's XDR, field for field
+    const slots = sig.members.map((m) => ({ index: m.index, keyData: m.key_data, sig: m.sig }));
+    assert.equal(hex(sor.uaSig({ signature: sig.signature, members: slots }).xdr), p.authXdr, kind);
+    assert.equal(sig.key_data, '0x', kind);
   }
 });
 

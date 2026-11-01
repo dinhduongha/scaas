@@ -24,7 +24,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use soroban_common::*;
 use stellar_xdr::{
-    Hash, HashIdPreimage, HashIdPreimageSorobanAuthorization, Int128Parts, InvokeContractArgs, Limits, ReadXdr, ScAddress,
+    Hash, HashIdPreimage, HashIdPreimageSorobanAuthorization, Int128Parts, InvokeContractArgs, Limits, ScAddress,
     ScMap, ScMapEntry, ScSymbol, ScVal, ScVec, SorobanAuthorizedFunction, SorobanAuthorizedInvocation, WriteXdr,
 };
 use tokio::sync::OnceCell;
@@ -58,13 +58,13 @@ impl UaKey {
     fn id(&self) -> [u8; 32] {
         unhex(self.registration()["ua"].as_str().unwrap()).try_into().unwrap()
     }
-    /// `auth` for (`digest`, `purpose`) by the clientkeys e2e signer.
-    fn sign(&self, digest: &[u8; 32], purpose: &str) -> ScVal {
+    /// `auth` for (`digest`, `purpose`) by the clientkeys e2e signer, as a job names it.
+    fn sign(&self, digest: &[u8; 32], purpose: &str) -> Value {
         let out = Command::new("node").args([SIGNER, self.kind, &self.index.to_string(), &hx(digest), purpose]).output().expect("node");
         assert!(out.status.success(), "soroban-sign.mjs: {}", String::from_utf8_lossy(&out.stderr));
         let v: Value = serde_json::from_slice(&out.stdout).unwrap();
         assert_eq!(v["ua"].as_str().unwrap(), format!("0x{}", hx(&self.id())), "{} signs as another UA", self.row);
-        ScVal::from_xdr(unhex(v["authXdr"].as_str().unwrap()), Limits::none()).unwrap()
+        v["sig"].clone()
     }
 }
 
@@ -109,10 +109,9 @@ fn ua_json(u: &[u8; 32]) -> String {
     format!("{{\"Ua\":\"{}\"}}", hx(u))
 }
 
-/// The empty `UaSig` of a native leg (host auth), as its contracttype map (fields sorted).
-fn no_auth() -> ScVal {
-    let e = |k: &str, v: ScVal| ScMapEntry { key: ScVal::Symbol(sym(k)), val: v };
-    ScVal::Map(Some(ScMap(vec![e("key_data", bytes(&[])), e("members", vecv(vec![])), e("signature", bytes(&[]))].try_into().unwrap())))
+/// The empty `UaSig` of a native leg (host auth).
+fn no_auth() -> Value {
+    json!({"key_data": "0x", "signature": "0x", "members": []})
 }
 
 /// A DEX `Order` as its contracttype map (fields sorted).
@@ -135,10 +134,17 @@ fn digest(contract: &str, f: &str, args: &[ScVal]) -> [u8; 32] {
     op_digest(&network(), &sc(contract), &sym(f), args).unwrap()
 }
 
-/// SOR-D14's job: `{kind: "ua_metatx", op: {contract, function, args: hex XDR ScVec (auth included), auth?}}`.
-fn ua_job(id: i64, contract: &str, function: &str, args: Vec<ScVal>, auth: Vec<Value>) -> Value {
-    let a = ScVec(args.try_into().unwrap()).to_xdr(Limits::none()).unwrap();
-    let mut op = json!({"contract": contract, "function": function, "args": format!("0x{}", hx(&a))});
+/// A DEX `Order` as a job names it, the same order as `order`'s; `salt` as a decimal string (past 2^53).
+#[allow(clippy::too_many_arguments)]
+fn order_json(maker: &Value, relayer: &str, sell: &str, sell_amount: i128, buy: &str, buy_amount: i128, expiry: u64, salt: u64) -> Value {
+    json!({"maker": maker, "destination": maker, "relayer": relayer, "sell_token": sell, "sell_amount": sell_amount.to_string(),
+           "buy_token": buy, "buy_amount": buy_amount.to_string(), "max_fee_ppm": 0, "expiry": expiry, "salt": salt.to_string()})
+}
+
+/// SOR-D14's job, named: `{kind: "ua_metatx", op: {contract, function, args: {…every argument, auth included}, auth?}}`.
+/// The digest each test signs comes from `ScVal`s of its own, so a field the node builds differently fails on chain.
+fn ua_job(id: i64, contract: &str, function: &str, args: Value, auth: Vec<Value>) -> Value {
+    let mut op = json!({"contract": contract, "function": function, "args": args});
     if !auth.is_empty() {
         op["auth"] = json!(auth);
     }
@@ -344,9 +350,9 @@ async fn e2e_soroban_ua_transfer_to_ua_and_ua_pay_relayed() {
     // ua_pay passkey -> mldsa65, bound to lane 0 (S8), relayed by the node
     let (pay_ref, vu, lane0) = (fresh(), now() + 600, g(&key(0)));
     let ml_before = view_i128(&st.token, "ua_balance", &["--ua", &hx(&ml)]);
-    let mut args = vec![bytes(&pk), h_ua(&ml), i128v(1_000), bytes(&pay_ref), ScVal::U64(vu), addr(&lane0)];
-    let d = digest(&st.token, "ua_pay", &args);
-    args.push(PASSKEY.sign(&d, "metatx"));
+    let d = digest(&st.token, "ua_pay", &[bytes(&pk), h_ua(&ml), i128v(1_000), bytes(&pay_ref), ScVal::U64(vu), addr(&lane0)]);
+    let args = json!({"from": ua0x(&pk), "to": {"Ua": ua0x(&ml)}, "amount": "1000", "pay_ref": ua0x(&pay_ref), "valid_until": vu, "relayer": lane0,
+                      "auth": PASSKEY.sign(&d, "metatx")});
     let tx = node.mined("ua_pay passkey -> mldsa65", 0, ua_job(201, &st.token, "ua_pay", args, vec![])).await;
     assert_eq!(view_i128(&st.token, "ua_balance", &["--ua", &hx(&ml)]), ml_before + 1_000);
     assert_eq!(view(&st.token, "ua_ref_used", &["--ua", &hx(&pk), "--pay_ref", &hx(&pay_ref)]), "true");
@@ -377,8 +383,8 @@ async fn e2e_soroban_ua_relay_fee() {
     let rf = relay_ref(&network(), &sc(&st.token), &sym("balance"), &target_args, &salt);
     let inner = [bytes(&pk), h_addr(&st.router), i128v(fee), bytes(&rf), ScVal::U64(vu), addr(&st.router)];
     let d = digest(&st.token, "ua_pay", &inner);
-    let args = vec![bytes(&pk), addr(&st.token), ScVal::Symbol(sym("balance")), vecv(target_args), bytes(&salt), addr(&st.token),
-                    h_addr(&st.router), i128v(fee), ScVal::U64(vu), addr(&lane0), PASSKEY.sign(&d, "metatx")];
+    let args = json!({"payer": ua0x(&pk), "target": st.token, "func": "balance", "args": [{"type": "Address", "value": lane1}], "salt": ua0x(&salt), "token": st.token,
+                      "to": {"Addr": st.router}, "amount": fee.to_string(), "valid_until": vu, "relayer": lane0, "auth": PASSKEY.sign(&d, "metatx")});
     let lane_before = view_i128(&st.token, "balance", &["--id", &lane0]);
     let tx = node.mined("ua_relay passkey fee, open mode", 0, ua_job(301, &st.router, "ua_relay", args, vec![])).await;
     assert_eq!(view_i128(&st.token, "balance", &["--id", &lane0]), lane_before + fee, "the fee reached the submitting lane");
@@ -419,9 +425,9 @@ async fn e2e_soroban_ua_mandate_pays_ua_payee() {
 
     // the UA delegate pays the UA payee; relayer None, lane 1 submits
     let (pay_ref, before) = (fresh(), view_i128(&st.token, "ua_balance", &["--ua", &hx(&ml)]));
-    let mut args = vec![addr(&st.token), h_ua(&ml), i128v(5_000), bytes(&pay_ref), ScVal::U64(epoch), ScVal::U64(vu), ScVal::Void];
-    let d = digest(&st.mandate, "mtx_mandate_pay", &args);
-    args.push(PASSKEY.sign(&d, "metatx"));
+    let d = digest(&st.mandate, "mtx_mandate_pay", &[addr(&st.token), h_ua(&ml), i128v(5_000), bytes(&pay_ref), ScVal::U64(epoch), ScVal::U64(vu), ScVal::Void]);
+    let args = json!({"token": st.token, "payee": {"Ua": ua0x(&ml)}, "amount": "5000", "pay_ref": ua0x(&pay_ref), "epoch": epoch, "valid_until": vu, "relayer": null,
+                      "auth": PASSKEY.sign(&d, "metatx")});
     let tx = node.mined("mtx_mandate_pay passkey delegate -> mldsa65 payee", 1, ua_job(401, &st.mandate, "mtx_mandate_pay", args, vec![])).await;
     assert_eq!(view_i128(&st.token, "ua_balance", &["--ua", &hx(&ml)]), before + 5_000);
     assert_eq!(view(&st.mandate, "paid", &["--pay_ref", &hx(&pay_ref)]), "true");
@@ -477,7 +483,10 @@ async fn e2e_soroban_ua_dex_leg() {
     let bal = |t: &str, f: &str, a: &str, v: &str| view_i128(t, f, &[a, v]);
     let (ml_a, ml_b) = (bal(&st.token, "ua_balance", "--ua", &hx(&ml)), bal(&st.token_b, "ua_balance", "--ua", &hx(&ml)));
     let (tk_a, tk_b) = (bal(&st.token, "balance", "--id", &tg), bal(&st.token_b, "balance", "--id", &tg));
-    let args = vec![maker, tko, i128v(1_000), maker_auth, no_auth()];
+    let (ml_h, tk_h) = (json!({"Ua": ua0x(&ml)}), json!({"Addr": tg}));
+    let args = json!({"maker": order_json(&ml_h, &lane0, &st.token, 1_000, &st.token_b, 2_000, expiry, salt),
+                      "taker": order_json(&tk_h, &lane0, &st.token_b, 2_000, &st.token, 1_000, expiry, salt),
+                      "maker_fill": "1000", "maker_auth": maker_auth, "taker_auth": no_auth()});
     node.mined("settle UA maker (mldsa65) vs native taker", 0, ua_job(501, &st.dex, "settle", args, auth)).await;
     assert_eq!(bal(&st.token, "ua_balance", "--ua", &hx(&ml)), ml_a - 1_000);
     assert_eq!(bal(&st.token_b, "ua_balance", "--ua", &hx(&ml)), ml_b + 2_000);
@@ -507,8 +516,9 @@ async fn e2e_soroban_ua_lane_authority_not_lent() {
     let rf = relay_ref(&network(), &sc(&st.token), &sym("approve"), &target_args, &salt);
     let inner = [bytes(&pk), h_addr(&st.router), i128v(fee), bytes(&rf), ScVal::U64(vu), addr(&st.router)];
     let d = digest(&st.token, "ua_pay", &inner);
-    let args = vec![bytes(&pk), addr(&st.token), ScVal::Symbol(sym("approve")), vecv(target_args), bytes(&salt), addr(&st.token),
-                    h_addr(&st.router), i128v(fee), ScVal::U64(vu), addr(&lane0), PASSKEY.sign(&d, "metatx")];
+    let approve = json!([{"type": "Address", "value": lane0}, {"type": "Address", "value": by}, {"type": "i128", "value": "1000000"}, {"type": "u32", "value": ledger + 1_000}]);
+    let args = json!({"payer": ua0x(&pk), "target": st.token, "func": "approve", "args": approve, "salt": ua0x(&salt), "token": st.token,
+                      "to": {"Addr": st.router}, "amount": fee.to_string(), "valid_until": vu, "relayer": lane0, "auth": PASSKEY.sign(&d, "metatx")});
     let seq = node.adapter.sequence(0).await.unwrap();
     let (state, last) = node.run(0, ua_job(601, &st.router, "ua_relay", args, vec![])).await;
     println!("T10 lane authority not lent (host refusal at simulation): job state {state}, reason {}", last["error"]);

@@ -56,12 +56,14 @@ export function signer(kind, index = kind === 'mldsa65' ? 2 : 0) {
   return single(kind, index);
 }
 /** `auth` for (purpose name or 32-byte tag, digest): the kind's signature over ua_msg (`pop` = the portable `pop` v2);
- *  `authXdr`: the `UaSig` ScVal the entries take. */
+ *  `authXdr`: the `UaSig` ScVal the entries take; `sig`: the same `UaSig` as a node job writes it (named fields, `0x…` hex). */
 export function authFor(sg, purpose, digest) {
   const tag = purpose === 'pop' ? ua.POP_V2_TAG : typeof purpose === 'string' ? ua.purposeTag(purpose) : purpose;
   const uaMsg = ua.uaMessage(sg.kind, tag, digest);
   const auth = sg.sign(uaMsg);
-  return { uaMsg, auth, authXdr: s.uaSig(sg.slots ? { members: sg.slots(uaMsg) } : { signature: auth }).xdr };
+  const members = sg.slots ? sg.slots(uaMsg) : [];
+  const sig = { key_data: hex(NONE), signature: hex(sg.slots ? NONE : auth), members: members.map((m) => ({ index: m.index, key_data: hex(m.keyData), sig: hex(m.sig) })) };
+  return { uaMsg, auth, authXdr: s.uaSig(sg.slots ? { members } : { signature: auth }).xdr, sig };
 }
 
 // --- the fixed network, contracts and arguments ---
