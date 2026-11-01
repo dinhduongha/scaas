@@ -204,7 +204,8 @@ fn ua8_relayer_checked_ua_authorises_nothing() {
     let row = portable["registrations"].as_array().unwrap().iter().find(|r| r["name"] == "slhdsa128s").unwrap();
     let (kd, pop, none) = (Bytes::from_slice(env, &hx(&row["keyData"])), Bytes::from_slice(env, &hx(&row["pop"])), Bytes::new(env));
     let by = Some(relayer.clone());
-    allow(env, &relayer, &reg.address, "register", (0x0133u32, &kd, no_attrs(env), &pop, &none, &by).into_val(env));
+    let digest = scaas_ua_common::attest_digest(env, &reg.address, "register", (0x0133u32, &kd, no_attrs(env), &pop, &none, &by).into_val(env));
+    allow(env, &relayer, &reg.address, "register", (digest,).into_val(env));
     let ua = reg.register(&0x0133, &kd, &no_attrs(env), &pop, &none, &by);
     assert!(!reg.receivable(&ua));
 

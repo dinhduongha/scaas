@@ -326,7 +326,17 @@ pub fn pqz_key_record_digest(env: &Env, ua: &BytesN<32>, pqz_key_hash: &BytesN<3
 /// Vec(args)]))`, the entry's arguments without `auth`. The token passes its own address; `ua_trade` passes itself with
 /// function `"ua_order"` (spec §5.3).
 pub fn op_digest(env: &Env, contract: &Address, function: &str, args: Vec<Val>) -> BytesN<32> {
-    let v = (Symbol::new(env, "scaas_metaop_v1"), env.ledger().network_id(), contract.clone(), Symbol::new(env, function), args);
+    call_digest(env, "scaas_metaop_v1", contract, function, args)
+}
+
+/// What a relayer's auth covers on a write it attests (U8S-D8, owner 2026-11-01): `op_digest`'s form under a tag of its own, over
+/// every argument of `function`, `relayer` included, so `require_auth_for_args` needs one word and not the arguments again.
+pub fn attest_digest(env: &Env, contract: &Address, function: &str, args: Vec<Val>) -> BytesN<32> {
+    call_digest(env, "scaas_attest_v1", contract, function, args)
+}
+
+fn call_digest(env: &Env, tag: &str, contract: &Address, function: &str, args: Vec<Val>) -> BytesN<32> {
+    let v = (Symbol::new(env, tag), env.ledger().network_id(), contract.clone(), Symbol::new(env, function), args);
     env.crypto().sha256(&v.to_xdr(env)).into()
 }
 

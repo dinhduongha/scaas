@@ -5,7 +5,7 @@
 //! id (P11, U8S-D8): such an attestation is never a signature, so it never makes a key able to authorise.
 #![no_std]
 use scaas_ua_common::{
-    h32, kem_pk, kem_pk_record_hash, kem_record_digest, kem_record_hash, portable_record_hash, pqz_key_hash,
+    attest_digest, h32, kem_pk, kem_pk_record_hash, kem_record_digest, kem_record_hash, portable_record_hash, pqz_key_hash,
     pqz_key_record_digest, registration_digest, Checked, FrostKey, KemKey, MemberSig, MsigStructure, MuSig2Key, Registration,
     UaAttrs, UaSig, WebAuthnKey, PURPOSE_KEM, PURPOSE_MEMBER, PURPOSE_POP_V2, PURPOSE_PQZ_KEY,
 };
@@ -367,16 +367,24 @@ fn stellar_account(env: &Env, id: &[u8; 32]) -> Address {
     Address::from_xdr(env, &b).unwrap_or_else(|_| fail(env, Error::Pop))
 }
 
+/// The relayer a write names and `attest_digest` of the write's arguments, `relayer` among them: hashed only when one is named.
+type By = Option<(Address, BytesN<32>)>;
+
+fn by(env: &Env, function: &str, relayer: &Option<Address>, args: impl FnOnce() -> Vec<Val>) -> By {
+    relayer.as_ref().map(|r| (r.clone(), attest_digest(env, &env.current_contract_address(), function, args())))
+}
+
 /// P11 rules 2, 3 (U8S-D8): a part the chain cannot verify, on the authority of `relayer`: `NotVerifiable` without one,
-/// `RelayerNotListed` outside the constructor's list, its `require_auth` over this very call, and the mark stored with the
-/// part. A part the chain verifies never comes here: it stays open to anyone, and `relayer` is not asked.
-fn attest(env: &Env, relayer: &Option<Address>) -> Checked {
-    let Some(r) = relayer else { fail(env, Error::NotVerifiable) };
+/// `RelayerNotListed` outside the constructor's list, its auth over this very call, and the mark stored with the part. The auth
+/// covers one word, the digest of every argument (owner 2026-11-01), so an entry does not carry them all a second time. A part
+/// the chain verifies never comes here: it stays open to anyone, and `relayer` is not asked.
+fn attest(env: &Env, by: &By) -> Checked {
+    let Some((r, digest)) = by else { fail(env, Error::NotVerifiable) };
     let list: Vec<Address> = env.storage().instance().get(&Key::Relayers).unwrap();
     if !list.contains(r) {
         fail(env, Error::RelayerNotListed);
     }
-    r.require_auth();
+    r.require_auth_for_args((digest.clone(),).into_val(env));
     Checked::Relayer(r.clone())
 }
 
@@ -393,7 +401,7 @@ fn attest(env: &Env, relayer: &Option<Address>) -> Checked {
 /// 2026-10-31, U8S-D1, every slot's weight counts, native ones included): with T the slots' total weight and N the
 /// threshold, T - min(weight) < N, else `short`. Returns who checked the signature.
 #[allow(clippy::too_many_arguments)]
-fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, digest: &BytesN<32>, sigs: &Vec<MemberSig>, portable: Option<&Hash<32>>, relayer: &Option<Address>, short: Error) -> Checked {
+fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, digest: &BytesN<32>, sigs: &Vec<MemberSig>, portable: Option<&Hash<32>>, relayer: &By, short: Error) -> Checked {
     let md = member_digest(env, ua, &ua_message(env, MSIG, purpose, digest));
     let pm = BytesN::from_array(env, &PURPOSE_MEMBER);
     let (threshold, count) = (u16_at(d, 0), u16_at(d, 2));
@@ -459,7 +467,7 @@ fn sig_fields_ok(kind: u32, s: &UaSig) -> bool {
 /// `(ua, purpose, rd)`, `Unauthorized`, an `msig` under `check_msig`'s portable rule (U8S-D1), a relayer-checked kind on
 /// `attest`; returns the bytes stored for it, the `signature` or EVM's `abi.encode(MemberSig[])`, and who checked them.
 #[allow(clippy::too_many_arguments)]
-fn check_portable(env: &Env, kind: u32, d: &Bytes, ua: &BytesN<32>, purpose: [u8; 32], rd: &Hash<32>, sig: &UaSig, relayer: &Option<Address>) -> (Bytes, Checked) {
+fn check_portable(env: &Env, kind: u32, d: &Bytes, ua: &BytesN<32>, purpose: [u8; 32], rd: &Hash<32>, sig: &UaSig, relayer: &By) -> (Bytes, Checked) {
     if !sig_fields_ok(kind, sig) {
         fail(env, Error::Unauthorized);
     }
@@ -633,7 +641,7 @@ fn webauthn_key_data(env: &Env, key: &WebAuthnKey) -> Bytes {
 /// kind, and an `msig` slot the chain cannot verify, is `attest`ed instead; the `pop`'s `Checked` marks the attributes it
 /// signed too; such a kind is never `signable` and keeps its key in `KeyR` (U8S-D8, P11.5).
 #[allow(clippy::too_many_arguments)]
-fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: Bytes, members: Vec<MemberSig>, pqz_pop: Bytes, relayer: &Option<Address>) -> BytesN<32> {
+fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: Bytes, members: Vec<MemberSig>, pqz_pop: Bytes, relayer: &By) -> BytesN<32> {
     if ![WEBAUTHN_P256, P256, ED25519, SECP256K1, MSIG, MLDSA44, MLDSA65].contains(&kind) && !relayer_checked(kind) {
         fail(env, Error::KindDisabled);
     }
@@ -756,8 +764,9 @@ impl UaRegistry {
         if kind == MSIG {
             fail(&env, Error::KeyData);
         }
+        let by = by(&env, "register", &relayer, || (kind, key_data.clone(), attrs.clone(), pop.clone(), pqz_pop.clone(), relayer.clone()).into_val(&env));
         let members = Vec::new(&env);
-        register_record(&env, kind, key_data, attrs, pop, members, pqz_pop, &relayer)
+        register_record(&env, kind, key_data, attrs, pop, members, pqz_pop, &by)
     }
 
     /// A `webauthn-p256` key from its fields (EVM `registerWebAuthn`, TS-D13): `x ‖ y ‖ rp_id_hash` is assembled here, so
@@ -770,9 +779,10 @@ impl UaRegistry {
         pqz_pop: Bytes,
         relayer: Option<Address>,
     ) -> BytesN<32> {
+        let by = by(&env, "register_webauthn", &relayer, || (key.clone(), attrs.clone(), pop.clone(), pqz_pop.clone(), relayer.clone()).into_val(&env));
         let d = webauthn_key_data(&env, &key);
         let members = Vec::new(&env);
-        register_record(&env, WEBAUTHN_P256, d, attrs, pop, members, pqz_pop, &relayer)
+        register_record(&env, WEBAUTHN_P256, d, attrs, pop, members, pqz_pop, &by)
     }
 
     /// An `msig` from its typed structure and member signatures (EVM `registerMsig`, TS-D10): the CTR-UA-09 key data is
@@ -785,23 +795,26 @@ impl UaRegistry {
         pqz_pop: Bytes,
         relayer: Option<Address>,
     ) -> BytesN<32> {
+        let by = by(&env, "register_msig", &relayer, || (structure.clone(), attrs.clone(), pop.clone(), pqz_pop.clone(), relayer.clone()).into_val(&env));
         let d = msig_key_data(&env, &structure);
-        register_record(&env, MSIG, d, attrs, Bytes::new(&env), pop, pqz_pop, &relayer)
+        register_record(&env, MSIG, d, attrs, Bytes::new(&env), pop, pqz_pop, &by)
     }
 
     /// `register` of `musig2-secp256k1` / `musig2-bn254` from its typed key (EVM `registerMuSig2`, TS-D13; U8S-D8): `aggKey ‖
     /// u16 n ‖ n × key` is assembled here, the same id and record as the packed `register`, which stays, as EVM.
     pub fn register_musig2(env: Env, kind: u32, key: MuSig2Key, attrs: UaAttrs, pop: Bytes, pqz_pop: Bytes, relayer: Option<Address>) -> BytesN<32> {
+        let by = by(&env, "register_musig2", &relayer, || (kind, key.clone(), attrs.clone(), pop.clone(), pqz_pop.clone(), relayer.clone()).into_val(&env));
         let d = musig2_key_data(&env, kind, &key);
         let members = Vec::new(&env);
-        register_record(&env, kind, d, attrs, pop, members, pqz_pop, &relayer)
+        register_record(&env, kind, d, attrs, pop, members, pqz_pop, &by)
     }
 
     /// `register` of `frost-secp256k1` / `frost-bn254` from its typed key (EVM `registerFrost`, TS-D13; U8S-D8), likewise.
     pub fn register_frost(env: Env, kind: u32, key: FrostKey, attrs: UaAttrs, pop: Bytes, pqz_pop: Bytes, relayer: Option<Address>) -> BytesN<32> {
+        let by = by(&env, "register_frost", &relayer, || (kind, key.clone(), attrs.clone(), pop.clone(), pqz_pop.clone(), relayer.clone()).into_val(&env));
         let d = frost_key_data(&env, kind, &key);
         let members = Vec::new(&env);
-        register_record(&env, kind, d, attrs, pop, members, pqz_pop, &relayer)
+        register_record(&env, kind, d, attrs, pop, members, pqz_pop, &by)
     }
 
     /// CTR-UA-17's Soroban form: `NotRegistered`, then `Unauthorized` unless `signable` and `purpose` is not a portable
@@ -900,7 +913,8 @@ impl UaRegistry {
             (Bytes::new(&env), r.pop_checked)
         } else {
             let rd = kem_record_digest(&env, &ua, version, &pk);
-            let part = check_portable(&env, r.kind, &r.key_data, &ua, PURPOSE_KEM, &rd, &sig, &relayer);
+            let by = by(&env, "set_kem_key", &relayer, || (ua.clone(), version, kem.clone(), sig.clone(), relayer.clone()).into_val(&env));
+            let part = check_portable(&env, r.kind, &r.key_data, &ua, PURPOSE_KEM, &rd, &sig, &by);
             if version > get::<u64>(&env, &Key::KemMax(ua.clone())).unwrap_or(0) {
                 put(&env, &Key::KemMax(ua.clone()), &version);
             }
@@ -933,7 +947,8 @@ impl UaRegistry {
         }
         let pqz_key_hash = pqz_key_hash(&env, &pqz_key);
         let rd = pqz_key_record_digest(&env, &ua, &pqz_key_hash, &pqz_pop_hash);
-        let (stored, checked) = check_portable(&env, r.kind, &r.key_data, &ua, PURPOSE_PQZ_KEY, &rd, &sig, &relayer);
+        let by = by(&env, "set_pqz_key", &relayer, || (ua.clone(), pqz_key.clone(), pqz_pop_hash.clone(), sig.clone(), relayer.clone()).into_val(&env));
+        let (stored, checked) = check_portable(&env, r.kind, &r.key_data, &ua, PURPOSE_PQZ_KEY, &rd, &sig, &by);
         let sig_hash = env.crypto().keccak256(&stored).into();
         put(&env, &k, &(pqz_key, stored, checked.clone(), pqz_pop_hash.clone()));
         bump_instance(&env);

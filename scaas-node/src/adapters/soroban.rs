@@ -556,7 +556,7 @@ impl ChainAdapter for SorobanAdapter {
         if registry_write {
             self.ua8_precheck(&op).await?;
         }
-        let tx = self.tx(lane, 0, valid_until, call.clone(), auth).map_err(rv)?;
+        let tx = self.tx(lane, 0, valid_until, call.clone(), auth.clone()).map_err(rv)?;
         let env = TransactionEnvelope::Tx(TransactionV1Envelope { tx: tx.clone(), signatures: Default::default() });
         let b64 = env.to_xdr_base64(Limits::none()).map_err(|e| SimError::Revert(e.to_string()))?;
         let sim = self
@@ -569,7 +569,7 @@ impl ChainAdapter for SorobanAdapter {
             }
         }
         let data = sim_data(&sim, self.max_deposit)?;
-        check_recorded_auth(&sim, &call).map_err(rv)?;
+        check_recorded_auth(&sim, &call, &auth).map_err(rv)?;
         if registry_write {
             check_no_other_signer(&sim).map_err(rv)?;
         }
@@ -1061,7 +1061,7 @@ pub fn job_tx(network: &[u8; 32], kind: Option<&str>, op: &Value, lane: &ScAddre
                 bail!("op.valid_until {valid_until} is not within {max} s after now ({now})");
             }
             let listed = policy.relayers.get().is_some_and(|l| l.contains(lane));
-            let (call, auth) = ua8_call_job(op, lane, registry, listed)?;
+            let (call, auth) = ua8_call_job(network, op, lane, registry, listed)?;
             Ok((call, auth, valid_until))
         }
         Some(k) => bail!("unknown job kind {k:?} (signed_op | ua_metatx | call)"),
@@ -1161,8 +1161,17 @@ pub fn ua_valid_until(call: &InvokeContractArgs) -> Result<u64> {
 /// NET-SOR-16's op digest (`scaas_ua_common::op_digest`): `sha256(xdr(Vec[Symbol("scaas_metaop_v1"), Bytes(network id),
 /// Address(contract), Symbol(fn), Vec(args)]))`, the arguments without `auth`.
 pub fn op_digest(network: &[u8; 32], contract: &ScAddress, function: &ScSymbol, args: &[ScVal]) -> Result<[u8; 32]> {
+    call_digest("scaas_metaop_v1", network, contract, function, args)
+}
+
+/// `scaas_ua_common::attest_digest`: what a relayer's auth covers, every argument of a registry write under a tag of its own.
+pub fn attest_digest(network: &[u8; 32], contract: &ScAddress, function: &ScSymbol, args: &[ScVal]) -> Result<[u8; 32]> {
+    call_digest("scaas_attest_v1", network, contract, function, args)
+}
+
+fn call_digest(tag: &str, network: &[u8; 32], contract: &ScAddress, function: &ScSymbol, args: &[ScVal]) -> Result<[u8; 32]> {
     let v = vec![
-        ScVal::Symbol(ScSymbol("scaas_metaop_v1".try_into()?)),
+        ScVal::Symbol(ScSymbol(tag.try_into()?)),
         ScVal::Bytes(network.to_vec().try_into()?),
         ScVal::Address(contract.clone()),
         ScVal::Symbol(function.clone()),
@@ -1289,14 +1298,15 @@ pub fn ua_metatx_job(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &
 }
 
 /// S14 / spec §8: a simulation (recording mode records every `require_auth`) whose auth holds a `SourceAccount` entry
-/// that is not rooted at exactly `call` (with nothing below) fails the job before submission: the node never lends a
-/// lane's authority to another call. Unreadable entries fail closed. The RPC records only for a transaction with no auth
+/// that is not rooted at exactly `call` (with nothing below), or at one of the job's `own` entries, fails the job before
+/// submission: the node never lends a lane's authority to another call. Unreadable entries fail closed. The RPC records only for a transaction with no auth
 /// entry; with one it enforces (`e2e_ua8_simulation_auth_mode`), so for a job carrying the lane's entry this reads back that
 /// entry alone, and the refusal of anything else is the host's, at simulation.
-fn check_recorded_auth(sim: &Value, call: &InvokeContractArgs) -> Result<()> {
+fn check_recorded_auth(sim: &Value, call: &InvokeContractArgs, own: &[SorobanAuthorizationEntry]) -> Result<()> {
     let ours = source_entry(call).root_invocation;
     for e in recorded_auth(sim)? {
-        if matches!(e.credentials, SorobanCredentials::SourceAccount) && e.root_invocation != ours {
+        let known = e.root_invocation == ours || own.iter().any(|o| o.root_invocation == e.root_invocation);
+        if matches!(e.credentials, SorobanCredentials::SourceAccount) && !known {
             bail!("the call asks for this lane's authority outside the job's own call (S14: a lane's authority is never lent)");
         }
     }
@@ -1575,8 +1585,9 @@ fn ua8_args(w: &Ua8Write, relayer: ScVal) -> Result<(&'static str, Vec<ScVal>)> 
 
 /// A `call` job (S15, UA8-D23): one registry write, built here from its named fields, on `params.ua_registry` only. No auth
 /// entry comes from the job. `relayer` is `None` or this lane, and this lane only when `listed` in `relayers()`; `Some(lane)`
-/// adds exactly one `SourceAccount` entry rooted at the call (as `relay_fee_job`).
-pub fn ua8_call_job(op: &Value, lane: &ScAddress, registry: &ScAddress, listed: bool) -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>)> {
+/// adds exactly one `SourceAccount` entry on the function, over the one word `attest` asks for: `attest_digest` of the call's own
+/// arguments, so what is hashed is what is sent (owner 2026-11-01).
+pub fn ua8_call_job(network: &[u8; 32], op: &Value, lane: &ScAddress, registry: &ScAddress, listed: bool) -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>)> {
     let (w, relayer) = ua8_write(op)?;
     if op["contract"].as_str().and_then(|c| ScAddress::from_str(c).ok()).as_ref() != Some(registry) {
         bail!("a call job targets params.ua_registry only, not {}", op["contract"]);
@@ -1588,7 +1599,12 @@ pub fn ua8_call_job(op: &Value, lane: &ScAddress, registry: &ScAddress, listed: 
     }
     let (f, args) = ua8_args(&w, relayer.as_ref().map_or(ScVal::Void, |r| ScVal::Address(r.clone())))?;
     let call = InvokeContractArgs { contract_address: registry.clone(), function_name: ScSymbol(f.try_into()?), args: args.try_into()? };
-    let auth = relayer.map(|_| source_entry(&call)).into_iter().collect();
+    if relayer.is_none() {
+        return Ok((call, vec![]));
+    }
+    let d = attest_digest(network, registry, &call.function_name, &call.args)?;
+    let word = InvokeContractArgs { contract_address: registry.clone(), function_name: call.function_name.clone(), args: vec![sc_bytes(&d)?].try_into()? };
+    let auth = vec![source_entry(&word)];
     Ok((call, auth))
 }
 
@@ -2261,17 +2277,17 @@ mod tests {
         let (call, auth, _) = ua_metatx_job(&NET7, &ua_op(CONTRACT, "ua_transfer", ua_ops(addr(LANE)).remove(0).2), &lane(), &policy()).unwrap();
         let b64 = |e: &SorobanAuthorizationEntry| json!(e.to_xdr_base64(Limits::none()).unwrap());
         let sim = |entries: Vec<Value>| json!({"results": [{"xdr": "AAAAAQ==", "auth": entries}]});
-        assert!(check_recorded_auth(&sim(vec![b64(&auth[0])]), &call).is_ok(), "the lane's entry for the call");
+        assert!(check_recorded_auth(&sim(vec![b64(&auth[0])]), &call, &[]).is_ok(), "the lane's entry for the call");
         let subject = SorobanAuthorizationEntry {
             credentials: SorobanCredentials::Address(SorobanAddressCredentials { address: sc(FROM), nonce: 1, signature_expiration_ledger: 9, signature: ScVal::Void }),
             root_invocation: inv(WALLET, "anything", vec![], vec![]),
         };
-        assert!(check_recorded_auth(&sim(vec![b64(&auth[0]), b64(&subject)]), &call).is_ok(), "a subject entry is not the lane's");
+        assert!(check_recorded_auth(&sim(vec![b64(&auth[0]), b64(&subject)]), &call, &[]).is_ok(), "a subject entry is not the lane's");
         let elsewhere = SorobanAuthorizationEntry {
             credentials: SorobanCredentials::SourceAccount,
             root_invocation: inv(CONTRACT, "transfer", vec![addr(LANE), addr(FROM), i128v(1)], vec![]),
         };
-        let e = check_recorded_auth(&sim(vec![b64(&auth[0]), b64(&elsewhere)]), &call).unwrap_err().to_string();
+        let e = check_recorded_auth(&sim(vec![b64(&auth[0]), b64(&elsewhere)]), &call, &[]).unwrap_err().to_string();
         assert!(e.contains("lane"), "{e}");
         let deeper = SorobanAuthorizationEntry {
             credentials: SorobanCredentials::SourceAccount,
@@ -2280,9 +2296,9 @@ mod tests {
                 sub_invocations: vec![inv(CONTRACT, "transfer", vec![addr(LANE)], vec![])].try_into().unwrap(),
             },
         };
-        assert!(check_recorded_auth(&sim(vec![b64(&deeper)]), &call).is_err(), "the call plus a lent sub-invocation");
-        assert!(check_recorded_auth(&sim(vec![json!("not xdr")]), &call).is_err(), "unreadable: fail closed");
-        assert!(check_recorded_auth(&json!({"results": [{"xdr": "AAAAAQ=="}]}), &call).is_ok(), "nothing recorded");
+        assert!(check_recorded_auth(&sim(vec![b64(&deeper)]), &call, &[]).is_err(), "the call plus a lent sub-invocation");
+        assert!(check_recorded_auth(&sim(vec![json!("not xdr")]), &call, &[]).is_err(), "unreadable: fail closed");
+        assert!(check_recorded_auth(&json!({"results": [{"xdr": "AAAAAQ=="}]}), &call, &[]).is_ok(), "nothing recorded");
     }
 
     /// Final review A-I1 note (spec §8): a lane that is a `G…` member of an `msig` never lends that membership to a job.
@@ -2310,7 +2326,7 @@ mod tests {
                 },
             };
             let sim = json!({"results": [{"xdr": "AAAAAQ==", "auth": [json!(member.to_xdr_base64(Limits::none()).unwrap())]}]});
-            let e = check_recorded_auth(&sim, &call).unwrap_err().to_string();
+            let e = check_recorded_auth(&sim, &call, &[]).unwrap_err().to_string();
             assert!(e.contains("lane"), "{f}: {e}");
         }
     }
@@ -2898,7 +2914,7 @@ mod tests {
         ]
     }
     fn job_of(op: &Value) -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>)> {
-        ua8_call_job(op, &lane(), &sc(REGISTRY), true)
+        ua8_call_job(&NET7, op, &lane(), &sc(REGISTRY), true)
     }
 
     /// The registry only: the job's `contract` is `params.ua_registry`; one field from a passing job.
@@ -3005,6 +3021,15 @@ mod tests {
     }
 
     /// `relayer` is `None` or this lane; `Some(lane)` adds exactly one `SourceAccount` entry rooted at the call.
+    /// `ua8_attest_digest_vector`'s bytes, built outside Rust: what the contract and the node must both answer.
+    #[test]
+    fn attest_digest_vector() {
+        let (net, c, sym) = ([0x11; 32], sc(CONTRACT), |s: &str| ScSymbol(s.try_into().unwrap()));
+        let args = [ScVal::U32(7), byt(&[1, 2]), ScVal::Void];
+        assert_eq!(hex(&attest_digest(&net, &c, &sym("register"), &args).unwrap()), "10c27d0f11b12ccc54ceeff725eea285795a0ea2d18bb5320b95c1c9e6e95b92");
+        assert_eq!(hex(&attest_digest(&net, &c, &sym("set_kem_key"), &args).unwrap()), "2da85a452358a70d013d2dbe4fd4136bec2234b25380f7f222fcfff6c712aa53");
+    }
+
     #[test]
     fn relayer_arg_is_the_lane() {
         for o in ops(&json!(LANE)) {
@@ -3015,7 +3040,10 @@ mod tests {
             }
             assert_eq!(auth.len(), 1, "{}", o["function"]);
             assert!(matches!(auth[0].credentials, SorobanCredentials::SourceAccount));
-            assert_eq!(auth[0].root_invocation, source_entry(&call).root_invocation);
+            let SorobanAuthorizedFunction::ContractFn(f) = &auth[0].root_invocation.function else { panic!() };
+            assert_eq!((&f.contract_address, &f.function_name), (&call.contract_address, &call.function_name));
+            let d = attest_digest(&NET7, &call.contract_address, &call.function_name, &call.args).unwrap();
+            assert_eq!(f.args.as_slice(), [byt(&d)], "one word, not the arguments again");
             assert!(auth[0].root_invocation.sub_invocations.is_empty());
             assert_eq!(call.args.last(), Some(&addr(LANE)));
         }

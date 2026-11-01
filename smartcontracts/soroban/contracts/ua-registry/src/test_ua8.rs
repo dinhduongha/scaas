@@ -13,6 +13,7 @@ use soroban_sdk::{
 };
 
 use crate::{
+    digest,
     test::{self, err, kem_key, msig, n, no_attrs, portable, portable_row, setup, structure_of, vecu8, Reg, PORTABLE},
     test_verify::{b, derived, hx, json, kind_of, n32},
     Error, Key, RegisteredRecord, UaKemKeySet, UaPqzKeySet, UaPqzPopStored, UaRegistered, UaRegistryClient,
@@ -1198,6 +1199,12 @@ fn ua8_relayer_unlisted_refused() {
     assert_eq!(err(portable(&env, "fndsa512").tried_by(&c, &Some(Address::generate(&env)))), Error::RelayerNotListed, "an empty list");
 }
 
+/// `relayer`'s auth of the one word `attest` asks for: the auth is an entry on `function`, over `digest_of`'s digest of `args`.
+fn authorise(env: &Env, c: &UaRegistryClient, relayer: &Address, function: &str, digest_of: &str, args: SVec<soroban_sdk::Val>) {
+    let d = attest_digest(env, &c.address, digest_of, args);
+    env.mock_auths(&[MockAuth { address: relayer, invoke: &MockAuthInvoke { contract: &c.address, fn_name: function, args: (d,).into_val(env), sub_invokes: &[] } }]);
+}
+
 /// Listed, no auth: the host refuses. An auth for another call is no auth either; only the relayer's auth of this very call
 /// stores, on each of the three writes.
 #[test]
@@ -1206,9 +1213,7 @@ fn ua8_relayer_must_authorise() {
     let relayer = Address::generate(&env);
     let c = test::deploy(&env, &[relayer.clone()]);
     let by = Some(relayer.clone());
-    let allow = |f: &str, args: soroban_sdk::Vec<soroban_sdk::Val>| {
-        env.mock_auths(&[MockAuth { address: &relayer, invoke: &MockAuthInvoke { contract: &c.address, fn_name: f, args, sub_invokes: &[] } }]);
-    };
+    let allow = |f: &str, args: soroban_sdk::Vec<soroban_sdk::Val>| authorise(&env, &c, &relayer, f, f, args);
     let r = portable(&env, "fndsa512");
     let args = |pop: &Bytes| (r.kind, r.kd.clone(), r.attrs.clone(), pop.clone(), r.pqz_pop.clone(), by.clone()).into_val(&env);
     assert_eq!(r.tried_by(&c, &by), Err(Ok(AUTH_REFUSED)));
@@ -1997,4 +2002,305 @@ fn ua8_record_bytes_round_trip() {
     }
     let file = std::fs::read_to_string(ROUND_TRIP).expect("vectors/ua8-roundtrip.json: run once with UA8_WRITE=1");
     assert_eq!(got, serde_json::from_str::<Value>(&file).unwrap(), "the answers moved from ua8-roundtrip.json");
+}
+
+// ---------- B7b (owner 2026-11-01): the relayer's auth is one word over every argument ----------
+
+/// A relayer-mode write with all its arguments, named, so one class can change at a time.
+#[derive(Clone)]
+enum Write {
+    Register { kind: u32, key_data: Bytes, attrs: UaAttrs, pop: Bytes, pqz_pop: Bytes, by: Option<Address> },
+    Msig { structure: MsigStructure, attrs: UaAttrs, pop: SVec<MemberSig>, pqz_pop: Bytes, by: Option<Address> },
+    Musig2 { kind: u32, key: MuSig2Key, attrs: UaAttrs, pop: Bytes, pqz_pop: Bytes, by: Option<Address> },
+    Frost { kind: u32, key: FrostKey, attrs: UaAttrs, pop: Bytes, pqz_pop: Bytes, by: Option<Address> },
+    SetKem { ua: BytesN<32>, version: u64, kem: KemKey, sig: UaSig, by: Option<Address> },
+    SetPqz { ua: BytesN<32>, key: Bytes, hash: BytesN<32>, sig: UaSig, by: Option<Address> },
+}
+
+impl Write {
+    fn function(&self) -> &'static str {
+        match self {
+            Write::Register { .. } => "register",
+            Write::Msig { .. } => "register_msig",
+            Write::Musig2 { .. } => "register_musig2",
+            Write::Frost { .. } => "register_frost",
+            Write::SetKem { .. } => "set_kem_key",
+            Write::SetPqz { .. } => "set_pqz_key",
+        }
+    }
+    /// Every argument in the entry's order, written here and not read from the contract: the test's own account of what is bound.
+    fn args(&self, env: &Env) -> SVec<soroban_sdk::Val> {
+        match self.clone() {
+            Write::Register { kind, key_data, attrs, pop, pqz_pop, by } => (kind, key_data, attrs, pop, pqz_pop, by).into_val(env),
+            Write::Msig { structure, attrs, pop, pqz_pop, by } => (structure, attrs, pop, pqz_pop, by).into_val(env),
+            Write::Musig2 { kind, key, attrs, pop, pqz_pop, by } => (kind, key, attrs, pop, pqz_pop, by).into_val(env),
+            Write::Frost { kind, key, attrs, pop, pqz_pop, by } => (kind, key, attrs, pop, pqz_pop, by).into_val(env),
+            Write::SetKem { ua, version, kem, sig, by } => (ua, version, kem, sig, by).into_val(env),
+            Write::SetPqz { ua, key, hash, sig, by } => (ua, key, hash, sig, by).into_val(env),
+        }
+    }
+    fn by(&self) -> Address {
+        match self {
+            Write::Register { by, .. } | Write::Msig { by, .. } | Write::Musig2 { by, .. } | Write::Frost { by, .. } | Write::SetKem { by, .. } | Write::SetPqz { by, .. } => by.clone().unwrap(),
+        }
+    }
+    fn tried(&self, c: &UaRegistryClient) -> Result<(), soroban_sdk::Error> {
+        let done = |x: bool, e: Option<soroban_sdk::Error>| if x { Ok(()) } else { Err(e.unwrap()) };
+        let id = |r: Tried<BytesN<32>>| done(r.is_ok(), r.err().map(|e| e.unwrap_or_else(|_| panic!("an invoke error"))));
+        let unit = |r: Tried<()>| done(r.is_ok(), r.err().map(|e| e.unwrap_or_else(|_| panic!("an invoke error"))));
+        match self {
+            Write::Register { kind, key_data, attrs, pop, pqz_pop, by } => id(c.try_register(kind, key_data, attrs, pop, pqz_pop, by)),
+            Write::Msig { structure, attrs, pop, pqz_pop, by } => id(c.try_register_msig(structure, attrs, pop, pqz_pop, by)),
+            Write::Musig2 { kind, key, attrs, pop, pqz_pop, by } => id(c.try_register_musig2(kind, key, attrs, pop, pqz_pop, by)),
+            Write::Frost { kind, key, attrs, pop, pqz_pop, by } => id(c.try_register_frost(kind, key, attrs, pop, pqz_pop, by)),
+            Write::SetKem { ua, version, kem, sig, by } => unit(c.try_set_kem_key(ua, version, kem, sig, by)),
+            Write::SetPqz { ua, key, hash, sig, by } => unit(c.try_set_pqz_key(ua, key, hash, sig, by)),
+        }
+    }
+}
+
+/// One relayer's digest of `w`, under `w`'s entry.
+fn attest_write(env: &Env, c: &UaRegistryClient, w: &Write) {
+    authorise(env, c, &w.by(), w.function(), w.function(), w.args(env));
+}
+
+type Change = (&'static str, fn(&Env, &mut Write, &Address));
+
+/// For each change, on a fresh registry: the attestation of `base` does not pass for the changed write, and that write stores on
+/// its own attestation, so the refusal was the hash and no rule of the contract.
+fn binds(base: fn(&Env, &UaRegistryClient, &Option<Address>) -> Write, changes: &[Change]) {
+    for (what, change) in changes {
+        let env = test::new_env();
+        let (r, other) = (Address::generate(&env), Address::generate(&env));
+        let c = test::deploy(&env, &[r.clone(), other.clone()]);
+        env.mock_all_auths();
+        let w = base(&env, &c, &Some(r));
+        let mut v = w.clone();
+        change(&env, &mut v, &other);
+        let name = w.function();
+        attest_write(&env, &c, &w);
+        assert_eq!(v.tried(&c), Err(AUTH_REFUSED), "{name}: {what}: the attestation of other arguments passed");
+        attest_write(&env, &c, &v);
+        assert_eq!(v.tried(&c), Ok(()), "{name}: {what}: refused for another reason than the hash");
+    }
+}
+
+fn set_row(env: &Env) -> Reg {
+    portable(env, &format!("mldsa65/{SET}"))
+}
+
+fn fndsa_write(env: &Env, _: &UaRegistryClient, by: &Option<Address>) -> Write {
+    let (r, s) = (portable(env, "fndsa512"), set_row(env));
+    Write::Register { kind: r.kind, key_data: r.kd, attrs: s.attrs, pop: r.pop, pqz_pop: s.pqz_pop, by: by.clone() }
+}
+
+fn attrs_of(w: &mut Write) -> &mut UaAttrs {
+    match w {
+        Write::Register { attrs, .. } | Write::Msig { attrs, .. } | Write::Musig2 { attrs, .. } | Write::Frost { attrs, .. } => attrs,
+        _ => panic!("no attrs"),
+    }
+}
+
+fn set_by(w: &mut Write, to: &Address) {
+    match w {
+        Write::Register { by, .. } | Write::Msig { by, .. } | Write::Musig2 { by, .. } | Write::Frost { by, .. } | Write::SetKem { by, .. } | Write::SetPqz { by, .. } => *by = Some(to.clone()),
+    }
+}
+
+/// Every argument class of `register`.
+#[test]
+fn ua8_attest_binds_register() {
+    binds(fndsa_write, &[
+        ("key_data", |e, w, _| if let Write::Register { key_data, .. } = w { *key_data = flipped(e, key_data) }),
+        ("pop", |e, w, _| if let Write::Register { pop, .. } = w { *pop = flipped(e, pop) }),
+        ("pqz_pop", |e, w, _| if let Write::Register { pqz_pop, .. } = w { *pqz_pop = Bytes::new(e) }),
+        ("attrs.pqz_key", |e, w, _| { let a = attrs_of(w); a.pqz_key = flipped(e, &a.pqz_key) }),
+        ("attrs.pqz_pop_hash", |e, w, _| {
+            let v = b(e, &[9; 64]);
+            let h: BytesN<32> = e.crypto().keccak256(&v).into();
+            attrs_of(w).pqz_pop_hash = h;
+            if let Write::Register { pqz_pop, .. } = w { *pqz_pop = v }
+        }),
+        ("attrs.kem.mlkem_ek", |e, w, _| { let a = attrs_of(w); a.kem.mlkem_ek = flipped(e, &a.kem.mlkem_ek) }),
+        ("attrs.kem.x25519", |e, w, _| attrs_of(w).kem.x25519 = n(e, [0x33; 32])),
+        ("attrs.kem_pk_hash", |e, w, _| { let a = attrs_of(w); a.kem = KemKey { scheme: 1, ..KemKey::none(e) }; a.kem_pk_hash = n(e, [0x44; 32]) }),
+        ("relayer", |_, w, other| set_by(w, other)),
+    ]);
+    // `kind`: two kinds of one key length, so only the hash can tell them apart
+    binds(|e, _, by| Write::Register { kind: 0x0133, key_data: b(e, &[7; 32]), attrs: no_attrs(e), pop: b(e, &[1; 64]), pqz_pop: Bytes::new(e), by: by.clone() }, &[
+        ("kind", |_, w, _| if let Write::Register { kind, .. } = w { *kind = 0x0103 }),
+    ]);
+}
+
+/// `fndsa512` members of the `msig` of `register_msig`, a third registered for the change of a member.
+fn msig_write(env: &Env, c: &UaRegistryClient, by: &Option<Address>) -> Write {
+    let members: StdVec<_> = (0..3u8).map(|i| {
+        let ua = c.register(&0x0132, &b(env, &[0x70 + i; 897]), &no_attrs(env), &b(env, &[1; 666]), &Bytes::new(env), by);
+        (0x0132u16, ua.to_array(), 2u16)
+    }).collect();
+    let m = msig(env, 4, &members[..2]);
+    let slots = [(0, vec![], vec![5; 666]), (1, vec![], vec![6; 666])];
+    Write::Msig { structure: m.s, attrs: no_attrs(env), pop: test::member_sigs(env, &slots), pqz_pop: Bytes::new(env), by: by.clone() }
+}
+
+fn structure(w: &mut Write) -> &mut MsigStructure {
+    match w {
+        Write::Msig { structure, .. } => structure,
+        _ => panic!("no structure"),
+    }
+}
+
+/// Every argument class of `register_msig`, a structure's fields and a slot's among them.
+#[test]
+fn ua8_attest_binds_register_msig() {
+    binds(msig_write, &[
+        ("structure.threshold", |_, w, _| structure(w).threshold = 3),
+        ("structure.members.weight", |_, w, _| {
+            let mut m = structure(w).members.get(1).unwrap();
+            m.weight = 3;
+            structure(w).members.set(1, m);
+        }),
+        ("structure.members.id", |e, w, _| {
+            let (s, third) = (structure(w), digest::ua_of(e, 0x0132, &b(e, &[0x72; 897])));
+            let mut ids: StdVec<_> = [s.members.get(0).unwrap().id, third].iter().map(|x| (0x0132u16, x.to_array(), 2u16)).collect();
+            ids.sort_by_key(|x| x.1);
+            *s = msig(e, 4, &ids).s;
+        }),
+        ("attrs", |e, w, _| *attrs_of(w) = set_row(e).attrs),
+        ("pop.sig", |e, w, _| if let Write::Msig { pop, .. } = w {
+            let mut s = pop.get(0).unwrap();
+            s.sig = flipped(e, &s.sig);
+            pop.set(0, s);
+        }),
+        ("relayer", |_, w, other| set_by(w, other)),
+    ]);
+}
+
+#[test]
+fn ua8_attest_binds_group_keys() {
+    binds(|e, _, by| {
+        let mut member_keys = SVec::new(e);
+        member_keys.push_back(b(e, &[2; 33]));
+        member_keys.push_back(b(e, &[3; 33]));
+        Write::Musig2 { kind: 0x0110, key: MuSig2Key { agg_key: b(e, &[1; 33]), member_keys }, attrs: no_attrs(e), pop: b(e, &[1; 64]), pqz_pop: Bytes::new(e), by: by.clone() }
+    }, &[
+        ("key.agg_key", |e, w, _| if let Write::Musig2 { key, .. } = w { key.agg_key = b(e, &[9; 33]) }),
+        ("key.member_keys", |e, w, _| if let Write::Musig2 { key, .. } = w { key.member_keys.set(1, b(e, &[8; 33])) }),
+        ("pop", |e, w, _| if let Write::Musig2 { pop, .. } = w { *pop = flipped(e, pop) }),
+        ("relayer", |_, w, other| set_by(w, other)),
+    ]);
+    binds(|e, _, by| {
+        let member = |x: u8| {
+            let mut commitments = SVec::new(e);
+            commitments.push_back(b(e, &[x; 33]));
+            commitments.push_back(b(e, &[x + 1; 33]));
+            FrostMember { commitments, r: b(e, &[x + 2; 33]), z: n(e, [x + 3; 32]) }
+        };
+        let mut members = SVec::new(e);
+        members.push_back(member(0x10));
+        members.push_back(member(0x20));
+        Write::Frost { kind: 0x0111, key: FrostKey { group_key: b(e, &[1; 33]), threshold: 2, members }, attrs: no_attrs(e), pop: b(e, &[1; 64]), pqz_pop: Bytes::new(e), by: by.clone() }
+    }, &[
+        ("key.group_key", |e, w, _| if let Write::Frost { key, .. } = w { key.group_key = b(e, &[9; 33]) }),
+        ("key.members.z", |e, w, _| if let Write::Frost { key, .. } = w {
+            let mut m = key.members.get(0).unwrap();
+            m.z = n(e, [0x77; 32]);
+            key.members.set(0, m);
+        }),
+        ("pop", |e, w, _| if let Write::Frost { pop, .. } = w { *pop = flipped(e, pop) }),
+        ("relayer", |_, w, other| set_by(w, other)),
+    ]);
+}
+
+/// A `fndsa512` holder, a second one for the change of `ua`.
+fn holder_of(env: &Env, c: &UaRegistryClient, by: &Option<Address>) -> BytesN<32> {
+    let id = c.register(&0x0132, &b(env, &[0x51; 897]), &no_attrs(env), &b(env, &[1; 666]), &Bytes::new(env), by);
+    c.register(&0x0132, &b(env, &[0x52; 897]), &no_attrs(env), &b(env, &[1; 666]), &Bytes::new(env), by);
+    id
+}
+
+fn other_holder(env: &Env) -> BytesN<32> {
+    digest::ua_of(env, 0x0132, &b(env, &[0x52; 897]))
+}
+
+#[test]
+fn ua8_attest_binds_set_kem_key() {
+    binds(|e, c, by| {
+        let ua = holder_of(e, c, by);
+        let k = kem_id(e, "fndsa512/v1");
+        Write::SetKem { ua, version: 1, kem: k.kem, sig: UaSig { key_data: Bytes::new(e), signature: b(e, &[1; 666]), members: SVec::new(e) }, by: by.clone() }
+    }, &[
+        ("ua", |e, w, _| if let Write::SetKem { ua, .. } = w { *ua = other_holder(e) }),
+        ("version", |_, w, _| if let Write::SetKem { version, .. } = w { *version = 2 }),
+        ("kem.mlkem_ek", |e, w, _| if let Write::SetKem { kem, .. } = w { kem.mlkem_ek = flipped(e, &kem.mlkem_ek) }),
+        ("kem.x25519", |e, w, _| if let Write::SetKem { kem, .. } = w { kem.x25519 = n(e, [0x33; 32]) }),
+        ("sig", |e, w, _| if let Write::SetKem { sig, .. } = w { sig.signature = flipped(e, &sig.signature) }),
+        ("relayer", |_, w, other| set_by(w, other)),
+    ]);
+}
+
+#[test]
+fn ua8_attest_binds_set_pqz_key() {
+    binds(|e, c, by| {
+        let (ua, s) = (holder_of(e, c, by), set_row(e));
+        Write::SetPqz { ua, key: s.attrs.pqz_key, hash: s.attrs.pqz_pop_hash, sig: UaSig { key_data: Bytes::new(e), signature: b(e, &[1; 666]), members: SVec::new(e) }, by: by.clone() }
+    }, &[
+        ("ua", |e, w, _| if let Write::SetPqz { ua, .. } = w { *ua = other_holder(e) }),
+        ("pqz_key", |e, w, _| if let Write::SetPqz { key, .. } = w { *key = flipped(e, key) }),
+        ("pqz_pop_hash", |e, w, _| if let Write::SetPqz { hash, .. } = w { *hash = n(e, [0x44; 32]) }),
+        ("sig", |e, w, _| if let Write::SetPqz { sig, .. } = w { sig.signature = flipped(e, &sig.signature) }),
+        ("relayer", |_, w, other| set_by(w, other)),
+    ]);
+}
+
+/// A digest of another entry over the same arguments is refused, under either entry's name: one word is not enough to confuse them.
+#[test]
+fn ua8_attest_hash_of_another_entry_refused() {
+    let env = test::new_env();
+    let r = Address::generate(&env);
+    let c = test::deploy(&env, &[r.clone()]);
+    env.mock_all_auths();
+    let w = fndsa_write(&env, &c, &Some(r.clone()));
+    for (entry, digest_of) in [("register", "register_msig"), ("register", "set_kem_key"), ("register_msig", "register"), ("set_kem_key", "set_kem_key")] {
+        authorise(&env, &c, &r, entry, digest_of, w.args(&env));
+        assert_eq!(w.tried(&c), Err(AUTH_REFUSED), "an auth on {entry} over a digest of {digest_of}");
+    }
+    attest_write(&env, &c, &w);
+    assert_eq!(w.tried(&c), Ok(()));
+}
+
+/// Only the relayer the write names is asked: another listed relayer's auth of the same digest stores nothing.
+#[test]
+fn ua8_attest_needs_the_named_relayer() {
+    let env = test::new_env();
+    let (r, other) = (Address::generate(&env), Address::generate(&env));
+    let c = test::deploy(&env, &[r.clone(), other.clone()]);
+    env.mock_all_auths();
+    let w = fndsa_write(&env, &c, &Some(r.clone()));
+    authorise(&env, &c, &other, w.function(), w.function(), w.args(&env));
+    assert_eq!(w.tried(&c), Err(AUTH_REFUSED));
+    env.set_auths(&[]);
+    assert_eq!(w.tried(&c), Err(AUTH_REFUSED), "no auth at all");
+    let none = match w.clone() {
+        Write::Register { kind, key_data, attrs, pop, pqz_pop, .. } => c.try_register(&kind, &key_data, &attrs, &pop, &pqz_pop, &None),
+        _ => unreachable!(),
+    };
+    assert_eq!(err(none), Error::NotVerifiable, "`Some(relayer)` is still required");
+    attest_write(&env, &c, &w);
+    assert_eq!(w.tried(&c), Ok(()));
+    let ua = digest::ua_of(&env, 0x0132, &portable(&env, "fndsa512").kd);
+    assert_eq!(c.record_of(&ua).unwrap().pop_checked, Checked::Relayer(r));
+    assert!(!c.receivable(&ua), "an attestation never makes a key able to authorise");
+}
+
+/// The digest against bytes built outside Rust, and `scaas-node`'s twin pins the same two words.
+#[test]
+fn ua8_attest_digest_vector() {
+    let env = test::new_env();
+    env.ledger().set_network_id([0x11; 32]);
+    let c = Address::from_str(&env, "CARCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEVQO");
+    let args: SVec<soroban_sdk::Val> = (7u32, b(&env, &[1, 2]), ()).into_val(&env);
+    let hex = |d: BytesN<32>| d.to_array().iter().map(|x| format!("{x:02x}")).collect::<StdVec<_>>().concat();
+    assert_eq!(hex(attest_digest(&env, &c, "register", args.clone())), "10c27d0f11b12ccc54ceeff725eea285795a0ea2d18bb5320b95c1c9e6e95b92");
+    assert_eq!(hex(attest_digest(&env, &c, "set_kem_key", args)), "2da85a452358a70d013d2dbe4fd4136bec2234b25380f7f222fcfff6c712aa53");
 }

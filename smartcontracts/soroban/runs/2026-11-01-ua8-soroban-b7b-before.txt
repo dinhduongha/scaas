@@ -1,0 +1,355 @@
+== e2e-ua8-local: bab5b43d+uncommitted 2026-11-01T14:46:11Z; stellar 30.0.0 (90a3d42d9327ccfaa0d301373766f45beae3e6d9); 8 GB available
+== build Wasm
+== build soroban
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/dex/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.78s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_dex.wasm (14694 bytes optimized (original size was 18122 bytes))
+    Wasm Hash: 3963d36f2e56afc818524f9d7e77f9802b46780250ac41394d8d01caa7990524
+    Wasm Size: 14694 bytes optimized (original size was 18122 bytes)
+    Exported Functions: 8 found
+      • __constructor
+      • cancel
+      • filled
+      • market
+      • order_hash
+      • set_market
+      • settle
+      • ua_cancel
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/token/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+   Compiling scaas-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/token)
+    Finished `release` profile [optimized] target(s) in 6.31s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_token.wasm (26651 bytes optimized (original size was 31198 bytes))
+    Wasm Hash: df541cf468add24ac137faadbed86723ac393ba2a800b969cade25c17470d259
+    Wasm Size: 26651 bytes optimized (original size was 31198 bytes)
+    Exported Functions: 30 found
+      • __constructor
+      • admin
+      • allowance
+      • approve
+      • balance
+      • burn
+      • burn_from
+      • decimals
+      • meta_pay_id
+      • mint
+      • mint_to_ua
+      • name
+      • pay
+      • pay_meta
+      • pay_to_ua
+      • ref_used
+      • registry
+      • symbol
+      • transfer
+      • transfer_from
+      • transfer_to_ua
+      • ua_balance
+      • ua_burn
+      • ua_cancel_nonce
+      • ua_nonce
+      • ua_pay
+      • ua_pay_meta
+      • ua_ref_used
+      • ua_trade
+      • ua_transfer
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/ua-registry/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.29s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_ua_registry.wasm (49317 bytes optimized (original size was 56399 bytes))
+    Wasm Hash: 8bb924b060237269da561b41ec090125b0a75f47e502b83ffb779703f0ce5a3a
+    Wasm Size: 49317 bytes optimized (original size was 56399 bytes)
+    Exported Functions: 31 found
+      • __constructor
+      • checked_of
+      • kem_key_at
+      • kem_key_of
+      • key_owner
+      • kind_name
+      • pop_of
+      • pqz_key_of
+      • pqz_key_sig_of
+      • pqz_pop_of
+      • receivable
+      • record_of
+      • register
+      • register_frost
+      • register_msig
+      • register_musig2
+      • register_webauthn
+      • registration_of
+      • relayers
+      • require_authorized
+      • set_kem_key
+      • set_pqz_key
+      • store_pqz_pop
+      • ua_at
+      • ua_count
+      • ua_of
+      • ua_of_frost
+      • ua_of_msig
+      • ua_of_musig2
+      • ua_of_webauthn
+      • ua_page
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/mandate/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.32s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_mandate.wasm (16554 bytes optimized (original size was 19087 bytes))
+    Wasm Hash: fca1b6562f7690f263dcf49c699c0b93f14633e9ba7b5acdb4512a7bb9ed46c9
+    Wasm Size: 16554 bytes optimized (original size was 19087 bytes)
+    Exported Functions: 12 found
+      • __constructor
+      • epoch
+      • mandate
+      • mtx_mandate_pay
+      • mtx_revoke
+      • mtx_set_mandate
+      • mtx_set_payee
+      • mtx_withdraw
+      • owner
+      • paid
+      • registry
+      • ua_nonce
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/relay-executor/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.28s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_relay_executor.wasm (1187 bytes optimized (original size was 1316 bytes))
+    Wasm Hash: e23732b60b42551e811c796609c60b8c6499205f1d2af816d558f6c4ba6c9c00
+    Wasm Size: 1187 bytes optimized (original size was 1316 bytes)
+    Exported Functions: 3 found
+      • __constructor
+      • exec
+      • router
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/relay-fee/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.18s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_relay_fee.wasm (7630 bytes optimized (original size was 8585 bytes))
+    Wasm Hash: 37330478cb2c3fc0c66a788f2efe8784edda1d5f9b1fd6b03a334cac97991a27
+    Wasm Size: 7630 bytes optimized (original size was 8585 bytes)
+    Exported Functions: 5 found
+      • __constructor
+      • executor
+      • relay
+      • relay_ref
+      • ua_relay
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/smart-key-account/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.31s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_smart_key_account.wasm (10529 bytes optimized (original size was 11975 bytes))
+    Wasm Hash: f02a6780eee4d41ba0489b8b8a258f42bc71be69ab9951ae5239c76d374c705d
+    Wasm Size: 10529 bytes optimized (original size was 11975 bytes)
+    Exported Functions: 5 found
+      • __check_auth
+      • __constructor
+      • add_key
+      • keys
+      • remove_key
+✅ Build Complete
+
+== EVM deploy build
+No files changed, compilation skipped
+== quickstart
+quickstart: scaas-stellar up (stellar/quickstart@sha256:e05d68bb3b2629a829310dc3434fc0ee3f801854bdfa1a7c8c362d2f1c9060f8), rpc http://127.0.0.1:31980/rpc
+quickstart: protocolVersion 30, testnet limits applied
+== anvil 31981, 31982
+== cargo test --test e2e_ua8
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.55s
+     Running tests/e2e_ua8.rs (target/debug/deps/e2e_ua8-41b6ff1d90a339a8)
+
+running 1 test
+test e2e_ua8_relayer_table ... LIMITS tx_max_instructions "400000000" tx_memory_limit 41943040 tx_max_disk_read_bytes 200000 tx_max_write_bytes 132096 tx_max_footprint_entries 400 tx_max_write_ledger_entries 200 tx_max_size_bytes 132096 contract_data_entry_size_bytes 65536 tx_max_contract_events_size_bytes 16384
+deploy.sh soroban local ua_registry: CARQRAE47XNAAQE4KPHFBN6PRIP6G5B7JLDNTHHSGGIYQVLQN7WYIOW2
+FIT TABLE register slhdsa128s no attributes #0: cpu_insns 2572276 used_cpu 2428469 mem_bytes 1441661 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 10084935 fee_charged 7624582
+FIT TABLE register slhdsa128s no attributes #1: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT TABLE register slhdsa128s no attributes #2: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT TABLE register slhdsa128s no attributes #3: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT TABLE register slhdsa128s no attributes #4: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT TABLE register slhdsa128s no attributes #5: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT TABLE register slhdsa128s no attributes #6: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT TABLE register slhdsa128s no attributes #7: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT TABLE register slhdsa128s no attributes #8: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT TABLE register slhdsa128s no attributes #9: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT TABLE register slhdsa128s no attributes #10: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT TABLE register slhdsa128s no attributes #11: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT TABLE register slhdsa128s no attributes #12: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT TABLE register fndsa512 no attributes #0: cpu_insns 1853677 used_cpu 1737508 mem_bytes 1386496 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 3048854 fee_charged 2301129
+FIT TABLE register fndsa512 no attributes #1: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #2: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #3: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #4: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #5: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #6: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #7: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #8: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #9: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #10: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #11: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #12: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #13: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #14: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #15: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #16: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #17: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #18: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 no attributes #19: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE register fndsa512 + PQZ + KEM n2048-kmax1024: cpu_insns 4448343 used_cpu 4211902 mem_bytes 1585169 read_bytes 0 write_bytes 21176 entries 9 writes 6 tx_size 40868 largest_entry 16636 events_bytes 2396 resource_fee 23537723 fee_charged 17803457
+FIT TABLE register fndsa512 + PQZ + KEM + proof n2048-kmax1024: cpu_insns 7962728 used_cpu 7582022 mem_bytes 1845899 read_bytes 0 write_bytes 49496 entries 10 writes 7 tx_size 97360 largest_entry 28312 events_bytes 2564 resource_fee 55098338 fee_charged 41682325
+FIT TABLE register fndsa512 for later writes n2048-kmax1024: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE set_pqz_key fndsa512 n2048-kmax1024: cpu_insns 3269826 used_cpu 3128371 mem_bytes 1527447 read_bytes 0 write_bytes 17312 entries 4 writes 1 tx_size 35168 largest_entry 17304 events_bytes 320 resource_fee 19312066 fee_charged 14605003
+FIT TABLE set_kem_key fndsa512 n2048-kmax1024: cpu_insns 1676948 used_cpu 1585386 mem_bytes 1387382 read_bytes 0 write_bytes 2640 entries 5 writes 2 tx_size 5820 largest_entry 2496 events_bytes 292 resource_fee 2970763 fee_charged 2241609
+FIT TABLE register fndsa512 + PQZ + KEM n2304-kmax4096: cpu_insns 4695463 used_cpu 4449518 mem_bytes 1605649 read_bytes 0 write_bytes 23224 entries 9 writes 6 tx_size 44964 largest_entry 18684 events_bytes 2396 resource_fee 25819599 fee_charged 19529908
+FIT TABLE register fndsa512 + PQZ + KEM + proof n2304-kmax4096: cpu_insns 8473678 used_cpu 8073320 mem_bytes 1886101 read_bytes 0 write_bytes 53736 entries 10 writes 7 tx_size 105840 largest_entry 30504 events_bytes 2564 resource_fee 59822528 fee_charged 45256618
+FIT TABLE register fndsa512 for later writes n2304-kmax4096: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE set_pqz_key fndsa512 n2304-kmax4096: cpu_insns 3516947 used_cpu 3365987 mem_bytes 1547927 read_bytes 0 write_bytes 19360 entries 4 writes 1 tx_size 39264 largest_entry 19352 events_bytes 320 resource_fee 21593942 fee_charged 16331454
+FIT TABLE set_kem_key fndsa512 n2304-kmax4096: cpu_insns 1676948 used_cpu 1585386 mem_bytes 1387382 read_bytes 0 write_bytes 2640 entries 5 writes 2 tx_size 5820 largest_entry 2496 events_bytes 292 resource_fee 2970763 fee_charged 2241609
+FIT TABLE register fndsa512 + PQZ + KEM n2560-kmax16384: cpu_insns 4942584 used_cpu 4687134 mem_bytes 1626129 read_bytes 0 write_bytes 25272 entries 9 writes 6 tx_size 49060 largest_entry 20732 events_bytes 2396 resource_fee 28101474 fee_charged 21256360
+FIT TABLE register fndsa512 + PQZ + KEM + proof n2560-kmax16384: cpu_insns 8980490 used_cpu 8560639 mem_bytes 1925991 read_bytes 0 write_bytes 57940 entries 10 writes 7 tx_size 114248 largest_entry 32660 events_bytes 2564 resource_fee 64506605 fee_charged 48800566
+FIT TABLE register fndsa512 for later writes n2560-kmax16384: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE set_pqz_key fndsa512 n2560-kmax16384: cpu_insns 3764067 used_cpu 3603603 mem_bytes 1568407 read_bytes 0 write_bytes 21408 entries 4 writes 1 tx_size 43360 largest_entry 21400 events_bytes 320 resource_fee 23875817 fee_charged 18057906
+FIT TABLE set_kem_key fndsa512 n2560-kmax16384: cpu_insns 1676948 used_cpu 1585386 mem_bytes 1387382 read_bytes 0 write_bytes 2640 entries 5 writes 2 tx_size 5820 largest_entry 2496 events_bytes 292 resource_fee 2970763 fee_charged 2241609
+FIT TABLE register fndsa512 + PQZ + KEM n2816-kmax65536: cpu_insns 5189705 used_cpu 4924750 mem_bytes 1646609 read_bytes 0 write_bytes 27320 entries 9 writes 6 tx_size 53156 largest_entry 22780 events_bytes 2396 resource_fee 30383345 fee_charged 22982811
+FIT TABLE register fndsa512 + PQZ + KEM + proof n2816-kmax65536: cpu_insns 9581595 used_cpu 9138625 mem_bytes 1972931 read_bytes 0 write_bytes 62928 entries 10 writes 7 tx_size 124224 largest_entry 35600 events_bytes 2564 resource_fee 70064215 fee_charged 53005417
+FIT TABLE register fndsa512 for later writes n2816-kmax65536: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4736 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215277
+FIT TABLE set_pqz_key fndsa512 n2816-kmax65536: cpu_insns 4011188 used_cpu 3841219 mem_bytes 1588887 read_bytes 0 write_bytes 23456 entries 4 writes 1 tx_size 47456 largest_entry 23448 events_bytes 320 resource_fee 26157687 fee_charged 19784357
+FIT TABLE set_kem_key fndsa512 n2816-kmax65536: cpu_insns 1676948 used_cpu 1585386 mem_bytes 1387382 read_bytes 0 write_bytes 2640 entries 5 writes 2 tx_size 5820 largest_entry 2496 events_bytes 292 resource_fee 2970763 fee_charged 2241609
+FIT TABLE register_musig2 bn254 16 keys: cpu_insns 1943895 used_cpu 1824256 mem_bytes 1400367 read_bytes 0 write_bytes 2284 entries 7 writes 4 tx_size 4296 largest_entry 1880 events_bytes 1984 resource_fee 2593277 fee_charged 1956525
+FIT TABLE register_frost bn254 16 of 16: REFUSED on chain, tx_size 44672: "FAILED" "AAAAAAADeRj/////AAAAAQAAAAAAAAAY/////QAAAAA="
+FIT TABLE register_msig 6 slhdsa128s slots + PQZ + KEM n2048-kmax1024: REFUSED sendTransaction, tx_size 134820: rejected before mempool: sendTransaction ERROR: "AAAAAASG0rz////vAAAAAA=="
+FIT TABLE register_msig 7 slhdsa128s slots + PQZ + KEM n2048-kmax1024: REFUSED sendTransaction, tx_size 151016: rejected before mempool: sendTransaction ERROR: "AAAAAAUQi6n////vAAAAAA=="
+FIT TABLE register_msig 8 slhdsa128s slots + PQZ + KEM n2048-kmax1024: REFUSED sendTransaction, tx_size 167212: rejected before mempool: sendTransaction ERROR: "AAAAAAWaRLb////vAAAAAA=="
+FIT TABLE register_msig 1 slhdsa128s slots + PQZ + KEM + proof n2048-kmax1024: cpu_insns 9279479 used_cpu 8853178 mem_bytes 1966009 read_bytes 0 write_bytes 55936 entries 9 writes 6 tx_size 110332 largest_entry 28312 events_bytes 1704 resource_fee 62376480 fee_charged 47188618
+FIT TABLE register_msig 5 slhdsa128s slots + PQZ + KEM + proof n2048-kmax1024: REFUSED sendTransaction, tx_size 175116: rejected before mempool: sendTransaction ERROR: "AAAAAAXc8er////vAAAAAA=="
+FIT TABLE register_msig 7 slhdsa128s slots + PQZ + KEM + proof n2048-kmax1024: REFUSED sendTransaction, tx_size 207508: rejected before mempool: sendTransaction ERROR: "AAAAAAbwY8j////vAAAAAA=="
+FIT TABLE register_msig 8 slhdsa128s slots + PQZ + KEM + proof n2048-kmax1024: REFUSED sendTransaction, tx_size 223704: rejected before mempool: sendTransaction ERROR: "AAAAAAd6HNb////vAAAAAA=="
+FIT TABLE register_msig heavy member, 4 light slhdsa128s n2048-kmax1024: cpu_insns 5348023 used_cpu 5049433 mem_bytes 1721415 read_bytes 0 write_bytes 9280 entries 10 writes 3 tx_size 19004 largest_entry 9036 events_bytes 1076 resource_fee 10268532 fee_charged 7763673
+FIT TABLE set_pqz_key 4 slhdsa128s slots n2048-kmax1024: cpu_insns 7944553 used_cpu 7623301 mem_bytes 2362422 read_bytes 0 write_bytes 48964 entries 4 writes 1 tx_size 97320 largest_entry 48956 events_bytes 320 resource_fee 54572933 fee_charged 41283019
+FIT TABLE register_msig heavy member, 5 light slhdsa128s n2048-kmax1024: cpu_insns 5871113 used_cpu 5545981 mem_bytes 1774673 read_bytes 0 write_bytes 9316 entries 11 writes 3 tx_size 19328 largest_entry 9072 events_bytes 1112 resource_fee 10310682 fee_charged 7795659
+FIT TABLE set_pqz_key 5 slhdsa128s slots n2048-kmax1024: cpu_insns 9085541 used_cpu 8720405 mem_bytes 2746010 read_bytes 0 write_bytes 57028 entries 4 writes 1 tx_size 113192 largest_entry 57020 events_bytes 320 resource_fee 63556530 fee_charged 48079922
+FIT TABLE register_msig heavy member, 6 light slhdsa128s n2048-kmax1024: cpu_insns 6394877 used_cpu 6044720 mem_bytes 1828132 read_bytes 0 write_bytes 9352 entries 12 writes 3 tx_size 19652 largest_entry 9108 events_bytes 1148 resource_fee 10352837 fee_charged 7827646
+FIT TABLE set_pqz_key 6 slhdsa128s slots n2048-kmax1024: cpu_insns 10245484 used_cpu 9835734 mem_bytes 3202494 read_bytes 0 write_bytes 65092 entries 4 writes 1 tx_size 129064 largest_entry 65084 events_bytes 320 resource_fee 72540145 fee_charged 54876838
+FIT TABLE register_msig heavy member, 7 light slhdsa128s n2048-kmax1024: cpu_insns 6936593 used_cpu 6542854 mem_bytes 1881792 read_bytes 0 write_bytes 9388 entries 13 writes 3 tx_size 19976 largest_entry 9144 events_bytes 1184 resource_fee 10395002 fee_charged 7859645
+FIT TABLE set_pqz_key 7 slhdsa128s slots n2048-kmax1024: REFUSED sendTransaction, tx_size 144936: rejected before mempool: sendTransaction ERROR: "AAAAAATb9KL////vAAAAAA=="
+FIT TABLE register_msig heavy member, 7 light slhdsa128s for KEM n2048-kmax1024: cpu_insns 6936593 used_cpu 6542854 mem_bytes 1881792 read_bytes 0 write_bytes 9388 entries 13 writes 3 tx_size 19976 largest_entry 9144 events_bytes 1184 resource_fee 10395002 fee_charged 7859645
+FIT TABLE set_kem_key 7 slhdsa128s slots n2048-kmax1024: cpu_insns 9831500 used_cpu 9426302 mem_bytes 3591809 read_bytes 0 write_bytes 58484 entries 5 writes 2 tx_size 115588 largest_entry 58340 events_bytes 292 resource_fee 65182466 fee_charged 49310376
+FIT TABLE register_msig heavy member, 8 light slhdsa128s for KEM n2048-kmax1024: cpu_insns 7452744 used_cpu 7042031 mem_bytes 1935653 read_bytes 0 write_bytes 9424 entries 14 writes 3 tx_size 20300 largest_entry 9180 events_bytes 1220 resource_fee 10437150 fee_charged 7891625
+FIT TABLE set_kem_key 8 slhdsa128s slots n2048-kmax1024: REFUSED on chain, tx_size 131460: "FAILED" "AAAAAAAJ0/j/////AAAAAQAAAAAAAAAY/////QAAAAA="
+FIT TABLE register_msig 16 fndsa512 slots + PQZ + KEM n2048-kmax1024: cpu_insns 12376312 used_cpu 11603485 mem_bytes 3097059 read_bytes 0 write_bytes 33916 entries 23 writes 5 tx_size 66764 largest_entry 16636 events_bytes 2076 resource_fee 37731717 fee_charged 28542880
+FIT TABLE register_msig 8 fndsa512 slots + PQZ + KEM + proof n2048-kmax1024: cpu_insns 11716441 used_cpu 11091122 mem_bytes 2326263 read_bytes 0 write_bytes 55036 entries 16 writes 6 tx_size 108696 largest_entry 28312 events_bytes 1956 resource_fee 61264713 fee_charged 46347777
+FIT TABLE register_msig 16 fndsa512 slots + PQZ + KEM + proof n2048-kmax1024: cpu_insns 15918723 used_cpu 14989461 mem_bytes 3360859 read_bytes 0 write_bytes 62236 entries 24 writes 6 tx_size 123256 largest_entry 28312 events_bytes 2244 resource_fee 69292350 fee_charged 52421771
+FIT TABLE register_msig heavy member, 15 light fndsa512 n2048-kmax1024: cpu_insns 6740316 used_cpu 6226336 mem_bytes 1733530 read_bytes 0 write_bytes 2476 entries 21 writes 3 tx_size 8192 largest_entry 2232 events_bytes 1472 resource_fee 2707308 fee_charged 2043619
+FIT TABLE set_pqz_key 15 fndsa512 slots n2048-kmax1024: cpu_insns 6462498 used_cpu 6198248 mem_bytes 2564700 read_bytes 0 write_bytes 29668 entries 4 writes 1 tx_size 56272 largest_entry 29660 events_bytes 320 resource_fee 33060545 fee_charged 25006494
+FIT TABLE register_msig heavy member, 15 light fndsa512 for KEM n2048-kmax1024: cpu_insns 6723491 used_cpu 6225512 mem_bytes 1733530 read_bytes 0 write_bytes 2476 entries 21 writes 3 tx_size 8192 largest_entry 2232 events_bytes 1472 resource_fee 2707294 fee_charged 2043607
+FIT TABLE set_kem_key 15 fndsa512 slots n2048-kmax1024: cpu_insns 4869620 used_cpu 4655263 mem_bytes 2424635 read_bytes 0 write_bytes 14996 entries 5 writes 2 tx_size 26924 largest_entry 14852 events_bytes 292 resource_fee 16719235 fee_charged 12643100
+FIT TABLE register_msig 6 slhdsa128s slots + PQZ + KEM n2304-kmax4096: REFUSED sendTransaction, tx_size 138916: rejected before mempool: sendTransaction ERROR: "AAAAAASn6L/////vAAAAAA=="
+FIT TABLE register_msig 7 slhdsa128s slots + PQZ + KEM n2304-kmax4096: REFUSED sendTransaction, tx_size 155112: rejected before mempool: sendTransaction ERROR: "AAAAAAUxobb////vAAAAAA=="
+FIT TABLE register_msig 8 slhdsa128s slots + PQZ + KEM n2304-kmax4096: REFUSED sendTransaction, tx_size 171308: rejected before mempool: sendTransaction ERROR: "AAAAAAW7Wrv////vAAAAAA=="
+FIT TABLE register_msig 1 slhdsa128s slots + PQZ + KEM + proof n2304-kmax4096: cpu_insns 9823557 used_cpu 9369879 mem_bytes 2007489 read_bytes 0 write_bytes 60176 entries 9 writes 6 tx_size 118812 largest_entry 30504 events_bytes 1704 resource_fee 66987127 fee_charged 50677061
+FIT TABLE register_msig 5 slhdsa128s slots + PQZ + KEM + proof n2304-kmax4096: REFUSED sendTransaction, tx_size 183596: rejected before mempool: sendTransaction ERROR: "AAAAAAYlB8r////vAAAAAA=="
+FIT TABLE register_msig 7 slhdsa128s slots + PQZ + KEM + proof n2304-kmax4096: REFUSED sendTransaction, tx_size 215988: rejected before mempool: sendTransaction ERROR: "AAAAAAc4ea/////vAAAAAA=="
+FIT TABLE register_msig 8 slhdsa128s slots + PQZ + KEM + proof n2304-kmax4096: REFUSED sendTransaction, tx_size 232184: rejected before mempool: sendTransaction ERROR: "AAAAAAfCMrv////vAAAAAA=="
+FIT TABLE register_msig heavy member, 4 light slhdsa128s n2304-kmax4096: cpu_insns 5340589 used_cpu 5048601 mem_bytes 1721415 read_bytes 0 write_bytes 9280 entries 10 writes 3 tx_size 19004 largest_entry 9036 events_bytes 1076 resource_fee 10268527 fee_charged 7763668
+FIT TABLE set_pqz_key 4 slhdsa128s slots n2304-kmax4096: cpu_insns 8191674 used_cpu 7860917 mem_bytes 2382902 read_bytes 0 write_bytes 51012 entries 4 writes 1 tx_size 101416 largest_entry 51004 events_bytes 320 resource_fee 56854805 fee_charged 43009471
+FIT TABLE register_msig heavy member, 5 light slhdsa128s n2304-kmax4096: cpu_insns 5871113 used_cpu 5545981 mem_bytes 1774673 read_bytes 0 write_bytes 9316 entries 11 writes 3 tx_size 19328 largest_entry 9072 events_bytes 1112 resource_fee 10310682 fee_charged 7795659
+FIT TABLE set_pqz_key 5 slhdsa128s slots n2304-kmax4096: cpu_insns 9332662 used_cpu 8958021 mem_bytes 2766490 read_bytes 0 write_bytes 59076 entries 4 writes 1 tx_size 117288 largest_entry 59068 events_bytes 320 resource_fee 65838400 fee_charged 49806373
+FIT TABLE register_msig heavy member, 6 light slhdsa128s n2304-kmax4096: cpu_insns 6403640 used_cpu 6043922 mem_bytes 1828132 read_bytes 0 write_bytes 9352 entries 12 writes 3 tx_size 19652 largest_entry 9108 events_bytes 1148 resource_fee 10352843 fee_charged 7827652
+FIT TABLE set_pqz_key 6 slhdsa128s slots n2304-kmax4096: REFUSED sendTransaction, tx_size 133160: rejected before mempool: sendTransaction ERROR: "AAAAAAR1seb////vAAAAAA=="
+FIT TABLE register_msig heavy member, 7 light slhdsa128s n2304-kmax4096: cpu_insns 6936593 used_cpu 6542854 mem_bytes 1881792 read_bytes 0 write_bytes 9388 entries 13 writes 3 tx_size 19976 largest_entry 9144 events_bytes 1184 resource_fee 10395002 fee_charged 7859645
+FIT TABLE set_pqz_key 7 slhdsa128s slots n2304-kmax4096: REFUSED sendTransaction, tx_size 149032: rejected before mempool: sendTransaction ERROR: "AAAAAAT+xjT////vAAAAAA=="
+FIT TABLE register_msig heavy member, 7 light slhdsa128s for KEM n2304-kmax4096: cpu_insns 6936593 used_cpu 6542854 mem_bytes 1881792 read_bytes 0 write_bytes 9388 entries 13 writes 3 tx_size 19976 largest_entry 9144 events_bytes 1184 resource_fee 10395002 fee_charged 7859645
+FIT TABLE set_kem_key 7 slhdsa128s slots n2304-kmax4096: cpu_insns 9831500 used_cpu 9426302 mem_bytes 3591809 read_bytes 0 write_bytes 58484 entries 5 writes 2 tx_size 115588 largest_entry 58340 events_bytes 292 resource_fee 65182466 fee_charged 49310376
+FIT TABLE register_msig heavy member, 8 light slhdsa128s for KEM n2304-kmax4096: cpu_insns 7465440 used_cpu 7043071 mem_bytes 1935653 read_bytes 0 write_bytes 9424 entries 14 writes 3 tx_size 20300 largest_entry 9180 events_bytes 1220 resource_fee 10437160 fee_charged 7891634
+FIT TABLE set_kem_key 8 slhdsa128s slots n2304-kmax4096: REFUSED on chain, tx_size 131460: "FAILED" "AAAAAAAJ0/j/////AAAAAQAAAAAAAAAY/////QAAAAA="
+FIT TABLE register_msig 16 fndsa512 slots + PQZ + KEM n2304-kmax4096: cpu_insns 12622244 used_cpu 11841567 mem_bytes 3117539 read_bytes 0 write_bytes 35964 entries 23 writes 5 tx_size 70860 largest_entry 18684 events_bytes 2076 resource_fee 40013591 fee_charged 30269330
+FIT TABLE register_msig 8 fndsa512 slots + PQZ + KEM + proof n2304-kmax4096: cpu_insns 12227391 used_cpu 11582420 mem_bytes 2366465 read_bytes 0 write_bytes 59276 entries 16 writes 6 tx_size 117176 largest_entry 30504 events_bytes 1956 resource_fee 65988905 fee_charged 49922071
+FIT TABLE register_msig 16 fndsa512 slots + PQZ + KEM + proof n2304-kmax4096: cpu_insns 16430091 used_cpu 15479353 mem_bytes 3401061 read_bytes 0 write_bytes 66476 entries 24 writes 6 tx_size 131736 largest_entry 30504 events_bytes 2244 resource_fee 74016541 fee_charged 55996065
+FIT TABLE register_msig heavy member, 15 light fndsa512 n2304-kmax4096: cpu_insns 6740316 used_cpu 6226336 mem_bytes 1733530 read_bytes 0 write_bytes 2476 entries 21 writes 3 tx_size 8192 largest_entry 2232 events_bytes 1472 resource_fee 2707308 fee_charged 2043619
+FIT TABLE set_pqz_key 15 fndsa512 slots n2304-kmax4096: cpu_insns 6709619 used_cpu 6435864 mem_bytes 2585180 read_bytes 0 write_bytes 31716 entries 4 writes 1 tx_size 60368 largest_entry 31708 events_bytes 320 resource_fee 35342414 fee_charged 26732945
+FIT TABLE register_msig heavy member, 15 light fndsa512 for KEM n2304-kmax4096: cpu_insns 6730846 used_cpu 6226136 mem_bytes 1733530 read_bytes 0 write_bytes 2476 entries 21 writes 3 tx_size 8192 largest_entry 2232 events_bytes 1472 resource_fee 2707300 fee_charged 2043612
+FIT TABLE set_kem_key 15 fndsa512 slots n2304-kmax4096: cpu_insns 4869620 used_cpu 4655263 mem_bytes 2424635 read_bytes 0 write_bytes 14996 entries 5 writes 2 tx_size 26924 largest_entry 14852 events_bytes 292 resource_fee 16719235 fee_charged 12643100
+FIT TABLE register_msig 6 slhdsa128s slots + PQZ + KEM n2560-kmax16384: REFUSED sendTransaction, tx_size 143012: rejected before mempool: sendTransaction ERROR: "AAAAAATKuk7////vAAAAAA=="
+FIT TABLE register_msig 7 slhdsa128s slots + PQZ + KEM n2560-kmax16384: REFUSED sendTransaction, tx_size 159208: rejected before mempool: sendTransaction ERROR: "AAAAAAVUc0X////vAAAAAA=="
+FIT TABLE register_msig 8 slhdsa128s slots + PQZ + KEM n2560-kmax16384: REFUSED sendTransaction, tx_size 175404: rejected before mempool: sendTransaction ERROR: "AAAAAAXeLEj////vAAAAAA=="
+FIT TABLE register_msig 1 slhdsa128s slots + PQZ + KEM + proof n2560-kmax16384: cpu_insns 10330370 used_cpu 9857200 mem_bytes 2047379 read_bytes 0 write_bytes 64380 entries 9 writes 6 tx_size 127220 largest_entry 32660 events_bytes 1704 resource_fee 71671209 fee_charged 54221007
+FIT TABLE register_msig 5 slhdsa128s slots + PQZ + KEM + proof n2560-kmax16384: REFUSED sendTransaction, tx_size 192004: rejected before mempool: sendTransaction ERROR: "AAAAAAZsgPr////vAAAAAA=="
+FIT TABLE register_msig 7 slhdsa128s slots + PQZ + KEM + proof n2560-kmax16384: REFUSED sendTransaction, tx_size 224396: rejected before mempool: sendTransaction ERROR: "AAAAAAd/8tD////vAAAAAA=="
+FIT TABLE register_msig 8 slhdsa128s slots + PQZ + KEM + proof n2560-kmax16384: REFUSED sendTransaction, tx_size 240592: rejected before mempool: sendTransaction ERROR: "AAAAAAgJq+r////vAAAAAA=="
+FIT TABLE register_msig heavy member, 4 light slhdsa128s n2560-kmax16384: cpu_insns 5340589 used_cpu 5048601 mem_bytes 1721415 read_bytes 0 write_bytes 9280 entries 10 writes 3 tx_size 19004 largest_entry 9036 events_bytes 1076 resource_fee 10268527 fee_charged 7763668
+FIT TABLE set_pqz_key 4 slhdsa128s slots n2560-kmax16384: cpu_insns 8438795 used_cpu 8098533 mem_bytes 2403382 read_bytes 0 write_bytes 53060 entries 4 writes 1 tx_size 105512 largest_entry 53052 events_bytes 320 resource_fee 59136681 fee_charged 44735922
+FIT TABLE register_msig heavy member, 5 light slhdsa128s n2560-kmax16384: cpu_insns 5871113 used_cpu 5545981 mem_bytes 1774673 read_bytes 0 write_bytes 9316 entries 11 writes 3 tx_size 19328 largest_entry 9072 events_bytes 1112 resource_fee 10310682 fee_charged 7795659
+FIT TABLE set_pqz_key 5 slhdsa128s slots n2560-kmax16384: cpu_insns 9579783 used_cpu 9195637 mem_bytes 2786970 read_bytes 0 write_bytes 61124 entries 4 writes 1 tx_size 121384 largest_entry 61116 events_bytes 320 resource_fee 68120276 fee_charged 51532824
+FIT TABLE register_msig heavy member, 6 light slhdsa128s n2560-kmax16384: cpu_insns 6403640 used_cpu 6043922 mem_bytes 1828132 read_bytes 0 write_bytes 9352 entries 12 writes 3 tx_size 19652 largest_entry 9108 events_bytes 1148 resource_fee 10352843 fee_charged 7827652
+FIT TABLE set_pqz_key 6 slhdsa128s slots n2560-kmax16384: REFUSED sendTransaction, tx_size 137256: rejected before mempool: sendTransaction ERROR: "AAAAAASYg3b////vAAAAAA=="
+FIT TABLE register_msig heavy member, 7 light slhdsa128s n2560-kmax16384: cpu_insns 6936593 used_cpu 6542854 mem_bytes 1881792 read_bytes 0 write_bytes 9388 entries 13 writes 3 tx_size 19976 largest_entry 9144 events_bytes 1184 resource_fee 10395002 fee_charged 7859645
+FIT TABLE set_pqz_key 7 slhdsa128s slots n2560-kmax16384: REFUSED sendTransaction, tx_size 153128: rejected before mempool: sendTransaction ERROR: "AAAAAAUhl8L////vAAAAAA=="
+FIT TABLE register_msig heavy member, 7 light slhdsa128s for KEM n2560-kmax16384: cpu_insns 6936593 used_cpu 6542854 mem_bytes 1881792 read_bytes 0 write_bytes 9388 entries 13 writes 3 tx_size 19976 largest_entry 9144 events_bytes 1184 resource_fee 10395002 fee_charged 7859645
+FIT TABLE set_kem_key 7 slhdsa128s slots n2560-kmax16384: cpu_insns 9831500 used_cpu 9426302 mem_bytes 3591809 read_bytes 0 write_bytes 58484 entries 5 writes 2 tx_size 115588 largest_entry 58340 events_bytes 292 resource_fee 65182466 fee_charged 49310376
+FIT TABLE register_msig heavy member, 8 light slhdsa128s for KEM n2560-kmax16384: cpu_insns 7461970 used_cpu 7043487 mem_bytes 1935653 read_bytes 0 write_bytes 9424 entries 14 writes 3 tx_size 20300 largest_entry 9180 events_bytes 1220 resource_fee 10437158 fee_charged 7891632
+FIT TABLE set_kem_key 8 slhdsa128s slots n2560-kmax16384: REFUSED on chain, tx_size 131460: "FAILED" "AAAAAAAJ0/j/////AAAAAQAAAAAAAAAY/////QAAAAA="
+FIT TABLE register_msig 16 fndsa512 slots + PQZ + KEM n2560-kmax16384: cpu_insns 12845094 used_cpu 12078733 mem_bytes 3138019 read_bytes 0 write_bytes 38012 entries 23 writes 5 tx_size 74956 largest_entry 20732 events_bytes 2076 resource_fee 42295442 fee_charged 31995765
+FIT TABLE register_msig 8 fndsa512 slots + PQZ + KEM + proof n2560-kmax16384: cpu_insns 12734205 used_cpu 12069741 mem_bytes 2406355 read_bytes 0 write_bytes 63480 entries 16 writes 6 tx_size 125584 largest_entry 32660 events_bytes 1956 resource_fee 70672985 fee_charged 53466017
+FIT TABLE register_msig 16 fndsa512 slots + PQZ + KEM + proof n2560-kmax16384: REFUSED sendTransaction, tx_size 140144: rejected before mempool: sendTransaction ERROR: "AAAAAASw4LH////vAAAAAA=="
+FIT TABLE register_msig heavy member, 15 light fndsa512 n2560-kmax16384: cpu_insns 6740316 used_cpu 6226336 mem_bytes 1733530 read_bytes 0 write_bytes 2476 entries 21 writes 3 tx_size 8192 largest_entry 2232 events_bytes 1472 resource_fee 2707308 fee_charged 2043619
+FIT TABLE set_pqz_key 15 fndsa512 slots n2560-kmax16384: cpu_insns 6956739 used_cpu 6673480 mem_bytes 2605660 read_bytes 0 write_bytes 33764 entries 4 writes 1 tx_size 64464 largest_entry 33756 events_bytes 320 resource_fee 37624287 fee_charged 28459396
+FIT TABLE register_msig heavy member, 15 light fndsa512 for KEM n2560-kmax16384: cpu_insns 6740965 used_cpu 6227168 mem_bytes 1733530 read_bytes 0 write_bytes 2476 entries 21 writes 3 tx_size 8192 largest_entry 2232 events_bytes 1472 resource_fee 2707308 fee_charged 2043619
+FIT TABLE set_kem_key 15 fndsa512 slots n2560-kmax16384: cpu_insns 4869620 used_cpu 4655263 mem_bytes 2424635 read_bytes 0 write_bytes 14996 entries 5 writes 2 tx_size 26924 largest_entry 14852 events_bytes 292 resource_fee 16719235 fee_charged 12643100
+FIT TABLE register_msig 6 slhdsa128s slots + PQZ + KEM n2816-kmax65536: REFUSED sendTransaction, tx_size 147108: rejected before mempool: sendTransaction ERROR: "AAAAAATti9v////vAAAAAA=="
+FIT TABLE register_msig 7 slhdsa128s slots + PQZ + KEM n2816-kmax65536: REFUSED sendTransaction, tx_size 163304: rejected before mempool: sendTransaction ERROR: "AAAAAAV3RNr////vAAAAAA=="
+FIT TABLE register_msig 8 slhdsa128s slots + PQZ + KEM n2816-kmax65536: REFUSED sendTransaction, tx_size 179500: rejected before mempool: sendTransaction ERROR: "AAAAAAYA/d7////vAAAAAA=="
+FIT TABLE register_msig 1 slhdsa128s slots + PQZ + KEM + proof n2816-kmax65536: REFUSED sendTransaction, tx_size 137196: rejected before mempool: sendTransaction ERROR: "AAAAAASaa3H////vAAAAAA=="
+FIT TABLE register_msig 5 slhdsa128s slots + PQZ + KEM + proof n2816-kmax65536: REFUSED sendTransaction, tx_size 201980: rejected before mempool: sendTransaction ERROR: "AAAAAAbBTmT////vAAAAAA=="
+FIT TABLE register_msig 7 slhdsa128s slots + PQZ + KEM + proof n2816-kmax65536: REFUSED sendTransaction, tx_size 234372: rejected before mempool: sendTransaction ERROR: "AAAAAAfUwDr////vAAAAAA=="
+FIT TABLE register_msig 8 slhdsa128s slots + PQZ + KEM + proof n2816-kmax65536: REFUSED sendTransaction, tx_size 250568: rejected before mempool: sendTransaction ERROR: "AAAAAAheeUX////vAAAAAA=="
+FIT TABLE register_msig heavy member, 4 light slhdsa128s n2816-kmax65536: cpu_insns 5342118 used_cpu 5048713 mem_bytes 1721415 read_bytes 0 write_bytes 9280 entries 10 writes 3 tx_size 19004 largest_entry 9036 events_bytes 1076 resource_fee 10268528 fee_charged 7763669
+FIT TABLE set_pqz_key 4 slhdsa128s slots n2816-kmax65536: cpu_insns 8685915 used_cpu 8336149 mem_bytes 2423862 read_bytes 0 write_bytes 55108 entries 4 writes 1 tx_size 109608 largest_entry 55100 events_bytes 320 resource_fee 61418550 fee_charged 46462373
+FIT TABLE register_msig heavy member, 5 light slhdsa128s n2816-kmax65536: cpu_insns 5870453 used_cpu 5545203 mem_bytes 1774673 read_bytes 0 write_bytes 9316 entries 11 writes 3 tx_size 19328 largest_entry 9072 events_bytes 1112 resource_fee 10310682 fee_charged 7795659
+FIT TABLE set_pqz_key 5 slhdsa128s slots n2816-kmax65536: cpu_insns 9826903 used_cpu 9433253 mem_bytes 2807450 read_bytes 0 write_bytes 63172 entries 4 writes 1 tx_size 125480 largest_entry 63164 events_bytes 320 resource_fee 70402152 fee_charged 53259276
+FIT TABLE register_msig heavy member, 6 light slhdsa128s n2816-kmax65536: cpu_insns 6391940 used_cpu 6043768 mem_bytes 1828132 read_bytes 0 write_bytes 9352 entries 12 writes 3 tx_size 19652 largest_entry 9108 events_bytes 1148 resource_fee 10352834 fee_charged 7827644
+FIT TABLE set_pqz_key 6 slhdsa128s slots n2816-kmax65536: REFUSED sendTransaction, tx_size 141352: rejected before mempool: sendTransaction ERROR: "AAAAAAS7VQn////vAAAAAA=="
+FIT TABLE register_msig heavy member, 7 light slhdsa128s n2816-kmax65536: cpu_insns 6931815 used_cpu 6543948 mem_bytes 1881792 read_bytes 0 write_bytes 9388 entries 13 writes 3 tx_size 19976 largest_entry 9144 events_bytes 1184 resource_fee 10394999 fee_charged 7859642
+FIT TABLE set_pqz_key 7 slhdsa128s slots n2816-kmax65536: REFUSED sendTransaction, tx_size 157224: rejected before mempool: sendTransaction ERROR: "AAAAAAVEaVb////vAAAAAA=="
+FIT TABLE register_msig heavy member, 7 light slhdsa128s for KEM n2816-kmax65536: cpu_insns 6939677 used_cpu 6544156 mem_bytes 1881792 read_bytes 0 write_bytes 9388 entries 13 writes 3 tx_size 19976 largest_entry 9144 events_bytes 1184 resource_fee 10395005 fee_charged 7859647
+FIT TABLE set_kem_key 7 slhdsa128s slots n2816-kmax65536: cpu_insns 9831500 used_cpu 9426302 mem_bytes 3591809 read_bytes 0 write_bytes 58484 entries 5 writes 2 tx_size 115588 largest_entry 58340 events_bytes 292 resource_fee 65182466 fee_charged 49310376
+FIT TABLE register_msig heavy member, 8 light slhdsa128s for KEM n2816-kmax65536: cpu_insns 7466480 used_cpu 7043175 mem_bytes 1935653 read_bytes 0 write_bytes 9424 entries 14 writes 3 tx_size 20300 largest_entry 9180 events_bytes 1220 resource_fee 10437161 fee_charged 7891635
+FIT TABLE set_kem_key 8 slhdsa128s slots n2816-kmax65536: REFUSED on chain, tx_size 131460: "FAILED" "AAAAAAAJ0/j/////AAAAAQAAAAAAAAAY/////QAAAAA="
+FIT TABLE register_msig 16 fndsa512 slots + PQZ + KEM n2816-kmax65536: cpu_insns 13119437 used_cpu 12316853 mem_bytes 3158499 read_bytes 0 write_bytes 40060 entries 23 writes 5 tx_size 79052 largest_entry 22780 events_bytes 2076 resource_fee 44577339 fee_charged 33722235
+FIT TABLE register_msig 8 fndsa512 slots + PQZ + KEM + proof n2816-kmax65536: REFUSED sendTransaction, tx_size 135560: rejected before mempool: sendTransaction ERROR: "AAAAAASLMCf////vAAAAAA=="
+FIT TABLE register_msig 16 fndsa512 slots + PQZ + KEM + proof n2816-kmax65536: REFUSED sendTransaction, tx_size 150120: rejected before mempool: sendTransaction ERROR: "AAAAAAUFrgb////vAAAAAA=="
+FIT TABLE register_msig heavy member, 15 light fndsa512 n2816-kmax65536: cpu_insns 6754704 used_cpu 6227488 mem_bytes 1733530 read_bytes 0 write_bytes 2476 entries 21 writes 3 tx_size 8192 largest_entry 2232 events_bytes 1472 resource_fee 2707319 fee_charged 2043629
+FIT TABLE set_pqz_key 15 fndsa512 slots n2816-kmax65536: cpu_insns 7203860 used_cpu 6911096 mem_bytes 2626140 read_bytes 0 write_bytes 35812 entries 4 writes 1 tx_size 68560 largest_entry 35804 events_bytes 320 resource_fee 39906164 fee_charged 30185848
+FIT TABLE register_msig heavy member, 15 light fndsa512 for KEM n2816-kmax65536: cpu_insns 6722443 used_cpu 6226448 mem_bytes 1733530 read_bytes 0 write_bytes 2476 entries 21 writes 3 tx_size 8192 largest_entry 2232 events_bytes 1472 resource_fee 2707293 fee_charged 2043606
+FIT TABLE set_kem_key 15 fndsa512 slots n2816-kmax65536: cpu_insns 4869620 used_cpu 4655263 mem_bytes 2424635 read_bytes 0 write_bytes 14996 entries 5 writes 2 tx_size 26924 largest_entry 14852 events_bytes 292 resource_fee 16719235 fee_charged 12643100
+FIT TABLE register mldsa65 Chain, relayer named #0: cpu_insns 5132608 used_cpu 4888137 mem_bytes 1475652 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12132 largest_entry 5944 events_bytes 2756 resource_fee 9454009 fee_charged 7147013
+FIT TABLE register mldsa65 Chain, relayer named #1: cpu_insns 5165786 used_cpu 4913146 mem_bytes 1477066 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12132 largest_entry 5944 events_bytes 2756 resource_fee 9340466 fee_charged 7061162
+FIT TABLE register mldsa65 Chain, relayer named #2: cpu_insns 5165786 used_cpu 4913146 mem_bytes 1477066 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12132 largest_entry 5944 events_bytes 2756 resource_fee 9340466 fee_charged 7061162
+FIT TABLE register mldsa65 Chain, relayer named #3: cpu_insns 5165786 used_cpu 4913146 mem_bytes 1477066 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12132 largest_entry 5944 events_bytes 2756 resource_fee 9340466 fee_charged 7061162
+FIT TABLE register mldsa65 Chain, relayer named #4: cpu_insns 5165786 used_cpu 4913146 mem_bytes 1477066 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12132 largest_entry 5944 events_bytes 2756 resource_fee 9340466 fee_charged 7061162
+FIT TABLE register mldsa65 Chain, relayer named #5: cpu_insns 5165786 used_cpu 4913146 mem_bytes 1477066 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12132 largest_entry 5944 events_bytes 2756 resource_fee 9340466 fee_charged 7061162
+FIT TABLE register mldsa65 Chain, relayer named #6: cpu_insns 5165786 used_cpu 4913146 mem_bytes 1477066 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12132 largest_entry 5944 events_bytes 2756 resource_fee 9340466 fee_charged 7061162
+FIT TABLE register mldsa65 Chain, relayer named #7: cpu_insns 5165786 used_cpu 4913146 mem_bytes 1477066 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12132 largest_entry 5944 events_bytes 2756 resource_fee 9340466 fee_charged 7061162
+FIT TABLE register mldsa65 Chain, relayer named #8: cpu_insns 5165786 used_cpu 4913146 mem_bytes 1477066 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12132 largest_entry 5944 events_bytes 2756 resource_fee 9340466 fee_charged 7061162
+FIT TABLE register mldsa65 Chain, relayer named #9: cpu_insns 5165786 used_cpu 4913146 mem_bytes 1477066 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12132 largest_entry 5944 events_bytes 2756 resource_fee 9340466 fee_charged 7061162
+FIT TABLE register mldsa65 Chain, relayer named #10: cpu_insns 5165786 used_cpu 4913146 mem_bytes 1477066 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12132 largest_entry 5944 events_bytes 2756 resource_fee 9340466 fee_charged 7061162
+FIT TABLE register mldsa65 Chain, relayer named #11: cpu_insns 5165786 used_cpu 4913146 mem_bytes 1477066 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12132 largest_entry 5944 events_bytes 2756 resource_fee 9340466 fee_charged 7061162
+FIT TABLE register mldsa65 Chain, relayer named #12: cpu_insns 5165786 used_cpu 4913146 mem_bytes 1477066 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12132 largest_entry 5944 events_bytes 2756 resource_fee 9340466 fee_charged 7061162
+FIT TABLE register mldsa65 Chain, relayer named #13: cpu_insns 5165786 used_cpu 4913146 mem_bytes 1477066 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12132 largest_entry 5944 events_bytes 2756 resource_fee 9340466 fee_charged 7061162
+FIT TABLE register mldsa65 Chain, relayer named #14: cpu_insns 5165786 used_cpu 4913146 mem_bytes 1477066 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12132 largest_entry 5944 events_bytes 2756 resource_fee 9340466 fee_charged 7061162
+FIT TABLE register mldsa65 Chain, relayer named #15: cpu_insns 5165786 used_cpu 4913146 mem_bytes 1477066 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12132 largest_entry 5944 events_bytes 2756 resource_fee 9340466 fee_charged 7061162
+FIT TABLE register_msig n=16 mldsa65 Chain + PQZ + KEM + proof n2816-kmax65536, relayer named: REFUSED sendTransaction, tx_size 234904: rejected before mempool: sendTransaction ERROR: "AAAAAAfi4az////vAAAAAA=="
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 197.73s
+
+== e2e-ua8-local: PASS

@@ -450,10 +450,11 @@ impl Node {
         let seq = self.adapter.sequence(lane).await.unwrap();
         let built = Built { job_id: 0, body: t.to_xdr(Limits::none()).unwrap(), valid_until: 0, meta: json!({}) };
         let signed = self.adapter.sign(built, lane, seq).await.unwrap();
-        self.adapter.submit(&signed).await.map_err(|e| format!("sendTransaction: {e:#}"))?;
+        let size = signed.raw.len();
+        self.adapter.submit(&signed).await.map_err(|e| format!("sendTransaction, tx_size {size}: {e:#}"))?;
         let r = await_tx(&signed.tx_id).await;
         if r["status"] != "SUCCESS" {
-            return Err(format!("on chain: {} {}", r["status"], r["resultXdr"]));
+            return Err(format!("on chain, tx_size {size}: {} {}", r["status"], r["resultXdr"]));
         }
         fit(what, &signed.tx_id).await;
         Ok(signed.tx_id)
@@ -946,7 +947,7 @@ async fn e2e_ua8_simulation_auth_mode() {
     // a part the host asks of nobody: what comes back for an entry nothing uses, and for none
     let op_of = |job: &Value| job["op"].clone();
     let j = g_member_job(&n, &ml, BYSTANDER, &me).await;
-    let (call, auth) = ua8_call_job(&op_of(&j), &lane, &registry, true).unwrap();
+    let (call, auth) = ua8_call_job(&network(), &op_of(&j), &lane, &registry, true).unwrap();
     assert_eq!(auth.len(), 1);
     let enforced = simulate(0, call.clone(), auth.clone()).await;
     println!("P1 auth = [lane entry], G member's slot, default mode: {}", sim_answer(&enforced));
@@ -963,7 +964,7 @@ async fn e2e_ua8_simulation_auth_mode() {
     let row_f = Rec::of_row(&row("registrations", "fndsa512"));
     let (f, args) = row_f.job_args(&me);
     let j = call_job(&n.registry, f, args);
-    let (call, auth) = ua8_call_job(&j["op"], &lane, &registry, true).unwrap();
+    let (call, auth) = ua8_call_job(&network(), &j["op"], &lane, &registry, true).unwrap();
     let ok = simulate(0, call, auth.clone()).await;
     let back = ok["results"][0]["auth"].as_array().cloned().unwrap_or_default();
     let same_entry = back.iter().all(|x| SorobanAuthorizationEntry::from_xdr_base64(x.as_str().unwrap(), Limits::none()).unwrap() == auth[0]);
@@ -1146,7 +1147,7 @@ async fn e2e_ua8_network_fit() {
         let kd = vec![0x80 + i; 32];
         let rec = Rec { kind: SLHDSA128S, key_data: kd.clone(), attrs: no_attrs(), pop: sig.clone(), pqz_pop: vec![] };
         let (f, args) = rec.job_args(&me);
-        let (call, auth) = ua8_call_job(&call_job(&n.registry, f, args)["op"], &lane, &registry, true).unwrap();
+        let (call, auth) = ua8_call_job(&network(), &call_job(&n.registry, f, args)["op"], &lane, &registry, true).unwrap();
         n.raw_send(&format!("register slhdsa128s #{i}"), 0, call, auth).await.unwrap();
         members.push((SLHDSA128S, rec.ua(), 1u16));
     }
@@ -1158,7 +1159,7 @@ async fn e2e_ua8_network_fit() {
     };
     let relayed = |rec: &Rec| {
         let (f, args) = rec.job_args(&me);
-        ua8_call_job(&call_job(&n.registry, f, args)["op"], &lane, &registry, true).unwrap()
+        ua8_call_job(&network(), &call_job(&n.registry, f, args)["op"], &lane, &registry, true).unwrap()
     };
     for (c, fits) in [(7, true), (8, false)] {
         let (call, auth) = relayed(&msig_of(0, c));
@@ -1166,20 +1167,19 @@ async fn e2e_ua8_network_fit() {
         println!("EDGE register {c} slhdsa128s slots: {r:?}");
         assert_eq!(r.is_ok(), fits, "the published limit of register moved: {r:?}");
     }
-    // `set_pqz_key`: the bytes rule, 6 slots at the smallest set and 5 at the largest; `Some(lane)` also carries every argument
-    // twice, in the lane's auth entry, which the unit host never saw
+    // `set_pqz_key`: the bytes rule, 6 slots at the smallest set and 5 at the largest
     for (k, c, set, fits) in [(1, 6, SETS[0], true), (1, 7, SETS[0], false), (2, 5, SETS[3], true), (2, 6, SETS[3], false)] {
         let (attrs, _, _) = set_attrs(set);
         let rec = msig_of(k, c);
         let (call, auth) = relayed(&rec);
         n.raw_send(&format!("register_msig {c} slhdsa128s slots ({set})"), 0, call, auth).await.unwrap();
         let args = json!({"ua": h(&rec.ua()), "pqz_key": h(&attrs.pqz_key), "pqz_pop_hash": h(&attrs.pqz_pop_hash), "sig": sig_json(MSIG, &rec.pop), "relayer": me});
-        let (call, auth) = ua8_call_job(&call_job(&n.registry, "set_pqz_key", args)["op"], &lane, &registry, true).unwrap();
+        let (call, auth) = ua8_call_job(&network(), &call_job(&n.registry, "set_pqz_key", args)["op"], &lane, &registry, true).unwrap();
         let r = n.raw_send(&format!("EDGE set_pqz_key {c} slhdsa128s slots {set}"), 0, call, auth).await;
         println!("EDGE set_pqz_key {c} slhdsa128s slots at {set}: {r:?}");
         assert_eq!(r.is_ok(), fits, "the published limit of set_pqz_key moved: {r:?}");
     }
-    // data: relayer mode with attributes at `register`, where the doubled arguments meet the transaction size
+    // data: relayer mode with attributes at `register`
     let (attrs, proof, _) = set_attrs(SETS[3]);
     for (c, proof) in [(5, vec![]), (6, vec![]), (5, proof.clone())] {
         let rec = Rec { attrs: attrs.clone(), pqz_pop: proof.clone(), ..msig_of(0, c) };
@@ -1195,15 +1195,6 @@ async fn e2e_ua8_network_fit() {
         let r = n.raw_send(&format!("register fndsa512 + PQZ + KEM {} {what}", SETS[3]), 0, call, auth).await;
         println!("EDGE register fndsa512 + PQZ + KEM {what}: {r:?}");
     }
-    // through the node: a job whose transaction passes simulation and is over `tx_max_size_bytes`, here 118 KB of arguments
-    // carried twice by naming a relayer on `Chain` parts
-    let big = Ms::new(16, pool[8..24].iter().map(|m| (m, 1)).collect());
-    let (attrs, proof, pqz_hash) = set_attrs(SETS[3]);
-    let (f, args) = big.rec(&big.every(), &attrs, &pqz_hash, proof).job_args(&me);
-    let (state, last, tx) = n.run(0, call_job(&n.registry, f, args)).await;
-    println!("EDGE node, transaction over tx_max_size_bytes: job {state}, signed {}, reason {}", tx.is_some(), last["error"]);
-    assert_eq!((state.as_str(), tx.is_none()), ("dead", true), "refused at build: {last}");
-    assert!(last["error"].as_str().unwrap_or_default().contains("tx_max_size_bytes"), "{last}");
 }
 
 /// A signed `ua_of` of padded key data, whose envelope `adapter` sends at exactly `target` bytes: the node's size is core's.
@@ -1248,6 +1239,20 @@ async fn e2e_ua8_tx_size_limit() {
         assert!(sent.is_err(), "{limit} + 4 B counted must be refused");
     }
 
+    // through the node: a job whose transaction passes simulation and is over `tx_max_size_bytes`, a proof no entry could hold
+    let big = vec![9; 140_000];
+    let f = row("registrations", "fndsa512");
+    let (mut attrs, _, _) = set_attrs(SETS[0]);
+    attrs.pqz_pop_hash = scaas_ua::keccak256(&big);
+    let rec = Rec { kind: FNDSA512, key_data: vec![0x77; 897], attrs, pop: hx(&f["pop"]), pqz_pop: vec![] };
+    let (fun, args) = rec.job_args(&json!(g(&key(0))));
+    assert!(table_row(&s, "register fndsa512 for the oversized job", fun, args).await);
+    let job = call_job(&s.registry, "store_pqz_pop", json!({"ua": h(&rec.ua()), "pqz_pop": h(&big)}));
+    let (state, last, tx) = s.run(0, job).await;
+    println!("EDGE node, transaction over tx_max_size_bytes: job {state}, signed {}, reason {}", tx.is_some(), last["error"]);
+    assert_eq!((state.as_str(), tx.is_none()), ("dead", true), "refused at build: {last}");
+    assert!(last["error"].as_str().unwrap_or_default().contains("tx_max_size_bytes"), "{last}");
+
     // over the 65,536 B entry limit: one write, no signature to make, so what simulation answers is all that is measured
     let (lane, registry, me) = (sc(&g(&key(0))), sc(&s.registry), json!(g(&key(0))));
     let proof = vec![7; 70_000];
@@ -1256,10 +1261,10 @@ async fn e2e_ua8_tx_size_limit() {
     let attrs = UAAttrs { pqz_pop_hash: scaas_ua::keccak256(&proof), ..attrs };
     let rec = Rec { kind: FNDSA512, key_data: hx(&f["keyData"]), attrs, pop: hx(&f["pop"]), pqz_pop: vec![] };
     let (fun, args) = rec.job_args(&me);
-    let (call, auth) = ua8_call_job(&call_job(&s.registry, fun, args)["op"], &lane, &registry, true).unwrap();
+    let (call, auth) = ua8_call_job(&network(), &call_job(&s.registry, fun, args)["op"], &lane, &registry, true).unwrap();
     s.raw_send("register fndsa512 for the entry limit", 0, call, auth).await.unwrap();
     let job = call_job(&s.registry, "store_pqz_pop", json!({"ua": h(&rec.ua()), "pqz_pop": h(&proof)}));
-    let (call, auth) = ua8_call_job(&job["op"], &lane, &registry, false).unwrap();
+    let (call, auth) = ua8_call_job(&network(), &job["op"], &lane, &registry, false).unwrap();
     let sim = simulate(0, call, auth).await;
     let data = SorobanTransactionData::from_xdr_base64(sim["transactionData"].as_str().unwrap_or_default(), Limits::none());
     let changes: Vec<usize> = sim["stateChanges"].as_array().into_iter().flatten()
@@ -1268,6 +1273,340 @@ async fn e2e_ua8_tx_size_limit() {
              sim.get("error").is_some(), data.as_ref().map(|d| d.resources.write_bytes).ok(), sim.as_object().map(|o| o.keys().cloned().collect::<Vec<_>>()));
     let (state, last, tx) = s.run(0, job).await;
     println!("ENTRY the same job through the node: job {state}, signed {}, reason {}", tx.is_some(), last["error"]);
+}
+
+// ---------- B7b: relayer mode, before and after the argument hash ----------
+
+/// One row of the table: every relayer-mode write as `raw_send` (junk signatures of the kind's length, which the chain stores
+/// unread), logged by name. The same test measured the contract before the owner's change of 2026-11-01, so a row's size is
+/// comparable across the two logs in `runs/`.
+async fn table_row(n: &Node, name: &str, f: &str, args: Value) -> bool {
+    let (lane, registry) = (sc(&g(&key(0))), sc(&n.registry));
+    let (call, auth) = ua8_call_job(&network(), &call_job(&n.registry, f, args)["op"], &lane, &registry, true).unwrap();
+    match n.raw_send(&format!("TABLE {name}"), 0, call, auth).await {
+        Ok(_) => true,
+        Err(e) => {
+            println!("FIT TABLE {name}: REFUSED {}", e.chars().take(170).collect::<String>().replace('\n', " "));
+            false
+        }
+    }
+}
+
+/// A slot kind's registered members, junk signatures of its length.
+struct Pool {
+    name: &'static str,
+    kind: u16,
+    sig: Vec<u8>,
+    ids: Vec<[u8; 32]>,
+}
+
+impl Pool {
+    async fn new(n: &Node, name: &'static str, kind: u16, key: usize, sig: usize, count: u8) -> Pool {
+        let (me, mut ids) = (json!(g(&key_of_lane())), vec![]);
+        for i in 0..count {
+            let rec = Rec { kind, key_data: vec![0x20 + i; key], attrs: no_attrs(), pop: vec![0x5a; sig], pqz_pop: vec![] };
+            let (f, args) = rec.job_args(&me);
+            assert!(table_row(n, &format!("register {name} no attributes #{i}"), f, args).await, "{name} #{i}");
+            ids.push(rec.ua());
+        }
+        ids.sort();
+        Pool { name, kind, sig: vec![0x5a; sig], ids }
+    }
+
+    fn slots(&self, indexes: impl Iterator<Item = u16>) -> Vec<MemberSig> {
+        indexes.map(|index| MemberSig { index, key_data: vec![], sig: self.sig.clone() }).collect()
+    }
+
+    /// `count` members from `start`, every one needed: `extra` on one weight only tells two records of the same members apart.
+    fn all_of(&self, start: usize, count: usize, extra: u16, attrs: &UAAttrs, pqz_pop: Vec<u8>) -> Rec {
+        let list: Vec<_> = self.ids[start..start + count].iter().enumerate().map(|(i, id)| (self.kind, *id, 1 + if i == 0 { extra } else { 0 })).collect();
+        let key_data = scaas_ua::encode_msig(count as u16 + extra, &list);
+        Rec { kind: MSIG, key_data, attrs: attrs.clone(), pop: encode_member_sigs(&self.slots(0..count as u16)), pqz_pop }
+    }
+
+    /// `count` members needed for a later record and one heavy member that registers alone: a later write's size does not need
+    /// a `register` of the same size. `(record, the later record's slots)`.
+    fn light_and_heavy(&self, start: usize, count: usize, weight: u16) -> (Rec, Vec<MemberSig>) {
+        let mut list: Vec<_> = self.ids[start..start + count].iter().map(|id| (self.kind, *id, 1u16)).collect();
+        list.push((self.kind, self.ids[start + count], count as u16 + weight));
+        let key_data = scaas_ua::encode_msig(count as u16, &list);
+        let at = count as u16; // sorted: the pool is, and the heavy member is the last of the slice
+        let rec = Rec { kind: MSIG, key_data, attrs: no_attrs(), pop: encode_member_sigs(&self.slots(at..at + 1)), pqz_pop: vec![] };
+        (rec, self.slots(0..count as u16))
+    }
+}
+
+fn key_of_lane() -> scaas_node::signer::LocalSigner {
+    key(0)
+}
+
+/// B8's table: every relayer-mode write's transaction, and the slot limits per set per kind, the edge and one refused, asserted.
+#[tokio::test]
+#[ignore]
+async fn e2e_ua8_relayer_table() {
+    network_limits().await;
+    let n = fresh_node().await;
+    let me = json!(g(&key(0)));
+    let kem1 = KemKey::from_kem_pk(&hx(&row("kemRecords", "mldsa65/v1")["kemPk"])).unwrap();
+    let slh = Pool::new(&n, "slhdsa128s", SLHDSA128S, 32, 7_856, 13).await;
+    let fnd = Pool::new(&n, "fndsa512", FNDSA512, 897, 666, 20).await;
+
+    // single keys and the two group kinds
+    for (r, set) in SETS.iter().enumerate() {
+        let (attrs, proof, _) = set_attrs(set);
+        let single = |i: u8, attrs: &UAAttrs, pqz_pop: Vec<u8>| Rec { kind: FNDSA512, key_data: vec![0x60 + i; 897], attrs: attrs.clone(), pop: vec![0x5a; 666], pqz_pop };
+        let (f, args) = single(4 * r as u8, &attrs, vec![]).job_args(&me);
+        table_row(&n, &format!("register fndsa512 + PQZ + KEM {set}"), f, args).await;
+        let (f, args) = single(4 * r as u8 + 1, &attrs, proof.clone()).job_args(&me);
+        table_row(&n, &format!("register fndsa512 + PQZ + KEM + proof {set}"), f, args).await;
+        let bare = single(4 * r as u8 + 2, &no_attrs(), vec![]);
+        let (f, args) = bare.job_args(&me);
+        table_row(&n, &format!("register fndsa512 for later writes {set}"), f, args).await;
+        let sig = sig_json(FNDSA512, &[0x5a; 666]);
+        table_row(&n, &format!("set_pqz_key fndsa512 {set}"), "set_pqz_key", json!({"ua": h(&bare.ua()), "pqz_key": h(&attrs.pqz_key), "pqz_pop_hash": h(&attrs.pqz_pop_hash), "sig": sig, "relayer": me})).await;
+        table_row(&n, &format!("set_kem_key fndsa512 {set}"), "set_kem_key", json!({"ua": h(&bare.ua()), "version": 1, "kem": kem_json(&kem1), "sig": sig, "relayer": me})).await;
+    }
+    let point = |i: u8| h(&[0x40 + i; 64]);
+    table_row(&n, "register_musig2 bn254 16 keys", "register_musig2", json!({"kind": 0x0112, "key": {"agg_key": point(0), "member_keys": (1..17).map(point).collect::<Vec<_>>()},
+        "attrs": attrs_json(&no_attrs()), "pop": h(&[0x5a; 64]), "pqz_pop": "0x", "relayer": me})).await;
+    // `UaRegistered` carries `key_data`, so the 16,384 B events limit is this kind's edge, and no relayer mode moves it
+    for t in [12u8, 13, 14, 15, 16] {
+        let member = |i: u8| json!({"commitments": (0..t).map(|c| point(i + c)).collect::<Vec<_>>(), "r": point(i), "z": h(&[i; 32])});
+        let ok = table_row(&n, &format!("register_frost bn254 {t} of 16"), "register_frost", json!({"kind": 0x0113, "key": {"group_key": point(99 + t), "threshold": t, "members": (0..16).map(member).collect::<Vec<_>>()},
+            "attrs": attrs_json(&no_attrs()), "pop": h(&[0x5a; 64]), "pqz_pop": "0x", "relayer": me})).await;
+        assert_eq!(ok, t <= 13, "register_frost {t} of 16: the limit moved");
+    }
+
+    // `msig` slots per set per kind: `register` with attributes, then the two later writes
+    for (si, set) in SETS.iter().enumerate() {
+        let (attrs, proof, _) = set_attrs(set);
+        let slh_pqz = [6, 5, 5, 5][si];
+        let cases = [(&slh, &[6usize, 7, 8][..], 7usize, &[1usize, 5, 7, 8][..], &[4usize, 5, 6, 7][..], slh_pqz, &[7usize, 8][..], 7usize),
+                     (&fnd, &[16, 17][..], 16, &[8, 16, 17][..], &[15][..], 15, &[15][..], 15)];
+        for (pool, plain, edge, whole, pqz, pqz_edge, kem, kem_edge) in cases {
+            let name = pool.name;
+            for &c in plain {
+                let (f, args) = pool.all_of(si, c, 0, &attrs, vec![]).job_args(&me);
+                let ok = table_row(&n, &format!("register_msig {c} {name} slots + PQZ + KEM {set}"), f, args).await;
+                assert_eq!(ok, c <= edge, "register_msig {c} {name} + PQZ + KEM at {set}: the limit moved");
+            }
+            for &c in whole {
+                let (f, args) = pool.all_of(si, c, 1, &attrs, proof.clone()).job_args(&me);
+                let ok = table_row(&n, &format!("register_msig {c} {name} slots + PQZ + KEM + proof {set}"), f, args).await;
+                assert_eq!(ok, c <= edge, "register_msig {c} {name} + PQZ + KEM + proof at {set}: the limit moved");
+            }
+            for &c in pqz {
+                let (rec, slots) = pool.light_and_heavy(si, c, 1);
+                let (f, args) = rec.job_args(&me);
+                assert!(table_row(&n, &format!("register_msig heavy member, {c} light {name} {set}"), f, args).await);
+                let ok = table_row(&n, &format!("set_pqz_key {c} {name} slots {set}"), "set_pqz_key", json!({"ua": h(&rec.ua()), "pqz_key": h(&attrs.pqz_key), "pqz_pop_hash": h(&attrs.pqz_pop_hash),
+                    "sig": sig_json(MSIG, &encode_member_sigs(&slots)), "relayer": me})).await;
+                assert_eq!(ok, c <= pqz_edge, "set_pqz_key {c} {name} at {set}: the limit moved");
+            }
+            for &c in kem {
+                let (rec, slots) = pool.light_and_heavy(si, c, 2);
+                let (f, args) = rec.job_args(&me);
+                assert!(table_row(&n, &format!("register_msig heavy member, {c} light {name} for KEM {set}"), f, args).await);
+                let ok = table_row(&n, &format!("set_kem_key {c} {name} slots {set}"), "set_kem_key", json!({"ua": h(&rec.ua()), "version": 1, "kem": kem_json(&kem1),
+                    "sig": sig_json(MSIG, &encode_member_sigs(&slots)), "relayer": me})).await;
+                assert_eq!(ok, c <= kem_edge, "set_kem_key {c} {name} at {set}: the limit moved");
+            }
+        }
+        // every member signing: the 16-member structure is the edge of a `fndsa512` slot, 17 members are refused above
+        let rec = fnd.all_of(si, 16, 2, &no_attrs(), vec![]);
+        let (f, args) = rec.job_args(&me);
+        assert!(table_row(&n, &format!("register_msig 16 fndsa512 slots, no attributes {set}"), f, args).await);
+        assert!(table_row(&n, &format!("set_pqz_key 16 fndsa512 slots {set}"), "set_pqz_key", json!({"ua": h(&rec.ua()), "pqz_key": h(&attrs.pqz_key), "pqz_pop_hash": h(&attrs.pqz_pop_hash),
+            "sig": sig_json(MSIG, &rec.pop), "relayer": me})).await);
+        assert!(table_row(&n, &format!("set_kem_key 16 fndsa512 slots {set}"), "set_kem_key", json!({"ua": h(&rec.ua()), "version": 1, "kem": kem_json(&kem1), "sig": sig_json(MSIG, &rec.pop), "relayer": me})).await);
+    }
+
+    // `Chain` parts with a relayer named: the unused entry
+    let ml: Vec<Ml> = (0..16).map(|i| Ml::new(0xa0 + i)).collect();
+    for (i, m) in ml.iter().enumerate() {
+        let (f, args) = ml_rec(m, &no_attrs(), &[0; 32], vec![]).job_args(&me);
+        table_row(&n, &format!("register mldsa65 Chain, relayer named #{i}"), f, args).await;
+    }
+    let (attrs, proof, pqz_hash) = set_attrs(SETS[3]);
+    let m16 = Ms::new(16, ml.iter().map(|m| (m, 1)).collect());
+    let (f, args) = m16.rec(&m16.every(), &attrs, &pqz_hash, proof).job_args(&me);
+    assert!(table_row(&n, "register_msig n=16 mldsa65 Chain + PQZ + KEM + proof n2816-kmax65536, relayer named", f, args).await, "naming a relayer no longer doubles it");
+}
+
+/// Simulated on the real host: the node's entry for `a` under the call of `b`.
+async fn entry_for_other_args(n: &Node, a: &Value, b: &Value) -> Value {
+    let (lane, registry) = (sc(&g(&key(0))), sc(&n.registry));
+    let (_, auth) = ua8_call_job(&network(), a, &lane, &registry, true).unwrap();
+    let (call, _) = ua8_call_job(&network(), b, &lane, &registry, true).unwrap();
+    simulate(0, call, auth).await
+}
+
+fn job_of(n: &Node, f: &str, args: Value) -> Value {
+    call_job(&n.registry, f, args)["op"].clone()
+}
+
+/// `a`'s own entry passes on the real host, and `b`'s does not pass for `a`: the contract's digest is the node's, on these bytes.
+async fn binds_on_host(n: &Node, what: &str, a: &Value, b: &Value) {
+    let own = entry_for_other_args(n, b, b).await;
+    assert!(own.get("error").is_none(), "{what}: the changed write on its own entry: {}", own["error"]);
+    let other = entry_for_other_args(n, a, b).await;
+    let refused = other["error"].as_str().unwrap_or_default().contains("Error(Auth,");
+    println!("BIND {what}: own entry passes, the entry of other arguments {}", if refused { "REFUSED Error(Auth)" } else { "PASSED" });
+    assert!(refused, "{what}: {}", sim_answer(&other));
+}
+
+fn flip_field(v: &mut Value) {
+    let mut b = hx(v);
+    let i = b.len() / 2;
+    b[i] ^= 1;
+    *v = json!(h(&b));
+}
+
+/// Owner 2026-11-01, on the real host: the entry of one argument set passes for no other, each class changed alone; a hash of
+/// another entry is refused; `Some(lane)` and the listed relayer's own auth are still needed. What holds an entry to its
+/// registry and network: `SourceAccount` signs nothing of its own, the transaction's signature covers it.
+#[tokio::test]
+#[ignore]
+async fn e2e_ua8_attestation_binds() {
+    let n = fresh_node().await;
+    let me = json!(g(&key(0)));
+    let (lane, registry) = (sc(&g(&key(0))), sc(&n.registry));
+    let (attrs, proof, _) = set_attrs(SETS[0]);
+    let f = row("registrations", "fndsa512");
+
+    // `register`
+    let rec = Rec { kind: FNDSA512, key_data: vec![0x31; 897], attrs: attrs.clone(), pop: hx(&f["pop"]), pqz_pop: proof.clone() };
+    let (fun, args) = rec.job_args(&me);
+    let base = job_of(&n, fun, args.clone());
+    let changed = |path: &[&str]| {
+        let mut o = base.clone();
+        let mut v = &mut o["args"];
+        for p in path {
+            v = &mut v[*p];
+        }
+        flip_field(v);
+        o
+    };
+    for (what, path) in [("key_data", &["key_data"][..]), ("pop", &["pop"]), ("attrs.pqz_key", &["attrs", "pqz_key"]), ("attrs.kem.mlkem_ek", &["attrs", "kem", "mlkem_ek"]), ("attrs.kem.x25519", &["attrs", "kem", "x25519"])] {
+        binds_on_host(&n, &format!("register {what}"), &base, &changed(path)).await;
+    }
+    let mut o = base.clone();
+    o["args"]["pqz_pop"] = json!("0x");
+    binds_on_host(&n, "register pqz_pop", &base, &o).await;
+    let mut o = base.clone();
+    o["args"]["attrs"]["pqz_pop_hash"] = json!(h(&scaas_ua::keccak256(&[7; 8])));
+    o["args"]["pqz_pop"] = json!(h(&[7; 8]));
+    binds_on_host(&n, "register attrs.pqz_pop_hash", &base, &o).await;
+    let (k1, k2) = (json!({"kind": SLHDSA128S, "key_data": h(&[3; 32]), "attrs": attrs_json(&no_attrs()), "pop": h(&[1; 8]), "pqz_pop": "0x", "relayer": me}), 0x0103);
+    let mut k = k1.clone();
+    k["kind"] = json!(k2);
+    binds_on_host(&n, "register kind", &job_of(&n, "register", k1), &job_of(&n, "register", k)).await;
+
+    // refused for what it is, not for what it asks: `None` on the same record, the other lane's name, no entry at all
+    let (call, _) = ua8_call_job(&network(), &base, &lane, &registry, true).unwrap();
+    let mut none = base.clone();
+    none["args"]["relayer"] = Value::Null;
+    let (no_relayer, no_entry) = ua8_call_job(&network(), &none, &lane, &registry, true).unwrap();
+    assert!(no_entry.is_empty());
+    let r = simulate(0, no_relayer, vec![]).await;
+    println!("BIND relayer = None: {}", sim_answer(&r));
+    assert!(r["error"].as_str().unwrap_or_default().contains("#11"), "NotVerifiable");
+    let (_, auth) = ua8_call_job(&network(), &base, &lane, &registry, true).unwrap();
+    let r = simulate(1, call.clone(), auth.clone()).await;
+    println!("BIND the entry sent by another source than the named relayer: {}", sim_answer(&r));
+    assert!(r["error"].as_str().unwrap_or_default().contains("Error(Auth,"), "the named relayer's auth is needed");
+
+    // a hash of another entry, the right function name over it; the entry on another registry
+    let word = |network_id: &[u8; 32], contract: &ScAddress, digest_of: &str, on: &ScSymbol, at: &ScAddress| {
+        let d = scaas_node::adapters::soroban::attest_digest(network_id, contract, &sym(digest_of), &call.args).unwrap();
+        let root = InvokeContractArgs { contract_address: at.clone(), function_name: on.clone(), args: vec![sc_bytes(&d)].try_into().unwrap() };
+        SorobanAuthorizationEntry {
+            credentials: stellar_xdr::SorobanCredentials::SourceAccount,
+            root_invocation: stellar_xdr::SorobanAuthorizedInvocation { function: stellar_xdr::SorobanAuthorizedFunction::ContractFn(root), sub_invocations: Default::default() },
+        }
+    };
+    let other = sc(&deploy_sh("ua_registry", &secret(DEPLOYER), &["--relayers", &format!("[\"{}\"]", g(&key(0)))]));
+    let cases = [
+        ("a digest of set_kem_key, on register", word(&network(), &registry, "set_kem_key", &sym("register"), &registry)),
+        ("a digest of register_msig, on register", word(&network(), &registry, "register_msig", &sym("register"), &registry)),
+        ("a digest of register, on set_kem_key", word(&network(), &registry, "register", &sym("set_kem_key"), &registry)),
+        ("a digest of register at another registry", word(&network(), &other, "register", &sym("register"), &registry)),
+        ("this digest, on another registry", word(&network(), &registry, "register", &sym("register"), &other)),
+        ("a digest of register on another network", word(&[0x11; 32], &registry, "register", &sym("register"), &registry)),
+    ];
+    for (what, e) in cases {
+        let r = simulate(0, call.clone(), vec![e]).await;
+        println!("BIND {what}: {}", sim_answer(&r));
+        assert!(r["error"].as_str().unwrap_or_default().contains("Error(Auth,"), "{what}");
+    }
+    // the network: a `SourceAccount` entry has no preimage, the transaction's signature is what names the network
+    let mut cfg = chain_cfg(false);
+    cfg.params.insert("network_passphrase".into(), "Another network".into());
+    let foreign = SorobanAdapter::new(&cfg, &[key(0), key(1)]).unwrap();
+    let sim = simulate(0, call.clone(), auth.clone()).await;
+    let mut data = SorobanTransactionData::from_xdr_base64(sim["transactionData"].as_str().unwrap(), Limits::none()).unwrap();
+    data.resource_fee += data.resource_fee * 15 / 100;
+    let t = tx(0, 0, 100 + data.resource_fee as u32, call.clone(), auth.clone(), TransactionExt::V1(data));
+    let built = Built { job_id: 0, body: t.to_xdr(Limits::none()).unwrap(), valid_until: 0, meta: json!({}) };
+    let signed = foreign.sign(built, 0, n.adapter.sequence(0).await.unwrap()).await.unwrap();
+    let sent = n.adapter.submit(&signed).await;
+    println!("BIND the same transaction signed for another network: {sent:?}");
+    assert!(sent.is_err(), "refused before any entry is read");
+
+    // the base write itself lands, marked, and authorises nothing
+    assert!(table_row(&n, "register fndsa512, its entry", fun, args).await);
+    assert_eq!(n.checked_of(&rec.ua()).await[0], (2, Some(g(&key(0)))));
+    n.rec(&rec.ua()).await.eq("BIND: Soroban against the arguments", &rec);
+    assert_eq!(read(&n.registry, "receivable", vec![sc_bytes(&rec.ua())]).await, ScVal::Bool(false));
+    let ua = rec.ua();
+
+    // `set_kem_key`, `set_pqz_key`
+    let kem1 = KemKey::from_kem_pk(&hx(&row("kemRecords", "mldsa65/v1")["kemPk"])).unwrap();
+    let sig = sig_json(FNDSA512, &[0x5a; 666]);
+    let kem_base = job_of(&n, "set_kem_key", json!({"ua": h(&ua), "version": 1, "kem": kem_json(&kem1), "sig": sig, "relayer": me}));
+    let flipped = |base: &Value, path: &[&str]| {
+        let mut o = base.clone();
+        let mut v = &mut o["args"];
+        for p in path {
+            v = &mut v[*p];
+        }
+        flip_field(v);
+        o
+    };
+    for (what, path) in [("kem.mlkem_ek", &["kem", "mlkem_ek"][..]), ("kem.x25519", &["kem", "x25519"]), ("sig.signature", &["sig", "signature"])] {
+        binds_on_host(&n, &format!("set_kem_key {what}"), &kem_base, &flipped(&kem_base, path)).await;
+    }
+    let mut v2 = kem_base.clone();
+    v2["args"]["version"] = json!(2);
+    binds_on_host(&n, "set_kem_key version", &kem_base, &v2).await;
+    let bare = Rec { kind: FNDSA512, key_data: vec![0x32; 897], attrs: no_attrs(), pop: hx(&f["pop"]), pqz_pop: vec![] };
+    let (fun, args) = bare.job_args(&me);
+    assert!(table_row(&n, "register fndsa512, a second holder", fun, args).await);
+    let mut u2 = kem_base.clone();
+    u2["args"]["ua"] = json!(h(&bare.ua()));
+    binds_on_host(&n, "set_kem_key ua", &kem_base, &u2).await;
+    let pqz_base = job_of(&n, "set_pqz_key", json!({"ua": h(&bare.ua()), "pqz_key": h(&attrs.pqz_key), "pqz_pop_hash": h(&attrs.pqz_pop_hash), "sig": sig, "relayer": me}));
+    for (what, path) in [("pqz_key", &["pqz_key"][..]), ("pqz_pop_hash", &["pqz_pop_hash"]), ("sig.signature", &["sig", "signature"])] {
+        binds_on_host(&n, &format!("set_pqz_key {what}"), &pqz_base, &flipped(&pqz_base, path)).await;
+    }
+    let third = Rec { key_data: vec![0x33; 897], ..bare.clone() };
+    let (fun, args) = third.job_args(&me);
+    assert!(table_row(&n, "register fndsa512, a third holder", fun, args).await);
+    let mut u2 = pqz_base.clone();
+    u2["args"]["ua"] = json!(h(&third.ua()));
+    binds_on_host(&n, "set_pqz_key ua", &pqz_base, &u2).await;
+
+    // `register_msig`, a slot and the structure
+    let slh = Pool::new(&n, "slhdsa128s", SLHDSA128S, 32, 7_856, 3).await;
+    let m = slh.all_of(0, 2, 0, &no_attrs(), vec![]);
+    let (fun, args) = m.job_args(&me);
+    let base = job_of(&n, fun, args);
+    let m2 = slh.all_of(1, 2, 0, &no_attrs(), vec![]);
+    let (fun, args) = m2.job_args(&me);
+    binds_on_host(&n, "register_msig structure.members", &base, &job_of(&n, fun, args)).await;
+    let mut o = base.clone();
+    flip_field(&mut o["args"]["pop"][0]["sig"]);
+    binds_on_host(&n, "register_msig pop.sig", &base, &o).await;
 }
 
 // ---------- P5: a relayer-checked slot, signed, through `check_*` ----------
