@@ -2150,9 +2150,26 @@ fn structure(w: &mut Write) -> &mut MsigStructure {
     }
 }
 
+/// The same `msig` with a third member in the structure, so a slot's `index` can move, and a PQZ key whose proof can go.
+fn msig_write_with_proof(env: &Env, c: &UaRegistryClient, by: &Option<Address>) -> Write {
+    let Write::Msig { pop, .. } = msig_write(env, c, by) else { unreachable!() };
+    let third = (0x0132u16, digest::ua_of(env, 0x0132, &b(env, &[0x72; 897])).to_array(), 2u16);
+    let first: StdVec<_> = (0..2u8).map(|i| (0x0132u16, digest::ua_of(env, 0x0132, &b(env, &[0x70 + i; 897])).to_array(), 2u16)).collect();
+    let s = set_row(env);
+    Write::Msig { structure: msig(env, 4, &[first[0], first[1], third]).s, attrs: s.attrs, pop, pqz_pop: s.pqz_pop, by: by.clone() }
+}
+
 /// Every argument class of `register_msig`, a structure's fields and a slot's among them.
 #[test]
 fn ua8_attest_binds_register_msig() {
+    binds(msig_write_with_proof, &[
+        ("pqz_pop", |e, w, _| if let Write::Msig { pqz_pop, .. } = w { *pqz_pop = Bytes::new(e) }),
+        ("pop.index", |_, w, _| if let Write::Msig { pop, .. } = w {
+            let mut s = pop.get(1).unwrap();
+            s.index = 2;
+            pop.set(1, s);
+        }),
+    ]);
     binds(msig_write, &[
         ("structure.threshold", |_, w, _| structure(w).threshold = 3),
         ("structure.members.weight", |_, w, _| {
@@ -2187,6 +2204,15 @@ fn ua8_attest_binds_group_keys() {
         ("key.agg_key", |e, w, _| if let Write::Musig2 { key, .. } = w { key.agg_key = b(e, &[9; 33]) }),
         ("key.member_keys", |e, w, _| if let Write::Musig2 { key, .. } = w { key.member_keys.set(1, b(e, &[8; 33])) }),
         ("pop", |e, w, _| if let Write::Musig2 { pop, .. } = w { *pop = flipped(e, pop) }),
+        // a group `kind` fixes the point size, so it can only change with the points: alone it is `KeyData` before `attest`
+        ("kind, with the points its size needs", |e, w, _| if let Write::Musig2 { kind, key, .. } = w {
+            *kind = 0x0112;
+            key.agg_key = b(e, &[1; 64]);
+            let mut member_keys = SVec::new(e);
+            member_keys.push_back(b(e, &[2; 64]));
+            member_keys.push_back(b(e, &[3; 64]));
+            key.member_keys = member_keys;
+        }),
         ("relayer", |_, w, other| set_by(w, other)),
     ]);
     binds(|e, _, by| {
@@ -2207,8 +2233,57 @@ fn ua8_attest_binds_group_keys() {
             m.z = n(e, [0x77; 32]);
             key.members.set(0, m);
         }),
+        ("key.members.commitments", |e, w, _| if let Write::Frost { key, .. } = w {
+            let mut m = key.members.get(0).unwrap();
+            m.commitments.set(1, b(e, &[0x66; 33]));
+            key.members.set(0, m);
+        }),
+        ("key.members.r", |e, w, _| if let Write::Frost { key, .. } = w {
+            let mut m = key.members.get(1).unwrap();
+            m.r = b(e, &[0x55; 33]);
+            key.members.set(1, m);
+        }),
+        // `threshold` fixes each member's commitments, so it can only change with them: alone it is `KeyData` before `attest`
+        ("key.threshold, with the commitments it counts", |e, w, _| if let Write::Frost { key, .. } = w {
+            key.threshold = 3;
+            let mut members = SVec::new(e);
+            for mut m in key.members.iter() {
+                m.commitments.push_back(b(e, &[0x44; 33]));
+                members.push_back(m);
+            }
+            members.push_back(members.get(0).unwrap());
+            key.members = members;
+        }),
         ("pop", |e, w, _| if let Write::Frost { pop, .. } = w { *pop = flipped(e, pop) }),
         ("relayer", |_, w, other| set_by(w, other)),
+    ]);
+    // `frost` of the other curve: as `register_musig2`, its `kind` comes with its points
+    binds(|e, _, by| {
+        let member = |x: u8| {
+            let mut commitments = SVec::new(e);
+            commitments.push_back(b(e, &[x; 33]));
+            commitments.push_back(b(e, &[x + 1; 33]));
+            FrostMember { commitments, r: b(e, &[x + 2; 33]), z: n(e, [x + 3; 32]) }
+        };
+        let mut members = SVec::new(e);
+        members.push_back(member(0x10));
+        members.push_back(member(0x20));
+        Write::Frost { kind: 0x0111, key: FrostKey { group_key: b(e, &[1; 33]), threshold: 2, members }, attrs: no_attrs(e), pop: b(e, &[1; 64]), pqz_pop: Bytes::new(e), by: by.clone() }
+    }, &[
+        ("kind, with the points its size needs", |e, w, _| if let Write::Frost { kind, key, .. } = w {
+            *kind = 0x0113;
+            key.group_key = b(e, &[1; 64]);
+            let mut members = SVec::new(e);
+            for mut m in key.members.iter() {
+                let mut commitments = SVec::new(e);
+                commitments.push_back(b(e, &[0x31; 64]));
+                commitments.push_back(b(e, &[0x32; 64]));
+                m.commitments = commitments;
+                m.r = b(e, &[0x33; 64]);
+                members.push_back(m);
+            }
+            key.members = members;
+        }),
     ]);
 }
 
@@ -2293,7 +2368,8 @@ fn ua8_attest_needs_the_named_relayer() {
     assert!(!c.receivable(&ua), "an attestation never makes a key able to authorise");
 }
 
-/// The digest against bytes built outside Rust, and `scaas-node`'s twin pins the same two words.
+/// The digest against the bytes `smartcontracts/soroban/scripts/attest-digest-vector.py` builds by hand, and `scaas-node`'s twin
+/// pins the same two words.
 #[test]
 fn ua8_attest_digest_vector() {
     let env = test::new_env();

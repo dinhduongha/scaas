@@ -1298,14 +1298,15 @@ pub fn ua_metatx_job(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &
 }
 
 /// S14 / spec §8: a simulation (recording mode records every `require_auth`) whose auth holds a `SourceAccount` entry
-/// that is not rooted at exactly `call` (with nothing below), or at one of the job's `own` entries, fails the job before
-/// submission: the node never lends a lane's authority to another call. Unreadable entries fail closed. The RPC records only for a transaction with no auth
+/// that is not rooted at exactly `call` (with nothing below), or at another `SourceAccount` entry of the job's `own`, fails the job
+/// before submission: the node never lends a lane's authority to another call. Only `own`'s `SourceAccount` entries count: a
+/// subject's `Address` entry has a root the client chose. Unreadable entries fail closed. The RPC records only for a transaction with no auth
 /// entry; with one it enforces (`e2e_ua8_simulation_auth_mode`), so for a job carrying the lane's entry this reads back that
 /// entry alone, and the refusal of anything else is the host's, at simulation.
 fn check_recorded_auth(sim: &Value, call: &InvokeContractArgs, own: &[SorobanAuthorizationEntry]) -> Result<()> {
     let ours = source_entry(call).root_invocation;
     for e in recorded_auth(sim)? {
-        let known = e.root_invocation == ours || own.iter().any(|o| o.root_invocation == e.root_invocation);
+        let known = e.root_invocation == ours || own.iter().any(|o| matches!(o.credentials, SorobanCredentials::SourceAccount) && o.root_invocation == e.root_invocation);
         if matches!(e.credentials, SorobanCredentials::SourceAccount) && !known {
             bail!("the call asks for this lane's authority outside the job's own call (S14: a lane's authority is never lent)");
         }
@@ -2277,17 +2278,17 @@ mod tests {
         let (call, auth, _) = ua_metatx_job(&NET7, &ua_op(CONTRACT, "ua_transfer", ua_ops(addr(LANE)).remove(0).2), &lane(), &policy()).unwrap();
         let b64 = |e: &SorobanAuthorizationEntry| json!(e.to_xdr_base64(Limits::none()).unwrap());
         let sim = |entries: Vec<Value>| json!({"results": [{"xdr": "AAAAAQ==", "auth": entries}]});
-        assert!(check_recorded_auth(&sim(vec![b64(&auth[0])]), &call, &[]).is_ok(), "the lane's entry for the call");
+        assert!(check_recorded_auth(&sim(vec![b64(&auth[0])]), &call, &auth).is_ok(), "the lane's entry for the call");
         let subject = SorobanAuthorizationEntry {
             credentials: SorobanCredentials::Address(SorobanAddressCredentials { address: sc(FROM), nonce: 1, signature_expiration_ledger: 9, signature: ScVal::Void }),
             root_invocation: inv(WALLET, "anything", vec![], vec![]),
         };
-        assert!(check_recorded_auth(&sim(vec![b64(&auth[0]), b64(&subject)]), &call, &[]).is_ok(), "a subject entry is not the lane's");
+        assert!(check_recorded_auth(&sim(vec![b64(&auth[0]), b64(&subject)]), &call, &auth).is_ok(), "a subject entry is not the lane's");
         let elsewhere = SorobanAuthorizationEntry {
             credentials: SorobanCredentials::SourceAccount,
             root_invocation: inv(CONTRACT, "transfer", vec![addr(LANE), addr(FROM), i128v(1)], vec![]),
         };
-        let e = check_recorded_auth(&sim(vec![b64(&auth[0]), b64(&elsewhere)]), &call, &[]).unwrap_err().to_string();
+        let e = check_recorded_auth(&sim(vec![b64(&auth[0]), b64(&elsewhere)]), &call, &auth).unwrap_err().to_string();
         assert!(e.contains("lane"), "{e}");
         let deeper = SorobanAuthorizationEntry {
             credentials: SorobanCredentials::SourceAccount,
@@ -2296,9 +2297,31 @@ mod tests {
                 sub_invocations: vec![inv(CONTRACT, "transfer", vec![addr(LANE)], vec![])].try_into().unwrap(),
             },
         };
-        assert!(check_recorded_auth(&sim(vec![b64(&deeper)]), &call, &[]).is_err(), "the call plus a lent sub-invocation");
-        assert!(check_recorded_auth(&sim(vec![json!("not xdr")]), &call, &[]).is_err(), "unreadable: fail closed");
-        assert!(check_recorded_auth(&json!({"results": [{"xdr": "AAAAAQ=="}]}), &call, &[]).is_ok(), "nothing recorded");
+        assert!(check_recorded_auth(&sim(vec![b64(&deeper)]), &call, &auth).is_err(), "the call plus a lent sub-invocation");
+        assert!(check_recorded_auth(&sim(vec![json!("not xdr")]), &call, &auth).is_err(), "unreadable: fail closed");
+        assert!(check_recorded_auth(&json!({"results": [{"xdr": "AAAAAQ=="}]}), &call, &auth).is_ok(), "nothing recorded");
+    }
+
+    /// `own` names only the lane's entries. A subject's `Address` entry has a root the client chose: it never makes a `SourceAccount`
+    /// entry at that root the job's own, or a client could lend the lane's authority by placing the root. The word a relayer-mode
+    /// job carries is the one `SourceAccount` root this widens to.
+    #[test]
+    fn recorded_auth_own_means_the_lanes_own() {
+        let call = InvokeContractArgs { contract_address: sc(MANDATE), function_name: ScSymbol("register".try_into().unwrap()), args: vec![ScVal::U32(1), ScVal::U32(2)].try_into().unwrap() };
+        let b64 = |e: &SorobanAuthorizationEntry| json!(e.to_xdr_base64(Limits::none()).unwrap());
+        let sim = |e: &SorobanAuthorizationEntry| json!({"results": [{"xdr": "AAAAAQ==", "auth": [b64(e)]}]});
+        let root = inv(WALLET, "anything", vec![], vec![]);
+        let subject = SorobanAuthorizationEntry {
+            credentials: SorobanCredentials::Address(SorobanAddressCredentials { address: sc(FROM), nonce: 1, signature_expiration_ledger: 9, signature: ScVal::Void }),
+            root_invocation: root.clone(),
+        };
+        let lent = SorobanAuthorizationEntry { credentials: SorobanCredentials::SourceAccount, root_invocation: root };
+        let e = check_recorded_auth(&sim(&lent), &call, std::slice::from_ref(&subject)).unwrap_err().to_string();
+        assert!(e.contains("lane"), "a subject's root is no lane entry: {e}");
+        let d = attest_digest(&NET7, &call.contract_address, &call.function_name, &call.args).unwrap();
+        let word = source_entry(&InvokeContractArgs { args: vec![byt(&d)].try_into().unwrap(), ..call.clone() });
+        check_recorded_auth(&sim(&word), &call, std::slice::from_ref(&word)).unwrap();
+        assert!(check_recorded_auth(&sim(&word), &call, &[]).is_err(), "only when it is this job's");
     }
 
     /// Final review A-I1 note (spec §8): a lane that is a `G…` member of an `msig` never lends that membership to a job.
@@ -2326,7 +2349,7 @@ mod tests {
                 },
             };
             let sim = json!({"results": [{"xdr": "AAAAAQ==", "auth": [json!(member.to_xdr_base64(Limits::none()).unwrap())]}]});
-            let e = check_recorded_auth(&sim, &call, &[]).unwrap_err().to_string();
+            let e = check_recorded_auth(&sim, &call, &auth).unwrap_err().to_string();
             assert!(e.contains("lane"), "{f}: {e}");
         }
     }
@@ -3020,8 +3043,8 @@ mod tests {
         }
     }
 
-    /// `relayer` is `None` or this lane; `Some(lane)` adds exactly one `SourceAccount` entry rooted at the call.
-    /// `ua8_attest_digest_vector`'s bytes, built outside Rust: what the contract and the node must both answer.
+    /// `ua8_attest_digest_vector`'s bytes, built outside Rust (`scripts/attest-digest-vector.py`): what the contract and the
+    /// node must both answer.
     #[test]
     fn attest_digest_vector() {
         let (net, c, sym) = ([0x11; 32], sc(CONTRACT), |s: &str| ScSymbol(s.try_into().unwrap()));
@@ -3030,6 +3053,8 @@ mod tests {
         assert_eq!(hex(&attest_digest(&net, &c, &sym("set_kem_key"), &args).unwrap()), "2da85a452358a70d013d2dbe4fd4136bec2234b25380f7f222fcfff6c712aa53");
     }
 
+    /// `relayer` is `None` or this lane; `Some(lane)` adds exactly one `SourceAccount` entry, on the call's function, over the
+    /// one word `attest` asks for.
     #[test]
     fn relayer_arg_is_the_lane() {
         for o in ops(&json!(LANE)) {

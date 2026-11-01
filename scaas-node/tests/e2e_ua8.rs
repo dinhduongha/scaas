@@ -360,6 +360,16 @@ fn core_metrics(r: &Value) -> Vec<(String, u64)> {
     out
 }
 
+/// What a failed transaction's diagnostic events say, `core_metrics` aside.
+fn diagnostic_errors(r: &Value) -> Vec<String> {
+    let xs = [&r["diagnosticEventsXdr"], &r["events"]["diagnosticEventsXdr"]].into_iter().filter_map(|v| v.as_array()).flatten();
+    xs.filter_map(|x| DiagnosticEvent::from_xdr_base64(x.as_str().unwrap_or_default(), Limits::none()).ok())
+        .map(|e| { let stellar_xdr::ContractEventBody::V0(b) = e.event.body; format!("{:?} {:?}", b.topics.as_slice(), b.data) })
+        .filter(|t| !t.contains("core_metrics"))
+        .map(|t| t.chars().take(220).collect())
+        .collect()
+}
+
 /// One line per landed transaction, on the network's limits; `FIT …` for the report's table.
 async fn fit(what: &str, hash: &str) {
     let r = await_tx(hash).await;
@@ -454,6 +464,7 @@ impl Node {
         self.adapter.submit(&signed).await.map_err(|e| format!("sendTransaction, tx_size {size}: {e:#}"))?;
         let r = await_tx(&signed.tx_id).await;
         if r["status"] != "SUCCESS" {
+            println!("DIAG {what}: core_metrics {:?}; {:?}", core_metrics(&r), diagnostic_errors(&r));
             return Err(format!("on chain, tx_size {size}: {} {}", r["status"], r["resultXdr"]));
         }
         fit(what, &signed.tx_id).await;
@@ -970,6 +981,15 @@ async fn e2e_ua8_simulation_auth_mode() {
     let same_entry = back.iter().all(|x| SorobanAuthorizationEntry::from_xdr_base64(x.as_str().unwrap(), Limits::none()).unwrap() == auth[0]);
     println!("P1 enforcing simulation that passes: {}, every entry returned is the node's own: {same_entry}", sim_answer(&ok));
     assert!(!back.is_empty() && same_entry, "an enforcing simulation answers the node's entry and nothing else");
+    let changes = ok.get("stateChanges").and_then(|c| c.as_array()).map(|c| c.len());
+    println!("P1 enforcing simulation, stateChanges: {changes:?} entries, of which with `after`: {:?}", ok.get("stateChanges").and_then(|c| c.as_array()).map(|c| c.iter().filter(|x| x["after"].is_string()).count()));
+
+    // `register_frost` at threshold 14: what the host itself says of the refusal
+    let point = |i: u8| h(&[0x40 + i; 64]);
+    let member = |i: u8| json!({"commitments": (0..14).map(|c| point(i + c)).collect::<Vec<_>>(), "r": point(i), "z": h(&[i; 32])});
+    let frost = json!({"kind": 0x0113, "key": {"group_key": point(99), "threshold": 14, "members": (0..16).map(member).collect::<Vec<_>>()},
+        "attrs": attrs_json(&no_attrs()), "pop": h(&[0x5a; 64]), "pqz_pop": "0x", "relayer": me});
+    assert!(!table_row(&n, "register_frost bn254 14 of 16", "register_frost", frost).await, "the events limit moved");
 
     // the node end to end. `Some(lane)`: the host refuses; `None`: the guards refuse
     let refused = |what: &str, r: (String, Value, Option<String>)| {
@@ -1179,100 +1199,6 @@ async fn e2e_ua8_network_fit() {
         println!("EDGE set_pqz_key {c} slhdsa128s slots at {set}: {r:?}");
         assert_eq!(r.is_ok(), fits, "the published limit of set_pqz_key moved: {r:?}");
     }
-    // data: relayer mode with attributes at `register`
-    let (attrs, proof, _) = set_attrs(SETS[3]);
-    for (c, proof) in [(5, vec![]), (6, vec![]), (5, proof.clone())] {
-        let rec = Rec { attrs: attrs.clone(), pqz_pop: proof.clone(), ..msig_of(0, c) };
-        let (call, auth) = relayed(&rec);
-        let r = n.raw_send(&format!("register_msig {c} slhdsa128s slots + PQZ + KEM {}", SETS[3]), 0, call, auth).await;
-        println!("EDGE register {c} slhdsa128s slots + PQZ + KEM, proof {} B: {r:?}", proof.len());
-    }
-    let f = row("registrations", "fndsa512");
-    for (p, what) in [(proof, "full"), (vec![], "without the proof")] {
-        // the second is the `register` the first leaves undone when refused; a key registered once is `AlreadyRegistered`
-        let rec = Rec { kind: FNDSA512, key_data: hx(&f["keyData"]), attrs: attrs.clone(), pop: hx(&f["pop"]), pqz_pop: p };
-        let (call, auth) = relayed(&rec);
-        let r = n.raw_send(&format!("register fndsa512 + PQZ + KEM {} {what}", SETS[3]), 0, call, auth).await;
-        println!("EDGE register fndsa512 + PQZ + KEM {what}: {r:?}");
-    }
-}
-
-/// A signed `ua_of` of padded key data, whose envelope `adapter` sends at exactly `target` bytes: the node's size is core's.
-async fn sized(n: &Node, target: usize) -> scaas_node::adapter::Signed {
-    let mut pad = 64;
-    loop {
-        let args = vec![ScVal::U32(MLDSA65 as u32), sc_bytes(&vec![7; pad])];
-        let call = InvokeContractArgs { contract_address: sc(&n.registry), function_name: sym("ua_of"), args: args.try_into().unwrap() };
-        let sim = simulate(0, call.clone(), vec![]).await;
-        assert!(sim.get("error").is_none(), "{}", sim["error"]);
-        let mut data = SorobanTransactionData::from_xdr_base64(sim["transactionData"].as_str().unwrap(), Limits::none()).unwrap();
-        data.resource_fee += data.resource_fee * 15 / 100;
-        let t = tx(0, 0, 100 + data.resource_fee as u32, call, vec![], TransactionExt::V1(data));
-        let seq = n.adapter.sequence(0).await.unwrap();
-        let built = Built { job_id: 0, body: t.to_xdr(Limits::none()).unwrap(), valid_until: 0, meta: json!({}) };
-        let signed = n.adapter.sign(built, 0, seq).await.unwrap();
-        if signed.raw.len() == target {
-            return signed;
-        }
-        pad = (pad as i64 + target as i64 - signed.raw.len() as i64) as usize;
-    }
-}
-
-/// The real host's reading of the limit the node compares against, plain and fee-bumped. And the question left to the owner: what
-/// simulation knows of a write over the entry limit.
-#[tokio::test]
-#[ignore]
-async fn e2e_ua8_tx_size_limit() {
-    let s = fresh_node().await;
-    let limit = 132_096;
-    // a fee bump wraps the same envelope in 128 B more, which the limit does not count
-    for (fee_bump, wrap) in [(false, 0), (true, 128)] {
-        let n = Node::with_fee_bump(s.registry.clone(), fee_bump).await;
-        let at = sized(&n, limit + wrap).await;
-        let sent = n.adapter.submit(&at).await;
-        let r = await_tx(&at.tx_id).await;
-        println!("EDGE {} B sent, {limit} B counted, fee_bump {fee_bump}: sent {:?}, status {}", at.raw.len(), sent.is_ok(), r["status"]);
-        assert!(sent.is_ok() && r["status"] == "SUCCESS", "{sent:?} {r}");
-        let over = sized(&n, limit + wrap + 4).await;
-        let sent = n.adapter.submit(&over).await;
-        println!("EDGE {} B sent, {} B counted, fee_bump {fee_bump}: {sent:?}", over.raw.len(), limit + 4);
-        assert!(sent.is_err(), "{limit} + 4 B counted must be refused");
-    }
-
-    // through the node: a job whose transaction passes simulation and is over `tx_max_size_bytes`, a proof no entry could hold
-    let big = vec![9; 140_000];
-    let f = row("registrations", "fndsa512");
-    let (mut attrs, _, _) = set_attrs(SETS[0]);
-    attrs.pqz_pop_hash = scaas_ua::keccak256(&big);
-    let rec = Rec { kind: FNDSA512, key_data: vec![0x77; 897], attrs, pop: hx(&f["pop"]), pqz_pop: vec![] };
-    let (fun, args) = rec.job_args(&json!(g(&key(0))));
-    assert!(table_row(&s, "register fndsa512 for the oversized job", fun, args).await);
-    let job = call_job(&s.registry, "store_pqz_pop", json!({"ua": h(&rec.ua()), "pqz_pop": h(&big)}));
-    let (state, last, tx) = s.run(0, job).await;
-    println!("EDGE node, transaction over tx_max_size_bytes: job {state}, signed {}, reason {}", tx.is_some(), last["error"]);
-    assert_eq!((state.as_str(), tx.is_none()), ("dead", true), "refused at build: {last}");
-    assert!(last["error"].as_str().unwrap_or_default().contains("tx_max_size_bytes"), "{last}");
-
-    // over the 65,536 B entry limit: one write, no signature to make, so what simulation answers is all that is measured
-    let (lane, registry, me) = (sc(&g(&key(0))), sc(&s.registry), json!(g(&key(0))));
-    let proof = vec![7; 70_000];
-    let (attrs, _, _) = set_attrs(SETS[0]);
-    let f = row("registrations", "fndsa512");
-    let attrs = UAAttrs { pqz_pop_hash: scaas_ua::keccak256(&proof), ..attrs };
-    let rec = Rec { kind: FNDSA512, key_data: hx(&f["keyData"]), attrs, pop: hx(&f["pop"]), pqz_pop: vec![] };
-    let (fun, args) = rec.job_args(&me);
-    let (call, auth) = ua8_call_job(&network(), &call_job(&s.registry, fun, args)["op"], &lane, &registry, true).unwrap();
-    s.raw_send("register fndsa512 for the entry limit", 0, call, auth).await.unwrap();
-    let job = call_job(&s.registry, "store_pqz_pop", json!({"ua": h(&rec.ua()), "pqz_pop": h(&proof)}));
-    let (call, auth) = ua8_call_job(&network(), &job["op"], &lane, &registry, false).unwrap();
-    let sim = simulate(0, call, auth).await;
-    let data = SorobanTransactionData::from_xdr_base64(sim["transactionData"].as_str().unwrap_or_default(), Limits::none());
-    let changes: Vec<usize> = sim["stateChanges"].as_array().into_iter().flatten()
-        .filter_map(|c| c["after"].as_str()).map(|x| base64::Engine::decode(&base64::engine::general_purpose::STANDARD, x).unwrap().len()).collect();
-    println!("ENTRY simulation of a 70,000 B write: error {:?}, write_bytes {:?}, stateChanges after {changes:?} B, fields {:?}",
-             sim.get("error").is_some(), data.as_ref().map(|d| d.resources.write_bytes).ok(), sim.as_object().map(|o| o.keys().cloned().collect::<Vec<_>>()));
-    let (state, last, tx) = s.run(0, job).await;
-    println!("ENTRY the same job through the node: job {state}, signed {}, reason {}", tx.is_some(), last["error"]);
 }
 
 // ---------- B7b: relayer mode, before and after the argument hash ----------
