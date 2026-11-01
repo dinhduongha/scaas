@@ -565,7 +565,9 @@ with execution order measures the access list, not the code.
 87,936 (+7,561); cold batch 178,259 to 185,844; warm FIXED fee 96,205 to 103,751; `mtxPay` 183,749 to 191,179; `unwrap`
 243,939 to 252,861; cancel 136,853 unchanged. The overhead does not grow with the envelope: for the largest PQZL op 7
 (M=8) and PQZH (M=4) envelopes it is 8.9-11.5 k against 7.9-9.1 k for the smallest, at most 2,405 gas more, against a
-bound of 8,000 (`runs/2026-10-27-metatx-split-overhead.txt`). The cheapest PQZL debit on `uaExecute` rose by about
+bound of 8,000 (`runs/2026-10-27-metatx-split-overhead.txt`). Since typed-signing the test subtracts the same op called directly, and
+the bound is 8,000 on PQZL and 10,000 on PQZH (owner 2026-11-01): the difference is 6,774–7,726 on PQZL op 7 M = 8 and 8,938–9,807 on
+PQZH M = 4, the relayed path's per-byte cost on a larger envelope (`runs/2026-11-01-typed-signing-c4-review-overhead.txt`). The cheapest PQZL debit on `uaExecute` rose by about
 6.9 k at every set (`debit_min_gas`: n2048-kmax1024 6,826,921; n2304-kmax4096 6,998,368; n2560-kmax16384 7,168,690;
 n2816-kmax65536 7,358,343). The `n2560-kmax16384` rollover at `ROLL_MAX` 64 is 12,418,528 (`mtxExecute`) and 12,576,880
 (`uaExecute`), 6,032 under 0.75 · 2^24 = 12,582,912: the next token-path change that adds more than about 6 k forces 48

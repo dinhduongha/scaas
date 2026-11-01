@@ -16,7 +16,8 @@ import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol"
 /// largest built one (PQZL op 7 M = 8 with the auditor; at a PQZH set also the largest PQZH debit, op 7 M = 4), exactly as
 /// `PqzStateGas.t.sol`'s gas table does (the precompile at the set's row price, ML-DSA-65 68,006, `fndsa512` 2.3 M
 /// stand-ins). The pre-split figures are the same test run on 2ceda92d (`test/vectors/metatx-overhead-presplit.json`).
-/// Asserted: (largest − pre-split) − (smallest − pre-split) <= 8,000 per kind. `MTX_OV_PRESPLIT=1`: log only.
+/// Asserted: (largest − pre-split) − (smallest − pre-split) <= 8,000 per kind on PQZL, <= 10,000 on PQZH (owner 2026-11-01: the
+/// relayed path's per-byte cost on PQZH's larger envelope, measured 8,938–9,807). `MTX_OV_PRESPLIT=1`: log only.
 /// typed-signing C4 review: the largest op's own cost moved with its explicit parameters, so its overhead is what the relayed
 /// call costs above the same op called directly on the same state (`_direct`), now and on 2ceda92d (the JSON's `direct|<id>`):
 /// `(largest − direct) − (pre-split largest − pre-split direct)`. The pre-split side runs from
@@ -25,6 +26,7 @@ import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol"
 /// (log: runs/2026-10-27-metatx-split-overhead.txt). It inherits `PqzStatePinGasTest`'s tests; select this contract.
 contract MtxSplitOverheadTest is PqzStatePinGasTest {
     uint256 internal constant BOUND = 8_000;
+    uint256 internal constant BOUND_PQZH = 10_000;
     string internal pre;
     bytes32 internal fnFee2;
 
@@ -51,12 +53,12 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
             kind = k == 0 ? "ecdsa" : k == 1 ? "mldsa65" : "fndsa512";
             sMeas = _meas(abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, 1)), 0);
             console2.log(string.concat("MEAS ", PqzSet.NAME, " ", kind, " S"), sMeas);
-            _large("pqzl", "M8-on", 8);
-            if (PqzSet.HAS_PQZH) _large("pqzh", "M4-on", 4);
+            _large("pqzl", "M8-on", 8, BOUND);
+            if (PqzSet.HAS_PQZH) _large("pqzh", "M4-on", 4, BOUND_PQZH);
         }
     }
 
-    function _large(string memory sys, string memory key, uint256 m) internal {
+    function _large(string memory sys, string memory key, uint256 m, uint256 bound) internal {
         uint256 row = vm.parseJsonUint(gj, string.concat(".", sys, "['", key, "'].row"));
         uint256 l = _meas(_op7a(m, true, _pf(sys, key)), row);
         string memory id = string.concat(sys, "-", key);
@@ -69,7 +71,7 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
         uint256 ovS = sMeas - _pre("", true);
         uint256 d = ovL > ovS ? ovL - ovS : 0;
         console2.log(string.concat("OVERHEAD ", PqzSet.NAME, " ", kind, " ", id, " smallest / largest / difference"), ovS, ovL, d);
-        assertLe(d, BOUND, string.concat(kind, " ", id, ": overhead grows with data"));
+        assertLe(d, bound, string.concat(kind, " ", id, ": overhead grows with data"));
     }
 
     function _pre(string memory id, bool small) internal view returns (uint256) {
