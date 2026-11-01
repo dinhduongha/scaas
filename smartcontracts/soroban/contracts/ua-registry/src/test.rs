@@ -110,7 +110,7 @@ pub(crate) fn members_of(env: &Env, pop: &Bytes) -> SVec<MemberSig> {
 
 /// typed(`UARegistration`) of a record without attributes (TS-D1, the zero KEM record): what its `pop` signs under
 /// purpose `pop` v2.
-fn reg_digest(env: &Env, ua: &BytesN<32>, kind: u32) -> BytesN<32> {
+pub(crate) fn reg_digest(env: &Env, ua: &BytesN<32>, kind: u32) -> BytesN<32> {
     let z = n(env, [0; 32]);
     registration_digest(env, &portable_record_hash(env, ua, kind, &z, &kem_record_hash(env, ua, 0, 0, &z)), &z).into()
 }
@@ -307,7 +307,7 @@ pub(crate) fn msig(env: &Env, threshold: u16, members: &[(u16, [u8; 32], u16)]) 
 }
 
 impl Msig {
-    fn index(&self, id: &[u8; 32]) -> u32 {
+    pub(crate) fn index(&self, id: &[u8; 32]) -> u32 {
         self.ids.iter().position(|x| x == id).unwrap() as u32
     }
     /// `member_digest(ua, ua_message(msig, purpose, digest))`.
@@ -315,17 +315,17 @@ impl Msig {
         digest::member_digest(env, &self.ua, &digest::ua_message(env, 0x0120, &n(env, purpose), d))
     }
     /// A registered member's slot: empty `keyData`, the signature under purpose `member` over `md`.
-    fn slot(&self, env: &Env, s: &Sk, purpose: [u8; 32], d: &BytesN<32>) -> (u32, StdVec<u8>, StdVec<u8>) {
+    pub(crate) fn slot(&self, env: &Env, s: &Sk, purpose: [u8; 32], d: &BytesN<32>) -> (u32, StdVec<u8>, StdVec<u8>) {
         let m = msg(env, s.kind(), PURPOSE_MEMBER, &self.md(env, purpose, d));
         (self.index(&s.ua(env).to_array()), vec![], vecu8(&s.sign(env, &m)))
     }
-    fn register(&self, env: &Env, c: &UaRegistryClient, pop: &SVec<MemberSig>) -> BytesN<32> {
+    pub(crate) fn register(&self, env: &Env, c: &UaRegistryClient, pop: &SVec<MemberSig>) -> BytesN<32> {
         c.register_msig(&self.s, &no_attrs(env), pop, &Bytes::new(env), &None)
     }
 }
 
 /// Typed slots from `(index, keyData, sig)`.
-fn member_sigs(env: &Env, slots: &[(u32, StdVec<u8>, StdVec<u8>)]) -> SVec<MemberSig> {
+pub(crate) fn member_sigs(env: &Env, slots: &[(u32, StdVec<u8>, StdVec<u8>)]) -> SVec<MemberSig> {
     let mut out = SVec::new(env);
     for (index, kd, sig) in slots {
         out.push_back(MemberSig { index: *index, key_data: b(env, kd), sig: b(env, sig) });
@@ -334,7 +334,7 @@ fn member_sigs(env: &Env, slots: &[(u32, StdVec<u8>, StdVec<u8>)]) -> SVec<Membe
 }
 
 /// An `msig`'s `auth`.
-fn msig_auth(env: &Env, slots: &[(u32, StdVec<u8>, StdVec<u8>)]) -> UaSig {
+pub(crate) fn msig_auth(env: &Env, slots: &[(u32, StdVec<u8>, StdVec<u8>)]) -> UaSig {
     UaSig::msig(env, member_sigs(env, slots))
 }
 

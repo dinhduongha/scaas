@@ -4,9 +4,9 @@
 //! construction (S16, C13).
 #![no_std]
 use scaas_ua_common::{
-    h32, kem_pk, kem_pk_record_hash, kem_record_hash, portable_record_hash, pqz_key_hash, registration_digest, Checked,
-    KemKey, MemberSig, MsigStructure, Registration, UaAttrs, UaSig, WebAuthnKey, PURPOSE_KEM, PURPOSE_MEMBER,
-    PURPOSE_POP_V2, PURPOSE_PQZ_KEY,
+    h32, kem_pk, kem_pk_record_hash, kem_record_digest, kem_record_hash, portable_record_hash, pqz_key_hash,
+    pqz_key_record_digest, registration_digest, Checked, KemKey, MemberSig, MsigStructure, Registration, UaAttrs, UaSig,
+    WebAuthnKey, PURPOSE_KEM, PURPOSE_MEMBER, PURPOSE_POP_V2, PURPOSE_PQZ_KEY,
 };
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contracttype, crypto::Hash, panic_with_error, xdr::FromXdr,
@@ -20,8 +20,9 @@ pub(crate) mod webauthn;
 
 use digest::*;
 
-/// SOR-D16, U8S-D5, TS-D5. A host crypto failure (ed25519 / P-256 / ML-DSA verify) is a host error, not `Pop` (plan
-/// finding F1). `Attrs` is unused since UA-8 attributes register; it keeps its code point.
+/// SOR-D16, U8S-D5, TS-D5. A host crypto failure (ed25519 / P-256 / ML-DSA verify) is a host error, not `Pop` or
+/// `Unauthorized` (plan finding F1). `Attrs` is unused since UA-8 attributes register; it keeps its code point.
+/// `KemKeyHash`: EVM `UAKemKeyHash`, `set_kem_key(ua, 0, …)` with a key that is not the `register` commit.
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -46,6 +47,7 @@ pub enum Error {
     KemScheme = 18,
     PqzKeySet = 19,
     KindUnknown = 20,
+    KemKeyHash = 21,
 }
 
 const DAY: u32 = 17_280;
@@ -55,8 +57,9 @@ const TTL_BUMP: u32 = 60 * DAY;
 /// Persistent, one entry per key (S11); `Relayers` is the only instance entry. `Signer(ua)` holds the kind and key
 /// data of a `signable` record, read alone by `require_authorized` and by `msig` member checks, so a check never loads
 /// a record's `pop` (msig-pophash I1: a member with a large `pop` costs what any other member costs). `PqzK(ua)` =
-/// `(key, sig, Checked)`, `PqzP(ua)` = the proof bytes, `Kem(ua, version)` = `(pk, sig, Checked)`, `KemMax(ua)` = the
-/// highest `set_kem_key` version: the bytes stay in state, `Ua(ua)` holds neither key (U8S-D3).
+/// `(key, sig, Checked, pqz_pop_hash)`, `PqzP(ua)` = the proof bytes, `Kem(ua, version)` = `(pk, sig, Checked)`,
+/// `KemMax(ua)` = the highest `set_kem_key` version: the bytes stay in state, `Ua(ua)` holds neither key (U8S-D3). A
+/// `set_pqz_key` key's hash is only in `PqzK`: `Ua(ua).attrs` keeps the `register` arguments, and is not rewritten.
 #[contracttype]
 #[derive(Clone)]
 pub(crate) enum Key {
@@ -143,6 +146,9 @@ const EMPTY_HASH: [u8; 32] = h32("c5d2460186f7233c927e7db2dcc703c0e500b653ca8227
 const KEM_SCHEME: u32 = 1;
 const KEM_PK_LENGTH: u32 = 1_601;
 
+type PqzEntry = (Bytes, Bytes, Checked, BytesN<32>);
+type KemEntry = (Bytes, Bytes, Checked);
+
 fn get<V: TryFromVal<Env, Val>>(env: &Env, k: &Key) -> Option<V> {
     let s = env.storage().persistent();
     let v = s.get(k);
@@ -179,6 +185,11 @@ fn word(d: &Bytes, o: u32) -> [u8; 32] {
 
 fn u16_at(d: &Bytes, o: u32) -> u32 {
     (d.get_unchecked(o) as u32) << 8 | d.get_unchecked(o + 1) as u32
+}
+
+/// The stored record; `NotRegistered` for an unregistered id (C17).
+fn record(env: &Env, ua: &BytesN<32>) -> Registration {
+    get(env, &Key::Ua(ua.clone())).unwrap_or_else(|| fail(env, Error::NotRegistered))
 }
 
 /// `msig` member `i` of validated key data (CTR-UA-09: `u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ bytes32 id ‖
@@ -302,11 +313,12 @@ fn stellar_account(env: &Env, id: &[u8; 32]) -> Address {
 /// purpose `member` over `member_digest(ua, ua_message(MSIG, purpose, digest))` until the threshold (a slot after it
 /// fails). A registered member's slot carries an empty `keyData` (its key read
 /// from `Signer(id)` alone; non-empty ⇒ `short`); a `G…` member's slot is empty and checked by the host over
-/// `(ua, purpose, digest)`; an `evm-eoa` member signs the record's typed digest `portable` itself (ECDSA, the `pop` at
-/// `register` only; typed-signing TS-D4, `eth_signTypedData_v4`, no `personal_sign`); an `evm-contract` slot, and an
-/// `evm-eoa` slot outside `portable`, is `NotVerifiable` (SOR-D6). A slot past the threshold or an unmet threshold is
-/// `short`. `portable` is a stored signature, so it is minimal too (owner 2026-10-31, U8S-D1, every slot's weight counts,
-/// native ones included): with T the slots' total weight and N the threshold, T - min(weight) < N, else `short`.
+/// `(ua, purpose, digest)`; an `evm-eoa` member signs the record's typed digest `portable` itself (ECDSA, a portable
+/// record only; typed-signing TS-D4, `eth_signTypedData_v4`, no `personal_sign`); an `evm-contract` slot, and an
+/// `evm-eoa` slot outside `portable`, is `NotVerifiable` (SOR-D6). A slot past the threshold, a refused slot signature or
+/// an unmet threshold is `short`. `portable` is a stored signature, so it is minimal too (owner 2026-10-31, U8S-D1, every
+/// slot's weight counts, native ones included): with T the slots' total weight and N the threshold, T - min(weight) < N,
+/// else `short`.
 fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, digest: &BytesN<32>, sigs: &Vec<MemberSig>, portable: Option<&Hash<32>>, short: Error) {
     let md = member_digest(env, ua, &ua_message(env, MSIG, purpose, digest));
     let pm = BytesN::from_array(env, &PURPOSE_MEMBER);
@@ -326,7 +338,7 @@ fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, diges
             EVM_EOA => {
                 let typed = portable.unwrap_or_else(|| fail(env, Error::NotVerifiable));
                 let id20: BytesN<20> = Bytes::from_array(env, &id).slice(12..32).try_into().unwrap();
-                verify::check_evm_eoa(env, &id20, typed, &s.sig);
+                verify::check_evm_eoa(env, &id20, typed, &s.sig, short);
             }
             STELLAR_ACCOUNT => {
                 if !s.sig.is_empty() {
@@ -338,7 +350,7 @@ fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, diges
             _ => {
                 let (_, key) = get::<(u32, Bytes)>(env, &Key::Signer(BytesN::from_array(env, &id)))
                     .unwrap_or_else(|| fail(env, short));
-                verify::check(env, kind, &key, &ua_message(env, kind, &pm, &md), &s.sig);
+                verify::check(env, kind, &key, &ua_message(env, kind, &pm, &md), &s.sig, short);
             }
         }
         acc += w;
@@ -356,6 +368,52 @@ fn zero(env: &Env) -> BytesN<32> {
 /// A PQZ / KEM holder (EVM `_holder`, U8S-D6): `mldsa44`, `mldsa65`, `fndsa512`, a PQ-eligible `msig`.
 fn holder(kind: u32, d: &Bytes) -> bool {
     matches!(kind, MLDSA44 | MLDSA65 | FNDSA512) || (kind == MSIG && pq_eligible(d))
+}
+
+/// TS-D12: a single key only `signature`, an `msig` only `members`, `key_data` never.
+fn sig_fields_ok(kind: u32, s: &UaSig) -> bool {
+    s.key_data.is_empty() && if kind == MSIG { s.signature.is_empty() } else { s.members.is_empty() }
+}
+
+/// EVM `_portableOk` + `_portableBytes` for a later portable record (`set_kem_key` ≥ 1, `set_pqz_key`): its signature over
+/// `(ua, purpose, rd)`, `Unauthorized`, an `msig` under `check_msig`'s portable rule (U8S-D1); returns the bytes stored for
+/// it, the `signature` or EVM's `abi.encode(MemberSig[])`.
+fn check_portable(env: &Env, kind: u32, d: &Bytes, ua: &BytesN<32>, purpose: [u8; 32], rd: &Hash<32>, sig: &UaSig) -> Bytes {
+    if !sig_fields_ok(kind, sig) {
+        fail(env, Error::Unauthorized);
+    }
+    let (p, digest) = (BytesN::from_array(env, &purpose), rd.to_bytes());
+    if kind == MSIG {
+        check_msig(env, ua, d, &p, &digest, &sig.members, Some(rd), Error::Unauthorized);
+        return abi::encode_member_sigs(env, &sig.members);
+    }
+    verify::check(env, kind, d, &ua_message(env, kind, &p, &digest), &sig.signature, Error::Unauthorized);
+    sig.signature.clone()
+}
+
+/// A PQZ key is of one of the four set lengths (`KeyData`, U8S-D6: Soroban has no set of its own).
+fn check_pqz_key(env: &Env, key: &Bytes) {
+    let n = key.len();
+    if !(16_384..=22_528).contains(&n) || n % 2_048 != 0 {
+        fail(env, Error::KeyData);
+    }
+}
+
+/// EVM `_checkKemPk` on a key that is not empty: scheme 1 (`scheme` is a `u32` here, so the field and not `pk`'s first
+/// byte), 1,601 B.
+fn check_kem_pk(env: &Env, scheme: u32, pk: &Bytes) {
+    if scheme != KEM_SCHEME {
+        fail(env, Error::KemScheme);
+    }
+    if pk.len() != KEM_PK_LENGTH {
+        fail(env, Error::KemKeyLength);
+    }
+}
+
+/// A stored `kem_pk` as its fields (EVM `_kemAt`; scheme 1 is the only stored form).
+fn kem_of(pk: &Bytes) -> KemKey {
+    let (ek, x) = (pk.slice(1..KEM_PK_LENGTH - 32), pk.slice(KEM_PK_LENGTH - 32..KEM_PK_LENGTH));
+    KemKey { scheme: KEM_SCHEME, mlkem_ek: ek, x25519: x.try_into().unwrap() }
 }
 
 /// Step 5, EVM `_attrs` in its order: holders, the proof hash, the PQZ key's length (one of the four sets), the KEM key
@@ -379,9 +437,8 @@ fn check_attrs(env: &Env, kind: u32, d: &Bytes, ua: &BytesN<32>, attrs: &UaAttrs
     if !pqz_pop.is_empty() && BytesN::from(env.crypto().keccak256(pqz_pop)) != attrs.pqz_pop_hash {
         fail(env, Error::PqzPopHash);
     }
-    let n = attrs.pqz_key.len();
-    if pqz && (!(16_384..=22_528).contains(&n) || n % 2_048 != 0) {
-        fail(env, Error::KeyData);
+    if pqz {
+        check_pqz_key(env, &attrs.pqz_key);
     }
     let h = if pqz { pqz_key_hash(env, &attrs.pqz_key) } else { none.clone() };
     let kh = if commit {
@@ -393,11 +450,8 @@ fn check_attrs(env: &Env, kind: u32, d: &Bytes, ua: &BytesN<32>, attrs: &UaAttrs
         }
         kem_record_hash(env, ua, 0, KEM_SCHEME as u8, &attrs.kem_pk_hash)
     } else {
-        if !pk.is_empty() && attrs.kem.scheme != KEM_SCHEME {
-            fail(env, Error::KemScheme);
-        }
-        if !pk.is_empty() && pk.len() != KEM_PK_LENGTH {
-            fail(env, Error::KemKeyLength);
+        if !pk.is_empty() {
+            check_kem_pk(env, attrs.kem.scheme, &pk);
         }
         kem_pk_record_hash(env, ua, 0, &pk)
     };
@@ -421,6 +475,14 @@ fn msig_key_data(env: &Env, s: &MsigStructure) -> Bytes {
         d.extend_from_array(&m.id.to_array());
         d.extend_from_slice(&(m.weight as u16).to_be_bytes());
     }
+    d
+}
+
+/// `x ‖ y ‖ rp_id_hash` of a typed key (EVM `registerWebAuthn`).
+fn webauthn_key_data(env: &Env, key: &WebAuthnKey) -> Bytes {
+    let mut d = Bytes::from_array(env, &key.x.to_array());
+    d.extend_from_array(&key.y.to_array());
+    d.extend_from_array(&key.rp_id_hash.to_array());
     d
 }
 
@@ -458,7 +520,7 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
             fail(env, Error::Pop); // classical-dominant: its members proved theirs, as EVM (U8S-D2)
         }
     } else {
-        verify::check(env, kind, &key_data, &ua_message(env, kind, &pv2, &reg), &sig);
+        verify::check(env, kind, &key_data, &ua_message(env, kind, &pv2, &reg), &sig, Error::Pop);
     }
     let pop = if kind == MSIG { abi::encode_member_sigs(env, &members) } else { sig };
 
@@ -474,8 +536,8 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
     let no_sig = Bytes::new(env);
     let sig_hash = BytesN::from_array(env, &EMPTY_HASH);
     if !attrs.pqz_key.is_empty() {
-        put(env, &Key::PqzK(ua.clone()), &(attrs.pqz_key.clone(), no_sig.clone(), Checked::Chain));
         let pqz_pop_hash = attrs.pqz_pop_hash.clone();
+        put(env, &Key::PqzK(ua.clone()), &(attrs.pqz_key.clone(), no_sig.clone(), Checked::Chain, pqz_pop_hash.clone()));
         UaPqzKeySet { ua: ua.clone(), pqz_key_hash: pqz_hash, pqz_pop_hash, sig_hash: sig_hash.clone(), checked: Checked::Chain }.publish(env);
     }
     if !pqz_pop.is_empty() {
@@ -563,9 +625,7 @@ impl UaRegistry {
         relayer: Option<Address>,
     ) -> BytesN<32> {
         let _ = relayer;
-        let mut d = Bytes::from_array(&env, &key.x.to_array());
-        d.extend_from_array(&key.y.to_array());
-        d.extend_from_array(&key.rp_id_hash.to_array());
+        let d = webauthn_key_data(&env, &key);
         let members = Vec::new(&env);
         register_record(&env, WEBAUTHN_P256, d, attrs, pop, members, pqz_pop)
     }
@@ -598,7 +658,7 @@ impl UaRegistry {
         if p == PURPOSE_POP_V2 || p == PURPOSE_KEM || p == PURPOSE_PQZ_KEY {
             fail(&env, Error::Unauthorized);
         }
-        if !auth.key_data.is_empty() || (kind == MSIG && !auth.signature.is_empty()) || (kind != MSIG && !auth.members.is_empty()) {
+        if !sig_fields_ok(kind, &auth) {
             fail(&env, Error::Unauthorized);
         }
         env.storage().persistent().extend_ttl(&Key::Ua(ua.clone()), TTL_MIN, TTL_BUMP);
@@ -606,7 +666,7 @@ impl UaRegistry {
         if kind == MSIG {
             check_msig(&env, &ua, &key, &purpose, &digest, &auth.members, None, Error::Unauthorized);
         } else {
-            verify::check(&env, kind, &key, &ua_message(&env, kind, &purpose, &digest), &auth.signature);
+            verify::check(&env, kind, &key, &ua_message(&env, kind, &purpose, &digest), &auth.signature, Error::Unauthorized);
         }
     }
 
@@ -617,14 +677,12 @@ impl UaRegistry {
         let mut a = r.attrs;
         let mut pqz_pop = Bytes::new(&env);
         if a.pqz_pop_hash != zero(&env) {
-            let (key, _, _) = get::<(Bytes, Bytes, Checked)>(&env, &Key::PqzK(ua.clone())).unwrap();
-            a.pqz_key = key;
+            a.pqz_key = get::<PqzEntry>(&env, &Key::PqzK(ua.clone())).unwrap().0;
             pqz_pop = get(&env, &Key::PqzP(ua.clone())).unwrap_or(pqz_pop);
         }
         if a.kem_pk_hash == zero(&env) {
-            if let Some((pk, _, _)) = get::<(Bytes, Bytes, Checked)>(&env, &Key::Kem(ua, 0)) {
-                let (ek, x) = (pk.slice(1..KEM_PK_LENGTH - 32), pk.slice(KEM_PK_LENGTH - 32..KEM_PK_LENGTH));
-                a.kem = KemKey { scheme: KEM_SCHEME, mlkem_ek: ek, x25519: x.try_into().unwrap() };
+            if let Some((pk, _, _)) = get::<KemEntry>(&env, &Key::Kem(ua, 0)) {
+                a.kem = kem_of(&pk);
             }
         }
         Some((r.kind, r.key_data, a, r.pop, pqz_pop))
@@ -647,8 +705,124 @@ impl UaRegistry {
             return (Checked::None, Checked::None, Checked::None);
         };
         let v = get::<u64>(&env, &Key::KemMax(ua.clone())).unwrap_or(0);
-        let kem = get::<(Bytes, Bytes, Checked)>(&env, &Key::Kem(ua, v)).map_or(Checked::None, |e| e.2);
+        let kem = get::<KemEntry>(&env, &Key::Kem(ua, v)).map_or(Checked::None, |e| e.2);
         (r.pop_checked, r.pqz_pop_checked, kem)
+    }
+
+    /// EVM `setKemKey`, anyone (P4, CTR-UA-32), every version write-once in any order, no owner check. Version ≥ 1: `sig`
+    /// over `ua_message(kind, PURPOSE_KEM, kem_record_digest(ua, version, pk))`. Version 0 only fills the key `register`
+    /// committed by hash, with no `sig` (the `pop` signed it): a key given in whole is not refillable (TS-D9). Check order:
+    /// `NotRegistered` → `KemHolder` → `KemVersion` → the key (`KemScheme`, `KemKeyLength`) → signature (`Unauthorized`) /
+    /// the commit (`KemKeyHash`). `relayer` as in `register`.
+    pub fn set_kem_key(env: Env, ua: BytesN<32>, version: u64, kem: KemKey, sig: UaSig, relayer: Option<Address>) {
+        let _ = relayer;
+        let r = record(&env, &ua);
+        if !holder(r.kind, &r.key_data) {
+            fail(&env, Error::KemHolder);
+        }
+        let k = Key::Kem(ua.clone(), version);
+        let committed = r.attrs.kem_pk_hash;
+        if has(&env, &k) || (version == 0 && committed == zero(&env)) {
+            fail(&env, Error::KemVersion);
+        }
+        let pk = kem_pk(&env, &kem);
+        if pk.is_empty() {
+            fail(&env, Error::KemKeyLength);
+        }
+        check_kem_pk(&env, kem.scheme, &pk);
+        let kem_pk_hash = BytesN::from(env.crypto().keccak256(&pk));
+        let stored = if version == 0 {
+            if !sig.is_empty() {
+                fail(&env, Error::Unauthorized);
+            }
+            if kem_pk_hash != committed {
+                fail(&env, Error::KemKeyHash);
+            }
+            Bytes::new(&env)
+        } else {
+            let rd = kem_record_digest(&env, &ua, version, &pk);
+            let stored = check_portable(&env, r.kind, &r.key_data, &ua, PURPOSE_KEM, &rd, &sig);
+            if version > get::<u64>(&env, &Key::KemMax(ua.clone())).unwrap_or(0) {
+                put(&env, &Key::KemMax(ua.clone()), &version);
+            }
+            stored
+        };
+        let sig_hash = env.crypto().keccak256(&stored).into();
+        put(&env, &k, &(pk, stored, Checked::Chain));
+        bump_instance(&env);
+        UaKemKeySet { ua, version, kem_pk_hash, sig_hash, checked: Checked::Chain }.publish(&env);
+    }
+
+    /// EVM `setPqzKey` without a verifier (U8S-D6): anyone, a holder without a key gets one, unproven, write-once, no `Key`
+    /// entry; `sig` over `ua_message(kind, PURPOSE_PQZ_KEY, pqz_key_record_digest(ua, pqzKeyHash, pqz_pop_hash))`. Check
+    /// order: `NotRegistered` → `PqzHolder` → `PqzKeySet` → the key's length (`KeyData`) → a zero or `keccak256("")` proof
+    /// hash (`PqzPopHash`) → signature (`Unauthorized`). `PqzK` holds key and signature in one entry, so the signing
+    /// ML-DSA-65 slots are at most 13 at n2048-kmax1024 / n2304-kmax4096, 12 at the larger sets (B0: 65,536 B an entry).
+    pub fn set_pqz_key(env: Env, ua: BytesN<32>, pqz_key: Bytes, pqz_pop_hash: BytesN<32>, sig: UaSig, relayer: Option<Address>) {
+        let _ = relayer;
+        let r = record(&env, &ua);
+        if !holder(r.kind, &r.key_data) {
+            fail(&env, Error::PqzHolder);
+        }
+        let k = Key::PqzK(ua.clone());
+        if has(&env, &k) {
+            fail(&env, Error::PqzKeySet);
+        }
+        check_pqz_key(&env, &pqz_key);
+        if pqz_pop_hash == zero(&env) || pqz_pop_hash.to_array() == EMPTY_HASH {
+            fail(&env, Error::PqzPopHash);
+        }
+        let pqz_key_hash = pqz_key_hash(&env, &pqz_key);
+        let rd = pqz_key_record_digest(&env, &ua, &pqz_key_hash, &pqz_pop_hash);
+        let stored = check_portable(&env, r.kind, &r.key_data, &ua, PURPOSE_PQZ_KEY, &rd, &sig);
+        let sig_hash = env.crypto().keccak256(&stored).into();
+        put(&env, &k, &(pqz_key, stored, Checked::Chain, pqz_pop_hash.clone()));
+        bump_instance(&env);
+        UaPqzKeySet { ua, pqz_key_hash, pqz_pop_hash, sig_hash, checked: Checked::Chain }.publish(&env);
+    }
+
+    /// EVM `storePqzPop` without a verifier (U8S-D6): anyone, `NotRegistered`, then `PqzPopHash` for an empty proof or one
+    /// that does not hash to the key's `pqz_pop_hash` (also for a UA without a key); stored bytes make it a no-op, no event.
+    pub fn store_pqz_pop(env: Env, ua: BytesN<32>, pqz_pop: Bytes) {
+        record(&env, &ua);
+        if pqz_pop.is_empty() {
+            fail(&env, Error::PqzPopHash);
+        }
+        let Some((_, _, _, pqz_pop_hash)) = get::<PqzEntry>(&env, &Key::PqzK(ua.clone())) else {
+            fail(&env, Error::PqzPopHash)
+        };
+        if BytesN::from(env.crypto().keccak256(&pqz_pop)) != pqz_pop_hash {
+            fail(&env, Error::PqzPopHash);
+        }
+        let k = Key::PqzP(ua.clone());
+        if has(&env, &k) {
+            return;
+        }
+        put(&env, &k, &pqz_pop);
+        bump_instance(&env);
+        UaPqzPopStored { ua, pqz_pop_hash }.publish(&env);
+    }
+
+    /// `(version, kem, sig, checked)` of the highest stored version, `None` without one (also a hash commit not filled);
+    /// the `register` key alone is version 0 with an empty `sig` (UA8-D4).
+    pub fn kem_key_of(env: Env, ua: BytesN<32>) -> Option<(u64, KemKey, Bytes, Checked)> {
+        let v = get::<u64>(&env, &Key::KemMax(ua.clone())).unwrap_or(0);
+        Self::kem_key_at(env, ua, v).map(|(kem, sig, checked)| (v, kem, sig, checked))
+    }
+
+    /// `(kem, sig, checked)` of a stored version.
+    pub fn kem_key_at(env: Env, ua: BytesN<32>, version: u64) -> Option<(KemKey, Bytes, Checked)> {
+        get::<KemEntry>(&env, &Key::Kem(ua, version)).map(|(pk, sig, checked)| (kem_of(&pk), sig, checked))
+    }
+
+    /// `(key, pqz_pop_hash, proven, checked)`: `proven` is `false` on Soroban, nothing verifies `R_REG` (U8S-D6).
+    pub fn pqz_key_of(env: Env, ua: BytesN<32>) -> Option<(Bytes, BytesN<32>, bool, Checked)> {
+        get::<PqzEntry>(&env, &Key::PqzK(ua)).map(|(key, _, checked, hash)| (key, hash, false, checked))
+    }
+
+    /// `set_pqz_key`'s stored signature; empty when the key came with `register` (its consent is the `pop`) or there is none.
+    pub fn pqz_key_sig_of(env: Env, ua: BytesN<32>) -> Bytes {
+        get::<PqzEntry>(&env, &Key::PqzK(ua)).map_or(Bytes::new(&env), |e| e.1)
     }
 
     /// TS-D5: the name of a kind id of the table, enabled here or not; `KindUnknown` for any other id.
@@ -666,6 +840,16 @@ impl UaRegistry {
 
     pub fn ua_of(env: Env, kind: u32, key_data: Bytes) -> BytesN<32> {
         digest::ua_of(&env, kind, &key_data)
+    }
+
+    /// `ua_of` of `register_msig`'s typed structure (packed-bytes inventory): `KeyData` for a value its `u16` cannot hold.
+    pub fn ua_of_msig(env: Env, structure: MsigStructure) -> BytesN<32> {
+        digest::ua_of(&env, MSIG, &msig_key_data(&env, &structure))
+    }
+
+    /// `ua_of` of `register_webauthn`'s typed key.
+    pub fn ua_of_webauthn(env: Env, key: WebAuthnKey) -> BytesN<32> {
+        digest::ua_of(&env, WEBAUTHN_P256, &webauthn_key_data(&env, &key))
     }
 
     /// `signable`; `false` for an unregistered id too (SOR-D15).

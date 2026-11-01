@@ -304,6 +304,10 @@ quickstart: protocolVersion 30, testnet limits applied
 #   for `set_pqz_key` is 13 at n2048-kmax1024 / n2304-kmax4096 and 12 at n2560-kmax16384 / n2816-kmax65536 (derived,
 #   not simulated). Keeping the signature in its own entry (e.g. `PqzS(ua)`, ≤ 56,600 B at n = 16) lifts it to 16 at
 #   every set; B3's call (controller / owner). Kem(ua, v) with an n = 16 msig signature is 58,176 B (88.8 %): fits.
+#   B3 (2026-11-01): U8S-D3 kept, so that is the published Soroban maximum: set_pqz_key takes 13 signing ML-DSA-65 slots at
+#   n2048-kmax1024 / n2304-kmax4096, 12 at n2560-kmax16384 / n2816-kmax65536, confirmed by the unit tests
+#   ua8_set_pqz_key_msig_largest_fits and _over_limit_* on the real entry (SDK entry-limit metering, not a network run).
+#   PqzK gained pqz_pop_hash (32 B); key + sig at the largest fit: 64,832 B (12 slots, 22,528 B key).
 #   keccak256 headroom (for the typed EIP-712 records under discussion): on the network ~14.6 K instructions per extra
 #   64 B hash, ~24 K per 256 B hash (keccak_model rows); the costliest call (msig n = 16 full register, 62.0 M) leaves
 #   ~338 M instructions = ~14,000 hashes of 256 B. A few more hashes per record (or one more per msig member) change

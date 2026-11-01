@@ -1,6 +1,6 @@
 //! Solidity ABI words: the stored `msig` `pop` = `abi.encode(MemberSig[])` (`{u16 index, bytes keyData, bytes sig}`,
-//! UA8-D5; `registration_of` returns EVM's bytes) and the dynamic `bytes` of the WebAuthn signature blob. Every refusal
-//! is `Pop`.
+//! UA8-D5; `registration_of` returns EVM's bytes) and the dynamic `bytes` of the WebAuthn signature blob. A refusal is the
+//! caller's `e`.
 use scaas_ua_common::MemberSig;
 use soroban_sdk::{panic_with_error, Bytes, Env, Vec};
 
@@ -10,21 +10,21 @@ use crate::Error;
 const MAX_MEMBERS: u32 = 16;
 
 /// The 32-byte big-endian word at `off` as a `u32`; a word above `u32::MAX` is refused.
-pub fn word(env: &Env, b: &Bytes, off: u32) -> u32 {
-    let end = off.checked_add(32).filter(|e| *e <= b.len()).unwrap_or_else(|| panic_with_error!(env, Error::Pop));
+pub fn word(env: &Env, b: &Bytes, off: u32, e: Error) -> u32 {
+    let end = off.checked_add(32).filter(|e| *e <= b.len()).unwrap_or_else(|| panic_with_error!(env, e));
     let mut w = [0u8; 32];
     b.slice(off..end).copy_into_slice(&mut w);
     if w[..28] != [0u8; 28] {
-        panic_with_error!(env, Error::Pop);
+        panic_with_error!(env, e);
     }
     u32::from_be_bytes([w[28], w[29], w[30], w[31]])
 }
 
 /// The dynamic `bytes` whose offset word sits at `head`, the offset relative to `base`; bounds-checked.
-pub fn bytes_at(env: &Env, b: &Bytes, base: u32, head: u32) -> Bytes {
-    let o = base.checked_add(word(env, b, head)).unwrap_or_else(|| panic_with_error!(env, Error::Pop));
-    let n = word(env, b, o);
-    let end = (o + 32).checked_add(n).filter(|e| *e <= b.len()).unwrap_or_else(|| panic_with_error!(env, Error::Pop));
+pub fn bytes_at(env: &Env, b: &Bytes, base: u32, head: u32, e: Error) -> Bytes {
+    let o = base.checked_add(word(env, b, head, e)).unwrap_or_else(|| panic_with_error!(env, e));
+    let n = word(env, b, o, e);
+    let end = (o + 32).checked_add(n).filter(|e| *e <= b.len()).unwrap_or_else(|| panic_with_error!(env, e));
     b.slice(o + 32..end)
 }
 
@@ -71,19 +71,19 @@ pub fn encode_member_sigs(env: &Env, sigs: &Vec<MemberSig>) -> Bytes {
 /// `MemberSig`s: it reads the vectors' `pop` bytes and pins `encode_member_sigs`.
 #[cfg(test)]
 pub fn decode_member_sigs(env: &Env, b: &Bytes) -> Vec<MemberSig> {
-    let n = word(env, b, 32);
-    if word(env, b, 0) != 32 || n > MAX_MEMBERS {
+    let n = word(env, b, 32, Error::Pop);
+    if word(env, b, 0, Error::Pop) != 32 || n > MAX_MEMBERS {
         panic_with_error!(env, Error::Pop);
     }
     let mut out: Vec<MemberSig> = Vec::new(env);
     for i in 0..n {
-        let t = 64 + word(env, b, 64 + 32 * i);
-        let index = word(env, b, t);
+        let t = 64 + word(env, b, 64 + 32 * i, Error::Pop);
+        let index = word(env, b, t, Error::Pop);
         let last = out.last().map(|m| m.index as i64).unwrap_or(-1);
         if index > 0xFFFF || (index as i64) <= last {
             panic_with_error!(env, Error::Pop);
         }
-        out.push_back(MemberSig { index, key_data: bytes_at(env, b, t, t + 32), sig: bytes_at(env, b, t, t + 64) });
+        out.push_back(MemberSig { index, key_data: bytes_at(env, b, t, t + 32, Error::Pop), sig: bytes_at(env, b, t, t + 64, Error::Pop) });
     }
     if encode_member_sigs(env, &out) != *b {
         panic_with_error!(env, Error::Pop);

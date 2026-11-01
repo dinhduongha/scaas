@@ -60,18 +60,18 @@ fn client_data_ok(cd: &[u8], ua_msg: &[u8; 32]) -> bool {
     cd[after] == b',' && cd[n - 1] == b'}'
 }
 
-/// The `webauthn-p256` check of `sig` over `ua_msg`; panics on failure (`Pop` for the contract's own checks, a host
-/// error for the P-256 verify, which also refuses high `s`, CAP-51).
-pub fn check(env: &Env, key_data: &Bytes, ua_msg: &Hash<32>, sig: &Bytes) {
+/// The `webauthn-p256` check of `sig` over `ua_msg`; panics on failure (the caller's `e` for the contract's own checks, a
+/// host error for the P-256 verify, which also refuses high `s`, CAP-51).
+pub fn check(env: &Env, key_data: &Bytes, ua_msg: &Hash<32>, sig: &Bytes, e: Error) {
     if key_data.len() != 96 {
         panic_with_error!(env, Error::KeyData);
     }
     if sig.len() < 128 {
-        panic_with_error!(env, Error::Pop);
+        panic_with_error!(env, e);
     }
-    let auth_data = bytes_at(env, sig, 0, 0);
-    let client_data = bytes_at(env, sig, 0, 32);
-    let rs: BytesN<64> = sig.slice(64..128).try_into().unwrap_or_else(|_| panic_with_error!(env, Error::Pop));
+    let auth_data = bytes_at(env, sig, 0, 0, e);
+    let client_data = bytes_at(env, sig, 0, 32, e);
+    let rs: BytesN<64> = sig.slice(64..128).try_into().unwrap_or_else(|_| panic_with_error!(env, e));
     // Canonical encoding only (owner 2026-10-30): re-encode and compare, so `pop` bytes (and `pop_hash`) are unique.
     let mut enc = Bytes::new(env);
     put_word(&mut enc, 128);
@@ -80,19 +80,19 @@ pub fn check(env: &Env, key_data: &Bytes, ua_msg: &Hash<32>, sig: &Bytes) {
     put_bytes(&mut enc, &auth_data);
     put_bytes(&mut enc, &client_data);
     if enc != *sig {
-        panic_with_error!(env, Error::Pop);
+        panic_with_error!(env, e);
     }
     let n = client_data.len() as usize;
     if auth_data.len() < 37 || auth_data.slice(0..32) != key_data.slice(64..96) || n > MAX_CLIENT_DATA {
-        panic_with_error!(env, Error::Pop);
+        panic_with_error!(env, e);
     }
     if auth_data.get_unchecked(32) & (FLAG_UP | FLAG_UV) != FLAG_UP | FLAG_UV {
-        panic_with_error!(env, Error::Pop);
+        panic_with_error!(env, e);
     }
     let mut buf = [0u8; MAX_CLIENT_DATA];
     client_data.copy_into_slice(&mut buf[..n]);
     if !client_data_ok(&buf[..n], &ua_msg.to_array()) {
-        panic_with_error!(env, Error::Pop);
+        panic_with_error!(env, e);
     }
     let mut key = Bytes::from_array(env, &[4u8]);
     key.append(&key_data.slice(0..64));

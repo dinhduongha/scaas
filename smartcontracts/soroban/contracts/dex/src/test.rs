@@ -245,8 +245,8 @@ fn contract_at(env: &Env, byte: u8) -> Address {
 /// A host failure seen across the call boundary: a missing auth entry, or an ed25519 UA signature that does not verify
 /// over the expected digest (the host's verify fails, not the registry — finding F1).
 const HOST_REFUSED: soroban_sdk::Error = soroban_sdk::Error::from_type_and_code(soroban_sdk::xdr::ScErrorType::Context, soroban_sdk::xdr::ScErrorCode::InvalidAction);
-/// The registry's `Pop` (8): an ed25519 UA's `auth` without its 64-byte `signature` (here empty).
-const REG_POP: soroban_sdk::Error = soroban_sdk::Error::from_contract_error(8);
+/// The registry's `Unauthorized` (10): an ed25519 UA's `auth` without its 64-byte `signature` (here empty).
+const REG_UNAUTHORIZED: soroban_sdk::Error = soroban_sdk::Error::from_contract_error(10);
 
 fn tok(e: scaas_token::Error) -> soroban_sdk::Error {
     e.into()
@@ -449,7 +449,7 @@ fn dex_ua_maker_native_taker_settles() {
     let bid = s.bid(100_000, Holder::Addr(s.bob.clone()));
     let no = UaSig::none(env);
     // The UA leg needs its signature; the native leg must carry none.
-    assert_eq!(s.settle(&s.dex, &ask, &bid, 100_000, &no, &no), Err(REG_POP));
+    assert_eq!(s.settle(&s.dex, &ask, &bid, 100_000, &no, &no), Err(REG_UNAUTHORIZED));
     assert_eq!(s.settle(&s.dex, &ask, &bid, 100_000, &auth, &auth), Err(Error::BadAuth.into()));
     s.settle(&s.dex, &ask, &bid, 100_000, &auth, &no).unwrap();
     // The UA gets 200 000 B minus 0.1 % in its UA balance, bob 100 000 A minus 0.2 %.
