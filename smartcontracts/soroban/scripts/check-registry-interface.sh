@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# The UaRegistry Wasm exposes exactly the T3 functions: no admin, no upgrade, no setter (plan SOR-D18; spec S16, C13).
+# The UaRegistry Wasm exposes exactly these functions: no admin, no upgrade, no setter (plan SOR-D18; spec S16, C13).
 # usage: check-registry-interface.sh <scaas_ua_registry.wasm>
 set -euo pipefail
-want="__constructor key_owner receivable record_of register registration_of relayers require_authorized ua_at ua_count ua_of ua_page"
+want="__constructor checked_of key_owner kind_name pop_of pqz_pop_of receivable record_of register register_msig registration_of relayers require_authorized ua_at ua_count ua_of ua_page"
 iface=$(stellar contract info interface --wasm "$1" --output json) || { echo "registry interface: could not read $1" >&2; exit 1; }
 got=$(python3 -c 'import json, sys; print(" ".join(sorted(e["function_v0"]["name"] for e in json.load(sys.stdin) if "function_v0" in e)))' <<<"$iface")
 if [ "$got" != "$want" ]; then

@@ -5,7 +5,7 @@ extern crate std;
 use std::{vec, vec::Vec as StdVec};
 
 use ed25519_dalek::Signer as _;
-use scaas_ua_common::{h32, meta_pay_id, pay_lane, Holder, Order, UaAttrs, PURPOSE_METATX, PURPOSE_METATX_CANCEL, PURPOSE_POP_V2, PURPOSE_TRADE, kem_record_hash, portable_record_hash, registration_digest};
+use scaas_ua_common::{h32, meta_pay_id, pay_lane, Holder, MemberSig, MsigMember, MsigStructure, Order, UaAttrs, UaSig, PURPOSE_METATX, PURPOSE_METATX_CANCEL, PURPOSE_POP_V2, PURPOSE_TRADE, kem_record_hash, portable_record_hash, registration_digest};
 use scaas_ua_registry::{UaRegistry, UaRegistryClient as RegClient};
 use serde_json::Value;
 use soroban_sdk::testutils::{storage::Persistent as _, Address as _, Events as _, Ledger as _, MockAuth, MockAuthInvoke};
@@ -82,7 +82,7 @@ fn err<V: core::fmt::Debug, C: core::fmt::Debug>(r: Result<V, Result<soroban_sdk
 }
 
 fn no_attrs(env: &Env) -> UaAttrs {
-    UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: n(env, [0; 32]), kem_pk: Bytes::new(env) }
+    UaAttrs::none(env)
 }
 
 fn keccak(env: &Env, parts: &[&[u8]]) -> [u8; 32] {
@@ -114,9 +114,9 @@ impl T {
     }
 
     /// The UA's signature over `op_digest(token, f, args)` under `purpose`.
-    fn sign(&self, u: &Ua, purpose: [u8; 32], f: &str, args: SVec<Val>) -> Bytes {
+    fn sign(&self, u: &Ua, purpose: [u8; 32], f: &str, args: SVec<Val>) -> UaSig {
         let d = op_digest(&self.env, &self.t.address, f, args).to_array();
-        Bytes::from_array(&self.env, &u.sk.sign(&keccak(&self.env, &[&MSG_TAG, &ED_TAG, &purpose, &d])).to_bytes())
+        UaSig::single(&self.env, Bytes::from_array(&self.env, &u.sk.sign(&keccak(&self.env, &[&MSG_TAG, &ED_TAG, &purpose, &d])).to_bytes()))
     }
 
     fn mint(&self, to: &Address, amount: i128) {
@@ -519,7 +519,7 @@ fn ua_ledger_off_refused() {
     let a = Address::generate(env);
     s.mint(&a, 100);
     let pool = &s.t.address;
-    let (r, z) = (n(env, [1; 32]), Bytes::new(env));
+    let (r, z, no) = (n(env, [1; 32]), Bytes::new(env), UaSig::none(env));
     let to = Holder::Ua(u.id.clone());
     allow(env, &a, pool, "transfer_to_ua", (&a, &u.id, 1i128).into_val(env));
     assert_eq!(err(s.t.try_transfer_to_ua(&a, &u.id, &1)), Error::UaLedgerOff);
@@ -529,13 +529,13 @@ fn ua_ledger_off_refused() {
     assert_eq!(err(s.t.try_mint_to_ua(&u.id, &1)), Error::UaLedgerOff);
     assert_eq!(s.transfer(&u, &to, 1, [1; 32], 0, NOW + 10, &None), Err(Error::UaLedgerOff));
     assert_eq!(s.pay(&u, &to, 1, [1; 32], NOW + 10), Err(Error::UaLedgerOff));
-    assert_eq!(err(s.t.try_ua_pay_meta(&u.id, &to, &1, &r, &z, &(NOW + 10), &None, &z)), Error::UaLedgerOff);
+    assert_eq!(err(s.t.try_ua_pay_meta(&u.id, &to, &1, &r, &z, &(NOW + 10), &None, &no)), Error::UaLedgerOff);
     assert_eq!(s.burn(&u, 1, [1; 32], 0, NOW + 10), Err(Error::UaLedgerOff));
-    assert_eq!(err(s.t.try_ua_cancel_nonce(&u.id, &r, &(NOW + 10), &z)), Error::UaLedgerOff);
+    assert_eq!(err(s.t.try_ua_cancel_nonce(&u.id, &r, &(NOW + 10), &no)), Error::UaLedgerOff);
     let dex = Address::generate(env);
     let o = order(env, &u.id, pool, 10);
-    allow(env, &dex, pool, "ua_trade", (&dex, &o, &z, 1i128).into_val(env));
-    assert_eq!(err(s.t.try_ua_trade(&dex, &o, &z, &1)), Error::UaLedgerOff);
+    allow(env, &dex, pool, "ua_trade", (&dex, &o, &no, 1i128).into_val(env));
+    assert_eq!(err(s.t.try_ua_trade(&dex, &o, &no, &1)), Error::UaLedgerOff);
     assert_eq!(s.t.balance(&a), 100);
 }
 
@@ -546,12 +546,8 @@ fn ua_receiver_not_registered_or_not_receivable() {
     let env = &s.env;
     let p: Value = serde_json::from_str(PORTABLE).unwrap();
     let row = |name: &str| p["registrations"].as_array().unwrap().iter().find(|r| r["name"] == name).unwrap().clone();
-    let on = |r: &Value| {
-        let kind = r["kind"].as_u64().unwrap() as u32;
-        s.reg.register(&kind, &Bytes::from_slice(env, &hx(&r["keyData"])), &no_attrs(env), &Bytes::from_slice(env, &hx(&r["pop"])), &Bytes::new(env), &None)
-    };
-    on(&row("mldsa65#1"));
-    let unspendable = on(&row("msig-pq-native"));
+    register_row(env, &s.reg, &row("mldsa65#1"));
+    let unspendable = register_row(env, &s.reg, &row("msig-pq-native"));
     assert!(!s.reg.receivable(&unspendable));
     let ghost = n(env, [0x42; 32]);
     let u = s.ua(1);
@@ -640,7 +636,7 @@ pub struct FakeDex;
 
 #[contractimpl]
 impl FakeDex {
-    pub fn take(env: Env, token: Address, dex: Address, order: Order, auth: Bytes, amount: i128) {
+    pub fn take(env: Env, token: Address, dex: Address, order: Order, auth: UaSig, amount: i128) {
         TokenClient::new(&env, &token).ua_trade(&dex, &order, &auth, &amount);
     }
 }
@@ -684,7 +680,7 @@ fn ua_trade_only_named_dex() {
 
 /// Review I1 + controller ruling 2026-10-30 (EVM `DexNotContract` / `pulled[h]` parity): the token bounds what the named
 /// DEX pulls. A UA with 1 000, a 60-unit order signed for a `FakeDex`.
-fn trade_fixture() -> (T, Ua, Address, Order, Bytes) {
+fn trade_fixture() -> (T, Ua, Address, Order, UaSig) {
     let s = setup();
     let u = s.ua(1);
     s.mint_ua(&u.id, 1_000);
@@ -746,6 +742,31 @@ fn arg_vals(env: &Env, p: &Value) -> SVec<Val> {
     v
 }
 
+/// A vector's `registrations[]` row: `register`, or `register_msig` of an `msig` (`portable.json`: `args.pop`; the
+/// `ua-ops.json` one has none, U8S-D2).
+fn register_row(env: &Env, reg: &RegClient, r: &Value) -> BytesN<32> {
+    let (kind, none) = (r["kind"].as_u64().unwrap() as u32, Bytes::new(env));
+    if kind != 0x0120 {
+        return reg.register(&kind, &Bytes::from_slice(env, &hx(&r["keyData"])), &UaAttrs::none(env), &Bytes::from_slice(env, &hx(&r["pop"])), &none, &None);
+    }
+    let mut members = SVec::new(env);
+    for m in r["members"].as_array().unwrap() {
+        let (kind, weight) = (m["kind"].as_u64().unwrap() as u32, m["weight"].as_u64().unwrap() as u32);
+        members.push_back(MsigMember { kind, id: BytesN::from_array(env, &hx(&m["id"]).try_into().unwrap()), weight });
+    }
+    let s = MsigStructure { threshold: r["threshold"].as_u64().unwrap() as u32, members };
+    let mut pop = SVec::new(env);
+    for m in r["args"]["pop"].as_array().into_iter().flatten() {
+        pop.push_back(MemberSig { index: m["index"].as_u64().unwrap() as u32, key_data: none.clone(), sig: Bytes::from_slice(env, &hx(&m["sig"])) });
+    }
+    reg.register_msig(&s, &UaAttrs::none(env), &pop, &none, &None)
+}
+
+/// A vector's `authXdr`: the `UaSig` the entry takes.
+fn auth_of(env: &Env, p: &Value) -> UaSig {
+    <UaSig as soroban_sdk::xdr::FromXdr>::from_xdr(env, &Bytes::from_slice(env, &hx(&p["authXdr"]))).unwrap()
+}
+
 /// SOR-D12: the token at `ua-ops.json`'s id and network id; every token row's digest is recomputed, and each `perKind`
 /// `auth` of `ua_transfer` / `ua_pay` / `ua_pay_meta` / `ua_burn` / `ua_cancel_nonce` runs as the call it signs.
 #[test]
@@ -754,8 +775,7 @@ fn ua_ops_vectors_token_rows() {
     let env = &s.env;
     let o = ops();
     for r in o["registrations"].as_array().unwrap() {
-        let kind = r["kind"].as_u64().unwrap() as u32;
-        let ua = s.reg.register(&kind, &Bytes::from_slice(env, &hx(&r["keyData"])), &no_attrs(env), &Bytes::from_slice(env, &hx(&r["pop"])), &Bytes::new(env), &None);
+        let ua = register_row(env, &s.reg, r);
         assert_eq!(ua.to_array().to_vec(), hx(&r["ua"]), "{}", r["name"]);
         s.mint_ua(&ua, 1_000_000);
     }
@@ -773,7 +793,7 @@ fn ua_ops_vectors_token_rows() {
             digests += 1;
             if run {
                 let mut all = args;
-                all.push_back(Bytes::from_slice(env, &hx(&p["auth"])).into_val(env));
+                all.push_back(auth_of(env, p).into_val(env));
                 let r = env.try_invoke_contract::<(), soroban_sdk::Error>(&s.t.address, &Symbol::new(env, f), all);
                 assert!(r.is_ok(), "{} {}: {r:?}", e["name"], p["kind"]);
                 calls += 1;
@@ -788,39 +808,6 @@ fn ua_ops_vectors_token_rows() {
 /// `TAG(msig)` and purpose `member` (CTR-UA-12 / -23).
 const MSIG_TAG: [u8; 32] = h32("0c74d89236d93351f72ba09e86363f0ce977ca1f492ea24ebf6314231157fdd4");
 const PURPOSE_MEMBER_R: [u8; 32] = h32("fbd8600564b68d09f75fe5d3e6acb8fe3c5a3a4cb20da6988723433beff5212a");
-
-/// `abi.encode(MemberSig[])` with empty `keyData` in every slot.
-fn ms_slots(env: &Env, slots: &[(u32, StdVec<u8>)]) -> Bytes {
-    let w = |v: usize| {
-        let mut x = [0u8; 32];
-        x[24..].copy_from_slice(&(v as u64).to_be_bytes());
-        x
-    };
-    let pad = |v: &[u8]| {
-        let mut x = v.to_vec();
-        x.resize(v.len().div_ceil(32) * 32, 0);
-        x
-    };
-    let (mut heads, mut tails) = (StdVec::new(), StdVec::new());
-    let mut off = 32 * slots.len();
-    for (i, sig) in slots {
-        heads.extend_from_slice(&w(off));
-        let mut t = StdVec::new();
-        t.extend_from_slice(&w(*i as usize));
-        t.extend_from_slice(&w(96));
-        t.extend_from_slice(&w(96 + 32));
-        t.extend_from_slice(&w(0));
-        t.extend_from_slice(&w(sig.len()));
-        t.extend_from_slice(&pad(sig));
-        off += t.len();
-        tails.extend_from_slice(&t);
-    }
-    let mut out = w(32).to_vec();
-    out.extend_from_slice(&w(slots.len()));
-    out.extend_from_slice(&heads);
-    out.extend_from_slice(&tails);
-    Bytes::from_slice(env, &out)
-}
 
 /// Final review A-I1 (the reviewer's repro): a 1-of-2 `msig` of (ed25519 UA, the token's `C…`) was registered by the
 /// ed25519 member's `pop` and then drained by anyone through `ua_transfer`, the token's empty slot met by Soroban
@@ -843,15 +830,20 @@ fn msig_member_equal_to_token_refused() {
         kd.extend_from_slice(id);
         kd.extend_from_slice(&w.to_be_bytes());
     }
-    let kd = Bytes::from_slice(env, &kd);
-    let ua = s.reg.ua_of(&0x0120, &kd);
+    let ua = s.reg.ua_of(&0x0120, &Bytes::from_slice(env, &kd));
+    let mut members = SVec::new(env);
+    for (k, id, w) in &m {
+        members.push_back(MsigMember { kind: *k as u32, id: n(env, *id), weight: *w as u32 });
+    }
     let idx = |id: &[u8; 32]| m.iter().position(|x| &x.1 == id).unwrap() as u32;
     let z = BytesN::from_array(env, &[0u8; 32]);
     let rd = registration_digest(env, &portable_record_hash(env, &ua, 0x0120, &z, &kem_record_hash(env, &ua, 0, 0, &z)), &z).to_array();
     let md = keccak(env, &[&ua.to_array(), &keccak(env, &[&MSG_TAG, &MSIG_TAG, &PURPOSE_POP_V2, &rd])]);
-    let sig = u1.sk.sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_MEMBER_R, &md])).to_bytes().to_vec();
-    let pop = ms_slots(env, &[(idx(&u1.id.to_array()), sig)]);
-    let r = s.reg.try_register(&0x0120, &kd, &no_attrs(env), &pop, &Bytes::new(env), &None);
+    let sig = Bytes::from_array(env, &u1.sk.sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_MEMBER_R, &md])).to_bytes());
+    let mut pop = SVec::new(env);
+    pop.push_back(MemberSig { index: idx(&u1.id.to_array()), key_data: Bytes::new(env), sig });
+    let structure = MsigStructure { threshold: 1, members };
+    let r = s.reg.try_register_msig(&structure, &no_attrs(env), &pop, &Bytes::new(env), &None);
     assert_eq!(r.err(), Some(Ok(soroban_sdk::Error::from_contract_error(scaas_ua_registry::Error::MemberUnknown as u32))));
     assert!(!s.reg.receivable(&ua));
 }

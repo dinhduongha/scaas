@@ -36,16 +36,17 @@ function single(name, index) {
   const sk = sc.seed ? int(keccak_256(utf8ToBytes(`scaas.ua.vectors.sig.${label}`))) : secretOf(label, sc.n);
   return make(label, sc.kind, sc.keyData(sk), (m) => sc.sign(sk, m));
 }
-/** The 2-of-3 msig of ed25519, p256 and mldsa65#1 (weights 1, sorted by id): `sign(uaMsg)` = abi.encode(MemberSig[]) of
- *  members 0 and 1 over memberDigest(ua, uaMsg) under `member`, empty keyData (registered members, CTR-UA-33). */
+/** The 2-of-3 msig of ed25519, p256 and mldsa65#1 (weights 1, sorted by id): `slots(uaMsg)` = the MemberSigs of members 0
+ *  and 1 over memberDigest(ua, uaMsg) under `member`, empty keyData (registered members, CTR-UA-33); `sign` = their
+ *  abi.encode(MemberSig[]). */
 function msig() {
   const members = [single('ed25519', 0), single('p256', 0), single('mldsa65', 1)]
     .sort((a, b) => (hex(a.ua) < hex(b.ua) ? -1 : 1)).map((m, index) => ({ ...m, index, weight: 1 }));
   const keyData = s.encodeMsig(2, members.map((m) => ({ kind: m.kind, id: m.ua, weight: m.weight })));
   const id = ua.uaOf(0x0120, keyData);
-  const sign = (m) => encodeMemberSigs([0, 1].map((i) => ({ index: i, keyData: NONE,
-    sig: members[i].sign(ua.uaMessage(members[i].kind, MEMBER, ua.memberDigest(id, m))) })));
-  return { ...make('msig-2of3', 0x0120, keyData, sign), threshold: 2, members };
+  const slots = (m) => [0, 1].map((i) => ({ index: i, keyData: NONE,
+    sig: members[i].sign(ua.uaMessage(members[i].kind, MEMBER, ua.memberDigest(id, m))) }));
+  return { ...make('msig-2of3', 0x0120, keyData, (m) => encodeMemberSigs(slots(m))), slots, threshold: 2, members };
 }
 
 /** The signer of `kind` (an S3 kind name or `msig`); `mldsa65` defaults to index 2 (index 1 is the msig member). */
@@ -54,11 +55,13 @@ export function signer(kind, index = kind === 'mldsa65' ? 2 : 0) {
   if (!SINGLE.includes(kind)) throw new Error(`not an S3 kind: ${kind}`);
   return single(kind, index);
 }
-/** `auth` for (purpose name or 32-byte tag, digest): the kind's signature over ua_msg (`pop` = the portable `pop` v2). */
+/** `auth` for (purpose name or 32-byte tag, digest): the kind's signature over ua_msg (`pop` = the portable `pop` v2);
+ *  `authXdr`: the `UaSig` ScVal the entries take. */
 export function authFor(sg, purpose, digest) {
   const tag = purpose === 'pop' ? ua.POP_V2_TAG : typeof purpose === 'string' ? ua.purposeTag(purpose) : purpose;
   const uaMsg = ua.uaMessage(sg.kind, tag, digest);
-  return { uaMsg, auth: sg.sign(uaMsg) };
+  const auth = sg.sign(uaMsg);
+  return { uaMsg, auth, authXdr: s.uaSig(sg.slots ? { members: sg.slots(uaMsg) } : { signature: auth }).xdr };
 }
 
 // --- the fixed network, contracts and arguments ---
@@ -144,9 +147,9 @@ function build() {
     perKind: signers.map((sg) => {
       const list = args(sg);
       const digest = s.opDigest({ networkId: NET, contract, fn, args: list.map((x) => x.v) });
-      const { uaMsg, auth } = authFor(sg, purpose, digest);
+      const { uaMsg, auth, authXdr } = authFor(sg, purpose, digest);
       return { kind: ua.kindInfo(sg.kind).name, ua: hex(sg.ua), args: list.map((x) => ({ name: x.name, type: x.type, xdr: hex(x.v.xdr) })),
-        digest: hex(digest), uaMsg: hex(uaMsg), auth: hex(auth) };
+        digest: hex(digest), uaMsg: hex(uaMsg), auth: hex(auth), authXdr: hex(authXdr) };
     }),
   }));
   const note = [
@@ -156,13 +159,15 @@ function build() {
     'a contracttype enum = Vec[Symbol(variant), payload]). uaMsg = keccak256(MSG_TAG | TAG(kind) | purposeTag | digest);',
     'auth: the kind\'s signature over uaMsg (ML-DSA over pq_msg = keccak256(TAG(kind) | uaMsg), empty context; WebAuthn the',
     'canonical abi.encode blob); msig: abi.encode(MemberSig[]) of members 0 and 1 over memberDigest(ua, uaMsg) under purpose',
-    'member, empty keyData (registered members). The args name the signer (from / ua / order.maker), so args and digest are',
+    'member, empty keyData (registered members); authXdr: the UaSig ScVal the entry takes (typed-signing TS-D12: a single',
+    'key only signature, the msig only members). The args name the signer (from / ua / order.maker), so args and digest are',
     'per kind. ua_order is ua_trade\'s digest (contract = token, fn "ua_order", args (dex, order)); ua_cancel the DEX\'s',
     '(SOR-D10); ua_relay the inner token.ua_pay of router.ua_relay (relayer = Some(router), pay_ref = relay.ref =',
     'keccak256("scaas.relayfee" | networkId | xdr(target) | keccak256(xdr((func, args))) | salt), open mode: to = router);',
     'mtx_* are signed by the mandate owner (mtx_set_mandate) and the delegate (mtx_mandate_pay, epoch 1 = after the',
     'first mtx_set_mandate, CTR-ACC-07). registrations[i] =',
-    'register(kind, keyData, empty attrs, pop, empty pqz_pop, None) (portable, no network); the single-key rows are',
+    'register(kind, keyData, empty attrs, pop, empty pqz_pop, None) (portable, no network), the msig',
+    'register_msig({threshold, members}, empty attrs, [], empty pqz_pop, None); the single-key rows are',
     'portable.json\'s; mldsa65 signs as mldsa65#2, mldsa65#1 is an msig member; the msig is classical-dominant: empty pop.',
   ].join(' ');
   return { note, version: 1, network: { passphrase: PASSPHRASE, networkId: hex(NET) }, contracts: C, registrations, entries };

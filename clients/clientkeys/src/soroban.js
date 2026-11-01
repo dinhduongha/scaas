@@ -68,6 +68,13 @@ export function holderUa(id) {
   if (b.length !== 32) throw new Error('a UA id is 32 bytes');
   return variant('Ua', bytesN(b));
 }
+/** A `UaSig` (TS-D12): a single key `{ signature }`, an `msig` `{ members: [{ index, keyData, sig }] }`; `key_data` stays
+ *  empty on Soroban (the key is read from the record). */
+export function uaSig({ signature = new Uint8Array(0), members = [] }) {
+  const none = bytes(new Uint8Array(0));
+  const slots = members.map((m) => struct({ index: u32(m.index), key_data: bytes(m.keyData), sig: bytes(m.sig) }));
+  return struct({ key_data: none, members: vec(slots), signature: bytes(signature) });
+}
 export const scvalXdr = (v) => v.xdr;
 
 export const networkId = (passphrase) => sha256(utf8ToBytes(passphrase));

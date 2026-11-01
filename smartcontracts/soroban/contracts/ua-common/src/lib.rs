@@ -20,12 +20,91 @@ pub enum Checked {
     Relayer(Address),
 }
 
+/// A KEM public key (EVM `KemKey`, TS-D11): scheme 1 = ML-KEM-1024 `mlkem_ek` (1,568 B) + X25519 `x25519`; `kem_pk` =
+/// `scheme ‖ mlkem_ek ‖ x25519` (1,601 B). All zero / empty = no key.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KemKey {
+    pub scheme: u32,
+    pub mlkem_ek: Bytes,
+    pub x25519: BytesN<32>,
+}
+
+/// The registration attributes as `register` takes them (EVM `UAAttrs`): the KEM key is version 0, whole (`kem` set,
+/// `kem_pk_hash` 0) or committed by hash (`kem_pk_hash` ≠ 0, `kem` only its `scheme`). `Registration.attrs` holds them
+/// without the bytes (U8S-D3): `pqz_key` empty, `kem` zero unless committed.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UaAttrs {
     pub pqz_key: Bytes,
     pub pqz_pop_hash: BytesN<32>,
-    pub kem_pk: Bytes,
+    pub kem: KemKey,
+    pub kem_pk_hash: BytesN<32>,
+}
+
+impl KemKey {
+    pub fn none(env: &Env) -> Self {
+        KemKey { scheme: 0, mlkem_ek: Bytes::new(env), x25519: BytesN::from_array(env, &[0; 32]) }
+    }
+}
+
+impl UaAttrs {
+    pub fn none(env: &Env) -> Self {
+        let zero = BytesN::from_array(env, &[0; 32]);
+        UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: zero.clone(), kem: KemKey::none(env), kem_pk_hash: zero }
+    }
+}
+
+/// One `msig` member's signature (EVM `MemberSig`): `key_data` always empty, the member's key is read from its record.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MemberSig {
+    pub index: u32,
+    pub key_data: Bytes,
+    pub sig: Bytes,
+}
+
+/// A UA's signature (EVM `UASig`, TS-D12): a single key only `signature`, an `msig` only `members`; `key_data` stays
+/// empty on Soroban (the key is read from the record, as EVM's stored kinds). Any other field set is not authorized.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UaSig {
+    pub key_data: Bytes,
+    pub signature: Bytes,
+    pub members: Vec<MemberSig>,
+}
+
+impl UaSig {
+    /// No signature: a native signer's `auth` (host auth).
+    pub fn none(env: &Env) -> Self {
+        UaSig { key_data: Bytes::new(env), signature: Bytes::new(env), members: Vec::new(env) }
+    }
+    pub fn single(env: &Env, signature: Bytes) -> Self {
+        UaSig { signature, ..Self::none(env) }
+    }
+    pub fn msig(env: &Env, members: Vec<MemberSig>) -> Self {
+        UaSig { members, ..Self::none(env) }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.key_data.is_empty() && self.signature.is_empty() && self.members.is_empty()
+    }
+}
+
+/// An `msig` member (EVM `MsigMember`, TS-D10); `kind` and `weight` are `u16` in the CTR-UA-09 key data.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MsigMember {
+    pub kind: u32,
+    pub id: BytesN<32>,
+    pub weight: u32,
+}
+
+/// An `msig` structure (EVM `MsigStructure`, TS-D10): the registry assembles the CTR-UA-09 key data from it.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MsigStructure {
+    pub threshold: u32,
+    pub members: Vec<MsigMember>,
 }
 
 #[contracttype]
@@ -62,7 +141,7 @@ pub struct Order {
 /// What the tokens, the mandate and the DEX call on the registry (spec §4).
 #[contractclient(name = "UaRegistryClient")]
 pub trait UaRegistryApi {
-    fn require_authorized(env: Env, ua: BytesN<32>, purpose: BytesN<32>, digest: BytesN<32>, auth: Bytes);
+    fn require_authorized(env: Env, ua: BytesN<32>, purpose: BytesN<32>, digest: BytesN<32>, auth: UaSig);
     fn receivable(env: Env, ua: BytesN<32>) -> bool;
     fn record_of(env: Env, ua: BytesN<32>) -> Option<Registration>;
 }
@@ -108,6 +187,9 @@ pub const UA_PORTABLE_RECORD_TYPEHASH: [u8; 32] = h32("0c1553cfab3c35326558484df
 /// `keccak256("UARegistration(UAPortableRecord record,bytes32 pqzPopHash)" ‖ UAKemRecord type ‖ UAPortableRecord type)`.
 pub const UA_REGISTRATION_TYPEHASH: [u8; 32] = h32("c78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e");
 
+/// `keccak256("scaas.ua.group.pqz-mlwe.v1")`: the keyHash group of a PQZ key (pinned by `portable.json` `tags`).
+pub const PQZ_KEY_GROUP: [u8; 32] = h32("0b46b017252788e1ba969e603cf986c143943e1d6d1176004a6f577a298a53e4");
+
 /// `keccak256("UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)")`.
 pub const UA_PQZ_KEY_TYPEHASH: [u8; 32] = h32("827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00");
 /// `keccak256("UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)" ‖ UAPqzKey type)`.
@@ -142,6 +224,34 @@ pub fn kem_record_hash(env: &Env, ua: &BytesN<32>, version: u64, scheme: u8, kem
     keccak_words(env, &[&UA_KEM_RECORD_TYPEHASH, &ua.to_array(), &v, &s, &kem_pk_hash.to_array()]).into()
 }
 
+/// EVM `kemRecordHash(ua, version, kemPk)`: the record of a whole key (`scheme` = its first byte, `kemPkHash` = its
+/// keccak256); no record (version 0, no key) is the zero record.
+pub fn kem_pk_record_hash(env: &Env, ua: &BytesN<32>, version: u64, kem_pk: &Bytes) -> BytesN<32> {
+    if version == 0 && kem_pk.is_empty() {
+        return kem_record_hash(env, ua, 0, 0, &BytesN::from_array(env, &[0; 32]));
+    }
+    kem_record_hash(env, ua, version, kem_pk.get(0).unwrap_or(0), &env.crypto().keccak256(kem_pk).into())
+}
+
+/// EVM `UAKinds.kemPk`: `scheme ‖ mlkem_ek ‖ x25519`, empty for no key. A `scheme` above 255 does not survive the byte:
+/// the registry refuses it on `kem.scheme` itself.
+pub fn kem_pk(env: &Env, k: &KemKey) -> Bytes {
+    if k == &KemKey::none(env) {
+        return Bytes::new(env);
+    }
+    let mut b = Bytes::from_array(env, &[k.scheme as u8]);
+    b.append(&k.mlkem_ek);
+    b.extend_from_array(&k.x25519.to_array());
+    b
+}
+
+/// `keccak256(PQZ_KEY_GROUP ‖ pqz_key)`: `pqzKeyHash`, the keyHash of scheme 0x0142.
+pub fn pqz_key_hash(env: &Env, pqz_key: &Bytes) -> BytesN<32> {
+    let mut b = Bytes::from_array(env, &PQZ_KEY_GROUP);
+    b.append(pqz_key);
+    env.crypto().keccak256(&b).into()
+}
+
 /// `hashStruct(UAPortableRecord{ua, kind, pqzKeyHash, kem})`, `kem_hash = kem_record_hash` of the initial KEM record.
 pub fn portable_record_hash(env: &Env, ua: &BytesN<32>, kind: u32, pqz_key_hash: &BytesN<32>, kem_hash: &BytesN<32>) -> BytesN<32> {
     let k = uint_word(kind as u64);
@@ -158,9 +268,7 @@ pub fn registration_digest(env: &Env, record_hash: &BytesN<32>, pqz_pop_hash: &B
 /// typed(`UAKemRecord`) of the KEM key `kem_pk` (`scheme` = its first byte, `kemPkHash` = its keccak256), signed as
 /// `ua_message(kind, PURPOSE_KEM, ·)` by `set_kem_key`. EVM `UAKinds.kemRecordDigest`.
 pub fn kem_record_digest(env: &Env, ua: &BytesN<32>, version: u64, kem_pk: &Bytes) -> BytesN<32> {
-    let scheme = kem_pk.get(0).unwrap_or(0);
-    let h: BytesN<32> = env.crypto().keccak256(kem_pk).into();
-    portable_digest(env, &kem_record_hash(env, ua, version, scheme, &h)).into()
+    portable_digest(env, &kem_pk_record_hash(env, ua, version, kem_pk)).into()
 }
 
 /// typed(`UAPqzKey`): a later PQZ key's own proof signs `ua_message(0x0142, PURPOSE_PQZ_KEY, ·)` of it (no proof hash).

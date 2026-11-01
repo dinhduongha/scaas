@@ -12,12 +12,12 @@
 //! bounded by `filled[order_hash]` here and by the token's own `UaPulled`. Every leg is pulled into the DEX, then paid
 //! to the other order's `destination` (`transfer`, or `transfer_to_ua` for a UA) and the fee recipient.
 #![no_std]
-/// The order and holder types of the DEX's interface.
-pub use scaas_ua_common::{Holder, Order};
+/// The order, holder and signature types of the DEX's interface.
+pub use scaas_ua_common::{Holder, Order, UaSig};
 use scaas_ua_common::{op_digest, UaRegistryClient, PURPOSE_TRADE};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractevent, contractimpl, contracttype, panic_with_error,
-    xdr::ToXdr, Address, Bytes, BytesN, Env, IntoVal, I256,
+    xdr::ToXdr, Address, BytesN, Env, IntoVal, I256,
 };
 
 const DAY: u32 = 17_280;
@@ -91,7 +91,7 @@ pub trait DexToken {
     fn transfer_from(env: Env, spender: Address, from: Address, to: Address, amount: i128);
     fn transfer(env: Env, from: Address, to: Address, amount: i128);
     fn transfer_to_ua(env: Env, from: Address, to: BytesN<32>, amount: i128);
-    fn ua_trade(env: Env, dex: Address, order: Order, auth: Bytes, amount: i128);
+    fn ua_trade(env: Env, dex: Address, order: Order, auth: UaSig, amount: i128);
 }
 
 pub fn order_hash(env: &Env, o: &Order) -> BytesN<32> {
@@ -123,7 +123,7 @@ fn admin(env: &Env) -> Address {
 
 /// A native maker signs its order by host auth and carries no `auth`; a UA maker's `auth` is checked by the sell token
 /// (`ua_trade`) when its leg is pulled.
-fn authorize(env: &Env, o: &Order, auth: &Bytes) {
+fn authorize(env: &Env, o: &Order, auth: &UaSig) {
     if let Holder::Addr(a) = &o.maker {
         if !auth.is_empty() {
             panic_with_error!(env, Error::BadAuth);
@@ -133,7 +133,7 @@ fn authorize(env: &Env, o: &Order, auth: &Bytes) {
 }
 
 /// `amount` of `o.sell_token` from its maker into the DEX.
-fn pull(env: &Env, o: &Order, auth: &Bytes, amount: i128) {
+fn pull(env: &Env, o: &Order, auth: &UaSig, amount: i128) {
     let (t, me) = (DexTokenClient::new(env, &o.sell_token), env.current_contract_address());
     match &o.maker {
         Holder::Addr(a) => t.transfer_from(&me, a, &me, &amount),
@@ -198,7 +198,7 @@ impl Dex {
 
     /// `cancel` for a UA maker (SOR-D10): its signature over `op_digest(dex, "ua_cancel", (order,))`, purpose `trade`,
     /// through the registry bound at construction.
-    pub fn ua_cancel(env: Env, order: Order, auth: Bytes) {
+    pub fn ua_cancel(env: Env, order: Order, auth: UaSig) {
         bump(&env);
         let Holder::Ua(ua) = &order.maker else { panic_with_error!(&env, Error::BadAuth) };
         let reg = match env.storage().instance().get::<_, Option<Address>>(&Key::Registry).flatten() {
@@ -213,7 +213,7 @@ impl Dex {
     /// `maker_fill` = lượng `maker.sell_token` maker bán trong lần khớp này. Taker trả theo giá của maker
     /// (làm tròn lên — maker không bao giờ nhận dưới giới hạn), và phải nhận ít nhất giá của chính taker.
     /// `maker_auth` / `taker_auth`: a UA maker's order signature, empty for a native maker (`BadAuth`).
-    pub fn settle(env: Env, maker: Order, taker: Order, maker_fill: i128, maker_auth: Bytes, taker_auth: Bytes) {
+    pub fn settle(env: Env, maker: Order, taker: Order, maker_fill: i128, maker_auth: UaSig, taker_auth: UaSig) {
         bump(&env);
         // Cùng token ⇒ một lệnh có thể khớp chính nó (mh == th) và ghi đè `filled`.
         if maker.sell_token != taker.buy_token || maker.buy_token != taker.sell_token || maker.sell_token == maker.buy_token {

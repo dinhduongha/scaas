@@ -18,10 +18,10 @@
 #![no_std]
 /// The holder type of the mandate's interface (owner, delegate, payee).
 pub use scaas_ua_common::Holder;
-use scaas_ua_common::{op_digest, UaRegistryClient, PURPOSE_METATX};
+use scaas_ua_common::{op_digest, UaRegistryClient, UaSig, PURPOSE_METATX};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractevent, contractimpl, contracttype, panic_with_error, Address,
-    Bytes, BytesN, Env, IntoVal, TryFromVal, Val, Vec,
+    BytesN, Env, IntoVal, TryFromVal, Val, Vec,
 };
 
 const DAY: u32 = 17_280;
@@ -173,7 +173,7 @@ fn authorize(
     lane: Option<(&BytesN<32>, u64)>,
     valid_until: u64,
     relayer: &Option<Address>,
-    auth: &Bytes,
+    auth: &UaSig,
 ) {
     // Every entry, also those that write nothing persistent (`mtx_revoke`, `mtx_withdraw`, `mtx_set_payee(false)`).
     env.storage().instance().extend_ttl(TTL_MIN, TTL_BUMP);
@@ -260,7 +260,7 @@ impl MandateWallet {
         nonce: u64,
         valid_until: u64,
         relayer: Option<Address>,
-        auth: Bytes,
+        auth: UaSig,
     ) {
         let args = (
             token.clone(), delegate.clone(), max_per_payment, max_per_period, period_seconds, expiry, lane.clone(), nonce,
@@ -288,7 +288,7 @@ impl MandateWallet {
         nonce: u64,
         valid_until: u64,
         relayer: Option<Address>,
-        auth: Bytes,
+        auth: UaSig,
     ) {
         let args = (token.clone(), payee.clone(), allowed, lane.clone(), nonce, valid_until, relayer.clone());
         authorize(&env, &owner(&env), "mtx_set_payee", args.into_val(&env), Some((&lane, nonce)), valid_until, &relayer, &auth);
@@ -312,7 +312,7 @@ impl MandateWallet {
         nonce: u64,
         valid_until: u64,
         relayer: Option<Address>,
-        auth: Bytes,
+        auth: UaSig,
     ) {
         let m = must_mandate(&env, &token);
         if by != owner(&env) {
@@ -339,7 +339,7 @@ impl MandateWallet {
         nonce: u64,
         valid_until: u64,
         relayer: Option<Address>,
-        auth: Bytes,
+        auth: UaSig,
     ) {
         let args = (token.clone(), to.clone(), amount, lane.clone(), nonce, valid_until, relayer.clone());
         authorize(&env, &owner(&env), "mtx_withdraw", args.into_val(&env), Some((&lane, nonce)), valid_until, &relayer, &auth);
@@ -362,7 +362,7 @@ impl MandateWallet {
         epoch: u64,
         valid_until: u64,
         relayer: Option<Address>,
-        auth: Bytes,
+        auth: UaSig,
     ) {
         let mut m = must_mandate(&env, &token);
         let rk = Key::Ref(pay_ref.clone());

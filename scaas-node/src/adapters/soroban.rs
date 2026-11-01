@@ -1636,7 +1636,7 @@ mod tests {
             }
             for row in e["perKind"].as_array().unwrap() {
                 let mut args: Vec<ScVal> = row["args"].as_array().unwrap().iter().map(|a| xdr(&a["xdr"])).collect();
-                let auth = byt(&strip(&row["auth"]));
+                let auth = xdr(&row["authXdr"]);
                 let (contract, function) = if e["name"] == "ua_relay" {
                     let r = &e["relay"];
                     assert_eq!(args[3], byt(&strip(&r["ref"])), "the vector's pay_ref is its relay ref");

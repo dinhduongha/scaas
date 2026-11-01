@@ -24,8 +24,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use soroban_common::*;
 use stellar_xdr::{
-    Hash, HashIdPreimage, HashIdPreimageSorobanAuthorization, Int128Parts, InvokeContractArgs, Limits, ScAddress, ScMap,
-    ScMapEntry, ScSymbol, ScVal, ScVec, SorobanAuthorizedFunction, SorobanAuthorizedInvocation, WriteXdr,
+    Hash, HashIdPreimage, HashIdPreimageSorobanAuthorization, Int128Parts, InvokeContractArgs, Limits, ReadXdr, ScAddress,
+    ScMap, ScMapEntry, ScSymbol, ScVal, ScVec, SorobanAuthorizedFunction, SorobanAuthorizedInvocation, WriteXdr,
 };
 use tokio::sync::OnceCell;
 
@@ -38,7 +38,7 @@ const TAKER: u32 = 9;
 const BYSTANDER: u32 = 8;
 /// Empty `Bytes` for the CLI: the JSON string `""` (a bare empty value is refused as missing).
 const EMPTY_PQZ_POP: &str = "--pqz_pop=\"\"";
-const EMPTY_AUTH: &str = "--auth=\"\"";
+const EMPTY_AUTH: &str = r#"--auth={"key_data":"","members":[],"signature":""}"#;
 
 /// A UA test signer: the `soroban-sign.mjs` kind and key index, and its `ua-ops.json` registration row.
 #[derive(Clone, Copy)]
@@ -64,7 +64,7 @@ impl UaKey {
         assert!(out.status.success(), "soroban-sign.mjs: {}", String::from_utf8_lossy(&out.stderr));
         let v: Value = serde_json::from_slice(&out.stdout).unwrap();
         assert_eq!(v["ua"].as_str().unwrap(), format!("0x{}", hx(&self.id())), "{} signs as another UA", self.row);
-        bytes(&unhex(v["auth"].as_str().unwrap()))
+        ScVal::from_xdr(unhex(v["authXdr"].as_str().unwrap()), Limits::none()).unwrap()
     }
 }
 
@@ -107,6 +107,12 @@ fn h_addr(s: &str) -> ScVal {
 /// CLI JSON of a `Holder`.
 fn ua_json(u: &[u8; 32]) -> String {
     format!("{{\"Ua\":\"{}\"}}", hx(u))
+}
+
+/// The empty `UaSig` of a native leg (host auth), as its contracttype map (fields sorted).
+fn no_auth() -> ScVal {
+    let e = |k: &str, v: ScVal| ScMapEntry { key: ScVal::Symbol(sym(k)), val: v };
+    ScVal::Map(Some(ScMap(vec![e("key_data", bytes(&[])), e("members", vecv(vec![])), e("signature", bytes(&[]))].try_into().unwrap())))
 }
 
 /// A DEX `Order` as its contracttype map (fields sorted).
@@ -204,7 +210,8 @@ async fn setup() -> Stack {
     let dex = deploy_sh("dex", &s, &["--admin", &admin, "--fee_recipient", &admin, "--registry", &reg]);
     println!("T10 stack: registry {registry} token {token} token_b {token_b} router {router} executor {executor} mandate {mandate} dex {dex}");
 
-    let attrs = format!("{{\"kem_pk\":\"\",\"pqz_key\":\"\",\"pqz_pop_hash\":\"{}\"}}", "0".repeat(64));
+    let z = "0".repeat(64);
+    let attrs = format!("{{\"kem\":{{\"mlkem_ek\":\"\",\"scheme\":0,\"x25519\":\"{z}\"}},\"kem_pk_hash\":\"{z}\",\"pqz_key\":\"\",\"pqz_pop_hash\":\"{z}\"}}");
     let mut registered = Vec::new();
     for k in [PASSKEY, MLDSA65] {
         let r = k.registration();
@@ -297,7 +304,8 @@ fn ua0x(u: &[u8; 32]) -> String {
 #[ignore]
 async fn e2e_soroban_ua_register_passkey_and_mldsa65() {
     let st = stack().await;
-    let attrs = format!("{{\"kem_pk\":\"\",\"pqz_key\":\"\",\"pqz_pop_hash\":\"{}\"}}", "0".repeat(64));
+    let z = "0".repeat(64);
+    let attrs = format!("{{\"kem\":{{\"mlkem_ek\":\"\",\"scheme\":0,\"x25519\":\"{z}\"}},\"kem_pk_hash\":\"{z}\",\"pqz_key\":\"\",\"pqz_pop_hash\":\"{z}\"}}");
     for r in &st.registered {
         println!(
             "T10 register {}: ua {} tx {} ledger {} cpu_insns {} resource_fee {} fee_charged {} stroops",
@@ -469,7 +477,7 @@ async fn e2e_soroban_ua_dex_leg() {
     let bal = |t: &str, f: &str, a: &str, v: &str| view_i128(t, f, &[a, v]);
     let (ml_a, ml_b) = (bal(&st.token, "ua_balance", "--ua", &hx(&ml)), bal(&st.token_b, "ua_balance", "--ua", &hx(&ml)));
     let (tk_a, tk_b) = (bal(&st.token, "balance", "--id", &tg), bal(&st.token_b, "balance", "--id", &tg));
-    let args = vec![maker, tko, i128v(1_000), maker_auth, bytes(&[])];
+    let args = vec![maker, tko, i128v(1_000), maker_auth, no_auth()];
     node.mined("settle UA maker (mldsa65) vs native taker", 0, ua_job(501, &st.dex, "settle", args, auth)).await;
     assert_eq!(bal(&st.token, "ua_balance", "--ua", &hx(&ml)), ml_a - 1_000);
     assert_eq!(bal(&st.token_b, "ua_balance", "--ua", &hx(&ml)), ml_b + 2_000);

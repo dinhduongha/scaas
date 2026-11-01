@@ -328,7 +328,7 @@ fn dex_settles_on_real_signatures_once_per_signature() {
                       buy_token: t.t2.address.clone(), buy_amount: 200, max_fee_ppm: 0, expiry: NOW + 60, salt: 1 };
     let bid = Order { maker: b.clone(), destination: b, relayer: rel.clone(), sell_token: t.t2.address.clone(), sell_amount: 300,
                       buy_token: t.t1.address.clone(), buy_amount: 100, max_fee_ppm: 0, expiry: NOW + 60, salt: 2 };
-    let no = Bytes::new(e);
+    let no = scaas_dex::UaSig::none(e);
     // The relayer's entry over the whole call.
     let relayed = |fill: i128, nonce: i64| {
         ed_entry(e, &rel, &rel_key, invocation(e, &dex.address, "settle", (ask.clone(), bid.clone(), fill, no.clone(), no.clone()).into_val(e)), nonce)

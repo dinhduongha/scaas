@@ -61,7 +61,7 @@ test('soroban ua-ops.json reproduced byte for byte', () => {
     const out = execFileSync(process.execPath, [fileURLToPath(new URL('../scripts/soroban-sign.mjs', import.meta.url)),
       kind, index, p.digest, e.purpose], { encoding: 'utf8' });
     const r = V.registrations.find((x) => x.ua === p.ua);
-    assert.deepEqual(JSON.parse(out), { ua: p.ua, keyData: r.keyData, auth: p.auth }, kind);
+    assert.deepEqual(JSON.parse(out), { ua: p.ua, keyData: r.keyData, auth: p.auth, authXdr: p.authXdr }, kind);
   }
 });
 

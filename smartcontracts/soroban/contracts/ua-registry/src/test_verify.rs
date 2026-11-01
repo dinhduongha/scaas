@@ -626,6 +626,12 @@ fn portable_digests_with_attrs_match() {
         if pqz_key.is_empty() && kem_pk.is_empty() {
             continue;
         }
+        if !pqz_key.is_empty() {
+            // keccak256(PQZ_KEY_GROUP ‖ pqzKey): the keyHash of scheme 0x0142, not a plain keccak (`portable.json` note)
+            assert_eq!(pqz_key_hash(&env, &b(&env, &pqz_key)), n32(&env, &r["pqzKeyHash"]), "pqzKeyHash of {}", r["name"]);
+            let plain: BytesN<32> = env.crypto().keccak256(&b(&env, &pqz_key)).into();
+            assert_ne!(plain, n32(&env, &r["pqzKeyHash"]), "{}", r["name"]);
+        }
         let ua = n32(&env, &r["ua"]);
         let zero = BytesN::from_array(&env, &[0; 32]);
         let kem = if kem_pk.is_empty() {
@@ -633,6 +639,7 @@ fn portable_digests_with_attrs_match() {
         } else {
             kem_record_hash(&env, &ua, 0, kem_pk[0], &env.crypto().keccak256(&b(&env, &kem_pk)).into())
         };
+        assert_eq!(kem_pk_record_hash(&env, &ua, 0, &b(&env, &kem_pk)), kem, "{}", r["name"]);
         assert_eq!(kem.to_array().to_vec(), hx(&r["kemRecordHash"]), "kemRecordHash of {}", r["name"]);
         let rec = portable_record_hash(&env, &ua, kind_of(&r["kind"]), &n32(&env, &r["pqzKeyHash"]), &kem);
         assert_eq!(portable_digest(&env, &rec).to_array().to_vec(), hx(&r["portableRecordDigest"]), "{}", r["name"]);
@@ -641,4 +648,24 @@ fn portable_digests_with_attrs_match() {
         seen += 1;
     }
     assert!(seen > 0);
+}
+
+/// B1 review: "no KEM key" is EVM's zero record `UAKemRecord{ua, 0, 0, 0}`, not scheme 0 over `keccak256("")`: every row
+/// without a KEM key pins `kem_pk_record_hash` and `kem_record_digest` of the empty key; a later version keeps the hash.
+#[test]
+fn kem_record_of_no_key_is_the_zero_record() {
+    let env = Env::default();
+    let (none, zero) = (Bytes::new(&env), BytesN::from_array(&env, &[0; 32]));
+    let mut seen = 0;
+    for r in json(PORTABLE)["registrations"].as_array().unwrap().iter().filter(|r| hx(&r["attrs"]["kemPk"]).is_empty()) {
+        let ua = n32(&env, &r["ua"]);
+        assert_eq!(kem_pk_record_hash(&env, &ua, 0, &none), n32(&env, &r["kemRecordHash"]), "{}", r["name"]);
+        let typed: BytesN<32> = portable_digest(&env, &n32(&env, &r["kemRecordHash"])).into();
+        assert_eq!(kem_record_digest(&env, &ua, 0, &none), typed, "{}", r["name"]);
+        let raw: BytesN<32> = portable_digest(&env, &kem_record_hash(&env, &ua, 0, 0, &env.crypto().keccak256(&none).into())).into();
+        assert_ne!(kem_record_digest(&env, &ua, 0, &none), raw, "{}", r["name"]);
+        assert_ne!(kem_pk_record_hash(&env, &ua, 1, &none), kem_record_hash(&env, &ua, 1, 0, &zero), "{}", r["name"]);
+        seen += 1;
+    }
+    assert!(seen >= 12, "{seen}");
 }

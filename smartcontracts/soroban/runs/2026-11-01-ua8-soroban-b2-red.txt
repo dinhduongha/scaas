@@ -1,0 +1,211 @@
+   Compiling scaas-ua-registry v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/ua-registry)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.10s
+     Running unittests src/lib.rs (target/debug/deps/scaas_ua_registry-dbecadbefa297ecc)
+
+running 78 tests
+test test::id_in_native_space_refused ... ok
+test test::entries_extend_ttl ... ok
+test test::key_hash_unique ... ok
+test test::msig_classical_dominant_matches_evm_bytes ... ok
+test test::key_data_invalid_rows_refused ... ok
+test test::member_large_pop_same_budget ... ok
+test test::msig_member_unknown_refused ... ok
+test test::msig_classical_dominant_empty_pop ... ok
+test test::msig_g_member_redundant_slot_refused ... ok
+test test::kind_msig_vectors_verify ... ok
+test test::kind_msig_negatives_fail ... ok
+test test::msig_soroban_contract_member_refused ... ok
+test test::msig_evm_eoa_member_typed_digest ... ok
+test test::register_any_submitter ... ok
+test test::msig_evm_eoa_personal_sign_refused ... ok
+test test::msig_require_authorized_keeps_rule ... ok
+test test::register_attrs_accepted ... FAILED
+test test::register_front_run_identical ... ok
+test test::msig_unsignable_not_receivable ... ok
+test test::relayers_from_constructor ... ok
+test test::require_authorized_not_registered ... ok
+test test::register_unverifiable_part_refused_4b ... ok
+test test::stellar_account_round_trip ... ok
+test test::msig_pop_not_minimal_refused ... ok
+test test::require_authorized_refuses_portable_purposes ... ok
+test test::registration_of_returns_register_args ... ok
+test test::msig_soroban_native_member_host_auth ... ok
+test test_ua8::ua8_attrs_error_unused ... FAILED
+test test::register_disabled_kind_refused ... ok
+test test::ua_lists_per_kind ... ok
+test test_ua8::ua8_checked_of_shape ... FAILED
+test test_ua8::ua8_kind_name_table ... FAILED
+test test_ua8::ua8_classical_msig_with_kem ... FAILED
+test test_ua8::ua8_entries_extend_ttl ... FAILED
+test test_ua8::ua8_kem_scheme_above_a_byte_refused ... FAILED
+test test_ua8::ua8_pqz_attrs_stored_unproven ... FAILED
+test test_ua8::ua8_negatives_from_portable_json ... FAILED
+test test_ua8::ua8_register_without_pqz_pop ... FAILED
+test test_ua8::ua8_register_kem_commit ... FAILED
+test test_ua8::ua8_events_fit_and_hash ... FAILED
+test test_verify::domain_separator_pinned ... ok
+test test_ua8::ua8_require_authorized_uasig_fields ... ok
+test test_verify::ed25519_key_check_matches_kinds_json ... ok
+test test_ua8::ua8_pqz_bytes_in_state ... FAILED
+test test_ua8::ua8_registration_of_reassembles ... ok
+test test_verify::evm_eoa_member_typed_recovers ... ok
+test test_verify::kem_record_digests_match_portable_json ... ok
+test test_verify::kem_record_of_no_key_is_the_zero_record ... ok
+test test_ua8::ua8_register_msig_typed ... FAILED
+test test::register_rows_from_portable_json ... ok
+test test_verify::kind_ed25519_vectors_verify ... ok
+test test_verify::kind_mldsa44_vectors_verify ... ok
+test test_verify::kind_ed25519_negatives_fail ... ok
+test test_verify::kind_ed25519_rfc8032_vectors ... ok
+test test_verify::kind_p256_negatives_fail ... ok
+test test_verify::kind_mldsa44_negatives_fail ... ok
+test test_verify::kind_secp256k1_negatives_fail ... ok
+test test_verify::kind_p256_vectors_verify ... ok
+test test_verify::kind_secp256k1_vectors_verify ... ok
+test test_verify::op_digest_matches_token_cross_vector ... ok
+test test_verify::pay_ids_match_paymeta_json ... ok
+test test_verify::kind_webauthn_p256_negatives_fail ... ok
+test test_verify::kind_webauthn_p256_vectors_verify ... ok
+test test_verify::kind_mldsa65_vectors_verify ... ok
+test test_verify::kind_mldsa65_negatives_fail ... ok
+test test_verify::purpose_tags_match_kinds_json ... ok
+test test_verify::portable_typehashes_pinned ... ok
+test test_verify::tags_match_kinds_json ... ok
+test test_verify::ua_message_matches_kinds_json ... ok
+test test_verify::webauthn_blob_canonical_only ... ok
+test test_verify::webauthn_cross_origin_refused ... ok
+test test_verify::member_sigs_abi_canonical_only ... ok
+test test_verify::pqz_key_record_digests_match_portable_json ... ok
+test test_verify::webauthn_origin_not_compared ... ok
+test test_verify::portable_digests_match_portable_json ... ok
+test test_ua8::ua8_register_attrs_rows ... FAILED
+test test_verify::portable_digests_with_attrs_match ... ok
+test test::require_authorized_each_kind_and_purpose ... ok
+
+failures:
+
+---- test::register_attrs_accepted stdout ----
+
+thread 'test::register_attrs_accepted' (125313) panicked at contracts/ua-registry/src/test.rs:167:23:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #7))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Writing test snapshot file for test "test::register_attrs_accepted" to "test_snapshots/test/register_attrs_accepted.1.json".
+
+---- test_ua8::ua8_attrs_error_unused stdout ----
+
+thread 'test_ua8::ua8_attrs_error_unused' (125325) panicked at contracts/ua-registry/src/test.rs:167:23:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #7))
+Writing test snapshot file for test "test_ua8::ua8_attrs_error_unused" to "test_snapshots/test_ua8/ua8_attrs_error_unused.1.json".
+
+---- test_ua8::ua8_checked_of_shape stdout ----
+
+thread 'test_ua8::ua8_checked_of_shape' (125326) panicked at contracts/ua-registry/src/test.rs:167:23:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #7))
+Writing test snapshot file for test "test_ua8::ua8_checked_of_shape" to "test_snapshots/test_ua8/ua8_checked_of_shape.1.json".
+
+---- test_ua8::ua8_kind_name_table stdout ----
+
+thread 'test_ua8::ua8_kind_name_table' (125331) panicked at contracts/ua-registry/src/test_ua8.rs:423:5:
+assertion `left == right` failed
+  left: 31
+ right: 32
+Writing test snapshot file for test "test_ua8::ua8_kind_name_table" to "test_snapshots/test_ua8/ua8_kind_name_table.1.json".
+
+---- test_ua8::ua8_classical_msig_with_kem stdout ----
+
+thread 'test_ua8::ua8_classical_msig_with_kem' (125327) panicked at contracts/ua-registry/src/test_ua8.rs:257:5:
+assertion `left == right` failed
+  left: Attrs
+ right: KemHolder
+Writing test snapshot file for test "test_ua8::ua8_classical_msig_with_kem" to "test_snapshots/test_ua8/ua8_classical_msig_with_kem.1.json".
+
+---- test_ua8::ua8_entries_extend_ttl stdout ----
+
+thread 'test_ua8::ua8_entries_extend_ttl' (125328) panicked at contracts/ua-registry/src/test.rs:167:23:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #7))
+Writing test snapshot file for test "test_ua8::ua8_entries_extend_ttl" to "test_snapshots/test_ua8/ua8_entries_extend_ttl.1.json".
+
+---- test_ua8::ua8_kem_scheme_above_a_byte_refused stdout ----
+
+thread 'test_ua8::ua8_kem_scheme_above_a_byte_refused' (125330) panicked at contracts/ua-registry/src/test_ua8.rs:268:5:
+assertion `left == right` failed
+  left: Attrs
+ right: KemScheme
+Writing test snapshot file for test "test_ua8::ua8_kem_scheme_above_a_byte_refused" to "test_snapshots/test_ua8/ua8_kem_scheme_above_a_byte_refused.1.json".
+
+---- test_ua8::ua8_pqz_attrs_stored_unproven stdout ----
+
+thread 'test_ua8::ua8_pqz_attrs_stored_unproven' (125333) panicked at contracts/ua-registry/src/test.rs:167:23:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #7))
+Writing test snapshot file for test "test_ua8::ua8_pqz_attrs_stored_unproven" to "test_snapshots/test_ua8/ua8_pqz_attrs_stored_unproven.1.json".
+
+---- test_ua8::ua8_negatives_from_portable_json stdout ----
+
+thread 'test_ua8::ua8_negatives_from_portable_json' (125332) panicked at contracts/ua-registry/src/test_ua8.rs:192:13:
+swapped-pqz-key/n2048-kmax1024: Error(Contract, #7)
+Writing test snapshot file for test "test_ua8::ua8_negatives_from_portable_json" to "test_snapshots/test_ua8/ua8_negatives_from_portable_json.1.json".
+
+---- test_ua8::ua8_register_without_pqz_pop stdout ----
+
+thread 'test_ua8::ua8_register_without_pqz_pop' (125339) panicked at contracts/ua-registry/src/test.rs:167:23:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #7))
+Writing test snapshot file for test "test_ua8::ua8_register_without_pqz_pop" to "test_snapshots/test_ua8/ua8_register_without_pqz_pop.1.json".
+
+---- test_ua8::ua8_register_kem_commit stdout ----
+
+thread 'test_ua8::ua8_register_kem_commit' (125337) panicked at contracts/ua-registry/src/test.rs:167:23:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #7))
+Writing test snapshot file for test "test_ua8::ua8_register_kem_commit" to "test_snapshots/test_ua8/ua8_register_kem_commit.1.json".
+
+---- test_ua8::ua8_events_fit_and_hash stdout ----
+
+thread 'test_ua8::ua8_events_fit_and_hash' (125329) panicked at contracts/ua-registry/src/test.rs:167:23:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #7))
+Writing test snapshot file for test "test_ua8::ua8_events_fit_and_hash" to "test_snapshots/test_ua8/ua8_events_fit_and_hash.1.json".
+
+---- test_ua8::ua8_pqz_bytes_in_state stdout ----
+
+thread 'test_ua8::ua8_pqz_bytes_in_state' (125334) panicked at contracts/ua-registry/src/test.rs:167:23:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #7))
+Writing test snapshot file for test "test_ua8::ua8_pqz_bytes_in_state" to "test_snapshots/test_ua8/ua8_pqz_bytes_in_state.1.json".
+
+---- test_ua8::ua8_register_msig_typed stdout ----
+
+thread 'test_ua8::ua8_register_msig_typed' (125338) panicked at contracts/ua-registry/src/test.rs:167:23:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #7))
+Writing test snapshot file for test "test_ua8::ua8_register_msig_typed" to "test_snapshots/test_ua8/ua8_register_msig_typed.1.json".
+
+---- test_ua8::ua8_register_attrs_rows stdout ----
+Writing test snapshot file for test "test_ua8::ua8_register_attrs_rows" to "test_snapshots/test_ua8/ua8_register_attrs_rows.1.json".
+Writing test snapshot file for test "test_ua8::ua8_register_attrs_rows" to "test_snapshots/test_ua8/ua8_register_attrs_rows.2.json".
+Writing test snapshot file for test "test_ua8::ua8_register_attrs_rows" to "test_snapshots/test_ua8/ua8_register_attrs_rows.3.json".
+Writing test snapshot file for test "test_ua8::ua8_register_attrs_rows" to "test_snapshots/test_ua8/ua8_register_attrs_rows.4.json".
+Writing test snapshot file for test "test_ua8::ua8_register_attrs_rows" to "test_snapshots/test_ua8/ua8_register_attrs_rows.5.json".
+Writing test snapshot file for test "test_ua8::ua8_register_attrs_rows" to "test_snapshots/test_ua8/ua8_register_attrs_rows.6.json".
+Writing test snapshot file for test "test_ua8::ua8_register_attrs_rows" to "test_snapshots/test_ua8/ua8_register_attrs_rows.7.json".
+
+thread 'test_ua8::ua8_register_attrs_rows' (125336) panicked at contracts/ua-registry/src/test.rs:167:23:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #7))
+Writing test snapshot file for test "test_ua8::ua8_register_attrs_rows" to "test_snapshots/test_ua8/ua8_register_attrs_rows.8.json".
+
+
+failures:
+    test::register_attrs_accepted
+    test_ua8::ua8_attrs_error_unused
+    test_ua8::ua8_checked_of_shape
+    test_ua8::ua8_classical_msig_with_kem
+    test_ua8::ua8_entries_extend_ttl
+    test_ua8::ua8_events_fit_and_hash
+    test_ua8::ua8_kem_scheme_above_a_byte_refused
+    test_ua8::ua8_kind_name_table
+    test_ua8::ua8_negatives_from_portable_json
+    test_ua8::ua8_pqz_attrs_stored_unproven
+    test_ua8::ua8_pqz_bytes_in_state
+    test_ua8::ua8_register_attrs_rows
+    test_ua8::ua8_register_kem_commit
+    test_ua8::ua8_register_msig_typed
+    test_ua8::ua8_register_without_pqz_pop
+
+test result: FAILED. 63 passed; 15 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.58s
+
+error: test failed, to rerun pass `-p scaas-ua-registry --lib`
