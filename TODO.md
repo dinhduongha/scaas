@@ -161,6 +161,14 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      in sync and likely cuts gas (not measured). Do it when a `zether-near` / `zether-algorand` / `zether-soroban` track
      needs it, or for EVM gas — measure first; on EVM a new verifier means a new implementation version (CTR-ZTH-20);
      security review of the weight derivation and of which untrusted points need a subgroup check.
+     **Done, merged 2026-11-01 (branch `zether-msm`, CTR-ZTH-53):** one MSM per proof, 182 points on a transfer, 154 on a
+     burn, 159 + 25M on a multi-recipient transfer; the owner's order for the branch is code first, no gas measurement, so
+     "measure first" above waits. Security derivation in zether.md §9.1, the per-equation verifier in `legacy/zether-msm/`.
+     Left: the owner's go to merge; gas re-measurement, then `gas_limits` in `clients/zether-prover/src/zether.rs`, which holds
+     the per-equation figures; a new verifier set reaches the SCaaS testnet at its next reset. For `typed-signing` C3, which
+     owns the file: add `BadPoint` to `IZetherToken`'s ABI, a bad point now always reverts with it.
+     A machine cryptographic review found it sound and complete with proof bytes unchanged (`docs/research/zether-msm-crypto-review.md`,
+     not an independent audit: the verifier stays UNAUDITED).
      **Done 2026-10-31 (branch `scaas-testnet-rename`): the SCaaS testnet's identifier is `scaas-testnet`** (owner
      2026-10-31, Change entry in NET-EVM-02): the Foundry profile, `src/chains/scaas-testnet/`, the `chain-uids.json` key,
      CI, the deploy / verify scripts, `scaas-node/tests/e2e*.rs` and current docs; history / plans / reviews keep the old
@@ -206,7 +214,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      `ua8-soroban` M2 / M3 / B1–B3 / B5 / B7 wait for it.
      **After the round merges (owner 2026-10-31):** reset the SCaaS testnet **without a backup** (owner 2026-10-31) and load the new contracts (deploy with
      every kind incl. `DEPLOY_ZETHER=1`, PQZ / Zether e2e, `verify-blockscout.sh`, Blockscout DB reset, records).
-  3. Zether verifier one merged MSM (EVM) — before `zether-soroban`, so the Soroban verifier is merged-MSM from the
+  3. **Done 2026-11-01:** Zether verifier one merged MSM (EVM) — before `zether-soroban`, so the Soroban verifier is merged-MSM from the
      start (the Z0 estimate 536 M–2,409 M vs the 400 M limit depends on it).
   4. `zether-soroban` (Part Z; Z0 measures first).
   5. C core crash at M = 16: **done (`pqz-core-m16`, merged 2026-11-01): a bench bug only, not the core; no full gate.**
