@@ -1,0 +1,181 @@
+# red-kat at commit 38544bcf plus the C4 tree, typed digest in pqz_kat.py, vectors not regenerated
+ok   Keccak-f permutation = hashlib sha3_256, 0 B
+ok   Keccak-f permutation = hashlib sha3_256, 1 B
+ok   Keccak-f permutation = hashlib sha3_256, 135 B
+ok   Keccak-f permutation = hashlib sha3_256, 136 B
+ok   Keccak-f permutation = hashlib sha3_256, 137 B
+ok   Keccak-f permutation = hashlib sha3_256, 300 B
+ok   keccak256('')
+ok   keccak256 of the retired v3 label
+ok   PQZL proofSystemId scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5 = ef1ffbcb... (set.json)
+ok   PQZH proofSystemId scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v3 = 046859a8... (set.json)
+ok   ids not retired, distinct
+ok   opTag TRANSFER = ef22f3d1...
+ok   opTag BURN = 7383374d...
+ok   opTag REFRESH = f118f2df...
+ok   opTag REGISTER = 69562a9c...
+ok   opTag DISCLOSE-SENDER = 868cc07c...
+ok   opTag DISCLOSE-RECEIVER = d8356cfb...
+ok   opTag DISCLOSE-AUDITOR = d6019aa4...
+ok   opTag TRANSFER-MULTI = 6f6a773a...
+     A digest keccak256(A bytes) = e9113207b99e664aa513ea05a1373364ed3fdca245666bcdbbc3677c76ef2422
+ok   KeyGen seed 00*32: ctr 0, norms
+ok   KeyGen seed 01*32: ctr 0, norms
+ok   KeyGen seed 02*32: ctr 0, norms
+ok   Dec(Enc(m)) = m, recipient 0, max |noise| 221 <= 13212
+ok   Dec(Enc(m)) = m, recipient 1, max |noise| 348 <= 13212
+ok   Dec(Enc(m)) = m, recipient 2, max |noise| 333 <= 13212
+ok   Add with Trivial(5)
+ok   Sub
+ok   statement TRANSFER
+ok   statement TRANSFER0
+ok   statement BURN
+ok   statement REFRESH
+ok   statement REGISTER
+ok   statement DISCLOSE-SENDER
+ok   statement DISCLOSE-RECEIVER
+ok   statement DISCLOSE-AUDITOR
+ok   reject: length - 1: length
+ok   reject: length + 1: length
+ok   reject: auditorOn 0 on the 93,312-byte form: auditorOn does not match the length
+ok   reject: auditorOn 1 on the 74,752-byte form: auditorOn does not match the length
+ok   reject: auditorOn 2: auditorOn does not match the length
+ok   reject: fee >= 2^64: fee >= 2^64
+ok   reject: salt word top byte set: salt word not 16 zero bytes || salt
+ok   reject: burn salt word byte 15 set: salt word not 16 zero bytes || salt
+ok   reject: burn amount >= 2^64: amount >= 2^64
+ok   reject: transfer amount >= 2^64 (decoder stricter than R_TX): amount >= 2^64
+ok   reject: TRANSFER amount != 0: amount must be 0
+ok   reject: TRANSFER recipient != 0: recipient must be 0
+ok   reject: TRANSFER0 recipient != 0: recipient must be 0
+ok   reject: BURN toUA != 0: toUA must be 0
+ok   reject: BURN auditorOn != 0: auditorOn must be 0
+ok   reject: BURN salt != 0: salt must be 0
+ok   reject: REFRESH toUA != 0: toUA must be 0
+ok   reject: REFRESH amount != 0: amount must be 0
+ok   reject: REFRESH recipient != 0: recipient must be 0
+ok   reject: REFRESH auditorOn != 0: auditorOn must be 0
+ok   reject: REFRESH salt != 0: salt must be 0
+ok   reject: coefficient = q: coefficient >= q
+ok   reject: coefficient = 2^46: coefficient >= q
+ok   reject: TRANSFER statement under op 2: opTag does not belong to op
+ok   reject: unknown proofSystemId: unknown proofSystemId
+ok   reject: disclosure amount >= 2^64: amount >= 2^64
+ok   reject: SENDER_S kind window 1: kind
+ok   reject: AUDITOR kind window 3 (S_AUD): kind
+ok   reject: kind word >= 2^16: kind
+ok   AUDITOR kind window 2 accepted
+ok   op 7 lengths (plan §4), distinct except (M = 1, on) = (M = 2, off) = 93,312
+ok   op 7 PQZL M = 1 auditor on: build(parse(x)) = x
+ok   op 7 PQZL M = 2 auditor on: build(parse(x)) = x
+ok   op 7 PQZL M = 4 auditor on: build(parse(x)) = x
+ok   op 7 PQZL M = 8 auditor on: build(parse(x)) = x
+ok   op 7 PQZL M = 1 auditor off: build(parse(x)) = x
+ok   op 7 PQZL M = 2 auditor off: build(parse(x)) = x
+ok   op 7 PQZL M = 4 auditor off: build(parse(x)) = x
+ok   op 7 PQZL M = 8 auditor off: build(parse(x)) = x
+ok   op 7 PQZH M = 1 auditor on: build(parse(x)) = x
+ok   op 7 PQZH M = 2 auditor on: build(parse(x)) = x
+ok   op 7 PQZH M = 4 auditor on: build(parse(x)) = x
+ok   op 7 PQZH M = 1 auditor off: build(parse(x)) = x
+ok   op 7 PQZH M = 2 auditor off: build(parse(x)) = x
+ok   op 7 PQZH M = 4 auditor off: build(parse(x)) = x
+ok   op 7 M = 1 body = op 1 body, auditor on
+ok   op 7 M = 1 body = op 1 body, auditor off
+ok   reject: op 7: length - 1: length
+ok   reject: op 7: length + 1: length
+ok   reject: op 7: M = 3 length, M word 2: length
+ok   reject: op 7: M = 0 length, M word 2: length
+ok   reject: op 7: header cut: length
+ok   reject: op 7: M word 0: M not a built leg count
+ok   reject: op 7: M word 3: M not a built leg count
+ok   reject: op 7: PQZH M word 8 (not built): M not a built leg count
+ok   reject: op 7: PQZL M word 16 (oversize only): M not a built leg count
+ok   reject: op 7: M word high bits: M not a built leg count
+ok   reject: op 7: M word 4 on the M = 2 length: length
+ok   reject: op 7: auditorOn 0 on an auditor-on statement: length
+ok   reject: op 7: auditorOn 1 on an auditor-off statement: length
+ok   reject: op 7: auditorOn 2: auditorOn does not match the length
+ok   reject: op 7: amount 1: amount must be 0
+ok   reject: op 7: amount >= 2^64: amount >= 2^64
+ok   reject: op 7: fee >= 2^64: fee >= 2^64
+ok   reject: op 7: salt word high half: salt word not 16 zero bytes || salt
+ok   reject: op 7: coefficient = q in v_{a,M-1}: coefficient >= q
+ok   reject: op 7: unknown proofSystemId: unknown proofSystemId
+ok   reject: op 7: op 7 statement under op 1: opTag does not belong to op
+ok   reject: op 7: op 1 statement under op 7: opTag does not belong to op
+ok   op 7 at 93,312 B: the M / auditorOn words pick (1, on) or (2, off)
+ok   KeyGen resamples with ||s|| <= 34, ||e|| <= 151: counters [3, 6, 1, 2]
+ok   Enc resamples with 34 / 151 / 12: counters [14, 28, 8, 1]
+ok   KeyGen: counter 64 error
+ok   Enc: counter 64 error
+ok   bundle 18,736 / 18,608 B
+ok   opening = abi.encode(bytes, bytes)
+     entryRef(7622, 1, token, 2, 0) = ea6afa7d500f6712173244bbdebf289d808d780c15138a298bcf1c0f59715ae3
+     parameter set n2304-kmax4096 (q = 61275424977257, n = 2304, K_MAX = 4,096, PQZH)
+     vector files: 16
+ok   cbd.json
+ok   enc.json
+FAIL fee0.json
+ok   keygen.json
+ok   matrix.json
+ok   negative.json
+ok   proof_pqzh.json
+ok   proof_pqzl.json
+ok   selftest.json
+FAIL statement_burn.json
+FAIL statement_disclose.json
+FAIL statement_refresh.json
+FAIL statement_register.json
+FAIL statement_transfer.json
+FAIL statement_transfer_multi.json
+ok   worstcase_noise.json
+FAIL fee0.json: TRANSFER pqzl auth_digest: 72a19a16d6d962464eab6b3e22e449811a7614b661af2e10491eec0f76915706 != e80030e5ee4dcca7ca6a78bf432adbb682d0f6f46c610c65aad9c8e428e69d80
+FAIL fee0.json: TRANSFER pqzh auth_digest: ad072d5e9758080366c0a7ba035981f2e8eaeb67e7526830a21fa5c40925c5a6 != e60778861c4caad32dddbb8459d895b1eba868fbec868554df044d4a14f1d675
+FAIL fee0.json: TRANSFER0 pqzl auth_digest: e12c677d2131780fab0dedf9ecf0c945344cc734e5fc1d6e9a640aebb7d4edbf != 88c6c90d777dde6e648631a683c7cf4d339fadf805fb34b6c84dbec75d02cb4c
+FAIL fee0.json: TRANSFER0 pqzh auth_digest: 2d9f1aa50d89eb69af1fd12dd2615067e9514b23a8a3cd3b2e6ecb6ec0f199a7 != 05ff59f0328e9862ff179e88f5293547dcab1fd4e100cc8750d019d487687e6d
+FAIL fee0.json: BURN pqzl auth_digest: b2165e5339120aed7bcc034841fba02663e5d28da93907273b324f1efe470a2f != 542db831ae70b4d8a00880815c990c90e1988b08b847dc41e252cad366db638e
+FAIL fee0.json: BURN pqzh auth_digest: f78da31681a2fb6f3389855c9fff96f7c7f98215310db9289a544e3f980e1a33 != 3e675e099dd03272e9813ab806566436b1d5ca6290699f2b0f66b0165d1cdd8b
+FAIL fee0.json: REFRESH pqzl auth_digest: d1c6ae53302b9f88a3ee4cc796907772f11bd14d43325e3d4d8927759474b210 != 8e929d433050261bcb3cf16340946dd6b5d19dd00dad686ab839d6361841f8c6
+FAIL fee0.json: REFRESH pqzh auth_digest: a53aa27204d4759c0cabf265e000571222b5b61a6a9ee00908d9325cb50b32f0 != 306fc05f43f615084652a0aab00a479d972e0fb2130f43acd5feae8d980297ee
+FAIL statement_burn.json: BURN pqzl auth_digest: bb9bcbe75f6383405ac59e7796c5710601ea6b46637c2b5163f4ac84cd197543 != 94ff07a22405029432a5b309d3c6a1ece838f5ba376cdf018a6e37d8e93178a1
+FAIL statement_burn.json: BURN pqzh auth_digest: f783a8bae13b5b06d4dda199742f07beed4cbb7211d0b116ab880f1e13d7f204 != 4d3c2432a18527fa60893eaf8133700ce27d32db1b9f48376a6b2c801931bf9e
+FAIL statement_disclose.json: DISCLOSE-SENDER auth_digest present: True != False
+FAIL statement_disclose.json: DISCLOSE-RECEIVER auth_digest present: True != False
+FAIL statement_disclose.json: DISCLOSE-AUDITOR auth_digest present: True != False
+FAIL statement_refresh.json: REFRESH pqzl auth_digest: a5d69ba5369b3c22d6fa4b56b82606323276618299db678aec081bb3d8f3dbb9 != ae93ad4097fd90ec78ca9a639e7fe901d6f4634665ab18d427311a6b7de8cece
+FAIL statement_refresh.json: REFRESH pqzh auth_digest: ddbef9f18ac30f30f6b88296f1d760f73b912a92c55b68f8b1aa4ab8afdc96e2 != 5383c0c09ed3d197d1a8fd9bfb977d69608c6fd509e042b4a67a32faf04ce715
+FAIL statement_register.json: REGISTER auth_digest present: True != False
+FAIL statement_transfer.json: TRANSFER pqzl auth_digest: bb55cd42da6f7b0dbae2b66c1ba840c6cda1ab7e2a43db2409a4f4427cfc00c6 != 1e612ecfd69126fdddcb3a031113a6a0e2d5f85bec4e753155364fa7936becc8
+FAIL statement_transfer.json: TRANSFER pqzh auth_digest: bea2bbc0f150dd4e70ff8c71ff5e4411949ca3d77429886ff8000d8158d7d934 != cc6c43211283d46a3395925c051527dd2a50886de8e323f4bb8dfd033f127931
+FAIL statement_transfer.json: TRANSFER0 pqzl auth_digest: d483abe0976fe9c303ea9b6cc87863d677cbda80f15d03ab5bb087db8f3e1415 != 2dce0a92c234057316847f012102b89e3dccf784626ebb330a19cb3e7ceac4cb
+FAIL statement_transfer.json: TRANSFER0 pqzh auth_digest: ac4970e507ca39515905cdb4a4cfb6349fe18f742709eeb8c7686af4a7e8393c != 6eb950eac091b1b3bbdb737d6ba1651ff28aef81484ebadc8277fb6f13ca7e2c
+FAIL statement_transfer_multi.json: M1-on pqzl auth_digest: d8b91b914b150146e8c47c691a9a6e21f3afe2b831b1a17b698ad6aee7c1649a != 12d91cb60a0fad9540c8ca058a3f35a5c1154c0301e1c99e12c7e7d019c580fb
+FAIL statement_transfer_multi.json: M1-on pqzh auth_digest: 2f3368e70d29b0ed20617fcf6e0d2d85f5fb423adb51816b0ca1518229cdd7a3 != 692477aa069b7c773d24ecb5c47fd058dd9daeddceea2627e7d2279fdf4e2c60
+FAIL statement_transfer_multi.json: M2-on pqzl auth_digest: d32b4880c4d27953649403f9bd15576a4675ea56864c9f57897c3e407e0b1b2f != 3b44113c17de2e9e5cf236152ba684356f27f915a2d356afcd7a37657b7dee9b
+FAIL statement_transfer_multi.json: M2-on pqzh auth_digest: 94c3eb01c97f288f2fefabb2bfb41e6aa16d9f2da8d57695ea1c924ab60e69dc != caf50e34611d4667ce37180a0bd3f2ae4c5a3beb03cfa679d026b33871a28a7f
+FAIL statement_transfer_multi.json: M4-on pqzl auth_digest: d9204e7cc68918e4096e24df75cbd94821f94bf04b7c33d39fc2dc38d0657498 != 2e386e3aaa9865d482e77918b4844678cb39fbd9bc15a3a8eb9fa2344b84ec17
+FAIL statement_transfer_multi.json: M4-on pqzh auth_digest: dabbcf40a75587522cdbe47d7e0a71da28077a30216e67949e0a0012b3656de6 != b5ca84e9cabc2e0af2a08cc6649de4e2bb73c85bb492b9c39525b3893e6c19c6
+FAIL statement_transfer_multi.json: M8-on pqzl auth_digest: 1c6ad3b0271d68f4914052913138d548d6975d3f3102c00fa8ae93bd5ea2603d != eadd645b695065c684b723adea4436965c79a88a9afe3ff71080a886a6872943
+FAIL statement_transfer_multi.json: M1-off pqzl auth_digest: feb1f6a9778e4f272092ffd06206a01484e125297a22bcd1c48ad0a8e4b6b116 != 848fc2ab3aa9899bdb61deccff371570437f16f57832f43f1f87b4b249ff93df
+FAIL statement_transfer_multi.json: M1-off pqzh auth_digest: 002a962bbc61304d3b515609af9f5b64d43afb08bd89aef89d28b3f13370af2b != fa6ea65e3d3a3be4f80282b9184f3f1602b203b9112aa16452352f3151970b24
+FAIL statement_transfer_multi.json: M2-off pqzl auth_digest: b354032910a5df02d363529bc41bd1846d9e2f637fc5e4b5f376c402063ea004 != 149be7c9f70249717df53d927e5d900d19cc07ff7482abce00c9c8bb47130fa7
+FAIL statement_transfer_multi.json: M2-off pqzh auth_digest: 6ed4daefe67a9b0af83b07f86838752a2109db7beb7aedd956c343e7a5c5d270 != 3bda427f374429445857e0711359b594c9cc7d36abc75a3c9fa2d6e5cb4d85e4
+FAIL statement_transfer_multi.json: M4-off pqzl auth_digest: c870c2d185fa0aabdce653a15492f5edb8059172a1daf416ac5f4913bb7eb698 != 24776fd8e3836e72902f81ba90f6fdf41ac2b0c964aca1d1f868ba7ac744ba24
+FAIL statement_transfer_multi.json: M4-off pqzh auth_digest: 5c0d445eb83aed663f870e9549b37cc474b64b7bac7c0994953c73d34c8d48c3 != 2ad9b3bb77f9ab80c4b042ca020a45f316e13215b8d8a97916de7f9a12ec5d00
+FAIL statement_transfer_multi.json: M8-off pqzl auth_digest: 01b131115f7faebad08c5b001e7500eadf8192bec415cf3d29e7865af72e1ce2 != e344a140bbe6da742a844fefc021bb4e7bb5a227c2610eda648b93c669d97a21
+FAIL statement_transfer_multi.json: M2-off-two-real pqzl auth_digest: e0fff679d646293e851ded8b4ea2b9446df6867f0d36df313a3aa257928d1cc3 != aa2db9d95e656f7300d06d54e967052204c0fbf7ef42ef8faaebd1207d99e38e
+FAIL statement_transfer_multi.json: M2-off-two-real pqzh auth_digest: 83a4586759245d6bf07f789272edcc4fe1faea5f51989879c4fad43282faf967 != dac57153b47c376d3231881d73e4a88dd1806d4db2444f97d88ff909e3cc8399
+FAIL statement_transfer_multi.json: M4-off-decoys pqzl auth_digest: 267e20424e4aba57b5438ce8d081d15c83437844a9850ee124d1dab1aaa8a8ce != 2c3c34b3ff7c434e9f460950179b1c19891cd5582d6d533249d76f7e7198b3e2
+FAIL statement_transfer_multi.json: M4-off-decoys pqzh auth_digest: 4e2cb8a11be798dcf596c5b27fc833bb87cbd26b3d2863da039ea7e21c8df0c8 != 8b1611d38d6ab711e235da36793f96f8e23d0f01ad5f43c41efdbbab5ac4c7ed
+FAIL statement_transfer_multi.json: M8-on-boundary pqzl auth_digest: c74de6ea3c3be579d4e493b62cbf4435d616521fe63f6c51cd5b9ad748da97c2 != 7b715eb2ef9e1ea76b22fa6154f13440b5720d79510adeaa6d2d7fc17e150419
+FAIL statement_transfer_multi.json: M8-on-boundary-leg5-auditor auth_digest absent: True != False
+FAIL statement_transfer_multi.json: M8-on-boundary-leg6-auditor auth_digest absent: True != False
+FAIL statement_transfer_multi.json: M4-on-leg2-auditor auth_digest absent: True != False
+FAIL statement_transfer_multi.json: M8-on-boundary-leg6-receiver auth_digest absent: True != False
+pqz_kat: FAIL
+
+real	1m0.373s
+user	1m0.158s
+sys	0m0.109s
+rc=1

@@ -1,0 +1,5 @@
+# parity-diff at commit 682f7a9f: metatx-parity.json against 38544bcf
+rows changed 447 of 1998
+fields changed [('gas', 411), ('sel', 36), ('digests', 10), ('events', 6)]
+[('WRAPPED_PQZ|addr', 125), ('WRAPPED_PQZ|ua', 106), ('NORMAL_PQZ|addr', 103), ('NORMAL_PQZ|ua', 77), ('NORMAL|1', 6), ('WRAPPED|1', 6), ('NORMAL_PQZ|1', 6), ('WRAPPED_PQZ|1', 6), ('NORMAL_ZETHER|1', 6), ('WRAPPED_ZETHER|1', 6)]
+rc=0
