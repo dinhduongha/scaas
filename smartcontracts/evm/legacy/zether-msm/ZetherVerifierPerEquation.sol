@@ -2,15 +2,15 @@
 pragma solidity ^0.8.20;
 
 import {
-    IZetherVerifierCommon, IZetherVerifier, IZetherBurnVerifier, IZetherInnerProductVerifier
-} from "./IZetherVerifier.sol";
+    ILegacyZetherVerifierCommon, ILegacyZetherVerifier, ILegacyZetherBurnVerifier, ILegacyZetherInnerProductVerifier
+} from "./IZetherVerifierPerEquation.sol";
 import {ZetherTranscript as T} from "../../src/zether/ZetherTranscript.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 import {G1Bls12381} from "../../src/zether/ZetherCurves.sol";
 
 /// @title The curve layer every Zether verifier contract shares: the curve hooks, the proof system ids, the NUMS
 ///        generator blob (§3, read from an SSTORE2 data contract) and the arithmetic helpers.
-abstract contract ZetherCurve is IZetherVerifierCommon {
+abstract contract LegacyZetherCurve is ILegacyZetherVerifierCommon {
     uint256 internal constant NGEN = 130; // h, U, G_0..63, H_0..63
 
     // ------------------------------------------------------------------ móc theo đường cong
@@ -138,7 +138,7 @@ abstract contract ZetherCurve is IZetherVerifierCommon {
 /// @notice **UNAUDITED.** Generator NUMS tính trong constructor theo §3 rồi ghi vào một data
 ///         contract (SSTORE2): ai cũng tính lại được, không có hằng số nào để tin. Trên BLS12-381 MSM đi qua 0x0c nên mọi
 ///         điểm đầu vào được kiểm subgroup ngầm.
-abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVerifier {
+abstract contract LegacyZetherInnerProductBase is LegacyZetherCurve, ILegacyZetherInnerProductVerifier {
     address public immutable generatorStore;
 
     error GeneratorStoreFailed();
@@ -317,7 +317,7 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
 ///         verifier and a burn verifier per curve share this base (the checks are the internal `_verify*`; the compiler
 ///         keeps in each only the code its entry points reach) and call the curve's inner-product verifier, fixed in the
 ///         constructor, for every range proof. Same statements, proofs and verdicts as the combined verifier.
-abstract contract ZetherVerifierBase is ZetherCurve {
+abstract contract LegacyZetherVerifierBase is LegacyZetherCurve {
     bytes32 internal constant OP_TRANSFER = keccak256("SCAAS-ZETHER-OP-TRANSFER-V1");
     bytes32 internal constant OP_BURN = keccak256("SCAAS-ZETHER-OP-BURN-V1");
     // Multi-recipient transfer: the storage mode is part of opTag (spec 2026-10-08-zether-multi-recipient §4).
@@ -335,12 +335,12 @@ abstract contract ZetherVerifierBase is ZetherCurve {
 
     /// @notice The curve's inner-product verifier (the range proofs, the generators), a constructor argument fixed at
     ///         deployment (CTR-ZTH-20).
-    IZetherInnerProductVerifier public immutable innerProduct;
+    ILegacyZetherInnerProductVerifier public immutable innerProduct;
     address public immutable generatorStore;
 
     error InnerProductMismatch(address innerProduct);
 
-    constructor(IZetherInnerProductVerifier innerProduct_) {
+    constructor(ILegacyZetherInnerProductVerifier innerProduct_) {
         if (!SigCheck.isContract(address(innerProduct_)) || innerProduct_.proofSystemId() != proofSystemId()) {
             revert InnerProductMismatch(address(innerProduct_));
         }
@@ -633,8 +633,8 @@ abstract contract ZetherVerifierBase is ZetherCurve {
 }
 
 /// @title The transfer verifier of a curve: `verifyTransfer`, `verifyTransferMulti`, and the group operations of
-///        `IZetherVerifier` (the token's homomorphic updates, `ZetherDisclosure`, the client tests).
-abstract contract ZetherTransferVerifierBase is ZetherVerifierBase, IZetherVerifier {
+///        `ILegacyZetherVerifier` (the token's homomorphic updates, `ZetherDisclosure`, the client tests).
+abstract contract LegacyZetherTransferVerifierBase is LegacyZetherVerifierBase, ILegacyZetherVerifier {
     function verifyTransfer(bytes calldata statement, bytes calldata proof) external view returns (bool) {
         return _verifyTransfer(statement, proof);
     }
@@ -666,7 +666,7 @@ abstract contract ZetherTransferVerifierBase is ZetherVerifierBase, IZetherVerif
 }
 
 /// @title The burn verifier of a curve: `verifyBurn` (unshield, unshield-unwrap) only.
-abstract contract ZetherBurnVerifierBase is ZetherVerifierBase, IZetherBurnVerifier {
+abstract contract LegacyZetherBurnVerifierBase is LegacyZetherVerifierBase, ILegacyZetherBurnVerifier {
     function verifyBurn(bytes calldata statement, bytes calldata proof) external view returns (bool) {
         return _verifyBurn(statement, proof);
     }
@@ -675,7 +675,7 @@ abstract contract ZetherBurnVerifierBase is ZetherVerifierBase, IZetherBurnVerif
 /// @title Verifier Zether trên BLS12-381 (EIP-2537, cần Prague).
 /// @notice **UNAUDITED.** 117–126 bit; điểm 128 byte; subgroup check nằm
 ///         trong mọi G1MSM.
-abstract contract ZetherBls12381Curve is ZetherCurve {
+abstract contract LegacyZetherBls12381Curve is LegacyZetherCurve {
     bytes internal constant GEN_DST = "SCAAS-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_";
 
     function _psidLabel() internal pure override returns (string memory) {
@@ -714,15 +714,15 @@ abstract contract ZetherBls12381Curve is ZetherCurve {
 }
 
 /// @title The BLS12-381 inner-product (Bulletproof) verifier (CTR-ZTH-20).
-contract ZetherInnerProductVerifierBls12381 is ZetherInnerProductBase, ZetherBls12381Curve {}
+contract LegacyZetherInnerProductVerifierBls12381 is LegacyZetherInnerProductBase, LegacyZetherBls12381Curve {}
 
 /// @title The BLS12-381 transfer verifier (CTR-ZTH-20).
-contract ZetherTransferVerifierBls12381 is ZetherTransferVerifierBase, ZetherBls12381Curve {
-    constructor(IZetherInnerProductVerifier ip) ZetherVerifierBase(ip) {}
+contract LegacyZetherTransferVerifierBls12381 is LegacyZetherTransferVerifierBase, LegacyZetherBls12381Curve {
+    constructor(ILegacyZetherInnerProductVerifier ip) LegacyZetherVerifierBase(ip) {}
 }
 
 /// @title The BLS12-381 burn verifier (CTR-ZTH-20).
-contract ZetherBurnVerifierBls12381 is ZetherBurnVerifierBase, ZetherBls12381Curve {
-    constructor(IZetherInnerProductVerifier ip) ZetherVerifierBase(ip) {}
+contract LegacyZetherBurnVerifierBls12381 is LegacyZetherBurnVerifierBase, LegacyZetherBls12381Curve {
+    constructor(ILegacyZetherInnerProductVerifier ip) LegacyZetherVerifierBase(ip) {}
 }
 

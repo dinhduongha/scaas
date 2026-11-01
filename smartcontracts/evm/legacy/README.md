@@ -99,7 +99,10 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   (`test_safetyAllowlist`), `test/pqz/PqzNormal.t.sol` (`test_createToken_enabledKindOnAForbiddenChain_reverts`),
   `test/pqz/UAPqzVerifier.t.sol` (the 22776 constructor revert). Not built.
 - `zether-msm/`: the per-equation classical Zether verifier as it stood on `main` before branch `zether-msm` folded every
-  equation into one MSM (CTR-ZTH-53; owner: backup, not delete): `ZetherVerifier.sol` (eight Σ MSMs and two per
-  Bulletproof, `verifyRange` called per proof) and its `IZetherVerifier.sol`, imports re-pointed at `src/`. **The one
-  exception to "not compiled" above:** `test/zether/helpers/ZetherLegacyVerifiers.sol` imports them, so the differential
-  suite `test/zether/ZetherMsmDifferential.t.sol` runs old and new side by side. Never deployed.
+  equation into one MSM (CTR-ZTH-53; owner: backup, not delete): `ZetherVerifierPerEquation.sol` (eight Σ MSMs and two per
+  Bulletproof, `verifyRange` called per proof) and `IZetherVerifierPerEquation.sol`. Byte-faithful to `src/zether/` at that
+  commit but for three things: the file names, a `Legacy` / `ILegacy` prefix on every contract and interface name, and the
+  imports re-pointed at `src/`. The new names keep these artifacts off the production paths: forge moves a same-named source
+  aside, and `script/verify-blockscout.sh` globs `out/*/<name>.json`. **The one exception to "not compiled" above:**
+  `test/zether/helpers/ZetherLegacyVerifiers.sol` imports them, so the differential suite
+  `test/zether/ZetherMsmDifferential.t.sol` runs old and new side by side. Never deployed.

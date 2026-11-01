@@ -13,10 +13,10 @@ pragma solidity ^0.8.20;
 ///         phép cộng đồng hình qua các hàm `g1*` của transfer verifier. Đặc tả byte-exact:
 ///         `docs/contracts/zether.md` (bản đóng băng `docs/history/specs/2026-10-03-zether-design.md`).
 ///
-///         CTR-ZTH-20 (owner 2026-10-19): one canonical transfer verifier (`IZetherVerifier`) and one burn verifier
-///         (`IZetherBurnVerifier`) per curve, implementation immutables of the token, recorded by `OpenFactory`. The
-///         creator no longer passes an address. `IZetherVerifierCommon` is what both answer.
-interface IZetherVerifierCommon {
+///         CTR-ZTH-20 (owner 2026-10-19): one canonical transfer verifier (`ILegacyZetherVerifier`) and one burn verifier
+///         (`ILegacyZetherBurnVerifier`) per curve, implementation immutables of the token, recorded by `OpenFactory`. The
+///         creator no longer passes an address. `ILegacyZetherVerifierCommon` is what both answer.
+interface ILegacyZetherVerifierCommon {
     /// @notice Khoá cứng bộ ba (curve, mạch, mã hoá điểm). Nằm trong statement (§6) ⇒ trong transcript.
     function proofSystemId() external pure returns (bytes32);
 
@@ -42,7 +42,7 @@ interface IZetherVerifierCommon {
 }
 
 /// @title The transfer verifier of a curve: the transfer proofs and the group operations.
-interface IZetherVerifier is IZetherVerifierCommon {
+interface ILegacyZetherVerifier is ILegacyZetherVerifierCommon {
     /// @notice Luôn 2: lộ danh tính người gửi/nhận (SRS §7.1), không có anonymity set.
     function ringSize() external pure returns (uint256);
 
@@ -67,7 +67,7 @@ interface IZetherVerifier is IZetherVerifierCommon {
 }
 
 /// @title The burn verifier of a curve (unshield, unshield-unwrap).
-interface IZetherBurnVerifier is IZetherVerifierCommon {
+interface ILegacyZetherBurnVerifier is ILegacyZetherVerifierCommon {
     /// @notice Kiểm proof rút ra dạng công khai. `amount`, `recipient` nằm trong `statement`.
     function verifyBurn(bytes calldata statement, bytes calldata proof) external view returns (bool);
 }
@@ -75,7 +75,7 @@ interface IZetherBurnVerifier is IZetherVerifierCommon {
 /// @title The inner-product (Bulletproof) verifier of a curve (CTR-ZTH-20 split, candidate (2)): it holds the NUMS
 ///        generators and checks the 64-bit range proofs for the curve's transfer and burn verifiers, which fix it in
 ///        their constructor.
-interface IZetherInnerProductVerifier is IZetherVerifierCommon {
+interface ILegacyZetherInnerProductVerifier is ILegacyZetherVerifierCommon {
     /// @notice The SSTORE2 data contract of the generator blob (`0x00 ‖ blob`).
     function generatorStore() external view returns (address);
 
