@@ -117,3 +117,20 @@ Take **lever 2 and lever 1** for C2–C6, as an owner decision.
 - **Gas of a named entry.** `mtxUnwrap` costs 602 gas more than `mtxExecute(unwrap)` on a warm lane (152,569 against 151,967), despite 128 B less calldata. It does not undercut the generic path, as one might assume.
 - **Entry counts.** `WrappedPqzToken` has 18 + 12 entries by `_uaAllowed`, the plan says about 11.
 - **`debit_min_gas`.** The spike moves the measured figure +680 to +720 at every set. Not re-pinned (owner ruling 2026-11-01); the figures are in the run log.
+
+## 8. `UARegistry` split (2026-11-01)
+
+Measured on a scratch copy at typed-signing C2, not built on the branch. Owner ruling: not split; R2 is the reserve, for a chain near BSC's 70M. Sources: `smartcontracts/evm/runs/2026-11-01-registry-split/`.
+
+| Variant | Registry runtime | Libraries | Total | Largest transaction (forge simulated) |
+|---|---|---|---|---|
+| baseline | 46,716 | none | 46,716 | 75.3 M |
+| R1′ views in `UAViewLib` | 39,288 | 17,885 | 57,173 | 63.4 M |
+| R2 registration paths in `UARegisterLib` | 28,048 | 31,257 | 59,305 | 50.0 M |
+| R1′ + R2, two libraries | 16,960 | 17,885 + 31,257 | 66,102 | 50.0 M |
+| R1′ + R2, one library | 16,960 | 41,875 | 58,835 | 67.0 M |
+
+- **R1′ falls short.** Legacy codegen writes the return encoder in the external wrapper whatever the body does, so the coders stay (12,654 B against 14,970 B). A raw `delegatecall` in a `view` function is refused; the working stub casts a function pointer past the view checker. Via-IR removes the coders, but its baseline is already 46,071 B.
+- **R2 costs:** `register` about +6 k regular gas, `registerMsig` about +8.8 k, total bytes +27 %. The hot path stays: `requireAuthorized` within +37 gas. The 53 selectors stay; `SSTORE2WriteFailed` must be declared again. New patterns: three words appended to the forwarded calldata for the immutables, callbacks on `address(this)`, `_sigOk` moved to the library, the registry's CREATE2 address depends on the library.
+- **Not measured:** 102 of 432 tests failed on every variant, baseline included, because the scratch copy lacked the branch's vectors. `register` with real signatures has run on no variant. A difference test with stand-in verifiers matched baseline on all 1,210 hashes. Re-run with the vectors before adopting R2.
+
