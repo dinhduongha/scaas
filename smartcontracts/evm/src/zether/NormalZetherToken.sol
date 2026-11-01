@@ -13,6 +13,7 @@ import {ZetherLayer} from "./ZetherLayer.sol";
 import {ZetherLib} from "./ZetherLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
+import {IZetherToken} from "./IZetherToken.sol";
 
 /// @title Kind `NORMAL_ZETHER` (CTR-TOK-21): the standalone token with the Zether layer (CTR-ZTH-44).
 /// @notice **UNAUDITED.** Any chain with EIP-2537 (BLS12-381). `MINTABLE` mints public units only; shielded
@@ -67,14 +68,14 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
         (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
         (s[2], c[2]) = (IConfidentialToken.mtxShield.selector, FEE_CLASS_ABSOLUTE);
-        (s[3], c[3]) = (this.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
-        (s[4], c[4]) = (this.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[5], c[5]) = (this.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
-        (s[6], c[6]) = (this.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
-        (s[7], c[7]) = (this.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
-        (s[8], c[8]) = (this.mtxRollOverBatch.selector, FEE_CLASS_ABSOLUTE);
-        (s[9], c[9]) = (this.mtxRollOverSigned.selector, FEE_CLASS_ABSOLUTE);
-        (s[10], c[10]) = (this.mtxSetRollOverMode.selector, FEE_CLASS_ABSOLUTE);
+        (s[3], c[3]) = (IZetherToken.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
+        (s[4], c[4]) = (IZetherToken.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
+        (s[5], c[5]) = (IZetherToken.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
+        (s[6], c[6]) = (IZetherToken.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
+        (s[7], c[7]) = (IConfidentialToken.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
+        (s[8], c[8]) = (IZetherToken.mtxRollOverBatch.selector, FEE_CLASS_ABSOLUTE);
+        (s[9], c[9]) = (IZetherToken.mtxRollOverSigned.selector, FEE_CLASS_ABSOLUTE);
+        (s[10], c[10]) = (IZetherToken.mtxSetRollOverMode.selector, FEE_CLASS_ABSOLUTE);
     }
 
     function _mtxRule(bytes4 sel) internal view override(NormalToken, MetaTxBase) returns (MtxRule memory) {

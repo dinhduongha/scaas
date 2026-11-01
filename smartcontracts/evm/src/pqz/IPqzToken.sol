@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
+import {IConfidentialToken, IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
 
 /// @title Events, errors, the account view and the PQZ-only entry points of the PQZ layer (pq-zero-knowledge.md §7.1,
 ///        §7.8, §9.4); the shared entry points and events are `IConfidentialToken`'s (plan 5h D20).
@@ -75,6 +75,42 @@ interface IPqzToken is IConfidentialToken {
     /// @notice The shared `beneficiary` argument is not the payload's beneficiary word (plan 5h D20).
     error BeneficiaryMismatch(bytes32 payload, bytes32 given);
 
+    /// @notice Multi-recipient, in the token's default storage mode.
+    function mtxConfidentialTransfer(
+        bytes calldata payload,
+        bytes calldata proof,
+        bytes calldata auth,
+        bytes32 beneficiary,
+        bytes calldata accHint
+    ) external returns (bytes32 entryRef);
+    /// @notice Multi-recipient, commit-reveal on every token.
+    function mtxConfidentialTransferCompact(
+        bytes calldata payload,
+        bytes calldata proof,
+        bytes calldata auth,
+        bytes32 beneficiary,
+        bytes calldata accHint
+    ) external returns (bytes32 entryRef);
+    /// @notice Single-recipient, in the token's default storage mode.
+    function mtxConfidentialTransferSingle(
+        bytes calldata payload,
+        bytes calldata proof,
+        bytes calldata auth,
+        bytes32 beneficiary,
+        bytes calldata accHint
+    ) external returns (bytes32 entryRef);
+    /// @notice `amount` shielded units out as `amount · shieldScale` public units from `SHIELD_POOL` to `recipient`: a
+    ///         native address as its zero-padded id, or a registered SIGNING UA (credited on the UA ledger); the pools
+    ///         are refused. PQZ: `amount = 0` with `recipient = 0` is a refresh.
+    function mtxUnshield(
+        bytes calldata payload,
+        bytes calldata proof,
+        bytes calldata auth,
+        bytes32 beneficiary,
+        bytes calldata accHint,
+        uint256 amount,
+        bytes32 recipient
+    ) external;
     /// @notice Single-recipient, commit-reveal on every token.
     function mtxConfidentialTransferSingleCompact(
         bytes calldata payload,
@@ -95,4 +131,19 @@ interface IPqzToken is IConfidentialToken {
     function pqzEntryBlob(bytes32 entryRef) external view returns (bytes memory);
     /// @notice Anyone, once per account and half (0, 1) before its first rollover (idempotent; plan 5h D8).
     function mtxPrepareAcc(bytes32 ua, uint256 half) external;
+}
+
+/// @title `mtxUnshieldUnwrap` of `WRAPPED_PQZ`, out of the shared interface (typed-signing Appendix X.3).
+interface IPqzWrappedToken is IConfidentialWrappedToken {
+    /// @notice `mtxUnshield`'s debit of `x.amount`, then leg `x.underlying` pays `⌊amount·shieldScale·den/num⌋ ≥ minOut`
+    ///         to `x.recipient`: a native address, or a derived UA in the leg's own UA ledger (`transferToUA`;
+    ///         `UALegNotLedger` otherwise).
+    function mtxUnshieldUnwrap(
+        bytes calldata payload,
+        bytes calldata proof,
+        bytes calldata auth,
+        bytes32 beneficiary,
+        bytes calldata accHint,
+        Unwrap calldata x
+    ) external;
 }

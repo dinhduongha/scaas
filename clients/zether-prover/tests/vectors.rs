@@ -87,7 +87,7 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
         assert!(call("proveBurn", burn).get("directCalldata").is_some());
         assert!(err("proveBurn", with(ub_burn, "envelopeBinding")).contains("exclusive"));
         assert!(t.get("witness").is_none(), "secrets must not leave the API unless asked");
-        let single = hex::encode(zether_prover::envelope::selector("mtxConfidentialTransferSingle(bytes,bytes,bytes,bytes32,bytes)"));
+        let single = hex::encode(zether_prover::envelope::selector(&format!("mtxConfidentialTransferSingle({},bytes)", zether_prover::envelope::single_type())));
         assert!(t["directCalldata"].as_str().unwrap().starts_with(&format!("0x{single}")), "direct selector (CTR-ZTH-45)");
         let ok = call("verifyTransfer", json!({"curve": curve, "statement": t["statement"], "proof": t["proof"]}));
         assert_eq!(ok["ok"], json!(true));

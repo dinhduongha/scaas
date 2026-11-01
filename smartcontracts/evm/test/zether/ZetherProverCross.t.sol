@@ -92,7 +92,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
     function _multi(ZetherLayer t, string memory dm, string memory am, bool aud, string memory extra) internal {
         string memory out = _cli("proveTransferMulti", _req(t, dm, am, aud, string.concat(extra, _recipients())));
         ZetherTypes.TransferMode tm = _mode(out.readString(".mode"));
-        assertEq(stm.transferStatement(address(t), out.readBytes(".payload"), carol.ua, tm, 0), out.readBytes(".statement"),
+        assertEq(stm.transferStatement(address(t), _zMulti(out.readBytes(".payload"), carol.ua), tm, 0), out.readBytes(".statement"),
             "statement bytes");
         (bool ok, bytes memory ret) = address(t).call(out.readBytes(".directCalldata"));
         assertTrue(ok, "settles");
@@ -159,7 +159,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         bytes32 binding = t.envelopeBinding(mt);
         string memory out = _cli("proveTransferMulti", _req(t, "compact", "optional", false,
             string.concat(",", _q("envelopeBinding", vm.toString(binding)), ',"uaSigner":"ecdsa"', _recipients())));
-        assertEq(stm.transferStatement(address(t), out.readBytes(".payload"), carol.ua, ZetherTypes.TransferMode.HASH, binding),
+        assertEq(stm.transferStatement(address(t), _zMulti(out.readBytes(".payload"), carol.ua), ZetherTypes.TransferMode.HASH, binding),
             out.readBytes(".statement"), "relayed statement bytes");
         mt.data = out.readBytes(".directCalldata");
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, t.mtxDigest(mt));
@@ -173,7 +173,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         ZetherLayer t = _token(0, 1, true, "s-full");
         string memory out = _cli("proveTransfer", _req(t, "bundle", "full", true,
             string.concat(",", _q("yTo", vm.toString(rs[0].y)), ',"amount":1200')));
-        assertEq(stm.transferStatementSingle(address(t), out.readBytes(".payload"), carol.ua, 0), out.readBytes(".statement"),
+        assertEq(stm.transferStatementSingle(address(t), _zSingle(out.readBytes(".payload"), carol.ua), 0), out.readBytes(".statement"),
             "single statement bytes");
         (bool ok, bytes memory ret) = address(t).call(out.readBytes(".directCalldata"));
         assertTrue(ok, "settles");

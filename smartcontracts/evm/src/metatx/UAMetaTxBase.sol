@@ -146,9 +146,16 @@ abstract contract UAMetaTxBase is MetaTxBase {
     function _namedUA(bytes32 typehash, bytes4 sel, MetaTxLib.UAEnvelope calldata e, bytes memory args,
         IUARegistry.UASig calldata auth) internal returns (bytes memory)
     {
-        MetaTxLib.UAMetaTransaction memory m = _uaMetaOf(e, abi.encodePacked(sel, args));
+        return _namedCallUA(typehash, e, args, abi.encodePacked(sel, args), auth);
+    }
+
+    /// @dev `_namedUA` where the struct's words are not the call's arguments (`ERC20MetaTx._namedCall`).
+    function _namedCallUA(bytes32 typehash, MetaTxLib.UAEnvelope calldata e, bytes memory words, bytes memory data,
+        IUARegistry.UASig calldata auth) internal returns (bytes memory)
+    {
+        MetaTxLib.UAMetaTransaction memory m = _uaMetaOf(e, data);
         return _uaSettle(m, MtxPipelineLib.preNamedUA(
-            _mtxCtx(), typehash, _uaEnvelopeOf(m, 0), args, _callFacts(m.data, true), auth));
+            _mtxCtx(), typehash, _uaEnvelopeOf(m, 0), words, _callFacts(m.data, true), auth));
     }
 
     /// @dev The same for `uaShield`, which keeps `bytes auth` (owner table, 2026-11-01).

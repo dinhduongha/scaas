@@ -13,3 +13,6 @@ the `MetaTransaction` `checkOwnerCall`, `ReceiverFee` over `paymentDigest` and i
 (`CancelOrder(bytes32 orderHash)`) and its `checkCancel`, the `MetaTransfer` `buildRelayFee`. **Load-bearing until C6** (C5 for the
 owner call): `scripts/ua-sig-vectors.mjs` builds the rows of `metatx3.json` / `uatrade_kat.json` from it and the forge KAT tests pin
 it, because the contracts still hash these structs. C6 regenerates both files on the nested structs and drops those imports.
+
+`zether-owner-auth.js` (typed-signing C3): `zetherOwnerAuth`, the `abi.encode(bytes(""), sig)` of an owner op before
+`mtxRollOverSigned` / `mtxSetRollOverMode` took `UASig` (`zetherOwnerSig`).

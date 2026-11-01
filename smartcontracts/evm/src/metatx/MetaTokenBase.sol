@@ -68,7 +68,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         t.initialized = true;
         t.creator = creator_;
         t.version = version_;
-        _init(abi.decode(initArgs, (TokenConfig)));
+        _initRaw(initArgs);
     }
 
     /// @notice No underlying (the `NORMAL*` kinds); `WrappedToken` lists its legs. Read by the factory's index.
@@ -77,6 +77,12 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     /// @dev The kind checks its fields of `cfg` (`ConfigFieldForOtherKind` for another kind's), calls `_setMetadata`
     ///      and `AdminLib.init`.
     function _init(TokenConfig memory cfg) internal virtual;
+
+    /// @dev `_init` of the decoded config; a kind near the size ceiling hands the raw bytes to a library instead, so no
+    ///      `TokenConfig` coder stays in it (`ZetherWrappedLib`, size lever 1, owner 2026-11-01).
+    function _initRaw(bytes calldata initArgs) internal virtual {
+        _init(abi.decode(initArgs, (TokenConfig)));
+    }
 
     /// @dev `ConfigFieldForOtherKind` for a set field the kind does not use; `conf` is used only by `*_ZETHER`.
     function _requireUnused(TokenConfig memory cfg, bool supply, bool legs, bool rate, bool conf) internal pure {

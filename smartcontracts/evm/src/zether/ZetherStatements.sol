@@ -16,61 +16,55 @@ import {ZetherLib} from "./ZetherLib.sol";
 ///         (`ZTX_V1_RELAYED`, `IZetherToken.envelopeBinding`).
 contract ZetherStatements {
     /// @notice The multi-recipient statement by its stored form `mode`: BUNDLE (`mtxConfidentialTransfer` on a `BUNDLE` token), HASH
-    ///         (`mtxConfidentialTransferCompact`, and `mtxConfidentialTransfer` on a `COMPACT` token; the payload ends with the memo).
+    ///         (`mtxConfidentialTransferCompact`, and `mtxConfidentialTransfer` on a `COMPACT` token; `sealedMemo` given).
     ///         `TransferEntryDisabled` for a form other than HASH on a `COMPACT` token, the
     ///         auditor errors by `auditorMode`.
     function transferStatement(
         address token,
-        bytes calldata payload,
-        ZetherTypes.UA beneficiary,
+        IZetherToken.ZetherMulti calldata t,
         ZetherTypes.TransferMode mode,
         bytes32 envelopeBinding
     ) external view returns (bytes memory) {
         ZetherLib.Ctx memory c = _ctx(token, ZetherLib.tagOf(envelopeBinding), envelopeBinding);
-        ZetherLib.Acct memory a = _acct(token, ZetherLib.multiFrom(payload, c.p));
-        return ZetherLib.prepareMulti(c, a, payload, beneficiary, mode).statement;
+        ZetherLib.Acct memory a = _acct(token, ZetherLib.multiFrom(t));
+        return ZetherLib.prepareMulti(c, a, t, mode).statement;
     }
 
     /// @notice The single-recipient statement (`mtxConfidentialTransferSingle`).
-    function transferStatementSingle(
-        address token,
-        bytes calldata payload,
-        ZetherTypes.UA beneficiary,
-        bytes32 envelopeBinding
-    ) external view returns (bytes memory) {
+    function transferStatementSingle(address token, IZetherToken.ZetherSingle calldata t, bytes32 envelopeBinding)
+        external view returns (bytes memory)
+    {
         ZetherLib.Ctx memory c = _ctx(token, ZetherLib.tagOf(envelopeBinding), envelopeBinding);
-        ZetherLib.Acct memory a = _acct(token, ZetherLib.singleFrom(payload, c.p));
-        return ZetherLib.prepareSingle(c, a, payload, beneficiary).statement;
+        ZetherLib.Acct memory a = _acct(token, ZetherLib.uaOf(t.yFrom));
+        return ZetherLib.prepareSingle(c, a, t).statement;
     }
 
     /// @notice The unshield statement (`mtxUnshield`; built: `burnStatement`).
     function unshieldStatement(
         address token,
-        bytes calldata payload,
+        IZetherToken.ZetherBurn calldata b,
         uint256 amount,
         bytes32 recipient,
-        ZetherTypes.UA beneficiary,
         bytes32 envelopeBinding
     ) external view returns (bytes memory) {
-        return _unshield(token, payload, amount, recipient, beneficiary, ZetherLib.tagOf(envelopeBinding), envelopeBinding);
+        return _unshield(token, b, amount, recipient, ZetherLib.tagOf(envelopeBinding), envelopeBinding);
     }
 
     /// @notice The statement of `mtxUnshieldUnwrap` on an `WRAPPED_ZETHER` token: relayed, the envelope binding;
     ///         direct, `ZTX_V1_DIRECT` with the leg and `minOut` bound (`unwrapBinding`).
     function unshieldUnwrapStatement(
         address token,
-        bytes calldata payload,
+        IZetherToken.ZetherBurn calldata b,
         uint256 amount,
         bytes32 recipient,
-        ZetherTypes.UA beneficiary,
         address u,
         uint256 minOut,
         bytes32 envelopeBinding
     ) external view returns (bytes memory) {
         if (envelopeBinding != bytes32(0)) {
-            return _unshield(token, payload, amount, recipient, beneficiary, ZetherLib.TAG_RELAYED, envelopeBinding);
+            return _unshield(token, b, amount, recipient, ZetherLib.TAG_RELAYED, envelopeBinding);
         }
-        return _unshield(token, payload, amount, recipient, beneficiary, ZetherLib.TAG_DIRECT, unwrapBinding(u, minOut));
+        return _unshield(token, b, amount, recipient, ZetherLib.TAG_DIRECT, unwrapBinding(u, minOut));
     }
 
     /// @notice The binding word of a direct `mtxUnshieldUnwrap` (controller ruling, pending the owner).
@@ -80,16 +74,15 @@ contract ZetherStatements {
 
     function _unshield(
         address token,
-        bytes calldata payload,
+        IZetherToken.ZetherBurn calldata b,
         uint256 amount,
         bytes32 recipient,
-        ZetherTypes.UA beneficiary,
         bytes32 tag,
         bytes32 binding
     ) internal view returns (bytes memory) {
         ZetherLib.Ctx memory c = _ctx(token, tag, binding);
-        ZetherLib.Acct memory a = _acct(token, ZetherLib.unshieldFrom(payload, c.p));
-        return ZetherLib.prepareUnshield(c, a, payload, amount, recipient, beneficiary).statement;
+        ZetherLib.Acct memory a = _acct(token, ZetherLib.uaOf(b.yFrom));
+        return ZetherLib.prepareUnshield(c, a, b, amount, recipient).statement;
     }
 
     function _ctx(address token, bytes32 tag, bytes32 binding) internal view returns (ZetherLib.Ctx memory c) {

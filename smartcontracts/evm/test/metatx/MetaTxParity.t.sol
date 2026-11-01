@@ -24,6 +24,7 @@ import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {ZetherKeys} from "../zether/helpers/ZetherKeys.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
+import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
@@ -2058,19 +2059,19 @@ contract ZetherRig is ZetherFixture, ParityCases {
     function _pTransfers(Tk memory k, ZetherLayer t) internal {
         MetaTxLib.MetaTransaction memory m = _pMt(k, "", 0, P_RR | P_FIX, 3, address(0));
         Tx memory x = _proveTransfer(t, alice, bob, 100, 500, carol.ua, t.envelopeBinding(m));
-        m.data = abi.encodeCall(ZetherLayer.mtxConfidentialTransferSingle, (x.payload, x.proof, bytes(""), ZetherTypes.UA.unwrap(carol.ua), bytes("")));
+        m.data = abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(x.payload, carol.ua), x.proof));
         _pX(k, "ok_transferSingle_addr", m);
         _pMx(k, "mtxExecute", "err_transferSingle_replay", "", IMetaTx.mtxExecute.selector, m, _pSgM(k, m), k.relayer);
         // the UA path: its own binding tag
         MetaTxLib.UAMetaTransaction memory u = _pUm(k, MetaTxLib.pad(k.signer), "", 0, P_RR, 0, address(0));
         x = _proveTransfer(t, alice, bob, 10, 500 - 100 - FEE, carol.ua, t.uaEnvelopeBinding(u));
-        u.data = abi.encodeCall(ZetherLayer.mtxConfidentialTransferSingle, (x.payload, x.proof, bytes(""), ZetherTypes.UA.unwrap(carol.ua), bytes("")));
+        u.data = abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(x.payload, carol.ua), x.proof));
         _pU(k, "ok_transferSingle_ua", u);
         // a proof bound to the address path, replayed under the UA path's envelope, is refused
         m = _pMt(k, "", 0, P_RR, 0, address(0));
         x = _proveTransfer(t, alice, bob, 5, 500 - 100 - FEE - 10 - FEE, carol.ua, t.envelopeBinding(m));
         u = _pUm(k, MetaTxLib.pad(k.signer), "", 0, P_RR, 0, address(0));
-        u.data = abi.encodeCall(ZetherLayer.mtxConfidentialTransferSingle, (x.payload, x.proof, bytes(""), ZetherTypes.UA.unwrap(carol.ua), bytes("")));
+        u.data = abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(x.payload, carol.ua), x.proof));
         _pU(k, "err_transferSingle_wrongPathBinding", u);
     }
 }

@@ -14,8 +14,14 @@ SH=$(cast keccak $(cast abi-encode 'f(bytes32,address,bytes32,bytes32,uint256,ui
 DT=$(cast keccak "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)")
 DS=$(cast keccak $(cast abi-encode 'f(bytes32,bytes32,bytes32,uint256,address,bytes32)' $DT $(cast keccak "SCaaS ZetherToken") $(cast keccak "1") 31337 $TOK $CUID))
 echo "digest $(cast keccak 0x1901${DS:2}${SH:2})"
-echo "transfer_call $(cast calldata 'mtxConfidentialTransferSingle(bytes,bytes,bytes,bytes32,bytes)' 0xaabb 0xccddee 0x 0x2222222222222222222222222222222222222222222222222222222222222222 0x)"
-echo "unshield_call $(cast calldata 'mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)' 0xaabb 0xccdd 0x 0x0000000000000000000000000000000000000000000000000000000000000000 0x 400000 0x0000000000000000000000004444444444444444444444444444444444444444)"
+G=$(printf '%064x' 0)
+P="(0x$G,0x$G,0x$G,0x$G)"
+B1=0x2222222222222222222222222222222222222222222222222222222222222222
+SALT=0x11111111111111111111111111111111
+G1T='(bytes32,bytes32,bytes32,bytes32)'
+echo "transfer_single_call $(cast calldata "mtxConfidentialTransferSingle((uint64,uint64,uint256,bytes16,bytes32,$G1T,$G1T,$G1T,$G1T,$G1T,$G1T),bytes)" "(5,3,100,$SALT,$B1,$P,$P,$P,$P,$P,$P)" 0xccddee)"
+echo "transfer_multi_call $(cast calldata "mtxConfidentialTransfer((uint64,uint64,uint256,bytes16,bytes32,uint256,$G1T,$G1T,$G1T,($G1T,$G1T,$G1T,$G1T)[],bytes),bytes)" "(5,3,100,$SALT,$B1,7,$P,$P,$P,[($P,$P,$P,$P)],0xabcd)" 0xccddee)"
+echo "unshield_call $(cast calldata "mtxUnshield((uint64,uint64,uint256,bytes32,$G1T),uint256,bytes32,bytes)" "(5,3,100,0x$G,$P)" 400000 0x0000000000000000000000004444444444444444444444444444444444444444 0xccdd)"
 echo "entry_ref $(cast keccak $(cast abi-encode 'f(bytes32,uint256,bytes32,address,bytes32,uint256)' $(cast keccak SCAAS-ZETHER-ENTRY-V1) 31337 $CUID $TOK 0x5555555555555555555555555555555555555555555555555555555555555555 3))"
 echo "unwrap_binding $(cast keccak $(cast abi-encode 'f(bytes32,address,uint256)' $(cast keccak SCAAS-ZETHER-UNWRAP-V1) 0x4444444444444444444444444444444444444444 1000))"
-for s in 'mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)' 'mtxConfidentialTransferSingle(bytes,bytes,bytes,bytes32,bytes)' 'mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)' 'mtxShield(bytes32,uint256)'; do echo "sel $s $(cast sig "$s")"; done
+for s in 'mtxShield(bytes32,uint256)'; do echo "sel $s $(cast sig "$s")"; done

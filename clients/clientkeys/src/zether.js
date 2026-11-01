@@ -10,7 +10,7 @@
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256, sha512 } from '@noble/hashes/sha2.js';
-import { keccak_256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, abiEncode, wipe } from './bytes.js';
+import { keccak_256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, wipe } from './bytes.js';
 import { createVault, openVault, seal, open } from './vault.js';
 import { uaOf, uaMessage, purposeTag, holderPopMessage, uaSig } from './ua.js';
 import { OP_BUILDERS, hashTypedData } from './evm.js';
@@ -190,22 +190,14 @@ const ZETHER_PURPOSES = ['metatx', 'metatx-cancel', 'keyop', 'receiver-fee', 'vp
 /**
  * The `sig` a Zether UA gives every UA-ledger write (metatx, metatx-cancel, keyop, receiver-fee, vp, vc-anchor, trade,
  * zether-owner): Schnorr by `x` over `uaMessage(0x0141, purpose, digest)`, returned RAW as `R‖z` (160 bytes); the
- * registry reads `Y` from its record. A token's `bytes auth` wants `abi.encode(bytes(""), sig)` (`zetherOwnerAuth` for
- * the owner ops), `requireAuthorized` takes `UASig{signature: sig}` (`uaSig` in ua.js). Spends carry no signature: the
+ * registry reads `Y` from its record. A token's `bytes auth` wants `abi.encode(bytes(""), sig)`, `requireAuthorized` and
+ * the owner ops (`zetherOwnerSig`) take `UASig{signature: sig}` (`uaSig` in ua.js). Spends carry no signature: the
  * proof alone authorizes them (UA-6).
  */
 export function zetherSign(curve, x, purpose, digest) {
   if (purpose === 'pop') throw new Error('the PoP has its own signer: zetherPop');
   if (!ZETHER_PURPOSES.includes(purpose)) throw new Error(`a Zether UA does not sign purpose ${purpose}`);
   return schnorrSign(curve, x, uaMessage(zetherKind(curve), purposeTag(purpose), digest));
-}
-
-/**
- * The `sig` of an owner op (`mtxRollOverSigned`, `mtxSetRollOverMode`):
- * `abi.encode(bytes(""), Schnorr by x over uaMessage(kind, zether-owner, digest))`.
- */
-export function zetherOwnerAuth(curve, x, digest) {
-  return hex(abiEncode(['bytes', 'bytes'], [new Uint8Array(0), zetherSign(curve, x, 'zether-owner', digest)]));
 }
 
 /** `ownerSig` of a typed owner op (typed-signing TS-D19): `UASig{signature: Schnorr by x over uaMessage(kind, zether-owner, digest)}`. */

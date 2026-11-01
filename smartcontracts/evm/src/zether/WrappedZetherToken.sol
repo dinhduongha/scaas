@@ -14,8 +14,11 @@ import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherLayer} from "./ZetherLayer.sol";
 import {ZetherLib} from "./ZetherLib.sol";
+import {ZetherWrappedLib} from "./ZetherWrappedLib.sol";
 import {IConfidentialToken, IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
+import {IZetherToken, IZetherWrappedToken} from "./IZetherToken.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title Kind `WRAPPED_ZETHER` (CTR-TOK-21): the wrapper of 1–8 legs with the Zether layer (CTR-ZTH-44).
 /// @notice **UNAUDITED.** Any chain with EIP-2537 (BLS12-381). The legs, rates, reserves, `wrap`/`unwrap`,
@@ -27,7 +30,18 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         construction (a wrap-shield mints `minted`, a multiple of the scale, to the pool, an unshield-unwrap burns
 ///         `amount·shieldScale` from it and pays `⌊amount·shieldScale·den/num⌋`, worth at most what it removes), and
 ///         `executeRate` checks it. Flags: `PAYABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE` (CTR-ZTH-47). Never on Hedera.
-contract WrappedZetherToken is WrappedToken, ZetherLayer, IConfidentialWrappedToken {
+contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
+    bytes32 private constant WRAP_SHIELD_TYPEHASH = keccak256(
+        "WrapShield(address from,address underlying,uint256 amountIn,bytes32 toUA,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+    bytes32 private constant UNSHIELD_UNWRAP_TYPEHASH = keccak256(
+        "ZetherUnshieldUnwrap(address from,ZetherBurn args,Unwrap unwrap,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)"
+    );
+    bytes32 private constant UA_UNSHIELD_UNWRAP_TYPEHASH = keccak256(
+        "UAZetherUnshieldUnwrap(bytes32 from,ZetherBurn args,Unwrap unwrap,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)"
+    );
+
+
     /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env` (Hedera off: `ZetherLayer`
     ///      refuses a Hedera env); no `implArgs`.
     constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
@@ -44,10 +58,11 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IConfidentialWrappedTo
         return AdminLib.KIND_WRAPPED_ZETHER;
     }
 
-    function _init(TokenConfig memory cfg) internal override(WrappedToken, MetaTokenBase) {
-        _requireUnused(cfg, true, false, false, false);
-        WrappedLib.initToken(cfg, false, AdminLib.KIND_WRAPPED_ZETHER);
-        ZetherLib.init(cfg.conf, TRANSFER_VERIFIER);
+    /// @dev Never reached: `_initRaw` is the kind's init.
+    function _init(TokenConfig memory) internal override(WrappedToken, MetaTokenBase) {}
+
+    function _initRaw(bytes calldata initArgs) internal override {
+        ZetherWrappedLib.init(initArgs, TRANSFER_VERIFIER);
     }
 
     // ------------------------------------------------------------------ wrap-shield / unshield-unwrap (CTR-ZTH-45)
@@ -64,38 +79,53 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IConfidentialWrappedTo
         _poolMove(bytes32(0), MetaTxLib.pad(MetaTxLib.SHIELD_POOL), minted); // D19: minted to the pool
     }
 
+    /// @notice The signed `mtxWrapShield`; as on the generic path, relayed it takes no coin (the native leg reverts).
+    function mtxWrapShield(MetaTxLib.Envelope calldata e, address underlying, uint256 amountIn, bytes32 toUA, bytes calldata sig)
+        external nonReentrant returns (bytes memory)
+    {
+        return _named(WRAP_SHIELD_TYPEHASH, IConfidentialWrappedToken.mtxWrapShield.selector, e, abi.encode(underlying, amountIn, toUA), sig);
+    }
+
     /// @notice The unshield proof (`x.amount` and `x.recipient` in the statement; a direct call also binds
     ///         `x.underlying` and `x.minOut`), then leg `x.underlying` pays `⌊amount·shieldScale·den/num⌋ ≥ minOut` from
     ///         its reserve to `x.recipient` — an address, or a derived UA through the leg's `transferToUA`
     ///         (`UALegNotLedger` otherwise, CTR-ZTH-51) — burning `amount·shieldScale` from `SHIELD_POOL`.
-    function mtxUnshieldUnwrap(
-        bytes calldata payload,
-        bytes calldata proof,
-        bytes calldata auth,
-        bytes32 beneficiary,
-        bytes calldata accHint,
-        Unwrap calldata x
-    ) external nonReentrant {
-        _noAuth(auth, accHint);
-        _unshieldUnwrap(payload, proof, ZetherTypes.UA.wrap(beneficiary), x);
-    }
-
-    /// @dev The leg first (cheap), the proof and the debit, then the payout from the leg's reserve (CEI: the debit
-    ///      before the one outside call).
-    function _unshieldUnwrap(
-        bytes calldata payload,
-        bytes calldata proof,
-        ZetherTypes.UA beneficiary,
-        Unwrap calldata x
-    ) private {
+    ///         The leg first (cheap), the proof and the debit, then the payout from the leg's reserve (CEI: the debit
+    ///         before the one outside call).
+    function mtxUnshieldUnwrap(ZetherBurn calldata b, Unwrap calldata x, bytes calldata proof) external nonReentrant {
         uint256 i = WrappedLib.indexOf(x.underlying);
         // a derived recipient: the leg's `transferToUA` checks it
         if (UAKinds.inNativeSpace(x.recipient)) _requirePayee(address(uint160(uint256(x.recipient))));
-        uint256 fee = ZetherLib.unshield(payload, proof, beneficiary, x.amount, x.recipient, _envUnwrap(x.underlying, x.minOut));
+        ZetherLib.Env memory env = _env();
+        if (env.binding == 0) env.binding = ZetherLib.unwrapBinding(x.underlying, x.minOut); // direct: the leg and `minOut`
+        uint256 fee = ZetherLib.unshield(b, proof, x.amount, x.recipient, env);
         uint256 wrapped = x.amount * ZetherLib.$().shieldScale;
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped); // D19: burn from the pool
-        _fromPool(beneficiary, fee);
+        _fromPool(ZetherTypes.UA.wrap(b.beneficiaryUA), fee);
         WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut);
+    }
+
+    /// @notice The signed form, the `Unwrap` leg a nested struct.
+    function mtxUnshieldUnwrap(MetaTxLib.Envelope calldata e, ZetherBurn calldata b, Unwrap calldata x, bytes calldata proof,
+        bytes calldata sig) external nonReentrant returns (bytes memory)
+    {
+        (bytes memory words, bytes memory data) = _unwrapCall(b, x, proof);
+        return _namedCall(UNSHIELD_UNWRAP_TYPEHASH, e, words, data, sig);
+    }
+
+    function uaUnshieldUnwrap(MetaTxLib.UAEnvelope calldata e, ZetherBurn calldata b, Unwrap calldata x, bytes calldata proof,
+        IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
+    {
+        (bytes memory words, bytes memory data) = _unwrapCall(b, x, proof);
+        return _namedCallUA(UA_UNSHIELD_UNWRAP_TYPEHASH, e, words, data, auth);
+    }
+
+    /// @dev The words the struct hashes (TS-D17) and the op's call.
+    function _unwrapCall(ZetherBurn calldata b, Unwrap calldata x, bytes calldata proof)
+        private pure returns (bytes memory, bytes memory)
+    {
+        return (abi.encode(ZetherLib.hashBurn(b), ZetherLib.hashUnwrap(x), keccak256(proof)),
+            abi.encodeCall(IZetherWrappedToken.mtxUnshieldUnwrap, (b, x, proof)));
     }
 
     /// @notice As `WrappedToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
@@ -127,16 +157,6 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IConfidentialWrappedTo
         return ZetherLayer._uaEnvelopeBinding(m);
     }
 
-    /// @dev Relayed: the envelope binding (the signature covers `data`, the leg and `minOut` with it); direct: the leg
-    ///      and `minOut` (`ZetherLib.unwrapBinding`) under `ZTX_V1_DIRECT`.
-    function _envUnwrap(address u, uint256 minOut) private view returns (ZetherLib.Env memory) {
-        bytes32 b = _ticketBinding();
-        if (b != bytes32(0)) return ZetherLib.Env(_REGISTRY, CHAIN_UID, ZetherLib.TAG_RELAYED, b, BURN_VERIFIER);
-        return ZetherLib.Env(
-            _REGISTRY, CHAIN_UID, ZetherLib.TAG_DIRECT, ZetherLib.unwrapBinding(u, minOut), BURN_VERIFIER
-        );
-    }
-
     // ------------------------------------------------------------------ allowlist (CTR-MTX-19, CTR-ZTH-34)
 
     /// @notice `WrappedToken`'s first six, then the Zether ops and the two underlying paths, each `ABSOLUTE`, then
@@ -145,33 +165,12 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IConfidentialWrappedTo
         public pure override(WrappedToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
-        s = new bytes4[](19);
-        c = new uint8[](19);
-        a = new uint8[](19);
-        (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
-        (s[1], c[1]) = (SEL_WRAP, FEE_CLASS_ABSOLUTE);
-        (s[2], c[2]) = (SEL_UNWRAP_MIN, FEE_CLASS_AMOUNT);
-        (s[3], c[3]) = (SEL_WRAP_LEG, FEE_CLASS_ABSOLUTE);
-        (s[4], c[4], a[4]) = (SEL_UNWRAP_LEG, FEE_CLASS_AMOUNT, 1);
-        (s[5], c[5]) = (SEL_ADD_RESERVE, FEE_CLASS_ABSOLUTE);
-        (s[6], c[6]) = (IConfidentialToken.mtxShield.selector, FEE_CLASS_ABSOLUTE);
-        (s[7], c[7]) = (this.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
-        (s[8], c[8]) = (this.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[9], c[9]) = (this.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
-        (s[10], c[10]) = (this.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
-        (s[11], c[11]) = (this.mtxWrapShield.selector, FEE_CLASS_ABSOLUTE);
-        (s[12], c[12]) = (this.mtxUnshieldUnwrap.selector, FEE_CLASS_ABSOLUTE);
-        (s[13], c[13]) = (SEL_WRAP_TO_UA, FEE_CLASS_ABSOLUTE);
-        (s[14], c[14], a[14]) = (SEL_UNWRAP_TO_UA, FEE_CLASS_AMOUNT, 1);
-        (s[15], c[15]) = (this.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
-        (s[16], c[16]) = (this.mtxRollOverBatch.selector, FEE_CLASS_ABSOLUTE);
-        (s[17], c[17]) = (this.mtxRollOverSigned.selector, FEE_CLASS_ABSOLUTE);
-        (s[18], c[18]) = (this.mtxSetRollOverMode.selector, FEE_CLASS_ABSOLUTE);
+        return ZetherWrappedLib.selectors();
     }
 
     function _mtxRule(bytes4 sel) internal view override(WrappedToken, MetaTxBase) returns (MtxRule memory) {
-        if (_isZetherOp(sel) || sel == this.mtxUnshieldUnwrap.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
-        if (sel == this.mtxWrapShield.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 100);
+        if (_isZetherOp(sel) || sel == IZetherWrappedToken.mtxUnshieldUnwrap.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
+        if (sel == IConfidentialWrappedToken.mtxWrapShield.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 100);
         return WrappedToken._mtxRule(sel);
     }
 
@@ -179,6 +178,6 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IConfidentialWrappedTo
     ///         `NormalZetherToken`); not `mtxWrapShield` (a UA wrap-shields in two signed steps, `uaWrap` then
     ///         `mtxShield`).
     function _uaAllowed(bytes4 sel) internal view override(WrappedToken, UAMetaTxBase) returns (bool) {
-        return _isZetherOp(sel) || sel == this.mtxUnshieldUnwrap.selector || WrappedToken._uaAllowed(sel);
+        return _isZetherOp(sel) || sel == IZetherWrappedToken.mtxUnshieldUnwrap.selector || WrappedToken._uaAllowed(sel);
     }
 }

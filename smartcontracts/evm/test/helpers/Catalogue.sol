@@ -11,6 +11,7 @@ import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
 import {HederaLib} from "../../src/hedera/HederaLib.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {ZetherLib} from "../../src/zether/ZetherLib.sol";
+import {ZetherWrappedLib} from "../../src/zether/ZetherWrappedLib.sol";
 import {PqzStateLib} from "../../src/pqz/PqzStateLib.sol";
 import {PqzTransferLib} from "../../src/pqz/PqzTransferLib.sol";
 import {PqzBurnLib} from "../../src/pqz/PqzBurnLib.sol";
@@ -49,11 +50,13 @@ function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory
         || kind == IOpenFactory.TokenKind.WRAPPED_PQZ;
     bool zth = kind == IOpenFactory.TokenKind.NORMAL_ZETHER || kind == IOpenFactory.TokenKind.WRAPPED_ZETHER;
     bool pqz = kind == IOpenFactory.TokenKind.NORMAL_PQZ || kind == IOpenFactory.TokenKind.WRAPPED_PQZ;
-    l = new address[](4 + (und ? 1 : 0) + (zth ? 1 : 0) + (pqz ? 4 : 0));
+    bool zwr = kind == IOpenFactory.TokenKind.WRAPPED_ZETHER;
+    l = new address[](4 + (und ? 1 : 0) + (zth ? 1 : 0) + (zwr ? 1 : 0) + (pqz ? 4 : 0));
     (l[0], l[1], l[2], l[3]) = (address(AdminLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
     uint256 n = 4;
     if (und) l[n++] = address(WrappedLib);
     if (zth) l[n++] = address(ZetherLib);
+    if (zwr) l[n++] = address(ZetherWrappedLib);
     if (pqz) {
         (l[n], l[n + 1], l[n + 2], l[n + 3]) =
             (address(PqzStateLib), address(PqzTransferLib), address(PqzBurnLib), address(PqzViewLib));

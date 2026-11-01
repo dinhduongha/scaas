@@ -246,9 +246,17 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     function _named(bytes32 typehash, bytes4 sel, MetaTxLib.Envelope calldata e, bytes memory args, bytes calldata sig)
         internal override returns (bytes memory)
     {
-        MetaTxLib.MetaTransaction memory m = _metaOf(e, abi.encodePacked(sel, args));
+        return _namedCall(typehash, e, args, abi.encodePacked(sel, args), sig);
+    }
+
+    /// @dev `_named` where the struct's words are not the call's arguments: nested structs and `bytes` hash into `words`
+    ///      (EIP-712), `data` is the op's call.
+    function _namedCall(bytes32 typehash, MetaTxLib.Envelope calldata e, bytes memory words, bytes memory data, bytes calldata sig)
+        internal returns (bytes memory)
+    {
+        MetaTxLib.MetaTransaction memory m = _metaOf(e, data);
         return _settle(m, MtxPipelineLib.preNamed(
-            _mtxCtx(), typehash, _envelopeOf(m, 0), args, _callFacts(m.data, false), false, sig));
+            _mtxCtx(), typehash, _envelopeOf(m, 0), words, _callFacts(m.data, false), false, sig));
     }
 
     /// @dev Steps 5-7 of the address path.

@@ -16,7 +16,8 @@ import {PqzCore} from "./PqzCore.sol";
 import {PqzBurnLib} from "./PqzBurnLib.sol";
 import {PqzStateLib} from "./PqzStateLib.sol";
 import {PqzViewLib} from "./PqzViewLib.sol";
-import {IConfidentialToken, IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
+import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
+import {IPqzWrappedToken} from "./IPqzToken.sol";
 
 /// @title Kind `WRAPPED_PQZ` (CTR-TOK-21, CTR-PQZ-22): the wrapper of 1–8 legs with the PQZ layer (P6g plan D1).
 /// @notice **UNAUDITED.** Any chain whose `PQZ` precompile passes the self-test (`PqzSafety`); never on Hedera.
@@ -26,7 +27,7 @@ import {IConfidentialToken, IConfidentialWrappedToken} from "../confidential/ICo
 ///         `mtxUnshieldUnwrap` (a burn: `amount · shieldScale` burnt from `SHIELD_POOL`, then paid out of a leg's
 ///         reserve to an address or, through a SCaaS ledger leg, to a UA), as on `WRAPPED_ZETHER`. Reserve invariant
 ///         `Σ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply()` (the shielded value is the pool's public units).
-contract WrappedPqzToken is WrappedToken, PqzLayer, IConfidentialWrappedToken {
+contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
     /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env`, whose
     ///      `deps[ENV_PQZ_VERIFIER]` is the release's `UAPqzVerifier` (CTR-ZTH-20 / CTR-PQZ-10); no `implArgs`.
     constructor(uint16 envVersion, Env memory env, bytes memory implArgs)

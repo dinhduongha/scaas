@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  deriveMasterSk, deriveChildSk, deriveConfKey, confPublic, schnorrSign, schnorrVerify, zetherKind, zetherPop, zetherSign, zetherOwnerAuth,
+  deriveMasterSk, deriveChildSk, deriveConfKey, confPublic, schnorrSign, schnorrVerify, zetherKind, zetherPop, zetherSign,
   sealConfKey, openConfKey, confLabel, CURVES, encodePoint, decodePoint, checkBalance, sealBalanceCache, openBalanceCache,
   setCachedBalance, cacheAfterDebit, cacheAfterRollOver, readBalance, zetherOwnerSig, g1, zetherRollOverTypedData,
   zetherRollOverCalldata, zetherRollOverDigest, zetherSetRollOverModeTypedData, zetherSetRollOverModeCalldata, zetherSetRollOverModeDigest,
@@ -92,13 +92,13 @@ test('the Zether PoP is portable (UA-8 P1): no chain field, over the typed UAReg
   assert.equal(hex(portableRecordDigest({ ua: z.ua, kind: 0x0141 })), z.portableRecordDigest, 'structures.json: the Zether row');
 });
 
-test('owner op: abi.encode(bytes(""), Schnorr over uaMessage(kind, zether-owner, digest))', () => {
+test('owner op: UASig{signature: Schnorr over uaMessage(kind, zether-owner, digest)}', () => {
   for (const curve of ['bls12381']) {
     const k = R33[curve].keys[0];
     const digest = '0x' + '77'.repeat(32);
-    const auth = fromHex(zetherOwnerAuth(curve, fromHex(k.x), digest));
-    const sig = auth.subarray(auth.length - 160);
-    assert.equal(hex(auth), hex(abiEncode(['bytes', 'bytes'], [new Uint8Array(0), sig])));
+    const s = zetherOwnerSig(curve, fromHex(k.x), digest);
+    const sig = s.signature instanceof Uint8Array ? s.signature : fromHex(s.signature);
+    assert.equal(sig.length, 160);
     const m = uaMessage(zetherKind(curve), purposeTag('zether-owner'), digest);
     assert.ok(schnorrVerify(curve, fromHex(k.Y), m, sig));
     assert.equal(schnorrVerify(curve, fromHex(k.Y), fromHex(digest), sig), false, 'never the raw digest');

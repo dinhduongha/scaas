@@ -11,6 +11,7 @@ import {MtxPipelineLib} from "../src/metatx/MtxPipelineLib.sol";
 import {HederaLib} from "../src/hedera/HederaLib.sol";
 import {TradeLib} from "../src/trade/TradeLib.sol";
 import {ZetherLib} from "../src/zether/ZetherLib.sol";
+import {ZetherWrappedLib} from "../src/zether/ZetherWrappedLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {NormalToken} from "../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
@@ -317,12 +318,12 @@ abstract contract DeployBase is Script {
         } catch {}
     }
 
-    /// @notice The link closure of a Zether token (task 6): `WrappedLib` only in `WRAPPED_ZETHER`.
+    /// @notice The link closure of a Zether token (task 6): `WrappedLib` and `ZetherWrappedLib` only in `WRAPPED_ZETHER`.
     function _zetherLibs(bool underlying) internal view returns (address[] memory l) {
-        l = new address[](underlying ? 6 : 5);
+        l = new address[](underlying ? 7 : 5);
         (l[0], l[1], l[2], l[3], l[4]) =
             (address(AdminLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(ZetherLib));
-        if (underlying) l[5] = address(WrappedLib);
+        if (underlying) (l[5], l[6]) = (address(WrappedLib), address(ZetherWrappedLib));
     }
 
     /// @notice Any chain but Hedera (CTR-ZTH-52; `_deployTokenFactory` requires the EIP-2537 probe first, and a chain

@@ -5,18 +5,75 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
-import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
+import {IConfidentialToken, IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title The confidential layer of the kinds `NORMAL_ZETHER` and `WRAPPED_ZETHER` (CTR-ZTH-44, CTR-ZTH-45): ElGamal
 ///        `acc`/`pending` balances over the token's public ERC-20 balance.
 /// @notice **UNAUDITED.** Byte-exact contract with the prover: `docs/contracts/zether.md`.
 ///         The token is also an `IERC20MetaTx` on the one meta-transaction base: every proof-carrying entry point is a
-///         direct call (statement `ZTX_V1_DIRECT`, binding 0) or an allowlisted self-call of `mtxExecute` / `uaExecute`
-///         whose envelope binding the statement carries (`ZTX_V1_RELAYED`, CTR-ZTH-34, CTR-ZTH-51). The shared entry points
-///         and events are `IConfidentialToken`'s (`auth` and `accHint` must be empty here); `mtxWrapShield` and
-///         `mtxUnshieldUnwrap` are on `WRAPPED_ZETHER` only (`IConfidentialWrappedToken`); the prover views are in
-///         `ZetherStatements` (CTR-ZTH-46).
+///         direct call (statement `ZTX_V1_DIRECT`, binding 0) or an allowlisted self-call of `mtxExecute` / `uaExecute` or
+///         of its signed overload (`ZetherLayer`, TS-D14), whose envelope binding the statement carries (`ZTX_V1_RELAYED`,
+///         CTR-ZTH-34, CTR-ZTH-51). The proof alone authorises (UA-6): no `auth`, no `accHint`. The shared entry points
+///         and events are `IConfidentialToken`'s; `mtxWrapShield` and `mtxUnshieldUnwrap` are on `WRAPPED_ZETHER` only
+///         (`IZetherWrappedToken`); the prover views are in `ZetherStatements` (CTR-ZTH-46).
 interface IZetherToken is IConfidentialToken {
+    /// @notice A curve point, EIP-2537 encoded: `abi.encode(G1)` is its 128 bytes (BLS12-381 is the only curve, CTR-ZTH-32).
+    struct G1 {
+        bytes32 x0;
+        bytes32 x1;
+        bytes32 y0;
+        bytes32 y1;
+    }
+
+    /// @notice The explicit parameters of a single-recipient transfer (TS-D17); the statement and the record are the
+    ///         ones the packed payload gave (zether.md §10, §11).
+    struct ZetherSingle {
+        uint64 accSeq;
+        uint64 sendCounter;
+        uint256 validUntilBlock;
+        bytes16 salt;
+        bytes32 beneficiaryUA;
+        G1 yFrom;
+        G1 yTo;
+        G1 cOut;
+        G1 dOut;
+        G1 cDeb;
+        G1 cAud;
+    }
+
+    struct ZetherLeg {
+        G1 yTo;
+        G1 cOut;
+        G1 cAud;
+        G1 dAud;
+    }
+
+    /// @notice A multi-recipient transfer; `M` is `legs.length`. On commit-reveal `sealedMemo` is the memo after its clear
+    ///         salt (`1 + 40·M` bytes; the memo is `salt ‖ sealedMemo`, CTR-ZTH-50), else empty.
+    struct ZetherMulti {
+        uint64 accSeq;
+        uint64 sendCounter;
+        uint256 validUntilBlock;
+        bytes16 salt;
+        bytes32 beneficiaryUA;
+        uint256 decoyFee;
+        G1 yFrom;
+        G1 dOut;
+        G1 cDeb;
+        ZetherLeg[] legs;
+        bytes sealedMemo;
+    }
+
+    /// @notice An unshield's own parameters; `amount` and the recipient are the entry's.
+    struct ZetherBurn {
+        uint64 accSeq;
+        uint64 sendCounter;
+        uint256 validUntilBlock;
+        bytes32 beneficiaryUA;
+        G1 yFrom;
+    }
+
     /// @notice One account at one block. An unset point is `O`.
     struct AccountState {
         bytes accC;
@@ -45,6 +102,7 @@ interface IZetherToken is IConfidentialToken {
     error SelfTransfer();
     error BadRecipientCount(uint256 count);
     error DuplicateRecipient(ZetherTypes.UA recipient);
+    /// @notice A `sealedMemo` of the wrong length for the stored form (`length`, its length).
     error BadPayload(uint256 length);
     error RollOverOwnerOnly(ZetherTypes.UA account);
     error RollOverExpired(uint256 validUntilBlock);
@@ -60,11 +118,9 @@ interface IZetherToken is IConfidentialToken {
     ///         (`Y_t`, any `Y_tj`): refused on every transfer form, direct, relayed and in the statement views (review C0-1;
     ///         the Zether twin of PQZ F-4).
     error AuditorKeyAsParty();
-    /// @notice A transfer or unshield statement past its `validUntilBlock` (`block.number > validUntilBlock`; payload word
-    ///         2, header word 15), the rule of the PQZ header (review C0-9).
+    /// @notice A transfer or unshield statement past its `validUntilBlock` (`block.number > validUntilBlock`; header word
+    ///         15), the rule of the PQZ header (review C0-9).
     error TransferExpired(uint256 validUntilBlock);
-    /// @notice Commit-reveal: the memo's clear salt is not the payload's (storage-only recovery needs it, CTR-ZTH-50).
-    error MemoSaltMismatch();
     /// @notice A `COMPACT` token refuses `mtxConfidentialTransferSingle` (CTR-ZTH-48).
     error TransferEntryDisabled(uint8 disclosureMode);
     /// @notice `ConfidentialConfig.disclosureMode` is neither BUNDLE nor COMPACT (CTR-ZTH-48).
@@ -78,10 +134,9 @@ interface IZetherToken is IConfidentialToken {
     error BadInit();
     /// @notice `mtxWrapShield`: the public-equivalent of the deposit is not a whole number of shielded units.
     error AmountNotScaled(uint256 minted, uint256 shieldScale);
-    /// @notice A shared proof-taking entry point got a non-empty `auth`: the Zether proof alone authorises (UA-6).
-    error AuthNotEmpty();
-    /// @notice A shared proof-taking entry point got a non-empty `accHint` (Zether has no materialised `acc`).
-    error AccHintNotEmpty();
+    /// @notice A point the verifier or a group operation refuses: not on the curve, outside the subgroup, not canonical.
+    ///         Every untrusted point reaches the one MSM, so a bad point always reverts with it (zether.md §9.1).
+    error BadPoint();
     /// @notice `mtxRollOver` with `n = 0`.
     error RollOverRange(uint256 n);
 
@@ -136,16 +191,40 @@ interface IZetherToken is IConfidentialToken {
 
     // ------------------------------------------------------------------ Zether-only entry points (CTR-ZTH-45)
 
+    /// @notice Multi-recipient, in the token's default storage mode.
+    function mtxConfidentialTransfer(ZetherMulti calldata t, bytes calldata proof) external returns (bytes32 entryRef);
+    /// @notice Multi-recipient, commit-reveal on every token.
+    function mtxConfidentialTransferCompact(ZetherMulti calldata t, bytes calldata proof) external returns (bytes32 entryRef);
+    /// @notice Single-recipient, in the token's default storage mode.
+    function mtxConfidentialTransferSingle(ZetherSingle calldata t, bytes calldata proof) external returns (bytes32 entryRef);
+    /// @notice `amount` shielded units out as `amount · shieldScale` public units from `SHIELD_POOL` to `recipient`: a
+    ///         native address as its zero-padded id, or a registered SIGNING UA (credited on the UA ledger); the pools
+    ///         are refused.
+    function mtxUnshield(ZetherBurn calldata b, uint256 amount, bytes32 recipient, bytes calldata proof) external;
     /// @notice Skips `OWNER_ONLY` items.
     function mtxRollOverBatch(ZetherTypes.UA[] calldata accounts) external;
-    /// @notice Owner roll-over: a registered Zether UA only (`AccountNotRegistered` otherwise).
-    function mtxRollOverSigned(ZetherTypes.UA account, uint64 expectedPendingSeq, uint64 validUntilBlock, bytes calldata sig)
-        external;
-    /// @notice Owner mode change: a registered Zether UA only (`AccountNotRegistered` otherwise).
+    /// @notice Owner roll-over: a registered Zether UA only (`AccountNotRegistered` otherwise). `ownerSig` is the typed
+    ///         `ZetherRollOver` under `zether-owner` (TS-D19), its Schnorr in `signature`.
+    function mtxRollOverSigned(
+        ZetherTypes.UA account,
+        uint64 expectedPendingSeq,
+        uint64 validUntilBlock,
+        IUARegistry.UASig calldata ownerSig
+    ) external;
+    /// @notice Owner mode change: a registered Zether UA only (`AccountNotRegistered` otherwise); the typed
+    ///         `ZetherSetRollOverMode`, as `mtxRollOverSigned`.
     function mtxSetRollOverMode(
         ZetherTypes.UA account,
         ZetherTypes.RollOverMode mode,
         uint64 validUntilBlock,
-        bytes calldata sig
+        IUARegistry.UASig calldata ownerSig
     ) external;
+}
+
+/// @title `mtxUnshieldUnwrap` of `WRAPPED_ZETHER`, its explicit form (typed-signing Appendix X.3).
+interface IZetherWrappedToken is IConfidentialWrappedToken {
+    /// @notice `mtxUnshield`'s debit of `x.amount`, then leg `x.underlying` pays `⌊amount·shieldScale·den/num⌋ ≥ minOut`
+    ///         to `x.recipient`: a native address, or a derived UA in the leg's own UA ledger (`transferToUA`;
+    ///         `UALegNotLedger` otherwise).
+    function mtxUnshieldUnwrap(IZetherToken.ZetherBurn calldata b, Unwrap calldata x, bytes calldata proof) external;
 }

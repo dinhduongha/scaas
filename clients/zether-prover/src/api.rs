@@ -175,8 +175,6 @@ fn sc<C: ZCurve>(s: &Fr<C>) -> String {
 }
 
 /// `mtxConfidentialTransferSingle` — a direct call has no outer fee; relayed, the same bytes are the envelope's `data`.
-const TRANSFER_SINGLE: &str = "mtxConfidentialTransferSingle(bytes,bytes,bytes,bytes32,bytes)";
-
 fn opt_str<'a>(v: &'a Value, k: &str) -> R<Option<&'a str>> {
     match v.get(k).filter(|x| !x.is_null()) {
         None => Ok(None),
@@ -208,11 +206,11 @@ fn y_aud<C: ZCurve>(v: &Value) -> R<G<C>> {
 
 /// The entry of a stored form (CTR-ZTH-38): `mtxConfidentialTransfer` is the token's default (BUNDLE, or commit-reveal
 /// on a COMPACT token), `mtxConfidentialTransferCompact` commit-reveal on every token, (NONE and `…NoBundle` retired, review C0-3).
-fn transfer_multi_sig(mode: TransferMode, compact: bool) -> &'static str {
+fn transfer_multi_name(mode: TransferMode, compact: bool) -> &'static str {
     match mode {
-        TransferMode::Bundle => "mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)",
-        TransferMode::Hash if compact => "mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)",
-        TransferMode::Hash => "mtxConfidentialTransferCompact(bytes,bytes,bytes,bytes32,bytes)",
+        TransferMode::Bundle => "mtxConfidentialTransfer",
+        TransferMode::Hash if compact => "mtxConfidentialTransfer",
+        TransferMode::Hash => "mtxConfidentialTransferCompact",
     }
 }
 
@@ -244,7 +242,7 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
         "entryRef": hx(&schnorr::entry_ref(h.chain_id, &h.chain_uid, &h.token, &k.ua(), h.send_counter)),
         "salt": hx(&st.header.salt),
         "record": hx(&st.record()),
-        "directCalldata": hx(&envelope::transfer_call(TRANSFER_SINGLE, &payload, &proof, &h.beneficiary)),
+        "directCalldata": hx(&envelope::transfer_single_call(&payload, &proof, &h.beneficiary)),
     });
     if include_witness(v) {
         out["witness"] = json!({"x": sc::<C>(&w.x), "v": sc::<C>(&w.v), "s": sc::<C>(&w.s), "b": sc::<C>(&w.b),
@@ -312,7 +310,7 @@ pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens
         "entryRef": hx(&schnorr::entry_ref(h.chain_id, &h.chain_uid, &h.token, &k.ua(), h.send_counter)),
         "salt": hx(&st.header.salt),
         "memo": hx(&w.memo),
-        "directCalldata": hx(&envelope::transfer_call(transfer_multi_sig(mode, compact), &payload, &proof, &h.beneficiary)),
+        "directCalldata": hx(&envelope::transfer_multi_call(transfer_multi_name(mode, compact), &payload, &proof, &h.beneficiary)),
     });
     if include_witness(v) {
         out["witness"] = json!({"x": sc::<C>(&w.x), "s": sc::<C>(&w.s), "b": sc::<C>(&w.b), "bPrime": sc::<C>(&w.b_prime),

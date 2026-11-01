@@ -6,6 +6,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {IConfidentialToken, IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
+import {IPqzToken, IPqzWrappedToken} from "../../src/pqz/IPqzToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UACall} from "../ua/UACall.sol";
@@ -294,7 +295,7 @@ contract ExplicitParamsCalldataTest is Test {
     function _op1Today(bool aud, bytes memory proof, bytes memory memo) internal view returns (bytes memory) {
         bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0), FROM, TO, BEN), SALT,
             _outOp1(aud), memo);
-        return abi.encodeCall(IConfidentialToken.mtxConfidentialTransferSingle, (pl, proof, _mlAuthToday(), BEN, ""));
+        return abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (pl, proof, _mlAuthToday(), BEN, ""));
     }
 
     function _op1Args(bool aud, bytes memory memo) internal view returns (PqzTransferArgs memory a) {
@@ -325,7 +326,7 @@ contract ExplicitParamsCalldataTest is Test {
         bytes memory out = _rnd(81 + m, PK * g + V * (m + 1) + (aud ? V * m : 0));
         bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0), FROM, BEN, m, uint256(0)),
             SALT, r, out, memo);
-        return abi.encodeCall(IConfidentialToken.mtxConfidentialTransfer, (pl, proof, _mlAuthToday(), BEN, ""));
+        return abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (pl, proof, _mlAuthToday(), BEN, ""));
     }
 
     function _op7Args(uint256 m, bool aud, bytes memory memo) internal view returns (PqzMultiArgs memory a) {
@@ -366,7 +367,7 @@ contract ExplicitParamsCalldataTest is Test {
     }
 
     function _burnToday(bytes memory proof, bytes memory auth, uint256 amount) internal view returns (bytes memory) {
-        return abi.encodeCall(IConfidentialToken.mtxUnshield, (_burnPayload(), proof, auth, BEN, "", amount,
+        return abi.encodeCall(IPqzToken.mtxUnshield, (_burnPayload(), proof, auth, BEN, "", amount,
             amount == 0 ? bytes32(0) : bytes32(uint256(0xD00D))));
     }
 
@@ -383,7 +384,7 @@ contract ExplicitParamsCalldataTest is Test {
     }
 
     function _burnUnwrapToday(bytes memory proof) internal view returns (bytes memory) {
-        return abi.encodeCall(IConfidentialWrappedToken.mtxUnshieldUnwrap, (_burnPayload(), proof, _mlAuthToday(), BEN,
+        return abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (_burnPayload(), proof, _mlAuthToday(), BEN,
             "", _unwrapX()));
     }
 
@@ -511,7 +512,7 @@ contract ExplicitParamsCalldataTest is Test {
         bytes memory pb = _rnd(13, 2_816);
         for (uint256 k; k < 2; ++k) {
             bool ua = k == 1;
-            bytes memory today = _today(ua, abi.encodeCall(IConfidentialToken.mtxConfidentialTransferSingle,
+            bytes memory today = _today(ua, abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle,
                 (_zSinglePayload(), ps, "", BEN, "")));
             bytes memory typed = ua
                 ? abi.encodeWithSelector(_sel("uaConfidentialTransferSingle"), _uaEnv(), _zSingle(), ps, _feeAuth())
@@ -522,7 +523,7 @@ contract ExplicitParamsCalldataTest is Test {
             for (uint256 m = 1; m <= 8; m = m == 1 ? 3 : m + 5) {
                 for (uint256 c; c < 2; ++c) {
                     bytes memory memo = c == 1 ? bytes.concat(SALT, _rnd(14, 1 + 40 * m)) : bytes("");
-                    today = _today(ua, abi.encodeCall(IConfidentialToken.mtxConfidentialTransfer,
+                    today = _today(ua, abi.encodeCall(IPqzToken.mtxConfidentialTransfer,
                         (_zMultiPayload(m, memo), pm, "", BEN, "")));
                     typed = ua
                         ? abi.encodeWithSelector(_sel("uaConfidentialTransfer"), _uaEnv(), _zMulti(m, memo), pm, _feeAuth())
@@ -535,7 +536,7 @@ contract ExplicitParamsCalldataTest is Test {
             }
             bytes memory bpl = bytes.concat(abi.encode(uint256(5), uint256(3), block.number + 100), _g1b(400));
             ZetherBurn memory zb = ZetherBurn(5, 3, block.number + 100, BEN, _g1(400));
-            today = _today(ua, abi.encodeCall(IConfidentialToken.mtxUnshield, (bpl, pb, "", BEN, "", 1, bytes32(uint256(0xD00D)))));
+            today = _today(ua, abi.encodeCall(IPqzToken.mtxUnshield, (bpl, pb, "", BEN, "", 1, bytes32(uint256(0xD00D)))));
             typed = ua
                 ? abi.encodeWithSelector(_sel("uaUnshield"), _uaEnv(), zb, uint256(1), bytes32(uint256(0xD00D)), pb, _feeAuth())
                 : abi.encodeWithSelector(_sel("mtxUnshield"), _env(), zb, uint256(1), bytes32(uint256(0xD00D)), pb,

@@ -73,10 +73,10 @@ const X4 = {
   RollOverBatch: ['bytes32[] uas', ''],
 };
 
-// `mtx` entries: the length of `mtxSelectors()`, read from the Solidity. `ua` entries: an expected count, by hand, since
+// `mtx` entries: the length of `mtxSelectors()`, read from the Solidity (`WRAPPED_ZETHER`: its table is in the library, size lever 1). `ua` entries: an expected count, by hand, since
 // `_uaAllowed` is an expression and states no count.
 const SOURCES = { NormalToken: 'metatx/NormalToken', WrappedToken: 'metatx/WrappedToken', NormalZetherToken: 'zether/NormalZetherToken',
-  WrappedZetherToken: 'zether/WrappedZetherToken', NormalPqzToken: 'pqz/NormalPqzToken', WrappedPqzToken: 'pqz/WrappedPqzToken',
+  WrappedZetherToken: 'zether/ZetherWrappedLib', NormalPqzToken: 'pqz/NormalPqzToken', WrappedPqzToken: 'pqz/WrappedPqzToken',
   MandateWallet: 'wallet/MandateWallet', SmartKeyAccount: 'account/SmartKeyAccount' };
 const mtxSelectorCount = (contract) => Number(/new bytes4\[\]\((\d+)\)/.exec(
   readFileSync(new URL(`../../../smartcontracts/evm/src/${SOURCES[contract]}.sol`, import.meta.url), 'utf8'))[1]);

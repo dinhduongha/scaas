@@ -119,40 +119,75 @@ pub fn selector(sig: &str) -> [u8; 4] {
     keccak256(sig.as_bytes())[..4].try_into().unwrap()
 }
 
-/// Calldata of a confidential transfer (`mtxConfidentialTransfer`, `…Compact`, `…Single`, all
-/// `(bytes payload, bytes proof, bytes auth, bytes32 beneficiary, bytes accHint)`, the shared `IConfidentialToken`
-/// signature; Zether: `auth` and `accHint` empty, the proof alone authorizes the spend, UA-6): the direct call and,
-/// unchanged, the envelope's `data`.
-pub fn transfer_call(sig: &str, payload: &[u8], proof: &[u8], beneficiary: &[u8; 32]) -> Vec<u8> {
-    let mut d = selector(sig).to_vec();
-    d.extend(abi::encode(&[
-        Tok::Bytes(payload.to_vec()),
-        Tok::Bytes(proof.to_vec()),
-        Tok::Bytes(Vec::new()),
-        Tok::Word(*beneficiary),
-        Tok::Bytes(Vec::new()),
-    ]));
+const G1: &str = "(bytes32,bytes32,bytes32,bytes32)";
+
+/// `abi` signature of `ZetherSingle` (`IZetherToken`, typed-signing Appendix X.2).
+pub fn single_type() -> String {
+    format!("(uint64,uint64,uint256,bytes16,bytes32,{G1},{G1},{G1},{G1},{G1},{G1})")
+}
+
+/// `abi` signature of `ZetherMulti`.
+pub fn multi_type() -> String {
+    format!("(uint64,uint64,uint256,bytes16,bytes32,uint256,{G1},{G1},{G1},({G1},{G1},{G1},{G1})[],bytes)")
+}
+
+/// `abi` signature of `ZetherBurn`.
+pub fn burn_type() -> String {
+    format!("(uint64,uint64,uint256,bytes32,{G1})")
+}
+
+fn salt_word(salt: &[u8]) -> Tok {
+    let mut w = [0u8; 32];
+    w[..16].copy_from_slice(salt);
+    Tok::Word(w)
+}
+
+/// `be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock)`: the head of every packed payload (zether.md §10).
+const P_HEAD: usize = 96;
+const POINT: usize = 128;
+
+/// Calldata of `mtxConfidentialTransferSingle(ZetherSingle t, bytes proof)` from the prover's packed `payload`
+/// (`head ‖ salt16 ‖ 6 points`): the direct call and, unchanged, the envelope's `data`. The proof alone authorizes the
+/// spend (UA-6).
+pub fn transfer_single_call(payload: &[u8], proof: &[u8], beneficiary: &[u8; 32]) -> Vec<u8> {
+    let mut toks = abi::words(&payload[..P_HEAD]);
+    toks.push(salt_word(&payload[P_HEAD..P_HEAD + 16]));
+    toks.push(Tok::Word(*beneficiary));
+    toks.extend(abi::words(&payload[P_HEAD + 16..]));
+    toks.push(Tok::Bytes(proof.to_vec()));
+    let mut d = selector(&format!("mtxConfidentialTransferSingle({},bytes)", single_type())).to_vec();
+    d.extend(abi::encode(&toks));
     d
 }
 
-/// `mtxUnshield(bytes payload, bytes proof, bytes auth, bytes32 beneficiary, bytes accHint, uint256 amount, bytes32
-/// recipient)`, `auth` and `accHint` empty, `to` the recipient id: a padded address or a derived SIGNING UA (CTR-ZTH-51).
-pub fn unshield_call(
-    payload: &[u8],
-    proof: &[u8],
-    beneficiary: &[u8; 32],
-    to: &[u8; 32],
-    amount: u64,
-) -> Vec<u8> {
-    let mut d = selector("mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)").to_vec();
-    d.extend(abi::encode(&[
-        Tok::Bytes(payload.to_vec()),
-        Tok::Bytes(proof.to_vec()),
-        Tok::Bytes(Vec::new()),
-        Tok::Word(*beneficiary),
-        Tok::Bytes(Vec::new()),
-        Tok::Word(abi::u256(amount)),
-        Tok::Word(*to),
-    ]));
+/// Calldata of `mtxConfidentialTransfer` / `…Compact` (`name`) `(ZetherMulti t, bytes proof)` from the packed `payload`
+/// (`head ‖ salt16 ‖ be32(M) ‖ be32(decoyFee) ‖ 3 points ‖ M · 4 points [‖ salt16 ‖ sealed]`).
+pub fn transfer_multi_call(name: &str, payload: &[u8], proof: &[u8], beneficiary: &[u8; 32]) -> Vec<u8> {
+    let m = abi::word_u64(payload, 112).expect("payload: M") as usize;
+    let pts = 176 + 3 * POINT;
+    let legs_end = pts + 4 * POINT * m;
+    let sealed = if payload.len() > legs_end { payload[legs_end + 16..].to_vec() } else { Vec::new() };
+    let mut t = abi::words(&payload[..P_HEAD]);
+    t.push(salt_word(&payload[P_HEAD..P_HEAD + 16]));
+    t.push(Tok::Word(*beneficiary));
+    t.extend(abi::words(&payload[144..pts]));
+    t.push(Tok::Array(m as u64, payload[pts..legs_end].to_vec()));
+    t.push(Tok::Bytes(sealed));
+    let mut d = selector(&format!("{name}({},bytes)", multi_type())).to_vec();
+    d.extend(abi::encode(&[Tok::Tuple(abi::encode(&t)), Tok::Bytes(proof.to_vec())]));
+    d
+}
+
+/// `mtxUnshield(ZetherBurn b, uint256 amount, bytes32 recipient, bytes proof)` from the packed `payload` (`head ‖ Y_f`),
+/// `to` the recipient id: a padded address or a derived SIGNING UA (CTR-ZTH-51).
+pub fn unshield_call(payload: &[u8], proof: &[u8], beneficiary: &[u8; 32], to: &[u8; 32], amount: u64) -> Vec<u8> {
+    let mut toks = abi::words(&payload[..P_HEAD]);
+    toks.push(Tok::Word(*beneficiary));
+    toks.extend(abi::words(&payload[P_HEAD..]));
+    toks.push(Tok::Word(abi::u256(amount)));
+    toks.push(Tok::Word(*to));
+    toks.push(Tok::Bytes(proof.to_vec()));
+    let mut d = selector(&format!("mtxUnshield({},uint256,bytes32,bytes)", burn_type())).to_vec();
+    d.extend(abi::encode(&toks));
     d
 }

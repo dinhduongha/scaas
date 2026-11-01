@@ -1,8 +1,18 @@
-//! Minimal Solidity `abi.encode` for static 32-byte words and dynamic `bytes` / `bytes[]`.
+//! Minimal Solidity `abi.encode` for static 32-byte words, dynamic `bytes`, a dynamic array of static elements and a
+//! dynamic tuple. A static tuple is its words in place (`words`).
 
 pub enum Tok {
     Word([u8; 32]),
     Bytes(Vec<u8>),
+    /// `T[]` of a static `T`: the length and the packed elements.
+    Array(u64, Vec<u8>),
+    /// A dynamic tuple, already `encode`d.
+    Tuple(Vec<u8>),
+}
+
+/// The 32-byte words of `b` (`b.len()` a multiple of 32) as static tokens.
+pub fn words(b: &[u8]) -> Vec<Tok> {
+    b.chunks_exact(32).map(|c| Tok::Word(c.try_into().unwrap())).collect()
 }
 
 pub fn u256(v: u64) -> [u8; 32] {
@@ -33,6 +43,15 @@ pub fn encode(toks: &[Tok]) -> Vec<u8> {
             Tok::Bytes(b) => {
                 head.extend_from_slice(&u256((32 * toks.len() + tail.len()) as u64));
                 tail.extend(padded(b));
+            }
+            Tok::Array(n, raw) => {
+                head.extend_from_slice(&u256((32 * toks.len() + tail.len()) as u64));
+                tail.extend_from_slice(&u256(*n));
+                tail.extend_from_slice(raw);
+            }
+            Tok::Tuple(raw) => {
+                head.extend_from_slice(&u256((32 * toks.len() + tail.len()) as u64));
+                tail.extend_from_slice(raw);
             }
         }
     }
