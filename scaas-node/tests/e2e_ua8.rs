@@ -968,6 +968,7 @@ async fn e2e_ua8_simulation_auth_mode() {
     let back = ok["results"][0]["auth"].as_array().cloned().unwrap_or_default();
     let same_entry = back.iter().all(|x| SorobanAuthorizationEntry::from_xdr_base64(x.as_str().unwrap(), Limits::none()).unwrap() == auth[0]);
     println!("P1 enforcing simulation that passes: {}, every entry returned is the node's own: {same_entry}", sim_answer(&ok));
+    assert!(!back.is_empty() && same_entry, "an enforcing simulation answers the node's entry and nothing else");
 
     // the node end to end. `Some(lane)`: the host refuses; `None`: the guards refuse
     let refused = |what: &str, r: (String, Value, Option<String>)| {

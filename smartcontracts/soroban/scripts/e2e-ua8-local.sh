@@ -17,6 +17,16 @@ export STELLAR_PASSPHRASE="${STELLAR_PASSPHRASE:-Standalone Network ; February 2
 export STELLAR_FRIENDBOT="${STELLAR_FRIENDBOT:-http://127.0.0.1:$port/friendbot}"
 export UA8_EVM_A="$a,http://127.0.0.1:$a" UA8_EVM_B="$b,http://127.0.0.1:$b"
 
+# the node's chain id on $1, empty when nothing answers there
+chain_id() {
+  curl -s -m 1 -X POST -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId"}' "http://127.0.0.1:$1" 2>/dev/null \
+    | python3 -I -c 'import json,sys; print(int(json.load(sys.stdin)["result"], 16))' 2>/dev/null || true
+}
+for p in "$a" "$b"; do
+  if [ -n "$(chain_id "$p")" ] || ss -ltn "sport = :$p" | grep -q LISTEN; then
+    echo "e2e-ua8-local: port $p is taken: a stale anvil would answer for ours, not started" >&2; exit 5
+  fi
+done
 avail=$(awk '/MemAvailable/ {print int($2 / 1048576)}' /proc/meminfo)
 if [ "$avail" -lt 6 ]; then
   echo "e2e-ua8-local: ${avail} GB available, under 6 GB: not started" >&2; exit 4
@@ -45,10 +55,12 @@ echo "== anvil $a, $b"
 for p in "$a" "$b"; do
   anvil --chain-id "$p" --hardfork amsterdam --gas-limit 200000000 --code-size-limit 65536 --port "$p" --silent >/dev/null 2>&1 &
   pids+=($!)
+  up=
   for _ in $(seq 1 50); do
-    curl -s -m 1 -X POST -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId"}' "http://127.0.0.1:$p" >/dev/null && break
+    [ "$(chain_id "$p")" = "$p" ] && { up=1; break; }
     sleep 0.2
   done
+  [ -n "$up" ] || { echo "e2e-ua8-local: anvil on $p did not answer as chain $p" >&2; exit 6; }
 done
 
 cd "$ROOT/scaas-node"

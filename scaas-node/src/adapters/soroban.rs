@@ -56,6 +56,8 @@ pub struct SorobanAdapter {
     /// may declare (NODE-LANE-18, spec §7).
     max_deposit: u64,
     hashes: Mutex<HashMap<u64, String>>,
+    /// The last `tx_max_size_bytes` the network answered, used while a later read fails.
+    tx_limit: Mutex<Option<usize>>,
 }
 
 fn hex(b: &[u8]) -> String {
@@ -325,6 +327,7 @@ impl SorobanAdapter {
                 })?,
             },
             hashes: Mutex::new(HashMap::new()),
+            tx_limit: Mutex::new(None),
         })
     }
 
@@ -460,17 +463,30 @@ impl SorobanAdapter {
         }
     }
 
-    /// The network's `tx_max_size_bytes`, read for each job: a setting the validators vote, never assumed. An unreadable answer
-    /// is `Transport`, as a failed simulation: it says nothing about this job.
+    /// The network's `tx_max_size_bytes`, read for each job: a setting the validators vote, so a change is seen on the next good
+    /// read, with no restart. A read that fails uses the last good answer, so this limit never stops a chain simulation still
+    /// serves; only the first read, with no answer yet, is `Transport`, as a failed simulation.
     async fn tx_max_size(&self) -> std::result::Result<usize, SimError> {
+        let read = self.read_tx_max_size().await;
+        let mut last = self.tx_limit.lock().unwrap_or_else(|e| e.into_inner());
+        match read {
+            Ok(limit) => {
+                *last = Some(limit);
+                Ok(limit)
+            }
+            Err(why) => (*last).inspect(|l| tracing::warn!(chain = %self.key, "tx_max_size_bytes: {why}; using the last answer, {l}"))
+                .ok_or_else(|| SimError::Transport(format!("tx_max_size_bytes: {why}"))),
+        }
+    }
+
+    async fn read_tx_max_size(&self) -> std::result::Result<usize, String> {
         let k = LedgerKey::ConfigSetting(LedgerKeyConfigSetting { config_setting_id: ConfigSettingId::ContractBandwidthV0 });
-        let k = k.to_xdr_base64(Limits::none()).map_err(|e| SimError::Revert(e.to_string()))?;
-        let unread = |why: String| SimError::Transport(format!("tx_max_size_bytes: {why}"));
-        let r = self.rpc("getLedgerEntries", json!({"keys": [k]})).await.map_err(|e| unread(format!("{e:#}")))?;
-        let x = r["entries"][0]["xdr"].as_str().ok_or_else(|| unread("no entry".into()))?;
+        let k = k.to_xdr_base64(Limits::none()).map_err(|e| e.to_string())?;
+        let r = self.rpc("getLedgerEntries", json!({"keys": [k]})).await.map_err(|e| format!("{e:#}"))?;
+        let x = r["entries"][0]["xdr"].as_str().ok_or("no entry")?;
         match LedgerEntryData::from_xdr_base64(x, Limits::len(1 << 16)) {
             Ok(LedgerEntryData::ConfigSetting(ConfigSettingEntry::ContractBandwidthV0(b))) => Ok(b.tx_max_size_bytes as usize),
-            other => Err(unread(format!("not the bandwidth setting: {other:?}"))),
+            other => Err(format!("not the bandwidth setting: {other:?}")),
         }
     }
 
@@ -2570,14 +2586,16 @@ mod tests {
     const TX_MAX: u32 = 132_096;
 
     async fn rpc_stub(answer: Answer, calls: Arc<Mutex<Vec<String>>>) -> String {
-        rpc_stub_limit(answer, calls, Some(TX_MAX)).await
+        rpc_stub_limit(answer, calls, Arc::new(Mutex::new(Some(TX_MAX)))).await
     }
 
-    /// `limit`: the bandwidth setting's `tx_max_size_bytes`, which `sendTransaction` also enforces; `None` = no such entry.
-    async fn rpc_stub_limit(answer: Answer, calls: Arc<Mutex<Vec<String>>>, limit: Option<u32>) -> String {
+    /// `limit`: the bandwidth setting's `tx_max_size_bytes`, which `sendTransaction` also enforces; `None` = the RPC has no such
+    /// entry. Shared, so a test can change the network's answer.
+    async fn rpc_stub_limit(answer: Answer, calls: Arc<Mutex<Vec<String>>>, limit: Arc<Mutex<Option<u32>>>) -> String {
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(b): axum::Json<Value>| {
-            let (answer, calls) = (answer.clone(), calls.clone());
+            let (answer, calls, limit) = (answer.clone(), calls.clone(), limit.clone());
             async move {
+                let limit = *limit.lock().unwrap();
                 let lane_rpc = match b["method"].as_str() {
                     Some("sendTransaction") => {
                         calls.lock().unwrap().push("SEND".to_string());
@@ -2594,10 +2612,11 @@ mod tests {
                     }
                     Some("getLedgerEntries") => {
                         let k = LedgerKey::from_xdr_base64(b["params"]["keys"][0].as_str().unwrap(), Limits::none()).unwrap();
-                        Some(json!({"entries": [{"xdr": match (k, limit) {
-                            (LedgerKey::ConfigSetting(_), Some(l)) => bandwidth(l),
-                            _ => lane_account(),
-                        }}]}))
+                        Some(match (k, limit) {
+                            (LedgerKey::ConfigSetting(_), Some(l)) => json!({"entries": [{"xdr": bandwidth(l)}]}),
+                            (LedgerKey::ConfigSetting(_), None) => json!({"entries": []}),
+                            _ => json!({"entries": [{"xdr": lane_account()}]}),
+                        })
                     }
                     Some("getTransaction") => Some(json!({"status": "SUCCESS", "ledger": 5})),
                     _ => None,
@@ -2649,8 +2668,12 @@ mod tests {
     }
 
     async fn stub_adapter(answer: Answer, router: bool) -> (SorobanAdapter, Arc<Mutex<Vec<String>>>) {
+        stub_adapter_limit(answer, router, Arc::new(Mutex::new(Some(TX_MAX)))).await
+    }
+
+    async fn stub_adapter_limit(answer: Answer, router: bool, limit: Arc<Mutex<Option<u32>>>) -> (SorobanAdapter, Arc<Mutex<Vec<String>>>) {
         let calls = Arc::new(Mutex::new(Vec::new()));
-        let url = rpc_stub(answer, calls.clone()).await;
+        let url = rpc_stub_limit(answer, calls.clone(), limit).await;
         let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: vec![url], lanes: vec![0], ..Default::default() };
         c.tokens = vec![crate::config::TokenCfg { address: CONTRACT.into(), decimals: 7 }];
         c.params.insert("network_passphrase".into(), "x".into());
@@ -3347,7 +3370,7 @@ mod tests {
     }
     async fn sized_adapter(fee_bump: bool, limit: Option<u32>) -> (SorobanAdapter, Arc<Mutex<Vec<String>>>) {
         let calls = Arc::new(Mutex::new(Vec::new()));
-        let url = rpc_stub_limit(registry(vec![], vec![]), calls.clone(), limit).await;
+        let url = rpc_stub_limit(registry(vec![], vec![]), calls.clone(), Arc::new(Mutex::new(limit))).await;
         let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: vec![url], lanes: vec![0], ..Default::default() };
         c.params.insert("network_passphrase".into(), "x".into());
         c.params.insert("ua_registry".into(), REGISTRY.into());
@@ -3422,7 +3445,27 @@ mod tests {
         assert!(!logged(&calls).contains(&"SEND".to_string()));
     }
 
-    /// The limit is the network's: an answer without it is no refusal of this job, as a failed simulation is not.
+    /// The limit never stops payments simulation still serves: a read that fails uses the last answer, and a voted change is seen
+    /// on the next good read, with no restart.
+    #[tokio::test]
+    async fn failed_limit_read_uses_the_last_answer() {
+        let limit = Arc::new(Mutex::new(Some(TX_MAX)));
+        let (a, calls) = stub_adapter_limit(Arc::new(|_| view_ok(ScVal::Void)), false, limit.clone()).await;
+        let (contract, f, args) = ua_ops(ScVal::Void).remove(1);
+        assert_eq!(f, "ua_pay");
+        let pay = ua_job(contract, f, args);
+        assert!(a.build(&pay, 0).await.is_ok(), "a good read");
+        *limit.lock().unwrap() = None;
+        assert!(a.build(&pay, 0).await.is_ok(), "the read fails, the last answer holds, the payment builds");
+        *limit.lock().unwrap() = Some(100);
+        let e = a.build(&pay, 0).await.err().unwrap();
+        assert!(matches!(&e, SimError::Revert(r) if r.contains("(100)")), "a voted change, on the next good read: {e:?}");
+        *limit.lock().unwrap() = None;
+        assert!(a.build(&pay, 0).await.is_err(), "the last answer is the newest one");
+        assert!(!logged(&calls).contains(&"SEND".to_string()));
+    }
+
+    /// The limit is the network's: with no answer yet, the first read is no refusal of this job, as a failed simulation is not.
     #[tokio::test]
     async fn unread_limit_is_transport() {
         let (a, calls) = sized_adapter(false, None).await;
