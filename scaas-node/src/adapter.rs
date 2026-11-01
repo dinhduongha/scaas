@@ -143,6 +143,11 @@ pub trait ChainAdapter: Send + Sync {
     }
     /// NODE-GW-07 at lane start: an EVM chain whose RPC's block 0 is not the configured `chain_uid` never runs a
     /// lane (review T4 I2). Default: nothing to check.
+    /// The deadline of a job picked up after a restart, its bytes gone. Default: `op.valid_until`, 0 when it names none.
+    fn job_valid_until(&self, job: &Job) -> u64 {
+        job.op.as_ref().and_then(|o| o["valid_until"].as_u64()).unwrap_or(0)
+    }
+
     async fn start_check(&self) -> Result<()> {
         Ok(())
     }
@@ -334,7 +339,7 @@ pub async fn recover_lane(adapter: &dyn ChainAdapter, odoo: &Odoo, lane: usize, 
             continue;
         };
         info!(chain = %adapter.chain_key(), lane, job = j.job_id, tx = %tx_id, "re-checking in-flight job after restart");
-        let valid_until = j.payload.op.as_ref().and_then(|o| o["valid_until"].as_u64()).unwrap_or(0);
+        let valid_until = adapter.job_valid_until(&j.payload);
         let f = InFlight { job: &j.payload, tx_id: &tx_id, valid_until, lane, signed: None, nonce: j.nonce };
         follow(adapter, odoo, f, Ok(()), None).await;
     }
@@ -497,8 +502,17 @@ enum Step {
     Retry(String),
 }
 
-/// Owner ruling I-2: `call` jobs stop at `call_budget_pct` of the hour's budget, every other kind runs to all of it. Soroban's,
-/// whose `call` job is free to the client; Hedera's run on this runner with the EVM rules, and EVM has its own runner.
+/// Owner rulings I-2 and 2026-11-02: `call` jobs and a plain `signed_op` (no `op.kind`; a job with no kind is one) stop at
+/// `call_budget_pct` of the hour's budget, every other kind runs to all of it. Soroban's, whose `call` job is free to the client;
+/// Hedera's run on this runner with the EVM rules, and EVM has its own runner.
+fn in_call_share(j: &Job) -> bool {
+    match j.kind.as_deref() {
+        Some("call") => true,
+        None | Some("signed_op") => j.op.as_ref().is_none_or(|o| o["kind"].is_null()),
+        _ => false,
+    }
+}
+
 fn calls_stopped(adapter: &dyn ChainAdapter, breaker: Option<&Mutex<Breaker>>) -> bool {
     adapter.family() == Family::Soroban && breaker.is_some_and(|k| k.lock().is_ok_and(|mut k| k.calls_stopped(now())))
 }
@@ -520,7 +534,7 @@ async fn step_once(
     let jobs = odoo.relay_poll_ref(adapter.chain_key().into(), if held { HELD_CALLS_POLL } else { 5 }).await?;
     let mut job = None;
     for j in jobs {
-        if held && j.kind.as_deref() == Some("call") {
+        if held && in_call_share(&j) {
             continue;
         }
         // N2: digest đang bay ở lane/đường khác ⇒ bỏ qua TRƯỚC claim (không claim, không báo).

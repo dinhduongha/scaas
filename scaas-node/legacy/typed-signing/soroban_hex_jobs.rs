@@ -337,3 +337,114 @@ fn ua_call(op: &Value) -> Result<(InvokeContractArgs, &'static UaFn)> {
         }
 
 
+
+//! Superseded by the N2 review (owner rulings 2026-11-02): `signed_op`'s hex `payload`, and `ua_value`'s closed list.
+
+// ---------------------------------------- auth_entry over a hex HashIdPreimage
+
+/// Một chữ ký chủ thể ⇒ auth entry. Kiểm network id (chặn payload mạng khác trước khi tốn phí).
+pub fn auth_entry(network: &[u8; 32], payload: &str, from: &str, signature: &str) -> Result<(SorobanAuthorizationEntry, InvokeContractArgs)> {
+    let bytes = unhex(payload)?;
+    let HashIdPreimage::SorobanAuthorization(p) = HashIdPreimage::from_xdr(&bytes, Limits::len(bytes.len() + 64))?
+    else {
+        bail!("payload is not a Soroban authorization preimage");
+    };
+    if p.network_id.0 != *network {
+        bail!("payload signed for another network");
+    }
+    let SorobanAuthorizedFunction::ContractFn(call) = &p.invocation.function else {
+        bail!("payload does not invoke a contract function");
+    };
+    let address = ScAddress::from_str(from).map_err(|_| anyhow!("bad subject address {from}"))?;
+    let signature = credential_signature(&address, signature)?;
+    let call = call.clone();
+    Ok((
+        SorobanAuthorizationEntry {
+            credentials: SorobanCredentials::Address(SorobanAddressCredentials {
+                address,
+                nonce: p.nonce,
+                signature_expiration_ledger: p.signature_expiration_ledger,
+                signature,
+            }),
+            root_invocation: p.invocation,
+        },
+        call,
+    ))
+}
+
+
+// ---------------------------------------- the test helpers payload, op
+
+    fn payload(net: [u8; 32], root: SorobanAuthorizedInvocation) -> String {
+        let p = HashIdPreimage::SorobanAuthorization(HashIdPreimageSorobanAuthorization {
+            network_id: Hash(net),
+            nonce: 42,
+            signature_expiration_ledger: 1000,
+            invocation: root,
+        });
+        hex(&p.to_xdr(Limits::none()).unwrap())
+    }
+
+// ---------------------------------------- foreign_network_wrong_contract_and_bad_signatures_are_refused
+
+    #[test]
+    fn foreign_network_wrong_contract_and_bad_signatures_are_refused() {
+        let n = network_id(NETWORK);
+        assert!(host_call(&network_id("Test SDF Network ; September 2015"), &op(PREIMAGE, &"ab".repeat(64))).is_err());
+        let mut o = op(PREIMAGE, &"ab".repeat(64));
+        o["contract"] = json!("CBCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEJ5HZ");
+        assert!(host_call(&n, &o).is_err());
+        assert!(host_call(&n, &op(PREIMAGE, "abcd")).is_err(), "account signatures are 64 bytes");
+        assert!(host_call(&n, &op("00000001", &"ab".repeat(64))).is_err());
+    }
+
+
+// ---------------------------------------- relay_fee_job_survives_non_utf8_symbol
+
+    /// A function symbol that is not UTF-8 (32 raw bytes) is hashed as received: no panic, and a bad ref.
+    #[test]
+    fn relay_fee_job_survives_non_utf8_symbol() {
+        let weird = ScVal::Symbol(ScSymbol(StringM::<32>::try_from(vec![0xffu8; 32]).unwrap()));
+        let lane = ScAddress::from_str(LANE).unwrap();
+        let o = relay_job_with(&[1; 32], &[2; 32], weird);
+        assert!(relay_fee_job(&NET7, &o, &lane, &policy()).is_err());
+    }
+
+
+// ---------------------------------------- the closed type list of ua_value
+
+/// One value of a contract type, spelled as the contract and `ua-ops.json` spell it. `i128` is a decimal string, as every amount
+/// the node reports; `u64` a number or, for a client that cannot write one past 2^53, a decimal string. `Void` and `Map` (a
+/// `#[contracttype]` struct, `{field: {type, value}}`) serve a relayed call's arguments, whose types the contract does not declare.
+// ponytail: the types the repo's contracts take; a relayed target with another (`String`, `u128`, …) is refused here, one line each.
+fn ua_value(ty: &str, v: &Value) -> Result<ScVal> {
+    Ok(match ty {
+        ID => sc_bytes(&b32_of(v)?)?,
+        "Bytes" => sc_bytes(&hex_of(v)?)?,
+        "i128" => {
+            let n: i128 = v.as_str().and_then(|s| s.parse().ok()).ok_or_else(|| anyhow!("{v} is not an i128 as a decimal string"))?;
+            ScVal::I128(Int128Parts { hi: (n >> 64) as i64, lo: n as u64 })
+        }
+        "u32" => ScVal::U32(num_of(v)?),
+        "u64" => ScVal::U64(match v.as_str() {
+            Some(s) => s.parse().with_context(|| format!("{v} is not a u64"))?,
+            None => num_of(v)?,
+        }),
+        "bool" => ScVal::Bool(v.as_bool().ok_or_else(|| anyhow!("{v} is not a bool"))?),
+        "Address" => ScVal::Address(address_of(v)?),
+        OPT => relayer_of(v)?.map_or(ScVal::Void, ScVal::Address),
+        "Symbol" => ScVal::Symbol(ScSymbol(v.as_str().ok_or_else(|| anyhow!("{v} is not a symbol"))?.try_into()?)),
+        "Holder" => holder_of(v)?,
+        "UaSig" => sc_sig(&sig_of(v)?)?,
+        "Order" => sc_map(ORDER.iter().map(|f| f.0).zip(args_of("order", &ORDER, v)?).collect())?,
+        "Vec<Val>" => sc_vec(list_of(v, relayed_of)?)?,
+        "Void" if v.is_null() => ScVal::Void,
+        "Map" => {
+            let o = v.as_object().ok_or_else(|| anyhow!("{v} is not a map"))?;
+            sc_map(o.iter().map(|(k, x)| Ok((k.as_str(), relayed_of(x)?))).collect::<Result<_>>()?)?
+        }
+        _ => bail!("{ty} value {v}: unknown type or value"),
+    })
+}
+
+

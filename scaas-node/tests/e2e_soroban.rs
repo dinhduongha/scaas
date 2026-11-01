@@ -16,13 +16,13 @@ use std::time::Duration;
 
 use scaas_node::adapter::{index_step, lane_step, ChainAdapter};
 use scaas_node::adapters::soroban::SorobanAdapter;
-use scaas_node::signer::{LocalSigner, Signer};
+use scaas_node::config::TokenCfg;
+use scaas_node::signer::LocalSigner;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use soroban_common::*;
 use stellar_xdr::{
-    Hash, HashIdPreimage, HashIdPreimageSorobanAuthorization, Int128Parts, InvokeContractArgs, Limits, ScSymbol, ScVal,
-    SorobanAuthorizedFunction, SorobanAuthorizedInvocation, WriteXdr,
+    Int128Parts, InvokeContractArgs, Limits, ScSymbol, ScVal, SorobanAuthorizedFunction, SorobanAuthorizedInvocation, WriteXdr,
 };
 
 /// Đúng phép dựng của Odoo `fam_soroban.build_terms` (vector chéo ghim ở ba phía).
@@ -47,15 +47,8 @@ fn sign_pay(subject: &LocalSigner, token: &str, to: &str, amount: i128, pay_ref:
         function_name: ScSymbol("pay".try_into().unwrap()),
         args: args.clone().try_into().unwrap(),
     };
-    let pre = HashIdPreimage::SorobanAuthorization(HashIdPreimageSorobanAuthorization {
-        network_id: Hash(network()),
-        nonce,
-        signature_expiration_ledger: exp,
-        invocation: SorobanAuthorizedInvocation { function: SorobanAuthorizedFunction::ContractFn(call), sub_invocations: Default::default() },
-    })
-    .to_xdr(Limits::none())
-    .unwrap();
-    let sig = subject.sign(&Sha256::digest(&pre)).unwrap();
+    let root = SorobanAuthorizedInvocation { function: SorobanAuthorizedFunction::ContractFn(call), sub_invocations: Default::default() };
+    let (payload, sig) = signed_auth(subject, nonce, exp, &root);
     let dv = ScVal::Vec(Some(
         vec![
             ScVal::Symbol(ScSymbol("scaas_metaop_v1".try_into().unwrap())),
@@ -70,7 +63,7 @@ fn sign_pay(subject: &LocalSigner, token: &str, to: &str, amount: i128, pay_ref:
     let digest = format!("0x{}", alloy::hex::encode(Sha256::digest(dv.to_xdr(Limits::none()).unwrap())));
     let job = json!({"id": id, "kind": "signed_op", "op": {
         "family": "soroban", "contract": token, "from": from, "op_kind": "pay",
-        "payload": alloy::hex::encode(&pre), "signature": alloy::hex::encode(&sig), "public_key": from,
+        "payload": payload, "signature": sig, "public_key": from,
         "auth_kind": "seed", "digest": digest, "valid_until": valid_until, "extra": {}}});
     Signed { job, digest }
 }
@@ -92,7 +85,13 @@ async fn soroban_payments_anti_lock_fee_bump_and_finality() {
     state.lock().unwrap().indexed_block = start - 1;
     let odoo = odoo_at(start_fake(state.clone()).await);
     let signers = [key(0), key(1)];
-    let adapter = SorobanAdapter::new(&chain_cfg(false), &signers).unwrap();
+    // a `signed_op` runs on the chain's own contracts only
+    let cfg = |fee_bump: bool| {
+        let mut c = chain_cfg(fee_bump);
+        c.tokens = [&t1, &t2].iter().map(|t| TokenCfg { address: t.to_string(), decimals: 7 }).collect();
+        c
+    };
+    let adapter = SorobanAdapter::new(&cfg(false), &signers).unwrap();
     assert_eq!(adapter.lanes()[1].address, g(&lane1));
     let seq0 = adapter.sequence(0).await.unwrap();
 
@@ -120,7 +119,7 @@ async fn soroban_payments_anti_lock_fee_bump_and_finality() {
     assert_eq!(adapter.sequence(0).await.unwrap(), seq0 + 1);
 
     // Fee-bump: lane 0 pays for lane 1's tx.
-    let bumped = SorobanAdapter::new(&chain_cfg(true), &signers).unwrap();
+    let bumped = SorobanAdapter::new(&cfg(true), &signers).unwrap();
     let z = sign_pay(&subject, &t1, &g(&payee), 3_000, [0xC3; 32], 77, exp, 4);
     state.lock().unwrap().jobs.push(z.job.clone());
     assert!(lane_step(&bumped, &odoo, 1, "n#1").await.unwrap());

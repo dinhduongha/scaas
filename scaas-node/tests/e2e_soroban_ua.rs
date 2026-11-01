@@ -7,7 +7,8 @@
 //! native account and the DEX. A passkey (`webauthn-p256`) UA and an `mldsa65` UA are registered by lane 0 through the
 //! CLI (anyone may submit; the node's `call` job is Part B's). UA signatures come from
 //! `clients/clientkeys/scripts/soroban-sign.mjs` (SOR-D13); UA entries go through the node as `ua_metatx` jobs
-//! (`lane_step`), and their rows through `index_step`. Every transaction logs its CPU instructions and fees.
+//! (`lane_step`), and their rows through `index_step`; a native payer's relay fee and a settle of two native makers go the same way.
+//! Every transaction logs its CPU instructions and fees.
 mod soroban_common;
 
 use std::process::Command;
@@ -19,13 +20,11 @@ use scaas_node::adapter::{index_step, lane_step, ChainAdapter};
 use scaas_node::adapters::soroban::{holder_addr, op_digest, relay_ref, SorobanAdapter};
 use scaas_node::config::TokenCfg;
 use scaas_node::odoo::Odoo;
-use scaas_node::signer::Signer;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use soroban_common::*;
 use stellar_xdr::{
-    Hash, HashIdPreimage, HashIdPreimageSorobanAuthorization, Int128Parts, InvokeContractArgs, Limits, ScAddress,
-    ScMap, ScMapEntry, ScSymbol, ScVal, ScVec, SorobanAuthorizedFunction, SorobanAuthorizedInvocation, WriteXdr,
+    Int128Parts, InvokeContractArgs, ScAddress, ScMap, ScMapEntry, ScSymbol, ScVal, ScVec, SorobanAuthorizedFunction, SorobanAuthorizedInvocation,
 };
 use tokio::sync::OnceCell;
 
@@ -127,6 +126,16 @@ fn order(maker: ScVal, destination: ScVal, relayer: &str, sell: &str, sell_amoun
         .try_into()
         .unwrap(),
     )))
+}
+
+fn invocation(contract: &str, f: &str, args: Vec<ScVal>, subs: Vec<SorobanAuthorizedInvocation>) -> SorobanAuthorizedInvocation {
+    let call = InvokeContractArgs { contract_address: sc(contract), function_name: sym(f), args: args.try_into().unwrap() };
+    SorobanAuthorizedInvocation { function: SorobanAuthorizedFunction::ContractFn(call), sub_invocations: subs.try_into().unwrap() }
+}
+
+/// What a native maker signs: `require_auth_for_args((order,))` rooted at `settle`.
+fn settle_root(dex: &str, order: &ScVal) -> SorobanAuthorizedInvocation {
+    invocation(dex, "settle", vec![order.clone()], vec![])
 }
 
 /// The op digest a UA signs (NET-SOR-16): the entry's arguments without `auth`.
@@ -462,23 +471,9 @@ async fn e2e_soroban_ua_dex_leg() {
     let tko = order(h_addr(&tg), h_addr(&tg), &lane0, &st.token_b, 2_000, &st.token, 1_000, expiry, salt);
     let maker_auth = MLDSA65.sign(&digest(&st.token, "ua_order", &[addr(&st.dex), maker.clone()]), "trade");
     // the native taker's host auth: require_auth_for_args((order,)) rooted at settle
-    let pre = HashIdPreimage::SorobanAuthorization(HashIdPreimageSorobanAuthorization {
-        network_id: Hash(network()),
-        nonce: i64::from_be_bytes(fresh()[..8].try_into().unwrap()),
-        signature_expiration_ledger: ledger as u32 + 1_000,
-        invocation: SorobanAuthorizedInvocation {
-            function: SorobanAuthorizedFunction::ContractFn(InvokeContractArgs {
-                contract_address: sc(&st.dex),
-                function_name: sym("settle"),
-                args: vec![tko.clone()].try_into().unwrap(),
-            }),
-            sub_invocations: Default::default(),
-        },
-    })
-    .to_xdr(Limits::none())
-    .unwrap();
-    let sig = taker.sign(&Sha256::digest(&pre)).unwrap();
-    let auth = vec![json!({"payload": hx(&pre), "from": tg, "signature": hx(&sig)})];
+    let nonce = i64::from_be_bytes(fresh()[..8].try_into().unwrap());
+    let (payload, sig) = signed_auth(&taker, nonce, ledger as u32 + 1_000, &settle_root(&st.dex, &tko));
+    let auth = vec![json!({"payload": payload, "from": tg, "signature": sig})];
 
     let bal = |t: &str, f: &str, a: &str, v: &str| view_i128(t, f, &[a, v]);
     let (ml_a, ml_b) = (bal(&st.token, "ua_balance", "--ua", &hx(&ml)), bal(&st.token_b, "ua_balance", "--ua", &hx(&ml)));
@@ -494,6 +489,90 @@ async fn e2e_soroban_ua_dex_leg() {
     assert_eq!(bal(&st.token_b, "balance", "--id", &tg), tk_b - 2_000);
     assert_eq!(bal(&st.token, "balance", "--id", &st.dex), 0, "the DEX holds nothing after the settle");
     assert_eq!(bal(&st.token_b, "balance", "--id", &st.dex), 0);
+}
+
+/// A native payer's relay fee through the node: the payer's root is `relay`'s eight `require_auth_for_args` arguments with
+/// `token.pay` under it, and the transaction carries that `Address` entry and the lane's `SourceAccount` entry together. The node
+/// builds the call from the named root; the host checks the signature over what it rebuilt.
+#[tokio::test]
+#[ignore]
+async fn e2e_soroban_native_relay_fee() {
+    let st = stack().await;
+    let node = Node::new(st).await;
+    let (payer, lane0, lane1) = (key(TAKER), g(&key(0)), g(&key(1)));
+    let pg = g(&payer);
+    send("mint (native payer)", DEPLOYER, &st.token, "mint", &["--to", &pg, "--amount", "10000"]).await;
+    let (salt, vu, fee) = (fresh(), now() + 600, 250i128);
+    let target_args = vec![addr(&lane1)];
+    let rf = relay_ref(&network(), &sc(&st.token), &sym("balance"), &target_args, &salt);
+    let pay = invocation(&st.token, "pay", vec![addr(&pg), addr(&st.router), i128v(fee), bytes(&rf), ScVal::U64(vu)], vec![]);
+    let root = invocation(&st.router, "relay", vec![addr(&st.token), ScVal::Symbol(sym("balance")), vecv(target_args), bytes(&salt), addr(&st.token), addr(&st.router),
+                                                    i128v(fee), ScVal::U64(vu)], vec![pay]);
+    let (nonce, expiry) = (i64::from_be_bytes(fresh()[..8].try_into().unwrap()), latest_ledger().await as u32 + 1_000);
+    let (payload, signature) = signed_auth(&payer, nonce, expiry, &root);
+    let job = |id: i64, signature: &str| json!({"id": id, "kind": "signed_op", "op": {"kind": "relay_fee", "payload": payload, "from": pg, "signature": signature,
+                                                "contract": st.router, "valid_until": vu, "ref": ua0x(&rf), "extra": {}}});
+
+    // one change from the passing job: a signature over other bytes. Dead at simulation, nothing sent
+    let seq = node.adapter.sequence(0).await.unwrap();
+    let other = signed_auth(&payer, nonce.wrapping_add(1), expiry, &root).1;
+    let (state, last) = node.run(0, job(700, &other)).await;
+    println!("native relay, a signature over other bytes: job state {state}, reason {}", last["error"]);
+    assert_eq!(state, "dead", "{last}");
+    assert!(report_of(&node.state.lock().unwrap(), 700, "signed").is_null(), "never signed");
+    assert_eq!(node.adapter.sequence(0).await.unwrap(), seq, "the lane's sequence is unchanged");
+
+    let (lane_before, payer_before) = (view_i128(&st.token, "balance", &["--id", &lane0]), view_i128(&st.token, "balance", &["--id", &pg]));
+    let tx = node.mined("relay native fee, open mode", 0, job(701, &signature)).await;
+    assert_eq!(view_i128(&st.token, "balance", &["--id", &lane0]), lane_before + fee, "the fee reached the submitting lane");
+    assert_eq!(view_i128(&st.token, "balance", &["--id", &pg]), payer_before - fee);
+    assert_eq!(view_i128(&st.token, "balance", &["--id", &st.router]), 0, "nothing rests on the router");
+    assert_eq!(view_i128(&st.token, "balance", &["--id", &st.executor]), 0, "nothing rests on the executor");
+
+    let rows = node.index().await;
+    let r = row(&rows, "PaymentSettled", &tx);
+    assert_eq!((r["from"].as_str(), r["to"].as_str()), (Some(pg.as_str()), Some(st.router.as_str())), "{r}");
+    assert_eq!(r["entry_ref"], ua0x(&rf));
+    assert_eq!(r["relay_payee"], json!(lane0), "open mode: the submitting lane is paid");
+    println!("native relay fee row: {}", serde_json::to_string(r).unwrap());
+}
+
+/// A DEX `settle` of two native makers through `lane_step`: named orders, two `op.auth` entries and the lane's own entry.
+#[tokio::test]
+#[ignore]
+async fn e2e_soroban_dex_both_native() {
+    let st = stack().await;
+    let node = Node::new(st).await;
+    let (maker, taker, lane0) = (key(BYSTANDER), key(TAKER), g(&key(0)));
+    fund(&g(&maker)).await;
+    let (mg, tg) = (g(&maker), g(&taker));
+    send("set_market (fees off)", DEPLOYER, &st.dex, "set_market", &["--token_a", &st.token, "--token_b", &st.token_b, "--market",
+         "{\"fee_on\":false,\"maker_fee_ppm\":0,\"taker_fee_ppm\":0}"]).await;
+    send("mint (maker, token A)", DEPLOYER, &st.token, "mint", &["--to", &mg, "--amount", "10000"]).await;
+    send("mint (taker, token B)", DEPLOYER, &st.token_b, "mint", &["--to", &tg, "--amount", "20000"]).await;
+    let ledger = latest_ledger().await;
+    let exp = (ledger + 5_000).to_string();
+    send("approve (maker -> DEX, token A)", BYSTANDER, &st.token, "approve", &["--from", &mg, "--spender", &st.dex, "--amount", "10000", "--expiration_ledger", &exp]).await;
+    send("approve (taker -> DEX, token B)", TAKER, &st.token_b, "approve", &["--from", &tg, "--spender", &st.dex, "--amount", "20000", "--expiration_ledger", &exp]).await;
+
+    let expiry = now() + 600;
+    let salt = u64::from_be_bytes(fresh()[..8].try_into().unwrap());
+    let a = order(h_addr(&mg), h_addr(&mg), &lane0, &st.token, 1_000, &st.token_b, 2_000, expiry, salt);
+    let b = order(h_addr(&tg), h_addr(&tg), &lane0, &st.token_b, 2_000, &st.token, 1_000, expiry, salt);
+    let nonce = || i64::from_be_bytes(fresh()[..8].try_into().unwrap());
+    let (pa, sa) = signed_auth(&maker, nonce(), ledger as u32 + 1_000, &settle_root(&st.dex, &a));
+    let (pb, sb) = signed_auth(&taker, nonce(), ledger as u32 + 1_000, &settle_root(&st.dex, &b));
+    let auth = vec![json!({"payload": pa, "from": mg, "signature": sa}), json!({"payload": pb, "from": tg, "signature": sb})];
+
+    let bal = |t: &str, id: &str| view_i128(t, "balance", &["--id", id]);
+    let (ma, tb) = (bal(&st.token, &mg), bal(&st.token_b, &tg));
+    let args = json!({"maker": order_json(&json!({"Addr": mg}), &lane0, &st.token, 1_000, &st.token_b, 2_000, expiry, salt),
+                      "taker": order_json(&json!({"Addr": tg}), &lane0, &st.token_b, 2_000, &st.token, 1_000, expiry, salt),
+                      "maker_fill": "1000", "maker_auth": no_auth(), "taker_auth": no_auth()});
+    node.mined("settle, two native makers", 0, ua_job(801, &st.dex, "settle", args, auth)).await;
+    assert_eq!(bal(&st.token, &mg), ma - 1_000);
+    assert_eq!(bal(&st.token_b, &tg), tb - 2_000);
+    assert_eq!(bal(&st.token, &st.dex), 0, "the DEX holds nothing after the settle");
 }
 
 /// S14 / spec §8 end to end: a validly signed `ua_relay` whose target would spend lane 0's own authority

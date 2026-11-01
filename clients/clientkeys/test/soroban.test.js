@@ -29,6 +29,17 @@ test('soroban op digest: the token cross vector reproduced', () => {
   const pre = concatBytes(be(9, 4), net, be(42, 8), be(1000, 4), be(0, 4), sor.scvalXdr(contract).subarray(4),
     sor.scvalXdr(sor.sym('pay')).subarray(4), sor.scvalXdr(sor.vec(args)).subarray(8), be(0, 4));
   assert.equal(h(pre), PREIMAGE);
+  // a job's named payload rebuilds the same bytes, as the node does
+  const typed = (type, value) => ({ type, value });
+  const invocation = { contract: 'CARCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEVQO', function: 'pay', sub_invocations: [], args: [
+    typed('Address', 'GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6'), typed('Address', 'GAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTHCM6'),
+    typed('i128', '12345'), typed('Bytes', hex(new Uint8Array(32).fill(0x11))), typed('u64', 1_800_000_300)] };
+  assert.equal(h(sor.authPreimage({ networkId: net, nonce: 42, expiry: 1000, invocation })), PREIMAGE);
+  assert.equal(h(sor.authDigest({ networkId: net, nonce: 42, expiry: 1000, invocation })), '0a2127bfdc94f6062f0ec27f6db966ae719dafaca90bc537666eab606b901103');
+  const under = { ...invocation, sub_invocations: [{ ...invocation, function: 'relay', args: [] }] };
+  assert.ok(h(sor.authPreimage({ networkId: net, nonce: -1, expiry: 1, invocation: under })).includes('000000057265' + '6c6179'), 'a sub-invocation');
+  // the node's table of every other type, against its XDR
+  for (const r of JSON.parse(/const TYPED_KAT: &str = r#"(\[[\s\S]*?\])"#;/.exec(rs)[1])) assert.equal(h(sor.jobValue(r).xdr), r.xdr, r.type);
   assert.equal(h(sha256(pre)), '0a2127bfdc94f6062f0ec27f6db966ae719dafaca90bc537666eab606b901103');
   const d = sor.opDigest({ networkId: net, contract: 'CARCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEVQO', fn: 'pay', args });
   assert.equal(h(d), '0bb4e9123b86f99303e03cfd8aacb1eecd3b8ccb10d572907e1228a715369b00'); // token VEC_DIGEST, ua-common
