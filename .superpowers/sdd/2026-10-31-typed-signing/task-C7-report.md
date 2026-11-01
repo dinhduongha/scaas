@@ -38,3 +38,14 @@ strings; `ownerDigest` replaced by it):
   ran green once the module existed (no separate RED capture for this round; the mutants show each assertion can fail).
 - Package suite green; `ZetherProverCross` 7 passed through the release `zether-cli` (`runs/2026-11-01-typed-signing-c7-fix1-cross.txt`).
 - Docs: decisions.md C7 entry rewritten (incl. PqzAuth sentence), plan C7 result, `zether-cli` header. No README exists in the package.
+
+## Fix round 2: named calls settle through the prover
+
+`smartcontracts/evm/test/zether/ZetherProverCross.t.sol` only: helpers `_envMt`, `_named` (real `zether-cli namedCall`, digest signed by the
+payer EOA in the test, calldata with the sig) and `_settleNamed` (negative then good call), plus three cells, all submitted by the relayer:
+`test_named_multi_relayed` (named `mtxConfidentialTransferCompact` via op `ZetherTransfer` on a COMPACT token, `_settled` reused),
+`test_named_single_relayed` (named single: ref, stored record, recipient and sender balances), `test_named_unshield_relayed` (named
+`mtxUnshield`: recipient credited `amount * SCALE`, sender account). Each asserts the payer nonce 0 after the refusal and 1 after the good
+call, and the relay fee taken from the payer. Negative: one flipped byte of the envelope `validUntil` word reverts `MetaTxBadSignature`, the
+good call passes after it. Result: 10 passed (7 old + 3), `clients/zether-prover/runs/2026-11-01-typed-signing-c7-fix2-cross.txt`.
+So the prover's digest is the token's digest on three real entries. Still digest-only: the UA twins.

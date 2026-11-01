@@ -7,6 +7,7 @@ import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 
 /// @notice The Rust prover against real tokens (final review P3b m3): `zether-cli` through ffi builds the transfer, the
 ///         token's statement builder (`ZetherStatements`, the same `ZetherLib` code the token runs) returns the
@@ -166,6 +167,112 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         vm.prank(relayer);
         bytes memory ret = t.mtxExecute(mt, abi.encodePacked(r, s, v));
         _settled(t, out, abi.decode(ret, (bytes32)), ZetherTypes.TransferMode.HASH);
+    }
+
+    // ------------------------------------------------------------------ typed-signing C7: the prover's `namedCall` settles
+
+    function _envMt(address payer, ZetherLayer t) internal view returns (MetaTxLib.MetaTransaction memory) {
+        return MetaTxLib.MetaTransaction({
+            from: payer, data: "", batch: 7, nonce: t.mtxNonce(payer, 7), validUntil: block.timestamp + 300,
+            mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, relayer: relayer, fee: 3, feeRecipient: address(0)
+        });
+    }
+
+    function _n(string memory k, uint256 v) private pure returns (string memory) {
+        return string.concat('"', k, '":"', vm.toString(v), '"');
+    }
+
+    function _envJson(MetaTxLib.MetaTransaction memory m) private pure returns (string memory) {
+        return string.concat(
+            '"env":{', _q("from", vm.toString(m.from)), ",", _n("batch", m.batch), ",", _n("nonce", m.nonce), ",", _n("validUntil", m.validUntil),
+            ",", _n("mode", m.mode), ",", _q("relayer", vm.toString(m.relayer)), ",", _n("fee", m.fee), ",",
+            _q("feeRecipient", vm.toString(m.feeRecipient)), "}"
+        );
+    }
+
+    function _namedReq(ZetherLayer t, string memory op, MetaTxLib.MetaTransaction memory m, string memory out, string memory extra)
+        private view returns (string memory)
+    {
+        string memory head = string.concat(
+            '{"op":"', op, '","chainId":', vm.toString(block.chainid), ",", _q("chainUid", vm.toString(t.chainUid())), ",",
+            _q("token", vm.toString(address(t))), ",", _envJson(m)
+        );
+        return string.concat(
+            head, ",", _q("payload", vm.toString(out.readBytes(".payload"))), ",", _q("proof", vm.toString(out.readBytes(".proof"))), ",",
+            _q("beneficiary", vm.toString(ZetherTypes.UA.unwrap(carol.ua))), extra
+        );
+    }
+
+    /// @dev `namedCall` through the real binary: the digest it returns, signed by the payer's EOA here, then the entry's calldata.
+    function _named(ZetherLayer t, string memory op, MetaTxLib.MetaTransaction memory m, string memory out, string memory extra)
+        internal returns (bytes memory)
+    {
+        string memory q = _namedReq(t, op, m, out, extra);
+        (uint8 v, bytes32 r, bytes32 sg) = vm.sign(PAYER_PK, _cli("namedCall", string.concat(q, "}")).readBytes32(".digest"));
+        return _cli("namedCall", string.concat(q, ',"sig":"', vm.toString(abi.encodePacked(r, sg, v)), '"}')).readBytes(".calldata");
+    }
+
+    /// @dev One changed byte in a signed field (the `validUntil` word of the envelope) is `MetaTxBadSignature`; the good call then settles.
+    function _settleNamed(ZetherLayer t, bytes memory cd, address payer) internal returns (bytes memory ret) {
+        bytes memory bad = cd;
+        bad = abi.encodePacked(cd);
+        bad[4 + 32 * 3 + 31] = bytes1(uint8(bad[4 + 32 * 3 + 31]) ^ 1);
+        vm.prank(relayer);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        address(t).call(bad);
+        assertEq(t.mtxNonce(payer, 7), 0, "nothing consumed by the refusal");
+        vm.prank(relayer);
+        bool ok;
+        (ok, ret) = address(t).call(cd);
+        assertTrue(ok, "the good call settles");
+        assertEq(t.mtxNonce(payer, 7), 1, "nonce consumed");
+        assertEq(t.balanceOf(payer), 1000 - 3, "relay fee paid");
+    }
+
+    /// @dev Relayed named `mtxConfidentialTransferCompact` (multi, commit-reveal) on a COMPACT token.
+    function test_named_multi_relayed() public {
+        ZetherLayer t = _token(1, 2, true, "n-multi");
+        address payer = vm.addr(PAYER_PK);
+        _public(t, payer, 1000);
+        MetaTxLib.MetaTransaction memory m = _envMt(payer, t);
+        string memory out = _cli("proveTransferMulti", _req(t, "compact", "optional", false,
+            string.concat(",", _q("envelopeBinding", vm.toString(t.envelopeBinding(m))), ',"uaSigner":"ecdsa"', _recipients())));
+        bytes memory cd = _named(t, "ZetherTransfer", m, out, "");
+        bytes memory ret = _settleNamed(t, cd, payer);
+        _settled(t, out, abi.decode(ret, (bytes32)), ZetherTypes.TransferMode.HASH);
+    }
+
+    /// @dev Relayed named `mtxConfidentialTransferSingle` (BUNDLE / FULL): balances and the stored record.
+    function test_named_single_relayed() public {
+        ZetherLayer t = _token(0, 1, true, "n-single");
+        address payer = vm.addr(PAYER_PK);
+        _public(t, payer, 1000);
+        MetaTxLib.MetaTransaction memory m = _envMt(payer, t);
+        string memory out = _cli("proveTransfer", _req(t, "bundle", "full", true, string.concat(
+            ",", _q("envelopeBinding", vm.toString(t.envelopeBinding(m))), ',"uaSigner":"ecdsa",', _q("yTo", vm.toString(rs[0].y)),
+            ',"amount":1200')));
+        bytes memory cd = _named(t, "ZetherTransferSingle", m, out, "");
+        bytes32 ref = abi.decode(_settleNamed(t, cd, payer), (bytes32));
+        assertEq(ref, out.readBytes32(".entryRef"));
+        assertEq(t.transferEntry(ref), out.readBytes(".record"), "single record");
+        assertTrue(_holds(t, rs[0], 1200, false), "recipient pending");
+        assertTrue(_holds(t, alice, B - 1200 - FEE, true), "sender acc");
+    }
+
+    /// @dev Relayed named `mtxUnshield`: the recipient is credited `amount * shieldScale` public units.
+    function test_named_unshield_relayed() public {
+        ZetherLayer t = _token(0, 2, true, "n-unshield");
+        address payer = vm.addr(PAYER_PK);
+        address to = address(0xAB1E);
+        _public(t, payer, 1000);
+        MetaTxLib.MetaTransaction memory m = _envMt(payer, t);
+        string memory out = _cli("proveBurn", _req(t, "bundle", "optional", false, string.concat(
+            ",", _q("envelopeBinding", vm.toString(t.envelopeBinding(m))), ',"amount":100,', _q("recipient", vm.toString(to)))));
+        bytes memory cd = _named(t, "ZetherUnshield", m, out, string.concat(
+            ',"amount":100,', _q("recipient", vm.toString(bytes32(uint256(uint160(to)))))));
+        _settleNamed(t, cd, payer);
+        assertEq(t.balanceOf(to), 100 * SCALE, "unshielded to the recipient");
+        assertTrue(_holds(t, alice, B - 100 - FEE, true), "sender acc");
     }
 
     /// @dev Typed-signing C3 review T3: the token's builder from the explicit struct against the prover, for every recipient count that
