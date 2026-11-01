@@ -563,7 +563,11 @@ and burn verifiers fold Σ; the inner-product verifier (`verifyFold`) adds the r
 `verifyRange` keeps its signature and answer, its two equations folded alone under a `ρ` that hashes `V ‖ proof`.
 
 **Why it is sound.** Five requirements, each with its test in `test/zether/ZetherMsm.t.sol` and
-`ZetherMsmDifferential.t.sol`; `runs/2026-11-01-zether-msm-mutation.py` removes each check or weight and shows them fail.
+`ZetherMsmDifferential.t.sol`. `runs/2026-11-01-zether-msm-mutation.py` removes one thing per row and shows a test fail:
+each equation, each advance of the weight, and the checks the fold added or leans on (`ρ ≠ 0`, scalars `< r`, every point in
+the MSM, the auditor-off `O` fields, what `ρ` hashes on both entries). It leaves out two groups: the `≠ 0` checks on
+`c, y, z, x, w, u_j`, which no test can reach (each needs a hash output of 0), and the older shape and point checks of §7,
+§8 and §11 (lengths, `opTag`, `Y_f ≠ Y_t`, distinct auditor copies), which have their own tests but no mutation row.
 
 1. **`ρ` hashes the full statement and the full proof, and nothing the prover chooses depends on it.** The running
    transcript absorbs no `z_*` and neither `a` nor `b`, so its final state does **not** bind the whole proof: a weight read
@@ -577,7 +581,8 @@ and burn verifiers fold Σ; the inner-product verifier (`verifyFold`) adds the r
    `P(X) = Σ d_i X^i` is a non-zero polynomial of degree `≤ e − 1` with at most `e − 1` roots, and the `d_i` are fixed by
    the statement and proof that `ρ` hashes. One attempt passes with probability `≤ (e − 1)/r + 2^-250`, so `Q` hash queries
    pass with probability `< Q · 2^-247` at the largest form (`M = 16`, `e = 103`, `r > 2^254`): far below the curve's
-   ~117–126 bits, on top of each challenge's own soundness error.
+   ~117–126 bits, on top of each challenge's own soundness error. The tests read the weights from the sum: an equation
+   broken alone leaves exactly its power of `ρ`, in every range proof of every form (`test_rangeEquationsAloneRefused_*`).
 3. **Which points need a subgroup check: every untrusted one, and on EVM the MSM does it.** EIP-2537: G1ADD (`0x0b`)
    checks encoding and on-curve, "no subgroup check"; G1MSM (`0x0c`) also errors on "on the G1 elliptic curve but not in
    the correct subgroup", every input, and "MSMs and pairings MUST perform a subgroup check"; scalars need not be `< r`.
@@ -606,7 +611,8 @@ and burn verifiers fold Σ; the inner-product verifier (`verifyFold`) adds the r
    `ProofRejected`. Not a new cost: a proof that passed the earlier equations already reached the point, and
    [CTR-ZTH-15](#CTR-ZTH-15) still holds. The reverse never occurs on the corpus. The old verifier is kept in
    `legacy/zether-msm/`; `ZetherMsmDifferential.t.sol` runs both on the vectors and on every point, scalar, header word
-   and length mutated.
+   and length mutated. A revert of the merged verifier counts as a refusal only as `BadPoint`, and a row holding only valid
+   points may not revert at all, because 0x0c out of gas also surfaces as `BadPoint`.
 
 <a id="zether-msm-psid"></a>**`proofSystemId` stays `…/v3`** (controller call, owner may override,
 [decisions.md](../decisions.md)): it names the format and the relation, both unchanged, and a proof valid under one
@@ -671,7 +677,8 @@ The auditor decrypts leg `j` as `C_aud_j − [x_a]D_aud_j = [v_j]G`. Σ commitme
 format): `A_y = [k_x]G`, `A_D = [k_s]G`, `A_deb = [Σk_vj]G + [k_s]Y_f`, `A_bal = [k_b]G + [k_x](D_acc − D_out)`,
 `A_Vb = [k_b]G + [k_gb]Hb`; per `j`: `A_out_j = [k_vj]G + [k_s]Y_tj`, `A_aud_j = [k_vj]G + [k_tj]Y_a`,
 `A_Daud_j = [k_tj]G`, `A_Vvj = [k_vj]G + [k_gvj]Hb`. Responses `z_x, z_s, z_b, z_gb`, per `j`: `z_vj, z_gvj, z_tj`.
-Auditor off: `A_aud_j = A_Daud_j = O` and `z_tj = 0` (the verifier requires all three, so no proof byte is free).
+Auditor off: `A_aud_j = A_Daud_j = O` and `z_tj = 0` (the verifier requires all three, so no proof byte is free;
+`test_auditorOffLegFieldsRefused`, on proofs made for the junk they carry).
 Auditor on: every `D_aud_j ≠ O` and no two legs share `C_aud` or `D_aud` (a reused `t_j` would publish `[v_j − v_k]G`
 again), refused by the verifier (`ProofRejected`), not only never built.
 Transcript: `T.absorb("statement", statement)`; `T.absorb("sigma.commit", V_b ‖ A_y ‖ A_D ‖ A_deb ‖ A_bal ‖ A_Vb ‖

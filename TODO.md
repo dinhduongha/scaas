@@ -164,8 +164,9 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      **Built on branch `zether-msm`, not merged (2026-11-01, CTR-ZTH-53):** one MSM per proof, 182 points on a transfer, 154 on a
      burn, 159 + 25M on a multi-recipient transfer; the owner's order for the branch is code first, no gas measurement, so
      "measure first" above waits. Security derivation in zether.md §9.1, the per-equation verifier in `legacy/zether-msm/`.
-     Left: the owner's go to merge; gas re-measurement and the prover's `gas_limits` table after it; a new verifier set
-     reaches the SCaaS testnet at its next reset.
+     Left: the owner's go to merge; gas re-measurement, then `gas_limits` in `clients/zether-prover/src/zether.rs`, which holds
+     the per-equation figures; a new verifier set reaches the SCaaS testnet at its next reset. For `typed-signing` C3, which
+     owns the file: add `BadPoint` to `IZetherToken`'s ABI, a bad point now always reverts with it.
      **Done 2026-10-31 (branch `scaas-testnet-rename`): the SCaaS testnet's identifier is `scaas-testnet`** (owner
      2026-10-31, Change entry in NET-EVM-02): the Foundry profile, `src/chains/scaas-testnet/`, the `chain-uids.json` key,
      CI, the deploy / verify scripts, `scaas-node/tests/e2e*.rs` and current docs; history / plans / reviews keep the old
