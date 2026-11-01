@@ -932,6 +932,12 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-42** (ty
   6,998,368 -> 7,004,731; n2560-kmax16384 7,168,690 -> 7,175,039; n2816-kmax65536 7,358,343 -> 7,364,677). `set.toml`
   keeps the pinned figures; Part C changes the same path, so CG re-measures after C2 and re-pins once, with the full
   gate that a set-parameter change needs. Until then the pinned floor is below the measured minimum by that amount.
+- **Size levers for C2–C6 (owner ruling 2026-11-01, on `docs/research/evm-size-levers.md`):** lever 2 (shared
+  `nonReentrant` body: `_enter` / `_exit` `private` in `MetaTxBase`, land it first in C2) and lever 1 (the init path and
+  the selector table of the wrapped confidential kinds behind external library calls, with `LinkClosure.test_libraryOpcodes`'
+  DELEGATECALL count raised for that library, and the library in the release's link closure). Mock: `WrappedPqzToken`
+  61,378 B, `WrappedZetherToken` 61,704 B, least margin 3,832 B; the mock does not run, so C3 / C4 re-check real sizes.
+  `optimizer_runs` stays 200, `via_ir` off. Above about 64.5 KB on real code: stop and ask; lever 3 or B′ is the reserve.
 - **`UARegistry` deploy gate (owner ruling 2026-11-01):** the registry gets a gate like the releases:
   `_requireReleaseGas("UARegistry")` in `DeployBase` and `require_release_gas("UARegistry")` in `e2e.py`, need 88.3 M
   (46,716 B × 1,530 + 2^24), test `test_registryDeployGate`, NET-EVM-06.
