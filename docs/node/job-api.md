@@ -312,8 +312,8 @@ payee) with a 65-byte signature the node recovers over its digest. Recovered to 
 is `BAD_SIGNATURE`, nothing simulated or sent; one with code is an ERC-1271 signer, its simulation answers. Any other length (a 64-byte
 Hedera account signature, [CTR-MTX-25](../contracts/metatx.md#CTR-MTX-25)), a derived UA, a member set or an account key is the simulation's.
 
-Gateway: `POST /v1/op {chain, op}` takes the same object, on a registered token only ([gateway.md](gateway.md#routes)); every other row is
-a job of a namespace with the grant.
+Gateway: `POST /v1/op {chain, op}` takes the same object, for an `mtx*` entry on a registered token only ([gateway.md](gateway.md#routes));
+every other row, `ua*` entries included, is a job of a namespace with the grant.
 
 | Refusal | When |
 |---|---|

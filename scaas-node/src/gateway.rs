@@ -221,12 +221,15 @@ async fn post_op(State(s): State<AppState>, Json(r): Json<OpReq>) -> Reply {
         Ok(c) => c,
         Err(e) => return e,
     };
-    let w = match work_of_op(None, &r.op, c.fee_recipient) {
-        Ok((w, _)) => w,
+    let (w, ua) = match work_of_op(None, &r.op, c.fee_recipient) {
+        Ok(x) => x,
         Err(e) => return bad(format!("{e:#}")),
     };
-    // the old door, default closed: a registered token (NODE-GW-01, NODE-GW-03). A deploy, a registry write, a DEX settlement, a
-    // wallet or a relay fee has no fee for this lane and goes as a job of a namespace that has the grant
+    // the old door, default closed: a registered token (NODE-GW-01, NODE-GW-03), and it had no UA path. A deploy, a registry
+    // write, a DEX settlement, a wallet, a relay fee or a `ua*` entry goes as a job of a namespace that has the grant
+    if ua {
+        return bad("FEATURE_UNSUPPORTED: a ua* entry is a ua_metatx job, not a gateway request");
+    }
     if let Err(e) = chain_of(&s, r.chain, w.to) {
         return e;
     }
@@ -582,6 +585,30 @@ mod tests {
         assert_eq!(st, StatusCode::BAD_REQUEST, "{body}");
         assert!(body.contains("expired"), "{body}");
         assert!(rx.try_recv().is_err());
+    }
+
+    /// The old door had no UA path: a `ua*` entry on a registered token is refused before the guard, zero simulations, nothing
+    /// queued, its signature never looked at; the `mtx*` twin on the same token passes (the control). No lane runs here: the
+    /// test reads the channel once, nothing waits on a receipt.
+    #[tokio::test]
+    async fn ua_entries_stay_off_the_gateway_door() {
+        let v = crate::typed::testkit::vectors();
+        let d = &v["ops"]["Unwrap"]["domains"]["token"]["domain"];
+        let token: Address = d["verifyingContract"].as_str().unwrap().parse().unwrap();
+        let chain: u64 = d["chainId"].as_str().unwrap().parse().unwrap();
+        for name in ["UAUnwrap", "UABurn", "UACancelNonce"] {
+            let op = crate::typed::testkit::op_of(name, "token", &v).unwrap();
+            let (app, mut rx, log) = gateway("0x", vec![token]).await;
+            let (st, body) = post_op_body(app, chain, &op).await;
+            assert_eq!(st, StatusCode::BAD_REQUEST, "{name}: {body}");
+            assert!(body.contains("FEATURE_UNSUPPORTED"), "{name}: {body}");
+            assert!(rx.try_recv().is_err(), "{name}: nothing queued");
+            assert!(log.lock().unwrap().is_empty(), "{name}: no chain read at all: {:?}", log.lock().unwrap());
+        }
+        let (app, mut rx, _) = gateway("0x", vec![token]).await;
+        let (st, body) = post_op_body(app, chain, &crate::typed::testkit::op_of("Unwrap", "token", &v).unwrap()).await;
+        assert_eq!(st, StatusCode::ACCEPTED, "the mtx twin: {body}");
+        assert!(rx.try_recv().is_ok());
     }
 
     /// The pre-check: the positive control queues; one changed thing each: a signature of another op on an account

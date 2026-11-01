@@ -56,3 +56,8 @@ fi
 if [[ "$want" == *" lane "* ]]; then
   run receiver-fee-outer-digest scaas-node/src/guard.rs 'm.digest = t.lane_digest_on(chain.number, uid);' 'm.digest = t.digest;' fill_digest_keeps_the_key_and_what_the_chain_emits_apart
 fi
+if [[ "$want" == *" uadoor "* ]]; then
+  run ua-entry-at-the-door scaas-node/src/gateway.rs '    if ua {
+        return bad("FEATURE_UNSUPPORTED' '    if ua && r.chain == 0 {
+        return bad("FEATURE_UNSUPPORTED' ua_entries_stay_off_the_gateway_door
+fi
