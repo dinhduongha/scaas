@@ -116,7 +116,7 @@ ROWS = [
     ('E4-form weight does not advance', [(E4, E4.split('\n')[0])], ALONE),
     ('E5 weight does not advance', [('''_term(x.f, slots[4], x.w, r - 1, r);
         x.w = mulmod(x.w, x.rho, r);''', '_term(x.f, slots[4], x.w, r - 1, r);')], ALONE),
-    ('range weights restart at 1', [('b.wt = sigma.weight;', 'b.wt = 1;')], RANGE),
+    ('range weights restart at 1', [('b.wt = sigma.weight % b.r;', 'b.wt = 1;')], RANGE),
     # auditor off: each field's own check, on rows proved for the junk they carry
     ('C_aud O check removed', [('if (!_isZero(_sp(x, 8)) || !_isZero(_pf(x, 7))) return false;', 'if (!_isZero(_pf(x, 7))) return false;')], AUD),
     ('A_aud O check removed', [('if (!_isZero(_sp(x, 8)) || !_isZero(_pf(x, 7))) return false;', 'if (!_isZero(_sp(x, 8))) return false;')], AUD),

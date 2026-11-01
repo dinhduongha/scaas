@@ -1,6 +1,6 @@
-zether-msm mutation run (runs/2026-11-01-zether-msm-mutation.py), 2026-11-01, on the committed merged verifier, after the review
-fix round. Each row removes one thing; every row must go red. "ran" counts the tests the row named, the listed ones failed. 49
-rows, all red, run one call at a time from the source at HEAD, with `src` clean after each call.
+zether-msm mutation run (runs/2026-11-01-zether-msm-mutation.py), 2026-11-01, on the committed merged verifier, after both review
+rounds. Each row removes one thing; every row must go red. "ran" counts the tests the row named, the listed ones failed. 57 rows,
+all red, run one call at a time from the source at HEAD, with `src` clean after each call.
 
 rho constant: every weight 1               RED (1 ran): test_cancellingPairRefused
 rho skips the proof bytes                  RED (1 ran): test_cancellingPairRefused
@@ -51,6 +51,14 @@ verifyRange rho misses the proof           RED (1 ran): test_verifyRangeRhoHashe
 verifyRange rho misses V                   RED (1 ran): test_verifyRangeRhoHashesCommitmentAndProof
 a Panic in place of BadPoint               RED (1 ran): test_s3TransferSigma
 BadPoint on a row of valid points          RED (1 ran): test_s3TransferSigma
+weight 0 not refused                       RED (1 ran): test_zeroWeightRefused
+weight r not reduced                       RED (1 ran): test_weightEqualToOrderRefused
+rho r not reduced                          RED (1 ran): test_rhoEqualToOrderRefused
+probe G1MSM(T, 1) ignored                  RED (1 ran): test_supportProbeRefusesMsmWithoutSubgroupCheck
+probe G1MSM(G, 1, T, 0) ignored            RED (1 ran): test_supportProbeRefusesMsmWithoutSubgroupCheck
+probes not capped                          RED (1 ran): test_supportProbeIsCapped
+recipient limit removed                    RED (1 ran): test_m16AndM17
+E3 of leg 16 dropped from the fold         RED (2 ran): test_m16_auditorOff, test_m16_auditorOn
 
 Not mutated: test_precompilesOnTheLowOrderPoint (it pins the precompiles, there is no verifier check to remove); the != 0 checks on
 c, y, z, x, w, u_j (no test can reach them, each needs a hash output of 0); the older shape and point checks of zether.md §7, §8
