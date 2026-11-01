@@ -971,6 +971,10 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-35 / -36
   and `IMetaTx` beside `mtxExecute`: it signs `address from`, so it is not part of `UAMetaTxBase`. The wallets keep it, no ERC-165 id
   changes. Only `mtxExecuteWithFee` goes to legacy. It shares the EIP-1776 name only: selector `0x47aea5b5`, against `0x0c53c51c` of
   the common `executeMetaTransaction(address,bytes,bytes32,bytes32,uint8)`, and ERC-1776 itself defines no such function.
+- **Flat `uaUnwrap` goes to legacy (owner ruling 2026-11-01):** the flat `uaUnwrap(bytes32 from, …)` overload duplicates the named
+  `uaUnwrap(UAEnvelope, …, UASig)`, so it moves to `smartcontracts/evm/legacy/typed-signing/`. `mtxCancelNonce` is declared in
+  `IMetaTx`, like every entry present on every contract, and the ERC-165 id is re-pinned (controller correction of a brief that
+  said to leave `IMetaTx` unchanged; that was about `executeMetaTransaction`). Both are done in C2's review fix round.
 - **`UARegistry` deploy gate (owner ruling 2026-11-01):** the registry gets a gate like the releases:
   `_requireReleaseGas("UARegistry")` in `DeployBase` and `require_release_gas("UARegistry")` in `e2e.py`, need 88.3 M
   (46,716 B × 1,530 + 2^24), test `test_registryDeployGate`, NET-EVM-06.
