@@ -69,7 +69,7 @@ deterministic in the statement and proof.
 
 | Id | Severity | Finding | Status on the branch |
 |---|---|---|---|
-| F1 | low | `isSupportedOnThisChain` did not probe the subgroup check; on a chain skipping it everywhere, a sender could plant a 3-torsion component in a recipient's balance. Griefing, no theft | fixed: two capped probes |
+| F1 | low | `isSupportedOnThisChain` did not probe the subgroup check; on a chain skipping it everywhere, a sender could plant a 3-torsion component in a recipient's balance. Griefing, no theft | fixed: two capped probes behind two capped valid controls and a gas floor |
 | F2 | low / info | `verifyFold` accepted weight 0, and `ρ = r` passed its guard. Unreachable through the token | fixed: reduced mod `r`, refused at 0 |
 | F3 | info | §9.1's off-EVM note was wrong on the `−1` slots | rewritten |
 | F4 | info | `fee` and `amount` enter E5 mod `r` unchecked; the token's bounds were not named there | named in §8 and the NatSpec |

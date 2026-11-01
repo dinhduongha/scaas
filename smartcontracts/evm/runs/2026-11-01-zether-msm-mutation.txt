@@ -1,6 +1,8 @@
 zether-msm mutation run (runs/2026-11-01-zether-msm-mutation.py), 2026-11-01, on the committed merged verifier, after both review
-rounds. Each row removes one thing; every row must go red. "ran" counts the tests the row named, the listed ones failed. 57 rows,
-all red, run one call at a time from the source at HEAD, with `src` clean after each call.
+rounds. Each row removes one thing; every row must go red. "ran" counts the tests the row named, the listed ones failed. 62 rows,
+all red, run one call at a time from the source at HEAD, with `src` clean after each call. The last change touched only
+`isSupportedOnThisChain`: its 8 rows (the three probe rows and the five control rows) ran on that source, the other 54 on the commit
+before it.
 
 rho constant: every weight 1               RED (1 ran): test_cancellingPairRefused
 rho skips the proof bytes                  RED (1 ran): test_cancellingPairRefused
@@ -59,6 +61,11 @@ probe G1MSM(G, 1, T, 0) ignored            RED (1 ran): test_supportProbeRefuses
 probes not capped                          RED (1 ran): test_supportProbeIsCapped
 recipient limit removed                    RED (1 ran): test_m16AndM17
 E3 of leg 16 dropped from the fold         RED (2 ran): test_m16_auditorOff, test_m16_auditorOn
+k = 1 control ignored                      RED (1 ran): test_supportProbeControlsMustPass
+k = 2 control ignored                      RED (1 ran): test_supportProbeControlsMustPass
+k = 1 control not capped                   RED (1 ran): test_supportProbeForwardsTheCap
+k = 2 control not capped                   RED (1 ran): test_supportProbeForwardsTheCap
+no gas floor under the probes              RED (1 ran): test_supportProbeShortOfGasFailsClosed
 
 Not mutated: test_precompilesOnTheLowOrderPoint (it pins the precompiles, there is no verifier check to remove); the != 0 checks on
 c, y, z, x, w, u_j (no test can reach them, each needs a hash output of 0); the older shape and point checks of zether.md §7, §8

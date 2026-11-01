@@ -754,14 +754,19 @@ abstract contract ZetherBls12381Curve is ZetherCurve {
 
     /// @dev Probe cả G1ADD và G1MSM: G + G == [2]G. Precompile vắng mặt trả 0 byte ⇒ false. Then the check the fold rests on
     ///      (zether.md §9.1): G1MSM must refuse the order-3 point `(0, 2)`, alone and at scalar 0 beside a good term. Both
-    ///      calls fail on every compliant chain and a failed precompile burns all it is sent, so each is capped at
+    ///      calls fail on every compliant chain and a failed precompile burns all it is sent, so every G1MSM here is capped at
     ///      `PROBE_GAS`: the exception to CTR-ZTH-15, and `ZetherLib.init` reads an out-of-gas probe as an unsupported chain.
+    ///      A failed probe must mean a refusal, not out of gas: two valid calls of the same shape pass under the same cap, so
+    ///      the chain's price fits it, and `gasleft()` covers both probes in full.
     function isSupportedOnThisChain() external view returns (bool) {
         bytes memory g = G1Bls12381.generator();
         (bool ok, bytes memory sum) = address(0x0b).staticcall(bytes.concat(g, g));
         if (!ok || sum.length != 128) return false;
-        (bool ok2, bytes memory dbl) = address(0x0c).staticcall(abi.encodePacked(g, uint256(2)));
-        if (!ok2 || dbl.length != 128 || keccak256(sum) != keccak256(dbl) || G1Bls12381.isIdentity(sum)) return false;
+        (bool ok2, bytes memory out) = address(0x0c).staticcall{gas: PROBE_GAS}(abi.encodePacked(g, uint256(2)));
+        if (!ok2 || out.length != 128 || keccak256(sum) != keccak256(out) || G1Bls12381.isIdentity(sum)) return false;
+        (ok2, out) = address(0x0c).staticcall{gas: PROBE_GAS}(abi.encodePacked(g, uint256(1), g, uint256(0)));
+        if (!ok2 || keccak256(out) != keccak256(g)) return false;
+        if (gasleft() < 3 * PROBE_GAS) return false;
         bytes memory t = abi.encodePacked(uint256(0), uint256(0), uint256(0), uint256(2));
         (bool taken,) = address(0x0c).staticcall{gas: PROBE_GAS}(abi.encodePacked(t, uint256(1)));
         if (taken) return false;

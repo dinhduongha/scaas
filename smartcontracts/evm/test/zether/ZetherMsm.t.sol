@@ -523,6 +523,43 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         assertTrue(ok && out.length == 32 && abi.decode(out, (uint256)) == 1, "the probe spent the call's gas");
     }
 
+    /// A probe that fails must mean the chain refused it. On a chain pricing G1MSM above the cap every capped call fails,
+    /// the valid ones first: `mockCallRevert` is that chain, and a wrong point is a chain that cannot be trusted either.
+    function test_supportProbeControlsMustPass() public {
+        bytes memory g = G1Bls12381.generator();
+        bytes memory k1 = abi.encodePacked(g, uint256(2));
+        bytes memory k2 = abi.encodePacked(g, uint256(1), g, uint256(0));
+        vm.mockCallRevert(address(0x0c), k1, "");
+        assertFalse(v.isSupportedOnThisChain(), "k = 1 control failed");
+        vm.clearMockedCalls();
+        vm.mockCallRevert(address(0x0c), k2, "");
+        assertFalse(v.isSupportedOnThisChain(), "k = 2 control failed");
+        vm.clearMockedCalls();
+        assertFalse(_supportedWhenAccepted(k1, g), "k = 1 control, wrong point");
+        assertFalse(_supportedWhenAccepted(k2, v.g1MulBase(2)), "k = 2 control, wrong point");
+        assertTrue(v.isSupportedOnThisChain(), "compliant again");
+    }
+
+    /// Controls and probes run under one cap, or the controls would not vouch for the probes.
+    function test_supportProbeForwardsTheCap() public {
+        bytes memory g = G1Bls12381.generator();
+        bytes memory t = _lowOrder();
+        vm.expectCall(address(0x0c), 0, 100_000, abi.encodePacked(g, uint256(2)));
+        vm.expectCall(address(0x0c), 0, 100_000, abi.encodePacked(g, uint256(1), g, uint256(0)));
+        vm.expectCall(address(0x0c), 0, 100_000, abi.encodePacked(t, uint256(1)));
+        vm.expectCall(address(0x0c), 0, 100_000, abi.encodePacked(g, uint256(1), t, uint256(0)));
+        assertTrue(v.isSupportedOnThisChain());
+    }
+
+    /// The cap is a ceiling: a caller short of gas could starve a probe into failing, which would read as a refusal. Whatever
+    /// the gas it is sent below what both probes need, the function does not answer true.
+    function test_supportProbeShortOfGasFailsClosed() public view {
+        for (uint256 gas_ = 60_000; gas_ <= 300_000; gas_ += 5_000) {
+            (bool ok, bytes memory out) = address(v).staticcall{gas: gas_}(abi.encodeCall(v.isSupportedOnThisChain, ()));
+            assertFalse(ok && out.length == 32 && abi.decode(out, (uint256)) == 1, "a starved probe read as a refusal");
+        }
+    }
+
     /// Each of `n` points at `off`: moved out of the subgroup by the order-3 point, it must reach G1MSM and revert.
     function _everyPointReachesMsm(uint8 op, bytes memory st, bytes memory pr, bool inStatement, uint256 off, uint256 n) internal {
         for (uint256 i; i < n; ++i) {

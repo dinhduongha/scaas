@@ -612,7 +612,9 @@ machine review of this section, not an independent audit, is the Source of the C
      `G1MSM(G ‖ 1 ‖ (0, 2) ‖ 0)` to fail, so a token's `initialize` refuses a chain whose G1MSM skips the check
      (`test_supportProbeRefusesMsmWithoutSubgroupCheck`; the vectors are in
      [networks/evm.md](../networks/evm.md#3-precompiles)). Each call is capped: both fail on every compliant chain, a failed
-     precompile burns all it is sent, and `ZetherLib.init` reads an out-of-gas probe as an unsupported chain.
+     precompile burns all it is sent, and `ZetherLib.init` reads an out-of-gas probe as an unsupported chain. A failure must
+     mean a refusal, not out of gas, so two valid G1MSM calls of the same shape run first under the same cap and must answer
+     the expected point, and the function answers false if too little gas is left for both probes.
 4. **Shared generators add mod `r`.** Every term enters by one line, `f[slot] = addmod(f[slot], mulmod(w, s, r), r)`:
    both opcodes are exact past 256 bits (`r` < 2^255 also keeps a port's plain addition from overflowing). Honest proofs
    pass only if every slot is exact, and `test_sharedGeneratorsAddModR` wraps each shared slot past `r`.
@@ -1272,8 +1274,9 @@ flags 5–8 (`FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`) are refused at creation ([
 <a id="precompile-gas"></a>
 <a id="CTR-ZTH-15"></a>**CTR-ZTH-15** — **The verifier forwards `gas()` to the precompiles** (it does not pin the
 EIP-1108/EIP-2537 prices): one bad point makes the transaction spend all its gas, so relayers must simulate first (the
-node's simulation gate). The one exception is the two subgroup probes of `isSupportedOnThisChain`, capped because they fail by
-design ([§9.1](#merged-check)).
+node's simulation gate). The one exception is `isSupportedOnThisChain`, whose G1MSM calls are capped: its two subgroup probes
+fail by design, and two valid calls of the same shape under the same cap show that a failure there is a refusal
+([§9.1](#merged-check)).
 
 <a id="chains"></a>
 <a id="CTR-ZTH-27"></a>**CTR-ZTH-27** — *Open (owner).* The owner put the private chain in scope as the **first**

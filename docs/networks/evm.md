@@ -152,8 +152,11 @@ so a transaction priced at 1 wei is never mined; clients price at least `baseFee
   | `T ‖ be32(1)` | `T` |
   | `G ‖ be32(1) ‖ T ‖ be32(0)` | `G` |
 
-  `G1ADD` takes `T`, which is correct: it has no subgroup check. `isSupportedOnThisChain()` runs the same two calls, so a
-  token's `initialize` refuses such a chain. Both fail on the SCaaS testnet's Nethermind 2.2.0 (read-only `eth_call`, 2026-11-01).
+  `G1ADD` takes `T`, which is correct: it has no subgroup check. A failure counts only if the same shape succeeds: `G ‖
+  be32(2)` must answer `[2]G` and `G ‖ be32(1) ‖ G ‖ be32(0)` must answer `G`, under the same gas, or the failure may be out of
+  gas. `isSupportedOnThisChain()` runs all four under a cap of 100,000 gas each (EIP-2537 prices them at 12,000 and 21,312), so
+  a token's `initialize` refuses such a chain, and one pricing G1MSM above the cap. The SCaaS testnet's Nethermind 2.2.0 answers
+  all four as required at that gas, the two failures as subgroup errors (read-only `eth_call`, 2026-11-01).
 - **PQ precompiles on the SCaaS testnet** (P6f, plugin `Nethermind.Pqz`, [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10)):
   `PQZ` `0x5caa500000000000000000000000000000000f01` (PQZL and PQZH proofs, per-row gas 2.57–5.41 M + 3 per word),
   `MLDSA44` `0x5caa500000000000000000000000000000000012` (49,000 + 6 per message word) and `MLDSA65`

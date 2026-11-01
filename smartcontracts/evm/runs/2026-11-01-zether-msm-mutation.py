@@ -17,6 +17,8 @@ LEG = 'test_auditorOffLegFieldsRefused'
 RHO_RANGE = 'test_verifyRangeRhoHashesCommitmentAndProof'
 CORPUS = 'test_s3TransferSigma'
 PROBE = 'test_supportProbeRefusesMsmWithoutSubgroupCheck'
+CONTROL = 'test_supportProbeControlsMustPass'
+CAP = 'test_supportProbeForwardsTheCap'
 E3 = '''for (uint256 i; i < 3; ++i) _term(x.f, slots[i], x.w, s[i], x.r);
         x.w = mulmod(x.w, x.rho, x.r);'''
 E4 = '''for (uint256 i; i < 4; ++i) _term(x.f, slots[i], x.w, s[i], x.r);
@@ -143,10 +145,17 @@ ROWS = [
     # the support probe: each call alone, and the cap
     ('probe G1MSM(T, 1) ignored', [('if (taken) return false;\n', '')], PROBE),
     ('probe G1MSM(G, 1, T, 0) ignored', [('return !taken;', 'return true;')], PROBE),
-    ('probes not capped', [('.staticcall{gas: PROBE_GAS}(', '.staticcall('), ('.staticcall{gas: PROBE_GAS}(', '.staticcall(')], 'test_supportProbeIsCapped'),
+    ('probes not capped', [('(bool taken,) = address(0x0c).staticcall{gas: PROBE_GAS}(', '(bool taken,) = address(0x0c).staticcall('),
+                           ('(taken,) = address(0x0c).staticcall{gas: PROBE_GAS}(', '(taken,) = address(0x0c).staticcall(')], 'test_supportProbeIsCapped'),
     # the largest form, and the first past it
     ('recipient limit removed', [('if (m == 0 || m > MAX_RECIPIENTS || statement.length', 'if (m == 0 || statement.length')], 'test_m16AndM17'),
     ('E3 of leg 16 dropped from the fold', drop4(82), r'test_m16_auditor'),
+    # the probe's controls: a failed probe must mean a refusal, not out of gas
+    ('k = 1 control ignored', [('if (!ok2 || out.length != 128 || keccak256(sum) != keccak256(out) || G1Bls12381.isIdentity(sum)) return false;\n', '')], CONTROL),
+    ('k = 2 control ignored', [('if (!ok2 || keccak256(out) != keccak256(g)) return false;\n', '')], CONTROL),
+    ('k = 1 control not capped', [('(bool ok2, bytes memory out) = address(0x0c).staticcall{gas: PROBE_GAS}(', '(bool ok2, bytes memory out) = address(0x0c).staticcall(')], CAP),
+    ('k = 2 control not capped', [('(ok2, out) = address(0x0c).staticcall{gas: PROBE_GAS}(', '(ok2, out) = address(0x0c).staticcall(')], CAP),
+    ('no gas floor under the probes', [('if (gasleft() < 3 * PROBE_GAS) return false;\n', '')], 'test_supportProbeShortOfGasFailsClosed'),
 ]
 
 
