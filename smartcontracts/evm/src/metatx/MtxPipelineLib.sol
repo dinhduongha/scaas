@@ -15,9 +15,11 @@ import {UAKinds} from "../ua/UAKinds.sol";
 /// @title The checks of every signed meta-tx path (metatx split, variant A; CTR-MTX-07, CTR-MTX-17, CTR-MTX-23).
 /// @notice Linked by the token kinds and run by DELEGATECALL in the token's context: steps 1–4 of CTR-MTX-17 and the fee
 ///         amount, on the address path and the UA path, for `MetaTransaction` and `MetaTransfer`; the address path's
-///         signature rule and the UA authorization rule. The token passes its immutables in `Ctx` and only
-///         `keccak256(data)`, never `data` (owner 2026-10-21). No state variable, no immutable, no constructor; the one
-///         slot written is the nonce of `scaas.metatx`, whose constant and struct are defined here only.
+///         signature rule and the UA authorization rule. The token passes its immutables in `Ctx`. `data` itself stays
+///         in the token (owner 2026-10-21): `preCall` takes `keccak256(data)`, `preNamed` and `preNamedUA` take `args`,
+///         the op's parameters as struct words, which they hash into the entry's struct. No state variable, no immutable,
+///         no constructor; the one slot written is the nonce of `scaas.metatx`, whose constant and struct are defined
+///         here only.
 /// @dev The check bodies are the internal functions; the external ones compose them for the tokens, and `MetaTxBase`
 ///      calls the same internal functions inlined (no link), so the wallets keep their own composition (§3.7).
 library MtxPipelineLib {
@@ -49,6 +51,7 @@ library MtxPipelineLib {
         uint8 feeClass; uint8 amountArg; uint32 staticLen;  // _mtxRule(sel)
         uint256 basis;                                      // word amountArg of the arguments if present, else 0
         bool uaAllowed;                                     // _uaAllowed(sel); read on the UA path only
+        uint32 supported;                                   // supportedModes()
     }
 
     struct Out { bytes32 digest; uint256 fee; address feeTo; }
@@ -276,7 +279,7 @@ library MtxPipelineLib {
     /// @dev What runs after it: the UA allowlist, call shape, nonce, fee.
     function _close(Out memory o, Envelope calldata e, CallFacts calldata f, bool ua) private {
         if (ua && (f.len < 4 || !f.uaAllowed)) revert IUALedger.MetaTxUnknownOp(f.sel);
-        _checkCall(f.sel, f.len, f.feeClass, f.amountArg, f.staticLen, e.mode, MetaTxLib.MODE_KNOWN_MASK);
+        _checkCall(f.sel, f.len, f.feeClass, f.amountArg, f.staticLen, e.mode, f.supported);
         _useNonce(e.from, e.batch);
         (o.fee, o.feeTo) = _callFee(
             f.feeClass, f.basis, e.mode, e.fee, e.feeRecipient == address(0) ? msg.sender : e.feeRecipient);

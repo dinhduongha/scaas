@@ -115,9 +115,11 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         return true;
     }
 
-    /// @notice Direct, or signed through `mtxExecute` on another lane (a subject without gas can cancel).
+    /// @notice Direct, or signed through `mtxExecute` on another lane (a subject without gas can cancel). A derived
+    ///         subject has no address lane: `_msgSender()` is `UA_POOL` for all of them, its cancel is `uaCancelNonce`.
     function cancelNonce(uint256 batch) external nonReentrant {
         address from = _msgSender();
+        if (from == MetaTxLib.UA_POOL) revert MtxSelectorNotAllowed(IMetaTx.cancelNonce.selector);
         emit MetaNonceCancelled(from, batch, _bumpNonce(MetaTxLib.pad(from), batch));
     }
 

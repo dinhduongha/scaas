@@ -13,7 +13,6 @@ import {SigCheck} from "../common/SigCheck.sol";
 import {ITradeToken} from "../trade/ITradeToken.sol";
 import {TradeLib} from "../trade/TradeLib.sol";
 import {IUALedger} from "./IUALedger.sol";
-import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 
@@ -31,15 +30,6 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     using MetaTxLib for MetaTxLib.MetaTransfer;
     using MetaTxLib for MetaTxLib.UAMetaTransaction;
     using MetaTxLib for MetaTxLib.UAMetaTransfer;
-
-    /// @custom:storage-location erc7201:scaas.ua.ledger
-    struct UALedgerStorage {
-        mapping(bytes32 ua => uint256) balance;
-        mapping(bytes32 digest => bool) cancelUsed;
-    }
-
-    // keccak256(abi.encode(uint256(keccak256("scaas.ua.ledger")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant _UA_STORAGE = 0x9e2def943e5a7ec3982e5d00524104579a6b98ce8b31343ac0092718cc04e900;
 
     constructor(bytes32 chainUid_, address registry_, address smartKeyAccountImpl_, bool hedera_)
         ERC20("", "") UAMetaTxBase(_domainName(), chainUid_, registry_, smartKeyAccountImpl_, hedera_)
@@ -67,7 +57,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
         return MtxPipelineLib.transferDigest(_domainSeparatorV4(), false, _padded(t));
     }
 
-    // `UAMetaTxBase` holds these five and `IUALedger` names them too: the join spelled out (the id stays `IUALedger`'s).
+    // `UAMetaTxBase` holds these seven and `IUALedger` names them too: the join spelled out (the id stays `IUALedger`'s).
 
     function registry() public view override(IUALedger, UAMetaTxBase) returns (address) {
         return UAMetaTxBase.registry();
@@ -104,11 +94,10 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
         return MtxPipelineLib.transferDigest(_domainSeparatorV4(), true, t);
     }
 
-    /// @notice The `metatx-cancel` digest (accounts.md §1.5): `CANCEL_TAG` is the purpose tag itself.
-    function uaCancelDigest(bytes32 ua, uint256 batch, uint256 validUntil) public view returns (bytes32) {
-        return keccak256(abi.encode(
-            UAKinds.PURPOSE_METATX_CANCEL, block.chainid, CHAIN_UID, address(this), ua, batch, validUntil
-        ));
+    function uaCancelDigest(bytes32 ua, uint256 batch, uint256 validUntil)
+        public view override(IUALedger, UAMetaTxBase) returns (bytes32)
+    {
+        return UAMetaTxBase.uaCancelDigest(ua, batch, validUntil);
     }
 
     // ------------------------------------------------------------------ trade orders (CTR-DEX-15, -25, -02)
@@ -339,18 +328,10 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
         return true;
     }
 
-    /// @notice A derived UA's `cancelNonce`, signed under purpose `metatx-cancel`; each signature works once. Native ids
-    ///         use `cancelNonce` (the same map, `pad(sender)`).
-    function uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, bytes calldata auth) external nonReentrant {
-        _uaOn();
-        if (UAKinds.inNativeSpace(ua)) revert UAKindNotAccepted(ua, 0);
-        if (block.timestamp > validUntil) revert MetaTxExpired(validUntil, block.timestamp);
-        bytes32 d = uaCancelDigest(ua, batch, validUntil);
-        UALedgerStorage storage $ = _ua();
-        if ($.cancelUsed[d]) revert UACancelUsed();
-        IUARegistry(_REGISTRY).requireAuthorized(ua, UAKinds.PURPOSE_METATX_CANCEL, d, UAKinds.uaSig(ua, auth)); // R1 → C2
-        $.cancelUsed[d] = true;
-        emit UANonceCancelled(ua, batch, _bumpNonce(ua, batch));
+    function uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, bytes calldata auth)
+        public override(IUALedger, UAMetaTxBase)
+    {
+        UAMetaTxBase.uaCancelNonce(ua, batch, validUntil, auth);
     }
 
     /// @dev Step 6 of the UA path: the fee from the signer's ledger.
@@ -415,14 +396,6 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
         uint256 b = $.balance[ua];
         if (b < value) revert UAInsufficientBalance(ua, b, value);
         unchecked { $.balance[ua] = b - value; }
-    }
-
-    function _uaOn() private view {
-        if (_REGISTRY == address(0)) revert UALedgerOff();
-    }
-
-    function _ua() private pure returns (UALedgerStorage storage $) {
-        assembly ("memory-safe") { $.slot := _UA_STORAGE }
     }
 
     function _msgSender() internal view virtual override(Context, MetaTxBase) returns (address) {

@@ -90,7 +90,7 @@ contract MtxPipelineLibTest is Test {
 
     /// AMOUNT(0) on a 36-byte static selector, basis 100 (fee cap 1).
     function _facts() internal pure returns (MtxPipelineLib.CallFacts memory) {
-        return MtxPipelineLib.CallFacts(SEL, 36, 2, 0, 36, 100, true);
+        return MtxPipelineLib.CallFacts(SEL, 36, 2, 0, 36, 100, true, MetaTxLib.MODE_KNOWN_MASK);
     }
 
     function _sig(uint256 pk, bytes32 d) internal pure returns (bytes memory) {

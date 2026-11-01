@@ -6,14 +6,26 @@ import {IUALedger} from "./IUALedger.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
+import {UAKinds} from "../ua/UAKinds.sol";
 
 /// @title The UA-signed call path on `MetaTxBase` (owner ruling 2026-11-01), for tokens and for contracts that are not.
 /// @notice `uaExecute` is a general entry: any contract on this base takes UA-signed calls of its `_uaAllowed` selectors
 ///         through `MtxPipelineLib` (CTR-MTX-17 on a `bytes32` signer, CTR-UA-26). A contract without a ledger runs at
-///         fee 0 (`_uaChargeFee`), still relayable; `ERC20MetaTx` overrides the hook with its UA ledger. Inside the
-///         self-call a contract reads `_ticketSubject()`, since `_msgSender()` is `UA_POOL` for every derived subject.
+///         fee mode `NONE` (`supportedModes()`, both paths), still relayable; `ERC20MetaTx` overrides `_uaChargeFee` with
+///         its UA ledger. An op body reads `_subject()`, since `_msgSender()` is `UA_POOL` for every derived subject; a
+///         derived signer cancels a lane with `uaCancelNonce`. The address path here takes the same `Ctx` signature rule.
 ///         `MetaTxBase` stays free of this code: `SmartKeyAccount` and `MandateWallet` have no registry.
 abstract contract UAMetaTxBase is MetaTxBase {
+    /// @custom:storage-location erc7201:scaas.ua.ledger
+    /// @dev `balance` is the UA ledger's (`ERC20MetaTx`); `cancelUsed` is every contract's on this base.
+    struct UALedgerStorage {
+        mapping(bytes32 ua => uint256) balance;
+        mapping(bytes32 digest => bool) cancelUsed;
+    }
+
+    // keccak256(abi.encode(uint256(keccak256("scaas.ua.ledger")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant _UA_STORAGE = 0x9e2def943e5a7ec3982e5d00524104579a6b98ce8b31343ac0092718cc04e900;
+
     /// @notice The UA registry of this chain (an implementation immutable; 0 = the UA path is off).
     address internal immutable _REGISTRY;
     /// @notice The EIP-1167 clone code hash of the chain's `SmartKeyAccount` implementation (0 = none): such a signer
@@ -48,6 +60,13 @@ abstract contract UAMetaTxBase is MetaTxBase {
         return MtxPipelineLib.callDigest(_domainSeparatorV4(), MetaTxLib.UAMETATX_TYPEHASH, _uaEnvelopeOf(m));
     }
 
+    /// @notice The `metatx-cancel` digest (accounts.md §1.5): `CANCEL_TAG` is the purpose tag itself.
+    function uaCancelDigest(bytes32 ua, uint256 batch, uint256 validUntil) public view virtual returns (bytes32) {
+        return keccak256(abi.encode(
+            UAKinds.PURPOSE_METATX_CANCEL, block.chainid, CHAIN_UID, address(this), ua, batch, validUntil
+        ));
+    }
+
     // ------------------------------------------------------------------ entry points
 
     function uaExecute(MetaTxLib.UAMetaTransaction calldata m, bytes calldata auth)
@@ -68,6 +87,22 @@ abstract contract UAMetaTxBase is MetaTxBase {
             _uaExecute(ms[i], auths[i]);
         }
         return true;
+    }
+
+    /// @notice A derived UA's `cancelNonce`, signed under purpose `metatx-cancel`; each signature works once. Native ids
+    ///         use `cancelNonce` (the same map, `pad(sender)`).
+    function uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, bytes calldata auth)
+        public virtual nonReentrant
+    {
+        _uaOn();
+        if (UAKinds.inNativeSpace(ua)) revert IUALedger.UAKindNotAccepted(ua, 0);
+        if (block.timestamp > validUntil) revert MetaTxExpired(validUntil, block.timestamp);
+        bytes32 d = uaCancelDigest(ua, batch, validUntil);
+        UALedgerStorage storage $ = _ua();
+        if ($.cancelUsed[d]) revert IUALedger.UACancelUsed();
+        IUARegistry(_REGISTRY).requireAuthorized(ua, UAKinds.PURPOSE_METATX_CANCEL, d, UAKinds.uaSig(ua, auth)); // R1 → C2
+        $.cancelUsed[d] = true;
+        emit IUALedger.UANonceCancelled(ua, batch, _bumpNonce(ua, batch));
     }
 
     // ------------------------------------------------------------------ the pipeline on MtxPipelineLib
@@ -91,6 +126,13 @@ abstract contract UAMetaTxBase is MetaTxBase {
             f.basis = basis;
         }
         if (ua) f.uaAllowed = _uaAllowed(f.sel);
+        f.supported = supportedModes();
+    }
+
+    /// @notice The signer as an id: the subject of the live ticket, else the direct caller padded.
+    function _subject() internal view returns (bytes32 s) {
+        s = _ticketSubject();
+        if (s == 0) s = MetaTxLib.pad(_msgSender());
     }
 
     /// @dev The generic UA pipeline (CTR-MTX-17 on a `bytes32` signer) on the library: `preCall(ua = true)` runs the
@@ -149,9 +191,24 @@ abstract contract UAMetaTxBase is MetaTxBase {
             m.feeRecipient);
     }
 
+    function _uaOn() internal view {
+        if (_REGISTRY == address(0)) revert IUALedger.UALedgerOff();
+    }
+
+    function _ua() internal pure returns (UALedgerStorage storage $) {
+        assembly ("memory-safe") { $.slot := _UA_STORAGE }
+    }
+
     // ------------------------------------------------------------------ hooks
 
+    /// @notice The address path's signature under this contract's `Ctx`, as the UA path's (HIP-632, the clone's ERC-1271
+    ///         cap). A token never reaches it: its `_execute` runs on the library.
+    function _requireValidSignature(address from, bytes32 digest, bytes calldata sig) internal view virtual override {
+        MtxPipelineLib.requireSignature(_mtxCtx(), from, digest, sig);
+    }
+
     /// @notice Step 6, fee ≠ 0 only: no ledger to charge => refused, as `_chargeFee` on the address path (CTR-MTX-22).
+    ///         Reached only by a contract whose `supportedModes()` claims a fee mode.
     function _uaChargeFee(MetaTxLib.UAMetaTransaction memory m, address, uint256) internal virtual {
         revert MetaTxUnknownMode(m.mode);
     }
