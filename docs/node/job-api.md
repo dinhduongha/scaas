@@ -238,7 +238,7 @@ Payload by kind:
 Status: **BUILT** (typed-signing N1, owner Option B, 2026-10-31: "explicit named JSON fields per operation instead of opaque
 hex blobs; the node builds the XDR / calldata"). On EVM and Hedera a job names an entry of the node's table and its fields
 ([named entries](#named-entries)); the guard allows a selector per contract kind, and nothing else
-([call table](#call-table)). `data` / `calldata` as a field of an op, a `metatx` or `m` body, a `call: {calldata}` object or
+([call table](#call-table)). `data` / `calldata` as a field of a job, an op, a `metatx` or `m` body, a `call: {calldata}` object, a hex string as `op` or `op.call`, or
 `struct = call` is refused by name on every job kind and at the gateway: `HEX_DATA_REFUSED`. A `bytes` field an entry declares
 (`Execute.data`, `proof`, `ciphertext`) is a named parameter and passes. The contracts keep `mtxExecute` / `mtxBatch` /
 `uaExecute` / `uaBatch` and their `mtxSelectors()` for other callers (owner 2026-10-31); the node relays no hex through them.
@@ -271,13 +271,13 @@ JSON; the struct names are the vector file's keys.
 |---|---|
 | `entry` | The contract function: `mtxUnwrap`, `uaUnshield`, … |
 | `contract` | The target's kind: `token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `registry`, `factory`. Names the rule and the EIP-712 domain (`SCaaS MetaToken`, `SCaaS ZetherToken`, `SCaaS PqzToken`, `SCaaS MandateWallet`, `SCaaS SmartKeyAccount`, `SCaaS Dex`). May be left out when the entry exists on one kind |
-| `struct` | Only when an entry has two rows on a kind (`ENTRY_AMBIGUOUS`): `CancelOrder` / `CancelWrapOrder`, `CancelUAOrder` / `CancelUAWrapOrder`, `RollOverSigned` / `ZetherRollOver`, `SetRollOverMode` / `ZetherSetRollOverMode`, `CancelDexOrder` / `mtxCancelOrders` |
+| `struct` | Only when an entry has two rows on a kind (`ENTRY_AMBIGUOUS`): `CancelOrder` / `CancelWrapOrder`, `CancelUAOrder` / `CancelUAWrapOrder`, `RollOverSigned` / `ZetherRollOver`, `SetRollOverMode` / `ZetherSetRollOverMode`, `CancelDexOrder` / `mtxCancelOrders`, `PayUnderMandate` (the named form) / `mtxPayUnderMandate` (the flat builder) |
 | `token` | The call's target; a `RelayFee`'s fee token; a wrap order's wrapper |
 | `envelope` | `from` + `batch`, `nonce`, `validUntil`, `mode`, `relayer`, `fee`, `feeRecipient`, on every entry whose struct ends with them; exactly these keys |
 | `args` | The struct's other fields under their struct names, plus what the entry takes unsigned; exactly these keys, nested structs as objects, arrays as arrays. An entry with no envelope has its whole struct here |
 | `signature` | Hex, an entry that takes `bytes` (`uaShield` too: its `auth` is `bytes`) |
 | `auth` | The object: `UASig` `{keyData, signature, members: [{index, keyData, sig}]}` on `ua*`, `AccountSig` `{keyIndex, proof, signature}` on the account's own entries |
-| `validUntil` | Job deadline, decimal string: required when the op signs none (an owner rollover, `mtxCancelOrders`, a plain entry without one), else it overrides the signed one for the job only |
+| `validUntil` | Job deadline, decimal string: required when nothing else gives one (an owner rollover, `mtxCancelOrders`, a plain entry without its own). It narrows a deadline the chain enforces, never extends it: the job's deadline is the minimum. A cancel has none, so there it stands alone (else the order's) |
 
 Values: `uint` as canonical decimal strings (`uint8`, `uint16`, `uint32` may be JSON numbers), addresses `0x` + 20 bytes, `bytes32` /
 `bytes16` `0x` + exact length, `bytes` `0x`-hex, `bool` as JSON. Anything else is `BAD_PAYLOAD` naming the path. An unbound `relayer` /
@@ -291,31 +291,33 @@ Values: `uint` as canonical decimal strings (`uint8`, `uint16`, `uint32` may be 
 | Receiver fee | `mtxPayReceiverFee` / `uaPayReceiverFee`: `args`: `payment` (the `MetaTransfer` / `UAMetaTransfer`), `payerSig` (hex / `UASig`), `fee`, `feeRecipient`, `validUntil`; `signature` / `auth` is the payee's |
 | Zether (`zether`) | `mtxShield`, `uaShield`, `mtxWrapShield`, `mtxRollOver`, `uaRollOver`, `mtxConfidentialTransferSingle`, `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`, `mtxUnshield`, `mtxUnshieldUnwrap` and `ua*` twins, `mtxRollOverSigned` / `mtxSetRollOverMode` (+ `args.ownerSig`) and twins, `mtxRollOverBatch`, `uaRollOverBatch` |
 | PQZ (`pqz`) | `mtxShield`, `uaShield`, `mtxWrapShield`, `mtxRollOver`, `uaRollOver`, `mtxPrepareAcc`, `uaPrepareAcc`, `mtxConfidentialTransferSingle`, `…SingleCompact`, `mtxConfidentialTransfer`, `…Compact`, `mtxUnshield`, `mtxUnshieldUnwrap` and `ua*` twins (+ `args.pqzAuth`, a `UASig`) |
-| `MandateWallet` (`wallet`) | `mtxSetMandate`, `mtxSetPayee`, `mtxRevokeMandate`, `mtxPayUnderMandate`, `mtxDelegateRevoke`, `mtxExecute` (`args.data` is `bytes`), plain `mtxExecuteAsOwner`, `mtxExecuteAsOwnerRaw` |
+| `MandateWallet` (`wallet`) | `mtxSetMandate`, `mtxSetPayee`, `mtxRevokeMandate`, `mtxPayUnderMandate` (`struct: "PayUnderMandate"`), `mtxDelegateRevoke`, `mtxExecute` (`args.data` is `bytes`). The flat builders, plain, which sign the generic `MetaTransaction` and take `args.sig` (owner 2026-11-01): `mtxPayUnderMandate` (`struct: "mtxPayUnderMandate"`; `token`, `payee`, `amount`, `entryRef`, `epoch`, `validUntil`, `sig`), `mtxRevoke` (`token`, `epoch`, `validUntil`, `sig`; the kill switch), `mtxExecuteAsOwner`, `mtxExecuteAsOwnerRaw` |
 | `SmartKeyAccount` (`account`) | `mtxAddKey`, `mtxRemoveKey`, `mtxRotateKey`, `mtxSetGuardian`, `mtxCancelRecovery`, `mtxExecute`, plain `mtxExecuteAsOwner` |
-| Relay fee | `mtxRelayFee`, `uaRelayFee` with `call` ([above](#paymeta-relayfee-jobs)) |
+| Relay fee | `mtxRelayFee`, `uaRelayFee` with `call` ([above](#paymeta-relayfee-jobs)). The node parses `call` without its `fee_recipient`: the payer hashed those bytes, so an unbound inner `relayer` / `feeRecipient` is 0 in what it signs |
 | `dex`, plain | `mtxSettle`, `mtxExchange`, `mtxExchangeVia`, `mtxExchangeBatch`, `mtxHybrid`, `mtxHybridVia`, `mtxCancelOrders`: legs as `{sellToken, shape, order, uaOrder, sig, auth, fill}` |
 | `registry`, plain | `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`, `setKemKey`, `storePqzPop`, `setPqzKey` |
 | `factory`, plain | `deploy` |
 
-**Mandate lanes.** `mtxPayUnderMandate` runs with `batch = mandatePayLane(entryRef)`, `mtxDelegateRevoke` with
+**Mandate lanes.** The named `mtxPayUnderMandate` runs with `batch = mandatePayLane(entryRef)`, `mtxDelegateRevoke` with
 `batch = mandateRevokeLane(token, epoch)`, both at nonce 0 (a revoke is the kill switch, it must not queue behind a pending nonce on
-a shared lane); anything else is `MANDATE_LANE`, nothing sent.
+a shared lane); anything else is `MANDATE_LANE`, nothing sent. The flat builders derive their lanes in the contract.
 
 **The digest is the key.** The node computes the typed digest from the op, in the domain `(name of contract, "1", chainId, target,
 chain_uid)`: no chain view. It is the job's in-flight key and what `MetaTransactionExecuted.digest` is compared to. The bytes sent are a
-second key, held with it: `contract` is not in the calldata, so one call never flies twice under another claim.
+second key, held with it on every lane: `contract` is not in the calldata, so one call never flies twice under another claim. A
+receiver fee's key is its outer digest; the chain reports the payment's `MetaTransfer` digest, which is what its job is compared to.
 
 **The signature pre-check** (every path, before the simulation). For a native signer (`from`, `ua`, `order.from`, a receiver fee's
 payee) with a 65-byte signature the node recovers over its digest. Recovered to the signer: good. To anyone else: an account without code
-is `BAD_SIGNATURE`, nothing simulated or sent; one with code is an ERC-1271 signer, its simulation answers. A derived UA, a member set
-or an account key is the simulation's.
+is `BAD_SIGNATURE`, nothing simulated or sent; one with code is an ERC-1271 signer, its simulation answers. Any other length (a 64-byte
+Hedera account signature, [CTR-MTX-25](../contracts/metatx.md#CTR-MTX-25)), a derived UA, a member set or an account key is the simulation's.
 
-Gateway: `POST /v1/op {chain, op}` takes the same object (`/v1/metatx` keeps `MetaTransfer`; `struct = call` is refused).
+Gateway: `POST /v1/op {chain, op}` takes the same object, on a registered token only ([gateway.md](gateway.md#routes)); every other row is
+a job of a namespace with the grant.
 
 | Refusal | When |
 |---|---|
-| `HEX_DATA_REFUSED` | `data` / `calldata` where no entry declares one, `call: {calldata}`, `struct = call` |
+| `HEX_DATA_REFUSED` | `data` / `calldata` where no entry declares one, at the top of a job too, `call: {calldata}`, a hex string as `op` or `op.call`, `struct = call` |
 | `UNKNOWN_ENTRY` | no such entry on that kind (a `transfer`, `mtxTrade`) |
 | `ENTRY_AMBIGUOUS` | `contract` or `struct` needed |
 | `OP_KIND_MISMATCH` | a `ua*` entry on a job that is not `ua_metatx`, or the reverse |
@@ -506,7 +508,7 @@ equals `chain.chain_uid` ([NODE-GW-07](gateway.md#NODE-GW-07)); a mismatch ⇒ `
 |---|---|---|
 | `SmartKeyAccountFactory.deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)` | the chain's account factory (`chain_contract.kind = account_factory`) | client subject-account onboarding |
 | `SmartKeyAccount.mtxExecuteAsOwner(bytes,uint256,uint256,bytes)` (built in P4) | runtime code = EIP-1167 clone of that factory's `IMPLEMENTATION` (checked at lease, cached); the account address is predicted per chain (the factory's constructor takes `chain_uid`, so the same owner has a different account address on each chain) | client subject accounts; role holders that are subject accounts |
-| `MandateWallet` named entries (`mtxPayUnderMandate`, `mtxDelegateRevoke`, both epoch-bound: the job re-reads `epoch(token)` and re-signs on `StaleEpoch`, [CTR-ACC-07](../contracts/mandates.md#CTR-ACC-07)), `mtxExecuteAsOwner`; `HederaMandateWallet.mtxExecuteAsOwnerRaw` | any address that is not a registered token and whose `chainUid()` equals `chain.chain_uid` (self-authenticating: the target checks the delegate/owner signature; a wallet is deployed per user with a deployer-chosen value, so it is read at lease and cached) | client payment requests, auto-pay |
+| `MandateWallet` named entries (`mtxPayUnderMandate`, `mtxDelegateRevoke`) and flat builders (`mtxPayUnderMandate`, `mtxRevoke`), all epoch-bound: the job re-reads `epoch(token)` and re-signs on `StaleEpoch`, [CTR-ACC-07](../contracts/mandates.md#CTR-ACC-07); `mtxExecuteAsOwner`; `HederaMandateWallet.mtxExecuteAsOwnerRaw` | any address that is not a registered token and whose `chainUid()` equals `chain.chain_uid` (self-authenticating: the target checks the delegate/owner signature; a wallet is deployed per user with a deployer-chosen value, so it is read at lease and cached) | client payment requests, auto-pay |
 | `SCaaSDex.mtxSettle` / `mtxExchange` / `mtxExchangeVia` / `mtxHybrid` / `mtxHybridVia` / `mtxExchangeBatch` ([CTR-DEX-20](../contracts/dex.md#CTR-DEX-20), [-27](../contracts/dex.md#CTR-DEX-27), [-28](../contracts/dex.md#CTR-DEX-28), BUILT on the new `SCaaSDex` (P2c); the node side, [NODE-DEX-17](dex-venue.md#NODE-DEX-17), SPECIFIED) / `mtxCancelOrders` / `mtxInvalidateNonces` | a DEX on the chain profile's DEX list (`chain_contract.kind = dex`, [NET-ALL-24](../networks/README.md#NET-ALL-24)); never any other address | DEX venue (`~dex`) |
 | `UARegistry.register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`, `setKemKey`, `storePqzPop`, `setPqzKey` (the UA registry, deployed on every chain since UA-3; `deployments/<chainid>.json` `ua_registry`; the eight writes of [CTR-UA-36](../contracts/accounts.md#CTR-UA-36), each relayable by anyone, owner 2026-10-30 ruling R-node, built on `ua8` in `64c233d4`, the typed rows in `typed-signing` Part R; one registry per chain, so once a chain runs a generation 2 the writes for generation-1 records are not relayable; a relayed `register` / `registerMsig` with its proof over min(`max_gas_per_tx`, block gas limit) is refused `UA_REGISTER_SPLIT`) | `Rule::UaRegistry`: the chain's `[[chains]] ua_registry` (unset ⇒ refused), bound to this chain ([NODE-GW-03](gateway.md#NODE-GW-03)) | namespaces with `allow_call`, relayers; the node gateway once `POST /v1/ua/register` is built |
 | `SealedBidTender.commitBid`, `revealBid`, `withdrawDeposit`, `settleTender` | `chain_contract.kind = tender` | client tender flows ([contracts/tender.md](../contracts/tender.md)) |

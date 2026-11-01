@@ -54,7 +54,7 @@ pub struct SignedReq {
     pub signature: String,
 }
 
-/// `POST /v1/op {chain, op}`: one named entry as explicit JSON (job-api.md).
+/// `POST /v1/op {chain, op}`: a named entry on a registered token, as explicit JSON (job-api.md); door A, nothing else.
 #[derive(Deserialize)]
 pub struct OpReq {
     pub chain: u64,
@@ -225,6 +225,11 @@ async fn post_op(State(s): State<AppState>, Json(r): Json<OpReq>) -> Reply {
         Ok((w, _)) => w,
         Err(e) => return bad(format!("{e:#}")),
     };
+    // the old door, default closed: a registered token (NODE-GW-01, NODE-GW-03). A deploy, a registry write, a DEX settlement, a
+    // wallet or a relay fee has no fee for this lane and goes as a job of a namespace that has the grant
+    if let Err(e) = chain_of(&s, r.chain, w.to) {
+        return e;
+    }
     if let Err(e) = fresh(U256::from(w.valid_until)) {
         return e;
     }
@@ -489,6 +494,10 @@ mod tests {
         assert!(work_of(r, None).unwrap_err().1 .0["error"].as_str().unwrap().starts_with("HEX_DATA_REFUSED"));
     }
 
+    const FACTORY: Address = Address::repeat_byte(0xf1);
+    const REGISTRY: Address = Address::repeat_byte(0xf2);
+    const DEX: Address = Address::repeat_byte(0xf3);
+
     /// A chain for `POST /v1/op`: bound to `uid`, `code` = what `eth_getCode` answers; `(gateway, lane receiver, RPC methods)`.
     async fn gateway(code: &'static str, tokens: Vec<Address>) -> (Router, mpsc::Receiver<Work>, Arc<Mutex<Vec<String>>>) {
         let log: Arc<Mutex<Vec<String>>> = Default::default();
@@ -514,7 +523,8 @@ mod tests {
         let v = crate::typed::testkit::vectors();
         let d = &v["ops"]["Unwrap"]["domains"]["token"]["domain"];
         let cfg = crate::config::ChainCfg { evm_chain_number: d["chainId"].as_str().unwrap().parse().unwrap(), rpc_urls: vec![url],
-            chain_uid: Some(d["salt"].as_str().unwrap().parse().unwrap()), ..Default::default() };
+            chain_uid: Some(d["salt"].as_str().unwrap().parse().unwrap()), account_factory: Some(FACTORY), ua_registry: Some(REGISTRY),
+            dex: Some(DEX), ..Default::default() };
         let tokens = Arc::new(RwLock::new(tokens));
         let (tx, rx) = mpsc::channel(4);
         let gw = GwChain { chain: Arc::new(Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap()),
@@ -532,6 +542,48 @@ mod tests {
         (s, String::from_utf8_lossy(&axum::body::to_bytes(r.into_body(), 4096).await.unwrap()).into_owned())
     }
 
+    /// Door A is not the job API: every entry below would pass the guard on its configured target (the factory, the registry, the
+    /// listed DEX, a bound wallet), and each has no fee for this lane: refused at the door, zero simulations, nothing queued. An
+    /// expired signed deadline stays expired whatever `op.validUntil` says.
+    #[tokio::test]
+    async fn door_a_takes_registered_tokens_only() {
+        let v = crate::typed::testkit::vectors();
+        let d = &v["ops"]["Unwrap"]["domains"]["token"];
+        let token: Address = d["domain"]["verifyingContract"].as_str().unwrap().parse().unwrap();
+        let chain: u64 = d["domain"]["chainId"].as_str().unwrap().parse().unwrap();
+        let until = (now() + 300).to_string();
+        let z = format!("{:#x}", B256::ZERO);
+        let zero = format!("{:#x}", Address::ZERO);
+        let none = json!({"pqzKey": "0x", "pqzPopHash": z, "kem": {"scheme": 0, "mlkemEk": "0x", "x25519": z}, "kemPkHash": z});
+        let deploy = json!({"entry": "deploy", "token": format!("{FACTORY:#x}"), "validUntil": until, "args": {
+            "firstKey": {"kind": 0, "x": z, "y": z, "rpIdHash": z, "originHash": z}, "guardian": zero}});
+        let register = json!({"entry": "register", "token": format!("{REGISTRY:#x}"), "validUntil": until, "args": {
+            "kind": 1, "keyData": "0x", "attrs": none, "pop": "0x", "pqzPop": "0x"}});
+        let settle = json!({"entry": "mtxSettle", "contract": "dex", "token": format!("{DEX:#x}"), "validUntil": until, "args": {"s": []}});
+        let owner = json!({"entry": "mtxExecuteAsOwner", "contract": "wallet", "token": format!("{:#x}", Address::repeat_byte(0x77)),
+            "validUntil": until, "args": {"data": "0x", "nonce": "0", "validUntil": until, "sig": "0x"}});
+        let mut unregistered = crate::typed::testkit::op_of("Unwrap", "token", &v).unwrap();
+        unregistered["token"] = json!(format!("{:#x}", Address::repeat_byte(0x99)));
+        unregistered["validUntil"] = json!(until);
+        for (what, op) in [("deploy", deploy), ("register", register), ("mtxSettle", settle), ("a wallet", owner), ("an unregistered contract", unregistered)] {
+            let (app, mut rx, log) = gateway("0x", vec![token]).await;
+            let (st, body) = post_op_body(app, chain, &op).await;
+            assert_eq!(st, StatusCode::BAD_REQUEST, "{what}: {body}");
+            assert!(body.contains("token not served"), "{what}: {body}");
+            assert!(rx.try_recv().is_err(), "{what}: nothing queued");
+            assert!(log.lock().unwrap().iter().all(|m| m != "eth_estimateGas"), "{what}: zero simulations");
+        }
+        // the signed deadline holds: the vector's `validUntil` passed by now in the envelope below
+        let mut late = crate::typed::testkit::op_of("Unwrap", "token", &v).unwrap();
+        late["envelope"]["validUntil"] = json!((now() - 1).to_string());
+        late["validUntil"] = json!(until);
+        let (app, mut rx, _) = gateway("0x", vec![token]).await;
+        let (st, body) = post_op_body(app, chain, &late).await;
+        assert_eq!(st, StatusCode::BAD_REQUEST, "{body}");
+        assert!(body.contains("expired"), "{body}");
+        assert!(rx.try_recv().is_err());
+    }
+
     /// The pre-check: the positive control queues; one changed thing each: a signature of another op on an account
     /// without code is `BAD_SIGNATURE`, nothing simulated, nothing queued; the same bytes from a contract signer go on to the
     /// simulation (ERC-1271).
@@ -541,8 +593,7 @@ mod tests {
         let d = &v["ops"]["Unwrap"]["domains"]["token"];
         let token: Address = d["domain"]["verifyingContract"].as_str().unwrap().parse().unwrap();
         let chain: u64 = d["domain"]["chainId"].as_str().unwrap().parse().unwrap();
-        let mut op = crate::typed::testkit::op_of("Unwrap", "token", &v).unwrap();
-        op["validUntil"] = json!((now() + 300).to_string());
+        let op = crate::typed::testkit::op_of("Unwrap", "token", &v).unwrap();
         let (app, mut rx, log) = gateway("0x", vec![token]).await;
         let (st, body) = post_op_body(app, chain, &op).await;
         assert_eq!(st, StatusCode::ACCEPTED, "{body}");

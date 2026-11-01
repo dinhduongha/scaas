@@ -12,3 +12,17 @@ restored scaas-node/src/submit.rs
 KILLED dedup-key-follows-the-claim by dedup_by_typed_digest (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 484 filtered out; finished in 0.07s | thread 'submit::tests::dedup_by_typed_digest' (1667301) panicked at src/submit.rs:1629:9: assertion `left == right` failed: one call, one send 
 restored scaas-node/src/submit.rs
 KILLED dedup-no-digest-key by one_digest_is_signed_once (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 484 filtered out; finished in 0.03s | thread 'submit::tests::one_digest_is_signed_once_across_lanes_and_released_on_transient_errors' (1667886) panicked at src/submit.rs:1372:9: 
+## review round, 2026-11-02
+restored scaas-node/src/gateway.rs
+KILLED door-open by door_a_takes_registered_tokens_only (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 493 filtered out; finished in 0.05s | thread 'gateway::tests::door_a_takes_registered_tokens_only' (2062337) panicked at src/gateway.rs:571:13: 
+restored scaas-node/src/guard.rs
+KILLED sig-any-length by a_signature_that_is_not_65_bytes_is_the_contracts (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 493 filtered out; finished in 0.01s | thread 'guard::tests::a_signature_that_is_not_65_bytes_is_the_contracts' (2063959) panicked at src/guard.rs:932:54: called `Result::unwrap()` on an `Err` value: Policy("BAD_SIGNATURE: not 0x0101010101010101010101010101010101010101's over the typed digest 0xa6953c59a5f683a1829fc8e90179e 
+restored scaas-node/src/typed.rs
+KILLED inner-takes-the-fee-recipient by relay_fee_call_object (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 493 filtered out; finished in 0.02s | thread 'typed::tests::relay_fee_call_object' (2065933) panicked at src/typed.rs:1381:13: 
+restored scaas-node/src/adapter.rs
+KILLED generic-runner-digest-only by the_generic_runner_keys_on_the_bytes_too (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 493 filtered out; finished in 0.07s | thread 'submit::tests::the_generic_runner_keys_on_the_bytes_too' (2069593) panicked at src/submit.rs:1602:9: 
+restored scaas-node/src/typed.rs
+KILLED deadline-job-overrides by a_job_deadline_never_outlives_the_signed_one (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 493 filtered out; finished in 0.02s | thread 'typed::tests::a_job_deadline_never_outlives_the_signed_one' (2071548) panicked at src/typed.rs:1307:13: 
+restored scaas-node/src/guard.rs
+KILLED receiver-fee-outer-digest by fill_digest_keeps_the_key_and_what_the_chain_emits_apart (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 493 filtered out; finished in 0.02s | thread 'guard::tests::fill_digest_keeps_the_key_and_what_the_chain_emits_apart' (2072734) panicked at src/guard.rs:909:9: 
+KILLED plain-row-swaps-pop-and-pqzPop by plain_rows_match_the_forge_abi (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished i | register: pop / pqzPop

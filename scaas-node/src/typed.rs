@@ -185,6 +185,10 @@ const PLAIN: &[(&str, &[&str], &str)] = &[
     ("deploy", FACT, "SubjectKey firstKey,address guardian"),
     ("mtxExecuteAsOwner", WA, "bytes data,uint256 nonce,uint256 validUntil,bytes sig"),
     ("mtxExecuteAsOwnerRaw", W, "bytes data,uint256 nonce,uint256 validUntil,bytes sig"),
+    // the wallet's flat builders stay beside the named entries (owner 2026-11-01): the delegate's `MetaTransaction`, its lane
+    // the contract's; `op.struct` = the entry names this overload
+    ("mtxPayUnderMandate", W, "address token,address payee,uint256 amount,bytes32 entryRef,uint64 epoch,uint256 validUntil,bytes sig"),
+    ("mtxRevoke", W, "address token,uint64 epoch,uint256 validUntil,bytes sig"),
     ("register", REG, "uint16 kind,bytes keyData,UAAttrs attrs,bytes pop,bytes pqzPop"),
     ("registerMsig", REG, "MsigStructure structure,UAAttrs attrs,MemberSig[] pop,bytes pqzPop"),
     ("registerWebAuthn", REG, "WebAuthnKey key,UAAttrs attrs,bytes pop,bytes pqzPop"),
@@ -383,7 +387,8 @@ pub fn rows() -> &'static [Row] {
     &ROWS
 }
 
-fn nested(ty: &str) -> Option<&'static Vec<(String, String)>> {
+/// The fields of a nested struct, `(type, name)`.
+pub fn nested(ty: &str) -> Option<&'static Vec<(String, String)>> {
     NESTED_MAP.get(ty)
 }
 
@@ -684,6 +689,8 @@ pub struct Typed {
     pub domain_of: Address,
     /// `None`: a plain entry, no typed digest.
     pub struct_hash: Option<B256>,
+    /// The struct `MetaTransactionExecuted` reports when it is not `struct_hash`: a receiver fee's payment.
+    pub lane_hash: Option<B256>,
     /// `(native signer, 65-byte signature)` when the signature can be checked here; `None`: a derived UA, a member set, a
     /// key of an account.
     pub signer: Option<(Address, Bytes)>,
@@ -696,7 +703,15 @@ pub struct Typed {
 impl Typed {
     /// The typed digest in the salted domain `(name, "1", chainId, domain_of, chain_uid)`, computed here, no chain view.
     pub fn digest_on(&self, chain_id: u64, chain_uid: B256) -> Option<B256> {
-        let h = self.struct_hash?;
+        self.hashed(self.struct_hash?, chain_id, chain_uid)
+    }
+
+    /// The digest the op's lane reports on chain, what `classify` compares: the payment's for a receiver fee.
+    pub fn lane_digest_on(&self, chain_id: u64, chain_uid: B256) -> Option<B256> {
+        self.hashed(self.lane_hash.or(self.struct_hash)?, chain_id, chain_uid)
+    }
+
+    fn hashed(&self, h: B256, chain_id: u64, chain_uid: B256) -> Option<B256> {
         let name = domain_name(self.contract)?;
         let sep = crate::dex::domain(name, chain_id, self.domain_of, chain_uid).separator();
         Some(keccak256([&[0x19, 0x01][..], sep.as_slice(), h.as_slice()].concat()))
@@ -752,7 +767,13 @@ fn find(entry: &str, contract: Option<&str>, name: Option<&str>) -> Result<(&'st
 impl Op {
     /// `op` as job-api.md: the only way a named entry reaches a lane or the gateway.
     pub fn parse(op: &Value, fee_recipient: Option<Address>) -> Result<Self> {
+        if op.is_string() {
+            return Err(hex_refused("op"));
+        }
         let o = op.as_object().ok_or_else(|| anyhow!("BAD_PAYLOAD: op is not an object"))?;
+        if o.get("call").is_some_and(Value::is_string) {
+            return Err(hex_refused("op.call"));
+        }
         for k in o.keys() {
             if matches!(k.as_str(), "data" | "calldata") {
                 bail!("HEX_DATA_REFUSED: op.{k}: name the entry and its fields, the node builds the calldata");
@@ -776,7 +797,9 @@ impl Op {
                 if args.get("target").is_some() || args.get("callDataHash").is_some() {
                     bail!("BAD_PAYLOAD: args.target and args.callDataHash come from op.call");
                 }
-                let c = Op::parse(c, fee_recipient)?;
+                // no `fee_recipient`: the payer hashed these bytes (`callDataHash`), the lane must not rewrite them; an unbound
+                // `relayer` / `feeRecipient` of the inner call goes as 0, which is what the client hashes (job-api.md §5.3)
+                let c = Op::parse(c, None)?;
                 if c.row.relay_fee() {
                     bail!("BAD_PAYLOAD: a relay fee does not relay a relay fee");
                 }
@@ -814,6 +837,10 @@ impl Op {
         };
         let signer = who.as_ref().and_then(word_of).and_then(|w| native(&w)).zip(native_sig);
         let payee = a.vals.get("payment").and_then(|p| at(p, 1)).as_ref().and_then(word_of);
+        let lane_hash = pos(&row.fields, "payment").and_then(|i| {
+            let ty = row.fields[i].0.as_str();
+            Some(hash_tuple(ty, nested(ty)?, a.vals["payment"].as_tuple()?))
+        });
         let lane = if row.enveloped { lane_of(&a.vals) } else { a.vals.get("payment").and_then(payment_lane) };
         if matches!(row.name, "PayUnderMandate" | "DelegateRevoke") {
             mandate_shape(row, &a)?;
@@ -822,7 +849,7 @@ impl Op {
             true => a.vals["underlying"].as_address().expect("address"),
             false => token,
         };
-        let typed = Typed { contract, domain_of, struct_hash: a.struct_hash, signer, payee, digest: None };
+        let typed = Typed { contract, domain_of, struct_hash: a.struct_hash, lane_hash, signer, payee, digest: None };
         Ok(Op { row, to, data: data.into(), typed, lane, valid_until })
     }
 }
@@ -851,15 +878,18 @@ fn payment_lane(p: &Val) -> Option<(B256, U256, U256)> {
     Some((word_of(&t[0])?, t[4].as_uint()?.0, t[5].as_uint()?.0))
 }
 
-/// `op.validUntil` (a job deadline, for entries that carry none), else what the op itself signs; a receiver fee: the sooner.
+/// A job's deadline: what the chain enforces on the op (the envelope, a fee's, the sooner of a receiver fee and its payment)
+/// and `op.validUntil`, the job's own, whichever comes first: a job deadline narrows a signed one, never extends it. A cancel
+/// has no enforced deadline, so its order's `validUntil` is used only when the job names none.
 fn deadline(o: &Map<String, Value>, a: &Assembled) -> Result<u64> {
-    if let Some(v) = o.get("validUntil") {
+    let job = o.get("validUntil").map(|v| {
         let s = v.as_str().ok_or_else(|| anyhow!("BAD_PAYLOAD: op.validUntil is not a string"))?;
-        return Ok(uint(s).map_err(|e| anyhow!("BAD_PAYLOAD: op.validUntil: {e}"))?.saturating_to());
-    }
-    let own = a.vals.get("validUntil").and_then(|v| v.as_uint()).map(|x| x.0);
+        uint(s).map_err(|e| anyhow!("BAD_PAYLOAD: op.validUntil: {e}"))
+    }).transpose()?;
     let nested = |k: &str, i: usize| a.vals.get(k).and_then(|t| t.as_tuple()).and_then(|t| t.get(i)).and_then(|v| v.as_uint()).map(|x| x.0);
-    let t = match (own, nested("payment", 6)) {
+    let own = a.vals.get("validUntil").and_then(|v| v.as_uint()).map(|x| x.0);
+    let enforced = own.into_iter().chain(nested("payment", 6)).min();
+    let t = match (enforced, job) {
         (Some(x), Some(y)) => x.min(y),
         (Some(x), None) | (None, Some(x)) => x,
         (None, None) => nested("order", 12).or(nested("order", 11)).ok_or_else(|| anyhow!("BAD_PAYLOAD: op.validUntil missing"))?,
@@ -992,7 +1022,7 @@ mod tests {
     }
 
     fn typed(contract: &'static str, domain_of: Address, h: B256) -> Typed {
-        Typed { contract, domain_of, struct_hash: Some(h), signer: None, payee: None, digest: None }
+        Typed { contract, domain_of, struct_hash: Some(h), lane_hash: None, signer: None, payee: None, digest: None }
     }
 
     /// Every row and domain of `typed_ops.json`: encodeType, struct hash, digest, entry selector, calldata; the signature
@@ -1027,7 +1057,7 @@ mod tests {
         }
         assert_eq!((structs, domains, calldata), (74, 130, 129), "every row was walked");
         assert_eq!(rows().iter().filter(|r| r.typed).count(), 77, "75 vector rows (Execute twice), the two invalidations");
-        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 18);
+        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 20);
     }
 
     /// One parse, two outputs: every field of every op moves the digest exactly when it moves the bytes sent (an unbound
@@ -1170,9 +1200,23 @@ mod tests {
         assert_eq!(Op::parse(&op, FEE).unwrap().typed.struct_hash, base, "mode 1 does not bind it");
     }
 
-    /// C5 review: pay on `mandatePayLane(ref)`, revoke on `mandateRevokeLane(token, epoch)`, nonce 0.
+    /// C5 review: pay on `mandatePayLane(ref)`, revoke on `mandateRevokeLane(token, epoch)`, nonce 0. The lanes are forge's
+    /// (`mandate_pay_kat.json`, `mandate_revoke_kat.json`: `batch` beside the signed `data`), not this file's formula.
     #[test]
     fn mandate_ops_run_on_their_own_lane_at_nonce_zero() {
+        let kat = |f: &str| -> Value {
+            let p = format!("{}/../smartcontracts/evm/test/vectors/{f}", env!("CARGO_MANIFEST_DIR"));
+            serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
+        };
+        let word = |k: &Value, i: usize| hex(&k["data"])[4 + 32 * i..4 + 32 * (i + 1)].to_vec();
+        let pay = kat("mandate_pay_kat.json");
+        // `payUnderMandate(token, payee, amount, entryRef, epoch)`
+        assert_eq!(mandate_pay_lane(&word(&pay, 3)).to_string(), pay["batch"].as_str().unwrap());
+        let rev = kat("mandate_revoke_kat.json");
+        // `revoke(token, epoch)`
+        let token = Address::from_slice(&word(&rev, 0)[12..]);
+        let epoch = u64::from_be_bytes(word(&rev, 1)[24..].try_into().unwrap());
+        assert_eq!(mandate_revoke_lane(token, epoch).to_string(), rev["batch"].as_str().unwrap());
         let v = vectors();
         let lane_of = |op: &Value| mandate_pay_lane(&hex(&op["args"]["entryRef"])).to_string();
         let mut pay = op_of("PayUnderMandate", "wallet", &v).unwrap();
@@ -1191,6 +1235,106 @@ mod tests {
         Op::parse(&rev, FEE).unwrap();
         rev["args"]["epoch"] = json!((epoch + 1).to_string());
         assert!(Op::parse(&rev, FEE).unwrap_err().to_string().starts_with("MANDATE_LANE"), "another epoch is another lane");
+    }
+
+    /// Owner 2026-11-01: the wallet's four flat builders stay beside the named entries: each builds, `op.struct` picks the
+    /// overload, and the bare name is refused rather than guessed.
+    #[test]
+    fn the_flat_wallet_builders_stay_beside_the_named_entries() {
+        let w = format!("{:#x}", Address::repeat_byte(0x77));
+        let z = format!("{:#x}", Address::ZERO);
+        let s = format!("0x{}", "11".repeat(65));
+        let pay = json!({"entry": "mtxPayUnderMandate", "struct": "mtxPayUnderMandate", "token": w, "args": {"token": z, "payee": z, "amount": "5",
+            "entryRef": format!("{:#x}", B256::repeat_byte(1)), "epoch": "2", "validUntil": "1800000300", "sig": s}});
+        let p = Op::parse(&pay, FEE).unwrap();
+        let cast: [u8; 4] = keccak256("mtxPayUnderMandate(address,address,uint256,bytes32,uint64,uint256,bytes)")[..4].try_into().unwrap();
+        assert_eq!((p.data[..4].try_into().unwrap(), p.lane, p.typed.struct_hash, p.valid_until), (cast, None, None, 1_800_000_300));
+        let mut bare = pay.clone();
+        bare.as_object_mut().unwrap().remove("struct");
+        assert!(Op::parse(&bare, FEE).unwrap_err().to_string().starts_with("ENTRY_AMBIGUOUS"));
+        let rev = json!({"entry": "mtxRevoke", "token": w, "args": {"token": z, "epoch": "2", "validUntil": "1800000300", "sig": s}});
+        let cast: [u8; 4] = keccak256("mtxRevoke(address,uint64,uint256,bytes)")[..4].try_into().unwrap();
+        assert_eq!(Op::parse(&rev, FEE).unwrap().data[..4], cast, "the kill switch path");
+        let raw = json!({"entry": "mtxExecuteAsOwnerRaw", "token": w, "args": {"data": "0x", "nonce": "0", "validUntil": "1800000300", "sig": s}});
+        Op::parse(&raw, FEE).unwrap();
+        let own = json!({"entry": "mtxExecuteAsOwner", "contract": "wallet", "token": w, "args": {"data": "0x", "nonce": "0", "validUntil": "1800000300", "sig": s}});
+        Op::parse(&own, FEE).unwrap();
+    }
+
+    /// forge's digests of the two invalidations, which `typed_ops.json` has no row for: token and DEX domain, the UA form.
+    #[test]
+    fn invalidate_digests_match_the_vectors() {
+        use crate::abi::IToken;
+        let file = |f: &str| -> Value {
+            serde_json::from_str(&std::fs::read_to_string(format!("{}/../smartcontracts/{f}", env!("CARGO_MANIFEST_DIR"))).unwrap()).unwrap()
+        };
+        let digest = |contract: &str, at: &str, chain: u64, uid: &str, data: &Value| -> String {
+            let c = IToken::mtxInvalidateNoncesCall::abi_decode(&hex(data)).unwrap();
+            let op = json!({"entry": "mtxInvalidateNonces", "contract": contract, "token": at,
+                "args": {"from": format!("{:#x}", c.from), "batch": c.batch.to_string(), "minNonce": c.newMin.to_string()},
+                "signature": format!("0x{}", alloy::hex::encode(&c.sig)), "validUntil": "1800000300"});
+            let p = Op::parse(&op, FEE).unwrap();
+            assert_eq!(p.data.to_vec(), hex(data), "the bytes too");
+            format!("{:#x}", p.typed.digest_on(chain, uid.parse().unwrap()).unwrap())
+        };
+        let t = file("evm/test/vectors/trade_kat.json");
+        let chain = |k: &Value| k["chain_id"].as_str().unwrap().parse::<u64>().unwrap();
+        assert_eq!(digest("token", t["verifying_contract"].as_str().unwrap(), chain(&t), t["salt"].as_str().unwrap(), &t["invalidate_calldata"]),
+            t["invalidate_digest"].as_str().unwrap().to_lowercase());
+        let d = file("evm/test/vectors/dex_order_kat.json");
+        assert_eq!(digest("dex", d["dex"].as_str().unwrap(), chain(&d), d["salt"].as_str().unwrap(), &d["invalidate_calldata"]),
+            d["invalidate_digest"].as_str().unwrap().to_lowercase());
+        let u = file("vectors/ua/uatrade_kat.json");
+        let rows_ = u["rows"].as_array().unwrap();
+        assert!(!rows_.is_empty());
+        for r in rows_ {
+            let m = &r["invalidate"]["message"];
+            let op = json!({"entry": "uaInvalidateNonces", "contract": "token", "token": r["invalidate"]["domain"]["verifyingContract"],
+                "args": m, "auth": {"keyData": "0x", "signature": "0x", "members": []}, "validUntil": "1800000300"});
+            let h = Op::parse(&op, FEE).unwrap().typed.digest_on(u["chainId"].as_u64().unwrap(), u["chainUid"].as_str().unwrap().parse().unwrap());
+            assert_eq!(format!("{:#x}", h.unwrap()), r["invalidateDigest"].as_str().unwrap(), "{}", r["name"]);
+        }
+    }
+
+    /// A job deadline narrows what is signed, never extends it; a cancel has none of its own.
+    #[test]
+    fn a_job_deadline_never_outlives_the_signed_one() {
+        let v = vectors();
+        let mut op = op_of("Unwrap", "token", &v).unwrap();
+        let signed = 1_800_000_300u64;
+        for (job, want) in [(signed + 100, signed), (signed - 100, signed - 100)] {
+            op["validUntil"] = json!(job.to_string());
+            assert_eq!(Op::parse(&op, FEE).unwrap().valid_until, want, "{job}");
+        }
+        op.as_object_mut().unwrap().remove("validUntil");
+        assert_eq!(Op::parse(&op, FEE).unwrap().valid_until, signed);
+        let mut fee = op_of("ReceiverFee", "token", &v).unwrap();
+        fee.as_object_mut().unwrap().remove("validUntil");
+        let outer: u64 = fee["args"]["validUntil"].as_str().unwrap().parse().unwrap();
+        fee["args"]["payment"]["validUntil"] = json!((outer + 5).to_string());
+        assert_eq!(Op::parse(&fee, FEE).unwrap().valid_until, outer, "the sooner: the fee's");
+        fee["args"]["payment"]["validUntil"] = json!((outer - 5).to_string());
+        assert_eq!(Op::parse(&fee, FEE).unwrap().valid_until, outer - 5, "the sooner: the payment's");
+        let mut c = op_of("CancelOrder", "token", &v).unwrap();
+        c["validUntil"] = json!((signed + 100).to_string());
+        assert_eq!(Op::parse(&c, FEE).unwrap().valid_until, signed + 100, "the chain enforces no deadline on a cancel");
+    }
+
+    /// `classify` compares what the chain emits: a receiver fee lands as its payment's `MetaTransfer`, not the outer struct.
+    #[test]
+    fn a_receiver_fee_is_recognised_by_its_payment_digest() {
+        let v = vectors();
+        let d = &v["ops"]["ReceiverFee"]["domains"]["token"];
+        let op = op_of("ReceiverFee", "token", &v).unwrap();
+        let p = Op::parse(&op, FEE).unwrap();
+        let (chain, at, uid) = domain_of(d);
+        let wire = v["ops"]["ReceiverFee"]["message"]["payment"].clone();
+        let m = crate::metatx::Mtx::from_wire(None, &wire).unwrap();
+        let dom = crate::metatx::Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id: chain, verifying_contract: at, salt: uid };
+        assert_eq!(p.typed.lane_digest_on(chain, uid), Some(m.digest(&dom)), "the sol! struct, another path");
+        assert_ne!(p.typed.lane_digest_on(chain, uid), p.typed.digest_on(chain, uid), "the in-flight key stays the outer op");
+        let plain = Op::parse(&op_of("Unwrap", "token", &v).unwrap(), FEE).unwrap();
+        assert_eq!(plain.typed.lane_digest_on(chain, uid), plain.typed.digest_on(chain, uid));
     }
 
     /// CTR-MTX-27: `call` is a named op, not hex: the router's calldata carries its bytes, `callDataHash` their hash, and the
@@ -1225,6 +1369,17 @@ mod tests {
             if let Some(c) = c {
                 assert_eq!((c.target, c.callData.to_vec(), c.token), (burn.to, burn.data.to_vec(), token));
             }
+            // the payer hashed the inner bytes: a node's `fee_recipient` leaves them alone
+            let ours = Some(Address::repeat_byte(0x99));
+            let mut open_inner = inner.clone();
+            open_inner["envelope"]["mode"] = json!(0);
+            let hashed = Op::parse(&open_inner, None).unwrap().data;
+            assert_ne!(Op::parse(&open_inner, ours).unwrap().data, hashed, "the control: a top-level op takes the lane's feeRecipient");
+            let mut unbound = op.clone();
+            unbound["call"] = open_inner;
+            let sent = Op::parse(&unbound, ours).unwrap();
+            assert_eq!(sent.data, Op::parse(&unbound, None).unwrap().data, "the relayed bytes do not follow the lane's fee_recipient");
+            assert!(sent.data.windows(hashed.len()).any(|w| w == &hashed[..]), "the router carries the bytes the payer hashed");
             let moved = {
                 let mut o2 = op.clone();
                 o2["call"]["args"]["amount"] = json!("1");
@@ -1241,6 +1396,8 @@ mod tests {
             let mut bad = op.clone();
             bad["call"] = json!({"target": "0x01", "calldata": "0x1234"});
             assert!(Op::parse(&bad, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"));
+            bad["call"] = json!("0x1234");
+            assert!(Op::parse(&bad, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"), "op.call as hex");
         }
     }
 
@@ -1249,11 +1406,13 @@ mod tests {
     fn the_signer_is_found_where_the_row_keeps_it() {
         let v = vectors();
         let key: Address = v["key"]["address"].as_str().unwrap().parse().unwrap();
-        for (name, kind, native_) in [("Unwrap", "token", true), ("UAUnwrap", "token", true), ("CancelOrder", "token", true),
-            ("CancelDexOrder", "dex", true), ("WrapOrder", "token", true), ("UACancelNonce", "token", false), ("AddKey", "account", false)] {
+        let payee: Address = v["ops"]["ReceiverFee"]["message"]["payment"]["to"].as_str().unwrap().parse().unwrap();
+        for (name, kind, who) in [("Unwrap", "token", Some(key)), ("UAUnwrap", "token", Some(key)), ("CancelOrder", "token", Some(key)),
+            ("CancelDexOrder", "dex", Some(key)), ("WrapOrder", "token", Some(key)), ("ReceiverFee", "token", Some(payee)),
+            ("UACancelNonce", "token", None), ("AddKey", "account", None)] {
             let op = op_of(name, kind, &v).unwrap();
             let s = Op::parse(&op, FEE).unwrap_or_else(|e| panic!("{name}: {e:#}")).typed.signer;
-            assert_eq!(s.as_ref().map(|x| x.0), native_.then_some(key), "{name}");
+            assert_eq!(s.as_ref().map(|x| x.0), who, "{name}");
         }
     }
 

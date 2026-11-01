@@ -271,14 +271,14 @@ impl Venue {
         self.chain.address()
     }
 
-    /// The token's kind for a job's typed digest, from its EIP-712 domain (`eip712Domain()`, immutable); an unreadable one
-    /// is `token`: the job's digest is then only a key, the lane's check answers.
-    async fn contract_of(&self, token: Address) -> &'static str {
-        match view(&self.chain, token, IToken::eip712DomainCall {}).await {
-            Ok(d) if d.name == "SCaaS ZetherToken" => "zether",
-            Ok(d) if d.name == "SCaaS PqzToken" => "pqz",
+    /// A SCaaS token's kind for a job's typed digest, from its EIP-712 domain (`eip712Domain()`, immutable). Unreadable is an
+    /// error, never `token`: a seller's cancel under the wrong domain dies `BAD_SIGNATURE` on the lane.
+    async fn contract_of(&self, token: Address) -> std::result::Result<&'static str, VenueError> {
+        Ok(match view(&self.chain, token, IToken::eip712DomainCall {}).await.map_err(down)?.name.as_str() {
+            "SCaaS ZetherToken" => "zether",
+            "SCaaS PqzToken" => "pqz",
             _ => "token",
-        }
+        })
     }
 
     fn kind(&self, token: Address) -> u8 {
@@ -623,13 +623,14 @@ impl Venue {
         if !self.valid_sig(self.verifier(r.sell), r.order.from, digest, &sig).await.map_err(down)? {
             return Err(bad("bad cancel signature"));
         }
+        // before the book moves: an order off the book with no way to close it on chain is the failure to avoid
+        let contract = if kind == KIND_SCAAS { self.contract_of(r.sell).await? } else { "dex" };
         let market_id = book.market_of(r.sell, r.order.receiveToken).map(|m| m.id).unwrap_or_default();
         let mut next = book.clone();
         next.remove(h);
         let mut commit = Commit::default();
         commit.order(market_id, &r, "cancelled");
         self.commit_or_reload(&mut book, next, commit).await?;
-        let contract = self.contract_of(r.sell).await;
         if let Ok(mut q) = self.cancels.lock() {
             if q.allow(r.order.from, now()) {
                 q.pending.push((market_id, r.sell, kind, r.order, sig, contract));
@@ -667,6 +668,7 @@ impl Venue {
             Err(SimError::Revert(r)) if r.starts_with("MinNonceNotIncreasing(") => false,
             Err(e) => return Err(bad(format!("mtxInvalidateNonces refused: {e}"))),
         };
+        let contract = if outside { "dex" } else { self.contract_of(sell).await? };
         let mut next = book.clone();
         let gone = next.drop_below(from, batch, min, &in_scope);
         let mut commit = Commit::default();
@@ -676,7 +678,6 @@ impl Venue {
         let allowed = self.cancels.lock().map(|mut q| q.allow(from, now())).unwrap_or(false);
         if job_needed && allowed {
             let valid_until = (now() + CANCEL_JOB_SECS).to_string();
-            let contract = if outside { "dex" } else { self.contract_of(sell).await };
             commit.jobs.push(json!({"kind": "metatx", "market_id": market_id, "op": invalidate_op(contract, target, from, batch, min, &sig, &valid_until)}));
         }
         self.commit_or_reload(&mut book, next, commit).await?;
@@ -1350,6 +1351,8 @@ mod tests {
         named: HashSet<B256>,
         /// `balanceOf` = 0.
         unfunded: HashSet<Address>,
+        /// The token's `eip712Domain().name`; `None`: it does not answer.
+        domain: Option<&'static str>,
         /// `(from, to, gas)` of every `isValidSignature` call.
         sig_calls: Vec<(Address, Address, u64)>,
         /// `isValidSignature` of this signer answers this JSON-RPC error instead.
@@ -1417,6 +1420,15 @@ mod tests {
                     } else if sel == IToken::balanceOfCall::SELECTOR {
                         let who = IToken::balanceOfCall::abi_decode(&input).unwrap().who;
                         Ok(word(if w.unfunded.contains(&who) { U256::ZERO } else { U256::from(10u64).pow(U256::from(30)) }))
+                    } else if sel == IToken::cancelOrderDigestCall::SELECTOR {
+                        Ok(word(U256::from_be_bytes(oh(&IToken::cancelOrderDigestCall::abi_decode(&input).unwrap().o).0)))
+                    } else if sel == IToken::eip712DomainCall::SELECTOR {
+                        match w.domain {
+                            Some(name) => Ok(hexs(&IToken::eip712DomainCall::abi_encode_returns(&IToken::eip712DomainReturn {
+                                fields: alloy::primitives::FixedBytes([0x1f]), name: name.into(), version: "1".into(), chainId: U256::from(7622),
+                                verifyingContract: to, salt: B256::ZERO, extensions: vec![] }))),
+                            None => revert(vec![]),
+                        }
                     } else if sel == MAGIC_1271 {
                         let gas = u64::from_str_radix(&p[0]["gas"].as_str().unwrap()[2..], 16).unwrap();
                         w.sig_calls.push((from, to, gas));
@@ -1806,6 +1818,28 @@ mod tests {
 
     /// A revert whose words name no leg (an amount, a zero) names nobody: the makers' health and each SCaaS leg's own
     /// pull decide, and the taker fills at the next maker instead of a 503 loop.
+    #[tokio::test]
+    async fn a_cancel_needs_the_token_kind_and_keeps_the_book_without_it() {
+        let maker = PrivateKeySigner::from_bytes(&B256::repeat_byte(0x61)).unwrap();
+        let ask = order(maker.address(), QUOTE, 100, 200, 1);
+        let sig = sig_of(&maker, oh(&ask));
+        let made = || vec![(ask.clone(), sig.clone())];
+        // the fake's cancelOrderDigest is the order hash, so `sig` is a valid cancel signature
+        let (v, _) = venue(World::default(), made()).await;
+        let e = v.cancel(oh(&ask), &hex_of(&sig)).await.unwrap_err();
+        assert!(matches!(e, VenueError::Unavailable(_)), "an unreadable kind is unavailable, never a guess");
+        assert!(in_book(&v.rows().await, &ask), "the order stays: nothing would close it on chain");
+        assert!(v.cancels.lock().unwrap().pending.is_empty());
+        for (name, want) in [("SCaaS MetaToken", "token"), ("SCaaS ZetherToken", "zether"), ("SCaaS PqzToken", "pqz")] {
+            let (v, _) = venue(World { domain: Some(name), ..Default::default() }, made()).await;
+            v.cancel(oh(&ask), &hex_of(&sig)).await.unwrap();
+            assert!(!in_book(&v.rows().await, &ask));
+            let q = v.cancels.lock().unwrap().pending.clone();
+            let jobs = cancel_jobs(DEX, &q);
+            assert_eq!(jobs[0]["op"]["contract"], want, "{name}");
+        }
+    }
+
     #[tokio::test]
     async fn revert_words_that_name_no_leg_are_no_names() {
         let taker = PrivateKeySigner::random();

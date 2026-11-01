@@ -37,3 +37,22 @@ if [ $# -eq 0 ] || [[ "$want" == *" dedup "* ]]; then
   run dedup-key-follows-the-claim scaas-node/src/submit.rs 'alloy::primitives::keccak256([&b"scaas.node.call"[..], self.to.as_slice(), &self.data].concat())' 'self.digest().unwrap_or_default()' dedup_by_typed_digest
   run dedup-no-digest-key scaas-node/src/submit.rs 'if s.contains(&d) || s.contains(&call) {' 'if s.contains(&call) && d == B256::ZERO {' one_digest_is_signed_once
 fi
+# the N1 review round
+if [[ "$want" == *" door "* ]]; then
+  run door-open scaas-node/src/gateway.rs 'if let Err(e) = chain_of(&s, r.chain, w.to) {' 'if let Err(e) = open_chain(&s, r.chain).map(|_| ()) {' door_a_takes_registered_tokens_only
+fi
+if [[ "$want" == *" len "* ]]; then
+  run sig-any-length scaas-node/src/guard.rs 'if sig.len() != 65 {' 'if sig.len() > 65 {' a_signature_that_is_not_65_bytes_is_the_contracts
+fi
+if [[ "$want" == *" inner "* ]]; then
+  run inner-takes-the-fee-recipient scaas-node/src/typed.rs 'let c = Op::parse(c, None)?;' 'let c = Op::parse(c, fee_recipient)?;' relay_fee_call_object
+fi
+if [[ "$want" == *" generic "* ]]; then
+  run generic-runner-digest-only scaas-node/src/adapter.rs '|| adapter.call_key(&j).is_some_and(|c| inflight.contains(&c))' '' the_generic_runner_keys_on_the_bytes_too
+fi
+if [[ "$want" == *" deadline "* ]]; then
+  run deadline-job-overrides scaas-node/src/typed.rs '(Some(x), Some(y)) => x.min(y),' '(Some(_), Some(y)) => y,' a_job_deadline_never_outlives_the_signed_one
+fi
+if [[ "$want" == *" lane "* ]]; then
+  run receiver-fee-outer-digest scaas-node/src/guard.rs 'm.digest = t.lane_digest_on(chain.number, uid);' 'm.digest = t.digest;' fill_digest_keeps_the_key_and_what_the_chain_emits_apart
+fi

@@ -514,10 +514,15 @@ impl Guard {
 
     /// The gateway pre-check, on every path: the local typed digest against a native signature. Recovered to the signer ⇒
     /// good. Recovered to anyone else ⇒ the signer may be a contract (ERC-1271), its simulation answers; an account without
-    /// code is `BAD_SIGNATURE`, nothing simulated or sent. A signer the node cannot read (`signer` None) is the simulation's.
+    /// code is `BAD_SIGNATURE`, nothing simulated or sent. A signer the node cannot read (`signer` None) and any signature that
+    /// is not 65 bytes are the simulation's.
     async fn check_signature(&self, chain: &Chain, w: &Work) -> Result<(), Refusal> {
         let Some(t) = &w.typed else { return Ok(()) };
         let Some((who, sig)) = &t.signer else { return Ok(()) };
+        // 65 bytes only: a 64-byte Hedera account signature (HIP-632, CTR-MTX-25) is no ecrecover input; the contract judges it
+        if sig.len() != 65 {
+            return Ok(());
+        }
         let uid = chain.uid().await.map_err(|e| Refusal::Transport(format!("chain_uid: {e:#}")))?;
         let Some(d) = t.digest_on(chain.number, uid) else { return Ok(()) };
         if typed::recovers(d, sig, *who) {
@@ -631,8 +636,8 @@ impl Guard {
     }
 }
 
-/// The typed digest of `w`, computed here (no chain view: only the cached `chain_uid`): the dedup key. On `w.typed` and, for an
-/// op with a nonce envelope, on `w.meta` (what the `MetaTransactionExecuted` it lands with is compared to).
+/// The typed digest of `w`, computed here (no chain view: only the cached `chain_uid`): the dedup key, on `w.typed`. On `w.meta`
+/// the digest its `MetaTransactionExecuted` will carry: the same, but for a receiver fee, which lands as its payment.
 pub async fn fill_digest(chain: &Chain, w: &mut Work) -> Result<(), SimError> {
     let Some(t) = w.typed.as_mut() else { return Ok(()) };
     if t.digest.is_some() || t.struct_hash.is_none() {
@@ -641,7 +646,7 @@ pub async fn fill_digest(chain: &Chain, w: &mut Work) -> Result<(), SimError> {
     let uid = chain.uid().await.map_err(|e| SimError::Transport(format!("{e:#}")))?;
     t.digest = t.digest_on(chain.number, uid);
     if let Some(m) = &mut w.meta {
-        m.digest = t.digest;
+        m.digest = t.lane_digest_on(chain.number, uid);
     }
     Ok(())
 }
@@ -730,9 +735,10 @@ mod tests {
     use super::*;
     use alloy::sol_types::{SolCall, SolError};
 
-    /// The plain rows' selectors are the `cast sig` of their Solidity signatures and the sol! bindings'; the DEX KAT calldata
-    /// (contract-generated) starts with them and round-trips through the node's own bindings, so a contract signature change
-    /// that `abi.rs` or `typed.rs` does not follow fails here. Every typed row is pinned by `typed_ops_kat_every_entry`.
+    /// The plain rows' selectors are the `cast sig` of their Solidity signatures and the sol! bindings', and the DEX KAT calldata
+    /// (contract-generated) starts with them. Selectors only: same-typed arguments in the wrong order pass here; the names and
+    /// order are pinned against forge's ABI by `plain_rows_match_the_forge_abi` (`tests/e2e.rs`). Every typed row is pinned by
+    /// `typed_ops_kat_every_entry`.
     #[test]
     fn the_plain_rows_are_pinned() {
         use crate::abi::{IMtxRelayFee as R, ISCaaSDex as D, IUARegistry as U};
@@ -770,6 +776,8 @@ mod tests {
         assert_eq!(sel("deploy", "factory"), cast("deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)"));
         assert_eq!(sel("mtxExecuteAsOwner", "wallet"), cast("mtxExecuteAsOwner(bytes,uint256,uint256,bytes)"));
         assert_eq!(sel("mtxExecuteAsOwnerRaw", "wallet"), cast("mtxExecuteAsOwnerRaw(bytes,uint256,uint256,bytes)"));
+        assert_eq!(sel("mtxPayUnderMandate", "wallet"), cast("mtxPayUnderMandate(address,address,uint256,bytes32,uint64,uint256,bytes)"));
+        assert_eq!(sel("mtxRevoke", "wallet"), cast("mtxRevoke(address,uint64,uint256,bytes)"));
         assert_eq!(R::relayCall::SELECTOR, cast("relay(address,bytes,address,address,address,uint256,uint256,bytes)"));
         let ua_sig = "(bytes,bytes,(uint16,bytes,bytes)[])";
         assert_eq!(R::uaRelayCall::SELECTOR, cast(&format!("uaRelay(address,bytes,address,bytes32,bytes32,uint256,uint256,{ua_sig})")));
@@ -851,7 +859,18 @@ mod tests {
             }
         }
         assert_eq!((sent, relayed, refused), (123, 6, 123), "the walk reached every row with an entry; the relay fees: submit.rs");
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 94, "table rows");
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 96, "table rows");
+        // the wallet's flat builders (owner 2026-11-01): allowed on a bound contract, never on a registered token
+        let wallet = Guard::new(&cfg, Default::default()).unwrap();
+        let token = Guard::new(&cfg, Arc::new(RwLock::new(vec![Address::repeat_byte(0x77)]))).unwrap();
+        let (a, s) = (format!("{:#x}", Address::repeat_byte(0x77)), format!("0x{}", "11".repeat(65)));
+        for op in [serde_json::json!({"entry": "mtxPayUnderMandate", "struct": "mtxPayUnderMandate", "token": a, "args": {"token": a, "payee": a, "amount": "5",
+                "entryRef": format!("{:#x}", B256::repeat_byte(1)), "epoch": "2", "validUntil": "1800000300", "sig": s}}),
+            serde_json::json!({"entry": "mtxRevoke", "token": a, "args": {"token": a, "epoch": "2", "validUntil": "1800000300", "sig": s}})] {
+            let (w, _) = crate::submit::work_of_op(Some(1), &op, None).unwrap();
+            wallet.check(&chain, &w).await.unwrap();
+            assert!(matches!(token.check(&chain, &w).await, Err(Refusal::Policy(r)) if r.starts_with("CALL_TARGET_REFUSED")));
+        }
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -861,17 +880,59 @@ mod tests {
             "mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
             "mtxBatch((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],bytes[])",
             "mtxTrade((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes,(uint256,uint256,uint256,address))",
-            "mtxPayUnderMandate(address,address,uint256,bytes32,uint64,uint256,bytes)", "mtxRevoke(address,uint64,uint256,bytes)",
             "mtxWrap(address,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes)",
             "mtxRelayFee(address,address,bytes32,address,uint256,uint256,bytes)",
             "uaRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,bytes,bytes)[]))"] {
             for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory"] {
-                let t = typed::Typed { contract: kind, domain_of: target, struct_hash: None, signer: None, payee: None, digest: None };
+                let t = typed::Typed { contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None };
                 let w = Work { job_id: Some(1), to: target, data: cast(s).into(), valid_until: 0, meta: None, entry: true, typed: Some(t) };
                 let e = g.check(&chain, &w).await.unwrap_err();
                 assert!(matches!(&e, Refusal::Policy(r) if r.starts_with("CALL_TARGET_REFUSED")), "{s} on {kind}: {e:?}");
             }
         }
+    }
+
+    /// Item of the lane, not of `Typed`: after `fill_digest` a receiver fee is keyed by its outer digest and `classify` compares
+    /// the payment's, what the chain emits; an ordinary op has one digest for both.
+    #[tokio::test]
+    async fn fill_digest_keeps_the_key_and_what_the_chain_emits_apart() {
+        use crate::typed::testkit::{op_of, vectors};
+        let v = vectors();
+        let d = &v["ops"]["ReceiverFee"]["domains"]["token"];
+        let uid: B256 = d["domain"]["salt"].as_str().unwrap().parse().unwrap();
+        let (cfg, _) = bound(uid).await;
+        let chain = Chain::with_signer(&cfg, signer()).unwrap();
+        let (mut w, _) = crate::submit::work_of_op(Some(1), &op_of("ReceiverFee", "token", &v).unwrap(), None).unwrap();
+        fill_digest(&chain, &mut w).await.unwrap();
+        let t = w.typed.clone().unwrap();
+        assert_eq!(format!("{:#x}", w.digest().unwrap()), d["digest"].as_str().unwrap(), "the in-flight key: the vector's outer digest");
+        assert_eq!(w.meta.unwrap().digest, t.lane_digest_on(31337, uid), "the job compares the payment's");
+        assert_ne!(w.meta.unwrap().digest, w.digest());
+        let (mut w, _) = crate::submit::work_of_op(Some(1), &op_of("Unwrap", "token", &v).unwrap(), None).unwrap();
+        fill_digest(&chain, &mut w).await.unwrap();
+        assert_eq!(w.meta.unwrap().digest, w.digest());
+    }
+
+    /// A 64-byte Hedera signature (HIP-632, CTR-MTX-25) on a codeless account is the contract's to judge; the same account with a
+    /// wrong 65-byte one is `BAD_SIGNATURE` (the control), and no code is read for the 64 bytes.
+    #[tokio::test]
+    async fn a_signature_that_is_not_65_bytes_is_the_contracts() {
+        let uid = B256::repeat_byte(0x24);
+        let (cfg, seen) = bound(uid).await;
+        let chain = Chain::with_signer(&cfg, signer()).unwrap();
+        let token = Address::repeat_byte(0x31);
+        let g = Guard::new(&cfg, Arc::new(RwLock::new(vec![token]))).unwrap();
+        let t = crate::metatx::MetaTransfer { from: Address::repeat_byte(1), to: Address::repeat_byte(2), value: alloy::primitives::U256::from(1),
+            entryRef: B256::ZERO, batch: alloy::primitives::U256::ZERO, nonce: alloy::primitives::U256::ZERO,
+            validUntil: alloy::primitives::U256::from(4_000_000_000u64), mode: 0, relayer: Address::ZERO, fee: alloy::primitives::U256::ZERO, feeRecipient: Address::ZERO };
+        let m = Mtx::Transfer(t);
+        let work = |sig: Vec<u8>| Work { job_id: Some(1), to: token, data: m.calldata(sig.clone().into()), valid_until: 4_000_000_000,
+            meta: Some(crate::submit::MetaRef::of(token, &m, None)), entry: false,
+            typed: Some(crate::submit::transfer_typed(None, token, m.struct_hash(), Some((m.from(), sig.into()))).unwrap()) };
+        g.check(&chain, &work(vec![0xab; 64])).await.unwrap();
+        assert!(seen.lock().unwrap().iter().all(|c| c != "eth_getCode"), "64 bytes: not even a code read");
+        let e = g.check(&chain, &work(vec![0xab; 65])).await.unwrap_err();
+        assert!(matches!(&e, Refusal::Policy(r) if r.starts_with("BAD_SIGNATURE")), "{e:?}");
     }
 
     /// A job that is neither a named entry nor a transfer never runs; a transfer struct's selector is the transfer's.

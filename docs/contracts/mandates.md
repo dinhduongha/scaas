@@ -120,8 +120,8 @@ How a client system uses mandates (the reference ERP implements it; the contract
   state, kill switch) creates exactly one run per (policy, invoice, event) under a uniqueness constraint, so a retry
   never pays twice; it checks the caps, takes the payee from the issuing company's approved receiving wallet on the
   same chain and token, and then follows **the manual payment path**: custodial signs the meta-tx through the
-  adapter, delegated signs the `payUnderMandate` `MetaTransaction` (with the current `epoch(token)`) and pushes a `call` job to `MandateWallet.mtxPayUnderMandate`. Every signature
+  adapter, delegated signs the `payUnderMandate` `MetaTransaction` (with the current `epoch(token)`) and pushes a `call` job naming the flat `MandateWallet.mtxPayUnderMandate` (`op`, [named entries](../node/job-api.md#named-entries)), or a `metatx` job naming the typed `PayUnderMandate` on `mandatePayLane(entryRef)`, nonce 0. Every signature
   passes the signing-policy checks (target token, `pay` op, caps, `validUntil − now ≤ 300 s`; the signing-policy service, `SigningPolicyService`, applies `validUntil ≤ 300 s`). A failure marks the
-  run `failed` and is raised, never silent; the kill switch also queues a `mtxRevoke` job for delegated wallets. The node executes such `call` jobs only for
-  allowlisted selectors and targets ([NODE-JOB-01](../node/job-api.md#NODE-JOB-01)), so it is never a "blind signer" of
+  run `failed` and is raised, never silent; the kill switch also queues a `mtxRevoke` job for delegated wallets (the flat builder, which stays beside the named entries, owner 2026-11-01; `mtxDelegateRevoke` on `mandateRevokeLane(token, epoch)`, nonce 0, is the named form). The node builds such calls itself from named fields, only for
+  allowlisted entries and targets ([NODE-JOB-01](../node/job-api.md#NODE-JOB-01)), so it is never a "blind signer" of
   client-built calldata.

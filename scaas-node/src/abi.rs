@@ -159,6 +159,9 @@ sol! {
     #[derive(Debug)]
     interface IToken {
         function mtxNonce(address from, uint256 batch) external view returns (uint256);
+        /// The chain's own digests: a live oracle for the local ones (`tests/e2e.rs`); the node reads neither to run a job.
+        function mtxDigest(MetaTransaction m) external view returns (bytes32);
+        function mtxTransferDigest(MetaTransfer t) external view returns (bytes32);
         function mtxExecute(MetaTransaction m, bytes signature) external returns (bytes);
         function mtxExecuteTransfer(MetaTransfer t, bytes signature) external returns (bool);
         /// CTR-MTX-26 (`IMetaTokenV2`): `mtxPay` with `payId = metaPayId(salt, meta)`; `PaymentMeta` first.
@@ -232,6 +235,7 @@ sol! {
     interface IUALedger {
         function registry() external view returns (address);
         function uaNonce(bytes32 ua, uint256 batch) external view returns (uint256);
+        function uaTransferDigest(UAMetaTransfer t) external view returns (bytes32);
         function uaExecute(UAMetaTransaction m, bytes auth) external returns (bytes);
         function uaExecuteTransfer(UAMetaTransfer t, UASig auth) external returns (bool);
         /// CTR-MTX-26 (`IMetaTokenV2`): `uaPay` with `payId = metaPayId(salt, meta)`; `PaymentMeta` first.

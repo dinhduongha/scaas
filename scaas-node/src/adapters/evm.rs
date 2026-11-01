@@ -95,6 +95,11 @@ impl ChainAdapter for EvmAdapter {
         work_from_job(job, self.fee_recipient).is_ok_and(|w| guard::already_invalidated(&w.data, reason))
     }
 
+    fn call_key(&self, job: &Job) -> Option<B256> {
+        let w = work_from_job(job, self.fee_recipient).ok()?;
+        w.typed.as_ref()?.struct_hash.map(|_| w.call_key())
+    }
+
     async fn digest(&self, job: &Job) -> std::result::Result<Option<B256>, SimError> {
         let Ok(mut w) = work_from_job(job, self.fee_recipient) else { return Ok(None) };
         let chain = self.lane(0).map_err(|e| SimError::Transport(e.to_string()))?;

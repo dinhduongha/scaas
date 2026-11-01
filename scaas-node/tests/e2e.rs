@@ -420,6 +420,11 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
         batch: U256::from(batch), nonce: U256::ZERO, validUntil: U256::from(now() + 300), mode: 0, relayer: Address::ZERO,
         fee: U256::ZERO, feeRecipient: Address::ZERO });
     let bad = call(IToken::transferCall { to: Address::repeat_byte(0x7e), value: U256::from(1u64) }.abi_encode(), 5);
+    // the node reads no digest from a contract any more, so the contract checks the local ones here, on the live token
+    let Mtx::Call(ref as_call) = bad else { unreachable!() };
+    assert_eq!(view(&rpc, token, IToken::mtxDigestCall { m: as_call.clone() }).await, bad.digest(&d), "mtxDigest");
+    let Mtx::Transfer(ref as_transfer) = m else { unreachable!() };
+    assert_eq!(view(&rpc, token, IToken::mtxTransferDigestCall { t: as_transfer.clone() }).await, m.digest(&d), "mtxTransferDigest");
     let good = json!({"id": 6, "kind": "metatx", "op": signed_op(&payer, cancel_op(payer.address(), token, 99, 6), chain_id, d.salt)});
     state.lock().unwrap().jobs.extend([job(5, token, &bad, "0x", sign(&payer, &d, &bad)), good]);
     s.poll_outbox().await;
@@ -471,7 +476,9 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
         .await.unwrap();
     assert_eq!(Address::abi_decode(&out).unwrap(), router.create(1), "the executor the node derives (never paid)");
     let inner = signed_op(&payer, cancel_op(payer.address(), token, 77, 8), chain_id, d.salt);
-    let r = scaas_node::metatx::relay_ref(chain_id, token, &scaas_node::typed::Op::parse(&inner, None).unwrap().data);
+    let parsed = scaas_node::typed::Op::parse(&inner, None).unwrap();
+    let r = scaas_node::metatx::relay_ref(chain_id, token, &parsed.data);
+    let inner_digest = parsed.typed.digest_on(chain_id, d.salt).unwrap();
     let relay = signed_op(&payer, json!({"entry": "mtxRelayFee", "contract": "token", "token": format!("{token:#x}"), "call": inner,
         "args": {"from": format!("{:#x}", payer.address()), "payee": format!("{router:#x}"), "value": "10",
             "validUntil": (now() + 300).to_string(), "relayer": format!("{router:#x}")}}), chain_id, d.salt);
@@ -501,6 +508,8 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     while scaas_node::indexer::step(&ichain, &odoo, Some(router)).await.unwrap() {}
     let ingested = state.lock().unwrap().ingested.clone();
     assert!(ingested.iter().all(|e| e["event"] != "RelayFeePaid"), "never a row");
+    assert!(ingested.iter().any(|e| e["event"] == "MetaTransactionExecuted" && e["digest"] == format!("{inner_digest:#x}")),
+        "the chain emitted the named entry's digest as the node computed it");
     let fee = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{r:#x}")).expect("fee settled");
     assert_eq!((fee["relay_target"].as_str(), fee["relay_payee"].as_str()),
         (Some(format!("{token:#x}").as_str()), Some(format!("{:#x}", relayer.address()).as_str())));
@@ -532,6 +541,52 @@ fn sign_hash(signer: &PrivateKeySigner, h: B256) -> String {
 }
 
 /// A `TradeOrder` on the venue's DEX: sells `amount` for at least `receive_amount` of `receive`, home-bound to the lane.
+/// The plain rows against forge's ABI: names and order of every argument and nested field, which a selector cannot pin
+/// (`pop` / `pqzPop` swapped keep it). Reads `out/`: the deploy of any other test here builds it.
+#[test]
+#[ignore]
+fn plain_rows_match_the_forge_abi() {
+    use scaas_node::typed::{nested, rows};
+    fn same(inputs: &[Value], fields: &[(String, String)], at: &str) {
+        assert_eq!(inputs.len(), fields.len(), "{at}");
+        for (i, (ty, name)) in inputs.iter().zip(fields) {
+            let abi = i["type"].as_str().unwrap();
+            // `SmartKeyAccount.mtxExecuteAsOwner` calls its last argument `signature`, the wallet `sig`: one row, the position counts
+            let abi_name = i["name"].as_str().unwrap().trim_end_matches('_');
+            assert!(abi_name == name || (abi_name == "signature" && name == "sig"), "{at}: {abi_name} / {name}");
+            let base = ty.trim_end_matches("[]");
+            match nested(base) {
+                Some(f) => {
+                    assert_eq!(abi.trim_start_matches("tuple"), &ty[base.len()..], "{at}.{name}");
+                    same(i["components"].as_array().unwrap(), f, &format!("{at}.{name}"));
+                }
+                None => assert_eq!(abi, ty, "{at}.{name}"),
+            }
+        }
+    }
+    let mut n = 0;
+    for r in rows().iter().filter(|r| !r.typed) {
+        for c in r.contracts {
+            let art = match (*c, r.entry) {
+                ("dex", _) => "ISCaaSDex",
+                ("registry", _) => "IUARegistry",
+                ("factory", _) => "SmartKeyAccountFactory",
+                ("account", _) => "SmartKeyAccount",
+                ("wallet", "mtxExecuteAsOwnerRaw") => "HederaMandateWallet",
+                _ => "MandateWallet",
+            };
+            let p = format!("{}/../smartcontracts/evm/out/{art}.sol/{art}.json", env!("CARGO_MANIFEST_DIR"));
+            let v: Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{p}: {e} (forge build)"))).unwrap();
+            let f = v["abi"].as_array().unwrap().iter()
+                .find(|f| f["type"] == "function" && f["name"] == r.entry && f["inputs"].as_array().unwrap().len() == r.fields.len())
+                .unwrap_or_else(|| panic!("{art}.{} with {} arguments", r.entry, r.fields.len()));
+            same(f["inputs"].as_array().unwrap(), &r.fields, r.entry);
+            n += 1;
+        }
+    }
+    assert_eq!(n, 21, "20 rows, mtxExecuteAsOwner on two contracts");
+}
+
 /// A named `mtxCancelNonce(lane)` of `from` on `token`, fee 0, open relayer.
 fn cancel_op(from: Address, token: Address, lane: u64, batch: u64) -> Value {
     let z = format!("{:#x}", Address::ZERO);
@@ -1237,6 +1292,7 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
         nonce: U256::ZERO, validUntil: U256::from(now() + 300), mode: MODE_RESTRICT_RELAYER, relayer: relayer.address(),
         fee: U256::ZERO, feeRecipient: Address::ZERO };
     let m = UaMtx::Transfer(t.clone());
+    assert_eq!(view(&rpc, token, IUALedger::uaTransferDigestCall { t }).await, m.digest(&d), "uaTransferDigest");
     let mut j = ua_job(1, &m, &ua_auth(&rpc, registry, &owner, b"scaas.ua.purpose.metatx.v1", m.digest(&d)).await);
     (j["salt"], j["meta"]) = (json!(format!("{salt:#x}")), json!(format!("0x{}", alloy::hex::encode(&meta))));
     state.lock().unwrap().jobs.push(j);

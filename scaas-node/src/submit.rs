@@ -209,7 +209,7 @@ pub fn work_from_job(job: &Job, fee_recipient: Option<Address>) -> Result<Work> 
     if job.receiver_fee.is_some() {
         anyhow::bail!("receiver-pays (receiver_fee) goes as the named entry mtxPayReceiverFee / uaPayReceiverFee; refused, never relayed without it");
     }
-    if job.call.is_some() {
+    if job.call.is_some() || job.calldata.is_some() || job.data.is_some() {
         return Err(hex_refused("call"));
     }
     if job.struct_.as_deref() == Some("call") {
@@ -248,7 +248,7 @@ pub fn transfer_typed(contract: Option<&str>, token: Address, struct_hash: B256,
         "pqz" => "pqz",
         c => anyhow::bail!("BAD_PAYLOAD: contract {c:?} (token | zether | pqz)"),
     };
-    Ok(Typed { contract, domain_of: token, struct_hash: Some(struct_hash), signer, payee: None, digest: None })
+    Ok(Typed { contract, domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer, payee: None, digest: None })
 }
 
 /// A named entry: everything comes out of one [`Op::parse`]; a job carries it or a transfer struct, never both.
@@ -686,7 +686,7 @@ impl Submitter {
         let Ok(mut w) = work_from_job(job, self.cfg.fee_recipient) else { return false };
         // an unreadable chain_uid: not known to be held, the submit path answers for it
         let _ = guard::fill_digest(&self.chain, &mut w).await;
-        w.digest().is_some_and(|d| self.digests.contains(&d)) || (w.typed.is_some() && self.digests.contains(&w.call_key()))
+        w.digest().is_some_and(|d| self.digests.contains(&d) || self.digests.contains(&w.call_key()))
     }
 
     pub fn inflight_count(&self) -> usize {
@@ -1507,6 +1507,12 @@ pub(crate) mod tests {
         hexarg["args"]["data"] = json!("0x1234");
         refused(json!({"id": 1, "kind": "metatx", "op": hexarg}), "op.args.data");
         refused(json!({"id": 1, "kind": "call", "call": {"target": format!("{TOKEN:#x}"), "calldata": "0x1234", "validUntil": "1"}}), "call");
+        refused(json!({"id": 1, "kind": "call", "calldata": "0x1234"}), "top-level calldata");
+        refused(json!({"id": 1, "kind": "metatx", "data": "0x1234"}), "top-level data");
+        refused(json!({"id": 1, "kind": "metatx", "op": "0x1234"}), "op as hex");
+        let mut hexcall = op.clone();
+        hexcall["call"] = json!("0x1234");
+        refused(json!({"id": 1, "kind": "metatx", "op": hexcall}), "op.call as hex");
         let mut m = job(7);
         m["metatx"]["data"] = json!("0x1234");
         refused(m, "metatx.data");
@@ -1568,6 +1574,36 @@ pub(crate) mod tests {
             }
         }
         assert_eq!(n, 123, "every row with an entry, but the relay fees (relay_fee_call_object)");
+    }
+
+    /// The generic lane runner (Hedera) holds the bytes too: a job whose call flies under another claimed `contract` is skipped
+    /// before the claim; the same job with the set free is claimed (the control); a plain entry has no key of its own.
+    #[tokio::test]
+    async fn the_generic_runner_keys_on_the_bytes_too() {
+        use crate::adapter::ChainAdapter;
+        let ua = |contract: &str| -> Value {
+            json!({"id": 9, "kind": "ua_metatx", "op": {"entry": "uaBurn", "contract": contract, "token": format!("{TOKEN:#x}"), "args": {"amount": "5"},
+                "envelope": {"from": format!("{UA:#x}"), "batch": "9", "nonce": "0", "validUntil": "4000000000", "mode": 0,
+                    "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)},
+                "auth": {"keyData": "0x", "signature": format!("0x{}", "22".repeat(96)), "members": []}}})
+        };
+        let (url, _) = fake_evm(Evm { ua_nonce: Some(0), ..Default::default() }).await;
+        let cfg = test_cfg(&url);
+        let chain = Chain::with_signer(&cfg, PrivateKeySigner::from_bytes(&B256::repeat_byte(1)).unwrap()).unwrap();
+        let a = crate::adapters::evm::EvmAdapter::new(&cfg, vec![chain], Arc::new(std::sync::RwLock::new(vec![TOKEN]))).unwrap();
+        let of = |j: Value| serde_json::from_value::<Job>(j).unwrap();
+        let w = work_from_job(&of(ua("token")), None).unwrap();
+        assert_eq!(a.call_key(&of(ua("pqz"))), Some(w.call_key()), "the claim moves the digest, not the bytes");
+        assert_eq!(a.call_key(&of(deploy_job(9, TOKEN))), None, "no typed digest, no key");
+        let held = InflightSet::default();
+        let _flying = held.try_acquire_op(B256::repeat_byte(0x71), w.call_key()).unwrap();
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![ua("pqz")], tokens: toks(), ..Default::default() }).await;
+        crate::adapter::step_once(&a, &odoo, 0, "n#0", None, &held).await.unwrap();
+        assert_eq!(o.lock().unwrap().claims, 0, "skipped before the claim");
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![ua("pqz")], tokens: toks(), ..Default::default() }).await;
+        // the claimed job goes on to wait for a receipt the fake never gives: only the claim is this test's
+        let _ = tokio::time::timeout(Duration::from_secs(2), crate::adapter::step_once(&a, &odoo, 0, "n#0", None, &InflightSet::default())).await;
+        assert_eq!(o.lock().unwrap().claims, 1, "the control");
     }
 
     /// A fixed op (its `validUntil` does not follow the clock, so two calls are one digest).
@@ -2255,7 +2291,7 @@ pub(crate) mod tests {
     }
 
     /// The lane relays a `ua_metatx` job like a `metatx` one: the guard first (a registered token whose UA ledger is
-    /// on), the token's own `uaTransferDigest` as the in-flight key, the simulated `uaExecuteTransfer`; a refused
+    /// on), the typed digest computed here as the in-flight key, the simulated `uaExecuteTransfer`; a refused
     /// simulation whose UA nonce is spent (`uaNonce(id, batch) > nonce`) is `consumed`, never `dead`.
     #[tokio::test]
     async fn ua_metatx_job_relays_and_a_spent_ua_nonce_is_consumed() {

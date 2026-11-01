@@ -89,9 +89,14 @@ pub struct Job {
     pub struct_: Option<String>,
     #[serde(default)]
     pub metatx: Option<Value>,
-    /// The refused hex `call: {target, calldata, validUntil}` (typed-signing N1): read only to name the refusal.
+    /// The refused hex fields (typed-signing N1), read only to name the refusal: `call: {target, calldata, validUntil}`, a
+    /// top-level `calldata` or `data`.
     #[serde(default)]
     pub call: Option<Value>,
+    #[serde(default)]
+    pub calldata: Option<Value>,
+    #[serde(default)]
+    pub data: Option<Value>,
     /// The contract kind of a `metatx` / `ua_metatx` struct job (`token`, `zether`, `pqz`; absent = `token`): its typed digest's
     /// domain name. An `op` names its own.
     #[serde(default)]
