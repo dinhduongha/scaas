@@ -212,7 +212,7 @@ fn p256k(seed: u8) -> p256::ecdsa::SigningKey {
 pub(crate) fn ml(seed: u8) -> Sk {
     Sk::Ml(std::boxed::Box::new(ml_dsa::SigningKey::from_seed(&ml_dsa::Seed::from([seed; 32]))))
 }
-fn k1(seed: u8) -> k256::ecdsa::SigningKey {
+pub(crate) fn k1(seed: u8) -> k256::ecdsa::SigningKey {
     k256::ecdsa::SigningKey::from_bytes(&[seed; 32].into()).unwrap()
 }
 

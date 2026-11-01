@@ -55,7 +55,9 @@ const DAY: u32 = 17_280;
 const TTL_MIN: u32 = 30 * DAY;
 const TTL_BUMP: u32 = 60 * DAY;
 
-/// Persistent, one entry per key (S11); `Relayers` is the only instance entry. `Signer(ua)` holds the kind and key
+/// Persistent, one entry per key (S11); `Relayers` is the only instance entry. `Key(kh)` is the key of a `Chain` kind's
+/// record, `KeyR(kh)` of a relayer-checked one: the chain proved nothing of a marked record, so it never blocks a `Chain`
+/// kind (a relayer kind checks both, a `Chain` kind only `Key`). `Signer(ua)` holds the kind and key
 /// data of a `signable` record, read alone by `require_authorized` and by `msig` member checks, so a check never loads
 /// a record's `pop` (msig-pophash I1: a member with a large `pop` costs what any other member costs). `PqzK(ua)` =
 /// `(key, sig, Checked, pqz_pop_hash)`, `PqzP(ua)` = the proof bytes, `Kem(ua, version)` = `(pk, sig, Checked)`,
@@ -67,6 +69,7 @@ pub(crate) enum Key {
     Relayers,
     Ua(BytesN<32>),
     Key(BytesN<32>),
+    KeyR(BytesN<32>),
     List(u32, u32),
     Count(u32),
     Signer(BytesN<32>),
@@ -628,7 +631,7 @@ fn webauthn_key_data(env: &Env, key: &WebAuthnKey) -> Bytes {
 /// from the submitter (CTR-UA-07). The PQZ key and proof and the KEM key stay in state (`PqzK`, `PqzP`, `Kem(ua, 0)`),
 /// unproven (U8S-D3, U8S-D6: no verifier, no `Key` entry); the events carry hashes (U8S-D4). The `pop` of a relayer-checked
 /// kind, and an `msig` slot the chain cannot verify, is `attest`ed instead; the `pop`'s `Checked` marks the attributes it
-/// signed too; such a kind is never `signable` (U8S-D8, P11.5).
+/// signed too; such a kind is never `signable` and keeps its key in `KeyR` (U8S-D8, P11.5).
 #[allow(clippy::too_many_arguments)]
 fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: Bytes, members: Vec<MemberSig>, pqz_pop: Bytes, relayer: &Option<Address>) -> BytesN<32> {
     if ![WEBAUTHN_P256, P256, ED25519, SECP256K1, MSIG, MLDSA44, MLDSA65].contains(&kind) && !relayer_checked(kind) {
@@ -644,7 +647,7 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
     }
     let kh = key_hash(env, kind, &key_data);
     if let Some(kh) = &kh {
-        if has(env, &Key::Key(kh.clone())) {
+        if has(env, &Key::Key(kh.clone())) || (relayer_checked(kind) && has(env, &Key::KeyR(kh.clone()))) {
             fail(env, Error::KeyInUse);
         }
     }
@@ -671,7 +674,7 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
     put(env, &Key::List(kind, index), &ua);
     put(env, &Key::Count(kind), &(index + 1));
     if let Some(kh) = kh {
-        put(env, &Key::Key(kh), &ua);
+        put(env, &if relayer_checked(kind) { Key::KeyR(kh) } else { Key::Key(kh) }, &ua);
     }
     if signable {
         put(env, &Key::Signer(ua.clone()), &(kind, key_data.clone()));
@@ -990,8 +993,9 @@ impl UaRegistry {
         get(&env, &Key::Ua(ua))
     }
 
+    /// The UA holding a key: a record of a `Chain` kind before a marked one (`KeyR`).
     pub fn key_owner(env: Env, key_hash: BytesN<32>) -> Option<BytesN<32>> {
-        get(&env, &Key::Key(key_hash))
+        get(&env, &Key::Key(key_hash.clone())).or_else(|| get(&env, &Key::KeyR(key_hash)))
     }
 
     pub fn ua_of(env: Env, kind: u32, key_data: Bytes) -> BytesN<32> {

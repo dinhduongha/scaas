@@ -1,0 +1,34 @@
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry
+test result: ok. 128 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 27.67s
+rc=0
+$ CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban
+== test soroban
+     Running unittests src/lib.rs (target/debug/deps/scaas_dex-7068acbd67a99c46)
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.06s
+     Running unittests src/lib.rs (target/debug/deps/scaas_mandate-a1aee3bee4707973)
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.16s
+     Running unittests src/lib.rs (target/debug/deps/scaas_relay_executor-bad4d0d6468963df)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/lib.rs (target/debug/deps/scaas_relay_fee-6360ea88c0e5227b)
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.68s
+     Running unittests src/lib.rs (target/debug/deps/scaas_smart_key_account-b312b7c5707f177a)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+     Running unittests src/lib.rs (target/debug/deps/scaas_token-6c586c645c90f0e4)
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.86s
+     Running unittests src/lib.rs (target/debug/deps/scaas_ua_common-4655ed0507a585d4)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/lib.rs (target/debug/deps/scaas_ua_registry-dbecadbefa297ecc)
+test result: ok. 128 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 31.14s
+rc=0
+$ scripts/capped smartcontracts/scripts/build.sh soroban
+    Wasm File: target/wasm32v1-none/release/scaas_dex.wasm (14694 bytes optimized (original size was 18122 bytes))
+    Wasm File: target/wasm32v1-none/release/scaas_token.wasm (26651 bytes optimized (original size was 31198 bytes))
+    Wasm File: target/wasm32v1-none/release/scaas_ua_registry.wasm (49317 bytes optimized (original size was 56399 bytes))
+    Wasm File: target/wasm32v1-none/release/scaas_mandate.wasm (16554 bytes optimized (original size was 19087 bytes))
+    Wasm File: target/wasm32v1-none/release/scaas_relay_executor.wasm (1187 bytes optimized (original size was 1316 bytes))
+    Wasm File: target/wasm32v1-none/release/scaas_relay_fee.wasm (7630 bytes optimized (original size was 8585 bytes))
+    Wasm File: target/wasm32v1-none/release/scaas_smart_key_account.wasm (10529 bytes optimized (original size was 11975 bytes))
+rc=0
+$ smartcontracts/soroban/scripts/check-registry-interface.sh smartcontracts/soroban/target/wasm32v1-none/release/scaas_ua_registry.wasm
+registry interface: ok
+rc=0

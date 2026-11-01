@@ -1680,7 +1680,8 @@ fn ua8_relayer_group_kinds_typed() {
 
 /// EVM's typed rules: another kind, a point of the wrong length, a member without `threshold` commitments; a value its `u16`
 /// cannot hold is `KeyData`, no truncated id. Every refused key differs from a good one in that alone, and the good one
-/// registers.
+/// registers. All but the kind run on the `ua_of_*` views, which have no layout check: `register_*`'s `check_key_data` would
+/// refuse most of these without the assembly's own rule.
 #[test]
 fn ua8_relayer_group_typed_rules() {
     let valid = valid_rows();
@@ -1692,15 +1693,16 @@ fn ua8_relayer_group_typed_rules() {
     for kind in [0x0111, 0x0113, 0x0131, 0x0120] {
         assert_eq!(refused(kind, &good), Error::KeyData, "{kind:#x}");
     }
-    assert_eq!(refused(0x0110, &MuSig2Key { agg_key: b(&env, &[2; 32]), ..good.clone() }), Error::KeyData);
+    let view = |k: &MuSig2Key| err(c.try_ua_of_musig2(&0x0110, k));
+    assert_eq!(view(&MuSig2Key { agg_key: b(&env, &[2; 32]), ..good.clone() }), Error::KeyData);
     let mut long = good.clone();
     long.member_keys.set(0, b(&env, &[2; 34]));
-    assert_eq!(refused(0x0110, &long), Error::KeyData);
+    assert_eq!(view(&long), Error::KeyData);
     let mut many = good.clone();
     while many.member_keys.len() < 17 {
         many.member_keys.push_back(good.agg_key.clone());
     }
-    assert_eq!(err(c.try_ua_of_musig2(&0x0110, &many)), Error::KeyData, "the view has no layout check of its own");
+    assert_eq!(view(&many), Error::KeyData);
     assert_eq!(c.try_register_musig2(&0x0110, &good, &attrs, &pop, &none, &by).unwrap().unwrap(), n32(&env, &row(0x0110)["ua"]));
 
     let good = frost_of(&env, &hx(&row(0x0111)["keyData"]), 33);
@@ -1710,12 +1712,13 @@ fn ua8_relayer_group_typed_rules() {
     }
     let no_members = SVec::new(&env);
     let wide = FrostKey { threshold: 0x1_0002, members: no_members, ..good.clone() };
-    assert_eq!(err(c.try_ua_of_frost(&0x0111, &wide)), Error::KeyData, "no id of a truncated threshold");
+    let view = |k: &FrostKey| err(c.try_ua_of_frost(&0x0111, k));
+    assert_eq!(view(&wide), Error::KeyData, "no id of a truncated threshold");
     let mut many = good.clone();
     while many.members.len() < 17 {
         many.members.push_back(good.members.get(0).unwrap());
     }
-    assert_eq!(err(c.try_ua_of_frost(&0x0111, &many)), Error::KeyData, "the view has no layout check of its own");
+    assert_eq!(view(&many), Error::KeyData);
     let edit = |f: fn(&mut FrostMember, &Env)| {
         let mut k = good.clone();
         let mut m = k.members.get(0).unwrap();
@@ -1723,9 +1726,9 @@ fn ua8_relayer_group_typed_rules() {
         k.members.set(0, m);
         k
     };
-    assert_eq!(refused(0x0111, &edit(|m, _| { m.commitments.pop_back(); })), Error::KeyData, "a commitment short");
-    assert_eq!(refused(0x0111, &edit(|m, e| m.r = b(e, &[2; 32]))), Error::KeyData);
-    assert_eq!(refused(0x0111, &edit(|m, e| m.commitments.set(0, b(e, &[2; 32])))), Error::KeyData);
+    assert_eq!(view(&edit(|m, _| { m.commitments.pop_back(); })), Error::KeyData, "a commitment short");
+    assert_eq!(view(&edit(|m, e| m.r = b(e, &[2; 32]))), Error::KeyData);
+    assert_eq!(view(&edit(|m, e| m.commitments.set(0, b(e, &[2; 32])))), Error::KeyData);
     assert_eq!(c.try_register_frost(&0x0111, &good, &attrs, &pop, &none, &by).unwrap().unwrap(), n32(&env, &row(0x0111)["ua"]));
 }
 
@@ -1756,8 +1759,8 @@ fn ua8_relayer_key_data_layout() {
     assert_eq!((layout, canonical), (55, 75));
 }
 
-/// `keyHash` by `kinds.json` group: every valid row of a `Relayer` kind, and the groups shared across kinds. A relayer-checked
-/// record holds its group's entry like any other, so a bad one can take a `Chain` key's (P11.6, on this chain only).
+/// `keyHash` by `kinds.json` group: every valid row of a `Relayer` kind, and a group two relayer kinds share. Against a `Chain`
+/// kind: `ua8_relayer_marked_record_blocks_no_chain_kind`, `ua8_relayer_kind_refused_over_chain_key`.
 #[test]
 fn ua8_relayer_key_hash_groups() {
     let env = Env::default();
@@ -1771,20 +1774,71 @@ fn ua8_relayer_key_hash_groups() {
 
     let (env, c, by) = relayed();
     let (attrs, pop, none) = (no_attrs(&env), b(&env, &[1; 64]), Bytes::new(&env));
-    let s = portable(&env, "secp256k1");
-    let x = s.kd.slice(0..32);
-    c.register(&0x0103, &x, &attrs, &pop, &none, &by);
-    assert_eq!(s.refused(&c), Error::KeyInUse, "a `bip340` record of the `x` holds the `secp256k1` group");
-    assert_eq!(err(c.try_register(&0x0103, &x, &attrs, &pop, &none, &by)), Error::AlreadyRegistered);
-    let (env, c, by) = relayed();
-    let (attrs, pop, none) = (no_attrs(&env), b(&env, &[1; 64]), Bytes::new(&env));
-    let s = portable(&env, "secp256k1");
-    s.on_by(&c, &by);
-    assert_eq!(err(c.try_register(&0x0103, &s.kd.slice(0..32), &attrs, &pop, &none, &by)), Error::KeyInUse);
     let r = portable(&env, "schnorr-bls12381");
     r.on_by(&c, &by);
     assert_eq!(err(c.try_register(&0x0141, &r.kd, &attrs, &pop, &none, &by)), Error::KeyInUse, "`bls12381-g1`");
     portable(&env, "zether-bls12381").on_by(&c, &by);
+}
+
+/// The kinds of `secp256k1`'s group other than `secp256k1`, the one group a `Relayer` kind shares with a `Chain` kind.
+const SECP_RELAYER: [u32; 3] = [0x0103, 0x0110, 0x0111];
+
+/// Key data of `kind` holding `x`, length and layout only, as a listed relayer can store it: no proof, any prefix byte.
+fn over_x(env: &Env, kind: u32, x: &[u8]) -> Bytes {
+    let group = [&[7u8][..], x].concat();
+    b(env, &match kind {
+        0x0103 => x.to_vec(),
+        0x0110 => [&group[..], &[0, 2], &[2; 66]].concat(),
+        _ => [&group[..], &[0, 2, 0, 2], &vec![2; 2 * (3 * 33 + 32)]].concat(),
+    })
+}
+
+/// A marked record proves nothing, so it blocks no `Chain` kind (controller ruling on P11.6): over a victim's `x`, on every
+/// relayer kind of the group, the real key still registers, owns its `key_hash`, signs, and an `msig` can name it. The marked
+/// record stays, marked, and a client ignores it.
+#[test]
+fn ua8_relayer_marked_record_blocks_no_chain_kind() {
+    for kind in SECP_RELAYER {
+        let (env, c, by) = relayed();
+        let s = test::Sk::K1(test::k1(68));
+        let kd = s.key_data(&env);
+        let kh = crate::key_hash(&env, 0x0108, &kd).unwrap();
+        let (pop, none) = (b(&env, &[1; 64]), Bytes::new(&env));
+        let squat = c.register(&kind, &over_x(&env, kind, &vecu8(&kd.slice(0..32))), &no_attrs(&env), &pop, &none, &by);
+        assert_eq!(c.key_owner(&kh), Some(squat.clone()), "{kind:#x}: the marked record alone");
+
+        let ua = s.register(&env, &c);
+        assert_eq!(c.key_owner(&kh), Some(ua.clone()), "{kind:#x}: the proved record");
+        assert_eq!(c.record_of(&ua).unwrap().pop_checked, Checked::Chain, "{kind:#x}");
+        assert_eq!(c.record_of(&squat).unwrap().pop_checked, marked(&by), "{kind:#x}");
+        assert!(c.receivable(&ua), "{kind:#x}");
+        let (pt, d) = (n(&env, METATX), n(&env, [0x74; 32]));
+        c.require_authorized(&ua, &pt, &d, &UaSig::single(&env, s.sign(&env, &test::msg(&env, 0x0108, METATX, &d))));
+        let m = msig(&env, 1, &[(0x0108, ua.to_array(), 1)]);
+        m.register(&env, &c, &SVec::new(&env));
+        c.require_authorized(&m.ua, &pt, &d, &test::msig_auth(&env, &[m.slot(&env, &s, METATX, &d)]));
+    }
+}
+
+/// The reverse order: a relayer kind checks `Key` too, so it never stores over a key a `Chain` kind proved, while the same
+/// call over another `x` stores. Two relayer kinds also keep one `x` between them.
+#[test]
+fn ua8_relayer_kind_refused_over_chain_key() {
+    for kind in SECP_RELAYER {
+        let (env, c, by) = relayed();
+        let s = test::Sk::K1(test::k1(69));
+        let kd = s.key_data(&env);
+        let (attrs, pop, none) = (no_attrs(&env), b(&env, &[1; 64]), Bytes::new(&env));
+        let ua = s.register(&env, &c);
+        let x = vecu8(&kd.slice(0..32));
+        assert_eq!(err(c.try_register(&kind, &over_x(&env, kind, &x), &attrs, &pop, &none, &by)), Error::KeyInUse, "{kind:#x}");
+        assert_eq!(c.key_owner(&crate::key_hash(&env, 0x0108, &kd).unwrap()), Some(ua.clone()), "{kind:#x}");
+        let other = c.register(&kind, &over_x(&env, kind, &[0x11; 32]), &attrs, &pop, &none, &by);
+        assert_eq!(c.record_of(&other).unwrap().pop_checked, marked(&by), "{kind:#x}");
+        for k in SECP_RELAYER.iter().filter(|k| **k != kind) {
+            assert_eq!(err(c.try_register(k, &over_x(&env, *k, &[0x11; 32]), &attrs, &pop, &none, &by)), Error::KeyInUse, "{kind:#x} then {k:#x}");
+        }
+    }
 }
 
 /// An n-of-n `msig` of `n` relayer-checked `slhdsa128s` members, its slots of 7,856 B each.
