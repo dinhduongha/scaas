@@ -211,6 +211,8 @@ const STATUS_POLL: Duration = Duration::from_millis(500);
 const BACKOFF_MIN: Duration = Duration::from_secs(1);
 const BACKOFF_MAX: Duration = Duration::from_secs(60);
 const EXPIRY_GRACE: u64 = 30;
+/// `relay_poll`'s limit while `call` jobs are stopped.
+const HELD_CALLS_POLL: u32 = 100;
 
 async fn report(odoo: &Odoo, r: Report) -> bool {
     match odoo.relay_report(&r).await {
@@ -227,7 +229,7 @@ fn rep(job: i64, state: &str) -> Report {
 }
 
 /// Một lane: claim → build/simulate → sign → journal `signed` → submit → theo dõi tới mined/reverted.
-/// Cầu dao (R55) chỉ chặn việc claim job MỚI; job đang bay của lane được `lane_step` theo dõi tới cùng.
+/// Cầu dao (R55) chỉ chặn việc claim job MỚI (`step_once`); job đang bay của lane được `follow` theo dõi tới cùng.
 pub async fn lane_runner(
     adapter: Arc<dyn ChainAdapter>,
     odoo: Odoo,
@@ -254,7 +256,7 @@ pub async fn lane_runner(
         backoff = (backoff * 2).min(BACKOFF_MAX);
     }
     backoff = BACKOFF_MIN;
-    let (mut tripped, mut sampled) = (None, None::<std::time::Instant>);
+    let (mut tripped, mut sampled, mut calls_held) = (None, None::<std::time::Instant>, false);
     loop {
         if sampled.is_none_or(|t| t.elapsed() >= Duration::from_secs(15)) {
             sampled = Some(std::time::Instant::now());
@@ -276,9 +278,10 @@ pub async fn lane_runner(
             }
             tripped = open;
         }
-        if open.is_some() {
-            tokio::time::sleep(poll).await;
-            continue;
+        let held = calls_stopped(adapter.as_ref(), Some(&breaker));
+        if held != calls_held {
+            warn!(chain = %key, lane, held, "`call` jobs at their share of the gas budget");
+            calls_held = held;
         }
         let why = match step_once(adapter.as_ref(), &odoo, lane, &worker, Some(&breaker), &inflight).await {
             Ok(Step::Done) => {
@@ -351,10 +354,10 @@ struct InFlight<'a> {
     nonce: Option<u64>,
 }
 
-/// Theo dõi tới mined/reverted/consumed/queued/dead. `sent` = kết quả lần gửi gần nhất.
+/// Theo dõi tới mined/reverted/consumed/queued/dead. `sent` = kết quả lần gửi gần nhất. `Some(why)` = the job is back in the queue.
 /// R80: revert ⇒ kiểm `op_consumed` trước (review H3); trước MỖI lần gửi lại cũng vậy. Đã tiêu thụ ⇒ báo `consumed`
 /// một lần, thôi gửi lại, vẫn giữ lane theo dõi tx tới trạng thái cuối hoặc hết hạn (không báo gì thêm ngoài `mined`).
-async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut sent: Result<()>, breaker: Option<&Mutex<Breaker>>) {
+async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut sent: Result<()>, breaker: Option<&Mutex<Breaker>>) -> Option<String> {
     let job = f.job.id;
     let (mut consumed, mut metered) = (false, false);
     loop {
@@ -362,7 +365,7 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
             Ok(TxStatus::Mined { tx_hash, .. }) => {
                 meter(adapter, breaker, f.tx_id).await;
                 report(odoo, Report { tx_hash, ..rep(job, "mined") }).await;
-                return;
+                return None;
             }
             Ok(TxStatus::Reverted { reason }) => {
                 // once: this arm runs again while `op_consumed` is unreadable
@@ -370,41 +373,43 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
                     meter(adapter, breaker, f.tx_id).await;
                 }
                 if consumed {
-                    return;
+                    return None;
                 }
                 match adapter.op_consumed(f.job).await {
                     Ok(Some(true)) => {
                         report(odoo, Report { error: Some(format!("unknown; ours reverted: {reason}")), ..rep(job, "consumed") }).await;
-                        return;
+                        return None;
                     }
                     Ok(_) => {
                         report(odoo, Report { error: Some(reason), ..rep(job, "reverted") }).await;
-                        return;
+                        return None;
                     }
                     Err(e) => warn!(chain = %adapter.chain_key(), job, "reverted, op_consumed unreadable; retry: {e:#}"),
                 }
             }
             Ok(TxStatus::Pending) => {}
             Err(e) if e.downcast_ref::<Rejected>().is_some() => {
-                if !consumed {
-                    report(odoo, Report { error: Some(e.to_string()), ..rep(job, "queued") }).await;
+                if consumed {
+                    return None;
                 }
-                return;
+                report(odoo, Report { error: Some(e.to_string()), ..rep(job, "queued") }).await;
+                return Some(e.to_string());
             }
             Ok(TxStatus::Unknown) | Err(_) => {
                 // Hỏi trạng thái TRƯỚC: bị từ chối khi gửi lại có thể vì tx lần trước đã vào khối.
                 if let Some(r) = sent.as_ref().err().and_then(|e| e.downcast_ref::<Rejected>()) {
-                    if !consumed {
-                        report(odoo, Report { error: Some(r.to_string()), ..rep(job, "queued") }).await;
+                    if consumed {
+                        return None;
                     }
-                    return;
+                    report(odoo, Report { error: Some(r.to_string()), ..rep(job, "queued") }).await;
+                    return Some(r.to_string());
                 }
                 if now() > f.valid_until + EXPIRY_GRACE {
                     // Payload chủ thể đã hết hạn: tx (nếu còn đâu đó) sẽ bị contract từ chối.
                     if !consumed {
                         report(odoo, Report { error: Some("expired before inclusion".into()), ..rep(job, "dead") }).await;
                     }
-                    return;
+                    return None;
                 }
                 match f.signed {
                     Some(signed) if sent.is_err() && !consumed => match adapter.op_consumed(f.job).await {
@@ -428,7 +433,7 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
                         if moved && matches!(adapter.tx_status(f.tx_id).await, Ok(TxStatus::Unknown)) {
                             let why = "lost with a node restart; its lane sequence moved on";
                             report(odoo, Report { error: Some(why.into()), ..rep(job, "queued") }).await;
-                            return;
+                            return Some(why.into());
                         }
                     }
                 }
@@ -454,11 +459,18 @@ pub async fn lane_step_metered(
     Ok(!matches!(step_once(adapter, odoo, lane, worker, breaker, &InflightSet::default()).await?, Step::Idle))
 }
 
-/// Kết quả một vòng lane. `Retry` = job đã về hàng đợi vì RPC/Odoo không với tới: runner lùi (merge TODO c).
+/// Kết quả một vòng lane. `Retry` = job đã về hàng đợi, every cause: the queue is oldest first, so it comes straight back, and
+/// the runner backs off (merge TODO c) so a job put back is never a tight loop.
 enum Step {
     Idle,
     Done,
     Retry(String),
+}
+
+/// Owner ruling I-2: `call` jobs stop at `call_budget_pct` of the hour's budget, every other kind runs to all of it. Soroban's,
+/// whose `call` job is free to the client; Hedera's run on this runner with the EVM rules, and EVM has its own runner.
+fn calls_stopped(adapter: &dyn ChainAdapter, breaker: Option<&Mutex<Breaker>>) -> bool {
+    adapter.family() == Family::Soroban && breaker.is_some_and(|k| k.lock().is_ok_and(|mut k| k.calls_stopped(now())))
 }
 
 async fn step_once(
@@ -469,9 +481,18 @@ async fn step_once(
     breaker: Option<&Mutex<Breaker>>,
     inflight: &InflightSet,
 ) -> Result<Step> {
-    let jobs = odoo.relay_poll_ref(adapter.chain_key().into(), 5).await?;
+    if breaker.is_some_and(|k| k.lock().map(|mut k| k.open(now())).unwrap_or(None).is_some()) {
+        return Ok(Step::Idle);
+    }
+    let held = calls_stopped(adapter, breaker);
+    // ponytail: the queue is oldest first, so a wider read reaches a payment behind stopped `call` jobs; past this many a payment
+    // waits for the window. A `relay_poll` kind filter on the consumer is the upgrade.
+    let jobs = odoo.relay_poll_ref(adapter.chain_key().into(), if held { HELD_CALLS_POLL } else { 5 }).await?;
     let mut job = None;
     for j in jobs {
+        if held && j.kind.as_deref() == Some("call") {
+            continue;
+        }
         // N2: digest đang bay ở lane/đường khác ⇒ bỏ qua TRƯỚC claim (không claim, không báo).
         if job_digest(&j).is_some_and(|d| inflight.contains(&d)) {
             continue;
@@ -494,7 +515,7 @@ async fn step_once(
     let _guard = match digest.map(|d| inflight.try_acquire(d)) {
         Some(None) => {
             report(odoo, Report { error: Some("in flight on another path".into()), ..rep(job.id, "queued") }).await;
-            return Ok(Step::Done);
+            return Ok(Step::Retry("in flight on another path".into()));
         }
         Some(g) => g,
         None => None,
@@ -506,7 +527,7 @@ async fn step_once(
             None => {
                 report(odoo, Report { error: Some("SUBJECT_HELD: a relay-fee job and another job of its payer are never in flight \
                     together".into()), ..rep(job.id, "queued") }).await;
-                return Ok(Step::Done);
+                return Ok(Step::Retry("SUBJECT_HELD".into()));
             }
         },
     };
@@ -548,8 +569,7 @@ async fn step_once(
         report(odoo, rep(job.id, "broadcast")).await;
     }
     let f = InFlight { job: &job, tx_id: &signed.tx_id, valid_until: signed.valid_until, lane, signed: Some(&signed), nonce: Some(seq) };
-    follow(adapter, odoo, f, sent, breaker).await;
-    Ok(Step::Done)
+    Ok(follow(adapter, odoo, f, sent, breaker).await.map_or(Step::Done, Step::Retry))
 }
 
 /// Indexer chung cho adapter không phải EVM: đỉnh final → event → `chain_event_ingest`.
@@ -699,7 +719,7 @@ pub(crate) mod tests {
                 "node_config" => serde_json::json!({"finality_mode": "instant", "finality_depth": 0, "finality_quorum": 1,
                     "indexed_block": 0, "tokens": o.tokens, "journal_max_nonce": null,
                     "inflight": if o.inflight.is_null() { serde_json::json!([]) } else { o.inflight.clone() }}),
-                "relay_poll" if o.repeat => Value::Array(o.jobs.clone()),
+                "relay_poll" if o.repeat => Value::Array(o.jobs.iter().take(b["limit"].as_u64().unwrap() as usize).cloned().collect()),
                 "relay_poll" => Value::Array(std::mem::take(&mut o.jobs)),
                 "relay_claim" => {
                     o.claims += 1;
@@ -863,6 +883,8 @@ pub(crate) mod tests {
         fee_unreadable: bool,
         /// `op_consumed` fails this many times first.
         consumed_unreadable: std::sync::atomic::AtomicU32,
+        /// `subject`'s key, a relay-fee job's.
+        subject: Option<alloy::primitives::B256>,
     }
 
     fn racy(build_revert: bool, consumed: Option<bool>, sends: &[bool], statuses: &[TxStatus]) -> Racy {
@@ -875,6 +897,7 @@ pub(crate) mod tests {
             fee: None,
             fee_unreadable: false,
             consumed_unreadable: Default::default(),
+            subject: None,
         }
     }
 
@@ -934,6 +957,9 @@ pub(crate) mod tests {
                 anyhow::bail!("rpc down");
             }
             Ok(self.fee)
+        }
+        fn subject(&self, _: &Job) -> Option<(alloy::primitives::B256, bool)> {
+            self.subject.map(|k| (k, true))
         }
     }
 
@@ -1034,6 +1060,31 @@ pub(crate) mod tests {
         assert_eq!((states.last().map(String::as_str), open, unread), (Some("mined"), None, 1));
         let (states, open, unread) = metered(racy(false, None, &[true], &[TxStatus::Reverted { reason: "boom".into() }]), 1).await;
         assert_eq!((states.last().map(String::as_str), open, unread), (Some("reverted"), None, 0));
+    }
+
+    /// The `call` share is Soroban's: another family's `call` job (Hedera's run on this runner) still runs to the whole budget.
+    #[tokio::test]
+    async fn the_call_share_stops_only_soroban() {
+        let k = Mutex::new(Breaker::new(crate::config::BreakerCfg { gas_budget_per_hour: Some(1_000), ..Default::default() }));
+        k.lock().unwrap().spend(now(), 500);
+        let a = racy(false, None, &[true], &[TxStatus::Mined { height: 1, tx_hash: None }]);
+        let job = serde_json::json!({"id": 5, "kind": "call", "op": {}});
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job], tokens: serde_json::json!([]), ..Default::default() }).await;
+        step_once(&a, &odoo, 0, "n#0", Some(&k), &InflightSet::default()).await.unwrap();
+        assert_eq!(o.lock().unwrap().reports.last().unwrap()["chain_state"], "mined");
+    }
+
+    /// A step that puts its job back never counts as done: `lane_runner` backs off on `Retry`, whatever the family. A held
+    /// subject here; `rejected_send_backs_off` in `adapters::soroban` for `Rejected`.
+    #[tokio::test]
+    async fn a_job_put_back_is_a_retry() {
+        let a = racy(true, None, &[], &[TxStatus::Unknown]);
+        let job = serde_json::json!({"id": 5, "kind": "signed_op", "op": {"digest": DIGEST}});
+        let (odoo, _) = fake_odoo(Fake { jobs: vec![job], tokens: serde_json::json!([]), ..Default::default() }).await;
+        let set = InflightSet::default();
+        let _held = set.hold_subject(alloy::primitives::B256::repeat_byte(9), false);
+        let held = Racy { subject: Some(alloy::primitives::B256::repeat_byte(9)), ..a };
+        assert!(matches!(step_once(&held, &odoo, 0, "n#0", None, &set).await.unwrap(), Step::Retry(_)));
     }
 
     /// R80 (§8.4 `step_once`): mô phỏng revert vì op đã bị tiêu thụ ⇒ `consumed`, không `dead`.

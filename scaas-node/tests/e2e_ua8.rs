@@ -23,10 +23,11 @@ use ml_dsa::signature::Keypair as _;
 use ml_dsa::{MlDsa65, Seed, SigningKey};
 use pqcrypto_falcon::falconpadded512 as falcon;
 use pqcrypto_traits::sign::{DetachedSignature as _, PublicKey as _};
-use scaas_node::adapter::{lane_step, Built, ChainAdapter};
+use scaas_node::adapter::{lane_step, lane_step_metered, Built, ChainAdapter};
 use scaas_node::adapters::soroban::{ua8_call_job, SorobanAdapter};
 use scaas_node::chain::Chain;
-use scaas_node::config::{ChainCfg, FinalityCfg};
+use scaas_node::breaker::Breaker;
+use scaas_node::config::{BreakerCfg, ChainCfg, FinalityCfg};
 use scaas_node::odoo::Odoo;
 use scaas_node::signer::Signer;
 use scaas_node::submit::Submitter;
@@ -1392,13 +1393,26 @@ async fn e2e_ua8_spend_stop() {
     println!("ENTRY at the limit through the node: job {state}, reason {}", last["error"]);
     assert_eq!(state, "mined", "{last}");
 
+    // `meter` on the real host: a mined job through the node, the budget holding what left the lane
+    let job = pop_job(&s, 0x7d, 1_000).await;
+    let id = job["id"].as_i64().unwrap();
+    s.state.lock().unwrap().jobs.push(job);
+    let k = Mutex::new(Breaker::new(BreakerCfg { gas_budget_per_hour: Some(u128::MAX), ..Default::default() }));
+    let before = native_balance(0).await;
+    assert!(lane_step_metered(&s.adapter, &s.odoo, 0, "ua8#0", Some(&k)).await.unwrap());
+    let down = before - native_balance(0).await;
+    let (spent, unread) = { let k = k.lock().unwrap(); (k.spent(), k.fees_unread()) };
+    println!("FEE metered through the node: job {}, budget spent {spent}, lane down {down}", last_state(&s.state.lock().unwrap(), id));
+    assert_eq!((spent, unread), (down, 0), "the budget holds this job's fee");
+    assert!(down > 0);
+
     let unfunded = SorobanAdapter::new(&chain_cfg(false), &[key(20), key(21)]).unwrap();
     assert_eq!(unfunded.lane_balance(0).await.unwrap(), Some(0), "no account, no balance");
     let n = Node::with_fee_bump(s.registry.clone(), true).await;
     let (b0, b1) = (native_balance(0).await, native_balance(1).await);
     assert_eq!(s.adapter.lane_balance(1).await.unwrap(), Some(b1));
-    assert_eq!(n.adapter.lane_balance(1).await.unwrap(), Some(b0 + b1), "a lane and the fee account");
-    assert_eq!(n.adapter.lane_balance(0).await.unwrap(), Some(b0), "the fee account's own lane counts it once");
+    assert_eq!(n.adapter.lane_balance(1).await.unwrap(), Some(b0), "under a fee bump, the account that pays");
+    assert_eq!(n.adapter.lane_balance(0).await.unwrap(), Some(b0), "the fee account's own lane");
     for (fee_bump, tx, down) in landed {
         let a = if fee_bump { &n.adapter } else { &s.adapter };
         assert_eq!(a.tx_fee(&tx).await.unwrap(), Some(down), "feeCharged is what left the payer");

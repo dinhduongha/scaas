@@ -343,12 +343,20 @@ pub struct BreakerCfg {
     #[serde(default, deserialize_with = "amount")]
     #[serde(serialize_with = "amount_text", skip_serializing_if = "Option::is_none")]
     pub min_relayer_balance: Option<u128>,
+    /// Soroban: `call` jobs stop at this share (%) of `gas_budget_per_hour`, every other kind runs to 100 %, so free registry
+    /// writes cannot spend the whole hour's budget and stop payments.
+    #[serde(default = "default_call_pct")]
+    pub call_budget_pct: u8,
 }
 
 impl Default for BreakerCfg {
     fn default() -> Self {
-        Self { spike_ratio: default_spike(), spike_min_base_fee_gwei: 1, gas_budget_per_hour: None, min_relayer_balance: None }
+        Self { spike_ratio: default_spike(), spike_min_base_fee_gwei: 1, gas_budget_per_hour: None, min_relayer_balance: None, call_budget_pct: default_call_pct() }
     }
+}
+
+fn default_call_pct() -> u8 {
+    50
 }
 
 fn amount<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Option<u128>, D::Error> {

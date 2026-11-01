@@ -347,12 +347,13 @@ never indexing, tracking or replacing signed transactions, rescues or gap-filler
 | Breaker | Rule | Defaults |
 |---|---|---|
 | `base_fee_spike` (EVM) | current `baseFeePerGas` > `spike_ratio` × 1 h trailing mean, with ≥ 4 samples and fee > `spike_min_base_fee_gwei`; reopens when back below | ratio 3.0 (0 disables), min 1 gwei |
-| `gas_budget` | gas spent in the fixed hour window ≥ `gas_budget_per_hour` (smallest gas-coin unit, per lane × chain); metered per [NODE-LANE-13](#NODE-LANE-13) | warn (log + metric) at 90 %; stop new work until the window ends at 100 % |
-| `balance_floor` | lane balance < `min_relayer_balance` ⇒ that lane takes no new job | warn below 120 % of the floor |
+| `gas_budget` | gas spent in the fixed hour window ≥ `gas_budget_per_hour` (smallest gas-coin unit, per lane × chain); metered per [NODE-LANE-13](#NODE-LANE-13) | warn (log + metric) at 90 %; stop new work until the window ends at 100 %; Soroban `call` jobs stop at `call_budget_pct`, default 50 %, every other kind runs on ([NET-SOR-14](../networks/soroban.md#NET-SOR-14)) |
+| `balance_floor` | balance of the account that pays the lane's fee < `min_relayer_balance` ⇒ that lane takes no new job | warn below 120 % of the floor |
 | structural | simulated gas (regular + state) > `max_gas_per_tx` or > the block gas limit ⇒ job `dead` ([Amsterdam gas](#amsterdam-gas)) | 3 000 000 (classical Zether chains ≥ 4 500 000, multi-recipient Zether ≥ 40 000 000; SCaaS testnet 64 000 000; [NODE-STO-10](store.md#NODE-STO-10)) |
 | `revert_streak` (chain) | ≥ 3 post-simulation reverts of class `other` in 15 min | [NODE-OPS-06](ops.md#NODE-OPS-06), latched |
 
-Non-EVM families use budget + balance floor (no EIP-1559 base fee). The SCaaS testnet (chain id 7622, formerly 9000) is a
+Non-EVM families use budget + balance floor (no EIP-1559 base fee). A job a lane puts back to the queue, for any reason, backs
+the lane off (1 s doubling to 60 s): the queue is oldest first, so without it the lane would loop on that job at RPC speed. The SCaaS testnet (chain id 7622, formerly 9000) is a
 Clique chain with EIP-1559 from genesis (`eip1559Transition` 0, genesis `baseFeePerGas` 0; the base fee stays at 0 or
 a few wei while blocks stay under their target, and Nethermind's minimum gas price is 1 wei), so `base_fee_spike`
 applies but rarely trips; the node never assumes a zero gas price there (fees from `eth_feeHistory`, ≥ 1 wei). Metric `scaas_breaker_open{chain,lane,breaker}`;

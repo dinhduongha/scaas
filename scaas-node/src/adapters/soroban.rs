@@ -687,23 +687,20 @@ impl ChainAdapter for SorobanAdapter {
         Ok(Some(u128::try_from(fee).with_context(|| format!("feeCharged {fee}"))?))
     }
 
-    /// NET-SOR-14: the native balance of the lane plus its fee account, the sum the floor compares (a fee account's own lane counts
-    /// it once). An account that does not exist holds 0, which is an answer; a failed read is an `Err`, and the last balance stands.
+    /// NET-SOR-14 (owner ruling I-1): the native balance of the account that pays, the lane's own or under a fee bump the fee
+    /// account alone. An account that does not exist holds 0, which is an answer (the RPC still names its `latestLedger`); a failed
+    /// read is an `Err`, and the last balance stands.
     async fn lane_balance(&self, lane: usize) -> Result<Option<u128>> {
-        let mut keys = vec![self.account_key(lane)?];
-        if let Some(f) = self.fee_bump.filter(|f| *f != lane) {
-            keys.push(self.account_key(f)?);
+        let k = self.account_key(self.fee_bump.unwrap_or(lane))?;
+        let r = self.rpc("getLedgerEntries", json!({"keys": [k]})).await?;
+        if r.get("latestLedger").is_none() {
+            bail!("getLedgerEntries without latestLedger: {r}");
         }
-        let r = self.rpc("getLedgerEntries", json!({"keys": keys})).await?;
-        let mut balance = 0;
-        for e in r["entries"].as_array().into_iter().flatten() {
-            let x = e["xdr"].as_str().ok_or_else(|| anyhow!("account entry without xdr"))?;
-            match LedgerEntryData::from_xdr_base64(x, Limits::len(1 << 16))? {
-                LedgerEntryData::Account(a) => balance += u128::try_from(a.balance)?,
-                _ => bail!("not an account entry"),
-            }
+        let Some(x) = r["entries"][0]["xdr"].as_str() else { return Ok(Some(0)) };
+        match LedgerEntryData::from_xdr_base64(x, Limits::len(1 << 16))? {
+            LedgerEntryData::Account(a) => Ok(Some(u128::try_from(a.balance)?)),
+            _ => bail!("not an account entry"),
         }
-        Ok(Some(balance))
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {
@@ -2727,11 +2724,15 @@ mod tests {
         entry_limit: Option<u32>,
         /// The accounts that exist, each `(public key, balance)`; `None` = every account, with no balance.
         accounts: Option<Vec<([u8; 32], i64)>>,
+        /// `sendTransaction` answers `ERROR` to everything.
+        refuses: bool,
+        /// `getLedgerEntries` answers a JSON body with no result.
+        no_entries_result: bool,
     }
 
     impl Default for Net {
         fn default() -> Self {
-            Self { tx: json!({"status": "SUCCESS", "ledger": 5}), entry_limit: Some(ENTRY_MAX), accounts: None }
+            Self { tx: json!({"status": "SUCCESS", "ledger": 5}), entry_limit: Some(ENTRY_MAX), accounts: None, refuses: false, no_entries_result: false }
         }
     }
 
@@ -2751,7 +2752,7 @@ mod tests {
                             }
                             e => e,
                         };
-                        let over = env.to_xdr(Limits::none()).unwrap().len() > limit.unwrap_or(TX_MAX) as usize;
+                        let over = env.to_xdr(Limits::none()).unwrap().len() > limit.unwrap_or(TX_MAX) as usize || net.lock().unwrap().refuses;
                         Some(if over { json!({"status": "ERROR", "errorResultXdr": "txSOROBAN_INVALID"}) } else { json!({"status": "PENDING"}) })
                     }
                     Some("getLedgerEntries") => {
@@ -2774,7 +2775,11 @@ mod tests {
                                 _ => entries.push(lane_account(0)),
                             }
                         }
-                        Some(json!({"entries": entries.iter().map(|x| json!({"xdr": x})).collect::<Vec<_>>()}))
+                        Some(if net.no_entries_result {
+                            Value::Null
+                        } else {
+                            json!({"entries": entries.iter().map(|x| json!({"xdr": x})).collect::<Vec<_>>(), "latestLedger": 5})
+                        })
                     }
                     Some("getTransaction") => Some(net.lock().unwrap().tx.clone()),
                     _ => None,
@@ -4005,10 +4010,10 @@ mod tests {
         }
     }
 
-    /// The account that pays and the one that sends, each counted once; an account that does not exist holds nothing; a failed
-    /// read is an `Err`, never a zero that would open the floor.
+    /// The account that pays and no other (owner ruling I-1): the lane's own, or under a fee bump the fee account alone. An account
+    /// that does not exist holds nothing; a failed read, or an answer with no result, is an `Err`, never a zero that opens the floor.
     #[tokio::test]
-    async fn lane_balance_counts_the_lane_and_its_fee_account() {
+    async fn lane_balance_is_the_account_that_pays() {
         let (one, two) = (lane_pk_of(1), lane_pk_of(2));
         let answer = registry(vec![], vec![]);
         let (a, _, net) = spend_adapter(answer.clone(), Net { accounts: Some(vec![(two, 70)]), ..Net::default() }, false).await;
@@ -4016,41 +4021,71 @@ mod tests {
         assert_eq!(a.lane_balance(0).await.unwrap(), Some(0), "unfunded");
         net.lock().unwrap().accounts = Some(vec![(one, 1_000), (two, 70)]);
         assert_eq!(a.lane_balance(1).await.unwrap(), Some(70), "no fee bump: the other account pays nothing here");
+        net.lock().unwrap().no_entries_result = true;
+        assert!(a.lane_balance(1).await.is_err(), "no result is no answer");
         let (a, _, net) = spend_adapter(answer, Net { accounts: Some(vec![(one, 1_000), (two, 70)]), ..Net::default() }, true).await;
-        assert_eq!(a.lane_balance(1).await.unwrap(), Some(1_070), "the lane and the fee account");
-        assert_eq!(a.lane_balance(0).await.unwrap(), Some(1_000), "the fee account's own lane, counted once");
+        assert_eq!(a.lane_balance(1).await.unwrap(), Some(1_000), "the fee account alone");
+        assert_eq!(a.lane_balance(0).await.unwrap(), Some(1_000), "the fee account's own lane");
         net.lock().unwrap().accounts = Some(vec![(two, 70)]);
-        assert_eq!(a.lane_balance(1).await.unwrap(), Some(70), "the fee account does not exist");
+        assert_eq!(a.lane_balance(1).await.unwrap(), Some(0), "the fee account does not exist");
         let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: vec!["http://127.0.0.1:1".into()], lanes: vec![0], ..Default::default() };
         c.params.insert("network_passphrase".into(), "x".into());
         assert!(SorobanAdapter::new(&c, &[lane_key(1)]).unwrap().lane_balance(0).await.is_err());
     }
 
+    /// I-1: a funded lane behind an empty fee account takes no job, and sends nothing. The one difference, a funded fee account:
+    /// the lane runs.
+    #[tokio::test]
+    async fn an_empty_fee_account_opens_the_floor_behind_a_funded_lane() {
+        let (one, two) = (lane_pk_of(1), lane_pk_of(2));
+        let floor = crate::config::BreakerCfg { min_relayer_balance: Some(100), ..Default::default() };
+        let (a, calls, _) = spend_adapter(registry(vec![], vec![]), Net { accounts: Some(vec![(one, 0), (two, 1_000_000)]), ..Net::default() }, true).await;
+        assert_eq!(lane_run(a, 1, floor.clone(), &calls, 300).await, (0, vec![], 0));
+        let (a, calls, _) = spend_adapter(registry(vec![], vec![]), Net { accounts: Some(vec![(one, 100), (two, 1_000_000)]), ..Net::default() }, true).await;
+        assert!(lane_run(a, 1, floor, &calls, 300).await.0 > 0);
+    }
+
+    /// `sendTransaction` answers `ERROR` to every send (`Rejected`, back to the queue, oldest first, so the same job again): the lane
+    /// backs off instead of looping at RPC speed, whatever the cause.
+    #[tokio::test]
+    async fn rejected_send_backs_off() {
+        let (a, calls, _) = spend_adapter(registry(vec![], vec![]), Net { refuses: true, tx: json!({"status": "NOT_FOUND"}), ..Net::default() }, false).await;
+        let (sent, states, _) = lane_run(a, 0, Default::default(), &calls, 2_500).await;
+        assert!((1..=3).contains(&sent), "{sent} sends in 2.5 s");
+        assert!(states.contains(&"queued".to_string()), "{states:?}");
+    }
+
     /// The real lane loop on `store_pqz_pop` jobs for `ms`, one job id over and over: what it sent, the states it reported and the claims.
-    async fn lane_run(a: Arc<SorobanAdapter>, cfg: crate::config::BreakerCfg, calls: &Arc<Mutex<Vec<String>>>, ms: u64) -> (usize, Vec<String>, u32) {
+    async fn lane_run(a: Arc<SorobanAdapter>, lane: usize, cfg: crate::config::BreakerCfg, calls: &Arc<Mutex<Vec<String>>>, ms: u64) -> (usize, Vec<String>, u32) {
         use crate::adapter::tests::{fake_odoo, Fake};
         let jobs = vec![json!({"id": 7, "kind": "call", "op": sized_op(8)})];
         let (odoo, o) = fake_odoo(Fake { jobs, repeat: true, tokens: json!([]), ..Default::default() }).await;
         let k = Arc::new(Mutex::new(crate::breaker::Breaker::new(cfg)));
-        let run = crate::adapter::lane_runner(a, odoo, 0, "n#0".into(), std::time::Duration::from_millis(10), k, Default::default());
+        let run = crate::adapter::lane_runner(a, odoo, lane, "n#0".into(), std::time::Duration::from_millis(10), k, Default::default());
         let _ = tokio::time::timeout(std::time::Duration::from_millis(ms), run).await;
         let f = o.lock().unwrap();
         (sends(calls), f.reports.iter().map(|r| r["chain_state"].as_str().unwrap().to_string()).collect(), f.claims)
     }
 
-    /// The ruling: a lane burned by failing jobs stops. Three FAILED transactions are the budget, so the fourth job is never
-    /// claimed, and each of the three is followed to its report. The one difference, no budget: the lane keeps sending.
+    /// The ruling: a lane burned by failing jobs stops. Three FAILED transactions are the budget, with the whole of it open to
+    /// `call` jobs here, so the fourth job is never claimed, and each of the three is followed to its report. At the default share
+    /// the same `call` jobs stop at two, half the budget being reached. The one difference, no budget: the lane keeps sending.
     #[tokio::test]
     async fn failing_jobs_open_the_budget_and_later_jobs_do_not_send() {
         let failing = || Net { tx: json!({"status": "FAILED", "ledger": 5, "resultXdr": RESULT_FAILED}), ..Net::default() };
         let budget = crate::config::BreakerCfg { gas_budget_per_hour: Some(3 * FAILED_FEE), ..Default::default() };
+        let whole = crate::config::BreakerCfg { call_budget_pct: 100, ..budget.clone() };
         let (a, calls, _) = spend_adapter(registry(vec![], vec![]), failing(), false).await;
-        let (sent, states, claims) = lane_run(a, budget, &calls, 800).await;
+        let (sent, states, claims) = lane_run(a, 0, whole, &calls, 800).await;
         assert_eq!((sent, claims), (3, 3), "{states:?}");
         assert_eq!(states.iter().filter(|s| *s == "reverted").count(), 3, "the jobs in flight end in their reports: {states:?}");
 
         let (a, calls, _) = spend_adapter(registry(vec![], vec![]), failing(), false).await;
-        let (sent, ..) = lane_run(a, Default::default(), &calls, 800).await;
+        let (sent, states, claims) = lane_run(a, 0, budget, &calls, 800).await;
+        assert_eq!((sent, claims), (2, 2), "{states:?}");
+
+        let (a, calls, _) = spend_adapter(registry(vec![], vec![]), failing(), false).await;
+        let (sent, ..) = lane_run(a, 0, Default::default(), &calls, 800).await;
         assert!(sent > 3, "no budget: {sent}");
     }
 
@@ -4060,9 +4095,9 @@ mod tests {
         let funded = || Net { accounts: Some(vec![(lane_pk_of(1), 100)]), ..Net::default() };
         let floor = |f: u128| crate::config::BreakerCfg { min_relayer_balance: Some(f), ..Default::default() };
         let (a, calls, _) = spend_adapter(registry(vec![], vec![]), funded(), false).await;
-        assert_eq!(lane_run(a, floor(101), &calls, 300).await, (0, vec![], 0));
+        assert_eq!(lane_run(a, 0, floor(101), &calls, 300).await, (0, vec![], 0));
         let (a, calls, _) = spend_adapter(registry(vec![], vec![]), funded(), false).await;
-        let (sent, states, _) = lane_run(a, floor(100), &calls, 300).await;
+        let (sent, states, _) = lane_run(a, 0, floor(100), &calls, 300).await;
         assert!(sent > 0 && states.contains(&"mined".to_string()), "{sent} {states:?}");
     }
 
@@ -4182,5 +4217,73 @@ mod tests {
         let states: Vec<String> = o.lock().unwrap().reports.iter().map(|r| r["chain_state"].as_str().unwrap().to_string()).collect();
         assert_eq!(states, ["signed", "broadcast", "mined"]);
         assert_eq!(sends(&calls), 1);
+    }
+
+    // ---- the `call` share of the budget (owner ruling I-2)
+
+    const BUDGET: u128 = 1_000_000_000;
+
+    fn call_of(id: i64) -> Value {
+        json!({"id": id, "kind": "call", "op": sized_op(8)})
+    }
+
+    fn pay_of(a: &SorobanAdapter, id: i64) -> Value {
+        json!({"id": id, "kind": "signed_op", "op": {"payload": payload(a.network_id, inv(CONTRACT, "pay", vec![addr(FROM), addr(WALLET), i128v(1), byt(&[3; 32]), ScVal::U64(1)], vec![])),
+            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": VU, "extra": {}}})
+    }
+
+    fn spent_lane(spent: u128, pct: u8) -> Mutex<crate::breaker::Breaker> {
+        let mut k = crate::breaker::Breaker::new(crate::config::BreakerCfg { gas_budget_per_hour: Some(BUDGET), call_budget_pct: pct, ..Default::default() });
+        k.spend(crate::submit::now(), spent);
+        Mutex::new(k)
+    }
+
+    /// One real `lane_step` over `jobs` in queue order: the jobs it reported and how many it claimed.
+    async fn budget_step(a: &SorobanAdapter, k: &Mutex<crate::breaker::Breaker>, jobs: Vec<Value>) -> (Vec<i64>, u32) {
+        use crate::adapter::tests::{fake_odoo, Fake};
+        let (odoo, o) = fake_odoo(Fake { jobs, repeat: true, tokens: json!([]), ..Default::default() }).await;
+        crate::adapter::lane_step_metered(a, &odoo, 0, "n#0", Some(k)).await.unwrap();
+        let f = o.lock().unwrap();
+        let mut ids: Vec<i64> = f.reports.iter().map(|r| r["job_id"].as_i64().unwrap()).collect();
+        ids.dedup();
+        (ids, f.claims)
+    }
+
+    /// Under the share a `call` job at the head runs; at it the `call` job is not claimed and the payment behind it runs; at the
+    /// whole budget neither runs; the next window reopens both.
+    #[tokio::test]
+    async fn call_jobs_stop_at_their_share_and_payments_run_to_the_budget() {
+        let (a, calls, _) = spend_adapter(registry(vec![], vec![]), Net::default(), false).await;
+        let jobs = vec![call_of(7), pay_of(&a, 8)];
+        assert_eq!(budget_step(&a, &spent_lane(BUDGET / 2 - 1, 50), jobs.clone()).await, (vec![7], 1), "one stroop under the share");
+        assert_eq!(sends(&calls), 1);
+        assert_eq!(budget_step(&a, &spent_lane(BUDGET / 2, 50), jobs.clone()).await, (vec![8], 1), "at the share");
+        assert_eq!(sends(&calls), 2);
+        assert_eq!(budget_step(&a, &spent_lane(BUDGET - 1, 50), jobs.clone()).await, (vec![8], 1), "a payment runs to the budget");
+        assert_eq!(sends(&calls), 3);
+        let spent = spent_lane(BUDGET, 50);
+        assert_eq!(budget_step(&a, &spent, jobs.clone()).await, (vec![], 0), "at the budget neither runs");
+        assert_eq!(sends(&calls), 3);
+        spent.lock().unwrap().rewind();
+        assert_eq!(budget_step(&a, &spent, jobs).await, (vec![7], 1), "the next window reopens both");
+        assert_eq!(sends(&calls), 4);
+    }
+
+    /// The share is the named value, not a constant.
+    #[tokio::test]
+    async fn the_call_share_is_configured() {
+        let (a, _, _) = spend_adapter(registry(vec![], vec![]), Net::default(), false).await;
+        let jobs = vec![call_of(7), pay_of(&a, 8)];
+        assert_eq!(budget_step(&a, &spent_lane(BUDGET / 4, 25), jobs.clone()).await.0, [8]);
+        assert_eq!(budget_step(&a, &spent_lane(BUDGET / 4, 26), jobs).await.0, [7]);
+    }
+
+    /// `relay_poll` is oldest first: a payment behind a queue of stopped `call` jobs must still be seen.
+    #[tokio::test]
+    async fn stopped_calls_at_the_head_do_not_hide_a_payment() {
+        let (a, _, _) = spend_adapter(registry(vec![], vec![]), Net::default(), false).await;
+        let mut jobs: Vec<Value> = (0..20).map(call_of).collect();
+        jobs.push(pay_of(&a, 99));
+        assert_eq!(budget_step(&a, &spent_lane(BUDGET / 2, 50), jobs).await, (vec![99], 1));
     }
 }

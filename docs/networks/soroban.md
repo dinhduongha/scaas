@@ -256,7 +256,7 @@ party re-submits both auth entries with `maker_fill = 1` ⇒ fails; the right re
   `sha256(TransactionSignaturePayload)`; `tx_id = 0x‖hex(hash)`.
 - `submit`: `sendTransaction`; `tx_status`: `getTransaction` (SUCCESS / FAILED / NOT_FOUND). Classes
   ([NODE-LANE-14](../node/submit-lanes.md#NODE-LANE-14), already right in code): `sendTransaction` `ERROR` = not in a
-  ledger ⇒ free requeue (`soroban.rs:368-378`); `TRY_AGAIN_LATER` / network error ⇒ resend the same bytes;
+  ledger ⇒ free requeue, the lane backing off (`soroban.rs:368-378`); `TRY_AGAIN_LATER` / network error ⇒ resend the same bytes;
   `getTransaction` `FAILED` = included and **billed** (inclusion fee + non-refundable resource fee) ⇒ final
   `Reverted` (`:380-387`). There is no requeue loop after a billed failure.
 - **Fee-bump (CAP-15):** `params.fee_bump_lane = i` wraps every lane's transaction in a `FeeBumpTransaction` signed by
@@ -270,15 +270,18 @@ JSON; a mismatch ⇒ `422 BAD_PAYLOAD` ([NODE-LANE-16](../node/submit-lanes.md#N
 `op["valid_until"]`, `soroban.rs:313`). Test: a job whose JSON `valid_until` exceeds the signed arg ⇒ refused.
 
 <a id="NET-SOR-14"></a>**NET-SOR-14** — **The Soroban adapter reports `tx_fee` (`feeCharged` from the `resultXdr` of
-`getTransaction`, for both `SUCCESS` and `FAILED`) and `lane_balance` (native balance of the lane and of the
-`fee_bump_lane`)** to the breaker ([NODE-LANE-13](../node/submit-lanes.md#NODE-LANE-13)). **BUILT** (ua8-soroban B9a, owner
+`getTransaction`, for both `SUCCESS` and `FAILED`) and `lane_balance` (native balance of the account that pays: the lane's,
+or under a fee bump the fee account alone; owner ruling 2026-11-01, amending "the lane and the `fee_bump_lane`")** to the
+breaker ([NODE-LANE-13](../node/submit-lanes.md#NODE-LANE-13)). **BUILT** (ua8-soroban B9a, owner
 ruling 2026-11-01: a working spend stop before the branch merges). `tx_fee` is `feeCharged` of the `resultXdr` for
 `SUCCESS` and `FAILED` (under a fee bump the outer result, the fee that left the fee account); any other status, a missing
-`resultXdr`, bad bytes or a negative fee is an `Err`, never 0. `lane_balance` is the lane's balance plus the fee account's
-(the fee account's own lane counts it once; an account that does not exist is 0, a failed read keeps the last balance). A
+`resultXdr`, bad bytes or a negative fee is an `Err`, never 0. `lane_balance` is the balance of the account that pays, so a
+funded lane behind an empty fee account opens the floor and sends nothing; an account that does not exist is 0, a failed read
+or an answer with no `latestLedger` is an `Err` and keeps the last balance. A
 landed failure counts: `follow` meters `Reverted` as `Mined`, once per transaction. A Soroban chain with `modules.submit` on
 refuses to start unless `breaker.gas_budget_per_hour` and `breaker.min_relayer_balance` are both above 0
-([ops.md](../node/ops.md#NODE-OPS-11)). A fee that cannot be read is logged and counted in `scaas_fee_unread_total`, not
+([ops.md](../node/ops.md#NODE-OPS-11)). `call` jobs stop at `breaker.call_budget_pct` of the budget (default 50, owner decision
+2026-11-01), every other kind runs to all of it, so free registry writes cannot stop payments. A fee that cannot be read is logged and counted in `scaas_fee_unread_total`, not
 guessed. **Measured** on the Protocol 30 quickstart (`e2e_ua8_spend_stop`): `feeCharged` equals the payer's balance drop in
 all four cases, 956,837 stroops (`SUCCESS`), 377,361 (`FAILED`), 956,937 (fee bump `SUCCESS`), 377,461 (fee bump `FAILED`),
 the sending lane down by 0 under the fee bump. **Entry pre-check:** the host compares the whole `LedgerEntry`, which is
@@ -287,8 +290,8 @@ to 65,552 B landed `FAILED`), so `build` refuses a job whose largest `ContractDa
 (`dead` on one claim, nothing signed); a limit it cannot read lets the job through. The earlier 65,084 B was the
 `LedgerEntryData` alone, 8 B less. What a failed over-entry write costs the lane is 0.039 to 0.065 XLM (B7), so the
 pre-check saves it. Not exercised end to end: with the pre-check on, no job lands `FAILED` through the node without a race,
-so the budget stop on the real host is shown by the runner test with real result bytes. Ceiling: `lane_balance` is a sum, so
-a lane above the floor hides an empty fee account (not measured; the protocol's own validity check stops the spend). Test: a
+so the budget stop on the real host is shown by the runner test with real result bytes, and `meter` by a mined job through
+`lane_step_metered`. Test: a
 FAILED transaction adds `feeCharged` to `spent`. Residual risk: a `G…`
 subject flips state after simulation (transfers everything away, or submits its own auth entry to burn the nonce);
 bounded per `from` by the grief score ([NODE-LANE-15](../node/submit-lanes.md#NODE-LANE-15); `subject_grief` not yet in

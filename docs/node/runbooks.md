@@ -190,6 +190,8 @@ flowchart LR
    `base_fee_spike` ⇒ wait; reset only if understood: `adm POST /v1/admin/chains/$C/breaker/reset -d
    '{"lane":"*","breaker":"base_fee_spike"}'`. `revert_streak` ⇒ RB-16 first (it survives restarts).
 3. All lanes open (P1): work is held, nothing is lost; tell clients via the status page if > 30 min.
+4. `ScaasFeeUnread`: the gas budget missed a landed fee, so `gas_budget` opens late. Read the node's `tx_fee unread` log; an RPC
+   that answers status but not fee ⇒ RB-05; every fee unread after an upgrade ⇒ treat as a blind budget and lower the limit.
 
 #### 2.1.3 RB-03 stuck lane
 

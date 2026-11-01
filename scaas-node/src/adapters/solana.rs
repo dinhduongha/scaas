@@ -1315,7 +1315,7 @@ impl ChainAdapter for SolanaAdapter {
     async fn tx_fee(&self, tx_id: &str) -> Result<Option<u128>> {
         let sig = b58(&alloy::hex::decode(tx_id.trim_start_matches("0x"))?);
         let v = self.rpc("getTransaction", json!([sig, {"commitment": "confirmed", "maxSupportedTransactionVersion": 1}])).await?;
-        Ok(v["meta"]["fee"].as_u64().map(u128::from))
+        Ok(Some(v["meta"]["fee"].as_u64().map(u128::from).ok_or_else(|| anyhow!("getTransaction {tx_id}: no fee"))?))
     }
 
     /// Restart: không còn bytes cũ ⇒ advance nonce của lane một lần để mọi tx đã ký trước crash không bao giờ vào sổ nữa;
@@ -1823,7 +1823,8 @@ mod tests {
                 "getTransaction" => {
                     let s = p[0].as_str().unwrap().to_string();
                     f.lock().unwrap().push(s.clone());
-                    json!({"slot": 1, "meta": {"err": null, "innerInstructions": []}, "transaction": {"signatures": [s], "message": {"accountKeys": []}}})
+                    let fee = (s == sig(1)).then_some(5_000);
+                    json!({"slot": 1, "meta": {"err": null, "fee": fee, "innerInstructions": []}, "transaction": {"signatures": [s], "message": {"accountKeys": []}}})
                 }
                 "getBlock" => json!({"blockhash": b58(&[2; 32])}),
                 "getFirstAvailableBlock" => json!(0),
@@ -1836,6 +1837,18 @@ mod tests {
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         url
+    }
+
+    /// A landed tx's fee; none in the answer is an `Err`, counted by the runner, never a silent zero.
+    #[tokio::test]
+    async fn tx_fee_reads_the_fee_or_fails() {
+        let url = fake_rpc(Arc::new(Mutex::new(Vec::new()))).await;
+        let mut params = toml::Table::new();
+        params.insert("program_id".into(), PROGRAM.into());
+        let cfg = ChainCfg { family: "solana".into(), network: Some(NETWORK.into()), rpc_urls: vec![url], lanes: vec![0], params, ..Default::default() };
+        let a = SolanaAdapter::new(&cfg, &[lane0()]).unwrap();
+        assert_eq!(a.tx_fee(&alloy::hex::encode([1u8; 64])).await.unwrap(), Some(5_000));
+        assert!(a.tx_fee(&alloy::hex::encode([2u8; 64])).await.is_err());
     }
 
     /// Review L2: a short page is not the end of history (paging goes on until an empty page or `from`); L1: Odoo
