@@ -386,22 +386,28 @@ impl SorobanAdapter {
     /// A read-only call by simulation from lane 0; `None` = it needs a restore (an archived entry): unknown, never a
     /// default value. A simulation error is an `Err` (fail closed): `SimRefused` when the host refused the call.
     async fn view(&self, contract: &ScAddress, f: &str, args: Vec<ScVal>) -> Result<Option<ScVal>> {
+        let (value, restore) = self.sim_view(contract, f, args).await?;
+        Ok(value.filter(|_| !restore))
+    }
+
+    /// A read-only call by simulation: its value, and whether the simulation needs a restore (it may still have read the
+    /// archived entry, so the value can come with `true`, and only with `true` can it be absent).
+    async fn sim_view(&self, contract: &ScAddress, f: &str, args: Vec<ScVal>) -> Result<(Option<ScVal>, bool)> {
         let call = InvokeContractArgs { contract_address: contract.clone(), function_name: ScSymbol(f.try_into()?), args: args.try_into()? };
         let env = TransactionEnvelope::Tx(TransactionV1Envelope { tx: self.tx(0, 0, 0, call, vec![])?, signatures: Default::default() });
         let sim = self.rpc("simulateTransaction", json!({"transaction": env.to_xdr_base64(Limits::none())?})).await?;
         if let Some(e) = sim.get("error").and_then(|e| e.as_str()) {
             return Err(SimRefused(format!("{f}: {e}")).into());
         }
-        if sim.get("restorePreamble").is_some_and(|r| !r.is_null()) {
-            return Ok(None);
-        }
+        let mut restore = sim.get("restorePreamble").is_some_and(|r| !r.is_null());
         if let Some(d) = sim["transactionData"].as_str() {
-            if restores(&SorobanTransactionData::from_xdr_base64(d, Limits::len(1 << 20))?) {
-                return Ok(None);
-            }
+            restore |= restores(&SorobanTransactionData::from_xdr_base64(d, Limits::len(1 << 20))?);
         }
-        let x = sim["results"][0]["xdr"].as_str().ok_or_else(|| anyhow!("{f}: simulation without a result"))?;
-        Ok(Some(ScVal::from_xdr_base64(x, Limits { depth: 64, len: 1 << 16 })?))
+        match sim["results"][0]["xdr"].as_str() {
+            Some(x) => Ok((Some(ScVal::from_xdr_base64(x, Limits { depth: 64, len: 1 << 16 })?), restore)),
+            None if restore => Ok((None, true)),
+            None => bail!("{f}: simulation without a result"),
+        }
     }
 
     /// Decision (D): the router's executor, read once from `router.executor()` (the router names it at construction,
@@ -421,6 +427,28 @@ impl SorobanAdapter {
             Ok(None) => Err(SimError::Transport("router executor(): its state needs a restore".into())),
             Err(e) if e.is::<SimRefused>() => Err(config(format!("has no executor(): {e:#}"))),
             Err(e) => Err(SimError::Transport(format!("router executor(): {e:#}"))),
+        }
+    }
+
+    /// The registry's `relayers()`, read until it answers and then kept: the list is immutable, so a lane not listed stays
+    /// refused whatever a later read says. Only a job that names a relayer needs it: an RPC failure is `Transport`, a needed
+    /// restore or a registry that does not answer `Revert`, so an idle registry costs that job and no other.
+    async fn load_relayers(&self) -> std::result::Result<(), SimError> {
+        let (Some(registry), None) = (&self.relay_fee.ua_registry, self.relay_fee.relayers.get()) else { return Ok(()) };
+        let config = |why: String| SimError::Revert(format!("config: params.ua_registry {registry} {why}"));
+        match self.view(registry, "relayers", vec![]).await {
+            Ok(Some(ScVal::Vec(Some(v)))) => {
+                let list: Option<Vec<ScAddress>> = v.iter().map(|a| match a {
+                    ScVal::Address(a) => Some(a.clone()),
+                    _ => None,
+                }).collect();
+                let _ = self.relay_fee.relayers.set(list.ok_or_else(|| config(format!("relayers() is not a list of addresses: {v:?}")))?);
+                Ok(())
+            }
+            Ok(Some(v)) => Err(config(format!("relayers() is not a list: {v:?}"))),
+            Ok(None) => Err(SimError::Revert("registry relayers(): its state needs a restore".into())),
+            Err(e) if e.is::<SimRefused>() => Err(config(format!("has no relayers(): {e:#}"))),
+            Err(e) => Err(SimError::Transport(format!("registry relayers(): {e:#}"))),
         }
     }
 
@@ -482,8 +510,11 @@ impl ChainAdapter for SorobanAdapter {
         let pk = lane_pk(self.signer(lane).map_err(rv)?).map_err(rv)?;
         let lane_addr = ScAddress::from_str(&stellar_account_strkey(&pk)).map_err(|e| SimError::Revert(e.to_string()))?;
         self.load_executor().await?;
-        let (call, auth, valid_until) = job_tx(&self.network_id, job.kind.as_deref(), &op, &lane_addr, &self.relay_fee).map_err(rv)?;
         let registry_write = job.kind.as_deref() == Some("call");
+        if registry_write && !op["args"]["relayer"].is_null() {
+            self.load_relayers().await?;
+        }
+        let (call, auth, valid_until) = job_tx(&self.network_id, job.kind.as_deref(), &op, &lane_addr, &self.relay_fee).map_err(rv)?;
         if registry_write {
             self.ua8_precheck(&op).await?;
         }
@@ -632,17 +663,11 @@ impl ChainAdapter for SorobanAdapter {
         Ok(crate::indexer::join_pay_events(out))
     }
 
-    /// The registry's `relayers()`, once: a lane listed or not at start stays so, whatever a later read says. A failed read
-    /// keeps the lane stopped (`run_lane` asks again), so no job runs on a list nobody read.
+    /// Reads `relayers()` early and only logs a failure: the list concerns relayer-mode jobs alone, and `build` reads it for them.
     async fn start_check(&self) -> Result<()> {
-        let (Some(registry), None) = (&self.relay_fee.ua_registry, self.relay_fee.relayers.get()) else { return Ok(()) };
-        let v = self.view(registry, "relayers", vec![]).await.context("params.ua_registry: relayers()")?;
-        let Some(ScVal::Vec(Some(v))) = v else { bail!("params.ua_registry: relayers() is not a list, or needs a restore") };
-        let one = |a: &ScVal| match a {
-            ScVal::Address(a) => Ok(a.clone()),
-            _ => Err(anyhow!("params.ua_registry: relayers() holds {a:?}")),
-        };
-        let _ = self.relay_fee.relayers.set(v.iter().map(one).collect::<Result<_>>()?);
+        if let Err(e) = self.load_relayers().await {
+            tracing::warn!(chain = %self.key, "registry relayers() not read at start, relayer-mode jobs read it again: {e}");
+        }
         Ok(())
     }
 
@@ -802,7 +827,7 @@ pub struct RelayFeePolicy {
     pub executor: OnceLock<ScAddress>,
     /// `params.ua_registry` (`C…`): the only target of `call` jobs; `None` = none are relayed.
     pub ua_registry: Option<ScAddress>,
-    /// The registry's `relayers()`, read once at lane start (`start_check`) and never again: unset, nobody is listed.
+    /// The registry's `relayers()`, kept from the first read that answers (`load_relayers`): unset, nobody is listed.
     pub relayers: OnceLock<Vec<ScAddress>>,
 }
 
@@ -986,6 +1011,11 @@ pub fn job_tx(network: &[u8; 32], kind: Option<&str>, op: &Value, lane: &ScAddre
         Some("call") => {
             let registry = policy.ua_registry.as_ref().ok_or_else(|| anyhow!("a call job needs params.ua_registry (the chain's UaRegistry)"))?;
             let valid_until = op["valid_until"].as_u64().ok_or_else(|| anyhow!("op.valid_until missing"))?;
+            // nothing signed names this deadline, so the node bounds it: `0` is no `max_time`, and `follow` waits for it
+            let (now, max) = (crate::submit::now(), crate::mesh::accept::MeshParams::default().max_valid_for_secs);
+            if valid_until <= now || valid_until > now.saturating_add(max) {
+                bail!("op.valid_until {valid_until} is not within {max} s after now ({now})");
+            }
             let listed = policy.relayers.get().is_some_and(|l| l.contains(lane));
             let (call, auth) = ua8_call_job(op, lane, registry, listed)?;
             Ok((call, auth, valid_until))
@@ -1507,7 +1537,7 @@ pub fn ua8_call_job(op: &Value, lane: &ScAddress, registry: &ScAddress, listed: 
     }
     match &relayer {
         Some(r) if r != lane => bail!("the relayer must be None or this lane"),
-        Some(_) if !listed => bail!("this lane is not in the registry's relayers() (read at start): no relayer-mode job"),
+        Some(_) if !listed => bail!("this lane is not in the registry's relayers(): no relayer-mode job"),
         _ => {}
     }
     let (f, args) = ua8_args(&w, relayer.as_ref().map_or(ScVal::Void, |r| ScVal::Address(r.clone())))?;
@@ -1570,13 +1600,16 @@ fn register_kind(a: &RegisterArgs) -> u16 {
 }
 
 impl SorobanAdapter {
-    /// `record_of(ua)` by simulation: `(kind, key_data, signable)`, `None` for an unregistered id. An RPC failure or a needed
-    /// restore is `Transport`, never "unregistered".
+    /// `record_of(ua)` by simulation: `(kind, key_data, signable)`, `None` for an unregistered id. An archived record's value
+    /// is taken: every reader binds it to its id (`ua_of` here, `derive_ua` in `check_*`), and the write's `sim_data` applies the
+    /// restore cap. An RPC failure alone is `Transport`, never "unregistered"; what this job's state answers is `Revert`, since
+    /// a requeued job is claimed again first and would starve the chain's queue.
     async fn ua8_record(&self, registry: &ScAddress, ua: &[u8; 32]) -> std::result::Result<Option<(u16, Vec<u8>, bool)>, SimError> {
         let id = sc_bytes(ua).map_err(|e| SimError::Revert(e.to_string()))?;
-        let v = match self.view(registry, "record_of", vec![id]).await {
-            Ok(Some(v)) => v,
-            Ok(None) => return Err(SimError::Transport("record_of: its state needs a restore".into())),
+        let v = match self.sim_view(registry, "record_of", vec![id]).await {
+            Ok((Some(v), _)) => v,
+            Ok((None, _)) => return Err(SimError::Revert("record_of: its state needs a restore, and no value came back".into())),
+            Err(e) if e.is::<SimRefused>() => return Err(SimError::Revert(format!("record_of: {e:#}"))),
             Err(e) => return Err(SimError::Transport(format!("record_of: {e:#}"))),
         };
         if v == ScVal::Void {
@@ -1629,8 +1662,11 @@ impl SorobanAdapter {
         if relayer.is_none() {
             return Err(SimError::Revert(format!("a part of kind {kind:#06x} needs a relayer (NotVerifiable): this job names none")));
         }
+        let refused = |e: UAError| SimError::Revert(format!("off-chain check refused the record: {}", e.code()));
+        // the contract's layout first, 16 members among it: one job costs at most 16 reads
+        scaas_ua::derive_ua(kind, &key_data, false).map_err(refused)?;
         let known = if kind == MSIG { self.ua8_members(registry, &key_data).await? } else { HashMap::new() };
-        ua8_check(&w, kind, &key_data, &|id| known.get(&id).cloned()).map_err(|e| SimError::Revert(format!("off-chain check refused the record: {}", e.code())))
+        ua8_check(&w, kind, &key_data, &|id| known.get(&id).cloned()).map_err(refused)
     }
 }
 
@@ -2504,9 +2540,17 @@ mod tests {
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(b): axum::Json<Value>| {
             let (answer, calls) = (answer.clone(), calls.clone());
             async move {
-                if b["method"] == "sendTransaction" {
-                    calls.lock().unwrap().push("SEND".to_string());
-                    return axum::Json(json!({"jsonrpc": "2.0", "id": 1, "result": {"status": "PENDING"}}));
+                let lane_rpc = match b["method"].as_str() {
+                    Some("sendTransaction") => {
+                        calls.lock().unwrap().push("SEND".to_string());
+                        Some(json!({"status": "PENDING"}))
+                    }
+                    Some("getLedgerEntries") => Some(json!({"entries": [{"xdr": lane_account()}]})),
+                    Some("getTransaction") => Some(json!({"status": "SUCCESS", "ledger": 5})),
+                    _ => None,
+                };
+                if let Some(r) = lane_rpc {
+                    return axum::Json(json!({"jsonrpc": "2.0", "id": 1, "result": r}));
                 }
                 let env = TransactionEnvelope::from_xdr_base64(b["params"]["transaction"].as_str().unwrap(), Limits::none()).unwrap();
                 let TransactionEnvelope::Tx(t) = env else { panic!() };
@@ -2520,6 +2564,22 @@ mod tests {
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         url
+    }
+
+    /// `adapter.sequence`'s answer.
+    fn lane_account() -> String {
+        LedgerEntryData::Account(stellar_xdr::AccountEntry {
+            account_id: AccountId(PublicKey::PublicKeyTypeEd25519(Uint256([1; 32]))),
+            balance: 0,
+            seq_num: SequenceNumber(4),
+            num_sub_entries: 0,
+            inflation_dest: None,
+            flags: 0,
+            home_domain: Default::default(),
+            thresholds: stellar_xdr::Thresholds([1, 0, 0, 0]),
+            signers: Default::default(),
+            ext: stellar_xdr::AccountEntryExt::V0,
+        }).to_xdr_base64(Limits::none()).unwrap()
     }
 
     fn view_ok(v: ScVal) -> Value {
@@ -2715,7 +2775,7 @@ mod tests {
         }
     }
     fn call_op(function: &str, args: Value) -> Value {
-        json!({"contract": REGISTRY, "function": function, "args": args, "valid_until": VU})
+        json!({"contract": REGISTRY, "function": function, "args": args, "valid_until": crate::submit::now() + 600})
     }
     /// A `kemRecords` / `pqzKeyRecords` row as its job.
     fn rec_op(f: &str, r: &Value, relayer: &Value) -> Value {
@@ -2895,7 +2955,7 @@ mod tests {
         let e = job_tx(&NET7, Some("call"), &op, &lane(), &policy()).unwrap_err().to_string();
         assert!(e.contains("ua_registry"), "{e}");
         let p = RelayFeePolicy { ua_registry: Some(sc(REGISTRY)), ..policy() };
-        assert_eq!(job_tx(&NET7, Some("call"), &op, &lane(), &p).unwrap().2, VU);
+        assert_eq!(Some(job_tx(&NET7, Some("call"), &op, &lane(), &p).unwrap().2), op["valid_until"].as_u64());
         let mut late = op.clone();
         late.as_object_mut().unwrap().remove("valid_until");
         assert!(job_tx(&NET7, Some("call"), &late, &lane(), &p).unwrap_err().to_string().contains("valid_until"));
@@ -2973,11 +3033,15 @@ mod tests {
         })
     }
     async fn ua8_adapter(answer: Answer) -> (SorobanAdapter, Arc<Mutex<Vec<String>>>) {
+        ua8_adapter_cap(answer, 0).await
+    }
+    async fn ua8_adapter_cap(answer: Answer, max_deposit: i64) -> (SorobanAdapter, Arc<Mutex<Vec<String>>>) {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let url = rpc_stub(answer, calls.clone()).await;
         let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: vec![url], lanes: vec![0], ..Default::default() };
         c.params.insert("network_passphrase".into(), "x".into());
         c.params.insert("ua_registry".into(), REGISTRY.into());
+        c.params.insert("max_deposit_per_job".into(), max_deposit.into());
         let s = LocalSigner::Ed(ed25519_dalek::SigningKey::from_bytes(&[1; 32]));
         (SorobanAdapter::new(&c, &[s]).unwrap(), calls)
     }
@@ -2991,7 +3055,10 @@ mod tests {
     }
     /// What the lane does with a job: build, and only after it sign and send.
     async fn run(a: &SorobanAdapter, op: &Value) -> std::result::Result<(), SimError> {
-        let job: Job = serde_json::from_value(json!({"id": 7, "kind": "call", "op": op})).unwrap();
+        run_kind(a, "call", op).await
+    }
+    async fn run_kind(a: &SorobanAdapter, kind: &str, op: &Value) -> std::result::Result<(), SimError> {
+        let job: Job = serde_json::from_value(json!({"id": 7, "kind": kind, "op": op})).unwrap();
         let built = a.build(&job, 0).await?;
         let signed = a.sign(built, 0, 1).await.unwrap();
         a.submit(&signed).await.unwrap();
@@ -3107,19 +3174,107 @@ mod tests {
         let (b, calls) = listed(vec![]).await;
         refused(run(&b, &good).await, "UAMemberUnknown");
         assert_eq!(logged(&calls), ["record_of"]);
-        // an RPC failure or a needed restore is no answer: retried, never a pass
-        for answer in [json!({"error": "boom"}), view_archived(rec(0x0132, &m.key, false))] {
-            let (c, calls) = ua8_adapter(Arc::new(move |f| match f.function_name.0.as_slice() {
+        // an RPC failure is no answer: retried, never a pass; a host refusal is this job's own: dead, not requeued
+        let answering = |answer: Value| {
+            let m = Arc::new(move |f: &InvokeContractArgs| match f.function_name.0.as_slice() {
                 b"relayers" => view_ok(vecv(vec![addr(&stub_lane())])),
                 b"record_of" => answer.clone(),
                 _ => view_ok(ScVal::Void),
-            })).await;
-            c.start_check().await.unwrap();
-            logged(&calls);
-            let e = run(&c, &good).await;
-            assert!(matches!(&e, Err(SimError::Transport(_))), "{e:?}");
-            assert_eq!(logged(&calls), ["record_of"]);
+            });
+            async move {
+                let (c, calls) = ua8_adapter(m).await;
+                c.start_check().await.unwrap();
+                logged(&calls);
+                (c, calls)
+            }
+        };
+        let (c, calls) = answering(json!({})).await;
+        let e = run(&c, &good).await;
+        assert!(matches!(&e, Err(SimError::Transport(_))), "{e:?}");
+        assert_eq!(logged(&calls), ["record_of"]);
+        let (c, calls) = answering(json!({"error": "boom"})).await;
+        refused(run(&c, &good).await, "boom");
+        assert_eq!(logged(&calls), ["record_of"]);
+        // an archived member's value is bound to its id by `check_*`: it is used, and the restore is the write's
+        let (c, calls) = answering(view_archived(rec(0x0132, &m.key, false))).await;
+        run(&c, &good).await.unwrap();
+        assert_eq!(logged(&calls), ["record_of", "register_msig", "SEND"]);
+        refused(run(&c, &bad).await, "UAPoP");
+        assert_eq!(logged(&calls), ["record_of"], "a restore skips no check");
+    }
+
+    /// An archived record (review): its value is used where its id binds it, the write's `sim_data` applies the cap, and a
+    /// restore with no value is this job's own refusal.
+    #[tokio::test]
+    async fn archived_record_restores_within_the_cap() {
+        let (r, k) = (row("registrations", "fndsa512"), row("kemRecords", "fndsa512/v1"));
+        let (ua, record) = row_rec(r, false);
+        let answer = |x: Option<Value>| -> Answer {
+            let record = record.clone();
+            Arc::new(move |c| match c.function_name.0.as_slice() {
+                b"relayers" => view_ok(vecv(vec![addr(&stub_lane())])),
+                b"record_of" => x.clone().unwrap_or_else(|| view_archived(record.clone())),
+                _ => view_archived(ScVal::Void),
+            })
+        };
+        assert_eq!(strip(&k["ua"]), ua);
+        let me = json!(stub_lane());
+        let job = rec_op("set_kem_key", k, &me);
+        let (a, calls) = ua8_adapter_cap(answer(None), 115).await;
+        a.start_check().await.unwrap();
+        logged(&calls);
+        run(&a, &job).await.unwrap();
+        assert_eq!(logged(&calls), ["record_of", "set_kem_key", "SEND"], "100 + 15 % within the cap");
+        let mut bad = job.clone();
+        flip(&mut bad["args"]["sig"]["signature"]);
+        refused(run(&a, &bad).await, "UAUnauthorized");
+        assert_eq!(logged(&calls), ["record_of"], "a restore skips no check");
+        let (a, calls) = ua8_adapter_cap(answer(None), 114).await;
+        a.start_check().await.unwrap();
+        logged(&calls);
+        refused(run(&a, &job).await, "restore over max_deposit_per_job");
+        assert_eq!(logged(&calls), ["record_of", "set_kem_key"], "the write's cap, never sent");
+        let (a, calls) = ua8_adapter_cap(answer(Some(json!({"restorePreamble": {"minResourceFee": "5"}}))), 115).await;
+        a.start_check().await.unwrap();
+        logged(&calls);
+        refused(run(&a, &job).await, "needs a restore");
+        assert_eq!(logged(&calls), ["record_of"]);
+    }
+
+    /// Review: a job naming an archived record, with a garbage `sig`, leaves the queue at once and the next job runs:
+    /// `relay_poll` is oldest first, so a requeued job would be claimed again every round.
+    #[tokio::test]
+    async fn archived_record_job_does_not_hold_the_queue() {
+        use crate::adapter::tests::{fake_odoo, Fake};
+        let record = row_rec(row("registrations", "mldsa65/n2048-kmax1024"), true).1;
+        let (a, calls) = ua8_adapter(Arc::new(move |c| match c.function_name.0.as_slice() {
+            b"relayers" => view_ok(vecv(vec![])),
+            b"record_of" => view_archived(record.clone()),
+            b"set_kem_key" => view_archived(ScVal::Void),
+            _ => view_ok(ScVal::Void),
+        })).await;
+        let mut garbage = rec_op("set_kem_key", row("kemRecords", "mldsa65/v1"), &NONE);
+        garbage["args"]["sig"]["signature"] = json!("0xdead");
+        let jobs = vec![json!({"id": 7, "kind": "call", "op": garbage}), json!({"id": 8, "kind": "call", "op": ops(&NONE)[7]})];
+        let (odoo, o) = fake_odoo(Fake { jobs, repeat: true, ..Default::default() }).await;
+        for _ in 0..4 {
+            crate::adapter::lane_step(&a, &odoo, 0, "n#0").await.unwrap();
+            let mut f = o.lock().unwrap();
+            let last = f.reports.last().unwrap().clone();
+            if last["chain_state"] != "queued" {
+                f.jobs.retain(|j| j["id"] != last["job_id"]);
+            }
+            if f.jobs.is_empty() {
+                break;
+            }
         }
+        let f = o.lock().unwrap();
+        let states = |id: i64| f.reports.iter().filter(|r| r["job_id"] == id).map(|r| r["chain_state"].as_str().unwrap()).collect::<Vec<_>>();
+        assert_eq!(states(7), ["dead"], "{:?}", f.reports);
+        assert_eq!(states(8).last(), Some(&"mined"), "{:?}", f.reports);
+        assert_eq!(f.claims, 2, "each job once");
+        assert!(f.jobs.is_empty());
+        assert_eq!(logged(&calls).iter().filter(|c| *c == "SEND").count(), 1);
     }
 
     /// `evm-contract`: no off-chain check exists (C14). Signing nothing it passes; with a slot it is `NotVerifiable`.
@@ -3170,7 +3325,7 @@ mod tests {
         let at = marked.iter().position(|x| x.1 == m.id).unwrap() as u16;
         let job = msig_op(2, &marked, &[(at, slot(&encode_msig(2, &marked), &m))], &json!(stub_lane()));
         refused(run(&a, &job).await, "UAKeyData");
-        assert_eq!(logged(&calls).iter().filter(|c| *c == "register_msig" || *c == "SEND").count(), 0);
+        assert_eq!(logged(&calls), Vec::<String>::new(), "no read, no simulation");
         // the control: the same weights with a native member `check_*` knows
         let mut eoa = [0u8; 32];
         eoa[31] = 1;
@@ -3178,6 +3333,39 @@ mod tests {
         let at = known.iter().position(|x| x.1 == m.id).unwrap() as u16;
         run(&a, &msig_op(2, &known, &[(at, slot(&encode_msig(2, &known), &m))], &json!(stub_lane()))).await.unwrap();
         assert_eq!(logged(&calls), ["record_of", "register_msig", "SEND"]);
+    }
+
+    /// Review: one job costs at most the contract's 16 member reads; 17 are refused with no simulation at all.
+    #[tokio::test]
+    async fn msig_member_list_is_bounded_before_any_read() {
+        let (a, calls) = listed(vec![]).await;
+        let job = |n: u8| {
+            let ms: Vec<(u16, [u8; 32], u16)> = (1..=n).map(|i| (0x0132, [i; 32], 1)).collect();
+            msig_op(n.into(), &ms, &[(0, vec![0xab; 666])], &json!(stub_lane()))
+        };
+        refused(run(&a, &job(16)).await, "UAMemberUnknown");
+        assert_eq!(logged(&calls), vec!["record_of".to_string(); 16], "the control: the same job at the limit");
+        refused(run(&a, &job(17)).await, "UAKeyData");
+        assert_eq!(logged(&calls), Vec::<String>::new(), "no read, no simulation");
+    }
+
+    /// Review: a `call` job's deadline is the node's to bound, nobody signed it: `0` is no `max_time`, a far one holds the
+    /// lane in `follow`, `u64::MAX` overflows `valid_until + EXPIRY_GRACE`.
+    #[tokio::test]
+    async fn call_job_valid_until_is_bounded() {
+        let (a, calls) = listed(vec![]).await;
+        let (now, max) = (crate::submit::now(), crate::mesh::accept::MeshParams::default().max_valid_for_secs);
+        let mut o = ops(&NONE).remove(7);
+        for v in [0, now - 1, now + max + 60, u64::MAX] {
+            o["valid_until"] = json!(v);
+            refused(run(&a, &o).await, "valid_until");
+            assert_eq!(logged(&calls), Vec::<String>::new(), "{v}");
+        }
+        for v in [now + 60, now + max - 60] {
+            o["valid_until"] = json!(v);
+            run(&a, &o).await.unwrap();
+            assert_eq!(logged(&calls), ["store_pqz_pop", "SEND"], "{v}");
+        }
     }
 
     /// `check_*` only where a part needs `relayer`: a Chain row is the chain's to refuse, a commit's fill compares a hash,
@@ -3212,8 +3400,8 @@ mod tests {
         assert_eq!(logged(&calls), ["record_of"]);
     }
 
-    /// `relayers()` is read once, at start: not listed stays refused even if a later read would pass, a failed read
-    /// lists nobody, and the one difference from the passing job is the start's answer.
+    /// `relayers()` answers once: not listed stays refused even if a later read would pass, and the one difference from the
+    /// passing job is that answer.
     #[tokio::test]
     async fn relayer_mode_refused_on_unlisted_lane() {
         let r = row("registrations", "fndsa512");
@@ -3238,14 +3426,44 @@ mod tests {
         let (b, calls) = listed(vec![]).await;
         run(&b, &job).await.unwrap();
         assert_eq!(logged(&calls), ["register", "SEND"], "the control: listed at start");
+    }
 
-        let (c, calls) = ua8_adapter(Arc::new(|_| json!({"error": "boom"}))).await;
-        assert!(c.start_check().await.is_err());
-        logged(&calls);
-        refused(run(&c, &job).await, "not in the registry's relayers()");
-        assert_eq!(logged(&calls), Vec::<String>::new());
-        let e = ua8_adapter(Arc::new(|_| view_ok(u64v(1)))).await.0.start_check().await.unwrap_err();
-        assert!(format!("{e:#}").contains("relayers"), "{e:#}");
+    /// Review: a failed `relayers()` read holds only what needs the list. `start_check` passes, payments and Chain parts run,
+    /// a relayer-mode job fails closed until a read answers, and the answer is kept.
+    #[tokio::test]
+    async fn failed_relayers_read_stops_only_relayer_mode() {
+        let list = view_ok(vecv(vec![addr(&stub_lane())]));
+        let answer = Arc::new(Mutex::new(json!({})));
+        let shared = answer.clone();
+        let (a, calls) = ua8_adapter(Arc::new(move |c| match c.function_name.0.as_slice() {
+            b"relayers" => shared.lock().unwrap().clone(),
+            _ => view_ok(ScVal::Void),
+        })).await;
+        a.start_check().await.unwrap();
+        assert_eq!(logged(&calls), ["relayers"], "logged, the lane starts");
+
+        let pay = json!({"payload": payload(a.network_id, inv(CONTRACT, "pay", vec![addr(FROM), addr(WALLET), i128v(1), byt(&[3; 32]), ScVal::U64(1)], vec![])),
+            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": VU, "extra": {}});
+        run_kind(&a, "signed_op", &pay).await.unwrap();
+        assert_eq!(logged(&calls), ["pay", "SEND"]);
+        run(&a, &reg_op(row("registrations", "ed25519"), &NONE)).await.unwrap();
+        assert_eq!(logged(&calls), ["register", "SEND"], "no relayer named, no read");
+
+        let job = reg_op(row("registrations", "fndsa512"), &json!(stub_lane()));
+        let e = run(&a, &job).await;
+        assert!(matches!(&e, Err(SimError::Transport(_))), "an RPC failure is retried: {e:?}");
+        assert_eq!(logged(&calls), ["relayers"], "never simulated, never sent");
+        for (bad, why) in [(view_archived(vecv(vec![])), "needs a restore"), (json!({"error": "boom"}), "config"), (view_ok(u64v(1)), "config")] {
+            *answer.lock().unwrap() = bad;
+            refused(run(&a, &job).await, why);
+            assert_eq!(logged(&calls), ["relayers"], "{why}");
+        }
+        *answer.lock().unwrap() = list;
+        run(&a, &job).await.unwrap();
+        assert_eq!(logged(&calls), ["relayers", "register", "SEND"], "the read answers, the job runs");
+        *answer.lock().unwrap() = json!({});
+        run(&a, &job).await.unwrap();
+        assert_eq!(logged(&calls), ["register", "SEND"], "read once");
     }
 
     /// `check_recorded_auth` applies, and a call that wants anyone else's authority cannot land: the job carries no entry.
