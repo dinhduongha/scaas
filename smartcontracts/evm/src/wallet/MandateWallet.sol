@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
-import {MetaTxBase} from "../metatx/MetaTxBase.sol";
+import {WalletExecute} from "./WalletExecute.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {IERC20Payment} from "../metatx/IERC20Payment.sol";
@@ -17,9 +17,12 @@ import {FeeMode} from "../common/FeePolicy.sol";
 ///         as a manual payment does. Every signed action is a `MetaTransaction` self-call (domain `("SCaaS
 ///         MandateWallet", "1", chainId, wallet, chain_uid)`, fee mode `NONE`): the delegate signs
 ///         `payUnderMandate(…, epoch)` and `revoke(token, epoch)`; the owner signs `setMandate`, `setPayee`,
-///         `revoke(token)` and `execute`. `mtxPayUnderMandate`, `mtxRevoke` and `mtxExecuteAsOwner` are the named builders and derive
-///         their lanes. ERC-1271 answers for the owner (ECDSA), so the owner also pays by hand with `from = wallet`.
-contract MandateWallet is MetaTxBase, IERC1271 {
+///         `revoke(token)` and `execute`. `mtxPayUnderMandate`, `mtxRevoke` and `mtxExecuteAsOwner` are the named builders of that
+///         `MetaTransaction` and derive their lanes. Each signed action also has a named typed entry (TS-D14) over its own struct:
+///         `mtxSetMandate`, `mtxSetPayee`, `mtxRevokeMandate`, `mtxExecute`; for the delegate `mtxPayUnderMandate` and
+///         `mtxDelegateRevoke`, whose `batch` is the signer's, so `refUsed` and `epoch` are what stop a replay on another lane.
+///         ERC-1271 answers for the owner (ECDSA), so the owner also pays by hand with `from = wallet`.
+contract MandateWallet is WalletExecute, IERC1271 {
     struct Mandate {
         address delegate;      // 0 = none or revoked
         uint64 expiry;         // unix seconds
@@ -63,7 +66,7 @@ contract MandateWallet is MetaTxBase, IERC1271 {
     }
 
     /// @param chainUid_ the chain's `chain_uid` from its profile (CTR-GEN-05); the node checks `chainUid()` before relaying.
-    constructor(address owner_, bytes32 chainUid_) MetaTxBase("SCaaS MandateWallet", chainUid_) {
+    constructor(address owner_, bytes32 chainUid_) WalletExecute("SCaaS MandateWallet", chainUid_) {
         if (owner_ == address(0)) revert ZeroOwner();
         owner = owner_;
     }
@@ -179,6 +182,42 @@ contract MandateWallet is MetaTxBase, IERC1271 {
             abi.encode(token, delegate, maxPerPayment, maxPerPeriod, periodSeconds, expiry), sig);
     }
 
+    /// @notice The owner's signed `setPayee` (TS-D14): struct `SetPayee`.
+    function mtxSetPayee(MetaTxLib.Envelope calldata e, address token, address payee, bool allowed, bytes calldata sig)
+        external nonReentrant returns (bytes memory)
+    {
+        return _named(_SET_PAYEE_TYPEHASH, MandateWallet.setPayee.selector, e, abi.encode(token, payee, allowed), sig);
+    }
+
+    /// @notice The owner's signed `revoke(token)` (TS-D14): struct `RevokeMandate`.
+    function mtxRevokeMandate(MetaTxLib.Envelope calldata e, address token, bytes calldata sig)
+        external nonReentrant returns (bytes memory)
+    {
+        return _named(_REVOKE_MANDATE_TYPEHASH, _REVOKE_OWNER, e, abi.encode(token), sig);
+    }
+
+    /// @notice The delegate's signed `payUnderMandate` (TS-D14): struct `PayUnderMandate`, bound to `epoch_` (CTR-ACC-07).
+    function mtxPayUnderMandate(MetaTxLib.Envelope calldata e, address token, address payee, uint256 amount, bytes32 entryRef,
+        uint64 epoch_, bytes calldata sig) external nonReentrant returns (bytes memory)
+    {
+        return _named(_PAY_UNDER_MANDATE_TYPEHASH, MandateWallet.payUnderMandate.selector, e,
+            abi.encode(token, payee, amount, entryRef, epoch_), sig);
+    }
+
+    /// @notice The delegate's signed `revoke(token, epoch)` (TS-D14): struct `DelegateRevoke`, bound to `epoch_` (CTR-ACC-07).
+    function mtxDelegateRevoke(MetaTxLib.Envelope calldata e, address token, uint64 epoch_, bytes calldata sig)
+        external nonReentrant returns (bytes memory)
+    {
+        return _named(_DELEGATE_REVOKE_TYPEHASH, _REVOKE_SIGNED, e, abi.encode(token, epoch_), sig);
+    }
+
+    /// @notice The owner's signed `execute` (TS-D14): struct `Execute`; the wallet shows target and value, `data` stays hex.
+    function mtxExecute(MetaTxLib.Envelope calldata e, address target, uint256 value, bytes calldata data, bytes calldata sig)
+        external nonReentrant returns (bytes memory)
+    {
+        return _namedExecute(e, target, value, data, sig);
+    }
+
     // ------------------------------------------------------------------ views
 
     function mandatePayLane(bytes32 entryRef) public pure returns (uint256) {
@@ -216,6 +255,18 @@ contract MandateWallet is MetaTxBase, IERC1271 {
     bytes4 private constant _REVOKE_SIGNED = bytes4(keccak256("revoke(address,uint64)"));
     bytes32 private constant _SET_MANDATE_TYPEHASH = keccak256(
         "SetMandate(address from,address token,address delegate,uint128 maxPerPayment,uint128 maxPerPeriod,uint64 periodSeconds,uint64 expiry,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+    bytes32 private constant _SET_PAYEE_TYPEHASH = keccak256(
+        "SetPayee(address from,address token,address payee,bool allowed,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+    bytes32 private constant _REVOKE_MANDATE_TYPEHASH = keccak256(
+        "RevokeMandate(address from,address token,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+    bytes32 private constant _PAY_UNDER_MANDATE_TYPEHASH = keccak256(
+        "PayUnderMandate(address from,address token,address payee,uint256 amount,bytes32 entryRef,uint64 epoch,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+    bytes32 private constant _DELEGATE_REVOKE_TYPEHASH = keccak256(
+        "DelegateRevoke(address from,address token,uint64 epoch,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
     function _mtxRule(bytes4 sel) internal view override returns (MtxRule memory) {

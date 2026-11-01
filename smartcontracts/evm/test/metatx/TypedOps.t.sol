@@ -3,14 +3,15 @@ pragma solidity ^0.8.24;
 
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {Test} from "forge-std/Test.sol";
+import {Test, stdStorage, StdStorage} from "forge-std/Test.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {MetaTxBase} from "../../src/metatx/MetaTxBase.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MtxRelayFee} from "../../src/metatx/MtxRelayFee.sol";
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
-import {SmartKeyAccount, SubjectKey, KeyKind} from "../../src/account/SmartKeyAccount.sol";
+import {HederaMandateWallet} from "../../src/hedera/HederaMandateWallet.sol";
+import {SmartKeyAccount, SubjectKey, KeyKind, AccountSig} from "../../src/account/SmartKeyAccount.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
@@ -33,6 +34,13 @@ import {VM, TYPED_OPS, SALTED_DOMAIN, checkRow, onChain, rowEnvelope, rowEnvelop
 /// `built` (the entry's call from the message's fields) is the row's calldata under `kind`; that calldata runs on `c` from
 /// the row's relayer, the signature replaced by the one under `c`'s domain.
 function runRow(string memory j, string memory op, string memory kind, address c, bytes memory built) returns (bytes memory ret) {
+    bool ok;
+    (ok, ret) = tryRow(j, op, kind, c, built);
+    if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+}
+
+/// `runRow` that returns the call's outcome: a row whose fillers the op itself refuses still has to get that far.
+function tryRow(string memory j, string memory op, string memory kind, address c, bytes memory built) returns (bool ok, bytes memory ret) {
     checkRow(j, op, kind);
     bytes memory cd = VM.parseJsonBytes(j, domainField(op, kind, "calldata"));
     require(keccak256(built) == keccak256(cd), "calldata");
@@ -41,9 +49,7 @@ function runRow(string memory j, string memory op, string memory kind, address c
     uint256 at = find(cd, rowSig);
     for (uint256 i; i < 65; ++i) cd[at + i] = sig[i];
     VM.prank(VM.parseJsonAddress(j, msgField(op, "relayer")));
-    bool ok;
     (ok, ret) = c.call(cd);
-    if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
 }
 
 function find(bytes memory hay, bytes memory needle) pure returns (uint256) {
@@ -59,6 +65,8 @@ function find(bytes memory hay, bytes memory needle) pure returns (uint256) {
 /// by itself (`checkRow`), its calldata equal to the message's fields, then the row's own calldata on a contract, under
 /// that contract's domain (the signature re-made over the row's `structHash`, so the entry hashes what clientkeys hashed).
 contract TypedOpsTest is UALedgerBase {
+    using stdStorage for StdStorage;
+
     string internal j;
     uint256 internal pk;
     address internal signer;
@@ -135,15 +143,20 @@ contract TypedOpsTest is UALedgerBase {
     /// fillers above `wrapped`), the signer holding its units; the registry answers for the row's `to`.
     function _rowLedgerLeg(string memory op) internal returns (WrappedToken w, NormalToken l) {
         address at = _addr(op, "underlying");
-        address impl = address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""));
-        vm.etch(at, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
-        l = NormalToken(at);
-        l.initialize(address(this), 1, abi.encode(normalInit("Leg", "LEG", 6, SUPPLY, address(this), address(this))));
+        l = _tokenAt(at);
         w = _wrapperAt(at, 1, 10);
         l.approve(address(w), SUPPLY);
         w.wrap(SUPPLY);
         w.transfer(signer, SUPPLY / 10);
         vm.mockCall(REG_L, abi.encodeCall(IUARegistry.kindOf, (_b32(op, "to"))), abi.encode(UAKinds.P256));
+    }
+
+    /// A SCaaS ledger token at a row's address, its supply here.
+    function _tokenAt(address at) internal returns (NormalToken l) {
+        address impl = address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""));
+        vm.etch(at, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
+        l = NormalToken(at);
+        l.initialize(address(this), 1, abi.encode(normalInit("Leg", "LEG", 6, SUPPLY, address(this), address(this))));
     }
 
     // ------------------------------------------------------------------ test_typedOpsVectors_<op>
@@ -316,6 +329,201 @@ contract TypedOpsTest is UALedgerBase {
             (u, address(leg), wrapped, to, _uint(op, "minOut"), _uaSigOf(op))));
         assertEq(leg.balanceOfUA(to), wrapped * 10);
         assertEq(w.balanceOf(u.feeRecipient), _feeOf(op, wrapped));
+    }
+
+    // ------------------------------------------------------------------ the wallets and the account (C5)
+
+    function _sigOf(string memory op, string memory kind) internal view returns (bytes memory) {
+        return vm.parseJsonBytes(j, domainField(op, kind, "signature"));
+    }
+
+    function _abiOf(string memory op, string memory kind) internal view returns (string memory) {
+        return vm.parseJsonString(j, domainField(op, kind, "abi"));
+    }
+
+    function _accountSig(string memory op) internal view returns (AccountSig memory) {
+        return AccountSig(0, new bytes32[](0), _sigOf(op, "account"));
+    }
+
+    /// A wallet under a mandate on the row's `token` for `delegate_`, its epoch the row's.
+    function _rowMandate(string memory op, address delegate_, uint256 cap) internal returns (MandateWallet w) {
+        address token = _addr(op, "token");
+        w = new MandateWallet(address(0xA11), chainUidA);
+        vm.prank(w.owner());
+        w.setMandate(token, delegate_, uint128(cap), uint128(cap), 1 days, uint64(block.timestamp + 1 days));
+        stdstore.target(address(w)).sig("epoch(address)").with_key(token).checked_write(_uint(op, "epoch"));
+    }
+
+    function test_typedOpsVectors_SetMandate() public {
+        string memory op = "SetMandate";
+        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
+        address token = _addr(op, "token");
+        MandateWallet w = new MandateWallet(e.from, chainUidA);
+        bytes memory built = abi.encodeCall(MandateWallet.mtxSetMandate, (e, token, _addr(op, "delegate"),
+            uint128(_uint(op, "maxPerPayment")), uint128(_uint(op, "maxPerPeriod")), uint64(_uint(op, "periodSeconds")),
+            uint64(_uint(op, "expiry")), _sigOf(op, "wallet")));
+        runRow(j, op, "wallet", address(w), built);
+        (address d,,,,,,) = w.mandates(token);
+        assertEq(d, _addr(op, "delegate"));
+        assertEq(w.epoch(token), 1);
+        assertEq(w.mtxNonce(e.from, e.batch), 1);
+    }
+
+    function _setPayeeRow(MandateWallet w) internal {
+        string memory op = "SetPayee";
+        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
+        address token = _addr(op, "token");
+        address payee = _addr(op, "payee");
+        runRow(j, op, "wallet", address(w), abi.encodeCall(MandateWallet.mtxSetPayee,
+            (e, token, payee, vm.parseJsonBool(j, msgField(op, "allowed")), _sigOf(op, "wallet"))));
+        assertTrue(w.payeeAllowed(token, payee));
+        assertEq(w.mtxNonce(e.from, e.batch), 1);
+    }
+
+    function test_typedOpsVectors_SetPayee() public {
+        _setPayeeRow(new MandateWallet(signer, chainUidA));
+    }
+
+    function test_typedOpsVectors_RevokeMandate() public {
+        string memory op = "RevokeMandate";
+        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
+        address token = _addr(op, "token");
+        MandateWallet w = new MandateWallet(e.from, chainUidA);
+        vm.prank(e.from);
+        w.setMandate(token, address(0xD), 1, 1, 1 days, uint64(block.timestamp + 1 days));
+        runRow(j, op, "wallet", address(w), abi.encodeCall(MandateWallet.mtxRevokeMandate, (e, token, _sigOf(op, "wallet"))));
+        (address d,,,,,,) = w.mandates(token);
+        assertEq(d, address(0));
+        assertEq(w.epoch(token), 2);
+    }
+
+    function test_typedOpsVectors_PayUnderMandate() public {
+        string memory op = "PayUnderMandate";
+        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
+        address token = _addr(op, "token");
+        address payee = _addr(op, "payee");
+        uint256 amount = _uint(op, "amount");
+        bytes32 ref = _b32(op, "entryRef");
+        MandateWallet w = _rowMandate(op, e.from, amount);
+        _tokenAt(token).transfer(address(w), amount);
+        vm.prank(w.owner());
+        w.setPayee(token, payee, true);
+        bytes memory built = abi.encodeWithSignature(_abiOf(op, "wallet"), e, token, payee, amount, ref, uint64(_uint(op, "epoch")),
+            _sigOf(op, "wallet"));
+        runRow(j, op, "wallet", address(w), built);
+        assertEq(NormalToken(token).balanceOf(payee), amount);
+        assertTrue(w.refUsed(ref));
+        assertEq(w.mtxNonce(e.from, e.batch), 1);
+    }
+
+    function test_typedOpsVectors_DelegateRevoke() public {
+        string memory op = "DelegateRevoke";
+        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
+        address token = _addr(op, "token");
+        uint64 epoch_ = uint64(_uint(op, "epoch"));
+        MandateWallet w = _rowMandate(op, e.from, 1);
+        runRow(j, op, "wallet", address(w), abi.encodeCall(MandateWallet.mtxDelegateRevoke, (e, token, epoch_, _sigOf(op, "wallet"))));
+        (address d,,,,,,) = w.mandates(token);
+        assertEq(d, address(0));
+        assertEq(w.epoch(token), epoch_ + 1);
+    }
+
+    function _executeRow(address c, string memory kind, bytes memory built) internal {
+        address target = _addr("Execute", "target");
+        uint256 value = _uint("Execute", "value");
+        vm.deal(c, value);
+        runRow(j, "Execute", kind, c, built);
+        assertEq(target.balance, value);
+    }
+
+    function _walletExecuteCall() internal view returns (bytes memory) {
+        return abi.encodeWithSignature(_abiOf("Execute", "wallet"), rowEnvelope(j, "Execute"), _addr("Execute", "target"),
+            _uint("Execute", "value"), vm.parseJsonBytes(j, msgField("Execute", "data")), _sigOf("Execute", "wallet"));
+    }
+
+    function test_typedOpsVectors_ExecuteWallet() public {
+        MandateWallet w = new MandateWallet(signer, chainUidA);
+        _executeRow(address(w), "wallet", _walletExecuteCall());
+        assertEq(w.mtxNonce(signer, 7), 1);
+    }
+
+    /// The Hedera wallet takes the rows' ECDSA signatures on the EVM path (a 64-byte one: `NamedHederaMandateTest`).
+    function test_typedOpsVectors_HederaWallet() public {
+        _setPayeeRow(new HederaMandateWallet(signer, chainUidA));
+        _executeRow(address(new HederaMandateWallet(signer, chainUidA)), "wallet", _walletExecuteCall());
+    }
+
+    /// The account of the row's key at the row's `from`: an account signs as itself (CTR-ACC-10), and the row's signature is
+    /// remade under the account's domain, as for every row.
+    function _rowAccount(string memory op) internal returns (SmartKeyAccount acct) {
+        address from = _addr(op, "from");
+        SmartKeyAccountFactory fac = new SmartKeyAccountFactory(chainUidA);
+        vm.etch(from, abi.encodePacked(hex"363d3d373d3d3d363d73", fac.IMPLEMENTATION(), hex"5af43d82803e903d91602b57fd5bf3"));
+        acct = SmartKeyAccount(payable(from));
+        vm.prank(address(fac));
+        acct.initialize(SubjectKey(KeyKind.SECP256K1, _pad(from), 0, 0, 0), address(0xD00D));
+    }
+
+    /// `kind` is 2 and `x` … `originHash` are fillers: `_checkKey` refuses them, in the self-call, past digest, signature
+    /// and nonce. A valid key through the same entry: `NamedAccountTest`.
+    function _refusedKeyRow(string memory op, bytes memory built) internal {
+        (bool ok, bytes memory ret) = tryRow(j, op, "account", address(_rowAccount(op)), built);
+        assertFalse(ok);
+        assertEq(ret, abi.encodeWithSelector(SmartKeyAccount.BadKey.selector));
+    }
+
+    function test_typedOpsVectors_AddKey() public {
+        string memory op = "AddKey";
+        _refusedKeyRow(op, abi.encodeCall(SmartKeyAccount.mtxAddKey, (rowEnvelope(j, op), uint8(_uint(op, "kind")), _b32(op, "x"),
+            _b32(op, "y"), _b32(op, "rpIdHash"), _b32(op, "originHash"), _accountSig(op))));
+    }
+
+    function test_typedOpsVectors_RotateKey() public {
+        string memory op = "RotateKey";
+        _refusedKeyRow(op, abi.encodeCall(SmartKeyAccount.mtxRotateKey, (rowEnvelope(j, op), _uint(op, "index"),
+            uint8(_uint(op, "kind")), _b32(op, "x"), _b32(op, "y"), _b32(op, "rpIdHash"), _b32(op, "originHash"), _accountSig(op))));
+    }
+
+    function test_typedOpsVectors_RemoveKey() public {
+        string memory op = "RemoveKey";
+        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
+        uint256 index = _uint(op, "index");
+        SmartKeyAccount acct = _rowAccount(op);
+        stdstore.target(address(acct)).sig("nextKeyIndex()").checked_write(index);
+        vm.prank(address(acct));
+        assertEq(acct.addKey(SubjectKey(KeyKind.SECP256K1, bytes32(uint256(0xB0B)), 0, 0, 0)), index);
+        runRow(j, op, "account", address(acct), abi.encodeCall(SmartKeyAccount.mtxRemoveKey, (e, index, _accountSig(op))));
+        assertEq(acct.keyCount(), 1);
+        assertEq(uint8(acct.keyAt(index).kind), 0);
+    }
+
+    function test_typedOpsVectors_SetGuardian() public {
+        string memory op = "SetGuardian";
+        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
+        address guardian = _addr(op, "guardian");
+        SmartKeyAccount acct = _rowAccount(op);
+        runRow(j, op, "account", address(acct), abi.encodeCall(SmartKeyAccount.mtxSetGuardian, (e, guardian, _accountSig(op))));
+        assertEq(acct.guardian(), guardian);
+        assertEq(acct.mtxNonce(e.from, e.batch), 1);
+    }
+
+    function test_typedOpsVectors_CancelRecovery() public {
+        string memory op = "CancelRecovery";
+        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
+        SmartKeyAccount acct = _rowAccount(op);
+        vm.prank(acct.guardian());
+        acct.initiateRecovery(SubjectKey(KeyKind.SECP256K1, bytes32(uint256(0xB0B)), 0, 0, 0));
+        runRow(j, op, "account", address(acct), abi.encodeCall(SmartKeyAccount.mtxCancelRecovery, (e, _accountSig(op))));
+        assertEq(acct.pendingRecovery(), bytes32(0));
+        assertEq(acct.recoveryReadyAt(), 0);
+    }
+
+    function test_typedOpsVectors_ExecuteAccount() public {
+        SmartKeyAccount acct = _rowAccount("Execute");
+        _executeRow(address(acct), "account", abi.encodeWithSignature(_abiOf("Execute", "account"), rowEnvelope(j, "Execute"),
+            _addr("Execute", "target"), _uint("Execute", "value"), vm.parseJsonBytes(j, msgField("Execute", "data")),
+            _accountSig("Execute")));
+        assertEq(acct.mtxNonce(signer, 7), 1);
     }
 
     // ------------------------------------------------------------------ what the entries keep and drop
