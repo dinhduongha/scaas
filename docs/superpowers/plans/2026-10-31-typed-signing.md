@@ -315,6 +315,7 @@ House rules for every task:
 | 7 | **C1** (clientkeys typed builders + `typed_ops.json`) · **C2** (base + public tokens) | C0 |
 | 8 | **C3** (Zether) · **C4** (PQZ + PqzAuth) · **C5** (wallets) | C2 (shared bases); C1 (vectors) |
 | 9 | **C6** (trade / DEX / receiver fee / relay fee / UA cancel) · **C7** (reproducers that build EVM digests) · **C8** (scripts, e2e, Deploy) | C2 (C6 shares `ERC20MetaTx` / `MetaTokenBase`); C1 (C7) |
+| 9b | **RS** (`UARegistry` split, R1′ + R2) | C8 |
 | 10 | **N1** (node: job API, calldata builders, guard, dedup, indexer) → **N2** (Soroban explicit JSON) | C2–C6 |
 | 11 | **CD** (docs C + N) → **CG** (gates) → **CRV** (review + fixes) | all |
 
@@ -839,6 +840,13 @@ reset (work order item 6) deploys the new contracts (controller call).
 
 ---
 
+### Task RS: `UARegistry` split, R1′ + R2 (owner ruling 2026-11-01)
+
+Runs after C8, before CD, on one agent; the figures and the immutables / storage choice come from the scratch measurement
+(`scratchpad/registry-size-f8a26a10/RESULTS.md`, private; its table goes to `docs/research/evm-size-levers.md`, and this task is
+detailed from it). `method identifiers` equal to before, the hot path's gas pins unmoved, the libraries in `LinkClosure`, `DeployBase`
+and `e2e.py`, gate for each deployment.
+
 # Part N — node: explicit job API (after C)
 
 ### Task N1: EVM job API, calldata builders, guard, dedup, indexer
@@ -975,6 +983,9 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-35 / -36
   `uaUnwrap(UAEnvelope, …, UASig)`, so it moves to `smartcontracts/evm/legacy/typed-signing/`. `mtxCancelNonce` is declared in
   `IMetaTx`, like every entry present on every contract, and the ERC-165 id is re-pinned (controller correction of a brief that
   said to leave `IMetaTx` unchanged; that was about `executeMetaTransaction`). Both are done in C2's review fix round.
+- **`UARegistry` split, R1′ + R2, no `fallback` (owner ruling 2026-11-01):** the off-chain views move to a linked `UAViewLib` behind
+  stubs that forward the raw return data, the registration and set-key paths to a linked `UARegisterLib`. Every function stays in the
+  contract's ABI at the same address; no `fallback`, no hidden selectors; the authorisation path stays in `UARegistry`. Task RS, below.
 - **`UARegistry` deploy gate (owner ruling 2026-11-01):** the registry gets a gate like the releases:
   `_requireReleaseGas("UARegistry")` in `DeployBase` and `require_release_gas("UARegistry")` in `e2e.py`, need 88.3 M
   (46,716 B × 1,530 + 2^24), test `test_registryDeployGate`, NET-EVM-06.
