@@ -1,0 +1,1082 @@
+# self-test at commit db79e158
+== n2048-kmax1024
+ok    mldsa65/n2048-kmax1024: R_REG message (pqzRegMessage, registering kind 0x0131)
+ok    mldsa65/n2048-kmax1024: PoP message (holderPopMessage)
+ok    mldsa65/n2048-kmax1024: registrationArgs = the row's args (full KEM key)
+ok    mldsa65/n2048-kmax1024: register calldata 51,972 B = registryCalldataLength, selector 0x4e229efb
+ok    mldsa65/n2048-kmax1024: hash-commit args + fill = the row's kemCommit
+ok    setKemKey fill calldata (selector 0xa00cce2a)
+ok    KEM record mldsa65/v1: message, KemKey
+ok    PQZ key record fndsa512/n2048-kmax1024: setPqzKey and R_REG messages
+ok    setPqzKey / requireAuthorized selectors
+ok    kemKeyOf decoder (key, empty key)
+ok    msig-pq/n2048-kmax1024: encodeMsig = the row's key data
+ok    msig-pq/n2048-kmax1024: msig message, member digest
+ok    msig-pq/n2048-kmax1024: registrationArgs = the row's args
+ok    msig-pq/n2048-kmax1024: registerMsig calldata 53,956 B = registryCalldataLength, selector 0x82b86a46
+ok    typed_ops.json: 19 rows with a builder here, want 19
+ok    Shield: calldata 484 B = the row's, selector 0xb4c1e1c0
+ok    Shield: typed digest = the row's
+ok    UAShield: calldata 484 B = the row's, selector 0x185d5243
+ok    UAShield: typed digest = the row's
+ok    WrapShield: calldata 516 B = the row's, selector 0xf1991276
+ok    WrapShield: typed digest = the row's
+ok    RollOver: calldata 484 B = the row's, selector 0xa7319c2d
+ok    RollOver: typed digest = the row's
+ok    UARollOver: calldata 644 B = the row's, selector 0x7f309756
+ok    UARollOver: typed digest = the row's
+ok    PrepareAcc: calldata 484 B = the row's, selector 0x1a4a1595
+ok    PrepareAcc: typed digest = the row's
+ok    UAPrepareAcc: calldata 644 B = the row's, selector 0x60c2174e
+ok    UAPrepareAcc: typed digest = the row's
+ok    PqzTransferSingle: calldata 2,308 B = the row's, selector 0x265cd4e4
+ok    PqzTransferSingle: typed digest = the row's
+ok    UAPqzTransferSingle: calldata 2,468 B = the row's, selector 0x7d93b2af
+ok    UAPqzTransferSingle: typed digest = the row's
+ok    PqzTransferSingleCompact: calldata 2,372 B = the row's, selector 0x274ac007
+ok    PqzTransferSingleCompact: typed digest = the row's
+ok    UAPqzTransferSingleCompact: calldata 2,532 B = the row's, selector 0x9b8e1528
+ok    UAPqzTransferSingleCompact: typed digest = the row's
+ok    PqzTransfer: calldata 3,012 B = the row's, selector 0xcff8464d
+ok    PqzTransfer: typed digest = the row's
+ok    UAPqzTransfer: calldata 3,172 B = the row's, selector 0x2174a476
+ok    UAPqzTransfer: typed digest = the row's
+ok    PqzTransferCompact: calldata 3,012 B = the row's, selector 0xd119f818
+ok    PqzTransferCompact: typed digest = the row's
+ok    UAPqzTransferCompact: calldata 3,172 B = the row's, selector 0x54812ef0
+ok    UAPqzTransferCompact: typed digest = the row's
+ok    PqzUnshield: calldata 1,988 B = the row's, selector 0x5276768c
+ok    PqzUnshield: typed digest = the row's
+ok    UAPqzUnshield: calldata 2,148 B = the row's, selector 0xefb2d957
+ok    UAPqzUnshield: typed digest = the row's
+ok    PqzUnshieldUnwrap: calldata 2,052 B = the row's, selector 0x1ec32e89
+ok    PqzUnshieldUnwrap: typed digest = the row's
+ok    UAPqzUnshieldUnwrap: calldata 2,212 B = the row's, selector 0x8167c978
+ok    UAPqzUnshieldUnwrap: typed digest = the row's
+ok    PqzAuth: K.auth_digest = the row's
+ok    ABI: register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),by
+ok    encoders of register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),by
+ok    ABI: registerMsig((uint16,(uint16,bytes32,uint16)[]),(bytes,bytes32,(uint8,
+ok    encoders of registerMsig((uint16,(uint16,bytes32,uint16)[]),(bytes,bytes32,(uint8,
+ok    ABI: setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    encoders of setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    ABI: requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    encoders of requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    ABI: mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,bytes32,
+ok    encoders of mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,bytes32,
+ok    ABI: mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,bytes32,uint25
+ok    encoders of mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,bytes32,uint25
+ok    ABI: setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    encoders of setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    ABI: setPqzKey(bytes32,bytes,bytes32,(bytes,bytes,(uint16,bytes,bytes)[]))
+ok    encoders of setPqzKey(bytes32,bytes,bytes32,(bytes,bytes,(uint16,bytes,bytes)[]))
+ok    ABI: storePqzPop(bytes32,bytes)
+ok    encoders of storePqzPop(bytes32,bytes)
+ok    ABI: requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    encoders of requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    ABI: createToken(uint8,uint64,bytes,bytes32)
+ok    encoders of createToken(uint8,uint64,bytes,bytes32)
+ok    ABI: mint(address,uint256)
+ok    encoders of mint(address,uint256)
+ok    ABI: mint(address,uint256)
+ok    encoders of mint(address,uint256)
+ok    ABI: mtxShield(bytes32,uint256)
+ok    encoders of mtxShield(bytes32,uint256)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: mint(address,uint256)
+ok    encoders of mint(address,uint256)
+ok    ABI: mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint2
+ok    encoders of mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint2
+ok    ABI: mintToUA(bytes32,uint256)
+ok    encoders of mintToUA(bytes32,uint256)
+ok    ABI: uaExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint25
+ok    encoders of uaExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint25
+ok    ABI: mint(address,uint256)
+ok    encoders of mint(address,uint256)
+ok    ABI: mtxShield(bytes32,uint256)
+ok    encoders of mtxShield(bytes32,uint256)
+ok    ABI: approve(address,uint256)
+ok    encoders of approve(address,uint256)
+ok    ABI: mtxWrapShield(address,uint256,bytes32)
+ok    encoders of mtxWrapShield(address,uint256,bytes32)
+ok    ABI: pqzKeyOf(bytes32)
+ok    encoders of pqzKeyOf(bytes32)
+ok    ABI: uaNonce(bytes32,uint256)
+ok    encoders of uaNonce(bytes32,uint256)
+ok    ABI: mtxNonce(address,uint256)
+ok    encoders of mtxNonce(address,uint256)
+ok    ABI: mtxRollOver(bytes32,uint256)
+ok    encoders of mtxRollOver(bytes32,uint256)
+ok    ABI: publishEnv(uint8,uint16,(address,bytes32,address,address,bool,address[
+ok    encoders of publishEnv(uint8,uint16,(address,bytes32,address,address,bool,address[
+ok    ABI: deployImplementation(uint8,uint64,uint16,bytes,bytes)
+ok    encoders of deployImplementation(uint8,uint64,uint16,bytes,bytes)
+ok    ABI: setKindEnabled(uint8,bool)
+ok    encoders of setKindEnabled(uint8,bool)
+ok    ABI: pqzKeyOf(bytes32)
+ok    encoders of pqzKeyOf(bytes32)
+ok    ABI: pqzKeyOf(bytes32)
+ok    encoders of pqzKeyOf(bytes32)
+ok    ABI: requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    encoders of requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    ABI: uaPage(uint16,uint256,uint256)
+ok    encoders of uaPage(uint16,uint256,uint256)
+ok    ABI: pqzPending(bytes32,uint64)
+ok    encoders of pqzPending(bytes32,uint64)
+ok    ABI: mintToUA(bytes32,uint256)
+ok    encoders of mintToUA(bytes32,uint256)
+ok    ABI: pqzEntryBlob(bytes32)
+ok    encoders of pqzEntryBlob(bytes32)
+ok    ABI: minDecoyFee()
+ok    encoders of minDecoyFee()
+ok    ABI: pqzEntryBlob(bytes32)
+ok    encoders of pqzEntryBlob(bytes32)
+ok    ABI: pqzPending(bytes32,uint64)
+ok    encoders of pqzPending(bytes32,uint64)
+ok    ABI: pqzAcc(bytes32)
+ok    encoders of pqzAcc(bytes32)
+ok    ABI: storePqzPop(bytes32,bytes)
+ok    encoders of storePqzPop(bytes32,bytes)
+ok    ABI: setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    encoders of setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    ABI: recordOf(bytes32)
+ok    encoders of recordOf(bytes32)
+ok    ABI: pqzKeyOf(bytes32)
+ok    encoders of pqzKeyOf(bytes32)
+ok    ABI: msigOf(bytes32)
+ok    encoders of msigOf(bytes32)
+ok    ABI: uaOf(uint16,bytes)
+ok    encoders of uaOf(uint16,bytes)
+ok    ABI: disclosureStatement(bytes32,uint256,uint256,uint8)
+ok    encoders of disclosureStatement(bytes32,uint256,uint256,uint8)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: disclosureStatement(bytes32,uint256,uint256,uint8)
+ok    encoders of disclosureStatement(bytes32,uint256,uint256,uint8)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: envelopeBinding((address,bytes,uint256,uint256,uint256,uint32,address,
+ok    encoders of envelopeBinding((address,bytes,uint256,uint256,uint256,uint32,address,
+ok    ABI: mtxDigest((address,bytes,uint256,uint256,uint256,uint32,address,uint25
+ok    encoders of mtxDigest((address,bytes,uint256,uint256,uint256,uint32,address,uint25
+ok    ABI: uaEnvelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,addres
+ok    encoders of uaEnvelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,addres
+ok    ABI: uaDigest((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256
+ok    encoders of uaDigest((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: balanceOfUA(bytes32)
+ok    encoders of balanceOfUA(bytes32)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: balanceOfUA(bytes32)
+ok    encoders of balanceOfUA(bytes32)
+ok    ABI: disclosureMode()
+ok    encoders of disclosureMode()
+ok    ABI: transferSingleStatement((uint64,uint256,uint256,bytes32,bytes32,bytes3
+ok    encoders of transferSingleStatement((uint64,uint256,uint256,bytes32,bytes32,bytes3
+ok    ABI: disclosureMode()
+ok    encoders of disclosureMode()
+ok    ABI: transferStatement((uint64,uint256,uint256,bytes32,bytes32,uint256,byte
+ok    encoders of transferStatement((uint64,uint256,uint256,bytes32,bytes32,uint256,byte
+ok    ABI: mtxUnshieldUnwrap((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes)
+ok    encoders of mtxUnshieldUnwrap((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes)
+ok    ABI: mtxUnshield((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),uint2
+ok    encoders of mtxUnshield((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),uint2
+ok    ABI: uaEnvelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,addres
+ok    encoders of uaEnvelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,addres
+ok    ABI: envelopeBinding((address,bytes,uint256,uint256,uint256,uint32,address,
+ok    encoders of envelopeBinding((address,bytes,uint256,uint256,uint256,uint32,address,
+ok    ABI: pqzAcc(bytes32)
+ok    encoders of pqzAcc(bytes32)
+ok    ABI: mtxPrepareAcc(bytes32,uint256)
+ok    encoders of mtxPrepareAcc(bytes32,uint256)
+ok    ABI: pqzPending(bytes32,uint64)
+ok    encoders of pqzPending(bytes32,uint64)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: totalShielded()
+ok    encoders of totalShielded()
+ok    ABI: uaOf(uint16,bytes)
+ok    encoders of uaOf(uint16,bytes)
+ok    ABI: uaOf(uint16,bytes)
+ok    encoders of uaOf(uint16,bytes)
+ok    ABI: uaOf(uint16,bytes)
+ok    encoders of uaOf(uint16,bytes)
+ok    ABI: kemKeyOf(bytes32)
+ok    encoders of kemKeyOf(bytes32)
+ok    ABI: pqzKeySigOf(bytes32)
+ok    encoders of pqzKeySigOf(bytes32)
+ok    ABI: kindOf(bytes32)
+ok    encoders of kindOf(bytes32)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: mtxNonce(address,uint256)
+ok    encoders of mtxNonce(address,uint256)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: uaNonce(bytes32,uint256)
+ok    encoders of uaNonce(bytes32,uint256)
+ok    ABI: balanceOfUA(bytes32)
+ok    encoders of balanceOfUA(bytes32)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: auditorUA()
+ok    encoders of auditorUA()
+ok    ABI: unshieldUnwrapStatement((uint64,uint256,uint256,bytes32,bytes32,bytes,
+ok    encoders of unshieldUnwrapStatement((uint64,uint256,uint256,bytes32,bytes32,bytes,
+ok    ABI: burnStatement((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),uin
+ok    encoders of burnStatement((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),uin
+ok    ABI: pqzAccount(bytes32)
+ok    encoders of pqzAccount(bytes32)
+ok    ABI: pqzAcc(bytes32)
+ok    encoders of pqzAcc(bytes32)
+ok    ABI: pqzPendingCt(bytes32,uint64)
+ok    encoders of pqzPendingCt(bytes32,uint64)
+ok    ABI: balanceOfUA(bytes32)
+ok    encoders of balanceOfUA(bytes32)
+ok    ABI: PRECOMPILE()
+ok    encoders of PRECOMPILE()
+ok    ABI: kemKeyOf(bytes32)
+ok    encoders of kemKeyOf(bytes32)
+ok    ABI: uaCount(uint16)
+ok    encoders of uaCount(uint16)
+ok    ABI: uaAt(uint16,uint256)
+ok    encoders of uaAt(uint16,uint256)
+ok    ABI: uaAt(uint16,uint256)
+ok    encoders of uaAt(uint16,uint256)
+ok    ABI: auditorUA()
+ok    encoders of auditorUA()
+ok    ABI: isSupportedOnThisChain()
+ok    encoders of isSupportedOnThisChain()
+ok    ABI: checkedOf(bytes32)
+ok    encoders of checkedOf(bytes32)
+ok    ABI: checkedOf(bytes32)
+ok    encoders of checkedOf(bytes32)
+ok    ABI: kindOf(bytes32)
+ok    encoders of kindOf(bytes32)
+ok    ABI: uaIndex(bytes32)
+ok    encoders of uaIndex(bytes32)
+ok    ABI: 60 signatures; built at run time: ['head']
+ok    the transfer events are the built ones
+self-test: 0 failure(s)
+== n2304-kmax4096
+ok    mldsa65/n2304-kmax4096: R_REG message (pqzRegMessage, registering kind 0x0131)
+ok    mldsa65/n2304-kmax4096: PoP message (holderPopMessage)
+ok    mldsa65/n2304-kmax4096: registrationArgs = the row's args (full KEM key)
+ok    mldsa65/n2304-kmax4096: register calldata 56,228 B = registryCalldataLength, selector 0x4e229efb
+ok    mldsa65/n2304-kmax4096: hash-commit args + fill = the row's kemCommit
+ok    setKemKey fill calldata (selector 0xa00cce2a)
+ok    KEM record mldsa65/v1: message, KemKey
+ok    PQZ key record fndsa512/n2304-kmax4096: setPqzKey and R_REG messages
+ok    setPqzKey / requireAuthorized selectors
+ok    kemKeyOf decoder (key, empty key)
+ok    msig-pq/n2304-kmax4096: encodeMsig = the row's key data
+ok    msig-pq/n2304-kmax4096: msig message, member digest
+ok    msig-pq/n2304-kmax4096: registrationArgs = the row's args
+ok    msig-pq/n2304-kmax4096: registerMsig calldata 58,212 B = registryCalldataLength, selector 0x82b86a46
+ok    typed_ops.json: 19 rows with a builder here, want 19
+ok    Shield: calldata 484 B = the row's, selector 0xb4c1e1c0
+ok    Shield: typed digest = the row's
+ok    UAShield: calldata 484 B = the row's, selector 0x185d5243
+ok    UAShield: typed digest = the row's
+ok    WrapShield: calldata 516 B = the row's, selector 0xf1991276
+ok    WrapShield: typed digest = the row's
+ok    RollOver: calldata 484 B = the row's, selector 0xa7319c2d
+ok    RollOver: typed digest = the row's
+ok    UARollOver: calldata 644 B = the row's, selector 0x7f309756
+ok    UARollOver: typed digest = the row's
+ok    PrepareAcc: calldata 484 B = the row's, selector 0x1a4a1595
+ok    PrepareAcc: typed digest = the row's
+ok    UAPrepareAcc: calldata 644 B = the row's, selector 0x60c2174e
+ok    UAPrepareAcc: typed digest = the row's
+ok    PqzTransferSingle: calldata 2,308 B = the row's, selector 0x265cd4e4
+ok    PqzTransferSingle: typed digest = the row's
+ok    UAPqzTransferSingle: calldata 2,468 B = the row's, selector 0x7d93b2af
+ok    UAPqzTransferSingle: typed digest = the row's
+ok    PqzTransferSingleCompact: calldata 2,372 B = the row's, selector 0x274ac007
+ok    PqzTransferSingleCompact: typed digest = the row's
+ok    UAPqzTransferSingleCompact: calldata 2,532 B = the row's, selector 0x9b8e1528
+ok    UAPqzTransferSingleCompact: typed digest = the row's
+ok    PqzTransfer: calldata 3,012 B = the row's, selector 0xcff8464d
+ok    PqzTransfer: typed digest = the row's
+ok    UAPqzTransfer: calldata 3,172 B = the row's, selector 0x2174a476
+ok    UAPqzTransfer: typed digest = the row's
+ok    PqzTransferCompact: calldata 3,012 B = the row's, selector 0xd119f818
+ok    PqzTransferCompact: typed digest = the row's
+ok    UAPqzTransferCompact: calldata 3,172 B = the row's, selector 0x54812ef0
+ok    UAPqzTransferCompact: typed digest = the row's
+ok    PqzUnshield: calldata 1,988 B = the row's, selector 0x5276768c
+ok    PqzUnshield: typed digest = the row's
+ok    UAPqzUnshield: calldata 2,148 B = the row's, selector 0xefb2d957
+ok    UAPqzUnshield: typed digest = the row's
+ok    PqzUnshieldUnwrap: calldata 2,052 B = the row's, selector 0x1ec32e89
+ok    PqzUnshieldUnwrap: typed digest = the row's
+ok    UAPqzUnshieldUnwrap: calldata 2,212 B = the row's, selector 0x8167c978
+ok    UAPqzUnshieldUnwrap: typed digest = the row's
+ok    PqzAuth: K.auth_digest = the row's
+ok    ABI: register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),by
+ok    encoders of register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),by
+ok    ABI: registerMsig((uint16,(uint16,bytes32,uint16)[]),(bytes,bytes32,(uint8,
+ok    encoders of registerMsig((uint16,(uint16,bytes32,uint16)[]),(bytes,bytes32,(uint8,
+ok    ABI: setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    encoders of setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    ABI: requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    encoders of requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    ABI: mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,bytes32,
+ok    encoders of mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,bytes32,
+ok    ABI: mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,bytes32,uint25
+ok    encoders of mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,bytes32,uint25
+ok    ABI: setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    encoders of setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    ABI: setPqzKey(bytes32,bytes,bytes32,(bytes,bytes,(uint16,bytes,bytes)[]))
+ok    encoders of setPqzKey(bytes32,bytes,bytes32,(bytes,bytes,(uint16,bytes,bytes)[]))
+ok    ABI: storePqzPop(bytes32,bytes)
+ok    encoders of storePqzPop(bytes32,bytes)
+ok    ABI: requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    encoders of requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    ABI: createToken(uint8,uint64,bytes,bytes32)
+ok    encoders of createToken(uint8,uint64,bytes,bytes32)
+ok    ABI: mint(address,uint256)
+ok    encoders of mint(address,uint256)
+ok    ABI: mint(address,uint256)
+ok    encoders of mint(address,uint256)
+ok    ABI: mtxShield(bytes32,uint256)
+ok    encoders of mtxShield(bytes32,uint256)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: mint(address,uint256)
+ok    encoders of mint(address,uint256)
+ok    ABI: mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint2
+ok    encoders of mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint2
+ok    ABI: mintToUA(bytes32,uint256)
+ok    encoders of mintToUA(bytes32,uint256)
+ok    ABI: uaExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint25
+ok    encoders of uaExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint25
+ok    ABI: mint(address,uint256)
+ok    encoders of mint(address,uint256)
+ok    ABI: mtxShield(bytes32,uint256)
+ok    encoders of mtxShield(bytes32,uint256)
+ok    ABI: approve(address,uint256)
+ok    encoders of approve(address,uint256)
+ok    ABI: mtxWrapShield(address,uint256,bytes32)
+ok    encoders of mtxWrapShield(address,uint256,bytes32)
+ok    ABI: pqzKeyOf(bytes32)
+ok    encoders of pqzKeyOf(bytes32)
+ok    ABI: uaNonce(bytes32,uint256)
+ok    encoders of uaNonce(bytes32,uint256)
+ok    ABI: mtxNonce(address,uint256)
+ok    encoders of mtxNonce(address,uint256)
+ok    ABI: mtxRollOver(bytes32,uint256)
+ok    encoders of mtxRollOver(bytes32,uint256)
+ok    ABI: publishEnv(uint8,uint16,(address,bytes32,address,address,bool,address[
+ok    encoders of publishEnv(uint8,uint16,(address,bytes32,address,address,bool,address[
+ok    ABI: deployImplementation(uint8,uint64,uint16,bytes,bytes)
+ok    encoders of deployImplementation(uint8,uint64,uint16,bytes,bytes)
+ok    ABI: setKindEnabled(uint8,bool)
+ok    encoders of setKindEnabled(uint8,bool)
+ok    ABI: pqzKeyOf(bytes32)
+ok    encoders of pqzKeyOf(bytes32)
+ok    ABI: pqzKeyOf(bytes32)
+ok    encoders of pqzKeyOf(bytes32)
+ok    ABI: requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    encoders of requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    ABI: uaPage(uint16,uint256,uint256)
+ok    encoders of uaPage(uint16,uint256,uint256)
+ok    ABI: pqzPending(bytes32,uint64)
+ok    encoders of pqzPending(bytes32,uint64)
+ok    ABI: mintToUA(bytes32,uint256)
+ok    encoders of mintToUA(bytes32,uint256)
+ok    ABI: pqzEntryBlob(bytes32)
+ok    encoders of pqzEntryBlob(bytes32)
+ok    ABI: minDecoyFee()
+ok    encoders of minDecoyFee()
+ok    ABI: pqzEntryBlob(bytes32)
+ok    encoders of pqzEntryBlob(bytes32)
+ok    ABI: pqzPending(bytes32,uint64)
+ok    encoders of pqzPending(bytes32,uint64)
+ok    ABI: pqzAcc(bytes32)
+ok    encoders of pqzAcc(bytes32)
+ok    ABI: storePqzPop(bytes32,bytes)
+ok    encoders of storePqzPop(bytes32,bytes)
+ok    ABI: setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    encoders of setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    ABI: recordOf(bytes32)
+ok    encoders of recordOf(bytes32)
+ok    ABI: pqzKeyOf(bytes32)
+ok    encoders of pqzKeyOf(bytes32)
+ok    ABI: msigOf(bytes32)
+ok    encoders of msigOf(bytes32)
+ok    ABI: uaOf(uint16,bytes)
+ok    encoders of uaOf(uint16,bytes)
+ok    ABI: disclosureStatement(bytes32,uint256,uint256,uint8)
+ok    encoders of disclosureStatement(bytes32,uint256,uint256,uint8)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: disclosureStatement(bytes32,uint256,uint256,uint8)
+ok    encoders of disclosureStatement(bytes32,uint256,uint256,uint8)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: envelopeBinding((address,bytes,uint256,uint256,uint256,uint32,address,
+ok    encoders of envelopeBinding((address,bytes,uint256,uint256,uint256,uint32,address,
+ok    ABI: mtxDigest((address,bytes,uint256,uint256,uint256,uint32,address,uint25
+ok    encoders of mtxDigest((address,bytes,uint256,uint256,uint256,uint32,address,uint25
+ok    ABI: uaEnvelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,addres
+ok    encoders of uaEnvelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,addres
+ok    ABI: uaDigest((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256
+ok    encoders of uaDigest((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: balanceOfUA(bytes32)
+ok    encoders of balanceOfUA(bytes32)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: balanceOfUA(bytes32)
+ok    encoders of balanceOfUA(bytes32)
+ok    ABI: disclosureMode()
+ok    encoders of disclosureMode()
+ok    ABI: transferSingleStatement((uint64,uint256,uint256,bytes32,bytes32,bytes3
+ok    encoders of transferSingleStatement((uint64,uint256,uint256,bytes32,bytes32,bytes3
+ok    ABI: disclosureMode()
+ok    encoders of disclosureMode()
+ok    ABI: transferStatement((uint64,uint256,uint256,bytes32,bytes32,uint256,byte
+ok    encoders of transferStatement((uint64,uint256,uint256,bytes32,bytes32,uint256,byte
+ok    ABI: mtxUnshieldUnwrap((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes)
+ok    encoders of mtxUnshieldUnwrap((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes)
+ok    ABI: mtxUnshield((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),uint2
+ok    encoders of mtxUnshield((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),uint2
+ok    ABI: uaEnvelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,addres
+ok    encoders of uaEnvelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,addres
+ok    ABI: envelopeBinding((address,bytes,uint256,uint256,uint256,uint32,address,
+ok    encoders of envelopeBinding((address,bytes,uint256,uint256,uint256,uint32,address,
+ok    ABI: pqzAcc(bytes32)
+ok    encoders of pqzAcc(bytes32)
+ok    ABI: mtxPrepareAcc(bytes32,uint256)
+ok    encoders of mtxPrepareAcc(bytes32,uint256)
+ok    ABI: pqzPending(bytes32,uint64)
+ok    encoders of pqzPending(bytes32,uint64)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: totalShielded()
+ok    encoders of totalShielded()
+ok    ABI: uaOf(uint16,bytes)
+ok    encoders of uaOf(uint16,bytes)
+ok    ABI: uaOf(uint16,bytes)
+ok    encoders of uaOf(uint16,bytes)
+ok    ABI: uaOf(uint16,bytes)
+ok    encoders of uaOf(uint16,bytes)
+ok    ABI: kemKeyOf(bytes32)
+ok    encoders of kemKeyOf(bytes32)
+ok    ABI: pqzKeySigOf(bytes32)
+ok    encoders of pqzKeySigOf(bytes32)
+ok    ABI: kindOf(bytes32)
+ok    encoders of kindOf(bytes32)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: mtxNonce(address,uint256)
+ok    encoders of mtxNonce(address,uint256)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: uaNonce(bytes32,uint256)
+ok    encoders of uaNonce(bytes32,uint256)
+ok    ABI: balanceOfUA(bytes32)
+ok    encoders of balanceOfUA(bytes32)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: auditorUA()
+ok    encoders of auditorUA()
+ok    ABI: unshieldUnwrapStatement((uint64,uint256,uint256,bytes32,bytes32,bytes,
+ok    encoders of unshieldUnwrapStatement((uint64,uint256,uint256,bytes32,bytes32,bytes,
+ok    ABI: burnStatement((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),uin
+ok    encoders of burnStatement((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),uin
+ok    ABI: pqzAccount(bytes32)
+ok    encoders of pqzAccount(bytes32)
+ok    ABI: pqzAcc(bytes32)
+ok    encoders of pqzAcc(bytes32)
+ok    ABI: pqzPendingCt(bytes32,uint64)
+ok    encoders of pqzPendingCt(bytes32,uint64)
+ok    ABI: balanceOfUA(bytes32)
+ok    encoders of balanceOfUA(bytes32)
+ok    ABI: PRECOMPILE()
+ok    encoders of PRECOMPILE()
+ok    ABI: kemKeyOf(bytes32)
+ok    encoders of kemKeyOf(bytes32)
+ok    ABI: uaCount(uint16)
+ok    encoders of uaCount(uint16)
+ok    ABI: uaAt(uint16,uint256)
+ok    encoders of uaAt(uint16,uint256)
+ok    ABI: uaAt(uint16,uint256)
+ok    encoders of uaAt(uint16,uint256)
+ok    ABI: auditorUA()
+ok    encoders of auditorUA()
+ok    ABI: isSupportedOnThisChain()
+ok    encoders of isSupportedOnThisChain()
+ok    ABI: checkedOf(bytes32)
+ok    encoders of checkedOf(bytes32)
+ok    ABI: checkedOf(bytes32)
+ok    encoders of checkedOf(bytes32)
+ok    ABI: kindOf(bytes32)
+ok    encoders of kindOf(bytes32)
+ok    ABI: uaIndex(bytes32)
+ok    encoders of uaIndex(bytes32)
+ok    ABI: 60 signatures; built at run time: ['head']
+ok    the transfer events are the built ones
+self-test: 0 failure(s)
+== n2560-kmax16384
+ok    mldsa65/n2560-kmax16384: R_REG message (pqzRegMessage, registering kind 0x0131)
+ok    mldsa65/n2560-kmax16384: PoP message (holderPopMessage)
+ok    mldsa65/n2560-kmax16384: registrationArgs = the row's args (full KEM key)
+ok    mldsa65/n2560-kmax16384: register calldata 60,420 B = registryCalldataLength, selector 0x4e229efb
+ok    mldsa65/n2560-kmax16384: hash-commit args + fill = the row's kemCommit
+ok    setKemKey fill calldata (selector 0xa00cce2a)
+ok    KEM record mldsa65/v1: message, KemKey
+ok    PQZ key record fndsa512/n2560-kmax16384: setPqzKey and R_REG messages
+ok    setPqzKey / requireAuthorized selectors
+ok    kemKeyOf decoder (key, empty key)
+ok    msig-pq/n2560-kmax16384: encodeMsig = the row's key data
+ok    msig-pq/n2560-kmax16384: msig message, member digest
+ok    msig-pq/n2560-kmax16384: registrationArgs = the row's args
+ok    msig-pq/n2560-kmax16384: registerMsig calldata 62,404 B = registryCalldataLength, selector 0x82b86a46
+ok    typed_ops.json: 19 rows with a builder here, want 19
+ok    Shield: calldata 484 B = the row's, selector 0xb4c1e1c0
+ok    Shield: typed digest = the row's
+ok    UAShield: calldata 484 B = the row's, selector 0x185d5243
+ok    UAShield: typed digest = the row's
+ok    WrapShield: calldata 516 B = the row's, selector 0xf1991276
+ok    WrapShield: typed digest = the row's
+ok    RollOver: calldata 484 B = the row's, selector 0xa7319c2d
+ok    RollOver: typed digest = the row's
+ok    UARollOver: calldata 644 B = the row's, selector 0x7f309756
+ok    UARollOver: typed digest = the row's
+ok    PrepareAcc: calldata 484 B = the row's, selector 0x1a4a1595
+ok    PrepareAcc: typed digest = the row's
+ok    UAPrepareAcc: calldata 644 B = the row's, selector 0x60c2174e
+ok    UAPrepareAcc: typed digest = the row's
+ok    PqzTransferSingle: calldata 2,308 B = the row's, selector 0x265cd4e4
+ok    PqzTransferSingle: typed digest = the row's
+ok    UAPqzTransferSingle: calldata 2,468 B = the row's, selector 0x7d93b2af
+ok    UAPqzTransferSingle: typed digest = the row's
+ok    PqzTransferSingleCompact: calldata 2,372 B = the row's, selector 0x274ac007
+ok    PqzTransferSingleCompact: typed digest = the row's
+ok    UAPqzTransferSingleCompact: calldata 2,532 B = the row's, selector 0x9b8e1528
+ok    UAPqzTransferSingleCompact: typed digest = the row's
+ok    PqzTransfer: calldata 3,012 B = the row's, selector 0xcff8464d
+ok    PqzTransfer: typed digest = the row's
+ok    UAPqzTransfer: calldata 3,172 B = the row's, selector 0x2174a476
+ok    UAPqzTransfer: typed digest = the row's
+ok    PqzTransferCompact: calldata 3,012 B = the row's, selector 0xd119f818
+ok    PqzTransferCompact: typed digest = the row's
+ok    UAPqzTransferCompact: calldata 3,172 B = the row's, selector 0x54812ef0
+ok    UAPqzTransferCompact: typed digest = the row's
+ok    PqzUnshield: calldata 1,988 B = the row's, selector 0x5276768c
+ok    PqzUnshield: typed digest = the row's
+ok    UAPqzUnshield: calldata 2,148 B = the row's, selector 0xefb2d957
+ok    UAPqzUnshield: typed digest = the row's
+ok    PqzUnshieldUnwrap: calldata 2,052 B = the row's, selector 0x1ec32e89
+ok    PqzUnshieldUnwrap: typed digest = the row's
+ok    UAPqzUnshieldUnwrap: calldata 2,212 B = the row's, selector 0x8167c978
+ok    UAPqzUnshieldUnwrap: typed digest = the row's
+ok    PqzAuth: K.auth_digest = the row's
+ok    ABI: register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),by
+ok    encoders of register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),by
+ok    ABI: registerMsig((uint16,(uint16,bytes32,uint16)[]),(bytes,bytes32,(uint8,
+ok    encoders of registerMsig((uint16,(uint16,bytes32,uint16)[]),(bytes,bytes32,(uint8,
+ok    ABI: setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    encoders of setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    ABI: requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    encoders of requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    ABI: mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,bytes32,
+ok    encoders of mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,bytes32,
+ok    ABI: mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,bytes32,uint25
+ok    encoders of mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,bytes32,uint25
+ok    ABI: setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    encoders of setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    ABI: setPqzKey(bytes32,bytes,bytes32,(bytes,bytes,(uint16,bytes,bytes)[]))
+ok    encoders of setPqzKey(bytes32,bytes,bytes32,(bytes,bytes,(uint16,bytes,bytes)[]))
+ok    ABI: storePqzPop(bytes32,bytes)
+ok    encoders of storePqzPop(bytes32,bytes)
+ok    ABI: requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    encoders of requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    ABI: createToken(uint8,uint64,bytes,bytes32)
+ok    encoders of createToken(uint8,uint64,bytes,bytes32)
+ok    ABI: mint(address,uint256)
+ok    encoders of mint(address,uint256)
+ok    ABI: mint(address,uint256)
+ok    encoders of mint(address,uint256)
+ok    ABI: mtxShield(bytes32,uint256)
+ok    encoders of mtxShield(bytes32,uint256)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: mint(address,uint256)
+ok    encoders of mint(address,uint256)
+ok    ABI: mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint2
+ok    encoders of mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint2
+ok    ABI: mintToUA(bytes32,uint256)
+ok    encoders of mintToUA(bytes32,uint256)
+ok    ABI: uaExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint25
+ok    encoders of uaExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint25
+ok    ABI: mint(address,uint256)
+ok    encoders of mint(address,uint256)
+ok    ABI: mtxShield(bytes32,uint256)
+ok    encoders of mtxShield(bytes32,uint256)
+ok    ABI: approve(address,uint256)
+ok    encoders of approve(address,uint256)
+ok    ABI: mtxWrapShield(address,uint256,bytes32)
+ok    encoders of mtxWrapShield(address,uint256,bytes32)
+ok    ABI: pqzKeyOf(bytes32)
+ok    encoders of pqzKeyOf(bytes32)
+ok    ABI: uaNonce(bytes32,uint256)
+ok    encoders of uaNonce(bytes32,uint256)
+ok    ABI: mtxNonce(address,uint256)
+ok    encoders of mtxNonce(address,uint256)
+ok    ABI: mtxRollOver(bytes32,uint256)
+ok    encoders of mtxRollOver(bytes32,uint256)
+ok    ABI: publishEnv(uint8,uint16,(address,bytes32,address,address,bool,address[
+ok    encoders of publishEnv(uint8,uint16,(address,bytes32,address,address,bool,address[
+ok    ABI: deployImplementation(uint8,uint64,uint16,bytes,bytes)
+ok    encoders of deployImplementation(uint8,uint64,uint16,bytes,bytes)
+ok    ABI: setKindEnabled(uint8,bool)
+ok    encoders of setKindEnabled(uint8,bool)
+ok    ABI: pqzKeyOf(bytes32)
+ok    encoders of pqzKeyOf(bytes32)
+ok    ABI: pqzKeyOf(bytes32)
+ok    encoders of pqzKeyOf(bytes32)
+ok    ABI: requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    encoders of requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    ABI: uaPage(uint16,uint256,uint256)
+ok    encoders of uaPage(uint16,uint256,uint256)
+ok    ABI: pqzPending(bytes32,uint64)
+ok    encoders of pqzPending(bytes32,uint64)
+ok    ABI: mintToUA(bytes32,uint256)
+ok    encoders of mintToUA(bytes32,uint256)
+ok    ABI: pqzEntryBlob(bytes32)
+ok    encoders of pqzEntryBlob(bytes32)
+ok    ABI: minDecoyFee()
+ok    encoders of minDecoyFee()
+ok    ABI: pqzEntryBlob(bytes32)
+ok    encoders of pqzEntryBlob(bytes32)
+ok    ABI: pqzPending(bytes32,uint64)
+ok    encoders of pqzPending(bytes32,uint64)
+ok    ABI: pqzAcc(bytes32)
+ok    encoders of pqzAcc(bytes32)
+ok    ABI: storePqzPop(bytes32,bytes)
+ok    encoders of storePqzPop(bytes32,bytes)
+ok    ABI: setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    encoders of setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    ABI: recordOf(bytes32)
+ok    encoders of recordOf(bytes32)
+ok    ABI: pqzKeyOf(bytes32)
+ok    encoders of pqzKeyOf(bytes32)
+ok    ABI: msigOf(bytes32)
+ok    encoders of msigOf(bytes32)
+ok    ABI: uaOf(uint16,bytes)
+ok    encoders of uaOf(uint16,bytes)
+ok    ABI: disclosureStatement(bytes32,uint256,uint256,uint8)
+ok    encoders of disclosureStatement(bytes32,uint256,uint256,uint8)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: disclosureStatement(bytes32,uint256,uint256,uint8)
+ok    encoders of disclosureStatement(bytes32,uint256,uint256,uint8)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: envelopeBinding((address,bytes,uint256,uint256,uint256,uint32,address,
+ok    encoders of envelopeBinding((address,bytes,uint256,uint256,uint256,uint32,address,
+ok    ABI: mtxDigest((address,bytes,uint256,uint256,uint256,uint32,address,uint25
+ok    encoders of mtxDigest((address,bytes,uint256,uint256,uint256,uint32,address,uint25
+ok    ABI: uaEnvelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,addres
+ok    encoders of uaEnvelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,addres
+ok    ABI: uaDigest((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256
+ok    encoders of uaDigest((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: balanceOfUA(bytes32)
+ok    encoders of balanceOfUA(bytes32)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: balanceOfUA(bytes32)
+ok    encoders of balanceOfUA(bytes32)
+ok    ABI: disclosureMode()
+ok    encoders of disclosureMode()
+ok    ABI: transferSingleStatement((uint64,uint256,uint256,bytes32,bytes32,bytes3
+ok    encoders of transferSingleStatement((uint64,uint256,uint256,bytes32,bytes32,bytes3
+ok    ABI: disclosureMode()
+ok    encoders of disclosureMode()
+ok    ABI: transferStatement((uint64,uint256,uint256,bytes32,bytes32,uint256,byte
+ok    encoders of transferStatement((uint64,uint256,uint256,bytes32,bytes32,uint256,byte
+ok    ABI: mtxUnshieldUnwrap((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes)
+ok    encoders of mtxUnshieldUnwrap((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes)
+ok    ABI: mtxUnshield((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),uint2
+ok    encoders of mtxUnshield((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),uint2
+ok    ABI: uaEnvelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,addres
+ok    encoders of uaEnvelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,addres
+ok    ABI: envelopeBinding((address,bytes,uint256,uint256,uint256,uint32,address,
+ok    encoders of envelopeBinding((address,bytes,uint256,uint256,uint256,uint32,address,
+ok    ABI: pqzAcc(bytes32)
+ok    encoders of pqzAcc(bytes32)
+ok    ABI: mtxPrepareAcc(bytes32,uint256)
+ok    encoders of mtxPrepareAcc(bytes32,uint256)
+ok    ABI: pqzPending(bytes32,uint64)
+ok    encoders of pqzPending(bytes32,uint64)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: totalShielded()
+ok    encoders of totalShielded()
+ok    ABI: uaOf(uint16,bytes)
+ok    encoders of uaOf(uint16,bytes)
+ok    ABI: uaOf(uint16,bytes)
+ok    encoders of uaOf(uint16,bytes)
+ok    ABI: uaOf(uint16,bytes)
+ok    encoders of uaOf(uint16,bytes)
+ok    ABI: kemKeyOf(bytes32)
+ok    encoders of kemKeyOf(bytes32)
+ok    ABI: pqzKeySigOf(bytes32)
+ok    encoders of pqzKeySigOf(bytes32)
+ok    ABI: kindOf(bytes32)
+ok    encoders of kindOf(bytes32)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: mtxNonce(address,uint256)
+ok    encoders of mtxNonce(address,uint256)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: uaNonce(bytes32,uint256)
+ok    encoders of uaNonce(bytes32,uint256)
+ok    ABI: balanceOfUA(bytes32)
+ok    encoders of balanceOfUA(bytes32)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: auditorUA()
+ok    encoders of auditorUA()
+ok    ABI: unshieldUnwrapStatement((uint64,uint256,uint256,bytes32,bytes32,bytes,
+ok    encoders of unshieldUnwrapStatement((uint64,uint256,uint256,bytes32,bytes32,bytes,
+ok    ABI: burnStatement((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),uin
+ok    encoders of burnStatement((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),uin
+ok    ABI: pqzAccount(bytes32)
+ok    encoders of pqzAccount(bytes32)
+ok    ABI: pqzAcc(bytes32)
+ok    encoders of pqzAcc(bytes32)
+ok    ABI: pqzPendingCt(bytes32,uint64)
+ok    encoders of pqzPendingCt(bytes32,uint64)
+ok    ABI: balanceOfUA(bytes32)
+ok    encoders of balanceOfUA(bytes32)
+ok    ABI: PRECOMPILE()
+ok    encoders of PRECOMPILE()
+ok    ABI: kemKeyOf(bytes32)
+ok    encoders of kemKeyOf(bytes32)
+ok    ABI: uaCount(uint16)
+ok    encoders of uaCount(uint16)
+ok    ABI: uaAt(uint16,uint256)
+ok    encoders of uaAt(uint16,uint256)
+ok    ABI: uaAt(uint16,uint256)
+ok    encoders of uaAt(uint16,uint256)
+ok    ABI: auditorUA()
+ok    encoders of auditorUA()
+ok    ABI: isSupportedOnThisChain()
+ok    encoders of isSupportedOnThisChain()
+ok    ABI: checkedOf(bytes32)
+ok    encoders of checkedOf(bytes32)
+ok    ABI: checkedOf(bytes32)
+ok    encoders of checkedOf(bytes32)
+ok    ABI: kindOf(bytes32)
+ok    encoders of kindOf(bytes32)
+ok    ABI: uaIndex(bytes32)
+ok    encoders of uaIndex(bytes32)
+ok    ABI: 60 signatures; built at run time: ['head']
+ok    the transfer events are the built ones
+self-test: 0 failure(s)
+== n2816-kmax65536
+ok    mldsa65/n2816-kmax65536: R_REG message (pqzRegMessage, registering kind 0x0131)
+ok    mldsa65/n2816-kmax65536: PoP message (holderPopMessage)
+ok    mldsa65/n2816-kmax65536: registrationArgs = the row's args (full KEM key)
+ok    mldsa65/n2816-kmax65536: register calldata 65,412 B = registryCalldataLength, selector 0x4e229efb
+ok    mldsa65/n2816-kmax65536: hash-commit args + fill = the row's kemCommit
+ok    setKemKey fill calldata (selector 0xa00cce2a)
+ok    KEM record mldsa65/v1: message, KemKey
+ok    PQZ key record fndsa512/n2816-kmax65536: setPqzKey and R_REG messages
+ok    setPqzKey / requireAuthorized selectors
+ok    kemKeyOf decoder (key, empty key)
+ok    msig-pq/n2816-kmax65536: encodeMsig = the row's key data
+ok    msig-pq/n2816-kmax65536: msig message, member digest
+ok    msig-pq/n2816-kmax65536: registrationArgs = the row's args
+ok    msig-pq/n2816-kmax65536: registerMsig calldata 67,396 B = registryCalldataLength, selector 0x82b86a46
+ok    typed_ops.json: 19 rows with a builder here, want 19
+ok    Shield: calldata 484 B = the row's, selector 0xb4c1e1c0
+ok    Shield: typed digest = the row's
+ok    UAShield: calldata 484 B = the row's, selector 0x185d5243
+ok    UAShield: typed digest = the row's
+ok    WrapShield: calldata 516 B = the row's, selector 0xf1991276
+ok    WrapShield: typed digest = the row's
+ok    RollOver: calldata 484 B = the row's, selector 0xa7319c2d
+ok    RollOver: typed digest = the row's
+ok    UARollOver: calldata 644 B = the row's, selector 0x7f309756
+ok    UARollOver: typed digest = the row's
+ok    PrepareAcc: calldata 484 B = the row's, selector 0x1a4a1595
+ok    PrepareAcc: typed digest = the row's
+ok    UAPrepareAcc: calldata 644 B = the row's, selector 0x60c2174e
+ok    UAPrepareAcc: typed digest = the row's
+ok    PqzTransferSingle: calldata 2,308 B = the row's, selector 0x265cd4e4
+ok    PqzTransferSingle: typed digest = the row's
+ok    UAPqzTransferSingle: calldata 2,468 B = the row's, selector 0x7d93b2af
+ok    UAPqzTransferSingle: typed digest = the row's
+ok    PqzTransferSingleCompact: calldata 2,372 B = the row's, selector 0x274ac007
+ok    PqzTransferSingleCompact: typed digest = the row's
+ok    UAPqzTransferSingleCompact: calldata 2,532 B = the row's, selector 0x9b8e1528
+ok    UAPqzTransferSingleCompact: typed digest = the row's
+ok    PqzTransfer: calldata 3,012 B = the row's, selector 0xcff8464d
+ok    PqzTransfer: typed digest = the row's
+ok    UAPqzTransfer: calldata 3,172 B = the row's, selector 0x2174a476
+ok    UAPqzTransfer: typed digest = the row's
+ok    PqzTransferCompact: calldata 3,012 B = the row's, selector 0xd119f818
+ok    PqzTransferCompact: typed digest = the row's
+ok    UAPqzTransferCompact: calldata 3,172 B = the row's, selector 0x54812ef0
+ok    UAPqzTransferCompact: typed digest = the row's
+ok    PqzUnshield: calldata 1,988 B = the row's, selector 0x5276768c
+ok    PqzUnshield: typed digest = the row's
+ok    UAPqzUnshield: calldata 2,148 B = the row's, selector 0xefb2d957
+ok    UAPqzUnshield: typed digest = the row's
+ok    PqzUnshieldUnwrap: calldata 2,052 B = the row's, selector 0x1ec32e89
+ok    PqzUnshieldUnwrap: typed digest = the row's
+ok    UAPqzUnshieldUnwrap: calldata 2,212 B = the row's, selector 0x8167c978
+ok    UAPqzUnshieldUnwrap: typed digest = the row's
+ok    PqzAuth: K.auth_digest = the row's
+ok    ABI: register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),by
+ok    encoders of register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),by
+ok    ABI: registerMsig((uint16,(uint16,bytes32,uint16)[]),(bytes,bytes32,(uint8,
+ok    encoders of registerMsig((uint16,(uint16,bytes32,uint16)[]),(bytes,bytes32,(uint8,
+ok    ABI: setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    encoders of setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    ABI: requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    encoders of requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    ABI: mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,bytes32,
+ok    encoders of mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,bytes32,
+ok    ABI: mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,bytes32,uint25
+ok    encoders of mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,bytes32,uint25
+ok    ABI: setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    encoders of setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    ABI: setPqzKey(bytes32,bytes,bytes32,(bytes,bytes,(uint16,bytes,bytes)[]))
+ok    encoders of setPqzKey(bytes32,bytes,bytes32,(bytes,bytes,(uint16,bytes,bytes)[]))
+ok    ABI: storePqzPop(bytes32,bytes)
+ok    encoders of storePqzPop(bytes32,bytes)
+ok    ABI: requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    encoders of requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    ABI: createToken(uint8,uint64,bytes,bytes32)
+ok    encoders of createToken(uint8,uint64,bytes,bytes32)
+ok    ABI: mint(address,uint256)
+ok    encoders of mint(address,uint256)
+ok    ABI: mint(address,uint256)
+ok    encoders of mint(address,uint256)
+ok    ABI: mtxShield(bytes32,uint256)
+ok    encoders of mtxShield(bytes32,uint256)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: mint(address,uint256)
+ok    encoders of mint(address,uint256)
+ok    ABI: mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint2
+ok    encoders of mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint2
+ok    ABI: mintToUA(bytes32,uint256)
+ok    encoders of mintToUA(bytes32,uint256)
+ok    ABI: uaExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint25
+ok    encoders of uaExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint25
+ok    ABI: mint(address,uint256)
+ok    encoders of mint(address,uint256)
+ok    ABI: mtxShield(bytes32,uint256)
+ok    encoders of mtxShield(bytes32,uint256)
+ok    ABI: approve(address,uint256)
+ok    encoders of approve(address,uint256)
+ok    ABI: mtxWrapShield(address,uint256,bytes32)
+ok    encoders of mtxWrapShield(address,uint256,bytes32)
+ok    ABI: pqzKeyOf(bytes32)
+ok    encoders of pqzKeyOf(bytes32)
+ok    ABI: uaNonce(bytes32,uint256)
+ok    encoders of uaNonce(bytes32,uint256)
+ok    ABI: mtxNonce(address,uint256)
+ok    encoders of mtxNonce(address,uint256)
+ok    ABI: mtxRollOver(bytes32,uint256)
+ok    encoders of mtxRollOver(bytes32,uint256)
+ok    ABI: publishEnv(uint8,uint16,(address,bytes32,address,address,bool,address[
+ok    encoders of publishEnv(uint8,uint16,(address,bytes32,address,address,bool,address[
+ok    ABI: deployImplementation(uint8,uint64,uint16,bytes,bytes)
+ok    encoders of deployImplementation(uint8,uint64,uint16,bytes,bytes)
+ok    ABI: setKindEnabled(uint8,bool)
+ok    encoders of setKindEnabled(uint8,bool)
+ok    ABI: pqzKeyOf(bytes32)
+ok    encoders of pqzKeyOf(bytes32)
+ok    ABI: pqzKeyOf(bytes32)
+ok    encoders of pqzKeyOf(bytes32)
+ok    ABI: requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    encoders of requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,bytes,b
+ok    ABI: uaPage(uint16,uint256,uint256)
+ok    encoders of uaPage(uint16,uint256,uint256)
+ok    ABI: pqzPending(bytes32,uint64)
+ok    encoders of pqzPending(bytes32,uint64)
+ok    ABI: mintToUA(bytes32,uint256)
+ok    encoders of mintToUA(bytes32,uint256)
+ok    ABI: pqzEntryBlob(bytes32)
+ok    encoders of pqzEntryBlob(bytes32)
+ok    ABI: minDecoyFee()
+ok    encoders of minDecoyFee()
+ok    ABI: pqzEntryBlob(bytes32)
+ok    encoders of pqzEntryBlob(bytes32)
+ok    ABI: pqzPending(bytes32,uint64)
+ok    encoders of pqzPending(bytes32,uint64)
+ok    ABI: pqzAcc(bytes32)
+ok    encoders of pqzAcc(bytes32)
+ok    ABI: storePqzPop(bytes32,bytes)
+ok    encoders of storePqzPop(bytes32,bytes)
+ok    ABI: setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    encoders of setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,by
+ok    ABI: recordOf(bytes32)
+ok    encoders of recordOf(bytes32)
+ok    ABI: pqzKeyOf(bytes32)
+ok    encoders of pqzKeyOf(bytes32)
+ok    ABI: msigOf(bytes32)
+ok    encoders of msigOf(bytes32)
+ok    ABI: uaOf(uint16,bytes)
+ok    encoders of uaOf(uint16,bytes)
+ok    ABI: disclosureStatement(bytes32,uint256,uint256,uint8)
+ok    encoders of disclosureStatement(bytes32,uint256,uint256,uint8)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: disclosureStatement(bytes32,uint256,uint256,uint8)
+ok    encoders of disclosureStatement(bytes32,uint256,uint256,uint8)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    encoders of verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)
+ok    ABI: envelopeBinding((address,bytes,uint256,uint256,uint256,uint32,address,
+ok    encoders of envelopeBinding((address,bytes,uint256,uint256,uint256,uint32,address,
+ok    ABI: mtxDigest((address,bytes,uint256,uint256,uint256,uint32,address,uint25
+ok    encoders of mtxDigest((address,bytes,uint256,uint256,uint256,uint32,address,uint25
+ok    ABI: uaEnvelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,addres
+ok    encoders of uaEnvelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,addres
+ok    ABI: uaDigest((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256
+ok    encoders of uaDigest((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: balanceOfUA(bytes32)
+ok    encoders of balanceOfUA(bytes32)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: balanceOfUA(bytes32)
+ok    encoders of balanceOfUA(bytes32)
+ok    ABI: disclosureMode()
+ok    encoders of disclosureMode()
+ok    ABI: transferSingleStatement((uint64,uint256,uint256,bytes32,bytes32,bytes3
+ok    encoders of transferSingleStatement((uint64,uint256,uint256,bytes32,bytes32,bytes3
+ok    ABI: disclosureMode()
+ok    encoders of disclosureMode()
+ok    ABI: transferStatement((uint64,uint256,uint256,bytes32,bytes32,uint256,byte
+ok    encoders of transferStatement((uint64,uint256,uint256,bytes32,bytes32,uint256,byte
+ok    ABI: mtxUnshieldUnwrap((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes)
+ok    encoders of mtxUnshieldUnwrap((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes)
+ok    ABI: mtxUnshield((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),uint2
+ok    encoders of mtxUnshield((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),uint2
+ok    ABI: uaEnvelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,addres
+ok    encoders of uaEnvelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,addres
+ok    ABI: envelopeBinding((address,bytes,uint256,uint256,uint256,uint32,address,
+ok    encoders of envelopeBinding((address,bytes,uint256,uint256,uint256,uint32,address,
+ok    ABI: pqzAcc(bytes32)
+ok    encoders of pqzAcc(bytes32)
+ok    ABI: mtxPrepareAcc(bytes32,uint256)
+ok    encoders of mtxPrepareAcc(bytes32,uint256)
+ok    ABI: pqzPending(bytes32,uint64)
+ok    encoders of pqzPending(bytes32,uint64)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: totalShielded()
+ok    encoders of totalShielded()
+ok    ABI: uaOf(uint16,bytes)
+ok    encoders of uaOf(uint16,bytes)
+ok    ABI: uaOf(uint16,bytes)
+ok    encoders of uaOf(uint16,bytes)
+ok    ABI: uaOf(uint16,bytes)
+ok    encoders of uaOf(uint16,bytes)
+ok    ABI: kemKeyOf(bytes32)
+ok    encoders of kemKeyOf(bytes32)
+ok    ABI: pqzKeySigOf(bytes32)
+ok    encoders of pqzKeySigOf(bytes32)
+ok    ABI: kindOf(bytes32)
+ok    encoders of kindOf(bytes32)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: mtxNonce(address,uint256)
+ok    encoders of mtxNonce(address,uint256)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: uaNonce(bytes32,uint256)
+ok    encoders of uaNonce(bytes32,uint256)
+ok    ABI: balanceOfUA(bytes32)
+ok    encoders of balanceOfUA(bytes32)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: balanceOf(address)
+ok    encoders of balanceOf(address)
+ok    ABI: auditorUA()
+ok    encoders of auditorUA()
+ok    ABI: unshieldUnwrapStatement((uint64,uint256,uint256,bytes32,bytes32,bytes,
+ok    encoders of unshieldUnwrapStatement((uint64,uint256,uint256,bytes32,bytes32,bytes,
+ok    ABI: burnStatement((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),uin
+ok    encoders of burnStatement((uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),uin
+ok    ABI: pqzAccount(bytes32)
+ok    encoders of pqzAccount(bytes32)
+ok    ABI: pqzAcc(bytes32)
+ok    encoders of pqzAcc(bytes32)
+ok    ABI: pqzPendingCt(bytes32,uint64)
+ok    encoders of pqzPendingCt(bytes32,uint64)
+ok    ABI: balanceOfUA(bytes32)
+ok    encoders of balanceOfUA(bytes32)
+ok    ABI: PRECOMPILE()
+ok    encoders of PRECOMPILE()
+ok    ABI: kemKeyOf(bytes32)
+ok    encoders of kemKeyOf(bytes32)
+ok    ABI: uaCount(uint16)
+ok    encoders of uaCount(uint16)
+ok    ABI: uaAt(uint16,uint256)
+ok    encoders of uaAt(uint16,uint256)
+ok    ABI: uaAt(uint16,uint256)
+ok    encoders of uaAt(uint16,uint256)
+ok    ABI: auditorUA()
+ok    encoders of auditorUA()
+ok    ABI: isSupportedOnThisChain()
+ok    encoders of isSupportedOnThisChain()
+ok    ABI: checkedOf(bytes32)
+ok    encoders of checkedOf(bytes32)
+ok    ABI: checkedOf(bytes32)
+ok    encoders of checkedOf(bytes32)
+ok    ABI: kindOf(bytes32)
+ok    encoders of kindOf(bytes32)
+ok    ABI: uaIndex(bytes32)
+ok    encoders of uaIndex(bytes32)
+ok    ABI: 60 signatures; built at run time: ['head']
+ok    the transfer events are the built ones
+self-test: 0 failure(s)
+rc=0

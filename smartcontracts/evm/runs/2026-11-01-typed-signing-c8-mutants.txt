@@ -1,0 +1,17 @@
+# mutants at commit db79e158
+killed    burn struct field order: rc=1: FAIL  PqzUnshield: typed digest = the row's
+killed    unshield amount / recipient swapped in the struct: rc=1: FAIL  self-test aborted: RuntimeError: clientkeys typed: as/.claude/worktrees/typed-signing/clients/clientkeys/src/evm.js:355:66
+killed    pqzAuth and accHint encoders swapped: rc=1: FAIL  self-test aborted: TypeError: can't concat list to bytes
+killed    uaShield takes a UASig: rc=1: FAIL  self-test aborted: TypeError: object of type 'int' has no len()
+killed    a signature not in the ABI: rc=1: FAIL  ABI: uaNonces(bytes32,uint256)
+killed    an encoder list that is not the signature's: rc=1: FAIL  encoders of mtxRollOver(bytes32,uint256)
+killed    registerMsig member encoder: rc=1: FAIL  self-test aborted: TypeError: object of type 'int' has no len()
+killed    msig tag: rc=1: FAIL  msig-pq/n2304-kmax4096: msig message, member digest
+killed    PqzAuth: op after the header: rc=1: FAIL  PqzAuth: K.auth_digest = the row's
+killed    Signed: a fee mode at fee 0: rc=1: AssertionError: no fee, no fee mode
+killed    Signed: uaShield signed as a UASig: rc=1: 
+killed    msig member digest without the id: rc=1: AssertionError
+killed    ZetherE2E: another key signs the envelope: rc=1: Error: script failed: named single transfer alice -> bob 40 reverted
+killed    ZetherE2E: a wrong expected balance: rc=1: Error: script failed: bob after the named single transfer: decrypted acc 150 pending 40, expected 150 / 41
+mutants: 14, survived: 0
+rc=0

@@ -38,7 +38,7 @@ for name, f, a, b, cmd in M:
         open(f, "w", encoding="utf-8").write(src)
     assert open(f, encoding="utf-8").read() == src
     out = r.stdout + r.stderr
-    why = [x for x in out.splitlines() if x.startswith("FAIL") or "AssertionError" in x or "reverted" in x or "expected" in x or "Error" in x]
+    why = [x for x in out.splitlines() if x.startswith("FAIL") or "script failed" in x or "AssertionError" in x]
     bad += r.returncode == 0
     print(f"{'SURVIVED' if r.returncode == 0 else 'killed  '}  {name}: rc={r.returncode}: {why[0][:150] if why else ''}", flush=True)
 print(f"mutants: {len(M)}, survived: {bad}")

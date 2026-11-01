@@ -1,0 +1,15 @@
+# ua-deploy at commit db79e158
+No files changed, compilation skipped
+
+Ran 7 tests for test/ua/UADeploy.t.sol:UADeployTest
+[PASS] test_C5_1_releaseNeedsABlockGasLimit() (gas: 636828879)
+[PASS] test_devChain() (gas: 965859951)
+[PASS] test_otherChains() (gas: 4822169960)
+[PASS] test_pqKindThreshold66() (gas: 636590863)
+[PASS] test_probe() (gas: 2234434)
+[PASS] test_probeFailureDisables() (gas: 1578203646)
+[PASS] test_registryDeployGate() (gas: 969582098)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 68.77ms (176.00ms CPU time)
+
+Ran 1 test suite in 69.61ms (68.77ms CPU time): 7 tests passed, 0 failed, 0 skipped (7 total tests)
+rc=0
