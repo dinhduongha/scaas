@@ -17,9 +17,10 @@ import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol"
 /// `PqzStateGas.t.sol`'s gas table does (the precompile at the set's row price, ML-DSA-65 68,006, `fndsa512` 2.3 M
 /// stand-ins). The pre-split figures are the same test run on 2ceda92d (`test/vectors/metatx-overhead-presplit.json`).
 /// Asserted: (largest − pre-split) − (smallest − pre-split) <= 8,000 per kind. `MTX_OV_PRESPLIT=1`: log only.
-/// typed-signing C4: the largest envelopes' op is on explicit parameters, whose per-leg ABI decoding is the op's own cost, the
-/// same on all three pipelines (the JSON's `typed|<id>`: this test on the C3 bytecode against the C4 bytecode, the largest of the
-/// three kinds; `smallest` moved 14 to 62 gas). It is taken off the largest, so the bound stays on the pipeline.
+/// typed-signing C4 review: the largest op's own cost moved with its explicit parameters, so its overhead is what the relayed
+/// call costs above the same op called directly on the same state (`_direct`), now and on 2ceda92d (the JSON's `direct|<id>`):
+/// `(largest − direct) − (pre-split largest − pre-split direct)`. The pre-split side runs from
+/// `runs/2026-11-01-typed-signing-c4-MtxSplitOverhead-at-2ceda92d.t.sol`, this test as it compiled there.
 /// Run: `scripts/capped smartcontracts/evm/script/pqz/at-set.sh <set> test --match-contract MtxSplitOverheadTest -vv`
 /// (log: runs/2026-10-27-metatx-split-overhead.txt). It inherits `PqzStatePinGasTest`'s tests; select this contract.
 contract MtxSplitOverheadTest is PqzStatePinGasTest {
@@ -61,7 +62,10 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
         string memory id = string.concat(sys, "-", key);
         console2.log(string.concat("MEAS ", PqzSet.NAME, " ", kind, " ", id), l);
         if (logOnly) return;
-        uint256 ovL = l - _pre(id, false) - vm.parseJsonUint(pre, string.concat(".", PqzSet.NAME, "['typed|", id, "']"));
+        uint256 dir = _direct(_op7a(m, true, _pf(sys, key)), row);
+        console2.log(string.concat("MEAS ", PqzSet.NAME, " direct ", id), dir);
+        uint256 preDir = vm.parseJsonUint(pre, string.concat(".", PqzSet.NAME, "['direct|", id, "']"));
+        uint256 ovL = (l - dir) - (_pre(id, false) - preDir);
         uint256 ovS = sMeas - _pre("", true);
         uint256 d = ovL > ovS ? ovL - ovS : 0;
         console2.log(string.concat("OVERHEAD ", PqzSet.NAME, " ", kind, " ", id, " smallest / largest / difference"), ovS, ovL, d);
@@ -70,6 +74,19 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
 
     function _pre(string memory id, bool small) internal view returns (uint256) {
         return vm.parseJsonUint(pre, string.concat(".", PqzSet.NAME, "['", kind, "|", small ? "S" : id, "']"));
+    }
+
+    /// the same op called directly on the same state, measured as `_meas`: the op's own cost, whatever the pipeline.
+    function _direct(bytes memory data, uint256 row) internal returns (uint256 inner) {
+        vm.clearMockedCalls();
+        vm.etch(PQZ, address(new RowBurner(row)).code);
+        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        uint256 snap = vm.snapshotState();
+        _gasTo(address(tok), data);
+        uint256 st = lastState;
+        vm.revertToState(snap);
+        inner = meter.measure(address(tok), data) - st;
+        vm.revertToState(snap);
     }
 
     /// the relayed call's EXECUTION gas (`GasMeter`: the callee warm as a transaction's `to`, cold state under a snapshot,

@@ -222,11 +222,13 @@ contract PqzAuthDigestTest is PqzNamedBase {
         return c;
     }
 
-    /// One row, in a frame of its own (a statement file of megabytes costs quadratic memory in one frame). `ids` 0: no such row.
-    function checkRowDigest(string memory file, uint256 i) external view returns (uint256 ids) {
+    /// One row, in a frame of its own (a statement file of megabytes costs quadratic memory in one frame); false: no such row.
+    /// A row without a PQZL digest fails here, it does not end the file.
+    function checkRowDigest(string memory file, uint256 i) external view returns (bool) {
         string memory j = vm.readFile(string.concat(_vecDir(), file));
         string memory r = string.concat(".rows[", vm.toString(i), "]");
-        if (!vm.keyExistsJson(j, r)) return 0;
+        if (!vm.keyExistsJson(j, r)) return false;
+        assertTrue(vm.keyExistsJson(j, string.concat(r, ".auth_digest.pqzl")), string.concat(file, r, ": no digest"));
         bytes memory st = vm.parseBytes(string.concat("0x", VM.parseJsonString(j, string.concat(r, ".stmt"))));
         uint8 op = uint8(VM.parseJsonUint(j, string.concat(r, ".op")));
         for (uint256 k; k < 2; ++k) {
@@ -235,22 +237,19 @@ contract PqzAuthDigestTest is PqzNamedBase {
             if (!vm.keyExistsJson(j, key)) continue;
             bytes memory s = _withId(st, k == 0 ? PqzSet.PQZL_ID : PqzSet.PQZH_ID);
             assertEq(ref_.digest(op, s, _rowDomain(s)), vm.parseBytes32(string.concat("0x", VM.parseJsonString(j, key))), string.concat(file, r, " ", id));
-            ++ids;
         }
+        return true;
     }
 
-    /// Every debit statement of the set: the vector's `auth_digest` (`pqz-vectors`, re-derived by `pqz_kat.py`) per proof
-    /// system is `PqzCore.authDigest`. A register or disclosure statement authorises nothing, so it has none.
+    /// Every debit statement of the set, the row count pinned: the vector's `auth_digest` (`pqz-vectors`, re-derived by
+    /// `pqz_kat.py`) per proof system is `PqzCore.authDigest`. A register or disclosure statement authorises nothing, so it has none.
     function test_pqzAuthDigestVectors() public view {
         string[5] memory files = ["statement_transfer.json", "statement_burn.json", "statement_refresh.json", "statement_transfer_multi.json", "fee0.json"];
+        uint8[5] memory rows = [2, 1, 1, 11, 4];
         for (uint256 f; f < 5; ++f) {
-            uint256 got;
-            for (uint256 i;; ++i) {
-                uint256 ids = this.checkRowDigest(files[f], i);
-                if (ids == 0) break;
-                got += ids;
-            }
-            assertGt(got, 0, files[f]);
+            uint256 i;
+            while (this.checkRowDigest(files[f], i)) ++i;
+            assertEq(i, rows[f], files[f]);
         }
     }
 
@@ -454,17 +453,48 @@ contract PqzNamedTest is PqzNamedBase {
         assertEq(ref, _entryRef(tok, 0), "the entry's reference");
         assertEq(tok.pqzAccount(alice).sendCounter, 1);
         assertEq(ua ? tok.uaNonce(u.from, LANE) : tok.mtxNonce(signer, LANE), 1);
-        // the replay, then a signature over other parameters
+        // the replay
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        if (ua) tok.uaConfidentialTransferSingle(u, t, proof, _pqAuth(), hint, _uaSig(sig));
-        else tok.mtxConfidentialTransferSingle(e, t, proof, _pqAuth(), hint, sig);
-        e.nonce = u.nonce = 1;
-        t.salt = bytes16(uint128(1));
+        _callSingle(compact, ua, e, u, t, proof, hint, sig);
+        _bindsSingle(compact, ua, t, proof, hint);
+    }
+
+    function _callSingle(bool compact, bool ua, MetaTxLib.Envelope memory e, MetaTxLib.UAEnvelope memory u, IPqzToken.PqzTransferArgs memory t,
+        bytes memory proof, bytes memory hint, bytes memory sig) internal
+    {
+        if (ua) {
+            if (compact) tok.uaConfidentialTransferSingleCompact(u, t, proof, _pqAuth(), hint, _uaSig(sig));
+            else tok.uaConfidentialTransferSingle(u, t, proof, _pqAuth(), hint, _uaSig(sig));
+        } else {
+            if (compact) tok.mtxConfidentialTransferSingleCompact(e, t, proof, _pqAuth(), hint, sig);
+            else tok.mtxConfidentialTransferSingle(e, t, proof, _pqAuth(), hint, sig);
+        }
+    }
+
+    /// Signed at the lane's next nonce over `t`: one field changed fails the signature and nothing else, the nonce unused;
+    /// the unchanged call then passes, so the refusals were the field's.
+    function _bindsSingle(bool compact, bool ua, IPqzToken.PqzTransferArgs memory t, bytes memory proof, bytes memory hint) internal {
+        MetaTxLib.Envelope memory e = _env(1);
+        MetaTxLib.UAEnvelope memory u = _uaEnv(1);
+        bytes memory sig = _singleSig(ua, compact ? "PqzTransferSingleCompact" : "PqzTransferSingle", 1, e.validUntil, t, proof, hint);
+        bytes16 s0 = t.salt;
+        t.salt = bytes16(uint128(s0) ^ 1);
         vm.prank(relayer);
-        vm.expectRevert();
-        if (ua) tok.uaConfidentialTransferSingle(u, t, proof, _pqAuth(), hint, _uaSig(sig));
-        else tok.mtxConfidentialTransferSingle(e, t, proof, _pqAuth(), hint, sig);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        _callSingle(compact, ua, e, u, t, proof, hint, sig);
+        t.salt = s0;
+        vm.prank(relayer);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        _callSingle(compact, ua, e, u, t, proof, bytes.concat(hint, hex"01"), sig);
+        t.vTo[7] ^= 0x01;
+        vm.prank(relayer);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        _callSingle(compact, ua, e, u, t, proof, hint, sig);
+        t.vTo[7] ^= 0x01;
+        vm.prank(relayer);
+        _callSingle(compact, ua, e, u, t, proof, hint, sig);
+        assertEq(ua ? tok.uaNonce(u.from, LANE) : tok.mtxNonce(signer, LANE), 2, "only the unchanged call used the nonce");
     }
 
     function test_pqzNamedTransferSingle() public { _runSingle(false, false); }
@@ -474,10 +504,10 @@ contract PqzNamedTest is PqzNamedBase {
 
     // ------------------------------------------------------------------ op 7
 
-    function _multiSig(bool ua, string memory base, uint256 until, IPqzToken.PqzMultiArgs memory t, bytes memory proof, bytes memory hint)
+    function _multiSig(bool ua, string memory base, uint256 nonce, uint256 until, IPqzToken.PqzMultiArgs memory t, bytes memory proof, bytes memory hint)
         internal view returns (bytes memory)
     {
-        string memory m = _msg(_argMsg(multiJson(t), "", proof, hint), 0, ua, until);
+        string memory m = _msg(_argMsg(multiJson(t), "", proof, hint), nonce, ua, until);
         return ecdsa(PK, typedDigest(address(tok), _name(ua, base), _argFields(ua, "PqzMultiArgs", ""), string.concat(',', T_LEG, ',', T_MULTI), m));
     }
 
@@ -487,7 +517,7 @@ contract PqzNamedTest is PqzNamedBase {
         bytes memory proof = hex"c0de";
         MetaTxLib.Envelope memory e = _env(0);
         MetaTxLib.UAEnvelope memory u = _uaEnv(0);
-        bytes memory sig = _multiSig(ua, compact ? "PqzTransferCompact" : "PqzTransfer", e.validUntil, t, proof, "");
+        bytes memory sig = _multiSig(ua, compact ? "PqzTransferCompact" : "PqzTransfer", 0, e.validUntil, t, proof, "");
         bytes memory st = tok.transferStatement(t, ua ? _uaBindingOf(tok, u) : _bindingOf(tok, e));
         vm.expectCall(PQZ, abi.encodePacked(uint8(7), uint32(st.length), st, proof));
         vm.prank(relayer);
@@ -499,6 +529,39 @@ contract PqzNamedTest is PqzNamedBase {
         assertEq(ref, _entryRef(tok, 0));
         for (uint256 j; j < 4; ++j) assertEq(tok.pqzAccount(rec[j]).pendingCount, 1, "a credit per leg");
         assertEq(ua ? tok.uaNonce(u.from, LANE) : tok.mtxNonce(signer, LANE), 1);
+        _bindsMulti(compact, ua, t, proof);
+    }
+
+    function _callMulti(bool compact, bool ua, IPqzToken.PqzMultiArgs memory t, bytes memory proof, bytes memory hint, bytes memory sig) internal {
+        if (ua) {
+            if (compact) tok.uaConfidentialTransferCompact(_uaEnv(1), t, proof, _pqAuth(), hint, _uaSig(sig));
+            else tok.uaConfidentialTransfer(_uaEnv(1), t, proof, _pqAuth(), hint, _uaSig(sig));
+        } else {
+            if (compact) tok.mtxConfidentialTransferCompact(_env(1), t, proof, _pqAuth(), hint, sig);
+            else tok.mtxConfidentialTransfer(_env(1), t, proof, _pqAuth(), hint, sig);
+        }
+    }
+
+    /// As `_bindsSingle`: the salt, the hint, a leg's `v`.
+    function _bindsMulti(bool compact, bool ua, IPqzToken.PqzMultiArgs memory t, bytes memory proof) internal {
+        bytes memory sig = _multiSig(ua, compact ? "PqzTransferCompact" : "PqzTransfer", 1, block.timestamp + 300, t, proof, "");
+        bytes16 s0 = t.salt;
+        t.salt = bytes16(uint128(s0) ^ 1);
+        vm.prank(relayer);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        _callMulti(compact, ua, t, proof, "", sig);
+        t.salt = s0;
+        vm.prank(relayer);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        _callMulti(compact, ua, t, proof, hex"01", sig);
+        t.legs[2].v[7] ^= 0x01;
+        vm.prank(relayer);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        _callMulti(compact, ua, t, proof, "", sig);
+        t.legs[2].v[7] ^= 0x01;
+        vm.prank(relayer);
+        _callMulti(compact, ua, t, proof, "", sig);
+        assertEq(ua ? tok.uaNonce(MetaTxLib.pad(signer), LANE) : tok.mtxNonce(signer, LANE), 2, "only the unchanged call used the nonce");
     }
 
     function test_pqzNamedTransfer() public { _runMulti(false, false); }
@@ -609,11 +672,205 @@ contract PqzNamedTest is PqzNamedBase {
     function test_pqzNamedRollOver() public { _rollRow(false); }
     function test_pqzNamedRollOverUA() public { _rollRow(true); }
 
-    /// A named entry is no allowlisted op: `mtxExecute` of one refuses it (TS-D14), on both paths.
-    function test_pqzNamedEntryNotAllowlisted() public view {
-        (bytes4[] memory s,,) = tok.mtxSelectors();
-        bytes4 signed = bytes4(keccak256(bytes(VM.parseJsonString(vm.readFile(TYPED_OPS), domainField("PqzTransferSingle", "pqz", "abi")))));
-        for (uint256 i; i < s.length; ++i) assertTrue(s[i] != signed);
+    /// A named entry is no allowlisted op (TS-D14): its selector inside a validly signed `mtxExecute` or `uaExecute` is refused at
+    /// the gate of each path, `MtxSelectorNotAllowed` and `MetaTxUnknownOp`.
+    function _refused(PqzLayer t, string memory j, string memory op) internal {
+        bytes4 sel = bytes4(VM.parseJsonBytes(j, domainField(op, "pqz", "selector")));
+        bytes memory data = bytes.concat(sel, new bytes(64));
+        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(signer, data, LANE, 0, block.timestamp + 300, 0, address(0), 0, address(0));
+        bytes memory sig = ecdsa(PK, t.mtxDigest(m));
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, sel));
+        t.mtxExecute(m, sig);
+        MetaTxLib.UAMetaTransaction memory u = MetaTxLib.UAMetaTransaction(MetaTxLib.pad(signer), data, LANE, 0, block.timestamp + 300, 0, address(0), 0, address(0));
+        sig = ecdsa(PK, t.uaDigest(u));
+        vm.expectRevert(abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, sel));
+        t.uaExecute(u, sig);
+    }
+
+    function test_pqzNamedEntryNotAllowlisted() public {
+        string memory j = vm.readFile(TYPED_OPS);
+        string[9] memory ops = ["PqzTransferSingle", "PqzTransferSingleCompact", "PqzTransfer", "PqzTransferCompact", "PqzUnshield", "Shield", "RollOver",
+            "PrepareAcc", "WrapShield"];
+        for (uint256 i; i < ops.length; ++i) {
+            _refused(w, j, ops[i]);
+            if (i != 8) _refused(tok, j, ops[i]);
+            if (i != 8) _refused(w, j, string.concat("UA", ops[i]));
+        }
+        _refused(w, j, "PqzUnshieldUnwrap");
+        _refused(w, j, "UAPqzUnshieldUnwrap");
+    }
+
+    // ------------------------------------------------------------------ an outer fee
+
+    function _runFee(bool ua) internal {
+        IPqzToken.PqzTransferArgs memory t = _ts(_sPl(tok, alice, true, "", 54));
+        bytes memory proof = hex"c0de";
+        MetaTxLib.Envelope memory e = _env(0);
+        MetaTxLib.UAEnvelope memory u = _uaEnv(0);
+        (e.mode, e.fee, u.mode, u.fee) = (MetaTxLib.MODE_FEE_FIXED, 7, MetaTxLib.MODE_FEE_FIXED, 7);
+        string memory m = string.concat('"from":', ua ? h(u.from) : a(signer), ',', _argMsg(transferJson(t), "", proof, ""), ',',
+            eJson(LANE, 0, e.validUntil, e.mode, e.fee));
+        bytes memory sig = ecdsa(PK, typedDigest(address(tok), _name(ua, "PqzTransferSingle"), _argFields(ua, "PqzTransferArgs", ""), string.concat(',', T_TRANSFER), m));
+        uint256 before = tok.balanceOf(signer);
+        vm.prank(relayer);
+        _callSingle(false, ua, e, u, t, proof, "", sig);
+        assertEq(tok.pqzAccount(alice).sendCounter, 1, "the op ran");
+        assertEq(tok.balanceOf(relayer), 7, "the relayer's fee");
+        assertEq(tok.balanceOf(signer), before - 7, "paid by the signer");
+    }
+
+    function test_pqzNamedFeePaid() public { _runFee(false); }
+    function test_pqzNamedFeePaidUA() public { _runFee(true); }
+}
+
+/// The one packed length check became a check per part (Appendix X.1): each part at each wrong length is `BadPayload` of that
+/// length, the unchanged struct passes, and what the ABI decoder refuses is refused on the raw calldata.
+contract PqzPartLengthsTest is PqzNamedBase {
+    function setUp() public {
+        _named();
+        _fund(tok, alice, 1000);
+    }
+
+    function _bad(uint256 want) internal pure returns (uint256[4] memory) {
+        return [0, want - 32, want + 32, want + 1];
+    }
+
+    function _badAud() internal pure returns (uint256[4] memory) {
+        return [32, PqzCt.V - 32, PqzCt.V + 32, PqzCt.V + 1];
+    }
+
+    function _nonEmpty(uint256 want) internal pure returns (uint256[4] memory) {
+        return [1, 41, 42, want];
+    }
+
+    function _expect(uint256 len) internal {
+        vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadPayload.selector, len));
+    }
+
+    function _t(IPqzToken.PqzTransferArgs memory t, uint256 len, bool compact) internal {
+        _expect(len);
+        if (compact) tok.mtxConfidentialTransferSingleCompact(t, hex"01", _pqAuth(), "");
+        else tok.mtxConfidentialTransferSingle(t, hex"01", _pqAuth(), "");
+    }
+
+    function test_partLengths_op1() public {
+        IPqzToken.PqzTransferArgs memory t = _ts(_sPl(tok, alice, true, "", 70));
+        bytes memory x;
+        for (uint256 i; i < 4; ++i) {
+            (x, t.u) = (t.u, new bytes(_bad(PqzCt.PK)[i]));
+            _t(t, t.u.length, false);
+            t.u = x;
+            (x, t.vTo) = (t.vTo, new bytes(_bad(PqzCt.V)[i]));
+            _t(t, t.vTo.length, false);
+            t.vTo = x;
+            (x, t.vFrom) = (t.vFrom, new bytes(_bad(PqzCt.V)[i]));
+            _t(t, t.vFrom.length, false);
+            t.vFrom = x;
+            (x, t.vAuditor) = (t.vAuditor, new bytes(_badAud()[i]));
+            _t(t, t.vAuditor.length, false);
+            t.vAuditor = x;
+            // no memo on BUNDLE, 41 bytes on commit-reveal
+            t.sealedMemo = new bytes(_nonEmpty(57)[i]);
+            _t(t, t.sealedMemo.length, false);
+            if (t.sealedMemo.length != PqzCore.SEALED) _t(t, t.sealedMemo.length, true);
+            t.sealedMemo = "";
+        }
+        _t(t, 0, true); // commit-reveal without the memo
+        tok.mtxConfidentialTransferSingle(t, hex"01", _pqAuth(), "");
+        assertEq(tok.pqzAccount(alice).sendCounter, 1, "the unchanged struct passes");
+    }
+
+    function _m(IPqzToken.PqzMultiArgs memory t, uint256 len, bool compact) internal {
+        _expect(len);
+        if (compact) tok.mtxConfidentialTransferCompact(t, hex"01", _pqAuth(), "");
+        else tok.mtxConfidentialTransfer(t, hex"01", _pqAuth(), "");
+    }
+
+    function test_partLengths_op7() public {
+        IPqzToken.PqzMultiArgs memory t = _ms(_mPl(tok, alice, _legsN(2), true, "", 71));
+        uint256 memoLen = 2 + 40 * 2;
+        bytes memory x;
+        for (uint256 i; i < 4; ++i) {
+            (x, t.u[0]) = (t.u[0], new bytes(_bad(PqzCt.PK)[i]));
+            _m(t, t.u[0].length, false);
+            t.u[0] = x;
+            (x, t.legs[1].v) = (t.legs[1].v, new bytes(_bad(PqzCt.V)[i]));
+            _m(t, t.legs[1].v.length, false);
+            t.legs[1].v = x;
+            (x, t.legs[1].vAuditor) = (t.legs[1].vAuditor, new bytes(_bad(PqzCt.V)[i]));
+            _m(t, t.legs[1].vAuditor.length, false); // length 0 here is the mix: leg 0 has its copy, leg 1 none
+            t.legs[1].vAuditor = x;
+            (x, t.vFrom) = (t.vFrom, new bytes(_bad(PqzCt.V)[i]));
+            _m(t, t.vFrom.length, false);
+            t.vFrom = x;
+            t.sealedMemo = new bytes(_nonEmpty(memoLen)[i]);
+            _m(t, t.sealedMemo.length, false);
+            if (t.sealedMemo.length != memoLen) _m(t, t.sealedMemo.length, true);
+            t.sealedMemo = "";
+        }
+        // the mirror mix: leg 0 without its copy, leg 1 with one
+        (x, t.legs[0].vAuditor) = (t.legs[0].vAuditor, "");
+        _m(t, PqzCt.V, false);
+        t.legs[0].vAuditor = x;
+        // the group count
+        bytes[] memory us = t.u;
+        t.u = new bytes[](us.length + 1);
+        _m(t, us.length + 1, false);
+        t.u = new bytes[](0);
+        _m(t, 0, false);
+        t.u = us;
+        _m(t, 0, true); // commit-reveal without the memo
+        tok.mtxConfidentialTransfer(t, hex"01", _pqAuth(), "");
+        assertEq(tok.pqzAccount(alice).sendCounter, 1, "the unchanged struct passes");
+    }
+
+    function test_partLengths_burn() public {
+        IPqzToken.PqzBurnArgs memory b = _bs(_bPl(tok, alice, 72));
+        bytes memory x;
+        for (uint256 i; i < 4; ++i) {
+            (x, b.u) = (b.u, new bytes(_bad(PqzCt.PK)[i]));
+            _expect(b.u.length);
+            tok.mtxUnshield(b, 0, 0, hex"01", _pqAuth(), "");
+            b.u = x;
+            (x, b.vFrom) = (b.vFrom, new bytes(_bad(PqzCt.V)[i]));
+            _expect(b.vFrom.length);
+            tok.mtxUnshield(b, 0, 0, hex"01", _pqAuth(), "");
+            b.vFrom = x;
+        }
+        tok.mtxUnshield(b, 0, 0, hex"01", _pqAuth(), "");
+        assertEq(tok.pqzAccount(alice).sendCounter, 1, "the unchanged struct passes");
+    }
+
+    /// `cd` with the struct at its head word `slot` and word `field` of the struct replaced by `word`.
+    function _patched(bytes memory cd, uint256 slot, uint256 field, bytes32 word) internal pure returns (bytes memory r) {
+        r = bytes.concat(cd);
+        uint256 o = 4 + uint256(_word(_slice(r, 4, 32 * (slot + 1)), 32 * slot)) + 32 * field;
+        assembly ("memory-safe") { mstore(add(add(r, 32), o), word) }
+    }
+
+    /// The word is refused by the decoder: an empty revert, before any check of the token's.
+    function _refusedRaw(bytes memory cd) internal {
+        (bool ok, bytes memory ret) = address(tok).call(cd);
+        assertFalse(ok, "a word outside its type");
+        assertEq(ret.length, 0, "the ABI decoder's own revert");
+    }
+
+    /// `p` is `uint64` and `salt` `bytes16`: `p ≥ 2^64` and a dirty low half of the salt word never reach the statement.
+    function test_rawCalldata_pAndSaltOutOfType() public {
+        bytes32 tooBig = bytes32(uint256(1) << 64);
+        bytes32 dirty = bytes32(uint256(bytes32(salt)) | 1);
+        bytes memory cd = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(_sPl(tok, alice, true, "", 73)), hex"01", _pqAuth(), ""));
+        _refusedRaw(_patched(cd, 0, 0, tooBig));
+        _refusedRaw(_patched(cd, 0, 6, dirty));
+        bytes memory cm = abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (_ms(_mPl(tok, alice, _legsN(2), true, "", 74)), hex"01", _pqAuth(), ""));
+        _refusedRaw(_patched(cm, 0, 0, tooBig));
+        _refusedRaw(_patched(cm, 0, 6, dirty));
+        bytes memory cb = abi.encodeCall(IPqzToken.mtxUnshield, (_bs(_bPl(tok, alice, 75)), 0, 0, hex"01", _pqAuth(), ""));
+        _refusedRaw(_patched(cb, 0, 0, tooBig));
+        // the same calldata with the words in type passes: `_patched` hit the field
+        bytes memory good = _patched(cd, 0, 6, bytes32(salt));
+        (bool ok,) = address(tok).call(good);
+        assertTrue(ok, "the unpatched call");
     }
 }
 

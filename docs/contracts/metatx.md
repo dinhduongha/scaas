@@ -572,7 +572,10 @@ n2816-kmax65536 7,358,343). The `n2560-kmax16384` rollover at `ROLL_MAX` 64 is 1
 (`runs/2026-10-27-metatx-split-rollscan-n2560-kmax16384.txt`). Pay-meta adds 37-52 gas to the token paths (PayMeta code).
 A `SmartKeyAccount`-signed `mtxExecute` needs 446,904 relayer call gas at least (`runs/2026-10-27-metatx-split-node-floor.txt`).
 Regeneration of the pre-split overhead JSON (`test/vectors/metatx-overhead-presplit.json`): check out `2ceda92d`, copy
-`test/pqz/MtxSplitOverhead.t.sol` into it, run with `MTX_OV_PRESPLIT=1`, paste the `MEAS` lines into the JSON.
+`smartcontracts/evm/runs/2026-11-01-typed-signing-c4-MtxSplitOverhead-at-2ceda92d.t.sol` to `test/pqz/MtxSplitOverhead.t.sol` there
+(today's test does not compile on it), run with `MTX_OV_PRESPLIT=1` at `n2304-kmax4096` and `n2048-kmax1024`, and write each line
+`MEAS <set> <kind> <id>` under `<set>` as `"<kind>|<id>"`, `S` included, and each `MEAS <set> direct <id>` as `"direct|<id>"`. The
+test reads all of these keys and reverts on a missing one.
 
 ## 9. FeePolicy
 

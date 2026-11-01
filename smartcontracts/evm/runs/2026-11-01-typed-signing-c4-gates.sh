@@ -6,7 +6,7 @@
 W=$(cd "$(dirname "$0")/../../.." && pwd)
 cd "$W" || exit 2
 R=smartcontracts/evm/runs
-P=2026-11-01-typed-signing-c4
+P=${P:-2026-11-01-typed-signing-c4}
 SETS="n2048-kmax1024 n2304-kmax4096 n2560-kmax16384 n2816-kmax65536"
 STEPS="forge-n2304-kmax4096"
 for s in $SETS; do STEPS="$STEPS pqz-$s gas-$s kat-$s vectors-$s"; done
