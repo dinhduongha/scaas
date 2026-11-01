@@ -42,14 +42,18 @@ contract PipeHarness {
 }
 
 /// The UA registry as the library sees it: `kindOf` as set; `requireAuthorized` accepts exactly
-/// `auth == abi.encode(purpose, digest)`, so a pass proves the purpose and the digest the library sent.
+/// `auth.signature == abi.encode(purpose, digest)`, so a pass proves the purpose and the digest the library sent
+/// (typed-signing R1: the library hands the registry `UAKinds.uaSig(from, auth)`, `auth = abi.encode("", signature)`).
 contract PipeRegistryMock {
     mapping(bytes32 => uint16) public kindOf;
 
     function setKind(bytes32 ua, uint16 k) external { kindOf[ua] = k; }
 
-    function requireAuthorized(bytes32 ua, bytes32 purpose, bytes32 digest, bytes calldata auth) external pure {
-        if (keccak256(auth) != keccak256(abi.encode(purpose, digest))) revert IUARegistry.UAUnauthorized(ua);
+    function requireAuthorized(bytes32 ua, bytes32 purpose, bytes32 digest, IUARegistry.UASig calldata auth)
+        external
+        pure
+    {
+        if (keccak256(auth.signature) != keccak256(abi.encode(purpose, digest))) revert IUARegistry.UAUnauthorized(ua);
     }
 }
 
@@ -99,11 +103,11 @@ contract MtxPipelineLibTest is Test {
     }
 
     function _uaAuth(MtxPipelineLib.Envelope memory e) internal view returns (bytes memory) {
-        return abi.encode(UAKinds.PURPOSE_METATX, h.callDigest(DS, MetaTxLib.UAMETATX_TYPEHASH, e));
+        return abi.encode(bytes(""), abi.encode(UAKinds.PURPOSE_METATX, h.callDigest(DS, MetaTxLib.UAMETATX_TYPEHASH, e)));
     }
 
     function _tauth(MetaTxLib.UAMetaTransfer memory t) internal view returns (bytes memory) {
-        return abi.encode(UAKinds.PURPOSE_METATX, h.transferDigest(DS, true, t));
+        return abi.encode(bytes(""), abi.encode(UAKinds.PURPOSE_METATX, h.transferDigest(DS, true, t)));
     }
 
     function _xfer(bytes32 from, bytes32 to) internal view returns (MetaTxLib.UAMetaTransfer memory) {
@@ -165,7 +169,7 @@ contract MtxPipelineLibTest is Test {
         e.feeRecipient = MetaTxLib.UA_POOL; // fee
         f.uaAllowed = false;               // unknown op
         f.len = 40;                        // shape
-        bytes memory bad = hex"00";
+        bytes memory bad = abi.encode(bytes(""), hex"00");
 
         c.registry = address(0);
         vm.expectRevert(IUALedger.UALedgerOff.selector);
@@ -296,15 +300,15 @@ contract MtxPipelineLibTest is Test {
         u.validUntil = block.timestamp - 1;
         c.registry = address(0);
         vm.expectRevert(IUALedger.UALedgerOff.selector);
-        h.preTransfer(c, u, true, 0, bad);
+        h.preTransfer(c, u, true, 0, abi.encode(bytes(""), bad));
         c.registry = address(reg);
 
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxExpired.selector, u.validUntil, block.timestamp));
-        h.preTransfer(c, u, true, 0, bad);
+        h.preTransfer(c, u, true, 0, abi.encode(bytes(""), bad));
 
         u.validUntil = block.timestamp + 300;
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, UA));
-        h.preTransfer(c, u, true, 0, bad);
+        h.preTransfer(c, u, true, 0, abi.encode(bytes(""), bad));
 
         bytes memory auth = _tauth(u);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, u.to));

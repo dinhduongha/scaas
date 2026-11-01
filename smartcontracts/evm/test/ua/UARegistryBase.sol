@@ -7,6 +7,7 @@ import {IUAPopVerifier} from "../../src/ua/IUAVerifier.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {UACall} from "./UACall.sol";
 
 /// Stand-in verifier: the "signature" over (keyData, message) is `keccak256(abi.encode(keyData, message))`, so the
 /// registry's message construction (kind tag, purpose, PoP digest, member digest) is what the tests exercise.
@@ -219,12 +220,19 @@ abstract contract UARegistryBase is Test {
     /// No attributes (UA-8 `UAAttrs`: empty / 0 = absent).
     function _none() internal pure returns (IUARegistry.UAAttrs memory) {}
 
-    /// The UA-8 registration digest (portable, no chain context): `registrationDigest(portablePopDigest(ua, pqzKeyHash,
-    /// kemRecordHash), pqzPopHash)` of `a`.
-    function _regDigest(bytes32 ua, IUARegistry.UAAttrs memory a) internal pure returns (bytes32) {
+    /// The UA-8 registration digest (portable, no chain context; typed-signing TS-D1): typed `UARegistration{
+    /// UAPortableRecord{ua, kind, pqzKeyHash, kem}, pqzPopHash}` of `a` (the zero KEM record without one).
+    function _regDigest(bytes32 ua, uint16 kind, IUARegistry.UAAttrs memory a) internal pure returns (bytes32) {
         bytes32 h = a.pqzKey.length == 0 ? bytes32(0) : UAKinds.keyHashOf(UAKinds.PQZ_MLWE, a.pqzKey);
-        bytes32 k = a.kemVersion == 0 ? bytes32(0) : UAKinds.kemRecordDigest(ua, a.kemVersion, a.kemPk);
-        return UAKinds.registrationDigest(UAKinds.portablePopDigest(ua, h, k), a.pqzPopHash);
+        bytes32 k = a.kemPkHash != 0
+            ? UAKinds.kemRecordHash(ua, 0, a.kem.scheme, a.kemPkHash)
+            : UAKinds.kemRecordHash(ua, 0, UAKinds.kemPk(a.kem));
+        return UAKinds.registrationDigest(ua, kind, h, k, a.pqzPopHash);
+    }
+
+    /// The registration digest of a UA without attributes (`_regDigest(ua, kind, _none())`).
+    function _regDigest(bytes32 ua, uint16 kind) internal pure returns (bytes32) {
+        return _regDigest(ua, kind, _none());
     }
 
     /// The stand-in PoP of `keyData` (no attributes) on any registry: the same bytes everywhere (UA-8 P1).
@@ -239,11 +247,11 @@ abstract contract UARegistryBase is Test {
     {
         bytes32 ua = UAKinds.uaOf(kind, keyData);
         r; // the PoP has no registry context (UA-8 P1); the parameter keeps the call sites
-        return _sig(keyData, UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, _regDigest(ua, a)));
+        return _sig(keyData, UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, _regDigest(ua, kind, a)));
     }
 
     function _register(UARegistry r, uint16 kind, bytes memory keyData) internal returns (bytes32) {
-        return r.register(kind, keyData, _none(), _pop(r, kind, keyData), "");
+        return UACall.register(r, kind, keyData, _none(), _pop(r, kind, keyData), "");
     }
 
     /// The UA-8 `register` with every argument.
@@ -255,14 +263,14 @@ abstract contract UARegistryBase is Test {
         bytes memory pop,
         bytes memory pqzPop
     ) internal returns (bytes32) {
-        return r.register(kind, keyData, attrs, pop, pqzPop);
+        return UACall.register(r, kind, keyData, attrs, pop, pqzPop);
     }
 
     /// The PoP is computed first: `vm.expectRevert` applies to the next external call.
     function _registerReverts(UARegistry r, uint16 kind, bytes memory keyData, bytes memory err) internal {
         bytes memory pop = _pop(r, kind, keyData);
         vm.expectRevert(err);
-        r.register(kind, keyData, _none(), pop, "");
+        UACall.register(r, kind, keyData, _none(), pop, "");
     }
 
     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)
@@ -271,6 +279,16 @@ abstract contract UARegistryBase is Test {
         returns (bytes memory)
     {
         return abi.encode(keyData, _sig(keyData, r.uaMessage(kind, purpose, digest)));
+    }
+
+    /// `requireAuthorized` with a pre-R1 `bytes auth` (`UACall.auth`); a frame of its own (stack room for the callers).
+    function _req(UARegistry r, bytes32 ua, bytes32 purpose, bytes32 digest, bytes memory auth) internal view {
+        r.requireAuthorized(ua, purpose, digest, UACall.auth(ua, auth));
+    }
+
+    /// The calldata of `_req`'s call.
+    function _reqCall(bytes32 ua, bytes32 purpose, bytes32 digest, bytes memory auth) internal pure returns (bytes memory) {
+        return abi.encodeCall(IUARegistry.requireAuthorized, (ua, purpose, digest, UACall.auth(ua, auth)));
     }
 
     function _pad(address a) internal pure returns (bytes32) {
@@ -322,7 +340,7 @@ abstract contract UARegistryBase is Test {
         return UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purpose, digest));
     }
 
-    function _msigAuth(bytes memory d, UARegistry.MemberSig[] memory sigs) internal pure returns (bytes memory) {
+    function _msigAuth(bytes memory d, IUARegistry.MemberSig[] memory sigs) internal pure returns (bytes memory) {
         return abi.encode(d, abi.encode(sigs));
     }
 }

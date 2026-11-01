@@ -5,7 +5,7 @@ extern crate std;
 use std::{vec, vec::Vec as StdVec};
 
 use ed25519_dalek::Signer as _;
-use scaas_ua_common::{h32, meta_pay_id, pay_lane, Holder, Order, UaAttrs, PURPOSE_METATX, PURPOSE_METATX_CANCEL, PURPOSE_POP_V2, PURPOSE_TRADE};
+use scaas_ua_common::{h32, meta_pay_id, pay_lane, Holder, Order, UaAttrs, PURPOSE_METATX, PURPOSE_METATX_CANCEL, PURPOSE_POP_V2, PURPOSE_TRADE, kem_record_hash, portable_record_hash, registration_digest};
 use scaas_ua_registry::{UaRegistry, UaRegistryClient as RegClient};
 use serde_json::Value;
 use soroban_sdk::testutils::{storage::Persistent as _, Address as _, Events as _, Ledger as _, MockAuth, MockAuthInvoke};
@@ -82,7 +82,7 @@ fn err<V: core::fmt::Debug, C: core::fmt::Debug>(r: Result<V, Result<soroban_sdk
 }
 
 fn no_attrs(env: &Env) -> UaAttrs {
-    UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: n(env, [0; 32]), kem_version: 0, kem_pk: Bytes::new(env) }
+    UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: n(env, [0; 32]), kem_pk: Bytes::new(env) }
 }
 
 fn keccak(env: &Env, parts: &[&[u8]]) -> [u8; 32] {
@@ -105,8 +105,9 @@ impl T {
         let sk = ed25519_dalek::SigningKey::from_bytes(&[seed; 32]);
         let kd = Bytes::from_array(env, &sk.verifying_key().to_bytes());
         let id = self.reg.ua_of(&ED25519, &kd);
-        let z = [0u8; 32];
-        let reg_digest = keccak(env, &[&keccak(env, &[&PURPOSE_POP_V2, &id.to_array(), &z, &z]), &z]);
+        let z = BytesN::from_array(env, &[0u8; 32]);
+        let rec = portable_record_hash(env, &id, ED25519, &z, &kem_record_hash(env, &id, 0, 0, &z));
+        let reg_digest = registration_digest(env, &rec, &z).to_array();
         let pop = sk.sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_POP_V2, &reg_digest])).to_bytes();
         self.reg.register(&ED25519, &kd, &no_attrs(env), &Bytes::from_array(env, &pop), &Bytes::new(env), &None);
         Ua { sk, id }
@@ -845,8 +846,8 @@ fn msig_member_equal_to_token_refused() {
     let kd = Bytes::from_slice(env, &kd);
     let ua = s.reg.ua_of(&0x0120, &kd);
     let idx = |id: &[u8; 32]| m.iter().position(|x| &x.1 == id).unwrap() as u32;
-    let z = [0u8; 32];
-    let rd = keccak(env, &[&keccak(env, &[&PURPOSE_POP_V2, &ua.to_array(), &z, &z]), &z]);
+    let z = BytesN::from_array(env, &[0u8; 32]);
+    let rd = registration_digest(env, &portable_record_hash(env, &ua, 0x0120, &z, &kem_record_hash(env, &ua, 0, 0, &z)), &z).to_array();
     let md = keccak(env, &[&ua.to_array(), &keccak(env, &[&MSG_TAG, &MSIG_TAG, &PURPOSE_POP_V2, &rd])]);
     let sig = u1.sk.sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_MEMBER_R, &md])).to_bytes().to_vec();
     let pop = ms_slots(env, &[(idx(&u1.id.to_array()), sig)]);

@@ -96,13 +96,11 @@ fn secp256k1_recover(env: &Env, msg: &Hash<32>, sig: &Bytes) -> BytesN<65> {
     env.crypto().secp256k1_recover(msg, &rs, (v - 27) as u32)
 }
 
-/// S10: an `evm-eoa` member's portable signature, ECDSA over the EIP-191 `personal_sign` hash of `member_digest`
-/// (CTR-UA-07); the recovered key's address (last 20 bytes of `keccak256(x ‖ y)`) must be `id20`.
-pub fn check_evm_eoa_personal_sign(env: &Env, id20: &BytesN<20>, member_digest: &BytesN<32>, sig: &Bytes) {
-    let mut m = Bytes::from_slice(env, b"\x19Ethereum Signed Message:\n32");
-    m.append(&member_digest.clone().into());
-    let pk = secp256k1_recover(env, &env.crypto().keccak256(&m), sig);
-    let pk: Bytes = pk.into();
+/// S10 / TS-D4 (owner decision 4): an `evm-eoa` member's portable signature, ECDSA over the record's typed digest
+/// itself (`eth_signTypedData_v4`, no `personal_sign`); the recovered key's address (last 20 bytes of
+/// `keccak256(x ‖ y)`) must be `id20`, else `Pop`.
+pub fn check_evm_eoa(env: &Env, id20: &BytesN<20>, typed: &Hash<32>, sig: &Bytes) {
+    let pk: Bytes = secp256k1_recover(env, typed, sig).into();
     let addr = env.crypto().keccak256(&pk.slice(1..65)).to_bytes();
     if Bytes::from(addr).slice(12..32) != Bytes::from(id20.clone()) {
         panic_with_error!(env, Error::Pop);

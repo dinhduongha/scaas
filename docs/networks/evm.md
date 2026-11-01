@@ -109,7 +109,8 @@ BLS12-381 precompiles `0x0b`/`0x0c`/`0x0f`/`0x10` were empty while `alt_bn128` `
 `baseFeePerGas` (no EIP-1559), no `withdrawalsRoot` (no Shanghai), no `blobGasUsed`/`excessBlobGas` (no Cancun).
 Forks must be written with Nethermind's own keys (`eip1559TransitionTimestamp`, `eip2537TransitionTimestamp`, …),
 and changing them changes the genesis hash (chain reset). The only detection is to inspect a block header or call
-the precompile — the deployment checklist does both. The chainspec was fixed on 2026-08-31 before the reset to
+the precompile — the deployment checklist does both, and for classical Zether it adds the two subgroup vectors of
+[§3](#3-precompiles). The chainspec was fixed on 2026-08-31 before the reset to
 the SCaaS testnet. The earlier 16,777,216 block gas limit admitted only ~5 classical confidential transfers per block (3.33 M gas each,
 measured); the 2026-10-22 reset starts at 200 M ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)).
 
@@ -141,6 +142,21 @@ so a transaction priced at 1 wei is never mined; clients price at least `baseFee
   A missing precompile returns empty `0x`; an input-length error (`invalid input length` on Celo, `PrecompileError`
   on Gnosis) also proves the code exists. Live is not cheap: measured costs are in
   [contracts/zether](../contracts/zether.md).
+- **`BLS12_G1MSM` must check the subgroup, and presence does not show it** ([CTR-ZTH-53](../contracts/zether.md#CTR-ZTH-53)).
+  The merged Zether check rests on it, and the official EIP-2537 vectors pin neither a zero scalar nor `k = 1` on a point
+  outside the subgroup. With `T` = `(0, 2)`, a point of order 3, encoded `be64(0) ‖ be64(2)`, both of these `eth_call`s to `0x0c`
+  must **fail** before a chain runs classical Zether:
+
+  | Input | A chain that skips the check answers |
+  |---|---|
+  | `T ‖ be32(1)` | `T` |
+  | `G ‖ be32(1) ‖ T ‖ be32(0)` | `G` |
+
+  `G1ADD` takes `T`, which is correct: it has no subgroup check. A failure counts only if the same shape succeeds: `G ‖
+  be32(2)` must answer `[2]G` and `G ‖ be32(1) ‖ G ‖ be32(0)` must answer `G`, under the same gas, or the failure may be out of
+  gas. `isSupportedOnThisChain()` runs all four under a cap of 100,000 gas each (EIP-2537 prices them at 12,000 and 21,312), so
+  a token's `initialize` refuses such a chain, and one pricing G1MSM above the cap. The SCaaS testnet's Nethermind 2.2.0 answers
+  all four as required at that gas, the two failures as subgroup errors (read-only `eth_call`, 2026-11-01).
 - **PQ precompiles on the SCaaS testnet** (P6f, plugin `Nethermind.Pqz`, [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10)):
   `PQZ` `0x5caa500000000000000000000000000000000f01` (PQZL and PQZH proofs, per-row gas 2.57–5.41 M + 3 per word),
   `MLDSA44` `0x5caa500000000000000000000000000000000012` (49,000 + 6 per message word) and `MLDSA65`
@@ -190,31 +206,34 @@ which needs `experimental = true` for `evm_version = "amsterdam"`; the profiles 
 (EIP-7843): Clique has no slot, so the opcode is off on the testnet. The bytecode equals the earlier `osaka` build apart
 from the metadata; the gas bounds of the tests moved with Amsterdam's prices (EIP-8037 state gas, EIP-8038 storage writes,
 EIP-7976 calldata floor, EIP-2780 intrinsic), each re-pin names its EIP in the test. The flows' total gas (regular + EIP-8037
-state gas) exceeds 2^24, up to ~111 M for the largest implementation deploy (`WRAPPED_PQZ`, 110.3 M, table below), so the SCaaS testnet runs a 200 M block gas limit
+state gas) exceeds 2^24, up to about 108.7 M simulated for the largest implementation deploy (`WRAPPED_ZETHER`, table below), so the SCaaS testnet runs a 200 M block gas limit
 (genesis `gasLimit` `0xbebc200`, reset 2026-10-22; `TargetBlockGasLimit` 200,000,000).
 
 **Minimum block gas limit per release kind (review C5-1; controller proposal, owner may override; no code-size work before
 Glamsterdam).** A release is one `CREATE2` of the whole implementation in the registrar's transaction. Under EIP-8037 the
 code deposit is state gas at 1,530 per byte of runtime, EIP-7825 caps only the regular gas at 2^24 = 16,777,216, and the
 transaction's gas may not exceed the block gas limit, so a release needs `runtime × 1,530 + 16,777,216` of block gas limit
-(the 2^24 term is the regular-gas bound, not the measured figure: `WrappedPqzToken` measures about 4.1 M regular). Runtime
-sizes are `smartcontracts/evm/size-baseline.json`'s (re-measured after the metatx split at T8 `69fce983`; the split took 269-456 B off each kind):
+(the 2^24 term is the regular-gas bound, not the measured figure: `WrappedPqzToken` simulates at about 7.5 M regular). Runtime
+sizes and the deploy gate are `smartcontracts/evm/size-baseline.json`'s on `typed-signing`. **Simulated** and **`tx.gas`** are forge's simulated
+Amsterdam gas, not real receipts, measured at `daacd49a` (`smartcontracts/evm/runs/2026-11-01-typed-signing-deploy-gas.txt`, profile `scaas-testnet`, `DEPLOY_ZETHER=true` plus `WRAPPED_PQZ`):
+regular + state gas of the transaction, and that figure × 1.05 (`--gas-estimate-multiplier 105`, `deploy.sh`), the gas the transaction asks of the block. Anvil's own `gasUsed` does
+not charge EIP-8037, so it says nothing here; the one run over a real client (7622, Nethermind, the pre-round sizes, `runs/2026-10-31-fs3-t13-pqz-7622-public-rpc.txt`) gave `UARegistry` 58.1 M, `NormalToken` 61.1 M, `WrappedPqzToken` 96.5 M. A blank cell is a kind that run does not deploy.
 
-| Kind (contract) | Runtime | State gas | Needs |
-|---|---|---|---|
-| `NORMAL` (`NormalToken`) | 38,195 B | 58.4 M | **75.2 M** |
-| `WRAPPED` (`WrappedToken`) | 48,068 B | 73.5 M | 90.3 M |
-| `NORMAL_ZETHER` (`NormalZetherToken`) | 48,313 B | 73.9 M | 90.7 M |
-| `NORMAL_PQZ` (`NormalPqzToken`) | 49,067 B | 75.1 M | 91.8 M |
-| `WRAPPED_ZETHER` (`WrappedZetherToken`) | 60,282 B | 92.2 M | 109.0 M |
-| `WRAPPED_PQZ` (`WrappedPqzToken`) | 61,137 B | 93.5 M | **110.3 M** |
-| information: `MtxPipelineLib` (linked library of every release) | 8,106 B | 12.4 M | 29.2 M |
-| information: `MtxRelayFee` (CTR-MTX-27 router; its `MtxRelayExecutor` 554 B) | 2,908 B | 4.4 M | 21.2 M |
+| Kind (contract) | Runtime | State gas | Deploy gate | Simulated | `tx.gas` (× 1.05) |
+|---|---|---|---|---|---|
+| `NORMAL` (`NormalToken`) | 39,889 B | 61.0 M | 77.8 M | 66.5 M | 69.8 M |
+| `WRAPPED` (`WrappedToken`) | 49,652 B | 76.0 M | 92.7 M | | |
+| `NORMAL_ZETHER` (`NormalZetherToken`) | 49,952 B | 76.4 M | 93.2 M | 83.1 M | 87.3 M |
+| `NORMAL_PQZ` (`NormalPqzToken`) | 50,652 B | 77.5 M | 94.3 M | | |
+| `WRAPPED_ZETHER` (`WrappedZetherToken`) | 61,808 B | 94.6 M | 111.3 M | 108.7 M | **114.1 M** |
+| `WRAPPED_PQZ` (`WrappedPqzToken`) | 62,616 B | 95.8 M | **112.6 M** | 103.9 M | 109.1 M |
+| the DEX (`SCaaSDex`) | 26,967 B | 41.3 M | 58.0 M | 45.2 M | 47.5 M |
+| `UARegistry` (one deployment per generation) | 46,716 B | 71.5 M | **88.3 M** | 77.2 M | **81.1 M** |
+| information: `MtxPipelineLib` (linked library of every release) | 9,063 B | 13.9 M | none (30.6 M by the formula) | 16.0 M | 16.8 M |
+| information: `MtxRelayFee` (CTR-MTX-27 router; its `MtxRelayExecutor` 554 B) | 2,982 B | 4.6 M | none (21.3 M by the formula) | 6.6 M | 6.9 M |
 
-The two information rows (`forge build src --sizes`, `smartcontracts/evm/runs/2026-10-28-metatx-split-fixwave-sizes.txt`, `MtxPipelineLib` re-measured after the EIP-7702 owner ruling in `runs/2026-10-28-metatx-split-7702-sizes.txt`; both under 24,576 B, so not in the baseline) have no gate of their own: the library is smaller than every implementation that links it, so the implementation's gate binds (spec §4, controller call). So about 75 M for the plain kinds and about 110 M for the confidential ones; the DEX release (under 24,576 B) needs at
-most 54.4 M. A chain with an Ethereum-like 60 M block holds none of the confidential kinds and only the smallest plain
-one; it needs a raised block gas limit (no gas price or limit is assumed: the check below reads the chain's actual
-value). **Deploy gate:** `DeployBase._requireReleaseGas(contract)` (called before each `deployImplementation` /
+`UARegistry` was 46,734 B when simulated (18 B less since, not re-measured); the simulation's state gas for it is 71.7 M. The information rows have no gate of their own: the library is smaller than every implementation that links it, so the implementation's gate binds (spec §4, controller call). The registry has one (owner ruling 2026-11-01), the largest of a plain deploy. So a plain stack (`Deploy.s.sol`: `NormalToken`, the DEX, the registry) asks about **81.1 M** of block gas limit under its **88.3 M** gate, and the full stack about **114.1 M** (`WrappedZetherToken`'s transaction, above its 111.3 M gate). At 100 M the plain stack deploys (32 blocks) and `DEPLOY_ZETHER` is refused by the gate before sending. A chain with an Ethereum-like 60 M block holds no kind at all: at 60 M and 36 M the `UARegistry` gate refuses `Deploy.s.sol` and nothing is sent (forge's simulation runs out of gas in that creation without the gate), and `NormalToken` (gate 77.8 M) would not fit either. Such a chain needs a raised block gas limit (no gas price or limit is assumed: the check below reads the chain's actual
+value). **Deploy gate:** `DeployBase._requireReleaseGas(contract)` (called before the `UARegistry` creation and each `deployImplementation` /
 `deployDexImplementation`) and `script/pqz/e2e.py` read `block.gaslimit` (`eth_getBlockByNumber`) and refuse before
 sending when it is below the kind's need; the sizes come from the baseline file at run time, so the figures follow the
 ratchet. The deploy tests assert regular + state gas against the same budget next to the 2^24 check.
@@ -265,7 +284,7 @@ shield, roll-over, a single transfer, a multi-recipient Compact M = 4 and BUNDLE
 disclosure view (`SENDER_S`), and on a `WRAPPED_ZETHER` token over a test ERC-20 wrap-shield and roll-over, proofs from
 `zether-cli` (the Rust prover), every balance checked by decryption in the simulation and again on chain (`check()`); it
 prints gasUsed per transaction from the receipts.
-Integration tests use `anvil --hardfork osaka --gas-limit 16777216 --code-size-limit 65536` (64 KiB code, as EIP-7954 proposes; owner 2026-10-11 — real chains keep 24,576, so a contract that only fits this anvil still cannot be deployed there).
+Integration tests use `anvil --hardfork amsterdam --gas-limit 200000000 --code-size-limit 65536` (`scaas-node/tests/e2e.rs`, `e2e_hedera.rs`, `scripts/e2e-zether.sh`; the SCaaS testnet's 200 M block gas limit, [NET-EVM-06](#NET-EVM-06)) (64 KiB code, as EIP-7954 proposes; owner 2026-10-11 — real chains keep 24,576, so a contract that only fits this anvil still cannot be deployed there).
 
 Every contract is a non-upgradeable clone or a fixed deployment ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)):
 upgradeable proxies (UUPS / ERC-1822) are not used, and a fix is a new implementation version deployed by the factory

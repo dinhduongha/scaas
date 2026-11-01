@@ -960,6 +960,7 @@ dependencies = [
  "ed25519-dalek",
  "k256",
  "p256",
+ "serde_json",
  "sha2",
  "sha3",
 ]

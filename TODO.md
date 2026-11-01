@@ -102,9 +102,9 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
          `ua8` merge evidence is overwritten in the tree; git history keeps it (`06cedadc` and before).
      - **Node:** follow-ups of the two merged branches — EVM node UA job path (`ua_metatx`; merged 2026-10-30), TON passkey relays (P-256
        in the node), relay-fee minimum before mainnet. **UA-8 (owner ruling R-node, 2026-10-30):** the gateway route
-       `POST /v1/ua/register` and the `~gateway` sponsor policy for the four registry selectors (`register`, `setKemKey`,
+       `POST /v1/ua/register` and the `~gateway` sponsor policy for the eight registry selectors (CTR-UA-36: `register`, the four typed entries, `setKemKey`,
        `storePqzPop`, `setPqzKey`; NODE-GW-03, `sponsorship.md#admin`) **do not exist in code** — the ruling asked to extend them, but
-       there is no gateway route and no sponsor-policy code to extend; the node relays the four writes through job-API `call` jobs only
+       there is no gateway route and no sponsor-policy code to extend; the node relays the eight writes through job-API `call` jobs only
        (`Rule::UaRegistry`, `[[chains]] ua_registry`, `UA_REGISTER_SPLIT`, `64c233d4` on `ua8`). Build the route (calldata from the
        checked body, split rule) and the sponsor policy; optional: registry revert names (`UAPoP`, …) in `abi::decode_revert`.
      - **pqz-core:** fs3 Task 12 (final gate; merged 2026-10-30) → Task 6 (reproduction package; **DONE**, merged 2026-10-30
@@ -161,6 +161,14 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      in sync and likely cuts gas (not measured). Do it when a `zether-near` / `zether-algorand` / `zether-soroban` track
      needs it, or for EVM gas — measure first; on EVM a new verifier means a new implementation version (CTR-ZTH-20);
      security review of the weight derivation and of which untrusted points need a subgroup check.
+     **Done, merged 2026-11-01 (branch `zether-msm`, CTR-ZTH-53):** one MSM per proof, 182 points on a transfer, 154 on a
+     burn, 159 + 25M on a multi-recipient transfer; the owner's order for the branch is code first, no gas measurement, so
+     "measure first" above waits. Security derivation in zether.md §9.1, the per-equation verifier in `legacy/zether-msm/`.
+     Left: the owner's go to merge; gas re-measurement, then `gas_limits` in `clients/zether-prover/src/zether.rs`, which holds
+     the per-equation figures; a new verifier set reaches the SCaaS testnet at its next reset. For `typed-signing` C3, which
+     owns the file: add `BadPoint` to `IZetherToken`'s ABI, a bad point now always reverts with it.
+     A machine cryptographic review found it sound and complete with proof bytes unchanged (`docs/research/zether-msm-crypto-review.md`,
+     not an independent audit: the verifier stays UNAUDITED).
      **Done 2026-10-31 (branch `scaas-testnet-rename`): the SCaaS testnet's identifier is `scaas-testnet`** (owner
      2026-10-31, Change entry in NET-EVM-02): the Foundry profile, `src/chains/scaas-testnet/`, the `chain-uids.json` key,
      CI, the deploy / verify scripts, `scaas-node/tests/e2e*.rs` and current docs; history / plans / reviews keep the old
@@ -187,21 +195,52 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   **Pre-freeze work order (owner 2026-10-31):** finish everything that changes contracts / the core, then freeze, then
   audit, then the clients. Order:
   1. T14 — UA-Soroban on the Stellar testnet (from 2026-11-03, SDK 30.0.0).
-  2. `ua8-soroban` (UA-8 Part B on Soroban), together with: the msig `pop` minimal form on **every** family (EVM
-     `UARegistry`, Soroban, NEAR, Algorand); the gen-1 registry kind set — **owner 2026-10-31: option (a)**, every
+  2. `ua8-soroban` (UA-8 Part B on Soroban), together with: the msig `pop` minimal form, built for EVM `UARegistry` and
+     Soroban (NEAR and Algorand have no UA registry yet — the rule is a requirement for their later UA rounds); the gen-1 registry kind set — **owner 2026-10-31: option (a)**, every
      gen-1 deploy carries every kind the chain can run (`DeployBase` already does; add a gate that refuses a gen-1
      deploy missing an EIP-2537 kind the probe passes; no `UARegistry` change); and the relay-fee minimum re-decision
      (owner decides there; if it changes contracts it lands before the freeze, if it is node config it goes with P6i).
-  3. Zether verifier one merged MSM (EVM) — before `zether-soroban`, so the Soroban verifier is merged-MSM from the
+  2d. **`typed-signing` round (owner 2026-10-31, before the freeze; inventory and decisions in the private note
+     `scratchpad/eip712-inventory.md`):** every user-signed operation becomes a typed, readable EIP-712 struct — the
+     EOA-visible paths (named typed entry points instead of opaque `MetaTransaction.data`: wrap,
+     unwrap, wrapToUA, unwrapToUA, burn, addReserve, cancelNonce, shield, MandateWallet setMandate / setPayee / revoke,
+     SmartKeyAccount key ops; nested `CancelOrder(TradeOrder)`, `ReceiverFee(MetaTransfer)`; dedicated `RelayFee` and
+     `WrapOrder`), the UA paths (`UA*` twins, `UACancelNonce`, Zether rollover / set-mode, `PqzAuth`) and the portable
+     records (domain with only `name` + `version`; `UAPortableRecord`, `UAKemRecord`, `UARegistration`, `UAPqzKey`,
+     `UAPqzKeyRecord`; native EOA msig members sign the typed record). `kind` is `uint16` (name from the kind table),
+     no `paramSet`; **a named entry point per operation** (owner 2026-10-31, option B: `mtxUnwrap`, `mtxBurn`,
+     `mtxSetMandate`, …, each with its own typehash; a generic `Execute` only for inherently arbitrary calls); code size
+     kept under 64 KiB with the library split pattern. `UARegistry.kindName(uint16)` view. The portable part goes first:
+     `ua8-soroban` M2 / M3 / B1–B3 / B5 / B7 wait for it. The explicit-parameter rule (owner 2026-10-31) joined the round:
+     plan `docs/superpowers/plans/2026-10-31-typed-signing.md`.
+     **Progress (2026-10-31):** Part P (typed portable records, `kindName`, native `msig` members over the typed digest, the `register` KEM key at
+     version 0), X0 (packed-blob inventory, calldata measured) and Part R (registry explicit ABI: `registerMsig`, `registerWebAuthn`, `registerMuSig2`,
+     `registerFrost`, `KemKey`, `UASig`, hash-committed KEM key filled by `setKemKey(ua, 0, …)`) built on branch `typed-signing`, docs done
+     (CTR-UA-07, -16, -32, -33, -35, -36, CLI-SGN-41); gates and whole-branch review (PG / PRV) done; `main` does not hold them yet: the 2026-11-01 merge was taken back (owner), a PR comes when the owner asks. Not done: Part C
+     (named typed entries; until C2 the tokens keep `bytes auth`, converted by `UAKinds.uaSig`), Part N (node explicit job API).
+     **`ua8-soroban` hand-over, after merging `main` (TS-D9):** resolve `ua-portable-vectors.mjs`, `ua-signers.mjs`, `ua-rs/src/ua8.rs`, `portable.json`
+     by taking `main`'s typed code plus M1's minimal-slot code and regenerating; B1 adds the `UAPqzKey` / `UAPqzKeyRecord` typehashes on
+     `ua-common` `portable_digest` and the typed `kem_record_digest`, `pqz_key_digest`, `pqz_key_record_digest` (the helpers live in `ua-common`, not `digest.rs`);
+     B2 / B3: `register` passes the real `pqzKeyHash`, KEM record hash and `pqzPopHash` (zeros today), stores the `register` KEM key at version 0,
+     `set_kem_key` is write-once for every version and takes version 0 only to fill a hash-committed `register` (the EVM rule, owner KEM rulings 2–4);
+     a `kind_name` view (`KindUnknown` panic for an unknown id); `register`, `set_kem_key`, `set_pqz_key`, `require_authorized` with explicit
+     `contracttype` arguments (Part R's shapes; `msig` one typed form, as EVM); the Soroban packed-`Bytes` inventory of X0.
+     **After the round merges (owner 2026-10-31):** reset the SCaaS testnet **without a backup** (owner 2026-10-31) and load the new contracts (deploy with
+     every kind incl. `DEPLOY_ZETHER=1`, PQZ / Zether e2e, `verify-blockscout.sh`, Blockscout DB reset, records).
+  3. **Done 2026-11-01:** Zether verifier one merged MSM (EVM) — before `zether-soroban`, so the Soroban verifier is merged-MSM from the
      start (the Z0 estimate 536 M–2,409 M vs the 400 M limit depends on it).
   4. `zether-soroban` (Part Z; Z0 measures first).
-  5. C core crash at M = 16 (pqz-core; full gate).
+  5. C core crash at M = 16: **done (`pqz-core-m16`, merged 2026-11-01): a bench bug only, not the core; no full gate.**
+     M = 16 exists only in the `OVERSIZE` bench. Three failures: an 8 MiB bench stack (SIGSEGV, wasm32 out of bounds),
+     a 3,072 MiB bench arena (SIGILL) and a divide by zero after a refused prove (SIGFPE). C = Rust at M = 16;
+     `pqz-core/STATUS.md` "R_TXM16 in the C bench". No core change, so item 6's timings do not move.
   6. Gas re-calibration on a quiet host (option (c), image `-calib`, 26 rows `n2304-kmax4096`; after item 5 because a
      core change moves the timings; the owner stops other heavy sessions first; change the chainspec at the next SCaaS
      testnet reset if it differs materially). Again before the SCaaS mainnet only if the core / library changes again
      or the validator hardware differs.
-  7. **Freeze** the contracts of the built families (EVM + Soroban + NEAR + Algorand); later family rounds get an
-     add-on audit.
+  7. **Freeze** the contracts of EVM + Soroban (the families whose base and UA rounds are done). NEAR and Algorand
+     have only their base contracts (no UA round yet): they and every later family round get an add-on audit when
+     their UA rounds finish (owner 2026-10-31 correction).
   8. Contracts audit (plan draft `.superpowers/sdd/2026-10-31-contracts-audit/plan.md`; Codex / agy / Claude workflow —
      owner decides reviewers).
   9. P6h → P6i → P6j (below).
@@ -331,7 +370,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   applies only to `register` with its proof, and the proof cannot be split further (final fix A concern 1, part 1 m1). Measure the real call (Task 13) before choosing `n2816-kmax65536` for a chain whose block limit (or relayer cap) is
   60 M; this concerns 60 M-block chains, **not the SCaaS testnet (200 M, genesis `gasLimit` `0xbebc200`)**. `e2e.py` takes the full path only when
   `eth_estimateGas` of the full register is at most `gasLimit·1023/1024`, otherwise (or on an estimate error) `register` + `storePqzPop` (a full
-  registration with the proof is 84.8–109.1 M). Coverage note: on the SCaaS testnet (200 M) `e2e.py` takes the **full** path, so the inline `register` + proof runs
+  registration with the proof is 84.7–108.9 M). Coverage note: on the SCaaS testnet (200 M) `e2e.py` takes the **full** path, so the inline `register` + proof runs
   in Task 13; the paths that have never run on a chain with the real `R_REG` verifier are the **split** one — `register` without `pqzPop`
   then `storePqzPop`, which `e2e.py --split` forces — and the **later PQZ key**: `setPqzKey` + `storePqzPop` with the `R_REG` proof over
   `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, h))`, which `e2e.py` now has as its own step (`a651600f`: `dave`, an ML-DSA-65 UA
@@ -340,7 +379,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   when `setPqzKey` replaces an other-set key that `setPqzKey` itself stored, the old key, hash and signature are overwritten in
   state; the record survives only in its `UAPqzKeyAdded` log (and on the chains of its own set) — a replaced `register` key is kept
   for `registrationOf`. Watch: decide whether to keep it in state if logs get pruned (EIP-4444) before anyone copies it. (3) **`pqz-core/stmt/src/lib.rs` doc comment**: it still names `popDigest`; UA-8 changed only the 32-byte
-  message's pre-image (`uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, pqzKeyHash, kemRecordHash))`), not the `R_REG`
+  message's pre-image (`uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kind, pqzKeyHash, kemRecordHash))`, typed since `typed-signing`), not the `R_REG`
   relation, statement or precompile. Edit the comment with the next pqz-core change (a doc-only edit in a core file would
   force the full pqz-core gate; owner rule: full gate only for core changes). Decision: `docs/decisions.md` CTR-UA-31 (the plan decision
   "pqz-core untouched").

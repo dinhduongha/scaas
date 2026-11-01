@@ -1,0 +1,75 @@
+# at daacd49a, forge Version: 1.8.5, solc via foundry.toml, profile scaas-testnet
+# broadcast rc=0 (200 M)
+| # | tx | input B | anvil gasUsed (no 8037) | sim total (tx.gas/1.05) | state | regular (total-state) | tx.gas x1.05 |
+|---|---|---|---|---|---|---|---|
+| 0 | AdminLib | 3,357 | 762,382 | 5,601,882 | 0 | 5,601,882 | 5,881,976 |
+| 1 | ZetherLib | 19,502 | 4,260,772 | 32,137,037 | 0 | 32,137,037 | 33,743,889 |
+| 2 | WrappedLib | 14,161 | 3,103,222 | 23,358,574 | 0 | 23,358,574 | 24,526,503 |
+| 3 | TradeLib | 4,112 | 925,997 | 6,842,778 | 0 | 6,842,778 | 7,184,917 |
+| 4 | PqzViewLib | 14,543 | 3,185,656 | 23,986,051 | 0 | 23,986,051 | 25,185,354 |
+| 5 | PqzTransferLib | 17,602 | 3,848,499 | 29,013,684 | 0 | 29,013,684 | 30,464,368 |
+| 6 | PqzStateLib | 8,403 | 1,855,233 | 13,894,666 | 0 | 13,894,666 | 14,589,399 |
+| 7 | PqzBurnLib | 10,553 | 2,321,046 | 17,428,244 | 0 | 17,428,244 | 18,299,656 |
+| 8 | HederaLib | 852 | 219,892 | 1,572,464 | 0 | 1,572,464 | 1,651,087 |
+| 9 | MtxPipelineLib | 9,148 | 2,017,012 | 16,008,869 | 0 | 16,008,869 | 16,809,312 |
+| 10 | SmartKeyAccountFactory | 22,028 | 4,697,123 | 35,259,357 | 32,761,890 | 2,497,467 | 37,022,325 |
+| 11 | OpenFactory | 16,174 | 3,468,709 | 26,066,310 | 24,227,550 | 1,838,760 | 27,369,626 |
+| 12 | WebAuthnP256Verifier | 6,141 | 1,308,039 | 10,174,188 | 8,900,010 | 1,274,178 | 10,682,897 |
+| 13 | P256Verifier | 3,666 | 771,828 | 5,541,249 | 5,113,260 | 427,989 | 5,818,311 |
+| 14 | Ed25519Verifier | 17,603 | 3,852,838 | 29,053,629 | 27,022,860 | 2,030,769 | 30,506,310 |
+| 15 | Bip340Verifier | 1,534 | 372,702 | 2,800,883 | 2,437,290 | 363,593 | 2,940,927 |
+| 16 | Secp256k1Verifier | 948 | 245,994 | 1,682,438 | 1,540,710 | 141,728 | 1,766,560 |
+| 17 | SchnorrBn254Verifier | 3,611 | 817,485 | 6,020,827 | 5,579,910 | 440,917 | 6,321,868 |
+| 18 | SchnorrBls12381Verifier | 3,611 | 817,485 | 6,020,827 | 5,579,910 | 440,917 | 6,321,868 |
+| 19 | BlsMinSigBls12381Verifier | 4,864 | 1,087,864 | 8,552,737 | 7,495,470 | 1,057,267 | 8,980,374 |
+| 20 | BlsMinSigBn254Verifier | 2,955 | 675,034 | 5,231,557 | 4,574,700 | 656,857 | 5,493,135 |
+| 21 | Musig2Secp256k1Verifier | 3,824 | 868,186 | 6,408,238 | 5,940,990 | 467,248 | 6,728,650 |
+| 22 | UAFrostSecp256k1Verifier | 4,633 | 1,044,103 | 8,193,735 | 7,178,760 | 1,014,975 | 8,603,422 |
+| 23 | Musig2Bn254Verifier | 5,369 | 1,198,324 | 9,434,215 | 8,269,650 | 1,164,565 | 9,905,926 |
+| 24 | FrostBn254Verifier | 4,655 | 1,049,093 | 8,232,273 | 7,212,420 | 1,019,853 | 8,643,887 |
+| 25 | ZetherSchnorrBls12381Verifier | 3,621 | 819,551 | 6,392,280 | 5,595,210 | 797,070 | 6,711,894 |
+| 26 | UAMldsaVerifier | 13,025 | 2,505,540 | 18,706,875 | 17,371,620 | 1,335,255 | 19,642,219 |
+| 27 | UAMldsaVerifier | 13,025 | 2,505,603 | 18,706,943 | 17,371,620 | 1,335,323 | 19,642,290 |
+| 28 | UAFndsaVerifier | 5,848 | 1,304,015 | 10,304,336 | 9,037,710 | 1,266,626 | 10,819,553 |
+| 29 | UASlhdsaVerifier | 2,324 | 544,147 | 4,175,957 | 3,645,990 | 529,967 | 4,384,755 |
+| 30 | UARegistry | 55,753 | 10,366,451 | 77,240,175 | 71,686,620 | 5,553,555 | 81,102,184 |
+| 31 | MtxRelayFee | 3,740 | 851,985 | 6,611,329 | 5,777,280 | 834,049 | 6,941,895 |
+| 32 | OpenFactory.publishEnv | 709 | 396,369 | 1,910,150 | 1,566,720 | 343,430 | 2,005,657 |
+| 33 | OpenFactory.deployImplementation | 42,341 | 8,935,177 | 66,506,368 | 61,703,370 | 4,802,998 | 69,831,686 |
+| 34 | OpenFactory.publishDexEnv | 485 | 237,719 | 1,087,572 | 881,280 | 206,292 | 1,141,951 |
+| 35 | OpenFactory.deployDexImplementation | 28,837 | 6,084,644 | 45,213,425 | 41,932,710 | 3,280,715 | 47,474,096 |
+| 36 | ZetherStatements | 9,432 | 2,083,943 | 16,545,071 | 14,521,230 | 2,023,841 | 17,372,325 |
+| 37 | ZetherDisclosure | 5,168 | 1,160,024 | 8,617,824 | 7,997,310 | 620,514 | 9,048,715 |
+| 38 | ZetherInnerProductVerifierBls12381 | 10,694 | 12,161,268 | 47,303,956 | 37,218,780 | 10,085,176 | 49,669,154 |
+| 39 | ZetherTransferVerifierBls12381 | 13,050 | 2,739,101 | 20,505,873 | 19,050,030 | 1,455,843 | 21,531,167 |
+| 40 | ZetherBurnVerifierBls12381 | 6,162 | 1,246,648 | 9,726,968 | 8,512,920 | 1,214,048 | 10,213,316 |
+| 41 | OpenFactory.publishEnv | 901 | 553,714 | 2,892,008 | 2,252,160 | 639,848 | 3,036,608 |
+| 42 | OpenFactory.publishEnv | 965 | 599,806 | 2,967,143 | 2,448,000 | 519,143 | 3,115,500 |
+| 43 | OpenFactory.deployImplementation | 53,733 | 11,180,734 | 83,116,675 | 77,099,760 | 6,016,915 | 87,272,509 |
+| 44 | OpenFactory.deployImplementation | 65,637 | 13,773,282 | 108,665,003 | 95,239,440 | 13,425,563 | 114,098,253 |
+| 45 | OpenFactory.setKindEnabled | 69 | 28,704 | 31,772 | 0 | 31,772 | 33,361 |
+| 46 | OpenFactory.setKindEnabled | 69 | 28,704 | 31,772 | 0 | 31,772 | 33,361 |
+| 47 | OpenFactory.publishEnv | 1,061 | 669,589 | 3,321,532 | 2,741,760 | 579,772 | 3,487,609 |
+| 48 | OpenFactory.deployImplementation | 65,477 | 13,941,871 | 103,949,572 | 96,475,680 | 7,473,892 | 109,147,051 |
+# Deploy.s.sol block limit 100000000 DEPLOY_ZETHER=false: rc=0, blocks mined 32: 
+# Deploy.s.sol block limit 100000000 DEPLOY_ZETHER=true: rc=1, blocks mined 0: block gas limit 100000000 < 111343456 needed to deploy the WrappedZetherToken
+# Deploy.s.sol block limit 60000000 DEPLOY_ZETHER=false: rc=1, blocks mined 0: simulation: OutOfGas in the creation of UARegistry
+# Deploy.s.sol block limit 60000000 DEPLOY_ZETHER=true: rc=1, blocks mined 0: simulation: OutOfGas in the creation of UARegistry
+# Deploy.s.sol block limit 36000000 DEPLOY_ZETHER=false: rc=1, blocks mined 0: simulation: OutOfGas in the creation of UARegistry
+# Deploy.s.sol block limit 36000000 DEPLOY_ZETHER=true: rc=1, blocks mined 0: simulation: OutOfGas in the creation of UARegistry
+
+# Notes
+# Rows 0-9 (libraries): state not split (forge links them before the script runs, the replay's CREATE2 collides); `sim` is regular + state.
+# `state` of a creation = (runtime + 120 B) x 1,530 (UARegistry 46,734 B: 71,686,620; WrappedPqzToken 62,616 B: 96,475,680), the same at
+# --gas-limit 100 M and 200 M; anvil's own gasUsed does not depend on the limit either (1,000 B creation at 36 / 60 / 100 / 200 / 400 M: 253,190).
+# `sim` runs over a real client's receipts: 7622 (Nethermind, runs/2026-10-31-fs3-t13-pqz-7622-public-rpc.txt, one run, the pre-round sizes,
+# UARegistry on e2e.py's 4 kinds): UARegistry 58,100,168, NormalToken 61,087,872, WrappedPqzToken 96,490,478.
+# Pre-round registry (main size-baseline.json 37,365 B, derived, not measured): 9,369 B less = 14,334,570 state gas less = sim about 62.9 M,
+# x1.30 = about 81.8 M; this round's 77.24 M x1.30 = 100,412,196, over the 100 M of the e2e anvil.
+# One earlier driver run (before the replay skipped the libraries) showed tx.gas of rows 10-30 x 18/17 (UARegistry 85,872,888);
+# not reproduced in 3 dry runs + 3 broadcasts + this run + the run before it, cause unknown; it would not change a verdict.
+# Block limit verdicts (tx.gas as forge sends it, x1.05; deploy gate = runtime x 1,530 + 2^24): the verdict lines above + this table:
+#   200 M (SCaaS testnet genesis 0xbebc200, TargetBlockGasLimit 200 M, JsonRpc.GasCap 200 M): the whole table fits, largest tx 114,098,253.
+#   100 M: Deploy.s.sol fits (32 blocks, largest tx UARegistry 81,102,184); DEPLOY_ZETHER refused by the gate before sending (WrappedZetherToken
+#          111,343,456); WrappedPqzToken gate 112,579,696 and sim 103,949,572 also over.
+#   60 M / 36 M: refused in forge's simulation, 0 tx sent: UARegistry (sim 77.24 M) runs out of gas; NormalToken (sim 66.5 M, gate 77.8 M) would too.

@@ -98,3 +98,22 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   the self-test `requirePqz` stays in `src/`), and the tests with the allowlist cases: `test/pqz/PqzCt.t.sol`
   (`test_safetyAllowlist`), `test/pqz/PqzNormal.t.sol` (`test_createToken_enabledKindOnAForbiddenChain_reverts`),
   `test/pqz/UAPqzVerifier.t.sol` (the 22776 constructor revert). Not built.
+- `zether-msm/`: the per-equation classical Zether verifier as it stood on `main` before branch `zether-msm` folded every
+  equation into one MSM (CTR-ZTH-53; owner: backup, not delete): `ZetherVerifierPerEquation.sol` (eight Σ MSMs and two per
+  Bulletproof, `verifyRange` called per proof) and `IZetherVerifierPerEquation.sol`. Byte-faithful to `src/zether/` at that
+  commit but for three things: the file names, a `Legacy` / `ILegacy` prefix on every contract and interface name, and the
+  imports re-pointed at `src/`. The new names keep these artifacts off the production paths: forge moves a same-named source
+  aside, and `script/verify-blockscout.sh` globs `out/*/<name>.json`. **The one exception to "not compiled" above:**
+  `test/zether/helpers/ZetherLegacyVerifiers.sol` imports them, so the differential suite
+  `test/zether/ZetherMsmDifferential.t.sol` runs old and new side by side. Never deployed.
+- `typed-signing/`: `UAKindsPortableRaw.sol` — the raw UA-8 portable digests (`portablePopDigest`, `registrationDigest`,
+  `kemRecordDigest`, `pqzKeyDigest`, `pqzKeyRecordDigest`), the record tags `KEM_RECORD_TAG` / `PQZ_KEY_RECORD_TAG` and
+  UARegistry's `personal_sign` path for a native `msig` member of a portable record, as they stood in `src/ua/` before
+  typed-signing P3 replaced them by typed EIP-712 records (TS-D1 … TS-D4). Not built.
+  `IUARegistryPacked.sol` — `src/ua/IUARegistry.sol` before typed-signing R1 (registry explicit ABI, TS-D10 … TS-D12; owner
+  KEM rulings 2026-10-31): `register` for every kind incl. the packed `msig` key data and `abi.encode(MemberSig[])` pop,
+  `UAAttrs{pqzKey, pqzPopHash, kemVersion, kemPk}`, `setKemKey(…, bytes kemPk, bytes sig)`, `setPqzKey(…, bytes sig)`,
+  `requireAuthorized(…, bytes auth)` and `kemKeyOf` / `kemKeyAt` returning bytes. Not built.
+  `IUARegistryPackedKeys.sol` — `register` as it stood after typed-signing R1 and before R1b (TS-D13): the packed key
+  data of `webauthn-p256`, MuSig2 and FROST, now `registerWebAuthn` / `registerMuSig2` / `registerFrost` (typed keys, the
+  same assembled bytes and ids; `register` refuses those kinds). Not built.

@@ -13,6 +13,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UAPqzVerifier} from "../../src/pqz/UAPqzVerifier.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {UACall} from "../ua/UACall.sol";
 
 /// Task 7b: a stand-in for a precompile with a known price: burns `B` gas, answers 1 (`_precompiles`).
 contract GasBurner {
@@ -686,15 +687,15 @@ contract PqzStatePinGasTest is PqzSlots {
         for (uint8 i; i < n; ++i) ids[i] = _mldsaUA(seed0 + i);
         for (uint256 i = 1; i < n; ++i) for (uint256 j = i; j > 0 && ids[j - 1] > ids[j]; --j) (ids[j - 1], ids[j]) = (ids[j], ids[j - 1]);
         bytes memory d = abi.encodePacked(uint16(n), uint16(n));
-        UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](n);
+        IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](n);
         for (uint16 i; i < n; ++i) {
             d = abi.encodePacked(d, UAKinds.MLDSA65, ids[i], uint16(1));
-            s[i] = UARegistry.MemberSig(i, "", new bytes(ML65_SIG));
+            s[i] = IUARegistry.MemberSig(i, "", new bytes(ML65_SIG));
         }
         ua = reg.uaOf(UAKinds.MSIG, d);
         bytes memory pqz = _pk(seed0 + 50);
         bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pqz);
-        reg.register(UAKinds.MSIG, d, _pqzAttrs(pqz), abi.encode(s), hex"aa"); // m-of-n PoP: filler signatures, ML65 mocked
+        UACall.register(reg, UAKinds.MSIG, d, _pqzAttrs(pqz), abi.encode(s), hex"aa"); // m-of-n PoP: filler signatures, ML65 mocked
         auth = abi.encode(d, abi.encode(s));
         assertEq(reg.keyOwner(h), ua);
     }
@@ -711,12 +712,12 @@ contract PqzStatePinGasTest is PqzSlots {
     function test_gasTable_holderRows() public {
         (hm[0], ha[0]) = _msigHolder(2, 150);
         (hm[1], ha[1]) = _msigHolder(3, 160);
-        slhFee = reg.register(UAKinds.SLHDSA128S, abi.encodePacked(keccak256("slh fee")), IUARegistry.UAAttrs("", 0, 0, ""), new bytes(7_856), "");
+        slhFee = UACall.register(reg, UAKinds.SLHDSA128S, abi.encodePacked(keccak256("slh fee")), UACall.attrs("", 0, ""), new bytes(7_856), "");
         NormalPqzToken(address(tok)).mintToUA(slhFee, 1000);
         minted += 1000;
         bytes memory fpk = new bytes(897); // fndsa512: 0x09 then every h_i = 0 < q
         fpk[0] = 0x09;
-        fnFee = reg.register(UAKinds.FNDSA512, fpk, IUARegistry.UAAttrs("", 0, 0, ""), new bytes(666), "");
+        fnFee = UACall.register(reg, UAKinds.FNDSA512, fpk, UACall.attrs("", 0, ""), new bytes(666), "");
         NormalPqzToken(address(tok)).mintToUA(fnFee, 1000);
         minted += 1000;
         gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
@@ -777,7 +778,7 @@ contract PqzStatePinGasTest is PqzSlots {
     function _registerRows(string memory sys, bool h) internal {
         bytes memory proof = _pf(sys, "REGISTER");
         UARegistry r = h ? regH : regL;
-        IUARegistry.UAAttrs memory a = IUARegistry.UAAttrs(_pk(60), keccak256(proof), 0, "");
+        IUARegistry.UAAttrs memory a = UACall.attrs(_pk(60), keccak256(proof), "");
         bytes memory d = abi.encodeCall(r.register, (UAKinds.MLDSA65, _mlPk(60), a, new bytes(ML65_SIG), proof));
         _row(sys, "REGISTER", "register (UARegistry.register: mldsa65 UA with a PQZ key)", address(r), d, false);
         UAPqzVerifier v = h ? verH : verL;

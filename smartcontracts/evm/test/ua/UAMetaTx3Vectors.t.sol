@@ -21,6 +21,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {UACall} from "./UACall.sol";
 
 /// smartcontracts/vectors/ua/metatx3.json (accounts.md §1.16, the v3 KAT): a `NORMAL` clone at the vector's token
 /// address on context A with the real UA-2a/UA-2b verifiers. Every row's struct (built from the file's typed data)
@@ -42,13 +43,11 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
         reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _realCfgs());
         for (uint256 i; vm.keyExistsJson(sj, string.concat(".derived[", vm.toString(i), "]")); ++i) {
             string memory d = string.concat(".derived[", vm.toString(i), "].");
-            reg.register(
-                uint16(vm.parseJsonUint(sj, string.concat(d, "kind"))),
+            UACall.register(reg, uint16(vm.parseJsonUint(sj, string.concat(d, "kind"))),
                 vm.parseJsonBytes(sj, string.concat(d, "keyData")),
                 _none(),
                 vm.parseJsonBytes(sj, string.concat(d, "pop.sig")),
-                ""
-            );
+                "");
         }
         address token = vm.parseJsonAddress(vj, ".token");
         address impl = address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_A, false), ""));
@@ -239,7 +238,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
         if (UAKinds.inNativeSpace(from)) {
             assertEq(ECDSA.recover(digest, auth), address(uint160(uint256(from))));
         } else {
-            reg.requireAuthorized(from, UAKinds.PURPOSE_METATX, digest, auth);
+            reg.requireAuthorized(from, UAKinds.PURPOSE_METATX, digest, UACall.auth(from, auth));
         }
     }
 

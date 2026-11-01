@@ -7,8 +7,8 @@ import '../frb_generated.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `arg`, `hash`, `k`, `kem`, `n`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`, `from`, `try_from`
+// These functions are ignored because they are not marked as `pub`: `arg`, `hash`, `k`, `n`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`, `from`, `from`, `try_from`
 
 KindInfo kindInfo({required PlatformInt64 kind}) =>
     ScaasUa.instance.api.crateApiUaKindInfo(kind: kind);
@@ -39,10 +39,6 @@ U8Array32 purposeTagV({
   purpose: purpose,
   version: version,
 );
-
-U8Array32 kemRecordTag() => ScaasUa.instance.api.crateApiUaKemRecordTag();
-
-U8Array32 pqzKeyRecordTag() => ScaasUa.instance.api.crateApiUaPqzKeyRecordTag();
 
 U8Array32 uaOf({required PlatformInt64 kind, required List<int> keyData}) =>
     ScaasUa.instance.api.crateApiUaUaOf(kind: kind, keyData: keyData);
@@ -113,27 +109,54 @@ U8Array32 uaMessage({
 U8Array32 chainKeyHash({required PlatformInt64 chainId}) =>
     ScaasUa.instance.api.crateApiUaChainKeyHash(chainId: chainId);
 
-/// `keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqz_key_hash ‖ kem_record_hash)`, each hash 32 zero bytes when absent (UA-8 P1: no chain).
-U8Array32 portablePopDigest({
+/// The portable EIP-712 domain separator `DS_P` (`EIP712Domain(string name,string version)` = ("SCaaS UA Portable", "1"), no
+/// chain; typed-signing TS-D1): every portable digest is `keccak256(0x1901 ‖ DS_P ‖ hashStruct)`.
+U8Array32 portableDomainSeparator() =>
+    ScaasUa.instance.api.crateApiUaPortableDomainSeparator();
+
+/// `hashStruct(UAKemRecord{ua, version, scheme, kemPkHash})`, the `kem` word of a portable record; `(0, [])` is the zero record
+/// `UAKemRecord{ua, 0, 0, 0}` (no KEM record), `(0, key)` the `register` key's record (owner 2026-10-31), otherwise the rules
+/// of [`kem_record_digest`].
+U8Array32 kemRecordHash({
   required U8Array32 ua,
+  required BigInt version,
+  required List<int> kemPk,
+}) => ScaasUa.instance.api.crateApiUaKemRecordHash(
+  ua: ua,
+  version: version,
+  kemPk: kemPk,
+);
+
+/// typed `UAPortableRecord{ua, kind, pqzKeyHash, kem}`: what `R_REG` proves over at `register`; a hash is 32 zero bytes when absent.
+U8Array32 portableRecordDigest({
+  required U8Array32 ua,
+  required PlatformInt64 kind,
   required U8Array32 pqzKeyHash,
   required U8Array32 kemRecordHash,
-}) => ScaasUa.instance.api.crateApiUaPortablePopDigest(
+}) => ScaasUa.instance.api.crateApiUaPortableRecordDigest(
   ua: ua,
+  kind: kind,
   pqzKeyHash: pqzKeyHash,
   kemRecordHash: kemRecordHash,
 );
 
-/// `keccak256(portable_pop_digest ‖ pqz_pop_hash)`: what the signer's `pop` signs under `ua_message(kind, POP_V2, ·)`.
+/// typed `UARegistration{record, pqzPopHash}`: what the signer's `pop` signs under `ua_message(kind, POP_V2, ·)` (and a native
+/// `msig` member signs itself, TS-D4).
 U8Array32 registrationDigest({
-  required U8Array32 portable,
+  required U8Array32 ua,
+  required PlatformInt64 kind,
+  required U8Array32 pqzKeyHash,
+  required U8Array32 kemRecordHash,
   required U8Array32 pqzPopHash,
 }) => ScaasUa.instance.api.crateApiUaRegistrationDigest(
-  portable: portable,
+  ua: ua,
+  kind: kind,
+  pqzKeyHash: pqzKeyHash,
+  kemRecordHash: kemRecordHash,
   pqzPopHash: pqzPopHash,
 );
 
-/// `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kem_pk))` (`UAKemVersion` for 0, `UAKemScheme` unless the first byte is 1, `UAKemKeyLength` unless 1,601 bytes).
+/// typed `UAKemRecord{ua, version, scheme, kemPkHash}` that `setKemKey` signs (`UAKemVersion` for 0, `UAKemScheme` unless the first byte is 1, `UAKemKeyLength` unless 1,601 bytes).
 U8Array32 kemRecordDigest({
   required U8Array32 ua,
   required BigInt version,
@@ -158,7 +181,8 @@ U8Array32 kemRecordMessage({
 );
 
 /// The portable PoP message of a registration. Attributes: `pqz_key` with its proof `pqz_pop` (or only its hash `pqz_pop_hash`;
-/// null / empty = absent) and the initial KEM record; only holders carry them (`UAPqzHolder`, `UAKemHolder`; an `msig` needs
+/// null / empty = absent) and the initial KEM key `kem_pk` (1,601 bytes, scheme byte 1 first; its record is always version 0,
+/// owner 2026-10-31; null / empty = absent); only holders carry them (`UAPqzHolder`, `UAKemHolder`; an `msig` needs
 /// `key_data` to show it is PQ-eligible); a PQZ key always comes with its proof hash and only with it (`UAPqzPopHash`).
 HolderPop holderPopMessage({
   required PlatformInt64 kind,
@@ -167,7 +191,7 @@ HolderPop holderPopMessage({
   Uint8List? pqzKey,
   Uint8List? pqzPop,
   Uint8List? pqzPopHash,
-  KemRecord? kemRecord,
+  Uint8List? kemPk,
 }) => ScaasUa.instance.api.crateApiUaHolderPopMessage(
   kind: kind,
   ua: ua,
@@ -175,33 +199,39 @@ HolderPop holderPopMessage({
   pqzKey: pqzKey,
   pqzPop: pqzPop,
   pqzPopHash: pqzPopHash,
-  kemRecord: kemRecord,
+  kemPk: kemPk,
 );
 
-/// The message `R_REG` proves over: `ua_message(0x0142, POP_V2, portable_pop_digest(ua, key_hash(pqz_key), kem_record_hash))`.
+/// The message `R_REG` proves over: `ua_message(0x0142, POP_V2, portable_record_digest(ua, kind, key_hash(pqz_key),
+/// kem_record_hash))`, `kind` the registering kind, `kem_pk` the register KEM key (version 0; null / empty = none).
 U8Array32 pqzRegMessage({
+  required PlatformInt64 kind,
   required U8Array32 ua,
   required List<int> pqzKey,
-  KemRecord? kemRecord,
+  Uint8List? kemPk,
 }) => ScaasUa.instance.api.crateApiUaPqzRegMessage(
+  kind: kind,
   ua: ua,
   pqzKey: pqzKey,
-  kemRecord: kemRecord,
+  kemPk: kemPk,
 );
 
-/// `keccak256(PQZ_KEY_RECORD_TAG ‖ ua ‖ pqz_key_hash)`: what a later PQZ key's `R_REG` proves over.
+/// typed `UAPqzKey{ua, pqzKeyHash}`: what a later PQZ key's `R_REG` proves over.
 U8Array32 pqzKeyDigest({
   required U8Array32 ua,
   required U8Array32 pqzKeyHash,
 }) =>
     ScaasUa.instance.api.crateApiUaPqzKeyDigest(ua: ua, pqzKeyHash: pqzKeyHash);
 
-/// `keccak256(pqz_key_digest ‖ pqz_pop_hash)`: what `setPqzKey`'s signature signs under `ua_message(kind, PURPOSE_PQZ_KEY, ·)`.
+/// typed `UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}`: what `setPqzKey`'s signature signs under
+/// `ua_message(kind, PURPOSE_PQZ_KEY, ·)` (and a native `msig` member signs itself, TS-D4).
 U8Array32 pqzKeyRecordDigest({
-  required U8Array32 keyDigest,
+  required U8Array32 ua,
+  required U8Array32 pqzKeyHash,
   required U8Array32 pqzPopHash,
 }) => ScaasUa.instance.api.crateApiUaPqzKeyRecordDigest(
-  keyDigest: keyDigest,
+  ua: ua,
+  pqzKeyHash: pqzKeyHash,
   pqzPopHash: pqzPopHash,
 );
 
@@ -225,13 +255,8 @@ PqzKeyRecord pqzKeyRecordMessage({
   alreadySet: alreadySet,
 );
 
-/// EIP-191 `personal_sign` of a 32-byte digest: `keccak256(0x19 ‖ "Ethereum Signed Message:\n32" ‖ digest)`. A code-less native
-/// (EOA) `msig` member signs it over the `member_digest` of a portable record only (POP_V2, KEM, PQZ_KEY; ruling C7); every
-/// other purpose stays UAAuth.
-U8Array32 personalSignDigest({required U8Array32 digest}) =>
-    ScaasUa.instance.api.crateApiUaPersonalSignDigest(digest: digest);
-
-/// POP_V2, KEM, PQZ_KEY: the only purposes a code-less native `msig` member signs by `personal_sign`.
+/// POP_V2, KEM, PQZ_KEY: the only purposes where a code-less native `msig` member signs the record's typed digest itself
+/// (`eth_signTypedData_v4`, TS-D4); every other purpose stays UAAuth.
 bool isPortablePurpose({required U8Array32 tag}) =>
     ScaasUa.instance.api.crateApiUaIsPortablePurpose(tag: tag);
 
@@ -261,6 +286,24 @@ U8Array32 memberDigest({
 String canonicalId({required String text}) =>
     ScaasUa.instance.api.crateApiUaCanonicalId(text: text);
 
+/// The registry's explicit arguments of a registration, JSON in and out. `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk,
+/// pop, kemCommit}` (bytes as "0x…" hex, an absent field is empty, an msig's `pop` is `[{index, keyData, sig}]`, `kemCommit`
+/// true / false forces the KEM form; absent: the hash commit only when the full call is over 261,909 B). Out: `{args, kemFill,
+/// calldataLength, kemFillCalldataLength}`, `args.entry` the registry entry, `kemFill` the `setKemKey(ua, 0, …)` of a
+/// hash-committed key (null otherwise). `UAArgument` when the input is not this JSON.
+String registrationArgs({required String input}) =>
+    ScaasUa.instance.api.crateApiUaRegistrationArgs(input: input);
+
+/// `setKemKey`'s explicit arguments, JSON in and out. `input`: `{ua, version, kemPk, sig}`, `sig` the `UASig` `{keyData, signature,
+/// members: [{index, keyData, sig}]}` (absent: empty, the version-0 fill of a hash commit). Out: `{ua, version, kem, sig}`.
+String setKemKeyArgs({required String input}) =>
+    ScaasUa.instance.api.crateApiUaSetKemKeyArgs(input: input);
+
+/// `setPqzKey`'s explicit arguments, JSON in and out. `input`: `{ua, pqzKey, pqzPopHash, sig}`, `sig` as [`set_kem_key_args`]. Out:
+/// the same fields, `sig` complete.
+String setPqzKeyArgs({required String input}) =>
+    ScaasUa.instance.api.crateApiUaSetPqzKeyArgs(input: input);
+
 /// Members are `(kind, id, weight)`; a kind outside 0..=0xFFFF is `UAKindUnknown`, a threshold or weight outside u16 (or
 /// more than 65535 members) is `UAArgument`.
 Uint8List encodeMsig({
@@ -272,13 +315,13 @@ Uint8List encodeMsig({
 );
 
 /// The portable PoP of a registration (UA-8 P1, P2). `message = ua_message(kind, POP_V2, registration_digest)`: what the signer's
-/// `pop` signs (every kind). `member_digest` (an `msig` only) is what each member signs under `member`; a code-less native
-/// member signs `personal_sign_digest(member_digest)` (ruling C7).
+/// `pop` signs (every kind). `member_digest` (an `msig` only) is what each derived member signs under `member`; a native
+/// member signs `registration_digest` itself (TS-D4).
 class HolderPop {
   final U8Array32 pqzKeyHash;
   final U8Array32 pqzPopHash;
   final U8Array32 kemRecordHash;
-  final U8Array32 portablePopDigest;
+  final U8Array32 portableRecordDigest;
   final U8Array32 registrationDigest;
   final U8Array32 message;
   final U8Array32? memberDigest;
@@ -287,7 +330,7 @@ class HolderPop {
     required this.pqzKeyHash,
     required this.pqzPopHash,
     required this.kemRecordHash,
-    required this.portablePopDigest,
+    required this.portableRecordDigest,
     required this.registrationDigest,
     required this.message,
     this.memberDigest,
@@ -298,7 +341,7 @@ class HolderPop {
       pqzKeyHash.hashCode ^
       pqzPopHash.hashCode ^
       kemRecordHash.hashCode ^
-      portablePopDigest.hashCode ^
+      portableRecordDigest.hashCode ^
       registrationDigest.hashCode ^
       message.hashCode ^
       memberDigest.hashCode;
@@ -311,30 +354,10 @@ class HolderPop {
           pqzKeyHash == other.pqzKeyHash &&
           pqzPopHash == other.pqzPopHash &&
           kemRecordHash == other.kemRecordHash &&
-          portablePopDigest == other.portablePopDigest &&
+          portableRecordDigest == other.portableRecordDigest &&
           registrationDigest == other.registrationDigest &&
           message == other.message &&
           memberDigest == other.memberDigest;
-}
-
-/// A KEM record attribute `(version >= 1, 1,601-byte key: scheme byte 1 first)`; `None`, or `(0, [])`, = absent. `version` is a `u64` (a Dart
-/// `BigInt`: 1 ... 2^64 - 1).
-class KemRecord {
-  final BigInt version;
-  final Uint8List pk;
-
-  const KemRecord({required this.version, required this.pk});
-
-  @override
-  int get hashCode => version.hashCode ^ pk.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is KemRecord &&
-          runtimeType == other.runtimeType &&
-          version == other.version &&
-          pk == other.pk;
 }
 
 class KindInfo {
@@ -475,7 +498,7 @@ class UaDomain {
           chainUid == other.chainUid;
 }
 
-/// `code` is one of the shared codes (the seven of the vector files plus `UAPqzHolder`, `UAKemHolder`, `UAKemVersion`, `UAKemKeyLength`, `UAPqzPopHash`, `UAPqzKeySet`) (`UAKeyData`, `UAKindUnknown`, ...); `reason` is the label after `UAKeyData: ` (empty for every other code),
+/// `code` is one of the shared codes (the seven of the vector files plus `UAPqzHolder`, `UAKemHolder`, `UAKemVersion`, `UAKemKeyLength`, `UAKemScheme`, `UAPqzPopHash`, `UAPqzKeySet`) (`UAKeyData`, `UAKindUnknown`, ...); `reason` is the label after `UAKeyData: ` (empty for every other code),
 /// as in the cxx and pure-Dart libraries.
 ///
 /// Integers are `i64` so a Dart value cannot wrap at the Rust width: a kind outside 0..=0xFFFF is `UAKindUnknown`; a chain

@@ -1,5 +1,5 @@
 """SCaaS Universal Account identity layer (accounts.md §1.3–§1.6) for client systems: the kind table, ids, keyHash,
-purpose tags, ua_msg, the portable PoP / KEM record / PQZ key record digests, the registry's UAAuth digest, member digests, canonical ids and key-data validation.
+purpose tags, ua_msg, the portable PoP / KEM record / PQZ key record (typed EIP-712 records, typed-signing TS-D1 … TS-D4), the registry's UAAuth digest, member digests, canonical ids and key-data validation.
 The same rules live in Solidity (UAKinds.sol), JS (clientkeys ua.js), Rust (scaas-ua), Go and C#;
 smartcontracts/vectors/ua pins all six. secp256k1, P-256, ed25519 and bn254 G1 are integer arithmetic here; bn254 G2
 and BLS12-381 use py_ecc. Public inputs only: nothing here is constant-time. UNAUDITED."""
@@ -163,8 +163,6 @@ def purpose_tag(purpose, version=1):
 
 POP_TAG = purpose_tag('pop')  # v1, a registry constant (kinds.json); the portable PoP is POP_V2_TAG
 POP_V2_TAG = purpose_tag('pop', 2)
-KEM_RECORD_TAG = keccak256(b'scaas.ua.kem-record.v1')
-PQZ_KEY_RECORD_TAG = keccak256(b'scaas.ua.pqz-key-record.v1')
 KEM_SCHEME_MLKEM1024_X25519 = 1  # kemPk[0] (CTR-UA-32); 2 = ML-KEM-1024 + HQC + X25519 is reserved (UAKemScheme)
 KEM_PK_LENGTH = 1601  # 0x01 ‖ ML-KEM-1024 ek ‖ X25519 pk (X-Wing order)
 DOMAIN_TYPEHASH = keccak256(b'EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)')
@@ -230,27 +228,76 @@ def _word(n):
     return int(n).to_bytes(32, 'big')
 
 
-def portable_pop_digest(ua, pqz_key_hash=bytes(32), kem_record_hash=bytes(32)):
-    """``keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)``, each hash 0 when absent (UA-8 P1: no chain)."""
-    return keccak256(POP_V2_TAG, _sized(ua, 32, 'ua'), _sized(pqz_key_hash, 32, 'pqzKeyHash'),
-                     _sized(kem_record_hash, 32, 'kemRecordHash'))
+# The portable EIP-712 domain (TS-D1): name and version only, no chainId / verifyingContract / salt (CTR-UA-07).
+PORTABLE_DOMAIN_TYPE = 'EIP712Domain(string name,string version)'
+PORTABLE_DOMAIN_NAME = 'SCaaS UA Portable'
+PORTABLE_DOMAIN_VERSION = '1'
+PORTABLE_DOMAIN_SEPARATOR = keccak256(keccak256(PORTABLE_DOMAIN_TYPE.encode()), keccak256(PORTABLE_DOMAIN_NAME.encode()),
+                                      keccak256(PORTABLE_DOMAIN_VERSION.encode()))
+_KEM_TYPE = 'UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)'
+_RECORD_TYPE = 'UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)'
+_PQZ_KEY_TYPE = 'UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)'
+# encodeType of each portable struct: primary, then the referenced types sorted by name
+PORTABLE_TYPES = {
+    'UAKemRecord': _KEM_TYPE,
+    'UAPortableRecord': _RECORD_TYPE + _KEM_TYPE,
+    'UARegistration': 'UARegistration(UAPortableRecord record,bytes32 pqzPopHash)' + _KEM_TYPE + _RECORD_TYPE,
+    'UAPqzKey': _PQZ_KEY_TYPE,
+    'UAPqzKeyRecord': 'UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)' + _PQZ_KEY_TYPE,
+}
 
 
-def registration_digest(portable, pqz_pop_hash=bytes(32)):
-    """``keccak256(portablePopDigest ‖ pqzPopHash)``: what the signer's pop signs under ``ua_message(kind, POP_V2, ·)``."""
-    return keccak256(_sized(portable, 32, 'portablePopDigest'), _sized(pqz_pop_hash, 32, 'pqzPopHash'))
+def portable_typehash(name):
+    return keccak256(PORTABLE_TYPES[name].encode())
 
 
-def kem_record_digest(ua, version, kem_pk):
-    """``keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))``: version 1 … 2^64 − 1, ``kem_pk`` = scheme byte ‖ key."""
-    if not 1 <= version < 2**64:
-        raise UAError('UAKemVersion', str(version))
+def hash_struct(name, *words):
+    """``keccak256(typehash(name) ‖ words)``: every portable field is a 32-byte word or a nested struct hash."""
+    return keccak256(portable_typehash(name), *(_sized(w, 32, 'word') for w in words))
+
+
+def _typed(struct_hash):
+    """``keccak256(0x1901 ‖ DS_P ‖ structHash)``: what ``eth_signTypedData_v4`` returns for a portable record."""
+    return keccak256(b'\x19\x01', PORTABLE_DOMAIN_SEPARATOR, struct_hash)
+
+
+def kem_record_hash(ua, version, kem_pk):
+    """``hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)})``: version 0 … 2^64 − 1
+    (version 0 = the key given at ``register``, owner 2026-10-31), ``kem_pk`` = scheme byte ‖ key. No key (version 0, no
+    key) is the zero record ``UAKemRecord{ua, 0, 0, 0}`` (TS-D2: a present record has scheme ≠ 0)."""
     pk = _bytes(kem_pk) if kem_pk is not None else b''
+    if version == 0 and not pk:
+        return hash_struct('UAKemRecord', ua, bytes(32), bytes(32), bytes(32))
+    if not 0 <= version < 2**64:
+        raise UAError('UAKemVersion', str(version))
     if pk and pk[0] != KEM_SCHEME_MLKEM1024_X25519:
         raise UAError('UAKemScheme', str(pk[0]))
     if len(pk) != KEM_PK_LENGTH:
         raise UAError('UAKemKeyLength', str(len(pk)))
-    return keccak256(KEM_RECORD_TAG, _sized(ua, 32, 'ua'), _word(version), keccak256(pk))
+    return hash_struct('UAKemRecord', ua, _word(version), _word(pk[0]), keccak256(pk))
+
+
+def kem_record_digest(ua, version, kem_pk):
+    """The typed ``UAKemRecord`` digest ``setKemKey`` signs (versions ≥ 1: version 0 is the ``register`` key, UAKemVersion here)."""
+    if version == 0:
+        raise UAError('UAKemVersion', '0')
+    return _typed(kem_record_hash(ua, version, kem_pk))
+
+
+def portable_record_hash(ua, kind, pqz_key_hash, kem_record_hash_):
+    """``hashStruct(UAPortableRecord{ua, kind, pqzKeyHash, kem})``; ``kem_record_hash_`` = kem_record_hash (the zero record's when none)."""
+    return hash_struct('UAPortableRecord', ua, _word(kind), pqz_key_hash, kem_record_hash_)
+
+
+def portable_record_digest(ua, kind, pqz_key_hash, kem_record_hash_):
+    """The typed ``UAPortableRecord``: what R_REG proves over at ``register`` / the first ``storePqzPop``."""
+    return _typed(portable_record_hash(ua, kind, pqz_key_hash, kem_record_hash_))
+
+
+def registration_digest(ua, kind, pqz_key_hash, kem_record_hash_, pqz_pop_hash):
+    """The typed ``UARegistration{record, pqzPopHash}``: what the signer's pop signs under ``ua_message(kind, POP_V2, ·)``
+    (and a native msig member signs itself, TS-D4)."""
+    return _typed(hash_struct('UARegistration', portable_record_hash(ua, kind, pqz_key_hash, kem_record_hash_), pqz_pop_hash))
 
 
 def kem_record_message(kind, ua, version, kem_pk):
@@ -288,21 +335,22 @@ def _proof_hash_of(pqz_pop, pqz_pop_hash):
     return h
 
 
-HolderPop = namedtuple('HolderPop', 'pqz_key_hash pqz_pop_hash kem_record_hash portable_pop_digest registration_digest '
+HolderPop = namedtuple('HolderPop', 'pqz_key_hash pqz_pop_hash kem_record_hash portable_record_digest registration_digest '
                                     'message member_digest')
-HolderPop.__doc__ = """``member_digest`` (msig only, else None) is ``member_digest(ua, message)``: what each member signs under
-``member``; a code-less native member signs ``personal_sign(member_digest)`` (ruling C7, ``personal_sign_digest``)."""
+HolderPop.__doc__ = """``kem_record_hash`` is hashStruct(UAKemRecord) (the zero record's when none), ``portable_record_digest`` the typed
+UAPortableRecord, ``registration_digest`` the typed UARegistration. ``member_digest`` (msig only, else None) is
+``member_digest(ua, message)``: what each derived member signs under ``member``; a native member signs
+``registration_digest`` itself (eth_signTypedData_v4, TS-D4)."""
 
 
-def holder_pop_message(kind, ua, key_data=b'', pqz_key=None, pqz_pop=None, pqz_pop_hash=None, kem=None):
+def holder_pop_message(kind, ua, key_data=b'', pqz_key=None, pqz_pop=None, pqz_pop_hash=None, kem_pk=None):
     """The portable PoP of a registration (UA-8 P1, P2): a HolderPop. ``pqz_key`` with its proof ``pqz_pop`` (or only its hash
-    ``pqz_pop_hash``) and the initial KEM record ``kem = (version >= 1, kem_pk)``; None / (0, b'') = absent. Only holders
+    ``pqz_pop_hash``) and the initial KEM key ``kem_pk`` (its record is always version 0, owner 2026-10-31); None / b'' = absent. Only holders
     carry them (UAPqzHolder, UAKemHolder; an msig needs ``key_data`` to show it is PQ-eligible); a PQZ key always comes with
     its proof hash and only with it (UAPqzPopHash)."""
     if pqz_key is not None and len(pqz_key) == 0:
         pqz_key = None
-    if kem is not None and kem[0] == 0 and (kem[1] is None or len(kem[1]) == 0):
-        kem = None
+    kem = kem_pk if kem_pk is not None and len(kem_pk) else None
     if (pqz_key is not None or kem is not None) and not _holds(kind, key_data):
         if pqz_key is not None:
             raise UAError('UAPqzHolder', f'0x{kind:04x} may not hold a PQZ key')
@@ -311,29 +359,29 @@ def holder_pop_message(kind, ua, key_data=b'', pqz_key=None, pqz_pop=None, pqz_p
     if (pqz_key is not None) != any(pop_hash):
         raise UAError('UAPqzPopHash', 'a PQZ key comes with its proof hash and only with it')
     kh = _pqz_key_hash_of(pqz_key) if pqz_key is not None else bytes(32)
-    kr = kem_record_digest(ua, *kem) if kem is not None else bytes(32)
-    portable = portable_pop_digest(ua, kh, kr)
-    reg = registration_digest(portable, pop_hash)
+    kr = kem_record_hash(ua, 0, kem)
+    reg = registration_digest(ua, kind, kh, kr, pop_hash)
     msg = ua_message(kind, POP_V2_TAG, reg)
-    return HolderPop(kh, pop_hash, kr, portable, reg, msg, member_digest(ua, msg) if kind == 0x0120 else None)
+    return HolderPop(kh, pop_hash, kr, portable_record_digest(ua, kind, kh, kr), reg, msg,
+                     member_digest(ua, msg) if kind == 0x0120 else None)
 
 
-def pqz_reg_message(ua, pqz_key, kem=None):
-    """The message R_REG proves over: ``ua_message(0x0142, POP_V2, portable_pop_digest(ua, keyHash(pqz_key), kem_record_hash))``."""
-    if kem is not None and kem[0] == 0 and (kem[1] is None or len(kem[1]) == 0):
-        kem = None
-    kr = kem_record_digest(ua, *kem) if kem is not None else bytes(32)
-    return ua_message(0x0142, POP_V2_TAG, portable_pop_digest(ua, _pqz_key_hash_of(pqz_key), kr))
+def pqz_reg_message(kind, ua, pqz_key, kem_pk=None):
+    """The message R_REG proves over: ``ua_message(0x0142, POP_V2, portable_record_digest(ua, kind, keyHash(pqz_key),
+    kem_record_hash))``, ``kind`` the registering kind (TS-D3); ``kem_pk`` the register KEM key (version 0), None = none."""
+    kr = kem_record_hash(ua, 0, kem_pk)
+    return ua_message(0x0142, POP_V2_TAG, portable_record_digest(ua, kind, _pqz_key_hash_of(pqz_key), kr))
 
 
 def pqz_key_digest(ua, pqz_key_hash):
-    """``keccak256(PQZ_KEY_RECORD_TAG ‖ ua ‖ pqzKeyHash)``: what a later PQZ key's R_REG proves over (no proof hash: no cycle)."""
-    return keccak256(PQZ_KEY_RECORD_TAG, _sized(ua, 32, 'ua'), _sized(pqz_key_hash, 32, 'pqzKeyHash'))
+    """The typed ``UAPqzKey{ua, pqzKeyHash}``: what a later PQZ key's R_REG proves over (no proof hash: no cycle)."""
+    return _typed(hash_struct('UAPqzKey', ua, pqz_key_hash))
 
 
-def pqz_key_record_digest(key_digest, pqz_pop_hash):
-    """``keccak256(pqzKeyDigest ‖ pqzPopHash)``: what ``setPqzKey``'s signature signs under ``ua_message(kind, PURPOSE_PQZ_KEY, ·)``."""
-    return keccak256(_sized(key_digest, 32, 'pqzKeyDigest'), _sized(pqz_pop_hash, 32, 'pqzPopHash'))
+def pqz_key_record_digest(ua, pqz_key_hash, pqz_pop_hash):
+    """The typed ``UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}``: what ``setPqzKey``'s signature signs under
+    ``ua_message(kind, PURPOSE_PQZ_KEY, ·)`` (and a native msig member signs itself, TS-D4)."""
+    return _typed(hash_struct('UAPqzKeyRecord', hash_struct('UAPqzKey', ua, pqz_key_hash), pqz_pop_hash))
 
 
 PqzKeyRecord = namedtuple('PqzKeyRecord', 'pqz_key_hash pqz_pop_hash pqz_key_digest record_digest message pqz_reg_message '
@@ -353,21 +401,15 @@ def pqz_key_record_message(kind, ua, key_data, pqz_key, pqz_pop=None, pqz_pop_ha
     if not any(pop_hash):
         raise UAError('UAPqzPopHash', 'a PQZ key record needs its proof hash')
     kd = pqz_key_digest(ua, kh)
-    rd = pqz_key_record_digest(kd, pop_hash)
+    rd = pqz_key_record_digest(ua, kh, pop_hash)
     tag = purpose_tag('pqz-key')
     msg = ua_message(kind, tag, rd)
     return PqzKeyRecord(kh, pop_hash, kd, rd, msg, ua_message(0x0142, tag, kd), member_digest(ua, msg) if kind == 0x0120 else None)
 
 
-def personal_sign_digest(digest):
-    """EIP-191 ``personal_sign`` of a 32-byte digest: ``keccak256(0x19 ‖ "Ethereum Signed Message:\\n32" ‖ digest)``. A code-less
-    native (EOA) msig member signs this over the ``member_digest`` of a portable record only (POP_V2, KEM, PQZ_KEY; ruling
-    C7); every other purpose stays UAAuth (CTR-MTX-14)."""
-    return keccak256(b'\x19Ethereum Signed Message:\n32', _sized(digest, 32, 'digest'))
-
-
 def is_portable_purpose(purpose_tag_bytes):
-    """POP_V2, KEM, PQZ_KEY: the only purposes a code-less native msig member signs by ``personal_sign``."""
+    """POP_V2, KEM, PQZ_KEY: the only purposes where a code-less native msig member signs the record's typed digest itself
+    (eth_signTypedData_v4, 65-byte r ‖ s ‖ v; a contract member answers ERC-1271 over it; TS-D4)."""
     return bytes(purpose_tag_bytes) in (POP_V2_TAG, purpose_tag('kem'), purpose_tag('pqz-key'))
 
 
@@ -382,8 +424,8 @@ def ua_auth_domain_separator(generation, chain_id, registry, chain_uid):
 
 def ua_auth_digest(generation, chain_id, registry, chain_uid, ua, purpose, digest):
     """EIP-712 digest of ``UAAuth(ua, purpose, digest)`` under the registry's domain: what native signers sign,
-    except that under the three portable purposes (``is_portable_purpose``) a code-less native msig member signs
-    ``personal_sign_digest(member_digest)`` instead (CTR-MTX-14, ruling C7)."""
+    except that under the three portable purposes (``is_portable_purpose``) a code-less native msig member signs the
+    record's typed digest instead (CTR-MTX-14, TS-D4)."""
     s = keccak256(UAAUTH_TYPEHASH, _sized(ua, 32, 'ua'), _sized(purpose, 32, 'purposeTag'), _sized(digest, 32, 'digest'))
     return keccak256(b'\x19\x01', ua_auth_domain_separator(generation, chain_id, registry, chain_uid), s)
 
@@ -619,3 +661,161 @@ def validate_key_data(kind, key_data, hedera_native=False):
     elif kind == 0x0132:
         _fndsa(d)
     # mldsa44/65, slhdsa128s: the length is the whole check
+
+
+# ----- the registry's explicit arguments (typed-signing R1 / R1b: TS-D10 … TS-D13; owner KEM rulings 2026-10-31) -----
+# Named JSON as clientkeys registrationArgs and the node job API: bytes as 0x-hex, numbers as ints.
+
+def _hx(b):
+    return '0x' + bytes(b).hex()
+
+
+def _hb(h):
+    return bytes.fromhex(h[2:])
+
+
+_ZW = _hx(bytes(32))
+REGISTER_CALLDATA_LIMIT = ((1 << 24) - 15_000) // 64  # the largest calldata whose EIP-7976 floor fits the 2^24 cap: 261,909 B
+
+
+def kem_key_of(kem_pk):
+    """``KemKey{scheme, mlkemEk, x25519}`` (TS-D11) of ``kem_pk = scheme ‖ ek ‖ x25519``; None / b'' = the empty key; a
+    malformed key is refused as the registry does (``kem_record_hash``: UAKemScheme, UAKemKeyLength)."""
+    pk = _bytes(kem_pk) if kem_pk is not None else b''
+    if not pk:
+        return {'scheme': 0, 'mlkemEk': '0x', 'x25519': _ZW}
+    kem_record_hash(bytes(32), 0, pk)
+    return {'scheme': pk[0], 'mlkemEk': _hx(pk[1:-32]), 'x25519': _hx(pk[-32:])}
+
+
+def msig_structure(key_data):
+    """CTR-UA-09 key data as ``MsigStructure{threshold, members: MsigMember{kind, id, weight}[]}`` (TS-D10)."""
+    d = _bytes(key_data)
+    _need(len(d) >= 4 and len(d) == 4 + 36 * _u16(d, 2), 'length')
+    return {'threshold': _u16(d, 0), 'members': [{'kind': _u16(d, o), 'id': _hx(d[o + 2:o + 34]), 'weight': _u16(d, o + 34)}
+                                                 for o in range(4, len(d), 36)]}
+
+
+def typed_key(kind, key_data):
+    """R1b (TS-D13): ``WebAuthnKey{x, y, rpIdHash}`` (0x0100), ``MuSig2Key{aggKey, memberKeys}`` (0x0110 / 0x0112) or
+    ``FrostKey{groupKey, threshold, members: FrostMember{commitments, r, z}[]}`` (0x0111 / 0x0113) of packed key data (points
+    of 33 B on secp256k1, 64 B on bn254); None for any other kind. The registry assembles the same bytes (same id)."""
+    d = _bytes(key_data)
+    at = lambda o, n: _hx(d[o:o + n])
+    if kind == 0x0100:
+        _need(len(d) == 96, 'length')
+        return {'x': at(0, 32), 'y': at(32, 32), 'rpIdHash': at(64, 32)}
+    s = {0x0110: 33, 0x0111: 33, 0x0112: 64, 0x0113: 64}.get(kind)
+    if s is None:
+        return None
+    if kind in (0x0110, 0x0112):
+        n = _u16(d, s)
+        _need(len(d) == s + 2 + n * s, 'length')
+        return {'aggKey': at(0, s), 'memberKeys': [at(s + 2 + i * s, s) for i in range(n)]}
+    t, n = _u16(d, s), _u16(d, s + 2)
+    per = (t + 1) * s + 32
+    _need(len(d) == s + 4 + n * per, 'length')
+    return {'groupKey': at(0, s), 'threshold': t, 'members': [
+        {'commitments': [at(o + j * s, s) for j in range(t)], 'r': at(o + t * s, s), 'z': at(o + (t + 1) * s, 32)}
+        for o in (s + 4 + i * per for i in range(n))]}
+
+
+def _member_sigs(members):
+    return [{'index': int(i), 'keyData': _hx(k or b''), 'sig': _hx(s)} for i, k, s in members]
+
+
+def ua_sig(key_data=b'', signature=b'', members=()):
+    """``UASig{keyData, signature, members}`` (TS-D12) of ``requireAuthorized`` / ``setKemKey`` / ``setPqzKey``: native —
+    ``signature``; a derived single key — ``key_data`` (empty for the stored kinds) + ``signature``; an msig — ``members`` as
+    (index, key_data, sig) tuples (key_data empty for stored kinds). A portable record's signature never has ``key_data``."""
+    return {'keyData': _hx(key_data or b''), 'signature': _hx(signature or b''), 'members': _member_sigs(members)}
+
+
+def set_kem_key_args(ua, version, kem_pk, sig):
+    """``setKemKey(ua, version, KemKey, UASig)``; ``sig`` a ua_sig (empty for the version-0 hash-commit fill); no key is no call."""
+    if not kem_pk:
+        raise UAError('UAKemKeyLength', '0')
+    return {'ua': _hx(_sized(ua, 32, 'ua')), 'version': int(version), 'kem': kem_key_of(kem_pk), 'sig': sig}
+
+
+def set_pqz_key_args(ua, pqz_key, pqz_pop_hash, sig):
+    """``setPqzKey(ua, pqzKey, pqzPopHash, UASig)``."""
+    return {'ua': _hx(_sized(ua, 32, 'ua')), 'pqzKey': _hx(_bytes(pqz_key)), 'pqzPopHash': _hx(_sized(pqz_pop_hash, 32, 'pqzPopHash')),
+            'sig': sig}
+
+
+def _tail(h):  # a `bytes` tail: length word + data padded to 32
+    return 32 + -(-(len(h) - 2) // 64) * 32
+
+
+def _bytes_arr(xs):  # a `bytes[]` tail
+    return 32 + sum(32 + _tail(x) for x in xs)
+
+
+def _kem_len(k):
+    return 96 + _tail(k['mlkemEk'])
+
+
+def _attrs_len(a):
+    return 128 + _tail(a['pqzKey']) + _kem_len(a['kem'])
+
+
+def _member_sigs_len(ms):
+    return 32 + sum(32 + 96 + _tail(m['keyData']) + _tail(m['sig']) for m in ms)
+
+
+def registry_calldata_length(entry, a):
+    """The ABI calldata length (selector included) of a ``register`` / ``registerMsig`` / ``registerWebAuthn`` /
+    ``registerMuSig2`` / ``registerFrost`` / ``setKemKey`` call from its named arguments, as clientkeys registryCalldataLength."""
+    if entry == 'setKemKey':
+        s = a['sig']
+        return 4 + 128 + _kem_len(a['kem']) + 96 + _tail(s['keyData']) + _tail(s['signature']) + _member_sigs_len(s['members'])
+    if entry == 'registerMsig':
+        return 4 + 128 + 96 + 96 * len(a['structure']['members']) + _attrs_len(a['attrs']) + _member_sigs_len(a['pop']) + _tail(a['pqzPop'])
+    rest = _attrs_len(a['attrs']) + _tail(a['pop']) + _tail(a['pqzPop'])
+    k = a.get('key')
+    if entry == 'register':
+        return 4 + 160 + _tail(a['keyData']) + rest
+    if entry == 'registerWebAuthn':
+        return 4 + 192 + rest
+    if entry == 'registerMuSig2':
+        return 4 + 160 + 64 + _tail(k['aggKey']) + _bytes_arr(k['memberKeys']) + rest
+    if entry == 'registerFrost':
+        return 4 + 160 + 96 + _tail(k['groupKey']) + 32 + sum(32 + 96 + _bytes_arr(m['commitments']) + _tail(m['r'])
+                                                               for m in k['members']) + rest
+    raise ValueError(f'no calldata length for {entry}')
+
+
+_TYPED_ENTRY = {0x0100: 'registerWebAuthn', 0x0110: 'registerMuSig2', 0x0112: 'registerMuSig2', 0x0111: 'registerFrost',
+                0x0113: 'registerFrost', 0x0120: 'registerMsig'}
+
+
+def registration_args(kind, key_data, pqz_key=None, pqz_pop_hash=None, pqz_pop=None, kem_pk=None, pop=None, kem_commit=None):
+    """The registry call of a registration (TS-D10 … TS-D13), as clientkeys registrationArgs: ``(args, kem_fill)``, ``args``
+    the named arguments with ``entry`` — ``register(kind, keyData, attrs, pop, pqzPop)``, ``registerMsig(structure, attrs, pop,
+    pqzPop)``, ``registerWebAuthn(key, attrs, pop, pqzPop)`` or ``registerMuSig2`` / ``registerFrost(kind, key, attrs, pop,
+    pqzPop)`` — with ``attrs = {pqzKey, pqzPopHash, kem: KemKey, kemPkHash}``. The KEM key is version 0 (owner 2026-10-31):
+    in full (``kemPkHash`` 0), or, only when the full call is over REGISTER_CALLDATA_LIMIT (X0: PQZH n2560-kmax16384 with a
+    PQZ key) or ``kem_commit=True``, the hash commit (``kem = {scheme, 0x, 0}``, ``kemPkHash = keccak256(kemPk)``) and then
+    ``kem_fill = setKemKey(ua, 0, kem, UASig())``, open to anyone (the pop signed the same record). ``kem_commit=False``
+    forces the full key. ``pop``: the signer's signature bytes, or for an msig (index, key_data, sig) member tuples."""
+    key_data = _bytes(key_data)
+    has = lambda v: v is not None and len(v) > 0
+    pop_hash = _proof_hash_of(pqz_pop, pqz_pop_hash) if has(pqz_key) or has(pqz_pop_hash) else bytes(32)
+    attrs = {'pqzKey': _hx(pqz_key or b''), 'pqzPopHash': _hx(pop_hash), 'kem': kem_key_of(kem_pk), 'kemPkHash': _ZW}
+    entry = _TYPED_ENTRY.get(kind, 'register')
+    tail = {'attrs': attrs, 'pqzPop': _hx(pqz_pop or b'')}
+    if entry == 'registerMsig':
+        args = {'entry': entry, 'structure': msig_structure(key_data), **tail, 'pop': _member_sigs(pop or ())}
+    elif entry == 'registerWebAuthn':
+        args = {'entry': entry, 'key': typed_key(kind, key_data), **tail, 'pop': _hx(pop or b'')}
+    elif entry == 'register':
+        args = {'entry': entry, 'kind': kind, 'keyData': _hx(key_data), **tail, 'pop': _hx(pop or b'')}
+    else:
+        args = {'entry': entry, 'kind': kind, 'key': typed_key(kind, key_data), **tail, 'pop': _hx(pop or b'')}
+    full = _bytes(kem_pk) if kem_pk is not None else b''
+    commit = kem_commit if kem_commit is not None else registry_calldata_length(entry, args) > REGISTER_CALLDATA_LIMIT
+    if not full or not commit:
+        return args, None
+    args['attrs'] = {**attrs, 'kem': {'scheme': full[0], 'mlkemEk': '0x', 'x25519': _ZW}, 'kemPkHash': _hx(keccak256(full))}
+    return args, set_kem_key_args(ua_of(kind, key_data), 0, full, ua_sig())

@@ -7,12 +7,14 @@ import {stdJson} from "forge-std/StdJson.sol";
 import {IZetherVerifier, IZetherBurnVerifier} from "../../src/zether/IZetherVerifier.sol";
 import {ZetherVerifiers} from "./helpers/ZetherVerifiers.sol";
 import {ZetherTranscript as T} from "../../src/zether/ZetherTranscript.sol";
+import {G1Bls12381} from "../../src/zether/ZetherCurves.sol";
 import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
 import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {ZetherSchnorrBls12381Verifier} from "../../src/ua/verifiers/PairingVerifiers.sol";
+import {UACall} from "../ua/UACall.sol";
 
 /// Token views `ZetherDisclosure` reads, etched at a vector's token address.
 contract S3Token {
@@ -47,7 +49,10 @@ contract ZetherS3VectorsTest is Test {
     enum Op { TRANSFER, BURN, MULTI }
 
     function _ok(IZetherVerifier v, bytes memory st, bytes memory pr, Op op) internal view returns (bool) {
-        try this.verify{gas: 60_000_000}(v, st, pr, op) returns (bool ok) { return ok; } catch { return false; }
+        try this.verify{gas: 60_000_000}(v, st, pr, op) returns (bool ok) { return ok; } catch (bytes memory e) {
+            assertTrue(e.length == 4 && bytes4(e) == G1Bls12381.BadPoint.selector, "a revert other than BadPoint");
+            return false;
+        }
     }
 
     function verify(IZetherVerifier v, bytes memory st, bytes memory pr, Op op) external view returns (bool) {
@@ -301,14 +306,14 @@ contract ZetherS3VectorsTest is Test {
                 abi.encode(keccak256(abi.encode("s3 chain", i)), address(0), false, uint64(12_000_000), address(0), false, k), at);
             IUARegistry reg = IUARegistry(at);
             assertEq(reg.uaOf(kind, y), ua);
-            bytes32 d = reg.portablePopDigest(ua, 0, 0);
-            assertEq(d, j.readBytes32(string.concat(key, ".pop.popDigest")));
-            bytes32 rd = reg.registrationDigest(d, 0);
+            bytes32 kh = reg.kemRecordHash(ua, 0, UACall.kem(""));
+            assertEq(reg.portableRecordDigest(ua, kind, 0, kh), j.readBytes32(string.concat(key, ".pop.popDigest")));
+            bytes32 rd = reg.registrationDigest(ua, kind, 0, kh, 0);
             assertEq(rd, j.readBytes32(string.concat(key, ".pop.registrationDigest")));
             assertEq(reg.uaMessage(kind, UAKinds.PURPOSE_POP_V2, rd), j.readBytes32(string.concat(key, ".pop.uaMsg")));
             vm.expectRevert(IUARegistry.UAPoP.selector);
-            reg.register(kind, y, IUARegistry.UAAttrs("", 0, 0, ""), _flip(pop, pop.length - 1), "");
-            assertEq(reg.register(kind, y, IUARegistry.UAAttrs("", 0, 0, ""), pop, ""), ua);
+            UACall.register(reg, kind, y, UACall.attrs("", 0, ""), _flip(pop, pop.length - 1), "");
+            assertEq(UACall.register(reg, kind, y, UACall.attrs("", 0, ""), pop, ""), ua);
             assertEq(reg.keyOf(ua), y);
         }
     }

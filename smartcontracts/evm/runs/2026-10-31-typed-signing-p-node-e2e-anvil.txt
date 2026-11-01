@@ -1,0 +1,46 @@
+# node-e2e-anvil at commit 80f45c56
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.28s
+     Running tests/e2e.rs (target/debug/deps/e2e-f5e08e3069fb3f57)
+
+running 6 tests
+test a_peer_landing_our_intent_makes_the_job_consumed_never_dead ... ok
+test dex_fill_below_half_settles_on_anvil ... [2m2026-10-31T18:27:54.504050Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m submit ready [3mchain[0m[2m=[0m31951 [3mchain_uid[0m[2m=[0m0xea944a561e212330aede952053dff0b51c070981f9b73cb41fe6bbcfebf0aade [3mnext[0m[2m=[0m0 [3mtracked[0m[2m=[0m0
+[2m2026-10-31T18:27:54.511563Z[0m [32m INFO[0m [2mscaas_node::dex::venue[0m[2m:[0m dex book loaded [3mchain[0m[2m=[0m31951 [3morders[0m[2m=[0m0
+ok
+test dex_order_book_settles_partial_fills_persists_and_cancels ... No files changed, compilation skipped
+[2m2026-10-31T18:28:07.064606Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m submit ready [3mchain[0m[2m=[0m31950 [3mchain_uid[0m[2m=[0m0x5a7e686ad9bda5a74ec59565c658a5f8d4f6d7eaac9d59df76e5c0ed5050b1a9 [3mnext[0m[2m=[0m0 [3mtracked[0m[2m=[0m0
+[2m2026-10-31T18:28:07.074735Z[0m [32m INFO[0m [2mscaas_node::dex::venue[0m[2m:[0m dex book loaded [3mchain[0m[2m=[0m31950 [3morders[0m[2m=[0m0
+[2m2026-10-31T18:28:07.411968Z[0m [32m INFO[0m [2mscaas_node::dex::venue[0m[2m:[0m dex book loaded [3mchain[0m[2m=[0m31950 [3morders[0m[2m=[0m1
+[2m2026-10-31T18:28:07.429141Z[0m [33m WARN[0m [2mscaas_node::dex::venue[0m[2m:[0m dex_book_commit: blockchain.dex.order.dex_book_commit: HTTP 500 Internal Server Error: {"error":"db down"}; reloading the book from the client [3mchain[0m[2m=[0m31950
+[2m2026-10-31T18:28:07.792171Z[0m [32m INFO[0m [2mscaas_node::dex::venue[0m[2m:[0m dex book loaded [3mchain[0m[2m=[0m31950 [3morders[0m[2m=[0m1
+ok
+test evm_adapter_runs_the_generic_lane_runner_on_two_mnemonic_lanes ... ok
+test outbox_payment_reaches_chain_and_comes_back_final ... [2m2026-10-31T18:28:31.686765Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m submit ready [3mchain[0m[2m=[0m31901 [3mchain_uid[0m[2m=[0m0x45c165d824e9d25463a07af8b683f0851b274ad242d291777a2a3c63c6fe79a0 [3mnext[0m[2m=[0m0 [3mtracked[0m[2m=[0m0
+[2m2026-10-31T18:28:31.805287Z[0m [32m INFO[0m [2mscaas_node::indexer[0m[2m:[0m ingested [3mchain[0m[2m=[0m31901 [3mfrom[0m[2m=[0m1 [3mto[0m[2m=[0m37 [3mcreated[0m[2m=[0m0
+[2m2026-10-31T18:28:31.807308Z[0m [32m INFO[0m [2mscaas_node::drift[0m[2m:[0m balance drift reported [3mchain[0m[2m=[0m31901 [3mheight[0m[2m=[0m37 [3mmismatch[0m[2m=[0m0
+[2m2026-10-31T18:28:31.809766Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m submit ready [3mchain[0m[2m=[0m31901 [3mchain_uid[0m[2m=[0m0x45c165d824e9d25463a07af8b683f0851b274ad242d291777a2a3c63c6fe79a0 [3mnext[0m[2m=[0m1 [3mtracked[0m[2m=[0m0
+[2m2026-10-31T18:28:31.811099Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m circuit breaker open: new work paused [3mchain[0m[2m=[0m31901 [3mlane[0m[2m=[0me2e-2 [3mbreaker[0m[2m=[0m"balance_floor"
+[2m2026-10-31T18:28:31.817189Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m meta-tx nonce consumed [3mjob[0m[2m=[0mSome(2) [3mfrom[0m[2m=[0m0x000000000000000000000000e05fcc23807536bee418f142d19fa0d21bb0cff7 [3mnonce[0m[2m=[0m0 [3mkind[0m[2m=[0m"landed"
+[2m2026-10-31T18:28:31.820678Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m simulation refused: CALL_TARGET_REFUSED: 0xa9059cbb is not in the call table [3mjob[0m[2m=[0mSome(3)
+[2m2026-10-31T18:28:31.821605Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m simulation refused: TOKEN_NOT_SERVED: 0x9999999999999999999999999999999999999999 is not a registered token of this chain [3mjob[0m[2m=[0mSome(4)
+[2m2026-10-31T18:28:31.827491Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m simulation refused: SELECTOR_NOT_ALLOWED: 0xa9059cbb is not on the contract's allowlist [3mjob[0m[2m=[0mSome(5)
+[2m2026-10-31T18:28:32.060529Z[0m [32m INFO[0m [2mscaas_node::indexer[0m[2m:[0m ingested [3mchain[0m[2m=[0m31901 [3mfrom[0m[2m=[0m38 [3mto[0m[2m=[0m39 [3mcreated[0m[2m=[0m0
+[2m2026-10-31T18:28:32.068460Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m submit ready [3mchain[0m[2m=[0m31901 [3mchain_uid[0m[2m=[0m0x45c165d824e9d25463a07af8b683f0851b274ad242d291777a2a3c63c6fe79a0 [3mnext[0m[2m=[0m3 [3mtracked[0m[2m=[0m0
+[2m2026-10-31T18:28:32.190051Z[0m [32m INFO[0m [2mscaas_node::indexer[0m[2m:[0m ingested [3mchain[0m[2m=[0m31901 [3mfrom[0m[2m=[0m40 [3mto[0m[2m=[0m40 [3mcreated[0m[2m=[0m0
+ok
+test ua_pay_meta_and_relay_fee_jobs_on_anvil ... [2m2026-10-31T18:28:43.787907Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m submit ready [3mchain[0m[2m=[0m31905 [3mchain_uid[0m[2m=[0m0xc4443ac6a455cd72b6dc5c11ea96799c14385542b9b9b6f2fa8b195801cb0c1b [3mnext[0m[2m=[0m0 [3mtracked[0m[2m=[0m0
+[2m2026-10-31T18:28:43.927117Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m transient, requeue: RELAY_FEE_REFUSED: fee 1 x min_wei_value 100000000000/1 wei is below the quote 8223177866756 wei (gas limit 297782 x fee ceiling 27614758 + 2 x L1 fee 0) [3mjob[0m[2m=[0mSome(2)
+[2m2026-10-31T18:28:44.062906Z[0m [32m INFO[0m [2mscaas_node::indexer[0m[2m:[0m ingested [3mchain[0m[2m=[0m31905 [3mfrom[0m[2m=[0m1 [3mto[0m[2m=[0m40 [3mcreated[0m[2m=[0m0
+[2m2026-10-31T18:28:44.070779Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m submit ready [3mchain[0m[2m=[0m31905 [3mchain_uid[0m[2m=[0m0xc4443ac6a455cd72b6dc5c11ea96799c14385542b9b9b6f2fa8b195801cb0c1b [3mnext[0m[2m=[0m2 [3mtracked[0m[2m=[0m0
+[2m2026-10-31T18:28:45.203035Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m replaced [3mnonce[0m[2m=[0m2
+[2m2026-10-31T18:28:46.311794Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m replaced [3mnonce[0m[2m=[0m2
+[2m2026-10-31T18:28:47.423916Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m replaced [3mnonce[0m[2m=[0m2
+[2m2026-10-31T18:28:48.531516Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m stuck at the fee cap; waiting [3mnonce[0m[2m=[0m2
+[2m2026-10-31T18:28:49.637714Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m stuck at the fee cap; waiting [3mnonce[0m[2m=[0m2
+[2m2026-10-31T18:28:50.742826Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m stuck at the fee cap; waiting [3mnonce[0m[2m=[0m2
+[2m2026-10-31T18:28:51.848482Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m stuck at the fee cap; waiting [3mnonce[0m[2m=[0m2
+ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 89.45s
+
+rc=0

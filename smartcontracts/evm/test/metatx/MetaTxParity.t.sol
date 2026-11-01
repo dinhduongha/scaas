@@ -887,7 +887,9 @@ abstract contract ParityCases is ParityIO {
         m = _pUm(k, MetaTxLib.pad(P_SHP), _pAmt(k, 1_000), 0, P_RR, 0, address(0));
         _pUx(k, "err_idShieldPool", "", m, hex"00", k.relayer);
         m = _pUm(k, bytes32(uint256(1) << 200), _pAmt(k, 1_000), 0, P_RR, 0, address(0));
-        _pUx(k, "err_idUnregisteredDerived", "", m, hex"00", k.relayer);
+        // typed-signing R1: the token decodes `auth` as `abi.encode(keyData, sig)` for the registry's `UASig` (until C2), so
+        // the junk signature travels in that frame; the registry still answers UAUnauthorized for an unregistered id
+        _pUx(k, "err_idUnregisteredDerived", "", m, abi.encode(bytes(""), hex"00"), k.relayer);
         // step 3
         _pU(k, "err_unknownOp_cancelNonce", _pUm(k, s, _pCancel(7), 0, P_RR, 0, address(0)));
         _pU(k, "err_unknownOp_transfer", _pUm(k, s, abi.encodeCall(IERC20.transfer, (k.payee, 1)), 0, P_RR, 0, address(0)));

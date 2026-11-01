@@ -14,6 +14,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 import {ZetherTranscript} from "../../src/zether/ZetherTranscript.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
+import {UACall} from "../ua/UACall.sol";
 
 /// @notice The whole life of a `NORMAL_ZETHER` token (a factory clone, the real verifier, real proofs from the test
 ///         prover), on BLS12-381 (the only classical Zether curve since UA-6): shield from the public balance, transfer,
@@ -658,7 +659,7 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
         tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, wrong);
         bytes memory sig = _ownerAuth(alice, d);
-        vm.expectCall(address(reg), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_ZETHER_OWNER, d, sig)));
+        vm.expectCall(address(reg), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_ZETHER_OWNER, d, UACall.auth(ua, sig))));
         tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, sig);
         _fund(tok, alice, 10);
         d = keccak256(bytes.concat(
@@ -666,7 +667,7 @@ abstract contract ZetherNormalSuite is ZetherFixture {
             abi.encode(alice.ua, uint64(0), uint64(1), until)
         ));
         sig = _ownerAuth(alice, d);
-        vm.expectCall(address(reg), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_ZETHER_OWNER, d, sig)));
+        vm.expectCall(address(reg), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_ZETHER_OWNER, d, UACall.auth(ua, sig))));
         tok.mtxRollOverSigned(alice.ua, 1, until, sig);
         assertEq(tok.accountState(alice.ua).accSeq, 1);
     }
@@ -677,15 +678,13 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         uint256 x = 0xBEEF1;
         bytes memory y = ZetherKeys.pub(x, false);
         bytes32 other = reg.uaOf(UAKinds.SCHNORR_BN254, y);
-        bytes32 pd = UAKinds.registrationDigest(UAKinds.portablePopDigest(other, 0, 0), 0); // UA-8: portable
+        bytes32 pd = UAKinds.registrationDigest(other, UAKinds.SCHNORR_BN254, 0, UAKinds.kemRecordHash(other, 0, ""), 0); // UA-8: portable
         vm.prank(address(0xB0B));
-        reg.register(
-            UAKinds.SCHNORR_BN254,
+        UACall.register(reg, UAKinds.SCHNORR_BN254,
             y,
-            IUARegistry.UAAttrs("", 0, 0, ""),
+            UACall.attrs("", 0, ""),
             ZetherKeys.sign("scaas.ua.schnorr.v1", x, reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_POP_V2, pd), false),
-            ""
-        );
+            "");
         _refusedOwnerOps(other, x);
         _refusedOwnerOps(keccak256("unregistered"), x);
     }

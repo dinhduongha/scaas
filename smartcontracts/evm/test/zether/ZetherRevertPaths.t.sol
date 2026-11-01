@@ -26,6 +26,7 @@ import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
+import {UACall} from "../ua/UACall.sol";
 
 /// `NORMAL_ZETHER` with one guarded call-out to the caller (`reenter`): a frame that holds the guard.
 contract GuardHarness is NormalZetherToken {
@@ -107,7 +108,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         bytes memory bnKey = ZetherKeys.pub(0x7777, false);
         ZetherTypes.UA bnUa = ZetherTypes.toUA(bnKey);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, uint16(0x0140)));
-        reg.register(0x0140, bnKey, IUARegistry.UAAttrs("", 0, 0, ""), "", "");
+        UACall.register(reg, 0x0140, bnKey, UACall.attrs("", 0, ""), "", "");
         assertFalse(tok.registered(bnUa));
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, bnUa));
         tok.mtxShield(ZetherTypes.UA.unwrap(ZetherTypes.toUA(bnKey)), 1);
@@ -383,7 +384,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
 
     /// Every proof path goes through the release's verifiers (CTR-ZTH-20): a single and a multi-recipient transfer
     /// through the transfer verifier, an unshield through the burn verifier, each exactly once, and every range proof
-    /// through the inner-product verifier the two fix.
+    /// through the inner-product verifier the two fix, in the one merged check of each op (CTR-ZTH-53).
     function test_everyProofPathUsesThePinnedVerifiers() public {
         _fund(tok, alice, 100);
         tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
@@ -394,8 +395,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         address ip = address(ZetherVerifierBase(address(ver)).innerProduct());
         assertEq(ip, address(ZetherVerifierBase(address(burnVer)).innerProduct()), "one inner-product verifier");
         for (uint256 i; i < 3; ++i) vm.expectCall(i == 2 ? address(burnVer) : address(ver), abi.encodePacked(checks[i]), 1);
-        // BP(v), BP(b'); BP(v_1), BP(b'); BP(b')
-        vm.expectCall(ip, abi.encodePacked(IZetherInnerProductVerifier.verifyRange.selector), 5);
+        vm.expectCall(ip, abi.encodePacked(IZetherInnerProductVerifier.verifyFold.selector), 3);
         for (uint256 i; i < 3; ++i) {
             (bool ok,) = address(tok).call(_zetherOpCall(ops[i], 100 - 10 * i, 0));
             assertTrue(ok, "honest op");

@@ -1,5 +1,7 @@
-//! The UA words (CTR-UA-04, -12, -23; UA8-D1), byte-identical to EVM `UAKinds`, over the host's `keccak256`.
-use scaas_ua_common::{h32, PURPOSE_POP_V2};
+//! The UA words (CTR-UA-04, -12, -23; UA8-D1), byte-identical to EVM `UAKinds`, over the host's `keccak256`. The typed
+//! portable records (typed-signing TS-D1) are in `scaas_ua_common` (the token / mandate / DEX / relay-fee tests register
+//! UAs by them too); the raw UA-8 digests they replace are in `legacy/typed-signing/`.
+use scaas_ua_common::h32;
 use soroban_sdk::{crypto::Hash, panic_with_error, Bytes, BytesN, Env};
 
 use crate::Error;
@@ -70,14 +72,4 @@ pub fn pq_message(env: &Env, kind: u32, ua_msg: &Hash<32>) -> Bytes {
 /// An `msig` member signs `ua_message(member kind, PURPOSE_MEMBER, keccak256(structureUA ‖ ua_msg))`.
 pub fn member_digest(env: &Env, structure_ua: &BytesN<32>, ua_msg: &Hash<32>) -> BytesN<32> {
     keccak(env, &[&structure_ua.to_array(), &ua_msg.to_array()]).into()
-}
-
-/// UA8-D1: `keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)` (each hash 0 when absent).
-pub fn portable_pop_digest(env: &Env, ua: &BytesN<32>, pqz_key_hash: &BytesN<32>, kem_record_hash: &BytesN<32>) -> BytesN<32> {
-    keccak(env, &[&PURPOSE_POP_V2, &ua.to_array(), &pqz_key_hash.to_array(), &kem_record_hash.to_array()]).into()
-}
-
-/// UA8-D1: `keccak256(portablePopDigest ‖ pqzPopHash)`; the `pop` signs `ua_message(kind, PURPOSE_POP_V2, ·)` of it.
-pub fn registration_digest(env: &Env, portable: &BytesN<32>, pqz_pop_hash: &BytesN<32>) -> BytesN<32> {
-    keccak(env, &[&portable.to_array(), &pqz_pop_hash.to_array()]).into()
 }

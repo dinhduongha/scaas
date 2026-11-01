@@ -173,9 +173,10 @@ export function memberSigs(blob) {
     return { index: wordAt(b, t), keyData: bytesAt(b, t, t + 32), sig: bytesAt(b, t, t + 64) };
   });
 }
-/** An msig signature: indices strictly increasing, each member verifies over `memberDigest` (derived members by key data
- *  from `keyOf`, under `member`; a native member by EIP-191 personal_sign, no key data), weight at least the threshold. */
-export function msigOk(r, md, blob, keyOf) {
+/** An msig signature: indices strictly increasing, each member verifies (derived members over `memberDigest` by key data
+ *  from `keyOf`, under `member`; a native member by ECDSA over `nativeDigest`, no key data: the portable record's typed
+ *  digest, typed-signing TS-D4; without one a native member is refused), weight at least the threshold. */
+export function msigOk(r, md, blob, keyOf, nativeDigest) {
   let weight = 0;
   let last = -1;
   for (const s of memberSigs(blob)) {
@@ -183,7 +184,7 @@ export function msigOk(r, md, blob, keyOf) {
     if (!m || s.index <= last) return false;
     last = s.index;
     const ok = ua.isNativeKind(m.kind)
-      ? s.keyData.length === 0 && nativeOk(`0x${m.id.slice(26)}`, ua.personalSignDigest(B(md)), hex(s.sig))
+      ? s.keyData.length === 0 && nativeDigest !== undefined && nativeOk(`0x${m.id.slice(26)}`, typeof nativeDigest === 'string' ? B(nativeDigest) : nativeDigest, hex(s.sig))
       : s.keyData.length === 0 && sigOk(m.kind, keyOf(m.id), hex(ua.uaMessage(m.kind, ua.purposeTag('member'), B(md))), hex(s.sig));
     if (!ok) return false;
     weight += m.weight;

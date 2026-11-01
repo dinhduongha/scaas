@@ -168,8 +168,9 @@ export function schnorrVerify(curve, Ybytes, msg, sig) {
 
 /**
  * The `pop` of `UARegistry.register(0x0141, Y, attrs = none, pop, "")` (UA-8 P1, the portable PoP): Schnorr by `x` under the
- * Zether tag over `uaMessage(0x0141, POP_V2, registrationDigest(portablePopDigest(UA, 0, 0), 0))` (a Zether UA holds no PQZ
- * key and no KEM key). No chain id, chain uid or registry: one PoP registers the UA on every chain, relayed by anyone.
+ * Zether tag over `uaMessage(0x0141, POP_V2, registrationDigest)`, the typed `UARegistration{UAPortableRecord{UA, 0x0141, 0,
+ * UAKemRecord{UA, 0, 0, 0}}, 0}` digest (typed-signing TS-D3; a Zether UA holds no PQZ key and no KEM key); `popDigest` is
+ * the typed `UAPortableRecord` digest. No chain id, chain uid or registry: one PoP registers the UA on every chain, relayed by anyone.
  * The chain-bound form before UA-8 is `zetherPopV1` in legacy/ua8/ua-pop-v1.js. Curve first, as every function of this
  * module (`zetherSign(curve, x, …)`); an old caller still passing the chain context gets an error, not a silent drop.
  */
@@ -178,7 +179,7 @@ export function zetherPop(curve, x, ...rest) {
   const kind = zetherKind(curve);
   const { Y, UA } = confPublic(curve, x);
   const p = holderPopMessage(kind, { ua: UA });
-  return { kind, Y, UA, popDigest: hex(p.portablePopDigest), registrationDigest: hex(p.registrationDigest), uaMsg: hex(p.message),
+  return { kind, Y, UA, popDigest: hex(p.portableRecordDigest), registrationDigest: hex(p.registrationDigest), uaMsg: hex(p.message),
     pop: hex(schnorrSign(curve, x, p.message)) };
 }
 
@@ -188,8 +189,9 @@ const ZETHER_PURPOSES = ['metatx', 'metatx-cancel', 'keyop', 'receiver-fee', 'vp
 /**
  * The `sig` a Zether UA gives every UA-ledger write (metatx, metatx-cancel, keyop, receiver-fee, vp, vc-anchor, trade,
  * zether-owner): Schnorr by `x` over `uaMessage(0x0141, purpose, digest)`, returned RAW as `R‖z` (160 bytes); the
- * registry reads `Y` from its record. `requireAuthorized` wants `abi.encode(bytes(""), sig)`: use `zetherOwnerAuth`
- * for the owner ops. Spends carry no signature: the proof alone authorizes them (UA-6).
+ * registry reads `Y` from its record. A token's `bytes auth` wants `abi.encode(bytes(""), sig)` (`zetherOwnerAuth` for
+ * the owner ops), `requireAuthorized` takes `UASig{signature: sig}` (`uaSig` in ua.js). Spends carry no signature: the
+ * proof alone authorizes them (UA-6).
  */
 export function zetherSign(curve, x, purpose, digest) {
   if (purpose === 'pop') throw new Error('the PoP has its own signer: zetherPop');

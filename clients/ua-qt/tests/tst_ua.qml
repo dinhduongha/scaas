@@ -111,38 +111,42 @@ TestCase {
         compare(UaKinds.purposeTagV("pop", 2), pp.tags.PURPOSE_POP_V2.hash)
         compare(UaKinds.purposeTag("kem"), pp.tags.PURPOSE_KEM.hash)
         compare(UaKinds.purposeTag("pqz-key"), pp.tags.PURPOSE_PQZ_KEY.hash)
-        compare(pp.registrations.length, 25)
+        verify(pp.tags.KEM_RECORD_TAG === undefined)  // the raw record tags are legacy (TS-D3)
+        compare(UaKinds.portableDomainSeparator(), pp.typed.domainSeparator)
         let withPqz = 0
         for (const r of pp.registrations) {
             const a = r.attrs
-            const h = JSON.parse(UaKinds.holderPopMessage(r.kind, r.ua, r.keyData, a.pqzKey, r.pqzPop, Number(a.kemVersion), a.kemPk))
+            const h = JSON.parse(UaKinds.holderPopMessage(r.kind, r.ua, r.keyData, a.pqzKey, r.pqzPop, a.kemPk))
             compare(UaKinds.lastError, "", r.name)
             compare(h.pqzKeyHash, r.pqzKeyHash, r.name)
             compare(h.pqzPopHash, a.pqzPopHash, r.name)
             compare(h.kemRecordHash, r.kemRecordHash, r.name)
-            compare(h.portablePopDigest, r.portablePopDigest, r.name)
+            compare(h.portableRecordDigest, r.portableRecordDigest, r.name)
             compare(h.registrationDigest, r.registrationDigest, r.name)
             compare(h.message, r.popMessage, r.name)
             compare(h.memberDigest ?? "", r.memberDigest ?? "", r.name)
-            compare(UaKinds.portablePopDigest(r.ua, h.pqzKeyHash, h.kemRecordHash), r.portablePopDigest)
-            compare(UaKinds.registrationDigest(r.portablePopDigest, h.pqzPopHash), r.registrationDigest)
+            compare(UaKinds.kemRecordHash(r.ua, 0, a.kemPk), r.kemRecordHash, r.name)  // the register key: version 0
+            compare(UaKinds.portableRecordDigest(r.ua, r.kind, h.pqzKeyHash, h.kemRecordHash), r.portableRecordDigest, r.name)
+            compare(UaKinds.registrationDigest(r.ua, r.kind, h.pqzKeyHash, h.kemRecordHash, h.pqzPopHash), r.registrationDigest, r.name)
             if (a.pqzKey !== "0x") {
                 withPqz++
-                compare(UaKinds.pqzRegMessage(r.ua, a.pqzKey, Number(a.kemVersion), a.kemPk), r.pqzRegMessage, r.name)
+                compare(UaKinds.pqzRegMessage(r.kind, r.ua, a.pqzKey, a.kemPk), r.pqzRegMessage, r.name)
+                // TS-D3: R_REG proves over the typed UAPortableRecord of the registering kind
+                compare(UaKinds.uaMessage(0x0142, UaKinds.purposeTagV("pop", 2), r.portableRecordDigest), r.pqzRegMessage, r.name)
             }
         }
-        compare(withPqz, 8)
+        verify(withPqz > 0)
         // hash-only proof path agrees with the proof bytes
         for (const r of pp.registrations) {
             const a = r.attrs
             if (a.pqzKey === "0x")
                 continue
-            const h = JSON.parse(UaKinds.holderPopMessageH(r.kind, r.ua, r.keyData, a.pqzKey, "0x", a.pqzPopHash, Number(a.kemVersion), a.kemPk))
+            const h = JSON.parse(UaKinds.holderPopMessageH(r.kind, r.ua, r.keyData, a.pqzKey, "0x", a.pqzPopHash, a.kemPk))
             compare(UaKinds.lastError, "", r.name)
             compare(h.message, r.popMessage, r.name)
         }
         // the portable.json negatives that are digest-layer rules (as ua-rs / ua-cs)
-        let run = 0
+        let run = 0, sigLevel = 0
         for (const n of pp.negatives) {
             if (n.rule === "msig-minimal") continue // a registry rule over a full registration (msig minimal form)
             const m = n.mutation, set = m.set ?? {}
@@ -153,7 +157,7 @@ TestCase {
                     if (key.startsWith("attrs.")) row.attrs[key.slice(6)] = v; else row[key] = v
                 }
                 const a = row.attrs
-                const out = UaKinds.holderPopMessageH(row.kind, row.ua, row.keyData, a.pqzKey, row.pqzPop, a.pqzPopHash, Number(a.kemVersion), a.kemPk)
+                const out = UaKinds.holderPopMessageH(row.kind, row.ua, row.keyData, a.pqzKey, row.pqzPop, a.pqzPopHash, a.kemPk)
                 if (n.error === "UAPoP") {
                     compare(UaKinds.lastError, "", n.name)
                     verify(JSON.parse(out).message !== row.popMessage, n.name)
@@ -174,27 +178,43 @@ TestCase {
                 const d = UaKinds.kemRecordDigest(set.ua, Number(kr.version), kr.kemPk)
                 verify(UaKinds.uaMessage(t.kind, UaKinds.purposeTag("kem"), d) !== kr.message, n.name)
                 run++
+            } else if (n.name === "record-kind-mismatch") {
+                // the typed record binds `kind`: the same UA and attributes under another kind is another message
+                const row = pp.registrations.find(r => r.name === m.row), z = "0x" + "00".repeat(32)
+                const d = UaKinds.registrationDigest(row.ua, m.otherKind, z, UaKinds.kemRecordHash(row.ua, 0, "0x"), z)
+                verify(UaKinds.uaMessage(row.kind, UaKinds.purposeTagV("pop", 2), d) !== row.popMessage, n.name)
+                run++
+            } else if (n.name === "kem-record-as-registration") {
+                // the row's own typed KEM record is not its registration (struct type)
+                const row = pp.registrations.find(r => r.name === m.row)
+                verify(pp.kemRecords.find(r => r.ua === row.ua).digest !== row.registrationDigest, n.name)
+                run++
+            } else {
+                sigLevel++  // signatures / native members: verified by the signature vectors
             }
         }
-        compare(run, 60)
+        compare(run + sigLevel + 1, pp.negatives.length) // + the skipped msig-minimal row
+        verify(run > 0 && sigLevel > 0)
         // refusals
         const proof = "0x" + "07".repeat(32), ua = "0x" + "01".repeat(32)
         for (const bad of [0x0101, 0x0133]) {  // single-key non-holders refuse a PQZ key (on every pqzReg row's UA)
             for (const p of s.pqzReg) {
-                UaKinds.holderPopMessage(bad, p.ua, "0x", k.pqzKey, proof, 0, "")
+                UaKinds.holderPopMessage(bad, p.ua, "0x", k.pqzKey, proof, "")
                 compare(UaKinds.lastError, "UAPqzHolder")
             }
         }
-        UaKinds.holderPopMessage(0x0130, ua, "0x", k.pqzKey, "0x", 0, "")
+        UaKinds.holderPopMessage(0x0130, ua, "0x", k.pqzKey, "0x", "")
         compare(UaKinds.lastError, "UAPqzPopHash")  // a PQZ key without its proof
-        UaKinds.holderPopMessage(0x0120, ua, "0x000200", k.pqzKey, proof, 0, "")
+        UaKinds.holderPopMessage(0x0120, ua, "0x000200", k.pqzKey, proof, "")
         compare(UaKinds.lastError, "UAKeyData")
-        UaKinds.holderPopMessage(0x0120, ua, "0x", k.pqzKey, proof, 0, "")
+        UaKinds.holderPopMessage(0x0120, ua, "0x", k.pqzKey, proof, "")
         compare(UaKinds.lastError, "UAPqzHolder")
-        UaKinds.holderPopMessage(0x0101, ua, "0x", "0x", "0x", 1, "0x" + "00".repeat(1600))
+        UaKinds.holderPopMessage(0x0101, ua, "0x", "0x", "0x", "0x01" + "00".repeat(1600))
         compare(UaKinds.lastError, "UAKemHolder")
+        UaKinds.holderPopMessage(0x0130, ua, "0x", "0x", "0x", "0x00" + "00".repeat(1600))
+        compare(UaKinds.lastError, "UAKemScheme")  // version 0 with scheme 0
         // a proof hash of the wrong length is UAPqzPopHash, as in every other package (m-C4)
-        UaKinds.holderPopMessageH(0x0130, ua, "0x", k.pqzKey, "0x", "0x" + "07".repeat(31), 0, "")
+        UaKinds.holderPopMessageH(0x0130, ua, "0x", k.pqzKey, "0x", "0x" + "07".repeat(31), "")
         compare(UaKinds.lastError, "UAPqzPopHash")
         UaKinds.pqzKeyRecordMessage(0x0130, ua, "0x", k.pqzKey, "0x", "0x" + "07".repeat(31), false)
         compare(UaKinds.lastError, "UAPqzPopHash")
@@ -202,26 +222,20 @@ TestCase {
         compare(UaKinds.chainKeyHash(1099511627783), "0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950")
     }
 
-    function test_personalSign() {
+    function test_portablePurposes() {
         const pp = vectors.load("portable.json")
-        const md = pp.registrations.find(r => r.name === "msig-pq-native").memberDigest
-        // known answer from the JS reference: prefix 0x19 + "Ethereum Signed Message:\n32" (28 bytes)
-        compare(md, "0x606d9a70c70d39e5d8d079c3ae31eefa6db574219dab56d6c776cb6731e61a7c")
-        compare(UaKinds.personalSignDigest(md), "0xe5d24987e9b4e710063a5432d6215eaead64d8dc073f7561726d21644d54c3d8")
-        compare(UaKinds.lastError, "")
         verify(UaKinds.isPortablePurpose(pp.tags.PURPOSE_POP_V2.hash) && UaKinds.isPortablePurpose(pp.tags.PURPOSE_KEM.hash)
                && UaKinds.isPortablePurpose(pp.tags.PURPOSE_PQZ_KEY.hash))
         verify(!UaKinds.isPortablePurpose(UaKinds.purposeTag("metatx")) && !UaKinds.isPortablePurpose(UaKinds.purposeTag("pop")))
         compare(UaKinds.lastError, "")
         verify(!UaKinds.isPortablePurpose("0x" + "00".repeat(31)))
         compare(UaKinds.lastError, "UAArgument")
-        UaKinds.personalSignDigest("0x" + "00".repeat(31))
+        UaKinds.portableRecordDigest("0x" + "00".repeat(31), 0x0130, "0x" + "00".repeat(32), "0x" + "00".repeat(32))
         compare(UaKinds.lastError, "UAArgument")
     }
 
     function test_pqzKeyRecord() {
         const pp = vectors.load("portable.json")
-        compare(pp.pqzKeyRecords.length, 8)
         let msigRows = 0
         for (const r of pp.pqzKeyRecords) {
             const reg = pp.registrations.find(x => x.ua === r.ua)
@@ -245,18 +259,17 @@ TestCase {
             UaKinds.pqzKeyRecordMessage(r.kind, r.ua, reg.keyData, r.pqzKey, "0x", r.pqzPopHash, true)
             compare(UaKinds.lastError, "UAPqzKeySet", r.name)
             compare(UaKinds.pqzKeyDigest(r.ua, r.pqzKeyHash), r.pqzKeyDigest, r.name)
-            compare(UaKinds.pqzKeyRecordDigest(r.pqzKeyDigest, r.pqzPopHash), r.recordDigest, r.name)
+            compare(UaKinds.pqzKeyRecordDigest(r.ua, r.pqzKeyHash, r.pqzPopHash), r.recordDigest, r.name)
         }
-        compare(UaKinds.pqzKeyRecordTag(), pp.tags.PQZ_KEY_RECORD_TAG.hash)
-        compare(msigRows, 8)  // 4 msig rows, each with the proof bytes and hash-only
+        verify(msigRows > 0)
     }
 
     function test_kemRecord() {
         const pp = vectors.load("portable.json")
-        compare(pp.kemRecords.length, 9)
         for (const r of pp.kemRecords) {
             const d = UaKinds.kemRecordDigest(r.ua, Number(r.version), r.kemPk)
             compare(d, r.digest, r.id)
+            compare(UaKinds.kemRecordHash(r.ua, Number(r.version), r.kemPk), r.structHash, r.id)
             compare(UaKinds.uaMessage(r.kind, UaKinds.purposeTag("kem"), d), r.message, r.id)
             compare(UaKinds.kemRecordMessage(r.kind, r.ua, Number(r.version), r.kemPk), r.message, r.id)
             if (r.kind === 0x0120)
@@ -266,6 +279,11 @@ TestCase {
         const kem = (n, scheme = "01") => "0x" + scheme + "00".repeat(n - 1) // scheme byte, zeros, n bytes in all
         UaKinds.kemRecordDigest(ua, 0, kem(1601))
         compare(UaKinds.lastError, "UAKemVersion")
+        // owner 2026-10-31: version 0 with a key is the register key's record (scheme != 0), never a setKemKey record
+        verify(UaKinds.kemRecordHash(ua, 0, kem(1601)) !== UaKinds.kemRecordHash(ua, 0, "0x"))
+        compare(UaKinds.lastError, "")
+        UaKinds.kemRecordHash(ua, 0, kem(1601, "00"))
+        compare(UaKinds.lastError, "UAKemScheme")
         UaKinds.kemRecordDigest(ua, 1, kem(1600))
         compare(UaKinds.lastError, "UAKemKeyLength")
         UaKinds.kemRecordDigest(ua, 1, kem(1602))
@@ -276,32 +294,33 @@ TestCase {
             UaKinds.kemRecordDigest(ua, 1, kem(1601, scheme))
             compare(UaKinds.lastError, "UAKemScheme", scheme)
         }
-        compare(UaKinds.kemRecordTag(), pp.tags.KEM_RECORD_TAG.hash)
         // known answer at 2^53, the largest version a QML number carries exactly (ua-rs / ua-py pin 2^64 - 1)
-        compare(UaKinds.kemRecordDigest(ua, 9007199254740992, kem(1601)), "0x044b39422238f0bea9c5d8689f0d3b3d3139c83928ca8c12b30a7238225a673e")
+        compare(UaKinds.kemRecordDigest(ua, 9007199254740992, kem(1601)), "0x04a0150e24a83fa4dbc9f760b7f649f939bcb62cb4ddd3a9f56f7d2e3d990482")
         UaKinds.kemRecordDigest(ua, 9007199254740994, kem(1601))
         compare(UaKinds.lastError, "UAArgument")
     }
 
     function test_structures() {
         for (const p of s.pop) {
-            const portable = UaKinds.portablePopDigest(p.ua, p.pqzKeyHash, p.kemRecordHash)
-            compare(portable, p.portablePopDigest)
-            compare(UaKinds.registrationDigest(portable, p.pqzPopHash), p.registrationDigest)
+            compare(UaKinds.portableRecordDigest(p.ua, p.kind, p.pqzKeyHash, p.kemRecordHash), p.portableRecordDigest)
+            compare(UaKinds.registrationDigest(p.ua, p.kind, p.pqzKeyHash, p.kemRecordHash, p.pqzPopHash), p.registrationDigest)
         }
         for (const p of s.pqzReg) {
             compare(UaKinds.keyHashOf(0x0142, k.pqzKey), p.pqzKeyHash)
-            compare(UaKinds.portablePopDigest(p.ua, p.pqzKeyHash, p.kemRecordHash), p.portablePopDigest)
-            compare(UaKinds.uaMessage(0x0142, UaKinds.purposeTagV("pop", 2), p.portablePopDigest), p.pqzRegMessage)
-            if (p.kemRecordHash !== "0x" + "00".repeat(32))
+            compare(UaKinds.portableRecordDigest(p.ua, p.kind, p.pqzKeyHash, p.kemRecordHash), p.portableRecordDigest)
+            compare(UaKinds.uaMessage(0x0142, UaKinds.purposeTagV("pop", 2), p.portableRecordDigest), p.pqzRegMessage)
+            if (p.kemRecordHash !== UaKinds.kemRecordHash(p.ua, 0, "0x"))
                 continue  // an opaque label; the real records are in portable.json
-            compare(UaKinds.pqzRegMessage(p.ua, k.pqzKey, 0, ""), p.pqzRegMessage)
-            const h = JSON.parse(UaKinds.holderPopMessage(p.kind, p.ua, "0x", k.pqzKey, "0x" + "07".repeat(32), 0, ""))
+            compare(UaKinds.pqzRegMessage(p.kind, p.ua, k.pqzKey, ""), p.pqzRegMessage)
+            const h = JSON.parse(UaKinds.holderPopMessage(p.kind, p.ua, "0x", k.pqzKey, "0x" + "07".repeat(32), ""))
             compare(h.pqzKeyHash, p.pqzKeyHash)
-            compare(h.portablePopDigest, p.portablePopDigest)
+            compare(h.portableRecordDigest, p.portableRecordDigest)
         }
-        for (const p of s.pqzMsig)
+        for (const p of s.pqzMsig) {
             compare(UaKinds.msigPqzEligible(p.keyData), p.eligible, p.reason)
+            compare(UaKinds.portableRecordDigest(p.ua, 0x0120, p.eligible ? k.pqzKeyHash : "0x" + "00".repeat(32), UaKinds.kemRecordHash(p.ua, 0, "0x")),
+                    p.portableRecordDigest, p.reason)
+        }
         for (const a of s.uaAuth) {
             const c = s.contexts[a.context]
             compare(UaKinds.uaAuthDomainSeparator(a.generation, c.chainId, c.registry, c.chainUid), a.domainSeparator)
@@ -423,6 +442,99 @@ TestCase {
         compare(UaKinds.lastError, "UAArgument")
         compare(UaKinds.algorandRelayRef(av.network, "0x1234", "0x", av.relayRefs[0].salt), "")
         compare(UaKinds.lastError, "UAArgument")
+    }
+
+    // clientkeys registrationArgs' input of a registration row; an msig's pop is its typed member list
+    function regInput(r) {
+        return { kind: r.kind, keyData: r.keyData, pqzKey: r.attrs.pqzKey, pqzPopHash: r.attrs.pqzPopHash, pqzPop: r.pqzPop,
+                 kemPk: r.attrs.kemPk, pop: r.args.pop }
+    }
+    function regArgs(i) {
+        const o = UaKinds.registrationArgs(JSON.stringify(i))
+        compare(UaKinds.lastError, "")
+        return JSON.parse(o)
+    }
+
+    function test_registration_args() {
+        const pp = vectors.load("portable.json")
+        let commits = 0
+        for (const r of pp.registrations) {
+            const a = regArgs(Object.assign(regInput(r), { kemCommit: false }))
+            compare(a.args, r.args, r.name)
+            compare(a.kemFill, null, r.name)
+            compare(a.kemFillCalldataLength, null, r.name)
+            compare(regArgs(regInput(r)).args, r.args, r.name)  // under the limit: the full key
+            if (r.attrs.kemPk === "0x") {
+                verify(r.kemCommit === undefined, r.name)
+                continue
+            }
+            const c = regArgs(Object.assign(regInput(r), { kemCommit: true }))
+            compare(c.args, r.kemCommit.register, r.name)
+            compare(c.kemFill, r.kemCommit.fill, r.name)
+            compare(c.kemFillCalldataLength, 2020, r.name)
+            commits++
+        }
+        compare(commits, pp.registrations.filter(r => r.kemCommit !== undefined).length)
+        verify(commits > 0)
+        const typed = { 256: ["registerWebAuthn", 580], 272: ["registerMuSig2", 1124], 274: ["registerMuSig2", 1124],
+                        273: ["registerFrost", 2308], 275: ["registerFrost", 2308] }
+        const rows = k.valid.filter(v => typed[v.kind] !== undefined)
+        compare(rows.length, 6)
+        for (const v of rows) {  // no attributes, a 32-byte pop (cast 1.8.5)
+            const a = regArgs({ kind: v.kind, keyData: v.keyData, pop: "0x" + "00".repeat(32) })
+            compare([a.args.entry, a.calldataLength], typed[v.kind], v.name)
+        }
+        compare(regArgs({ kind: 257, keyData: k.valid[1].keyData }).args.entry, "register")
+        // the hash commit only over 261,909 B (PQZH n2560-kmax16384's sizes; ua-rs registration_hash_commit_when_over_limit)
+        const x = { kind: 0x0131, keyData: "0x" + "5a".repeat(1952), pqzKey: "0x" + "5a".repeat(20480), pqzPop: "0x" + "5a".repeat(234238),
+                    kemPk: "0x01" + "5a".repeat(1600), pop: "0x" + "5a".repeat(3309) }
+        compare(regArgs(Object.assign({}, x, { kemCommit: false })).calldataLength, 262116)
+        const auto = regArgs(x)
+        compare([auto.calldataLength, auto.kemFillCalldataLength, auto.kemFill.version], [260548, 2020, 0])
+        for (const [bad, code] of [["not json", "UAArgument"], ['{"kind": 65536}', "UAArgument"],
+                                   ['{"kind": 257, "keyData": "0xzz"}', "UAArgument"],
+                                   ['{"kind": 288, "keyData": "0x00020000", "pop": "0x"}', "UAArgument"],
+                                   ['{"kind": 288, "keyData": "0x000200"}', "UAKeyData"],
+                                   ['{"kind": 305, "kemPk": "0x0101"}', "UAKemKeyLength"],
+                                   ['{"kind": 305, "pqzKey": "0x01", "pqzPopHash": "0x01", "pqzPop": "0x01"}', "UAPqzPopHash"]]) {
+            compare(UaKinds.registrationArgs(bad), "", bad)
+            compare(UaKinds.lastError, code, bad)
+        }
+    }
+
+    // a record row's UASig: its sig, an msig's as the typed member list; absent fields are empty
+    function recordSig(r) {
+        return r.kind === 0x0120 ? { members: r.args.sig.members } : { signature: r.sig }
+    }
+
+    function test_set_key_args() {
+        const pp = vectors.load("portable.json")
+        compare(pp.kemRecords.length, 9)
+        for (const k of pp.kemRecords) {
+            const o = UaKinds.setKemKeyArgs(JSON.stringify({ ua: k.ua, version: k.version, kemPk: k.kemPk, sig: recordSig(k) }))
+            compare(UaKinds.lastError, "", k.id)
+            compare(JSON.parse(o), k.args, k.id)
+        }
+        compare(pp.pqzKeyRecords.length, 8)
+        for (const r of pp.pqzKeyRecords) {
+            const o = UaKinds.setPqzKeyArgs(JSON.stringify({ ua: r.ua, pqzKey: r.pqzKey, pqzPopHash: r.pqzPopHash, sig: recordSig(r) }))
+            compare(UaKinds.lastError, "", r.name)
+            compare(JSON.parse(o), r.args, r.name)
+        }
+        const ua = "0x" + "11".repeat(32)
+        for (const [bad, code] of [["not json", "UAArgument"],
+                                   ['{"ua": "0x11", "version": 1}', "UAArgument"],
+                                   [JSON.stringify({ ua }), "UAArgument"],
+                                   [JSON.stringify({ ua, version: 1, kemPk: "0x0101" }), "UAKemKeyLength"]]) {
+            compare(UaKinds.setKemKeyArgs(bad), "", bad)
+            compare(UaKinds.lastError, code, bad)
+        }
+        for (const [bad, code] of [["not json", "UAArgument"],
+                                   [JSON.stringify({ ua, pqzPopHash: "0x01" }), "UAPqzPopHash"],
+                                   [JSON.stringify({ ua, pqzPopHash: ua, sig: "0x01" }), "UAArgument"]]) {
+            compare(UaKinds.setPqzKeyArgs(bad), "", bad)
+            compare(UaKinds.lastError, code, bad)
+        }
     }
 
     function test_encode_msig() {

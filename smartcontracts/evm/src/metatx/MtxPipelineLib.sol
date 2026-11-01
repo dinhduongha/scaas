@@ -256,7 +256,7 @@ library MtxPipelineLib {
         private view
     {
         if (!UAKinds.inNativeSpace(from)) {
-            return IUARegistry(c.registry).requireAuthorized(from, purpose, digest, auth);
+            return IUARegistry(c.registry).requireAuthorized(from, purpose, digest, UAKinds.uaSig(from, auth)); // R1 → C2
         }
         address a = address(uint160(uint256(from)));
         if (a == address(0)) revert IUALedger.UANotRegistered(from);

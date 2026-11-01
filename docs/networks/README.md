@@ -448,7 +448,7 @@ branch, the spec / plan file names and the commit prefixes use these names.
 | # | Question | Shared answer (every family) | Family-specific part | UA-Soroban |
 |---|---|---|---|---|
 | 1 | Where the records live | one registry per chain holding the UA-8 records; chain-wide `keyHash` uniqueness | a registry contract, a factory, a lazy open, an account app … | S1 |
-| 2 | Registration form | the UA-8 portable `register` (same record bytes and digests as EVM, [CTR-UA-31](../contracts/accounts.md#CTR-UA-31)) | encoding of the call on the chain | S2 |
+| 2 | Registration form | the UA-8 portable `register` (same record bytes and digests as EVM, [CTR-UA-31](../contracts/accounts.md#CTR-UA-31)): the typed portable records hashed byte-identically under the domain `("SCaaS UA Portable", "1")` ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)), explicit named registry arguments, no packed blob ([CTR-UA-36](../contracts/accounts.md#CTR-UA-36)), a `kind_name` view ([CTR-UA-35](../contracts/accounts.md#CTR-UA-35)) | encoding of the call on the chain; the chain's own readable signing form ([NET-ALL-23](#NET-ALL-23)) | S2 |
 | 3 | Kinds enabled in generation 1 | classical kinds first, PQ where the chain verifies it; a kind without an on-chain verifier only in relayer-checked mode | which verifiers the chain has | S3 |
 | 4 | PQ verifier | ML-DSA / Falcon only through a chain-native or measured on-chain verifier | host function, precompile, opcode, or none | S4 |
 | 5 | SDK, toolchain and network pins | exact versions pinned, local network first | the chain's SDK / node versions | S5 |

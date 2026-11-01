@@ -13,6 +13,7 @@ import {ZetherSchnorrBls12381Verifier} from "../../src/ua/verifiers/PairingVerif
 import {normalInit, wrappedInit, Rate} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {UACall} from "./UACall.sol";
 
 /// The UA ledger fixture (accounts.md CTR-UA-18/19/26): a registry at `REG_L` on context A (chain 31337, `chainUidA`)
 /// with the stand-in verifier for the eight classical kinds and the real `zether-bls12381` verifier; a `NORMAL` clone and a
@@ -59,13 +60,11 @@ abstract contract UALedgerBase is UARegistryBase {
         uaB = _register(lreg, UAKinds.BIP340, _key(UAKinds.BIP340));
         bytes memory y = ZetherKeys.pub(ZX, true);
         bytes32 z = lreg.uaOf(UAKinds.ZETHER_BLS12381, y);
-        uaZ = lreg.register(
-            UAKinds.ZETHER_BLS12381,
+        uaZ = UACall.register(lreg, UAKinds.ZETHER_BLS12381,
             y,
             _none(),
-            ZetherKeys.schnorr(ZX, lreg.uaMessage(UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(UAKinds.portablePopDigest(z, 0, 0), 0)), true),
-            ""
-        );
+            ZetherKeys.schnorr(ZX, lreg.uaMessage(UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_POP_V2, _regDigest(z, UAKinds.ZETHER_BLS12381)), true),
+            "");
         (alice, bob) = (vm.addr(ALICE_PK), vm.addr(BOB_PK));
         vm.warp(1_800_000_000);
         tok = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));

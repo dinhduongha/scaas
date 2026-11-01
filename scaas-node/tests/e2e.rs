@@ -61,9 +61,11 @@ fn now() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
 }
 
+/// The block gas limit is the SCaaS testnet's (genesis 200 M, NET-EVM-06): a creation's forge estimate (x1.30 here, no
+/// `--gas-estimate-multiplier`) must fit it.
 async fn start_anvil(chain_id: u64, port: u16) -> (Anvil, String) {
     let child = Command::new("anvil")
-        .args(["--chain-id", &chain_id.to_string(), "--hardfork", "amsterdam", "--gas-limit", "100000000", "--code-size-limit", "65536", "--port", &port.to_string(), "--silent"])
+        .args(["--chain-id", &chain_id.to_string(), "--hardfork", "amsterdam", "--gas-limit", "200000000", "--code-size-limit", "65536", "--port", &port.to_string(), "--silent"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -1098,12 +1100,13 @@ async fn evm_adapter_runs_the_generic_lane_runner_on_two_mnemonic_lanes() {
 }
 
 alloy::sol! {
-    // UA-8: the portable registration (accounts.md CTR-UA-07 / CTR-UA-31)
-    struct UAAttrs { bytes pqzKey; bytes32 pqzPopHash; uint64 kemVersion; bytes kemPk; }
+    // the typed registration (IUARegistry; accounts.md CTR-UA-07 / CTR-UA-31)
+    struct KemKey { uint8 scheme; bytes mlkemEk; bytes32 x25519; }
+    struct UAAttrs { bytes pqzKey; bytes32 pqzPopHash; KemKey kem; bytes32 kemPkHash; }
     function register(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32 ua);
     function uaOf(uint16 kind, bytes keyData) external pure returns (bytes32);
-    function portablePopDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 kemRecordHash) external pure returns (bytes32);
-    function registrationDigest(bytes32 portable, bytes32 pqzPopHash) external pure returns (bytes32);
+    function kemRecordHash(bytes32 ua, uint64 version, KemKey kem) external pure returns (bytes32);
+    function registrationDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash, bytes32 pqzPopHash) external pure returns (bytes32);
     function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32);
 }
 
@@ -1185,11 +1188,13 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
     let owner = small_key(0x05ec);
     let key_data = alloy::primitives::Bytes::from(owner.public_key().to_vec());
     let ua = view(&rpc, registry, uaOfCall { kind: UA_SECP256K1, keyData: key_data.clone() }).await;
-    let pd = view(&rpc, registry, portablePopDigestCall { ua, pqzKeyHash: B256::ZERO, kemRecordHash: B256::ZERO }).await;
-    let rd = view(&rpc, registry, registrationDigestCall { portable: pd, pqzPopHash: B256::ZERO }).await;
+    // no KEM key: kemRecordHash = hashStruct(UAKemRecord{ua, 0, 0, 0}), not 0
+    let no_kem = KemKey { scheme: 0, mlkemEk: Default::default(), x25519: B256::ZERO };
+    let krh = view(&rpc, registry, kemRecordHashCall { ua, version: 0, kem: no_kem.clone() }).await;
+    let rd = view(&rpc, registry, registrationDigestCall { ua, kind: UA_SECP256K1, pqzKeyHash: B256::ZERO, kemRecordHash: krh, pqzPopHash: B256::ZERO }).await;
     let pm = view(&rpc, registry, uaMessageCall { kind: UA_SECP256K1, purposeTag: keccak256(b"scaas.ua.purpose.pop.v2"), digest: rd }).await;
     let pop = owner.sign_hash_sync(&pm).unwrap().as_bytes().to_vec();
-    send(&rpc, &deployer, registry, registerCall { kind: UA_SECP256K1, keyData: key_data, attrs: UAAttrs { pqzKey: Default::default(), pqzPopHash: B256::ZERO, kemVersion: 0, kemPk: Default::default() },
+    send(&rpc, &deployer, registry, registerCall { kind: UA_SECP256K1, keyData: key_data, attrs: UAAttrs { pqzKey: Default::default(), pqzPopHash: B256::ZERO, kem: no_kem, kemPkHash: B256::ZERO },
         pop: pop.into(), pqzPop: Default::default() }.abi_encode()).await;
     send(&rpc, &deployer, token, IUALedger::transferToUACall { to: ua, amount: U256::from(1_000_000u64) }.abi_encode()).await;
     assert_eq!(view(&rpc, token, IUALedger::balanceOfUACall { ua }).await, U256::from(1_000_000u64));
