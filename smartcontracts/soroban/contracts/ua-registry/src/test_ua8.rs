@@ -27,6 +27,8 @@ type Entry = (Bytes, Bytes, Checked);
 type PqzEntry = (Bytes, Bytes, Checked, BytesN<32>);
 type Tried<T> = Result<Result<T, soroban_sdk::ConversionError>, Result<soroban_sdk::Error, soroban_sdk::InvokeError>>;
 type Slot = (u32, StdVec<u8>, StdVec<u8>);
+/// A host verify's failure as the caller sees it (plan finding F1): the contract cannot answer `Unauthorized` for it.
+const HOST_REFUSED: soroban_sdk::Error = soroban_sdk::Error::from_type_and_code(soroban_sdk::xdr::ScErrorType::Context, soroban_sdk::xdr::ScErrorCode::InvalidAction);
 
 /// The `registrations[]` rows of a `Chain` kind (`msig-classical`'s members are disabled kinds here: B4).
 fn chain_rows() -> StdVec<Value> {
@@ -717,7 +719,6 @@ fn ua8_kem_rules() {
     for neg in negatives("setKemKey") {
         let (name, set) = (neg["name"].as_str().unwrap(), &neg["mutation"]["set"]);
         let mut k = kem_id(&env, neg["mutation"]["row"].as_str().unwrap());
-        k.version += 10; // a free version of `r`: the row's own is taken above
         if let Some(sig) = set.get("sig") {
             k.sig = UaSig::single(&env, b(&env, &hx(sig)));
         }
@@ -844,7 +845,8 @@ fn ua8_set_pqz_key_write_once() {
 }
 
 /// Every `setPqzKey` negative. `fndsa512` and `slhdsa128s` are disabled kinds here (B4): `already-set` runs on the row's
-/// `mldsa65/<set>`, `wrong-holder` on `p256`, the others on `mldsa65#1`, a holder without a key.
+/// `mldsa65/<set>`, `wrong-holder` on `p256`, `hash-of-empty` on `mldsa65#1`, and `signed-by-other-ua`, whose signature is
+/// `mldsa65#1`'s, on `mldsa65#2`: that signature reaches the host's verify, so the exact refusal is `HOST_REFUSED`.
 #[test]
 fn ua8_set_pqz_key_negatives() {
     let negs = negatives("setPqzKey");
@@ -857,6 +859,7 @@ fn ua8_set_pqz_key_negatives() {
         p.ua = match want {
             "UAPqzKeySet" => portable(&env, &format!("mldsa65/{}", row.split('/').nth(1).unwrap())).on(&c),
             "UAPqzHolder" => non_holder(&env, &c),
+            "UAUnauthorized" => portable(&env, "mldsa65#2").on(&c),
             _ => portable(&env, "mldsa65#1").on(&c),
         };
         if let Some(sig) = set.get("sig") {
@@ -865,9 +868,37 @@ fn ua8_set_pqz_key_negatives() {
         if let Some(h) = set.get("pqzPopHash") {
             p.pop_hash = n32(&env, h);
         }
-        expect(name, want, p.tried(&c));
+        if want == "UAUnauthorized" {
+            assert_eq!(p.tried(&c), Err(Ok(HOST_REFUSED)), "{name}");
+        } else {
+            expect(name, want, p.tried(&c));
+        }
         assert_eq!(c.pqz_key_of(&p.ua).is_some(), want == "UAPqzKeySet", "{name}");
     }
+}
+
+/// `set_pqz_key` on a single key, which `pqzKeyRecords[]` has no `Chain` row for: anyone submits, a relayer is accepted and
+/// ignored, no owner check (no `Key` entry, U8S-D6: two UAs may list one key). A signature by another UA is refused by the
+/// host's verify (plan finding F1), not by the contract; only the holder's own is stored.
+#[test]
+fn ua8_set_pqz_key_single_key() {
+    let (env, c) = setup();
+    let (key, ph) = (b(&env, &[7; 16_384]), n(&env, [9; 32]));
+    let (a, z) = (test::ml(37), test::ml(38));
+    let signed = |s: &test::Sk, ua: &BytesN<32>| {
+        let d = pqz_key_record_digest(&env, ua, &pqz_key_hash(&env, &key), &ph).to_bytes();
+        s.sign(&env, &test::msg(&env, s.kind(), PURPOSE_PQZ_KEY, &d))
+    };
+    let (ua, other) = (a.register(&env, &c), z.register(&env, &c));
+    let tried = |ua: &BytesN<32>, sig: &Bytes, r: &Option<Address>| c.try_set_pqz_key(ua, &key, &ph, &UaSig::single(&env, sig.clone()), r);
+    assert_eq!(tried(&ua, &signed(&z, &ua), &None), Err(Ok(HOST_REFUSED)), "signed by another UA");
+    assert_eq!(c.pqz_key_of(&ua), None);
+    let own = signed(&a, &ua);
+    tried(&ua, &own, &Some(Address::generate(&env))).unwrap().unwrap();
+    assert_eq!(c.pqz_key_of(&ua), Some((key.clone(), ph.clone(), false, Checked::Chain)));
+    assert_eq!(c.pqz_key_sig_of(&ua), own);
+    tried(&other, &signed(&z, &other), &None).unwrap().unwrap();
+    assert_eq!(c.pqz_key_of(&other).unwrap().0, key, "one key, two UAs");
 }
 
 /// EVM's check order: holder → key already there → length → proof hash → signature; every refused bytes leaves no key.
@@ -1010,17 +1041,19 @@ fn ua8_views_of_register() {
 }
 
 /// B2 review: `register`'s slot refusals are `Pop`: a `G…` slot with bytes, a registered member's slot with `key_data`.
+/// `q` alone meets the threshold, so the `key_data` is all that refuses that slot: the same slot without it registers.
 #[test]
 fn ua8_register_slot_fields_pop() {
     let (env, c) = setup();
     let q = test::ml(35);
     q.register(&env, &c);
     let g = [0x44; 32];
-    let m = msig(&env, 2, &[(0x0011, g, 1), (0x0131, q.ua(&env).to_array(), 1)]);
+    let m = msig(&env, 2, &[(0x0011, g, 1), (0x0131, q.ua(&env).to_array(), 2)]);
     let refused = |s: &[Slot]| err(c.try_register_msig(&m.s, &no_attrs(&env), &test::member_sigs(&env, s), &Bytes::new(&env), &None));
     assert_eq!(refused(&[(m.index(&g), std::vec![], std::vec![1])]), Error::Pop);
     let (i, _, sig) = m.slot(&env, &q, PURPOSE_POP_V2, &test::reg_digest(&env, &m.ua, 0x0120));
-    assert_eq!(refused(&[(i, std::vec![1], sig)]), Error::Pop);
+    assert_eq!(refused(&[(i, std::vec![1], sig.clone())]), Error::Pop);
+    assert_eq!(m.register(&env, &c, &test::member_sigs(&env, &[(i, std::vec![], sig)])), m.ua);
 }
 
 /// `set_pqz_key` by an n-of-n `msig` of in-test `mldsa65` keys, weight 1 each: every slot signs, so `PqzK` holds `n` of

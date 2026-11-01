@@ -54,3 +54,5 @@ EVM's bytes.
 and types them `PayMeta { uint16 schema; bytes body; }`, which EVM's Part C has not built yet (`metaPayId(bytes32, bytes)`
 still takes the bytes). The Soroban form would be `PayMeta { schema: u32, body: Bytes }` on the three entries, reassembled
 to the same bytes, so `meta_pay_id` and `paymeta.json` do not change. It belongs with EVM's change, not with the registry.
+
+EVM has the typed views `msigOf` and `webAuthnKeyOf` (Appendix X row 18); Soroban has neither.

@@ -1,0 +1,92 @@
+# mutant 1: 'if !s.key_data.is_empty() { fail(env, short); }' removed from check_msig
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry --lib -- ua8_register_slot_fields_pop
+
+running 1 test
+test test_ua8::ua8_register_slot_fields_pop ... FAILED
+
+failures:
+
+---- test_ua8::ua8_register_slot_fields_pop stdout ----
+
+thread 'test_ua8::ua8_register_slot_fields_pop' (246093) panicked at contracts/ua-registry/src/test.rs:68:18:
+succeeded
+
+
+failures:
+    test_ua8::ua8_register_slot_fields_pop
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 101 filtered out; finished in 0.13s
+
+error: test failed, to rerun pass `-p scaas-ua-registry --lib`
+rc=101
+cmp mutant 1: identical
+
+# mutant 2: every single-key set_pqz_key refused in check_portable
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry --lib -- ua8_set_pqz_key
+
+running 8 tests
+test test_ua8::ua8_set_pqz_key_single_key ... FAILED
+test test_ua8::ua8_set_pqz_key_rules ... ok
+test test_ua8::ua8_set_pqz_key_write_once ... ok
+test test_ua8::ua8_set_pqz_key_negatives ... FAILED
+test test_ua8::ua8_set_pqz_key_from_vectors ... ok
+test test_ua8::ua8_set_pqz_key_msig_over_limit_n2048 - should panic ... ok
+test test_ua8::ua8_set_pqz_key_msig_over_limit_n2816 - should panic ... ok
+test test_ua8::ua8_set_pqz_key_msig_largest_fits ... ok
+
+failures:
+
+---- test_ua8::ua8_set_pqz_key_single_key stdout ----
+
+thread 'test_ua8::ua8_set_pqz_key_single_key' (246502) panicked at contracts/ua-registry/src/test_ua8.rs:894:5:
+assertion `left == right` failed: signed by another UA
+  left: Err(Ok(Error(Contract, #10)))
+ right: Err(Ok(Error(Context, InvalidAction)))
+
+---- test_ua8::ua8_set_pqz_key_negatives stdout ----
+
+thread 'test_ua8::ua8_set_pqz_key_negatives' (246500) panicked at contracts/ua-registry/src/test_ua8.rs:872:13:
+assertion `left == right` failed: pqz-key-record-signed-by-other-ua/n2048-kmax1024
+  left: Err(Ok(Error(Contract, #10)))
+ right: Err(Ok(Error(Context, InvalidAction)))
+
+
+failures:
+    test_ua8::ua8_set_pqz_key_negatives
+    test_ua8::ua8_set_pqz_key_single_key
+
+test result: FAILED. 6 passed; 2 failed; 0 ignored; 0 measured; 94 filtered out; finished in 7.86s
+
+error: test failed, to rerun pass `-p scaas-ua-registry --lib`
+rc=101
+cmp mutant 2: identical
+
+# mutant 3: a single-key set_pqz_key refused after its verify passes (a wrong signature still traps in the host, the case the rows cannot see)
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry --lib -- ua8_set_pqz_key
+
+running 8 tests
+test test_ua8::ua8_set_pqz_key_single_key ... FAILED
+test test_ua8::ua8_set_pqz_key_write_once ... ok
+test test_ua8::ua8_set_pqz_key_rules ... ok
+test test_ua8::ua8_set_pqz_key_from_vectors ... ok
+test test_ua8::ua8_set_pqz_key_negatives ... ok
+test test_ua8::ua8_set_pqz_key_msig_over_limit_n2816 - should panic ... ok
+test test_ua8::ua8_set_pqz_key_msig_over_limit_n2048 - should panic ... ok
+test test_ua8::ua8_set_pqz_key_msig_largest_fits ... ok
+
+failures:
+
+---- test_ua8::ua8_set_pqz_key_single_key stdout ----
+
+thread 'test_ua8::ua8_set_pqz_key_single_key' (247570) panicked at contracts/ua-registry/src/test_ua8.rs:897:54:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #10))
+
+
+failures:
+    test_ua8::ua8_set_pqz_key_single_key
+
+test result: FAILED. 7 passed; 1 failed; 0 ignored; 0 measured; 94 filtered out; finished in 8.64s
+
+error: test failed, to rerun pass `-p scaas-ua-registry --lib`
+rc=101
+cmp mutant 3: identical
