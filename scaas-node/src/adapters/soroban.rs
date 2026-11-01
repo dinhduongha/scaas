@@ -20,12 +20,12 @@ use scaas_ua::UAError;
 use sha2::{Digest, Sha256};
 use stellar_xdr::{
     AccountId, ConfigSettingEntry, ConfigSettingId, DecoratedSignature, FeeBumpTransaction, FeeBumpTransactionEnvelope, FeeBumpTransactionExt,
-    FeeBumpTransactionInnerTx, HashIdPreimage, HostFunction, InvokeContractArgs, InvokeHostFunctionOp, LedgerEntryData,
+    FeeBumpTransactionInnerTx, HashIdPreimage, HostFunction, InvokeContractArgs, InvokeHostFunctionOp, LedgerEntry, LedgerEntryData,
     LedgerKey, LedgerKeyAccount, LedgerKeyConfigSetting, Limits, Memo, MuxedAccount, Operation, OperationBody, Preconditions, PublicKey,
     ReadXdr, ScAddress, ScMap, ScMapEntry, ScSymbol, ScVal, ScVec, SequenceNumber, Signature, SignatureHint,
     SorobanAddressCredentials, SorobanAuthorizationEntry, SorobanAuthorizedFunction, SorobanAuthorizedInvocation, SorobanCredentials,
     SorobanTransactionData, SorobanTransactionDataExt, TimeBounds, TimePoint, Transaction, TransactionEnvelope, TransactionExt,
-    TransactionV1Envelope, Uint256, WriteXdr,
+    TransactionResult, TransactionV1Envelope, Uint256, WriteXdr,
 };
 
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, TxStatus};
@@ -58,6 +58,8 @@ pub struct SorobanAdapter {
     hashes: Mutex<HashMap<u64, String>>,
     /// The last `tx_max_size_bytes` the network answered, used while a later read fails.
     tx_limit: Mutex<Option<usize>>,
+    /// The same for `contract_data_entry_size_bytes`.
+    entry_limit: Mutex<Option<usize>>,
 }
 
 fn hex(b: &[u8]) -> String {
@@ -328,6 +330,7 @@ impl SorobanAdapter {
             },
             hashes: Mutex::new(HashMap::new()),
             tx_limit: Mutex::new(None),
+            entry_limit: Mutex::new(None),
         })
     }
 
@@ -480,14 +483,43 @@ impl SorobanAdapter {
     }
 
     async fn read_tx_max_size(&self) -> std::result::Result<usize, String> {
-        let k = LedgerKey::ConfigSetting(LedgerKeyConfigSetting { config_setting_id: ConfigSettingId::ContractBandwidthV0 });
+        match self.read_setting(ConfigSettingId::ContractBandwidthV0).await? {
+            ConfigSettingEntry::ContractBandwidthV0(b) => Ok(b.tx_max_size_bytes as usize),
+            other => Err(format!("not the bandwidth setting: {other:?}")),
+        }
+    }
+
+    async fn read_setting(&self, id: ConfigSettingId) -> std::result::Result<ConfigSettingEntry, String> {
+        let k = LedgerKey::ConfigSetting(LedgerKeyConfigSetting { config_setting_id: id });
         let k = k.to_xdr_base64(Limits::none()).map_err(|e| e.to_string())?;
         let r = self.rpc("getLedgerEntries", json!({"keys": [k]})).await.map_err(|e| format!("{e:#}"))?;
         let x = r["entries"][0]["xdr"].as_str().ok_or("no entry")?;
         match LedgerEntryData::from_xdr_base64(x, Limits::len(1 << 16)) {
-            Ok(LedgerEntryData::ConfigSetting(ConfigSettingEntry::ContractBandwidthV0(b))) => Ok(b.tx_max_size_bytes as usize),
-            other => Err(format!("not the bandwidth setting: {other:?}")),
+            Ok(LedgerEntryData::ConfigSetting(c)) => Ok(c),
+            other => Err(format!("not a setting: {other:?}")),
         }
+    }
+
+    /// The network's `contract_data_entry_size_bytes`, read as `tx_max_size`; a failed read uses the last answer. `None`: never
+    /// answered, so the check cannot run. That job goes on: the chain still refuses an entry over the limit.
+    async fn entry_max_size(&self) -> Option<usize> {
+        let read = match self.read_setting(ConfigSettingId::ContractDataEntrySizeBytes).await {
+            Ok(ConfigSettingEntry::ContractDataEntrySizeBytes(n)) => Ok(n as usize),
+            Ok(other) => Err(format!("not the entry setting: {other:?}")),
+            Err(why) => Err(why),
+        };
+        let mut last = self.entry_limit.lock().unwrap_or_else(|e| e.into_inner());
+        match read {
+            Ok(limit) => *last = Some(limit),
+            Err(why) => tracing::warn!(chain = %self.key, "contract_data_entry_size_bytes: {why}; using the last answer, {:?}", *last),
+        }
+        *last
+    }
+
+    /// `getLedgerEntries` key of `lane`'s account.
+    fn account_key(&self, lane: usize) -> Result<String> {
+        let account = AccountId(PublicKey::PublicKeyTypeEd25519(Uint256(lane_pk(self.signer(lane)?)?)));
+        Ok(LedgerKey::Account(LedgerKeyAccount { account_id: account }).to_xdr_base64(Limits::none())?)
     }
 
     /// CTR-ACC-07: a delegate's `mtx_revoke` / `mtx_mandate_pay` refused `StaleEpoch` (the mandate's error #13): the
@@ -582,6 +614,12 @@ impl ChainAdapter for SorobanAdapter {
         if size > limit {
             return Err(SimError::Revert(format!("transaction of {size} B over the network's tx_max_size_bytes ({limit})")));
         }
+        // simulation does not refuse this write, and on chain it fails on the lane's fee: this job's own state
+        if let Some(size) = largest_data_write(&sim) {
+            if let Some(limit) = self.entry_max_size().await.filter(|l| size > *l) {
+                return Err(SimError::Revert(format!("entry of {size} B over the network's contract_data_entry_size_bytes ({limit})")));
+            }
+        }
         let body = tx.to_xdr(Limits::none()).map_err(|e| SimError::Revert(e.to_string()))?;
         Ok(Built { job_id: job.id, body, valid_until, meta: json!({}) })
     }
@@ -637,9 +675,39 @@ impl ChainAdapter for SorobanAdapter {
         })
     }
 
+    /// NET-SOR-14: `feeCharged` of a transaction that landed, `SUCCESS` or `FAILED`. Under a fee bump the outer result, the fee
+    /// that left the fee account (`e2e_ua8_spend_stop` compares both with the balances). What this cannot read is an `Err`, never 0.
+    async fn tx_fee(&self, tx_id: &str) -> Result<Option<u128>> {
+        let r = self.rpc("getTransaction", json!({"hash": tx_id.trim_start_matches("0x")})).await?;
+        if !matches!(r["status"].as_str(), Some("SUCCESS" | "FAILED")) {
+            bail!("getTransaction {tx_id}: {}, not landed", r["status"]);
+        }
+        let x = r["resultXdr"].as_str().ok_or_else(|| anyhow!("getTransaction {tx_id} without resultXdr"))?;
+        let fee = TransactionResult::from_xdr_base64(x, Limits::len(1 << 16))?.fee_charged;
+        Ok(Some(u128::try_from(fee).with_context(|| format!("feeCharged {fee}"))?))
+    }
+
+    /// NET-SOR-14: the native balance of the lane plus its fee account, the sum the floor compares (a fee account's own lane counts
+    /// it once). An account that does not exist holds 0, which is an answer; a failed read is an `Err`, and the last balance stands.
+    async fn lane_balance(&self, lane: usize) -> Result<Option<u128>> {
+        let mut keys = vec![self.account_key(lane)?];
+        if let Some(f) = self.fee_bump.filter(|f| *f != lane) {
+            keys.push(self.account_key(f)?);
+        }
+        let r = self.rpc("getLedgerEntries", json!({"keys": keys})).await?;
+        let mut balance = 0;
+        for e in r["entries"].as_array().into_iter().flatten() {
+            let x = e["xdr"].as_str().ok_or_else(|| anyhow!("account entry without xdr"))?;
+            match LedgerEntryData::from_xdr_base64(x, Limits::len(1 << 16))? {
+                LedgerEntryData::Account(a) => balance += u128::try_from(a.balance)?,
+                _ => bail!("not an account entry"),
+            }
+        }
+        Ok(Some(balance))
+    }
+
     async fn sequence(&self, lane: usize) -> Result<u64> {
-        let account = AccountId(PublicKey::PublicKeyTypeEd25519(Uint256(lane_pk(self.signer(lane)?)?)));
-        let k = LedgerKey::Account(LedgerKeyAccount { account_id: account }).to_xdr_base64(Limits::none())?;
+        let k = self.account_key(lane)?;
         let r = self.rpc("getLedgerEntries", json!({"keys": [k]})).await?;
         let x = r["entries"][0]["xdr"].as_str().ok_or_else(|| anyhow!("lane {} account does not exist", self.lanes[lane].address))?;
         match LedgerEntryData::from_xdr_base64(x, Limits::len(1 << 16))? {
@@ -1338,6 +1406,17 @@ fn recorded_auth(sim: &Value) -> Result<Vec<SorobanAuthorizationEntry>> {
 /// Protocol 23 (CAP-0066): the transaction data lists archived entries the transaction restores itself.
 fn restores(data: &SorobanTransactionData) -> bool {
     matches!(&data.ext, SorobanTransactionDataExt::V1(x) if !x.archived_soroban_entries.is_empty())
+}
+
+/// The largest `ContractData` entry a simulation would write: its whole `LedgerEntry`, `stateChanges[].after`, the size the host
+/// compares (measured, `e2e_ua8_spend_stop`: 65,536 B lands, 65,540 B fails). `None` = it names none it can read: the job goes on.
+fn largest_data_write(sim: &Value) -> Option<usize> {
+    sim["stateChanges"].as_array()?.iter()
+        .filter_map(|c| LedgerEntry::from_xdr_base64(c["after"].as_str()?, Limits::len(1 << 21)).ok())
+        .filter(|e| matches!(e.data, LedgerEntryData::ContractData(_)))
+        .filter_map(|e| e.to_xdr(Limits::none()).ok())
+        .map(|b| b.len())
+        .max()
 }
 
 /// The simulation's transaction data, resource fee plus the margin. An archived footprint (Protocol 23 auto-restore,
@@ -2627,6 +2706,8 @@ mod tests {
 
     /// The quickstart's `tx_max_size_bytes`.
     const TX_MAX: u32 = 132_096;
+    /// The quickstart's `contract_data_entry_size_bytes`.
+    const ENTRY_MAX: u32 = 65_536;
 
     async fn rpc_stub(answer: Answer, calls: Arc<Mutex<Vec<String>>>) -> String {
         rpc_stub_limit(answer, calls, Arc::new(Mutex::new(Some(TX_MAX)))).await
@@ -2635,8 +2716,28 @@ mod tests {
     /// `limit`: the bandwidth setting's `tx_max_size_bytes`, which `sendTransaction` also enforces; `None` = the RPC has no such
     /// entry. Shared, so a test can change the network's answer.
     async fn rpc_stub_limit(answer: Answer, calls: Arc<Mutex<Vec<String>>>, limit: Arc<Mutex<Option<u32>>>) -> String {
+        rpc_stub_net(answer, calls, limit, Arc::new(Mutex::new(Net::default()))).await
+    }
+
+    /// The stub chain's answers beyond simulation.
+    struct Net {
+        /// `getTransaction`.
+        tx: Value,
+        /// `contract_data_entry_size_bytes`; `None` = the RPC has no such entry.
+        entry_limit: Option<u32>,
+        /// The accounts that exist, each `(public key, balance)`; `None` = every account, with no balance.
+        accounts: Option<Vec<([u8; 32], i64)>>,
+    }
+
+    impl Default for Net {
+        fn default() -> Self {
+            Self { tx: json!({"status": "SUCCESS", "ledger": 5}), entry_limit: Some(ENTRY_MAX), accounts: None }
+        }
+    }
+
+    async fn rpc_stub_net(answer: Answer, calls: Arc<Mutex<Vec<String>>>, limit: Arc<Mutex<Option<u32>>>, net: Arc<Mutex<Net>>) -> String {
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(b): axum::Json<Value>| {
-            let (answer, calls, limit) = (answer.clone(), calls.clone(), limit.clone());
+            let (answer, calls, limit, net) = (answer.clone(), calls.clone(), limit.clone(), net.clone());
             async move {
                 let limit = *limit.lock().unwrap();
                 let lane_rpc = match b["method"].as_str() {
@@ -2654,14 +2755,28 @@ mod tests {
                         Some(if over { json!({"status": "ERROR", "errorResultXdr": "txSOROBAN_INVALID"}) } else { json!({"status": "PENDING"}) })
                     }
                     Some("getLedgerEntries") => {
-                        let k = LedgerKey::from_xdr_base64(b["params"]["keys"][0].as_str().unwrap(), Limits::none()).unwrap();
-                        Some(match (k, limit) {
-                            (LedgerKey::ConfigSetting(_), Some(l)) => json!({"entries": [{"xdr": bandwidth(l)}]}),
-                            (LedgerKey::ConfigSetting(_), None) => json!({"entries": []}),
-                            _ => json!({"entries": [{"xdr": lane_account()}]}),
-                        })
+                        let net = net.lock().unwrap();
+                        let mut entries = vec![];
+                        for k in b["params"]["keys"].as_array().unwrap() {
+                            match (LedgerKey::from_xdr_base64(k.as_str().unwrap(), Limits::none()).unwrap(), limit) {
+                                (LedgerKey::ConfigSetting(c), _) if c.config_setting_id == ConfigSettingId::ContractDataEntrySizeBytes => {
+                                    let e = net.entry_limit.map(|l| LedgerEntryData::ConfigSetting(ConfigSettingEntry::ContractDataEntrySizeBytes(l)));
+                                    entries.extend(e.map(|e| e.to_xdr_base64(Limits::none()).unwrap()));
+                                }
+                                (LedgerKey::ConfigSetting(_), l) => entries.extend(l.map(bandwidth)),
+                                (LedgerKey::Account(k), _) => {
+                                    let AccountId(PublicKey::PublicKeyTypeEd25519(Uint256(pk))) = k.account_id;
+                                    match &net.accounts {
+                                        None => entries.push(lane_account(0)),
+                                        Some(l) => entries.extend(l.iter().find(|a| a.0 == pk).map(|a| lane_account(a.1))),
+                                    }
+                                }
+                                _ => entries.push(lane_account(0)),
+                            }
+                        }
+                        Some(json!({"entries": entries.iter().map(|x| json!({"xdr": x})).collect::<Vec<_>>()}))
                     }
-                    Some("getTransaction") => Some(json!({"status": "SUCCESS", "ledger": 5})),
+                    Some("getTransaction") => Some(net.lock().unwrap().tx.clone()),
                     _ => None,
                 };
                 if let Some(r) = lane_rpc {
@@ -2688,10 +2803,10 @@ mod tests {
     }
 
     /// `adapter.sequence`'s answer.
-    fn lane_account() -> String {
+    fn lane_account(balance: i64) -> String {
         LedgerEntryData::Account(stellar_xdr::AccountEntry {
             account_id: AccountId(PublicKey::PublicKeyTypeEd25519(Uint256([1; 32]))),
-            balance: 0,
+            balance,
             seq_num: SequenceNumber(4),
             num_sub_entries: 0,
             inflation_dest: None,
@@ -3836,5 +3951,236 @@ mod tests {
         let next = events_params(&f, 10, 20, Some("0000000042-0000000001"));
         assert_eq!(next["pagination"]["cursor"], "0000000042-0000000001");
         assert!(next.get("startLedger").is_none() && next.get("endLedger").is_none(), "{next}");
+    }
+
+    // ---- the spend stop (NET-SOR-14)
+
+    /// `resultXdr` as the real host answers it (Protocol 30 quickstart, `e2e_ua8_spend_stop`, whose `FEE` lines compare each
+    /// `feeCharged` with what left the payer's balance): SUCCESS, FAILED, and both under a fee bump.
+    const RESULT_SUCCESS: &str = "AAAAAAAOmaUAAAAAAAAAAQAAAAAAAAAYAAAAAFAt8yW35C2zFXeWHaVy2MCn80yeTkoeh6LYx/OWZwfwAAAAAA==";
+    const RESULT_FAILED: &str = "AAAAAAAFwhH/////AAAAAQAAAAAAAAAY/////QAAAAA=";
+    const RESULT_BUMP_SUCCESS: &str = "AAAAAAAOmgkAAAABxhCeKITm331T+c813d/vgsvT1jdeC/Fvf+SEMZPVqDMAAAAAAAAAAAAAAAAAAAABAAAAAAAAABgAAAAAulj84l+7Ptgk7kgYNYbiVWZP327QkxLiQOm8rCevr8gAAAAAAAAAAA==";
+    const RESULT_BUMP_FAILED: &str = "AAAAAAAFwnX////zSG1s3vM5/nZVp4irv7Llnmfod1hIgycQrJ1HV1i3kqoAAAAAAAAAAP////8AAAABAAAAAAAAABj////9AAAAAAAAAAA=";
+    const FAILED_FEE: u128 = 377_361;
+
+    fn lane_key(seed: u8) -> LocalSigner {
+        LocalSigner::Ed(ed25519_dalek::SigningKey::from_bytes(&[seed; 32]))
+    }
+
+    fn lane_pk_of(seed: u8) -> [u8; 32] {
+        lane_key(seed).public_key().try_into().unwrap()
+    }
+
+    /// A real adapter on the stub chain: lanes `[1; 32]` and `[2; 32]`, the first the fee account when `fee_bump`.
+    async fn spend_adapter(answer: Answer, net: Net, fee_bump: bool) -> (Arc<SorobanAdapter>, Arc<Mutex<Vec<String>>>, Arc<Mutex<Net>>) {
+        let (calls, net) = (Arc::new(Mutex::new(Vec::new())), Arc::new(Mutex::new(net)));
+        let url = rpc_stub_net(answer, calls.clone(), Arc::new(Mutex::new(Some(TX_MAX))), net.clone()).await;
+        let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: vec![url], lanes: vec![0, 1], ..Default::default() };
+        c.params.insert("network_passphrase".into(), "x".into());
+        c.params.insert("ua_registry".into(), REGISTRY.into());
+        if fee_bump {
+            c.params.insert("fee_bump_lane".into(), 0.into());
+        }
+        (Arc::new(SorobanAdapter::new(&c, &[lane_key(1), lane_key(2)]).unwrap()), calls, net)
+    }
+
+    fn sends(c: &Arc<Mutex<Vec<String>>>) -> usize {
+        c.lock().unwrap().iter().filter(|c| *c == "SEND").count()
+    }
+
+    /// `feeCharged`, of a SUCCESS and of a FAILED, the outer result under a fee bump. Each refusal is one change from a passing answer.
+    #[tokio::test]
+    async fn tx_fee_is_the_fee_charged() {
+        let (a, _, net) = spend_adapter(registry(vec![], vec![]), Net::default(), false).await;
+        for (status, xdr, want) in [("SUCCESS", RESULT_SUCCESS, 956_837), ("FAILED", RESULT_FAILED, 377_361), ("SUCCESS", RESULT_BUMP_SUCCESS, 956_937), ("FAILED", RESULT_BUMP_FAILED, 377_461)] {
+            net.lock().unwrap().tx = json!({"status": status, "ledger": 5, "resultXdr": xdr});
+            assert_eq!(a.tx_fee("0xab").await.unwrap(), Some(want), "{status} {xdr}");
+        }
+        let mut negative = stellar_xdr::TransactionResult::from_xdr_base64(RESULT_FAILED, Limits::none()).unwrap();
+        negative.fee_charged = -1;
+        for bad in [json!({"status": "NOT_FOUND", "resultXdr": RESULT_FAILED}), json!({"status": "FAILED", "resultXdr": "AAAA"}), json!({"status": "FAILED"}),
+                    json!({"status": "FAILED", "resultXdr": negative.to_xdr_base64(Limits::none()).unwrap()})] {
+            net.lock().unwrap().tx = bad.clone();
+            assert!(a.tx_fee("0xab").await.is_err(), "{bad}: an unread fee is never a zero one");
+        }
+    }
+
+    /// The account that pays and the one that sends, each counted once; an account that does not exist holds nothing; a failed
+    /// read is an `Err`, never a zero that would open the floor.
+    #[tokio::test]
+    async fn lane_balance_counts_the_lane_and_its_fee_account() {
+        let (one, two) = (lane_pk_of(1), lane_pk_of(2));
+        let answer = registry(vec![], vec![]);
+        let (a, _, net) = spend_adapter(answer.clone(), Net { accounts: Some(vec![(two, 70)]), ..Net::default() }, false).await;
+        assert_eq!(a.lane_balance(1).await.unwrap(), Some(70), "funded");
+        assert_eq!(a.lane_balance(0).await.unwrap(), Some(0), "unfunded");
+        net.lock().unwrap().accounts = Some(vec![(one, 1_000), (two, 70)]);
+        assert_eq!(a.lane_balance(1).await.unwrap(), Some(70), "no fee bump: the other account pays nothing here");
+        let (a, _, net) = spend_adapter(answer, Net { accounts: Some(vec![(one, 1_000), (two, 70)]), ..Net::default() }, true).await;
+        assert_eq!(a.lane_balance(1).await.unwrap(), Some(1_070), "the lane and the fee account");
+        assert_eq!(a.lane_balance(0).await.unwrap(), Some(1_000), "the fee account's own lane, counted once");
+        net.lock().unwrap().accounts = Some(vec![(two, 70)]);
+        assert_eq!(a.lane_balance(1).await.unwrap(), Some(70), "the fee account does not exist");
+        let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: vec!["http://127.0.0.1:1".into()], lanes: vec![0], ..Default::default() };
+        c.params.insert("network_passphrase".into(), "x".into());
+        assert!(SorobanAdapter::new(&c, &[lane_key(1)]).unwrap().lane_balance(0).await.is_err());
+    }
+
+    /// The real lane loop on `store_pqz_pop` jobs for `ms`, one job id over and over: what it sent, the states it reported and the claims.
+    async fn lane_run(a: Arc<SorobanAdapter>, cfg: crate::config::BreakerCfg, calls: &Arc<Mutex<Vec<String>>>, ms: u64) -> (usize, Vec<String>, u32) {
+        use crate::adapter::tests::{fake_odoo, Fake};
+        let jobs = vec![json!({"id": 7, "kind": "call", "op": sized_op(8)})];
+        let (odoo, o) = fake_odoo(Fake { jobs, repeat: true, tokens: json!([]), ..Default::default() }).await;
+        let k = Arc::new(Mutex::new(crate::breaker::Breaker::new(cfg)));
+        let run = crate::adapter::lane_runner(a, odoo, 0, "n#0".into(), std::time::Duration::from_millis(10), k, Default::default());
+        let _ = tokio::time::timeout(std::time::Duration::from_millis(ms), run).await;
+        let f = o.lock().unwrap();
+        (sends(calls), f.reports.iter().map(|r| r["chain_state"].as_str().unwrap().to_string()).collect(), f.claims)
+    }
+
+    /// The ruling: a lane burned by failing jobs stops. Three FAILED transactions are the budget, so the fourth job is never
+    /// claimed, and each of the three is followed to its report. The one difference, no budget: the lane keeps sending.
+    #[tokio::test]
+    async fn failing_jobs_open_the_budget_and_later_jobs_do_not_send() {
+        let failing = || Net { tx: json!({"status": "FAILED", "ledger": 5, "resultXdr": RESULT_FAILED}), ..Net::default() };
+        let budget = crate::config::BreakerCfg { gas_budget_per_hour: Some(3 * FAILED_FEE), ..Default::default() };
+        let (a, calls, _) = spend_adapter(registry(vec![], vec![]), failing(), false).await;
+        let (sent, states, claims) = lane_run(a, budget, &calls, 800).await;
+        assert_eq!((sent, claims), (3, 3), "{states:?}");
+        assert_eq!(states.iter().filter(|s| *s == "reverted").count(), 3, "the jobs in flight end in their reports: {states:?}");
+
+        let (a, calls, _) = spend_adapter(registry(vec![], vec![]), failing(), false).await;
+        let (sent, ..) = lane_run(a, Default::default(), &calls, 800).await;
+        assert!(sent > 3, "no budget: {sent}");
+    }
+
+    /// Under the floor the lane takes no job at all; at the floor it runs, the one difference.
+    #[tokio::test]
+    async fn balance_floor_stops_the_lane_before_it_sends() {
+        let funded = || Net { accounts: Some(vec![(lane_pk_of(1), 100)]), ..Net::default() };
+        let floor = |f: u128| crate::config::BreakerCfg { min_relayer_balance: Some(f), ..Default::default() };
+        let (a, calls, _) = spend_adapter(registry(vec![], vec![]), funded(), false).await;
+        assert_eq!(lane_run(a, floor(101), &calls, 300).await, (0, vec![], 0));
+        let (a, calls, _) = spend_adapter(registry(vec![], vec![]), funded(), false).await;
+        let (sent, states, _) = lane_run(a, floor(100), &calls, 300).await;
+        assert!(sent > 0 && states.contains(&"mined".to_string()), "{sent} {states:?}");
+    }
+
+    /// A `LedgerEntry` of exactly `size` B, as `stateChanges[].after` carries it.
+    fn contract_data_after(size: usize) -> String {
+        let entry = |n: usize| stellar_xdr::LedgerEntry {
+            last_modified_ledger_seq: 7,
+            data: LedgerEntryData::ContractData(stellar_xdr::ContractDataEntry {
+                ext: stellar_xdr::ExtensionPoint::V0,
+                contract: ScAddress::from_str(REGISTRY).unwrap(),
+                key: ScVal::Void,
+                durability: stellar_xdr::ContractDataDurability::Persistent,
+                val: byt(&vec![7; n]),
+            }),
+            ext: stellar_xdr::LedgerEntryExt::V0,
+        };
+        let frame = entry(0).to_xdr(Limits::none()).unwrap().len();
+        let x = entry(size - frame).to_xdr_base64(Limits::none()).unwrap();
+        assert_eq!(base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &x).unwrap().len(), size);
+        x
+    }
+
+    /// A contract's code of `size` B or so: the limit is not code's.
+    fn contract_code_after(size: usize) -> String {
+        stellar_xdr::LedgerEntry {
+            last_modified_ledger_seq: 7,
+            data: LedgerEntryData::ContractCode(stellar_xdr::ContractCodeEntry {
+                ext: stellar_xdr::ContractCodeEntryExt::V0,
+                hash: stellar_xdr::Hash([7; 32]),
+                code: vec![7; size].try_into().unwrap(),
+            }),
+            ext: stellar_xdr::LedgerEntryExt::V0,
+        }.to_xdr_base64(Limits::none()).unwrap()
+    }
+
+    /// The registry's answers, the write's simulation carrying `changes` (`Null` = a simulation without `stateChanges`).
+    fn writes(changes: Value) -> Answer {
+        Arc::new(move |c| {
+            let mut a = view_ok(if c.function_name.0.as_slice() == b"relayers" { vecv(vec![]) } else { ScVal::Void });
+            if !changes.is_null() {
+                a["stateChanges"] = changes.clone();
+            }
+            a
+        })
+    }
+
+    fn after(entries: &[String]) -> Value {
+        entries.iter().map(|x| json!({"type": "updated", "key": "AAAA", "before": null, "after": x})).collect()
+    }
+
+    /// One `lane_step` of a `store_pqz_pop` job: what it sent, the states it reported, the claims and the last error.
+    async fn entry_step(a: &SorobanAdapter, calls: &Arc<Mutex<Vec<String>>>) -> (usize, Vec<String>, u32, String) {
+        use crate::adapter::tests::{fake_odoo, Fake};
+        let jobs = vec![json!({"id": 7, "kind": "call", "op": sized_op(8)})];
+        let (odoo, o) = fake_odoo(Fake { jobs, tokens: json!([]), ..Default::default() }).await;
+        crate::adapter::lane_step(a, &odoo, 0, "n#0").await.unwrap();
+        let f = o.lock().unwrap();
+        let states: Vec<String> = f.reports.iter().map(|r| r["chain_state"].as_str().unwrap().to_string()).collect();
+        (sends(calls), states, f.claims, f.reports.last().unwrap()["error"].as_str().unwrap_or_default().to_string())
+    }
+
+    /// Measured on the real host (`e2e_ua8_spend_stop`, `BOUNDARY`): an `after` of the limit lands, 4 B more (XDR's step) fails on
+    /// chain, on the lane's fee. So over it is refused here, `dead` on the one claim, nothing sent, and a smaller entry beside it
+    /// does not hide it.
+    #[tokio::test]
+    async fn entry_over_the_limit_is_refused_at_build() {
+        let (limit, small) = (ENTRY_MAX as usize, contract_data_after(200));
+        let (a, calls, _) = spend_adapter(writes(after(&[small.clone(), contract_data_after(limit + 4)])), Net::default(), false).await;
+        let (sent, states, claims, error) = entry_step(&a, &calls).await;
+        assert_eq!((sent, states.join(" ").as_str(), claims), (0, "dead", 1));
+        assert!(error.contains("contract_data_entry_size_bytes") && error.contains(&format!("({limit})")), "{error}");
+
+        let (a, calls, _) = spend_adapter(writes(after(&[small, contract_data_after(limit)])), Net::default(), false).await;
+        let (sent, states, ..) = entry_step(&a, &calls).await;
+        assert_eq!((sent, states.last().map(String::as_str)), (1, Some("mined")), "exactly the limit runs");
+    }
+
+    /// The check only saves a fee, and the chain still refuses: what it cannot read lets the job through, never stops it.
+    #[tokio::test]
+    async fn entry_check_never_stops_a_job_on_what_it_cannot_read() {
+        let over = contract_data_after(ENTRY_MAX as usize + 4);
+        for (changes, net, why) in [
+            (Value::Null, Net::default(), "no stateChanges"),
+            (json!([{"type": "deleted", "key": "AAAA", "before": "AAAA", "after": null}]), Net::default(), "no after"),
+            (after(&["not xdr".to_string()]), Net::default(), "an after that does not decode"),
+            (after(&[contract_code_after(ENTRY_MAX as usize + 4)]), Net::default(), "code, not data"),
+            (after(std::slice::from_ref(&over)), Net { entry_limit: None, ..Net::default() }, "the limit never read"),
+        ] {
+            let (a, calls, _) = spend_adapter(writes(changes), net, false).await;
+            let (sent, states, ..) = entry_step(&a, &calls).await;
+            assert_eq!((sent, states.last().map(String::as_str)), (1, Some("mined")), "{why}");
+        }
+        // as `tx_max_size_bytes`: a failed read keeps the last answer, a voted change is seen on the next good read
+        let (a, calls, net) = spend_adapter(writes(after(&[over])), Net { entry_limit: Some(70_000), ..Net::default() }, false).await;
+        assert_eq!(entry_step(&a, &calls).await.0, 1, "under this limit");
+        net.lock().unwrap().entry_limit = Some(ENTRY_MAX);
+        let (sent, states, ..) = entry_step(&a, &calls).await;
+        assert_eq!((sent, states.join(" ").as_str()), (1, "dead"), "the voted limit");
+        net.lock().unwrap().entry_limit = None;
+        let (sent, states, ..) = entry_step(&a, &calls).await;
+        assert_eq!((sent, states.join(" ").as_str()), (1, "dead"), "the read fails, the last answer holds");
+    }
+
+    /// B6's rule through the real step: a `relayers()` read that fails stops no payment.
+    #[tokio::test]
+    async fn a_payment_runs_while_relayers_read_fails() {
+        use crate::adapter::tests::{fake_odoo, Fake};
+        let (a, calls) = ua8_adapter(Arc::new(|c| match c.function_name.0.as_slice() {
+            b"relayers" => json!({}),
+            _ => view_ok(ScVal::Void),
+        })).await;
+        a.start_check().await.unwrap();
+        let pay = json!({"payload": payload(a.network_id, inv(CONTRACT, "pay", vec![addr(FROM), addr(WALLET), i128v(1), byt(&[3; 32]), ScVal::U64(1)], vec![])),
+            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": VU, "extra": {}});
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![json!({"id": 7, "kind": "signed_op", "op": pay})], tokens: json!([]), ..Default::default() }).await;
+        crate::adapter::lane_step(&a, &odoo, 0, "n#0").await.unwrap();
+        let states: Vec<String> = o.lock().unwrap().reports.iter().map(|r| r["chain_state"].as_str().unwrap().to_string()).collect();
+        assert_eq!(states, ["signed", "broadcast", "mined"]);
+        assert_eq!(sends(&calls), 1);
     }
 }

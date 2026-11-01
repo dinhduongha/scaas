@@ -116,7 +116,8 @@ pub trait ChainAdapter: Send + Sync {
     async fn lane_balance(&self, _lane: usize) -> Result<Option<u128>> {
         Ok(None)
     }
-    /// Phí thực trả của tx đã vào khối (đơn vị nhỏ nhất) cho ngân sách gas theo giờ (R55).
+    /// What a tx that landed paid (smallest unit), mined or reverted, for the hourly gas budget (R55, NODE-LANE-13). `Ok(None)`:
+    /// the family reports none, or it paid nothing. `Err`: unread, logged and counted by `follow`.
     async fn tx_fee(&self, _tx_id: &str) -> Result<Option<u128>> {
         Ok(None)
     }
@@ -323,6 +324,23 @@ pub async fn recover_lane(adapter: &dyn ChainAdapter, odoo: &Odoo, lane: usize, 
     Ok(())
 }
 
+/// NODE-LANE-13: a tx that landed was billed, mined or reverted, so its fee goes to the lane's budget. A failed read never holds
+/// the job's report: the budget misses that fee, which is logged and counted (`scaas_fee_unread_total`).
+async fn meter(adapter: &dyn ChainAdapter, breaker: Option<&Mutex<Breaker>>, tx_id: &str) {
+    let Some(k) = breaker else { return };
+    let fee = adapter.tx_fee(tx_id).await;
+    if let Err(e) = &fee {
+        warn!(chain = %adapter.chain_key(), tx = tx_id, "tx_fee unread, not in the gas budget: {e:#}");
+    }
+    if let Ok(mut k) = k.lock() {
+        match fee {
+            Ok(Some(fee)) => k.spend(now(), fee),
+            Ok(None) => {}
+            Err(_) => k.fee_unread(),
+        }
+    }
+}
+
 /// Một tx đang bay. `signed` = bytes còn trong tay (gửi lại được); `None` sau khởi động lại.
 struct InFlight<'a> {
     job: &'a Job,
@@ -338,30 +356,34 @@ struct InFlight<'a> {
 /// một lần, thôi gửi lại, vẫn giữ lane theo dõi tx tới trạng thái cuối hoặc hết hạn (không báo gì thêm ngoài `mined`).
 async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut sent: Result<()>, breaker: Option<&Mutex<Breaker>>) {
     let job = f.job.id;
-    let mut consumed = false;
+    let (mut consumed, mut metered) = (false, false);
     loop {
         match adapter.tx_status(f.tx_id).await {
             Ok(TxStatus::Mined { tx_hash, .. }) => {
-                if let (Some(k), Ok(Some(fee))) = (breaker, adapter.tx_fee(f.tx_id).await) {
-                    if let Ok(mut k) = k.lock() {
-                        k.spend(now(), fee);
-                    }
-                }
+                meter(adapter, breaker, f.tx_id).await;
                 report(odoo, Report { tx_hash, ..rep(job, "mined") }).await;
                 return;
             }
-            Ok(TxStatus::Reverted { .. }) if consumed => return,
-            Ok(TxStatus::Reverted { reason }) => match adapter.op_consumed(f.job).await {
-                Ok(Some(true)) => {
-                    report(odoo, Report { error: Some(format!("unknown; ours reverted: {reason}")), ..rep(job, "consumed") }).await;
+            Ok(TxStatus::Reverted { reason }) => {
+                // once: this arm runs again while `op_consumed` is unreadable
+                if !std::mem::replace(&mut metered, true) {
+                    meter(adapter, breaker, f.tx_id).await;
+                }
+                if consumed {
                     return;
                 }
-                Ok(_) => {
-                    report(odoo, Report { error: Some(reason), ..rep(job, "reverted") }).await;
-                    return;
+                match adapter.op_consumed(f.job).await {
+                    Ok(Some(true)) => {
+                        report(odoo, Report { error: Some(format!("unknown; ours reverted: {reason}")), ..rep(job, "consumed") }).await;
+                        return;
+                    }
+                    Ok(_) => {
+                        report(odoo, Report { error: Some(reason), ..rep(job, "reverted") }).await;
+                        return;
+                    }
+                    Err(e) => warn!(chain = %adapter.chain_key(), job, "reverted, op_consumed unreadable; retry: {e:#}"),
                 }
-                Err(e) => warn!(chain = %adapter.chain_key(), job, "reverted, op_consumed unreadable; retry: {e:#}"),
-            },
+            }
             Ok(TxStatus::Pending) => {}
             Err(e) if e.downcast_ref::<Rejected>().is_some() => {
                 if !consumed {
@@ -421,7 +443,7 @@ pub async fn lane_step(adapter: &dyn ChainAdapter, odoo: &Odoo, lane: usize, wor
     lane_step_metered(adapter, odoo, lane, worker, None).await
 }
 
-/// `lane_step` + ghi phí thực trả của tx đã vào khối vào ngân sách gas của lane.
+/// `lane_step` + ghi phí thực trả của tx đã vào sổ (mined hoặc reverted) vào ngân sách gas của lane.
 pub async fn lane_step_metered(
     adapter: &dyn ChainAdapter,
     odoo: &Odoo,
@@ -836,6 +858,11 @@ pub(crate) mod tests {
         /// `tx_status` lần lượt; phần tử cuối lặp lại.
         statuses: std::sync::Mutex<std::collections::VecDeque<TxStatus>>,
         submits: std::sync::atomic::AtomicU32,
+        /// `tx_fee`'s answer; `fee_unreadable` = an RPC failure.
+        fee: Option<u128>,
+        fee_unreadable: bool,
+        /// `op_consumed` fails this many times first.
+        consumed_unreadable: std::sync::atomic::AtomicU32,
     }
 
     fn racy(build_revert: bool, consumed: Option<bool>, sends: &[bool], statuses: &[TxStatus]) -> Racy {
@@ -845,6 +872,9 @@ pub(crate) mod tests {
             sends: std::sync::Mutex::new(sends.iter().copied().collect()),
             statuses: std::sync::Mutex::new(statuses.iter().cloned().collect()),
             submits: Default::default(),
+            fee: None,
+            fee_unreadable: false,
+            consumed_unreadable: Default::default(),
         }
     }
 
@@ -893,16 +923,30 @@ pub(crate) mod tests {
             unreachable!()
         }
         async fn op_consumed(&self, _: &Job) -> Result<Option<bool>> {
+            if self.consumed_unreadable.load(std::sync::atomic::Ordering::SeqCst) > 0 {
+                self.consumed_unreadable.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+                anyhow::bail!("rpc down");
+            }
             Ok(self.consumed)
+        }
+        async fn tx_fee(&self, _: &str) -> Result<Option<u128>> {
+            if self.fee_unreadable {
+                anyhow::bail!("rpc down");
+            }
+            Ok(self.fee)
         }
     }
 
     const DIGEST: &str = "0x7777777777777777777777777777777777777777777777777777777777777777";
 
     async fn race(a: &Racy, inflight: &InflightSet) -> (Vec<String>, Shared) {
+        race_metered(a, inflight, None).await
+    }
+
+    async fn race_metered(a: &Racy, inflight: &InflightSet, k: Option<&Mutex<Breaker>>) -> (Vec<String>, Shared) {
         let job = serde_json::json!({"id": 5, "kind": "signed_op", "op": {"op_kind": "pay", "digest": DIGEST}});
         let (odoo, o) = fake_odoo(Fake { jobs: vec![job], tokens: serde_json::json!([]), ..Default::default() }).await;
-        let step = step_once(a, &odoo, 0, "n#0", None, inflight);
+        let step = step_once(a, &odoo, 0, "n#0", k, inflight);
         tokio::time::timeout(Duration::from_secs(10), step).await.expect("lane held").unwrap();
         let states = o.lock().unwrap().reports.iter().map(|r| r["chain_state"].as_str().unwrap().to_string()).collect();
         (states, o)
@@ -950,6 +994,46 @@ pub(crate) mod tests {
         let (_, o) = race(&a, &InflightSet::default()).await;
         let mined = o.lock().unwrap().reports.iter().find(|r| r["chain_state"] == "mined").cloned().unwrap();
         assert!(mined.get("tx_hash").is_none(), "{mined}");
+    }
+
+    /// `a` once on a lane with this hourly budget: its states, the breaker open, the fee reads that failed.
+    async fn metered(a: Racy, budget: u128) -> (Vec<String>, Option<&'static str>, u64) {
+        let k = Mutex::new(Breaker::new(crate::config::BreakerCfg { gas_budget_per_hour: Some(budget), ..Default::default() }));
+        let (states, _) = race_metered(&a, &InflightSet::default(), Some(&k)).await;
+        let mut k = k.lock().unwrap();
+        (states, k.open(now()), k.fees_unread())
+    }
+
+    /// NODE-LANE-13: a tx that landed and failed was billed, so it counts as a mined one does. The budget of exactly its fee opens,
+    /// one above does not, whatever the path out of `follow`.
+    #[tokio::test]
+    async fn a_landed_failure_counts_against_the_budget_once() {
+        let mined = || Racy { fee: Some(10), ..racy(false, None, &[true], &[TxStatus::Mined { height: 1, tx_hash: None }]) };
+        assert_eq!(metered(mined(), 10).await.1, Some("gas_budget"));
+        let reverted = || Racy { fee: Some(10), ..racy(false, None, &[true], &[TxStatus::Reverted { reason: "boom".into() }]) };
+        let (states, open, _) = metered(reverted(), 10).await;
+        assert_eq!((states.as_slice(), open), (["signed", "broadcast", "reverted"].map(String::from).as_slice(), Some("gas_budget")));
+        assert_eq!(metered(reverted(), 11).await.1, None, "one over its fee");
+        // the arm runs again while `op_consumed` is unreadable; the fee was billed once
+        let retried = Racy { consumed_unreadable: 2.into(), ..reverted() };
+        let (states, open, _) = metered(retried, 11).await;
+        assert_eq!((states.last().map(String::as_str), open), (Some("reverted"), None), "counted once: {states:?}");
+        // someone else's copy consumed the op and ours still landed, and failed: ours was billed too
+        let consumed = Racy { fee: Some(10), ..racy(false, Some(true), &[], &[TxStatus::Unknown, TxStatus::Unknown, TxStatus::Reverted { reason: "nonce".into() }]) };
+        let (states, open, _) = metered(consumed, 10).await;
+        assert_eq!((states.as_slice(), open), (["signed", "consumed"].map(String::from).as_slice(), Some("gas_budget")));
+    }
+
+    /// A failed read never holds the job's report, and the budget's blind spot is counted, for `Mined` and `Reverted` alike; a
+    /// family that reports no fee (`Ok(None)`) is not a failed read.
+    #[tokio::test]
+    async fn an_unread_fee_reports_the_job_and_is_counted() {
+        let (states, open, unread) = metered(Racy { fee_unreadable: true, ..racy(false, None, &[true], &[TxStatus::Reverted { reason: "boom".into() }]) }, 1).await;
+        assert_eq!((states.last().map(String::as_str), open, unread), (Some("reverted"), None, 1));
+        let (states, open, unread) = metered(Racy { fee_unreadable: true, ..racy(false, None, &[true], &[TxStatus::Mined { height: 1, tx_hash: None }]) }, 1).await;
+        assert_eq!((states.last().map(String::as_str), open, unread), (Some("mined"), None, 1));
+        let (states, open, unread) = metered(racy(false, None, &[true], &[TxStatus::Reverted { reason: "boom".into() }]), 1).await;
+        assert_eq!((states.last().map(String::as_str), open, unread), (Some("reverted"), None, 0));
     }
 
     /// R80 (§8.4 `step_once`): mô phỏng revert vì op đã bị tiêu thụ ⇒ `consumed`, không `dead`.

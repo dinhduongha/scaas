@@ -576,6 +576,11 @@ impl Config {
                 c.canonical(&t.address).with_context(|| format!("chain {key}: token {}", t.address))?;
             }
             c.relay_params().with_context(|| format!("chain {key}"))?;
+            // NET-SOR-14: a Soroban job is free to the client and its fee is the lane's, so the limits are the operator's to name.
+            let set = |v: Option<u128>| v.is_some_and(|v| v > 0);
+            if c.family == "soroban" && self.modules.submit && !(set(c.breaker.gas_budget_per_hour) && set(c.breaker.min_relayer_balance)) {
+                bail!("chain {key}: a soroban lane needs breaker.gas_budget_per_hour and breaker.min_relayer_balance, both above 0 (stroops; node.example.toml)");
+            }
         }
         self.validate_store_sections(&seen)
     }
@@ -1045,13 +1050,31 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         assert!(toml::from_str::<Config>(&OK.replace("finality =", "breaker = { gas_budget_per_hour = \"x\" }\nfinality =")).is_err());
     }
 
+    /// NET-SOR-14: a Soroban lane does not start without both spend limits, a job being free to the client. One key differs per
+    /// case; an indexer-only node has no lane to limit.
+    #[test]
+    fn soroban_lanes_need_both_spend_limits() {
+        let raw = |modules: &str, breaker: &str| format!("{modules}{OK}\n[keys]\nmnemonic = {{ env = \"SCAAS_TEST_MNEMONIC\" }}\n\
+            [[chains]]\nfamily = \"soroban\"\nnetwork = \"local\"\nrpc_urls = [\"http://p\"]\nlanes = [0]\n\
+            params = {{ network_passphrase = \"x\" }}\n{breaker}\n");
+        let check = |modules: &str, breaker: &str| toml::from_str::<Config>(&raw(modules, breaker)).unwrap().validate();
+        check("", "breaker = { gas_budget_per_hour = 1, min_relayer_balance = 1 }").unwrap();
+        for bad in ["", "breaker = { gas_budget_per_hour = 1 }", "breaker = { min_relayer_balance = 1 }",
+                    "breaker = { gas_budget_per_hour = 1, min_relayer_balance = 0 }", "breaker = { gas_budget_per_hour = 0, min_relayer_balance = 1 }"] {
+            let e = check("", bad).unwrap_err().to_string();
+            assert!(e.contains("gas_budget_per_hour") && e.contains("min_relayer_balance"), "{bad}: {e}");
+        }
+        check("[modules]\nsubmit = false\n", "").unwrap();
+    }
+
     #[test]
     fn pi_chain_lanes_use_the_chain_coin_type() {
         use crate::signer::Signer;
         // Soroban family, Pi Network passphrase, SLIP-44 314159 (bip_utils 2.9.3, the 24-word "abandon … art").
         let raw = format!("{OK}\n[keys]\nmnemonic = {{ env = \"SCAAS_TEST_MNEMONIC\" }}\n\
             [[chains]]\nfamily = \"soroban\"\nnetwork = \"pi-testnet\"\nrpc_urls = [\"http://p\"]\nlanes = [0, 1]\n\
-            coin_type = 314159\nparams = {{ network_passphrase = \"Pi Testnet\" }}\n");
+            coin_type = 314159\nparams = {{ network_passphrase = \"Pi Testnet\" }}\n\
+            breaker = {{ gas_budget_per_hour = 1, min_relayer_balance = 1 }}\n");
         let c: Config = toml::from_str(&raw).unwrap();
         c.validate().unwrap();
         std::env::set_var("SCAAS_TEST_MNEMONIC", "abandon abandon abandon abandon abandon abandon abandon abandon \

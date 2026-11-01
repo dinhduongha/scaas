@@ -5,7 +5,7 @@
 //! Every comparison is between independent sources: a chain's read against the vector or against the other chain's read,
 //! never a value against its own copy. The registry writes go through the node's `call` jobs (`lane_step` on Soroban, the
 //! outbox on EVM); only the published byte limits of `e2e_ua8_network_fit` use `raw_send`, junk `slhdsa128s` signatures the
-//! off-chain check would refuse and the chain never reads. Log prefixes: `COPY`, `FIT`, `EDGE`, `P1` … `P5` (the brief's proofs).
+//! off-chain check would refuse and the chain never reads. Log prefixes: `COPY`, `FIT`, `EDGE`, `FEE`, `BOUNDARY`, `ENTRY`, `P1` … `P5` (the brief's proofs).
 mod soroban_common;
 
 use std::process::Command;
@@ -479,6 +479,18 @@ impl Node {
     /// A transaction the node's checks do not see: `ua8_call_job`'s XDR, simulated as `build` does, sent if it simulates.
     /// `Err` is the refusal, at simulation or on chain.
     async fn raw_send(&self, what: &str, lane: usize, call: InvokeContractArgs, auth: Vec<SorobanAuthorizationEntry>) -> Result<String, String> {
+        let (tx, r) = self.raw_tx(lane, call, auth).await?;
+        if r["status"] != "SUCCESS" {
+            println!("DIAG {what}: core_metrics {:?}; {:?}", core_metrics(&r), diagnostic_errors(&r));
+            let size = TransactionEnvelope::from_xdr_base64(r["envelopeXdr"].as_str().unwrap(), Limits::none()).unwrap().to_xdr(Limits::none()).unwrap().len();
+            return Err(format!("on chain, tx_size {size}: {} {}", r["status"], r["resultXdr"]));
+        }
+        fit(what, &tx).await;
+        Ok(tx)
+    }
+
+    /// `raw_send`'s transaction, whatever it lands as: its hash and its `getTransaction` answer. `Err` = it never landed.
+    async fn raw_tx(&self, lane: usize, call: InvokeContractArgs, auth: Vec<SorobanAuthorizationEntry>) -> Result<(String, Value), String> {
         let sim = simulate(lane as u32, call.clone(), auth.clone()).await;
         if let Some(e) = sim.get("error") {
             return Err(format!("simulation: {}", e.as_str().unwrap_or_default().chars().take(240).collect::<String>()));
@@ -492,12 +504,7 @@ impl Node {
         let size = signed.raw.len();
         self.adapter.submit(&signed).await.map_err(|e| format!("sendTransaction, tx_size {size}: {e:#}"))?;
         let r = await_tx(&signed.tx_id).await;
-        if r["status"] != "SUCCESS" {
-            println!("DIAG {what}: core_metrics {:?}; {:?}", core_metrics(&r), diagnostic_errors(&r));
-            return Err(format!("on chain, tx_size {size}: {} {}", r["status"], r["resultXdr"]));
-        }
-        fit(what, &signed.tx_id).await;
-        Ok(signed.tx_id)
+        Ok((signed.tx_id, r))
     }
 
     async fn rec(&self, ua: &[u8; 32]) -> Rec {
@@ -1301,6 +1308,101 @@ async fn e2e_ua8_tx_size_limit() {
              sim.get("error").is_some(), data.as_ref().map(|d| d.resources.write_bytes).ok(), sim.as_object().map(|o| o.keys().cloned().collect::<Vec<_>>()));
     let (state, last, tx) = s.run(0, job).await;
     println!("ENTRY the same job through the node: job {state}, signed {}, reason {}", tx.is_some(), last["error"]);
+}
+
+// ---------- B9a: the spend stop ----------
+
+/// `i`'s native balance, read here and not through the adapter under test.
+async fn native_balance(i: u32) -> u128 {
+    let pk: [u8; 32] = key(i).public_key().try_into().unwrap();
+    let id = stellar_xdr::AccountId(stellar_xdr::PublicKey::PublicKeyTypeEd25519(Uint256(pk)));
+    let k = LedgerKey::Account(stellar_xdr::LedgerKeyAccount { account_id: id }).to_xdr_base64(Limits::none()).unwrap();
+    let r = rpc("getLedgerEntries", json!({"keys": [k]})).await;
+    match LedgerEntryData::from_xdr_base64(r["entries"][0]["xdr"].as_str().unwrap(), Limits::none()).unwrap() {
+        LedgerEntryData::Account(a) => a.balance as u128,
+        d => panic!("{d:?}"),
+    }
+}
+
+/// A fresh record whose proof is `size` B, registered by lane 0 (`seed` makes it fresh): the `store_pqz_pop` job that writes it.
+async fn pop_job(n: &Node, seed: u8, size: usize) -> Value {
+    let proof = vec![seed; size];
+    let (attrs, _, _) = set_attrs(SETS[0]);
+    let attrs = UAAttrs { pqz_pop_hash: scaas_ua::keccak256(&proof), ..attrs };
+    let rec = Rec { kind: FNDSA512, key_data: vec![seed; 897], attrs, pop: hx(&row("registrations", "fndsa512")["pop"]), pqz_pop: vec![] };
+    let (f, args) = rec.job_args(&json!(g(&key(0))));
+    assert!(table_row(n, &format!("register fndsa512 for a {size} B proof"), f, args).await);
+    call_job(&n.registry, "store_pqz_pop", json!({"ua": h(&rec.ua()), "pqz_pop": h(&proof)}))
+}
+
+/// What the real host answers for the Soroban spend stop (NET-SOR-14): `tx_fee` against the balances, plain and fee-bumped,
+/// `SUCCESS` and `FAILED`, whose `resultXdr` are the bytes of `adapters::soroban`'s tests; `lane_balance` of a funded and an
+/// unfunded account; the entry limit's exact edge; a job over it refused at build.
+#[tokio::test]
+#[ignore]
+async fn e2e_ua8_spend_stop() {
+    let s = fresh_node().await;
+    let registry = sc(&s.registry);
+    let mut seed = 0x30;
+    let mut landed = vec![];
+    // lane 0 is the chain's `fee_bump_lane`, so with a fee bump lane 1 sends and lane 0 pays
+    for (fee_bump, sender) in [(false, 0u32), (true, 1)] {
+        let n = Node::with_fee_bump(s.registry.clone(), fee_bump).await;
+        for (want, size) in [("SUCCESS", 1_000), ("FAILED", 70_000)] {
+            seed += 1;
+            let job = pop_job(&s, seed, size).await;
+            let (call, auth) = ua8_call_job(&network(), &job["op"], &sc(&g(&key(sender))), &registry, false).unwrap();
+            let before = (native_balance(0).await, native_balance(sender).await);
+            let (tx, r) = n.raw_tx(sender as usize, call, auth).await.unwrap();
+            let after = (native_balance(0).await, native_balance(sender).await);
+            let res = stellar_xdr::TransactionResult::from_xdr_base64(r["resultXdr"].as_str().unwrap(), Limits::none()).unwrap();
+            println!("FEE fee_bump {fee_bump} {}: feeCharged {}, payer (lane 0) down {}, sender (lane {sender}) down {}, feeBump {}, resultXdr {}",
+                     r["status"], res.fee_charged, before.0 - after.0, before.1 - after.1, r["feeBump"], r["resultXdr"]);
+            assert_eq!(r["status"], want, "{r}");
+            landed.push((fee_bump, tx, before.0 - after.0));
+        }
+    }
+
+    // the exact edge: every size around it landed, so the host answers, not a byte rule
+    let (lane, mut edge) = (sc(&g(&key(0))), vec![]);
+    for size in (65_392..=65_424).step_by(4) {
+        seed += 1;
+        let job = pop_job(&s, seed, size).await;
+        let (call, auth) = ua8_call_job(&network(), &job["op"], &lane, &registry, false).unwrap();
+        let sim = simulate(0, call.clone(), auth.clone()).await;
+        let largest = sim["stateChanges"].as_array().into_iter().flatten().filter_map(|c| c["after"].as_str())
+            .map(|x| base64::Engine::decode(&base64::engine::general_purpose::STANDARD, x).unwrap().len()).max().unwrap();
+        let (_, r) = s.raw_tx(0, call, auth).await.unwrap();
+        println!("BOUNDARY proof {size} B, after {largest} B: {} {:?}", r["status"], diagnostic_errors(&r).iter().take(1).collect::<Vec<_>>());
+        edge.push((largest, r["status"].as_str().unwrap().to_string()));
+    }
+
+    let (at, over) = (edge.iter().filter(|e| e.1 == "SUCCESS").map(|e| e.0).max().unwrap(), edge.iter().filter(|e| e.1 == "FAILED").map(|e| e.0).min().unwrap());
+    println!("BOUNDARY largest landed after {at} B, smallest refused after {over} B");
+
+    // over the limit through the node: dead on the one claim, nothing signed
+    let job = pop_job(&s, 0x7f, 70_000).await;
+    let (state, last, tx) = s.run(0, job).await;
+    println!("ENTRY over the limit through the node: job {state}, signed {}, reason {}", tx.is_some(), last["error"]);
+    assert_eq!((state.as_str(), tx.is_none()), ("dead", true), "refused at build: {last}");
+    assert!(last["error"].as_str().unwrap_or_default().contains("contract_data_entry_size_bytes"), "{last}");
+    // the largest that lands still runs
+    let job = pop_job(&s, 0x7e, at - 128).await;
+    let (state, last, _) = s.run(0, job).await;
+    println!("ENTRY at the limit through the node: job {state}, reason {}", last["error"]);
+    assert_eq!(state, "mined", "{last}");
+
+    let unfunded = SorobanAdapter::new(&chain_cfg(false), &[key(20), key(21)]).unwrap();
+    assert_eq!(unfunded.lane_balance(0).await.unwrap(), Some(0), "no account, no balance");
+    let n = Node::with_fee_bump(s.registry.clone(), true).await;
+    let (b0, b1) = (native_balance(0).await, native_balance(1).await);
+    assert_eq!(s.adapter.lane_balance(1).await.unwrap(), Some(b1));
+    assert_eq!(n.adapter.lane_balance(1).await.unwrap(), Some(b0 + b1), "a lane and the fee account");
+    assert_eq!(n.adapter.lane_balance(0).await.unwrap(), Some(b0), "the fee account's own lane counts it once");
+    for (fee_bump, tx, down) in landed {
+        let a = if fee_bump { &n.adapter } else { &s.adapter };
+        assert_eq!(a.tx_fee(&tx).await.unwrap(), Some(down), "feeCharged is what left the payer");
+    }
 }
 
 // ---------- B7b: relayer mode, before and after the argument hash ----------
