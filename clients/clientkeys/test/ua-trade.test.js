@@ -15,8 +15,6 @@ import { hex, fromHex, keccak_256, concatBytes } from '../src/bytes.js';
 import { PQ_KINDS, pqMessage } from '../src/pq.js';
 import { hashTypedData, hashStruct, padId, uaTradeOrderTypedData, uaInvalidateNoncesTypedData, cancelUAOrderTypedData,
   checkTradeOrder, checkCancel, TYPED_OPS } from '../src/evm.js';
-// uatrade_kat.json keeps the struct the contracts hash until C6: CancelOrder over the order hash.
-import { orderCancelTypedData } from '../legacy/typed-signing/evm-pre-named.js';
 
 import { dir } from './ua-vectors-dir.js';
 const V = JSON.parse(readFileSync(new URL('uatrade_kat.json', dir)));
@@ -68,7 +66,7 @@ test('every row: order, cancel and invalidate digests; the builders rebuild the 
     assert.deepEqual(uaTradeOrderTypedData({ ...at, token: V.tokenA, order: m }), r.order, r.name);
     assert.equal(hex(hashStruct(r.order.types, 'UATradeOrder', m)), r.structHash);
     assert.equal(hex(hashTypedData(r.order)), r.orderHash, r.name);
-    assert.equal(hex(hashTypedData(orderCancelTypedData({ ...at, contract: V.tokenA, orderHash: r.orderHash }))), r.cancelDigest);
+    assert.equal(hex(hashTypedData(cancelUAOrderTypedData({ ...at, name: 'SCaaS MetaToken', contract: V.tokenA, message: { order: m } }))), r.cancelDigest);
     assert.deepEqual(uaInvalidateNoncesTypedData({ ...at, contract: V.tokenA, from: r.from, batch: 1, minNonce: 5 }), r.invalidate);
     assert.equal(hex(hashTypedData(r.invalidate)), r.invalidateDigest);
     for (const [d, auth] of [[r.orderHash, r.auth], [r.cancelDigest, r.cancelAuth], [r.invalidateDigest, r.invalidateAuth]]) {

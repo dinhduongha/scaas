@@ -5,15 +5,12 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
   hashTypedData, hashStruct, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
   batchLeaf, evmAddress, passkeySubjectKey, addKeyCall, addKeyTypedData, executeTypedData, checkOwnerCall, checkPayment,
-  keyProofMessage, metaTxTypedData, metaTransferTypedData, checkCall, tradeOrderTypedData, cancelOrderTypedData,
+  keyProofMessage, metaTxTypedData, metaTransferTypedData, checkCall, tradeOrderTypedData, cancelOrderTypedData, cancelDexOrderTypedData,
   invalidateNoncesTypedData, uaInvalidateNoncesTypedData, checkTradeOrder, bidMinFill, bidMinBase, checkCancel, payLane, receiverFeeTypedData, wrapToUACall,
   unwrapToUACall, payWithFeeToUACalldata, checkReceiverFee,
 } from '../src/evm.js';
-// What the contracts hash until C5 / C6: the forge KATs below still pin these.
-import {
-  orderCancelTypedData, ownerCallTypedData, checkOwnerCall as checkGenericOwnerCall, receiverFeeTypedData as receiverFeeOverDigest,
-  checkCancel as checkCancelOverHash,
-} from '../legacy/typed-signing/evm-pre-named.js';
+// What the wallets' generic `mtxExecute` still hashes: the forge KAT below pins these.
+import { ownerCallTypedData, checkOwnerCall as checkGenericOwnerCall } from '../legacy/typed-signing/evm-pre-named.js';
 import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
 const vectors = new URL('../../../smartcontracts/evm/test/vectors/', import.meta.url);
@@ -46,9 +43,7 @@ test('TradeOrder, CancelOrder, InvalidateNonces in the token domain = forge KAT 
   const td = tradeOrderTypedData({ token: k.verifying_contract, chainId: 7622, chainUid: k.salt, order: o });
   assert.equal(hex(hashTypedData(td)), k.order_hash);
   const at = { contract: k.verifying_contract, chainId: 7622, chainUid: k.salt };
-  assert.equal(hex(hashTypedData(orderCancelTypedData({ ...at, orderHash: k.order_hash }))), k.cancel_digest);
-  assert.equal(hex(hashTypedData(orderCancelTypedData({ ...at, invalidate: { from: o.from, batch: 7, minNonce: 43 } }))),
-    k.invalidate_digest);
+  assert.equal(hex(hashTypedData(cancelOrderTypedData({ ...at, name: 'SCaaS MetaToken', message: { order: o } }))), k.cancel_digest);
   assert.equal(hex(hashTypedData(invalidateNoncesTypedData({ ...at, from: o.from, batch: 7, minNonce: 43 }))), k.invalidate_digest);
 });
 
@@ -59,9 +54,8 @@ test('DexOrder (nested TradeOrder) and the DEX cancels in the DEX domain = forge
   assert.equal(hex(hashStruct(td.types, 'DexOrder', td.message)), k.dex_order_struct_hash);
   assert.equal(hex(hashTypedData(td)), k.dex_order_hash);
   const at = { name: 'SCaaS Dex', contract: k.dex, chainId: 7622, chainUid: k.salt };
-  assert.equal(hex(hashTypedData(orderCancelTypedData({ ...at, orderHash: k.dex_order_hash }))), k.cancel_digest);
-  assert.equal(hex(hashTypedData(orderCancelTypedData({ ...at, invalidate: { from: o.from, batch: 1, minNonce: 5 } }))),
-    k.invalidate_digest);
+  assert.equal(hex(hashTypedData(cancelDexOrderTypedData({ ...at, message: { order: { sellToken: k.outside_token, order: o } } }))), k.cancel_digest);
+  assert.equal(hex(hashTypedData(invalidateNoncesTypedData({ ...at, from: o.from, batch: 1, minNonce: 5 }))), k.invalidate_digest);
   const t = decodeOrder(k.taker_order_abi);
   assert.equal(hex(hashTypedData(tradeOrderTypedData({ token: k.token, chainId: 7622, chainUid: k.salt, order: t }))),
     k.taker_order_hash);
@@ -423,8 +417,7 @@ test('trade order: exactly the order the client built, on a pinned DEX or wrappe
     td.domain = { ...td.domain, ...dom };
     return td;
   };
-  const want = { account: ACCOUNT, chainId: 7622, chainUid: UID, order: mine, sellToken: TOKEN, dexes: [DEX, DEX2],
-    wrappers: [WRAPPER], now: NOW };
+  const want = { account: ACCOUNT, chainId: 7622, chainUid: UID, order: mine, sellToken: TOKEN, dexes: [DEX, DEX2], now: NOW };
   const ok = checkTradeOrder(server(), want);
   assert.deepEqual(ok.warnings, []);
   assert.equal(ok.minFill, 0n, 'the signed minFill (no protocol floor, CTR-DEX-14)');
@@ -441,8 +434,6 @@ test('trade order: exactly the order the client built, on a pinned DEX or wrappe
   const open = { ...mine, relayer: '0x' + '00'.repeat(20) };
   assert.deepEqual(checkTradeOrder(server(open), { ...want, order: open }).warnings,
     ['any submitter may settle this order and earn the relayer share']);
-  const wrap = { ...mine, dex: WRAPPER, receiveToken: WRAPPER, minFill: '1000' };
-  checkTradeOrder(server(wrap), { ...want, order: wrap });
   const escrow = { ...mine, flags: 3 };
   checkTradeOrder(server(escrow), { ...want, order: escrow });
   // C6-5: the chain refuses a nonce >= 2^128 (no lane floor can reach it)
@@ -469,9 +460,9 @@ test('trade order: exactly the order the client built, on a pinned DEX or wrappe
   // the order the client built must itself be sane
   for (const [i, [o, why, extra]] of [
     [{ dex: '0x' + 'ee'.repeat(20) }, /DEX that is not on your chain profile/],
-    [{ dex: WRAPPER, receiveToken: WRAPPER }, /wrap by signature/],                  // not all or nothing
-    [{ dex: WRAPPER, minFill: '1000' }, /wrap by signature/],                        // paying out something else
-    [{ dex: WRAPPER, receiveToken: WRAPPER, minFill: '1000' }, /wrap by signature/, { outside: true, sellToken: OUT }],
+    [{ dex: WRAPPER, minFill: '1000' }, /DEX that is not on your chain profile/],    // not on the DEX list
+    [{ dex: DEX, receiveToken: DEX }, /a wrap by signature is a WrapOrder/],         // the chain hashes it as one
+    [{ dex: WRAPPER, receiveToken: WRAPPER, minFill: '1000' }, /a wrap by signature is a WrapOrder/, { outside: true, sellToken: OUT }],
     [{ fee: '10001' }, /the fee is above 1 %/],
     [{ flags: 2 }, /unknown order flags/],                                           // ESCROW without IOC
     [{ flags: 8 }, /unknown order flags/],
@@ -492,7 +483,7 @@ test('trade order: exactly the order the client built, on a pinned DEX or wrappe
 
 test('cancel: only the order the user holds or the lane the user chose, from the account, in the order\'s domain', () => {
   const order = cancelOrderTypedData({ name: 'SCaaS MetaToken', contract: TOKEN, chainId: 7622, chainUid: UID, message: { order: { from: ACCOUNT,
-    receiveToken: ATK, amount: 1000, receiveAmount: 2000, dex: ATK, nonce: 5, validUntil: NOW + 600 } } }).message.order;
+    receiveToken: ATK, amount: 1000, receiveAmount: 2000, dex: '0x' + 'de'.repeat(20), nonce: 5, validUntil: NOW + 600 } } }).message.order;
   const want = { account: ACCOUNT, chainId: 7622, chainUid: UID, contract: TOKEN, order };
   const at = { name: 'SCaaS MetaToken', contract: TOKEN, chainId: 7622, chainUid: UID };
   const td = cancelOrderTypedData({ ...at, message: { order } });
@@ -516,12 +507,12 @@ test('cancel: only the order the user holds or the lane the user chose, from the
     { ...want, order: undefined, invalidate: inv }), /not the cancel you asked for/);
 });
 
-test('legacy checkCancel: the UA invalidation resolves its builder', () => {
+test('checkCancel: the UA invalidation resolves its builder', () => {
   const id = '0x' + 'ac'.repeat(32);
   const inv = { batch: 7, minNonce: 43 };
   const at = { contract: TOKEN, chainId: 7622, chainUid: UID };
   const td = uaInvalidateNoncesTypedData({ ...at, ...inv, from: id });
-  assert.equal(hex(checkCancelOverHash(td, { account: id, ...at, invalidate: inv, ua: true })), hex(hashTypedData(td)));
+  assert.equal(hex(checkCancel(td, { account: id, ...at, invalidate: inv, ua: true })), hex(hashTypedData(td)));
 });
 
 const KEY_PROOF_ZERO = '0xfa7987471ecf88572865d4f53880fda17e67fadcae78beb98eb39504833f66de';
@@ -534,15 +525,18 @@ test('UA-5a: ReceiverFee typed data and the receivers\' calldata (`cast calldata
   // ReceiverPays.t.sol test_receiverFeeDigestIsPinned: the typehash and the salted domain of the token
   const fields = (td) => td.types[td.primaryType].map((f) => `${f.type} ${f.name}`).join(',');
   const contract = '0x' + 'a1'.repeat(20);
+  const ZERO_FEE_TO = '0x' + '00'.repeat(20);
   const chainUid = '0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464';
   const paymentDigest = hex(keccak_256(utf8ToBytes('payment')));
-  const td = receiverFeeOverDigest({ contract, chainId: 7622, chainUid, paymentDigest, fee: 3000000,
-    feeRecipient: '0x0000000000000000000000000000000000000fee', validUntil: 1800000060 });
-  assert.equal(hex(keccak_256(utf8ToBytes(`ReceiverFee(${fields(td)})`))),
-    '0x0128f09c9f096f23f7540465cf85cf756ab725cb552bf61e040433a9b20a9bdf');
+  const td = receiverFeeTypedData({ name: 'SCaaS MetaToken', contract, chainId: 7622, chainUid, message: {
+    payment: { from: contract, to: contract, value: 1, entryRef: paymentDigest, batch: 0, nonce: 0, validUntil: 1, mode: 1,
+      relayer: contract, fee: 0, feeRecipient: ZERO_FEE_TO },
+    fee: 3000000, feeRecipient: '0x0000000000000000000000000000000000000fee', validUntil: 1800000060 } });
+  const typehash = '0x7c08a6ca283c642a92e66bc1b0a04aaf10abca26906244a63d8a5e3c28232305';
+  assert.equal(hex(keccak_256(utf8ToBytes(`ReceiverFee(${fields(td)})MetaTransfer(${td.types.MetaTransfer.map((f) => `${f.type} ${f.name}`).join(',')})`))), typehash);
   const ds = hashStruct(td.types, 'EIP712Domain', td.domain);
   const sh = keccak_256(abiEncode(['bytes32', 'bytes32', 'uint256', 'address', 'uint256'],
-    ['0x0128f09c9f096f23f7540465cf85cf756ab725cb552bf61e040433a9b20a9bdf', paymentDigest, 3000000n,
+    [typehash, hex(hashStruct(td.types, 'MetaTransfer', td.message.payment)), 3000000n,
       '0x0000000000000000000000000000000000000fee', 1800000060n]));
   assert.equal(hex(hashTypedData(td)), hex(keccak_256(new Uint8Array([0x19, 0x01, ...ds, ...sh]))));
   // cast calldata "wrapToUA(address,uint256,bytes32)" 0x5ca0…b1 1000000 0xabab…ab (likewise below)

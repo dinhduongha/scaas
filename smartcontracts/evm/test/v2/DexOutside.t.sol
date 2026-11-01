@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {OrderJson} from "../helpers/OrderJson.sol";
+import {domainOf} from "../metatx/NamedEntry.t.sol";
+import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {Test, Vm} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -329,8 +332,12 @@ contract DexOutsideTest is Test {
         bytes32 h = keccak256(abi.encodePacked(
             "\x19\x01", domain, keccak256(abi.encode(dexOrderType, address(usdc), orderStruct))));
         assertEq(dex.dexOrderDigest(address(usdc), o), h);
-        assertEq(dex.cancelOrderDigest(h), keccak256(abi.encodePacked(
-            "\x19\x01", domain, keccak256(abi.encode(keccak256("CancelOrder(bytes32 orderHash)"), h)))));
+        bytes32 cancelType = keccak256(
+            "CancelDexOrder(DexOrder order)DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,address receiveToken,"
+            "uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,address destination,"
+            "uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)");
+        assertEq(dex.cancelDexOrderDigest(address(usdc), o), keccak256(abi.encodePacked("\x19\x01", domain, keccak256(abi.encode(
+            cancelType, keccak256(abi.encode(dexOrderType, address(usdc), orderStruct)))))));
         assertEq(dex.invalidateNoncesDigest(dave, 1, 5), keccak256(abi.encodePacked("\x19\x01", domain, keccak256(
             abi.encode(keccak256("InvalidateNonces(address from,uint256 batch,uint256 minNonce)"), dave, 1, 5)))));
         // signed for another sell token: refused
@@ -617,6 +624,25 @@ contract DexOutsideTest is Test {
 
     // ------------------------------------------------------------------ cancels (CTR-DEX-02, CTR-DEX-18)
 
+    /// `CancelDexOrder` nests the `DexOrder` (TS-D19): the wallet's JSON is the digest; `pulled` stays keyed by the order
+    /// digest. The pre-C6 `CancelOrder(bytes32 orderHash)`, the only change, is a skipped item; the nested one closes it.
+    function test_cancelDexOrderNested() public {
+        ITradeToken.TradeOrder memory o = _order(dave, address(a), 2000, 1000, 1);
+        bytes32 h = dex.dexOrderDigest(address(usdc), o);
+        bytes32 wallet = OrderJson.cancelDex(address(dex), address(usdc), TradeLib.core(o));
+        assertEq(dex.cancelDexOrderDigest(address(usdc), o), wallet);
+        ISCaaSDex.DexOrder[] memory os = new ISCaaSDex.DexOrder[](1);
+        os[0] = ISCaaSDex.DexOrder(address(usdc), o);
+        bytes[] memory sigs = new bytes[](1);
+        sigs[0] = _sig(DAVE_PK, keccak256(abi.encodePacked("\x19\x01", domainOf(address(dex)),
+            keccak256(abi.encode(keccak256("CancelOrder(bytes32 orderHash)"), h)))));
+        dex.mtxCancelOrders(os, sigs);
+        assertEq(dex.pulled(h), 0, "the flat form is skipped");
+        sigs[0] = _sig(DAVE_PK, wallet);
+        dex.mtxCancelOrders(os, sigs);
+        assertEq(dex.pulled(h), 2000);
+    }
+
     function test_cancelOrders_skipsBadItems_andInvalidateNonces() public {
         ITradeToken.TradeOrder memory good = _order(dave, address(a), 2000, 1000, 1);
         ITradeToken.TradeOrder memory bad = _order(dave, address(a), 2000, 1000, 2);
@@ -626,8 +652,8 @@ contract DexOutsideTest is Test {
         os[0] = ISCaaSDex.DexOrder(address(usdc), good);
         os[1] = ISCaaSDex.DexOrder(address(usdc), bad);
         bytes[] memory sigs = new bytes[](2);
-        sigs[0] = _sig(DAVE_PK, dex.cancelOrderDigest(hg));
-        sigs[1] = _sig(0xBAD, dex.cancelOrderDigest(hb));
+        sigs[0] = _sig(DAVE_PK, dex.cancelDexOrderDigest(address(usdc), good));
+        sigs[1] = _sig(0xBAD, dex.cancelDexOrderDigest(address(usdc), bad));
         vm.expectRevert(ISCaaSDex.LengthMismatch.selector);
         dex.mtxCancelOrders(os, new bytes[](1));
         vm.expectEmit(address(dex));
@@ -673,7 +699,7 @@ contract DexOutsideTest is Test {
         vm.prank(relayer);
         assertTrue(dex.mtxSettle(DexLegs.wire(ss))[0]);
         assertEq(dex.pulled(h), 2000);
-        sigs[0] = _sig(DAVE_PK, dex.cancelOrderDigest(h2));
+        sigs[0] = _sig(DAVE_PK, dex.cancelDexOrderDigest(address(usdc), os[0].order));
         dex.mtxCancelOrders(os, sigs);
         assertEq(dex.pulled(h2), 2000, "cancelled");
         dex.mtxInvalidateNonces(dave, 1, 5, _sig(DAVE_PK, d));
@@ -693,7 +719,7 @@ contract DexOutsideTest is Test {
         bytes[] memory sigs = new bytes[](3);
         sigs[0] = hex"00";
         sigs[1] = hex"00";
-        sigs[2] = _sig(DAVE_PK, dex.cancelOrderDigest(hg));
+        sigs[2] = _sig(DAVE_PK, dex.cancelDexOrderDigest(address(usdc), good));
         dex.mtxCancelOrders{gas: 1_000_000}(os, sigs);
         assertEq(dex.pulled(hg), 2000);
         assertEq(dex.pulled(dex.dexOrderDigest(address(usdc), os[0].order)), 0);

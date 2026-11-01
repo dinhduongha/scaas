@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {OrderJson} from "../helpers/OrderJson.sol";
+import {domainOf, h, n} from "../metatx/NamedEntry.t.sol";
+import {UACall} from "./UACall.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -104,7 +107,7 @@ contract UALedgerTest is UALedgerBase {
         bytes memory wrapped = _ecdsa(ALICE_PK, lreg.uaAuthDigest(_pad(alice), UAKinds.PURPOSE_METATX, tok.uaTransferDigest(t)));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, wrapped);
+        tok.uaExecuteTransfer(t, UACall.auth(t.from, wrapped));
         vm.expectEmit(address(tok));
         emit IUALedger.UAPaymentSettled(_pad(alice), uaP, 30, 0, RELAYER, keccak256("invoice-2"));
         t.entryRef = keccak256("invoice-2");
@@ -119,12 +122,12 @@ contract UALedgerTest is UALedgerBase {
             _auth(lreg, UAKinds.P256, _key(UAKinds.P256), UAKinds.PURPOSE_MEMBER, tok.uaTransferDigest(t));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaP));
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, wrongPurpose);
+        tok.uaExecuteTransfer(t, UACall.auth(t.from, wrongPurpose));
         bytes32 stranger = keccak256("not registered");
         t = _t(stranger, _pad(bob), 0);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, stranger));
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, abi.encode(bytes(""), bytes("")));
+        tok.uaExecuteTransfer(t, UACall.auth(t.from, abi.encode(bytes(""), bytes(""))));
     }
 
     // ----- T-V3-1: one nonce map for both paths -----
@@ -142,7 +145,7 @@ contract UALedgerTest is UALedgerBase {
         assertEq(tok.uaNonce(_pad(alice), 1), 1);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(v3, a3);
+        tok.uaExecuteTransfer(v3, UACall.auth(v3.from, a3));
         v3.nonce = 1;
         _xfer(v3);
         assertEq(tok.mtxNonce(alice, 1), 2);
@@ -196,7 +199,7 @@ contract UALedgerTest is UALedgerBase {
         bytes memory a = _authT(address(tok), t);
         vm.expectRevert(IERC20MetaTx.FeeRecipientIsPayee.selector);
         vm.prank(bob);
-        tok.uaExecuteTransfer(t, a);
+        tok.uaExecuteTransfer(t, UACall.auth(t.from, a));
     }
 
     /// D19: no UA-ledger fee reaches `SHIELD_POOL`: the transfer fee, and the self-call fee of `uaExecute` (`_uaMove`
@@ -270,33 +273,55 @@ contract UALedgerTest is UALedgerBase {
         MetaTxLib.UAMetaTransfer memory t = _t(_pad(POOL), _pad(bob), 1);
         vm.expectRevert(IUALedger.UAPoolNotPayable.selector);
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, new bytes(65));
+        tok.uaExecuteTransfer(t, UACall.auth(t.from, new bytes(65)));
     }
 
     function test_T_V3_3b_cancelNative_refused() public {
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UAKindNotAccepted.selector, _pad(alice), uint16(0)));
-        tok.uaCancelNonce(_pad(alice), 1, block.timestamp + 60, "");
+        tok.uaCancelNonce(_pad(alice), 1, block.timestamp + 60, UACall.auth(_pad(alice), ""));
     }
 
     // ----- uaCancelNonce -----
 
+    /// `test_uaCancelNonceTyped` (TS-D19): the wallet's JSON digest in the token's domain is what is authorized (purpose
+    /// `metatx-cancel`); the pre-C6 digest, the only change, is `UAUnauthorized`; the wallet's cancels the lane.
+    function test_uaCancelNonceTyped() public {
+        uint256 until = block.timestamp + 60;
+        bytes32 wallet = OrderJson.digest(address(tok), "UACancelNonce",
+            '"UACancelNonce":[{"name":"ua","type":"bytes32"},{"name":"batch","type":"uint256"},{"name":"validUntil","type":"uint256"}]',
+            string.concat('{"ua":', h(uaP), ',"batch":', n(9), ',"validUntil":', n(until), '}'));
+        assertEq(tok.uaCancelDigest(uaP, 9, until), wallet);
+        bytes32 tagged = keccak256(abi.encode(UAKinds.PURPOSE_METATX_CANCEL, block.chainid, chainUidA, address(tok), uaP, uint256(9), until));
+        bytes memory old = _auth(lreg, UAKinds.P256, _key(UAKinds.P256), UAKinds.PURPOSE_METATX_CANCEL, tagged);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaP));
+        tok.uaCancelNonce(uaP, 9, until, UACall.auth(uaP, old));
+        assertEq(tok.uaNonce(uaP, 9), 0);
+        bytes memory good = _auth(lreg, UAKinds.P256, _key(UAKinds.P256), UAKinds.PURPOSE_METATX_CANCEL, wallet);
+        vm.expectEmit(address(tok));
+        emit IUALedger.UANonceCancelled(uaP, 9, 1);
+        vm.prank(address(0x0BEE)); // anyone submits
+        tok.uaCancelNonce(uaP, 9, until, UACall.auth(uaP, good));
+        assertEq(tok.uaNonce(uaP, 9), 1);
+    }
+
     function test_uaCancelNonce() public {
         uint256 until = block.timestamp + 60;
         bytes32 d = tok.uaCancelDigest(uaP, 9, until);
-        assertEq(d, keccak256(abi.encode(UAKinds.PURPOSE_METATX_CANCEL, block.chainid, chainUidA, address(tok), uaP, uint256(9), until)));
+        assertEq(d, keccak256(abi.encodePacked(hex"1901", domainOf(address(tok)), keccak256(abi.encode(
+            keccak256("UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)"), uaP, uint256(9), until)))));
         bytes memory a = _auth(lreg, UAKinds.P256, _key(UAKinds.P256), UAKinds.PURPOSE_METATX_CANCEL, d);
         vm.expectEmit(address(tok));
         emit IUALedger.UANonceCancelled(uaP, 9, 1);
-        tok.uaCancelNonce(uaP, 9, until, a);
+        tok.uaCancelNonce(uaP, 9, until, UACall.auth(uaP, a));
         assertEq(tok.uaNonce(uaP, 9), 1);
         vm.expectRevert(IUALedger.UACancelUsed.selector); // one signature, one cancel
-        tok.uaCancelNonce(uaP, 9, until, a);
+        tok.uaCancelNonce(uaP, 9, until, UACall.auth(uaP, a));
         bytes memory asMetatx = _auth(lreg, UAKinds.P256, _key(UAKinds.P256), UAKinds.PURPOSE_METATX, d);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaP));
-        tok.uaCancelNonce(uaP, 9, until + 1, asMetatx);
+        tok.uaCancelNonce(uaP, 9, until + 1, UACall.auth(uaP, asMetatx));
         vm.warp(until + 1);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxExpired.selector, until, until + 1));
-        tok.uaCancelNonce(uaP, 9, until, a);
+        tok.uaCancelNonce(uaP, 9, until, UACall.auth(uaP, a));
     }
 
     // ----- uaExecute: the UA allowlist (`unwrap`), a derived signer spends its own UA balance -----
@@ -359,15 +384,15 @@ contract UALedgerTest is UALedgerBase {
         (as_[0], as_[1]) = (_authT(address(tok), ts[0]), _authT(address(tok), ts[1]));
         vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.MetaTxInsufficientForFee.selector, 60, 40));
         vm.prank(RELAYER);
-        tok.uaBatchTransfer(ts, as_);
+        tok.uaBatchTransfer(ts, UACall.auths(ts, as_));
         ts[1].value = 40;
         as_[1] = _authT(address(tok), ts[1]);
         vm.prank(RELAYER);
-        tok.uaBatchTransfer(ts, as_);
+        tok.uaBatchTransfer(ts, UACall.auths(ts, as_));
         assertEq(tok.balanceOfUA(uaB), 60);
         assertEq(tok.balanceOf(bob), 40);
         vm.expectRevert(IMetaTx.MtxBatchEmpty.selector);
-        tok.uaBatchTransfer(new MetaTxLib.UAMetaTransfer[](0), new bytes[](0));
+        tok.uaBatchTransfer(new MetaTxLib.UAMetaTransfer[](0), new IUARegistry.UASig[](0));
         vm.expectRevert(IMetaTx.MtxBatchLengthMismatch.selector);
         tok.uaBatch(new MetaTxLib.UAMetaTransaction[](1), new bytes[](0));
     }
@@ -385,7 +410,7 @@ contract UALedgerTest is UALedgerBase {
         bytes memory bySession = _ecdsa(BOB_PK, tok.uaTransferDigest(t));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // the delegate's isValidSignature is never asked (D1)
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, bySession);
+        tok.uaExecuteTransfer(t, UACall.auth(t.from, bySession));
         assertEq(tok.balanceOfUA(uaP), 5);
         MetaTxLib.MetaTransfer memory v2 = MetaTxLib.MetaTransfer({
             from: alice, to: bob, value: 1, entryRef: 0, batch: 1, nonce: 1, validUntil: block.timestamp + 300,
@@ -415,7 +440,7 @@ contract UALedgerTest is UALedgerBase {
         off.transferToUA(uaP, 1);
         MetaTxLib.UAMetaTransfer memory t = _t(_pad(alice), _pad(bob), 1);
         vm.expectRevert(IUALedger.UALedgerOff.selector);
-        off.uaExecuteTransfer(t, "");
+        off.uaExecuteTransfer(t, UACall.auth(t.from, ""));
     }
 
     function test_initialize_registryChainUid() public {

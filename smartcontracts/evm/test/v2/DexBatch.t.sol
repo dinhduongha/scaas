@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Vm} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {DexLegs} from "../helpers/DexLegs.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -57,7 +58,7 @@ contract DexBatchTest is UADexBase {
     function _leg(address sell, ITradeToken.TradeOrder memory o, uint256 sellFill, uint256 floor)
         internal view returns (ISCaaSDex.ExchangeLeg memory)
     {
-        return ISCaaSDex.ExchangeLeg(sell, 0, abi.encode(o), _natLeg(sell, o, sellFill).sig, sellFill, floor);
+        return DexLegs.xLeg(sell, o, _natLeg(sell, o, sellFill).sig, sellFill, floor);
     }
 
     function _plan(bytes32 ref, ISCaaSDex.ExchangeLeg memory l) internal pure returns (ISCaaSDex.ExchangePlan memory p) {
@@ -284,7 +285,7 @@ contract DexBatchTest is UADexBase {
         vm.prank(w);
         usdc.approve(pl, type(uint256).max);
         ISCaaSDex.ExchangeLeg memory l =
-            ISCaaSDex.ExchangeLeg(address(usdc), 0, abi.encode(_nat(w, address(A), 1000, 400, 0)), hex"00", 1000, 400);
+            DexLegs.xLeg(address(usdc), _nat(w, address(A), 1000, 400, 0), hex"00", 1000, 400);
         ISCaaSDex.ExchangePlan[] memory ps = _ps(_p("p1", 1), _plan("p2", l));
         ISCaaSDex.Interaction[][] memory xs = _xs(_r(1900), _swap(address(usdc), address(A), 1000, 450));
         bytes memory cd = abi.encodeCall(dex.mtxExchangeBatch, (ps, xs));
@@ -298,7 +299,7 @@ contract DexBatchTest is UADexBase {
     function test_batch_realUAVerifyGas_revertsWhole() public {
         ITradeToken.UATradeOrder memory u = _ua(uaP, address(B), 1000, 1800, 0);
         ISCaaSDex.ExchangeLeg memory l =
-            ISCaaSDex.ExchangeLeg(address(A), 1, abi.encode(u), _uaLeg(address(A), u, 1000).sig, 1000, 1800);
+            DexLegs.exchange(_uaLeg(address(A), u, 1000), 1000, 1800);
         ISCaaSDex.ExchangePlan[] memory ps = _ps(_p("p1", 1), _plan("p2", l));
         ISCaaSDex.Interaction[][] memory xs = _xs(_r(1900), _r(1900));
         bytes memory cd = abi.encodeCall(dex.mtxExchangeBatch, (ps, xs));

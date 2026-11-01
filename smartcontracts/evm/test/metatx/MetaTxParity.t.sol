@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {UACall} from "../ua/UACall.sol";
 import {Test, Vm, console2} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
@@ -14,6 +15,7 @@ import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeePolicy} from "../../src/common/FeePolicy.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UALedgerBase} from "../ua/UALedgerBase.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
@@ -694,7 +696,7 @@ abstract contract ParityCases is ParityIO {
     function _pUtS(Tk memory k, string memory name, MetaTxLib.UAMetaTransfer memory t, bytes memory auth, address caller)
         internal
     {
-        _pRec(k, _pH("uaExecuteTransfer", "ua", name), caller, abi.encodeCall(IUALedger.uaExecuteTransfer, (t, auth)),
+        _pRec(k, _pH("uaExecuteTransfer", "ua", name), caller, abi.encodeCall(IUALedger.uaExecuteTransfer, (t, UACall.auth(t.from, auth))),
             _pD("uaTransferDigest", MetaTokenBase(k.t).uaTransferDigest(t)), _pL(t.batch));
     }
 
@@ -832,6 +834,14 @@ abstract contract ParityCases is ParityIO {
         return bytes.concat(
             sel, abi.encodePacked(w), abi.encode((w.length + 1) * 32, dyn.length), dyn, new bytes((32 - dyn.length % 32) % 32)
         );
+    }
+
+    /// The same with the trailing `UASig`: the encoding of the struct past its own offset word.
+    function _pEncU(bytes4 sel, uint256[] memory w, IUARegistry.UASig memory au) internal pure returns (bytes memory) {
+        bytes memory e = abi.encode(au);
+        bytes memory tail = new bytes(e.length - 32);
+        for (uint256 i; i < tail.length; ++i) tail[i] = e[i + 32];
+        return bytes.concat(sel, abi.encodePacked(w), abi.encode((w.length + 1) * 32), tail);
     }
 
     function _pW(address a) internal pure returns (uint256) {
@@ -974,7 +984,7 @@ abstract contract ParityCases is ParityIO {
     function _pUcOne(Tk memory k, string memory name, bytes32 ua, uint256 lane, uint256 vu, bool bad) internal {
         bytes32 dg = MetaTokenBase(k.t).uaCancelDigest(ua, lane, vu);
         bytes memory au = bad ? _pBadAuth(k, ua, UAKinds.PURPOSE_METATX_CANCEL, dg) : _pAuth(k, ua, UAKinds.PURPOSE_METATX_CANCEL, dg);
-        _pRec(k, _pH("uaCancelNonce", "ua", name), k.relayer, abi.encodeCall(IUALedger.uaCancelNonce, (ua, lane, vu, au)),
+        _pRec(k, _pH("uaCancelNonce", "ua", name), k.relayer, abi.encodeCall(IUALedger.uaCancelNonce, (ua, lane, vu, UACall.auth(ua, au))),
             _pD("uaCancelDigest", dg), _pL(lane));
     }
 
@@ -1195,7 +1205,7 @@ abstract contract ParityCases is ParityIO {
         t = _pUt(k, s, p, 1_000, 0, 0, P_RR, 0, address(0));
         bytes memory au = _pAuT(k, t);
         vm.prank(k.relayer);
-        IUALedger(k.t).uaExecuteTransfer(t, au);
+        IUALedger(k.t).uaExecuteTransfer(t, UACall.auth(t.from, au));
         _pUtS(k, "err_replay", t, au, k.relayer);
     }
 
@@ -1237,7 +1247,7 @@ abstract contract ParityCases is ParityIO {
     function _pNamedUa(Tk memory k, string memory entry, string memory name, bytes4 sel, uint256[] memory w, bytes memory au,
         MetaTxLib.UAMetaTransfer memory t) internal
     {
-        _pRec(k, _pH(entry, "ua", name), k.relayer, _pEncB(sel, w, au),
+        _pRec(k, _pH(entry, "ua", name), k.relayer, _pEncU(sel, w, UACall.auth(t.from, au)),
             _pD("uaTransferDigest", MetaTokenBase(k.t).uaTransferDigest(t)), _pL(t.batch));
     }
 
@@ -1261,15 +1271,15 @@ abstract contract ParityCases is ParityIO {
         au[1] = au[0];
         _pBtuRec(k, "err_atomic_secondBadAuth", ts, au, l0, l1);
         _pRec(k, _pH("uaBatchTransfer", "ua", "err_empty"), k.relayer,
-            abi.encodeCall(IUALedger.uaBatchTransfer, (new MetaTxLib.UAMetaTransfer[](0), new bytes[](0))), _pD("none", 0), _pL(0));
+            abi.encodeCall(IUALedger.uaBatchTransfer, (new MetaTxLib.UAMetaTransfer[](0), new IUARegistry.UASig[](0))), _pD("none", 0), _pL(0));
         _pRec(k, _pH("uaBatchTransfer", "ua", "err_lengthMismatch"), k.relayer,
-            abi.encodeCall(IUALedger.uaBatchTransfer, (ts, new bytes[](1))), _pD("none", 0), _pL(0));
+            abi.encodeCall(IUALedger.uaBatchTransfer, (ts, new IUARegistry.UASig[](1))), _pD("none", 0), _pL(0));
     }
 
     function _pBtuRec(Tk memory k, string memory name, MetaTxLib.UAMetaTransfer[] memory ts, bytes[] memory au, uint256 l0,
         uint256 l1) internal
     {
-        _pRec(k, _pH("uaBatchTransfer", "ua", name), k.relayer, abi.encodeCall(IUALedger.uaBatchTransfer, (ts, au)),
+        _pRec(k, _pH("uaBatchTransfer", "ua", name), k.relayer, abi.encodeCall(IUALedger.uaBatchTransfer, (ts, UACall.auths(ts, au))),
             _pD2("uaTransferDigest0", MetaTokenBase(k.t).uaTransferDigest(ts[0]), "uaTransferDigest1",
                 MetaTokenBase(k.t).uaTransferDigest(ts[1])), _pL2(l0, l1));
     }
@@ -1342,7 +1352,7 @@ abstract contract ParityCases is ParityIO {
     function _pRf(Tk memory k, string memory name, MetaTxLib.MetaTransfer memory x, Rfa memory a) internal {
         MetaTokenBase t = MetaTokenBase(k.t);
         bytes32 d = t.mtxTransferDigest(x);
-        bytes32 rfd = t.receiverFeeDigest(d, a.fee, a.fr, a.vu);
+        bytes32 rfd = t.receiverFeeDigest(x, a.fee, a.fr, a.vu);
         bytes memory ps = _pEcdsa(a.badPayer ? k.payeePk : k.pk, d);
         bytes memory ys = _pEcdsa(a.badPayee ? k.pk : k.payeePk, rfd);
         _pRec(k, _pH("mtxPayReceiverFee", "addr", name), k.relayer,
@@ -1392,11 +1402,11 @@ abstract contract ParityCases is ParityIO {
     function _pRfU(Tk memory k, string memory name, MetaTxLib.UAMetaTransfer memory x, Rfa memory a) internal {
         MetaTokenBase t = MetaTokenBase(k.t);
         bytes32 d = t.uaTransferDigest(x);
-        bytes32 rfd = t.receiverFeeDigest(d, a.fee, a.fr, a.vu);
+        bytes32 rfd = t.uaReceiverFeeDigest(x, a.fee, a.fr, a.vu);
         bytes memory ys = !a.badPayee ? _pAuth(k, x.to, UAKinds.PURPOSE_RECEIVER_FEE, rfd)
             : (x.to == k.uaD && k.uaD != 0 ? _pBadDerived(k, UAKinds.PURPOSE_RECEIVER_FEE, rfd) : _pEcdsa(k.pk, rfd));
         _pRec(k, _pH("uaPayReceiverFee", "ua", name), k.relayer,
-            abi.encodeCall(MetaTokenBase.uaPayReceiverFee, (x, _pAuth(k, x.from, UAKinds.PURPOSE_METATX, d), a.fee, a.fr, a.vu, ys)),
+            abi.encodeCall(MetaTokenBase.uaPayReceiverFee, (x, UACall.auth(x.from, _pAuth(k, x.from, UAKinds.PURPOSE_METATX, d)), a.fee, a.fr, a.vu, UACall.auth(x.to, ys))),
             _pD2("uaTransferDigest", d, "receiverFeeDigest", rfd), _pL(x.batch));
     }
 
@@ -1481,12 +1491,12 @@ abstract contract ParityCases is ParityIO {
     function _pTradeCancel(Tk memory k) internal {
         MetaTokenBase t = MetaTokenBase(k.t);
         ITradeToken.TradeOrder memory o = _pOrder(k, 0);
-        bytes memory sg = _pEcdsa(k.pk, t.cancelOrderDigest(t.tradeOrderDigest(o)));
+        bytes memory sg = _pEcdsa(k.pk, t.cancelOrderDigest(o));
         _pTradeRec(k, "mtxCancelOrder", "ok", o, abi.encodeCall(ITradeToken.mtxCancelOrder, (o, sg)), k.relayer);
         _pTradeRec(k, "mtxCancelOrder", "ok_alreadyClosedNoop", o, abi.encodeCall(ITradeToken.mtxCancelOrder, (o, sg)), k.relayer);
         _pMtr(k, "err_afterCancel_orderClosed", o, _pTSign(k, o), 5_000, 4_000, k.dex);
         o = _pOrder(k, 0);
-        sg = _pEcdsa(k.payeePk, t.cancelOrderDigest(t.tradeOrderDigest(o)));
+        sg = _pEcdsa(k.payeePk, t.cancelOrderDigest(o));
         _pTradeRec(k, "mtxCancelOrder", "err_badSignature", o, abi.encodeCall(ITradeToken.mtxCancelOrder, (o, sg)), k.relayer);
     }
 
@@ -1498,7 +1508,7 @@ abstract contract ParityCases is ParityIO {
         bytes32 h = t.tradeOrderDigest(o);
         k.oh = h;
         _pRec(k, _pH(entry, "addr", name), caller, cd,
-            _pD2("tradeOrderDigest", h, "cancelOrderDigest", t.cancelOrderDigest(h)), _pL(o.batch));
+            _pD2("tradeOrderDigest", h, "cancelOrderDigest", t.cancelOrderDigest(o)), _pL(o.batch));
         k.oh = 0;
     }
 
@@ -1537,7 +1547,7 @@ abstract contract ParityCases is ParityIO {
         bytes32 h = t.uaTradeOrderDigest(o);
         k.oh = h;
         _pRec(k, _pH(entry, "ua", name), caller, cd,
-            _pD2("uaTradeOrderDigest", h, "cancelOrderDigest", t.cancelOrderDigest(h)), _pL(o.batch));
+            _pD2("uaTradeOrderDigest", h, "cancelOrderDigest", t.cancelUAOrderDigest(o)), _pL(o.batch));
         k.oh = 0;
     }
 
@@ -1549,7 +1559,7 @@ abstract contract ParityCases is ParityIO {
     function _pUtr(Tk memory k, string memory name, ITradeToken.UATradeOrder memory o, bytes memory au, address caller)
         internal
     {
-        _pUTradeRec(k, "uaTrade", name, o, abi.encodeCall(ITradeToken.uaTrade, (o, au, _pFill(k, 5_000, 4_000))), caller);
+        _pUTradeRec(k, "uaTrade", name, o, abi.encodeCall(ITradeToken.uaTrade, (o, UACall.auth(o.from, au), _pFill(k, 5_000, 4_000))), caller);
     }
 
     function _pTradeUaOne(Tk memory k, bytes32 who, string memory tag) internal {
@@ -1567,9 +1577,9 @@ abstract contract ParityCases is ParityIO {
         bytes32 dg = MetaTokenBase(k.t).uaInvalidateNoncesDigest(who, lane, 5);
         bytes memory ia = _pAuth(k, who, UAKinds.PURPOSE_TRADE, dg);
         _pRec(k, _pH("uaInvalidateNonces", "ua", string.concat("ok_", tag)), k.relayer,
-            abi.encodeCall(ITradeToken.uaInvalidateNonces, (who, lane, 5, ia)), _pD("uaInvalidateNoncesDigest", dg), _pL(lane));
+            abi.encodeCall(ITradeToken.uaInvalidateNonces, (who, lane, 5, UACall.auth(who, ia))), _pD("uaInvalidateNoncesDigest", dg), _pL(lane));
         _pRec(k, _pH("uaInvalidateNonces", "ua", string.concat("err_notIncreasing_", tag)), k.relayer,
-            abi.encodeCall(ITradeToken.uaInvalidateNonces, (who, lane, 5, ia)), _pD("uaInvalidateNoncesDigest", dg), _pL(lane));
+            abi.encodeCall(ITradeToken.uaInvalidateNonces, (who, lane, 5, UACall.auth(who, ia))), _pD("uaInvalidateNoncesDigest", dg), _pL(lane));
         o = _pUOrder(k, who, lane);
         _pUtr(k, string.concat("err_nonceInvalidated_", tag), o, _pUAuth(k, who, o), k.dex);
         _pTradeUaInvBad(k, who, tag, lane);
@@ -1578,19 +1588,19 @@ abstract contract ParityCases is ParityIO {
     function _pTradeUaInvBad(Tk memory k, bytes32 who, string memory tag, uint256 lane) internal {
         bytes32 dg = MetaTokenBase(k.t).uaInvalidateNoncesDigest(who, lane, 9);
         _pRec(k, _pH("uaInvalidateNonces", "ua", string.concat("err_badAuth_", tag)), k.relayer,
-            abi.encodeCall(ITradeToken.uaInvalidateNonces, (who, lane, 9, _pBadAuth(k, who, UAKinds.PURPOSE_TRADE, dg))),
+            abi.encodeCall(ITradeToken.uaInvalidateNonces, (who, lane, 9, UACall.auth(who, _pBadAuth(k, who, UAKinds.PURPOSE_TRADE, dg)))),
             _pD("uaInvalidateNoncesDigest", dg), _pL(lane));
     }
 
     function _pTradeUaCancel(Tk memory k, bytes32 who, string memory tag, ITradeToken.UATradeOrder memory o) internal {
         MetaTokenBase t = MetaTokenBase(k.t);
-        bytes32 cd = t.cancelOrderDigest(t.uaTradeOrderDigest(o));
+        bytes32 cd = t.cancelUAOrderDigest(o);
         bytes memory ca = _pAuth(k, who, UAKinds.PURPOSE_TRADE, cd);
-        _pUTradeRec(k, "uaCancelOrder", string.concat("ok_", tag), o, abi.encodeCall(ITradeToken.uaCancelOrder, (o, ca)), k.relayer);
+        _pUTradeRec(k, "uaCancelOrder", string.concat("ok_", tag), o, abi.encodeCall(ITradeToken.uaCancelOrder, (o, UACall.auth(o.from, ca))), k.relayer);
         _pUTradeRec(k, "uaCancelOrder", string.concat("ok_alreadyClosedNoop_", tag), o,
-            abi.encodeCall(ITradeToken.uaCancelOrder, (o, ca)), k.relayer);
+            abi.encodeCall(ITradeToken.uaCancelOrder, (o, UACall.auth(o.from, ca))), k.relayer);
         _pUTradeRec(k, "uaCancelOrder", string.concat("err_badAuth_", tag), o,
-            abi.encodeCall(ITradeToken.uaCancelOrder, (o, _pBadAuth(k, who, UAKinds.PURPOSE_TRADE, cd))), k.relayer);
+            abi.encodeCall(ITradeToken.uaCancelOrder, (o, UACall.auth(o.from, _pBadAuth(k, who, UAKinds.PURPOSE_TRADE, cd)))), k.relayer);
     }
 
     // =================================================================================================================
@@ -1696,7 +1706,7 @@ abstract contract ParityCases is ParityIO {
         MetaTxLib.UAMetaTransfer[] memory ts = new MetaTxLib.UAMetaTransfer[](1);
         ts[0] = _pUt(k, s, p, 1_000, 0, 0, P_RR, 0, address(0));
         au[0] = _pAuT(k, ts[0]);
-        _pRec(k, _pH("uaBatchTransfer", "ua", "err_ledgerOff"), k.relayer, abi.encodeCall(IUALedger.uaBatchTransfer, (ts, au)),
+        _pRec(k, _pH("uaBatchTransfer", "ua", "err_ledgerOff"), k.relayer, abi.encodeCall(IUALedger.uaBatchTransfer, (ts, UACall.auths(ts, au))),
             _pD("uaTransferDigest0", MetaTokenBase(k.t).uaTransferDigest(ts[0])), _pL(ts[0].batch));
         _pRec(k, _pH("transferToUA", "ua", "err_ledgerOff"), k.signer, abi.encodeCall(IUALedger.transferToUA, (bytes32(uint256(1) << 200), 100)),
             _pD("none", 0), _pL(0));

@@ -4,7 +4,8 @@
 // signatures.json's `native` key, RFC 6979), the entry's signature, selector and calldata. Fields a row does not set are
 // fillers, keccak256 of the field's path: right types, not valid proofs, ciphertexts or lengths, since a typed digest
 // hashes `bytes` whatever their length. C2-C6 run these against the chain as NamedEntry.t.sol does (`structHash` under the
-// contract's own domain). The rows of the C0 entries take values their fixtures accept.
+// contract's own domain). The rows of the C0 entries and of C6's orders, cancels and receiver fees take values their
+// fixtures accept.
 //   node scripts/typed-ops-vectors.mjs [outDir]
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -31,6 +32,12 @@ const ROUTER = '0x5ca00000000000000000000000000000000000e0';
 const EXECUTOR = '0x5ca00000000000000000000000000000000000e1';
 const TARGET = '0x5ca00000000000000000000000000000000000c0';
 const VALID_UNTIL = 1800000300;
+const NONE = '0x' + '00'.repeat(20);
+const NO_ID = '0x' + '00'.repeat(32);
+const WRAPPER = '0x5ca00000000000000000000000000000000000b2';
+const BUYS = '0x5ca00000000000000000000000000000000000b3';
+const BUYS_ON = '0x5ca00000000000000000000000000000000000b4';
+const SELLS = '0x5ca00000000000000000000000000000000000b5';
 const hash = (path) => keccak_256(utf8ToBytes(`scaas.typed-ops.${path}`));
 const filler = (path, n) => hex(concatBytes(hash(path), hash(`${path}.1`), hash(`${path}.2`), hash(`${path}.3`), hash(`${path}.4`)).subarray(0, n));
 
@@ -56,8 +63,13 @@ const envelope = (op) => {
 const ZETHER_UA = confPublic('bls12381', 0xb0bn).UA; // `bob` of ZetherFixture
 const pay = (id, to) => {
   const entryRef = hex(hash('payment'));
-  return { from: id, to, value: 100000000, entryRef, batch: payLane(entryRef), nonce: 0, validUntil: VALID_UNTIL, mode: 1, relayer: RELAYER };
+  return { from: id, to, value: 100000000, entryRef, batch: payLane(entryRef), nonce: 0, validUntil: VALID_UNTIL, mode: 1, relayer: RELAYER,
+    fee: 0, feeRecipient: NONE };
 };
+// An order the chain takes: `order` buys `BUYS` on `dex`; `wrapOrder` is the same terms minted by `WRAPPER` (TS-D19).
+const TERMS = { amount: 1000, minFill: 1000, fee: 3000, relayer: RELAYER, flags: 0, batch: 7, nonce: 1, validUntil: VALID_UNTIL };
+const order = (from, destination, dex = BUYS_ON) => ({ ...TERMS, from, receiveToken: BUYS, receiveAmount: 2000, dex, destination });
+const wrapOrder = (from, destination) => ({ ...TERMS, from, wrappedToken: WRAPPER, minMinted: 1000, destination });
 const COMMIT_REVEAL = { sealedMemo: '0x' };  // a BUNDLE form carries no memo
 const ROW = {
   Unwrap: { wrapped: 1000000, minOut: 990000, recipient: '0x0000000000000000000000000000000000000B0B' },
@@ -73,6 +85,14 @@ const ROW = {
   UAReceiverFee: { payment: pay(hex(nativeUa), padId('0x0000000000000000000000000000000000005409')), fee: 300000, feeRecipient: FEE_TO,
     validUntil: 1800000060 },
 };
+ROW.WrapOrder = wrapOrder(FROM, NONE);
+ROW.UAWrapOrder = wrapOrder(hex(nativeUa), NO_ID);
+ROW.CancelOrder = { order: order(FROM, NONE) };
+ROW.CancelUAOrder = { order: order(hex(nativeUa), NO_ID) };
+ROW.CancelWrapOrder = { order: ROW.WrapOrder };
+ROW.CancelUAWrapOrder = { order: ROW.UAWrapOrder };
+ROW.CancelDexOrder = { order: { sellToken: SELLS, order: order(FROM, NONE, CONTRACT.dex) } };
+ROW.UACancelNonce = { batch: 7, validUntil: VALID_UNTIL };
 ROW.UAShield = ROW.Shield;
 ROW.UAUnwrap = ROW.Unwrap;
 ROW.UASetRollOverMode = ROW.SetRollOverMode;

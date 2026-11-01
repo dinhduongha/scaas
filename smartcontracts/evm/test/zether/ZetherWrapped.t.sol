@@ -26,7 +26,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UACall} from "../ua/UACall.sol";
-import {IWrapOrder} from "../v2/MtxWrap.t.sol";
+import {DexLegs} from "../helpers/DexLegs.sol";
 
 /// A leg that calls back into the token when the token pays it out or pulls it (an ERC-777-style hook).
 contract HookLeg is MockERC20 {
@@ -419,14 +419,13 @@ contract ZetherWrappedTest is ZetherFixture {
         address[] memory legs = new address[](1);
         legs[0] = address(pts);
         WrappedZetherToken z = _wrapper(legs, _ones(1), _ones(1), "zpts", false);
-        ITradeToken.TradeOrder memory o;
-        (o.from, o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.dex) =
-            (payer, address(z), 20 * SCALE, 20 * SCALE, 20 * SCALE, address(z));
+        ITradeToken.WrapOrder memory o;
+        (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill) = (payer, address(z), 20 * SCALE, 20 * SCALE, 20 * SCALE);
         (o.batch, o.nonce, o.validUntil) = (7, 1, block.timestamp + 300);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, pts.tradeOrderDigest(o));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, pts.tradeOrderDigest(DexLegs.asTrade(o)));
         bytes memory sig = abi.encodePacked(r, s, v);
         vm.prank(relayer);
-        z.mtxWrap(address(pts), o, sig);
+        z.mtxWrapOrder(address(pts), o, sig);
         assertEq(z.balanceOf(payer), 20 * SCALE);
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
             from: payer, data: abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 20)), batch: 2, nonce: 0,
@@ -595,7 +594,7 @@ contract ZetherWrappedTest is ZetherFixture {
             abi.encodeWithSignature("cancelRate()"),
             abi.encodeWithSignature("executeRate()"),
             abi.encodeWithSignature("disableWrap(address,bytes32)", address(usd), bytes32(0)),
-            abi.encodeWithSelector(IWrapOrder.mtxWrap.selector)
+            abi.encodeWithSelector(IWrappedToken.mtxWrapOrder.selector)
         ];
         for (uint256 i; i < refused.length; ++i) {
             _relay(refused[i], 100 + i, abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(refused[i])));

@@ -195,7 +195,7 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
 
     /// @notice Signature wrap of a SCaaS underlying (CTR-TOK-20): mints `minted − fee` to `o.destination` (or
     ///         `o.from`) and `fee` to the submitter. Not allowlisted: a direct read of the caller (the submitter).
-    function mtxWrap(address u, TradeOrder calldata o, bytes calldata sig)
+    function mtxWrapOrder(address u, WrapOrder calldata o, bytes calldata sig)
         external nonReentrant returns (uint256 minted)
     {
         uint256 received;
@@ -207,11 +207,11 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
         emit Wrapped(to, u, received, minted - fee);
     }
 
-    /// @notice `mtxWrap` for a `UATradeOrder` (CTR-TOK-20, UA-5b): the underlying's `uaTrade` checks the holder (a
+    /// @notice `mtxWrapOrder` for a `UAWrapOrder` (CTR-TOK-20, UA-5b): the underlying's `uaTrade` checks the holder (a
     ///         derived id under purpose `trade`, a native id itself); `minted − fee` goes to `o.destination` (0 ⇒
     ///         `o.from`) — a derived id by `_uaMint` (registered SIGNING), a native one by `_mint` — and `fee` to the
     ///         submitter. Not allowlisted: a direct read of the caller.
-    function uaWrap(address u, UATradeOrder calldata o, bytes calldata auth)
+    function uaWrapOrder(address u, UAWrapOrder calldata o, IUARegistry.UASig calldata auth)
         external nonReentrant returns (uint256 minted)
     {
         uint256 received;

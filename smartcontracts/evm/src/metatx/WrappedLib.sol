@@ -17,6 +17,7 @@ import {AdminLib} from "./AdminLib.sol";
 import {MetaTokenBase} from "./MetaTokenBase.sol";
 import {HederaLib} from "../hedera/HederaLib.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title Legs, reserve and rates of kind `WRAPPED` (CTR-TOK-24), in the ERC-7201 namespace `scaas.underlying`.
 /// @notice External library: the core of wrap and unwrap **without a destination** (pull, rate, reserve; pay out),
@@ -172,33 +173,60 @@ library WrappedLib {
         L.reserve = reserve + received;
     }
 
-    /// @notice `mtxWrap` (CTR-TOK-20): the leg must accept a wrap (enabled, no pending change, no shortfall); the
-    ///         underlying's `mtxTrade` checks the holder's signature, that this token is `o.dex`, the price
-    ///         (`receiveAmount <= minted`), the relayer (`submitter`) and the fee bound, and moves `o.amount` here.
+    /// @notice `mtxWrapOrder` (CTR-TOK-20): the leg must accept a wrap (enabled, no pending change, no shortfall); the
+    ///         underlying's `mtxTrade` takes the order with `dex == receiveToken == wrappedToken` as the holder's
+    ///         `WrapOrder`: it checks the signature, that this token is the puller, the price (`minMinted <= minted`),
+    ///         the relayer (`submitter`) and the fee bound, and moves `o.amount` here.
     /// @return received the measured delta (must be `o.amount`)
     /// @return minted `⌊o.amount·num/den⌋`
     /// @return fee `⌈minted·o.fee/10⁶⌉`, the submitter's part of `minted`
-    function wrapBySig(address u, ITradeToken.TradeOrder calldata o, bytes calldata sig, address submitter)
+    function wrapBySig(address u, ITradeToken.WrapOrder calldata o, bytes calldata sig, address submitter)
         public returns (uint256 received, uint256 minted, uint256 fee)
     {
-        Leg storage L = _wrapLeg(u, o.receiveToken);
+        Leg storage L = _wrapLeg(u, o.wrappedToken);
         (minted, fee) = _sigQuote(L, o.amount, o.fee);
         uint256 before = _sigBefore(L);
-        ITradeToken(u).mtxTrade(o, sig, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
+        ITradeToken(u).mtxTrade(_tradeOf(o), sig, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
         received = _sigReceived(L, before, o.amount);
     }
 
-    /// @notice `uaWrap` (CTR-TOK-20, UA-5b): `wrapBySig` with the holder's `UATradeOrder` pulled by the underlying's
+    /// @notice `uaWrapOrder` (CTR-TOK-20, UA-5b): `wrapBySig` with the holder's `UAWrapOrder` pulled by the underlying's
     ///         `uaTrade`; the underlying must be a SCaaS ledger token (`IUALedger` by ERC-165, as `payOutToUA`).
-    function wrapBySigUA(address u, ITradeToken.UATradeOrder calldata o, bytes calldata auth, address submitter)
+    function wrapBySigUA(address u, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth, address submitter)
         public returns (uint256 received, uint256 minted, uint256 fee)
     {
-        Leg storage L = _wrapLeg(u, o.receiveToken);
+        Leg storage L = _wrapLeg(u, o.wrappedToken);
         if (!ERC165Checker.supportsInterface(u, type(IUALedger).interfaceId)) revert IUALedger.UALegNotLedger(u);
         (minted, fee) = _sigQuote(L, o.amount, o.fee);
         uint256 before = _sigBefore(L);
-        ITradeToken(u).uaTrade(o, auth, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
+        ITradeToken(u).uaTrade(_order(o), auth, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
         received = _sigReceived(L, before, o.amount);
+    }
+
+    /// @dev `_order` of a `WrapOrder`: the same 12 words as a `UAWrapOrder`, ids zero-padded, into the 13 of a `TradeOrder`.
+    function _tradeOf(ITradeToken.WrapOrder memory w) private pure returns (ITradeToken.TradeOrder memory t) {
+        ITradeToken.UAWrapOrder memory u;
+        assembly ("memory-safe") { u := w }
+        ITradeToken.UATradeOrder memory c = _order(u);
+        assembly ("memory-safe") { t := c }
+    }
+
+    /// @dev The order the underlying checks: a wrap order is the `UATradeOrder` with `dex == receiveToken == wrappedToken`
+    ///      (TS-D19).
+    function _order(ITradeToken.UAWrapOrder memory w) private pure returns (ITradeToken.UATradeOrder memory c) {
+        c.from = w.from;
+        c.receiveToken = w.wrappedToken;
+        c.amount = w.amount;
+        c.receiveAmount = w.minMinted;
+        c.minFill = w.minFill;
+        c.fee = w.fee;
+        c.relayer = w.relayer;
+        c.dex = w.wrappedToken;
+        c.destination = w.destination;
+        c.flags = w.flags;
+        c.batch = w.batch;
+        c.nonce = w.nonce;
+        c.validUntil = w.validUntil;
     }
 
     function _wrapLeg(address u, address receiveToken) private view returns (Leg storage L) {

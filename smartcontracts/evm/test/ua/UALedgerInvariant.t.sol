@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {UACall} from "./UACall.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -312,9 +313,9 @@ contract UALedgerHandler is Test {
         bytes32 d = tok.uaTransferDigest(x);
         bytes memory payerAuth = _auth(payer, d);
         bytes memory payeeAuth = _sign(payee, UAKinds.PURPOSE_RECEIVER_FEE,
-            tok.receiverFeeDigest(d, fee, FEE_TO, block.timestamp));
+            tok.uaReceiverFeeDigest(x, fee, FEE_TO, block.timestamp));
         vm.prank(RELAYER);
-        tok.uaPayReceiverFee(x, payerAuth, fee, FEE_TO, block.timestamp, payeeAuth);
+        tok.uaPayReceiverFee(x, UACall.auth(x.from, payerAuth), fee, FEE_TO, block.timestamp, UACall.auth(x.to, payeeAuth));
         bool pUA = payer > 2;
         bool qUA = payee > 2;
         // the payment (UATransfer iff a derived side, Transfer iff a native side), then the fee from the payee to FEE_TO
@@ -366,18 +367,18 @@ contract UALedgerHandler is Test {
 
     function _submit(MetaTokenBase t_, MetaTxLib.UAMetaTransfer memory x, bytes memory auth, uint256 entry) internal {
         if (entry == 1 && x.fee == 0) {
-            t_.uaTransfer(x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, auth);
+            t_.uaTransfer(x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, UACall.auth(x.from, auth));
         } else if (entry == 1) {
             t_.uaTransferWithFee(
-                x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, x.fee, x.feeRecipient, auth
+                x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, x.fee, x.feeRecipient, UACall.auth(x.from, auth)
             );
         } else if (entry == 2) {
             MetaTxLib.UAMetaTransfer[] memory xs = new MetaTxLib.UAMetaTransfer[](1);
             bytes[] memory as_ = new bytes[](1);
             (xs[0], as_[0]) = (x, auth);
-            t_.uaBatchTransfer(xs, as_);
+            t_.uaBatchTransfer(xs, UACall.auths(xs, as_));
         } else {
-            t_.uaExecuteTransfer(x, auth);
+            t_.uaExecuteTransfer(x, UACall.auth(x.from, auth));
         }
     }
 

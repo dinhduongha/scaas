@@ -10,9 +10,9 @@ header); `test/ua-groups.test.js` read the raw PoP until typed-signing P2 regene
 
 `evm-pre-named.js` (typed-signing C1): what `src/evm.js` built before the named typed entries, verbatim: `ownerCallTypedData` and
 the `MetaTransaction` `checkOwnerCall`, `ReceiverFee` over `paymentDigest` and its `checkReceiverFee`, `orderCancelTypedData`
-(`CancelOrder(bytes32 orderHash)`) and its `checkCancel`, the `MetaTransfer` `buildRelayFee`. **Load-bearing until C6** (C5 for the
-owner call): `scripts/ua-sig-vectors.mjs` builds the rows of `metatx3.json` / `uatrade_kat.json` from it and the forge KAT tests pin
-it, because the contracts still hash these structs. C6 regenerates both files on the nested structs and drops those imports.
+(`CancelOrder(bytes32 orderHash)`) and its `checkCancel`, the `MetaTransfer` `buildRelayFee`. Since C6 nothing on the branch hashes
+`ReceiverFee` over `paymentDigest` or `CancelOrder(bytes32)`: `scripts/ua-sig-vectors.mjs` builds `metatx3.json` / `uatrade_kat.json`
+on the nested structs. `test/evm.test.js` still loads the generic `ownerCallTypedData` / `checkOwnerCall` for the wallets' `mtxExecute` KAT.
 
 `zether-owner-auth.js` (typed-signing C3): `zetherOwnerAuth`, the `abi.encode(bytes(""), sig)` of an owner op before
 `mtxRollOverSigned` / `mtxSetRollOverMode` took `UASig` (`zetherOwnerSig`).

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {UACall} from "../ua/UACall.sol";
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
@@ -139,10 +140,10 @@ contract UAMetaTxBaseTest is Test {
         uint256 until = block.timestamp + 300;
         vm.expectEmit(address(l));
         emit IUALedger.UANonceCancelled(UA, 9, 1);
-        l.uaCancelNonce(UA, 9, until, auth);
+        l.uaCancelNonce(UA, 9, until, UACall.auth(UA, auth));
         assertEq(l.uaNonce(UA, 9), 1);
         vm.expectRevert(IUALedger.UACancelUsed.selector);
-        l.uaCancelNonce(UA, 9, until, auth);
+        l.uaCancelNonce(UA, 9, until, UACall.auth(UA, auth));
     }
 
     /// The address path of a non-token takes the same `Ctx`: 400k for a `SmartKeyAccount` clone, 50k for any other wallet.

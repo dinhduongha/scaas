@@ -29,7 +29,7 @@ import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
-import {VM, TYPED_OPS, SALTED_DOMAIN, checkRow, onChain, rowEnvelope, rowEnvelope2, msgField, domainField} from "./NamedEntry.t.sol";
+import {VM, TYPED_OPS, SALTED_DOMAIN, checkRow, onChain, domainOf, rowEnvelope, rowEnvelope2, msgField, domainField} from "./NamedEntry.t.sol";
 
 /// `built` (the entry's call from the message's fields) is the row's calldata under `kind`; that calldata runs on `c` from
 /// the row's relayer, the signature replaced by the one under `c`'s domain.
@@ -41,15 +41,25 @@ function runRow(string memory j, string memory op, string memory kind, address c
 
 /// `runRow` that returns the call's outcome: a row whose fillers the op itself refuses still has to get that far.
 function tryRow(string memory j, string memory op, string memory kind, address c, bytes memory built) returns (bool ok, bytes memory ret) {
+    return tryRowAs(j, op, kind, c, c, VM.parseJsonAddress(j, msgField(op, "relayer")), built);
+}
+
+/// `tryRow` for a row signed in the domain of `signedIn` (an order, in its sell token's), sent by `sender`.
+function tryRowAs(string memory j, string memory op, string memory kind, address c, address signedIn, address sender, bytes memory built)
+    returns (bool ok, bytes memory ret)
+{
     checkRow(j, op, kind);
     bytes memory cd = VM.parseJsonBytes(j, domainField(op, kind, "calldata"));
     require(keccak256(built) == keccak256(cd), "calldata");
-    bytes memory rowSig = VM.parseJsonBytes(j, domainField(op, kind, "signature"));
-    bytes memory sig = onChain(j, op, c);
-    uint256 at = find(cd, rowSig);
-    for (uint256 i; i < 65; ++i) cd[at + i] = sig[i];
-    VM.prank(VM.parseJsonAddress(j, msgField(op, "relayer")));
+    swap(cd, VM.parseJsonBytes(j, domainField(op, kind, "signature")), onChain(j, op, signedIn));
+    VM.prank(sender);
     (ok, ret) = c.call(cd);
+}
+
+/// `to` in place of `old`, the same length, in `cd`.
+function swap(bytes memory cd, bytes memory old, bytes memory to) pure {
+    uint256 at = find(cd, old);
+    for (uint256 i; i < old.length; ++i) cd[at + i] = to[i];
 }
 
 function find(bytes memory hay, bytes memory needle) pure returns (uint256) {
@@ -864,12 +874,12 @@ contract TypedOpsTest is UALedgerBase {
         MetaTxLib.Envelope memory e = _env(alice, 0, RR, 0, address(0));
         e.relayer = router.EXECUTOR();
         bytes memory cd = abi.encodeCall(WrappedToken.mtxUnwrap, (e, 100, bob, 0, _unwrapSig(ALICE_PK, wrp, e, 100)));
-        bytes32 ref = keccak256(abi.encodePacked("scaas.relayfee", block.chainid, address(wrp), keccak256(cd)));
-        MetaTxLib.MetaTransfer memory t = MetaTxLib.MetaTransfer(alice, RELAYER, 25, ref, tok.payLane(ref), 0,
-            block.timestamp + 300, RR, address(router), 0, address(0));
-        bytes memory s = _ecdsa(ALICE_PK, tok.mtxTransferDigest(t));
+        uint256 until = block.timestamp + 300;
+        bytes memory s = _ecdsa(ALICE_PK, keccak256(abi.encodePacked(hex"1901", domainOf(address(tok)), keccak256(abi.encode(
+            keccak256("RelayFee(address from,address target,bytes32 callDataHash,address payee,uint256 value,uint256 validUntil,address relayer)"),
+            alice, address(wrp), keccak256(cd), RELAYER, 25, until, address(router))))));
         vm.prank(RELAYER);
-        router.relay(address(wrp), cd, address(tok), t, s);
+        router.relay(address(wrp), cd, address(tok), alice, RELAYER, 25, until, s);
         assertEq(und.balanceOf(bob), 100);
         assertEq(tok.balanceOf(RELAYER), 25);
         assertEq(wrp.mtxNonce(alice, e.batch), 1);

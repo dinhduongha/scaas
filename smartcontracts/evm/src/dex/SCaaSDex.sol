@@ -14,6 +14,7 @@ import {SigCheck} from "../common/SigCheck.sol";
 import {TradeLib} from "../trade/TradeLib.sol";
 import {IUALedger} from "../metatx/IUALedger.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 import {DexPuller} from "./DexPuller.sol";
 import {TokenCall} from "./TokenCall.sol";
 
@@ -36,7 +37,7 @@ import {TokenCall} from "./TokenCall.sol";
 ///         `approve` (controller ruling, pending the owner; other allowance-raising calls are not tracked),
 ///         listed targets only when a leg or the admin asks (CTR-DEX-23), and every allowance an `approve` interaction
 ///         grants is set back to 0 before the payout. UA legs (CTR-DEX-26): a leg is tagged — shape 0 a `TradeOrder`,
-///         shape 1 a `UATradeOrder` (ids as `bytes32`) — and decoded into one form (`UATradeOrder` in memory, a native
+///         shape 1 a `UATradeOrder` (ids as `bytes32`) — and read into one form (`UATradeOrder` in memory, a native
 ///         id zero-padded); a shape-1 leg sells a SCaaS token with its UA ledger on, through the token's `uaTrade`; a
 ///         derived party is paid and refunded by the token's `transferToUA` from the DEX's own balance; self-trade is
 ///         over ids; a UA leg's starved verify (`UAVerifyGas`) reverts the whole `mtxSettle`. Hybrid (`mtxHybrid` /
@@ -83,6 +84,12 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         "DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,address receiveToken,uint256 amount,"
         "uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,address destination,uint8 flags,"
         "uint256 batch,uint256 nonce,uint256 validUntil)"
+    );
+
+    bytes32 internal constant CANCEL_DEX_ORDER_TYPEHASH = keccak256(
+        "CancelDexOrder(DexOrder order)DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,"
+        "address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,"
+        "address destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"
     );
 
     // keccak256(abi.encode(uint256(keccak256("scaas.dex")) - 1)) & ~bytes32(uint256(0xff))
@@ -234,11 +241,16 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     }
 
     function _dexOrderDigest(address sellToken, ITradeToken.TradeOrder memory o) private view returns (bytes32) {
-        return _hashTypedDataV4(keccak256(abi.encode(DEX_ORDER_TYPEHASH, sellToken, TradeLib.hashStruct(o))));
+        return _hashTypedDataV4(_dexOrderHash(sellToken, o));
     }
 
-    function cancelOrderDigest(bytes32 orderHash) public view returns (bytes32) {
-        return _hashTypedDataV4(keccak256(abi.encode(TradeLib.CANCEL_ORDER_TYPEHASH, orderHash)));
+    function _dexOrderHash(address sellToken, ITradeToken.TradeOrder memory o) private pure returns (bytes32) {
+        return keccak256(abi.encode(DEX_ORDER_TYPEHASH, sellToken, TradeLib.hashStruct(o)));
+    }
+
+    /// @notice The cancel nests the `DexOrder` the order was signed as (TS-D19); `pulled` stays keyed by the order digest.
+    function cancelDexOrderDigest(address sellToken, ITradeToken.TradeOrder calldata o) public view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(CANCEL_DEX_ORDER_TYPEHASH, _dexOrderHash(sellToken, o))));
     }
 
     function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) public view returns (bytes32) {
@@ -253,9 +265,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         if (orders.length != sigs.length) revert LengthMismatch();
         for (uint256 i; i < orders.length; ++i) {
             ITradeToken.TradeOrder calldata o = orders[i].order;
-            bytes32 h = _dexOrderDigest(orders[i].sellToken, o);
-            if (SigCheck.isValid(o.from, cancelOrderDigest(h), sigs[i], _cap(o.from))) {
-                TradeLib.cancel(h, o.amount, TradeLib.pad(o.from), false);
+            if (SigCheck.isValid(o.from, cancelDexOrderDigest(orders[i].sellToken, o), sigs[i], _cap(o.from))) {
+                TradeLib.cancel(_dexOrderDigest(orders[i].sellToken, o), o.amount, TradeLib.pad(o.from), false);
             }
         }
     }
@@ -318,7 +329,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         if (msg.sender != address(this)) revert NotSelf();
         uint256 n = s.makers.length;
         if (n == 0) revert NoMakers();
-        Calc memory taker = _decode(s.taker.sellToken, s.taker.shape, s.taker.order);
+        Calc memory taker = _decode(s.taker.sellToken, s.taker.shape, s.taker.order, s.taker.uaOrder);
         address tokenA = s.taker.sellToken;      // the taker sells A, the makers sell B
         address tokenB = taker.o.receiveToken;
         _checkMarket(tokenA, tokenB);
@@ -328,8 +339,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         _calc(taker, tokenA, submitter, takerSell, takerRecv);
         uint256 balA = _bal(tokenA);
         uint256 balB = _bal(tokenB);
-        _pull(tokenA, taker, s.taker.sig, submitter);
-        for (uint256 i; i < n; ++i) _pull(tokenB, makers[i], s.makers[i].sig, submitter);
+        _pullLeg(tokenA, taker, s.taker, submitter);
+        for (uint256 i; i < n; ++i) _pullLeg(tokenB, makers[i], s.makers[i], submitter);
         _pay(s.ref, tokenA, taker, submitter);
         for (uint256 i; i < n; ++i) _pay(s.ref, tokenB, makers[i], submitter);
         if (_bal(tokenA) != balA) revert ConservationBroken(tokenA);
@@ -339,13 +350,13 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     /// @dev The makers of a settlement or a hybrid: each sells B and receives A; no maker's `from` is the taker's
     ///      (makers may share a signer); no order twice. Returns their legs, Σ receive (what the taker sells them) and
     ///      Σ fill (what the taker receives from them).
-    function _makers(Leg[] calldata ms, bytes32 takerFrom, address tokenA, address tokenB, address submitter)
+    function _makers(DexLeg[] calldata ms, bytes32 takerFrom, address tokenA, address tokenB, address submitter)
         private view returns (Calc[] memory makers, uint256 takerSell, uint256 takerRecv)
     {
         makers = new Calc[](ms.length);
         for (uint256 i; i < ms.length; ++i) {
-            Leg calldata m = ms[i];
-            Calc memory c = _decode(m.sellToken, m.shape, m.order);
+            DexLeg calldata m = ms[i];
+            Calc memory c = _decode(m.sellToken, m.shape, m.order, m.uaOrder);
             if (m.sellToken != tokenB || c.o.receiveToken != tokenA) revert TokenMismatch();
             if (c.o.from == takerFrom) revert SelfTrade(c.o.from);
             // a maker sells `fill` at its own price: it receives `⌈fill·receiveAmount/amount⌉` (in its favour)
@@ -365,17 +376,19 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     }
 
     /// @dev A leg's order in the one form, and its kind from the listing (never from the leg): shape 0 a `TradeOrder`
-    ///      (address words validated by the decoder; a native id is its address zero-padded, the same word), shape 1 a
-    ///      `UATradeOrder`, only on a SCaaS token whose UA ledger is on (a UA holds no other token, CTR-DEX-26).
-    function _decode(address sellToken, uint8 shape, bytes calldata order) private view returns (Calc memory c) {
+    ///      (a native id is its address zero-padded, the same word), shape 1 a `UATradeOrder`, only on a SCaaS token whose
+    ///      UA ledger is on (a UA holds no other token, CTR-DEX-26).
+    function _decode(address sellToken, uint8 shape, ITradeToken.TradeOrder calldata order,
+        ITradeToken.UATradeOrder calldata uaOrder) private view returns (Calc memory c)
+    {
         if (shape > 1) revert LegShapeUnknown(shape);
         c.outside = _s().kind[sellToken] != KIND_SCAAS;
         if (shape == 0) {
-            c.o = TradeLib.core(abi.decode(order, (ITradeToken.TradeOrder)));
+            c.o = TradeLib.core(order);
         } else {
             if (!_ledgerOn(sellToken)) revert UALegNotLedger(sellToken);
             c.ua = true;
-            c.o = abi.decode(order, (ITradeToken.UATradeOrder));
+            c.o = uaOrder;
         }
     }
 
@@ -412,12 +425,18 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         }
     }
 
-    function _pull(address sellToken, Calc memory c, bytes calldata sig, address submitter) private {
+    function _pullLeg(address sellToken, Calc memory c, DexLeg calldata l, address submitter) private {
+        _pull(sellToken, c, l.sig, l.auth, submitter);
+    }
+
+    function _pull(address sellToken, Calc memory c, bytes calldata sig, IUARegistry.UASig calldata auth, address submitter)
+        private
+    {
         ITradeToken.UATradeOrder memory o = c.o;
         ITradeToken.TradeFill memory f = o.flags & ESCROW != 0
             ? ITradeToken.TradeFill(o.amount, 0, 0, submitter)
             : ITradeToken.TradeFill(c.sold, c.recv, c.fee, submitter);
-        if (c.ua) return ITradeToken(sellToken).uaTrade(o, sig, f);
+        if (c.ua) return ITradeToken(sellToken).uaTrade(o, auth, f);
         if (!c.outside) return ITradeToken(sellToken).mtxTrade(_native(o), sig, f);
         // outside token: the DEX runs the token's checks on its own state (the signature once, CTR-DEX-15 step 4),
         // then pulls through the puller
@@ -572,7 +591,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     function _hybridIn(HybridPlan calldata p, address submitter)
         private returns (Tok[] memory t, Calc memory taker, Calc[] memory makers, bool onlyListed)
     {
-        taker = _decode(p.taker.sellToken, p.taker.shape, p.taker.order);
+        taker = _decode(p.taker.sellToken, p.taker.shape, p.taker.order, p.taker.uaOrder);
         address tokenA = p.taker.sellToken;
         address tokenB = taker.o.receiveToken;
         _checkMarket(tokenA, tokenB);
@@ -593,8 +612,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         }
         for (uint256 i; i < p.extraTokens.length; ++i) _tok(t, p.extraTokens[i]);
         _snap(t);
-        _pull(tokenA, taker, p.taker.sig, submitter);
-        for (uint256 i; i < makers.length; ++i) _pull(tokenB, makers[i], p.makers[i].sig, submitter);
+        _pullLeg(tokenA, taker, p.taker, submitter);
+        for (uint256 i; i < makers.length; ++i) _pullLeg(tokenB, makers[i], p.makers[i], submitter);
         _checkPulled(t);
     }
 
@@ -676,7 +695,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         c = new Calc[](n);
         for (uint256 i; i < n; ++i) {
             ExchangeLeg calldata l = p.legs[i];
-            Calc memory ci = _decode(l.sellToken, l.shape, l.order);
+            Calc memory ci = _decode(l.sellToken, l.shape, l.order, l.uaOrder);
             address rt = ci.o.receiveToken;
             if (s.listings[l.sellToken] == 0) revert TokenNotKnown(l.sellToken);
             if (s.listings[rt] == 0) revert TokenNotKnown(rt);
@@ -691,7 +710,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         }
         for (uint256 i; i < p.extraTokens.length; ++i) _tok(t, p.extraTokens[i]);
         _snap(t);
-        for (uint256 i; i < n; ++i) _pull(p.legs[i].sellToken, c[i], p.legs[i].sig, submitter);
+        for (uint256 i; i < n; ++i) _pull(p.legs[i].sellToken, c[i], p.legs[i].sig, p.legs[i].auth, submitter);
         _checkPulled(t);
     }
 

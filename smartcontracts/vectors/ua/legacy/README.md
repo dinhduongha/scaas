@@ -25,3 +25,6 @@
   as they stood before the round (raw portable digests `portablePopDigest` / `registrationDigest` / `kemRecordDigest` /
   `pqzKeyDigest` / `pqzKeyRecordDigest`, native EOA `msig` members over `personal_sign(md)`; the `ref/pre-typed-signing`
   tag holds the same bytes). Every file is copied whether or not it moves; the live files carry the typed digests.
+- typed-signing C6 (2026-11-01, TS-D19): `typed-signing/{metatx3,uatrade_kat}.json` as they stood before the nested structs:
+  `ReceiverFee(bytes32 paymentDigest,…)` and `CancelOrder(bytes32 orderHash)`; the `metatx3` rows of `pq_signatures.json` moved
+  with them.

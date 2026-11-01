@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {DexLegs} from "../helpers/DexLegs.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {UniswapExecutor} from "../../src/dex/UniswapExecutor.sol";
@@ -254,11 +255,11 @@ contract UniswapExecutorTest is UADexBase {
     /// its fee ⌈5.7⌉ = 6 plus every B above the floor; the DEX and the executor end with nothing.
     function test_executor_viaDex_mtxExchangeVia_endToEnd() public {
         uint256 b = v2AmountOut(v2AmountOut(1000, 100_000, 100_000), 100_000, 200_000);
-        ISCaaSDex.Leg memory l = _natLeg(address(A), _nat(alice, address(B), 1000, 1900, 3_000), 1000);
+        ISCaaSDex.DexLeg memory l = _natLeg(address(A), _nat(alice, address(B), 1000, 1900, 3_000), 1000);
         ISCaaSDex.ExchangePlan memory p;
         p.ref = "x";
         p.legs = new ISCaaSDex.ExchangeLeg[](1);
-        p.legs[0] = ISCaaSDex.ExchangeLeg(address(A), 0, l.order, l.sig, 1000, 1900);
+        p.legs[0] = DexLegs.exchange(l, 1000, 1900);
         uint256 a0 = A.balanceOf(alice);
         vm.prank(RELAYER);
         dex.mtxExchangeVia(p, address(ex), _hops(_v3(address(A), address(C)), _v3(address(C), address(B))));
@@ -281,7 +282,7 @@ contract UniswapExecutorTest is UADexBase {
         ISCaaSDex.HybridPlan memory p;
         p.ref = "hy";
         p.taker = _natLeg(address(A), t, 500);
-        p.makers = new ISCaaSDex.Leg[](1);
+        p.makers = new ISCaaSDex.DexLeg[](1);
         p.makers[0] = _natLeg(address(B), _nat(bob, address(A), 2000, 1000, 1_000), 800);
         p.outsideSell = 100;
         p.outsideFloor = 180;

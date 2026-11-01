@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
 /// typed-signing R1 test helpers: the registry's explicit arguments (TS-D10 … TS-D12) built from the byte forms the
 /// vectors and the older tests carry (`kemPk` = scheme ‖ ek ‖ x25519, CTR-UA-09 `msig` key data, `abi.encode(MemberSig[])`
@@ -226,9 +227,22 @@ library UACall {
         else u.signature = s;
     }
 
-    /// The `requireAuthorized` argument of a pre-R1 `bytes auth` (the tokens' conversion, `UAKinds.uaSig`).
-    function auth(bytes32 ua, bytes memory a) internal pure returns (IUARegistry.UASig memory) {
+    /// The `UASig` of a pre-R1 `bytes auth` (the tokens' conversion, `UAKinds.uaSig`). Test-only: bytes that are no
+    /// `abi.encode(keyData, sig)` (the older tests' junk and empty auths) travel as `signature`, so they stay junk.
+    function auth(bytes32 ua, bytes memory a) internal pure returns (IUARegistry.UASig memory s) {
+        if (!UAKinds.inNativeSpace(ua) && (a.length < 96 || uint256(bytes32(a)) != 0x40)) {
+            s.signature = a;
+            return s;
+        }
         return UAKinds.uaSig(ua, a);
+    }
+
+    /// `auth` of each transfer of a batch.
+    function auths(MetaTxLib.UAMetaTransfer[] memory ts, bytes[] memory as_)
+        internal pure returns (IUARegistry.UASig[] memory s)
+    {
+        s = new IUARegistry.UASig[](as_.length);
+        for (uint256 i; i < as_.length; ++i) s[i] = auth(ts[i].from, as_[i]);
     }
 
     function _u16(bytes memory d, uint256 o) private pure returns (uint256 v) {

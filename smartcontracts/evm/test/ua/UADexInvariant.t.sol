@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {UACall} from "./UACall.sol";
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -8,6 +9,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
+import {DexLegs} from "../helpers/DexLegs.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -87,7 +89,7 @@ contract UADexHandler is Test {
         ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](1);
         ss[0].ref = bytes32(++nonce);
         ss[0].taker = _leg(X, _order(Y, ids[p.ti], p.tDest, p.tAmount, p.tf, escrow ? 3 : 0), p.t1, p.amt);
-        ss[0].makers = new ISCaaSDex.Leg[](1);
+        ss[0].makers = new ISCaaSDex.DexLeg[](1);
         ss[0].makers[0] = _leg(Y, _order(X, ids[p.mi], p.mDest, p.amt, p.mf, 0), p.m1, p.amt);
         int256[6][2] memory before = _snap();
         vm.prank(RELAYER);
@@ -106,11 +108,11 @@ contract UADexHandler is Test {
         if (A.balanceOfUA(ids[pi]) < amt || B.balanceOf(address(router)) < amt + surplus) return;
         fee = fee % 10_001;
         bool ua = pi >= 2 || shape1;
-        ISCaaSDex.Leg memory l = _leg(A, _order(B, ids[pi], 0, amt, fee, 0), ua, amt);
+        ISCaaSDex.DexLeg memory l = _leg(A, _order(B, ids[pi], 0, amt, fee, 0), ua, amt);
         ISCaaSDex.ExchangePlan memory p;
         p.ref = bytes32(++nonce);
         p.legs = new ISCaaSDex.ExchangeLeg[](1);
-        p.legs[0] = ISCaaSDex.ExchangeLeg(address(A), l.shape, l.order, l.sig, amt, amt);
+        p.legs[0] = DexLegs.exchange(l, amt, amt);
         ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](2);
         xs[0] = ISCaaSDex.Interaction(address(A), abi.encodeCall(IERC20.approve, (address(router), amt)));
         xs[1] = ISCaaSDex.Interaction(address(router),
@@ -149,12 +151,12 @@ contract UADexHandler is Test {
 
     /// Shape 1 as is; shape 0 the same fields as a `TradeOrder` (a native `from` and `destination`).
     function _leg(NormalToken sell, ITradeToken.UATradeOrder memory o, bool shape1, uint256 fill)
-        internal view returns (ISCaaSDex.Leg memory)
+        internal view returns (ISCaaSDex.DexLeg memory)
     {
-        if (shape1) return ISCaaSDex.Leg(address(sell), 1, abi.encode(o), _sign(o.from, sell.uaTradeOrderDigest(o)), fill);
+        if (shape1) return DexLegs.uaLeg(address(sell), o, UACall.auth(o.from, _sign(o.from, sell.uaTradeOrderDigest(o))), fill);
         // the same 13 words: a native id is its address zero-padded
         ITradeToken.TradeOrder memory t = abi.decode(abi.encode(o), (ITradeToken.TradeOrder));
-        return ISCaaSDex.Leg(address(sell), 0, abi.encode(t), _sign(o.from, sell.tradeOrderDigest(t)), fill);
+        return DexLegs.leg(address(sell), t, _sign(o.from, sell.tradeOrderDigest(t)), fill);
     }
 
     /// A native id signs `digest` itself; a UA `ua_msg(kind, trade, digest)` (the stand-in verifier).

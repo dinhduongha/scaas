@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {UACall} from "../ua/UACall.sol";
 import {Test} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -123,7 +124,7 @@ contract HederaV2Test is Test {
         bytes32 d = IERC20MetaTx(t).mtxTransferDigest(x);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(payerPk, d);
         bytes memory payerSig = abi.encodePacked(r, s, v);
-        bytes memory payeeSig = _edSign(IMetaTokenV2(t).receiverFeeDigest(d, 30, feeTo, block.timestamp));
+        bytes memory payeeSig = _edSign(IMetaTokenV2(t).receiverFeeDigest(x, 30, feeTo, block.timestamp));
         uint256 aliceBefore = IERC20MetaTx(t).balanceOf(alice);
         vm.prank(relayer);
         IMetaTokenV2(t).mtxPayReceiverFee(x, payerSig, 30, feeTo, block.timestamp, payeeSig);
@@ -239,10 +240,10 @@ contract HederaV2Test is Test {
             validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
         bytes32 d = IUALedger(t).uaTransferDigest(x);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(payerPk, d);
-        bytes memory payeeSig = _edSign(IMetaTokenV2(t).receiverFeeDigest(d, 30, feeTo, block.timestamp));
+        bytes memory payeeSig = _edSign(IMetaTokenV2(t).uaReceiverFeeDigest(x, 30, feeTo, block.timestamp));
         uint256 aliceBefore = IERC20MetaTx(t).balanceOf(alice);
         vm.prank(relayer);
-        IMetaTokenV2(t).uaPayReceiverFee(x, abi.encodePacked(r, s, v), 30, feeTo, block.timestamp, payeeSig);
+        IMetaTokenV2(t).uaPayReceiverFee(x, UACall.auth(x.from, abi.encodePacked(r, s, v)), 30, feeTo, block.timestamp, UACall.auth(x.to, payeeSig));
         assertEq(IERC20MetaTx(t).balanceOf(payer), 300);
         assertEq(IERC20MetaTx(t).balanceOf(alice), aliceBefore + 200 - 30);
         assertEq(IERC20MetaTx(t).balanceOf(feeTo), 30);

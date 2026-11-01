@@ -9,7 +9,7 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 /// @notice Events and errors raised by `WrappedLib` (an external library) are declared here so that they are in the
 ///         token ABI. The creation config is `IFactoryToken.TokenConfig` (`legs`, `rate`).
 interface IWrappedToken {
-    /// @notice `account` is credited `minted`: the caller of a direct wrap; for `mtxWrap` the order's `destination` (or
+    /// @notice `account` is credited `minted`: the caller of a direct wrap; for `mtxWrapOrder` the order's `destination` (or
     ///         `from`) and the units net of the submitter's fee (W-Q), which its `Transfer` shows.
     event Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted);
     event Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned,
@@ -18,7 +18,7 @@ interface IWrappedToken {
     ///         `UATransfer(ua, 0)` names the UA).
     event UnwrappedToUA(address indexed account, address indexed underlying, bytes32 indexed to, uint256 burned,
         uint256 out);
-    /// @notice `uaWrap` (CTR-TOK-20, UA-5b): `to` is credited `minted`: the order's `destination` (or `from`) and the
+    /// @notice `uaWrapOrder` (CTR-TOK-20, UA-5b): `to` is credited `minted`: the order's `destination` (or `from`) and the
     ///         units net of the submitter's fee (W-Q).
     event UAWrapped(bytes32 indexed to, address indexed underlying, uint256 underlyingIn, uint256 minted);
     event ReserveAdded(address indexed from, address indexed underlying, uint256 amount);
@@ -56,7 +56,7 @@ interface IWrappedToken {
     error WrapPausedForRateChange(address u);
     /// @notice `msg.value` must equal `amount` on the native leg and be 0 on any other leg (CTR-TOK-26).
     error NativeValueMismatch(uint256 value, uint256 expected);
-    /// @notice `mtxWrap` (CTR-TOK-20): a signature cannot carry coin; the order must buy this token; the underlying
+    /// @notice `mtxWrapOrder` (CTR-TOK-20): a signature cannot carry coin; the order must buy this token; the underlying
     ///         must deliver exactly `o.amount`.
     error NativeNotGasless();
     error WrapOrderInvalid(address receiveToken);
@@ -83,11 +83,11 @@ interface IWrappedToken {
         external returns (uint256 out, uint256 burned);
     /// @notice Wrap a SCaaS underlying by the holder's `TradeOrder` (`dex` = this token, `receiveToken` = this
     ///         token, `receiveAmount` = the minimum minted, `minFill = amount`); `fee` pays the submitter in minted units.
-    function mtxWrap(address underlying, ITradeToken.TradeOrder calldata o, bytes calldata sig)
+    function mtxWrapOrder(address underlying, ITradeToken.WrapOrder calldata o, bytes calldata sig)
         external returns (uint256 minted);
-    /// @notice `mtxWrap` for a `UATradeOrder` (UA-5b): the underlying must be a SCaaS ledger token; `minted − fee`
+    /// @notice `mtxWrapOrder` for a `UAWrapOrder` (UA-5b): the underlying must be a SCaaS ledger token; `minted − fee`
     ///         to `o.destination` (0 ⇒ `o.from`), a derived id into the UA ledger.
-    function uaWrap(address underlying, ITradeToken.UATradeOrder calldata o, bytes calldata auth)
+    function uaWrapOrder(address underlying, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth)
         external returns (uint256 minted);
     /// @notice The named typed entries (TS-D14): the envelope, the op's own parameters, the signature.
     function mtxWrap(MetaTxLib.Envelope calldata e, uint256 amount, bytes calldata sig) external returns (bytes memory);

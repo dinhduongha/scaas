@@ -13,9 +13,7 @@ import * as ua from '../src/ua.js';
 import { schnorrVerify as zetherVerify } from '../src/zether.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, abiEncode, concatBytes } from '../src/bytes.js';
 import { hashTypedData, hashStruct, padId, uaMetaTxTypedData, uaMetaTransferTypedData, uaReceiverFeeTypedData, unwrapToUACall,
-  checkReceiverFee as checkNestedReceiverFee, TYPED_OPS } from '../src/evm.js';
-// metatx3.json keeps the struct the contracts hash until C6 (`uaPayReceiverFee`): ReceiverFee over the payment digest.
-import { receiverFeeTypedData, checkReceiverFee } from '../legacy/typed-signing/evm-pre-named.js';
+  checkReceiverFee, TYPED_OPS } from '../src/evm.js';
 
 import { dir } from './ua-vectors-dir.js';
 const V = JSON.parse(readFileSync(new URL('metatx3.json', dir)));
@@ -114,8 +112,8 @@ test('receiverFee rows: native payer x every derived payee and p256 x bip340; pa
     assert.deepEqual(uaMetaTransferTypedData({ ...domain, message: t }), r.transfer);
     assert.deepEqual([t.mode, t.fee, t.nonce], [1, '0', '0'], 'CTR-MTX-06 shape: fee NONE, relayer bound, nonce 0');
     const rf = r.receiverFee.message;
-    assert.equal(rf.paymentDigest, r.paymentDigest);
-    assert.deepEqual(receiverFeeTypedData({ ...domain, ...rf }), r.receiverFee);
+    assert.deepEqual(rf.payment, t);
+    assert.deepEqual(uaReceiverFeeTypedData({ ...domain, message: rf }), r.receiverFee);
     assert.equal(hex(hashTypedData(r.receiverFee)), r.receiverFeeDigest);
     for (const [id, purpose, digest, auth] of [[t.from, 'metatx', r.paymentDigest, r.payerAuth],
       [t.to, 'receiver-fee', r.receiverFeeDigest, r.payeeAuth]]) {
@@ -130,36 +128,21 @@ test('receiverFee rows: native payer x every derived payee and p256 x bip340; pa
   assert.equal(nobled, 10 + 1 + 6, 'the native payer x10 (ECDSA), the p256 payer, the p256 / bip340 x2 / ed25519 / secp256k1 / zether payees');
 });
 
-test('receiver-pays, UA path: checkReceiverFee accepts every receiverFee row for its payee id and refuses another payee', () => {
-  for (const r of V.receiverFee) {
-    const t = r.transfer.message;
-    const rf = r.receiverFee.message;
-    const want = { payee: t.to, chainId: V.chainId, chainUid: V.chainUid, amount: t.value, decimals: 0, entryRef: t.entryRef,
-      expectedToken: V.token, payment: r.transfer, maxFee: rf.fee, feeRecipient: rf.feeRecipient,
-      now: Number(rf.validUntil) - 60 };
-    const ok = checkReceiverFee(r.receiverFee, want);
-    assert.deepEqual([hex(ok.digest), hex(ok.paymentDigest), ok.payer], [r.receiverFeeDigest, r.paymentDigest, t.from]);
-    assert.throws(() => checkReceiverFee(r.receiverFee, { ...want, payee: padId('0x' + '5e'.repeat(20)) }), /does not pay you/);
-    assert.throws(() => checkReceiverFee(r.receiverFee, { ...want, maxFee: BigInt(rf.fee) - 1n }), /above your limit/);
-    // the address-path struct over the same fields is another digest: never accepted for a UA payment
-    assert.throws(() => checkReceiverFee(r.receiverFee, { ...want, payment: { ...r.transfer, primaryType: 'MetaTransfer' } }),
-      /malformed|unexpected payment fields/);
-  }
-});
-
 test('UAReceiverFee nests the row\'s payment: the payee checks it on ids, the payment digest is the payer\'s', () => {
   for (const r of V.receiverFee) {
     const t = r.transfer.message;
     const rf = r.receiverFee.message;
-    const td = uaReceiverFeeTypedData({ ...domain, message: { payment: t, fee: rf.fee, feeRecipient: rf.feeRecipient, validUntil: rf.validUntil } });
+    const td = r.receiverFee;
     assert.equal(hex(hashStruct(td.types, 'UAMetaTransfer', td.message.payment)),
       hex(hashStruct(r.transfer.types, 'UAMetaTransfer', t)), 'the nested struct is the payment as signed');
     assert.equal(hex(hashStruct(td.types, 'UAReceiverFee', td.message)), hex(keccak_256(concatBytes(fromHex(TYPED_OPS.UAReceiverFee.typehash),
       hashStruct(td.types, 'UAMetaTransfer', td.message.payment), abiEncode(['uint256', 'address', 'uint256'], [rf.fee, rf.feeRecipient, rf.validUntil])))));
     const want = { payee: t.to, chainId: V.chainId, chainUid: V.chainUid, amount: t.value, decimals: 0, entryRef: t.entryRef,
       expectedToken: V.token, maxFee: rf.fee, feeRecipient: rf.feeRecipient, now: Number(rf.validUntil) - 60 };
-    const ok = checkNestedReceiverFee(td, want);
-    assert.deepEqual([hex(ok.digest), hex(ok.paymentDigest), ok.payer], [hex(hashTypedData(td)), r.paymentDigest, t.from]);
-    assert.throws(() => checkNestedReceiverFee({ ...td, primaryType: 'ReceiverFee' }, want), /unexpected receiver fee fields|malformed/);
+    const ok = checkReceiverFee(td, want);
+    assert.deepEqual([hex(ok.digest), hex(ok.paymentDigest), ok.payer], [r.receiverFeeDigest, r.paymentDigest, t.from]);
+    assert.throws(() => checkReceiverFee(td, { ...want, payee: padId('0x' + '5e'.repeat(20)) }), /does not pay you/);
+    assert.throws(() => checkReceiverFee(td, { ...want, maxFee: BigInt(rf.fee) - 1n }), /above your limit/);
+    assert.throws(() => checkReceiverFee({ ...td, primaryType: 'ReceiverFee' }, want), /unexpected receiver fee fields|malformed/);
   }
 });

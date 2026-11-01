@@ -139,14 +139,14 @@ abstract contract UALedgerBase is UARegistryBase {
     function _xfer(MetaTxLib.UAMetaTransfer memory t) internal {
         bytes memory a = _authT(address(tok), t);
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, a);
+        tok.uaExecuteTransfer(t, UACall.auth(t.from, a));
     }
 
     function _xferReverts(MetaTxLib.UAMetaTransfer memory t, bytes memory err) internal {
         bytes memory a = _authT(address(tok), t);
         vm.expectRevert(err);
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, a);
+        tok.uaExecuteTransfer(t, UACall.auth(t.from, a));
     }
 
     /// `amount` of alice's native balance into `ua`.

@@ -23,6 +23,9 @@ abstract contract UAMetaTxBase is MetaTxBase {
         mapping(bytes32 digest => bool) cancelUsed;
     }
 
+    bytes32 private constant _UA_CANCEL_NONCE_TYPEHASH =
+        keccak256("UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)");
+
     // keccak256(abi.encode(uint256(keccak256("scaas.ua.ledger")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant _UA_STORAGE = 0x9e2def943e5a7ec3982e5d00524104579a6b98ce8b31343ac0092718cc04e900;
 
@@ -60,11 +63,9 @@ abstract contract UAMetaTxBase is MetaTxBase {
         return MtxPipelineLib.callDigest(_domainSeparatorV4(), MetaTxLib.UAMETATX_TYPEHASH, _uaEnvelopeOf(m));
     }
 
-    /// @notice The `metatx-cancel` digest (accounts.md §1.5): `CANCEL_TAG` is the purpose tag itself.
+    /// @notice The `metatx-cancel` digest (TS-D19): `UACancelNonce` in this contract's domain.
     function uaCancelDigest(bytes32 ua, uint256 batch, uint256 validUntil) public view virtual returns (bytes32) {
-        return keccak256(abi.encode(
-            UAKinds.PURPOSE_METATX_CANCEL, block.chainid, CHAIN_UID, address(this), ua, batch, validUntil
-        ));
+        return _hashTypedDataV4(keccak256(abi.encode(_UA_CANCEL_NONCE_TYPEHASH, ua, batch, validUntil)));
     }
 
     // ------------------------------------------------------------------ entry points
@@ -91,7 +92,7 @@ abstract contract UAMetaTxBase is MetaTxBase {
 
     /// @notice A derived UA's `cancelNonce`, signed under purpose `metatx-cancel`; each signature works once. Native ids
     ///         use `cancelNonce` (the same map, `pad(sender)`).
-    function uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, bytes calldata auth)
+    function uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, IUARegistry.UASig calldata auth)
         public virtual nonReentrant
     {
         _uaOn();
@@ -100,7 +101,7 @@ abstract contract UAMetaTxBase is MetaTxBase {
         bytes32 d = uaCancelDigest(ua, batch, validUntil);
         UALedgerStorage storage $ = _ua();
         if ($.cancelUsed[d]) revert IUALedger.UACancelUsed();
-        IUARegistry(_REGISTRY).requireAuthorized(ua, UAKinds.PURPOSE_METATX_CANCEL, d, UAKinds.uaSig(ua, auth)); // R1 → C2
+        IUARegistry(_REGISTRY).requireAuthorized(ua, UAKinds.PURPOSE_METATX_CANCEL, d, auth);
         $.cancelUsed[d] = true;
         emit IUALedger.UANonceCancelled(ua, batch, _bumpNonce(ua, batch));
     }

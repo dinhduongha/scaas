@@ -67,9 +67,10 @@ contract MsgSenderLintTest is Test {
         assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 7,
             "ERC20MetaTx: event relayer x3 (_execute, _executeTransfer, _uaExecuteTransfer), mtxTrade and uaTrade caller (CTR-DEX-15, -25), restorePulled caller x2 (DX7)");
         assertEq(_count("src/metatx/UAMetaTxBase.sol", "msg.sender", false), 1, "UAMetaTxBase: event relayer (_uaSettle)");
-        assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 1, "MetaTokenBase: factory check in initialize");
+        assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 4,
+            "MetaTokenBase: factory check in initialize; the relayer of mtxRelayFee, uaRelayFee (struct word x2, `_relayHash`), bound to the direct caller");
         assertEq(_count("src/metatx/NormalToken.sol", "msg.sender", false), 0, "NormalToken");
-        assertEq(_count("src/metatx/WrappedToken.sol", "msg.sender", false), 4, "WrappedToken: mtxWrap and uaWrap submitter x2 (CTR-TOK-20)");
+        assertEq(_count("src/metatx/WrappedToken.sol", "msg.sender", false), 4, "WrappedToken: mtxWrapOrder and uaWrapOrder submitter x2 (CTR-TOK-20)");
         assertEq(_count("src/metatx/WrappedLib.sol", "msg.sender", false), 0, "WrappedLib");
         assertEq(_count("src/trade/TradeLib.sol", "msg.sender", false), 0, "TradeLib: the caller is a parameter");
         assertEq(_count("src/metatx/AdminLib.sol", "msg.sender", false), 0, "AdminLib");

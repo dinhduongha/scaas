@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {OrderJson} from "../helpers/OrderJson.sol";
+import {domainOf} from "../metatx/NamedEntry.t.sol";
+import {UACall} from "./UACall.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -70,13 +73,13 @@ contract UATradeTest is UALedgerBase {
     }
 
     function _trade(ITradeToken.UATradeOrder memory o, ITradeToken.TradeFill memory f) internal {
-        tok.uaTrade(o, _a(o), f);
+        tok.uaTrade(o, UACall.auth(o.from, _a(o)), f);
     }
 
     function _expect(bytes4 sel, ITradeToken.UATradeOrder memory o, ITradeToken.TradeFill memory f) internal {
         bytes memory auth = _a(o);
         vm.expectRevert(abi.encodeWithSelector(sel, tok.uaTradeOrderDigest(o)));
-        tok.uaTrade(o, auth, f);
+        tok.uaTrade(o, UACall.auth(o.from, auth), f);
     }
 
     // ----- digests -----
@@ -143,7 +146,7 @@ contract UATradeTest is UALedgerBase {
         o2.nonce = 2;
         bytes memory bad = _auth(lreg, UAKinds.P256, _key(UAKinds.P256), UAKinds.PURPOSE_TRADE, tok.uaTradeOrderDigest(o2));
         vm.expectRevert();
-        tok.uaTrade(o2, bad, _f(1000, 2000, 0));
+        tok.uaTrade(o2, UACall.auth(o2.from, bad), _f(1000, 2000, 0));
     }
 
     function test_pathB_escrow_onTheUAShape() public {
@@ -173,28 +176,28 @@ contract UATradeTest is UALedgerBase {
         // 1. caller and identities
         vm.prank(OTHER);
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.NotDex.selector, OTHER));
-        tok.uaTrade(o, auth, _f(600, 1200, 0));
+        tok.uaTrade(o, UACall.auth(o.from, auth), _f(600, 1200, 0));
         o.dex = OTHER; // an EOA
         auth = _a(o);
         vm.prank(OTHER);
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.DexNotContract.selector, OTHER));
-        tok.uaTrade(o, auth, _f(600, 1200, 0));
+        tok.uaTrade(o, UACall.auth(o.from, auth), _f(600, 1200, 0));
         o = _o(_pad(address(tok)), 1000, 2000);
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.SelfOrder.selector, tok.uaTradeOrderDigest(o)));
-        tok.uaTrade(o, "", _f(600, 1200, 0));
+        tok.uaTrade(o, UACall.auth(o.from, ""), _f(600, 1200, 0));
         o = _o(uaP, 1000, 2000);
         o.dex = address(tok);
         auth = _a(o);
         bytes32 h = tok.uaTradeOrderDigest(o);
         vm.prank(address(tok));
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.SelfOrder.selector, h));
-        tok.uaTrade(o, auth, _f(600, 1200, 0));
+        tok.uaTrade(o, UACall.auth(o.from, auth), _f(600, 1200, 0));
         // 2. relayer
         o = _o(uaP, 1000, 2000);
         o.relayer = OTHER;
         auth = _a(o);
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.WrongRelayer.selector, tok.uaTradeOrderDigest(o), RELAYER));
-        tok.uaTrade(o, auth, _f(600, 1200, 0));
+        tok.uaTrade(o, UACall.auth(o.from, auth), _f(600, 1200, 0));
         // 3. shape
         o = _o(uaP, 1000, 2000);
         o.validUntil = block.timestamp - 1;
@@ -245,7 +248,7 @@ contract UATradeTest is UALedgerBase {
 
     function test_nonceFloor_and_balance() public {
         ITradeToken.UATradeOrder memory o = _o(uaP, 1000, 2000);
-        tok.uaInvalidateNonces(uaP, 1, 2, _authP(uaP, UAKinds.PURPOSE_TRADE, tok.uaInvalidateNoncesDigest(uaP, 1, 2)));
+        tok.uaInvalidateNonces(uaP, 1, 2, UACall.auth(uaP, _authP(uaP, UAKinds.PURPOSE_TRADE, tok.uaInvalidateNoncesDigest(uaP, 1, 2))));
         _expect(ITradeToken.NonceInvalidated.selector, o, _f(600, 1200, 0));
         o.batch = 2; // another lane
         _trade(o, _f(600, 1200, 0));
@@ -253,7 +256,7 @@ contract UATradeTest is UALedgerBase {
         o.batch = 3;
         bytes memory auth = _a(o);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UAInsufficientBalance.selector, uaP, 9_400, 20_000));
-        tok.uaTrade(o, auth, _f(20_000, 40_000, 0));
+        tok.uaTrade(o, UACall.auth(o.from, auth), _f(20_000, 40_000, 0));
     }
 
     // ----- step 4: the UA rule under `trade` -----
@@ -264,27 +267,27 @@ contract UATradeTest is UALedgerBase {
         // a `metatx` auth over the same digest is refused (purposes separate uses)
         bytes memory wrongPurpose = _authP(uaP, UAKinds.PURPOSE_METATX, h);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaP));
-        tok.uaTrade(o, wrongPurpose, _f(600, 1200, 0));
+        tok.uaTrade(o, UACall.auth(o.from, wrongPurpose), _f(600, 1200, 0));
         // another UA's auth
         bytes memory other = _authP(uaB, UAKinds.PURPOSE_TRADE, h);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaP));
-        tok.uaTrade(o, other, _f(600, 1200, 0));
+        tok.uaTrade(o, UACall.auth(o.from, other), _f(600, 1200, 0));
         // the Zether UA signs under `trade` like any SIGNING UA (UA-6 U8): its `metatx` signature is refused
         o.from = uaZ;
         bytes memory zWrong = _authP(uaZ, UAKinds.PURPOSE_METATX, tok.uaTradeOrderDigest(o));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaZ));
-        tok.uaTrade(o, zWrong, _f(600, 1200, 0));
+        tok.uaTrade(o, UACall.auth(o.from, zWrong), _f(600, 1200, 0));
         // UA_POOL as a native id
         o.from = _pad(POOL);
         vm.expectRevert(IUALedger.UAPoolNotPayable.selector);
-        tok.uaTrade(o, "", _f(600, 1200, 0));
+        tok.uaTrade(o, UACall.auth(o.from, ""), _f(600, 1200, 0));
     }
 
     /// C5-2: the native id 0 is not a signer on the UA path (its fee move would be a mint).
     function test_C5_2_nativeIdZeroRefused() public {
         ITradeToken.UATradeOrder memory o = _o(bytes32(0), 1000, 2000);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, bytes32(0)));
-        tok.uaTrade(o, "", _f(600, 1200, 0));
+        tok.uaTrade(o, UACall.auth(o.from, ""), _f(600, 1200, 0));
     }
 
     function test_ledgerOff_everyUATradeFunction() public {
@@ -293,11 +296,11 @@ contract UATradeTest is UALedgerBase {
         off.initialize(address(this), 1, abi.encode(normalInit("Off", "OFF", 6, 1_000_000, alice, address(this))));
         ITradeToken.UATradeOrder memory o = _o(_pad(alice), 1000, 2000);
         vm.expectRevert(IUALedger.UALedgerOff.selector);
-        off.uaTrade(o, "", _f(600, 1200, 0));
+        off.uaTrade(o, UACall.auth(o.from, ""), _f(600, 1200, 0));
         vm.expectRevert(IUALedger.UALedgerOff.selector);
-        off.uaCancelOrder(o, "");
+        off.uaCancelOrder(o, UACall.auth(o.from, ""));
         vm.expectRevert(IUALedger.UALedgerOff.selector);
-        off.uaInvalidateNonces(_pad(alice), 1, 2, "");
+        off.uaInvalidateNonces(_pad(alice), 1, 2, UACall.auth(_pad(alice), ""));
     }
 
     // ----- UP-12: verified once -----
@@ -306,13 +309,13 @@ contract UATradeTest is UALedgerBase {
         ITradeToken.UATradeOrder memory o = _o(uaP, 1000, 2000);
         bytes memory other = _authP(uaP, UAKinds.PURPOSE_TRADE, bytes32(0)); // a valid auth over another digest
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaP));
-        tok.uaTrade(o, other, _f(600, 1200, 0)); // the first pull always verifies
+        tok.uaTrade(o, UACall.auth(o.from, other), _f(600, 1200, 0)); // the first pull always verifies
         bytes memory auth = _a(o);
         uint256 g = gasleft();
-        tok.uaTrade(o, auth, _f(600, 1200, 0));
+        tok.uaTrade(o, UACall.auth(o.from, auth), _f(600, 1200, 0));
         uint256 first = g - gasleft();
         g = gasleft();
-        tok.uaTrade(o, hex"00", _f(400, 800, 0)); // pulled[h] ≠ 0: no second check
+        tok.uaTrade(o, UACall.auth(o.from, hex"00"), _f(400, 800, 0)); // pulled[h] ≠ 0: no second check
         uint256 second = g - gasleft();
         emit log_named_uint("uaTrade first fill (p256 stand-in verify)", first);
         emit log_named_uint("uaTrade second fill (no verify)", second);
@@ -332,9 +335,9 @@ contract UATradeTest is UALedgerBase {
     function test_verifiedOnce_neverAfterACancel() public {
         ITradeToken.UATradeOrder memory o = _o(uaP, 1000, 2000);
         bytes32 h = tok.uaTradeOrderDigest(o);
-        tok.uaCancelOrder(o, _authP(uaP, UAKinds.PURPOSE_TRADE, tok.cancelOrderDigest(h)));
+        tok.uaCancelOrder(o, UACall.auth(o.from, _authP(uaP, UAKinds.PURPOSE_TRADE, tok.cancelUAOrderDigest(o))));
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.OrderClosed.selector, h));
-        tok.uaTrade(o, hex"00", _f(600, 1200, 0));
+        tok.uaTrade(o, UACall.auth(o.from, hex"00"), _f(600, 1200, 0));
     }
 
     // ----- cancel and invalidate -----
@@ -342,30 +345,63 @@ contract UATradeTest is UALedgerBase {
     function test_cancel_neverExpires_idempotent_signerBound() public {
         ITradeToken.UATradeOrder memory o = _o(uaB, 1000, 2000);
         bytes32 h = tok.uaTradeOrderDigest(o);
-        bytes32 cd = tok.cancelOrderDigest(h);
+        bytes32 cd = tok.cancelUAOrderDigest(o);
         bytes memory wrong = _authP(uaP, UAKinds.PURPOSE_TRADE, cd);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaB));
-        tok.uaCancelOrder(o, wrong);
+        tok.uaCancelOrder(o, UACall.auth(o.from, wrong));
         bytes memory meta = _authP(uaB, UAKinds.PURPOSE_METATX, cd);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaB));
-        tok.uaCancelOrder(o, meta);
+        tok.uaCancelOrder(o, UACall.auth(o.from, meta));
         vm.warp(o.validUntil + 365 days); // a cancel never expires
         bytes memory auth = _authP(uaB, UAKinds.PURPOSE_TRADE, cd);
         vm.expectEmit(address(tok));
         emit ITradeToken.UAOrderCancelled(h, uaB);
         vm.prank(OTHER); // anyone submits
-        tok.uaCancelOrder(o, auth);
+        tok.uaCancelOrder(o, UACall.auth(o.from, auth));
         assertEq(tok.pulled(h), 1000);
         vm.recordLogs();
-        tok.uaCancelOrder(o, auth); // closed: a no-op
+        tok.uaCancelOrder(o, UACall.auth(o.from, auth)); // closed: a no-op
         assertEq(vm.getRecordedLogs().length, 0);
+    }
+
+    /// `CancelUAOrder` nests the order (TS-D19): the wallet's JSON is the digest, authorized under `trade`. The pre-C6
+    /// `CancelOrder(bytes32 orderHash)` of the same order, the only change, is `UAUnauthorized`; the nested one closes it.
+    function test_cancelUAOrderNested() public {
+        ITradeToken.UATradeOrder memory o = _o(uaB, 1000, 2000);
+        bytes32 h = tok.uaTradeOrderDigest(o);
+        bytes32 wallet = OrderJson.cancelTrade(address(tok), o, true);
+        assertEq(tok.cancelUAOrderDigest(o), wallet);
+        bytes32 flat = keccak256(abi.encodePacked(hex"1901", domainOf(address(tok)),
+            keccak256(abi.encode(keccak256("CancelOrder(bytes32 orderHash)"), h))));
+        bytes memory old = _authP(uaB, UAKinds.PURPOSE_TRADE, flat);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaB));
+        tok.uaCancelOrder(o, UACall.auth(o.from, old));
+        assertEq(tok.pulled(h), 0);
+        tok.uaCancelOrder(o, UACall.auth(o.from, _authP(uaB, UAKinds.PURPOSE_TRADE, wallet)));
+        assertEq(tok.pulled(h), 1000);
+    }
+
+    /// A UA's wrap order: `UAWrapOrder`, cancelled as `CancelUAWrapOrder`; `CancelUAOrder` of its order form is refused.
+    function test_cancelUAWrapOrderNested() public {
+        ITradeToken.UATradeOrder memory o = _o(uaB, 1000, 2000);
+        o.receiveToken = o.dex;
+        assertEq(tok.uaTradeOrderDigest(o), OrderJson.wrap(address(tok), o, true));
+        bytes32 h = tok.uaTradeOrderDigest(o);
+        bytes32 wallet = OrderJson.cancelWrap(address(tok), o, true);
+        assertEq(tok.cancelUAOrderDigest(o), wallet);
+        bytes memory asTrade = _authP(uaB, UAKinds.PURPOSE_TRADE, OrderJson.cancelTrade(address(tok), o, true));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaB));
+        tok.uaCancelOrder(o, UACall.auth(o.from, asTrade));
+        assertEq(tok.pulled(h), 0);
+        tok.uaCancelOrder(o, UACall.auth(o.from, _authP(uaB, UAKinds.PURPOSE_TRADE, wallet)));
+        assertEq(tok.pulled(h), 1000);
     }
 
     function test_cancel_aPartlyFilledOrder_closesTheRemainder() public {
         ITradeToken.UATradeOrder memory o = _o(uaP, 1000, 2000);
         _trade(o, _f(600, 1200, 0));
         bytes32 h = tok.uaTradeOrderDigest(o);
-        tok.uaCancelOrder(o, _authP(uaP, UAKinds.PURPOSE_TRADE, tok.cancelOrderDigest(h)));
+        tok.uaCancelOrder(o, UACall.auth(o.from, _authP(uaP, UAKinds.PURPOSE_TRADE, tok.cancelUAOrderDigest(o))));
         assertEq(tok.pulled(h), 1000);
         _expect(ITradeToken.OrderClosed.selector, o, _f(400, 800, 0));
     }
@@ -374,17 +410,17 @@ contract UATradeTest is UALedgerBase {
         bytes memory a5 = _authP(uaP, UAKinds.PURPOSE_TRADE, tok.uaInvalidateNoncesDigest(uaP, 1, 5));
         vm.expectEmit(address(tok));
         emit ITradeToken.UANoncesInvalidated(uaP, 1, 5);
-        tok.uaInvalidateNonces(uaP, 1, 5, a5);
+        tok.uaInvalidateNonces(uaP, 1, 5, UACall.auth(uaP, a5));
         assertEq(tok.uaMinNonce(uaP, 1), 5);
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.MinNonceNotIncreasing.selector, 5, 5));
-        tok.uaInvalidateNonces(uaP, 1, 5, a5);
+        tok.uaInvalidateNonces(uaP, 1, 5, UACall.auth(uaP, a5));
         uint256 big = 2 ** 128 + 1;
         bytes memory ab = _authP(uaP, UAKinds.PURPOSE_TRADE, tok.uaInvalidateNoncesDigest(uaP, 1, big));
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.MinNonceAboveCap.selector, big));
-        tok.uaInvalidateNonces(uaP, 1, big, ab);
+        tok.uaInvalidateNonces(uaP, 1, big, UACall.auth(uaP, ab));
         bytes memory wrong = _authP(uaB, UAKinds.PURPOSE_TRADE, tok.uaInvalidateNoncesDigest(uaP, 1, 6));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaP));
-        tok.uaInvalidateNonces(uaP, 1, 6, wrong);
+        tok.uaInvalidateNonces(uaP, 1, 6, UACall.auth(uaP, wrong));
     }
 
     /// One floor per id: the address path raises the padded id's floor and the UA path the address's.
@@ -399,7 +435,7 @@ contract UATradeTest is UALedgerBase {
         bytes32 d = tok.uaInvalidateNoncesDigest(_pad(alice), 1, 7);
         vm.expectEmit(address(tok));
         emit ITradeToken.UANoncesInvalidated(_pad(alice), 1, 7);
-        tok.uaInvalidateNonces(_pad(alice), 1, 7, _ecdsa(ALICE_PK, d));
+        tok.uaInvalidateNonces(_pad(alice), 1, 7, UACall.auth(_pad(alice), _ecdsa(ALICE_PK, d)));
         assertEq(tok.minNonce(alice, 1), 7);
         ITradeToken.TradeOrder memory n = _native(1000, 2000);
         n.nonce = 6;
@@ -417,7 +453,7 @@ contract UATradeTest is UALedgerBase {
         ITradeToken.TradeOrder memory n = _native(1000, 2000);
         ITradeToken.UATradeOrder memory u = _o(_pad(alice), 1000, 2000);
         bytes32 hn = tok.tradeOrderDigest(n);
-        tok.mtxCancelOrder(n, _ecdsa(ALICE_PK, tok.cancelOrderDigest(hn)));
+        tok.mtxCancelOrder(n, _ecdsa(ALICE_PK, tok.cancelOrderDigest(n)));
         assertEq(tok.pulled(hn), 1000);
         _trade(u, _f(600, 1200, 0));
         assertEq(tok.pulled(tok.uaTradeOrderDigest(u)), 600);

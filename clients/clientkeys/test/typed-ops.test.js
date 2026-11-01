@@ -73,10 +73,10 @@ const X4 = {
   RollOverBatch: ['bytes32[] uas', ''],
 };
 
-// `mtx` entries: the length of `mtxSelectors()`, read from the Solidity (`WRAPPED_ZETHER`: its table is in the library, size lever 1). `ua` entries: an expected count, by hand, since
+// `mtx` entries: the length of `mtxSelectors()`, read from the Solidity (`WRAPPED_ZETHER`, `WRAPPED_PQZ`: the table is in the library, size lever 1). `ua` entries: an expected count, by hand, since
 // `_uaAllowed` is an expression and states no count.
 const SOURCES = { NormalToken: 'metatx/NormalToken', WrappedToken: 'metatx/WrappedToken', NormalZetherToken: 'zether/NormalZetherToken',
-  WrappedZetherToken: 'zether/ZetherWrappedLib', NormalPqzToken: 'pqz/NormalPqzToken', WrappedPqzToken: 'pqz/WrappedPqzToken',
+  WrappedZetherToken: 'zether/ZetherWrappedLib', NormalPqzToken: 'pqz/NormalPqzToken', WrappedPqzToken: 'pqz/PqzWrappedLib',
   MandateWallet: 'wallet/MandateWallet', SmartKeyAccount: 'account/SmartKeyAccount' };
 const mtxSelectorCount = (contract) => Number(/new bytes4\[\]\((\d+)\)/.exec(
   readFileSync(new URL(`../../../smartcontracts/evm/src/${SOURCES[contract]}.sol`, import.meta.url), 'utf8'))[1]);
@@ -407,14 +407,28 @@ test('checkOp refuses a wrap order: its rules cannot be bypassed; the cancel of 
   }
 });
 
-test('until C6 the chain takes a wrap as a TradeOrder: that branch of checkTradeOrder and its cancel stay', () => {
+test('after C6 a wrap is only a WrapOrder: checkTradeOrder and checkCancel refuse the TradeOrder form', () => {
   const order = { receiveToken: R_WRAPPER, amount: 1000, receiveAmount: 990, minFill: 1000, fee: 3000, relayer: R_RELAYER, dex: R_WRAPPER,
     flags: 1, batch: 1, validUntil: R_NOW + 600 };
-  const td = evm.tradeOrderTypedData({ token: R_AT.contract, chainId: R_AT.chainId, chainUid: R_AT.chainUid, order: { ...order, from: R_ME, nonce: 5 } });
-  checkTradeOrder(td, { account: R_ME, chainId: R_AT.chainId, chainUid: R_AT.chainUid, order, sellToken: R_AT.contract, wrappers: [R_WRAPPER], now: R_NOW });
+  const where = { account: R_ME, chainId: R_AT.chainId, chainUid: R_AT.chainUid };
+  const td = evm.tradeOrderTypedData({ token: R_AT.contract, ...where, order: { ...order, from: R_ME, nonce: 5 } });
+  // the wrapper on the DEX list changes nothing: the chain hashes `dex == receiveToken` as a WrapOrder
+  assert.throws(() => checkTradeOrder(td, { ...where, order, sellToken: R_AT.contract, dexes: [R_WRAPPER], now: R_NOW }), /a wrap by signature is a WrapOrder/);
+  // the positive control: one field differs, `receiveToken`
+  const buys = '0x' + '77'.repeat(20);
+  const held = { ...order, receiveToken: buys };
+  checkTradeOrder(evm.tradeOrderTypedData({ token: R_AT.contract, ...where, order: { ...held, from: R_ME, nonce: 5 } }),
+    { ...where, order: held, sellToken: R_AT.contract, dexes: [R_WRAPPER], now: R_NOW });
+  const bare = { ...where, contract: R_AT.contract };
   const cancel = evm.cancelOrderTypedData({ ...R_AT, message: { order: td.message } });
-  assert.equal(hex(checkCancel(cancel, { account: R_ME, chainId: R_AT.chainId, chainUid: R_AT.chainUid, contract: R_AT.contract, order: td.message })),
-    hex(hashTypedData(cancel)));
+  assert.throws(() => checkCancel(cancel, { ...bare, order: td.message }), /cancelled as a CancelWrapOrder/);
+  const plain = evm.cancelOrderTypedData({ ...R_AT, message: { order: { ...td.message, receiveToken: buys } } });
+  assert.equal(hex(checkCancel(plain, { ...bare, order: plain.message.order })), hex(hashTypedData(plain)));
+  // the wrap order's own cancel is taken
+  const { receiveToken, receiveAmount, dex, ...rest } = td.message;
+  const w = { ...rest, wrappedToken: receiveToken, minMinted: receiveAmount };
+  const wrapCancel = evm.cancelWrapOrderTypedData({ ...R_AT, message: { order: w } });
+  assert.equal(hex(checkCancel(wrapCancel, { ...bare, order: wrapCancel.message.order })), hex(hashTypedData(wrapCancel)));
 });
 
 test('checkOp keeps a relayer or fee recipient the client named: refused when the mode bit would drop it', () => {

@@ -761,7 +761,7 @@ function payMetaParts({ salt, meta, entryRef }) {
   return { salt: s, meta: m, payId, lane: payLane(payId), schema, shown };
 }
 
-const PAY_TAIL = ['uint256', 'uint32', 'address', 'uint256', 'address', 'bytes'];
+const PAY_TAIL = ['uint256', 'uint32', 'address', 'uint256', 'address'];
 
 function buildPayMeta(ua, { name, token, chainId, chainUid, from, to, amount, salt, meta, entryRef, validUntil, mode = 0,
   relayer = ZERO_ADDRESS, fee = 0, feeRecipient = ZERO_ADDRESS, onChain = true }) {
@@ -771,12 +771,14 @@ function buildPayMeta(ua, { name, token, chainId, chainUid, from, to, amount, sa
     batch: p.lane, nonce: 0, validUntil, mode, relayer, fee, feeRecipient } });
   const t = typedData.message;
   const id = ua ? 'bytes32' : 'address';
-  const tail = (sig) => [t.validUntil, t.mode, t.relayer, t.fee, t.feeRecipient, sig];
+  const sigType = ua ? abiType('UASig') : 'bytes';
+  const tailTypes = [...PAY_TAIL, sigType];
+  const tail = (sig) => [t.validUntil, t.mode, t.relayer, t.fee, t.feeRecipient, ua ? abiValue('UASig', uaSigOf(sig)) : sig];
   const calldata = (sig) => (onChain
-    ? abiCall(`${ua ? 'uaPayMeta' : 'mtxPayMeta'}(${id},${id},uint256,bytes32,bytes,${PAY_TAIL.join(',')})`,
-      [id, id, 'uint256', 'bytes32', 'bytes', ...PAY_TAIL], [t.from, t.to, t.value, p.salt, p.meta, ...tail(sig)])
-    : abiCall(`${ua ? 'uaPay' : 'mtxPay'}(${id},${id},uint256,bytes32,${PAY_TAIL.join(',')})`,
-      [id, id, 'uint256', 'bytes32', ...PAY_TAIL], [t.from, t.to, t.value, p.payId, ...tail(sig)]));
+    ? abiCall(`${ua ? 'uaPayMeta' : 'mtxPayMeta'}(${id},${id},uint256,bytes32,bytes,${tailTypes.join(',')})`,
+      [id, id, 'uint256', 'bytes32', 'bytes', ...tailTypes], [t.from, t.to, t.value, p.salt, p.meta, ...tail(sig)])
+    : abiCall(`${ua ? 'uaPay' : 'mtxPay'}(${id},${id},uint256,bytes32,${tailTypes.join(',')})`,
+      [id, id, 'uint256', 'bytes32', ...tailTypes], [t.from, t.to, t.value, p.payId, ...tail(sig)]));
   return { typedData, digest: digestOf(typedData), payId: p.payId, lane: p.lane, salt: p.salt, meta: hex(p.meta),
     schema: p.schema, shown: p.shown, calldata };
 }
@@ -987,6 +989,10 @@ export function checkCancel(td, { account, chainId, chainUid, contract, order, i
   if (!CANCELS.includes(td && td.primaryType)) refuse('this is not the cancel you asked for');
   const held = td.primaryType === 'CancelDexOrder' ? (order || {}).order : order;
   if (!same((held || {}).from, account)) refuse('this is not your order');
+  // `dex == receiveToken` was signed as a `WrapOrder`: the chain hashes this order's cancel as `CancelWrapOrder` (TS-D19).
+  if (['CancelOrder', 'CancelUAOrder'].includes(td.primaryType) && same(order.dex, order.receiveToken)) {
+    refuse('a wrap order is cancelled as a CancelWrapOrder');
+  }
   return checkOp(td, { op: td.primaryType, contract, chainId, chainUid, message: { order } }).digest;
 }
 
@@ -1009,11 +1015,11 @@ function orderWarnings(o, account, none, ua) {
 /** A trade order that is exactly the one the client built from the user's input (CLI-SGN-35): `order` (receiveToken,
  *  amount, receiveAmount, minFill, fee, relayer, dex, destination, flags, batch, optional validUntil) from `account`,
  *  selling `sellToken` (`outside`: an outside token, signed as `DexOrder` in the DEX's domain, CTR-DEX-18). The order
- *  itself must name a DEX on the signer's pinned list (or, for a wrap by signature as the chain takes it until C6, then
- *  `checkWrapOrder`, CLI-SGN-36: `dex` = `receiveToken` = a pinned wrapper and `minFill = amount`), fee at most 1 %, known flags (no ESCROW on an outside token), non-zero
- *  amounts. The server supplies only the nonce and, when `order` has none, `validUntil` within the window. Returns
+ *  itself must name a DEX on the signer's pinned list and buy another token than that DEX (`dex == receiveToken` is a wrap,
+ *  which the chain takes only as a `WrapOrder`: `checkWrapOrder`, CLI-SGN-36), fee at most 1 %, known flags (no ESCROW on an
+ *  outside token), non-zero amounts. The server supplies only the nonce and, when `order` has none, `validUntil` within the window. Returns
  *  {digest, minFill (the signed one: no protocol floor, CTR-DEX-14), warnings}. */
-export function checkTradeOrder(td, { account, chainId, chainUid, order, sellToken, outside = false, dexes = [], wrappers = [],
+export function checkTradeOrder(td, { account, chainId, chainUid, order, sellToken, outside = false, dexes = [],
   ua = false, now = Math.floor(Date.now() / 1000), maxWindow = 30 * 86400 }) {
   if (ua && outside) refuse('a UA order sells a SCaaS token only');
   if (!td || td.primaryType !== (outside ? 'DexOrder' : ua ? 'UATradeOrder' : 'TradeOrder')) refuse('this is not the trade order you asked for');
@@ -1022,13 +1028,8 @@ export function checkTradeOrder(td, { account, chainId, chainUid, order, sellTok
   const o = { minFill: '0', fee: '0', relayer: ZERO_ADDRESS, destination: none, flags: 0, batch: '0', ...order,
     from: account, nonce: uint(got.nonce, 'the nonce'), validUntil: (order || {}).validUntil ?? got.validUntil };
   orderTerms(o, outside);
-  if (wrappers.some((w) => same(w, o.dex))) {
-    if (outside || !same(o.receiveToken, o.dex) || uint(o.minFill, 'minFill') !== uint(o.amount, 'the amount')) {
-      refuse('a wrap by signature mints from this wrapper, all or nothing');
-    }
-  } else if (!dexes.some((x) => same(x, o.dex))) {
-    refuse('the order names a DEX that is not on your chain profile');
-  }
+  if (same(o.receiveToken, o.dex)) refuse('a wrap by signature is a WrapOrder: checkWrapOrder');
+  if (!dexes.some((x) => same(x, o.dex))) refuse('the order names a DEX that is not on your chain profile');
   const amount = uint(o.amount, 'the amount');
   const minFill = uint(o.minFill, 'minFill');
   if (amount === 0n || uint(o.receiveAmount, 'the price') === 0n || minFill > amount) refuse('the amounts are malformed');
