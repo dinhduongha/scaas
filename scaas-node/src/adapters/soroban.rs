@@ -6,6 +6,8 @@
 //! Thiết kế: `docs/history/specs/2026-10-03-net-soroban.md`.
 //! UA-Soroban (spec `2026-10-30-ua-soroban-design.md` §8, §9): `ua_metatx` jobs (`ua_metatx_job`), the lane-authority
 //! rule (`check_recorded_auth`), Protocol 23 auto-restore within `params.max_deposit_per_job` (`sim_data`), UA events.
+//! UA-8 (UA8-D23): `call` jobs for the registry writes (`ua8_call_job`), the off-chain check before a relayer's attestation
+//! (`ua8_precheck`).
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::{Mutex, OnceLock};
@@ -13,6 +15,8 @@ use std::sync::{Mutex, OnceLock};
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use scaas_ua::ua8::{self, FrostKey, FrostMember, KemKey, MemberSig, MsigMember, MsigStructure, MuSig2Key, RegisterArgs, SetKemKeyArgs, UAAttrs, UASig, WebAuthnKey};
+use scaas_ua::UAError;
 use sha2::{Digest, Sha256};
 use stellar_xdr::{
     AccountId, DecoratedSignature, FeeBumpTransaction, FeeBumpTransactionEnvelope, FeeBumpTransactionExt,
@@ -479,6 +483,10 @@ impl ChainAdapter for SorobanAdapter {
         let lane_addr = ScAddress::from_str(&stellar_account_strkey(&pk)).map_err(|e| SimError::Revert(e.to_string()))?;
         self.load_executor().await?;
         let (call, auth, valid_until) = job_tx(&self.network_id, job.kind.as_deref(), &op, &lane_addr, &self.relay_fee).map_err(rv)?;
+        let registry_write = job.kind.as_deref() == Some("call");
+        if registry_write {
+            self.ua8_precheck(&op).await?;
+        }
         let tx = self.tx(lane, 0, valid_until, call.clone(), auth).map_err(rv)?;
         let env = TransactionEnvelope::Tx(TransactionV1Envelope { tx: tx.clone(), signatures: Default::default() });
         let b64 = env.to_xdr_base64(Limits::none()).map_err(|e| SimError::Revert(e.to_string()))?;
@@ -493,6 +501,9 @@ impl ChainAdapter for SorobanAdapter {
         }
         let data = sim_data(&sim, self.max_deposit)?;
         check_recorded_auth(&sim, &call).map_err(rv)?;
+        if registry_write {
+            check_no_other_signer(&sim).map_err(rv)?;
+        }
         let mut tx = tx;
         tx.fee = u32::try_from(self.base_fee as i64 + data.resource_fee).map_err(|_| SimError::Revert("fee overflow".into()))?;
         tx.ext = TransactionExt::V1(data);
@@ -619,6 +630,20 @@ impl ChainAdapter for SorobanAdapter {
         }
         out.sort_by_key(|e| (e["block_number"].as_u64(), e["tx_hash"].as_str().map(str::to_owned), e["log_index"].as_u64()));
         Ok(crate::indexer::join_pay_events(out))
+    }
+
+    /// The registry's `relayers()`, once: a lane listed or not at start stays so, whatever a later read says. A failed read
+    /// keeps the lane stopped (`run_lane` asks again), so no job runs on a list nobody read.
+    async fn start_check(&self) -> Result<()> {
+        let (Some(registry), None) = (&self.relay_fee.ua_registry, self.relay_fee.relayers.get()) else { return Ok(()) };
+        let v = self.view(registry, "relayers", vec![]).await.context("params.ua_registry: relayers()")?;
+        let Some(ScVal::Vec(Some(v))) = v else { bail!("params.ua_registry: relayers() is not a list, or needs a restore") };
+        let one = |a: &ScVal| match a {
+            ScVal::Address(a) => Ok(a.clone()),
+            _ => Err(anyhow!("params.ua_registry: relayers() holds {a:?}")),
+        };
+        let _ = self.relay_fee.relayers.set(v.iter().map(one).collect::<Result<_>>()?);
+        Ok(())
     }
 
     /// R80 for `ua_metatx` jobs (spec §9.3, NET-SOR-12): a pay ref spent (`ua_ref_used(ua, pay_ref)` on the token; the
@@ -775,6 +800,10 @@ pub struct RelayFeePolicy {
     pub dex: Option<ScAddress>,
     /// The router's executor (decision (D)), read once from `router.executor()` (`SorobanAdapter::load_executor`).
     pub executor: OnceLock<ScAddress>,
+    /// `params.ua_registry` (`C…`): the only target of `call` jobs; `None` = none are relayed.
+    pub ua_registry: Option<ScAddress>,
+    /// The registry's `relayers()`, read once at lane start (`start_check`) and never again: unset, nobody is listed.
+    pub relayers: OnceLock<Vec<ScAddress>>,
 }
 
 impl RelayFeePolicy {
@@ -793,14 +822,14 @@ impl RelayFeePolicy {
         let tokens = cfg.tokens.iter()
             .map(|t| ScAddress::from_str(&t.address).map_err(|e| anyhow!("tokens: {} is not a Soroban address: {e}", t.address)))
             .collect::<Result<_>>()?;
-        let dex = match cfg.params.get("dex") {
-            None => None,
+        let contract = |k: &str| match cfg.params.get(k) {
+            None => Ok(None),
             Some(v) => match v.as_str().map(ScAddress::from_str) {
-                Some(Ok(a @ ScAddress::Contract(_))) => Some(a),
-                _ => bail!("params.dex {v} is not a Soroban contract address (C…)"),
+                Some(Ok(a @ ScAddress::Contract(_))) => Ok(Some(a)),
+                _ => Err(anyhow!("params.{k} {v} is not a Soroban contract address (C…)")),
             },
         };
-        Ok(Self { router, tokens, params, dex, executor: OnceLock::new() })
+        Ok(Self { router, tokens, params, dex: contract("dex")?, executor: OnceLock::new(), ua_registry: contract("ua_registry")?, relayers: OnceLock::new() })
     }
 }
 
@@ -938,7 +967,8 @@ fn source_entry(call: &InvokeContractArgs) -> SorobanAuthorizationEntry {
 }
 
 /// The job's call, auth and `valid_until` by `job.kind` (S15): `ua_metatx` ⇒ `ua_metatx_job` (`valid_until` from the
-/// signed arguments), none / `signed_op` ⇒ `job_call` (`op.valid_until`); any other kind is refused.
+/// signed arguments), `call` ⇒ `ua8_call_job` (`op.valid_until`), none / `signed_op` ⇒ `job_call` (`op.valid_until`); any
+/// other kind is refused.
 pub fn job_tx(network: &[u8; 32], kind: Option<&str>, op: &Value, lane: &ScAddress, policy: &RelayFeePolicy)
     -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>, u64)>
 {
@@ -953,7 +983,14 @@ pub fn job_tx(network: &[u8; 32], kind: Option<&str>, op: &Value, lane: &ScAddre
             let (call, auth) = job_call(network, op, lane, policy)?;
             Ok((call, auth, valid_until))
         }
-        Some(k) => bail!("unknown job kind {k:?} (signed_op | ua_metatx)"),
+        Some("call") => {
+            let registry = policy.ua_registry.as_ref().ok_or_else(|| anyhow!("a call job needs params.ua_registry (the chain's UaRegistry)"))?;
+            let valid_until = op["valid_until"].as_u64().ok_or_else(|| anyhow!("op.valid_until missing"))?;
+            let listed = policy.relayers.get().is_some_and(|l| l.contains(lane));
+            let (call, auth) = ua8_call_job(op, lane, registry, listed)?;
+            Ok((call, auth, valid_until))
+        }
+        Some(k) => bail!("unknown job kind {k:?} (signed_op | ua_metatx | call)"),
     }
 }
 
@@ -1182,16 +1219,33 @@ pub fn ua_metatx_job(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &
 /// lane's authority to another call. Unreadable entries fail closed.
 fn check_recorded_auth(sim: &Value, call: &InvokeContractArgs) -> Result<()> {
     let ours = source_entry(call).root_invocation;
-    for r in sim["results"].as_array().into_iter().flatten() {
-        for e in r["auth"].as_array().into_iter().flatten() {
-            let x = e.as_str().ok_or_else(|| anyhow!("simulation auth entry is not base64 XDR"))?;
-            let e = SorobanAuthorizationEntry::from_xdr_base64(x, Limits { depth: 64, len: 1 << 20 })?;
-            if matches!(e.credentials, SorobanCredentials::SourceAccount) && e.root_invocation != ours {
-                bail!("the call asks for this lane's authority outside the job's own call (S14: a lane's authority is never lent)");
-            }
+    for e in recorded_auth(sim)? {
+        if matches!(e.credentials, SorobanCredentials::SourceAccount) && e.root_invocation != ours {
+            bail!("the call asks for this lane's authority outside the job's own call (S14: a lane's authority is never lent)");
         }
     }
     Ok(())
+}
+
+/// A `call` job carries no auth entry, so a call that records someone else's (the slot of a `G…` member, host-authorised)
+/// wants a signature this transaction will not have: it could only fail on chain, on the lane's fee.
+fn check_no_other_signer(sim: &Value) -> Result<()> {
+    if recorded_auth(sim)?.iter().any(|e| !matches!(e.credentials, SorobanCredentials::SourceAccount)) {
+        bail!("the call needs another account's signature, which a call job does not carry");
+    }
+    Ok(())
+}
+
+/// The auth entries a simulation recorded; an unreadable one fails closed.
+fn recorded_auth(sim: &Value) -> Result<Vec<SorobanAuthorizationEntry>> {
+    let mut out = Vec::new();
+    for r in sim["results"].as_array().into_iter().flatten() {
+        for e in r["auth"].as_array().into_iter().flatten() {
+            let x = e.as_str().ok_or_else(|| anyhow!("simulation auth entry is not base64 XDR"))?;
+            out.push(SorobanAuthorizationEntry::from_xdr_base64(x, Limits { depth: 64, len: 1 << 20 })?);
+        }
+    }
+    Ok(out)
 }
 
 /// Protocol 23 (CAP-0066): the transaction data lists archived entries the transaction restores itself.
@@ -1216,6 +1270,368 @@ fn sim_data(sim: &Value, max_deposit: u64) -> std::result::Result<SorobanTransac
         return Err(SimError::Revert(format!("restore over max_deposit_per_job ({} > {max_deposit} stroops)", data.resource_fee)));
     }
     Ok(data)
+}
+
+
+/// The `msig` kind.
+const MSIG: u16 = 0x0120;
+
+/// U8S-D8's `Chain` kinds. Every other kind goes through `check_*`, so a kind this table does not know fails closed.
+fn chain_kind(kind: u16) -> bool {
+    matches!(kind, 0x0100 | 0x0101 | 0x0102 | 0x0108 | MSIG | 0x0130 | 0x0131)
+}
+
+/// One registry write of a `call` job, in `scaas_ua`'s types: the XDR and the off-chain check read the same values.
+enum Ua8Write {
+    Register(RegisterArgs),
+    SetKem(SetKemKeyArgs),
+    SetPqz { ua: [u8; 32], pqz_key: Vec<u8>, pqz_pop_hash: [u8; 32], sig: UASig },
+    StorePop { ua: [u8; 32], pqz_pop: Vec<u8> },
+}
+
+/// `v`'s named fields, every one required, no other (explicit parameters, owner 2026-10-31).
+fn named<'a, const N: usize>(v: &'a Value, what: &str, names: [&str; N]) -> Result<[&'a Value; N]> {
+    let o = v.as_object().ok_or_else(|| anyhow!("{what} is an object of named fields"))?;
+    if let Some(k) = o.keys().find(|k| !names.contains(&k.as_str())) {
+        bail!("{what}: unknown field {k}");
+    }
+    let mut out = [&Value::Null; N];
+    for (slot, n) in out.iter_mut().zip(names) {
+        *slot = o.get(n).ok_or_else(|| anyhow!("{what}: {n} missing"))?;
+    }
+    Ok(out)
+}
+
+fn hex_of(v: &Value) -> Result<Vec<u8>> {
+    let h = v.as_str().and_then(|s| s.strip_prefix("0x")).ok_or_else(|| anyhow!("bytes are 0x… hex, not {v}"))?;
+    Ok(alloy::hex::decode(h)?)
+}
+
+fn b32_of(v: &Value) -> Result<[u8; 32]> {
+    hex_of(v)?.try_into().map_err(|_| anyhow!("{v} is not 32 bytes"))
+}
+
+fn num_of<T: TryFrom<u64>>(v: &Value) -> Result<T> {
+    v.as_u64().and_then(|n| T::try_from(n).ok()).ok_or_else(|| anyhow!("{v} is not a number in range"))
+}
+
+fn list_of<T>(v: &Value, one: impl Fn(&Value) -> Result<T>) -> Result<Vec<T>> {
+    v.as_array().ok_or_else(|| anyhow!("{v} is not a list"))?.iter().map(one).collect()
+}
+
+fn kem_of(v: &Value) -> Result<KemKey> {
+    let [scheme, mlkem_ek, x25519] = named(v, "kem", ["scheme", "mlkem_ek", "x25519"])?;
+    Ok(KemKey { scheme: num_of(scheme)?, mlkem_ek: hex_of(mlkem_ek)?, x25519: b32_of(x25519)? })
+}
+
+fn attrs_of(v: &Value) -> Result<UAAttrs> {
+    let [pqz_key, pqz_pop_hash, kem, kem_pk_hash] = named(v, "attrs", ["pqz_key", "pqz_pop_hash", "kem", "kem_pk_hash"])?;
+    Ok(UAAttrs { pqz_key: hex_of(pqz_key)?, pqz_pop_hash: b32_of(pqz_pop_hash)?, kem: kem_of(kem)?, kem_pk_hash: b32_of(kem_pk_hash)? })
+}
+
+fn member_sig_of(v: &Value) -> Result<MemberSig> {
+    let [index, key_data, sig] = named(v, "member signature", ["index", "key_data", "sig"])?;
+    Ok(MemberSig { index: num_of(index)?, key_data: hex_of(key_data)?, sig: hex_of(sig)? })
+}
+
+fn sig_of(v: &Value) -> Result<UASig> {
+    let [key_data, signature, members] = named(v, "sig", ["key_data", "signature", "members"])?;
+    Ok(UASig { key_data: hex_of(key_data)?, signature: hex_of(signature)?, members: list_of(members, member_sig_of)? })
+}
+
+fn structure_of(v: &Value) -> Result<MsigStructure> {
+    let [threshold, members] = named(v, "structure", ["threshold", "members"])?;
+    let member = |m: &Value| {
+        let [kind, id, weight] = named(m, "member", ["kind", "id", "weight"])?;
+        Ok(MsigMember { kind: num_of(kind)?, id: b32_of(id)?, weight: num_of(weight)? })
+    };
+    Ok(MsigStructure { threshold: num_of(threshold)?, members: list_of(members, member)? })
+}
+
+fn webauthn_of(v: &Value) -> Result<WebAuthnKey> {
+    let [x, y, rp_id_hash] = named(v, "key", ["x", "y", "rp_id_hash"])?;
+    Ok(WebAuthnKey { x: b32_of(x)?, y: b32_of(y)?, rp_id_hash: b32_of(rp_id_hash)? })
+}
+
+fn musig2_of(v: &Value) -> Result<MuSig2Key> {
+    let [agg_key, member_keys] = named(v, "key", ["agg_key", "member_keys"])?;
+    Ok(MuSig2Key { agg_key: hex_of(agg_key)?, member_keys: list_of(member_keys, hex_of)? })
+}
+
+fn frost_of(v: &Value) -> Result<FrostKey> {
+    let [group_key, threshold, members] = named(v, "key", ["group_key", "threshold", "members"])?;
+    let member = |m: &Value| {
+        let [commitments, r, z] = named(m, "member", ["commitments", "r", "z"])?;
+        Ok(FrostMember { commitments: list_of(commitments, hex_of)?, r: hex_of(r)?, z: b32_of(z)? })
+    };
+    Ok(FrostKey { group_key: hex_of(group_key)?, threshold: num_of(threshold)?, members: list_of(members, member)? })
+}
+
+fn relayer_of(v: &Value) -> Result<Option<ScAddress>> {
+    match v {
+        Value::Null => Ok(None),
+        _ => v.as_str().and_then(|s| ScAddress::from_str(s).ok()).map(Some).ok_or_else(|| anyhow!("relayer {v} is null or an address")),
+    }
+}
+
+/// UA8-D23, S15, the explicit parameters of owner 2026-10-31: `op = {contract, function, args, valid_until}`, `args` the
+/// contract's own arguments by name, bytes `0x…` hex, a `#[contracttype]` struct an object of its fields, `relayer` null or a
+/// `G…` (`store_pqz_pop` has none). The write, and its `relayer`.
+fn ua8_write(op: &Value) -> Result<(Ua8Write, Option<ScAddress>)> {
+    let [_, function, a, _] = named(op, "op", ["contract", "function", "args", "valid_until"])?;
+    let f = function.as_str().ok_or_else(|| anyhow!("op.function is a string"))?;
+    let reg = |w| Ua8Write::Register(w);
+    Ok(match f {
+        "register" => {
+            let [kind, key_data, attrs, pop, pqz_pop, relayer] = named(a, f, ["kind", "key_data", "attrs", "pop", "pqz_pop", "relayer"])?;
+            let (kind, key_data, attrs) = (num_of(kind)?, hex_of(key_data)?, attrs_of(attrs)?);
+            (reg(RegisterArgs::Register { kind, key_data, attrs, pop: hex_of(pop)?, pqz_pop: hex_of(pqz_pop)? }), relayer_of(relayer)?)
+        }
+        "register_msig" => {
+            let [structure, attrs, pop, pqz_pop, relayer] = named(a, f, ["structure", "attrs", "pop", "pqz_pop", "relayer"])?;
+            let (structure, attrs) = (structure_of(structure)?, attrs_of(attrs)?);
+            (reg(RegisterArgs::RegisterMsig { structure, attrs, pop: list_of(pop, member_sig_of)?, pqz_pop: hex_of(pqz_pop)? }), relayer_of(relayer)?)
+        }
+        "register_webauthn" => {
+            let [key, attrs, pop, pqz_pop, relayer] = named(a, f, ["key", "attrs", "pop", "pqz_pop", "relayer"])?;
+            let (key, attrs) = (webauthn_of(key)?, attrs_of(attrs)?);
+            (reg(RegisterArgs::RegisterWebAuthn { key, attrs, pop: hex_of(pop)?, pqz_pop: hex_of(pqz_pop)? }), relayer_of(relayer)?)
+        }
+        "register_musig2" => {
+            let [kind, key, attrs, pop, pqz_pop, relayer] = named(a, f, ["kind", "key", "attrs", "pop", "pqz_pop", "relayer"])?;
+            let (kind, key, attrs) = (num_of(kind)?, musig2_of(key)?, attrs_of(attrs)?);
+            (reg(RegisterArgs::RegisterMuSig2 { kind, key, attrs, pop: hex_of(pop)?, pqz_pop: hex_of(pqz_pop)? }), relayer_of(relayer)?)
+        }
+        "register_frost" => {
+            let [kind, key, attrs, pop, pqz_pop, relayer] = named(a, f, ["kind", "key", "attrs", "pop", "pqz_pop", "relayer"])?;
+            let (kind, key, attrs) = (num_of(kind)?, frost_of(key)?, attrs_of(attrs)?);
+            (reg(RegisterArgs::RegisterFrost { kind, key, attrs, pop: hex_of(pop)?, pqz_pop: hex_of(pqz_pop)? }), relayer_of(relayer)?)
+        }
+        "set_kem_key" => {
+            let [ua, version, kem, sig, relayer] = named(a, f, ["ua", "version", "kem", "sig", "relayer"])?;
+            (Ua8Write::SetKem(SetKemKeyArgs { ua: b32_of(ua)?, version: num_of(version)?, kem: kem_of(kem)?, sig: sig_of(sig)? }), relayer_of(relayer)?)
+        }
+        "set_pqz_key" => {
+            let [ua, pqz_key, pqz_pop_hash, sig, relayer] = named(a, f, ["ua", "pqz_key", "pqz_pop_hash", "sig", "relayer"])?;
+            (Ua8Write::SetPqz { ua: b32_of(ua)?, pqz_key: hex_of(pqz_key)?, pqz_pop_hash: b32_of(pqz_pop_hash)?, sig: sig_of(sig)? }, relayer_of(relayer)?)
+        }
+        "store_pqz_pop" => {
+            let [ua, pqz_pop] = named(a, f, ["ua", "pqz_pop"])?;
+            (Ua8Write::StorePop { ua: b32_of(ua)?, pqz_pop: hex_of(pqz_pop)? }, None)
+        }
+        _ => bail!("{f:?} is not a registry write"),
+    })
+}
+
+fn sc_bytes(b: &[u8]) -> Result<ScVal> {
+    Ok(ScVal::Bytes(b.to_vec().try_into()?))
+}
+
+fn sc_vec(v: Vec<ScVal>) -> Result<ScVal> {
+    Ok(ScVal::Vec(Some(ScVec(v.try_into()?))))
+}
+
+fn sc_list(l: &[Vec<u8>]) -> Result<ScVal> {
+    sc_vec(l.iter().map(|b| sc_bytes(b)).collect::<Result<_>>()?)
+}
+
+/// A `#[contracttype]` struct: a map sorted by field name.
+fn sc_struct<const N: usize>(mut fields: [(&str, ScVal); N]) -> Result<ScVal> {
+    fields.sort_by_key(|f| f.0);
+    let e: Vec<ScMapEntry> = fields.into_iter().map(|(k, val)| Ok(ScMapEntry { key: ScVal::Symbol(ScSymbol(k.try_into()?)), val })).collect::<Result<_>>()?;
+    Ok(ScVal::Map(Some(ScMap(e.try_into()?))))
+}
+
+fn sc_kem(k: &KemKey) -> Result<ScVal> {
+    sc_struct([("scheme", ScVal::U32(k.scheme.into())), ("mlkem_ek", sc_bytes(&k.mlkem_ek)?), ("x25519", sc_bytes(&k.x25519)?)])
+}
+
+fn sc_attrs(a: &UAAttrs) -> Result<ScVal> {
+    sc_struct([("pqz_key", sc_bytes(&a.pqz_key)?), ("pqz_pop_hash", sc_bytes(&a.pqz_pop_hash)?), ("kem", sc_kem(&a.kem)?), ("kem_pk_hash", sc_bytes(&a.kem_pk_hash)?)])
+}
+
+fn sc_member_sigs(m: &[MemberSig]) -> Result<ScVal> {
+    let one = |s: &MemberSig| sc_struct([("index", ScVal::U32(s.index.into())), ("key_data", sc_bytes(&s.key_data)?), ("sig", sc_bytes(&s.sig)?)]);
+    sc_vec(m.iter().map(one).collect::<Result<_>>()?)
+}
+
+fn sc_sig(s: &UASig) -> Result<ScVal> {
+    sc_struct([("key_data", sc_bytes(&s.key_data)?), ("signature", sc_bytes(&s.signature)?), ("members", sc_member_sigs(&s.members)?)])
+}
+
+fn sc_structure(s: &MsigStructure) -> Result<ScVal> {
+    let one = |m: &MsigMember| sc_struct([("kind", ScVal::U32(m.kind.into())), ("id", sc_bytes(&m.id)?), ("weight", ScVal::U32(m.weight.into()))]);
+    sc_struct([("threshold", ScVal::U32(s.threshold.into())), ("members", sc_vec(s.members.iter().map(one).collect::<Result<_>>()?)?)])
+}
+
+fn sc_frost(k: &FrostKey) -> Result<ScVal> {
+    let one = |m: &FrostMember| sc_struct([("commitments", sc_list(&m.commitments)?), ("r", sc_bytes(&m.r)?), ("z", sc_bytes(&m.z)?)]);
+    sc_struct([("group_key", sc_bytes(&k.group_key)?), ("threshold", ScVal::U32(k.threshold.into())), ("members", sc_vec(k.members.iter().map(one).collect::<Result<_>>()?)?)])
+}
+
+/// The write's function and arguments as the registry declares them.
+fn ua8_args(w: &Ua8Write, relayer: ScVal) -> Result<(&'static str, Vec<ScVal>)> {
+    Ok(match w {
+        Ua8Write::Register(RegisterArgs::Register { kind, key_data, attrs, pop, pqz_pop }) => {
+            ("register", vec![ScVal::U32((*kind).into()), sc_bytes(key_data)?, sc_attrs(attrs)?, sc_bytes(pop)?, sc_bytes(pqz_pop)?, relayer])
+        }
+        Ua8Write::Register(RegisterArgs::RegisterMsig { structure, attrs, pop, pqz_pop }) => {
+            ("register_msig", vec![sc_structure(structure)?, sc_attrs(attrs)?, sc_member_sigs(pop)?, sc_bytes(pqz_pop)?, relayer])
+        }
+        Ua8Write::Register(RegisterArgs::RegisterWebAuthn { key, attrs, pop, pqz_pop }) => {
+            let k = sc_struct([("x", sc_bytes(&key.x)?), ("y", sc_bytes(&key.y)?), ("rp_id_hash", sc_bytes(&key.rp_id_hash)?)])?;
+            ("register_webauthn", vec![k, sc_attrs(attrs)?, sc_bytes(pop)?, sc_bytes(pqz_pop)?, relayer])
+        }
+        Ua8Write::Register(RegisterArgs::RegisterMuSig2 { kind, key, attrs, pop, pqz_pop }) => {
+            let k = sc_struct([("agg_key", sc_bytes(&key.agg_key)?), ("member_keys", sc_list(&key.member_keys)?)])?;
+            ("register_musig2", vec![ScVal::U32((*kind).into()), k, sc_attrs(attrs)?, sc_bytes(pop)?, sc_bytes(pqz_pop)?, relayer])
+        }
+        Ua8Write::Register(RegisterArgs::RegisterFrost { kind, key, attrs, pop, pqz_pop }) => {
+            ("register_frost", vec![ScVal::U32((*kind).into()), sc_frost(key)?, sc_attrs(attrs)?, sc_bytes(pop)?, sc_bytes(pqz_pop)?, relayer])
+        }
+        Ua8Write::SetKem(a) => ("set_kem_key", vec![sc_bytes(&a.ua)?, ScVal::U64(a.version), sc_kem(&a.kem)?, sc_sig(&a.sig)?, relayer]),
+        Ua8Write::SetPqz { ua, pqz_key, pqz_pop_hash, sig } => {
+            ("set_pqz_key", vec![sc_bytes(ua)?, sc_bytes(pqz_key)?, sc_bytes(pqz_pop_hash)?, sc_sig(sig)?, relayer])
+        }
+        Ua8Write::StorePop { ua, pqz_pop } => ("store_pqz_pop", vec![sc_bytes(ua)?, sc_bytes(pqz_pop)?]),
+    })
+}
+
+/// A `call` job (S15, UA8-D23): one registry write, built here from its named fields, on `params.ua_registry` only. No auth
+/// entry comes from the job. `relayer` is `None` or this lane, and this lane only when `listed` in `relayers()`; `Some(lane)`
+/// adds exactly one `SourceAccount` entry rooted at the call (as `relay_fee_job`).
+pub fn ua8_call_job(op: &Value, lane: &ScAddress, registry: &ScAddress, listed: bool) -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>)> {
+    let (w, relayer) = ua8_write(op)?;
+    if op["contract"].as_str().and_then(|c| ScAddress::from_str(c).ok()).as_ref() != Some(registry) {
+        bail!("a call job targets params.ua_registry only, not {}", op["contract"]);
+    }
+    match &relayer {
+        Some(r) if r != lane => bail!("the relayer must be None or this lane"),
+        Some(_) if !listed => bail!("this lane is not in the registry's relayers() (read at start): no relayer-mode job"),
+        _ => {}
+    }
+    let (f, args) = ua8_args(&w, relayer.as_ref().map_or(ScVal::Void, |r| ScVal::Address(r.clone())))?;
+    let call = InvokeContractArgs { contract_address: registry.clone(), function_name: ScSymbol(f.try_into()?), args: args.try_into()? };
+    let auth = relayer.map(|_| source_entry(&call)).into_iter().collect();
+    Ok((call, auth))
+}
+
+/// The contract's `attest`, as a superset: this write has a part the chain cannot verify, a signature of a kind outside
+/// `chain_kind` or an `msig` slot of a member outside it, `evm-eoa` and `G…` being the chain's. `kind` and `key_data` are the record's.
+fn ua8_marked(w: &Ua8Write, kind: u16, key_data: &[u8]) -> Result<bool> {
+    if kind != MSIG {
+        return Ok(!chain_kind(kind));
+    }
+    let slots = match w {
+        Ua8Write::Register(RegisterArgs::RegisterMsig { pop, .. }) => pop,
+        Ua8Write::SetKem(a) => &a.sig.members,
+        Ua8Write::SetPqz { sig, .. } => &sig.members,
+        _ => return Ok(false),
+    };
+    let members = MsigStructure::from_key_data(key_data)?.members;
+    Ok(slots.iter().any(|s| members.get(s.index as usize).is_none_or(|m| !chain_kind(m.kind) && !matches!(m.kind, 0x0001 | 0x0011))))
+}
+
+/// The `UaSig` as the bytes `check_*` take: a single key's `signature`, an `msig`'s stored `abi.encode(MemberSig[])`; any
+/// other field set is `Unauthorized` (the contract's `sig_fields_ok`).
+fn ua_sig_bytes(kind: u16, s: &UASig) -> std::result::Result<Vec<u8>, UAError> {
+    let ok = s.key_data.is_empty() && if kind == MSIG { s.signature.is_empty() } else { s.members.is_empty() };
+    ok.then(|| if kind == MSIG { ua8::encode_member_sigs(&s.members) } else { s.signature.clone() }).ok_or(UAError::Unauthorized)
+}
+
+/// `scaas_ua::ua8::check_*` on the write, `kind` and `key_data` being its record's.
+fn ua8_check(w: &Ua8Write, kind: u16, key_data: &[u8], members: &ua8::Members) -> std::result::Result<(), UAError> {
+    match w {
+        Ua8Write::Register(a) => {
+            let (pop, pqz_pop) = match a {
+                RegisterArgs::RegisterMsig { pop, pqz_pop, .. } => (ua8::encode_member_sigs(pop), pqz_pop),
+                RegisterArgs::Register { pop, pqz_pop, .. }
+                | RegisterArgs::RegisterWebAuthn { pop, pqz_pop, .. }
+                | RegisterArgs::RegisterMuSig2 { pop, pqz_pop, .. }
+                | RegisterArgs::RegisterFrost { pop, pqz_pop, .. } => (pop.clone(), pqz_pop),
+            };
+            ua8::check_registration(kind, key_data, a.attrs(), &pop, pqz_pop, members)
+        }
+        Ua8Write::SetKem(a) => ua8::check_kem_record(kind, key_data, &a.ua, a.version, &a.kem.kem_pk(), &ua_sig_bytes(kind, &a.sig)?, members),
+        Ua8Write::SetPqz { ua, pqz_key, pqz_pop_hash, sig } => {
+            ua8::check_pqz_key_record(kind, key_data, ua, pqz_key, pqz_pop_hash, &ua_sig_bytes(kind, sig)?, members)
+        }
+        Ua8Write::StorePop { .. } => Ok(()),
+    }
+}
+
+/// The kind a `register…` names.
+fn register_kind(a: &RegisterArgs) -> u16 {
+    match a {
+        RegisterArgs::Register { kind, .. } | RegisterArgs::RegisterMuSig2 { kind, .. } | RegisterArgs::RegisterFrost { kind, .. } => *kind,
+        RegisterArgs::RegisterMsig { .. } => MSIG,
+        RegisterArgs::RegisterWebAuthn { .. } => 0x0100,
+    }
+}
+
+impl SorobanAdapter {
+    /// `record_of(ua)` by simulation: `(kind, key_data, signable)`, `None` for an unregistered id. An RPC failure or a needed
+    /// restore is `Transport`, never "unregistered".
+    async fn ua8_record(&self, registry: &ScAddress, ua: &[u8; 32]) -> std::result::Result<Option<(u16, Vec<u8>, bool)>, SimError> {
+        let id = sc_bytes(ua).map_err(|e| SimError::Revert(e.to_string()))?;
+        let v = match self.view(registry, "record_of", vec![id]).await {
+            Ok(Some(v)) => v,
+            Ok(None) => return Err(SimError::Transport("record_of: its state needs a restore".into())),
+            Err(e) => return Err(SimError::Transport(format!("record_of: {e:#}"))),
+        };
+        if v == ScVal::Void {
+            return Ok(None);
+        }
+        match (field(&v, "kind"), field(&v, "key_data"), field(&v, "signable")) {
+            (Some(ScVal::U32(k)), Some(ScVal::Bytes(d)), Some(ScVal::Bool(s))) if *k <= 0xFFFF => Ok(Some((*k as u16, d.to_vec(), *s))),
+            _ => Err(SimError::Revert(format!("record_of is not a record: {v:?}"))),
+        }
+    }
+
+    /// An `msig`'s derived members as the contract reads them (`check_members`): a `Chain` kind's `Signer`, whose bytes
+    /// `record_of` returns when `signable`, a marked kind's `Ua`. What is absent `check_*` refuses as `MemberUnknown`.
+    async fn ua8_members(&self, registry: &ScAddress, key_data: &[u8]) -> std::result::Result<HashMap<[u8; 32], (u16, Vec<u8>)>, SimError> {
+        let structure = MsigStructure::from_key_data(key_data).map_err(|e| SimError::Revert(e.to_string()))?;
+        let mut known = HashMap::new();
+        for m in structure.members.iter().filter(|m| !scaas_ua::is_native(m.kind)) {
+            if let Some((kind, key, signable)) = self.ua8_record(registry, &m.id).await? {
+                if signable || !chain_kind(kind) {
+                    known.insert(m.id, (kind, key));
+                }
+            }
+        }
+        Ok(known)
+    }
+
+    /// UA8-D23, the gate behind `Checked::Relayer`: a write with a part the chain cannot verify passes `check_*` here, before
+    /// it is simulated, or the job fails with no submit. A part the chain verifies is not checked: `check_*` refuses a valid
+    /// `G…` member, and the chain is that part's check. A fill of a hash commit (version 0) and `store_pqz_pop` attest nothing.
+    async fn ua8_precheck(&self, op: &Value) -> std::result::Result<(), SimError> {
+        let rv = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
+        let registry = self.relay_fee.ua_registry.as_ref().ok_or_else(|| SimError::Revert("params.ua_registry is not set".into()))?;
+        let (w, relayer) = ua8_write(op).map_err(rv)?;
+        let (kind, key_data) = match &w {
+            Ua8Write::Register(a) => (register_kind(a), a.key_data()),
+            Ua8Write::SetKem(a) if a.version == 0 => return Ok(()),
+            Ua8Write::StorePop { .. } => return Ok(()),
+            Ua8Write::SetKem(SetKemKeyArgs { ua, .. }) | Ua8Write::SetPqz { ua, .. } => {
+                let (kind, key, _) = self.ua8_record(registry, ua).await?.ok_or_else(|| SimError::Revert("the UA is not registered".into()))?;
+                // the answer decides whether anything is checked, so it must be this id's, as `Members` is
+                if scaas_ua::ua_of(kind, &key) != Ok(*ua) {
+                    return Err(SimError::Revert(format!("record_of answered another record for {}", hex(ua))));
+                }
+                (kind, key)
+            }
+        };
+        if !ua8_marked(&w, kind, &key_data).map_err(|e| rv(e.context("key data")))? {
+            return Ok(());
+        }
+        if relayer.is_none() {
+            return Err(SimError::Revert(format!("a part of kind {kind:#06x} needs a relayer (NotVerifiable): this job names none")));
+        }
+        let known = if kind == MSIG { self.ua8_members(registry, &key_data).await? } else { HashMap::new() };
+        ua8_check(&w, kind, &key_data, &|id| known.get(&id).cloned()).map_err(|e| SimError::Revert(format!("off-chain check refused the record: {}", e.code())))
+    }
 }
 
 #[cfg(test)]
@@ -1443,7 +1859,8 @@ mod tests {
 
     fn policy() -> RelayFeePolicy {
         RelayFeePolicy { router: Some(ScAddress::from_str(WALLET2).unwrap()), tokens: vec![ScAddress::from_str(CONTRACT).unwrap()],
-                         params: rp(5), dex: Some(ScAddress::from_str(DEX).unwrap()), executor: OnceLock::new() }
+                         params: rp(5), dex: Some(ScAddress::from_str(DEX).unwrap()), executor: OnceLock::new(),
+                         ua_registry: None, relayers: OnceLock::new() }
     }
 
     fn rp(min_amount: u128) -> crate::config::RelayParams {
@@ -1627,7 +2044,7 @@ mod tests {
         let c = &v["contracts"];
         let at = |k: &str| sc(c[k].as_str().unwrap());
         let policy = RelayFeePolicy { router: Some(at("router")), tokens: vec![at("token")], params: rp(5), dex: Some(at("dex")),
-                                      executor: OnceLock::new() };
+                                      executor: OnceLock::new(), ua_registry: None, relayers: OnceLock::new() };
         let xdr = |s: &Value| ScVal::from_xdr(strip(s), Limits::none()).unwrap();
         let mut n = 0;
         for e in v["entries"].as_array().unwrap() {
@@ -1967,7 +2384,7 @@ mod tests {
         assert!(e.contains("executor"), "{e}");
     }
 
-    /// The node's job kinds (S15): `ua_metatx`, and `signed_op` / none for the native jobs; anything else is refused.
+    /// The node's job kinds (S15): `ua_metatx`, `call`, and `signed_op` / none for the native jobs; anything else is refused.
     #[test]
     fn soroban_unknown_job_kind_refused() {
         let p = policy();
@@ -1979,10 +2396,13 @@ mod tests {
         let (c, f, args) = ua_ops(ScVal::Void).remove(0);
         assert_eq!(job_tx(&NET7, Some("ua_metatx"), &ua_op(c, f, args), &lane(), &p).unwrap().2, VU);
         assert!(job_tx(&NET7, Some("ua_metatx"), &pay, &lane(), &p).is_err(), "a signed_op is not a ua_metatx");
-        for k in ["metatx", "call", "pay", "", "UA_METATX"] {
+        for k in ["metatx", "pay", "", "UA_METATX", "CALL"] {
             let e = job_tx(&NET7, Some(k), &pay, &lane(), &p).unwrap_err().to_string();
-            assert!(e.contains("unknown job kind"), "{k}: {e}");
+            assert!(e.contains("unknown job kind") && e.contains("call"), "{k}: {e}");
         }
+        // `call` is a kind now, and a signed_op is not one
+        let e = job_tx(&NET7, Some("call"), &pay, &lane(), &p).unwrap_err().to_string();
+        assert!(!e.contains("unknown job kind"), "{e}");
     }
 
     fn data(resource_fee: i64, archived: &[u32]) -> String {
@@ -2084,6 +2504,10 @@ mod tests {
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(b): axum::Json<Value>| {
             let (answer, calls) = (answer.clone(), calls.clone());
             async move {
+                if b["method"] == "sendTransaction" {
+                    calls.lock().unwrap().push("SEND".to_string());
+                    return axum::Json(json!({"jsonrpc": "2.0", "id": 1, "result": {"status": "PENDING"}}));
+                }
                 let env = TransactionEnvelope::from_xdr_base64(b["params"]["transaction"].as_str().unwrap(), Limits::none()).unwrap();
                 let TransactionEnvelope::Tx(t) = env else { panic!() };
                 let OperationBody::InvokeHostFunction(op) = &t.tx.operations[0].body else { panic!() };
@@ -2260,6 +2684,607 @@ mod tests {
         assert!(matches!(&e, SimError::Revert(r) if r.contains("router")), "{e:?}");
     }
 
+    // ---- ua8-soroban B6: `call` jobs for the registry writes, the relayer pre-check (UA8-D23)
+
+    use pqcrypto_falcon::falconpadded512 as falcon;
+    use pqcrypto_traits::sign::{DetachedSignature as _, PublicKey as _};
+    use scaas_ua::{encode_msig, UAError};
+
+    const REGISTRY: &str = MANDATE;
+    const NONE: Value = Value::Null;
+
+    fn h(b: &[u8]) -> String {
+        format!("0x{}", hex(b))
+    }
+    fn portable() -> &'static Value {
+        static P: OnceLock<Value> = OnceLock::new();
+        P.get_or_init(|| serde_json::from_str(include_str!("../../../smartcontracts/vectors/ua/portable.json")).unwrap())
+    }
+    fn row(list: &str, name: &str) -> &'static Value {
+        portable()[list].as_array().unwrap().iter().find(|r| r["name"] == name || r["id"] == name).unwrap()
+    }
+    /// portable.json's `args` (camelCase, with `entry`) as the job's named fields.
+    fn snake(v: &Value) -> Value {
+        match v {
+            Value::Object(m) => {
+                let name = |k: &str| k.chars().flat_map(|c| if c.is_ascii_uppercase() { vec!['_', c.to_ascii_lowercase()] } else { vec![c] }).collect();
+                Value::Object(m.iter().filter(|(k, _)| *k != "entry").map(|(k, x)| (name(k), snake(x))).collect())
+            }
+            Value::Array(a) => a.iter().map(snake).collect(),
+            x => x.clone(),
+        }
+    }
+    fn call_op(function: &str, args: Value) -> Value {
+        json!({"contract": REGISTRY, "function": function, "args": args, "valid_until": VU})
+    }
+    /// A `kemRecords` / `pqzKeyRecords` row as its job.
+    fn rec_op(f: &str, r: &Value, relayer: &Value) -> Value {
+        let mut a = snake(&r["args"]);
+        a["relayer"] = relayer.clone();
+        call_op(f, a)
+    }
+    fn reg_op(r: &Value, relayer: &Value) -> Value {
+        let f = if r["args"]["entry"] == "registerMsig" { "register_msig" } else { "register" };
+        rec_op(f, r, relayer)
+    }
+    /// One byte of a `0x…` field flipped.
+    fn flip(v: &mut Value) {
+        let mut b = strip(v);
+        let i = b.len() / 2;
+        b[i] ^= 1;
+        *v = json!(h(&b));
+    }
+    /// One well-formed job per allow-listed function (S15, UA8-D23), `relayer` as given (`store_pqz_pop` has none).
+    fn ops(relayer: &Value) -> Vec<Value> {
+        let z = h(&[0; 32]);
+        let attrs = json!({"pqz_key": "0x", "pqz_pop_hash": z, "kem": {"scheme": 0, "mlkem_ek": "0x", "x25519": z}, "kem_pk_hash": z});
+        let sig = json!({"key_data": "0x", "signature": "0xab", "members": [{"index": 0, "key_data": "0x", "sig": "0xcd"}]});
+        let msig = json!({"threshold": 1, "members": [{"kind": 0x0102, "id": h(&[2; 32]), "weight": 1}]});
+        let web = json!({"x": h(&[1; 32]), "y": h(&[2; 32]), "rp_id_hash": h(&[3; 32])});
+        let musig = json!({"agg_key": h(&[2; 33]), "member_keys": [h(&[3; 33]), h(&[4; 33])]});
+        let frost = json!({"group_key": h(&[2; 33]), "threshold": 2, "members": [{"commitments": [h(&[3; 33]), h(&[4; 33])], "r": h(&[5; 33]), "z": h(&[6; 32])}]});
+        let kem = json!({"scheme": 1, "mlkem_ek": h(&[7; 1568]), "x25519": h(&[8; 32])});
+        vec![
+            call_op("register", json!({"kind": 0x0102, "key_data": h(&[1; 32]), "attrs": attrs, "pop": "0xab", "pqz_pop": "0x", "relayer": relayer})),
+            call_op("register_msig", json!({"structure": msig, "attrs": attrs, "pop": sig["members"], "pqz_pop": "0x", "relayer": relayer})),
+            call_op("register_webauthn", json!({"key": web, "attrs": attrs, "pop": "0xab", "pqz_pop": "0x", "relayer": relayer})),
+            call_op("register_musig2", json!({"kind": 0x0110, "key": musig, "attrs": attrs, "pop": "0xab", "pqz_pop": "0x", "relayer": relayer})),
+            call_op("register_frost", json!({"kind": 0x0111, "key": frost, "attrs": attrs, "pop": "0xab", "pqz_pop": "0x", "relayer": relayer})),
+            call_op("set_kem_key", json!({"ua": h(&UA), "version": 1, "kem": kem, "sig": sig, "relayer": relayer})),
+            call_op("set_pqz_key", json!({"ua": h(&UA), "pqz_key": h(&[9; 16_384]), "pqz_pop_hash": h(&[1; 32]), "sig": sig, "relayer": relayer})),
+            call_op("store_pqz_pop", json!({"ua": h(&UA), "pqz_pop": "0xab"})),
+        ]
+    }
+    fn job_of(op: &Value) -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>)> {
+        ua8_call_job(op, &lane(), &sc(REGISTRY), true)
+    }
+
+    /// The registry only: the job's `contract` is `params.ua_registry`; one field from a passing job.
+    #[test]
+    fn soroban_call_job_registry_only() {
+        let op = ops(&NONE).remove(7);
+        assert_eq!(job_of(&op).unwrap().0.contract_address, sc(REGISTRY));
+        for other in [CONTRACT, WALLET, DEX, FROM, "nope"] {
+            let mut o = op.clone();
+            o["contract"] = json!(other);
+            let e = job_of(&o).unwrap_err().to_string();
+            assert!(e.contains("ua_registry"), "{other}: {e}");
+        }
+    }
+
+    /// The eight functions and nothing else; every field of each is required, no other is taken.
+    #[test]
+    fn soroban_call_job_function_allowlist() {
+        let names = ["register", "register_msig", "register_webauthn", "register_musig2", "register_frost", "set_kem_key", "set_pqz_key", "store_pqz_pop"];
+        let good = ops(&NONE);
+        assert_eq!(good.iter().map(|o| job_of(o).unwrap().0.function_name.0.to_string()).collect::<Vec<_>>(), names);
+        for f in ["relay", "ua_transfer", "require_authorized", "transfer", "__constructor", "registerMsig", ""] {
+            let mut o = good[0].clone();
+            o["function"] = json!(f);
+            let e = job_of(&o).unwrap_err().to_string();
+            assert!(e.contains("not a registry write"), "{f}: {e}");
+        }
+        for o in &good {
+            let f = o["function"].clone();
+            for k in o["args"].as_object().unwrap().keys() {
+                let mut gone = o.clone();
+                gone["args"].as_object_mut().unwrap().remove(k);
+                let e = job_of(&gone).unwrap_err().to_string();
+                assert!(e.contains("missing"), "{f} without {k}: {e}");
+            }
+            let mut more = o.clone();
+            more["args"]["signature"] = json!("0xab");
+            let e = job_of(&more).unwrap_err().to_string();
+            assert!(e.contains("unknown field"), "{f}: {e}");
+        }
+        for (path, k) in [(&["args", "attrs"][..], "kem_commit"), (&["args", "attrs", "kem"][..], "pk"), (&["args", "structure"][..], "t")] {
+            let mut o = good[1].clone();
+            path.iter().fold(&mut o, |v, p| &mut v[*p])[k] = json!(1);
+            let e = job_of(&o).unwrap_err().to_string();
+            assert!(e.contains("unknown field"), "{k}: {e}");
+        }
+        // an opaque blob is not a field: `args` stays named, and a number stays in the contract's range
+        let mut o = good[0].clone();
+        o["args"] = json!("0xab");
+        assert!(job_of(&o).is_err());
+        o = good[0].clone();
+        o["args"]["kind"] = json!(0x1_0000);
+        assert!(job_of(&o).is_err(), "kind is a u16 in the key's id");
+    }
+
+    /// The contract's typed shapes, field for field: a `#[contracttype]` struct is a map sorted by field name.
+    #[test]
+    fn soroban_call_job_builds_the_contract_shapes() {
+        fn keys(v: &ScVal) -> Vec<String> {
+            let ScVal::Map(Some(m)) = v else { panic!("{v:?}") };
+            m.iter().map(|e| scval_str(&e.key).unwrap()).collect()
+        }
+        fn seq(v: &ScVal) -> &[ScVal] {
+            let ScVal::Vec(Some(s)) = v else { panic!("{v:?}") };
+            s.as_slice()
+        }
+        let got: Vec<Vec<ScVal>> = ops(&NONE).iter().map(|o| job_of(o).unwrap().0.args.to_vec()).collect();
+        assert_eq!(got.iter().map(Vec::len).collect::<Vec<_>>(), [6, 5, 5, 6, 6, 5, 5, 2], "the contract's arities");
+        let attrs = field(&got[0][2], "kem").unwrap();
+        assert_eq!(keys(&got[0][2]), ["kem", "kem_pk_hash", "pqz_key", "pqz_pop_hash"]);
+        assert_eq!(keys(attrs), ["mlkem_ek", "scheme", "x25519"]);
+        assert_eq!(field(attrs, "scheme"), Some(&ScVal::U32(0)));
+        assert_eq!(got[0][0], ScVal::U32(0x0102));
+        assert_eq!(got[0][1], byt(&[1; 32]));
+        assert_eq!((&got[0][3], &got[0][4], &got[0][5]), (&byt(&[0xab]), &byt(&[]), &ScVal::Void));
+        assert_eq!(keys(&got[1][0]), ["members", "threshold"]);
+        assert_eq!(keys(&seq(field(&got[1][0], "members").unwrap())[0]), ["id", "kind", "weight"]);
+        assert_eq!(keys(&seq(&got[1][2])[0]), ["index", "key_data", "sig"]);
+        assert_eq!(field(&seq(&got[1][2])[0], "index"), Some(&ScVal::U32(0)));
+        assert_eq!(keys(&got[2][0]), ["rp_id_hash", "x", "y"]);
+        assert_eq!(got[3][0], ScVal::U32(0x0110));
+        assert_eq!(keys(&got[3][1]), ["agg_key", "member_keys"]);
+        assert_eq!(seq(field(&got[3][1], "member_keys").unwrap()), [byt(&[3; 33]), byt(&[4; 33])]);
+        assert_eq!(keys(&got[4][1]), ["group_key", "members", "threshold"]);
+        assert_eq!(keys(&seq(field(&got[4][1], "members").unwrap())[0]), ["commitments", "r", "z"]);
+        assert_eq!((&got[5][0], &got[5][1]), (&byt(&UA), &u64v(1)));
+        assert_eq!(keys(&got[5][3]), ["key_data", "members", "signature"]);
+        assert_eq!((&got[6][1], &got[6][2]), (&byt(&[9; 16_384]), &byt(&[1; 32])));
+        assert_eq!(got[7], [byt(&UA), byt(&[0xab])]);
+    }
+
+    /// No auth entries from the job: a job naming any is refused, one without has none but the lane's own.
+    #[test]
+    fn soroban_call_job_has_no_job_auth_entries() {
+        for o in ops(&NONE) {
+            assert_eq!(job_of(&o).unwrap().1.len(), 0, "{}", o["function"]);
+            for (k, v) in [("auth", json!([{"payload": PREIMAGE, "from": FROM, "signature": sig()}])), ("extra", json!({"auth": []})), ("payload", json!(PREIMAGE))] {
+                let mut bad = o.clone();
+                bad[k] = v;
+                let e = job_of(&bad).unwrap_err().to_string();
+                assert!(e.contains("unknown field"), "{k}: {e}");
+            }
+        }
+    }
+
+    /// `relayer` is `None` or this lane; `Some(lane)` adds exactly one `SourceAccount` entry rooted at the call.
+    #[test]
+    fn relayer_arg_is_the_lane() {
+        for o in ops(&json!(LANE)) {
+            let (call, auth) = job_of(&o).unwrap();
+            if call.function_name.0.as_slice() == b"store_pqz_pop" {
+                assert!(auth.is_empty(), "no relayer argument");
+                continue;
+            }
+            assert_eq!(auth.len(), 1, "{}", o["function"]);
+            assert!(matches!(auth[0].credentials, SorobanCredentials::SourceAccount));
+            assert_eq!(auth[0].root_invocation, source_entry(&call).root_invocation);
+            assert!(auth[0].root_invocation.sub_invocations.is_empty());
+            assert_eq!(call.args.last(), Some(&addr(LANE)));
+        }
+        for other in [FROM, WALLET] {
+            for o in ops(&json!(other)).into_iter().take(7) {
+                let e = job_of(&o).unwrap_err().to_string();
+                assert!(e.contains("None or this lane"), "{}: {e}", o["function"]);
+            }
+        }
+        let mut bad = ops(&json!(LANE)).remove(0);
+        bad["args"]["relayer"] = json!(7);
+        assert!(job_of(&bad).is_err(), "a relayer is an address or null");
+    }
+
+    /// `call` needs `params.ua_registry` (a contract), and a deadline; unset, nothing is relayed.
+    #[test]
+    fn ua_registry_param_required_for_call() {
+        let op = ops(&NONE).remove(7);
+        let e = job_tx(&NET7, Some("call"), &op, &lane(), &policy()).unwrap_err().to_string();
+        assert!(e.contains("ua_registry"), "{e}");
+        let p = RelayFeePolicy { ua_registry: Some(sc(REGISTRY)), ..policy() };
+        assert_eq!(job_tx(&NET7, Some("call"), &op, &lane(), &p).unwrap().2, VU);
+        let mut late = op.clone();
+        late.as_object_mut().unwrap().remove("valid_until");
+        assert!(job_tx(&NET7, Some("call"), &late, &lane(), &p).unwrap_err().to_string().contains("valid_until"));
+        let cfg = |v: Option<&str>| {
+            let mut c = ChainCfg { family: "soroban".into(), ..Default::default() };
+            if let Some(v) = v {
+                c.params.insert("ua_registry".into(), v.into());
+            }
+            RelayFeePolicy::from_cfg(&c)
+        };
+        assert!(cfg(None).unwrap().ua_registry.is_none());
+        assert_eq!(cfg(Some(REGISTRY)).unwrap().ua_registry, Some(sc(REGISTRY)));
+        for bad in [FROM, "nope"] {
+            assert!(format!("{:#}", cfg(Some(bad)).err().unwrap()).contains("params.ua_registry"), "{bad}");
+        }
+    }
+
+    // A real msig row's typed signatures are the bytes `check_*` takes, on `register` and on a KEM record.
+    #[test]
+    fn msig_row_converts_to_the_stored_bytes() {
+        let r = row("registrations", "msig-pq/n2048-kmax1024");
+        let key_data = strip(&r["keyData"]);
+        let keys: HashMap<[u8; 32], (u16, Vec<u8>)> = portable()["registrations"].as_array().unwrap().iter()
+            .map(|m| (strip(&m["ua"]).try_into().unwrap(), (m["kind"].as_u64().unwrap() as u16, strip(&m["keyData"]))))
+            .collect();
+        let members = |id| keys.get(&id).cloned();
+        let write = |o: &Value| ua8_write(o).unwrap().0;
+        let w = write(&reg_op(r, &NONE));
+        let Ua8Write::Register(RegisterArgs::RegisterMsig { pop, .. }) = &w else { panic!() };
+        assert_eq!(ua8::encode_member_sigs(pop), strip(&r["pop"]), "the stored abi.encode(MemberSig[])");
+        ua8_check(&w, 0x0120, &key_data, &members).unwrap();
+        let mut bad = reg_op(r, &NONE);
+        flip(&mut bad["args"]["pop"][1]["sig"]);
+        assert_eq!(ua8_check(&write(&bad), 0x0120, &key_data, &members), Err(UAError::Pop));
+
+        let k = row("kemRecords", "msig-pq/v1");
+        ua8_check(&write(&rec_op("set_kem_key", k, &NONE)), 0x0120, &key_data, &members).unwrap();
+        let mut bad = rec_op("set_kem_key", k, &NONE);
+        flip(&mut bad["args"]["sig"]["members"][0]["sig"]);
+        assert_eq!(ua8_check(&write(&bad), 0x0120, &key_data, &members), Err(UAError::Unauthorized));
+        // the contract's `sig_fields_ok`: an msig only `members`
+        let mut bad = rec_op("set_kem_key", k, &NONE);
+        bad["args"]["sig"]["signature"] = json!("0xab");
+        assert_eq!(ua8_check(&write(&bad), 0x0120, &key_data, &members), Err(UAError::Unauthorized));
+
+        // an evm-eoa slot, by its typed digest; a single key's `signature`; the same shape rule the other way
+        let n = row("registrations", "msig-pq-native");
+        ua8_check(&write(&reg_op(n, &NONE)), 0x0120, &strip(&n["keyData"]), &members).unwrap();
+        let s = row("registrations", "fndsa512");
+        let (d, p) = (strip(&s["keyData"]), row("pqzKeyRecords", "fndsa512/n2048-kmax1024"));
+        ua8_check(&write(&rec_op("set_pqz_key", p, &NONE)), 0x0132, &d, &members).unwrap();
+        let mut bad = rec_op("set_pqz_key", p, &NONE);
+        bad["args"]["sig"]["key_data"] = json!("0xab");
+        assert_eq!(ua8_check(&write(&bad), 0x0132, &d, &members), Err(UAError::Unauthorized));
+    }
+
+    // -- the adapter against a stub registry: `calls` is every simulation, by function, and `SEND` every submit
+
+    fn stub_lane() -> String {
+        stellar_account_strkey(&ed25519_dalek::SigningKey::from_bytes(&[1; 32]).verifying_key().to_bytes())
+    }
+    fn rec(kind: u16, key: &[u8], signable: bool) -> ScVal {
+        let e = |k: &str, v: ScVal| ScMapEntry { key: sym(k), val: v };
+        ScVal::Map(Some(ScMap(vec![e("key_data", byt(key)), e("kind", ScVal::U32(kind as u32)), e("signable", ScVal::Bool(signable))].try_into().unwrap())))
+    }
+    fn row_rec(r: &Value, signable: bool) -> ([u8; 32], ScVal) {
+        (strip(&r["ua"]).try_into().unwrap(), rec(r["kind"].as_u64().unwrap() as u16, &strip(&r["keyData"]), signable))
+    }
+    /// `relayers()`, `record_of(id)` from `records`, and a passing simulation of anything else.
+    fn registry(relayers: Vec<ScVal>, records: Vec<([u8; 32], ScVal)>) -> Answer {
+        Arc::new(move |c| match c.function_name.0.as_slice() {
+            b"relayers" => view_ok(vecv(relayers.clone())),
+            b"record_of" => view_ok(records.iter().find(|r| c.args[0] == byt(&r.0)).map_or(ScVal::Void, |r| r.1.clone())),
+            _ => view_ok(ScVal::Void),
+        })
+    }
+    async fn ua8_adapter(answer: Answer) -> (SorobanAdapter, Arc<Mutex<Vec<String>>>) {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let url = rpc_stub(answer, calls.clone()).await;
+        let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: vec![url], lanes: vec![0], ..Default::default() };
+        c.params.insert("network_passphrase".into(), "x".into());
+        c.params.insert("ua_registry".into(), REGISTRY.into());
+        let s = LocalSigner::Ed(ed25519_dalek::SigningKey::from_bytes(&[1; 32]));
+        (SorobanAdapter::new(&c, &[s]).unwrap(), calls)
+    }
+    /// An adapter past `start_check`, its lane listed, its call log empty.
+    async fn listed(records: Vec<([u8; 32], ScVal)>) -> (SorobanAdapter, Arc<Mutex<Vec<String>>>) {
+        let (a, calls) = ua8_adapter(registry(vec![addr(&stub_lane())], records)).await;
+        a.start_check().await.unwrap();
+        assert_eq!(*calls.lock().unwrap(), ["relayers"]);
+        calls.lock().unwrap().clear();
+        (a, calls)
+    }
+    /// What the lane does with a job: build, and only after it sign and send.
+    async fn run(a: &SorobanAdapter, op: &Value) -> std::result::Result<(), SimError> {
+        let job: Job = serde_json::from_value(json!({"id": 7, "kind": "call", "op": op})).unwrap();
+        let built = a.build(&job, 0).await?;
+        let signed = a.sign(built, 0, 1).await.unwrap();
+        a.submit(&signed).await.unwrap();
+        Ok(())
+    }
+    fn logged(c: &Arc<Mutex<Vec<String>>>) -> Vec<String> {
+        std::mem::take(&mut *c.lock().unwrap())
+    }
+    fn refused(r: std::result::Result<(), SimError>, why: &str) {
+        assert!(matches!(&r, Err(SimError::Revert(e)) if e.contains(why)), "{why}: {r:?}");
+    }
+
+    /// `fndsa512` is relayer-checked: a valid row passes `check_*` and only then is simulated and sent.
+    #[tokio::test]
+    async fn relayer_mode_prechecks_off_chain() {
+        let r = row("registrations", "fndsa512");
+        let (a, calls) = listed(vec![row_rec(r, false)]).await;
+        let me = json!(stub_lane());
+        run(&a, &reg_op(r, &me)).await.unwrap();
+        assert_eq!(logged(&calls), ["register", "SEND"]);
+        run(&a, &rec_op("set_kem_key", row("kemRecords", "fndsa512/v1"), &me)).await.unwrap();
+        assert_eq!(logged(&calls), ["record_of", "set_kem_key", "SEND"], "the record's kind and key are read first");
+        run(&a, &rec_op("set_pqz_key", row("pqzKeyRecords", "fndsa512/n2048-kmax1024"), &me)).await.unwrap();
+        assert_eq!(logged(&calls), ["record_of", "set_pqz_key", "SEND"]);
+        // the one change: no `relayer`, so the part would be `NotVerifiable`
+        refused(run(&a, &reg_op(r, &NONE)).await, "needs a relayer");
+        refused(run(&a, &rec_op("set_kem_key", row("kemRecords", "fndsa512/v1"), &NONE)).await, "needs a relayer");
+        assert_eq!(logged(&calls), ["record_of"], "never simulated, never sent");
+    }
+
+    /// A flipped byte: refused, and the fake RPC proves the write was never simulated or sent.
+    #[tokio::test]
+    async fn relayer_mode_refuses_failing_record() {
+        let r = row("registrations", "fndsa512");
+        let (k, q) = (row("kemRecords", "fndsa512/v1"), row("pqzKeyRecords", "fndsa512/n2048-kmax1024"));
+        let (a, calls) = listed(vec![row_rec(r, false)]).await;
+        let me = json!(stub_lane());
+        let mut pop = reg_op(r, &me);
+        flip(&mut pop["args"]["pop"]);
+        let e = run(&a, &pop).await;
+        refused(e, "UAPoP");
+        assert_eq!(logged(&calls), Vec::<String>::new(), "not one RPC call");
+        let mut kem = rec_op("set_kem_key", k, &me);
+        flip(&mut kem["args"]["sig"]["signature"]);
+        refused(run(&a, &kem).await, "UAUnauthorized");
+        assert_eq!(logged(&calls), ["record_of"], "only the record read");
+        let mut pqz = rec_op("set_pqz_key", q, &me);
+        flip(&mut pqz["args"]["sig"]["signature"]);
+        refused(run(&a, &pqz).await, "UAUnauthorized");
+        assert_eq!(logged(&calls), ["record_of"]);
+        // the control of all three: the same jobs unflipped, on the same adapter
+        for o in [reg_op(r, &me), rec_op("set_kem_key", k, &me), rec_op("set_pqz_key", q, &me)] {
+            run(&a, &o).await.unwrap();
+            assert_eq!(logged(&calls).last().unwrap(), "SEND");
+        }
+    }
+
+    // -- an msig slot of a kind the chain cannot verify: no vector row has one, so a fresh `fndsa512` member signs
+
+    struct Member {
+        key: Vec<u8>,
+        id: [u8; 32],
+        sk: falcon::SecretKey,
+    }
+    fn member() -> Member {
+        let (pk, sk) = falcon::keypair();
+        let key = pk.as_bytes().to_vec();
+        Member { id: scaas_ua::derive_ua(0x0132, &key, false).unwrap(), key, sk }
+    }
+    /// `m`'s slot of the `pop` of the msig `key_data`, no attributes: over the `member` digest of its registration.
+    fn slot(key_data: &[u8], m: &Member) -> Vec<u8> {
+        let (ua, none) = (scaas_ua::ua_of(0x0120, key_data).unwrap(), [0; 32]);
+        let digest = ua8::registration_digest(&ua, 0x0120, &none, &ua8::kem_record_hash(&ua, 0, &[]).unwrap(), &none);
+        let md = scaas_ua::member_digest(&ua, &scaas_ua::ua_message(0x0120, &ua8::pop_v2_tag(), &digest).unwrap());
+        let msg = scaas_ua::ua_message(0x0132, &scaas_ua::purpose_tag("member").unwrap(), &md).unwrap();
+        falcon::detached_sign(&msg, &m.sk).as_bytes().to_vec()
+    }
+    /// `register_msig` of `threshold` and `members` in id order, `slots` = member index ⇒ signature.
+    fn msig_op(threshold: u16, members: &[(u16, [u8; 32], u16)], slots: &[(u16, Vec<u8>)], relayer: &Value) -> Value {
+        let z = h(&[0; 32]);
+        let m: Vec<Value> = members.iter().map(|(k, id, w)| json!({"kind": k, "id": h(id), "weight": w})).collect();
+        let s: Vec<Value> = slots.iter().map(|(i, b)| json!({"index": i, "key_data": "0x", "sig": h(b)})).collect();
+        call_op("register_msig", json!({"structure": {"threshold": threshold, "members": m}, "pop": s, "pqz_pop": "0x", "relayer": relayer,
+            "attrs": {"pqz_key": "0x", "pqz_pop_hash": z, "kem": {"scheme": 0, "mlkem_ek": "0x", "x25519": z}, "kem_pk_hash": z}}))
+    }
+    fn by_id(mut m: Vec<(u16, [u8; 32], u16)>) -> Vec<(u16, [u8; 32], u16)> {
+        m.sort_by_key(|x| x.1);
+        m
+    }
+
+    /// A marked slot reads its member through `record_of`; every other job differs from the passing one by one thing.
+    #[tokio::test]
+    async fn relayer_mode_checks_a_marked_msig_slot() {
+        let m = member();
+        let ms = vec![(0x0132, m.id, 1)];
+        let kd = encode_msig(1, &ms);
+        let (a, calls) = listed(vec![(m.id, rec(0x0132, &m.key, false))]).await;
+        let me = json!(stub_lane());
+        let good = msig_op(1, &ms, &[(0, slot(&kd, &m))], &me);
+        run(&a, &good).await.unwrap();
+        assert_eq!(logged(&calls), ["record_of", "register_msig", "SEND"]);
+
+        let mut bad = good.clone();
+        flip(&mut bad["args"]["pop"][0]["sig"]);
+        refused(run(&a, &bad).await, "UAPoP");
+        assert_eq!(logged(&calls), ["record_of"], "the write is never simulated");
+        let mut none = good.clone();
+        none["args"]["relayer"] = NONE;
+        refused(run(&a, &none).await, "needs a relayer");
+        assert_eq!(logged(&calls), Vec::<String>::new());
+
+        // the member is not registered: `MemberUnknown`
+        let (b, calls) = listed(vec![]).await;
+        refused(run(&b, &good).await, "UAMemberUnknown");
+        assert_eq!(logged(&calls), ["record_of"]);
+        // an RPC failure or a needed restore is no answer: retried, never a pass
+        for answer in [json!({"error": "boom"}), view_archived(rec(0x0132, &m.key, false))] {
+            let (c, calls) = ua8_adapter(Arc::new(move |f| match f.function_name.0.as_slice() {
+                b"relayers" => view_ok(vecv(vec![addr(&stub_lane())])),
+                b"record_of" => answer.clone(),
+                _ => view_ok(ScVal::Void),
+            })).await;
+            c.start_check().await.unwrap();
+            logged(&calls);
+            let e = run(&c, &good).await;
+            assert!(matches!(&e, Err(SimError::Transport(_))), "{e:?}");
+            assert_eq!(logged(&calls), ["record_of"]);
+        }
+    }
+
+    /// `evm-contract`: no off-chain check exists (C14). Signing nothing it passes; with a slot it is `NotVerifiable`.
+    #[tokio::test]
+    async fn relayer_mode_refuses_evm_contract_slot() {
+        let m = member();
+        let mut contract = [0u8; 32];
+        contract[31] = 9;
+        let ms = by_id(vec![(0x0132, m.id, 2), (0x0002, contract, 1)]);
+        let (a, calls) = listed(vec![(m.id, rec(0x0132, &m.key, false))]).await;
+        let me = json!(stub_lane());
+        let at = ms.iter().position(|x| x.1 == m.id).unwrap() as u16;
+        let good = msig_op(2, &ms, &[(at, slot(&encode_msig(2, &ms), &m))], &me);
+        run(&a, &good).await.unwrap();
+        assert_eq!(logged(&calls), ["record_of", "register_msig", "SEND"]);
+        // threshold 3: both slots are needed, and the fndsa512 one is valid, so only the `evm-contract` slot refuses
+        let mut slots = vec![(1 - at, vec![0xab; 65]), (at, slot(&encode_msig(3, &ms), &m))];
+        slots.sort_by_key(|s| s.0);
+        refused(run(&a, &msig_op(3, &ms, &slots, &me)).await, "UANotVerifiable");
+        assert_eq!(logged(&calls), ["record_of"], "the write is never simulated");
+        // no relayer changes nothing: an `evm-contract` slot is never submitted
+        refused(run(&a, &msig_op(3, &ms, &slots, &NONE)).await, "needs a relayer");
+        assert_eq!(logged(&calls), Vec::<String>::new());
+        // beside a Chain slot alone it is still the part that needs a relayer: its slot comes first and refuses
+        let ml = row("registrations", "mldsa65#1");
+        let (b, calls) = listed(vec![row_rec(ml, true)]).await;
+        let ms = by_id(vec![(0x0131, strip(&ml["ua"]).try_into().unwrap(), 2), (0x0002, contract, 1)]);
+        let chain = msig_op(3, &ms, &[(0, vec![0xab; 65]), (1, vec![0xcd; 3309])], &me);
+        refused(run(&b, &chain).await, "UANotVerifiable");
+        assert_eq!(logged(&calls), ["record_of"], "the write is never simulated");
+    }
+
+    /// A `G…` member with only Chain parts needs no relayer, so `check_*`, which refuses it, is not asked; a `G…` member
+    /// next to a slot that needs a relayer stays refused (the owner's question, fail closed).
+    #[tokio::test]
+    async fn g_member_msig_is_checked_only_for_a_marked_slot() {
+        let (m, g) = (member(), [0xee; 32]);
+        let ed = row("registrations", "ed25519");
+        let ed_id: [u8; 32] = strip(&ed["ua"]).try_into().unwrap();
+        let (a, calls) = listed(vec![row_rec(ed, true), (m.id, rec(0x0132, &m.key, false))]).await;
+        // classical-dominant: no `pop` (U8S-D2), `Chain`, whatever its members
+        let classical = by_id(vec![(0x0011, g, 1), (0x0102, ed_id, 1)]);
+        assert!(scaas_ua::derive_ua(0x0120, &encode_msig(2, &classical), false).is_err(), "check_* refuses it off chain");
+        run(&a, &msig_op(2, &classical, &[], &NONE)).await.unwrap();
+        assert_eq!(logged(&calls), ["register_msig", "SEND"], "not checked, not refused");
+        // the fndsa512 member's slot, valid for this very structure: only the `G…` member beside it refuses
+        let marked = by_id(vec![(0x0011, g, 1), (0x0132, m.id, 2)]);
+        let at = marked.iter().position(|x| x.1 == m.id).unwrap() as u16;
+        let job = msig_op(2, &marked, &[(at, slot(&encode_msig(2, &marked), &m))], &json!(stub_lane()));
+        refused(run(&a, &job).await, "UAKeyData");
+        assert_eq!(logged(&calls).iter().filter(|c| *c == "register_msig" || *c == "SEND").count(), 0);
+        // the control: the same weights with a native member `check_*` knows
+        let mut eoa = [0u8; 32];
+        eoa[31] = 1;
+        let known = by_id(vec![(0x0001, eoa, 1), (0x0132, m.id, 2)]);
+        let at = known.iter().position(|x| x.1 == m.id).unwrap() as u16;
+        run(&a, &msig_op(2, &known, &[(at, slot(&encode_msig(2, &known), &m))], &json!(stub_lane()))).await.unwrap();
+        assert_eq!(logged(&calls), ["record_of", "register_msig", "SEND"]);
+    }
+
+    /// `check_*` only where a part needs `relayer`: a Chain row is the chain's to refuse, a commit's fill compares a hash,
+    /// and `store_pqz_pop` has no `relayer`.
+    #[tokio::test]
+    async fn chain_parts_are_not_prechecked() {
+        let (ml, f) = (row("registrations", "mldsa65/n2048-kmax1024"), row("registrations", "fndsa512"));
+        let (a, calls) = listed(vec![row_rec(ml, true), row_rec(f, false)]).await;
+        // a wrong signature the node never reads: it reaches the simulation, which is the chain's check
+        let mut chain = reg_op(row("registrations", "ed25519"), &NONE);
+        flip(&mut chain["args"]["pop"]);
+        run(&a, &chain).await.unwrap();
+        assert_eq!(logged(&calls), ["register", "SEND"]);
+        run(&a, &rec_op("set_kem_key", row("kemRecords", "mldsa65/v1"), &NONE)).await.unwrap();
+        assert_eq!(logged(&calls), ["record_of", "set_kem_key", "SEND"]);
+        let mut fill = rec_op("set_kem_key", row("kemRecords", "fndsa512/v1"), &NONE);
+        fill["args"]["version"] = json!(0);
+        fill["args"]["sig"] = json!({"key_data": "0x", "signature": "0x", "members": []});
+        run(&a, &fill).await.unwrap();
+        assert_eq!(logged(&calls), ["set_kem_key", "SEND"], "a marked kind's fill needs no relayer");
+        run(&a, &ops(&NONE)[7]).await.unwrap();
+        assert_eq!(logged(&calls), ["store_pqz_pop", "SEND"]);
+        // an unregistered id: nothing to check, refused before its write
+        let mut lost = rec_op("set_kem_key", row("kemRecords", "fndsa512/v1"), &NONE);
+        lost["args"]["ua"] = json!(h(&[0x77; 32]));
+        refused(run(&a, &lost).await, "not registered");
+        assert_eq!(logged(&calls), ["record_of"]);
+        // an answer that is not this id's cannot turn a marked record into a Chain one: the job above with its record swapped
+        let (b, calls) = listed(vec![(strip(&f["ua"]).try_into().unwrap(), row_rec(ml, true).1)]).await;
+        let job = rec_op("set_kem_key", row("kemRecords", "fndsa512/v1"), &json!(stub_lane()));
+        refused(run(&b, &job).await, "another record");
+        assert_eq!(logged(&calls), ["record_of"]);
+    }
+
+    /// `relayers()` is read once, at start: not listed stays refused even if a later read would pass, a failed read
+    /// lists nobody, and the one difference from the passing job is the start's answer.
+    #[tokio::test]
+    async fn relayer_mode_refused_on_unlisted_lane() {
+        let r = row("registrations", "fndsa512");
+        let job = reg_op(r, &json!(stub_lane()));
+        let list = Arc::new(Mutex::new(vec![addr(FROM)]));
+        let l2 = list.clone();
+        let (a, calls) = ua8_adapter(Arc::new(move |c| match c.function_name.0.as_slice() {
+            b"relayers" => view_ok(vecv(l2.lock().unwrap().clone())),
+            _ => view_ok(ScVal::Void),
+        })).await;
+        a.start_check().await.unwrap();
+        list.lock().unwrap().push(addr(&stub_lane()));
+        a.start_check().await.unwrap();
+        assert_eq!(logged(&calls), ["relayers"], "read once");
+        refused(run(&a, &job).await, "not in the registry's relayers()");
+        assert_eq!(logged(&calls), Vec::<String>::new(), "never simulated, never sent");
+        // relayer-mode names the job: `Some(lane)` is refused on a part the chain verifies too; `None` there is untouched
+        refused(run(&a, &reg_op(row("registrations", "ed25519"), &json!(stub_lane()))).await, "not in the registry's relayers()");
+        run(&a, &reg_op(row("registrations", "ed25519"), &NONE)).await.unwrap();
+        assert_eq!(logged(&calls), ["register", "SEND"]);
+
+        let (b, calls) = listed(vec![]).await;
+        run(&b, &job).await.unwrap();
+        assert_eq!(logged(&calls), ["register", "SEND"], "the control: listed at start");
+
+        let (c, calls) = ua8_adapter(Arc::new(|_| json!({"error": "boom"}))).await;
+        assert!(c.start_check().await.is_err());
+        logged(&calls);
+        refused(run(&c, &job).await, "not in the registry's relayers()");
+        assert_eq!(logged(&calls), Vec::<String>::new());
+        let e = ua8_adapter(Arc::new(|_| view_ok(u64v(1)))).await.0.start_check().await.unwrap_err();
+        assert!(format!("{e:#}").contains("relayers"), "{e:#}");
+    }
+
+    /// `check_recorded_auth` applies, and a call that wants anyone else's authority cannot land: the job carries no entry.
+    #[tokio::test]
+    async fn call_job_refuses_recorded_authority() {
+        let stolen = source_entry(&InvokeContractArgs { contract_address: sc(WALLET), function_name: ScSymbol("pay".try_into().unwrap()), args: Default::default() });
+        let signer = SorobanAuthorizationEntry {
+            credentials: SorobanCredentials::Address(SorobanAddressCredentials { address: sc(FROM), nonce: 1, signature_expiration_ledger: 1, signature: ScVal::Void }),
+            root_invocation: stolen.root_invocation.clone(),
+        };
+        let at = |e: &SorobanAuthorizationEntry| e.to_xdr_base64(Limits::none()).unwrap();
+        let sim = |auth: Vec<String>| json!({"results": [{"xdr": ScVal::Void.to_xdr_base64(Limits::none()).unwrap(), "auth": auth}], "transactionData": data(100, &[])});
+        let job = reg_op(row("registrations", "ed25519"), &NONE);
+        for (entry, why) in [(at(&stolen), "lent"), (at(&signer), "signature")] {
+            let a2 = sim(vec![entry]);
+            let (a, calls) = ua8_adapter(Arc::new(move |_| a2.clone())).await;
+            refused(run(&a, &job).await, why);
+            assert_eq!(logged(&calls), ["register"], "simulated, never sent");
+        }
+        // the control: the lane's own entry for exactly this call
+        let (a, calls) = ua8_adapter(Arc::new(move |c| sim(vec![source_entry(c).to_xdr_base64(Limits::none()).unwrap()]))).await;
+        run(&a, &job).await.unwrap();
+        assert_eq!(logged(&calls), ["register", "SEND"]);
+    }
+
+    /// The contract reads `Signer` for a Chain kind and `Ua` for a marked one (`check_members`); natives have no record.
+    #[tokio::test]
+    async fn members_read_as_the_contract_reads_them() {
+        let (signer, unsigned, marked, gone) = ([1u8; 32], [2u8; 32], [3u8; 32], [4u8; 32]);
+        let mut native = [0u8; 32];
+        native[31] = 1;
+        let (a, calls) = listed(vec![(signer, rec(0x0131, b"s", true)), (unsigned, rec(0x0131, b"u", false)), (marked, rec(0x0132, b"m", false))]).await;
+        let d = encode_msig(1, &[(0x0001, native, 1), (0x0131, signer, 1), (0x0131, unsigned, 1), (0x0132, marked, 1), (0x0131, gone, 1)]);
+        let m = a.ua8_members(&sc(REGISTRY), &d).await.unwrap();
+        assert_eq!(m.len(), 2, "{m:?}");
+        assert_eq!((&m[&signer], &m[&marked]), (&(0x0131, b"s".to_vec()), &(0x0132, b"m".to_vec())));
+        assert_eq!(logged(&calls).len(), 4, "every derived member, no native");
+    }
+
     proptest! {
         #[test]
         fn payload_decoder_never_panics(bytes in proptest::collection::vec(any::<u8>(), 0..512), sig in "[0-9a-f]{0,200}") {
@@ -2299,6 +3324,21 @@ mod tests {
             let o = json!({"contract": c, "function": f, "args": hex(&a)});
             let _ = ua_metatx_job(&NET7, &o, &lane(), &policy());
             let _ = job_tx(&NET7, Some("ua_metatx"), &o, &lane(), &policy());
+        }
+
+        /// A registry write's untrusted bytes: refused or checked, never a panic.
+        #[test]
+        fn ua8_check_never_panics(kind in any::<u16>(), key in proptest::collection::vec(any::<u8>(), 0..1024), pop in proptest::collection::vec(any::<u8>(), 0..1024), index in any::<u16>()) {
+            let mut o = ops(&NONE).remove(0);
+            (o["args"]["kind"], o["args"]["key_data"], o["args"]["pop"]) = (json!(kind), json!(h(&key)), json!(h(&pop)));
+            let (w, _) = ua8_write(&o).unwrap();
+            let _ = ua8_marked(&w, kind, &key);
+            let _ = ua8_check(&w, kind, &key, &|_| None);
+            let mut o = ops(&NONE).remove(1);
+            o["args"]["pop"][0] = json!({"index": index, "key_data": "0x", "sig": h(&pop)});
+            let (w, _) = ua8_write(&o).unwrap();
+            let _ = ua8_marked(&w, MSIG, &key);
+            let _ = ua8_check(&w, MSIG, &key, &|_| None);
         }
 
         #[test]
