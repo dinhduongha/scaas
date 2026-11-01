@@ -4,7 +4,7 @@ export { createVault, openVault, enablePrf, needsRewrap, rewrapPin, checkPassphr
 export { SeedBackup } from './backup.js';
 export {
   hashTypedData, secpSubjectKey, passkeySubjectKey, accountSignature, merkleBatch, checkOwnerCall, checkPayment, keyProofMessage,
-  checkCall, checkOp, checkTradeOrder, checkCancel, payLane, metaTransferTypedData, tradeOrderTypedData, cancelOrderTypedData,
+  checkCall, checkOp, checkTradeOrder, checkWrapOrder, checkUAWrapOrder, checkCancel, payLane, metaTransferTypedData, tradeOrderTypedData, cancelOrderTypedData,
   invalidateNoncesTypedData,
   metaPayId, decodeMeta, checkPayMeta, buildMtxPayMeta, buildUaPayMeta, relayRef, mtxExecuteCalldata, buildRelayFee,
 } from './evm.js';

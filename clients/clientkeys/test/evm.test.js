@@ -6,12 +6,13 @@ import {
   hashTypedData, hashStruct, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
   batchLeaf, evmAddress, passkeySubjectKey, addKeyCall, addKeyTypedData, executeTypedData, checkOwnerCall, checkPayment,
   keyProofMessage, metaTxTypedData, metaTransferTypedData, checkCall, tradeOrderTypedData, cancelOrderTypedData,
-  invalidateNoncesTypedData, checkTradeOrder, bidMinFill, bidMinBase, checkCancel, payLane, receiverFeeTypedData, wrapToUACall,
+  invalidateNoncesTypedData, uaInvalidateNoncesTypedData, checkTradeOrder, bidMinFill, bidMinBase, checkCancel, payLane, receiverFeeTypedData, wrapToUACall,
   unwrapToUACall, payWithFeeToUACalldata, checkReceiverFee,
 } from '../src/evm.js';
 // What the contracts hash until C5 / C6: the forge KATs below still pin these.
 import {
   orderCancelTypedData, ownerCallTypedData, checkOwnerCall as checkGenericOwnerCall, receiverFeeTypedData as receiverFeeOverDigest,
+  checkCancel as checkCancelOverHash,
 } from '../legacy/typed-signing/evm-pre-named.js';
 import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
@@ -490,9 +491,10 @@ test('trade order: exactly the order the client built, on a pinned DEX or wrappe
 });
 
 test('cancel: only the order the user holds or the lane the user chose, from the account, in the order\'s domain', () => {
-  const order = { from: ACCOUNT, receiveToken: ATK, amount: 1000, receiveAmount: 2000, dex: ATK, nonce: 5, validUntil: NOW + 600 };
+  const order = cancelOrderTypedData({ name: 'SCaaS MetaToken', contract: TOKEN, chainId: 7622, chainUid: UID, message: { order: { from: ACCOUNT,
+    receiveToken: ATK, amount: 1000, receiveAmount: 2000, dex: ATK, nonce: 5, validUntil: NOW + 600 } } }).message.order;
   const want = { account: ACCOUNT, chainId: 7622, chainUid: UID, contract: TOKEN, order };
-  const at = { contract: TOKEN, chainId: 7622, chainUid: UID };
+  const at = { name: 'SCaaS MetaToken', contract: TOKEN, chainId: 7622, chainUid: UID };
   const td = cancelOrderTypedData({ ...at, message: { order } });
   assert.equal(hex(checkCancel(td, want)), hex(hashTypedData(td)));
   const inv = { batch: 7, minNonce: 43 };
@@ -512,6 +514,14 @@ test('cancel: only the order the user holds or the lane the user chose, from the
     { ...want, order: undefined, invalidate: inv }), /not the cancel you asked for/);
   assert.throws(() => checkCancel(invalidateNoncesTypedData({ ...at, ...inv, from: ATK }),
     { ...want, order: undefined, invalidate: inv }), /not the cancel you asked for/);
+});
+
+test('legacy checkCancel: the UA invalidation resolves its builder', () => {
+  const id = '0x' + 'ac'.repeat(32);
+  const inv = { batch: 7, minNonce: 43 };
+  const at = { contract: TOKEN, chainId: 7622, chainUid: UID };
+  const td = uaInvalidateNoncesTypedData({ ...at, ...inv, from: id });
+  assert.equal(hex(checkCancelOverHash(td, { account: id, ...at, invalidate: inv, ua: true })), hex(hashTypedData(td)));
 });
 
 const KEY_PROOF_ZERO = '0xfa7987471ecf88572865d4f53880fda17e67fadcae78beb98eb39504833f66de';
@@ -569,7 +579,7 @@ test('receiver-pays, address path: the payee co-signs ReceiverFee nesting only t
   const payment = serverPayment();   // mode 1 (relayer bound), fee NONE, lane payLane(REF), nonce 0: CTR-MTX-06's shape
   const pd = hex(hashTypedData(payment));
   const rf = (over = {}, dom = {}, pay = {}) => {
-    const t = receiverFeeTypedData({ contract: TOKEN, chainId: 7622, chainUid: UID, message: { payment: { ...payment.message, ...pay },
+    const t = receiverFeeTypedData({ name: 'SCaaS MetaToken', contract: TOKEN, chainId: 7622, chainUid: UID, message: { payment: { ...payment.message, ...pay },
       fee: '3000000', feeRecipient: FEE_TO, validUntil: String(NOW + 60), ...over } });
     t.domain = { ...t.domain, ...dom };
     return t;

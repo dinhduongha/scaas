@@ -55,6 +55,7 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
         (cd clients/zether-prover && target/release/zether-cli vectors vectors) || return 1
         git diff --exit-code --stat -- smartcontracts/vectors/ua smartcontracts/vectors/typed smartcontracts/soroban/vectors clients/zether-prover/vectors || return 1
       done
+      (cd clients/clientkeys && ../../scripts/capped node scripts/typed-ops-cast-check.mjs) || return 1 # needs cast: Foundry, as every forge step
       for f in r33_keys schnorr_bls12381; do # the committed copies of the zether files
         cmp clients/zether-prover/vectors/$f.json clients/clientkeys/test/vectors/$f.json &&
           cmp clients/zether-prover/vectors/$f.json smartcontracts/evm/test/vectors/zether/s3/$f.json || return 1

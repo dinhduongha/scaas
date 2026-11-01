@@ -100,7 +100,7 @@ test('mldsa65 orders for the caps verify with noble under trade', () => {
 
 test('CancelUAOrder nests the order as signed; checkCancel takes it only from the holder of that order', () => {
   for (const r of V.rows) {
-    const td = cancelUAOrderTypedData({ ...at, contract: V.tokenA, message: { order: r.order.message } });
+    const td = cancelUAOrderTypedData({ ...at, name: 'SCaaS MetaToken', contract: V.tokenA, message: { order: r.order.message } });
     assert.equal(hex(hashStruct(td.types, 'UATradeOrder', td.message.order)), r.structHash);
     assert.equal(hex(hashStruct(td.types, 'CancelUAOrder', td.message)),
       hex(keccak_256(concatBytes(fromHex(TYPED_OPS.CancelUAOrder.typehash), fromHex(r.structHash)))));

@@ -90,7 +90,7 @@ test('mtxExecuteCalldata: the signed call the payment commits to', () => {
 });
 
 test('a named entry as the relayed call: fee 0, relayer bound to the executor; the payment commits to its calldata', () => {
-  const td = unwrapTypedData({ contract: TARGET, chainId: 7622, chainUid: UID, message: { from: SIGNER, wrapped: 7, recipient: SIGNER,
+  const td = unwrapTypedData({ name: 'SCaaS MetaToken', contract: TARGET, chainId: 7622, chainUid: UID, message: { from: SIGNER, wrapped: 7, recipient: SIGNER,
     validUntil: NOW + 300, mode: 1 } });
   const plan = buildRelayFee({ ...base, inner: td });
   assert.equal(plan.call.message.relayer, EXECUTOR);

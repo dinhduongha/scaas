@@ -31,11 +31,18 @@ export function wipe(...buffers) {
 }
 
 export function word(value) {
+  if (typeof value === 'string' && value.trim() === '') throw new Error('not a number: the empty string'); // BigInt('') is 0
   let v = BigInt(value);
   if (v < 0n || v >= 1n << 256n) throw new Error('uint256 out of range');
   const out = new Uint8Array(32);
   for (let i = 31; i >= 0; i--) { out[i] = Number(v & 0xffn); v >>= 8n; }
   return out;
+}
+
+/** `Boolean('false')` is true: a bool is `true` or `false`, nothing that reads as one. */
+export function boolWord(value) {
+  if (typeof value !== 'boolean') throw new Error(`not a bool: ${value}`);
+  return word(value ? 1 : 0);
 }
 
 export function addressWord(address) {
@@ -80,7 +87,7 @@ function encodeOne(t, v) {
   if (t === 'bytes') return padded(v instanceof Uint8Array ? v : fromHex(v));
   if (t === 'address') return addressWord(v);
   if (t === 'bytes32') return bytes32(v);
-  if (t === 'bool') return word(v ? 1 : 0);
+  if (t === 'bool') return boolWord(v);
   if (/^bytes\d+$/.test(t)) {
     const b = v instanceof Uint8Array ? v : fromHex(v);
     if (b.length !== Number(t.slice(5))) throw new Error(`${t} must be ${t.slice(5)} bytes`);

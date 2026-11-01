@@ -1,6 +1,6 @@
 // EVM pieces: EIP-712 digests, addresses, SmartKeyAccount key/salt/CREATE2, Merkle batch, the typed builder of every named entry.
 import {
-  keccak_256, sha256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, addressWord, abiEncode, bytes32,
+  keccak_256, sha256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, boolWord, addressWord, abiEncode, bytes32,
 } from './bytes.js';
 
 export function checksumAddress(address) {
@@ -37,7 +37,7 @@ function encodeValue(type, value, types) {
   if (type === 'string') return keccak_256(utf8ToBytes(String(value)));
   if (type === 'bytes') return keccak_256(value instanceof Uint8Array ? value : fromHex(value));
   if (type === 'address') return addressWord(value);
-  if (type === 'bool') return word(value ? 1 : 0);
+  if (type === 'bool') return boolWord(value);
   if (type === 'bytes32') return bytes32(value);
   if (/^bytes\d+$/.test(type)) return abiEncode([type], [value]);
   if (/^uint\d+$/.test(type)) return word(value);
@@ -192,17 +192,28 @@ const WRAPPED_CONFIDENTIAL = ['WrappedZetherToken', 'WrappedPqzToken'];
 const WALLET = ['MandateWallet'];
 const ACCOUNT = ['SmartKeyAccount'];
 
-const uaSigOf = (s) => (s === undefined || s instanceof Uint8Array || typeof s === 'string'
-  ? { keyData: '0x', signature: s ?? '0x', members: [] } : { keyData: '0x', signature: '0x', members: [], ...s });
-const accountSigOf = (s) => (s instanceof Uint8Array || typeof s === 'string'
-  ? { keyIndex: 0, proof: [], signature: s } : { keyIndex: 0, proof: [], ...s });
+const isRaw = (s) => s instanceof Uint8Array || typeof s === 'string';
+const required = (v, what) => (v === undefined ? refuse(`${what} is required`) : v);
+/** A `UASig`: raw (a native id) or `{keyData, signature, members}`. No entry verifies an empty one (`_check`, `_authorize`). */
+function uaSigOf(s, what = 'the signature') {
+  const sig = { keyData: '0x', signature: '0x', members: [], ...(isRaw(s) ? { signature: s } : s) };
+  if (asBytes(sig.signature).length === 0 && sig.members.length === 0) refuse(`${what} is required`);
+  return sig;
+}
+/** An `AccountSig`: a raw ECDSA signature of key 0, or `{keyIndex, proof, signature}`; never `accountSignature`'s encoded blob. */
+function accountSigOf(s) {
+  if (!isRaw(s)) return { keyIndex: 0, proof: [], ...s };
+  if (asBytes(s).length !== 65) refuse('a raw signature is 65 bytes; any other names its keyIndex, proof and signature');
+  return { keyIndex: 0, proof: [], signature: s };
+}
 // A wrap order on the underlying's entries is the `TradeOrder` with `dex == receiveToken` (TS-D19).
 const asTradeOrder = ({ wrappedToken, minMinted, ...o }) => ({ ...o, receiveToken: wrappedToken, receiveAmount: minMinted, dex: wrappedToken });
 // The parameters after the envelope where they are not the struct's own fields in order (Appendix X.3). `pqzAuth` and
 // `ownerSig` are signatures of their own, so never inside a signed struct (Appendix X.1).
-const pqzOp = (args) => (m, x) => [[args, m.args], ['bytes', m.proof], ['UASig', uaSigOf(x.pqzAuth)], ['bytes', m.accHint]];
-const pqzUnshield = (m, x) => [['PqzBurnArgs', m.args], ['Payout', m], ['bytes', m.proof], ['UASig', uaSigOf(x.pqzAuth)], ['bytes', m.accHint]];
-const pqzUnwrap = (m, x) => [['PqzBurnArgs', m.args], ['Unwrap', m.unwrap], ['bytes', m.proof], ['UASig', uaSigOf(x.pqzAuth)], ['bytes', m.accHint]];
+const pqzAuthOf = (x) => ['UASig', uaSigOf(x.pqzAuth, 'pqzAuth')];
+const pqzOp = (args) => (m, x) => [[args, m.args], ['bytes', m.proof], pqzAuthOf(x), ['bytes', m.accHint]];
+const pqzUnshield = (m, x) => [['PqzBurnArgs', m.args], ['Payout', m], ['bytes', m.proof], pqzAuthOf(x), ['bytes', m.accHint]];
+const pqzUnwrap = (m, x) => [['PqzBurnArgs', m.args], ['Unwrap', m.unwrap], ['bytes', m.proof], pqzAuthOf(x), ['bytes', m.accHint]];
 const zetherOp = (args) => (m) => [[args, m.args], ['bytes', m.proof]];
 const PQZ_TAIL = 'bytes proof,bytes accHint';
 
@@ -254,15 +265,15 @@ const OPS = {
   ZetherUnshieldUnwrap: { fields: 'ZetherBurn args,Unwrap unwrap,bytes proof', on: ['WrappedZetherToken'], ua: true, entry: 'UnshieldUnwrap',
     args: (m) => [['ZetherBurn', m.args], ['Unwrap', m.unwrap], ['bytes', m.proof]] },
   RollOverSigned: { fields: 'bytes32 ua,uint64 expectedPendingSeq,uint64 validUntilBlock', on: ZETHER, ua: true,
-    args: (m, x) => [['bytes32', m.ua], ['uint64', m.expectedPendingSeq], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(x.ownerSig)]] },
+    args: (m, x) => [['bytes32', m.ua], ['uint64', m.expectedPendingSeq], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(x.ownerSig, 'ownerSig')]] },
   SetRollOverMode: { fields: 'bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock', on: ZETHER, ua: true,
-    args: (m, x) => [['bytes32', m.ua], ['uint8', m.rollOverMode], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(x.ownerSig)]] },
+    args: (m, x) => [['bytes32', m.ua], ['uint8', m.rollOverMode], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(x.ownerSig, 'ownerSig')]] },
   RollOverBatch: { fields: 'bytes32[] uas', on: ZETHER, ua: true },
   // TS-D19: `x.payerSig` is the payer's signature of the nested payment (the plain `MetaTransfer` / `UAMetaTransfer`)
   ReceiverFee: { raw: `MetaTransfer payment,${RECEIVER_FEE}`, on: TOKENS, entry: 'mtxPayReceiverFee', call: (m, sig, x) => [['MetaTransfer', m.payment],
-    ['bytes', x.payerSig], ['uint256', m.fee], ['address', m.feeRecipient], ['uint256', m.validUntil], ['bytes', sig]] },
+    ['bytes', required(x.payerSig, 'payerSig')], ['uint256', m.fee], ['address', m.feeRecipient], ['uint256', m.validUntil], ['bytes', sig]] },
   UAReceiverFee: { raw: `UAMetaTransfer payment,${RECEIVER_FEE}`, on: TOKENS, entry: 'uaPayReceiverFee', call: (m, sig, x) => [['UAMetaTransfer', m.payment],
-    ['UASig', uaSigOf(x.payerSig)], ['uint256', m.fee], ['address', m.feeRecipient], ['uint256', m.validUntil], ['UASig', uaSigOf(sig)]] },
+    ['UASig', uaSigOf(x.payerSig, 'payerSig')], ['uint256', m.fee], ['address', m.feeRecipient], ['uint256', m.validUntil], ['UASig', uaSigOf(sig)]] },
   // The router calls these as the struct's `relayer` (`msg.sender`), on the lane `payLane(ref)`, nonce 0.
   RelayFee: { raw: relayFeeOf('address'), on: TOKENS, entry: 'mtxRelayFee', call: (m, sig) => [['address', m.from], ['address', m.target],
     ['bytes32', m.callDataHash], ['address', m.payee], ['uint256', m.value], ['uint256', m.validUntil], ['bytes', sig]] },
@@ -349,7 +360,10 @@ function canonical(type, v, types) {
     return m;
   }
   if (type === 'address') { addressWord(v ?? ZERO_ADDRESS); return v ?? ZERO_ADDRESS; }
-  if (type === 'bool') return Boolean(v);
+  if (type === 'bool') {
+    if (v !== undefined && typeof v !== 'boolean') refuse(`${v} is not a bool`);
+    return v ?? false;
+  }
   if (type === 'bytes') return hex(asBytes(v ?? '0x'));
   const fixed = /^bytes(\d+)$/.exec(type);
   if (fixed) {
@@ -358,15 +372,55 @@ function canonical(type, v, types) {
     return hex(b);
   }
   const bits = Number(type.slice(4));
+  const numeric = typeof v !== 'object' && /^(0x[0-9a-fA-F]+|[0-9]+)$/.test(String(v));
+  if (v != null && !numeric) refuse(`${v} is not a ${type}`);
   const n = BigInt(v ?? 0);
-  if (n < 0n || n >= 1n << BigInt(bits)) refuse(`${n} is out of range for a ${type}`);
+  if (n >= 1n << BigInt(bits)) refuse(`${n} is out of range for a ${type}`);
   return bits <= 32 ? Number(n) : String(n);
 }
 
-function opTypedData(op, { name = op.domains[0], contract, chainId, chainUid, message }) {
-  if (!op.domains.includes(name)) refuse(`${op.primary} is not signed in the domain ${name}`);
-  return { types: op.types, primaryType: op.primary, domain: salted({ name, contract, chainId, chainUid }),
+const E_FIELDS = new Set(fields(E).map((f) => f.name));
+const bindsRelayer = (list) => ['mode', 'relayer', 'feeRecipient'].every((n) => list.some((f) => f.name === n));
+
+/** What a client expects, whole: an omitted field is not "expect zero" (`open`: the struct's `E` may be left to the server).
+ *  A relayer or fee recipient it names needs its mode bit (`mode`, the server's when the client leaves it open), or canonical
+ *  zeroing would drop it and the digests still match: the signature open to any relayer, the fee to `msg.sender`. */
+function requireWhole(type, v, types, open, mode) {
+  if (type.endsWith('[]')) {
+    if (!Array.isArray(v)) refuse(`the expected ${type} is missing`);
+    v.forEach((x) => requireWhole(elementType(type), x, types));
+    return;
+  }
+  if (!types[type]) return;
+  if (v === null || typeof v !== 'object') refuse(`the expected ${type} is missing`);
+  for (const f of types[type]) {
+    if (open && E_FIELDS.has(f.name)) continue;
+    if (v[f.name] == null) refuse(`the expected ${f.name} is missing`);
+    requireWhole(f.type, v[f.name], types);
+  }
+  if (!bindsRelayer(types[type])) return;
+  const bits = uint(v.mode ?? mode, 'the fee mode');
+  const dropped = (id, bit) => id != null && !same(id, ZERO_ADDRESS) && !(bits & bit);
+  if (dropped(v.relayer, 1n)) refuse('the relayer you named is not bound by the mode');
+  if (dropped(v.feeRecipient, 2n)) refuse('the fee recipient you named is not bound by the mode');
+}
+
+function opTypedData(op, { name, contract, chainId, chainUid, message }) {
+  if (name === undefined && op.domains.length > 1) refuse(`${op.primary} is signed in ${op.domains.length} domains: name yours`);
+  const domainName = name ?? op.domains[0];
+  if (!op.domains.includes(domainName)) refuse(`${op.primary} is not signed in the domain ${domainName}`);
+  return { types: op.types, primaryType: op.primary, domain: salted({ name: domainName, contract, chainId, chainUid }),
     message: canonical(op.primary, message, op.types) };
+}
+
+/** `opTypedData` over a server's fields: what does not build is refused, never thrown as something else. */
+function rebuilt(op, opts) {
+  try {
+    return opTypedData(op, opts);
+  } catch (e) {
+    if (String(e.message).startsWith('Refusing')) throw e;
+    return refuse('malformed typed data');
+  }
 }
 
 const opName = (primary) => primary.replace(/^UA/, 'ua').replace(/^[A-Z]/, (c) => c.toLowerCase());
@@ -794,7 +848,7 @@ export function buildRelayFee({ name = 'SCaaS MetaToken', token, chainId, chainU
     const uid = chainUid instanceof Uint8Array ? hex(chainUid) : String(chainUid);
     if (uint(d.chainId, 'the call\'s chain id') !== BigInt(chainId) || !same(d.salt, uid)) refuse('the call is for another chain');
     if (uint(m.validUntil, 'the call\'s deadline') > uint(validUntil, 'the deadline')) refuse('the call outlives its payment');
-    bound = BigInt(m.mode ?? 0) & 1n;
+    bound = uint(m.mode ?? 0, 'the call\'s mode') & 1n;
     if (bound && !same(m.relayer, ZERO_ADDRESS) && !same(m.relayer, executor)) refuse('the call is bound to another relayer');
     call = { ...inner, message: { ...m, relayer: bound ? executor : m.relayer } };
   }
@@ -821,17 +875,21 @@ export function buildRelayFee({ name = 'SCaaS MetaToken', token, chainId, chainU
 
 /** CLI-SGN-27 on a named entry: check, then sign exactly what was checked. `td` must be struct `op` on `contract`, salted with
  *  the signer's own `chainId` and `chainUid` (CLI-SGN-33), with every field of `message`, the op's own fields as the client
- *  built them from the user's input (`from` too). Struct family `E`: the server supplies only what `message` leaves out, the
- *  lane, nonce and deadline (near, CLI-SGN-05) and the fee fields; the fee within `maxFee` (default 0; PERCENT only on an
- *  AMOUNT op, on the op's own amount, CTR-MTX-20), a bound fee recipient / relayer the one named. Any other struct: all of
- *  it is the client's. Returns {digest, op, entry, feeMode, fee, feeRecipient, relayer}. */
+ *  built them from the user's input (`from` too), every one of them present: nothing omitted reads as zero. Struct family
+ *  `E`: the server supplies only what `message` leaves out, the lane, nonce and deadline (near, CLI-SGN-05) and the fee
+ *  fields; the fee within `maxFee` (default 0; PERCENT only on an AMOUNT op, on the op's own amount, CTR-MTX-20), a bound fee
+ *  recipient / relayer the one named, and one named in `message` must be bound. Any other struct: all of it is the
+ *  client's. A wrap order is refused here: `checkWrapOrder` carries its rules. Returns {digest, op, entry, feeMode, fee,
+ *  feeRecipient, relayer}. */
 export function checkOp(td, { op, contract, chainId, chainUid, message, maxFee, feeRecipient, relayer,
   now = Math.floor(Date.now() / 1000), maxWindow = 3600 }) {
+  if (op === 'WrapOrder' || op === 'UAWrapOrder') refuse('a wrap order is checked by checkWrapOrder (CLI-SGN-36)');
   const o = TYPED_OPS[op];
   if (!o || !td || td.primaryType !== op) refuse('this is not the operation you asked for');
   const m = td.message || {};
   const d = td.domain || {};
   if (!same(d.verifyingContract, contract)) refuse('the operation is not on the contract you chose');
+  requireWhole(op, message, o.types, o.envelope, m.mode);
   let fee = {};
   let server = {};
   if (o.envelope) {
@@ -841,14 +899,7 @@ export function checkOp(td, { op, contract, chainId, chainUid, message, maxFee, 
     server = { batch: uint(m.batch, 'the lane'), nonce: uint(m.nonce, 'the nonce'), validUntil: m.validUntil, mode: m.mode,
       relayer: m.relayer, fee: m.fee, feeRecipient: m.feeRecipient };
   }
-  let mine;
-  try {
-    mine = opTypedData(o, { name: d.name, contract, chainId, chainUid, message: { ...server, ...message } });
-  } catch (e) {
-    if (String(e.message).startsWith('Refusing')) throw e;
-    refuse('malformed typed data');
-  }
-  const digest = digestOf(mine);
+  const digest = digestOf(rebuilt(o, { name: d.name, contract, chainId, chainUid, message: { ...server, ...message } }));
   if (hex(digestOf(td)) !== hex(digest)) refuse('this is not the operation you asked for');
   return { digest, op, entry: o.entry, ...fee };
 }
@@ -939,11 +990,27 @@ export function checkCancel(td, { account, chainId, chainUid, contract, order, i
   return checkOp(td, { op: td.primaryType, contract, chainId, chainUid, message: { order } }).digest;
 }
 
+/** The terms every order shares (CLI-SGN-35): the nonce the chain takes, fee at most 1 %, known flags (no ESCROW outside). */
+function orderTerms(o, outside) {
+  if (o.nonce >= 2n ** 128n) refuse('the order nonce is at or above 2^128; the chain refuses it');
+  if (uint(o.fee, 'the fee') > 10000n) refuse('the fee is above 1 %');
+  const flags = uint(o.flags, 'the flags');
+  if (flags & ~7n || (flags & 2n && (outside || !(flags & 1n)))) refuse('unknown order flags');
+}
+
+function orderWarnings(o, account, none, ua) {
+  const idOf = (x) => (ua ? hex(bytes32(x)) : String(x).toLowerCase());
+  const warnings = idOf(o.destination) === idOf(none) || idOf(o.destination) === idOf(account) ? []
+    : ['someone else receives the proceeds'];
+  if (same(o.relayer, ZERO_ADDRESS)) warnings.push('any submitter may settle this order and earn the relayer share');
+  return warnings;
+}
+
 /** A trade order that is exactly the one the client built from the user's input (CLI-SGN-35): `order` (receiveToken,
  *  amount, receiveAmount, minFill, fee, relayer, dex, destination, flags, batch, optional validUntil) from `account`,
  *  selling `sellToken` (`outside`: an outside token, signed as `DexOrder` in the DEX's domain, CTR-DEX-18). The order
- *  itself must name a DEX on the signer's pinned list (or, for a wrap by signature, CLI-SGN-36: `dex` = `receiveToken` =
- *  a pinned wrapper and `minFill = amount`), fee at most 1 %, known flags (no ESCROW on an outside token), non-zero
+ *  itself must name a DEX on the signer's pinned list (or, for a wrap by signature as the chain takes it until C6, then
+ *  `checkWrapOrder`, CLI-SGN-36: `dex` = `receiveToken` = a pinned wrapper and `minFill = amount`), fee at most 1 %, known flags (no ESCROW on an outside token), non-zero
  *  amounts. The server supplies only the nonce and, when `order` has none, `validUntil` within the window. Returns
  *  {digest, minFill (the signed one: no protocol floor, CTR-DEX-14), warnings}. */
 export function checkTradeOrder(td, { account, chainId, chainUid, order, sellToken, outside = false, dexes = [], wrappers = [],
@@ -954,7 +1021,7 @@ export function checkTradeOrder(td, { account, chainId, chainUid, order, sellTok
   const none = ua ? ZERO_ID : ZERO_ADDRESS;
   const o = { minFill: '0', fee: '0', relayer: ZERO_ADDRESS, destination: none, flags: 0, batch: '0', ...order,
     from: account, nonce: uint(got.nonce, 'the nonce'), validUntil: (order || {}).validUntil ?? got.validUntil };
-  if (o.nonce >= 2n ** 128n) refuse('the order nonce is at or above 2^128; the chain refuses it');
+  orderTerms(o, outside);
   if (wrappers.some((w) => same(w, o.dex))) {
     if (outside || !same(o.receiveToken, o.dex) || uint(o.minFill, 'minFill') !== uint(o.amount, 'the amount')) {
       refuse('a wrap by signature mints from this wrapper, all or nothing');
@@ -962,9 +1029,6 @@ export function checkTradeOrder(td, { account, chainId, chainUid, order, sellTok
   } else if (!dexes.some((x) => same(x, o.dex))) {
     refuse('the order names a DEX that is not on your chain profile');
   }
-  if (uint(o.fee, 'the fee') > 10000n) refuse('the fee is above 1 %');
-  const flags = uint(o.flags, 'the flags');
-  if (flags & ~7n || (flags & 2n && (outside || !(flags & 1n)))) refuse('unknown order flags');
   const amount = uint(o.amount, 'the amount');
   const minFill = uint(o.minFill, 'minFill');
   if (amount === 0n || uint(o.receiveAmount, 'the price') === 0n || minFill > amount) refuse('the amounts are malformed');
@@ -975,12 +1039,36 @@ export function checkTradeOrder(td, { account, chainId, chainUid, order, sellTok
     : ua ? uaTradeOrderTypedData({ token: sellToken, name: d.name, chainId, chainUid, order: o })
       : tradeOrderTypedData({ token: sellToken, name: d.name, chainId, chainUid, order: o }));
   if (hex(digestOf(td)) !== hex(digest)) refuse('this is not the trade order you asked for');
-  const idOf = (x) => (ua ? hex(bytes32(x)) : String(x).toLowerCase());
-  const warnings = idOf(o.destination) === idOf(none) || idOf(o.destination) === idOf(account) ? []
-    : ['someone else receives the proceeds'];
-  if (same(o.relayer, ZERO_ADDRESS)) warnings.push('any submitter may settle this order and earn the relayer share');
-  return { digest, minFill, warnings };
+  return { digest, minFill, warnings: orderWarnings(o, account, none, ua) };
 }
+
+/** A wrap by signature that is exactly the one the client built (CLI-SGN-35, CLI-SGN-36, TS-D19): the `WrapOrder` (`ua`:
+ *  `UAWrapOrder`) `order` (wrappedToken, amount, minMinted, minFill, fee, relayer, destination, flags, batch, optional
+ *  validUntil) from `account`, in the domain of the underlying `sellToken`. A wrapper can pull `amount`, so it must be on the
+ *  signer's pinned `wrappers`; all or nothing (`minFill = amount`), fee at most 1 %, known flags, non-zero amounts. The server
+ *  supplies only the nonce and, when `order` has none, `validUntil` within the window. Returns {digest, minFill, warnings}. */
+export function checkWrapOrder(td, { account, chainId, chainUid, order, sellToken, wrappers = [], ua = false,
+  now = Math.floor(Date.now() / 1000), maxWindow = 30 * 86400 }) {
+  const type = ua ? 'UAWrapOrder' : 'WrapOrder';
+  if (!td || td.primaryType !== type) refuse('this is not the wrap order you asked for');
+  const got = td.message || {};
+  const none = ua ? ZERO_ID : ZERO_ADDRESS;
+  const o = { minFill: '0', fee: '0', relayer: ZERO_ADDRESS, destination: none, flags: 0, batch: '0', ...order,
+    from: account, nonce: uint(got.nonce, 'the nonce'), validUntil: (order || {}).validUntil ?? got.validUntil };
+  orderTerms(o, false);
+  if (!wrappers.some((w) => same(w, o.wrappedToken))) refuse('the wrapper is not on your chain profile');
+  const amount = uint(o.amount, 'the amount');
+  const minFill = uint(o.minFill, 'minFill');
+  if (amount === 0n || uint(o.minMinted, 'the minimum to mint') === 0n) refuse('the amounts are malformed');
+  if (minFill !== amount) refuse('a wrap by signature mints from this wrapper, all or nothing');
+  deadline(o.validUntil, now, maxWindow);
+  const digest = digestOf(rebuilt(TYPED_OPS[type], { name: (td.domain || {}).name, contract: sellToken, chainId, chainUid, message: o }));
+  if (hex(digestOf(td)) !== hex(digest)) refuse('this is not the wrap order you asked for');
+  return { digest, minFill, warnings: orderWarnings(o, account, none, ua) };
+}
+
+/** `checkWrapOrder` on the UA path: `UAWrapOrder`, `account` and `destination` 32-byte ids. */
+export const checkUAWrapOrder = (td, opts) => checkWrapOrder(td, { ...opts, ua: true });
 
 /** A bid's per-fill minimum in the sell token from a minimum in the base token: `ceil(minBase * amount / receiveAmount)`
  *  (CLI-SGN-35). Refused above `amount`, which the chain would refuse as `BadMinFill`. */

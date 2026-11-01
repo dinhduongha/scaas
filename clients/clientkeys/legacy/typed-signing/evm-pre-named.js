@@ -4,7 +4,8 @@
 // then, so metatx3.json and uatrade_kat.json keep the structs the contracts hash. Not exported, not bundled.
 import { keccak_256, concatBytes, utf8ToBytes, fromHex, hex, abiEncode, bytes32 } from '../../src/bytes.js';
 import {
-  ADD_KEY_SELECTOR, hashTypedData, metaTransferTypedData, metaTxTypedData, padId, payLane, relayRef, uaMetaTransferTypedData,
+  ADD_KEY_SELECTOR, hashTypedData, metaTransferTypedData, metaTxTypedData, padId, payLane, relayRef, uaInvalidateNoncesTypedData,
+  uaMetaTransferTypedData,
 } from '../../src/evm.js';
 
 const ZERO_ADDRESS = '0x' + '00'.repeat(20);

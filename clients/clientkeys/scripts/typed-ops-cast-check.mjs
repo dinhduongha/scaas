@@ -1,11 +1,13 @@
 // typed-signing C1: typed_ops.json against Foundry (alloy), no code of src/ involved: for every row and domain `cast wallet
-// sign --data` over the wallet's JSON gives the row's signature (RFC 6979, so the same digest), and `cast calldata-decode` then
+// sign --data` over the wallet's JSON gives the row's signature (RFC 6979, so the same digest); `cast calldata-decode` gives the
+// row's message, field by field and in the entry's order (scripts/typed-ops-expected.mjs), so a swapped parameter fails; and
 // `cast calldata` over the decoded values gives the row's calldata back byte for byte. Needs `cast` on PATH.
 //   node scripts/typed-ops-cast-check.mjs [typed_ops.json]
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { expectedCall, norm } from './typed-ops-expected.mjs';
 
 const file = process.argv[2] ?? new URL('../../../smartcontracts/vectors/typed/typed_ops.json', import.meta.url);
 const V = JSON.parse(readFileSync(file));
@@ -42,6 +44,9 @@ try {
       signed++;
       if (!d.abi) continue;
       const { data } = JSON.parse(cast('calldata-decode', '--json', d.abi, d.calldata));
+      if (JSON.stringify(norm(data)) !== JSON.stringify(norm(expectedCall(name, r, d)))) {
+        throw new Error(`${name} ${kind}: calldata decodes to ${JSON.stringify(data)}, not the row's message`);
+      }
       const types = members(d.abi.slice(d.abi.indexOf('(')));
       const again = cast('calldata', d.abi, ...types.map((t, i) => arg(t, data[i])));
       if (again !== d.calldata) throw new Error(`${name} ${kind}: cast re-encodes ${again}, row ${d.calldata}`);

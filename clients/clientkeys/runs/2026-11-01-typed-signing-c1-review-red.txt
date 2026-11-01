@@ -1,0 +1,14 @@
+✖ a bool is true or false: 'false' is no truth, in the builder, the hash or the calldata (0.272453ms)
+✖ an omitted expectation is no "expect zero": every own field is the client's, in full (0.479324ms)
+✖ calldata refuses what the entry cannot verify: the missing signature, an encoded account blob; a shared op names its domain (0.482529ms)
+✖ checkOp keeps a relayer or fee recipient the client named: refused when the mode bit would drop it (0.489883ms)
+✖ checkOp refuses a wrap order: its rules cannot be bypassed; the cancel of one still goes through checkCancel (0.846856ms)
+✖ checkWrapOrder: CLI-SGN-35 / -36 on the real WrapOrder; the server supplies only the nonce and an in-window deadline (0.518668ms)
+✔ every typehash pinned: the plan's truncated value, keccak256(typeString), table = vector (3.879902ms)
+✖ failing tests:
+ℹ fail 8
+ℹ pass 36
+ℹ tests 44
+✖ legacy checkCancel: the UA invalidation resolves its builder (0.377321ms)
+✔ the table covers every allowlisted entry of every contract, and only them (3.004943ms)
+✖ typed-ops-cast-check: a swapped parameter is refused against the message, not passed as a round trip (394.774705ms)
