@@ -213,7 +213,7 @@ House rules for every task:
   `_uaAllowed` (the generic path still serves every allowlisted op and atomic mixed batches, CTR-MTX-11). Clients and the
   node build the named typed entry by default and use the generic path only for a mixed batch or an op with no named
   entry. Controller call, owner may override: `mtxExecuteWithFee` is removed (→ legacy), it duplicates `mtxExecute`.
-  `executeMetaTransaction` stays and moves to `UAMetaTxBase` (owner ruling 2026-11-01). The direct (non-meta) functions stay as they are. Mechanism: the
+  `executeMetaTransaction` stays in `MetaTxBase` (owner ruling 2026-11-01). The direct (non-meta) functions stay as they are. Mechanism: the
   named entry builds the op's call and runs the existing ticket self-call (`_selfCall`, as `uaUnwrap` does today), so the
   op bodies and `_msgSender()` semantics are unchanged; nonces are shared with the generic path (one `(from, batch)`
   lane, so the same op cannot be replayed through the other entry).
@@ -742,7 +742,7 @@ message, `structHash`, `digest`, the entry's calldata, a native ECDSA signature)
 **Files:** `MetaTxLib.sol`, `MetaTxBase.sol`, new `UAMetaTxBase.sol` (owner ruling 2026-11-01, Owner rulings below), `MtxPipelineLib.sol`, `ERC20MetaTx.sol`, `MetaTokenBase.sol`,
 `NormalToken.sol`, `WrappedToken.sol`, `IMetaTx.sol`, `IERC20MetaTx.sol`, `IUALedger.sol`, `IWrappedToken.sol`
 (ERC-165 ids re-pinned); the named `ua*` entries take `UASig`; the generic `uaExecute` / `uaBatch` keep `bytes auth` and R1's decode helper (TS-D14); legacy
-`smartcontracts/evm/legacy/typed-signing/` (`mtxExecuteWithFee` only; `executeMetaTransaction` moves to `UAMetaTxBase`, owner 2026-11-01; the four generic entries, their structs and `mtxSelectors` stay, owner 2026-10-31);
+`smartcontracts/evm/legacy/typed-signing/` (`mtxExecuteWithFee` only; `executeMetaTransaction` stays in `MetaTxBase`, owner 2026-11-01; the four generic entries, their structs and `mtxSelectors` stay, owner 2026-10-31);
 tests `test/metatx/*`, `test/v2/*` that used `mtxExecute` / `uaExecute` / `mtxBatch`, new `test/metatx/TypedOps.t.sol`
 (reads `typed_ops.json`), `test/ua/UAMetaTx3Vectors.t.sol`, gas `test/v2/MetaTxGasV2.t.sol` (`AMS_*` re-pinned).
 
@@ -967,9 +967,10 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-35 / -36
   UAMetaTxBase` overrides it with `_uaMove`. Not in `MetaTxBase`: `SmartKeyAccount` and `MandateWallet` stay without a
   registry or UA code. A non-token contract must read `_ticketSubject()`, since `_msgSender()` is `UA_POOL` for every derived
   subject. Pure move, no storage change, no ABI or selector change for tokens; built at the start of C2 with lever 2.
-- **`executeMetaTransaction` stays (owner ruling 2026-11-01, replaces the plan's removal):** kept for EIP-1776 compatibility and
-  moved into `UAMetaTxBase`, so `MetaTxBase`, `SmartKeyAccount` and `MandateWallet` no longer have it. Only `mtxExecuteWithFee` goes
-  to legacy. If the declaration leaves `IMetaTx`, its ERC-165 id changes and is re-pinned.
+- **`executeMetaTransaction` stays (owner ruling 2026-11-01, replaces the plan's removal):** it stays where it is, in `MetaTxBase`
+  and `IMetaTx` beside `mtxExecute`: it signs `address from`, so it is not part of `UAMetaTxBase`. The wallets keep it, no ERC-165 id
+  changes. Only `mtxExecuteWithFee` goes to legacy. It shares the EIP-1776 name only: selector `0x47aea5b5`, against `0x0c53c51c` of
+  the common `executeMetaTransaction(address,bytes,bytes32,bytes32,uint8)`, and ERC-1776 itself defines no such function.
 - **`UARegistry` deploy gate (owner ruling 2026-11-01):** the registry gets a gate like the releases:
   `_requireReleaseGas("UARegistry")` in `DeployBase` and `require_release_gas("UARegistry")` in `e2e.py`, need 88.3 M
   (46,716 B × 1,530 + 2^24), test `test_registryDeployGate`, NET-EVM-06.
