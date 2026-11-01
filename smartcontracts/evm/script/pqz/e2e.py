@@ -1264,7 +1264,7 @@ def run(kd, kr, ke):
     log("\n## 5b. named relayed entries on pqUSD: the entry's own typed struct, ECDSA envelope, ML-DSA-65 envelope, msig envelope and pqzAuth")
     for ua_, what in ((feeua, "fee UA"), (erin, "erin")):
         sd.send(t1, cd("mintToUA(bytes32,uint256)", ["w", "w"], ua_.ua, 20 * SCALE), f"pqUSD mintToUA({what}, 20)")
-    sd.send(t1, cd("mint(address,uint256)", ["w", "w"], se.addr, 20 * SCALE), "pqUSD mint 20 public to the envelope signer")
+    sd.send(t1, cd("mint(address,uint256)", ["w", "w"], se.addr, 50 * SCALE), "pqUSD mint 50 public to the envelope signer")  # 5 left from section 5: 30 shielded, about 8 outer fees
     se0, fee0 = (int.from_bytes(words(call(t1, c))[0], "big") for c in (cd("balanceOf(address)", ["w"], se.addr), cd("balanceOfUA(bytes32)", ["w"], feeua.ua)))
     ad, ud, md = (lambda who=who: Signed(t1, who, pq, sr, SCALE) for who in (se, feeua, erin))
 
