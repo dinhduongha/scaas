@@ -4166,6 +4166,7 @@ dependencies = [
  "ed25519-dalek",
  "eth-keystore",
  "hmac 0.12.1",
+ "ml-dsa",
  "p256",
  "pqcrypto-falcon",
  "pqcrypto-traits",

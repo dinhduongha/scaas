@@ -1,6 +1,7 @@
 //! B2, B3 (U8S-D3–D7): `register` with PQZ / KEM attributes and the later writes against `portable.json` (the authority
 //! for bytes): the bytes stay in contract state, unproven, and `registration_of` returns exactly the `register` arguments,
-//! as EVM `registrationOf`. B4 (U8S-D8, UA8-D18–D20): the relayer-checked mode, a listed relayer's auth mocked.
+//! as EVM `registrationOf`. B4 (U8S-D8, UA8-D18–D20): the relayer-checked mode, a listed relayer's auth mocked. B7 (C15): the
+//! bytes read back against the vector, `ua8-roundtrip.json`.
 extern crate std;
 use std::{format, vec, vec::Vec as StdVec};
 
@@ -1902,4 +1903,98 @@ fn ua8_register_relayer_slots_largest_fit() {
 fn ua8_register_relayer_slots_over_limit() {
     let (env, c, by, m, slots) = slh_msig(8);
     msig_tried(&env, &c, &m, &slots, &by).unwrap().unwrap();
+}
+
+// ---------- B7 (C15): the record bytes, read back against the vector ----------
+
+const ROUND_TRIP: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../vectors/ua8-roundtrip.json");
+
+fn checked_code(c: &Checked) -> u32 {
+    match c {
+        Checked::None => 0,
+        Checked::Chain => 1,
+        Checked::Relayer(_) => 2,
+    }
+}
+
+/// `kem` read back against a row's typed `kem`, field by field.
+fn assert_kem(k: &KemKey, row: &Value, what: &str) {
+    assert_eq!((k.scheme as u64, vecu8(&k.mlkem_ek), k.x25519.to_array().to_vec()),
+               (row["scheme"].as_u64().unwrap(), hx(&row["mlkemEk"]), hx(&row["x25519"])), "{what}");
+}
+
+/// A registered `row` read back through `registration_of` / `kem_key_at` / `pqz_key_of`, every byte against the vector's JSON
+/// and not the values given to `register`; then its KEM records in `order`, each read back the same way, `kem_key_of` sampled
+/// after each write. Returns the row's line of `ua8-roundtrip.json`, all of it read from the contract.
+fn round_trip(env: &Env, c: &UaRegistryClient, row: &Value, order: &[u64], relayer: &Option<Address>) -> Value {
+    let (name, ua) = (row["name"].as_str().unwrap(), n32(env, &row["ua"]));
+    let a = &row["args"]["attrs"];
+    let read = c.registration_of(&ua).unwrap();
+    let (kind, kd, attrs, pop, pqz_pop) = read.clone();
+    assert_eq!((kind, vecu8(&kd)), (kind_of(&row["kind"]), hx(&row["keyData"])), "{name}");
+    assert_eq!((vecu8(&attrs.pqz_key), vecu8(&attrs.pqz_pop_hash.clone().into()), vecu8(&attrs.kem_pk_hash.clone().into())),
+               (hx(&a["pqzKey"]), hx(&a["pqzPopHash"]), hx(&a["kemPkHash"])), "{name}");
+    assert_kem(&attrs.kem, &a["kem"], name);
+    assert_eq!((vecu8(&pop), vecu8(&pqz_pop)), (hx(&row["pop"]), hx(&row["pqzPop"])), "{name}");
+    if hx(&a["kem"]["mlkemEk"]).is_empty() {
+        assert_eq!(c.kem_key_at(&ua, &0), None, "{name}");
+    } else {
+        let (kem, sig, _) = c.kem_key_at(&ua, &0).unwrap();
+        assert_kem(&kem, &a["kem"], name);
+        assert!(sig.is_empty(), "{name}: the pop signed version 0");
+    }
+    let pqz = c.pqz_key_of(&ua);
+    if let Some((key, hash, proven, _)) = &pqz {
+        assert_eq!((vecu8(key), vecu8(&hash.clone().into()), proven), (hx(&a["pqzKey"]), hx(&a["pqzPopHash"]), &false), "{name}");
+    } else {
+        assert!(hx(&a["pqzKey"]).is_empty(), "{name}: the key is in state");
+    }
+
+    let rows = json(PORTABLE)["kemRecords"].as_array().unwrap().clone();
+    let mut max_after = StdVec::new();
+    for v in order {
+        let r = rows.iter().find(|k| k["ua"] == row["ua"] && k["version"] == *v).unwrap();
+        kem_row(env, r).tried_by(c, relayer).unwrap().unwrap();
+        let (kem, sig, _) = c.kem_key_at(&ua, v).unwrap();
+        assert_kem(&kem, &r["args"]["kem"], name);
+        assert_eq!(vecu8(&sig), hx(&r["sig"]), "{name} v{v}");
+        max_after.push(c.kem_key_of(&ua).unwrap().0);
+    }
+    assert_eq!(c.registration_of(&ua).unwrap(), read, "{name}: a later KEM record is no `register` argument");
+    let (p, q, k) = c.checked_of(&ua);
+    serde_json::json!({
+        "name": name, "ua": row["ua"], "kind": kind,
+        "checked": {"pop": checked_code(&p), "pqzPop": checked_code(&q), "kem": checked_code(&k),
+                    "pqzKey": pqz.map(|x| checked_code(&x.3))},
+        "kemOrder": order, "kemMaxAfter": max_after,
+    })
+}
+
+/// C15: the `Chain` rows with their KEM records, a `fndsa512` through the relayer mode with KEM records 3 then 1, `msig-pq`
+/// with its minimal `pop` among the `Chain` rows. `checked` and the KEM order are pinned in `ua8-roundtrip.json`
+/// (`UA8_WRITE=1` writes it, every other run compares), which `e2e_ua8` also takes its order from.
+#[test]
+fn ua8_record_bytes_round_trip() {
+    let mut rows = StdVec::new();
+    for row in chain_rows() {
+        let (env, c, _) = registered(row["name"].as_str().unwrap());
+        let order: &[u64] = if json(PORTABLE)["kemRecords"].as_array().unwrap().iter().any(|k| k["ua"] == row["ua"]) { &[3, 1, 2] } else { &[] };
+        rows.push(round_trip(&env, &c, &row, order, &None));
+    }
+    let (env, c, by) = relayed();
+    let row = derived(PORTABLE, "registrations", "fndsa512");
+    portable_row(&env, &row).on_by(&c, &by);
+    rows.push(round_trip(&env, &c, &row, &[3, 1], &by));
+    assert_eq!(rows.len(), 17);
+    assert_eq!(rows.iter().filter(|r| !r["kemOrder"].as_array().unwrap().is_empty()).count(), 9);
+
+    let got = serde_json::json!({
+        "note": "Generated by ua8_record_bytes_round_trip (UA8_WRITE=1), never edit by hand: what the registry answered for each row of portable.json. checked: 0 none, 1 chain, 2 relayer.",
+        "rows": rows,
+    });
+    if std::env::var("UA8_WRITE").is_ok_and(|v| v == "1") {
+        std::fs::write(ROUND_TRIP, serde_json::to_string_pretty(&got).unwrap() + "\n").unwrap();
+    }
+    let file = std::fs::read_to_string(ROUND_TRIP).expect("vectors/ua8-roundtrip.json: run once with UA8_WRITE=1");
+    assert_eq!(got, serde_json::from_str::<Value>(&file).unwrap(), "the answers moved from ua8-roundtrip.json");
 }

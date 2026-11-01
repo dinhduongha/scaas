@@ -1,4 +1,4 @@
-//! Shared by `e2e_soroban` and `e2e_soroban_ua`: the network (env), keys, the stellar CLI, deploys and the fake Odoo.
+//! Shared by `e2e_soroban`, `e2e_soroban_ua` and `e2e_ua8`: the network (env), keys, the stellar CLI, deploys and the fake Odoo.
 //!
 //! Env (local quickstart defaults; T14 points them at the Stellar testnet):
 //! - `STELLAR_URL` — the RPC endpoint (default `http://127.0.0.1:31980/rpc`, `quickstart.sh`);

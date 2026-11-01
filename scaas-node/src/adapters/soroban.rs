@@ -1246,7 +1246,9 @@ pub fn ua_metatx_job(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &
 
 /// S14 / spec §8: a simulation (recording mode records every `require_auth`) whose auth holds a `SourceAccount` entry
 /// that is not rooted at exactly `call` (with nothing below) fails the job before submission: the node never lends a
-/// lane's authority to another call. Unreadable entries fail closed.
+/// lane's authority to another call. Unreadable entries fail closed. The RPC records only for a transaction with no auth
+/// entry; with one it enforces (`e2e_ua8_simulation_auth_mode`), so for a job carrying the lane's entry this reads back that
+/// entry alone, and the refusal of anything else is the host's, at simulation.
 fn check_recorded_auth(sim: &Value, call: &InvokeContractArgs) -> Result<()> {
     let ours = source_entry(call).root_invocation;
     for e in recorded_auth(sim)? {

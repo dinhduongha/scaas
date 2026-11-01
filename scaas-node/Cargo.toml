@@ -48,3 +48,5 @@ p256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
 # adapters::soroban tests: a fresh `fndsa512` signer for an msig slot of a kind the chain cannot verify (no vector row has one)
 pqcrypto-falcon = { version = "=0.4.1", default-features = false }
 pqcrypto-traits = { version = "=0.3.5", default-features = false }
+# e2e_ua8: seeded `mldsa65` members for the network-fit msigs, at the pin of `scaas-ua`'s `pq`
+ml-dsa = { version = "=0.1.1", default-features = false, features = ["alloc"] }
