@@ -12,6 +12,12 @@ import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 
+/// The wrap-by-signature entry, beside the named `mtxWrap(Envelope, …)` until C6 renames it (TS-D16).
+interface IWrapOrder {
+    function mtxWrap(address underlying, ITradeToken.TradeOrder calldata o, bytes calldata sig)
+        external returns (uint256 minted);
+}
+
 /// A leg whose `mtxTrade` delivers `amount + skew` to `o.dex` (no signature, no checks): a lying underlying.
 contract SkewLeg {
     mapping(address => uint256) public balanceOf;
@@ -160,7 +166,7 @@ contract MtxWrapTest is V2Fixture {
 
     function test_mtxWrap_isNotAllowlisted() public view {
         (bytes4[] memory s,,) = w.mtxSelectors();
-        for (uint256 i; i < s.length; ++i) assertTrue(s[i] != w.mtxWrap.selector);
+        for (uint256 i; i < s.length; ++i) assertTrue(s[i] != IWrapOrder.mtxWrap.selector);
     }
 
     // ------------------------------------------------------------------ more refusals
@@ -240,11 +246,11 @@ contract MtxWrapTest is V2Fixture {
 
     function test_mtxWrap_throughMtxExecuteIsNotAllowlisted() public {
         ITradeToken.TradeOrder memory o = _order(1000, 3000, 0);
-        bytes memory data = abi.encodeCall(w.mtxWrap, (address(u), o, _sig(o)));
+        bytes memory data = abi.encodeCall(IWrapOrder.mtxWrap, (address(u), o, _sig(o)));
         MetaTxLib.MetaTransaction memory m = _call(alice, data, 1, RR);
         bytes memory sig = _signCall(ALICE_PK, address(w), m);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, w.mtxWrap.selector));
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, IWrapOrder.mtxWrap.selector));
         MetaTokenBase(address(w)).mtxExecute(m, sig);
     }
 }

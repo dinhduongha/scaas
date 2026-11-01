@@ -2,6 +2,8 @@
 pragma solidity ^0.8.24;
 
 import {ITradeToken} from "../trade/ITradeToken.sol";
+import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title Kind `WRAPPED` (CTR-TOK-21): 1–8 legs, each an ERC-20 or the native coin (`address(0)`, CTR-TOK-26).
 /// @notice Events and errors raised by `WrappedLib` (an external library) are declared here so that they are in the
@@ -87,6 +89,26 @@ interface IWrappedToken {
     ///         to `o.destination` (0 ⇒ `o.from`), a derived id into the UA ledger.
     function uaWrap(address underlying, ITradeToken.UATradeOrder calldata o, bytes calldata auth)
         external returns (uint256 minted);
+    /// @notice The named typed entries (TS-D14): the envelope, the op's own parameters, the signature.
+    function mtxWrap(MetaTxLib.Envelope calldata e, uint256 amount, bytes calldata sig) external returns (bytes memory);
+    function mtxWrapLeg(MetaTxLib.Envelope calldata e, address underlying, uint256 amount, bytes calldata sig)
+        external returns (bytes memory);
+    function mtxWrapToUA(MetaTxLib.Envelope calldata e, address underlying, uint256 amount, bytes32 to, bytes calldata sig)
+        external returns (bytes memory);
+    function mtxAddReserve(MetaTxLib.Envelope calldata e, address underlying, uint256 amount, bytes calldata sig)
+        external returns (bytes memory);
+    function mtxUnwrap(MetaTxLib.Envelope calldata e, uint256 wrapped, address recipient, uint256 minOut,
+        bytes calldata sig) external returns (bytes memory);
+    function uaUnwrap(MetaTxLib.UAEnvelope calldata e, uint256 wrapped, address recipient, uint256 minOut,
+        IUARegistry.UASig calldata auth) external returns (bytes memory);
+    function mtxUnwrapLeg(MetaTxLib.Envelope calldata e, address underlying, uint256 wrapped, address recipient,
+        uint256 minOut, bytes calldata sig) external returns (bytes memory);
+    function uaUnwrapLeg(MetaTxLib.UAEnvelope calldata e, address underlying, uint256 wrapped, address recipient,
+        uint256 minOut, IUARegistry.UASig calldata auth) external returns (bytes memory);
+    function mtxUnwrapToUA(MetaTxLib.Envelope calldata e, address underlying, uint256 wrapped, bytes32 to, uint256 minOut,
+        bytes calldata sig) external returns (bytes memory);
+    function uaUnwrapToUA(MetaTxLib.UAEnvelope calldata e, address underlying, uint256 wrapped, bytes32 to, uint256 minOut,
+        IUARegistry.UASig calldata auth) external returns (bytes memory);
     function disableWrap(address underlying, bytes32 reason) external;
     function proposeRate(address underlying, uint96 num, uint96 den) external;
     function cancelRate() external;

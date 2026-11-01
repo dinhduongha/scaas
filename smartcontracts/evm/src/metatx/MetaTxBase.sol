@@ -31,6 +31,10 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         uint32 staticLen;
     }
 
+    bytes32 private constant _CANCEL_NONCE_TYPEHASH = keccak256(
+        "CancelNonce(address from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+
     // Transient slots (CTR-MTX-18), written as literals: assembly takes no keccak256 constant.
     bytes32 private constant _GUARD = 0xf92fce36488cd980109789c37ce44669ca2ec8fc93bcd6d944c3a5544f9ce252; // keccak256("scaas.mtx.guard")
     bytes32 private constant _SENDER = 0x6f8cf97d962f34e862325b04dcb64b0eb0b06cf30b06b61c33210ec760df0f0b; // keccak256("scaas.mtx.sender")
@@ -115,6 +119,13 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     function cancelNonce(uint256 batch) external nonReentrant {
         address from = _msgSender();
         emit MetaNonceCancelled(from, batch, _bumpNonce(MetaTxLib.pad(from), batch));
+    }
+
+    /// @notice The signed `cancelNonce(lane)` (TS-D14): `lane` is cancelled, `e.batch` is the lane of the cancel itself.
+    function mtxCancelNonce(MetaTxLib.Envelope calldata e, uint256 lane, bytes calldata sig)
+        external nonReentrant returns (bytes memory)
+    {
+        return _named(_CANCEL_NONCE_TYPEHASH, IMetaTx.cancelNonce.selector, e, abi.encode(lane), sig);
     }
 
     // ------------------------------------------------------------------ pipeline (CTR-MTX-17)

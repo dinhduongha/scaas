@@ -373,7 +373,7 @@ contract NamedShieldPqzTest is PqzFixture {
         bytes32 toUA = _rowHolder(j, "UAShield", address(uint160(uint256(u.from))));
         uint256 amount = VM.parseJsonUint(j, msgField("UAShield", "amount"));
         assertEq(abi.encodeCall(w.uaShield, (u, toUA, amount, VM.parseJsonBytes(j, domainField("UAShield", "pqz", "signature")))),
-            VM.parseJsonBytes(j, domainField("UAShield", "pqz", "calldata")), "C0: `bytes auth` until C2");
+            VM.parseJsonBytes(j, domainField("UAShield", "pqz", "calldata")), "`uaShield` keeps `bytes auth`");
         bytes memory sig = onChain(j, "UAShield", address(w));
         vm.prank(u.relayer);
         w.uaShield(u, toUA, amount, sig);

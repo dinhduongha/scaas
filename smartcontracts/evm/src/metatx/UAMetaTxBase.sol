@@ -5,6 +5,7 @@ import {MetaTxBase} from "./MetaTxBase.sol";
 import {IUALedger} from "./IUALedger.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {MtxPipelineLib} from "./MtxPipelineLib.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title The UA-signed call path on `MetaTxBase` (owner ruling 2026-11-01), for tokens and for contracts that are not.
 /// @notice `uaExecute` is a general entry: any contract on this base takes UA-signed calls of its `_uaAllowed` selectors
@@ -100,13 +101,29 @@ abstract contract UAMetaTxBase is MetaTxBase {
     }
 
     /// @dev `_uaExecute` of a named `ua*` entry (TS-D14), the twin of `_named`.
+    function _namedUA(bytes32 typehash, bytes4 sel, MetaTxLib.UAEnvelope calldata e, bytes memory args,
+        IUARegistry.UASig calldata auth) internal returns (bytes memory)
+    {
+        MetaTxLib.UAMetaTransaction memory m = _uaMetaOf(e, abi.encodePacked(sel, args));
+        return _uaSettle(m, MtxPipelineLib.preNamedUA(
+            _mtxCtx(), typehash, _uaEnvelopeOf(m, 0), args, _callFacts(m.data, true), auth));
+    }
+
+    /// @dev The same for `uaShield`, which keeps `bytes auth` (owner table, 2026-11-01).
     function _namedUA(bytes32 typehash, bytes4 sel, MetaTxLib.UAEnvelope calldata e, bytes memory args, bytes calldata auth)
         internal returns (bytes memory)
     {
-        MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(e.from, abi.encodePacked(sel, args), e.batch,
-            e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient);
+        MetaTxLib.UAMetaTransaction memory m = _uaMetaOf(e, abi.encodePacked(sel, args));
         return _uaSettle(m, MtxPipelineLib.preNamed(
             _mtxCtx(), typehash, _uaEnvelopeOf(m, 0), args, _callFacts(m.data, true), true, auth));
+    }
+
+    /// @dev The `UAMetaTransaction` a named entry runs as (the binding hooks and the fee read it).
+    function _uaMetaOf(MetaTxLib.UAEnvelope calldata e, bytes memory data)
+        private pure returns (MetaTxLib.UAMetaTransaction memory)
+    {
+        return MetaTxLib.UAMetaTransaction(e.from, data, e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee,
+            e.feeRecipient);
     }
 
     /// @dev Steps 5-7 of the UA path.

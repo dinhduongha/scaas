@@ -32,8 +32,6 @@ interface IMetaTokenV2 is IERC20Payment {
         uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata signature
     ) external returns (bool);
 
-    function mtxExecuteWithFee(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
-        external returns (bytes memory);
 
     function mtxPay(
         address from, address to, uint256 amount, bytes32 payId, uint256 validUntil,

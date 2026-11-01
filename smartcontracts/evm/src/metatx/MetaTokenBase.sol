@@ -187,14 +187,6 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         return true;
     }
 
-    /// @notice `mtxExecute` that says "this intent pays a fee": fee nibble ≠ `NONE`.
-    function mtxExecuteWithFee(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
-        external nonReentrant returns (bytes memory)
-    {
-        if (m.mode & MetaTxLib.MODE_FEE_MASK == 0) revert MtxModeShape(m.mode);
-        return _execute(m, signature);
-    }
-
     /// @notice Payment `payId` on its own lane `payLane(payId)`, nonce 0 (CTR-MTX-10).
     function mtxPay(
         address from, address to, uint256 amount, bytes32 payId, uint256 validUntil,

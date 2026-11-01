@@ -59,14 +59,17 @@ contract MetaTxGasV2Test is Test {
     // no7702 (owner ruling D3, 2026-10-30): P is a bound-relayer (`MODE_RESTRICT_RELAYER`) row, so it pays the designator
     // guard on the relayer (+313 warm EXTCODESIZE path); it sat inside BUDGET until the review fixes moved the bytecode
     // metadata (and with it the CREATE2 addresses and signature bytes) by a few gas: P re-measured 189,800 (+304).
-    uint256 constant AMS_A = 87_936;
-    uint256 constant AMS_B = 185_844;
-    uint256 constant AMS_C = 103_751;
-    uint256 constant AMS_D = 103_666;
-    uint256 constant AMS_E = 103_744;
-    uint256 constant AMS_F = 185_868;
-    uint256 constant AMS_G = 182_453;
-    uint256 constant AMS_P = 189_800;
+    // typed-signing C2 re-measured on lever 2, `UAMetaTxBase` and the named entries: A 87,940, B 185,848, C 103,743, D 103,658,
+    // E 104,049 (E is a bound-relayer row too: the +313 of the guard above, left inside BUDGET until now), F 185,848,
+    // G 182,502, P 189,813.
+    uint256 constant AMS_A = 87_940;
+    uint256 constant AMS_B = 185_848;
+    uint256 constant AMS_C = 103_743;
+    uint256 constant AMS_D = 103_658;
+    uint256 constant AMS_E = 104_049;
+    uint256 constant AMS_F = 185_848;
+    uint256 constant AMS_G = 182_502;
+    uint256 constant AMS_P = 189_813;
     address signer;
     address relayer = address(0xBEEF);
     address recipient = address(0xCAFE);

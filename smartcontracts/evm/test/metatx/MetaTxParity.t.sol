@@ -641,7 +641,7 @@ abstract contract ParityCases is ParityIO {
 
     // ------------------------------------------------------------------ one case per entry shape
 
-    /// `mtxExecute` / `executeMetaTransaction` / `mtxExecuteWithFee` on `m`.
+    /// `mtxExecute` / `executeMetaTransaction` on `m`.
     function _pMx(Tk memory k, string memory entry, string memory name, string memory expect, bytes4 sel,
         MetaTxLib.MetaTransaction memory m, bytes memory sig, address caller) internal
     {
@@ -772,13 +772,6 @@ abstract contract ParityCases is ParityIO {
         _pMx(k, "executeMetaTransaction", "err_badNonce", "", IMetaTx.executeMetaTransaction.selector, m, _pSgM(k, m), k.relayer);
         m = _pMt(k, _pAmt(k, P_BIG), 0, P_RR | P_PCT, 20_000, address(0));
         _pMx(k, "executeMetaTransaction", "bothFail_feeExceedsCap_callReverts", "fee-error-first", IMetaTx.executeMetaTransaction.selector, m, _pSgM(k, m), k.relayer);
-        // mtxExecuteWithFee
-        m = _pMt(k, _pCancel(7), 0, P_RR | P_RF | P_FIX, 5, k.feeTo);
-        _pMx(k, "mtxExecuteWithFee", "ok_fixedFee", "", MetaTokenBase.mtxExecuteWithFee.selector, m, _pSgM(k, m), k.relayer);
-        m = _pMt(k, _pAmt(k, 100_000), 0, P_RR | P_PCT, 1_000, address(0));
-        _pMx(k, "mtxExecuteWithFee", "ok_percentFee", "", MetaTokenBase.mtxExecuteWithFee.selector, m, _pSgM(k, m), k.relayer);
-        m = _pMt(k, _pCancel(7), 0, P_RR, 0, address(0));
-        _pMx(k, "mtxExecuteWithFee", "err_modeShape_noFeeNibble", "", MetaTokenBase.mtxExecuteWithFee.selector, m, _pSgM(k, m), k.relayer);
     }
 
     function _pMtxBatch(Tk memory k) internal {
@@ -1689,10 +1682,9 @@ abstract contract ParityCases is ParityIO {
         }
     }
 
-    /// §3.8 on the remaining entries: `mtxExecuteWithFee`, an `mtxBatch` item and a `uaBatch` item break the fee rule AND revert.
+    /// §3.8 on the remaining entries: an `mtxBatch` item and a `uaBatch` item break the fee rule AND revert.
     function _pBothFailMore(Tk memory k) internal {
         MetaTxLib.MetaTransaction memory m = _pMt(k, _pAmt(k, P_BIG), 0, P_RR | P_PCT, 20_000, address(0));
-        _pMx(k, "mtxExecuteWithFee", "bothFail_feeExceedsCap_callReverts", "fee-error-first", MetaTokenBase.mtxExecuteWithFee.selector, m, _pSgM(k, m), k.relayer);
         MetaTxLib.MetaTransaction[] memory ms = new MetaTxLib.MetaTransaction[](2);
         bytes[] memory sg = new bytes[](2);
         ms[0] = _pMt(k, _pCancel(7), 0, P_RR, 0, address(0));

@@ -311,18 +311,6 @@ contract BaseTest is V2Fixture {
         }
         vm.expectRevert(abi.encodeWithSelector(e, RF | PCT));
         t.mtxTransferWithFee(alice, shop, 1, 1, 0, vu, RF | PCT, relayer, 1, address(0), "");
-        MetaTxLib.MetaTransaction memory m = _call(alice, abi.encodeCall(t.cancelNonce, (1)), 1, RR | RF);
-        vm.expectRevert(abi.encodeWithSelector(e, RR | RF));
-        t.mtxExecuteWithFee(m, "");
-        // with a fee nibble it runs: `cancelNonce` is ABSOLUTE, the signed fee is charged after the call
-        m = _call(alice, abi.encodeCall(t.cancelNonce, (1)), 2, RR | RF | FIX);
-        m.fee = 3;
-        m.feeRecipient = feeTaker;
-        bytes memory s = _signCall(PK, address(t), m);
-        vm.prank(relayer);
-        t.mtxExecuteWithFee(m, s);
-        assertEq(t.mtxNonce(alice, 1), 1);
-        assertEq(t.balanceOf(feeTaker), 3);
     }
 
     /// L5: `fee` không bị canonical-zero hoá dưới `NONE`. Đường chung nhận; `mtxTransfer` đặt `fee = 0` nên

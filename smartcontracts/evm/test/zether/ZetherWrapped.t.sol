@@ -26,6 +26,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UACall} from "../ua/UACall.sol";
+import {IWrapOrder} from "../v2/MtxWrap.t.sol";
 
 /// A leg that calls back into the token when the token pays it out or pulls it (an ERC-777-style hook).
 contract HookLeg is MockERC20 {
@@ -595,7 +596,7 @@ contract ZetherWrappedTest is ZetherFixture {
             abi.encodeWithSignature("cancelRate()"),
             abi.encodeWithSignature("executeRate()"),
             abi.encodeWithSignature("disableWrap(address,bytes32)", address(usd), bytes32(0)),
-            abi.encodeWithSelector(IWrappedToken.mtxWrap.selector)
+            abi.encodeWithSelector(IWrapOrder.mtxWrap.selector)
         ];
         for (uint256 i; i < refused.length; ++i) {
             _relay(refused[i], 100 + i, abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(refused[i])));

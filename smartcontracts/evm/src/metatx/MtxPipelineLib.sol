@@ -81,6 +81,15 @@ library MtxPipelineLib {
         return _pre(c, e, _namedHash(typehash, e, args), f, ua, auth);
     }
 
+    /// @notice `preNamed` of a named `ua*` entry (TS-D14): the same steps, the `UASig` goes to the registry as it came.
+    function preNamedUA(Ctx calldata c, bytes32 typehash, Envelope calldata e, bytes calldata args, CallFacts calldata f,
+        IUARegistry.UASig calldata auth) external returns (Out memory o)
+    {
+        o.digest = _open(c, e, _namedHash(typehash, e, args), true);
+        _authorize(c, e.from, UAKinds.PURPOSE_METATX, o.digest, auth);
+        _close(o, e, f, true);
+    }
+
     /// @notice CTR-MTX-23 steps 1-4 of the typed path. `t` in the UAMetaTransfer layout; the address path passes padded
     ///         ids. `have` = the payer's balance, read by the token before the call.
     function preTransfer(Ctx calldata c, MetaTxLib.UAMetaTransfer calldata t, bool ua, uint256 have,
@@ -251,15 +260,22 @@ library MtxPipelineLib {
     function _pre(Ctx calldata c, Envelope calldata e, bytes32 structHash, CallFacts calldata f, bool ua,
         bytes calldata auth) private returns (Out memory o)
     {
+        o.digest = _open(c, e, structHash, ua);
+        if (ua) _authorize(c, e.from, UAKinds.PURPOSE_METATX, o.digest, auth);
+        else _requireSignature(c, _native(e.from), o.digest, auth);
+        _close(o, e, f, ua);
+    }
+
+    /// @dev What runs before the signature: ledger on, envelope, digest.
+    function _open(Ctx calldata c, Envelope calldata e, bytes32 structHash, bool ua) private view returns (bytes32) {
         if (ua && c.registry == address(0)) revert IUALedger.UALedgerOff();
         if (_checkEnvelope(e.from, e.batch, e.nonce, e.validUntil, e.mode, e.relayer)) revert IMetaTx.SelfSender();
-        o.digest = MessageHashUtils.toTypedDataHash(c.domainSeparator, structHash);
-        if (ua) {
-            _authorize(c, e.from, UAKinds.PURPOSE_METATX, o.digest, auth);
-            if (f.len < 4 || !f.uaAllowed) revert IUALedger.MetaTxUnknownOp(f.sel);
-        } else {
-            _requireSignature(c, _native(e.from), o.digest, auth);
-        }
+        return MessageHashUtils.toTypedDataHash(c.domainSeparator, structHash);
+    }
+
+    /// @dev What runs after it: the UA allowlist, call shape, nonce, fee.
+    function _close(Out memory o, Envelope calldata e, CallFacts calldata f, bool ua) private {
+        if (ua && (f.len < 4 || !f.uaAllowed)) revert IUALedger.MetaTxUnknownOp(f.sel);
         _checkCall(f.sel, f.len, f.feeClass, f.amountArg, f.staticLen, e.mode, MetaTxLib.MODE_KNOWN_MASK);
         _useNonce(e.from, e.batch);
         (o.fee, o.feeTo) = _callFee(
@@ -281,6 +297,20 @@ library MtxPipelineLib {
         if (!UAKinds.inNativeSpace(from)) {
             return IUARegistry(c.registry).requireAuthorized(from, purpose, digest, UAKinds.uaSig(from, auth)); // R1 → C2
         }
+        _authorizeNative(c, from, digest, auth);
+    }
+
+    /// @dev The rule above for a `UASig`: a native id signs with `auth.signature`.
+    function _authorize(Ctx calldata c, bytes32 from, bytes32 purpose, bytes32 digest, IUARegistry.UASig calldata auth)
+        private view
+    {
+        if (!UAKinds.inNativeSpace(from)) {
+            return IUARegistry(c.registry).requireAuthorized(from, purpose, digest, auth);
+        }
+        _authorizeNative(c, from, digest, auth.signature);
+    }
+
+    function _authorizeNative(Ctx calldata c, bytes32 from, bytes32 digest, bytes calldata auth) private view {
         address a = address(uint160(uint256(from)));
         if (a == address(0)) revert IUALedger.UANotRegistered(from);
         if (a == MetaTxLib.UA_POOL) revert IUALedger.UAPoolNotPayable();

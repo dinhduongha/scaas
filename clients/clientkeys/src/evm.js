@@ -231,7 +231,7 @@ const OPS = {
   AddReserve: { fields: 'address underlying,uint256 amount', on: WRAPPED },
   WrapToUA: { fields: 'address underlying,uint256 amount,bytes32 to', on: WRAPPED },
   UnwrapToUA: { fields: 'address underlying,uint256 wrapped,bytes32 to,uint256 minOut', on: WRAPPED, ua: true, amount: 'wrapped' },
-  // `uaBytes`: the C0 spike's `uaShield` takes `bytes auth` until C2 moves the `ua*` entries to `UASig`.
+  // `uaBytes`: `uaShield` keeps the C0 spike's `bytes auth` (plan, Owner rulings); every other `ua*` entry takes `UASig`.
   Shield: { fields: 'bytes32 toUA,uint256 amount', on: CONFIDENTIAL, ua: true, uaBytes: true },
   WrapShield: { fields: 'address underlying,uint256 amountIn,bytes32 toUA', on: WRAPPED_CONFIDENTIAL },
   RollOver: { fields: 'bytes32 ua,uint256 n', on: CONFIDENTIAL, ua: true },
