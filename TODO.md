@@ -218,6 +218,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      `registerFrost`, `KemKey`, `UASig`, hash-committed KEM key filled by `setKemKey(ua, 0, …)`) built on branch `typed-signing`, docs done
      (CTR-UA-07, -16, -32, -33, -35, -36, CLI-SGN-41); gates and whole-branch review (PG / PRV) done; `main` does not hold them yet: the 2026-11-01 merge was taken back (owner), a PR comes when the owner asks. Part C: C0 (pattern, size levers) and C1 (clientkeys builders, `typed_ops.json`) built; not done: C2–C8
      (named typed entries; until C2 the tokens keep `bytes auth`, converted by `UAKinds.uaSig`), Part N (node explicit job API).
+     **Status 2026-11-01:** C0, C1, C2, C3, C5 built with their reviews; C3's fix round is owed (plan, Owner rulings), then C4, C6, C7, C8, N1, N2, CD, CG, CRV.
      **`ua8-soroban` hand-over, after merging `main` (TS-D9):** resolve `ua-portable-vectors.mjs`, `ua-signers.mjs`, `ua-rs/src/ua8.rs`, `portable.json`
      by taking `main`'s typed code plus M1's minimal-slot code and regenerating; B1 adds the `UAPqzKey` / `UAPqzKeyRecord` typehashes on
      `ua-common` `portable_digest` and the typed `kem_record_digest`, `pqz_key_digest`, `pqz_key_record_digest` (the helpers live in `ua-common`, not `digest.rs`);
