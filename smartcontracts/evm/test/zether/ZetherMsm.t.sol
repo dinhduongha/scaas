@@ -137,7 +137,7 @@ contract ZetherMsmTest is ZetherMsmCorpus {
     function _reprove(uint8 op, bytes memory st) internal view returns (bytes memory pr) {
         if (op == 0) return _proveTransfer(Case(B, 300, 300, FEE, true), st);
         if (op == 2) return _proveBurn(st, XF, B - 400 - FEE);
-        (, pr) = _multi(multiM, true);
+        (, pr) = _multi(multiM, !multiNoAud);
     }
 
     /// @dev The state after `sigma.c` and `ρ` of a proof, as zether.md §9.1 derives them.
@@ -207,6 +207,7 @@ contract ZetherMsmTest is ZetherMsmCorpus {
     }
 
     uint256 multiM; // the leg count `_reprove` proves
+    bool multiNoAud;
 
     function test_eachTransferEquationAloneRefused() public {
         (bytes memory st,) = _transfer(true);
@@ -286,6 +287,44 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         _broken(1, 6, 12, st, sig); // A_Vb, E8
     }
 
+    // ------------------------------------------------------------------ the largest form, M = 16
+
+    /// @dev 559 points, honest `O`, then the last two range proofs each broken alone: `eqs` Σ equations before them.
+    function _m16(bool aud, uint256 eqs) internal returns (bytes memory st) {
+        multiM = 16;
+        multiNoAud = !aud;
+        bytes memory pr;
+        (st, pr) = _multi(16, aud);
+        assertTrue(_ok(1, st, pr), "honest");
+        (bytes memory sum, uint256 n) = _fold(1, st, pr);
+        assertEq(n, 559, "131 + 12 + 16 + 25 x 16");
+        assertEq(sum, new bytes(P), "honest: O");
+        Form memory f = Form(1, st, (6 + 5 * 16) * P, (4 + 3 * 16) * 32, eqs);
+        _rangePin(f, 15, 115); // BP(v_16)
+        _rangePin(f, 16, 64);  // BP(b'), the last two of the `e` equations
+    }
+
+    /// `e` = 103: E1 E2, 4 × 16 leg equations, E4 E5 E8, 2 × 17 range equations.
+    function test_m16_auditorOn() public {
+        bytes memory st = _m16(true, 69);
+        uint256 sig = (6 + 5 * 16) * P;
+        _broken(1, 6 + 5 * 15 + 2, 62, st, sig); // A_out_16, E3
+        _broken(1, 6 + 5 * 15 + 3, 63, st, sig); // A_aud_16, E6
+        _broken(1, 6 + 5 * 15 + 4, 64, st, sig); // A_Daud_16, E6′
+        _broken(1, 6 + 5 * 15 + 5, 65, st, sig); // A_Vv16, E7
+        _broken(1, 4, 66, st, sig);              // A_deb, E4
+        _broken(1, 6, 68, st, sig);              // A_Vb, E8
+    }
+
+    /// `e` = 71: no E6, no E6′.
+    function test_m16_auditorOff() public {
+        bytes memory st = _m16(false, 37);
+        uint256 sig = (6 + 5 * 16) * P;
+        _broken(1, 6 + 5 * 15 + 2, 32, st, sig); // A_out_16, E3
+        _broken(1, 6 + 5 * 15 + 5, 33, st, sig); // A_Vv16, E7
+        _broken(1, 5, 35, st, sig);              // A_bal, E5
+    }
+
     // ------------------------------------------------------------------ auditor off: the fields no equation reads
 
     /// With the auditor off no equation reads these, so a tampered copy of an honest row proves nothing: it moves `c` and
@@ -359,15 +398,34 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         assertFalse(_ok(0, st, _cancelling(pr, honest)), "the honest proof's weight");
     }
 
-    /// `ρ = 0` would keep only the first equation: refused by the check, not by luck. BP-1 alone holds on this proof.
-    function test_zeroRhoRefused() public view {
+    /// @dev `verifyFold` on a range proof whose BP-2 is false and whose BP-1 holds, with no Σ terms.
+    function _foldBroken(uint256 rho, uint256 weight) internal view returns (bool) {
         (bytes memory st, bytes memory pr) = _transfer(true);
         (bytes32 s1,) = _rho(st, pr, 10 * P);
         uint256[] memory at = new uint256[](1);
         at[0] = 131;
         bytes memory bp = _at(pr, 10 * P + 192, BP_LEN);
-        _setWord(bp, BP_LEN - 32, addmod(_word(bp, BP_LEN - 32), 1, R)); // BP-2 broken
-        assertFalse(ip.verifyFold(s1, IZetherInnerProductVerifier.SigmaFold(0, 1, _point(pr, 0), new uint256[](132), at), bp));
+        _setWord(bp, BP_LEN - 32, addmod(_word(bp, BP_LEN - 32), 1, R));
+        return ip.verifyFold(s1, IZetherInnerProductVerifier.SigmaFold(rho, weight, _point(pr, 0), new uint256[](132), at), bp);
+    }
+
+    /// `ρ ≡ 0` would keep only the first range equation: refused by the check, not by luck, in both spellings.
+    function test_zeroRhoRefused() public view {
+        assertFalse(_foldBroken(0, 1), "rho 0");
+    }
+
+    function test_rhoEqualToOrderRefused() public view {
+        assertFalse(_foldBroken(R, 1), "rho r");
+    }
+
+    /// Weight `≡ 0` switches every range equation off, so any range proof would pass. The token cannot reach it (`ρ^e ≠ 0`);
+    /// `verifyFold` is public and refuses it anyway.
+    function test_zeroWeightRefused() public view {
+        assertFalse(_foldBroken(5, 0), "weight 0");
+    }
+
+    function test_weightEqualToOrderRefused() public view {
+        assertFalse(_foldBroken(5, R), "weight r");
     }
 
     /// Requirement 4: every shared slot starts at `r − 1`, its `+1` a copy of the generator in the caller's points. The range
@@ -438,6 +496,31 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         assertFalse(ok, "at any position of the input");
         (ok,) = address(0x0c).staticcall{gas: GAS}(abi.encodePacked(uint256(0), uint256(1), uint256(0), uint256(1), uint256(0)));
         assertFalse(ok, "off the curve, scalar 0");
+    }
+
+    /// @dev `isSupportedOnThisChain` on a chain whose G1MSM answers `input` with `out` instead of refusing it.
+    function _supportedWhenAccepted(bytes memory input, bytes memory out) internal returns (bool ok) {
+        vm.mockCall(address(0x0c), input, out);
+        ok = v.isSupportedOnThisChain();
+        vm.clearMockedCalls();
+    }
+
+    /// The probe holds the fold's precondition (requirement 3): a G1MSM that skips the subgroup check, alone or on a zero-scalar
+    /// term, is refused, and each probe does it alone. `[1]T = T` and `[1]G + [0]T = G` are what such a chain would answer.
+    function test_supportProbeRefusesMsmWithoutSubgroupCheck() public {
+        bytes memory t = _lowOrder();
+        bytes memory g = G1Bls12381.generator();
+        assertTrue(v.isSupportedOnThisChain(), "a compliant chain");
+        assertFalse(_supportedWhenAccepted(abi.encodePacked(t, uint256(1)), t), "G1MSM(T, 1) accepted");
+        assertFalse(_supportedWhenAccepted(abi.encodePacked(g, uint256(1), t, uint256(0)), g), "G1MSM(G, 1, T, 0) accepted");
+        assertTrue(v.isSupportedOnThisChain(), "compliant again");
+    }
+
+    /// Both probes fail by design on a compliant chain, and a failed precompile burns all it is sent. `ZetherLib.init` reads
+    /// an out-of-gas probe as an unsupported chain, so an uncapped probe would refuse the chains it must accept.
+    function test_supportProbeIsCapped() public view {
+        (bool ok, bytes memory out) = address(v).staticcall{gas: 500_000}(abi.encodeCall(v.isSupportedOnThisChain, ()));
+        assertTrue(ok && out.length == 32 && abi.decode(out, (uint256)) == 1, "the probe spent the call's gas");
     }
 
     /// Each of `n` points at `off`: moved out of the subgroup by the order-3 point, it must reach G1MSM and revert.

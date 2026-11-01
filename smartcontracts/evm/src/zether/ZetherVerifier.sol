@@ -190,12 +190,12 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
         b.n = 64;
         b.k = 6;
         b.sOff = (4 + 2 * b.k) * b.p;
-        b.rho = sigma.rho;
-        b.wt = sigma.weight;
+        b.rho = sigma.rho % b.r;
+        b.wt = sigma.weight % b.r;
         b.at = sigma.scalars.length;
         uint256 len = b.sOff + 160;
         uint256 m = sigma.commitments.length;
-        if (b.rho == 0 || rangeProofs.length != m * len || sigma.points.length + SLOT_EXT * b.p != b.at * b.p) {
+        if (b.rho == 0 || b.wt == 0 || rangeProofs.length != m * len || sigma.points.length + SLOT_EXT * b.p != b.at * b.p) {
             return (false, st);
         }
         bytes memory pts = _foldStart(b, sigma, m);
@@ -368,7 +368,8 @@ abstract contract ZetherVerifierBase is ZetherCurve {
     uint256 internal constant NB = 64;
     /// @dev Statement header (zether.md §7, `…/v3`): 16 words, `chainUid` the 4th (CTR-ZTH-36), the salt the 14th
     ///      (CTR-ZTH-30), `memoHash` the 15th (CTR-ZTH-50), `validUntilBlock` the 16th (review C0-9: the token checks it, the
-    ///      proof binds it); `fee` and `amount` are read here.
+    ///      proof binds it); `fee` and `amount` are read here, mod `r` with no range check: E5 is a congruence, and the
+    ///      token bounds `fee < 2^64`, `0 < amount ≤ maxShielded ≤ 2^54` before it builds the header (zether.md §8.1, §8.2).
     uint256 internal constant HEADER = 512;
     uint256 internal constant FEE_AT = 288;
     uint256 internal constant AMOUNT_AT = 352;
@@ -743,6 +744,7 @@ abstract contract ZetherBurnVerifierBase is ZetherVerifierBase, IZetherBurnVerif
 ///         trong mọi G1MSM.
 abstract contract ZetherBls12381Curve is ZetherCurve {
     bytes internal constant GEN_DST = "SCAAS-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_";
+    uint256 internal constant PROBE_GAS = 100_000; // EIP-2537 prices these calls at 12,000 and 21,312
 
     function _psidLabel() internal pure override returns (string memory) {
         return "scaas/zether/sigma-bullets/bls12-381/n64-n64/v3"; // v3: review C0-1 (per-leg t_j), C0-9 (validUntilBlock)
@@ -750,13 +752,21 @@ abstract contract ZetherBls12381Curve is ZetherCurve {
 
     function curveName() external pure returns (string memory) { return "bls12-381"; }
 
-    /// @dev Probe cả G1ADD và G1MSM: G + G == [2]G. Precompile vắng mặt trả 0 byte ⇒ false.
+    /// @dev Probe cả G1ADD và G1MSM: G + G == [2]G. Precompile vắng mặt trả 0 byte ⇒ false. Then the check the fold rests on
+    ///      (zether.md §9.1): G1MSM must refuse the order-3 point `(0, 2)`, alone and at scalar 0 beside a good term. Both
+    ///      calls fail on every compliant chain and a failed precompile burns all it is sent, so each is capped at
+    ///      `PROBE_GAS`: the exception to CTR-ZTH-15, and `ZetherLib.init` reads an out-of-gas probe as an unsupported chain.
     function isSupportedOnThisChain() external view returns (bool) {
         bytes memory g = G1Bls12381.generator();
         (bool ok, bytes memory sum) = address(0x0b).staticcall(bytes.concat(g, g));
         if (!ok || sum.length != 128) return false;
         (bool ok2, bytes memory dbl) = address(0x0c).staticcall(abi.encodePacked(g, uint256(2)));
-        return ok2 && dbl.length == 128 && keccak256(sum) == keccak256(dbl) && !G1Bls12381.isIdentity(sum);
+        if (!ok2 || dbl.length != 128 || keccak256(sum) != keccak256(dbl) || G1Bls12381.isIdentity(sum)) return false;
+        bytes memory t = abi.encodePacked(uint256(0), uint256(0), uint256(0), uint256(2));
+        (bool taken,) = address(0x0c).staticcall{gas: PROBE_GAS}(abi.encodePacked(t, uint256(1)));
+        if (taken) return false;
+        (taken,) = address(0x0c).staticcall{gas: PROBE_GAS}(abi.encodePacked(g, uint256(1), t, uint256(0)));
+        return !taken;
     }
 
     function _pointBytes() internal pure override returns (uint256) { return 128; }

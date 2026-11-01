@@ -34,7 +34,8 @@ interface IZetherVerifierCommon {
 
     /// @notice Precompile mà verifier cần có thật và trả đúng vector đã biết trên chain này không.
     /// @dev Precompile vắng mặt trả về staticcall THÀNH CÔNG với output rỗng — không revert, không
-    ///      triệu chứng lúc deploy. Factory gọi hàm này và từ chối nếu false.
+    ///      triệu chứng lúc deploy. Factory gọi hàm này và từ chối nếu false. It also requires G1MSM to refuse a point
+    ///      outside the subgroup, which the merged check rests on (zether.md §9.1).
     function isSupportedOnThisChain() external view returns (bool);
 
     /// @notice Blob generator NUMS `h ‖ U ‖ G_0..G_63 ‖ H_0..H_63` (§3), tính trong constructor.
@@ -49,6 +50,8 @@ interface IZetherVerifier is IZetherVerifierCommon {
     /// @notice Kiểm proof chuyển khoản (đặc tả §6–§9). `statement` do token dựng từ storage.
     /// @dev Verifier KHÔNG kiểm `chainId`/token trong header — đó là việc của token, nó tự dựng
     ///      header từ `block.chainid`/`address(this)`. Verifier chỉ kiểm `opTag` và `proofSystemId`.
+    ///      Precondition: the header's `fee` and `amount` enter E5 mod `r`, a congruence, with no range check here. The token
+    ///      bounds `fee < 2^64` and `0 < amount ≤ maxShielded ≤ 2^54` first, so `E5` holds over the integers (§8.1, §8.2).
     function verifyTransfer(bytes calldata statement, bytes calldata proof) external view returns (bool);
 
     /// @notice Transfer tới nhiều người nhận (zether.md §7.1 multi).
@@ -78,8 +81,9 @@ interface IZetherBurnVerifier is IZetherVerifierCommon {
 interface IZetherInnerProductVerifier is IZetherVerifierCommon {
     /// @notice The caller's side of the merged check, before the range proofs. A fold slot is a position of
     ///         `G ‖ Hb ‖ U ‖ G_0..63 ‖ H_0..63 ‖ points`.
-    /// @param rho the fold challenge, `≠ 0` or the call answers false.
-    /// @param weight the weight of the first range-proof equation: `ρ^e` after the caller's `e` equations.
+    /// @param rho the fold challenge; `≡ 0` mod `r` and the call answers false.
+    /// @param weight the weight of the first range-proof equation: must be `ρ^e ≠ 0` after the caller's `e` equations; `≡ 0`
+    ///        mod `r` would switch every range equation off, and the call answers false.
     /// @param points the caller's untrusted points, concatenated, slots from 131.
     /// @param scalars the caller's weighted sum per slot, `131 + points` entries.
     /// @param commitments the slot of each range proof's commitment `V`, in proof order.

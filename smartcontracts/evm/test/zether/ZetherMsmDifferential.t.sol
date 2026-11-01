@@ -21,7 +21,6 @@ interface IInnerProductOf {
 contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
     using stdJson for string;
 
-    uint256 constant GAS = 20_000_000; // a bad point burns all it is sent; M ≤ 3 verifies well inside this
     uint8 constant TRANSFER = 0;
     uint8 constant MULTI = 1;
     uint8 constant BURN = 2;
@@ -32,6 +31,7 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
 
     IZetherVerifier oldT;
     IZetherBurnVerifier oldB;
+    uint256 gasCap = 20_000_000; // a bad point burns all it is sent; M ≤ 3 verifies well inside this
     uint256[3][3] tally; // tally[old][new]
     bool validPoints;
 
@@ -66,7 +66,7 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
     function _verdict(IZetherVerifier t, IZetherBurnVerifier b, uint8 op, bytes memory st, bytes memory pr)
         internal view returns (uint8)
     {
-        try this.verify{gas: GAS}(t, b, op, st, pr) returns (bool ok) { return ok ? YES : NO; } catch (bytes memory e) {
+        try this.verify{gas: gasCap}(t, b, op, st, pr) returns (bool ok) { return ok ? YES : NO; } catch (bytes memory e) {
             if (t == v) assertTrue(e.length == 4 && bytes4(e) == G1Bls12381.BadPoint.selector, "a revert other than BadPoint");
             return REVERT;
         }
@@ -288,6 +288,19 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
         }
     }
 
+    /// The largest form, and the first past it: M = 17 is proved in full, so only the recipient limit refuses it.
+    function test_m16AndM17() public {
+        gasCap = 200_000_000;
+        (bytes memory st, bytes memory pr) = _multi(16, true);
+        assertTrue(_same(MULTI, st, pr), "M = 16, auditor");
+        (st, pr) = _multi(16, false);
+        assertTrue(_same(MULTI, st, pr), "M = 16, no auditor");
+        (st, pr) = _multi(16, true, 1);
+        assertFalse(_same(MULTI, st, pr), "M = 16, cheating balance");
+        (st, pr) = _multi(17, true);
+        assertFalse(_same(MULTI, st, pr), "M = 17");
+    }
+
     function test_mutatedSolidityRows() public {
         (bytes memory st, bytes memory pr) = _multi(1, true);
         _sigmaAndStatementRows(_shape(MULTI, 1), st, pr);
@@ -316,7 +329,7 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
     }
 
     function _range(IZetherVerifier t, bytes32 s, bytes memory V, bytes memory bp) internal view returns (bool, bytes32) {
-        try this.range{gas: GAS}(t, s, V, bp) returns (bool ok, bytes32 out) { return (ok, out); } catch { return (false, s); }
+        try this.range{gas: gasCap}(t, s, V, bp) returns (bool ok, bytes32 out) { return (ok, out); } catch { return (false, s); }
     }
 
     function range(IZetherVerifier t, bytes32 s, bytes memory V, bytes memory bp) external view returns (bool, bytes32) {
