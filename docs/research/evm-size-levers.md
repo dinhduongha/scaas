@@ -134,3 +134,22 @@ Measured on a scratch copy at typed-signing C2, not built on the branch. Owner r
 - **R2 costs:** `register` about +6 k regular gas, `registerMsig` about +8.8 k, total bytes +27 %. The hot path stays: `requireAuthorized` within +37 gas. The 53 selectors stay; `SSTORE2WriteFailed` must be declared again. New patterns: three words appended to the forwarded calldata for the immutables, callbacks on `address(this)`, `_sigOk` moved to the library, the registry's CREATE2 address depends on the library.
 - **Not measured:** 102 of 432 tests failed on every variant, baseline included, because the scratch copy lacked the branch's vectors. `register` with real signatures has run on no variant. A difference test with stand-in verifiers matched baseline on all 1,210 hashes. Re-run with the vectors before adopting R2.
 
+## 9. Lever 1 on real code (C3, 2026-11-01)
+
+The owner's lever 1 on `WrappedZetherToken`, in the measured form of §4: `initialize` hands the raw `initArgs` to a library, so no `TokenConfig` coder stays in the token, and `mtxSelectors()` is a library call. The library is a new one, `ZetherWrappedLib`, in the release's link closure of `WRAPPED_ZETHER` only. The form in the mock put both functions in `ZetherLib`; that would have added a DELEGATECALL and `WrappedLib` to `NORMAL_ZETHER`'s closure for nothing.
+
+| `WrappedZetherToken` | Runtime | Margin to 65,536 B |
+|---|---|---|
+| before C3 | 57,404 | 8,132 |
+| C3, no lever 1 | 64,475 | 1,061 |
+| C3, lever 1 | 60,759 | 4,777 |
+
+The lever frees 3,716 B on the token. `ZetherWrappedLib` is 4,958 B and `init` chains two libraries, so `LinkClosure.test_libraryOpcodes` pins 2 DELEGATECALLs for it. Without the lever the kind is 25 B under the 64.5 KB stop line and C6 has entries to add, so it stays on.
+
+The mock's 61,704 B was close. `NormalZetherToken` ends at 51,639 B (mock 52,234 B, no lever applied), `ZetherLib` at 19,560 B.
+
+Two findings for C4:
+
+- A `constant` written `keccak256(bytes(string.concat(...)))` is not folded by the compiler: the concatenation runs at every use. Written as one string literal per typehash, the same eight constants freed 2,016 B on the wrapped kind and on the normal one.
+- A signed entry and its `ua*` twin share one private function that returns the struct words and the op's call. Two encoders per pair of entries would otherwise cost about 1,100 B on the wrapped kind.
+

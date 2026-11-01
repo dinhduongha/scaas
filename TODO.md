@@ -165,8 +165,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      burn, 159 + 25M on a multi-recipient transfer; the owner's order for the branch is code first, no gas measurement, so
      "measure first" above waits. Security derivation in zether.md §9.1, the per-equation verifier in `legacy/zether-msm/`.
      Left: the owner's go to merge; gas re-measurement, then `gas_limits` in `clients/zether-prover/src/zether.rs`, which holds
-     the per-equation figures; a new verifier set reaches the SCaaS testnet at its next reset. For `typed-signing` C3, which
-     owns the file: add `BadPoint` to `IZetherToken`'s ABI, a bad point now always reverts with it.
+     the per-equation figures; a new verifier set reaches the SCaaS testnet at its next reset. `BadPoint` is in `IZetherToken`'s
+     ABI (typed-signing C3).
      A machine cryptographic review found it sound and complete with proof bytes unchanged (`docs/research/zether-msm-crypto-review.md`,
      not an independent audit: the verifier stays UNAUDITED).
      **Done 2026-10-31 (branch `scaas-testnet-rename`): the SCaaS testnet's identifier is `scaas-testnet`** (owner
