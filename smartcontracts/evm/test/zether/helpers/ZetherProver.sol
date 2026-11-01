@@ -33,14 +33,16 @@ contract ZetherProver {
 
     uint256 constant HEADER = 512; // zether.md §7: chainUid is word 3, salt word 13, memoHash word 14, validUntilBlock word 15
 
-    /// @dev A cheating prover (zether-msm), both 0 = honest. `tamperCommit = i + 1`: `[1]G` on Σ point `i` before it is
+    /// @dev A cheating prover (zether-msm), all 0 = honest. `tamperCommit = i + 1`: `[1]G` on Σ point `i` before it is
     ///      absorbed, so everything else stays honest under the new challenges and only that point's equation fails.
-    ///      `tamperT1 = rid`: the same on `T1` of the range proof `rid`, which only its BP-1 reads.
+    ///      `tamperT1 = rid`: the same on `T1` of the range proof `rid`, which only its BP-1 reads; `tamperA = rid`, on its
+    ///      `A`, which only its BP-2 reads.
     uint256 public tamperCommit;
     uint256 public tamperT1;
+    uint256 public tamperA;
 
-    function setTamper(uint256 commit, uint256 t1) external {
-        (tamperCommit, tamperT1) = (commit, t1);
+    function setTamper(uint256 commit, uint256 t1, uint256 a) external {
+        (tamperCommit, tamperT1, tamperA) = (commit, t1, a);
     }
 
     /// @dev `pts` with `[1]G` added to its point `i`.
@@ -344,6 +346,7 @@ contract ZetherProver {
         internal view returns (bytes memory out, bytes32)
     {
         RP memory q = _rpInit(e, n, value, gamma);
+        if (tamperA == e.rid) q.AS = _offset(e, q.AS, 0);
         st = T.absorb(st, "bp.AS", abi.encodePacked(uint32(n), q.AS));
         (st, q.y) = T.challenge(st, "bp.y", e.r);
         (st, q.z) = T.challenge(st, "bp.z", e.r);

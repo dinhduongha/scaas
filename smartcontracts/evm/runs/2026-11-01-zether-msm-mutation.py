@@ -11,6 +11,11 @@ SRC = 'src/zether/ZetherVerifier.sol'
 ALONE = r'test_eachTransferEquationAloneRefused\(\)'
 BURN = 'test_eachBurnEquationAloneRefused'
 MULTI = 'test_eachMultiEquationAloneRefused'
+RANGE = 'test_rangeEquationsAloneRefused'
+AUD = 'test_auditorOffFieldsRefused'
+LEG = 'test_auditorOffLegFieldsRefused'
+RHO_RANGE = 'test_verifyRangeRhoHashesCommitmentAndProof'
+CORPUS = 'test_s3TransferSigma'
 E3 = '''for (uint256 i; i < 3; ++i) _term(x.f, slots[i], x.w, s[i], x.r);
         x.w = mulmod(x.w, x.rho, x.r);'''
 E4 = '''for (uint256 i; i < 4; ++i) _term(x.f, slots[i], x.w, s[i], x.r);
@@ -63,11 +68,11 @@ ROWS = [
         uint256 sumY;'''),
         ('''_term(b.f, b.at + 3, w, _negS(mulmod(b.x, b.x, r), r), r);
         b.wt = mulmod(w, b.rho, r);''', '''_term(b.f, b.at + 3, w, _negS(mulmod(b.x, b.x, r), r), r);
-        b.wt = mulmod(b.wt, b.rho, r);''')], 'test_firstBpOneAloneRefused'),
+        b.wt = mulmod(b.wt, b.rho, r);''')], RANGE),
     ('BP-2 dropped from the fold', [
         ('''uint256 w = b.wt;
         uint256 a = b.at;''', '''uint256 w = 0; b.wt = 0;
-        uint256 a = b.at;''')], r'test_(eachBpTwoAloneRefused|verifyRange)'),
+        uint256 a = b.at;''')], r'test_(eachBpTwoAloneRefused|verifyRange|rangeEquationsAloneRefused)'),
     ('second BP: BP-1 dropped', [
         ('''uint256 w = b.wt;
         uint256 z2 = mulmod(b.z, b.z, r);
@@ -79,7 +84,7 @@ ROWS = [
         b.wt = mulmod(b.wt, b.rho, r);'''),
         ('''    struct BP {''', '''    function sigmaEnd(BP memory b) private pure returns (uint256) { return b.f.length - 32; }
 
-    struct BP {''')], 'test_secondBpOneAloneRefused'),
+    struct BP {''')], RANGE),
     ('no-auditor E7 dropped', drop4(8), 'test_eachTransferEquationAloneRefused_noAuditor'),
     ('burn E1 dropped', drop3(1), BURN),
     ('burn E5 dropped', drop4(2), BURN),
@@ -100,6 +105,36 @@ ROWS = [
      'test_zeroScalarSlotStillChecked'),
     ('wrong modulus in _term', [('f[slot] = addmod(f[slot], mulmod(w, s, r), r);', 'f[slot] = addmod(f[slot], mulmod(w, s, r), r - 2);')],
      'test_sharedGeneratorsAddModR'),
+    # the weights: every advance of a power, and where the range proofs pick it up
+    ('BP-1 and BP-2 of a proof share a weight', [('''_term(b.f, b.at + 3, w, _negS(mulmod(b.x, b.x, r), r), r);
+        b.wt = mulmod(w, b.rho, r);''', '_term(b.f, b.at + 3, w, _negS(mulmod(b.x, b.x, r), r), r);')], RANGE),
+    ('BP-2 of proof k, BP-1 of k+1 share one', [('''_term(b.f, a + 5 + 2 * j, w, mulmod(b.uInv[j], b.uInv[j], r), r);
+        }
+        b.wt = mulmod(w, b.rho, r);''', '''_term(b.f, a + 5 + 2 * j, w, mulmod(b.uInv[j], b.uInv[j], r), r);
+        }''')], RANGE),
+    ('E4-form weight does not advance', [(E4, E4.split('\n')[0])], ALONE),
+    ('E5 weight does not advance', [('''_term(x.f, slots[4], x.w, r - 1, r);
+        x.w = mulmod(x.w, x.rho, r);''', '_term(x.f, slots[4], x.w, r - 1, r);')], ALONE),
+    ('range weights restart at 1', [('b.wt = sigma.weight;', 'b.wt = 1;')], RANGE),
+    # auditor off: each field's own check, on rows proved for the junk they carry
+    ('C_aud O check removed', [('if (!_isZero(_sp(x, 8)) || !_isZero(_pf(x, 7))) return false;', 'if (!_isZero(_pf(x, 7))) return false;')], AUD),
+    ('A_aud O check removed', [('if (!_isZero(_sp(x, 8)) || !_isZero(_pf(x, 7))) return false;', 'if (!_isZero(_sp(x, 8))) return false;')], AUD),
+    ('z_tj zero check removed', [('return zt == 0 && _isZero(_lp(x, j, 2))', 'return _isZero(_lp(x, j, 2))')], LEG),
+    ('C_aud_j O check removed', [('_isZero(_lp(x, j, 2)) && _isZero(_lp(x, j, 3))', '_isZero(_lp(x, j, 3))')], LEG),
+    ('D_aud_j O check removed', [('_isZero(_lp(x, j, 2)) && _isZero(_lp(x, j, 3))', '_isZero(_lp(x, j, 2))')], LEG),
+    ('A_aud_j O check removed', [('''&& _isZero(_pf(x, 6 + 5 * j + 2))
+                && _isZero(_pf(x, 6 + 5 * j + 3));''', '&& _isZero(_pf(x, 6 + 5 * j + 3));')], LEG),
+    ('A_Daud_j O check removed', [('''&& _isZero(_pf(x, 6 + 5 * j + 2))
+                && _isZero(_pf(x, 6 + 5 * j + 3));''', '&& _isZero(_pf(x, 6 + 5 * j + 2));')], LEG),
+    # verifyRange's rho
+    ('verifyRange rho misses the proof', [('_rho(st, bytes.concat(V, proof))', '_rho(st, V)')], RHO_RANGE),
+    ('verifyRange rho misses V', [('_rho(st, bytes.concat(V, proof))', '_rho(st, proof)')], RHO_RANGE),
+    # a refusal by revert: BadPoint on a bad point, nothing else
+    ('a Panic in place of BadPoint', [('_copy(pts, SLOT_EXT * b.p, sigma.points, 0, sigma.points.length);',
+                                       '_copy(pts, SLOT_EXT * b.p, sigma.points, 0, sigma.points.length); assert(_valid(_slice(sigma.points, 0, b.p)));')],
+     CORPUS),
+    ('BadPoint on a row of valid points', [('return (_isZero(_msm(pts, b.f)), st);',
+                                            'if (!_isZero(_msm(pts, b.f))) revert G1Bls12381.BadPoint();\n        return (true, st);')], CORPUS),
 ]
 
 

@@ -33,6 +33,7 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
     IZetherVerifier oldT;
     IZetherBurnVerifier oldB;
     uint256[3][3] tally; // tally[old][new]
+    bool validPoints;
 
     /// @dev Where a form keeps its points and scalars.
     struct Shape {
@@ -61,17 +62,23 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
         return op == TRANSFER ? t.verifyTransfer(st, pr) : op == MULTI ? t.verifyTransferMulti(st, pr) : b.verifyBurn(st, pr);
     }
 
+    /// @dev A revert of the merged verifier is a refusal only as `BadPoint`: out of gas or a `Panic` must not read as one.
     function _verdict(IZetherVerifier t, IZetherBurnVerifier b, uint8 op, bytes memory st, bytes memory pr)
         internal view returns (uint8)
     {
-        try this.verify{gas: GAS}(t, b, op, st, pr) returns (bool ok) { return ok ? YES : NO; } catch { return REVERT; }
+        try this.verify{gas: GAS}(t, b, op, st, pr) returns (bool ok) { return ok ? YES : NO; } catch (bytes memory e) {
+            if (t == v) assertTrue(e.length == 4 && bytes4(e) == G1Bls12381.BadPoint.selector, "a revert other than BadPoint");
+            return REVERT;
+        }
     }
 
-    /// @dev One row through both; returns the shared verdict.
+    /// @dev One row through both; returns the shared verdict. `validPoints`: the row holds no bad point, so it may not revert
+    ///      at all. `BadPoint` alone would not show that: 0x0c out of gas also surfaces as `BadPoint`.
     function _same(uint8 op, bytes memory st, bytes memory pr) internal returns (bool) {
         uint8 o = _verdict(oldT, oldB, op, st, pr);
         uint8 n = _verdict(v, vb, op, st, pr);
         assertEq(o == YES, n == YES, "old and new disagree");
+        assertTrue(!validPoints || n != REVERT, "a row of valid points reverted");
         ++tally[o][n];
         return n == YES;
     }
@@ -91,6 +98,7 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
             for (uint256 kind; kind < 4; ++kind) {
                 (bytes memory a, bytes memory b) = (bytes.concat(st), bytes.concat(pr));
                 _mutatePoint(inSt ? a : b, off + i * P, kind);
+                validPoints = kind < 2;
                 _different(h.op, a, b, st, pr);
             }
         }
@@ -110,6 +118,7 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
     }
 
     function _scalarRows(uint8 op, bytes memory st, bytes memory pr, uint256 off, uint256 n) internal {
+        validPoints = true;
         for (uint256 i; i < n; ++i) {
             uint256 at = off + 32 * i;
             uint256 w = _word(pr, at);
@@ -122,6 +131,7 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
     }
 
     function _headerRows(uint8 op, bytes memory st, bytes memory pr) internal {
+        validPoints = true;
         for (uint256 i; i < HEADER / 32; ++i) {
             bytes memory a = bytes.concat(st);
             a[32 * i + 31] ^= 0x01;
@@ -130,6 +140,7 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
     }
 
     function _lengthRows(uint8 op, bytes memory st, bytes memory pr) internal {
+        validPoints = true;
         _different(op, bytes.concat(st, new bytes(32)), pr, st, pr);
         _different(op, st, bytes.concat(pr, new bytes(32)), st, pr);
         _different(op, _head(st, st.length - 32), pr, st, pr);
@@ -139,6 +150,7 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
     /// @dev The first two range proofs swapped, and with them their commitments on the single form.
     function _swapRows(Shape memory h, bytes memory st, bytes memory pr) internal {
         if (h.bps < 2) return;
+        validPoints = true;
         uint256 off = h.sigmaPts * P + h.zs * 32;
         bytes memory b = bytes.concat(pr);
         for (uint256 i; i < BP_LEN; i += 32) {
@@ -202,15 +214,16 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
     function test_s3MultiNoAuditorSigma() public { _s3("transfer_multi_noaud_bls12381.json", MULTI, false); }
     function test_s3MultiNoAuditorRanges() public { _s3("transfer_multi_noaud_bls12381.json", MULTI, true); }
 
-    /// The refused generations of vectors: statements under the old ids, and the weak Fiat-Shamir forgeries.
-    function test_refusedVectorGenerations() public {
+    /// The `v2` vectors carry the old proof system ids, so both verifiers stop at the header check: 0x0c is never called. This
+    /// shows the header check only, nothing about `ρ` or the MSM.
+    function test_oldProofSystemIdsStopAtTheHeader() public {
         string[3] memory files = ["v2/transfer_bls12381.json", "v2/burn_bls12381.json", "v2/transfer_multi_bls12381.json"];
         uint8[3] memory ops = [TRANSFER, BURN, MULTI];
+        vm.expectCall(address(0x0c), bytes(""), 0);
         for (uint256 i; i < 3; ++i) {
             string memory j = vm.readFile(string.concat(DIR, files[i]));
             assertFalse(_same(ops[i], j.readBytes(".statement"), j.readBytes(".proof")));
         }
-        _report();
     }
 
     function test_multiMWord() public {

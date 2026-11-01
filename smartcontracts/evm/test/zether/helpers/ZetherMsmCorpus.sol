@@ -133,10 +133,17 @@ abstract contract ZetherMsmCorpus is Test {
         uint256[] memory vs = new uint256[](m);
         uint256 total;
         (st, total) = _multiSt(m, vs, aud);
+        pr = _proveMulti(st, vs, total, over);
+    }
+
+    function _proveMulti(bytes memory st, uint256[] memory vs, uint256 total, uint256 over)
+        internal view returns (bytes memory)
+    {
+        uint256 m = vs.length;
         uint256[] memory gv = new uint256[](m);
         uint256[] memory ts = new uint256[](m);
         for (uint256 j; j < m; ++j) (gv[j], ts[j]) = (0x1234 + 7 * j, T0 + j);
-        pr = prover.proveTransferMulti(v, st,
+        return prover.proveTransferMulti(v, st,
             ZetherProver.MultiWitness(XF, S, vs, ts, B - FEE - total + over, gv, 0x5678, keccak256("m")));
     }
 
