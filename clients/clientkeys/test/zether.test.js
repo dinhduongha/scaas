@@ -7,10 +7,12 @@ import { readFileSync } from 'node:fs';
 import {
   deriveMasterSk, deriveChildSk, deriveConfKey, confPublic, schnorrSign, schnorrVerify, zetherKind, zetherPop, zetherSign, zetherOwnerAuth,
   sealConfKey, openConfKey, confLabel, CURVES, encodePoint, decodePoint, checkBalance, sealBalanceCache, openBalanceCache,
-  setCachedBalance, cacheAfterDebit, cacheAfterRollOver, readBalance,
+  setCachedBalance, cacheAfterDebit, cacheAfterRollOver, readBalance, zetherOwnerSig, g1, zetherRollOverTypedData,
+  zetherRollOverCalldata, zetherRollOverDigest, zetherSetRollOverModeTypedData, zetherSetRollOverModeCalldata, zetherSetRollOverModeDigest,
 } from '../src/zether.js';
 import { deriveKey, seedFromWords, NETWORKS } from '../src/seed.js';
-import { fromHex, hex, abiEncode } from '../src/bytes.js';
+import { fromHex, hex, abiEncode, keccak_256, concatBytes, utf8ToBytes } from '../src/bytes.js';
+import { hashTypedData, hashStruct, TYPED_OPS } from '../src/evm.js';
 import { uaMessage, purposeTag, holderPopMessage, portableRecordDigest, registrationDigest, POP_V2_TAG } from '../src/ua.js';
 import { dir } from './ua-vectors-dir.js';
 
@@ -319,3 +321,35 @@ for (const curve of ['bls12381']) {
     await assert.rejects(readBalance(curve, x, {}, state, async () => '5001'), /does not match/);
   });
 }
+
+test('typed owner ops: ZetherRollOver / ZetherSetRollOverMode digests, ownerSig as UASig.signature, the direct calldata', () => {
+  const curve = 'bls12381';
+  const k = R33[curve].keys[0];
+  const x = fromHex(k.x);
+  const at = { contract: '0x' + 'a2'.repeat(20), chainId: 7622, chainUid: '0x' + 'c1'.repeat(32) };
+  const roll = { ...at, message: { ua: k.UA, accSeq: 4, expectedPendingSeq: 9, validUntilBlock: 1000 } };
+  const td = zetherRollOverTypedData(roll);
+  assert.equal(td.domain.name, 'SCaaS ZetherToken');
+  assert.equal(hex(zetherRollOverDigest(roll)), hex(hashTypedData(td)));
+  assert.equal(hex(hashStruct(td.types, 'ZetherRollOver', td.message)), hex(keccak_256(concatBytes(fromHex(TYPED_OPS.ZetherRollOver.typehash),
+    abiEncode(['bytes32', 'uint64', 'uint64', 'uint64'], [k.UA, 4, 9, 1000])))));
+  const digest = zetherRollOverDigest(roll);
+  const sig = zetherOwnerSig(curve, x, digest);
+  assert.deepEqual([sig.keyData, sig.members], ['0x', []]);
+  assert.ok(schnorrVerify(curve, fromHex(k.Y), uaMessage(0x0141, purposeTag('zether-owner'), digest), fromHex(sig.signature)));
+  const sel = (s) => hex(keccak_256(utf8ToBytes(s)).subarray(0, 4));
+  const UASIG = '(bytes,bytes,(uint16,bytes,bytes)[])';
+  assert.equal(hex(zetherRollOverCalldata(td, sig).subarray(0, 4)), sel(`mtxRollOverSigned(bytes32,uint64,uint64,${UASIG})`));
+  const mode = { ...at, message: { ua: k.UA, mode: 1, modeNonce: 2, validUntilBlock: 1000 } };
+  assert.notEqual(hex(zetherSetRollOverModeDigest(mode)), hex(digest));
+  assert.equal(hex(zetherSetRollOverModeCalldata(zetherSetRollOverModeTypedData(mode), sig).subarray(0, 4)),
+    sel(`mtxSetRollOverMode(bytes32,uint8,uint64,${UASIG})`));
+  assert.throws(() => zetherRollOverTypedData({ ...roll, name: 'SCaaS PqzToken' }), /domain/);
+});
+
+test('G1: the 128 encoded bytes word by word, abi.encode(G1) = the packed point', () => {
+  const b = encodePoint('bls12381', CURVES.bls12381.Point.BASE.multiply(7n));
+  const g = g1(b);
+  assert.equal(hex(abiEncode(['(bytes32,bytes32,bytes32,bytes32)'], [[g.x0, g.x1, g.y0, g.y1]])), hex(b));
+  assert.throws(() => g1(b.subarray(1)), /wrong point length/);
+});

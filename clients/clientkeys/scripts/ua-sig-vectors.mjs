@@ -33,9 +33,11 @@ import { sha512 } from '@noble/hashes/sha2.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, abiEncode } from '../src/bytes.js';
 import * as ua from '../src/ua.js';
 import {
-  hashStruct, hashTypedData, padId, payLane, uaMetaTxTypedData, uaMetaTransferTypedData, receiverFeeTypedData,
-  unwrapToUACalldata, uaTradeOrderTypedData, uaInvalidateNoncesTypedData, orderCancelTypedData,
+  hashStruct, hashTypedData, padId, payLane, uaMetaTxTypedData, uaMetaTransferTypedData, unwrapToUACall, uaTradeOrderTypedData,
+  uaInvalidateNoncesTypedData,
 } from '../src/evm.js';
+// `ReceiverFee` over the payment digest and `CancelOrder` over the order hash: what the contracts hash until C6.
+import { receiverFeeTypedData, orderCancelTypedData } from '../legacy/typed-signing/evm-pre-named.js';
 import { PQ_KINDS, pqMessage } from '../src/pq.js';
 import { holderPopMessageV1 } from '../legacy/ua8/ua-pop-v1.js';
 import {
@@ -487,7 +489,7 @@ const m3CallOf = (data, batch) => (from) => uaMetaTxTypedData({ ...M3, message: 
 const M3_UA_TO = fromHex(row('p256').ua); // the receiver of `unwrapToUA`: a registered SIGNING UA
 const m3Burn = m3CallOf(concatBytes(keccak_256(utf8ToBytes('burn(uint256)')).subarray(0, 4),
   abiEncode(['uint256'], [1000000n])), 8);
-const m3UnwrapToUA = m3CallOf(unwrapToUACalldata(M3_UNDERLYING, 1000000n, M3_UA_TO, 990000n), 9);
+const m3UnwrapToUA = m3CallOf(unwrapToUACall(M3_UNDERLYING, 1000000n, M3_UA_TO, 990000n), 9);
 const M3_RF = { fee: 300000, feeRecipient: M3_FEE_TO, validUntil: 1800000060 };
 /** The payment of receiver-pays: fee NONE, relayer bound (mode 0x01), its own pay lane, nonce 0 (CTR-MTX-06's shape). */
 const m3Payment = (from, to, ref) => uaMetaTransferTypedData({ ...M3, message: { from, to, value: 100000000,

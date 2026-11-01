@@ -1,4 +1,4 @@
-// EVM pieces: EIP-712 digests, addresses, SmartKeyAccount key/salt/CREATE2, Merkle batch.
+// EVM pieces: EIP-712 digests, addresses, SmartKeyAccount key/salt/CREATE2, Merkle batch, the typed builder of every named entry.
 import {
   keccak_256, sha256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, addressWord, abiEncode, bytes32,
 } from './bytes.js';
@@ -17,11 +17,14 @@ export function evmAddress(uncompressed) {
 
 // ------------------------------------------------------------------ EIP-712 (structs, nested structs)
 
+const elementType = (t) => t.replace(/\[\]$/, '');
+
 /** EIP-712 `encodeType`: the primary type, then every struct it references, sorted by name. */
 export function encodeType(types, primary) {
   const deps = new Set();
   const walk = (t) => types[t].forEach((f) => {
-    if (types[f.type] && f.type !== primary && !deps.has(f.type)) { deps.add(f.type); walk(f.type); }
+    const e = elementType(f.type);
+    if (types[e] && e !== primary && !deps.has(e)) { deps.add(e); walk(e); }
   });
   walk(primary);
   const one = (t) => `${t}(${types[t].map((f) => `${f.type} ${f.name}`).join(',')})`;
@@ -29,12 +32,14 @@ export function encodeType(types, primary) {
 }
 
 function encodeValue(type, value, types) {
+  if (type.endsWith('[]')) return keccak_256(concatBytes(...value.map((v) => encodeValue(elementType(type), v, types))));
   if (types && types[type]) return hashStruct(types, type, value);
   if (type === 'string') return keccak_256(utf8ToBytes(String(value)));
   if (type === 'bytes') return keccak_256(value instanceof Uint8Array ? value : fromHex(value));
   if (type === 'address') return addressWord(value);
   if (type === 'bool') return word(value ? 1 : 0);
   if (type === 'bytes32') return bytes32(value);
+  if (/^bytes\d+$/.test(type)) return abiEncode([type], [value]);
   if (/^uint\d+$/.test(type)) return word(value);
   throw new Error(`EIP-712 type ${type} is not supported here`);
 }
@@ -132,30 +137,278 @@ const DOMAIN_TYPE = [{ name: 'name', type: 'string' }, { name: 'version', type: 
   { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }];
 // The salted domain of every contract on `MetaTxBase` (CTR-MTX-02, CLI-SGN-33) and its generic struct (CTR-MTX-15).
 const SALTED_DOMAIN_TYPE = [...DOMAIN_TYPE, { name: 'salt', type: 'bytes32' }];
-const MTX_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, MetaTransaction: ['from:address', 'data:bytes', 'batch:uint256',
-  'nonce:uint256', 'validUntil:uint256', 'mode:uint32', 'relayer:address', 'fee:uint256', 'feeRecipient:address']
-  .map((s) => ({ name: s.split(':')[0], type: s.split(':')[1] })) };
 const ZERO_ADDRESS = '0x' + '00'.repeat(20);
-const fields = (list) => list.map((s) => ({ name: s.split(':')[0], type: s.split(':')[1] }));
-// The token's typed transfer and payment (CTR-MTX-23); `entryRef = 0` is a transfer, else a payment.
-const TRANSFER_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, MetaTransfer: fields(['from:address', 'to:address',
-  'value:uint256', 'entryRef:bytes32', 'batch:uint256', 'nonce:uint256', 'validUntil:uint256', 'mode:uint32',
-  'relayer:address', 'fee:uint256', 'feeRecipient:address']) };
-// The role-free order (CTR-DEX-13), signed in the sell token's domain; an outside token's in the DEX's as `DexOrder`.
-const TRADE_ORDER = fields(['from:address', 'receiveToken:address', 'amount:uint256', 'receiveAmount:uint256',
-  'minFill:uint256', 'fee:uint256', 'relayer:address', 'dex:address', 'destination:address', 'flags:uint8',
-  'batch:uint256', 'nonce:uint256', 'validUntil:uint256']);
+const ZERO_ID = '0x' + '00'.repeat(32);
+const fields = (list) => list.split(',').filter(Boolean).map((f) => {
+  const [type, name] = f.split(' ');
+  return { name, type };
+});
+// `E`, the envelope closing every meta-transaction struct, and the structs that differ only by the id type.
+const E = 'uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient';
+const orderOf = (id) => `${id} from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,`
+  + `address relayer,address dex,${id} destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil`;
+const wrapOrderOf = (id) => `${id} from,address wrappedToken,uint256 amount,uint256 minMinted,uint256 minFill,uint256 fee,`
+  + `address relayer,${id} destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil`;
+const transferOf = (id) => `${id} from,${id} to,uint256 value,bytes32 entryRef,${E}`;
+const relayFeeOf = (id) => `${id} from,address target,bytes32 callDataHash,${id} payee,uint256 value,uint256 validUntil,address relayer`;
+const RECEIVER_FEE = 'uint256 fee,address feeRecipient,uint256 validUntil';
+
+// Every struct a signed type nests or an entry takes (Appendix X.2). The last group is calldata only, never signed.
+const STRUCTS = Object.fromEntries(Object.entries({
+  // the order's sell side (CTR-DEX-13, CTR-DEX-25: ids as bytes32) and an outside token's `DexOrder` (CTR-DEX-18)
+  TradeOrder: orderOf('address'), UATradeOrder: orderOf('bytes32'), DexOrder: 'address sellToken,TradeOrder order',
+  WrapOrder: wrapOrderOf('address'), UAWrapOrder: wrapOrderOf('bytes32'),
+  // the token's typed transfer and payment (CTR-MTX-23); `entryRef = 0` is a transfer, else a payment (CTR-UA-26 on ids)
+  MetaTransfer: transferOf('address'), UAMetaTransfer: transferOf('bytes32'),
+  PqzTransferArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,'
+    + 'bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo',
+  PqzLeg: 'bytes32 ua,bytes v,bytes vAuditor',
+  PqzMultiArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,'
+    + 'bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo',
+  PqzBurnArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,bytes u,bytes vFrom',
+  Unwrap: 'address underlying,bytes32 recipient,uint256 amount,uint256 minOut',
+  G1: 'bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1',
+  ZetherSingle: 'uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,'
+    + 'G1 yFrom,G1 yTo,G1 cOut,G1 dOut,G1 cDeb,G1 cAud',
+  ZetherLeg: 'G1 yTo,G1 cOut,G1 cAud,G1 dAud',
+  ZetherMulti: 'uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,uint256 decoyFee,'
+    + 'G1 yFrom,G1 dOut,G1 cDeb,ZetherLeg[] legs,bytes sealedMemo',
+  ZetherBurn: 'uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom',
+  Envelope: `address from,${E}`, UAEnvelope: `bytes32 from,${E}`, MemberSig: 'uint16 index,bytes keyData,bytes sig',
+  UASig: 'bytes keyData,bytes signature,MemberSig[] members', AccountSig: 'uint256 keyIndex,bytes32[] proof,bytes signature',
+  Payout: 'uint256 amount,bytes32 recipient',
+}).map(([name, list]) => [name, fields(list)]));
+
+const DOMAIN_OF = { NormalToken: 'SCaaS MetaToken', WrappedToken: 'SCaaS MetaToken', NormalZetherToken: 'SCaaS ZetherToken',
+  WrappedZetherToken: 'SCaaS ZetherToken', NormalPqzToken: 'SCaaS PqzToken', WrappedPqzToken: 'SCaaS PqzToken',
+  MandateWallet: 'SCaaS MandateWallet', SmartKeyAccount: 'SCaaS SmartKeyAccount', SCaaSDex: 'SCaaS Dex' };
+const NORMAL = ['NormalToken', 'NormalZetherToken', 'NormalPqzToken'];
+const WRAPPED = ['WrappedToken', 'WrappedZetherToken', 'WrappedPqzToken'];
+const TOKENS = [...NORMAL, ...WRAPPED];
+const ZETHER = ['NormalZetherToken', 'WrappedZetherToken'];
+const PQZ = ['NormalPqzToken', 'WrappedPqzToken'];
+const CONFIDENTIAL = [...ZETHER, ...PQZ];
+const WRAPPED_CONFIDENTIAL = ['WrappedZetherToken', 'WrappedPqzToken'];
+const WALLET = ['MandateWallet'];
+const ACCOUNT = ['SmartKeyAccount'];
+
+const uaSigOf = (s) => (s === undefined || s instanceof Uint8Array || typeof s === 'string'
+  ? { keyData: '0x', signature: s ?? '0x', members: [] } : { keyData: '0x', signature: '0x', members: [], ...s });
+const accountSigOf = (s) => (s instanceof Uint8Array || typeof s === 'string'
+  ? { keyIndex: 0, proof: [], signature: s } : { keyIndex: 0, proof: [], ...s });
+// A wrap order on the underlying's entries is the `TradeOrder` with `dex == receiveToken` (TS-D19).
+const asTradeOrder = ({ wrappedToken, minMinted, ...o }) => ({ ...o, receiveToken: wrappedToken, receiveAmount: minMinted, dex: wrappedToken });
+// The parameters after the envelope where they are not the struct's own fields in order (Appendix X.3). `pqzAuth` and
+// `ownerSig` are signatures of their own, so never inside a signed struct (Appendix X.1).
+const pqzOp = (args) => (m, x) => [[args, m.args], ['bytes', m.proof], ['UASig', uaSigOf(x.pqzAuth)], ['bytes', m.accHint]];
+const pqzUnshield = (m, x) => [['PqzBurnArgs', m.args], ['Payout', m], ['bytes', m.proof], ['UASig', uaSigOf(x.pqzAuth)], ['bytes', m.accHint]];
+const pqzUnwrap = (m, x) => [['PqzBurnArgs', m.args], ['Unwrap', m.unwrap], ['bytes', m.proof], ['UASig', uaSigOf(x.pqzAuth)], ['bytes', m.accHint]];
+const zetherOp = (args) => (m) => [[args, m.args], ['bytes', m.proof]];
+const PQZ_TAIL = 'bytes proof,bytes accHint';
+
+// The one table of the type strings (plan Part C, Appendix X.4). `fields`: the struct `<Name>(address from,<fields>,E)`
+// (TS-D14), `ua`: with its twin `UA<Name>(bytes32 from,…)`, entries `mtx<Name>` / `ua<Name>`; `entry`: their name when it
+// is not the struct's (TS-D16), `args`: their parameters. `raw`: a struct without `E`, with the whole `entry` and `call`.
+// `on`: the contracts that take it. `amount`: the op's amount field where the fee class is AMOUNT (CTR-MTX-20).
+const OPS = {
+  CancelNonce: { fields: 'uint256 lane', on: [...TOKENS, ...WALLET, ...ACCOUNT] },
+  Burn: { fields: 'uint256 amount', on: NORMAL, ua: true, amount: 'amount' },
+  Wrap: { fields: 'uint256 amount', on: WRAPPED },
+  WrapLeg: { fields: 'address underlying,uint256 amount', on: WRAPPED },
+  Unwrap: { fields: 'uint256 wrapped,address recipient,uint256 minOut', on: WRAPPED, ua: true, amount: 'wrapped' },
+  UnwrapLeg: { fields: 'address underlying,uint256 wrapped,address recipient,uint256 minOut', on: WRAPPED, ua: true, amount: 'wrapped' },
+  AddReserve: { fields: 'address underlying,uint256 amount', on: WRAPPED },
+  WrapToUA: { fields: 'address underlying,uint256 amount,bytes32 to', on: WRAPPED },
+  UnwrapToUA: { fields: 'address underlying,uint256 wrapped,bytes32 to,uint256 minOut', on: WRAPPED, ua: true, amount: 'wrapped' },
+  // `uaBytes`: the C0 spike's `uaShield` takes `bytes auth` until C2 moves the `ua*` entries to `UASig`.
+  Shield: { fields: 'bytes32 toUA,uint256 amount', on: CONFIDENTIAL, ua: true, uaBytes: true },
+  WrapShield: { fields: 'address underlying,uint256 amountIn,bytes32 toUA', on: WRAPPED_CONFIDENTIAL },
+  RollOver: { fields: 'bytes32 ua,uint256 n', on: CONFIDENTIAL, ua: true },
+  PrepareAcc: { fields: 'bytes32 ua,uint256 half', on: PQZ, ua: true },
+  // MandateWallet: the owner's three, the delegate's two (CTR-ACC-07), the arbitrary call
+  SetMandate: { fields: 'address token,address delegate,uint128 maxPerPayment,uint128 maxPerPeriod,uint64 periodSeconds,uint64 expiry', on: WALLET },
+  SetPayee: { fields: 'address token,address payee,bool allowed', on: WALLET },
+  RevokeMandate: { fields: 'address token', on: WALLET },
+  PayUnderMandate: { fields: 'address token,address payee,uint256 amount,bytes32 entryRef,uint64 epoch', on: WALLET },
+  DelegateRevoke: { fields: 'address token,uint64 epoch', on: WALLET },
+  // SmartKeyAccount: `SubjectKey` flattened, its own entries signed with `AccountSig` (Appendix X row 13)
+  AddKey: { fields: 'uint8 kind,bytes32 x,bytes32 y,bytes32 rpIdHash,bytes32 originHash', on: ACCOUNT, accountSig: true },
+  RemoveKey: { fields: 'uint256 index', on: ACCOUNT, accountSig: true },
+  RotateKey: { fields: 'uint256 index,uint8 kind,bytes32 x,bytes32 y,bytes32 rpIdHash,bytes32 originHash', on: ACCOUNT, accountSig: true },
+  SetGuardian: { fields: 'address guardian', on: ACCOUNT, accountSig: true },
+  CancelRecovery: { fields: '', on: ACCOUNT, accountSig: true },
+  Execute: { fields: 'address target,uint256 value,bytes data', on: [...WALLET, ...ACCOUNT], accountSig: true },
+  // PQZ (Appendix X.3; `Payout` as C0 found: the flat `amount, recipient` does not compile there, evm-size-levers.md §7)
+  PqzTransferSingle: { fields: `PqzTransferArgs args,${PQZ_TAIL}`, on: PQZ, ua: true, entry: 'ConfidentialTransferSingle', args: pqzOp('PqzTransferArgs') },
+  PqzTransferSingleCompact: { fields: `PqzTransferArgs args,${PQZ_TAIL}`, on: PQZ, ua: true, entry: 'ConfidentialTransferSingleCompact', args: pqzOp('PqzTransferArgs') },
+  PqzTransfer: { fields: `PqzMultiArgs args,${PQZ_TAIL}`, on: PQZ, ua: true, entry: 'ConfidentialTransfer', args: pqzOp('PqzMultiArgs') },
+  PqzTransferCompact: { fields: `PqzMultiArgs args,${PQZ_TAIL}`, on: PQZ, ua: true, entry: 'ConfidentialTransferCompact', args: pqzOp('PqzMultiArgs') },
+  PqzUnshield: { fields: `PqzBurnArgs args,uint256 amount,bytes32 recipient,${PQZ_TAIL}`, on: PQZ, ua: true, entry: 'Unshield', args: pqzUnshield },
+  PqzUnshieldUnwrap: { fields: `PqzBurnArgs args,Unwrap unwrap,${PQZ_TAIL}`, on: ['WrappedPqzToken'], ua: true, entry: 'UnshieldUnwrap', args: pqzUnwrap },
+  // Zether (Appendix X.3)
+  ZetherTransferSingle: { fields: 'ZetherSingle args,bytes proof', on: ZETHER, ua: true, entry: 'ConfidentialTransferSingle', args: zetherOp('ZetherSingle') },
+  ZetherTransfer: { fields: 'ZetherMulti args,bytes proof', on: ZETHER, ua: true, entry: 'ConfidentialTransfer', args: zetherOp('ZetherMulti') },
+  ZetherTransferCompact: { fields: 'ZetherMulti args,bytes proof', on: ZETHER, ua: true, entry: 'ConfidentialTransferCompact', args: zetherOp('ZetherMulti') },
+  ZetherUnshield: { fields: 'ZetherBurn args,uint256 amount,bytes32 recipient,bytes proof', on: ZETHER, ua: true, entry: 'Unshield',
+    args: (m) => [['ZetherBurn', m.args], ['uint256', m.amount], ['bytes32', m.recipient], ['bytes', m.proof]] },
+  ZetherUnshieldUnwrap: { fields: 'ZetherBurn args,Unwrap unwrap,bytes proof', on: ['WrappedZetherToken'], ua: true, entry: 'UnshieldUnwrap',
+    args: (m) => [['ZetherBurn', m.args], ['Unwrap', m.unwrap], ['bytes', m.proof]] },
+  RollOverSigned: { fields: 'bytes32 ua,uint64 expectedPendingSeq,uint64 validUntilBlock', on: ZETHER, ua: true,
+    args: (m, x) => [['bytes32', m.ua], ['uint64', m.expectedPendingSeq], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(x.ownerSig)]] },
+  SetRollOverMode: { fields: 'bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock', on: ZETHER, ua: true,
+    args: (m, x) => [['bytes32', m.ua], ['uint8', m.rollOverMode], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(x.ownerSig)]] },
+  RollOverBatch: { fields: 'bytes32[] uas', on: ZETHER, ua: true },
+  // TS-D19: `x.payerSig` is the payer's signature of the nested payment (the plain `MetaTransfer` / `UAMetaTransfer`)
+  ReceiverFee: { raw: `MetaTransfer payment,${RECEIVER_FEE}`, on: TOKENS, entry: 'mtxPayReceiverFee', call: (m, sig, x) => [['MetaTransfer', m.payment],
+    ['bytes', x.payerSig], ['uint256', m.fee], ['address', m.feeRecipient], ['uint256', m.validUntil], ['bytes', sig]] },
+  UAReceiverFee: { raw: `UAMetaTransfer payment,${RECEIVER_FEE}`, on: TOKENS, entry: 'uaPayReceiverFee', call: (m, sig, x) => [['UAMetaTransfer', m.payment],
+    ['UASig', uaSigOf(x.payerSig)], ['uint256', m.fee], ['address', m.feeRecipient], ['uint256', m.validUntil], ['UASig', uaSigOf(sig)]] },
+  // The router calls these as the struct's `relayer` (`msg.sender`), on the lane `payLane(ref)`, nonce 0.
+  RelayFee: { raw: relayFeeOf('address'), on: TOKENS, entry: 'mtxRelayFee', call: (m, sig) => [['address', m.from], ['address', m.target],
+    ['bytes32', m.callDataHash], ['address', m.payee], ['uint256', m.value], ['uint256', m.validUntil], ['bytes', sig]] },
+  UARelayFee: { raw: relayFeeOf('bytes32'), on: TOKENS, entry: 'uaRelayFee', call: (m, sig) => [['bytes32', m.from], ['address', m.target],
+    ['bytes32', m.callDataHash], ['bytes32', m.payee], ['uint256', m.value], ['uint256', m.validUntil], ['UASig', uaSigOf(sig)]] },
+  // Signed in the underlying's domain, submitted to `wrappedToken`, which needs the leg: `underlying` is `verifyingContract`.
+  WrapOrder: { raw: wrapOrderOf('address'), on: TOKENS, entry: 'mtxWrapOrder',
+    call: (m, sig, x, td) => [['address', td.domain.verifyingContract], ['WrapOrder', m], ['bytes', sig]] },
+  UAWrapOrder: { raw: wrapOrderOf('bytes32'), on: TOKENS, entry: 'uaWrapOrder',
+    call: (m, sig, x, td) => [['address', td.domain.verifyingContract], ['UAWrapOrder', m], ['UASig', uaSigOf(sig)]] },
+  // The cancel nests the struct the order was signed in; a wrap order goes through the same entries as the order form.
+  CancelOrder: { raw: 'TradeOrder order', on: TOKENS, entry: 'mtxCancelOrder', call: (m, sig) => [['TradeOrder', m.order], ['bytes', sig]] },
+  CancelUAOrder: { raw: 'UATradeOrder order', on: TOKENS, entry: 'uaCancelOrder', call: (m, sig) => [['UATradeOrder', m.order], ['UASig', uaSigOf(sig)]] },
+  CancelWrapOrder: { raw: 'WrapOrder order', on: TOKENS, entry: 'mtxCancelOrder',
+    call: (m, sig) => [['TradeOrder', asTradeOrder(m.order)], ['bytes', sig]] },
+  CancelUAWrapOrder: { raw: 'UAWrapOrder order', on: TOKENS, entry: 'uaCancelOrder',
+    call: (m, sig) => [['UATradeOrder', asTradeOrder(m.order)], ['UASig', uaSigOf(sig)]] },
+  CancelDexOrder: { raw: 'DexOrder order', on: ['SCaaSDex'], entry: 'mtxCancelOrders', call: (m, sig) => [['DexOrder[]', [m.order]], ['bytes[]', [sig]]] },
+  UACancelNonce: { raw: 'bytes32 ua,uint256 batch,uint256 validUntil', on: TOKENS, entry: 'uaCancelNonce',
+    call: (m, sig) => [['bytes32', m.ua], ['uint256', m.batch], ['uint256', m.validUntil], ['UASig', uaSigOf(sig)]] },
+  // The owner's own signature (purpose `zether-owner`), `ownerSig` of the direct ops and of `RollOverSigned` / `SetRollOverMode`.
+  ZetherRollOver: { raw: 'bytes32 ua,uint64 accSeq,uint64 expectedPendingSeq,uint64 validUntilBlock', on: ZETHER, entry: 'mtxRollOverSigned',
+    call: (m, sig) => [['bytes32', m.ua], ['uint64', m.expectedPendingSeq], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(sig)]] },
+  ZetherSetRollOverMode: { raw: 'bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock', on: ZETHER, entry: 'mtxSetRollOverMode',
+    call: (m, sig) => [['bytes32', m.ua], ['uint8', m.mode], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(sig)]] },
+  // The statement's header words verbatim (purpose `zether-auth`); signed into `pqzAuth`, no entry of its own.
+  PqzAuth: { raw: 'uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,'
+    + 'uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,'
+    + 'bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash', on: PQZ },
+};
+
+const abiType = (t) => {
+  if (t.endsWith('[]')) return `${abiType(elementType(t))}[]`;
+  return STRUCTS[t] ? `(${STRUCTS[t].map((f) => abiType(f.type)).join(',')})` : t;
+};
+const abiValue = (t, v) => {
+  if (t.endsWith('[]')) return v.map((x) => abiValue(elementType(t), x));
+  return STRUCTS[t] ? STRUCTS[t].map((f) => abiValue(f.type, v[f.name])) : v;
+};
+
+/** One signed struct (twin `ua`): its type string and typehash, and `call(td, sig, extra)` → the entry's `{abi, data}`. */
+function defineOp(primary, def, ua) {
+  const own = fields(def.raw ?? [`${ua ? 'bytes32' : 'address'} from`, def.fields, E].filter(Boolean).join(','));
+  const types = { EIP712Domain: SALTED_DOMAIN_TYPE, [primary]: own };
+  const nest = (list) => list.forEach((f) => {
+    const t = elementType(f.type);
+    if (STRUCTS[t] && !types[t]) { types[t] = STRUCTS[t]; nest(STRUCTS[t]); }
+  });
+  nest(own);
+  const typeString = encodeType(types, primary);
+  const base = primary.replace(/^UA/, '');
+  const entry = def.raw ? def.entry : `${ua ? 'ua' : 'mtx'}${def.entry ?? base}`;
+  const sigParam = (td, sig) => {
+    if (ua) return def.uaBytes ? ['bytes', sig] : ['UASig', uaSigOf(sig)];
+    return def.accountSig && td.domain.name === DOMAIN_OF.SmartKeyAccount ? ['AccountSig', accountSigOf(sig)] : ['bytes', sig];
+  };
+  const call = (td, sig, x = {}) => {
+    const m = td.message;
+    const params = def.raw ? def.call(m, sig, x, td) : [[ua ? 'UAEnvelope' : 'Envelope', m],
+      ...(def.args ? def.args(m, x) : own.slice(1, -7).map((f) => [f.type, m[f.name]])), sigParam(td, sig)];
+    const abiTypes = params.map(([t]) => abiType(t));
+    const abi = `${entry}(${abiTypes.join(',')})`;
+    return { abi, data: abiCall(abi, abiTypes, params.map(([t, v]) => abiValue(t, v))) };
+  };
+  return { primary, typeString, typehash: hex(keccak_256(utf8ToBytes(typeString))), types, fields: own, on: def.on, ua,
+    envelope: !def.raw, amount: def.amount, entry, domains: [...new Set(def.on.map((c) => DOMAIN_OF[c]))], call: entry ? call : null };
+}
+
+/** Every signed struct by name: {typeString, typehash, types, fields, on, entry, domains, call}. */
+export const TYPED_OPS = Object.freeze(Object.fromEntries(Object.entries(OPS).flatMap(([name, def]) => [[name, defineOp(name, def, false)],
+  ...(def.ua ? [[`UA${name}`, defineOp(`UA${name}`, def, true)]] : [])])));
+
+/** The canonical JSON a wallet signs: unset fields 0, hex bytes, uint ≤ 32 bits as numbers, the others as decimal
+ *  strings; `relayer` / `feeRecipient` canonical-zeroed as the contract hashes them (`MetaTxLib.canon`), nested `MetaTransfer` too. */
+function canonical(type, v, types) {
+  if (type.endsWith('[]')) return (v ?? []).map((x) => canonical(elementType(type), x, types));
+  if (types[type]) {
+    for (const k of Object.keys(v ?? {})) if (!types[type].some((f) => f.name === k)) refuse(`${k} is not a field of ${type}`);
+    const m = Object.fromEntries(types[type].map((f) => [f.name, canonical(f.type, v?.[f.name], types)]));
+    if ('mode' in m && 'relayer' in m && 'feeRecipient' in m) {
+      if (!(BigInt(m.mode) & 1n)) m.relayer = ZERO_ADDRESS;
+      if (!(BigInt(m.mode) & 2n)) m.feeRecipient = ZERO_ADDRESS;
+    }
+    return m;
+  }
+  if (type === 'address') { addressWord(v ?? ZERO_ADDRESS); return v ?? ZERO_ADDRESS; }
+  if (type === 'bool') return Boolean(v);
+  if (type === 'bytes') return hex(asBytes(v ?? '0x'));
+  const fixed = /^bytes(\d+)$/.exec(type);
+  if (fixed) {
+    const b = v === undefined ? new Uint8Array(Number(fixed[1])) : asBytes(v);
+    if (b.length !== Number(fixed[1])) refuse(`a ${type} is ${fixed[1]} bytes`);
+    return hex(b);
+  }
+  const bits = Number(type.slice(4));
+  const n = BigInt(v ?? 0);
+  if (n < 0n || n >= 1n << BigInt(bits)) refuse(`${n} is out of range for a ${type}`);
+  return bits <= 32 ? Number(n) : String(n);
+}
+
+function opTypedData(op, { name = op.domains[0], contract, chainId, chainUid, message }) {
+  if (!op.domains.includes(name)) refuse(`${op.primary} is not signed in the domain ${name}`);
+  return { types: op.types, primaryType: op.primary, domain: salted({ name, contract, chainId, chainUid }),
+    message: canonical(op.primary, message, op.types) };
+}
+
+const opName = (primary) => primary.replace(/^UA/, 'ua').replace(/^[A-Z]/, (c) => c.toLowerCase());
+/** `<op>TypedData({name, contract, chainId, chainUid, message})` and `<op>Calldata(td, sig, extra)` of every struct
+ *  (`extra`: `pqzAuth`, `ownerSig`, `payerSig` where the entry takes one); exported by name below and from zether.js. */
+export const OP_BUILDERS = Object.freeze(Object.fromEntries(Object.values(TYPED_OPS).flatMap((op) => [
+  [`${opName(op.primary)}TypedData`, (o) => opTypedData(op, o)],
+  ...(op.call ? [[`${opName(op.primary)}Calldata`, (td, sig, x) => op.call(td, sig, x).data]] : [])])));
+export const {
+  cancelNonceTypedData, cancelNonceCalldata, burnTypedData, burnCalldata, uaBurnTypedData, uaBurnCalldata,
+  wrapTypedData, wrapCalldata, wrapLegTypedData, wrapLegCalldata, unwrapTypedData, unwrapCalldata, uaUnwrapTypedData, uaUnwrapCalldata,
+  unwrapLegTypedData, unwrapLegCalldata, uaUnwrapLegTypedData, uaUnwrapLegCalldata, addReserveTypedData, addReserveCalldata,
+  wrapToUATypedData, wrapToUACalldata, unwrapToUATypedData, unwrapToUACalldata, uaUnwrapToUATypedData, uaUnwrapToUACalldata,
+  shieldTypedData, shieldCalldata, uaShieldTypedData, uaShieldCalldata, wrapShieldTypedData, wrapShieldCalldata,
+  rollOverTypedData, rollOverCalldata, uaRollOverTypedData, uaRollOverCalldata,
+  prepareAccTypedData, prepareAccCalldata, uaPrepareAccTypedData, uaPrepareAccCalldata,
+  setMandateTypedData, setMandateCalldata, setPayeeTypedData, setPayeeCalldata, revokeMandateTypedData, revokeMandateCalldata,
+  payUnderMandateTypedData, payUnderMandateCalldata, delegateRevokeTypedData, delegateRevokeCalldata,
+  addKeyTypedData, addKeyCalldata, removeKeyTypedData, removeKeyCalldata, rotateKeyTypedData, rotateKeyCalldata,
+  setGuardianTypedData, setGuardianCalldata, cancelRecoveryTypedData, cancelRecoveryCalldata, executeTypedData, executeCalldata,
+  receiverFeeTypedData, receiverFeeCalldata, uaReceiverFeeTypedData, uaReceiverFeeCalldata,
+  relayFeeTypedData, relayFeeCalldata, uaRelayFeeTypedData, uaRelayFeeCalldata,
+  wrapOrderTypedData, wrapOrderCalldata, uaWrapOrderTypedData, uaWrapOrderCalldata,
+  cancelOrderTypedData, cancelOrderCalldata, cancelUAOrderTypedData, cancelUAOrderCalldata,
+  cancelWrapOrderTypedData, cancelWrapOrderCalldata, cancelUAWrapOrderTypedData, cancelUAWrapOrderCalldata,
+  cancelDexOrderTypedData, cancelDexOrderCalldata, uaCancelNonceTypedData, uaCancelNonceCalldata,
+} = OP_BUILDERS;
+
+// The generic path stays (owner 2026-10-31, TS-D14): a mixed batch, an op with no named entry.
+const MTX_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, MetaTransaction: fields(`address from,bytes data,${E}`) };
+const TRANSFER_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, MetaTransfer: STRUCTS.MetaTransfer };
+const TRADE_ORDER = STRUCTS.TradeOrder;
 const ORDER_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, TradeOrder: TRADE_ORDER };
 // A UA's order (dex.md CTR-DEX-25): the same fields with `from` and `destination` as 32-byte ids, in the sell token's
 // domain; a derived signer signs `ua_msg(kind, trade, digest)` through the registry, a native id the digest itself.
-const UA_TRADE_ORDER = fields(['from:bytes32', 'receiveToken:address', 'amount:uint256', 'receiveAmount:uint256',
-  'minFill:uint256', 'fee:uint256', 'relayer:address', 'dex:address', 'destination:bytes32', 'flags:uint8',
-  'batch:uint256', 'nonce:uint256', 'validUntil:uint256']);
+const UA_TRADE_ORDER = STRUCTS.UATradeOrder;
 const UA_ORDER_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, UATradeOrder: UA_TRADE_ORDER };
+const INVALIDATE_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE,
+  InvalidateNonces: fields('address from,uint256 batch,uint256 minNonce') };
 const UA_INVALIDATE_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE,
-  UAInvalidateNonces: fields(['from:bytes32', 'batch:uint256', 'minNonce:uint256']) };
-const DEX_ORDER_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, DexOrder: fields(['sellToken:address', 'order:TradeOrder']),
-  TradeOrder: TRADE_ORDER };
+  UAInvalidateNonces: fields('bytes32 from,uint256 batch,uint256 minNonce') };
+const DEX_ORDER_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, DexOrder: STRUCTS.DexOrder, TradeOrder: TRADE_ORDER };
 const sel = (sig) => hex(keccak_256(utf8ToBytes(sig)).subarray(0, 4));
 // Never inside a `MetaTransaction` (CLI-SGN-34): moving funds is a `MetaTransfer`, and EOAs never approve (CLI-SGN-36).
 const NEVER_CALLED = new Set(['transfer(address,uint256)', 'transferFrom(address,address,uint256)',
@@ -188,7 +441,8 @@ export function keyProofMessage(challenge) {
   return keccak_256(concatBytes(KEY_PROOF_PREFIX, challenge));
 }
 
-export function addKeyCalldata(key) {
+/** The direct `addKey(key)` call; `mtxAddKey` is `addKeyCalldata`. */
+export function addKeyCall(key) {
   return concatBytes(ADD_KEY_SELECTOR, abiEncode([KEY_TUPLE], [key]));
 }
 
@@ -211,23 +465,14 @@ export function metaTxTypedData({ name, contract, chainId, chainUid, message }) 
   };
 }
 
-/** The account's own call (CTR-ACC-10): `MetaTransaction{from: account, data, batch: 0, nonce, validUntil}` in the
- *  domain `SCaaS SmartKeyAccount`, exactly what `mtxExecuteAsOwner(data, nonce, validUntil, sig)` builds. */
-export function ownerCallTypedData({ account, chainId, chainUid, data, nonce, validUntil }) {
-  return metaTxTypedData({ name: 'SCaaS SmartKeyAccount', contract: account, chainId, chainUid,
-    message: { from: account, data, nonce, validUntil } });
-}
-
-/** The server's owner call must be exactly `addKey(newKey)` signed by `account` itself on lane 0, on `chainId` and the
- *  signer's own pinned `chainUid` (a missing or different salt is refused, CLI-SGN-33); nonce and a near deadline come
- *  from the server. Returns the digest to sign, or throws (CLI-SGN-05). */
+/** The server's owner call must be exactly `AddKey(newKey)` signed by `account` itself on lane 0, no relayer and no fee, on
+ *  `chainId` and the signer's own pinned `chainUid` (a missing or different salt is refused, CLI-SGN-33); nonce and a near
+ *  deadline come from the server. Returns the digest to sign, or throws (CLI-SGN-05). */
 export function checkOwnerCall(td, { account, chainId, chainUid, newKey, now = Math.floor(Date.now() / 1000), maxWindow = 3600 }) {
-  const m = (td && td.message) || {};
-  const nonce = uint(m.nonce, 'the nonce');
-  const until = deadline(m.validUntil, now, maxWindow);
-  const mine = digestOf(ownerCallTypedData({ account, chainId, chainUid, data: addKeyCalldata(newKey), nonce, validUntil: until }));
-  if (hex(digestOf(td)) !== hex(mine)) refuse('this is not the key change you asked for');
-  return mine;
+  const [kind, x, y, rpIdHash, originHash] = newKey;
+  return checkOp(td, { op: 'AddKey', contract: account, chainId, chainUid, now, maxWindow,
+    message: { from: account, kind, x, y, rpIdHash, originHash, batch: 0, mode: 0, relayer: ZERO_ADDRESS, fee: 0,
+      feeRecipient: ZERO_ADDRESS } }).digest;
 }
 
 function toBase(amount, decimals) {
@@ -258,13 +503,8 @@ export function metaTransferTypedData({ name = 'SCaaS MetaToken', contract, chai
 
 // The UA ledger's two structs (accounts.md CTR-UA-19, CTR-UA-26): ids as bytes32 (a native address zero-padded), the
 // token's own salted domain; the typehash separates them from `MetaTransaction` / `MetaTransfer`.
-const UA_TX_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, UAMetaTransaction: fields(['from:bytes32', 'data:bytes',
-  'batch:uint256', 'nonce:uint256', 'validUntil:uint256', 'mode:uint32', 'relayer:address', 'fee:uint256',
-  'feeRecipient:address']) };
-const UA_TRANSFER_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, UAMetaTransfer: fields(['from:bytes32', 'to:bytes32',
-  'value:uint256', 'entryRef:bytes32', 'batch:uint256', 'nonce:uint256', 'validUntil:uint256', 'mode:uint32',
-  'relayer:address', 'fee:uint256', 'feeRecipient:address']) };
-const ZERO_ID = '0x' + '00'.repeat(32);
+const UA_TX_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, UAMetaTransaction: fields(`bytes32 from,bytes data,${E}`) };
+const UA_TRANSFER_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, UAMetaTransfer: STRUCTS.UAMetaTransfer };
 
 /** A native address as a UA-ledger id: the address zero-padded to 32 bytes (accounts.md §1.3). */
 export const padId = (address) => hex(addressWord(address));
@@ -296,26 +536,13 @@ export function uaMetaTransferTypedData({ name = 'SCaaS MetaToken', contract, ch
   };
 }
 
-// The payee's co-signature of receiver-pays (CTR-MTX-05/06), over the payer's payment digest: `MetaTransfer`'s on the
-// address path (`mtxPayReceiverFee`), `UAMetaTransfer`'s on the UA path (`uaPayReceiverFee`). A native payee signs its
-// digest; a derived one `ua_msg(kind, receiver-fee, digest)` through the registry.
-const RECEIVER_FEE_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, ReceiverFee: fields(['paymentDigest:bytes32', 'fee:uint256',
-  'feeRecipient:address', 'validUntil:uint256']) };
-
-/** A token's `ReceiverFee(paymentDigest, fee, feeRecipient, validUntil)` in its salted domain (both paths). */
-export function receiverFeeTypedData({ name = 'SCaaS MetaToken', contract, chainId, chainUid, paymentDigest, fee,
-  feeRecipient, validUntil }) {
-  return { types: RECEIVER_FEE_TYPES, primaryType: 'ReceiverFee', domain: salted({ name, contract, chainId, chainUid }),
-    message: { paymentDigest: hex(bytes32(paymentDigest)), fee: String(fee), feeRecipient, validUntil: String(validUntil) } };
-}
-
 // The UA-5a receivers (accounts.md CTR-UA-28): a native caller credits a derived UA `to` (32 bytes) in one call.
 const abiCall = (sig, types, values) => concatBytes(fromHex(sel(sig)), abiEncode(types, values));
 /** `wrapToUA(underlying, amount, to)`: direct (payable on the native leg), or inside a `MetaTransaction` (`ABSOLUTE`). */
-export const wrapToUACalldata = (underlying, amount, to) =>
+export const wrapToUACall = (underlying, amount, to) =>
   abiCall('wrapToUA(address,uint256,bytes32)', ['address', 'uint256', 'bytes32'], [underlying, amount, to]);
 /** `unwrapToUA(underlying, wrapped, to, minOut)`: direct, in a `MetaTransaction` or a `UAMetaTransaction` (`AMOUNT(1)`). */
-export const unwrapToUACalldata = (underlying, wrapped, to, minOut) => abiCall('unwrapToUA(address,uint256,bytes32,uint256)',
+export const unwrapToUACall = (underlying, wrapped, to, minOut) => abiCall('unwrapToUA(address,uint256,bytes32,uint256)',
   ['address', 'uint256', 'bytes32', 'uint256'], [underlying, wrapped, to, minOut]);
 /** `payWithFeeToUA(to, amount, feeMode, fee, feeRecipient, entryRef)`: direct only (never a call, as `payWithFee`). */
 export const payWithFeeToUACalldata = (to, amount, feeMode, fee, feeRecipient, entryRef) =>
@@ -372,25 +599,25 @@ export function checkPayment(td, { account, chainId, chainUid, amount, decimals,
   return { digest, payee, token: expectedToken, entryRef, ...fee };
 }
 
-/** The payee's side of receiver-pays (CTR-MTX-05/06), both paths: `td` is the `ReceiverFee` to co-sign, `payment` the
- *  payer's `MetaTransfer` (`mtxPayReceiverFee`) or `UAMetaTransfer` (`uaPayReceiverFee`; `payee` then a 32-byte id,
- *  `padId` for a native one) it rides on. The payment must be the one the payee expects, as `checkPayment` checks it for
- *  the payer: to `payee`, `amount` (× 10^`decimals`) with the request's `entryRef` on lane `payLane(entryRef)` nonce 0,
- *  the contract's shape (fee NONE, relayer bound: mode 1), in `expectedToken`'s domain salted with `chainUid`; its digest
- *  is recomputed here and must be `paymentDigest`. The fee is the payee's own: non-zero, at most the amount and
- *  `maxFee` (default 0), to the `feeRecipient` it named, with a near deadline. The server supplies only the payment's
- *  `from` / `validUntil` / `relayer` and the fee's `validUntil`. Returns {digest, paymentDigest, payer, fee, feeRecipient}. */
-export function checkReceiverFee(td, { payee, chainId, chainUid, amount, decimals, entryRef, expectedToken, payment,
-  maxFee = 0, feeRecipient, now = Math.floor(Date.now() / 1000), maxWindow = 86400 }) {
-  if (!td || td.primaryType !== 'ReceiverFee') refuse('this is not a receiver fee');
+/** The payee's side of receiver-pays (CTR-MTX-05/06), both paths: `td` is the `ReceiverFee` (`mtxPayReceiverFee`) or
+ *  `UAReceiverFee` (`uaPayReceiverFee`; `payee` then a 32-byte id, `padId` for a native one) to co-sign, nesting the payer's
+ *  payment (TS-D19). The payment must be the one the payee expects, as `checkPayment` checks it for the payer: to `payee`,
+ *  `amount` (× 10^`decimals`) with the request's `entryRef` on lane `payLane(entryRef)` nonce 0, the contract's shape (fee
+ *  NONE, relayer bound: mode 1), in `expectedToken`'s domain salted with `chainUid`. The fee is the payee's own: non-zero, at
+ *  most the amount and `maxFee` (default 0), to the `feeRecipient` it named, with a near deadline. The server supplies only
+ *  the payment's `from` / `validUntil` / `relayer` and the fee's `validUntil`. Returns {digest, paymentDigest (what the
+ *  payer signs), payer, fee, feeRecipient}. */
+export function checkReceiverFee(td, { payee, chainId, chainUid, amount, decimals, entryRef, expectedToken, maxFee = 0, feeRecipient,
+  now = Math.floor(Date.now() / 1000), maxWindow = 86400 }) {
+  const ua = td && td.primaryType === 'UAReceiverFee';
+  if (!td || !(ua || td.primaryType === 'ReceiverFee')) refuse('this is not a receiver fee');
   if ([payee, amount, entryRef, expectedToken, feeRecipient].some((v) => v == null)) {
     refuse('the payee, amount, reference, token and fee recipient are required');
   }
-  const ua = payment && payment.primaryType === 'UAMetaTransfer';
-  if (!payment || !(ua || payment.primaryType === 'MetaTransfer')) refuse('the fee is not on a payment');
-  const p = payment.message || {};
-  const pdom = payment.domain || {};
-  if (!same(pdom.verifyingContract, expectedToken) || !same((td.domain || {}).verifyingContract, expectedToken)) refuse('wrong token');
+  const d = td.domain || {};
+  const m = td.message || {};
+  const p = m.payment || {};
+  if (!same(d.verifyingContract, expectedToken)) refuse('wrong token');
   if (!same(p.to, payee)) refuse('the payment does not pay you');
   const value = toBase(amount, decimals);
   if (uint(p.value, 'the amount') !== value || value === 0n) refuse('the amount differs from what you were shown');
@@ -399,20 +626,17 @@ export function checkReceiverFee(td, { payee, chainId, chainUid, amount, decimal
   const batch = payLane(entryRef);
   if (uint(p.batch, 'the lane') !== batch || uint(p.nonce, 'the nonce') !== 0n) refuse('a payment is signed once, on its request lane');
   if (uint(p.mode, 'the fee mode') !== 1n || uint(p.fee, 'the payer fee') !== 0n) refuse('the payment is not in the receiver-pays shape');
-  const build = ua ? uaMetaTransferTypedData : metaTransferTypedData;
-  const paymentDigest = digestOf(build({ name: pdom.name, contract: expectedToken, chainId, chainUid,
-    message: { ...p, to: payee, value, entryRef, batch, nonce: 0 } }));
-  if (hex(digestOf(payment)) !== hex(paymentDigest)) refuse('unexpected payment fields');
-  const m = td.message || {};
-  if (!same(m.paymentDigest, hex(paymentDigest))) refuse('the fee is not on the payment you expect');
   const fee = uint(m.fee, 'the fee');
   if (fee === 0n) refuse('no fee to co-sign');
   if (fee > value) refuse('the fee is more than the payment');
   if (fee > uint(maxFee, 'your fee limit')) refuse('the fee is above your limit');
   if (!same(m.feeRecipient, feeRecipient)) refuse('the fee goes to an address you did not name');
   const validUntil = deadline(m.validUntil, now, maxWindow);
-  const digest = digestOf(receiverFeeTypedData({ name: (td.domain || {}).name, contract: expectedToken, chainId, chainUid,
-    paymentDigest, fee, feeRecipient, validUntil }));
+  const payment = { ...p, to: payee, value, entryRef, batch, nonce: 0 };
+  const paymentDigest = digestOf((ua ? uaMetaTransferTypedData : metaTransferTypedData)({ name: d.name, contract: expectedToken,
+    chainId, chainUid, message: payment }));
+  const digest = digestOf((ua ? uaReceiverFeeTypedData : receiverFeeTypedData)({ name: d.name, contract: expectedToken, chainId,
+    chainUid, message: { payment, fee, feeRecipient, validUntil } }));
   if (hex(digestOf(td)) !== hex(digest)) refuse('unexpected receiver fee fields');
   return { digest, paymentDigest, payer: p.from, fee, feeRecipient };
 }
@@ -543,16 +767,15 @@ export function mtxExecuteCalldata(td, signature) {
     abiEncode(['bytes'], [asBytes(signature)]).subarray(32));
 }
 
-const TRANSFER_TUPLE = (id) => `(${id},${id},uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)`;
-
-/** A relay-fee job (CTR-MTX-27) on `router` (`MtxRelayFee`, executor `executor`): `inner` (optional) is the call's own
- *  `MetaTransaction` typed data on `target`; a relayer it binds (`MODE_RESTRICT_RELAYER`) is set to the executor (left
- *  open otherwise; bound to anything else: refused). Open mode by default (`payee` unset: the payment goes to the router,
- *  which pays whoever submits); `payee` binds it (never the executor). `ua`: the payer `from` and `payee` are 32-byte ids.
- *  Returns {call (the inner typed data to sign first, or null), prompt {call, payment}: both intents for one review,
- *  payment(callData) → {ref, lane, typedData, digest, calldata(sig)}}: `callData` is the call with its own signature
- *  (`mtxExecuteCalldata`); the payment is `{from, to, value: amount, entryRef: ref, batch: payLane(ref), nonce: 0,
- *  validUntil, mode: RESTRICT_RELAYER, relayer: router, fee: 0}`, `calldata` is `relay(…)` / `uaRelay(…)`. */
+/** A relay-fee job (CTR-MTX-27, TS-D19) on `router` (`MtxRelayFee`, executor `executor`): `inner` (optional) is the call's
+ *  own typed data on `target`, a named entry's or a `MetaTransaction`; a relayer it binds (`MODE_RESTRICT_RELAYER`) is set
+ *  to the executor (left open otherwise; bound to anything else: refused). Open mode by default (`payee` unset: the payment
+ *  goes to the router, which pays whoever submits); `payee` binds it (never the executor). `ua`: the payer `from` and
+ *  `payee` are 32-byte ids. Returns {call (the inner typed data to sign first, or null), prompt {call, payment}: both intents
+ *  for one review, payment(callData) → {ref, lane, typedData, digest, calldata(sig)}}: `callData` is the call with its own
+ *  signature (`<op>Calldata`, `mtxExecuteCalldata`); the payment is `RelayFee{from, target, callDataHash, payee, value:
+ *  amount, validUntil, relayer: router}` (`UARelayFee` on ids), on lane `payLane(ref)` with nonce 0 implicit; `calldata` is
+ *  the router's `relay(target, callData, token, from, payee, value, validUntil, sig)` / `uaRelay(…, UASig)`. */
 export function buildRelayFee({ name = 'SCaaS MetaToken', token, chainId, chainUid, router, executor, target, inner, from,
   amount, payee, validUntil, ua = false }) {
   if (same(target, executor) || same(target, router)) refuse('a relay never targets the router or its executor');
@@ -576,26 +799,61 @@ export function buildRelayFee({ name = 'SCaaS MetaToken', token, chainId, chainU
     call = { ...inner, message: { ...m, relayer: bound ? executor : m.relayer } };
   }
   const prompt = {
-    call: call ? { target, data: call.message.data, from: call.message.from, relayer: bound ? executor : null }
+    call: call ? { target, op: call.primaryType, message: call.message, from: call.message.from, relayer: bound ? executor : null }
       : { target },
     payment: { token, amount: BigInt(amount), payee: open ? null : to, open },
   };
   const payment = (callData) => {
     const ref = relayRef(chainId, target, callData);
     const lane = payLane(ref);
-    const typedData = (ua ? uaMetaTransferTypedData : metaTransferTypedData)({ name, contract: token, chainId, chainUid,
-      message: { from, to, value: amount, entryRef: ref, batch: lane, nonce: 0, validUntil, mode: 1, relayer: router, fee: 0 } });
+    const typedData = (ua ? uaRelayFeeTypedData : relayFeeTypedData)({ name, contract: token, chainId, chainUid,
+      message: { from, target, callDataHash: hex(keccak_256(asBytes(callData))), payee: to, value: amount, validUntil, relayer: router } });
     const t = typedData.message;
-    const tuple = [t.from, t.to, t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, t.relayer, t.fee, t.feeRecipient];
-    const T = TRANSFER_TUPLE(ua ? 'bytes32' : 'address');
-    const calldata = (sig) => abiCall(`${ua ? 'uaRelay' : 'relay'}(address,bytes,address,${T},bytes)`,
-      ['address', 'bytes', 'address', T, 'bytes'], [target, asBytes(callData), token, tuple, asBytes(sig)]);
+    const id = ua ? 'bytes32' : 'address';
+    const sigType = ua ? abiType('UASig') : 'bytes';
+    const calldata = (sig) => abiCall(`${ua ? 'uaRelay' : 'relay'}(address,bytes,address,${id},${id},uint256,uint256,${sigType})`,
+      ['address', 'bytes', 'address', id, id, 'uint256', 'uint256', sigType],
+      [target, asBytes(callData), token, t.from, t.payee, t.value, t.validUntil, ua ? abiValue('UASig', uaSigOf(sig)) : asBytes(sig)]);
     return { ref, lane, typedData, digest: digestOf(typedData), calldata };
   };
   return { call, prompt, payment };
 }
 
-/** A self-call `MetaTransaction` (CTR-MTX-17) that is exactly the call the client built, `call = {contract, data}`:
+/** CLI-SGN-27 on a named entry: check, then sign exactly what was checked. `td` must be struct `op` on `contract`, salted with
+ *  the signer's own `chainId` and `chainUid` (CLI-SGN-33), with every field of `message`, the op's own fields as the client
+ *  built them from the user's input (`from` too). Struct family `E`: the server supplies only what `message` leaves out, the
+ *  lane, nonce and deadline (near, CLI-SGN-05) and the fee fields; the fee within `maxFee` (default 0; PERCENT only on an
+ *  AMOUNT op, on the op's own amount, CTR-MTX-20), a bound fee recipient / relayer the one named. Any other struct: all of
+ *  it is the client's. Returns {digest, op, entry, feeMode, fee, feeRecipient, relayer}. */
+export function checkOp(td, { op, contract, chainId, chainUid, message, maxFee, feeRecipient, relayer,
+  now = Math.floor(Date.now() / 1000), maxWindow = 3600 }) {
+  const o = TYPED_OPS[op];
+  if (!o || !td || td.primaryType !== op) refuse('this is not the operation you asked for');
+  const m = td.message || {};
+  const d = td.domain || {};
+  if (!same(d.verifyingContract, contract)) refuse('the operation is not on the contract you chose');
+  let fee = {};
+  let server = {};
+  if (o.envelope) {
+    const basis = o.amount === undefined ? undefined : uint(message[o.amount], 'the amount');
+    fee = feePolicy({ ...m, ...message }, { maxFee, feeRecipient, relayer }, basis);
+    deadline(message.validUntil ?? m.validUntil, now, maxWindow);
+    server = { batch: uint(m.batch, 'the lane'), nonce: uint(m.nonce, 'the nonce'), validUntil: m.validUntil, mode: m.mode,
+      relayer: m.relayer, fee: m.fee, feeRecipient: m.feeRecipient };
+  }
+  let mine;
+  try {
+    mine = opTypedData(o, { name: d.name, contract, chainId, chainUid, message: { ...server, ...message } });
+  } catch (e) {
+    if (String(e.message).startsWith('Refusing')) throw e;
+    refuse('malformed typed data');
+  }
+  const digest = digestOf(mine);
+  if (hex(digestOf(td)) !== hex(digest)) refuse('this is not the operation you asked for');
+  return { digest, op, entry: o.entry, ...fee };
+}
+
+/** A self-call `MetaTransaction` (CTR-MTX-17), the generic path (TS-D14: a mixed batch, an op with no named entry), that is exactly the call the client built, `call = {contract, data}`:
  *  `verifyingContract` and `data` equal; `data` decoded against the contract's published allowlist `[{selector, name,
  *  feeClass, amountArg}]` (`mtxSelectors()`, pinned per implementation version, CLI-SGN-34); an unknown selector, a
  *  transfer/pay selector or an approval is refused; the fee within `maxFee` (default 0; PERCENT only on an AMOUNT
@@ -638,7 +896,7 @@ export function tradeOrderTypedData({ token, dex, sellToken, chainId, chainUid, 
 }
 
 /** A `UATradeOrder` in its SCaaS sell token's salted domain (CTR-DEX-25); ids 32 bytes (a native address zero-padded,
- *  `padId`); unset fields 0. Its cancel is `orderCancelTypedData({ orderHash })` over this order's digest. */
+ *  `padId`); unset fields 0. Its cancel is `cancelUAOrderTypedData({ message: { order } })`. */
 export function uaTradeOrderTypedData({ token, chainId, chainUid, order, name = 'SCaaS MetaToken' }) {
   const o = { minFill: '0', fee: '0', relayer: ZERO_ADDRESS, destination: ZERO_ID, flags: 0, batch: '0', ...order };
   const message = Object.fromEntries(UA_TRADE_ORDER.map((f) => [f.name,
@@ -654,30 +912,31 @@ export function uaInvalidateNoncesTypedData({ name = 'SCaaS MetaToken', contract
     message: { from: hex(bytes32(from)), batch: String(batch), minNonce: String(minNonce) } };
 }
 
-/** `CancelOrder(orderHash)` or `InvalidateNonces(from, batch, minNonce)` in the domain that holds the order (the sell
- *  token, or the DEX for an outside token). */
-export function orderCancelTypedData({ name = 'SCaaS MetaToken', contract, chainId, chainUid, orderHash, invalidate }) {
-  const domain = salted({ name, contract, chainId, chainUid });
-  if (invalidate) {
-    return { types: { EIP712Domain: SALTED_DOMAIN_TYPE, InvalidateNonces: fields(['from:address', 'batch:uint256', 'minNonce:uint256']) },
-      primaryType: 'InvalidateNonces', domain,
-      message: { from: invalidate.from, batch: String(invalidate.batch), minNonce: String(invalidate.minNonce) } };
-  }
-  return { types: { EIP712Domain: SALTED_DOMAIN_TYPE, CancelOrder: fields(['orderHash:bytes32']) }, primaryType: 'CancelOrder',
-    domain, message: { orderHash } };
+/** `InvalidateNonces(from, batch, minNonce)` in the domain that holds the orders (the sell token, or the DEX for an outside
+ *  token). */
+export function invalidateNoncesTypedData({ name = 'SCaaS MetaToken', contract, chainId, chainUid, from, batch, minNonce }) {
+  return { types: INVALIDATE_TYPES, primaryType: 'InvalidateNonces', domain: salted({ name, contract, chainId, chainUid }),
+    message: { from, batch: String(batch), minNonce: String(minNonce) } };
 }
 
-/** A cancel the user chose: `CancelOrder(orderHash)` of the client's own stored order, or `InvalidateNonces(account,
- *  batch, minNonce)`, in the domain that holds the order (`contract`: the sell token, or the DEX). `ua`: the account is
- *  a 32-byte id and the invalidation is `UAInvalidateNonces` (CTR-DEX-25). Returns the digest. */
-export function checkCancel(td, { account, chainId, chainUid, contract, orderHash, invalidate, ua = false }) {
+const CANCELS = ['CancelOrder', 'CancelUAOrder', 'CancelWrapOrder', 'CancelUAWrapOrder', 'CancelDexOrder'];
+
+/** A cancel the user chose: the nested cancel of the client's own stored `order` (TS-D19: `td.primaryType` names the struct
+ *  the order was signed in, `cancelOrderTypedData` … `cancelDexOrderTypedData`), or `InvalidateNonces(account, batch,
+ *  minNonce)`, in the domain that holds the order (`contract`: the sell token, or the DEX). `ua`: the account is a 32-byte
+ *  id and the invalidation is `UAInvalidateNonces` (CTR-DEX-25). Returns the digest. */
+export function checkCancel(td, { account, chainId, chainUid, contract, order, invalidate, ua = false }) {
   const d = (td && td.domain) || {};
-  const mine = digestOf(ua && invalidate
-    ? uaInvalidateNoncesTypedData({ name: d.name, contract, chainId, chainUid, ...invalidate, from: account })
-    : orderCancelTypedData({ name: d.name, contract, chainId, chainUid, orderHash,
-      invalidate: invalidate && { ...invalidate, from: account } }));
-  if (hex(digestOf(td)) !== hex(mine)) refuse('this is not the cancel you asked for');
-  return mine;
+  if (invalidate) {
+    const build = ua ? uaInvalidateNoncesTypedData : invalidateNoncesTypedData;
+    const mine = digestOf(build({ name: d.name, contract, chainId, chainUid, ...invalidate, from: account }));
+    if (hex(digestOf(td)) !== hex(mine)) refuse('this is not the cancel you asked for');
+    return mine;
+  }
+  if (!CANCELS.includes(td && td.primaryType)) refuse('this is not the cancel you asked for');
+  const held = td.primaryType === 'CancelDexOrder' ? (order || {}).order : order;
+  if (!same((held || {}).from, account)) refuse('this is not your order');
+  return checkOp(td, { op: td.primaryType, contract, chainId, chainUid, message: { order } }).digest;
 }
 
 /** A trade order that is exactly the one the client built from the user's input (CLI-SGN-35): `order` (receiveToken,

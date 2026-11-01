@@ -4,11 +4,15 @@ import { readFileSync } from 'node:fs';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
   hashTypedData, hashStruct, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
-  batchLeaf, evmAddress, passkeySubjectKey, addKeyCalldata, ownerCallTypedData, checkOwnerCall, checkPayment,
-  keyProofMessage, metaTxTypedData, metaTransferTypedData, checkCall, tradeOrderTypedData, orderCancelTypedData,
-  checkTradeOrder, bidMinFill, bidMinBase, checkCancel, payLane, receiverFeeTypedData, wrapToUACalldata, unwrapToUACalldata,
-  payWithFeeToUACalldata, checkReceiverFee,
+  batchLeaf, evmAddress, passkeySubjectKey, addKeyCall, addKeyTypedData, executeTypedData, checkOwnerCall, checkPayment,
+  keyProofMessage, metaTxTypedData, metaTransferTypedData, checkCall, tradeOrderTypedData, cancelOrderTypedData,
+  invalidateNoncesTypedData, checkTradeOrder, bidMinFill, bidMinBase, checkCancel, payLane, receiverFeeTypedData, wrapToUACall,
+  unwrapToUACall, payWithFeeToUACalldata, checkReceiverFee,
 } from '../src/evm.js';
+// What the contracts hash until C5 / C6: the forge KATs below still pin these.
+import {
+  orderCancelTypedData, ownerCallTypedData, checkOwnerCall as checkGenericOwnerCall, receiverFeeTypedData as receiverFeeOverDigest,
+} from '../legacy/typed-signing/evm-pre-named.js';
 import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
 const vectors = new URL('../../../smartcontracts/evm/test/vectors/', import.meta.url);
@@ -44,6 +48,7 @@ test('TradeOrder, CancelOrder, InvalidateNonces in the token domain = forge KAT 
   assert.equal(hex(hashTypedData(orderCancelTypedData({ ...at, orderHash: k.order_hash }))), k.cancel_digest);
   assert.equal(hex(hashTypedData(orderCancelTypedData({ ...at, invalidate: { from: o.from, batch: 7, minNonce: 43 } }))),
     k.invalidate_digest);
+  assert.equal(hex(hashTypedData(invalidateNoncesTypedData({ ...at, from: o.from, batch: 7, minNonce: 43 }))), k.invalidate_digest);
 });
 
 test('DexOrder (nested TradeOrder) and the DEX cancels in the DEX domain = forge KAT (DexKat.t.sol, dex_order_kat.json)', () => {
@@ -63,11 +68,11 @@ test('DexOrder (nested TradeOrder) and the DEX cancels in the DEX domain = forge
 
 test('SmartKeyAccount owner call = forge KAT (AccountKat.t.sol, smart_key_account_kat.json)', () => {
   const k = read('smart_key_account_kat.json');
-  assert.equal(hex(addKeyCalldata(secpSubjectKey('0x' + '77'.repeat(20)))), k.data);
+  assert.equal(hex(addKeyCall(secpSubjectKey('0x' + '77'.repeat(20)))), k.data);
   const td = ownerCallTypedData({ account: k.verifying_contract, chainId: Number(k.chain_id), chainUid: k.salt,
     data: k.data, nonce: k.nonce, validUntil: k.valid_until });
   assert.equal(hex(hashTypedData(td)), k.digest);
-  assert.equal(hex(checkOwnerCall(td, { account: k.verifying_contract, chainId: 7622, chainUid: k.salt,
+  assert.equal(hex(checkGenericOwnerCall(td, { account: k.verifying_contract, chainId: 7622, chainUid: k.salt,
     newKey: secpSubjectKey('0x' + '77'.repeat(20)), now: 1_800_000_000 })), k.digest);
   // the account encoding of the seed key's ECDSA signature (key index 0, no batch proof)
   const sig = fromHex(k.signature).subarray(160, 225);
@@ -178,53 +183,54 @@ const NEW_KEY = secpSubjectKey('0x' + '77'.repeat(20));
 
 const UID = '0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464';   // chain 7622 (chain-uids.json)
 
-/** The account's owner call as a server issues it: a `MetaTransaction` in the salted `SCaaS SmartKeyAccount` domain. */
-function serverOwnerCall(data, { account = ACCOUNT, chainId = 7622, salt = UID, nonce = '2', validUntil = String(NOW + 600),
+/** The account's owner call as a server issues it: an `AddKey` in the salted `SCaaS SmartKeyAccount` domain. */
+function serverOwnerCall(key, { account = ACCOUNT, chainId = 7622, salt = UID, nonce = '2', validUntil = String(NOW + 600),
   ...over } = {}) {
-  const td = metaTxTypedData({ name: 'SCaaS SmartKeyAccount', contract: account, chainId, chainUid: salt,
-    message: { from: account, data, nonce, validUntil, ...over } });
+  const [kind, x, y, rpIdHash, originHash] = key;
+  const td = addKeyTypedData({ contract: account, chainId, chainUid: salt,
+    message: { from: account, kind, x, y, rpIdHash, originHash, validUntil, ...over } });
   td.message.nonce = nonce;
   return td;
 }
 
-test('owner call: the client signs only addKey(the key it just made) as its own account, on its chain', () => {
+test('owner call: the client signs only AddKey(the key it just made) as its own account, on its chain', () => {
   const want = { account: ACCOUNT, chainId: 7622, chainUid: UID, newKey: NEW_KEY, now: NOW };
-  const td = serverOwnerCall(addKeyCalldata(NEW_KEY));
+  const td = serverOwnerCall(NEW_KEY);
+  assert.equal(td.primaryType, 'AddKey');
   assert.equal(hex(checkOwnerCall(td, want)), hex(hashTypedData(td)));
-  assert.equal(hex(hashTypedData(ownerCallTypedData({ account: ACCOUNT, chainId: 7622, chainUid: UID,
-    data: addKeyCalldata(NEW_KEY), nonce: '2', validUntil: String(NOW + 600) }))), hex(hashTypedData(td)));
   // addKey(abi.encode(key)): selector of addKey((uint8,bytes32,bytes32,bytes32,bytes32)) + 5 words.
-  assert.equal(hex(addKeyCalldata(NEW_KEY).subarray(0, 4)),
+  assert.equal(hex(addKeyCall(NEW_KEY).subarray(0, 4)),
     hex(keccak_256(utf8ToBytes('addKey((uint8,bytes32,bytes32,bytes32,bytes32))')).subarray(0, 4)));
-  const drain = concatSel('execute(address,uint256,bytes)');
-  const unsalted = serverOwnerCall(addKeyCalldata(NEW_KEY));
+  const drain = executeTypedData({ contract: ACCOUNT, chainId: 7622, chainUid: UID, name: 'SCaaS SmartKeyAccount',
+    message: { from: ACCOUNT, target: ATK, value: 1, validUntil: String(NOW + 600) } });
+  const unsalted = serverOwnerCall(NEW_KEY);
   unsalted.types = { ...unsalted.types, EIP712Domain: unsalted.types.EIP712Domain.slice(0, 4) };
   delete unsalted.domain.salt;
-  const oldShape = serverOwnerCall(addKeyCalldata(NEW_KEY));
+  const oldShape = serverOwnerCall(NEW_KEY);
   oldShape.domain.name = 'SCaaS SubjectAccount';
   const refused = [
-    serverOwnerCall(drain),                                                      // any other call
-    serverOwnerCall(addKeyCalldata(secpSubjectKey('0x' + '66'.repeat(20)))),     // someone else's key
-    serverOwnerCall(addKeyCalldata(NEW_KEY), { account: '0x' + 'bd'.repeat(20) }),
-    serverOwnerCall(addKeyCalldata(NEW_KEY), { from: '0x' + 'bd'.repeat(20) }),  // signed as another party
-    serverOwnerCall(addKeyCalldata(NEW_KEY), { chainId: 1 }),
-    serverOwnerCall(addKeyCalldata(NEW_KEY), { salt: '0x' + '11'.repeat(32) }),  // another chain_uid
-    unsalted,                                                                    // no salt (CLI-SGN-33)
-    oldShape,                                                                    // the built domain name
-    serverOwnerCall(addKeyCalldata(NEW_KEY), { batch: '1' }),
-    serverOwnerCall(addKeyCalldata(NEW_KEY), { mode: 1, relayer: '0x' + '02'.repeat(20) }),
-    serverOwnerCall(addKeyCalldata(NEW_KEY), { fee: '1' }),
-    serverOwnerCall(addKeyCalldata(NEW_KEY), { validUntil: String(NOW - 1) }),
-    serverOwnerCall(addKeyCalldata(NEW_KEY), { validUntil: String(NOW + 7200) }),
-    serverOwnerCall(addKeyCalldata(NEW_KEY), { nonce: '-1' }),
-    { ...serverOwnerCall(addKeyCalldata(NEW_KEY)), primaryType: 'OwnerCall' },
+    drain,                                                       // any other op
+    serverOwnerCall(secpSubjectKey('0x' + '66'.repeat(20))),     // someone else's key
+    serverOwnerCall(NEW_KEY, { account: '0x' + 'bd'.repeat(20) }),
+    serverOwnerCall(NEW_KEY, { from: '0x' + 'bd'.repeat(20) }),  // signed as another party
+    serverOwnerCall(NEW_KEY, { chainId: 1 }),
+    serverOwnerCall(NEW_KEY, { salt: '0x' + '11'.repeat(32) }),  // another chain_uid
+    unsalted,                                                    // no salt (CLI-SGN-33)
+    oldShape,                                                    // the built domain name
+    serverOwnerCall(NEW_KEY, { batch: '1' }),
+    serverOwnerCall(NEW_KEY, { mode: 1, relayer: '0x' + '02'.repeat(20) }),
+    serverOwnerCall(NEW_KEY, { fee: '1' }),
+    serverOwnerCall(NEW_KEY, { validUntil: String(NOW - 1) }),
+    serverOwnerCall(NEW_KEY, { validUntil: String(NOW + 7200) }),
+    serverOwnerCall(NEW_KEY, { nonce: '-1' }),
+    { ...serverOwnerCall(NEW_KEY), primaryType: 'OwnerCall' },
   ];
-  const extra = serverOwnerCall(addKeyCalldata(NEW_KEY));
-  extra.types = { ...extra.types, MetaTransaction: [...extra.types.MetaTransaction, { name: 'value', type: 'uint256' }] };
+  const extra = serverOwnerCall(NEW_KEY);
+  extra.types = { ...extra.types, AddKey: [...extra.types.AddKey, { name: 'value', type: 'uint256' }] };
   extra.message.value = '1';
   refused.push(extra);
   // single fields the server might slip in (set after the builder, which would zero the unbound ones)
-  const field = (f) => { const x = serverOwnerCall(addKeyCalldata(NEW_KEY)); f(x); return x; };
+  const field = (f) => { const x = serverOwnerCall(NEW_KEY); f(x); return x; };
   refused.push(
     field((x) => { x.message.feeRecipient = '0x' + '0f'.repeat(20); }),
     field((x) => { x.message.relayer = '0x' + '02'.repeat(20); }),             // relayer with mode 0
@@ -232,8 +238,8 @@ test('owner call: the client signs only addKey(the key it just made) as its own 
     field((x) => { x.domain.version = '2'; }),
   );
   for (const [i, bad] of refused.entries()) {
-    assert.throws(() => checkOwnerCall(bad, want), /Refusing to sign: this is not the key change|deadline|nonce|malformed/,
-      `case ${i}`);
+    assert.throws(() => checkOwnerCall(bad, want),
+      /Refusing to sign: this is not the operation|contract you chose|not signed in the domain|deadline|nonce|malformed/, `case ${i}`);
   }
   assert.throws(() => checkOwnerCall(td, { ...want, chainUid: '0x' + '11'.repeat(32) }), /Refusing to sign/);
   // a signer whose own chainUid is short or missing refuses rather than signing a garbage digest
@@ -241,24 +247,20 @@ test('owner call: the client signs only addKey(the key it just made) as its own 
     assert.throws(() => checkOwnerCall(td, { ...want, chainUid }), /Refusing to sign: the chain_uid is not 32 bytes/);
   }
   // the deadline bounds: now is too late, now + maxWindow is the last accepted
-  assert.throws(() => checkOwnerCall(serverOwnerCall(addKeyCalldata(NEW_KEY), { validUntil: String(NOW) }), want),
+  assert.throws(() => checkOwnerCall(serverOwnerCall(NEW_KEY, { validUntil: String(NOW) }), want),
     /Refusing to sign: the signing deadline is not near/);
-  checkOwnerCall(serverOwnerCall(addKeyCalldata(NEW_KEY), { validUntil: String(NOW + 3600) }), want);
-  assert.throws(() => checkOwnerCall(serverOwnerCall(addKeyCalldata(NEW_KEY), { validUntil: String(NOW + 3601) }), want),
+  checkOwnerCall(serverOwnerCall(NEW_KEY, { validUntil: String(NOW + 3600) }), want);
+  assert.throws(() => checkOwnerCall(serverOwnerCall(NEW_KEY, { validUntil: String(NOW + 3601) }), want),
     /Refusing to sign: the signing deadline is not near/);
   // typed data that does not hash is refused as such, never signed as some digest
-  const noTypes = serverOwnerCall(addKeyCalldata(NEW_KEY));
+  const noTypes = serverOwnerCall(NEW_KEY);
   delete noTypes.types;
   assert.throws(() => checkOwnerCall(noTypes, want), /Refusing to sign: malformed typed data/);
   // A passkey key is rebuilt from the server's rpId/origin and the coordinates the device returned.
   const pk = passkeySubjectKey({ x: new Uint8Array(32).fill(1), y: new Uint8Array(32).fill(2), rpId: 'pay.example.com',
     origin: 'https://pay.example.com' });
-  checkOwnerCall(serverOwnerCall(addKeyCalldata(pk)), { ...want, newKey: pk });
+  checkOwnerCall(serverOwnerCall(pk), { ...want, newKey: pk });
 });
-
-function concatSel(sig) {
-  return new Uint8Array([...keccak_256(utf8ToBytes(sig)).subarray(0, 4), ...new Uint8Array(96)]);
-}
 
 const TOKEN = '0x' + 'cd'.repeat(20);
 const REF = '0x' + '09'.repeat(32);
@@ -329,7 +331,7 @@ test('payment: only the payment the user was shown (payee, token, reference, amo
     [serverPayment({}, { chainId: '1' }), /unexpected payment fields/],
     [serverPayment({}, { salt: '0x' + '11'.repeat(32) }), /unexpected payment fields/],  // another chain_uid (CLI-SGN-33)
     [{ ...serverPayment(), primaryType: 'MetaTransaction' }, /this is not a payment/],    // the v1 struct
-    [serverOwnerCall(addKeyCalldata(NEW_KEY)), /this is not a payment/],
+    [serverOwnerCall(NEW_KEY), /this is not a payment/],
   ];
   const unsalted = serverPayment();
   unsalted.types = { ...unsalted.types, EIP712Domain: unsalted.types.EIP712Domain.slice(0, 4) };
@@ -487,28 +489,29 @@ test('trade order: exactly the order the client built, on a pinned DEX or wrappe
   checkTradeOrder(server({ validUntil: String(NOW + 30 * 86400) }), want);
 });
 
-test('cancel: only the order hash or the lane the user chose, from the account, in the order\'s domain', () => {
-  const H = '0x' + '5a'.repeat(32);
-  const want = { account: ACCOUNT, chainId: 7622, chainUid: UID, contract: TOKEN, orderHash: H };
+test('cancel: only the order the user holds or the lane the user chose, from the account, in the order\'s domain', () => {
+  const order = { from: ACCOUNT, receiveToken: ATK, amount: 1000, receiveAmount: 2000, dex: ATK, nonce: 5, validUntil: NOW + 600 };
+  const want = { account: ACCOUNT, chainId: 7622, chainUid: UID, contract: TOKEN, order };
   const at = { contract: TOKEN, chainId: 7622, chainUid: UID };
-  const td = orderCancelTypedData({ ...at, orderHash: H });
+  const td = cancelOrderTypedData({ ...at, message: { order } });
   assert.equal(hex(checkCancel(td, want)), hex(hashTypedData(td)));
   const inv = { batch: 7, minNonce: 43 };
-  const tdInv = orderCancelTypedData({ ...at, invalidate: { ...inv, from: ACCOUNT } });
-  assert.equal(hex(checkCancel(tdInv, { ...want, orderHash: undefined, invalidate: inv })), hex(hashTypedData(tdInv)));
-  const short = orderCancelTypedData({ ...at, orderHash: H });
-  short.message.orderHash = '0x' + '5a'.repeat(31);
-  assert.throws(() => hashTypedData(short), /bytes32 must be 32 bytes/);
+  const tdInv = invalidateNoncesTypedData({ ...at, ...inv, from: ACCOUNT });
+  assert.equal(hex(checkCancel(tdInv, { ...want, order: undefined, invalidate: inv })), hex(hashTypedData(tdInv)));
+  const short = cancelOrderTypedData({ ...at, message: { order } });
+  short.message.order.nonce = '6';
   for (const [i, bad] of [
-    orderCancelTypedData({ ...at, orderHash: '0x' + '5b'.repeat(32) }),
-    orderCancelTypedData({ ...at, contract: ATK, orderHash: H }),
-    orderCancelTypedData({ ...at, invalidate: { ...inv, from: ATK } }),
+    cancelOrderTypedData({ ...at, message: { order: { ...order, nonce: 6 } } }),   // another order
+    cancelOrderTypedData({ ...at, contract: ATK, message: { order } }),
+    invalidateNoncesTypedData({ ...at, ...inv, from: ATK }),
     short,
   ].entries()) assert.throws(() => checkCancel(bad, want), /Refusing to sign/, `case ${i}`);
-  assert.throws(() => checkCancel(orderCancelTypedData({ ...at, invalidate: { ...inv, minNonce: 44, from: ACCOUNT } }),
-    { ...want, orderHash: undefined, invalidate: inv }), /not the cancel you asked for/);
-  assert.throws(() => checkCancel(orderCancelTypedData({ ...at, invalidate: { ...inv, from: ATK } }),
-    { ...want, orderHash: undefined, invalidate: inv }), /not the cancel you asked for/);
+  assert.throws(() => checkCancel(td, { ...want, order: { ...order, from: ATK } }), /not your order/);
+  assert.throws(() => checkCancel(td, { ...want, order: undefined }), /not your order/);
+  assert.throws(() => checkCancel(invalidateNoncesTypedData({ ...at, ...inv, minNonce: 44, from: ACCOUNT }),
+    { ...want, order: undefined, invalidate: inv }), /not the cancel you asked for/);
+  assert.throws(() => checkCancel(invalidateNoncesTypedData({ ...at, ...inv, from: ATK }),
+    { ...want, order: undefined, invalidate: inv }), /not the cancel you asked for/);
 });
 
 const KEY_PROOF_ZERO = '0xfa7987471ecf88572865d4f53880fda17e67fadcae78beb98eb39504833f66de';
@@ -523,7 +526,7 @@ test('UA-5a: ReceiverFee typed data and the receivers\' calldata (`cast calldata
   const contract = '0x' + 'a1'.repeat(20);
   const chainUid = '0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464';
   const paymentDigest = hex(keccak_256(utf8ToBytes('payment')));
-  const td = receiverFeeTypedData({ contract, chainId: 7622, chainUid, paymentDigest, fee: 3000000,
+  const td = receiverFeeOverDigest({ contract, chainId: 7622, chainUid, paymentDigest, fee: 3000000,
     feeRecipient: '0x0000000000000000000000000000000000000fee', validUntil: 1800000060 });
   assert.equal(hex(keccak_256(utf8ToBytes(`ReceiverFee(${fields(td)})`))),
     '0x0128f09c9f096f23f7540465cf85cf756ab725cb552bf61e040433a9b20a9bdf');
@@ -536,8 +539,8 @@ test('UA-5a: ReceiverFee typed data and the receivers\' calldata (`cast calldata
   const U = '0x5ca00000000000000000000000000000000000b1';
   const TO = '0x' + 'ab'.repeat(32);
   const W = (n) => n.toString(16).padStart(64, '0');
-  assert.equal(hex(wrapToUACalldata(U, 1000000n, TO)), '0x1b0237ad' + W(BigInt(U)) + W(1000000n) + 'ab'.repeat(32));
-  assert.equal(hex(unwrapToUACalldata(U, 1000000n, TO, 990000n)),
+  assert.equal(hex(wrapToUACall(U, 1000000n, TO)), '0x1b0237ad' + W(BigInt(U)) + W(1000000n) + 'ab'.repeat(32));
+  assert.equal(hex(unwrapToUACall(U, 1000000n, TO, 990000n)),
     '0xe4a9f766' + W(BigInt(U)) + W(1000000n) + 'ab'.repeat(32) + W(990000n));
   assert.equal(hex(payWithFeeToUACalldata(TO, 100000000n, 2, 100000n, '0x0000000000000000000000000000000000000fee',
     '0x' + 'cd'.repeat(32))), '0x18c3a777' + 'ab'.repeat(32) + W(100000000n) + W(2n) + W(100000n) + W(0xfeen)
@@ -554,25 +557,25 @@ test('UA-5a: ReceiverFee typed data and the receivers\' calldata (`cast calldata
     return checkCall(t, { account: k.from, chainId: 7622, chainUid: k.salt, allowlist, maxFee: 10000,
       call: { contract: k.verifying_contract, data }, now: NOW });
   };
-  assert.equal(run(hex(wrapToUACalldata(U, 1000000n, TO))).name, 'wrapToUA');
-  const unwrap = hex(unwrapToUACalldata(U, 1000000n, TO, 0n));
+  assert.equal(run(hex(wrapToUACall(U, 1000000n, TO))).name, 'wrapToUA');
+  const unwrap = hex(unwrapToUACall(U, 1000000n, TO, 0n));
   assert.equal(run(unwrap, { mode: 0x11, fee: '10000' }).fee, 10000n);   // PERCENT on wrapped (argument 1): 1 %
-  assert.throws(() => run(hex(wrapToUACalldata(U, 1000000n, TO)), { mode: 0x11, fee: '1' }), /a percentage fee/);
+  assert.throws(() => run(hex(wrapToUACall(U, 1000000n, TO)), { mode: 0x11, fee: '1' }), /a percentage fee/);
   assert.throws(() => run(hex(payWithFeeToUACalldata(TO, 1n, 0, 0n, '0x' + '00'.repeat(20), TO))), /never signed as a call/);
 });
 
-test('receiver-pays, address path: the payee co-signs ReceiverFee only over the payment it expects, within its own bounds', () => {
+test('receiver-pays, address path: the payee co-signs ReceiverFee nesting only the payment it expects, within its own bounds', () => {
   const FEE_TO = '0x' + '0f'.repeat(20);
   const payment = serverPayment();   // mode 1 (relayer bound), fee NONE, lane payLane(REF), nonce 0: CTR-MTX-06's shape
   const pd = hex(hashTypedData(payment));
-  const rf = (over = {}, dom = {}) => {
-    const t = receiverFeeTypedData({ contract: TOKEN, chainId: 7622, chainUid: UID, paymentDigest: pd, fee: '3000000',
-      feeRecipient: FEE_TO, validUntil: String(NOW + 60), ...over });
+  const rf = (over = {}, dom = {}, pay = {}) => {
+    const t = receiverFeeTypedData({ contract: TOKEN, chainId: 7622, chainUid: UID, message: { payment: { ...payment.message, ...pay },
+      fee: '3000000', feeRecipient: FEE_TO, validUntil: String(NOW + 60), ...over } });
     t.domain = { ...t.domain, ...dom };
     return t;
   };
   const want = { payee: PAYEE, chainId: 7622, chainUid: UID, amount: '125000.5', decimals: 6, entryRef: REF,
-    expectedToken: TOKEN, payment, maxFee: '3000000', feeRecipient: FEE_TO, now: NOW };
+    expectedToken: TOKEN, maxFee: '3000000', feeRecipient: FEE_TO, now: NOW };
   const ok = checkReceiverFee(rf(), want);
   assert.equal(hex(ok.digest), hex(hashTypedData(rf())));
   assert.deepEqual([hex(ok.paymentDigest), ok.payer, ok.fee, ok.feeRecipient], [pd, ACCOUNT, 3000000n, FEE_TO]);
@@ -585,22 +588,17 @@ test('receiver-pays, address path: the payee co-signs ReceiverFee only over the 
   no(rf({ fee: '0' }), {}, /no fee/);
   no(rf({ validUntil: String(NOW + 86401) }), {}, /deadline is not near/);
   no(rf({ validUntil: String(NOW) }), {}, /deadline is not near/);
-  // paymentDigest recomputed from the payment the payee expects
-  no(rf({ paymentDigest: hex(keccak_256(utf8ToBytes('another payment'))) }), {}, /not on the payment you expect/);
-  no(rf(), { payment: serverPayment({ to: ATK }) }, /does not pay you/);
+  // the nested payment against the one the payee expects
+  no(rf({}, {}, { to: ATK }), {}, /does not pay you/);
   no(rf(), { amount: '125000.4' }, /the amount differs/);
   no(rf({ fee: '125000500001' }), { maxFee: '999999999999' }, /more than the payment/);
   no(rf(), { entryRef: '0x' + '0a'.repeat(32) }, /reference differs/);
-  no(rf(), { payment: serverPayment({ nonce: '1' }) }, /on its request lane/);
-  no(rf(), { payment: serverPayment({ mode: 0x21, fee: '1' }) }, /receiver-pays shape/);
-  no(rf(), { payment: serverPayment({ mode: 0, relayer: '0x' + '00'.repeat(20) }) }, /receiver-pays shape/);
-  no(rf(), { payment: serverPayment({}, {}, ATK) }, /wrong token/);
+  no(rf({}, {}, { nonce: '1' }), {}, /on its request lane/);
+  no(rf({}, {}, { mode: 0x21, fee: '1' }), {}, /receiver-pays shape/);
+  no(rf({}, {}, { mode: 0, relayer: '0x' + '00'.repeat(20) }), {}, /receiver-pays shape/);
   no(rf({}, { verifyingContract: ATK }), {}, /wrong token/);
   no(rf({}, { salt: '0x' + '11'.repeat(32) }), {}, /unexpected receiver fee fields/);
-  no(rf(), { payment: serverPayment({}, { salt: '0x' + '11'.repeat(32) }) }, /unexpected payment fields/);
-  no(rf(), { payment: { ...payment, primaryType: 'MetaTransaction' } }, /not on a payment/);
   no({ ...rf(), primaryType: 'MetaTransfer' }, {}, /not a receiver fee/);
-  no(rf(), { payment: undefined }, /not on a payment/);
 });
 
 test('a bid\'s minFill from a base minimum and back (CLI-SGN-35)', () => {

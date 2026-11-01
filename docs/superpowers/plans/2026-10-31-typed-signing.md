@@ -726,10 +726,14 @@ envelope builders from the explicit structs), new `clients/clientkeys/scripts/ty
 message, `structHash`, `digest`, the entry's calldata, a native ECDSA signature), regenerate `metatx3.json` /
 `uatrade_kat.json` via `ua-sig-vectors.mjs` (the UA ops / cancels move); tests `test/{evm,relayfee,paymeta,ua-metatx3,ua-trade,zether}.test.js`.
 
-- [ ] Step 1: failing tests: `every typehash pinned`, `hashTypedData(td) == row.digest`, `calldata decodes to the
+- [x] Step 1: failing tests: `every typehash pinned`, `hashTypedData(td) == row.digest`, `calldata decodes to the
   message`, `checkOp refuses a changed field`, `nested cancel / receiver fee`, `canonical zero for unbound relayer`.
-- [ ] Steps 2–4: FAIL → implement → `npm test` PASS; generators twice, no diff. Step 5: commit
+- [x] Steps 2–4: FAIL → implement → `npm test` PASS; generators twice, no diff. Step 5: commit
   `typed-signing C1: clientkeys typed builders for every named entry, typed_ops.json`.
+- **C1 result (2026-11-01):** 74 structs (59 with `E`), every plan typehash as printed, every row equal to `cast` (`scripts/typed-ops-cast-check.mjs`); the C0
+  entries run `typed_ops.json` rows (`NamedEntry.t.sol`). The generic builders stay in `src/evm.js` (owner ruling above). `metatx3.json` / `uatrade_kat.json`
+  are not regenerated: C6 does, and drops the `legacy/typed-signing/evm-pre-named.js` imports. Calls for C2–C6 (router `relay`, `mtxWrapOrder` with
+  `underlying`, wrap-order cancels, `Payout`, `AccountSig`): decisions.md CLI-SGN-27, change of 2026-11-01.
 
 ### Task C2: base + public tokens
 

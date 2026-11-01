@@ -143,7 +143,7 @@ export function deriveKey(seed, network, i = 0, { coinType = null } = {}) {
 }
 
 /** Sign EIP-712 typed data: the digest is computed here (`hashTypedData`, preimage `0x1901 ‖ …`), so it can never be
- *  an EIP-7702 authorization (`0x05 ‖ rlp(…)`) or a transaction hash. Check `td` first (`checkPayment`, `checkCall`, …). */
+ *  an EIP-7702 authorization (`0x05 ‖ rlp(…)`) or a transaction hash. Check `td` first (`checkPayment`, `checkOp`, `checkCall`, …). */
 export function signTyped(key, td) {
   return sign(key, hashTypedData(td));
 }

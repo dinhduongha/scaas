@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {console2} from "forge-std/console2.sol";
-import {V2Fixture} from "../v2/helpers/V2Fixture.sol";
+import {V2Fixture, UID_} from "../v2/helpers/V2Fixture.sol";
 import {MandateFixture} from "../wallet/MandateWallet.t.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
@@ -23,6 +23,7 @@ import {Catalogue} from "../helpers/Catalogue.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 
 Vm constant VM = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
@@ -69,6 +70,68 @@ function domainJson(address c) view returns (string memory) {
 function ecdsa(uint256 pk, bytes32 digest) pure returns (bytes memory) {
     (uint8 v, bytes32 r, bytes32 s) = VM.sign(pk, digest);
     return abi.encodePacked(r, s, v);
+}
+
+// ------------------------------------------------------------------ typed-signing C1: typed_ops.json on the C0 entries
+
+string constant TYPED_OPS = "../vectors/typed/typed_ops.json";
+bytes32 constant SALTED_DOMAIN = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)");
+
+function rowKey(string memory j) pure returns (uint256) {
+    return uint256(VM.parseJsonBytes32(j, ".key.private"));
+}
+
+function msgField(string memory op, string memory field) pure returns (string memory) {
+    return string.concat(".ops.", op, ".message.", field);
+}
+
+function domainField(string memory op, string memory kind, string memory field) pure returns (string memory) {
+    return string.concat(".ops.", op, ".domains.", kind, ".", field);
+}
+
+function rowEnvelope(string memory j, string memory op) pure returns (MetaTxLib.Envelope memory e) {
+    e = rowEnvelope2(j, op);
+    e.from = VM.parseJsonAddress(j, msgField(op, "from"));
+}
+
+/// The envelope without `from`, an address or a 32-byte id by the struct.
+function rowEnvelope2(string memory j, string memory op) pure returns (MetaTxLib.Envelope memory e) {
+    e.batch = VM.parseJsonUint(j, msgField(op, "batch"));
+    e.nonce = VM.parseJsonUint(j, msgField(op, "nonce"));
+    e.validUntil = VM.parseJsonUint(j, msgField(op, "validUntil"));
+    e.mode = uint32(VM.parseJsonUint(j, msgField(op, "mode")));
+    e.relayer = VM.parseJsonAddress(j, msgField(op, "relayer"));
+    e.fee = VM.parseJsonUint(j, msgField(op, "fee"));
+    e.feeRecipient = VM.parseJsonAddress(j, msgField(op, "feeRecipient"));
+}
+
+/// The row by itself: its digest under its own domain, its native signature, the hashes of its type string.
+function checkRow(string memory j, string memory op, string memory kind) pure {
+    require(keccak256(bytes(VM.parseJsonString(j, string.concat(".ops.", op, ".typeString"))))
+        == VM.parseJsonBytes32(j, string.concat(".ops.", op, ".typehash")), "typehash");
+    string memory d = string.concat(".ops.", op, ".domains.", kind, ".domain.");
+    bytes32 sep = keccak256(abi.encode(SALTED_DOMAIN, keccak256(bytes(VM.parseJsonString(j, string.concat(d, "name")))),
+        keccak256(bytes(VM.parseJsonString(j, string.concat(d, "version")))), VM.parseJsonUint(j, string.concat(d, "chainId")),
+        VM.parseJsonAddress(j, string.concat(d, "verifyingContract")), VM.parseJsonBytes32(j, string.concat(d, "salt"))));
+    bytes32 digest = VM.parseJsonBytes32(j, domainField(op, kind, "digest"));
+    require(sep == VM.parseJsonBytes32(j, domainField(op, kind, "domainSeparator")), "domain separator");
+    require(digest == keccak256(abi.encodePacked(hex"1901", sep, VM.parseJsonBytes32(j, string.concat(".ops.", op, ".structHash")))), "digest");
+    bytes memory sig = VM.parseJsonBytes(j, domainField(op, kind, "signature"));
+    bytes32 r;
+    bytes32 s;
+    assembly ("memory-safe") {
+        r := mload(add(sig, 32))
+        s := mload(add(sig, 64))
+    }
+    require(ecrecover(digest, uint8(sig[64]), r, s) == VM.parseJsonAddress(j, ".key.address"), "signature");
+}
+
+/// The contract's own digest of the row's struct hash: an entry accepts this signature only if it hashes what clientkeys hashed.
+function onChain(string memory j, string memory op, address c) view returns (bytes memory) {
+    (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) = IERC5267(c).eip712Domain();
+    bytes32 sep = keccak256(abi.encode(SALTED_DOMAIN, keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt));
+    return ecdsa(rowKey(j), keccak256(abi.encodePacked(hex"1901", sep,
+        VM.parseJsonBytes32(j, string.concat(".ops.", op, ".structHash")))));
 }
 
 string constant UNWRAP_FIELDS = '{"name":"from","type":"address"},{"name":"wrapped","type":"uint256"},{"name":"recipient","type":"address"},{"name":"minOut","type":"uint256"}';
@@ -181,6 +244,29 @@ contract NamedUnwrapTest is V2Fixture {
         assertLt(named, generic + 2_000);
     }
 
+    /// C1: the `Unwrap` row byte for byte on the C0 entry, and run under this token's domain.
+    function test_c1_unwrapRow() public {
+        string memory j = VM.readFile(TYPED_OPS);
+        checkRow(j, "Unwrap", "token");
+        MetaTxLib.Envelope memory e = rowEnvelope(j, "Unwrap");
+        uint256 wrapped = VM.parseJsonUint(j, msgField("Unwrap", "wrapped"));
+        address recipient = VM.parseJsonAddress(j, msgField("Unwrap", "recipient"));
+        uint256 minOut = VM.parseJsonUint(j, msgField("Unwrap", "minOut"));
+        assertEq(abi.encodeCall(w.mtxUnwrap, (e, wrapped, recipient, minOut, VM.parseJsonBytes(j, domainField("Unwrap", "token", "signature")))),
+            VM.parseJsonBytes(j, domainField("Unwrap", "token", "calldata")));
+        usd.mint(e.from, 2 * wrapped);
+        vm.startPrank(e.from);
+        usd.approve(address(w), 2 * wrapped);
+        w.wrap(2 * wrapped);
+        vm.stopPrank();
+        bytes memory sig = onChain(j, "Unwrap", address(w));
+        vm.prank(e.relayer);
+        w.mtxUnwrap(e, wrapped, recipient, minOut, sig);
+        assertEq(usd.balanceOf(recipient), wrapped);
+        assertEq(w.mtxNonce(e.from, e.batch), 1);
+        assertEq(w.balanceOf(e.feeRecipient), wrapped * e.fee / 1_000_000, "the row's PERCENT fee");
+    }
+
     /// The named entry is no self-call target: the generic path cannot call it, nor the entry itself.
     function test_c0_namedEntryNotAllowlisted() public {
         MetaTxLib.MetaTransaction memory m = _generic(0, 1, 0);
@@ -250,6 +336,50 @@ contract NamedShieldPqzTest is PqzFixture {
         assertEq(w.balanceOf(signer), 70 * SCALE);
         assertEq(w.uaNonce(u.from, 0), 2);
     }
+
+    /// C1: the row's `toUA` is `ZetherFixture`'s; here the registry answers for it as for `alice`: the signature is what is pinned.
+    function _rowHolder(string memory j, string memory op, address from) internal returns (bytes32 toUA) {
+        toUA = VM.parseJsonBytes32(j, msgField(op, "toUA"));
+        (address ptr, bytes32 keyHash, bool proven) = reg.pqzKeyOf(alice);
+        vm.mockCall(address(reg), abi.encodeCall(IUARegistry.pqzKeyOf, (toUA)), abi.encode(ptr, keyHash, proven));
+        usd.mint(from, 100 * SCALE);
+        vm.startPrank(from);
+        usd.approve(address(w), 100 * SCALE);
+        w.wrap(100 * SCALE);
+        vm.stopPrank();
+    }
+
+    function test_c1_shieldRow() public {
+        string memory j = VM.readFile(TYPED_OPS);
+        checkRow(j, "Shield", "pqz");
+        MetaTxLib.Envelope memory e = rowEnvelope(j, "Shield");
+        bytes32 toUA = _rowHolder(j, "Shield", e.from);
+        uint256 amount = VM.parseJsonUint(j, msgField("Shield", "amount"));
+        assertEq(abi.encodeWithSignature("mtxShield((address,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,bytes)",
+            e, toUA, amount, VM.parseJsonBytes(j, domainField("Shield", "pqz", "signature"))), VM.parseJsonBytes(j, domainField("Shield", "pqz", "calldata")));
+        bytes memory sig = onChain(j, "Shield", address(w));
+        vm.prank(e.relayer);
+        w.mtxShield(e, toUA, amount, sig);
+        assertEq(w.mtxNonce(e.from, e.batch), 1);
+        assertEq((w.pqzPending(toUA, 0) >> 96) & type(uint64).max, amount);
+    }
+
+    function test_c1_uaShieldRow() public {
+        string memory j = VM.readFile(TYPED_OPS);
+        checkRow(j, "UAShield", "pqz");
+        MetaTxLib.Envelope memory env = rowEnvelope2(j, "UAShield");
+        MetaTxLib.UAEnvelope memory u = MetaTxLib.UAEnvelope(VM.parseJsonBytes32(j, msgField("UAShield", "from")), env.batch, env.nonce,
+            env.validUntil, env.mode, env.relayer, env.fee, env.feeRecipient);
+        bytes32 toUA = _rowHolder(j, "UAShield", address(uint160(uint256(u.from))));
+        uint256 amount = VM.parseJsonUint(j, msgField("UAShield", "amount"));
+        assertEq(abi.encodeCall(w.uaShield, (u, toUA, amount, VM.parseJsonBytes(j, domainField("UAShield", "pqz", "signature")))),
+            VM.parseJsonBytes(j, domainField("UAShield", "pqz", "calldata")), "C0: `bytes auth` until C2");
+        bytes memory sig = onChain(j, "UAShield", address(w));
+        vm.prank(u.relayer);
+        w.uaShield(u, toUA, amount, sig);
+        assertEq(w.uaNonce(u.from, u.batch), 1);
+        assertEq((w.pqzPending(toUA, 0) >> 96) & type(uint64).max, amount);
+    }
 }
 
 contract NamedShieldZetherTest is ZetherFixture {
@@ -308,6 +438,29 @@ contract NamedShieldZetherTest is ZetherFixture {
         assertEq(w.totalShielded(), 25);
         assertEq(w.uaNonce(from, 0), 1);
     }
+
+    /// C1: the `Shield` row, its `toUA` is `bob`.
+    function test_c1_shieldRow() public {
+        string memory j = VM.readFile(TYPED_OPS);
+        checkRow(j, "Shield", "zether");
+        MetaTxLib.Envelope memory e = rowEnvelope(j, "Shield");
+        bytes32 toUA = VM.parseJsonBytes32(j, msgField("Shield", "toUA"));
+        assertEq(toUA, ZetherTypes.UA.unwrap(bob.ua));
+        uint256 amount = VM.parseJsonUint(j, msgField("Shield", "amount"));
+        assertEq(abi.encodeWithSignature("mtxShield((address,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,bytes)",
+            e, toUA, amount, VM.parseJsonBytes(j, domainField("Shield", "zether", "signature"))),
+            VM.parseJsonBytes(j, domainField("Shield", "zether", "calldata")));
+        usd.mint(e.from, 100 * SCALE);
+        vm.startPrank(e.from);
+        usd.approve(address(w), 100 * SCALE);
+        w.wrap(100 * SCALE);
+        vm.stopPrank();
+        bytes memory sig = onChain(j, "Shield", address(w));
+        vm.prank(e.relayer);
+        w.mtxShield(e, toUA, amount, sig);
+        assertEq(w.mtxNonce(e.from, e.batch), 1);
+        assertEq(w.totalShielded(), amount);
+    }
 }
 
 contract NamedMandateTest is MandateFixture {
@@ -352,5 +505,31 @@ contract NamedMandateTest is MandateFixture {
         e.from = delegate;
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         w.mtxSetMandate(e, address(t), d2, 7, 9, 1 days, expiry, sig);
+    }
+
+    function _rowCall(string memory j, MetaTxLib.Envelope memory e, bytes memory sig) internal pure returns (bytes memory) {
+        return abi.encodeCall(MandateWallet.mtxSetMandate, (e, VM.parseJsonAddress(j, msgField("SetMandate", "token")),
+            VM.parseJsonAddress(j, msgField("SetMandate", "delegate")), uint128(VM.parseJsonUint(j, msgField("SetMandate", "maxPerPayment"))),
+            uint128(VM.parseJsonUint(j, msgField("SetMandate", "maxPerPeriod"))), uint64(VM.parseJsonUint(j, msgField("SetMandate", "periodSeconds"))),
+            uint64(VM.parseJsonUint(j, msgField("SetMandate", "expiry"))), sig));
+    }
+
+    /// C1: the `SetMandate` row on a wallet of the row's key.
+    function test_c1_setMandateRow() public {
+        string memory j = VM.readFile(TYPED_OPS);
+        checkRow(j, "SetMandate", "wallet");
+        MetaTxLib.Envelope memory e = rowEnvelope(j, "SetMandate");
+        assertEq(_rowCall(j, e, VM.parseJsonBytes(j, domainField("SetMandate", "wallet", "signature"))),
+            VM.parseJsonBytes(j, domainField("SetMandate", "wallet", "calldata")));
+        MandateWallet mine = new MandateWallet(e.from, UID_);
+        bytes memory data = _rowCall(j, e, onChain(j, "SetMandate", address(mine)));
+        vm.prank(e.relayer);
+        (bool ok, bytes memory ret) = address(mine).call(data);
+        assertTrue(ok, string(ret));
+        (address d2,,,, uint128 perPayment, uint128 perPeriod,) = mine.mandates(VM.parseJsonAddress(j, msgField("SetMandate", "token")));
+        assertEq(d2, VM.parseJsonAddress(j, msgField("SetMandate", "delegate")));
+        assertEq(perPayment, VM.parseJsonUint(j, msgField("SetMandate", "maxPerPayment")));
+        assertEq(perPeriod, VM.parseJsonUint(j, msgField("SetMandate", "maxPerPeriod")));
+        assertEq(mine.mtxNonce(e.from, e.batch), 1);
     }
 }

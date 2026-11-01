@@ -13,8 +13,10 @@ import * as ua from '../src/ua.js';
 import { schnorrVerify as zetherVerify } from '../src/zether.js';
 import { hex, fromHex, keccak_256, concatBytes } from '../src/bytes.js';
 import { PQ_KINDS, pqMessage } from '../src/pq.js';
-import { hashTypedData, hashStruct, padId, uaTradeOrderTypedData, uaInvalidateNoncesTypedData, orderCancelTypedData,
-  checkTradeOrder, checkCancel } from '../src/evm.js';
+import { hashTypedData, hashStruct, padId, uaTradeOrderTypedData, uaInvalidateNoncesTypedData, cancelUAOrderTypedData,
+  checkTradeOrder, checkCancel, TYPED_OPS } from '../src/evm.js';
+// uatrade_kat.json keeps the struct the contracts hash until C6: CancelOrder over the order hash.
+import { orderCancelTypedData } from '../legacy/typed-signing/evm-pre-named.js';
 
 import { dir } from './ua-vectors-dir.js';
 const V = JSON.parse(readFileSync(new URL('uatrade_kat.json', dir)));
@@ -93,6 +95,19 @@ test('mldsa65 orders for the caps verify with noble under trade', () => {
     assert.ok(PQ_KINDS.mldsa65.alg.verify(sig, pqMessage('mldsa65', msg), fromHex(keys[r.index].keyData)), r.name);
     const other = ua.uaMessage(0x0131, ua.purposeTag('metatx'), fromHex(r.orderHash));
     assert.equal(PQ_KINDS.mldsa65.alg.verify(sig, pqMessage('mldsa65', other), fromHex(keys[r.index].keyData)), false);
+  }
+});
+
+test('CancelUAOrder nests the order as signed; checkCancel takes it only from the holder of that order', () => {
+  for (const r of V.rows) {
+    const td = cancelUAOrderTypedData({ ...at, contract: V.tokenA, message: { order: r.order.message } });
+    assert.equal(hex(hashStruct(td.types, 'UATradeOrder', td.message.order)), r.structHash);
+    assert.equal(hex(hashStruct(td.types, 'CancelUAOrder', td.message)),
+      hex(keccak_256(concatBytes(fromHex(TYPED_OPS.CancelUAOrder.typehash), fromHex(r.structHash)))));
+    const want = { account: r.from, ...at, contract: V.tokenA, order: r.order.message };
+    assert.equal(hex(checkCancel(td, want)), hex(hashTypedData(td)), r.name);
+    assert.throws(() => checkCancel(td, { ...want, account: padId('0x' + '5e'.repeat(20)) }), /not your order/);
+    assert.throws(() => checkCancel(td, { ...want, order: { ...r.order.message, nonce: '2' } }), /Refusing/);
   }
 });
 

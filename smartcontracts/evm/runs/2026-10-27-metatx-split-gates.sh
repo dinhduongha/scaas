@@ -50,10 +50,10 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
       (cd clients/zether-prover && ../../scripts/capped cargo build -j2 --release --bin zether-cli) || return 1
       for i in 1 2; do
         (cd clients/clientkeys && ../../scripts/capped sh -c 'node scripts/ua-vectors.mjs && node scripts/ua-sig-vectors.mjs &&
-           node scripts/ua-portable-vectors.mjs && node scripts/soroban-ua-ops-vectors.mjs') || return 1
+           node scripts/ua-portable-vectors.mjs && node scripts/soroban-ua-ops-vectors.mjs && node scripts/typed-ops-vectors.mjs') || return 1
         (cd clients/ua-rs && ../../scripts/capped cargo test -j2 --features signers --test groups -- --ignored write_groups_json) || return 1
         (cd clients/zether-prover && target/release/zether-cli vectors vectors) || return 1
-        git diff --exit-code --stat -- smartcontracts/vectors/ua smartcontracts/soroban/vectors clients/zether-prover/vectors || return 1
+        git diff --exit-code --stat -- smartcontracts/vectors/ua smartcontracts/vectors/typed smartcontracts/soroban/vectors clients/zether-prover/vectors || return 1
       done
       for f in r33_keys schnorr_bls12381; do # the committed copies of the zether files
         cmp clients/zether-prover/vectors/$f.json clients/clientkeys/test/vectors/$f.json &&

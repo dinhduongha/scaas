@@ -2,7 +2,8 @@
 export * from './webauthn.js';
 export {
   hashTypedData, passkeySubjectKey, secpSubjectKey, accountSignature, merkleBatch, checkOwnerCall, checkPayment, keyProofMessage,
-  checkCall, checkTradeOrder, checkCancel, payLane, metaTransferTypedData, tradeOrderTypedData, orderCancelTypedData,
+  checkCall, checkOp, checkTradeOrder, checkCancel, payLane, metaTransferTypedData, tradeOrderTypedData, cancelOrderTypedData,
+  invalidateNoncesTypedData,
   uaMetaTxTypedData, uaMetaTransferTypedData, padId,
   metaPayId, decodeMeta, checkPayMeta, buildMtxPayMeta, buildUaPayMeta, relayRef, mtxExecuteCalldata, buildRelayFee,
 } from './evm.js';

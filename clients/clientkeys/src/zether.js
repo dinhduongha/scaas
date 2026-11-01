@@ -12,7 +12,8 @@ import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256, sha512 } from '@noble/hashes/sha2.js';
 import { keccak_256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, abiEncode, wipe } from './bytes.js';
 import { createVault, openVault, seal, open } from './vault.js';
-import { uaOf, uaMessage, purposeTag, holderPopMessage } from './ua.js';
+import { uaOf, uaMessage, purposeTag, holderPopMessage, uaSig } from './ua.js';
+import { OP_BUILDERS, hashTypedData } from './evm.js';
 
 export const USE_CONF = 7;
 export const USE_DISCLOSURE = 8;
@@ -206,6 +207,48 @@ export function zetherSign(curve, x, purpose, digest) {
 export function zetherOwnerAuth(curve, x, digest) {
   return hex(abiEncode(['bytes', 'bytes'], [new Uint8Array(0), zetherSign(curve, x, 'zether-owner', digest)]));
 }
+
+/** `ownerSig` of a typed owner op (typed-signing TS-D19): `UASig{signature: Schnorr by x over uaMessage(kind, zether-owner, digest)}`. */
+export const zetherOwnerSig = (curve, x, digest) => uaSig({ signature: zetherSign(curve, x, 'zether-owner', digest) });
+
+// ------------------------------------------------------------------ the confidential entries (typed-signing C3 / C4)
+// From the one table of src/evm.js, on the explicit structs of Appendix X: `<op>TypedData({name, contract, chainId,
+// chainUid, message})`, `<op>Calldata(td, sig, extra)`. `extra` holds what the entry takes unsigned: `pqzAuth`, `ownerSig`.
+
+/** The explicit Zether point (Appendix X.1, `struct G1`): the 128 encoded bytes, word by word. */
+export function g1(point) {
+  const b = point instanceof Uint8Array ? point : fromHex(point);
+  if (b.length !== 128) throw new Error('wrong point length');
+  const w = (i) => hex(b.subarray(32 * i, 32 * i + 32));
+  return { x0: w(0), x1: w(1), y0: w(2), y1: w(3) };
+}
+
+export const {
+  zetherTransferSingleTypedData, zetherTransferSingleCalldata, uaZetherTransferSingleTypedData, uaZetherTransferSingleCalldata,
+  zetherTransferTypedData, zetherTransferCalldata, uaZetherTransferTypedData, uaZetherTransferCalldata,
+  zetherTransferCompactTypedData, zetherTransferCompactCalldata, uaZetherTransferCompactTypedData, uaZetherTransferCompactCalldata,
+  zetherUnshieldTypedData, zetherUnshieldCalldata, uaZetherUnshieldTypedData, uaZetherUnshieldCalldata,
+  zetherUnshieldUnwrapTypedData, zetherUnshieldUnwrapCalldata, uaZetherUnshieldUnwrapTypedData, uaZetherUnshieldUnwrapCalldata,
+  rollOverSignedTypedData, rollOverSignedCalldata, uaRollOverSignedTypedData, uaRollOverSignedCalldata,
+  setRollOverModeTypedData, setRollOverModeCalldata, uaSetRollOverModeTypedData, uaSetRollOverModeCalldata,
+  rollOverBatchTypedData, rollOverBatchCalldata, uaRollOverBatchTypedData, uaRollOverBatchCalldata,
+  zetherRollOverTypedData, zetherRollOverCalldata, zetherSetRollOverModeTypedData, zetherSetRollOverModeCalldata,
+} = OP_BUILDERS;
+
+export const {
+  pqzTransferSingleTypedData, pqzTransferSingleCalldata, uaPqzTransferSingleTypedData, uaPqzTransferSingleCalldata,
+  pqzTransferSingleCompactTypedData, pqzTransferSingleCompactCalldata, uaPqzTransferSingleCompactTypedData, uaPqzTransferSingleCompactCalldata,
+  pqzTransferTypedData, pqzTransferCalldata, uaPqzTransferTypedData, uaPqzTransferCalldata,
+  pqzTransferCompactTypedData, pqzTransferCompactCalldata, uaPqzTransferCompactTypedData, uaPqzTransferCompactCalldata,
+  pqzUnshieldTypedData, pqzUnshieldCalldata, uaPqzUnshieldTypedData, uaPqzUnshieldCalldata,
+  pqzUnshieldUnwrapTypedData, pqzUnshieldUnwrapCalldata, uaPqzUnshieldUnwrapTypedData, uaPqzUnshieldUnwrapCalldata,
+  pqzAuthTypedData,
+} = OP_BUILDERS;
+
+/** The digest of `mtxRollOverSigned`: `ZetherRollOver` in the token's domain, signed under `zether-owner`. */
+export const zetherRollOverDigest = (opts) => hashTypedData(zetherRollOverTypedData(opts));
+/** The digest of `mtxSetRollOverMode`: `ZetherSetRollOverMode` in the token's domain, signed under `zether-owner`. */
+export const zetherSetRollOverModeDigest = (opts) => hashTypedData(zetherSetRollOverModeTypedData(opts));
 
 // ------------------------------------------------------------------ at rest
 

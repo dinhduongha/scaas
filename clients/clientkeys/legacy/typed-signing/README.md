@@ -7,3 +7,9 @@ typed digest, `eth_signTypedData_v4`, instead of `personal_sign`): `ua-portable-
 `personalSignDigest`; formerly in `src/ua.js`). The old vector files are in `smartcontracts/vectors/ua/legacy/typed-signing/`;
 `ref/pre-typed-signing` holds the same bytes. Not exported, not bundled; load-bearing for one negative (see the file
 header); `test/ua-groups.test.js` read the raw PoP until typed-signing P2 regenerated `groups.json` on the typed records.
+
+`evm-pre-named.js` (typed-signing C1): what `src/evm.js` built before the named typed entries, verbatim: `ownerCallTypedData` and
+the `MetaTransaction` `checkOwnerCall`, `ReceiverFee` over `paymentDigest` and its `checkReceiverFee`, `orderCancelTypedData`
+(`CancelOrder(bytes32 orderHash)`) and its `checkCancel`, the `MetaTransfer` `buildRelayFee`. **Load-bearing until C6** (C5 for the
+owner call): `scripts/ua-sig-vectors.mjs` builds the rows of `metatx3.json` / `uatrade_kat.json` from it and the forge KAT tests pin
+it, because the contracts still hash these structs. C6 regenerates both files on the nested structs and drops those imports.

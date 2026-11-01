@@ -12,8 +12,10 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import * as ua from '../src/ua.js';
 import { schnorrVerify as zetherVerify } from '../src/zether.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, abiEncode, concatBytes } from '../src/bytes.js';
-import { hashTypedData, hashStruct, padId, uaMetaTxTypedData, uaMetaTransferTypedData, receiverFeeTypedData,
-  unwrapToUACalldata, checkReceiverFee } from '../src/evm.js';
+import { hashTypedData, hashStruct, padId, uaMetaTxTypedData, uaMetaTransferTypedData, uaReceiverFeeTypedData, unwrapToUACall,
+  checkReceiverFee as checkNestedReceiverFee, TYPED_OPS } from '../src/evm.js';
+// metatx3.json keeps the struct the contracts hash until C6 (`uaPayReceiverFee`): ReceiverFee over the payment digest.
+import { receiverFeeTypedData, checkReceiverFee } from '../legacy/typed-signing/evm-pre-named.js';
 
 import { dir } from './ua-vectors-dir.js';
 const V = JSON.parse(readFileSync(new URL('metatx3.json', dir)));
@@ -82,7 +84,7 @@ const authOk = (from, purpose, digest, auth) => {
 
 test('burn and unwrapToUA rows: one per signer of call, the same envelope, data the new call', () => {
   const sel = (sig) => hex(keccak_256(utf8ToBytes(sig)).subarray(0, 4));
-  const unwrapToUA = hex(unwrapToUACalldata('0x5ca00000000000000000000000000000000000b1', 1000000n,
+  const unwrapToUA = hex(unwrapToUACall('0x5ca00000000000000000000000000000000000b1', 1000000n,
     S.derived.find((d) => d.name === 'p256').ua, 990000n));
   for (const [rows, data, batch] of [[V.burn, sel('burn(uint256)') + '00'.repeat(29) + '0f4240', '8'],
     [V.unwrapToUA, unwrapToUA, '9']]) {
@@ -97,7 +99,7 @@ test('burn and unwrapToUA rows: one per signer of call, the same envelope, data 
       assert.notEqual(authOk(r.from, 'metatx', r.digest, r.auth), false, r.name);
     }
   }
-  assert.equal(hex(unwrapToUACalldata('0x5ca00000000000000000000000000000000000b1', 1000000n, '0x' + 'ab'.repeat(32), 990000n)),
+  assert.equal(hex(unwrapToUACall('0x5ca00000000000000000000000000000000000b1', 1000000n, '0x' + 'ab'.repeat(32), 990000n)),
     '0xe4a9f766' + '0'.repeat(24) + '5ca00000000000000000000000000000000000b1' + '0'.repeat(59) + 'f4240' + 'ab'.repeat(32)
     + '0'.repeat(59) + 'f1b30');
 });
@@ -142,5 +144,22 @@ test('receiver-pays, UA path: checkReceiverFee accepts every receiverFee row for
     // the address-path struct over the same fields is another digest: never accepted for a UA payment
     assert.throws(() => checkReceiverFee(r.receiverFee, { ...want, payment: { ...r.transfer, primaryType: 'MetaTransfer' } }),
       /malformed|unexpected payment fields/);
+  }
+});
+
+test('UAReceiverFee nests the row\'s payment: the payee checks it on ids, the payment digest is the payer\'s', () => {
+  for (const r of V.receiverFee) {
+    const t = r.transfer.message;
+    const rf = r.receiverFee.message;
+    const td = uaReceiverFeeTypedData({ ...domain, message: { payment: t, fee: rf.fee, feeRecipient: rf.feeRecipient, validUntil: rf.validUntil } });
+    assert.equal(hex(hashStruct(td.types, 'UAMetaTransfer', td.message.payment)),
+      hex(hashStruct(r.transfer.types, 'UAMetaTransfer', t)), 'the nested struct is the payment as signed');
+    assert.equal(hex(hashStruct(td.types, 'UAReceiverFee', td.message)), hex(keccak_256(concatBytes(fromHex(TYPED_OPS.UAReceiverFee.typehash),
+      hashStruct(td.types, 'UAMetaTransfer', td.message.payment), abiEncode(['uint256', 'address', 'uint256'], [rf.fee, rf.feeRecipient, rf.validUntil])))));
+    const want = { payee: t.to, chainId: V.chainId, chainUid: V.chainUid, amount: t.value, decimals: 0, entryRef: t.entryRef,
+      expectedToken: V.token, maxFee: rf.fee, feeRecipient: rf.feeRecipient, now: Number(rf.validUntil) - 60 };
+    const ok = checkNestedReceiverFee(td, want);
+    assert.deepEqual([hex(ok.digest), hex(ok.paymentDigest), ok.payer], [hex(hashTypedData(td)), r.paymentDigest, t.from]);
+    assert.throws(() => checkNestedReceiverFee({ ...td, primaryType: 'ReceiverFee' }, want), /unexpected receiver fee fields|malformed/);
   }
 });

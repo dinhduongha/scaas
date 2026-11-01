@@ -3,8 +3,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { relayRef, payLane, buildRelayFee, metaTxTypedData, hashTypedData, padId, mtxExecuteCalldata } from '../src/evm.js';
-import { hex, keccak_256, utf8ToBytes } from '../src/bytes.js';
+import { relayRef, payLane, buildRelayFee, metaTxTypedData, hashTypedData, padId, mtxExecuteCalldata, unwrapTypedData,
+  unwrapCalldata, TYPED_OPS } from '../src/evm.js';
+import { hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
 const R = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/metatx/relayref.json', import.meta.url)));
 const sel = (sig) => hex(keccak_256(utf8ToBytes(sig)).subarray(0, 4));
@@ -37,23 +38,23 @@ test('buildRelayFee: open mode by default, one prompt with both intents, the rou
   // the inner envelope binds its relayer to the executor (the router never calls a target itself)
   assert.equal(plan.call.message.relayer, EXECUTOR);
   assert.equal(plan.call.message.mode, 1);
-  assert.deepEqual(plan.prompt.call, { target: TARGET, data: '0x12345678', from: SIGNER, relayer: EXECUTOR });
+  assert.deepEqual(plan.prompt.call, { target: TARGET, op: 'MetaTransaction', message: plan.call.message, from: SIGNER, relayer: EXECUTOR });
   assert.deepEqual(plan.prompt.payment, { token: TOKEN, amount: 25n, payee: null, open: true });
   const callData = '0xdeadbeef';
   const p = plan.payment(callData);
   assert.equal(p.ref, relayRef(7622, TARGET, callData));
   assert.equal(p.lane, payLane(p.ref));
   const m = p.typedData.message;
-  assert.equal(p.typedData.primaryType, 'MetaTransfer');
-  assert.deepEqual([m.from, m.to, m.value, m.entryRef, m.batch, m.nonce, m.mode, m.relayer, m.fee],
-    [PAYER, ROUTER, '25', p.ref, String(p.lane), '0', 1, ROUTER, '0']);
+  assert.equal(p.typedData.primaryType, 'RelayFee');
+  assert.deepEqual([m.from, m.target, m.callDataHash, m.payee, m.value, m.validUntil, m.relayer],
+    [PAYER, TARGET, hex(keccak_256(fromHex(callData))), ROUTER, '25', String(NOW + 300), ROUTER]);
   assert.equal(hex(p.digest), hex(hashTypedData(p.typedData)));
   const cd = p.calldata(new Uint8Array(65));
-  assert.equal(hex(cd.subarray(0, 4)), sel('relay(address,bytes,address,(address,address,uint256,bytes32,uint256,uint256,'
-    + 'uint256,uint32,address,uint256,address),bytes)'));
+  assert.equal(hex(cd.subarray(0, 4)), sel('relay(address,bytes,address,address,address,uint256,uint256,bytes)'));
   assert.equal(word(cd, 0), '0x' + '00'.repeat(12) + TARGET.slice(2));
   assert.equal(word(cd, 2), '0x' + '00'.repeat(12) + TOKEN.slice(2));
-  assert.equal(word(cd, 6), p.ref, 't.entryRef');
+  assert.equal(word(cd, 3), '0x' + '00'.repeat(12) + PAYER.slice(2), 'from');
+  assert.equal(word(cd, 4), '0x' + '00'.repeat(12) + ROUTER.slice(2), 'payee: open mode');
 });
 
 test('buildRelayFee: an open inner envelope stays open; a bound payee; the UA path', () => {
@@ -61,14 +62,14 @@ test('buildRelayFee: an open inner envelope stays open; a bound payee; the UA pa
   assert.equal(open.call.message.relayer, '0x' + '00'.repeat(20));
   const PAYEE = '0x' + '55'.repeat(20);
   const bound = buildRelayFee({ ...base, payee: PAYEE }).payment('0x');
-  assert.equal(bound.typedData.message.to, PAYEE);
+  assert.equal(bound.typedData.message.payee, PAYEE);
   const ua = buildRelayFee({ ...base, from: padId(PAYER), ua: true });
   assert.equal(ua.call, null);
   const u = ua.payment('0x01');
-  assert.equal(u.typedData.primaryType, 'UAMetaTransfer');
-  assert.equal(u.typedData.message.to, padId(ROUTER), 'open mode on the UA path: to = pad(router)');
-  assert.equal(hex(u.calldata(new Uint8Array(2)).subarray(0, 4)), sel('uaRelay(address,bytes,address,(bytes32,bytes32,'
-    + 'uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes)'));
+  assert.equal(u.typedData.primaryType, 'UARelayFee');
+  assert.equal(u.typedData.message.payee, padId(ROUTER), 'open mode on the UA path: payee = pad(router)');
+  assert.equal(hex(u.calldata(new Uint8Array(2)).subarray(0, 4)),
+    sel('uaRelay(address,bytes,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,bytes,bytes)[]))'));
 });
 
 test('mtxExecuteCalldata: the signed call the payment commits to', () => {
@@ -86,6 +87,19 @@ test('mtxExecuteCalldata: the signed call the payment commits to', () => {
   assert.equal(w(13), 65n, 'signature length');
   assert.equal(cd.length, 4 + 32 * 17);
   assert.equal(plan.payment(cd).ref, relayRef(7622, TARGET, cd));
+});
+
+test('a named entry as the relayed call: fee 0, relayer bound to the executor; the payment commits to its calldata', () => {
+  const td = unwrapTypedData({ contract: TARGET, chainId: 7622, chainUid: UID, message: { from: SIGNER, wrapped: 7, recipient: SIGNER,
+    validUntil: NOW + 300, mode: 1 } });
+  const plan = buildRelayFee({ ...base, inner: td });
+  assert.equal(plan.call.message.relayer, EXECUTOR);
+  assert.deepEqual([plan.prompt.call.op, plan.prompt.call.relayer], ['Unwrap', EXECUTOR]);
+  const cd = unwrapCalldata(plan.call, new Uint8Array(65));
+  assert.equal(hex(cd.subarray(0, 4)), sel(TYPED_OPS.Unwrap.call(plan.call, new Uint8Array(65)).abi));
+  const p = plan.payment(cd);
+  assert.equal(p.typedData.message.callDataHash, hex(keccak_256(cd)));
+  assert.equal(p.ref, relayRef(7622, TARGET, cd));
 });
 
 test('buildRelayFee refuses to pay the executor, an inner envelope bound elsewhere or on another contract', () => {
