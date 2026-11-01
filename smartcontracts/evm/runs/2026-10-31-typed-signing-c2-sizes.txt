@@ -18,8 +18,8 @@ Step 0b: forge inspect storageLayout, ABI (functions, events, errors) and method
 After the entries: storageLayout identical (label, slot, offset, type). Selectors: + mtxCancelNonce on all; + mtxBurn, uaBurn on the Normal kinds;
 + mtxWrap(Envelope), mtxWrapLeg, mtxWrapToUA, mtxAddReserve, mtxUnwrapLeg, mtxUnwrapToUA, uaUnwrap(UAEnvelope), uaUnwrapLeg, uaUnwrapToUA on the Wrapped kinds;
 - mtxExecuteWithFee on all.
-ERC-165 ids answered by supportsInterface, sources unchanged: IMetaTx 0xf6695913, IERC20MetaTx 0x98653977, IERC20Payment 0xcc624078, IUALedger 0x4311eb9b.
-IConfidentialToken 0xc68b926b. Interfaces no supportsInterface answers: IWrappedToken 0xb6672464 -> 0xa7bb6a18, IMetaTokenV2 0x0386503f -> 0x2bc21c97.
+ERC-165 ids answered by supportsInterface: IMetaTx 0xf6695913 -> 0x2f1aa7fe (review: `mtxCancelNonce` declared there, owner 2026-11-01); sources unchanged: IERC20MetaTx 0x98653977, IERC20Payment 0xcc624078, IUALedger 0x4311eb9b.
+IConfidentialToken 0xc68b926b. Interfaces no supportsInterface answers: IWrappedToken 0xb6672464 -> 0xa7bb6a18, IMetaTokenV2 0x0386503f -> 0x2bc21c97 before the review (it then also loses the flat `uaUnwrap`).
 
 == Gas pins, test/v2/MetaTxGasV2.t.sol AMS_*
 A 87,936 -> 87,940; B 185,844 -> 185,848; C 103,751 -> 103,743; D 103,666 -> 103,658; E 103,744 -> 104,049; F 185,868 -> 185,848; G 182,453 -> 182,502; P 189,800 -> 189,813.
@@ -38,3 +38,12 @@ clientkeys npm test: 199 passed, 2 skipped. scaas-node `kat` filter: 5 passed.
 vectors-check: each generator twice, no vector moved; typed_ops.json 74 structs, 130 digests, 129 calldatas equal to cast's.
 docs_check: 0 errors.
 metatx-parity.json regenerated: 24 rows gone (mtxExecuteWithFee x 4 x 6 kinds), none added, no `ok` / `ret` / `expect` moved; the rest follows the shared lane counter and balances.
+
+== C2 review round (tables above are the first pass; these are the final figures)
+Runtime: NormalToken 35,709; WrappedToken 46,247; NormalZetherToken 45,053; WrappedZetherToken 57,404 (margin 8,132); NormalPqzToken 45,905; WrappedPqzToken 58,307 (margin 7,229);
+MandateWallet 15,893; SmartKeyAccount 19,072; MtxPipelineLib 10,844. Storage layout of all six kinds still identical to e7e01c7a. Selectors since the first pass: - flat uaUnwrap, nothing added.
+debit_min_gas measured, not re-pinned: n2048-kmax1024 6,834,545 (+298); n2304-kmax4096 7,005,992 (+299); n2560-kmax16384 7,176,314 (+300); n2816-kmax65536 7,365,968 (+302).
+AMS_* unchanged: every row within BUDGET (D 103,670, F 185,860, the rest as pinned).
+forge test (default set): 154 suites, 1,768 passed, 0 failed, 11 skipped. --isolate: 22 passed. size gate: 0 errors, 46 contracts.
+clientkeys npm test: 199 passed, 2 skipped. scaas-node `kat` filter: 5 passed. vectors-check: no vector moved, typed_ops.json byte-identical. docs_check: 0 errors.
+metatx-parity.json: 30 `uaUnwrap` rows gone, none added, no `ok` / `ret` / `expect` moved; after L1-L5 only `gas` moved.

@@ -2,6 +2,8 @@
 pragma solidity ^0.8.24;
 
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {Test} from "forge-std/Test.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {MetaTxBase} from "../../src/metatx/MetaTxBase.sol";
@@ -17,7 +19,41 @@ import {MockERC20} from "../helpers/Mocks.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "../ua/UALedgerBase.sol";
-import {TYPED_OPS, SALTED_DOMAIN, checkRow, onChain, rowEnvelope, rowEnvelope2, msgField, domainField} from "./NamedEntry.t.sol";
+import {UACall} from "../ua/UACall.sol";
+import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
+import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
+import {Catalogue} from "../helpers/Catalogue.sol";
+import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
+import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
+import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {VM, TYPED_OPS, SALTED_DOMAIN, checkRow, onChain, rowEnvelope, rowEnvelope2, msgField, domainField} from "./NamedEntry.t.sol";
+
+/// `built` (the entry's call from the message's fields) is the row's calldata under `kind`; that calldata runs on `c` from
+/// the row's relayer, the signature replaced by the one under `c`'s domain.
+function runRow(string memory j, string memory op, string memory kind, address c, bytes memory built) returns (bytes memory ret) {
+    checkRow(j, op, kind);
+    bytes memory cd = VM.parseJsonBytes(j, domainField(op, kind, "calldata"));
+    require(keccak256(built) == keccak256(cd), "calldata");
+    bytes memory rowSig = VM.parseJsonBytes(j, domainField(op, kind, "signature"));
+    bytes memory sig = onChain(j, op, c);
+    uint256 at = find(cd, rowSig);
+    for (uint256 i; i < 65; ++i) cd[at + i] = sig[i];
+    VM.prank(VM.parseJsonAddress(j, msgField(op, "relayer")));
+    bool ok;
+    (ok, ret) = c.call(cd);
+    if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+}
+
+function find(bytes memory hay, bytes memory needle) pure returns (uint256) {
+    for (uint256 i; i + needle.length <= hay.length; ++i) {
+        uint256 k;
+        while (k < needle.length && hay[i + k] == needle[k]) ++k;
+        if (k == needle.length) return i;
+    }
+    revert("signature not in the calldata");
+}
 
 /// typed-signing C2 (TS-D14): every named entry of the base and the public tokens runs its `typed_ops.json` row: the row
 /// by itself (`checkRow`), its calldata equal to the message's fields, then the row's own calldata on a contract, under
@@ -66,29 +102,8 @@ contract TypedOpsTest is UALedgerBase {
         u = MetaTxLib.UAEnvelope(_b32(op, "from"), e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient);
     }
 
-    /// `built` (the entry's call from the message's fields) is the row's calldata; that calldata runs on `c` from the row's
-    /// relayer, the signature replaced by the one under `c`'s domain.
-    function _run(string memory op, address c, bytes memory built) internal returns (bytes memory ret) {
-        checkRow(j, op, "token");
-        bytes memory cd = vm.parseJsonBytes(j, domainField(op, "token", "calldata"));
-        assertEq(built, cd, "calldata");
-        bytes memory rowSig = _sigOf(op);
-        bytes memory sig = onChain(j, op, c);
-        uint256 at = _find(cd, rowSig);
-        for (uint256 i; i < 65; ++i) cd[at + i] = sig[i];
-        vm.prank(_addr(op, "relayer"));
-        bool ok;
-        (ok, ret) = c.call(cd);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
-    }
-
-    function _find(bytes memory hay, bytes memory needle) internal pure returns (uint256) {
-        for (uint256 i; i + needle.length <= hay.length; ++i) {
-            uint256 k;
-            while (k < needle.length && hay[i + k] == needle[k]) ++k;
-            if (k == needle.length) return i;
-        }
-        revert("signature not in the calldata");
+    function _run(string memory op, address c, bytes memory built) internal returns (bytes memory) {
+        return runRow(j, op, "token", c, built);
     }
 
     function _feeOf(string memory op, uint256 basis) internal view returns (uint256) {
@@ -482,8 +497,146 @@ contract TypedOpsTest is UALedgerBase {
 
         // the same signature on the next nonce: another digest
         e.nonce = 1;
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaP));
         tok.uaBurn(_uaE(e, uaP), 100, s);
+    }
+
+    function _uaSigFor(bytes32 ua, address c, string memory head, bytes memory args, MetaTxLib.Envelope memory e)
+        internal view returns (IUARegistry.UASig memory)
+    {
+        return UAKinds.uaSig(ua, _authFor(ua, _digest(c, head, ua, args, e)));
+    }
+
+    function test_namedUADerivedUnwrap() public {
+        _wrapFor(alice, 1_000);
+        vm.prank(alice);
+        wrp.transferToUA(uaP, 1_000);
+        MetaTxLib.Envelope memory e = _env(address(0), 0, 0, 0, address(0));
+        bytes memory args = abi.encode(uint256(100), bob, uint256(100));
+        wrp.uaUnwrap(_uaE(e, uaP), 100, bob, 100,
+            _uaSigFor(uaP, address(wrp), "UAUnwrap(bytes32 from,uint256 wrapped,address recipient,uint256 minOut,", args, e));
+        assertEq(und.balanceOf(bob), 100);
+        assertEq(wrp.balanceOfUA(uaP), 900);
+
+        e.nonce = 1;
+        args = abi.encode(address(und), uint256(200), bob, uint256(200));
+        wrp.uaUnwrapLeg(_uaE(e, uaP), address(und), 200, bob, 200, _uaSigFor(uaP, address(wrp),
+            "UAUnwrapLeg(bytes32 from,address underlying,uint256 wrapped,address recipient,uint256 minOut,", args, e));
+        assertEq(und.balanceOf(bob), 300);
+        assertEq(wrp.balanceOfUA(uaP), 700);
+        assertEq(wrp.uaNonce(uaP, e.batch), 2);
+    }
+
+    function test_namedUADerivedUnwrapToUA() public {
+        tok.mint(address(this), 1_000);
+        tok.approve(address(wrpL), 1_000);
+        wrpL.wrap(1_000);
+        wrpL.transferToUA(uaP, 1_000);
+        MetaTxLib.Envelope memory e = _env(address(0), 0, 0, 0, address(0));
+        bytes memory args = abi.encode(address(tok), uint256(100), uaB, uint256(100));
+        wrpL.uaUnwrapToUA(_uaE(e, uaP), address(tok), 100, uaB, 100, _uaSigFor(uaP, address(wrpL),
+            "UAUnwrapToUA(bytes32 from,address underlying,uint256 wrapped,bytes32 to,uint256 minOut,", args, e));
+        assertEq(tok.balanceOfUA(uaB), 100);
+        assertEq(wrpL.balanceOfUA(uaP), 900);
+    }
+
+    /// An `msig` `UASig`: `members` set, at the threshold; one member short is the registry's refusal.
+    function test_namedUAMsig() public {
+        Member[] memory m = new Member[](2);
+        m[0] = Member(UAKinds.EVM_EOA, _pad(alice), 1);
+        m[1] = Member(UAKinds.EVM_EOA, _pad(bob), 1);
+        bytes memory d = _msigKey(2, m);
+        bytes32 ua = UACall.register(lreg, UAKinds.MSIG, d, _none(), "", "");
+        tok.mintToUA(ua, 1_000);
+        MetaTxLib.Envelope memory e = _env(address(0), 0, 0, 0, address(0));
+        bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX,
+            _digest(address(tok), "UABurn(bytes32 from,uint256 amount,", ua, abi.encode(uint256(100)), e));
+        uint16 ia = _indexOf(d, _pad(alice));
+        uint16 ib = 1 - ia;
+        IUARegistry.MemberSig[] memory all = new IUARegistry.MemberSig[](2);
+        all[ia] = IUARegistry.MemberSig(ia, "", _nativeSig(lreg, ALICE_PK, UAKinds.PURPOSE_MEMBER, md));
+        all[ib] = IUARegistry.MemberSig(ib, "", _nativeSig(lreg, BOB_PK, UAKinds.PURPOSE_MEMBER, md));
+        IUARegistry.UASig memory s;
+        s.members = new IUARegistry.MemberSig[](1);
+        s.members[0] = all[0];
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        tok.uaBurn(_uaE(e, ua), 100, s);
+
+        s.members = all;
+        tok.uaBurn(_uaE(e, ua), 100, s);
+        assertEq(tok.balanceOfUA(ua), 900);
+    }
+
+    /// `from == account`: the account signs its own cancel with its key set, the `AccountSig` blob as `bytes sig`.
+    function test_namedCancelNonceFromAccount() public {
+        SmartKeyAccount acct = SmartKeyAccount(payable(new SmartKeyAccountFactory(chainUidA).deploy(
+            SubjectKey(KeyKind.SECP256K1, _pad(alice), 0, 0, 0), address(0xD00D))));
+        MetaTxLib.Envelope memory e = _env(address(acct), 0, 0, 0, address(0));
+        bytes32 d = _digest(address(acct), "CancelNonce(address from,uint256 lane,", _pad(address(acct)), abi.encode(uint256(9)), e);
+        acct.mtxCancelNonce(e, 9, abi.encode(uint256(0), new bytes32[](0), _ecdsa(ALICE_PK, d)));
+        assertEq(acct.mtxNonce(address(acct), 9), 1);
+        assertEq(acct.mtxNonce(address(acct), e.batch), 1);
+    }
+
+    /// `lane == batch`: the entry takes nonce 0, the cancel the next, so the lane skips one.
+    function test_namedCancelNonceOwnLane() public {
+        MetaTxLib.Envelope memory e = _env(alice, 0, 0, 0, address(0));
+        bytes32 d = _digest(address(tok), "CancelNonce(address from,uint256 lane,", _pad(alice), abi.encode(e.batch), e);
+        vm.expectEmit(address(tok));
+        emit IMetaTx.MetaNonceCancelled(alice, e.batch, 2);
+        tok.mtxCancelNonce(e, e.batch, _ecdsa(ALICE_PK, d));
+        assertEq(tok.mtxNonce(alice, e.batch), 2);
+    }
+
+    /// Every bound field is in the digest; an unbound relayer or recipient is hashed as 0 and may be anything.
+    function test_namedEntryEnvelopeTamper() public {
+        string memory op = "Burn";
+        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
+        uint256 amount = _uint(op, "amount");
+        tok.mint(e.from, SUPPLY);
+        bytes memory sig = onChain(j, op, address(tok));
+        address signed = e.relayer;
+
+        e.feeRecipient = address(0xBAD);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        vm.prank(signed);
+        tok.mtxBurn(e, amount, sig);
+
+        e = rowEnvelope(j, op);
+        e.fee += 1;
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        vm.prank(signed);
+        tok.mtxBurn(e, amount, sig);
+
+        e = rowEnvelope(j, op);
+        e.relayer = address(0xBAD);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnauthorizedRelayer.selector, address(0xBAD), signed));
+        vm.prank(signed);
+        tok.mtxBurn(e, amount, sig);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        vm.prank(address(0xBAD));
+        tok.mtxBurn(e, amount, sig);
+
+        // the signer bound neither: any relayer, any recipient value, the same signature
+        MetaTxLib.Envelope memory open = _env(alice, 0, 0, 0, address(0));
+        bytes32 d = _digest(address(tok), "Burn(address from,uint256 amount,", _pad(alice), abi.encode(uint256(1)), open);
+        (open.relayer, open.feeRecipient) = (address(0xBAD), address(0xBAD));
+        tok.mtxBurn(open, 1, _ecdsa(ALICE_PK, d));
+        assertEq(tok.mtxNonce(alice, open.batch), 1);
+    }
+
+    /// The token is in the domain: a `Burn` signed for one token does not run on another.
+    function test_namedEntryOtherToken() public {
+        string memory op = "Burn";
+        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
+        uint256 amount = _uint(op, "amount");
+        NormalToken other = NormalToken(Clones.clone(address(new NormalToken(1,
+            plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+        other.initialize(address(this), 1, abi.encode(normalInit("Other", "OTH", 6, SUPPLY, e.from, address(this))));
+        bytes memory sig = onChain(j, op, address(tok));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        vm.prank(e.relayer);
+        other.mtxBurn(e, amount, sig);
     }
 
     function test_namedUAEmptySignatureRefused() public {
@@ -512,5 +665,125 @@ contract TypedOpsTest is UALedgerBase {
         assertEq(und.balanceOf(bob), 100);
         assertEq(tok.balanceOf(RELAYER), 25);
         assertEq(wrp.mtxNonce(alice, e.batch), 1);
+    }
+}
+
+/// The rows of the base and the public tokens that also stand on a confidential kind: the same entries, the kind's domain.
+abstract contract ConfidentialRows is Test {
+    string internal j;
+    uint256 internal constant FUNDS = 10_000_000;
+
+    function _kind() internal pure virtual returns (string memory);
+    function _normalKind() internal virtual returns (NormalToken);
+    function _wrappedKind(address leg) internal virtual returns (WrappedToken);
+
+    function test_typedOpsVectors_CancelNonceRow() public {
+        j = vm.readFile(TYPED_OPS);
+        string memory k = _kind();
+        NormalToken t = _normalKind();
+        assertTrue(t.supportsInterface(type(IMetaTx).interfaceId));
+        MetaTxLib.Envelope memory e = rowEnvelope(j, "CancelNonce");
+        uint256 lane = vm.parseJsonUint(j, msgField("CancelNonce", "lane"));
+        runRow(j, "CancelNonce", k, address(t), abi.encodeCall(IMetaTx.mtxCancelNonce,
+            (e, lane, vm.parseJsonBytes(j, domainField("CancelNonce", k, "signature")))));
+        assertEq(t.mtxNonce(e.from, lane), 1);
+    }
+
+    function test_typedOpsVectors_BurnRow() public {
+        j = vm.readFile(TYPED_OPS);
+        string memory k = _kind();
+        NormalToken t = _normalKind();
+        MetaTxLib.Envelope memory e = rowEnvelope(j, "Burn");
+        uint256 amount = vm.parseJsonUint(j, msgField("Burn", "amount"));
+        t.mint(e.from, FUNDS);
+        runRow(j, "Burn", k, address(t), abi.encodeCall(NormalToken.mtxBurn,
+            (e, amount, vm.parseJsonBytes(j, domainField("Burn", k, "signature")))));
+        uint256 fee = amount * e.fee / 1_000_000;
+        assertEq(t.balanceOf(e.from), FUNDS - amount - fee);
+        assertEq(t.balanceOf(e.feeRecipient), fee);
+    }
+
+    function test_typedOpsVectors_UABurnRow() public {
+        j = vm.readFile(TYPED_OPS);
+        string memory k = _kind();
+        NormalToken t = _normalKind();
+        MetaTxLib.Envelope memory u = rowEnvelope2(j, "UABurn");
+        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(vm.parseJsonBytes32(j, msgField("UABurn", "from")), u.batch,
+            u.nonce, u.validUntil, u.mode, u.relayer, u.fee, u.feeRecipient);
+        uint256 amount = vm.parseJsonUint(j, msgField("UABurn", "amount"));
+        IUARegistry.UASig memory s;
+        s.signature = vm.parseJsonBytes(j, domainField("UABurn", k, "signature"));
+        t.mint(address(uint160(uint256(e.from))), FUNDS);
+        runRow(j, "UABurn", k, address(t), abi.encodeCall(NormalToken.uaBurn, (e, amount, s)));
+        assertEq(t.uaNonce(e.from, e.batch), 1);
+        assertEq(t.balanceOf(e.feeRecipient), amount * e.fee / 1_000_000);
+    }
+
+    function test_typedOpsVectors_WrapLegRow() public {
+        j = vm.readFile(TYPED_OPS);
+        MetaTxLib.Envelope memory e = rowEnvelope(j, "WrapLeg");
+        address at = vm.parseJsonAddress(j, msgField("WrapLeg", "underlying"));
+        uint256 amount = vm.parseJsonUint(j, msgField("WrapLeg", "amount"));
+        deployCodeTo("Mocks.sol:MockERC20", abi.encode("Leg", "LEG", uint8(6)), at);
+        WrappedToken w = _wrappedKind(at);
+        MockERC20(at).mint(e.from, amount);
+        vm.prank(e.from);
+        MockERC20(at).approve(address(w), amount);
+        bytes memory sig = vm.parseJsonBytes(j, domainField("WrapLeg", _kind(), "signature"));
+        runRow(j, "WrapLeg", _kind(), address(w), abi.encodeCall(WrappedToken.mtxWrapLeg, (e, at, amount, sig)));
+        assertEq(w.balanceOf(e.from), amount - e.fee);
+        assertEq(w.balanceOf(e.feeRecipient), e.fee);
+    }
+}
+
+contract ConfidentialRowsPqzTest is ConfidentialRows, PqzFixture {
+    uint256 internal rowSalt;
+
+    function setUp() public {
+        _stack();
+        _releaseWrapped();
+    }
+
+    function _kind() internal pure override returns (string memory) {
+        return "pqz";
+    }
+
+    function _normalKind() internal override returns (NormalToken) {
+        return NormalToken(address(_newToken(bytes32(++rowSalt))));
+    }
+
+    function _wrappedKind(address leg) internal override returns (WrappedToken) {
+        IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
+        c.features = 1 << AdminLib.PAYABLE;
+        c.roles.minter = address(0);
+        c.legs = new IFactoryToken.Leg[](1);
+        c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
+        return WrappedToken(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "row"));
+    }
+}
+
+contract ConfidentialRowsZetherTest is ConfidentialRows, ZetherFixture {
+    uint256 internal rowSalt;
+
+    function setUp() public {
+        _stack();
+        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
+    }
+
+    function _kind() internal pure override returns (string memory) {
+        return "zether";
+    }
+
+    function _normalKind() internal override returns (NormalToken) {
+        return NormalToken(address(_newToken(false, bytes32(++rowSalt))));
+    }
+
+    function _wrappedKind(address leg) internal override returns (WrappedToken) {
+        IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
+        c.features = 1 << AdminLib.PAYABLE;
+        c.roles.minter = address(0);
+        c.legs = new IFactoryToken.Leg[](1);
+        c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
+        return WrappedToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "row")));
     }
 }
