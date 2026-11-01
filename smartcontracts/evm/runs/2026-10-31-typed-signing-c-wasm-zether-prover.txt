@@ -1,0 +1,7 @@
+# wasm-zether-prover at commit e1e3d06b
+    Finished `release` profile [optimized] target(s) in 0.03s
+   Compiling zether-prover v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/zether-prover)
+    Finished `release` profile [optimized] target(s) in 9.18s
+bls12381: proveTransfer 730 ms in wasm
+wasm smoke: 9 checks passed
+rc=0

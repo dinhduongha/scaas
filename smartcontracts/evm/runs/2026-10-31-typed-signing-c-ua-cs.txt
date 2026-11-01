@@ -1,0 +1,37 @@
+# ua-cs at commit e1e3d06b
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Scaas.Ua -> /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cs/Scaas.Ua/bin/Debug/net10.0/Scaas.Ua.dll
+  Scaas.Ua.Tests -> /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll
+Test run for /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll (.NETCoreApp,Version=v10.0)
+VSTest version 18.0.2 (x64)
+
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.13)
+[xUnit.net 00:00:00.09]   Discovering: Scaas.Ua.Tests
+[xUnit.net 00:00:00.14]   Discovered:  Scaas.Ua.Tests
+[xUnit.net 00:00:00.16]   Starting:    Scaas.Ua.Tests
+  Passed Scaas.Ua.Tests.VectorTests.KemRecordVectors [68 ms]
+  Passed Scaas.Ua.Tests.VectorTests.Structures [21 ms]
+  Passed Scaas.Ua.Tests.VectorTests.MalformedKemRefused [2 ms]
+  Passed Scaas.Ua.Tests.VectorTests.PortableVectors [59 ms]
+  Passed Scaas.Ua.Tests.VectorTests.TableGroupsPurposesConstants [12 ms]
+  Passed Scaas.Ua.Tests.VectorTests.PortableTyped [54 ms]
+  Passed Scaas.Ua.Tests.VectorTests.RegistrationHashCommitWhenOverLimit [48 ms]
+  Passed Scaas.Ua.Tests.VectorTests.HolderRefusals [126 ms]
+  Passed Scaas.Ua.Tests.VectorTests.PqzKeyRecordVectors [34 ms]
+  Passed Scaas.Ua.Tests.VectorTests.NativesNativeSpaceCanonicalIds [3 ms]
+  Passed Scaas.Ua.Tests.VectorTests.RegistrationArgsTyped [98 ms]
+  Passed Scaas.Ua.Tests.VectorTests.Messages [1 ms]
+  Passed Scaas.Ua.Tests.VectorTests.ValidRows [938 ms]
+  Passed Scaas.Ua.Tests.VectorTests.NativeMemberTypedDigest [20 ms]
+[xUnit.net 00:00:02.40]   Finished:    Scaas.Ua.Tests
+  Passed Scaas.Ua.Tests.VectorTests.InvalidRows [676 ms]
+  Passed Scaas.Ua.Tests.VectorTests.RegistrationArgsTypedKeys [20 ms]
+
+Test Run Successful.
+Total tests: 16
+     Passed: 16
+ Total time: 2.9510 Seconds
+rc=0

@@ -37,7 +37,7 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
       cd smartcontracts/evm || return 1
       o=$(mktemp); ZETHER_CLI="$W/clients/zether-prover/target/release/zether-cli" ../../scripts/capped forge test --ffi \
         --match-path test/zether/ZetherProverCross.t.sol 2>&1 | tee "$o"; rc=${PIPESTATUS[0]}
-      [ $rc -eq 0 ] && grep -q "6 passed; 0 failed; 0 skipped" "$o" || { echo "zether-cross: not 6 passed / 0 skipped"; rc=1; }
+      [ $rc -eq 0 ] && grep -q "${ZETHER_CROSS_N:-6} passed; 0 failed; 0 skipped" "$o" || { echo "zether-cross: not ${ZETHER_CROSS_N:-6} passed / 0 skipped"; rc=1; }
       rm -f "$o"; return $rc ;;
     cargo-scaas-node) cd scaas-node && ../scripts/capped sh -c 'cargo clippy -j2 --all-targets -- -D warnings && cargo test -j2' ;;
     # the anvil e2e CI runs (`cargo test --test e2e -- --ignored`); added 2026-10-30 after CI caught a stale register ABI there
@@ -89,7 +89,7 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
     soroban-spike-local) CAPPED_SLOTS=1 smartcontracts/soroban/spike/run.sh ;;
     e2e-soroban-local) smartcontracts/soroban/scripts/e2e-local.sh ;;
     named-tests) named_tests ;;
-    *) echo "unknown step $1"; return 2 ;;
+    *) if declare -F extra_step > /dev/null; then extra_step "$1"; else echo "unknown step $1"; return 2; fi ;; # extra_step: a wrapper's own steps
   esac
 }
 
@@ -782,7 +782,7 @@ named_tests() { # every new test passed; no family log with 0 passed, a skipped 
     p != "" && /^(ok|FAILED|ignored)/ { print p $0; p = "" }' "$1"; }
   while IFS='|' read -r step form name; do
     case $form in
-      forge) cat "$D/$P"-forge-*.txt 2>/dev/null | grep -qF "[PASS] $name(" ;;
+      forge) cat "$D/$P"-forge-*.txt "$D/$P-zether-cross.txt" 2>/dev/null | grep -qF "[PASS] $name(" ;;
       cargo) re="^test ([^ ]+::)?${name//::/::([^ ]+::)?}( - should panic)?" # a #[should_panic] test prints the suffix
         f=$(cnorm "$D/$P-$step.txt" 2>/dev/null)
         ! grep -qE "$re \.\.\. ignored(, .*)?$" <<< "$f" && grep -qE "$re \.\.\. ok$" <<< "$f" ;;
