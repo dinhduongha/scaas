@@ -1,0 +1,1273 @@
+# ua-n2304-kmax4096 at commit 8279e186
+Compiling 39 files with Solc 0.8.37
+Solc 0.8.37 finished in 41.24s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/factory/OpenFactory.sol:284:26:
+    |
+284 |         private returns (address at, Release memory r)
+    |                          ^^^^^^^^^^
+
+Warning (6335): "layout" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/ua/UAStore.sol:57:5:
+   |
+57 |     function layout() internal pure returns (Layout storage s) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/zether/ZetherVerifier.sol:87:28:
+   |
+87 |     error PrecompileFailed(uint256 at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:233:9:
+    |
+233 |         uint256 at;     // the slot of this proof's `A`
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/account/SmartKeyAccount.sol:310:9:
+    |
+310 |         uint256 at;
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/zether/helpers/ZetherFixture.sol:419:37:
+    |
+419 |     function _zWord(bytes memory b, uint256 at) internal pure returns (bytes32 w) {
+    |                                     ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/zether/helpers/ZetherFixture.sol:423:38:
+    |
+423 |     function _zPoint(bytes memory b, uint256 at) internal pure returns (IZetherToken.G1 memory) {
+    |                                      ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UAGas.t.sol:251:26:
+    |
+251 |     function _registerAt(address at, address pred, UARegistry.KindConfig[] memory cfg, bytes memory d, uint256 bound)
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistryGroups.t.sol:463:56:
+    |
+463 |     function _memberBound(uint16 kind, uint256 sigLen, address at) internal {
+    |                                                        ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:213:64:
+    |
+213 |     function _reg(SplitDiff.Run memory r, string memory label, address at, bytes memory data) internal returns (bytes32 ua) {
+    |                                                                ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:257:67:
+    |
+257 |     function _holder(SplitDiff.Run memory r, string memory label, address at, uint16 kind, bytes memory pk, uint256 salt, bool commit)
+    |                                                                   ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:312:57:
+    |
+312 |     function _gen1Registrations(SplitDiff.Run memory r, address at) internal {
+    |                                                         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:319:51:
+    |
+319 |     function _attachments(SplitDiff.Run memory r, address at) internal returns (bytes32 h2, bytes memory proof2) {
+    |                                                   ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:335:45:
+    |
+335 |     function _msigs(SplitDiff.Run memory r, address at) internal returns (bytes32 ms) {
+    |                                             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:367:55:
+    |
+367 |     function _msigIndexGuards(SplitDiff.Run memory r, address at, bytes memory d, bytes32 ms) internal {
+    |                                                       ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:387:51:
+    |
+387 |     function _msigRecords(SplitDiff.Run memory r, address at, bytes32 ms, bytes memory d, bytes memory fn) internal {
+    |                                                   ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:401:53:
+    |
+401 |     function _packedEntries(SplitDiff.Run memory r, address at) internal {
+    |                                                     ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:411:45:
+    |
+411 |     function _cache(SplitDiff.Run memory r, address at) internal {
+    |                                             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:434:57:
+    |
+434 |     function _registerNegatives(SplitDiff.Run memory r, address at) internal {
+    |                                                         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:452:56:
+    |
+452 |     function _pqzAttrNegatives(SplitDiff.Run memory r, address at, bytes memory key, bytes memory pop) internal {
+    |                                                        ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:467:56:
+    |
+467 |     function _kemAttrNegatives(SplitDiff.Run memory r, address at, bytes memory key, bytes memory pop) internal {
+    |                                                        ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:487:55:
+    |
+487 |     function _holderNegatives(SplitDiff.Run memory r, address at) internal {
+    |                                                       ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:538:59:
+    |
+538 |     function _attachmentNegatives(SplitDiff.Run memory r, address at, bytes32 h2) internal {
+    |                                                           ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:553:55:
+    |
+553 |     function _pqzKeyNegatives(SplitDiff.Run memory r, address at, bytes32 h2, bytes32 slh) internal {
+    |                                                       ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:575:55:
+    |
+575 |     function _kemKeyNegatives(SplitDiff.Run memory r, address at, bytes32 h2, bytes32 slh) internal {
+    |                                                       ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:595:58:
+    |
+595 |     function _kemCommitNegatives(SplitDiff.Run memory r, address at) internal {
+    |                                                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:605:51:
+    |
+605 |     function _invalidRows(SplitDiff.Run memory r, address at) internal {
+    |                                                   ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:617:53:
+    |
+617 |     function _msigNegatives(SplitDiff.Run memory r, address at) internal {
+    |                                                     ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:645:50:
+    |
+645 |     function _debitBound(SplitDiff.Run memory r, address at) internal {
+    |                                                  ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:674:49:
+    |
+674 |     function _malformed(SplitDiff.Run memory r, address at) internal {
+    |                                                 ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:688:48:
+    |
+688 |     function _authRows(SplitDiff.Run memory r, address at) internal {
+    |                                                ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:712:46:
+    |
+712 |     function _dumpUa(SplitDiff.Run memory r, address at, uint256 i) internal view {
+    |                                              ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:736:44:
+    |
+736 |     function _dump(SplitDiff.Run memory r, address at) internal view {
+    |                                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistrySplit.t.sol:1046:13:
+     |
+1046 |             address at = i == 0 ? R1 : R2;
+     |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistrySplit.t.sol:1112:13:
+     |
+1112 |             address at = i == 0 ? R1 : R2;
+     |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistrySplit.t.sol:1134:13:
+     |
+1134 |             address at = i == 0 ? R1 : R2;
+     |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistrySplit.t.sol:1164:13:
+     |
+1164 |             address at = i == 0 ? R1 : R2;
+     |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistrySplit.t.sol:1204:35:
+     |
+1204 |     function _meter(Gas memory g, address at, bytes32 ua, IUARegistry.UASig memory s, string memory label) internal {
+     |                                   ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistrySplit.t.sol:1215:9:
+     |
+1215 |         address at = R8;
+     |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistrySplit.t.sol:1278:47:
+     |
+1278 |     function _msigAtBudget(string memory art, address at) internal returns (uint256 regular) {
+     |                                               ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistryUA8.t.sol:2559:40:
+     |
+2559 |             (uint16 k, bytes memory d, IUARegistry.UAAttrs memory at, bytes memory p, bytes memory z) = a.registrationOf(x.ua);
+     |                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistryUA8.t.sol:2711:17:
+     |
+2711 |             (,, IUARegistry.UAAttrs memory at,,) = a.registrationOf(x.ua);
+     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistryUA8.t.sol:3015:53:
+     |
+3015 |     function _splitRegister(SplitDiff.Run memory r, address at, Row memory x, string memory label) internal {
+     |                                                     ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistryUA8.t.sol:3034:52:
+     |
+3034 |     function _splitRecords(SplitDiff.Run memory r, address at, Row[] memory rows, KemRec[] memory ks, KeyRec[] memory kr)
+     |                                                    ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistryUA8.t.sol:3055:9:
+     |
+3055 |         address at = address(_regA(true));
+     |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> test/ua/UATradeVectors.t.sol:86:9:
+   |
+86 |         address at = vm.parseJsonAddress(vj, ".dex");
+   |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UATradeVectors.t.sol:101:21:
+    |
+101 |     function _token(address at) internal returns (NormalToken t) {
+    |                     ^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> src/ua/UAKinds.sol:267:56:
+    |
+267 |     function kemRecordHash(bytes32 ua, uint64 version, bytes memory kemPk) internal pure returns (bytes32) {
+    |                                                        ^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> src/ua/UAKinds.sol:281:5:
+    |
+281 |     function kemPk(IUARegistry.KemKey memory k) internal pure returns (bytes memory) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> src/ua/UAKinds.sol:352:58:
+    |
+352 |     function kemRecordDigest(bytes32 ua, uint64 version, bytes memory kemPk) internal pure returns (bytes32) {
+    |                                                          ^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> src/ua/UAKinds.sol:281:5:
+    |
+281 |     function kemPk(IUARegistry.KemKey memory k) internal pure returns (bytes memory) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:43:14:
+   |
+43 |             (bool ok, uint256 hx, uint256 hy) = _hint(keyData, h, l, i);
+   |              ^^^^^^^
+Note: The shadowed declaration is here:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:51:10:
+   |
+51 |         (bool ok, uint256 qy) = Bip340.liftX(qx);
+   |          ^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:143:38:
+    |
+143 |     function _newToken(bool auditor, bytes32 salt) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:65:5:
+   |
+65 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:147:38:
+    |
+147 |     function _newToken(bool auditor, bytes32 salt, uint256 maxShielded) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:65:5:
+   |
+65 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:516:44:
+    |
+516 |     function cacheExpandedKey(uint16 kind, bytes calldata pk, uint256 part) external returns (bytes32 ua) {
+    |                                            ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:516:63:
+    |
+516 |     function cacheExpandedKey(uint16 kind, bytes calldata pk, uint256 part) external returns (bytes32 ua) {
+    |                                                               ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:516:95:
+    |
+516 |     function cacheExpandedKey(uint16 kind, bytes calldata pk, uint256 part) external returns (bytes32 ua) {
+    |                                                                                               ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:520:36:
+    |
+520 |     function register(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
+    |                                    ^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:520:60:
+    |
+520 |     function register(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
+    |                                                            ^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:520:84:
+    |
+520 |     function register(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
+    |                                                                                    ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:521:9:
+    |
+521 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:521:50:
+    |
+521 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |                                                  ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:526:31:
+    |
+526 |     function registerWebAuthn(WebAuthnKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                               ^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:526:57:
+    |
+526 |     function registerWebAuthn(WebAuthnKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                                                         ^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:526:81:
+    |
+526 |     function registerWebAuthn(WebAuthnKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                                                                                 ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:527:9:
+    |
+527 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:527:50:
+    |
+527 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |                                                  ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:532:42:
+    |
+532 |     function registerMuSig2(uint16 kind, MuSig2Key calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                                          ^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:532:66:
+    |
+532 |     function registerMuSig2(uint16 kind, MuSig2Key calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                                                                  ^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:532:90:
+    |
+532 |     function registerMuSig2(uint16 kind, MuSig2Key calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                                                                                          ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:533:9:
+    |
+533 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:533:50:
+    |
+533 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |                                                  ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:538:41:
+    |
+538 |     function registerFrost(uint16 kind, FrostKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                                         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:538:64:
+    |
+538 |     function registerFrost(uint16 kind, FrostKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                                                                ^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:538:88:
+    |
+538 |     function registerFrost(uint16 kind, FrostKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                                                                                        ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:539:9:
+    |
+539 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:539:50:
+    |
+539 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |                                                  ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:544:27:
+    |
+544 |     function registerMsig(MsigStructure calldata structure, UAAttrs calldata attrs, MemberSig[] calldata pop,
+    |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:544:61:
+    |
+544 |     function registerMsig(MsigStructure calldata structure, UAAttrs calldata attrs, MemberSig[] calldata pop,
+    |                                                             ^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:544:85:
+    |
+544 |     function registerMsig(MsigStructure calldata structure, UAAttrs calldata attrs, MemberSig[] calldata pop,
+    |                                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:545:9:
+    |
+545 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:545:50:
+    |
+545 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |                                                  ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:550:26:
+    |
+550 |     function storePqzPop(bytes32 ua, bytes calldata pqzPop) external {
+    |                          ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:550:38:
+    |
+550 |     function storePqzPop(bytes32 ua, bytes calldata pqzPop) external {
+    |                                      ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:554:36:
+    |
+554 |     function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, UASig calldata sig) external {
+    |                                    ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:554:59:
+    |
+554 |     function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, UASig calldata sig) external {
+    |                                                           ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:554:79:
+    |
+554 |     function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, UASig calldata sig) external {
+    |                                                                               ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:558:36:
+    |
+558 |     function setKemKey(bytes32 ua, uint64 version, KemKey calldata kem, UASig calldata sig) external {
+    |                                    ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:558:52:
+    |
+558 |     function setKemKey(bytes32 ua, uint64 version, KemKey calldata kem, UASig calldata sig) external {
+    |                                                    ^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:558:73:
+    |
+558 |     function setKemKey(bytes32 ua, uint64 version, KemKey calldata kem, UASig calldata sig) external {
+    |                                                                         ^^^^^^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> src/ua/UARegistryLib.sol:671:5:
+    |
+671 |     function _nativeCap() private view returns (uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Secp256k1Verifier.sol:14:5:
+   |
+14 |     function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) public view returns (bool) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:82:5:
+   |
+82 |     function _coef(bytes32 l, bytes calldata pk) private view returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> script/DeployBase.sol:330:5:
+    |
+330 |     function _zetherLibs(bool underlying) internal view returns (address[] memory l) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> test/helpers/Catalogue.sol:50:1:
+   |
+50 | function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory l) {
+   | ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/wallet/MandateWallet.t.sol:643:5:
+    |
+643 |     function _edOwnerCall(bytes memory data, uint256 nonce) internal returns (MetaTxLib.MetaTransaction memory m) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/ua/UARegistryBase.sol:280:5:
+    |
+280 |     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> test/ua/UARegistryGroups.t.sol:74:5:
+   |
+74 |     function _popMsg(UARegistry r, uint16 kind, bytes memory keyData) internal view returns (bytes32) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/ua/UARegistrySplit.t.sol:688:5:
+    |
+688 |     function _authRows(SplitDiff.Run memory r, address at) internal {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> test/ua/UARegistryVectors.t.sol:58:5:
+   |
+58 |     function _d(uint256 i, string memory f) internal view returns (string memory) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Ran 7 tests for test/ua/FnDsa.t.sol:FnDsaTest
+[PASS] test_decode_s2Bound() (gas: 19849450)
+[PASS] test_falcon_nistKat() (gas: 3549)
+[PASS] test_kat_fndsa512() (gas: 20711470)
+[PASS] test_malformed_fndsa() (gas: 19637810)
+[PASS] test_shake_knownAnswers() (gas: 15181309)
+[PASS] test_shake_requiresReserve() (gas: 15272228)
+[PASS] test_zetaTable_falcon() (gas: 748388)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 1.14s (1.14s CPU time)
+
+Ran 3 tests for test/ua/SlhDsa.t.sol:SlhDsaTest
+[PASS] test_acvp_slhdsa() (gas: 3549)
+[PASS] test_kat_slhdsa128s() (gas: 16192862)
+[PASS] test_malformed_slhdsa() (gas: 5339632)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 1.51s (1.50s CPU time)
+
+Ran 7 tests for test/ua/UAAllowlist5a.t.sol:UAAllowlist5aTest
+[PASS] test_uaAllowlist_refusals() (gas: 1640071)
+[PASS] test_uaBatch_burnAndUnwrapToUA() (gas: 2758385)
+[PASS] test_uaExecute_burnNative() (gas: 263142)
+[PASS] test_uaExecute_burnUnderUA() (gas: 62004772)
+[PASS] test_uaExecute_unwrapToUAUnderUA() (gas: 1962525)
+[PASS] test_uaExecute_unwrapToUA_nativeToRefused() (gas: 1414215)
+[PASS] test_uaExecute_unwrapToUA_rate32() (gas: 80097050)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 38.92ms (10.50ms CPU time)
+
+Ran 7 tests for test/ua/UADeploy.t.sol:UADeployTest
+[PASS] test_C5_1_releaseNeedsABlockGasLimit() (gas: 636828879)
+[PASS] test_devChain() (gas: 965859951)
+[PASS] test_otherChains() (gas: 4822169960)
+[PASS] test_pqKindThreshold66() (gas: 636590863)
+[PASS] test_probe() (gas: 2234434)
+[PASS] test_probeFailureDisables() (gas: 1578203646)
+[PASS] test_registryDeployGate() (gas: 969582098)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 185.03ms (304.97ms CPU time)
+
+Ran 11 tests for test/ua/UADex.t.sol:UADexTest
+[PASS] test_exchange_uaLegGetsTheSurplus_and_uaTradeIsNoInteraction() (gas: 2162139)
+[PASS] test_gas_legShapes() (gas: 3293334)
+[PASS] test_legKindAndShapeErrors() (gas: 780393)
+[PASS] test_nativeShape1_paysAUA() (gas: 800636)
+[PASS] test_nativeTaker_uaMaker_derivedDestination() (gas: 752499)
+[PASS] test_pathB_refundToAUA() (gas: 878523)
+[PASS] test_payoutErrors() (gas: 2109046)
+[PASS] test_selfTrade_byId() (gas: 556841)
+[PASS] test_uaTaker_nativeMaker() (gas: 1326732)
+[PASS] test_uaVerifyGas_revertsTheWholeCall() (gas: 1002758)
+[PASS] test_uaVsUa_and_aSecondFillVerifiesNothing() (gas: 1316533)
+Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 53.92ms (18.79ms CPU time)
+
+Ran 4 tests for test/ua/PqGas.t.sol:PqGasTest
+[PASS] test_gas_fndsa() (gas: 10650135)
+[PASS] test_gas_mldsa() (gas: 73023971)
+[PASS] test_gas_mldsaCache() (gas: 119094091)
+[PASS] test_gas_slhdsa() (gas: 10165442)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 761.14ms (758.41ms CPU time)
+
+Ran 1 test for test/ua/SSTORE2.t.sol:SSTORE2Test
+[PASS] test_sstore2() (gas: 22485789)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.97ms (523.70µs CPU time)
+
+Ran 17 tests for test/ua/verifiers/EccVerifiers.t.sol:EccVerifiersTest
+[PASS] testFuzz_Bip340Valid(uint256,uint256,bytes32) (runs: 256, μ: 103363, ~: 103570)
+[PASS] testFuzz_P256Valid(uint256,bytes32) (runs: 256, μ: 39487, ~: 39474)
+[PASS] testFuzz_WebAuthnValid(uint256,bytes32) (runs: 256, μ: 146380, ~: 146367)
+[PASS] test_Bip340ChallengeTag() (gas: 881)
+[PASS] test_Bip340Negatives() (gas: 284908)
+[PASS] test_Bip340OfficialVectors() (gas: 446366)
+[PASS] test_Gas() (gas: 289833)
+[PASS] test_P256InvalidCheapWithPrecompile() (gas: 93446)
+[PASS] test_P256Negatives() (gas: 381251)
+[PASS] test_P256Probe() (gas: 274064)
+[PASS] test_P256ProbeFailsSolidityPath() (gas: 3198899)
+[PASS] test_P256ProbeRejectsLiar() (gas: 3198994)
+[PASS] test_SignatureVectors() (gas: 5775241)
+[PASS] test_WebAuthnCanonicalOnly() (gas: 472976)
+[PASS] test_WebAuthnGrammar() (gas: 587140)
+[PASS] test_WebAuthnMalformedAbi() (gas: 276356)
+[PASS] test_WebAuthnNegatives() (gas: 529337)
+Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 1.94s (1.93s CPU time)
+
+Ran 11 tests for test/ua/verifiers/Musig2Verifiers.t.sol:Musig2VerifiersTest
+[PASS] test_bnMalformed() (gas: 6029173)
+[PASS] test_bnPopGas() (gas: 6243915)
+[PASS] test_bnSecondKeyRule() (gas: 12755646)
+[PASS] test_groups() (gas: 138384430)
+[PASS] test_mainSigs() (gas: 23802638)
+[PASS] test_secpKeyXAtLeastN() (gas: 4804710)
+[PASS] test_secpMalformed() (gas: 4824030)
+[PASS] test_secpSecondKeyRule() (gas: 11785717)
+[PASS] test_secpWrongHint() (gas: 4905753)
+[PASS] test_tags() (gas: 1580)
+[PASS] test_vectorNegatives() (gas: 37195320)
+Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 2.18s (2.17s CPU time)
+
+Ran 1 test for test/ua/UADexInvariant.t.sol:UADexInvariantTest
+[PASS]
+UADexInvariantTest invariants:
+[PASS] invariant_conservation_A
+[PASS] invariant_conservation_B
+ UADexInvariantTest invariants (runs: 64, calls: 2048, reverts: 0)
+
+╭--------------+----------+-------+---------+----------╮
+| Contract     | Selector | Calls | Reverts | Discards |
++======================================================+
+| UADexHandler | exchange | 1090  | 0       | 0        |
+|--------------+----------+-------+---------+----------|
+| UADexHandler | settle   | 958   | 0       | 0        |
+╰--------------+----------+-------+---------+----------╯
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 5.90s (5.86s CPU time)
+
+Ran 1 test for test/ua/UALedgerInvariant.t.sol:UALedgerInvariantTest
+[PASS]
+UALedgerInvariantTest invariants:
+[PASS] invariant_T_V3_2_ledgerLeg
+[PASS] invariant_T_V3_2_nativeLeg
+[PASS] invariant_T_V3_2_normal
+[PASS] invariant_T_V3_2_wrapped
+[PASS] invariant_ledgerLegSolvent
+ UALedgerInvariantTest invariants (runs: 64, calls: 2048, reverts: 0)
+
+╭-----------------+------------------+-------+---------+----------╮
+| Contract        | Selector         | Calls | Reverts | Discards |
++=================================================================+
+| UALedgerHandler | burn             | 128   | 0       | 0        |
+|-----------------+------------------+-------+---------+----------|
+| UALedgerHandler | burnUnderUA      | 126   | 0       | 0        |
+|-----------------+------------------+-------+---------+----------|
+| UALedgerHandler | mint             | 131   | 0       | 0        |
+|-----------------+------------------+-------+---------+----------|
+| UALedgerHandler | mintToUA         | 122   | 0       | 0        |
+|-----------------+------------------+-------+---------+----------|
+| UALedgerHandler | nativeTransfer   | 126   | 0       | 0        |
+|-----------------+------------------+-------+---------+----------|
+| UALedgerHandler | payWithFeeToUA   | 140   | 0       | 0        |
+|-----------------+------------------+-------+---------+----------|
+| UALedgerHandler | poolTransferFrom | 147   | 0       | 0        |
+|-----------------+------------------+-------+---------+----------|
+| UALedgerHandler | transferToUA     | 120   | 0       | 0        |
+|-----------------+------------------+-------+---------+----------|
+| UALedgerHandler | uaPayReceiverFee | 143   | 0       | 0        |
+|-----------------+------------------+-------+---------+----------|
+| UALedgerHandler | uaTransfer       | 96    | 0       | 0        |
+|-----------------+------------------+-------+---------+----------|
+| UALedgerHandler | unwrapToUA       | 113   | 0       | 0        |
+|-----------------+------------------+-------+---------+----------|
+| UALedgerHandler | unwrapUnder      | 134   | 0       | 0        |
+|-----------------+------------------+-------+---------+----------|
+| UALedgerHandler | wrapLedger       | 155   | 0       | 0        |
+|-----------------+------------------+-------+---------+----------|
+| UALedgerHandler | wrapNative       | 137   | 0       | 0        |
+|-----------------+------------------+-------+---------+----------|
+| UALedgerHandler | wrapToUA         | 103   | 0       | 0        |
+|-----------------+------------------+-------+---------+----------|
+| UALedgerHandler | wrpToUA          | 127   | 0       | 0        |
+╰-----------------+------------------+-------+---------+----------╯
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 6.10s (6.06s CPU time)
+
+Ran 8 tests for test/ua/UALedgerNamed.t.sol:UALedgerNamedTest
+[PASS] test_C5_4_shieldPoolRecipientRefused() (gas: 1275643)
+[PASS] test_T_V3_1_uaPay() (gas: 455542)
+[PASS] test_T_V3_1_uaTransfer() (gas: 696540)
+[PASS] test_T_V3_1_uaTransferWithFee() (gas: 593795)
+[PASS] test_uaPay_needsPayable() (gas: 61135897)
+[PASS] test_uaTransfer_modeShape() (gas: 60859)
+[PASS] test_uaUnwrap_poolRecipientRefused() (gas: 1275536)
+[PASS] test_uaUnwrap_refusals() (gas: 145549)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 26.73ms (4.09ms CPU time)
+
+Ran 13 tests for test/ua/verifiers/Ed25519Verifier.t.sol:Ed25519VerifierTest
+[PASS] testFuzz_bitFlipRefused(uint256) (runs: 256, μ: 12196464, ~: 12235159)
+[PASS] testFuzz_random64NeverVerifies(bytes32,bytes32,bytes32,bytes32) (runs: 256, μ: 17159, ~: 8177)
+[PASS] testFuzz_randomNeverVerifies(bytes,bytes32,bytes) (runs: 256, μ: 15308, ~: 14322)
+[PASS] test_derivedRow() (gas: 244953950)
+[PASS] test_fuzzParity() (gas: 294345437)
+[PASS] test_gas() (gas: 12791004)
+[PASS] test_malformed() (gas: 13738531)
+[PASS] test_rfc8032() (gas: 171969678)
+[PASS] test_sha512_boundaries() (gas: 2842966)
+[PASS] test_sha512_dirtyMemory() (gas: 51412)
+[PASS] test_sha512_fips() (gas: 126407)
+[PASS] test_sha512_gas() (gas: 93960)
+[PASS] test_sha512_millionA() (gas: 238821174)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 6.62s (6.61s CPU time)
+
+Ran 24 tests for test/ua/UALedger.t.sol:UALedgerTest
+[PASS] test_7702_nativeFrom() (gas: 5360193)
+[PASS] test_D19_feeToShieldPoolRefused() (gas: 1794990)
+[PASS] test_T_V3_1_sharedNonceMap() (gas: 594563)
+[PASS] test_T_V3_3_approveAndTradeRefused() (gas: 950419)
+[PASS] test_T_V3_3_feeRecipientIsPayee() (gas: 651662)
+[PASS] test_T_V3_3_feeToTokenRefused() (gas: 1584261)
+[PASS] test_T_V3_3_unregisteredReceiver() (gas: 657286)
+[PASS] test_T_V3_3b_cancelNative_refused() (gas: 48690)
+[PASS] test_T_V3_3b_poolNotPayable() (gas: 554409)
+[PASS] test_UA6_zetherReceivesAndSigns() (gas: 1190303)
+[PASS] test_derivedFrom_registryDecides() (gas: 465561)
+[PASS] test_initialize_registryChainUid() (gas: 59984104)
+[PASS] test_nativePath() (gas: 799370)
+[PASS] test_registryOff() (gas: 60943940)
+[PASS] test_transferToUA() (gas: 347947)
+[PASS] test_transferToUA_refusesNonSigningReceivers() (gas: 63281)
+[PASS] test_uaBatchTransfer_atomic() (gas: 1142013)
+[PASS] test_uaCancelNonce() (gas: 504629)
+[PASS] test_uaCancelNonceTyped() (gas: 430625)
+[PASS] test_uaDigest_domainAndTypehash() (gas: 68484)
+[PASS] test_uaExecute_unwrapNative() (gas: 1387481)
+[PASS] test_uaExecute_unwrapUnderUA() (gas: 1923340)
+[PASS] test_uaToNative_withFee() (gas: 848108)
+[PASS] test_uaToUA_emitsNoTransfer() (gas: 695204)
+Suite result: ok. 24 passed; 0 failed; 0 skipped; finished in 40.36ms (19.67ms CPU time)
+
+Ran 3 tests for test/ua/UAMetaTx3Pq.t.sol:UAMetaTx3PqTest
+[PASS] test_callRows() (gas: 30003751)
+[PASS] test_receiverFee_twoMldsa65_underCap() (gas: 27624717)
+[PASS] test_transferRows() (gas: 33866450)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 1.44s (804.13ms CPU time)
+
+Ran 3 tests for test/ua/UARegistryPqzBound.t.sol:UARegistryPqzBoundTest
+[PASS] test_register_msigHolderBoundary() (gas: 65627429)
+[PASS] test_register_msigHolderOverBound() (gas: 44796018)
+[PASS] test_register_msigHolderWithinBound() (gas: 46759261)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 217.03ms (202.54ms CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 8 tests for test/ua/UAGas.t.sol:UAGasTest
+[PASS] test_T_GAS_capsWithinBudget() (gas: 111244)
+[PASS] test_T_GAS_ed25519() (gas: 24489505)
+[PASS] test_T_GAS_memberPopSizeFree() (gas: 2604087938)
+[PASS] test_T_GAS_msigAtBudget() (gas: 466505444)
+[PASS] test_T_GAS_msigPqAtBudget() (gas: 442650708)
+[PASS] test_T_GAS_native() (gas: 4560211)
+[PASS] test_T_GAS_registerHeadroomBlsBn254() (gas: 22271298)
+[PASS] test_T_GAS_structureOverBudgetRefused() (gas: 23086294)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 5.50s (5.49s CPU time)
+
+Ran 14 tests for test/ua/UAReceiverFee.t.sol:UAReceiverFeeTest
+[PASS] testFuzz_uaPayReceiverFee_rp1(uint256,uint256) (runs: 256, μ: 977490, ~: 982684)
+[PASS] test_gas_uaPayReceiverFee() (gas: 6705255)
+[PASS] test_uaPayReceiverFee_7702Payee() (gas: 5646629)
+[PASS] test_uaPayReceiverFee_coSignatureOverAnotherDigest_refused() (gas: 896006)
+[PASS] test_uaPayReceiverFee_erc1271Payee() (gas: 66986826)
+[PASS] test_uaPayReceiverFee_eventsAndBalances() (gas: 1019307)
+[PASS] test_uaPayReceiverFee_feeRecipientChecks() (gas: 751360)
+[PASS] test_uaPayReceiverFee_matrix() (gas: 5344696)
+[PASS] test_uaPayReceiverFee_payerIntentLandedElsewhere_coSignatureDead() (gas: 893533)
+[PASS] test_uaPayReceiverFee_poolFeeRecipientRefused() (gas: 758605)
+[PASS] test_uaPayReceiverFee_purposeSeparation() (gas: 952960)
+[PASS] test_uaPayReceiverFee_shapeErrors() (gas: 63505617)
+[PASS] test_uaPayReceiverFee_shieldPoolFeeRecipientRefused() (gas: 628609)
+[PASS] test_uaReceiverFeeNested() (gas: 1164788)
+Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 200.43ms (177.85ms CPU time)
+
+Ran 24 tests for test/ua/UAReceivers.t.sol:UAReceiversTest
+[PASS] test_UA6_wrapToUA_zetherReceives() (gas: 999341)
+[PASS] test_gas_receiversVsAddressTwins() (gas: 4863229)
+[PASS] test_gas_snapshotRestoresColdAccess() (gas: 2047783)
+[PASS] test_mintToUA() (gas: 61195735)
+[PASS] test_payWithFeeToUA() (gas: 61543190)
+[PASS] test_payWithFeeToUA_poolFeeRecipientRefused() (gas: 86436)
+[PASS] test_uaMint_eventsAndTotals() (gas: 406674)
+[PASS] test_uaMint_ledgerOff() (gas: 60640604)
+[PASS] test_uaMint_refusesNativeUnregistered_zetherReceives() (gas: 438085)
+[PASS] test_unwrapToUA_direct() (gas: 1347760)
+[PASS] test_unwrapToUA_ledgerOffWrapper_ledgerOnLeg() (gas: 79406813)
+[PASS] test_unwrapToUA_lyingLeg() (gas: 83875366)
+[PASS] test_unwrapToUA_minOutAndReserve() (gas: 80407306)
+[PASS] test_unwrapToUA_nativeOrBadTo() (gas: 1463665)
+[PASS] test_unwrapToUA_notLedgerLeg() (gas: 141223285)
+[PASS] test_unwrapToUA_rate32_direct() (gas: 79475325)
+[PASS] test_unwrapToUA_relayedNative() (gas: 1688979)
+[PASS] test_wrapToUA_erc20Leg() (gas: 1073584)
+[PASS] test_wrapToUA_nativeLeg_direct() (gas: 668600)
+[PASS] test_wrapToUA_nativeLeg_relayedRefused() (gas: 122751)
+[PASS] test_wrapToUA_rate32_direct() (gas: 79200085)
+[PASS] test_wrapToUA_rate32_relayed() (gas: 79349276)
+[PASS] test_wrapToUA_refusals() (gas: 162532430)
+[PASS] test_wrapToUA_relayed_absoluteFeeFromNativeBalance() (gas: 2112005)
+Suite result: ok. 24 passed; 0 failed; 0 skipped; finished in 40.65ms (18.79ms CPU time)
+
+Ran 40 tests for test/ua/UARegistry.t.sol:UARegistryTest
+[PASS] test_T_AUTH_1_kindsByPurpose() (gas: 16681413)
+[PASS] test_T_AUTH_1b_zether() (gas: 88570)
+[PASS] test_T_AUTH_2_msig() (gas: 6617832)
+[PASS] test_T_AUTH_2_msigContractMembers() (gas: 10341378)
+[PASS] test_T_AUTH_2_msigRegistration() (gas: 5887494)
+[PASS] test_T_AUTH_2_msigUndecodableAuth() (gas: 5632613)
+[PASS] test_T_AUTH_3_dirtyMagic() (gas: 17680)
+[PASS] test_T_AUTH_3_eip7702() (gas: 24371873)
+[PASS] test_T_AUTH_3_native1271() (gas: 27234379)
+[PASS] test_T_AUTH_3_nativeEoa() (gas: 132908)
+[PASS] test_T_AUTH_3_smartKeyCloneCap() (gas: 15266645)
+[PASS] test_T_AUTH_3_zeroAddressNeverSigns() (gas: 1336520)
+[PASS] test_T_AUTH_4_failClosed() (gas: 24294761)
+[PASS] test_T_AUTH_4_gen2Starvation() (gas: 3079075)
+[PASS] test_T_AUTH_4_starvation() (gas: 18773007)
+[PASS] test_T_CHAIN() (gas: 2485010)
+[PASS] test_T_MEMBER_hederaNative() (gas: 3984687)
+[PASS] test_T_REG_1_registerEveryKind() (gas: 12804099)
+[PASS] test_T_REG_2_negativeKeyData() (gas: 33694630)
+[PASS] test_T_REG_2_negativeRegistry() (gas: 6809668)
+[PASS] test_T_REG_3_senderIndependent() (gas: 2577096)
+[PASS] test_T_REG_3b_pqzKey() (gas: 69320538)
+[PASS] test_T_REG_4_gen2Constructor() (gas: 14539)
+[PASS] test_T_REG_4_gen2Msig() (gas: 4455551)
+[PASS] test_T_REG_4_gen2SeesGen1() (gas: 6092636)
+[PASS] test_T_REG_4_keyInUseAcrossGenerations() (gas: 1887187)
+[PASS] test_T_REG_4_msigBothGenerations() (gas: 2654810)
+[PASS] test_T_REG_5_invariants() (gas: 11941060)
+[PASS] test_W_M_gen1OutOfGas_isUAVerifyGas_aCheapRevertIsAVerdict() (gas: 3338181)
+[PASS] test_W_M_gen1StarvedBeforeItsHold_isUAVerifyGas() (gas: 27257475)
+[PASS] test_constructorConfig() (gas: 10214)
+[PASS] test_constructorDesignatorRefused() (gas: 10393)
+[PASS] test_constructorSmartKeyNoCode() (gas: 7325)
+[PASS] test_index_appendsPerKindInRegistrationOrder() (gas: 5103101)
+[PASS] test_index_gen2ForwardsGen1Kinds() (gas: 4214957)
+[PASS] test_index_msigListedUnknownIdsNot() (gas: 5483629)
+[PASS] test_registerTypedKeysSameId() (gas: 3217541972)
+[PASS] test_secp256k1_sharesTheSecp256k1Group() (gas: 4511961)
+[PASS] test_surface() (gas: 342987)
+[PASS] test_vectorsContextA() (gas: 2348158)
+Suite result: ok. 40 passed; 0 failed; 0 skipped; finished in 1.81s (1.80s CPU time)
+
+Ran 6 tests for test/ua/UAMetaTx3Vectors.t.sol:UAMetaTx3VectorsTest
+[PASS] test_callRows() (gas: 524504958)
+[PASS] test_transferRows() (gas: 575373627)
+[PASS] test_typeHashesAndDomain() (gas: 32901832)
+[PASS] test_vectors_burn() (gas: 704310397)
+[PASS] test_vectors_receiverFee() (gas: 964452482)
+[PASS] test_vectors_unwrapToUA() (gas: 524513801)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 4.91s (5.62s CPU time)
+
+Ran 13 tests for test/ua/UARegistryUA6.t.sol:UARegistryUA6Test
+[PASS] test_UA6_frontRun() (gas: 88337943)
+[PASS] test_UA6_gen2GrieferRefused() (gas: 82553365)
+[PASS] test_UA6_generations() (gas: 96274513)
+[PASS] test_UA6_holderWithKey() (gas: 116202291)
+[PASS] test_UA6_holderWithoutKey() (gas: 4004006)
+[PASS] test_UA6_keyUniqueAcrossKinds() (gas: 71106865)
+[PASS] test_UA6_msigSquatting() (gas: 52036268)
+[PASS] test_UA6_nonHolders() (gas: 13867853)
+[PASS] test_UA6_pqzDisabled() (gas: 47406307)
+[PASS] test_UA6_pqzListOrder() (gas: 116189719)
+[PASS] test_UA6_pqzNotAKind() (gas: 7927729)
+[PASS] test_UA6_zetherRequireAuthorized() (gas: 2412969)
+[PASS] test_UA6_zetherSets() (gas: 1954584)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 923.86ms (897.95ms CPU time)
+
+Ran 15 tests for test/ua/MlDsa.t.sol:MlDsaTest
+[PASS] test_acvp_mldsa() (gas: 3525)
+[PASS] test_eip8051_nistKat() (gas: 3570)
+[PASS] test_eip8355_cases() (gas: 3548)
+[PASS] test_expandedKey() (gas: 67245571)
+[PASS] test_expandedKeyParts_verifyCached() (gas: 104801334)
+[PASS] test_kat_mldsa44() (gas: 110157249)
+[PASS] test_kat_mldsa65() (gas: 178000967)
+[PASS] test_malformed_hintCount() (gas: 3592)
+[PASS] test_malformed_hints() (gas: 49706410)
+[PASS] test_malformed_mldsa() (gas: 4565254)
+[PASS] test_malformed_zBound() (gas: 3527)
+[PASS] test_probe_lengthsAndReverts() (gas: 3527)
+[PASS] test_probe_usesOnlyAnExactEip8355Answer() (gas: 3549)
+[PASS] test_refusesOtherKinds() (gas: 5216)
+[PASS] test_zetaTable_mldsa() (gas: 505843)
+Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 14.84s (24.40s CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 15 tests for test/ua/UARegistrySplit.t.sol:UARegistrySplitTest
+[PASS] test_1271MemberSeesTheRegistry() (gas: 14730473)
+[PASS] test_abiUnchanged() (gas: 16675603)
+[PASS] test_callerCannotSupplyTheWords() (gas: 6599247)
+[PASS] test_constructorRefusesAMissingLibrary() (gas: 47643343)
+[PASS] test_deployGas() (gas: 205220329)
+[PASS] test_diff() (gas: 5968493529)
+[PASS] test_gasHotPath() (gas: 161825989)
+[PASS] test_gen2SharesTheLibrary() (gas: 2884477)
+[PASS] test_libraryDirectCallRefused() (gas: 21584037)
+[PASS] test_libraryOpcodes() (gas: 48984002)
+[PASS] test_msigPopAtTheBudget() (gas: 79352092)
+[PASS] test_nestedOffsetReadsAWordAsItsOwnArgument() (gas: 3444962)
+[PASS] test_reentryFromAVerifierRefused() (gas: 30865692)
+[PASS] test_starvedMemberThroughTheSelfCall() (gas: 11761109)
+[PASS] test_storageLayoutUnchanged() (gas: 13974358)
+Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 8.26s (15.46s CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 12 tests for test/ua/UARegistryPq.t.sol:UARegistryPqTest
+[PASS] test_T_GAS_msigPqHold() (gas: 104247263)
+[PASS] test_T_GAS_pqHandedAtBudget() (gas: 98447000)
+[PASS] test_T_GAS_pqHybrid() (gas: 330254364)
+[PASS] test_T_GAS_pqTreasury() (gas: 285816320)
+[PASS] test_cacheRefusals() (gas: 3481624)
+[PASS] test_cacheRefusedWithPrecompile() (gas: 5804238)
+[PASS] test_gen2PqHandoff() (gas: 76003016)
+[PASS] test_halfCacheRefusesPop() (gas: 50028347)
+[PASS] test_pqSlots() (gas: 200708)
+[PASS] test_pqStored() (gas: 15108200)
+[PASS] test_vectors_pq() (gas: 344868065)
+[PASS] test_vectors_pqzPop() (gas: 262605282)
+Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 4.46s (4.44s CPU time)
+
+Ran 5 tests for test/ua/UARegistryVectors.t.sol:UARegistryVectorsTest
+[PASS] test_msig_webauthnMember_realVerifier() (gas: 22075819)
+[PASS] test_requireAuthorizedUASigEveryKind() (gas: 462152966)
+[PASS] test_vectors_derived() (gas: 2164642417)
+[PASS] test_vectors_msig() (gas: 224448387)
+[PASS] test_vectors_native() (gas: 141478274)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 5.36s (5.33s CPU time)
+
+Ran 6 tests for test/ua/UARegistryZether.t.sol:UARegistryZetherTest
+[PASS] test_constructorZetherSlots() (gas: 9983187)
+[PASS] test_gen2HandsZetherToGen1() (gas: 49881118)
+[PASS] test_keyHashGroupShared() (gas: 1975693)
+[PASS] test_registerSelf() (gas: 2036428)
+[PASS] test_zetherOwnerOpThroughRequireAuthorized() (gas: 2366406)
+[PASS] test_zetherVerifiers() (gas: 17464786)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 39.77ms (21.55ms CPU time)
+
+Ran 22 tests for test/ua/UATrade.t.sol:UATradeTest
+[PASS] test_C5_2_nativeIdZeroRefused() (gas: 78453)
+[PASS] test_auth_purposeSignerAndKind() (gas: 487770)
+[PASS] test_cancelUAOrderNested() (gas: 417743)
+[PASS] test_cancelUAWrapOrderNested() (gas: 501010)
+[PASS] test_cancel_aPartlyFilledOrder_closesTheRemainder() (gas: 655791)
+[PASS] test_cancel_neverExpires_idempotent_signerBound() (gas: 540518)
+[PASS] test_derived_pathA_movesToTheDex_thenTheRemainderCloses() (gas: 751990)
+[PASS] test_digests_typehashes() (gas: 74106)
+[PASS] test_invalidate_strictlyUp_cap_events() (gas: 486618)
+[PASS] test_ioc_closesAtItsSinglePull() (gas: 528005)
+[PASS] test_ledgerOff_everyUATradeFunction() (gas: 60987471)
+[PASS] test_matrix_everyCheck() (gas: 2853792)
+[PASS] test_nativeId_signsItself_andSellsItsErc20Balance() (gas: 518705)
+[PASS] test_nonceFloor_and_balance() (gas: 854745)
+[PASS] test_pathB_escrow_onTheUAShape() (gas: 917147)
+[PASS] test_sharedFloors_bothWays() (gas: 550705)
+[PASS] test_twoStructs_twoOrders() (gas: 547735)
+[PASS] test_uaTrade_belowHalfSettles() (gas: 391033)
+[PASS] test_ua_minFill_remainderClosesBelowMinFill() (gas: 535970)
+[PASS] test_verifiedOnce_addressPath() (gas: 484466)
+[PASS] test_verifiedOnce_neverAfterACancel() (gas: 317888)
+[PASS] test_verifiedOnce_uaPath() (gas: 597976)
+Suite result: ok. 22 passed; 0 failed; 0 skipped; finished in 44.20ms (19.93ms CPU time)
+
+Ran 4 tests for test/ua/UATradeVectors.t.sol:UATradeVectorsTest
+[PASS] test_pq_threeMldsa65Legs_revertUAVerifyGas() (gas: 69048150)
+[PASS] test_pq_twoMldsa65Legs_fitOneTransaction() (gas: 40332897)
+[PASS] test_rows_digests_settle_cancel_invalidate() (gas: 554038502)
+[PASS] test_typeHashesPurposeDomain() (gas: 9944633)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 2.46s (1.90s CPU time)
+
+Ran 6 tests for test/ua/UAWrap.t.sol:UAWrapTest
+[PASS] test_UA6_zetherDestinationAndSigner() (gas: 1479119)
+[PASS] test_derivedHolder_intoItself_feeToTheSubmitter() (gas: 1222848)
+[PASS] test_ledgerOffWrapper() (gas: 79114595)
+[PASS] test_legAndOrderChecks() (gas: 818430)
+[PASS] test_rate_and_destinations() (gas: 79474454)
+[PASS] test_receiverChecks() (gas: 449697)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 32.15ms (8.81ms CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 14 tests for test/ua/UARegistryGroups.t.sol:UARegistryGroupsTest
+[PASS] test_T_GAS_groups() (gas: 137463745)
+[PASS] test_T_GAS_msigStoredMemberBound() (gas: 31264988)
+[PASS] test_authStored() (gas: 70301046)
+[PASS] test_authStoredStarved() (gas: 61172365)
+[PASS] test_gen2EnablesGroupKinds() (gas: 64567038)
+[PASS] test_gen2HandsStoredToGen1() (gas: 50691085)
+[PASS] test_groupKindsEnabled() (gas: 60587)
+[PASS] test_keyHashGroup() (gas: 17226577)
+[PASS] test_msigStoredMembers() (gas: 19886949)
+[PASS] test_msigStoredMembersGen2() (gas: 19402638)
+[PASS] test_registerKeyXAtLeastN() (gas: 4923545)
+[PASS] test_registerStoredStarved() (gas: 3027914831)
+[PASS] test_vectorsRegister() (gas: 151874883)
+[PASS] test_vectorsRegisterNegatives() (gas: 96443824)
+Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 8.95s (8.94s CPU time)
+
+Ran 17 tests for test/ua/UAFrost.t.sol:UAFrostTest
+[PASS] testFuzz_mutatedBn(uint256,uint8) (runs: 256, μ: 37764631, ~: 37760729)
+[PASS] testFuzz_mutatedSecp(uint256,uint8) (runs: 256, μ: 37773569, ~: 37776653)
+[PASS] testFuzz_randomNeverReverts(bytes,bytes,bytes32) (runs: 256, μ: 29020, ~: 27855)
+[PASS] test_badPoK_extra() (gas: 75432505)
+[PASS] test_badPoints_bn() (gas: 38086593)
+[PASS] test_badPoints_secp() (gas: 38300762)
+[PASS] test_bounds() (gas: 110081703)
+[PASS] test_dkgRows() (gas: 62681196)
+[PASS] test_gas() (gas: 930128125)
+[PASS] test_groups() (gas: 997777964)
+[PASS] test_mainSigs() (gas: 189524624)
+[PASS] test_negatives() (gas: 2627423495)
+[PASS] test_rfc9591_e5() (gas: 38009933)
+[PASS] test_tFrost() (gas: 481447871)
+[PASS] test_tfrost_bip340Official() (gas: 97548896)
+[PASS] test_xmd_rfc9380_k1() (gas: 39918)
+[PASS] test_zfDkg() (gas: 32397564)
+Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 22.31s (29.23s CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 77 tests for test/ua/UARegistryUA8.t.sol:UARegistryUA8Test
+[PASS] test_T_GAS_register_ua8PerKind() (gas: 930366156)
+[PASS] test_T_GAS_setKemKey() (gas: 1703035911)
+[PASS] test_T_GAS_storePqzPop() (gas: 1054539260)
+[PASS] test_kemCommitFormRefused() (gas: 636104362)
+[PASS] test_kemHashCommitThenFill() (gas: 850799419)
+[PASS] test_kemKeyAssembledBytes() (gas: 1120747800)
+[PASS] test_kindNameEveryKind() (gas: 4546358)
+[PASS] test_kindNameUnknownReverts() (gas: 280609)
+[PASS] test_msigContractMember1271OverTypedDigest() (gas: 662696414)
+[PASS] test_msigNativeMemberPersonalSignRefused() (gas: 1382653756)
+[PASS] test_msigNativeMemberTypedDigest() (gas: 1916920482)
+[PASS] test_msigOfRoundTrip() (gas: 943146287)
+[PASS] test_registerMsigTypedMembersSameId() (gas: 756906036)
+[PASS] test_registrationArgsFromVectors() (gas: 1203003864)
+[PASS] test_registrationOfUnchangedBytes() (gas: 943448482)
+[PASS] test_setKemKeyNeverOverwrites() (gas: 1132248739)
+[PASS] test_setKemKeyV0WithoutCommitReverts() (gas: 636157955)
+[PASS] test_setKemKeyV0WrongKeyReverts() (gas: 636589731)
+[PASS] test_split_portableRowsSame() (gas: 6409525880)
+[PASS] test_split_storePqzPopWithAVerify() (gas: 1066707822)
+[PASS] test_storePqzPopAfterKemHashCommit() (gas: 834029696)
+[PASS] test_storePqzPopAfterKemHashCommitGen2Host() (gas: 835409853)
+[PASS] test_storePqzPopGen2HostKindFromGen1() (gas: 721071545)
+[PASS] test_ua8_attrsShapeRefused() (gas: 2037898843)
+[PASS] test_ua8_blobChunksRoundTrip() (gas: 341067004)
+[PASS] test_ua8_checkedIsChain() (gas: 857873707)
+[PASS] test_ua8_copyBetweenRegistries() (gas: 1314957396)
+[PASS] test_ua8_copyFromState() (gas: 1209750609)
+[PASS] test_ua8_crossSetGen2ReplacesGen1Key() (gas: 757687814)
+[PASS] test_ua8_crossSetKeyReplaced() (gas: 1353245376)
+[PASS] test_ua8_crossSetRightSetKeyStays() (gas: 1278938043)
+[PASS] test_ua8_disabledKindReverts() (gas: 629970185)
+[PASS] test_ua8_everyKindFromVectors() (gas: 1553291731)
+[PASS] test_ua8_frontRunnerDropsPqzPop() (gas: 673322262)
+[PASS] test_ua8_frontRunnerGetsIdenticalRecord() (gas: 732663220)
+[PASS] test_ua8_gen2ForwardsReads() (gas: 736864678)
+[PASS] test_ua8_gen2PqzKeyWhenGen1HasNone() (gas: 847258043)
+[PASS] test_ua8_gen2ProvesGen1RegisterKey() (gas: 760097418)
+[PASS] test_ua8_gen2RefusesPreUa8Gen1() (gas: 3488368)
+[PASS] test_ua8_gen2RefusesWhenGen1HasPqz() (gas: 1194751796)
+[PASS] test_ua8_gen2RefusesWritesForGen1() (gas: 1248679884)
+[PASS] test_ua8_gen2SetPqzKeyForGen1Record() (gas: 1519309188)
+[PASS] test_ua8_kemBadSigRefused() (gas: 2072456476)
+[PASS] test_ua8_kemCopyBetweenRegistries() (gas: 1752472013)
+[PASS] test_ua8_kemEvent() (gas: 1361404664)
+[PASS] test_ua8_kemGen2RecordElsewhereRefused() (gas: 1376129593)
+[PASS] test_ua8_kemInitialVersionFromRegister() (gas: 1128092640)
+[PASS] test_ua8_kemLengthRefused() (gas: 647908821)
+[PASS] test_ua8_kemLowerVersionAfterHigher() (gas: 661813284)
+[PASS] test_ua8_kemMsigMofN() (gas: 1406148481)
+[PASS] test_ua8_kemNoOwnerCheck() (gas: 662504231)
+[PASS] test_ua8_kemNonHolderRefused() (gas: 668558183)
+[PASS] test_ua8_kemRepeatedVersionRefused() (gas: 644980183)
+[PASS] test_ua8_kemSchemeRefused() (gas: 1371888805)
+[PASS] test_ua8_kemVersionZeroRefused() (gas: 635982270)
+[PASS] test_ua8_largestMsigPopStored() (gas: 329504061)
+[PASS] test_ua8_msigNativeMember7702Portable() (gas: 665492566)
+[PASS] test_ua8_msigPopCanonical() (gas: 1180523751)
+[PASS] test_ua8_msigPqEligibleCopy() (gas: 873186085)
+[PASS] test_ua8_nonHolderAttrsRefused() (gas: 2017532688)
+[PASS] test_ua8_popCoversAttrs() (gas: 1406015748)
+[PASS] test_ua8_pqzPopInRegisterProven() (gas: 724484549)
+[PASS] test_ua8_pqzProveLaterOnVerifierChain() (gas: 915465037)
+[PASS] test_ua8_pqzUnprovenWithoutVerifier() (gas: 724318288)
+[PASS] test_ua8_provenKeyStillUnique() (gas: 765438674)
+[PASS] test_ua8_setKemKeyByThirdParty() (gas: 1120974533)
+[PASS] test_ua8_setPqzKeyCopyFromState() (gas: 1296976331)
+[PASS] test_ua8_setPqzKeyFromVectors() (gas: 2793125400)
+[PASS] test_ua8_setPqzKeyRefused() (gas: 3263149799)
+[PASS] test_ua8_sigOkPortablePurposesOnly() (gas: 48225245)
+[PASS] test_ua8_storePqzPopBadProofReverts() (gas: 670384137)
+[PASS] test_ua8_storePqzPopIdempotent() (gas: 826773656)
+[PASS] test_ua8_storePqzPopNoKemExactMessage() (gas: 714916074)
+[PASS] test_ua8_storePqzPopWrongBytesRefused() (gas: 1572591960)
+[PASS] test_ua8_storesEveryField() (gas: 726971992)
+[PASS] test_ua8_unprovenListingDoesNotBlockOwner() (gas: 761419972)
+[PASS] test_ua8_writeSelectorsPinned() (gas: 276)
+Suite result: ok. 77 passed; 0 failed; 0 skipped; finished in 91.04s (675.88s CPU time)
+
+Ran 19 tests for test/ua/UAKinds.t.sol:UAKindsTest
+[PASS] test_checkedCodePoints() (gas: 3527)
+[PASS] test_gasShortIsNotKeyData() (gas: 2310888)
+[PASS] test_groupsPurposesConstants() (gas: 3018068)
+[PASS] test_invalidPrecompileKeyGasBounded() (gas: 13367798)
+[PASS] test_invalidRows() (gas: 3571)
+[PASS] test_kemRecordDigestVectors() (gas: 3526)
+[PASS] test_kindTable() (gas: 8881690)
+[PASS] test_nativeSpaceAndMessages() (gas: 3593)
+[PASS] test_nearAlgorandNatives() (gas: 37370)
+[PASS] test_noKemRecordIsZeroRecord() (gas: 1667)
+[PASS] test_portableDomainSeparatorPinned() (gas: 3525)
+[PASS] test_portableRecordDigestVectors() (gas: 3571)
+[PASS] test_portableTypehashesPinned() (gas: 3528)
+[PASS] test_pqTagsMatchPqUA() (gas: 8462)
+[PASS] test_pqzKeyRecordDigestVectors() (gas: 3569)
+[PASS] test_purposeTagsV2() (gas: 3592)
+[PASS] test_registrationDigestVectors() (gas: 3592)
+[PASS] test_structures() (gas: 1951313)
+[PASS] test_validRows() (gas: 3593)
+Suite result: ok. 19 passed; 0 failed; 0 skipped; finished in 99.15s (19.59s CPU time)
+
+Ran 13 tests for test/ua/verifiers/PairingVerifiers.t.sol:PairingVerifiersTest
+[PASS] test_bls12381SubgroupCheckIsInThePairing() (gas: 14489705)
+[PASS] test_bn254MapToG1Iterations() (gas: 3511588)
+[PASS] test_checkRevertsVerifyAnswersFalse() (gas: 14911226)
+[PASS] test_gas() (gas: 4157380)
+[PASS] test_malformedBlsSignatures() (gas: 34722690)
+[PASS] test_malformedKeys() (gas: 84744411)
+[PASS] test_malformedSchnorr() (gas: 29540799)
+[PASS] test_malformedSignatureLengths() (gas: 2251844)
+[PASS] test_negatives() (gas: 8525173)
+[PASS] test_proposedCapsSuffice() (gas: 2604117)
+[PASS] test_starvedVerifyNeverTrue() (gas: 2398666)
+[PASS] test_validPopsAndSignatures() (gas: 4800694)
+[PASS] test_vectorsBindIdsAndMessages() (gas: 2742423)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 103.62s (7.64s CPU time)
+
+Ran 35 test suites in 105.41s (402.12s CPU time): 451 tests passed, 0 failed, 0 skipped (451 total tests)
+rc=0
