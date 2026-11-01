@@ -19,9 +19,9 @@ use scaas_ua::ua8::{self, FrostKey, FrostMember, KemKey, MemberSig, MsigMember, 
 use scaas_ua::UAError;
 use sha2::{Digest, Sha256};
 use stellar_xdr::{
-    AccountId, DecoratedSignature, FeeBumpTransaction, FeeBumpTransactionEnvelope, FeeBumpTransactionExt,
+    AccountId, ConfigSettingEntry, ConfigSettingId, DecoratedSignature, FeeBumpTransaction, FeeBumpTransactionEnvelope, FeeBumpTransactionExt,
     FeeBumpTransactionInnerTx, HashIdPreimage, HostFunction, InvokeContractArgs, InvokeHostFunctionOp, LedgerEntryData,
-    LedgerKey, LedgerKeyAccount, Limits, Memo, MuxedAccount, Operation, OperationBody, Preconditions, PublicKey,
+    LedgerKey, LedgerKeyAccount, LedgerKeyConfigSetting, Limits, Memo, MuxedAccount, Operation, OperationBody, Preconditions, PublicKey,
     ReadXdr, ScAddress, ScMap, ScMapEntry, ScSymbol, ScVal, ScVec, SequenceNumber, Signature, SignatureHint,
     SorobanAddressCredentials, SorobanAuthorizationEntry, SorobanAuthorizedFunction, SorobanAuthorizedInvocation, SorobanCredentials,
     SorobanTransactionData, SorobanTransactionDataExt, TimeBounds, TimePoint, Transaction, TransactionEnvelope, TransactionExt,
@@ -383,6 +383,14 @@ impl SorobanAdapter {
         })
     }
 
+    /// The bytes `tx_max_size_bytes` counts for `tx`, known with no key used: its V1 envelope with a blank signature of ed25519's
+    /// length. A fee bump around it is not counted (measured, `e2e_ua8_tx_size_limit`).
+    fn envelope_size(tx: &Transaction) -> Result<usize> {
+        let blank = DecoratedSignature { hint: SignatureHint([0; 4]), signature: Signature(vec![0; 64].try_into()?) };
+        let env = TransactionEnvelope::Tx(TransactionV1Envelope { tx: tx.clone(), signatures: vec![blank].try_into()? });
+        Ok(env.to_xdr(Limits::none())?.len())
+    }
+
     /// A read-only call by simulation from lane 0; `None` = it needs a restore (an archived entry): unknown, never a
     /// default value. A simulation error is an `Err` (fail closed): `SimRefused` when the host refused the call.
     async fn view(&self, contract: &ScAddress, f: &str, args: Vec<ScVal>) -> Result<Option<ScVal>> {
@@ -449,6 +457,20 @@ impl SorobanAdapter {
             Ok(None) => Err(SimError::Revert("registry relayers(): its state needs a restore".into())),
             Err(e) if e.is::<SimRefused>() => Err(config(format!("has no relayers(): {e:#}"))),
             Err(e) => Err(SimError::Transport(format!("registry relayers(): {e:#}"))),
+        }
+    }
+
+    /// The network's `tx_max_size_bytes`, read for each job: a setting the validators vote, never assumed. An unreadable answer
+    /// is `Transport`, as a failed simulation: it says nothing about this job.
+    async fn tx_max_size(&self) -> std::result::Result<usize, SimError> {
+        let k = LedgerKey::ConfigSetting(LedgerKeyConfigSetting { config_setting_id: ConfigSettingId::ContractBandwidthV0 });
+        let k = k.to_xdr_base64(Limits::none()).map_err(|e| SimError::Revert(e.to_string()))?;
+        let unread = |why: String| SimError::Transport(format!("tx_max_size_bytes: {why}"));
+        let r = self.rpc("getLedgerEntries", json!({"keys": [k]})).await.map_err(|e| unread(format!("{e:#}")))?;
+        let x = r["entries"][0]["xdr"].as_str().ok_or_else(|| unread("no entry".into()))?;
+        match LedgerEntryData::from_xdr_base64(x, Limits::len(1 << 16)) {
+            Ok(LedgerEntryData::ConfigSetting(ConfigSettingEntry::ContractBandwidthV0(b))) => Ok(b.tx_max_size_bytes as usize),
+            other => Err(unread(format!("not the bandwidth setting: {other:?}"))),
         }
     }
 
@@ -538,6 +560,12 @@ impl ChainAdapter for SorobanAdapter {
         let mut tx = tx;
         tx.fee = u32::try_from(self.base_fee as i64 + data.resource_fee).map_err(|_| SimError::Revert("fee overflow".into()))?;
         tx.ext = TransactionExt::V1(data);
+        // simulation does not see this limit, and `sendTransaction` would answer `ERROR`, which requeues: this job's own state
+        let size = Self::envelope_size(&tx).map_err(rv)?;
+        let limit = self.tx_max_size().await?;
+        if size > limit {
+            return Err(SimError::Revert(format!("transaction of {size} B over the network's tx_max_size_bytes ({limit})")));
+        }
         let body = tx.to_xdr(Limits::none()).map_err(|e| SimError::Revert(e.to_string()))?;
         Ok(Built { job_id: job.id, body, valid_until, meta: json!({}) })
     }
@@ -2538,16 +2566,39 @@ mod tests {
     type Answer = Arc<dyn Fn(&InvokeContractArgs) -> Value + Send + Sync>;
     use std::sync::Arc;
 
+    /// The quickstart's `tx_max_size_bytes`.
+    const TX_MAX: u32 = 132_096;
+
     async fn rpc_stub(answer: Answer, calls: Arc<Mutex<Vec<String>>>) -> String {
+        rpc_stub_limit(answer, calls, Some(TX_MAX)).await
+    }
+
+    /// `limit`: the bandwidth setting's `tx_max_size_bytes`, which `sendTransaction` also enforces; `None` = no such entry.
+    async fn rpc_stub_limit(answer: Answer, calls: Arc<Mutex<Vec<String>>>, limit: Option<u32>) -> String {
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(b): axum::Json<Value>| {
             let (answer, calls) = (answer.clone(), calls.clone());
             async move {
                 let lane_rpc = match b["method"].as_str() {
                     Some("sendTransaction") => {
                         calls.lock().unwrap().push("SEND".to_string());
-                        Some(json!({"status": "PENDING"}))
+                        // what core counts: the inner envelope of a fee bump
+                        let env = match TransactionEnvelope::from_xdr_base64(b["params"]["transaction"].as_str().unwrap(), Limits::none()).unwrap() {
+                            TransactionEnvelope::TxFeeBump(f) => {
+                                let FeeBumpTransactionInnerTx::Tx(i) = f.tx.inner_tx;
+                                TransactionEnvelope::Tx(i)
+                            }
+                            e => e,
+                        };
+                        let over = env.to_xdr(Limits::none()).unwrap().len() > limit.unwrap_or(TX_MAX) as usize;
+                        Some(if over { json!({"status": "ERROR", "errorResultXdr": "txSOROBAN_INVALID"}) } else { json!({"status": "PENDING"}) })
                     }
-                    Some("getLedgerEntries") => Some(json!({"entries": [{"xdr": lane_account()}]})),
+                    Some("getLedgerEntries") => {
+                        let k = LedgerKey::from_xdr_base64(b["params"]["keys"][0].as_str().unwrap(), Limits::none()).unwrap();
+                        Some(json!({"entries": [{"xdr": match (k, limit) {
+                            (LedgerKey::ConfigSetting(_), Some(l)) => bandwidth(l),
+                            _ => lane_account(),
+                        }}]}))
+                    }
                     Some("getTransaction") => Some(json!({"status": "SUCCESS", "ledger": 5})),
                     _ => None,
                 };
@@ -2566,6 +2617,12 @@ mod tests {
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         url
+    }
+
+    /// `tx_max_size_bytes`'s answer.
+    fn bandwidth(tx_max_size_bytes: u32) -> String {
+        let b = stellar_xdr::ConfigSettingContractBandwidthV0 { ledger_max_txs_size_bytes: 1 << 20, tx_max_size_bytes, fee_tx_size1_kb: 1 };
+        LedgerEntryData::ConfigSetting(stellar_xdr::ConfigSettingEntry::ContractBandwidthV0(b)).to_xdr_base64(Limits::none()).unwrap()
     }
 
     /// `adapter.sequence`'s answer.
@@ -3277,6 +3334,101 @@ mod tests {
         assert_eq!(f.claims, 2, "each job once");
         assert!(f.jobs.is_empty());
         assert_eq!(logged(&calls).iter().filter(|c| *c == "SEND").count(), 1);
+    }
+
+    // -- a transaction over the network's `tx_max_size_bytes`: simulation passes it, `sendTransaction` never will
+
+    /// A `store_pqz_pop` job with `pad` bytes of proof: it reads no state, so only its size is under test.
+    fn sized_op(pad: usize) -> Value {
+        let mut o = ops(&NONE)[7].clone();
+        assert_eq!(o["function"], "store_pqz_pop");
+        o["args"]["pqz_pop"] = json!(h(&vec![7; pad]));
+        o
+    }
+    async fn sized_adapter(fee_bump: bool, limit: Option<u32>) -> (SorobanAdapter, Arc<Mutex<Vec<String>>>) {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let url = rpc_stub_limit(registry(vec![], vec![]), calls.clone(), limit).await;
+        let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: vec![url], lanes: vec![0], ..Default::default() };
+        c.params.insert("network_passphrase".into(), "x".into());
+        c.params.insert("ua_registry".into(), REGISTRY.into());
+        if fee_bump {
+            c.params.insert("fee_bump_lane".into(), 0.into());
+        }
+        let s = LocalSigner::Ed(ed25519_dalek::SigningKey::from_bytes(&[1; 32]));
+        (SorobanAdapter::new(&c, &[s]).unwrap(), calls)
+    }
+
+    /// As `archived_record_job_does_not_hold_the_queue`: over the limit is this job's own state, `dead` on one claim with nothing
+    /// signed, and the next job goes.
+    #[tokio::test]
+    async fn oversized_job_does_not_hold_the_queue() {
+        use crate::adapter::tests::{fake_odoo, Fake};
+        let (a, calls) = sized_adapter(false, Some(TX_MAX)).await;
+        let jobs = vec![json!({"id": 7, "kind": "call", "op": sized_op(TX_MAX as usize)}), json!({"id": 8, "kind": "call", "op": sized_op(8)})];
+        let (odoo, o) = fake_odoo(Fake { jobs, repeat: true, ..Default::default() }).await;
+        for _ in 0..4 {
+            crate::adapter::lane_step(&a, &odoo, 0, "n#0").await.unwrap();
+            let mut f = o.lock().unwrap();
+            let last = f.reports.last().unwrap().clone();
+            if last["chain_state"] != "queued" {
+                f.jobs.retain(|j| j["id"] != last["job_id"]);
+            }
+            if f.jobs.is_empty() {
+                break;
+            }
+        }
+        let f = o.lock().unwrap();
+        let states = |id: i64| f.reports.iter().filter(|r| r["job_id"] == id).map(|r| r["chain_state"].as_str().unwrap()).collect::<Vec<_>>();
+        assert_eq!(states(7), ["dead"], "{:?}", f.reports);
+        assert!(f.reports[0]["error"].as_str().unwrap().contains("tx_max_size_bytes"), "{:?}", f.reports[0]);
+        assert_eq!(states(8).last(), Some(&"mined"), "{:?}", f.reports);
+        assert_eq!(f.claims, 2, "each job once");
+        assert!(f.jobs.is_empty());
+        assert_eq!(logged(&calls).iter().filter(|c| *c == "SEND").count(), 1, "the oversized job is never sent");
+    }
+
+    /// The compared size is what `sign` sends, less a fee bump's 128 B: exactly the limit is sent, 4 B more (XDR's step) is refused
+    /// here. Core's reading of both edges is `e2e_ua8_tx_size_limit`.
+    #[tokio::test]
+    async fn transaction_of_exactly_the_limit_passes() {
+        for (fee_bump, wrap) in [(false, 0), (true, 128)] {
+            let (a, calls) = sized_adapter(fee_bump, Some(TX_MAX)).await;
+            let signed_len = |pad: usize| {
+                let a = &a;
+                async move {
+                    let job: Job = serde_json::from_value(json!({"id": 7, "kind": "call", "op": sized_op(pad)})).unwrap();
+                    a.sign(a.build(&job, 0).await.unwrap(), 0, 1).await.unwrap().raw.len()
+                }
+            };
+            let pad = TX_MAX as usize + wrap - signed_len(4).await + 4;
+            assert_eq!(signed_len(pad).await, TX_MAX as usize + wrap, "fee_bump {fee_bump}");
+            logged(&calls);
+            run(&a, &sized_op(pad)).await.unwrap();
+            assert_eq!(logged(&calls).last().unwrap(), "SEND", "fee_bump {fee_bump}");
+            refused(run(&a, &sized_op(pad + 4)).await, "tx_max_size_bytes");
+            assert!(!logged(&calls).contains(&"SEND".to_string()), "fee_bump {fee_bump}");
+        }
+    }
+
+    /// One exit for every job kind: a `ua_metatx` too.
+    #[tokio::test]
+    async fn oversized_ua_metatx_refused_at_build() {
+        let (a, calls) = stub_adapter(Arc::new(|_| view_ok(ScVal::Void)), false).await;
+        let (contract, f, mut args) = ua_ops(ScVal::Void).remove(2);
+        assert_eq!(f, "ua_pay_meta");
+        args[4] = byt(&vec![7; TX_MAX as usize]);
+        let e = a.build(&ua_job(contract, f, args), 0).await.err().unwrap();
+        assert!(matches!(&e, SimError::Revert(r) if r.contains("tx_max_size_bytes")), "{e:?}");
+        assert!(!logged(&calls).contains(&"SEND".to_string()));
+    }
+
+    /// The limit is the network's: an answer without it is no refusal of this job, as a failed simulation is not.
+    #[tokio::test]
+    async fn unread_limit_is_transport() {
+        let (a, calls) = sized_adapter(false, None).await;
+        let r = run(&a, &sized_op(8)).await;
+        assert!(matches!(&r, Err(SimError::Transport(e)) if e.contains("tx_max_size_bytes")), "{r:?}");
+        assert!(!logged(&calls).contains(&"SEND".to_string()));
     }
 
     /// `evm-contract`: no off-chain check exists (C14). Signing nothing it passes; with a slot it is `NotVerifiable`.
