@@ -31,6 +31,17 @@ M = [
      "        mapping(bytes32 ua => bytes32) keyOwner_; // never", ""),  # replaced below
     ("no-abi-error", REG, "ABI: SSTORE2WriteFailed not declared",
      "    error SSTORE2WriteFailed();\n", ""),
+    ("msig-threshold-stop", LIB, "library `_msig`: no stop at the threshold",
+     "if (acc >= threshold || s.index < next || s.index >= count) return false;", "if (s.index < next || s.index >= count) return false;"),
+    ("msig-index-count", LIB, "library `_msig`: no check against the member count",
+     "if (acc >= threshold || s.index < next || s.index >= count) return false;", "if (acc >= threshold || s.index < next) return false;"),
+    ("msig-index-order", LIB, "library `_msig`: a member twice, or out of order",
+     "if (acc >= threshold || s.index < next || s.index >= count) return false;", "if (acc >= threshold || s.index >= count) return false;"),
+    ("caller-word", LIB, "the words: the library reads the caller's trailing bytes",
+     "w := calldataload(sub(calldatasize(), 96))", "w := calldataload(sub(calldatasize(), 192))"),
+    ("via-starved", STORE, "`via`: a starved target's UAVerifyGas becomes a verdict",
+     "if ((err.length == 4 && bytes4(err) == UAKinds.UAVerifyGas.selector) || (err.length == 0 && gasleft() < g / 63)) {",
+     "if (err.length == 0 && gasleft() < g / 63) {"),
     ("no-lib-check", REG, "constructor: a missing library accepted",
      "        if (address(UARegistryLib).code.length == 0) revert UAConfig(0);\n", ""),
 ]

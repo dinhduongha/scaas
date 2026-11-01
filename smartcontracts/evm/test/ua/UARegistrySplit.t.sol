@@ -12,6 +12,7 @@ import {UARegistryBase, MockVerifier, MockWallet} from "./UARegistryBase.sol";
 import {UACall} from "./UACall.sol";
 import {SplitDiff} from "./SplitDiff.sol";
 import {GasMeter} from "./GroupFixtures.sol";
+import {AcceptAll} from "./UAGas.t.sol";
 
 contract Create2er {
     function create(bytes32 salt, bytes memory init) external returns (address a) {
@@ -354,8 +355,33 @@ contract UARegistrySplitTest is UARegistryBase {
         s[0] = abi.decode(good, (IUARegistry.MemberSig[]))[0];
         r.refused("msig: below the threshold", at, _regCall(UAKinds.MSIG, d, _none(), abi.encode(s), ""),
             abi.encodePacked(IUARegistry.UAPoP.selector));
+        _msigIndexGuards(r, at, d, ms);
         _reg(r, "registerMsig PQ-eligible", at, _regCall(UAKinds.MSIG, d, _none(), good, ""));
         _msigRecords(r, at, ms, d, fn);
+    }
+
+    /// `UARegistryLib._msig`'s own guards, which `UARegistry.t.sol` reaches only on the registry's copy: a valid MemberSig after
+    /// the threshold (the stop keeps the registration bound sound), a member twice, an index past the members. Each from the
+    /// signatures of the call that passes in `_msigs`. A mutated index check still ends in `UAPoP` here, but it reads past the
+    /// structure and recovers a key: the `[calls]` row shows it.
+    function _msigIndexGuards(SplitDiff.Run memory r, address at, bytes memory d, bytes32 ms) internal {
+        (bytes memory ml, bytes memory fn) = (_pk(ML44, 11), _keyOf(FN));
+        bytes32 rd = _regDigest(ms, UAKinds.MSIG);
+        bytes32 md = _memberDigest(ms, UAKinds.PURPOSE_POP_V2, rd);
+        IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](3);
+        s[0] = _member(d, _pad(vm.addr(ALICE)), _ecdsa(ALICE, rd));
+        s[1] = _member(d, UAKinds.uaOf(FN, fn), _sig(fn, UAKinds.uaMessage(FN, UAKinds.PURPOSE_MEMBER, md)));
+        s[2] = _member(d, UAKinds.uaOf(ML44, ml), _sig(ml, UAKinds.uaMessage(ML44, UAKinds.PURPOSE_MEMBER, md)));
+        _sorted(s);
+        r.refused("msig: a MemberSig after the threshold", at, _regCall(UAKinds.MSIG, d, _none(), abi.encode(s), ""),
+            abi.encodePacked(IUARegistry.UAPoP.selector));
+        IUARegistry.MemberSig[] memory two = new IUARegistry.MemberSig[](2);
+        (two[0], two[1]) = (s[0], s[0]);
+        r.refused("msig: the same member twice", at, _regCall(UAKinds.MSIG, d, _none(), abi.encode(two), ""),
+            abi.encodePacked(IUARegistry.UAPoP.selector));
+        two[1] = IUARegistry.MemberSig(3, "", _ecdsa(ALICE, rd));
+        r.refused("msig: an index past the members", at, _regCall(UAKinds.MSIG, d, _none(), abi.encode(two), ""),
+            abi.encodePacked(IUARegistry.UAPoP.selector));
     }
 
     function _msigRecords(SplitDiff.Run memory r, address at, bytes32 ms, bytes memory d, bytes memory fn) internal {
@@ -587,7 +613,7 @@ contract UARegistrySplitTest is UARegistryBase {
         }
     }
 
-    /// `msig` member rules: unknown member, wrong kind, over the budget, a PQZ holder over the debit bound.
+    /// `msig` member rules: unknown member, wrong kind, an `msig` member, the PoP of a classical structure.
     function _msigNegatives(SplitDiff.Run memory r, address at) internal {
         bytes memory fn = _keyOf(FN);
         bytes32 fnUa = UAKinds.uaOf(FN, fn);
@@ -614,19 +640,21 @@ contract UARegistrySplitTest is UARegistryBase {
         _reg(r, "msig classical, no PoP", at, _regCall(UAKinds.MSIG, d, _none(), "", ""));
     }
 
-    /// A PQ-eligible `msig` of 10 members at the stand-in cap 1,000,000: inside the budget, over the PQZ holder's debit bound.
+    /// The two bounds of a PQ-eligible `msig`, 12 members at the stand-in cap 1,000,000. Threshold 10: inside the budget, over
+    /// the PQZ holder's debit bound. Threshold 12: over `verifyBudget`. One change, threshold 11: past the bound, stops at the PoP.
     function _debitBound(SplitDiff.Run memory r, address at) internal {
-        Member[] memory m = new Member[](10);
-        IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](10);
-        for (uint256 i; i < 10; ++i) {
-            bytes memory k = _pk(SLH, 100 + i);
-            m[i] = Member(SLH, _reg(r, "member", at, _plain(SLH, k)), 1);
+        Member[] memory m = new Member[](12);
+        for (uint256 i; i < 12; ++i) {
+            m[i] = Member(SLH, _reg(r, "member", at, _plain(SLH, _pk(SLH, 100 + i))), 1);
         }
         bytes memory d = _msigKey(10, m);
-        bytes32 ua = UAKinds.uaOf(UAKinds.MSIG, d);
         IUARegistry.UAAttrs memory a = UACall.attrs(_pk(UAKinds.PQZ_MLWE, 70), keccak256("p"), "");
-        r.refused("msig PQZ holder over the debit bound", at, _regCall(UAKinds.MSIG, d, a, abi.encode(s), ""),
-            _err(IUARegistry.UAPqzHolder.selector, ua));
+        r.refused("msig PQZ holder over the debit bound", at, _regCall(UAKinds.MSIG, d, a, abi.encode(new IUARegistry.MemberSig[](10)), ""),
+            _err(IUARegistry.UAPqzHolder.selector, UAKinds.uaOf(UAKinds.MSIG, d)));
+        r.refused("msig over the budget", at, _regCall(UAKinds.MSIG, _msigKey(12, m), _none(), "", ""),
+            abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
+        r.refused("msig one member inside the budget", at, _regCall(UAKinds.MSIG, _msigKey(11, m), _none(), "", ""),
+            abi.encodePacked(IUARegistry.UAPoP.selector));
     }
 
     /// Verifiers that fail in every way (`MockVerifier` modes), with a registry of their own.
@@ -748,7 +776,10 @@ contract UARegistrySplitTest is UARegistryBase {
         bytes memory pk = _pk(ML65, 70);
         bytes32 ua = _reg(r, "gen 1: a holder for gen 2", R1, _plain(ML65, pk));
         bytes memory pqz = _pk(UAKinds.PQZ_MLWE, 71);
-        r.refused("gen 2: setPqzKey, bad signature", R2, _pqzKeyCall(ua, ML65, pk, pqz, 0x0), _err(IUARegistry.UAPqzPopHash.selector, ua));
+        IUARegistry.UASig memory bad = _sigFor(pk, ML65, UAKinds.PURPOSE_PQZ_KEY, keccak256("other"));
+        r.refused("gen 2: setPqzKey, bad signature", R2, abi.encodeCall(IUARegistry.setPqzKey, (ua, pqz, keccak256("g2"), bad)),
+            _err(IUARegistry.UAUnauthorized.selector, ua));
+        r.refused("gen 2: setPqzKey, hash 0", R2, _pqzKeyCall(ua, ML65, pk, pqz, 0x0), _err(IUARegistry.UAPqzPopHash.selector, ua));
         r.write("gen 2: setPqzKey on a gen-1 record", R2, _pqzKeyCall(ua, ML65, pk, pqz, keccak256("g2")));
         r.refused("gen 2: setKemKey of a gen-1 record", R2, _kemCall(ua, ML65, pk, 1, _kemPk(70)), _err(IUARegistry.UAUnauthorized.selector, ua));
         _gen2Msigs(r);
@@ -951,7 +982,7 @@ contract UARegistrySplitTest is UARegistryBase {
         IUARegistry.FrostKey memory f;
         IUARegistry.MsigStructure memory st;
         c = new bytes[](9);
-        c[0] = abi.encodeWithSelector(UARegistryLib.cacheExpandedKey.selector, ML44, pk, uint256(0));
+        c[0] = abi.encodeWithSelector(UARegistryLib.cacheExpandedKey.selector, ML44, _pk(ML44, 2), uint256(0));
         c[1] = abi.encodeWithSelector(UARegistryLib.register.selector, ML44, pk, _none(), _pop(UARegistry(address(0)), ML44, pk), bytes(""));
         c[2] = abi.encodeWithSelector(UARegistryLib.registerWebAuthn.selector, w, _none(), bytes(""), bytes(""));
         c[3] = abi.encodeWithSelector(UARegistryLib.registerMuSig2.selector, uint16(0x0110), m, _none(), bytes(""), bytes(""));
@@ -963,13 +994,26 @@ contract UARegistrySplitTest is UARegistryBase {
         for (uint256 i; i < 9; ++i) c[i] = bytes.concat(c[i], _words(v));
     }
 
-    /// Called directly, every entry reverts with nothing (solc's library call protection), with no write and no log, even
-    /// with an accepting verifier in the words. The same bytes through a DELEGATECALL reach the code (control), on the
-    /// caller's own storage: a typed answer, or a pass, never the registry's state.
+    /// The guarantee is solc's call protection: the deployed runtime opens with `PUSH20 <self> ADDRESS EQ` and every entry, none
+    /// being `view` or `pure`, reverts on that flag. Called directly each reverts with nothing, no log, no write, no creation.
+    /// Most entries would fail there anyway, on a getter the library lacks; `cacheExpandedKey` calls no getter and
+    /// `register` is a good call, so the same bytes by DELEGATECALL from a foreign contract with those getters are the control:
+    /// those two land, on the foreign contract's storage, and the others reach the code (a typed answer).
     function test_libraryDirectCallRefused() public {
+        address lib = address(UARegistryLib);
+        bytes memory code = lib.code;
+        assertEq(uint8(code[0]), 0x73, "PUSH20");
+        bytes20 self;
+        assembly ("memory-safe") {
+            self := mload(add(code, 33))
+        }
+        assertEq(address(self), lib, "the library's own address, filled in at deployment");
+        assertEq(uint8(code[21]), 0x30, "ADDRESS");
+        assertEq(uint8(code[22]), 0x14, "EQ");
+
         bytes[] memory c = _entries(address(new CacheVerifier(address(0))));
         Foreign foreign = new Foreign();
-        address lib = address(UARegistryLib);
+        uint256 nonce = vm.getNonce(lib);
         for (uint256 i; i < c.length; ++i) {
             vm.record();
             vm.recordLogs();
@@ -980,17 +1024,23 @@ contract UARegistrySplitTest is UARegistryBase {
             assertEq(writes.length, 0, vm.toString(i));
             assertEq(vm.getRecordedLogs().length, 0, vm.toString(i));
             (bool ok2, bytes memory ret2) = foreign.run(lib, c[i]);
-            assertTrue(ok2 || ret2.length >= 4, string.concat("the control reached the code ", vm.toString(i)));
+            if (i < 2) assertTrue(ok2, string.concat("a good call lands in the control ", vm.toString(i)));
+            else assertGe(ret2.length, 4, string.concat("the control reached the code ", vm.toString(i)));
         }
-        bytes32 ua = UAKinds.uaOf(ML44, _pk(ML44, 1));
-        assertEq(reg.kindOf(ua), 0, "a foreign run writes nowhere near a registry");
+        assertEq(vm.getNonce(lib), nonce, "no SSTORE2 write from the library's own address");
+        bytes32 cached = keccak256(abi.encode(UAKinds.uaOf(ML44, _pk(ML44, 2)), uint256(3))); // `ekPtr`
+        bytes32 record = keccak256(abi.encode(UAKinds.uaOf(ML44, _pk(ML44, 1)), uint256(0))); // `records`
+        assertTrue(vm.load(address(foreign), cached) != 0, "the control wrote its own storage");
+        assertTrue(vm.load(address(foreign), record) != 0, "the control wrote its own storage");
+        assertEq(vm.load(lib, cached), 0);
+        assertEq(vm.load(lib, record), 0);
     }
 
     /// Three words a caller appends stay its own trailing bytes: the library reads the ones the registry appends after them.
     /// One change each from a passing call, on both sides.
     function test_callerCannotSupplyTheWords() public {
         string[2] memory arts = [OLD, NEW];
-        address yes = address(new MockVerifier(0, 0));
+        address yes = address(new AcceptAll()); // the words a caller wishes for: any PoP passes
         for (uint256 i; i < 2; ++i) {
             registryArtifact = arts[i];
             address at = i == 0 ? R1 : R2;
@@ -1002,7 +1052,7 @@ contract UARegistrySplitTest is UARegistryBase {
             (bool ok, bytes memory ret) = at.call(bytes.concat(off, words));
             assertFalse(ok);
             assertEq(ret, abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, ML44));
-            // a bad PoP stays bad under the kind's own verifier
+            // a bad PoP stays bad: the kind's own verifier, not the caller's accepting one
             (ok, ret) = at.call(bytes.concat(_regCall(SLH, key, _none(), hex"01", ""), words));
             assertFalse(ok);
             assertEq(ret, abi.encodePacked(IUARegistry.UAPoP.selector));
@@ -1103,6 +1153,25 @@ contract UARegistrySplitTest is UARegistryBase {
         new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
         vm.etch(lib, code);
         new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+    }
+
+    /// A derived member's PoP in `registerMsig` is a `requireAuthorized` frame on the registry (`UAStore.via`): starved at
+    /// its hold, the caller sees `UAVerifyGas`, not `UAPoP`, on both sides. Control: the same call with the gas passes.
+    function test_starvedMemberThroughTheSelfCall() public {
+        string[2] memory arts = [OLD, NEW];
+        for (uint256 i; i < 2; ++i) {
+            registryArtifact = arts[i];
+            address at = i == 0 ? R1 : R2;
+            UARegistry r = _deploy(at, chainUidA, address(0), false, BUDGET, address(0), true, _one(FN, address(mock), PQ));
+            bytes memory fn = _pk(FN, 5);
+            _register(r, FN, fn);
+            bytes memory data = _walletMsig(vm.addr(ALICE), fn);
+            (bool ok, bytes memory ret) = at.call{gas: 800_000}(data); // under the member's cap of 1,000,000
+            assertFalse(ok);
+            assertEq(ret, abi.encodeWithSelector(UAKinds.UAVerifyGas.selector));
+            (ok,) = at.call(data);
+            assertTrue(ok, "with the gas");
+        }
     }
 
     /// Two registries on one library: it has no state of its own.
