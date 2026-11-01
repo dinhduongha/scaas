@@ -1,0 +1,57 @@
+# debit-gas at commit 4702e029 (+ the M2 change): PqzStateGas -vv per set against runs/2026-11-01-typed-signing-gas-<set>.txt
+n2048-kmax1024: 93 rows, 13 moved, deltas [(-24, 1), (-12, 8), (139, 2), (176, 2)]
+  GAS n2048-kmax1024 pqzl | burn 1, 2-of-2 mldsa65 msig holder, mtxExecute | calldata 66852  | 6752610 -> 6752749
+  GAS n2048-kmax1024 pqzl-ua | burn 1, 2-of-2 mldsa65 msig holder, uaExecute | calldata 7021 | 6893756 -> 6893895
+  GAS n2048-kmax1024 pqzl | burn 1, 3-of-3 mldsa65 msig holder, mtxExecute | calldata 70404  | 6879578 -> 6879754
+  GAS n2048-kmax1024 pqzl-ua | burn 1, 3-of-3 mldsa65 msig holder, uaExecute | calldata 7376 | 7020770 -> 7020946
+  GAS n2048-kmax1024 pqzl | op 1, auditor, materialised acc, no hint | calldata 64036 (zero  | 9940490 -> 9940478
+  GAS n2048-kmax1024 pqzl | op 1, auditor, materialised acc, hint | calldata 74884 (zero 107 | 9415041 -> 9415029
+  GAS n2048-kmax1024 pqzl | op 7 M = 1, auditor, fresh ref | calldata 64132 (zero 10805) | s | 6696484 -> 6696460
+  GAS n2048-kmax1024 pqzl | op 7 M = 4, auditor, fresh ref | calldata 96932 (zero 17339) | s | 8391525 -> 8391513
+  GAS n2048-kmax1024 pqzl | op 7 M = 4, no auditor, fresh ref | calldata 65636 (zero 10901)  | 7342089 -> 7342077
+  GAS n2048-kmax1024 pqzl | disclosure RECEIVER, op 7 M = 8 entry leg 5 (verifyTransferAmoun | 4245872 -> 4245860
+  GAS n2048-kmax1024 pqzl | disclosure AUDITOR, op 7 M = 8 entry leg 5 (verifyTransferAmount | 4249036 -> 4249024
+  GAS n2048-kmax1024 pqzl-ua | disclosure RECEIVER, op 7 M = 8 entry leg 5 (verifyTransferAm | 4245872 -> 4245860
+  GAS n2048-kmax1024 pqzl-ua | disclosure AUDITOR, op 7 M = 8 entry leg 5 (verifyTransferAmo | 4249036 -> 4249024
+n2304-kmax4096: 93 rows, 15 moved, deltas [(-12, 5), (12, 6), (139, 2), (176, 2)]
+  GAS n2304-kmax4096 pqzl | burn 1, 2-of-2 mldsa65 msig holder, mtxExecute | calldata 72804  | 6911709 -> 6911848
+  GAS n2304-kmax4096 pqzl-ua | burn 1, 2-of-2 mldsa65 msig holder, uaExecute | calldata 7616 | 7052931 -> 7053070
+  GAS n2304-kmax4096 pqzl | burn 1, 3-of-3 mldsa65 msig holder, mtxExecute | calldata 76356  | 7039994 -> 7040170
+  GAS n2304-kmax4096 pqzl-ua | burn 1, 3-of-3 mldsa65 msig holder, uaExecute | calldata 7971 | 7181262 -> 7181438
+  GAS n2304-kmax4096 pqzl | op 1, auditor, fresh ref | calldata 70020 (zero 11530) | std 981 | 9179551 -> 9179539
+  GAS n2304-kmax4096 pqzl | op 1, no auditor, fresh ref | calldata 69540 (zero 11462) | std  | 8889856 -> 8889868
+  GAS n2304-kmax4096 pqzl | op 1, auditor, materialised acc, no hint | calldata 70020 (zero  | 10290514 -> 10290502
+  GAS n2304-kmax4096 pqzl | op 7 M = 1, auditor, fresh ref | calldata 70084 (zero 11582) | s | 6876498 -> 6876486
+  GAS n2304-kmax4096 pqzl | op 7 M = 2, no auditor, fresh ref | calldata 70308 (zero 11602)  | 7173598 -> 7173586
+  GAS n2304-kmax4096 pqzl | op 7 M = 4, auditor, fresh ref | calldata 106596 (zero 18900) |  | 8701905 -> 8701893
+  GAS n2304-kmax4096 pqzl | op 7 M = 4, no auditor, fresh ref | calldata 71588 (zero 11705)  | 7531258 -> 7531270
+  GAS n2304-kmax4096 pqzl | disclosure RECEIVER, op 7 M = 8 entry leg 5 (verifyTransferAmoun | 4330027 -> 4330039
+  GAS n2304-kmax4096 pqzl | disclosure AUDITOR, op 7 M = 8 entry leg 5 (verifyTransferAmount | 4333407 -> 4333419
+  GAS n2304-kmax4096 pqzl-ua | disclosure RECEIVER, op 7 M = 8 entry leg 5 (verifyTransferAm | 4330027 -> 4330039
+  GAS n2304-kmax4096 pqzl-ua | disclosure AUDITOR, op 7 M = 8 entry leg 5 (verifyTransferAmo | 4333407 -> 4333419
+n2560-kmax16384: 93 rows, 15 moved, deltas [(-12, 2), (12, 9), (127, 1), (139, 1), (176, 2)]
+  GAS n2560-kmax16384 pqzl | burn 1, 2-of-2 mldsa65 msig holder, mtxExecute | calldata 78532 | 7071566 -> 7071693
+  GAS n2560-kmax16384 pqzl-ua | burn 1, 2-of-2 mldsa65 msig holder, uaExecute | calldata 818 | 7212862 -> 7213001
+  GAS n2560-kmax16384 pqzl | burn 1, 3-of-3 mldsa65 msig holder, mtxExecute | calldata 82084 | 7198144 -> 7198320
+  GAS n2560-kmax16384 pqzl-ua | burn 1, 3-of-3 mldsa65 msig holder, uaExecute | calldata 854 | 7339485 -> 7339661
+  GAS n2560-kmax16384 pqzl | op 1, auditor, fresh ref | calldata 75780 (zero 12306) | std 10 | 9359248 -> 9359260
+  GAS n2560-kmax16384 pqzl | op 1, no auditor, fresh ref | calldata 75332 (zero 12277) | std | 9065120 -> 9065132
+  GAS n2560-kmax16384 pqzl | op 1, auditor, materialised acc, no hint | calldata 75780 (zero | 10659274 -> 10659262
+  GAS n2560-kmax16384 pqzl | op 7 M = 4, no auditor, fresh ref | calldata 77380 (zero 12504) | 7721816 -> 7721804
+  GAS n2560-kmax16384 pqzl | op 7 M = 8, no auditor, fresh ref | calldata 116804 (zero 20466 | 10912311 -> 10912323
+  GAS n2560-kmax16384 pqzl | burn 1 to an address, fresh ref | calldata 74660 (zero 12245) | | 7033781 -> 7033793
+  GAS n2560-kmax16384 pqzl | refresh, fresh ref | calldata 74692 (zero 12274) | std 1047784  | 7018572 -> 7018584
+  GAS n2560-kmax16384 pqzl | disclosure RECEIVER, op 7 M = 8 entry leg 5 (verifyTransferAmou | 4405945 -> 4405957
+  GAS n2560-kmax16384 pqzl | disclosure AUDITOR, op 7 M = 8 entry leg 5 (verifyTransferAmoun | 4409073 -> 4409085
+  GAS n2560-kmax16384 pqzl-ua | disclosure RECEIVER, op 7 M = 8 entry leg 5 (verifyTransferA | 4405945 -> 4405957
+  GAS n2560-kmax16384 pqzl-ua | disclosure AUDITOR, op 7 M = 8 entry leg 5 (verifyTransferAm | 4409073 -> 4409085
+n2816-kmax65536: 49 rows, 8 moved, deltas [(12, 3), (24, 1), (127, 1), (139, 1), (176, 2)]
+  GAS n2816-kmax65536 pqzl | burn 1, 2-of-2 mldsa65 msig holder, mtxExecute | calldata 85092 | 7252184 -> 7252311
+  GAS n2816-kmax65536 pqzl-ua | burn 1, 2-of-2 mldsa65 msig holder, uaExecute | calldata 884 | 7393564 -> 7393703
+  GAS n2816-kmax65536 pqzl | burn 1, 3-of-3 mldsa65 msig holder, mtxExecute | calldata 88644 | 7374659 -> 7374835
+  GAS n2816-kmax65536 pqzl-ua | burn 1, 3-of-3 mldsa65 msig holder, uaExecute | calldata 920 | 7516085 -> 7516261
+  GAS n2816-kmax65536 pqzl | op 7 M = 1, no auditor, fresh ref | calldata 81892 (zero 13127) | 7624343 -> 7624367
+  GAS n2816-kmax65536 pqzl | op 7 M = 4, auditor, fresh ref | calldata 87908 (zero 13463) |  | 8273423 -> 8273435
+  GAS n2816-kmax65536 pqzl | op 7 M = 8, auditor, fresh ref | calldata 131268 (zero 22429) | | 12557659 -> 12557671
+  GAS n2816-kmax65536 pqzl | op 7 M = 8, no auditor, fresh ref | calldata 127364 (zero 22018 | 11288154 -> 11288166
+rc=0

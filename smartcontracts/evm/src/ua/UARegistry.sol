@@ -1200,6 +1200,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// `eth_signTypedData_v4`; an EOA: code-less or an EIP-7702 designator, its own key only) or, a contract, answers
     /// ERC-1271 over `digest` (`_nativePortable`); otherwise native members sign `UAAuth` (CTR-UA-24, CTR-MTX-14). Derived
     /// members sign `member_digest` under `member` in both. (The members come typed, TS-D12: no encoding to canonicalise.)
+    /// `portable` is a stored signature, so it is minimal too (owner 2026-10-31, U8S-D1): with T the slots' total weight
+    /// and N the threshold, T >= N and T - weight(i) < N for every slot, i.e. T - min(weight) < N.
     function _msig(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory d, MemberSig[] memory sigs, bool portable)
         private
         view
@@ -1209,15 +1211,18 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         if (!portable) digest = 0; // from here: the typed digest a native member signs, on the portable path only
         (uint256 threshold, uint256 count) = (_u16(d, 0), _u16(d, 2));
         uint256 acc;
+        uint256 wMin = type(uint256).max; // the smallest slot weight
         uint256 next; // lowest index the next MemberSig may use
         for (uint256 i; i < sigs.length; ++i) {
             MemberSig memory s = sigs[i];
             if (acc >= threshold || s.index < next || s.index >= count) return false;
             next = uint256(s.index) + 1;
             if (!_memberOk(d, md, digest, s)) return false;
-            acc += _u16(d, 4 + 36 * uint256(s.index) + 34);
+            uint256 w = _u16(d, 4 + 36 * uint256(s.index) + 34);
+            acc += w;
+            if (w < wMin) wMin = w;
         }
-        return acc >= threshold;
+        return acc >= threshold && (!portable || acc - wMin < threshold);
     }
 
     /// The signature `s` of member `s.index` of the structure `d` over `md` under `member`, without key data (native:
