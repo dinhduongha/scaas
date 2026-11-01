@@ -1,0 +1,24 @@
+   Compiling scaas-ua-registry v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/ua-registry)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.11s
+     Running unittests src/lib.rs (target/debug/deps/scaas_ua_registry-dbecadbefa297ecc)
+
+running 2 tests
+test test_ua8::tmp_kem_row_under_mutant ... ok
+test test_ua8::ua8_pop_purpose_and_record_separated ... FAILED
+
+failures:
+
+---- test_ua8::ua8_pop_purpose_and_record_separated stdout ----
+
+thread 'test_ua8::ua8_pop_purpose_and_record_separated' (179540) panicked at contracts/ua-registry/src/test_ua8.rs:187:18:
+the registration under purpose kem: Ok(Ok(BytesN<32>(34, 166, 165, 159, 17, 71, 170, 240, 14, 236, 105, 204, 135, 155, 180, 42, 4, 246, 126, 43, 218, 55, 218, 125, 195, 46, 143, 222, 21, 93, 22, 51)))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Writing test snapshot file for test "test_ua8::ua8_pop_purpose_and_record_separated" to "test_snapshots/test_ua8/ua8_pop_purpose_and_record_separated.1.json".
+
+
+failures:
+    test_ua8::ua8_pop_purpose_and_record_separated
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 79 filtered out; finished in 0.09s
+
+error: test failed, to rerun pass `-p scaas-ua-registry --lib`

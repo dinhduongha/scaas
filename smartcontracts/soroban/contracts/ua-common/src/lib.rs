@@ -55,6 +55,16 @@ impl UaAttrs {
     }
 }
 
+/// A `webauthn-p256` key (EVM `WebAuthnKey`, TS-D13): the P-256 point and the relying party's `rpIdHash`; the key data is
+/// `x ‖ y ‖ rp_id_hash`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WebAuthnKey {
+    pub x: BytesN<32>,
+    pub y: BytesN<32>,
+    pub rp_id_hash: BytesN<32>,
+}
+
 /// One `msig` member's signature (EVM `MemberSig`): `key_data` always empty, the member's key is read from its record.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]

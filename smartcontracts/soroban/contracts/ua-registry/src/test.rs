@@ -203,7 +203,7 @@ fn p256k(seed: u8) -> p256::ecdsa::SigningKey {
     p256::ecdsa::SigningKey::from_bytes(&[seed; 32].into()).unwrap()
 }
 /// An in-test `mldsa65` key: an in-test `msig` of a PQ majority needs a real member signature over its own digest.
-fn ml(seed: u8) -> Sk {
+pub(crate) fn ml(seed: u8) -> Sk {
     Sk::Ml(std::boxed::Box::new(ml_dsa::SigningKey::from_seed(&ml_dsa::Seed::from([seed; 32]))))
 }
 fn k1(seed: u8) -> k256::ecdsa::SigningKey {
@@ -233,7 +233,7 @@ fn webauthn_sig(env: &Env, sk: &p256::ecdsa::SigningKey, m: &[u8; 32], ext: usiz
 }
 
 impl Sk {
-    fn kind(&self) -> u32 {
+    pub(crate) fn kind(&self) -> u32 {
         match self {
             Sk::Wa(_) => 0x0100,
             Sk::P256(_) => 0x0101,
@@ -242,7 +242,7 @@ impl Sk {
             Sk::Ml(_) => 0x0131,
         }
     }
-    fn key_data(&self, env: &Env) -> Bytes {
+    pub(crate) fn key_data(&self, env: &Env) -> Bytes {
         let v = match self {
             Sk::Ed(k) => k.verifying_key().to_bytes().to_vec(),
             Sk::P256(k) => k.verifying_key().to_encoded_point(false).as_bytes()[1..].to_vec(),
@@ -252,7 +252,7 @@ impl Sk {
         };
         b(env, &v)
     }
-    fn ua(&self, env: &Env) -> BytesN<32> {
+    pub(crate) fn ua(&self, env: &Env) -> BytesN<32> {
         digest::ua_of(env, self.kind(), &self.key_data(env))
     }
     /// The kind's signature over `ua_msg` (spec §3).
@@ -600,11 +600,11 @@ fn kind_msig_negatives_fail() {
     let mut a = msig_auth(&env, &good);
     a.key_data = m.kd.clone();
     assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &d, &a)), Error::Unauthorized);
-    // A registered member's slot with its key data: refused (`Pop`), even though the key is right.
+    // A registered member's slot with its key data: refused (the caller's error, as EVM), even though the key is right.
     let mut kd = good.clone();
     let signer = if kd[0].0 == m.index(&e.ua(&env).to_array()) { &e } else { &p };
     kd[0].1 = vecu8(&signer.key_data(&env));
-    assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &d, &msig_auth(&env, &kd))), Error::Pop);
+    assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &d, &msig_auth(&env, &kd))), Error::Unauthorized);
     // Another purpose, another digest.
     assert!(c.try_require_authorized(&m.ua, &n(&env, PURPOSE_TRADE), &d, &msig_auth(&env, &good)).is_err());
     assert!(c.try_require_authorized(&m.ua, &pm, &n(&env, [0x33; 32]), &msig_auth(&env, &good)).is_err());
@@ -715,7 +715,7 @@ fn msig_soroban_native_member_host_auth() {
     c.require_authorized(&m.ua, &pm, &d, &empty_slot);
     // A native slot carrying bytes is refused.
     env.set_auths(&[]);
-    assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &d, &msig_auth(&env, &[(0, vec![], vec![1])]))), Error::Pop);
+    assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &d, &msig_auth(&env, &[(0, vec![], vec![1])]))), Error::Unauthorized);
 }
 
 /// An EOA key's 20-byte address as a native-space id.

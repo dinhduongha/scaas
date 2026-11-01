@@ -237,10 +237,56 @@ fn ua8_negatives_from_portable_json() {
         }
         members(&env, &c, r.kind);
         mutate(&env, &mut r, &neg["mutation"]["set"]);
+        if name == "kem-record-as-registration" {
+            // The row's 666 B FN-DSA signature cannot reach ML-DSA-65's verify: a real signature of this key and length.
+            let rows = json(PORTABLE)["kemRecords"].as_array().unwrap().clone();
+            let k = rows.iter().find(|x| x["id"] == "mldsa65/v1").unwrap();
+            assert_eq!(n32(&env, &k["ua"]), r.ua);
+            r.pop = b(&env, &hx(&k["sig"]));
+        }
         expect(name, want, r.tried(&c));
         assert_eq!(c.record_of(&r.ua), None, "{name}");
     }
     assert_eq!(seen, 48);
+}
+
+/// A `pop` is bound to its purpose and to its record, each alone: a real signature by the registering key over the right
+/// digest under purpose `kem`, then under purpose `pop` v2 over the UA's own KEM record (the vector
+/// `kem-record-as-registration`, a disabled kind's row here, on an enabled kind). Only the right pair registers.
+#[test]
+fn ua8_pop_purpose_and_record_separated() {
+    let (env, c) = setup();
+    let s = test::ml(23);
+    let (ua, kind, kd) = (s.ua(&env), s.kind(), s.key_data(&env));
+    let attrs = UaAttrs { kem: portable(&env, &format!("mldsa65/{SET}")).attrs.kem, ..no_attrs(&env) };
+    let pk = kem_pk(&env, &attrs.kem);
+    let zero = n(&env, [0; 32]);
+    let rec = portable_record_hash(&env, &ua, kind, &zero, &kem_pk_record_hash(&env, &ua, 0, &pk));
+    let reg: BytesN<32> = registration_digest(&env, &rec, &zero).into();
+    let tried = |p: [u8; 32], d: &BytesN<32>| {
+        let pop = s.sign(&env, &test::msg(&env, kind, p, d));
+        c.try_register(&kind, &kd, &attrs, &pop, &Bytes::new(&env), &None)
+    };
+    expect("the registration under purpose kem", "UAPoP", tried(PURPOSE_KEM, &reg));
+    expect("the KEM record under purpose pop v2", "UAPoP", tried(PURPOSE_POP_V2, &kem_record_digest(&env, &ua, 0, &pk)));
+    assert_eq!(tried(PURPOSE_POP_V2, &reg).unwrap().unwrap(), ua);
+}
+
+/// TS-D13: `register_webauthn` from the row's typed `args.key` is the packed `register`: the same id, the same record.
+#[test]
+fn ua8_register_webauthn_typed() {
+    let (env, c) = setup();
+    let row = derived(PORTABLE, "registrations", "webauthn-p256");
+    let r = portable_row(&env, &row);
+    let a = &row["args"]["key"];
+    assert_eq!(row["args"]["entry"], "registerWebAuthn");
+    let key = WebAuthnKey { x: n32(&env, &a["x"]), y: n32(&env, &a["y"]), rp_id_hash: n32(&env, &a["rpIdHash"]) };
+    let none = Bytes::new(&env);
+    let other = WebAuthnKey { rp_id_hash: n(&env, [1; 32]), ..key.clone() };
+    expect("another rpIdHash", "UAPoP", c.try_register_webauthn(&other, &r.attrs, &r.pop, &none, &None));
+    assert_eq!(c.register_webauthn(&key, &r.attrs, &r.pop, &none, &None), r.ua);
+    assert_eq!(c.registration_of(&r.ua), Some((r.kind, r.kd.clone(), r.attrs.clone(), r.pop.clone(), none)));
+    assert_eq!(r.refused(&c), Error::AlreadyRegistered, "one record, either form");
 }
 
 /// `classical-msig-with-kem` (`msig-classical`'s members are disabled kinds here): an in-test classical-dominant `msig`.

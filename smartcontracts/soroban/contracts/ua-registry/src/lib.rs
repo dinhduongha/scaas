@@ -5,8 +5,8 @@
 #![no_std]
 use scaas_ua_common::{
     h32, kem_pk, kem_pk_record_hash, kem_record_hash, portable_record_hash, pqz_key_hash, registration_digest, Checked,
-    KemKey, MemberSig, MsigStructure, Registration, UaAttrs, UaSig, PURPOSE_KEM, PURPOSE_MEMBER, PURPOSE_POP_V2,
-    PURPOSE_PQZ_KEY,
+    KemKey, MemberSig, MsigStructure, Registration, UaAttrs, UaSig, WebAuthnKey, PURPOSE_KEM, PURPOSE_MEMBER,
+    PURPOSE_POP_V2, PURPOSE_PQZ_KEY,
 };
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contracttype, crypto::Hash, panic_with_error, xdr::FromXdr,
@@ -301,7 +301,7 @@ fn stellar_account(env: &Env, id: &[u8; 32]) -> Address {
 /// An `msig` signature over `(ua, purpose, digest)`: `sigs` with strictly increasing indexes below `count`, members under
 /// purpose `member` over `member_digest(ua, ua_message(MSIG, purpose, digest))` until the threshold (a slot after it
 /// fails). A registered member's slot carries an empty `keyData` (its key read
-/// from `Signer(id)` alone; non-empty ⇒ `Pop`); a `G…` member's slot is empty and checked by the host over
+/// from `Signer(id)` alone; non-empty ⇒ `short`); a `G…` member's slot is empty and checked by the host over
 /// `(ua, purpose, digest)`; an `evm-eoa` member signs the record's typed digest `portable` itself (ECDSA, the `pop` at
 /// `register` only; typed-signing TS-D4, `eth_signTypedData_v4`, no `personal_sign`); an `evm-contract` slot, and an
 /// `evm-eoa` slot outside `portable`, is `NotVerifiable` (SOR-D6). A slot past the threshold or an unmet threshold is
@@ -319,7 +319,7 @@ fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, diges
         next = s.index + 1;
         let (kind, id, w) = member(d, s.index);
         if !s.key_data.is_empty() {
-            fail(env, Error::Pop);
+            fail(env, short);
         }
         match kind {
             EVM_CONTRACT => fail(env, Error::NotVerifiable),
@@ -330,7 +330,7 @@ fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, diges
             }
             STELLAR_ACCOUNT => {
                 if !s.sig.is_empty() {
-                    fail(env, Error::Pop);
+                    fail(env, short);
                 }
                 let args = (ua.clone(), purpose.clone(), digest.clone()).into_val(env);
                 stellar_account(env, &id).require_auth_for_args(args);
@@ -550,6 +550,24 @@ impl UaRegistry {
         }
         let members = Vec::new(&env);
         register_record(&env, kind, key_data, attrs, pop, members, pqz_pop)
+    }
+
+    /// A `webauthn-p256` key from its fields (EVM `registerWebAuthn`, TS-D13): `x ‖ y ‖ rp_id_hash` is assembled here, so
+    /// the id, the digests and the record are those of `register(0x0100, …)`, which stays, as EVM.
+    pub fn register_webauthn(
+        env: Env,
+        key: WebAuthnKey,
+        attrs: UaAttrs,
+        pop: Bytes,
+        pqz_pop: Bytes,
+        relayer: Option<Address>,
+    ) -> BytesN<32> {
+        let _ = relayer;
+        let mut d = Bytes::from_array(&env, &key.x.to_array());
+        d.extend_from_array(&key.y.to_array());
+        d.extend_from_array(&key.rp_id_hash.to_array());
+        let members = Vec::new(&env);
+        register_record(&env, WEBAUTHN_P256, d, attrs, pop, members, pqz_pop)
     }
 
     /// An `msig` from its typed structure and member signatures (EVM `registerMsig`, TS-D10): the CTR-UA-09 key data is
