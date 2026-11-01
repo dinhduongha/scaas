@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {NormalToken} from "../metatx/NormalToken.sol";
 import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
 import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
+import {UAMetaTxBase} from "../metatx/UAMetaTxBase.sol";
 import {MetaTxBase} from "../metatx/MetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {AdminLib} from "../metatx/AdminLib.sol";
@@ -52,7 +53,7 @@ contract NormalPqzToken is NormalToken, PqzLayer {
     }
 
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory m)
-        internal view override(ERC20MetaTx, PqzLayer) returns (bytes32)
+        internal view override(UAMetaTxBase, PqzLayer) returns (bytes32)
     {
         return PqzLayer._uaEnvelopeBinding(m);
     }
@@ -88,7 +89,7 @@ contract NormalPqzToken is NormalToken, PqzLayer {
     }
 
     /// @notice `burn` and the PQZ ops (CTR-PQZ-15: the PQ-complete path).
-    function _uaAllowed(bytes4 sel) internal view override(NormalToken, ERC20MetaTx) returns (bool) {
+    function _uaAllowed(bytes4 sel) internal view override(NormalToken, UAMetaTxBase) returns (bool) {
         return _isPqzOp(sel) || NormalToken._uaAllowed(sel);
     }
 }

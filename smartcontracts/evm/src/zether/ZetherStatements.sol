@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {IZetherToken} from "./IZetherToken.sol";
+import {IUALedger} from "../metatx/IUALedger.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherLib} from "./ZetherLib.sol";
 
@@ -94,7 +95,7 @@ contract ZetherStatements {
     function _ctx(address token, bytes32 tag, bytes32 binding) internal view returns (ZetherLib.Ctx memory c) {
         IZetherToken t = IZetherToken(token);
         c.ver = t.verifier();
-        c.registry = t.registry();
+        c.registry = IUALedger(address(t)).registry();
         c.token = token;
         c.chainUid = IMetaTx(token).chainUid();
         c.psid = c.ver.proofSystemId();

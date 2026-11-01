@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {WrappedToken} from "../metatx/WrappedToken.sol";
 import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
 import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
+import {UAMetaTxBase} from "../metatx/UAMetaTxBase.sol";
 import {MetaTxBase} from "../metatx/MetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {AdminLib} from "../metatx/AdminLib.sol";
@@ -123,7 +124,7 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IConfidentialWrappedToken {
     }
 
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory m)
-        internal view override(ERC20MetaTx, PqzLayer) returns (bytes32)
+        internal view override(UAMetaTxBase, PqzLayer) returns (bytes32)
     {
         return PqzLayer._uaEnvelopeBinding(m);
     }
@@ -174,7 +175,7 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IConfidentialWrappedToken {
     }
 
     /// @notice The leg paths of `WrappedToken` and the PQZ ops; not `mtxWrapShield` (the pool holds no leg).
-    function _uaAllowed(bytes4 sel) internal view override(WrappedToken, ERC20MetaTx) returns (bool) {
+    function _uaAllowed(bytes4 sel) internal view override(WrappedToken, UAMetaTxBase) returns (bool) {
         return (_isPqzOp(sel) && sel != this.mtxWrapShield.selector) || WrappedToken._uaAllowed(sel);
     }
 }

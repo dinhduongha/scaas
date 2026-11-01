@@ -5,7 +5,6 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
-import {IUALedger} from "../metatx/IUALedger.sol";
 import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 
 /// @title The confidential layer of the kinds `NORMAL_ZETHER` and `WRAPPED_ZETHER` (CTR-ZTH-44, CTR-ZTH-45): ElGamal
@@ -17,7 +16,7 @@ import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 ///         and events are `IConfidentialToken`'s (`auth` and `accHint` must be empty here); `mtxWrapShield` and
 ///         `mtxUnshieldUnwrap` are on `WRAPPED_ZETHER` only (`IConfidentialWrappedToken`); the prover views are in
 ///         `ZetherStatements` (CTR-ZTH-46).
-interface IZetherToken is IUALedger, IConfidentialToken {
+interface IZetherToken is IConfidentialToken {
     /// @notice One account at one block. An unset point is `O`.
     struct AccountState {
         bytes accC;
@@ -114,7 +113,7 @@ interface IZetherToken is IUALedger, IConfidentialToken {
     /// @notice The release's curve, `"bls12-381"` (the transfer verifier's `curveName()`): an attribute of
     ///         the implementation version; version numbers carry no curve meaning.
     function curve() external view returns (string memory);
-    // `registry()` (the account registry, an implementation immutable, CTR-ZTH-44) is the UA ledger's (`IUALedger`).
+    // `registry()` (the account registry, an implementation immutable, CTR-ZTH-44) is `UAMetaTxBase`'s, as in `IUALedger`.
 
     // ------------------------------------------------------------------ state
 

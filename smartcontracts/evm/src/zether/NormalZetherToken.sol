@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {NormalToken} from "../metatx/NormalToken.sol";
 import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
 import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
+import {UAMetaTxBase} from "../metatx/UAMetaTxBase.sol";
 import {MetaTxBase} from "../metatx/MetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {AdminLib} from "../metatx/AdminLib.sol";
@@ -49,7 +50,7 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
     }
 
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory m)
-        internal view override(ERC20MetaTx, ZetherLayer) returns (bytes32)
+        internal view override(UAMetaTxBase, ZetherLayer) returns (bytes32)
     {
         return ZetherLayer._uaEnvelopeBinding(m);
     }
@@ -84,7 +85,7 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
     /// @notice `NormalToken`'s UA allowlist (`burn`) and the Zether ops (CTR-ZTH-51, UA-5c): `mtxShield` (no proof,
     ///         no binding; the Zether UA shields its own public units, UA-6 U8) and the proof-carrying ones, whose
     ///         statement carries the UA envelope binding; the outer fee from the signer's UA balance.
-    function _uaAllowed(bytes4 sel) internal view override(NormalToken, ERC20MetaTx) returns (bool) {
+    function _uaAllowed(bytes4 sel) internal view override(NormalToken, UAMetaTxBase) returns (bool) {
         return _isZetherOp(sel) || NormalToken._uaAllowed(sel);
     }
 }
