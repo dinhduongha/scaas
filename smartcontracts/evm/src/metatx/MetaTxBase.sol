@@ -46,15 +46,9 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
 
     /// @notice One contract-wide guard; the one self-call of step 5 may enter once and consumes the ticket.
     modifier nonReentrant() {
-        bool outer = _tload(_GUARD) == 0;
-        if (outer) {
-            _tstore(_GUARD, 1);
-        } else {
-            if (msg.sender != address(this) || _tload(_TICKET) != 1) revert Reentrancy();
-            _tstore(_TICKET, 2);
-        }
+        bool outer = _enter();
         _;
-        if (outer) _tstore(_GUARD, 0);
+        _exit(outer);
     }
 
     // ------------------------------------------------------------------ views
@@ -307,6 +301,22 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     }
 
     // ------------------------------------------------------------------ transient storage
+
+    /// @dev The body of `nonReentrant`, one copy for every entry (lever 2, owner 2026-11-01). Returns whether this frame
+    ///      holds the guard; only the self-call under a live ticket may enter it again, and that consumes the ticket.
+    function _enter() private returns (bool outer) {
+        outer = _tload(_GUARD) == 0;
+        if (outer) {
+            _tstore(_GUARD, 1);
+        } else {
+            if (msg.sender != address(this) || _tload(_TICKET) != 1) revert Reentrancy();
+            _tstore(_TICKET, 2);
+        }
+    }
+
+    function _exit(bool outer) private {
+        if (outer) _tstore(_GUARD, 0);
+    }
 
     function _tload(bytes32 slot) private view returns (uint256 v) {
         assembly ("memory-safe") { v := tload(slot) }
