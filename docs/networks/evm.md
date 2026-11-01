@@ -109,7 +109,8 @@ BLS12-381 precompiles `0x0b`/`0x0c`/`0x0f`/`0x10` were empty while `alt_bn128` `
 `baseFeePerGas` (no EIP-1559), no `withdrawalsRoot` (no Shanghai), no `blobGasUsed`/`excessBlobGas` (no Cancun).
 Forks must be written with Nethermind's own keys (`eip1559TransitionTimestamp`, `eip2537TransitionTimestamp`, …),
 and changing them changes the genesis hash (chain reset). The only detection is to inspect a block header or call
-the precompile — the deployment checklist does both. The chainspec was fixed on 2026-08-31 before the reset to
+the precompile — the deployment checklist does both, and for classical Zether it adds the two subgroup vectors of
+[§3](#3-precompiles). The chainspec was fixed on 2026-08-31 before the reset to
 the SCaaS testnet. The earlier 16,777,216 block gas limit admitted only ~5 classical confidential transfers per block (3.33 M gas each,
 measured); the 2026-10-22 reset starts at 200 M ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)).
 
@@ -141,6 +142,18 @@ so a transaction priced at 1 wei is never mined; clients price at least `baseFee
   A missing precompile returns empty `0x`; an input-length error (`invalid input length` on Celo, `PrecompileError`
   on Gnosis) also proves the code exists. Live is not cheap: measured costs are in
   [contracts/zether](../contracts/zether.md).
+- **`BLS12_G1MSM` must check the subgroup, and presence does not show it** ([CTR-ZTH-53](../contracts/zether.md#CTR-ZTH-53)).
+  The merged Zether check rests on it, and the official EIP-2537 vectors pin neither a zero scalar nor `k = 1` on a point
+  outside the subgroup. With `T` = `(0, 2)`, a point of order 3, encoded `be64(0) ‖ be64(2)`, both of these `eth_call`s to `0x0c`
+  must **fail** before a chain runs classical Zether:
+
+  | Input | A chain that skips the check answers |
+  |---|---|
+  | `T ‖ be32(1)` | `T` |
+  | `G ‖ be32(1) ‖ T ‖ be32(0)` | `G` |
+
+  `G1ADD` takes `T`, which is correct: it has no subgroup check. `isSupportedOnThisChain()` runs the same two calls, so a
+  token's `initialize` refuses such a chain. Both fail on the SCaaS testnet's Nethermind 2.2.0 (read-only `eth_call`, 2026-11-01).
 - **PQ precompiles on the SCaaS testnet** (P6f, plugin `Nethermind.Pqz`, [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10)):
   `PQZ` `0x5caa500000000000000000000000000000000f01` (PQZL and PQZH proofs, per-row gas 2.57–5.41 M + 3 per word),
   `MLDSA44` `0x5caa500000000000000000000000000000000012` (49,000 + 6 per message word) and `MLDSA65`

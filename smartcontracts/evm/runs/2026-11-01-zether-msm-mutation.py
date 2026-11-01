@@ -16,6 +16,7 @@ AUD = 'test_auditorOffFieldsRefused'
 LEG = 'test_auditorOffLegFieldsRefused'
 RHO_RANGE = 'test_verifyRangeRhoHashesCommitmentAndProof'
 CORPUS = 'test_s3TransferSigma'
+PROBE = 'test_supportProbeRefusesMsmWithoutSubgroupCheck'
 E3 = '''for (uint256 i; i < 3; ++i) _term(x.f, slots[i], x.w, s[i], x.r);
         x.w = mulmod(x.w, x.rho, x.r);'''
 E4 = '''for (uint256 i; i < 4; ++i) _term(x.f, slots[i], x.w, s[i], x.r);
@@ -38,7 +39,7 @@ ROWS = [
     ('rho constant: every weight 1', [('x.rho = _rho(x.st, x.pr);', 'x.rho = 1;')], 'test_cancellingPairRefused'),
     ('rho skips the proof bytes', [('T.absorb(st, "fold.proof", proof)', 'T.absorb(st, "fold.proof", new bytes(proof.length & 0))')],
      'test_cancellingPairRefused'),
-    ('no rho == 0 check', [('if (b.rho == 0 || rangeProofs.length', 'if (rangeProofs.length')], 'test_zeroRhoRefused'),
+    ('no rho == 0 check', [('if (b.rho == 0 || b.wt == 0 || rangeProofs.length', 'if (b.wt == 0 || rangeProofs.length')], 'test_zeroRhoRefused'),
     ('E3-form weight does not advance', [(E3, E3.split('\n')[0])], ALONE),
     ('z canonical check removed', [('ok = v < x.r;', 'ok = true;')], 'test_nonCanonicalScalarRejected'),
     ('BP scalar canonical check removed', [('if (b.sc[i] >= b.r) return (false, st);', '')], 'test_mutatedSolidityRows'),
@@ -135,6 +136,17 @@ ROWS = [
      CORPUS),
     ('BadPoint on a row of valid points', [('return (_isZero(_msm(pts, b.f)), st);',
                                             'if (!_isZero(_msm(pts, b.f))) revert G1Bls12381.BadPoint();\n        return (true, st);')], CORPUS),
+    # verifyFold's guard: rho and the weight, 0 and r
+    ('weight 0 not refused', [('if (b.rho == 0 || b.wt == 0 || rangeProofs.length', 'if (b.rho == 0 || rangeProofs.length')], 'test_zeroWeightRefused'),
+    ('weight r not reduced', [('b.wt = sigma.weight % b.r;', 'b.wt = sigma.weight;')], 'test_weightEqualToOrderRefused'),
+    ('rho r not reduced', [('b.rho = sigma.rho % b.r;', 'b.rho = sigma.rho;')], 'test_rhoEqualToOrderRefused'),
+    # the support probe: each call alone, and the cap
+    ('probe G1MSM(T, 1) ignored', [('if (taken) return false;\n', '')], PROBE),
+    ('probe G1MSM(G, 1, T, 0) ignored', [('return !taken;', 'return true;')], PROBE),
+    ('probes not capped', [('.staticcall{gas: PROBE_GAS}(', '.staticcall('), ('.staticcall{gas: PROBE_GAS}(', '.staticcall(')], 'test_supportProbeIsCapped'),
+    # the largest form, and the first past it
+    ('recipient limit removed', [('if (m == 0 || m > MAX_RECIPIENTS || statement.length', 'if (m == 0 || statement.length')], 'test_m16AndM17'),
+    ('E3 of leg 16 dropped from the fold', drop4(82), r'test_m16_auditor'),
 ]
 
 

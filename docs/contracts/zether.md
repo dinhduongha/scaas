@@ -456,7 +456,8 @@ E7  [z_v]G + [z_gv]Hb − [c]V_v − A_Vv
 E8  [z_b]G + [z_gb]Hb − [c]V_b − A_Vb
 ```
 
-E5 is `T = C_acc − C_deb − [fee]G = [b']G + [x](D_acc − D_out)`. E7/E8 share `z_v`, `z_b` with E3/E4/E5 — that is the
+E5 is `T = C_acc − C_deb − [fee]G = [b']G + [x](D_acc − D_out)`, a congruence mod `r`: the verifier does not range-check the
+header's `fee`, so the precondition is the token's, `fee < 2^64` before it builds the header, with every balance `≤ 2^54`. E7/E8 share `z_v`, `z_b` with E3/E4/E5 — that is the
 Σ-Bullets link; removing E7 or E8 prints money.
 
 ### <a id="burn"></a>8.2 Burn
@@ -475,7 +476,9 @@ E5  [z_b + c·(amount + fee)]G + [z_x]D_acc − [c]C_acc − A_bal
 E8  [z_b]G + [z_gb]Hb − [c]V_b − A_Vb
 ```
 
-`recipient` and `amount` are in the statement ⇒ a relayer cannot change where a burn pays out.
+`recipient` and `amount` are in the statement ⇒ a relayer cannot change where a burn pays out. E5 is a congruence mod `r` here
+too, and the verifier does not range-check `amount` or `fee`: the token bounds `fee < 2^64` and `0 < amount ≤ maxShielded ≤
+2^54` before it builds the header.
 
 ## 9. Bulletproofs — exactly two range statements
 
@@ -564,10 +567,12 @@ and burn verifiers fold Σ; the inner-product verifier (`verifyFold`) adds the r
 
 **Why it is sound.** Five requirements, each with its test in `test/zether/ZetherMsm.t.sol` and
 `ZetherMsmDifferential.t.sol`. `runs/2026-11-01-zether-msm-mutation.py` removes one thing per row and shows a test fail:
-each equation, each advance of the weight, and the checks the fold added or leans on (`ρ ≠ 0`, scalars `< r`, every point in
-the MSM, the auditor-off `O` fields, what `ρ` hashes on both entries). It leaves out two groups: the `≠ 0` checks on
+each equation, each advance of the weight, and the checks the fold added or leans on (`ρ` and the weight `≢ 0`, scalars
+`< r`, every point in the MSM, the auditor-off `O` fields, what `ρ` hashes on both entries, both support probes, the
+recipient limit). It leaves out two groups: the `≠ 0` checks on
 `c, y, z, x, w, u_j`, which no test can reach (each needs a hash output of 0), and the older shape and point checks of §7,
-§8 and §11 (lengths, `opTag`, `Y_f ≠ Y_t`, distinct auditor copies), which have their own tests but no mutation row.
+§8 and §11 (lengths, `opTag`, `Y_f ≠ Y_t`, distinct auditor copies), which have their own tests but no mutation row. A
+machine review of this section, not an independent audit, is the Source of the CTR-ZTH-53 register entry.
 
 1. **`ρ` hashes the full statement and the full proof, and nothing the prover chooses depends on it.** The running
    transcript absorbs no `z_*` and neither `a` nor `b`, so its final state does **not** bind the whole proof: a weight read
@@ -576,7 +581,8 @@ the MSM, the auditor-off `O` fields, what `ρ` hashes on both entries). It leave
    `st_c` binds the statement. The labels `"fold.proof"`, `"fold.rho"` are used nowhere else and the fork's state is
    dropped, so every existing challenge keeps its value.
 2. **Width, non-zero, bound.** `ρ` is one full-width scalar (`hashToScalar`, 512 bits mod `r`, bias `< 2^-250`) and the
-   weights are its powers: one hash, nothing to port but a loop. `ρ = 0` is refused, so every `ρ^i ≠ 0` (`r` is prime). Let
+   weights are its powers: one hash, nothing to port but a loop. `verifyFold` reduces `ρ` and the first range weight mod
+   `r` and refuses either at 0, so every weight is non-zero (`r` is prime). Let
    `R_i` be the value of `Q_i`, all in the prime-order group (3 below), `R_i = [d_i]B`. If not all are `O`, then
    `P(X) = Σ d_i X^i` is a non-zero polynomial of degree `≤ e − 1` with at most `e − 1` roots, and the `d_i` are fixed by
    the statement and proof that `ρ` hashes. One attempt passes with probability `≤ (e − 1)/r + 2^-250`, so `Q` hash queries
@@ -599,9 +605,14 @@ the MSM, the auditor-off `O` fields, what `ρ` hashes on both entries). It leave
      raw bytes before the MSM; equal bytes mean equal points because the MSM refuses every non-canonical encoding, and a
      point refused there refuses the call. The token's G1ADD and G1SUB run after the verdict, on statement points that passed
      the MSM.
-   - **Off EVM.** A host MSM that does not check the subgroup needs an explicit check of every untrusted point **before**
-     folding: the merge is not exact on a point with a cofactor component, and a random-combination check of many points
-     does not replace it, a weight divisible by 3 erases a 3-torsion component.
+   - **Off EVM.** Without an explicit subgroup check on every untrusted point, a 3-torsion component survives with
+     constant probability (always on a weight-1 slot carrying −1, about 1/3 for a cancelling pair); check every point before
+     folding.
+   - **The precondition is probed.** `isSupportedOnThisChain` requires `G1MSM((0, 2) ‖ 1)` and
+     `G1MSM(G ‖ 1 ‖ (0, 2) ‖ 0)` to fail, so a token's `initialize` refuses a chain whose G1MSM skips the check
+     (`test_supportProbeRefusesMsmWithoutSubgroupCheck`; the vectors are in
+     [networks/evm.md](../networks/evm.md#3-precompiles)). Each call is capped: both fail on every compliant chain, a failed
+     precompile burns all it is sent, and `ZetherLib.init` reads an out-of-gas probe as an unsupported chain.
 4. **Shared generators add mod `r`.** Every term enters by one line, `f[slot] = addmod(f[slot], mulmod(w, s, r), r)`:
    both opcodes are exact past 256 bits (`r` < 2^255 also keeps a port's plain addition from overflowing). Honest proofs
    pass only if every slot is exact, and `test_sharedGeneratorsAddModR` wraps each shared slot past `r`.
@@ -1261,7 +1272,8 @@ flags 5–8 (`FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`) are refused at creation ([
 <a id="precompile-gas"></a>
 <a id="CTR-ZTH-15"></a>**CTR-ZTH-15** — **The verifier forwards `gas()` to the precompiles** (it does not pin the
 EIP-1108/EIP-2537 prices): one bad point makes the transaction spend all its gas, so relayers must simulate first (the
-node's simulation gate).
+node's simulation gate). The one exception is the two subgroup probes of `isSupportedOnThisChain`, capped because they fail by
+design ([§9.1](#merged-check)).
 
 <a id="chains"></a>
 <a id="CTR-ZTH-27"></a>**CTR-ZTH-27** — *Open (owner).* The owner put the private chain in scope as the **first**
@@ -1279,7 +1291,8 @@ and customer chains alike. The only chain requirement is capability: BLS12-381 n
 (EIP-2537). A chain without them fails the call: the inner-product verifier's constructor (the generators) reverts, a
 token's `initialize` reverts `VerifierUnsupportedOnThisChain` (the release's transfer verifier answers
 `isSupportedOnThisChain()`), and `DeployBase` registers the UA kind `zether-bls12381` only where `UAPrecompileProbe`
-passes EIP-2537 (`DEPLOY_ZETHER` refuses such a chain before deploying anything). Never on Hedera (`ZetherLayer` refuses a
+passes EIP-2537 (`DEPLOY_ZETHER` refuses such a chain before deploying anything). The same answer also requires G1MSM to
+refuse a point outside the subgroup ([§9.1](#merged-check)). Never on Hedera (`ZetherLayer` refuses a
 Hedera env; `DEPLOY_ZETHER` refuses a Hedera deploy; the Hedera registry gets no `zether-bls12381`; regression test
 `test/zether/ZetherNoEip2537.t.sol`).
 
