@@ -352,6 +352,22 @@ contract TypedOpsTest is UALedgerBase {
         }
     }
 
+    /// The flat `uaUnwrap(bytes32 from, …)` went to legacy (owner 2026-11-01): the named overload is the only one.
+    function test_flatUaUnwrapGone() public {
+        (bool ok, bytes memory ret) = address(wrp).call(abi.encodeWithSelector(bytes4(0x8de5ca31), uaP));
+        assertFalse(ok);
+        assertEq(ret.length, 0, "no such function");
+    }
+
+    /// `mtxCancelNonce` joined `IMetaTx`: 0xf6695913 ^ its selector (owner 2026-11-01).
+    function test_iMetaTxIdPinned() public view {
+        assertEq(type(IMetaTx).interfaceId, bytes4(0x2f1aa7fe));
+        assertEq(type(IMetaTx).interfaceId ^ IMetaTx.mtxCancelNonce.selector, bytes4(0xf6695913));
+        assertTrue(tok.supportsInterface(0x2f1aa7fe));
+        assertTrue(wrp.supportsInterface(0x2f1aa7fe));
+        assertFalse(tok.supportsInterface(0xf6695913));
+    }
+
     function _generic(address from, uint256 nonce) internal view returns (MetaTxLib.MetaTransaction memory m) {
         m = MetaTxLib.MetaTransaction(from, abi.encodeCall(NormalToken.burn, (1)), 3, nonce, block.timestamp + 300, 0,
             address(0), 0, address(0));

@@ -837,7 +837,7 @@ abstract contract ParityCases is ParityIO {
     }
 
     // =================================================================================================================
-    // uaExecute, uaBatch, uaUnwrap
+    // uaExecute, uaBatch
     // =================================================================================================================
 
     function _pUaExecute(Tk memory k) internal {
@@ -911,7 +911,6 @@ abstract contract ParityCases is ParityIO {
         // not a fee fault (1,001 is under 1 % of P_BIG): only the call fails, unmarked (T3; the name is the fixture's)
         m = _pUm(k, s, _pAmt(k, P_BIG), 0, P_RR | P_FIX, 1_001, address(0));
         _pUx(k, "bothFail_feeExceedsCapFixed_callReverts", "", m, _pAuM(k, m), k.relayer);
-        _pUaUnwrap(k);
     }
 
     function _pUaBatch(Tk memory k) internal {
@@ -982,41 +981,6 @@ abstract contract ParityCases is ParityIO {
     {
         _pRec(k, _pH("uaBatch", "ua", name), k.relayer, abi.encodeCall(IUALedger.uaBatch, (ms, au)),
             _pD2("uaDigest0", MetaTokenBase(k.t).uaDigest(ms[0]), "uaDigest1", MetaTokenBase(k.t).uaDigest(ms[1])), _pL2(l0, l1));
-    }
-
-    /// `uaUnwrap` builds `unwrap(address,uint256,address,uint256)` (kinds without it: `MetaTxUnknownOp`).
-    function _pUaUnwrap(Tk memory k) internal {
-        // only the wrapper kinds list `unwrap` for the UA path; the others refuse it as `MetaTxUnknownOp`
-        string memory ok = k.style == 1 ? "ok_" : "err_unknownOp_";
-        _pUwOne(k, string.concat(ok, "native"), MetaTxLib.pad(k.signer), P_RR, false);
-        if (k.uaD != 0) _pUwOne(k, string.concat(ok, "derived"), k.uaD, P_RR, false);
-        _pUwOne(k, "err_modeShape_restrictFee", MetaTxLib.pad(k.signer), P_RR | P_RF, false);
-        _pUwOne(k, "err_modeShape_feeNibble", MetaTxLib.pad(k.signer), P_RR | P_FIX, false);
-        _pUwOne(k, "err_badAuth", MetaTxLib.pad(k.signer), P_RR, true);
-    }
-
-    function _pUwLeg(Tk memory k) internal pure returns (address) {
-        return k.und == address(0) ? address(0x1234) : k.und;
-    }
-
-    /// The `UAMetaTransaction` `uaUnwrap` builds from its arguments.
-    function _pUwM(Tk memory k, bytes32 from, uint256 lane, uint32 mode) internal view returns (MetaTxLib.UAMetaTransaction memory) {
-        bytes memory data = abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", _pUwLeg(k), uint256(1_000), k.payee, uint256(0));
-        return MetaTxLib.UAMetaTransaction(from, data, lane, 0, P_VU, mode & P_RR, k.relayer, 0, address(0));
-    }
-
-    function _pUwW(Tk memory k, bytes32 from, uint256 lane, uint32 mode) internal pure returns (uint256[] memory w) {
-        w = new uint256[](10);
-        (w[0], w[1], w[2], w[3], w[4]) = (uint256(from), _pW(_pUwLeg(k)), 1_000, _pW(k.payee), 0);
-        (w[5], w[6], w[7], w[8], w[9]) = (lane, 0, P_VU, mode, _pW(k.relayer));
-    }
-
-    function _pUwOne(Tk memory k, string memory name, bytes32 from, uint32 mode, bool bad) internal {
-        uint256 lane = _pLn(k);
-        MetaTxLib.UAMetaTransaction memory m = _pUwM(k, from, lane, mode);
-        bytes memory au = bad ? _pEcdsa(k.payeePk, MetaTokenBase(k.t).uaDigest(m)) : _pAuM(k, m);
-        _pRec(k, _pH("uaUnwrap", "ua", name), k.relayer, _pEncB(MetaTokenBase.uaUnwrap.selector, _pUwW(k, from, lane, mode), au),
-            _pD("uaDigest", MetaTokenBase(k.t).uaDigest(m)), _pL(lane));
     }
 
     // =================================================================================================================

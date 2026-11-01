@@ -17,7 +17,7 @@ import {UALedgerBase} from "./UALedgerBase.sol";
 /// Random mixes of native moves, mints, burns, `transferToUA`, the UA transfer entries (`uaExecuteTransfer`, the named
 /// `uaTransfer` / `uaTransferWithFee`, `uaBatchTransfer`; any side native or derived, with or without a fee) on the NORMAL
 /// clone and on the 1:1 WRAPPED clone `wrp`, plus wrap, wrap→UA and the burn under a derived UA (`unwrap` through
-/// `uaExecute` with a fee after the self-call, or the named `uaUnwrap`), and the `UA_POOL` `transferFrom` refusal.
+/// `uaExecute`, optionally with a fee after the self-call), and the `UA_POOL` `transferFrom` refusal.
 /// UA-5a (CTR-UA-28, CTR-UA-26, CTR-MTX-05): `wrapToUA` on `wrp` and on the native-leg `wrpN`, `mintToUA`,
 /// `payWithFeeToUA`, `burn` under a derived UA, wraps of the ledger-leg `wrpL` (leg `tok` at 3/2, wrapped by this
 /// handler, a contract; `wrap` or `wrapToUA`), `unwrapToUA` from `wrpL` (direct by a native, or under `uaExecute` by a
@@ -117,15 +117,15 @@ contract UALedgerHandler is Test {
     }
 
     /// The burn under a derived UA: `unwrap(und, amt, recipient, 0)` as `uaExecute` (optionally with a 1 % fee paid
-    /// after the self-call) or the fee-less named `uaUnwrap`. `amt + fee` is bounded to the UA's balance.
-    function unwrapUnder(uint256 fromIdx, uint256 amount, bool withFee, bool viaNamed) external {
+    /// after the self-call). `amt + fee` is bounded to the UA's balance.
+    function unwrapUnder(uint256 fromIdx, uint256 amount, bool withFee) external {
         bytes32 f = uas[fromIdx % 2];
         uint256 have = wrp.balanceOfUA(f);
         // fee = amt / 100 exactly: amt is a multiple of 100 and `amt + amt / 100 ≤ have`
         amount = bound(amount, 0, have * 100 / 101) / 100 * 100;
         if (amount == 0) return;
         address recipient = vm.addr(pks[1]);
-        uint256 fee = withFee && !viaNamed ? amount / 100 : 0;
+        uint256 fee = withFee ? amount / 100 : 0;
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
             from: f, data: abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), amount, recipient, 0),
             batch: 1, nonce: wrp.uaNonce(f, 1), validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER,
@@ -137,11 +137,7 @@ contract UALedgerHandler is Test {
         }
         bytes memory auth = _auth(3 + fromIdx % 2, wrp.uaDigest(m));
         vm.prank(RELAYER);
-        if (viaNamed) {
-            wrp.uaUnwrap(f, address(und), amount, recipient, 0, 1, m.nonce, m.validUntil, m.mode, RELAYER, auth);
-        } else {
-            wrp.uaExecute(m, auth);
-        }
+        wrp.uaExecute(m, auth);
         uint256 n = fee != 0 ? 2 : 1; // the burn, and the fee move out of the UA
         _settle(wrp, n, n);
     }

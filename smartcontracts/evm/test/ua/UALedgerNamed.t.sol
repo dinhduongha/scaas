@@ -93,36 +93,14 @@ contract UALedgerNamedTest is UALedgerBase {
         assertEq(np.balanceOf(bob), 7);
     }
 
-    /// `uaUnwrap(f,u,w,r,min,b,n,v,mode,rel,s) ≡ uaExecute({f, unwrap(u,w,r,min), b,n,v,mode,rel,0,0}, s)`.
-    function test_T_V3_1_uaUnwrap() public {
-        _wrapFor(alice, 1_000);
-        vm.prank(alice);
-        wrp.transferToUA(uaP, 1_000);
-        bytes memory data = abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 250, bob, 250);
-        MetaTxLib.UAMetaTransaction memory m = _m(address(wrp), uaP, data);
-        bytes memory a = _authM(address(wrp), m);
-        vm.prank(RELAYER);
-        bytes memory ret = wrp.uaUnwrap(uaP, address(und), 250, bob, 250, 1, 0, m.validUntil, RR, RELAYER, a);
-        (uint256 out, uint256 burned) = abi.decode(ret, (uint256, uint256));
-        assertEq(out, 250);
-        assertEq(burned, 250);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        vm.prank(RELAYER);
-        wrp.uaExecute(m, a);
-        assertEq(und.balanceOf(bob), 250);
-        assertEq(wrp.balanceOfUA(uaP), 750);
-    }
-
-    /// No fee in the named form; on the NORMAL kind no `unwrap` is on the UA allowlist.
+    /// On the NORMAL kind no `unwrap` is on the UA allowlist.
     function test_uaUnwrap_refusals() public {
-        uint256 until = block.timestamp + 300;
-        vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.MtxModeShape.selector, RR | FIX));
-        wrp.uaUnwrap(uaP, address(und), 1, bob, 0, 1, 0, until, RR | FIX, RELAYER, "");
         bytes memory data = abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 1, bob, 0);
-        bytes memory a = _authM(address(tok), _m(address(tok), uaP, data));
+        MetaTxLib.UAMetaTransaction memory m = _m(address(tok), uaP, data);
+        bytes memory a = _authM(address(tok), m);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, bytes4(data)));
         vm.prank(RELAYER);
-        tok.uaUnwrap(uaP, address(und), 1, bob, 0, 1, 0, until, RR, RELAYER, a);
+        tok.uaExecute(m, a);
     }
 
     /// M2: `UA_POOL` holds every derived balance; an unwrap never pays out to it.
@@ -136,9 +114,6 @@ contract UALedgerNamedTest is UALedgerBase {
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, POOL));
         vm.prank(RELAYER);
         wrp.uaExecute(m, a);
-        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, POOL));
-        vm.prank(RELAYER);
-        wrp.uaUnwrap(uaP, address(und), 10, POOL, 0, 1, 0, m.validUntil, RR, RELAYER, a);
     }
 
     /// C5-4: `SHIELD_POOL` is no unwrap recipient either (the plain unwrap would pay the underlying to a keyless address).

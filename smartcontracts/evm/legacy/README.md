@@ -119,3 +119,5 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   same assembled bytes and ids; `register` refuses those kinds). Not built.
   `MtxExecuteWithFee.sol` — `mtxExecuteWithFee` of `MetaTokenBase` before typed-signing C2 (TS-D14): it duplicated
   `mtxExecute` behind a shape check. `executeMetaTransaction` stays in `MetaTxBase` (owner 2026-11-01). Not built.
+  `FlatUaUnwrap.sol` — the flat `uaUnwrap(bytes32 from, …)` of `MetaTokenBase` before the typed-signing C2 review: it
+  duplicated the named `uaUnwrap(UAEnvelope, …, UASig)` / `uaUnwrapLeg` (owner 2026-11-01). Not built.

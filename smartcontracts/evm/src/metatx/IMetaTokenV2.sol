@@ -78,7 +78,4 @@ interface IMetaTokenV2 is IERC20Payment {
     function uaPayMeta(bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes calldata meta, uint256 validUntil,
                        uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata auth)
         external returns (bool);
-    function uaUnwrap(bytes32 from, address underlying, uint256 wrapped, address recipient, uint256 minOut,
-                      uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer,
-                      bytes calldata auth) external returns (bytes memory);
 }
