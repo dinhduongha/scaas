@@ -383,7 +383,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
 
     /// Every proof path goes through the release's verifiers (CTR-ZTH-20): a single and a multi-recipient transfer
     /// through the transfer verifier, an unshield through the burn verifier, each exactly once, and every range proof
-    /// through the inner-product verifier the two fix.
+    /// through the inner-product verifier the two fix, in the one merged check of each op (CTR-ZTH-53).
     function test_everyProofPathUsesThePinnedVerifiers() public {
         _fund(tok, alice, 100);
         tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
@@ -394,8 +394,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         address ip = address(ZetherVerifierBase(address(ver)).innerProduct());
         assertEq(ip, address(ZetherVerifierBase(address(burnVer)).innerProduct()), "one inner-product verifier");
         for (uint256 i; i < 3; ++i) vm.expectCall(i == 2 ? address(burnVer) : address(ver), abi.encodePacked(checks[i]), 1);
-        // BP(v), BP(b'); BP(v_1), BP(b'); BP(b')
-        vm.expectCall(ip, abi.encodePacked(IZetherInnerProductVerifier.verifyRange.selector), 5);
+        vm.expectCall(ip, abi.encodePacked(IZetherInnerProductVerifier.verifyFold.selector), 3);
         for (uint256 i; i < 3; ++i) {
             (bool ok,) = address(tok).call(_zetherOpCall(ops[i], 100 - 10 * i, 0));
             assertTrue(ok, "honest op");

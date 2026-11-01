@@ -7,6 +7,7 @@ import {stdJson} from "forge-std/StdJson.sol";
 import {IZetherVerifier, IZetherBurnVerifier} from "../../src/zether/IZetherVerifier.sol";
 import {ZetherVerifiers} from "./helpers/ZetherVerifiers.sol";
 import {ZetherTranscript as T} from "../../src/zether/ZetherTranscript.sol";
+import {G1Bls12381} from "../../src/zether/ZetherCurves.sol";
 import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
 import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
@@ -47,7 +48,10 @@ contract ZetherS3VectorsTest is Test {
     enum Op { TRANSFER, BURN, MULTI }
 
     function _ok(IZetherVerifier v, bytes memory st, bytes memory pr, Op op) internal view returns (bool) {
-        try this.verify{gas: 60_000_000}(v, st, pr, op) returns (bool ok) { return ok; } catch { return false; }
+        try this.verify{gas: 60_000_000}(v, st, pr, op) returns (bool ok) { return ok; } catch (bytes memory e) {
+            assertTrue(e.length == 4 && bytes4(e) == G1Bls12381.BadPoint.selector, "a revert other than BadPoint");
+            return false;
+        }
     }
 
     function verify(IZetherVerifier v, bytes memory st, bytes memory pr, Op op) external view returns (bool) {

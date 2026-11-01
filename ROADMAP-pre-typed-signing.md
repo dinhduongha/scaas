@@ -182,7 +182,7 @@ flowchart LR
 | Contract verification (a) | A locally patched sc-verifier image until upstream supports Amsterdam. | TODO item "switch to upstream sc-verifier" |
 | CREATE2 deployer in genesis | In the SCaaS testnet genesis; **proposed** for the mainnet, owner decides at launch. | fs3 Task 13 (HANDOFF 2026-10-31) |
 | `scaas-testnet` identifier | The testnet's id is `scaas-testnet`; the mainnet will be `scaas-mainnet`. | NET-EVM-02 Change |
-| Zether merged MSM | Fold the classical Zether verifier into one MSM (step 3). | TODO |
+| Zether merged MSM | Fold the classical Zether verifier into one MSM (step 3). | Done 2026-11-01 |
 | `msig` `pop` minimal form | Every slot must be necessary; with UA-8 Part B (step 2). | TODO; U8S-D1 |
 | Gen-1 kind set option (a) | Every gen-1 deploy carries every kind the chain can run; a `DeployBase` gate refuses otherwise. | U8S-D9; built as G1 |
 | Relay-fee minimum option (c) | Per-token price and the job's simulated cost on every family; (d) ruled out. | `docs/research/relay-fee-minimum.md` on `ua8-soroban` |

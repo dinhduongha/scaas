@@ -1,0 +1,78 @@
+zether-msm mutation run (runs/2026-11-01-zether-msm-mutation.py), 2026-11-01, on the committed merged verifier, after both review
+rounds. Each row removes one thing; every row must go red. "ran" counts the tests the row named, the listed ones failed. 62 rows,
+all red, run one call at a time from the source at HEAD, with `src` clean after each call. The last change touched only
+`isSupportedOnThisChain`: its 8 rows (the three probe rows and the five control rows) ran on that source, the other 54 on the commit
+before it.
+
+rho constant: every weight 1               RED (1 ran): test_cancellingPairRefused
+rho skips the proof bytes                  RED (1 ran): test_cancellingPairRefused
+no rho == 0 check                          RED (1 ran): test_zeroRhoRefused
+E3-form weight does not advance            RED (1 ran): test_eachTransferEquationAloneRefused
+z canonical check removed                  RED (1 ran): test_nonCanonicalScalarRejected
+BP scalar canonical check removed          RED (1 ran): test_mutatedSolidityRows
+A of each proof left out of the MSM        RED (1 ran): test_everyTransferPointReachesTheMsm
+T2 term dropped                            RED (1 ran): test_pointCountPerForm
+E1 dropped from the fold                   RED (1 ran): test_eachTransferEquationAloneRefused
+E2 dropped from the fold                   RED (1 ran): test_eachTransferEquationAloneRefused
+E3 dropped from the fold                   RED (1 ran): test_eachTransferEquationAloneRefused
+E4 dropped from the fold                   RED (1 ran): test_eachTransferEquationAloneRefused
+E5 dropped from the fold                   RED (1 ran): test_eachTransferEquationAloneRefused
+E6 dropped from the fold                   RED (1 ran): test_eachTransferEquationAloneRefused
+E7 dropped from the fold                   RED (1 ran): test_eachTransferEquationAloneRefused
+E8 dropped from the fold                   RED (1 ran): test_eachTransferEquationAloneRefused
+BP-1 dropped from the fold                 RED (3 ran): test_rangeEquationsAloneRefused_burn, test_rangeEquationsAloneRefused_multi, test_rangeEquationsAloneRefused_transfer
+BP-2 dropped from the fold                 RED (7 ran): test_eachBpTwoAloneRefused, test_rangeEquationsAloneRefused_burn, test_rangeEquationsAloneRefused_multi, test_rangeEquationsAloneRefused_transfer, test_verifyRangeAgrees, test_verifyRangeHonestAndTampered, test_verifyRangeRhoHashesCommitmentAndProof
+second BP: BP-1 dropped                    RED (3 ran): test_rangeEquationsAloneRefused_burn, test_rangeEquationsAloneRefused_multi, test_rangeEquationsAloneRefused_transfer
+no-auditor E7 dropped                      RED (1 ran): test_eachTransferEquationAloneRefused_noAuditor
+burn E1 dropped                            RED (1 ran): test_eachBurnEquationAloneRefused
+burn E5 dropped                            RED (1 ran): test_eachBurnEquationAloneRefused
+burn E8 dropped                            RED (1 ran): test_eachBurnEquationAloneRefused
+multi E3_0 dropped                         RED (1 ran): test_eachMultiEquationAloneRefused
+multi E6_0 dropped                         RED (1 ran): test_eachMultiEquationAloneRefused
+multi E6p_1 dropped                        RED (1 ran): test_eachMultiEquationAloneRefused
+multi E7_1 dropped                         RED (1 ran): test_eachMultiEquationAloneRefused
+multi E4 dropped                           RED (1 ran): test_eachMultiEquationAloneRefused
+multi E8 dropped                           RED (1 ran): test_eachMultiEquationAloneRefused
+first caller point not in the MSM          RED (3 ran): test_everyBurnPointReachesTheMsm, test_everyMultiPointReachesTheMsm, test_everyTransferPointReachesTheMsm
+A_Vv and A_Vb out of the MSM               RED (1 ran): test_lowOrderPairAcrossEquationsRefused
+zero-scalar slots dropped from the MSM     RED (1 ran): test_zeroScalarSlotStillChecked
+wrong modulus in _term                     RED (1 ran): test_sharedGeneratorsAddModR
+BP-1 and BP-2 of a proof share a weight    RED (3 ran): test_rangeEquationsAloneRefused_burn, test_rangeEquationsAloneRefused_multi, test_rangeEquationsAloneRefused_transfer
+BP-2 of proof k, BP-1 of k+1 share one     RED (3 ran): test_rangeEquationsAloneRefused_multi, test_rangeEquationsAloneRefused_transfer
+E4-form weight does not advance            RED (1 ran): test_eachTransferEquationAloneRefused
+E5 weight does not advance                 RED (1 ran): test_eachTransferEquationAloneRefused
+range weights restart at 1                 RED (3 ran): test_rangeEquationsAloneRefused_burn, test_rangeEquationsAloneRefused_multi, test_rangeEquationsAloneRefused_transfer
+C_aud O check removed                      RED (1 ran): test_auditorOffFieldsRefused
+A_aud O check removed                      RED (1 ran): test_auditorOffFieldsRefused
+z_tj zero check removed                    RED (1 ran): test_auditorOffLegFieldsRefused
+C_aud_j O check removed                    RED (1 ran): test_auditorOffLegFieldsRefused
+D_aud_j O check removed                    RED (1 ran): test_auditorOffLegFieldsRefused
+A_aud_j O check removed                    RED (1 ran): test_auditorOffLegFieldsRefused
+A_Daud_j O check removed                   RED (1 ran): test_auditorOffLegFieldsRefused
+verifyRange rho misses the proof           RED (1 ran): test_verifyRangeRhoHashesCommitmentAndProof
+verifyRange rho misses V                   RED (1 ran): test_verifyRangeRhoHashesCommitmentAndProof
+a Panic in place of BadPoint               RED (1 ran): test_s3TransferSigma
+BadPoint on a row of valid points          RED (1 ran): test_s3TransferSigma
+weight 0 not refused                       RED (1 ran): test_zeroWeightRefused
+weight r not reduced                       RED (1 ran): test_weightEqualToOrderRefused
+rho r not reduced                          RED (1 ran): test_rhoEqualToOrderRefused
+probe G1MSM(T, 1) ignored                  RED (1 ran): test_supportProbeRefusesMsmWithoutSubgroupCheck
+probe G1MSM(G, 1, T, 0) ignored            RED (1 ran): test_supportProbeRefusesMsmWithoutSubgroupCheck
+probes not capped                          RED (1 ran): test_supportProbeIsCapped
+recipient limit removed                    RED (1 ran): test_m16AndM17
+E3 of leg 16 dropped from the fold         RED (2 ran): test_m16_auditorOff, test_m16_auditorOn
+k = 1 control ignored                      RED (1 ran): test_supportProbeControlsMustPass
+k = 2 control ignored                      RED (1 ran): test_supportProbeControlsMustPass
+k = 1 control not capped                   RED (1 ran): test_supportProbeForwardsTheCap
+k = 2 control not capped                   RED (1 ran): test_supportProbeForwardsTheCap
+no gas floor under the probes              RED (1 ran): test_supportProbeShortOfGasFailsClosed
+
+Not mutated: test_precompilesOnTheLowOrderPoint (it pins the precompiles, there is no verifier check to remove); the != 0 checks on
+c, y, z, x, w, u_j (no test can reach them, each needs a hash output of 0); the older shape and point checks of zether.md §7, §8
+and §11, which have their own tests.
+
+Earlier runs of this script are void and not listed. A "$" in the test pattern matched nothing, so eight rows ran no test and read
+as green; the script now treats that as an error. Three runs overlapped on the same source and one left a mutant in src: the script
+now takes a lock and refuses a source that differs from HEAD. "A_Vv out of the MSM" alone stayed green, rightly: the pair's other
+point still reached G1MSM, so the row was widened to both. The independent review found two weight advances, the auditor-off O
+checks and verifyRange's rho removable with every test green; those rows and the tests behind them were added here.

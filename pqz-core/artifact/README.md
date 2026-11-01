@@ -274,7 +274,7 @@ to `pqz-core/`.
 - The package targets x86-64. Without AVX2 + AES-NI the x86-64-v3 runs are skipped.
 - Memory: up to about 2 GB (the header of `reproduce.sh`). The PQZL bench reserves a 768 MiB arena; pqz-ffi's wasm32
   digest run takes about 0.6 GB; with the multi-recipient transfer, pqz-ffi's prove tests take up to about 0.9 GB per
-  test thread and `pqz-vectors --check` about 1 GB; `--multi-bench` with PQZL M = 16 about 1.6 GB. The documented
+  test thread and `pqz-vectors --check` about 1 GB; `--multi-bench` with PQZL M = 16 about 3.1 GB. The documented
   `docker run --memory=4g` leaves headroom.
 - Wall time on the reference machine (Ryzen 5 7235HS):
   - image build: a few minutes plus the apt snapshot download (which took 42 min while snapshot.ubuntu.com was

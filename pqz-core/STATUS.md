@@ -1421,6 +1421,69 @@ Commits: `ea4b00d` (Q-A), `d08e3f9` (Q-B…Q-H), `d5bcc33` (Rust-port minors), `
   call and peak 268,297,200 B, as in `fs5-c`; fill determinism 3,118 lines identical; symbol scan "no test hook"; the
   build log names clang 18.1.3 (`ffi/runs/rev2-*`, `rev2-c-*`).
 
+## R_TXM16 in the C bench: stack and arena (2026-11-01, branch `pqz-core-m16`)
+
+The "C core crash at M = 16" of the pre-freeze order (first seen in fs3 Task 13 B3, run
+`artifact/runs/fs3-t13-docker-multi/`). **The core is unchanged: the crash is in the bench harness and its build
+configuration.** M = 16 exists only in `OVERSIZE=1` builds of `pqz_bench`; `pqz-ffi` refuses them at compile time. No
+proof, statement, wire, transcript, vector, parameter or gas row changes, and the timings do not move.
+
+Three separate failures hid behind one label, in the order a run meets them:
+
+| Signal | Where | Cause | Fix |
+|---|---|---|---|
+| SIGSEGV native; wasm32 `memory access out of bounds` | `__schwartz_zippel_accumulate_z3`, `lazer/lnp-tbox.c:3654-3655`, the `vR_` and `vR` matrices on the stack | the bench's stack is 8 MiB; the frame takes `lambda * nex * d * 72` B natively | `pqz_bench` raises its stack limit to 16 MiB in `OVERSIZE` builds, `build.sh` links wasm32 with 16 MiB there; both stay 8 MiB otherwise |
+| SIGILL | `pqz_arena_alloc`, `src/pqz_arena.c:158` (the fail-stop of `pqz.h`) | (16, on) at n2304-kmax4096 peaks at 3,136 MiB, the harness's arena was 3,072 MiB | `txm-bench.sh` default arena 3,900 MiB |
+| SIGFPE | `verify_bad`, `test/pqz_bench.c`: `rnd () % (8 * len)` | a refused prove leaves `len = 0` | `verify_bad` returns "rejected" when there is no proof, as the Rust bench does |
+
+The first run at the default stack, then each cause in turn (unlimited stack, then a larger arena) showed one failure
+at a time. ASan + UBSan (`txm-asan.sh`'s flags, libc heap): at 8 MiB `stack-overflow` at `lnp-tbox.c:3655`; on an
+unlimited stack (16, off) at n2304-kmax4096 has no report, `fails 0`.
+
+**The real boundary is the stack, not M.** The frame grows with `nex`, the polynomials under the exact-norm proof:
+`vR_` (1 limb) + `vR` (2 limbs) cost 72 B per element natively, 56 B on wasm32 [derived from the struct sizes, not
+measured], and the rest of the prove adds about 280 KiB, the bench's `main` about 106 KiB. At `lambda` 4 and `d` 64 an
+8 MiB native stack holds `nex` up to about 433. The largest built shape is `nex` 386 (n2048-kmax1024 (8, on)),
+7,209 KiB. Of the M = 16 shapes only n2048-kmax1024 (16, off) (`nex` 394) fits: the unfixed bench proves it at 8 MiB,
+`fails 0`. n2304-kmax4096 (16, off) (`nex` 435) misses by a few tens of KiB. The generic verifier runs the same
+function (about 100 KiB less); the specialised verifier never reaches it (63 KiB at n2304-kmax4096, (8, on) and
+(16, off)). `pqz-ffi` runs the core on a 16 MiB worker, which would hold every shape below, and it never has M = 16.
+
+Stack [measured] from the `pqz_prove` call down, deepest touched byte on a painted stack, `-O2`; a scratch wrapper, not in
+the tree. The bench's own frames, about 106 KiB, come on top:
+
+| Set | largest built shape, KiB | (16, on) KiB; arena peak B; result | (16, off) KiB; arena peak B; result |
+|---|---|---|---|
+| n2048-kmax1024 | 7,209 | 12,733; 4,015,688,576; refused | 7,369; 1,462,413,824; proof 86,534 B |
+| n2304-kmax4096 | 6,613 | 11,377; 3,287,872,640; refused | 8,112; 1,775,489,744; proof 94,651 B |
+| n2560-kmax16384 | 5,747 | 9,462; 2,378,748,496; refused | 8,875; 2,127,009,216; refused |
+| n2816-kmax65536 | 6,202 | 10,206; 2,772,657,856; refused | 9,619; 2,500,841,552; refused |
+
+"Refused" is `PQZ_ERR_INPUT` (3): the proof's encoding exceeds `PQZ_MAX_PROOF` (98,304 B), which `do_prove` checks after
+the full prove. The Rust core refuses the same shapes with `Input`.
+
+**C = Rust at M = 16** (2 proofs per shape, native C against the Rust `oversize` bench, `pqzl/runs/m16-<set>.txt`): the
+same refusals, `fails` equal, and `proofs_fnv` equal on every shape that proves (n2304-kmax4096 (16, off): `d86946b3`).
+
+**Regression test:** `pqzl/test/txm_oversize.sh`, run by hand and not a gate step (below): both shapes, native generic and specialised
+and wasm32 generic, each must end in its own report on an 8 MiB soft limit. Green on all four sets. Before the fix 5
+of the 6 failed at n2304-kmax4096. `pqzl/runs/m16-red.txt` puts each part back in turn, and each goes red alone: the
+native stack (four SIGSEGV), the empty-proof guard (SIGFPE, wasm32 `remainder by zero`), the wasm32 stack
+(`memory access out of bounds`, which also confirms that trap is the stack) and the arena (SIGILL). The x86-64-v3
+bench, not in the test, behaves the same at n2304-kmax4096 (`pqzl/runs/m16-final.txt`).
+
+It keeps up to 3.74 GiB resident (n2048-kmax1024 (16, on)). At `CAPPED_MEM=5G` it passed on all four sets; under the
+default 4 GB cap at n2048-kmax1024, beside another session's `solc`, systemd-oomd killed its scope in the wasm32 case.
+A bench-only shape is not worth that risk inside an hours-long gate, so the gate does not run it.
+
+**Why not the core.** Moving `vR_` / `vR` into the arena also works and would drop most of the stack at every shape,
+but it changes `lazer/`, moves arena peaks by the same few MiB against the tight wasm32 budget (`pqz-ffi`'s
+`WASM_PQZL_MAX_LEGS` rests on those peaks) and needs a full gate on every set, for shapes that are never built. Worth
+doing only if a built shape comes near the 8 MiB bench stack, or if the C prover runs on a stack that is not its own.
+
+**Left as is:** a refused shape still counts in the bench's `fails` in both cores, so `--multi-bench` keeps reporting
+(16, on) as FAIL. `pqz_sv_diff` built with `OVERSIZE=1` runs on the default stack; no script does that.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 The spike's measurement record: P6d-2 against the unoptimised spike, and the verdict against the kill criteria

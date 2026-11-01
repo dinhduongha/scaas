@@ -161,6 +161,14 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      in sync and likely cuts gas (not measured). Do it when a `zether-near` / `zether-algorand` / `zether-soroban` track
      needs it, or for EVM gas — measure first; on EVM a new verifier means a new implementation version (CTR-ZTH-20);
      security review of the weight derivation and of which untrusted points need a subgroup check.
+     **Done, merged 2026-11-01 (branch `zether-msm`, CTR-ZTH-53):** one MSM per proof, 182 points on a transfer, 154 on a
+     burn, 159 + 25M on a multi-recipient transfer; the owner's order for the branch is code first, no gas measurement, so
+     "measure first" above waits. Security derivation in zether.md §9.1, the per-equation verifier in `legacy/zether-msm/`.
+     Left: the owner's go to merge; gas re-measurement, then `gas_limits` in `clients/zether-prover/src/zether.rs`, which holds
+     the per-equation figures; a new verifier set reaches the SCaaS testnet at its next reset. For `typed-signing` C3, which
+     owns the file: add `BadPoint` to `IZetherToken`'s ABI, a bad point now always reverts with it.
+     A machine cryptographic review found it sound and complete with proof bytes unchanged (`docs/research/zether-msm-crypto-review.md`,
+     not an independent audit: the verifier stays UNAUDITED).
      **Done 2026-10-31 (branch `scaas-testnet-rename`): the SCaaS testnet's identifier is `scaas-testnet`** (owner
      2026-10-31, Change entry in NET-EVM-02): the Foundry profile, `src/chains/scaas-testnet/`, the `chain-uids.json` key,
      CI, the deploy / verify scripts, `scaas-node/tests/e2e*.rs` and current docs; history / plans / reviews keep the old
@@ -206,10 +214,13 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      `mtxSetMandate`, …, each with its own typehash; a generic `Execute` only for inherently arbitrary calls); code size
      kept under 64 KiB with the library split pattern. `UARegistry.kindName(uint16)` view. The portable part goes first:
      `ua8-soroban` M2 / M3 / B1–B3 / B5 / B7 wait for it.)
-  3. Zether verifier one merged MSM (EVM) — before `zether-soroban`, so the Soroban verifier is merged-MSM from the
+  3. **Done 2026-11-01:** Zether verifier one merged MSM (EVM) — before `zether-soroban`, so the Soroban verifier is merged-MSM from the
      start (the Z0 estimate 536 M–2,409 M vs the 400 M limit depends on it).
   4. `zether-soroban` (Part Z; Z0 measures first).
-  5. C core crash at M = 16 (pqz-core; full gate).
+  5. C core crash at M = 16: **done (`pqz-core-m16`, merged 2026-11-01): a bench bug only, not the core; no full gate.**
+     M = 16 exists only in the `OVERSIZE` bench. Three failures: an 8 MiB bench stack (SIGSEGV, wasm32 out of bounds),
+     a 3,072 MiB bench arena (SIGILL) and a divide by zero after a refused prove (SIGFPE). C = Rust at M = 16;
+     `pqz-core/STATUS.md` "R_TXM16 in the C bench". No core change, so item 6's timings do not move.
   6. Gas re-calibration on a quiet host (option (c), image `-calib`, 26 rows `n2304-kmax4096`; after item 5 because a
      core change moves the timings; the owner stops other heavy sessions first; change the chainspec at the next SCaaS
      testnet reset if it differs materially). Again before the SCaaS mainnet only if the core / library changes again
