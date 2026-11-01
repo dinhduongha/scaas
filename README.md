@@ -660,7 +660,7 @@ Why it matters:
 
 The signed structures on EVM ([docs/contracts/metatx.md](docs/contracts/metatx.md)): `MetaTransaction` for every
 contract and, on tokens only, the typed `MetaTransfer` ([CTR-MTX-23](docs/contracts/metatx.md#CTR-MTX-23)). Both share
-the lanes, so one signature spends one lane slot whichever struct carries it.
+the lanes, so one signature spends one lane slot whichever struct carries it. Beside them every operation has a **named entry point with its own typed struct and explicit parameters** (`mtxUnwrap`, `mtxCancelOrder`, `mtxConfidentialTransfer*`, …; [CTR-MTX-28](docs/contracts/metatx.md#CTR-MTX-28), [CTR-MTX-29](docs/contracts/metatx.md#CTR-MTX-29)): the wallet shows the operation's own fields. The generic `mtxExecute` / `mtxBatch` / `uaExecute` / `uaBatch` stay for a mixed batch or an operation with no named entry, and the node's job API takes the named entries as explicit JSON ([job-api.md](docs/node/job-api.md#named-entries)).
 
 | Field | Purpose |
 |---|---|

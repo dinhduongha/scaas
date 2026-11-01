@@ -483,8 +483,8 @@ arguments (`IUARegistry`, [§1.8](#registry); client builders [CLI-SGN-41](../cl
   signature encoding that is one cryptographic object (a WebAuthn assertion, a BLS, Schnorr, MuSig2 or FROST signature, an ML-DSA, FN-DSA
   or SLH-DSA signature, a HIP-632 signature) stays one `bytes signature` (owner 2026-10-31). External standards keep their ABI (ERC-1271,
   Uniswap callbacks).
-- **Tokens.** The token-side `ua*` entries keep `bytes auth` = `abi.encode(keyData, sig)` until the named entries of `typed-signing` Part C;
-  until then `UAKinds.uaSig` converts it to a `UASig` for the registry (an `msig` is told by `keccak256(TAG(msig) ‖ keyData) == ua`).
+- **Tokens.** Since typed-signing C2-C6 the named `ua*` entries take `UASig` (`uaUnwrap`, the UA transfer, trade, cancel and receiver-fee entries, `uaCancelNonce`, the confidential twins; [CTR-MTX-28](metatx.md#CTR-MTX-28)). The generic `uaExecute` / `uaBatch` and `uaShield` keep `bytes auth` = `abi.encode(keyData, sig)` (TS-D14, owner table): `UAKinds.uaSig` converts it to a `UASig` for the registry (an `msig` is told by `keccak256(TAG(msig) ‖ keyData) == ua`). On a named `ua*` entry a native id signs with `UASig.signature`; `keyData` and `members` are ignored there, being unsigned.
+- **The registry is split in two (owner ruling 2026-11-01, typed-signing registry split; it replaces "`UARegistry` is not split" and the earlier two-library ruling).** `UARegistry` (27,997 B) keeps the views and `requireAuthorized`; `UARegistryLib` (31,315 B) holds every `register*`, `storePqzPop`, `setPqzKey`, `setKemKey` and the ML-DSA key cache, reached by DELEGATECALL. One library only: the views stay in the registry and there is no `fallback`. A behaviour-preserving refactor: the 53 selectors, the ABI, every digest, event and error are unchanged; `requireAuthorized` costs at most +37 gas at all four sets, `register` about +6 k and `registerMsig` about +8.8 k regular gas. The one difference is on malformed calldata only (a nested offset aimed at an appended word reads it as the caller's own argument, `test_nestedOffsetReadsAWordAsItsOwnArgument`). The constructor refuses a library without code (`UAConfig(0)`). Both contracts have a deploy gate ([NET-EVM-06](../networks/evm.md#NET-EVM-06)). The pre-split source is frozen in `smartcontracts/evm/legacy/typed-signing/UARegistryPreSplit.sol`. Figures: `docs/research/evm-size-levers.md` §8. The `ua8-soroban` minimal-`msig` rule (U8S-D1) lands in `UARegistryLib._msig`.
 
 ### 1.5 Keys, purposes, tags
 
@@ -835,8 +835,8 @@ EVM tokens, address-typed paths:
 | same | `cancelNonce(batch)` | sender (or `m.from` through `mtxExecute`) | N | — |
 | same | `transfer`; `approve`, `transferFrom` | sender; `approve` caller and spender | N; caller and spender contracts | — |
 | same | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` | `o.from` | N | `_requireValidSignature`; `msg.sender == o.dex` |
-| `MetaTokenBase` | `mtxTransfer`, `mtxTransferWithFee`, `mtxExecuteWithFee`, `mtxPay`, `mtxBatch` | `from` / `m.from` | N | same pipeline |
-| same | `payWithFee`, `wrap`, `unwrap`, `addReserve`; `mtxWrap` | sender (`_msgSender()`); `o.from` | N | — ; the underlying's `mtxTrade` |
+| `MetaTokenBase` | `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxBatch` (`mtxExecuteWithFee` went to `legacy/typed-signing/`) | `from` / `m.from` | N | same pipeline |
+| same | `payWithFee`, `wrap`, `unwrap`, `addReserve`; `mtxWrapOrder` | sender (`_msgSender()`); `o.from` | N | — ; the underlying's `mtxTrade` |
 | same | `mtxPayReceiverFee` | payer `t.from`, payee `t.to` co-signs | N (payer), N (payee) | `_requireValidSignature` |
 | same (BUILT, UA-5a) | `payWithFeeToUA`; `wrapToUA`; `unwrapToUA`; `mintToUA` (`NORMAL*`, minter) | sender (`_msgSender()`), or for `unwrapToUA` the signer of `uaExecute`; receiver `to` | sender N (`unwrapToUA`: U); `to` U-derived | — ([CTR-UA-28](#CTR-UA-28)) |
 | Hedera children | as above | as above | N incl. `hedera-native` | HIP-632 for 64-byte sigs from codeless accounts |
@@ -1970,7 +1970,7 @@ Registration (execution gas, bn254 base):
 `smartcontracts/evm/runs/2026-10-30-ua8-gas.txt`; the rows below re-read from the `UARegistryUA8.t.sol` pins after `typed-signing`, the FROST row from UA-8).** The rows above that predate UA-8 (`register` 77 k–273 k, the "Total" column of the
 registration table) are the pre-UA-8 figures: the UA-8 record stores every `register` field (SSTORE2 of the whole registration, state gas
 ≈ 1.1–1.2 M for a single classical key under EIP-8037, 1.70 M for `webauthn-p256`), so a single-key registration is now regular + state gas as below. Columns are
-regular gas (including the calldata floor) + EIP-8037 state gas; a transaction is charged their sum. The figures assume no gas price and no
+regular gas (including the calldata floor) + EIP-8037 state gas. The `sum` column is an upper bound on what the sender pays, exact only above the floor: the sender pays `max(total, floor)`, `total` being execution plus state gas, so a row below the calldata floor is not charged the sum of the two columns. A transaction is **included** only if its `tx.gas` (regular plus state) fits the block gas limit; the block's `gas_used`, `max(Σ regular, Σ state)`, is accounting, not an inclusion test. The figures assume no gas price and no
 block limit; the 60 M statements below compare one transaction with a 60 M block only to show what the split is for.
 
 | `register` (with its attributes) | regular | state | sum |
@@ -2219,7 +2219,8 @@ identifier features. Tokens verify a `SmartKeyAccount` through ERC-1271 with the
   checks the signature against the account's own key set (its ERC-1271 logic), signed by an existing key. Domain
   `("SCaaS SmartKeyAccount", "1", chainId, account, chain_uid)`, the 2D lane nonce, fee mode `NONE` (the relayer pays
   gas); `cancelRecovery` and the base `cancelNonce` are allowlisted too. `mtxExecuteAsOwner(data, nonce, validUntil,
-  signature)` is the named builder of that `MetaTransaction` with `batch = 0`. A plain EOA never rotates. BUILT (P4).
+  signature)` is the flat builder of that `MetaTransaction` with `batch = 0` (it stays, owner 2026-11-01). A plain EOA never rotates. BUILT (P4).
+  **Named entries (typed-signing C5, [CTR-MTX-28](metatx.md#CTR-MTX-28); controller calls, owner may override).** `mtxAddKey`, `mtxRemoveKey`, `mtxRotateKey`, `mtxSetGuardian`, `mtxCancelRecovery` and `mtxExecute(Envelope e, target, value, data, sig)` take an `Envelope` and an `AccountSig` `{keyIndex, proof, signature}` (the account's key set, not a `UASig`), each with its own struct (`AddKey(address from,uint8 kind,bytes32 x,bytes32 y,bytes32 rpIdHash,bytes32 originHash,…envelope)`, `Execute(address from,address target,uint256 value,bytes data,…envelope)`); the key arguments are explicit fields, not a packed key blob. The account still signs as itself. A generic `Execute` is kept only because the call is inherently arbitrary. `Execute` runs in `src/wallet/WalletExecute.sol`, an abstract `MetaTxBase` both wallets inherit. `test_skaMerkleBatchLeafIsTypedDigest`, `test_skaPasskeyChallengeTypedDigest`.
 - The client backup predicate ([CLI-SGN-13](../clients/signers-clientkeys.md#CLI-SGN-13)) applies to it unchanged;
   derived UAs are "single-key, no recovery" by construction and the app shows that.
 - `msig` UAs may list a `SmartKeyAccount` as a member (native contract member).

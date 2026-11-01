@@ -456,8 +456,7 @@ intent. Cost: one `eth_call` per stuck tx per `stuck_after_secs` (60 s) and per 
 After `valid_until` the subject nonce of GRAM/Solana/Aptos/Sui lanes may be pruned (Sui: permissionless `prune`) and read as 0; consumption checks are
 only made while `now ≤ valid_until + clock_skew_secs`, and expiry decides after that.
 
-EVM view names (BUILT, P5): `mtxNonce(from, batch)`, `mtxDigest(m)` / `mtxTransferDigest(t)`; the node relays
-`mtxExecute` / `mtxExecuteTransfer` (the alias `executeMetaTransaction` stays, [contracts/metatx.md](../contracts/metatx.md)).
+EVM view names (BUILT, P5): `mtxNonce(from, batch)`, `mtxDigest(m)` / `mtxTransferDigest(t)`; the views stay on the contracts, but since typed-signing N1 the node reads no digest view: it relays the named entries of its own table ([NODE-JOB-20](job-api.md#NODE-JOB-20)) and computes the typed digest locally (`mtxExecuteTransfer` for a `MetaTransfer`; `executeMetaTransaction` and the generic entries stay on the contracts, [contracts/metatx.md](../contracts/metatx.md)).
 
 ### 9.1 Shared submit path
 
@@ -560,9 +559,9 @@ unbound (`MetaTxLib.canon`, the fields `canon()` zeroes), so without this a clie
 has `Mtx::normalize(&mut self, fee_recipient: Option<Address>)`, called **once, where the `Work` is built from a
 request, a job or an envelope**: BUILT in gateway `post_metatx` (`work_of`) and in `submit::work_from_job` (the outbox submitter and
 the EVM/Hedera adapters' `build`, with `[[chains]] fee_recipient`); the mesh work builder is SPECIFIED. The outbox's
-in-flight key is the token's `mtxDigest`, never the job's `digest`. A job-API job built by an ERP with fee 0 and
+in-flight key is the typed digest the node computes locally from the op (typed-signing N1), never the job's `digest` field; for a derived-UA or contract signer, whose claim of `contract` the calldata cannot check, it is that digest together with `keccak(to ‖ data)`, both free or neither ([job-api.md](job-api.md#named-entries)). A job-API job built by an ERP with fee 0 and
 recipient 0 is unchanged in effect. A job carrying `receiver_fee` is refused (`dead`), never relayed without it. BUILT: the guard
-([NODE-JOB-20](job-api.md#NODE-JOB-20)) runs in `Submitter::submit` before the digest read, simulation or signing; a `MetaTransfer` and the
+([NODE-JOB-20](job-api.md#NODE-JOB-20)) runs in `Submitter::submit` before the local digest, simulation or signing; a `MetaTransfer` and the
 order and wrap entries need a registered token (an entry also a listed DEX), else `TOKEN_NOT_SERVED`; the token lists refresh every
 15 s with the breaker sample. Jobs rebuilt from the tracked journal after a restart pass the guard too and keep their sent transaction's gas limit (`max_gas_per_tx` capped by the block gas limit, and by 2^24 before Amsterdam, when the RPC no longer knows it; [Amsterdam gas](#amsterdam-gas)); a refused
 one is only logged and its nonce gap-filled (the ERP gets no report). Hedera runs the same lane checks at start ([NET-HED-08](../networks/hedera.md#NET-HED-08)).

@@ -648,7 +648,7 @@ owner before 22776's gen-1 registry and for the audit).
    transactions off; its on-demand ContractCode fetch returned nothing): the script now sends one verification request
    for such a clone against its implementation's source, which makes Blockscout fetch the code (the request itself
    fails: a 45-byte proxy). Decoding checked through the API the UI uses: the single transfer tx `0xdcccd38d…ffee` shows
-   `mtxConfidentialTransferSingle(bytes payload, …)` on "Zether E2E" (`eip1167`), the shield tx's logs decode as
+   `mtxConfidentialTransferSingle(bytes payload, …)` on "Zether E2E" (that run predates typed-signing; the ABI is now `mtxConfidentialTransferSingle(ZetherSingle t, bytes proof)` with the explicit fields as named inputs, and the signed relayed form `mtxConfidentialTransferSingle(Envelope e, ZetherSingle args, bytes proof, bytes sig)`) (`eip1167`), the shield tx's logs decode as
    `Shielded(toUA, from, amount 1234, index 1)` and `Transfer`.
 
 **Re-run after a reset** (a fresh chain: the default salt works; on a chain that already holds a set with the same salt,

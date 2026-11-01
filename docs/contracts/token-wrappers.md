@@ -467,18 +467,18 @@ EOA may approve a contract on a token SCaaS does not control) and wraps gaslessl
 cannot approve anything ([CTR-TOK-01](#CTR-TOK-01)) and wraps by signature:
 
 <a id="CTR-TOK-20"></a>**CTR-TOK-20** — **Signature wrap of a SCaaS underlying** (owner). The holder signs a
-`TradeOrder` ([CTR-DEX-13](dex.md#CTR-DEX-13)) in the **underlying's** domain with `dex` = the wrapper, `receiveToken`
-= the wrapper, `receiveAmount` = the minimum it accepts to receive (its `minOut`), `minFill = amount`, `fee` = the
-relayer's rate. **BUILT on `WrappedToken` (P2a)**, inherited by `WrappedZetherToken` (P3). Both expose
+`WrapOrder` (typed-signing C6, TS-D19: the 12 fields of the `TradeOrder` of [CTR-DEX-13](dex.md#CTR-DEX-13) with `receiveToken → wrappedToken`, `receiveAmount → minMinted` and `dex` dropped, since the wrapper pulls for itself) in the **underlying's** domain with `wrappedToken` = the wrapper, `minMinted` = the minimum it accepts to receive (its `minOut`), `minFill = amount`, `fee` = the
+relayer's rate. Until C6 the same order was a `TradeOrder` with `dex == receiveToken` = the wrapper; the underlying's order digest now hashes exactly such an order as `WrapOrder`, every other as `TradeOrder` (`TradeLib.orderHash`), and the `pulled` key stays that digest. **BUILT on `WrappedToken` (P2a; named `mtxWrapOrder` since C6)**, inherited by `WrappedZetherToken` (P3) and `WrappedPqzToken`. They expose
 
 ```solidity
-function mtxWrap(address underlying, TradeOrder calldata o, bytes calldata sig) external nonReentrant returns (uint256 minted);
+function mtxWrapOrder(address underlying, WrapOrder calldata o, bytes calldata sig) external nonReentrant returns (uint256 minted);
+function uaWrapOrder(address underlying, UAWrapOrder calldata o, UASig calldata auth) external nonReentrant returns (uint256 minted);
 ```
 
 1. `address(0)` ⇒ `NativeNotGasless()` (checked first); resolve the leg: `_legOf(underlying)` (both `WRAPPED*` kinds), which refuses an
    unknown "underlying" whose `mtxTrade` could be a no-op (built: `UnknownUnderlying(u)`, controller ruling, pending the owner); require `wrapEnabled`, no pending
    rate change and no reserve shortfall;
-2. require `o.receiveToken == address(this)` (`WrapOrderInvalid`); the relayer binding is the underlying's (`submitter` = `msg.sender`, `WrongRelayer`; controller ruling, pending the owner: the wrapper does not repeat it); `o.receiveAmount` is gross, the holder receives `minted − wrapFee`;
+2. require `o.wrappedToken == address(this)` (`WrapOrderInvalid`); the relayer binding is the underlying's (`submitter` = `msg.sender`, `WrongRelayer`; controller ruling, pending the owner: the wrapper does not repeat it); `o.receiveAmount` is gross, the holder receives `minted − wrapFee`;
 3. quote `minted = ⌊o.amount · num / den⌋` and `wrapFee = ⌈minted · o.fee / 10⁶⌉`
    ([CTR-DEX-11](dex.md#CTR-DEX-11) rounding; `fee = 0` ⇒ 0);
 4. call `underlying.mtxTrade(o, sig, TradeFill(o.amount, minted, wrapFee, msg.sender))` — the underlying checks the
@@ -490,20 +490,22 @@ function mtxWrap(address underlying, TradeOrder calldata o, bytes calldata sig) 
    2026-10-19; before, `from` and the gross `minted`).
 
 No allowance; only the named wrapper can pull, and only at the signed minimum. The call to the underlying is a wrap
-talking to its underlying, as the direct wrap's pull is, not the meta-tx pipeline calling out. `mtxWrap` is not
+talking to its underlying, as the direct wrap's pull is, not the meta-tx pipeline calling out. `mtxWrapOrder` is not
 allowlisted, so never a self-call; the submitter may be any address, an EOA relayer included; the node runs it as a metatx-job entry point.
 Clients refuse by default to build or sign such an order when `dex` is not a registered wrapper of that underlying
 ([CTR-DEX-19](dex.md#CTR-DEX-19)).
 
-**`uaWrap`** (owner 2026-10-13; BUILT, UA-5b): `uaWrap(address u, UATradeOrder o, bytes auth)` is `mtxWrap` with
-the holder's `UATradeOrder` ([CTR-DEX-25](dex.md#CTR-DEX-25)) pulled by the underlying's `uaTrade`; the underlying must
+**`uaWrapOrder`** (owner 2026-10-13, as `uaWrap`; BUILT, UA-5b; renamed and typed in C6): `uaWrapOrder(address u, UAWrapOrder o, UASig auth)` is `mtxWrapOrder` with
+the holder's `UAWrapOrder` (the `UATradeOrder` of [CTR-DEX-25](dex.md#CTR-DEX-25) in the same wrap form) pulled by the underlying's `uaTrade`; the underlying must
 be a SCaaS ledger token (`UALegNotLedger(u)`); `minted − wrapFee` goes to `o.destination` (0 ⇒ `o.from`), a derived id
 by `_uaMint`, a native one by `_mint`; event `UAWrapped(bytes32 indexed to, address indexed u, uint256 received,
 uint256 minted)` only (no `Wrapped`), with the credited id (`destination` or `from`) and `minted − wrapFee` (review
 W-Q, 2026-10-19); the leg check is ERC-165 on `IUALedger`, before the pull; the fee goes to
-`msg.sender`; not allowlisted (`test/ua/UAWrap.t.sol`). A native holder uses it to wrap straight into its UA. A holder of an outside underlying wraps into a
+`msg.sender`; not allowlisted (`test/ua/UAWrap.t.sol`). A wrap order is cancelled by `CancelWrapOrder(WrapOrder order)` / `CancelUAWrapOrder`, nested ([CTR-DEX-02](dex.md#CTR-DEX-02)); the client sends it through `mtxCancelOrder` / `uaCancelOrder` in the order's `TradeOrder` form. A native holder uses it to wrap straight into its UA. A holder of an outside underlying wraps into a
 UA with `wrapToUA`, and unwraps a SCaaS ledger leg straight into a UA with `unwrapToUA` (both BUILT, UA-5a;
-[CTR-UA-28](accounts.md#CTR-UA-28)).
+([CTR-UA-28](accounts.md#CTR-UA-28)).
+
+**Named entries of the wrap, unwrap, burn and reserve operations** (typed-signing C2; [CTR-MTX-28](metatx.md#CTR-MTX-28)). Each gets its own struct and entry, signed in the token's domain: `CancelNonce`, `Burn` / `UABurn` (`mtxBurn(Envelope, amount, sig)`, `uaBurn`), `Wrap` (`mtxWrap`, the one-leg `wrap(uint256)`), `WrapLeg`, `WrapToUA`, `AddReserve`, `Unwrap` / `UAUnwrap` (`mtxUnwrap(Envelope, wrapped, recipient, minOut, sig)`), `UnwrapLeg` / `UAUnwrapLeg` (with `underlying`), `UnwrapToUA` / `UAUnwrapToUA`. Fee classes are the allowlist's: an amount class over `wrapped` on the unwrap entries, absolute on wrap and `addReserve`. A wrap or unwrap runs exactly as the direct call by `from`; `mtxWrapShield` with the native coin stays unrelayable ([CTR-MTX-19](metatx.md#CTR-MTX-19)). The flat `uaUnwrap(bytes32 from, …)` overload went to `legacy/typed-signing/` (owner 2026-11-01); the named `uaUnwrap(UAEnvelope, …, UASig)` replaces it.
 
 ## 4. Features
 
