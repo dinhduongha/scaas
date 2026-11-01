@@ -157,8 +157,9 @@ export function nativeOk(address, h, sig) {
   });
 }
 
-/** `abi.encode(MemberSig[])`, MemberSig = (uint16 index, bytes keyData, bytes sig). */
+/** `abi.encode(MemberSig[])`, MemberSig = (uint16 index, bytes keyData, bytes sig); empty for no slots, as the registries. */
 export function encodeMemberSigs(list) {
+  if (list.length === 0) return new Uint8Array(0);
   const tuples = list.map(({ index, keyData, sig }) => abiEncode(['uint16', 'bytes', 'bytes'], [index, keyData, sig]));
   const offsets = [];
   let o = 32 * list.length;
@@ -170,7 +171,7 @@ const toBytes = (v) => (v instanceof Uint8Array ? v : fromHex(v));
 export const decodeMemberSigs = (blob) => attempt(() => {
   const b = toBytes(blob);
   const n = wordAt(b, 32);
-  if (wordAt(b, 0) !== 32 || n === 0 || n > 16) return null;
+  if (wordAt(b, 0) !== 32 || n > 16) return null;
   const out = Array.from({ length: n }, (_, i) => {
     const t = 64 + wordAt(b, 64 + 32 * i);
     return { index: wordAt(b, t), keyData: bytesAt(b, t, t + 32), sig: bytesAt(b, t, t + 64) };

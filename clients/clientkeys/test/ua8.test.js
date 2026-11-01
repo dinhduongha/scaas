@@ -801,7 +801,7 @@ test('verifyKemRecord accepts every row and refuses a flipped byte', () => {
     for (const bad of flipped(k.kind, k.sig)) { refuses(() => verifyKemRecord(kemRow(k, { sig: bad }), keysOf), 'UAUnauthorized', k.id); flips++; }
     refuses(() => verifyKemRecord(kemRow(k, { version: k.version + 3 }), keysOf), 'UAUnauthorized', k.id);
     refuses(() => verifyKemRecord(kemRow(k, { version: 0 }), keysOf), 'UAKemVersion', k.id);
-    refuses(() => verifyKemRecord(kemRow(k, { ua: `0x${'09'.repeat(32)}` }), keysOf), 'UAUnauthorized', k.id);
+    refuses(() => verifyKemRecord(kemRow(k, { ua: `0x${'09'.repeat(32)}` }), keysOf), 'UAUnauthorized', `${k.id}: an unregistered id`);
     refuses(() => verifyKemRecord(kemRow(k, { kemPk: hex(B(k.kemPk).subarray(0, 1600)) }), keysOf), 'UAKemKeyLength', k.id);
     refuses(() => verifyKemRecord(kemRow(k, { kemPk: '0x' }), keysOf), 'UAKemKeyLength', k.id);
     refuses(() => verifyKemRecord(kemRow(k, { kemPk: flipAt(k.kemPk, 0).replace(/^0x00/, '0x02') }), keysOf), 'UAKemScheme', k.id);
@@ -809,6 +809,9 @@ test('verifyKemRecord accepts every row and refuses a flipped byte', () => {
   assert.equal(flips, 3 * 6 + 3 * 2 * 3);
   const s = row('slhdsa128s');
   refuses(() => verifyKemRecord(kemRow(P.kemRecords[0], { ua: s.ua, sig: s.pop }), keysOf), 'UAKemHolder', 'a valid signature cannot reach the signature check');
+  // one field off: the record's `ua` is not the id of the key read. Key K must not sign for a victim's `ua`; a non-holder key, so
+  // that without the id compare this is UAKemHolder, which a signature mismatch could not hide
+  refuses(() => verifyKemRecord(kemRow(P.kemRecords[0]), () => keysOf(s.ua)), 'UAUnauthorized', 'not the key data\'s id');
 });
 
 test('verifyPqzKeyRecord accepts every row and refuses a flipped byte', () => {
@@ -818,9 +821,14 @@ test('verifyPqzKeyRecord accepts every row and refuses a flipped byte', () => {
     refuses(() => verifyPqzKeyRecord(pqzRow(k, { pqzPopHash: flipAt(k.pqzPopHash, 0) }), keysOf), 'UAUnauthorized', k.name);
     refuses(() => verifyPqzKeyRecord(pqzRow(k, { pqzPopHash: Z }), keysOf), 'UAPqzPopHash', k.name);
     refuses(() => verifyPqzKeyRecord(pqzRow(k, { pqzKey: hex(B(k.pqzKey).subarray(0, 32)) }), keysOf), 'UAKeyData', k.name);
-    refuses(() => verifyPqzKeyRecord(pqzRow(k, { ua: `0x${'09'.repeat(32)}` }), keysOf), 'UAUnauthorized', k.name);
+    refuses(() => verifyPqzKeyRecord(pqzRow(k, { ua: `0x${'09'.repeat(32)}` }), keysOf), 'UAUnauthorized', `${k.name}: an unregistered id`);
     refuses(() => verifyPqzKeyRecord(pqzRow(k, { pqzKey: flipAt(k.pqzKey, 0) }), keysOf), 'UAUnauthorized', k.name); // keccak(PQZ_KEY_GROUP ‖ key)
   }
+  // the id compare, as in the KEM test: the control first, then one field off (without the compare: UAPqzHolder)
+  const s = row('slhdsa128s');
+  const k = P.pqzKeyRecords[0];
+  refuses(() => verifyPqzKeyRecord(pqzRow(k, { ua: s.ua }), keysOf), 'UAPqzHolder', 'the control');
+  refuses(() => verifyPqzKeyRecord(pqzRow(k), () => keysOf(s.ua)), 'UAUnauthorized', 'not the key data\'s id');
 });
 
 test('verify* fail closed: each case one field off a row that passes (ua-rs check_fails_closed)', () => {
@@ -864,6 +872,7 @@ test('verify* fail closed: each case one field off a row that passes (ua-rs chec
   refuses(withPop(pad), 'UAPoP', 'trailing bytes');
   refuses(withPop('0x'), 'UAPoP', 'no slots');
   refuses(withPop(`0x${'00'.repeat(31)}20${'00'.repeat(32)}`), 'UAPoP', 'abi.encode of no slots');
+  assert.equal(enc([]), '0x', 'no slots is the empty blob, as the registries and ua-rs');
   refuses(withPop(enc([{ ...slots[0], keyData: B(keysOf(ids[0]).keyData) }, slots[1]])), 'UAPoP', 'CTR-UA-33: a slot carries no key data');
   refuses(withPop(enc([slots[1], slots[0]])), 'UAPoP', 'order');
   refuses(withPop(enc([slots[0], slots[0]])), 'UAPoP', 'repeated');
@@ -897,10 +906,9 @@ test('verifyRegistration refuses every kinds.json invalid key by its error; vali
   const K = JSON.parse(readFileSync(new URL('kinds.json', dir), 'utf8'));
   const none = { pqzKey: '0x', pqzPopHash: Z, kemPk: '0x' };
   const go = (r) => () => verifyRegistration({ kind: r.kind, keyData: r.keyData, attrs: none, pop: `0x${'00'.repeat(64)}`, pqzPop: '0x' }, () => undefined);
-  let n = 0;
-  for (const r of K.invalid.filter((x) => !x.hederaNative)) { refuses(go(r), r.error, JSON.stringify(r).slice(0, 120)); n++; }
+  for (const r of K.invalid) refuses(go(r), r.error, JSON.stringify(r).slice(0, 120));
   for (const r of K.valid.filter((x) => x.kind !== 0x0120 && !(x.kind >= 0x0110 && x.kind <= 0x0113))) refuses(go(r), 'UAPoP', r.keyData.slice(0, 40));
-  assert.ok(n > 100, String(n));
+  assert.equal(K.invalid.length, 199);
 });
 
 test('the group kinds have no verifier here: refused, never accepted (C14; ua-rs checks them)', () => {

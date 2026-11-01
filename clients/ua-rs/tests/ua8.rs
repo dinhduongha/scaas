@@ -917,7 +917,6 @@ fn check_kem_record_vectors() {
         assert_eq!(at(&ua, v, &pk), Ok(()), "{id}: the control");
         assert_eq!(at(&ua, v + 3, &pk), Err(UAError::Unauthorized), "{id}: signed for another version");
         assert_eq!(at(&ua, 0, &pk), Err(UAError::KemVersion), "{id}: version 0 is register's");
-        assert_eq!(at(&[9; 32], v, &pk), Err(UAError::Unauthorized), "{id}: not the key data's id");
         assert_eq!(at(&ua, v, &pk[..1600]), Err(UAError::KemKeyLength), "{id}");
         assert_eq!(at(&ua, v, &[]), Err(UAError::KemKeyLength), "{id}");
         assert_eq!(at(&ua, v, &[&[2u8][..], &pk[1..]].concat()), Err(UAError::KemScheme), "{id}");
@@ -927,6 +926,10 @@ fn check_kem_record_vectors() {
     let pk = bytes(&arr(&p, "kemRecords")[0]["kemPk"]);
     let got = check_kem_record(0x0133, &bytes(&s["keyData"]), &b32(&s["ua"]), 1, &pk, &[0; 7856], &keys(&p));
     assert_eq!(got, Err(UAError::KemHolder(0x0133)));
+    // one field off: `ua` is not this key's id. Key K must not sign for a victim's `ua`; a non-holder key, so that without the id
+    // compare this is `KemHolder`, which a signature mismatch could not hide
+    let got = check_kem_record(0x0133, &bytes(&s["keyData"]), &[9; 32], 1, &pk, &[0; 7856], &keys(&p));
+    assert_eq!(got, Err(UAError::Unauthorized), "not the key data's id");
     assert_eq!(flips, 3 * 6 + 3 * 2 * 3, "3 per signature: 6 single keys, 3 msig of 2 slots");
     println!("9 KEM records, {flips} flipped signatures refused");
 }
@@ -952,11 +955,15 @@ fn check_pqz_key_record_vectors() {
         assert_eq!(at(&ua, &key, &other), Err(UAError::Unauthorized), "{name}: another proof's hash");
         assert_eq!(at(&ua, &key, &[0; 32]), Err(UAError::PqzPopHash), "{name}");
         assert_eq!(at(&ua, &key[..32], &h), Err(UAError::KeyData("PQZ key length")), "{name}");
-        assert_eq!(at(&[9; 32], &key, &h), Err(UAError::Unauthorized), "{name}: not the key data's id");
         let mut swapped = key.clone();
         swapped[0] ^= 1;
         assert_eq!(at(&ua, &swapped, &h), Err(UAError::Unauthorized), "{name}: pqzKeyHash = keccak(PQZ_KEY_GROUP ‖ key)");
     }
+    // the id compare, as in check_kem_record_vectors: the control first, then one field off (without the compare: `PqzHolder`)
+    let (s, k) = (find(&p, "registrations", "name", &"slhdsa128s".into()), &arr(&p, "pqzKeyRecords")[0]);
+    let at = |ua: &[u8; 32]| check_pqz_key_record(0x0133, &bytes(&s["keyData"]), ua, &bytes(&k["pqzKey"]), &b32(&k["pqzPopHash"]), &[0; 7856], &keys(&p));
+    assert_eq!(at(&b32(&s["ua"])), Err(UAError::PqzHolder(0x0133)));
+    assert_eq!(at(&[9; 32]), Err(UAError::Unauthorized), "not the key data's id");
     println!("8 PQZ key records, {flips} flipped signatures refused");
 }
 
@@ -1082,6 +1089,7 @@ fn check_fails_closed() {
     assert_eq!(on(&pad), Err(UAError::Pop), "trailing bytes");
     assert_eq!(on(&[]), Err(UAError::Pop), "no slots");
     assert_eq!(on(&[[0u8; 31].as_slice(), &[32], &[0; 32]].concat()), Err(UAError::Pop), "abi.encode of no slots");
+    assert!(enc(&[]).is_empty(), "no slots is the empty blob, as the registries and clientkeys");
     let mut with_key = slots.clone();
     with_key[0].key_data = keys(&p)(ids[0]).unwrap().1;
     assert_eq!(on(&enc(&with_key)), Err(UAError::Pop), "CTR-UA-33: a slot carries no key data");

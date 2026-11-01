@@ -1,0 +1,28 @@
+# ua8-soroban B5 fix 1, mutants on the id compare, on top of 6eac252a, working tree of the fix; each restored and compared with cmp
+
+## rust mutant: is_record_of compares nothing (key K signs for any ua)
+$ scripts/capped cargo test -j2 --manifest-path clients/ua-rs/Cargo.toml --features pq --test ua8 --no-fail-fast
+test check_kem_record_vectors ... FAILED
+test check_pqz_key_record_vectors ... FAILED
+thread 'check_kem_record_vectors' (478155) panicked at tests/ua8.rs:932:5:
+assertion `left == right` failed: not the key data's id
+  left: Err(KemHolder(307))
+ right: Err(Unauthorized)
+thread 'check_pqz_key_record_vectors' (478156) panicked at tests/ua8.rs:966:5:
+assertion `left == right` failed: not the key data's id
+  left: Err(PqzHolder(307))
+ right: Err(Unauthorized)
+test result: FAILED. 22 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.74s
+restored: cmp ok
+
+## js mutant: recordOf compares nothing (key K signs for any ua)
+$ cd clients/clientkeys && ../../scripts/capped node --test test/ua8.test.js
+    actual: Error: UAKemHolder: 0xf0a55b694ab3f58dd5ac8f8508dd1d7699c67fbefd731a22df21326126a8c3c7
+    actual: Error: UAPqzHolder: 0x0133 may not hold a PQZ key
+  AssertionError [ERR_ASSERTION]: not the key data's id
+    expected: { code: 'UAUnauthorized' },
+ℹ fail 2
+ℹ pass 29
+✖ verifyKemRecord accepts every row and refuses a flipped byte (140.799028ms)
+✖ verifyPqzKeyRecord accepts every row and refuses a flipped byte (179.24257ms)
+restored: cmp ok
