@@ -845,6 +845,8 @@ reset (work order item 6) deploys the new contracts (controller call).
 - [ ] Steps: `forge script` dry runs on anvil for each touched script; e2e.py self-checks → commit
   `typed-signing C8: scripts on the named entries`.
 
+- **C8 result (2026-11-01):** `script/pqz/e2e.py` drives every PQZ op on its named entry (sections 5b, 6b; `NAMED`, `Signed`): typed struct from clientkeys, ECDSA, ML-DSA-65 and msig `UASig`; `pqzAuth` the typed `PqzAuth`; one PQZ holder registers by `registerMsig`; `UARegistryLib` linked and deployed behind `require_release_gas`. The generic section 5 stays (TS-D14). It has **not run on a chain**: it needs the `PQZ` precompile, so the next reset is its first run. Offline: `--self-test` checks the 19 named entries' calldata and digest against `typed_ops.json`, `PqzAuth`, `registerMsig` against `portable.json`, the 60 signatures and encoders of the file against `out/`; `test_e2e_linked.py` runs `Signed`. `ZetherE2E.s.sol` adds three relayed named entries through `zether-cli namedCall`, broadcast on anvil by `scripts/e2e-zether.sh` with the deploy path; `DeployBase` takes no code change (comment figures only). No script deploys a gen 2. Decisions: the C8 entry of 2026-11-01. Logs: `runs/2026-11-01-typed-signing-c8-*`.
+
 ---
 
 # Part N — node: explicit job API (after C)

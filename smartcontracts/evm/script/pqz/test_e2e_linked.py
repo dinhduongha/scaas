@@ -1,4 +1,4 @@
-"""`Deployer.linked` returns the transitive link closure, leaf first (metatx-split task 6).
+"""`Deployer.linked` returns the transitive link closure, leaf first (metatx-split task 6); `Signed` signs and submits a named entry.
 Run: python3 -I smartcontracts/evm/script/pqz/test_e2e_linked.py"""
 import importlib.util
 import json
@@ -57,4 +57,53 @@ with tempfile.TemporaryDirectory() as root:
     D.deploy("Reg", b"\xaa")
     assert s.order[-2:] == ["library RegLib", "deploy Reg"], s.order
     assert s.data == bytes(1) + bytes.fromhex(D.libs["RegLib"][2:]) + bytes(0) + b"\xaa", s.data
+
+
+# `Signed`: what is signed is the digest of the entry's own struct, in the signer's shape; the relayer submits `named_cd`
+class Echo:  # the "signature" is the message, so the test reads what was signed
+    def ml_sign(self, lvl, seed, m):
+        return m
+
+
+class Relayer:
+    def send(self, to, data, what):
+        self.sent = data
+
+
+class Eoa:
+    key, addr = 1, e2e.address(1)
+
+
+word = bytes(31) + b"\x05"
+e2e.call = lambda to, data: "0x" + word.hex()
+e2e.CTX[:] = [31337, bytes(32)]
+TOK, R, PQ = "0x" + "ab" * 20, Relayer(), Echo()
+A = bytes(31) + b"\xaa"
+at = (TOK, 31337, bytes(32))
+sg = e2e.Signed(TOK, Eoa, PQ, R, 3)
+assert sg.binding == word and sg.e[2] == 5 and sg.e[4] == 0x20 and sg.e[6] == 3, sg.e
+sg.send("Shield", [A, 7], "x")
+assert R.sent == e2e.named_cd("Shield", sg.e, [A, 7], e2e.ecdsa(1, e2e.typed_digest("Shield", at, sg.e, [A, 7])))
+assert e2e.Signed.spent[TOK, Eoa.addr] == 3
+
+
+def ml(purpose, d):
+    return e2e.kc(e2e.TAG[e2e.MLDSA65], e2e.ua_msg(e2e.MLDSA65, purpose, d))
+
+
+m0, m1 = (e2e.UA(kind=e2e.MLDSA65, seed=b"", ua=bytes(31) + bytes([i])) for i in (1, 2))
+sg = e2e.Signed(TOK, m0, PQ, R, 0)
+assert sg.e[4] == 0, "no fee, no fee mode"
+sg.send("RollOver", [A, 1], "x")
+d = e2e.typed_digest("UARollOver", at, sg.e, [A, 1])
+assert R.sent == e2e.named_cd("UARollOver", sg.e, [A, 1], [b"", ml(e2e.P_METATX, d), []])
+sg.send("Shield", [A, 7], "x")  # `uaShield` keeps `bytes auth`
+d = e2e.typed_digest("UAShield", at, sg.e, [A, 7])
+assert R.sent == e2e.named_cd("UAShield", sg.e, [A, 7], e2e.encs(["b", "b"], [b"", ml(e2e.P_METATX, d)]))
+ms = e2e.UA(kind=e2e.MSIG, ua=bytes(31) + b"\x09", members=[m0, m1])
+sg = e2e.Signed(TOK, ms, PQ, R, 0)
+sg.send("RollOver", [A, 1], "x")
+d = e2e.typed_digest("UARollOver", at, sg.e, [A, 1])
+md = e2e.kc(ms.ua, e2e.ua_msg(e2e.MSIG, e2e.P_METATX, d))
+assert R.sent == e2e.named_cd("UARollOver", sg.e, [A, 1], [b"", b"", [[0, b"", ml(e2e.P_MEMBER, md)], [1, b"", ml(e2e.P_MEMBER, md)]]])
 print("ok")
