@@ -50,7 +50,7 @@ test('soroban ua-ops.json reproduced byte for byte', () => {
   assert.equal(uaOpsJson(), TEXT);
   assert.equal(V.network.networkId, hex(sor.networkId(V.network.passphrase)));
   assert.deepEqual(V.entries.map((e) => e.name), ['ua_transfer', 'ua_pay', 'ua_pay_meta', 'ua_burn', 'ua_cancel_nonce',
-    'ua_order', 'ua_cancel', 'ua_relay', 'mtx_mandate_pay', 'mtx_set_mandate']);
+    'ua_order', 'ua_cancel', 'ua_relay', 'mtx_mandate_pay', 'mtx_set_mandate', 'mtx_set_payee', 'mtx_revoke', 'mtx_withdraw']);
   for (const e of V.entries) {
     assert.deepEqual(e.perKind.map((p) => p.kind), ['webauthn-p256', 'p256', 'ed25519', 'secp256k1', 'mldsa44', 'mldsa65', 'msig'], e.name);
   }

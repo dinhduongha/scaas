@@ -1656,7 +1656,7 @@ mod tests {
                 n += 1;
             }
         }
-        assert_eq!(n, 9 * 7, "every job row of the vector file");
+        assert_eq!(n, 12 * 7, "every job row of the vector file");
     }
 
     /// Spec §9.1: token functions on a registered token, `ua_relay` on the router, `settle` / `ua_cancel` on

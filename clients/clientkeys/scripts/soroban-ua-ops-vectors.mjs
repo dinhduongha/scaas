@@ -118,6 +118,15 @@ const ENTRIES = [
     a('delegate', 'Holder', s.holderUa(p256Ua())), a('max_per_payment', 'i128', s.i128(50_000)),
     a('max_per_period', 'i128', s.i128(200_000)), a('period_seconds', 'u64', s.u64(86_400)), a('expiry', 'u64', s.u64(1_900_000_000)),
     a('lane', 'BytesN<32>', s.bytesN(fill(0x0d))), a('nonce', 'u64', s.u64(0)), VU, NO_RELAYER]],
+  ['mtx_set_payee', C.mandate, 'mtx_set_payee', 'metatx', () => [a('token', 'Address', s.addr(C.token)),
+    a('payee', 'Holder', s.holderAddr(TO)), a('allowed', 'bool', s.bool(true)),
+    a('lane', 'BytesN<32>', s.bytesN(fill(0x0e))), a('nonce', 'u64', s.u64(0)), VU, NO_RELAYER]],
+  ['mtx_revoke', C.mandate, 'mtx_revoke', 'metatx', (sg) => [a('token', 'Address', s.addr(C.token)),
+    a('by', 'Holder', s.holderUa(sg.ua)), a('epoch', 'u64', s.u64(1)),
+    a('lane', 'BytesN<32>', s.bytesN(fill(0x10))), a('nonce', 'u64', s.u64(0)), VU, NO_RELAYER]],
+  ['mtx_withdraw', C.mandate, 'mtx_withdraw', 'metatx', () => [a('token', 'Address', s.addr(C.token)),
+    a('to', 'Holder', s.holderAddr(TO)), a('amount', 'i128', s.i128(700)),
+    a('lane', 'BytesN<32>', s.bytesN(fill(0x0f))), a('nonce', 'u64', s.u64(0)), VU, NO_RELAYER]],
 ];
 
 const registrationRow = (sg) => {
@@ -165,7 +174,8 @@ function build() {
     '(SOR-D10); ua_relay the inner token.ua_pay of router.ua_relay (relayer = Some(router), pay_ref = relay.ref =',
     'keccak256("scaas.relayfee" | networkId | xdr(target) | keccak256(xdr((func, args))) | salt), open mode: to = router);',
     'mtx_* are signed by the mandate owner (mtx_set_mandate) and the delegate (mtx_mandate_pay, epoch 1 = after the',
-    'first mtx_set_mandate, CTR-ACC-07). registrations[i] =',
+    'first mtx_set_mandate, CTR-ACC-07); mtx_set_payee and mtx_withdraw are signed by the owner, mtx_revoke by the delegate',
+    '(by = the delegate, epoch 1). registrations[i] =',
     'register(kind, keyData, empty attrs, pop, empty pqz_pop, None) (portable, no network), the msig',
     'register_msig({threshold, members}, empty attrs, [], empty pqz_pop, None); the single-key rows are',
     'portable.json\'s; mldsa65 signs as mldsa65#2, mldsa65#1 is an msig member; the msig is classical-dominant: empty pop.',

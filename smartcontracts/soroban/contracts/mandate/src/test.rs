@@ -551,6 +551,14 @@ fn auth_of(env: &Env, p: &Value) -> UaSig {
     <UaSig as soroban_sdk::xdr::FromXdr>::from_xdr(env, &Bytes::from_slice(env, &hx(&p["authXdr"]))).unwrap()
 }
 
+/// The `Address` inside a `Holder::Addr` arg.
+fn sc_holder_addr(env: &Env, v: &Val) -> Val {
+    match Holder::try_from_val(env, v).unwrap() {
+        Holder::Addr(a) => a.into_val(env),
+        Holder::Ua(_) => panic!("a native holder"),
+    }
+}
+
 fn arg_vals(env: &Env, p: &Value) -> SVec<Val> {
     let mut v = SVec::new(env);
     for a in p["args"].as_array().unwrap() {
@@ -560,9 +568,9 @@ fn arg_vals(env: &Env, p: &Value) -> SVec<Val> {
     v
 }
 
-/// SOR-D12: the mandate at `ua-ops.json`'s id and network id; each `mtx_set_mandate` / `mtx_mandate_pay` row's digest
-/// is recomputed and its `auth` runs as the call it signs: `mtx_set_mandate` with that kind's UA as the owner,
-/// `mtx_mandate_pay` with that kind's UA as the delegate (set by a native owner).
+/// SOR-D12: the mandate at `ua-ops.json`'s id and network id; each mandate row's digest is recomputed and its `auth`
+/// runs as the call it signs: `mtx_set_mandate`, `mtx_set_payee` and `mtx_withdraw` with that kind's UA as the owner,
+/// `mtx_mandate_pay` and `mtx_revoke` with that kind's UA as the delegate (set by a native owner).
 #[test]
 fn ua_ops_vectors_mandate_rows() {
     let o = ops();
@@ -573,7 +581,7 @@ fn ua_ops_vectors_mandate_rows() {
             continue;
         }
         let f = e["fn"].as_str().unwrap();
-        assert!(["mtx_set_mandate", "mtx_mandate_pay"].contains(&f), "{f}");
+        assert!(["mtx_set_mandate", "mtx_set_payee", "mtx_withdraw", "mtx_revoke", "mtx_mandate_pay"].contains(&f), "{f}");
         for p in e["perKind"].as_array().unwrap() {
             let s = base();
             let env = &s.env;
@@ -587,8 +595,10 @@ fn ua_ops_vectors_mandate_rows() {
             let ua = Holder::Ua(ua.unwrap());
             let args = arg_vals(env, p);
             let native = Address::generate(env);
-            let w = if f == "mtx_set_mandate" {
+            let w = if f == "mtx_set_mandate" || f == "mtx_set_payee" {
                 s.mandate(&ua, 0)
+            } else if f == "mtx_withdraw" {
+                s.mandate(&ua, 1_000_000)
             } else {
                 let w = s.mandate(&Holder::Addr(native.clone()), 1_000_000);
                 s.set_mandate(&w, Who::Native(&native), &ua, 1_000_000, 1_000_000, 3600, NOW + 86_400, 1, 0).unwrap();
@@ -606,6 +616,16 @@ fn ua_ops_vectors_mandate_rows() {
             if f == "mtx_set_mandate" {
                 let delegate = Holder::try_from_val(env, &args.get(1).unwrap()).unwrap();
                 assert_eq!(w.mandate(&s.t.address).unwrap().delegate, delegate);
+            } else if f == "mtx_set_payee" {
+                let payee = Holder::try_from_val(env, &args.get(1).unwrap()).unwrap();
+                assert!(env.as_contract(&w.address, || env.storage().persistent().has(&Key::Payee(s.t.address.clone(), payee))));
+            } else if f == "mtx_withdraw" {
+                let to = Address::try_from_val(env, &sc_holder_addr(env, &args.get(1).unwrap())).unwrap();
+                assert_eq!(s.t.balance(&to), 700);
+                assert_eq!(s.t.balance(&w.address), 1_000_000 - 700);
+            } else if f == "mtx_revoke" {
+                assert!(w.mandate(&s.t.address).is_none());
+                assert_eq!(w.epoch(&s.t.address), 2, "revoke bumps the epoch");
             } else {
                 let pay_ref = BytesN::<32>::try_from_val(env, &args.get(3).unwrap()).unwrap();
                 assert!(w.paid(&pay_ref));
@@ -613,5 +633,5 @@ fn ua_ops_vectors_mandate_rows() {
             }
         }
     }
-    assert_eq!((digests, calls), (2 * 7, 2 * 7));
+    assert_eq!((digests, calls), (5 * 7, 5 * 7));
 }
