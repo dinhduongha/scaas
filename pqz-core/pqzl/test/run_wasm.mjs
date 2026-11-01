@@ -67,7 +67,7 @@ for (let tx = 0; tx < NAMES.length; tx++) {
     if (vf(() => x.step_verify(tx))[0] !== 1) { out({ rel, verify_honest: 0, run: i }); fails++; }
   }
   stats(`${rel} prove`, tp);
-  out({ rel, proof_bytes_last: x.step_len(tx), proof_bytes_max: maxlen, arena_peak: x.step_arena_peak(),
+  out({ rel, proof_bytes_last: x.step_len(tx), proof_bytes_max: maxlen, arena_peak: x.step_arena_peak() >>> 0,
        proofs_fnv: hall.toString(16).padStart(8, '0') });
   const tv = [];
   for (let i = 0; i < nv; i++) {

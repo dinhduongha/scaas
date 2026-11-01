@@ -1,0 +1,20 @@
+# n2304-kmax4096, ulimit -Ss 8192, pqz-core-m16 harness fix
+ok   native generic mask 16384 (rc=1): {"rel": "R_TXM16", "proof_bytes_last": 0, "proof_bytes_max": 0, "arena_peak": 32
+ok   native fast mask 16384 (rc=1): {"rel": "R_TXM16", "proof_bytes_last": 0, "proof_bytes_max": 0, "arena_peak": 32
+ok   wasm32 generic mask 16384 (rc=1): {"rel":"R_TXM16","proof_bytes_last":0,"proof_bytes_max":0,"arena_peak":246966940
+ok   native generic mask 32768 (rc=0): {"rel": "R_TXM16_0", "proof_bytes_last": 94645, "proof_bytes_max": 94645, "arena
+ok   native fast mask 32768 (rc=0): {"rel": "R_TXM16_0", "proof_bytes_last": 94645, "proof_bytes_max": 94645, "arena
+ok   wasm32 generic mask 32768 (rc=0): {"rel":"R_TXM16_0","proof_bytes_last":94645,"proof_bytes_max":94645,"arena_peak"
+test rc=0
+== mask 16384
+C    {"fails": 3}
+C    {"rel": "R_TXM16", "proof_bytes_last": 0, "proof_bytes_max": 0, "arena_peak": 3287872640, "proofs_fnv": "811c9dc5"}
+C    {"rel": "R_TXM16", "prove_rc": 3, "at": ":0"}
+Rust {"fails": 3}
+Rust {"rel": "R_TXM16", "proof_bytes_last": 0, "proof_bytes_max": 0, "proofs_fnv": "811c9dc5"}
+Rust {"rel": "R_TXM16", "prove_rc": "Input"}
+== mask 32768
+C    {"fails": 0}
+C    {"rel": "R_TXM16_0", "proof_bytes_last": 94651, "proof_bytes_max": 94651, "arena_peak": 1775489744, "proofs_fnv": "d86946b3"}
+Rust {"fails": 0}
+Rust {"rel": "R_TXM16_0", "proof_bytes_last": 94651, "proof_bytes_max": 94651, "proofs_fnv": "d86946b3"}

@@ -75,8 +75,8 @@ native() {
     $B/native/hooks/pqz_rel.o $B/native/hooks/pqz_sv.o $B/native/pqz_lazer.o $B/native/pqz_ntt.o $B/native/pqz_arena.o
 }
 
-# wasm32: freestanding (no libc, no compiler-rt; src/pqz_wasm_rt.c), 8 MiB stack below the data, arena from
-# __heap_base (test/run_wasm.mjs grows the memory)
+# wasm32: freestanding (no libc, no compiler-rt; src/pqz_wasm_rt.c), 8 MiB stack below the data (OVERSIZE=1: 16 MiB,
+# R_TXM16's frames), arena from __heap_base (test/run_wasm.mjs grows the memory)
 wasm() {
   lazer_h
   mkdir -p $B/wasm
@@ -94,7 +94,9 @@ wasm() {
   for e in step_init step_prove step_len step_verify step_verify_bad step_hash step_arena_peak step_peak_reset step_set_fast step_nrel __heap_base; do
     ex="$ex --export=$e"
   done
-  ${WASM_LD:-wasm-ld-18} --no-entry $ex -z stack-size=8388608 --stack-first --max-memory=4294967296 \
+  stack=8388608
+  [ "${OVERSIZE:-0}" = 1 ] && stack=16777216
+  ${WASM_LD:-wasm-ld-18} --no-entry $ex -z stack-size=$stack --stack-first --max-memory=4294967296 \
     -o $B/wasm/pqz.wasm $objs $B/wasm/pqz_bench.o
 }
 

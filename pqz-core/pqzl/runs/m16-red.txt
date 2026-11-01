@@ -1,0 +1,40 @@
+=== without: the 16 MiB native stack
+FAIL native generic mask 16384 (rc=139): 
+FAIL native fast mask 16384 (rc=139): 
+ok   wasm32 generic mask 16384 (rc=1): {"rel":"R_TXM16","proof_bytes_last":0,"proof_bytes_max":0,"arena_peak":
+FAIL native generic mask 32768 (rc=139): 
+FAIL native fast mask 32768 (rc=139): 
+ok   wasm32 generic mask 32768 (rc=0): {"rel":"R_TXM16_0","proof_bytes_last":94645,"proof_bytes_max":94645,"ar
+test rc=1
+=== without: the empty-proof guard in verify_bad
+FAIL native generic mask 16384 (rc=136): 
+FAIL native fast mask 16384 (rc=136): 
+FAIL wasm32 generic mask 16384 (rc=1): RuntimeError: remainder by zero
+ok   native generic mask 32768 (rc=0): {"rel": "R_TXM16_0", "proof_bytes_last": 94645, "proof_bytes_max": 9464
+ok   native fast mask 32768 (rc=0): {"rel": "R_TXM16_0", "proof_bytes_last": 94645, "proof_bytes_max": 94645, 
+ok   wasm32 generic mask 32768 (rc=0): {"rel":"R_TXM16_0","proof_bytes_last":94645,"proof_bytes_max":94645,"ar
+test rc=1
+=== without: the 16 MiB wasm32 stack
+ok   native generic mask 16384 (rc=1): {"rel": "R_TXM16", "proof_bytes_last": 0, "proof_bytes_max": 0, "arena_
+ok   native fast mask 16384 (rc=1): {"rel": "R_TXM16", "proof_bytes_last": 0, "proof_bytes_max": 0, "arena_pea
+FAIL wasm32 generic mask 16384 (rc=1): RuntimeError: memory access out of bounds
+ok   native generic mask 32768 (rc=0): {"rel": "R_TXM16_0", "proof_bytes_last": 94645, "proof_bytes_max": 9464
+ok   native fast mask 32768 (rc=0): {"rel": "R_TXM16_0", "proof_bytes_last": 94645, "proof_bytes_max": 94645, 
+ok   wasm32 generic mask 32768 (rc=0): {"rel":"R_TXM16_0","proof_bytes_last":94645,"proof_bytes_max":94645,"ar
+test rc=1
+=== without: the 3,900 MiB arena (back to 3,072)
+FAIL native generic mask 16384 (rc=132): 
+FAIL native fast mask 16384 (rc=132): 
+ok   wasm32 generic mask 16384 (rc=1): {"rel":"R_TXM16","proof_bytes_last":0,"proof_bytes_max":0,"arena_peak":
+ok   native generic mask 32768 (rc=0): {"rel": "R_TXM16_0", "proof_bytes_last": 94645, "proof_bytes_max": 9464
+ok   native fast mask 32768 (rc=0): {"rel": "R_TXM16_0", "proof_bytes_last": 94645, "proof_bytes_max": 94645, 
+ok   wasm32 generic mask 32768 (rc=0): {"rel":"R_TXM16_0","proof_bytes_last":94645,"proof_bytes_max":94645,"ar
+test rc=1
+=== the fix in place
+ok   native generic mask 16384 (rc=1): {"rel": "R_TXM16", "proof_bytes_last": 0, "proof_bytes_max": 0, "arena_
+ok   native fast mask 16384 (rc=1): {"rel": "R_TXM16", "proof_bytes_last": 0, "proof_bytes_max": 0, "arena_pea
+ok   wasm32 generic mask 16384 (rc=1): {"rel":"R_TXM16","proof_bytes_last":0,"proof_bytes_max":0,"arena_peak":
+ok   native generic mask 32768 (rc=0): {"rel": "R_TXM16_0", "proof_bytes_last": 94645, "proof_bytes_max": 9464
+ok   native fast mask 32768 (rc=0): {"rel": "R_TXM16_0", "proof_bytes_last": 94645, "proof_bytes_max": 94645, 
+ok   wasm32 generic mask 32768 (rc=0): {"rel":"R_TXM16_0","proof_bytes_last":94645,"proof_bytes_max":94645,"ar
+test rc=0
