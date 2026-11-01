@@ -362,7 +362,9 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
 - **A.** The registration event (`UARegistered` on EVM, `UaRegistered` on Soroban, the equivalent elsewhere) carries
   `popHash = keccak256(pop)` (`keccak256("")` for an empty `pop`) instead of `pop`. `pop` stays in contract state, read with
   `popOf(ua)` / `registrationOf(ua)`; the record is rebuilt from the log plus `popOf`, or from state alone. Every other
-  argument (`keyData`, `attrs`, `pqzPop`) and the `checked` values stay in the event.
+  argument (`keyData`, `attrs`, `pqzPop`) and the `checked` values stay in the event. On Soroban (owner 2026-11-01) `key_data`
+  stays too unless it is over 15,360 B, when `UaRegistered` carries it empty, by its length alone: the id stays the topic and
+  `record_of` / `registration_of` return the bytes. Only a `frost-bn254` key reaches that, under the 16,384 B events limit.
 - **B.** In `UASig.members` (`MemberSig[]`, [CTR-UA-36](#CTR-UA-36); also the `pop` of `registerMsig` and the KEM / PQZ-key signatures of an `msig`), every `MemberSig.keyData`
   is empty: a native member has no key data, a registered member's key is read from its own record — `vk` at `keyPtr` for the
   stored kinds, the key data in the registration blob for the classical kinds — the key bytes only, never the member's

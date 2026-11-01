@@ -2380,3 +2380,101 @@ fn ua8_attest_digest_vector() {
     assert_eq!(hex(attest_digest(&env, &c, "register", args.clone())), "10c27d0f11b12ccc54ceeff725eea285795a0ea2d18bb5320b95c1c9e6e95b92");
     assert_eq!(hex(attest_digest(&env, &c, "set_kem_key", args)), "2da85a452358a70d013d2dbe4fd4136bec2234b25380f7f222fcfff6c712aa53");
 }
+
+// ---------- B7c (owner 2026-11-01, CTR-UA-33.A on Soroban): `UaRegistered` carries `key_data` unless too large ----------
+
+/// `key_data` of the last `UaRegistered`, read from the event's own XDR.
+fn event_key_data_of(env: &Env) -> StdVec<u8> {
+    use soroban_sdk::xdr::{ContractEventBody, ScVal};
+    let all = env.events().all();
+    let e = all.events().iter().rev().find(|e| matches!(&e.body, ContractEventBody::V0(b) if format!("{:?}", b.topics.first()).contains("UaRegistered"))).expect("UaRegistered").clone();
+    let ContractEventBody::V0(b) = e.body;
+    let ScVal::Vec(Some(data)) = b.data else { panic!("not the event's vec") };
+    let ScVal::Map(Some(record)) = &data[0] else { panic!("not the record") };
+    let f = record.iter().find(|x| matches!(&x.key, ScVal::Symbol(k) if k.0.as_slice() == b"key_data")).unwrap();
+    let ScVal::Bytes(k) = &f.val else { panic!("key_data") };
+    k.to_vec()
+}
+
+/// A `frost-bn254` key of `t` of `n`, and its bytes put together here, not by the contract.
+fn frost_bn254(env: &Env, t: u32, n_: u32) -> (FrostKey, StdVec<u8>) {
+    let point = |x: u8| vec![x; 64];
+    let mut kd = point(0x31);
+    kd.extend_from_slice(&(t as u16).to_be_bytes());
+    kd.extend_from_slice(&(n_ as u16).to_be_bytes());
+    let mut members = SVec::new(env);
+    for i in 0..n_ {
+        let mut commitments = SVec::new(env);
+        for c in 0..t {
+            commitments.push_back(b(env, &point(0x40 + c as u8)));
+            kd.extend(point(0x40 + c as u8));
+        }
+        kd.extend(point(0x60 + i as u8));
+        kd.extend([0x70 + i as u8; 32]);
+        members.push_back(FrostMember { commitments, r: b(env, &point(0x60 + i as u8)), z: n(env, [0x70 + i as u8; 32]) });
+    }
+    (FrostKey { group_key: b(env, &point(0x31)), threshold: t, members }, kd)
+}
+
+/// The rule, at its edge. No real key has exactly this length, a FROST key's lengths being discrete, so the edge is here and
+/// `ua8_event_frost_sizes` holds the nearest real lengths on each side.
+#[test]
+fn ua8_event_key_data_limit() {
+    let env = test::new_env();
+    let at = b(&env, &vec![7; crate::EVENT_KEY_DATA_MAX as usize]);
+    assert_eq!(crate::event_key_data(&env, &at), at, "exactly the constant is in the event");
+    let over = b(&env, &vec![7; crate::EVENT_KEY_DATA_MAX as usize + 1]);
+    assert!(crate::event_key_data(&env, &over).is_empty(), "one byte more is not");
+    assert!(crate::event_key_data(&env, &Bytes::new(&env)).is_empty());
+    assert_eq!(crate::EVENT_KEY_DATA_MAX, 15_360);
+}
+
+/// Below the limit the event is EVM's `keyData`, on every entry: the vector's bytes, not the ones given.
+#[test]
+fn ua8_event_is_evm_key_data_below_the_limit() {
+    for row in chain_rows().iter().chain(offchain_rows().iter().filter(|r| r["name"] == "fndsa512")) {
+        let name = row["name"].as_str().unwrap();
+        let (env, c, by) = relayed();
+        let r = portable_row(&env, row);
+        members(&env, &c, r.kind);
+        r.on_by(&c, &by);
+        assert_eq!(event_key_data_of(&env), hx(&row["keyData"]), "{name}");
+    }
+    // the typed entries the rows do not reach
+    let (env, c, by) = relayed();
+    let r = portable(&env, "webauthn-p256");
+    let d = vecu8(&r.kd);
+    let key = WebAuthnKey { x: n(&env, d[..32].try_into().unwrap()), y: n(&env, d[32..64].try_into().unwrap()), rp_id_hash: n(&env, d[64..96].try_into().unwrap()) };
+    c.register_webauthn(&key, &r.attrs, &r.pop, &r.pqz_pop, &None);
+    assert_eq!(event_key_data_of(&env), d);
+    let mut member_keys = SVec::new(&env);
+    let mut kd = vec![1; 64];
+    kd.extend([0, 16]);
+    for i in 0..16u8 {
+        member_keys.push_back(b(&env, &[0x20 + i; 64]));
+        kd.extend([0x20 + i; 64]);
+    }
+    c.register_musig2(&0x0112, &MuSig2Key { agg_key: b(&env, &[1; 64]), member_keys }, &no_attrs(&env), &b(&env, &[1; 64]), &Bytes::new(&env), &by);
+    assert_eq!(event_key_data_of(&env), kd);
+}
+
+/// The nearest real lengths on each side of the limit, and threshold 1, which no chain admits. Emptied or not: the record is the
+/// input, byte for byte, and `ua` is the key's.
+#[test]
+fn ua8_event_frost_sizes() {
+    for (t, count, whole) in [(2, 2, true), (13, 16, true), (14, 15, true), (15, 15, false), (14, 16, false), (15, 16, false), (16, 16, false)] {
+        let (env, c, by) = relayed();
+        let (key, kd) = frost_bn254(&env, t, count);
+        let (attrs, pop, none) = (no_attrs(&env), b(&env, &[1; 64]), Bytes::new(&env));
+        let ua = c.register_frost(&0x0113, &key, &attrs, &pop, &none, &by);
+        let got = event_key_data_of(&env);
+        assert_eq!(got, if whole { kd.clone() } else { vec![] }, "{t} of {count}: {} B", kd.len());
+        assert_eq!(ua, digest::ua_of(&env, 0x0113, &b(&env, &kd)), "{t} of {count}: the id is the key's, emptied or not");
+        assert_eq!(c.ua_of_frost(&0x0113, &key), ua);
+        assert_eq!(vecu8(&c.record_of(&ua).unwrap().key_data), kd, "{t} of {count}");
+        assert_eq!(c.registration_of(&ua), Some((0x0113, b(&env, &kd), attrs, pop, none)), "{t} of {count}");
+    }
+    let (env, c, by) = relayed();
+    let (key, _) = frost_bn254(&env, 1, 2);
+    assert_eq!(err(c.try_register_frost(&0x0113, &key, &no_attrs(&env), &b(&env, &[1; 64]), &Bytes::new(&env), &by)), Error::KeyData, "threshold 1: EVM and ua-rs refuse it too");
+}

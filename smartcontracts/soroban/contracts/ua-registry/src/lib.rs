@@ -80,7 +80,8 @@ pub(crate) enum Key {
 }
 
 /// `Registration` with `pop` replaced by `pop_hash = keccak256(pop)` (owner ruling 2026-10-30 after T0: the full record
-/// overran the 16 384 B contract-events limit); `pop` stays in `Ua(ua)`.
+/// overran the 16 384 B contract-events limit); `pop` stays in `Ua(ua)`. `key_data` is EVM's, empty only when too large
+/// (`event_key_data`).
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RegisteredRecord {
@@ -449,6 +450,20 @@ fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, diges
     checked
 }
 
+/// CTR-UA-33.A on Soroban (owner 2026-11-01): the largest `key_data` `UaRegistered` carries. `register_frost`, the only entry that
+/// comes near, emits that one event, 892 B around `key_data`, return value included: 16,252 B of the 16,384 B events limit here.
+pub(crate) const EVENT_KEY_DATA_MAX: u32 = 15_360;
+
+/// `key_data` as `UaRegistered` carries it: whole, or empty when it is over `EVENT_KEY_DATA_MAX`, by its length alone. Empty says
+/// nothing about the key: `ua` is the topic, and `record_of` / `registration_of` return the bytes.
+pub(crate) fn event_key_data(env: &Env, d: &Bytes) -> Bytes {
+    if d.len() <= EVENT_KEY_DATA_MAX {
+        d.clone()
+    } else {
+        Bytes::new(env)
+    }
+}
+
 fn zero(env: &Env) -> BytesN<32> {
     BytesN::from_array(env, &[0; 32])
 }
@@ -707,7 +722,7 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
     let ledger = env.ledger().sequence();
     let record = RegisteredRecord {
         kind,
-        key_data: key_data.clone(),
+        key_data: event_key_data(env, &key_data),
         attrs: attrs.clone(),
         pop_hash: env.crypto().keccak256(&pop).into(),
         pop_checked: checked.clone(),

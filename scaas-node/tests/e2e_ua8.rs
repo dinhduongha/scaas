@@ -76,6 +76,7 @@ alloy::sol! {
     function pqzKeyOf(bytes32 ua) external view returns (address ptr, bytes32 pqzPopHash, bool proven);
     function pqzKeySigOf(bytes32 ua) external view returns (bytes);
     function pqzPopOf(bytes32 ua) external view returns (bytes);
+    event UARegistered(bytes32 indexed ua, uint16 indexed kind, bytes keyData, SolAttrs attrs, bytes32 popHash, bytes pqzPop, uint8 checkedPop, uint8 checkedPqzPop, uint8 checkedKem);
 }
 
 // ---------- values ----------
@@ -370,6 +371,19 @@ fn diagnostic_errors(r: &Value) -> Vec<String> {
         .collect()
 }
 
+/// `key_data` of the `UaRegistered` a landed transaction emitted, from its own event XDR.
+fn registered_key_data(r: &Value) -> Vec<u8> {
+    let events = r["events"]["contractEventsXdr"].as_array().into_iter().flatten().flat_map(|o| o.as_array().into_iter().flatten());
+    for x in events {
+        let e = stellar_xdr::ContractEvent::from_xdr_base64(x.as_str().unwrap(), Limits::none()).unwrap();
+        let stellar_xdr::ContractEventBody::V0(b) = &e.body;
+        if matches!(b.topics.first(), Some(ScVal::Symbol(s)) if s.0.as_slice() == b"UaRegistered") {
+            return by(field(&tuple(&b.data)[0], "key_data"));
+        }
+    }
+    panic!("no UaRegistered in {r}");
+}
+
 /// One line per landed transaction, on the network's limits; `FIT …` for the report's table.
 async fn fit(what: &str, hash: &str) {
     let r = await_tx(hash).await;
@@ -447,6 +461,21 @@ impl Node {
         tx
     }
 
+    /// The lane's sequence. `getLedgerEntries` has answered `could not query captive core` once in a whole run, on a read that is
+    /// not under test, so it gets a few tries here; the node's own lanes retry at their next step.
+    async fn seq(&self, lane: usize) -> u64 {
+        for _ in 0..4 {
+            match self.adapter.sequence(lane).await {
+                Ok(s) => return s,
+                Err(e) => {
+                    println!("RETRY sequence: {e:#}");
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                }
+            }
+        }
+        self.adapter.sequence(lane).await.unwrap()
+    }
+
     /// A transaction the node's checks do not see: `ua8_call_job`'s XDR, simulated as `build` does, sent if it simulates.
     /// `Err` is the refusal, at simulation or on chain.
     async fn raw_send(&self, what: &str, lane: usize, call: InvokeContractArgs, auth: Vec<SorobanAuthorizationEntry>) -> Result<String, String> {
@@ -457,7 +486,7 @@ impl Node {
         let mut data = SorobanTransactionData::from_xdr_base64(sim["transactionData"].as_str().unwrap(), Limits::none()).unwrap();
         data.resource_fee += data.resource_fee * 15 / 100;
         let t = tx(lane as u32, 0, 100 + data.resource_fee as u32, call, auth, TransactionExt::V1(data));
-        let seq = self.adapter.sequence(lane).await.unwrap();
+        let seq = self.seq(lane).await;
         let built = Built { job_id: 0, body: t.to_xdr(Limits::none()).unwrap(), valid_until: 0, meta: json!({}) };
         let signed = self.adapter.sign(built, lane, seq).await.unwrap();
         let size = signed.raw.len();
@@ -547,13 +576,14 @@ impl Evm {
         C::abi_decode_returns(&p.call(TransactionRequest::default().to(self.registry).input(c.abi_encode().into())).await.unwrap()).unwrap()
     }
 
-    /// A client's own transaction (chain A), its gas logged.
-    async fn send(&self, what: &str, data: Vec<u8>) {
+    /// A client's own transaction (chain A), its gas logged. The `keyData` of a `UARegistered` it logged, if any.
+    async fn send(&self, what: &str, data: Vec<u8>) -> Option<Vec<u8>> {
         let from: PrivateKeySigner = DEPLOYER_KEY.parse().unwrap();
         let p = ProviderBuilder::new().wallet(EthereumWallet::from(from)).connect_http(self.rpc.parse().unwrap());
         let r = p.send_transaction(TransactionRequest::default().to(self.registry).input(data.into())).await.unwrap().get_receipt().await.unwrap();
         assert!(r.status(), "{what}");
         println!("COPY evm {} {what}: gas_used {}", self.id, r.gas_used);
+        r.inner.logs().iter().find_map(|l| l.log_decode::<UARegistered>().ok()).map(|l| l.inner.data.keyData.to_vec())
     }
 
     /// ML-DSA-65's two `cacheExpandedKey` parts, which EVM verifies on (P6c).
@@ -767,7 +797,7 @@ async fn copy_registration(c: &Copy, name: &str, relayer: &Value) -> Rec {
         c.a.cache_key(name, &vector.key_data).await;
         c.b.cache_key(name, &vector.key_data).await;
     }
-    c.a.send(&format!("register {name}"), vector.calldata()).await;
+    let evm_key = c.a.send(&format!("register {name}"), vector.calldata()).await.expect("UARegistered");
     if !vector.pqz_pop.is_empty() {
         c.a.send(&format!("storePqzPop {name}"), storePqzPopCall { ua: ua.into(), pqzPop: vector.pqz_pop.clone().into() }.abi_encode()).await;
     }
@@ -775,7 +805,8 @@ async fn copy_registration(c: &Copy, name: &str, relayer: &Value) -> Rec {
     on_a.eq(&format!("{name}: EVM A against the vector"), &vector);
 
     let (f, args) = on_a.job_args(relayer);
-    c.s.mined(&format!("copy {f} {name}"), f, args).await;
+    let tx = c.s.mined(&format!("copy {f} {name}"), f, args).await;
+    same(&format!("{name}: Soroban's UaRegistered against EVM's UARegistered"), "key_data", &registered_key_data(&await_tx(&tx).await), &evm_key);
     let on_s = c.s.rec(&ua).await;
     on_s.eq(&format!("{name}: Soroban against EVM A"), &on_a);
 
@@ -983,13 +1014,6 @@ async fn e2e_ua8_simulation_auth_mode() {
     assert!(!back.is_empty() && same_entry, "an enforcing simulation answers the node's entry and nothing else");
     let changes = ok.get("stateChanges").and_then(|c| c.as_array()).map(|c| c.len());
     println!("P1 enforcing simulation, stateChanges: {changes:?} entries, of which with `after`: {:?}", ok.get("stateChanges").and_then(|c| c.as_array()).map(|c| c.iter().filter(|x| x["after"].is_string()).count()));
-
-    // `register_frost` at threshold 14: what the host itself says of the refusal
-    let point = |i: u8| h(&[0x40 + i; 64]);
-    let member = |i: u8| json!({"commitments": (0..14).map(|c| point(i + c)).collect::<Vec<_>>(), "r": point(i), "z": h(&[i; 32])});
-    let frost = json!({"kind": 0x0113, "key": {"group_key": point(99), "threshold": 14, "members": (0..16).map(member).collect::<Vec<_>>()},
-        "attrs": attrs_json(&no_attrs()), "pop": h(&[0x5a; 64]), "pqz_pop": "0x", "relayer": me});
-    assert!(!table_row(&n, "register_frost bn254 14 of 16", "register_frost", frost).await, "the events limit moved");
 
     // the node end to end. `Some(lane)`: the host refuses; `None`: the guards refuse
     let refused = |what: &str, r: (String, Value, Option<String>)| {
@@ -1201,6 +1225,84 @@ async fn e2e_ua8_network_fit() {
     }
 }
 
+/// A signed `ua_of` of padded key data, whose envelope `adapter` sends at exactly `target` bytes: the node's size is core's.
+async fn sized(n: &Node, target: usize) -> scaas_node::adapter::Signed {
+    let mut pad = 64;
+    loop {
+        let args = vec![ScVal::U32(MLDSA65 as u32), sc_bytes(&vec![7; pad])];
+        let call = InvokeContractArgs { contract_address: sc(&n.registry), function_name: sym("ua_of"), args: args.try_into().unwrap() };
+        let sim = simulate(0, call.clone(), vec![]).await;
+        assert!(sim.get("error").is_none(), "{}", sim["error"]);
+        let mut data = SorobanTransactionData::from_xdr_base64(sim["transactionData"].as_str().unwrap(), Limits::none()).unwrap();
+        data.resource_fee += data.resource_fee * 15 / 100;
+        let t = tx(0, 0, 100 + data.resource_fee as u32, call, vec![], TransactionExt::V1(data));
+        let seq = n.seq(0).await;
+        let built = Built { job_id: 0, body: t.to_xdr(Limits::none()).unwrap(), valid_until: 0, meta: json!({}) };
+        let signed = n.adapter.sign(built, 0, seq).await.unwrap();
+        if signed.raw.len() == target {
+            return signed;
+        }
+        pad = (pad as i64 + target as i64 - signed.raw.len() as i64) as usize;
+    }
+}
+
+/// The real host's reading of the limit the node compares against, plain and fee-bumped. And the question left to the owner: what
+/// simulation knows of a write over the entry limit.
+#[tokio::test]
+#[ignore]
+async fn e2e_ua8_tx_size_limit() {
+    let s = fresh_node().await;
+    let limit = 132_096;
+    // a fee bump wraps the same envelope in 128 B more, which the limit does not count
+    for (fee_bump, wrap) in [(false, 0), (true, 128)] {
+        let n = Node::with_fee_bump(s.registry.clone(), fee_bump).await;
+        let at = sized(&n, limit + wrap).await;
+        let sent = n.adapter.submit(&at).await;
+        let r = await_tx(&at.tx_id).await;
+        println!("EDGE {} B sent, {limit} B counted, fee_bump {fee_bump}: sent {:?}, status {}", at.raw.len(), sent.is_ok(), r["status"]);
+        assert!(sent.is_ok() && r["status"] == "SUCCESS", "{sent:?} {r}");
+        let over = sized(&n, limit + wrap + 4).await;
+        let sent = n.adapter.submit(&over).await;
+        println!("EDGE {} B sent, {} B counted, fee_bump {fee_bump}: {sent:?}", over.raw.len(), limit + 4);
+        assert!(sent.is_err(), "{limit} + 4 B counted must be refused");
+    }
+
+    // through the node: a job whose transaction passes simulation and is over `tx_max_size_bytes`, a proof no entry could hold
+    let big = vec![9; 140_000];
+    let f = row("registrations", "fndsa512");
+    let (mut attrs, _, _) = set_attrs(SETS[0]);
+    attrs.pqz_pop_hash = scaas_ua::keccak256(&big);
+    let rec = Rec { kind: FNDSA512, key_data: vec![0x77; 897], attrs, pop: hx(&f["pop"]), pqz_pop: vec![] };
+    let (fun, args) = rec.job_args(&json!(g(&key(0))));
+    assert!(table_row(&s, "register fndsa512 for the oversized job", fun, args).await);
+    let job = call_job(&s.registry, "store_pqz_pop", json!({"ua": h(&rec.ua()), "pqz_pop": h(&big)}));
+    let (state, last, tx) = s.run(0, job).await;
+    println!("EDGE node, transaction over tx_max_size_bytes: job {state}, signed {}, reason {}", tx.is_some(), last["error"]);
+    assert_eq!((state.as_str(), tx.is_none()), ("dead", true), "refused at build: {last}");
+    assert!(last["error"].as_str().unwrap_or_default().contains("tx_max_size_bytes"), "{last}");
+
+    // over the 65,536 B entry limit: one write, no signature to make, so what simulation answers is all that is measured
+    let (lane, registry, me) = (sc(&g(&key(0))), sc(&s.registry), json!(g(&key(0))));
+    let proof = vec![7; 70_000];
+    let (attrs, _, _) = set_attrs(SETS[0]);
+    let f = row("registrations", "fndsa512");
+    let attrs = UAAttrs { pqz_pop_hash: scaas_ua::keccak256(&proof), ..attrs };
+    let rec = Rec { kind: FNDSA512, key_data: hx(&f["keyData"]), attrs, pop: hx(&f["pop"]), pqz_pop: vec![] };
+    let (fun, args) = rec.job_args(&me);
+    let (call, auth) = ua8_call_job(&network(), &call_job(&s.registry, fun, args)["op"], &lane, &registry, true).unwrap();
+    s.raw_send("register fndsa512 for the entry limit", 0, call, auth).await.unwrap();
+    let job = call_job(&s.registry, "store_pqz_pop", json!({"ua": h(&rec.ua()), "pqz_pop": h(&proof)}));
+    let (call, auth) = ua8_call_job(&network(), &job["op"], &lane, &registry, false).unwrap();
+    let sim = simulate(0, call, auth).await;
+    let data = SorobanTransactionData::from_xdr_base64(sim["transactionData"].as_str().unwrap_or_default(), Limits::none());
+    let changes: Vec<usize> = sim["stateChanges"].as_array().into_iter().flatten()
+        .filter_map(|c| c["after"].as_str()).map(|x| base64::Engine::decode(&base64::engine::general_purpose::STANDARD, x).unwrap().len()).collect();
+    println!("ENTRY simulation of a 70,000 B write: error {:?}, write_bytes {:?}, stateChanges after {changes:?} B, fields {:?}",
+             sim.get("error").is_some(), data.as_ref().map(|d| d.resources.write_bytes).ok(), sim.as_object().map(|o| o.keys().cloned().collect::<Vec<_>>()));
+    let (state, last, tx) = s.run(0, job).await;
+    println!("ENTRY the same job through the node: job {state}, signed {}, reason {}", tx.is_some(), last["error"]);
+}
+
 // ---------- B7b: relayer mode, before and after the argument hash ----------
 
 /// One row of the table: every relayer-mode write as `raw_send` (junk signatures of the kind's length, which the chain stores
@@ -1295,12 +1397,11 @@ async fn e2e_ua8_relayer_table() {
     let point = |i: u8| h(&[0x40 + i; 64]);
     table_row(&n, "register_musig2 bn254 16 keys", "register_musig2", json!({"kind": 0x0112, "key": {"agg_key": point(0), "member_keys": (1..17).map(point).collect::<Vec<_>>()},
         "attrs": attrs_json(&no_attrs()), "pop": h(&[0x5a; 64]), "pqz_pop": "0x", "relayer": me})).await;
-    // `UaRegistered` carries `key_data`, so the 16,384 B events limit is this kind's edge, and no relayer mode moves it
     for t in [12u8, 13, 14, 15, 16] {
         let member = |i: u8| json!({"commitments": (0..t).map(|c| point(i + c)).collect::<Vec<_>>(), "r": point(i), "z": h(&[i; 32])});
         let ok = table_row(&n, &format!("register_frost bn254 {t} of 16"), "register_frost", json!({"kind": 0x0113, "key": {"group_key": point(99 + t), "threshold": t, "members": (0..16).map(member).collect::<Vec<_>>()},
             "attrs": attrs_json(&no_attrs()), "pop": h(&[0x5a; 64]), "pqz_pop": "0x", "relayer": me})).await;
-        assert_eq!(ok, t <= 13, "register_frost {t} of 16: the limit moved");
+        assert!(ok, "register_frost {t} of 16");
     }
 
     // `msig` slots per set per kind: `register` with attributes, then the two later writes
@@ -1533,6 +1634,60 @@ async fn e2e_ua8_attestation_binds() {
     let mut o = base.clone();
     flip_field(&mut o["args"]["pop"][0]["sig"]);
     binds_on_host(&n, "register_msig pop.sig", &base, &o).await;
+}
+
+/// Owner 2026-11-01, CTR-UA-33.A on Soroban: every `frost-bn254` shape registers on the real host. A key over 15,360 B leaves the
+/// event and nothing else: its `ua` is the key's, `registration_of` returns it byte for byte. Threshold 1 exists on no chain.
+#[tokio::test]
+#[ignore]
+async fn e2e_ua8_frost_every_size() {
+    let n = fresh_node().await;
+    let me = json!(g(&key(0)));
+    let (lane, registry) = (sc(&g(&key(0))), sc(&n.registry));
+    let (mut carried, mut emptied) = (0, vec![]);
+    let frost = |t: u8, count: u8| {
+        let point = |x: u8| vec![x; 64];
+        let group = [vec![t; 32], vec![count; 32]].concat();
+        let mut kd = [group.clone(), vec![0, t, 0, count]].concat();
+        let members: Vec<Value> = (0..count).map(|i| {
+            let commitments: Vec<Vec<u8>> = (0..t).map(|c| point(0x40 + c)).collect();
+            let (r, z) = (point(0x60 + i), vec![0x80 + i; 32]);
+            kd.extend(commitments.concat());
+            kd.extend(&r);
+            kd.extend(&z);
+            json!({"commitments": commitments.iter().map(|c| h(c)).collect::<Vec<_>>(), "r": h(&r), "z": h(&z)})
+        }).collect();
+        (json!({"kind": 0x0113, "key": {"group_key": h(&group), "threshold": t, "members": members}, "attrs": attrs_json(&no_attrs()), "pop": h(&[0x5a; 64]), "pqz_pop": "0x", "relayer": me}), kd)
+    };
+    for t in 2..=16u8 {
+        for count in t..=16u8 {
+            let (args, kd) = frost(t, count);
+            let name = format!("register_frost bn254 {t} of {count}, key_data {} B", kd.len());
+            let (call, auth) = ua8_call_job(&network(), &call_job(&n.registry, "register_frost", args)["op"], &lane, &registry, true).unwrap();
+            let tx = n.raw_send(&name, 0, call, auth).await.unwrap_or_else(|e| panic!("{name}: {e}"));
+            let got = registered_key_data(&await_tx(&tx).await);
+            let rec = Rec { kind: 0x0113, key_data: kd.clone(), attrs: no_attrs(), pop: vec![0x5a; 64], pqz_pop: vec![] };
+            n.rec(&rec.ua()).await.eq(&name, &rec);
+            if kd.len() <= 15_360 {
+                same(&name, "the event's key_data", &got, &kd);
+                carried += 1;
+            } else {
+                assert!(got.is_empty(), "{name}: {} B in the event", got.len());
+                emptied.push(format!("{t} of {count}"));
+                println!("EVENT {name}: emptied, the record byte-equal");
+            }
+        }
+    }
+    println!("EVENT carried {carried}, emptied {emptied:?}");
+    assert_eq!(emptied, ["14 of 16", "15 of 15", "15 of 16", "16 of 16"]);
+    assert_eq!(carried, 116);
+    for (t, count) in [(1, 1), (1, 2), (1, 16)] {
+        let (args, _) = frost(t, count);
+        let (call, auth) = ua8_call_job(&network(), &call_job(&n.registry, "register_frost", args)["op"], &lane, &registry, true).unwrap();
+        let r = simulate(0, call, auth).await;
+        println!("EVENT threshold 1 of {count}: {}", sim_answer(&r));
+        assert!(r["error"].as_str().unwrap_or_default().contains("#2"), "KeyData: EVM and ua-rs refuse it too");
+    }
 }
 
 // ---------- P5: a relayer-checked slot, signed, through `check_*` ----------

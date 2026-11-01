@@ -2590,6 +2590,10 @@ mod tests {
         assert_eq!(e["lane"], json!(format!("0x{}", "01".repeat(32))));
         let e = decode_event(&ev_of(CONTRACT, vec![sym("UaRegistered"), byt(&UA), ScVal::U32(0x0102)], vecv(vec![ScVal::Void, ScVal::Void]))).unwrap();
         assert_eq!((e["event"].as_str(), e["ua"].as_str(), e["kind"].as_u64()), (Some("UaRegistered"), Some(ua.as_str()), Some(0x0102)));
+        // CTR-UA-33.A on Soroban: `key_data` empty when too large is the same row, the id being the topic
+        let record = |d: &[u8]| vecv(vec![ScVal::Map(Some(ScMap(vec![ScMapEntry { key: sym("key_data"), val: byt(d) }].try_into().unwrap()))), ScVal::Void]);
+        let [whole, emptied] = [record(&[7; 64]), record(&[])].map(|d| decode_event(&ev_of(CONTRACT, vec![sym("UaRegistered"), byt(&UA), ScVal::U32(0x0113)], d)).unwrap());
+        assert_eq!(whole, emptied);
         // malformed holders and negative amounts decode to nothing
         assert!(decode_event(&ev_of(CONTRACT, vec![sym("UaTransfer"), vecv(vec![sym("Ua"), byt(&[1; 31])]), h_addr(FROM)], i128v(9))).is_none());
         assert!(decode_event(&ev_of(CONTRACT, vec![sym("UaTransfer"), vecv(vec![sym("Nope"), addr(FROM)]), h_addr(FROM)], i128v(9))).is_none());
