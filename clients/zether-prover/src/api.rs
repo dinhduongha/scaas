@@ -704,6 +704,11 @@ pub fn call(cmd: &str, input: &str) -> R<String> {
             json!({"binding": hx(&envelope::envelope_binding(chain, &uid, &token, &m)),
                    "digest": hx(&envelope::digest(chain, &uid, &token, &m))})
         }
+        // typed-signing C7: the typed digest of a Zether owner op (roll-over, roll-over mode and their UA-ledger twins); `ownerAuth` signs it
+        "ownerDigest" => {
+            let op = get(&v, "op")?.as_str().ok_or("`op` must be a string")?;
+            envelope::owner_digest(op, num(&v, "chainId")?, &fixed::<32>(&v, "chainUid")?, &fixed::<20>(&v, "token")?, get(&v, "message")?)?
+        }
         _ => match get(&v, "curve")?.as_str() {
             #[cfg(feature = "bn254")]
             Some("bn254") => by_curve::<Bn254>(cmd, &v, &mut OsRng)?,

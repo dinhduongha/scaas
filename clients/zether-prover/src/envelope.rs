@@ -87,6 +87,56 @@ pub fn digest(chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], m: &MetaTx)
     keccak256(&b)
 }
 
+/// The signed Zether owner ops (typed-signing C7), each `(typeString, [(field, kind)])`; kind `b` bytes32, `u` uint / address as one word.
+const OWNER_OPS: [(&str, &[(&str, char)]); 4] = [
+    ("ZetherRollOver", &[("ua", 'b'), ("accSeq", 'u'), ("expectedPendingSeq", 'u'), ("validUntilBlock", 'u')]),
+    ("ZetherSetRollOverMode", &[("ua", 'b'), ("mode", 'u'), ("modeNonce", 'u'), ("validUntilBlock", 'u')]),
+    ("UARollOverSigned", &[("from", 'b'), ("ua", 'b'), ("expectedPendingSeq", 'u'), ("validUntilBlock", 'u'), ("batch", 'u'),
+        ("nonce", 'u'), ("validUntil", 'u'), ("mode", 'u'), ("relayer", 'a'), ("fee", 'u'), ("feeRecipient", 'a')]),
+    ("UASetRollOverMode", &[("from", 'b'), ("ua", 'b'), ("rollOverMode", 'u'), ("validUntilBlock", 'u'), ("batch", 'u'),
+        ("nonce", 'u'), ("validUntil", 'u'), ("mode", 'u'), ("relayer", 'a'), ("fee", 'u'), ("feeRecipient", 'a')]),
+];
+const OWNER_TYPES: [&str; 4] = [
+    "ZetherRollOver(bytes32 ua,uint64 accSeq,uint64 expectedPendingSeq,uint64 validUntilBlock)",
+    "ZetherSetRollOverMode(bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock)",
+    "UARollOverSigned(bytes32 from,bytes32 ua,uint64 expectedPendingSeq,uint64 validUntilBlock,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+    "UASetRollOverMode(bytes32 from,bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+];
+
+/// `(typehash, structHash)` of an owner op: `fields` are the words of the struct in order (see [`OWNER_OPS`]).
+pub fn owner_struct_hash(typ: &str, words: &[[u8; 32]]) -> ([u8; 32], [u8; 32]) {
+    let th = keccak256(typ.as_bytes());
+    (th, keccak256(&[th.to_vec(), words.concat()].concat()))
+}
+
+/// The typed digest of a Zether owner op in the token's domain (`ZetherRollOver`, `ZetherSetRollOverMode`, their UA-ledger
+/// relayed twins `UARollOverSigned`, `UASetRollOverMode`): what the Zether key's Schnorr signs under `zether-owner`.
+pub fn owner_digest(op: &str, chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], message: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let i = OWNER_OPS.iter().position(|o| o.0 == op).ok_or_else(|| format!("unknown owner op `{op}`"))?;
+    let hx = |b: &[u8]| format!("0x{}", hex::encode(b));
+    let mut words = vec![];
+    for (name, kind) in OWNER_OPS[i].1 {
+        let f = message.get(*name).filter(|x| !x.is_null()).ok_or_else(|| format!("missing field `{name}`"))?;
+        words.push(match (kind, f) {
+            ('u', serde_json::Value::Number(n)) => abi::u256(n.as_u64().ok_or_else(|| format!("`{name}` must be a u64"))?),
+            ('u', serde_json::Value::String(s)) => abi::u256(s.parse().map_err(|_| format!("`{name}` must be a decimal u64"))?),
+            ('b' | 'a', serde_json::Value::String(s)) => {
+                let b = hex::decode(s.strip_prefix("0x").unwrap_or(s)).map_err(|_| format!("`{name}` is not hex"))?;
+                match (kind, b.len()) {
+                    ('b', 32) => b.try_into().unwrap(),
+                    ('a', 20) => abi::addr(&b.try_into().unwrap()),
+                    _ => return Err(format!("`{name}` has the wrong length")),
+                }
+            }
+            _ => return Err(format!("`{name}` has the wrong type")),
+        });
+    }
+    let (th, sh) = owner_struct_hash(OWNER_TYPES[i], &words);
+    let ds = domain_separator(chain_id, chain_uid, token);
+    let digest = keccak256(&[&[0x19, 0x01][..], &ds, &sh].concat());
+    Ok(serde_json::json!({"typehash": hx(&th), "structHash": hx(&sh), "domainSeparator": hx(&ds), "digest": hx(&digest)}))
+}
+
 /// `envelopeBinding` (CTR-ZTH-06) — every envelope field except `data`, plus `chainUid`.
 pub fn envelope_binding(chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], m: &MetaTx) -> [u8; 32] {
     let (r, f) = m.canon();

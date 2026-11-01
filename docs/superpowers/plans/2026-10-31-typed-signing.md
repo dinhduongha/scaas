@@ -834,6 +834,8 @@ a chain-bound digest (X0 lists them by grep of `metatx-cancel`, `UAMetaTransacti
 - [ ] Steps: failing vector tests over `typed_ops.json` / `metatx3.json` / `uatrade_kat.json` → implement → package
   steps PASS → commit `typed-signing C7: reproducers build the typed op digests`.
 
+- **C7 result (2026-11-01):** the only packages that build a typed EVM op digest are `clientkeys` (C1, C6) and `zether-prover`; the `ua-*` packages build portable records, registry arguments and `relay_ref` (all unchanged, tests green: ua-rs, ua-py, ua-go). `zether-prover` gets `ownerDigest` (ZetherRollOver, ZetherSetRollOverMode, UARollOverSigned, UASetRollOverMode), `tests/typed_ops.rs` equal to the four rows of `typed_ops.json`; RED in `clients/zether-prover/runs/2026-11-01-typed-signing-c7-red.txt`, mutant (two fields swapped) killed. No PQZ client builds `PqzAuth` here. Decisions: the C7 entry of 2026-11-01.
+
 ### Task C8: scripts and deploy
 
 **Files:** `smartcontracts/evm/script/*` (Deploy scripts that call removed entries, `ZetherE2E.s.sol`, `pqz/e2e.py`
