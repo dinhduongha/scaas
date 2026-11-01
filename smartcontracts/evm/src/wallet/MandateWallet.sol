@@ -20,7 +20,8 @@ import {FeeMode} from "../common/FeePolicy.sol";
 ///         `revoke(token)` and `execute`. `mtxPayUnderMandate`, `mtxRevoke` and `mtxExecuteAsOwner` are the named builders of that
 ///         `MetaTransaction` and derive their lanes. Each signed action also has a named typed entry (TS-D14) over its own struct:
 ///         `mtxSetMandate`, `mtxSetPayee`, `mtxRevokeMandate`, `mtxExecute`; for the delegate `mtxPayUnderMandate` and
-///         `mtxDelegateRevoke`, whose `batch` is the signer's, so `refUsed` and `epoch` are what stop a replay on another lane.
+///         `mtxDelegateRevoke`, whose `batch` is the signer's: a signature cannot move lanes, `batch` is signed, and `refUsed` and
+///         `epoch` stop a new signature by the delegate for the same payment or revoke.
 ///         ERC-1271 answers for the owner (ECDSA), so the owner also pays by hand with `from = wallet`.
 contract MandateWallet is WalletExecute, IERC1271 {
     struct Mandate {

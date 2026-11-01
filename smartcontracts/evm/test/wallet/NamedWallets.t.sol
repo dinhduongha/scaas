@@ -5,7 +5,7 @@ import {Hashes} from "@openzeppelin/contracts/utils/cryptography/Hashes.sol";
 import {UID_} from "../v2/helpers/V2Fixture.sol";
 import {MandateFixture} from "./MandateWallet.t.sol";
 import {WebAuthnSoft} from "../account/SmartKeyAccount.t.sol";
-import {VM, a, n, h, eJson, walletDigest} from "../metatx/NamedEntry.t.sol";
+import {VM, a, n, h, walletDigest} from "../metatx/NamedEntry.t.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
@@ -38,8 +38,11 @@ function env(address from, uint256 nonce, uint256 validUntil) pure returns (Meta
     return MetaTxLib.Envelope(from, LANE, nonce, validUntil, 0, address(0), 0, address(0));
 }
 
+/// `E` as signed: an unbound relayer is the canonical zero.
 function tail(MetaTxLib.Envelope memory e) pure returns (string memory) {
-    return eJson(e.batch, e.nonce, e.validUntil, e.mode, e.fee);
+    address r = e.mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 ? e.relayer : address(0);
+    return string.concat('"batch":', n(e.batch), ',"nonce":', n(e.nonce), ',"validUntil":', n(e.validUntil), ',"mode":', n(e.mode),
+        ',"relayer":', a(r), ',"fee":', n(e.fee), ',"feeRecipient":', a(address(0)));
 }
 
 function setPayeeDigest(address w, MetaTxLib.Envelope memory e, address token, address payee, bool allowed) view returns (bytes32) {
@@ -199,8 +202,8 @@ contract NamedMandateEntriesTest is MandateFixture {
         assertEq(d, delegate, "no old revoke took it");
     }
 
-    /// The named entries' lanes float: the signer picks `batch`, so a used signature only burns its own lane; `refUsed` and
-    /// `epoch` are what stop the same payment or revoke on another lane, or through the kept generic path.
+    /// The named entries' lanes float: the signer picks `batch`, and a signature cannot move lanes since `batch` is signed.
+    /// `refUsed` and `epoch` stop a new signature by the delegate for the same payment or revoke, here or on the generic path.
     function test_mandateLanesFloatRefAndEpochGuard() public {
         MetaTxLib.Envelope memory e = _env(delegate, 0);
         w.mtxPayUnderMandate(e, address(t), npp, 10, "once", 1, _paySig(e, 10, "once", 1));
@@ -261,6 +264,45 @@ contract NamedMandateEntriesTest is MandateFixture {
         vm.expectRevert(abi.encodeWithSelector(MandateWallet.CallFailed.selector, abi.encodeWithSelector(IMetaTx.Reentrancy.selector)));
         w.mtxExecute(e, address(w), 0, inner, sig);
         assertEq(w.mtxNonce(owner, LANE), 0, "a failed op burns no nonce");
+    }
+
+    /// Step 7: the event the node's indexer decodes, carrying the digest the wallet signed.
+    function test_executeTypedEmitsExecuted() public {
+        MetaTxLib.Envelope memory e = _env(owner, 0);
+        bytes32 d = executeDigest(address(w), e, stranger, 0, "");
+        bytes memory sig = _sig(OWNER_PK, d);
+        vm.expectEmit(true, true, true, true, address(w));
+        emit IMetaTx.MetaTransactionExecuted(owner, relayer, LANE, 0, d, relayer, 0);
+        vm.prank(relayer);
+        w.mtxExecute(e, stranger, 0, "", sig);
+    }
+
+    /// The domain binds the wallet and the chain; a bound relayer and `validUntil` hold on `mtxExecute`.
+    function test_executeTypedReplayAndEnvelope() public {
+        MandateWallet other = new MandateWallet(owner, UID_);
+        MetaTxLib.Envelope memory e = _env(owner, 0);
+        bytes memory sig = _sig(OWNER_PK, executeDigest(address(w), e, stranger, 0, ""));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        other.mtxExecute(e, stranger, 0, "", sig);
+        vm.chainId(7623);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        w.mtxExecute(e, stranger, 0, "", sig);
+        vm.chainId(7622);
+
+        e.mode = MetaTxLib.MODE_RESTRICT_RELAYER;
+        e.relayer = relayer;
+        sig = _sig(OWNER_PK, executeDigest(address(w), e, stranger, 0, ""));
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnauthorizedRelayer.selector, relayer, stranger));
+        w.mtxExecute(e, stranger, 0, "", sig);
+        vm.warp(e.validUntil + 1);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxExpired.selector, e.validUntil, e.validUntil + 1));
+        w.mtxExecute(e, stranger, 0, "", sig);
+        vm.warp(e.validUntil);
+        vm.prank(relayer);
+        w.mtxExecute(e, stranger, 0, "", sig);
+        assertEq(w.mtxNonce(owner, LANE), 1);
     }
 
     /// The same `(from, batch)` lane as the kept generic path; neither signature runs on the other entry.
@@ -427,13 +469,17 @@ contract NamedAccountTest is WebAuthnSoft {
         return env(address(acct), nonce, block.timestamp + 300);
     }
 
-    function _keyJson(SubjectKey memory k) internal pure returns (string memory) {
-        return string.concat('"kind":', n(uint8(k.kind)), ',"x":', h(k.x), ',"y":', h(k.y), ',"rpIdHash":', h(k.rpIdHash),
+    function _keyJson(uint8 kind, SubjectKey memory k) internal pure returns (string memory) {
+        return string.concat('"kind":', n(kind), ',"x":', h(k.x), ',"y":', h(k.y), ',"rpIdHash":', h(k.rpIdHash),
             ',"originHash":', h(k.originHash));
     }
 
+    function _addKeyDigest(MetaTxLib.Envelope memory e, uint8 kind, SubjectKey memory k) internal view returns (bytes32) {
+        return walletDigest(address(acct), "AddKey", ADD_KEY, string.concat('"from":', a(e.from), ",", _keyJson(kind, k), ",", tail(e)));
+    }
+
     function _addKeyDigest(MetaTxLib.Envelope memory e, SubjectKey memory k) internal view returns (bytes32) {
-        return walletDigest(address(acct), "AddKey", ADD_KEY, string.concat('"from":', a(e.from), ",", _keyJson(k), ",", tail(e)));
+        return _addKeyDigest(e, uint8(k.kind), k);
     }
 
     function _removeKeyDigest(MetaTxLib.Envelope memory e, uint256 index) internal view returns (bytes32) {
@@ -442,7 +488,7 @@ contract NamedAccountTest is WebAuthnSoft {
 
     function _rotateKeyDigest(MetaTxLib.Envelope memory e, uint256 index, SubjectKey memory k) internal view returns (bytes32) {
         return walletDigest(address(acct), "RotateKey", ROTATE_KEY,
-            string.concat('"from":', a(e.from), ',"index":', n(index), ",", _keyJson(k), ",", tail(e)));
+            string.concat('"from":', a(e.from), ',"index":', n(index), ",", _keyJson(uint8(k.kind), k), ",", tail(e)));
     }
 
     function _setGuardianDigest(MetaTxLib.Envelope memory e, address g) internal view returns (bytes32) {
@@ -576,18 +622,18 @@ contract NamedAccountTest is WebAuthnSoft {
         _addKey(e0, k, AccountSig(0, p1, sig));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // no proof: the digest itself, which nobody signed
         _addKey(e0, k, AccountSig(0, new bytes32[](0), sig));
+
+        // the same fields as a generic `MetaTransaction`: another digest, so no leaf of this root
+        MetaTxLib.MetaTransaction memory m;
+        (m.from, m.data, m.batch, m.validUntil) = (address(acct), abi.encodeCall(SmartKeyAccount.addKey, (k)), LANE, e0.validUntil);
+        bytes memory blob = abi.encode(uint256(0), p0, sig);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        acct.mtxExecute(m, blob);
+
         _addKey(e0, k, AccountSig(0, p0, sig));
         acct.mtxSetGuardian(e1, address(0xA), AccountSig(0, p1, sig));
         assertEq(acct.keyCount(), 2);
         assertEq(acct.guardian(), address(0xA));
-
-        // a leaf of the generic form is a different digest: the same root does not sign the op through `mtxExecute`
-        MetaTxLib.MetaTransaction memory m;
-        (m.from, m.data, m.batch, m.nonce, m.validUntil) = (address(acct), abi.encodeCall(SmartKeyAccount.setGuardian, (address(0xB))),
-            LANE, 2, e1.validUntil);
-        bytes memory blob = abi.encode(uint256(0), p1, sig);
-        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        acct.mtxExecute(m, blob);
     }
 
     /// A passkey signs the typed digest as the WebAuthn challenge (CTR-ACC-08): base64url of the 32 bytes.
@@ -611,6 +657,118 @@ contract NamedAccountTest is WebAuthnSoft {
         vm.prank(relayer);
         _addKey(e, k, right);
         assertEq(acct.keyCount(), 2);
+    }
+
+    /// The offset of the `AccountSig` tuple in `mtxCancelRecovery(e, sig)`: the eight envelope words and that offset.
+    uint256 internal constant TUPLE_AT = 0x120;
+
+    /// `mtxCancelRecovery(e, sig)` with the tuple's offset and the bytes behind the head set by hand.
+    function _rawCancel(MetaTxLib.Envelope memory e, uint256 tupleAt, bytes memory tuple) internal pure returns (bytes memory) {
+        return abi.encodePacked(SmartKeyAccount.mtxCancelRecovery.selector, abi.encode(e), tupleAt, tuple);
+    }
+
+    function _refused(bytes memory call, bytes memory err) internal {
+        (bool ok, bytes memory ret) = address(acct).call(call);
+        assertFalse(ok);
+        assertEq(ret, err);
+        assertEq(acct.mtxNonce(address(acct), LANE), 0, "no nonce burnt");
+    }
+
+    /// `_blob` takes the calldata from the tuple's offset: whatever layout a relayer sends is decoded as a signature, and
+    /// refused unless it is one. The last call is the control: the same hand-made layout, well formed, runs.
+    function test_accountSigMalformedLayout() public {
+        vm.prank(GUARDIAN);
+        acct.initiateRecovery(_seedKey(SEED2));
+        MetaTxLib.Envelope memory e = _env(0);
+        bytes memory raw = _raw(SEED, _cancelRecoveryDigest(e));
+        bytes memory bad = abi.encodeWithSelector(IMetaTx.MetaTxBadSignature.selector);
+
+        // tuple offset 0: the tuple overlaps the envelope, `from` as the key index and `batch` as an offset
+        _refused(_rawCancel(e, 0, abi.encode(uint256(0), new bytes32[](0), raw)), bad);
+        // offsets past the end: the entry's own decoder
+        _refused(_rawCancel(e, TUPLE_AT, ""), "");
+        _refused(_rawCancel(e, TUPLE_AT, abi.encode(uint256(0), uint256(0x60))), "");
+        _refused(_rawCancel(e, 1 << 64, abi.encode(uint256(0), new bytes32[](0), raw)), "");
+        _refused(_rawCancel(e, type(uint256).max, abi.encode(uint256(0), new bytes32[](0), raw)), "");
+        // inner offsets and lengths past the end: `_isValid`'s decode, inside the static call
+        _refused(_rawCancel(e, TUPLE_AT, abi.encode(uint256(0), uint256(1) << 40, uint256(0x60))), bad);
+        _refused(_rawCancel(e, TUPLE_AT, abi.encode(uint256(0), uint256(0x60), uint256(1) << 40, uint256(0))), bad);
+        _refused(_rawCancel(e, TUPLE_AT, abi.encode(uint256(0), uint256(0x60), uint256(0x80), uint256(0), uint256(1) << 40)), bad);
+
+        (bool ok, bytes memory ret) = address(acct).call(_rawCancel(e, TUPLE_AT, abi.encode(uint256(0), new bytes32[](0), raw)));
+        assertTrue(ok, string(ret));
+        assertEq(acct.pendingRecovery(), bytes32(0));
+    }
+
+    /// `kind` reaches the op as signed: 0 and 3 are the op's refusals, past the signature, and the nonce stays.
+    function test_addKeyKindRefused() public {
+        SubjectKey memory k = _seedKey(SEED2);
+        MetaTxLib.Envelope memory e = _env(0);
+        AccountSig memory s = _seedSig(0, SEED, _addKeyDigest(e, 0, k));
+        _refused(abi.encodeCall(SmartKeyAccount.mtxAddKey, (e, 0, k.x, k.y, k.rpIdHash, k.originHash, s)),
+            abi.encodeWithSelector(SmartKeyAccount.BadKey.selector));
+        s = _seedSig(0, SEED, _addKeyDigest(e, 3, k));
+        _refused(abi.encodeCall(SmartKeyAccount.mtxAddKey, (e, 3, k.x, k.y, k.rpIdHash, k.originHash, s)), "");
+        assertEq(acct.keyCount(), 1);
+    }
+
+    function test_rotateKeyToPasskeyTyped() public {
+        SubjectKey memory k = _passkey(PASSKEY);
+        MetaTxLib.Envelope memory e = _env(0);
+        AccountSig memory s = _seedSig(0, SEED, _rotateKeyDigest(e, 0, k));
+        acct.mtxRotateKey(e, 0, uint8(k.kind), k.x, k.y, k.rpIdHash, k.originHash, s);
+        assertEq(uint8(acct.keyAt(1).kind), uint8(KeyKind.P256_WEBAUTHN));
+        assertEq(acct.keyCount(), 1);
+
+        e = _env(1);
+        bytes32 d = _setGuardianDigest(e, address(0xA));
+        s = _seedSig(0, SEED, d);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // the seed key is gone
+        acct.mtxSetGuardian(e, address(0xA), s);
+        acct.mtxSetGuardian(e, address(0xA), AccountSig(1, new bytes32[](0), _enc(_assertion(PASSKEY, d))));
+        assertEq(acct.guardian(), address(0xA));
+    }
+
+    function test_executeTypedEmitsExecuted() public {
+        MetaTxLib.Envelope memory e = _env(0);
+        bytes32 d = executeDigest(address(acct), e, GUARDIAN, 0, "");
+        AccountSig memory s = _seedSig(0, SEED, d);
+        vm.expectEmit(true, true, true, true, address(acct));
+        emit IMetaTx.MetaTransactionExecuted(address(acct), relayer, LANE, 0, d, relayer, 0);
+        vm.prank(relayer);
+        acct.mtxExecute(e, GUARDIAN, 0, "", s);
+    }
+
+    /// The domain binds the clone and the chain, for the same key; a bound relayer and `validUntil` hold on `mtxExecute`.
+    function test_executeTypedReplayAndEnvelope() public {
+        SmartKeyAccount other = SmartKeyAccount(payable(fac.deploy(_seedKey(SEED), address(0xFEED))));
+        MetaTxLib.Envelope memory e = _env(0);
+        AccountSig memory s = _seedSig(0, SEED, executeDigest(address(acct), e, GUARDIAN, 0, ""));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // `from` still this clone: not `other`'s own key set
+        other.mtxExecute(e, GUARDIAN, 0, "", s);
+        MetaTxLib.Envelope memory theirs = env(address(other), 0, e.validUntil);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        other.mtxExecute(theirs, GUARDIAN, 0, "", s);
+        vm.chainId(7623);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        acct.mtxExecute(e, GUARDIAN, 0, "", s);
+        vm.chainId(7622);
+
+        e.mode = MetaTxLib.MODE_RESTRICT_RELAYER;
+        e.relayer = relayer;
+        s = _seedSig(0, SEED, executeDigest(address(acct), e, GUARDIAN, 0, ""));
+        address stranger = address(0x5745);
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnauthorizedRelayer.selector, relayer, stranger));
+        acct.mtxExecute(e, GUARDIAN, 0, "", s);
+        vm.warp(e.validUntil + 1);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxExpired.selector, e.validUntil, e.validUntil + 1));
+        acct.mtxExecute(e, GUARDIAN, 0, "", s);
+        vm.warp(e.validUntil);
+        vm.prank(relayer);
+        acct.mtxExecute(e, GUARDIAN, 0, "", s);
+        assertEq(acct.mtxNonce(address(acct), LANE), 1);
     }
 
     /// `AccountSig`: a key index without a key, and a `from` other than the account.

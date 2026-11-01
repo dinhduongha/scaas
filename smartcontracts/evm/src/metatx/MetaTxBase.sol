@@ -150,7 +150,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
 
     /// @dev CTR-MTX-17 over the digest of the entry's struct.
     function _run(MetaTxLib.MetaTransaction memory m, bytes32 digest, bytes calldata signature)
-        private returns (bytes memory ret)
+        internal returns (bytes memory ret)
     {
         _checkEnvelope(MetaTxLib.pad(m.from), m.batch, m.nonce, m.validUntil, m.mode, m.relayer); // 1
         _requireValidSignature(m.from, digest, signature);      // 2

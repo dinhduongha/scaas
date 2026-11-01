@@ -855,6 +855,9 @@ reset (work order item 6) deploys the new contracts (controller call).
   entry table (alloy `sol!`), checks the typed digest locally against the signature (gateway pre-check), and uses the
   typed digest as the dedup key (no chain view; `mtxDigest` is gone). Hex `data` / `calldata` fields are refused with
   a named error.
+- Mandate lanes (C5 review): the node and clients build `PayUnderMandate` with `batch = mandatePayLane(ref)` and `DelegateRevoke`
+  with `batch = mandateRevokeLane(token, epoch)`, both at nonce 0: a revoke is the kill switch, it must not queue behind a pending
+  nonce on a shared lane. The node does not yet allow the named selectors of the wallets; that is this task too.
 - `guard.rs`: the allow-list per entry selector (rules per contract kind); `dex.rs` `cancel_digest` nested;
   `venue.rs` cancels; indexer: `MetaTransactionExecuted` keeps its fields (digest = the typed digest); new events from C
   (if any) indexed.
