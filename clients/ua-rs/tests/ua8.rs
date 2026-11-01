@@ -789,3 +789,409 @@ fn registration_args_typed_keys() {
     let r = registration_args(&RegistrationInput { kind: 0x0101, key_data: bytes(&p256["keyData"]), ..Default::default() }).unwrap();
     assert!(matches!(r.args, RegisterArgs::Register { .. }));
 }
+
+// --- the off-chain verifier (ua8-soroban B5, UA8-D24, C14): the relayer's only check of what Soroban stores unverified ---
+
+/// A `kemPk` as `KemKey` fields, whatever its bytes (`KemKey::from_kem_pk` refuses what these tests want refused later).
+#[cfg(feature = "pq")]
+fn kem_fields(pk: &[u8]) -> KemKey {
+    match pk.len() {
+        0 => KemKey::default(),
+        n => KemKey { scheme: pk[0], mlkem_ek: pk[1..n - 32].to_vec(), x25519: pk[n - 32..].try_into().unwrap() },
+    }
+}
+/// A row's `attrs` in `register`'s form.
+#[cfg(feature = "pq")]
+fn attrs_of(r: &Value) -> UAAttrs {
+    let a = &r["attrs"];
+    UAAttrs { pqz_key: bytes(&a["pqzKey"]), pqz_pop_hash: b32(&a["pqzPopHash"]), kem: kem_fields(&bytes(&a["kemPk"])), kem_pk_hash: [0; 32] }
+}
+/// The registered keys: what a node reads from the registry.
+#[cfg(feature = "pq")]
+fn keys(p: &Value) -> impl Fn([u8; 32]) -> Option<(u16, Vec<u8>)> + '_ {
+    |id| arr(p, "registrations").iter().find(|r| b32(&r["ua"]) == id).map(|r| (num(&r["kind"]) as u16, bytes(&r["keyData"])))
+}
+#[cfg(feature = "pq")]
+fn check_row(p: &Value, r: &Value) -> Result<()> {
+    check_registration(num(&r["kind"]) as u16, &bytes(&r["keyData"]), &attrs_of(r), &bytes(&r["pop"]), &bytes(&r["pqzPop"]), &keys(p))
+}
+/// `kem_record` / `pqz_record` of a row, `sig` and the registration of `ua` given (a negative changes them).
+#[cfg(feature = "pq")]
+fn check_kem(p: &Value, k: &Value, ua: &Value, sig: &[u8]) -> Result<()> {
+    let reg = find(p, "registrations", "ua", ua);
+    check_kem_record(num(&reg["kind"]) as u16, &bytes(&reg["keyData"]), &b32(ua), num(&k["version"]), &bytes(&k["kemPk"]), sig, &keys(p))
+}
+#[cfg(feature = "pq")]
+fn check_pqz(p: &Value, k: &Value, ua: &Value, hash: &Value, sig: &[u8]) -> Result<()> {
+    let reg = find(p, "registrations", "ua", ua);
+    check_pqz_key_record(num(&reg["kind"]) as u16, &bytes(&reg["keyData"]), &b32(ua), &bytes(&k["pqzKey"]), &b32(hash), sig, &keys(p))
+}
+/// `pop` with one bit flipped inside a signature (first, middle, last byte): never in the ABI of an msig blob, so the refusal
+/// is the signature's and not the decoder's.
+#[cfg(feature = "pq")]
+fn flipped(kind: u16, sig: &[u8]) -> Vec<Vec<u8>> {
+    let flip = |s: &[u8], i: usize| {
+        let mut s = s.to_vec();
+        s[i] ^= 1;
+        s
+    };
+    if kind != 0x0120 {
+        return [0, sig.len() / 2, sig.len() - 1].iter().map(|i| flip(sig, *i)).collect();
+    }
+    let m = decode_member_sigs(sig).expect("a vector's blob is canonical");
+    assert_eq!(encode_member_sigs(&m), sig, "the encoder is the decoder's inverse");
+    let mut out = vec![];
+    for slot in 0..m.len() {
+        for i in [0, m[slot].sig.len() / 2, m[slot].sig.len() - 1] {
+            let mut x = m.clone();
+            x[slot].sig = flip(&x[slot].sig, i);
+            out.push(encode_member_sigs(&x));
+        }
+    }
+    out
+}
+
+#[cfg(feature = "pq")]
+#[test]
+fn check_registration_vectors() {
+    let p = load("portable.json");
+    let (mut n, mut flips, mut commits) = (0, 0, 0);
+    for r in arr(&p, "registrations") {
+        let (name, kind, kd) = (&r["name"], num(&r["kind"]) as u16, bytes(&r["keyData"]));
+        let (attrs, pop, proof) = (attrs_of(r), bytes(&r["pop"]), bytes(&r["pqzPop"]));
+        assert_eq!(check_row(&p, r), Ok(()), "{name}");
+        assert_eq!(check_registration(kind, &kd, &attrs, &pop, &[], &keys(&p)), Ok(()), "{name}: the proof bytes are optional");
+        if !pop.is_empty() {
+            for bad in flipped(kind, &pop) {
+                assert_eq!(check_registration(kind, &kd, &attrs, &bad, &proof, &keys(&p)), Err(UAError::Pop), "{name}");
+                flips += 1;
+            }
+        }
+        if kind != 0x0120 {
+            for bad in [&pop[..pop.len() - 1], &[&pop[..], &[0]].concat()] {
+                assert_eq!(check_registration(kind, &kd, &attrs, bad, &proof, &keys(&p)), Err(UAError::Pop), "{name}: a byte off");
+            }
+        }
+        if let Some(c) = r.get("kemCommit") {
+            let (a, h) = (&c["register"]["attrs"], b32(&c["register"]["attrs"]["kemPkHash"]));
+            assert_eq!(h, keccak256(&bytes(&r["attrs"]["kemPk"])), "{name}");
+            let commit = UAAttrs { kem: KemKey { scheme: num(&a["kem"]["scheme"]) as u8, ..Default::default() }, kem_pk_hash: h, ..attrs.clone() };
+            let try_attrs = |x: &UAAttrs| check_registration(kind, &kd, x, &pop, &proof, &keys(&p));
+            assert_eq!(try_attrs(&commit), Ok(()), "{name}: the same pop signs the hash commit");
+            let mut other = commit.clone();
+            other.kem_pk_hash[0] ^= 1;
+            assert_eq!(try_attrs(&other), Err(UAError::Pop), "{name}: another key's commit");
+            let bad = |f: &dyn Fn(&mut UAAttrs)| {
+                let mut x = commit.clone();
+                f(&mut x);
+                try_attrs(&x)
+            };
+            assert_eq!(bad(&|x| x.kem.scheme = 2), Err(UAError::KemScheme), "{name}");
+            assert_eq!(bad(&|x| x.kem.scheme = 0), Err(UAError::KemScheme), "{name}");
+            assert_eq!(bad(&|x| x.kem.mlkem_ek = vec![1]), Err(UAError::KemKeyLength), "{name}: key bytes next to the hash");
+            assert_eq!(bad(&|x| x.kem.x25519 = [1; 32]), Err(UAError::KemKeyLength), "{name}: key bytes next to the hash");
+            commits += 1;
+        }
+        n += 1;
+    }
+    assert_eq!((n, commits), (25, 9));
+    println!("{n} registrations, {commits} hash commits, {flips} flipped signatures refused");
+}
+
+#[cfg(feature = "pq")]
+#[test]
+fn check_kem_record_vectors() {
+    let p = load("portable.json");
+    let mut flips = 0;
+    for k in arr(&p, "kemRecords") {
+        let (id, kind, sig) = (&k["id"], num(&k["kind"]) as u16, bytes(&k["sig"]));
+        assert_eq!(check_kem(&p, k, &k["ua"], &sig), Ok(()), "{id}");
+        for bad in flipped(kind, &sig) {
+            assert_eq!(check_kem(&p, k, &k["ua"], &bad), Err(UAError::Unauthorized), "{id}");
+            flips += 1;
+        }
+        let reg = find(&p, "registrations", "ua", &k["ua"]);
+        let (kd, ua, pk) = (bytes(&reg["keyData"]), b32(&k["ua"]), bytes(&k["kemPk"]));
+        let v = num(&k["version"]);
+        let at = |ua: &[u8; 32], v: u64, pk: &[u8]| check_kem_record(kind, &kd, ua, v, pk, &sig, &keys(&p));
+        assert_eq!(at(&ua, v, &pk), Ok(()), "{id}: the control");
+        assert_eq!(at(&ua, v + 3, &pk), Err(UAError::Unauthorized), "{id}: signed for another version");
+        assert_eq!(at(&ua, 0, &pk), Err(UAError::KemVersion), "{id}: version 0 is register's");
+        assert_eq!(at(&[9; 32], v, &pk), Err(UAError::Unauthorized), "{id}: not the key data's id");
+        assert_eq!(at(&ua, v, &pk[..1600]), Err(UAError::KemKeyLength), "{id}");
+        assert_eq!(at(&ua, v, &[]), Err(UAError::KemKeyLength), "{id}");
+        assert_eq!(at(&ua, v, &[&[2u8][..], &pk[1..]].concat()), Err(UAError::KemScheme), "{id}");
+    }
+    // not a holder: a valid signature cannot reach the signature check
+    let s = find(&p, "registrations", "name", &"slhdsa128s".into());
+    let pk = bytes(&arr(&p, "kemRecords")[0]["kemPk"]);
+    let got = check_kem_record(0x0133, &bytes(&s["keyData"]), &b32(&s["ua"]), 1, &pk, &[0; 7856], &keys(&p));
+    assert_eq!(got, Err(UAError::KemHolder(0x0133)));
+    assert_eq!(flips, 3 * 6 + 3 * 2 * 3, "3 per signature: 6 single keys, 3 msig of 2 slots");
+    println!("9 KEM records, {flips} flipped signatures refused");
+}
+
+#[cfg(feature = "pq")]
+#[test]
+fn check_pqz_key_record_vectors() {
+    let p = load("portable.json");
+    let mut flips = 0;
+    for k in arr(&p, "pqzKeyRecords") {
+        let (name, kind, sig) = (&k["name"], num(&k["kind"]) as u16, bytes(&k["sig"]));
+        assert_eq!(check_pqz(&p, k, &k["ua"], &k["pqzPopHash"], &sig), Ok(()), "{name}");
+        for bad in flipped(kind, &sig) {
+            assert_eq!(check_pqz(&p, k, &k["ua"], &k["pqzPopHash"], &bad), Err(UAError::Unauthorized), "{name}");
+            flips += 1;
+        }
+        let reg = find(&p, "registrations", "ua", &k["ua"]);
+        let (kd, ua, key, h) = (bytes(&reg["keyData"]), b32(&k["ua"]), bytes(&k["pqzKey"]), b32(&k["pqzPopHash"]));
+        let at = |ua: &[u8; 32], key: &[u8], h: &[u8; 32]| check_pqz_key_record(kind, &kd, ua, key, h, &sig, &keys(&p));
+        assert_eq!(at(&ua, &key, &h), Ok(()), "{name}: the control");
+        let mut other = h;
+        other[0] ^= 1;
+        assert_eq!(at(&ua, &key, &other), Err(UAError::Unauthorized), "{name}: another proof's hash");
+        assert_eq!(at(&ua, &key, &[0; 32]), Err(UAError::PqzPopHash), "{name}");
+        assert_eq!(at(&ua, &key[..32], &h), Err(UAError::KeyData("PQZ key length")), "{name}");
+        assert_eq!(at(&[9; 32], &key, &h), Err(UAError::Unauthorized), "{name}: not the key data's id");
+        let mut swapped = key.clone();
+        swapped[0] ^= 1;
+        assert_eq!(at(&ua, &swapped, &h), Err(UAError::Unauthorized), "{name}: pqzKeyHash = keccak(PQZ_KEY_GROUP ‖ key)");
+    }
+    println!("8 PQZ key records, {flips} flipped signatures refused");
+}
+
+/// Every `negatives[]` row, by its exact error (Rust and clientkeys `verify*` take the same rows). What a stateless check
+/// cannot see is counted and pinned as accepted: `pqz-key-record-already-set` is write-once state, the chain's `PqzKeySet`.
+#[cfg(feature = "pq")]
+#[test]
+fn check_refuses_negatives() {
+    let p = load("portable.json");
+    let (mut refused, mut stateful, mut other_entry) = (0, 0, 0);
+    let code = |r: Result<()>| r.err().map(|e| e.code());
+    for n in arr(&p, "negatives") {
+        let (name, err) = (n["name"].as_str().unwrap(), n["error"].as_str().unwrap());
+        if n["rule"] == "msig-minimal" {
+            // every slot verifies and the threshold is met: only the minimal rule can refuse it
+            let r = &n["registration"];
+            let (kd, slots) = (MsigStructure::from_key_data(&bytes(&r["keyData"])).unwrap(), decode_member_sigs(&bytes(&r["pop"])).unwrap());
+            let md = b32(&r["memberDigest"]);
+            let mt = purpose_tag("member").unwrap();
+            for s in &slots {
+                let m = &kd.members[s.index as usize];
+                let key = keys(&p)(m.id).unwrap().1;
+                assert!(verify::verify(m.kind, &key, &ua_message(m.kind, &mt, &md).unwrap(), &s.sig, false), "{name}: slot {}", s.index);
+            }
+            assert_eq!(code(check_row(&p, r)), Some(err), "{name}");
+            refused += 1;
+            continue;
+        }
+        let m = &n["mutation"];
+        let set = &m["set"];
+        match n["entry"].as_str().unwrap() {
+            "register" | "storePqzPop" => {
+                let mut row = find(&p, "registrations", "name", &m["row"]).clone();
+                for (k, v) in set.as_object().unwrap() {
+                    match k.strip_prefix("attrs.") {
+                        Some(f) => row["attrs"][f] = v.clone(),
+                        None => row[k] = v.clone(),
+                    }
+                }
+                assert_eq!(code(check_row(&p, &row)), Some(err), "{name}");
+                refused += 1;
+            }
+            "setPqzKey" => {
+                let k = find(&p, "pqzKeyRecords", "name", &m["row"]);
+                let (ua, hash) = (set.get("ua").unwrap_or(&k["ua"]), set.get("pqzPopHash").unwrap_or(&k["pqzPopHash"]));
+                let got = check_pqz(&p, k, ua, hash, &bytes(set.get("sig").unwrap_or(&k["sig"])));
+                if err == "UAPqzKeySet" {
+                    assert_eq!(got, Ok(()), "{name}: the signature is good, the chain's state refuses");
+                    stateful += 1;
+                } else {
+                    assert_eq!(code(got), Some(err), "{name}");
+                    refused += 1;
+                }
+            }
+            "setKemKey" => {
+                let k = find(&p, "kemRecords", "id", &m["row"]);
+                let got = check_kem(&p, k, set.get("ua").unwrap_or(&k["ua"]), &bytes(set.get("sig").unwrap_or(&k["sig"])));
+                assert_eq!(code(got), Some(err), "{name}");
+                refused += 1;
+            }
+            "requireAuthorized" => other_entry += 1, // a transaction authorisation: no stored record, nothing to check here
+            e => panic!("{name}: {e}"),
+        }
+    }
+    assert_eq!((refused, stateful, other_entry), (63, 4, 1), "{} negatives", arr(&p, "negatives").len());
+    println!("{refused} negatives refused by their error, {stateful} state-only, {other_entry} not a record");
+}
+
+/// `check_*` fail closed: each case is one field off a row that passes (the first assert of each block).
+#[cfg(feature = "pq")]
+#[test]
+fn check_fails_closed() {
+    let p = load("portable.json");
+    let row = |n: &str| find(&p, "registrations", "name", &n.into()).clone();
+    let (none, q, native, classical) = (UAAttrs::default(), row("msig-pq/n2048-kmax1024"), row("msig-pq-native"), row("msig-classical"));
+    let (qk, qa, qp, qz) = (bytes(&q["keyData"]), attrs_of(&q), bytes(&q["pop"]), bytes(&q["pqzPop"]));
+    let on = |pop: &[u8]| check_registration(0x0120, &qk, &qa, pop, &qz, &keys(&p));
+    let res = |kd: &[u8], pop: &[u8]| check_registration(0x0120, kd, &none, pop, &[], &keys(&p));
+
+    // kinds: unknown, native, the PQZ scheme
+    let m = row("mldsa65#1");
+    let (mk, mp) = (bytes(&m["keyData"]), bytes(&m["pop"]));
+    assert_eq!(check_registration(0x0131, &mk, &none, &mp, &[], &keys(&p)), Ok(()));
+    for (kind, e) in [(0x0199, UAError::KindUnknown(0x0199)), (0x0001, UAError::KindNotDerived(0x0001)), (0x0142, UAError::KindNotDerived(0x0142))] {
+        assert_eq!(check_registration(kind, &mk, &none, &mp, &[], &keys(&p)), Err(e));
+        assert_eq!(check_kem_record(kind, &mk, &[1; 32], 1, &[1; 1601], &mp, &keys(&p)), Err(e));
+        assert_eq!(check_pqz_key_record(kind, &mk, &[1; 32], &[1; 16384], &[1; 32], &mp, &keys(&p)), Err(e));
+    }
+    assert_eq!(check_registration(0x0131, &mk, &none, &[], &[], &keys(&p)), Err(UAError::Pop), "a single key's empty pop");
+
+    // an evm-contract slot has no off-chain ERC-1271 check; a member that is no slot signs nothing
+    let (nk, np) = (bytes(&native["keyData"]), bytes(&native["pop"]));
+    assert_eq!(res(&nk, &np), Ok(()));
+    assert_eq!(u16::from_be_bytes([nk[4], nk[5]]), 0x0001);
+    let contract = |d: &[u8]| [&d[..4], &[0, 2], &d[6..]].concat();
+    assert_eq!(res(&contract(&nk), &np), Err(UAError::NotVerifiable));
+    let ck = bytes(&classical["keyData"]);
+    assert_eq!(res(&ck, &[]), Ok(()));
+    assert_eq!(u16::from_be_bytes([ck[4], ck[5]]), 0x0001);
+    assert_eq!(res(&contract(&ck), &[]), Ok(()), "classical-dominant: no slot, no pop");
+    assert_eq!(res(&ck, &[0; 64]), Err(UAError::Pop), "classical-dominant: an empty pop, U8S-D2");
+
+    // members: unknown, another kind, another key under the id, a key that is not canonical but hashes to the id
+    let ids: Vec<[u8; 32]> = MsigStructure::from_key_data(&qk).unwrap().members.iter().map(|m| m.id).collect();
+    let via = |f: &dyn Fn([u8; 32]) -> Option<(u16, Vec<u8>)>| check_registration(0x0120, &qk, &qa, &qp, &qz, f);
+    let good = keys(&p);
+    assert_eq!(on(&qp), Ok(()));
+    assert_eq!(via(&|id| if id == ids[0] { good(id) } else { None }), Err(UAError::MemberUnknown), "unresolved");
+    assert_eq!(via(&|id| if id == ids[0] { good(id) } else { Some((0x0130, good(id)?.1)) }), Err(UAError::MemberUnknown), "kind");
+    assert_eq!(via(&|id| if id == ids[0] { good(id) } else { good(ids[0]) }), Err(UAError::MemberUnknown), "another key");
+    assert_eq!(check_registration(0x0120, &ck, &none, &[], &[], &|_| None), Err(UAError::MemberUnknown), "no slots: still resolved");
+    let junk = vec![7u8; 100];
+    let id = ua_of(0x0131, &junk).unwrap();
+    let got = check_registration(0x0120, &encode_msig(1, &[(0x0131, id, 1)]), &none, &[], &[], &|_| Some((0x0131, junk.clone())));
+    assert_eq!(got, Err(UAError::MemberUnknown), "the id matches, the key is no key");
+
+    // the blob
+    let slots = decode_member_sigs(&qp).unwrap();
+    let enc = |s: &[MemberSig]| encode_member_sigs(s);
+    assert_eq!(on(&enc(&slots)), Ok(()));
+    let pad = [&qp[..], &[0u8; 32]].concat();
+    assert_eq!(decode_member_sigs(&pad), None);
+    assert_eq!(on(&pad), Err(UAError::Pop), "trailing bytes");
+    assert_eq!(on(&[]), Err(UAError::Pop), "no slots");
+    assert_eq!(on(&[[0u8; 31].as_slice(), &[32], &[0; 32]].concat()), Err(UAError::Pop), "abi.encode of no slots");
+    let mut with_key = slots.clone();
+    with_key[0].key_data = keys(&p)(ids[0]).unwrap().1;
+    assert_eq!(on(&enc(&with_key)), Err(UAError::Pop), "CTR-UA-33: a slot carries no key data");
+    let mut swapped = slots.clone();
+    swapped.swap(0, 1);
+    assert_eq!(on(&enc(&swapped)), Err(UAError::Pop), "order");
+    assert_eq!(on(&enc(&[slots[0].clone(), slots[0].clone()])), Err(UAError::Pop), "repeated");
+    assert_eq!(on(&enc(&slots[..1])), Err(UAError::Pop), "below the threshold");
+    let mut past = slots.clone();
+    past[1].index = 2;
+    assert_eq!(on(&enc(&past)), Err(UAError::Pop), "past the members");
+
+    // a native member: over the typed digest only, low s
+    let ns = decode_member_sigs(&np).unwrap();
+    let eoa = ns.iter().position(|s| s.sig.len() == 65).unwrap();
+    let with_sig = |sig: Vec<u8>| {
+        let mut x = ns.clone();
+        x[eoa].sig = sig;
+        res(&nk, &enc(&x))
+    };
+    assert_eq!(with_sig(ns[eoa].sig.clone()), Ok(()));
+    assert_eq!(with_sig(high_s(&ns[eoa].sig)), Err(UAError::Pop), "the same point with the other s");
+    let mut v = ns[eoa].sig.clone();
+    v[64] += 2;
+    assert_eq!(with_sig(v), Err(UAError::Pop), "v 29 / 30");
+
+    // the proof hash binds the key, not the bytes offered next to it (the digest helpers derive it from the bytes)
+    let mut x = qa.clone();
+    x.pqz_pop_hash = [0; 32];
+    assert_eq!(check_registration(0x0120, &qk, &x, &qp, &qz, &keys(&p)), Err(UAError::PqzPopHash), "a key without its hash");
+    let plain = row("fndsa512");
+    let mut y = attrs_of(&plain);
+    assert_eq!(check_row(&p, &plain), Ok(()));
+    // Falcon: exactly the 666 padded bytes (PQClean alone also takes the signature without its padding)
+    let fp = bytes(&plain["pop"]);
+    let stripped = &fp[..fp.iter().rposition(|b| *b != 0).unwrap() + 1];
+    assert!(stripped.len() < 666);
+    assert_eq!(check_registration(0x0132, &bytes(&plain["keyData"]), &attrs_of(&plain), stripped, &[], &keys(&p)), Err(UAError::Pop), "padding stripped");
+    y.pqz_pop_hash = keccak256(&qz);
+    assert_eq!(check_registration(0x0132, &bytes(&plain["keyData"]), &y, &bytes(&plain["pop"]), &qz, &keys(&p)), Err(UAError::PqzPopHash), "a hash without a key");
+    let commit = UAAttrs { kem: KemKey { scheme: 1, ..Default::default() }, kem_pk_hash: [1; 32], ..Default::default() };
+    assert_eq!(check_registration(0x0133, &bytes(&row("slhdsa128s")["keyData"]), &commit, &[], &[], &keys(&p)), Err(UAError::KemHolder(0x0133)), "a commit needs a holder");
+}
+
+/// The default build has no PQ verifier: a PQ signature is refused, never taken as checked, a classical one still verifies.
+#[cfg(not(feature = "pq"))]
+#[test]
+fn check_without_pq_refuses_pq_kinds() {
+    let p = load("portable.json");
+    let res = |n: &str| {
+        let r = find(&p, "registrations", "name", &n.into());
+        check_registration(num(&r["kind"]) as u16, &bytes(&r["keyData"]), &UAAttrs::default(), &bytes(&r["pop"]), &[], &|_| None)
+    };
+    assert_eq!(res("p256"), Ok(()));
+    for n in ["mldsa44", "mldsa65#1", "slhdsa128s"] {
+        assert_eq!(res(n), Err(UAError::Pop), "{n}");
+    }
+}
+
+/// `r ‖ (n − s) ‖ v'`: the other signature of the same key and digest.
+#[cfg(feature = "pq")]
+fn high_s(sig: &[u8]) -> Vec<u8> {
+    const N: [u8; 32] = [
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xba, 0xae, 0xdc, 0xe6, 0xaf,
+        0x48, 0xa0, 0x3b, 0xbf, 0xd2, 0x5e, 0x8c, 0xd0, 0x36, 0x41, 0x41,
+    ];
+    let mut out = sig.to_vec();
+    let mut borrow = 0i32;
+    for i in (0..32).rev() {
+        let d = N[i] as i32 - sig[32 + i] as i32 - borrow;
+        out[32 + i] = d.rem_euclid(256) as u8;
+        borrow = (d < 0) as i32;
+    }
+    out[64] ^= 27 ^ 28;
+    out
+}
+
+/// `kinds.json` `invalid[]`: Soroban stores a relayer-checked kind's key data on length alone, so a relayer that attested one
+/// would put an invalid key on chain (B4 report: 75 of these rows). Each is refused by its error, an empty `pop` never
+/// reached; `valid[]` is the control (the same check reaches the signature, `UAPoP`).
+#[cfg(feature = "pq")]
+#[test]
+fn check_refuses_invalid_keys() {
+    let k = load("kinds.json");
+    let none = UAAttrs::default();
+    let res = |r: &Value| check_registration(num(&r["kind"]) as u16, &bytes(&r["keyData"]), &none, &[0; 64], &[], &|_| None);
+    for r in arr(&k, "invalid") {
+        assert_eq!(res(r).err().map(|e| e.code()), r["error"].as_str(), "{r}");
+    }
+    for r in arr(&k, "valid").iter().filter(|r| r["kind"] != 0x0120) {
+        assert_eq!(res(r), Err(UAError::Pop), "{r}");
+    }
+    println!("{} invalid key rows refused", arr(&k, "invalid").len());
+}
+
+/// Group kinds 0x0110–0x0113: the whole group check (`verify` with `pop`) over the portable message; clientkeys has no
+/// verifier for them and refuses (`UANotVerifiable`, the report's C14 list).
+#[cfg(feature = "pq")]
+#[test]
+fn check_group_kinds() {
+    let g = load("groups.json");
+    let mut n = 0;
+    for r in arr(&g, "groups") {
+        let (kind, kd, blob) = (num(&r["kind"]) as u16, bytes(&r["keyData"]), bytes(&r["pop"]["blob"]));
+        let got = |pop: &[u8]| check_registration(kind, &kd, &UAAttrs::default(), pop, &[], &|_| None);
+        assert_eq!(got(&blob), Ok(()), "{}", r["name"]);
+        let mut bad = blob.clone();
+        bad[blob.len() / 2] ^= 1;
+        assert_eq!(got(&bad), Err(UAError::Pop), "{}", r["name"]);
+        n += 1;
+    }
+    assert_eq!(n, 20);
+}

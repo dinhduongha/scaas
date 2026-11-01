@@ -1,16 +1,18 @@
-// The UA kind verifiers of accounts.md §1.9, written from the spec (not from the generators' signing code), shared by
-// test/ua-sig.test.js (signatures.json) and test/ua8.test.js (portable.json): `verify(kind, keyData, msg, sig, pop)` per
-// derived kind (any throw is a refusal), the native EOA rule `nativeOk`, and the ABI readers the msig decoders use.
+// UNAUDITED. The UA kind verifiers of accounts.md §1.9, written from the spec (not from the generators' signing code):
+// `verify(kind, keyData, msg, sig, pop)` per derived kind (any throw is a refusal), the native EOA rule `nativeOk`, and the
+// client's re-check of a portable record (`verifyRegistration`, `verifyKemRecord`, `verifyPqzKeyRecord`; UA8-D24, C14): the
+// rules of ua-rs `ua8::check_*` on the noble verifiers, the same rows and errors. Not in ua.js, which the signer bundles load:
+// nothing here reaches them. The group kinds 0x0110–0x0113 have no verifier here: `UANotVerifiable`, never an acceptance.
 import { p256 } from '@noble/curves/nist.js';
 import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
 import { bn254 } from '@noble/curves/bn254.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256, sha512 } from '@noble/hashes/sha2.js';
-import { schnorrVerify as zetherVerify } from '../src/zether.js';
-import { PQ_KINDS, pqMessage } from '../src/pq.js';
-import * as ua from '../src/ua.js';
-import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url } from '../src/bytes.js';
+import { schnorrVerify as zetherVerify } from './zether.js';
+import { PQ_KINDS, pqMessage } from './pq.js';
+import * as ua from './ua.js';
+import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url, abiEncode, word } from './bytes.js';
 export const int = (b) => BigInt(hex(b));
 export const B = (h) => fromHex(h);
 export const eq = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
@@ -155,39 +157,91 @@ export function nativeOk(address, h, sig) {
   });
 }
 
-// --- shared by test/ua8.test.js (portable.json) and test/soroban.test.js (ua-ops.json) ---
-export const pqName = (kind) => Object.keys(PQ_KINDS).find((n) => PQ_KINDS[n].kind === kind);
-/** A derived kind's signature over a 32-byte ua_msg: test/ua-verify.js (classical, BLS pop DST) or noble (PQ). */
-export function sigOk(kind, keyData, msg, sig) {
-  const n = pqName(kind);
-  if (!n) return verify(kind, keyData, msg, sig, true);
-  return attempt(() => PQ_KINDS[n].alg.verify(B(sig), PQ_KINDS[n].pq ? pqMessage(n, B(msg)) : B(msg), B(keyData)));
+/** `abi.encode(MemberSig[])`, MemberSig = (uint16 index, bytes keyData, bytes sig). */
+export function encodeMemberSigs(list) {
+  const tuples = list.map(({ index, keyData, sig }) => abiEncode(['uint16', 'bytes', 'bytes'], [index, keyData, sig]));
+  const offsets = [];
+  let o = 32 * list.length;
+  for (const t of tuples) { offsets.push(word(o)); o += t.length; }
+  return concatBytes(word(32), word(list.length), ...offsets, ...tuples);
 }
-/** `abi.decode(blob, (MemberSig[]))`, MemberSig = (uint16 index, bytes keyData, bytes sig). */
-export function memberSigs(blob) {
-  const b = B(blob);
-  const a = wordAt(b, 0);
-  const base = a + 32;
-  return Array.from({ length: wordAt(b, a) }, (_, i) => {
-    const t = base + wordAt(b, base + 32 * i);
+const toBytes = (v) => (v instanceof Uint8Array ? v : fromHex(v));
+/** `abi.decode(blob, (MemberSig[]))`, canonical only (re-encoded and compared), at most 16 slots; else null, no slots too. */
+export const decodeMemberSigs = (blob) => attempt(() => {
+  const b = toBytes(blob);
+  const n = wordAt(b, 32);
+  if (wordAt(b, 0) !== 32 || n === 0 || n > 16) return null;
+  const out = Array.from({ length: n }, (_, i) => {
+    const t = 64 + wordAt(b, 64 + 32 * i);
     return { index: wordAt(b, t), keyData: bytesAt(b, t, t + 32), sig: bytesAt(b, t, t + 64) };
   });
+  return out.every((s) => s.index <= 0xffff) && eq(encodeMemberSigs(out), b) ? out : null;
+}) || null;
+
+const pqName = (kind) => Object.keys(PQ_KINDS).find((n) => PQ_KINDS[n].kind === kind);
+/** A derived kind's signature over a 32-byte ua_msg: `VERIFY` (`pop` = the BLS PoP domain) or noble (PQ); any throw is a refusal. */
+export function kindVerify(kind, keyData, msg, sig, pop) {
+  const n = pqName(kind);
+  if (!n) return verify(kind, hex(toBytes(keyData)), hex(toBytes(msg)), hex(toBytes(sig)), pop);
+  const m = toBytes(msg);
+  return attempt(() => PQ_KINDS[n].alg.verify(toBytes(sig), PQ_KINDS[n].pq ? pqMessage(n, m) : m, toBytes(keyData)) === true);
 }
-/** An msig signature: indices strictly increasing, each member verifies (derived members over `memberDigest` by key data
- *  from `keyOf`, under `member`; a native member by ECDSA over `nativeDigest`, no key data: the portable record's typed
- *  digest, typed-signing TS-D4; without one a native member is refused), weight at least the threshold. */
-export function msigOk(r, md, blob, keyOf, nativeDigest) {
-  let weight = 0;
-  let last = -1;
-  for (const s of memberSigs(blob)) {
-    const m = r.members[s.index];
-    if (!m || s.index <= last) return false;
-    last = s.index;
-    const ok = ua.isNativeKind(m.kind)
-      ? s.keyData.length === 0 && nativeDigest !== undefined && nativeOk(`0x${m.id.slice(26)}`, typeof nativeDigest === 'string' ? B(nativeDigest) : nativeDigest, hex(s.sig))
-      : s.keyData.length === 0 && sigOk(m.kind, keyOf(m.id), hex(ua.uaMessage(m.kind, ua.purposeTag('member'), B(md))), hex(s.sig));
-    if (!ok) return false;
-    weight += m.weight;
-  }
-  return weight >= r.threshold;
+
+const isGroup = (kind) => kind >= 0x0110 && kind <= 0x0113;
+const refuse = (code, reason) => { throw new ua.UAError(code, reason); };
+/** Each derived member's key by its id, in member order (native members: null). `members(id)` → `{ kind, keyData }` is never
+ *  trusted: the answer must be a canonical key that hashes to `id` under its stated kind. */
+const memberKeys = (d, members) => ua.msigStructure(d).members.map((m) => {
+  if (ua.isNativeKind(m.kind)) return null;
+  const r = members(m.id);
+  const ok = r?.kind === m.kind && attempt(() => hex(ua.deriveUA(r.kind, r.keyData)) === m.id);
+  return ok ? r.keyData : refuse('UAMemberUnknown', m.id);
+});
+/** ua-rs `signature_ok` (EVM `_sigOk` + `_msig(portable = true)`) over `uaMessage(kind, purpose, digest)`; throws for a part
+ *  nothing here can check. An `msig`: no slots unless PQ-eligible (U8S-D2), then the canonical minimal `MemberSig[]` (U8S-D1),
+ *  each slot without key data, a derived member under `member` over `memberDigest`, an `evm-eoa` member over `digest` (TS-D4). */
+function signatureOk(kind, d, id, purpose, digest, sig, members) {
+  const message = ua.uaMessage(kind, purpose, digest);
+  if (isGroup(kind)) refuse('UANotVerifiable', `kind 0x${kind.toString(16)}`);
+  if (kind !== 0x0120) return kindVerify(kind, d, message, sig, true);
+  const keys = memberKeys(d, members);
+  if (!ua.msigPqzEligible(d)) return toBytes(sig).length === 0;
+  const slots = decodeMemberSigs(sig);
+  if (!slots || !ua.msigSlotsMinimal(d, slots.map((s) => s.index))) return false;
+  const all = ua.msigStructure(d).members;
+  const md = ua.memberDigest(id, message);
+  return slots.every((s) => {
+    const m = all[s.index];
+    if (s.keyData.length !== 0) return false;
+    if (m.kind === 0x0001) return nativeOk(`0x${m.id.slice(26)}`, digest, hex(s.sig));
+    if (ua.isNativeKind(m.kind) || isGroup(m.kind)) refuse('UANotVerifiable', `slot ${s.index}`);
+    return kindVerify(m.kind, keys[s.index], ua.uaMessage(m.kind, ua.purposeTag('member'), md), s.sig, false);
+  });
+}
+/** A registration row `{ kind, keyData, attrs, pop, pqzPop }` as `register` checks it, on bytes only (ua-rs `check_registration`):
+ *  the id from canonical key data, the attributes, the `pop`; the PQZ proof is not checked. Throws `UAError`; returns nothing.
+ *  `attrs`: `{ pqzKey, pqzPopHash, kemPk }` or the typed `{ pqzKey, pqzPopHash, kem, kemPkHash }` (the hash commit). */
+export function verifyRegistration({ kind, keyData, attrs, pop, pqzPop }, members) {
+  const id = ua.deriveUA(kind, keyData);
+  const digest = ua.registrationAttrsDigest(kind, { ua: id, keyData, attrs, pqzPop });
+  if (!signatureOk(kind, keyData, id, ua.POP_V2_TAG, digest, pop, members)) refuse('UAPoP');
+}
+/** The record of `row.ua`, read through `members`: the row itself names no key data. */
+function recordOf(row, members) {
+  const r = members(row.ua);
+  return r && hex(ua.deriveUA(r.kind, r.keyData)) === row.ua ? r : refuse('UAUnauthorized', row.ua);
+}
+/** A KEM record row `{ ua, version, kemPk, sig }` as `setKemKey` (version ≥ 1) checks it (ua-rs `check_kem_record`). */
+export function verifyKemRecord(row, members) {
+  const { kind, keyData } = recordOf(row, members);
+  if (!ua.isKeyHolder(kind, keyData)) refuse('UAKemHolder', row.ua);
+  const digest = ua.kemRecordDigest(row);
+  if (!signatureOk(kind, keyData, B(row.ua), ua.KEM_TAG, digest, row.sig, members)) refuse('UAUnauthorized', row.ua);
+}
+/** A PQZ key record row `{ ua, pqzKey, pqzPopHash, sig }` as `setPqzKey` checks it, without its state (ua-rs
+ *  `check_pqz_key_record`: a key already set is the chain's `UAPqzKeySet`). */
+export function verifyPqzKeyRecord(row, members) {
+  const { kind, keyData } = recordOf(row, members);
+  const { recordDigest } = ua.pqzKeyRecordMessage(kind, { ua: row.ua, keyData, pqzKey: row.pqzKey, pqzPopHash: row.pqzPopHash });
+  if (!signatureOk(kind, keyData, B(row.ua), ua.PQZ_KEY_TAG, recordDigest, row.sig, members)) refuse('UAUnauthorized', row.ua);
 }

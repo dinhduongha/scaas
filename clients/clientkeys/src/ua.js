@@ -320,7 +320,8 @@ export function portableTypedData(primaryType, message) {
 }
 
 /** A PQZ / KEM holder (UA-6 U3, UA-8 P7): mldsa44, mldsa65, fndsa512, or an `msig` whose `keyData` is PQ-eligible. */
-const holds = (kind, keyData) => isPqzHolder(kind) || (kind === 0x0120 && present(keyData) && msigPqzEligible(keyData));
+export const isKeyHolder = (kind, keyData) => isPqzHolder(kind) || (kind === 0x0120 && present(keyData) && msigPqzEligible(keyData));
+const holds = isKeyHolder;
 
 /**
  * The portable PoP of a registration (UA-8 P1, P2; typed-signing TS-D3): `{ pqzKeyHash, pqzPopHash, kemRecordHash,
@@ -350,6 +351,31 @@ export function holderPopMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopHash
     { record: portableRecordStruct({ ua, kind, pqzKeyHash, kem }), pqzPopHash: hex(popHash) });
   return { pqzKeyHash, pqzPopHash: popHash, kemRecordHash: kh, portableRecordDigest: portableRecordDigest(words),
     registrationDigest: registration, message, typedData, ...(kind === 0x0120 ? { memberDigest: memberDigest(ua, message) } : {}) };
+}
+
+/** The registry's `_attrs` in its order over given attributes (ua-rs `registration_attrs`), no digest helper's defaults: the typed
+ *  registration digest. `attrs`: `{ pqzKey, pqzPopHash, kemPk }` or `{ pqzKey, pqzPopHash, kem, kemPkHash }`, the KEM key version 0
+ *  in whole or by its hash (a hash commit has no key bytes to check: `kem` is its scheme alone). */
+export function registrationAttrsDigest(kind, { ua, keyData, attrs: a, pqzPop }) {
+  const commit = present(a.kemPkHash) && !bytes(a.kemPkHash).every((b) => b === 0);
+  const pqz = present(a.pqzKey);
+  const kemPk = commit ? null : a.kem ? kemPkOf(a.kem) : orEmpty(a.kemPk);
+  if (pqz && !holds(kind, keyData)) fail('UAPqzHolder', String(kind));
+  if ((commit || kemPk.length !== 0) && !holds(kind, keyData)) fail('UAKemHolder', String(kind));
+  const popHash = a.pqzPopHash === undefined ? Z32 : sized(a.pqzPopHash, 32, 'pqzPopHash');
+  if (pqz === popHash.every((b) => b === 0) || hex(popHash) === EMPTY_PROOF_HASH
+    || (present(pqzPop) && hex(keccak_256(bytes(pqzPop))) !== hex(popHash))) fail('UAPqzPopHash', 'attrs');
+  const pqzKeyHash = pqz ? pqzKeyHashOf(a.pqzKey) : Z32;
+  let kem = null;
+  if (commit) {
+    const f = a.kem ?? { scheme: 0, mlkemEk: '0x', x25519: Z32 };
+    if (present(a.kemPk) || bytes(f.mlkemEk).length !== 0 || hex(sized(f.x25519, 32, 'x25519')) !== ZW) fail('UAKemKeyLength', 'key bytes next to the hash');
+    if (f.scheme !== KEM_SCHEME.mlkem1024X25519) fail('UAKemScheme', String(f.scheme));
+    kem = { ua: h32(ua, 'ua'), version: 0, scheme: f.scheme, kemPkHash: h32(a.kemPkHash, 'kemPkHash') };
+  } else {
+    kem = kemRecordStruct({ ua, version: 0, kemPk });
+  }
+  return registrationDigest({ ua, kind, pqzKeyHash, kemRecordHash: kemHash(kem), pqzPopHash: popHash });
 }
 
 /** The message `R_REG` proves over: `uaMessage(0x0142, POP_V2, portableRecordDigest(ua, kind, keyHash(0x0142, pqzKey),

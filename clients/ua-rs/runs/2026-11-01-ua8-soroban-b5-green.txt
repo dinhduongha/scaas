@@ -1,0 +1,85 @@
+# ua-rs cargo test -j2 --features pq; clippy --all-targets --features pq -D warnings; on top of df7cb104, working tree of B5
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.41s
+     Running unittests src/lib.rs (target/debug/deps/scaas_ua-5396214c66816038)
+test verify::tests::base64url_unpadded ... ok
+test verify::tests::rfc9380_g1_ro_empty_message ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/ed25519_fuzz.rs (target/debug/deps/ed25519_fuzz-52b300b542bb00b4)
+test dalek_verify_strict_matches_every_case ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+     Running tests/groups_verify.rs (target/debug/deps/groups_verify-e187468f65d00bd3)
+test t_frost_rows ... ok
+test official_sections ... ok
+70 group negatives refused
+test group_negatives_refused ... ok
+test groups_register_and_sign ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+     Running tests/metatx.rs (target/debug/deps/metatx-afbaac01cbf217c0)
+test relay_ref_matches_vector ... ok
+test meta_pay_id_vectors ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/near_algorand.rs (target/debug/deps/near_algorand-4360c06875d44fa8)
+test algorand_vectors ... ok
+test near_vectors ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests/pq.rs (target/debug/deps/pq-1cc00ea29600713a)
+test pq_other_kinds_refused ... ok
+4 kinds, 30 mutations refused
+test pq_kat_verifies ... ok
+21 accepted, 33 refused
+test pq_signatures_verify ... ok
+37 accepted, 73 refused
+test pq_external_verifies ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+     Running tests/signatures.rs (target/debug/deps/signatures-2784344cfd676261)
+test ed25519_rfc8032_section ... ok
+test bip340_official_vectors ... ok
+test native_uaauth ... ok
+test msig_sets ... ok
+test derived_positives_verify ... ok
+99 derived negatives refused
+test derived_negatives_refused ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.74s
+     Running tests/ua8.rs (target/debug/deps/ua8-1caad75e183991c2)
+199 invalid key rows refused
+test check_refuses_invalid_keys ... ok
+test domain_separator_pinned ... ok
+test kem_repair_fills_a_front_run_commit ... ok
+test malformed_msig_key_data ... ok
+test msig_slots_minimal_cases ... ok
+test check_fails_closed ... ok
+test kem_record_vectors ... ok
+test native_member_typed_digest ... ok
+test portable_msig_rows_minimal ... ok
+test portable_rows_typed ... ok
+test portable_typehashes_pinned ... ok
+9 KEM records, 36 flipped signatures refused
+test check_kem_record_vectors ... ok
+test pqz_key_record_vectors ... ok
+test registration_args_typed_keys ... ok
+test registration_hash_commit_when_over_limit ... ok
+test registration_refuses_malformed_kem ... ok
+8 PQZ key records, 36 flipped signatures refused
+test check_pqz_key_record_vectors ... ok
+62 digest-layer negatives refused, 5 signature-level
+test negatives_refused ... ok
+test tags ... ok
+test check_group_kinds ... ok
+test portable_vectors ... ok
+63 negatives refused by their error, 4 state-only, 1 not a record
+test check_refuses_negatives ... ok
+test registration_args_typed ... ok
+25 registrations, 9 hash commits, 87 flipped signatures refused
+test check_registration_vectors ... ok
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.93s
+     Running tests/vectors.rs (target/debug/deps/vectors-92396e545e4e492a)
+test natives_native_space_canonical_ids ... ok
+test messages ... ok
+test valid_rows ... ok
+test invalid_rows ... ok
+test table_groups_purposes_constants ... ok
+test structures ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+rc=0
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.89s

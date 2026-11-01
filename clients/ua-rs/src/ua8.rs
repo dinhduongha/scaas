@@ -1,7 +1,8 @@
 //! UA-8 portable registrations (P1, P2, P7; plan UA8-D1/D2): the chain-free PoP, the KEM record and the PQZ key record, as
 //! typed EIP-712 structs under the name + version domain (typed-signing TS-D1 … TS-D4): no chain id, chain uid or registry.
 //! The JS reference is clientkeys `src/ua.js`; `smartcontracts/vectors/ua/portable.json` pins every byte. The raw digests
-//! before the typed records are in legacy/typed-signing/portable_raw.rs. UNAUDITED.
+//! before the typed records are in legacy/typed-signing/portable_raw.rs. `check_*` (ua8-soroban B5) is the off-chain verifier
+//! of these records. UNAUDITED.
 use crate::*;
 
 /// KEM scheme ids, `kem_pk[0]` (CTR-UA-32): 1 = ML-KEM-1024 + X25519; 2 = ML-KEM-1024 + HQC + X25519, reserved (after
@@ -631,4 +632,173 @@ pub fn registration_args(i: &RegistrationInput) -> Result<Registration> {
 }
 fn zero32(b: &[u8; 32]) -> bool {
     b.iter().all(|x| *x == 0)
+}
+
+// --- the off-chain verifier (UA8-D24, C14): what a relayer runs before `Checked::Relayer`, the only check some parts get ---
+
+/// `register`'s attributes.
+pub type Attrs = UAAttrs;
+/// `id` → the registered `(kind, key data)`: an `msig` member's record as the node reads it. Never trusted: the answer must
+/// be a canonical key that hashes to `id` under its stated kind.
+pub type Members<'a> = dyn Fn([u8; 32]) -> Option<(u16, Vec<u8>)> + 'a;
+
+/// `abi.encode(MemberSig[])`, the stored form of an `msig` signature (CTR-UA-33); empty for no slots, as the registries.
+pub fn encode_member_sigs(sigs: &[MemberSig]) -> Vec<u8> {
+    if sigs.is_empty() {
+        return vec![];
+    }
+    let tuple_len = |m: &MemberSig| 96 + tail_len(&m.key_data) + tail_len(&m.sig);
+    let usize_word = |v: usize| word(v as u64);
+    let put = |o: &mut Vec<u8>, b: &[u8]| {
+        o.extend(usize_word(b.len()));
+        o.extend(b);
+        o.resize(o.len() + b.len().next_multiple_of(32) - b.len(), 0);
+    };
+    let mut o = [usize_word(32), usize_word(sigs.len())].concat();
+    let mut off = 32 * sigs.len();
+    for m in sigs {
+        o.extend(usize_word(off));
+        off += tuple_len(m);
+    }
+    for m in sigs {
+        o.extend([usize_word(m.index as usize), usize_word(96), usize_word(96 + tail_len(&m.key_data))].concat());
+        put(&mut o, &m.key_data);
+        put(&mut o, &m.sig);
+    }
+    o
+}
+/// `abi.decode(blob, (MemberSig[]))`, canonical only (re-encoded and compared): `None` for anything else, an empty blob
+/// included (it has no slots to return).
+pub fn decode_member_sigs(blob: &[u8]) -> Option<Vec<MemberSig>> {
+    use crate::verify::word_usize as w;
+    let at = |base: usize, head: usize| {
+        let o = base.checked_add(w(blob, head)?)?;
+        let start = o.checked_add(32)?;
+        blob.get(start..start.checked_add(w(blob, o)?)?).map(<[u8]>::to_vec)
+    };
+    let n = w(blob, 32).filter(|n| *n <= 16 && w(blob, 0) == Some(32))?;
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let t = w(blob, 64 + 32 * i)?.checked_add(64)?;
+        out.push(MemberSig { index: u16::try_from(w(blob, t)?).ok()?, key_data: at(t, t + 32)?, sig: at(t, t + 64)? });
+    }
+    (encode_member_sigs(&out) == blob).then_some(out)
+}
+
+/// EVM `_memberOk` before the signature: each derived member's key by its id, in member order (native members: empty).
+fn member_keys(d: &[u8], members: &Members) -> Result<Vec<Vec<u8>>> {
+    let key = |m: &MsigMember| {
+        if is_native(m.kind) {
+            return Ok(vec![]);
+        }
+        match members(m.id) {
+            Some((k, key)) if k == m.kind && derive_ua(k, &key, false) == Ok(m.id) => Ok(key),
+            _ => Err(UAError::MemberUnknown),
+        }
+    };
+    MsigStructure::from_key_data(d)?.members.iter().map(key).collect()
+}
+
+/// EVM `_sigOk` + `_msig(portable = true)` over `ua_message(kind, purpose, digest)`, `Err` for a part nothing here can check.
+/// An `msig`: no slots unless PQ-eligible (U8S-D2), then the canonical minimal `MemberSig[]` (U8S-D1), each slot without key
+/// data, a derived member under `member` over `member_digest`, an `evm-eoa` member over `digest` itself (TS-D4).
+fn signature_ok(kind: u16, d: &[u8], ua: &[u8; 32], purpose: &[u8; 32], digest: &[u8; 32], sig: &[u8], members: &Members) -> Result<bool> {
+    let message = ua_message(kind, purpose, digest)?;
+    if kind != 0x0120 {
+        return Ok(crate::verify::verify(kind, d, &message, sig, true));
+    }
+    let keys = member_keys(d, members)?;
+    if !msig_pqz_eligible(d)? {
+        return Ok(sig.is_empty());
+    }
+    let Some(slots) = decode_member_sigs(sig) else { return Ok(false) };
+    if !msig_slots_minimal(d, &slots.iter().map(|s| s.index).collect::<Vec<_>>())? {
+        return Ok(false);
+    }
+    let structure = MsigStructure::from_key_data(d)?;
+    let (md, tag) = (member_digest(ua, &message), purpose_tag("member")?);
+    for s in &slots {
+        let (m, key) = (&structure.members[s.index as usize], &keys[s.index as usize]);
+        let vk = &key[..match point_size(m.kind) {
+            0 => key.len(),
+            head => head, // a group kind signs against its stored `vk`
+        }];
+        let ok = s.key_data.is_empty()
+            && match m.kind {
+                0x0001 => crate::verify::native_ecdsa(m.id[12..].try_into().expect("20 bytes"), digest, &s.sig),
+                k if is_native(k) => return Err(UAError::NotVerifiable),
+                k => crate::verify::verify(k, vk, &ua_message(k, &tag, &md)?, &s.sig, false),
+            };
+        if !ok {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// `true` iff `(kind, d)` is the record of `ua`.
+fn is_record_of(kind: u16, d: &[u8], ua: &[u8; 32]) -> Result<bool> {
+    Ok(derive_ua(kind, d, false)? == *ua)
+}
+
+/// EVM `_attrs` in its order; the typed registration digest. The `register` KEM key is version 0, in whole or by its hash
+/// (a hash commit has no key bytes to check: `kem` is its scheme alone).
+fn registration_attrs(kind: u16, ua: &[u8; 32], d: &[u8], a: &Attrs, pqz_pop: &[u8]) -> Result<[u8; 32]> {
+    let (pqz, commit) = (!a.pqz_key.is_empty(), !zero32(&a.kem_pk_hash));
+    let kem_pk = if commit { vec![] } else { a.kem.kem_pk() };
+    if pqz && !holds(kind, d)? {
+        return Err(UAError::PqzHolder(kind));
+    }
+    if (commit || !kem_pk.is_empty()) && !holds(kind, d)? {
+        return Err(UAError::KemHolder(kind));
+    }
+    if pqz == zero32(&a.pqz_pop_hash) || a.pqz_pop_hash == keccak256(&[]) || (!pqz_pop.is_empty() && keccak256(pqz_pop) != a.pqz_pop_hash) {
+        return Err(UAError::PqzPopHash);
+    }
+    let pqz_key_hash = if pqz { pqz_key_hash_of(&a.pqz_key)? } else { [0; 32] };
+    let kem = if commit {
+        if !a.kem.mlkem_ek.is_empty() || !zero32(&a.kem.x25519) {
+            return Err(UAError::KemKeyLength);
+        }
+        if a.kem.scheme != KEM_SCHEME_MLKEM1024_X25519 {
+            return Err(UAError::KemScheme);
+        }
+        keccak(&[&portable_typehash("UAKemRecord"), ua, &[0; 32], &word(a.kem.scheme as u64), &a.kem_pk_hash])
+    } else {
+        kem_record_hash(ua, 0, &kem_pk)?
+    };
+    Ok(registration_digest(ua, kind, &pqz_key_hash, &kem, &a.pqz_pop_hash))
+}
+
+/// A registration as `register` checks it, on bytes only (no state, no `keyHash`): the id from canonical key data, every
+/// `msig` member resolved, the attributes in `_attrs`' order, `keccak256(pqz_pop) == pqz_pop_hash` when proof bytes come,
+/// the `pop`. The PQZ proof itself is not checked (U8S-D6). `Err` for anything it cannot check: an unknown kind, an
+/// `evm-contract` slot (`NotVerifiable`), a member `members` does not resolve (`MemberUnknown`).
+pub fn check_registration(kind: u16, key_data: &[u8], attrs: &Attrs, pop: &[u8], pqz_pop: &[u8], members: &Members) -> Result<()> {
+    let ua = derive_ua(kind, key_data, false)?;
+    let digest = registration_attrs(kind, &ua, key_data, attrs, pqz_pop)?;
+    signature_ok(kind, key_data, &ua, &pop_v2_tag(), &digest, pop, members)?.then_some(()).ok_or(UAError::Pop)
+}
+
+/// A KEM record as `setKemKey` (version ≥ 1) checks it: `ua` the id of `key_data`, a holder, the key, `sig` in the `pop` format
+/// over `kem_record_message`. Version 0 is `KemVersion`: its key is `register`'s (a commit's fill has no signature).
+pub fn check_kem_record(kind: u16, key_data: &[u8], ua: &[u8; 32], version: u64, kem_pk: &[u8], sig: &[u8], members: &Members) -> Result<()> {
+    if !is_record_of(kind, key_data, ua)? {
+        return Err(UAError::Unauthorized);
+    }
+    if !holds(kind, key_data)? {
+        return Err(UAError::KemHolder(kind));
+    }
+    let digest = kem_record_digest(ua, version, kem_pk)?;
+    signature_ok(kind, key_data, ua, &purpose_tag("kem")?, &digest, sig, members)?.then_some(()).ok_or(UAError::Unauthorized)
+}
+
+/// A PQZ key record as `setPqzKey` checks it, without its state (a key already set is the chain's `PqzKeySet`): `ua` the id of
+/// `key_data`, a holder, the key's length, the proof hash, `sig` over `pqz_key_record_digest`.
+pub fn check_pqz_key_record(kind: u16, key_data: &[u8], ua: &[u8; 32], pqz_key: &[u8], pqz_pop_hash: &[u8; 32], sig: &[u8], members: &Members) -> Result<()> {
+    if !is_record_of(kind, key_data, ua)? {
+        return Err(UAError::Unauthorized);
+    }
+    let r = pqz_key_record_message(kind, ua, key_data, pqz_key, None, Some(pqz_pop_hash), false)?;
+    signature_ok(kind, key_data, ua, &purpose_tag("pqz-key")?, &r.record_digest, sig, members)?.then_some(()).ok_or(UAError::Unauthorized)
 }

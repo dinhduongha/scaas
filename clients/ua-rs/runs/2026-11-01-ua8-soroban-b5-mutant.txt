@@ -1,0 +1,75 @@
+# ua8-soroban B5 mutants at commit df7cb104, working tree of the task; each restored and compared with cmp
+
+## rust mutant: the minimal rule at the call site: only the range and order of msig_slots_minimal's Err kept
+test check_refuses_negatives ... FAILED
+thread 'check_refuses_negatives' (408792) panicked at tests/ua8.rs:984:13:
+  left: None
+ right: Some("UAPoP")
+test result: FAILED. 23 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.12s
+restored: cmp ok
+
+## rust mutant: the signature check of check_registration: signature_ok's false ignored
+test check_group_kinds ... FAILED
+test check_refuses_invalid_keys ... FAILED
+test check_refuses_negatives ... FAILED
+test check_registration_vectors ... FAILED
+test check_fails_closed ... FAILED
+thread 'check_group_kinds' (409334) panicked at tests/ua8.rs:1173:9:
+  left: Ok(())
+ right: Err(Pop)
+thread 'check_refuses_invalid_keys' (409337) panicked at tests/ua8.rs:1155:9:
+  left: Ok(())
+ right: Err(Pop)
+thread 'check_refuses_negatives' (409338) panicked at tests/ua8.rs:999:17:
+  left: None
+ right: Some("UAPoP")
+thread 'check_registration_vectors' (409339) panicked at tests/ua8.rs:866:17:
+  left: Ok(())
+ right: Err(Pop)
+thread 'check_fails_closed' (409333) panicked at tests/ua8.rs:1048:5:
+  left: Ok(())
+ right: Err(Pop)
+test result: FAILED. 19 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+restored: cmp ok
+
+## rust mutant: a resolved member key: its id compared, not its canonical form
+test check_fails_closed ... FAILED
+thread 'check_fails_closed' (409814) panicked at tests/ua8.rs:1074:5:
+  left: Err(Pop)
+ right: Err(MemberUnknown)
+test result: FAILED. 23 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+restored: cmp ok
+
+## rust mutant: a key without its proof hash (the digest helpers derive it from the bytes)
+test check_refuses_negatives ... FAILED
+thread 'check_refuses_negatives' (410418) panicked at tests/ua8.rs:999:17:
+  left: Some("UAPoP")
+ right: Some("UAPqzPopHash")
+test result: FAILED. 23 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.71s
+restored: cmp ok
+
+## js mutant: the minimal rule at the call site: order, range and threshold kept
+    actual: undefined,
+  AssertionError [ERR_ASSERTION]: Missing expected exception: msig-pop-not-minimal
+    code: 'ERR_ASSERTION',
+    expected: { code: 'UAPoP' },
+✖ failing tests:
+ℹ fail 1
+ℹ pass 30
+✖ verifyRegistration accepts every row and refuses every negative (818.518136ms)
+restored: cmp ok
+
+## js mutant: the signature check of verifyRegistration: signatureOk's false ignored
+    actual: undefined,
+  AssertionError [ERR_ASSERTION]: Missing expected exception: 0x41c0212c53ecf63e77328a1f3f31e1a5e466e0
+  AssertionError [ERR_ASSERTION]: Missing expected exception: a single key's empty pop
+  AssertionError [ERR_ASSERTION]: Missing expected exception: webauthn-p256
+    code: 'ERR_ASSERTION',
+    expected: { code: 'UAPoP' },
+✖ failing tests:
+ℹ fail 3
+ℹ pass 28
+✖ verify* fail closed: each case one field off a row that passes (ua-rs check_fails_closed) (3.089563ms)
+✖ verifyRegistration accepts every row and refuses every negative (5.116273ms)
+✖ verifyRegistration refuses every kinds.json invalid key by its error; valid[] reaches the signature (ua-rs check_refuses_invalid_keys) (12.12879ms)
+restored: cmp ok

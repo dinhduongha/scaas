@@ -25,7 +25,8 @@ pub const BN254_LABEL_POP: &[u8] = b"SCAAS-UA-BLS-BN254-POP-V1";
 /// `IUAKindVerifier.verify` (`pop = false`) / `IUAPopVerifier.verifyPop` (`pop = true`) for the UA-2a kinds; `pop` only
 /// changes the BLS kinds' domain. The group kinds 0x0110–0x0113 (UA-2c, `groups.rs`): `pop = false` takes the stored `vk`
 /// (`Q`/`Y`: 33 bytes SEC1 compressed or 64 bytes bn254) and checks a group signature; `pop = true` takes the full key
-/// data and the registration `pop` blob and runs the whole group check. Other kinds: `false`.
+/// data and the registration `pop` blob and runs the whole group check. The PQ kinds need feature `pq`, else `false`.
+/// Other kinds: `false`.
 pub fn verify(kind: u16, key_data: &[u8], message: &[u8; 32], sig: &[u8], pop: bool) -> bool {
     match kind {
         0x0100 => webauthn_p256(key_data, message, sig),
@@ -39,6 +40,8 @@ pub fn verify(kind: u16, key_data: &[u8], message: &[u8; 32], sig: &[u8], pop: b
         0x0107 => bls_bn254_minsig(key_data, message, sig, pop),
         0x0108 => key_data.len() == 64 && native_ecdsa(keccak(&[key_data])[12..].try_into().unwrap(), message, sig),
         0x0110..=0x0113 => crate::groups::verify(kind, key_data, message, sig, pop),
+        #[cfg(feature = "pq")]
+        0x0130..=0x0133 => crate::pq::verify(kind, key_data, message, sig),
         _ => false,
     }
 }
@@ -79,7 +82,7 @@ fn p256_ok(xy: &[u8], hash: &[u8; 32], rs: &[u8]) -> bool {
 
 // --- WebAuthn ---
 
-fn word_usize(b: &[u8], o: usize) -> Option<usize> {
+pub(crate) fn word_usize(b: &[u8], o: usize) -> Option<usize> {
     let w = b.get(o..o.checked_add(32)?)?;
     w[..24].iter().all(|x| *x == 0).then(|| w[24..].iter().fold(0usize, |a, x| (a << 8) | *x as usize))
 }

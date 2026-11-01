@@ -10,8 +10,9 @@ import { ed25519, x25519 } from '@noble/curves/ed25519.js';
 import { ml_kem1024 } from '@noble/post-quantum/ml-kem.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { shake256 } from '@noble/hashes/sha3.js';
-import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url, abiEncode, word } from '../src/bytes.js';
+import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url, abiEncode } from '../src/bytes.js';
 import * as ua from '../src/ua.js';
+import { encodeMemberSigs } from '../src/ua-verify.js';
 import { seedFromWords } from '../src/seed.js';
 import { PQ_KINDS, pqKeygen, pqMessage } from '../src/pq.js';
 import { schnorrSign as zetherSchnorr } from '../src/zether.js';
@@ -116,14 +117,7 @@ export const ecdsa = (sk, h) => {
 export const nativeSk = secretOf('native', SECP_N);
 export const nativeAddr = keccak_256(secp256k1.getPublicKey(be(nativeSk, 32), false).subarray(1)).subarray(12);
 export const nativeUa = ua.nativeId(0x0001, nativeAddr);
-/** `abi.encode(MemberSig[])`, MemberSig = (uint16 index, bytes keyData, bytes sig). */
-export function encodeMemberSigs(list) {
-  const tuples = list.map(({ index, keyData, sig }) => abiEncode(['uint16', 'bytes', 'bytes'], [index, keyData, sig]));
-  const offsets = [];
-  let o = 32 * list.length;
-  for (const t of tuples) { offsets.push(word(o)); o += t.length; }
-  return concatBytes(word(32), word(list.length), ...offsets, ...tuples);
-}
+export { encodeMemberSigs };
 /** `encodeMemberSigs` for a portable purpose (`pop` v2, KEM record, PQZ key record) of the msig `keyData`: only a minimal
  *  slot set (`ua.msigSlotsMinimal`, owner 2026-10-31), else `UAError('UAPoP')` — the registry's verdict. */
 export function portableMemberSigs(keyData, list) {

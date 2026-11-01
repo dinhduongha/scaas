@@ -3,7 +3,8 @@
 //! in Solidity (`UAKinds.sol`), JS (clientkeys `ua.js`), Python, Go and C#; `smartcontracts/vectors/ua/` pins all six.
 //! The curve code here (k256, p256, curve25519-dalek, arkworks) is independent of the JS generator's (noble): the vectors
 //! are accepted only when both agree. Feature `signers` (UA-2c): the MuSig2 / FROST group signers that generate
-//! `groups.json` (`musig2`, `frost`); the group kinds' registry checks are in the default build (`verify`). UNAUDITED.
+//! `groups.json` (`musig2`, `frost`); the group kinds' registry checks are in the default build (`verify`). Feature `pq`
+//! (UA8-D24): the PQ kinds' verifiers (`pq`) behind `verify` and `ua8::check_*`; without it a PQ signature is refused. UNAUDITED.
 use sha3::{Digest, Keccak256};
 
 mod keydata;
@@ -12,6 +13,8 @@ pub mod algorand;
 pub use keydata::validate_key_data;
 pub mod verify;
 pub mod ua8;
+#[cfg(feature = "pq")]
+pub mod pq;
 #[cfg(feature = "json")]
 pub mod json;
 pub use ua8::{holder_pop_message, pqz_reg_message};
@@ -40,6 +43,14 @@ pub enum UAError {
     PqzPopHash,
     /// `setPqzKey` on a registration that already has a PQZ key (write-once).
     PqzKeySet,
+    /// `ua8::check_registration`: the `pop` is not a valid signature of the record.
+    Pop,
+    /// `ua8::check_kem_record`, `ua8::check_pqz_key_record`: the signature is not the UA's over the record.
+    Unauthorized,
+    /// An `msig` member that is neither native nor a registered key of its stated kind.
+    MemberUnknown,
+    /// A part nothing off chain can check: an `evm-contract` slot (no ERC-1271 here, C14).
+    NotVerifiable,
 }
 
 impl UAError {
@@ -59,6 +70,10 @@ impl UAError {
             UAError::KemScheme => "UAKemScheme",
             UAError::PqzPopHash => "UAPqzPopHash",
             UAError::PqzKeySet => "UAPqzKeySet",
+            UAError::Pop => "UAPoP",
+            UAError::Unauthorized => "UAUnauthorized",
+            UAError::MemberUnknown => "UAMemberUnknown",
+            UAError::NotVerifiable => "UANotVerifiable",
         }
     }
 }
