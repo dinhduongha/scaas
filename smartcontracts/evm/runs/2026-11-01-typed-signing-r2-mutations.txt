@@ -1,0 +1,54 @@
+## record-keyOwner: library write: step 8 does not claim the keyHash
+file src/ua/UARegistryLib.sol, restored by cmp: same
+CAUGHT rc=1 compiled=True
+  [FAIL: SplitDiff: no revert: key in use] test_diff() (gas: 2311333842)
+  [FAIL: register state 256: -97920 != 0] test_gasHotPath() (gas: 33376630)
+## empty-proof-hash: library rule: the empty proof's hash accepted
+file src/ua/UARegistryLib.sol, restored by cmp: same
+CAUGHT rc=1 compiled=True
+  [FAIL: SplitDiff: wrong revert: the empty proof's hash got 0x93f2c82c want 0x79d99c4da91514abca05ad7a4cc7467abfbb5374194bb23aa693dd425fcadcd725c8c7c7]
+## kem-commit-hash: library rule: version 0 takes any key
+file src/ua/UARegistryLib.sol, restored by cmp: same
+CAUGHT rc=1 compiled=True
+  [FAIL: SplitDiff: no revert: setKemKey v0: not the committed key] test_diff() (gas: 3244254118)
+## native-member-digest: library rule: a native member over member_digest, not the typed digest
+file src/ua/UARegistryLib.sol, restored by cmp: same
+CAUGHT rc=1 compiled=True
+  [FAIL: SplitDiff: write failed: registerMsig PQ-eligible 0x93f2c82c] test_diff() (gas: 1818957540)
+## event-pop-hash: library event: no pop hash in `UARegistered`
+file src/ua/UARegistryLib.sol, restored by cmp: same
+CAUGHT rc=1 compiled=True
+  [FAIL: first row that differs: register kind 256 [logs] != ] test_diff() (gas: 4757983563)
+## words-swapped: the words: kind and 0x0142 swapped in `_lib`
+file src/ua/UARegistry.sol, restored by cmp: same
+CAUGHT rc=1 compiled=True
+  [FAIL: 256] test_gasHotPath() (gas: 27929738)
+  [FAIL: SplitDiff: write failed: register kind 256 0x40c52d880000000000000000000000000000000000000000000000000000000000000100] test_diff() (gas: 141493
+  [FAIL: UAKindDisabled(257)] test_gen2SharesTheLibrary() (gas: 468098)
+  [FAIL: UAKindDisabled(304)] test_reentryFromAVerifierRefused() (gas: 8754099)
+  [FAIL: UAKindDisabled(306)] test_1271MemberSeesTheRegistry() (gas: 2462487)
+  [FAIL: UAKindDisabled(307)] test_msigPopAtTheBudget() (gas: 25078956)
+  [FAIL: assertion failed: 0x40c52d880000000000000000000000000000000000000000000000000000000000000133 != 0x93f2c82c] test_callerCannotSupplyTheWords() (
+  [FAIL: now: the word, 0, as the length] test_nestedOffsetReadsAWordAsItsOwnArgument() (gas: 613075)
+## word-clone-zero: the words: the clone codehash not passed
+file src/ua/UARegistry.sol, restored by cmp: same
+CAUGHT rc=1 compiled=True
+  [FAIL: SplitDiff: write failed: clone: a member at 400 k 0x93f2c82c] test_diff() (gas: 4751299079)
+## kind-word-record: the words: `setKemKey` with the wrong kind's word
+file src/ua/UARegistry.sol, restored by cmp: same
+CAUGHT rc=1 compiled=True
+  [FAIL: SplitDiff: write failed: setKemKey v3 0x1a66f1c19ea1ae58fb643cadd11c96611644e9261d0b45f67377528b69a7a1875a41b6b2] test_diff() (gas: 1664856290)
+## layout-swap: storage: two fields swapped in `UAStore.Layout`
+file src/ua/UAStore.sol, restored by cmp: same
+CAUGHT rc=1 compiled=True
+  [FAIL: assertion failed: kemCommit != kemMax] test_storageLayoutUnchanged() (gas: 13215178)
+  [FAIL: first row that differs: holder, KEM by hash [storage] != ] test_diff() (gas: 4758043996)
+## no-abi-error: ABI: SSTORE2WriteFailed not declared
+file src/ua/UARegistry.sol, restored by cmp: same
+CAUGHT rc=1 compiled=True
+  [FAIL: error: 0x0bd4aca928c64a408df3c3f93fea713a641865a6a7d366d5ead5200518ce1329 != 0xe3536fc2c97de6a33bc1240e853589a43c5df4d3e9656d15af11c0172e8e5d68
+## no-lib-check: constructor: a missing library accepted
+file src/ua/UARegistry.sol, restored by cmp: same
+CAUGHT rc=1 compiled=True
+  [FAIL: next call did not revert as expected] test_constructorRefusesAMissingLibrary() (gas: 2320129)
+mutants not caught or not restored: 0

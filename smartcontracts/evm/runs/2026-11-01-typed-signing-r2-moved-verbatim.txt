@@ -1,0 +1,50 @@
+456 statements, 49 not in the frozen source:
+  from "../common/SigCheck.sol";
+  from "../common/SSTORE2.sol";
+  from "./sol";
+  import {IUAPopVerifier}
+  from "./IUAVerifier.sol";
+  from "./UAKinds.sol";
+  import {UAStore}
+  from "./sol";
+  from "../pqz/PqzSet.sol";
+  from "./MlDsa.sol";
+  library UARegistryLib {
+  function _cfg(kind) private pure returns (uint256 w) {
+  w := calldataload(sub(calldatasize(), 96)) }
+  function _cfg(UAKinds.PQZ_MLWE) private pure returns (uint256 w) {
+  w := calldataload(sub(calldatasize(), 64)) }
+  function _cloneHash() private pure returns (bytes32 w) {
+  w := calldataload(sub(calldatasize(), 32)) }
+  function predecessor private view returns (address) {
+  return IUARegistry(address(this)).predecessor();
+  function kindOf(bytes32 ua) private view returns (uint16) {
+  return IUARegistry(address(this)).kindOf(ua);
+  function keyOwner(bytes32 h) private view returns (bytes32) {
+  return IUARegistry(address(this)).keyOwner(h);
+  if (!_sigOk(_cfg(kind), kind, d, ua, UAKinds.PURPOSE_POP_V2, rd, sig, members)) revert UAPoP();
+  address g1 = predecessor;
+  if (g1 != address(0) && IUARegistry(g1).kindEnabled(UAKinds.PQZ_MLWE)) {
+  address g1 = predecessor;
+  (k.ptr, ph,) = IUARegistry(g1).pqzKeyOf(ua);
+  k.added = IUARegistry(g1).pqzKeySigOf(ua).length != 0;
+  return sig.keyData.length == 0 && _sigOk(_cfg(kind), kind, d, ua, purpose, digest, sig.signature, sig.members);
+  if (sig.keyData.length != 0 || sig.signature.length != 0 || sig.members.length != 0) {
+  function _sigOk( uint256 cfg, uint16 kind, bytes memory d, bytes32 ua, bytes32 purpose, bytes32 digest, bytes memory sig, MemberSig[] memory members ) internal view retur
+  return members.length != 0 && _msig(ua, purpose, digest, d, members);
+  if (uint160(cfg) == 0) return via(predecessor, ua, purpose, digest, UASig("", sig, members));
+  function _msig(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory d, MemberSig[] memory sigs) private view returns (bool) {
+  if (!UAKinds.isNative(kind)) {
+  return via(address(this), id, UAKinds.PURPOSE_MEMBER, md, UASig(s.keyData, s.sig, new MemberSig[](0)));
+  return byCode(address(uint160(uint256(id))), typed, s.sig, _cloneHash());
+  IUARegistry self = IUARegistry(address(this));
+  (bool hedera, address g1) = (self.hederaNative(), self.predecessor());
+  if (!UAKinds.isMember(kind, hedera)) revert UAMemberUnknown(id);
+  if (self.kindOf(id) != kind) revert UAMemberUnknown(id);
+  uint256 cap = self.verifyCap(kind);
+  if (cap == 0) {
+  cap = IUARegistry(g1).verifyCap(kind);
+  cap = cap + cap / 63 + SigCheck.GAS_MARGIN;
+  caps[i] = cap;
+  if (worst > self.verifyBudget()) revert UAKeyData(UAKinds.MSIG);
+  return _cloneHash() != 0 ? SMART_KEY_1271_GAS : SigCheck.ERC1271_GAS;

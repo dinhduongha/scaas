@@ -1,0 +1,12 @@
+n2048-kmax1024: 93 rows; moved by column {'calldata': 0, 'pqz': 0, 'exec': 69, 'regular': 37, 'state': 0, 'fits': 0}; regular delta -8 .. +21427; debit row 6836240 -> 6836270 (+30), pin 6826921, over the pin +9349; all fit 2^24: False
+  pqzl | register (UARegistry.register: mldsa65 UA with a PQZ key): 5135380 -> 5156807 (+21427)
+  pqzl-ua | register (UARegistry.register: mldsa65 UA with a PQZ key): 5135380 -> 5156807 (+21427)
+n2304-kmax4096: 93 rows; moved by column {'calldata': 0, 'pqz': 0, 'exec': 69, 'regular': 37, 'state': 0, 'fits': 0}; regular delta -8 .. +23095; debit row 7007728 -> 7007758 (+30), pin 6998368, over the pin +9390; all fit 2^24: False
+  pqzl | register (UARegistry.register: mldsa65 UA with a PQZ key): 5264853 -> 5287948 (+23095)
+  pqzl-ua | register (UARegistry.register: mldsa65 UA with a PQZ key): 5264853 -> 5287948 (+23095)
+n2560-kmax16384: 93 rows; moved by column {'calldata': 0, 'pqz': 0, 'exec': 69, 'regular': 37, 'state': 0, 'fits': 0}; regular delta -8 .. +24807; debit row 7178027 -> 7178057 (+30), pin 7168690, over the pin +9367; all fit 2^24: False
+  pqzl | register (UARegistry.register: mldsa65 UA with a PQZ key): 5395491 -> 5420298 (+24807)
+  pqzl-ua | register (UARegistry.register: mldsa65 UA with a PQZ key): 5395491 -> 5420298 (+24807)
+n2816-kmax65536: 49 rows; moved by column {'calldata': 0, 'pqz': 0, 'exec': 37, 'regular': 37, 'state': 0, 'fits': 0}; regular delta -8 .. +26927; debit row 7367731 -> 7367761 (+30), pin 7358343, over the pin +9418; all fit 2^24: True
+  pqzl | register (UARegistry.register: mldsa65 UA with a PQZ key): 5580894 -> 5607821 (+26927)
+  pqzl-ua | register (UARegistry.register: mldsa65 UA with a PQZ key): 5580894 -> 5607821 (+26927)
