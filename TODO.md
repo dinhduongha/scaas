@@ -195,7 +195,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   **Pre-freeze work order (owner 2026-10-31):** finish everything that changes contracts / the core, then freeze, then
   audit, then the clients. Order:
   1. T14 — UA-Soroban on the Stellar testnet (from 2026-11-03, SDK 30.0.0).
-  2. `ua8-soroban` (UA-8 Part B on Soroban), together with: the msig `pop` minimal form, built for EVM `UARegistry` and
+  2. (Status 2026-11-01: merge of `bdde1d66` and M2 on branch `ua8-soroban`; M3 patch ready, B1 next.) `ua8-soroban` (UA-8 Part B on Soroban), together with: the msig `pop` minimal form, built for EVM `UARegistry` and
      Soroban (NEAR and Algorand have no UA registry yet — the rule is a requirement for their later UA rounds); the gen-1 registry kind set — **owner 2026-10-31: option (a)**, every
      gen-1 deploy carries every kind the chain can run (`DeployBase` already does; add a gate that refuses a gen-1
      deploy missing an EIP-2537 kind the probe passes; no `UARegistry` change); and the relay-fee minimum re-decision
@@ -212,6 +212,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      `mtxSetMandate`, …, each with its own typehash; a generic `Execute` only for inherently arbitrary calls); code size
      kept under 64 KiB with the library split pattern. `UARegistry.kindName(uint16)` view. The portable part goes first:
      `ua8-soroban` M2 / M3 / B1–B3 / B5 / B7 wait for it.
+     **Status 2026-11-01 (HANDOFF has the order):** C0–C3 and C5 on branch `typed-signing`, not on `main`; C3's review fix round next, then C4, C6, C7, C8, N1, N2, CD, CG, CRV.
      **After the round merges (owner 2026-10-31):** reset the SCaaS testnet **without a backup** (owner 2026-10-31) and load the new contracts (deploy with
      every kind incl. `DEPLOY_ZETHER=1`, PQZ / Zether e2e, `verify-blockscout.sh`, Blockscout DB reset, records).
   3. **Done 2026-11-01:** Zether verifier one merged MSM (EVM) — before `zether-soroban`, so the Soroban verifier is merged-MSM from the

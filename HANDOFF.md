@@ -1,4 +1,37 @@
-## Session 2026-10-31 (UA-Soroban merged, SCaaS testnet rolled out, PQZ / Zether unlocked) — resume here
+## Session 2026-11-01 (typed-signing P + R taken back off `main`, C0 to C3 + C5 built, merged-MSM verifier merged) — resume here
+
+**State, nothing running, all trees clean:**
+
+| Branch | Local | Remote | Note |
+|---|---|---|---|
+| `main` | this note on `462edf66` | `462edf66` | holds `pqz-core-m16`, `zether-msm`; **not** typed-signing P + R |
+| `typed-signing` | `0df419cd` + a TODO commit | `822dcde7` | 8+ commits unpushed: C3, C5; linear on `462edf66`; do not rebase again |
+| `ua8-soroban` | `5383ac7b` | `c5333fdb` | merge of `bdde1d66` and M2 unpushed |
+| `pre-typed-signing` | `a3854c72` | `a3854c72` | `main` merged in |
+
+CI on `main` is red on two old jobs, neither from today's merges: `docs` (10 fact misses in `docs/history`) and `ua-c` (`header_matches_src`; green at `19b0902a`, so Parts P + R probably cure it, not confirmed).
+
+**Done today (figures on the branches' runs/, decisions in `docs/decisions.md`):**
+- `typed-signing` Parts P + R finished (PRV fix wave), merged to `main` and pushed, then **taken back on the owner's word**: `main` force-pushed to `4c8d56ea`. Local tag `ref/pre-rebase-typed-signing` (`06efa3fe`) is the pre-rebase branch.
+- `pqz-core-m16` merged: the M = 16 "C core crash" was a bench bug only (stack, arena, divide by zero); core unchanged.
+- `zether-msm` merged and pushed: one merged MSM (182 / 154 / 159 + 25M points), proof bytes unchanged, verified by a Fable workflow (`docs/research/zether-msm-crypto-review.md`; no forgery, findings at most low, all fixed; G1MSM's subgroup check is the load-bearing precondition, now probed). Machine review, not an audit; UNAUDITED; never run on a live node; gas not measured, `gas_limits` in zether-prover pending.
+- C0 (size spike), C1 + review fix, C2 + review fix (`UAMetaTxBase`, lever 2), C3 (lever 1 in `ZetherWrappedLib`), C5 + review fix.
+- `ua8-soroban`: merge of `bdde1d66` (P + R) and M2; M3 built and reverted on the owner's stop, patch at `scratchpad/ua8-soroban-m3-uncommitted.patch` (private; applies on `5383ac7b`).
+
+**Owner rulings 2026-11-01:** `debit_min_gas` stays pinned until CG (now about +7.6 k over the pin at every set); `UARegistry` gets a deploy gate (88.3 M); size levers L2 + L1; `UAMetaTxBase` (non-token contracts can take UA calls); `executeMetaTransaction` stays in `MetaTxBase`, only `mtxExecuteWithFee` and the flat `uaUnwrap` go to legacy; the four flat wallet builders stay; **`UARegistry` is not split**, R2 is a reserve for a chain near BSC's 70M (`docs/research/evm-size-levers.md` §8); C-core-only fixes need no full gate.
+
+**Next, in order:**
+1. **C3 review fix round** (no critical / high / medium). L1: `clients/zether-prover/src/api.rs:666-674`, `schnorr.rs:170-175`: `ownerAuth` still returns the packed blob while `mtxRollOverSigned` / `mtxSetRollOverMode` take `UASig{signature}`; return the raw signature or send it to legacy (`tests/vectors.rs:103` checks only length). T1: typed `expectRevert` at `ZetherTyped.t.sol:468,473,508`, 473 being the only cross-token check. T2: owner rows stop at `AccountNotRegistered` (`:1005-1031`), add row tests for `ZetherRollOver`, `ZetherSetRollOverMode`. T3: keep a statement differential over M and auditor settings; the review's was thrown away. T4: vacuous selector test `envelope_disclosure.rs:236-242`. T5: `IZetherToken.transferMemo` NatSpec `49 + 40·M` should be `17 + 40·M`.
+2. **C4** (PQZ + `PqzAuth`, lever 1 on `WrappedPqzToken`; 58,368 B now, stop line about 64.5 KB). One string literal per typehash, a shared private call builder per entry pair (`evm-size-levers.md` §9). Then C6, C7, C8, N1, N2, CD, CG, CRV; each task gets an independent review and a fix round. The owner has been giving the go per task.
+3. **`ua8-soroban`:** apply the M3 patch, review, then B1 to B9, V1, RV; `set_pqz_key` of an msig n = 16 exceeds 65,536 B under U8S-D3 (B0 finding). `zether-soroban` branches from it; every untrusted point needs a subgroup check before folding. Merge `bdde1d66`, never a later `typed-signing`, so Part C stays out of it.
+4. **T14** from 2026-11-03 when the Stellar testnet reaches Protocol 30 and SDK 30.0.0 ships.
+5. After the round: merge to `main` on the owner's word (PR when the owner asks), reset the SCaaS testnet without backup, deploy, `e2e.py`, Zether e2e; calibration; freeze; audit.
+
+**Not verified / owed:** `scaas-node` suite on `ua8-soroban` (needs 6 GB, run alone); forge at the other three sets on `typed-signing`; the 102 vector-bound tests of the registry split spike; mutation rows for C2's review tests; docs (`metatx.md`, `accounts.md`, `zether.md`, `token-wrappers.md`) describe the old ABI until CD; `docs/history` fact misses. Deploy gate formula assumes EIP-8037 on every chain, wrong on a chain without it (only matters when deploying outside the SCaaS testnet). EIP-8037 was in Last Call (deadline 2026-11-01) and Glamsterdam on Hoodi was postponed 2026-10-22, so 1,530 gas/B may still move.
+
+**Machine:** systemd-oomd killed the terminal at 05:23 under raised `CAPPED_MEM` beside other jobs: never raise it beside another agent. `rtk diff` reported "identical" for files that differ: use `rtk proxy git diff`. Worktrees `typed-signing` and `ua8-soroban` hold real copies of `smartcontracts/evm/lib` and `clients/clientkeys/node_modules`.
+
+## Session 2026-10-31 (UA-Soroban merged, SCaaS testnet rolled out, PQZ / Zether unlocked)
 
 **State:** `main` = this note on top of `27d77467`; origin = `63e49509` (pushed 2026-10-31 on the owner's "push"); the
 `scaas-testnet` rename merge and this note are local. Running at the time of writing: branch `zether-testnet`
