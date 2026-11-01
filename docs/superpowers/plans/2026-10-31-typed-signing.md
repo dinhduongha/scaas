@@ -981,6 +981,9 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-35 / -36
   not remove the ABI coders under legacy codegen and raises total bytes, so `UARegistry` stays as it is. R2 (`UARegisterLib`, registry
   28,048 B, library 31,257 B) is the reserve, for a chain near BSC's 70M; on Ethereum it matters only if the limit stays under about
   88M. Table and sources: `docs/research/evm-size-levers.md` §8, `smartcontracts/evm/runs/2026-11-01-registry-split/`.
+- **Wallet builders stay (owner ruling 2026-11-01):** the flat `mtxPayUnderMandate(token, …)`, `mtxRevoke`, `mtxExecuteAsOwner` and
+  `mtxExecuteAsOwnerRaw` stay beside the named entries: they sign the generic `MetaTransaction`, add no digest, and `mandate_pay_kat`
+  and `mandate_revoke_kat` depend on them.
 - **`UARegistry` deploy gate (owner ruling 2026-11-01):** the registry gets a gate like the releases:
   `_requireReleaseGas("UARegistry")` in `DeployBase` and `require_release_gas("UARegistry")` in `e2e.py`, need 88.3 M
   (46,716 B × 1,530 + 2^24), test `test_registryDeployGate`, NET-EVM-06.
