@@ -17,7 +17,7 @@ import {UALedgerBase} from "./UALedgerBase.sol";
 /// Random mixes of native moves, mints, burns, `transferToUA`, the UA transfer entries (`uaExecuteTransfer`, the named
 /// `uaTransfer` / `uaTransferWithFee`, `uaBatchTransfer`; any side native or derived, with or without a fee) on the NORMAL
 /// clone and on the 1:1 WRAPPED clone `wrp`, plus wrap, wrap→UA and the burn under a derived UA (`unwrap` through
-/// `uaExecute`, optionally with a fee after the self-call), and the `UA_POOL` `transferFrom` refusal.
+/// `uaExecute` or the named `uaUnwrap`, optionally with a fee after the self-call), and the `UA_POOL` `transferFrom` refusal.
 /// UA-5a (CTR-UA-28, CTR-UA-26, CTR-MTX-05): `wrapToUA` on `wrp` and on the native-leg `wrpN`, `mintToUA`,
 /// `payWithFeeToUA`, `burn` under a derived UA, wraps of the ledger-leg `wrpL` (leg `tok` at 3/2, wrapped by this
 /// handler, a contract; `wrap` or `wrapToUA`), `unwrapToUA` from `wrpL` (direct by a native, or under `uaExecute` by a
@@ -116,9 +116,10 @@ contract UALedgerHandler is Test {
         _settle(wrp, 1, 1);
     }
 
-    /// The burn under a derived UA: `unwrap(und, amt, recipient, 0)` as `uaExecute` (optionally with a 1 % fee paid
-    /// after the self-call). `amt + fee` is bounded to the UA's balance.
-    function unwrapUnder(uint256 fromIdx, uint256 amount, bool withFee) external {
+    /// The burn under a derived UA, `amt` to `recipient`: `unwrap(und, amt, recipient, 0)` as `uaExecute` or `unwrap(amt,
+    /// recipient, 0)` as the named `uaUnwrap` (TS-D14), optionally with a 1 % fee paid after the self-call. `amt + fee` is
+    /// bounded to the UA's balance.
+    function unwrapUnder(uint256 fromIdx, uint256 amount, bool withFee, bool viaNamed) external {
         bytes32 f = uas[fromIdx % 2];
         uint256 have = wrp.balanceOfUA(f);
         // fee = amt / 100 exactly: amt is a multiple of 100 and `amt + amt / 100 ≤ have`
@@ -135,11 +136,29 @@ contract UALedgerHandler is Test {
             m.mode |= MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT | MetaTxLib.MODE_FEE_PERCENT;
             (m.fee, m.feeRecipient) = (10_000, FEE_TO);
         }
-        bytes memory auth = _auth(3 + fromIdx % 2, wrp.uaDigest(m));
-        vm.prank(RELAYER);
-        wrp.uaExecute(m, auth);
+        if (viaNamed) {
+            MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(f, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient);
+            bytes memory sig = _auth(3 + fromIdx % 2, _unwrapDigest(e, amount, recipient));
+            vm.prank(RELAYER);
+            WrappedToken(address(wrp)).uaUnwrap(e, amount, recipient, 0, UAKinds.uaSig(f, sig));
+        } else {
+            bytes memory auth = _auth(3 + fromIdx % 2, wrp.uaDigest(m));
+            vm.prank(RELAYER);
+            wrp.uaExecute(m, auth);
+        }
         uint256 n = fee != 0 ? 2 : 1; // the burn, and the fee move out of the UA
         _settle(wrp, n, n);
+    }
+
+    /// The `UAUnwrap` digest under `wrp`'s domain (ERC-5267), as a wallet computes it; relayer and fee recipient bound.
+    function _unwrapDigest(MetaTxLib.UAEnvelope memory e, uint256 wrapped, address recipient) internal view returns (bytes32) {
+        bytes32 structHash = keccak256(bytes.concat(abi.encode(
+            keccak256("UAUnwrap(bytes32 from,uint256 wrapped,address recipient,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            e.from, wrapped, recipient, uint256(0)), abi.encode(e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient)));
+        (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) = wrp.eip712Domain();
+        return keccak256(abi.encodePacked(hex"1901",
+            keccak256(abi.encode(keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
+                keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt)), structHash));
     }
 
     // ----- ops: UA-5a receivers, the UA allowlist, receiver-pays -----
