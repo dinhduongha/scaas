@@ -381,9 +381,14 @@ moved out of the lane beyond fees, net of excess observed coming back (GRAM forw
 `deposits` = rent or storage the lane funded (Solana account rent, Sui storage net of rebate, Aptos storage fee,
 Soroban rent, NEAR storage stake attached as deposit, Algorand MBR payments). So `Breaker::spend(fee + value_out + deposits)`; adapter method `tx_cost(tx_id) → TxCost`
 (`tx_cost(tx_id) -> Option<TxCost { fee, value_out, deposits }>`) for every landed
-terminal status; the three are `outer_tx` cost fields. Status: the EVM path meters every receipt (**BUILT**); the
-generic runner metering every terminal status is **SPECIFIED**. Under attack the hourly budget trips earlier, as
-intended.
+terminal status; the three are `outer_tx` cost fields. Status: the EVM path meters every receipt (**BUILT**). The generic
+runner's `fee` is **BUILT** (ua8-soroban B9a): `follow` feeds `Breaker::spend` with `tx_fee` once per landed transaction, for
+`Mined` and for `Reverted`, on every family that reports one (Solana, Aptos, NEAR and Soroban charge a failure and answer
+what they charged; Algorand answers `None` at a pool error because that group paid nothing; Hedera, Sui, Cosmos and TON
+report no fee yet), so a lane burned by failing jobs stops. A fee that cannot be read is a `warn!` and the counter
+`scaas_fee_unread_total{chain,lane}`, not a guess. `value_out` and `deposits` through the generic runner are still
+**SPECIFIED**. A restart resets the window, and `recover_lane` follows a recovered transaction without the breaker, so a fee
+landed across a restart is not metered. Under attack the hourly budget trips earlier, as intended.
 
 <a id="retries"></a><a id="NODE-LANE-14"></a>**NODE-LANE-14** — **A billed failure is retried at most once; every job
 has an attempt cap.** Adapters classify each outcome as **not included** (precheck, CheckTx or mempool reject,

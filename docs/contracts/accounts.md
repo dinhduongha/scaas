@@ -234,7 +234,20 @@ structure, its struct type the operation. This holds for the three portable purp
 purpose keeps the EIP-712 `UAAuth` ([CTR-UA-24](#CTR-UA-24)). So an `msig` PoP with native members is portable too, and the member's
 wallet shows the record's fields, not a hash. Members come typed ([CTR-UA-36](#CTR-UA-36)), so `abi.encode(MemberSig[])` is only the
 stored form and there is no second encoding of one signature to refuse. A classical-dominant `msig` has no PoP of its own (its
-members proved theirs) and registers with an empty `pop`.
+members proved theirs) and registers with an empty `pop`; where a member's own registration was only attested by a relayer
+([CTR-UA-34](#CTR-UA-34), Soroban), "proved theirs" is false for that member and the `msig`'s `CHAIN` mark says only that its `pop`
+holds nothing unverified.
+
+**Minimal form of a stored `msig` signature** (owner 2026-10-31, scope controller call under the owner's rule: "with `T` = the
+slots' total weight and `N` the threshold, require `T ≥ N` and, for every slot `i`, `T − weight(i) < N` (each slot necessary)").
+It applies to the three portable purposes, the signatures the registry stores and copies byte for byte (`pop` v2, `kem`, `pqz-key`):
+`UARegistry._msig(…, portable = true)` on EVM, `check_msig(…, portable = true)` on Soroban, one pass summing `T` and keeping the
+smallest slot weight `w_min` (accept iff `T ≥ N` and `T − w_min < N`), every slot counting its member's weight, native members
+included. Failure is `UAPoP` in `register` and `UAUnauthorized` in `setKemKey` / `setPqzKey` (Soroban: `Pop` / `Unauthorized`); no new
+error, no ABI change. A transaction authorisation (`requireAuthorized`) is not stored and keeps its rule (a slot after the threshold
+fails). A front-runner that drops a slot from a valid `pop` gets a refusal, and `clientkeys` and `ua-rs` build only minimal sets.
+**BUILT** on EVM (ua8-soroban M2) and Soroban (M3). NEAR UA round: requirement, to be built in that family's own UA registry; Algorand
+UA round: requirement, to be built in that family's own UA registry (neither has a UA registry today, [NET-ALL-84](../networks/README.md#NET-ALL-84)).
 
 The PQZ key and the KEM record are the fields not implied by `keyData`; the signer's PoP covers their hashes, so a
 front-runner can neither strip them (the PoP over the real hashes fails over the zero record) nor swap them (another key changes the
@@ -287,7 +300,8 @@ invisible to the chain.
 members by `(kind, id, weight)`, strictly sorted by id; a member may not itself be a structure. (A `bls12381-multi` kind
 was cut — no consumer, and `msig` over `bls12381-minsig` covers it; number `0x0121` stays reserved.) The call takes the
 structure typed (`registerMsig`, [CTR-UA-36](#CTR-UA-36)); the registry assembles these bytes, so the id is the packed form's. Bounded gas, no
-cycles, a simple audit. Two-level governance uses `SmartKeyAccount` or Safe (native 1271) as a member.
+cycles, a simple audit. Two-level governance uses `SmartKeyAccount` or Safe (native 1271) as a member. A stored signature of an
+`msig` (`pop`, KEM, PQZ key) is **minimal**: every slot necessary, see [CTR-UA-07](#CTR-UA-07) (owner 2026-10-31).
 
 <a id="registration-gate"></a>
 <a id="CTR-UA-25"></a>**CTR-UA-25** — **No on-chain registration gate in v1** (owner): registration spam is bounded by
@@ -354,7 +368,7 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
 - **A submitter's choice of signatures.** For an `msig` any quorum's signatures are valid, so a front-runner that holds a
   quorum's signatures can submit a different valid subset first: the stored `pop` / `sig` differs, the key, the version and
   the id do not. Nothing depends on which valid subset is stored.
-- **Family status.** EVM: built (UA-8 Part A). Soroban: the registry and the portable `register` (empty `attrs`) are **BUILT** in UA-Soroban on branch `ua-soroban` ([NET-SOR-17](../networks/soroban.md#NET-SOR-17)), on the typed digests since `typed-signing`; the KEM records, PQZ attributes, `checked = Relayer` and the relayer-checked mode are Part B (`ua8-soroban`, next, after the owner's go on `ua-soroban`). Other families: their own UA family rounds.
+- **Family status.** EVM: built (UA-8 Part A). Soroban: the registry and the portable `register` (empty `attrs`) are **BUILT** in UA-Soroban on branch `ua-soroban` ([NET-SOR-17](../networks/soroban.md#NET-SOR-17)), on the typed digests since `typed-signing`; UA-8 Part B (`ua8-soroban`: attributes, KEM records, PQZ attributes stored unproven, `checked = Relayer`, the relayer-checked mode, `call` jobs) is **built, local end-to-end passed; done only after B10**, the Stellar testnet run ([NET-SOR-27](../networks/soroban.md#NET-SOR-27)). Other families: their own UA family rounds; NEAR and Algorand are separate rounds, neither has a UA registry yet.
 
 <a id="CTR-UA-33"></a>**CTR-UA-33** — **The registration event carries `popHash`; `msig` members sign without key data; WebAuthn blobs canonical only** (owner 2026-10-30;
 [decisions.md](../decisions.md)). One rule on every family that has a UA registry:
@@ -445,6 +459,17 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   not committed (`UAKemVersion`) → the key: scheme (`UAKemScheme`), length (`UAKemKeyLength`) → signature (`UAUnauthorized`; version 0: a non-empty
   `sig`) / version 0 the committed hash (`UAKemKeyHash`). `setKemKey` decodes the whole registration blob (the key data and `pop`: about 7 KB
   for an `msig` with PQ members), a few per cent of its gas ([§1.15](#gas)).
+
+<a id="CTR-UA-34"></a>**CTR-UA-34** — **Relayer-checked mode: where a chain cannot verify a part, a listed relayer checks it off chain, the record says so, and nothing it marks ever authorises** (owner rulings P10 and P11 of 2026-10-29, UA-8 spec P11 rules 1 to 6; the Soroban form is controller calls, owner may override; [decisions.md](../decisions.md)). Soroban is the first family to run it ([NET-SOR-27](../networks/soroban.md#NET-SOR-27)); **EVM does not**, every part it stores is verified on chain, so `checked` there is derived ([CTR-UA-31](#CTR-UA-31)). Status: **BUILT** on Soroban (ua8-soroban B4, B6, B7b), not yet on a network (B10); every other family: SPECIFIED, in its own UA round.
+
+1. **The relayer checks before it submits.** The full verification the EVM registry does: the id from canonical key data, `pop` over the registration digest, every KEM record signature, the minimal form of an `msig` signature ([CTR-UA-07](#CTR-UA-07)), `keccak256(pqz_pop) == pqz_pop_hash` (the PQZ proof itself is not checked where there is no verifier). The node does it with `scaas_ua::ua8::check_*` (feature `pq`, exact-pinned PQ crates, accepted only if every KAT row agrees) and never submits a record that fails it; `clientkeys` re-checks with its own verifiers.
+2. **Only listed relayers write in this mode.** The list is the registry's constructor argument, immutable, no admin. A part the chain cannot verify without a `relayer` is `NotVerifiable`, a relayer outside the list `RelayerNotListed`. A part the chain verifies is always verified there and stays open to anyone, whatever `relayer` says.
+3. **The record says who checked each part:** `checked = none | chain | relayer(<id>)` per part (`pop`, PQZ proof, KEM record), in state and in the event. Soroban: the relayer authenticates by `require_auth_for_args` over `attest_digest`, a hash of the whole call (owner 2026-11-01), so the transaction does not carry every argument twice.
+4. **Everything needed to re-check is stored,** and **clients always re-verify** before using a key read from a relayer-checked record: the id is a hash of the key data, so identity is never taken on the relayer's word, but a member of a classical-dominant `msig` that is itself relayer-checked was not proved by the chain (a Change to the reading of [CTR-UA-07](#CTR-UA-07), controller call).
+5. **A relayer-checked record never authorises anything on that chain:** `signable = false`, never receivable, no signer entry; the record serves discovery. Change (controller call, owner may override; B4): this is the rule for a single key. For an `msig` whose `pop` is relayer-marked only because a member or slot is relayer-checked, `signable` counts only members the chain verifies and `G…` accounts, so such an `msig` may stay `signable` by those members; the attestation adds no authority. The reading of the UA-Soroban spec's §6 ("a `Relayer` record has `signable = false`") and S9 ("`pop` checked by the chain") is amended accordingly.
+6. **Residual, accepted with the mode:** a listed relayer that stores a bad record takes that write-once `(ua, version)` slot on that chain. Changes (controller call, owner may override; B4): the remedy "the operator delists such a relayer" means **a new registry and new tokens** where the list is immutable (Soroban), records of the old registry staying readable; a bad relayer can also **pin `kem_key_of` through a high version**, so clients read `kem_key_at` with a version they verified; a marked record never blocks a `Chain` kind (a relayer kind's key sits in its own `KeyR` entry, so a bad record cannot take a real key such as a `secp256k1` x from its owner); `key_owner` may return a record that is only marked, so a reader checks `checked_of`.
+
+Open for the owner, stated as open: an `msig` whose `pop` has a `G…` member's slot beside a relayer-checked slot is refused off chain and through node `call` jobs (a host-checked slot has no off-chain form), so such records need another path; and `call` jobs are free to the client, their cost to the lane limited only by the spend breaker.
 
 <a id="CTR-UA-35"></a>**CTR-UA-35** — **`kindName(kind)` answers a kind id's name** (owner 2026-10-31; [decisions.md](../decisions.md)).
 `UARegistry.kindName(uint16 kind) external pure returns (string)` is `UAKinds.name(kind)`. Every id of the kind table answers, enabled or
@@ -1728,7 +1753,8 @@ destruction.
 `IUniversalAccountRegistry` and `AuthScheme` leave the build (backed up in `smartcontracts/evm/legacy/ua3/`, owner:
 backup, not delete); `ZetherTypes.toUA` becomes the tagged derivation; Zether accounts re-register; no data migration.
 **BUILT (UA-3)**, plan `docs/superpowers/plans/2026-10-12-ua3-zether.md`. Every chain with the EIP-2537 probe may hold registrations ([CTR-ZTH-52](zether.md#CTR-ZTH-52));
-test balances are recreated by scripts.
+test balances are recreated by scripts. Generation 1 on a chain must carry every kind the chain can run: the gen-1 kind gate
+(owner 2026-10-31, option (a); **BUILT**, ua8-soroban G1) is in [§1.9](#gen1-kind-gate).
 
 What existed before UA-3: `UniversalAccountRegistry` (Zether-only, `UA = keccak256(encodedY)`, untagged; `AuthScheme` 8 values; PoP
 binds `msg.sender`; `links`/`link_eth`; no rotation). Consumers: the Zether kinds, P3 (`ZetherLayer.registered` via `keyLengthOf`,

@@ -209,6 +209,7 @@ Existing (BUILT, `admin.rs` `render()`, `submit.rs`; first-release forms `scaas_
 | `scaas_indexer_lag_blocks` | gauge | `chain` | final head − indexed block |
 | `scaas_relayer_balance` | gauge | `chain`, `lane` | smallest gas-coin unit |
 | `scaas_breaker_open` | gauge | `chain`, `lane`, `breaker` | + `revert_streak`, reported on every lane of the chain |
+| `scaas_fee_unread_total` | counter | `chain`, `lane` | landed transactions (mined or reverted) whose fee `tx_fee` could not read, so the gas budget missed that fee; each is also a `warn!` log naming the job. BUILT (ua8-soroban B9a) |
 | `scaas_submit_bump_skipped_consumed_total` | counter | none today; `chain`, `lane` added with the metrics core | consumption check |
 | `scaas_config_toml_drift` | gauge | — | [NODE-STO-03](store.md#NODE-STO-03) |
 
@@ -612,6 +613,17 @@ month). Conversion to the reporting currency happens only in the report, with an
 ([NODE-LANE-05](submit-lanes.md#NODE-LANE-05)), sponsor budgets ([NODE-SPN-02](sponsorship.md#NODE-SPN-02)) and
 `max_live_jobs`.** Jobs are purged after 30 d, Prometheus retention is short, and `~gateway`/`~mesh` costs are booked by
 no client, so the rollup is needed; cost: one small upsert per terminal job.
+
+**Soroban spend limits are mandatory** ([NET-SOR-14](../networks/soroban.md#NET-SOR-14); controller call under the owner's
+ruling of 2026-11-01, owner may override; **BUILT**, ua8-soroban B9a). A `soroban` chain with `modules.submit` on does not
+start unless `[chains.breaker]` sets both `gas_budget_per_hour` and `min_relayer_balance` above 0 (stroops; the error names
+the chain). Why a refusal and not a default: a job is free to the client and its fee is the lane's, the amount is a money
+decision for the operator's finance owner, and a default would be an XLM figure nobody chose on a family that also serves
+Pi. An indexer-only node (`modules.submit` off) has no lane to limit and needs neither. `node.example.toml` sets 100 XLM an
+hour and a 10 XLM floor on both Soroban chains as a starting point, not as a recommendation. A landed failure counts against
+the budget (`FAILED` Soroban transactions are billed): the breaker opens at the budget and no later job is claimed, while a
+job in flight is still followed to its report. When `tx_fee` cannot read a landed transaction's fee, the budget misses it:
+that is a `warn!` log and `scaas_fee_unread_total{chain,lane}`, never a guessed fee. Alert on an increase of the counter.
 
 Measurement:
 

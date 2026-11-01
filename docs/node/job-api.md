@@ -424,6 +424,44 @@ refuses the second.
 <a id="NODE-JOB-15"></a>**NODE-JOB-15** (open; default applied) — The namespace created for an ERP client that
 migrates from the legacy pull path gets `allow_call = true` (mandates and subject accounts need it).
 
+<a id="soroban-call-jobs"></a>**Soroban `call` jobs** (UA-8 Part B, `ua8-soroban` B6; BUILT; [NET-SOR-23](../networks/soroban.md#NET-SOR-23),
+[NET-SOR-27](../networks/soroban.md#NET-SOR-27); the owner's explicit-parameter rule of 2026-10-31 replaced the plan's
+`op.extra.call` XDR). The Soroban `call` job has no selector table: its target is the chain's UA registry only, and its
+function one of the registry's eight writes. Payload: `{kind: "call", op: {contract, function, args, valid_until}}`, every
+field required and any other field refused at every level (no XDR, `auth`, `extra` or `payload` can enter).
+
+- `contract`: a `C…` equal to the chain's `params.ua_registry`; unset means every Soroban `call` job is refused.
+- `valid_until`: unix seconds, the transaction's `max_time`; after now and at most 3,600 s later (`MeshParams.max_valid_for_secs`,
+  no `node.toml` knob), else refused.
+- `args`: the contract's own argument names, bytes as `0x…` hex, a `#[contracttype]` struct as an object of its fields, `relayer`
+  null or a `G…`. A number outside what the record's bytes hold is refused at the node (`kind`, `threshold`, `weight`, `index`
+  above 65,535, `scheme` above 255). The names are the contract's, not `portable.json`'s camelCase EVM `args`.
+
+| `function` | `args` |
+|---|---|
+| `register` | `kind, key_data, attrs, pop, pqz_pop, relayer` |
+| `register_msig` | `structure {threshold, members [{kind, id, weight}]}, attrs, pop [{index, key_data, sig}], pqz_pop, relayer` |
+| `register_webauthn` | `key {x, y, rp_id_hash}, attrs, pop, pqz_pop, relayer` |
+| `register_musig2` | `kind, key {agg_key, member_keys}, attrs, pop, pqz_pop, relayer` |
+| `register_frost` | `kind, key {group_key, threshold, members [{commitments, r, z}]}, attrs, pop, pqz_pop, relayer` |
+| `set_kem_key` | `ua, version, kem, sig, relayer` |
+| `set_pqz_key` | `ua, pqz_key, pqz_pop_hash, sig, relayer` |
+| `store_pqz_pop` | `ua, pqz_pop` |
+
+`attrs` is `{pqz_key, pqz_pop_hash, kem, kem_pk_hash}`, `kem` is `{scheme, mlkem_ek, x25519}`, `sig` is `{key_data, signature, members}`.
+
+Rules at `build`: `relayer` must be null or this lane, and this lane only when it is in the registry's `relayers()` (read once
+and kept: the list is immutable); a part the chain cannot verify needs a `relayer` (refused before simulation otherwise) and is
+checked off chain first (`scaas_ua::ua8::check_*`, feature `pq`), a part the chain verifies is not; the transaction carries one
+`SourceAccount` entry (the relayer's attestation over `attest_digest` of the call's arguments) only when a relayer is named; a
+simulation that records any other signer is refused before signing; a finished transaction over `tx_max_size_bytes`, or a largest
+entry over the entry limit, is `Revert`: the job is `dead` on one claim and nothing is signed. A failed `relayers()` read holds
+only the relayer-mode jobs, never payments. The `UA_REGISTER_SPLIT` rule is EVM's; a Soroban job splits a proof off by sending
+`store_pqz_pop` itself. `call` jobs are free to the client and `max_deposit_per_job` caps only restores, so a job's cost to the
+lane is bounded by the spend breaker ([NET-SOR-14](../networks/soroban.md#NET-SOR-14)); whether they should stay free is an open
+owner question. A `call` job that carries the call in a field other than `op` is `job without op` and fails closed; consumers
+follow this interface.
+
 ## <a id="call-table"></a>11. Call table
 
 <a id="call-table"></a><a id="NODE-JOB-01"></a>**NODE-JOB-01** — **`call` jobs are limited to a selector/target

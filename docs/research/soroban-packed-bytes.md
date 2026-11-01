@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 # Soroban packed-`Bytes` inventory
 
 The Soroban half of the explicit-parameter inventory (typed-signing X0, hand-over TS-D9). It replaces
