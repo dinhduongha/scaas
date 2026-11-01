@@ -510,6 +510,12 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         tok.mtxRelayFee(alice, t.tgt, t.cdh, PAYEE, FEE, t.validUntil, s);
         assertEq(tok.balanceOf(PAYEE), FEE);
         assertEq(tok.mtxNonce(alice, t.batch), 1);
+        // the UA half's control: another call bytes, so another lane (`pad(alice)` shares the one spent above); from the router it passes
+        u = _upay(MetaTxLib.pad(alice), MetaTxLib.pad(PAYEE), address(target), bytes.concat(cd, hex"00"), FEE);
+        a.signature = _ecdsa(ALICE_PK, _digest(address(tok), UA_RELAY_FEE, u, address(router)));
+        vm.prank(address(router));
+        tok.uaRelayFee(u.from, u.tgt, u.cdh, u.to, FEE, u.validUntil, a);
+        assertEq(tok.balanceOf(PAYEE), 2 * FEE);
     }
 
     /// `test_relayFeeTyped`: the wallet's JSON digest settles through the router in open mode (+UA): lane `payLane(ref)`,
