@@ -737,13 +737,16 @@ message, `structHash`, `digest`, the entry's calldata, a native ECDSA signature)
 
 ### Task C2: base + public tokens
 
-**Files:** `MetaTxLib.sol`, `MetaTxBase.sol`, `MtxPipelineLib.sol`, `ERC20MetaTx.sol`, `MetaTokenBase.sol`,
+**Files:** `MetaTxLib.sol`, `MetaTxBase.sol`, new `UAMetaTxBase.sol` (owner ruling 2026-11-01, Owner rulings below), `MtxPipelineLib.sol`, `ERC20MetaTx.sol`, `MetaTokenBase.sol`,
 `NormalToken.sol`, `WrappedToken.sol`, `IMetaTx.sol`, `IERC20MetaTx.sol`, `IUALedger.sol`, `IWrappedToken.sol`
 (ERC-165 ids re-pinned); the named `ua*` entries take `UASig`; the generic `uaExecute` / `uaBatch` keep `bytes auth` and R1's decode helper (TS-D14); legacy
 `smartcontracts/evm/legacy/typed-signing/` (`executeMetaTransaction`, `mtxExecuteWithFee` only; the four generic entries, their structs and `mtxSelectors` stay, owner 2026-10-31);
 tests `test/metatx/*`, `test/v2/*` that used `mtxExecute` / `uaExecute` / `mtxBatch`, new `test/metatx/TypedOps.t.sol`
 (reads `typed_ops.json`), `test/ua/UAMetaTx3Vectors.t.sol`, gas `test/v2/MetaTxGasV2.t.sol` (`AMS_*` re-pinned).
 
+- [ ] Step 0: first commits, on their own, before the entries: lever 2 (`_enter` / `_exit`), then `UAMetaTxBase` (a pure move: whole suite
+  green, every token's `mtxSelectors`, ERC-165 ids and storage layout unchanged; new test `test_uaBaseRefusesFee`, a minimal
+  non-token contract on `UAMetaTxBase` that runs a UA-signed call at fee 0, refuses fee ≠ 0, and reads `_ticketSubject()`).
 - [ ] Step 1: failing tests `test_typedOpsVectors_<op>` for `CancelNonce`, `Burn`, `UABurn`, `Wrap`, `WrapLeg`,
   `Unwrap`, `UAUnwrap`, `UnwrapLeg`, `UAUnwrapLeg`, `AddReserve`, `WrapToUA`, `UnwrapToUA`, `UAUnwrapToUA`;
   `test_removedAliasesGone` (`executeMetaTransaction`, `mtxExecuteWithFee` selectors absent), `test_genericEntriesKept` (the four generic entries still run), `test_namedEntryReplayRefused` (nonce), `test_namedEntryOtherOpDigestRefused`
@@ -948,6 +951,14 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-42** (ty
   `uaCancelOrder`; the router is `relay(target, callData, token, from, payee, value, validUntil, sig)`; `AccountSig` on the
   account's own five entries and its `Execute`, `bytes sig` on every `mtxCancelNonce`. `metatx3.json` and
   `uatrade_kat.json` regenerate in C6, not C1.
+- **`UAMetaTxBase` (owner ruling 2026-11-01):** `uaExecute` is a general entry, so contracts that are not tokens must be
+  able to take UA-signed calls later. A new `abstract contract UAMetaTxBase is MetaTxBase` (`src/metatx/UAMetaTxBase.sol`)
+  holds `_REGISTRY`, `_mtxCtx`, `uaExecute`, `uaBatch`, `_uaExecute`, `_namedUA`, `_uaSettle`, the envelope and digest helpers
+  of the UA path, and the non-ledger part of `_callFacts` / `_uaAllowed`. The fee step becomes a hook `_uaChargeFee`, whose
+  default refuses a fee ≠ 0 (a contract with no ledger runs at fee 0, owner's relayable rule); `ERC20MetaTx is
+  UAMetaTxBase` overrides it with `_uaMove`. Not in `MetaTxBase`: `SmartKeyAccount` and `MandateWallet` stay without a
+  registry or UA code. A non-token contract must read `_ticketSubject()`, since `_msgSender()` is `UA_POOL` for every derived
+  subject. Pure move, no storage change, no ABI or selector change for tokens; built at the start of C2 with lever 2.
 - **`UARegistry` deploy gate (owner ruling 2026-11-01):** the registry gets a gate like the releases:
   `_requireReleaseGas("UARegistry")` in `DeployBase` and `require_release_gas("UARegistry")` in `e2e.py`, need 88.3 M
   (46,716 B × 1,530 + 2^24), test `test_registryDeployGate`, NET-EVM-06.
