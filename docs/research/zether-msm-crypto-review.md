@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 # Cryptographic review of the merged Zether verifier
 
 **A machine review, not an independent audit.** Claude Opus agents ran it on 2026-11-01, on the `zether-msm` snapshot `6fed9881`:
