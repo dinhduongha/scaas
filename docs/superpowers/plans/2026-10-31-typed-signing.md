@@ -719,8 +719,8 @@ with every envelope word ABI-encoded — never `encodePacked` on `uint32 mode`),
 **Files:** `clients/clientkeys/src/evm.js` (one `<op>TypedData({domain…, message})` + `<op>Calldata(td, sig)` per named
 entry, built from one table of type strings; `checkCall` → `checkOp(td, expectations)` per struct family (CLI-SGN-27:
 check then sign exactly what was checked); `receiverFeeTypedData` nested; `cancelOrderTypedData` nested;
-`buildRelayFee` → `RelayFee`; `ownerCallTypedData` → the SmartKeyAccount structs; the `MetaTransaction` builders →
-legacy), `clients/clientkeys/src/zether.js` (`ZetherRollOver` / `ZetherSetRollOverMode` digests, confidential
+`buildRelayFee` → `RelayFee`; `ownerCallTypedData` → the SmartKeyAccount structs; the `MetaTransaction` builders
+stay, TS-D14), `clients/clientkeys/src/zether.js` (`ZetherRollOver` / `ZetherSetRollOverMode` digests, confidential
 envelope builders from the explicit structs), new `clients/clientkeys/scripts/typed-ops-vectors.mjs` →
 `smartcontracts/vectors/typed/typed_ops.json` (per struct: `typeString`, `typehash`, a domain per contract kind, a
 message, `structHash`, `digest`, the entry's calldata, a native ECDSA signature), regenerate `metatx3.json` /
@@ -739,14 +739,14 @@ message, `structHash`, `digest`, the entry's calldata, a native ECDSA signature)
 
 **Files:** `MetaTxLib.sol`, `MetaTxBase.sol`, `MtxPipelineLib.sol`, `ERC20MetaTx.sol`, `MetaTokenBase.sol`,
 `NormalToken.sol`, `WrappedToken.sol`, `IMetaTx.sol`, `IERC20MetaTx.sol`, `IUALedger.sol`, `IWrappedToken.sol`
-(ERC-165 ids re-pinned); the `ua*` entries take `UASig` (removes R1's decode helper); legacy
-`smartcontracts/evm/legacy/typed-signing/` (generic entries, `MetaTransaction` structs / typehashes, `mtxSelectors`);
+(ERC-165 ids re-pinned); the named `ua*` entries take `UASig`; the generic `uaExecute` / `uaBatch` keep `bytes auth` and R1's decode helper (TS-D14); legacy
+`smartcontracts/evm/legacy/typed-signing/` (`executeMetaTransaction`, `mtxExecuteWithFee` only; the four generic entries, their structs and `mtxSelectors` stay, owner 2026-10-31);
 tests `test/metatx/*`, `test/v2/*` that used `mtxExecute` / `uaExecute` / `mtxBatch`, new `test/metatx/TypedOps.t.sol`
 (reads `typed_ops.json`), `test/ua/UAMetaTx3Vectors.t.sol`, gas `test/v2/MetaTxGasV2.t.sol` (`AMS_*` re-pinned).
 
 - [ ] Step 1: failing tests `test_typedOpsVectors_<op>` for `CancelNonce`, `Burn`, `UABurn`, `Wrap`, `WrapLeg`,
   `Unwrap`, `UAUnwrap`, `UnwrapLeg`, `UAUnwrapLeg`, `AddReserve`, `WrapToUA`, `UnwrapToUA`, `UAUnwrapToUA`;
-  `test_genericEntriesGone` (selectors absent), `test_namedEntryReplayRefused` (nonce), `test_namedEntryOtherOpDigestRefused`
+  `test_removedAliasesGone` (`executeMetaTransaction`, `mtxExecuteWithFee` selectors absent), `test_genericEntriesKept` (the four generic entries still run), `test_namedEntryReplayRefused` (nonce), `test_namedEntryOtherOpDigestRefused`
   (an `Unwrap` signature on `mtxUnwrapLeg`), `test_namedEntryFeeClass` (amount-class fee on unwrap, absolute on wrap),
   `test_relayFeeRouterRunsNamedEntry` (router + executor call `mtxUnwrap` with fee 0).
 - [ ] Steps 2–4: FAIL → implement → `test/metatx`, `test/v2`, `test/ua` PASS; whole suite (default set); `sizes`
@@ -942,6 +942,12 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-42** (ty
   DELEGATECALL count raised for that library, and the library in the release's link closure). Mock: `WrappedPqzToken`
   61,378 B, `WrappedZetherToken` 61,704 B, least margin 3,832 B; the mock does not run, so C3 / C4 re-check real sizes.
   `optimizer_runs` stays 200, `via_ir` off. Above about 64.5 KB on real code: stop and ask; lever 3 or B′ is the reserve.
+- **C2–C6 follow C1's table (controller calls, owner may override; CLI-SGN-27 change of 2026-11-01):** `uaShield` keeps
+  `bytes auth` as the C0 spike; `Payout` (`amount`, `recipient` in one calldata struct) is PQZ only, Zether's `mtxUnshield`
+  is flat; `mtxWrapOrder(address underlying, WrapOrder, sig)` keeps the leg; wrap-order cancels use `mtxCancelOrder` /
+  `uaCancelOrder`; the router is `relay(target, callData, token, from, payee, value, validUntil, sig)`; `AccountSig` on the
+  account's own five entries and its `Execute`, `bytes sig` on every `mtxCancelNonce`. `metatx3.json` and
+  `uatrade_kat.json` regenerate in C6, not C1.
 - **`UARegistry` deploy gate (owner ruling 2026-11-01):** the registry gets a gate like the releases:
   `_requireReleaseGas("UARegistry")` in `DeployBase` and `require_release_gas("UARegistry")` in `e2e.py`, need 88.3 M
   (46,716 B × 1,530 + 2^24), test `test_registryDeployGate`, NET-EVM-06.
