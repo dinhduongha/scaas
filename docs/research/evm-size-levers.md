@@ -120,7 +120,7 @@ Take **lever 2 and lever 1** for C2–C6, as an owner decision.
 
 ## 8. `UARegistry` split (2026-11-01)
 
-Measured on a scratch copy at typed-signing C2, not built on the branch. Owner ruling: not split; R2 is the reserve, for a chain near BSC's 70M. Sources: `smartcontracts/evm/runs/2026-11-01-registry-split/`.
+Measured first on a scratch copy at typed-signing C2 (the table below, the owner's first ruling: not split). Owner ruling later on 2026-11-01: build R2 alone. Built in typed-signing R2; its figures close this section. Sources: `smartcontracts/evm/runs/2026-11-01-registry-split/` (spike), `smartcontracts/evm/runs/2026-11-01-typed-signing-r2-*` (built).
 
 | Variant | Registry runtime | Libraries | Total | Largest transaction (forge simulated) |
 |---|---|---|---|---|
@@ -132,7 +132,30 @@ Measured on a scratch copy at typed-signing C2, not built on the branch. Owner r
 
 - **R1′ falls short.** Legacy codegen writes the return encoder in the external wrapper whatever the body does, so the coders stay (12,654 B against 14,970 B). A raw `delegatecall` in a `view` function is refused; the working stub casts a function pointer past the view checker. Via-IR removes the coders, but its baseline is already 46,071 B.
 - **R2 costs:** `register` about +6 k regular gas, `registerMsig` about +8.8 k, total bytes +27 %. The hot path stays: `requireAuthorized` within +37 gas. The 53 selectors stay; `SSTORE2WriteFailed` must be declared again. New patterns: three words appended to the forwarded calldata for the immutables, callbacks on `address(this)`, `_sigOk` moved to the library, the registry's CREATE2 address depends on the library.
-- **Not measured:** 102 of 432 tests failed on every variant, baseline included, because the scratch copy lacked the branch's vectors. `register` with real signatures has run on no variant. A difference test with stand-in verifiers matched baseline on all 1,210 hashes. Re-run with the vectors before adopting R2.
+- **Not measured by the spike:** 102 of 432 tests failed on every variant, baseline included, because the scratch copy lacked the branch's vectors. `register` with real signatures had run on no variant. A difference test with stand-in verifiers matched baseline on all 1,210 hashes. Owed before adopting R2; done below.
+
+### Built (typed-signing R2, 2026-11-01)
+
+| | `UARegistry` runtime | init | `UARegistryLib` runtime | Total runtime |
+|---|---:|---:|---:|---:|
+| pre-split (C6) | 46,716 | 53,718 | none | 46,716 |
+| built | 27,997 | 34,970 | 31,315 | 59,312 (+26.9 %) |
+
+Each deployment its own transaction, CREATE2 with a salt, 20 kinds + 0x0142 (`UARegistrySplit.test_deployGas`, forge simulated):
+
+| Transaction | Regular | State | Total | Gate `runtime × 1,530 + 2^24` |
+|---|---:|---:|---:|---:|
+| pre-split `UARegistry` | 3,593,112 | 71,659,080 | 75,252,192 | 88.3 M |
+| `UARegistry` | 2,392,984 | 43,019,010 | 45,411,994 | 59.6 M |
+| `UARegistryLib` | 2,030,488 | 48,095,550 | 50,126,038 | 64.7 M |
+
+The largest transaction of the registry falls from 75.3 M to 50.1 M, under a 60 M block. The library's gate asks 64.7 M, 14.6 M over its simulated gas: its code deposit is state gas, so the formula's whole 2^24 of regular room is unused. The formula stays (owner rule), so on a 60 M block the gate refuses the library although the transaction fits; `NormalToken` (73.7 M) is refused there anyway.
+
+- **Hot path:** `requireAuthorized` single keys +37 gas, group and PQ kinds +15, `zether-bls12381` +4, native EOA +5, native ERC-1271 −49, `msig` 2-of-2 −38: the spike's +37 holds.
+- **Writes:** `register` +6,055…+6,454 regular gas, `registerMsig` +8,841, state gas unchanged at every row. Rows under the calldata floor do not move. An `msig` PoP at its bound (8 members near 1.4 M each) 11,443,002 to 11,489,473 regular gas: each derived member adds a `requireAuthorized` frame, and it still fits 2^24.
+- **Differential:** the frozen source (`legacy/typed-signing/UARegistryPreSplit.sol`) against the split on the same inputs at the same addresses: return and revert data, logs, every storage slot written, every created contract, every call out. `UARegistrySplit.test_diff`: the spike's views, extended to writes and 69 negatives with exact errors, 3,488 rows. `UARegistryUA8Test.test_split_portableRowsSame`: portable.json's real signatures and verifiers.
+- **One difference, malformed calldata only:** a nested offset is checked where it is read, and the library's calldata is 96 B longer, so an offset aimed at an appended word reads it as the caller's own argument where the pre-split code reverted. It reads public values and writes nothing a well-formed call could not.
+- **`forge build --sizes` leaves out a library with no view function in its ABI,** so `scripts/size_gate.py` now measures a baseline name from its artifact.
 
 ## 9. Lever 1 on real code (C3, 2026-11-01)
 

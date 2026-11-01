@@ -17,6 +17,7 @@ import {PqzTransferLib} from "../../src/pqz/PqzTransferLib.sol";
 import {PqzBurnLib} from "../../src/pqz/PqzBurnLib.sol";
 import {PqzViewLib} from "../../src/pqz/PqzViewLib.sol";
 import {PqzWrappedLib} from "../../src/pqz/PqzWrappedLib.sol";
+import {UARegistryLib} from "../../src/ua/UARegistryLib.sol";
 
 /// @notice A plain release environment (plan 5g-Z2): no dependencies, no pinned libraries.
 function plainEnv(address factory, address ska, bytes32 uid, address registry, bool hedera)
@@ -65,6 +66,13 @@ function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory
         n += 4;
     }
     if (pwr) l[n] = address(PqzWrappedLib);
+}
+
+/// @notice The link closure of `UARegistry` (typed-signing R2). No release env pins it: the registry has no factory, its
+///         init code embeds the address. Checked against `linkReferences` by `LinkClosure.t.sol`.
+function registryClosureLibs() pure returns (address[] memory l) {
+    l = new address[](1);
+    l[0] = address(UARegistryLib);
 }
 
 /// @notice `e` with `kind`'s link closure pinned (libraries and their code hashes).

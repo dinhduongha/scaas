@@ -139,6 +139,8 @@ abstract contract UARegistryBase is Test {
     address internal constant REG_A = 0x5Ca0000000000000000000000000000000000001;
     bytes32 internal constant DIGEST = keccak256("scaas.ua.test.digest");
 
+    /// What `_deploy` deploys; `test/ua/UARegistrySplit.t.sol` points it at the pre-split source for one run of a scenario.
+    string internal registryArtifact = "UARegistry.sol:UARegistry";
     bytes32 internal chainUidA;
     MockVerifier internal mock;
     UARegistry internal reg;
@@ -152,6 +154,8 @@ abstract contract UARegistryBase is Test {
     }
 
     function setUp() public virtual {
+        // `UA_REGISTRY_ARTIFACT=UARegistryPreSplit.sol:UARegistryPreSplit` runs a suite's `_deploy`s on the pre-split source
+        registryArtifact = vm.envOr("UA_REGISTRY_ARTIFACT", registryArtifact);
         chainUidA = vm.parseJsonBytes32(_structures(), ".contexts.A.chainUid");
         string memory j = _kindsJson();
         for (uint256 i; i < 8; ++i) {
@@ -207,7 +211,7 @@ abstract contract UARegistryBase is Test {
         bool msig,
         UARegistry.KindConfig[] memory cfgs
     ) internal returns (UARegistry) {
-        deployCodeTo("UARegistry.sol:UARegistry", abi.encode(uid, pred, hedera, budget, ska, msig, cfgs), where);
+        deployCodeTo(registryArtifact, abi.encode(uid, pred, hedera, budget, ska, msig, cfgs), where);
         return UARegistry(where);
     }
 

@@ -984,10 +984,11 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-35 / -36
   `uaUnwrap(UAEnvelope, …, UASig)`, so it moves to `smartcontracts/evm/legacy/typed-signing/`. `mtxCancelNonce` is declared in
   `IMetaTx`, like every entry present on every contract, and the ERC-165 id is re-pinned (controller correction of a brief that
   said to leave `IMetaTx` unchanged; that was about `executeMetaTransaction`). Both are done in C2's review fix round.
-- **`UARegistry` is not split (owner ruling 2026-11-01, replaces the R1′ + R2 ruling of the same day):** the measurement showed R1′ does
-  not remove the ABI coders under legacy codegen and raises total bytes, so `UARegistry` stays as it is. R2 (`UARegisterLib`, registry
-  28,048 B, library 31,257 B) is the reserve, for a chain near BSC's 70M; on Ethereum it matters only if the limit stays under about
-  88M. Table and sources: `docs/research/evm-size-levers.md` §8, `smartcontracts/evm/runs/2026-11-01-registry-split/`.
+- **`UARegistry` is split, R2 alone (owner ruling 2026-11-01, later the same day; it replaces "`UARegistry` is not split", itself the replacement of the R1′ + R2 ruling):** the measurement showed R1′ does
+  not remove the ABI coders under legacy codegen and raises total bytes, so R1′ is not built; R2 is. Registration, the PQZ attachment,
+  KEM records and the ML-DSA cache move to `UARegistryLib` by DELEGATECALL; the views and `requireAuthorized` stay; no `fallback`. Order:
+  after C6, before C7. This "R2" is the size lever of `docs/research/evm-size-levers.md` §8, not Part R's Task R2 above. Table and
+  sources: §8, `smartcontracts/evm/runs/2026-11-01-registry-split/`, `smartcontracts/evm/runs/2026-11-01-typed-signing-r2-*`.
 - **Wallet builders stay (owner ruling 2026-11-01):** the flat `mtxPayUnderMandate(token, …)`, `mtxRevoke`, `mtxExecuteAsOwner` and
   `mtxExecuteAsOwnerRaw` stay beside the named entries: they sign the generic `MetaTransaction`, add no digest, and `mandate_pay_kat`
   and `mandate_revoke_kat` depend on them.

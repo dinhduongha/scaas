@@ -706,6 +706,7 @@ def run(kd, kr, ke):
     kinds = [(MLDSA44, mlv[MLDSA44], CAP_ML), (MLDSA65, mlv[MLDSA65], CAP_ML), (PQZ_MLWE, pqv, CAP_PQZ),
              (SECP256K1, secv, 50_000)]
     require_release_gas("UARegistry")
+    require_release_gas("UARegistryLib")  # D.deploy links it (D.linked)
     reg = D.deploy("UARegistry", encs(["w", "w", "w", "w", "w", "w", ("a", ("t", ["w", "w", "w"]))],
                                       [uid, 0, 0, BUDGET, 0, 1, kinds]), label="UARegistry gen 1")
     REG[0] = reg

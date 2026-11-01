@@ -18,9 +18,10 @@ import {PqzTransferLib} from "../../src/pqz/PqzTransferLib.sol";
 import {PqzBurnLib} from "../../src/pqz/PqzBurnLib.sol";
 import {PqzViewLib} from "../../src/pqz/PqzViewLib.sol";
 import {PqzWrappedLib} from "../../src/pqz/PqzWrappedLib.sol";
+import {UARegistryLib} from "../../src/ua/UARegistryLib.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {ZUID} from "../zether/helpers/ZetherFixture.sol";
-import {closureLibs} from "../helpers/Catalogue.sol";
+import {closureLibs, registryClosureLibs} from "../helpers/Catalogue.sol";
 
 /// @notice metatx-split task 6 (spec §4, R5, R6): a release's `Env.libs` is the transitive link closure of its
 ///         implementation, read from the artifacts' `linkReferences` (each library's own, recursively); and no closure
@@ -29,7 +30,7 @@ contract LinkClosureTest is Test {
     IOpenFactory.TokenKind constant NORMAL = IOpenFactory.TokenKind.NORMAL;
     string[] internal names = [
         "AdminLib", "HederaLib", "TradeLib", "MtxPipelineLib", "WrappedLib", "ZetherLib", "ZetherWrappedLib",
-        "PqzStateLib", "PqzTransferLib", "PqzBurnLib", "PqzViewLib", "PqzWrappedLib"
+        "PqzStateLib", "PqzTransferLib", "PqzBurnLib", "PqzViewLib", "PqzWrappedLib", "UARegistryLib"
     ];
 
     function _addr(string memory n) internal pure returns (address a) {
@@ -46,6 +47,7 @@ contract LinkClosureTest is Test {
         if (h == keccak256("PqzBurnLib")) return address(PqzBurnLib);
         if (h == keccak256("PqzViewLib")) return address(PqzViewLib);
         if (h == keccak256("PqzWrappedLib")) return address(PqzWrappedLib);
+        if (h == keccak256("UARegistryLib")) return address(UARegistryLib);
         revert(string.concat("unknown library ", n));
     }
 
@@ -108,6 +110,36 @@ contract LinkClosureTest is Test {
             for (uint256 i; i < e.libs.length; ++i) e.libCodeHashes[i] = e.libs[i].codehash;
             _assertEnvIsClosure(impls[k], impls[k], e);
         }
+    }
+
+    /// typed-signing R2: the registry's link closure is `UARegistryLib` alone, and that library links nothing. The deployed
+    /// registry (through `DeployBase`, CREATE2) holds exactly one DELEGATECALL, `_lib`'s, whose target is that library.
+    function test_registryClosure() public {
+        string[] memory c = _closure("UARegistry", new string[](0));
+        address[] memory want = registryClosureLibs();
+        assertEq(c.length, want.length, "number of libraries");
+        assertEq(_addr(c[0]), want[0]);
+        assertEq(_closure("UARegistryLib", new string[](0)).length, 0, "UARegistryLib links nothing");
+
+        DeployHarness h = new DeployHarness();
+        (, string memory json) = h.deploy(ZUID, false, new SmartKeyAccountFactory(ZUID).IMPLEMENTATION());
+        address reg = vm.parseJsonAddress(json, ".ua_registry");
+        assertEq(vm.parseJsonAddress(json, ".ua_registry_lib"), want[0]);
+        (uint256 delegates, bool destruct, bool callcode) = _walk(reg.code);
+        assertEq(delegates, 1, "UARegistry: DELEGATECALL count");
+        assertFalse(destruct, "UARegistry: SELFDESTRUCT");
+        assertFalse(callcode, "UARegistry: CALLCODE");
+        assertTrue(_holds(reg.code, want[0]), "the DELEGATECALL's target is in the code");
+    }
+
+    /// `code` holds the 20 bytes of `a`.
+    function _holds(bytes memory code, address a) internal pure returns (bool) {
+        for (uint256 i; i + 20 <= code.length; ++i) {
+            bool m = true;
+            for (uint256 j; j < 20 && m; ++j) m = code[i + j] == bytes20(a)[j];
+            if (m) return true;
+        }
+        return false;
     }
 
     /// R6: over every library of every closure, PUSH data skipped, from the start to the last `INVALID` (solc puts its

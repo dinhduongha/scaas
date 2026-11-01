@@ -19,6 +19,7 @@ class FakeSession:
     def send(self, to, data, label):
         self.n += 1
         self.order.append(label)
+        self.data = data
         return {"contractAddress": "0x" + "%040x" % self.n}
 
 
@@ -50,4 +51,10 @@ with tempfile.TemporaryDirectory() as root:
     art(root, "Token2", [("MtxPipelineLib", 0)])
     assert D.linked("Token2")[1] == [hed, mtx]
     assert s.n == 3, "no library deployed twice"
+    # constructor arguments on linked code (UARegistry + UARegistryLib): the library first, its address in the init code
+    art(root, "RegLib", [])
+    art(root, "Reg", [("RegLib", 1)])
+    D.deploy("Reg", b"\xaa")
+    assert s.order[-2:] == ["library RegLib", "deploy Reg"], s.order
+    assert s.data == bytes(1) + bytes.fromhex(D.libs["RegLib"][2:]) + bytes(0) + b"\xaa", s.data
 print("ok")
