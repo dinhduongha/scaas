@@ -1,0 +1,42 @@
+# overhead-c3-vs-c4: test_splitOverhead_dataSizeBound MEAS rows (MTX_OV_PRESPLIT=1) on the C3 snapshot 38544bcf and the C4 tree
+== n2304 c3
+  MEAS n2304-kmax4096 ecdsa S 5797414
+  MEAS n2304-kmax4096 ecdsa pqzl-M8-on 10758540
+  MEAS n2304-kmax4096 ecdsa pqzh-M4-on 10400231
+  MEAS n2304-kmax4096 mldsa65 S 5906431
+  MEAS n2304-kmax4096 mldsa65 pqzl-M8-on 10848104
+  MEAS n2304-kmax4096 mldsa65 pqzh-M4-on 10492311
+  MEAS n2304-kmax4096 fndsa512 S 8128246
+  MEAS n2304-kmax4096 fndsa512 pqzl-M8-on 13074584
+  MEAS n2304-kmax4096 fndsa512 pqzh-M4-on 12716802
+== n2304 c4
+  MEAS n2304-kmax4096 ecdsa S 5797476
+  MEAS n2304-kmax4096 ecdsa pqzl-M8-on 10777751
+  MEAS n2304-kmax4096 ecdsa pqzh-M4-on 10421723
+  MEAS n2304-kmax4096 mldsa65 S 5906445
+  MEAS n2304-kmax4096 mldsa65 pqzl-M8-on 10867288
+  MEAS n2304-kmax4096 mldsa65 pqzh-M4-on 10513768
+  MEAS n2304-kmax4096 fndsa512 S 8128260
+  MEAS n2304-kmax4096 fndsa512 pqzl-M8-on 13093751
+  MEAS n2304-kmax4096 fndsa512 pqzh-M4-on 12738249
+== n2048 c3
+  MEAS n2048-kmax1024 ecdsa S 4776458
+  MEAS n2048-kmax1024 ecdsa pqzl-M8-on 10927922
+  MEAS n2048-kmax1024 ecdsa pqzh-M4-on 9999507
+  MEAS n2048-kmax1024 mldsa65 S 4885475
+  MEAS n2048-kmax1024 mldsa65 pqzl-M8-on 11017679
+  MEAS n2048-kmax1024 mldsa65 pqzh-M4-on 10091323
+  MEAS n2048-kmax1024 fndsa512 S 7107290
+  MEAS n2048-kmax1024 fndsa512 pqzl-M8-on 13244006
+  MEAS n2048-kmax1024 fndsa512 pqzh-M4-on 12316023
+== n2048 c4
+  MEAS n2048-kmax1024 ecdsa S 4776520
+  MEAS n2048-kmax1024 ecdsa pqzl-M8-on 10952151
+  MEAS n2048-kmax1024 ecdsa pqzh-M4-on 10020346
+  MEAS n2048-kmax1024 mldsa65 S 4885489
+  MEAS n2048-kmax1024 mldsa65 pqzl-M8-on 11041883
+  MEAS n2048-kmax1024 mldsa65 pqzh-M4-on 10112126
+  MEAS n2048-kmax1024 fndsa512 S 7107304
+  MEAS n2048-kmax1024 fndsa512 pqzl-M8-on 13268192
+  MEAS n2048-kmax1024 fndsa512 pqzh-M4-on 12336816
+rc=0

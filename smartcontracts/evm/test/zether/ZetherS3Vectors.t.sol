@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
+import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {Test} from "forge-std/Test.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {IZetherVerifier, IZetherBurnVerifier} from "../../src/zether/IZetherVerifier.sol";
@@ -14,6 +15,7 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {ZetherSchnorrBls12381Verifier} from "../../src/ua/verifiers/PairingVerifiers.sol";
+import {UACall} from "../ua/UACall.sol";
 
 /// Token views `ZetherDisclosure` reads, etched at a vector's token address.
 contract S3Token {
@@ -180,20 +182,20 @@ contract ZetherS3VectorsTest is Test {
         for (uint256 i; i < 192; ++i) out[i] = st[off + i];
     }
 
-    /// `directCalldata` = `mtxConfidentialTransferSingle(payload, proof, beneficiary)`: the direct call, and unchanged the
-    /// envelope's `data` (CTR-ZTH-34; no `authSig` since UA-6 U9).
+    /// `directCalldata` = `mtxConfidentialTransferSingle(ZetherSingle, proof)`: the direct call, and unchanged the envelope's
+    /// `data` (CTR-ZTH-34; no `authSig` since UA-6 U9).
     function test_s3DirectCalldataIsTheEntryPointCall() public view {
         string memory j = vm.readFile(string.concat(DIR, "transfer_bls12381.json"));
         bytes memory op = j.readBytes(".directCalldata");
-        assertEq(bytes4(op), ZetherLayer.mtxConfidentialTransferSingle.selector);
+        assertEq(bytes4(op), IZetherToken.mtxConfidentialTransferSingle.selector);
         bytes memory args = new bytes(op.length - 4);
         for (uint256 i; i < args.length; ++i) args[i] = op[4 + i];
-        (bytes memory pl, bytes memory pr, bytes memory auth, bytes32 ben, bytes memory hint) =
-            abi.decode(args, (bytes, bytes, bytes, bytes32, bytes));
-        assertEq(pl, j.readBytes(".payload"));
+        (IZetherToken.ZetherSingle memory t, bytes memory pr) = abi.decode(args, (IZetherToken.ZetherSingle, bytes));
+        bytes memory pl = j.readBytes(".payload");
+        assertEq(bytes.concat(abi.encode(uint256(t.accSeq), uint256(t.sendCounter), t.validUntilBlock), t.salt,
+            abi.encode(t.yFrom, t.yTo, t.cOut, t.dOut, t.cDeb, t.cAud)), pl, "the explicit parameters are the payload's bytes");
         assertEq(pr, j.readBytes(".proof"));
-        assertEq(ben, j.readBytes32(".request.beneficiary"));
-        assertEq(auth.length + hint.length, 0, "Zether: auth and accHint empty");
+        assertEq(t.beneficiaryUA, j.readBytes32(".request.beneficiary"));
     }
 
     /// Mở tiết lộ của S3 qua contract `ZetherDisclosure` thật (token giả etch tại địa chỉ token của vector): bốn kind
@@ -305,14 +307,14 @@ contract ZetherS3VectorsTest is Test {
                 abi.encode(keccak256(abi.encode("s3 chain", i)), address(0), false, uint64(12_000_000), address(0), false, k), at);
             IUARegistry reg = IUARegistry(at);
             assertEq(reg.uaOf(kind, y), ua);
-            bytes32 d = reg.portablePopDigest(ua, 0, 0);
-            assertEq(d, j.readBytes32(string.concat(key, ".pop.popDigest")));
-            bytes32 rd = reg.registrationDigest(d, 0);
+            bytes32 kh = reg.kemRecordHash(ua, 0, UACall.kem(""));
+            assertEq(reg.portableRecordDigest(ua, kind, 0, kh), j.readBytes32(string.concat(key, ".pop.popDigest")));
+            bytes32 rd = reg.registrationDigest(ua, kind, 0, kh, 0);
             assertEq(rd, j.readBytes32(string.concat(key, ".pop.registrationDigest")));
             assertEq(reg.uaMessage(kind, UAKinds.PURPOSE_POP_V2, rd), j.readBytes32(string.concat(key, ".pop.uaMsg")));
             vm.expectRevert(IUARegistry.UAPoP.selector);
-            reg.register(kind, y, IUARegistry.UAAttrs("", 0, 0, ""), _flip(pop, pop.length - 1), "");
-            assertEq(reg.register(kind, y, IUARegistry.UAAttrs("", 0, 0, ""), pop, ""), ua);
+            UACall.register(reg, kind, y, UACall.attrs("", 0, ""), _flip(pop, pop.length - 1), "");
+            assertEq(UACall.register(reg, kind, y, UACall.attrs("", 0, ""), pop, ""), ua);
             assertEq(reg.keyOf(ua), y);
         }
     }

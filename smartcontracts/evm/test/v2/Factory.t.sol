@@ -507,9 +507,13 @@ contract FactoryTest is Test {
         // owner: size later (Glamsterdam); budget 20,480 (P2a ruling); +8.7 KB for the UA ledger (UA-4); +1.2 / +2.5 KB
         // for the UA-5a receivers; +2.3 / +3.4 KB for UA-5b (UATradeOrder, uaWrap); +1.6 KB for the guard on every entry
         // (review W-Q, CTR-MTX-18) (size-baseline.json holds the exact ratchet)
-        assertLe(address(normalImpl).code.length, 38_925); // +13 B: metatx split T2
+        // +13 B: metatx split T2; +964 B: typed-signing R1's `UAKinds.uaSig` (`uaCancelNonce`'s `bytes auth` as the
+        // registry's `UASig`, removed when C2 types the parameter); typed-signing C0: +56 B (the base's named path), +1,118 B
+        // on the wrapped kind (`mtxUnwrap`, `_named`)
+        assertLe(address(normalImpl).code.length, 39_945);
         assertLe(address(f).code.length, 24_576);
-        // Transitional (P1d D2): over EIP-170 until the size work
-        assertLe(address(wrappedImpl).code.length, 49_152);
+        // Transitional (P1d D2): over EIP-170 until the size work (the only ceiling: 65,536 B, owner 2026-10-21); +973 B:
+        // typed-signing R1's `UAKinds.uaSig`, as above
+        assertLe(address(wrappedImpl).code.length, 50_770);
     }
 }

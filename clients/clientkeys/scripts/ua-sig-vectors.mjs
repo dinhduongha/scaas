@@ -1,5 +1,5 @@
 // Generates smartcontracts/vectors/ua/signatures.json: UA-2a signatures (accounts.md §1.4, §1.8, §1.9) on deterministic
-// keys — per derived kind a key, its PoP (UA-8: portable, the same in context A and B), signatures over ua_msg under metatx and member,
+// keys — per derived kind a key, its PoP (UA-8: portable, the same in context A and B; typed records, typed-signing TS-D1), signatures over ua_msg under metatx and member,
 // and negatives a verifier must refuse; native EOA UAAuth signatures; an msig structure with member signature sets.
 // Secrets: keccak256("scaas.ua.vectors.sig.<name>") mod (n − 1) + 1 (ed25519: the 32-byte keccak itself, RFC 8032 seed).
 // Nonces: RFC 6979 (P-256, secp256k1 ECDSA), zero aux_rand (BIP-340), keccak256(secret ‖ message ‖ "scaas.ua.vectors.nonce")
@@ -11,7 +11,7 @@
 // UA-5a (accounts.md CTR-UA-26/28, metatx.md CTR-MTX-05/06) appends the keys burn and unwrapToUA (UAMetaTransaction rows
 // of the newly UA-allowlisted calls) and receiverFee (uaPayReceiverFee: the payer's UAMetaTransfer, the payee's
 // ReceiverFee co-signature, a derived payee under the purpose receiver-fee); the existing keys stay byte-identical.
-// UA-5b (dex.md CTR-DEX-25/26) writes uatrade_kat.json: UATradeOrder, the CancelOrder over its digest and
+// UA-5b (dex.md CTR-DEX-25/26) writes uatrade_kat.json: UATradeOrder, the CancelUAOrder nesting it and
 // UAInvalidateNonces under the purpose trade, for the native key and every derived kind, plus three mldsa65 orders (one
 // taker, two makers) for the per-transaction caps; the other files stay byte-identical.
 // Also writes ed25519_fuzz.json (UA-2b T-FUZZ, accounts.md §1.16): mutated / crafted ed25519 cases from a fixed seed, each
@@ -33,8 +33,8 @@ import { sha512 } from '@noble/hashes/sha2.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, abiEncode } from '../src/bytes.js';
 import * as ua from '../src/ua.js';
 import {
-  hashStruct, hashTypedData, padId, payLane, uaMetaTxTypedData, uaMetaTransferTypedData, receiverFeeTypedData,
-  unwrapToUACalldata, uaTradeOrderTypedData, uaInvalidateNoncesTypedData, orderCancelTypedData,
+  hashStruct, hashTypedData, padId, payLane, uaMetaTxTypedData, uaMetaTransferTypedData, unwrapToUACall, uaTradeOrderTypedData,
+  uaInvalidateNoncesTypedData, uaReceiverFeeTypedData, cancelUAOrderTypedData,
 } from '../src/evm.js';
 import { PQ_KINDS, pqMessage } from '../src/pq.js';
 import { holderPopMessageV1 } from '../legacy/ua8/ua-pop-v1.js';
@@ -134,8 +134,9 @@ function blsG1OffSubgroup() {
 // --- derived rows ---
 /** The portable PoP (UA-8 P1): one per UA and attributes, the same in every context (`holderPopMessage`). */
 const popOf = (kind, uaId, attrs = {}) => ua.holderPopMessage(kind, { ua: uaId, ...attrs });
-/** A PoP row: popDigest = portablePopDigest, message = uaMessage(kind, pop v2, registrationDigest); the context is a label. */
-const popRow = (ctx, p, sig, extra = {}) => ({ context: ctx, ...extra, popDigest: hex(p.portablePopDigest),
+/** A PoP row: popDigest = portableRecordDigest (typed UAPortableRecord), message = uaMessage(kind, pop v2, registrationDigest
+ *  (typed UARegistration)); the context is a label. */
+const popRow = (ctx, p, sig, extra = {}) => ({ context: ctx, ...extra, popDigest: hex(p.portableRecordDigest),
   registrationDigest: hex(p.registrationDigest), message: hex(p.message), sig: hex(sig) });
 /** The negatives a portable verifier refuses: a PoP over the chain-bound digest of context A, a PoP under the v1 purpose. */
 const chainBoundPop = (kind, uaId) => holderPopMessageV1(kind, { ...contexts.A, ua: uaId }).message;
@@ -260,7 +261,7 @@ const byIndex = (list) => [...list].sort((a, b) => a.index - b.index);
 const set = (name, valid, list) => {
   const sig = encodeMemberSigs(list);
   return { name, valid, purpose: msigPurpose, digest: hex(DIGEST), memberDigest: hex(memberDigest), indices: list.map((s) => s.index),
-    sig: hex(sig), auth: hex(abiEncode(['bytes', 'bytes'], [msigKey, sig])) };
+    sig: hex(sig), auth: hex(abiEncode(['bytes', 'bytes'], [msigKey, sig])), uaSig: ua.uaSig({ members: list }) };
 };
 const S = (n, o) => memberSig(n, o);
 const sets = [
@@ -486,7 +487,7 @@ const m3CallOf = (data, batch) => (from) => uaMetaTxTypedData({ ...M3, message: 
 const M3_UA_TO = fromHex(row('p256').ua); // the receiver of `unwrapToUA`: a registered SIGNING UA
 const m3Burn = m3CallOf(concatBytes(keccak_256(utf8ToBytes('burn(uint256)')).subarray(0, 4),
   abiEncode(['uint256'], [1000000n])), 8);
-const m3UnwrapToUA = m3CallOf(unwrapToUACalldata(M3_UNDERLYING, 1000000n, M3_UA_TO, 990000n), 9);
+const m3UnwrapToUA = m3CallOf(unwrapToUACall(M3_UNDERLYING, 1000000n, M3_UA_TO, 990000n), 9);
 const M3_RF = { fee: 300000, feeRecipient: M3_FEE_TO, validUntil: 1800000060 };
 /** The payment of receiver-pays: fee NONE, relayer bound (mode 0x01), its own pay lane, nonce 0 (CTR-MTX-06's shape). */
 const m3Payment = (from, to, ref) => uaMetaTransferTypedData({ ...M3, message: { from, to, value: 100000000,
@@ -501,7 +502,7 @@ const rfRow = (payer, payee, sign) => {
   const ref = keccak_256(utf8ToBytes(`scaas.metatx3.receiverFee.${payer.name}.${payee.name}`));
   const transfer = m3Payment(payer.id, payee.id, ref);
   const paymentDigest = hashTypedData(transfer);
-  const receiverFee = receiverFeeTypedData({ ...M3, paymentDigest, ...M3_RF });
+  const receiverFee = uaReceiverFeeTypedData({ ...M3, message: { payment: transfer.message, ...M3_RF } });
   const receiverFeeDigest = hashTypedData(receiverFee);
   return { payer: payer.name, payee: payee.name, transfer, paymentDigest: hex(paymentDigest), receiverFee,
     receiverFeeDigest: hex(receiverFeeDigest), payerAuth: sign(payer, 'metatx', paymentDigest),
@@ -537,8 +538,8 @@ const m3Out = {
 
 // --- pq_signatures.json (P6c): the PQ kinds on context A; stored kinds, so every auth carries an empty keyData ---
 const PQ_OTHER = { mldsa44: 'mldsa65', mldsa65: 'mldsa44', fndsa512: 'slhdsa128s', slhdsa128s: 'fndsa512' };
-// UA-6: a PQ signer registers its PQZ key in the same call; UA-8: its pop is over registrationDigest(portablePopDigest(ua, h, 0),
-// pqzPopHash) with h = keyHash(0x0142, pqzKey) != 0 (the same key as ua-vectors.mjs) and the hash of the R_REG proof
+// UA-6: a PQ signer registers its PQZ key in the same call; UA-8: its pop is over registrationDigest = typed(UARegistration{
+// UAPortableRecord{ua, kind, h, UAKemRecord{ua, 0, 0, 0}}, pqzPopHash}) with h = keyHash(0x0142, pqzKey) != 0 (the same key as ua-vectors.mjs) and the hash of the R_REG proof
 // (portable.json's n2048-kmax1024 filler). `popPqz` rows: the digest and message move with h, so a pop for no key does not carry over.
 const PQZ_SET = 'n2048-kmax1024';
 const PQZ_KEY = pqzKeyOf(PQZ_SET);
@@ -618,7 +619,7 @@ function pqMsig(name, list, threshold) {
   return { name, keyData: hex(keyData), ua: hex(id), threshold, purpose: 'metatx', digest: hex(DIGEST), memberDigest: hex(md),
     pqzEligible: ua.msigPqzEligible(keyData),
     popPqz: { context: 'A', pqzKey: hex(PQZ_KEY), pqzKeyHash: hex(hp.pqzKeyHash), pqzPopHash: hex(hp.pqzPopHash),
-      popDigest: hex(hp.portablePopDigest), registrationDigest: hex(hp.registrationDigest), memberDigest: hex(popMd),
+      popDigest: hex(hp.portableRecordDigest), registrationDigest: hex(hp.registrationDigest), memberDigest: hex(popMd),
       pop: hex(popBlob), indices: ms.slice(0, threshold).map((m) => m.index) },
     members: ms.map((m) => ({ index: m.index, kind: m.kind, id: hex(m.id), weight: m.weight })), sets };
 }
@@ -663,7 +664,7 @@ const utOrder = (from, sell, receive, amount, receiveAmount, nonce) => uaTradeOr
 const utRow = (s, sign) => {
   const order = utOrder(s.id, UT_A, UT_B, 1000, 2000, 1);
   const orderHash = hashTypedData(order);
-  const cancel = orderCancelTypedData({ ...UT, contract: UT_A, orderHash: hex(orderHash) });
+  const cancel = cancelUAOrderTypedData({ ...UT, contract: UT_A, message: { order: order.message } });
   const invalidate = uaInvalidateNoncesTypedData({ ...UT, contract: UT_A, from: s.id, batch: 1, minNonce: 5 });
   const cancelDigest = hashTypedData(cancel);
   const invalidateDigest = hashTypedData(invalidate);
@@ -685,9 +686,12 @@ const utNativeMaker = (() => { // the counterparty of every row: the native key 
   const orderHash = hashTypedData(order);
   return { order, orderHash: hex(orderHash), auth: hex(ecdsa(nativeSk, orderHash)) };
 })();
+const V_CANCEL_UA_ORDER = hex(keccak_256(utf8ToBytes('CancelUAOrder(UATradeOrder order)UATradeOrder(bytes32 from,address receiveToken,'
+  + 'uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,bytes32 destination,uint8 flags,'
+  + 'uint256 batch,uint256 nonce,uint256 validUntil)')));
 const utOut = {
   note: 'Generated by clients/clientkeys/scripts/ua-sig-vectors.mjs (src/evm.js typed data, src/ua.js, @noble/curves 2.4.0, '
-    + '@noble/post-quantum 0.7.1); never edit by hand. dex.md CTR-DEX-25/26: UATradeOrder, CancelOrder over its digest and '
+    + '@noble/post-quantum 0.7.1); never edit by hand. dex.md CTR-DEX-25/26: UATradeOrder, CancelUAOrder nesting it and '
     + 'UAInvalidateNonces in the sell token\'s domain ("SCaaS MetaToken", "1", chainId, token, salt = chain_uid) of context A, '
     + 'under the UA purpose trade. Keys, PoPs and the registry are those of signatures.json and pq_signatures.json (context A). '
     + 'Native auth = ECDSA over the digest itself; derived auth = abi.encode(bytes keyData, bytes sig over ua_msg(kind, trade, '
@@ -701,7 +705,7 @@ const utOut = {
       + 'receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,bytes32 destination,uint8 flags,uint256 batch,'
       + 'uint256 nonce,uint256 validUntil)'))),
     UAInvalidateNonces: hex(keccak_256(utf8ToBytes('UAInvalidateNonces(bytes32 from,uint256 batch,uint256 minNonce)'))),
-    CancelOrder: hex(keccak_256(utf8ToBytes('CancelOrder(bytes32 orderHash)'))),
+    CancelUAOrder: V_CANCEL_UA_ORDER,
   },
   domainSeparatorA: hex(hashStruct(utNativeMaker.order.types, 'EIP712Domain', { ...utNativeMaker.order.domain, verifyingContract: UT_A })),
   rows: m3Signers.map((s) => utRow(s, m3Auth)),
@@ -711,12 +715,16 @@ const utOut = {
 
 const note = 'Generated by clients/clientkeys/scripts/ua-sig-vectors.mjs (src/ua.js on @noble/curves 2.4.0); never edit by hand. '
   + 'Every positive must verify and every negative must fail (verifyPop: which verifier entry point is asked). '
-  + 'PoPs are portable (UA-8 P1): popDigest = portablePopDigest(ua, 0, 0), message = ua_msg(kind, pop v2, registrationDigest), '
+  + 'PoPs are portable typed records (UA-8 P1, typed-signing TS-D1 / TS-D3; smartcontracts/vectors/ua/portable.json typed.*): '
+  + 'popDigest = portableRecordDigest = typed(UAPortableRecord{ua, kind, 0, UAKemRecord{ua, 0, 0, 0}}), message = ua_msg(kind, '
+  + 'pop v2, registrationDigest = typed(UARegistration{record, 0})), '
   + 'the same in every context (popOther repeats pop under context B for its consumers); chain-bound-pop / pop-v1-purpose: the '
   + 'pre-UA-8 PoP and the v1 purpose are refused. '
   + 'The scaas Schnorr transcript and the bn254 mapToG1 have no independent second implementation: clients/ua-rs agreeing '
   + 'on them is self-consistency only (accounts.md §1.16). msig auth = abi.encode(bytes keyData, bytes sig) (§1.9), sig = abi.encode(MemberSig[]) with an empty keyData in every '
   + 'MemberSig (CTR-UA-33: the registry reads a registered member\'s key from its record; a non-empty one is refused). '
+  + 'typed-signing R1 (TS-D12): requireAuthorized takes UASig{keyData, signature, members}; msig.sets[i].uaSig is its typed form '
+  + '(members only, the structure from the record); auth stays the tokens\' bytes form until C2 (UAKinds.uaSig converts it). '
   + 'webauthn-p256 abi-* negatives: the blob is accepted only as its canonical abi.encode(authenticatorData, clientDataJSON, r, s) '
   + '(CTR-UA-33 C); all but the two length-word rows decode leniently to the positive\'s own fields.';
 const out = {

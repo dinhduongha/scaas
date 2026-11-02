@@ -204,7 +204,7 @@ async fn setup() -> Stack {
     let dex = deploy_sh("dex", &s, &["--admin", &admin, "--fee_recipient", &admin, "--registry", &reg]);
     println!("T10 stack: registry {registry} token {token} token_b {token_b} router {router} executor {executor} mandate {mandate} dex {dex}");
 
-    let attrs = format!("{{\"kem_pk\":\"\",\"kem_version\":0,\"pqz_key\":\"\",\"pqz_pop_hash\":\"{}\"}}", "0".repeat(64));
+    let attrs = format!("{{\"kem_pk\":\"\",\"pqz_key\":\"\",\"pqz_pop_hash\":\"{}\"}}", "0".repeat(64));
     let mut registered = Vec::new();
     for k in [PASSKEY, MLDSA65] {
         let r = k.registration();
@@ -297,7 +297,7 @@ fn ua0x(u: &[u8; 32]) -> String {
 #[ignore]
 async fn e2e_soroban_ua_register_passkey_and_mldsa65() {
     let st = stack().await;
-    let attrs = format!("{{\"kem_pk\":\"\",\"kem_version\":0,\"pqz_key\":\"\",\"pqz_pop_hash\":\"{}\"}}", "0".repeat(64));
+    let attrs = format!("{{\"kem_pk\":\"\",\"pqz_key\":\"\",\"pqz_pop_hash\":\"{}\"}}", "0".repeat(64));
     for r in &st.registered {
         println!(
             "T10 register {}: ua {} tx {} ledger {} cpu_insns {} resource_fee {} fee_charged {} stroops",

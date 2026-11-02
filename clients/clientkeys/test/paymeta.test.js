@@ -103,10 +103,10 @@ test('uaPayMeta: UAMetaTransfer between ids, uaPayMeta / uaPay calldata', () => 
   assert.equal(p.typedData.message.batch, String(BigInt(r.payLane)));
   const cd = p.calldata(new Uint8Array(3));
   assert.equal(hex(cd.subarray(0, 4)),
-    sel('uaPayMeta(bytes32,bytes32,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,bytes)'));
+    sel('uaPayMeta(bytes32,bytes32,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,bytes,bytes)[]))'));
   const off = buildUaPayMeta({ ...base, from: padId(PAYER), to: padId(PAYEE), salt: r.salt, meta: r.meta, onChain: false });
   assert.equal(hex(off.calldata(new Uint8Array(3)).subarray(0, 4)),
-    sel('uaPay(bytes32,bytes32,uint256,bytes32,uint256,uint32,address,uint256,address,bytes)'));
+    sel('uaPay(bytes32,bytes32,uint256,bytes32,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,bytes,bytes)[]))'));
 });
 
 test('checkPayMeta: server typed data for the committed payId passes and returns the decoded meta', () => {

@@ -1,0 +1,5 @@
+# vectors: every writer re-run on the split source (WRITE_KAT, PARITY_WRITE, RELAYREF_WRITE, PAYMETA_WRITE), row by row against HEAD
+test/vectors/metatx-parity.json rows 1998 1998
+ rows that moved 188 fields {'gas': 188}
+ gas delta min -7 max 37 median 15
+Restored both files: no CREATE2-derived column moved; hedera_kat.json's writer drops the ed25519 fields gen_hedera_kat.py adds (not the split), metatx-parity.json's gas is outside its replay.

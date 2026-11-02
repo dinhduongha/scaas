@@ -146,28 +146,28 @@ fn structures() {
     let ctx = |name: &str| &s["contexts"][name];
     for p in arr(&s, "pop") {
         let (ua, h, kr, ph) = (b32(&p["ua"]), b32(&p["pqzKeyHash"]), b32(&p["kemRecordHash"]), b32(&p["pqzPopHash"]));
-        let portable = ua8::portable_pop_digest(&ua, &h, &kr);
-        assert_eq!(hx(&portable), p["portablePopDigest"]);
-        assert_eq!(hx(&ua8::registration_digest(&portable, &ph)), p["registrationDigest"]);
+        let k = kind(&p["kind"]);
+        assert_eq!(hx(&ua8::portable_record_digest(&ua, k, &h, &kr)), p["portableRecordDigest"]);
+        assert_eq!(hx(&ua8::registration_digest(&ua, k, &h, &kr, &ph)), p["registrationDigest"]);
     }
     let pk = bytes(&load("kinds.json")["pqzKey"]);
     for p in arr(&s, "pqzReg") {
         let ua = b32(&p["ua"]);
         let h = key_hash_of(PQZ_SCHEME, &pk).unwrap().unwrap();
         assert_eq!(hx(&h), p["pqzKeyHash"]);
-        assert_eq!(hx(&ua8::portable_pop_digest(&ua, &h, &b32(&p["kemRecordHash"]))), p["portablePopDigest"]);
-        let portable = b32(&p["portablePopDigest"]);
+        let k = kind(&p["kind"]);
+        assert_eq!(hx(&ua8::portable_record_digest(&ua, k, &h, &b32(&p["kemRecordHash"]))), p["portableRecordDigest"]);
+        let portable = b32(&p["portableRecordDigest"]);
         assert_eq!(hx(&ua_message(PQZ_SCHEME, &ua8::pop_v2_tag(), &portable).unwrap()), p["pqzRegMessage"]);
-        if b32(&p["kemRecordHash"]) != [0; 32] {
+        if b32(&p["kemRecordHash"]) != ua8::kem_record_hash(&ua, 0, &[]).unwrap() {
             continue; // the row's KEM record hash is opaque (a label); the real records are in portable.json (tests/ua8.rs)
         }
-        assert_eq!(hx(&pqz_reg_message(&ua, &pk, None).unwrap()), p["pqzRegMessage"]);
+        assert_eq!(hx(&pqz_reg_message(k, &ua, &pk, None).unwrap()), p["pqzRegMessage"]);
         // a single-key holder carries the key; anything else is refused
         let proof = [7u8; 32];
-        let k = kind(&p["kind"]);
         let got = holder_pop_message(k, &ua, &[], Some(&pk), None, Some(&proof), None).unwrap();
         assert_eq!(hx(&got.pqz_key_hash), p["pqzKeyHash"]);
-        assert_eq!(hx(&got.portable_pop_digest), p["portablePopDigest"]);
+        assert_eq!(hx(&got.portable_record_digest), p["portableRecordDigest"]);
         for bad in [0x0101, 0x0133] {
             assert_eq!(holder_pop_message(bad, &ua, &[], Some(&pk), None, Some(&proof), None), Err(UAError::PqzHolder(bad)));
         }
@@ -177,7 +177,8 @@ fn structures() {
         assert_eq!(msig_pqz_eligible(&d).unwrap(), p["eligible"], "{}", p["reason"]);
         assert_eq!(hx(&derive_ua(0x0120, &d, false).unwrap()), p["ua"]);
         let h = if p["eligible"].as_bool().unwrap() { b32(&load("kinds.json")["pqzKeyHash"]) } else { [0; 32] };
-        assert_eq!(hx(&ua8::portable_pop_digest(&b32(&p["ua"]), &h, &[0; 32])), p["portablePopDigest"], "{}", p["reason"]);
+        let ua = b32(&p["ua"]);
+        assert_eq!(hx(&ua8::portable_record_digest(&ua, 0x0120, &h, &ua8::kem_record_hash(&ua, 0, &[]).unwrap())), p["portableRecordDigest"], "{}", p["reason"]);
     }
     assert!(msig_pqz_eligible(&[0u8; 5]).is_err());
     for a in arr(&s, "uaAuth") {

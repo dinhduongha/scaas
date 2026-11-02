@@ -155,4 +155,31 @@ contract UADeployTest is Test {
         if (block.gaslimit < conf) vm.expectRevert();
         h.requireGas("WrappedPqzToken");
     }
+
+    /// NET-EVM-06: the registry and `UARegistryLib` each have the gate of a release (typed-signing R2): the deploy refuses
+    /// one below each figure and reaches the next gate at it. Passing both reaches `NormalToken`'s, which binds a plain
+    /// deploy now; at that figure the deploy goes through.
+    function test_registryDeployGate() public {
+        DeployHarness h = new DeployHarness();
+        string memory base = vm.readFile("./size-baseline.json");
+        uint256 need = h.gasNeed("UARegistry");
+        uint256 lib = h.gasNeed("UARegistryLib");
+        uint256 token = h.gasNeed("NormalToken");
+        assertEq(need, vm.parseJsonUint(base, ".UARegistry") * 1530 + 16_777_216);
+        assertEq(lib, vm.parseJsonUint(base, ".UARegistryLib") * 1530 + 16_777_216);
+        assertLt(need, lib);
+        assertLt(lib, token);
+        _refused(h, need - 1, need, "UARegistry");
+        _refused(h, need, lib, "UARegistryLib");
+        _refused(h, lib, token, "NormalToken");
+        h.limitBlockGas(token);
+        h.deploy(UID, false, ska);
+    }
+
+    function _refused(DeployHarness h, uint256 limit, uint256 need, string memory name) internal {
+        h.limitBlockGas(limit);
+        vm.expectRevert(bytes(string.concat("block gas limit ", vm.toString(limit), " < ", vm.toString(need),
+            " needed to deploy the ", name, " release (NET-EVM-06)")));
+        h.deploy(UID, false, ska);
+    }
 }

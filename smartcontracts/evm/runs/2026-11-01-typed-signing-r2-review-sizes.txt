@@ -1,0 +1,4 @@
+# sizes at commit 8279e186
+size gate: 0 error(s), 84 contracts
+size gate self-test ok
+rc=0

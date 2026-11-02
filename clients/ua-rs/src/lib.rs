@@ -12,7 +12,9 @@ pub mod algorand;
 pub use keydata::validate_key_data;
 pub mod verify;
 pub mod ua8;
-pub use ua8::{holder_pop_message, pqz_reg_message, personal_sign_digest};
+#[cfg(feature = "json")]
+pub mod json;
+pub use ua8::{holder_pop_message, pqz_reg_message};
 mod groups;
 #[cfg(feature = "signers")]
 pub mod musig2;
@@ -139,7 +141,7 @@ pub const GROUPS: &[&str] = &[
 
 pub const PURPOSES: &[&str] = &[
     "pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
-    "vc-anchor", "trade", "kem", "pqz-key",
+    "vc-anchor", "trade", "kem", "pqz-key", "membership",
 ];
 
 pub const DOMAIN_TYPE: &str =
@@ -321,7 +323,7 @@ fn address_word(a: &[u8; 20]) -> [u8; 32] {
     w[12..].copy_from_slice(a);
     w
 }
-/// LEGACY (pre-UA-8, chain-bound; the registry accepts only [`ua8::portable_pop_digest`]). `pop_digest_v1` (CTR-UA-07): `pqz_key_hash` is the keyHash of the UA's PQZ key, 0 without one (the bytes of the former `authRef = 0`).
+/// LEGACY (pre-UA-8, chain-bound; the registry accepts only the typed [`ua8::registration_digest`]). `pop_digest_v1` (CTR-UA-07): `pqz_key_hash` is the keyHash of the UA's PQZ key, 0 without one (the bytes of the former `authRef = 0`).
 pub fn pop_digest_v1(chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], pqz_key_hash: &[u8; 32]) -> [u8; 32] {
     keccak(&[&purpose_tag("pop").expect("pop"), &chain_key_hash(chain_id), chain_uid, &address_word(registry), ua, pqz_key_hash])
 }

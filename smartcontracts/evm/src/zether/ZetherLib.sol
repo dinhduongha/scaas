@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {IZetherToken} from "./IZetherToken.sol";
-import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
+import {IConfidentialToken, IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
 import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
@@ -17,7 +18,9 @@ import {SSTORE2} from "../common/SSTORE2.sol";
 ///         (`ZetherLayer`); the logic runs here by `DELEGATECALL`, so `address(this)` is the token. One implementation
 ///         for every curve: points are `bytes`, the group operations and the proofs go through the release's verifier
 ///         immutables. The statement builders are `internal` so that `ZetherStatements` builds the very same bytes from
-///         the token's views (CTR-ZTH-46). Byte layout: `docs/contracts/zether.md` §7, §11, §12.
+///         the token's views (CTR-ZTH-46), all from the explicit parameters (TS-D17): a point's `abi.encode` is its 128
+///         bytes, so the statement and the stored record are what the packed payload gave. Byte layout:
+///         `docs/contracts/zether.md` §7, §11, §12.
 library ZetherLib {
     /// @dev `acc`/`pending` as `bytes` points (`O` when never written); the counters of zether.md §6.
     struct Account {
@@ -68,9 +71,11 @@ library ZetherLib {
         /// @dev The implementation's burn verifier (CTR-ZTH-20): the unshield proofs. The transfer verifier is copied to
         ///      storage at `init` (shield and roll-over use its group operations without an `Env`).
         IZetherBurnVerifier burnVer;
+        /// @dev The token's EIP-712 domain: the owner digests (TS-D19) are typed under it.
+        bytes32 domainSeparator;
     }
 
-    /// @notice Everything a statement needs besides the payload and the sender's account: from the token's storage
+    /// @notice Everything a statement needs besides the explicit parameters and the sender's account: from the token's storage
     ///         (`ctx`) or from its views (`ZetherStatements`).
     struct Ctx {
         IZetherVerifier ver;
@@ -107,14 +112,14 @@ library ZetherLib {
         /// @dev The statement's public fee word: the inner fee (when a beneficiary is named), plus `M · decoyFee` on the
         ///      multi-recipient format.
         uint256 fee;
-        /// @dev Multi-recipient only: the sender's per-leg `decoyFee` (payload word at 112).
+        /// @dev Multi-recipient only: the sender's per-leg `decoyFee`.
         uint256 decoyFee;
         uint64 sendCounter;
-        /// @dev The payload's salt (CTR-ZTH-30, header word 13) and, on commit-reveal, `keccak256(memo)` (CTR-ZTH-50,
-        ///      header word 14); both 0 for an unshield.
+        /// @dev The salt (CTR-ZTH-30, header word 13) and, on commit-reveal, `keccak256(memo)` (CTR-ZTH-50, header word
+        ///      14); both 0 for an unshield.
         bytes16 salt;
         bytes32 memoHash;
-        /// @dev The payload's `validUntilBlock` (word 2; header word 15, review C0-9): checked `block.number <=` it.
+        /// @dev `validUntilBlock` (header word 15, review C0-9): checked `block.number <=` it.
         uint256 validUntil;
         ZetherTypes.UA[] to; // multi-recipient only
     }
@@ -140,18 +145,24 @@ library ZetherLib {
     bytes32 private constant OP_MULTI_HASH = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/HASH");
     bytes32 private constant OP_MULTI_BUNDLE = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/BUNDLE");
     bytes32 private constant TAG_ENTRY = keccak256("SCAAS-ZETHER-ENTRY-V1");
-    bytes32 private constant TAG_ROLLOVER = keccak256("ZETHER_ROLLOVER_V1");
-    bytes32 private constant TAG_SET_MODE = keccak256("ZETHER_SET_ROLLOVER_MODE_V1");
+    /// @dev The typed owner ops (TS-D19), and the structs of the signed entries' explicit parameters (Appendix X.4).
+    bytes32 private constant TH_ROLL_OVER = keccak256("ZetherRollOver(bytes32 ua,uint64 accSeq,uint64 expectedPendingSeq,uint64 validUntilBlock)");
+    bytes32 private constant TH_SET_MODE = keccak256("ZetherSetRollOverMode(bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock)");
+    bytes32 private constant TH_G1 = keccak256("G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)");
+    bytes32 private constant TH_SINGLE = keccak256(
+        "ZetherSingle(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,G1 yFrom,G1 yTo,G1 cOut,G1 dOut,G1 cDeb,G1 cAud)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)"
+    );
+    bytes32 private constant TH_LEG = keccak256("ZetherLeg(G1 yTo,G1 cOut,G1 cAud,G1 dAud)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)");
+    bytes32 private constant TH_MULTI = keccak256(
+        "ZetherMulti(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,uint256 decoyFee,G1 yFrom,G1 dOut,G1 cDeb,ZetherLeg[] legs,bytes sealedMemo)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherLeg(G1 yTo,G1 cOut,G1 cAud,G1 dAud)"
+    );
+    bytes32 private constant TH_BURN = keccak256(
+        "ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)"
+    );
+    bytes32 private constant TH_UNWRAP = keccak256("Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)");
     /// @dev The statement format's maximum, not a gas bound: under EIP-7825's 2^24 regular gas only `M` ≤ 6–8 (by form)
     ///      executes (zether.md §19); the chain refuses the rest and the prover takes 6–8 by form.
     uint256 private constant MAX_RECIPIENTS = 16;
-    /// @dev Every payload starts `be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock)` (`P_HEAD`). Where the points
-    ///      start: the single payload after `… ‖ salt(16)`, the multi-recipient one after `… ‖ salt(16) ‖ be32(M) ‖
-    ///      be32(decoyFee)`, the unshield one at `P_HEAD` (zether.md §10, §11). A multi-recipient leg is
-    ///      `Y_tj ‖ C_out_j ‖ C_aud_j ‖ D_aud_j` (`4P`, review C0-1).
-    uint256 private constant P_HEAD = 96;
-    uint256 private constant S_PTS = 112;
-    uint256 private constant M_PTS = 176;
     uint256 private constant MAX_TOTAL_SHIELDED = 1 << 54;
     /// @dev `2^n_v` (n_v = 64, CTR-ZTH-18): the bound of `confidentialFee`.
     uint256 private constant VALUE_BOUND = 1 << 64;
@@ -226,32 +237,31 @@ library ZetherLib {
     /// @notice The single-recipient format (BUNDLE tokens only): checks, the proof (the only authority), then
     ///         `acc_f −= (C_deb + [fee]G, D_out)`, `pend_t += (C_out, D_out)`, `totalShielded -= fee` (the fee is paid in public units by the layer), `sendCounter_f++`;
     ///         the record `salt ‖ B` stored in full.
-    function transferSingle(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary, Env memory e)
+    function transferSingle(IZetherToken.ZetherSingle calldata t, bytes calldata proof, Env memory e)
         public returns (bytes32, uint256)
     {
-        (Ctx memory c, Prepared memory pp) = _prepareSingle(payload, beneficiary, e);
+        (Ctx memory c, Prepared memory pp) = _prepareSingle(t, e);
         _check(c, pp, proof, OP_TRANSFER);
-        return (_settleSingle(c, pp, payload), pp.fee);
+        return (_settleSingle(c, pp, t), pp.fee);
     }
 
-    function _prepareSingle(bytes calldata payload, ZetherTypes.UA beneficiary, Env memory e)
+    function _prepareSingle(IZetherToken.ZetherSingle calldata t, Env memory e)
         private view returns (Ctx memory c, Prepared memory pp)
     {
         ZetherStorage storage s = $();
         c = ctx(s, e);
-        pp = prepareSingle(c, acct(s.acct[singleFrom(payload, c.p)], c.p), payload, beneficiary);
+        pp = prepareSingle(c, acct(s.acct[uaOf(t.yFrom)], c.p), t);
     }
 
-    function _settleSingle(Ctx memory c, Prepared memory pp, bytes calldata payload) private returns (bytes32 entryRef) {
+    function _settleSingle(Ctx memory c, Prepared memory pp, IZetherToken.ZetherSingle calldata t) private returns (bytes32 entryRef) {
         ZetherStorage storage s = $();
-        bytes calldata pts = payload[S_PTS:];
-        uint256 p = c.p;
-        ZetherTypes.UA to = ZetherTypes.toUA(pts[p:2 * p]);
-        _debit(c, s.acct[pp.from], pts[4 * p:5 * p], pts[3 * p:4 * p], pp.fee);
-        _credit(s, to, pts[2 * p:3 * p], pts[3 * p:4 * p]);
+        ZetherTypes.UA to = uaOf(t.yTo);
+        bytes memory dOut = abi.encode(t.dOut);
+        _debit(c, s.acct[pp.from], abi.encode(t.cDeb), dOut, pp.fee);
+        _credit(s, to, abi.encode(t.cOut), dOut);
         _payFee(s, pp);
         entryRef = _sent(s, c, pp);
-        s.entries[entryRef] = bytes.concat(pp.salt, pts[p:2 * p], pts[2 * p:4 * p], pts[5 * p:6 * p]);
+        s.entries[entryRef] = bytes.concat(pp.salt, abi.encode(t.yTo, t.cOut, t.dOut, t.cAud));
         emit IConfidentialToken.ConfidentialTransfer(entryRef, ZetherTypes.UA.unwrap(pp.from), ZetherTypes.UA.unwrap(to),
             ZetherTypes.UA.unwrap(pp.beneficiary), pp.fee, pp.sendCounter, address(0));
     }
@@ -261,35 +271,34 @@ library ZetherLib {
     ///         `mode` (the stored form, CTR-ZTH-38), which a `COMPACT` token allows only as HASH. Returns `Paid`: `txFee`
     ///         to the beneficiary and `decoyFee` to each leg, decoys included (owner 2026-10-20).
     function transferMulti(
-        bytes calldata payload,
+        IZetherToken.ZetherMulti calldata t,
         bytes calldata proof,
-        ZetherTypes.UA beneficiary,
         ZetherTypes.TransferMode mode,
         Env memory e
     ) public returns (bytes32, Paid memory) {
-        (Ctx memory c, Prepared memory pp) = _prepareMulti(payload, beneficiary, mode, e);
+        (Ctx memory c, Prepared memory pp) = _prepareMulti(t, mode, e);
         _check(c, pp, proof, OP_MULTI_HASH);
-        return (_settleMulti(c, pp, payload, mode), Paid(pp.fee - pp.to.length * pp.decoyFee, pp.decoyFee, pp.to));
+        return (_settleMulti(c, pp, t, mode), Paid(pp.fee - pp.to.length * pp.decoyFee, pp.decoyFee, pp.to));
     }
 
-    function _prepareMulti(bytes calldata payload, ZetherTypes.UA beneficiary, ZetherTypes.TransferMode mode, Env memory e)
+    function _prepareMulti(IZetherToken.ZetherMulti calldata t, ZetherTypes.TransferMode mode, Env memory e)
         private view returns (Ctx memory c, Prepared memory pp)
     {
         ZetherStorage storage s = $();
         c = ctx(s, e);
-        pp = prepareMulti(c, acct(s.acct[multiFrom(payload, c.p)], c.p), payload, beneficiary, mode);
+        pp = prepareMulti(c, acct(s.acct[multiFrom(t)], c.p), t, mode);
     }
 
-    function _settleMulti(Ctx memory c, Prepared memory pp, bytes calldata payload, ZetherTypes.TransferMode mode)
+    function _settleMulti(Ctx memory c, Prepared memory pp, IZetherToken.ZetherMulti calldata t, ZetherTypes.TransferMode mode)
         private returns (bytes32 entryRef)
     {
         ZetherStorage storage s = $();
-        uint256 p = c.p;
-        _debit(c, s.acct[pp.from], payload[M_PTS + 2 * p:M_PTS + 3 * p], payload[M_PTS + p:M_PTS + 2 * p], pp.fee);
-        _creditLegs(s, pp.to, payload, p);
+        bytes memory dOut = abi.encode(t.dOut);
+        _debit(c, s.acct[pp.from], abi.encode(t.cDeb), dOut, pp.fee);
+        _creditLegs(s, pp.to, t.legs, dOut);
         _payFee(s, pp);
         entryRef = _sent(s, c, pp);
-        _storeRecord(s, p, entryRef, payload, pp, mode);
+        _storeRecord(s, entryRef, t, pp, dOut, mode);
         ZetherTypes.UA[] memory to = pp.to;
         bytes32[] memory rec;
         assembly ("memory-safe") { rec := to } // `UA` is `bytes32`: the same memory array
@@ -298,12 +307,8 @@ library ZetherLib {
     }
 
     /// @dev Every `pend_tj += (C_out_j, D_out)`, decoys included.
-    function _creditLegs(ZetherStorage storage s, ZetherTypes.UA[] memory to, bytes calldata payload, uint256 p) private {
-        bytes calldata dOut = payload[M_PTS + p:M_PTS + 2 * p];
-        for (uint256 j; j < to.length; ++j) {
-            uint256 o = _leg(p, j);
-            _credit(s, to[j], payload[o + p:o + 2 * p], dOut);
-        }
+    function _creditLegs(ZetherStorage storage s, ZetherTypes.UA[] memory to, IZetherToken.ZetherLeg[] calldata legs, bytes memory dOut) private {
+        for (uint256 j; j < to.length; ++j) _credit(s, to[j], abi.encode(legs[j].cOut), dOut);
     }
 
     // ------------------------------------------------------------------ unshield
@@ -313,14 +318,13 @@ library ZetherLib {
     ///         then pays `amount · shieldScale` public-equivalent units to `recipient` (a padded address or a derived UA,
     ///         CTR-ZTH-51: the statement's recipient word either way) from the pool or a leg's underlying.
     function unshield(
-        bytes calldata payload,
+        IZetherToken.ZetherBurn calldata b,
         bytes calldata proof,
-        ZetherTypes.UA beneficiary,
         uint256 amount,
         bytes32 recipient,
         Env memory e
     ) public returns (uint256) {
-        (Ctx memory c, Prepared memory pp) = _prepareUnshield(payload, amount, recipient, beneficiary, e);
+        (Ctx memory c, Prepared memory pp) = _prepareUnshield(b, amount, recipient, e);
         _check(c, pp, proof, OP_BURN);
         ZetherStorage storage s = $();
         Account storage a = s.acct[pp.from];
@@ -332,16 +336,12 @@ library ZetherLib {
         return pp.fee;
     }
 
-    function _prepareUnshield(
-        bytes calldata payload,
-        uint256 amount,
-        bytes32 recipient,
-        ZetherTypes.UA beneficiary,
-        Env memory e
-    ) private view returns (Ctx memory c, Prepared memory pp) {
+    function _prepareUnshield(IZetherToken.ZetherBurn calldata b, uint256 amount, bytes32 recipient, Env memory e)
+        private view returns (Ctx memory c, Prepared memory pp)
+    {
         ZetherStorage storage s = $();
         c = ctx(s, e);
-        pp = prepareUnshield(c, acct(s.acct[unshieldFrom(payload, c.p)], c.p), payload, amount, recipient, beneficiary);
+        pp = prepareUnshield(c, acct(s.acct[uaOf(b.yFrom)], c.p), b, amount, recipient);
     }
 
     // ------------------------------------------------------------------ roll-over (zether.md §6)
@@ -362,13 +362,13 @@ library ZetherLib {
     }
 
     /// @notice CTR-ZTH-16/17: `lastRolledPendingSeq < expectedPendingSeq ≤ pendingSeq`, signed by the account (a Schnorr
-    ///         by `x` through `registry.requireAuthorized` under `zether-owner`, UA-6 U9) over `ZETHER_ROLLOVER_V1` with
-    ///         `chainid`, `chainUid`, the token and `accSeq`.
+    ///         by `x` through `registry.requireAuthorized` under `zether-owner`, UA-6 U9) over the typed `ZetherRollOver`
+    ///         in the token's domain (TS-D19), with `accSeq`.
     function rollOverSigned(
         ZetherTypes.UA ua,
         uint64 expectedPendingSeq,
         uint64 validUntilBlock,
-        bytes calldata sig,
+        IUARegistry.UASig calldata sig,
         Env memory e
     ) public {
         if (block.number > validUntilBlock) revert IZetherToken.RollOverExpired(validUntilBlock);
@@ -378,31 +378,68 @@ library ZetherLib {
         if (a.pendingSeq < expectedPendingSeq || expectedPendingSeq <= a.lastRolledPendingSeq) {
             revert IZetherToken.PendingSeqMismatch(expectedPendingSeq, a.pendingSeq);
         }
-        bytes32 digest = keccak256(abi.encode(
-            TAG_ROLLOVER, block.chainid, e.chainUid, address(this), ua, a.accSeq, expectedPendingSeq, validUntilBlock
-        ));
+        bytes32 digest = MessageHashUtils.toTypedDataHash(e.domainSeparator, keccak256(abi.encode(
+            TH_ROLL_OVER, ua, a.accSeq, expectedPendingSeq, validUntilBlock
+        )));
         _requireOwner(e, ua, digest, sig);
         _rollOver(s, ua);
     }
 
-    /// @notice `ZETHER_SET_ROLLOVER_MODE_V1` with `chainid`, `chainUid`, the token and `modeNonce` (no replay).
+    /// @notice The typed `ZetherSetRollOverMode` in the token's domain (TS-D19), with `modeNonce` (no replay).
     function setRollOverMode(
         ZetherTypes.UA ua,
         ZetherTypes.RollOverMode mode,
         uint64 validUntilBlock,
-        bytes calldata sig,
+        IUARegistry.UASig calldata sig,
         Env memory e
     ) public {
         if (block.number > validUntilBlock) revert IZetherToken.RollOverExpired(validUntilBlock);
         if (!registeredOn(e.registry, ua)) revert IZetherToken.AccountNotRegistered(ua); // Zether UA only (2026-10-20)
         Account storage a = $().acct[ua];
-        bytes32 digest = keccak256(abi.encode(
-            TAG_SET_MODE, block.chainid, e.chainUid, address(this), ua, uint8(mode), a.modeNonce, validUntilBlock
-        ));
+        bytes32 digest = MessageHashUtils.toTypedDataHash(e.domainSeparator, keccak256(abi.encode(
+            TH_SET_MODE, ua, uint8(mode), a.modeNonce, validUntilBlock
+        )));
         _requireOwner(e, ua, digest, sig);
         a.mode = mode;
         a.modeNonce += 1;
         emit IZetherToken.RollOverModeChanged(ua, mode);
+    }
+
+    // ------------------------------------------------------------------ EIP-712 hashes of the explicit parameters (TS-D17)
+
+    function hashSingle(IZetherToken.ZetherSingle calldata t) public pure returns (bytes32) {
+        return keccak256(bytes.concat(
+            abi.encode(TH_SINGLE, t.accSeq, t.sendCounter, t.validUntilBlock, t.salt, t.beneficiaryUA),
+            abi.encode(_hash(t.yFrom), _hash(t.yTo), _hash(t.cOut), _hash(t.dOut), _hash(t.cDeb), _hash(t.cAud))
+        ));
+    }
+
+    function hashMulti(IZetherToken.ZetherMulti calldata t) public pure returns (bytes32) {
+        return keccak256(bytes.concat(
+            abi.encode(TH_MULTI, t.accSeq, t.sendCounter, t.validUntilBlock, t.salt, t.beneficiaryUA, t.decoyFee),
+            abi.encode(_hash(t.yFrom), _hash(t.dOut), _hash(t.cDeb), _hashLegs(t.legs), keccak256(t.sealedMemo))
+        ));
+    }
+
+    function hashBurn(IZetherToken.ZetherBurn calldata b) public pure returns (bytes32) {
+        return keccak256(abi.encode(TH_BURN, b.accSeq, b.sendCounter, b.validUntilBlock, b.beneficiaryUA, _hash(b.yFrom)));
+    }
+
+    function hashUnwrap(IConfidentialWrappedToken.Unwrap calldata x) public pure returns (bytes32) {
+        return keccak256(abi.encode(TH_UNWRAP, x));
+    }
+
+    function _hash(IZetherToken.G1 calldata g) private pure returns (bytes32) {
+        return keccak256(abi.encode(TH_G1, g));
+    }
+
+    function _hashLegs(IZetherToken.ZetherLeg[] calldata legs) private pure returns (bytes32) {
+        bytes32[] memory h = new bytes32[](legs.length);
+        for (uint256 j; j < h.length; ++j) {
+            IZetherToken.ZetherLeg calldata l = legs[j];
+            h[j] = keccak256(abi.encode(TH_LEG, _hash(l.yTo), _hash(l.cOut), _hash(l.cAud), _hash(l.dAud)));
+        }
+        return keccak256(abi.encodePacked(h));
     }
 
     // ------------------------------------------------------------------ statements (shared with ZetherStatements)
@@ -454,119 +491,93 @@ library ZetherLib {
         return keccak256(abi.encode(TAG_ENTRY, block.chainid, c.chainUid, c.token, from, uint256(counter)));
     }
 
-    /// @notice Single format: `be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock) ‖ salt(16) ‖ Y_f ‖ Y_t ‖ C_out ‖
-    ///         D_out ‖ C_deb ‖ C_aud`.
-    function singleFrom(bytes calldata payload, uint256 p) internal pure returns (ZetherTypes.UA) {
-        if (payload.length != S_PTS + 6 * p) revert IZetherToken.BadPayload(payload.length);
-        return ZetherTypes.toUA(payload[S_PTS:S_PTS + p]);
+    /// @notice The UA of a key given as a point (`ZetherTypes.toUA` of its 128 bytes).
+    function uaOf(IZetherToken.G1 calldata y) internal pure returns (ZetherTypes.UA) {
+        return ZetherTypes.toUA(abi.encode(y));
     }
 
-    /// @notice `be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock) ‖ salt(16) ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖
-    ///         D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j ‖ D_aud_j)_j`,
-    ///         then the sender memo (`17 + 40·M` bytes, CTR-ZTH-50) on commit-reveal only (checked by the form,
-    ///         `prepareMulti`).
-    function multiFrom(bytes calldata payload, uint256 p) internal pure returns (ZetherTypes.UA) {
-        if (payload.length < M_PTS + 3 * p) revert IZetherToken.BadPayload(payload.length);
-        uint256 m = uint256(bytes32(payload[112:144]));
+    /// @notice The sender of `M` legs, `0 < M ≤ 16`.
+    function multiFrom(IZetherToken.ZetherMulti calldata t) internal pure returns (ZetherTypes.UA) {
+        uint256 m = t.legs.length;
         if (m == 0 || m > MAX_RECIPIENTS) revert IZetherToken.BadRecipientCount(m);
-        uint256 legsEnd = _leg(p, m);
-        if (payload.length != legsEnd && payload.length != legsEnd + 17 + 40 * m) {
-            revert IZetherToken.BadPayload(payload.length);
-        }
-        return ZetherTypes.toUA(payload[M_PTS:M_PTS + p]);
-    }
-
-    /// @notice `be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock) ‖ Y_f`.
-    function unshieldFrom(bytes calldata payload, uint256 p) internal pure returns (ZetherTypes.UA) {
-        if (payload.length != P_HEAD + p) revert IZetherToken.BadPayload(payload.length);
-        return ZetherTypes.toUA(payload[P_HEAD:P_HEAD + p]);
+        return uaOf(t.yFrom);
     }
 
     /// @notice Every cheap check before verification: the mode, self, registration, fee, `accSeq`, `sendCounter`,
     ///         `validUntilBlock`, the auditor key as a party.
-    function prepareSingle(Ctx memory c, Acct memory a, bytes calldata payload, ZetherTypes.UA beneficiary)
+    function prepareSingle(Ctx memory c, Acct memory a, IZetherToken.ZetherSingle calldata t)
         internal view returns (Prepared memory pp)
     {
         if (c.disclosureMode == ZetherTypes.DisclosureMode.COMPACT) {
             revert IZetherToken.TransferEntryDisabled(uint8(c.disclosureMode));
         }
-        uint256 p = c.p;
-        bytes calldata pts = payload[S_PTS:];
-        pp.from = ZetherTypes.toUA(pts[0:p]);
-        ZetherTypes.UA to = ZetherTypes.toUA(pts[p:2 * p]);
+        pp.from = uaOf(t.yFrom);
+        ZetherTypes.UA to = uaOf(t.yTo);
         if (ZetherTypes.UA.unwrap(pp.from) == ZetherTypes.UA.unwrap(to)) revert IZetherToken.SelfTransfer();
         _requireRegistered(c, pp.from);
         _requireRegistered(c, to);
-        pp.beneficiary = beneficiary;
-        pp.fee = _innerFee(c, beneficiary);
-        (pp.sendCounter, pp.validUntil) = _checkSeqs(a, payload);
-        pp.salt = bytes16(payload[P_HEAD:S_PTS]);
-        bytes memory ya = _auditorPoint(c, _isO(pts[5 * p:6 * p]) ? 1 : 0, 1);
+        pp.beneficiary = ZetherTypes.UA.wrap(t.beneficiaryUA);
+        pp.fee = _innerFee(c, pp.beneficiary);
+        (pp.sendCounter, pp.validUntil) = _checkSeqs(a, t.accSeq, t.sendCounter, t.validUntilBlock);
+        pp.salt = t.salt;
+        bytes memory ya = _auditorPoint(c, _isO(abi.encode(t.cAud)) ? 1 : 0, 1);
         ZetherTypes.UA[] memory parties = new ZetherTypes.UA[](1);
         parties[0] = to;
         _noAuditorParty(ya, pp.from, parties);
         pp.statement = bytes.concat(
-            _header(c, OP_TRANSFER, c.psid, a, pp, 0, 0), pts[0:2 * p], ya, a.accC, a.accD, pts[2 * p:6 * p]
+            _header(c, OP_TRANSFER, c.psid, a, pp, 0, 0), abi.encode(t.yFrom, t.yTo), ya, a.accC, a.accD,
+            abi.encode(t.cOut, t.dOut, t.cDeb, t.cAud)
         );
     }
 
     /// @notice As `prepareSingle`, for `M` recipients: pairwise distinct, none the sender (nor, with the auditor on, the
     ///         auditor key: `AuditorKeyAsParty`), all registered; a `COMPACT`
-    ///         token takes HASH only; the memo exactly on HASH, its clear salt the payload's, its hash in the header;
+    ///         token takes HASH only; the memo exactly on HASH, `salt ‖ sealedMemo`, its hash in the header;
     ///         `minDecoyFee ≤ decoyFee < 2^64` (`DecoyFeeOutOfRange`) and the header's fee word `txFee + M · decoyFee`
     ///         `< 2^64`, so the proof binds the sender's `decoyFee` (no relation change: the fee is already public).
     function prepareMulti(
         Ctx memory c,
         Acct memory a,
-        bytes calldata payload,
-        ZetherTypes.UA beneficiary,
+        IZetherToken.ZetherMulti calldata t,
         ZetherTypes.TransferMode mode
     ) internal view returns (Prepared memory pp) {
         if (c.disclosureMode == ZetherTypes.DisclosureMode.COMPACT && mode != ZetherTypes.TransferMode.HASH) {
             revert IZetherToken.TransferEntryDisabled(uint8(c.disclosureMode));
         }
-        uint256 p = c.p;
-        pp.from = ZetherTypes.toUA(payload[M_PTS:M_PTS + p]);
+        pp.from = uaOf(t.yFrom);
         _requireRegistered(c, pp.from);
-        pp.to = _recipients(c, payload, pp.from, uint256(bytes32(payload[112:144])));
-        pp.beneficiary = beneficiary;
-        uint256 d = uint256(bytes32(payload[144:M_PTS]));
+        pp.to = _recipients(c, t.legs, pp.from);
+        pp.beneficiary = ZetherTypes.UA.wrap(t.beneficiaryUA);
+        uint256 d = t.decoyFee;
         if (d < c.minDecoyFee || d >= VALUE_BOUND) revert IZetherToken.DecoyFeeOutOfRange(d, c.minDecoyFee);
         pp.decoyFee = d;
-        pp.fee = _innerFee(c, beneficiary) + pp.to.length * d;
+        pp.fee = _innerFee(c, pp.beneficiary) + pp.to.length * d;
         if (pp.fee >= VALUE_BOUND) revert IZetherToken.AmountOutOfRange(pp.fee, VALUE_BOUND);
-        (pp.sendCounter, pp.validUntil) = _checkSeqs(a, payload);
-        pp.salt = bytes16(payload[P_HEAD:P_HEAD + 16]);
-        bytes calldata memo = payload[_leg(p, pp.to.length):];
-        if (memo.length != (mode == ZetherTypes.TransferMode.HASH ? 17 + 40 * pp.to.length : 0)) {
-            revert IZetherToken.BadPayload(payload.length);
-        }
-        if (memo.length != 0) {
-            if (bytes16(memo[0:16]) != pp.salt) revert IZetherToken.MemoSaltMismatch();
-            pp.memoHash = keccak256(memo);
-        }
-        pp.statement = _multiStatement(c, a, payload, pp, mode);
+        (pp.sendCounter, pp.validUntil) = _checkSeqs(a, t.accSeq, t.sendCounter, t.validUntilBlock);
+        pp.salt = t.salt;
+        bool hashed = mode == ZetherTypes.TransferMode.HASH;
+        if (t.sealedMemo.length != (hashed ? 1 + 40 * pp.to.length : 0)) revert IZetherToken.BadPayload(t.sealedMemo.length);
+        if (hashed) pp.memoHash = keccak256(bytes.concat(t.salt, t.sealedMemo));
+        pp.statement = _multiStatement(c, a, t, pp, mode);
     }
 
     /// @notice `0 < amount ≤ maxShielded` before the statement (`amount + fee < 2^65 < r`), recipient non-zero.
     function prepareUnshield(
         Ctx memory c,
         Acct memory a,
-        bytes calldata payload,
+        IZetherToken.ZetherBurn calldata b,
         uint256 amount,
-        bytes32 recipient,
-        ZetherTypes.UA beneficiary
+        bytes32 recipient
     ) internal view returns (Prepared memory pp) {
         if (amount == 0 || amount > c.maxShielded) revert IZetherToken.AmountOutOfRange(amount, c.maxShielded);
         if (recipient == 0) revert IZetherToken.ZeroRecipient();
-        uint256 p = c.p;
-        pp.from = ZetherTypes.toUA(payload[P_HEAD:P_HEAD + p]);
+        pp.from = uaOf(b.yFrom);
         _requireRegistered(c, pp.from);
-        pp.beneficiary = beneficiary;
-        pp.fee = _innerFee(c, beneficiary);
-        (pp.sendCounter, pp.validUntil) = _checkSeqs(a, payload);
+        pp.beneficiary = ZetherTypes.UA.wrap(b.beneficiaryUA);
+        pp.fee = _innerFee(c, pp.beneficiary);
+        (pp.sendCounter, pp.validUntil) = _checkSeqs(a, b.accSeq, b.sendCounter, b.validUntilBlock);
         pp.statement = bytes.concat(
-            _header(c, OP_BURN, c.psid, a, pp, amount, recipient), payload[P_HEAD:P_HEAD + p], a.accC, a.accD
+            _header(c, OP_BURN, c.psid, a, pp, amount, recipient), abi.encode(b.yFrom), a.accC, a.accD
         );
     }
 
@@ -591,24 +602,27 @@ library ZetherLib {
     function _multiStatement(
         Ctx memory c,
         Acct memory a,
-        bytes calldata payload,
+        IZetherToken.ZetherMulti calldata t,
         Prepared memory pp,
         ZetherTypes.TransferMode mode
     ) private view returns (bytes memory) {
-        uint256 p = c.p;
         bytes32 op = mode == ZetherTypes.TransferMode.HASH ? OP_MULTI_HASH : OP_MULTI_BUNDLE;
-        bytes memory ya = _auditorPoint(c, _audOff(payload, p, pp.to.length), pp.to.length);
+        bytes memory ya = _auditorPoint(c, _audOff(t.legs), pp.to.length);
         _noAuditorParty(ya, pp.from, pp.to);
         bytes memory head = bytes.concat(
-            _header(c, op, c.ver.proofSystemIdMulti(), a, pp, 0, 0), payload[M_PTS:M_PTS + p], ya, a.accC, a.accD
+            _header(c, op, c.ver.proofSystemIdMulti(), a, pp, 0, 0), abi.encode(t.yFrom), ya, a.accC, a.accD
         );
-        head = bytes.concat(head, payload[M_PTS + p:M_PTS + 3 * p], payload[112:144]);
-        return bytes.concat(head, payload[M_PTS + 3 * p:_leg(p, pp.to.length)]);
+        return bytes.concat(head, abi.encode(t.dOut, t.cDeb, pp.to.length), _legPoints(t.legs));
     }
 
-    /// @dev Where leg `j` starts in a multi-recipient payload (and, for `j = M`, where the legs end).
-    function _leg(uint256 p, uint256 j) private pure returns (uint256) {
-        return M_PTS + 3 * p + 4 * p * j;
+    /// @dev The legs' points in order: `abi.encode(legs)` less its offset and length words (a leg is four static points).
+    function _legPoints(IZetherToken.ZetherLeg[] calldata legs) private pure returns (bytes memory b) {
+        b = abi.encode(legs);
+        assembly ("memory-safe") {
+            let n := sub(mload(b), 64)
+            b := add(b, 64)
+            mstore(b, n)
+        }
     }
 
     /// @dev With the auditor on (`Y_a ≠ O`), neither the sender nor a recipient is the auditor key (review C0-1;
@@ -621,14 +635,13 @@ library ZetherLib {
     }
 
     /// @dev The recipients: none the sender, pairwise distinct, registered.
-    function _recipients(Ctx memory c, bytes calldata payload, ZetherTypes.UA from, uint256 m)
+    function _recipients(Ctx memory c, IZetherToken.ZetherLeg[] calldata legs, ZetherTypes.UA from)
         private view returns (ZetherTypes.UA[] memory to)
     {
-        uint256 p = c.p;
+        uint256 m = legs.length;
         to = new ZetherTypes.UA[](m);
         for (uint256 j; j < m; ++j) {
-            uint256 o = _leg(p, j);
-            to[j] = ZetherTypes.toUA(payload[o:o + p]);
+            to[j] = uaOf(legs[j].yTo);
             bytes32 t = ZetherTypes.UA.unwrap(to[j]);
             if (t == ZetherTypes.UA.unwrap(from)) revert IZetherToken.SelfTransfer();
             for (uint256 k; k < j; ++k) if (ZetherTypes.UA.unwrap(to[k]) == t) revert IZetherToken.DuplicateRecipient(to[j]);
@@ -638,10 +651,9 @@ library ZetherLib {
 
     /// @dev `accSeq`, `sendCounter` and `block.number ≤ validUntilBlock` (review C0-9, the PQZ header's rule; the word
     ///      is in the statement, so the proof binds it).
-    function _checkSeqs(Acct memory a, bytes calldata payload) private view returns (uint64, uint256 validUntil) {
-        uint256 provedAccSeq = uint256(bytes32(payload[0:32]));
-        uint256 provedSend = uint256(bytes32(payload[32:64]));
-        validUntil = uint256(bytes32(payload[64:P_HEAD]));
+    function _checkSeqs(Acct memory a, uint64 provedAccSeq, uint64 provedSend, uint256 validUntil)
+        private view returns (uint64, uint256)
+    {
         if (block.number > validUntil) revert IZetherToken.TransferExpired(validUntil);
         if (provedAccSeq != a.accSeq) revert IZetherToken.StaleAccSeq(a.accSeq, provedAccSeq);
         if (provedSend != a.sendCounter) revert IZetherToken.StaleSendCounter(a.sendCounter, provedSend);
@@ -667,8 +679,8 @@ library ZetherLib {
 
     /// @dev An owner op (roll-over, mode): a registered Zether UA only (owner ruling 2026-10-20; checked first by both entry
     ///      points: any other kind or an unregistered id reverts `AccountNotRegistered`), its Schnorr by `x` through `requireAuthorized` under
-    ///      `zether-owner`, `sig = abi.encode(bytes(""), schnorrSig)` (UA-6 U9; `Y` from the record).
-    function _requireOwner(Env memory e, ZetherTypes.UA ua, bytes32 digest, bytes calldata sig) private view {
+    ///      `zether-owner`, `sig.signature` the Schnorr (UA-6 U9; `Y` from the record).
+    function _requireOwner(Env memory e, ZetherTypes.UA ua, bytes32 digest, IUARegistry.UASig calldata sig) private view {
         IUARegistry(e.registry).requireAuthorized(ZetherTypes.UA.unwrap(ua), UAKinds.PURPOSE_ZETHER_OWNER, digest, sig);
     }
 
@@ -696,7 +708,7 @@ library ZetherLib {
     }
 
     /// @dev `acc_f −= (C_deb + [fee]G, D_out)`.
-    function _debit(Ctx memory c, Account storage a, bytes calldata cDeb, bytes calldata dOut, uint256 fee) private {
+    function _debit(Ctx memory c, Account storage a, bytes memory cDeb, bytes memory dOut, uint256 fee) private {
         bytes memory cc = c.ver.g1Sub(_pt(a.accC, c.p), cDeb);
         if (fee != 0) cc = c.ver.g1Sub(cc, c.ver.g1MulBase(fee));
         a.accC = cc;
@@ -730,29 +742,29 @@ library ZetherLib {
     ///      `R` in state.
     function _storeRecord(
         ZetherStorage storage s,
-        uint256 p,
         bytes32 entryRef,
-        bytes calldata payload,
+        IZetherToken.ZetherMulti calldata t,
         Prepared memory pp,
+        bytes memory dOut,
         ZetherTypes.TransferMode mode
     ) private {
-        uint256 legsEnd = _leg(p, pp.to.length);
-        bytes memory r = _record(pp.salt, payload[M_PTS + 3 * p:legsEnd], payload[M_PTS + p:M_PTS + 2 * p], p);
+        bytes memory r = _record(pp.salt, t.legs, dOut);
         if (mode == ZetherTypes.TransferMode.BUNDLE) {
             s.entries[entryRef] = r;
         } else {
             s.entryPtrs[entryRef] = SSTORE2.write(r);
-            s.memos[entryRef] = payload[legsEnd:];
+            s.memos[entryRef] = bytes.concat(t.salt, t.sealedMemo);
             emit IZetherToken.TransferBundles(entryRef, r);
         }
     }
 
     /// @dev `R = salt ‖ B_1 ‖ … ‖ B_M`, `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j ‖ D_aud_j` (5 points, review C0-1; the
     ///      single format's `B` keeps 4, its auditor copy being under `s`).
-    function _record(bytes16 salt, bytes calldata legs, bytes calldata dOut, uint256 p) private pure returns (bytes memory b) {
+    function _record(bytes16 salt, IZetherToken.ZetherLeg[] calldata legs, bytes memory dOut) private pure returns (bytes memory b) {
         b = abi.encodePacked(salt);
-        for (uint256 o; o < legs.length; o += 4 * p) {
-            b = bytes.concat(b, legs[o:o + 2 * p], dOut, legs[o + 2 * p:o + 4 * p]);
+        for (uint256 j; j < legs.length; ++j) {
+            IZetherToken.ZetherLeg calldata l = legs[j];
+            b = bytes.concat(b, abi.encode(l.yTo, l.cOut), dOut, abi.encode(l.cAud, l.dAud));
         }
     }
 
@@ -769,12 +781,9 @@ library ZetherLib {
         return new bytes(c.p);
     }
 
-    /// @dev Number of the `m` legs with `C_aud_j = O` (the verifier then requires `D_aud_j = O` too).
-    function _audOff(bytes calldata payload, uint256 p, uint256 m) private pure returns (uint256 n) {
-        for (uint256 j; j < m; ++j) {
-            uint256 o = _leg(p, j) + 2 * p;
-            if (_isO(payload[o:o + p])) ++n;
-        }
+    /// @dev Number of the legs with `C_aud_j = O` (the verifier then requires `D_aud_j = O` too).
+    function _audOff(IZetherToken.ZetherLeg[] calldata legs) private pure returns (uint256 n) {
+        for (uint256 j; j < legs.length; ++j) if (_isO(abi.encode(legs[j].cAud))) ++n;
     }
 
     /// @dev The stored point, or `O` when never written.

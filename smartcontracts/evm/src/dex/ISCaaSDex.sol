@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {ITradeToken} from "../trade/ITradeToken.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title The DEX side of `TradeOrder` and `UATradeOrder` (CTR-DEX-16, -17, -11, -03, -24, -18, -22, -08, -20, -21,
 ///        -23, -26): one taker against many makers per settlement, or a plan of orders against AMM routes (the exchange
@@ -19,13 +20,16 @@ interface ISCaaSDex {
     }
 
     /// @notice One order in one settlement; `fill` = its `sellFill` in this call (Path B: the matched part). Tagged
-    ///         (CTR-DEX-26): `shape` 0 = `order` is `abi.encode(TradeOrder)`, 1 = `abi.encode(UATradeOrder)` (`sig` the
-    ///         registry auth of a derived signer, or a native id's own signature).
-    struct Leg {
+    ///         (CTR-DEX-26): `shape` 0 = a `TradeOrder` in `order`, signed in `sig`; 1 = a `UATradeOrder` in `uaOrder`,
+    ///         authorized in `auth` (a derived signer's registry auth, a native id's own signature in `auth.signature`).
+    ///         The members of the other shape stay zero; nothing reads them (Appendix X row 20).
+    struct DexLeg {
         address sellToken;
         uint8 shape;
-        bytes order;
+        ITradeToken.TradeOrder order;
+        ITradeToken.UATradeOrder uaOrder;
         bytes sig;
+        IUARegistry.UASig auth;
         uint256 fill;
     }
 
@@ -39,8 +43,8 @@ interface ISCaaSDex {
     /// @notice `ref` is the submitter's, echoed in events only; taker/makers is a call-time arrangement.
     struct Settlement {
         bytes32 ref;
-        Leg taker;
-        Leg[] makers;
+        DexLeg taker;
+        DexLeg[] makers;
     }
 
     /// @notice One order on the exchange path (CTR-DEX-20): `sellFill` of its sell token in this call (Path B: the
@@ -49,8 +53,10 @@ interface ISCaaSDex {
     struct ExchangeLeg {
         address sellToken;
         uint8 shape;
-        bytes order;
+        ITradeToken.TradeOrder order;
+        ITradeToken.UATradeOrder uaOrder;
         bytes sig;
+        IUARegistry.UASig auth;
         uint256 sellFill;
         uint256 receiveFill;
     }
@@ -76,8 +82,8 @@ interface ISCaaSDex {
     ///         `extraTokens` are intermediate hop tokens (snapshotted; each must end at its snapshot).
     struct HybridPlan {
         bytes32 ref;
-        Leg taker;
-        Leg[] makers;
+        DexLeg taker;
+        DexLeg[] makers;
         uint256 outsideSell;
         uint256 outsideFloor;
         address[] extraTokens;
@@ -212,7 +218,8 @@ interface ISCaaSDex {
     function setListedOnly(bool on) external;
 
     function dexOrderDigest(address sellToken, ITradeToken.TradeOrder calldata o) external view returns (bytes32);
-    function cancelOrderDigest(bytes32 orderHash) external view returns (bytes32);
+    /// @notice `CancelDexOrder(DexOrder order)`: the digest `mtxCancelOrders` checks.
+    function cancelDexOrderDigest(address sellToken, ITradeToken.TradeOrder calldata o) external view returns (bytes32);
     function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) external view returns (bytes32);
     /// @notice Fill state of outside-token orders, kept by the DEX (`h` = the `DexOrder` digest).
     function pulled(bytes32 orderHash) external view returns (uint256);

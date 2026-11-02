@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {UACall} from "../ua/UACall.sol";
 import {console2} from "forge-std/Test.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -439,7 +440,7 @@ contract MtxCtxTest is PqzRegistryBase {
             "mtxExecuteTransfer", _set(_nonceSlot(MetaTxLib.pad(alice), 13), _balSlot(alice), _balSlot(BOB), relayer, 0, 4));
         // uaExecuteTransfer: u -> BOB 100, fee 5
         MetaTxLib.UAMetaTransfer memory ut = _ut(u, MetaTxLib.pad(BOB), 14);
-        _checkWrites(abi.encodeCall(IUALedger.uaExecuteTransfer, (ut, _mlAuth())), "uaExecuteTransfer",
+        _checkWrites(abi.encodeCall(IUALedger.uaExecuteTransfer, (ut, UACall.auth(ut.from, _mlAuth()))), "uaExecuteTransfer",
             _set(_nonceSlot(u, 14), _uaSlot(u), _balSlot(MetaTxLib.UA_POOL), _balSlot(BOB), relayer, 5));
     }
 
@@ -533,8 +534,8 @@ contract MtxCtxTest is PqzRegistryBase {
         _hip632(t, abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, _ed(htok.mtxTransferDigest(x)))),
             MtxPipelineLib.preTransfer.selector);
         MetaTxLib.UAMetaTransfer memory y = _ut(MetaTxLib.pad(hed), MetaTxLib.pad(BOB), 3);
-        _hip632(t, abi.encodeCall(IUALedger.uaExecuteTransfer, (y, _ed(htok.uaTransferDigest(y)))),
-            MtxPipelineLib.preTransfer.selector);
+        _hip632(t, abi.encodeCall(IUALedger.uaExecuteTransfer, (y, UACall.auth(y.from, _ed(htok.uaTransferDigest(y))))),
+            MtxPipelineLib.preTransferUA.selector);
         assertEq(htok.balanceOf(BOB), 2_000);
         assertEq(htok.mtxNonce(hed, 1) + htok.mtxNonce(hed, 2) + htok.mtxNonce(hed, 3), 3);
     }

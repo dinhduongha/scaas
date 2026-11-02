@@ -10,9 +10,9 @@ rules: `docs/contracts/` (start at `docs/contracts/README.md`); reasons and old 
 |---|---|---|
 | Token kinds `NORMAL` / `WRAPPED` | `metatx/NormalToken.sol`, `metatx/WrappedToken.sol` on `MetaTokenBase` (`MetaTxBase`, `ERC20MetaTx`, `WrappedLib`, `AdminLib`) | built; EIP-1167 clones; meta-tx (address path and UA path), UA ledger, wrapper legs ([token-wrappers.md](../../docs/contracts/token-wrappers.md), [metatx.md](../../docs/contracts/metatx.md)) |
 | Zether kinds `NORMAL_ZETHER` / `WRAPPED_ZETHER` | `zether/` (`ZetherLayer`, `ZetherLib`, `ZetherStatements`, per curve the transfer / burn / inner-product verifiers (`ZetherTransferVerifier*`, `ZetherBurnVerifier*`, `ZetherInnerProductVerifier*`), `ZetherDisclosure`) | built; unaudited, any chain with EIP-2537 ([zether.md](../../docs/contracts/zether.md)) |
-| PQZ kinds `NORMAL_PQZ` / `WRAPPED_PQZ` | `pqz/` (`PqzLayer`, `PqzStateLib`, `PqzTransferLib`, `PqzBurnLib`, `PqzViewLib`, `PqzCore`, `PqzCt`, `UAPqzVerifier`, `PqzSafety`) | built; any chain whose `PQZ` precompile passes the self-test (`PqzSafety`); op 7 multi-recipient transfers (`pqzTransfer*`) and op 1 single (`pqzTransferSingle*`) over the `PQZ` precompile ([pq-zero-knowledge.md](../../docs/contracts/pq-zero-knowledge.md)) |
+| PQZ kinds `NORMAL_PQZ` / `WRAPPED_PQZ` | `pqz/` (`PqzLayer`, `PqzStateLib`, `PqzTransferLib`, `PqzBurnLib`, `PqzViewLib`, `PqzCore`, `PqzCt`, `UAPqzVerifier`, `PqzSafety`) | built; any chain whose `PQZ` precompile passes the self-test (`PqzSafety`); op 7 multi-recipient transfers (`mtxConfidentialTransfer*`) and op 1 single (`mtxConfidentialTransferSingle*`) over the `PQZ` precompile ([pq-zero-knowledge.md](../../docs/contracts/pq-zero-knowledge.md)) |
 | Factory | `factory/OpenFactory.sol` (`IOpenFactory`, `IFactoryToken`) | built; open creation, versioned catalogue, the Zether / PQZ gates |
-| Universal Accounts | `ua/UARegistry.sol`, `ua/UAKinds.sol`, `ua/verifiers/`, the PQ verifiers (`MlDsa`, `FnDsa`, `SlhDsa`) | built; admin-free registry, kinds `0x0100`–`0x0108`, groups, `msig`, Zether / PQZ kinds, per-kind list ([accounts.md](../../docs/contracts/accounts.md)) |
+| Universal Accounts | `ua/UARegistry.sol` (views, `requireAuthorized`) with its linked `ua/UARegistryLib.sol` (the writes), `ua/UAKinds.sol`, `ua/verifiers/`, the PQ verifiers (`MlDsa`, `FnDsa`, `SlhDsa`) | built; admin-free registry, kinds `0x0100`–`0x0108`, groups, `msig`, Zether / PQZ kinds, per-kind list ([accounts.md](../../docs/contracts/accounts.md)) |
 | DEX | `dex/SCaaSDex.sol` (`DexPuller`), `trade/` | built; clone per DEX, `mtxSettle` one taker / many makers ([dex.md](../../docs/contracts/dex.md)) |
 | Accounts and wallets | `account/SmartKeyAccount.sol` (+ factory), `wallet/MandateWallet.sol` | built |
 | Hedera | `hedera/` | built; HIP-632 / long-zero helpers for the Hedera profile ([networks/hedera.md](../../docs/networks/hedera.md)) |
@@ -74,9 +74,23 @@ reached by DELEGATECALL and does not count towards a token's size; `internal` li
 ## Deploying
 
 `script/Deploy.s.sol` (with `DeployBase.sol`) deploys the factory, the token catalogue, the UA registry generation 1
-with the per-chain kinds (`UAPrecompileProbe`) and writes `deployments/<chainid>.json`; `script/ZetherE2E.s.sol` is the
-classical Zether e2e (`scripts/e2e-zether.sh`: an anvil, or the SCaaS testnet with `RPC`). Chain 7622's PQZ stack is deployed and exercised end to end by `script/pqz/e2e.py` (logs in `runs/`,
-e.g. the live addresses of the latest run at the end of each log).
+with the per-chain kinds (`UAPrecompileProbe`) and writes `deployments/<chainid>.json`, `ua_registry_lib` included: forge
+links and deploys `UARegistryLib` by CREATE2 before the registry, behind the same release gas gate. No script deploys a
+registry generation 2. `script/ZetherE2E.s.sol` is the classical Zether e2e (`scripts/e2e-zether.sh`: an anvil, or the
+SCaaS testnet with `RPC`), direct calls and relayed named entries. The SCaaS testnet's PQZ stack is deployed and exercised
+end to end by `script/pqz/e2e.py` (logs in `runs/`, e.g. the live addresses of the latest run at the end of each log).
+
+A signed call is a named entry: the `Envelope` or `UAEnvelope`, the op's explicit parameters, then the signature, over the
+entry's own typed struct:
+
+```solidity
+token.mtxConfidentialTransferSingle(envelope, args, proof, pqzAuth, accHint, sig);   // bytes sig, an EOA's EIP-712
+token.uaConfidentialTransferSingle(uaEnvelope, args, proof, pqzAuth, accHint, uaSig); // UASig{keyData, signature, members}
+registry.registerMsig(structure, attrs, memberSigs, pqzPop);                          // MsigStructure, UAAttrs, MemberSig[]
+```
+
+The generic `mtxExecute` / `uaExecute` stay for a mixed batch or an op without a named entry. `pqzAuth` is the holder's
+`UASig` over the typed `PqzAuth` of the statement. Type strings and calldata per op: `../vectors/typed/typed_ops.json`.
 
 ## Design notes
 

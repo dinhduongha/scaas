@@ -64,7 +64,7 @@ const groups = <String>[
 
 const purposes = <String>[
   'pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'receiver-fee', 'vp',
-  'vc-anchor', 'trade', 'kem', 'pqz-key',
+  'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership',
 ];
 
 /// Throws UAKindUnknown. [kind] must be 0..0xffff to match (a wider int is simply unknown).

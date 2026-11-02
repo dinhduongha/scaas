@@ -4,7 +4,7 @@ use std::{vec, vec::Vec as StdVec};
 use super::*;
 use ed25519_dalek::Signer as _;
 use scaas_token::{Token, TokenClient};
-use scaas_ua_common::{h32, op_digest, UaAttrs, PURPOSE_METATX, PURPOSE_POP_V2, PURPOSE_TRADE};
+use scaas_ua_common::{h32, op_digest, UaAttrs, PURPOSE_METATX, PURPOSE_POP_V2, PURPOSE_TRADE, kem_record_hash, portable_record_hash, registration_digest};
 use scaas_ua_registry::{UaRegistry, UaRegistryClient as RegClient};
 use serde_json::Value;
 use soroban_sdk::testutils::{Address as _, AuthorizedFunction, Ledger, MockAuth, MockAuthInvoke};
@@ -312,8 +312,9 @@ impl U {
         let sk = ed25519_dalek::SigningKey::from_bytes(&[seed; 32]);
         let kd = Bytes::from_array(env, &sk.verifying_key().to_bytes());
         let id = self.reg.ua_of(&ED25519, &kd);
-        let z = [0u8; 32];
-        let reg_digest = keccak(env, &[&keccak(env, &[&PURPOSE_POP_V2, &id.to_array(), &z, &z]), &z]);
+        let z = BytesN::from_array(env, &[0u8; 32]);
+        let rec = portable_record_hash(env, &id, ED25519, &z, &kem_record_hash(env, &id, 0, 0, &z));
+        let reg_digest = registration_digest(env, &rec, &z).to_array();
         let pop = sk.sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_POP_V2, &reg_digest])).to_bytes();
         self.reg.register(&ED25519, &kd, &no_attrs(env), &Bytes::from_array(env, &pop), &Bytes::new(env), &None);
         Ua { sk, id }
@@ -404,7 +405,7 @@ impl U {
 }
 
 fn no_attrs(env: &Env) -> UaAttrs {
-    UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: BytesN::from_array(env, &[0; 32]), kem_version: 0, kem_pk: Bytes::new(env) }
+    UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: BytesN::from_array(env, &[0; 32]), kem_pk: Bytes::new(env) }
 }
 
 /// Property 5 (T7): one UA signature fills an order in three settles up to `sell_amount`; a fourth is `Overfill`; another

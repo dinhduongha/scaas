@@ -205,6 +205,8 @@ rebuilds the payload with `fam/<family>.js` and returns a frozen `checked` objec
 | Aptos | payload fields (op, from, to, amount, asset, window); `account == account_of(root, owner)`; `message` = the digest text; `application == location.origin` (portal: the configured `aptos_application`); `chainId`; `nonce == lane` |
 | Soroban | decode the invocation: contract = token, function, args (from, to, amount); `network_id` = the configured passphrase hash; `signature_expiration_ledger` ≤ current + window |
 | Cosmos, GRAM, Hedera ED25519 | the payload rebuilt from terms == `payload_hex`; `from`; chain/network; contract; amount |
+| EVM named operations (every struct of `typed_ops.json`, [CLI-SGN-42](#CLI-SGN-42)) | `checkOp(td, {op, contract, chainId, chainUid, message, maxFee, feeRecipient, relayer})` checks **per struct**: the typed data is rebuilt from the fields the client built from the user's input (`from` too), every one present (nothing omitted reads as zero); the server supplies only the lane, nonce, deadline and fee fields of the envelope, the fee within `maxFee` (PERCENT only on an AMOUNT op, on the op's own amount, [CTR-MTX-20](../contracts/metatx.md#CTR-MTX-20)), a bound fee recipient or relayer the one named. Any other struct (an order, a cancel, `ReceiverFee`, `RelayFee`, `PqzAuth`) is all the client's. `checkWrapOrder` / `checkUAWrapOrder`, `checkCancel`, `checkReceiverFee` and `checkTradeOrder` carry their own rules; `checkOp` refuses a wrap order. `checkCall` (the generic `MetaTransaction`) stays beside it |
+| Portable UA records (`UARegistration`, `UAKemRecord`, `UAPqzKeyRecord`, `UAMembership`; a native `msig` member) | the typed data rebuilt from the record's fields by `portableTypedData` ([CLI-SGN-41](#CLI-SGN-41)) equals what is shown: domain `name` + `version` only, `ua`, the `uint16 kind` with its name, the key and proof hashes. SPECIFIED for `checkTerms`; today the builder is the check |
 
 NEAR secp256k1 (kind `0x0108`, raw op digest): the token's `env::ecrecover` takes the recovery id, so the client sends
 `v ∈ {0, 1}` (a wallet's 27 / 28 minus 27; accounts.md §1.6 writes 27 / 28 for the EVM form) ([NET-NEAR-03](../networks/near.md#NET-NEAR-03)).
@@ -284,10 +286,10 @@ tests for the ceilings (exact and inexact divisions), the round trip and the zer
 <a id="CLI-SGN-36"></a>**CLI-SGN-36** — **A client never asks an EOA to approve a SCaaS token; wrapping a SCaaS
 underlying is signed, not approved.** Status: **BUILT** in clientkeys (P5: no approve builder; `checkTradeOrder` with `wrappers`, a flat list: defence in depth, the wrapper itself checks the underlying). On a SCaaS token only a contract may call `approve`
 ([CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)), and `approve` is on no token allowlist, so no client offers
-an approve screen, typed data or permit for one. A wrap whose underlying is a SCaaS token is a `TradeOrder` signed in
-the **underlying's** domain with `dex` = `receiveToken` = the wrapper, `receiveAmount` = the minimum to mint,
-`minFill = amount` and `fee` = what the submitting relayer earns from the minted units; it is submitted as an `mtxWrap`
-job ([job-api.md#metatx-entries](../node/job-api.md#metatx-entries)). A wrap of an **outside** underlying (e.g. a
+an approve screen, typed data or permit for one. A wrap whose underlying is a SCaaS token is a `WrapOrder` (typed-signing C6, TS-D19) signed in
+the **underlying's** domain with `wrappedToken` = the wrapper, `minMinted` = the minimum to mint,
+`minFill = amount` and `fee` = what the submitting relayer earns from the minted units; it is submitted as an `mtxWrapOrder`
+job ([job-api.md#metatx-entries](../node/job-api.md#metatx-entries)). `checkWrapOrder` / `checkUAWrapOrder` check it; `checkTradeOrder` no longer takes a wrap (it refuses every order with `dex == receiveToken`, whatever the `dexes` list says, and has lost its `wrappers` option), and `checkCancel` refuses a `CancelOrder` / `CancelUAOrder` of such an order, which can no longer verify: a wrap order is cancelled as `CancelWrapOrder` / `CancelUAWrapOrder`, sent through `mtxCancelOrder` / `uaCancelOrder`. A wrap of an **outside** underlying (e.g. a
 stablecoin) still needs the holder's allowance on that outside token, to the wrapper only, for the exact amount
 ([CLI-APP-23](app.md#CLI-APP-23)); trading an outside token needs the allowance to a listed DEX's `DexPuller`, never to the DEX ([CLI-SGN-37](#CLI-SGN-37)). A contract account
 that must approve a SCaaS token for another contract does so through its own call path (`mtxExecuteAsOwner` →
@@ -343,6 +345,26 @@ its vectors):
    is not open;
 4. **TON**: do not queue an op at lane nonce `n + 1` behind a revocable order at `n`: a revoke moves the lane to `n + 2`,
    so the queued op fails.
+
+<a id="CLI-SGN-41"></a>**CLI-SGN-41** — **A portable UA record is signed as typed data, and a registry call is built from named fields, by one
+builder per library** (owner 2026-10-31, the portable records and the explicit-parameter rule; builder names are controller calls, owner may
+override). Status: clientkeys, `ua-rs`, the wrappers and the reproducers **BUILT** (`typed-signing`). `portableTypedData(primaryType, message)` (`clients/clientkeys/src/ua.js`)
+returns the exact JSON for `eth_signTypedData_v4`: `{domain: {name, version}, types, primaryType, message}`, with `EIP712Domain` of `name` and
+`version` only ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)); `PORTABLE_DOMAIN`, `PORTABLE_TYPES`, `PORTABLE_TYPEHASH`, `portableDomainSeparator`, `kemRecordStruct`,
+`portableRecordStruct` are its parts, and `holderPopMessage` / `pqzKeyRecordMessage` return `typedData` next to the digests. A native `msig` member
+signs that JSON (`signTyped`), never `personal_sign` and never a raw digest; a derived member signs its `memberDigest` as before.
+`registrationArgs({kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit})` returns `{entry, args, kemFill}`, the
+[CTR-UA-36](../contracts/accounts.md#CTR-UA-36) call as named fields: `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost` for their kinds
+(the recommended path; the registry also takes `register` with packed key data for all but `msig`) and `register` for the rest, the
+KEM key in full, or the hash commit plus `kemFill` = `setKemKey(ua, 0, kem, UASig())` only when `registryCalldataLength` is over
+`REGISTER_CALLDATA_LIMIT` (261,909 B) or `kemCommit: true` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)). A front-runner can land the commit form of a full
+`register`, so after `register`, or on `UAAlreadyRegistered`, a client reads `registrationOf` and `kemKeyAt(ua, 0)` and sends what
+`kemRepair({ua, kemPkHash, stored, kemPk})` returns: that fill when `attrs.kemPkHash != 0` and the stored key is empty, else null. `kemKeyOf` (which refuses a malformed key
+as the registry does, before a form is chosen) / `kemPkOf`, `msigStructure`, `typedKey` and
+`uaSig` convert between the packed bytes and the typed forms. `portable.json` carries every row's `typedData` and `args`, so each library is checked
+against them ([ua-libraries.md](ua-libraries.md)).
+
+<a id="CLI-SGN-42"></a>**CLI-SGN-42** — **Every named EVM operation is built from one table of typed structs, one builder pair per struct** (owner option B and the explicit-parameter rule, 2026-10-31; builder names are controller calls, owner may override). Status: clientkeys **BUILT** (typed-signing C1, C6; `zether-prover` C7). `src/evm.js` holds one table of type strings (`TYPED_OPS`); `<op>TypedData({name, contract, chainId, chainUid, message})` returns the exact JSON for `eth_signTypedData_v4` and `<op>Calldata(td, sig, extra)` the entry's calldata (`extra`: `pqzAuth`, `ownerSig`, `payerSig` where an entry takes one), exported by name (`unwrapTypedData`, `uaUnwrapCalldata`, `executeTypedData`, `receiverFeeTypedData`, `relayFeeTypedData`, …) and collected in `OP_BUILDERS`; `zether.js` builds the confidential envelopes from the explicit structs and the `ZetherRollOver` / `ZetherSetRollOverMode` digests. `smartcontracts/vectors/typed/typed_ops.json` (74 structs; `scripts/typed-ops-vectors.mjs`) pins type string, typehash, domain per contract kind, message, struct hash, digest and calldata, and `scripts/typed-ops-cast-check.mjs` compares every row with `cast`. `buildRelayFee` builds the `RelayFee` and the router's `relay` call; the generic `metaTxTypedData`, `uaMetaTxTypedData`, `mtxExecuteCalldata` and `checkCall` stay (TS-D14: a mixed batch and an operation with no named entry). `zether-prover` has `typedDigest` over the 47 Zether rows and `namedCall` for the relayed named entries; the other `ua-*` libraries build no EVM op digest, only portable records and registry arguments ([ua-libraries.md](ua-libraries.md)). The legacy builders are in `clients/clientkeys/legacy/typed-signing/`.
 
 <a id="CLI-SGN-40"></a>**CLI-SGN-40** — **A wallet never signs an EIP-7702 authorization, and clientkeys refuses a raw
 digest unless the caller opts in.** Owner rule 2026-10-30 after the EIP-7702 hot-wallet drain
@@ -881,7 +903,7 @@ any signing scalar. BIP-32/SLIP-10 have no bn254 or BLS12-381, so derivation is 
 - The audit view/disclosure key (`ITransferDisclosure`): `<use> = 8`, on both trees.
 - Short forms: `m/12381/<coin>/<acct>/7` and `m/254/<coin>/<acct>/7` (`m/254/…`).
 - `y = g^x` (G1 of the curve); `UA = keccak256(TAG(kind) ‖ encodedY)` (`ZetherTypes.toUA`, tagged; `encodedY`: bn254 64 bytes
-  `x‖y`, BLS12-381 128 bytes per EIP-2537); the proof of possession binds chain, registry and UA
+  `x‖y`, BLS12-381 128 bytes per EIP-2537); the proof of possession binds the UA and its attributes, no chain
   ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07); an earlier Schnorr PoP over `keccak256(registry ‖ encodedY ‖
   account)` bound to the caller account is replaced; the legacy registry's (`legacy/ua3/`) challenge had no chain id). Zether protocol: [contracts/zether](../contracts/zether.md).
 - Stored like the seed: client only, encrypted at rest, never sent to a server or a relayer.
@@ -904,23 +926,25 @@ key oracle and the ML-DSA key in an HSM with FIPS 204 firmware where available. 
 next to `sealConfKey`/`openConfKey`. clientkeys uses `deriveUAKey(seed, {kind: 'mldsa65', account, index})` /
 `signUA('zether-auth', authDigest)` with a vetted JS/WASM ML-DSA package; **the register flow** builds the PQZ key from the
 sealed leaf (`openPqKey`), computes `h = keccak256(GROUP(pqz-mlwe) ‖ pqzKey)`, hands the leaf to the native prover for `pqzPop` (the `R_REG` proof over
-`pqzRegMessage(ua, pqzKey, kem)` = `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, h, kemRecordHash))`), then signs the signer's `pop`
-over `holderPopMessage(kind, {ua, keyData, pqzKey, pqzPop, kemVersion, kemPk})` (`registrationDigest`, which covers the proof's hash) and submits
-`register(kind, keyData, attrs, pop, pqzPop)`; **the PoP carries no chain context, so the same `pop` and `pqzPop` register the UA on any chain** and
+`pqzRegMessage({ua, kind, pqzKey, kemPk})` = `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kind, h, kemRecordHash))`), then signs the signer's `pop`
+over `holderPopMessage(kind, {ua, keyData, pqzKey, pqzPop, kemPk})` (`registrationDigest`, which covers the proof's hash; the KEM key is version 0) and submits
+the call `registrationArgs` builds ([CLI-SGN-41](#CLI-SGN-41)), `register(kind, keyData, attrs, pop, pqzPop)` or the kind's typed entry; **the PoP carries no chain context, so the same `pop` and `pqzPop` register the UA on any chain** and
 a copy elsewhere re-sends the fields unchanged (read from `registrationOf` or the logs). When `eth_estimateGas` of the full call exceeds the block gas
 limit (through a relayer: min(block gas limit, the relayer's per-transaction cap), owner 2026-10-30 ruling R-node) the client registers
 with an empty `pqzPop` and then calls `storePqzPop(ua, pqzPop)`. A PQ signer is registered together
 with its PQZ key by default; a holder registered without one may add it later, once, with `pqzKeyRecordMessage` + `setPqzKey` (**one PQZ key per UA,
 ever** on chains of one PQZ parameter set — a copied unproven key of another set's length may be replaced by `setPqzKey` where `0x0142`
 has a verifier (it then emits `UAPqzKeyAdded`; the replaced `register` key stays in `registrationOf`, so read the current key with
-`pqzKeyOf`), owner 2026-10-30 ruling R-cross-set; and one KEM key per KEM version, the initial record included; [accounts.md](../contracts/accounts.md#CTR-UA-16)). An `msig` quorum signs `memberDigest(ua, message)`; a native (EOA) member — code-less, or EIP-7702-delegated, always with its own key (owner 2026-10-30 ruling D1: the registry never takes a designator's ERC-1271) — signs
-`personalSignDigest(memberDigest)` through `personal_sign` for the three portable purposes only (`pop` v2, `kem`, `pqz-key`; `isPortablePurpose`), so the
-wallet shows a `personal_sign` prompt, not typed data. KEM versions come by `kemRecordMessage` + `setKemKey` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)); `kemPk` is `0x01 ‖ ML-KEM-1024 ek ‖ X25519 pk` (1,601 B: its first byte is the KEM scheme id, scheme 2 is reserved and refused with `UAKemScheme`; `KEM_SCHEME`, `KEM_PK_LENGTH`, `kemPkLength` in `ua.js`, the same constants in every client). An explicit export of the 32-byte leaf (never the
+`pqzKeyOf`), owner 2026-10-30 ruling R-cross-set; and one KEM key per KEM version, the initial record included; [accounts.md](../contracts/accounts.md#CTR-UA-16)). An `msig` quorum's derived members sign `memberDigest(ua, message)`; a native (EOA) member — code-less, or EIP-7702-delegated, always with its own key (owner 2026-10-30 ruling D1: the registry never takes a designator's ERC-1271) — signs
+the record's typed data through `eth_signTypedData_v4` for the portable purposes only (`pop` v2, `kem`, `pqz-key`, `membership`; `isPortablePurpose`), so the
+wallet shows the record's fields. KEM versions ≥ 1 come by `kemRecordMessage` + `setKemKey` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)); `kemPk` is `0x01 ‖ ML-KEM-1024 ek ‖ X25519 pk` (1,601 B: its first byte is the KEM scheme id, scheme 2 is reserved and refused with `UAKemScheme`; `KEM_SCHEME`, `KEM_PK_LENGTH`, `kemPkLength` in `ua.js`, the same constants in every client). An explicit export of the 32-byte leaf (never the
 seed) feeds the native prover or the organization's key oracle — PQ Zether proving is **not** in JS; envelopes reuse the
 existing `MetaTransaction` EIP-712 builder (address path, domain `("SCaaS PqzToken", "1", …)`) and the
 `UAMetaTransaction` builder (UA path, `salt = chainUid`) with `signUA('metatx', digest)` by the dedicated `mldsa65` fee UA — no new signing code; the UA
 vectors (`smartcontracts/vectors/ua/kinds.json`) carry the `pqz-mlwe` scheme row (seed → pk, keyHash, `pqz_reg_message`). Protocol detail:
 [contracts/pq-zether](../contracts/pq-zero-knowledge.md). SPECIFIED.
+
+An `msig` member accepts its place with `membershipMessage({ ua, member })` (`digest` for a native member, `memberDigest` under `member` for a derived one), sent as `acceptMembership` by anyone ([CTR-UA-37](../contracts/accounts.md#CTR-UA-37)). Listing in `msigOf` is no consent: a client adds the weights of the slots where `memberAccepted` is true, shows the `msig` as not active below the threshold, and does not name it as a signer, party, role holder or payer until then (**SPECIFIED**: no client reads `memberAccepted` yet; `membershipMessage` is built in clientkeys and every library has the digest). Below the threshold it can authorize nothing on a registry with this rule, for any purpose on any contract.
 
 ## 12. Zether balance reading
 

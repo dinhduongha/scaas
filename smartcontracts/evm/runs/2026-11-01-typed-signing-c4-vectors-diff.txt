@@ -1,0 +1,73 @@
+# vectors-diff at commit 682f7a9f: every file against 38544bcf with auth_digest and description dropped
+== smartcontracts/vectors/pqz
+same cbd.json
+same enc.json
+DIFF fee0.json other fields equal | description same | auth_digest rows 4 -> 4 | file bytes 2802165 -> 2802165
+same keygen.json
+same matrix.json
+same negative.json
+same proof_pqzh.json
+same proof_pqzl.json
+same selftest.json
+DIFF statement_burn.json other fields equal | description changed | auth_digest rows 1 -> 1 | file bytes 102686 -> 102913
+DIFF statement_disclose.json other fields equal | description changed | auth_digest rows 3 -> 0 | file bytes 203876 -> 203548
+DIFF statement_refresh.json other fields equal | description changed | auth_digest rows 1 -> 1 | file bytes 102610 -> 102837
+DIFF statement_register.json other fields equal | description changed | auth_digest rows 1 -> 0 | file bytes 34421 -> 34463
+DIFF statement_transfer.json other fields equal | description changed | auth_digest rows 2 -> 2 | file bytes 304699 -> 304926
+DIFF statement_transfer_multi.json other fields equal | description same | auth_digest rows 15 -> 11 | file bytes 3296611 -> 3295871
+same worstcase_noise.json
+vecdiff: ok
+== smartcontracts/vectors/pqz/n2304-kmax4096
+same cbd.json
+same enc.json
+DIFF fee0.json other fields equal | description same | auth_digest rows 4 -> 4 | file bytes 3040777 -> 3040777
+same keygen.json
+same matrix.json
+same negative.json
+same proof_pqzh.json
+same proof_pqzl.json
+same selftest.json
+DIFF statement_burn.json other fields equal | description changed | auth_digest rows 1 -> 1 | file bytes 114974 -> 115201
+DIFF statement_disclose.json other fields equal | description changed | auth_digest rows 3 -> 0 | file bytes 228452 -> 228124
+DIFF statement_refresh.json other fields equal | description changed | auth_digest rows 1 -> 1 | file bytes 114898 -> 115125
+DIFF statement_register.json other fields equal | description changed | auth_digest rows 1 -> 0 | file bytes 38517 -> 38559
+DIFF statement_transfer.json other fields equal | description changed | auth_digest rows 2 -> 2 | file bytes 341563 -> 341790
+DIFF statement_transfer_multi.json other fields equal | description same | auth_digest rows 15 -> 11 | file bytes 3624050 -> 3623310
+same worstcase_noise.json
+vecdiff: ok
+== smartcontracts/vectors/pqz/n2560-kmax16384
+same cbd.json
+same enc.json
+DIFF fee0.json other fields equal | description same | auth_digest rows 4 -> 4 | file bytes 3557186 -> 3557186
+same keygen.json
+same matrix.json
+same negative.json
+same proof_pqzh.json
+same proof_pqzl.json
+same selftest.json
+DIFF statement_burn.json other fields equal | description changed | auth_digest rows 1 -> 1 | file bytes 127262 -> 127489
+DIFF statement_disclose.json other fields equal | description changed | auth_digest rows 3 -> 0 | file bytes 253028 -> 252700
+DIFF statement_refresh.json other fields equal | description changed | auth_digest rows 1 -> 1 | file bytes 127186 -> 127413
+DIFF statement_register.json other fields equal | description changed | auth_digest rows 1 -> 0 | file bytes 42613 -> 42655
+DIFF statement_transfer.json other fields equal | description changed | auth_digest rows 2 -> 2 | file bytes 378428 -> 378655
+DIFF statement_transfer_multi.json other fields equal | description same | auth_digest rows 15 -> 11 | file bytes 3894023 -> 3893283
+same worstcase_noise.json
+vecdiff: ok
+== smartcontracts/vectors/pqz/n2816-kmax65536
+same cbd.json
+same enc.json
+DIFF fee0.json other fields equal | description same | auth_digest rows 4 -> 4 | file bytes 1263454 -> 1263454
+same keygen.json
+same matrix.json
+same negative.json
+same proof_pqzl.json
+same selftest.json
+DIFF statement_burn.json other fields equal | description changed | auth_digest rows 1 -> 1 | file bytes 139390 -> 139617
+DIFF statement_disclose.json other fields equal | description changed | auth_digest rows 3 -> 0 | file bytes 277124 -> 277036
+DIFF statement_refresh.json other fields equal | description changed | auth_digest rows 1 -> 1 | file bytes 139314 -> 139541
+DIFF statement_register.json other fields equal | description changed | auth_digest rows 1 -> 0 | file bytes 46549 -> 46671
+DIFF statement_transfer.json other fields equal | description changed | auth_digest rows 2 -> 2 | file bytes 414972 -> 415199
+DIFF statement_transfer_multi.json other fields equal | description same | auth_digest rows 15 -> 11 | file bytes 4272967 -> 4272547
+same worstcase_noise.json
+vecdiff: ok
+rc=0

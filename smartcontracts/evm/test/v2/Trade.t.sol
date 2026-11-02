@@ -9,6 +9,7 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
+import {OrderJson} from "../helpers/OrderJson.sol";
 
 /// The sell token's side of a `TradeOrder` (CTR-DEX-15, -14, -04, -05, -02). This test contract plays the DEX: it is
 /// a contract and it is `o.dex`.
@@ -246,7 +247,7 @@ contract TradeTest is V2Fixture {
     function test_cancel_closesForever_replayIsANoOp() public {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         bytes32 h = t.tradeOrderDigest(o);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t.cancelOrderDigest(h));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t.cancelOrderDigest(o));
         bytes memory c = abi.encodePacked(r, s, v);
         vm.expectEmit(address(t));
         emit ITradeToken.OrderCancelled(h, alice);
@@ -257,7 +258,7 @@ contract TradeTest is V2Fixture {
         t.mtxCancelOrder(o, c);
         assertEq(vm.getRecordedLogs().length, 0);
         _expect(ITradeToken.OrderClosed.selector, o, _fill(600, 1200, 0));
-        (v, r, s) = vm.sign(0xBAD, t.cancelOrderDigest(h));
+        (v, r, s) = vm.sign(0xBAD, t.cancelOrderDigest(o));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         t.mtxCancelOrder(o, abi.encodePacked(r, s, v));
     }
@@ -322,7 +323,10 @@ contract TradeTest is V2Fixture {
             "TradeOrder(address from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,"
             "uint256 fee,address relayer,address dex,address destination,uint8 flags,uint256 batch,uint256 nonce,"
             "uint256 validUntil)");
-        bytes32 cancel = keccak256("CancelOrder(bytes32 orderHash)");
+        bytes32 cancel = keccak256(
+            "CancelOrder(TradeOrder order)TradeOrder(address from,address receiveToken,uint256 amount,uint256 receiveAmount,"
+            "uint256 minFill,uint256 fee,address relayer,address dex,address destination,uint8 flags,uint256 batch,"
+            "uint256 nonce,uint256 validUntil)");
         bytes32 inv = keccak256("InvalidateNonces(address from,uint256 batch,uint256 minNonce)");
         assertEq(TradeLib.TRADE_ORDER_TYPEHASH, order);
         assertEq(TradeLib.CANCEL_ORDER_TYPEHASH, cancel);
@@ -330,8 +334,80 @@ contract TradeTest is V2Fixture {
         assertEq(order, 0xffe350903bdef674d7c33448fa7ce9b1cd306aa838f3ce1bbdd82aca46773f5d);
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         assertEq(t.tradeOrderDigest(o), _typed(_orderStruct(order, o)));
-        assertEq(t.cancelOrderDigest(bytes32(uint256(5))), _typed(keccak256(abi.encode(cancel, uint256(5)))));
+        assertEq(cancel, 0x298793429e353378c80de5c623565fb1280e22feac6b07d640da06fa42e789a5);
+        assertEq(t.cancelOrderDigest(o), _typed(keccak256(abi.encode(cancel, _orderStruct(order, o)))));
         assertEq(t.invalidateNoncesDigest(alice, 3, 4), _typed(keccak256(abi.encode(inv, alice, uint256(3), uint256(4)))));
+    }
+
+    // ------------------------------------------------------------------ the typed forms (typed-signing C6, TS-D19)
+
+    function _ecdsa(bytes32 d) internal pure returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, d);
+        return abi.encodePacked(r, s, v);
+    }
+
+    /// `dex == receiveToken`: only a wrap, the wrapped token pulling for itself. This contract is both here.
+    function _wrapShaped() internal view returns (ITradeToken.TradeOrder memory o) {
+        o = _order(1000, 2000);
+        o.receiveToken = address(this);
+    }
+
+    /// The order is signed as a `WrapOrder`, the wallet's JSON its digest; the `TradeOrder` form of the same fields, the
+    /// only change, does not verify; `pulled` is keyed by the `WrapOrder` digest.
+    function test_wrapOrderTyped() public {
+        ITradeToken.TradeOrder memory o = _wrapShaped();
+        bytes32 wallet = OrderJson.wrap(address(t), TradeLib.core(o), false);
+        assertEq(t.tradeOrderDigest(o), wallet);
+        bytes memory asTrade = _ecdsa(OrderJson.trade(address(t), TradeLib.core(o), false));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        t.mtxTrade(o, asTrade, _fill(600, 1200, 0));
+        assertEq(t.pulled(wallet), 0);
+        t.mtxTrade(o, _ecdsa(wallet), _fill(600, 1200, 0));
+        assertEq(t.pulled(wallet), 600);
+    }
+
+    /// Any other order stays a `TradeOrder`: its wallet JSON is the digest, the `WrapOrder` form of it does not verify.
+    function test_tradeOrderStillTradeOrder() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        assertTrue(o.dex != o.receiveToken);
+        bytes32 wallet = OrderJson.trade(address(t), TradeLib.core(o), false);
+        assertEq(t.tradeOrderDigest(o), wallet);
+        bytes memory asWrap = _ecdsa(OrderJson.wrap(address(t), TradeLib.core(o), false));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        t.mtxTrade(o, asWrap, _fill(600, 1200, 0));
+        t.mtxTrade(o, _ecdsa(wallet), _fill(600, 1200, 0));
+        assertEq(t.pulled(wallet), 600);
+    }
+
+    /// `CancelOrder` nests the order: the wallet's JSON is the digest. The pre-C6 `CancelOrder(bytes32 orderHash)` over the
+    /// same order, the only change, is refused and leaves the order open; the nested one closes it.
+    function test_cancelOrderNested() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        bytes32 h = t.tradeOrderDigest(o);
+        bytes32 wallet = OrderJson.cancelTrade(address(t), TradeLib.core(o), false);
+        assertEq(t.cancelOrderDigest(o), wallet);
+        bytes memory flat = _ecdsa(_typed(keccak256(abi.encode(keccak256("CancelOrder(bytes32 orderHash)"), h))));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        t.mtxCancelOrder(o, flat);
+        assertEq(t.pulled(h), 0);
+        vm.prank(other); // anyone submits
+        t.mtxCancelOrder(o, _ecdsa(wallet));
+        assertEq(t.pulled(h), 1000);
+    }
+
+    /// A wrap order is cancelled as `CancelWrapOrder` through the same entry; `CancelOrder` nesting its `TradeOrder` form, the
+    /// only change, is refused.
+    function test_cancelWrapOrderNested() public {
+        ITradeToken.TradeOrder memory o = _wrapShaped();
+        bytes32 h = t.tradeOrderDigest(o);
+        bytes32 wallet = OrderJson.cancelWrap(address(t), TradeLib.core(o), false);
+        assertEq(t.cancelOrderDigest(o), wallet);
+        bytes memory asTrade = _ecdsa(OrderJson.cancelTrade(address(t), TradeLib.core(o), false));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        t.mtxCancelOrder(o, asTrade);
+        assertEq(t.pulled(h), 0);
+        t.mtxCancelOrder(o, _ecdsa(wallet));
+        assertEq(t.pulled(h), 1000);
     }
 
     // ------------------------------------------------------------------ more bounds and edges
@@ -376,8 +452,7 @@ contract TradeTest is V2Fixture {
     function test_replayOnAnotherChain_andCancelSignedOnAnotherToken() public {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         bytes memory sig = _sign(t, o);
-        bytes32 h = t.tradeOrderDigest(o);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t2.cancelOrderDigest(h));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t2.cancelOrderDigest(o));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         t.mtxCancelOrder(o, abi.encodePacked(r, s, v));
         vm.chainId(block.chainid + 1);

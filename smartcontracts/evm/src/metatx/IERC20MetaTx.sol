@@ -21,4 +21,8 @@ interface IERC20MetaTx is IERC20, IMetaTx {
     function mtxExecuteTransfer(MetaTxLib.MetaTransfer calldata t, bytes calldata signature) external returns (bool);
     function mtxBatchTransfer(MetaTxLib.MetaTransfer[] calldata ts, bytes[] calldata signatures)
         external returns (bool);
+    /// @notice The relay-fee payment (CTR-MTX-27, TS-D19): `from` signed `RelayFee{…, relayer}`, `relayer` read as
+    ///         `msg.sender`. Pays `value` to `payee` on lane `payLane(ref)`, nonce 0, `ref` = `MtxRelayFee.relayRef`.
+    function mtxRelayFee(address from, address target, bytes32 callDataHash, address payee, uint256 value,
+        uint256 validUntil, bytes calldata sig) external;
 }

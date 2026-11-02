@@ -1,0 +1,10 @@
+# red-named: the tests of 11a1fa3b on the contracts of 3aa90da6 (src only), compile
+DeclarationError: Identifier not found or not unique.
+  --> test/helpers/DexLegs.sol:40:22:
+   |
+40 |     function asTrade(ITradeToken.WrapOrder memory w) internal pure returns (ITradeToken.TradeOrder memory) {
+   |                      ^^^^^^^^^^^^^^^^^^^^^
+
+
+errors: 1
+rc=1

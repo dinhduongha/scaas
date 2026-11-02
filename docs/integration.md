@@ -168,12 +168,12 @@ process ([NODE-JOB-06](node/job-api.md#NODE-JOB-06)). Why: one lane journal per 
 
 | Kind | Payload |
 |---|---|
-| `metatx` | `{token, signature, struct: "call"\|"transfer", metatx: {…}}`: a `MetaTransaction` (an allowlisted call of any SCaaS contract) or a token's `MetaTransfer` (transfer or payment) ([NODE-JOB-20](node/job-api.md#NODE-JOB-20), [CTR-MTX-15](contracts/metatx.md#CTR-MTX-15)); `uint256` as decimal strings; addresses lowercase |
+| `metatx` | `{op: {entry, contract, token, envelope, args, signature}}`, one [named entry](node/job-api.md#named-entries), or a token's `MetaTransfer` (transfer or payment): `{token, contract?, signature, struct: "transfer", metatx: {…}}`; hex `data` / `calldata` is refused ([NODE-JOB-20](node/job-api.md#NODE-JOB-20), [CTR-MTX-15](contracts/metatx.md#CTR-MTX-15)); `uint256` as decimal strings; addresses lowercase |
 | `signed_op` | `{op: {op_kind: "pay", payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload` |
-| `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.mtxPayUnderMandate(...)` (as built `MandateWallet.payUnderMandate(...)`), `SmartKeyAccountFactory.deploy(...)`; the signature lives inside the calldata; selector and target must match a call-table row; no native value |
-| `ua_metatx` (SPECIFIED) | MetaToken v3 `UAMetaTransaction` or `UAMetaTransfer` with `from: bytes32` and its `auth`; same lifecycle as `metatx` |
+| `call` | `{op: {entry, token, args, validUntil}}` — e.g. the flat `MandateWallet.mtxPayUnderMandate` (`struct: "mtxPayUnderMandate"`), `mtxRevoke`, `SmartKeyAccountFactory.deploy`; named fields, the signature one of them, the node builds the calldata (the old `{call: {target, calldata, validUntil}}` is refused; the call behind the flat entry is `MandateWallet.payUnderMandate(...)`); entry and target must match a call-table row; no native value |
+| `ua_metatx` | A `ua*` named entry with `auth` the `UASig` object, or `{token, contract?, struct: "transfer", m: WireUAMetaTransfer, auth}`; same lifecycle as `metatx` |
 | `pqz_call` (SPECIFIED; private chain only) | **Direct open calls only**: `{chain, contract, selector ∈ {mtxConfidentialTransfer, mtxConfidentialTransferCompact, mtxConfidentialTransferSingle, mtxConfidentialTransferSingleCompact, mtxUnshield, mtxRollOver}, calldata}` to a configured PQZ token (plan 5h names; direct `mtxShield` / `mtxWrapShield` take the caller's own public units / underlying and are never a node job) |
-| PQZ envelopes (SPECIFIED) | **No new kind**: a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` or `ua_metatx` jobs with `struct = call` (domain `("SCaaS PqzToken", "1", chainId, token, chainUid)`), `m.data` = the direct calldata of `mtxConfidentialTransfer*`/`mtxUnshield`/`mtxShield` (and `mtxUnshieldUnwrap` on `WRAPPED_PQZ`; opaque to the client); `mtxRollOver` and `mtxPrepareAcc` are relayable too (on both PQZ allow-lists since Task R, owner 2026-10-20; the outer fee may be 0; anyone may also call them directly); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `mtxUnshield` (public units from `SHIELD_POOL` to `recipient`) or `mtxUnshieldUnwrap` (the underlying) |
+| PQZ envelopes (SPECIFIED) | **No new kind**: a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` or `ua_metatx` jobs naming their entry with `contract = pqz` (domain `("SCaaS PqzToken", "1", chainId, token, chainUid)`), the named fields of `mtxConfidentialTransfer*`/`mtxUnshield`/`mtxShield` (and `mtxUnshieldUnwrap` on `WRAPPED_PQZ`); `mtxRollOver` and `mtxPrepareAcc` are relayable too (on both PQZ allow-lists since Task R, owner 2026-10-20; the outer fee may be 0; anyone may also call them directly); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `mtxUnshield` (public units from `SHIELD_POOL` to `recipient`) or `mtxUnshieldUnwrap` (the underlying) |
 
 **Accept checks.** The node checks every item in a fixed order without RPC and answers per item; the rules and their
 order are [job-api.md#intake](node/job-api.md#intake). What a client must get right before it pushes:
@@ -524,8 +524,8 @@ wallets sign `pay` through the custody adapter under `SigningPolicyService` (`va
 sign the `payUnderMandate` `MetaTransaction` in the wallet's domain and push a `call` job to
 `MandateWallet.mtxPayUnderMandate` (as built `payUnderMandate` with the typed `PayUnderMandate`). A run ends `done` when the payment
 transaction is done (the accounting module posts and reconciles) or `failed`. Kill: off-chain immediately, and for
-delegated wallets an `mtxRevoke` job (as built `revokeWithSig`); the revoke is the delegate's `MetaTransaction` with `data =
-revoke(token, epoch)` and the wallet's current `epoch[token]` ([CTR-ACC-07](contracts/mandates.md#CTR-ACC-07)).
+delegated wallets a `call` job naming the flat `mtxRevoke` (`token`, `epoch`, `validUntil`, `sig`); the revoke is the delegate's `MetaTransaction` with `data =
+revoke(token, epoch)` and the wallet's current `epoch[token]` ([CTR-ACC-07](contracts/mandates.md#CTR-ACC-07)); the node derives no lane for it, the contract does.
 
 ## 9. Families and addresses
 
@@ -820,17 +820,16 @@ kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, `secp256k1`, Schnorr
 1. The client derives the key for the kind on its own path (`m/7622'/0'/<account>'/<kindNo>'/<i>'`; Zether conf keys
    keep `m/254|12381/<coin>/<account>/7`; passkeys are one credential per `rpId`), builds the normalised `keyData`,
    computes `ua = keccak256(keccak256("scaas.ua.<kind>.v1") ‖ keyData)` and checks `ua >> 160 ≠ 0`.
-2. It computes the portable PoP locally: `portablePopDigest = keccak256(abi.encode(PURPOSE_POP_V2, ua, pqzKeyHash,
-   kemRecordHash))` and `registrationDigest = keccak256(abi.encode(portablePopDigest, pqzPopHash))` bind the UA, its PQZ key,
+2. It computes the portable PoP locally: the typed EIP-712 records `portableRecordDigest` and `registrationDigest` bind the UA, its PQZ key,
    its first KEM record and the PQZ proof hash — **no chain, no registry, not the caller**
-   ([CTR-UA-07](contracts/accounts.md#CTR-UA-07)); the hashes are 0 for an absent attribute. The client signs
+   ([CTR-UA-07](contracts/accounts.md#CTR-UA-07)); an absent attribute is a zero hash, an absent KEM key the zero record. The client signs
    `uaMessage(kind, PURPOSE_POP_V2, registrationDigest)` with the kind's signer (`UAKey.signUA("pop", …)`; MuSig2/FROST: a group
-   signing session plus the KeyAgg hints or the DKG transcript; a PQ-eligible `msig`: its members, a native member by
-   `personal_sign`). A PQ holder with a PQZ key first makes the `R_REG` proof over `portablePopDigest`. The EIP-712 `salt =
+   signing session plus the KeyAgg hints or the DKG transcript; a PQ-eligible `msig`: its members, a native member over the typed
+   data with `eth_signTypedData_v4`). A PQ holder with a PQZ key first makes the `R_REG` proof over `portableRecordDigest`. The EIP-712 `salt =
    chain_uid` ([NET-ALL-22](networks/README.md#NET-ALL-22)) still guards every `UAAuth` and mtx signature, which stay chain-bound.
-3. **Anyone** submits `register(kind, keyData, attrs, pop, pqzPop)`: the subject self-paid, a relayer job, a sponsor,
-   or the node gateway `POST /v1/ua/register {chain, kind, keyData, attrs, pop, pqzPop?}` (gasless,
-   [NODE-GW-03](node/gateway.md#NODE-GW-03); the node relays all four registry writes, `register`, `setKemKey`, `storePqzPop` and `setPqzKey`, owner 2026-10-30
+3. **Anyone** submits `register(kind, keyData, attrs, pop, pqzPop)` or the kind's typed entry ([CTR-UA-36](contracts/accounts.md#CTR-UA-36); `registerMsig` for an `msig`): the subject self-paid, a relayer job, a sponsor,
+   or the node gateway `POST /v1/ua/register {chain, entry, …args}` (gasless,
+   [NODE-GW-03](node/gateway.md#NODE-GW-03); the node relays all eight registry writes, owner 2026-10-30
    ruling R-node: the node's call-table rows are built, the gateway route and its sponsor policy are not yet, `TODO.md`; a relayed `register`
    with its proof over the cap is refused `UA_REGISTER_SPLIT`). Front-running yields the identical record or a revert. When the full call with the proof does not fit one
    transaction — its estimate exceeds the block gas limit for a direct submitter, or min(block gas limit, the relayer's per-transaction

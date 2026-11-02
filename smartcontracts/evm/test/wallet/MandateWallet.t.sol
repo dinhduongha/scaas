@@ -538,7 +538,8 @@ contract MandateWalletTest is MandateFixture {
     function test_unlistedSelectorsAndShapes() public {
         bytes[4] memory calls = [
             abi.encodeCall(MandateWallet.mtxExecuteAsOwner, ("", 0, 0, "")),
-            abi.encodeCall(MandateWallet.mtxPayUnderMandate, (address(t), npp, 1, 0, 0, 0, "")),
+            abi.encodeWithSignature("mtxPayUnderMandate(address,address,uint256,bytes32,uint64,uint256,bytes)",
+                address(t), npp, uint256(1), bytes32(0), uint64(0), uint256(0), bytes("")),
             abi.encodeCall(MandateWallet.mtxRevoke, (address(t), 1, 0, "")),
             abi.encodeCall(MandateWallet.isValidSignature, (bytes32(0), ""))
         ];

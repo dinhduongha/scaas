@@ -1,0 +1,30 @@
+## typed.rs array elements reversed
+test typed_digest_refuses_unknown_op_missing_and_extra_field ... ok
+test every_zether_row_digest_equals_the_vector ... FAILED
+test named_call_equals_the_vector_calldata ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+restored, cmp identical
+## typed.rs bytes by first byte not keccak
+test typed_digest_refuses_unknown_op_missing_and_extra_field ... ok
+test named_call_equals_the_vector_calldata ... FAILED
+test every_zether_row_digest_equals_the_vector ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+restored, cmp identical
+## typed.rs envelope batch and nonce swapped
+test typed_digest_refuses_unknown_op_missing_and_extra_field ... ok
+test named_call_equals_the_vector_calldata ... FAILED
+test every_zether_row_digest_equals_the_vector ... ok
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+restored, cmp identical
+## typed.rs payload leg points cAud and dAud swapped
+test typed_digest_refuses_unknown_op_missing_and_extra_field ... ok
+test named_call_equals_the_vector_calldata ... FAILED
+test every_zether_row_digest_equals_the_vector ... ok
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+restored, cmp identical
+## envelope.rs named single: proof and sig swapped
+test typed_digest_refuses_unknown_op_missing_and_extra_field ... ok
+test named_call_equals_the_vector_calldata ... FAILED
+test every_zether_row_digest_equals_the_vector ... ok
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+restored, cmp identical

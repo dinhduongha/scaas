@@ -273,7 +273,6 @@ contract AllowlistTest is Test {
             _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxTransfer.selector));
             _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxTransferWithFee.selector));
             _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxPay.selector));
-            _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxExecuteWithFee.selector));
             _refused(t, abi.encodeWithSelector(IERC20MetaTx.mtxExecuteTransfer.selector));
             _refused(t, abi.encodeWithSelector(IERC20MetaTx.mtxBatchTransfer.selector));
             _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxPayReceiverFee.selector));

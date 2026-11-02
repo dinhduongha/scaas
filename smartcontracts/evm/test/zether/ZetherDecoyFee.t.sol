@@ -47,14 +47,14 @@ contract ZetherDecoyFeeTest is ZetherFixture {
     function test_decoyFee_perLegUniform() public {
         decoyFee = 3;
         Tx memory t = _proveMulti(tok, alice, _to(4), _vs4(), 1000, carol.ua, ZetherTypes.TransferMode.BUNDLE);
-        assertEq(_fee(stm.transferStatement(address(tok), t.payload, carol.ua, ZetherTypes.TransferMode.BUNDLE, 0)),
+        assertEq(_fee(stm.transferStatement(address(tok), _zMulti(t.payload, carol.ua), ZetherTypes.TransferMode.BUNDLE, 0)),
             FEE + 4 * 3, "statement fee = txFee + M * decoyFee");
         bytes32[] memory uas = new bytes32[](4);
         for (uint256 j; j < 4; ++j) uas[j] = ZetherTypes.UA.unwrap(rs[j].ua);
         vm.expectEmit(true, true, true, true, address(tok));
         emit IConfidentialToken.ConfidentialTransferMulti(_ref(tok, alice, 0), ZetherTypes.UA.unwrap(alice.ua),
             ZetherTypes.UA.unwrap(carol.ua), FEE + 12, 0, uas, uint8(ZetherTypes.TransferMode.BUNDLE), address(0));
-        tok.mtxConfidentialTransfer(t.payload, t.proof, "", ZetherTypes.UA.unwrap(carol.ua), "");
+        tok.mtxConfidentialTransfer(_zMulti(t.payload, carol.ua), t.proof);
         assertTrue(_holds(tok, alice, 1000 - 350 - FEE - 12, true), "sender: sum + txFee + M * decoyFee");
         for (uint256 j; j < 4; ++j) {
             assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(rs[j].ua)), 3 * SCALE, "every leg, decoys included");
@@ -72,8 +72,8 @@ contract ZetherDecoyFeeTest is ZetherFixture {
         uint256[] memory vs = new uint256[](2);
         vs[1] = 40;
         Tx memory t = _proveMulti(tok, alice, _to(2), vs, 1000, _none(), ZetherTypes.TransferMode.HASH);
-        assertEq(_fee(stm.transferStatement(address(tok), t.payload, _none(), ZetherTypes.TransferMode.HASH, 0)), 2 * MIN);
-        tok.mtxConfidentialTransferCompact(t.payload, t.proof, "", bytes32(0), "");
+        assertEq(_fee(stm.transferStatement(address(tok), _zMulti(t.payload, _none()), ZetherTypes.TransferMode.HASH, 0)), 2 * MIN);
+        tok.mtxConfidentialTransferCompact(_zMulti(t.payload, _none()), t.proof);
         assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(rs[0].ua)), MIN * SCALE);
         assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(rs[1].ua)), MIN * SCALE);
         assertTrue(_holds(tok, alice, 1000 - 40 - 2 * MIN, true));
@@ -91,13 +91,13 @@ contract ZetherDecoyFeeTest is ZetherFixture {
         for (uint256 i; i < 2; ++i) {
             bytes memory pl = _withD(t.payload, bad[i]);
             vm.expectRevert(abi.encodeWithSelector(IZetherToken.DecoyFeeOutOfRange.selector, bad[i], MIN));
-            tok.mtxConfidentialTransfer(pl, t.proof, "", ben, "");
+            tok.mtxConfidentialTransfer(_zMulti(pl, ZetherTypes.UA.wrap(ben)), t.proof);
             vm.expectRevert(abi.encodeWithSelector(IZetherToken.DecoyFeeOutOfRange.selector, bad[i], MIN));
-            stm.transferStatement(address(tok), pl, carol.ua, ZetherTypes.TransferMode.BUNDLE, 0);
+            stm.transferStatement(address(tok), _zMulti(pl, carol.ua), ZetherTypes.TransferMode.BUNDLE, 0);
         }
         uint256 d = uint256(1) << 63; // FEE + 2 · 2^63 ≥ 2^64
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, FEE + 2 * d, uint256(1) << 64));
-        tok.mtxConfidentialTransfer(_withD(t.payload, d), t.proof, "", ben, "");
+        tok.mtxConfidentialTransfer(_zMulti(_withD(t.payload, d), ZetherTypes.UA.wrap(ben)), t.proof);
     }
 
     /// A payload whose `decoyFee` is not the one proven (the fee word differs) fails the proof; the proven one settles.
@@ -108,9 +108,9 @@ contract ZetherDecoyFeeTest is ZetherFixture {
         uint256[2] memory other = [uint256(MIN), 4];
         for (uint256 i; i < 2; ++i) {
             vm.expectRevert(IZetherToken.ProofRejected.selector);
-            tok.mtxConfidentialTransfer(_withD(t.payload, other[i]), t.proof, "", ben, "");
+            tok.mtxConfidentialTransfer(_zMulti(_withD(t.payload, other[i]), ZetherTypes.UA.wrap(ben)), t.proof);
         }
-        tok.mtxConfidentialTransfer(t.payload, t.proof, "", ben, "");
+        tok.mtxConfidentialTransfer(_zMulti(t.payload, ZetherTypes.UA.wrap(ben)), t.proof);
         assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(rs[0].ua)), 3 * SCALE);
     }
 
@@ -161,7 +161,7 @@ contract ZetherDecoyFeeGasTest is ZetherFixture {
         vs[1] = 100;
         decoyFee = d;
         Tx memory t = _proveMulti(tok, alice, to, vs, 1000, carol.ua, ZetherTypes.TransferMode.BUNDLE);
-        bytes memory cd = abi.encodeCall(ZetherLayer.mtxConfidentialTransfer, (t.payload, t.proof, "", ZetherTypes.UA.unwrap(carol.ua), ""));
+        bytes memory cd = abi.encodeCall(IZetherToken.mtxConfidentialTransfer, (_zMulti(t.payload, carol.ua), t.proof));
         uint256 g0 = gasleft();
         (bool ok,) = address(tok).call(cd);
         g = g0 - gasleft();

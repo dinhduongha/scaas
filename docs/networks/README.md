@@ -410,6 +410,8 @@ whose amount or `to` differs from the `MetaTransfer` is refused; with the policy
 passkey `pay` passes. Status: SPECIFIED (built today: Solana signs `"<label>:" ‖ hex(sha256(MetaOp))`, Sui signs
 BCS). Client rendering: [CLI-SGN-27](../clients/signers-clientkeys.md#CLI-SGN-27).
 
+**EVM and Hedera (typed-signing, owner 2026-10-31, one rule: each family has its own readable form).** The readable form of the EVM family is the **typed EIP-712 struct** of the operation, whose fields are the operation's own explicit parameters: the chain-bound operations are the named structs of [CTR-MTX-28](../contracts/metatx.md#CTR-MTX-28) (`Unwrap`, `PqzTransfer`, `CancelOrder`, `RelayFee`, …) signed with `eth_signTypedData_v4` in the contract's domain, and the portable UA records are typed under the domain `("SCaaS UA Portable", "1")` ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)). Other families keep the readable forms above and hash the portable records byte-identically; none is changed by the EVM form (never split by chain kind). `0x0108` in MetaMask is not built.
+
 ## 6. Universal Account on non-EVM families
 
 <a id="ua-registries"></a><a id="NET-ALL-20"></a>**NET-ALL-20** — **Per-family registries share the kind table, the
@@ -448,7 +450,7 @@ branch, the spec / plan file names and the commit prefixes use these names.
 | # | Question | Shared answer (every family) | Family-specific part | UA-Soroban |
 |---|---|---|---|---|
 | 1 | Where the records live | one registry per chain holding the UA-8 records; chain-wide `keyHash` uniqueness | a registry contract, a factory, a lazy open, an account app … | S1 |
-| 2 | Registration form | the UA-8 portable `register` (same record bytes and digests as EVM, [CTR-UA-31](../contracts/accounts.md#CTR-UA-31)) | encoding of the call on the chain | S2 |
+| 2 | Registration form | the UA-8 portable `register` (same record bytes and digests as EVM, [CTR-UA-31](../contracts/accounts.md#CTR-UA-31)): the typed portable records hashed byte-identically under the domain `("SCaaS UA Portable", "1")` ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)), explicit named registry arguments, no packed blob ([CTR-UA-36](../contracts/accounts.md#CTR-UA-36)), a `kind_name` view ([CTR-UA-35](../contracts/accounts.md#CTR-UA-35)) | encoding of the call on the chain; the chain's own readable signing form ([NET-ALL-23](#NET-ALL-23)) | S2 |
 | 3 | Kinds enabled in generation 1 | classical kinds first, PQ where the chain verifies it; a kind without an on-chain verifier only in relayer-checked mode | which verifiers the chain has | S3 |
 | 4 | PQ verifier | ML-DSA / Falcon only through a chain-native or measured on-chain verifier | host function, precompile, opcode, or none | S4 |
 | 5 | SDK, toolchain and network pins | exact versions pinned, local network first | the chain's SDK / node versions | S5 |
@@ -466,6 +468,7 @@ branch, the spec / plan file names and the commit prefixes use these names.
 | 17 | Upgrade and admin | no admin and no upgrade path on the registry; relayer lists fixed at deploy | how the chain makes code immutable | S16 |
 | 18 | Test order | unit tests, then a local network, then the public testnet | the chain's devnet / sandbox | S17 |
 | 19 | Order inside the round | stated per round, with its branches | — | S18 |
+| 20 | Explicit parameters | every entry and every job takes named, typed parameters, as in a REST / JSON / RPC API; no packed `bytes` bundling several fields; a genuine cryptographic blob (`proof`, `ciphertext`, `kemPk`, `pqzKey`, `signature`) is its own named parameter; the statement and digest bytes the verifiers hash stay byte-identical, and what is stored is what the packed bytes were (owner 2026-10-31, [CTR-MTX-29](../contracts/metatx.md#CTR-MTX-29), [CTR-UA-36](../contracts/accounts.md#CTR-UA-36)) | the chain's own argument types (`contracttype` structs on Soroban, ARC-4 structs on Algorand, per-token records on NEAR); a family answers this row in its UA round, NEAR and Algorand each in its own | — (the `ua8-soroban` branch carries Soroban's) |
 
 ## 7. Key lifecycle per family
 

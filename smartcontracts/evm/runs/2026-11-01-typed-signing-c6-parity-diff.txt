@@ -1,0 +1,29 @@
+# parity-diff at commit 11a1fa3b: metatx-parity.json at 3aa90da6 against 11a1fa3b, row by row
+rows 1998 -> 1998; rows moved 1723; fields moved {'gas': 1723, 'digests': 428}
+entry: rows, min, median, max of the gas delta
+executeMetaTransaction: 20 -45 42.0 98
+mtxBatch: 41 -22 62 197
+mtxBatchTransfer: 30 -93 44.0 86
+mtxCancelOrder: 18 2005 5057.0 5159
+mtxExecute: 296 -80 32.0 99
+mtxExecuteTransfer: 186 -141 -3.0 54
+mtxInvalidateNonces: 24 44 149.0 165
+mtxPay: 24 -185 -49.0 54
+mtxPayReceiverFee: 96 -47 -22.0 5062
+mtxTrade: 114 -2317 505.0 605
+mtxTransfer: 24 -114 -24.5 43
+mtxTransferWithFee: 15 13 15 26
+transferToUA: 1 -22 -22 -22
+uaBatch: 45 -88 22 341
+uaBatchTransfer: 24 -624 54.0 1999
+uaCancelNonce: 37 -2006 -157 433
+uaCancelOrder: 36 -593 2989.5 4451
+uaExecute: 300 -113 10.0 132
+uaExecuteTransfer: 181 -1574 913 1020
+uaInvalidateNonces: 36 -1656 290.5 930
+uaPay: 18 606 944.5 986
+uaPayReceiverFee: 66 -278 -125.0 5205
+uaTrade: 61 -1559 75 1118
+uaTransfer: 18 -215 891.5 950
+uaTransferWithFee: 12 -187 406.5 1033
+rc=0

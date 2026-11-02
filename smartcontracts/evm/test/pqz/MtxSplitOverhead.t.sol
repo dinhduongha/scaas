@@ -7,6 +7,8 @@ import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {UACall} from "../ua/UACall.sol";
+import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 
 /// metatx-split T5 (spec §3.6, §10 R9; owner variant A 2026-10-21): the split's relayed overhead must not grow with the
 /// envelope's `data` size. For each accepted fee-UA kind (ECDSA address path, `mldsa65` and `fndsa512` on `uaExecute`) the
@@ -14,11 +16,17 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 /// largest built one (PQZL op 7 M = 8 with the auditor; at a PQZH set also the largest PQZH debit, op 7 M = 4), exactly as
 /// `PqzStateGas.t.sol`'s gas table does (the precompile at the set's row price, ML-DSA-65 68,006, `fndsa512` 2.3 M
 /// stand-ins). The pre-split figures are the same test run on 2ceda92d (`test/vectors/metatx-overhead-presplit.json`).
-/// Asserted: (largest − pre-split) − (smallest − pre-split) <= 8,000 per kind. `MTX_OV_PRESPLIT=1`: log only.
+/// Asserted: (largest − pre-split) − (smallest − pre-split) <= 8,000 per kind on PQZL, <= 10,000 on PQZH (owner 2026-11-01: the
+/// relayed path's per-byte cost on PQZH's larger envelope, measured 8,938–9,807). `MTX_OV_PRESPLIT=1`: log only.
+/// typed-signing C4 review: the largest op's own cost moved with its explicit parameters, so its overhead is what the relayed
+/// call costs above the same op called directly on the same state (`_direct`), now and on 2ceda92d (the JSON's `direct|<id>`):
+/// `(largest − direct) − (pre-split largest − pre-split direct)`. The pre-split side runs from
+/// `runs/2026-11-01-typed-signing-c4-MtxSplitOverhead-at-2ceda92d.t.sol`, this test as it compiled there.
 /// Run: `scripts/capped smartcontracts/evm/script/pqz/at-set.sh <set> test --match-contract MtxSplitOverheadTest -vv`
 /// (log: runs/2026-10-27-metatx-split-overhead.txt). It inherits `PqzStatePinGasTest`'s tests; select this contract.
 contract MtxSplitOverheadTest is PqzStatePinGasTest {
     uint256 internal constant BOUND = 8_000;
+    uint256 internal constant BOUND_PQZH = 10_000;
     string internal pre;
     bytes32 internal fnFee2;
 
@@ -34,7 +42,7 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
         if (!logOnly) vm.skip(!vm.keyExistsJson(pre, string.concat(".", PqzSet.NAME)));
         bytes memory fpk = new bytes(897); // fndsa512: 0x09 then every h_i = 0 < q
         fpk[0] = 0x09;
-        fnFee2 = reg.register(UAKinds.FNDSA512, fpk, IUARegistry.UAAttrs("", 0, 0, ""), new bytes(666), "");
+        fnFee2 = UACall.register(reg, UAKinds.FNDSA512, fpk, UACall.attrs("", 0, ""), new bytes(666), "");
         NormalPqzToken(address(tok)).mintToUA(fnFee2, 1000);
         minted += 1000;
         bytes32 mlFee = feeUA;
@@ -43,28 +51,44 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
             feeUA = k == 2 ? fnFee2 : mlFee;
             feeSigLen = k == 2 ? 666 : ML65_SIG;
             kind = k == 0 ? "ecdsa" : k == 1 ? "mldsa65" : "fndsa512";
-            sMeas = _meas(abi.encodeCall(tok.mtxRollOver, (alice, 1)), 0);
+            sMeas = _meas(abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, 1)), 0);
             console2.log(string.concat("MEAS ", PqzSet.NAME, " ", kind, " S"), sMeas);
-            _large("pqzl", "M8-on", 8);
-            if (PqzSet.HAS_PQZH) _large("pqzh", "M4-on", 4);
+            _large("pqzl", "M8-on", 8, BOUND);
+            if (PqzSet.HAS_PQZH) _large("pqzh", "M4-on", 4, BOUND_PQZH);
         }
     }
 
-    function _large(string memory sys, string memory key, uint256 m) internal {
+    function _large(string memory sys, string memory key, uint256 m, uint256 bound) internal {
         uint256 row = vm.parseJsonUint(gj, string.concat(".", sys, "['", key, "'].row"));
         uint256 l = _meas(_op7a(m, true, _pf(sys, key)), row);
         string memory id = string.concat(sys, "-", key);
         console2.log(string.concat("MEAS ", PqzSet.NAME, " ", kind, " ", id), l);
         if (logOnly) return;
-        uint256 ovL = l - _pre(id, false) ;
+        uint256 dir = _direct(_op7a(m, true, _pf(sys, key)), row);
+        console2.log(string.concat("MEAS ", PqzSet.NAME, " direct ", id), dir);
+        uint256 preDir = vm.parseJsonUint(pre, string.concat(".", PqzSet.NAME, "['direct|", id, "']"));
+        uint256 ovL = (l - dir) - (_pre(id, false) - preDir);
         uint256 ovS = sMeas - _pre("", true);
         uint256 d = ovL > ovS ? ovL - ovS : 0;
         console2.log(string.concat("OVERHEAD ", PqzSet.NAME, " ", kind, " ", id, " smallest / largest / difference"), ovS, ovL, d);
-        assertLe(d, BOUND, string.concat(kind, " ", id, ": overhead grows with data"));
+        assertLe(d, bound, string.concat(kind, " ", id, ": overhead grows with data"));
     }
 
     function _pre(string memory id, bool small) internal view returns (uint256) {
         return vm.parseJsonUint(pre, string.concat(".", PqzSet.NAME, "['", kind, "|", small ? "S" : id, "']"));
+    }
+
+    /// the same op called directly on the same state, measured as `_meas`: the op's own cost, whatever the pipeline.
+    function _direct(bytes memory data, uint256 row) internal returns (uint256 inner) {
+        vm.clearMockedCalls();
+        vm.etch(PQZ, address(new RowBurner(row)).code);
+        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        uint256 snap = vm.snapshotState();
+        _gasTo(address(tok), data);
+        uint256 st = lastState;
+        vm.revertToState(snap);
+        inner = meter.measure(address(tok), data) - st;
+        vm.revertToState(snap);
     }
 
     /// the relayed call's EXECUTION gas (`GasMeter`: the callee warm as a transaction's `to`, cold state under a snapshot,

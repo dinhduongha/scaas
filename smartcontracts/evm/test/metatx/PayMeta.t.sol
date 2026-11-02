@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {UACall} from "../ua/UACall.sol";
 import {Test, Vm} from "forge-std/Test.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
@@ -91,7 +92,7 @@ contract PayMetaTest is Test {
     function _uaPayMeta(address t, bytes32 salt, bytes memory meta, uint256 vu, bytes memory auth) internal {
         vm.prank(REL);
         MetaTokenBase(t).uaPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, salt, meta, vu, MODE, REL,
-            FEE, FEE_TO, auth);
+            FEE, FEE_TO, UACall.auth(MetaTxLib.pad(signer), auth));
     }
 
     function _hasLedger(address t) internal view returns (bool) {
@@ -168,7 +169,7 @@ contract PayMetaTest is Test {
         bytes32 d = MetaTokenBase(t).uaTransferDigest(x);
         uint256 snap = vm.snapshotState();
         vm.prank(REL);
-        MetaTokenBase(t).uaPay(x.from, x.to, AMOUNT, x.entryRef, x.validUntil, MODE, REL, FEE, FEE_TO, _ecdsa(d));
+        MetaTokenBase(t).uaPay(x.from, x.to, AMOUNT, x.entryRef, x.validUntil, MODE, REL, FEE, FEE_TO, UACall.auth(x.from, _ecdsa(d)));
         vm.revertToState(snap);
         vm.recordLogs();
         _uaPayMeta(t, salt, meta, x.validUntil, _ecdsa(d));
@@ -219,17 +220,17 @@ contract PayMetaTest is Test {
         vm.prank(REL);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         MetaTokenBase(t).uaPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, salt, meta, vu, MODE, REL,
-            FEE, FEE_TO, bad);
+            FEE, FEE_TO, UACall.auth(MetaTxLib.pad(signer), bad));
         bytes memory auth = _ecdsa(MetaTokenBase(t).uaTransferDigest(_ut(t, _payId(salt, meta))));
         vm.prank(REL);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         MetaTokenBase(t).uaPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, ~salt, meta, vu, MODE, REL,
-            FEE, FEE_TO, auth);
+            FEE, FEE_TO, UACall.auth(MetaTxLib.pad(signer), auth));
         _uaPayMeta(t, salt, meta, vu, auth);
         vm.prank(REL);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
         MetaTokenBase(t).uaPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, salt, meta, vu, MODE, REL,
-            FEE, FEE_TO, auth);
+            FEE, FEE_TO, UACall.auth(MetaTxLib.pad(signer), auth));
     }
 
     /// Pay, so `PAYABLE` gates both (CTR-TOK-22). `PAYABLE` is always locked, so the bit is cleared in storage.
@@ -245,7 +246,7 @@ contract PayMetaTest is Test {
             MetaTokenBase(t).mtxPayMeta(signer, PAYEE, AMOUNT, salt, meta, block.timestamp + 1, MODE, REL, FEE, FEE_TO, "");
             vm.expectRevert(err);
             MetaTokenBase(t).uaPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, salt, meta,
-                block.timestamp + 1, MODE, REL, FEE, FEE_TO, "");
+                block.timestamp + 1, MODE, REL, FEE, FEE_TO, UACall.auth(MetaTxLib.pad(signer), ""));
         }
     }
 

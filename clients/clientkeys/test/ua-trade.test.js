@@ -13,8 +13,8 @@ import * as ua from '../src/ua.js';
 import { schnorrVerify as zetherVerify } from '../src/zether.js';
 import { hex, fromHex, keccak_256, concatBytes } from '../src/bytes.js';
 import { PQ_KINDS, pqMessage } from '../src/pq.js';
-import { hashTypedData, hashStruct, padId, uaTradeOrderTypedData, uaInvalidateNoncesTypedData, orderCancelTypedData,
-  checkTradeOrder, checkCancel } from '../src/evm.js';
+import { hashTypedData, hashStruct, padId, uaTradeOrderTypedData, uaInvalidateNoncesTypedData, cancelUAOrderTypedData,
+  checkTradeOrder, checkCancel, TYPED_OPS } from '../src/evm.js';
 
 import { dir } from './ua-vectors-dir.js';
 const V = JSON.parse(readFileSync(new URL('uatrade_kat.json', dir)));
@@ -66,7 +66,7 @@ test('every row: order, cancel and invalidate digests; the builders rebuild the 
     assert.deepEqual(uaTradeOrderTypedData({ ...at, token: V.tokenA, order: m }), r.order, r.name);
     assert.equal(hex(hashStruct(r.order.types, 'UATradeOrder', m)), r.structHash);
     assert.equal(hex(hashTypedData(r.order)), r.orderHash, r.name);
-    assert.equal(hex(hashTypedData(orderCancelTypedData({ ...at, contract: V.tokenA, orderHash: r.orderHash }))), r.cancelDigest);
+    assert.equal(hex(hashTypedData(cancelUAOrderTypedData({ ...at, name: 'SCaaS MetaToken', contract: V.tokenA, message: { order: m } }))), r.cancelDigest);
     assert.deepEqual(uaInvalidateNoncesTypedData({ ...at, contract: V.tokenA, from: r.from, batch: 1, minNonce: 5 }), r.invalidate);
     assert.equal(hex(hashTypedData(r.invalidate)), r.invalidateDigest);
     for (const [d, auth] of [[r.orderHash, r.auth], [r.cancelDigest, r.cancelAuth], [r.invalidateDigest, r.invalidateAuth]]) {
@@ -93,6 +93,19 @@ test('mldsa65 orders for the caps verify with noble under trade', () => {
     assert.ok(PQ_KINDS.mldsa65.alg.verify(sig, pqMessage('mldsa65', msg), fromHex(keys[r.index].keyData)), r.name);
     const other = ua.uaMessage(0x0131, ua.purposeTag('metatx'), fromHex(r.orderHash));
     assert.equal(PQ_KINDS.mldsa65.alg.verify(sig, pqMessage('mldsa65', other), fromHex(keys[r.index].keyData)), false);
+  }
+});
+
+test('CancelUAOrder nests the order as signed; checkCancel takes it only from the holder of that order', () => {
+  for (const r of V.rows) {
+    const td = cancelUAOrderTypedData({ ...at, name: 'SCaaS MetaToken', contract: V.tokenA, message: { order: r.order.message } });
+    assert.equal(hex(hashStruct(td.types, 'UATradeOrder', td.message.order)), r.structHash);
+    assert.equal(hex(hashStruct(td.types, 'CancelUAOrder', td.message)),
+      hex(keccak_256(concatBytes(fromHex(TYPED_OPS.CancelUAOrder.typehash), fromHex(r.structHash)))));
+    const want = { account: r.from, ...at, contract: V.tokenA, order: r.order.message };
+    assert.equal(hex(checkCancel(td, want)), hex(hashTypedData(td)), r.name);
+    assert.throws(() => checkCancel(td, { ...want, account: padId('0x' + '5e'.repeat(20)) }), /not your order/);
+    assert.throws(() => checkCancel(td, { ...want, order: { ...r.order.message, nonce: '2' } }), /Refusing/);
   }
 });
 

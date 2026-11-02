@@ -1,0 +1,31 @@
+# ua-py at commit c91be72a
+test_malformed_kem_refused (tests.test_vectors.TypedRegistryArgs.test_malformed_kem_refused)
+PRV L6: the registry's KEM key check runs before a form is chosen; a setKemKey without a key is no call. ... ok
+test_registration_args_typed (tests.test_vectors.TypedRegistryArgs.test_registration_args_typed) ... ok
+test_registration_args_typed_keys (tests.test_vectors.TypedRegistryArgs.test_registration_args_typed_keys)
+R1b (TS-D13): webauthn-p256 / MuSig2 / FROST through registerWebAuthn / registerMuSig2 / registerFrost, typed keys ... ok
+test_registration_hash_commit_when_over_limit (tests.test_vectors.TypedRegistryArgs.test_registration_hash_commit_when_over_limit)
+The hash commit only when the full call does not fit one transaction (owner 2026-10-31; X0: PQZH n2560-kmax16384 ... ok
+test_holder_refusals (tests.test_vectors.Vectors.test_holder_refusals) ... ok
+test_invalid_rows (tests.test_vectors.Vectors.test_invalid_rows) ... ok
+test_kem_record (tests.test_vectors.Vectors.test_kem_record) ... ok
+test_membership_rows (tests.test_vectors.Vectors.test_membership_rows)
+CTR-UA-37: every acceptance row: the typed digest, the message and memberDigest a derived member signs. ... ok
+test_messages (tests.test_vectors.Vectors.test_messages) ... ok
+test_native_member_typed_digest (tests.test_vectors.Vectors.test_native_member_typed_digest)
+TS-D4: a native msig member signs the record's typed digest itself (what eth_signTypedData_v4 of typedData ... ok
+test_natives_native_space_canonical_ids (tests.test_vectors.Vectors.test_natives_native_space_canonical_ids) ... ok
+test_non_bytes_key_data_raises_ua_key_data (tests.test_vectors.Vectors.test_non_bytes_key_data_raises_ua_key_data) ... ok
+test_portable (tests.test_vectors.Vectors.test_portable) ... ok
+test_portable_typed (tests.test_vectors.Vectors.test_portable_typed)
+TS-D1: the domain separator and the five typehashes pinned and re-derived; every row's typedData (the JSON ... ok
+test_pqz_key_record (tests.test_vectors.Vectors.test_pqz_key_record) ... ok
+test_structures (tests.test_vectors.Vectors.test_structures) ... ok
+test_table_groups_purposes_constants (tests.test_vectors.Vectors.test_table_groups_purposes_constants) ... ok
+test_valid_rows (tests.test_vectors.Vectors.test_valid_rows) ... ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 0.201s
+
+OK
+rc=0

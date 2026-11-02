@@ -1,0 +1,20 @@
+# e2e-linked at commit f4003909
+      HederaLib at 0x0000000000000000000000000000000000000001
+      MtxPipelineLib at 0x0000000000000000000000000000000000000002
+      TradeLib at 0x0000000000000000000000000000000000000003
+      RegLib at 0x0000000000000000000000000000000000000004
+      Reg at 0x0000000000000000000000000000000000000005
+ok
+ok    mldsa65/n2304-kmax4096: R_REG message (pqzRegMessage, registering kind 0x0131)
+ok    mldsa65/n2304-kmax4096: PoP message (holderPopMessage)
+ok    mldsa65/n2304-kmax4096: registrationArgs = the row's args (full KEM key)
+ok    mldsa65/n2304-kmax4096: register calldata 56,228 B = registryCalldataLength, selector 0x4e229efb
+ok    mldsa65/n2304-kmax4096: hash-commit args + fill = the row's kemCommit
+ok    setKemKey fill calldata (selector 0xa00cce2a)
+ok    KEM record mldsa65/v1: message, KemKey
+ok    PQZ key record fndsa512/n2304-kmax4096: setPqzKey and R_REG messages
+ok    setPqzKey / requireAuthorized selectors
+ok    kemKeyOf decoder (key, empty key)
+self-test: 0 failure(s)
+size gate self-test ok
+rc=0

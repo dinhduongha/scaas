@@ -1,0 +1,1627 @@
+# v2-metatx-n2560-kmax16384 at commit 11a1fa3b
+== at-set.sh: n2560-kmax16384 (n2560-kmax16384), forge test --match-path test/{v2,metatx}/*
+Compiling 247 files with Solc 0.8.37
+Solc 0.8.37 finished in 79.90s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> legacy/zether-msm/ZetherVerifierPerEquation.sol:89:28:
+   |
+89 |     error PrecompileFailed(uint256 at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> legacy/zether-msm/ZetherVerifierPerEquation.sol:268:13:
+    |
+268 |             uint256 at = 4 + 2 * n + 2 * j;
+    |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> legacy/zether-msm/ZetherVerifierPerEquation.sol:372:9:
+    |
+372 |         uint256 at = HEADER + 6 * p;
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/factory/OpenFactory.sol:284:26:
+    |
+284 |         private returns (address at, Release memory r)
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/zether/ZetherVerifier.sol:87:28:
+   |
+87 |     error PrecompileFailed(uint256 at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:233:9:
+    |
+233 |         uint256 at;     // the slot of this proof's `A`
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/account/SmartKeyAccount.sol:310:9:
+    |
+310 |         uint256 at;
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/zether/helpers/ZetherFixture.sol:419:37:
+    |
+419 |     function _zWord(bytes memory b, uint256 at) internal pure returns (bytes32 w) {
+    |                                     ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/zether/helpers/ZetherFixture.sol:423:38:
+    |
+423 |     function _zPoint(bytes memory b, uint256 at) internal pure returns (IZetherToken.G1 memory) {
+    |                                      ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/metatx/MtxCtx.t.sol:302:9:
+    |
+302 |         address at = _etchNormal(vm.parseJsonAddress(j, ".verifying_contract"), vm.parseJsonBytes32(j, ".salt"), 7622);
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/metatx/MtxCtx.t.sol:369:39:
+    |
+369 |     function _uaRows(string memory j, address at, string memory list, bool transfer) internal view returns (uint256 n) {
+    |                                       ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/metatx/MtxCtx.t.sol:404:26:
+    |
+404 |     function _etchNormal(address at, bytes32 uid, uint256 chainId) internal returns (address) {
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> test/metatx/TypedOps.t.sol:61:5:
+   |
+61 |     uint256 at = find(cd, old);
+   |     ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/metatx/TypedOps.t.sol:143:9:
+    |
+143 |         address at = _addr(op, "underlying");
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/metatx/TypedOps.t.sol:155:9:
+    |
+155 |         address at = _addr(op, "underlying");
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/metatx/TypedOps.t.sol:165:23:
+    |
+165 |     function _tokenAt(address at) internal returns (NormalToken l) {
+    |                       ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/metatx/TypedOps.t.sol:943:9:
+    |
+943 |         address at = vm.parseJsonAddress(j, msgField("WrapLeg", "underlying"));
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/metatx/MtxRelayFee.t.sol:553:9:
+    |
+553 |         address at = vm.parseJsonAddress(j, domainField("RelayFee", "token", "router"));
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/metatx/TradeTyped.t.sol:117:9:
+    |
+117 |         address at = vm.parseJsonAddress(j, domainField(op, _kind(), "domain.verifyingContract"));
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/v2/ExplicitParamsCalldata.t.sol:483:13:
+    |
+483 |             UAAttrsPacked memory at = UAAttrsPacked(_rnd(7, PK), keccak256(rp), uint64(kem), kemPk);
+    |             ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> src/ua/UAKinds.sol:267:56:
+    |
+267 |     function kemRecordHash(bytes32 ua, uint64 version, bytes memory kemPk) internal pure returns (bytes32) {
+    |                                                        ^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> src/ua/UAKinds.sol:281:5:
+    |
+281 |     function kemPk(IUARegistry.KemKey memory k) internal pure returns (bytes memory) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> src/ua/UAKinds.sol:352:58:
+    |
+352 |     function kemRecordDigest(bytes32 ua, uint64 version, bytes memory kemPk) internal pure returns (bytes32) {
+    |                                                          ^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> src/ua/UAKinds.sol:281:5:
+    |
+281 |     function kemPk(IUARegistry.KemKey memory k) internal pure returns (bytes memory) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:43:14:
+   |
+43 |             (bool ok, uint256 hx, uint256 hy) = _hint(keyData, h, l, i);
+   |              ^^^^^^^
+Note: The shadowed declaration is here:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:51:10:
+   |
+51 |         (bool ok, uint256 qy) = Bip340.liftX(qx);
+   |          ^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:143:38:
+    |
+143 |     function _newToken(bool auditor, bytes32 salt) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:65:5:
+   |
+65 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:147:38:
+    |
+147 |     function _newToken(bool auditor, bytes32 salt, uint256 maxShielded) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:65:5:
+   |
+65 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> test/metatx/MtxRelayFee.t.sol:95:20:
+   |
+95 |     function _call(uint256 n, address rel) internal view returns (bytes memory) {
+   |                    ^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/metatx/NamedEntry.t.sol:34:1:
+   |
+34 | function n(uint256 v) pure returns (string memory) {
+   | ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/metatx/MtxRelayFee.t.sol:699:9:
+    |
+699 |         DeployHarness h = new DeployHarness();
+    |         ^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/metatx/NamedEntry.t.sol:42:1:
+   |
+42 | function h(bytes32 v) pure returns (string memory) {
+   | ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/pqzh/Pqzh.sol:249:64:
+    |
+249 |     function pw(uint256[64] memory t, uint256 bits, uint256 n, uint256 off) internal pure returns (uint256 r) {
+    |                                                                ^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/pqzh/Pqzh.sol:162:5:
+    |
+162 |     function off(bytes calldata x) internal pure returns (uint256 o) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/v2/ReceiverPays.t.sol:176:27:
+    |
+176 |     function testFuzz_rp1(uint256 n, uint256 fee) public {
+    |                           ^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/metatx/NamedEntry.t.sol:34:1:
+   |
+34 | function n(uint256 v) pure returns (string memory) {
+   | ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (5159): "selfdestruct" has been deprecated. Note that, starting from the Cancun hard fork, the underlying opcode no longer deletes the code and data associated with an account and only transfers its Ether to the beneficiary, unless executed in the same transaction in which the contract was created (see EIP-6780). Any use in newly deployed contracts is strongly discouraged even if the new behavior is taken into account. Future changes to the EVM might further reduce the functionality of the opcode.
+  --> test/v2/Factory.t.sol:43:9:
+   |
+43 |         selfdestruct(payable(address(0)));
+   |         ^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+   --> test/metatx/MtxRelayFee.t.sol:657:9:
+    |
+657 |         bytes32 ref = _ref(address(target), cd);
+    |         ^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Secp256k1Verifier.sol:14:5:
+   |
+14 |     function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) public view returns (bool) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:82:5:
+   |
+82 |     function _coef(bytes32 l, bytes calldata pk) private view returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> script/DeployBase.sol:322:5:
+    |
+322 |     function _zetherLibs(bool underlying) internal view returns (address[] memory l) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> test/helpers/Catalogue.sol:49:1:
+   |
+49 | function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory l) {
+   | ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/wallet/MandateWallet.t.sol:643:5:
+    |
+643 |     function _edOwnerCall(bytes memory data, uint256 nonce) internal returns (MetaTxLib.MetaTransaction memory m) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/ua/UARegistryBase.sol:276:5:
+    |
+276 |     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/metatx/MetaTxParity.t.sol:201:5:
+    |
+201 |     function _next(bool) internal returns (string memory) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/metatx/MetaTxParity.t.sol:592:5:
+    |
+592 |     function _pAmt(Tk memory k, uint256 amount) internal view returns (bytes memory) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/metatx/MetaTxParity.t.sol:601:5:
+    |
+601 |     function _pMt(Tk memory k, bytes memory data, uint256 lane, uint32 mode, uint256 fee, address fr)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/metatx/MetaTxParity.t.sol:608:5:
+    |
+608 |     function _pUm(Tk memory k, bytes32 from, bytes memory data, uint256 lane, uint32 mode, uint256 fee, address fr)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/metatx/MetaTxParity.t.sol:615:5:
+    |
+615 |     function _pTr(Tk memory k, address to, uint256 value, bytes32 ref, uint256 lane, uint32 mode, uint256 fee, address fr)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/metatx/MetaTxParity.t.sol:622:5:
+    |
+622 |     function _pUt(
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+    --> test/metatx/MetaTxParity.t.sol:1417:5:
+     |
+1417 |     function _pOrder(Tk memory k, uint256 lane) internal view returns (ITradeToken.TradeOrder memory) {
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+    --> test/metatx/MetaTxParity.t.sol:1422:5:
+     |
+1422 |     function _pUOrder(Tk memory k, bytes32 from, uint256 lane) internal view returns (ITradeToken.UATradeOrder memory) {
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+    --> test/metatx/MetaTxParity.t.sol:1427:5:
+     |
+1427 |     function _pFill(Tk memory k, uint256 sell, uint256 recv) internal view returns (ITradeToken.TradeFill memory) {
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+    --> test/metatx/MetaTxParity.t.sol:1917:5:
+     |
+1917 |     function _pDerivedAuth(Tk memory, bytes32, bytes32) internal view override returns (bytes memory) {
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+    --> test/metatx/MetaTxParity.t.sol:1922:5:
+     |
+1922 |     function _pBadDerived(Tk memory, bytes32, bytes32) internal view override returns (bytes memory) {
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/metatx/PayMeta.t.sol:109:5:
+    |
+109 |     function _checkLogs(address t, bytes32 payId, bytes memory meta, bool ua, uint256 lane, bytes32 d, uint256 i)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/metatx/PayMeta.t.sol:278:5:
+    |
+278 |     function _row(MetaTokenBase t0, string memory name, uint16 schema, bytes32 salt, bytes memory meta)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:561:5:
+    |
+561 |     function _w(bytes calldata s, uint256 i) private view returns (uint256 v) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:568:5:
+    |
+568 |     function _seed(Ctx memory c, bytes calldata stmt) private view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:573:5:
+    |
+573 |     function _observe(Ctx memory c, uint256 ptr, uint256 len) private view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:584:5:
+    |
+584 |     function _sample(Ctx memory c) private view returns (uint256 r) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:653:5:
+    |
+653 |     function _cd(uint256 p) private view returns (uint256 v) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:661:5:
+    |
+661 |     function _alphaPowers(Ctx memory c) private view returns (uint256[] memory packed) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:700:5:
+    |
+700 |     function _combine(uint256[] memory packed, uint256 ptr, uint256 w, uint256 E) private view returns (uint256 o, uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:772:5:
+    |
+772 |     function _rows(Ctx memory c, Tree memory tr, uint256 p, uint256 ti) private view returns (uint256 rowsBytes, uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:787:5:
+    |
+787 |     function _deep(Ctx memory c, uint256 x) private view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:846:5:
+    |
+846 |     function _gather(uint256[] memory ev, uint256 k, uint256 pos, uint256 folded, uint256 p, uint256 E)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:862:5:
+    |
+862 |     function _leaf(uint256[] memory ev, uint256 k, uint256 E) private view returns (bytes32 h) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/v2/Trade.t.sol:296:5:
+    |
+296 |     function test_tradeEntriesAreNotAllowlisted() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Ran 21 tests for test/metatx/AdminLib.t.sol:AdminLibTest
+[PASS] test_disableFeature_alwaysLockedEvenWhenNeverSet() (gas: 203497)
+[PASS] test_disableFeature_oneWay_lockedRefused() (gas: 645523)
+[PASS] test_grantRevokeRenounce() (gas: 700982)
+[PASS] test_grant_onlyARoleOfASetFlag() (gas: 454586)
+[PASS] test_initEmitsRolesAndOwner() (gas: 395384)
+[PASS] test_initialRoles_onlyForSetFlags() (gas: 132249)
+[PASS] test_lockedFlagCannotBeDisabled() (gas: 403943)
+[PASS] test_lockedMustBeSubset_payableBurnableAlwaysLocked() (gas: 302720)
+[PASS] test_noOwnerMeansNoAdministration() (gas: 307737)
+[PASS] test_nonOwnerCannotAdminister() (gas: 468361)
+[PASS] test_oldOwnerLosesPowerAfterTransfer() (gas: 470658)
+[PASS] test_ownerGrantRateAdminToEoaRefused() (gas: 407945)
+[PASS] test_rateAdminMustBeAContract() (gas: 1473578)
+[PASS] test_regulatedFlags_notBuiltOnPublicKinds_invalidOnConfidential() (gas: 592257)
+[PASS] test_renounceClearsPendingOwner() (gas: 467622)
+[PASS] test_storageSlotIsTheErc7201Namespace() (gas: 271862)
+[PASS] test_transferToZeroCannotBeAccepted() (gas: 319970)
+[PASS] test_twoStepTransferAndRenounce_rolesSurvive() (gas: 694071)
+[PASS] test_unknownBitsAndKinds_refused() (gas: 89723)
+[PASS] test_validFlagsPerKind() (gas: 72307556)
+[PASS] test_zeroAccountRoleRefused() (gas: 318614)
+Suite result: ok. 21 passed; 0 failed; 0 skipped; finished in 5.87ms (4.11ms CPU time)
+
+Ran 12 tests for test/v2/Features.t.sol:FeaturesTest
+[PASS] test_adminFunctionsAreNeverSelfCalls() (gas: 1380749)
+[PASS] test_adminWritesDoNotTouchOtherNamespaces() (gas: 1540032)
+[PASS] test_burn_onlyWithBurnable_directAndGasless() (gas: 2206212)
+[PASS] test_initRefusesFlagsOfAnotherKind() (gas: 413410)
+[PASS] test_initWritesMetadataProvenanceAndFlags() (gas: 1385533)
+[PASS] test_isHedera_takesTheHip632Path_onlyWhenSet() (gas: 2183066)
+[PASS] test_mint_needsTheFlagAndTheRole() (gas: 1293562)
+[PASS] test_mint_withoutTheFlag_fixedSupply() (gas: 857137)
+[PASS] test_ownerAdministersThroughTheToken() (gas: 1571863)
+[PASS] test_payable_off_gatesThePayEntries_notMetaTransfer() (gas: 1307003)
+[PASS] test_payable_on_payWithFeeWorks() (gas: 1204007)
+[PASS] test_supportsInterface_paymentOnlyWhenPayable() (gas: 1506064)
+Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 14.88ms (12.13ms CPU time)
+
+Ran 10 tests for test/v2/Tier1.t.sol:Tier1Test
+[PASS] test_allowanceOnlyBetweenContracts() (gas: 61075128)
+[PASS] test_allowance_7702DelegatedEoaRefused() (gas: 61076835)
+[PASS] test_gaslessBurnPaysAmountFee() (gas: 61373946)
+[PASS] test_holderBurnsOwnBalance() (gas: 61069896)
+[PASS] test_initMintsToCreatorAndStoresMinter() (gas: 61157632)
+[PASS] test_initRefusesUnderlyings() (gas: 215421)
+[PASS] test_noMintableMeansFixedSupply() (gas: 1210937)
+[PASS] test_onlyMinterMints() (gas: 61186408)
+[PASS] test_renounceMinterIsOneWay() (gas: 60972491)
+[PASS] test_unwrapIsNotListedOnTier1() (gas: 61090827)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 21.08ms (18.61ms CPU time)
+
+Ran 13 tests for test/v2/Allowlist.t.sol:AllowlistTest
+[PASS] test_innerRevertBubbles_laneUntouched() (gas: 1179769)
+[PASS] test_multi_allowlistPinned() (gas: 25238)
+[PASS] test_multi_everyListedSelectorRuns() (gas: 3685275)
+[PASS] test_normal_allowlistPinned() (gas: 14822)
+[PASS] test_normal_classAndBasisMatchTheRule() (gas: 301634)
+[PASS] test_normal_everyListedSelectorRuns() (gas: 1076842)
+[PASS] test_reentryFromUnderlyingHook_reverts() (gas: 5751951)
+[PASS] test_refusedEverywhere() (gas: 6097247)
+[PASS] test_single_allowlistPinned() (gas: 25283)
+[PASS] test_single_everyListedSelectorRuns() (gas: 5445790)
+[PASS] test_wrapPaysItsAbsoluteFeeFromMintedUnits() (gas: 946932)
+[PASS] test_wrapped_classAndBasisMatchTheRule() (gas: 853870)
+[PASS] test_wrongStaticLength_refused() (gas: 200894)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 44.28ms (37.78ms CPU time)
+
+Ran 11 tests for test/v2/ReceiverPays.t.sol:ReceiverPaysTest
+[PASS] testFuzz_rp1(uint256,uint256) (runs: 256, μ: 524769, ~: 528278)
+[PASS] test_C5_3_poolFeeRecipientRefusedFirst() (gas: 170884)
+[PASS] test_amountExpiryAndPayeeCheck() (gas: 597529)
+[PASS] test_coSignatureOverAnotherDigest_refused() (gas: 208355)
+[PASS] test_erc1271Payee() (gas: 2566675)
+[PASS] test_feeEqualToValue_and_unboundPayerFeeRecipientIgnored() (gas: 405806)
+[PASS] test_payeePaysTheFee_eventsAndBalances() (gas: 581832)
+[PASS] test_payerIntentLandedElsewhere_coSignatureDead() (gas: 431275)
+[PASS] test_receiverFeeDigestIsPinned() (gas: 38542)
+[PASS] test_receiverFeeNested() (gas: 867276)
+[PASS] test_shapeErrors() (gas: 927002)
+Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 228.91ms (222.88ms CPU time)
+
+Ran 6 tests for test/metatx/SaltedEIP712.t.sol:SaltedEIP712Test
+[PASS] test_chainIdChangeRebuilds() (gas: 12177)
+[PASS] test_cloneUsesItsOwnAddressAndTheImplementationSalt() (gas: 249298)
+[PASS] test_eip712Domain_fields0x1f() (gas: 15941)
+[PASS] test_longNameRefused() (gas: 352294)
+[PASS] test_separatorIsSalted() (gas: 15096)
+[PASS] test_zeroChainUidRefused() (gas: 349743)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 2.32ms (232.79µs CPU time)
+
+Ran 16 tests for test/metatx/SigCheck.t.sol:SigCheckTest
+[PASS] test_1271_capIsEnforced() (gas: 18669)
+[PASS] test_1271_dirtyTail_refused() (gas: 148855)
+[PASS] test_1271_guardPassed_walletGetsFullCap() (gas: 195328)
+[PASS] test_1271_longReturndata_refused() (gas: 148676)
+[PASS] test_1271_refusals() (gas: 264722)
+[PASS] test_1271_starvedCallReverts() (gas: 37649)
+[PASS] test_1271_valid() (gas: 23688)
+[PASS] test_7702Designator_isEoa() (gas: 45095)
+[PASS] test_eoa_64byteCompact_refused() (gas: 20067)
+[PASS] test_eoa_highS_refused() (gas: 20014)
+[PASS] test_eoa_valid() (gas: 19608)
+[PASS] test_eoa_wrongSigner() (gas: 19591)
+[PASS] test_isValid_7702_badDelegates() (gas: 11123596)
+[PASS] test_isValid_7702_ctrUa24() (gas: 2208114)
+[PASS] test_requireNotDelegated() (gas: 98218)
+[PASS] test_requireNotDelegated_gas() (gas: 36309)
+Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 10.23ms (7.98ms CPU time)
+
+Ran 4 tests for test/metatx/Sweeper7702.t.sol:Sweeper7702Test
+[PASS] test_boundRelayerDelegatedRefused() (gas: 412457)
+[PASS] test_plainEoaAndContractCallersUnchanged() (gas: 458940)
+[PASS] test_sweeper_directCallsRefused() (gas: 508112)
+[PASS] test_sweeper_signaturesRefused() (gas: 469715)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 7.15ms (2.14ms CPU time)
+
+Ran 2 tests for test/metatx/TokenKat.t.sol:TokenKatTest
+[PASS] test_metaTransferKat() (gas: 528020)
+[PASS] test_metaTxKat() (gas: 379959)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 5.65ms (4.55ms CPU time)
+
+Ran 23 tests for test/v2/Base.t.sol:BaseTest
+[PASS] testFuzz_feeConservesSupply(uint96,uint16) (runs: 256, μ: 457578, ~: 507631)
+[PASS] testFuzz_namedDigestEqualsGeneric(uint8,uint256,uint256,uint64,bool,uint16,bytes32) (runs: 256, μ: 397082, ~: 366519)
+[PASS] test_allowanceOnlyBetweenContracts() (gas: 1578540)
+[PASS] test_approveIsNeverASelfCall() (gas: 1146839)
+[PASS] test_cancelNonceEmits() (gas: 429275)
+[PASS] test_domainIsSaltedV1AndTheClone() (gas: 69733)
+[PASS] test_erc1271Gets400kOnlyAsSmartKeyAccountClone() (gas: 59317114)
+[PASS] test_everyModeShapeCase() (gas: 307453)
+[PASS] test_feeCapOnePercentBothModes() (gas: 587542)
+[PASS] test_feeNeverGoesToThePayee() (gas: 660638)
+[PASS] test_implementationIsLockedAndCloneInitializesOnce() (gas: 499124)
+[PASS] test_leftoverFeeUnderNoneFailsTheNamedPath() (gas: 375367)
+[PASS] test_mtxBatchIsAtomic() (gas: 263851)
+[PASS] test_mtxBatchRunsEveryItem() (gas: 662033)
+[PASS] test_mtxBatchShape() (gas: 185714)
+[PASS] test_mtxPayDerivesTheLaneAndPaysOnce() (gas: 423408)
+[PASS] test_oneSignatureOneLaneAcrossPaths() (gas: 629418)
+[PASS] test_payWithFeeSameEntryRefStillSettles() (gas: 394932)
+[PASS] test_percentFeeOnValueChargedOnTop() (gas: 468303)
+[PASS] test_shortAndUnlistedData() (gas: 343397)
+[PASS] test_transferThroughTheTypedPath() (gas: 446613)
+[PASS] test_transferToZeroFailsAtStepThree() (gas: 93369)
+[PASS] test_unknownSelectorStaticcallRevertsCheaply() (gas: 11375)
+Suite result: ok. 23 passed; 0 failed; 0 skipped; finished in 219.49ms (216.28ms CPU time)
+
+Ran 2 tests for test/metatx/NamedEntry.t.sol:NamedMandateTest
+[PASS] test_c0_setMandateTyped() (gas: 491013)
+[PASS] test_c1_setMandateRow() (gas: 10162244)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 281.22ms (277.61ms CPU time)
+
+Ran 32 tests for test/v2/Trade.t.sol:TradeTest
+[PASS] testFuzz_mulGt(uint128,uint128,uint128,uint128) (runs: 256, μ: 7579, ~: 7572)
+[PASS] test_C6_5_nonceAbove2pow128Refused() (gas: 418707)
+[PASS] test_badSignature_andReplayOnAnotherToken() (gas: 89097)
+[PASS] test_cancelOrderNested() (gas: 327702)
+[PASS] test_cancelWrapOrderNested() (gas: 363949)
+[PASS] test_cancel_closesForever_replayIsANoOp() (gas: 453578)
+[PASS] test_edges_minNonceCap_relayerIsSubmitter_validUntilIsNow() (gas: 511475)
+[PASS] test_erc1271Signer() (gas: 2531697)
+[PASS] test_hugeAmount_partFillDoesNotOverflow() (gas: 1387383)
+[PASS] test_invalidateNonces_strictlyIncreasing_capped() (gas: 704182)
+[PASS] test_ioc_closesAtItsSinglePull() (gas: 441901)
+[PASS] test_minFill_belowHalfSettles() (gas: 340191)
+[PASS] test_minFill_belowSignedMinFill_reverts() (gas: 418461)
+[PASS] test_minFill_remainderClosesBelowMinFill() (gas: 546854)
+[PASS] test_minFill_signerMinimum_andFillOrKill() (gas: 614130)
+[PASS] test_minFill_zeroAcceptsAnyFill() (gas: 441900)
+[PASS] test_mulGt_past2pow256() (gas: 2344)
+[PASS] test_onlyTheNamedDex_andItMustBeAContract() (gas: 178094)
+[PASS] test_pathA_bounds() (gas: 909417)
+[PASS] test_pathA_feeBound_hugeReceiveFill() (gas: 437944)
+[PASS] test_pathA_partialFillsToTheDex_thenTheRemainderCloses() (gas: 579073)
+[PASS] test_pathA_priceLimit_hugeAmounts() (gas: 106861)
+[PASS] test_pathB_escrowPullsTheWholeAmountOnce() (gas: 945971)
+[PASS] test_replayOnAnotherChain_andCancelSignedOnAnotherToken() (gas: 166934)
+[PASS] test_selfOrder_fromOrDexIsTheToken() (gas: 157843)
+[PASS] test_selfOrder_relayer_expiry_shape() (gas: 828161)
+[PASS] test_tradeEntriesAreNotAllowlisted() (gas: 14738)
+[PASS] test_tradeEntriesThroughMtxExecuteAreNotAllowlisted() (gas: 413564)
+[PASS] test_tradeNamespace_pulledSlot_andBaseNamespacesUntouched() (gas: 356826)
+[PASS] test_tradeOrderStillTradeOrder() (gas: 474903)
+[PASS] test_typehashesArePinned() (gas: 55812)
+[PASS] test_wrapOrderTyped() (gas: 490984)
+Suite result: ok. 32 passed; 0 failed; 0 skipped; finished in 35.65ms (32.24ms CPU time)
+
+Ran 15 tests for test/v2/NativeLeg.t.sol:NativeLegTest
+[PASS] test_native_addReserveIsPayable() (gas: 78554773)
+[PASS] test_native_atMostOneLeg() (gas: 278013)
+[PASS] test_native_contractRecipientGetsAllGas() (gas: 79170074)
+[PASS] test_native_decimalsOnHederaAre8() (gas: 1411535)
+[PASS] test_native_erc20LegRefusesValue() (gas: 79826360)
+[PASS] test_native_executeRateChecksTheCoinBalance() (gas: 80230349)
+[PASS] test_native_forcedCoinIsNotReserve() (gas: 79023840)
+[PASS] test_native_noGaslessWrap_gaslessUnwrapWorks() (gas: 79262144)
+[PASS] test_native_reentrantRecipientIsBlocked() (gas: 79684094)
+[PASS] test_native_reentryIntoEveryEntry_isRefused() (gas: 81526212)
+[PASS] test_native_refusingRecipientRevertsTheUnwrap() (gas: 79073491)
+[PASS] test_native_shortfallStopsWrapNotUnwrap() (gas: 78891525)
+[PASS] test_native_unwrapToDesignatorRefused() (gas: 79072155)
+[PASS] test_native_valueMustMatch() (gas: 78451412)
+[PASS] test_native_wrapAndUnwrap() (gas: 79116521)
+Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 16.29ms (13.53ms CPU time)
+
+Ran 19 tests for test/v2/Tier2.t.sol:Tier2Test
+[PASS] testFuzz_wrapUnwrapNeverProfits(uint256,uint96,uint96) (runs: 256, μ: 79500310, ~: 79497079)
+[PASS] test_addReserveRaisesBackingNotSupply() (gas: 79635187)
+[PASS] test_allowanceOnlyBetweenContracts() (gas: 78424821)
+[PASS] test_boundsAreInclusive() (gas: 81111059)
+[PASS] test_decimalsAreTheIssuersChoiceAndLegSnapshot() (gas: 78407073)
+[PASS] test_donationIsNotCountedAndStaysLocked() (gas: 79326573)
+[PASS] test_feeOnTransferInboundMintsWhatArrived() (gas: 83031298)
+[PASS] test_gaslessWrapPaysAbsoluteFeeFromMinted() (gas: 79565989)
+[PASS] test_initRefusals() (gas: 5068178)
+[PASS] test_initRefusesItselfAsUnderlying() (gas: 77379114)
+[PASS] test_integerRateKeepsDustWithTheHolder() (gas: 79467993)
+[PASS] test_negativeRebaseStopsWrapNotUnwrap() (gas: 82941712)
+[PASS] test_oneToOneIsV1Behaviour() (gas: 79543769)
+[PASS] test_previewWrapUsedAndDustInReserve() (gas: 79269157)
+[PASS] test_roundingAlwaysDown() (gas: 79497919)
+[PASS] test_senderPaysFeeUnderlyingCannotLeave() (gas: 82887546)
+[PASS] test_twoLegsAreAValidToken_singleAssetAbiRefuses() (gas: 79130114)
+[PASS] test_unwrapBelowMinAndBadRecipient() (gas: 79319660)
+[PASS] test_zeroOutputsRevert() (gas: 80934269)
+Suite result: ok. 19 passed; 0 failed; 0 skipped; finished in 331.68ms (325.75ms CPU time)
+
+Ran 21 tests for test/metatx/ERC20MetaTx.t.sol:ERC20MetaTxTest
+[PASS] test_C5_3_poolsRefusedAtStep3_typedPath() (gas: 354086)
+[PASS] test_absoluteClass_fixedUncapped_percentRefused() (gas: 427084)
+[PASS] test_amountClass_fixedCapped() (gas: 97851)
+[PASS] test_amountClass_percentOnTheBasis_afterTheCall() (gas: 381087)
+[PASS] test_approve_callerAndSpenderMustBeContracts() (gas: 1384234)
+[PASS] test_batchTransfer_atomic() (gas: 904776)
+[PASS] test_domainAndModes() (gas: 25402)
+[PASS] test_feeFailureAfterTheCall_revertsTheCall() (gas: 147069)
+[PASS] test_feeToTheTokenRefused_genericPath() (gas: 118550)
+[PASS] test_feeToTheTokenRefused_typedPath() (gas: 97212)
+[PASS] test_fixedFee_cappedAtOnePercentOfValue() (gas: 528560)
+[PASS] test_fromTheTokenItselfRefused() (gas: 73865)
+[PASS] test_noTokensAtTheTokensAddress() (gas: 51647)
+[PASS] test_oneLaneForBothStructs() (gas: 502253)
+[PASS] test_payment_emitsPaymentSettledWithTheRealFee() (gas: 472274)
+[PASS] test_restrictedRelayer_otherCallerRefused() (gas: 90760)
+[PASS] test_selfCallRunsAsTheSigner() (gas: 205126)
+[PASS] test_step3Refusals() (gas: 354523)
+[PASS] test_transferAndApproveNotAllowlisted() (gas: 193144)
+[PASS] test_transferFrom_onlyByAContract() (gas: 2546923)
+[PASS] test_transfer_movesValueBumpsLaneEmits() (gas: 434820)
+Suite result: ok. 21 passed; 0 failed; 0 skipped; finished in 13.28ms (10.29ms CPU time)
+
+Ran 13 tests for test/v2/DexBatch.t.sol:DexBatchTest
+[PASS] test_batch_allFail_nothingSettled() (gas: 600316)
+[PASS] test_batch_exchangeOneFromOutside_notSelf() (gas: 1044409)
+[PASS] test_batch_forgedStarvationFromTarget_onlyThatPlan() (gas: 5310098)
+[PASS] test_batch_gasBurningTarget_laterPlansFailEmpty() (gas: 5016394)
+[PASS] test_batch_laterPlanSeesEarlierPulled() (gas: 963520)
+[PASS] test_batch_lengthMismatch() (gas: 357273)
+[PASS] test_batch_realSigCheckGasStarved_revertsWhole() (gas: 69752552)
+[PASS] test_batch_realUAVerifyGas_revertsWhole() (gas: 1582537)
+[PASS] test_batch_relayerBindingAndFeeShare_followTheCaller() (gas: 1344025)
+[PASS] test_batch_resetForgesStarvation_onlyThatPlan() (gas: 1394395)
+[PASS] test_batch_restorePulledInteraction_forbidden() (gas: 873511)
+[PASS] test_batch_returnbombTarget_onlyThatPlan() (gas: 7384414)
+[PASS] test_batch_secondPlanFails_othersSettle() (gas: 1357152)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 372.94ms (341.03ms CPU time)
+
+Ran 41 tests for test/v2/DexExchange.t.sol:DexExchangeTest
+[PASS] test_exchangeVia_executorPaysLess_reverts() (gas: 5345140)
+[PASS] test_exchangeVia_executorPaysMore_distributed() (gas: 6976151)
+[PASS] test_exchangeVia_hostileExecutor_reenterTradePull_fail() (gas: 7986549)
+[PASS] test_exchange_approvalsResetToZero() (gas: 2371457)
+[PASS] test_exchange_approveWithTrailingBytes_isReset() (gas: 730070)
+[PASS] test_exchange_coincidenceOfWants_noInteractions_refundNotDistributed() (gas: 1173255)
+[PASS] test_exchange_delistQuote_makesItUnknown() (gas: 156501)
+[PASS] test_exchange_destination_getsProceedsAndSurplus() (gas: 774740)
+[PASS] test_exchange_distinctSigners_noLegs_relayer_priceLimit() (gas: 831897)
+[PASS] test_exchange_excessCreditedSellToken_failsAtThePull() (gas: 4834175)
+[PASS] test_exchange_executorGetsTheRef() (gas: 2509200)
+[PASS] test_exchange_failingTarget_wrappedAsInteractionFailed() (gas: 4727569)
+[PASS] test_exchange_feeOnTransferSellToken_failsAtThePull() (gas: 4509574)
+[PASS] test_exchange_floorAboveLimit_eventFields() (gas: 754964)
+[PASS] test_exchange_forbiddenSelector_increaseAllowance() (gas: 234594)
+[PASS] test_exchange_forbiddenSelector_mtxTradeOfARestingOrder_andShortData() (gas: 653326)
+[PASS] test_exchange_forbiddenSelector_permit2Approve() (gas: 238863)
+[PASS] test_exchange_forbiddenSelector_restorePulled() (gas: 547896)
+[PASS] test_exchange_forbiddenTargets_theDexAndThePuller() (gas: 369825)
+[PASS] test_exchange_intermediateLeftover_reverts() (gas: 1173113)
+[PASS] test_exchange_legEvent_refAndFromTopics() (gas: 740685)
+[PASS] test_exchange_listedPoolsTimesListedOnly_bothEntryPoints() (gas: 30266937)
+[PASS] test_exchange_listedPools_onTheSecondLeg() (gas: 342920)
+[PASS] test_exchange_lyingRouter_insufficientOutput_exactFloorsSettle() (gas: 1589494)
+[PASS] test_exchange_multiHopThroughPairs() (gas: 3915909)
+[PASS] test_exchange_outsideLeg_throughThePuller() (gas: 524707)
+[PASS] test_exchange_pathBLeg_refundsTheRest() (gas: 655892)
+[PASS] test_exchange_profitableCycle_xToX() (gas: 445015)
+[PASS] test_exchange_reenteringTarget_isRefused() (gas: 4659596)
+[PASS] test_exchange_relayerBoundOrder_settles() (gas: 500891)
+[PASS] test_exchange_returnbombTarget_boundedCopy() (gas: 8908312)
+[PASS] test_exchange_revertingAndGasBurningTargets() (gas: 5455038)
+[PASS] test_exchange_routerPullingMore_fails() (gas: 841086)
+[PASS] test_exchange_soldOnlyLeftover_reverts() (gas: 357808)
+[PASS] test_exchange_successReturnDataNotCopied() (gas: 7159664)
+[PASS] test_exchange_surplusSplit_threeReceivers_lastReceiverNotLastLeg() (gas: 1888129)
+[PASS] test_exchange_targetForgingStarvation_isInteractionFailed() (gas: 4641367)
+[PASS] test_exchange_tokenNotKnown() (gas: 962873)
+[PASS] test_exchange_transferFromAVictim_fails() (gas: 237247)
+[PASS] test_exchange_twoLegs_floorsPlusSurplus_feesOnTheFloor() (gas: 1255220)
+[PASS] test_setExchangeTarget_setListedOnly_onlyAdmin() (gas: 248598)
+Suite result: ok. 41 passed; 0 failed; 0 skipped; finished in 136.34ms (122.99ms CPU time)
+
+Ran 2 tests for test/v2/Layout.t.sol:LayoutTest
+[PASS] test_reserveSlotIsWhereIndexersReadIt() (gas: 82753022)
+[PASS] test_storageLayoutIsPinned() (gas: 122746065)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 522.97ms (519.75ms CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 4 tests for test/v2/DexGas.t.sol:DexGasTest
+[PASS] test_GAS_batch_overheadPerPlan() (gas: 1405494)
+[PASS] test_GAS_hybrid_1x1_oneHop() (gas: 1160395)
+[PASS] test_GAS_hybrid_1x2_oneHop() (gas: 1369882)
+[PASS] test_GAS_settle_1x1_unchanged() (gas: 969134)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 69.26ms (11.31ms CPU time)
+
+Ran 5 tests for test/metatx/PayMeta.t.sol:PayMetaTest
+[PASS] test_payMetaVectors() (gas: 1744328)
+[PASS] test_payMeta_mismatchAndReplayRefused() (gas: 8246649)
+[PASS] test_payMeta_requiresPayable() (gas: 906795)
+[PASS] test_payMeta_settlesLikeMtxPay() (gas: 6517846)
+[PASS] test_uaPayMeta_settlesLikeUaPay() (gas: 5593587)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 344.91ms (53.36ms CPU time)
+
+Ran 1 test for test/v2/RateVectors.t.sol:RateVectorsTest
+[PASS] test_writeRateVectors() (gas: 91244260)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 18.07ms (12.67ms CPU time)
+
+Ran 3 tests for test/metatx/NamedEntry.t.sol:NamedShieldPqzTest
+[PASS] test_c0_shieldTyped() (gas: 1112158)
+[PASS] test_c1_shieldRow() (gas: 9942691)
+[PASS] test_c1_uaShieldRow() (gas: 9944793)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 497.22ms (272.67ms CPU time)
+
+Ran 44 tests for test/v2/Dex.t.sol:DexTest
+[PASS] testFuzz_feeRoundsUp(uint256,uint256) (runs: 256, μ: 958060, ~: 990073)
+[PASS] test_C6_9_setMarketGuards() (gas: 87222)
+[PASS] test_aFailingSettlementIsIsolated() (gas: 1769076)
+[PASS] test_adminOnly_delegatedAdminRefused() (gas: 74532)
+[PASS] test_adminOnly_feeSplitBounds() (gas: 1470842)
+[PASS] test_checks() (gas: 2607560)
+[PASS] test_classification_deprecatedAndUnregisteredAreOutside() (gas: 1802585)
+[PASS] test_createDex_emitsDexCreated() (gas: 1921883)
+[PASS] test_createDex_registry_andInitializeOnce() (gas: 220093)
+[PASS] test_createDex_saltScopedByCreator_andNotReusable() (gas: 3847327)
+[PASS] test_deployDexImplementation() (gas: 100760567)
+[PASS] test_deprecateDex_refusesNewDexOfThatVersion() (gas: 152834)
+[PASS] test_deprecatedTokenListedAsOutside_isADexOrderPulledByThePuller() (gas: 836671)
+[PASS] test_destination_proceedsGoThere_andNeverToTheDex() (gas: 1970033)
+[PASS] test_dexCatalogue_versionZeroRefused_latestTracksTheHighest() (gas: 94604048)
+[PASS] test_domainIsTheClone_saltedWithTheChain() (gas: 36889)
+[PASS] test_feeRoundsUp() (gas: 2044437)
+[PASS] test_feeRoundsUp_splittingNeverPaysLess() (gas: 6705792)
+[PASS] test_gasBurning1271Maker_othersStillSettle() (gas: 2439387)
+[PASS] test_legSettled_receivedIsNetOfTheFee_everyField() (gas: 1492904)
+[PASS] test_makerDestinationIsTheDex_conservationBroken() (gas: 538074)
+[PASS] test_makerPriceRoundsInTheMakersFavour() (gas: 780096)
+[PASS] test_makerReceiveTokenIsNotTheTakersSellToken_tokenMismatch() (gas: 399885)
+[PASS] test_pathA_takerExactlyAtItsLimit_settles() (gas: 1447089)
+[PASS] test_pathA_takerLimitOneAboveTheFill_tokenRefuses() (gas: 417558)
+[PASS] test_pathA_tokenSeesTheSettledFigures() (gas: 1446569)
+[PASS] test_pathB_dexChecksTheMatchedPart() (gas: 1255655)
+[PASS] test_pathB_escrowMakerRefundsTheRest() (gas: 789530)
+[PASS] test_pathB_makerFeeIsAtTheSignedRate() (gas: 887955)
+[PASS] test_pathB_priceLimit_hugeReceiveAmount() (gas: 277161)
+[PASS] test_pathB_refundGoesToFrom_proceedsToDestination() (gas: 785471)
+[PASS] test_pathB_signedMinFill_isEnforced() (gas: 277180)
+[PASS] test_pathB_takerBelowItsLimit_priceLimit() (gas: 277110)
+[PASS] test_pathB_takerPartialMatch_refundsInA() (gas: 1529697)
+[PASS] test_returndataBomb1271Maker_othersStillSettle() (gas: 2440958)
+[PASS] test_reverseDirectionOfAListedMarket() (gas: 876974)
+[PASS] test_settleOneOnlyThroughSettle() (gas: 382983)
+[PASS] test_settle_hugeAmounts_feeAndRelayerShare() (gas: 2612762)
+[PASS] test_settle_makerAtTenPercent_settles() (gas: 777644)
+[PASS] test_settle_minFill_remainderClosesBelowMinFill() (gas: 1046848)
+[PASS] test_settle_oneTakerTwoMakers_paysEveryone_splitsFees_conserves() (gas: 1562370)
+[PASS] test_settle_pathAOrderFilledInFiveSettlements() (gas: 1963526)
+[PASS] test_takerFeeChargedOnceOnTheAggregate() (gas: 1332427)
+[PASS] test_takerSellsAnOutsideToken_settles() (gas: 5668438)
+Suite result: ok. 44 passed; 0 failed; 0 skipped; finished in 530.14ms (524.55ms CPU time)
+
+Ran 51 tests for test/v2/DexHybrid.t.sol:DexHybridTest
+[PASS] test_hybridVia_executorNotListed() (gas: 7736206)
+[PASS] test_hybridVia_executorPaysMore_toTaker() (gas: 7085488)
+[PASS] test_hybridVia_executorPaysShort_insufficientOutput() (gas: 5328551)
+[PASS] test_hybrid_designatorSubmitterAndRelayer_open() (gas: 7749323)
+[PASS] test_hybrid_duplicateOrder() (gas: 464366)
+[PASS] test_hybrid_events_makerLegSettled_takerExchangeLegSettled() (gas: 1301801)
+[PASS] test_hybrid_extraTokensHop() (gas: 1822178)
+[PASS] test_hybrid_feeOnTransferSellToken_conservationBroken() (gas: 5123297)
+[PASS] test_hybrid_fees_makersOnReceive_takerOnceOnFloor_surplusFeeFree() (gas: 1482921)
+[PASS] test_hybrid_fillMismatch() (gas: 655232)
+[PASS] test_hybrid_floorBelowTakerLimit_priceLimit() (gas: 347082)
+[PASS] test_hybrid_forbiddenSelector_restorePulled() (gas: 813541)
+[PASS] test_hybrid_gasBurningTarget() (gas: 5936995)
+[PASS] test_hybrid_interactionMovesAOut_conservationBroken() (gas: 423376)
+[PASS] test_hybrid_listedPools_takerFlag_makerFlagIgnored() (gas: 1643481)
+[PASS] test_hybrid_makerPathB() (gas: 1332186)
+[PASS] test_hybrid_makerWrongRelayer() (gas: 359716)
+[PASS] test_hybrid_makersAtTheirPrice_takerGetsAllAboveTheFloor() (gas: 1990235)
+[PASS] test_hybrid_marketNotListed() (gas: 402253)
+[PASS] test_hybrid_outputBelowFloor_insufficientOutput() (gas: 1658145)
+[PASS] test_hybrid_reentry_refused() (gas: 16268337)
+[PASS] test_hybrid_refund_fokTaker_reverts() (gas: 1505066)
+[PASS] test_hybrid_refund_gtcTakerPulledIsTheSoldPart() (gas: 1188004)
+[PASS] test_hybrid_refund_iocTaker_staysClosed() (gas: 1175925)
+[PASS] test_hybrid_refund_leftoverAboveOutsideSell_conservationBroken() (gas: 1681297)
+[PASS] test_hybrid_refund_makersNeverGetTheRemainder() (gas: 1216282)
+[PASS] test_hybrid_refund_noFeeOnRefund() (gas: 1818280)
+[PASS] test_hybrid_refund_outsideTaker_restoredOnTheDex() (gas: 682058)
+[PASS] test_hybrid_refund_pathBTaker_refundIsLeftoverPlusRemainder() (gas: 1210816)
+[PASS] test_hybrid_refund_restoresCapacity_gtcRefillsLater() (gas: 1487335)
+[PASS] test_hybrid_refund_soldAboveMinFill_settlesAndRefunds() (gas: 1267090)
+[PASS] test_hybrid_refund_soldBelowMinFill_reverts() (gas: 1584404)
+[PASS] test_hybrid_refund_soldZero_zeroFill() (gas: 279676)
+[PASS] test_hybrid_refund_viaExecutor() (gas: 7516704)
+[PASS] test_hybrid_refund_worsePrice_priceLimit() (gas: 45217275)
+[PASS] test_hybrid_routeOverspendsA_conservationBroken() (gas: 403110)
+[PASS] test_hybrid_selfTrade_takerIsMaker() (gas: 359588)
+[PASS] test_hybrid_staleMaker_revertsWholePlan() (gas: 1256143)
+[PASS] test_hybrid_takerFok() (gas: 1603034)
+[PASS] test_hybrid_takerIoc_closedAtThePull() (gas: 1313074)
+[PASS] test_hybrid_takerPathB_refundsTheRest() (gas: 1342274)
+[PASS] test_hybrid_twoMakersOneSigner_settle() (gas: 1278745)
+[PASS] test_hybrid_uaMaker_and_outsideMaker() (gas: 2514688)
+[PASS] test_hybrid_uaTaker() (gas: 1410483)
+[PASS] test_hybrid_zeroMakers() (gas: 730321)
+[PASS] test_hybrid_zeroOutsideSell() (gas: 1011975)
+[PASS] test_restorePulled_boundedByThisTxPull() (gas: 4845104)
+[PASS] test_restorePulled_noCarryAcrossTx() (gas: 4866290)
+[PASS] test_restorePulled_noOpCancelClearsTheCounter() (gas: 4506157)
+[PASS] test_restorePulled_onlyOrderDex() (gas: 4479508)
+[PASS] test_restorePulled_uaOrder() (gas: 6147281)
+Suite result: ok. 51 passed; 0 failed; 0 skipped; finished in 247.13ms (187.09ms CPU time)
+
+Ran 13 tests for test/v2/Rates.t.sol:RatesTest
+[PASS] testFuzz_stepBoundExact(uint96,uint96,uint96,uint96,uint16) (runs: 256, μ: 1574035, ~: 1573632)
+[PASS] test_collateralValueSaturatesAndExecuteSurvives() (gas: 2868134)
+[PASS] test_decreaseNeedsCollateral() (gas: 658971)
+[PASS] test_delayAndWindowBounds() (gas: 334199)
+[PASS] test_executeRefusesShortfallOnAnyLeg() (gas: 614094)
+[PASS] test_expiredChangeCountsAsNone() (gas: 676736)
+[PASS] test_fixedRateHasNoSetters() (gas: 1486610)
+[PASS] test_onePendingChangeAndCancel() (gas: 486909)
+[PASS] test_onlyTheAdminProposesCancelsExecutes() (gas: 264797)
+[PASS] test_proposeExecuteLifecycle() (gas: 304662)
+[PASS] test_renounceRoleKeepsThePendingChange_disableFeatureCancelsIt() (gas: 745682)
+[PASS] test_stepBoundExactEdgeBothDirections() (gas: 543467)
+[PASS] test_wrapPausedWhilePendingReopensAfter() (gas: 1657844)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 204.56ms (197.96ms CPU time)
+
+Ran 13 tests for test/v2/DexModes.t.sol:DexModesTest
+[PASS] test_mode3_exchangePlan_excessAToMakersProRata() (gas: 1807182)
+[PASS] test_mode3_exchangePlan_staleMaker_revertsWithItsHash() (gas: 1245780)
+[PASS] test_mode3_exchangePlan_takerAndTwoMakers_viaMockV2() (gas: 1809646)
+[PASS] test_mode3_exchangePlan_takerIocAndFok() (gas: 2879080)
+[PASS] test_mode3_exchangePlan_uaMaker_outsideMaker() (gas: 2814264)
+[PASS] test_mode3_exchangePlan_viaMockV3Router() (gas: 1742444)
+[PASS] test_mode4_clearingPrice_ammMarginal() (gas: 906896)
+[PASS] test_mode4_clearingPrice_midpointWithoutPool() (gas: 879245)
+[PASS] test_mode4_legAtMinFillBelowHalf() (gas: 1124839)
+[PASS] test_mode4_partialCow_netThroughAmm_bothFilled() (gas: 1363944)
+[PASS] test_mode4_ring3_noInteractions_remainderToLastReceiver() (gas: 1576702)
+[PASS] test_mode4_ring_intermediateLeftover_conservationBroken() (gas: 1896648)
+[PASS] test_mode4_twoCowPlansInOneBatch() (gas: 1702773)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 98.13ms (68.74ms CPU time)
+
+Ran 12 tests for test/v2/UniswapExecutor.t.sol:UniswapExecutorTest
+[PASS] test_executor_constructor_dependenciesMustBeContracts() (gas: 12049967)
+[PASS] test_executor_hopKindOff() (gas: 9591899)
+[PASS] test_executor_leftover_refused() (gas: 402625)
+[PASS] test_executor_onlyDex() (gas: 151401)
+[PASS] test_executor_strayBalance_becomesSurplus() (gas: 616490)
+[PASS] test_executor_v3Callback_nonPool_refused() (gas: 17458836)
+[PASS] test_executor_v3_twoHops_wholeBalance() (gas: 511331)
+[PASS] test_executor_v4Callback_notPoolManager_refused() (gas: 118029)
+[PASS] test_executor_v4_hop() (gas: 1160775)
+[PASS] test_executor_v4_nativeCurrency_refused() (gas: 240872)
+[PASS] test_executor_viaDex_mtxExchangeVia_endToEnd() (gas: 890603)
+[PASS] test_executor_viaDex_mtxHybridVia_withRefund() (gas: 1260339)
+Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 72.35ms (12.64ms CPU time)
+
+Ran 20 tests for test/v2/Factory.t.sol:FactoryTest
+[PASS] test_constructor_refusesZeroChainUid() (gas: 6605)
+[PASS] test_createTokenUnregistered_isCheckedAndRecordedAsVersion0() (gas: 3293466)
+[PASS] test_createToken_legCountByKind() (gas: 37803324)
+[PASS] test_createToken_normal_emitsOneEventWithProvenance() (gas: 1318841)
+[PASS] test_createToken_unknownVersion() (gas: 199882)
+[PASS] test_createToken_wrapped_indexesEveryLeg_includingNative() (gas: 3576921)
+[PASS] test_delegatedRegistrarRefused() (gas: 64420)
+[PASS] test_deployImplementation_checksKindFactoryAndChainUid() (gas: 8398511469)
+[PASS] test_deployImplementation_checksLibraryCodeHashes() (gas: 65022271)
+[PASS] test_deprecate_refusesNewTokensOfThatVersion() (gas: 4134390)
+[PASS] test_designatorImplementationRefused() (gas: 107319)
+[PASS] test_factoryOnlyForwards_theTokenValidatesFlagsAndFields() (gas: 648356)
+[PASS] test_kindEnabled() (gas: 350277)
+[PASS] test_kindIsAConstantOfTheImplementation() (gas: 11798)
+[PASS] test_noticePeriod() (gas: 6919)
+[PASS] test_onlyTheFactoryInitializes_andOnlyOnce() (gas: 1501480)
+[PASS] test_publishEnv() (gas: 69230249)
+[PASS] test_saltIsScopedByCreator_andCannotBeReused() (gas: 2532757)
+[PASS] test_sizes() (gas: 16109)
+[PASS] test_unregisteredImplementationThatSelfDestructs_cannotReuseTheSalt() (gas: 1606266)
+Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 37.95ms (22.69ms CPU time)
+
+Ran 4 tests for test/v2/FactoryZether.t.sol:FactoryZetherTest
+[PASS] test_confidentialKinds_offByDefault_registrarOnly() (gas: 3131577)
+[PASS] test_domainNameHook() (gas: 25520)
+[PASS] test_publicKinds_refuseEveryConfField() (gas: 87422359)
+[PASS] test_wrappedZether_flagsValidatedForItsKind() (gas: 304398)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 17.79ms (5.89ms CPU time)
+
+Ran 10 tests for test/v2/UnwrapOp.t.sol:UnwrapOpTest
+[PASS] test_erc777HookCannotReenterAGuardedFunction() (gas: 9789967)
+[PASS] test_erc777HookSeesTheNonceSpentAndConsistentState() (gas: 10383538)
+[PASS] test_feeInWrappedUnitsAfterTheCall() (gas: 2961871)
+[PASS] test_gaslessUnwrapPaysTheRecipient() (gas: 462270)
+[PASS] test_gaslessUnwrapWorksDuringAPendingRateChange() (gas: 4090169)
+[PASS] test_innerRefusalsBubble() (gas: 5776339)
+[PASS] test_noPayeeCheckOnUnwrap() (gas: 515689)
+[PASS] test_oldUnwrapEntryPointsAreGone() (gas: 101547)
+[PASS] test_senderPaysFeeUnderlyingRevertsTheGaslessUnwrap() (gas: 6025339)
+[PASS] test_underlyingRevertUndoesFeeAndNonce() (gas: 6387018)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 26.74ms (19.98ms CPU time)
+
+Ran 2 tests for test/metatx/NamedEntry.t.sol:NamedShieldZetherTest
+[PASS] test_c0_shieldTyped() (gas: 1991312)
+[PASS] test_c1_shieldRow() (gas: 10387986)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 204.76ms (134.04ms CPU time)
+
+Ran 28 tests for test/v2/DexOutside.t.sol:DexOutsideTest
+[PASS] test_C6_1_gasBurningTokenCannotStarveTheNextSettlement() (gas: 10356442)
+[PASS] test_cancelDexOrderNested() (gas: 352939)
+[PASS] test_cancelOrders_skipsBadItems_andInvalidateNonces() (gas: 1238226)
+[PASS] test_designatorMaker_delegate1271Refused_ownKeyWorks() (gas: 2548748)
+[PASS] test_dexOrderDigest_isEip712OverTheDexDomain_andBindsTheSellToken() (gas: 331645)
+[PASS] test_erc1271Cap_400kOnlyForSmartKeyClones() (gas: 2602681)
+[PASS] test_erc1271OutsideSigner_settles() (gas: 3079420)
+[PASS] test_fallbackOnlyToken_isOutside_andFails() (gas: 901171)
+[PASS] test_feeOnTransferToken_conservationCatchesIt() (gas: 5082490)
+[PASS] test_forgedStarvationFromAnOutsideToken_isOnlyMatchFailed() (gas: 12161832)
+[PASS] test_gasBurning1271OutsideMaker_othersStillSettle() (gas: 1447529)
+[PASS] test_hookTokenReentry_isRefused() (gas: 15424063)
+[PASS] test_hostile1271InACancelBatch_isSkipped() (gas: 1315277)
+[PASS] test_matchFailed_carriesTheRevertData() (gas: 953994)
+[PASS] test_noReturnValueToken_settles() (gas: 2898500)
+[PASS] test_onlyTheDexPulls() (gas: 49721)
+[PASS] test_outsideLeg_belowHalfSettles() (gas: 752503)
+[PASS] test_outsideMaker_pulledThroughThePuller() (gas: 829434)
+[PASS] test_outsideOrder_isCheckedByTheDex() (gas: 1836065)
+[PASS] test_outsidePartialFills_accumulateOnTheDex_thenClosed() (gas: 1610542)
+[PASS] test_pullUsesTheAllowanceToThePuller_notToTheDex() (gas: 1236019)
+[PASS] test_rebasingUpToken_conservationCatchesIt() (gas: 4587753)
+[PASS] test_returnbombToken_reasonIsBounded_othersSettle() (gas: 2123784)
+[PASS] test_returndataBomb1271OutsideMaker_othersStillSettle() (gas: 1449144)
+[PASS] test_smartKeyAccountImpl_isExposed() (gas: 28981)
+[PASS] test_starvedCheckInsideASCaaSLeg_revertsTheBatch() (gas: 2165658)
+[PASS] test_starvedOutsideTokenCall_isAnEmptyMatchFailed() (gas: 10266668)
+[PASS] test_starvedSigCheck_revertsTheWholeCall() (gas: 2754493)
+Suite result: ok. 28 passed; 0 failed; 0 skipped; finished in 230.11ms (221.16ms CPU time)
+
+Ran 2 tests for test/v2/DexKat.t.sol:DexKatTest
+[PASS] test_dexKat() (gas: 3812348)
+[PASS] test_dexKat_newEntriesRoundTrip() (gas: 418095)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 24.82ms (20.94ms CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 4 tests for test/metatx/NamedEntry.t.sol:NamedUnwrapTest
+[PASS] test_c0_gasNamedVsGeneric() (gas: 787005)
+[PASS] test_c0_namedEntryNotAllowlisted() (gas: 114302)
+[PASS] test_c0_unwrapTyped() (gas: 1343469)
+[PASS] test_c1_unwrapRow() (gas: 9706624)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 188.20ms (184.63ms CPU time)
+
+Ran 7 tests for test/metatx/UAMetaTxBase.t.sol:UAMetaTxBaseTest
+[PASS] test_uaBaseAddressPathUsesCtx() (gas: 20622370)
+[PASS] test_uaBaseAllowlist() (gas: 82187)
+[PASS] test_uaBaseBatch() (gas: 552212)
+[PASS] test_uaBaseCancelNonce() (gas: 19642604)
+[PASS] test_uaBaseModesAsAddressPath() (gas: 154270)
+[PASS] test_uaBaseOffWithoutRegistry() (gas: 19267980)
+[PASS] test_uaBaseRefusesFee() (gas: 20000124)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 18.46ms (15.11ms CPU time)
+
+Ran 2 tests for test/v2/LinkClosure.t.sol:LinkClosureTest
+[PASS] test_envLibsEqualLinkClosure() (gas: 2834200167)
+[PASS] test_libraryOpcodes() (gas: 27383646)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 1.08s (1.19s CPU time)
+
+Ran 29 tests for test/metatx/MetaTxBase.t.sol:MetaTxBaseTest
+[PASS] test_alias_everyAllowlistedSelector() (gas: 1247718)
+[PASS] test_alias_returnsTrue() (gas: 295311)
+[PASS] test_cancelNonce_direct() (gas: 218936)
+[PASS] test_cancelNonce_signedOnAnotherLane() (gas: 315430)
+[PASS] test_dataShape_refused() (gas: 153522)
+[PASS] test_digestIsSaltedEip712() (gas: 32756)
+[PASS] test_directSelfCallWithoutTicket_isNotTheSigner() (gas: 139182)
+[PASS] test_erc1271_wallet() (gas: 2554789)
+[PASS] test_everyAllowlistedSelectorIsNonReentrant() (gas: 361945)
+[PASS] test_execute_returnsTheInnerReturnData() (gas: 285066)
+[PASS] test_execute_runsTheCallAsTheSigner() (gas: 341662)
+[PASS] test_expired_refused() (gas: 361816)
+[PASS] test_feeRecipientBound_eventCarriesIt() (gas: 305946)
+[PASS] test_feeRecipientBound_rewriteRefused() (gas: 86414)
+[PASS] test_highS_refused() (gas: 84329)
+[PASS] test_innerRevert_bubblesAndLeavesTheNonce() (gas: 85291)
+[PASS] test_lanesAreIndependent() (gas: 391091)
+[PASS] test_msgSender_outsideTheSelfCall_isTheCaller() (gas: 439339)
+[PASS] test_mtxSelectors_isPinnedAndMatchesTheRules() (gas: 47145)
+[PASS] test_notAllowlisted_refused() (gas: 299652)
+[PASS] test_reentryFromOutsideDuringTheSelfCall_refused() (gas: 573016)
+[PASS] test_relayerBinding() (gas: 361523)
+[PASS] test_relayerBound_otherSubmitterRefused_rewriteRefused() (gas: 149810)
+[PASS] test_replay_refused() (gas: 346498)
+[PASS] test_selfSender_refused() (gas: 65798)
+[PASS] test_ticketAdmitsOneSelfCall() (gas: 92929)
+[PASS] test_unboundFieldsAreNotSigned() (gas: 308267)
+[PASS] test_unknownMode_refused() (gas: 244843)
+[PASS] test_wrongSigner_refused() (gas: 84265)
+Suite result: ok. 29 passed; 0 failed; 0 skipped; finished in 13.20ms (10.74ms CPU time)
+
+Ran 9 tests for test/metatx/MetaTxBaseBatch.t.sol:MetaTxBaseBatchTest
+[PASS] test_C5_5_bindingClearedAfterSelfCall() (gas: 17395299)
+[PASS] test_batch_badSignatureRollsBackEarlierItem() (gas: 181640)
+[PASS] test_batch_empty() (gas: 35605)
+[PASS] test_batch_isAllOrNothing() (gas: 164974)
+[PASS] test_batch_isNotAllowlisted() (gas: 124374)
+[PASS] test_batch_lengthMismatch() (gas: 70529)
+[PASS] test_batch_replayOfSameItemReverts() (gas: 155453)
+[PASS] test_batch_runsEachItemAsItsSigner() (gas: 754812)
+[PASS] test_batch_wrongRelayerRollsBackEarlierItem() (gas: 182279)
+Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 6.19ms (3.75ms CPU time)
+
+Ran 9 tests for test/metatx/MetaTxBaseFee.t.sol:MetaTxBaseFeeTest
+[PASS] test_amountArg1_basisAndShortData() (gas: 17779266)
+[PASS] test_batch_chargesPerItem() (gas: 18125796)
+[PASS] test_chargeFee_refusesAllButNone() (gas: 16627259)
+[PASS] test_feeClassAboveAmount_refused() (gas: 17153652)
+[PASS] test_feeFailure_revertsTheCall() (gas: 17182361)
+[PASS] test_feeHook_basisAndEvent() (gas: 18236147)
+[PASS] test_feeModes_refusedWithoutOverride() (gas: 531095)
+[PASS] test_feeRunsAfterCall() (gas: 17915061)
+[PASS] test_supportedModes_flagsOnly() (gas: 5880)
+Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 7.32ms (4.85ms CPU time)
+
+Ran 2 tests for test/metatx/MetaTxBaseLane.t.sol:MetaTxBaseLaneTest
+[PASS] test_sharedLane_oneNonceSequence() (gas: 14339337)
+[PASS] test_unguardedAllowlistedTarget_failsClosed() (gas: 14003072)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 3.43ms (1.04ms CPU time)
+
+Ran 16 tests for test/v2/MetaTxGasV2.t.sol:MetaTxGasV2Test
+[PASS] test_gasA_warmBatchNoFee() (gas: 241538)
+[PASS] test_gasB_coldBatchNoFee() (gas: 339477)
+[PASS] test_gasBatchOfThreeVersusThreeSingles() (gas: 666068)
+[PASS] test_gasC_warmFixedFee() (gas: 257486)
+[PASS] test_gasCalldata() (gas: 489619)
+[PASS] test_gasD_warmPercentFee() (gas: 257458)
+[PASS] test_gasE_warmFixedRestricted() (gas: 259755)
+[PASS] test_gasF_newRecipient() (gas: 339550)
+[PASS] test_gasG_erc1271() (gas: 304597)
+[PASS] test_gasGaslessUnwrap() (gas: 404310)
+[PASS] test_gasH_cancel() (gas: 258585)
+[PASS] test_gasNamedTransferVersusGeneric_logOnly() (gas: 361960)
+[PASS] test_gasNamedTransferWithFeeVersusGeneric_logOnly() (gas: 397779)
+[PASS] test_gasP_payOpColdLane() (gas: 576580)
+[PASS] test_gasUnwrapDirect() (gas: 148961)
+[PASS] test_gasWrap() (gas: 148644)
+Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 16.28ms (8.94ms CPU time)
+
+Ran 10 tests for test/metatx/MetaTxLib.t.sol:MetaTxLibTest
+[PASS] test_bothFlags_bindBoth() (gas: 6411)
+[PASS] test_hashStruct_encoding() (gas: 2346)
+[PASS] test_metaTransferTypehashIsPinned() (gas: 302)
+[PASS] test_metaTxTypehashIsPinned() (gas: 337)
+[PASS] test_onlyFeeRecipientFlag_bindsFeeRecipientNotRelayer() (gas: 6389)
+[PASS] test_onlyRelayerFlag_bindsRelayerNotFeeRecipient() (gas: 6434)
+[PASS] test_uaHashStruct_encodingAndZeroing() (gas: 3736)
+[PASS] test_uaPoolAndPad() (gas: 409)
+[PASS] test_uaTypehashesArePinned() (gas: 510)
+[PASS] test_unboundFieldsAreHashedAsZero() (gas: 4871)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 2.15ms (259.32µs CPU time)
+
+Ran 4 tests for test/metatx/TypedOps.t.sol:ConfidentialRowsZetherTest
+[PASS] test_typedOpsVectors_BurnRow() (gas: 2190652430)
+[PASS] test_typedOpsVectors_CancelNonceRow() (gas: 2229502501)
+[PASS] test_typedOpsVectors_UABurnRow() (gas: 2194167144)
+[PASS] test_typedOpsVectors_WrapLegRow() (gas: 2195795777)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 1.03s (955.74ms CPU time)
+
+Ran 4 tests for test/metatx/TypedOps.t.sol:ConfidentialRowsPqzTest
+[PASS] test_typedOpsVectors_BurnRow() (gas: 2190808556)
+[PASS] test_typedOpsVectors_CancelNonceRow() (gas: 2229658557)
+[PASS] test_typedOpsVectors_UABurnRow() (gas: 2194460244)
+[PASS] test_typedOpsVectors_WrapLegRow() (gas: 2196089073)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 1.40s (1.09s CPU time)
+
+Ran 11 tests for test/metatx/TradeTyped.t.sol:OrderRowsPqzTest
+[PASS] test_typedOpsVectors_CancelOrderRow() (gas: 2223882114)
+[PASS] test_typedOpsVectors_CancelUAOrderRow() (gas: 2223943593)
+[PASS] test_typedOpsVectors_CancelUAWrapOrderRow() (gas: 2220303853)
+[PASS] test_typedOpsVectors_CancelWrapOrderRow() (gas: 2220241875)
+[PASS] test_typedOpsVectors_ReceiverFeeRow() (gas: 2374082875)
+[PASS] test_typedOpsVectors_RelayFeeRow() (gas: 2202275547)
+[PASS] test_typedOpsVectors_UACancelNonceRow() (gas: 2311695116)
+[PASS] test_typedOpsVectors_UAReceiverFeeRow() (gas: 2374290104)
+[PASS] test_typedOpsVectors_UARelayFeeRow() (gas: 2202343572)
+[PASS] test_typedOpsVectors_UAWrapOrderRow() (gas: 2227541894)
+[PASS] test_typedOpsVectors_WrapOrderRow() (gas: 2227479981)
+Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 4.28s (4.02s CPU time)
+
+Ran 1 test for test/metatx/TradeKat.t.sol:TradeKatTest
+[PASS] test_tradeKat() (gas: 613414)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 4.29s (4.28s CPU time)
+
+Ran 7 tests for test/metatx/MtxPipelineLib.t.sol:MtxPipelineLibTest
+[PASS] test_addressPath_refusesDerivedFrom() (gas: 552405)
+[PASS] test_digestsEqualMetaTxLib((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(address,address,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32) (runs: 256, μ: 57135, ~: 57001)
+[PASS] test_directCallReverts() (gas: 568237)
+[PASS] test_preCall_orderAddressPath() (gas: 612351)
+[PASS] test_preCall_orderUaPath() (gas: 1081830)
+[PASS] test_preCall_writesOnlyTheNonceSlot() (gas: 583490)
+[PASS] test_preTransfer_matchesTodayOrder() (gas: 1619199)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 53.39ms (51.16ms CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 24 tests for test/metatx/MtxRelayFee.t.sol:MtxRelayFeeTest
+[PASS] test_deployBase_relayFee() (gas: 1023778498)
+[PASS] test_executor_onlyRouter() (gas: 99001)
+[PASS] test_relayFeeDirectCallRefused() (gas: 490254)
+[PASS] test_relayFeeExecutorPayeeRefused() (gas: 883117)
+[PASS] test_relayFeeFieldsBound() (gas: 657587)
+[PASS] test_relayFeeRows() (gas: 12658370)
+[PASS] test_relayFeeTyped() (gas: 1082153)
+[PASS] test_relayGas_ecdsaAndMldsa65() (gas: 2603433)
+[PASS] test_relayRefVectors() (gas: 97583)
+[PASS] test_relayRef_formula() (gas: 38985)
+[PASS] test_relay_boundPayee() (gas: 645884)
+[PASS] test_relay_boundToCall() (gas: 17004429)
+[PASS] test_relay_callDataIsAnotherRouterPayment() (gas: 164084)
+[PASS] test_relay_innerRevertBubbles() (gas: 178193)
+[PASS] test_relay_openModePaysCaller() (gas: 670874)
+[PASS] test_relay_payOnce() (gas: 436084)
+[PASS] test_relay_paymentFailureRollsBackCall() (gas: 1507902)
+[PASS] test_relay_reentryRefused() (gas: 4978533)
+[PASS] test_relay_targetDesignatorRefused() (gas: 206529)
+[PASS] test_relay_targetEnvelopeBoundToExecutor() (gas: 772745)
+[PASS] test_relay_targetNoCode_counterfactual() (gas: 16419128)
+[PASS] test_routerBoundPayment_refusedOutsideRouter() (gas: 231560)
+[PASS] test_router_holdsNothingAfterOpenMode() (gas: 1106727)
+[PASS] test_uaRelay_mldsa65Payer() (gas: 11778508)
+Suite result: ok. 24 passed; 0 failed; 0 skipped; finished in 274.12ms (486.36ms CPU time)
+
+Ran 18 tests for test/v2/MtxWrap.t.sol:MtxWrapTest
+[PASS] test_mtxWrapOrderRenamed() (gas: 746587)
+[PASS] test_mtxWrapOrder_anOutsideLegHasNoMtxTrade() (gas: 4794387)
+[PASS] test_mtxWrapOrder_deliveredLessOrMoreThanSignedIsRefused() (gas: 3084174)
+[PASS] test_mtxWrapOrder_disabledLegIsRefused() (gas: 1645002)
+[PASS] test_mtxWrapOrder_escrowFlagIsRefusedByTheUnderlying() (gas: 132747)
+[PASS] test_mtxWrapOrder_feeIsRoundedUp() (gas: 2219436)
+[PASS] test_mtxWrapOrder_isNotAllowlisted() (gas: 20154)
+[PASS] test_mtxWrapOrder_mintsAtTheRate_feeToTheSubmitter() (gas: 928630)
+[PASS] test_mtxWrapOrder_nativeLegIsNotGasless() (gas: 1450234)
+[PASS] test_mtxWrapOrder_pausedDuringARateChange() (gas: 2832373)
+[PASS] test_mtxWrapOrder_refusals() (gas: 160711)
+[PASS] test_mtxWrapOrder_relayerBinding() (gas: 778013)
+[PASS] test_mtxWrapOrder_reserveShortfallIsRefused() (gas: 3346707)
+[PASS] test_mtxWrapOrder_signedMinimumIsThePrice() (gas: 135836)
+[PASS] test_mtxWrapOrder_throughMtxExecuteIsNotAllowlisted() (gas: 148688)
+[PASS] test_mtxWrapOrder_toDestination() (gas: 716069)
+[PASS] test_mtxWrapOrder_tooSmallToMint() (gas: 1482673)
+[PASS] test_mtxWrapOrder_walletJson() (gas: 715341)
+Suite result: ok. 18 passed; 0 failed; 0 skipped; finished in 18.25ms (13.98ms CPU time)
+
+Ran 2 tests for test/metatx/MetaTxParity.t.sol:MetaTxParityTest
+[SKIP] test_parity() (gas: 0)
+[PASS] test_ruleTableParity() (gas: 68585419)
+Suite result: ok. 1 passed; 0 failed; 1 skipped; finished in 5.83s (5.49s CPU time)
+
+Ran 12 tests for test/v2/Multi.t.sol:MultiTest
+[PASS] testFuzz_wrapIUnwrapJNeverProfitsAtPar(uint256,uint96,uint96,uint96,uint96) (runs: 256, μ: 10544729, ~: 10541408)
+[PASS] test_allowanceOnlyBetweenContracts() (gas: 57439)
+[PASS] test_anyOfWrapOneUnwrapAnother() (gas: 1929676)
+[PASS] test_gaslessUnwrapWorksOnADisabledLeg() (gas: 1309012)
+[PASS] test_guardianDisablesWrapOneWay() (gas: 1460424)
+[PASS] test_h1PendingChangePausesEveryLegAndOnlyTheAdminExecutes() (gas: 4555794)
+[PASS] test_inheritedSingleAssetAbiReverts() (gas: 79931)
+[PASS] test_initRefusals() (gas: 35912055)
+[PASS] test_kindAndLegs() (gas: 76247)
+[PASS] test_rateDecreaseRefusedWhileAnyLegIsDisabled() (gas: 4770243)
+[PASS] test_renounceGuardian() (gas: 120693)
+[PASS] test_unwrapBoundedByTheLegReserve() (gas: 1601642)
+Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 268.59ms (264.16ms CPU time)
+
+Ran 1 test for test/v2/WrapperInvariant.t.sol:WrapperInvariant_1_1e4
+[PASS]
+WrapperInvariant_1_1e4 invariants:
+[PASS] invariant_perLegConservation
+[PASS] invariant_rateAndGuardianRules
+[PASS] invariant_slackNeverDecreasesAndNoProfit
+[PASS] invariant_solventAndBalancesSumToSupply
+ WrapperInvariant_1_1e4 invariants (runs: 64, calls: 2048, reverts: 0)
+
+╭----------------+--------------+-------+---------+----------╮
+| Contract       | Selector     | Calls | Reverts | Discards |
++============================================================+
+| WrapperHandler | addReserve   | 134   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | cancel       | 170   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | disable      | 160   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | donate       | 141   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | execute      | 296   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | propose      | 175   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | shock        | 159   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | transferMeta | 157   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | unwrap       | 170   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | unwrapOp     | 179   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | warpToEta    | 166   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | wrap         | 141   | 0       | 0        |
+╰----------------+--------------+-------+---------+----------╯
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.73s (2.72s CPU time)
+
+Ran 11 tests for test/metatx/TradeTyped.t.sol:OrderRowsZetherTest
+[PASS] test_typedOpsVectors_CancelOrderRow() (gas: 2224000075)
+[PASS] test_typedOpsVectors_CancelUAOrderRow() (gas: 2224061830)
+[PASS] test_typedOpsVectors_CancelUAWrapOrderRow() (gas: 2220421786)
+[PASS] test_typedOpsVectors_CancelWrapOrderRow() (gas: 2220359854)
+[PASS] test_typedOpsVectors_ReceiverFeeRow() (gas: 2374199788)
+[PASS] test_typedOpsVectors_RelayFeeRow() (gas: 2202393366)
+[PASS] test_typedOpsVectors_UACancelNonceRow() (gas: 2311812922)
+[PASS] test_typedOpsVectors_UAReceiverFeeRow() (gas: 2374407757)
+[PASS] test_typedOpsVectors_UARelayFeeRow() (gas: 2202461094)
+[PASS] test_typedOpsVectors_UAWrapOrderRow() (gas: 2227779924)
+[PASS] test_typedOpsVectors_WrapOrderRow() (gas: 2227717504)
+Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 6.78s (4.44s CPU time)
+
+Ran 1 test for test/v2/WrapperInvariant.t.sol:WrapperInvariant_1_1
+[PASS]
+WrapperInvariant_1_1 invariants:
+[PASS] invariant_perLegConservation
+[PASS] invariant_rateAndGuardianRules
+[PASS] invariant_slackNeverDecreasesAndNoProfit
+[PASS] invariant_solventAndBalancesSumToSupply
+ WrapperInvariant_1_1 invariants (runs: 64, calls: 2048, reverts: 0)
+
+╭----------------+--------------+-------+---------+----------╮
+| Contract       | Selector     | Calls | Reverts | Discards |
++============================================================+
+| WrapperHandler | addReserve   | 134   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | cancel       | 170   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | disable      | 160   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | donate       | 141   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | execute      | 296   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | propose      | 175   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | shock        | 159   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | transferMeta | 157   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | unwrap       | 170   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | unwrapOp     | 179   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | warpToEta    | 166   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | wrap         | 141   | 0       | 0        |
+╰----------------+--------------+-------+---------+----------╯
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.48s (2.47s CPU time)
+
+Ran 1 test for test/v2/WrapperInvariant.t.sol:WrapperInvariant_1_max
+[PASS]
+WrapperInvariant_1_max invariants:
+[PASS] invariant_perLegConservation
+[PASS] invariant_rateAndGuardianRules
+[PASS] invariant_slackNeverDecreasesAndNoProfit
+[PASS] invariant_solventAndBalancesSumToSupply
+ WrapperInvariant_1_max invariants (runs: 64, calls: 2048, reverts: 0)
+
+╭----------------+--------------+-------+---------+----------╮
+| Contract       | Selector     | Calls | Reverts | Discards |
++============================================================+
+| WrapperHandler | addReserve   | 134   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | cancel       | 170   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | disable      | 160   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | donate       | 141   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | execute      | 296   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | propose      | 175   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | shock        | 159   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | transferMeta | 157   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | unwrap       | 170   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | unwrapOp     | 179   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | warpToEta    | 166   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | wrap         | 141   | 0       | 0        |
+╰----------------+--------------+-------+---------+----------╯
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.21s (2.20s CPU time)
+
+Ran 1 test for test/v2/WrapperInvariant.t.sol:WrapperInvariant_1e12_1
+[PASS]
+WrapperInvariant_1e12_1 invariants:
+[PASS] invariant_perLegConservation
+[PASS] invariant_rateAndGuardianRules
+[PASS] invariant_slackNeverDecreasesAndNoProfit
+[PASS] invariant_solventAndBalancesSumToSupply
+ WrapperInvariant_1e12_1 invariants (runs: 64, calls: 2048, reverts: 0)
+
+╭----------------+--------------+-------+---------+----------╮
+| Contract       | Selector     | Calls | Reverts | Discards |
++============================================================+
+| WrapperHandler | addReserve   | 134   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | cancel       | 170   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | disable      | 160   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | donate       | 141   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | execute      | 296   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | propose      | 175   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | shock        | 159   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | transferMeta | 157   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | unwrap       | 170   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | unwrapOp     | 179   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | warpToEta    | 166   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | wrap         | 141   | 0       | 0        |
+╰----------------+--------------+-------+---------+----------╯
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.45s (2.44s CPU time)
+
+Ran 2 tests for test/metatx/MsgSenderLint.t.sol:MsgSenderLintTest
+[PASS] test_msgSenderReadsArePinned() (gas: 131654594)
+[PASS] test_noExternalSelfCalls() (gas: 268739782)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 3.20s (3.18s CPU time)
+
+Ran 1 test for test/v2/WrapperInvariant.t.sol:WrapperInvariant_max_1
+[PASS]
+WrapperInvariant_max_1 invariants:
+[PASS] invariant_perLegConservation
+[PASS] invariant_rateAndGuardianRules
+[PASS] invariant_slackNeverDecreasesAndNoProfit
+[PASS] invariant_solventAndBalancesSumToSupply
+ WrapperInvariant_max_1 invariants (runs: 64, calls: 2048, reverts: 0)
+
+╭----------------+--------------+-------+---------+----------╮
+| Contract       | Selector     | Calls | Reverts | Discards |
++============================================================+
+| WrapperHandler | addReserve   | 134   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | cancel       | 170   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | disable      | 160   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | donate       | 141   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | execute      | 296   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | propose      | 175   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | shock        | 159   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | transferMeta | 157   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | unwrap       | 170   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | unwrapOp     | 179   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | warpToEta    | 166   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | wrap         | 141   | 0       | 0        |
+╰----------------+--------------+-------+---------+----------╯
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.17s (2.16s CPU time)
+
+Ran 6 tests for test/metatx/MtxCtx.t.sol:MtxCtxTest
+[PASS] test_ctxEqualsTokenViews() (gas: 3497774426)
+[PASS] test_digestViewsEqualKats() (gas: 1178306741)
+[PASS] test_hedera_hip632CallerIsToken() (gas: 2725577)
+[PASS] test_minGas_mldsa65UaExecute() (gas: 56371305)
+[PASS] test_minGas_smartKeyAccountMtxExecute() (gas: 7318488)
+[PASS] test_relayedCall_writesRecordedSlots() (gas: 3853012)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 1.24s (1.53s CPU time)
+
+Ran 1 test for test/v2/WrapperInvariant.t.sol:WrapperInvariant_3_7
+[PASS]
+WrapperInvariant_3_7 invariants:
+[PASS] invariant_perLegConservation
+[PASS] invariant_rateAndGuardianRules
+[PASS] invariant_slackNeverDecreasesAndNoProfit
+[PASS] invariant_solventAndBalancesSumToSupply
+ WrapperInvariant_3_7 invariants (runs: 64, calls: 2048, reverts: 0)
+
+╭----------------+--------------+-------+---------+----------╮
+| Contract       | Selector     | Calls | Reverts | Discards |
++============================================================+
+| WrapperHandler | addReserve   | 134   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | cancel       | 170   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | disable      | 160   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | donate       | 141   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | execute      | 296   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | propose      | 175   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | shock        | 159   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | transferMeta | 157   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | unwrap       | 170   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | unwrapOp     | 179   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | warpToEta    | 166   | 0       | 0        |
+|----------------+--------------+-------+---------+----------|
+| WrapperHandler | wrap         | 141   | 0       | 0        |
+╰----------------+--------------+-------+---------+----------╯
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.21s (2.20s CPU time)
+
+Ran 43 tests for test/metatx/TypedOps.t.sol:TypedOpsTest
+[PASS] test_flatUaUnwrapGone() (gas: 26938)
+[PASS] test_genericEntriesKept() (gas: 737465)
+[PASS] test_iMetaTxIdPinned() (gas: 28127)
+[PASS] test_namedCancelNonceFromAccount() (gas: 37257736)
+[PASS] test_namedCancelNonceOwnLane() (gas: 203327)
+[PASS] test_namedEntryEnvelopeTamper() (gas: 115048032)
+[PASS] test_namedEntryFeeClass() (gas: 88058004)
+[PASS] test_namedEntryOtherOpDigestRefused() (gas: 1372674)
+[PASS] test_namedEntryOtherToken() (gas: 117062815)
+[PASS] test_namedEntryReplayRefused() (gas: 159295525)
+[PASS] test_namedUADerivedSigner() (gas: 640096)
+[PASS] test_namedUADerivedUnwrap() (gas: 1852524)
+[PASS] test_namedUADerivedUnwrapToUA() (gas: 1618407)
+[PASS] test_namedUAEmptySignatureRefused() (gas: 63564)
+[PASS] test_namedUAMsig() (gas: 1816719)
+[PASS] test_relayFeeRouterRunsNamedEntry() (gas: 7625285)
+[PASS] test_removedAliasesGone() (gas: 109039)
+[PASS] test_typedOpsVectors_AddKey() (gas: 116061498)
+[PASS] test_typedOpsVectors_AddReserve() (gas: 144365602)
+[PASS] test_typedOpsVectors_Burn() (gas: 147019485)
+[PASS] test_typedOpsVectors_CancelNonce() (gas: 225693881)
+[PASS] test_typedOpsVectors_CancelRecovery() (gas: 137276341)
+[PASS] test_typedOpsVectors_DelegateRevoke() (gas: 179259437)
+[PASS] test_typedOpsVectors_ExecuteAccount() (gas: 159160591)
+[PASS] test_typedOpsVectors_ExecuteWallet() (gas: 107664014)
+[PASS] test_typedOpsVectors_HederaWallet() (gas: 210965404)
+[PASS] test_typedOpsVectors_PayUnderMandate() (gas: 255022780)
+[PASS] test_typedOpsVectors_RemoveKey() (gas: 141479163)
+[PASS] test_typedOpsVectors_RevokeMandate() (gas: 89656816)
+[PASS] test_typedOpsVectors_RotateKey() (gas: 119721042)
+[PASS] test_typedOpsVectors_SetGuardian() (gas: 140688343)
+[PASS] test_typedOpsVectors_SetMandate() (gas: 150692904)
+[PASS] test_typedOpsVectors_SetPayee() (gas: 96601346)
+[PASS] test_typedOpsVectors_UABurn() (gas: 150668951)
+[PASS] test_typedOpsVectors_UAUnwrap() (gas: 162514911)
+[PASS] test_typedOpsVectors_UAUnwrapLeg() (gas: 198193801)
+[PASS] test_typedOpsVectors_UAUnwrapToUA() (gas: 262162028)
+[PASS] test_typedOpsVectors_Unwrap() (gas: 155206779)
+[PASS] test_typedOpsVectors_UnwrapLeg() (gas: 194544215)
+[PASS] test_typedOpsVectors_UnwrapToUA() (gas: 258511950)
+[PASS] test_typedOpsVectors_Wrap() (gas: 65774447)
+[PASS] test_typedOpsVectors_WrapLeg() (gas: 144268708)
+[PASS] test_typedOpsVectors_WrapToUA() (gas: 148262404)
+Suite result: ok. 43 passed; 0 failed; 0 skipped; finished in 10.16s (8.99s CPU time)
+
+Ran 13 tests for test/metatx/TradeTyped.t.sol:OrderRowsTokenTest
+[PASS] test_c6EntriesNotAllowlisted() (gas: 2471246)
+[PASS] test_typedOpsVectors_CancelDexOrderRow() (gas: 2272140561)
+[PASS] test_typedOpsVectors_CancelOrderRow() (gas: 2282671746)
+[PASS] test_typedOpsVectors_CancelUAOrderRow() (gas: 2282733581)
+[PASS] test_typedOpsVectors_CancelUAWrapOrderRow() (gas: 2279093797)
+[PASS] test_typedOpsVectors_CancelWrapOrderRow() (gas: 2279031862)
+[PASS] test_typedOpsVectors_ReceiverFeeRow() (gas: 2432774267)
+[PASS] test_typedOpsVectors_RelayFeeRow() (gas: 2260967540)
+[PASS] test_typedOpsVectors_UACancelNonceRow() (gas: 2370485079)
+[PASS] test_typedOpsVectors_UAReceiverFeeRow() (gas: 2432982501)
+[PASS] test_typedOpsVectors_UARelayFeeRow() (gas: 2261035150)
+[PASS] test_typedOpsVectors_UAWrapOrderRow() (gas: 2361671853)
+[PASS] test_typedOpsVectors_WrapOrderRow() (gas: 2361610075)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 9.09s (4.33s CPU time)
+
+Ran 3 tests for test/v2/ExplicitParamsCalldata.t.sol:ExplicitParamsCalldataTest
+[PASS] test_r1_kemHashCommitFits() (gas: 17619333)
+[PASS] test_x0_calldata() (gas: 6806283981)
+[PASS] test_x0_reassemblesPayload() (gas: 2723921)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 17.61s (17.61s CPU time)
+
+Ran 10 tests for test/v2/Wrapped.t.sol:WrappedTest
+[PASS] test_disableRateAdjustable_cancelsThePendingChange_andFixesTheRate() (gas: 80772564)
+[PASS] test_disableRateAdjustable_withNothingPending_emitsNoCancel() (gas: 79620242)
+[PASS] test_guardianRenounces() (gas: 78897708)
+[PASS] test_guardianRole_disableWrap_oneWay_andFlagGates() (gas: 79039180)
+[PASS] test_init_legCount() (gas: 30399154)
+[PASS] test_libraryErrorsAreInTheTokenAbi() (gas: 1446018548)
+[PASS] test_rateRole_grantRevokeRenounce_leaveTheRate() (gas: 80086907)
+[PASS] test_singleAssetAbi_onlyWithExactlyOneLeg() (gas: 82061602)
+[PASS] test_underlyingStateLivesInItsNamespace() (gas: 80603291)
+[PASS] test_validFlags_wrappedKind() (gas: 77462421)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 39.04s (39.04s CPU time)
+
+Ran 1 test for test/v2/DexInvariant.t.sol:DexInvariantTest
+[PASS]
+DexInvariantTest invariants:
+[PASS] invariant_dexHoldsNoAllowance
+[PASS] invariant_dexHoldsNothing
+[PASS] invariant_everyReceiveAtLeastTheLimit
+[PASS] invariant_makersNeverGetHybridSurplus
+[PASS] invariant_pulledNeverAboveAmount
+ DexInvariantTest invariants (runs: 128, calls: 8192, reverts: 0)
+
+╭------------+----------+-------+---------+----------╮
+| Contract   | Selector | Calls | Reverts | Discards |
++====================================================+
+| DexHandler | batch    | 2050  | 0       | 0        |
+|------------+----------+-------+---------+----------|
+| DexHandler | exchange | 2065  | 0       | 0        |
+|------------+----------+-------+---------+----------|
+| DexHandler | hybrid   | 2087  | 0       | 0        |
+|------------+----------+-------+---------+----------|
+| DexHandler | settle   | 1990  | 0       | 0        |
+╰------------+----------+-------+---------+----------╯
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 42.72s (42.66s CPU time)
+
+Ran 65 test suites in 42.73s (167.75s CPU time): 740 tests passed, 0 failed, 1 skipped (741 total tests)
+rc=0

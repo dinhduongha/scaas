@@ -1,6 +1,6 @@
 // Generates smartcontracts/vectors/ua/kinds.json and structures.json: the UA identity layer of src/ua.js on deterministic
 // keys — the kind table, every derived kind's valid key data with its id and keyHash, invalid key data with the error
-// every implementation must give, native ids, canonical ids, ua_msg, the portable PoP digests (UA-8: no chain context), UAAuth
+// every implementation must give, native ids, canonical ids, ua_msg, the portable PoP digests (UA-8: no chain context; typed records, typed-signing), UAAuth
 // and member digests. Every valid row
 // is accepted and every invalid row refused by src/ua.js before it is written; clients/ua-rs recomputes all of it with
 // independent curve code (k256, p256, curve25519-dalek, arkworks). MuSig2 / FROST rows are valid layouts of valid points,
@@ -456,7 +456,7 @@ const messages = [...[...key.keys(), 0x0120, 0x0142].map((kind) => [kind, 'pop',
   .map(([kind, purpose, version]) => ({ kind, purpose, version, purposeTag: hex(ua.purposeTag(purpose, version)),
     digest: hex(digest), uaMsg: hex(ua.uaMessage(kind, ua.purposeTag(purpose, version), digest)) }));
 
-// --- structures.json: the portable pop (UA-8), UAAuth, member ---
+// --- structures.json: the portable pop (UA-8; typed records, typed-signing TS-D1), UAAuth, member ---
 const registry = '0x5ca0000000000000000000000000000000000001';
 // the chain contexts of the chain-bound UAAuth rows (and of signatures.json); the PoP rows have none (UA-8 P1)
 const contexts = {
@@ -470,27 +470,27 @@ const zero = hex(z32);
 const hex0 = zero;
 const pqzH = hex(pqzKeyHash);
 const holder = hex(id(0x0130));
-// word inputs (each 0 when absent): a PQZ key's keyHash, the initial KEM record's hash, the R_REG proof's hash
+// word inputs (0 when absent; no KEM record = the zero record's hash hashStruct(UAKemRecord{ua, 0, 0, 0}), TS-D2): a PQZ
+// key's keyHash, the initial KEM record's struct hash, the R_REG proof's hash
 const kemH = hex(label('kem record'));
 const proofH = hex(label('pqz pop'));
+const noKem = (u) => hex(ua.kemRecordHash({ ua: u }));
 const pop = [
-  { kind: 0x0101, ua: derivedId, pqzKeyHash: hex0, kemRecordHash: hex0, pqzPopHash: hex0 },
-  { kind: 0x0141, ua: hex(id(0x0141)), pqzKeyHash: hex0, kemRecordHash: hex0, pqzPopHash: hex0 },
-  { kind: 0x0130, ua: holder, pqzKeyHash: hex0, kemRecordHash: hex0, pqzPopHash: hex0 },
-  { kind: 0x0130, ua: holder, pqzKeyHash: pqzH, kemRecordHash: hex0, pqzPopHash: proofH },
+  { kind: 0x0101, ua: derivedId, pqzKeyHash: hex0, kemRecordHash: noKem(derivedId), pqzPopHash: hex0 },
+  { kind: 0x0141, ua: hex(id(0x0141)), pqzKeyHash: hex0, kemRecordHash: noKem(id(0x0141)), pqzPopHash: hex0 },
+  { kind: 0x0130, ua: holder, pqzKeyHash: hex0, kemRecordHash: noKem(holder), pqzPopHash: hex0 },
+  { kind: 0x0130, ua: holder, pqzKeyHash: pqzH, kemRecordHash: noKem(holder), pqzPopHash: proofH },
   { kind: 0x0130, ua: holder, pqzKeyHash: hex0, kemRecordHash: kemH, pqzPopHash: hex0 },
   { kind: 0x0130, ua: holder, pqzKeyHash: pqzH, kemRecordHash: kemH, pqzPopHash: proofH },
-  { kind: 0x0130, ua: holder, pqzKeyHash: pqzH, kemRecordHash: hex0, pqzPopHash: kemH },
-].map((p) => {
-  const d = ua.portablePopDigest(p);
-  return { ...p, portablePopDigest: hex(d), registrationDigest: hex(ua.registrationDigest(d, p.pqzPopHash)) };
-});
-assert(new Set(pop.map((p) => p.registrationDigest)).size === pop.length, 'registrationDigest must separate ua and every attribute hash');
-// R_REG's message: uaMessage(0x0142, pop v2, portablePopDigest(ua, keyHash(0x0142, pqzKey), kemRecordHash)), per holder kind
-const pqzReg = [[0x0130, hex0], [0x0131, kemH], [0x0132, hex0]].map(([kind, kemRecordHash]) => {
+  { kind: 0x0130, ua: holder, pqzKeyHash: pqzH, kemRecordHash: noKem(holder), pqzPopHash: kemH },
+].map((p) => ({ ...p, portableRecordDigest: hex(ua.portableRecordDigest(p)), registrationDigest: hex(ua.registrationDigest(p)) }));
+assert(new Set(pop.map((p) => p.registrationDigest)).size === pop.length, 'registrationDigest must separate ua, kind and every attribute hash');
+// R_REG's message: uaMessage(0x0142, pop v2, portableRecordDigest(ua, kind, keyHash(0x0142, pqzKey), kemRecordHash)), per holder kind
+const pqzReg = [[0x0130, null], [0x0131, kemH], [0x0132, null]].map(([kind, kem]) => {
   const u = hex(id(kind));
-  const d = ua.portablePopDigest({ ua: u, pqzKeyHash: pqzH, kemRecordHash });
-  return { kind, ua: u, pqzKeyHash: pqzH, kemRecordHash, portablePopDigest: hex(d), pqzRegMessage: hex(ua.uaMessage(0x0142, ua.POP_V2_TAG, d)) };
+  const kemRecordHash = kem ?? noKem(u);
+  const d = ua.portableRecordDigest({ ua: u, kind, pqzKeyHash: pqzH, kemRecordHash });
+  return { kind, ua: u, pqzKeyHash: pqzH, kemRecordHash, portableRecordDigest: hex(d), pqzRegMessage: hex(ua.uaMessage(0x0142, ua.POP_V2_TAG, d)) };
 });
 assert(new Set(pqzReg.map((p) => p.pqzRegMessage)).size === pqzReg.length, 'pqz_reg_message must separate holder and KEM record');
 // msig_pqz_eligible: the weight of members outside 0x0130-0x0133 must be below the threshold (CTR-PQZ-12)
@@ -507,7 +507,7 @@ const pqzMsig = [
   valid.push(row(0x0120, d));
   const u = ua.deriveUA(0x0120, d);
   return { reason, keyData: hex(d), ua: hex(u), eligible,
-    portablePopDigest: hex(ua.portablePopDigest({ ua: u, pqzKeyHash: eligible ? pqzKeyHash : z32 })) };
+    portableRecordDigest: hex(ua.portableRecordDigest({ ua: u, kind: 0x0120, pqzKeyHash: eligible ? pqzKeyHash : z32 })) };
 });
 const memberTag = ua.purposeTag('member');
 const uaAuth = [['A', 1], ['A', 2], ['B', 1], ['C', 1], ['E', 1]].map(([context, generation]) => {
@@ -541,5 +541,5 @@ mkdirSync(OUT, { recursive: true });
 const write = (name, obj) => writeFileSync(join(OUT, name), `${JSON.stringify(obj, null, 2)}\n`);
 write('kinds.json', { note, version: 1, constants, kinds, schemes, pqzKey: hex(pqzKey), pqzKeyHash: pqzH, groups, purposes, valid, invalid, natives, nativeInvalid, nativeSpace,
   messages, canonicalIds });
-write('structures.json', { note, version: 2, contexts, pop, pqzReg, pqzMsig, uaAuth, member });
+write('structures.json', { note, version: 3, contexts, pop, pqzReg, pqzMsig, uaAuth, member });
 console.log(`kinds.json: ${valid.length} valid, ${invalid.length} invalid; structures.json written to ${OUT}`);

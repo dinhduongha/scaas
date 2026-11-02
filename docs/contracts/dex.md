@@ -119,7 +119,7 @@ struct TradeOrder {
 }
 // "TradeOrder(address from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,"
 // "address relayer,address dex,address destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"
-// CancelOrder(bytes32 orderHash)
+// CancelOrder(TradeOrder order)TradeOrder(…)   — nested since typed-signing C6 (was CancelOrder(bytes32 orderHash))
 // InvalidateNonces(address from,uint256 batch,uint256 minNonce)
 ```
 
@@ -182,11 +182,12 @@ base `ERC20MetaTx` ([CTR-MTX-07](metatx.md#CTR-MTX-07)):
 ```solidity
 struct TradeFill { uint256 sellFill; uint256 receiveFill; uint256 dexFee; address submitter; }
 function mtxTrade(TradeOrder calldata o, bytes calldata sig, TradeFill calldata f) external nonReentrant;
-function mtxCancelOrder(TradeOrder calldata o, bytes calldata sig) external nonReentrant;   // CancelOrder(bytes32 orderHash)
+function mtxCancelOrder(TradeOrder calldata o, bytes calldata sig) external nonReentrant;   // CancelOrder(TradeOrder order), nested; CancelWrapOrder when o.dex == o.receiveToken
 function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig) external nonReentrant;
 mapping(bytes32 => uint256) public pulled;                         // orderHash => amount pulled (amount = closed)
 mapping(address => mapping(uint256 => uint256)) public minNonce;   // from => order lane => min valid nonce
-function tradeOrderDigest(TradeOrder calldata o) external view returns (bytes32);
+function tradeOrderDigest(TradeOrder calldata o) external view returns (bytes32);   // dex == receiveToken (a wrap) hashes as WrapOrder, every other order as TradeOrder
+function cancelOrderDigest(TradeOrder calldata o) external view returns (bytes32);  // the nested cancel, not a digest of a digest
 ```
 
 `mtxTrade` checks, in order (error in brackets; every error carries the order hash where it has one):
@@ -242,7 +243,7 @@ struct UATradeOrder {
 }
 // "UATradeOrder(bytes32 from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,"
 // "address relayer,address dex,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"
-// "UAInvalidateNonces(bytes32 from,uint256 batch,uint256 minNonce)"; cancel: CancelOrder(bytes32 orderHash), orderHash = the UATradeOrder digest
+// "UAInvalidateNonces(bytes32 from,uint256 batch,uint256 minNonce)"; cancel: CancelUAOrder(UATradeOrder order), nested (typed-signing C6); `uaTrade`, `uaCancelOrder`, `uaInvalidateNonces` take `UASig`
 function uaTrade(UATradeOrder calldata o, bytes calldata auth, TradeFill calldata f) external;           // only o.dex
 function uaCancelOrder(UATradeOrder calldata o, bytes calldata auth) external;                          // never expires
 function uaInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, bytes calldata auth) external; // strictly up
@@ -294,14 +295,16 @@ lock an address out forever. An order with `nonce ≥ 2^128` is refused at the p
 lane floor could ever reach it, only a per-order cancel would. The venue's intake and `clientkeys` `checkTradeOrder` refuse it the same way. A signer with orders on several tokens cancels per token; the off-chain book drops them
 at once. For outside-token orders the DEX keeps the same state and entry points ([CTR-DEX-18](#CTR-DEX-18)).
 
+**Nested cancels (typed-signing C6, TS-D19; controller call, owner may override).** A cancel nests the struct the order was signed in, so a wallet shows the order's fields and not a hash: `CancelOrder(TradeOrder order)`, `CancelUAOrder(UATradeOrder order)`, `CancelWrapOrder(WrapOrder order)`, `CancelUAWrapOrder(UAWrapOrder order)` in the token's domain, `CancelDexOrder(DexOrder order)` in the DEX's. The `pulled` key stays the order digest, so the cancel binds the full order and closes exactly what it names. A wrap order (`dex == receiveToken`) cancels as `CancelWrapOrder`, through the same `mtxCancelOrder` / `uaCancelOrder`; a `CancelOrder` of such an order can no longer verify, and `clientkeys` `checkCancel` refuses to build it. Views `cancelOrderDigest(TradeOrder)`, `cancelUAOrderDigest(UATradeOrder)` and, on the DEX, `cancelDexOrderDigest(sellToken, TradeOrder)` replace the views over a digest (a nested struct hashes the struct); the cancel carries no deadline of its own (`UACancelNonce` and the owner ops are the typed structs that do). The node's job takes the cancel as the named entry `mtxCancelOrder` / `uaCancelOrder` / `mtxCancelOrders` ([NODE-JOB-20](../node/job-api.md#NODE-JOB-20)).
+
 ## 4. The DEX's side: `mtxSettle`
 
 <a id="CTR-DEX-16"></a>**CTR-DEX-16** — **Everything goes through the DEX, and the DEX ends every settlement with
 unchanged balances** (owner).
 
 ```solidity
-struct Leg { address sellToken; uint8 shape; bytes order; bytes sig; uint256 fill; }  // fill = sellFill of this leg in this call; shape: CTR-DEX-26 (BUILT, UA-5b)
-struct Settlement { bytes32 ref; Leg taker; Leg[] makers; }               // ref: chosen by the submitter, echoed in events only
+struct DexLeg { address sellToken; uint8 shape; TradeOrder order; UATradeOrder uaOrder; bytes sig; UASig auth; uint256 fill; }  // fill = sellFill of this leg in this call; shape: CTR-DEX-26; the members of the other shape stay zero (typed-signing C6, Appendix X row 20; was `Leg` with opaque `bytes order`)
+struct Settlement { bytes32 ref; DexLeg taker; DexLeg[] makers; }               // ref: chosen by the submitter, echoed in events only
 function mtxSettle(Settlement[] calldata s) external nonReentrant returns (bool[] memory ok); // each settlement atomic (low-level self-call)
 ```
 
@@ -379,10 +382,11 @@ price, rounded in the maker's favour, and the node only emits matches that pass 
 change). A leg names its order's shape:
 
 ```solidity
-struct Leg         { address sellToken; uint8 shape; bytes order; bytes sig; uint256 fill; }
-struct ExchangeLeg { address sellToken; uint8 shape; bytes order; bytes sig; uint256 sellFill; uint256 receiveFill; }
-// shape 0: order = abi.encode(TradeOrder)    — today's legs
-// shape 1: order = abi.encode(UATradeOrder)  — sig = the registry auth (derived) or the native signature
+struct DexLeg      { address sellToken; uint8 shape; TradeOrder order; UATradeOrder uaOrder; bytes sig; UASig auth; uint256 fill; }
+struct ExchangeLeg { address sellToken; uint8 shape; TradeOrder order; UATradeOrder uaOrder; bytes sig; UASig auth; uint256 sellFill; uint256 receiveFill; }
+// shape 0: order = the TradeOrder, sig = its signature      — today's legs
+// shape 1: uaOrder = the UATradeOrder, auth = the registry auth (derived) or the native signature in auth.signature
+// (typed-signing C6: the opaque `bytes order` / `bytes sig` became these members; a dirty address word in a leg now reverts the whole mtxSettle at the outer re-encoding)
 event UALegSettled(bytes32 indexed ref, bytes32 indexed orderHash, bytes32 indexed from, bytes32 destination,
                    uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
 event UAExchangeLegSettled(bytes32 indexed ref, bytes32 indexed orderHash, bytes32 indexed from, bytes32 destination,
@@ -526,7 +530,7 @@ by the DEX** (a contract SCaaS does not control cannot verify it):
 | Checks | the full [CTR-DEX-15](#CTR-DEX-15) list, enforced by the DEX: relayer binding, expiry, nonce, flags, zero amounts, `minFill ≤ amount`, fee cap, signature (`SigCheck.isValid` with the ERC-1271 cap, [CTR-DEX-08](#CTR-DEX-08)), `p < amount`, `sellFill > 0`, overfill, the signer's minimum fill, price, fee bound |
 | Flags | `IOC` allowed; **`ESCROW` refused** (`BadFlags`) — the fill is already pulled exactly into the DEX |
 | Pull | `DexPuller.pull(token, from, sellFill)` = `safeTransferFrom(from, DEX, sellFill)` under the party's allowance to the **puller**, never to the DEX ([CTR-DEX-22](#CTR-DEX-22)); an EOA may approve a contract on a token SCaaS does not control |
-| Cancel | `mtxCancelOrders(DexOrder[] orders, bytes[] sigs)` (`CancelOrder(bytes32 orderHash)` in the DEX domain; closed or bad-signature items skipped, no revert of the batch) and `mtxInvalidateNonces(from, batch, newMin, sig)` (`InvalidateNonces(address from,uint256 batch,uint256 minNonce)` in the DEX domain) |
+| Cancel | `mtxCancelOrders(DexOrder[] orders, bytes[] sigs)` (`CancelDexOrder(DexOrder order)` in the DEX domain, nested since typed-signing C6; closed or bad-signature items skipped, no revert of the batch) and `mtxInvalidateNonces(from, batch, newMin, sig)` (`InvalidateNonces(address from,uint256 batch,uint256 minNonce)` in the DEX domain) |
 | Backstop | conservation ([CTR-DEX-16](#CTR-DEX-16)); on the exchange path none for a **receive-only** outside token with a transfer fee (the DEX measures its own balance, the fee comes out of the recipient's side, so a signer is paid below its signed floor and conservation balances; loss bounded by the token's fee; the `mtxSettle` path pulls both tokens and is safe): list only exact-transfer tokens, delist on a fee (review C6-4; a recipient-balance check was not built) |
 | Parties | native only: a UA holds no outside token ([CTR-UA-27](accounts.md#CTR-UA-27)); a shape-1 leg in an outside token reverts `UALegNotLedger` ([CTR-DEX-26](#CTR-DEX-26)) |
 | Transitional (BUILT, P2b-2) | on the DEX: `dexOrderDigest(sellToken, o)`, `cancelOrderDigest`, `invalidateNoncesDigest`, `pulled`, `minNonce`, `puller()`; `TradeLib`'s checks on the DEX's own `scaas.trade` state, the leg's token as the sell token (`SelfOrder` if `from` is it); `BadSignature(digest)`, `LengthMismatch`; payouts by `SafeERC20`; no `checkOrder`: the [section 10](#10-intake-reads-and-invariants) reads are the intake (controller ruling, pending the owner); limitation: no HIP-632 branch on DEX signatures, so a Hedera ED25519 account cannot sign a `DexOrder` or a DEX cancel |
@@ -538,7 +542,7 @@ by the DEX** (a contract SCaaS does not control cannot verify it):
 multi-hop routes, cycles — instead of `makers[]`; the same order, no new signature** (owner). Beside `mtxSettle`:
 
 ```solidity
-struct ExchangeLeg  { address sellToken; uint8 shape; bytes order; bytes sig; uint256 sellFill; uint256 receiveFill; } // receiveFill = floor; tagged (CTR-DEX-26, BUILT UA-5b)
+struct ExchangeLeg  { address sellToken; uint8 shape; TradeOrder order; UATradeOrder uaOrder; bytes sig; UASig auth; uint256 sellFill; uint256 receiveFill; } // receiveFill = floor; tagged (CTR-DEX-26; explicit members since typed-signing C6)
 struct Interaction  { address target; bytes data; }                       // no value: the DEX holds no native coin
 struct ExchangePlan { bytes32 ref; ExchangeLeg[] legs; address[] extraTokens; } // extraTokens: intermediate hop tokens
 function mtxExchange(ExchangePlan calldata p, Interaction[] calldata interactions) external nonReentrant;  // (a) DEX calls

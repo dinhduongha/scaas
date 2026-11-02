@@ -26,6 +26,7 @@ use crate::elgamal::{
 /// Largest wasm table without `allowLargeTable` (2^24 entries, 256 MiB).
 const WASM_TABLE_BITS_DEFAULT_MAX: u32 = 24;
 use crate::envelope::{self, MetaTx};
+use crate::typed;
 use crate::keys::{seed_from_mnemonic, ZetherKey};
 use crate::schnorr;
 use crate::zether::{
@@ -175,8 +176,6 @@ fn sc<C: ZCurve>(s: &Fr<C>) -> String {
 }
 
 /// `mtxConfidentialTransferSingle` — a direct call has no outer fee; relayed, the same bytes are the envelope's `data`.
-const TRANSFER_SINGLE: &str = "mtxConfidentialTransferSingle(bytes,bytes,bytes,bytes32,bytes)";
-
 fn opt_str<'a>(v: &'a Value, k: &str) -> R<Option<&'a str>> {
     match v.get(k).filter(|x| !x.is_null()) {
         None => Ok(None),
@@ -208,11 +207,11 @@ fn y_aud<C: ZCurve>(v: &Value) -> R<G<C>> {
 
 /// The entry of a stored form (CTR-ZTH-38): `mtxConfidentialTransfer` is the token's default (BUNDLE, or commit-reveal
 /// on a COMPACT token), `mtxConfidentialTransferCompact` commit-reveal on every token, (NONE and `…NoBundle` retired, review C0-3).
-fn transfer_multi_sig(mode: TransferMode, compact: bool) -> &'static str {
+fn transfer_multi_name(mode: TransferMode, compact: bool) -> &'static str {
     match mode {
-        TransferMode::Bundle => "mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)",
-        TransferMode::Hash if compact => "mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)",
-        TransferMode::Hash => "mtxConfidentialTransferCompact(bytes,bytes,bytes,bytes32,bytes)",
+        TransferMode::Bundle => "mtxConfidentialTransfer",
+        TransferMode::Hash if compact => "mtxConfidentialTransfer",
+        TransferMode::Hash => "mtxConfidentialTransferCompact",
     }
 }
 
@@ -244,7 +243,7 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
         "entryRef": hx(&schnorr::entry_ref(h.chain_id, &h.chain_uid, &h.token, &k.ua(), h.send_counter)),
         "salt": hx(&st.header.salt),
         "record": hx(&st.record()),
-        "directCalldata": hx(&envelope::transfer_call(TRANSFER_SINGLE, &payload, &proof, &h.beneficiary)),
+        "directCalldata": hx(&envelope::transfer_single_call(&payload, &proof, &h.beneficiary)),
     });
     if include_witness(v) {
         out["witness"] = json!({"x": sc::<C>(&w.x), "v": sc::<C>(&w.v), "s": sc::<C>(&w.s), "b": sc::<C>(&w.b),
@@ -312,7 +311,7 @@ pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens
         "entryRef": hx(&schnorr::entry_ref(h.chain_id, &h.chain_uid, &h.token, &k.ua(), h.send_counter)),
         "salt": hx(&st.header.salt),
         "memo": hx(&w.memo),
-        "directCalldata": hx(&envelope::transfer_call(transfer_multi_sig(mode, compact), &payload, &proof, &h.beneficiary)),
+        "directCalldata": hx(&envelope::transfer_multi_call(transfer_multi_name(mode, compact), &payload, &proof, &h.beneficiary)),
     });
     if include_witness(v) {
         out["witness"] = json!({"x": sc::<C>(&w.x), "s": sc::<C>(&w.s), "b": sc::<C>(&w.b), "bPrime": sc::<C>(&w.b_prime),
@@ -373,7 +372,7 @@ struct Source {
 
 /// The source of a recovery: `payload` (the transfer's calldata argument, any entry) or `entry` =
 /// `transferEntry(entryRef)` with `sendCounter`: the record `R` (single: `16 + 4P` bytes exactly, multi `16 + 5P·M`; every
-/// form keeps `R` in state, review C0-3) and, for a commit-reveal entry, `memo` = `transferMemo(entryRef)` (`49 + 40·M`).
+/// form keeps `R` in state, review C0-3) and, for a commit-reveal entry, `memo` = `transferMemo(entryRef)` (`17 + 40·M`).
 fn recovery_source<C: ZCurve>(v: &Value) -> R<Source> {
     let p = point_len::<C>();
     if v.get("payload").is_some_and(|x| !x.is_null()) {
@@ -653,31 +652,32 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
         "verifyTransfer" => verify_json::<C>(&gens(), v, false),
         "verifyTransferMulti" => verify_multi_json::<C>(&gens(), v),
         "verifyBurn" => verify_json::<C>(&gens(), v, true),
-        // The `register` PoP (UA-8 P1, portable: no chain, chainUid or registry; a Zether UA holds no PQZ key or KEM record).
+        // The `register` PoP (UA-8 P1, portable: no chain, chainUid or registry; a Zether UA holds no PQZ key or KEM record),
+        // over the typed `UARegistration` (typed-signing TS-D3); `popDigest` is the typed `UAPortableRecord` digest.
         "pop" => {
             let k = key::<C>(v)?;
-            let rd = schnorr::zether_registration_digest(&k.ua());
+            let rd = schnorr::zether_registration_digest::<C>(&k.ua());
             Ok(json!({
                 "kind": zether_kind::<C>(), "Y": hx(&k.encoded_y()), "UA": hx(&k.ua()),
-                "popDigest": hx(&schnorr::portable_pop_digest(&k.ua(), &[0u8; 32], &[0u8; 32])), "registrationDigest": hx(&rd),
+                "popDigest": hx(&schnorr::zether_record_digest::<C>(&k.ua())), "registrationDigest": hx(&rd),
                 "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::pop_tag(), &rd)),
                 "pop": hx(&schnorr::zether_pop(&k, rng)),
             }))
         }
-        // A self account's owner op (roll-over, mode): `sig` for `mtxRollOverSigned` / `mtxSetRollOverMode`.
+        // A self account's owner op (roll-over, mode): `sig` is the raw R‖z of `UASig{signature: sig}` for `mtxRollOverSigned` / `mtxSetRollOverMode`.
         "ownerAuth" => {
             let k = key::<C>(v)?;
             let d = fixed::<32>(v, "digest")?;
             Ok(json!({
                 "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::purpose_tag("zether-owner"), &d)),
-                "auth": hx(&schnorr::owner_auth(&k, &d, rng)),
+                "sig": hx(&schnorr::owner_auth(&k, &d, rng)),
             }))
         }
         // The Zether UA signs every UA-ledger write (UA-6): `sig` = Schnorr by x over `ua_message(purpose, digest)`.
         "uaSig" => {
             let k = key::<C>(v)?;
             let (purpose, d) = (get(v, "purpose")?.as_str().ok_or("`purpose` must be a string")?, fixed::<32>(v, "digest")?);
-            // the purposes a Zether UA signs (no `member`: the kind is SIGNING, not MEMBER; no `zether-auth`: no PQZ key); `pop` has its own command. `sig` is the raw R‖z; `requireAuthorized` wants abi.encode(bytes(""), sig)
+            // the purposes a Zether UA signs (no `member`: the kind is SIGNING, not MEMBER; no `zether-auth`: no PQZ key); `pop` has its own command. `sig` is the raw R‖z: a token's `bytes auth` wants abi.encode(bytes(""), sig), `requireAuthorized` takes UASig{signature: sig}
             const PURPOSES: [&str; 8] = ["metatx", "metatx-cancel", "zether-owner", "keyop", "receiver-fee", "vp", "vc-anchor", "trade"];
             if !PURPOSES.contains(&purpose) {
                 return Err(format!("`purpose` must be one of {PURPOSES:?} (the PoP has its own command `pop`)"));
@@ -705,6 +705,15 @@ pub fn call(cmd: &str, input: &str) -> R<String> {
             json!({"binding": hx(&envelope::envelope_binding(chain, &uid, &token, &m)),
                    "digest": hx(&envelope::digest(chain, &uid, &token, &m))})
         }
+        // typed-signing C7: the typed digest of any Zether op (`typed::OPS`: transfers, unshield, roll-overs, owner ops, ...);
+        // `ownerAuth` signs the owner ones, the subject's ECDSA / UA signature the rest. `message` is the struct, named fields.
+        "typedDigest" => {
+            let op = get(&v, "op")?.as_str().ok_or("`op` must be a string")?;
+            typed::typed_digest(op, num(&v, "chainId")?, &fixed::<32>(&v, "chainUid")?, &fixed::<20>(&v, "token")?, get(&v, "message")?)?
+        }
+        // typed-signing C7: a prover build as a named relayed entry (`mtxConfidentialTransferSingle(Envelope, ZetherSingle, proof, sig)`, ...):
+        // the typed `message`, the `digest` the wallet signs and, with `sig`, the `calldata`. The generic `envelope` path stays.
+        "namedCall" => typed::named_call(&v)?,
         _ => match get(&v, "curve")?.as_str() {
             #[cfg(feature = "bn254")]
             Some("bn254") => by_curve::<Bn254>(cmd, &v, &mut OsRng)?,

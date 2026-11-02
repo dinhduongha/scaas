@@ -31,6 +31,10 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         uint32 staticLen;
     }
 
+    bytes32 private constant _CANCEL_NONCE_TYPEHASH = keccak256(
+        "CancelNonce(address from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+
     // Transient slots (CTR-MTX-18), written as literals: assembly takes no keccak256 constant.
     bytes32 private constant _GUARD = 0xf92fce36488cd980109789c37ce44669ca2ec8fc93bcd6d944c3a5544f9ce252; // keccak256("scaas.mtx.guard")
     bytes32 private constant _SENDER = 0x6f8cf97d962f34e862325b04dcb64b0eb0b06cf30b06b61c33210ec760df0f0b; // keccak256("scaas.mtx.sender")
@@ -46,15 +50,9 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
 
     /// @notice One contract-wide guard; the one self-call of step 5 may enter once and consumes the ticket.
     modifier nonReentrant() {
-        bool outer = _tload(_GUARD) == 0;
-        if (outer) {
-            _tstore(_GUARD, 1);
-        } else {
-            if (msg.sender != address(this) || _tload(_TICKET) != 1) revert Reentrancy();
-            _tstore(_TICKET, 2);
-        }
+        bool outer = _enter();
         _;
-        if (outer) _tstore(_GUARD, 0);
+        _exit(outer);
     }
 
     // ------------------------------------------------------------------ views
@@ -117,33 +115,50 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         return true;
     }
 
-    /// @notice Direct, or signed through `mtxExecute` on another lane (a subject without gas can cancel).
+    /// @notice Direct, or signed through `mtxExecute` on another lane (a subject without gas can cancel). A derived
+    ///         subject has no address lane: `_msgSender()` is `UA_POOL` for all of them, its cancel is `uaCancelNonce`.
     function cancelNonce(uint256 batch) external nonReentrant {
         address from = _msgSender();
+        if (from == MetaTxLib.UA_POOL) revert MtxSelectorNotAllowed(IMetaTx.cancelNonce.selector);
         emit MetaNonceCancelled(from, batch, _bumpNonce(MetaTxLib.pad(from), batch));
+    }
+
+    /// @notice The signed `cancelNonce(lane)` (TS-D14): `lane` is cancelled, `e.batch` is the lane of the cancel itself.
+    function mtxCancelNonce(MetaTxLib.Envelope calldata e, uint256 lane, bytes calldata sig)
+        external nonReentrant returns (bytes memory)
+    {
+        return _named(_CANCEL_NONCE_TYPEHASH, IMetaTx.cancelNonce.selector, e, abi.encode(lane), sig);
     }
 
     // ------------------------------------------------------------------ pipeline (CTR-MTX-17)
 
-    /// @dev Every entry (generic, alias, batch, later the named builders) goes through here.
+    /// @dev Every generic entry (generic, alias, batch, the wallets' builders) goes through here.
     function _execute(MetaTxLib.MetaTransaction memory m, bytes calldata signature)
-        internal virtual returns (bytes memory ret)
+        internal virtual returns (bytes memory)
     {
-        bytes32 digest = _checkIntent(m, signature);            // 1, 2
+        return _run(m, _hashTypedDataV4(MtxPipelineLib._structHash(MetaTxLib.METATX_TYPEHASH, _envelopeOf(m))), signature);
+    }
+
+    /// @dev A named entry (TS-D14), `sel` a static-shape op: the same pipeline, lanes and self-call as `_execute`, over
+    ///      the entry's own struct (`typehash`, `args` = the op's parameters as ABI words, also the call's arguments).
+    function _named(bytes32 typehash, bytes4 sel, MetaTxLib.Envelope calldata e, bytes memory args, bytes calldata sig)
+        internal virtual returns (bytes memory)
+    {
+        MetaTxLib.MetaTransaction memory m = _metaOf(e, abi.encodePacked(sel, args));
+        return _run(m, _hashTypedDataV4(MtxPipelineLib._namedHash(typehash, _envelopeOf(m, 0), args)), sig);
+    }
+
+    /// @dev CTR-MTX-17 over the digest of the entry's struct.
+    function _run(MetaTxLib.MetaTransaction memory m, bytes32 digest, bytes calldata signature)
+        internal returns (bytes memory ret)
+    {
+        _checkEnvelope(MetaTxLib.pad(m.from), m.batch, m.nonce, m.validUntil, m.mode, m.relayer); // 1
+        _requireValidSignature(m.from, digest, signature);      // 2
         uint256 basis = _checkCall(m.data, m.mode);             // 3
         _useNonce(MetaTxLib.pad(m.from), m.batch);              // 4
         ret = _selfCall(MetaTxLib.pad(m.from), m.data, _envelopeBinding(m)); // 5
         uint256 fee = _chargeFee(m.from, basis, m);             // 6
         emit MetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, digest, _feeRecipientOf(m), fee); // 7
-    }
-
-    /// @dev Steps 1 (cheap) and 2 (signature).
-    function _checkIntent(MetaTxLib.MetaTransaction memory m, bytes calldata signature)
-        internal view returns (bytes32 digest)
-    {
-        _checkEnvelope(MetaTxLib.pad(m.from), m.batch, m.nonce, m.validUntil, m.mode, m.relayer);
-        digest = _hashTypedDataV4(MtxPipelineLib._structHash(MetaTxLib.METATX_TYPEHASH, _envelopeOf(m)));
-        _requireValidSignature(m.from, digest, signature);
     }
 
     /// @dev Step 1 on the shared lane space (CTR-MTX-15, CTR-UA-26): the common envelope of every signed struct
@@ -182,8 +197,22 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
 
     /// @dev The envelope of `m` for `MtxPipelineLib._structHash`: `from` padded, `data` as its hash.
     function _envelopeOf(MetaTxLib.MetaTransaction memory m) internal pure returns (MtxPipelineLib.Envelope memory) {
-        return MtxPipelineLib.Envelope(MetaTxLib.pad(m.from), keccak256(m.data), m.batch, m.nonce, m.validUntil, m.mode,
-            m.relayer, m.fee, m.feeRecipient);
+        return _envelopeOf(m, keccak256(m.data));
+    }
+
+    function _envelopeOf(MetaTxLib.MetaTransaction memory m, bytes32 dataHash)
+        internal pure returns (MtxPipelineLib.Envelope memory)
+    {
+        return MtxPipelineLib.Envelope(MetaTxLib.pad(m.from), dataHash, m.batch, m.nonce, m.validUntil, m.mode, m.relayer,
+            m.fee, m.feeRecipient);
+    }
+
+    /// @dev The `MetaTransaction` a named entry runs as (the binding hooks and the fee read it).
+    function _metaOf(MetaTxLib.Envelope calldata e, bytes memory data)
+        internal pure returns (MetaTxLib.MetaTransaction memory)
+    {
+        return MetaTxLib.MetaTransaction(e.from, data, e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee,
+            e.feeRecipient);
     }
 
     /// @dev Step 5: store the ticket (and the envelope binding, when the contract has one), call self, clear the ticket;
@@ -285,6 +314,22 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     }
 
     // ------------------------------------------------------------------ transient storage
+
+    /// @dev The body of `nonReentrant`, one copy for every entry (lever 2, owner 2026-11-01). Returns whether this frame
+    ///      holds the guard; only the self-call under a live ticket may enter it again, and that consumes the ticket.
+    function _enter() private returns (bool outer) {
+        outer = _tload(_GUARD) == 0;
+        if (outer) {
+            _tstore(_GUARD, 1);
+        } else {
+            if (msg.sender != address(this) || _tload(_TICKET) != 1) revert Reentrancy();
+            _tstore(_TICKET, 2);
+        }
+    }
+
+    function _exit(bool outer) private {
+        if (outer) _tstore(_GUARD, 0);
+    }
 
     function _tload(bytes32 slot) private view returns (uint256 v) {
         assembly ("memory-safe") { v := tload(slot) }

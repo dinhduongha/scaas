@@ -1,0 +1,18 @@
+## caller-word: the words: the library reads the caller's trailing bytes
+file src/ua/UARegistryLib.sol, restored by cmp: same
+CAUGHT rc=1 compiled=True
+  [FAIL: 256] test_gasHotPath() (gas: 27931744)
+  [FAIL: SplitDiff: write failed: register kind 256 0x93f2c82c] test_diff() (gas: 1496118041)
+  [FAIL: UAPoP()] test_1271MemberSeesTheRegistry() (gas: 2600515)
+  [FAIL: UAPoP()] test_gen2SharesTheLibrary() (gas: 468073)
+  [FAIL: UAPoP()] test_msigPopAtTheBudget() (gas: 25078998)
+  [FAIL: UAPoP()] test_reentryFromAVerifierRefused() (gas: 8754074)
+  [FAIL: UAPoP()] test_starvedMemberThroughTheSelfCall() (gas: 2415368)
+  [FAIL: a good call lands in the control 0] test_libraryDirectCallRefused() (gas: 9983375)
+  [FAIL: assertion failed] test_callerCannotSupplyTheWords() (gas: 3389471)
+  [FAIL: now: the word, 0, as the length] test_nestedOffsetReadsAWordAsItsOwnArgument() (gas: 613138)
+## via-starved: `via`: a starved target's UAVerifyGas becomes a verdict
+file src/ua/UAStore.sol, restored by cmp: same
+CAUGHT rc=1 compiled=True
+  [FAIL: assertion failed: 0x93f2c82c != 0xedd8d6f8] test_starvedMemberThroughTheSelfCall() (gas: 2661271)
+mutants not caught or not restored: 0

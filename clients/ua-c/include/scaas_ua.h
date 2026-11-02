@@ -23,7 +23,7 @@
 /**
  * Bumped on any breaking signature or layout change; compare with `scaas_ua_abi_version()`.
  */
-#define SCAAS_UA_ABI_VERSION 2
+#define SCAAS_UA_ABI_VERSION 5
 
 /**
  * The result of every fallible call: `SCAAS_UA_OK` or one of `SCAAS_UA_ERR_*`.
@@ -47,14 +47,14 @@ typedef struct {
 /**
  * The portable PoP of a registration, as `scaas_ua_holder_pop_message` writes it (all hashes 32 bytes). `message` is
  * `ua_message(kind, POP_V2, registration_digest)`: what the signer's `pop` signs. `has_member_digest` (an `msig` only) says
- * `member_digest` is set: what each member signs under `member`; a code-less or EIP-7702-designator native member signs
- * `scaas_ua_personal_sign_digest` of it (ruling C7).
+ * `member_digest` is set: what each derived member signs under `member`; a native member signs `registration_digest` itself
+ * (TS-D4).
  */
 typedef struct {
   uint8_t pqz_key_hash[32];
   uint8_t pqz_pop_hash[32];
   uint8_t kem_record_hash[32];
-  uint8_t portable_pop_digest[32];
+  uint8_t portable_record_digest[32];
   uint8_t registration_digest[32];
   uint8_t message[32];
   bool has_member_digest;
@@ -148,7 +148,7 @@ typedef struct {
 #define SCAAS_UA_ERR_KEM_HOLDER 12
 
 /**
- * "UAKemVersion": a KEM record version of 0.
+ * "UAKemVersion": a `setKemKey` record of version 0 (version 0 is the `register` key's) or past 2^64 − 1.
  */
 #define SCAAS_UA_ERR_KEM_VERSION 13
 
@@ -167,6 +167,11 @@ typedef struct {
  * "UAPqzKeySet": `setPqzKey` on a registration that already has a PQZ key (write-once).
  */
 #define SCAAS_UA_ERR_PQZ_KEY_SET 16
+
+/**
+ * "UAKemScheme": the first byte of a KEM key is not an enabled KEM scheme id (only 1; 2 is reserved).
+ */
+#define SCAAS_UA_ERR_KEM_SCHEME 17
 
 #ifdef __cplusplus
 extern "C" {
@@ -272,16 +277,6 @@ ScaasUaStatus scaas_ua_purpose_tag_v(const char *purpose,
                                      uint8_t *out32);
 
 /**
- * The 32-byte KEM_RECORD_TAG.
- */
-ScaasUaStatus scaas_ua_kem_record_tag(uint8_t *out32);
-
-/**
- * The 32-byte PQZ_KEY_RECORD_TAG.
- */
-ScaasUaStatus scaas_ua_pqz_key_record_tag(uint8_t *out32);
-
-/**
  * The 32-byte UA of a derived kind's key data (no member-rule checks; see `scaas_ua_derive_ua`).
  */
 ScaasUaStatus scaas_ua_ua_of(uint16_t kind,
@@ -339,22 +334,45 @@ ScaasUaStatus scaas_ua_ua_message(uint16_t kind,
 ScaasUaStatus scaas_ua_chain_key_hash(uint64_t chain_id, uint8_t *out32);
 
 /**
- * `keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)`; every input 32 bytes, a hash all zero when absent.
+ * The 32-byte portable EIP-712 domain separator `DS_P` (`EIP712Domain(string name,string version)` = ("SCaaS UA Portable",
+ * "1"), no chain id, verifying contract or salt; typed-signing TS-D1). Every portable digest is `keccak256(0x1901 ‖ DS_P ‖ hashStruct)`.
  */
-ScaasUaStatus scaas_ua_portable_pop_digest(const uint8_t *ua32,
-                                           const uint8_t *pqz_key_hash32,
-                                           const uint8_t *kem_record_hash32,
-                                           uint8_t *out32);
+ScaasUaStatus scaas_ua_portable_domain_separator(uint8_t *out32);
 
 /**
- * `keccak256(portablePopDigest ‖ pqzPopHash)`: what the signer's `pop` signs under `ua_message(kind, POP_V2, ·)`.
+ * `hashStruct(UAKemRecord{ua, version, scheme: kem_pk[0], kemPkHash: keccak256(kem_pk)})`: the `kem` word of a portable
+ * record. Version 0 with an empty key is the zero record `UAKemRecord{ua, 0, 0, 0}` (no KEM record); version 0 with a key
+ * is the `register` key's record (owner 2026-10-31); otherwise the rules of `scaas_ua_kem_record_digest`.
  */
-ScaasUaStatus scaas_ua_registration_digest(const uint8_t *portable32,
+ScaasUaStatus scaas_ua_kem_record_hash(const uint8_t *ua32,
+                                       uint64_t version,
+                                       const uint8_t *kem_pk,
+                                       size_t kem_pk_len,
+                                       uint8_t *out32);
+
+/**
+ * The typed `UAPortableRecord{ua, kind, pqzKeyHash, kem}` digest (what `R_REG` proves over at `register`); every hash input 32
+ * bytes, `pqz_key_hash32` all zero without a key, `kem_record_hash32` = `scaas_ua_kem_record_hash` (the zero record's without one).
+ */
+ScaasUaStatus scaas_ua_portable_record_digest(const uint8_t *ua32,
+                                              uint16_t kind,
+                                              const uint8_t *pqz_key_hash32,
+                                              const uint8_t *kem_record_hash32,
+                                              uint8_t *out32);
+
+/**
+ * The typed `UARegistration{UAPortableRecord{ua, kind, pqzKeyHash, kem}, pqzPopHash}` digest: what the signer's `pop` signs
+ * under `ua_message(kind, POP_V2, ·)` and what a native `msig` member signs itself (`eth_signTypedData_v4`, TS-D4).
+ */
+ScaasUaStatus scaas_ua_registration_digest(const uint8_t *ua32,
+                                           uint16_t kind,
+                                           const uint8_t *pqz_key_hash32,
+                                           const uint8_t *kem_record_hash32,
                                            const uint8_t *pqz_pop_hash32,
                                            uint8_t *out32);
 
 /**
- * `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kem_pk))`: version 1 ... 2^64 - 1
+ * The typed `UAKemRecord{ua, version, scheme, kemPkHash}` digest `setKemKey` signs: version 1 ... 2^64 - 1
  * (`SCAAS_UA_ERR_KEM_VERSION` for 0), a 1,601-byte key, scheme byte first (`SCAAS_UA_ERR_KEM_SCHEME` for an id other than 1, `SCAAS_UA_ERR_KEM_KEY_LENGTH`).
  */
 ScaasUaStatus scaas_ua_kem_record_digest(const uint8_t *ua32,
@@ -376,7 +394,8 @@ ScaasUaStatus scaas_ua_kem_record_message(uint16_t kind,
 /**
  * The portable PoP message of a registration (UA-8 P1, P2) into `*out`. `key_data` (needed for an `msig`, to show it is
  * PQ-eligible), `pqz_key` with its proof `pqz_pop` (or only the 32-byte `pqz_pop_hash`; NULL / length 0 = absent) and the
- * initial KEM record `(kem_version, kem_pk)` (`0` and empty = absent). Only holders carry a key or a record
+ * initial KEM key `kem_pk` (its record is always version 0, owner 2026-10-31; NULL / length 0 = absent). Only holders carry
+ * a key or a record
  * (`SCAAS_UA_ERR_PQZ_HOLDER`, `SCAAS_UA_ERR_KEM_HOLDER`); a PQZ key always comes with its proof hash and only with it
  * (`SCAAS_UA_ERR_PQZ_POP_HASH`).
  */
@@ -390,36 +409,45 @@ ScaasUaStatus scaas_ua_holder_pop_message(uint16_t kind,
                                           size_t pqz_pop_len,
                                           const uint8_t *pqz_pop_hash,
                                           size_t pqz_pop_hash_len,
-                                          uint64_t kem_version,
                                           const uint8_t *kem_pk,
                                           size_t kem_pk_len,
                                           ScaasUaHolderPop *out);
 
 /**
- * The 32-byte message `R_REG` proves over: `ua_message(0x0142, POP_V2, portable_pop_digest(ua, key_hash(pqz_key),
- * kem_record_hash))`; the KEM record `(kem_version, kem_pk)` is `0` and empty when absent.
+ * The 32-byte message `R_REG` proves over: `ua_message(0x0142, POP_V2, portable_record_digest(ua, kind, key_hash(pqz_key),
+ * kem_record_hash))`, `kind` the registering kind; `kem_pk` the register KEM key (version 0), NULL / length 0 when absent.
  */
-ScaasUaStatus scaas_ua_pqz_reg_message(const uint8_t *ua32,
+ScaasUaStatus scaas_ua_pqz_reg_message(uint16_t kind,
+                                       const uint8_t *ua32,
                                        const uint8_t *pqz_key,
                                        size_t pqz_key_len,
-                                       uint64_t kem_version,
                                        const uint8_t *kem_pk,
                                        size_t kem_pk_len,
                                        uint8_t *out32);
 
 /**
- * `keccak256(PQZ_KEY_RECORD_TAG ‖ ua ‖ pqzKeyHash)`: what a later PQZ key's `R_REG` proves over.
+ * The typed `UAPqzKey{ua, pqzKeyHash}` digest: what a later PQZ key's `R_REG` proves over.
  */
 ScaasUaStatus scaas_ua_pqz_key_digest(const uint8_t *ua32,
                                       const uint8_t *pqz_key_hash32,
                                       uint8_t *out32);
 
 /**
- * `keccak256(pqzKeyDigest ‖ pqzPopHash)`: what `setPqzKey`'s signature signs under `ua_message(kind, PURPOSE_PQZ_KEY, ·)`.
+ * The typed `UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}` digest: what `setPqzKey`'s signature signs under
+ * `ua_message(kind, PURPOSE_PQZ_KEY, ·)` (and a native `msig` member signs itself, TS-D4).
  */
-ScaasUaStatus scaas_ua_pqz_key_record_digest(const uint8_t *key_digest32,
+ScaasUaStatus scaas_ua_pqz_key_record_digest(const uint8_t *ua32,
+                                             const uint8_t *pqz_key_hash32,
                                              const uint8_t *pqz_pop_hash32,
                                              uint8_t *out32);
+
+/**
+ * The typed `UAMembership{ua, member}` digest: what `member` signs to accept its slot in the `msig` `ua` (CTR-UA-37): a native
+ * member this digest itself, a derived member `member_digest(ua, ua_message(MSIG, PURPOSE_MEMBERSHIP, ·))` under `member`.
+ */
+ScaasUaStatus scaas_ua_membership_digest(const uint8_t *ua32,
+                                         const uint8_t *member32,
+                                         uint8_t *out32);
 
 /**
  * The signed, portable, write-once PQZ key record into `*out`: accepted only by a registration without a PQZ key
@@ -440,16 +468,8 @@ ScaasUaStatus scaas_ua_pqz_key_record_message(uint16_t kind,
                                               ScaasUaPqzKeyRecord *out);
 
 /**
- * EIP-191 `personal_sign` of a 32-byte digest: `keccak256(0x19 ‖ "Ethereum Signed Message:\n32" ‖ digest)`. What a code-less
- * native (EOA) `msig` member signs over the `member_digest` of a portable record only (POP_V2, KEM, PQZ_KEY; ruling C7);
- * every other purpose stays UAAuth.
- */
-ScaasUaStatus scaas_ua_personal_sign_digest(const uint8_t *digest32,
-                                            uint8_t *out32);
-
-/**
- * `*out = true` iff the 32-byte purpose tag is POP_V2, KEM or PQZ_KEY: the only ones a code-less or EIP-7702-designator native `msig` member signs
- * by `personal_sign`.
+ * `*out = true` iff the 32-byte purpose tag is POP_V2, KEM or PQZ_KEY: the only ones where a code-less or EIP-7702-designator
+ * native `msig` member signs the record's typed digest itself (`eth_signTypedData_v4`, TS-D4); every other purpose stays UAAuth.
  */
 ScaasUaStatus scaas_ua_is_portable_purpose(const uint8_t *tag32,
                                            bool *out);
@@ -486,6 +506,35 @@ ScaasUaStatus scaas_ua_member_digest(const uint8_t *structure_ua32,
  * The canonical form of an id (NUL-terminated); non-UTF-8 text is `SCAAS_UA_ERR_ID_FORMAT`.
  */
 ScaasUaStatus scaas_ua_canonical_id(const char *text, char *out, size_t *out_len);
+
+/**
+ * The registry's explicit arguments of a registration, JSON in and out (NUL-terminated; `*out_len` counts the NUL).
+ * `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit}` (bytes as "0x..." hex, an absent field is
+ * empty, an msig's `pop` is `[{index, keyData, sig}]`, `kemCommit` true / false forces the KEM form, absent: the hash commit
+ * only when the full call is over 261,909 B). Out: `{args, kemFill, calldataLength, kemFillCalldataLength}`, `args.entry` =
+ * `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2` or `registerFrost`, `kemFill` the `setKemKey(ua, 0, ...)`
+ * that stores a hash-committed key (null otherwise). `SCAAS_UA_ERR_ARGUMENT` when the input is not this JSON.
+ */
+ScaasUaStatus scaas_ua_registration_args(const char *input,
+                                         char *out,
+                                         size_t *out_len);
+
+/**
+ * `setKemKey`'s explicit arguments, JSON in and out as `scaas_ua_registration_args`. `input`: `{ua, version, kemPk, sig}`, `sig`
+ * the `UASig` `{keyData, signature, members: [{index, keyData, sig}]}` (absent: empty, the version-0 fill of a hash commit).
+ * Out: `{ua, version, kem, sig}`.
+ */
+ScaasUaStatus scaas_ua_set_kem_key_args(const char *input,
+                                        char *out,
+                                        size_t *out_len);
+
+/**
+ * `setPqzKey`'s explicit arguments, JSON in and out as `scaas_ua_registration_args`. `input`: `{ua, pqzKey, pqzPopHash, sig}`,
+ * `sig` as in `scaas_ua_set_kem_key_args`. Out: the same fields, `sig` complete.
+ */
+ScaasUaStatus scaas_ua_set_pqz_key_args(const char *input,
+                                        char *out,
+                                        size_t *out_len);
 
 /**
  * The `msig` key data for `n` members (`members` may be NULL when `n == 0`): 4 + 36 * n bytes.

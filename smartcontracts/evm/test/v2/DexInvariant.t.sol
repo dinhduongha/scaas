@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {DexLegs} from "../helpers/DexLegs.sol";
+import {UACall} from "../ua/UACall.sol";
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -48,7 +50,7 @@ contract DexHandler is Test {
         uint8 party;
         uint8 shape;
         address sell;
-        bytes order; // abi.encode of the shape's struct
+        ITradeToken.TradeOrder t; // the shape-0 form of `o`
         bytes sig;
         bytes32 h;
         ITradeToken.UATradeOrder o;
@@ -137,7 +139,7 @@ contract DexHandler is Test {
         uint8 used;
         uint256 sell; // Σ maker receive: what the taker sells them
         uint256 fill; // Σ maker fill: what the taker receives from them
-        ISCaaSDex.Leg[] legs;
+        ISCaaSDex.DexLeg[] legs;
         Pick[] picks;
     }
 
@@ -145,7 +147,7 @@ contract DexHandler is Test {
     function _makers(uint256 seed, address sell, address recv, uint8 used, uint256 n)
         internal returns (Ms memory m)
     {
-        (m.used, m.legs, m.picks) = (used, new ISCaaSDex.Leg[](n), new Pick[](n));
+        (m.used, m.legs, m.picks) = (used, new ISCaaSDex.DexLeg[](n), new Pick[](n));
         for (uint256 j; j < n; ++j) {
             (bool ok, Pick memory q) = _order(_r(seed, 10 + j), sell, recv, m.used);
             if (!ok) return m;
@@ -388,23 +390,22 @@ contract DexHandler is Test {
         if (p >= 3 || (sell != usdc && (r >> 17) & 1 == 1)) {
             s.shape = 1;
             s.h = ITradeToken(sell).uaTradeOrderDigest(o);
-            s.order = abi.encode(o);
         } else {
             ITradeToken.TradeOrder memory t = abi.decode(abi.encode(o), (ITradeToken.TradeOrder));
             s.h = sell == usdc ? dex.dexOrderDigest(sell, t) : ITradeToken(sell).tradeOrderDigest(t);
-            s.order = abi.encode(t);
+            s.t = t;
         }
         s.sig = _sign(p, s.h);
     }
 
-    function _leg(uint256 k, uint256 fill) internal view returns (ISCaaSDex.Leg memory) {
+    function _leg(uint256 k, uint256 fill) internal view returns (ISCaaSDex.DexLeg memory) {
         Ord storage o = ords[k];
-        return ISCaaSDex.Leg(o.sell, o.shape, o.order, o.sig, fill);
+        return o.shape == 0 ? DexLegs.leg(o.sell, o.t, o.sig, fill)
+            : DexLegs.uaLeg(o.sell, o.o, UACall.auth(o.o.from, o.sig), fill);
     }
 
     function _xl(Pick memory q, uint256 floor) internal view returns (ISCaaSDex.ExchangeLeg memory) {
-        Ord storage o = ords[q.k];
-        return ISCaaSDex.ExchangeLeg(o.sell, o.shape, o.order, o.sig, q.fill, floor);
+        return DexLegs.exchange(_leg(q.k, 0), q.fill, floor);
     }
 
     /// A native signs `digest` itself; a UA `ua_msg(kind, trade, digest)` (the stand-in verifier).

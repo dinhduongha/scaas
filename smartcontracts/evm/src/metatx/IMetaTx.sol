@@ -30,6 +30,7 @@ interface IMetaTx {
     function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
         external returns (bool success);
     function mtxBatch(MetaTxLib.MetaTransaction[] calldata ms, bytes[] calldata signatures) external returns (bool);
+    function mtxCancelNonce(MetaTxLib.Envelope calldata e, uint256 lane, bytes calldata sig) external returns (bytes memory);
     function mtxSelectors()
         external view returns (bytes4[] memory selectors, uint8[] memory feeClass, uint8[] memory amountArg);
     function chainUid() external view returns (bytes32);

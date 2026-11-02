@@ -1,0 +1,37 @@
+# mutations at commit 11a1fa3b
+
+## M1 digest: cancelHash loses the wrap branch (a wrap order cancelled as CancelOrder)
+src/trade/TradeLib.sol; test/v2/Trade.t.sol --match-test test_cancelWrapOrderNested
+Ran 1 test suite in 16.52ms (3.16ms CPU time): 0 tests passed, 1 failed, 0 skipped (1 total tests)
+[FAIL: assertion failed: 0xe8562f1a907624fde2836df10949edf35112813eb04f4f0ed5c6305dc59af1cd != 0x0b40fe69818f09986595ef22a4ebe4f7ab79b645df23457f50ef361d10a1f113] test_cancelWrapOrderNested() (gas: 81237)
+exit 1
+
+## M1b digest: ReceiverFee hashes the payment digest back in the nested word (the flat form, kept the typehash)
+src/metatx/MtxPipelineLib.sol; test/v2/ReceiverPays.t.sol --match-test test_receiverFeeNested
+Ran 1 test suite in 14.16ms (2.85ms CPU time): 0 tests passed, 1 failed, 0 skipped (1 total tests)
+[FAIL: assertion failed: 0xea653bdff1556dad3694e832f81ac1a717830e3d63837d27c7cc57f86084874c != 0x8e79b957530bfc36128f815e4b7fba32a0499e9352cced8adab9acfecf88a569] test_receiverFeeNested() (gas: 83908)
+exit 1
+
+## M2 msg.sender != relayer: the struct word no longer reads the caller (a stored router, the test's), positive path intact
+src/metatx/MetaTokenBase.sol; test/metatx/MtxRelayFee.t.sol --match-test test_relayFeeDirectCallRefused
+Ran 1 test suite in 14.26ms (7.30ms CPU time): 0 tests passed, 1 failed, 0 skipped (1 total tests)
+[FAIL: next call did not revert as expected] test_relayFeeDirectCallRefused() (gas: 129777)
+exit 1
+
+## M3 the router accepts the executor as payee
+src/metatx/MtxRelayFee.sol; test/metatx/MtxRelayFee.t.sol --match-test test_relayFeeExecutorPayeeRefused
+Ran 1 test suite in 17.45ms (7.77ms CPU time): 0 tests passed, 1 failed, 0 skipped (1 total tests)
+[FAIL: next call did not revert as expected] test_relayFeeExecutorPayeeRefused() (gas: 215220)
+exit 1
+
+## M4 an extra allowlist entry: mtxRelayFee on _mtxRule
+src/metatx/MetaTxBase.sol; test/metatx/TradeTyped.t.sol --match-test test_c6EntriesNotAllowlisted
+Ran 1 test suite in 18.09ms (17.19ms CPU time): 0 tests passed, 1 failed, 0 skipped (1 total tests)
+[FAIL: call reverted as expected, but without data] test_c6EntriesNotAllowlisted() (gas: 1062021)
+exit 1
+
+## M5 the WrapOrder form is gone: every order hashes as TradeOrder
+src/trade/TradeLib.sol; test/v2/Trade.t.sol --match-test test_wrapOrderTyped
+Ran 1 test suite in 14.22ms (3.51ms CPU time): 0 tests passed, 1 failed, 0 skipped (1 total tests)
+[FAIL: assertion failed: 0x434c277415157fa5c1d234592069b0fa3cd91abd3d5ede62115bf55e2a47c111 != 0xa2a30e76a4c9ef55c79a3e0a9220e072de93afbfecbd6ab1deb691eaecef7e34] test_wrapOrderTyped() (gas: 62897)
+exit 1

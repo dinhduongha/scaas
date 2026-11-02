@@ -20,32 +20,30 @@ library PqzTransferLib {
     ///      Arguments ordered for the stack: the ones used last on top.
     function transfer(
         PqzCore.Env memory e,
-        bytes calldata payload,
+        IPqzToken.PqzTransferArgs calldata t,
         bytes calldata hint,
         bytes calldata proof,
-        bytes calldata authSig
+        IUARegistry.UASig calldata authSig
     ) public returns (bytes32 ref, PqzCore.Paid memory paid) {
-        (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareTransfer(e, payload, hint, proof.length);
+        (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareTransfer(e, t, hint, proof.length);
         PqzCore._check(o, buf, proof, authSig);
-        ref = PqzCore._settleTransfer(o, payload);
+        ref = PqzCore._settleTransfer(o, t);
         paid = PqzCore._paid(o);
     }
 
     /// @notice Op 7 `R_TXM`: `M` legs (decoys are legs of amount 0), one proof; the sender exactly as a single transfer,
-    ///         a credit per leg, the entry by `mode`; the statement's fee `txFee + M · decoyFee`. Payload: `p ‖
-    ///         validUntilBlock ‖ shieldIn ‖ fromUA ‖ beneficiaryUA ‖ M ‖ decoyFee ‖ salt(16) ‖ UA_0 … UA_{M−1} ‖ out ‖
-    ///         [memo]`, `out = u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖ v_f ‖ [v_{a,0} … v_{a,M−1}]`, memo `18 + 40·M` bytes on
-    ///         HASH. Returns `paid`: the token pays txFee to the beneficiary and `decoyFee` to every leg from `SHIELD_POOL`.
+    ///         a credit per leg, the entry by `mode`; the statement's fee `txFee + M · decoyFee`. Returns `paid`: the
+    ///         token pays txFee to the beneficiary and `decoyFee` to every leg from `SHIELD_POOL`.
     function transferMulti(
         PqzCore.Env memory e,
-        bytes calldata payload,
+        IPqzToken.PqzMultiArgs calldata t,
         bytes calldata hint,
         bytes calldata proof,
-        bytes calldata authSig
+        IUARegistry.UASig calldata authSig
     ) public returns (bytes32 ref, PqzCore.Paid memory paid) {
-        (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareMulti(e, payload, hint, proof.length);
+        (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareMulti(e, t, hint, proof.length);
         PqzCore._check(o, buf, proof, authSig);
-        ref = PqzCore._settleMulti(o, payload);
+        ref = PqzCore._settleMulti(o, t);
         paid = PqzCore._paid(o);
     }
 }

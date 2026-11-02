@@ -7,6 +7,7 @@ import {IUAPopVerifier} from "../../src/ua/IUAVerifier.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {UACall} from "./UACall.sol";
 
 /// Stand-in verifier: the "signature" over (keyData, message) is `keccak256(abi.encode(keyData, message))`, so the
 /// registry's message construction (kind tag, purpose, PoP digest, member digest) is what the tests exercise.
@@ -138,6 +139,8 @@ abstract contract UARegistryBase is Test {
     address internal constant REG_A = 0x5Ca0000000000000000000000000000000000001;
     bytes32 internal constant DIGEST = keccak256("scaas.ua.test.digest");
 
+    /// What `_deploy` deploys; `test/ua/UARegistrySplit.t.sol` points it at the pre-split source for one run of a scenario.
+    string internal registryArtifact = "UARegistry.sol:UARegistry";
     bytes32 internal chainUidA;
     MockVerifier internal mock;
     UARegistry internal reg;
@@ -151,6 +154,8 @@ abstract contract UARegistryBase is Test {
     }
 
     function setUp() public virtual {
+        // `UA_REGISTRY_ARTIFACT=UARegistryPreSplit.sol:UARegistryPreSplit` runs a suite's `_deploy`s on the pre-split source
+        registryArtifact = vm.envOr("UA_REGISTRY_ARTIFACT", registryArtifact);
         chainUidA = vm.parseJsonBytes32(_structures(), ".contexts.A.chainUid");
         string memory j = _kindsJson();
         for (uint256 i; i < 8; ++i) {
@@ -206,7 +211,7 @@ abstract contract UARegistryBase is Test {
         bool msig,
         UARegistry.KindConfig[] memory cfgs
     ) internal returns (UARegistry) {
-        deployCodeTo("UARegistry.sol:UARegistry", abi.encode(uid, pred, hedera, budget, ska, msig, cfgs), where);
+        deployCodeTo(registryArtifact, abi.encode(uid, pred, hedera, budget, ska, msig, cfgs), where);
         return UARegistry(where);
     }
 
@@ -219,12 +224,19 @@ abstract contract UARegistryBase is Test {
     /// No attributes (UA-8 `UAAttrs`: empty / 0 = absent).
     function _none() internal pure returns (IUARegistry.UAAttrs memory) {}
 
-    /// The UA-8 registration digest (portable, no chain context): `registrationDigest(portablePopDigest(ua, pqzKeyHash,
-    /// kemRecordHash), pqzPopHash)` of `a`.
-    function _regDigest(bytes32 ua, IUARegistry.UAAttrs memory a) internal pure returns (bytes32) {
+    /// The UA-8 registration digest (portable, no chain context; typed-signing TS-D1): typed `UARegistration{
+    /// UAPortableRecord{ua, kind, pqzKeyHash, kem}, pqzPopHash}` of `a` (the zero KEM record without one).
+    function _regDigest(bytes32 ua, uint16 kind, IUARegistry.UAAttrs memory a) internal pure returns (bytes32) {
         bytes32 h = a.pqzKey.length == 0 ? bytes32(0) : UAKinds.keyHashOf(UAKinds.PQZ_MLWE, a.pqzKey);
-        bytes32 k = a.kemVersion == 0 ? bytes32(0) : UAKinds.kemRecordDigest(ua, a.kemVersion, a.kemPk);
-        return UAKinds.registrationDigest(UAKinds.portablePopDigest(ua, h, k), a.pqzPopHash);
+        bytes32 k = a.kemPkHash != 0
+            ? UAKinds.kemRecordHash(ua, 0, a.kem.scheme, a.kemPkHash)
+            : UAKinds.kemRecordHash(ua, 0, UAKinds.kemPk(a.kem));
+        return UAKinds.registrationDigest(ua, kind, h, k, a.pqzPopHash);
+    }
+
+    /// The registration digest of a UA without attributes (`_regDigest(ua, kind, _none())`).
+    function _regDigest(bytes32 ua, uint16 kind) internal pure returns (bytes32) {
+        return _regDigest(ua, kind, _none());
     }
 
     /// The stand-in PoP of `keyData` (no attributes) on any registry: the same bytes everywhere (UA-8 P1).
@@ -239,11 +251,11 @@ abstract contract UARegistryBase is Test {
     {
         bytes32 ua = UAKinds.uaOf(kind, keyData);
         r; // the PoP has no registry context (UA-8 P1); the parameter keeps the call sites
-        return _sig(keyData, UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, _regDigest(ua, a)));
+        return _sig(keyData, UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, _regDigest(ua, kind, a)));
     }
 
     function _register(UARegistry r, uint16 kind, bytes memory keyData) internal returns (bytes32) {
-        return r.register(kind, keyData, _none(), _pop(r, kind, keyData), "");
+        return UACall.register(r, kind, keyData, _none(), _pop(r, kind, keyData), "");
     }
 
     /// The UA-8 `register` with every argument.
@@ -255,14 +267,14 @@ abstract contract UARegistryBase is Test {
         bytes memory pop,
         bytes memory pqzPop
     ) internal returns (bytes32) {
-        return r.register(kind, keyData, attrs, pop, pqzPop);
+        return UACall.register(r, kind, keyData, attrs, pop, pqzPop);
     }
 
     /// The PoP is computed first: `vm.expectRevert` applies to the next external call.
     function _registerReverts(UARegistry r, uint16 kind, bytes memory keyData, bytes memory err) internal {
         bytes memory pop = _pop(r, kind, keyData);
         vm.expectRevert(err);
-        r.register(kind, keyData, _none(), pop, "");
+        UACall.register(r, kind, keyData, _none(), pop, "");
     }
 
     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)
@@ -271,6 +283,16 @@ abstract contract UARegistryBase is Test {
         returns (bytes memory)
     {
         return abi.encode(keyData, _sig(keyData, r.uaMessage(kind, purpose, digest)));
+    }
+
+    /// `requireAuthorized` with a pre-R1 `bytes auth` (`UACall.auth`); a frame of its own (stack room for the callers).
+    function _req(UARegistry r, bytes32 ua, bytes32 purpose, bytes32 digest, bytes memory auth) internal view {
+        r.requireAuthorized(ua, purpose, digest, UACall.auth(ua, auth));
+    }
+
+    /// The calldata of `_req`'s call.
+    function _reqCall(bytes32 ua, bytes32 purpose, bytes32 digest, bytes memory auth) internal pure returns (bytes memory) {
+        return abi.encodeCall(IUARegistry.requireAuthorized, (ua, purpose, digest, UACall.auth(ua, auth)));
     }
 
     function _pad(address a) internal pure returns (bytes32) {
@@ -322,7 +344,33 @@ abstract contract UARegistryBase is Test {
         return UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purpose, digest));
     }
 
-    function _msigAuth(bytes memory d, UARegistry.MemberSig[] memory sigs) internal pure returns (bytes memory) {
+    function _msigAuth(bytes memory d, IUARegistry.MemberSig[] memory sigs) internal pure returns (bytes memory) {
         return abi.encode(d, abi.encode(sigs));
+    }
+
+    // ----- acceptance (CTR-UA-37) -----
+
+    /// Every slot of `d` accepted with `sig`, for members that answer anything (accept-all and burn-all verifiers and wallets).
+    function _acceptWith(UARegistry r, bytes memory d, bytes memory sig) internal {
+        uint256 count = uint16(bytes2(abi.encodePacked(d[2], d[3])));
+        bytes32 ua = UAKinds.uaOf(UAKinds.MSIG, d);
+        for (uint256 i; i < count; ++i) r.acceptMembership(ua, IUARegistry.MemberSig(uint16(i), "", sig));
+    }
+
+    /// What a derived member signs under `member` to accept its slot.
+    function _membershipMd(bytes32 ua, bytes32 member) internal pure returns (bytes32) {
+        return _memberDigest(ua, UAKinds.PURPOSE_MEMBERSHIP, UAKinds.membershipDigest(ua, member));
+    }
+
+    /// The acceptance of the EOA of `pk` in the structure `d`.
+    function _acceptEoaSig(bytes memory d, uint256 pk) internal pure returns (IUARegistry.MemberSig memory) {
+        (bytes32 ua, bytes32 id) = (UAKinds.uaOf(UAKinds.MSIG, d), _pad(vm.addr(pk)));
+        return IUARegistry.MemberSig(_indexOf(d, id), "", _ecdsa(pk, UAKinds.membershipDigest(ua, id)));
+    }
+
+    /// The acceptance of the registered `key` of `kind` in the structure `d` (the stand-in verifier's signature).
+    function _acceptKeySig(bytes memory d, uint16 kind, bytes memory key) internal pure returns (IUARegistry.MemberSig memory) {
+        (bytes32 ua, bytes32 id) = (UAKinds.uaOf(UAKinds.MSIG, d), UAKinds.uaOf(kind, key));
+        return IUARegistry.MemberSig(_indexOf(d, id), "", _sig(key, UAKinds.uaMessage(kind, UAKinds.PURPOSE_MEMBER, _membershipMd(ua, id))));
     }
 }

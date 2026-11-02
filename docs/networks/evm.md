@@ -206,31 +206,38 @@ which needs `experimental = true` for `evm_version = "amsterdam"`; the profiles 
 (EIP-7843): Clique has no slot, so the opcode is off on the testnet. The bytecode equals the earlier `osaka` build apart
 from the metadata; the gas bounds of the tests moved with Amsterdam's prices (EIP-8037 state gas, EIP-8038 storage writes,
 EIP-7976 calldata floor, EIP-2780 intrinsic), each re-pin names its EIP in the test. The flows' total gas (regular + EIP-8037
-state gas) exceeds 2^24, up to ~111 M for the largest implementation deploy (`WRAPPED_PQZ`, 110.3 M, table below), so the SCaaS testnet runs a 200 M block gas limit
+state gas) exceeds 2^24, up to about 108.7 M simulated for the largest implementation deploy (`WRAPPED_ZETHER`, table below), so the SCaaS testnet runs a 200 M block gas limit
 (genesis `gasLimit` `0xbebc200`, reset 2026-10-22; `TargetBlockGasLimit` 200,000,000).
 
 **Minimum block gas limit per release kind (review C5-1; controller proposal, owner may override; no code-size work before
 Glamsterdam).** A release is one `CREATE2` of the whole implementation in the registrar's transaction. Under EIP-8037 the
 code deposit is state gas at 1,530 per byte of runtime, EIP-7825 caps only the regular gas at 2^24 = 16,777,216, and the
 transaction's gas may not exceed the block gas limit, so a release needs `runtime × 1,530 + 16,777,216` of block gas limit
-(the 2^24 term is the regular-gas bound, not the measured figure: `WrappedPqzToken` measures about 4.1 M regular). Runtime
-sizes are `smartcontracts/evm/size-baseline.json`'s (re-measured after the metatx split at T8 `69fce983`; the split took 269-456 B off each kind):
+(the 2^24 term is the regular-gas bound, not the measured figure: `WrappedPqzToken` simulates at about 7.5 M regular). Runtime
+sizes and the deploy gate are `smartcontracts/evm/size-baseline.json`'s on `typed-signing`. **Simulated** and **`tx.gas`** are forge's simulated
+Amsterdam gas, not real receipts, measured at `daacd49a` (`smartcontracts/evm/runs/2026-11-01-typed-signing-deploy-gas.txt`, profile `scaas-testnet`, `DEPLOY_ZETHER=true` plus `WRAPPED_PQZ`):
+regular + state gas of the transaction, and that figure × 1.05 (`--gas-estimate-multiplier 105`, `deploy.sh`), the gas the transaction asks of the block. Anvil's own `gasUsed` does
+not charge EIP-8037, so it says nothing here; the one run over a real client (7622, Nethermind, the pre-round sizes, `runs/2026-10-31-fs3-t13-pqz-7622-public-rpc.txt`) gave `UARegistry` 58.1 M, `NormalToken` 61.1 M, `WrappedPqzToken` 96.5 M. A blank cell is a kind that run does not deploy.
 
-| Kind (contract) | Runtime | State gas | Needs |
-|---|---|---|---|
-| `NORMAL` (`NormalToken`) | 38,195 B | 58.4 M | **75.2 M** |
-| `WRAPPED` (`WrappedToken`) | 48,068 B | 73.5 M | 90.3 M |
-| `NORMAL_ZETHER` (`NormalZetherToken`) | 48,313 B | 73.9 M | 90.7 M |
-| `NORMAL_PQZ` (`NormalPqzToken`) | 49,067 B | 75.1 M | 91.8 M |
-| `WRAPPED_ZETHER` (`WrappedZetherToken`) | 60,282 B | 92.2 M | 109.0 M |
-| `WRAPPED_PQZ` (`WrappedPqzToken`) | 61,137 B | 93.5 M | **110.3 M** |
-| information: `MtxPipelineLib` (linked library of every release) | 8,106 B | 12.4 M | 29.2 M |
-| information: `MtxRelayFee` (CTR-MTX-27 router; its `MtxRelayExecutor` 554 B) | 2,908 B | 4.4 M | 21.2 M |
+| Kind (contract) | Runtime now | Deploy gate now | Runtime at `daacd49a` | Simulated at `daacd49a` | `tx.gas` (× 1.05) at `daacd49a` |
+|---|---|---|---|---|---|
+| `NORMAL` (`NormalToken`) | 37,228 B | 73.7 M | 39,889 B | 66.5 M | 69.8 M |
+| `WRAPPED` (`WrappedToken`) | 48,015 B | 90.2 M | 49,652 B | | |
+| `NORMAL_ZETHER` (`NormalZetherToken`) | 52,741 B | 97.5 M | 49,952 B | 83.1 M | 87.3 M |
+| `NORMAL_PQZ` (`NormalPqzToken`) | 52,891 B | 97.7 M | 50,652 B | | |
+| `WRAPPED_ZETHER` (`WrappedZetherToken`) | 62,169 B | 111.9 M | 61,808 B | 108.7 M | **114.1 M** |
+| `WRAPPED_PQZ` (`WrappedPqzToken`) | 63,423 B | **113.8 M** | 62,616 B | 103.9 M | 109.1 M |
+| the DEX (`SCaaSDex`) | 27,957 B | 59.6 M | 26,967 B | 45.2 M | 47.5 M |
+| `UARegistry` (split, typed-signing registry split) | 28,429 B | 60.3 M | 46,716 B (not split) | 46.5 M (registry split, whole transaction) | not measured |
+| `UARegistryLib` (linked library of the registry) | 32,667 B | **66.8 M** | none | 54.7 M (registry split, whole transaction) | not measured |
+| `UARegistry` before the split | 46,716 B | 88.3 M | 46,716 B | 77.2 M | 81.1 M |
+| information: `MtxPipelineLib` (linked library of every release) | 9,063 B | none (30.6 M by the formula) | 9,063 B | 16.0 M | 16.8 M |
+| information: `MtxRelayFee` (CTR-MTX-27 router; its `MtxRelayExecutor` 554 B) | 2,982 B | none (21.3 M by the formula) | 2,982 B | 6.6 M | 6.9 M |
 
-The two information rows (`forge build src --sizes`, `smartcontracts/evm/runs/2026-10-28-metatx-split-fixwave-sizes.txt`, `MtxPipelineLib` re-measured after the EIP-7702 owner ruling in `runs/2026-10-28-metatx-split-7702-sizes.txt`; both under 24,576 B, so not in the baseline) have no gate of their own: the library is smaller than every implementation that links it, so the implementation's gate binds (spec §4, controller call). So about 75 M for the plain kinds and about 110 M for the confidential ones; the DEX release (under 24,576 B) needs at
-most 54.4 M. A chain with an Ethereum-like 60 M block holds none of the confidential kinds and only the smallest plain
-one; it needs a raised block gas limit (no gas price or limit is assumed: the check below reads the chain's actual
-value). **Deploy gate:** `DeployBase._requireReleaseGas(contract)` (called before each `deployImplementation` /
+"Runtime now" is `smartcontracts/evm/size-baseline.json` and "Deploy gate now" is the formula `runtime × 1,530 + 2^24` applied to it (arithmetic, not a measurement). The simulated and `tx.gas` columns are the run at `daacd49a` on the sizes of that column; the tokens and the DEX have not been simulated again since the named entries and the levers moved their sizes, so those cells are old (a run owed to the next gate). The registry-split figures are from `smartcontracts/evm/runs/2026-11-01-typed-signing-r2-deploy.txt` (`forge script` on anvil, whole transactions: intrinsic gas and calldata included), at the sizes of the split; not run again for CTR-UA-37. `test_deployGas` (`CREATE2`, no intrinsic gas) moved `UARegistry` 45.4 M -> 46.1 M, `UARegistryLib` 50.1 M -> 52.3 M. The `UARegistry` rows at `daacd49a` were 46,734 B when simulated (state gas 71.7 M). The information rows have no gate of their own: the library is smaller than every implementation that links it, so the implementation's gate binds (spec §4, controller call). The registry now has two gates (owner ruling 2026-11-01; `_requireReleaseGas("UARegistry")` and `_requireReleaseGas("UARegistryLib")`, `require_release_gas` in `e2e.py`, `test_registryDeployGate`), and the library's binds: a plain stack (`Deploy.s.sol`: `NormalToken`, the DEX, the registry and its library) is held by `NormalToken`'s 73.7 M, the full stack by `WrappedPqzToken`'s 113.8 M gate. **The gate over-refuses:** `_requireReleaseGas` reserves all of 2^24 for regular gas, but a deployment's regular gas is far below it (the registry library simulated at 54.7 M at its size of the split against a gate of 66.8 M now, about 10 M of unused regular room), so a chain whose block limit sits between the two refuses a stack that would deploy. The formula is the owner's and stays; this sentence records the margin. A chain with an Ethereum-like 60 M block holds no kind at all: the `UARegistryLib` gate (66.8 M) and `NormalToken`'s (73.7 M) refuse, and nothing is sent. Such a chain needs a raised block gas limit (no gas price or limit is assumed: the check below reads the chain's actual value).
+
+**What the block limit bounds (EIP-8037).** A transaction is included only if its `tx.gas`, which covers regular plus state gas, fits the block gas limit; EIP-7825's 2^24 caps only the regular part. The block's `gas_used` is `max(Σ regular, Σ state)` and is accounting, not an inclusion test. The sender pays `max(total, floor)` where `total` is execution plus state gas and `floor` the EIP-7976 calldata floor; below the floor the sum of the two gas columns overstates the charge. A deployment such as `storePqzPop` at `n2816-kmax65536` (60.11 M regular + state in the registry-split measurement) therefore does not fit a 60 M block.
+**Deploy gate:** `DeployBase._requireReleaseGas(contract)` (called before the `UARegistry` creation and each `deployImplementation` /
 `deployDexImplementation`) and `script/pqz/e2e.py` read `block.gaslimit` (`eth_getBlockByNumber`) and refuse before
 sending when it is below the kind's need; the sizes come from the baseline file at run time, so the figures follow the
 ratchet. The deploy tests assert regular + state gas against the same budget next to the 2^24 check.
@@ -281,7 +288,7 @@ shield, roll-over, a single transfer, a multi-recipient Compact M = 4 and BUNDLE
 disclosure view (`SENDER_S`), and on a `WRAPPED_ZETHER` token over a test ERC-20 wrap-shield and roll-over, proofs from
 `zether-cli` (the Rust prover), every balance checked by decryption in the simulation and again on chain (`check()`); it
 prints gasUsed per transaction from the receipts.
-Integration tests use `anvil --hardfork osaka --gas-limit 16777216 --code-size-limit 65536` (64 KiB code, as EIP-7954 proposes; owner 2026-10-11 — real chains keep 24,576, so a contract that only fits this anvil still cannot be deployed there).
+Integration tests use `anvil --hardfork amsterdam --gas-limit 200000000 --code-size-limit 65536` (`scaas-node/tests/e2e.rs`, `e2e_hedera.rs`, `scripts/e2e-zether.sh`; the SCaaS testnet's 200 M block gas limit, [NET-EVM-06](#NET-EVM-06)) (64 KiB code, as EIP-7954 proposes; owner 2026-10-11 — real chains keep 24,576, so a contract that only fits this anvil still cannot be deployed there).
 
 Every contract is a non-upgradeable clone or a fixed deployment ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)):
 upgradeable proxies (UUPS / ERC-1822) are not used, and a fix is a new implementation version deployed by the factory

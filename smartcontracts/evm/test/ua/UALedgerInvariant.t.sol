@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {UACall} from "./UACall.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -17,7 +18,7 @@ import {UALedgerBase} from "./UALedgerBase.sol";
 /// Random mixes of native moves, mints, burns, `transferToUA`, the UA transfer entries (`uaExecuteTransfer`, the named
 /// `uaTransfer` / `uaTransferWithFee`, `uaBatchTransfer`; any side native or derived, with or without a fee) on the NORMAL
 /// clone and on the 1:1 WRAPPED clone `wrp`, plus wrap, wrap→UA and the burn under a derived UA (`unwrap` through
-/// `uaExecute` with a fee after the self-call, or the named `uaUnwrap`), and the `UA_POOL` `transferFrom` refusal.
+/// `uaExecute` or the named `uaUnwrap`, optionally with a fee after the self-call), and the `UA_POOL` `transferFrom` refusal.
 /// UA-5a (CTR-UA-28, CTR-UA-26, CTR-MTX-05): `wrapToUA` on `wrp` and on the native-leg `wrpN`, `mintToUA`,
 /// `payWithFeeToUA`, `burn` under a derived UA, wraps of the ledger-leg `wrpL` (leg `tok` at 3/2, wrapped by this
 /// handler, a contract; `wrap` or `wrapToUA`), `unwrapToUA` from `wrpL` (direct by a native, or under `uaExecute` by a
@@ -116,8 +117,9 @@ contract UALedgerHandler is Test {
         _settle(wrp, 1, 1);
     }
 
-    /// The burn under a derived UA: `unwrap(und, amt, recipient, 0)` as `uaExecute` (optionally with a 1 % fee paid
-    /// after the self-call) or the fee-less named `uaUnwrap`. `amt + fee` is bounded to the UA's balance.
+    /// The burn under a derived UA, `amt` to `recipient`: `unwrap(und, amt, recipient, 0)` as `uaExecute` or `unwrap(amt,
+    /// recipient, 0)` as the named `uaUnwrap` (TS-D14), optionally with a 1 % fee paid after the self-call. `amt + fee` is
+    /// bounded to the UA's balance.
     function unwrapUnder(uint256 fromIdx, uint256 amount, bool withFee, bool viaNamed) external {
         bytes32 f = uas[fromIdx % 2];
         uint256 have = wrp.balanceOfUA(f);
@@ -125,7 +127,7 @@ contract UALedgerHandler is Test {
         amount = bound(amount, 0, have * 100 / 101) / 100 * 100;
         if (amount == 0) return;
         address recipient = vm.addr(pks[1]);
-        uint256 fee = withFee && !viaNamed ? amount / 100 : 0;
+        uint256 fee = withFee ? amount / 100 : 0;
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
             from: f, data: abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), amount, recipient, 0),
             batch: 1, nonce: wrp.uaNonce(f, 1), validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER,
@@ -135,15 +137,29 @@ contract UALedgerHandler is Test {
             m.mode |= MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT | MetaTxLib.MODE_FEE_PERCENT;
             (m.fee, m.feeRecipient) = (10_000, FEE_TO);
         }
-        bytes memory auth = _auth(3 + fromIdx % 2, wrp.uaDigest(m));
-        vm.prank(RELAYER);
         if (viaNamed) {
-            wrp.uaUnwrap(f, address(und), amount, recipient, 0, 1, m.nonce, m.validUntil, m.mode, RELAYER, auth);
+            MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(f, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient);
+            bytes memory sig = _auth(3 + fromIdx % 2, _unwrapDigest(e, amount, recipient));
+            vm.prank(RELAYER);
+            WrappedToken(address(wrp)).uaUnwrap(e, amount, recipient, 0, UAKinds.uaSig(f, sig));
         } else {
+            bytes memory auth = _auth(3 + fromIdx % 2, wrp.uaDigest(m));
+            vm.prank(RELAYER);
             wrp.uaExecute(m, auth);
         }
         uint256 n = fee != 0 ? 2 : 1; // the burn, and the fee move out of the UA
         _settle(wrp, n, n);
+    }
+
+    /// The `UAUnwrap` digest under `wrp`'s domain (ERC-5267), as a wallet computes it; relayer and fee recipient bound.
+    function _unwrapDigest(MetaTxLib.UAEnvelope memory e, uint256 wrapped, address recipient) internal view returns (bytes32) {
+        bytes32 structHash = keccak256(bytes.concat(abi.encode(
+            keccak256("UAUnwrap(bytes32 from,uint256 wrapped,address recipient,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            e.from, wrapped, recipient, uint256(0)), abi.encode(e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient)));
+        (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) = wrp.eip712Domain();
+        return keccak256(abi.encodePacked(hex"1901",
+            keccak256(abi.encode(keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
+                keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt)), structHash));
     }
 
     // ----- ops: UA-5a receivers, the UA allowlist, receiver-pays -----
@@ -297,9 +313,9 @@ contract UALedgerHandler is Test {
         bytes32 d = tok.uaTransferDigest(x);
         bytes memory payerAuth = _auth(payer, d);
         bytes memory payeeAuth = _sign(payee, UAKinds.PURPOSE_RECEIVER_FEE,
-            tok.receiverFeeDigest(d, fee, FEE_TO, block.timestamp));
+            tok.uaReceiverFeeDigest(x, fee, FEE_TO, block.timestamp));
         vm.prank(RELAYER);
-        tok.uaPayReceiverFee(x, payerAuth, fee, FEE_TO, block.timestamp, payeeAuth);
+        tok.uaPayReceiverFee(x, UACall.auth(x.from, payerAuth), fee, FEE_TO, block.timestamp, UACall.auth(x.to, payeeAuth));
         bool pUA = payer > 2;
         bool qUA = payee > 2;
         // the payment (UATransfer iff a derived side, Transfer iff a native side), then the fee from the payee to FEE_TO
@@ -351,18 +367,18 @@ contract UALedgerHandler is Test {
 
     function _submit(MetaTokenBase t_, MetaTxLib.UAMetaTransfer memory x, bytes memory auth, uint256 entry) internal {
         if (entry == 1 && x.fee == 0) {
-            t_.uaTransfer(x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, auth);
+            t_.uaTransfer(x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, UACall.auth(x.from, auth));
         } else if (entry == 1) {
             t_.uaTransferWithFee(
-                x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, x.fee, x.feeRecipient, auth
+                x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, x.fee, x.feeRecipient, UACall.auth(x.from, auth)
             );
         } else if (entry == 2) {
             MetaTxLib.UAMetaTransfer[] memory xs = new MetaTxLib.UAMetaTransfer[](1);
             bytes[] memory as_ = new bytes[](1);
             (xs[0], as_[0]) = (x, auth);
-            t_.uaBatchTransfer(xs, as_);
+            t_.uaBatchTransfer(xs, UACall.auths(xs, as_));
         } else {
-            t_.uaExecuteTransfer(x, auth);
+            t_.uaExecuteTransfer(x, UACall.auth(x.from, auth));
         }
     }
 

@@ -2,12 +2,14 @@
 pragma solidity ^0.8.24;
 
 import {ITradeToken} from "../trade/ITradeToken.sol";
+import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title Kind `WRAPPED` (CTR-TOK-21): 1–8 legs, each an ERC-20 or the native coin (`address(0)`, CTR-TOK-26).
 /// @notice Events and errors raised by `WrappedLib` (an external library) are declared here so that they are in the
 ///         token ABI. The creation config is `IFactoryToken.TokenConfig` (`legs`, `rate`).
 interface IWrappedToken {
-    /// @notice `account` is credited `minted`: the caller of a direct wrap; for `mtxWrap` the order's `destination` (or
+    /// @notice `account` is credited `minted`: the caller of a direct wrap; for `mtxWrapOrder` the order's `destination` (or
     ///         `from`) and the units net of the submitter's fee (W-Q), which its `Transfer` shows.
     event Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted);
     event Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned,
@@ -16,7 +18,7 @@ interface IWrappedToken {
     ///         `UATransfer(ua, 0)` names the UA).
     event UnwrappedToUA(address indexed account, address indexed underlying, bytes32 indexed to, uint256 burned,
         uint256 out);
-    /// @notice `uaWrap` (CTR-TOK-20, UA-5b): `to` is credited `minted`: the order's `destination` (or `from`) and the
+    /// @notice `uaWrapOrder` (CTR-TOK-20, UA-5b): `to` is credited `minted`: the order's `destination` (or `from`) and the
     ///         units net of the submitter's fee (W-Q).
     event UAWrapped(bytes32 indexed to, address indexed underlying, uint256 underlyingIn, uint256 minted);
     event ReserveAdded(address indexed from, address indexed underlying, uint256 amount);
@@ -54,7 +56,7 @@ interface IWrappedToken {
     error WrapPausedForRateChange(address u);
     /// @notice `msg.value` must equal `amount` on the native leg and be 0 on any other leg (CTR-TOK-26).
     error NativeValueMismatch(uint256 value, uint256 expected);
-    /// @notice `mtxWrap` (CTR-TOK-20): a signature cannot carry coin; the order must buy this token; the underlying
+    /// @notice `mtxWrapOrder` (CTR-TOK-20): a signature cannot carry coin; the order must buy this token; the underlying
     ///         must deliver exactly `o.amount`.
     error NativeNotGasless();
     error WrapOrderInvalid(address receiveToken);
@@ -81,12 +83,32 @@ interface IWrappedToken {
         external returns (uint256 out, uint256 burned);
     /// @notice Wrap a SCaaS underlying by the holder's `TradeOrder` (`dex` = this token, `receiveToken` = this
     ///         token, `receiveAmount` = the minimum minted, `minFill = amount`); `fee` pays the submitter in minted units.
-    function mtxWrap(address underlying, ITradeToken.TradeOrder calldata o, bytes calldata sig)
+    function mtxWrapOrder(address underlying, ITradeToken.WrapOrder calldata o, bytes calldata sig)
         external returns (uint256 minted);
-    /// @notice `mtxWrap` for a `UATradeOrder` (UA-5b): the underlying must be a SCaaS ledger token; `minted − fee`
+    /// @notice `mtxWrapOrder` for a `UAWrapOrder` (UA-5b): the underlying must be a SCaaS ledger token; `minted − fee`
     ///         to `o.destination` (0 ⇒ `o.from`), a derived id into the UA ledger.
-    function uaWrap(address underlying, ITradeToken.UATradeOrder calldata o, bytes calldata auth)
+    function uaWrapOrder(address underlying, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth)
         external returns (uint256 minted);
+    /// @notice The named typed entries (TS-D14): the envelope, the op's own parameters, the signature.
+    function mtxWrap(MetaTxLib.Envelope calldata e, uint256 amount, bytes calldata sig) external returns (bytes memory);
+    function mtxWrapLeg(MetaTxLib.Envelope calldata e, address underlying, uint256 amount, bytes calldata sig)
+        external returns (bytes memory);
+    function mtxWrapToUA(MetaTxLib.Envelope calldata e, address underlying, uint256 amount, bytes32 to, bytes calldata sig)
+        external returns (bytes memory);
+    function mtxAddReserve(MetaTxLib.Envelope calldata e, address underlying, uint256 amount, bytes calldata sig)
+        external returns (bytes memory);
+    function mtxUnwrap(MetaTxLib.Envelope calldata e, uint256 wrapped, address recipient, uint256 minOut,
+        bytes calldata sig) external returns (bytes memory);
+    function uaUnwrap(MetaTxLib.UAEnvelope calldata e, uint256 wrapped, address recipient, uint256 minOut,
+        IUARegistry.UASig calldata auth) external returns (bytes memory);
+    function mtxUnwrapLeg(MetaTxLib.Envelope calldata e, address underlying, uint256 wrapped, address recipient,
+        uint256 minOut, bytes calldata sig) external returns (bytes memory);
+    function uaUnwrapLeg(MetaTxLib.UAEnvelope calldata e, address underlying, uint256 wrapped, address recipient,
+        uint256 minOut, IUARegistry.UASig calldata auth) external returns (bytes memory);
+    function mtxUnwrapToUA(MetaTxLib.Envelope calldata e, address underlying, uint256 wrapped, bytes32 to, uint256 minOut,
+        bytes calldata sig) external returns (bytes memory);
+    function uaUnwrapToUA(MetaTxLib.UAEnvelope calldata e, address underlying, uint256 wrapped, bytes32 to, uint256 minOut,
+        IUARegistry.UASig calldata auth) external returns (bytes memory);
     function disableWrap(address underlying, bytes32 reason) external;
     function proposeRate(address underlying, uint96 num, uint96 den) external;
     function cancelRate() external;

@@ -22,13 +22,89 @@ interface IUARegistry is IERC5267 {
         uint40 index; // the UA's position in its kind's list (`uaAt`)
     }
 
-    /// The registration attributes, exactly as `register` takes them; empty / 0 = absent. `kemVersion` ≥ 1 with a
-    /// 1,601-byte `kemPk` (scheme byte 0x01 ‖ ek ‖ x25519 pk) is the initial KEM record (UA8-D3, D4); `pqzPopHash = keccak256(pqzPop)` whenever `pqzKey` is set.
+    /// One `msig` member's signature (CTR-UA-33: `keyData` always empty; the member's key is read from its record).
+    struct MemberSig {
+        uint16 index;
+        bytes keyData;
+        bytes sig;
+    }
+
+    /// A UA's signature, explicit (typed-signing TS-D12): a native id only `signature`; a derived single key `keyData`
+    /// (empty for the stored kinds, CTR-UA-17) + `signature`; an `msig` only `members` (its structure is read from the
+    /// record). A portable record's signature (`setKemKey`, `setPqzKey`) never carries `keyData`. Any other field set ⇒
+    /// not authorized.
+    struct UASig {
+        bytes keyData;
+        bytes signature;
+        MemberSig[] members;
+    }
+
+    /// An `msig` member (CTR-UA-09): `kind`, id, weight (TS-D10).
+    struct MsigMember {
+        uint16 kind;
+        bytes32 id;
+        uint16 weight;
+    }
+
+    /// An `msig` structure (TS-D10); the registry assembles the CTR-UA-09 key data `u16 threshold ‖ u16 n ‖ n × (u16 kind
+    /// ‖ id ‖ u16 weight)` from it, so the id and every digest are those of the packed bytes.
+    struct MsigStructure {
+        uint16 threshold;
+        MsigMember[] members;
+    }
+
+    /// A `webauthn-p256` key (typed-signing TS-D13, Appendix X row 12): the P-256 point and the relying party's
+    /// `rpIdHash`; the registry assembles the key data `x ‖ y ‖ rpIdHash` (96 B), so the id and every digest are the
+    /// packed bytes'.
+    struct WebAuthnKey {
+        bytes32 x;
+        bytes32 y;
+        bytes32 rpIdHash;
+    }
+
+    /// A MuSig2 group key (TS-D13): `aggKey` and the n sorted member keys, each one point (`musig2-secp256k1`: 33 B
+    /// compressed, `musig2-bn254`: 64 B); assembled `aggKey ‖ u16 n ‖ n × key`.
+    struct MuSig2Key {
+        bytes aggKey;
+        bytes[] memberKeys;
+    }
+
+    /// One FROST member (TS-D13): its `threshold` Feldman commitments, the PoK nonce point `r` (R_i) and response `z`.
+    struct FrostMember {
+        bytes[] commitments;
+        bytes r;
+        bytes32 z;
+    }
+
+    /// A FROST group key (TS-D13): points of 33 B (`frost-secp256k1`) or 64 B (`frost-bn254`); assembled `groupKey ‖
+    /// u16 threshold ‖ u16 n ‖ n × (threshold commitments ‖ r ‖ z)`.
+    struct FrostKey {
+        bytes groupKey;
+        uint16 threshold;
+        FrostMember[] members;
+    }
+
+    /// A KEM public key (TS-D11): scheme 1 = ML-KEM-1024 `mlkemEk` (1,568 B) + X25519 `x25519`. The registry assembles
+    /// `kemPk = scheme ‖ mlkemEk ‖ x25519` (1,601 B) for storage and `kemPkHash = keccak256(kemPk)`. All zero / empty =
+    /// no key.
+    struct KemKey {
+        uint8 scheme;
+        bytes mlkemEk;
+        bytes32 x25519;
+    }
+
+    /// The registration attributes, exactly as `register` takes them; empty / 0 = absent. `pqzPopHash = keccak256(pqzPop)`
+    /// whenever `pqzKey` is set. The KEM key given here is always version 0 (owner 2026-10-31), in one of two forms:
+    /// the full key — `kem` set, `kemPkHash` 0 — stored now; or the hash commit — `kemPkHash` ≠ 0 and `kem` carrying only
+    /// its `scheme` (`mlkemEk` empty, `x25519` 0) — when the full key does not fit the registration transaction (owner
+    /// 2026-10-31: PQZH `n2560-kmax16384` with a PQZ key). Either way the PoP signs `UAKemRecord{ua, 0, scheme,
+    /// kemPkHash}`; a committed key is stored later by `setKemKey(ua, 0, key, UASig())`, open to anyone. No KEM key:
+    /// `kem` all zero and `kemPkHash` 0.
     struct UAAttrs {
         bytes pqzKey;
         bytes32 pqzPopHash;
-        uint64 kemVersion;
-        bytes kemPk;
+        KemKey kem;
+        bytes32 kemPkHash;
     }
 
     /// Every `register` argument but `pop`, which comes as `popHash = keccak256(pop)` (`keccak256("")` for an empty
@@ -44,14 +120,19 @@ interface IUARegistry is IERC5267 {
     /// empty when `register` wrote them (its `UARegistered`, emitted next, carries them).
     event UAPqzPopStored(bytes32 indexed ua, uint8 checkedPqzPop, bytes pqzPop);
     /// A PQZ key added by `setPqzKey` (`pqzKeyHash = keyHashOf(0x0142, pqzKey)`), with the call's bytes (spec P2: the
-    /// record is copyable from the log); unproven (`CHECKED_NONE`) until its proof is stored (`UAPqzPopStored`).
+    /// record is copyable from the log; `sig` as stored, `pqzKeySigOf`: the `signature`, or an msig's
+    /// `abi.encode(members)`); unproven (`CHECKED_NONE`) until its proof is stored (`UAPqzPopStored`).
     event UAPqzKeyAdded(bytes32 indexed ua, bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes pqzKey, bytes sig);
-    /// A KEM record stored by `setKemKey` (`keyHash = keccak256(kemPk)`), with the call's bytes (spec P2, ruling A6-m
-    /// m3: the record is copyable from the log); checked on chain (`CHECKED_CHAIN`) on EVM. The initial record comes in
-    /// `UARegistered`.
-    event UAKemKeySet(bytes32 indexed ua, uint64 indexed version, bytes32 keyHash, bytes kemPk, bytes sig);
+    /// A KEM record stored by `setKemKey` (`keyHash = keccak256(kemPk)` of the assembled key), with the call's key and
+    /// its stored signature bytes (`kemKeyAt`'s `sig`) (spec P2, ruling A6-m m3: the record is copyable from the log);
+    /// checked on chain (`CHECKED_CHAIN`) on EVM. The initial record comes in `UARegistered` (a hash-committed one is
+    /// filled here, version 0, empty `sig`).
+    event UAKemKeySet(bytes32 indexed ua, uint64 indexed version, bytes32 keyHash, KemKey kem, bytes sig);
     /// One part of an ML-DSA id's expanded key stored (P6c), at `ptr` (SSTORE2).
     event UAKeyCached(bytes32 indexed ua, uint16 indexed kind, uint256 part, address ptr);
+    /// Slot `index` of the `msig` `ua`, member `member`, accepted by `acceptMembership` (CTR-UA-37). Slots that signed the
+    /// `pop` are accepted at registration, without this event: `UARegistered` and `popOf` carry them.
+    event UAMembershipAccepted(bytes32 indexed ua, uint16 index, bytes32 indexed member);
 
     error UAKindDisabled(uint16 kind); // not enabled in this generation (incl. kinds a predecessor offers)
     error UAKeyData(uint16 kind); // non-canonical, curve, subgroup, identity, ordering, threshold, cap bound
@@ -66,7 +147,10 @@ interface IUARegistry is IERC5267 {
     error UAIndex(uint16 kind, uint256 i); // uaAt past the kind's count
     error UANotIndexed(bytes32 ua); // uaIndex of an unregistered id
     error UAKemHolder(bytes32 ua); // kind / structure may not hold a KEM key (UA8-D12)
-    error UAKemVersion(bytes32 ua, uint64 version); // 0 (with a key), or already stored
+    /// setKemKey: a version already stored (every version write-once, owner 2026-10-31), or version 0 not committed by
+    /// hash at `register`
+    error UAKemVersion(bytes32 ua, uint64 version);
+    error UAKemKeyHash(bytes32 ua); // setKemKey version 0: the key does not hash to the `kemPkHash` committed at register
     error UAKemKeyLength(uint256 length); // empty, or ≠ 1,601 for scheme 1
     error UAKemScheme(uint8 scheme); // first byte of kemPk: not an enabled KEM scheme (1 only; 2 reserved)
     /// A PQZ key without its proof hash or a proof hash without a key (`register`; a zero hash in `setPqzKey`), a proof
@@ -87,33 +171,76 @@ interface IUARegistry is IERC5267 {
     function hederaNative() external view returns (bool); // Hedera profile: 0x0003 ∈ MEMBER
     function uaOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32);
     function keyHashOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32); // 0 for structures
-    /// UA8-D1 (`UAKinds`): `pqzKeyHash = keyHashOf(0x0142, pqzKey)`, `kemRecordHash = kemRecordDigest(ua, kemVersion,
-    /// kemPk)`, each 0 when absent.
-    function portablePopDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 kemRecordHash) external pure returns (bytes32);
-    function registrationDigest(bytes32 portable, bytes32 pqzPopHash) external pure returns (bytes32);
-    function kemRecordDigest(bytes32 ua, uint64 version, bytes calldata kemPk) external pure returns (bytes32);
+    /// typed-signing TS-D5 (owner 2026-10-31): the name of a kind id of the table (`UAKinds.name`; enabled or not, a name
+    /// table, not an enablement view); an unknown id reverts `UAKindUnknown(kind)` (an app reads a revert as "unknown").
+    function kindName(uint16 kind) external pure returns (string memory);
+    /// The portable records as typed EIP-712 structs (typed-signing TS-D1 … TS-D3, TS-D6; `UAKinds`) under the domain
+    /// `EIP712Domain(string name,string version)` = ("SCaaS UA Portable", "1"): `pqzKeyHash = keyHashOf(0x0142,
+    /// pqzKey)`, `pqzPopHash = keccak256(pqzPop)`, each 0 when absent; `kemRecordHash = hashStruct(UAKemRecord{ua,
+    /// version, scheme, keccak256(kemPk)})` of the assembled `kemPk = scheme ‖ mlkemEk ‖ x25519`, the zero record
+    /// `UAKemRecord{ua, 0, 0, 0}` for an empty `KemKey` (no key).
+    function portableDomainSeparator() external pure returns (bytes32);
+    /// typed(`UAPortableRecord{ua, kind, pqzKeyHash, kem}`), `kind` the registering kind: what R_REG proves over.
+    function portableRecordDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash)
+        external
+        pure
+        returns (bytes32);
+    function kemRecordHash(bytes32 ua, uint64 version, KemKey calldata kem) external pure returns (bytes32);
+    /// typed(`UARegistration{record, pqzPopHash}`): what `register`'s `pop` signs.
+    function registrationDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash, bytes32 pqzPopHash)
+        external
+        pure
+        returns (bytes32);
+    /// typed(`UAKemRecord`): what `setKemKey`'s `sig` signs.
+    function kemRecordDigest(bytes32 ua, uint64 version, KemKey calldata kem) external pure returns (bytes32);
+    /// typed(`UAPqzKey{ua, pqzKeyHash}`): what a later PQZ key's R_REG proves over.
     function pqzKeyDigest(bytes32 ua, bytes32 pqzKeyHash) external pure returns (bytes32);
-    function pqzKeyRecordDigest(bytes32 keyDigest, bytes32 pqzPopHash) external pure returns (bytes32);
+    /// typed(`UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}`): what `setPqzKey`'s `sig` signs.
+    function pqzKeyRecordDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 pqzPopHash) external pure returns (bytes32);
     function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32);
     /// EIP-712 digest of UAAuth(ua, purposeTag, digest) under this registry's domain: what native signers sign.
     function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
 
-    /// `pop`: the kind's signature (an msig: the canonical `abi.encode(MemberSig[])` over `memberDigest`, other bytes are
-    /// `UAPoP`; a native member that is an EOA — code-less or an EIP-7702 designator — by EIP-191 `personal_sign` with its
-    /// own key only, never ERC-1271 through the delegate; a contract by ERC-1271 over `memberDigest`) over `uaMessage(kind, PURPOSE_POP_V2,
-    /// registrationDigest(portablePopDigest(ua, pqzKeyHash, kemRecordHash), attrs.pqzPopHash))`. `attrs`: only a holder
+    /// A derived kind by its key data (every derived kind but `msig`, `registerMsig` only, `UAKeyData(kind)` here;
+    /// `webauthn-p256`, MuSig2 and FROST also through `registerWebAuthn` / `registerMuSig2` / `registerFrost`). `pop`: the
+    /// kind's signature over `uaMessage(kind, PURPOSE_POP_V2, registrationDigest(ua, kind, pqzKeyHash, kemRecordHash,
+    /// attrs.pqzPopHash))`. `attrs`: only a holder
     /// (`mldsa44`, `mldsa65`, `fndsa512`, a PQ-eligible `msig`; UA-6 U3, UA8-D12) carries a PQZ key or a KEM record.
-    /// `pqzPop`: the `R_REG` proof over `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(...))`, optional (empty: the
+    /// `pqzPop`: the `R_REG` proof over `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(...))`, optional (empty: the
     /// key is stored unproven, `storePqzPop` later; also unproven where the `0x0142` slot is empty, UA8-D8). The attribute
-    /// checks (holder, proof hash, PQZ key length, KEM version, KEM key length) come before the PoP (portable.json
-    /// `negatives`). Anyone may submit; the same bytes register on every registry.
+    /// checks (holder, proof hash, PQZ key length, KEM key length) come before the PoP (portable.json `negatives`). Anyone
+    /// may submit; the same arguments register on every registry, and so does the hash-commit form of the same `pop`
+    /// (PRV M1, owner 2026-11-01): a front-run yields the same record, its hash-commit form or a revert; after `register`
+    /// or `UAAlreadyRegistered` a client reads `registrationOf`, and when `attrs.kemPkHash != 0` and `kemKeyAt(ua, 0)` is
+    /// empty sends `setKemKey(ua, 0, key, UASig())`.
     function register(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
+        bytes calldata pqzPop) external returns (bytes32 ua);
+    /// `register` for the structure `msig` (typed-signing TS-D10): the key data is assembled from `s` (CTR-UA-09), so the
+    /// id and every digest are the packed form's (from `structure`). `pop`: empty unless the structure is PQ-eligible, then m-of-n member
+    /// signatures over the registration (derived members sign `memberDigest` under `member`; a native member signs the
+    /// typed `registrationDigest` itself (TS-D4, `eth_signTypedData_v4`): an EOA — code-less or an EIP-7702 designator —
+    /// by ECDSA with its own key only, never ERC-1271 through the delegate; a contract by ERC-1271 over it). Stored as
+    /// `abi.encode(pop)` (`popOf`, `registrationOf`; "" for none).
+    function registerMsig(MsigStructure calldata structure, UAAttrs calldata attrs, MemberSig[] calldata pop,
+        bytes calldata pqzPop) external returns (bytes32 ua);
+    /// `register` for `webauthn-p256` from its typed key (typed-signing TS-D13; `register(0x0100, …)` takes the packed
+    /// form too, same id). The registry assembles `x ‖ y ‖ rpIdHash`; `pop` as `register`'s (one WebAuthn assertion).
+    function registerWebAuthn(WebAuthnKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
+        bytes calldata pqzPop) external returns (bytes32 ua);
+    /// `register` for `kind` `musig2-secp256k1` (0x0110) or `musig2-bn254` (0x0112) from its typed key (TS-D13; another
+    /// kind, or a point of the wrong length, `UAKeyData(kind)`; `register` takes the packed form too, same id).
+    function registerMuSig2(uint16 kind, MuSig2Key calldata key, UAAttrs calldata attrs, bytes calldata pop,
+        bytes calldata pqzPop) external returns (bytes32 ua);
+    /// `register` for `kind` `frost-secp256k1` (0x0111) or `frost-bn254` (0x0113) from its typed key (TS-D13; another
+    /// kind, a point of the wrong length or a member without `threshold` commitments, `UAKeyData(kind)`; `register` takes
+    /// the packed form too, same id).
+    function registerFrost(uint16 kind, FrostKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
         bytes calldata pqzPop) external returns (bytes32 ua);
 
     /// Anyone (UA8-D8, P8): the `R_REG` proof of the UA's PQZ key, given later (or again) — `UAPqzPopHash` unless
     /// `keccak256(pqzPop)` is the stored `pqzPopHash` (so also for a UA without a PQZ key); a no-op (no event) once proof
     /// bytes are stored. Else the bytes are stored and, where slot `0x0142` has a verifier, checked over the key's `R_REG`
-    /// message — `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(...))` for a key from `register`,
+    /// message — `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kindOf(ua), ...))` for a key from `register`,
     /// `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, pqzKeyHash))` for one from `setPqzKey` — (`UAPoP` on failure),
     /// then the key's owner (`UAKeyInUse`), `keyOwner`, the `0x0142` list, `proven`; `UAPqzPopStored` with the bytes.
     /// Empty `pqzPop`: `UAPqzPopHash` (ruling A6-m). `UAUnauthorized` for an id this registry does not hold (gen 2: a
@@ -125,30 +252,41 @@ interface IUARegistry is IERC5267 {
     /// replaces a stored key this chain can never prove (ruling R-cross-set: slot 0x0142 has a verifier and the key,
     /// unproven, is not of this build's parameter set's length — e.g. a registration copied from a chain of another set);
     /// a key of this chain's set stays write-once, and without the verifier nothing is replaced. A replaced `register` key
-    /// stays in `registrationOf`. `sig` in the `pop` format over `uaMessage(kind, PURPOSE_PQZ_KEY, pqzKeyRecordDigest(pqzKeyDigest(ua, pqzKeyHash), pqzPopHash))`;
+    /// stays in `registrationOf`. `sig` in the `pop` format over `uaMessage(kind, PURPOSE_PQZ_KEY, pqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash))`;
     /// the key is stored unproven, and its `R_REG` (over `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, pqzKeyHash))`)
     /// comes by `storePqzPop`. The key's bytes are stored once, at the SSTORE2 pointer `pqzKeyOf(ua).ptr` (as `recordOf`'s:
     /// `eth_getCode(ptr)` without its leading STOP byte), and carried by `UAPqzKeyAdded`. On a gen 2 that enables 0x0142
     /// in front of a gen 1 that does not, it takes gen-1 records too (ruling A6-I1, as `storePqzPop`); gen 1's key, if
     /// any, counts for `UAPqzKeySet` (the same rule: gen 2, the verifier's generation, may replace gen 1's other-set key in
-    /// its own attachment; gen 1 keeps its record). A PQ-eligible `msig`'s `sig` that does not decode as `MemberSig[]`
-    /// reverts with empty data (the ABI decoder), not `UAUnauthorized`. Check order (ruling A4-c2): an id this registry does not hold (`UAUnauthorized`, as
+    /// its own attachment; gen 1 keeps its record). `sig`: `signature` (single keys) or `members` (an msig), never
+    /// `keyData`; stored (`pqzKeySigOf`) as `signature`, or `abi.encode(members)` for an msig. Check order (ruling A4-c2): an id this registry does not hold (`UAUnauthorized`, as
     /// `storePqzPop`), a gen 2 whose gen 1 enables 0x0142 (`UAKindDisabled(0x0142)`, as `register`) → holder
     /// (`UAPqzHolder`, with the `msig` debit bound) → the record has a PQZ key that stays (`UAPqzKeySet`) → the key's length
     /// (`UAKeyData(0x0142)`) / a zero or `keccak256("")` `pqzPopHash` (`UAPqzPopHash`) → signature (`UAUnauthorized`).
     /// `UAPoP` (`R_REG`) and `UAKeyInUse` (one UA per proven key) fire only where a proof is checked: `storePqzPop`,
     /// and `register` with a `pqzPop`. `UAPqzKeyAdded`.
-    function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, bytes calldata sig) external;
-    /// Anyone (P4, UA8-D5): the UA's KEM record `(version, kemPk)`; `sig` in the `pop` format (an msig: m-of-n
-    /// `MemberSig[]`, native members as in `register`'s `pop`) over `uaMessage(kind,
-    /// PURPOSE_KEM, kemRecordDigest(ua, version, kemPk))` (a PQ-eligible `msig`'s `sig` that does not decode as
-    /// `MemberSig[]` reverts with empty data, the ABI decoder). Each `(ua, version)` once, in any order; no owner check (two
-    /// UAs may list one key) and no revocation (P7). Stored `pk ‖ sig` (SSTORE2 chunks), `kemKeyOf` follows the highest
-    /// version, `UAKemKeySet` with the bytes. Check order: an id this registry does not hold (`UAUnauthorized`: an
-    /// unregistered id, and on gen 2 a gen-1 record, which goes to gen 1, UA8-D11) → holder (`UAKemHolder`: `mldsa44`,
-    /// `mldsa65`, `fndsa512`, a PQ-eligible `msig`; UA8-D12) → version 0 or stored, the initial record from `register`
-    /// included (`UAKemVersion`, UA8-D4) → `kemPk` of scheme 1 (`UAKemScheme`) and 1,601 B (`UAKemKeyLength`) → signature (`UAUnauthorized`).
-    function setKemKey(bytes32 ua, uint64 version, bytes calldata kemPk, bytes calldata sig) external;
+    function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, UASig calldata sig) external;
+    /// Anyone (P4, UA8-D5): the UA's KEM record `(version, kem)`. Versions ≥ 1: `sig` (`signature`, or `members` for an
+    /// msig, native members as in `registerMsig`'s `pop`; never `keyData`) over `uaMessage(kind, PURPOSE_KEM,
+    /// kemRecordDigest(ua, version, kem))`. Version 0 (owner 2026-10-31): only the key `register` committed by hash
+    /// (`attrs.kemPkHash`), with an empty `sig` (the PoP signed it), after `keccak256(kemPk) == kemPkHash`
+    /// (`UAKemKeyHash`); open to anyone, as `storePqzPop`. Every version is write-once — a stored key is never
+    /// overwritten, a new key goes to a new version (owner 2026-10-31) — in any order; no owner check (two UAs may list
+    /// one key) and no revocation (P7). Stored `kemPk ‖ sig` (SSTORE2 chunks; `sig` = `signature`, or `abi.encode(members)`),
+    /// `kemKeyOf` follows the highest version, `UAKemKeySet`. Check order: an id this registry does not hold
+    /// (`UAUnauthorized`: an unregistered id, and on gen 2 a gen-1 record, which goes to gen 1, UA8-D11) → holder
+    /// (`UAKemHolder`: `mldsa44`, `mldsa65`, `fndsa512`, a PQ-eligible `msig`; UA8-D12) → a stored version, or version 0
+    /// not committed (`UAKemVersion`) → the key: scheme 1 (`UAKemScheme`), 1,601 B assembled (`UAKemKeyLength`) →
+    /// signature (`UAUnauthorized`; version 0: a non-empty `sig`) / version 0 the committed hash (`UAKemKeyHash`).
+    function setKemKey(bytes32 ua, uint64 version, KemKey calldata kem, UASig calldata sig) external;
+    /// CTR-UA-37. Anyone submits, the member signs: slot `memberSig.index` of the `msig` `ua` accepts its place. `keyData`
+    /// empty (CTR-UA-33). A native member signs the typed `UAMembership{ua, member}` itself (`eth_signTypedData_v4`) or
+    /// answers ERC-1271 over it; a derived member signs `memberDigest(ua, uaMessage(MSIG, PURPOSE_MEMBERSHIP, typed))` under
+    /// `member`. Portable: no chain, no registry, so the same signature accepts on every registry (no nonce needed). A slot
+    /// already accepted is a no-op, no second event. `UAUnauthorized` for an id that is no `msig` on this registry (gen 2: a
+    /// gen-1 record goes to gen 1, UA8-D11, as `setKemKey`), an index past the members or a bad signature. No revoke: an
+    /// acceptance cannot be withdrawn.
+    function acceptMembership(bytes32 ua, MemberSig calldata memberSig) external;
 
     /// `pqzKey`: the SSTORE2 pointer of the UA's PQZ key, proven or not (UA8-D9: a directory), 0 = none (gen 2 forwards
     /// gen-1 records).
@@ -156,9 +294,22 @@ interface IUARegistry is IERC5267 {
     /// Exactly the `register` arguments: a PQZ key added later by `setPqzKey` is not in `attrs` (read it, its proof and
     /// its signature with `pqzKeyOf`, `pqzPopOf`, `pqzKeySigOf`; ruling A4-c3), and a `register` key it replaced (ruling
     /// R-cross-set) still is, with an empty `pqzPop` (this chain never stored its proof). For a key from `register`, `pqzPop` is the
-    /// stored proof (given in `register` or by `storePqzPop`; it hashes to `attrs.pqzPopHash`; ruling A5-c2).
+    /// stored proof (given in `register` or by `storePqzPop`; it hashes to `attrs.pqzPopHash`; ruling A5-c2). An `msig`:
+    /// `keyData` the assembled CTR-UA-09 bytes, `pop` = `abi.encode(MemberSig[])` ("" for none; `msigOf` for the typed
+    /// structure). A hash-committed KEM key stays in its committed form (`kem` = scheme only, `kemPkHash`), filled or not.
     function registrationOf(bytes32 ua) external view returns (uint16 kind, bytes memory keyData, UAAttrs memory attrs,
         bytes memory pop, bytes memory pqzPop);
+    /// The typed structure of an `msig` (TS-D10); empty (threshold 0, no members) for any other id.
+    function msigOf(bytes32 ua) external view returns (MsigStructure memory);
+    /// Has member slot `index` of `ua` agreed (CTR-UA-37: it signed the `pop` here, or `acceptMembership`)? False for a slot
+    /// that is only listed in `msigOf`, for any other id and past the members. Only accepted slots count at verify. Gen 2
+    /// forwards gen-1 records.
+    function memberAccepted(bytes32 ua, uint256 index) external view returns (bool);
+    /// The typed key of a `webauthn-p256` / MuSig2 / FROST UA (TS-D13); empty for any other id (gen 2 forwards gen-1
+    /// records).
+    function webAuthnKeyOf(bytes32 ua) external view returns (WebAuthnKey memory);
+    function muSig2KeyOf(bytes32 ua) external view returns (MuSig2Key memory);
+    function frostKeyOf(bytes32 ua) external view returns (FrostKey memory);
     function popOf(bytes32 ua) external view returns (bytes memory);
     function pqzPopOf(bytes32 ua) external view returns (bytes memory);
     /// `setPqzKey`'s signature; empty when the key came with `register` (its consent is the `pop`) or there is none.
@@ -170,10 +321,11 @@ interface IUARegistry is IERC5267 {
     /// The three parts (P11.3, ruling C8), `UAKinds.CHECKED_*`: `pop` = CHAIN; `pqzPop` = CHAIN iff proven, else NONE (no
     /// key, or not yet proven); `kem` = CHAIN once a KEM record is stored, else NONE; all NONE for an unregistered id.
     function checkedOf(bytes32 ua) external view returns (uint8 pop, uint8 pqzPop, uint8 kem);
-    /// The highest stored version (0, "", "" without one); `sig` is "" for the initial record (UA8-D4).
-    function kemKeyOf(bytes32 ua) external view returns (uint64 version, bytes memory pk, bytes memory sig);
-    /// ("", "") for a version not stored.
-    function kemKeyAt(bytes32 ua, uint64 version) external view returns (bytes memory pk, bytes memory sig);
+    /// The highest stored version: (0, none, "") without one — also a hash-committed `register` key not filled yet —,
+    /// (0, kem, "") for the `register` key alone (version 0, empty `sig`: its consent is the pop, UA8-D4).
+    function kemKeyOf(bytes32 ua) external view returns (uint64 version, KemKey memory kem, bytes memory sig);
+    /// (none, "") for a version not stored.
+    function kemKeyAt(bytes32 ua, uint64 version) external view returns (KemKey memory kem, bytes memory sig);
     function kindOf(bytes32 ua) external view returns (uint16); // 0 = not registered (native ids too)
     function isRegistered(bytes32 ua) external view returns (bool);
     function keyOwner(bytes32 keyHash) external view returns (bytes32);
@@ -199,14 +351,13 @@ interface IUARegistry is IERC5267 {
     /// The stored part pointers (0 = not yet), this generation only.
     function expandedKeyOf(bytes32 ua) external view returns (address[2] memory);
 
-    /// Reverts UAUnauthorized unless `auth` authorizes `digest` for `ua` under `purposeTag`.
-    /// Native ids (ua >> 160 == 0): ECDSA low-s (EOA) or ERC-1271 (50 k cap; 400 k for SmartKeyAccount clones, by the
-    ///   immutable clone codehash) over uaAuthDigest(ua, purposeTag, digest) — never over the raw digest.
-    ///   Classified by code at call time (owner ruling D1, 2026-10-30): empty or the 7702 designator (an EOA) ⇒ ECDSA by
-    ///   its own key only, never 1271 through the delegate; other ⇒ 1271.
-    /// Derived SIGNING: auth = abi.encode(bytes keyData, bytes sig); keyData empty for stored kinds (Zether
-    ///   `zether-bls12381` included, UA-6 U8: a Schnorr by `x` on `Y`).
-    ///   msig: sig = abi.encode(MemberSig[]), MemberSig{uint16 index; bytes keyData; bytes sig}.
+    /// Reverts UAUnauthorized unless `auth` authorizes `digest` for `ua` under `purposeTag` (typed-signing TS-D12).
+    /// Native ids (ua >> 160 == 0): `auth.signature` only, ECDSA low-s (EOA) or ERC-1271 (50 k cap; 400 k for
+    ///   SmartKeyAccount clones, by the immutable clone codehash) over uaAuthDigest(ua, purposeTag, digest) — never over
+    ///   the raw digest. Classified by code at call time (owner ruling D1, 2026-10-30): empty or the 7702 designator (an
+    ///   EOA) ⇒ ECDSA by its own key only, never 1271 through the delegate; other ⇒ 1271.
+    /// Derived SIGNING: `auth.keyData` (empty for stored kinds: Zether `zether-bls12381` included, UA-6 U8: a Schnorr by
+    ///   `x` on `Y`) + `auth.signature`. msig: `auth.members` only (the structure from the record).
     /// Unregistered: UAUnauthorized.
-    function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes calldata auth) external view;
+    function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, UASig calldata auth) external view;
 }

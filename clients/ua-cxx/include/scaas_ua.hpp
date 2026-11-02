@@ -14,7 +14,7 @@ namespace scaas::ua {
 using Bytes = std::vector<uint8_t>;
 
 // code(): UAKeyData, UAIdInNativeSpace, UAKindUnknown, UAKindNotDerived, UAKindNotNative, UAIdFormat, UAPurposeUnknown, UAPqzHolder, UAKemHolder,
-// UAKemVersion, UAKemKeyLength, UAKemScheme, UAPqzPopHash, UAPqzKeySet.
+// UAKemVersion, UAKemKeyLength, UAKemScheme, UAPqzPopHash, UAPqzKeySet, UAArgument (the JSON calls only).
 // reason(): the label after "UAKeyData: " (empty for every other code).
 class Error : public std::runtime_error {
 public:
@@ -39,14 +39,12 @@ struct Member {
     Bytes id;  // 32 bytes
     uint16_t weight;
 };
-// A KEM record attribute: (version >= 1, 1,601-byte key, scheme byte first). nullopt, or (0, empty), = absent.
-using Kem = std::pair<uint64_t, Bytes>;
 // The portable PoP of a registration (UA-8 P1, P2); every hash is 32 bytes, 0 when absent.
 struct HolderPop {
-    Bytes pqzKeyHash, pqzPopHash, kemRecordHash, portablePopDigest, registrationDigest;
+    Bytes pqzKeyHash, pqzPopHash, kemRecordHash, portableRecordDigest, registrationDigest;
     Bytes message;  // uaMessage(kind, POP_V2, registrationDigest): what the signer's pop signs (every kind)
-    // msig only: memberDigest(ua, message), what each member signs under `member`. A code-less native member signs
-    // personalSignDigest(memberDigest) (ruling C7).
+    // msig only: memberDigest(ua, message), what each derived member signs under `member`. A native member signs
+    // registrationDigest itself (eth_signTypedData_v4, typed-signing TS-D4).
     std::optional<Bytes> memberDigest;
 };
 // The PQZ key record of setPqzKey (ruling A1-I1).
@@ -71,8 +69,6 @@ std::optional<Bytes> groupTag(const std::string& group);
 std::optional<std::string> groupTagString(const std::string& group);
 Bytes msgTag();
 Bytes purposeTag(const std::string& purpose, uint32_t version = 1);  // every purpose is v1; pop is also v2 (UA-8)
-Bytes kemRecordTag();
-Bytes pqzKeyRecordTag();
 constexpr uint8_t kKemSchemeMlkem1024X25519 = 1;  // kemPk[0] (CTR-UA-32); 2 = ML-KEM-1024 + HQC + X25519 is reserved (UAKemScheme)
 constexpr size_t kKemPkLength = 1601;  // 0x01 ‖ ML-KEM-1024 ek ‖ X25519 pk (X-Wing order)
 Bytes uaOf(uint16_t kind, const Bytes& keyData);
@@ -89,37 +85,60 @@ bool isSigning(uint16_t kind);
 bool isMember(uint16_t kind, bool hederaNative);
 Bytes uaMessage(uint16_t kind, const Bytes& purposeTag, const Bytes& digest);
 Bytes chainKeyHash(uint64_t chainId);
-// keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash), each hash 32 zero bytes when absent (UA-8 P1: no chain).
-Bytes portablePopDigest(const Bytes& ua, const Bytes& pqzKeyHash, const Bytes& kemRecordHash);
-// keccak256(portablePopDigest ‖ pqzPopHash): what the signer's pop signs under uaMessage(kind, POP_V2, ·).
-Bytes registrationDigest(const Bytes& portable, const Bytes& pqzPopHash);
-// keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk)): version 1 … 2^64 − 1 (UAKemVersion), a 1,601-byte key, scheme byte first (UAKemScheme for an id other than 1, UAKemKeyLength).
+// The portable records are typed EIP-712 structs (typed-signing TS-D1): typed(s) = keccak256(0x1901 ‖ DS_P ‖ hashStruct(s)), DS_P the
+// domain EIP712Domain(string name,string version) = ("SCaaS UA Portable", "1"): no chain id, verifying contract or salt.
+Bytes portableDomainSeparator();
+// hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], keccak256(kemPk)}), the kem word of a portable record; (0, empty) is the
+// zero record UAKemRecord{ua, 0, 0, 0} (no KEM record), (0, key) the register key's record (owner 2026-10-31), otherwise the rules
+// of kemRecordDigest.
+Bytes kemRecordHash(const Bytes& ua, uint64_t version, const Bytes& kemPk);
+// typed(UAPortableRecord{ua, kind, pqzKeyHash, kem}): what R_REG proves over at register; pqzKeyHash 32 zero bytes without a key.
+Bytes portableRecordDigest(const Bytes& ua, uint16_t kind, const Bytes& pqzKeyHash, const Bytes& kemRecordHash);
+// typed(UARegistration{record, pqzPopHash}): what the signer's pop signs under uaMessage(kind, POP_V2, ·) (and a native msig member itself).
+Bytes registrationDigest(const Bytes& ua, uint16_t kind, const Bytes& pqzKeyHash, const Bytes& kemRecordHash, const Bytes& pqzPopHash);
+// typed(UAKemRecord{…}) that setKemKey signs: version 1 … 2^64 − 1 (UAKemVersion), a 1,601-byte key, scheme byte first (UAKemScheme for an id other than 1, UAKemKeyLength).
 Bytes kemRecordDigest(const Bytes& ua, uint64_t version, const Bytes& kemPk);
 Bytes kemRecordMessage(uint16_t kind, const Bytes& ua, uint64_t version, const Bytes& kemPk);  // uaMessage(kind, PURPOSE_KEM, digest)
 // The portable PoP message of a registration. pqzKey with its proof pqzPop (or only its hash pqzPopHash; a relayer may hold only
-// that; an empty hash is absent, another length than 32 is UAPqzPopHash) and the initial KEM record; nullopt = absent. Only
+// that; an empty hash is absent, another length than 32 is UAPqzPopHash) and the initial KEM key kemPk (1,601 bytes, scheme byte
+// first; its record is always version 0, owner 2026-10-31); nullopt / empty = absent. Only
 // holders carry them (UAPqzHolder, UAKemHolder; an msig needs keyData to show it is PQ-eligible); a PQZ key always comes with its
 // proof hash and only with it (UAPqzPopHash).
 HolderPop holderPopMessage(uint16_t kind, const Bytes& ua, const Bytes& keyData, const std::optional<Bytes>& pqzKey = std::nullopt,
                            const std::optional<Bytes>& pqzPop = std::nullopt, const std::optional<Bytes>& pqzPopHash = std::nullopt,
-                           const std::optional<Kem>& kem = std::nullopt);
-// The message R_REG proves over: uaMessage(0x0142, POP_V2, portablePopDigest(ua, keyHash(0x0142, pqzKey), kemRecordHash)).
-Bytes pqzRegMessage(const Bytes& ua, const Bytes& pqzKey, const std::optional<Kem>& kem = std::nullopt);
-Bytes pqzKeyDigest(const Bytes& ua, const Bytes& pqzKeyHash);  // keccak256(PQZ_KEY_RECORD_TAG ‖ ua ‖ pqzKeyHash)
-Bytes pqzKeyRecordDigest(const Bytes& pqzKeyDigest, const Bytes& pqzPopHash);  // keccak256(pqzKeyDigest ‖ pqzPopHash)
+                           const std::optional<Bytes>& kemPk = std::nullopt);
+// The message R_REG proves over: uaMessage(0x0142, POP_V2, portableRecordDigest(ua, kind, keyHash(0x0142, pqzKey), kemRecordHash)),
+// kind the registering kind, kemPk the register KEM key (version 0).
+Bytes pqzRegMessage(uint16_t kind, const Bytes& ua, const Bytes& pqzKey, const std::optional<Bytes>& kemPk = std::nullopt);
+Bytes pqzKeyDigest(const Bytes& ua, const Bytes& pqzKeyHash);  // typed(UAPqzKey{ua, pqzKeyHash})
+// typed(UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}): what setPqzKey's signature signs under uaMessage(kind, PURPOSE_PQZ_KEY, ·)
+Bytes pqzKeyRecordDigest(const Bytes& ua, const Bytes& pqzKeyHash, const Bytes& pqzPopHash);
+// typed(UAMembership{ua, member}): what member signs to accept its slot in the msig ua (CTR-UA-37): a native member this digest
+// itself, a derived member memberDigest(ua, uaMessage(MSIG, PURPOSE_MEMBERSHIP, ·)) under member
+Bytes membershipDigest(const Bytes& ua, const Bytes& member);
 // The signed, portable, write-once PQZ key record of setPqzKey: alreadySet = the registration has a key (UAPqzKeySet). The holder
 // rules of holderPopMessage; the key and its proof (or hash) are both required.
 PqzKeyRecord pqzKeyRecordMessage(uint16_t kind, const Bytes& ua, const Bytes& keyData, const Bytes& pqzKey,
                                  const std::optional<Bytes>& pqzPop = std::nullopt, const std::optional<Bytes>& pqzPopHash = std::nullopt,
                                  bool alreadySet = false);
-// EIP-191 personal_sign of a 32-byte digest: keccak256(0x19 ‖ "Ethereum Signed Message:\n32" ‖ digest). A code-less native (EOA) msig
-// member signs it over the memberDigest of a portable record only (POP_V2, KEM, PQZ_KEY; ruling C7); every other purpose stays UAAuth.
-Bytes personalSignDigest(const Bytes& digest);
+// POP_V2, KEM, PQZ_KEY: the purposes where a native msig member signs the record's typed digest itself (TS-D4); every other
+// purpose stays UAAuth.
 bool isPortablePurpose(const Bytes& purposeTag);
 Bytes uaAuthDomainSeparator(const Domain& d);
 Bytes uaAuthDigest(const Domain& d, const Bytes& ua, const Bytes& purposeTag, const Bytes& digest);
 Bytes memberDigest(const Bytes& structureUa, const Bytes& uaMsg);
 std::string canonicalId(const std::string& text);
 Bytes encodeMsig(uint16_t threshold, const std::vector<Member>& members);
+// The registry's explicit arguments of a registration, JSON in and out. In: {kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop,
+// kemCommit}: bytes as "0x…" hex, an absent field is empty, an msig's pop is [{index, keyData, sig}], kemCommit true / false forces the
+// KEM form (absent: the hash commit only when the full call is over 261,909 B). Out: {args, kemFill, calldataLength,
+// kemFillCalldataLength}: args.entry names the registry entry, kemFill is the setKemKey(ua, 0, …) that stores a hash-committed key
+// (null otherwise). UAArgument when the input is not this JSON.
+std::string registrationArgs(const std::string& input);
+// setKemKey's explicit arguments, JSON in and out. In: {ua, version, kemPk, sig}, sig the UASig {keyData, signature, members: [{index,
+// keyData, sig}]} (absent: empty, the version-0 fill of a hash commit). Out: {ua, version, kem, sig}.
+std::string setKemKeyArgs(const std::string& input);
+// setPqzKey's explicit arguments, JSON in and out. In: {ua, pqzKey, pqzPopHash, sig}, sig as setKemKeyArgs. Out: the same fields, sig complete.
+std::string setPqzKeyArgs(const std::string& input);
 
 }  // namespace scaas::ua

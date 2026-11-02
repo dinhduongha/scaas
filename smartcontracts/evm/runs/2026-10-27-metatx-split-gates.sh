@@ -37,7 +37,7 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
       cd smartcontracts/evm || return 1
       o=$(mktemp); ZETHER_CLI="$W/clients/zether-prover/target/release/zether-cli" ../../scripts/capped forge test --ffi \
         --match-path test/zether/ZetherProverCross.t.sol 2>&1 | tee "$o"; rc=${PIPESTATUS[0]}
-      [ $rc -eq 0 ] && grep -q "6 passed; 0 failed; 0 skipped" "$o" || { echo "zether-cross: not 6 passed / 0 skipped"; rc=1; }
+      [ $rc -eq 0 ] && grep -q "${ZETHER_CROSS_N:-6} passed; 0 failed; 0 skipped" "$o" || { echo "zether-cross: not ${ZETHER_CROSS_N:-6} passed / 0 skipped"; rc=1; }
       rm -f "$o"; return $rc ;;
     cargo-scaas-node) cd scaas-node && ../scripts/capped sh -c 'cargo clippy -j2 --all-targets -- -D warnings && cargo test -j2' ;;
     # the anvil e2e CI runs (`cargo test --test e2e -- --ignored`); added 2026-10-30 after CI caught a stale register ABI there
@@ -45,6 +45,21 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
     clientkeys) cd clients/clientkeys && ../../scripts/capped npm test ;;
     ua-rs) cd clients/ua-rs && ../../scripts/capped cargo test -j2 ;;
     ua-rs-signers) cd clients/ua-rs && ../../scripts/capped cargo test -j2 --features signers ;;
+    ua-rs-json) cd clients/ua-rs && ../../scripts/capped sh -c 'cargo clippy -j2 --all-targets --features json -- -D warnings && cargo test -j2 --features json' ;;
+    vectors-check) # typed-signing PG: each generator twice, the committed vector files must not move; groups.json = ua-rs write_groups_json
+      (cd clients/zether-prover && ../../scripts/capped cargo build -j2 --release --bin zether-cli) || return 1
+      for i in 1 2; do
+        (cd clients/clientkeys && ../../scripts/capped sh -c 'node scripts/ua-vectors.mjs && node scripts/ua-sig-vectors.mjs &&
+           node scripts/ua-portable-vectors.mjs && node scripts/soroban-ua-ops-vectors.mjs && node scripts/typed-ops-vectors.mjs') || return 1
+        (cd clients/ua-rs && ../../scripts/capped cargo test -j2 --features signers --test groups -- --ignored write_groups_json) || return 1
+        (cd clients/zether-prover && target/release/zether-cli vectors vectors) || return 1
+        git diff --exit-code --stat -- smartcontracts/vectors/ua smartcontracts/vectors/typed smartcontracts/soroban/vectors clients/zether-prover/vectors || return 1
+      done
+      (cd clients/clientkeys && ../../scripts/capped node scripts/typed-ops-cast-check.mjs) || return 1 # needs cast: Foundry, as every forge step
+      for f in r33_keys schnorr_bls12381; do # the committed copies of the zether files
+        cmp clients/zether-prover/vectors/$f.json clients/clientkeys/test/vectors/$f.json &&
+          cmp clients/zether-prover/vectors/$f.json smartcontracts/evm/test/vectors/zether/s3/$f.json || return 1
+      done ;;
     ua-qt) # as Task 18; build/ is git-ignored; ctest -V prints QtQuickTest's per-function PASS lines for named-tests
       QMAKE=$QT/bin/qmake6 LD_LIBRARY_PATH=$QT/lib QT_QPA_PLATFORM=offscreen scripts/capped sh -c \
         "cmake -S clients/ua-qt -B clients/ua-qt/build -DCMAKE_PREFIX_PATH=$QT && cmake --build clients/ua-qt/build -j2 &&
@@ -74,7 +89,7 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
     soroban-spike-local) CAPPED_SLOTS=1 smartcontracts/soroban/spike/run.sh ;;
     e2e-soroban-local) smartcontracts/soroban/scripts/e2e-local.sh ;;
     named-tests) named_tests ;;
-    *) echo "unknown step $1"; return 2 ;;
+    *) if declare -F extra_step > /dev/null; then extra_step "$1"; else echo "unknown step $1"; return 2; fi ;; # extra_step: a wrapper's own steps
   esac
 }
 
@@ -767,7 +782,7 @@ named_tests() { # every new test passed; no family log with 0 passed, a skipped 
     p != "" && /^(ok|FAILED|ignored)/ { print p $0; p = "" }' "$1"; }
   while IFS='|' read -r step form name; do
     case $form in
-      forge) cat "$D/$P"-forge-*.txt 2>/dev/null | grep -qF "[PASS] $name(" ;;
+      forge) cat "$D/$P"-forge-*.txt "$D/$P-zether-cross.txt" 2>/dev/null | grep -qF "[PASS] $name(" ;;
       cargo) re="^test ([^ ]+::)?${name//::/::([^ ]+::)?}( - should panic)?" # a #[should_panic] test prints the suffix
         f=$(cnorm "$D/$P-$step.txt" 2>/dev/null)
         ! grep -qE "$re \.\.\. ignored(, .*)?$" <<< "$f" && grep -qE "$re \.\.\. ok$" <<< "$f" ;;
@@ -788,7 +803,8 @@ named_tests() { # every new test passed; no family log with 0 passed, a skipped 
             if (p) { if (a == pa + 1 && x == px) ok++; p = 0 }
             if (t == n) { p = 1; pa = a; px = x; seen++ } }
           END { exit !(seen > 0 && ok == seen) }' ;;
-      unittest) grep -qE "^${name} \(.*\) \.\.\. ok\$" "$D/$P-$step.txt" 2>/dev/null ;;
+      # a test with a docstring prints its name, then "<docstring> ... ok" on the next line
+      unittest) grep -A1 -E "^${name} \(.*\)( \.\.\. ok)?\$" "$D/$P-$step.txt" 2>/dev/null | grep -qE " \.\.\. ok\$" ;;
     esac || { echo "named-tests: not passed in $step: $name"; miss=$((miss + 1)); }
   done <<< "$NEW_TESTS"
   for s in $FAMILIES; do

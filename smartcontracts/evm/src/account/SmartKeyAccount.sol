@@ -5,7 +5,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {P256} from "@openzeppelin/contracts/utils/cryptography/P256.sol";
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
-import {MetaTxBase} from "../metatx/MetaTxBase.sol";
+import {WalletExecute} from "../wallet/WalletExecute.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {WebAuthnClientData} from "../common/WebAuthnClientData.sol";
@@ -25,6 +25,13 @@ struct SubjectKey {
     bytes32 originHash;  // keccak256(origin): the "origin" value of clientDataJSON
 }
 
+/// @dev A signature of the account (CTR-ACC-02): the explicit form of `abi.encode(keyIndex, proof, signature)`, on its own entries.
+struct AccountSig {
+    uint256 keyIndex;
+    bytes32[] proof;
+    bytes signature;
+}
+
 /// @title The multi-key ERC-1271 account of one subject on one EVM chain (CTR-ACC-09…11), on `MetaTxBase`.
 /// @notice ERC-1271 for tokens and the DEX: `isValidSignature(digest, abi.encode(uint256 keyIndex, bytes32[] proof,
 ///         bytes sig))` (CTR-ACC-02): an empty `proof` signs the digest, a non-empty one a Merkle root whose leaf is
@@ -35,13 +42,30 @@ struct SubjectKey {
 ///         (its passkeys have no address), checked against its own key set, domain `("SCaaS SmartKeyAccount", "1",
 ///         chainId, account, chain_uid)`, the 2D lane nonce, fee mode `NONE`. `addKey`, `removeKey`, `rotateKey`,
 ///         `setGuardian`, `cancelRecovery` and `execute` are allowlisted self-calls, `onlySelf`. `mtxExecuteAsOwner` is
-///         the named builder of that `MetaTransaction` on lane 0. Guardian recovery adds a key after `RECOVERY_DELAY`
+///         the named builder of that `MetaTransaction` on lane 0. Each of the six also has a named typed entry (TS-D14) over its
+///         own struct, `SubjectKey` flattened, signed with an `AccountSig`: `mtxAddKey`, `mtxRemoveKey`, `mtxRotateKey`,
+///         `mtxSetGuardian`, `mtxCancelRecovery`, `mtxExecute`. Guardian recovery adds a key after `RECOVERY_DELAY`
 ///         (CTR-ACC-03); the account never has zero keys. No owner or admin: the factory only initialises.
-contract SmartKeyAccount is MetaTxBase, IERC1271 {
+contract SmartKeyAccount is WalletExecute, IERC1271 {
     uint256 public constant RECOVERY_DELAY = 2 days;
     bytes4 private constant _INVALID = 0xffffffff;
     uint8 private constant _FLAG_UP = 0x01;
     uint8 private constant _FLAG_UV = 0x04;
+    bytes32 private constant _ADD_KEY_TYPEHASH = keccak256(
+        "AddKey(address from,uint8 kind,bytes32 x,bytes32 y,bytes32 rpIdHash,bytes32 originHash,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+    bytes32 private constant _REMOVE_KEY_TYPEHASH = keccak256(
+        "RemoveKey(address from,uint256 index,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+    bytes32 private constant _ROTATE_KEY_TYPEHASH = keccak256(
+        "RotateKey(address from,uint256 index,uint8 kind,bytes32 x,bytes32 y,bytes32 rpIdHash,bytes32 originHash,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+    bytes32 private constant _SET_GUARDIAN_TYPEHASH = keccak256(
+        "SetGuardian(address from,address guardian,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+    bytes32 private constant _CANCEL_RECOVERY_TYPEHASH = keccak256(
+        "CancelRecovery(address from,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
 
     address public immutable FACTORY;
 
@@ -79,7 +103,7 @@ contract SmartKeyAccount is MetaTxBase, IERC1271 {
     }
 
     /// @dev Runs once, on the implementation, deployed by the factory; locks the implementation.
-    constructor(bytes32 chainUid_) MetaTxBase("SCaaS SmartKeyAccount", chainUid_) {
+    constructor(bytes32 chainUid_) WalletExecute("SCaaS SmartKeyAccount", chainUid_) {
         FACTORY = msg.sender;
         _initialized = true;
     }
@@ -118,6 +142,45 @@ contract SmartKeyAccount is MetaTxBase, IERC1271 {
         m.nonce = nonce;
         m.validUntil = validUntil;
         return _execute(m, signature);
+    }
+
+    /// @notice The named typed entries (TS-D14): anyone submits, `e.from` is the account (`onlySelf`), `sig` one of its keys.
+    function mtxAddKey(MetaTxLib.Envelope calldata e, uint8 kind, bytes32 x, bytes32 y, bytes32 rpIdHash, bytes32 originHash,
+        AccountSig calldata sig) external nonReentrant returns (bytes memory)
+    {
+        return _named(_ADD_KEY_TYPEHASH, SmartKeyAccount.addKey.selector, e, abi.encode(kind, x, y, rpIdHash, originHash), _blob(sig));
+    }
+
+    function mtxRemoveKey(MetaTxLib.Envelope calldata e, uint256 index, AccountSig calldata sig)
+        external nonReentrant returns (bytes memory)
+    {
+        return _named(_REMOVE_KEY_TYPEHASH, SmartKeyAccount.removeKey.selector, e, abi.encode(index), _blob(sig));
+    }
+
+    function mtxRotateKey(MetaTxLib.Envelope calldata e, uint256 index, uint8 kind, bytes32 x, bytes32 y, bytes32 rpIdHash,
+        bytes32 originHash, AccountSig calldata sig) external nonReentrant returns (bytes memory)
+    {
+        return _named(_ROTATE_KEY_TYPEHASH, SmartKeyAccount.rotateKey.selector, e,
+            abi.encode(index, kind, x, y, rpIdHash, originHash), _blob(sig));
+    }
+
+    function mtxSetGuardian(MetaTxLib.Envelope calldata e, address guardian_, AccountSig calldata sig)
+        external nonReentrant returns (bytes memory)
+    {
+        return _named(_SET_GUARDIAN_TYPEHASH, SmartKeyAccount.setGuardian.selector, e, abi.encode(guardian_), _blob(sig));
+    }
+
+    function mtxCancelRecovery(MetaTxLib.Envelope calldata e, AccountSig calldata sig)
+        external nonReentrant returns (bytes memory)
+    {
+        return _named(_CANCEL_RECOVERY_TYPEHASH, SmartKeyAccount.cancelRecovery.selector, e, "", _blob(sig));
+    }
+
+    /// @notice Struct `Execute`: the wallet shows target and value, `data` stays hex.
+    function mtxExecute(MetaTxLib.Envelope calldata e, address target, uint256 value, bytes calldata data, AccountSig calldata sig)
+        external nonReentrant returns (bytes memory)
+    {
+        return _namedExecute(e, target, value, data, _blob(sig));
     }
 
     function addKey(SubjectKey calldata key) external nonReentrant onlySelf returns (uint256) {
@@ -239,6 +302,15 @@ contract SmartKeyAccount is MetaTxBase, IERC1271 {
     }
 
     // ------------------------------------------------------------------ private
+
+    /// @dev The `AccountSig` as the `bytes` the pipeline and `isValidSignature` take. A dynamic tuple in calldata IS
+    ///      `abi.encode(keyIndex, proof, signature)`, its offsets relative to its own start, so this is the rest of the
+    ///      calldata from there, never re-encoded. Anything behind the tuple is ignored by `_isValid`'s decode.
+    function _blob(AccountSig calldata s) private pure returns (bytes calldata) {
+        uint256 at;
+        assembly ("memory-safe") { at := s }
+        return msg.data[at:];
+    }
 
     function _addKey(SubjectKey calldata key) private returns (uint256 index) {
         _checkKey(key);

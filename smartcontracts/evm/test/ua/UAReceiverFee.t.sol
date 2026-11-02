@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {domainOf} from "../metatx/NamedEntry.t.sol";
+import {UACall} from "./UACall.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -62,8 +64,9 @@ contract UAReceiverFeeTest is UALedgerBase {
         bytes memory err) internal returns (uint256 gas)
     {
         bytes32 d = t_.uaTransferDigest(t);
-        bytes memory payerAuth = _sign(t.from, UAKinds.PURPOSE_METATX, d);
-        bytes memory payeeAuth = _sign(t.to, UAKinds.PURPOSE_RECEIVER_FEE, t_.receiverFeeDigest(d, fee, feeTo, rfUntil));
+        IUARegistry.UASig memory payerAuth = UACall.auth(t.from, _sign(t.from, UAKinds.PURPOSE_METATX, d));
+        IUARegistry.UASig memory payeeAuth = UACall.auth(t.to,
+            _sign(t.to, UAKinds.PURPOSE_RECEIVER_FEE, t_.uaReceiverFeeDigest(t, fee, feeTo, rfUntil)));
         if (err.length != 0) vm.expectRevert(err);
         vm.prank(RELAYER);
         gas = gasleft();
@@ -148,11 +151,42 @@ contract UAReceiverFeeTest is UALedgerBase {
         });
         bytes32 d = tok.mtxTransferDigest(x);
         bytes memory ps = _ecdsa(ALICE_PK, d);
-        bytes memory rs = _ecdsa(BOB_PK, tok.receiverFeeDigest(d, 1_000, FEE_TO, block.timestamp));
+        bytes memory rs = _ecdsa(BOB_PK, tok.receiverFeeDigest(x, 1_000, FEE_TO, block.timestamp));
         vm.prank(RELAYER);
         uint256 g0 = gasleft();
         tok.mtxPayReceiverFee(x, ps, 1_000, FEE_TO, block.timestamp, rs);
         emit log_named_uint("mtxPayReceiverFee payer native, payee native", g0 - gasleft());
+    }
+
+    function _paymentHash(MetaTxLib.UAMetaTransfer memory t) internal pure returns (bytes32) {
+        return keccak256(abi.encode(MetaTxLib.UAMETATRANSFER_TYPEHASH, t.from, t.to, t.value, t.entryRef, t.batch, t.nonce, t.validUntil,
+            t.mode, t.relayer, t.fee, t.feeRecipient));
+    }
+
+    /// `UAReceiverFee` nests the `UAMetaTransfer` (TS-D19), purpose `receiver-fee`: the pre-C6 form over the payment digest,
+    /// the only change, is `UAUnauthorized` and nothing moves; a nested co-signature runs.
+    function test_uaReceiverFeeNested() public {
+        _fund(uaP, 10_000);
+        MetaTxLib.UAMetaTransfer memory t = _pay(uaP, uaE, 10);
+        uint256 until = block.timestamp + 60;
+        bytes32 d = tok.uaTransferDigest(t);
+        bytes32 rf = tok.uaReceiverFeeDigest(t, 1, FEE_TO, until);
+        assertEq(rf, keccak256(abi.encodePacked(hex"1901", domainOf(address(tok)), keccak256(abi.encode(
+            keccak256("UAReceiverFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)UAMetaTransfer(bytes32 from,"
+                "bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            _paymentHash(t), uint256(1), FEE_TO, until)))));
+        IUARegistry.UASig memory payer = UACall.auth(t.from, _sign(uaP, UAKinds.PURPOSE_METATX, d));
+        bytes32 flat = keccak256(abi.encodePacked(hex"1901", domainOf(address(tok)), keccak256(abi.encode(
+            keccak256("ReceiverFee(bytes32 paymentDigest,uint256 fee,address feeRecipient,uint256 validUntil)"), d, uint256(1), FEE_TO, until))));
+        IUARegistry.UASig memory old = UACall.auth(t.to, _sign(uaE, UAKinds.PURPOSE_RECEIVER_FEE, flat));
+        vm.prank(RELAYER);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaE));
+        tok.uaPayReceiverFee(t, payer, 1, FEE_TO, until, old);
+        assertEq(tok.uaNonce(uaP, t.batch), 0);
+        IUARegistry.UASig memory good = UACall.auth(t.to, _sign(uaE, UAKinds.PURPOSE_RECEIVER_FEE, rf));
+        vm.prank(RELAYER);
+        tok.uaPayReceiverFee(t, payer, 1, FEE_TO, until, good);
+        assertEq(tok.balanceOf(FEE_TO), 1);
     }
 
     // ----- shape, expiry, amount, feature -----
@@ -234,20 +268,20 @@ contract UAReceiverFeeTest is UALedgerBase {
         _fund(uaP, N);
         MetaTxLib.UAMetaTransfer memory t = _pay(uaP, uaE, 10);
         bytes32 d = tok.uaTransferDigest(t);
-        bytes32 rf = tok.receiverFeeDigest(d, 1, FEE_TO, block.timestamp);
+        bytes32 rf = tok.uaReceiverFeeDigest(t, 1, FEE_TO, block.timestamp);
         bytes memory payerAuth = _sign(uaP, UAKinds.PURPOSE_METATX, d);
         bytes[2] memory wrong = [_sign(uaE, UAKinds.PURPOSE_METATX, rf), _sign(uaE, UAKinds.PURPOSE_RECEIVER_FEE, d)];
         for (uint256 i; i < 2; ++i) {
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaE));
             vm.prank(RELAYER);
-            tok.uaPayReceiverFee(t, payerAuth, 1, FEE_TO, block.timestamp, wrong[i]);
+            tok.uaPayReceiverFee(t, UACall.auth(t.from, payerAuth), 1, FEE_TO, block.timestamp, UACall.auth(t.to, wrong[i]));
         }
         // and the payer's `receiver-fee` signature does not authorize its payment
         bytes memory payerAsRf = _sign(uaP, UAKinds.PURPOSE_RECEIVER_FEE, d);
         bytes memory payeeAuth = _sign(uaE, UAKinds.PURPOSE_RECEIVER_FEE, rf);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaP));
         vm.prank(RELAYER);
-        tok.uaPayReceiverFee(t, payerAsRf, 1, FEE_TO, block.timestamp, payeeAuth);
+        tok.uaPayReceiverFee(t, UACall.auth(t.from, payerAsRf), 1, FEE_TO, block.timestamp, UACall.auth(t.to, payeeAuth));
     }
 
     function test_uaPayReceiverFee_coSignatureOverAnotherDigest_refused() public {
@@ -258,11 +292,11 @@ contract UAReceiverFeeTest is UALedgerBase {
             MetaTxLib.UAMetaTransfer memory other = _pay(uaP, payees[i], 11);
             bytes memory payerAuth = _sign(uaP, UAKinds.PURPOSE_METATX, tok.uaTransferDigest(t));
             bytes memory payeeAuth = _sign(payees[i], UAKinds.PURPOSE_RECEIVER_FEE,
-                tok.receiverFeeDigest(tok.uaTransferDigest(other), 1, FEE_TO, block.timestamp));
+                tok.uaReceiverFeeDigest(other, 1, FEE_TO, block.timestamp));
             vm.expectRevert(i == 0 ? abi.encodeWithSelector(IMetaTx.MetaTxBadSignature.selector)
                 : abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaE));
             vm.prank(RELAYER);
-            tok.uaPayReceiverFee(t, payerAuth, 1, FEE_TO, block.timestamp, payeeAuth);
+            tok.uaPayReceiverFee(t, UACall.auth(t.from, payerAuth), 1, FEE_TO, block.timestamp, UACall.auth(t.to, payeeAuth));
         }
         assertEq(tok.balanceOfUA(uaP), N);                   // RP4: no fee without the payment, and vice versa
     }
@@ -272,12 +306,12 @@ contract UAReceiverFeeTest is UALedgerBase {
         MetaTxLib.UAMetaTransfer memory t = _pay(uaP, uaE, 10);
         bytes32 d = tok.uaTransferDigest(t);
         bytes memory payerAuth = _sign(uaP, UAKinds.PURPOSE_METATX, d);
-        bytes memory payeeAuth = _sign(uaE, UAKinds.PURPOSE_RECEIVER_FEE, tok.receiverFeeDigest(d, 1, FEE_TO, block.timestamp));
+        bytes memory payeeAuth = _sign(uaE, UAKinds.PURPOSE_RECEIVER_FEE, tok.uaReceiverFeeDigest(t, 1, FEE_TO, block.timestamp));
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, payerAuth);
+        tok.uaExecuteTransfer(t, UACall.auth(t.from, payerAuth));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
         vm.prank(RELAYER);
-        tok.uaPayReceiverFee(t, payerAuth, 1, FEE_TO, block.timestamp, payeeAuth);
+        tok.uaPayReceiverFee(t, UACall.auth(t.from, payerAuth), 1, FEE_TO, block.timestamp, UACall.auth(t.to, payeeAuth));
         assertEq(tok.balanceOf(FEE_TO), 0);
     }
 
@@ -299,10 +333,10 @@ contract UAReceiverFeeTest is UALedgerBase {
             t.batch = ts[i].payLane(t.entryRef);
             bytes32 d = ts[i].uaTransferDigest(t);
             bytes memory payerAuth = _sign(uaP, UAKinds.PURPOSE_METATX, d);
-            bytes memory payeeSig = _ecdsa(BOB_PK, ts[i].receiverFeeDigest(d, 2_000, FEE_TO, block.timestamp));
+            bytes memory payeeSig = _ecdsa(BOB_PK, ts[i].uaReceiverFeeDigest(t, 2_000, FEE_TO, block.timestamp));
             if (i == 0) vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // 50 k: not enough for this wallet
             vm.prank(RELAYER);
-            ts[i].uaPayReceiverFee(t, payerAuth, 2_000, FEE_TO, block.timestamp, payeeSig);
+            ts[i].uaPayReceiverFee(t, UACall.auth(t.from, payerAuth), 2_000, FEE_TO, block.timestamp, UACall.auth(t.to, payeeSig));
         }
         assertEq(t400.balanceOf(payee), N - 2_000);
         assertEq(t400.balanceOf(FEE_TO), 2_000);
@@ -318,12 +352,12 @@ contract UAReceiverFeeTest is UALedgerBase {
         for (uint256 i; i < 2; ++i) {
             MetaTxLib.UAMetaTransfer memory t = _pay(uaP, _pad(carol), N);
             bytes32 d = tok.uaTransferDigest(t);
-            bytes32 rf = tok.receiverFeeDigest(d, 500, FEE_TO, block.timestamp);
+            bytes32 rf = tok.uaReceiverFeeDigest(t, 500, FEE_TO, block.timestamp);
             bytes memory payeeSig = i == 0 ? _ecdsa(0xCA401, rf) : _ecdsa(BOB_PK, rf);
             bytes memory payerAuth = _sign(uaP, UAKinds.PURPOSE_METATX, d);
             if (i == 1) vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
             vm.prank(RELAYER);
-            tok.uaPayReceiverFee(t, payerAuth, 500, FEE_TO, block.timestamp, payeeSig);
+            tok.uaPayReceiverFee(t, UACall.auth(t.from, payerAuth), 500, FEE_TO, block.timestamp, UACall.auth(t.to, payeeSig));
         }
         assertEq(tok.balanceOf(carol), N - 500);
     }

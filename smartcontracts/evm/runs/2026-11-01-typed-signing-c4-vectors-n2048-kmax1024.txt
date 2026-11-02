@@ -1,0 +1,70 @@
+# vectors-n2048-kmax1024 at commit 682f7a9f
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 9.54s
+     Running `target/release/pqz-vectors --check`
+keys / cbd / matrix / enc: 0.1 s
+pqzl TRANSFER           proof  42729 B  prove+verify 2.19 s
+pqzl TRANSFER0          proof  42422 B  prove+verify 1.96 s
+pqzl BURN               proof  41943 B  prove+verify 2.26 s
+pqzl REFRESH            proof  41908 B  prove+verify 5.57 s
+pqzl REGISTER           proof  28191 B  prove+verify 1.55 s
+pqzl DISCLOSE-SENDER    proof  28970 B  prove+verify 1.32 s
+pqzl DISCLOSE-RECEIVER  proof  29068 B  prove+verify 1.22 s
+pqzl DISCLOSE-AUDITOR   proof  29077 B  prove+verify 1.48 s
+pqzh TRANSFER           proof 231726 B  prove+verify 1.40 s
+pqzh TRANSFER0          proof 232056 B  prove+verify 1.35 s
+pqzh BURN               proof 230696 B  prove+verify 1.41 s
+pqzh REFRESH            proof 231128 B  prove+verify 1.42 s
+pqzh REGISTER           proof 186810 B  prove+verify 0.88 s
+pqzh DISCLOSE-SENDER    proof 187482 B  prove+verify 1.00 s
+pqzh DISCLOSE-RECEIVER  proof 187226 B  prove+verify 1.06 s
+pqzh DISCLOSE-AUDITOR   proof 187098 B  prove+verify 1.06 s
+pqzl M1-on              proof  42771 B  prove+verify 1.99 s
+pqzh M1-on              proof 232046 B  prove+verify 1.40 s
+pqzl M2-on              proof  43575 B  prove+verify 1.97 s
+pqzh M2-on              proof 232366 B  prove+verify 2.22 s
+pqzl M4-on              proof  58319 B  prove+verify 8.90 s
+pqzh M4-on              proof 277036 B  prove+verify 2.08 s
+pqzl M8-on              proof  85126 B  prove+verify 6.18 s
+pqzl M1-off             proof  42401 B  prove+verify 1.45 s
+pqzh M1-off             proof 229640 B  prove+verify 1.36 s
+pqzl M2-off             proof  42940 B  prove+verify 3.58 s
+pqzh M2-off             proof 230306 B  prove+verify 1.35 s
+pqzl M4-off             proof  43935 B  prove+verify 3.46 s
+pqzh M4-off             proof 232494 B  prove+verify 1.37 s
+pqzl M8-off             proof  59005 B  prove+verify 2.70 s
+pqzl M2-off-two-real    proof  42889 B  prove+verify 2.36 s
+pqzh M2-off-two-real    proof 230658 B  prove+verify 1.37 s
+pqzl M4-off-decoys      proof  43932 B  prove+verify 2.10 s
+pqzh M4-off-decoys      proof 232206 B  prove+verify 1.40 s
+pqzl M8-on-boundary     proof  85167 B  prove+verify 6.77 s
+pqzl M8-on-boundary-leg3-auditor proof  29094 B
+pqzh M8-on-boundary-leg3-auditor proof 186554 B
+pqzl M8-on-boundary-leg4-auditor proof  29079 B
+pqzh M8-on-boundary-leg4-auditor proof 186328 B
+pqzl M4-on-leg2-auditor proof  29062 B
+pqzh M4-on-leg2-auditor proof 186810 B
+pqzl M8-on-boundary-leg4-receiver proof  29094 B
+pqzh M8-on-boundary-leg4-receiver proof 187096 B
+proofs: 86.1 s
+negative: 824 rows (511 decoder, 313 verifier): 109.8 s
+worst case: 120.1 s
+total: 128.3 s
+same matrix.json 1051 B
+same cbd.json 4356 B
+same keygen.json 2986 B
+same enc.json 7897 B
+same statement_transfer.json 304926 B
+same statement_burn.json 102913 B
+same statement_refresh.json 102837 B
+same statement_register.json 34463 B
+same statement_disclose.json 203548 B
+same statement_transfer_multi.json 3295875 B
+same proof_pqzl.json 2569051 B
+same proof_pqzh.json 9058458 B
+same negative.json 281542 B
+same selftest.json 2356 B
+same worstcase_noise.json 3465113 B
+same fee0.json 2802165 B
+pqz-vectors --check: 16 files, 22239537 B: ok
+rc=0

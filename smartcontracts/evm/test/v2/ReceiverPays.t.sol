@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {OrderJson} from "../helpers/OrderJson.sol";
+import {domainOf, h, n, a as a_} from "../metatx/NamedEntry.t.sol";
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
@@ -51,7 +53,7 @@ contract ReceiverPaysTest is Test {
 
     function _run(MetaTxLib.MetaTransfer memory x, uint256 fee, address to, uint256 rfUntil) internal {
         bytes memory ps = _sig(PAYER_PK, t.mtxTransferDigest(x));
-        bytes memory rs = _sig(PAYEE_PK, t.receiverFeeDigest(t.mtxTransferDigest(x), fee, to, rfUntil));
+        bytes memory rs = _sig(PAYEE_PK, t.receiverFeeDigest(x, fee, to, rfUntil));
         vm.prank(relayer);
         t.mtxPayReceiverFee(x, ps, fee, to, rfUntil, rs);
     }
@@ -60,7 +62,7 @@ contract ReceiverPaysTest is Test {
         internal
     {
         bytes memory ps = _sig(PAYER_PK, t.mtxTransferDigest(x));
-        bytes memory rs = _sig(PAYEE_PK, t.receiverFeeDigest(t.mtxTransferDigest(x), fee, to, rfUntil));
+        bytes memory rs = _sig(PAYEE_PK, t.receiverFeeDigest(x, fee, to, rfUntil));
         vm.prank(relayer);
         vm.expectRevert(err);
         t.mtxPayReceiverFee(x, ps, fee, to, rfUntil, rs);
@@ -140,7 +142,7 @@ contract ReceiverPaysTest is Test {
         MetaTxLib.MetaTransfer memory x = _pay(payee, 10e6);
         MetaTxLib.MetaTransfer memory other = _pay(payee, 11e6);
         bytes memory ps = _sig(PAYER_PK, t.mtxTransferDigest(x));
-        bytes memory rs = _sig(PAYEE_PK, t.receiverFeeDigest(t.mtxTransferDigest(other), 1, feeTo, block.timestamp));
+        bytes memory rs = _sig(PAYEE_PK, t.receiverFeeDigest(other, 1, feeTo, block.timestamp));
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         t.mtxPayReceiverFee(x, ps, 1, feeTo, block.timestamp, rs);
@@ -150,7 +152,7 @@ contract ReceiverPaysTest is Test {
     function test_payerIntentLandedElsewhere_coSignatureDead() public {
         MetaTxLib.MetaTransfer memory x = _pay(payee, 10e6);
         bytes memory ps = _sig(PAYER_PK, t.mtxTransferDigest(x));
-        bytes memory rs = _sig(PAYEE_PK, t.receiverFeeDigest(t.mtxTransferDigest(x), 1, feeTo, block.timestamp));
+        bytes memory rs = _sig(PAYEE_PK, t.receiverFeeDigest(x, 1, feeTo, block.timestamp));
         vm.prank(relayer);
         t.mtxExecuteTransfer(x, ps);
         vm.prank(relayer);
@@ -163,7 +165,7 @@ contract ReceiverPaysTest is Test {
         Mock1271Wallet w = new Mock1271Wallet(payee);
         MetaTxLib.MetaTransfer memory x = _pay(address(w), 10e6);
         bytes memory ps = _sig(PAYER_PK, t.mtxTransferDigest(x));
-        bytes memory rs = _sig(PAYEE_PK, t.receiverFeeDigest(t.mtxTransferDigest(x), 2e6, feeTo, block.timestamp));
+        bytes memory rs = _sig(PAYEE_PK, t.receiverFeeDigest(x, 2e6, feeTo, block.timestamp));
         vm.prank(relayer);
         t.mtxPayReceiverFee(x, ps, 2e6, feeTo, block.timestamp, rs);
         assertEq(t.balanceOf(address(w)), 8e6);
@@ -180,17 +182,66 @@ contract ReceiverPaysTest is Test {
         assertEq(t.balanceOf(feeTo), fee);
     }
 
+    function _walletFee(MetaTxLib.MetaTransfer memory x, uint256 fee, uint256 until) internal view returns (bytes32) {
+        string memory m = string.concat('{"payment":{"from":', a_(x.from), ',"to":', a_(x.to), ',"value":', n(x.value), ',"entryRef":', h(x.entryRef),
+            ',"batch":', n(x.batch), ',"nonce":', n(x.nonce), ',"validUntil":', n(x.validUntil));
+        return OrderJson.digest(address(t), "ReceiverFee", string.concat(
+            '"ReceiverFee":[{"name":"payment","type":"MetaTransfer"},{"name":"fee","type":"uint256"},{"name":"feeRecipient","type":"address"},',
+            '{"name":"validUntil","type":"uint256"}],"MetaTransfer":[{"name":"from","type":"address"},{"name":"to","type":"address"},',
+            '{"name":"value","type":"uint256"},{"name":"entryRef","type":"bytes32"},{"name":"batch","type":"uint256"},{"name":"nonce","type":"uint256"},',
+            '{"name":"validUntil","type":"uint256"},{"name":"mode","type":"uint32"},{"name":"relayer","type":"address"},{"name":"fee","type":"uint256"},',
+            '{"name":"feeRecipient","type":"address"}]'), string.concat(m, ',"mode":', n(x.mode), ',"relayer":', a_(x.relayer), ',"fee":', n(x.fee),
+            ',"feeRecipient":', a_(x.feeRecipient), '},"fee":', n(fee), ',"feeRecipient":', a_(feeTo), ',"validUntil":', n(until), '}'));
+    }
+
+    /// `ReceiverFee` nests the payment (TS-D19): the wallet's JSON is the digest the payee signs. The pre-C6 form over the
+    /// payment digest, the only change, is `MetaTxBadSignature` and nothing moves; a co-signature for another payment too;
+    /// the wallet's runs.
+    function test_receiverFeeNested() public {
+        MetaTxLib.MetaTransfer memory x = _pay(payee, 100e6);
+        uint256 until = block.timestamp + 60;
+        bytes32 wallet = _walletFee(x, 3e6, until);
+        assertEq(t.receiverFeeDigest(x, 3e6, feeTo, until), wallet);
+        bytes memory ps = _sig(PAYER_PK, t.mtxTransferDigest(x));
+        bytes32 ds = domainOf(address(t));
+        bytes32 flat = keccak256(abi.encodePacked(hex"1901", ds, keccak256(abi.encode(
+            keccak256("ReceiverFee(bytes32 paymentDigest,uint256 fee,address feeRecipient,uint256 validUntil)"),
+            t.mtxTransferDigest(x), uint256(3e6), feeTo, until))));
+        bytes memory old = _sig(PAYEE_PK, flat);
+        vm.prank(relayer);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        t.mtxPayReceiverFee(x, ps, 3e6, feeTo, until, old);
+        MetaTxLib.MetaTransfer memory y = _pay(payee, 100e6 + 1);
+        bytes memory forOther = _sig(PAYEE_PK, t.receiverFeeDigest(y, 3e6, feeTo, until));
+        vm.prank(relayer);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        t.mtxPayReceiverFee(x, ps, 3e6, feeTo, until, forOther);
+        assertEq(t.balanceOf(payee), 0);
+        vm.prank(relayer);
+        t.mtxPayReceiverFee(x, ps, 3e6, feeTo, until, _sig(PAYEE_PK, wallet));
+        assertEq(t.balanceOf(feeTo), 3e6);
+    }
+
+    function _paymentHash(MetaTxLib.MetaTransfer memory x) internal pure returns (bytes32) {
+        return keccak256(abi.encode(
+            keccak256("MetaTransfer(address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,"
+                "uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            x.from, x.to, x.value, x.entryRef, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, x.fee, x.feeRecipient));
+    }
+
     /// The `ReceiverFee` typehash and domain are pinned independently of the contract.
     function test_receiverFeeDigestIsPinned() public view {
-        assertEq(keccak256("ReceiverFee(bytes32 paymentDigest,uint256 fee,address feeRecipient,uint256 validUntil)"),
-            0x0128f09c9f096f23f7540465cf85cf756ab725cb552bf61e040433a9b20a9bdf);
+        assertEq(keccak256("ReceiverFee(MetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)"
+            "MetaTransfer(address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,"
+            "uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x7c08a6ca283c642a92e66bc1b0a04aaf10abca26906244a63d8a5e3c28232305);
         bytes32 domainSep = keccak256(abi.encode(
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
             keccak256("SCaaS MetaToken"), keccak256("1"), uint256(7622), address(t), UID));
-        bytes32 d = keccak256("payment");
+        MetaTxLib.MetaTransfer memory x = _pay(payee, 100e6);
         bytes32 expected = keccak256(abi.encodePacked(hex"1901", domainSep, keccak256(abi.encode(
-            bytes32(0x0128f09c9f096f23f7540465cf85cf756ab725cb552bf61e040433a9b20a9bdf), d, uint256(3e6), feeTo,
+            bytes32(0x7c08a6ca283c642a92e66bc1b0a04aaf10abca26906244a63d8a5e3c28232305), _paymentHash(x), uint256(3e6), feeTo,
             uint256(1_800_000_060)))));
-        assertEq(t.receiverFeeDigest(d, 3e6, feeTo, 1_800_000_060), expected);
+        assertEq(t.receiverFeeDigest(x, 3e6, feeTo, 1_800_000_060), expected);
     }
 }

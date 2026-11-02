@@ -1,0 +1,124 @@
+# x0-calldata-n2304-kmax4096 at commit cf926251 with test/v2/ExplicitParamsCalldata.t.sol (committed with this log) (FOUNDRY_SPARSE_MODE=true scripts/capped smartcontracts/evm/script/pqz/at-set.sh n2304-kmax4096 test --match-path test/v2/ExplicitParamsCalldata.t.sol -vv)
+Compiling 1 files with Solc 0.8.37
+Ran 2 tests for test/v2/ExplicitParamsCalldata.t.sol:ExplicitParamsCalldataTest
+[PASS] test_x0_calldata() (gas: 5840711090)
+Logs:
+  # X0 calldata at n2304-kmax4096 (PK 18432, V 128, S_AUD 3)
+  X0 n2304-kmax4096 pqzl mtx | op 1 BUNDLE, auditor | today 70020 B floor 4496280 | typed 70180 B floor 4506520
+  X0 n2304-kmax4096 pqzl mtx | op 1 commit-reveal (memo 57 B), auditor | today 70084 B floor 4500376 | typed 70244 B floor 4510616
+  X0 n2304-kmax4096 pqzl mtx | op 1 BUNDLE, no auditor | today 69540 B floor 4465560 | typed 69700 B floor 4475800
+  X0 n2304-kmax4096 pqzl mtx | op 1 commit-reveal (memo 57 B), no auditor | today 69604 B floor 4469656 | typed 69764 B floor 4479896
+  X0 n2304-kmax4096 pqzl mtx | op 7 M = 1, auditor | today 70084 B floor 4500376 | typed 70372 B floor 4518808
+  X0 n2304-kmax4096 pqzl mtx | op 7 M = 1, auditor, commit-reveal (memo 18 + 40M B) | today 70148 B floor 4504472 | typed 70436 B floor 4522904
+  X0 n2304-kmax4096 pqzl mtx | op 7 M = 1, no auditor | today 69636 B floor 4471704 | typed 69924 B floor 4490136
+  X0 n2304-kmax4096 pqzl mtx | op 7 M = 1, no auditor, commit-reveal (memo 18 + 40M B) | today 69700 B floor 4475800 | typed 69988 B floor 4494232
+  X0 n2304-kmax4096 pqzl mtx | op 7 M = 2, auditor | today 71204 B floor 4572056 | typed 71652 B floor 4600728
+  X0 n2304-kmax4096 pqzl mtx | op 7 M = 2, auditor, commit-reveal (memo 18 + 40M B) | today 71300 B floor 4578200 | typed 71748 B floor 4606872
+  X0 n2304-kmax4096 pqzl mtx | op 7 M = 2, no auditor | today 70308 B floor 4514712 | typed 70756 B floor 4543384
+  X0 n2304-kmax4096 pqzl mtx | op 7 M = 2, no auditor, commit-reveal (memo 18 + 40M B) | today 70404 B floor 4520856 | typed 70852 B floor 4549528
+  X0 n2304-kmax4096 pqzl mtx | op 7 M = 4, auditor | today 106596 B floor 6837144 | typed 107428 B floor 6890392
+  X0 n2304-kmax4096 pqzl mtx | op 7 M = 4, auditor, commit-reveal (memo 18 + 40M B) | today 106788 B floor 6849432 | typed 107620 B floor 6902680
+  X0 n2304-kmax4096 pqzl mtx | op 7 M = 4, no auditor | today 71588 B floor 4596632 | typed 72356 B floor 4645784
+  X0 n2304-kmax4096 pqzl mtx | op 7 M = 4, no auditor, commit-reveal (memo 18 + 40M B) | today 71780 B floor 4608920 | typed 72548 B floor 4658072
+  X0 n2304-kmax4096 pqzl mtx | op 7 M = 8, auditor | today 142596 B floor 9141144 | typed 144132 B floor 9239448
+  X0 n2304-kmax4096 pqzl mtx | op 7 M = 8, auditor, commit-reveal (memo 18 + 40M B) | today 142948 B floor 9163672 | typed 144484 B floor 9261976
+  X0 n2304-kmax4096 pqzl mtx | op 7 M = 8, no auditor | today 107428 B floor 6890392 | typed 108900 B floor 6984600
+  X0 n2304-kmax4096 pqzl mtx | op 7 M = 8, no auditor, commit-reveal (memo 18 + 40M B) | today 107780 B floor 6912920 | typed 109252 B floor 7007128
+  X0 n2304-kmax4096 pqzl mtx | burn 1 to an address | today 68932 B floor 4426648 | typed 68900 B floor 4424600
+  X0 n2304-kmax4096 pqzl mtx | refresh | today 68932 B floor 4426648 | typed 68900 B floor 4424600
+  X0 n2304-kmax4096 pqzl mtx | unshield-unwrap (wrapped PQZ) | today 68996 B floor 4430744 | typed 68964 B floor 4428696
+  X0 n2304-kmax4096 pqzl mtx | burn 1, 2-of-2 mldsa65 msig holder | today 72804 B floor 4674456 | typed 72612 B floor 4662168
+  X0 n2304-kmax4096 pqzl mtx | burn 1, 3-of-3 mldsa65 msig holder | today 76356 B floor 4901784 | typed 76132 B floor 4887448
+  X0 n2304-kmax4096 pqzl ua  | op 1 BUNDLE, auditor | today 73380 B floor 4711320 | typed 73572 B floor 4723608
+  X0 n2304-kmax4096 pqzl ua  | op 1 commit-reveal (memo 57 B), auditor | today 73444 B floor 4715416 | typed 73636 B floor 4727704
+  X0 n2304-kmax4096 pqzl ua  | op 1 BUNDLE, no auditor | today 72900 B floor 4680600 | typed 73092 B floor 4692888
+  X0 n2304-kmax4096 pqzl ua  | op 1 commit-reveal (memo 57 B), no auditor | today 72964 B floor 4684696 | typed 73156 B floor 4696984
+  X0 n2304-kmax4096 pqzl ua  | op 7 M = 1, auditor | today 73444 B floor 4715416 | typed 73764 B floor 4735896
+  X0 n2304-kmax4096 pqzl ua  | op 7 M = 1, auditor, commit-reveal (memo 18 + 40M B) | today 73508 B floor 4719512 | typed 73828 B floor 4739992
+  X0 n2304-kmax4096 pqzl ua  | op 7 M = 1, no auditor | today 72996 B floor 4686744 | typed 73316 B floor 4707224
+  X0 n2304-kmax4096 pqzl ua  | op 7 M = 1, no auditor, commit-reveal (memo 18 + 40M B) | today 73060 B floor 4690840 | typed 73380 B floor 4711320
+  X0 n2304-kmax4096 pqzl ua  | op 7 M = 2, auditor | today 74564 B floor 4787096 | typed 75044 B floor 4817816
+  X0 n2304-kmax4096 pqzl ua  | op 7 M = 2, auditor, commit-reveal (memo 18 + 40M B) | today 74660 B floor 4793240 | typed 75140 B floor 4823960
+  X0 n2304-kmax4096 pqzl ua  | op 7 M = 2, no auditor | today 73668 B floor 4729752 | typed 74148 B floor 4760472
+  X0 n2304-kmax4096 pqzl ua  | op 7 M = 2, no auditor, commit-reveal (memo 18 + 40M B) | today 73764 B floor 4735896 | typed 74244 B floor 4766616
+  X0 n2304-kmax4096 pqzl ua  | op 7 M = 4, auditor | today 109956 B floor 7052184 | typed 110820 B floor 7107480
+  X0 n2304-kmax4096 pqzl ua  | op 7 M = 4, auditor, commit-reveal (memo 18 + 40M B) | today 110148 B floor 7064472 | typed 111012 B floor 7119768
+  X0 n2304-kmax4096 pqzl ua  | op 7 M = 4, no auditor | today 74948 B floor 4811672 | typed 75748 B floor 4862872
+  X0 n2304-kmax4096 pqzl ua  | op 7 M = 4, no auditor, commit-reveal (memo 18 + 40M B) | today 75140 B floor 4823960 | typed 75940 B floor 4875160
+  X0 n2304-kmax4096 pqzl ua  | op 7 M = 8, auditor | today 145956 B floor 9356184 | typed 147524 B floor 9456536
+  X0 n2304-kmax4096 pqzl ua  | op 7 M = 8, auditor, commit-reveal (memo 18 + 40M B) | today 146308 B floor 9378712 | typed 147876 B floor 9479064
+  X0 n2304-kmax4096 pqzl ua  | op 7 M = 8, no auditor | today 110788 B floor 7105432 | typed 112292 B floor 7201688
+  X0 n2304-kmax4096 pqzl ua  | op 7 M = 8, no auditor, commit-reveal (memo 18 + 40M B) | today 111140 B floor 7127960 | typed 112644 B floor 7224216
+  X0 n2304-kmax4096 pqzl ua  | burn 1 to an address | today 72292 B floor 4641688 | typed 72292 B floor 4641688
+  X0 n2304-kmax4096 pqzl ua  | refresh | today 72292 B floor 4641688 | typed 72292 B floor 4641688
+  X0 n2304-kmax4096 pqzl ua  | unshield-unwrap (wrapped PQZ) | today 72356 B floor 4645784 | typed 72356 B floor 4645784
+  X0 n2304-kmax4096 pqzl ua  | burn 1, 2-of-2 mldsa65 msig holder | today 76164 B floor 4889496 | typed 76004 B floor 4879256
+  X0 n2304-kmax4096 pqzl ua  | burn 1, 3-of-3 mldsa65 msig holder | today 79716 B floor 5116824 | typed 79524 B floor 5104536
+  X0 n2304-kmax4096 pqzl mtx | register, PQZ key, no KEM key (direct) | today 54564 B floor 3507096 | typed 54660 B floor 3513240
+  X0 n2304-kmax4096 pqzl mtx | register, PQZ key + KEM key (direct) | today 56196 B floor 3611544 | typed 56228 B floor 3613592
+  X0 n2304-kmax4096 pqzh mtx | op 1 BUNDLE, auditor | today 274948 B floor 17611672 | typed 275108 B floor 17621912
+  X0 n2304-kmax4096 pqzh mtx | op 1 commit-reveal (memo 57 B), auditor | today 275012 B floor 17615768 | typed 275172 B floor 17626008
+  X0 n2304-kmax4096 pqzh mtx | op 1 BUNDLE, no auditor | today 274820 B floor 17603480 | typed 274980 B floor 17613720
+  X0 n2304-kmax4096 pqzh mtx | op 1 commit-reveal (memo 57 B), no auditor | today 274884 B floor 17607576 | typed 275044 B floor 17617816
+  X0 n2304-kmax4096 pqzh mtx | op 7 M = 1, auditor | today 275012 B floor 17615768 | typed 275300 B floor 17634200
+  X0 n2304-kmax4096 pqzh mtx | op 7 M = 1, auditor, commit-reveal (memo 18 + 40M B) | today 275076 B floor 17619864 | typed 275364 B floor 17638296
+  X0 n2304-kmax4096 pqzh mtx | op 7 M = 1, no auditor | today 274884 B floor 17607576 | typed 275172 B floor 17626008
+  X0 n2304-kmax4096 pqzh mtx | op 7 M = 1, no auditor, commit-reveal (memo 18 + 40M B) | today 274948 B floor 17611672 | typed 275236 B floor 17630104
+  X0 n2304-kmax4096 pqzh mtx | op 7 M = 2, auditor | today 276036 B floor 17681304 | typed 276484 B floor 17709976
+  X0 n2304-kmax4096 pqzh mtx | op 7 M = 2, auditor, commit-reveal (memo 18 + 40M B) | today 276132 B floor 17687448 | typed 276580 B floor 17716120
+  X0 n2304-kmax4096 pqzh mtx | op 7 M = 2, no auditor | today 275044 B floor 17617816 | typed 275492 B floor 17646488
+  X0 n2304-kmax4096 pqzh mtx | op 7 M = 2, no auditor, commit-reveal (memo 18 + 40M B) | today 275140 B floor 17623960 | typed 275588 B floor 17652632
+  X0 n2304-kmax4096 pqzh mtx | op 7 M = 4, auditor | today 338948 B floor 21707672 | typed 339780 B floor 21760920
+  X0 n2304-kmax4096 pqzh mtx | op 7 M = 4, auditor, commit-reveal (memo 18 + 40M B) | today 339140 B floor 21719960 | typed 339972 B floor 21773208
+  X0 n2304-kmax4096 pqzh mtx | op 7 M = 4, no auditor | today 276100 B floor 17685400 | typed 276868 B floor 17734552
+  X0 n2304-kmax4096 pqzh mtx | op 7 M = 4, no auditor, commit-reveal (memo 18 + 40M B) | today 276292 B floor 17697688 | typed 277060 B floor 17746840
+  X0 n2304-kmax4096 pqzh mtx | burn 1 to an address | today 274692 B floor 17595288 | typed 274660 B floor 17593240
+  X0 n2304-kmax4096 pqzh mtx | refresh | today 274692 B floor 17595288 | typed 274660 B floor 17593240
+  X0 n2304-kmax4096 pqzh mtx | unshield-unwrap (wrapped PQZ) | today 274756 B floor 17599384 | typed 274724 B floor 17597336
+  X0 n2304-kmax4096 pqzh mtx | burn 1, 2-of-2 mldsa65 msig holder | today 278564 B floor 17843096 | typed 278372 B floor 17830808
+  X0 n2304-kmax4096 pqzh mtx | burn 1, 3-of-3 mldsa65 msig holder | today 282116 B floor 18070424 | typed 281892 B floor 18056088
+  X0 n2304-kmax4096 pqzh ua  | op 1 BUNDLE, auditor | today 278308 B floor 17826712 | typed 278500 B floor 17839000
+  X0 n2304-kmax4096 pqzh ua  | op 1 commit-reveal (memo 57 B), auditor | today 278372 B floor 17830808 | typed 278564 B floor 17843096
+  X0 n2304-kmax4096 pqzh ua  | op 1 BUNDLE, no auditor | today 278180 B floor 17818520 | typed 278372 B floor 17830808
+  X0 n2304-kmax4096 pqzh ua  | op 1 commit-reveal (memo 57 B), no auditor | today 278244 B floor 17822616 | typed 278436 B floor 17834904
+  X0 n2304-kmax4096 pqzh ua  | op 7 M = 1, auditor | today 278372 B floor 17830808 | typed 278692 B floor 17851288
+  X0 n2304-kmax4096 pqzh ua  | op 7 M = 1, auditor, commit-reveal (memo 18 + 40M B) | today 278436 B floor 17834904 | typed 278756 B floor 17855384
+  X0 n2304-kmax4096 pqzh ua  | op 7 M = 1, no auditor | today 278244 B floor 17822616 | typed 278564 B floor 17843096
+  X0 n2304-kmax4096 pqzh ua  | op 7 M = 1, no auditor, commit-reveal (memo 18 + 40M B) | today 278308 B floor 17826712 | typed 278628 B floor 17847192
+  X0 n2304-kmax4096 pqzh ua  | op 7 M = 2, auditor | today 279396 B floor 17896344 | typed 279876 B floor 17927064
+  X0 n2304-kmax4096 pqzh ua  | op 7 M = 2, auditor, commit-reveal (memo 18 + 40M B) | today 279492 B floor 17902488 | typed 279972 B floor 17933208
+  X0 n2304-kmax4096 pqzh ua  | op 7 M = 2, no auditor | today 278404 B floor 17832856 | typed 278884 B floor 17863576
+  X0 n2304-kmax4096 pqzh ua  | op 7 M = 2, no auditor, commit-reveal (memo 18 + 40M B) | today 278500 B floor 17839000 | typed 278980 B floor 17869720
+  X0 n2304-kmax4096 pqzh ua  | op 7 M = 4, auditor | today 342308 B floor 21922712 | typed 343172 B floor 21978008
+  X0 n2304-kmax4096 pqzh ua  | op 7 M = 4, auditor, commit-reveal (memo 18 + 40M B) | today 342500 B floor 21935000 | typed 343364 B floor 21990296
+  X0 n2304-kmax4096 pqzh ua  | op 7 M = 4, no auditor | today 279460 B floor 17900440 | typed 280260 B floor 17951640
+  X0 n2304-kmax4096 pqzh ua  | op 7 M = 4, no auditor, commit-reveal (memo 18 + 40M B) | today 279652 B floor 17912728 | typed 280452 B floor 17963928
+  X0 n2304-kmax4096 pqzh ua  | burn 1 to an address | today 278052 B floor 17810328 | typed 278052 B floor 17810328
+  X0 n2304-kmax4096 pqzh ua  | refresh | today 278052 B floor 17810328 | typed 278052 B floor 17810328
+  X0 n2304-kmax4096 pqzh ua  | unshield-unwrap (wrapped PQZ) | today 278116 B floor 17814424 | typed 278116 B floor 17814424
+  X0 n2304-kmax4096 pqzh ua  | burn 1, 2-of-2 mldsa65 msig holder | today 281924 B floor 18058136 | typed 281764 B floor 18047896
+  X0 n2304-kmax4096 pqzh ua  | burn 1, 3-of-3 mldsa65 msig holder | today 285476 B floor 18285464 | typed 285284 B floor 18273176
+  X0 n2304-kmax4096 pqzh mtx | register, PQZ key, no KEM key (direct) | today 231876 B floor 14855064 | typed 231972 B floor 14861208
+  X0 n2304-kmax4096 pqzh mtx | register, PQZ key + KEM key (direct) | today 233508 B floor 14959512 | typed 233540 B floor 14961560
+  X0 n2304-kmax4096 zether mtx | single (6 points) | today 7620 B floor 502680 | typed 7300 B floor 482200
+  X0 n2304-kmax4096 zether mtx | multi M = 1, BUNDLE (proof fixed at 11,936 B) | today 13860 B floor 902040 | typed 13668 B floor 889752
+  X0 n2304-kmax4096 zether mtx | multi M = 1, commit-reveal (memo 17 + 40M B) (proof fixed at 11,936 B) | today 13924 B floor 906136 | typed 13732 B floor 893848
+  X0 n2304-kmax4096 zether mtx | multi M = 3, BUNDLE (proof fixed at 11,936 B) | today 14884 B floor 967576 | typed 14692 B floor 955288
+  X0 n2304-kmax4096 zether mtx | multi M = 3, commit-reveal (memo 17 + 40M B) (proof fixed at 11,936 B) | today 15012 B floor 975768 | typed 14820 B floor 963480
+  X0 n2304-kmax4096 zether mtx | multi M = 8, BUNDLE (proof fixed at 11,936 B) | today 17444 B floor 1131416 | typed 17252 B floor 1119128
+  X0 n2304-kmax4096 zether mtx | multi M = 8, commit-reveal (memo 17 + 40M B) (proof fixed at 11,936 B) | today 17796 B floor 1153944 | typed 17604 B floor 1141656
+  X0 n2304-kmax4096 zether mtx | unshield | today 3940 B floor 267160 | typed 3620 B floor 246680
+  X0 n2304-kmax4096 zether ua  | single (6 points) | today 10980 B floor 717720 | typed 10692 B floor 699288
+  X0 n2304-kmax4096 zether ua  | multi M = 1, BUNDLE (proof fixed at 11,936 B) | today 17220 B floor 1117080 | typed 17060 B floor 1106840
+  X0 n2304-kmax4096 zether ua  | multi M = 1, commit-reveal (memo 17 + 40M B) (proof fixed at 11,936 B) | today 17284 B floor 1121176 | typed 17124 B floor 1110936
+  X0 n2304-kmax4096 zether ua  | multi M = 3, BUNDLE (proof fixed at 11,936 B) | today 18244 B floor 1182616 | typed 18084 B floor 1172376
+  X0 n2304-kmax4096 zether ua  | multi M = 3, commit-reveal (memo 17 + 40M B) (proof fixed at 11,936 B) | today 18372 B floor 1190808 | typed 18212 B floor 1180568
+  X0 n2304-kmax4096 zether ua  | multi M = 8, BUNDLE (proof fixed at 11,936 B) | today 20804 B floor 1346456 | typed 20644 B floor 1336216
+  X0 n2304-kmax4096 zether ua  | multi M = 8, commit-reveal (memo 17 + 40M B) (proof fixed at 11,936 B) | today 21156 B floor 1368984 | typed 20996 B floor 1358744
+  X0 n2304-kmax4096 zether ua  | unshield | today 7300 B floor 482200 | typed 7012 B floor 463768
+  X0 n2304-kmax4096 static mtx | mtxUnwrap (WrappedToken) | today 676 B floor 58264 | typed 548 B floor 50072
+  X0 n2304-kmax4096 static ua  | uaUnwrap (WrappedToken) | today 4036 B floor 273304 | typed 3940 B floor 267160
+[PASS] test_x0_reassemblesPayload() (gas: 3714311)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 10.19s (10.20s CPU time)
+Ran 1 test suite in 10.19s (10.19s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
+rc=0

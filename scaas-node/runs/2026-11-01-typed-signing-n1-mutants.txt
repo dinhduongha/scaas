@@ -1,0 +1,38 @@
+restored scaas-node/src/guard.rs
+KILLED sig-precheck-accepts-all by the_gateway_checks_the_typed_signature_before_the_simulation (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 484 filtered out; finished in 0.07s | thread 'gateway::tests::the_gateway_checks_the_typed_signature_before_the_simulation' (1664446) panicked at src/gateway.rs:559:9: 
+restored scaas-node/src/guard.rs
+KILLED allowlist-drops-a-row by guard_allows_every_named_entry_only (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 484 filtered out; finished in 0.23s | thread 'guard::tests::guard_allows_every_named_entry_only' (1664993) panicked at src/guard.rs:842:66: UAPqzUnshield on pqz is a missing row: Policy("CALL_TARGET_REFUSED: 0xefb2d957 is no named entry of a \"pqz\" contract") 
+restored scaas-node/src/guard.rs
+KILLED allowlist-opens-any-selector by guard_allows_every_named_entry_only (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 484 filtered out; finished in 0.43s | thread 'guard::tests::guard_allows_every_named_entry_only' (1665513) panicked at src/guard.rs:871:51: 
+restored scaas-node/src/dex.rs
+KILLED dex-leg-drops-the-sig by dex::tests (rc=101): test result: FAILED. 26 passed; 1 failed; 0 ignored; 0 measured; 458 filtered out; finished in 0.01s | thread 'dex::tests::kat_hashes_and_calldata_match_forge' (1666005) panicked at src/dex.rs:899:9: 
+restored scaas-node/src/dex.rs
+KILLED dex-leg-other-shape by dex::tests (rc=101): test result: FAILED. 25 passed; 2 failed; 0 ignored; 0 measured; 458 filtered out; finished in 0.02s | thread 'dex::tests::a_planned_settlement_encodes_as_the_dex_reads_it' (1666490) panicked at src/dex.rs:1359:9: thread 'dex::tests::kat_hashes_and_calldata_match_forge' (1666498) panicked at src/dex.rs:899:9: 
+restored scaas-node/src/submit.rs
+KILLED dedup-key-follows-the-claim by dedup_by_typed_digest (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 484 filtered out; finished in 0.07s | thread 'submit::tests::dedup_by_typed_digest' (1667301) panicked at src/submit.rs:1629:9: assertion `left == right` failed: one call, one send 
+restored scaas-node/src/submit.rs
+KILLED dedup-no-digest-key by one_digest_is_signed_once (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 484 filtered out; finished in 0.03s | thread 'submit::tests::one_digest_is_signed_once_across_lanes_and_released_on_transient_errors' (1667886) panicked at src/submit.rs:1372:9: 
+## review round, 2026-11-02
+restored scaas-node/src/gateway.rs
+KILLED door-open by door_a_takes_registered_tokens_only (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 493 filtered out; finished in 0.05s | thread 'gateway::tests::door_a_takes_registered_tokens_only' (2062337) panicked at src/gateway.rs:571:13: 
+restored scaas-node/src/guard.rs
+KILLED sig-any-length by a_signature_that_is_not_65_bytes_is_the_contracts (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 493 filtered out; finished in 0.01s | thread 'guard::tests::a_signature_that_is_not_65_bytes_is_the_contracts' (2063959) panicked at src/guard.rs:932:54: called `Result::unwrap()` on an `Err` value: Policy("BAD_SIGNATURE: not 0x0101010101010101010101010101010101010101's over the typed digest 0xa6953c59a5f683a1829fc8e90179e 
+restored scaas-node/src/typed.rs
+KILLED inner-takes-the-fee-recipient by relay_fee_call_object (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 493 filtered out; finished in 0.02s | thread 'typed::tests::relay_fee_call_object' (2065933) panicked at src/typed.rs:1381:13: 
+restored scaas-node/src/adapter.rs
+KILLED generic-runner-digest-only by the_generic_runner_keys_on_the_bytes_too (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 493 filtered out; finished in 0.07s | thread 'submit::tests::the_generic_runner_keys_on_the_bytes_too' (2069593) panicked at src/submit.rs:1602:9: 
+restored scaas-node/src/typed.rs
+KILLED deadline-job-overrides by a_job_deadline_never_outlives_the_signed_one (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 493 filtered out; finished in 0.02s | thread 'typed::tests::a_job_deadline_never_outlives_the_signed_one' (2071548) panicked at src/typed.rs:1307:13: 
+restored scaas-node/src/guard.rs
+KILLED receiver-fee-outer-digest by fill_digest_keeps_the_key_and_what_the_chain_emits_apart (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 493 filtered out; finished in 0.02s | thread 'guard::tests::fill_digest_keeps_the_key_and_what_the_chain_emits_apart' (2072734) panicked at src/guard.rs:909:9: 
+KILLED plain-row-swaps-pop-and-pqzPop by plain_rows_match_the_forge_abi (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished i | register: pop / pqzPop
+restored scaas-node/src/gateway.rs
+KILLED ua-entry-at-the-door by ua_entries_stay_off_the_gateway_door (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 494 filtered out; finished in 0.05s | thread 'gateway::tests::ua_entries_stay_off_the_gateway_door' (2112687) panicked at src/gateway.rs:603:13: 
+## review round 3, 2026-11-02
+restored scaas-node/src/adapter.rs
+KILLED generic-runner-digest-only by the_hedera_lane_skips_bytes_already_in_flight (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 495 filtered out; finished in 0.02s | thread 'adapters::hedera::tests::the_hedera_lane_skips_bytes_already_in_flight' (2186409) panicked at src/adapters/hedera.rs:527:13: 
+restored scaas-node/src/adapters/hedera.rs
+KILLED hedera-drops-call-key by the_hedera_lane_skips_bytes_already_in_flight (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 495 filtered out; finished in 0.01s | thread 'adapters::hedera::tests::the_hedera_lane_skips_bytes_already_in_flight' (2187556) panicked at src/adapters/hedera.rs:521:9: 
+restored scaas-node/src/gateway.rs
+KILLED op-signature-unbounded by door_a_takes_registered_tokens_only (rc=101): test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 495 filtered out; finished in 0.19s | thread 'gateway::tests::door_a_takes_registered_tokens_only' (2188645) panicked at src/gateway.rs:618:13: 
+clock past the vector's validUntil (now = 1900000000, 2030): gateway rc=0: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 487 filtered out; fi

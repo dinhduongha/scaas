@@ -1,7 +1,10 @@
-//! UA-8 A2: the portable registration digests of `scaas_ua::ua8` against smartcontracts/vectors/ua/portable.json (written
-//! by the JS reference, clientkeys scripts/ua-portable-vectors.mjs): every digest of every registration, KEM record and PQZ
-//! key record, and every holder / length / proof-hash refusal of `negatives[]` that is a digest-layer rule. Rows that only a
-//! signature check or the registry's state can refuse (UAUnauthorized, the chain's PoP verdict) are counted, not run.
+//! UA-8 A2 / typed-signing P2: the portable registration digests of `scaas_ua::ua8` against
+//! smartcontracts/vectors/ua/portable.json (written by the JS reference, clientkeys scripts/ua-portable-vectors.mjs): the
+//! typed EIP-712 records (TS-D1: domain, typehashes; every row's struct hash, digest and `typedData` JSON, hashed here by an
+//! independent EIP-712 encoder), every digest of every registration, KEM record and PQZ key record, the native msig member
+//! over the typed digest (TS-D4), and every holder / length / proof-hash refusal of `negatives[]` that is a digest-layer
+//! rule. Rows that only a signature check or the registry's state can refuse (UAUnauthorized, the chain's PoP verdict) are
+//! counted, not run.
 use scaas_ua::ua8::*;
 use scaas_ua::*;
 use serde_json::Value;
@@ -31,6 +34,56 @@ fn find<'a>(v: &'a Value, k: &str, f: &str, x: &Value) -> &'a Value {
 fn zero(b: &[u8]) -> bool {
     b.iter().all(|x| *x == 0)
 }
+fn word(v: u64) -> [u8; 32] {
+    let mut w = [0u8; 32];
+    w[24..].copy_from_slice(&v.to_be_bytes());
+    w
+}
+/// The legacy EIP-191 `personal_sign` prehash (legacy/typed-signing/portable_raw.rs): only for the negatives that pin it.
+fn personal_sign(d: &[u8; 32]) -> [u8; 32] {
+    keccak256(&[&b"\x19Ethereum Signed Message:\n32"[..], d].concat())
+}
+
+// ---------- an independent EIP-712 encoder over a wallet's typed-data JSON (the field types the portable records use) ----------
+
+fn encode_type(types: &Value, t: &str) -> String {
+    fn walk(types: &Value, t: &str, deps: &mut std::collections::BTreeSet<String>) {
+        for f in types[t].as_array().unwrap() {
+            let ft = f["type"].as_str().unwrap();
+            if types.get(ft).is_some() && deps.insert(ft.to_string()) {
+                walk(types, ft, deps);
+            }
+        }
+    }
+    let mut deps = std::collections::BTreeSet::new();
+    walk(types, t, &mut deps);
+    deps.remove(t);
+    let one = |n: &str| {
+        let fs: Vec<String> = types[n].as_array().unwrap().iter().map(|f| format!("{} {}", f["type"].as_str().unwrap(), f["name"].as_str().unwrap())).collect();
+        format!("{n}({})", fs.join(","))
+    };
+    std::iter::once(one(t)).chain(deps.iter().map(|n| one(n))).collect()
+}
+fn hash_struct(types: &Value, t: &str, data: &Value) -> [u8; 32] {
+    let mut enc = keccak256(encode_type(types, t).as_bytes()).to_vec();
+    for f in types[t].as_array().unwrap() {
+        let (ft, v) = (f["type"].as_str().unwrap(), &data[f["name"].as_str().unwrap()]);
+        enc.extend(match ft {
+            _ if types.get(ft).is_some() => hash_struct(types, ft, v),
+            "string" => keccak256(v.as_str().unwrap().as_bytes()),
+            "bytes32" => b32(v),
+            "uint8" | "uint16" | "uint64" => word(num(v)),
+            _ => panic!("field type {ft}"),
+        });
+    }
+    keccak256(&enc)
+}
+/// `hashTypedData(td)`: what `eth_signTypedData_v4` signs for the JSON `td`.
+fn hash_typed_data(td: &Value) -> [u8; 32] {
+    let t = &td["types"];
+    let ds = hash_struct(t, "EIP712Domain", &td["domain"]);
+    keccak256(&[&[0x19u8, 0x01][..], &ds, &hash_struct(t, td["primaryType"].as_str().unwrap(), &td["message"])].concat())
+}
 
 /// `holder_pop_message` over a registration row's `attrs` (and `pqzPop` bytes, or only their hash when `hash_only`).
 fn register(row: &Value, hash_only: bool) -> Result<HolderPop> {
@@ -38,7 +91,7 @@ fn register(row: &Value, hash_only: bool) -> Result<HolderPop> {
     let (key, pop, hash, pk) = (bytes(&a["pqzKey"]), bytes(&row["pqzPop"]), b32(&a["pqzPopHash"]), bytes(&a["kemPk"]));
     let opt = |b: &[u8]| (!b.is_empty()).then_some(b.to_vec());
     let (key, pop, pk) = (opt(&key), opt(&pop), opt(&pk));
-    let kem = (num(&a["kemVersion"]) != 0 || pk.is_some()).then(|| (num(&a["kemVersion"]), pk.clone().unwrap_or_default()));
+    assert!(a.get("kemVersion").is_none(), "register takes no KEM version (typed-signing R1)");
     holder_pop_message(
         num(&row["kind"]) as u16,
         &b32(&row["ua"]),
@@ -46,7 +99,7 @@ fn register(row: &Value, hash_only: bool) -> Result<HolderPop> {
         key.as_deref(),
         if hash_only { None } else { pop.as_deref() },
         (!zero(&hash)).then_some(&hash),
-        kem.as_ref().map(|(v, p)| (*v, &p[..])),
+        pk.as_deref(), // the register KEM key: version 0 (owner 2026-10-31)
     )
 }
 
@@ -57,8 +110,7 @@ fn tags() {
     assert_eq!(hx(&pop_v2_tag()), t["PURPOSE_POP_V2"]["hash"]);
     assert_eq!(hx(&purpose_tag("kem").unwrap()), t["PURPOSE_KEM"]["hash"]);
     assert_eq!(hx(&purpose_tag("pqz-key").unwrap()), t["PURPOSE_PQZ_KEY"]["hash"]);
-    assert_eq!(hx(&kem_record_tag()), t["KEM_RECORD_TAG"]["hash"]);
-    assert_eq!(hx(&pqz_key_record_tag()), t["PQZ_KEY_RECORD_TAG"]["hash"]);
+    assert!(t.get("KEM_RECORD_TAG").is_none() && t.get("PQZ_KEY_RECORD_TAG").is_none(), "raw record tags are legacy (TS-D3)");
     assert_eq!(hx(&group_tag("pqz-mlwe").unwrap()), t["PQZ_KEY_GROUP"]["hash"]);
     assert_eq!(purpose_tag_v("pop", 2).unwrap(), pop_v2_tag());
     assert_eq!(purpose_tag_v("pop", 1).unwrap(), purpose_tag("pop").unwrap());
@@ -67,6 +119,123 @@ fn tags() {
     for (name, c) in [("none", Checked::None), ("chain", Checked::Chain), ("relayer", Checked::Relayer([7; 32]))] {
         assert_eq!(c.code() as u64, num(&p["checked"][name]), "{name}");
     }
+}
+
+/// TS-D1: `DS_P = hashStruct(EIP712Domain{name: "SCaaS UA Portable", version: "1"})`, pinned and re-derived.
+#[test]
+fn domain_separator_pinned() {
+    let p = load("portable.json");
+    let t = &p["typed"];
+    assert_eq!(hx(&PORTABLE_DOMAIN_SEPARATOR), "0x9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1");
+    assert_eq!(hx(&PORTABLE_DOMAIN_SEPARATOR), t["domainSeparator"]);
+    assert_eq!((PORTABLE_DOMAIN_TYPE, PORTABLE_DOMAIN_NAME, PORTABLE_DOMAIN_VERSION), ("EIP712Domain(string name,string version)", "SCaaS UA Portable", "1"));
+    assert_eq!(t["domainType"], PORTABLE_DOMAIN_TYPE);
+    assert_eq!((t["domain"]["name"].as_str(), t["domain"]["version"].as_str()), (Some(PORTABLE_DOMAIN_NAME), Some(PORTABLE_DOMAIN_VERSION)));
+    let derived = keccak256(&[keccak256(PORTABLE_DOMAIN_TYPE.as_bytes()), keccak256(PORTABLE_DOMAIN_NAME.as_bytes()), keccak256(PORTABLE_DOMAIN_VERSION.as_bytes())].concat());
+    assert_eq!(derived, PORTABLE_DOMAIN_SEPARATOR);
+}
+
+/// CTR-UA-37: every acceptance row: its typed digest, the message and `memberDigest` a derived member signs under `member`.
+#[test]
+fn membership_rows() {
+    let p = load("portable.json");
+    let rows = arr(&p, "memberships");
+    assert_eq!(rows.len(), 6);
+    for r in rows {
+        let (ua, member) = (b32(&r["ua"]), b32(&r["member"]));
+        let d = membership_digest(&ua, &member);
+        assert_eq!(hx(&d), r["digest"], "{}", r["name"]);
+        let m = ua_message(0x0120, &purpose_tag("membership").unwrap(), &d).unwrap();
+        assert_eq!(hx(&m), r["message"], "{}", r["name"]);
+        assert_eq!(hx(&member_digest(&ua, &m)), r["memberDigest"], "{}", r["name"]);
+        assert!(is_portable_purpose(&purpose_tag("membership").unwrap()));
+    }
+}
+
+/// TS-D1, CTR-UA-37: the six portable typehashes (type strings: primary, then the referenced types sorted by name).
+#[test]
+fn portable_typehashes_pinned() {
+    let p = load("portable.json");
+    let want = [
+        ("UAKemRecord", "0x0ab7989827627b89c268e88a0a0b06b62aefa70b0a466014931ca44acfa9a201"),
+        ("UAPortableRecord", "0x0c1553cfab3c35326558484df79963dced75ead85272d2a85985f264757bfe7f"),
+        ("UARegistration", "0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e"),
+        ("UAPqzKey", "0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00"),
+        ("UAPqzKeyRecord", "0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567"),
+        ("UAMembership", "0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4"),
+    ];
+    assert_eq!(PORTABLE_TYPES.map(|(n, _)| n), want.map(|(n, _)| n));
+    assert_eq!(p["typed"]["types"].as_object().unwrap().len(), want.len());
+    for ((name, ty), (_, th)) in PORTABLE_TYPES.iter().zip(want) {
+        assert_eq!(hx(&portable_typehash(name)), th, "{name}");
+        assert_eq!(hx(&keccak256(ty.as_bytes())), th, "{name}");
+        assert_eq!(p["typed"]["types"][name]["type"], *ty, "{name}");
+        assert_eq!(p["typed"]["types"][name]["typehash"], th, "{name}");
+        // the wallet JSON's types encode to the same string
+        let row = arr(&p, "registrations")[0]["typedData"]["types"].clone();
+        if row.get(*name).is_some() {
+            assert_eq!(encode_type(&row, name), *ty, "{name}");
+        }
+    }
+}
+
+/// Every row's `typedData` (the JSON `eth_signTypedData_v4` signs) hashes to the row's typed digest, its message carries
+/// the row's words (`kind` included), and the struct hashes agree with the word-level functions.
+#[test]
+fn portable_rows_typed() {
+    let p = load("portable.json");
+    let mut n = 0;
+    for r in arr(&p, "registrations") {
+        let td = &r["typedData"];
+        let (ua, kind) = (b32(&r["ua"]), num(&r["kind"]) as u16);
+        assert_eq!((td["primaryType"].as_str(), &td["domain"]), (Some("UARegistration"), &p["typed"]["domain"]), "{}", r["name"]);
+        assert_eq!(hx(&hash_typed_data(td)), r["registrationDigest"], "{}", r["name"]);
+        let (rec, kem) = (&td["message"]["record"], &td["message"]["record"]["kem"]);
+        assert_eq!((num(&rec["kind"]), b32(&rec["ua"]), b32(&kem["ua"])), (kind as u64, ua, ua), "{}", r["name"]);
+        assert_eq!(rec["pqzKeyHash"], r["pqzKeyHash"], "{}", r["name"]);
+        assert_eq!(td["message"]["pqzPopHash"], r["attrs"]["pqzPopHash"], "{}", r["name"]);
+        assert_eq!(hx(&hash_struct(&td["types"], "UAKemRecord", kem)), r["kemRecordHash"], "{}", r["name"]);
+        let (pk, v) = (bytes(&r["attrs"]["kemPk"]), 0); // the register KEM key is version 0 (owner 2026-10-31)
+        assert_eq!(hx(&kem_record_hash(&ua, v, &pk).unwrap()), r["kemRecordHash"], "{}", r["name"]);
+        if pk.is_empty() {
+            // TS-D2: no KEM record = UAKemRecord{ua, 0, 0, 0}
+            assert_eq!((num(&kem["version"]), num(&kem["scheme"]), b32(&kem["kemPkHash"])), (0, 0, [0; 32]), "{}", r["name"]);
+        } else {
+            assert_eq!((num(&kem["version"]), num(&kem["scheme"]), b32(&kem["kemPkHash"])), (v, pk[0] as u64, keccak256(&pk)), "{}", r["name"]);
+        }
+        let words = (b32(&r["pqzKeyHash"]), b32(&r["kemRecordHash"]));
+        assert_eq!(hx(&portable_record_hash(&ua, kind, &words.0, &words.1)), hx(&hash_struct(&td["types"], "UAPortableRecord", rec)), "{}", r["name"]);
+        let mut rtd = td.clone(); // the R_REG record alone, as a wallet would show it
+        rtd["primaryType"] = "UAPortableRecord".into();
+        rtd["message"] = rec.clone();
+        assert_eq!(hx(&hash_typed_data(&rtd)), r["portableRecordDigest"], "{}", r["name"]);
+        n += 1;
+    }
+    for r in arr(&p, "kemRecords") {
+        let td = &r["typedData"];
+        assert_eq!(td["primaryType"], "UAKemRecord", "{}", r["id"]);
+        assert_eq!(hx(&hash_typed_data(td)), r["digest"], "{}", r["id"]);
+        assert_eq!(hx(&hash_struct(&td["types"], "UAKemRecord", &td["message"])), r["structHash"], "{}", r["id"]);
+        let (ua, v, pk) = (b32(&r["ua"]), num(&r["version"]), bytes(&r["kemPk"]));
+        assert_eq!(hx(&kem_record_hash(&ua, v, &pk).unwrap()), r["structHash"], "{}", r["id"]);
+        assert_eq!((num(&td["message"]["version"]), num(&td["message"]["scheme"])), (v, pk[0] as u64), "{}", r["id"]);
+        n += 1;
+    }
+    for r in arr(&p, "pqzKeyRecords") {
+        let td = &r["typedData"];
+        assert_eq!(td["primaryType"], "UAPqzKeyRecord", "{}", r["name"]);
+        assert_eq!(hx(&hash_typed_data(td)), r["recordDigest"], "{}", r["name"]);
+        let (ua, h, ph) = (b32(&r["ua"]), b32(&r["pqzKeyHash"]), b32(&r["pqzPopHash"]));
+        assert_eq!((b32(&td["message"]["key"]["ua"]), b32(&td["message"]["key"]["pqzKeyHash"]), b32(&td["message"]["pqzPopHash"])), (ua, h, ph), "{}", r["name"]);
+        assert_eq!(hx(&pqz_key_record_digest(&ua, &h, &ph)), r["recordDigest"], "{}", r["name"]);
+        let mut ktd = td.clone();
+        ktd["primaryType"] = "UAPqzKey".into();
+        ktd["message"] = td["message"]["key"].clone();
+        assert_eq!(hx(&hash_typed_data(&ktd)), r["pqzKeyDigest"], "{}", r["name"]);
+        assert_eq!(hx(&pqz_key_digest(&ua, &h)), r["pqzKeyDigest"], "{}", r["name"]);
+        n += 1;
+    }
+    assert_eq!(n, 25 + 9 + 8);
 }
 
 #[test]
@@ -81,22 +250,23 @@ fn portable_vectors() {
             assert_eq!(hx(&h.pqz_key_hash), r["pqzKeyHash"], "{}", r["name"]);
             assert_eq!(hx(&h.pqz_pop_hash), r["attrs"]["pqzPopHash"], "{}", r["name"]);
             assert_eq!(hx(&h.kem_record_hash), r["kemRecordHash"], "{}", r["name"]);
-            assert_eq!(hx(&h.portable_pop_digest), r["portablePopDigest"], "{}", r["name"]);
+            assert_eq!(hx(&h.portable_record_digest), r["portableRecordDigest"], "{}", r["name"]);
             assert_eq!(hx(&h.registration_digest), r["registrationDigest"], "{}", r["name"]);
             assert_eq!(hx(&h.message), r["popMessage"], "{}", r["name"]);
             // the word-level functions agree
-            let portable = portable_pop_digest(&ua, &h.pqz_key_hash, &h.kem_record_hash);
-            assert_eq!(portable, h.portable_pop_digest);
-            assert_eq!(registration_digest(&portable, &h.pqz_pop_hash), h.registration_digest);
+            assert_eq!(portable_record_digest(&ua, kind, &h.pqz_key_hash, &h.kem_record_hash), h.portable_record_digest);
+            assert_eq!(registration_digest(&ua, kind, &h.pqz_key_hash, &h.kem_record_hash, &h.pqz_pop_hash), h.registration_digest);
             assert_eq!(ua_message(kind, &pop_v2_tag(), &h.registration_digest).unwrap(), h.message);
             assert_eq!(h.member_digest.map(|d| hx(&d)), r.get("memberDigest").map(|d| d.as_str().unwrap().to_string()), "{}", r["name"]);
         }
         let pk = bytes(&r["attrs"]["pqzKey"]);
         if !pk.is_empty() {
             with_pqz += 1;
-            let kem = (num(&r["attrs"]["kemVersion"]) != 0).then(|| (num(&r["attrs"]["kemVersion"]), bytes(&r["attrs"]["kemPk"])));
-            let got = pqz_reg_message(&ua, &pk, kem.as_ref().map(|(v, p)| (*v, &p[..]))).unwrap();
+            let kem = bytes(&r["attrs"]["kemPk"]);
+            let got = pqz_reg_message(kind, &ua, &pk, (!kem.is_empty()).then_some(&kem[..])).unwrap();
             assert_eq!(hx(&got), r["pqzRegMessage"], "{}", r["name"]);
+            // TS-D3: R_REG proves over the typed UAPortableRecord of the registering kind
+            assert_eq!(got, ua_message(PQZ_SCHEME, &pop_v2_tag(), &b32(&r["portableRecordDigest"])).unwrap(), "{}", r["name"]);
             reg_msgs += 1;
         } else {
             assert!(zero(&bytes(&r["pqzRegMessage"])), "{}", r["name"]);
@@ -114,6 +284,7 @@ fn kem_record_vectors() {
     for r in arr(&p, "kemRecords") {
         let (kind, ua, v, pk) = (num(&r["kind"]) as u16, b32(&r["ua"]), num(&r["version"]), bytes(&r["kemPk"]));
         assert_eq!(hx(&kem_record_digest(&ua, v, &pk).unwrap()), r["digest"], "{}", r["id"]);
+        assert_eq!(hx(&kem_record_hash(&ua, v, &pk).unwrap()), r["structHash"], "{}", r["id"]);
         let m = kem_record_message(kind, &ua, v, &pk).unwrap();
         assert_eq!(hx(&m), r["message"], "{}", r["id"]);
         assert_eq!(m, ua_message(kind, &purpose_tag("kem").unwrap(), &b32(&r["digest"])).unwrap());
@@ -128,13 +299,23 @@ fn kem_record_vectors() {
     assert_eq!(kem_record_digest(&ua, 1, &kem(1, 1600)), Err(UAError::KemKeyLength));
     assert_eq!(kem_record_digest(&ua, 1, &kem(1, 1602)), Err(UAError::KemKeyLength));
     assert_eq!(kem_record_digest(&ua, 1, &[]), Err(UAError::KemKeyLength));
+    // TS-D2: (0, no key) is the zero record's hash; owner 2026-10-31: version 0 with a key is the register key's record
+    // (scheme != 0: scheme 0 is UAKemScheme), never a setKemKey record (UAKemVersion)
+    let th = keccak256(b"UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)");
+    assert_eq!(kem_record_hash(&ua, 0, &[]).unwrap(), keccak256(&[th, ua, [0; 32], [0; 32], [0; 32]].concat()));
+    let mut one = [0u8; 32];
+    one[31] = 1;
+    assert_eq!(kem_record_hash(&ua, 0, &kem(1, 1601)).unwrap(), keccak256(&[th, ua, [0; 32], one, keccak256(&kem(1, 1601))].concat()));
+    assert_eq!(kem_record_hash(&ua, 0, &kem(0, 1601)), Err(UAError::KemScheme));
+    assert_eq!(kem_record_hash(&ua, 1, &[]), Err(UAError::KemKeyLength));
+    assert_eq!(kem_record_digest(&ua, 0, &[]), Err(UAError::KemVersion));
     // CTR-UA-32: scheme 1 only; 0, the reserved 2 and an unknown id are UAKemScheme, whatever the length
     for scheme in [0u8, 2, 0xff] {
         assert_eq!(kem_record_digest(&ua, 1, &kem(scheme, 1601)), Err(UAError::KemScheme));
         assert_eq!(kem_record_digest(&ua, 1, &kem(scheme, 1600)), Err(UAError::KemScheme));
     }
     // known answers (ua-py / ua-go): the 8-byte version word and the decimal "evm:" chain key
-    assert_eq!(hx(&kem_record_digest(&ua, u64::MAX, &kem(1, 1601)).unwrap()), "0x8c997440926a352465f61b53b75606d794efa60c66ac4a7a63f25369a15f7092");
+    assert_eq!(hx(&kem_record_digest(&ua, u64::MAX, &kem(1, 1601)).unwrap()), "0xa0063a84b56d80c83688d8caf5aeb4be8fb4556928e8bc649686449573938f07");
     assert_eq!(hx(&chain_key_hash((1 << 40) + 7)), "0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950"); // keccak256("evm:1099511627783")
 }
 
@@ -157,7 +338,7 @@ fn pqz_key_record_vectors() {
             assert_eq!(hx(&got.message), r["message"], "{}", r["name"]);
             assert_eq!(hx(&got.pqz_reg_message), r["pqzRegMessage"], "{}", r["name"]);
             assert_eq!(pqz_key_digest(&ua, &got.pqz_key_hash), got.pqz_key_digest);
-            assert_eq!(pqz_key_record_digest(&got.pqz_key_digest, &got.pqz_pop_hash), got.record_digest);
+            assert_eq!(pqz_key_record_digest(&ua, &got.pqz_key_hash, &got.pqz_pop_hash), got.record_digest);
             assert_eq!(got.member_digest.is_some(), kind == 0x0120, "{}", r["name"]);
             if let Some(md) = got.member_digest {
                 assert_eq!(member_digest(&ua, &got.message), md);
@@ -222,11 +403,35 @@ fn negatives_refused() {
                 assert_ne!(hx(&msg), k["message"], "{name}");
                 run += 1;
             }
-            "register" if name == "native-uaauth-in-portable-pop" => {
-                // a UAAuth-framed native signature does not recover the member over personal_sign(memberDigest)
+            "register" if name == "native-uaauth-in-portable-pop" || name == "native-member-personal-sign" => {
+                // TS-D4: neither a UAAuth-framed native signature nor the old personal_sign(memberDigest) recovers the
+                // member over the typed registration digest; the old form is a valid signature over its own prehash
                 let r = &row;
-                let got = native_recovered(r, &bytes(&m["set"]["pop"]), &b32(&r["memberDigest"]));
+                let blob = bytes(&m["set"]["pop"]);
+                let got = native_recovered(r, &blob, &b32(&r["registrationDigest"]));
                 assert!(!got.is_empty() && got.iter().all(|(i, a)| a.as_ref() != Some(&member_address(r, *i))), "{name}");
+                let old = native_recovered(r, &blob, &personal_sign(&b32(&r["memberDigest"])));
+                assert_eq!(old.iter().all(|(i, a)| a.as_ref() == Some(&member_address(r, *i))), name == "native-member-personal-sign", "{name}");
+                run += 1;
+            }
+            "register" if name == "record-kind-mismatch" => {
+                // a valid pop over the same UA and attributes under another kind: the typed record binds `kind`
+                let other = num(&m["otherKind"]) as u16;
+                let (kind, ua) = (num(&row["kind"]) as u16, b32(&row["ua"]));
+                let msg = ua_message(kind, &pop_v2_tag(), &registration_digest(&ua, other, &[0; 32], &kem_record_hash(&ua, 0, &[]).unwrap(), &[0; 32])).unwrap();
+                assert_ne!(other, kind, "{name}");
+                assert_ne!(hx(&msg), row["popMessage"], "{name}");
+                let (kd, pop) = (bytes(&row["keyData"]), bytes(&m["set"]["pop"]));
+                assert!(scaas_ua::verify::verify(kind, &kd, &msg, &pop, true), "{name}: signed over the other kind");
+                assert!(!scaas_ua::verify::verify(kind, &kd, &b32(&row["popMessage"]), &pop, true), "{name}");
+                run += 1;
+            }
+            "register" if name == "kem-record-as-registration" => {
+                // the row's own KEM record (typed UAKemRecord) signed under pop v2 is not its registration (struct type)
+                let k = find(&p, "kemRecords", "id", &format!("{}/v1", row["name"].as_str().unwrap()).into());
+                let msg = ua_message(num(&row["kind"]) as u16, &pop_v2_tag(), &b32(&k["digest"])).unwrap();
+                assert_ne!(hx(&msg), row["popMessage"], "{name}");
+                assert_ne!(k["digest"], row["registrationDigest"], "{name}");
                 run += 1;
             }
             "requireAuthorized" => {
@@ -235,7 +440,7 @@ fn negatives_refused() {
                 assert!(!is_portable_purpose(&tag), "{name}");
                 assert_eq!(hx(bytes_at(&auth, 0)), row["keyData"], "{name}");
                 let md = member_digest(&b32(&row["ua"]), &ua_message(0x0120, &tag, &b32(&m["set"]["digest"])).unwrap());
-                let got = native_recovered(&row, bytes_at(&auth, 32), &md);
+                let got = native_recovered(&row, bytes_at(&auth, 32), &personal_sign(&md));
                 assert!(!got.is_empty() && got.iter().all(|(i, a)| a.as_ref() == Some(&member_address(&row, *i))), "{name}");
                 run += 1;
             }
@@ -254,9 +459,9 @@ fn bytes_at(b: &[u8], o: usize) -> &[u8] {
     let p = word_at(b, o);
     &b[p + 32..p + 32 + word_at(b, p)]
 }
-/// The address each native (kind 0x0001) member's signature in a `MemberSig[]` blob recovers over `personal_sign(md)`
+/// The address each native (kind 0x0001) member's signature in a `MemberSig[]` blob recovers over the prehash `digest`
 /// (None: not a 65-byte signature, or no recovery), by member index.
-fn native_recovered(row: &Value, blob: &[u8], md: &[u8; 32]) -> Vec<(usize, Option<String>)> {
+fn native_recovered(row: &Value, blob: &[u8], digest: &[u8; 32]) -> Vec<(usize, Option<String>)> {
     use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
     let (list, count) = (word_at(blob, 0), word_at(blob, word_at(blob, 0)));
     let mut out = vec![];
@@ -272,7 +477,7 @@ fn native_recovered(row: &Value, blob: &[u8], md: &[u8; 32]) -> Vec<(usize, Opti
             .then(|| {
                 let s = Signature::from_slice(&sig[..64]).ok()?;
                 let v = RecoveryId::from_byte(sig[64].checked_sub(27)?)?;
-                let vk = VerifyingKey::recover_from_prehash(&personal_sign_digest(md), &s, v).ok()?;
+                let vk = VerifyingKey::recover_from_prehash(digest, &s, v).ok()?;
                 Some(hx(&keccak256(&vk.to_encoded_point(false).as_bytes()[1..])[12..]))
             })
             .flatten();
@@ -284,18 +489,25 @@ fn member_address(row: &Value, idx: usize) -> String {
     format!("0x{}", &row["members"][idx]["id"].as_str().unwrap()[26..])
 }
 
-/// C7: the native msig member signs `personal_sign(memberDigest)`; the recovered address is the member's.
+/// TS-D4 (owner decision 4): a native EOA msig member signs the portable record's typed digest itself
+/// (`eth_signTypedData_v4`), not `personal_sign(memberDigest)`; the recovered address is the member's.
 #[test]
-fn native_member_personal_sign() {
+fn native_member_typed_digest() {
     let p = load("portable.json");
     let r = find(&p, "registrations", "name", &"msig-pq-native".into());
-    let md = b32(&r["memberDigest"]);
-    let got = native_recovered(r, &bytes(&r["pop"]), &md);
-    assert_eq!(got.len(), 1);
-    assert_eq!(got[0].1, Some(member_address(r, got[0].0)));
-    // the raw digest is not what it signs; known answer from the JS reference (prefix 0x19 + "Ethereum Signed Message:\n32")
-    assert_eq!(hx(&md), "0x606d9a70c70d39e5d8d079c3ae31eefa6db574219dab56d6c776cb6731e61a7c");
-    assert_eq!(hx(&personal_sign_digest(&md)), "0xe5d24987e9b4e710063a5432d6215eaead64d8dc073f7561726d21644d54c3d8");
+    let mut cases = vec![(b32(&r["registrationDigest"]), bytes(&r["pop"]), b32(&r["memberDigest"]))];
+    for k in arr(&p, "pqzKeyRecords").iter().filter(|k| k["ua"] == r["ua"]) {
+        cases.push((b32(&k["recordDigest"]), bytes(&k["sig"]), b32(&k["memberDigest"])));
+    }
+    assert_eq!(cases.len(), 5, "the registration and its PQZ key record per set");
+    for (typed, blob, md) in cases {
+        let got = native_recovered(r, &blob, &typed);
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].1, Some(member_address(r, got[0].0)), "over the typed digest");
+        for other in [md, personal_sign(&md)] {
+            assert_ne!(native_recovered(r, &blob, &other)[0].1, Some(member_address(r, got[0].0)), "not md, not personal_sign(md)");
+        }
+    }
     assert!(is_portable_purpose(&pop_v2_tag()) && is_portable_purpose(&purpose_tag("kem").unwrap()) && is_portable_purpose(&purpose_tag("pqz-key").unwrap()));
     assert!(!is_portable_purpose(&purpose_tag("metatx").unwrap()) && !is_portable_purpose(&purpose_tag("pop").unwrap()));
 }
@@ -309,10 +521,220 @@ fn malformed_msig_key_data() {
     for kd in [&[0u8, 2, 0][..], &[0, 2, 0, 2, 9, 9][..]] {
         let want = Err(UAError::KeyData("length"));
         assert_eq!(holder_pop_message(0x0120, &ua, kd, Some(&pk), None, Some(&proof), None).map(|_| ()), want);
-        assert_eq!(holder_pop_message(0x0120, &ua, kd, None, None, None, Some((1, &[0; 1600]))).map(|_| ()), want);
+        assert_eq!(holder_pop_message(0x0120, &ua, kd, None, None, None, Some(&[0; 1600])).map(|_| ()), want);
         assert_eq!(pqz_key_record_message(0x0120, &ua, kd, &pk, None, Some(&proof), false).map(|_| ()), want);
     }
     // no attributes: key data is not consulted; an msig without key data is not a holder
     assert!(holder_pop_message(0x0120, &ua, &[0, 2, 0], None, None, None, None).is_ok());
     assert_eq!(holder_pop_message(0x0120, &ua, &[], Some(&pk), None, Some(&proof), None).map(|_| ()), Err(UAError::PqzHolder(0x0120)));
+}
+
+// --- typed-signing R1: the registry's explicit arguments (TS-D10 … TS-D12; owner KEM rulings 2026-10-31) ---
+
+fn kem_json(k: &KemKey) -> Value {
+    serde_json::json!({ "scheme": k.scheme, "mlkemEk": hx(&k.mlkem_ek), "x25519": hx(&k.x25519) })
+}
+fn member_sigs_json(m: &[MemberSig]) -> Value {
+    Value::Array(m.iter().map(|s| serde_json::json!({ "index": s.index, "keyData": hx(&s.key_data), "sig": hx(&s.sig) })).collect())
+}
+fn attrs_json(a: &UAAttrs) -> Value {
+    serde_json::json!({ "pqzKey": hx(&a.pqz_key), "pqzPopHash": hx(&a.pqz_pop_hash), "kem": kem_json(&a.kem), "kemPkHash": hx(&a.kem_pk_hash) })
+}
+fn args_json(r: &RegisterArgs) -> Value {
+    match r {
+        RegisterArgs::Register { kind, key_data, attrs, pop, pqz_pop } => serde_json::json!({ "entry": "register", "kind": kind,
+            "keyData": hx(key_data), "attrs": attrs_json(attrs), "pqzPop": hx(pqz_pop), "pop": hx(pop) }),
+        RegisterArgs::RegisterMsig { structure, attrs, pop, pqz_pop } => serde_json::json!({ "entry": "registerMsig",
+            "structure": { "threshold": structure.threshold, "members": structure.members.iter().map(|m| serde_json::json!({
+                "kind": m.kind, "id": hx(&m.id), "weight": m.weight })).collect::<Vec<_>>() },
+            "attrs": attrs_json(attrs), "pqzPop": hx(pqz_pop), "pop": member_sigs_json(pop) }),
+        RegisterArgs::RegisterWebAuthn { key, attrs, pop, pqz_pop } => serde_json::json!({ "entry": "registerWebAuthn",
+            "key": { "x": hx(&key.x), "y": hx(&key.y), "rpIdHash": hx(&key.rp_id_hash) },
+            "attrs": attrs_json(attrs), "pqzPop": hx(pqz_pop), "pop": hx(pop) }),
+        RegisterArgs::RegisterMuSig2 { kind, key, attrs, pop, pqz_pop } => serde_json::json!({ "entry": "registerMuSig2",
+            "kind": kind, "key": { "aggKey": hx(&key.agg_key), "memberKeys": key.member_keys.iter().map(|k| hx(k)).collect::<Vec<_>>() },
+            "attrs": attrs_json(attrs), "pqzPop": hx(pqz_pop), "pop": hx(pop) }),
+        RegisterArgs::RegisterFrost { kind, key, attrs, pop, pqz_pop } => serde_json::json!({ "entry": "registerFrost",
+            "kind": kind, "key": { "groupKey": hx(&key.group_key), "threshold": key.threshold, "members": key.members.iter().map(|m| serde_json::json!({
+                "commitments": m.commitments.iter().map(|c| hx(c)).collect::<Vec<_>>(), "r": hx(&m.r), "z": hx(&m.z) })).collect::<Vec<_>>() },
+            "attrs": attrs_json(attrs), "pqzPop": hx(pqz_pop), "pop": hx(pop) }),
+    }
+}
+fn fill_json(f: &SetKemKeyArgs) -> Value {
+    serde_json::json!({ "ua": hx(&f.ua), "version": f.version, "kem": kem_json(&f.kem), "sig": { "keyData": hx(&f.sig.key_data),
+        "signature": hx(&f.sig.signature), "members": member_sigs_json(&f.sig.members) } })
+}
+/// `abi.encode(MemberSig[])` (the vectors' byte form) back to the typed list.
+fn member_sigs(blob: &[u8]) -> Vec<MemberSig> {
+    if blob.is_empty() {
+        return vec![];
+    }
+    let w = |o: usize| usize::from_be_bytes(blob[o + 24..o + 32].try_into().unwrap());
+    let (base, n) = (w(0), w(w(0)));
+    (0..n)
+        .map(|i| {
+            let t = base + 32 + w(base + 32 + 32 * i);
+            let field = |k: usize| {
+                let o = t + w(t + 32 * k);
+                blob[o + 32..o + 32 + w(o)].to_vec()
+            };
+            MemberSig { index: w(t) as u16, key_data: field(1), sig: field(2) }
+        })
+        .collect()
+}
+fn reg_input(row: &Value) -> RegistrationInput {
+    let a = &row["attrs"];
+    let kind = num(&row["kind"]) as u16;
+    RegistrationInput {
+        kind,
+        key_data: bytes(&row["keyData"]),
+        pqz_key: bytes(&a["pqzKey"]),
+        pqz_pop_hash: b32(&a["pqzPopHash"]),
+        pqz_pop: bytes(&row["pqzPop"]),
+        kem_pk: bytes(&a["kemPk"]),
+        pop: if kind == 0x0120 { vec![] } else { bytes(&row["pop"]) },
+        members: if kind == 0x0120 { member_sigs(&bytes(&row["pop"])) } else { vec![] },
+        kem_commit: None,
+    }
+}
+
+#[test]
+fn registration_args_typed() {
+    let p = load("portable.json");
+    let mut commits = 0;
+    for row in arr(&p, "registrations") {
+        let name = row["name"].as_str().unwrap();
+        let full = registration_args(&RegistrationInput { kem_commit: Some(false), ..reg_input(row) }).unwrap();
+        assert_eq!(args_json(&full.args), row["args"], "{name}");
+        assert!(full.kem_fill.is_none(), "{name}");
+        let kem = full.args.attrs().kem.clone();
+        assert_eq!(hx(&kem.kem_pk()), row["attrs"]["kemPk"].as_str().unwrap(), "{name}: KemKey assembles to kemPk");
+        if let RegisterArgs::RegisterMsig { structure, .. } = &full.args {
+            assert_eq!(structure.key_data(), bytes(&row["keyData"]), "{name}: the structure is the packed key data");
+            assert_eq!(&MsigStructure::from_key_data(&bytes(&row["keyData"])).unwrap(), structure);
+        }
+        if row.get("kemCommit").is_none() {
+            assert!(kem.kem_pk().is_empty(), "{name}");
+            continue;
+        }
+        let c = registration_args(&RegistrationInput { kem_commit: Some(true), ..reg_input(row) }).unwrap();
+        assert_eq!(args_json(&c.args), row["kemCommit"]["register"], "{name}");
+        assert_eq!(fill_json(c.kem_fill.as_ref().unwrap()), row["kemCommit"]["fill"], "{name}");
+        commits += 1;
+    }
+    assert_eq!(commits, 9);
+    for k in arr(&p, "kemRecords") {
+        let sig = bytes(&k["sig"]);
+        let s = if num(&k["kind"]) == 0x0120 { UASig { members: member_sigs(&sig), ..Default::default() } } else {
+            UASig { signature: sig, ..Default::default() }
+        };
+        let a = SetKemKeyArgs { ua: b32(&k["ua"]), version: num(&k["version"]), kem: KemKey::from_kem_pk(&bytes(&k["kemPk"])).unwrap(), sig: s };
+        assert_eq!(fill_json(&a), k["args"]);
+    }
+    assert_eq!(KemKey::from_kem_pk(&[]).unwrap(), KemKey::default());
+    assert!(KemKey::default().kem_pk().is_empty());
+    assert_eq!(KemKey::from_kem_pk(&[1; 32]), Err(UAError::KemKeyLength));
+}
+
+/// The hash commit only when the full call does not fit one transaction (owner 2026-10-31; X0: PQZH n2560-kmax16384 with a
+/// PQZ key and a KEM key): the same figures as clientkeys and ExplicitParamsCalldata.t.sol `test_r1_kemHashCommitFits`.
+#[test]
+fn registration_hash_commit_when_over_limit() {
+    let proof = |set: &str| {
+        let path = format!("{}/../../smartcontracts/evm/test/vectors/pqz-gas/{set}.json", env!("CARGO_MANIFEST_DIR"));
+        let g: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        num(&g["pqzh"]["REGISTER"]["proof"]) as usize
+    };
+    let mut kem_pk = vec![0x5a; 1601];
+    kem_pk[0] = 1;
+    let input = |set: &str, pqz: usize| RegistrationInput {
+        kind: 0x0131, key_data: vec![0x5a; 1952], pqz_key: vec![0x5a; pqz], pqz_pop: vec![0x5a; proof(set)],
+        kem_pk: kem_pk.clone(), pop: vec![0x5a; 3309], ..Default::default()
+    };
+    assert_eq!(REGISTER_CALLDATA_LIMIT, 261_909);
+    let x = input("n2560-kmax16384", 20480);
+    let full = registration_args(&RegistrationInput { kem_commit: Some(false), ..x.clone() }).unwrap();
+    assert_eq!(full.args.calldata_len(), 262_116);
+    let auto = registration_args(&x).unwrap();
+    assert_eq!(auto.args.calldata_len(), 260_548);
+    let fill = auto.kem_fill.expect("over the limit: the hash commit");
+    assert_eq!(fill.calldata_len(), 2020);
+    assert_eq!(fill.kem.kem_pk(), kem_pk);
+    assert_eq!(fill.ua, ua_of(0x0131, &x.key_data).unwrap());
+    let small = registration_args(&input("n2304-kmax4096", 18432)).unwrap();
+    assert!(small.kem_fill.is_none(), "under the limit: the full key");
+}
+
+/// PRV L6: the registry's KEM key check runs before a form is chosen: a commit of a malformed key could only revert at its fill.
+#[test]
+fn registration_refuses_malformed_kem() {
+    let p = load("portable.json");
+    let row = arr(&p, "registrations").iter().find(|r| r.get("kemCommit").is_some()).unwrap();
+    let with = |head: u8, n: usize, kem_commit| {
+        let mut kem_pk = vec![0x5a; n];
+        kem_pk[0] = head;
+        registration_args(&RegistrationInput { kem_pk, kem_commit, ..reg_input(row) }).unwrap_err()
+    };
+    for commit in [Some(true), Some(false), None] {
+        assert_eq!(with(1, 40, commit), UAError::KemKeyLength);
+        assert_eq!(with(2, 1601, commit), UAError::KemScheme);
+    }
+}
+
+/// PRV M1 (owner 2026-11-01, option (a)): a client repairs a front-run hash commit from what it reads.
+#[test]
+fn kem_repair_fills_a_front_run_commit() {
+    let p = load("portable.json");
+    let row = arr(&p, "registrations").iter().find(|r| r.get("kemCommit").is_some()).unwrap();
+    let (ua, key) = (b32(&row["ua"]), bytes(&row["attrs"]["kemPk"]));
+    let (hash, stored, none) = (b32(&row["kemCommit"]["register"]["attrs"]["kemPkHash"]), KemKey::from_kem_pk(&key).unwrap(), KemKey::default());
+    assert_eq!(kem_repair(&ua, &[0; 32], &stored, &key).unwrap(), None, "never committed, full key");
+    assert_eq!(kem_repair(&ua, &[0; 32], &none, &key).unwrap(), None, "never committed, no key");
+    assert_eq!(kem_repair(&ua, &hash, &stored, &key).unwrap(), None, "committed and filled");
+    assert_eq!(fill_json(&kem_repair(&ua, &hash, &none, &key).unwrap().unwrap()), row["kemCommit"]["fill"]);
+    assert_eq!(kem_repair(&ua, &hash, &none, &[]), Err(UAError::KemKeyLength));
+}
+
+/// typed-signing R1b (TS-D13, Appendix X row 12): `webauthn-p256` / MuSig2 / FROST register through `registerWebAuthn` /
+/// `registerMuSig2` / `registerFrost` with typed keys that assemble to the packed key data (kinds.json `valid` rows), the
+/// calldata lengths cast 1.8.5 gave (no attributes, a 32-byte pop, no pqzPop; as clientkeys and forge
+/// `test_registerTypedKeysSameId`); any other single key stays `register`.
+#[test]
+fn registration_args_typed_keys() {
+    let k = load("kinds.json");
+    let mut n = 0;
+    for v in arr(&k, "valid") {
+        let kind = num(&v["kind"]) as u16;
+        let (entry, len) = match kind {
+            0x0100 => ("registerWebAuthn", 580),
+            0x0110 | 0x0112 => ("registerMuSig2", 1124),
+            0x0111 | 0x0113 => ("registerFrost", 2308),
+            _ => continue,
+        };
+        let d = bytes(&v["keyData"]);
+        let r = registration_args(&RegistrationInput { kind, key_data: d.clone(), pop: vec![0; 32], ..Default::default() }).unwrap();
+        assert_eq!(args_json(&r.args)["entry"], entry);
+        assert_eq!(r.args.calldata_len(), len, "{}", v["name"]);
+        let packed = match &r.args {
+            RegisterArgs::RegisterWebAuthn { key, .. } => [key.x, key.y, key.rp_id_hash].concat(),
+            RegisterArgs::RegisterMuSig2 { key, .. } => {
+                [key.agg_key.clone(), (key.member_keys.len() as u16).to_be_bytes().to_vec(), key.member_keys.concat()].concat()
+            }
+            RegisterArgs::RegisterFrost { key, .. } => {
+                let mut o = [key.group_key.clone(), key.threshold.to_be_bytes().to_vec(), (key.members.len() as u16).to_be_bytes().to_vec()].concat();
+                for m in &key.members {
+                    o.extend([m.commitments.concat(), m.r.clone(), m.z.to_vec()].concat());
+                }
+                o
+            }
+            _ => unreachable!(),
+        };
+        assert_eq!(packed, d, "{}: the typed key is the packed key data", v["name"]);
+        assert_eq!(r.args.key_data(), d);
+        n += 1;
+    }
+    assert_eq!(n, 6);
+    let p256 = &arr(&k, "valid")[1];
+    let r = registration_args(&RegistrationInput { kind: 0x0101, key_data: bytes(&p256["keyData"]), ..Default::default() }).unwrap();
+    assert!(matches!(r.args, RegisterArgs::Register { .. }));
 }

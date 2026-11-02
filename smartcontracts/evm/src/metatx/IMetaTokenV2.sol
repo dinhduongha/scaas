@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {IERC20Payment} from "./IERC20Payment.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeeMode} from "../common/FeePolicy.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title Named functions of every v2 tier (`MetaTokenBase`, metatx.md Interfaces; CTR-MTX-09, CTR-MTX-05), and those of
 ///        the UA ledger (accounts.md CTR-UA-26: each builds its `UAMetaTransfer` / `UAMetaTransaction`).
@@ -32,8 +33,6 @@ interface IMetaTokenV2 is IERC20Payment {
         uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata signature
     ) external returns (bool);
 
-    function mtxExecuteWithFee(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
-        external returns (bytes memory);
 
     function mtxPay(
         address from, address to, uint256 amount, bytes32 payId, uint256 validUntil,
@@ -54,13 +53,15 @@ interface IMetaTokenV2 is IERC20Payment {
         uint256 fee, address feeRecipient, uint256 rfValidUntil, bytes calldata payeeSig
     ) external returns (bool);
 
-    function receiverFeeDigest(bytes32 paymentDigest, uint256 fee, address feeRecipient, uint256 validUntil)
+    function receiverFeeDigest(MetaTxLib.MetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil)
+        external view returns (bytes32);
+    function uaReceiverFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil)
         external view returns (bytes32);
 
     /// @notice Receiver-pays on the UA path: payer and payee are ids; a derived payee co-signs under `receiver-fee`.
     function uaPayReceiverFee(
-        MetaTxLib.UAMetaTransfer calldata t, bytes calldata payerAuth,
-        uint256 fee, address feeRecipient, uint256 rfValidUntil, bytes calldata payeeAuth
+        MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth,
+        uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth
     ) external returns (bool);
 
     function payLane(bytes32 payId) external pure returns (uint256);
@@ -70,17 +71,15 @@ interface IMetaTokenV2 is IERC20Payment {
                             bytes32 entryRef) external returns (bool);
 
     function uaTransfer(bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
-                        uint32 mode, address relayer, bytes calldata auth) external returns (bool);
+                        uint32 mode, address relayer, IUARegistry.UASig calldata auth) external returns (bool);
     function uaTransferWithFee(bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce,
                                uint256 validUntil, uint32 mode, address relayer, uint256 fee, address feeRecipient,
-                               bytes calldata auth) external returns (bool);
+                               IUARegistry.UASig calldata auth) external returns (bool);
     function uaPay(bytes32 from, bytes32 to, uint256 amount, bytes32 payId, uint256 validUntil, uint32 mode,
-                   address relayer, uint256 fee, address feeRecipient, bytes calldata auth) external returns (bool);
+                   address relayer, uint256 fee, address feeRecipient, IUARegistry.UASig calldata auth)
+        external returns (bool);
     /// @notice `uaPay` with `payId = metaPayId(salt, meta)` (CTR-MTX-26).
     function uaPayMeta(bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes calldata meta, uint256 validUntil,
-                       uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata auth)
+                       uint32 mode, address relayer, uint256 fee, address feeRecipient, IUARegistry.UASig calldata auth)
         external returns (bool);
-    function uaUnwrap(bytes32 from, address underlying, uint256 wrapped, address recipient, uint256 minOut,
-                      uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer,
-                      bytes calldata auth) external returns (bytes memory);
 }

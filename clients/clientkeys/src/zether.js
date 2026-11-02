@@ -10,9 +10,10 @@
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256, sha512 } from '@noble/hashes/sha2.js';
-import { keccak_256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, abiEncode, wipe } from './bytes.js';
+import { keccak_256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, wipe } from './bytes.js';
 import { createVault, openVault, seal, open } from './vault.js';
-import { uaOf, uaMessage, purposeTag, holderPopMessage } from './ua.js';
+import { uaOf, uaMessage, purposeTag, holderPopMessage, uaSig } from './ua.js';
+import { OP_BUILDERS, hashTypedData } from './evm.js';
 
 export const USE_CONF = 7;
 export const USE_DISCLOSURE = 8;
@@ -168,8 +169,9 @@ export function schnorrVerify(curve, Ybytes, msg, sig) {
 
 /**
  * The `pop` of `UARegistry.register(0x0141, Y, attrs = none, pop, "")` (UA-8 P1, the portable PoP): Schnorr by `x` under the
- * Zether tag over `uaMessage(0x0141, POP_V2, registrationDigest(portablePopDigest(UA, 0, 0), 0))` (a Zether UA holds no PQZ
- * key and no KEM key). No chain id, chain uid or registry: one PoP registers the UA on every chain, relayed by anyone.
+ * Zether tag over `uaMessage(0x0141, POP_V2, registrationDigest)`, the typed `UARegistration{UAPortableRecord{UA, 0x0141, 0,
+ * UAKemRecord{UA, 0, 0, 0}}, 0}` digest (typed-signing TS-D3; a Zether UA holds no PQZ key and no KEM key); `popDigest` is
+ * the typed `UAPortableRecord` digest. No chain id, chain uid or registry: one PoP registers the UA on every chain, relayed by anyone.
  * The chain-bound form before UA-8 is `zetherPopV1` in legacy/ua8/ua-pop-v1.js. Curve first, as every function of this
  * module (`zetherSign(curve, x, …)`); an old caller still passing the chain context gets an error, not a silent drop.
  */
@@ -178,7 +180,7 @@ export function zetherPop(curve, x, ...rest) {
   const kind = zetherKind(curve);
   const { Y, UA } = confPublic(curve, x);
   const p = holderPopMessage(kind, { ua: UA });
-  return { kind, Y, UA, popDigest: hex(p.portablePopDigest), registrationDigest: hex(p.registrationDigest), uaMsg: hex(p.message),
+  return { kind, Y, UA, popDigest: hex(p.portableRecordDigest), registrationDigest: hex(p.registrationDigest), uaMsg: hex(p.message),
     pop: hex(schnorrSign(curve, x, p.message)) };
 }
 
@@ -188,8 +190,9 @@ const ZETHER_PURPOSES = ['metatx', 'metatx-cancel', 'keyop', 'receiver-fee', 'vp
 /**
  * The `sig` a Zether UA gives every UA-ledger write (metatx, metatx-cancel, keyop, receiver-fee, vp, vc-anchor, trade,
  * zether-owner): Schnorr by `x` over `uaMessage(0x0141, purpose, digest)`, returned RAW as `R‖z` (160 bytes); the
- * registry reads `Y` from its record. `requireAuthorized` wants `abi.encode(bytes(""), sig)`: use `zetherOwnerAuth`
- * for the owner ops. Spends carry no signature: the proof alone authorizes them (UA-6).
+ * registry reads `Y` from its record. A token's `bytes auth` wants `abi.encode(bytes(""), sig)`, `requireAuthorized` and
+ * the owner ops (`zetherOwnerSig`) take `UASig{signature: sig}` (`uaSig` in ua.js). Spends carry no signature: the
+ * proof alone authorizes them (UA-6).
  */
 export function zetherSign(curve, x, purpose, digest) {
   if (purpose === 'pop') throw new Error('the PoP has its own signer: zetherPop');
@@ -197,13 +200,47 @@ export function zetherSign(curve, x, purpose, digest) {
   return schnorrSign(curve, x, uaMessage(zetherKind(curve), purposeTag(purpose), digest));
 }
 
-/**
- * The `sig` of an owner op (`mtxRollOverSigned`, `mtxSetRollOverMode`):
- * `abi.encode(bytes(""), Schnorr by x over uaMessage(kind, zether-owner, digest))`.
- */
-export function zetherOwnerAuth(curve, x, digest) {
-  return hex(abiEncode(['bytes', 'bytes'], [new Uint8Array(0), zetherSign(curve, x, 'zether-owner', digest)]));
+/** `ownerSig` of a typed owner op (typed-signing TS-D19): `UASig{signature: Schnorr by x over uaMessage(kind, zether-owner, digest)}`. */
+export const zetherOwnerSig = (curve, x, digest) => uaSig({ signature: zetherSign(curve, x, 'zether-owner', digest) });
+
+// ------------------------------------------------------------------ the confidential entries (typed-signing C3 / C4)
+// From the one table of src/evm.js, on the explicit structs of Appendix X: `<op>TypedData({name, contract, chainId,
+// chainUid, message})`, `<op>Calldata(td, sig, extra)`. `extra` holds what the entry takes unsigned: `pqzAuth`, `ownerSig`.
+
+/** The explicit Zether point (Appendix X.1, `struct G1`): the 128 encoded bytes, word by word. */
+export function g1(point) {
+  const b = point instanceof Uint8Array ? point : fromHex(point);
+  if (b.length !== 128) throw new Error('wrong point length');
+  const w = (i) => hex(b.subarray(32 * i, 32 * i + 32));
+  return { x0: w(0), x1: w(1), y0: w(2), y1: w(3) };
 }
+
+export const {
+  zetherTransferSingleTypedData, zetherTransferSingleCalldata, uaZetherTransferSingleTypedData, uaZetherTransferSingleCalldata,
+  zetherTransferTypedData, zetherTransferCalldata, uaZetherTransferTypedData, uaZetherTransferCalldata,
+  zetherTransferCompactTypedData, zetherTransferCompactCalldata, uaZetherTransferCompactTypedData, uaZetherTransferCompactCalldata,
+  zetherUnshieldTypedData, zetherUnshieldCalldata, uaZetherUnshieldTypedData, uaZetherUnshieldCalldata,
+  zetherUnshieldUnwrapTypedData, zetherUnshieldUnwrapCalldata, uaZetherUnshieldUnwrapTypedData, uaZetherUnshieldUnwrapCalldata,
+  rollOverSignedTypedData, rollOverSignedCalldata, uaRollOverSignedTypedData, uaRollOverSignedCalldata,
+  setRollOverModeTypedData, setRollOverModeCalldata, uaSetRollOverModeTypedData, uaSetRollOverModeCalldata,
+  rollOverBatchTypedData, rollOverBatchCalldata, uaRollOverBatchTypedData, uaRollOverBatchCalldata,
+  zetherRollOverTypedData, zetherRollOverCalldata, zetherSetRollOverModeTypedData, zetherSetRollOverModeCalldata,
+} = OP_BUILDERS;
+
+export const {
+  pqzTransferSingleTypedData, pqzTransferSingleCalldata, uaPqzTransferSingleTypedData, uaPqzTransferSingleCalldata,
+  pqzTransferSingleCompactTypedData, pqzTransferSingleCompactCalldata, uaPqzTransferSingleCompactTypedData, uaPqzTransferSingleCompactCalldata,
+  pqzTransferTypedData, pqzTransferCalldata, uaPqzTransferTypedData, uaPqzTransferCalldata,
+  pqzTransferCompactTypedData, pqzTransferCompactCalldata, uaPqzTransferCompactTypedData, uaPqzTransferCompactCalldata,
+  pqzUnshieldTypedData, pqzUnshieldCalldata, uaPqzUnshieldTypedData, uaPqzUnshieldCalldata,
+  pqzUnshieldUnwrapTypedData, pqzUnshieldUnwrapCalldata, uaPqzUnshieldUnwrapTypedData, uaPqzUnshieldUnwrapCalldata,
+  pqzAuthTypedData,
+} = OP_BUILDERS;
+
+/** The digest of `mtxRollOverSigned`: `ZetherRollOver` in the token's domain, signed under `zether-owner`. */
+export const zetherRollOverDigest = (opts) => hashTypedData(zetherRollOverTypedData(opts));
+/** The digest of `mtxSetRollOverMode`: `ZetherSetRollOverMode` in the token's domain, signed under `zether-owner`. */
+export const zetherSetRollOverModeDigest = (opts) => hashTypedData(zetherSetRollOverModeTypedData(opts));
 
 // ------------------------------------------------------------------ at rest
 

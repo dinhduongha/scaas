@@ -11,6 +11,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {UACall} from "./UACall.sol";
 
 /// The UA ledger with PQ signers (P6c; accounts.md CTR-UA-26, §1.16): pq_signatures.json's `metatx3` rows — the
 /// metatx3.json structs and domain, one row per PQ kind — on a `NORMAL` clone at the vector token address, context A,
@@ -39,12 +40,12 @@ contract UAMetaTx3PqTest is UARegistryBase {
             uint16 kind = uint16(vm.parseJsonUint(pj, string.concat(k, "kind")));
             bytes memory pk = vm.parseJsonBytes(pj, string.concat(k, "keyData"));
             for (uint256 p; kind <= 0x0131 && p < (kind == 0x0130 ? 1 : 2); ++p) reg.cacheExpandedKey(kind, pk, p);
-            reg.register(kind, pk, _none(), vm.parseJsonBytes(pj, string.concat(k, "pop.sig")), "");
+            UACall.register(reg, kind, pk, _none(), vm.parseJsonBytes(pj, string.concat(k, "pop.sig")), "");
         }
         // the receiverFee payee: mldsa65 index 1 (extraKeys[0]), its expanded key cached as the payer's
         bytes memory pk1 = vm.parseJsonBytes(pj, ".extraKeys[0].keyData");
         for (uint256 p; p < 2; ++p) reg.cacheExpandedKey(0x0131, pk1, p);
-        reg.register(0x0131, pk1, _none(), vm.parseJsonBytes(pj, ".extraKeys[0].pop.sig"), "");
+        UACall.register(reg, 0x0131, pk1, _none(), vm.parseJsonBytes(pj, ".extraKeys[0].pop.sig"), "");
         address token = vm.parseJsonAddress(pj, ".metatx3.token");
         address impl = address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_A, false), ""));
         vm.etch(token, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
@@ -98,7 +99,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
             bytes32 digest = vm.parseJsonBytes32(pj, string.concat(r, "digest"));
             assertEq(MetaTxLib.hashStruct(m), vm.parseJsonBytes32(pj, string.concat(r, "structHash")));
             assertEq(tok.uaDigest(m), digest);
-            reg.requireAuthorized(m.from, UAKinds.PURPOSE_METATX, digest, vm.parseJsonBytes(pj, string.concat(r, "auth")));
+            reg.requireAuthorized(m.from, UAKinds.PURPOSE_METATX, digest, UACall.auth(m.from, vm.parseJsonBytes(pj, string.concat(r, "auth"))));
             ++n;
         }
         assertEq(n, 4);
@@ -119,7 +120,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
             tok.transferToUA(t.from, t.value + t.fee);
             vm.prank(t.relayer);
             uint256 g = gasleft();
-            tok.uaExecuteTransfer(t, auth);
+            tok.uaExecuteTransfer(t, UACall.auth(t.from, auth));
             g -= gasleft();
             emit log_named_uint(string.concat("uaExecuteTransfer ", vm.parseJsonString(pj, string.concat(r, "name"))), g);
             assertEq(tok.balanceOfUA(t.from), 0);
@@ -163,7 +164,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
         bytes32 d = vm.parseJsonBytes32(pj, string.concat(r, "paymentDigest"));
         assertEq(tok.uaTransferDigest(t), d);
         (uint256 f, address feeTo, uint256 until) = _rfFields(pj, r);
-        assertEq(tok.receiverFeeDigest(d, f, feeTo, until), vm.parseJsonBytes32(pj, string.concat(r, "receiverFeeDigest")));
+        assertEq(tok.uaReceiverFeeDigest(t, f, feeTo, until), vm.parseJsonBytes32(pj, string.concat(r, "receiverFeeDigest")));
         return (t, f, _rfCalldata(pj, r, t));
     }
 
@@ -179,7 +180,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
         bytes memory payerAuth = vm.parseJsonBytes(pj, string.concat(r, "payerAuth"));
         bytes memory payeeAuth = vm.parseJsonBytes(pj, string.concat(r, "payeeAuth"));
         (uint256 fee, address feeTo, uint256 until) = _rfFields(pj, r);
-        return abi.encodeCall(tok.uaPayReceiverFee, (t, payerAuth, fee, feeTo, until, payeeAuth));
+        return abi.encodeCall(tok.uaPayReceiverFee, (t, UACall.auth(t.from, payerAuth), fee, feeTo, until, UACall.auth(t.to, payeeAuth)));
     }
 
     /// EIP-2028 calldata gas (4 per zero byte, 16 otherwise) and the EIP-7623 floor (10 per token, 4 tokens per non-zero byte).

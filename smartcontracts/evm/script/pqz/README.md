@@ -3,15 +3,23 @@
 Plan: [2026-10-16-p6g-contracts.md](../../../../docs/superpowers/plans/2026-10-16-p6g-contracts.md) (D7, D15).
 Deploys the PQZ stack with raw transactions (forge's EVM has no `PQZ` / `MLDSA*` precompile, so `forge script`
 cannot simulate it) and runs the life cycle with real proofs: registry gen 1 (`mldsa44`, `mldsa65` on the
-precompiles, `pqz-mlwe`, `msig`), `OpenFactory`, `NORMAL_PQZ` / `WRAPPED_PQZ`, register, shield, transfer, rollover,
-inline credits, burn, refresh, disclosure (all three kinds), v1 and v3 relayed transfers, wrap-shield, commit-reveal
-`R_TX0`, unshield-unwrap.
+precompiles, `pqz-mlwe`, `msig`; `UARegistryLib` linked and deployed with it), `OpenFactory`, `NORMAL_PQZ` / `WRAPPED_PQZ`,
+register (one PQZ holder by `registerMsig`), shield, transfer, rollover, inline credits, burn, refresh, disclosure (all
+three kinds), relayed transfers on the generic entries, every PQZ op on its named entry (typed struct; ECDSA, ML-DSA-65
+and msig `UASig`), wrap-shield, commit-reveal `R_TX0`, unshield-unwrap.
 
 ```sh
 scripts/capped forge build                                                   # smartcontracts/evm/out
 (cd pqz-core/ffi && scripts/capped cargo build --release --offline -j2 --features prove --example pqz_prove)
 python3 -I smartcontracts/evm/script/pqz/e2e.py --rpc http://127.0.0.1:8545 --log smartcontracts/evm/runs/<date>-p6g-7622.txt
+python3 -I smartcontracts/evm/script/pqz/e2e.py --self-test                  # no chain, after forge build
+python3 -I smartcontracts/evm/script/pqz/test_e2e_linked.py                  # no chain: link closure, `Signed`
 ```
+
+The chain run needs the `PQZ` and ML-DSA precompiles. typed-signing changed its calls and it has not run since: the next
+reset of the SCaaS testnet is its first run on the named entries. `--self-test` checks each named entry's calldata and
+digest against `typed_ops.json`, the registry calls against `portable.json`, and every signature and encoder against the
+ABI in `out/`; it does not run the scenario.
 
 - **Parameter set** (plan 5h Task 8d part 2): the contracts build against `src/pqz/PqzSet.sol` (committed
   `n2304-kmax4096`); `at-set.sh <set> [forge args]` builds / tests another set (installs its `PqzSet.sol`, runs forge in

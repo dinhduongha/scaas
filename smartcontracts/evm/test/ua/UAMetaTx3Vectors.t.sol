@@ -21,6 +21,8 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {UACall} from "./UACall.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 
 /// smartcontracts/vectors/ua/metatx3.json (accounts.md §1.16, the v3 KAT): a `NORMAL` clone at the vector's token
 /// address on context A with the real UA-2a/UA-2b verifiers. Every row's struct (built from the file's typed data)
@@ -42,13 +44,11 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
         reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _realCfgs());
         for (uint256 i; vm.keyExistsJson(sj, string.concat(".derived[", vm.toString(i), "]")); ++i) {
             string memory d = string.concat(".derived[", vm.toString(i), "].");
-            reg.register(
-                uint16(vm.parseJsonUint(sj, string.concat(d, "kind"))),
+            UACall.register(reg, uint16(vm.parseJsonUint(sj, string.concat(d, "kind"))),
                 vm.parseJsonBytes(sj, string.concat(d, "keyData")),
                 _none(),
                 vm.parseJsonBytes(sj, string.concat(d, "pop.sig")),
-                ""
-            );
+                "");
         }
         address token = vm.parseJsonAddress(vj, ".token");
         address impl = address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_A, false), ""));
@@ -151,7 +151,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             _fund(t.from, t.value + t.fee);
             vm.prank(t.relayer);
             uint256 g = gasleft();
-            tok.uaExecuteTransfer(t, auth);
+            tok.uaExecuteTransfer(t, UACall.auth(t.from, auth));
             g -= gasleft();
             emit log_named_uint(string.concat("uaExecuteTransfer ", vm.parseJsonString(vj, string.concat(r, "name"))), g);
             assertEq(tok.balanceOfUA(t.from), 0);
@@ -216,12 +216,11 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             uint256 fee = vm.parseJsonUint(vj, string.concat(r, "receiverFee.message.fee"));
             address feeTo = vm.parseJsonAddress(vj, string.concat(r, "receiverFee.message.feeRecipient"));
             uint256 until = vm.parseJsonUint(vj, string.concat(r, "receiverFee.message.validUntil"));
-            assertEq(vm.parseJsonBytes32(vj, string.concat(r, "receiverFee.message.paymentDigest")), d);
-            assertEq(tok.receiverFeeDigest(d, fee, feeTo, until), vm.parseJsonBytes32(vj, string.concat(r, "receiverFeeDigest")));
+            assertEq(tok.uaReceiverFeeDigest(t, fee, feeTo, until), vm.parseJsonBytes32(vj, string.concat(r, "receiverFeeDigest")));
             _fund(t.from, t.value);
             uint256 before = tok.balanceOfUA(t.to);
-            bytes memory payerAuth = vm.parseJsonBytes(vj, string.concat(r, "payerAuth"));
-            bytes memory payeeAuth = vm.parseJsonBytes(vj, string.concat(r, "payeeAuth"));
+            IUARegistry.UASig memory payerAuth = UACall.auth(t.from, vm.parseJsonBytes(vj, string.concat(r, "payerAuth")));
+            IUARegistry.UASig memory payeeAuth = UACall.auth(t.to, vm.parseJsonBytes(vj, string.concat(r, "payeeAuth")));
             vm.prank(t.relayer);
             uint256 g = gasleft();
             tok.uaPayReceiverFee(t, payerAuth, fee, feeTo, until, payeeAuth);
@@ -239,7 +238,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
         if (UAKinds.inNativeSpace(from)) {
             assertEq(ECDSA.recover(digest, auth), address(uint160(uint256(from))));
         } else {
-            reg.requireAuthorized(from, UAKinds.PURPOSE_METATX, digest, auth);
+            reg.requireAuthorized(from, UAKinds.PURPOSE_METATX, digest, UACall.auth(from, auth));
         }
     }
 

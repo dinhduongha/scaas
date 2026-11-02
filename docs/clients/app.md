@@ -374,7 +374,7 @@ unlocked ([vault threat model](signers-clientkeys.md#vault)).
 | Passkey ceremony | `creationOptions`, `requestOptions`, `publicKeyFromSpki`, `derToRS`, `encodeAssertion`, `passkeySubjectKey`, `accountSalt`, `predictAccount`, `accountSignature`, `merkleBatch`, `checkOwnerCall`, `passkeyFlags` |
 | Backup | `hasBackup`, `backupStatus` — keys de-duplicated by P-256 `(x, y)` across `rpIdHash`/`originHash` before counting; `keys[]` carries `x, y`; the backup vectors gain "same passkey, two origins ⇒ 1 key" and the `msig` rule |
 | Seed vault | `createVault`, `openVault`, `rewrapPin`, `needsRewrap`, `checkPassphrase`, `SeedBackup`, `deriveKey`, `signTyped`, `signKeyProof`, `signDigest` (native only; a raw digest needs `{ allowRawDigest: true }`, [CLI-SGN-40](signers-clientkeys.md#CLI-SGN-40)), `signFamily`; v2: `openStore`, `deviceKey`, `sealDevice`, `openDevice`, `needsBinding` |
-| UA | `ua.js`: `uaOf`, `keyHashOf`, `uaMessage`, `portablePopDigest`, `registrationDigest`, `holderPopMessage`, `pqzRegMessage`, `kemRecordDigest` / `kemRecordMessage`, `pqzKeyRecordMessage`, `personalSignDigest`, `isPortablePurpose`, `deriveUAKey`, `UAKey.signUA`, `UAMetaTransaction` typed data (UA-8: the registration PoP is portable, [accounts.md](../contracts/accounts.md) CTR-UA-07; `popDigest` is in `legacy/ua8/`) |
+| UA | `ua.js`: `uaOf`, `keyHashOf`, `uaMessage`, `portableRecordDigest`, `registrationDigest`, `portableTypedData`, `holderPopMessage`, `pqzRegMessage`, `kemRecordDigest` / `kemRecordMessage`, `pqzKeyRecordMessage`, `registrationArgs`, `isPortablePurpose`, `deriveUAKey`, `UAKey.signUA`, `UAMetaTransaction` typed data (UA-8: the registration PoP is portable, [accounts.md](../contracts/accounts.md) CTR-UA-07; `popDigest` is in `legacy/ua8/`) |
 | Zether | `deriveConfKey` (uses 7/8 only), `sealConfKey`, `openConfKey`, the tagged `zetherPop`, `zetherOwnerAuth`, the balance cache |
 | Wallets | `wallets/<family>.js`, `wallets/evm.js` (EIP-6963 + `walletKind`), `wallet-signer.js` entry |
 
@@ -431,7 +431,9 @@ locally before sending.** Default validity windows: transfers, pay and unwrap �
 envelopes (Aptos, Solana OCMS, GRAM cell, Hedera ED25519) the review also shows "your wallet will display:
 `scaas.metaop.v1:0xABCD…1234`" and "approve SCaaS messages only on `<origin>`"; when a family moves to the readable message
 ([NET-ALL-23](../networks/README.md#NET-ALL-23)), the review shows that text. Why: extension wallets show hex for most
-families; the app's review is the only real check. Cost: non-curated tokens take an explicit-add step.
+families; the app's review is the only real check. Cost: non-curated tokens take an explicit-add step. A named EVM operation ([CLI-SGN-42](signers-clientkeys.md#CLI-SGN-42)) is reviewed from its typed struct, field by field (recipient, amount, minimum out, the envelope's lane, deadline, relayer and fee), after `checkOp`; a confidential op shows the real recipient and legs and the hashed `proof`, the encrypted amount being absent by construction; a wrap order, a nested cancel and a `RelayFee` show the nested order or the target and call hash, never a bare digest (typed-signing C1, C6; SPECIFIED for the app, built in clientkeys). A portable UA record
+([CLI-SGN-41](signers-clientkeys.md#CLI-SGN-41)) is reviewed from its typed data: the review renders the record's fields and the kind's name from the
+kind table or `kindName` ([CTR-UA-35](../contracts/accounts.md#CTR-UA-35)), the signed `uint16` beside it, never a hash alone (owner 2026-10-31; SPECIFIED, built with the app round).
 
 | Row | Content |
 |---|---|

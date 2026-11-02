@@ -72,9 +72,10 @@ impl NodeConfig {
     }
 }
 
-/// Một job outbox. `kind = "ua_metatx"`: `token`/`auth`/`m` (UA structs, CTR-UA-26). `kind = "metatx"`: `token`/`signature`/`metatx` có mặt, `struct` names the signed struct
-/// (`call` = `MetaTransaction`, `transfer` = `MetaTransfer`; absent = `transfer`, CTR-MTX-15). `kind = "call"`:
-/// chỉ `call` — calldata Odoo đã dựng (MandateWallet, R25), node chỉ gửi.
+/// One outbox job. EVM (job-api.md): `op`, one named entry as explicit JSON; `kind` = `metatx`, `ua_metatx` (a `ua*` entry)
+/// or `call` (a plain entry: the registry, the account factory, the DEX). A plain transfer or payment keeps its explicit
+/// struct: `kind = "metatx"` with `token`, `signature`, `metatx` (`MetaTransfer`), `kind = "ua_metatx"` with `token`, `auth`,
+/// `m` (`UAMetaTransfer`). Hex `data` / `calldata` is refused on every kind (`submit::work_from_job`).
 #[derive(Debug, Clone, Deserialize)]
 pub struct Job {
     pub id: i64,
@@ -88,25 +89,18 @@ pub struct Job {
     pub struct_: Option<String>,
     #[serde(default)]
     pub metatx: Option<Value>,
+    /// The refused hex fields (typed-signing N1), read only to name the refusal: `call: {target, calldata, validUntil}`, a
+    /// top-level `calldata` or `data`.
     #[serde(default)]
-    pub call: Option<WireCall>,
-    /// A token's other signed entry point (job-api.md, order and wrap entries): `mtxCancelOrder` (`order`),
-    /// `mtxInvalidateNonces` (`from`, `batch`, `newMin`), `mtxWrap` (`underlying`, `order`); `token` is the target.
+    pub call: Option<Value>,
     #[serde(default)]
-    pub entry: Option<String>,
+    pub calldata: Option<Value>,
     #[serde(default)]
-    pub order: Option<Value>,
+    pub data: Option<Value>,
+    /// The contract kind of a `metatx` / `ua_metatx` struct job (`token`, `zether`, `pqz`; absent = `token`): its typed digest's
+    /// domain name. An `op` names its own.
     #[serde(default)]
-    pub from: Option<String>,
-    #[serde(default)]
-    pub batch: Option<String>,
-    #[serde(default, rename = "newMin")]
-    pub new_min: Option<String>,
-    #[serde(default)]
-    pub underlying: Option<Address>,
-    /// Deadline of an entry job that carries none of its own (cancels never expire on chain).
-    #[serde(default, rename = "validUntil")]
-    pub valid_until: Option<String>,
+    pub contract: Option<String>,
     /// Receiver-pays (job-api.md): not built in the node, so a job carrying it is refused (`work_from_job`), never
     /// relayed as a plain transfer that drops the payee's fee authorization (review T2 m5).
     #[serde(default)]
@@ -119,25 +113,16 @@ pub struct Job {
     pub meta: Option<String>,
     #[serde(default)]
     pub meta_offchain: Option<bool>,
-    /// A `ua_metatx` job (job-api.md): `m` = `WireUAMetaTransaction` | `WireUAMetaTransfer` (`struct`), `auth` its UA
-    /// authorization (`requireAuthorized` bytes); never `metatx` / `signature`.
+    /// A `ua_metatx` struct job (job-api.md): `m` = `WireUAMetaTransfer`, `auth` the `UASig` object; never `metatx` / `signature`.
     #[serde(default)]
     pub m: Option<Value>,
     #[serde(default)]
-    pub auth: Option<String>,
+    pub auth: Option<Value>,
     /// `metatx` | `call` | `signed_op` (họ không phải EVM: payload ký + chữ ký + khoá công khai, adapter tự đọc).
     #[serde(default)]
     pub kind: Option<String>,
     #[serde(default)]
     pub op: Option<Value>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct WireCall {
-    pub target: Address,
-    pub calldata: String,
-    #[serde(rename = "validUntil")]
-    pub valid_until: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -260,6 +245,7 @@ impl Odoo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy::sol_types::SolCall;
 
     #[test]
     fn job_payload_from_odoo_decodes() {
@@ -277,15 +263,33 @@ mod tests {
         assert_eq!(m.batch(), alloy::primitives::U256::from(7));
     }
 
+    /// The plain entry that replaced the hex `call` job: named JSON in, the row's bytes out.
     #[test]
     fn call_job_payload_decodes() {
-        let raw = r#"{"id": 9, "kind": "call", "call": {"target": "0xbabababababababababababababababababababa",
-            "calldata": "0xdeadbeef", "validUntil": "1800000300"}}"#;
+        let raw = r#"{"id": 9, "kind": "call", "op": {"entry": "storePqzPop", "token": "0xbabababababababababababababababababababa",
+            "validUntil": "1800000300", "args": {"pqzPop": "0xdeadbeef",
+            "ua": "0x0000000000000000000000000000000000000000000000000000000000000042"}}}"#;
         let job: Job = serde_json::from_str(raw).unwrap();
         assert!(job.metatx.is_none());
         let w = crate::submit::work_from_job(&job, None).unwrap();
-        assert_eq!(w.data.as_ref(), &[0xde, 0xad, 0xbe, 0xef]);
+        assert_eq!(w.data[..4], crate::abi::IUARegistry::storePqzPopCall::SELECTOR);
         assert_eq!(w.valid_until, 1_800_000_300);
+    }
+
+    /// CTR-UA-37: a member's acceptance as a job, the member's own signature in named fields: a relayer carries it, the member
+    /// holds no gas.
+    #[test]
+    fn accept_membership_job_decodes() {
+        let raw = r#"{"id": 9, "kind": "call", "op": {"entry": "acceptMembership", "token": "0xbabababababababababababababababababababa",
+            "validUntil": "1800000300", "args": {"memberSig": {"index": 3, "keyData": "0x", "sig": "0xdeadbeef"},
+            "ua": "0x0000000000000000000000000000000000000000000000000000000000000042"}}}"#;
+        let job: Job = serde_json::from_str(raw).unwrap();
+        let w = crate::submit::work_from_job(&job, None).unwrap();
+        use alloy::sol_types::SolCall;
+        let call = crate::abi::IUARegistry::acceptMembershipCall::abi_decode(&w.data).unwrap();
+        assert_eq!((call.memberSig.index, call.memberSig.sig.to_vec()), (3, vec![0xde, 0xad, 0xbe, 0xef]));
+        assert_eq!(call.ua, alloy::primitives::B256::with_last_byte(0x42));
+        assert!(call.memberSig.keyData.is_empty());
     }
 
     #[test]

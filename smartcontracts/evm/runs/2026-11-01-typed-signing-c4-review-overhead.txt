@@ -1,0 +1,50 @@
+# review-overhead at the C4 review tree, on top of 1ec1c078: the direct-subtracted bound, its decomposition, the padding experiment
+== difference per kind, BOUND lifted for this log only so that every row prints (BOUND stays 8,000 in the test)
+  OVERHEAD n2304-kmax4096 ecdsa pqzl-M8-on smallest / largest / difference 8960 15734 6774
+  OVERHEAD n2304-kmax4096 ecdsa pqzh-M4-on smallest / largest / difference 8960 18440 9480
+  OVERHEAD n2304-kmax4096 mldsa65 pqzl-M8-on smallest / largest / difference 13337 20186 6849
+  OVERHEAD n2304-kmax4096 mldsa65 pqzh-M4-on smallest / largest / difference 13337 23124 9787
+  OVERHEAD n2304-kmax4096 fndsa512 pqzl-M8-on smallest / largest / difference 11581 18443 6862
+  OVERHEAD n2304-kmax4096 fndsa512 pqzh-M4-on smallest / largest / difference 11581 21388 9807
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 1.57s (1.08s CPU time)
+  OVERHEAD n2048-kmax1024 ecdsa pqzl-M8-on smallest / largest / difference 8960 16578 7618
+  OVERHEAD n2048-kmax1024 ecdsa pqzh-M4-on smallest / largest / difference 8960 17898 8938
+  OVERHEAD n2048-kmax1024 mldsa65 pqzl-M8-on smallest / largest / difference 13337 21051 7714
+  OVERHEAD n2048-kmax1024 mldsa65 pqzh-M4-on smallest / largest / difference 13337 22556 9219
+  OVERHEAD n2048-kmax1024 fndsa512 pqzl-M8-on smallest / largest / difference 11581 19307 7726
+  OVERHEAD n2048-kmax1024 fndsa512 pqzh-M4-on smallest / largest / difference 11581 20820 9239
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 1.54s (1.10s CPU time)
+== n2304-kmax4096, ecdsa: relayed minus direct (MEAS rows; 2ceda92d, 38544bcf, the C4 bytecode)
+pqzl-M8-on: 362,955 / 372,824 / 378,689: +9,869 to C3, +5,865 in C4. direct: -4,669 to C3, +13,346 in C4
+pqzh-M4-on: 1,413,290 / 1,424,741 / 1,431,730: +11,451 to C3, +6,989 in C4. direct: -1,511 to C3, +14,503 in C4
+== padding experiment on 38544bcf: _op7a passes accHint = new bytes(m == 8 ? 1664 : 960), the bytes C4 adds; a hint of the wrong length is ignored. No C4 code.
+pqzl-M8-on ecdsa relayed 8271 direct 2446 relayed minus direct 5825
+pqzl-M8-on mldsa65 relayed 8292 direct 2446 relayed minus direct 5846
+pqzl-M8-on fndsa512 relayed 8275 direct 2446 relayed minus direct 5829
+pqzh-M4-on ecdsa relayed 9796 direct 2847 relayed minus direct 6949
+pqzh-M4-on mldsa65 relayed 9809 direct 2847 relayed minus direct 6962
+pqzh-M4-on fndsa512 relayed 9799 direct 2847 relayed minus direct 6952
+== 2ceda92d relayed MEAS rows reproduce the JSON exactly; the direct rows are the JSON's direct|<id>
+  MEAS n2048-kmax1024 direct pqzh-M4-on 8720786
+  MEAS n2048-kmax1024 direct pqzl-M8-on 10504919
+  MEAS n2048-kmax1024 ecdsa pqzh-M4-on 9989518
+  MEAS n2048-kmax1024 ecdsa pqzl-M8-on 10922562
+  MEAS n2048-kmax1024 ecdsa S 4767560
+  MEAS n2048-kmax1024 fndsa512 pqzh-M4-on 12303066
+  MEAS n2048-kmax1024 fndsa512 pqzl-M8-on 13235874
+  MEAS n2048-kmax1024 fndsa512 S 7095723
+  MEAS n2048-kmax1024 mldsa65 pqzh-M4-on 10076640
+  MEAS n2048-kmax1024 mldsa65 pqzl-M8-on 11007821
+  MEAS n2048-kmax1024 mldsa65 S 4872152
+  MEAS n2304-kmax4096 direct pqzh-M4-on 8977001
+  MEAS n2304-kmax4096 direct pqzl-M8-on 10390385
+  MEAS n2304-kmax4096 ecdsa pqzh-M4-on 10390291
+  MEAS n2304-kmax4096 ecdsa pqzl-M8-on 10753340
+  MEAS n2304-kmax4096 ecdsa S 5788516
+  MEAS n2304-kmax4096 fndsa512 pqzh-M4-on 12703869
+  MEAS n2304-kmax4096 fndsa512 pqzl-M8-on 13066631
+  MEAS n2304-kmax4096 fndsa512 S 8116679
+  MEAS n2304-kmax4096 mldsa65 pqzh-M4-on 10477652
+  MEAS n2304-kmax4096 mldsa65 pqzl-M8-on 10838425
+  MEAS n2304-kmax4096 mldsa65 S 5893108
+rc=0

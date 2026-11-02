@@ -31,11 +31,18 @@ export function wipe(...buffers) {
 }
 
 export function word(value) {
+  if (typeof value === 'string' && value.trim() === '') throw new Error('not a number: the empty string'); // BigInt('') is 0
   let v = BigInt(value);
   if (v < 0n || v >= 1n << 256n) throw new Error('uint256 out of range');
   const out = new Uint8Array(32);
   for (let i = 31; i >= 0; i--) { out[i] = Number(v & 0xffn); v >>= 8n; }
   return out;
+}
+
+/** `Boolean('false')` is true: a bool is `true` or `false`, nothing that reads as one. */
+export function boolWord(value) {
+  if (typeof value !== 'boolean') throw new Error(`not a bool: ${value}`);
+  return word(value ? 1 : 0);
 }
 
 export function addressWord(address) {
@@ -54,37 +61,53 @@ function padded(b) {
   return concatBytes(word(b.length), b, new Uint8Array((32 - (b.length % 32)) % 32));
 }
 
-/**
- * Minimal `abi.encode` for the shapes this package needs: uint256/uint8, address, bytes32, bytes,
- * bytes32[], and a static tuple written as `(t1,t2,...)` of those static types.
- */
+/** The member types of a tuple type `(t1,t2,...)`, split at its top-level commas. */
+function tupleTypes(t) {
+  const out = [];
+  let depth = 0;
+  let start = 1;
+  for (let i = 1; i < t.length - 1; i++) {
+    if (t[i] === '(') depth++;
+    else if (t[i] === ')') depth--;
+    else if (t[i] === ',' && depth === 0) { out.push(t.slice(start, i)); start = i + 1; }
+  }
+  out.push(t.slice(start, -1));
+  return out;
+}
+
+const isDynamic = (t) => t === 'bytes' || t.endsWith('[]') || (t.startsWith('(') && tupleTypes(t).some(isDynamic));
+const headSize = (t) => (t.startsWith('(') && !isDynamic(t) ? tupleTypes(t).reduce((n, m) => n + headSize(m), 0) : 32);
+
+function encodeOne(t, v) {
+  if (t.endsWith('[]')) {
+    const inner = t.slice(0, -2);
+    return concatBytes(word(v.length), abiEncode(v.map(() => inner), v));
+  }
+  if (t.startsWith('(')) return abiEncode(tupleTypes(t), v);
+  if (t === 'bytes') return padded(v instanceof Uint8Array ? v : fromHex(v));
+  if (t === 'address') return addressWord(v);
+  if (t === 'bytes32') return bytes32(v);
+  if (t === 'bool') return boolWord(v);
+  if (/^bytes\d+$/.test(t)) {
+    const b = v instanceof Uint8Array ? v : fromHex(v);
+    if (b.length !== Number(t.slice(5))) throw new Error(`${t} must be ${t.slice(5)} bytes`);
+    return concatBytes(b, new Uint8Array(32 - b.length));
+  }
+  if (/^uint\d+$/.test(t)) return word(v);
+  throw new Error(`unsupported ABI type ${t}`);
+}
+
+/** `abi.encode`: uintN, bool, address, bytesN, bytes, `T[]` and tuples written `(t1,t2,...)`, nested and dynamic ones too. */
 export function abiEncode(types, values) {
   const heads = [];
   const tails = [];
-  let tailOffset = 0;
-  const dyn = (t) => t === 'bytes' || t.endsWith('[]');
-  const staticWords = (t, v) => {
-    if (t.startsWith('(')) {
-      const inner = t.slice(1, -1).split(',');
-      return concatBytes(...inner.map((it, i) => staticWords(it, v[i])));
-    }
-    if (t === 'address') return addressWord(v);
-    if (t === 'bytes32') return bytes32(v);
-    if (/^uint\d+$/.test(t)) return word(v);
-    throw new Error(`unsupported ABI type ${t}`);
-  };
-  const headSize = types.reduce((n, t) => n + (t.startsWith('(') ? 32 * t.split(',').length : 32), 0);
+  let tailOffset = types.reduce((n, t) => n + headSize(t), 0);
   types.forEach((t, i) => {
-    if (!dyn(t)) {
-      heads.push(staticWords(t, values[i]));
-      return;
-    }
-    heads.push(word(headSize + tailOffset));
-    const tail = t === 'bytes'
-      ? padded(values[i] instanceof Uint8Array ? values[i] : fromHex(values[i]))
-      : concatBytes(word(values[i].length), ...values[i].map(bytes32));
-    tails.push(tail);
-    tailOffset += tail.length;
+    const enc = encodeOne(t, values[i]);
+    if (!isDynamic(t)) { heads.push(enc); return; }
+    heads.push(word(tailOffset));
+    tails.push(enc);
+    tailOffset += enc.length;
   });
   return concatBytes(...heads, ...tails);
 }

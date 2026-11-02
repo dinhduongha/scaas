@@ -627,7 +627,7 @@ is ≈ 40 KB), so it rides on a PQ signer: the signer's id is the PQZ account (`
 balance on the UA ledger and its confidential balance share it, and the PQZ key is **not** in the id. The key is supplied
 in the signer's `register(kind, keyData, attrs, pop, pqzPop)` (`attrs.pqzKey`; or later by the signed `setPqzKey`, [CTR-UA-16](accounts.md#CTR-UA-16)), is immutable and
 belongs to one UA only (`UAKeyInUse` on the group `pqz-mlwe`, `msig` included, checked once the key is proven). The `R_REG` proof is over
-`uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, pqzKeyHash, kemRecordHash))` and the signer's PoP over the `registrationDigest` that covers the proof's hash
+`uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kind, pqzKeyHash, kemRecordHash))` and the signer's PoP over the `registrationDigest` that covers the proof's hash
 ([CTR-UA-07](accounts.md#CTR-UA-07)): the proof is bound to the signer's id (a proof made for another UA fails) but **not to a chain or a registry**, so one
 proof serves every chain with the PQZ precompile; nobody can strip or swap the key. The proof is **optional** in `register` (the key is then `proven = false` until
 `storePqzPop` gives bytes that hash to the signed `pqzPopHash` and a registry with the verifier checks them); PQZ tokens accept only proven keys (`pqzKeyOf(ua).proven`). Key seed by the UA PQ rule `HKDF-SHA256(BIP-39 seed, "scaas.ua.pq.v1", tag ‖ u32 account ‖ u32 i)`, derived
@@ -636,7 +636,7 @@ Zether worker and `pqz-cli` open (`sealPqKey` / `openPqKey`). PQZ adds no signin
 
 | No. | Name (tag `scaas.ua.<name>.v1`) | Key | keyHash group | Proof | Verifier (EVM) | Chains |
 |---|---|---|---|---|---|---|
-| `0x0142` | `pqz-mlwe` (scheme) | `pk` (`PqzCt.PK`) | `pqz-mlwe` | `R_REG` proof over `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(signerUA, pqzKeyHash, kemRecordHash))` (`PURPOSE_PQZ_KEY` and `pqzKeyDigest` for a key added by `setPqzKey`) | `UAPqzVerifier` → precompile `0x…0F01` op 3 | SCaaS testnet ([CTR-PQZ-01](#CTR-PQZ-01)) |
+| `0x0142` | `pqz-mlwe` (scheme) | `pk` (`PqzCt.PK`) | `pqz-mlwe` | `R_REG` proof over `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(signerUA, kind, pqzKeyHash, kemRecordHash))` (`PURPOSE_PQZ_KEY` and `pqzKeyDigest` for a key added by `setPqzKey`) | `UAPqzVerifier` → precompile `0x…0F01` op 3 | SCaaS testnet ([CTR-PQZ-01](#CTR-PQZ-01)) |
 
 **Record storage.** The signer's UA `Record` is unchanged; the PQZ key is a second SSTORE2 pointer beside it
 (`recordOf(ua)` returns it, 0 = none; `UAPqzVerifier` refuses any key that is not exactly `PqzCt.PK` bytes with every
@@ -654,13 +654,13 @@ members whose kind is not 0x0130–0x0133 (`slhdsa128s` counts as PQ weight in a
 7,856-byte signature and a ≈ 1.4 M gas cap on every spend). Every other kind — classical signers, `slhdsa128s`, Zether,
 a classical-dominant `msig` — reverts `UAPqzHolder`. **Authorization bound (review2 C0-5, controller proposal, owner may
 override):** an `msig` holder must also be usable — `register` reverts `UAPqzHolder` unless its worst-case authorization
-(register step 4's bound `w`: the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` + the caller's hold; plus `w / 63 + SigCheck.GAS_MARGIN`, the hold of a gen-2 registry that forwards the authorization to this one) plus
+(register step 4's bound `w`: the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` + `MSIG_ACCEPTED_GAS` + the caller's hold; plus `w / 63 + SigCheck.GAS_MARGIN`, the hold of a gen-2 registry that forwards the authorization to this one) plus
 `PqzSet.PQZ_DEBIT_MIN_GAS` is at most 2^24 (the per-transaction cap of EIP-7825, not a chain's own block limit).
 `PQZ_DEBIT_MIN_GAS` is generated from `set.toml` `debit_min_gas`: the full relayed transaction of the cheapest PQZL debit
-(burn 1) on the costlier relay path (`uaExecute`, ML-DSA-65 fee UA at 68,006 gas [estimate]) — 6,826,921 at
-`n2048-kmax1024`, 6,998,368 at `n2304-kmax4096`, 7,168,690 at `n2560-kmax16384`, 7,358,343 at `n2816-kmax65536`, from
-`runs/2026-10-27-metatx-split-gas-<set>.txt` (metatx split, T8; the pre-split values were 6,820,062 / 6,991,487 / 7,161,789 / 7,351,418). So the worst-case authorization may not exceed 9.96 M / 9.79 M / 9.62 M /
-9.43 M; `{fndsa512 × 4, slhdsa128s}, t = 5` (≈ 11.6 M) and `{fndsa512 × 4}, t = 4` (≈ 10.2 M) are refused, a 2-of-2
+(burn 1) on the costlier relay path (`uaExecute`, ML-DSA-65 fee UA at 68,006 gas [estimate]) — 6,836,182 at
+`n2048-kmax1024`, 7,007,670 at `n2304-kmax4096`, 7,177,969 at `n2560-kmax16384`, 7,367,673 at `n2816-kmax65536`, from
+`runs/2026-10-27-metatx-split-gas-<set>.txt` (metatx split, T8; the pre-split values were 6,820,062 / 6,991,487 / 7,161,789 / 7,351,418). So the worst-case authorization may not exceed 9.94 M / 9.77 M / 9.60 M /
+9.41 M; `{fndsa512 × 4, slhdsa128s}, t = 5` (≈ 11.6 M) and `{fndsa512 × 4}, t = 4` (≈ 10.2 M) are refused, a 2-of-2
 `mldsa65` quorum on the precompile is not. Single-key holders are unaffected (their cap is ≤ 2.5 M). A PQ-eligible `msig` registers with its m-of-n `pop`, so nobody
 can fix it without a key. One key = one purpose: the PQZ key decrypts and proves, the signer's key authorizes; the UA's
 PQ signing kinds ([CTR-UA-23](accounts.md#CTR-UA-23)) invite exactly this hybrid. A leaked PQZ key is a read-only breach
@@ -842,20 +842,23 @@ states and values in signed 64-bit for clients. The classical 2^54 rationale (th
 3. Id: `uaOf(kind, keyData)` of the signer, not in the native space, not registered. Its `pop` is verified in step 6.
 4. `keyHash = keccak256(GROUP("pqz-mlwe") ‖ pqzKey)`; free here and in the predecessor (`UAKeyInUse`) only when the key becomes proven (step 7 or `storePqzPop`).
 5. Holder rule of [CTR-PQZ-12](#CTR-PQZ-12) (`UAPqzHolder`); `attrs.pqzPopHash` ≠ 0 and not the hash of an empty proof (`UAPqzPopHash`); `pqzPop`, if given, hashes to it.
-6. The signer's PoP over `registrationDigest(portablePopDigest(ua, pqzKeyHash, kemRecordHash), pqzPopHash)` with its kind's verifier; a PQ-eligible `msig` signs with its m-of-n.
+6. The signer's PoP over `registrationDigest(ua, kind, pqzKeyHash, kemRecordHash, pqzPopHash)` with its kind's verifier; a PQ-eligible `msig` signs with its m-of-n.
 7. PoP of the PQZ key: `UAPqzVerifier.verifyPop(pk, message, pqzPop)` = `PQZ(OP_REGISTER, stmt ‖ pop) == 1` with
    `stmt = opTag(REGISTER) ‖ proofSystemId ‖ message ‖ pk` (prefix as [encodings](#encodings); `proofSystemId` is an
-   immutable of `UAPqzVerifier`) and `message = uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, pqzKeyHash, kemRecordHash))` — relation
-   `R_REG`: `pk = A s + e`, `‖s‖ ≤ 36`, `‖e‖ ≤ 164`, the message absorbed into the statement. `portablePopDigest` is
-   `keccak256(abi.encode(PURPOSE_POP_V2, ua, pqzKeyHash, kemRecordHash))` ([CTR-UA-07](accounts.md#CTR-UA-07)): it binds the signer's id and
+   immutable of `UAPqzVerifier`) and `message = uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kind, pqzKeyHash, kemRecordHash))` — relation
+   `R_REG`: `pk = A s + e`, `‖s‖ ≤ 36`, `‖e‖ ≤ 164`, the message absorbed into the statement. `portableRecordDigest` is
+   the typed `UAPortableRecord{ua, kind, pqzKeyHash, kem}` ([CTR-UA-07](accounts.md#CTR-UA-07)): it binds the signer's id and
    the attributes, not a chain, a registry or the caller, so anyone may submit on any chain, nobody can strip or swap the key,
    and a proof made for another UA fails. The relation, the statement layout and the verifier do not depend on what the message
-   commits to: UA-8 changed only the 32-byte message's pre-image (the `pqz-core/stmt` doc comment that still names `popDigest` is
+   commits to: UA-8 and `typed-signing` changed only the 32-byte message's pre-image (the `pqz-core/stmt` doc comment that still names `popDigest` is
    updated with the next core change, `TODO.md`). The step is optional in `register`: without `pqzPop`, or on a registry whose slot `0x0142` is empty,
    the key is stored with `proven = false`, claims no `keyOwner` or list entry, and `storePqzPop(ua, pqzPop)` completes it later.
 8. Store the signer's record, `_pqzKey[ua] = SSTORE2(pk)`, `keyOwner` for the signer's key and, for a proven key, for `pqzKeyHash` and the
-   `0x0142` list; emit `UARegistered(ua, kind, keyData, attrs, pop, pqzPop, checkedPop, checkedPqzPop, checkedKem)` (it carries the
+   `0x0142` list; emit `UARegistered(ua, kind, keyData, attrs, popHash, pqzPop, checkedPop, checkedPqzPop, checkedKem)` (it carries the
    whole PQZ key in `attrs`; [accounts.md §1.8](accounts.md#registry)).
+
+An `msig` holder goes through `registerMsig` with the same steps ([CTR-UA-36](accounts.md#CTR-UA-36)). A registration with its proof and a KEM key that does not fit one
+transaction's calldata commits the KEM key by hash ([CTR-UA-32](accounts.md#CTR-UA-32); today one case, `n2560-kmax16384`).
 
 The signer's `register` without a PQZ key is the plain UA registration; it may add the key later, once, by the signed `setPqzKey` ([CTR-UA-16](accounts.md#CTR-UA-16); the PQZ key is not in the id).
 
@@ -1155,7 +1158,7 @@ state gas is only the envelope's (195,840). `n2816-kmax65536`'s `ROLL_MAX` is 32
 may override). Margins under the rule on the binding `uaExecute` path: 712,704 / 305,390 / **6,032** / 1,334,868 gas (re-measured on the metatx split bytecode, `runs/2026-10-27-metatx-split-gas-<set>.txt` and `...-rollscan-n2560-kmax16384.txt`; the `ROLL_MAX + 16` column is measured at every set on the split bytecode, a linear fit from `ROLL_MAX` (the gas logs' `ROLL_MAX + 16, relayed full transaction (…, linear fit)` lines);
 `n2560-kmax16384`'s is tight (any contract change re-runs the scan). The halves of `mtxPrepareAcc` are far under
 `0.75 · 2^24` in regular gas on both paths; their new slots are EIP-8037 state gas (≈ 97,920 per slot), which counts
-against the block (both halves of `n2816-kmax65536` ≈ 59 M, so one half per transaction). Logs
+in the transaction's `tx.gas` (regular plus state), and that must fit the block gas limit for inclusion (both halves of `n2816-kmax65536` ≈ 59 M, so one half per transaction). Logs
 `smartcontracts/evm/runs/2026-10-26-t8d2b-fix-gas-<set>.txt`.
 
 **`mtxPrepareAcc(bytes32 ua, uint256 half)`** (PQZ only; permissionless, idempotent, `half ∈ {0, 1}`, else `BadPayload(half)`;
@@ -1217,7 +1220,7 @@ burn: 640 + 16,384 + 16,512 + 16,512 = **50,048 B**. (Before the salt and memo r
 builds it from storage, SSTORE2 reads and calldata; the prover builds it identically (`smartcontracts/vectors/pqz/statement_*.json`).
 Byte offsets of every object and the decoder's rule per header word: [serialization v1](#serialization).
 
-`authDigest = keccak256("SCAAS-PQZ-AUTH-V1" ‖ keccak256(statement))`. The authorization signature is over these 32
+`authDigest` is, since typed-signing C4 (TS-D19, TS-D20), the **typed `PqzAuth` digest** in the token's own domain: `PqzAuth(uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash)` = the op byte, the 20 statement header words verbatim (op 7's `recipient` word holds `M`) and `bodyHash = keccak256(statement[640:])`; before C4: `authDigest = keccak256("SCAAS-PQZ-AUTH-V1" ‖ keccak256(statement))`. This is not a core change: the statement bytes, provers, verifiers and set parameters are untouched, so the affected steps run, not the full pqz-core gate; the token (`PqzCore.authDigest`, hashing the buffer in place), `e2e.py`, `pqz_kat.py` and the `pqz-vectors` generator compute it, and the statement vectors' `auth_digest` field is regenerated (debit rows only: the register and disclosure statements authorise nothing and lose the field). The authorization signature is over these 32
 bytes, wrapped as the UA `ua_msg` and signed by ML-DSA as `pq_msg` with the empty context, as EIP-8355 requires ([CTR-UA-23](accounts.md#CTR-UA-23), SPECIFIED (P6); transitional: `ua_msg` with `ctx = kind_tag`).
 
 ### 7.8 Events and indexing
@@ -1428,6 +1431,8 @@ PQZ selectors are refused in `mtxBatch`/`uaBatch` (`MtxNotBatchable(selector)`: 
 ≈ 0.25 M at 340 KB (`w` = 10 625); the callee's arguments are `bytes calldata`, so nothing is decoded into memory
 again. An earlier ≈ 2 M estimate, which had motivated a mixin reading `m.data` as calldata slices, assumed three copies
 (decode, re-encode, call). A PQZ op is ≈ 3.25 M gas, below the EIP-7825 cap of 16,777,216.
+
+**Typed-signing (C4; [CTR-MTX-28](metatx.md#CTR-MTX-28), [CTR-MTX-29](metatx.md#CTR-MTX-29); controller calls, owner may override).** The generic self-call above stays, and every op also has a named entry with its own struct and explicit parameters, signed in the token's domain and run through the same ticket: `PqzTransferSingle`, `PqzTransferSingleCompact`, `PqzTransfer`, `PqzTransferCompact`, `PqzUnshield`, `PqzUnshieldUnwrap`, `Shield`, `WrapShield`, `RollOver`, `PrepareAcc` and the `UA*` twins (`typed_ops.json`; every row runs on `NormalPqzToken` and `WrappedPqzToken`, `PqzTypedRowsTest`). The op parameters are `PqzTransferArgs` / `PqzMultiArgs` / `PqzBurnArgs` (`p`, `validUntilBlock`, `shieldIn`, `fromUA`, `beneficiaryUA`, `u`, `vFrom`, …), then `proof`, `UASig pqzAuth` and `accHint`, each its own named parameter: the contract assembles the statement and the op blob **byte-identically** to the packed `payload` (`test_pqzExplicitStatementBytes_*` against `PqzPackedRef`, the packed code kept live in the test tree and in `legacy/typed-signing/PqzPacked.sol`), and what is stored (the op blob, `acc`, pending entries, the memo) is exactly what the packed bytes were: `test_pqzStoredCiphertextUnchanged`, never only a hash plus calldata. A signed entry's struct shows the real recipient and legs, the amounts being encrypted, and `proof`, `u`, `v` as hashes. The signed unshield takes a `Payout` (`amount`, `recipient`) struct, the direct `mtxUnshield` stays flat. The signed overloads and `ua*` twins are on `PqzLayer` / `WrappedPqzToken`, not in `IPqzToken`, so the allowlist selectors stay unique. **Batching:** PQZ selectors stay refused in `mtxBatch` / `uaBatch` (`MtxNotBatchable`), and there is no typed batch of them (TS-D15; EIP-712 arrays are homogeneous, a PQZ op is up to ≈ 340 KB). **PQZH fits:** every PQZH `n2048-kmax1024` form fits 2^24 regular gas as a named entry on both relay paths, the tightest 23,656 gas (369 B) under (`test_pqzhN2048FitsBothPaths`). **Cost of the typed envelope:** `test_splitOverhead_dataSizeBound` takes the op's own direct cost off both sides; its bound is 8,000 on PQZL and 10,000 on PQZH (owner ruling 2026-11-01): PQZH op 7 M = 4 measures 8,938 to 9,807, PQZL 6,774 to 7,726, the relayed path's per-byte cost on a larger envelope, not a C4 code path (the same bytes padded into `accHint` on the C3 bytecode give the same rise within 40 gas; `runs/2026-11-01-typed-signing-c4-review-overhead.txt`). **`debit_min_gas`:** the pin is untouched (owner ruling 2026-11-01, until CG); it is on the generic `uaExecute`; measured, the named path adds +43 gas per set (C6) and C4's share of the gap is +1.65 to 1.72 k gas, the real typed cost; the task reports have the figures per set. `e2e.py` drives every PQZ op on its named entry (sections 5b, 6b) but has not run on a chain.
 
 <a id="CTR-PQZ-22"></a>**CTR-PQZ-22** — **PQZ entry points share the `mtx*` names and one interface with classical Zether** (owner,
 [CTR-ZTH-45](zether.md#CTR-ZTH-45), 2026-10-20; before that the `pqz*` prefix mirrored the `zether*` one). PQZ entry points are
@@ -1788,7 +1793,7 @@ do; the `opTag` names the relation), `pk` 288, `u` 16,672, `v` 33,056.
   bundle ‖ zero bytes to P1 ‖ word(len(proof)) ‖ proof ‖ zero bytes to P2`, with `P1`, `P2` the two lengths rounded
   up to a multiple of 32, nothing after (`parse_opening`; `negative.json` has 8 rejected openings).
 - `entryRef = keccak256(keccak256("SCAAS-PQZ-ENTRY-V1") ‖ word(chainId) ‖ word(chainUid) ‖ word(token) ‖ word(fromUA)
-  ‖ word(sendCounter))` (= the `abi.encode` of §7.4); `authDigest = keccak256("SCAAS-PQZ-AUTH-V1" ‖ keccak256(stmt))`.
+  ‖ word(sendCounter))` (= the `abi.encode` of §7.4); `authDigest` = the typed `PqzAuth` digest (header words verbatim + `bodyHash = keccak256(stmt[640:])`, typed-signing C4; was `keccak256("SCAAS-PQZ-AUTH-V1" ‖ keccak256(stmt))`).
 
 **Canonical encodings (P6e D15).** Every decoder accepts exactly one encoding of a given value: fixed lengths per form,
 coefficients `< q` as `be8`, the scalars above `< 2^64`, `auditorOn` and the zero words as the tables say, the op's
@@ -2042,7 +2047,7 @@ State gas of the burn / refresh rows: 17.06 / 16.96, 20.89 / 20.79, 25.11 / 25.0
 **Findings for the owner** (no rule changed here): (1) every built PQZL form fits 2^24 at every set (asserted by the
 test) **with an ML-DSA-65 (precompile) or ECDSA envelope and a single-key holder**: an `msig` holder admitted at the C0-5 bound is guaranteed burn / refresh only (its authorization is part of every debit), and an `fndsa512` / `slhdsa128s` fee UA is a client choice: measured (`runs/2026-10-27-review2-t2-holder-gas-<set>.txt`, valid verify 2.3 M / 0.79 M [estimate]) burn and op 7 M = 8 with the auditor fit with an `fndsa512` fee UA at every set (op 7 M = 8: 14.5–15.4 M; the review's estimate of +4.4 M is not reproduced, the verifier cap is 2.5 M), but not with an `slhdsa128s` fee UA at PQZH `n2048-kmax1024` (burn 1: 16,890,776 regular gas, over 2^24). **Accepted fee-UA kinds on `uaExecute` (C0-2 option (2), "a stated fee-UA list")**: at PQZH `n2048-kmax1024` an `mldsa65` (precompile) or `fndsa512` fee UA fits every built form and an `slhdsa128s` fee UA is the one excluded kind; at every PQZL set, and on the `mtxExecute` path (an ECDSA envelope has no fee UA), every enabled fee-UA kind fits. There is no client rule against an `fndsa512` fee signer for op 7 M = 8: the measurement (14.5–15.4 M, the verifier cap is 2.5 M) does not support one; (2) **op 7 M = 8 with the auditor carries more state gas than a 60 M mainnet-like block holds** at
 `n2048-kmax1024`, `n2304-kmax4096` and `n2816-kmax65536` (and without the auditor at `n2816-kmax65536`): under EIP-8037
-a block's gas used is max(Σ regular, Σ state), so such a transaction needs a block limit ≥ its state gas (the SCaaS
+a transaction is included only if its `tx.gas` (regular plus state) fits the block gas limit, so such a transaction needs a block limit ≥ its regular plus state gas (the block's `gas_used`, max(Σ regular, Σ state), is accounting, not the inclusion test; the sender pays `max(total, floor)`) (the SCaaS
 testnet's limit is 200 M; a 60 M block does not hold it) (spec 2026-10-20 §12 item 3 left "the total against a 60 M
 block" to this measurement). **Client rule (C0-10, controller proposal, owner may override): `M ≤ 4` where the chain's block gas limit is 60 M**; the dependence on the block limit is accepted and there is no cutoff in code (a cutoff would hard-code one chain's block limit); (3) PQZH debits fit one transaction only at `n2048-kmax1024` (not op 7 M = 4 with the
 auditor, not with the hint), on both relay paths: 0.30–0.39 M of headroom on `mtxExecute`, 0.09–0.18 M (1,361–2,769 B)
@@ -2509,7 +2514,7 @@ Later phases add, in the same directory: `derive.json` (P6h), `register_pqz.json
 | `derive.json` | BIP-39 seed → derivation seeds, PQZ pk, ML-DSA pk, UAs, keyHashes (rows also in the UA `kinds.json`) |
 | `mldsa65.json` | NIST ACVP-style vectors via the chosen implementation |
 | `auth_{mldsa65,mldsa44,msig}.json` | `authDigest` → the UA `ua_msg` (with `MSG_TAG`, `TAG(authKind)`, `PURPOSE_ZETHER_AUTH`) → signature, for an `mldsa65`, an `mldsa44` and a hybrid `msig {mldsa65 w1, p256 w1} t=2` holder; each verifies through `UARegistry.requireAuthorized(fromUA, PURPOSE_ZETHER_AUTH, …)`; rows shared with the UA vectors |
-| `register_pqz.json` | the pre-UA-8 chain-bound form (`popDigest` with `chainKeyHash`, `chainUid`); UA-8 moved the registration rows to `smartcontracts/vectors/ua/portable.json` (`R_REG` message over `portablePopDigest`, the signer's PoP over `registrationDigest`; the `pqzPop` bytes there are length-faithful filler, not proofs) |
+| `register_pqz.json` | the pre-UA-8 chain-bound form (`popDigest` with `chainKeyHash`, `chainUid`); UA-8 moved the registration rows to `smartcontracts/vectors/ua/portable.json` (`R_REG` message over `portableRecordDigest`, the signer's PoP over `registrationDigest`; the `pqzPop` bytes there are length-faithful filler, not proofs) |
 | `metatx_pqz.json` | per op and path: envelope fields → `metaTxDigest` (v1 domain, no salt) / `uaDigest` (v3, `salt = chainUid`), `envelopeBinding` / `uaEnvelopeBinding`, the bound statement and `authDigest`, the signature (ECDSA, `mldsa65` fee UA); the direct form with binding 0; typehashes pinned to the classical meta-tx vectors and the UA `metatx3.json` |
 
 The UA `smartcontracts/vectors/ua/kinds.json` gains the `pqz-mlwe` row (seed → pk, UA, keyHash).
