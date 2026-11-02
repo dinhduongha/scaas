@@ -185,10 +185,16 @@ library UARegistryLib {
     function registerMsig(IUARegistry.MsigStructure calldata structure, IUARegistry.UAAttrs calldata attrs,
         IUARegistry.MemberSig[] calldata pop, bytes calldata pqzPop) external returns (bytes32 ua)
     {
-        return _register(UAKinds.MSIG, _packed(structure), attrs, "", pop, pqzPop);
+        IUARegistry.MsigMember[] calldata m = structure.members;
+        bytes memory d = abi.encodePacked(structure.threshold, uint16(m.length));
+        for (uint256 i; i < m.length; ++i) {
+            d = bytes.concat(d, abi.encodePacked(m[i].kind, m[i].id, m[i].weight));
+        }
+        return _register(UAKinds.MSIG, d, attrs, "", pop, pqzPop);
     }
 
-    /// The CTR-UA-09 bytes of a structure.
+    /// The CTR-UA-09 bytes of a structure read from a record. Not shared with `registerMsig`: a `memory` parameter there copies the
+    /// whole structure out of calldata first, which every flat `msig` would pay.
     function _packed(IUARegistry.MsigStructure memory s) private pure returns (bytes memory d) {
         IUARegistry.MsigMember[] memory m = s.members;
         d = abi.encodePacked(s.threshold, uint16(m.length));
@@ -708,7 +714,7 @@ library UARegistryLib {
     function _membersWorst(bytes memory d) private view returns (uint256 worst) {
         IUARegistry self = IUARegistry(address(this));
         uint256 held;
-        (worst, held) = _worst(d, false, _nativeCap());
+        (worst, held) = _worst(d, false, _nativeCap(), self.hederaNative());
         if (held > UAStore.SMART_KEY_1271_GAS) worst += (held - UAStore.SMART_KEY_1271_GAS) / 63;
         if (worst > self.verifyBudget()) revert IUARegistry.UAKeyData(UAKinds.MSIG);
     }
@@ -716,14 +722,14 @@ library UARegistryLib {
     /// One level of the bound: the worst of `d` without the caller's hold, and the largest single cap in it (`held`). An `msig` member
     /// counts its own worst as its cap, so the total is every signature across both levels, plain members and inner thresholds
     /// together; `inner`: this is that member, and it may hold no `msig` (`UAMemberUnknown`: two levels only).
-    function _worst(bytes memory d, bool inner, uint256 nativeCap) private view returns (uint256 worst, uint256 held) {
+    function _worst(bytes memory d, bool inner, uint256 nativeCap, bool hedera) private view returns (uint256 worst, uint256 held) {
         (uint256 threshold, uint256 count) = (UAStore.u16(d, 0), UAStore.u16(d, 2));
         uint256[] memory weights = new uint256[](count);
         uint256[] memory caps = new uint256[](count);
         for (uint256 i; i < count; ++i) {
             uint256 o = 4 + 36 * i;
             uint256 h;
-            (caps[i], h) = _slotCap(uint16(UAStore.u16(d, o)), bytes32(UAStore.word(d, o + 2)), inner, nativeCap);
+            (caps[i], h) = _slotCap(uint16(UAStore.u16(d, o)), bytes32(UAStore.word(d, o + 2)), inner, nativeCap, hedera);
             if (h > held) held = h;
             weights[i] = UAStore.u16(d, o + 34);
         }
@@ -742,15 +748,17 @@ library UARegistryLib {
     /// What one slot may spend (`cap`) and the largest single cap in it (`held`): a native member's, a registered kind's, or an `msig`
     /// member's own worst. A record gen 1 holds is one more call level: `cap / 63 + GAS_MARGIN`, as a member of a kind gen 1 alone
     /// enables; gen 1's natives may be clones of its own, so they count 400 k there.
-    function _slotCap(uint16 kind, bytes32 id, bool inner, uint256 nativeCap) private view returns (uint256 cap, uint256 held) {
+    function _slotCap(uint16 kind, bytes32 id, bool inner, uint256 nativeCap, bool hedera)
+        private view returns (uint256 cap, uint256 held)
+    {
         IUARegistry self = IUARegistry(address(this));
-        if (!UAKinds.isMember(kind, self.hederaNative())) revert IUARegistry.UAMemberUnknown(id);
+        if (!UAKinds.isMember(kind, hedera)) revert IUARegistry.UAMemberUnknown(id);
         if (UAKinds.isNative(kind)) return (nativeCap, nativeCap);
         if (self.kindOf(id) != kind) revert IUARegistry.UAMemberUnknown(id);
         if (kind == UAKinds.MSIG) {
             if (inner) revert IUARegistry.UAMemberUnknown(id);
             bool here = UAStore.layout().records[id].kind != 0;
-            (cap, held) = _worst(_msigBytes(id), true, here ? nativeCap : UAStore.SMART_KEY_1271_GAS);
+            (cap, held) = _worst(_msigBytes(id), true, here ? nativeCap : UAStore.SMART_KEY_1271_GAS, hedera);
             if (!here) cap += cap / 63 + SigCheck.GAS_MARGIN;
             return (cap, held);
         }

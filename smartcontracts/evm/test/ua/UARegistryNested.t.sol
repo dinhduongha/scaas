@@ -174,6 +174,22 @@ contract UARegistryNestedTest is UARegistryBase {
         UACall.register(reg, UAKinds.MSIG, d, _none(), "", "");
     }
 
+    /// The profile's MEMBER set holds one level down: a Hedera-native member of an inner `msig` lists on a Hedera profile, and only there.
+    function test_hederaNativeInInner() public {
+        bytes32 hedera = bytes32(uint256(0x4d2)); // long-zero 0.0.1234
+        Member[] memory m = new Member[](2);
+        m[0] = Member(UAKinds.HEDERA_NATIVE, hedera, 1);
+        m[1] = Member(P256, idP, 1);
+        bytes memory di = _msigKey(2, m);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAMemberUnknown.selector, hedera));
+        UACall.register(reg, UAKinds.MSIG, di, _none(), "", "");
+        UARegistry h = _deploy(address(0x5ce0), chainUidA, address(0), true, BUDGET, address(0), true, _cfgs(address(mock)));
+        _register(h, P256, keyP);
+        m[0] = Member(UAKinds.MSIG, UACall.register(h, UAKinds.MSIG, di, _none(), "", ""), 1);
+        m[1] = Member(UAKinds.EVM_EOA, _eoa(PK_B), 1);
+        assertEq(h.kindOf(UACall.register(h, UAKinds.MSIG, _msigKey(2, m), _none(), "", "")), UAKinds.MSIG);
+    }
+
     /// A member is registered first, under its stated kind: an id not registered, or a registered id of another kind, is refused;
     /// ids are hashes of the structure, so a member listed before it exists is the only way to a cycle and it fails here.
     function test_memberRegisteredFirst() public {
