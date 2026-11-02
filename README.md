@@ -1126,3 +1126,7 @@ its whole group, and a general-purpose service open to all (running a blockchain
 excluded because one of its users is; that user stays excluded. Everyone else needs a Vegan Enterprise License (contact ha@dad.vn); the
 license has the exact terms. Contributions are accepted under the CLA in [CONTRIBUTING.md](CONTRIBUTING.md).
 Third-party components keep their own licenses.
+
+**No patents.** The authors have filed no patent application on this work and will not file one. It is published as prior
+art, so that it stays free for everyone to use and nobody can patent it. This covers the authors' own rights only:
+third-party patents have not been cleared (see [G-LIC](docs/contracts/pq-zero-knowledge.md)).

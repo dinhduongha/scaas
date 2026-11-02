@@ -194,8 +194,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      quiet; the whole Task 13 + Task 9 about 2–3 h).
   **Pre-freeze work order (owner 2026-10-31):** finish everything that changes contracts / the core, then freeze, then
   audit, then the clients. Order:
-  1. T14 — UA-Soroban on the Stellar testnet (from 2026-11-03, SDK 30.0.0).
-  2. `ua8-soroban` (UA-8 Part B on Soroban), together with: the msig `pop` minimal form, built for EVM `UARegistry` and
+  1. T14 — the one e2e run of UA-Soroban on the public Stellar testnet: possible from 2026-11-03, when that network votes Protocol 30, with SDK 30.0.0. **It blocks nothing** (owner 2026-10-29 "no waiting"; SOR-D17: the round's last step): all code runs on a local Protocol 30 network, and neither the merge of `ua8-soroban` nor the audit waits for it.
+  2. (Status 2026-11-02: M3, B1-B7, B7b, B7c, V1, B9a, B8, N2 built on branch `ua8-soroban`; N2 fix round WIP `f47ed86a`, not compiled or tested; then B9, RV, B10. HANDOFF has the order.) `ua8-soroban` (UA-8 Part B on Soroban), together with: the msig `pop` minimal form, built for EVM `UARegistry` and
      Soroban (NEAR and Algorand have no UA registry yet — the rule is a requirement for their later UA rounds); the gen-1 registry kind set — **owner 2026-10-31: option (a)**, every
      gen-1 deploy carries every kind the chain can run (`DeployBase` already does; add a gate that refuses a gen-1
      deploy missing an EIP-2537 kind the probe passes; no `UARegistry` change); and the relay-fee minimum re-decision
@@ -211,21 +211,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      no `paramSet`; **a named entry point per operation** (owner 2026-10-31, option B: `mtxUnwrap`, `mtxBurn`,
      `mtxSetMandate`, …, each with its own typehash; a generic `Execute` only for inherently arbitrary calls); code size
      kept under 64 KiB with the library split pattern. `UARegistry.kindName(uint16)` view. The portable part goes first:
-     `ua8-soroban` M2 / M3 / B1–B3 / B5 / B7 wait for it. The explicit-parameter rule (owner 2026-10-31) joined the round:
-     plan `docs/superpowers/plans/2026-10-31-typed-signing.md`.
-     **Progress (2026-10-31):** Part P (typed portable records, `kindName`, native `msig` members over the typed digest, the `register` KEM key at
-     version 0), X0 (packed-blob inventory, calldata measured) and Part R (registry explicit ABI: `registerMsig`, `registerWebAuthn`, `registerMuSig2`,
-     `registerFrost`, `KemKey`, `UASig`, hash-committed KEM key filled by `setKemKey(ua, 0, …)`) built on branch `typed-signing`, docs done
-     (CTR-UA-07, -16, -32, -33, -35, -36, CLI-SGN-41); gates and whole-branch review (PG / PRV) done; `main` does not hold them yet: the 2026-11-01 merge was taken back (owner), a PR comes when the owner asks. Part C: C0 (pattern, size levers) and C1 (clientkeys builders, `typed_ops.json`) built; not done: C2–C8
-     (named typed entries; until C2 the tokens keep `bytes auth`, converted by `UAKinds.uaSig`), Part N (node explicit job API).
-     **Status 2026-11-01:** C0, C1, C2, C3, C5 built with their reviews; C3's fix round is owed (plan, Owner rulings), then C4, C6, C7, C8, N1, N2, CD, CG, CRV.
-     **`ua8-soroban` hand-over, after merging `main` (TS-D9):** resolve `ua-portable-vectors.mjs`, `ua-signers.mjs`, `ua-rs/src/ua8.rs`, `portable.json`
-     by taking `main`'s typed code plus M1's minimal-slot code and regenerating; B1 adds the `UAPqzKey` / `UAPqzKeyRecord` typehashes on
-     `ua-common` `portable_digest` and the typed `kem_record_digest`, `pqz_key_digest`, `pqz_key_record_digest` (the helpers live in `ua-common`, not `digest.rs`);
-     B2 / B3: `register` passes the real `pqzKeyHash`, KEM record hash and `pqzPopHash` (zeros today), stores the `register` KEM key at version 0,
-     `set_kem_key` is write-once for every version and takes version 0 only to fill a hash-committed `register` (the EVM rule, owner KEM rulings 2–4);
-     a `kind_name` view (`KindUnknown` panic for an unknown id); `register`, `set_kem_key`, `set_pqz_key`, `require_authorized` with explicit
-     `contracttype` arguments (Part R's shapes; `msig` one typed form, as EVM); the Soroban packed-`Bytes` inventory of X0.
+     `ua8-soroban` M2 / M3 / B1–B3 / B5 / B7 wait for it. Plan `docs/superpowers/plans/2026-10-31-typed-signing.md`.
+     **Status 2026-11-02:** Parts P, R, C and N, R2 (`UARegistry` + `UARegistryLib`, owner), the `msig` minimal form, member acceptance (CTR-UA-37), CD, CG and CRV done on branch `typed-signing`, gates green; N2 moved to `ua8-soroban`.
      **After the round merges (owner 2026-10-31):** reset the SCaaS testnet **without a backup** (owner 2026-10-31) and load the new contracts (deploy with
      every kind incl. `DEPLOY_ZETHER=1`, PQZ / Zether e2e, `verify-blockscout.sh`, Blockscout DB reset, records).
   3. **Done 2026-11-01:** Zether verifier one merged MSM (EVM) — before `zether-soroban`, so the Soroban verifier is merged-MSM from the
@@ -242,8 +229,10 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   7. **Freeze** the contracts of EVM + Soroban (the families whose base and UA rounds are done). NEAR and Algorand
      have only their base contracts (no UA round yet): they and every later family round get an add-on audit when
      their UA rounds finish (owner 2026-10-31 correction).
-  8. Contracts audit (plan draft `.superpowers/sdd/2026-10-31-contracts-audit/plan.md`; Codex / agy / Claude workflow —
-     owner decides reviewers).
+  8. Contracts audit (Codex / agy / Claude workflow / Fable; **owner 2026-11-02: EVM first**, plan
+     `docs/research/contracts-audit-2026-11/README.md`, target `typed-signing` after the `debit_min_gas` re-pin and the M2 port,
+     it does not wait for items 4 and 6: neither touches EVM source). Soroban after `zether-soroban`; NEAR, Algorand and the other
+     families add-on audits when their UA rounds finish (owner 2026-10-31).
   9. P6h → P6i → P6j (below).
   6. P6h (clients + WASM) → P6i (node) → P6j (review) → P6-PUB drafts. In parallel: TradeEngine EVM ∥ non-EVM 1 × N (the TradeEngine stream is unblocked: the DEX round contracts are built on `dex-round`; open follow-ups: NODE-DEX-15's "no settlement worth less than its gas", the `UniswapExecutor` deploy script with the first Uniswap chain)
      (DEX).
@@ -391,7 +380,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   testnet's PQZL v2 id is the forgeable one, an `eth_estimateGas` row in the probe; main's FFI library `ee2f7096…` is
   not the reviewed `16dd99ce…` (review the v4 library before building the image); the `UARegistry` redeploy for the native UA kinds `0x0017 near-account` /
   `0x0018 algorand-address` (near-algorand T2: `UAKinds` bytecode changed, spec 2026-10-28-near-algorand-design §8).
-- [ ] **Dependabot alerts 19 / 20 / 21 — owner 2026-10-22: leave open (option 2), no dismiss.** (2026-10-27: #36 `sprintf-js` closed on its own; #42–#45 `fast-uri` < 3.1.9 in `smartcontracts/ton`, dev-only via `ajv`, fixed by the lockfile bump `885c91f4`, TON tests 28/28.) All dev / test-only:
+- [ ] **Dependabot (2026-11-02): 19 / 20 / 21 are no longer open; open are #46-#53, incl. `wee_alloc` critical and `follow-redirects` high: triage owed.** Older text: alerts 19 / 20 / 21 — owner 2026-10-22: leave open (option 2), no dismiss. (2026-10-27: #36 `sprintf-js` closed on its own; #42–#45 `fast-uri` < 3.1.9 in `smartcontracts/ton`, dev-only via `ajv`, fixed by the lockfile bump `885c91f4`, TON tests 28/28.) All dev / test-only:
   Solana `ed25519-dalek` 1.0.1, `curve25519-dalek` 3.2.0, `rand` 0.7.3 via `litesvm` 0.17 (dev-dependency) →
   `agave-precompiles` 4.3.0 — `cargo update` once litesvm / Agave move to `ed25519-dalek` 2; TON `sprintf-js` 1.0.3 via
   jest → babel-plugin-istanbul → `js-yaml` 3 → `argparse` 1 (no patched version) — goes when jest drops `js-yaml` 3.
@@ -664,6 +653,11 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   family.
 
 ## 0. Finish the spec phase (6 items left)
+
+- [ ] **Owner 2026-11-01: review this file:** done items to COMPLETED.md, items no longer needed dropped, outdated items to a new `outdate.md`. §1 audit in `scratchpad/todo-audit-fix-first-2026-11-01.md`: 53 of 60 FIX ids are still open, `NET-TON-FIX1` BLOCK among them; the leftovers and stream-table audit must be redone.
+- [ ] **Defensive publication (owner 2026-11-02: no patent application anywhere, and nobody else should patent this work):** owner steps: archive the public repo in Software Heritage, a Zenodo DOI on a source tag, the P6-PUB paper; a lawyer on a patent clause in LICENSE with G-LIC.
+- [ ] **Node queue (NODE-JOB-21, owner 2026-11-02):** the node is open, so "a stopped kind never hides another" is the node's guarantee: its own queue claims by kind, with a per-namespace `call` quota. Before Soroban jobs open to real clients. The built pull path stops at 50 jobs.
+- [ ] **`debit_min_gas` re-pin:** +9.4 k over the pin at every set, owner decides; see HANDOFF.
 
 - [ ] **Governance matrix for factory-made contracts (owner 2026-10-20)** — tokens, DEX, later lending and the other
   contract families: for every property and power (verifiers and Env, rates and legs, mint, burn, blacklist, pause, fees,
