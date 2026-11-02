@@ -9,7 +9,7 @@
 
 use crate::abi;
 use crate::curve::keccak256;
-use crate::envelope::domain_separator;
+use crate::envelope::{domain_separator, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER};
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 
@@ -113,10 +113,19 @@ impl Defs {
         if let Some(extra) = v.as_object().and_then(|o| o.keys().find(|k| !fields.iter().any(|f| &f.1 == *k))) {
             return Err(format!("`{name}` has no field `{extra}`"));
         }
+        // `MetaTxLib.canon`, one place for an envelope and a nested payment: a struct with `mode`, `relayer` and `feeRecipient`
+        // hashes the fields its mode does not bind as 0, as the contract, clientkeys and the node do
+        let canon = ["relayer", "feeRecipient"].iter().all(|n| fields.iter().any(|f| f.1 == *n));
+        let mode = fields.iter().find(|f| canon && f.1 == "mode").and_then(|(t, f)| v.get(f).map(|x| self.value(t, f, x)));
+        let mode = mode.transpose()?.map(|w| u32::from_be_bytes(w[28..].try_into().unwrap()));
         let mut b = keccak256(self.encode_type(name).as_bytes()).to_vec();
         for (t, f) in fields {
             let x = v.get(f).filter(|x| !x.is_null()).ok_or_else(|| format!("missing field `{f}`"))?;
-            b.extend(self.value(t, f, x)?);
+            let word = self.value(t, f, x)?;
+            let unbound = mode.is_some_and(|m| {
+                (f == "relayer" && m & MODE_RESTRICT_RELAYER == 0) || (f == "feeRecipient" && m & MODE_RESTRICT_FEE_RECIPIENT == 0)
+            });
+            b.extend(if unbound { [0; 32] } else { word });
         }
         Ok(keccak256(&b))
     }

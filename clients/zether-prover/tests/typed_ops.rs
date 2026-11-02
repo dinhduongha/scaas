@@ -60,6 +60,42 @@ fn every_zether_row_digest_equals_the_vector() {
     assert_eq!(other, want, "a row left out must be listed in NOT_ZETHER with its reason");
 }
 
+/// CRV I1: `MetaTxLib.canon`. A `relayer` / `feeRecipient` the mode does not bind hashes as 0, on the envelope and on a nested
+/// payment, as the contract, clientkeys and the node do; the vector's own messages are canonical, so they cannot show this.
+#[test]
+fn unbound_relayer_and_fee_recipient_hash_as_zero() {
+    let v = vector();
+    let digest = |op: &str, edit: &dyn Fn(&mut Value)| -> Value {
+        let row = &v["ops"][op];
+        let mut message = row["message"].clone();
+        edit(&mut message);
+        let r = merge(req(row), json!({"op": op, "message": message}));
+        let out: Value = serde_json::from_str(&call("typedDigest", &r.to_string()).unwrap()).unwrap();
+        out["digest"].clone()
+    };
+    let (zero, other) = (format!("0x{}", "00".repeat(20)), format!("0x{}", "ab".repeat(20)));
+    let set = |m: &mut Value, mode: u64, field: &str, addr: &str| {
+        m["mode"] = json!(mode);
+        m[field] = json!(addr);
+    };
+
+    // `Burn`'s mode 19 binds both: bit 1 relayer, bit 2 fee recipient
+    assert_eq!(digest("Burn", &|_| ()), v["ops"]["Burn"]["domains"]["zether"]["digest"], "the row itself");
+    for (field, mode) in [("relayer", 18u64), ("feeRecipient", 17)] {
+        let named = digest("Burn", &|m| set(m, mode, field, &other));
+        assert_eq!(named, digest("Burn", &|m| set(m, mode, field, &zero)), "{field} unbound hashes as 0");
+        // the control: the same address bound moves the digest
+        let bound = digest("Burn", &|m| set(m, 19, field, &other));
+        assert_ne!(bound, digest("Burn", &|m| set(m, 19, field, &zero)), "{field} bound is hashed");
+    }
+
+    // a nested payment: `ReceiverFee`'s mode 1 binds the relayer only
+    let row = &v["ops"]["ReceiverFee"]["domains"]["zether"]["digest"];
+    assert_eq!(&digest("ReceiverFee", &|m| m["payment"]["feeRecipient"] = json!(other)), row, "nested fee recipient unbound");
+    let bound = digest("ReceiverFee", &|m| set(&mut m["payment"], 3, "feeRecipient", &other));
+    assert_ne!(bound, digest("ReceiverFee", &|m| set(&mut m["payment"], 3, "feeRecipient", &zero)), "nested, bound");
+}
+
 #[test]
 fn typed_digest_refuses_unknown_op_missing_and_extra_field() {
     let base = json!({"chainId": 31337, "chainUid": format!("0x{}", "11".repeat(32)), "token": format!("0x{}", "22".repeat(20))});
