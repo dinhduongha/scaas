@@ -1646,7 +1646,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 ### CTR-GOV-05 — A wrapped kind refuses a SCaaS leg with FORCE or MODERATE
 - old: governance:D5 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-05 · superseded-by: —
 
-**Rule.** `_addLeg` of every wrapped kind refuses a leg that is a SCaaS token (`factory.isToken`) whose `features()` carries bit 6 `FORCE` or bit 9 `MODERATE`; features only lose bits, so a check at init holds. The wizard refuses a `MODERATE` token as a tender, vesting or offer deposit asset. Outside legs cannot be checked: a wrapped unit's value is as good as each leg's issuer, and the disclosure says so.
+**Rule.** `_addLeg` of every wrapped kind refuses a leg that is a SCaaS token (`factory.isToken`) whose `features()` carries bit 6 `FORCE` or bit 21 `MODERATE`; features only lose bits, so a check at init holds. The wizard refuses a `MODERATE` token as a tender, vesting or offer deposit asset. Outside legs cannot be checked: a wrapped unit's value is as good as each leg's issuer, and the disclosure says so.
 **Status.** Decided as recommended, not built.
 **Why.** A leg's issuer who can move the wrapper's balance empties a wrapper that shows no power of its own. Under wrapped PQZ or Zether that is value gone behind intact ciphertexts, with no record and no proof.
 **Cost if wrong.** A few bytes in `WrappedLib`, one read per leg at init; a legitimate regulated leg cannot be wrapped.
@@ -1673,7 +1673,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 ### CTR-GOV-08 — MODERATE: later, with flags 5-8
 - old: governance:D8 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-08 · superseded-by: —
 
-**Rule.** Bit 9 `MODERATE`: a holder moves units out of an account with no record. One direct entry `moderatedTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref)` on `_uaMove`, no `mtx` or `ua` twin; it refuses 0, `pad(UA_POOL)`, `pad(SHIELD_POOL)`, `pad(this)`, an unregistered or non-SIGNING derived `to`, and a native `from` with code; it passes `FREEZE` and `ALLOWLIST`; its scope is any or a registry. Bit 9 joins the CTR-AS-02 disclosure and `termsHash`; CTR-TOK-10, the contracts README §3 and architecture.md are amended.
+**Rule.** Bit 21 `MODERATE` (bit 9 until CTR-GOV-18): a holder moves units out of an account with no record. One direct entry `moderatedTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref)` on `_uaMove`, no `mtx` or `ua` twin; it refuses 0, `pad(UA_POOL)`, `pad(SHIELD_POOL)`, `pad(this)`, an unregistered or non-SIGNING derived `to`, and a native `from` with code; it passes `FREEZE` and `ALLOWLIST`; its scope is any or a registry. Bit 9 joins the CTR-AS-02 disclosure and `termsHash`; CTR-TOK-10, the contracts README §3 and architecture.md are amended.
 **Status.** Decided as recommended, later: built with flags 5–8. Only the bit number is taken now, 0 B.
 **Why.** A moderator without the refusals reaches tender deposits, vesting clones, wrapper reserves and pools; refusing a `from` with code leaves Safe-held balances out of reach, the lesser hole.
 **Cost if wrong.** Three normative sentences rewritten; bytes on the plain kinds later.
@@ -1769,7 +1769,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 ### CTR-GOV-18 — Receiver check: two feature bits, ALLOWLIST and DENYLIST, off by default
 - old: governance:denied-flags · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-18 · superseded-by: —
 
-**Rule.** The receiver check has two feature bits on the same `ComplianceRegistry`, both off by default, so by default nobody is stopped. `ALLOWLIST` keeps bit 8 and reads `requiredFlags`; `DENYLIST` takes a new bit and reads `deniedFlags`:
+**Rule.** The receiver check has two feature bits on the same `ComplianceRegistry`, both off by default, so by default nobody is stopped. `ALLOWLIST` keeps bit 8 and reads `requiredFlags`; `DENYLIST` takes bit 9, beside it, and reads `deniedFlags`; `MODERATE` moves to bit 21:
 `R(a) = (!ALLOWLIST || (flags(a) & requiredFlags) == requiredFlags) && (!DENYLIST || (flags(a) & deniedFlags) == 0)`.
 Both on means: known, and not denied. Each bit is disabled and locked on its own. Features only lose bits after creation, so a token created with a bit off never gets it: the issuer chooses at creation.
 **Status.** Decided, not built. It changes CTR-AS-07 and CTR-AS-17's `ALLOWLIST ⇔ registry ≠ 0 && requiredFlags ≠ 0` row. A token with both off adds no read (CTR-GOV-11). An earlier draft of this entry had one bit with two flag sets and a denylist by default.

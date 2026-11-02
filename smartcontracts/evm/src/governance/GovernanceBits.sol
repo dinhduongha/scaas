@@ -13,14 +13,15 @@ library GovernanceBits {
     uint8 internal constant FORCE = 6;
     uint8 internal constant PAUSE = 7;
     uint8 internal constant ALLOWLIST = 8;
-    uint8 internal constant MODERATE = 9;
+    uint8 internal constant DENYLIST = 9;
     uint8 internal constant RECORD = 10;
     uint8 internal constant LISTING = 11;
     uint8 internal constant FEE_ROUTING = 12;
     uint8 internal constant RESCUABLE = 17;
+    uint8 internal constant MODERATE = 21;
 
-    /// @dev Flags 5–8 (CTR-AS-17): refused while the controls are not built.
-    uint256 internal constant REGULATED = (1 << FREEZE) | (1 << FORCE) | (1 << PAUSE) | (1 << ALLOWLIST);
+    /// @dev Flags 5–9 (CTR-AS-17, CTR-GOV-18): refused while the controls are not built.
+    uint256 internal constant REGULATED = (1 << FREEZE) | (1 << FORCE) | (1 << PAUSE) | (1 << ALLOWLIST) | (1 << DENYLIST);
     uint256 internal constant ALWAYS_LOCKED = (1 << PAYABLE) | (1 << BURNABLE) | (1 << RESCUABLE);
 
     // Per kind (CTR-TOK-22). The confidential kinds' refusal of flags 5–8 is today's built state (CTR-AS-17), not a
