@@ -695,6 +695,16 @@ canon:D7	research/_USER-DECISIONS.md:861
 canon:D12	research/_USER-DECISIONS.md:862
 canon:D14	research/_USER-DECISIONS.md:869
 canon:D17	research/_USER-DECISIONS.md:864
+governance:D1	research/governance/permission-model.md:441
+governance:D2	research/governance/permission-model.md:442
+governance:D3	research/governance/permission-model.md:443
+governance:D4	research/governance/permission-model.md:444
+governance:D5	research/governance/permission-model.md:445
+governance:D6	research/governance/permission-model.md:446
+governance:D7	research/governance/permission-model.md:447
+governance:D8	research/governance/permission-model.md:448
+governance:D9	research/governance/permission-model.md:449
+governance:bands	research/governance/permission-model.md:14
 net-aptos:L1	history/specs/2026-10-04-net-aptos.md:37
 net-aptos:L2	history/specs/2026-10-04-net-aptos.md:38
 net-aptos:L3	history/specs/2026-10-04-net-aptos.md:39

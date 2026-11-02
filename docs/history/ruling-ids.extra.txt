@@ -256,3 +256,13 @@ msig-nested:N2	superpowers/specs/2026-11-02-msig-nested.md:35	msig-nested spec r
 msig-nested:N5	superpowers/specs/2026-11-02-msig-nested.md:38	msig-nested spec row
 msig-nested:N14	superpowers/specs/2026-11-02-msig-nested.md:48	msig-nested spec row
 msig-nested:N15	superpowers/specs/2026-11-02-msig-nested.md:47	msig-nested spec row
+governance:D1	research/governance/permission-model.md:441	governance owner decision 2026-11-02
+governance:D2	research/governance/permission-model.md:442	governance owner decision 2026-11-02
+governance:D3	research/governance/permission-model.md:443	governance owner decision 2026-11-02
+governance:D4	research/governance/permission-model.md:444	governance owner decision 2026-11-02
+governance:D5	research/governance/permission-model.md:445	governance owner decision 2026-11-02
+governance:D6	research/governance/permission-model.md:446	governance owner decision 2026-11-02
+governance:D7	research/governance/permission-model.md:447	governance owner decision 2026-11-02
+governance:D8	research/governance/permission-model.md:448	governance owner decision 2026-11-02
+governance:D9	research/governance/permission-model.md:449	governance owner decision 2026-11-02
+governance:bands	research/governance/permission-model.md:14	governance owner decision 2026-11-02

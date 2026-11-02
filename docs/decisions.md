@@ -1607,6 +1607,96 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 **Cost if wrong.** CREATE addresses depend on deployer nonces and drift between chains and redeploys.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §2 A11, §3 MG-4.
 
+### CTR-GOV-01 — GovernanceBase on every token kind and the DEX
+- old: governance:D1 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-01 · superseded-by: —
+
+**Rule.** One layer, `GovernanceBase` (owner, features, roles, lock, delay), in its own ERC-7201 namespace, inheritable by any contract, on every token kind and on `SCaaSDex`. `scaas.token` splits: `scaas.token` keeps identity (`creator`, `version`, `kind`, `decimals`, `initialized`, `name`, `symbol`), `scaas.governance` takes `features`, `lockedFeatures`, `owner`, `pendingOwner`, the holders and the delay state. `AdminLib` becomes `GovernanceLib`; `IGovernance` replaces `ITokenAdmin` with every name kept. On the DEX `admin` becomes `owner`, the market setters (`setMarket`, `setExchangeTarget`, `setListedOnly`) run under bit `LISTING` and `setFeeSplit` under bit `FEE_ROUTING`. The namespace roots join the layout pins. It is not in `MetaTxBase` or `UAMetaTxBase`, which are authentication and relay.
+**Status.** Decided as recommended, not built. A measured prototype sits on branch `governance`; the spec follows the attack round.
+**Why.** Today the same five words mean different things at each address: the DEX has an `admin` with no transfer and no renounce, a token has an `owner`. One base reads the same way at every address, and a third-party application can inherit it.
+**Cost if wrong.** One new env version per domain, DEX runtime grows, clients rename `admin` to `owner` on the DEX. Every token created after it has another address than a prediction made before it, a non-event while every chain is test-only.
+**Source.** `research/governance/permission-model.md` §1, §2, §6.
+
+### CTR-GOV-02 — The Grant record in the contract, subject to measuring
+- old: governance:D2 · status: open · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-02 · superseded-by: —
+
+**Rule.** A limit on a power lives in the contract that owns the power, in `GovernanceBase`: `use(bit, holder, scalar) → scope`, `setGrant`, `grantOf`. Two levels: the owner grants, a holder with a `delegable` grant may grant a narrower leaf, a leaf cannot delegate. An edit carries `spent` and never refreshes a budget. `renounceOwnership` reverts while a bit that is not locked has holders. **Subject to measuring** the bytes first (owner): the default until the measurement is read is the rule as stated.
+**Status.** Decided as recommended, subject to measuring; not built. If `WrappedPqzToken` measures over its stop line the fallback already stated is grants on `NORMAL*` and the DEX only, said plainly, not a lever hunt.
+**Why.** The owner's examples (a loan approval in a band, a subtree, a group) and the mint allowance need a limit bound to the number the contract acts on; a separate holder clone cannot carry them, and a holder that reports its own limit is believed for nothing.
+**Cost if wrong.** Bytes on every kind, and two disclosure shapes on one chain if one kind goes flat-only. CTR-TOK-22's "revoke every role, then renounce" turns from advice into a revert for unlocked bits.
+**Source.** `research/governance/permission-model.md` §1.3, §6, §7; `research/governance/permission-model-attack.md` A3, A10, A19.
+
+### CTR-GOV-03 — A plain transfer stays +0: one regulated implementation per kind, never per feature
+- old: governance:D3 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-03 · superseded-by: —
+
+**Rule.** A plain transfer's gas does not rise. A regulated instance is known on the hot path by its implementation, not by a storage read: one regulated implementation per kind, never one per feature. Ids 8 `NORMAL_REGULATED` and 9 `WRAPPED_REGULATED` are reserved in the enum comment now (0 B) and built with flags 5–8. `WrappedPqzToken` and `WrappedZetherToken` will have regulated versions too (owner 2026-11-02): "one regulated implementation per kind" covers them. How they work is **open, owner, not designed**; nothing here fixes the regulated set at two.
+**Status.** Decided as recommended, not built. It conflicts with CTR-AS-17's placement ("on the ordinary kinds, not separate kinds"); the Change to CTR-AS-17 is drafted and waits for the owner. The refusal of flags 5–8 on the confidential kinds at creation is the current built state, not a permanent rule.
+**Why.** `_update` and `_uaMove` read no governance slot today; a `features` read there would charge every holder of every plain token for a control their token does not have. Two implementations meet the rule by construction.
+**Cost if wrong.** More catalogue rows and more artifacts in the size gate and the audit. The alternatives were immutable-args clones (every clone address formula changes, factory bytecode before the freeze) or accepting the read (the rule breaks on the entry that matters most).
+**Source.** `research/governance/permission-model.md` §2.5, §6; `research/governance/permission-model-attack.md` A17; owner statement 2026-11-02 on the confidential kinds.
+
+### CTR-GOV-04 — Two-call grantDelay and holderCount
+- old: governance:D4 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-04 · superseded-by: —
+
+**Rule.** `grantDelay` is set at creation (`TokenConfig`, `DexConfig`), immutable, 0 allowed. The **owner calls `grantRole` twice**: propose, then confirm in `[eta, eta + grantDelay]`; nobody else executes, the confirmer must be the proposer, outside the window the pending is dead, so an owner of 0 and a new owner cannot confirm. Views `pendingGrant(bit, account)`, `lastProposedAt()`, `holderCount(bit)`; `holderCount` counts INIT grants once and never a pending. `acceptOwnership` is **not** delayed. Wizard default 2 days, dev chains 0.
+**Status.** Decided as recommended, not built, not in the prototype of D1 and D2.
+**Why.** An executable pending grant survives a renounce or a transfer and makes "owner 0 means nothing above can change" false; a window and an owner-only confirm remove both. A delay on `acceptOwnership` gives a stalemate with a shared key, not recovery.
+**Cost if wrong.** `grantRole` tests double; a config field through init on every kind.
+**Source.** `research/governance/permission-model.md` §3 A1, A2, A20, §6; `research/governance/permission-model-attack.md` A1, A2, A6.
+
+### CTR-GOV-05 — A wrapped kind refuses a SCaaS leg with FORCE or MODERATE
+- old: governance:D5 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-05 · superseded-by: —
+
+**Rule.** `_addLeg` of every wrapped kind refuses a leg that is a SCaaS token (`factory.isToken`) whose `features()` carries bit 6 `FORCE` or bit 9 `MODERATE`; features only lose bits, so a check at init holds. The wizard refuses a `MODERATE` token as a tender, vesting or offer deposit asset. Outside legs cannot be checked: a wrapped unit's value is as good as each leg's issuer, and the disclosure says so.
+**Status.** Decided as recommended, not built.
+**Why.** A leg's issuer who can move the wrapper's balance empties a wrapper that shows no power of its own. Under wrapped PQZ or Zether that is value gone behind intact ciphertexts, with no record and no proof.
+**Cost if wrong.** A few bytes in `WrappedLib`, one read per leg at init; a legitimate regulated leg cannot be wrapped.
+**Source.** `research/governance/permission-model.md` §3 A4, §6; `research/governance/permission-model-attack.md` A4, A5.
+
+### CTR-GOV-06 — Rescue to an immutable rescueTo
+- old: governance:D6 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-06 · superseded-by: —
+
+**Rule.** Bit 17 `RESCUABLE`, a capability: `rescue(asset)` by anyone, to `rescueTo`, immutable, set at creation, on the kinds that fit. A foreign asset: every leg's balance is unchanged across the call. A leg asset: that leg's `balanceOf ≥ reserve` after. On the DEX only if CTR-DEX-20 does not already pay strays out, else on `DexPuller` alone. `WrappedPqzToken` last.
+**Status.** Decided as recommended, not built. CTR-DEX-20 was read at `main` on 2026-11-02: the sweep rule stands, so the DEX takes no `rescue` entry and `DexPuller` is the case left.
+**Why.** A stray on a wrapper is stuck forever today; a destination the admin can rewrite is a power with a holder again.
+**Cost if wrong.** Bytes on each kind that takes it; a kind without it keeps strays stuck, as today.
+**Source.** `research/governance/permission-model.md` §3 A15, A16, §6; `research/governance/permission-model-attack.md` A15, A16.
+
+### CTR-GOV-07 — set_admin and renounce_admin outside the EVM
+- old: governance:D7 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-07 · superseded-by: —
+
+**Rule.** `set_admin` (two-step) and `renounce_admin` on the Soroban token and DEX before their freeze. NEAR takes the same two entries in its UA round. Algorand takes the same two entries in its UA round. Sui's `AdminCap` gets `store` or a two-step transfer before `make_immutable`.
+**Status.** Decided as recommended, not built.
+**Why.** Without it every Soroban token is write-once forever, and a fixed supply there is "initial mint, then renounce", which needs the entry.
+**Cost if wrong.** Small per family; a family frozen first cannot add it later without a new deployment.
+**Source.** `research/governance/permission-model.md` §4, §6.
+
+### CTR-GOV-08 — MODERATE: later, with flags 5-8
+- old: governance:D8 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-08 · superseded-by: —
+
+**Rule.** Bit 9 `MODERATE`: a holder moves units out of an account with no record. One direct entry `moderatedTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref)` on `_uaMove`, no `mtx` or `ua` twin; it refuses 0, `pad(UA_POOL)`, `pad(SHIELD_POOL)`, `pad(this)`, an unregistered or non-SIGNING derived `to`, and a native `from` with code; it passes `FREEZE` and `ALLOWLIST`; its scope is any or a registry. Bit 9 joins the CTR-AS-02 disclosure and `termsHash`; CTR-TOK-10, the contracts README §3 and architecture.md are amended.
+**Status.** Decided as recommended, later: built with flags 5–8. Only the bit number is taken now, 0 B.
+**Why.** A moderator without the refusals reaches tender deposits, vesting clones, wrapper reserves and pools; refusing a `from` with code leaves Safe-held balances out of reach, the lesser hole.
+**Cost if wrong.** Three normative sentences rewritten; bytes on the plain kinds later.
+**Source.** `research/governance/permission-model.md` §3, §6; `research/governance/permission-model-attack.md` A4.
+
+### CTR-GOV-09 — Delayed relaxing and RECORD: later, with the asset suite
+- old: governance:D9 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-09 · superseded-by: —
+
+**Rule.** A mask `_delayedRelaxBits()`: `revokeRole` and `disableFeature` on `FREEZE`, `FORCE`, `PAUSE` take `grantDelay`. Bit 10 `RECORD` is the compliance right, distinct from `FORCE`; one holder is refused both.
+**Status.** Decided as recommended, later: built with the asset suite. It rewrites CTR-AS-03's "losing a role relaxes at once". The mask costs 0 B until the asset suite sets it.
+**Why.** Revoking the last issuer ends every freeze at once, so one owner key releases what a threshold guards; and one holder must not both write an order and execute it.
+**Cost if wrong.** A delay on a relaxation also delays a correct release.
+**Source.** `research/governance/permission-model.md` §3 A9, escalation F6, §6; `research/governance/permission-model-attack.md` A9.
+
+### CTR-GOV-10 — Bit bands: 0-63 one meaning, 64-127 per application, 128 and above refused
+- old: governance:bands · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-10 · superseded-by: —
+
+**Rule.** Bits 0–63 are SCaaS's: one global table, each bit allocated once, never renumbered, the same meaning on every SCaaS contract, and a contract without the power leaves the bit off. Bits 64–127 are per application contract, declared with a label. Bits 128 and above are refused today; the word stays `uint256` so the ABI does not move when they open. The owner's three examples must run on the model: a loan approval bounded on a named argument of the application's function, adding or removing members only in one's own subtree, circulation only within a group.
+**Status.** Decided, not built. The allocation of bits 10–20 is a proposal read against the specs in the governance gaps note.
+**Why.** A wallet names a bit without reading the contract, and the top band gives exhaustion an answer other than renumbering.
+**Cost if wrong.** A second meaning for a bit on one contract would break every wallet's reading of that bit.
+**Source.** `research/governance/permission-model.md` §1.4, opening decisions A, B, C.
+
 ## 17. Contracts — Meta-transactions
 
 ### CTR-MTX-01 — Payment is a MetaTransfer with entryRef ≠ 0
@@ -8885,6 +8975,16 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 | msig-nested:N5 | CTR-UA-38 | current |
 | msig-nested:N14 | CTR-UA-38 | current |
 | msig-nested:N15 | CTR-UA-38 | current |
+| governance:D1 | CTR-GOV-01 | current |
+| governance:D2 | CTR-GOV-02 | open |
+| governance:D3 | CTR-GOV-03 | current |
+| governance:D4 | CTR-GOV-04 | current |
+| governance:D5 | CTR-GOV-05 | current |
+| governance:D6 | CTR-GOV-06 | current |
+| governance:D7 | CTR-GOV-07 | current |
+| governance:D8 | CTR-GOV-08 | current |
+| governance:D9 | CTR-GOV-09 | current |
+| governance:bands | CTR-GOV-10 | current |
 | net-aptos:L1 | NET-ALL-06 | current |
 | net-aptos:L2 | NET-ALL-07 | current |
 | net-aptos:L3 | NET-ALL-08 | current |
