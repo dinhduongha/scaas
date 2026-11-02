@@ -705,6 +705,11 @@ governance:D7	research/governance/permission-model.md:447
 governance:D8	research/governance/permission-model.md:448
 governance:D9	research/governance/permission-model.md:449
 governance:bands	research/governance/permission-model.md:14
+governance:plus0	decisions.md:1683
+governance:hybrid	decisions.md:1693
+governance:moderate-public	decisions.md:1702
+governance:bits-13-14	decisions.md:1711
+governance:operator-delay	decisions.md:1720
 net-aptos:L1	history/specs/2026-10-04-net-aptos.md:37
 net-aptos:L2	history/specs/2026-10-04-net-aptos.md:38
 net-aptos:L3	history/specs/2026-10-04-net-aptos.md:39

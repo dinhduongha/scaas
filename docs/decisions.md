@@ -9031,11 +9031,11 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 | governance:D8 | CTR-GOV-08 | current |
 | governance:D9 | CTR-GOV-09 | current |
 | governance:bands | CTR-GOV-10 | current |
-| governance:plus0 | CTR-GOV-11 | current |
+| governance:bits-13-14 | CTR-GOV-14 | current |
 | governance:hybrid | CTR-GOV-12 | open |
 | governance:moderate-public | CTR-GOV-13 | current |
-| governance:bits-13-14 | CTR-GOV-14 | current |
 | governance:operator-delay | CTR-GOV-15 | current |
+| governance:plus0 | CTR-GOV-11 | current |
 | net-aptos:L1 | NET-ALL-06 | current |
 | net-aptos:L2 | NET-ALL-07 | current |
 | net-aptos:L3 | NET-ALL-08 | current |
