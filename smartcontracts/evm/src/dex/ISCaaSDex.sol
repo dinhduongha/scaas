@@ -13,7 +13,7 @@ interface ISCaaSDex {
     /// @notice Written once by `initialize` (CTR-DEX-24). `relayerSharePpm` of every fee goes to the submitter, the
     ///         rest to `treasury`. `listedOnly`: every exchange target or executor must be listed (CTR-DEX-23).
     struct DexConfig {
-        address admin;
+        address owner;
         uint32 relayerSharePpm;
         address treasury;
         bool listedOnly;
@@ -121,7 +121,6 @@ interface ISCaaSDex {
 
     error NotFactory();
     error AlreadyInitialized();
-    error NotAdmin(address caller);
     error FeeSplitInvalid(uint32 relayerSharePpm, address treasury);
     error NotSelf();
     error NothingSettled();
@@ -227,7 +226,6 @@ interface ISCaaSDex {
     /// @notice The `DexPuller` holders of outside tokens approve (CTR-DEX-22), deployed by `initialize`.
     function puller() external view returns (address);
 
-    function admin() external view returns (address);
     function relayerSharePpm() external view returns (uint32);
     function treasury() external view returns (address);
     function listedOnly() external view returns (bool);

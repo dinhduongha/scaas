@@ -4,7 +4,9 @@ pragma solidity ^0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {MetaTokenBase} from "../../../src/metatx/MetaTokenBase.sol";
-import {AdminLib} from "../../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../../src/metatx/TokenStore.sol";
 import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {NormalToken} from "../../../src/metatx/NormalToken.sol";
@@ -19,13 +21,15 @@ contract BaseHarness is MetaTokenBase {
     constructor(address f, address s) MetaTokenBase(plainEnv(f, s, UID_, address(0), false)) {}
 
     function kind() public pure override returns (uint8) {
-        return AdminLib.KIND_NORMAL;
+        return TokenStore.KIND_NORMAL;
     }
+
+    function _validBits() internal pure override returns (uint256) { return GovernanceBits.NORMAL_BITS; }
 
     function _init(TokenConfig memory cfg) internal override {
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-        AdminLib.Roles memory none;
-        AdminLib.init(AdminLib.KIND_NORMAL, 1 << AdminLib.PAYABLE, 0, address(0), none);
+        GovernanceLib.Roles memory none;
+        GovernanceLib.init(1 << GovernanceBits.PAYABLE, 0, address(0), none, _validBits(), _roleBits(), _contractOnlyBits());
         _mint(cfg.initialHolder, cfg.initialSupply);
     }
 
@@ -63,9 +67,9 @@ function wrappedInit(address[] memory us, uint256[] memory nums, uint256[] memor
     c.name = "Wrapped";
     c.symbol = "WRP";
     c.decimals = dec;
-    c.features = 1 << AdminLib.PAYABLE;
-    if (cfg.adjustable) c.features |= 1 << AdminLib.RATE_ADJUSTABLE;
-    if (guardian != address(0)) c.features |= 1 << AdminLib.WRAP_DISABLEABLE;
+    c.features = 1 << GovernanceBits.PAYABLE;
+    if (cfg.adjustable) c.features |= 1 << GovernanceBits.RATE_ADJUSTABLE;
+    if (guardian != address(0)) c.features |= 1 << GovernanceBits.WRAP_DISABLEABLE;
     c.owner = owner;
     c.roles.rateAdmin = cfg.rateAdmin;
     c.roles.guardian = guardian;

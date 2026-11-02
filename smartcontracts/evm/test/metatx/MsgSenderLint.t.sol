@@ -13,7 +13,7 @@ import {Test} from "forge-std/Test.sol";
 contract MsgSenderLintTest is Test {
     string[15] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/UAMetaTxBase.sol", "src/metatx/MtxPipelineLib.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
         "src/metatx/NormalToken.sol", "src/metatx/WrappedToken.sol", "src/metatx/WrappedLib.sol",
-        "src/metatx/AdminLib.sol", "src/hedera/HederaLib.sol", "src/trade/TradeLib.sol", "src/zether/ZetherLayer.sol",
+        "src/governance/GovernanceLib.sol", "src/hedera/HederaLib.sol", "src/trade/TradeLib.sol", "src/zether/ZetherLayer.sol",
         "src/zether/ZetherLib.sol", "src/zether/NormalZetherToken.sol", "src/zether/WrappedZetherToken.sol"];
 
     /// Occurrences of `pat` (not preceded by an identifier character); `exceptSelector` skips `pat<ident>.selector`.
@@ -73,7 +73,7 @@ contract MsgSenderLintTest is Test {
         assertEq(_count("src/metatx/WrappedToken.sol", "msg.sender", false), 4, "WrappedToken: mtxWrapOrder and uaWrapOrder submitter x2 (CTR-TOK-20)");
         assertEq(_count("src/metatx/WrappedLib.sol", "msg.sender", false), 0, "WrappedLib");
         assertEq(_count("src/trade/TradeLib.sol", "msg.sender", false), 0, "TradeLib: the caller is a parameter");
-        assertEq(_count("src/metatx/AdminLib.sol", "msg.sender", false), 0, "AdminLib");
+        assertEq(_count("src/governance/GovernanceLib.sol", "msg.sender", false), 0, "GovernanceLib");
         assertEq(_count("src/hedera/HederaLib.sol", "msg.sender", false), 0, "HederaLib");
         assertEq(_count("src/zether/ZetherLayer.sol", "msg.sender", false), 0, "ZetherLayer");
         assertEq(_count("src/zether/ZetherLib.sol", "msg.sender", false), 0, "ZetherLib");

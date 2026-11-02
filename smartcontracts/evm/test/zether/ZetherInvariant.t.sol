@@ -6,7 +6,9 @@ import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialTok
 import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -44,7 +46,7 @@ contract ZetherHandler is ZetherFixture {
             type(WrappedZetherToken).creationCode)));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals) = ("Z", "Z", 6);
-        c.features = (1 << AdminLib.PAYABLE) | (1 << AdminLib.RATE_ADJUSTABLE);
+        c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.RATE_ADJUSTABLE);
         c.roles.rateAdmin = address(this);
         c.rate = IFactoryToken.RateConfig(2 days, 1000);
         c.legs = new IFactoryToken.Leg[](2);

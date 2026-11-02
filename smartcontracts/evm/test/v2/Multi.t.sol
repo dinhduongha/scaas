@@ -7,9 +7,11 @@ import {RateAdminForwarder} from "./helpers/V2Mocks.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
 /// T3: tầng 3 `WrappedToken` — any-of, reserve theo chân, guardian chỉ tắt wrap (TW2 §8, R136, R147).
@@ -53,7 +55,7 @@ contract MultiTest is V2Fixture {
     }
 
     function test_kindAndLegs() public view {
-        assertEq(t.kind(), AdminLib.KIND_WRAPPED); // D9: every leg count
+        assertEq(t.kind(), TokenStore.KIND_WRAPPED); // D9: every leg count
         assertEq(t.underlying(), address(0));
         address[] memory us = t.underlyings();
         assertEq(us.length, 3);
@@ -181,7 +183,7 @@ contract MultiTest is V2Fixture {
 
     function test_renounceGuardian() public {
         vm.expectEmit(address(t));
-        emit ITokenAdmin.RoleRevoked(4, guardian, guardian);
+        emit IGovernance.RoleRevoked(4, guardian, guardian);
         vm.prank(guardian);
         t.renounceRole(4);
         assertFalse(t.hasRole(4, guardian));
@@ -189,7 +191,7 @@ contract MultiTest is V2Fixture {
         vm.expectRevert(IWrappedToken.NotGuardian.selector);
         t.disableWrap(address(usdc), "x");
         vm.prank(guardian);
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.MissingRole.selector, uint8(4), guardian));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(4), guardian));
         t.renounceRole(4);
     }
 

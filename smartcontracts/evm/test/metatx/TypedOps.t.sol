@@ -26,7 +26,9 @@ import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {VM, TYPED_OPS, SALTED_DOMAIN, checkRow, onChain, domainOf, rowEnvelope, rowEnvelope2, msgField, domainField} from "./NamedEntry.t.sol";
@@ -1003,7 +1005,7 @@ contract ConfidentialRowsPqzTest is ConfidentialRows, PqzFixture {
 
     function _wrappedKind(address leg) internal override returns (WrappedToken) {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-        c.features = 1 << AdminLib.PAYABLE;
+        c.features = 1 << GovernanceBits.PAYABLE;
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
@@ -1029,7 +1031,7 @@ contract ConfidentialRowsZetherTest is ConfidentialRows, ZetherFixture {
 
     function _wrappedKind(address leg) internal override returns (WrappedToken) {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
-        c.features = 1 << AdminLib.PAYABLE;
+        c.features = 1 << GovernanceBits.PAYABLE;
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(leg, 1, 1);

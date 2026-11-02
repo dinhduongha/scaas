@@ -5,7 +5,9 @@ import {Script} from "forge-std/Script.sol";
 import {OpenFactory} from "../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../src/factory/IFactoryToken.sol";
-import {AdminLib} from "../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../src/metatx/TokenStore.sol";
 import {WrappedLib} from "../src/metatx/WrappedLib.sol";
 import {MtxPipelineLib} from "../src/metatx/MtxPipelineLib.sol";
 import {HederaLib} from "../src/hedera/HederaLib.sol";
@@ -191,7 +193,7 @@ abstract contract DeployBase is Script {
             // the link closure of NormalToken (task 6): MtxPipelineLib, which links HederaLib
             address[] memory libs = new address[](4);
             (libs[0], libs[1], libs[2], libs[3]) =
-                (address(AdminLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
+                (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
             f.publishEnv(IOpenFactory.TokenKind.NORMAL, 1,
                 _env(f, address(reg), smartKeyAccountImpl, isHedera, new address[](0), libs));
             _requireReleaseGas("NormalToken");
@@ -199,8 +201,8 @@ abstract contract DeployBase is Script {
             _gate(none);
             vm.serializeAddress("deploy", "implementation_normal", none);
             // The DEX release (CTR-DEX-24): clones come from `createDex`; DEX version 1.
-            address[] memory dexLibs = new address[](1);
-            dexLibs[0] = address(TradeLib);
+            address[] memory dexLibs = new address[](2);
+            (dexLibs[0], dexLibs[1]) = (address(GovernanceLib), address(TradeLib));
             f.publishDexEnv(1, _env(f, address(0), smartKeyAccountImpl, isHedera, new address[](0), dexLibs));
             _requireReleaseGas("SCaaSDex");
             address dexImpl = f.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, "");
@@ -348,7 +350,7 @@ abstract contract DeployBase is Script {
     function _zetherLibs(bool underlying) internal view returns (address[] memory l) {
         l = new address[](underlying ? 7 : 5);
         (l[0], l[1], l[2], l[3], l[4]) =
-            (address(AdminLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(ZetherLib));
+            (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(ZetherLib));
         if (underlying) (l[5], l[6]) = (address(WrappedLib), address(ZetherWrappedLib));
     }
 
@@ -421,7 +423,7 @@ abstract contract DeployBase is Script {
         c.name = name;
         c.symbol = symbol;
         c.decimals = 6;
-        c.features = 1 << AdminLib.PAYABLE;
+        c.features = 1 << GovernanceBits.PAYABLE;
         c.initialSupply = supply;
         c.initialHolder = holder;
         return f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), tokenSalt);

@@ -33,7 +33,9 @@ import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue, pqzEnv, plainEnv} from "../helpers/Catalogue.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
@@ -1893,7 +1895,7 @@ contract PqzRig is PqzFixture, ParityCases {
         address impl = Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1,
             pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(WrappedPqzToken).creationCode);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-        c.features = 1 << AdminLib.PAYABLE;
+        c.features = 1 << GovernanceBits.PAYABLE;
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
@@ -2016,7 +2018,7 @@ contract ZetherRig is ZetherFixture, ParityCases {
         address impl = Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(),
             type(WrappedZetherToken).creationCode);
         IFactoryToken.TokenConfig memory c = _cfg(true, uint256(1) << 40);
-        c.features = 1 << AdminLib.PAYABLE;
+        c.features = 1 << GovernanceBits.PAYABLE;
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);

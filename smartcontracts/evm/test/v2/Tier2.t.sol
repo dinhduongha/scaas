@@ -8,9 +8,11 @@ import {SenderPaysFeeERC20, SlashableERC20, NoDecimals, BadDecimals, RateAdminFo
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
@@ -39,7 +41,7 @@ contract Tier2Test is V2Fixture {
 
     function test_oneToOneIsV1Behaviour() public {
         WrappedToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
-        assertEq(t.kind(), AdminLib.KIND_WRAPPED);
+        assertEq(t.kind(), TokenStore.KIND_WRAPPED);
         assertEq(t.underlying(), address(usdc));
         assertEq(t.underlyings().length, 1);
         _fund(usdc, alice, 100e6, address(t));
@@ -274,7 +276,7 @@ contract Tier2Test is V2Fixture {
         _refuse(address(usdc), 1, 1, c, cfgErr);
         // adjustable: admin must have code, delay [2d, 30d], step [1, 1000]
         _refuse(address(usdc), 1, 1, _adjustable(bob),
-            abi.encodeWithSelector(ITokenAdmin.RoleNotContract.selector, uint8(3), bob));
+            abi.encodeWithSelector(IGovernance.RoleNotContract.selector, uint8(3), bob));
         address adm = address(new RateAdminForwarder());
         c = _adjustable(adm);
         c.rateDelay = 2 days - 1;
@@ -296,7 +298,7 @@ contract Tier2Test is V2Fixture {
         uint256[] memory one = new uint256[](2);
         one[0] = one[1] = 1;
         WrappedToken t = WrappedToken(this.initExt(two, _multiInit(two, one, one, _fixedRate(), address(0))));
-        assertEq(t.kind(), AdminLib.KIND_WRAPPED);
+        assertEq(t.kind(), TokenStore.KIND_WRAPPED);
         assertEq(t.underlying(), address(0));
         assertEq(t.underlyings().length, 2);
         vm.expectRevert(IWrappedToken.UnderlyingRequired.selector);

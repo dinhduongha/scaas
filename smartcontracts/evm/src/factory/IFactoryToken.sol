@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {AdminLib} from "../metatx/AdminLib.sol";
+import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {TokenStore} from "../metatx/TokenStore.sol";
 
 // Positions in `IFactoryToken.Env.deps` (plan 5g-Z2): the `*_ZETHER` kinds' transfer, burn and inner-product verifiers
 // and `ZetherDisclosure` of one curve (CTR-ZTH-20); the `*_PQZ` kinds' `UAPqzVerifier`.
@@ -82,7 +84,7 @@ interface IFactoryToken {
         uint256 features;
         uint256 lockedFeatures;
         address owner;               // 0 = no administration ever
-        AdminLib.Roles roles;        // initial holders, each only for a set flag
+        GovernanceLib.Roles roles;        // initial holders, each only for a set flag
         uint256 initialSupply;       // NORMAL* only
         address initialHolder;       // NORMAL* only
         Leg[] legs;                  // WRAPPED* only, 1..8

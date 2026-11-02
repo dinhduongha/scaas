@@ -7,7 +7,10 @@ import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
 import {UAMetaTxBase} from "../metatx/UAMetaTxBase.sol";
 import {MetaTxBase} from "../metatx/MetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
-import {AdminLib} from "../metatx/AdminLib.sol";
+import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {TokenStore} from "../metatx/TokenStore.sol";
+import {GovernanceBase} from "../governance/GovernanceBase.sol";
 import {WrappedLib} from "../metatx/WrappedLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
@@ -49,7 +52,11 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
     }
 
     function kind() public pure override(WrappedToken, MetaTokenBase) returns (uint8) {
-        return AdminLib.KIND_WRAPPED_ZETHER;
+        return TokenStore.KIND_WRAPPED_ZETHER;
+    }
+
+    function _validBits() internal pure override(WrappedToken, GovernanceBase) returns (uint256) {
+        return GovernanceBits.WRAPPED_BITS;
     }
 
     /// @dev Never reached: `_initRaw` is the kind's init.
@@ -121,9 +128,9 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
     }
 
     /// @notice As `WrappedToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
-    function disableFeature(uint8 bit) external override(WrappedToken, MetaTokenBase) nonReentrant {
-        AdminLib.disableFeature(bit, _msgSender());
-        if (bit == AdminLib.RATE_ADJUSTABLE) WrappedLib.dropPending();
+    function disableFeature(uint8 bit) external override(WrappedToken, GovernanceBase) nonReentrant {
+        GovernanceLib.disableFeature(bit, _msgSender());
+        if (bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }
 
     /// @notice The collateral check of a rate change counts the shielded value too.

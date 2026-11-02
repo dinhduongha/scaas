@@ -6,7 +6,9 @@ import {DeployHarness} from "../helpers/DeployHarness.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
@@ -89,8 +91,8 @@ contract ZetherDeployTest is Test {
             WrappedZetherToken(payable(f.implementationOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1)));
         // CTR-ZTH-20: one release per kind on the canonical verifiers, the curve an attribute of the release (`curve()`)
         address tv = _checkCurve(f, h, json);
-        assertEq(none.kind(), AdminLib.KIND_NORMAL_ZETHER);
-        assertEq(und.kind(), AdminLib.KIND_WRAPPED_ZETHER);
+        assertEq(none.kind(), TokenStore.KIND_NORMAL_ZETHER);
+        assertEq(und.kind(), TokenStore.KIND_WRAPPED_ZETHER);
         address reg = vm.parseJsonAddress(json, ".ua_registry");
         assertEq(vm.parseJsonAddress(json, ".zether_registry"), reg, "the same registry");
         assertFalse(IUARegistry(reg).kindEnabled(0x0140), "zether-bn254 is in legacy/ua6/");
@@ -108,7 +110,7 @@ contract ZetherDeployTest is Test {
 
         // a token from the deployed catalogue, on the deployed verifier
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << AdminLib.PAYABLE);
+        (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << GovernanceBits.PAYABLE);
         c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0);
         ZetherLayer t = ZetherLayer(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z"));
         assertEq(address(t.verifier()), tv);
@@ -149,7 +151,7 @@ contract ZetherDeployTest is Test {
             _checkCurve(f, h, json);
             assertTrue(IUARegistry(vm.parseJsonAddress(json, ".ua_registry")).kindEnabled(UAKinds.ZETHER_BLS12381));
             IFactoryToken.TokenConfig memory c;
-            (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << AdminLib.PAYABLE);
+            (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << GovernanceBits.PAYABLE);
             c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0);
             assertTrue(f.isRegisteredToken(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z")));
         }

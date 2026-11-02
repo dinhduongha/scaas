@@ -2,7 +2,9 @@
 pragma solidity ^0.8.24;
 
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
-import {AdminLib} from "../metatx/AdminLib.sol";
+import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {TokenStore} from "../metatx/TokenStore.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
 import {WrappedLib} from "../metatx/WrappedLib.sol";
@@ -35,7 +37,7 @@ library ZetherWrappedLib {
     function init(bytes calldata initArgs, IZetherVerifier v) public {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         if (cfg.initialSupply != 0 || cfg.initialHolder != address(0)) revert IFactoryToken.ConfigFieldForOtherKind(1);
-        WrappedLib.initToken(cfg, false, AdminLib.KIND_WRAPPED_ZETHER);
+        WrappedLib.initToken(cfg, false, TokenStore.KIND_WRAPPED_ZETHER, GovernanceBits.WRAPPED_BITS);
         ZetherLib.init(cfg.conf, v);
     }
 

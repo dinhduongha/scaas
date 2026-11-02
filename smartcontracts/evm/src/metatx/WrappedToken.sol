@@ -2,7 +2,9 @@
 pragma solidity ^0.8.24;
 
 import {MetaTokenBase} from "./MetaTokenBase.sol";
-import {AdminLib} from "./AdminLib.sol";
+import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {TokenStore} from "./TokenStore.sol";
 import {WrappedLib} from "./WrappedLib.sol";
 import {IWrappedToken} from "./IWrappedToken.sol";
 import {MetaTxBase} from "./MetaTxBase.sol";
@@ -67,13 +69,17 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     constructor(uint16, Env memory env, bytes memory) MetaTokenBase(env) {}
 
     function kind() public pure virtual override returns (uint8) {
-        return AdminLib.KIND_WRAPPED;
+        return TokenStore.KIND_WRAPPED;
     }
 
     /// @dev `initialSupply`, `initialHolder`, `conf` must be empty; legs and rate are checked in `WrappedLib`.
+    function _validBits() internal pure virtual override returns (uint256) {
+        return GovernanceBits.WRAPPED_BITS | GovernanceBits.REGULATED;
+    }
+
     function _init(TokenConfig memory cfg) internal virtual override {
         _requireUnused(cfg, true, false, false, true);
-        WrappedLib.initToken(cfg, IS_HEDERA, AdminLib.KIND_WRAPPED);
+        WrappedLib.initToken(cfg, IS_HEDERA, TokenStore.KIND_WRAPPED, _validBits());
     }
 
     // ------------------------------------------------------------------ wrap / unwrap / reserve
@@ -267,8 +273,8 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
 
     /// @notice `disableFeature(RATE_ADJUSTABLE)` also cancels a pending rate change (CTR-TOK-06).
     function disableFeature(uint8 bit) external virtual override nonReentrant {
-        AdminLib.disableFeature(bit, _msgSender());
-        if (bit == AdminLib.RATE_ADJUSTABLE) WrappedLib.dropPending();
+        GovernanceLib.disableFeature(bit, _msgSender());
+        if (bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }
 
     // ------------------------------------------------------------------ allowlist (CTR-MTX-19)
@@ -349,7 +355,7 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     }
 
     function rateAdjustable() external view returns (bool) {
-        return AdminLib.hasFeature(AdminLib.RATE_ADJUSTABLE);
+        return GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE);
     }
 
     function rateDelay() external view returns (uint32) {

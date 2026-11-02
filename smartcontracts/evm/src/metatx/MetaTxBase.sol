@@ -317,7 +317,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
 
     /// @dev The body of `nonReentrant`, one copy for every entry (lever 2, owner 2026-11-01). Returns whether this frame
     ///      holds the guard; only the self-call under a live ticket may enter it again, and that consumes the ticket.
-    function _enter() private returns (bool outer) {
+    function _enter() internal returns (bool outer) {
         outer = _tload(_GUARD) == 0;
         if (outer) {
             _tstore(_GUARD, 1);
@@ -327,7 +327,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         }
     }
 
-    function _exit(bool outer) private {
+    function _exit(bool outer) internal {
         if (outer) _tstore(_GUARD, 0);
     }
 

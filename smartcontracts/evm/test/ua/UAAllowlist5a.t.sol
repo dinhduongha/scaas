@@ -4,9 +4,11 @@ pragma solidity ^0.8.24;
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
@@ -63,11 +65,11 @@ contract UAAllowlist5aTest is UALedgerBase {
         NormalToken nb =
             NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
         IFactoryToken.TokenConfig memory c = normalInit("NB", "NB", 6, 0, address(0), address(this));
-        c.features = (1 << AdminLib.PAYABLE) | (1 << AdminLib.MINTABLE);
+        c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE);
         nb.initialize(address(this), 1, abi.encode(c));
         nb.mintToUA(uaP, 10);
         _exec(address(nb), _m(address(nb), uaP, abi.encodeCall(NormalToken.burn, (1))),
-            abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, AdminLib.BURNABLE));
+            abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.BURNABLE));
     }
 
     /// A native signer burns its own address balance (`mtxExecute` on the ids path).

@@ -8,11 +8,13 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, normalInit, wrappedInit, Rate} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 
 /// Answers nothing the factory asks.
@@ -128,7 +130,7 @@ contract FactoryTest is Test {
         vm.expectRevert(IOpenFactory.EnvInvalid.selector);
         f.publishEnv(NORMAL, 2, bad);
         // a pin that pins nothing (review 5g-Z2 P2-1): 0 (no account) or keccak256("") (no code)
-        (bad.libs[0], bad.libCodeHashes) = (address(AdminLib), new bytes32[](1));
+        (bad.libs[0], bad.libCodeHashes) = (address(GovernanceLib), new bytes32[](1));
         vm.expectRevert(IOpenFactory.EnvInvalid.selector);
         f.publishEnv(NORMAL, 2, bad);
         bad.libCodeHashes[0] = keccak256("");
@@ -165,7 +167,7 @@ contract FactoryTest is Test {
         IFactoryToken.Env memory e = plainEnv(address(f), address(0), UID_, address(0), false);
         e.libs = new address[](2);
         e.libCodeHashes = new bytes32[](2);
-        (e.libs[0], e.libCodeHashes[0]) = (address(AdminLib), address(AdminLib).codehash);
+        (e.libs[0], e.libCodeHashes[0]) = (address(GovernanceLib), address(GovernanceLib).codehash);
         (e.libs[1], e.libCodeHashes[1]) = (address(usdc), keccak256("not the code"));
         uint16 ev = Catalogue.env(f, NORMAL, e);
         vm.prank(registrar);
@@ -461,7 +463,7 @@ contract FactoryTest is Test {
     function test_factoryOnlyForwards_theTokenValidatesFlagsAndFields() public {
         IFactoryToken.TokenConfig memory c = _normal(alice);
         c.features |= 1 << 3; // RATE_ADJUSTABLE on NORMAL
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, 3));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, 3));
         f.createToken(NORMAL, 1, abi.encode(c), "a");
         c = _normal(alice);
         c.rate.rateDelay = 7 days;

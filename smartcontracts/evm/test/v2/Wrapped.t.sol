@@ -8,11 +8,13 @@ import {MockERC20} from "../helpers/Mocks.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 
-/// Kind `WRAPPED` on `AdminLib` (CTR-TOK-22): flags valid for the kind, the rate role and the guardian as roles,
+/// Kind `WRAPPED` on `GovernanceLib` (CTR-TOK-22): flags valid for the kind, the rate role and the guardian as roles,
 /// `disableFeature(RATE_ADJUSTABLE)` cancels a pending change, the single-asset ABI rule, the leg count, and
 /// `WrappedLib` writing only its own namespace.
 contract WrappedTest is V2Fixture {
@@ -53,22 +55,22 @@ contract WrappedTest is V2Fixture {
         (address[] memory us, uint256[] memory one) = _two();
         Rate memory fixedRate;
         IFactoryToken.TokenConfig memory c = wrappedInit(us, one, one, 6, fixedRate, address(0), address(0));
-        c.features |= 1 << AdminLib.MINTABLE;
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.MINTABLE));
+        c.features |= 1 << GovernanceBits.MINTABLE;
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.MINTABLE));
         this.initExt(us, abi.encode(c));
         c = wrappedInit(us, one, one, 6, fixedRate, address(0), address(0));
         c.roles.rateAdmin = address(new RateAdminForwarder());
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.RoleWithoutFeature.selector, RATE));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, RATE));
         this.initExt(us, abi.encode(c));
         c = wrappedInit(us, one, one, 6, _adjustable(bob), address(0), address(0));
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.RoleNotContract.selector, RATE, bob));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleNotContract.selector, RATE, bob));
         this.initExt(us, abi.encode(c));
         // adjustable without an initial rate admin is valid: the owner grants the role later
         c = wrappedInit(us, one, one, 6, _adjustable(address(0)), address(0), wrapperOwner);
         WrappedToken t = WrappedToken(this.initExt(us, abi.encode(c)));
         assertTrue(t.rateAdjustable());
-        assertEq(t.kind(), AdminLib.KIND_WRAPPED);
-        assertEq(t.features(), (1 << AdminLib.PAYABLE) | (1 << RATE));
+        assertEq(t.kind(), TokenStore.KIND_WRAPPED);
+        assertEq(t.features(), (1 << GovernanceBits.PAYABLE) | (1 << RATE));
     }
 
     /// E6: the factory indexes the same `legs` the token reads; a direct `initialize` with 0 or 9 legs is refused by
@@ -123,7 +125,7 @@ contract WrappedTest is V2Fixture {
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapPausedForRateChange.selector, address(usdc)));
         t.wrap(10);
         vm.expectEmit(address(t));
-        emit ITokenAdmin.FeatureDisabled(RATE, wrapperOwner);
+        emit IGovernance.FeatureDisabled(RATE, wrapperOwner);
         vm.expectEmit(address(t));
         emit IWrappedToken.RateChangeCancelled(address(usdc));
         vm.prank(wrapperOwner);

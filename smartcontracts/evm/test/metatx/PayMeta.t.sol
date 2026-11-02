@@ -9,8 +9,10 @@ import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IRig, PlainRig, PqzRig, ZetherRig} from "./MetaTxParity.t.sol";
 
@@ -29,8 +31,8 @@ contract PayMetaTest is Test {
         | MetaTxLib.MODE_FEE_FIXED;
     uint256 internal constant FEE = 5;
     uint256 internal constant AMOUNT = 1_000;
-    // AdminLib's ERC-7201 `scaas.token`: slot 0 of `TokenStorage` is `features`
-    bytes32 internal constant TOKEN_STORAGE = 0x83083067f3d1caf66741d4eeefa9d3f4f0e5b0793677731d6fee7e67b774ac00;
+    // GovernanceLib's ERC-7201 `scaas.governance`: slot 0 of `GovernanceStorage` is `features`
+    bytes32 internal constant TOKEN_STORAGE = 0x0a3a361961b35589cdb03530b6f9e23a4db6ca9a0dad5ddf5d7761c7fabc8700;
     string internal constant FILE = "../vectors/metatx/paymeta.json";
 
     address internal signer = vm.addr(PK);
@@ -238,10 +240,10 @@ contract PayMetaTest is Test {
         for (uint256 i; i < toks.length; ++i) {
             address t = toks[i];
             uint256 f = uint256(vm.load(t, TOKEN_STORAGE));
-            assertEq(f & (1 << AdminLib.PAYABLE), 1 << AdminLib.PAYABLE, kinds[i]);
-            vm.store(t, TOKEN_STORAGE, bytes32(f & ~uint256(1 << AdminLib.PAYABLE)));
+            assertEq(f & (1 << GovernanceBits.PAYABLE), 1 << GovernanceBits.PAYABLE, kinds[i]);
+            vm.store(t, TOKEN_STORAGE, bytes32(f & ~uint256(1 << GovernanceBits.PAYABLE)));
             (bytes32 salt, bytes memory meta) = _meta(400 + i);
-            bytes memory err = abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, AdminLib.PAYABLE);
+            bytes memory err = abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.PAYABLE);
             vm.expectRevert(err);
             MetaTokenBase(t).mtxPayMeta(signer, PAYEE, AMOUNT, salt, meta, block.timestamp + 1, MODE, REL, FEE, FEE_TO, "");
             vm.expectRevert(err);

@@ -5,12 +5,14 @@ import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
 import {IConfidentialToken, IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
@@ -106,7 +108,7 @@ contract ZetherWrappedTest is ZetherFixture {
         c.name = "Zether wrapped";
         c.symbol = "zW";
         c.decimals = 6;
-        c.features = (1 << AdminLib.PAYABLE) | (1 << AdminLib.RATE_ADJUSTABLE) | (1 << AdminLib.WRAP_DISABLEABLE);
+        c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.RATE_ADJUSTABLE) | (1 << GovernanceBits.WRAP_DISABLEABLE);
         c.owner = address(this);
         c.roles.rateAdmin = address(this);
         c.roles.guardian = address(this);
@@ -211,7 +213,7 @@ contract ZetherWrappedTest is ZetherFixture {
         c.name = "S";
         c.symbol = "S";
         c.decimals = 6;
-        c.features = (1 << AdminLib.PAYABLE) | (1 << AdminLib.RATE_ADJUSTABLE);
+        c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.RATE_ADJUSTABLE);
         c.roles.rateAdmin = address(this);
         c.rate = IFactoryToken.RateConfig(2 days, 1000);
         c.legs = new IFactoryToken.Leg[](1);
@@ -381,19 +383,19 @@ contract ZetherWrappedTest is ZetherFixture {
         w.proposeRate(address(usd), 11, 10);
         (address pu,,,) = w.pendingRate();
         assertEq(pu, address(usd));
-        w.disableFeature(AdminLib.RATE_ADJUSTABLE);
+        w.disableFeature(GovernanceBits.RATE_ADJUSTABLE);
         (pu,,,) = w.pendingRate();
         assertEq(pu, address(0), "the pending change is gone");
         assertFalse(w.rateAdjustable());
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.features) = ("F", "F", 6, 1 << AdminLib.FREEZE);
+        (c.name, c.symbol, c.decimals, c.features) = ("F", "F", 6, 1 << GovernanceBits.FREEZE);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         c.conf = IFactoryToken.ConfidentialConfig("", SCALE, 100, FEE, 0, 0, 0);
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.FREEZE));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.FREEZE));
         factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "freeze");
-        c.features = 1 << AdminLib.MINTABLE;
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.MINTABLE));
+        c.features = 1 << GovernanceBits.MINTABLE;
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.MINTABLE));
         factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "mint");
         // `initialSupply` / `initialHolder` are the `NORMAL*` kinds' (CTR-TOK-25): refused, never silently ignored
         c.features = 0;
@@ -413,7 +415,7 @@ contract ZetherWrappedTest is ZetherFixture {
         Catalogue.plain(factory, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0),
             address(0), false);
         IFactoryToken.TokenConfig memory pc;
-        (pc.name, pc.symbol, pc.decimals, pc.features) = ("Points", "PTS", 6, 1 << AdminLib.PAYABLE);
+        (pc.name, pc.symbol, pc.decimals, pc.features) = ("Points", "PTS", 6, 1 << GovernanceBits.PAYABLE);
         (pc.initialSupply, pc.initialHolder) = (50 * SCALE, payer);
         NormalToken pts = NormalToken(factory.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(pc), "pts"));
         address[] memory legs = new address[](1);
@@ -522,7 +524,7 @@ contract ZetherWrappedTest is ZetherFixture {
         hook.mint(address(this), SCALE);
         hook.approve(address(z), SCALE);
         bytes[2] memory calls =
-            [abi.encodeCall(z.disableFeature, (AdminLib.RATE_ADJUSTABLE)), abi.encodeCall(z.executeRate, ())];
+            [abi.encodeCall(z.disableFeature, (GovernanceBits.RATE_ADJUSTABLE)), abi.encodeCall(z.executeRate, ())];
         for (uint256 i; i < 2; ++i) {
             hook.arm(address(z), calls[i]);
             vm.expectRevert(IMetaTx.Reentrancy.selector);
@@ -571,7 +573,7 @@ contract ZetherWrappedTest is ZetherFixture {
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, IConfidentialWrappedToken.mtxWrapShield.selector));
         w.mtxExecute(m, sig);
-        assertEq(w.kind(), AdminLib.KIND_WRAPPED_ZETHER);
+        assertEq(w.kind(), TokenStore.KIND_WRAPPED_ZETHER);
         (, string memory n,,,,,) = w.eip712Domain();
         assertEq(n, "SCaaS ZetherToken");
     }

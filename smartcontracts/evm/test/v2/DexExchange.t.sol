@@ -9,6 +9,7 @@ import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {ISCaaSDex, IExchangeExecutor} from "../../src/dex/ISCaaSDex.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {DexPuller} from "../../src/dex/DexPuller.sol";
@@ -809,9 +810,9 @@ contract DexExchangeTest is Test {
     // ------------------------------------------------------------------ admin (CTR-DEX-03)
 
     function test_setExchangeTarget_setListedOnly_onlyAdmin() public {
-        vm.expectRevert(_err(ISCaaSDex.NotAdmin.selector, address(this)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(11), address(this)));
         dex.setExchangeTarget(address(router), true);
-        vm.expectRevert(_err(ISCaaSDex.NotAdmin.selector, address(this)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(11), address(this)));
         dex.setListedOnly(true);
         vm.startPrank(admin);
         vm.expectEmit(address(dex));

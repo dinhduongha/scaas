@@ -7,7 +7,7 @@ import {MockERC20} from "../helpers/Mocks.sol";
 import {SlashableERC20, RateAdminForwarder} from "./helpers/V2Mocks.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 
 /// T2: tỉ lệ cố định / điều chỉnh được, timelock, chỉ admin thực thi, tạm dừng wrap (TW2 §6, R135, R147).
 contract RatesTest is V2Fixture {
@@ -190,8 +190,8 @@ contract RatesTest is V2Fixture {
     function test_renounceRoleKeepsThePendingChange_disableFeatureCancelsIt() public {
         _propose(101, 100);
         vm.expectEmit(address(t));
-        emit ITokenAdmin.RoleRevoked(3, address(adm), address(adm));
-        _admin(abi.encodeCall(ITokenAdmin.renounceRole, (3)));
+        emit IGovernance.RoleRevoked(3, address(adm), address(adm));
+        _admin(abi.encodeCall(IGovernance.renounceRole, (3)));
         assertFalse(t.hasRole(3, address(adm)));
         assertTrue(t.rateAdjustable());
         (address u,,,) = t.pendingRate();

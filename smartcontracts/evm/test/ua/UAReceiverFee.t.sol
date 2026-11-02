@@ -11,8 +11,10 @@ import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -223,12 +225,12 @@ contract UAReceiverFeeTest is UALedgerBase {
         NormalToken np =
             NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
         IFactoryToken.TokenConfig memory c = normalInit("NP", "NP", 6, 0, address(0), address(this));
-        c.features = (1 << AdminLib.MINTABLE) | (1 << AdminLib.BURNABLE);
+        c.features = (1 << GovernanceBits.MINTABLE) | (1 << GovernanceBits.BURNABLE);
         np.initialize(address(this), 1, abi.encode(c));
         np.mintToUA(uaP, 10);
         t = _pay(uaP, uaE, 10);
         t.batch = np.payLane(t.entryRef);
-        _call(np, t, 1, FEE_TO, until, abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, AdminLib.PAYABLE));
+        _call(np, t, 1, FEE_TO, until, abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.PAYABLE));
         assertEq(tok.balanceOfUA(uaP), N);
     }
 

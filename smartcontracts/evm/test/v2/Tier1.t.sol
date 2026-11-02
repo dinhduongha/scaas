@@ -5,10 +5,12 @@ import {SigCheck} from "../../src/common/SigCheck.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {V2Fixture, UID_, normalInit} from "./helpers/V2Fixture.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
@@ -28,7 +30,7 @@ contract Tier1Test is V2Fixture {
         assertEq(t.totalSupply(), 500);
         assertTrue(t.hasRole(1, minter));
         assertEq(t.decimals(), 0);
-        assertEq(t.kind(), AdminLib.KIND_NORMAL);
+        assertEq(t.kind(), TokenStore.KIND_NORMAL);
     }
 
     function test_onlyMinterMints() public {
@@ -37,7 +39,7 @@ contract Tier1Test is V2Fixture {
         t.mint(bob, 7);
         assertEq(t.balanceOf(bob), 7);
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.MissingRole.selector, uint8(1), bob));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), bob));
         t.mint(bob, 1);
     }
 
@@ -48,21 +50,21 @@ contract Tier1Test is V2Fixture {
         c.features &= ~uint256(1 << 1); // no MINTABLE
         NormalToken t = NormalToken(_clone(normalImpl, address(this), new address[](0), abi.encode(c)));
         vm.prank(address(0));
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, uint8(1)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(1)));
         t.mint(bob, 1);
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.MissingRole.selector, uint8(1), address(this)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), address(this)));
         t.renounceRole(1);
     }
 
     function test_renounceMinterIsOneWay() public {
         NormalToken t = _normal(address(this), 0, minter);
         vm.expectEmit(address(t));
-        emit ITokenAdmin.RoleRevoked(1, minter, minter);
+        emit IGovernance.RoleRevoked(1, minter, minter);
         vm.prank(minter);
         t.renounceRole(1);
         assertFalse(t.hasRole(1, minter));
         vm.prank(minter);
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.MissingRole.selector, uint8(1), minter));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), minter));
         t.mint(bob, 1);
     }
 

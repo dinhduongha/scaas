@@ -49,7 +49,7 @@ interface IOpenFactory {
         uint64 indexed version, address indexed implementation, uint16 envVersion, bytes32 envHash, bytes32 initcodeHash,
         bytes32 codeHash, uint64 usableFrom);
     event DexImplementationDeprecated(uint64 indexed version, string reason);
-    event DexCreated(address indexed dex, address indexed creator, uint64 version, address implementation, address admin);
+    event DexCreated(address indexed dex, address indexed creator, uint64 version, address implementation, address owner);
 
     error NotRegistrar();
     error ChainUidZero();

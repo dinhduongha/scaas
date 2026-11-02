@@ -5,7 +5,9 @@ import {Test} from "forge-std/Test.sol";
 import {OpenFactory} from "../../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
-import {AdminLib} from "../../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../../src/metatx/TokenStore.sol";
 import {UARegistry} from "../../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../../src/ua/UAKinds.sol";
 import {SchnorrBn254Verifier, ZetherSchnorrBls12381Verifier} from "../../../src/ua/verifiers/PairingVerifiers.sol";
@@ -132,7 +134,7 @@ abstract contract ZetherFixture is Test {
         c.name = "Zether USD";
         c.symbol = "zUSD";
         c.decimals = 6;
-        c.features = (1 << AdminLib.PAYABLE) | (1 << AdminLib.MINTABLE) | (1 << AdminLib.BURNABLE);
+        c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE) | (1 << GovernanceBits.BURNABLE);
         c.roles.minter = address(this);
         c.conf = IFactoryToken.ConfidentialConfig(
             auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, maxShielded, FEE, dMode,

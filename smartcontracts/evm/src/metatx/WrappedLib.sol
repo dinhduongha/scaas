@@ -13,7 +13,9 @@ import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {ITradeToken} from "../trade/ITradeToken.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {SigCheck} from "../common/SigCheck.sol";
-import {AdminLib} from "./AdminLib.sol";
+import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {TokenStore} from "./TokenStore.sol";
 import {MetaTokenBase} from "./MetaTokenBase.sol";
 import {HederaLib} from "../hedera/HederaLib.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
@@ -78,17 +80,19 @@ library WrappedLib {
     // ------------------------------------------------------------------ init
 
     /// @notice The token's `_init`: legs 1–8 (the factory's index reads the same `legs`), the metadata, the
-    ///         flags/owner/roles of `kind` (`AdminLib.init`: `WRAPPED` or `WRAPPED_ZETHER`), the rate config, then
+    ///         flags/owner/roles of `kind` (`GovernanceLib.init`: `WRAPPED` or `WRAPPED_ZETHER`), the rate config, then
     ///         the legs in their given order (never changes).
-    function initToken(IFactoryToken.TokenConfig memory c, bool isHedera, uint8 kind) public {
+    function initToken(IFactoryToken.TokenConfig memory c, bool isHedera, uint8 kind, uint256 valid) public {
         uint256 n = c.legs.length;
         if (n == 0 || n > MAX_LEGS) revert MetaTokenBase.UnderlyingCountInvalid(n);
-        AdminLib.TokenStorage storage t = AdminLib.$();
+        TokenStore.TokenStorage storage t = TokenStore.$();
         t.name = c.name;
         t.symbol = c.symbol;
         t.decimals = c.decimals;
-        AdminLib.init(kind, c.features, c.lockedFeatures, c.owner, c.roles);
-        bool adjustable = AdminLib.hasFeature(AdminLib.RATE_ADJUSTABLE);
+        t.kind = kind;
+        GovernanceLib.init(c.features, c.lockedFeatures, c.owner, c.roles, valid, GovernanceBits.TOKEN_ROLES,
+            GovernanceBits.TOKEN_CONTRACT_ONLY);
+        bool adjustable = GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE);
         WrappedStorage storage s = $();
         IFactoryToken.RateConfig memory rate = c.rate;
         if (!adjustable) {
@@ -343,7 +347,7 @@ library WrappedLib {
 
     /// @notice One-way: no re-enable (a compromised guardian reopening a depegged inflow would drain the good legs).
     function disableWrap(address u, bytes32 reason, address caller) public {
-        if (!AdminLib.hasFeature(AdminLib.WRAP_DISABLEABLE) || !AdminLib.hasRole(AdminLib.WRAP_DISABLEABLE, caller)) {
+        if (!GovernanceLib.hasFeature(GovernanceBits.WRAP_DISABLEABLE) || !GovernanceLib.hasRole(GovernanceBits.WRAP_DISABLEABLE, caller)) {
             revert IWrappedToken.NotGuardian();
         }
         Leg storage L = $().legs[indexOf(u)];
@@ -355,8 +359,8 @@ library WrappedLib {
     // ------------------------------------------------------------------ rates (CTR-TOK-06, CTR-TOK-13)
 
     function _onlyRateAdmin(address caller) private view {
-        if (!AdminLib.hasFeature(AdminLib.RATE_ADJUSTABLE)) revert IWrappedToken.RateFixed();
-        if (!AdminLib.hasRole(AdminLib.RATE_ADJUSTABLE, caller)) revert IWrappedToken.NotRateAdmin();
+        if (!GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE)) revert IWrappedToken.RateFixed();
+        if (!GovernanceLib.hasRole(GovernanceBits.RATE_ADJUSTABLE, caller)) revert IWrappedToken.NotRateAdmin();
     }
 
     /// @notice The step is checked ONCE, here, against the current rate (which cannot change while pending).

@@ -17,6 +17,9 @@ import {UAKinds} from "../ua/UAKinds.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {DexPuller} from "./DexPuller.sol";
 import {TokenCall} from "./TokenCall.sol";
+import {GovernanceBase} from "../governance/GovernanceBase.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {GovernanceLib} from "../governance/GovernanceLib.sol";
 
 /// @title `SCaaSDex` (CTR-DEX-16, -17, -11, -03, -24, -18, -22, -08, -20, -21, -23): an EIP-1167 clone made by
 ///        `OpenFactory.createDex`.
@@ -43,7 +46,7 @@ import {TokenCall} from "./TokenCall.sol";
 ///         over ids; a UA leg's starved verify (`UAVerifyGas`) reverts the whole `mtxSettle`. Hybrid (`mtxHybrid` /
 ///         `mtxHybridVia`, spec §4): one listed-market taker against 0..n makers at their own price and the rest of
 ///         its sell routed outside, in one atomic plan; the taker alone gets the output above `outsideFloor`.
-contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
+contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, GovernanceBase {
     uint256 internal constant PPM = 1_000_000;
     uint8 internal constant ESCROW = 2;
     uint8 internal constant KIND_SCAAS = 1;
@@ -69,7 +72,6 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     /// @custom:storage-location erc7201:scaas.dex
     struct DexStorage {
         bool initialized;
-        address admin;
         uint32 relayerSharePpm;
         address treasury;
         bool listedOnly;
@@ -151,15 +153,43 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         DexStorage storage s = _s();
         if (s.initialized) revert AlreadyInitialized();
         s.initialized = true;
-        s.admin = cfg.admin;
+        GovernanceLib.Roles memory none;
+        GovernanceLib.init(GovernanceBits.DEX_BITS, 0, cfg.owner, none, GovernanceBits.DEX_BITS, GovernanceBits.DEX_BITS, 0);
+        if (cfg.owner != address(0)) { // today's admin: the owner lists and routes until it grants otherwise
+            GovernanceLib.grantRole(GovernanceBits.LISTING, cfg.owner, cfg.owner, GovernanceBits.DEX_BITS, 0);
+            GovernanceLib.grantRole(GovernanceBits.FEE_ROUTING, cfg.owner, cfg.owner, GovernanceBits.DEX_BITS, 0);
+        }
         s.listedOnly = cfg.listedOnly;
         s.puller = address(new DexPuller());
         _setFeeSplit(s, cfg.relayerSharePpm, cfg.treasury);
     }
 
+    /// @dev A governance entry never runs inside a settlement: no outside call of a running plan reaches it.
+    function _guardIn() internal view override returns (bool) {
+        if (_reentrancyGuardEntered()) revert ReentrancyGuardReentrantCall();
+        return false;
+    }
+
+    function _guardOut(bool) internal pure override {}
+
+    /// @dev An owner or holder that is an EIP-7702 designator is refused (owner ruling 2026-10-30, D2).
+    function _caller() internal view override returns (address) {
+        SigCheck.requireNotDelegated(msg.sender);
+        return msg.sender;
+    }
+
+    function _validBits() internal pure override returns (uint256) { return GovernanceBits.DEX_BITS; }
+    function _roleBits() internal pure override returns (uint256) { return GovernanceBits.DEX_BITS; }
+    function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
+
+    function _power(uint8 bit) private view returns (DexStorage storage) {
+        GovernanceLib.requireRole(bit, _caller());
+        return _s();
+    }
+
     /// @notice Lists or delists the pair and records each token's kind from the factory (never from a leg).
     function setMarket(address base, address quote, bool listed) external {
-        DexStorage storage s = _onlyAdmin();
+        DexStorage storage s = _power(GovernanceBits.LISTING);
         if (base == quote || base == address(0) || quote == address(0)) revert BadMarket(base, quote); // C6-9
         bytes32 k = _pair(base, quote);
         if (s.listed[k] != listed) {
@@ -178,18 +208,18 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     }
 
     function setFeeSplit(uint32 relayerSharePpm_, address treasury_) external {
-        _setFeeSplit(_onlyAdmin(), relayerSharePpm_, treasury_);
+        _setFeeSplit(_power(GovernanceBits.FEE_ROUTING), relayerSharePpm_, treasury_);
     }
 
     /// @notice Lists or delists an interaction target or an executor (CTR-DEX-23).
     function setExchangeTarget(address target, bool listed) external {
-        _onlyAdmin().exchangeTarget[target] = listed;
+        _power(GovernanceBits.LISTING).exchangeTarget[target] = listed;
         emit ExchangeTargetSet(target, listed);
     }
 
     /// @notice DEX-wide listed-only mode for the exchange path (CTR-DEX-23); a leg's `LISTED_POOLS` asks the same.
     function setListedOnly(bool on) external {
-        _onlyAdmin().listedOnly = on;
+        _power(GovernanceBits.LISTING).listedOnly = on;
         emit ListedOnlySet(on);
     }
 
@@ -198,12 +228,6 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         s.relayerSharePpm = ppm;
         s.treasury = t;
         emit FeeSplitSet(ppm, t);
-    }
-
-    function _onlyAdmin() private view returns (DexStorage storage s) {
-        s = _s();
-        if (msg.sender != s.admin) revert NotAdmin(msg.sender);
-        SigCheck.requireNotDelegated(msg.sender); // owner ruling 2026-10-30, D2
     }
 
     /// @dev SCaaS iff the factory made it from a registered (version ≠ 0), non-deprecated implementation.
@@ -220,7 +244,6 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
 
     // ------------------------------------------------------------------ views
 
-    function admin() external view returns (address) { return _s().admin; }
     function relayerSharePpm() external view returns (uint32) { return _s().relayerSharePpm; }
     function treasury() external view returns (address) { return _s().treasury; }
     function listedOnly() external view returns (bool) { return _s().listedOnly; }

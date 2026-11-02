@@ -9,7 +9,9 @@ import {MetaTxLib} from "../src/common/MetaTxLib.sol";
 import {OpenFactory} from "../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../src/factory/IFactoryToken.sol";
-import {AdminLib} from "../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../src/metatx/TokenStore.sol";
 import {IUARegistry} from "../src/ua/IUARegistry.sol";
 import {UAKinds} from "../src/ua/UAKinds.sol";
 import {ZetherLayer} from "../src/zether/ZetherLayer.sol";
@@ -258,7 +260,7 @@ contract ZetherE2E is Script {
 
     function _normal() internal {
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.features) = ("Zether E2E", "zE2E", 6, 1 << AdminLib.PAYABLE);
+        (c.name, c.symbol, c.decimals, c.features) = ("Zether E2E", "zE2E", 6, 1 << GovernanceBits.PAYABLE);
         (c.initialSupply, c.initialHolder, c.conf) = (1_000_000, me, _conf());
         t = fac.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), salt);
         console.log(string.concat("      NORMAL_ZETHER token at ", vm.toString(t)));
@@ -372,7 +374,7 @@ contract ZetherE2E is Script {
         und = address(m);
         console.log(string.concat("      MockERC20 at ", vm.toString(und)));
         IFactoryToken.TokenConfig memory w;
-        (w.name, w.symbol, w.decimals, w.features, w.conf) = ("Zether wrapped E2E USD", "zweUSD", 6, 1 << AdminLib.PAYABLE, _conf());
+        (w.name, w.symbol, w.decimals, w.features, w.conf) = ("Zether wrapped E2E USD", "zweUSD", 6, 1 << GovernanceBits.PAYABLE, _conf());
         w.legs = new IFactoryToken.Leg[](1);
         w.legs[0] = IFactoryToken.Leg(und, 1, 1);
         wt = fac.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(w), salt);

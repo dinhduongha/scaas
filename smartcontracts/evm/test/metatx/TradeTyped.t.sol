@@ -22,7 +22,9 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {Catalogue, plainEnv} from "../helpers/Catalogue.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {UALedgerBase} from "../ua/UALedgerBase.sol";
@@ -374,7 +376,7 @@ contract OrderRowsPqzTest is OrderRows, PqzFixture {
 
     function _wrappedKind(address leg) internal override returns (WrappedToken) {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-        c.features = 1 << AdminLib.PAYABLE;
+        c.features = 1 << GovernanceBits.PAYABLE;
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
@@ -400,7 +402,7 @@ contract OrderRowsZetherTest is OrderRows, ZetherFixture {
 
     function _wrappedKind(address leg) internal override returns (WrappedToken) {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
-        c.features = 1 << AdminLib.PAYABLE;
+        c.features = 1 << GovernanceBits.PAYABLE;
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(leg, 1, 1);

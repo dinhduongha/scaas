@@ -7,7 +7,9 @@ import {PqzArgs} from "./PqzArgs.sol";
 import {OpenFactory} from "../../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
-import {AdminLib} from "../../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../../src/metatx/TokenStore.sol";
 import {NormalPqzToken} from "../../../src/pqz/NormalPqzToken.sol";
 import {WrappedPqzToken} from "../../../src/pqz/WrappedPqzToken.sol";
 import {MockERC20} from "../../helpers/Mocks.sol";
@@ -78,7 +80,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         c.name = "PQZ USD";
         c.symbol = "pqUSD";
         c.decimals = 6;
-        c.features = (1 << AdminLib.PAYABLE) | (1 << AdminLib.MINTABLE) | (1 << AdminLib.BURNABLE);
+        c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE) | (1 << GovernanceBits.BURNABLE);
         c.roles.minter = address(this);
         bool withAud = aMode != uint8(ZetherTypes.AuditorMode.NONE);
         c.conf = IFactoryToken.ConfidentialConfig(
@@ -98,7 +100,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     /// An `WRAPPED_PQZ` token with one 1:1 `MockERC20` leg (after `_releaseWrapped`).
     function _newWrapped(bytes32 s) internal returns (WrappedPqzToken) {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-        c.features = (1 << AdminLib.PAYABLE);
+        c.features = (1 << GovernanceBits.PAYABLE);
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
