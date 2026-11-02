@@ -1756,7 +1756,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 - old: governance:regulated-confidential · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-17 · superseded-by: —
 
 **Rule.** On a regulated `NORMAL_ZETHER`, `WRAPPED_ZETHER`, `NORMAL_PQZ` or `WRAPPED_PQZ`:
-- **FREEZE** of an account blocks its shield, unshield and transfer, and locks its public balance.
+- **FREEZE** of an account blocks its shield, unshield and transfer, and locks its public balance. A frozen account still receives shielded credits: it may be a decoy, and a refusal would break the ring and name it. It cannot take the credit out.
 - **PAUSE** stops the whole token, shielded transfers included.
 - **A denylist, not an allowlist:** a denied account cannot receive into a public balance. The check sits on the public balance, so a multi-recipient transfer with decoys is not checked.
 - **FORCE** acts on public balances only, as `MODERATE` does (CTR-GOV-13): a shielded balance never moves without its owner's proof.
