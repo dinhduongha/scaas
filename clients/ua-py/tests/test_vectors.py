@@ -358,7 +358,7 @@ class Vectors(unittest.TestCase):
     def test_native_member_typed_digest(self):
         """TS-D4: a native msig member signs the record's typed digest itself (what eth_signTypedData_v4 of typedData
         returns), a derived member keeps member_digest(ua, message); only under the portable purposes."""
-        self.assertTrue(all(ua.is_portable_purpose(ua.purpose_tag(p, v)) for p, v in (('pop', 2), ('kem', 1), ('pqz-key', 1))))
+        self.assertTrue(all(ua.is_portable_purpose(ua.purpose_tag(p, v)) for p, v in (('pop', 2), ('kem', 1), ('pqz-key', 1), ('membership', 1))))
         self.assertFalse(ua.is_portable_purpose(ua.purpose_tag('metatx')) or ua.is_portable_purpose(ua.purpose_tag('pop')))
         self.assertFalse(hasattr(ua, 'personal_sign_digest'))  # legacy/typed-signing
         r = next(x for x in P['registrations'] if x['name'] == 'msig-pq-native')

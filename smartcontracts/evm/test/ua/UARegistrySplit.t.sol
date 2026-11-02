@@ -947,6 +947,11 @@ contract UARegistrySplitTest is UARegistryBase {
             assertEq(vm.parseJsonString(b, string.concat(n, ".slot")), vm.toString(i));
             assertEq(vm.parseJsonString(a, string.concat(o, ".slot")), vm.toString(i));
         }
+        // CTR-UA-37 added one field after the split, last, so no slot above moved; the pre-split contract has none
+        assertEq(vm.parseJsonString(b, string.concat(m, "15].label")), "accepted");
+        assertEq(vm.parseJsonString(b, string.concat(m, "15].slot")), "15");
+        assertFalse(vm.keyExistsJson(b, string.concat(m, "16]")), "no field after accepted");
+        assertFalse(vm.keyExistsJson(a, ".storageLayout.storage[15]"), "the pre-split contract has no accepted");
     }
 
     /// No CALL, CALLCODE, DELEGATECALL or SELFDESTRUCT in the library: everything it calls runs under the static flag, so

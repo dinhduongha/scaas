@@ -485,7 +485,7 @@ public class VectorTests
     public void NativeMemberTypedDigest()
     {
         var p = Load("portable.json");
-        Assert.True(UA.IsPortablePurpose(UA.PopV2Tag) && UA.IsPortablePurpose(UA.PurposeTag("kem")) && UA.IsPortablePurpose(UA.PurposeTag("pqz-key")));
+        Assert.True(UA.IsPortablePurpose(UA.PopV2Tag) && UA.IsPortablePurpose(UA.PurposeTag("kem")) && UA.IsPortablePurpose(UA.PurposeTag("pqz-key")) && UA.IsPortablePurpose(UA.PurposeTag("membership")));
         Assert.False(UA.IsPortablePurpose(UA.PurposeTag("metatx")) || UA.IsPortablePurpose(UA.PurposeTag("pop")));
         Assert.Null(typeof(UA).GetMethod("PersonalSignDigest")); // legacy/typed-signing
         var r = p.GetProperty("registrations").EnumerateArray().First(x => x.GetProperty("name").GetString() == "msig-pq-native");

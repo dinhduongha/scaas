@@ -344,12 +344,12 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   gen 2 emits PQZ events (`UAPqzPopStored`, `UAPqzKeyAdded`) for UAs registered in gen 1, and `UARegistered` only for its own.
   On a gen 2 in front of a gen 1 that enables `0x0142` (the PQZ attachment lives in the oldest generation with the verifier), a non-holder's PQZ key gets `UAKindDisabled(0x0142)` before `UAPqzHolder`
   (the order of the checks is the order of the steps, [§1.8](#registry)).
-- **Relaying** (owner 2026-10-30, ruling R-node; node built on `ua8` in `64c233d4`, `4d4509e7`, `51b0c027`). The node relays all eight writes ([CTR-UA-36](#CTR-UA-36): `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`, `setKemKey`,
-  `storePqzPop`, `setPqzKey`) as ordinary `call` jobs (`kind = "call"`, target = the registry, calldata): its call table has a row for
-  each of the eight selectors under the guard rule `Rule::UaRegistry` — the target must equal the chain's `[[chains]] ua_registry`
-  (node config; unset ⇒ all eight are refused `CALL_TARGET_REFUSED`), be bound to this chain (`chainUid()`) and be neither a
+- **Relaying** (owner 2026-10-30, ruling R-node; node built on `ua8` in `64c233d4`, `4d4509e7`, `51b0c027`). The node relays all nine writes ([CTR-UA-36](#CTR-UA-36): `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`, `setKemKey`,
+  `storePqzPop`, `setPqzKey`, `acceptMembership`) as ordinary `call` jobs (`kind = "call"`, target = the registry, calldata): its call table has a row for
+  each of the nine selectors under the guard rule `Rule::UaRegistry` — the target must equal the chain's `[[chains]] ua_registry`
+  (node config; unset ⇒ all nine are refused `CALL_TARGET_REFUSED`), be bound to this chain (`chainUid()`) and be neither a
   registered token nor the token factory ([NODE-JOB-19](../node/job-api.md#NODE-JOB-19)). The gateway's `~gateway` sponsor policy is
-  specified to cover all eight ([NODE-GW-03](../node/gateway.md#NODE-GW-03)), but the gateway route `POST /v1/ua/register` and the
+  specified to cover all nine ([NODE-GW-03](../node/gateway.md#NODE-GW-03)), but the gateway route `POST /v1/ua/register` and the
   sponsor policy are **not built** (no route, no sponsor-policy code; `TODO.md`): today relaying goes through job-API `call` jobs
   only. The node binds one registry per chain: once a chain runs a generation 2, the writes that must go to generation 1 (e.g.
   `setKemKey` for a generation-1 record) cannot be relayed (`TODO.md`). No new job kind, no fee form (there is no token to
@@ -477,6 +477,7 @@ arguments (`IUARegistry`, [§1.8](#registry); client builders [CLI-SGN-41](../cl
 | `setKemKey` | `0xa00cce2a` | `(bytes32 ua, uint64 version, KemKey kem, UASig sig)` |
 | `setPqzKey` | `0x3c6897f1` | `(bytes32 ua, bytes pqzKey, bytes32 pqzPopHash, UASig sig)` |
 | `storePqzPop` | `0x7fac161a` | `(bytes32 ua, bytes pqzPop)` |
+| `acceptMembership` | `0x73fd7d54` | `(bytes32 ua, MemberSig memberSig)`: one slot of an `msig`, [CTR-UA-37](#CTR-UA-37) |
 
 - **Typed keys.** `webauthn-p256` (`0x0100`) and the MuSig2 / FROST kinds (`0x0110`–`0x0113`) register through their typed entry or through
   `register` with the packed key data (owner 2026-10-31): both forms give the same id and run the same `validateKeyData`, and the typed entries are the recommended client
@@ -507,19 +508,23 @@ explorers show listed and accepted apart.
   (`eth_signTypedData_v4`) or answers ERC-1271 over it; a derived member signs `memberDigest` under `member`, with the purpose
   `PURPOSE_MEMBERSHIP = keccak256("scaas.ua.purpose.membership.v1")`, so a `pop`, `kem` or `pqz-key` signature is never an acceptance, nor the reverse.
   The struct is portable (domain `DS_P`, no chain, no registry): the same signature accepts on every registry, as
-  [CTR-UA-07](#CTR-UA-07) records do, and needs no nonce. Accepting twice is a no-op with no second event.
-  Refused with `UAUnauthorized`: an id that is no `msig` on this registry, an index past the members, a bad signature.
+  [CTR-UA-07](#CTR-UA-07) records do, and needs no nonce. Accepting twice is a no-op with no second event: a slot already accepted returns
+  before the signature is read, so any bytes there succeed and change nothing.
+  Refused with `UAUnauthorized`: an id that is no `msig` on this registry, an index past the members, a bad signature. A member check
+  starved of gas reverts `UAVerifyGas`, never a verdict, and the slot stays open.
 - **State.** One bitmap slot per `msig`, bit `i` = slot `i`, written at registration: a slot that signed the stored `pop` is accepted from
   the start (a portable `pop` does this on each registry it is copied to); an empty `pop` writes nothing, so every slot starts unaccepted.
   Each registry keeps its own bits: on a new chain a member accepts there too, with the same signature.
 - **Verify.** In every `msig` verification (`requireAuthorized`, the ERC-1271 and UA envelope paths through it, `setKemKey`, `setPqzKey`) a
   `MemberSig` of an unaccepted slot fails the verification, even with a good signature. The registration's own `pop` is exempt: it is what
-  accepts its signers. **Until the accepted weight reaches the threshold, the `msig` can authorize nothing, on any contract, for any purpose:
-  payments, mandates, roles, orders, keys, records.** A client computes the accepted weight from `msigOf` and `memberAccepted`, shows
+  accepts its signers. **On a registry with this rule, until the accepted weight reaches the threshold, the `msig` can authorize nothing, on any
+  contract, for any purpose: payments, mandates, roles, orders, keys, records.** A client computes the accepted weight from `msigOf` and `memberAccepted`, shows
   the `msig` as not active, and does not name it as a signer, party, role holder or payer until then. The verify path reads the one
   bitmap slot and never parses `pop`; that cold read, once per authorization and not per member, is its own term of the registration bound,
   `MSIG_ACCEPTED_GAS = 2,500` (measured +2,236: `requireAuthorized`, `msig` 2-of-2, 49,634 -> 51,870), so an `msig` registered at the bound
   still authorizes at it. Single-key kinds do not read it.
+- **Scope.** Built on EVM (`UARegistry`). Soroban's twin is in progress on `ua8-soroban`. NEAR and Algorand have no registry and are not covered:
+  their `msig` counts member weight with no acceptance (`near/common/src/ua.rs`, `algorand/contracts/account.py`), and each is its own decision.
 - **No decline, no leave.** The UA id derives from the structure, so a member cannot be removed.
 - **No revoke.** An acceptance cannot be withdrawn: a revoke could drop a held `msig` below its threshold and lock what it holds. The owner
   may add it later.

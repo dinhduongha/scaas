@@ -665,7 +665,7 @@ func TestPqzKeyRecord(t *testing.T) {
 func TestNativeMemberTypedDigest(t *testing.T) {
 	p := load(t, "portable.json")
 	metatx, pop := mustTag(t, "metatx"), mustTag(t, "pop")
-	if !IsPortablePurpose(PopV2Tag) || !IsPortablePurpose(kemPurpose) || !IsPortablePurpose(pqzKeyPurpose) || IsPortablePurpose(metatx) || IsPortablePurpose(pop) {
+	if !IsPortablePurpose(PopV2Tag) || !IsPortablePurpose(kemPurpose) || !IsPortablePurpose(pqzKeyPurpose) || !IsPortablePurpose(membershipPurpose) || IsPortablePurpose(metatx) || IsPortablePurpose(pop) {
 		t.Fatal("IsPortablePurpose")
 	}
 	r := find(rows(p, "registrations"), "name", "msig-pq-native")

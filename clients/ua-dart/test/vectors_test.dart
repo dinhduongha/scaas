@@ -483,7 +483,7 @@ void main() {
   // TS-D4: a native msig member signs the record's typed digest itself (what eth_signTypedData_v4 of typedData returns), a
   // derived member keeps memberDigest(ua, message); only under the portable purposes.
   test('native member typed digest', () {
-    expect([for (final t in [popV2Tag, purposeTag('kem'), purposeTag('pqz-key')]) isPortablePurpose(t)], [true, true, true]);
+    expect([for (final t in [popV2Tag, purposeTag('kem'), purposeTag('pqz-key'), purposeTag('membership')]) isPortablePurpose(t)], [true, true, true, true]);
     expect(isPortablePurpose(purposeTag('metatx')) || isPortablePurpose(purposeTag('pop')), isFalse);
     final r = byKey(regs, 'name', 'msig-pq-native'), h = register(r);
     expect(_hashTypedData(r['typedData'] as Map), _hx(h.registrationDigest));
