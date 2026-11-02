@@ -1,0 +1,690 @@
+== e2e-ua8-local: 45ca6f04+uncommitted 2026-11-01T14:32:59Z; stellar 30.0.0 (90a3d42d9327ccfaa0d301373766f45beae3e6d9); 8 GB available
+== build Wasm
+== build soroban
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/dex/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.54s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_dex.wasm (14694 bytes optimized (original size was 18122 bytes))
+    Wasm Hash: 3963d36f2e56afc818524f9d7e77f9802b46780250ac41394d8d01caa7990524
+    Wasm Size: 14694 bytes optimized (original size was 18122 bytes)
+    Exported Functions: 8 found
+      • __constructor
+      • cancel
+      • filled
+      • market
+      • order_hash
+      • set_market
+      • settle
+      • ua_cancel
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/token/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.11s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_token.wasm (26651 bytes optimized (original size was 31198 bytes))
+    Wasm Hash: df541cf468add24ac137faadbed86723ac393ba2a800b969cade25c17470d259
+    Wasm Size: 26651 bytes optimized (original size was 31198 bytes)
+    Exported Functions: 30 found
+      • __constructor
+      • admin
+      • allowance
+      • approve
+      • balance
+      • burn
+      • burn_from
+      • decimals
+      • meta_pay_id
+      • mint
+      • mint_to_ua
+      • name
+      • pay
+      • pay_meta
+      • pay_to_ua
+      • ref_used
+      • registry
+      • symbol
+      • transfer
+      • transfer_from
+      • transfer_to_ua
+      • ua_balance
+      • ua_burn
+      • ua_cancel_nonce
+      • ua_nonce
+      • ua_pay
+      • ua_pay_meta
+      • ua_ref_used
+      • ua_trade
+      • ua_transfer
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/ua-registry/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.12s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_ua_registry.wasm (49317 bytes optimized (original size was 56399 bytes))
+    Wasm Hash: 8bb924b060237269da561b41ec090125b0a75f47e502b83ffb779703f0ce5a3a
+    Wasm Size: 49317 bytes optimized (original size was 56399 bytes)
+    Exported Functions: 31 found
+      • __constructor
+      • checked_of
+      • kem_key_at
+      • kem_key_of
+      • key_owner
+      • kind_name
+      • pop_of
+      • pqz_key_of
+      • pqz_key_sig_of
+      • pqz_pop_of
+      • receivable
+      • record_of
+      • register
+      • register_frost
+      • register_msig
+      • register_musig2
+      • register_webauthn
+      • registration_of
+      • relayers
+      • require_authorized
+      • set_kem_key
+      • set_pqz_key
+      • store_pqz_pop
+      • ua_at
+      • ua_count
+      • ua_of
+      • ua_of_frost
+      • ua_of_msig
+      • ua_of_musig2
+      • ua_of_webauthn
+      • ua_page
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/mandate/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.10s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_mandate.wasm (16554 bytes optimized (original size was 19087 bytes))
+    Wasm Hash: fca1b6562f7690f263dcf49c699c0b93f14633e9ba7b5acdb4512a7bb9ed46c9
+    Wasm Size: 16554 bytes optimized (original size was 19087 bytes)
+    Exported Functions: 12 found
+      • __constructor
+      • epoch
+      • mandate
+      • mtx_mandate_pay
+      • mtx_revoke
+      • mtx_set_mandate
+      • mtx_set_payee
+      • mtx_withdraw
+      • owner
+      • paid
+      • registry
+      • ua_nonce
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/relay-executor/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.15s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_relay_executor.wasm (1187 bytes optimized (original size was 1316 bytes))
+    Wasm Hash: e23732b60b42551e811c796609c60b8c6499205f1d2af816d558f6c4ba6c9c00
+    Wasm Size: 1187 bytes optimized (original size was 1316 bytes)
+    Exported Functions: 3 found
+      • __constructor
+      • exec
+      • router
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/relay-fee/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.61s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_relay_fee.wasm (7630 bytes optimized (original size was 8585 bytes))
+    Wasm Hash: 37330478cb2c3fc0c66a788f2efe8784edda1d5f9b1fd6b03a334cac97991a27
+    Wasm Size: 7630 bytes optimized (original size was 8585 bytes)
+    Exported Functions: 5 found
+      • __constructor
+      • executor
+      • relay
+      • relay_ref
+      • ua_relay
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/smart-key-account/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.21s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_smart_key_account.wasm (10529 bytes optimized (original size was 11975 bytes))
+    Wasm Hash: f02a6780eee4d41ba0489b8b8a258f42bc71be69ab9951ae5239c76d374c705d
+    Wasm Size: 10529 bytes optimized (original size was 11975 bytes)
+    Exported Functions: 5 found
+      • __check_auth
+      • __constructor
+      • add_key
+      • keys
+      • remove_key
+✅ Build Complete
+
+== EVM deploy build
+No files changed, compilation skipped
+== quickstart
+quickstart: scaas-stellar up (stellar/quickstart@sha256:e05d68bb3b2629a829310dc3434fc0ee3f801854bdfa1a7c8c362d2f1c9060f8), rpc http://127.0.0.1:31980/rpc
+quickstart: protocolVersion 30, testnet limits applied
+== anvil 31981, 31982
+== cargo test --test e2e_ua8
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.41s
+     Running tests/e2e_ua8.rs (target/debug/deps/e2e_ua8-41b6ff1d90a339a8)
+
+running 6 tests
+test e2e_ua8_copy_evm_soroban_evm ... COPY evm chain 31981: registry 0x2662b2ef30186a65c318d5daab534d3b22729ea2
+COPY evm chain 31982: registry 0x2662b2ef30186a65c318d5daab534d3b22729ea2
+deploy.sh soroban local ua_registry: CA4PC3VGKXJBWOPHQEQ6OTA2OOEFUHIE462PCHSQAT2YAH27Q7K26L7Q
+COPY evm 31981 register fndsa512: gas_used 3538627
+FIT copy register fndsa512: cpu_insns 2285732 used_cpu 2144195 mem_bytes 1411922 read_bytes 0 write_bytes 4532 entries 8 writes 5 tx_size 8008 largest_entry 2292 events_bytes 2080 resource_fee 5100493 fee_charged 3853718
+COPY evm 31982 register fndsa512: gas_used 3538627 (call job)
+COPY fndsa512: register byte-equal on A, Soroban and B: key_data 897 B, pop 666 B, pqz_key 0 B, pqz_pop 0 B, kem_ek 1568 B
+COPY evm 31981 setKemKey fndsa512 v3: gas_used 2938974
+FIT copy set_kem_key fndsa512 v3: cpu_insns 1676948 used_cpu 1585386 mem_bytes 1387382 read_bytes 0 write_bytes 2640 entries 5 writes 2 tx_size 5836 largest_entry 2496 events_bytes 292 resource_fee 2970763 fee_charged 2241679
+COPY evm 31982 setKemKey fndsa512 v3: gas_used 2938974 (call job)
+COPY fndsa512 KEM v3: byte-equal on A, Soroban and B, highest version 3
+COPY evm 31981 setKemKey fndsa512 v1: gas_used 2978556
+FIT copy set_kem_key fndsa512 v1: cpu_insns 1659909 used_cpu 1571030 mem_bytes 1387116 read_bytes 0 write_bytes 2504 entries 5 writes 1 tx_size 5836 largest_entry 2496 events_bytes 292 resource_fee 2814497 fee_charged 2123176
+COPY evm 31982 setKemKey fndsa512 v1: gas_used 2978556 (call job)
+COPY fndsa512 KEM v1: byte-equal on A, Soroban and B, highest version 3
+COPY fndsa512: checked_of [(2, Some("GB3TCCIC6KLYKM72PX7KA6RNYC2BHC7DQYDMEAAN7PDMUZQD7UKJGSSY")), (0, None), (2, Some("GB3TCCIC6KLYKM72PX7KA6RNYC2BHC7DQYDMEAAN7PDMUZQD7UKJGSSY"))]
+COPY evm 31981 setPqzKey fndsa512/n2816-kmax65536: gas_used 7736085
+FIT copy set_pqz_key fndsa512/n2816-kmax65536: cpu_insns 4011188 used_cpu 3841219 mem_bytes 1588887 read_bytes 0 write_bytes 23456 entries 4 writes 1 tx_size 47472 largest_entry 23448 events_bytes 320 resource_fee 26157687 fee_charged 19784426
+COPY evm 31982 setPqzKey fndsa512/n2816-kmax65536: gas_used 7736085 (call job)
+COPY evm 31981 storePqzPop fndsa512/n2816-kmax65536: gas_used 8253695
+FIT copy store_pqz_pop fndsa512/n2816-kmax65536: cpu_insns 4933399 used_cpu 4721701 mem_bytes 1647482 read_bytes 0 write_bytes 35608 entries 5 writes 1 tx_size 36204 largest_entry 35600 events_bytes 172 resource_fee 39499790 fee_charged 29872278
+COPY evm 31982 storePqzPop fndsa512/n2816-kmax65536: gas_used 8253695 (call job)
+COPY fndsa512/n2816-kmax65536: set_pqz_key + store_pqz_pop byte-equal on A, Soroban and B: key 22528 B, proof 35479 B, sig 666 B
+COPY evm 31981 cacheExpandedKey mldsa65/n2816-kmax65536 part 0: gas_used 9584095
+COPY evm 31981 cacheExpandedKey mldsa65/n2816-kmax65536 part 1: gas_used 13414988
+COPY evm 31982 cacheExpandedKey mldsa65/n2816-kmax65536 part 0: gas_used 9584095
+COPY evm 31982 cacheExpandedKey mldsa65/n2816-kmax65536 part 1: gas_used 13414988
+COPY evm 31981 register mldsa65/n2816-kmax65536: gas_used 12905851
+COPY evm 31981 storePqzPop mldsa65/n2816-kmax65536: gas_used 8274597
+FIT copy register mldsa65/n2816-kmax65536: cpu_insns 10458436 used_cpu 9987634 mem_bytes 1797362 read_bytes 0 write_bytes 68596 entries 10 writes 8 tx_size 66332 largest_entry 35600 events_bytes 3440 resource_fee 76123152 fee_charged 57576975
+COPY evm 31982 register mldsa65/n2816-kmax65536: gas_used 12905851 (call job)
+COPY evm 31982 storePqzPop mldsa65/n2816-kmax65536: gas_used 8274597 (call job)
+COPY mldsa65/n2816-kmax65536: register byte-equal on A, Soroban and B: key_data 1952 B, pop 3309 B, pqz_key 22528 B, pqz_pop 35479 B, kem_ek 1568 B
+COPY evm 31981 setKemKey mldsa65/n2816-kmax65536 v3: gas_used 7083841
+FIT copy set_kem_key mldsa65/n2816-kmax65536 v3: cpu_insns 4667216 used_cpu 4461686 mem_bytes 1455357 read_bytes 0 write_bytes 5240 entries 5 writes 2 tx_size 5832 largest_entry 5096 events_bytes 248 resource_fee 5840837 fee_charged 4412432
+COPY evm 31982 setKemKey mldsa65/n2816-kmax65536 v3: gas_used 7083841 (call job)
+COPY mldsa65/n2816-kmax65536 KEM v3: byte-equal on A, Soroban and B, highest version 3
+COPY evm 31981 setKemKey mldsa65/n2816-kmax65536 v1: gas_used 7063374
+FIT copy set_kem_key mldsa65/n2816-kmax65536 v1: cpu_insns 4650178 used_cpu 4447330 mem_bytes 1455091 read_bytes 0 write_bytes 5104 entries 5 writes 1 tx_size 5832 largest_entry 5096 events_bytes 248 resource_fee 5684570 fee_charged 4293929
+COPY evm 31982 setKemKey mldsa65/n2816-kmax65536 v1: gas_used 7063374 (call job)
+COPY mldsa65/n2816-kmax65536 KEM v1: byte-equal on A, Soroban and B, highest version 3
+COPY evm 31981 setKemKey mldsa65/n2816-kmax65536 v2: gas_used 7062639
+FIT copy set_kem_key mldsa65/n2816-kmax65536 v2: cpu_insns 4650178 used_cpu 4447330 mem_bytes 1455091 read_bytes 0 write_bytes 5104 entries 5 writes 1 tx_size 5832 largest_entry 5096 events_bytes 248 resource_fee 5684570 fee_charged 4293929
+COPY evm 31982 setKemKey mldsa65/n2816-kmax65536 v2: gas_used 7062639 (call job)
+COPY mldsa65/n2816-kmax65536 KEM v2: byte-equal on A, Soroban and B, highest version 3
+COPY mldsa65/n2816-kmax65536: checked_of [(1, None), (0, None), (1, None)]
+COPY evm 31981 cacheExpandedKey mldsa65#1 part 0: gas_used 9584506
+COPY evm 31981 cacheExpandedKey mldsa65#1 part 1: gas_used 13415254
+COPY evm 31982 cacheExpandedKey mldsa65#1 part 0: gas_used 9584506
+COPY evm 31982 cacheExpandedKey mldsa65#1 part 1: gas_used 13415254
+COPY evm 31981 register mldsa65#1: gas_used 7243207
+FIT copy register mldsa65#1: cpu_insns 4941449 used_cpu 4698480 mem_bytes 1451670 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 6420 largest_entry 5944 events_bytes 2756 resource_fee 9308689 fee_charged 7036099
+COPY evm 31982 register mldsa65#1: gas_used 7243207 (call job)
+COPY mldsa65#1: register byte-equal on A, Soroban and B: key_data 1952 B, pop 3309 B, pqz_key 0 B, pqz_pop 0 B, kem_ek 0 B
+COPY evm 31981 register msig-pq-native: gas_used 6927819
+FIT copy register_msig msig-pq-native: cpu_insns 7603924 used_cpu 7272336 mem_bytes 1469759 read_bytes 0 write_bytes 4872 entries 6 writes 3 tx_size 4868 largest_entry 4628 events_bytes 880 resource_fee 5442276 fee_charged 4111431
+COPY evm 31982 register msig-pq-native: gas_used 6927819 (call job)
+COPY msig-pq-native: register byte-equal on A, Soroban and B: key_data 76 B, pop 3872 B, pqz_key 0 B, pqz_pop 0 B, kem_ek 0 B
+COPY msig-pq-native: checked_of [(1, None), (0, None), (0, None)]
+COPY evm 31981 setPqzKey msig-pq-native/n2816-kmax65536: gas_used 12036026
+FIT copy set_pqz_key msig-pq-native/n2816-kmax65536: cpu_insns 9167208 used_cpu 8791142 mem_bytes 1605183 read_bytes 0 write_bytes 26616 entries 5 writes 1 tx_size 26928 largest_entry 26608 events_bytes 276 resource_fee 29533932 fee_charged 22334280
+COPY evm 31982 setPqzKey msig-pq-native/n2816-kmax65536: gas_used 12036026 (call job)
+COPY evm 31981 storePqzPop msig-pq-native/n2816-kmax65536: gas_used 8253695
+FIT copy store_pqz_pop msig-pq-native/n2816-kmax65536: cpu_insns 5127549 used_cpu 4908384 mem_bytes 1674833 read_bytes 0 write_bytes 35608 entries 5 writes 1 tx_size 36204 largest_entry 35600 events_bytes 172 resource_fee 39499947 fee_charged 29872414
+COPY evm 31982 storePqzPop msig-pq-native/n2816-kmax65536: gas_used 8253695 (call job)
+COPY msig-pq-native/n2816-kmax65536: set_pqz_key + store_pqz_pop byte-equal on A, Soroban and B: key 22528 B, proof 35479 B, sig 3872 B
+COPY evm 31981 cacheExpandedKey mldsa65#2 part 0: gas_used 9584603
+COPY evm 31981 cacheExpandedKey mldsa65#2 part 1: gas_used 13415351
+COPY evm 31982 cacheExpandedKey mldsa65#2 part 0: gas_used 9584603
+COPY evm 31982 cacheExpandedKey mldsa65#2 part 1: gas_used 13415351
+COPY evm 31981 register mldsa65#2: gas_used 7247626
+FIT copy register mldsa65#2: cpu_insns 4941449 used_cpu 4698480 mem_bytes 1451670 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 6420 largest_entry 5944 events_bytes 2756 resource_fee 9308689 fee_charged 7036099
+COPY evm 31982 register mldsa65#2: gas_used 7247626 (call job)
+COPY mldsa65#2: register byte-equal on A, Soroban and B: key_data 1952 B, pop 3309 B, pqz_key 0 B, pqz_pop 0 B, kem_ek 0 B
+COPY msig-pq/n2816-kmax65536 on EVM without the ML-DSA precompile: refused, server returned an error response: error code 3: execution reverted: custom error 0xe9472176:                           
+ok
+test e2e_ua8_network_fit ... LIMITS tx_max_instructions "400000000" tx_memory_limit 41943040 tx_max_disk_read_bytes 200000 tx_max_write_bytes 132096 tx_max_footprint_entries 400 tx_max_write_ledger_entries 200 tx_max_size_bytes 132096 contract_data_entry_size_bytes 65536 tx_max_contract_events_size_bytes 16384
+deploy.sh soroban local ua_registry: CC6OLYP7BBQUQMQGOAHYE56UCON5ZOV3MBGEEE2S32RRKNWQRZNRCROY
+FIT register mldsa65 n2048-kmax1024 full: cpu_insns 9354795 used_cpu 8919815 mem_bytes 1725268 read_bytes 0 write_bytes 55164 entries 10 writes 8 tx_size 52900 largest_entry 28312 events_bytes 3440 resource_fee 61118210 fee_charged 46226939
+FIT GATE register mldsa65 n2048-kmax1024 split: cpu_insns 6856743 used_cpu 6522217 mem_bytes 1577169 read_bytes 0 write_bytes 26844 entries 9 writes 7 tx_size 24600 largest_entry 16592 events_bytes 3272 resource_fee 29713920 fee_charged 22471708
+FIT GATE store_pqz_pop mldsa65 n2048-kmax1024: cpu_insns 4198238 used_cpu 4014816 mem_bytes 1594890 read_bytes 0 write_bytes 28320 entries 5 writes 1 tx_size 28916 largest_entry 28312 events_bytes 172 resource_fee 31419851 fee_charged 23760418
+FIT GATE set_kem_key mldsa65 n2048-kmax1024: cpu_insns 4667216 used_cpu 4461686 mem_bytes 1455357 read_bytes 0 write_bytes 5240 entries 5 writes 2 tx_size 5832 largest_entry 5096 events_bytes 248 resource_fee 5840837 fee_charged 4412432
+FIT register mldsa65 n2048-kmax1024 no attributes: cpu_insns 4941449 used_cpu 4698480 mem_bytes 1451670 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 6420 largest_entry 5944 events_bytes 2756 resource_fee 9308689 fee_charged 7036099
+FIT GATE set_pqz_key mldsa65 n2048-kmax1024: cpu_insns 5732592 used_cpu 5497457 mem_bytes 1536566 read_bytes 0 write_bytes 19912 entries 4 writes 1 tx_size 20444 largest_entry 19904 events_bytes 276 resource_fee 22100436 fee_charged 16711201
+FIT register_msig n=16 n2048-kmax1024 full: cpu_insns 62502025 used_cpu 59642974 mem_bytes 7102071 read_bytes 0 write_bytes 105332 entries 25 writes 7 tx_size 105384 largest_entry 57644 events_bytes 2068 resource_fee 116887627 fee_charged 88416700
+FIT register_msig n=16 n2048-kmax1024 split: cpu_insns 60007376 used_cpu 57250430 mem_bytes 6950863 read_bytes 0 write_bytes 77012 entries 24 writes 6 tx_size 77084 largest_entry 57644 events_bytes 1900 resource_fee 85369772 fee_charged 64575597
+FIT store_pqz_pop msig n=16 n2048-kmax1024: cpu_insns 6060375 used_cpu 5805332 mem_bytes 1853393 read_bytes 0 write_bytes 28320 entries 5 writes 1 tx_size 28916 largest_entry 28312 events_bytes 172 resource_fee 31421351 fee_charged 23761722
+FIT set_kem_key msig n=16 n2048-kmax1024, Ua(ua) loaded: cpu_insns 58066806 used_cpu 55605405 mem_bytes 6993666 read_bytes 0 write_bytes 58312 entries 21 writes 2 tx_size 58584 largest_entry 58168 events_bytes 248 resource_fee 64716769 fee_charged 48951887
+FIT register_msig 15 slots n2048-kmax1024: cpu_insns 54690317 used_cpu 52195181 mem_bytes 6256972 read_bytes 0 write_bytes 55100 entries 22 writes 4 tx_size 55512 largest_entry 54124 events_bytes 1384 resource_fee 61060296 fee_charged 46186470
+FIT set_pqz_key msig Ua(ua) of 15 slots n2048-kmax1024, 1 slot: cpu_insns 8018402 used_cpu 7686520 mem_bytes 1808636 read_bytes 0 write_bytes 20184 entries 5 writes 1 tx_size 20636 largest_entry 20176 events_bytes 276 resource_fee 22403375 fee_charged 16940538
+FIT register_msig 13 slots n2048-kmax1024: cpu_insns 47275261 used_cpu 45128296 mem_bytes 5168499 read_bytes 0 write_bytes 47844 entries 19 writes 4 tx_size 48068 largest_entry 46976 events_bytes 1276 resource_fee 53008717 fee_charged 40095422
+FIT EDGE set_pqz_key 13 slots n2048-kmax1024: cpu_insns 48320212 used_cpu 46305023 mem_bytes 5390746 read_bytes 0 write_bytes 62424 entries 17 writes 1 tx_size 62684 largest_entry 62416 events_bytes 276 resource_fee 69261297 fee_charged 52388222
+EDGE n2048-kmax1024: 13 slots fit, sig 45824 B stored
+FIT register_msig 14 slots n2048-kmax1024: cpu_insns 50848625 used_cpu 48543866 mem_bytes 5686387 read_bytes 0 write_bytes 51436 entries 20 writes 4 tx_size 51680 largest_entry 50532 events_bytes 1312 resource_fee 56993966 fee_charged 43110254
+EDGE n2048-kmax1024: 14 slots: job reverted, signed true, reason "tx failed: AAAAAAAF4DD/////AAAAAQAAAAAAAAAY/////QAAAAA="
+FIT register mldsa65 n2304-kmax4096 full: cpu_insns 9713580 used_cpu 9264800 mem_bytes 1748512 read_bytes 0 write_bytes 59404 entries 10 writes 8 tx_size 57140 largest_entry 30504 events_bytes 3440 resource_fee 65818891 fee_charged 49782638
+FIT GATE register mldsa65 n2304-kmax4096 split: cpu_insns 7030365 used_cpu 6689161 mem_bytes 1589457 read_bytes 0 write_bytes 28892 entries 9 writes 7 tx_size 26648 largest_entry 18640 events_bytes 3272 resource_fee 31984440 fee_charged 24189178
+FIT GATE store_pqz_pop mldsa65 n2304-kmax4096: cpu_insns 4457166 used_cpu 4263785 mem_bytes 1616086 read_bytes 0 write_bytes 30512 entries 5 writes 1 tx_size 31108 largest_entry 30504 events_bytes 172 resource_fee 33850075 fee_charged 25598700
+FIT GATE set_kem_key mldsa65 n2304-kmax4096: cpu_insns 4667216 used_cpu 4461686 mem_bytes 1455357 read_bytes 0 write_bytes 5240 entries 5 writes 2 tx_size 5832 largest_entry 5096 events_bytes 248 resource_fee 5840837 fee_charged 4412432
+FIT register mldsa65 n2304-kmax4096 no attributes: cpu_insns 4941449 used_cpu 4698480 mem_bytes 1451670 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 6420 largest_entry 5944 events_bytes 2756 resource_fee 9308689 fee_charged 7036099
+FIT GATE set_pqz_key mldsa65 n2304-kmax4096: cpu_insns 5906214 used_cpu 5664401 mem_bytes 1548854 read_bytes 0 write_bytes 21960 entries 4 writes 1 tx_size 22492 largest_entry 21952 events_bytes 276 resource_fee 24370955 fee_charged 18428671
+FIT register_msig n=16 n2304-kmax4096 full: cpu_insns 62888546 used_cpu 60008357 mem_bytes 7125505 read_bytes 0 write_bytes 109572 entries 25 writes 7 tx_size 109624 largest_entry 57644 events_bytes 2068 resource_fee 121474761 fee_charged 91886543
+FIT register_msig n=16 n2304-kmax4096 split: cpu_insns 60175556 used_cpu 57416686 mem_bytes 6963151 read_bytes 0 write_bytes 79060 entries 24 writes 6 tx_size 79132 largest_entry 57644 events_bytes 1900 resource_fee 87640285 fee_charged 66293062
+FIT store_pqz_pop msig n=16 n2304-kmax4096: cpu_insns 6319303 used_cpu 6054301 mem_bytes 1874589 read_bytes 0 write_bytes 30512 entries 5 writes 1 tx_size 31108 largest_entry 30504 events_bytes 172 resource_fee 33851573 fee_charged 25600003
+FIT set_kem_key msig n=16 n2304-kmax4096, Ua(ua) loaded: cpu_insns 58066806 used_cpu 55605405 mem_bytes 6993666 read_bytes 0 write_bytes 58312 entries 21 writes 2 tx_size 58584 largest_entry 58168 events_bytes 248 resource_fee 64716769 fee_charged 48951887
+FIT register_msig 15 slots n2304-kmax4096: cpu_insns 54693518 used_cpu 52194261 mem_bytes 6256972 read_bytes 0 write_bytes 55100 entries 22 writes 4 tx_size 55512 largest_entry 54124 events_bytes 1384 resource_fee 61060298 fee_charged 46186472
+FIT set_pqz_key msig Ua(ua) of 15 slots n2304-kmax4096, 1 slot: cpu_insns 8192023 used_cpu 7853464 mem_bytes 1820924 read_bytes 0 write_bytes 22232 entries 5 writes 1 tx_size 22684 largest_entry 22224 events_bytes 276 resource_fee 24673888 fee_charged 18658008
+FIT register_msig 13 slots n2304-kmax4096: cpu_insns 47271983 used_cpu 45129288 mem_bytes 5168499 read_bytes 0 write_bytes 47844 entries 19 writes 4 tx_size 48068 largest_entry 46976 events_bytes 1276 resource_fee 53008715 fee_charged 40095420
+FIT EDGE set_pqz_key 13 slots n2304-kmax4096: cpu_insns 48493834 used_cpu 46471967 mem_bytes 5403034 read_bytes 0 write_bytes 64472 entries 17 writes 1 tx_size 64732 largest_entry 64464 events_bytes 276 resource_fee 71531813 fee_charged 54105691
+EDGE n2304-kmax4096: 13 slots fit, sig 45824 B stored
+FIT register_msig 14 slots n2304-kmax4096: cpu_insns 50855763 used_cpu 48541994 mem_bytes 5686387 read_bytes 0 write_bytes 51436 entries 20 writes 4 tx_size 51680 largest_entry 50532 events_bytes 1312 resource_fee 56993972 fee_charged 43110259
+EDGE n2304-kmax4096: 14 slots: job reverted, signed true, reason "tx failed: AAAAAAAGCmL/////AAAAAQAAAAAAAAAY/////QAAAAA="
+FIT register mldsa65 n2560-kmax16384 full: cpu_insns 10069518 used_cpu 9607048 mem_bytes 1771584 read_bytes 0 write_bytes 63608 entries 10 writes 8 tx_size 61344 largest_entry 32660 events_bytes 3440 resource_fee 70479657 fee_charged 53308146
+FIT GATE register mldsa65 n2560-kmax16384 split: cpu_insns 7203987 used_cpu 6856105 mem_bytes 1601745 read_bytes 0 write_bytes 30940 entries 9 writes 7 tx_size 28696 largest_entry 20688 events_bytes 3272 resource_fee 34254958 fee_charged 25906648
+FIT GATE store_pqz_pop mldsa65 n2560-kmax16384: cpu_insns 4713246 used_cpu 4510016 mem_bytes 1637110 read_bytes 0 write_bytes 32668 entries 5 writes 1 tx_size 33264 largest_entry 32660 events_bytes 172 resource_fee 36240381 fee_charged 27406790
+FIT GATE set_kem_key mldsa65 n2560-kmax16384: cpu_insns 4667216 used_cpu 4461686 mem_bytes 1455357 read_bytes 0 write_bytes 5240 entries 5 writes 2 tx_size 5832 largest_entry 5096 events_bytes 248 resource_fee 5840837 fee_charged 4412432
+FIT register mldsa65 n2560-kmax16384 no attributes: cpu_insns 4941449 used_cpu 4698480 mem_bytes 1451670 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 6420 largest_entry 5944 events_bytes 2756 resource_fee 9308689 fee_charged 7036099
+FIT GATE set_pqz_key mldsa65 n2560-kmax16384: cpu_insns 6079835 used_cpu 5831345 mem_bytes 1561142 read_bytes 0 write_bytes 24008 entries 4 writes 1 tx_size 24540 largest_entry 24000 events_bytes 276 resource_fee 26641472 fee_charged 20146140
+FIT register_msig n=16 n2560-kmax16384 full: cpu_insns 63250756 used_cpu 60353932 mem_bytes 7148577 read_bytes 0 write_bytes 113776 entries 25 writes 7 tx_size 113828 largest_entry 57644 events_bytes 2068 resource_fee 126135538 fee_charged 95412057
+FIT register_msig n=16 n2560-kmax16384 split: cpu_insns 60345278 used_cpu 57583856 mem_bytes 6975439 read_bytes 0 write_bytes 81108 entries 24 writes 6 tx_size 81180 largest_entry 57644 events_bytes 1900 resource_fee 89910801 fee_charged 68010530
+FIT store_pqz_pop msig n=16 n2560-kmax16384: cpu_insns 6575383 used_cpu 6300532 mem_bytes 1895613 read_bytes 0 write_bytes 32668 entries 5 writes 1 tx_size 33264 largest_entry 32660 events_bytes 172 resource_fee 36241879 fee_charged 27408093
+FIT set_kem_key msig n=16 n2560-kmax16384, Ua(ua) loaded: cpu_insns 58066806 used_cpu 55605405 mem_bytes 6993666 read_bytes 0 write_bytes 58312 entries 21 writes 2 tx_size 58584 largest_entry 58168 events_bytes 248 resource_fee 64716769 fee_charged 48951887
+FIT register_msig 15 slots n2560-kmax16384: cpu_insns 54697306 used_cpu 52193165 mem_bytes 6256972 read_bytes 0 write_bytes 55100 entries 22 writes 4 tx_size 55512 largest_entry 54124 events_bytes 1384 resource_fee 61060302 fee_charged 46186475
+FIT set_pqz_key msig Ua(ua) of 15 slots n2560-kmax16384, 1 slot: cpu_insns 8365645 used_cpu 8020408 mem_bytes 1833212 read_bytes 0 write_bytes 24280 entries 5 writes 1 tx_size 24732 largest_entry 24272 events_bytes 276 resource_fee 26944405 fee_charged 20375477
+FIT register_msig 12 slots n2560-kmax16384: cpu_insns 43706610 used_cpu 41725394 mem_bytes 4682812 read_bytes 0 write_bytes 44252 entries 18 writes 4 tx_size 44456 largest_entry 43420 events_bytes 1240 resource_fee 49023470 fee_charged 37080591
+FIT EDGE set_pqz_key 12 slots n2560-kmax16384: cpu_insns 45097312 used_cpu 43216296 mem_bytes 4919353 read_bytes 0 write_bytes 63000 entries 16 writes 1 tx_size 63276 largest_entry 62992 events_bytes 276 resource_fee 69897338 fee_charged 52869039
+EDGE n2560-kmax16384: 12 slots fit, sig 42304 B stored
+FIT register_msig 13 slots n2560-kmax16384: cpu_insns 47276326 used_cpu 45128488 mem_bytes 5168499 read_bytes 0 write_bytes 47844 entries 19 writes 4 tx_size 48068 largest_entry 46976 events_bytes 1276 resource_fee 53008718 fee_charged 40095423
+EDGE n2560-kmax16384: 13 slots: job reverted, signed true, reason "tx failed: AAAAAAAF41z/////AAAAAQAAAAAAAAAY/////QAAAAA="
+FIT register mldsa65 n2816-kmax65536 full: cpu_insns 10491614 used_cpu 10012910 mem_bytes 1798572 read_bytes 0 write_bytes 68596 entries 10 writes 8 tx_size 66332 largest_entry 35600 events_bytes 3440 resource_fee 76009611 fee_charged 57491124
+FIT GATE register mldsa65 n2816-kmax65536 split: cpu_insns 7377609 used_cpu 7023049 mem_bytes 1614033 read_bytes 0 write_bytes 32988 entries 9 writes 7 tx_size 30744 largest_entry 22736 events_bytes 3272 resource_fee 36525472 fee_charged 27624118
+FIT GATE store_pqz_pop mldsa65 n2816-kmax65536: cpu_insns 5035487 used_cpu 4819863 mem_bytes 1662050 read_bytes 0 write_bytes 35608 entries 5 writes 1 tx_size 36204 largest_entry 35600 events_bytes 172 resource_fee 39499872 fee_charged 29872349
+FIT GATE set_kem_key mldsa65 n2816-kmax65536: cpu_insns 4667216 used_cpu 4461686 mem_bytes 1455357 read_bytes 0 write_bytes 5240 entries 5 writes 2 tx_size 5832 largest_entry 5096 events_bytes 248 resource_fee 5840837 fee_charged 4412432
+FIT register mldsa65 n2816-kmax65536 no attributes: cpu_insns 4941449 used_cpu 4698480 mem_bytes 1451670 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 6420 largest_entry 5944 events_bytes 2756 resource_fee 9308689 fee_charged 7036099
+FIT GATE set_pqz_key mldsa65 n2816-kmax65536: cpu_insns 6253457 used_cpu 5998289 mem_bytes 1573430 read_bytes 0 write_bytes 26056 entries 4 writes 1 tx_size 26588 largest_entry 26048 events_bytes 276 resource_fee 28911991 fee_charged 21863611
+FIT register_msig n=16 n2816-kmax65536 full: cpu_insns 63672853 used_cpu 60759795 mem_bytes 7175565 read_bytes 0 write_bytes 118764 entries 25 writes 7 tx_size 118816 largest_entry 57644 events_bytes 2068 resource_fee 131665488 fee_charged 99595033
+FIT register_msig n=16 n2816-kmax65536 split: cpu_insns 60524898 used_cpu 57753632 mem_bytes 6987727 read_bytes 0 write_bytes 83156 entries 24 writes 6 tx_size 83228 largest_entry 57644 events_bytes 1900 resource_fee 92181325 fee_charged 69728004
+FIT store_pqz_pop msig n=16 n2816-kmax65536: cpu_insns 6897624 used_cpu 6610379 mem_bytes 1920553 read_bytes 0 write_bytes 35608 entries 5 writes 1 tx_size 36204 largest_entry 35600 events_bytes 172 resource_fee 39501371 fee_charged 29873653
+FIT set_kem_key msig n=16 n2816-kmax65536, Ua(ua) loaded: cpu_insns 58066806 used_cpu 55605405 mem_bytes 6993666 read_bytes 0 write_bytes 58312 entries 21 writes 2 tx_size 58584 largest_entry 58168 events_bytes 248 resource_fee 64716769 fee_charged 48951887
+FIT register_msig 15 slots n2816-kmax65536: cpu_insns 54690284 used_cpu 52195169 mem_bytes 6256972 read_bytes 0 write_bytes 55100 entries 22 writes 4 tx_size 55512 largest_entry 54124 events_bytes 1384 resource_fee 61060296 fee_charged 46186470
+FIT set_pqz_key msig Ua(ua) of 15 slots n2816-kmax65536, 1 slot: cpu_insns 8539267 used_cpu 8187352 mem_bytes 1845500 read_bytes 0 write_bytes 26328 entries 5 writes 1 tx_size 26780 largest_entry 26320 events_bytes 276 resource_fee 29214925 fee_charged 22092948
+FIT register_msig 12 slots n2816-kmax65536: cpu_insns 43706560 used_cpu 41725346 mem_bytes 4682812 read_bytes 0 write_bytes 44252 entries 18 writes 4 tx_size 44456 largest_entry 43420 events_bytes 1240 resource_fee 49023470 fee_charged 37080591
+FIT EDGE set_pqz_key 12 slots n2816-kmax65536: cpu_insns 45270933 used_cpu 43383240 mem_bytes 4931641 read_bytes 0 write_bytes 65048 entries 16 writes 1 tx_size 65324 largest_entry 65040 events_bytes 276 resource_fee 72167850 fee_charged 54586508
+EDGE n2816-kmax65536: 12 slots fit, sig 42304 B stored
+FIT register_msig 13 slots n2816-kmax65536: cpu_insns 47274568 used_cpu 45128416 mem_bytes 5168499 read_bytes 0 write_bytes 47844 entries 19 writes 4 tx_size 48068 largest_entry 46976 events_bytes 1276 resource_fee 53008717 fee_charged 40095422
+EDGE n2816-kmax65536: 13 slots: job reverted, signed true, reason "tx failed: AAAAAAAGDY3/////AAAAAQAAAAAAAAAY/////QAAAAA="
+FIT register slhdsa128s #0: cpu_insns 2572276 used_cpu 2428469 mem_bytes 1441661 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 10084935 fee_charged 7624582
+FIT register slhdsa128s #1: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT register slhdsa128s #2: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT register slhdsa128s #3: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT register slhdsa128s #4: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT register slhdsa128s #5: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT register slhdsa128s #6: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT register slhdsa128s #7: cpu_insns 2605263 used_cpu 2453478 mem_bytes 1443075 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 17376 largest_entry 8612 events_bytes 924 resource_fee 9971391 fee_charged 7538730
+FIT EDGE register_msig 7 slhdsa128s slots: cpu_insns 13114324 used_cpu 12507598 mem_bytes 3908980 read_bytes 0 write_bytes 57736 entries 12 writes 3 tx_size 114884 largest_entry 57492 events_bytes 1148 resource_fee 64254327 fee_charged 48608977
+EDGE register 7 slhdsa128s slots: Ok("0xf511f2ded96aab40d032335739608dc695505b9039042f505dcaf7c6423c8c15")
+EDGE register 8 slhdsa128s slots: Err("on chain: \"FAILED\" \"AAAAAAAJ30v/////AAAAAQAAAAAAAAAY/////QAAAAA=\"")
+FIT register_msig 6 slhdsa128s slots (n2048-kmax1024): cpu_insns 11425608 used_cpu 10886842 mem_bytes 3326473 read_bytes 0 write_bytes 49636 entries 11 writes 3 tx_size 98688 largest_entry 49392 events_bytes 1112 resource_fee 55228555 fee_charged 41780071
+FIT EDGE set_pqz_key 6 slhdsa128s slots n2048-kmax1024: cpu_insns 11686619 used_cpu 11221441 mem_bytes 3403762 read_bytes 0 write_bytes 65092 entries 4 writes 1 tx_size 129064 largest_entry 65084 events_bytes 320 resource_fee 72541305 fee_charged 54877847
+EDGE set_pqz_key 6 slhdsa128s slots at n2048-kmax1024: Ok("0x972a5832d13a4b92459270e4d5bd1cf862b388646f3bbc236170494c9c618de4")
+FIT register_msig 7 slhdsa128s slots (n2048-kmax1024): cpu_insns 13128393 used_cpu 12508222 mem_bytes 3908980 read_bytes 0 write_bytes 57736 entries 12 writes 3 tx_size 114884 largest_entry 57492 events_bytes 1148 resource_fee 64254337 fee_charged 48608986
+EDGE set_pqz_key 7 slhdsa128s slots at n2048-kmax1024: Err("sendTransaction: rejected before mempool: sendTransaction ERROR: \"AAAAAATb+hT////vAAAAAA==\"")
+FIT register_msig 5 slhdsa128s slots (n2816-kmax65536): cpu_insns 9747895 used_cpu 9285037 mem_bytes 2817063 read_bytes 0 write_bytes 41536 entries 10 writes 3 tx_size 82492 largest_entry 41292 events_bytes 1076 resource_fee 46202797 fee_charged 34951172
+FIT EDGE set_pqz_key 5 slhdsa128s slots n2816-kmax65536: cpu_insns 10977590 used_cpu 10539682 mem_bytes 2968398 read_bytes 0 write_bytes 63172 entries 4 writes 1 tx_size 125480 largest_entry 63164 events_bytes 320 resource_fee 70403079 fee_charged 53260082
+EDGE set_pqz_key 5 slhdsa128s slots at n2816-kmax65536: Ok("0x4ef6b5f1b818b9bc64f10e218f7680f83e6ff989f3d746d9c7c014ff98b58a3f")
+FIT register_msig 6 slhdsa128s slots (n2816-kmax65536): cpu_insns 11414615 used_cpu 10886536 mem_bytes 3326473 read_bytes 0 write_bytes 49636 entries 11 writes 3 tx_size 98688 largest_entry 49392 events_bytes 1112 resource_fee 55228547 fee_charged 41780064
+EDGE set_pqz_key 6 slhdsa128s slots at n2816-kmax65536: Err("sendTransaction: rejected before mempool: sendTransaction ERROR: \"AAAAAAS7WZH////vAAAAAA==\"")
+FIT register_msig 5 slhdsa128s slots + PQZ + KEM n2816-kmax65536: cpu_insns 13070330 used_cpu 12452126 mem_bytes 3076864 read_bytes 0 write_bytes 66160 entries 12 writes 5 tx_size 130912 largest_entry 41292 events_bytes 1680 resource_fee 73650847 fee_charged 55718720
+EDGE register 5 slhdsa128s slots + PQZ + KEM, proof 0 B: Ok("0x4f5a53708cd30a8af7d89b929aa766b26720c6c579a1771af4b3379374cca794")
+EDGE register 6 slhdsa128s slots + PQZ + KEM, proof 0 B: Err("sendTransaction: rejected before mempool: sendTransaction ERROR: \"AAAAAATti+T////vAAAAAA==\"")
+EDGE register 5 slhdsa128s slots + PQZ + KEM, proof 35479 B: Err("simulation: HostError: Error(Contract, #4)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CC6OLYP7BBQUQMQGOAHYE56UCON5ZOV3MBGEEE2S32RRKNWQRZNRCROY, topics:[error, Error(Contract, #4)], data:\"escalating error to VM trap from failed host fu")
+FIT register fndsa512 + PQZ + KEM n2816-kmax65536 full: cpu_insns 9548609 used_cpu 9113349 mem_bytes 1971721 read_bytes 0 write_bytes 62928 entries 10 writes 7 tx_size 124224 largest_entry 35600 events_bytes 2564 resource_fee 70177758 fee_charged 53091269
+EDGE register fndsa512 + PQZ + KEM full: Ok("0xc882fcaa15cb107307b26b7f1690413dd471ec2318f76a5715b4f78b6904078c")
+EDGE register fndsa512 + PQZ + KEM without the proof: Err("simulation: HostError: Error(Contract, #4)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CC6OLYP7BBQUQMQGOAHYE56UCON5ZOV3MBGEEE2S32RRKNWQRZNRCROY, topics:[error, Error(Contract, #4)], data:\"escalating error to VM trap from failed host fu")
+EDGE node, transaction over tx_max_size_bytes: job dead, signed false, reason "simulation: transaction of 234920 B over the network's tx_max_size_bytes (132096)"
+ok
+test e2e_ua8_relayer_checked_msig_slot ... FIT P5 register the fndsa512 member, relayer mode: cpu_insns 1886664 used_cpu 1762517 mem_bytes 1387910 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 4752 largest_entry 2292 events_bytes 1792 resource_fee 2935311 fee_charged 2215347
+FIT P5 register the mldsa65 member: cpu_insns 4941449 used_cpu 4698480 mem_bytes 1451670 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 6420 largest_entry 5944 events_bytes 2756 resource_fee 9308689 fee_charged 7036099
+P5 flipped fndsa512 slot: job dead, reason "simulation: off-chain check refused the record: UAPoP"
+P5 no relayer: job dead, reason "simulation: a part of kind 0x0120 needs a relayer (NotVerifiable): this job names none"
+FIT P5 register_msig fndsa512 + mldsa65 slots, relayer mode: cpu_insns 5712533 used_cpu 5438014 mem_bytes 1545382 read_bytes 0 write_bytes 5492 entries 7 writes 3 tx_size 10460 largest_entry 5248 events_bytes 968 resource_fee 6042495 fee_charged 4566241
+COPY evm 31981 P5 register the fndsa512 member: gas_used 3141589
+COPY evm 31981 cacheExpandedKey P5 mldsa65 member part 0: gas_used 9584240
+COPY evm 31981 cacheExpandedKey P5 mldsa65 member part 1: gas_used 13415133
+COPY evm 31981 P5 register the mldsa65 member: gas_used 7245497
+COPY evm 31981 P5 registerMsig fndsa512 + mldsa65 slots: gas_used 9375978
+P5 result: an fndsa512 slot signed, passed check_registration, stored marked Relayer on Soroban and verified by EVM; remaining without a positive on a host: group vk slice, slhdsa128s slot, BLS slot with pop = false
+ok
+test e2e_ua8_simulation_auth_mode ... deploy.sh soroban local ua_registry: CDIIAJPT3ABYOIKUP36HN7YNXUZ3V7O5UK3WARW5IFA56Z5IXEJ7NF4J
+FIT P1 register the ML-DSA member: cpu_insns 4908271 used_cpu 4673471 mem_bytes 1450256 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 6420 largest_entry 5944 events_bytes 2756 resource_fee 9422232 fee_charged 7121950
+P1 auth = [lane entry], G member's slot, default mode: error Some("HostError: Error(Auth, InvalidAction)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDIIAJPT3ABYOIKUP36HN7YNXUZ3V7O5UK3WARW5IFA56Z5IXEJ7NF4J, top"), results[0].auth None entries
+P1 auth = [lane entry], authMode record: error Some("cannot set authMode to 'record' with an auth footprint"), results[0].auth None entries
+P1 auth = [], the same call, default mode: error None, results[0].auth Some(1) entries
+P1 result: a non-empty auth ENFORCES (Some(lane)), an empty auth RECORDS
+P1 enforcing simulation that passes: error None, results[0].auth Some(1) entries, every entry returned is the node's own: true
+P1 node, relayer = Some(lane), G slot of another account: job dead, reason "simulation: HostError: Error(Auth, InvalidAction)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDIIAJPT3ABYOIKUP36HN7YNXUZ3V7O5UK3WARW5IFA56Z5IXEJ7NF4J, topics:[error, Error(Auth, InvalidAction)], data:\"escalating error to VM trap from failed host function call: require_auth_for_args\"\n   1: [Dia"
+P1 node, relayer = None, G slot of another account: job dead, reason "simulation: the call needs another account's signature, which a call job does not carry"
+P1 node, relayer = Some(lane), G slot of this lane: job dead, reason "simulation: HostError: Error(Auth, InvalidAction)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDIIAJPT3ABYOIKUP36HN7YNXUZ3V7O5UK3WARW5IFA56Z5IXEJ7NF4J, topics:[error, Error(Auth, InvalidAction)], data:\"escalating error to VM trap from failed host function call: require_auth_for_args\"\n   1: [Dia"
+P1 node, relayer = None, G slot of this lane: job dead, reason "simulation: the call asks for this lane's authority outside the job's own call (S14: a lane's authority is never lent)"
+ok
+test e2e_ua8_tx_size_limit ... deploy.sh soroban local ua_registry: CD4NLXFDSEETFWUMNSLIJQXUXF2AGAPXRYPZT3HN7PONUWDZFAGPVNBN
+EDGE 132096 B sent, 132096 B counted, fee_bump false: sent true, status "SUCCESS"
+EDGE 132100 B sent, 132100 B counted, fee_bump false: Err(rejected before mempool: sendTransaction ERROR: "AAAAAAALby3////vAAAAAA==")
+EDGE 132224 B sent, 132096 B counted, fee_bump true: sent true, status "SUCCESS"
+EDGE 132228 B sent, 132100 B counted, fee_bump true: Err(rejected before mempool: sendTransaction ERROR: "AAAAAAALb5H////zl70QIKaum1yqh4O5JU9FKfDnJg1j6+VnTCKhH923gboAAAAAAAAAAP///+8AAAAAAAAAAA==")
+FIT register fndsa512 for the entry limit: cpu_insns 4415356 used_cpu 4186439 mem_bytes 1583891 read_bytes 0 write_bytes 21176 entries 9 writes 6 tx_size 40868 largest_entry 16636 events_bytes 2396 resource_fee 23651268 fee_charged 17889309
+ENTRY simulation of a 70,000 B write: error false, write_bytes Some(70128), stateChanges after [70128] B, fields Some(["events", "latestLedger", "minResourceFee", "results", "stateChanges", "transactionData"])
+ENTRY the same job through the node: job reverted, signed true, reason "tx failed: AAAAAAAFwkv/////AAAAAQAAAAAAAAAY/////QAAAAA="
+ok
+test e2e_ua8_unused_source_account_entry ... deploy.sh soroban local ua_registry: CDMEVLSS6URM4HXKNZFIYUC6WH6TLFUV3EIZI3CY5RIAYCFHBLGQDSUJ
+P2 Chain part, relayer = Some(lane): job mined, {"chain_state":"mined","job_id":1155}
+FIT P2 register mldsa65, relayer = Some(lane), entry unused: cpu_insns 5132608 used_cpu 4888137 mem_bytes 1475652 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 12148 largest_entry 5944 events_bytes 2756 resource_fee 9454009 fee_charged 7147083
+P2 result: ACCEPTED on chain, status "SUCCESS", 1 auth entry in the envelope, unused, pop_checked Chain
+ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 273.02s
+
+== e2e-ua8-local: PASS
+rc-ua8=0
+== e2e-local: 45ca6f04+uncommitted 2026-11-01T14:38:00Z; stellar 30.0.0 (90a3d42d9327ccfaa0d301373766f45beae3e6d9)
+== build Wasm
+== build soroban
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/dex/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.21s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_dex.wasm (14694 bytes optimized (original size was 18122 bytes))
+    Wasm Hash: 3963d36f2e56afc818524f9d7e77f9802b46780250ac41394d8d01caa7990524
+    Wasm Size: 14694 bytes optimized (original size was 18122 bytes)
+    Exported Functions: 8 found
+      • __constructor
+      • cancel
+      • filled
+      • market
+      • order_hash
+      • set_market
+      • settle
+      • ua_cancel
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/token/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.08s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_token.wasm (26651 bytes optimized (original size was 31198 bytes))
+    Wasm Hash: df541cf468add24ac137faadbed86723ac393ba2a800b969cade25c17470d259
+    Wasm Size: 26651 bytes optimized (original size was 31198 bytes)
+    Exported Functions: 30 found
+      • __constructor
+      • admin
+      • allowance
+      • approve
+      • balance
+      • burn
+      • burn_from
+      • decimals
+      • meta_pay_id
+      • mint
+      • mint_to_ua
+      • name
+      • pay
+      • pay_meta
+      • pay_to_ua
+      • ref_used
+      • registry
+      • symbol
+      • transfer
+      • transfer_from
+      • transfer_to_ua
+      • ua_balance
+      • ua_burn
+      • ua_cancel_nonce
+      • ua_nonce
+      • ua_pay
+      • ua_pay_meta
+      • ua_ref_used
+      • ua_trade
+      • ua_transfer
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/ua-registry/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.08s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_ua_registry.wasm (49317 bytes optimized (original size was 56399 bytes))
+    Wasm Hash: 8bb924b060237269da561b41ec090125b0a75f47e502b83ffb779703f0ce5a3a
+    Wasm Size: 49317 bytes optimized (original size was 56399 bytes)
+    Exported Functions: 31 found
+      • __constructor
+      • checked_of
+      • kem_key_at
+      • kem_key_of
+      • key_owner
+      • kind_name
+      • pop_of
+      • pqz_key_of
+      • pqz_key_sig_of
+      • pqz_pop_of
+      • receivable
+      • record_of
+      • register
+      • register_frost
+      • register_msig
+      • register_musig2
+      • register_webauthn
+      • registration_of
+      • relayers
+      • require_authorized
+      • set_kem_key
+      • set_pqz_key
+      • store_pqz_pop
+      • ua_at
+      • ua_count
+      • ua_of
+      • ua_of_frost
+      • ua_of_msig
+      • ua_of_musig2
+      • ua_of_webauthn
+      • ua_page
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/mandate/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.08s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_mandate.wasm (16554 bytes optimized (original size was 19087 bytes))
+    Wasm Hash: fca1b6562f7690f263dcf49c699c0b93f14633e9ba7b5acdb4512a7bb9ed46c9
+    Wasm Size: 16554 bytes optimized (original size was 19087 bytes)
+    Exported Functions: 12 found
+      • __constructor
+      • epoch
+      • mandate
+      • mtx_mandate_pay
+      • mtx_revoke
+      • mtx_set_mandate
+      • mtx_set_payee
+      • mtx_withdraw
+      • owner
+      • paid
+      • registry
+      • ua_nonce
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/relay-executor/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.08s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_relay_executor.wasm (1187 bytes optimized (original size was 1316 bytes))
+    Wasm Hash: e23732b60b42551e811c796609c60b8c6499205f1d2af816d558f6c4ba6c9c00
+    Wasm Size: 1187 bytes optimized (original size was 1316 bytes)
+    Exported Functions: 3 found
+      • __constructor
+      • exec
+      • router
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/relay-fee/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.08s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_relay_fee.wasm (7630 bytes optimized (original size was 8585 bytes))
+    Wasm Hash: 37330478cb2c3fc0c66a788f2efe8784edda1d5f9b1fd6b03a334cac97991a27
+    Wasm Size: 7630 bytes optimized (original size was 8585 bytes)
+    Exported Functions: 5 found
+      • __constructor
+      • executor
+      • relay
+      • relay_ref
+      • ua_relay
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/smart-key-account/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.08s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_smart_key_account.wasm (10529 bytes optimized (original size was 11975 bytes))
+    Wasm Hash: f02a6780eee4d41ba0489b8b8a258f42bc71be69ab9951ae5239c76d374c705d
+    Wasm Size: 10529 bytes optimized (original size was 11975 bytes)
+    Exported Functions: 5 found
+      • __check_auth
+      • __constructor
+      • add_key
+      • keys
+      • remove_key
+✅ Build Complete
+
+== registry interface
+ℹ️  Loading contract spec from file...
+registry interface: ok
+== quickstart
+quickstart: scaas-stellar up (stellar/quickstart@sha256:e05d68bb3b2629a829310dc3434fc0ee3f801854bdfa1a7c8c362d2f1c9060f8), rpc http://127.0.0.1:31980/rpc
+quickstart: protocolVersion 30, testnet limits applied
+== cargo test --test e2e_soroban
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s
+     Running tests/e2e_soroban.rs (target/debug/deps/e2e_soroban-1acad7df96f5b319)
+
+running 1 test
+test soroban_payments_anti_lock_fee_bump_and_finality ... ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/token/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+   Compiling scaas-token v0.1.0 (smartcontracts/soroban/contracts/token)
+    Finished `release` profile [optimized] target(s) in 1.48s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_token.wasm (26651 bytes optimized (original size was 31198 bytes))
+    Wasm Hash: 707f4c014045a889eb8d64e778d88a31618b2eaedc73b66655ec01ece54d4fb0
+    Wasm Size: 26651 bytes optimized (original size was 31198 bytes)
+    Exported Functions: 30 found
+      • __constructor
+      • admin
+      • allowance
+      • approve
+      • balance
+      • burn
+      • burn_from
+      • decimals
+      • meta_pay_id
+      • mint
+      • mint_to_ua
+      • name
+      • pay
+      • pay_meta
+      • pay_to_ua
+      • ref_used
+      • registry
+      • symbol
+      • transfer
+      • transfer_from
+      • transfer_to_ua
+      • ua_balance
+      • ua_burn
+      • ua_cancel_nonce
+      • ua_nonce
+      • ua_pay
+      • ua_pay_meta
+      • ua_ref_used
+      • ua_trade
+      • ua_transfer
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/token/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.07s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_token.wasm (26651 bytes optimized (original size was 31198 bytes))
+    Wasm Hash: 707f4c014045a889eb8d64e778d88a31618b2eaedc73b66655ec01ece54d4fb0
+    Wasm Size: 26651 bytes optimized (original size was 31198 bytes)
+    Exported Functions: 30 found
+      • __constructor
+      • admin
+      • allowance
+      • approve
+      • balance
+      • burn
+      • burn_from
+      • decimals
+      • meta_pay_id
+      • mint
+      • mint_to_ua
+      • name
+      • pay
+      • pay_meta
+      • pay_to_ua
+      • ref_used
+      • registry
+      • symbol
+      • transfer
+      • transfer_from
+      • transfer_to_ua
+      • ua_balance
+      • ua_burn
+      • ua_cancel_nonce
+      • ua_nonce
+      • ua_pay
+      • ua_pay_meta
+      • ua_ref_used
+      • ua_trade
+      • ua_transfer
+✅ Build Complete
+
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 21.60s
+
+== cargo test --test e2e_soroban_ua
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s
+     Running tests/e2e_soroban_ua.rs (target/debug/deps/e2e_soroban_ua-d602368fa31cb8bd)
+
+running 6 tests
+test e2e_soroban_ua_dex_leg ... deploy.sh soroban local ua_registry: CDYPKDWYN5GAKUWNHIQEAILQQRK56WHDDA25ZNWIRY2DR7M4VFG7LUYR
+deploy.sh soroban local token: CDUOL5NFU57MZ2WXLOSFSP7MHIJNFWYUU6WD3YL4CFDSSBB4U3HYDEUY
+deploy.sh soroban local token: CDPEI3ZNJY3AON6C3PGX7G5Q5MQFOAWAFCDZ4BAT6RISAOKIKLKHKN53
+deploy.sh soroban local relay_fee: CAM3OJ7BP2GNMNAJEXHZFEMR7HJSFS62CURPP4LUYPPO4EBTSSDBAE7N
+deploy.sh soroban local mandate: CDG7Z7LZJV5G77GH4PREQPGDIZACM7SNOKK3PUCDZYICMBL2X2R5L3D6
+deploy.sh soroban local dex: CBSYQSONJQWCXK7WHDJP7ZWULOU6CXGUHU4CHVHEFFNX4VFFCE22QRI7
+T10 stack: registry CDYPKDWYN5GAKUWNHIQEAILQQRK56WHDDA25ZNWIRY2DR7M4VFG7LUYR token CDUOL5NFU57MZ2WXLOSFSP7MHIJNFWYUU6WD3YL4CFDSSBB4U3HYDEUY token_b CDPEI3ZNJY3AON6C3PGX7G5Q5MQFOAWAFCDZ4BAT6RISAOKIKLKHKN53 router CAM3OJ7BP2GNMNAJEXHZFEMR7HJSFS62CURPP4LUYPPO4EBTSSDBAE7N executor CD5JJABZDTP4YQIJWYZV7Q623MBXRZWDU3DMP3DTBUN75Q2IZ3LV5X2N mandate CDG7Z7LZJV5G77GH4PREQPGDIZACM7SNOKK3PUCDZYICMBL2X2R5L3D6 dex CBSYQSONJQWCXK7WHDJP7ZWULOU6CXGUHU4CHVHEFFNX4VFFCE22QRI7
+T10 register webauthn-p256 (lane 0 via CLI): tx 4760e6f1d7eac330ebd6795b60f10a40ea145c3bfe58425bee62ae8bbba79a81 ledger 83 cpu_insns 5018123 resource_fee 1791666 fee_charged 1553021 stroops
+T10 register mldsa65#2 (lane 0 via CLI): tx 10ba2e0c344d5d880058ab26cf0f0df5557a564824e1446b47f0231917921e39 ledger 85 cpu_insns 4908271 resource_fee 8193246 fee_charged 7121880 stroops
+T10 set_market (fees off): tx f27cc7ecdca06fe86feb05e5609123ee7b24e7f61978532e890b2a98188c01e9 ledger 88 cpu_insns 700447 resource_fee 216985 fee_charged 181403 stroops
+T10 mint_to_ua (mldsa65, token A): tx 3ae745321f13ba4020d075bd484ffe2052119e7e355703ff9de40b1c8eae2e33 ledger 90 cpu_insns 1716284 resource_fee 309073 fee_charged 261977 stroops
+T10 mint (taker, token B): tx a38c74efcfd8479fadc786b1248959eb361bf2387a626ebbc044e9a935abc9e1 ledger 92 cpu_insns 782559 resource_fee 162283 fee_charged 133724 stroops
+T10 approve (taker -> DEX, token B): tx b6da0d8a62cd2b1c1c445554a7a374ed832902dde3ee88a089e82fdc97b78169 ledger 94 cpu_insns 806454 resource_fee 22364 fee_charged 12182 stroops
+T10 settle UA maker (mldsa65) vs native taker (ua_metatx job, lane 0): tx 1add57ea5e6affe44ba6291e8c6aa111abc0e7f999ea14541dbaf171d74adaf3 ledger 96 cpu_insns 10672958 resource_fee 1446842 fee_charged 1095140 stroops
+ok
+test e2e_soroban_ua_lane_authority_not_lent ... T10 mint_to_ua (passkey): tx 07f387790d8a424cd050ade0cdf348f2319559a565f6f07384126774028e61a2 ledger 98 cpu_insns 1683392 resource_fee 168127 fee_charged 139412 stroops
+T10 lane authority not lent (host refusal at simulation): job state dead, reason "simulation: HostError: Error(Auth, InvalidAction)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CAM3OJ7BP2GNMNAJEXHZFEMR7HJSFS62CURPP4LUYPPO4EBTSSDBAE7N, topics:[error, Error(Auth, InvalidAction)], data:\"escalating error to VM trap from failed host function call: call\"\n   1: [Diagnostic Event] co"
+ok
+test e2e_soroban_ua_mandate_pays_ua_payee ... T10 mtx_set_mandate (native owner, delegate = passkey UA): tx 39ff856fda50b51ecf5eea343d6a9a34c54cead564ed3b29a5be3e1d3f5e3683 ledger 100 cpu_insns 895572 resource_fee 585727 fee_charged 502697 stroops
+T10 mtx_set_payee (native owner, payee = mldsa65 UA): tx a7856ac2bb17a558717a5557fa02ccb5a5c01b7bc486f99a0bb83b0bf5cae064 ledger 103 cpu_insns 751632 resource_fee 209764 fee_charged 175300 stroops
+T10 mint (to the mandate): tx 18e4d1ff85d5d507bf35d0134353c54dcaf83e4c70a51b375501c383a004b34e ledger 105 cpu_insns 781266 resource_fee 158370 fee_charged 130315 stroops
+T10 mtx_mandate_pay passkey delegate -> mldsa65 payee (ua_metatx job, lane 1): tx 2b3d49d20de1614cedfb0036a141ecc7af0d3b7491ce78dc4a16271e62a5b711 ledger 107 cpu_insns 7474682 resource_fee 393832 fee_charged 293898 stroops
+T10 mandate PaymentSettled row: {"amount":"5000","block_hash":"0x11465d14e4b4270ce7e9a7c584e3d02ba7cf87d4458d3be24f32a04c5a0a6d39","block_number":107,"contract":"CDUOL5NFU57MZ2WXLOSFSP7MHIJNFWYUU6WD3YL4CFDSSBB4U3HYDEUY","entry_ref":"0x886e9171e32ffe28bb75c3f8def610b342f082a5336ffe7343a516a85584ac4a","event":"PaymentSettled","from":"CDG7Z7LZJV5G77GH4PREQPGDIZACM7SNOKK3PUCDZYICMBL2X2R5L3D6","log_index":2,"to":"0xab3b7198a4753f06b0a9b0e4fdffd92759ea2f3c7031ccd1b87c2f666e1b4428","tx_hash":"0x2b3d49d20de1614cedfb0036a141ecc7af0d3b7491ce78dc4a16271e62a5b711"}
+ok
+test e2e_soroban_ua_register_passkey_and_mldsa65 ... T10 register webauthn-p256: ua 0x766d7245671c64dafe1478ea07b04c23350bffdf6a823ae6c492813e564136e3 tx 4760e6f1d7eac330ebd6795b60f10a40ea145c3bfe58425bee62ae8bbba79a81 ledger 83 cpu_insns 5018123 resource_fee 1791666 fee_charged 1553021 stroops
+T10 register mldsa65#2: ua 0xab3b7198a4753f06b0a9b0e4fdffd92759ea2f3c7031ccd1b87c2f666e1b4428 tx 10ba2e0c344d5d880058ab26cf0f0df5557a564824e1446b47f0231917921e39 ledger 85 cpu_insns 4908271 resource_fee 8193246 fee_charged 7121880 stroops
+ok
+test e2e_soroban_ua_relay_fee ... T10 mint_to_ua (passkey): tx c1cb0903b83749d1cb1d2fc9f0afce92cb3747c10004acfdf183b8bcdd24ca35 ledger 110 cpu_insns 1718581 resource_fee 23394 fee_charged 13561 stroops
+T10 ua_relay passkey fee, open mode (ua_metatx job, lane 0): tx e08974c0e5761246f60c175e164010d3191a44f8296edc276e475f790843d590 ledger 113 cpu_insns 8014664 resource_fee 585213 fee_charged 438727 stroops
+T10 ua_relay fee row (PaymentSettled + RelayFeePaid): {"amount":"250","block_hash":"0xed4b38bbc8b730cd6f8fce9fc7c5e079db6b40dc86a37ab08e068fc1298128a3","block_number":113,"contract":"CDUOL5NFU57MZ2WXLOSFSP7MHIJNFWYUU6WD3YL4CFDSSBB4U3HYDEUY","entry_ref":"0x9f0eba6451e4c488d2b2607cd1ab4836c08e59ef4a28f1a86a16a934b596784b","event":"PaymentSettled","from":"0x766d7245671c64dafe1478ea07b04c23350bffdf6a823ae6c492813e564136e3","log_index":2,"relay_payee":"GB3TCCIC6KLYKM72PX7KA6RNYC2BHC7DQYDMEAAN7PDMUZQD7UKJGSSY","relay_target":"CDUOL5NFU57MZ2WXLOSFSP7MHIJNFWYUU6WD3YL4CFDSSBB4U3HYDEUY","to":"CAM3OJ7BP2GNMNAJEXHZFEMR7HJSFS62CURPP4LUYPPO4EBTSSDBAE7N","tx_hash":"0xe08974c0e5761246f60c175e164010d3191a44f8296edc276e475f790843d590"}
+ok
+test e2e_soroban_ua_transfer_to_ua_and_ua_pay_relayed ... T10 mint (native): tx 0da5b2a98f42c72110c43febd793bd5126aa3e165fbd7fabf999d5c2a5a7793d ledger 115 cpu_insns 782559 resource_fee 162283 fee_charged 133724 stroops
+T10 transfer_to_ua (native -> passkey UA): tx a1814916621ee5a313b5686cb7225bcfcb890dccc1b4b19bc0f8e96132832c82 ledger 116 cpu_insns 1841640 resource_fee 27324 fee_charged 17451 stroops
+T10 ua_pay passkey -> mldsa65 (ua_metatx job, lane 0): tx 3167132a1cf56b2b21df3d9e118b41e499c539b22dc1da95190ba591690eca16 ledger 118 cpu_insns 6244010 resource_fee 241215 fee_charged 177373 stroops
+T10 ua_pay rows: {"amount":"1000","block_hash":"0xddae7207a5f376f518f3d2e3cc2965a58c3e2576b0e6767becf82529d02c8389","block_number":118,"contract":"CDUOL5NFU57MZ2WXLOSFSP7MHIJNFWYUU6WD3YL4CFDSSBB4U3HYDEUY","entry_ref":"0x01de374576d2824f7ecdf512faff28750608e49a2e758fa2f237cd456e55d32a","event":"PaymentSettled","from":"0x766d7245671c64dafe1478ea07b04c23350bffdf6a823ae6c492813e564136e3","log_index":1,"to":"0xab3b7198a4753f06b0a9b0e4fdffd92759ea2f3c7031ccd1b87c2f666e1b4428","tx_hash":"0x3167132a1cf56b2b21df3d9e118b41e499c539b22dc1da95190ba591690eca16"}
+ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 72.06s
+
+== e2e-local: PASS
+rc-local=0

@@ -353,6 +353,7 @@ static void holder_refusals() {
     auto& regs = p["registrations"];
     int run = 0, sigLevel = 0;
     for (auto& n : p["negatives"]) {
+        if (n.value("rule", "") == "msig-minimal") continue; // a registry rule over a full registration (msig minimal form)
         std::string entry = n["entry"].get<std::string>(), name = n["name"].get<std::string>(), err = n["error"].get<std::string>();
         auto& m = n["mutation"];
         json set = m.contains("set") ? m["set"] : json::object();
@@ -406,7 +407,7 @@ static void holder_refusals() {
             ++sigLevel;  // signatures / native members: verified by the signature vectors
         }
     }
-    CHECK(run + sigLevel == int(p["negatives"].size()) && run && sigLevel, "negatives counts");
+    CHECK(run + sigLevel + 1 == int(p["negatives"].size()) && run && sigLevel, "negatives counts"); // + the skipped msig-minimal row
     Bytes u(32, 1), key(16384), proof(32, 7);
     // malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
     for (Bytes kd : {Bytes{0, 2, 0}, Bytes{0, 2, 0, 2, 9, 9}})

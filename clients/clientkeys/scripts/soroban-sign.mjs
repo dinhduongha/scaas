@@ -3,7 +3,8 @@
 //   node scripts/soroban-sign.mjs <kind> <keyIndex> <hex digest> <purpose>
 //     kind: webauthn-p256 | p256 | ed25519 | secp256k1 | mldsa44 | mldsa65 | msig (the 2-of-3; keyIndex ignored)
 //     purpose: metatx | trade | metatx-cancel | member | pop (= the portable pop v2: digest = registrationDigest)
-//   → {"ua": "0x…", "keyData": "0x…", "auth": "0x…"}
+//   → {"ua": "0x…", "keyData": "0x…", "auth": "0x…", "authXdr": "0x…", "sig": {key_data, signature, members}}
+//     (authXdr: the UaSig ScVal the entries take; sig: the same UaSig as a node `ua_metatx` job writes it)
 import { hex, fromHex } from '../src/bytes.js';
 import { signer, authFor } from './soroban-ua-ops-vectors.mjs';
 
@@ -13,5 +14,5 @@ if (!purpose || !/^\d+$/.test(index) || !/^(0x)?[0-9a-fA-F]{64}$/.test(digest)) 
   process.exit(2);
 }
 const sg = signer(kind, ...(kind === 'msig' ? [] : [Number(index)]));
-const { auth } = authFor(sg, purpose, fromHex(digest));
-console.log(JSON.stringify({ ua: hex(sg.ua), keyData: hex(sg.keyData), auth: hex(auth) }));
+const { auth, authXdr, sig } = authFor(sg, purpose, fromHex(digest));
+console.log(JSON.stringify({ ua: hex(sg.ua), keyData: hex(sg.keyData), auth: hex(auth), authXdr: hex(authXdr), sig }));

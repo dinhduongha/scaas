@@ -15,7 +15,7 @@
 //! Some(router), auth)`, whose UA signature covers `pay_ref = ref` and `relayer = router`; only the router's own
 //! fee call satisfies `router.require_auth()`. `RelayFeePaid` names `payer` and `payee` as `Holder` (SOR-D11).
 #![no_std]
-use scaas_ua_common::Holder;
+use scaas_ua_common::{Holder, UaSig};
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, vec, xdr::ToXdr, Address,
     Bytes, BytesN, Env, Executable, IntoVal, Symbol, Val, Vec,
@@ -147,7 +147,7 @@ impl RelayFee {
     /// Open mode (`to == Holder::Addr(router)`) forwards to `relayer`; any failure reverts both.
     #[allow(clippy::too_many_arguments)]
     pub fn ua_relay(env: Env, payer: BytesN<32>, target: Address, func: Symbol, args: Vec<Val>, salt: BytesN<32>,
-                    token: Address, to: Holder, amount: i128, valid_until: u64, relayer: Address, auth: Bytes) {
+                    token: Address, to: Holder, amount: i128, valid_until: u64, relayer: Address, auth: UaSig) {
         relayer.require_auth();
         let call_ref = run(&env, &to, &relayer, &target, &func, args, &salt);
         let me = Some(env.current_contract_address());

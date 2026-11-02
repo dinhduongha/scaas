@@ -72,6 +72,8 @@ pub enum Key {
     Key(BytesN<32>),
     List(u32, u32),
     Count(u32),
+    // B0 (ua8-soroban, U8S-D3): the real registry's `Signer`
+    Signer(BytesN<32>),
 }
 
 pub fn h(env: &Env, data: &Bytes) -> BytesN<32> {
@@ -473,6 +475,7 @@ impl UaSpike {
     /// `pop` None ⇒ empty (the CLI takes no empty `Bytes` argument).
     pub fn seed(env: Env, kind: u32, key_data: Bytes, pop: Option<Bytes>) -> BytesN<32> {
         let id = tagged(&env, kind, &key_data);
+        put(&env, &Key::Signer(id.clone()), &(kind, key_data.clone())); // B0: what the real registry's member checks read
         store(&env, &id, kind, key_data, pop.unwrap_or_else(|| Bytes::new(&env)));
         id
     }

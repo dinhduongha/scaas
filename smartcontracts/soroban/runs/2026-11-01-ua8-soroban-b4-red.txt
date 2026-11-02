@@ -1,0 +1,480 @@
+# RED at ec4912a5 + B4 tests + stub entries (register_musig2, register_frost, ua_of_musig2, ua_of_frost refuse KindDisabled); lines capped at 300 characters
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --no-fail-fast
+   Compiling scaas-ua-registry v0.1.0 (smartcontracts/soroban/contracts/ua-registry)
+   Compiling scaas-token v0.1.0 (smartcontracts/soroban/contracts/token)
+warning: use of deprecated method `soroban_sdk::ledger::Ledger::protocol_version`: Protocol version won't be available in the future
+  --> contracts/token/src/test.rs:50:40
+   |
+50 |     assert_eq!(Env::default().ledger().protocol_version(), 30);
+   |                                        ^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+
+warning: `scaas-token` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.81s
+     Running unittests src/lib.rs (smartcontracts/soroban/target/debug/deps/scaas_token-b6d29af687fae8f6)
+
+running 32 tests
+test test::env_default_protocol_30 ... ok
+test test::cross_implementation_vector ... ok
+test test::pay_meta_settles_and_emits_meta_first ... ok
+test test::sep41_basics ... ok
+test test::pay_moves_funds_once_per_ref_and_respects_expiry ... ok
+test test::pay_meta_vectors_match ... ok
+test test::approve_only_to_contracts ... ok
+test test::pay_requires_the_payer ... ok
+test test::pay_ref_is_per_payer_nobody_can_pre_burn_it ... ok
+test test::soroban_pay_meta_mismatch_and_replay ... ok
+test test_ua::mint_to_ua_admin_only ... ok
+test test_ua::msig_member_equal_to_token_refused ... ok
+test test_ua::pay_to_ua_ref_once_per_payer ... ok
+test test_ua::pool_address_not_payable ... ok
+test test_ua::relayer_bound_needs_auth ... ok
+test test_ua::ua_entries_extend_ttl ... ok
+test test_ua::ua8_relayer_checked_ua_authorises_nothing ... FAILED
+test test_ua::sep41_events_match_balance_with_ua_moves ... ok
+test test_ua::ua_ledger_off_refused ... ok
+test test_ua::ua_entry_archived_nonce_restored_not_reset ... ok
+test test_ua::ua_burn_and_cancel_nonce ... ok
+test test_ua::transfer_to_ua_then_ua_transfer ... ok
+test test_ua::ua_expired_refused ... ok
+test test_ua::ua_pay_meta_emits_meta_first ... ok
+test test_ua::ua_trade_over_pull_one_call_refused ... ok
+test test_ua::ua_trade_dex_must_be_contract ... ok
+test test_ua::ua_pay_once_per_ref ... ok
+test test_ua::ua_trade_only_named_dex ... ok
+test test_ua::ua_trade_pulled_total_bounded ... ok
+test test_ua::ua_transfer_replay_refused ... ok
+test test_ua::ua_receiver_not_registered_or_not_receivable ... ok
+test test_ua::ua_ops_vectors_token_rows ... ok
+
+failures:
+
+---- test_ua::ua8_relayer_checked_ua_authorises_nothing stdout ----
+
+thread 'test_ua::ua8_relayer_checked_ua_authorises_nothing' (278799) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+HostError: Error(Contract, #1)
+
+Event log (newest first):
+   0: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:"escalating error to panic"
+   1: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:["contract call failed", register, [307, Bytes(7d55db624a6ce7e22796fb2115a9ed527d98bd3e6d0cde7f6f5d319c8a5ba629), {kem: {mlkem_ek: Bytes(), scheme: 0, x25519: Bytes(0000000000000000000000000000000000000000000000000000000000000000)}, 
+   2: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M, topics:[error, Error(Contract, #1)], data:"caught error from function"
+   3: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M, topics:[error, Error(Contract, #1)], data:"escalating error to panic"
+   4: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M, topics:[error, Error(Contract, #1)], data:["failing with contract error", 1]
+   5: [Diagnostic Event] topics:[fn_call, CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M, register], data:[307, Bytes(7d55db624a6ce7e22796fb2115a9ed527d98bd3e6d0cde7f6f5d319c8a5ba629), {kem: {mlkem_ek: Bytes(), scheme: 0, x25519: Bytes(000000000000000000000000000000000000000000000000000000
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Writing test snapshot file for test "test_ua::ua8_relayer_checked_ua_authorises_nothing" to "test_snapshots/test_ua/ua8_relayer_checked_ua_authorises_nothing.1.json".
+
+
+failures:
+    test_ua::ua8_relayer_checked_ua_authorises_nothing
+
+test result: FAILED. 31 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.75s
+
+error: test failed, to rerun pass `-p scaas-token --lib`
+     Running unittests src/lib.rs (smartcontracts/soroban/target/debug/deps/scaas_ua_registry-c54d5d54c1d28043)
+
+running 126 tests
+test test::id_in_native_space_refused ... ok
+test test::key_hash_unique ... ok
+test test::entries_extend_ttl ... ok
+test test::key_data_invalid_rows_refused ... ok
+test test::msig_classical_dominant_matches_evm_bytes ... ok
+test test::member_large_pop_same_budget ... ok
+test test::msig_classical_dominant_empty_pop ... ok
+test test::kind_msig_vectors_verify ... ok
+test test::kind_msig_negatives_fail ... ok
+test test::msig_member_unknown_refused ... ok
+test test::msig_g_member_redundant_slot_refused ... ok
+test test::msig_require_authorized_keeps_rule ... ok
+test test::msig_evm_eoa_member_typed_digest ... ok
+test test::register_disabled_kind_refused ... ok
+test test::msig_soroban_contract_member_refused ... ok
+test test::register_any_submitter ... ok
+test test::msig_evm_eoa_personal_sign_refused ... ok
+test test::register_front_run_identical ... ok
+test test::relayers_from_constructor ... ok
+test test::register_unverifiable_part_refused ... ok
+test test::msig_unsignable_not_receivable ... ok
+test test::require_authorized_not_registered ... ok
+test test::stellar_account_round_trip ... ok
+test test::msig_soroban_native_member_host_auth ... ok
+test test::require_authorized_refuses_portable_purposes ... ok
+test test::registration_of_returns_register_args ... ok
+test test::msig_pop_not_minimal_refused ... ok
+test test::ua_lists_per_kind ... ok
+test test_ua8::ua8_classical_msig_with_kem ... ok
+test test_ua8::ua8_entries_extend_ttl ... ok
+test test_ua8::ua8_checked_of_shape ... ok
+test test::register_attrs_accepted ... ok
+test test::register_rows_from_portable_json ... ok
+test test_ua8::msig_kem_sig_not_minimal_refused ... ok
+test test_ua8::ua8_attrs_error_unused ... ok
+test test_ua8::ua8_kem_scheme_above_a_byte_refused ... ok
+test test_ua8::ua8_events_fit_and_hash ... ok
+test test_ua8::ua8_kem_any_order_write_once ... ok
+test test_ua8::ua8_kem_by_third_party ... ok
+test test_ua8::ua8_kem_rules ... FAILED
+test test_ua8::ua8_kind_name_table ... ok
+test test::require_authorized_each_kind_and_purpose ... ok
+test test_ua8::ua8_pqz_bytes_in_state ... ok
+test test_ua8::ua8_kem_commit_filled_once ... ok
+test test_ua8::ua8_pop_purpose_and_record_separated ... ok
+test test_ua8::ua8_register_relayer_slots_largest_fit ... FAILED
+test test_ua8::ua8_register_relayer_slots_over_limit - should panic ... FAILED
+test test_ua8::ua8_pqz_attrs_stored_unproven ... ok
+test test_ua8::ua8_register_webauthn_typed ... ok
+test test_ua8::ua8_register_slot_fields_pop ... ok
+test test_ua8::ua8_kem_from_vectors ... ok
+test test_ua8::ua8_register_without_pqz_pop ... ok
+test test_ua8::ua8_register_msig_typed ... ok
+test test_ua8::ua8_relayer_bad_record_takes_slot_marked ... FAILED
+test test_ua8::ua8_relayer_checked_every_offchain_kind ... FAILED
+test test_ua8::ua8_relayer_checked_ua_authorises_nothing ... FAILED
+test test_ua8::ua8_relayer_classical_msig_row ... FAILED
+test test_ua8::ua8_relayer_group_kinds_typed ... FAILED
+test test_ua8::ua8_relayer_group_typed_rules ... FAILED
+test test_ua8::ua8_relayer_key_data_layout ... FAILED
+test test_ua8::ua8_relayer_fndsa512_kem_and_pqz ... FAILED
+test test_ua8::ua8_relayer_key_hash_groups ... FAILED
+test test_ua8::ua8_relayer_list_immutable ... FAILED
+test test_ua8::ua8_relayer_evm_contract_slot ... FAILED
+test test_ua8::ua8_relayer_kind_without_relayer_not_verifiable ... FAILED
+test test_ua8::ua8_portable_sig_fields ... ok
+test test_ua8::ua8_relayer_msig_mixed_members ... FAILED
+test test_ua8::ua8_relayer_msig_member_rules ... FAILED
+test test_ua8::ua8_registration_of_reassembles ... ok
+test test_ua8::ua8_relayer_msig_signable_counts_chain_members ... FAILED
+test test_ua8::ua8_relayer_must_authorise ... FAILED
+test test_ua8::ua8_register_kem_commit ... ok
+test test_ua8::ua8_relayer_unlisted_refused ... FAILED
+test test_ua8::ua8_require_authorized_uasig_fields ... ok
+test test_ua8::ua8_relayer_register_parts_take_pop_checked ... FAILED
+test test_ua8::ua8_negatives_from_portable_json ... FAILED
+test test_ua8::ua8_set_pqz_key_negatives ... FAILED
+test test_ua8::ua8_set_pqz_key_relayer_slots_largest_fit ... FAILED
+test test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2048 - should panic ... FAILED
+test test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2816 - should panic ... FAILED
+test test_ua8::ua8_set_events_hash_only ... ok
+test test_ua8::ua8_set_pqz_key_rules ... FAILED
+test test_ua8::ua8_relayer_mode_still_verifies_chain_parts ... ok
+test test_ua8::ua8_set_pqz_key_from_vectors ... ok
+test test_ua8::ua8_set_pqz_key_single_key ... ok
+test test_ua8::ua8_set_pqz_key_write_once ... ok
+test test_ua8::ua8_ua_of_typed ... ok
+test test_ua8::ua8_store_pqz_pop_idempotent ... ok
+test test_verify::domain_separator_pinned ... ok
+test test_verify::ed25519_key_check_matches_kinds_json ... ok
+test test_ua8::ua8_views_of_register ... ok
+test test_verify::evm_eoa_member_typed_recovers ... ok
+test test_ua8::ua8_store_pqz_pop_hash_checked ... ok
+test test_verify::kem_record_digests_match_portable_json ... ok
+test test_verify::kem_record_of_no_key_is_the_zero_record ... ok
+test test_verify::kind_ed25519_negatives_fail ... ok
+test test_verify::kind_ed25519_rfc8032_vectors ... ok
+test test_verify::kind_ed25519_vectors_verify ... ok
+test test_ua8::ua8_store_pqz_pop_negatives ... ok
+test test_verify::kind_mldsa44_vectors_verify ... ok
+test test_verify::kind_mldsa44_negatives_fail ... ok
+test test_verify::kind_p256_vectors_verify ... ok
+test test_verify::kind_p256_negatives_fail ... ok
+test test_verify::kind_mldsa65_negatives_fail ... ok
+test test_verify::kind_secp256k1_negatives_fail ... ok
+test test_verify::kind_mldsa65_vectors_verify ... ok
+test test_verify::kind_webauthn_p256_negatives_fail ... ok
+test test_verify::op_digest_matches_token_cross_vector ... ok
+test test_verify::kind_secp256k1_vectors_verify ... ok
+test test_verify::pay_ids_match_paymeta_json ... ok
+test test_verify::kind_webauthn_p256_vectors_verify ... ok
+test test_verify::portable_typehashes_pinned ... ok
+test test_verify::member_sigs_abi_canonical_only ... ok
+test test_ua8::ua8_register_attrs_rows ... ok
+test test_verify::purpose_tags_match_kinds_json ... ok
+test test_verify::tags_match_kinds_json ... ok
+test test_verify::ua_message_matches_kinds_json ... ok
+test test_verify::webauthn_blob_canonical_only ... ok
+test test_verify::webauthn_cross_origin_refused ... ok
+test test_verify::pqz_key_record_digests_match_portable_json ... ok
+test test_verify::portable_digests_with_attrs_match ... ok
+test test_verify::webauthn_origin_not_compared ... ok
+test test_verify::portable_digests_match_portable_json ... ok
+test test_ua8::ua8_set_pqz_key_msig_over_limit_n2048 - should panic ... ok
+test test_ua8::ua8_set_pqz_key_msig_over_limit_n2816 - should panic ... ok
+test test_ua8::ua8_set_pqz_key_msig_largest_fits ... ok
+
+failures:
+
+---- test_ua8::ua8_kem_rules stdout ----
+
+thread 'test_ua8::ua8_kem_rules' (278862) panicked at contracts/ua-registry/src/test.rs:170:35:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #1))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Writing test snapshot file for test "test_ua8::ua8_kem_rules" to "test_snapshots/test_ua8/ua8_kem_rules.1.json".
+
+---- test_ua8::ua8_register_relayer_slots_largest_fit stdout ----
+
+thread 'test_ua8::ua8_register_relayer_slots_largest_fit' (278878) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+HostError: Error(Contract, #1)
+
+Event log (newest first):
+   0: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:"escalating error to panic"
+   1: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:["contract call failed", register, [307, Bytes(8080808080808080808080808080808080808080808080808080808080808080), {kem: {mlkem_ek: Bytes(), scheme: 0, x25519: Bytes(0000000000000000000000000000000000000000000000000000000000000000)}, 
+   2: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, topics:[error, Error(Contract, #1)], data:"caught error from function"
+   3: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, topics:[error, Error(Contract, #1)], data:"escalating error to panic"
+   4: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, topics:[error, Error(Contract, #1)], data:["failing with contract error", 1]
+   5: [Diagnostic Event] topics:[fn_call, CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, register], data:[307, Bytes(8080808080808080808080808080808080808080808080808080808080808080), {kem: {mlkem_ek: Bytes(), scheme: 0, x25519: Bytes(000000000000000000000000000000000000000000000000000000
+
+Writing test snapshot file for test "test_ua8::ua8_register_relayer_slots_largest_fit" to "test_snapshots/test_ua8/ua8_register_relayer_slots_largest_fit.1.json".
+
+---- test_ua8::ua8_register_relayer_slots_over_limit stdout ----
+
+thread 'test_ua8::ua8_register_relayer_slots_over_limit' (278879) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+HostError: Error(Contract, #1)
+
+Event log (newest first):
+   0: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:"escalating error to panic"
+   1: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:["contract call failed", register, [307, Bytes(8080808080808080808080808080808080808080808080808080808080808080), {kem: {mlkem_ek: Bytes(), scheme: 0, x25519: Bytes(0000000000000000000000000000000000000000000000000000000000000000)}, 
+   2: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, topics:[error, Error(Contract, #1)], data:"caught error from function"
+   3: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, topics:[error, Error(Contract, #1)], data:"escalating error to panic"
+   4: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, topics:[error, Error(Contract, #1)], data:["failing with contract error", 1]
+   5: [Diagnostic Event] topics:[fn_call, CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, register], data:[307, Bytes(8080808080808080808080808080808080808080808080808080808080808080), {kem: {mlkem_ek: Bytes(), scheme: 0, x25519: Bytes(000000000000000000000000000000000000000000000000000000
+
+Writing test snapshot file for test "test_ua8::ua8_register_relayer_slots_over_limit" to "test_snapshots/test_ua8/ua8_register_relayer_slots_over_limit.1.json".
+note: panic did not contain expected string
+      panic message: "HostError: Error(Contract, #1)\n\nEvent log (newest first):\n   0: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:\"escalating error to panic\"\n   1: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:[\"contract call failed\", register, [307, Bytes(808
+ expected substring: "contract data entry"
+---- test_ua8::ua8_relayer_bad_record_takes_slot_marked stdout ----
+
+thread 'test_ua8::ua8_relayer_bad_record_takes_slot_marked' (278946) panicked at contracts/ua-registry/src/test.rs:170:35:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #1))
+Writing test snapshot file for test "test_ua8::ua8_relayer_bad_record_takes_slot_marked" to "test_snapshots/test_ua8/ua8_relayer_bad_record_takes_slot_marked.1.json".
+
+---- test_ua8::ua8_relayer_checked_every_offchain_kind stdout ----
+
+thread 'test_ua8::ua8_relayer_checked_every_offchain_kind' (278948) panicked at contracts/ua-registry/src/test.rs:170:35:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #1))
+Writing test snapshot file for test "test_ua8::ua8_relayer_checked_every_offchain_kind" to "test_snapshots/test_ua8/ua8_relayer_checked_every_offchain_kind.1.json".
+
+---- test_ua8::ua8_relayer_checked_ua_authorises_nothing stdout ----
+
+thread 'test_ua8::ua8_relayer_checked_ua_authorises_nothing' (278949) panicked at contracts/ua-registry/src/test.rs:170:35:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #1))
+Writing test snapshot file for test "test_ua8::ua8_relayer_checked_ua_authorises_nothing" to "test_snapshots/test_ua8/ua8_relayer_checked_ua_authorises_nothing.1.json".
+
+---- test_ua8::ua8_relayer_classical_msig_row stdout ----
+
+thread 'test_ua8::ua8_relayer_classical_msig_row' (278950) panicked at contracts/ua-registry/src/test.rs:170:35:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #1))
+Writing test snapshot file for test "test_ua8::ua8_relayer_classical_msig_row" to "test_snapshots/test_ua8/ua8_relayer_classical_msig_row.1.json".
+
+---- test_ua8::ua8_relayer_group_kinds_typed stdout ----
+
+thread 'test_ua8::ua8_relayer_group_kinds_typed' (278953) panicked at contracts/ua-registry/src/test_ua8.rs:1663:9:
+assertion `left == right` failed: "musig2-secp256k1"
+  left: KindDisabled
+ right: NotVerifiable
+Writing test snapshot file for test "test_ua8::ua8_relayer_group_kinds_typed" to "test_snapshots/test_ua8/ua8_relayer_group_kinds_typed.1.json".
+
+---- test_ua8::ua8_relayer_group_typed_rules stdout ----
+
+thread 'test_ua8::ua8_relayer_group_typed_rules' (278954) panicked at contracts/ua-registry/src/test_ua8.rs:1692:9:
+assertion `left == right` failed: 0x111
+  left: KindDisabled
+ right: KeyData
+Writing test snapshot file for test "test_ua8::ua8_relayer_group_typed_rules" to "test_snapshots/test_ua8/ua8_relayer_group_typed_rules.1.json".
+
+---- test_ua8::ua8_relayer_key_data_layout stdout ----
+
+thread 'test_ua8::ua8_relayer_key_data_layout' (278955) panicked at contracts/ua-registry/src/test_ua8.rs:1740:13:
+assertion `left == right` failed: 0x103 empty
+  left: KindDisabled
+ right: KeyData
+Writing test snapshot file for test "test_ua8::ua8_relayer_key_data_layout" to "test_snapshots/test_ua8/ua8_relayer_key_data_layout.1.json".
+
+---- test_ua8::ua8_relayer_fndsa512_kem_and_pqz stdout ----
+
+thread 'test_ua8::ua8_relayer_fndsa512_kem_and_pqz' (278952) panicked at contracts/ua-registry/src/test.rs:170:35:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #1))
+Writing test snapshot file for test "test_ua8::ua8_relayer_fndsa512_kem_and_pqz" to "test_snapshots/test_ua8/ua8_relayer_fndsa512_kem_and_pqz.1.json".
+
+---- test_ua8::ua8_relayer_key_hash_groups stdout ----
+
+thread 'test_ua8::ua8_relayer_key_hash_groups' (278957) panicked at contracts/ua-registry/src/test_ua8.rs:1759:53:
+called `Option::unwrap()` on a `None` value
+
+---- test_ua8::ua8_relayer_list_immutable stdout ----
+
+thread 'test_ua8::ua8_relayer_list_immutable' (278959) panicked at contracts/ua-registry/src/test_ua8.rs:1591:5:
+assertion `left == right` failed
+  left: ["__constructor", "checked_of", "kem_key_at", "kem_key_of", "key_owner", "kind_name", "pop_of", "pqz_key_of", "pqz_key_sig_of", "pqz_pop_of", "receivable", "record_of", "register", "register_frost", "register_msig", "register_musig2", "register_webauthn", "registration_of", "relayers", "requ
+ right: ["__constructor", "checked_of", "kem_key_at", "kem_key_of", "key_owner", "kind_name", "pop_of", "pqz_key_of", "pqz_key_sig_of", "pqz_pop_of", "receivable", "record_of", "register", "register_msig", "register_webauthn", "registration_of", "relayers", "require_authorized", "set_kem_key", "set_
+
+---- test_ua8::ua8_relayer_evm_contract_slot stdout ----
+
+thread 'test_ua8::ua8_relayer_evm_contract_slot' (278951) panicked at contracts/ua-registry/src/test_ua8.rs:1448:5:
+assertion `left == right` failed
+  left: NotVerifiable
+ right: RelayerNotListed
+Writing test snapshot file for test "test_ua8::ua8_relayer_evm_contract_slot" to "test_snapshots/test_ua8/ua8_relayer_evm_contract_slot.1.json".
+
+---- test_ua8::ua8_relayer_kind_without_relayer_not_verifiable stdout ----
+
+thread 'test_ua8::ua8_relayer_kind_without_relayer_not_verifiable' (278958) panicked at contracts/ua-registry/src/test_ua8.rs:1278:9:
+assertion `left == right` failed: "bip340"
+  left: KindDisabled
+ right: NotVerifiable
+Writing test snapshot file for test "test_ua8::ua8_relayer_kind_without_relayer_not_verifiable" to "test_snapshots/test_ua8/ua8_relayer_kind_without_relayer_not_verifiable.1.json".
+
+---- test_ua8::ua8_relayer_msig_mixed_members stdout ----
+
+thread 'test_ua8::ua8_relayer_msig_mixed_members' (278962) panicked at contracts/ua-registry/src/test.rs:170:35:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #1))
+Writing test snapshot file for test "test_ua8::ua8_relayer_msig_mixed_members" to "test_snapshots/test_ua8/ua8_relayer_msig_mixed_members.1.json".
+
+---- test_ua8::ua8_relayer_msig_member_rules stdout ----
+
+thread 'test_ua8::ua8_relayer_msig_member_rules' (278961) panicked at contracts/ua-registry/src/test.rs:170:35:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #1))
+Writing test snapshot file for test "test_ua8::ua8_relayer_msig_member_rules" to "test_snapshots/test_ua8/ua8_relayer_msig_member_rules.1.json".
+
+---- test_ua8::ua8_relayer_msig_signable_counts_chain_members stdout ----
+
+thread 'test_ua8::ua8_relayer_msig_signable_counts_chain_members' (278963) panicked at contracts/ua-registry/src/test.rs:170:35:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #1))
+Writing test snapshot file for test "test_ua8::ua8_relayer_msig_signable_counts_chain_members" to "test_snapshots/test_ua8/ua8_relayer_msig_signable_counts_chain_members.1.json".
+
+---- test_ua8::ua8_relayer_must_authorise stdout ----
+
+thread 'test_ua8::ua8_relayer_must_authorise' (278964) panicked at contracts/ua-registry/src/test_ua8.rs:1212:5:
+assertion `left == right` failed
+  left: Err(Ok(Error(Contract, #1)))
+ right: Err(Ok(Error(Context, InvalidAction)))
+Writing test snapshot file for test "test_ua8::ua8_relayer_must_authorise" to "test_snapshots/test_ua8/ua8_relayer_must_authorise.1.json".
+
+---- test_ua8::ua8_relayer_unlisted_refused stdout ----
+
+thread 'test_ua8::ua8_relayer_unlisted_refused' (278966) panicked at contracts/ua-registry/src/test_ua8.rs:1185:5:
+assertion `left == right` failed
+  left: KindDisabled
+ right: RelayerNotListed
+Writing test snapshot file for test "test_ua8::ua8_relayer_unlisted_refused" to "test_snapshots/test_ua8/ua8_relayer_unlisted_refused.1.json".
+
+---- test_ua8::ua8_relayer_register_parts_take_pop_checked stdout ----
+
+thread 'test_ua8::ua8_relayer_register_parts_take_pop_checked' (278965) panicked at contracts/ua-registry/src/test.rs:170:35:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #1))
+Writing test snapshot file for test "test_ua8::ua8_relayer_register_parts_take_pop_checked" to "test_snapshots/test_ua8/ua8_relayer_register_parts_take_pop_checked.1.json".
+
+---- test_ua8::ua8_negatives_from_portable_json stdout ----
+Writing test snapshot file for test "test_ua8::ua8_negatives_from_portable_json" to "test_snapshots/test_ua8/ua8_negatives_from_portable_json.1.json".
+Writing test snapshot file for test "test_ua8::ua8_negatives_from_portable_json" to "test_snapshots/test_ua8/ua8_negatives_from_portable_json.2.json".
+Writing test snapshot file for test "test_ua8::ua8_negatives_from_portable_json" to "test_snapshots/test_ua8/ua8_negatives_from_portable_json.3.json".
+Writing test snapshot file for test "test_ua8::ua8_negatives_from_portable_json" to "test_snapshots/test_ua8/ua8_negatives_from_portable_json.4.json".
+Writing test snapshot file for test "test_ua8::ua8_negatives_from_portable_json" to "test_snapshots/test_ua8/ua8_negatives_from_portable_json.5.json".
+Writing test snapshot file for test "test_ua8::ua8_negatives_from_portable_json" to "test_snapshots/test_ua8/ua8_negatives_from_portable_json.6.json".
+
+thread 'test_ua8::ua8_negatives_from_portable_json' (278866) panicked at contracts/ua-registry/src/test_ua8.rs:245:5:
+assertion `left == right` failed: non-holder-with-pqz-key/n2048-kmax1024
+  left: Ok(KindDisabled)
+ right: Ok(PqzHolder)
+Writing test snapshot file for test "test_ua8::ua8_negatives_from_portable_json" to "test_snapshots/test_ua8/ua8_negatives_from_portable_json.7.json".
+
+---- test_ua8::ua8_set_pqz_key_negatives stdout ----
+
+thread 'test_ua8::ua8_set_pqz_key_negatives' (278974) panicked at contracts/ua-registry/src/test.rs:170:35:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #1))
+Writing test snapshot file for test "test_ua8::ua8_set_pqz_key_negatives" to "test_snapshots/test_ua8/ua8_set_pqz_key_negatives.1.json".
+
+---- test_ua8::ua8_set_pqz_key_relayer_slots_largest_fit stdout ----
+
+thread 'test_ua8::ua8_set_pqz_key_relayer_slots_largest_fit' (278976) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+HostError: Error(Contract, #1)
+
+Event log (newest first):
+   0: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:"escalating error to panic"
+   1: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:["contract call failed", register, [307, Bytes(8080808080808080808080808080808080808080808080808080808080808080), {kem: {mlkem_ek: Bytes(), scheme: 0, x25519: Bytes(0000000000000000000000000000000000000000000000000000000000000000)}, 
+   2: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, topics:[error, Error(Contract, #1)], data:"caught error from function"
+   3: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, topics:[error, Error(Contract, #1)], data:"escalating error to panic"
+   4: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, topics:[error, Error(Contract, #1)], data:["failing with contract error", 1]
+   5: [Diagnostic Event] topics:[fn_call, CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, register], data:[307, Bytes(8080808080808080808080808080808080808080808080808080808080808080), {kem: {mlkem_ek: Bytes(), scheme: 0, x25519: Bytes(000000000000000000000000000000000000000000000000000000
+
+Writing test snapshot file for test "test_ua8::ua8_set_pqz_key_relayer_slots_largest_fit" to "test_snapshots/test_ua8/ua8_set_pqz_key_relayer_slots_largest_fit.1.json".
+
+---- test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2048 stdout ----
+
+thread 'test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2048' (278977) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+HostError: Error(Contract, #1)
+
+Event log (newest first):
+   0: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:"escalating error to panic"
+   1: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:["contract call failed", register, [307, Bytes(8080808080808080808080808080808080808080808080808080808080808080), {kem: {mlkem_ek: Bytes(), scheme: 0, x25519: Bytes(0000000000000000000000000000000000000000000000000000000000000000)}, 
+   2: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, topics:[error, Error(Contract, #1)], data:"caught error from function"
+   3: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, topics:[error, Error(Contract, #1)], data:"escalating error to panic"
+   4: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, topics:[error, Error(Contract, #1)], data:["failing with contract error", 1]
+   5: [Diagnostic Event] topics:[fn_call, CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, register], data:[307, Bytes(8080808080808080808080808080808080808080808080808080808080808080), {kem: {mlkem_ek: Bytes(), scheme: 0, x25519: Bytes(000000000000000000000000000000000000000000000000000000
+
+Writing test snapshot file for test "test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2048" to "test_snapshots/test_ua8/ua8_set_pqz_key_relayer_slots_over_limit_n2048.1.json".
+note: panic did not contain expected string
+      panic message: "HostError: Error(Contract, #1)\n\nEvent log (newest first):\n   0: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:\"escalating error to panic\"\n   1: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:[\"contract call failed\", register, [307, Bytes(808
+ expected substring: "contract data entry"
+---- test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2816 stdout ----
+
+thread 'test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2816' (278978) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+HostError: Error(Contract, #1)
+
+Event log (newest first):
+   0: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:"escalating error to panic"
+   1: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:["contract call failed", register, [307, Bytes(8080808080808080808080808080808080808080808080808080808080808080), {kem: {mlkem_ek: Bytes(), scheme: 0, x25519: Bytes(0000000000000000000000000000000000000000000000000000000000000000)}, 
+   2: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, topics:[error, Error(Contract, #1)], data:"caught error from function"
+   3: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, topics:[error, Error(Contract, #1)], data:"escalating error to panic"
+   4: [Failed Diagnostic Event (not emitted)] contract:CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, topics:[error, Error(Contract, #1)], data:["failing with contract error", 1]
+   5: [Diagnostic Event] topics:[fn_call, CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4, register], data:[307, Bytes(8080808080808080808080808080808080808080808080808080808080808080), {kem: {mlkem_ek: Bytes(), scheme: 0, x25519: Bytes(000000000000000000000000000000000000000000000000000000
+
+Writing test snapshot file for test "test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2816" to "test_snapshots/test_ua8/ua8_set_pqz_key_relayer_slots_over_limit_n2816.1.json".
+note: panic did not contain expected string
+      panic message: "HostError: Error(Contract, #1)\n\nEvent log (newest first):\n   0: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:\"escalating error to panic\"\n   1: [Diagnostic Event] topics:[error, Error(Contract, #1)], data:[\"contract call failed\", register, [307, Bytes(808
+ expected substring: "contract data entry"
+---- test_ua8::ua8_set_pqz_key_rules stdout ----
+
+thread 'test_ua8::ua8_set_pqz_key_rules' (278980) panicked at contracts/ua-registry/src/test.rs:170:35:
+called `Result::unwrap()` on an `Err` value: Ok(Error(Contract, #1))
+Writing test snapshot file for test "test_ua8::ua8_set_pqz_key_rules" to "test_snapshots/test_ua8/ua8_set_pqz_key_rules.1.json".
+
+
+failures:
+    test_ua8::ua8_kem_rules
+    test_ua8::ua8_negatives_from_portable_json
+    test_ua8::ua8_register_relayer_slots_largest_fit
+    test_ua8::ua8_register_relayer_slots_over_limit
+    test_ua8::ua8_relayer_bad_record_takes_slot_marked
+    test_ua8::ua8_relayer_checked_every_offchain_kind
+    test_ua8::ua8_relayer_checked_ua_authorises_nothing
+    test_ua8::ua8_relayer_classical_msig_row
+    test_ua8::ua8_relayer_evm_contract_slot
+    test_ua8::ua8_relayer_fndsa512_kem_and_pqz
+    test_ua8::ua8_relayer_group_kinds_typed
+    test_ua8::ua8_relayer_group_typed_rules
+    test_ua8::ua8_relayer_key_data_layout
+    test_ua8::ua8_relayer_key_hash_groups
+    test_ua8::ua8_relayer_kind_without_relayer_not_verifiable
+    test_ua8::ua8_relayer_list_immutable
+    test_ua8::ua8_relayer_msig_member_rules
+    test_ua8::ua8_relayer_msig_mixed_members
+    test_ua8::ua8_relayer_msig_signable_counts_chain_members
+    test_ua8::ua8_relayer_must_authorise
+    test_ua8::ua8_relayer_register_parts_take_pop_checked
+    test_ua8::ua8_relayer_unlisted_refused
+    test_ua8::ua8_set_pqz_key_negatives
+    test_ua8::ua8_set_pqz_key_relayer_slots_largest_fit
+    test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2048
+    test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2816
+    test_ua8::ua8_set_pqz_key_rules
+
+test result: FAILED. 99 passed; 27 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.42s
+
+error: test failed, to rerun pass `-p scaas-ua-registry --lib`
+error: 2 targets failed:
+    `-p scaas-token --lib`
+    `-p scaas-ua-registry --lib`
+rc=101

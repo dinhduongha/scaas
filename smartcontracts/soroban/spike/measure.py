@@ -147,13 +147,14 @@ def cli(*args, stdin=None):
 
 
 def argv(args):
-    """A `bytes` value goes through `--<name>-file-path` (raw bytes; an argument may not exceed 128 KiB)."""
+    """A `bytes` value goes through `--<name>-file-path` (raw bytes, empty allowed; an argument may not exceed 128 KiB),
+    a `dict` (a contract struct, B0's `UaAttrs`) the same way as JSON."""
     out = []
     for a in args:
-        if isinstance(a, bytes):
+        if isinstance(a, (bytes, dict)):
             p = os.path.join(CFG, 'arg%d.bin' % len(out))
             with open(p, 'wb') as f:
-                f.write(a)
+                f.write(a if isinstance(a, bytes) else json.dumps(a).encode())
             out[-1] += '-file-path'
             out.append(p)
         else:
@@ -316,7 +317,7 @@ def main():
     print('| class | call | ' + ' | '.join(keys) + ' | diag_events | resource fee (stroops) | verdict |')
     print('|---|---|' + '---|' * (len(keys) + 3))
     print('| limit | network | ' + ' | '.join(str(L[k]) for k in keys) + ' | — | — | — |')
-    bad, msig_fit, msig_stop, gate_over = 0, 0, None, []
+    bad, msig_fit, msig_stop, gate_over, res = 0, 0, None, [], {}
     for cls, label, cid, fn, args in calls + data:
         scan = cls == 'data' and fn == 'msig_model'
         n = len(args[1]) // 36 if scan else 0  # key data 4 + 36n
@@ -325,6 +326,7 @@ def main():
         except SimError as e:  # the network refused it: a figure
             print('| %s | %s | SIMULATION FAILED: %s |' % (cls, label, str(e).replace('\n', ' ')[:300]))
             bad += cls == 'GATE'
+            res[label] = (None, ['simulation failed'])
             if scan and msig_stop is None:
                 msig_stop = (n, ['simulation failed'])
             continue
@@ -333,6 +335,7 @@ def main():
             bad += cls == 'GATE'
             continue
         over = [k for k in keys if f[k] is not None and f[k] > L[k]]
+        res[label] = (f, over)
         bad += cls == 'GATE' and bool(over)
         if cls == 'GATE' and over:
             gate_over.append((label, cid, fn, args))
@@ -352,7 +355,7 @@ def main():
             print('## submitted %s: the network ACCEPTED it' % label)
         except RuntimeError as e:
             print('## submitted %s: the network refused it: %s' % (label, str(e).replace('\n', ' ')[-300:]))
-    print('## GATE: %s' % ('FAIL (%d gate call(s) failed or over a limit)' % bad if bad else 'PASS (every UA-Soroban figure within the limits)'))
+    print('## GATE: %s' % ('FAIL (%d gate call(s) failed or over a limit)' % bad if bad else 'PASS (every UA-Soroban and B0 gate figure within the limits)'))
     sys.exit(1 if bad else 0)
 
 

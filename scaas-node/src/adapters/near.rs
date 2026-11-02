@@ -2148,7 +2148,7 @@ impl ChainAdapter for NearAdapter {
     }
 
     async fn tx_fee(&self, tx_id: &str) -> Result<Option<u128>> {
-        let Some(v) = self.find_tx(tx_id).await? else { return Ok(None) };
+        let v = self.find_tx(tx_id).await?.ok_or_else(|| anyhow!("{tx_id} not found"))?;
         let burnt = std::iter::once(&v["transaction_outcome"]).chain(v["receipts_outcome"].as_array().into_iter().flatten())
             .map(|o| dec_u128(&o["outcome"]["tokens_burnt"], "tokens_burnt").unwrap_or(0))
             .fold(0u128, u128::saturating_add);
@@ -2641,6 +2641,16 @@ mod tests {
         let w = Arc::new(Mutex::new(w));
         let url = serve(w.clone()).await;
         (NearAdapter::new(&cfg(&url, relay_fee), &[lane0()]).unwrap(), w)
+    }
+
+    /// A landed tx's fee; a tx not found is an `Err`, counted by the runner, never a silent zero.
+    #[tokio::test]
+    async fn tx_fee_reads_the_burn_or_fails() {
+        let (a, w) = adapter(world(), "").await;
+        let burnt = json!({"transaction_outcome": {"outcome": {"tokens_burnt": "5"}}, "receipts_outcome": [{"outcome": {"tokens_burnt": "2"}}]});
+        w.lock().unwrap().txs.insert(bs58::encode([7u8; 32]).into_string(), burnt);
+        assert_eq!(a.tx_fee(&alloy::hex::encode([7u8; 32])).await.unwrap(), Some(7));
+        assert!(a.tx_fee(&alloy::hex::encode([8u8; 32])).await.is_err());
     }
 
     fn sent(w: &Arc<Mutex<World>>) -> Vec<Vec<u8>> {

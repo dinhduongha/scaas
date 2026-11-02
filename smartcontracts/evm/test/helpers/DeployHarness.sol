@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {DeployBase} from "../../script/DeployBase.sol";
 import {UAPrecompileProbe} from "../../script/UAPrecompileProbe.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 
 /// The deploy steps without the RPC parts (`_setup`, the `eth_call` probe): the salt, `chain_uid`, `DEPLOY_ZETHER` and
 /// the profile set directly; the precompile probe runs in this EVM (or its verdict is forced).
@@ -46,6 +47,8 @@ contract DeployHarness is DeployBase {
     }
 
     function pqKindFits(uint64 cap, uint64 budget) external pure returns (bool) { return _pqKindFits(cap, budget); }
+
+    function checkGen1Kinds(IUARegistry reg, bool bls, bool hedera) external view { _checkGen1Kinds(reg, bls, hedera); }
 
     function defaultNotice(uint256 chainId) external pure returns (uint256) { return _defaultNotice(chainId); }
 

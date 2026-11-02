@@ -36,16 +36,17 @@ function single(name, index) {
   const sk = sc.seed ? int(keccak_256(utf8ToBytes(`scaas.ua.vectors.sig.${label}`))) : secretOf(label, sc.n);
   return make(label, sc.kind, sc.keyData(sk), (m) => sc.sign(sk, m));
 }
-/** The 2-of-3 msig of ed25519, p256 and mldsa65#1 (weights 1, sorted by id): `sign(uaMsg)` = abi.encode(MemberSig[]) of
- *  members 0 and 1 over memberDigest(ua, uaMsg) under `member`, empty keyData (registered members, CTR-UA-33). */
+/** The 2-of-3 msig of ed25519, p256 and mldsa65#1 (weights 1, sorted by id): `slots(uaMsg)` = the MemberSigs of members 0
+ *  and 1 over memberDigest(ua, uaMsg) under `member`, empty keyData (registered members, CTR-UA-33); `sign` = their
+ *  abi.encode(MemberSig[]). */
 function msig() {
   const members = [single('ed25519', 0), single('p256', 0), single('mldsa65', 1)]
     .sort((a, b) => (hex(a.ua) < hex(b.ua) ? -1 : 1)).map((m, index) => ({ ...m, index, weight: 1 }));
   const keyData = s.encodeMsig(2, members.map((m) => ({ kind: m.kind, id: m.ua, weight: m.weight })));
   const id = ua.uaOf(0x0120, keyData);
-  const sign = (m) => encodeMemberSigs([0, 1].map((i) => ({ index: i, keyData: NONE,
-    sig: members[i].sign(ua.uaMessage(members[i].kind, MEMBER, ua.memberDigest(id, m))) })));
-  return { ...make('msig-2of3', 0x0120, keyData, sign), threshold: 2, members };
+  const slots = (m) => [0, 1].map((i) => ({ index: i, keyData: NONE,
+    sig: members[i].sign(ua.uaMessage(members[i].kind, MEMBER, ua.memberDigest(id, m))) }));
+  return { ...make('msig-2of3', 0x0120, keyData, (m) => encodeMemberSigs(slots(m))), slots, threshold: 2, members };
 }
 
 /** The signer of `kind` (an S3 kind name or `msig`); `mldsa65` defaults to index 2 (index 1 is the msig member). */
@@ -54,11 +55,15 @@ export function signer(kind, index = kind === 'mldsa65' ? 2 : 0) {
   if (!SINGLE.includes(kind)) throw new Error(`not an S3 kind: ${kind}`);
   return single(kind, index);
 }
-/** `auth` for (purpose name or 32-byte tag, digest): the kind's signature over ua_msg (`pop` = the portable `pop` v2). */
+/** `auth` for (purpose name or 32-byte tag, digest): the kind's signature over ua_msg (`pop` = the portable `pop` v2);
+ *  `authXdr`: the `UaSig` ScVal the entries take; `sig`: the same `UaSig` as a node job writes it (named fields, `0x…` hex). */
 export function authFor(sg, purpose, digest) {
   const tag = purpose === 'pop' ? ua.POP_V2_TAG : typeof purpose === 'string' ? ua.purposeTag(purpose) : purpose;
   const uaMsg = ua.uaMessage(sg.kind, tag, digest);
-  return { uaMsg, auth: sg.sign(uaMsg) };
+  const auth = sg.sign(uaMsg);
+  const members = sg.slots ? sg.slots(uaMsg) : [];
+  const sig = { key_data: hex(NONE), signature: hex(sg.slots ? NONE : auth), members: members.map((m) => ({ index: m.index, key_data: hex(m.keyData), sig: hex(m.sig) })) };
+  return { uaMsg, auth, authXdr: s.uaSig(sg.slots ? { members } : { signature: auth }).xdr, sig };
 }
 
 // --- the fixed network, contracts and arguments ---
@@ -108,6 +113,9 @@ const ENTRIES = [
   ['ua_relay', C.token, 'ua_pay', 'metatx', (sg) => [ua32('from', sg), a('to', 'Holder', s.holderAddr(C.router)),
     a('amount', 'i128', s.i128(100)), a('pay_ref', 'BytesN<32>', s.bytesN(RELAY_REF)), VU,
     a('relayer', 'Option<Address>', s.some(s.addr(C.router)))]],
+  ['ua_pay_lane', C.token, 'ua_pay', 'metatx', (sg) => [ua32('from', sg), a('to', 'Holder', s.holderUa(p256Ua())),
+    a('amount', 'i128', s.i128(12_345)), a('pay_ref', 'BytesN<32>', s.bytesN(fill(0x13))), VU,
+    a('relayer', 'Option<Address>', s.some(s.addr(LANE_RELAYER)))]],
   ['mtx_mandate_pay', C.mandate, 'mtx_mandate_pay', 'metatx', () => [a('token', 'Address', s.addr(C.token)),
     a('payee', 'Holder', s.holderAddr(TO)), a('amount', 'i128', s.i128(5_000)), a('pay_ref', 'BytesN<32>', s.bytesN(fill(0x12))),
     a('epoch', 'u64', s.u64(1)), VU, NO_RELAYER]],
@@ -115,6 +123,15 @@ const ENTRIES = [
     a('delegate', 'Holder', s.holderUa(p256Ua())), a('max_per_payment', 'i128', s.i128(50_000)),
     a('max_per_period', 'i128', s.i128(200_000)), a('period_seconds', 'u64', s.u64(86_400)), a('expiry', 'u64', s.u64(1_900_000_000)),
     a('lane', 'BytesN<32>', s.bytesN(fill(0x0d))), a('nonce', 'u64', s.u64(0)), VU, NO_RELAYER]],
+  ['mtx_set_payee', C.mandate, 'mtx_set_payee', 'metatx', () => [a('token', 'Address', s.addr(C.token)),
+    a('payee', 'Holder', s.holderAddr(TO)), a('allowed', 'bool', s.bool(true)),
+    a('lane', 'BytesN<32>', s.bytesN(fill(0x0e))), a('nonce', 'u64', s.u64(0)), VU, NO_RELAYER]],
+  ['mtx_revoke', C.mandate, 'mtx_revoke', 'metatx', (sg) => [a('token', 'Address', s.addr(C.token)),
+    a('by', 'Holder', s.holderUa(sg.ua)), a('epoch', 'u64', s.u64(1)),
+    a('lane', 'BytesN<32>', s.bytesN(fill(0x10))), a('nonce', 'u64', s.u64(0)), VU, NO_RELAYER]],
+  ['mtx_withdraw', C.mandate, 'mtx_withdraw', 'metatx', () => [a('token', 'Address', s.addr(C.token)),
+    a('to', 'Holder', s.holderAddr(TO)), a('amount', 'i128', s.i128(700)),
+    a('lane', 'BytesN<32>', s.bytesN(fill(0x0f))), a('nonce', 'u64', s.u64(0)), VU, NO_RELAYER]],
 ];
 
 const registrationRow = (sg) => {
@@ -129,8 +146,12 @@ const registrationRow = (sg) => {
   const m = ua.holderPopMessage(sg.kind, { ua: sg.ua, keyData: sg.keyData });
   return { name: sg.name, kind: sg.kind, kindName: 'msig', keyData: hex(sg.keyData), ua: hex(sg.ua),
     threshold: sg.threshold, members: sg.members.map((x) => ({ index: x.index, kind: x.kind, id: hex(x.ua), weight: x.weight })),
-    registrationDigest: hex(m.registrationDigest), popMessage: hex(m.message), memberDigest: hex(m.memberDigest), popSigners: [0, 1],
-    pop: hex(sg.sign(m.message)) };
+    registrationDigest: hex(m.registrationDigest), popMessage: hex(m.message), memberDigest: hex(m.memberDigest), popSigners: [],
+    pop: '0x', // classical-dominant (2 of its 3 weights): no pop of its own, as EVM (U8S-D2)
+    memberships: sg.members.map((x) => {
+      const r = ua.membershipMessage({ ua: sg.ua, member: x.ua });
+      return { index: x.index, member: hex(x.ua), digest: hex(r.digest), memberDigest: hex(r.memberDigest), sig: hex(x.sign(ua.uaMessage(x.kind, MEMBER, r.memberDigest))) };
+    }) };
 };
 
 function build() {
@@ -144,9 +165,9 @@ function build() {
     perKind: signers.map((sg) => {
       const list = args(sg);
       const digest = s.opDigest({ networkId: NET, contract, fn, args: list.map((x) => x.v) });
-      const { uaMsg, auth } = authFor(sg, purpose, digest);
+      const { uaMsg, auth, authXdr } = authFor(sg, purpose, digest);
       return { kind: ua.kindInfo(sg.kind).name, ua: hex(sg.ua), args: list.map((x) => ({ name: x.name, type: x.type, xdr: hex(x.v.xdr) })),
-        digest: hex(digest), uaMsg: hex(uaMsg), auth: hex(auth) };
+        digest: hex(digest), uaMsg: hex(uaMsg), auth: hex(auth), authXdr: hex(authXdr) };
     }),
   }));
   const note = [
@@ -156,14 +177,20 @@ function build() {
     'a contracttype enum = Vec[Symbol(variant), payload]). uaMsg = keccak256(MSG_TAG | TAG(kind) | purposeTag | digest);',
     'auth: the kind\'s signature over uaMsg (ML-DSA over pq_msg = keccak256(TAG(kind) | uaMsg), empty context; WebAuthn the',
     'canonical abi.encode blob); msig: abi.encode(MemberSig[]) of members 0 and 1 over memberDigest(ua, uaMsg) under purpose',
-    'member, empty keyData (registered members). The args name the signer (from / ua / order.maker), so args and digest are',
+    'member, empty keyData (registered members); authXdr: the UaSig ScVal the entry takes (typed-signing TS-D12: a single',
+    'key only signature, the msig only members). The args name the signer (from / ua / order.maker), so args and digest are',
     'per kind. ua_order is ua_trade\'s digest (contract = token, fn "ua_order", args (dex, order)); ua_cancel the DEX\'s',
     '(SOR-D10); ua_relay the inner token.ua_pay of router.ua_relay (relayer = Some(router), pay_ref = relay.ref =',
     'keccak256("scaas.relayfee" | networkId | xdr(target) | keccak256(xdr((func, args))) | salt), open mode: to = router);',
+    'ua_pay_lane: a ua_pay bound to one lane, relayer = Some(lane);',
     'mtx_* are signed by the mandate owner (mtx_set_mandate) and the delegate (mtx_mandate_pay, epoch 1 = after the',
-    'first mtx_set_mandate, CTR-ACC-07). registrations[i] =',
-    'register(kind, keyData, empty attrs, pop, empty pqz_pop, None) (portable, no network); the single-key rows are',
-    'portable.json\'s; mldsa65 signs as mldsa65#2, mldsa65#1 is an msig member.',
+    'first mtx_set_mandate, CTR-ACC-07); mtx_set_payee and mtx_withdraw are signed by the owner, mtx_revoke by the delegate',
+    '(by = the delegate, epoch 1). registrations[i] =',
+    'register(kind, keyData, empty attrs, pop, empty pqz_pop, None) (portable, no network), the msig',
+    'register_msig({threshold, members}, empty attrs, [], empty pqz_pop, None); the single-key rows are',
+    'portable.json\'s; mldsa65 signs as mldsa65#2, mldsa65#1 is an msig member; the msig is classical-dominant: empty pop.',
+    'memberships: each slot\'s accept_membership(ua, {index, empty key_data, sig}, None) (CTR-UA-37): until they run the msig',
+    'authorizes nothing, so a test registers it and then accepts; a portable.json memberships row is the same signature\'s form.',
   ].join(' ');
   return { note, version: 1, network: { passphrase: PASSPHRASE, networkId: hex(NET) }, contracts: C, registrations, entries };
 }

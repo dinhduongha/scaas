@@ -1,4 +1,4 @@
-//! Shared by `e2e_soroban` and `e2e_soroban_ua`: the network (env), keys, the stellar CLI, deploys and the fake Odoo.
+//! Shared by `e2e_soroban`, `e2e_soroban_ua` and `e2e_ua8`: the network (env), keys, the stellar CLI, deploys and the fake Odoo.
 //!
 //! Env (local quickstart defaults; T14 points them at the Stellar testnet):
 //! - `STELLAR_URL` — the RPC endpoint (default `http://127.0.0.1:31980/rpc`, `quickstart.sh`);
@@ -19,7 +19,11 @@ use scaas_node::keys::{lane_secret, Seed};
 use scaas_node::odoo::Odoo;
 use scaas_node::signer::{base32, crc16_xmodem, stellar_account_strkey, LocalSigner, Signer};
 use serde_json::{json, Value};
-use stellar_xdr::{Limits, ReadXdr, ScAddress, ScVal, TransactionEnvelope, TransactionExt, TransactionResult};
+use sha2::{Digest, Sha256};
+use stellar_xdr::{
+    Hash, HashIdPreimage, HashIdPreimageSorobanAuthorization, Limits, ReadXdr, ScAddress, ScVal, SorobanAuthorizedFunction, SorobanAuthorizedInvocation,
+    TransactionEnvelope, TransactionExt, TransactionResult, WriteXdr,
+};
 
 pub const MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
     abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
@@ -60,6 +64,45 @@ pub fn key(i: u32) -> LocalSigner {
 
 pub fn g(s: &LocalSigner) -> String {
     stellar_account_strkey(&s.public_key())
+}
+
+/// A value of a signed invocation as a job names it: `{type, value}`.
+pub fn job_arg(v: &ScVal) -> Value {
+    let (ty, value) = match v {
+        ScVal::Address(a) => ("Address", json!(a.to_string())),
+        ScVal::Bytes(b) => ("Bytes", json!(format!("0x{}", alloy::hex::encode(b.as_slice())))),
+        ScVal::I128(p) => ("i128", json!((((p.hi as i128) << 64) | p.lo as i128).to_string())),
+        ScVal::U64(n) => ("u64", json!(n.to_string())),
+        ScVal::U32(n) => ("u32", json!(n)),
+        ScVal::Bool(b) => ("bool", json!(b)),
+        ScVal::Symbol(s) => ("Symbol", json!(String::from_utf8_lossy(s.0.as_slice()))),
+        ScVal::Vec(Some(l)) => ("Vec<Val>", json!(l.iter().map(job_arg).collect::<Vec<_>>())),
+        ScVal::Map(Some(m)) => ("Map", json!(m.iter().map(|e| json!({"key": job_arg(&e.key), "val": job_arg(&e.val)})).collect::<Vec<_>>())),
+        other => panic!("not an argument of these tests: {other:?}"),
+    };
+    json!({"type": ty, "value": value})
+}
+
+/// A signed invocation as a job names it.
+pub fn job_invocation(i: &SorobanAuthorizedInvocation) -> Value {
+    let SorobanAuthorizedFunction::ContractFn(c) = &i.function else { panic!("a contract call") };
+    json!({"contract": c.contract_address.to_string(), "function": String::from_utf8_lossy(c.function_name.0.as_slice()),
+           "args": c.args.iter().map(job_arg).collect::<Vec<_>>(), "sub_invocations": i.sub_invocations.iter().map(job_invocation).collect::<Vec<_>>()})
+}
+
+/// `signer`'s authorization of `root`: the job's named `payload` and the hex signature over the preimage built here, from `ScVal`s, so
+/// the host accepts it only if the node rebuilt the same bytes from the names.
+pub fn signed_auth(signer: &LocalSigner, nonce: i64, expiry: u32, root: &SorobanAuthorizedInvocation) -> (Value, String) {
+    let pre = HashIdPreimage::SorobanAuthorization(HashIdPreimageSorobanAuthorization {
+        network_id: Hash(network()),
+        nonce,
+        signature_expiration_ledger: expiry,
+        invocation: root.clone(),
+    })
+    .to_xdr(Limits::none())
+    .unwrap();
+    let sig = signer.sign(&Sha256::digest(&pre)).unwrap();
+    (json!({"nonce": nonce.to_string(), "expiry": expiry, "invocation": job_invocation(root)}), format!("0x{}", alloy::hex::encode(sig)))
 }
 
 /// `S…` strkey (seed ed25519) cho CLI.
@@ -138,6 +181,13 @@ pub fn wasm(name: &str) -> String {
         .unwrap();
     assert!(st.success());
     format!("{dir}/target/wasm32v1-none/release/scaas_{name}.wasm")
+}
+
+/// The hash a contract instance names: `sha256` of the file `build.sh soroban` left and `deploy.sh` deployed. Another build of the same
+/// source, a package alone (`wasm`) among them, gives other bytes.
+pub fn wasm_hash(name: &str) -> String {
+    let path = format!("{}/../smartcontracts/soroban/target/wasm32v1-none/release/scaas_{name}.wasm", env!("CARGO_MANIFEST_DIR"));
+    alloy::hex::encode(Sha256::digest(std::fs::read(path).unwrap()))
 }
 
 /// The token's `registry: Option<Address>` is passed only when set (omitted = `None`, the UA ledger off).
@@ -297,6 +347,7 @@ pub fn odoo_at(addr: SocketAddr) -> Odoo {
 pub fn chain_cfg(fee_bump: bool) -> ChainCfg {
     let mut params = toml::Table::new();
     params.insert("network_passphrase".into(), passphrase().into());
+    params.insert("max_resource_fee_per_job".into(), 1_000_000_000.into());
     if fee_bump {
         params.insert("fee_bump_lane".into(), 0.into());
     }

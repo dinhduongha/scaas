@@ -376,6 +376,8 @@ class Vectors(unittest.TestCase):
         regs = P['registrations']
         run = sig_level = 0
         for n in P['negatives']:
+            if n.get('rule') == 'msig-minimal':
+                continue  # a registry rule over a full registration (msig minimal form), not a digest-layer row
             m, err, s = n['mutation'], n['error'], n['mutation'].get('set', {})
             if n['entry'] in ('register', 'storePqzPop') and all(k.startswith('attrs.') or k == 'pqzPop' for k in s):
                 row = next(x for x in regs if x['name'] == m['row'])
@@ -410,7 +412,7 @@ class Vectors(unittest.TestCase):
                 run += 1
             else:
                 sig_level += 1  # signatures / native personal_sign / another record's pop: verified by the signature vectors
-        self.assertEqual((run, sig_level), (57, len(P['negatives']) - 57))
+        self.assertEqual((run, sig_level), (57, len(P['negatives']) - 58))  # 58: 57 + the skipped msig-minimal row
         u, key, proof = bytes([1]) * 32, bytes(16384), bytes([7]) * 32
         # malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
         for kd in (bytes([0, 2, 0]), bytes([0, 2, 0, 2, 9, 9])):

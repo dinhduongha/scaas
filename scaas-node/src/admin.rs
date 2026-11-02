@@ -53,8 +53,8 @@ pub struct Reading {
     pub head: Result<u64, String>,
     pub stats: Result<Stats, String>,
     pub max_lag: u64,
-    /// (nhãn lane, số dư gần nhất, trạng thái cầu dao theo `NAMES`)
-    pub lanes: Vec<(String, Option<u128>, [bool; 3])>,
+    /// (nhãn lane, số dư gần nhất, trạng thái cầu dao theo `NAMES`, tx đã vào sổ mà không đọc được phí)
+    pub lanes: Vec<(String, Option<u128>, [bool; 3], u64)>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -79,7 +79,7 @@ pub fn render(readings: &[Reading]) -> Snapshot {
         }
     };
     let mut jobs = Vec::new();
-    let (mut attention, mut lag, mut drift, mut balance, mut open) = (vec![], vec![], vec![], vec![], vec![]);
+    let (mut attention, mut lag, mut drift, mut balance, mut open, mut unread) = (vec![], vec![], vec![], vec![], vec![], vec![]);
     for r in readings {
         let c = esc(&r.key);
         if let Err(e) = &r.head {
@@ -102,7 +102,7 @@ pub fn render(readings: &[Reading]) -> Snapshot {
                 }
             }
         }
-        for (lane, bal, states) in &r.lanes {
+        for (lane, bal, states, fees_unread) in &r.lanes {
             let l = esc(lane);
             if let Some(b) = bal {
                 balance.push((format!("chain=\"{c}\",lane=\"{l}\""), b.to_string()));
@@ -110,6 +110,7 @@ pub fn render(readings: &[Reading]) -> Snapshot {
             for (name, on) in NAMES.iter().zip(states) {
                 open.push((format!("chain=\"{c}\",lane=\"{l}\",breaker=\"{name}\""), u8::from(*on).to_string()));
             }
+            unread.push((format!("chain=\"{c}\",lane=\"{l}\""), fees_unread.to_string()));
         }
     }
     fam("scaas_relay_jobs", "Relay jobs by chain state.", "gauge", jobs);
@@ -117,6 +118,7 @@ pub fn render(readings: &[Reading]) -> Snapshot {
     fam("scaas_indexer_lag_blocks", "Final head minus the indexed block.", "gauge", lag);
     fam("scaas_relayer_balance", "Relayer lane balance in the smallest gas-coin unit.", "gauge", balance);
     fam("scaas_breaker_open", "Gas circuit breaker open (1) per lane.", "gauge", open);
+    fam("scaas_fee_unread_total", "Landed transactions whose fee could not be read, so the gas budget missed it.", "counter", unread);
     fam("scaas_drift_alerts", "Unmatched inbound transfers plus balance mismatches.", "gauge", drift);
     let ready = reasons.is_empty() && !readings.is_empty();
     Snapshot { ready, reasons, metrics: m }
@@ -144,8 +146,8 @@ async fn read(p: &ChainProbe, odoo: &Odoo) -> Reading {
         .lanes
         .iter()
         .map(|l| {
-            let (bal, st) = l.breaker.lock().map(|mut k| (k.last_balance(), k.states(t))).unwrap_or((None, [false; 3]));
-            (l.lane.clone(), bal, st)
+            let (bal, st, unread) = l.breaker.lock().map(|mut k| (k.last_balance(), k.states(t), k.fees_unread())).unwrap_or((None, [false; 3], 0));
+            (l.lane.clone(), bal, st, unread)
         })
         .collect();
     Reading { key: p.key.clone(), head, stats, max_lag: p.max_lag, lanes }
@@ -218,7 +220,7 @@ mod tests {
                 drift_alerts: 3,
             }),
             max_lag: 50,
-            lanes: vec![("0xaa".into(), Some(10), [false, true, false])],
+            lanes: vec![("0xaa".into(), Some(10), [false, true, false], 2)],
         }
     }
 
@@ -261,6 +263,9 @@ scaas_relayer_balance{chain=\"evm:7622\",lane=\"0xaa\"} 10
 scaas_breaker_open{chain=\"evm:7622\",lane=\"0xaa\",breaker=\"base_fee_spike\"} 0
 scaas_breaker_open{chain=\"evm:7622\",lane=\"0xaa\",breaker=\"gas_budget\"} 1
 scaas_breaker_open{chain=\"evm:7622\",lane=\"0xaa\",breaker=\"balance_floor\"} 0
+# HELP scaas_fee_unread_total Landed transactions whose fee could not be read, so the gas budget missed it.
+# TYPE scaas_fee_unread_total counter
+scaas_fee_unread_total{chain=\"evm:7622\",lane=\"0xaa\"} 2
 # HELP scaas_drift_alerts Unmatched inbound transfers plus balance mismatches.
 # TYPE scaas_drift_alerts gauge
 scaas_drift_alerts{chain=\"evm:7622\"} 3

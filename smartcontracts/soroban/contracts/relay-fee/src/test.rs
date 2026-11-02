@@ -4,7 +4,7 @@ use super::*;
 use ed25519_dalek::Signer as _;
 use scaas_mandate::{Holder, MandateWallet, MandateWalletClient};
 use scaas_relay_executor::{RelayExecutor, RelayExecutorClient};
-use scaas_ua_common::{h32, op_digest, UaAttrs, PURPOSE_METATX, PURPOSE_METATX_CANCEL, PURPOSE_POP_V2, kem_record_hash, portable_record_hash, registration_digest};
+use scaas_ua_common::{h32, MemberSig, op_digest, MsigMember, MsigStructure, UaAttrs, UaSig, PURPOSE_METATX, PURPOSE_METATX_CANCEL, PURPOSE_POP_V2, kem_record_hash, portable_record_hash, registration_digest};
 use scaas_ua_registry::{UaRegistry, UaRegistryClient as RegClient};
 use scaas_token::{Token, TokenClient};
 use sha2::{Digest, Sha256};
@@ -82,8 +82,8 @@ fn setup_with(env: Env) -> T {
 type Res = Result<(), soroban_sdk::Error>;
 
 /// A native owner's `mtx_*` tail: lane 0x01 x 32, nonce 0 (not consumed for a native holder), no relayer, empty auth.
-fn tail(env: &Env) -> (BytesN<32>, u64, u64, Option<Address>, Bytes) {
-    (BytesN::from_array(env, &[1; 32]), 0, NOW + 60, None, Bytes::new(env))
+fn tail(env: &Env) -> (BytesN<32>, u64, u64, Option<Address>, UaSig) {
+    (BytesN::from_array(env, &[1; 32]), 0, NOW + 60, None, UaSig::none(env))
 }
 
 /// `wallet.mtx_revoke(token, by, epoch 0, tail)` arguments (`by` is the owner: its epoch is not checked).
@@ -500,6 +500,41 @@ fn hx(v: &serde_json::Value) -> std::vec::Vec<u8> {
     (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
 }
 
+/// `register_listed`, and every slot of an `msig` row accepts (CTR-UA-37): until then it authorizes nothing.
+fn register_row(env: &Env, reg: &RegClient, r: &serde_json::Value) -> BytesN<32> {
+    let ua = register_listed(env, reg, r);
+    accept_row(env, reg, r);
+    ua
+}
+
+/// Every `memberships` row of a registration: the member's own `accept_membership`.
+fn accept_row(env: &Env, reg: &RegClient, r: &serde_json::Value) {
+    for m in r["memberships"].as_array().into_iter().flatten() {
+        let slot = MemberSig { index: m["index"].as_u64().unwrap() as u32, key_data: Bytes::new(env), sig: Bytes::from_slice(env, &hx(&m["sig"])) };
+        reg.accept_membership(&BytesN::from_array(env, &hx(&r["ua"]).try_into().unwrap()), &slot, &None);
+    }
+}
+
+/// A vector's `registrations[]` row: `register`, or `register_msig` of the `msig` (its `pop` is empty, U8S-D2).
+fn register_listed(env: &Env, reg: &RegClient, r: &serde_json::Value) -> BytesN<32> {
+    let (kind, none) = (r["kind"].as_u64().unwrap() as u32, Bytes::new(env));
+    if kind != 0x0120 {
+        return reg.register(&kind, &Bytes::from_slice(env, &hx(&r["keyData"])), &UaAttrs::none(env), &Bytes::from_slice(env, &hx(&r["pop"])), &none, &None);
+    }
+    let mut members = soroban_sdk::Vec::new(env);
+    for m in r["members"].as_array().unwrap() {
+        let (kind, weight) = (m["kind"].as_u64().unwrap() as u32, m["weight"].as_u64().unwrap() as u32);
+        members.push_back(MsigMember { kind, id: BytesN::from_array(env, &hx(&m["id"]).try_into().unwrap()), weight });
+    }
+    let s = MsigStructure { threshold: r["threshold"].as_u64().unwrap() as u32, members };
+    reg.register_msig(&s, &UaAttrs::none(env), &soroban_sdk::Vec::new(env), &none, &None)
+}
+
+/// A vector's `authXdr`: the `UaSig` the entry takes.
+fn auth_of(env: &Env, p: &serde_json::Value) -> UaSig {
+    <UaSig as soroban_sdk::xdr::FromXdr>::from_xdr(env, &Bytes::from_slice(env, &hx(&p["authXdr"]))).unwrap()
+}
+
 fn arg_vals(env: &Env, p: &serde_json::Value) -> soroban_sdk::Vec<Val> {
     let mut v = soroban_sdk::Vec::new(env);
     for a in p["args"].as_array().unwrap() {
@@ -575,8 +610,7 @@ impl U {
         let rec = portable_record_hash(env, &id, ED25519, &z, &kem_record_hash(env, &id, 0, 0, &z));
         let reg_digest = registration_digest(env, &rec, &z).to_array();
         let pop = sk.sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_POP_V2, &reg_digest])).to_bytes();
-        let attrs = UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: b32(env, 0), kem_pk: Bytes::new(env) };
-        self.reg.register(&ED25519, &kd, &attrs, &Bytes::from_array(env, &pop), &Bytes::new(env), &None);
+        self.reg.register(&ED25519, &kd, &UaAttrs::none(env), &Bytes::from_array(env, &pop), &Bytes::new(env), &None);
         if funds > 0 {
             self.mint_ua(&id, funds);
         }
@@ -584,9 +618,9 @@ impl U {
     }
 
     /// The UA's signature over `op_digest(token, f, args)` under `purpose`.
-    fn sign(&self, u: &Ua, purpose: [u8; 32], f: &str, args: soroban_sdk::Vec<Val>) -> Bytes {
+    fn sign(&self, u: &Ua, purpose: [u8; 32], f: &str, args: soroban_sdk::Vec<Val>) -> UaSig {
         let d = op_digest(&self.env, &self.token.address, f, args).to_array();
-        Bytes::from_array(&self.env, &u.sk.sign(&keccak(&self.env, &[&MSG_TAG, &ED_TAG, &purpose, &d])).to_bytes())
+        UaSig::single(&self.env, Bytes::from_array(&self.env, &u.sk.sign(&keccak(&self.env, &[&MSG_TAG, &ED_TAG, &purpose, &d])).to_bytes()))
     }
 
     /// `token.ua_cancel_nonce(u, lane, …, auth)` arguments, signed by `u`.
@@ -601,7 +635,7 @@ impl U {
     }
 
     /// The payer's UA signature of the inner `token.ua_pay` of a `ua_relay` with `ref = rf` (`relayer = Some(router)`).
-    fn fee_auth(&self, u: &Ua, to: &Holder, amount: i128, rf: &BytesN<32>) -> Bytes {
+    fn fee_auth(&self, u: &Ua, to: &Holder, amount: i128, rf: &BytesN<32>) -> UaSig {
         let a = (&u.id, to, amount, rf, NOW + 60, Some(self.router.address.clone()));
         self.sign(u, PURPOSE_METATX, "ua_pay", a.into_val(&self.env))
     }
@@ -609,7 +643,7 @@ impl U {
     /// `router.ua_relay(payer, token, f, args, salt, token, to, amount, valid_until, relayer, auth)`; the relayer's
     /// host auth is mocked for exactly that call.
     #[allow(clippy::too_many_arguments)]
-    fn relay_ua(&self, payer: &BytesN<32>, f: &str, args: &soroban_sdk::Vec<Val>, salt: &BytesN<32>, to: &Holder, amount: i128, vu: u64, auth: &Bytes) -> Res {
+    fn relay_ua(&self, payer: &BytesN<32>, f: &str, args: &soroban_sdk::Vec<Val>, salt: &BytesN<32>, to: &Holder, amount: i128, vu: u64, auth: &UaSig) -> Res {
         let (e, tk) = (&self.env, &self.token.address);
         let f = Symbol::new(e, f);
         let mut all: soroban_sdk::Vec<Val> = (payer, tk, &f, args, salt, tk, to, amount, vu, &self.relayer).into_val(e);
@@ -622,7 +656,7 @@ impl U {
     }
 
     /// `relay_ua` of `u`'s cancel of `lane` with salt `salt`.
-    fn relay_cancel(&self, u: &Ua, args: &soroban_sdk::Vec<Val>, salt: u8, to: &Holder, amount: i128, auth: &Bytes) -> Res {
+    fn relay_cancel(&self, u: &Ua, args: &soroban_sdk::Vec<Val>, salt: u8, to: &Holder, amount: i128, auth: &UaSig) -> Res {
         self.relay_ua(&u.id, CANCEL, args, &b32(&self.env, salt), to, amount, NOW + 60, auth)
     }
 
@@ -768,9 +802,7 @@ fn ua_ops_vectors_ua_relay_row() {
     let s = ua_setup();
     let (e, o) = (&s.env, ops());
     for r in o["registrations"].as_array().unwrap() {
-        let kind = r["kind"].as_u64().unwrap() as u32;
-        let attrs = UaAttrs { pqz_key: Bytes::new(e), pqz_pop_hash: b32(e, 0), kem_pk: Bytes::new(e) };
-        let ua = s.reg.register(&kind, &Bytes::from_slice(e, &hx(&r["keyData"])), &attrs, &Bytes::from_slice(e, &hx(&r["pop"])), &Bytes::new(e), &None);
+        let ua = register_row(e, &s.reg, r);
         assert_eq!(ua.to_array().to_vec(), hx(&r["ua"]), "{}", r["name"]);
         s.mint_ua(&ua, 1_000);
     }
@@ -793,12 +825,40 @@ fn ua_ops_vectors_ua_relay_row() {
         assert_eq!(BytesN::<32>::try_from_val(e, &a.get(3).unwrap()).unwrap(), rf);
         assert_eq!(Option::<Address>::try_from_val(e, &a.get(5).unwrap()).unwrap(), Some(s.router.address.clone()));
         assert_eq!(to, s.open());
-        let r = s.relay_ua(&from, f, &call, &salt, &to, amount, vu, &Bytes::from_slice(e, &hx(&p["auth"])));
+        let r = s.relay_ua(&from, f, &call, &salt, &to, amount, vu, &auth_of(e, p));
         assert!(r.is_ok(), "{}: {r:?}", p["kind"]);
         assert!(s.token.ua_ref_used(&from, &rf));
         n += 1;
     }
     assert_eq!((n, s.token.balance(&s.relayer), s.token.balance(&s.router.address)), (7, 700, 0));
+}
+
+/// CTR-UA-37: a listed `msig` pays no relay fee: its `ua_relay` is refused, nothing moves, and the same call settles once its slots accepted.
+#[test]
+fn ua_ops_msig_relay_refused_until_accepted() {
+    let s = ua_setup();
+    let (e, o) = (&s.env, ops());
+    let regs = o["registrations"].as_array().unwrap();
+    for r in regs {
+        let ua = register_listed(e, &s.reg, r);
+        s.mint_ua(&ua, 1_000);
+    }
+    let row = o["entries"].as_array().unwrap().iter().find(|x| x["name"] == "ua_relay").unwrap();
+    let rl = &row["relay"];
+    let p = row["perKind"].as_array().unwrap().iter().find(|p| p["kind"] == "msig").unwrap();
+    let (f, call) = (rl["func"].as_str().unwrap(), arg_vals(e, rl));
+    let salt = BytesN::from_array(e, &hx(&rl["salt"]).try_into().unwrap());
+    let a = arg_vals(e, p);
+    let from = BytesN::<32>::try_from_val(e, &a.get(0).unwrap()).unwrap();
+    let to = Holder::try_from_val(e, &a.get(1).unwrap()).unwrap();
+    let amount = i128::try_from_val(e, &a.get(2).unwrap()).unwrap();
+    let vu = u64::try_from_val(e, &a.get(4).unwrap()).unwrap();
+    assert!(s.relay_ua(&from, f, &call, &salt, &to, amount, vu, &auth_of(e, p)).is_err());
+    assert_eq!(s.token.ua_balance(&from), 1_000);
+    accept_row(e, &s.reg, regs.iter().find(|r| r["kind"] == 0x0120).unwrap());
+    let r = s.relay_ua(&from, f, &call, &salt, &to, amount, vu, &auth_of(e, p));
+    assert!(r.is_ok(), "{r:?}");
+    assert_eq!(s.token.ua_balance(&from), 1_000 - amount);
 }
 
 /// T8 review (critical; controller ruling 2026-10-31): a relayer makes a victim's router-bound `ua_pay` the target of

@@ -1,0 +1,192 @@
+== e2e-ua8-local: c8c0d67c+uncommitted 2026-11-01T15:52:36Z; stellar 30.0.0 (90a3d42d9327ccfaa0d301373766f45beae3e6d9); 13 GB available
+== build Wasm
+== build soroban
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/dex/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.14s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_dex.wasm (14694 bytes optimized (original size was 18122 bytes))
+    Wasm Hash: 3963d36f2e56afc818524f9d7e77f9802b46780250ac41394d8d01caa7990524
+    Wasm Size: 14694 bytes optimized (original size was 18122 bytes)
+    Exported Functions: 8 found
+      • __constructor
+      • cancel
+      • filled
+      • market
+      • order_hash
+      • set_market
+      • settle
+      • ua_cancel
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/token/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+   Compiling scaas-token v0.1.0 (smartcontracts/soroban/contracts/token)
+    Finished `release` profile [optimized] target(s) in 1.10s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_token.wasm (26651 bytes optimized (original size was 31198 bytes))
+    Wasm Hash: df541cf468add24ac137faadbed86723ac393ba2a800b969cade25c17470d259
+    Wasm Size: 26651 bytes optimized (original size was 31198 bytes)
+    Exported Functions: 30 found
+      • __constructor
+      • admin
+      • allowance
+      • approve
+      • balance
+      • burn
+      • burn_from
+      • decimals
+      • meta_pay_id
+      • mint
+      • mint_to_ua
+      • name
+      • pay
+      • pay_meta
+      • pay_to_ua
+      • ref_used
+      • registry
+      • symbol
+      • transfer
+      • transfer_from
+      • transfer_to_ua
+      • ua_balance
+      • ua_burn
+      • ua_cancel_nonce
+      • ua_nonce
+      • ua_pay
+      • ua_pay_meta
+      • ua_ref_used
+      • ua_trade
+      • ua_transfer
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/ua-registry/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.08s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_ua_registry.wasm (52519 bytes optimized (original size was 59853 bytes))
+    Wasm Hash: 41a003ae4acd3c88de11ced6970a981960d3a16fe00f60033720d4bc118e7255
+    Wasm Size: 52519 bytes optimized (original size was 59853 bytes)
+    Exported Functions: 31 found
+      • __constructor
+      • checked_of
+      • kem_key_at
+      • kem_key_of
+      • key_owner
+      • kind_name
+      • pop_of
+      • pqz_key_of
+      • pqz_key_sig_of
+      • pqz_pop_of
+      • receivable
+      • record_of
+      • register
+      • register_frost
+      • register_msig
+      • register_musig2
+      • register_webauthn
+      • registration_of
+      • relayers
+      • require_authorized
+      • set_kem_key
+      • set_pqz_key
+      • store_pqz_pop
+      • ua_at
+      • ua_count
+      • ua_of
+      • ua_of_frost
+      • ua_of_msig
+      • ua_of_musig2
+      • ua_of_webauthn
+      • ua_page
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/mandate/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.08s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_mandate.wasm (16554 bytes optimized (original size was 19087 bytes))
+    Wasm Hash: fca1b6562f7690f263dcf49c699c0b93f14633e9ba7b5acdb4512a7bb9ed46c9
+    Wasm Size: 16554 bytes optimized (original size was 19087 bytes)
+    Exported Functions: 12 found
+      • __constructor
+      • epoch
+      • mandate
+      • mtx_mandate_pay
+      • mtx_revoke
+      • mtx_set_mandate
+      • mtx_set_payee
+      • mtx_withdraw
+      • owner
+      • paid
+      • registry
+      • ua_nonce
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/relay-executor/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.08s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_relay_executor.wasm (1187 bytes optimized (original size was 1316 bytes))
+    Wasm Hash: e23732b60b42551e811c796609c60b8c6499205f1d2af816d558f6c4ba6c9c00
+    Wasm Size: 1187 bytes optimized (original size was 1316 bytes)
+    Exported Functions: 3 found
+      • __constructor
+      • exec
+      • router
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/relay-fee/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.08s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_relay_fee.wasm (7630 bytes optimized (original size was 8585 bytes))
+    Wasm Hash: 37330478cb2c3fc0c66a788f2efe8784edda1d5f9b1fd6b03a334cac97991a27
+    Wasm Size: 7630 bytes optimized (original size was 8585 bytes)
+    Exported Functions: 5 found
+      • __constructor
+      • executor
+      • relay
+      • relay_ref
+      • ua_relay
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/smart-key-account/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.08s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_smart_key_account.wasm (10529 bytes optimized (original size was 11975 bytes))
+    Wasm Hash: f02a6780eee4d41ba0489b8b8a258f42bc71be69ab9951ae5239c76d374c705d
+    Wasm Size: 10529 bytes optimized (original size was 11975 bytes)
+    Exported Functions: 5 found
+      • __check_auth
+      • __constructor
+      • add_key
+      • keys
+      • remove_key
+✅ Build Complete
+
+== EVM deploy build
+No files changed, compilation skipped
+== quickstart
+quickstart: scaas-stellar up (stellar/quickstart@sha256:e05d68bb3b2629a829310dc3434fc0ee3f801854bdfa1a7c8c362d2f1c9060f8), rpc http://127.0.0.1:31980/rpc
+quickstart: protocolVersion 30, testnet limits applied
+== anvil 31981, 31982
+== cargo test --test e2e_ua8
+   Compiling scaas-node v0.1.0 (scaas-node)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.33s
+     Running tests/e2e_ua8.rs (target/debug/deps/e2e_ua8-41b6ff1d90a339a8)
+
+running 1 test
+test e2e_ua8_simulation_auth_mode ... deploy.sh soroban local ua_registry: CAIUAK6WTM6KC6CFAU6EHBQEW3UJIPC6C6MPZADDSYM5OQWBKBRDPL3A
+FIT P1 register the ML-DSA member: cpu_insns 4922096 used_cpu 4686764 mem_bytes 1456520 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 6420 largest_entry 5944 events_bytes 2756 resource_fee 9422244 fee_charged 7121960
+P1 auth = [lane entry], G member's slot, default mode: error Some("HostError: Error(Auth, InvalidAction)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CAIUAK6WTM6KC6CFAU6EHBQEW3UJIPC6C6MPZADDSYM5OQWBKBRDPL3A, top"), results[0].auth None entries
+P1 auth = [lane entry], authMode record: error Some("cannot set authMode to 'record' with an auth footprint"), results[0].auth None entries
+P1 auth = [], the same call, default mode: error None, results[0].auth Some(1) entries
+P1 result: a non-empty auth ENFORCES (Some(lane)), an empty auth RECORDS
+P1 enforcing simulation that passes: error None, results[0].auth Some(1) entries, every entry returned is the node's own: true
+P1 enforcing simulation, stateChanges: Some(5) entries, of which with `after`: Some(5)
+DIAG TABLE register_frost bn254 14 of 16: core_metrics [("read_entry", 7), ("write_entry", 4), ("ledger_read_byte", 0), ("ledger_write_byte", 17132), ("read_key_byte", 0), ("write_key_byte", 0), ("read_data_byte", 0), ("write_data_byte", 17132), ("read_code_byte", 0), ("write_code_byte", 0), ("emit_event", 1), ("emit_event_byte", 16792), ("cpu_insn", 6892411), ("mem_byte", 4011562), ("invoke_time_nsecs", 3644099), ("max_rw_key_byte", 108), ("max_rw_data_byte", 16736), ("max_rw_code_byte", 0), ("max_emit_event_byte", 16792)]; ["[Symbol(ScSymbol(StringM(fn_call))), Bytes(ScBytes(BytesM(11402bd69b3ca17845053c438604b6e8943c5e1798fc80639619d742c1506237))), Symbol(ScSymbol(StringM(register_frost)))] Vec(Some(ScVec(VecM([U32(275), Map(Some(ScMap(VecM", "[Symbol(ScSymbol(StringM(UaRegistered))), Bytes(ScBytes(BytesM(b2b84629368bf409230fd6f563fe3b0a606d53afd67cc8f7e81f3e6cfcc0c24f))), U32(275)] Vec(Some(ScVec(VecM([Map(Some(ScMap(VecM([ScMapEntry { key: Symbol(ScSymbol(St", "[Symbol(ScSymbol(StringM(fn_return))), Symbol(ScSymbol(StringM(register_frost)))] Bytes(ScBytes(BytesM(b2b84629368bf409230fd6f563fe3b0a606d53afd67cc8f7e81f3e6cfcc0c24f)))", "[Symbol(ScSymbol(StringM(error))), Error(Budget(ExceededLimit))] Vec(Some(ScVec(VecM([String(ScString(StringM(total events size exceeds network config maximum))), U64(16792), U64(16384)]))))"]
+FIT TABLE register_frost bn254 14 of 16: REFUSED on chain, tx_size 20520: "FAILED" "AAAAAAAB1of/////AAAAAQAAAAAAAAAY/////QAAAAA="
+P1 node, relayer = Some(lane), G slot of another account: job dead, reason "simulation: HostError: Error(Auth, InvalidAction)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CAIUAK6WTM6KC6CFAU6EHBQEW3UJIPC6C6MPZADDSYM5OQWBKBRDPL3A, topics:[error, Error(Auth, InvalidAction)], data:\"escalating error to VM trap from failed host function call: require_auth_for_args\"\n   1: [Dia"
+P1 node, relayer = None, G slot of another account: job dead, reason "simulation: the call needs another account's signature, which a call job does not carry"
+P1 node, relayer = Some(lane), G slot of this lane: job dead, reason "simulation: HostError: Error(Auth, InvalidAction)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CAIUAK6WTM6KC6CFAU6EHBQEW3UJIPC6C6MPZADDSYM5OQWBKBRDPL3A, topics:[error, Error(Auth, InvalidAction)], data:\"escalating error to VM trap from failed host function call: require_auth_for_args\"\n   1: [Dia"
+P1 node, relayer = None, G slot of this lane: job dead, reason "simulation: the call asks for this lane's authority outside the job's own call (S14: a lane's authority is never lent)"
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 13.60s
+
+== e2e-ua8-local: PASS

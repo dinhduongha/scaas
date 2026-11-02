@@ -105,6 +105,25 @@ export function msigPqzEligible(keyData) {
   }
   return classical < u16(d, 0);
 }
+/** The minimal form of a stored `msig` signature (`pop` v2, KEM record, PQZ key record; owner 2026-10-31): with T = the
+ *  signing slots' total weight and N the threshold, T >= N and T − weight(i) < N for every slot (each slot necessary), i.e.
+ *  T − min(weight) < N. `indexes`: the MemberSig indexes; a set that is not strictly increasing within the members is not
+ *  minimal. Malformed key data is `UAKeyData`. */
+export function msigSlotsMinimal(keyData, indexes) {
+  const d = bytes(keyData);
+  need(d.length >= 4 && d.length === 4 + 36 * u16(d, 2), 'length');
+  let total = 0;
+  let min = Infinity;
+  let last = -1;
+  for (const i of indexes) {
+    if (!Number.isInteger(i) || i <= last || i >= u16(d, 2)) return false;
+    last = i;
+    const w = u16(d, 4 + 36 * i + 34);
+    total += w;
+    min = Math.min(min, w);
+  }
+  return total >= u16(d, 0) && total - min < u16(d, 0);
+}
 export const isMemberKind = (kind, hederaNative = false) =>
   singleSigning(kind) || kind === 0x0001 || kind === 0x0002 || (hederaNative && kind === 0x0003);
 
@@ -304,7 +323,8 @@ export function portableTypedData(primaryType, message) {
 }
 
 /** A PQZ / KEM holder (UA-6 U3, UA-8 P7): mldsa44, mldsa65, fndsa512, or an `msig` whose `keyData` is PQ-eligible. */
-const holds = (kind, keyData) => isPqzHolder(kind) || (kind === 0x0120 && present(keyData) && msigPqzEligible(keyData));
+export const isKeyHolder = (kind, keyData) => isPqzHolder(kind) || (kind === 0x0120 && present(keyData) && msigPqzEligible(keyData));
+const holds = isKeyHolder;
 
 /**
  * The portable PoP of a registration (UA-8 P1, P2; typed-signing TS-D3): `{ pqzKeyHash, pqzPopHash, kemRecordHash,
@@ -334,6 +354,31 @@ export function holderPopMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopHash
     { record: portableRecordStruct({ ua, kind, pqzKeyHash, kem }), pqzPopHash: hex(popHash) });
   return { pqzKeyHash, pqzPopHash: popHash, kemRecordHash: kh, portableRecordDigest: portableRecordDigest(words),
     registrationDigest: registration, message, typedData, ...(kind === 0x0120 ? { memberDigest: memberDigest(ua, message) } : {}) };
+}
+
+/** The registry's `_attrs` in its order over given attributes (ua-rs `registration_attrs`), no digest helper's defaults: the typed
+ *  registration digest. `attrs`: `{ pqzKey, pqzPopHash, kemPk }` or `{ pqzKey, pqzPopHash, kem, kemPkHash }`, the KEM key version 0
+ *  in whole or by its hash (a hash commit has no key bytes to check: `kem` is its scheme alone). */
+export function registrationAttrsDigest(kind, { ua, keyData, attrs: a, pqzPop }) {
+  const commit = present(a.kemPkHash) && !bytes(a.kemPkHash).every((b) => b === 0);
+  const pqz = present(a.pqzKey);
+  const kemPk = commit ? null : a.kem ? kemPkOf(a.kem) : orEmpty(a.kemPk);
+  if (pqz && !holds(kind, keyData)) fail('UAPqzHolder', String(kind));
+  if ((commit || kemPk.length !== 0) && !holds(kind, keyData)) fail('UAKemHolder', String(kind));
+  const popHash = a.pqzPopHash === undefined ? Z32 : sized(a.pqzPopHash, 32, 'pqzPopHash');
+  if (pqz === popHash.every((b) => b === 0) || hex(popHash) === EMPTY_PROOF_HASH
+    || (present(pqzPop) && hex(keccak_256(bytes(pqzPop))) !== hex(popHash))) fail('UAPqzPopHash', 'attrs');
+  const pqzKeyHash = pqz ? pqzKeyHashOf(a.pqzKey) : Z32;
+  let kem = null;
+  if (commit) {
+    const f = a.kem ?? { scheme: 0, mlkemEk: '0x', x25519: Z32 };
+    if (present(a.kemPk) || bytes(f.mlkemEk).length !== 0 || hex(sized(f.x25519, 32, 'x25519')) !== ZW) fail('UAKemKeyLength', 'key bytes next to the hash');
+    if (f.scheme !== KEM_SCHEME.mlkem1024X25519) fail('UAKemScheme', String(f.scheme));
+    kem = { ua: h32(ua, 'ua'), version: 0, scheme: f.scheme, kemPkHash: h32(a.kemPkHash, 'kemPkHash') };
+  } else {
+    kem = kemRecordStruct({ ua, version: 0, kemPk });
+  }
+  return registrationDigest({ ua, kind, pqzKeyHash, kemRecordHash: kemHash(kem), pqzPopHash: popHash });
 }
 
 /** The message `R_REG` proves over: `uaMessage(0x0142, POP_V2, portableRecordDigest(ua, kind, keyHash(0x0142, pqzKey),
@@ -525,6 +570,8 @@ export function registrationArgs({ kind, keyData, pqzKey, pqzPopHash, pqzPop, ke
   const attrs = { pqzKey: hex(orEmpty(pqzKey)), pqzPopHash: hex(hasPqz || present(pqzPopHash) ? proofHashOf(pqzPop, pqzPopHash) : Z32),
     kem: kemKeyOf(kemPk), kemPkHash: ZW };
   const msig = k === 0x0120;
+  // every stored msig signature is minimal (owner 2026-10-31): the registry refuses any other set, so it is never built
+  if (msig && pop?.length && !msigSlotsMinimal(keyData, pop.map((s) => s.index))) throw new UAError('UAPoP', 'msig pop slots not minimal');
   const entry = msig ? 'registerMsig' : TYPED_ENTRY[k] ?? 'register';
   const common = { attrs, pqzPop: hex(orEmpty(pqzPop)) };
   const args = msig ? { structure: msigStructure(keyData), ...common, pop: (pop ?? []).map(memberSigJson) }

@@ -25,6 +25,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 sha3 = "0.10"
+# UA8-D23: `ua8::check_*`, the only check of what Soroban stores on a relayer's word; without `pq` a PQ signature is `Pop`
+scaas-ua = { path = "../clients/ua-rs", features = ["pq"] }
 # Node store (R88/R111): SQLite now, PostgreSQL/MySQL in P1b. No default features: no `any`, no `json`.
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "migrate", "macros"] }
 stellar-xdr = { version = "28", features = ["base64"] }
@@ -43,3 +45,16 @@ store-sqlite = ["sqlx/sqlite"]
 proptest = "1"
 # e2e_near only: P-256 passkey signers for the largest wrapper (13 passkeys) on near-sandbox
 p256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
+# adapters::soroban tests: a fresh `fndsa512` signer for an msig slot of a kind the chain cannot verify (no vector row has one)
+pqcrypto-falcon = { version = "=0.4.1", default-features = false }
+pqcrypto-traits = { version = "=0.3.5", default-features = false }
+# e2e_ua8: seeded `mldsa65` members for the network-fit msigs, at the pin of `scaas-ua`'s `pq`
+ml-dsa = { version = "=0.1.1", default-features = false}
+# e2e_ua8: a seeded `slhdsa128s` member for the relayer-checked msig slot, at the pin of `scaas-ua`'s `pq` (no rng: the FIPS 205 internal functions)
+slh-dsa = { version = "=0.2.0-rc.5", default-features = false }
+
+# its signing is slow unoptimised (about 2^22 hashes)
+[profile.dev.package.slh-dsa]
+opt-level = 3
+[profile.dev.package.sha2]
+opt-level = 3

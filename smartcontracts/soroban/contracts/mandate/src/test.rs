@@ -7,12 +7,12 @@ use std::vec::Vec as StdVec;
 use super::*;
 use ed25519_dalek::Signer as _;
 use scaas_token::{Token, TokenClient};
-use scaas_ua_common::{h32, UaAttrs, PURPOSE_POP_V2, kem_record_hash, portable_record_hash, registration_digest};
+use scaas_ua_common::{h32, MemberSig, MsigMember, MsigStructure, UaAttrs, UaSig, PURPOSE_POP_V2, kem_record_hash, portable_record_hash, registration_digest};
 use scaas_ua_registry::{UaRegistry, UaRegistryClient as RegClient};
 use serde_json::Value;
 use soroban_sdk::testutils::{Address as _, Ledger as _, MockAuth, MockAuthInvoke};
 use soroban_sdk::xdr::{Limits, ReadXdr as _, ScVal};
-use soroban_sdk::{IntoVal, String, Symbol, TryFromVal, Val, Vec as SVec};
+use soroban_sdk::{Bytes, IntoVal, String, Symbol, TryFromVal, Val, Vec as SVec};
 
 const OPS: &str = include_str!("../../../vectors/ua-ops.json");
 const NOW: u64 = 1_800_000_000;
@@ -57,7 +57,7 @@ fn err<V: core::fmt::Debug, C: core::fmt::Debug>(r: Result<V, Result<soroban_sdk
 }
 
 fn no_attrs(env: &Env) -> UaAttrs {
-    UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: n(env, [0; 32]), kem_pk: Bytes::new(env) }
+    UaAttrs::none(env)
 }
 
 fn keccak(env: &Env, parts: &[&[u8]]) -> [u8; 32] {
@@ -148,13 +148,13 @@ impl T {
         let auth = match who {
             Who::Native(a) => {
                 let mut all = args.clone();
-                all.push_back(Bytes::new(env).into_val(env));
+                all.push_back(UaSig::none(env).into_val(env));
                 allow(env, a, &w.address, f, all);
-                Bytes::new(env)
+                UaSig::none(env)
             }
             Who::Ua(u) => {
                 let d = scaas_ua_common::op_digest(env, &w.address, f, args.clone()).to_array();
-                Bytes::from_array(env, &u.sk.sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_METATX, &d])).to_bytes())
+                UaSig::single(env, Bytes::from_array(env, &u.sk.sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_METATX, &d])).to_bytes()))
             }
         };
         let mut all = args;
@@ -244,7 +244,7 @@ fn mandate_native_owner_unchanged_semantics() {
     e.ledger().with_mut(|l| l.timestamp = NOW);
 
     // SOR-D9: a native holder's `auth` must be empty; its lane is not consumed (same lane and nonce again).
-    let a = (&s.t.address, &p, false, n(e, [1; 32]), 0u64, NOW + 60, None::<Address>, Bytes::from_array(e, &[1]));
+    let a = (&s.t.address, &p, false, n(e, [1; 32]), 0u64, NOW + 60, None::<Address>, UaSig::single(e, Bytes::from_array(e, &[1])));
     allow(e, &owner, &w.address, "mtx_set_payee", a.clone().into_val(e));
     assert_eq!(err(w.try_mtx_set_payee(a.0, a.1, &a.2, &a.3, &a.4, &a.5, &a.6, &a.7)), Error::BadAuth);
     s.set_payee(&w, Who::Native(&owner), &p, false, 1, 0).unwrap();
@@ -335,13 +335,13 @@ fn mandate_ua_owner_lane_replay_refused() {
     let d1 = scaas_ua_common::op_digest(e, &w.address, "mtx_revoke", (&s.t.address, owner.h(), 3u64, n(e, [2; 32]), 1u64, NOW + 61, None::<Address>).into_val(e));
     let sig = owner.sk.sign(&keccak(e, &[&MSG_TAG, &ED_TAG, &PURPOSE_METATX, &d1.to_array()])).to_bytes();
     s.set_mandate(&w, Who::Ua(&owner), &delegate.h(), 10, 10, 60, NOW + 60, 3, 0).unwrap();
-    assert!(w.try_mtx_revoke(&s.t.address, &owner.h(), &3, &n(e, [2; 32]), &1, &(NOW + 60), &None, &Bytes::from_array(e, &sig)).is_err());
+    assert!(w.try_mtx_revoke(&s.t.address, &owner.h(), &3, &n(e, [2; 32]), &1, &(NOW + 60), &None, &UaSig::single(e, Bytes::from_array(e, &sig))).is_err());
     assert_eq!(w.ua_nonce(&owner.id, &n(e, [2; 32])), 1);
     // A bound relayer: without its authorisation refused, with it the entry runs.
     let r = Address::generate(e);
     let ra = (&s.t.address, owner.h(), w.epoch(&s.t.address), n(e, [2; 32]), 1u64, NOW + 60, Some(r.clone()));
     let d = scaas_ua_common::op_digest(e, &w.address, "mtx_revoke", ra.clone().into_val(e));
-    let sig = Bytes::from_array(e, &owner.sk.sign(&keccak(e, &[&MSG_TAG, &ED_TAG, &PURPOSE_METATX, &d.to_array()])).to_bytes());
+    let sig = UaSig::single(e, Bytes::from_array(e, &owner.sk.sign(&keccak(e, &[&MSG_TAG, &ED_TAG, &PURPOSE_METATX, &d.to_array()])).to_bytes()));
     assert!(w.try_mtx_revoke(ra.0, &ra.1, &ra.2, &ra.3, &ra.4, &ra.5, &ra.6, &sig).is_err());
     let mut full: SVec<Val> = ra.clone().into_val(e);
     full.push_back(sig.into_val(e));
@@ -531,6 +531,49 @@ fn mandate_pay_stale_epoch_refused() {
 
 // ---------- ua-ops.json ----------
 
+/// `register_listed`, and every slot of an `msig` row accepts (CTR-UA-37): until then it authorizes nothing.
+fn register_row(env: &Env, reg: &RegClient, r: &Value) -> BytesN<32> {
+    let ua = register_listed(env, reg, r);
+    accept_row(env, reg, r);
+    ua
+}
+
+/// Every `memberships` row of a registration: the member's own `accept_membership`.
+fn accept_row(env: &Env, reg: &RegClient, r: &Value) {
+    for m in r["memberships"].as_array().into_iter().flatten() {
+        let slot = MemberSig { index: m["index"].as_u64().unwrap() as u32, key_data: Bytes::new(env), sig: Bytes::from_slice(env, &hx(&m["sig"])) };
+        reg.accept_membership(&BytesN::from_array(env, &hx(&r["ua"]).try_into().unwrap()), &slot, &None);
+    }
+}
+
+/// A vector's `registrations[]` row: `register`, or `register_msig` of the `msig` (its `pop` is empty, U8S-D2).
+fn register_listed(env: &Env, reg: &RegClient, r: &Value) -> BytesN<32> {
+    let (kind, none) = (r["kind"].as_u64().unwrap() as u32, Bytes::new(env));
+    if kind != 0x0120 {
+        return reg.register(&kind, &Bytes::from_slice(env, &hx(&r["keyData"])), &UaAttrs::none(env), &Bytes::from_slice(env, &hx(&r["pop"])), &none, &None);
+    }
+    let mut members = SVec::new(env);
+    for m in r["members"].as_array().unwrap() {
+        let (kind, weight) = (m["kind"].as_u64().unwrap() as u32, m["weight"].as_u64().unwrap() as u32);
+        members.push_back(MsigMember { kind, id: BytesN::from_array(env, &hx(&m["id"]).try_into().unwrap()), weight });
+    }
+    let s = MsigStructure { threshold: r["threshold"].as_u64().unwrap() as u32, members };
+    reg.register_msig(&s, &UaAttrs::none(env), &SVec::new(env), &none, &None)
+}
+
+/// A vector's `authXdr`: the `UaSig` the entry takes.
+fn auth_of(env: &Env, p: &Value) -> UaSig {
+    <UaSig as soroban_sdk::xdr::FromXdr>::from_xdr(env, &Bytes::from_slice(env, &hx(&p["authXdr"]))).unwrap()
+}
+
+/// The `Address` inside a `Holder::Addr` arg.
+fn sc_holder_addr(env: &Env, v: &Val) -> Val {
+    match Holder::try_from_val(env, v).unwrap() {
+        Holder::Addr(a) => a.into_val(env),
+        Holder::Ua(_) => panic!("a native holder"),
+    }
+}
+
 fn arg_vals(env: &Env, p: &Value) -> SVec<Val> {
     let mut v = SVec::new(env);
     for a in p["args"].as_array().unwrap() {
@@ -540,9 +583,9 @@ fn arg_vals(env: &Env, p: &Value) -> SVec<Val> {
     v
 }
 
-/// SOR-D12: the mandate at `ua-ops.json`'s id and network id; each `mtx_set_mandate` / `mtx_mandate_pay` row's digest
-/// is recomputed and its `auth` runs as the call it signs: `mtx_set_mandate` with that kind's UA as the owner,
-/// `mtx_mandate_pay` with that kind's UA as the delegate (set by a native owner).
+/// SOR-D12: the mandate at `ua-ops.json`'s id and network id; each mandate row's digest is recomputed and its `auth`
+/// runs as the call it signs: `mtx_set_mandate`, `mtx_set_payee` and `mtx_withdraw` with that kind's UA as the owner,
+/// `mtx_mandate_pay` and `mtx_revoke` with that kind's UA as the delegate (set by a native owner).
 #[test]
 fn ua_ops_vectors_mandate_rows() {
     let o = ops();
@@ -553,14 +596,13 @@ fn ua_ops_vectors_mandate_rows() {
             continue;
         }
         let f = e["fn"].as_str().unwrap();
-        assert!(["mtx_set_mandate", "mtx_mandate_pay"].contains(&f), "{f}");
+        assert!(["mtx_set_mandate", "mtx_set_payee", "mtx_withdraw", "mtx_revoke", "mtx_mandate_pay"].contains(&f), "{f}");
         for p in e["perKind"].as_array().unwrap() {
             let s = base();
             let env = &s.env;
             let mut ua = None;
             for r in o["registrations"].as_array().unwrap() {
-                let kind = r["kind"].as_u64().unwrap() as u32;
-                let id = s.reg.register(&kind, &Bytes::from_slice(env, &hx(&r["keyData"])), &no_attrs(env), &Bytes::from_slice(env, &hx(&r["pop"])), &Bytes::new(env), &None);
+                let id = register_row(env, &s.reg, r);
                 if r["ua"] == p["ua"] {
                     ua = Some(id);
                 }
@@ -568,8 +610,10 @@ fn ua_ops_vectors_mandate_rows() {
             let ua = Holder::Ua(ua.unwrap());
             let args = arg_vals(env, p);
             let native = Address::generate(env);
-            let w = if f == "mtx_set_mandate" {
+            let w = if f == "mtx_set_mandate" || f == "mtx_set_payee" {
                 s.mandate(&ua, 0)
+            } else if f == "mtx_withdraw" {
+                s.mandate(&ua, 1_000_000)
             } else {
                 let w = s.mandate(&Holder::Addr(native.clone()), 1_000_000);
                 s.set_mandate(&w, Who::Native(&native), &ua, 1_000_000, 1_000_000, 3600, NOW + 86_400, 1, 0).unwrap();
@@ -580,13 +624,23 @@ fn ua_ops_vectors_mandate_rows() {
             assert_eq!(scaas_ua_common::op_digest(env, &w.address, f, args.clone()).to_array().to_vec(), hx(&p["digest"]), "{f} {}", p["kind"]);
             digests += 1;
             let mut all = args.clone();
-            all.push_back(Bytes::from_slice(env, &hx(&p["auth"])).into_val(env));
+            all.push_back(auth_of(env, p).into_val(env));
             let r = env.try_invoke_contract::<(), soroban_sdk::Error>(&w.address, &Symbol::new(env, f), all);
             assert!(r.is_ok(), "{f} {}: {r:?}", p["kind"]);
             calls += 1;
             if f == "mtx_set_mandate" {
                 let delegate = Holder::try_from_val(env, &args.get(1).unwrap()).unwrap();
                 assert_eq!(w.mandate(&s.t.address).unwrap().delegate, delegate);
+            } else if f == "mtx_set_payee" {
+                let payee = Holder::try_from_val(env, &args.get(1).unwrap()).unwrap();
+                assert!(env.as_contract(&w.address, || env.storage().persistent().has(&Key::Payee(s.t.address.clone(), payee))));
+            } else if f == "mtx_withdraw" {
+                let to = Address::try_from_val(env, &sc_holder_addr(env, &args.get(1).unwrap())).unwrap();
+                assert_eq!(s.t.balance(&to), 700);
+                assert_eq!(s.t.balance(&w.address), 1_000_000 - 700);
+            } else if f == "mtx_revoke" {
+                assert!(w.mandate(&s.t.address).is_none());
+                assert_eq!(w.epoch(&s.t.address), 2, "revoke bumps the epoch");
             } else {
                 let pay_ref = BytesN::<32>::try_from_val(env, &args.get(3).unwrap()).unwrap();
                 assert!(w.paid(&pay_ref));
@@ -594,5 +648,30 @@ fn ua_ops_vectors_mandate_rows() {
             }
         }
     }
-    assert_eq!((digests, calls), (2 * 7, 2 * 7));
+    assert_eq!((digests, calls), (5 * 7, 5 * 7));
+}
+
+/// CTR-UA-37: a mandate owned by a listed `msig` moves nothing: its `mtx_set_mandate` is refused, the same call runs once its slots accepted.
+#[test]
+fn ua_ops_msig_mandate_owner_refused_until_accepted() {
+    let o = ops();
+    let (mandate, regs) = (&o["contracts"]["mandate"], o["registrations"].as_array().unwrap());
+    let e = o["entries"].as_array().unwrap().iter().find(|e| e["contract"] == *mandate && e["fn"] == "mtx_set_mandate").unwrap();
+    let p = e["perKind"].as_array().unwrap().iter().find(|p| p["kind"] == "msig").unwrap();
+    let ms = regs.iter().find(|r| r["kind"] == 0x0120).unwrap();
+    let s = base();
+    let env = &s.env;
+    for r in regs {
+        register_listed(env, &s.reg, r);
+    }
+    let w = s.mandate(&Holder::Ua(BytesN::from_array(env, &hx(&ms["ua"]).try_into().unwrap())), 0);
+    let mut all = arg_vals(env, p);
+    all.push_back(auth_of(env, p).into_val(env));
+    let set = |all: &soroban_sdk::Vec<soroban_sdk::Val>| env.try_invoke_contract::<(), soroban_sdk::Error>(&w.address, &Symbol::new(env, "mtx_set_mandate"), all.clone());
+    assert!(set(&all).is_err());
+    assert!(w.mandate(&s.t.address).is_none());
+    accept_row(env, &s.reg, ms);
+    let r = set(&all);
+    assert!(r.is_ok(), "{r:?}");
+    assert!(w.mandate(&s.t.address).is_some());
 }

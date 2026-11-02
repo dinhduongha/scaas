@@ -13,7 +13,9 @@ import { hex, keccak_256, utf8ToBytes, concatBytes, word } from '../src/bytes.js
 import { hashStruct, hashTypedData } from '../src/evm.js';
 import { personalSignDigest } from '../legacy/typed-signing/ua-portable-raw.js';
 import { portableJson } from '../scripts/ua-portable-vectors.mjs';
-import { B, nativeOk, bytesAt, sigOk, verify, memberSigs, msigOk } from './ua-verify.js';
+import * as signers from '../scripts/ua-signers.mjs';
+import { B, nativeOk, bytesAt, sigOk, memberSigs, msigOk, SECP_N, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord, verifyMembership, decodeMemberSigs,
+  encodeMemberSigs, kindVerify } from './ua-verify.js';
 
 import { dir } from './ua-vectors-dir.js';
 const TEXT = readFileSync(new URL('portable.json', dir), 'utf8');
@@ -321,6 +323,7 @@ test('holder refusals', () => {
     'UAPoP', 'UAPqzHolder', 'UAPqzKeySet', 'UAPqzPopHash', 'UAUnauthorized']);
   assert.deepEqual([...new Set(P.negatives.map((n) => n.entry))].sort(), ['register', 'requireAuthorized', 'setKemKey', 'setPqzKey', 'storePqzPop']);
   for (const n of P.negatives) {
+    if (n.rule === 'msig-minimal') continue; // a registry rule over a full registration, test 'portable.json msig rows are minimal'
     const set = n.mutation.set;
     if (n.entry === 'storePqzPop') {
       const r = row(n.mutation.row);
@@ -447,7 +450,7 @@ test('acceptance (CTR-UA-37): every row by hand, the wallet JSON, the native sig
     else {
       const m = hex(ua.uaMessage(r.memberKind, ua.purposeTag('member'), B(r.memberDigest)));
       const key = P.registrations.find((x) => x.ua === r.member).keyData;
-      assert.ok(r.memberKind >= 0x0130 ? sigOk(r.memberKind, key, m, r.sig) : verify(r.memberKind, key, m, r.sig), r.name);
+      assert.ok(r.memberKind >= 0x0130 ? sigOk(r.memberKind, key, m, r.sig) : kindVerify(r.memberKind, key, m, r.sig, false), r.name);
     }
   }
 });
@@ -555,6 +558,74 @@ test('every portable pop verifies', () => {
       assert.ok(sigOk(k.kind, r.keyData, k.message, k.sig), `${k.name} v${k.version}`);
     }
   }
+});
+
+// msig minimal form (owner 2026-10-31; plan U8S-D1): a stored msig signature (pop v2, KEM record, PQZ key record) is accepted
+// only when every slot is necessary: T = the slots' total weight, N = the threshold, T >= N and T - weight(i) < N for each i.
+const msigKd = (t, ...weights) => ua.encodeMsig(t, weights.map((weight, i) => ({ kind: 0x0131, id: new Uint8Array(32).fill(0x10 + i), weight })));
+const isCode = (c) => (e) => e instanceof ua.UAError && e.code === c;
+
+test('msigSlotsMinimal: 2-of-(1,1) both slots minimal; 2-of-(1,2) both slots not; one slot of weight 2 minimal; below threshold not', () => {
+  assert.equal(ua.msigSlotsMinimal(msigKd(2, 1, 1), [0, 1]), true);
+  assert.equal(ua.msigSlotsMinimal(msigKd(2, 1, 2), [0, 1]), false);
+  assert.equal(ua.msigSlotsMinimal(msigKd(2, 1, 2), [1]), true);
+  assert.equal(ua.msigSlotsMinimal(msigKd(2, 1, 2), [0]), false);
+  assert.equal(ua.msigSlotsMinimal(msigKd(2, 1, 1), []), false);
+  assert.equal(ua.msigSlotsMinimal(msigKd(2, 1, 1, 1), [1, 2]), true);
+  assert.equal(ua.msigSlotsMinimal(msigKd(2, 1, 1, 1), [0, 1, 2]), false);
+  assert.equal(ua.msigSlotsMinimal(msigKd(3, 1, 1, 1, 2), [0, 3]), true); // 1 + 2: each necessary
+  assert.equal(ua.msigSlotsMinimal(msigKd(3, 1, 1, 1, 2), [0, 1, 3]), false); // 4 − 1 = 3 >= 3
+  // a set the registry refuses (unsorted, repeated, out of range) is not minimal; malformed key data is UAKeyData
+  for (const ix of [[1, 0], [0, 0], [0, 2]]) assert.equal(ua.msigSlotsMinimal(msigKd(2, 1, 1), ix), false, `${ix}`);
+  assert.equal(ua.msigSlotsMinimal(hex(msigKd(2, 1, 1)), [0, 1]), true, 'hex key data');
+  assert.throws(() => ua.msigSlotsMinimal(new Uint8Array(3), [0]), isCode('UAKeyData'));
+  assert.throws(() => ua.msigSlotsMinimal(msigKd(2, 1, 1).subarray(0, 40), [0]), isCode('UAKeyData'));
+});
+
+test('vector builders refuse a non-minimal portable set', () => {
+  const s = (index) => ({ index, keyData: new Uint8Array(0), sig: Uint8Array.of(index + 1) });
+  assert.throws(() => signers.portableMemberSigs(msigKd(2, 1, 2), [s(0), s(1)]), isCode('UAPoP'));
+  assert.deepEqual(signers.portableMemberSigs(msigKd(2, 1, 2), [s(1)]), signers.encodeMemberSigs([s(1)]));
+  assert.deepEqual(signers.portableMemberSigs(msigKd(2, 1, 1), [s(0), s(1)]), signers.encodeMemberSigs([s(0), s(1)]));
+});
+
+test('portable.json msig rows are minimal', () => {
+  const ix = (blob) => memberSigs(blob).map((s) => s.index);
+  let n = 0;
+  for (const r of P.registrations.filter((x) => x.kind === 0x0120 && x.pop !== '0x')) {
+    assert.ok(ua.msigSlotsMinimal(r.keyData, ix(r.pop)), r.name);
+    n++;
+  }
+  for (const k of [...P.kemRecords, ...P.pqzKeyRecords].filter((x) => x.kind === 0x0120)) {
+    assert.ok(ua.msigSlotsMinimal(regOf(k.ua).keyData, ix(k.sig)), k.id ?? k.name);
+    n++;
+  }
+  assert.equal(n, 12, '5 pops, 3 KEM records, 4 PQZ key records');
+  // the negative: 2-of-(1, 2) over the registered mldsa65#1 / #2 (lower id weight 1), both slots sign
+  const neg = P.negatives.find((x) => x.name === 'msig-pop-not-minimal') ?? assert.fail('no msig-pop-not-minimal');
+  assert.deepEqual([neg.entry, neg.rule, neg.error], ['register', 'msig-minimal', 'UAPoP']);
+  const r = neg.registration;
+  const [lo, hi] = [row('mldsa65#1'), row('mldsa65#2')].sort((a, b) => (a.ua < b.ua ? -1 : 1));
+  assert.deepEqual([r.kind, r.threshold, r.members.map((m) => [m.kind, m.id, m.weight])], [0x0120, 2, [[0x0131, lo.ua, 1], [0x0131, hi.ua, 2]]]);
+  assert.equal(r.ua, hex(ua.deriveUA(0x0120, B(r.keyData))));
+  assert.ok(ua.msigPqzEligible(B(r.keyData)));
+  assert.ok(!P.registrations.some((x) => x.ua === r.ua), 'not a registrations[] row');
+  assert.deepEqual([r.attrs.pqzKey, r.attrs.pqzPopHash, r.attrs.kemPk, r.pqzPop], ['0x', Z, '0x', '0x']);
+  const m = ua.holderPopMessage(0x0120, args(r));
+  assert.deepEqual([m.portableRecordDigest, m.registrationDigest, m.message, m.memberDigest].map(hex),
+    [r.portableRecordDigest, r.registrationDigest, r.popMessage, r.memberDigest]);
+  assert.deepEqual([ix(r.pop), r.popSigners], [[0, 1], [0, 1]]);
+  assert.ok(msigOk(r, r.memberDigest, r.pop, keyOf, B(r.registrationDigest)), 'every member signature verifies; 1, then 3 >= 2 (the old rule)');
+  assert.equal(ua.msigSlotsMinimal(r.keyData, [0, 1]), false);
+  assert.equal(ua.msigSlotsMinimal(r.keyData, [1]), true, 'the weight-2 slot alone is the minimal set');
+  assert.throws(() => ua.registrationArgs({ ...regInput(r), pop: ix(r.pop).map((index) => ({ index, sig: '0x01' })) }), { code: 'UAPoP' }, 'never built');
+  assert.equal(ua.registrationArgs({ ...regInput(r), pop: [{ index: 1, sig: '0x01' }] }).args.pop.length, 1);
+  // the lightest slot is not the first: every slot verifies, T - weight(0) = 4 < 5 alone would pass, T - weight(1) = 5 refuses
+  const light = neg.lightestInMiddle;
+  assert.deepEqual([light.threshold, light.members.map((m) => m.weight), ix(light.pop)], [5, [2, 1, 3], [0, 1, 2]]);
+  assert.ok(msigOk(light, light.memberDigest, light.pop, keyOf, B(light.registrationDigest)), 'every member signature verifies');
+  assert.equal(ua.msigSlotsMinimal(light.keyData, [0, 1, 2]), false);
+  assert.equal(ua.msigSlotsMinimal(light.keyData, [0, 2]), true);
 });
 
 // --- typed-signing R1: the registry's explicit arguments (TS-D10 … TS-D12; owner KEM rulings 2026-10-31) ---
@@ -681,4 +752,215 @@ test('register args typed keys (registerWebAuthn / registerMuSig2 / registerFros
   assert.equal(n, 6);
   // a single key of another kind stays register(kind, keyData, …)
   assert.equal(ua.registrationArgs({ kind: 0x0101, keyData: K.valid[1].keyData, pop: '0x01' }).entry, 'register');
+});
+
+// --- the client re-check (ua8-soroban B5, UA8-D24, C14): the same rows and the same errors as ua-rs `check_*` ---
+
+const keysOf = (id) => { const r = P.registrations.find((x) => x.ua === id); return r && { kind: r.kind, keyData: r.keyData }; };
+const refuses = (f, code, what) => assert.throws(f, { code }, what);
+const flipAt = (s, i) => { const b = B(s).slice(); b[i] ^= 1; return hex(b); };
+/** `sig` with one bit flipped inside a signature (first, middle, last byte), never in the ABI of an msig blob. */
+function flipped(kind, sig) {
+  const at = (s) => [0, (B(s).length / 2) | 0, B(s).length - 1];
+  if (kind !== 0x0120) return at(sig).map((i) => flipAt(sig, i));
+  const m = decodeMemberSigs(sig);
+  assert.ok(m, 'a vector blob is canonical');
+  assert.equal(hex(encodeMemberSigs(m)), sig, 'the encoder is the decoder\'s inverse');
+  return m.flatMap((s, slot) => at(hex(s.sig)).map((i) => hex(encodeMemberSigs(m.map((x, j) => (j === slot ? { ...x, sig: flipAt(hex(x.sig), i) } : x))))));
+}
+const kemRow = (k, over = {}) => ({ ua: k.ua, version: k.version, kemPk: k.kemPk, sig: k.sig, ...over });
+const pqzRow = (k, over = {}) => ({ ua: k.ua, pqzKey: k.pqzKey, pqzPopHash: k.pqzPopHash, sig: k.sig, ...over });
+
+test('verifyRegistration accepts every row and refuses every negative', () => {
+  const [n, commits] = [P.registrations.length, P.registrations.filter((r) => r.kemCommit).length];
+  assert.deepEqual([n, commits], [25, 9]);
+  for (const r of P.registrations) {
+    verifyRegistration(r, keysOf);
+    verifyRegistration({ ...r, pqzPop: '0x' }, keysOf); // the proof bytes are optional
+    if (r.pop !== '0x') for (const bad of flipped(r.kind, r.pop)) refuses(() => verifyRegistration({ ...r, pop: bad }, keysOf), 'UAPoP', r.name);
+    if (r.kind !== 0x0120) for (const bad of [r.pop.slice(0, -2), `${r.pop}00`]) refuses(() => verifyRegistration({ ...r, pop: bad }, keysOf), 'UAPoP', `${r.name}: a byte off`);
+    if (!r.kemCommit) continue;
+    const a = r.kemCommit.register.attrs;
+    assert.equal(a.kemPkHash, hex(keccak_256(B(r.attrs.kemPk))), r.name);
+    const commit = (over) => ({ ...r, attrs: { ...a, ...over } });
+    verifyRegistration(commit({}), keysOf); // the same pop signs the hash commit
+    refuses(() => verifyRegistration(commit({ kemPkHash: flipAt(a.kemPkHash, 0) }), keysOf), 'UAPoP', r.name);
+    refuses(() => verifyRegistration(commit({ kem: { ...a.kem, scheme: 2 } }), keysOf), 'UAKemScheme', r.name);
+    refuses(() => verifyRegistration(commit({ kem: { ...a.kem, scheme: 0 } }), keysOf), 'UAKemScheme', r.name);
+    refuses(() => verifyRegistration(commit({ kem: { ...a.kem, mlkemEk: '0x01' } }), keysOf), 'UAKemKeyLength', r.name);
+    refuses(() => verifyRegistration(commit({ kem: { ...a.kem, x25519: `0x${'01'.repeat(32)}` } }), keysOf), 'UAKemKeyLength', r.name);
+  }
+  let [refused, stateful, otherEntry] = [0, 0, 0];
+  for (const x of P.negatives) {
+    if (x.rule === 'msig-minimal') {
+      // every slot verifies and the threshold is met: only the minimal rule can refuse it
+      const r = x.registration;
+      for (const s of decodeMemberSigs(r.pop)) {
+        const m = r.members[s.index];
+        assert.ok(kindVerify(m.kind, keysOf(m.id).keyData, ua.uaMessage(m.kind, ua.purposeTag('member'), B(r.memberDigest)), s.sig, false), `${x.name} ${s.index}`);
+      }
+      refuses(() => verifyRegistration(r, keysOf), x.error, x.name);
+      refused++;
+      continue;
+    }
+    const set = x.mutation.set;
+    if (x.entry === 'register' || x.entry === 'storePqzPop') {
+      const r = structuredClone(row(x.mutation.row));
+      for (const [k, v] of Object.entries(set)) { if (k.startsWith('attrs.')) r.attrs[k.slice(6)] = v; else r[k] = v; }
+      refuses(() => verifyRegistration(r, keysOf), x.error, x.name);
+      refused++;
+    } else if (x.entry === 'setPqzKey') {
+      const k = rec(x.mutation.row);
+      const r = pqzRow(k, set);
+      if (x.error === 'UAPqzKeySet') {
+        verifyPqzKeyRecord(r, keysOf); // the signature is good, the chain's state refuses
+        stateful++;
+      } else {
+        refuses(() => verifyPqzKeyRecord(r, keysOf), x.error, x.name);
+        refused++;
+      }
+    } else if (x.entry === 'setKemKey') {
+      const k = P.kemRecords.find((y) => y.id === x.mutation.row);
+      refuses(() => verifyKemRecord(kemRow(k, set), keysOf), x.error, x.name);
+      refused++;
+    } else {
+      assert.equal(x.entry, 'requireAuthorized', x.name); // a transaction authorisation: no stored record
+      otherEntry++;
+    }
+  }
+  assert.deepEqual([refused, stateful, otherEntry], [63, 4, 1]);
+});
+
+test('verifyMembership accepts every row and refuses a flipped byte (ua-rs check_membership_rows)', () => {
+  for (const r of P.memberships) {
+    verifyMembership(r, keysOf);
+    for (const bad of flipped(r.memberKind, r.sig)) refuses(() => verifyMembership({ ...r, sig: bad }, keysOf), 'UAUnauthorized', r.name);
+    refuses(() => verifyMembership({ ...r, index: 9 }, keysOf), 'UAUnauthorized', r.name);
+    refuses(() => verifyMembership({ ...r, index: r.index === 0 ? 1 : 0 }, keysOf), 'UAUnauthorized', r.name);
+    refuses(() => verifyMembership({ ...r, ua: `0x${'09'.repeat(32)}` }, keysOf), 'UAUnauthorized', r.name);
+    refuses(() => verifyMembership({ ...r, ua: r.member }, keysOf), 'UAUnauthorized', `${r.name}: a member is no msig`);
+  }
+});
+
+test('verifyKemRecord accepts every row and refuses a flipped byte', () => {
+  let flips = 0;
+  for (const k of P.kemRecords) {
+    verifyKemRecord(kemRow(k), keysOf);
+    for (const bad of flipped(k.kind, k.sig)) { refuses(() => verifyKemRecord(kemRow(k, { sig: bad }), keysOf), 'UAUnauthorized', k.id); flips++; }
+    refuses(() => verifyKemRecord(kemRow(k, { version: k.version + 3 }), keysOf), 'UAUnauthorized', k.id);
+    refuses(() => verifyKemRecord(kemRow(k, { version: 0 }), keysOf), 'UAKemVersion', k.id);
+    refuses(() => verifyKemRecord(kemRow(k, { ua: `0x${'09'.repeat(32)}` }), keysOf), 'UAUnauthorized', `${k.id}: an unregistered id`);
+    refuses(() => verifyKemRecord(kemRow(k, { kemPk: hex(B(k.kemPk).subarray(0, 1600)) }), keysOf), 'UAKemKeyLength', k.id);
+    refuses(() => verifyKemRecord(kemRow(k, { kemPk: '0x' }), keysOf), 'UAKemKeyLength', k.id);
+    refuses(() => verifyKemRecord(kemRow(k, { kemPk: flipAt(k.kemPk, 0).replace(/^0x00/, '0x02') }), keysOf), 'UAKemScheme', k.id);
+  }
+  assert.equal(flips, 3 * 6 + 3 * 2 * 3);
+  const s = row('slhdsa128s');
+  refuses(() => verifyKemRecord(kemRow(P.kemRecords[0], { ua: s.ua, sig: s.pop }), keysOf), 'UAKemHolder', 'a valid signature cannot reach the signature check');
+  // one field off: the record's `ua` is not the id of the key read. Key K must not sign for a victim's `ua`; a non-holder key, so
+  // that without the id compare this is UAKemHolder, which a signature mismatch could not hide
+  refuses(() => verifyKemRecord(kemRow(P.kemRecords[0]), () => keysOf(s.ua)), 'UAUnauthorized', 'not the key data\'s id');
+});
+
+test('verifyPqzKeyRecord accepts every row and refuses a flipped byte', () => {
+  for (const k of P.pqzKeyRecords) {
+    verifyPqzKeyRecord(pqzRow(k), keysOf);
+    for (const bad of flipped(k.kind, k.sig)) refuses(() => verifyPqzKeyRecord(pqzRow(k, { sig: bad }), keysOf), 'UAUnauthorized', k.name);
+    refuses(() => verifyPqzKeyRecord(pqzRow(k, { pqzPopHash: flipAt(k.pqzPopHash, 0) }), keysOf), 'UAUnauthorized', k.name);
+    refuses(() => verifyPqzKeyRecord(pqzRow(k, { pqzPopHash: Z }), keysOf), 'UAPqzPopHash', k.name);
+    refuses(() => verifyPqzKeyRecord(pqzRow(k, { pqzKey: hex(B(k.pqzKey).subarray(0, 32)) }), keysOf), 'UAKeyData', k.name);
+    refuses(() => verifyPqzKeyRecord(pqzRow(k, { ua: `0x${'09'.repeat(32)}` }), keysOf), 'UAUnauthorized', `${k.name}: an unregistered id`);
+    refuses(() => verifyPqzKeyRecord(pqzRow(k, { pqzKey: flipAt(k.pqzKey, 0) }), keysOf), 'UAUnauthorized', k.name); // keccak(PQZ_KEY_GROUP ‖ key)
+  }
+  // the id compare, as in the KEM test: the control first, then one field off (without the compare: UAPqzHolder)
+  const s = row('slhdsa128s');
+  const k = P.pqzKeyRecords[0];
+  refuses(() => verifyPqzKeyRecord(pqzRow(k, { ua: s.ua }), keysOf), 'UAPqzHolder', 'the control');
+  refuses(() => verifyPqzKeyRecord(pqzRow(k), () => keysOf(s.ua)), 'UAUnauthorized', 'not the key data\'s id');
+});
+
+test('verify* fail closed: each case one field off a row that passes (ua-rs check_fails_closed)', () => {
+  const noAttrs = { pqzKey: '0x', pqzPopHash: Z, kemPk: '0x' };
+  const q = row('msig-pq/n2048-kmax1024');
+  const nat = row('msig-pq-native');
+  const cl = row('msig-classical');
+  const m = row('mldsa65#1');
+  const plain = { kind: m.kind, keyData: m.keyData, attrs: noAttrs, pop: m.pop, pqzPop: '0x' };
+  // kinds
+  verifyRegistration(plain, keysOf);
+  for (const [kind, code] of [[0x0199, 'UAKindUnknown'], [0x0001, 'UAKindNotDerived'], [0x0142, 'UAKindNotDerived']]) {
+    refuses(() => verifyRegistration({ ...plain, kind }, keysOf), code, String(kind));
+  }
+  refuses(() => verifyRegistration({ ...plain, pop: '0x' }, keysOf), 'UAPoP', 'a single key\'s empty pop');
+  // an evm-contract slot has no off-chain ERC-1271 check; a member that is no slot signs nothing
+  const contract = (kd) => { const b = B(kd).slice(); assert.equal((b[4] << 8) | b[5], 1); b[5] = 2; return hex(b); };
+  verifyRegistration(nat, keysOf);
+  refuses(() => verifyRegistration({ ...nat, keyData: contract(nat.keyData) }, keysOf), 'UANotVerifiable', 'evm-contract slot');
+  verifyRegistration(cl, keysOf);
+  verifyRegistration({ ...cl, keyData: contract(cl.keyData) }, keysOf); // classical-dominant: no slot, no pop
+  refuses(() => verifyRegistration({ ...cl, pop: `0x${'00'.repeat(64)}` }, keysOf), 'UAPoP', 'classical-dominant: an empty pop, U8S-D2');
+  // members
+  const ids = ua.msigStructure(q.keyData).members.map((x) => x.id);
+  verifyRegistration(q, keysOf);
+  refuses(() => verifyRegistration(q, (id) => (id === ids[0] ? keysOf(id) : undefined)), 'UAMemberUnknown', 'unresolved');
+  refuses(() => verifyRegistration(q, (id) => (id === ids[0] ? keysOf(id) : { ...keysOf(id), kind: 0x0130 })), 'UAMemberUnknown', 'kind');
+  refuses(() => verifyRegistration(q, (id) => keysOf(ids[0])), 'UAMemberUnknown', 'another key');
+  refuses(() => verifyRegistration(cl, () => undefined), 'UAMemberUnknown', 'no slots: still resolved');
+  const junk = new Uint8Array(100).fill(7);
+  const id = ua.uaOf(0x0131, junk);
+  refuses(() => verifyRegistration({ ...plain, kind: 0x0120, keyData: ua.encodeMsig(1, [{ kind: 0x0131, id, weight: 1 }]), pop: '0x' },
+    () => ({ kind: 0x0131, keyData: hex(junk) })), 'UAMemberUnknown', 'the id matches, the key is no key');
+  // the blob
+  const slots = decodeMemberSigs(q.pop);
+  const enc = (s) => hex(encodeMemberSigs(s));
+  const withPop = (pop) => () => verifyRegistration({ ...q, pop }, keysOf);
+  withPop(enc(slots))();
+  const pad = `${q.pop}${'00'.repeat(32)}`;
+  assert.equal(decodeMemberSigs(pad), null);
+  refuses(withPop(pad), 'UAPoP', 'trailing bytes');
+  refuses(withPop('0x'), 'UAPoP', 'no slots');
+  refuses(withPop(`0x${'00'.repeat(31)}20${'00'.repeat(32)}`), 'UAPoP', 'abi.encode of no slots');
+  assert.equal(enc([]), '0x', 'no slots is the empty blob, as the registries and ua-rs');
+  refuses(withPop(enc([{ ...slots[0], keyData: B(keysOf(ids[0]).keyData) }, slots[1]])), 'UAPoP', 'CTR-UA-33: a slot carries no key data');
+  refuses(withPop(enc([slots[1], slots[0]])), 'UAPoP', 'order');
+  refuses(withPop(enc([slots[0], slots[0]])), 'UAPoP', 'repeated');
+  refuses(withPop(enc(slots.slice(0, 1))), 'UAPoP', 'below the threshold');
+  refuses(withPop(enc([slots[0], { ...slots[1], index: 2 }])), 'UAPoP', 'past the members');
+  // a native member: over the typed digest only, low s
+  const ns = decodeMemberSigs(nat.pop);
+  const eoa = ns.findIndex((s) => s.sig.length === 65);
+  const withSig = (sig) => () => verifyRegistration({ ...nat, pop: enc(ns.map((s, i) => (i === eoa ? { ...s, sig } : s))) }, keysOf);
+  const sig = ns[eoa].sig;
+  withSig(sig)();
+  const highS = Uint8Array.from(sig);
+  highS.set(B(`0x${(SECP_N - BigInt(hex(sig.subarray(32, 64)))).toString(16).padStart(64, '0')}`), 32);
+  highS[64] = 27 + 28 - sig[64];
+  refuses(withSig(highS), 'UAPoP', 'the same point with the other s');
+  const v = Uint8Array.from(sig);
+  v[64] += 2;
+  refuses(withSig(v), 'UAPoP', 'v 29 / 30');
+  // the proof hash binds the key, not the bytes offered next to it
+  refuses(() => verifyRegistration({ ...q, attrs: { ...q.attrs, pqzPopHash: Z } }, keysOf), 'UAPqzPopHash', 'a key without its hash');
+  const f = row('fndsa512');
+  verifyRegistration(f, keysOf);
+  refuses(() => verifyRegistration({ ...f, pop: f.pop.replace(/(00)+$/, '') }, keysOf), 'UAPoP', 'Falcon: padding stripped');
+  refuses(() => verifyRegistration({ ...f, attrs: { ...f.attrs, pqzPopHash: hex(keccak_256(B(q.pqzPop))) }, pqzPop: q.pqzPop }, keysOf), 'UAPqzPopHash', 'a hash without a key');
+  const s = row('slhdsa128s');
+  refuses(() => verifyRegistration({ ...s, attrs: { pqzKey: '0x', pqzPopHash: Z, kem: { scheme: 1, mlkemEk: '0x', x25519: Z }, kemPkHash: `0x${'01'.repeat(32)}` } }, keysOf),
+    'UAKemHolder', 'a commit needs a holder');
+});
+
+test('verifyRegistration refuses every kinds.json invalid key by its error; valid[] reaches the signature (ua-rs check_refuses_invalid_keys)', () => {
+  const K = JSON.parse(readFileSync(new URL('kinds.json', dir), 'utf8'));
+  const none = { pqzKey: '0x', pqzPopHash: Z, kemPk: '0x' };
+  const go = (r) => () => verifyRegistration({ kind: r.kind, keyData: r.keyData, attrs: none, pop: `0x${'00'.repeat(64)}`, pqzPop: '0x' }, () => undefined);
+  for (const r of K.invalid) refuses(go(r), r.error, JSON.stringify(r).slice(0, 120));
+  for (const r of K.valid.filter((x) => x.kind !== 0x0120 && !(x.kind >= 0x0110 && x.kind <= 0x0113))) refuses(go(r), 'UAPoP', r.keyData.slice(0, 40));
+  assert.equal(K.invalid.length, 199);
+});
+
+test('the group kinds have no verifier here: refused, never accepted (C14; ua-rs checks them)', () => {
+  const G = JSON.parse(readFileSync(new URL('groups.json', dir), 'utf8'));
+  const none = { pqzKey: '0x', pqzPopHash: Z, kemPk: '0x' };
+  for (const g of G.groups) refuses(() => verifyRegistration({ kind: g.kind, keyData: g.keyData, attrs: none, pop: g.pop.blob, pqzPop: '0x' }, keysOf), 'UANotVerifiable', g.name);
 });

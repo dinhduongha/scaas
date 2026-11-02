@@ -3,8 +3,8 @@
 //! is the token's own address: every native ↔ UA move goes through `Balance(token)`, so `balance(token) = Σ UaBalance`
 //! and the SEP-41 events replay to `balance()`.
 use scaas_ua_common::{
-    meta_pay_id, op_digest, pay_lane, Holder, Order, UaRegistryClient, PURPOSE_METATX, PURPOSE_METATX_CANCEL,
-    PURPOSE_TRADE,
+    meta_pay_id, op_digest, pay_lane, Holder, Order, UaRegistryClient, UaSig, PURPOSE_METATX,
+    PURPOSE_METATX_CANCEL, PURPOSE_TRADE,
 };
 use soroban_sdk::{
     contractevent, contractimpl, panic_with_error, Address, Bytes, BytesN, Env, Executable, IntoVal, TryFromVal, Val,
@@ -147,7 +147,7 @@ fn authorize(
     nonce: u64,
     valid_until: u64,
     relayer: &Option<Address>,
-    auth: &Bytes,
+    auth: &UaSig,
 ) -> (UaRegistryClient<'static>, BytesN<32>) {
     let reg = registry(env);
     if env.ledger().timestamp() > valid_until {
@@ -235,7 +235,7 @@ impl Token {
         nonce: u64,
         valid_until: u64,
         relayer: Option<Address>,
-        auth: Bytes,
+        auth: UaSig,
     ) {
         let args = (from.clone(), to.clone(), amount, lane.clone(), nonce, valid_until, relayer.clone());
         let (reg, digest) =
@@ -257,7 +257,7 @@ impl Token {
         pay_ref: BytesN<32>,
         valid_until: u64,
         relayer: Option<Address>,
-        auth: Bytes,
+        auth: UaSig,
     ) {
         let args = (from.clone(), to.clone(), amount, pay_ref.clone(), valid_until, relayer.clone());
         Self::ua_settle(&env, "ua_pay", args.into_val(&env), from, to, amount, pay_ref, valid_until, relayer, auth);
@@ -274,7 +274,7 @@ impl Token {
         meta: Bytes,
         valid_until: u64,
         relayer: Option<Address>,
-        auth: Bytes,
+        auth: UaSig,
     ) {
         let pay_ref = meta_pay_id(&env, &salt, &meta);
         PaymentMeta { pay_id: pay_ref.clone(), meta: meta.clone() }.publish(&env);
@@ -292,7 +292,7 @@ impl Token {
         nonce: u64,
         valid_until: u64,
         relayer: Option<Address>,
-        auth: Bytes,
+        auth: UaSig,
     ) {
         let args = (from.clone(), amount, lane.clone(), nonce, valid_until, relayer.clone());
         let (_, digest) =
@@ -306,7 +306,7 @@ impl Token {
 
     /// Bumps `lane` by one (purpose `metatx-cancel`): a signed entry at the old nonce can no longer run. The signature
     /// names no nonce, so each cancel digest runs once (`UaCancelUsed`, EVM `cancelUsed`; a replay is `BadNonce`).
-    pub fn ua_cancel_nonce(env: Env, ua: BytesN<32>, lane: BytesN<32>, valid_until: u64, auth: Bytes) {
+    pub fn ua_cancel_nonce(env: Env, ua: BytesN<32>, lane: BytesN<32>, valid_until: u64, auth: UaSig) {
         let nonce = Self::ua_nonce(env.clone(), ua.clone(), lane.clone());
         let args: Vec<Val> = (ua.clone(), lane.clone(), valid_until).into_val(&env);
         // Before the signature check, as EVM `cancelUsed`: a replay costs no verify.
@@ -325,7 +325,7 @@ impl Token {
     /// The order signature is over `op_digest(token, "ua_order", (dex, order))`, purpose `trade`; no nonce, so one
     /// signature fills partially. The token bounds the pulls itself (controller ruling 2026-10-30, EVM `DexNotContract`
     /// / `pulled[h]` parity): `dex` is a deployed contract and the running `UaPulled(digest)` stays `≤ sell_amount`.
-    pub fn ua_trade(env: Env, dex: Address, order: Order, auth: Bytes, amount: i128) {
+    pub fn ua_trade(env: Env, dex: Address, order: Order, auth: UaSig, amount: i128) {
         let reg = registry(&env);
         if !matches!(dex.executable(), Some(Executable::Wasm(_))) {
             panic_with_error!(&env, Error::BadOrder);
@@ -369,7 +369,7 @@ impl Token {
         pay_ref: BytesN<32>,
         valid_until: u64,
         relayer: Option<Address>,
-        auth: Bytes,
+        auth: UaSig,
     ) {
         let lane = pay_lane(env, &pay_ref);
         let (reg, digest) = authorize(env, f, args, PURPOSE_METATX, &from, &lane, 0, valid_until, &relayer, &auth);

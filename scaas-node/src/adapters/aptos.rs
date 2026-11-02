@@ -983,8 +983,9 @@ impl ChainAdapter for AptosAdapter {
     }
 
     async fn tx_fee(&self, tx_id: &str) -> Result<Option<u128>> {
-        let Some(tx) = self.get_at(&self.rest[0], &format!("/transactions/by_hash/{tx_id}")).await? else { return Ok(None) };
-        Ok(num(&tx["gas_used"]).zip(num(&tx["gas_unit_price"])).map(|(g, p)| g as u128 * p as u128))
+        let tx = self.get_at(&self.rest[0], &format!("/transactions/by_hash/{tx_id}")).await?.ok_or_else(|| anyhow!("{tx_id} not found"))?;
+        let fee = num(&tx["gas_used"]).zip(num(&tx["gas_unit_price"])).map(|(g, p)| g as u128 * p as u128);
+        Ok(Some(fee.ok_or_else(|| anyhow!("{tx_id}: no gas_used or gas_unit_price"))?))
     }
 
     /// AptosBFT: block đã commit là final. Đỉnh báo Odoo = min(đỉnh REST, block mà indexer đã xử lý TRỌN) — con trỏ
@@ -1192,6 +1193,21 @@ mod tests {
         ))
         .unwrap();
         AptosAdapter::new(&cfg, &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()]).unwrap()
+    }
+
+    /// A landed tx's fee; a tx not found, or an answer without its fee, is an `Err`, counted by the runner, never a silent zero.
+    #[tokio::test]
+    async fn tx_fee_reads_the_fee_or_fails() {
+        let app = axum::Router::new()
+            .route("/transactions/by_hash/0xaa", axum::routing::get(|| async { axum::Json(json!({"gas_used": "7", "gas_unit_price": "100"})) }))
+            .route("/transactions/by_hash/0xbb", axum::routing::get(|| async { axum::Json(json!({"gas_used": "7"})) }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let a = events_adapter(&[&url], 1);
+        assert_eq!(a.tx_fee("0xaa").await.unwrap(), Some(700));
+        assert!(a.tx_fee("0xbb").await.is_err(), "no price");
+        assert!(a.tx_fee("0xcc").await.is_err(), "not found");
     }
 
     // L3: with quorum > 1, event bodies need the same agreement as block hashes — one endpoint cannot invent a payment.

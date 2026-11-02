@@ -1,0 +1,85 @@
+# B4 fix round 1 mutants, each on lib.rs, run, restored, compared with cmp; filtered to the failing tests, lines capped at 200 characters.
+
+## Before the test change, at 36f27307: both pass, so the five negatives in ua8_relayer_group_typed_rules did not depend on these guards
+
+# mutant push-point: push_point's length check removed: a point of any length is assembled
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.71s
+test result: ok. 126 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.95s
+rc=0
+cmp mutant push-point: identical
+
+# mutant commitment-count: frost_key_data's check of exactly `threshold` commitments removed
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.71s
+test result: ok. 126 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.00s
+rc=0
+cmp mutant commitment-count: identical
+
+## After the fix: the group negatives on the views, the KeyR rule complete
+
+# mutant push-point: push_point's length check removed: a point of any length is assembled
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+test test_ua8::ua8_relayer_group_typed_rules ... FAILED
+thread 'test_ua8::ua8_relayer_group_typed_rules' (357959) panicked at contracts/ua-registry/src/test.rs:68:18:
+test result: FAILED. 127 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.00s
+rc=101
+cmp mutant push-point: identical
+
+# mutant commitment-count: frost_key_data's check of exactly `threshold` commitments removed
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.79s
+test test_ua8::ua8_relayer_group_typed_rules ... FAILED
+thread 'test_ua8::ua8_relayer_group_typed_rules' (359634) panicked at contracts/ua-registry/src/test.rs:68:18:
+test result: FAILED. 127 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.56s
+rc=101
+cmp mutant commitment-count: identical
+
+# mutant keyr-chain-checks: a Chain kind also refuses on KeyR: the marked record blocks it again
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.75s
+test test_ua8::ua8_relayer_marked_record_blocks_no_chain_kind ... FAILED
+test result: FAILED. 127 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.81s
+rc=101
+cmp mutant keyr-chain-checks: identical
+
+# mutant keyr-relayer-skips-key: a relayer kind does not check Key: it stores over a Chain key
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s
+test test_ua8::ua8_relayer_kind_refused_over_chain_key ... FAILED
+thread 'test_ua8::ua8_relayer_kind_refused_over_chain_key' (362848) panicked at contracts/ua-registry/src/test.rs:68:18:
+test result: FAILED. 127 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.11s
+rc=101
+cmp mutant keyr-relayer-skips-key: identical
+
+# mutant keyr-relayer-skips-keyr: a relayer kind does not check KeyR: two relayer kinds share a key
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.74s
+test test_ua8::ua8_relayer_key_hash_groups ... FAILED
+test test_ua8::ua8_relayer_kind_refused_over_chain_key ... FAILED
+thread 'test_ua8::ua8_relayer_key_hash_groups' (364130) panicked at contracts/ua-registry/src/test.rs:68:18:
+thread 'test_ua8::ua8_relayer_kind_refused_over_chain_key' (364131) panicked at contracts/ua-registry/src/test.rs:68:18:
+test result: FAILED. 126 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.84s
+rc=101
+cmp mutant keyr-relayer-skips-keyr: identical
+
+# mutant keyr-owner: key_owner prefers KeyR over Key
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.76s
+test test_ua8::ua8_relayer_marked_record_blocks_no_chain_kind ... FAILED
+thread 'test_ua8::ua8_relayer_marked_record_blocks_no_chain_kind' (365876) panicked at contracts/ua-registry/src/test_ua8.rs:1811:9:
+  left: Some(BytesN<32>(146, 2, 16, 244, 52, 196, 253, 230, 136, 105, 122, 102, 167, 62, 230, 116, 231, 182, 57, 64, 86, 150, 240, 192, 48, 147, 229, 74, 87, 134, 176, 21))
+ right: Some(BytesN<32>(176, 219, 124, 69, 93, 239, 237, 174, 196, 208, 95, 224, 65, 7, 205, 227, 76, 215, 106, 25, 162, 1, 160, 82, 20, 175, 24, 173, 98, 101, 60, 159))
+test result: FAILED. 127 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.73s
+rc=101
+cmp mutant keyr-owner: identical
+
+# mutant keyr-write: a relayer kind writes Key, not KeyR
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --lib --no-fail-fast
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.29s
+test test_ua8::ua8_relayer_marked_record_blocks_no_chain_kind ... FAILED
+test result: FAILED. 127 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 19.60s
+rc=101
+cmp mutant keyr-write: identical
+

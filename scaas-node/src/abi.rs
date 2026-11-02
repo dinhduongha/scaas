@@ -289,7 +289,7 @@ sol! {
     /// `ua_registry`, and `register` / `registerMsig`'s `pqzPop` for the split rule ([`crate::guard::UA_REGISTER_SPLIT`]).
     /// typed-signing R1 (TS-D10 … TS-D12): the explicit ABI — `registerMsig` with a typed structure and `MemberSig[]`,
     /// `KemKey`, `UASig`; a hash-committed KEM key is filled by `setKemKey(ua, 0, kem, UASig())`. R1b (TS-D13):
-    /// `registerWebAuthn` / `registerMuSig2` / `registerFrost` with typed keys (`register` refuses those kinds).
+    /// `registerWebAuthn` / `registerMuSig2` / `registerFrost` with typed keys (`register` takes the packed key data of those kinds too, same bytes and id; it refuses only `msig`).
     #[derive(Debug)]
     interface IUARegistry {
         struct KemKey { uint8 scheme; bytes mlkemEk; bytes32 x25519; }

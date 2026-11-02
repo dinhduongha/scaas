@@ -20,12 +20,129 @@ pub enum Checked {
     Relayer(Address),
 }
 
+/// A KEM public key (EVM `KemKey`, TS-D11): scheme 1 = ML-KEM-1024 `mlkem_ek` (1,568 B) + X25519 `x25519`; `kem_pk` =
+/// `scheme ‖ mlkem_ek ‖ x25519` (1,601 B). All zero / empty = no key.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KemKey {
+    pub scheme: u32,
+    pub mlkem_ek: Bytes,
+    pub x25519: BytesN<32>,
+}
+
+/// The registration attributes as `register` takes them (EVM `UAAttrs`): the KEM key is version 0, whole (`kem` set,
+/// `kem_pk_hash` 0) or committed by hash (`kem_pk_hash` ≠ 0, `kem` only its `scheme`). `Registration.attrs` holds them
+/// without the bytes (U8S-D3): `pqz_key` empty, `kem` zero unless committed.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UaAttrs {
     pub pqz_key: Bytes,
     pub pqz_pop_hash: BytesN<32>,
-    pub kem_pk: Bytes,
+    pub kem: KemKey,
+    pub kem_pk_hash: BytesN<32>,
+}
+
+impl KemKey {
+    pub fn none(env: &Env) -> Self {
+        KemKey { scheme: 0, mlkem_ek: Bytes::new(env), x25519: BytesN::from_array(env, &[0; 32]) }
+    }
+}
+
+impl UaAttrs {
+    pub fn none(env: &Env) -> Self {
+        let zero = BytesN::from_array(env, &[0; 32]);
+        UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: zero.clone(), kem: KemKey::none(env), kem_pk_hash: zero }
+    }
+}
+
+/// A `webauthn-p256` key (EVM `WebAuthnKey`, TS-D13): the P-256 point and the relying party's `rpIdHash`; the key data is
+/// `x ‖ y ‖ rp_id_hash`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WebAuthnKey {
+    pub x: BytesN<32>,
+    pub y: BytesN<32>,
+    pub rp_id_hash: BytesN<32>,
+}
+
+/// One `msig` member's signature (EVM `MemberSig`): `key_data` always empty, the member's key is read from its record.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MemberSig {
+    pub index: u32,
+    pub key_data: Bytes,
+    pub sig: Bytes,
+}
+
+/// A UA's signature (EVM `UASig`, TS-D12): a single key only `signature`, an `msig` only `members`; `key_data` stays
+/// empty on Soroban (the key is read from the record, as EVM's stored kinds). Any other field set is not authorized.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UaSig {
+    pub key_data: Bytes,
+    pub signature: Bytes,
+    pub members: Vec<MemberSig>,
+}
+
+impl UaSig {
+    /// No signature: a native signer's `auth` (host auth).
+    pub fn none(env: &Env) -> Self {
+        UaSig { key_data: Bytes::new(env), signature: Bytes::new(env), members: Vec::new(env) }
+    }
+    pub fn single(env: &Env, signature: Bytes) -> Self {
+        UaSig { signature, ..Self::none(env) }
+    }
+    pub fn msig(env: &Env, members: Vec<MemberSig>) -> Self {
+        UaSig { members, ..Self::none(env) }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.key_data.is_empty() && self.signature.is_empty() && self.members.is_empty()
+    }
+}
+
+/// An `msig` member (EVM `MsigMember`, TS-D10); `kind` and `weight` are `u16` in the CTR-UA-09 key data.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MsigMember {
+    pub kind: u32,
+    pub id: BytesN<32>,
+    pub weight: u32,
+}
+
+/// An `msig` structure (EVM `MsigStructure`, TS-D10): the registry assembles the CTR-UA-09 key data from it.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MsigStructure {
+    pub threshold: u32,
+    pub members: Vec<MsigMember>,
+}
+
+/// A MuSig2 group key (EVM `MuSig2Key`, TS-D13): `agg_key` and the sorted member keys, each one point (`musig2-secp256k1`:
+/// 33 B compressed, `musig2-bn254`: 64 B); the registry assembles `agg_key ‖ u16 n ‖ n × key`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MuSig2Key {
+    pub agg_key: Bytes,
+    pub member_keys: Vec<Bytes>,
+}
+
+/// One FROST member (EVM `FrostMember`, TS-D13): its `threshold` Feldman commitments, the PoK nonce point `r` and response `z`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FrostMember {
+    pub commitments: Vec<Bytes>,
+    pub r: Bytes,
+    pub z: BytesN<32>,
+}
+
+/// A FROST group key (EVM `FrostKey`, TS-D13): points of 33 B (`frost-secp256k1`) or 64 B (`frost-bn254`); the registry
+/// assembles `group_key ‖ u16 threshold ‖ u16 n ‖ n × (threshold commitments ‖ r ‖ z)`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FrostKey {
+    pub group_key: Bytes,
+    pub threshold: u32,
+    pub members: Vec<FrostMember>,
 }
 
 #[contracttype]
@@ -62,7 +179,7 @@ pub struct Order {
 /// What the tokens, the mandate and the DEX call on the registry (spec §4).
 #[contractclient(name = "UaRegistryClient")]
 pub trait UaRegistryApi {
-    fn require_authorized(env: Env, ua: BytesN<32>, purpose: BytesN<32>, digest: BytesN<32>, auth: Bytes);
+    fn require_authorized(env: Env, ua: BytesN<32>, purpose: BytesN<32>, digest: BytesN<32>, auth: UaSig);
     fn receivable(env: Env, ua: BytesN<32>) -> bool;
     fn record_of(env: Env, ua: BytesN<32>) -> Option<Registration>;
 }
@@ -96,6 +213,8 @@ pub const PURPOSE_MEMBER: [u8; 32] = h32("fbd8600564b68d09f75fe5d3e6acb8fe3c5a3a
 pub const PURPOSE_POP_V2: [u8; 32] = h32("0ffb2c52d2a16294393778508b3fff52351664d2c5bbe5deb3d3278f56281f93");
 pub const PURPOSE_KEM: [u8; 32] = h32("99f2818f111f001f1f71ec2f8756cff7e9858c0fcb204b353c21f95b2ff3f2b8");
 pub const PURPOSE_PQZ_KEY: [u8; 32] = h32("8f354ac3b315d85e2c32c80857a1600c5aebe8bbe14a265d56079725a6602330");
+/// A member's acceptance of its `msig` slot (CTR-UA-37): never a `pop`, `kem` or `pqz-key` signature, and the reverse.
+pub const PURPOSE_MEMBERSHIP: [u8; 32] = h32("d7c6b488053a6f35540715ec029fa684c9445475cb4e38d564225334f7b3f253");
 
 /// typed-signing TS-D1 (owner 2026-10-31 decisions 2 + 8), byte-identical to EVM `UAKinds`: the portable records are
 /// EIP-712 structs under `EIP712Domain(string name,string version)` = ("SCaaS UA Portable", "1"), no chain id, contract
@@ -107,6 +226,16 @@ pub const UA_KEM_RECORD_TYPEHASH: [u8; 32] = h32("0ab7989827627b89c268e88a0a0b06
 pub const UA_PORTABLE_RECORD_TYPEHASH: [u8; 32] = h32("0c1553cfab3c35326558484df79963dced75ead85272d2a85985f264757bfe7f");
 /// `keccak256("UARegistration(UAPortableRecord record,bytes32 pqzPopHash)" ‖ UAKemRecord type ‖ UAPortableRecord type)`.
 pub const UA_REGISTRATION_TYPEHASH: [u8; 32] = h32("c78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e");
+
+/// `keccak256("scaas.ua.group.pqz-mlwe.v1")`: the keyHash group of a PQZ key (pinned by `portable.json` `tags`).
+pub const PQZ_KEY_GROUP: [u8; 32] = h32("0b46b017252788e1ba969e603cf986c143943e1d6d1176004a6f577a298a53e4");
+
+/// `keccak256("UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)")`.
+pub const UA_PQZ_KEY_TYPEHASH: [u8; 32] = h32("827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00");
+/// `keccak256("UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)" ‖ UAPqzKey type)`.
+pub const UA_PQZ_KEY_RECORD_TYPEHASH: [u8; 32] = h32("aba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567");
+/// `keccak256("UAMembership(bytes32 ua,bytes32 member)")`.
+pub const UA_MEMBERSHIP_TYPEHASH: [u8; 32] = h32("2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4");
 
 /// A `uint` ABI word (`abi.encode` of `uint8` / `uint16` / `uint64`).
 fn uint_word(v: u64) -> [u8; 32] {
@@ -137,6 +266,34 @@ pub fn kem_record_hash(env: &Env, ua: &BytesN<32>, version: u64, scheme: u8, kem
     keccak_words(env, &[&UA_KEM_RECORD_TYPEHASH, &ua.to_array(), &v, &s, &kem_pk_hash.to_array()]).into()
 }
 
+/// EVM `kemRecordHash(ua, version, kemPk)`: the record of a whole key (`scheme` = its first byte, `kemPkHash` = its
+/// keccak256); no record (version 0, no key) is the zero record.
+pub fn kem_pk_record_hash(env: &Env, ua: &BytesN<32>, version: u64, kem_pk: &Bytes) -> BytesN<32> {
+    if version == 0 && kem_pk.is_empty() {
+        return kem_record_hash(env, ua, 0, 0, &BytesN::from_array(env, &[0; 32]));
+    }
+    kem_record_hash(env, ua, version, kem_pk.get(0).unwrap_or(0), &env.crypto().keccak256(kem_pk).into())
+}
+
+/// EVM `UAKinds.kemPk`: `scheme ‖ mlkem_ek ‖ x25519`, empty for no key. A `scheme` above 255 does not survive the byte:
+/// the registry refuses it on `kem.scheme` itself.
+pub fn kem_pk(env: &Env, k: &KemKey) -> Bytes {
+    if k == &KemKey::none(env) {
+        return Bytes::new(env);
+    }
+    let mut b = Bytes::from_array(env, &[k.scheme as u8]);
+    b.append(&k.mlkem_ek);
+    b.extend_from_array(&k.x25519.to_array());
+    b
+}
+
+/// `keccak256(PQZ_KEY_GROUP ‖ pqz_key)`: `pqzKeyHash`, the keyHash of scheme 0x0142.
+pub fn pqz_key_hash(env: &Env, pqz_key: &Bytes) -> BytesN<32> {
+    let mut b = Bytes::from_array(env, &PQZ_KEY_GROUP);
+    b.append(pqz_key);
+    env.crypto().keccak256(&b).into()
+}
+
 /// `hashStruct(UAPortableRecord{ua, kind, pqzKeyHash, kem})`, `kem_hash = kem_record_hash` of the initial KEM record.
 pub fn portable_record_hash(env: &Env, ua: &BytesN<32>, kind: u32, pqz_key_hash: &BytesN<32>, kem_hash: &BytesN<32>) -> BytesN<32> {
     let k = uint_word(kind as u64);
@@ -150,11 +307,46 @@ pub fn registration_digest(env: &Env, record_hash: &BytesN<32>, pqz_pop_hash: &B
     portable_digest(env, &s.into())
 }
 
+/// typed(`UAKemRecord`) of the KEM key `kem_pk` (`scheme` = its first byte, `kemPkHash` = its keccak256), signed as
+/// `ua_message(kind, PURPOSE_KEM, ·)` by `set_kem_key`. EVM `UAKinds.kemRecordDigest`.
+pub fn kem_record_digest(env: &Env, ua: &BytesN<32>, version: u64, kem_pk: &Bytes) -> Hash<32> {
+    portable_digest(env, &kem_pk_record_hash(env, ua, version, kem_pk))
+}
+
+/// typed(`UAPqzKey`): a later PQZ key's own proof signs `ua_message(0x0142, PURPOSE_PQZ_KEY, ·)` of it (no proof hash).
+pub fn pqz_key_digest(env: &Env, ua: &BytesN<32>, pqz_key_hash: &BytesN<32>) -> BytesN<32> {
+    let s = keccak_words(env, &[&UA_PQZ_KEY_TYPEHASH, &ua.to_array(), &pqz_key_hash.to_array()]);
+    portable_digest(env, &s.into()).into()
+}
+
+/// typed(`UAPqzKeyRecord{key, pqzPopHash}`): `set_pqz_key`'s signature signs `ua_message(kind, PURPOSE_PQZ_KEY, ·)` of it.
+pub fn pqz_key_record_digest(env: &Env, ua: &BytesN<32>, pqz_key_hash: &BytesN<32>, pqz_pop_hash: &BytesN<32>) -> Hash<32> {
+    let k = keccak_words(env, &[&UA_PQZ_KEY_TYPEHASH, &ua.to_array(), &pqz_key_hash.to_array()]);
+    let s = keccak_words(env, &[&UA_PQZ_KEY_RECORD_TYPEHASH, &k.to_array(), &pqz_pop_hash.to_array()]);
+    portable_digest(env, &s.into())
+}
+
+/// typed(`UAMembership{ua, member}`), EVM `UAKinds.membershipDigest`: what `member` signs to accept its slot in the `msig` `ua`.
+pub fn membership_digest(env: &Env, ua: &BytesN<32>, member: &BytesN<32>) -> Hash<32> {
+    let s = keccak_words(env, &[&UA_MEMBERSHIP_TYPEHASH, &ua.to_array(), &member.to_array()]);
+    portable_digest(env, &s.into())
+}
+
 /// NET-SOR-16's op digest (spec §2): `sha256(xdr(Vec[Symbol("scaas_metaop_v1"), network_id, contract, Symbol(fn),
 /// Vec(args)]))`, the entry's arguments without `auth`. The token passes its own address; `ua_trade` passes itself with
 /// function `"ua_order"` (spec §5.3).
 pub fn op_digest(env: &Env, contract: &Address, function: &str, args: Vec<Val>) -> BytesN<32> {
-    let v = (Symbol::new(env, "scaas_metaop_v1"), env.ledger().network_id(), contract.clone(), Symbol::new(env, function), args);
+    call_digest(env, "scaas_metaop_v1", contract, function, args)
+}
+
+/// What a relayer's auth covers on a write it attests (U8S-D8, owner 2026-11-01): `op_digest`'s form under a tag of its own, over
+/// every argument of `function`, `relayer` included, so `require_auth_for_args` needs one word and not the arguments again.
+pub fn attest_digest(env: &Env, contract: &Address, function: &str, args: Vec<Val>) -> BytesN<32> {
+    call_digest(env, "scaas_attest_v1", contract, function, args)
+}
+
+fn call_digest(env: &Env, tag: &str, contract: &Address, function: &str, args: Vec<Val>) -> BytesN<32> {
+    let v = (Symbol::new(env, tag), env.ledger().network_id(), contract.clone(), Symbol::new(env, function), args);
     env.crypto().sha256(&v.to_xdr(env)).into()
 }
 

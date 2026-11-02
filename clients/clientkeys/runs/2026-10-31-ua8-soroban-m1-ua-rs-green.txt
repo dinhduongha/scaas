@@ -1,0 +1,18 @@
+   Compiling scaas-ua v0.1.0 (clients/ua-rs)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.23s
+     Running tests/ua8.rs (target/debug/deps/ua8-21f28f2691dd2c04)
+
+running 9 tests
+test malformed_msig_key_data ... ok
+test msig_slots_minimal_cases ... ok
+test tags ... ok
+test native_member_personal_sign ... ok
+test kem_record_vectors ... ok
+test portable_msig_rows_minimal ... ok
+test pqz_key_record_vectors ... ok
+test portable_vectors ... ok
+test negatives_refused ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+rc=0

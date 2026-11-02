@@ -1,0 +1,18 @@
+# RED 1 at 36f27307 + the new tests, contract unchanged; lines capped at 300 characters
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry --lib -- ua8_relayer_marked_record_blocks_no_chain_kind ua8_relayer_kind_refused_over_chain_key
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.76s
+test test_ua8::ua8_relayer_marked_record_blocks_no_chain_kind ... FAILED
+test test_ua8::ua8_relayer_kind_refused_over_chain_key ... ok
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 126 filtered out; finished in 0.08s
+error: test failed, to rerun pass `-p scaas-ua-registry --lib`
+rc=101
+
+# RED 2: KeyR split in, a relayer kind checks KeyR only (the half of the rule that RED 1 could not fail on)
+$ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry --lib -- ua8_relayer_marked_record_blocks_no_chain_kind ua8_relayer_kind_refused_over_chain_key
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.35s
+test test_ua8::ua8_relayer_kind_refused_over_chain_key ... FAILED
+test test_ua8::ua8_relayer_marked_record_blocks_no_chain_kind ... ok
+thread 'test_ua8::ua8_relayer_kind_refused_over_chain_key' (355067) panicked at contracts/ua-registry/src/test.rs:68:18:
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 126 filtered out; finished in 0.12s
+error: test failed, to rerun pass `-p scaas-ua-registry --lib`
+rc=101

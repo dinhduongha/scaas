@@ -18,7 +18,7 @@ import * as ua from '../src/ua.js';
 import { encodeType } from '../src/evm.js';
 import { PQ_KINDS } from '../src/pq.js';
 import { personalSignDigest } from '../legacy/typed-signing/ua-portable-raw.js';
-import { SCHEMES, schemeSecret, ecdsa, nativeSk, nativeUa, encodeMemberSigs, pqKey, pqSignMsg, PQZ_SETS, pqzKeyOf, pqzPopOf,
+import { SCHEMES, schemeSecret, ecdsa, nativeSk, nativeUa, encodeMemberSigs, portableMemberSigs, pqKey, pqSignMsg, PQZ_SETS, pqzKeyOf, pqzPopOf,
   kemPublicKey } from './ua-signers.mjs';
 
 const OUT = fileURLToPath(new URL('../../../smartcontracts/vectors/ua/', import.meta.url));
@@ -44,18 +44,18 @@ const pq = (name, index = 0) => {
 };
 const native = { kind: 0x0001, ua: nativeUa };
 
-/** An msig over `members` ({ kind, ua, sign? } with a weight): sorted by id; `sign(md, typedDigest, indices)` =
+/** An msig over `members` ({ kind, ua, sign? } with a weight): sorted by id; `signMembers(md, typedDigest, indices)` =
  *  abi.encode(MemberSig[]), derived members over uaMessage(kind, member, md) with empty key data (stored kinds), a native
  *  member by ECDSA over the record's typed digest itself (TS-D4: eth_signTypedData_v4, chain-free, no UAAuth domain);
- *  `nativeSig` replaces the native member's signature (the negatives). */
+ *  `nativeSig` replaces the native member's signature (the negatives); only a minimal slot set (owner 2026-10-31: every
+ *  signature this file stores is a portable one). `memberList`: any set, unchecked. */
 function msig(name, threshold, members) {
   const ms = members.map(([m, weight]) => ({ ...m, weight }))
     .sort((a, b) => (hex(a.ua) < hex(b.ua) ? -1 : 1)).map((m, index) => ({ ...m, index }));
   const keyData = ua.encodeMsig(threshold, ms.map((m) => ({ kind: m.kind, id: m.ua, weight: m.weight })));
   const list = (md, typedDigest, indices, nativeSig = () => ecdsa(nativeSk, typedDigest)) => indices.map((i) => ({
     index: i, keyData: NONE, sig: ua.isNativeKind(ms[i].kind) ? nativeSig() : ms[i].sign(ua.uaMessage(ms[i].kind, MEMBER, md)) }));
-  const sign = (...a) => encodeMemberSigs(list(...a));
-  return { ...signer(name, 0x0120, keyData, null), threshold, members: ms, signMembers: sign, memberList: list };
+  return { ...signer(name, 0x0120, keyData, null), threshold, members: ms, signMembers: (...a) => portableMemberSigs(keyData, list(...a)), memberList: list };
 }
 
 /** [v0 (the register key), v1, v2, v3]: each version its own key (a new key always goes to a new version). */
@@ -73,18 +73,20 @@ const nativeMsig = msig('msig-pq-native', 2, [[native, 1], [ml1, 1]]);
 const KEM = { mldsa65: kemKeys('mldsa65'), fndsa512: kemKeys('fndsa512'), 'msig-pq': kemKeys('msig-pq') };
 
 /** One registration: the `register` arguments, every digest between them, and the signer's pop over the portable PoP. */
-function registration(s, { set = '', kem = false } = {}) {
+function registration(s, { set = '', kem = false, raw = false, slots = 2 } = {}) {
   const pqzKey = set ? pqzKeyOf(set, PQZ_LABEL[s.name]) : NONE;
   const pqzPop = set ? pqzPopOf(set) : NONE;
   const kemPk = kem ? KEM[s.name][0] : NONE;
   const m = ua.holderPopMessage(s.kind, { ua: s.ua, keyData: s.keyData, pqzKey, pqzPop, kemPk });
   const isMsig = s.kind === 0x0120;
-  const popSigners = isMsig && ua.msigPqzEligible(s.keyData) ? s.members.map((x) => x.index).slice(0, 2) : [];
+  const popSigners = isMsig && ua.msigPqzEligible(s.keyData) ? s.members.map((x) => x.index).slice(0, slots) : [];
   const popList = isMsig ? s.memberList(m.memberDigest, m.registrationDigest, popSigners) : null;
-  const pop = isMsig ? (popSigners.length ? encodeMemberSigs(popList) : NONE) : s.sign(m.message, { pop: true });
+  const pop = isMsig ? (popSigners.length ? (raw ? encodeMemberSigs(popList) : portableMemberSigs(s.keyData, popList)) : NONE) : s.sign(m.message, { pop: true });
   // typed-signing R1: the explicit registry arguments (register / registerMsig), and for a KEM row its hash-commit form
   const input = { kind: s.kind, keyData: s.keyData, pqzKey, pqzPopHash: m.pqzPopHash, pqzPop, kemPk, pop: popList ?? pop };
-  const full = ua.registrationArgs({ ...input, kemCommit: false });
+  // a raw row is not minimal, which `registrationArgs` refuses to build: its arguments are the row's own
+  const full = ua.registrationArgs({ ...input, pop: raw ? [] : input.pop, kemCommit: false });
+  if (raw) full.args.pop = popList.map((m) => ({ index: m.index, keyData: hex(m.keyData), sig: hex(m.sig) }));
   const commit = kem ? ua.registrationArgs({ ...input, kemCommit: true }) : null;
   return {
     name: set ? `${s.name}/${set}` : s.name, kind: s.kind, kindName: ua.kindInfo(s.kind).name, set, keyData: hex(s.keyData),
@@ -219,6 +221,20 @@ const negatives = [
     digest: hex(DIGEST), auth: hex(abiEncode(['bytes', 'bytes'], [nativeMsig.keyData,
       nativeMsig.signMembers(metatxMd, Z, [0, 1], () => ecdsa(nativeSk, personalSignDigest(metatxMd)))])) },
   'UAUnauthorized'),
+  // msig minimal form (owner 2026-10-31): not a mutation of a row; the full register arguments are in `registration`
+  { name: 'msig-pop-not-minimal', entry: 'register', rule: 'msig-minimal',
+    why: 'A stored msig signature (pop v2, KEM record, PQZ key record) is refused unless every slot is necessary: with T = '
+      + 'the slots\' total weight and N the threshold, T >= N and T - weight(i) < N for every slot (owner 2026-10-31). This '
+      + '2-of-(1, 2) msig over the registered mldsa65#1 and mldsa65#2 (the lower id weight 1) is signed by both slots: '
+      + 'every member signature verifies and the old rule accepts it (1, then 3 >= 2), but the weight-2 slot alone reaches '
+      + 'the threshold. Digest-only readers skip rule msig-minimal. lightestInMiddle: the same rule when the lightest slot is '
+      + 'not the first: 5-of-(2, 1, 3) by index over mldsa65, #1 and #2, all three signed: T - weight(1) = 5, so the weight-1 '
+      + 'slot is not necessary, while T - weight(0) = 4 would pass a check of the first slot alone.',
+    registration: registration(msig('msig-pq-not-minimal', 2, [ml1, ml2].sort((a, b) => (hex(a.ua) < hex(b.ua) ? -1 : 1))
+      .map((m, i) => [m, i + 1])), { raw: true }),
+    lightestInMiddle: registration(msig('msig-pq-not-minimal-light', 5, [ml, ml1, ml2].sort((a, b) => (hex(a.ua) < hex(b.ua) ? -1 : 1))
+      .map((m, i) => [m, [2, 1, 3][i]])), { raw: true, slots: 3 }),
+    error: 'UAPoP' },
   // typed-signing (TS-D3 / TS-D4): the pre-round native form (EIP-191 personal_sign of memberDigest), a pop over the same UA
   // and attributes under another kind (only the record's kind differs), and the row's own initial KEM record's typed digest
   // signed under pop v2 (only the struct type differs)

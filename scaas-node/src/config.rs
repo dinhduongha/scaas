@@ -343,12 +343,20 @@ pub struct BreakerCfg {
     #[serde(default, deserialize_with = "amount")]
     #[serde(serialize_with = "amount_text", skip_serializing_if = "Option::is_none")]
     pub min_relayer_balance: Option<u128>,
+    /// Soroban: `call` jobs stop at this share (%) of `gas_budget_per_hour`, every other kind runs to 100 %, so free registry
+    /// writes cannot spend the whole hour's budget and stop payments.
+    #[serde(default = "default_call_pct")]
+    pub call_budget_pct: u8,
 }
 
 impl Default for BreakerCfg {
     fn default() -> Self {
-        Self { spike_ratio: default_spike(), spike_min_base_fee_gwei: 1, gas_budget_per_hour: None, min_relayer_balance: None }
+        Self { spike_ratio: default_spike(), spike_min_base_fee_gwei: 1, gas_budget_per_hour: None, min_relayer_balance: None, call_budget_pct: default_call_pct() }
     }
+}
+
+fn default_call_pct() -> u8 {
+    50
 }
 
 fn amount<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Option<u128>, D::Error> {
@@ -576,6 +584,17 @@ impl Config {
                 c.canonical(&t.address).with_context(|| format!("chain {key}: token {}", t.address))?;
             }
             c.relay_params().with_context(|| format!("chain {key}"))?;
+            if !(1..=100).contains(&c.breaker.call_budget_pct) {
+                bail!("chain {key}: breaker.call_budget_pct is a share of the budget, 1 to 100");
+            }
+            // NET-SOR-14: a Soroban job is free to the client and its fee is the lane's, so the limits are the operator's to name.
+            let set = |v: Option<u128>| v.is_some_and(|v| v > 0);
+            if c.family == "soroban" && self.modules.submit && !(set(c.breaker.gas_budget_per_hour) && set(c.breaker.min_relayer_balance)) {
+                bail!("chain {key}: a soroban lane needs breaker.gas_budget_per_hour and breaker.min_relayer_balance, both above 0 (stroops; node.example.toml)");
+            }
+            if c.family == "soroban" && self.modules.submit && !c.params.get("max_resource_fee_per_job").and_then(|v| v.as_integer()).is_some_and(|n| n > 0) {
+                bail!("chain {key}: a soroban lane needs params.max_resource_fee_per_job above 0 (stroops; node.example.toml)");
+            }
         }
         self.validate_store_sections(&seen)
     }
@@ -1045,13 +1064,46 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         assert!(toml::from_str::<Config>(&OK.replace("finality =", "breaker = { gas_budget_per_hour = \"x\" }\nfinality =")).is_err());
     }
 
+    /// NET-SOR-14: a Soroban lane does not start without both spend limits, a job being free to the client. One key differs per
+    /// case; an indexer-only node has no lane to limit.
+    #[test]
+    fn soroban_lanes_need_both_spend_limits() {
+        let raw = |modules: &str, params: &str, breaker: &str| format!("{modules}{OK}\n[keys]\nmnemonic = {{ env = \"SCAAS_TEST_MNEMONIC\" }}\n\
+            [[chains]]\nfamily = \"soroban\"\nnetwork = \"local\"\nrpc_urls = [\"http://p\"]\nlanes = [0]\n\
+            params = {{ network_passphrase = \"x\"{params} }}\n{breaker}\n");
+        let fee_cap = ", max_resource_fee_per_job = 1";
+        let with_cap = |modules: &str, params: &str, breaker: &str| toml::from_str::<Config>(&raw(modules, params, breaker)).unwrap().validate();
+        let check = |modules: &str, breaker: &str| with_cap(modules, fee_cap, breaker);
+        check("", "breaker = { gas_budget_per_hour = 1, min_relayer_balance = 1 }").unwrap();
+        for bad in ["", "breaker = { gas_budget_per_hour = 1 }", "breaker = { min_relayer_balance = 1 }",
+                    "breaker = { gas_budget_per_hour = 1, min_relayer_balance = 0 }", "breaker = { gas_budget_per_hour = 0, min_relayer_balance = 1 }"] {
+            let e = check("", bad).unwrap_err().to_string();
+            assert!(e.contains("gas_budget_per_hour") && e.contains("min_relayer_balance"), "{bad}: {e}");
+        }
+        // the third limit, the per-job cap: as the budget, the amount is the operator's, so no default
+        let limits = "breaker = { gas_budget_per_hour = 1, min_relayer_balance = 1 }";
+        for bad in ["", ", max_resource_fee_per_job = 0", ", max_resource_fee_per_job = \"x\""] {
+            let e = with_cap("", bad, limits).unwrap_err().to_string();
+            assert!(e.contains("max_resource_fee_per_job"), "{bad}: {e}");
+        }
+        with_cap("[modules]\nsubmit = false\n", "", "").unwrap();
+        for ok in [1, 100] {
+            check("", &format!("breaker = {{ gas_budget_per_hour = 1, min_relayer_balance = 1, call_budget_pct = {ok} }}")).unwrap();
+        }
+        for bad in [0, 101] {
+            let e = check("", &format!("breaker = {{ gas_budget_per_hour = 1, min_relayer_balance = 1, call_budget_pct = {bad} }}")).unwrap_err();
+            assert!(e.to_string().contains("call_budget_pct"), "{bad}: {e}");
+        }
+    }
+
     #[test]
     fn pi_chain_lanes_use_the_chain_coin_type() {
         use crate::signer::Signer;
         // Soroban family, Pi Network passphrase, SLIP-44 314159 (bip_utils 2.9.3, the 24-word "abandon … art").
         let raw = format!("{OK}\n[keys]\nmnemonic = {{ env = \"SCAAS_TEST_MNEMONIC\" }}\n\
             [[chains]]\nfamily = \"soroban\"\nnetwork = \"pi-testnet\"\nrpc_urls = [\"http://p\"]\nlanes = [0, 1]\n\
-            coin_type = 314159\nparams = {{ network_passphrase = \"Pi Testnet\" }}\n");
+            coin_type = 314159\nparams = {{ network_passphrase = \"Pi Testnet\", max_resource_fee_per_job = 1 }}\n\
+            breaker = {{ gas_budget_per_hour = 1, min_relayer_balance = 1 }}\n");
         let c: Config = toml::from_str(&raw).unwrap();
         c.validate().unwrap();
         std::env::set_var("SCAAS_TEST_MNEMONIC", "abandon abandon abandon abandon abandon abandon abandon abandon \

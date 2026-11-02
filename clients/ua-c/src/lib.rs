@@ -94,6 +94,7 @@ impl From<ua::UAError> for Fail {
             PqzPopHash => SCAAS_UA_ERR_PQZ_POP_HASH,
             PqzKeySet => SCAAS_UA_ERR_PQZ_KEY_SET,
             KemScheme => SCAAS_UA_ERR_KEM_SCHEME,
+            Pop | Unauthorized | MemberUnknown | NotVerifiable => SCAAS_UA_ERR_INTERNAL, // ua8::check_* only, not exported here
         };
         Fail(status, e.to_string())
     }

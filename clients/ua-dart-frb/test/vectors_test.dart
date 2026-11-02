@@ -366,6 +366,7 @@ void main() {
   test('holder refusals', () {
     var run = 0, sigLevel = 0;
     for (final n in rows(pv, 'negatives')) {
+      if (n['rule'] == 'msig-minimal') continue; // a registry rule over a full registration (msig minimal form)
       final entry = n['entry'], name = n['name'], err = n['error'];
       final m = n['mutation'] as Map, set = (m['set'] ?? <String, Object?>{}) as Map;
       if ((entry == 'register' || entry == 'storePqzPop') && set.keys.every((k) => (k as String).startsWith('attrs.') || k == 'pqzPop')) {
@@ -422,7 +423,7 @@ void main() {
         sigLevel++; // signatures / native members: verified by the signature vectors
       }
     }
-    expect(run + sigLevel, rows(pv, 'negatives').length);
+    expect(run + sigLevel + 1, rows(pv, 'negatives').length); // + the skipped msig-minimal row
     expect(run > 0 && sigLevel > 0, isTrue);
     final u = U8Array32(Uint8List.fromList(List.filled(32, 1))), key = Uint8List(16384), proof = Uint8List.fromList(List.filled(32, 7));
     HolderPop holder({required int kind, Uint8List? keyData, Uint8List? pqzKey, Uint8List? pqzPop, Uint8List? pqzPopHash, Uint8List? kemPk}) =>

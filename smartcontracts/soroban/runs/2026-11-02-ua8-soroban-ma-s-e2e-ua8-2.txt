@@ -1,0 +1,327 @@
+== e2e-ua8-local: 7352f3e5+uncommitted 2026-11-02T08:08:10Z; stellar 30.0.0 (90a3d42d9327ccfaa0d301373766f45beae3e6d9); 12 GB available
+== build Wasm
+== build soroban
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/dex/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.19s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_dex.wasm (14694 bytes optimized (original size was 18122 bytes))
+    Wasm Hash: 3963d36f2e56afc818524f9d7e77f9802b46780250ac41394d8d01caa7990524
+    Wasm Size: 14694 bytes optimized (original size was 18122 bytes)
+    Exported Functions: 8 found
+      • __constructor
+      • cancel
+      • filled
+      • market
+      • order_hash
+      • set_market
+      • settle
+      • ua_cancel
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/token/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.09s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_token.wasm (26651 bytes optimized (original size was 31198 bytes))
+    Wasm Hash: df541cf468add24ac137faadbed86723ac393ba2a800b969cade25c17470d259
+    Wasm Size: 26651 bytes optimized (original size was 31198 bytes)
+    Exported Functions: 30 found
+      • __constructor
+      • admin
+      • allowance
+      • approve
+      • balance
+      • burn
+      • burn_from
+      • decimals
+      • meta_pay_id
+      • mint
+      • mint_to_ua
+      • name
+      • pay
+      • pay_meta
+      • pay_to_ua
+      • ref_used
+      • registry
+      • symbol
+      • transfer
+      • transfer_from
+      • transfer_to_ua
+      • ua_balance
+      • ua_burn
+      • ua_cancel_nonce
+      • ua_nonce
+      • ua_pay
+      • ua_pay_meta
+      • ua_ref_used
+      • ua_trade
+      • ua_transfer
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/ua-registry/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.08s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_ua_registry.wasm (56835 bytes optimized (original size was 64645 bytes))
+    Wasm Hash: 4c6258d827b021c53779d060656f4d14e9638ec40f2eb3a8c2b1b8bf9b5cbf1a
+    Wasm Size: 56835 bytes optimized (original size was 64645 bytes)
+    Exported Functions: 34 found
+      • __constructor
+      • accept_membership
+      • checked_of
+      • kem_key_at
+      • kem_key_of
+      • key_owner
+      • kind_name
+      • member_accepted
+      • member_checked
+      • pop_of
+      • pqz_key_of
+      • pqz_key_sig_of
+      • pqz_pop_of
+      • receivable
+      • record_of
+      • register
+      • register_frost
+      • register_msig
+      • register_musig2
+      • register_webauthn
+      • registration_of
+      • relayers
+      • require_authorized
+      • set_kem_key
+      • set_pqz_key
+      • store_pqz_pop
+      • ua_at
+      • ua_count
+      • ua_of
+      • ua_of_frost
+      • ua_of_msig
+      • ua_of_musig2
+      • ua_of_webauthn
+      • ua_page
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/mandate/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.08s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_mandate.wasm (16554 bytes optimized (original size was 19087 bytes))
+    Wasm Hash: fca1b6562f7690f263dcf49c699c0b93f14633e9ba7b5acdb4512a7bb9ed46c9
+    Wasm Size: 16554 bytes optimized (original size was 19087 bytes)
+    Exported Functions: 12 found
+      • __constructor
+      • epoch
+      • mandate
+      • mtx_mandate_pay
+      • mtx_revoke
+      • mtx_set_mandate
+      • mtx_set_payee
+      • mtx_withdraw
+      • owner
+      • paid
+      • registry
+      • ua_nonce
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/relay-executor/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.08s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_relay_executor.wasm (1187 bytes optimized (original size was 1316 bytes))
+    Wasm Hash: e23732b60b42551e811c796609c60b8c6499205f1d2af816d558f6c4ba6c9c00
+    Wasm Size: 1187 bytes optimized (original size was 1316 bytes)
+    Exported Functions: 3 found
+      • __constructor
+      • exec
+      • router
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/relay-fee/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.09s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_relay_fee.wasm (7630 bytes optimized (original size was 8585 bytes))
+    Wasm Hash: 37330478cb2c3fc0c66a788f2efe8784edda1d5f9b1fd6b03a334cac97991a27
+    Wasm Size: 7630 bytes optimized (original size was 8585 bytes)
+    Exported Functions: 5 found
+      • __constructor
+      • executor
+      • relay
+      • relay_ref
+      • ua_relay
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=<cargo>/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/smart-key-account/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.08s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_smart_key_account.wasm (10529 bytes optimized (original size was 11975 bytes))
+    Wasm Hash: f02a6780eee4d41ba0489b8b8a258f42bc71be69ab9951ae5239c76d374c705d
+    Wasm Size: 10529 bytes optimized (original size was 11975 bytes)
+    Exported Functions: 5 found
+      • __check_auth
+      • __constructor
+      • add_key
+      • keys
+      • remove_key
+✅ Build Complete
+
+== EVM deploy build
+No files changed, compilation skipped
+== quickstart
+quickstart: scaas-stellar up (stellar/quickstart@sha256:e05d68bb3b2629a829310dc3434fc0ee3f801854bdfa1a7c8c362d2f1c9060f8), rpc http://127.0.0.1:31980/rpc
+quickstart: protocolVersion 30, testnet limits applied
+== anvil 31981, 31982
+== cargo test --test e2e_ua8
+   Compiling scaas-node v0.1.0 (scaas-node)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.41s
+     Running tests/e2e_ua8.rs (target/debug/deps/e2e_ua8-b1037446e70685b3)
+
+running 2 tests
+test e2e_ua8_frost_every_size ... deploy.sh soroban local ua_registry: CDOOKHV4OVDY4554KE7MCTULIAQY3BEX3SBO4OQ2BINWZYUHRPFFN6PF
+FIT register_frost bn254 2 of 2, key_data 516 B: cpu_insns 2003735 used_cpu 1881795 mem_bytes 1448185 read_bytes 0 write_bytes 1708 entries 7 writes 4 tx_size 2160 largest_entry 1304 events_bytes 1408 resource_fee 1943021 fee_charged 1463949
+FIT register_frost bn254 2 of 3, key_data 740 B: cpu_insns 2127182 used_cpu 1993785 mem_bytes 1464817 read_bytes 0 write_bytes 1932 entries 7 writes 4 tx_size 2484 largest_entry 1528 events_bytes 1632 resource_fee 2079711 fee_charged 1567525
+FIT register_frost bn254 2 of 4, key_data 964 B: cpu_insns 2217241 used_cpu 2080380 mem_bytes 1480931 read_bytes 0 write_bytes 2156 entries 7 writes 4 tx_size 2808 largest_entry 1752 events_bytes 1856 resource_fee 2329942 fee_charged 1756954
+FIT register_frost bn254 2 of 5, key_data 1188 B: cpu_insns 2307535 used_cpu 2167201 mem_bytes 1497941 read_bytes 0 write_bytes 2380 entries 7 writes 4 tx_size 3132 largest_entry 1976 events_bytes 2080 resource_fee 2580171 fee_charged 1946380
+FIT register_frost bn254 2 of 6, key_data 1412 B: cpu_insns 2398060 used_cpu 2254244 mem_bytes 1515847 read_bytes 0 write_bytes 2604 entries 7 writes 4 tx_size 3456 largest_entry 2200 events_bytes 2304 resource_fee 2830488 fee_charged 2135809
+FIT register_frost bn254 2 of 7, key_data 1636 B: cpu_insns 2488819 used_cpu 2341513 mem_bytes 1534649 read_bytes 0 write_bytes 2828 entries 7 writes 4 tx_size 3780 largest_entry 2424 events_bytes 2528 resource_fee 3080884 fee_charged 2325237
+FIT register_frost bn254 2 of 8, key_data 1860 B: cpu_insns 2579809 used_cpu 2429003 mem_bytes 1554347 read_bytes 0 write_bytes 3052 entries 7 writes 4 tx_size 4104 largest_entry 2648 events_bytes 2752 resource_fee 3331275 fee_charged 2514665
+FIT register_frost bn254 2 of 9, key_data 2084 B: cpu_insns 2671036 used_cpu 2516721 mem_bytes 1574941 read_bytes 0 write_bytes 3276 entries 7 writes 4 tx_size 4428 largest_entry 2872 events_bytes 2976 resource_fee 3581670 fee_charged 2704095
+FIT register_frost bn254 2 of 10, key_data 2308 B: cpu_insns 2762492 used_cpu 2604660 mem_bytes 1596431 read_bytes 0 write_bytes 3500 entries 7 writes 4 tx_size 4752 largest_entry 3096 events_bytes 3200 resource_fee 3832065 fee_charged 2893523
+FIT register_frost bn254 2 of 11, key_data 2532 B: cpu_insns 2854183 used_cpu 2692824 mem_bytes 1618817 read_bytes 0 write_bytes 3724 entries 7 writes 4 tx_size 5076 largest_entry 3320 events_bytes 3424 resource_fee 4082459 fee_charged 3082952
+FIT register_frost bn254 2 of 12, key_data 2756 B: cpu_insns 2946105 used_cpu 2781211 mem_bytes 1642099 read_bytes 0 write_bytes 3948 entries 7 writes 4 tx_size 5400 largest_entry 3544 events_bytes 3648 resource_fee 4332857 fee_charged 3272382
+FIT register_frost bn254 2 of 13, key_data 2980 B: cpu_insns 3038263 used_cpu 2869824 mem_bytes 1666277 read_bytes 0 write_bytes 4172 entries 7 writes 4 tx_size 5724 largest_entry 3768 events_bytes 3872 resource_fee 4583249 fee_charged 3461810
+FIT register_frost bn254 2 of 14, key_data 3204 B: cpu_insns 3130651 used_cpu 2958659 mem_bytes 1691351 read_bytes 0 write_bytes 4396 entries 7 writes 4 tx_size 6048 largest_entry 3992 events_bytes 4096 resource_fee 4833642 fee_charged 3651239
+FIT register_frost bn254 2 of 15, key_data 3428 B: cpu_insns 3223275 used_cpu 3047720 mem_bytes 1717321 read_bytes 0 write_bytes 4620 entries 7 writes 4 tx_size 6372 largest_entry 4216 events_bytes 4320 resource_fee 5084040 fee_charged 3840669
+FIT register_frost bn254 2 of 16, key_data 3652 B: cpu_insns 3316128 used_cpu 3137002 mem_bytes 1744187 read_bytes 0 write_bytes 4844 entries 7 writes 4 tx_size 6696 largest_entry 4440 events_bytes 4544 resource_fee 5334434 fee_charged 4030100
+FIT register_frost bn254 3 of 3, key_data 932 B: cpu_insns 2182165 used_cpu 2046653 mem_bytes 1472935 read_bytes 0 write_bytes 2124 entries 7 writes 4 tx_size 2700 largest_entry 1720 events_bytes 1824 resource_fee 2293867 fee_charged 1729607
+FIT register_frost bn254 3 of 4, key_data 1220 B: cpu_insns 2290835 used_cpu 2151143 mem_bytes 1492843 read_bytes 0 write_bytes 2412 entries 7 writes 4 tx_size 3096 largest_entry 2008 events_bytes 2112 resource_fee 2615484 fee_charged 1973063
+FIT register_frost bn254 3 of 5, key_data 1508 B: cpu_insns 2399880 used_cpu 2255994 mem_bytes 1514191 read_bytes 0 write_bytes 2700 entries 7 writes 4 tx_size 3492 largest_entry 2296 events_bytes 2400 resource_fee 2937204 fee_charged 2216517
+FIT register_frost bn254 3 of 6, key_data 1796 B: cpu_insns 2509299 used_cpu 2361205 mem_bytes 1536979 read_bytes 0 write_bytes 2988 entries 7 writes 4 tx_size 3888 largest_entry 2584 events_bytes 2688 resource_fee 3259018 fee_charged 2459974
+FIT register_frost bn254 3 of 7, key_data 2084 B: cpu_insns 2619094 used_cpu 2466777 mem_bytes 1561207 read_bytes 0 write_bytes 3276 entries 7 writes 4 tx_size 4284 largest_entry 2872 events_bytes 2976 resource_fee 3580836 fee_charged 2703431
+FIT register_frost bn254 3 of 8, key_data 2372 B: cpu_insns 2729260 used_cpu 2572706 mem_bytes 1586875 read_bytes 0 write_bytes 3564 entries 7 writes 4 tx_size 4680 largest_entry 3160 events_bytes 3264 resource_fee 3902652 fee_charged 2946887
+FIT register_frost bn254 3 of 9, key_data 2660 B: cpu_insns 2839804 used_cpu 2678998 mem_bytes 1613983 read_bytes 0 write_bytes 3852 entries 7 writes 4 tx_size 5076 largest_entry 3448 events_bytes 3552 resource_fee 4224465 fee_charged 3190342
+FIT register_frost bn254 3 of 10, key_data 2948 B: cpu_insns 2950720 used_cpu 2785648 mem_bytes 1642531 read_bytes 0 write_bytes 4140 entries 7 writes 4 tx_size 5472 largest_entry 3736 events_bytes 3840 resource_fee 4546284 fee_charged 3433800
+FIT register_frost bn254 3 of 11, key_data 3236 B: cpu_insns 3062012 used_cpu 2892660 mem_bytes 1672519 read_bytes 0 write_bytes 4428 entries 7 writes 4 tx_size 5868 largest_entry 4024 events_bytes 4128 resource_fee 4868099 fee_charged 3677258
+FIT register_frost bn254 3 of 12, key_data 3524 B: cpu_insns 3173677 used_cpu 3000030 mem_bytes 1703947 read_bytes 0 write_bytes 4716 entries 7 writes 4 tx_size 6264 largest_entry 4312 events_bytes 4416 resource_fee 5189916 fee_charged 3920714
+FIT register_frost bn254 3 of 13, key_data 3812 B: cpu_insns 3285717 used_cpu 3107761 mem_bytes 1736815 read_bytes 0 write_bytes 5004 entries 7 writes 4 tx_size 6660 largest_entry 4600 events_bytes 4704 resource_fee 5511737 fee_charged 4164172
+FIT register_frost bn254 3 of 14, key_data 4100 B: cpu_insns 3398132 used_cpu 3215852 mem_bytes 1771123 read_bytes 0 write_bytes 5292 entries 7 writes 4 tx_size 7056 largest_entry 4888 events_bytes 4992 resource_fee 5833550 fee_charged 4407629
+FIT register_frost bn254 3 of 15, key_data 4388 B: cpu_insns 3510921 used_cpu 3324303 mem_bytes 1806871 read_bytes 0 write_bytes 5580 entries 7 writes 4 tx_size 7452 largest_entry 5176 events_bytes 5280 resource_fee 6155373 fee_charged 4651089
+FIT register_frost bn254 3 of 16, key_data 4676 B: cpu_insns 3624082 used_cpu 3433112 mem_bytes 1844059 read_bytes 0 write_bytes 5868 entries 7 writes 4 tx_size 7848 largest_entry 5464 events_bytes 5568 resource_fee 6477187 fee_charged 4894547
+FIT register_frost bn254 4 of 4, key_data 1476 B: cpu_insns 2364694 used_cpu 2222162 mem_bytes 1505779 read_bytes 0 write_bytes 2668 entries 7 writes 4 tx_size 3384 largest_entry 2264 events_bytes 2368 resource_fee 2901075 fee_charged 2189172
+FIT register_frost bn254 4 of 5, key_data 1828 B: cpu_insns 2492642 used_cpu 2345189 mem_bytes 1532041 read_bytes 0 write_bytes 3020 entries 7 writes 4 tx_size 3852 largest_entry 2616 events_bytes 2720 resource_fee 3294313 fee_charged 2486655
+FIT register_frost bn254 4 of 6, key_data 2180 B: cpu_insns 2621138 used_cpu 2468742 mem_bytes 1560415 read_bytes 0 write_bytes 3372 entries 7 writes 4 tx_size 4320 largest_entry 2968 events_bytes 3072 resource_fee 3687552 fee_charged 2784139
+FIT register_frost bn254 4 of 7, key_data 2532 B: cpu_insns 2750184 used_cpu 2592825 mem_bytes 1590901 read_bytes 0 write_bytes 3724 entries 7 writes 4 tx_size 4788 largest_entry 3320 events_bytes 3424 resource_fee 4080787 fee_charged 3081625
+FIT register_frost bn254 4 of 8, key_data 2884 B: cpu_insns 2879776 used_cpu 2717433 mem_bytes 1623499 read_bytes 0 write_bytes 4076 entries 7 writes 4 tx_size 5256 largest_entry 3672 events_bytes 3776 resource_fee 4474023 fee_charged 3379107
+FIT register_frost bn254 4 of 9, key_data 3236 B: cpu_insns 3009921 used_cpu 2842572 mem_bytes 1658209 read_bytes 0 write_bytes 4428 entries 7 writes 4 tx_size 5724 largest_entry 4024 events_bytes 4128 resource_fee 4867264 fee_charged 3676593
+FIT register_frost bn254 4 of 10, key_data 3588 B: cpu_insns 3140612 used_cpu 2968237 mem_bytes 1695031 read_bytes 0 write_bytes 4780 entries 7 writes 4 tx_size 6192 largest_entry 4376 events_bytes 4480 resource_fee 5260503 fee_charged 3974078
+FIT register_frost bn254 4 of 11, key_data 3940 B: cpu_insns 3271854 used_cpu 3094431 mem_bytes 1733965 read_bytes 0 write_bytes 5132 entries 7 writes 4 tx_size 6660 largest_entry 4728 events_bytes 4832 resource_fee 5653746 fee_charged 4271564
+FIT register_frost bn254 4 of 12, key_data 4292 B: cpu_insns 3403643 used_cpu 3221151 mem_bytes 1775011 read_bytes 0 write_bytes 5484 entries 7 writes 4 tx_size 7128 largest_entry 5080 events_bytes 5184 resource_fee 6046982 fee_charged 4569051
+FIT register_frost bn254 4 of 13, key_data 4644 B: cpu_insns 3535986 used_cpu 3348404 mem_bytes 1818169 read_bytes 0 write_bytes 5836 entries 7 writes 4 tx_size 7596 largest_entry 5432 events_bytes 5536 resource_fee 6440223 fee_charged 4866536
+FIT register_frost bn254 4 of 14, key_data 4996 B: cpu_insns 3668873 used_cpu 3476180 mem_bytes 1863439 read_bytes 0 write_bytes 6188 entries 7 writes 4 tx_size 8064 largest_entry 5784 events_bytes 5888 resource_fee 6833465 fee_charged 5164023
+FIT register_frost bn254 4 of 15, key_data 5348 B: cpu_insns 3802311 used_cpu 3604486 mem_bytes 1910821 read_bytes 0 write_bytes 6540 entries 7 writes 4 tx_size 8532 largest_entry 6136 events_bytes 6240 resource_fee 7226706 fee_charged 5461509
+FIT register_frost bn254 4 of 16, key_data 5700 B: cpu_insns 3936297 used_cpu 3733318 mem_bytes 1960315 read_bytes 0 write_bytes 6892 entries 7 writes 4 tx_size 9000 largest_entry 6488 events_bytes 6592 resource_fee 7619951 fee_charged 5758998
+FIT register_frost bn254 5 of 5, key_data 2148 B: cpu_insns 2585820 used_cpu 2434783 mem_bytes 1551491 read_bytes 0 write_bytes 3340 entries 7 writes 4 tx_size 4212 largest_entry 2936 events_bytes 3040 resource_fee 3651422 fee_charged 2756793
+FIT register_frost bn254 5 of 6, key_data 2564 B: cpu_insns 2733576 used_cpu 2576856 mem_bytes 1586155 read_bytes 0 write_bytes 3756 entries 7 writes 4 tx_size 4752 largest_entry 3352 events_bytes 3456 resource_fee 4116080 fee_charged 3108305
+FIT register_frost bn254 5 of 7, key_data 2980 B: cpu_insns 2882090 used_cpu 2719658 mem_bytes 1623731 read_bytes 0 write_bytes 4172 entries 7 writes 4 tx_size 5292 largest_entry 3768 events_bytes 3872 resource_fee 4580742 fee_charged 3459817
+FIT register_frost bn254 5 of 8, key_data 3396 B: cpu_insns 3031357 used_cpu 2863184 mem_bytes 1664219 read_bytes 0 write_bytes 4588 entries 7 writes 4 tx_size 5832 largest_entry 4184 events_bytes 4288 resource_fee 5045403 fee_charged 3811330
+FIT register_frost bn254 5 of 9, key_data 3812 B: cpu_insns 3181386 used_cpu 3007442 mem_bytes 1707619 read_bytes 0 write_bytes 5004 entries 7 writes 4 tx_size 6372 largest_entry 4600 events_bytes 4704 resource_fee 5510062 fee_charged 4162842
+FIT register_frost bn254 5 of 10, key_data 4228 B: cpu_insns 3332169 used_cpu 3152426 mem_bytes 1753931 read_bytes 0 write_bytes 5420 entries 7 writes 4 tx_size 6912 largest_entry 5016 events_bytes 5120 resource_fee 5974726 fee_charged 4514357
+FIT register_frost bn254 5 of 11, key_data 4644 B: cpu_insns 3483710 used_cpu 3298139 mem_bytes 1803155 read_bytes 0 write_bytes 5836 entries 7 writes 4 tx_size 7452 largest_entry 5432 events_bytes 5536 resource_fee 6439389 fee_charged 4865871
+FIT register_frost bn254 5 of 12, key_data 5060 B: cpu_insns 3636007 used_cpu 3444578 mem_bytes 1855291 read_bytes 0 write_bytes 6252 entries 7 writes 4 tx_size 7992 largest_entry 5848 events_bytes 5952 resource_fee 6904053 fee_charged 5217387
+FIT register_frost bn254 5 of 13, key_data 5476 B: cpu_insns 3789064 used_cpu 3591748 mem_bytes 1910339 read_bytes 0 write_bytes 6668 entries 7 writes 4 tx_size 8532 largest_entry 6264 events_bytes 6368 resource_fee 7368715 fee_charged 5568901
+FIT register_frost bn254 5 of 14, key_data 5892 B: cpu_insns 3942876 used_cpu 3739644 mem_bytes 1968299 read_bytes 0 write_bytes 7084 entries 7 writes 4 tx_size 9072 largest_entry 6680 events_bytes 6784 resource_fee 7833381 fee_charged 5920418
+FIT register_frost bn254 5 of 15, key_data 6308 B: cpu_insns 4097446 used_cpu 3888269 mem_bytes 2029171 read_bytes 0 write_bytes 7500 entries 7 writes 4 tx_size 9612 largest_entry 7096 events_bytes 7200 resource_fee 8298046 fee_charged 6271935
+FIT register_frost bn254 5 of 16, key_data 6724 B: cpu_insns 4252771 used_cpu 4037620 mem_bytes 2092955 read_bytes 0 write_bytes 7916 entries 7 writes 4 tx_size 10152 largest_entry 7512 events_bytes 7616 resource_fee 8762711 fee_charged 6623452
+FIT register_frost bn254 6 of 6, key_data 2948 B: cpu_insns 2846612 used_cpu 2685544 mem_bytes 1614199 read_bytes 0 write_bytes 4140 entries 7 writes 4 tx_size 5184 largest_entry 3736 events_bytes 3840 resource_fee 4544610 fee_charged 3432471
+FIT register_frost bn254 6 of 7, key_data 3428 B: cpu_insns 3014809 used_cpu 2847272 mem_bytes 1659697 read_bytes 0 write_bytes 4620 entries 7 writes 4 tx_size 5796 largest_entry 4216 events_bytes 4320 resource_fee 5080693 fee_charged 3838012
+FIT register_frost bn254 6 of 8, key_data 3908 B: cpu_insns 3184003 used_cpu 3009959 mem_bytes 1709035 read_bytes 0 write_bytes 5100 entries 7 writes 4 tx_size 6408 largest_entry 4696 events_bytes 4800 resource_fee 5616775 fee_charged 4243552
+FIT register_frost bn254 6 of 9, key_data 4388 B: cpu_insns 3354198 used_cpu 3173608 mem_bytes 1762213 read_bytes 0 write_bytes 5580 entries 7 writes 4 tx_size 7020 largest_entry 5176 events_bytes 5280 resource_fee 6152864 fee_charged 4649096
+FIT register_frost bn254 6 of 10, key_data 4868 B: cpu_insns 3525388 used_cpu 3338214 mem_bytes 1819231 read_bytes 0 write_bytes 6060 entries 7 writes 4 tx_size 7632 largest_entry 5656 events_bytes 5760 resource_fee 6688948 fee_charged 5054637
+FIT register_frost bn254 6 of 11, key_data 5348 B: cpu_insns 3697580 used_cpu 3503783 mem_bytes 1880089 read_bytes 0 write_bytes 6540 entries 7 writes 4 tx_size 8244 largest_entry 6136 events_bytes 6240 resource_fee 7225033 fee_charged 5460181
+FIT register_frost bn254 6 of 12, key_data 5828 B: cpu_insns 3870767 used_cpu 3670309 mem_bytes 1944787 read_bytes 0 write_bytes 7020 entries 7 writes 4 tx_size 8856 largest_entry 6616 events_bytes 6720 resource_fee 7761120 fee_charged 5865726
+FIT register_frost bn254 6 of 13, key_data 6308 B: cpu_insns 4044956 used_cpu 3837798 mem_bytes 2013325 read_bytes 0 write_bytes 7500 entries 7 writes 4 tx_size 9468 largest_entry 7096 events_bytes 7200 resource_fee 8297207 fee_charged 6271270
+FIT register_frost bn254 6 of 14, key_data 6788 B: cpu_insns 4220140 used_cpu 4006244 mem_bytes 2085703 read_bytes 0 write_bytes 7980 entries 7 writes 4 tx_size 10080 largest_entry 7576 events_bytes 7680 resource_fee 8833299 fee_charged 6676815
+FIT register_frost bn254 6 of 15, key_data 7268 B: cpu_insns 4396325 used_cpu 4175653 mem_bytes 2161921 read_bytes 0 write_bytes 8460 entries 7 writes 4 tx_size 10692 largest_entry 8056 events_bytes 8160 resource_fee 9369388 fee_charged 7082362
+FIT register_frost bn254 6 of 16, key_data 7748 B: cpu_insns 4573505 used_cpu 4346018 mem_bytes 2241979 read_bytes 0 write_bytes 8940 entries 7 writes 4 tx_size 11304 largest_entry 8536 events_bytes 8640 resource_fee 9905477 fee_charged 7487908
+FIT register_frost bn254 7 of 7, key_data 3876 B: cpu_insns 3148346 used_cpu 2975673 mem_bytes 1698799 read_bytes 0 write_bytes 5068 entries 7 writes 4 tx_size 6300 largest_entry 4664 events_bytes 4768 resource_fee 5580651 fee_charged 4216207
+FIT register_frost bn254 7 of 8, key_data 4420 B: cpu_insns 3337714 used_cpu 3157758 mem_bytes 1757947 read_bytes 0 write_bytes 5612 entries 7 writes 4 tx_size 6984 largest_entry 5208 events_bytes 5312 resource_fee 6188155 fee_charged 4675777
+FIT register_frost bn254 7 of 9, key_data 4964 B: cpu_insns 3528358 used_cpu 3341069 mem_bytes 1821991 read_bytes 0 write_bytes 6156 entries 7 writes 4 tx_size 7668 largest_entry 5752 events_bytes 5856 resource_fee 6795661 fee_charged 5135348
+FIT register_frost bn254 7 of 10, key_data 5508 B: cpu_insns 3720273 used_cpu 3525603 mem_bytes 1890931 read_bytes 0 write_bytes 6700 entries 7 writes 4 tx_size 8352 largest_entry 6296 events_bytes 6400 resource_fee 7403173 fee_charged 5594920
+FIT register_frost bn254 7 of 11, key_data 6052 B: cpu_insns 3913463 used_cpu 3711363 mem_bytes 1964767 read_bytes 0 write_bytes 7244 entries 7 writes 4 tx_size 9036 largest_entry 6840 events_bytes 6944 resource_fee 8010680 fee_charged 6054492
+FIT register_frost bn254 7 of 12, key_data 6596 B: cpu_insns 4107924 used_cpu 3898344 mem_bytes 2043499 read_bytes 0 write_bytes 7788 entries 7 writes 4 tx_size 9720 largest_entry 7384 events_bytes 7488 resource_fee 8618194 fee_charged 6514064
+FIT register_frost bn254 7 of 13, key_data 7140 B: cpu_insns 4303658 used_cpu 4086550 mem_bytes 2127127 read_bytes 0 write_bytes 8332 entries 7 writes 4 tx_size 10404 largest_entry 7928 events_bytes 8032 resource_fee 9225703 fee_charged 6973640
+FIT register_frost bn254 7 of 14, key_data 7684 B: cpu_insns 4500665 used_cpu 4275980 mem_bytes 2215651 read_bytes 0 write_bytes 8876 entries 7 writes 4 tx_size 11088 largest_entry 8472 events_bytes 8576 resource_fee 9833215 fee_charged 7433215
+FIT register_frost bn254 7 of 15, key_data 8228 B: cpu_insns 4698947 used_cpu 4466636 mem_bytes 2309071 read_bytes 0 write_bytes 9420 entries 7 writes 4 tx_size 11772 largest_entry 9016 events_bytes 9120 resource_fee 10440732 fee_charged 7892792
+FIT register_frost bn254 7 of 16, key_data 8772 B: cpu_insns 4898498 used_cpu 4658512 mem_bytes 2407387 read_bytes 0 write_bytes 9964 entries 7 writes 4 tx_size 12456 largest_entry 9560 events_bytes 9664 resource_fee 11048245 fee_charged 8352369
+FIT register_frost bn254 8 of 8, key_data 4932 B: cpu_insns 3492490 used_cpu 3306581 mem_bytes 1810955 read_bytes 0 write_bytes 6124 entries 7 writes 4 tx_size 7560 largest_entry 5720 events_bytes 5824 resource_fee 6759535 fee_charged 5108000
+FIT register_frost bn254 8 of 9, key_data 5540 B: cpu_insns 3703867 used_cpu 3509828 mem_bytes 1886953 read_bytes 0 write_bytes 6732 entries 7 writes 4 tx_size 8316 largest_entry 6328 events_bytes 6432 resource_fee 7438464 fee_charged 5621602
+FIT register_frost bn254 8 of 10, key_data 6148 B: cpu_insns 3916822 used_cpu 3714592 mem_bytes 1969031 read_bytes 0 write_bytes 7340 entries 7 writes 4 tx_size 9072 largest_entry 6936 events_bytes 7040 resource_fee 8117396 fee_charged 6135201
+FIT register_frost bn254 8 of 11, key_data 6756 B: cpu_insns 4131359 used_cpu 3920878 mem_bytes 2057189 read_bytes 0 write_bytes 7948 entries 7 writes 4 tx_size 9828 largest_entry 7544 events_bytes 7648 resource_fee 8796329 fee_charged 6648804
+FIT register_frost bn254 8 of 12, key_data 7364 B: cpu_insns 4347474 used_cpu 4128681 mem_bytes 2151427 read_bytes 0 write_bytes 8556 entries 7 writes 4 tx_size 10584 largest_entry 8152 events_bytes 8256 resource_fee 9475267 fee_charged 7162408
+FIT register_frost bn254 8 of 13, key_data 7972 B: cpu_insns 4565175 used_cpu 4338009 mem_bytes 2251745 read_bytes 0 write_bytes 9164 entries 7 writes 4 tx_size 11340 largest_entry 8760 events_bytes 8864 resource_fee 10154204 fee_charged 7676012
+FIT register_frost bn254 8 of 14, key_data 8580 B: cpu_insns 4784452 used_cpu 4548852 mem_bytes 2358143 read_bytes 0 write_bytes 9772 entries 7 writes 4 tx_size 12096 largest_entry 9368 events_bytes 9472 resource_fee 10833139 fee_charged 8189617
+FIT register_frost bn254 8 of 15, key_data 9188 B: cpu_insns 5005314 used_cpu 4761219 mem_bytes 2470621 read_bytes 0 write_bytes 10380 entries 7 writes 4 tx_size 12852 largest_entry 9976 events_bytes 10080 resource_fee 11512079 fee_charged 8703223
+FIT register_frost bn254 8 of 16, key_data 9796 B: cpu_insns 5227752 used_cpu 4975102 mem_bytes 2589179 read_bytes 0 write_bytes 10988 entries 7 writes 4 tx_size 13608 largest_entry 10584 events_bytes 10688 resource_fee 12191016 fee_charged 9216832
+FIT register_frost bn254 9 of 9, key_data 6116 B: cpu_insns 3880722 used_cpu 3679881 mem_bytes 1957099 read_bytes 0 write_bytes 7308 entries 7 writes 4 tx_size 8964 largest_entry 6904 events_bytes 7008 resource_fee 8081267 fee_charged 6107856
+FIT register_frost bn254 9 of 10, key_data 6788 B: cpu_insns 4115033 used_cpu 3905180 mem_bytes 2053531 read_bytes 0 write_bytes 7980 entries 7 writes 4 tx_size 9792 largest_entry 7576 events_bytes 7680 resource_fee 8831623 fee_charged 6675486
+FIT register_frost bn254 9 of 11, key_data 7460 B: cpu_insns 4351269 used_cpu 4132330 mem_bytes 2157355 read_bytes 0 write_bytes 8652 entries 7 writes 4 tx_size 10620 largest_entry 8248 events_bytes 8352 resource_fee 9581984 fee_charged 7243118
+FIT register_frost bn254 9 of 12, key_data 8132 B: cpu_insns 4589423 used_cpu 4361324 mem_bytes 2268571 read_bytes 0 write_bytes 9324 entries 7 writes 4 tx_size 11448 largest_entry 8920 events_bytes 9024 resource_fee 10332339 fee_charged 7810751
+FIT register_frost bn254 9 of 13, key_data 8804 B: cpu_insns 4829502 used_cpu 4592169 mem_bytes 2387179 read_bytes 0 write_bytes 9996 entries 7 writes 4 tx_size 12276 largest_entry 9592 events_bytes 9696 resource_fee 11082699 fee_charged 8378385
+FIT register_frost bn254 9 of 14, key_data 9476 B: cpu_insns 5071501 used_cpu 4824861 mem_bytes 2513179 read_bytes 0 write_bytes 10668 entries 7 writes 4 tx_size 13104 largest_entry 10264 events_bytes 10368 resource_fee 11833064 fee_charged 8946021
+FIT register_frost bn254 9 of 15, key_data 10148 B: cpu_insns 5315424 used_cpu 5059402 mem_bytes 2646571 read_bytes 0 write_bytes 11340 entries 7 writes 4 tx_size 13932 largest_entry 10936 events_bytes 11040 resource_fee 12583429 fee_charged 9513657
+FIT register_frost bn254 9 of 16, key_data 10820 B: cpu_insns 5561265 used_cpu 5295788 mem_bytes 2787355 read_bytes 0 write_bytes 12012 entries 7 writes 4 tx_size 14760 largest_entry 11608 events_bytes 11712 resource_fee 13333796 fee_charged 10081297
+FIT register_frost bn254 10 of 10, key_data 7428 B: cpu_insns 4314911 used_cpu 4097370 mem_bytes 2144431 read_bytes 0 write_bytes 8620 entries 7 writes 4 tx_size 10512 largest_entry 8216 events_bytes 8320 resource_fee 9545851 fee_charged 7215770
+FIT register_frost bn254 10 of 11, key_data 8164 B: cpu_insns 4573192 used_cpu 4345717 mem_bytes 2265265 read_bytes 0 write_bytes 9356 entries 7 writes 4 tx_size 11412 largest_entry 8952 events_bytes 9056 resource_fee 10367635 fee_charged 7837432
+FIT register_frost bn254 10 of 12, key_data 8900 B: cpu_insns 4833768 used_cpu 4596271 mem_bytes 2394931 read_bytes 0 write_bytes 10092 entries 7 writes 4 tx_size 12312 largest_entry 9688 events_bytes 9792 resource_fee 11189418 fee_charged 8459096
+FIT register_frost bn254 10 of 13, key_data 9636 B: cpu_insns 5096642 used_cpu 4849035 mem_bytes 2533429 read_bytes 0 write_bytes 10828 entries 7 writes 4 tx_size 13212 largest_entry 10424 events_bytes 10528 resource_fee 12011206 fee_charged 9080761
+FIT register_frost bn254 10 of 14, key_data 10372 B: cpu_insns 5361811 used_cpu 5104005 mem_bytes 2680759 read_bytes 0 write_bytes 11564 entries 7 writes 4 tx_size 14112 largest_entry 11160 events_bytes 11264 resource_fee 12832992 fee_charged 9702428
+FIT register_frost bn254 10 of 15, key_data 11108 B: cpu_insns 5629277 used_cpu 5361184 mem_bytes 2836921 read_bytes 0 write_bytes 12300 entries 7 writes 4 tx_size 15012 largest_entry 11896 events_bytes 12000 resource_fee 13654783 fee_charged 10324096
+FIT register_frost bn254 10 of 16, key_data 11844 B: cpu_insns 5899039 used_cpu 5620570 mem_bytes 3001915 read_bytes 0 write_bytes 13036 entries 7 writes 4 tx_size 15912 largest_entry 12632 events_bytes 12736 resource_fee 14476574 fee_charged 10945766
+FIT register_frost bn254 11 of 11, key_data 8868 B: cpu_insns 4797130 used_cpu 4561042 mem_bytes 2380919 read_bytes 0 write_bytes 10060 entries 7 writes 4 tx_size 12204 largest_entry 9656 events_bytes 9760 resource_fee 11153288 fee_charged 8431750
+FIT register_frost bn254 11 of 12, key_data 9668 B: cpu_insns 5080509 used_cpu 4833522 mem_bytes 2530507 read_bytes 0 write_bytes 10860 entries 7 writes 4 tx_size 13176 largest_entry 10456 events_bytes 10560 resource_fee 12046497 fee_charged 9107444
+FIT register_frost bn254 11 of 13, key_data 10468 B: cpu_insns 5366595 used_cpu 5108605 mem_bytes 2690495 read_bytes 0 write_bytes 11660 entries 7 writes 4 tx_size 14148 largest_entry 11256 events_bytes 11360 resource_fee 12939706 fee_charged 9783138
+FIT register_frost bn254 11 of 14, key_data 11268 B: cpu_insns 5655383 used_cpu 5386286 mem_bytes 2860883 read_bytes 0 write_bytes 12460 entries 7 writes 4 tx_size 15120 largest_entry 12056 events_bytes 12160 resource_fee 13832923 fee_charged 10458835
+FIT register_frost bn254 11 of 15, key_data 12068 B: cpu_insns 5946877 used_cpu 5666568 mem_bytes 3041671 read_bytes 0 write_bytes 13260 entries 7 writes 4 tx_size 16092 largest_entry 12856 events_bytes 12960 resource_fee 14726139 fee_charged 11134536
+FIT register_frost bn254 11 of 16, key_data 12868 B: cpu_insns 6241072 used_cpu 5949448 mem_bytes 3232859 read_bytes 0 write_bytes 14060 entries 7 writes 4 tx_size 17064 largest_entry 13656 events_bytes 13760 resource_fee 15619356 fee_charged 11810237
+FIT register_frost bn254 12 of 12, key_data 10436 B: cpu_insns 5329644 used_cpu 5073075 mem_bytes 2675299 read_bytes 0 write_bytes 11628 entries 7 writes 4 tx_size 14040 largest_entry 11224 events_bytes 11328 resource_fee 12903581 fee_charged 9755792
+FIT register_frost bn254 12 of 13, key_data 11300 B: cpu_insns 5639359 used_cpu 5370878 mem_bytes 2858377 read_bytes 0 write_bytes 12492 entries 7 writes 4 tx_size 15084 largest_entry 12088 events_bytes 12192 resource_fee 13868216 fee_charged 10485519
+FIT register_frost bn254 12 of 14, key_data 12164 B: cpu_insns 5952216 used_cpu 5671702 mem_bytes 3053551 read_bytes 0 write_bytes 13356 entries 7 writes 4 tx_size 16128 largest_entry 12952 events_bytes 13056 resource_fee 14832851 fee_charged 11215247
+FIT register_frost bn254 12 of 15, key_data 13028 B: cpu_insns 6268219 used_cpu 5975551 mem_bytes 3260821 read_bytes 0 write_bytes 14220 entries 7 writes 4 tx_size 17172 largest_entry 13816 events_bytes 13920 resource_fee 15797498 fee_charged 11944978
+FIT register_frost bn254 12 of 16, key_data 13892 B: cpu_insns 6587365 used_cpu 6282422 mem_bytes 3480187 read_bytes 0 write_bytes 15084 entries 7 writes 4 tx_size 18216 largest_entry 14680 events_bytes 14784 resource_fee 16762141 fee_charged 12674712
+FIT register_frost bn254 13 of 13, key_data 12132 B: cpu_insns 5914935 used_cpu 5635855 mem_bytes 3037075 read_bytes 0 write_bytes 13324 entries 7 writes 4 tx_size 16020 largest_entry 12920 events_bytes 13024 resource_fee 14796726 fee_charged 11187900
+FIT register_frost bn254 13 of 14, key_data 13060 B: cpu_insns 6252310 used_cpu 5960254 mem_bytes 3258763 read_bytes 0 write_bytes 14252 entries 7 writes 4 tx_size 17136 largest_entry 13848 events_bytes 13952 resource_fee 15832789 fee_charged 11971660
+FIT register_frost bn254 13 of 15, key_data 13988 B: cpu_insns 6593306 used_cpu 6288135 mem_bytes 3494371 read_bytes 0 write_bytes 15180 entries 7 writes 4 tx_size 18252 largest_entry 14776 events_bytes 14880 resource_fee 16868862 fee_charged 12755424
+FIT register_frost bn254 13 of 16, key_data 14916 B: cpu_insns 6937918 used_cpu 6619492 mem_bytes 3743899 read_bytes 0 write_bytes 16108 entries 7 writes 4 tx_size 19368 largest_entry 15704 events_bytes 15808 resource_fee 17904929 fee_charged 13539190
+FIT register_frost bn254 14 of 14, key_data 13956 B: cpu_insns 6555666 used_cpu 6251942 mem_bytes 3476519 read_bytes 0 write_bytes 15148 entries 7 writes 4 tx_size 18144 largest_entry 14744 events_bytes 14848 resource_fee 16832728 fee_charged 12728075
+FIT register_frost bn254 14 of 15, key_data 14948 B: cpu_insns 6922136 used_cpu 6604317 mem_bytes 3742321 read_bytes 0 write_bytes 16140 entries 7 writes 4 tx_size 19332 largest_entry 15736 events_bytes 15840 resource_fee 17940226 fee_charged 13565871
+FIT register_frost bn254 14 of 16, key_data 15940 B: cpu_insns 7286559 used_cpu 6954724 mem_bytes 4024099 read_bytes 0 write_bytes 17132 entries 7 writes 4 tx_size 20520 largest_entry 16728 events_bytes 892 resource_fee 18944790 fee_charged 14325834
+EVENT register_frost bn254 14 of 16, key_data 15940 B: emptied, the record byte-equal
+FIT register_frost bn254 15 of 15, key_data 15908 B: cpu_insns 7248554 used_cpu 6918181 mem_bytes 4004775 read_bytes 0 write_bytes 17100 entries 7 writes 4 tx_size 20412 largest_entry 16696 events_bytes 892 resource_fee 18908863 fee_charged 14298642
+EVENT register_frost bn254 15 of 15, key_data 15908 B: emptied, the record byte-equal
+FIT register_frost bn254 15 of 16, key_data 16964 B: cpu_insns 7645149 used_cpu 7299522 mem_bytes 4320579 read_bytes 0 write_bytes 18156 entries 7 writes 4 tx_size 21672 largest_entry 17752 events_bytes 892 resource_fee 20080972 fee_charged 15185318
+EVENT register_frost bn254 15 of 16, key_data 16964 B: emptied, the record byte-equal
+FIT register_frost bn254 16 of 16, key_data 17988 B: cpu_insns 8007998 used_cpu 7648416 mem_bytes 4633443 read_bytes 0 write_bytes 19180 entries 7 writes 4 tx_size 22824 largest_entry 18776 events_bytes 892 resource_fee 21217158 fee_charged 16044804
+EVENT register_frost bn254 16 of 16, key_data 17988 B: emptied, the record byte-equal
+EVENT carried 116, emptied ["14 of 16", "15 of 15", "15 of 16", "16 of 16"]
+EVENT threshold 1 of 1: error Some("HostError: Error(Contract, #2)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDOOKHV4OVDY4554KE7MCTULIAQY3BEX3SBO4OQ2BINWZYUHRPFFN6PF, topics:[er"), results[0].auth None entries
+EVENT threshold 1 of 2: error Some("HostError: Error(Contract, #2)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDOOKHV4OVDY4554KE7MCTULIAQY3BEX3SBO4OQ2BINWZYUHRPFFN6PF, topics:[er"), results[0].auth None entries
+EVENT threshold 1 of 16: error Some("HostError: Error(Contract, #2)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDOOKHV4OVDY4554KE7MCTULIAQY3BEX3SBO4OQ2BINWZYUHRPFFN6PF, topics:[er"), results[0].auth None entries
+ok
+test e2e_ua8_relayer_checked_msig_slot ... COPY evm chain 31981: registry 0xd430a819a80bdad22c929f9d1d85ef636c3fb6be
+COPY evm chain 31982: registry 0xd430a819a80bdad22c929f9d1d85ef636c3fb6be
+deploy.sh soroban local ua_registry: CAI6MRPCQJQBYTH5EI5FCU5G7Z4HNJ2KDFEUXJ72LOZN7JHJDULRMESG
+FIT P5 register the fndsa512 member, relayer mode: cpu_insns 2016312 used_cpu 1893888 mem_bytes 1427348 read_bytes 0 write_bytes 2696 entries 7 writes 4 tx_size 2864 largest_entry 2292 events_bytes 1792 resource_fee 3038792 fee_charged 2293080
+FIT P5 register the mldsa65 member: cpu_insns 4966431 used_cpu 4729394 mem_bytes 1467539 read_bytes 0 write_bytes 8452 entries 7 writes 5 tx_size 6420 largest_entry 5944 events_bytes 2756 resource_fee 9422280 fee_charged 7121991
+FIT P5 register the slhdsa128s member, relayer mode: cpu_insns 2870734 used_cpu 2715448 mem_bytes 1482029 read_bytes 0 write_bytes 9016 entries 7 writes 4 tx_size 9184 largest_entry 8612 events_bytes 924 resource_fee 10039900 fee_charged 7589071
+P5 flipped fndsa512 slot: job dead, reason "simulation: off-chain check refused the record: UAPoP"
+P5 flipped slhdsa128s slot: job dead, reason "simulation: off-chain check refused the record: UAPoP"
+P5 no relayer: job dead, reason "simulation: a part of kind 0x0120 needs a relayer (NotVerifiable): this job names none"
+FIT P5 register_msig fndsa512 + mldsa65 + slhdsa128s slots, relayer mode: cpu_insns 7877468 used_cpu 7504039 mem_bytes 1878110 read_bytes 0 write_bytes 13852 entries 9 writes 4 tx_size 13992 largest_entry 13348 events_bytes 1004 resource_fee 15405400 fee_charged 11648066
+COPY evm 31981 P5 register the fndsa512 member: gas_used 3162565
+COPY evm 31981 cacheExpandedKey P5 mldsa65 member part 0: gas_used 9584240
+COPY evm 31981 cacheExpandedKey P5 mldsa65 member part 1: gas_used 13415133
+COPY evm 31981 P5 register the mldsa65 member: gas_used 7262597
+COPY evm 31981 P5 register the slhdsa128s member: gas_used 2839871
+COPY evm 31981 P5 registerMsig fndsa512 + mldsa65 + slhdsa128s slots: gas_used 11999110
+P5 result: an fndsa512 slot and an slhdsa128s slot signed, passed check_registration, stored marked Relayer on Soroban and verified by EVM; remaining without a positive on a host: group vk slice, BLS slot with pop = false
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 179.82s
+
+== e2e-ua8-local: PASS

@@ -1,0 +1,215 @@
+# m2-ua8 at commit 4702e029 (+ the M2 change)
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/factory/OpenFactory.sol:284:26:
+    |
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/zether/ZetherVerifier.sol:87:28:
+   |
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:233:9:
+    |
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UAGas.t.sol:251:26:
+    |
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistryUA8.t.sol:2659:40:
+     |
+     |                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistryUA8.t.sol:2811:17:
+     |
+     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> src/ua/UAKinds.sol:267:56:
+    |
+    |                                                        ^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> src/ua/UAKinds.sol:281:5:
+    |
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> src/ua/UAKinds.sol:352:58:
+    |
+    |                                                          ^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> src/ua/UAKinds.sol:281:5:
+    |
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:43:14:
+   |
+   |              ^^^^^^^
+Note: The shadowed declaration is here:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:51:10:
+   |
+   |          ^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:142:38:
+    |
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:64:5:
+   |
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:146:38:
+    |
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:64:5:
+   |
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Secp256k1Verifier.sol:14:5:
+   |
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:82:5:
+   |
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> script/DeployBase.sol:339:5:
+    |
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> test/helpers/Catalogue.sol:47:1:
+   |
+   | ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/ua/UARegistryBase.sol:276:5:
+    |
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 80 tests for test/ua/UARegistryUA8.t.sol:UARegistryUA8Test
+[PASS] test_T_GAS_register_ua8PerKind() (gas: 937760546)
+[PASS] test_T_GAS_setKemKey() (gas: 1718031667)
+[PASS] test_T_GAS_storePqzPop() (gas: 1064378387)
+[PASS] test_kemCommitFormRefused() (gas: 643526767)
+[PASS] test_kemHashCommitThenFill() (gas: 858444370)
+[PASS] test_kemKeyAssembledBytes() (gas: 1134284186)
+[PASS] test_kindNameEveryKind() (gas: 4835404)
+[PASS] test_kindNameUnknownReverts() (gas: 373719)
+[PASS] test_msigContractMember1271OverTypedDigest() (gas: 670154920)
+[PASS] test_msigFrontRunSlotDropRefused() (gas: 674706243)
+[PASS] test_msigKemSigNotMinimalRefused() (gas: 1184339757)
+[PASS] test_msigNativeMemberPersonalSignRefused() (gas: 1431607147)
+[PASS] test_msigNativeMemberTypedDigest() (gas: 1973200234)
+[PASS] test_msigOfRoundTrip() (gas: 953671145)
+[PASS] test_msigPopNotMinimalRefused() (gas: 1175350039)
+[PASS] test_msigPqzKeySigNotMinimalRefused() (gas: 1212532145)
+[PASS] test_msigRequireAuthorizedKeepsRule() (gas: 1174802806)
+[PASS] test_registerMsigTypedMembersSameId() (gas: 764362587)
+[PASS] test_registrationArgsFromVectors() (gas: 1216772105)
+[PASS] test_registrationOfUnchangedBytes() (gas: 951175655)
+[PASS] test_setKemKeyNeverOverwrites() (gas: 1146392034)
+[PASS] test_setKemKeyV0WithoutCommitReverts() (gas: 643617894)
+[PASS] test_setKemKeyV0WrongKeyReverts() (gas: 644112564)
+[PASS] test_storePqzPopAfterKemHashCommit() (gas: 841520979)
+[PASS] test_storePqzPopAfterKemHashCommitGen2Host() (gas: 843482440)
+[PASS] test_storePqzPopGen2HostKindFromGen1() (gas: 729125310)
+[PASS] test_ua8_attrsShapeRefused() (gas: 2096973792)
+[PASS] test_ua8_blobChunksRoundTrip() (gas: 341066982)
+[PASS] test_ua8_checkedIsChain() (gas: 866741047)
+[PASS] test_ua8_copyBetweenRegistries() (gas: 1325501431)
+[PASS] test_ua8_copyFromState() (gas: 1219245655)
+[PASS] test_ua8_crossSetGen2ReplacesGen1Key() (gas: 765932621)
+[PASS] test_ua8_crossSetKeyReplaced() (gas: 1367811602)
+[PASS] test_ua8_crossSetRightSetKeyStays() (gas: 1293241227)
+[PASS] test_ua8_disabledKindReverts() (gas: 639486560)
+[PASS] test_ua8_everyKindFromVectors() (gas: 1561540586)
+[PASS] test_ua8_frontRunnerDropsPqzPop() (gas: 680844783)
+[PASS] test_ua8_frontRunnerGetsIdenticalRecord() (gas: 740212928)
+[PASS] test_ua8_gen2ForwardsReads() (gas: 745443785)
+[PASS] test_ua8_gen2PqzKeyWhenGen1HasNone() (gas: 856574462)
+[PASS] test_ua8_gen2ProvesGen1RegisterKey() (gas: 768519396)
+[PASS] test_ua8_gen2RefusesPreUa8Gen1() (gas: 4984272)
+[PASS] test_ua8_gen2RefusesWhenGen1HasPqz() (gas: 1209086692)
+[PASS] test_ua8_gen2RefusesWritesForGen1() (gas: 1263014747)
+[PASS] test_ua8_gen2SetPqzKeyForGen1Record() (gas: 1534141020)
+[PASS] test_ua8_kemBadSigRefused() (gas: 2127627250)
+[PASS] test_ua8_kemCopyBetweenRegistries() (gas: 1768123281)
+[PASS] test_ua8_kemEvent() (gas: 1375218132)
+[PASS] test_ua8_kemGen2RecordElsewhereRefused() (gas: 1390820914)
+[PASS] test_ua8_kemInitialVersionFromRegister() (gas: 1141636113)
+[PASS] test_ua8_kemLengthRefused() (gas: 655413059)
+[PASS] test_ua8_kemLowerVersionAfterHigher() (gas: 669324511)
+[PASS] test_ua8_kemMsigMofN() (gas: 1420145795)
+[PASS] test_ua8_kemNoOwnerCheck() (gas: 669987770)
+[PASS] test_ua8_kemNonHolderRefused() (gas: 676000367)
+[PASS] test_ua8_kemRepeatedVersionRefused() (gas: 652452100)
+[PASS] test_ua8_kemSchemeRefused() (gas: 1421684372)
+[PASS] test_ua8_kemVersionZeroRefused() (gas: 643441864)
+[PASS] test_ua8_largestMsigPopStored() (gas: 330441710)
+[PASS] test_ua8_msigNativeMember7702Portable() (gas: 673067193)
+[PASS] test_ua8_msigPopCanonical() (gas: 1194204272)
+[PASS] test_ua8_msigPqEligibleCopy() (gas: 881805409)
+[PASS] test_ua8_nonHolderAttrsRefused() (gas: 2076511941)
+[PASS] test_ua8_popCoversAttrs() (gas: 1455838032)
+[PASS] test_ua8_pqzPopInRegisterProven() (gas: 732139543)
+[PASS] test_ua8_pqzProveLaterOnVerifierChain() (gas: 925240309)
+[PASS] test_ua8_pqzUnprovenWithoutVerifier() (gas: 731976633)
+[PASS] test_ua8_provenKeyStillUnique() (gas: 773035243)
+[PASS] test_ua8_setKemKeyByThirdParty() (gas: 1134509916)
+[PASS] test_ua8_setPqzKeyCopyFromState() (gas: 1311437648)
+[PASS] test_ua8_setPqzKeyFromVectors() (gas: 2809861217)
+[PASS] test_ua8_setPqzKeyRefused() (gas: 3324299613)
+[PASS] test_ua8_sigOkPortablePurposesOnly() (gas: 75730748)
+[PASS] test_ua8_storePqzPopBadProofReverts() (gas: 677854786)
+[PASS] test_ua8_storePqzPopIdempotent() (gas: 835553137)
+[PASS] test_ua8_storePqzPopNoKemExactMessage() (gas: 722401300)
+[PASS] test_ua8_storePqzPopWrongBytesRefused() (gas: 1621412714)
+[PASS] test_ua8_storesEveryField() (gas: 731771666)
+[PASS] test_ua8_unprovenListingDoesNotBlockOwner() (gas: 768995822)
+[PASS] test_ua8_writeSelectorsPinned() (gas: 298)
+Suite result: ok. 80 passed; 0 failed; 0 skipped; finished in 211.58s (1583.02s CPU time)
+
+Ran 1 test suite in 211.59s (211.58s CPU time): 80 tests passed, 0 failed, 0 skipped (80 total tests)
+rc=0

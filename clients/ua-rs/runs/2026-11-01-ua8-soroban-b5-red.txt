@@ -1,0 +1,42 @@
+# cargo test -j2 --features pq at commit 3022dee7 with the B5 tests, before pq.rs and check_*
+error[E0425]: cannot find function `check_registration` in this scope
+    --> tests/ua8.rs:1114:16
+     |
+1114 |     assert_eq!(check_registration(0x0132, &bytes(&plain["keyData"]), &y, &bytes(&plain["pop"]), &qz, &keys(&p)), Err(UAError::PqzP...
+     |                ^^^^^^^^^^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find function `check_registration` in this scope
+    --> tests/ua8.rs:1116:16
+     |
+1116 |     assert_eq!(check_registration(0x0133, &bytes(&row("slhdsa128s")["keyData"]), &commit, &[], &[], &keys(&p)), Err(UAError::KemHo...
+     |                ^^^^^^^^^^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find function `check_registration` in this scope
+    --> tests/ua8.rs:1145:27
+     |
+1145 |     let res = |r: &Value| check_registration(num(&r["kind"]) as u16, &bytes(&r["keyData"]), &none, &[0; 64], &[], &|_| None);
+     |                           ^^^^^^^^^^^^^^^^^^ not found in this scope
+
+error[E0599]: no variant, associated function, or constant named `Pop` found for enum `scaas_ua::UAError` in the current scope
+    --> tests/ua8.rs:1156:41
+     |
+1156 |         assert_eq!(res(r), Err(UAError::Pop), "{r}");
+     |                                         ^^^ variant, associated function, or constant not found in `scaas_ua::UAError`
+
+error[E0425]: cannot find function `check_registration` in this scope
+    --> tests/ua8.rs:1170:32
+     |
+1170 |         let got = |pop: &[u8]| check_registration(kind, &kd, &UAAttrs::default(), pop, &[], &|_| None);
+     |                                ^^^^^^^^^^^^^^^^^^ not found in this scope
+
+error[E0599]: no variant, associated function, or constant named `Pop` found for enum `scaas_ua::UAError` in the current scope
+    --> tests/ua8.rs:1174:44
+     |
+1174 |         assert_eq!(got(&bad), Err(UAError::Pop), "{}", r["name"]);
+     |                                            ^^^ variant, associated function, or constant not found in `scaas_ua::UAError`
+
+Some errors have detailed explanations: E0425, E0599.
+For more information about an error, try `rustc --explain E0425`.
+error: could not compile `scaas-ua` (test "ua8") due to 61 previous errors
+warning: build failed, waiting for other jobs to finish...
+rc=101

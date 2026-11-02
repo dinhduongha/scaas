@@ -148,6 +148,7 @@ TestCase {
         // the portable.json negatives that are digest-layer rules (as ua-rs / ua-cs)
         let run = 0, sigLevel = 0
         for (const n of pp.negatives) {
+            if (n.rule === "msig-minimal") continue // a registry rule over a full registration (msig minimal form)
             const m = n.mutation, set = m.set ?? {}
             const only = Object.keys(set).every(x => x.startsWith("attrs.") || x === "pqzPop")
             if ((n.entry === "register" || n.entry === "storePqzPop") && only) {
@@ -192,7 +193,7 @@ TestCase {
                 sigLevel++  // signatures / native members: verified by the signature vectors
             }
         }
-        compare(run + sigLevel, pp.negatives.length)
+        compare(run + sigLevel + 1, pp.negatives.length) // + the skipped msig-minimal row
         verify(run > 0 && sigLevel > 0)
         // refusals
         const proof = "0x" + "07".repeat(32), ua = "0x" + "01".repeat(32)

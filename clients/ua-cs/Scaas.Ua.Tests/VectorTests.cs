@@ -509,6 +509,8 @@ public class VectorTests
         int run = 0, sigLevel = 0;
         foreach (var n in p.GetProperty("negatives").EnumerateArray())
         {
+            if (n.TryGetProperty("rule", out var rule) && rule.GetString() == "msig-minimal")
+                continue; // a registry rule over a full registration (msig minimal form), not a digest-layer row
             var entry = n.GetProperty("entry").GetString();
             var name = n.GetProperty("name").GetString();
             var m = n.GetProperty("mutation");
@@ -553,7 +555,7 @@ public class VectorTests
             }
             else sigLevel++; // signatures / native personal_sign / another record's pop: verified by the signature vectors
         }
-        Assert.Equal((57, p.GetProperty("negatives").GetArrayLength() - 57), (run, sigLevel));
+        Assert.Equal((57, p.GetProperty("negatives").GetArrayLength() - 58), (run, sigLevel)); // 58: 57 + the skipped msig-minimal row
         // single-key non-holders refuse a PQZ key
         var u = Enumerable.Repeat((byte)1, 32).ToArray();
         var key = new byte[16384];

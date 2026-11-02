@@ -6,7 +6,7 @@
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check
 #   clients/clientkeys:    npm ci --ignore-scripts; npm test
 #   clients/zether-prover: cargo test; ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke); zether-cli against the tokens (ZetherProverCross)
-#   clients/ua-rs:         cargo test; cargo clippy --all-targets -- -D warnings; the same with --features signers (groups.json signers + regeneration) and --features json (the JSON shim the wrappers call)
+#   clients/ua-rs:         cargo test; cargo clippy --all-targets -- -D warnings; the same with --features signers (groups.json signers + regeneration), --features json (the JSON shim the wrappers call) and --features pq (the off-chain verifier's PQ kinds, ua8::check_*)
 #   clients/ua-py:         python3 -m unittest tests.test_vectors
 #   clients/ua-go:         go vet ./...; go test ./...
 #   clients/ua-cs:         dotnet test Scaas.Ua.Tests
@@ -216,12 +216,16 @@ jobs:
         run: cargo clippy --all-targets --features signers -- -D warnings
       - name: clippy (json)
         run: cargo clippy --all-targets --features json -- -D warnings
+      - name: clippy (pq)
+        run: cargo clippy --all-targets --features pq -- -D warnings
       - name: vectors
         run: cargo test
       - name: groups.json (signers, byte-for-byte regeneration, BIP-327 / RFC 9591 vectors)
         run: cargo test --features signers --test groups
       - name: JSON shim (feature json)
         run: cargo test --features json --test json
+      - name: Off-chain verifier (feature pq; ua8::check_*, UA8-D24)
+        run: cargo test --features pq --test pq --test ua8
 
   ua-cxx:
     runs-on: ubuntu-latest

@@ -699,6 +699,9 @@ func TestHolderRefusals(t *testing.T) {
 	regs := rows(p, "registrations")
 	run, sigLevel := 0, 0
 	for _, n := range rows(p, "negatives") {
+		if n["rule"] == "msig-minimal" {
+			continue // a registry rule over a full registration (msig minimal form), not a digest-layer row
+		}
 		name, entry, want := n["name"], n["entry"], n["error"]
 		m := n["mutation"].(obj)
 		set, _ := m["set"].(obj)
@@ -764,7 +767,7 @@ func TestHolderRefusals(t *testing.T) {
 			sigLevel++ // signatures / native personal_sign / another record's pop: verified by the signature vectors
 		}
 	}
-	if run != 57 || sigLevel != len(rows(p, "negatives"))-57 {
+	if run != 57 || sigLevel != len(rows(p, "negatives"))-58 { // 58: 57 + the skipped msig-minimal row
 		t.Fatalf("negatives %d digest-layer, %d signature-level", run, sigLevel)
 	}
 	u, key, proof := b32(hx(bytes.Repeat([]byte{1}, 32))), make([]byte, 16384), bytes.Repeat([]byte{7}, 32)

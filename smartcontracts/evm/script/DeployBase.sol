@@ -16,6 +16,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {NormalToken} from "../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 import {UARegistry} from "../src/ua/UARegistry.sol";
+import {IUARegistry} from "../src/ua/IUARegistry.sol";
 import {UARegistryLib} from "../src/ua/UARegistryLib.sol";
 import {MtxRelayFee, MtxRelayExecutor} from "../src/metatx/MtxRelayFee.sol";
 import {UAKinds} from "../src/ua/UAKinds.sol";
@@ -310,9 +311,26 @@ abstract contract DeployBase is Script {
         _requireReleaseGas("UARegistry");
         _requireReleaseGas("UARegistryLib");
         reg = new UARegistry{salt: salt}(uid, address(0), isHedera, budget, smartKeyAccountImpl, true, k);
+        _checkGen1Kinds(reg, bls, isHedera);
         _gate(address(reg));
         vm.serializeAddress("deploy", "ua_registry", address(reg));
         vm.serializeAddress("deploy", "ua_registry_lib", address(UARegistryLib));
+    }
+
+    /// @notice The gen-1 kind gate (U8S-D9, owner ruling 2026-10-31, option (a)): every gen-1 deploy carries every kind the
+    ///         chain can run, so when the probe passes EIP-2537 (`bls`) the gen-1 registry `reg` must enable
+    ///         `schnorr-bls12381` 0x0105, `bls12381-minsig` 0x0106 and, except on Hedera (no Zether token can exist there,
+    ///         `ZetherLayer`), `zether-bls12381` 0x0141; otherwise the deploy reverts before anything is sent. No
+    ///         `UARegistry` change. A probe that fails (the RPC refuses the call) requires nothing (`_precompiles`).
+    function _checkGen1Kinds(IUARegistry reg, bool bls, bool isHedera) internal view {
+        require(reg.generation() == 1, "gen-1 registry: not generation 1");
+        if (!bls) return;
+        uint16[3] memory need = [UAKinds.SCHNORR_BLS12381, UAKinds.BLS12381_MINSIG, UAKinds.ZETHER_BLS12381];
+        for (uint256 i; i < (isHedera ? 2 : 3); ++i) {
+            require(reg.kindEnabled(need[i]), string.concat(
+                "gen-1 registry: EIP-2537 kind ", vm.toString(abi.encodePacked(need[i])), " the probe passes is missing"
+            ));
+        }
     }
 
     /// @notice The chain's own verdict on its pairing precompiles (`UAPrecompileProbe`), asked through `eth_call` with

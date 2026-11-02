@@ -79,7 +79,7 @@ revoked (hot, ≤ 2 s) by a `key_custodian` (`POST /v1/admin/keys`, `POST /v1/ad
 submission — job API, gateway door A, mesh scheduler, DEX `mtxSettle` — is a `job` row; mesh `intent` rows reference
 `job_uid` instead of carrying their own lane, outer nonce and tx hash. `job.digest` is **derived by the node** from
 the decoded payload with the mesh digest library ([mesh.md#intent-id](mesh.md#intent-id) per family; Soroban: SHA-256
-of the `HashIdPreimage` the payload carries); a client `digest` that differs ⇒ `422 BAD_PAYLOAD`. A unique
+of the `HashIdPreimage` the payload's named fields rebuild); a client `digest` that differs ⇒ `422 BAD_PAYLOAD`. A unique
 live-digest index (`(chain_key, digest)` over live states; emulated on MySQL) makes G2
 ([README.md#invariants](README.md#invariants)) durable across namespaces and restarts. Two journals would mean two
 `plan()` inputs and two outcome sinks; a client-supplied digest would let one tenant squat another's intent or bypass
@@ -141,9 +141,9 @@ Payload by kind:
 | Kind | Payload |
 |---|---|
 | `metatx` | One named entry: `{op: {entry, contract, token, envelope, args, signature}}` ([named entries](#named-entries)); the node builds the calldata and the typed digest from the one parse. A token transfer or payment keeps its explicit struct: `{token, contract?, signature, struct: "transfer", metatx: {…}}`, the 11 fields of `MetaTransfer` (`entryRef = 0` transfer, else payment, [CTR-MTX-23](../contracts/metatx.md#CTR-MTX-23)); `contract` = `token` \| `zether` \| `pqz` (absent = `token`) names its digest's domain. `uint256` as decimal strings; addresses lowercase. Idempotency and the mesh `intent_id` are the typed digest; one `(from, batch, nonce)` lane space spans every entry and the struct. Hex is refused on every kind (`HEX_DATA_REFUSED`, [NODE-JOB-20](#NODE-JOB-20)). `receiver_fee` on a job is `dead`, never relayed without it: receiver-pays is the entry `mtxPayReceiverFee` ([sponsorship.md#receiver-pays](sponsorship.md#receiver-pays)) |
-| `signed_op` | `{op: {op_kind: "call"\|"transfer", function?, payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"\|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload` (non-EVM `MetaCall`/`MetaTransfer`, [NET-ALL-26](../networks/README.md#NET-ALL-26), or Soroban auth payload); as built `op_kind: "pay"` over `MetaOp` v1 |
+| `signed_op` | `{op: {op_kind: "call"\|"transfer", function?, payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"\|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload` (non-EVM `MetaCall`/`MetaTransfer`, [NET-ALL-26](../networks/README.md#NET-ALL-26)); as built `op_kind: "pay"` over `MetaOp` v1. Soroban names its `payload` and never takes these bytes: [Soroban `signed_op`](#soroban-signed-op) |
 | `call` | A plain entry, no typed struct of its own: `{op: {entry, token, args, validUntil}}` (`token` = the target; `SmartKeyAccountFactory.deploy`, the registry's writes, the DEX's settlement entries, `mtxExecuteAsOwner`), every argument named JSON; the signature, if any, is one of the `args`; entry and target must match the [call table](#call-table); no native value |
-| `ua_metatx` (EVM outbox path **BUILT**, node-ua-jobs 2026-10-30; the rest SPECIFIED; `kind = ua_metatx`) | A `ua*` named entry: `{op: {entry, contract, token, envelope, args, auth}}` with `auth` the `UASig` object `{keyData, signature, members: [{index, keyData, sig}]}` ([named entries](#named-entries)), or a transfer on the UA ledger: `{token, contract?, struct: "transfer", m: WireUAMetaTransfer, auth}` (the address struct's wire fields, `from` / `to` as bytes32; `metatx`, `signature` refused). Same lifecycle as `metatx`; idempotency on `(chain, token, from, batch, nonce)`; digest = the typed digest the node computes. Built: relayed on a registered token whose UA ledger is on (`registry() ≠ 0`, else `FEATURE_UNSUPPORTED`); the kind and registration are the exact call's simulation; a refused simulation is `consumed` when `uaNonce(from, batch)` has passed the nonce. Not built: the record cache ([gateway.md](gateway.md#ua-cache)), mesh `evm.ua_meta_tx`. **Soroban (BUILT, UA-Soroban T9; [NET-SOR-23](../networks/soroban.md#NET-SOR-23)):** `{op: {contract, function, args: "<hex XDR ScVec>" (every argument, `auth` last), auth?: [{payload, from, signature}], valid_until?}}`, no `op.kind`; `op.valid_until` is optional and never read (the signed argument decides, [NET-SOR-15](../networks/soroban.md#NET-SOR-15)); `function` is allow-listed per contract class (token `ua_transfer`, `ua_pay`, `ua_pay_meta`, `ua_burn`, `ua_cancel_nonce`; router `ua_relay`; DEX `settle`, `ua_cancel`; mandate `mtx_set_mandate`, `mtx_set_payee`, `mtx_revoke`, `mtx_withdraw`, `mtx_mandate_pay`) with the exact arity; a lane-bound `relayer` gets one `SourceAccount` entry rooted at the call and any other recorded `SourceAccount` entry fails the job; a payee, destination or mandate delegate that is the router or the executor is refused; a delegate job refused `StaleEpoch` returns the signed and the current epoch, the client re-signs; the digest is recomputed and is the job id; archived entries are restored within `params.max_deposit_per_job` (stroops; absent = none) |
+| `ua_metatx` (EVM outbox path **BUILT**, node-ua-jobs 2026-10-30; Soroban **BUILT**, [its own form](#soroban-ua-metatx-jobs); the rest SPECIFIED; `kind = ua_metatx`) | A `ua*` named entry: `{op: {entry, contract, token, envelope, args, auth}}` with `auth` the `UASig` object `{keyData, signature, members: [{index, keyData, sig}]}` ([named entries](#named-entries)), or a transfer on the UA ledger: `{token, contract?, struct: "transfer", m: WireUAMetaTransfer, auth}` (the address struct's wire fields, `from` / `to` as bytes32; `metatx`, `signature` refused). Same lifecycle as `metatx`; idempotency on `(chain, token, from, batch, nonce)`; digest = the typed digest the node computes. Built: relayed on a registered token whose UA ledger is on (`registry() ≠ 0`, else `FEATURE_UNSUPPORTED`); the kind and registration are the exact call's simulation; a refused simulation is `consumed` when `uaNonce(from, batch)` has passed the nonce. Not built: the record cache ([gateway.md](gateway.md#ua-cache)), mesh `evm.ua_meta_tx`. **Soroban (BUILT, UA-Soroban T9; [NET-SOR-23](../networks/soroban.md#NET-SOR-23)):** `{op: {contract, function, args, auth?, valid_until?}}` by named fields ([Soroban `ua_metatx` jobs](#soroban-ua-metatx-jobs)), no `op.kind`; `op.valid_until` is optional and never read (the signed argument decides, [NET-SOR-15](../networks/soroban.md#NET-SOR-15)); `function` is allow-listed per contract class (token `ua_transfer`, `ua_pay`, `ua_pay_meta`, `ua_burn`, `ua_cancel_nonce`; router `ua_relay`; DEX `settle`, `ua_cancel`; mandate `mtx_set_mandate`, `mtx_set_payee`, `mtx_revoke`, `mtx_withdraw`, `mtx_mandate_pay`) with the exact arity; a lane-bound `relayer` gets one `SourceAccount` entry rooted at the call and any other recorded `SourceAccount` entry fails the job; a payee, destination or mandate delegate that is the router or the executor is refused; a delegate job refused `StaleEpoch` returns the signed and the current epoch, the client re-signs; the digest is recomputed and is the job id; archived entries are restored within `params.max_deposit_per_job` (stroops; absent = none) |
 | `pqz_call` (SPECIFIED; private chain only) | **Direct open calls only**: `{chain, contract, selector ∈ {mtxConfidentialTransfer, mtxUnshield, mtxRollOver}, calldata}` to a configured PQZ token (direct `mtxShield` moves the caller's public units into the pool and `mtxWrapShield` pulls the caller's underlying: neither is a node job; `mtxRollOver` and `mtxPrepareAcc` are allowlisted self-calls too, so a keeper may call them directly or relay them as ordinary `metatx` jobs, owner 2026-10-20); stored like `call`: `digest` NULL, `call_hash` set |
 | PQZ and Zether ops | **No new kind** ([CTR-PQZ-15](../contracts/pq-zero-knowledge.md#CTR-PQZ-15)): every envelope op is a named entry, `metatx` or `ua_metatx`, `contract` = `pqz` or `zether`, the explicit struct as JSON in `args` ([named entries](#named-entries)); `pqzAuth`, `ownerSig` are `UASig` objects in `args`, unsigned by the envelope; outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile |
 
@@ -324,7 +324,7 @@ every other row, `ua*` entries included, is a job of a namespace with the grant.
 | `BAD_PAYLOAD` | a field missing, unknown, or not its type (the path is named) |
 | `MANDATE_LANE` | above |
 | `BAD_SIGNATURE` | above |
-| `CALL_TARGET_REFUSED` / `TOKEN_NOT_SERVED` | the target does not meet the kind's rule ([call table](#call-table)) |
+| `CALL_TARGET_REFUSED` / `TOKEN_NOT_SERVED` | the target does not meet the kind's rule ([call table](#call-table)); `TOKEN_NOT_SERVED` also a Soroban mandate job's `token` ([NET-SOR-29](../networks/soroban.md#NET-SOR-29)) |
 
 ## <a id="intake"></a>6. Intake
 
@@ -435,6 +435,14 @@ The lane scheduler leases queued rows of its chain with `hold = 0` and `lane_hin
 ≤ 10 per round, skipping digests already in flight; after a restart, queued jobs are not leased for
 `lease_hold_after_start_secs` (15 s), so queued cancels land first.
 
+<a id="NODE-JOB-21"></a>**NODE-JOB-21** — **The node's own queue claims by kind: a stopped kind never hides another**
+(owner decision 2026-11-02; SPECIFIED). A kind can be stopped on a lane while others run, today Soroban `call` jobs at
+`breaker.call_budget_pct` of the hour's budget, with a plain `signed_op` that is no token payment. The scheduler leases past a stopped kind inside the store, so its queued rows
+take no slot of the round and the oldest job of a running kind is always reached, however long the backlog. Each namespace has a
+`call` quota (`max_live_call_jobs`, beside `max_live_jobs`; over it `429 QUOTA` at `POST /v1/jobs`), so one namespace's backlog
+of free jobs stays bounded. This is the node's guarantee, not a consumer's: the node is open and any consumer can run it. The
+built legacy pull path has a limit of its own, [NODE-JOB-10](#NODE-JOB-10).
+
 ## 8. Lane pinning
 
 <a id="lane-pinning"></a><a id="NODE-JOB-08"></a>**NODE-JOB-08** — **Relayer-bound jobs are pinned to their lane**: a
@@ -471,6 +479,135 @@ refuses the second.
 
 <a id="NODE-JOB-15"></a>**NODE-JOB-15** (open; default applied) — The namespace created for an ERP client that
 migrates from the legacy pull path gets `allow_call = true` (mandates and subject accounts need it).
+
+<a id="soroban-call-jobs"></a>**Soroban `call` jobs** (UA-8 Part B, `ua8-soroban` B6; BUILT; [NET-SOR-23](../networks/soroban.md#NET-SOR-23),
+[NET-SOR-27](../networks/soroban.md#NET-SOR-27); the owner's explicit-parameter rule of 2026-10-31 replaced the plan's
+`op.extra.call` XDR). The Soroban `call` job has no selector table: its target is the chain's UA registry only, and its
+function one of the registry's eight writes. Payload: `{kind: "call", op: {contract, function, args, valid_until}}`, every
+field required and any other field refused at every level (no XDR, `auth`, `extra` or `payload` can enter).
+
+- `contract`: a `C…` equal to the chain's `params.ua_registry`; unset means every Soroban `call` job is refused.
+- `valid_until`: unix seconds, the transaction's `max_time`; after now and at most 3,600 s later (`MeshParams.max_valid_for_secs`,
+  no `node.toml` knob), else refused.
+- `args`: the contract's own argument names, bytes as `0x…` hex, a `#[contracttype]` struct as an object of its fields, `relayer`
+  null or a `G…`. A number outside what the record's bytes hold is refused at the node (`kind`, `threshold`, `weight`, `index`
+  above 65,535, `scheme` above 255). The names are the contract's, not `portable.json`'s camelCase EVM `args`.
+
+| `function` | `args` |
+|---|---|
+| `register` | `kind, key_data, attrs, pop, pqz_pop, relayer` |
+| `register_msig` | `structure {threshold, members [{kind, id, weight}]}, attrs, pop [{index, key_data, sig}], pqz_pop, relayer` |
+| `register_webauthn` | `key {x, y, rp_id_hash}, attrs, pop, pqz_pop, relayer` |
+| `register_musig2` | `kind, key {agg_key, member_keys}, attrs, pop, pqz_pop, relayer` |
+| `register_frost` | `kind, key {group_key, threshold, members [{commitments, r, z}]}, attrs, pop, pqz_pop, relayer` |
+| `set_kem_key` | `ua, version, kem, sig, relayer` |
+| `set_pqz_key` | `ua, pqz_key, pqz_pop_hash, sig, relayer` |
+| `store_pqz_pop` | `ua, pqz_pop` |
+
+`attrs` is `{pqz_key, pqz_pop_hash, kem, kem_pk_hash}`, `kem` is `{scheme, mlkem_ek, x25519}`, `sig` is `{key_data, signature, members}`.
+
+Rules at `build`: `relayer` must be null or this lane, and this lane only when it is in the registry's `relayers()` (read once
+and kept: the list is immutable); a part the chain cannot verify needs a `relayer` (refused before simulation otherwise) and is
+checked off chain first (`scaas_ua::ua8::check_*`, feature `pq`), a part the chain verifies is not; the transaction carries one
+`SourceAccount` entry (the relayer's attestation over `attest_digest` of the call's arguments) only when a relayer is named; a
+simulation that records any other signer is refused before signing; a finished transaction over `tx_max_size_bytes`, or a largest
+entry over the entry limit, is `Revert`: the job is `dead` on one claim and nothing is signed. A failed `relayers()` read holds
+only the relayer-mode jobs, never payments. The `UA_REGISTER_SPLIT` rule is EVM's; a Soroban job splits a proof off by sending
+`store_pqz_pop` itself. `call` jobs are free to the client, so a job's cost to the lane is bounded by
+`params.max_resource_fee_per_job` ([NET-SOR-29](../networks/soroban.md#NET-SOR-29)) and the spend breaker
+([NET-SOR-14](../networks/soroban.md#NET-SOR-14)); whether they should stay free is an open owner question. `store_pqz_pop` reads
+`pqz_pop_of` first: a proof already stored is `dead`, unsent, since on chain it is a no-op on the lane's fee. A `call` job that carries the call in a field other than `op` is `job without op` and fails closed; consumers
+follow this interface.
+
+<a id="soroban-ua-metatx-jobs"></a>**Soroban `ua_metatx` jobs** (`ua8-soroban` N2; BUILT; [NET-SOR-23](../networks/soroban.md#NET-SOR-23); the
+owner's explicit-parameter rule of 2026-10-31 replaced hex XDR `op.args`). Payload: `{kind: "ua_metatx", op: {contract, function,
+args, auth?, valid_until?}}`, any other field refused. The node builds the `InvokeContractArgs` from `args`, in the contract's
+order, and takes the op digest (the job id), `valid_until` and every check from that one value.
+
+- `args`: every argument by the contract's name, `auth` included, each required, any other refused.
+- <a id="soroban-job-values"></a>Values by contract type: `BytesN<32>` and `Bytes` are `0x…` hex; `i128`, `u128`, `u256` and `i256` decimal strings; `u32` and `i32`
+  numbers; `u64`, `i64`, `Timepoint` and `Duration` a number or a decimal string (a client that cannot write one past 2^53, such as
+  an order `salt`); `bool` a boolean; `Address` a `G…` or `C…`; `Option<Address>` null or an address; `Symbol` and `String` strings;
+  `Holder` `{"Addr": "G…"}` or `{"Ua": "0x…"}`; `UaSig` `{key_data, signature, members}`, as a `call` job's `sig`; `MemberSig` `{index,
+  key_data, sig}`; `Order` `{maker, destination, relayer, sell_token, sell_amount, buy_token, buy_amount, max_fee_ppm, expiry, salt}`.
+- `ua_relay`'s `args` is the relayed call's arguments, whose types the contract does not declare: a list of `{type, value}`, `type` one of
+  the names above, `Vec<Val>` (a list of `{type, value}`), `Map` (a list of `{key, val}`, each a `{type, value}`, in any order; the
+  node sorts it) or `Void` (`value` null). `Error` and the host's ledger-key values are no argument a job can name.
+- `op.auth`: `[{payload, from, signature}]`, a native leg's authorization, `payload` as [below](#soroban-signed-op). A job never names
+  a `SourceAccount` entry; the lane's own entry is the node's. `op.valid_until` is optional and never read: the deadline is the
+  built call's, also after a restart, and the transaction's `max_time` is that deadline capped at `now + 3,600 s`
+  ([NET-SOR-15](../networks/soroban.md#NET-SOR-15)); a deadline already past is `dead`, unsent. `accept_membership` alone names no
+  deadline in its arguments, so there it is required and bounded as a `call` job's.
+- A job on a mandate runs only on a Wasm of `params.mandate_wasm_hashes`, else `MANDATE_WASM_REFUSED`, `dead`, nothing simulated; unset,
+  none runs. Its `token` is a token of the chain's list, else `TOKEN_NOT_SERVED`, `dead`, nothing simulated. Any job's declared resource fee over `params.max_resource_fee_per_job` is `RESOURCE_FEE_OVER_CAP`
+  ([NET-SOR-29](../networks/soroban.md#NET-SOR-29)). A job with no `op.auth` whose simulation records another signer is refused before signing.
+
+| Contract | `function` | `args` |
+|---|---|---|
+| token | `ua_transfer` | `from, to, amount, lane, nonce, valid_until, relayer, auth` |
+| token | `ua_pay` | `from, to, amount, pay_ref, valid_until, relayer, auth` |
+| token | `ua_pay_meta` | `from, to, amount, salt, meta, valid_until, relayer, auth` |
+| token | `ua_burn` | `from, amount, lane, nonce, valid_until, relayer, auth` |
+| token | `ua_cancel_nonce` | `ua, lane, valid_until, auth` |
+| router | `ua_relay` | `payer, target, func, args, salt, token, to, amount, valid_until, relayer, auth` |
+| DEX | `settle` | `maker, taker, maker_fill, maker_auth, taker_auth` |
+| DEX | `ua_cancel` | `order, auth` |
+| mandate | `mtx_set_mandate` | `token, delegate, max_per_payment, max_per_period, period_seconds, expiry, lane, nonce, valid_until, relayer, auth` |
+| mandate | `mtx_set_payee` | `token, payee, allowed, lane, nonce, valid_until, relayer, auth` |
+| mandate | `mtx_revoke` | `token, by, epoch, lane, nonce, valid_until, relayer, auth` |
+| mandate | `mtx_withdraw` | `token, to, amount, lane, nonce, valid_until, relayer, auth` |
+| mandate | `mtx_mandate_pay` | `token, payee, amount, pay_ref, epoch, valid_until, relayer, auth` |
+| registry | `accept_membership` | `ua, member_sig, relayer` |
+
+<a id="soroban-accept-membership"></a>`accept_membership` ([NET-SOR-28](../networks/soroban.md#NET-SOR-28), `ua8-soroban` MA-S; BUILT): a member of an `msig` accepts its
+slot and holds no XLM: the member signs, the lane submits. `contract` must equal `params.ua_registry` (unset: refused); this function
+is a `ua_metatx` so that `op.auth` can carry a `G…` member's entry, which a `call` job cannot, and it is the only `ua_metatx` on the
+registry: a `signed_op` still never runs there, and `call` jobs stay the eight writes. `op.valid_until` is required, after now and at most
+3,600 s later. `member_sig` is the slot: `key_data` `0x`, `sig` the member's signature (`clientkeys`: `acceptMembershipOp`).
+
+| Slot's member | `sig` | `relayer` | `op.auth` |
+|---|---|---|---|
+| `evm-eoa` | ECDSA over the typed digest | null | none |
+| a registered `Chain` kind | under `member` over `memberDigest` | null | none |
+| `G…` | `0x` | null | the member's entry over `(ua, PURPOSE_MEMBERSHIP, typed)` (`clientkeys`: `membershipInvocation`, `signedAuth`) |
+| a relayer-checked kind | as a `Chain` kind | this lane, listed in `relayers()` | none |
+
+Rules at `build`, as a `call` job's: a slot the chain cannot verify needs a `relayer` and passes `scaas_ua::ua8::check_membership` before
+simulation, a refused one is `dead` and nothing is sent; the lane's one entry is over `attest_digest` of `(ua, member_sig, relayer)`; an
+`evm-contract` slot is `NotVerifiable` here, no off-chain check reaches ERC-1271. With no `op.auth`, a simulation that records another
+signer is refused before signing. The job has no op digest (the job's own id), is free to the client and counts in the call share
+(`call_budget_pct`, [NET-SOR-14](../networks/soroban.md#NET-SOR-14)). `build` reads `member_accepted` first: a slot already accepted is `consumed`, nothing simulated or sent, since on chain it is a no-op on the lane's fee. A relayer-checked slot beside a `G…` member is `UAKeyData`, `dead`: see [NET-SOR-28](../networks/soroban.md#NET-SOR-28).
+
+<a id="soroban-signed-op"></a>**Soroban `signed_op`** (`ua8-soroban` N2 review, owner rulings of 2026-11-02; BUILT). Payload: `{kind: "signed_op", op: {payload,
+from, signature, contract, valid_until, kind?, extra?}}`.
+
+- `payload`: `{nonce, expiry, invocation}`, `nonce` the `i64` of the auth entry, `expiry` the `u32` signature expiration ledger, and
+  `invocation` `{contract, function, args: [{type, value}], sub_invocations: [invocation]}`, values as [above](#soroban-job-values). The
+  node rebuilds the auth entry from these fields on its own network id, and the host checks `signature` over what it rebuilt: the
+  account signs `sha256` of that `HashIdPreimage` (`clientkeys`: `authPreimage`, `authDigest`, `signedAuth`). `op.auth[]` and `extra.auth[]` carry
+  the same `{payload, from, signature}`.
+- `signature` stays `0x…` hex, one crypto object: 64 bytes of a `G…` account, or the `ScVal` XDR a `C…` subject's `__check_auth` reads, at
+  most 8,192 B and nested at most 64 XDR levels.
+- `valid_until`: unix seconds, nothing the node reads signs it, so it is required, after now and at most 3,600 s later, as a `call` job's; `0`
+  would be no `max_time` on chain.
+- The call is the invocation the subject signed; no field names it. A `G…` account or a `C…` contract only signs: the lane submits.
+- Contracts: it runs only on a token, a mandate (`params.mandates`, `C…`), the DEX or the router of the chain's `params`, and never on
+  the registry, even one listed there; anything else is `CALL_TARGET_REFUSED`, `dead` on its one claim, nothing sent. A `G…` `msig`
+  member whose signature the registry needs submits that write itself, a `call` job carrying no other signer; its acceptance alone is
+  relayed, as [`accept_membership`](#soroban-accept-membership).
+- Budget: a plain `signed_op` (no `op.kind`; a job with no kind is one) whose root is a token payment, `invocation.function` `pay`,
+  `pay_meta` or `transfer` on a contract of the chain's tokens, runs to all of the hour's budget. The host call is exactly that root,
+  so a client cannot mislabel one, and `build` refuses a job read as one that builds any other call (`CALL_TARGET_REFUSED`, nothing
+  sent). Every other plain `signed_op`, and one that does not parse, counts in the `call` share and stops at
+  `breaker.call_budget_pct`. `ua_metatx` jobs and a `signed_op` with `op.kind` run to all of it.
+- Its relay fee (`op.kind = "relay_fee"`) is built from the signed root, the eight `relay` arguments, with `payer` the signer and
+  `relayer` this lane, so the job carries `payload`, `from`, `signature`, `contract`, `valid_until` and `ref`, and no call of its own. A
+  multi-party DEX `settle` is a `ua_metatx` job, its native legs in `op.auth`.
+
+<a id="soroban-hex-refused"></a>**No blob on any Soroban job.** `op.args` as a string, `op.extra.call` at all, or a string where a job has
+named fields (`payload`, an invocation tree, an `auth`, an order, a holder, a relayed list) is `HEX_ARGS_REFUSED`: the job goes `dead`
+on its one claim and nothing is sent. Only signature bytes stay hex. A value nested past 64 XDR levels is refused the same way, with
+its reason.
 
 ## <a id="call-table"></a>11. Call table
 
@@ -679,13 +816,17 @@ the flag and the client's service methods; the final node refuses the legacy sec
 rejected: the in-flight journal lives in the client, so a hard cut means importing it (a one-off path that can
 double-sign) or a stop-the-world drain (≥ one `valid_until` window per chain, payers re-sign), with no rollback.
 
+Limit of this path: `relay_poll` hands a chain's oldest jobs and clamps `limit` to 50, with no notion of kind. So while Soroban
+`call` jobs are stopped the node reads 50 and skips them, and a backlog over 50 `call` jobs can hide a payment, across windows
+while it lasts. [NODE-JOB-21](#NODE-JOB-21) is the node's own queue, which has no such limit.
+
 Transitional (BUILT). The node pulls work from the client database over the client's JSON-RPC (`POST
 /json/2/<model>/<method>`, `Authorization: Bearer <api key>`, database header), and reports outcomes back:
 
 | Method | Caller key | In | Out / effect |
 |---|---|---|---|
 | `node_config` | relay worker or indexer | `evm_chain_number, relayer_address?` | chain params, finality, `indexed_block`, token `[{address, decimals}]`, `journal_max_nonce` and `inflight` (jobs `nonce_leased/signed/broadcast` of the relayer, with payload) for cold start |
-| `relay_poll` | relay worker | `evm_chain_number, limit` | `queued` jobs with the full meta-tx (struct + signature + token) |
+| `relay_poll` | relay worker | `evm_chain_number, limit` (clamped to 50) | `queued` jobs with the full meta-tx (struct + signature + token), oldest first |
 | `relay_claim` | relay worker | `job_ids, worker` | the ids claimed (CAS `UPDATE … WHERE chain_state='queued' RETURNING id`) |
 | `relay_report` | relay worker | `job_id, chain_state, tx_hash?, outer_nonce?, error?` | transition per the client's allowed-transition table |
 | `chain_event_ingest` | indexer | `evm_chain_number, from_block, to_block, to_block_hash, events[]` | record events + apply effects + advance the cursor, **one transaction** |

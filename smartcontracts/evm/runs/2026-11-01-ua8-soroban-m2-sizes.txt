@@ -1,0 +1,4 @@
+# sizes at commit 4702e029 (+ the M2 change)
+size gate: 0 error(s), 46 contracts
+UARegistry runtime 46768 init 53770
+rc=0

@@ -12,6 +12,8 @@ cd "$W" || exit 2
 R=smartcontracts/evm/runs
 # P, STEPS, FAMILIES, NEW_TESTS: overridable, so 2026-10-30-ua8-gates.sh reuses this runner (same step contract)
 P=${P:-2026-10-27-metatx-split}
+# LOGEXT: the step logs' extension; a runner that keeps its logs out of git sets "log" (git-ignored) and writes a summary
+LOGEXT=${LOGEXT:-txt}
 STEPS=${STEPS-"forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 sizes gen-set docs cargo-zether-prover zether-cross wasm-zether-prover cargo-scaas-node clientkeys ua-rs ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart soroban solana cosmos sui aptos ton near algorand e2e-near e2e-algorand named-tests"}
 FAMILIES=${FAMILIES-"soroban solana cosmos sui aptos ton near algorand e2e-near e2e-algorand"}
 QT=/home/ha/usr/Qt/6.12.0/gcc_64
@@ -44,6 +46,21 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
     node-e2e-anvil) cd scaas-node && ../scripts/capped cargo test -j2 --test e2e -- --ignored --test-threads=1 ;;
     clientkeys) cd clients/clientkeys && ../../scripts/capped npm test ;;
     ua-rs) cd clients/ua-rs && ../../scripts/capped cargo test -j2 ;;
+    summary) make_summary ;;
+    ua-rs-pq) cd clients/ua-rs && ../../scripts/capped cargo test -j2 --features pq ;;
+    soroban-roundtrip-check) CARGO_BUILD_JOBS=2 scripts/capped sh -c 'cd smartcontracts/soroban && cargo test -j2 -p scaas-ua-registry ua8_record_bytes_round_trip' ;;
+    # e2e_ua8 is 10 ignored tests, a full run 688 s (the command limit is 600 s): three filtered runs, each test once
+    # (e2e-ua8-union checks the union); --exact so a filter is a name, never a substring
+    e2e-ua8-1) smartcontracts/soroban/scripts/e2e-ua8-local.sh --exact e2e_ua8_tx_size_limit e2e_ua8_copy_evm_soroban_evm e2e_ua8_simulation_auth_mode e2e_ua8_unused_source_account_entry e2e_ua8_spend_stop ;;
+    e2e-ua8-2) smartcontracts/soroban/scripts/e2e-ua8-local.sh --exact e2e_ua8_frost_every_size e2e_ua8_relayer_checked_msig_slot ;;
+    e2e-ua8-3) smartcontracts/soroban/scripts/e2e-ua8-local.sh --exact e2e_ua8_attestation_binds e2e_ua8_network_fit e2e_ua8_relayer_table ;;
+    e2e-ua8-union) # the 10 ignored tests of e2e_ua8 = the 10 that ran, each once across the three step logs
+      cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_ua8 -- --ignored --list | sed -n 's/^\(e2e_ua8_[a-z0-9_]*\): test$/\1/p' | sort > "${TMPDIR:-/tmp}/ua8.list" || return 1
+      cd "$W" || return 1
+      cat $R/$P-e2e-ua8-[123].${LOGEXT} | sed -n 's/^test \(e2e_ua8_[a-z0-9_]*\) \.\.\. .*/\1/p' | sort > "${TMPDIR:-/tmp}/ua8.ran"
+      echo "listed $(wc -l < "${TMPDIR:-/tmp}/ua8.list"), started $(wc -l < "${TMPDIR:-/tmp}/ua8.ran")"
+      [ "$(wc -l < "${TMPDIR:-/tmp}/ua8.list")" -eq 10 ] && cmp "${TMPDIR:-/tmp}/ua8.list" "${TMPDIR:-/tmp}/ua8.ran" &&
+        [ "$(cat $R/$P-e2e-ua8-[123].${LOGEXT} | grep -c '^test result: ok. [0-9]* passed; 0 failed')" -eq 3 ] ;;
     ua-rs-signers) cd clients/ua-rs && ../../scripts/capped cargo test -j2 --features signers ;;
     ua-rs-json) cd clients/ua-rs && ../../scripts/capped sh -c 'cargo clippy -j2 --all-targets --features json -- -D warnings && cargo test -j2 --features json' ;;
     vectors-check) # typed-signing PG: each generator twice, the committed vector files must not move; groups.json = ua-rs write_groups_json
@@ -782,21 +799,21 @@ named_tests() { # every new test passed; no family log with 0 passed, a skipped 
     p != "" && /^(ok|FAILED|ignored)/ { print p $0; p = "" }' "$1"; }
   while IFS='|' read -r step form name; do
     case $form in
-      forge) cat "$D/$P"-forge-*.txt "$D/$P-zether-cross.txt" 2>/dev/null | grep -qF "[PASS] $name(" ;;
+      forge) cat "$D/$P"-forge-*.${LOGEXT} "$D/$P-zether-cross.${LOGEXT}" 2>/dev/null | grep -qF "[PASS] $name(" ;;
       cargo) re="^test ([^ ]+::)?${name//::/::([^ ]+::)?}( - should panic)?" # a #[should_panic] test prints the suffix
-        f=$(cnorm "$D/$P-$step.txt" 2>/dev/null)
+        f=$(cnorm "$D/$P-$step.${LOGEXT}" 2>/dev/null)
         ! grep -qE "$re \.\.\. ignored(, .*)?$" <<< "$f" && grep -qE "$re \.\.\. ok$" <<< "$f" ;;
-      move) grep -qE "\[ PASS +\] [^ ]*::${name}\$" "$D/$P-$step.txt" 2>/dev/null ;;
-      jest) norm "$D/$P-$step.txt" 2>/dev/null | grep -qxF "✓ $name" ;;
-      node) norm "$D/$P-$step.txt" 2>/dev/null | grep -qxF "✔ $name" ;;
-      qt) grep -qE "PASS +: ([A-Za-z_]+::)+${name}\(\)" "$D/$P-$step.txt" 2>/dev/null ;;
-      pytest) grep -qE "^PASSED tests/${name}(\[[^ ]*\])?\$" "$D/$P-$step.txt" 2>/dev/null ;;
-      go) grep -qE "^--- PASS: ${name} \\(" "$D/$P-$step.txt" 2>/dev/null ;;
-      cs) grep -qE "^ *Passed ([A-Za-z0-9_]+\\.)*${name} \\[" "$D/$P-$step.txt" 2>/dev/null ;;
-      ctest) grep -qE "Test +#[0-9]+: ${name} \\.+ +Passed" "$D/$P-$step.txt" 2>/dev/null ;;
+      move) grep -qE "\[ PASS +\] [^ ]*::${name}\$" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
+      jest) norm "$D/$P-$step.${LOGEXT}" 2>/dev/null | grep -qxF "✓ $name" ;;
+      node) norm "$D/$P-$step.${LOGEXT}" 2>/dev/null | grep -qxF "✔ $name" ;;
+      qt) grep -qE "PASS +: ([A-Za-z_]+::)+${name}\(\)" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
+      pytest) grep -qE "^PASSED tests/${name}(\[[^ ]*\])?\$" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
+      go) grep -qE "^--- PASS: ${name} \\(" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
+      cs) grep -qE "^ *Passed ([A-Za-z0-9_]+\\.)*${name} \\[" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
+      ctest) grep -qE "Test +#[0-9]+: ${name} \\.+ +Passed" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
       # dart: the expanded reporter prints a name when its test STARTS; it passed only if the next progress line has
       # "+" one higher and the same "~skipped -failed" tail. Every occurrence (vm, -p node, dart run) must pass.
-      dart) sed -E 's/\x1b\[[0-9;]*m//g' "$D/$P-$step.txt" 2>/dev/null | awk -v n="$name" '
+      dart) sed -E 's/\x1b\[[0-9;]*m//g' "$D/$P-$step.${LOGEXT}" 2>/dev/null | awk -v n="$name" '
           match($0, /^[0-9:]+ \+[0-9]+( [-~][0-9]+)*: /) {
             t = substr($0, RLENGTH + 1); sub(/^[^ ]+\.dart: /, "", t)
             a = substr($0, 1, RLENGTH - 2); sub(/^[0-9:]+ \+/, "", a); x = a; sub(/^[0-9]+/, "", x); sub(/ .*/, "", a)
@@ -804,11 +821,11 @@ named_tests() { # every new test passed; no family log with 0 passed, a skipped 
             if (t == n) { p = 1; pa = a; px = x; seen++ } }
           END { exit !(seen > 0 && ok == seen) }' ;;
       # a test with a docstring prints its name, then "<docstring> ... ok" on the next line
-      unittest) grep -A1 -E "^${name} \(.*\)( \.\.\. ok)?\$" "$D/$P-$step.txt" 2>/dev/null | grep -qE " \.\.\. ok\$" ;;
+      unittest) grep -A1 -E "^${name} \(.*\)( \.\.\. ok)?\$" "$D/$P-$step.${LOGEXT}" 2>/dev/null | grep -qE " \.\.\. ok\$" ;;
     esac || { echo "named-tests: not passed in $step: $name"; miss=$((miss + 1)); }
   done <<< "$NEW_TESTS"
   for s in $FAMILIES; do
-    f=$D/$P-$s.txt
+    f=$D/$P-$s.${LOGEXT}
     [ -f "$f" ] || { echo "named-tests: no log for $s"; miss=$((miss + 1)); continue; }
     # cargo: a crate's doc-test or a test-less binary prints "0 passed"; only those lines are allowed
     n=$(awk '/^ *Doc-tests /{d=1} /^ *Running /{d=0} /^running 0 tests$/{z=1}
@@ -823,8 +840,42 @@ named_tests() { # every new test passed; no family log with 0 passed, a skipped 
   [ $miss -eq 0 ]
 }
 
+# <prefix>-summary.txt: one row per step "step | commit | rc | counts" from the logs, then the short result lines; the repo root
+# is stripped and any /home path left fails the step (owner 2026-11-02: no compiler / test output in git)
+make_summary() {
+  local out=$R/$P-summary.txt s f c rc n
+  { echo "# $P at commit $(git rev-parse --short HEAD)"; echo "step | commit | rc | counts"
+    for s in $STEPS; do
+      [ "$s" = summary ] && continue
+      f=$R/$P-$s.$LOGEXT
+      if [ ! -f "$f" ]; then echo "$s | - | missing | -"; continue; fi
+      c=$(head -n1 "$f" | sed -n 's/^# .* at commit //p'); rc=$(tail -n1 "$f" | sed -n 's/^rc=//p')
+      n=$(sed -E 's/\x1b\[[0-9;]*m//g' "$f" | awk '
+        /^test result: .* [0-9]+ passed;/ { for (i = 1; i <= NF; i++) { if ($(i+1) ~ /^passed/) p += $i; if ($(i+1) ~ /^failed/) fl += $i; if ($(i+1) ~ /^ignored/) ig += $i } }
+        /\[PASS\]/ { fp++ } /\[FAIL/ { ff++ }
+        /^ℹ pass / { np = $3 } /^ℹ fail / { nf = $3 }
+        /^--- PASS:/ { gp++ } /^Ran [0-9]+ tests? in/ { py += $2 }
+        /Passed [A-Za-z]/ { cs++ } /Test +#[0-9]+: .* Passed/ { ct++ } /PASS +: / { qt++ }
+        END { o = ""
+          if (p + fl) o = o p " passed " fl " failed " ig " ignored (cargo) "
+          if (fp + ff) o = o fp " passed " ff " failed (forge) "
+          if (np + nf) o = o np " passed " nf " failed (node) "
+          if (gp) o = o gp " passed (go) "; if (py) o = o py " ran (unittest) "
+          if (cs) o = o cs " passed (dotnet) "; if (ct) o = o ct " passed (ctest) "; if (qt) o = o qt " passed (qt) "
+          print (o == "" ? "-" : o) }')
+      echo "$s | $c | $rc | $n"
+    done
+    echo; echo "# result lines"
+    for s in $STEPS; do
+      f=$R/$P-$s.$LOGEXT; [ -f "$f" ] && [ "$s" != summary ] || continue
+      sed -E 's/\x1b\[[0-9;]*m//g' "$f" | grep -aE '^(test result: |Suite result: |Ran [0-9]+ test suites|named-tests: |listed [0-9]+, started|e2e-ua8-local: PASS|== e2e-ua8-local: [0-9a-f]+)' | cut -c1-200 | sed "s|^|$s: |"
+    done; } | sed "s|$W/||g" > "$out"
+  if grep -n '/home' "$out"; then echo "summary: an absolute /home path is left in $out"; return 1; fi
+  echo "summary: $(grep -c ' | ' "$out") rows -> $out"
+}
+
 done_at_head() { # log ends rc=0, first line names HEAD, tree clean apart from the logs
-  L=$R/$P-$1.txt
+  L=$R/$P-$1.${LOGEXT}
   [ -f "$L" ] && [ "$(tail -n1 "$L")" = "rc=0" ] && [ "$(head -n1 "$L")" = "# $1 at commit $(git rev-parse --short HEAD)" ] &&
     [ -z "$(git status --porcelain -- . ":(exclude)$R")" ]
 }
@@ -841,7 +892,7 @@ fail=0
 for s in $STEPS; do
   [ -z "$only" ] || [ "$s" = "$only" ] || continue
   if [ -z "$GATES_FRESH" ] && done_at_head "$s"; then echo "skip $s (rc=0 at $(git rev-parse --short HEAD))"; continue; fi
-  L=$R/$P-$s.txt
+  L=$R/$P-$s.${LOGEXT}
   echo "run  $s"
   { echo "# $s at commit $(git rev-parse --short HEAD)"; (run_step "$s") 2>&1; echo "rc=$?"; } > "$L.tmp" 2>&1
   mv "$L.tmp" "$L"   # named-tests reads $R; the step's own log appears only when the step is done

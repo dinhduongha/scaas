@@ -22,11 +22,12 @@ pub struct Breaker {
     spent: u128,
     budget_warned: bool,
     balance: Option<u128>,
+    fees_unread: u64,
 }
 
 impl Breaker {
     pub fn new(cfg: BreakerCfg) -> Self {
-        Self { cfg, fees: VecDeque::new(), spiking: false, window: 0, spent: 0, budget_warned: false, balance: None }
+        Self { cfg, fees: VecDeque::new(), spiking: false, window: 0, spent: 0, budget_warned: false, balance: None, fees_unread: 0 }
     }
 
     /// Mẫu `baseFeePerGas` (EVM). So với trung bình 1 h của các mẫu TRƯỚC nó.
@@ -52,7 +53,7 @@ impl Breaker {
         }
     }
 
-    /// Phí thực trả của một tx đã vào khối (gas_used × effective_gas_price), cửa sổ giờ cố định.
+    /// Phí thực trả của một tx đã vào sổ, mined hay reverted (NODE-LANE-13), cửa sổ giờ cố định.
     pub fn spend(&mut self, now: u64, amount: u128) {
         self.roll(now);
         self.spent = self.spent.saturating_add(amount);
@@ -62,6 +63,26 @@ impl Breaker {
                 warn!(spent = %self.spent, budget = %b, "gas budget of this hour at 90 %");
             }
         }
+    }
+
+    /// A landed tx whose fee could not be read: the budget misses it, so it is counted (`scaas_fee_unread_total`).
+    pub fn fee_unread(&mut self) {
+        self.fees_unread += 1;
+    }
+
+    pub fn fees_unread(&self) -> u64 {
+        self.fees_unread
+    }
+
+    /// Spent in the current window, as of the last `spend`.
+    pub fn spent(&self) -> u128 {
+        self.spent
+    }
+
+    /// The next read falls in a new window.
+    #[cfg(test)]
+    pub fn rewind(&mut self) {
+        self.window = 0;
     }
 
     /// Số dư coin gas của lane. Dưới 120 % sàn ⇒ cảnh báo (R1-1); dưới sàn ⇒ lane ngưng nhận việc.
@@ -89,6 +110,12 @@ impl Breaker {
         [self.spiking, budget, floor]
     }
 
+    /// The jobs of the `call` share (`ChainAdapter::in_call_share`) stop here, at `call_budget_pct` of the hour's budget; all others run to `gas_budget`.
+    pub fn calls_stopped(&mut self, now: u64) -> bool {
+        self.roll(now);
+        self.cfg.gas_budget_per_hour.is_some_and(|b| self.spent.saturating_mul(100) >= b.saturating_mul(self.cfg.call_budget_pct.into()))
+    }
+
     /// Tên cầu dao đầu tiên đang mở, hoặc `None` = được nhận việc mới.
     pub fn open(&mut self, now: u64) -> Option<&'static str> {
         self.states(now).iter().zip(NAMES).find(|(on, _)| **on).map(|(_, n)| n)
@@ -100,7 +127,7 @@ mod tests {
     use super::*;
 
     fn b(spike: f64, budget: Option<u128>, floor: Option<u128>) -> Breaker {
-        Breaker::new(BreakerCfg { spike_ratio: spike, spike_min_base_fee_gwei: 0, gas_budget_per_hour: budget, min_relayer_balance: floor })
+        Breaker::new(BreakerCfg { spike_ratio: spike, spike_min_base_fee_gwei: 0, gas_budget_per_hour: budget, min_relayer_balance: floor, ..BreakerCfg::default() })
     }
 
     #[test]

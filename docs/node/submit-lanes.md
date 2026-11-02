@@ -347,12 +347,19 @@ never indexing, tracking or replacing signed transactions, rescues or gap-filler
 | Breaker | Rule | Defaults |
 |---|---|---|
 | `base_fee_spike` (EVM) | current `baseFeePerGas` > `spike_ratio` × 1 h trailing mean, with ≥ 4 samples and fee > `spike_min_base_fee_gwei`; reopens when back below | ratio 3.0 (0 disables), min 1 gwei |
-| `gas_budget` | gas spent in the fixed hour window ≥ `gas_budget_per_hour` (smallest gas-coin unit, per lane × chain); metered per [NODE-LANE-13](#NODE-LANE-13) | warn (log + metric) at 90 %; stop new work until the window ends at 100 % |
-| `balance_floor` | lane balance < `min_relayer_balance` ⇒ that lane takes no new job | warn below 120 % of the floor |
+| `gas_budget` | gas spent in the fixed hour window ≥ `gas_budget_per_hour` (smallest gas-coin unit, per lane × chain); metered per [NODE-LANE-13](#NODE-LANE-13) | warn (log + metric) at 90 %; stop new work until the window ends at 100 %; Soroban `call` jobs and a plain `signed_op` that is no token payment stop at `call_budget_pct`, default 50 %, everything else runs on ([NET-SOR-14](../networks/soroban.md#NET-SOR-14)) |
+| `balance_floor` | balance of the account that pays the lane's fee < `min_relayer_balance` ⇒ that lane takes no new job | warn below 120 % of the floor |
 | structural | simulated gas (regular + state) > `max_gas_per_tx` or > the block gas limit ⇒ job `dead` ([Amsterdam gas](#amsterdam-gas)) | 3 000 000 (classical Zether chains ≥ 4 500 000, multi-recipient Zether ≥ 40 000 000; SCaaS testnet 64 000 000; [NODE-STO-10](store.md#NODE-STO-10)) |
 | `revert_streak` (chain) | ≥ 3 post-simulation reverts of class `other` in 15 min | [NODE-OPS-06](ops.md#NODE-OPS-06), latched |
 
-Non-EVM families use budget + balance floor (no EIP-1559 base fee). The SCaaS testnet (chain id 7622, formerly 9000) is a
+A stopped kind never hides another: the node's own queue claims by kind, with a per-namespace `call` quota
+([NODE-JOB-21](job-api.md#NODE-JOB-21), SPECIFIED); on the built legacy pull path a backlog over 50 `call` jobs can hide a
+payment across windows, a limit of that path ([NODE-JOB-10](job-api.md#NODE-JOB-10)).
+
+Non-EVM families use budget + balance floor (no EIP-1559 base fee). A job a lane puts back to the queue, for any reason, backs
+the lane off (1 s doubling to 60 s): the queue is oldest first, so without it the lane would loop on that job at RPC speed. A
+refusal for good is not put back (Soroban `txSOROBAN_INVALID`, `dead` on one claim): the queue is per chain, so that job would
+hold every lane and every job behind it. The SCaaS testnet (chain id 7622, formerly 9000) is a
 Clique chain with EIP-1559 from genesis (`eip1559Transition` 0, genesis `baseFeePerGas` 0; the base fee stays at 0 or
 a few wei while blocks stay under their target, and Nethermind's minimum gas price is 1 wei), so `base_fee_spike`
 applies but rarely trips; the node never assumes a zero gas price there (fees from `eth_feeHistory`, ≥ 1 wei). Metric `scaas_breaker_open{chain,lane,breaker}`;
@@ -381,9 +388,15 @@ moved out of the lane beyond fees, net of excess observed coming back (GRAM forw
 `deposits` = rent or storage the lane funded (Solana account rent, Sui storage net of rebate, Aptos storage fee,
 Soroban rent, NEAR storage stake attached as deposit, Algorand MBR payments). So `Breaker::spend(fee + value_out + deposits)`; adapter method `tx_cost(tx_id) → TxCost`
 (`tx_cost(tx_id) -> Option<TxCost { fee, value_out, deposits }>`) for every landed
-terminal status; the three are `outer_tx` cost fields. Status: the EVM path meters every receipt (**BUILT**); the
-generic runner metering every terminal status is **SPECIFIED**. Under attack the hourly budget trips earlier, as
-intended.
+terminal status; the three are `outer_tx` cost fields. Status: the EVM path meters every receipt (**BUILT**). The generic
+runner's `fee` is **BUILT** (ua8-soroban B9a): `follow` feeds `Breaker::spend` with `tx_fee` once per landed transaction, for
+`Mined` and for `Reverted`, on every family that reports one (Solana, Aptos, NEAR and Soroban charge a failure and answer
+what they charged; Algorand answers `None` at a pool error because that group paid nothing; Hedera, Sui, Cosmos and TON
+report no fee yet), so a lane burned by failing jobs stops. A failure a family answers as `Rejected` although it landed and
+paid (Solana `classify_landed`, Aptos out of gas) goes back to the queue unmetered. A fee that cannot be read is a `warn!` and the counter
+`scaas_fee_unread_total{chain,lane}`, not a guess. `value_out` and `deposits` through the generic runner are still
+**SPECIFIED**. A restart resets the window, and `recover_lane` follows a recovered transaction without the breaker, so a fee
+landed across a restart is not metered. Under attack the hourly budget trips earlier, as intended.
 
 <a id="retries"></a><a id="NODE-LANE-14"></a>**NODE-LANE-14** — **A billed failure is retried at most once; every job
 has an attempt cap.** Adapters classify each outcome as **not included** (precheck, CheckTx or mempool reject,

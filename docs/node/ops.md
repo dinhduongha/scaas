@@ -207,8 +207,9 @@ Existing (BUILT, `admin.rs` `render()`, `submit.rs`; first-release forms `scaas_
 | `scaas_relay_jobs` | gauge | `chain`, `state` (incl. `dead`) | from the legacy client today; from the store with `namespace` once jobs run from the store |
 | `scaas_payment_requests_attention`, `scaas_drift_alerts` | gauge | `chain` | legacy; leave the node |
 | `scaas_indexer_lag_blocks` | gauge | `chain` | final head − indexed block |
-| `scaas_relayer_balance` | gauge | `chain`, `lane` | smallest gas-coin unit |
+| `scaas_relayer_balance` | gauge | `chain`, `lane` | smallest gas-coin unit; the account that pays, so on a chain with `fee_bump_lane` every lane reports the fee account |
 | `scaas_breaker_open` | gauge | `chain`, `lane`, `breaker` | + `revert_streak`, reported on every lane of the chain |
+| `scaas_fee_unread_total` | counter | `chain`, `lane` | landed transactions (mined or reverted) whose fee `tx_fee` could not read, so the gas budget missed that fee; each is also a warning in the log naming the job. BUILT (ua8-soroban B9a) |
 | `scaas_submit_bump_skipped_consumed_total` | counter | none today; `chain`, `lane` added with the metrics core | consumption check |
 | `scaas_config_toml_drift` | gauge | — | [NODE-STO-03](store.md#NODE-STO-03) |
 
@@ -396,7 +397,7 @@ reversible lever instead of suspending a namespace or pausing a token. Empty by 
 
 <a id="alerts"></a>Rule file `scaas/ops/prometheus/scaas-rules.yml` (recommended). Every alert carries `severity` and
 `runbook` (anchor in [runbooks.md#incidents](runbooks.md#incidents)). `$STORE_MOUNT` is the filesystem holding the
-store (set per deployment).
+store and `$FEE_BUMP_CHAINS` a regex of the chains that set `params.fee_bump_lane`, empty when none (both set per deployment).
 
 ```yaml
 groups:
@@ -425,8 +426,15 @@ groups:
   - {alert: ScaasChainNoLaneAvailable, expr: 'min by (chain) (max by (chain, lane) (scaas_breaker_open)) == 1', for: 5m, labels: {severity: P1, runbook: rb-02-breaker-open}}
   - alert: ScaasLaneRunwayCritical
     expr: |
-      (scaas_relayer_balance - on (chain, lane) scaas_relayer_balance_floor)
+      (scaas_relayer_balance{chain!~"$FEE_BUMP_CHAINS"} - on (chain, lane) scaas_relayer_balance_floor)
         / on (chain, lane) clamp_min(rate(scaas_lane_cost_native_total[1h]), 1e-30) < 3600
+    for: 5m
+    labels: {severity: P1, runbook: rb-14-runway}
+  # $FEE_BUMP_CHAINS, chains with `fee_bump_lane`: every lane reports the one fee account, whose runway is over all its lanes' burn
+  - alert: ScaasFeeAccountRunwayCritical
+    expr: |
+      (max by (chain) (scaas_relayer_balance{chain=~"$FEE_BUMP_CHAINS"}) - max by (chain) (scaas_relayer_balance_floor))
+        / on (chain) clamp_min(sum by (chain) (rate(scaas_lane_cost_native_total[1h])), 1e-30) < 3600
     for: 5m
     labels: {severity: P1, runbook: rb-14-runway}
   - {alert: ScaasFinalityViolated, expr: 'scaas_indexer_finality_violated == 1', labels: {severity: P1, runbook: rb-06-chain-halt-or-finality-violation}}
@@ -454,10 +462,17 @@ groups:
   - {alert: ScaasChainNotReady, expr: '(scaas_chain_ready == 0) unless on (chain) (scaas_chain_state{state=~"paused|halted"} == 1)', for: 10m, labels: {severity: P2, runbook: rb-01-node-down-or-not-ready}}
   - {alert: ScaasLaneHeadStuck, expr: 'scaas_lane_head_stuck_seconds > 300', labels: {severity: P2, runbook: rb-03-stuck-lane}}
   - {alert: ScaasFeeCapReached, expr: 'increase(scaas_submit_fee_cap_reached_total[15m]) > 0', labels: {severity: P2, runbook: rb-03-stuck-lane}}
+  - {alert: ScaasFeeUnread, expr: 'increase(scaas_fee_unread_total[15m]) > 0', labels: {severity: P2, runbook: rb-02-breaker-open}}
   - alert: ScaasLaneRunwayLow
     expr: |
-      (scaas_relayer_balance - on (chain, lane) scaas_relayer_balance_floor)
+      (scaas_relayer_balance{chain!~"$FEE_BUMP_CHAINS"} - on (chain, lane) scaas_relayer_balance_floor)
         / on (chain, lane) clamp_min(rate(scaas_lane_cost_native_total[6h]), 1e-30) < 4 * 3600
+    for: 15m
+    labels: {severity: P2, runbook: rb-14-runway}
+  - alert: ScaasFeeAccountRunwayLow
+    expr: |
+      (max by (chain) (scaas_relayer_balance{chain=~"$FEE_BUMP_CHAINS"}) - max by (chain) (scaas_relayer_balance_floor))
+        / on (chain) clamp_min(sum by (chain) (rate(scaas_lane_cost_native_total[6h])), 1e-30) < 4 * 3600
     for: 15m
     labels: {severity: P2, runbook: rb-14-runway}
   - {alert: ScaasBreakerOpen, expr: 'scaas_breaker_open == 1', for: 10m, labels: {severity: P2, runbook: rb-02-breaker-open}}
@@ -613,6 +628,23 @@ month). Conversion to the reporting currency happens only in the report, with an
 `max_live_jobs`.** Jobs are purged after 30 d, Prometheus retention is short, and `~gateway`/`~mesh` costs are booked by
 no client, so the rollup is needed; cost: one small upsert per terminal job.
 
+**Soroban spend limits are mandatory** ([NET-SOR-14](../networks/soroban.md#NET-SOR-14); controller call under the owner's
+ruling of 2026-11-01, owner may override; **BUILT**, ua8-soroban B9a). A `soroban` chain with `modules.submit` on does not
+start unless `[chains.breaker]` sets both `gas_budget_per_hour` and `min_relayer_balance` above 0 and `params` sets
+`max_resource_fee_per_job` above 0 ([NET-SOR-29](../networks/soroban.md#NET-SOR-29), owner 2026-11-02; stroops; the error names
+the chain). Why a refusal and not a default: a job is free to the client and its fee is the lane's, the amount is a money
+decision for the operator's finance owner, and a default would be an XLM figure nobody chose on a family that also serves
+Pi. An indexer-only node (`modules.submit` off) has no lane to limit and needs neither. `node.example.toml` sets 100 XLM an
+hour, a 10 XLM floor and a 12 XLM cap per job on both Soroban chains as a starting point, not as a recommendation. A lane lands at
+most 720 transactions an hour, each at most that cap: the failures measured cost 0.04 to 0.07 XLM, about 50 XLM an hour at that rate, under
+the budget, so set it lower to stop failing jobs inside the hour. The floor compares the account that pays, under a fee bump the fee account alone (owner ruling 2026-11-01). `call`
+jobs and a plain `signed_op` that is no token payment stop at `breaker.call_budget_pct` of the budget (default 50, owner decisions
+2026-11-01 and 2026-11-02) and everything else runs to all of it, free `ua_metatx` jobs included, so those can stop a payment until the
+window ends. `ua_metatx` on a mandate needs `params.mandate_wasm_hashes` (unset, none runs) and names a registered token. A landed failure counts against
+the budget (`FAILED` Soroban transactions are billed): the breaker opens at the budget and no later job is claimed, while a
+job in flight is still followed to its report. When `tx_fee` cannot read a landed transaction's fee, the budget misses it:
+that is a warning in the log and `scaas_fee_unread_total{chain,lane}`, never a guessed fee, and `ScaasFeeUnread` alerts on an increase.
+
 Measurement:
 
 | What | Where | Unit |
@@ -650,7 +682,7 @@ Budget alarms:
 | Budget | Owner | Alarm | Enforcement |
 |---|---|---|---|
 | Lane gas per hour (`gas_budget_per_hour`) | node operator's finance owner | `ScaasBreakerOpen` (`gas_budget`) | breaker (BUILT) |
-| Lane float / runway | node operator | `ScaasLaneRunwayLow` (< 4 h), `…Critical` (< 1 h) | `balance_floor` breaker |
+| Lane float / runway | node operator | `ScaasLaneRunwayLow` (< 4 h), `…Critical` (< 1 h); `ScaasFeeAccountRunwayLow`, `…Critical` on a chain with `fee_bump_lane` | `balance_floor` breaker |
 | Sponsor daily budget | sponsor account owner | `ScaasSponsorBudgetLow` (< 20 %), `…Exhausted` | sponsor budgets |
 | Namespace monthly cost | tenant's finance owner | `ScaasNamespaceBudget90` | none (report + `max_live_jobs`) |
 

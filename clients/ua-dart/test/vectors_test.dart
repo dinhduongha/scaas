@@ -501,6 +501,7 @@ void main() {
   test('holder refusals', () {
     var run = 0, sigLevel = 0;
     for (final n in (p['negatives'] as List).cast<Map>()) {
+      if (n['rule'] == 'msig-minimal') continue; // a registry rule over a full registration (msig minimal form)
       final entry = n['entry'], name = n['name'], err = n['error'];
       final m = n['mutation'] as Map, set = (m['set'] ?? <String, Object?>{}) as Map;
       if ((entry == 'register' || entry == 'storePqzPop') && set.keys.every((k) => (k as String).startsWith('attrs.') || k == 'pqzPop')) {
@@ -543,7 +544,7 @@ void main() {
         sigLevel++; // signatures / native personal_sign / another record's pop: verified by the signature vectors
       }
     }
-    expect([run, sigLevel], [57, (p['negatives'] as List).length - 57]);
+    expect([run, sigLevel], [57, (p['negatives'] as List).length - 58]); // 58: 57 + the skipped msig-minimal row
     final u = Uint8List.fromList(List.filled(32, 1)), key = Uint8List(16384), proof = Uint8List.fromList(List.filled(32, 7));
     // malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
     for (final kd in [Uint8List.fromList([0, 2, 0]), Uint8List.fromList([0, 2, 0, 2, 9, 9])]) {

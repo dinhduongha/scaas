@@ -4,12 +4,12 @@ use std::{vec, vec::Vec as StdVec};
 use super::*;
 use ed25519_dalek::Signer as _;
 use scaas_token::{Token, TokenClient};
-use scaas_ua_common::{h32, op_digest, UaAttrs, PURPOSE_METATX, PURPOSE_POP_V2, PURPOSE_TRADE, kem_record_hash, portable_record_hash, registration_digest};
+use scaas_ua_common::{h32, MemberSig, op_digest, MsigMember, MsigStructure, UaAttrs, UaSig, PURPOSE_METATX, PURPOSE_POP_V2, PURPOSE_TRADE, kem_record_hash, portable_record_hash, registration_digest};
 use scaas_ua_registry::{UaRegistry, UaRegistryClient as RegClient};
 use serde_json::Value;
 use soroban_sdk::testutils::{Address as _, AuthorizedFunction, Ledger, MockAuth, MockAuthInvoke};
 use soroban_sdk::xdr::{Limits, ReadXdr as _, ScVal};
-use soroban_sdk::{String, Symbol, TryFromVal, Val, Vec as SVec};
+use soroban_sdk::{Bytes, String, Symbol, TryFromVal, Val, Vec as SVec};
 
 const NOW: u64 = 1_800_000_000;
 
@@ -22,7 +22,7 @@ struct T {
     bob: Address,
     fees: Address,
     relayer: Address,
-    no: Bytes,
+    no: UaSig,
 }
 
 fn setup(fee_on: bool) -> T {
@@ -46,7 +46,7 @@ fn setup(fee_on: bool) -> T {
     b.mint(&bob, &1_000_000);
     a.approve(&alice, &dex.address, &1_000_000, &1_000);
     b.approve(&bob, &dex.address, &1_000_000, &1_000);
-    let (relayer, no) = (Address::generate(&env), Bytes::new(&env));
+    let (relayer, no) = (Address::generate(&env), UaSig::none(&env));
     T { env, dex, a, b, alice, bob, fees, relayer, no }
 }
 
@@ -201,7 +201,7 @@ fn eighteen_decimal_amounts_do_not_overflow() {
 #[test]
 fn native_leg_with_auth_is_refused() {
     let t = setup(false);
-    let junk = Bytes::from_array(&t.env, &[1]);
+    let junk = UaSig::single(&t.env, Bytes::from_array(&t.env, &[1]));
     let r = t.dex.try_settle(&t.ask(1_000, 0), &t.bid(1_000, 3, 0), &10, &junk, &t.no);
     assert_eq!(code(r), Error::BadAuth.into());
 }
@@ -245,8 +245,8 @@ fn contract_at(env: &Env, byte: u8) -> Address {
 /// A host failure seen across the call boundary: a missing auth entry, or an ed25519 UA signature that does not verify
 /// over the expected digest (the host's verify fails, not the registry — finding F1).
 const HOST_REFUSED: soroban_sdk::Error = soroban_sdk::Error::from_type_and_code(soroban_sdk::xdr::ScErrorType::Context, soroban_sdk::xdr::ScErrorCode::InvalidAction);
-/// The registry's `Pop` (8): an `auth` that does not decode (here empty).
-const REG_POP: soroban_sdk::Error = soroban_sdk::Error::from_contract_error(8);
+/// The registry's `Unauthorized` (10): an ed25519 UA's `auth` without its 64-byte `signature` (here empty).
+const REG_UNAUTHORIZED: soroban_sdk::Error = soroban_sdk::Error::from_contract_error(10);
 
 fn tok(e: scaas_token::Error) -> soroban_sdk::Error {
     e.into()
@@ -343,18 +343,18 @@ impl U {
     }
 
     /// `u`'s signature over `op_digest(contract, f, args)` under `purpose`.
-    fn sign(&self, u: &Ua, purpose: [u8; 32], contract: &Address, f: &str, args: SVec<Val>) -> Bytes {
+    fn sign(&self, u: &Ua, purpose: [u8; 32], contract: &Address, f: &str, args: SVec<Val>) -> UaSig {
         let d = op_digest(&self.env, contract, f, args).to_array();
-        Bytes::from_array(&self.env, &u.sk.sign(&keccak(&self.env, &[&MSG_TAG, &ED_TAG, &purpose, &d])).to_bytes())
+        UaSig::single(&self.env, Bytes::from_array(&self.env, &u.sk.sign(&keccak(&self.env, &[&MSG_TAG, &ED_TAG, &purpose, &d])).to_bytes()))
     }
 
     /// The UA maker's order signature for `dex`: the sell token's `ua_trade` digest, purpose `trade`.
-    fn sign_order(&self, u: &Ua, dex: &Address, o: &Order) -> Bytes {
+    fn sign_order(&self, u: &Ua, dex: &Address, o: &Order) -> UaSig {
         self.sign(u, PURPOSE_TRADE, &o.sell_token, "ua_order", (dex, o).into_val(&self.env))
     }
 
     /// `settle` on `dex` with the relayer(s) the orders name and each native maker mocked for exactly this call.
-    fn settle(&self, dex: &DexClient, m: &Order, t: &Order, fill: i128, ma: &Bytes, ta: &Bytes) -> Result<(), soroban_sdk::Error> {
+    fn settle(&self, dex: &DexClient, m: &Order, t: &Order, fill: i128, ma: &UaSig, ta: &UaSig) -> Result<(), soroban_sdk::Error> {
         let mut rs = vec![m.relayer.clone()];
         if t.relayer != m.relayer {
             rs.push(t.relayer.clone());
@@ -364,7 +364,7 @@ impl U {
 
     /// `settle` with `relayers` (not necessarily the ones the orders name) and each native maker mocked.
     #[allow(clippy::too_many_arguments)]
-    fn settle_as(&self, relayers: &[Address], dex: &DexClient, m: &Order, t: &Order, fill: i128, ma: &Bytes, ta: &Bytes) -> Result<(), soroban_sdk::Error> {
+    fn settle_as(&self, relayers: &[Address], dex: &DexClient, m: &Order, t: &Order, fill: i128, ma: &UaSig, ta: &UaSig) -> Result<(), soroban_sdk::Error> {
         let env = &self.env;
         let all: SVec<Val> = (m, t, fill, ma, ta).into_val(env);
         let mut who: StdVec<(Address, SVec<Val>)> = relayers.iter().map(|r| (r.clone(), all.clone())).collect();
@@ -405,7 +405,7 @@ impl U {
 }
 
 fn no_attrs(env: &Env) -> UaAttrs {
-    UaAttrs { pqz_key: Bytes::new(env), pqz_pop_hash: BytesN::from_array(env, &[0; 32]), kem_pk: Bytes::new(env) }
+    UaAttrs::none(env)
 }
 
 /// Property 5 (T7): one UA signature fills an order in three settles up to `sell_amount`; a fourth is `Overfill`; another
@@ -419,7 +419,7 @@ fn ua_trade_dex_only_partial_fill_no_resign() {
     let ask = s.ask(u.h(), 300, u.h());
     let auth = s.sign_order(&u, &s.dex.address, &ask);
     let bid = s.bid(1_000, Holder::Addr(s.bob.clone()));
-    let no = Bytes::new(env);
+    let no = UaSig::none(env);
     // Another DEX instance: the signature names the first one, so the token refuses it.
     let d2 = s.other_dex(None);
     s.approve_b(&d2.address);
@@ -447,9 +447,9 @@ fn dex_ua_maker_native_taker_settles() {
     let ask = s.ask(u.h(), 100_000, u.h());
     let auth = s.sign_order(&u, &s.dex.address, &ask);
     let bid = s.bid(100_000, Holder::Addr(s.bob.clone()));
-    let no = Bytes::new(env);
+    let no = UaSig::none(env);
     // The UA leg needs its signature; the native leg must carry none.
-    assert_eq!(s.settle(&s.dex, &ask, &bid, 100_000, &no, &no), Err(REG_POP));
+    assert_eq!(s.settle(&s.dex, &ask, &bid, 100_000, &no, &no), Err(REG_UNAUTHORIZED));
     assert_eq!(s.settle(&s.dex, &ask, &bid, 100_000, &auth, &auth), Err(Error::BadAuth.into()));
     s.settle(&s.dex, &ask, &bid, 100_000, &auth, &no).unwrap();
     // The UA gets 200 000 B minus 0.1 % in its UA balance, bob 100 000 A minus 0.2 %.
@@ -473,7 +473,7 @@ fn dex_native_orders_bind_relayer() {
     env.set_auths(&[]);
     let ask = s.ask(Holder::Addr(alice.clone()), 100, Holder::Addr(alice.clone()));
     let bid = s.bid(100, Holder::Addr(s.bob.clone()));
-    let no = Bytes::new(env);
+    let no = UaSig::none(env);
     let other = Address::generate(env);
     assert_eq!(s.settle_as(&[other.clone()], &s.dex, &ask, &bid, 50, &no, &no), Err(HOST_REFUSED));
     // Each order binds its own relayer: a taker naming `other` needs `other` too.
@@ -495,7 +495,7 @@ fn dex_ua_cancel_sets_filled() {
     let ask = s.ask(u.h(), 300, u.h());
     let order_auth = s.sign_order(&u, &s.dex.address, &ask);
     let cancel = s.sign(&u, PURPOSE_TRADE, &s.dex.address, "ua_cancel", (&ask,).into_val(env));
-    let no = Bytes::new(env);
+    let no = UaSig::none(env);
     let bid = s.bid(1_000, Holder::Addr(s.bob.clone()));
     s.settle(&s.dex, &ask, &bid, 100, &order_auth, &no).unwrap();
     // Not a cancel signature: the order's own, a `metatx` one, another UA's.
@@ -528,23 +528,58 @@ fn dex_ua_destination_receives_proceeds() {
     let ask = s.ask(u.h(), 1_000, Holder::Addr(carol.clone()));
     let auth = s.sign_order(&u, &s.dex.address, &ask);
     let bid = s.bid(1_000, v.h());
-    s.settle(&s.dex, &ask, &bid, 400, &auth, &Bytes::new(env)).unwrap();
+    s.settle(&s.dex, &ask, &bid, 400, &auth, &UaSig::none(env)).unwrap();
     assert_eq!((s.b.balance(&carol), s.b.ua_balance(&u.id)), (800, 0));
     assert_eq!((s.a.ua_balance(&v.id), s.a.balance(&s.bob), s.a.ua_balance(&u.id)), (400, 0, 600));
     // A destination UA that is not registered: the whole settle fails.
     let ghost = Holder::Ua(BytesN::from_array(env, &[0x42; 32]));
     let bid2 = Order { destination: ghost, salt: 3, ..bid };
-    assert_eq!(s.settle(&s.dex, &ask, &bid2, 100, &auth, &Bytes::new(env)), Err(tok(scaas_token::Error::UaNotRegistered)));
+    assert_eq!(s.settle(&s.dex, &ask, &bid2, 100, &auth, &UaSig::none(env)), Err(tok(scaas_token::Error::UaNotRegistered)));
     assert_eq!(s.dex.filled(&s.dex.order_hash(&ask)), 400);
     // Review I1: a destination equal to the DEX (no withdraw: the proceeds would be stuck) is refused, either order.
     let me = Holder::Addr(s.dex.address.clone());
     let bid3 = Order { destination: me.clone(), salt: 4, ..bid2.clone() };
-    assert_eq!(s.settle(&s.dex, &ask, &bid3, 100, &auth, &Bytes::new(env)), Err(Error::BadDestination.into()));
+    assert_eq!(s.settle(&s.dex, &ask, &bid3, 100, &auth, &UaSig::none(env)), Err(Error::BadDestination.into()));
     let ask2 = Order { destination: me, salt: 5, ..ask.clone() };
     let auth2 = s.sign_order(&u, &s.dex.address, &ask2);
     let bid4 = Order { destination: v.h(), salt: 6, ..bid2 };
-    assert_eq!(s.settle(&s.dex, &ask2, &bid4, 100, &auth2, &Bytes::new(env)), Err(Error::BadDestination.into()));
+    assert_eq!(s.settle(&s.dex, &ask2, &bid4, 100, &auth2, &UaSig::none(env)), Err(Error::BadDestination.into()));
     assert_eq!((s.a.balance(&s.dex.address), s.b.balance(&s.dex.address), s.dex.filled(&s.dex.order_hash(&ask))), (0, 0, 400));
+}
+
+/// `register_listed`, and every slot of an `msig` row accepts (CTR-UA-37): until then it authorizes nothing.
+fn register_row(env: &Env, reg: &RegClient, r: &Value) -> BytesN<32> {
+    let ua = register_listed(env, reg, r);
+    accept_row(env, reg, r);
+    ua
+}
+
+/// Every `memberships` row of a registration: the member's own `accept_membership`.
+fn accept_row(env: &Env, reg: &RegClient, r: &Value) {
+    for m in r["memberships"].as_array().into_iter().flatten() {
+        let slot = MemberSig { index: m["index"].as_u64().unwrap() as u32, key_data: Bytes::new(env), sig: Bytes::from_slice(env, &hx(&m["sig"])) };
+        reg.accept_membership(&BytesN::from_array(env, &hx(&r["ua"]).try_into().unwrap()), &slot, &None);
+    }
+}
+
+/// A vector's `registrations[]` row: `register`, or `register_msig` of the `msig` (its `pop` is empty, U8S-D2).
+fn register_listed(env: &Env, reg: &RegClient, r: &Value) -> BytesN<32> {
+    let (kind, none) = (r["kind"].as_u64().unwrap() as u32, Bytes::new(env));
+    if kind != 0x0120 {
+        return reg.register(&kind, &Bytes::from_slice(env, &hx(&r["keyData"])), &UaAttrs::none(env), &Bytes::from_slice(env, &hx(&r["pop"])), &none, &None);
+    }
+    let mut members = SVec::new(env);
+    for m in r["members"].as_array().unwrap() {
+        let (kind, weight) = (m["kind"].as_u64().unwrap() as u32, m["weight"].as_u64().unwrap() as u32);
+        members.push_back(MsigMember { kind, id: BytesN::from_array(env, &hx(&m["id"]).try_into().unwrap()), weight });
+    }
+    let s = MsigStructure { threshold: r["threshold"].as_u64().unwrap() as u32, members };
+    reg.register_msig(&s, &UaAttrs::none(env), &SVec::new(env), &none, &None)
+}
+
+/// A vector's `authXdr`: the `UaSig` the entry takes.
+fn auth_of(env: &Env, p: &Value) -> UaSig {
+    <UaSig as soroban_sdk::xdr::FromXdr>::from_xdr(env, &Bytes::from_slice(env, &hx(&p["authXdr"]))).unwrap()
 }
 
 fn arg_vals(env: &Env, p: &Value) -> SVec<Val> {
@@ -558,7 +593,7 @@ fn arg_vals(env: &Env, p: &Value) -> SVec<Val> {
 
 /// The vectors' relayer is a `G…` account, which `mock_auths` cannot stand in for: it is made the transaction's source
 /// account and authorises `dex.settle(args)` by a `SourceAccount` entry.
-fn settle_by_source(env: &Env, dex: &DexClient, m: &Order, t: &Order, fill: i128, ma: &Bytes, ta: &Bytes) -> Result<(), soroban_sdk::Error> {
+fn settle_by_source(env: &Env, dex: &DexClient, m: &Order, t: &Order, fill: i128, ma: &UaSig, ta: &UaSig) -> Result<(), soroban_sdk::Error> {
     use soroban_sdk::xdr::{
         InvokeContractArgs, ScAddress, SorobanAuthorizationEntry, SorobanAuthorizedFunction, SorobanAuthorizedInvocation,
         SorobanCredentials,
@@ -582,6 +617,39 @@ fn settle_by_source(env: &Env, dex: &DexClient, m: &Order, t: &Order, fill: i128
     }
 }
 
+/// CTR-UA-37: an order and a cancel of a listed `msig`: the token's `ua_trade` and the DEX's `ua_cancel`, the two paths of the registry here,
+/// refuse a good `auth`, nothing moves, and the same calls run once its slots accepted.
+#[test]
+fn ua_ops_msig_trade_and_cancel_refused_until_accepted() {
+    let s = ua_setup(false);
+    let env = &s.env;
+    let v = s.ua(9);
+    let o = ops();
+    let regs = o["registrations"].as_array().unwrap();
+    let ms = regs.iter().find(|r| r["kind"] == 0x0120).unwrap();
+    for r in regs {
+        register_listed(env, &s.reg, r);
+    }
+    let of = |name: &str| o["entries"].as_array().unwrap().iter().find(|e| e["name"] == name).unwrap()["perKind"].as_array().unwrap().iter().find(|p| p["kind"] == "msig").unwrap().clone();
+    let (p, c) = (of("ua_order"), of("ua_cancel"));
+    let ask = Order::try_from_val(env, &arg_vals(env, &p).get(1).unwrap()).unwrap();
+    let Holder::Ua(ua) = ask.maker.clone() else { panic!() };
+    s.fund(&s.a, &ua, ask.sell_amount);
+    s.fund(&s.b, &v.id, ask.buy_amount);
+    let bid = Order { maker: v.h(), destination: v.h(), relayer: ask.relayer.clone(), sell_token: ask.buy_token.clone(), sell_amount: ask.buy_amount,
+                      buy_token: ask.sell_token.clone(), buy_amount: ask.sell_amount, max_fee_ppm: 0, expiry: NOW + 60, salt: 900 };
+    let bid_auth = s.sign_order(&v, &s.dex.address, &bid);
+    let auth = auth_of(env, &p);
+    assert!(settle_by_source(env, &s.dex, &ask, &bid, ask.sell_amount / 2, &auth, &bid_auth).is_err());
+    assert!(s.dex.try_ua_cancel(&ask, &auth_of(env, &c)).is_err());
+    assert_eq!((s.a.ua_balance(&ua), s.dex.filled(&s.dex.order_hash(&ask))), (ask.sell_amount, 0));
+    accept_row(env, &s.reg, ms);
+    settle_by_source(env, &s.dex, &ask, &bid, ask.sell_amount / 2, &auth, &bid_auth).unwrap();
+    assert_eq!(s.b.ua_balance(&ua), ask.buy_amount / 2);
+    s.dex.ua_cancel(&ask, &auth_of(env, &c));
+    assert_eq!(s.dex.filled(&s.dex.order_hash(&ask)), ask.sell_amount);
+}
+
 /// SOR-D12: the DEX, the token and the registry at `ua-ops.json`'s ids and network id. Per kind, the `ua_order` row
 /// (the `ua_trade` digest) and the `ua_cancel` row (the DEX's) name the same order; both digests are recomputed, the
 /// order's `auth` fills half of it in a real `settle` against an in-test UA taker (the vectors' relayer submitting),
@@ -593,8 +661,7 @@ fn ua_ops_vectors_ua_trade_rows() {
     let v = s.ua(9);
     let o = ops();
     for r in o["registrations"].as_array().unwrap() {
-        let kind = r["kind"].as_u64().unwrap() as u32;
-        let ua = s.reg.register(&kind, &Bytes::from_slice(env, &hx(&r["keyData"])), &no_attrs(env), &Bytes::from_slice(env, &hx(&r["pop"])), &Bytes::new(env), &None);
+        let ua = register_row(env, &s.reg, r);
         assert_eq!(ua.to_array().to_vec(), hx(&r["ua"]), "{}", r["name"]);
     }
     let row = |name: &str| o["entries"].as_array().unwrap().iter().find(|e| e["name"] == name).unwrap().clone();
@@ -620,11 +687,11 @@ fn ua_ops_vectors_ua_trade_rows() {
                           sell_amount: ask.buy_amount, buy_token: ask.sell_token.clone(), buy_amount: ask.sell_amount,
                           max_fee_ppm: 0, expiry: NOW + 60, salt: i as u64 };
         let bid_auth = s.sign_order(&v, &s.dex.address, &bid);
-        let auth = Bytes::from_slice(env, &hx(&p["auth"]));
+        let auth = auth_of(env, p);
         let got = s.a.ua_balance(&v.id);
         settle_by_source(env, &s.dex, &ask, &bid, ask.sell_amount / 2, &auth, &bid_auth).unwrap_or_else(|e| panic!("{} settle: {e:?}", p["kind"]));
         assert_eq!((s.b.ua_balance(&ua), s.a.ua_balance(&v.id) - got), (ask.buy_amount / 2, ask.sell_amount / 2), "{}", p["kind"]);
-        s.dex.ua_cancel(&ask, &Bytes::from_slice(env, &hx(&c["auth"])));
+        s.dex.ua_cancel(&ask, &auth_of(env, c));
         assert_eq!(s.dex.filled(&s.dex.order_hash(&ask)), ask.sell_amount, "{}", c["kind"]);
         assert_eq!(settle_by_source(env, &s.dex, &ask, &bid, 1, &auth, &bid_auth), Err(Error::Overfill.into()));
     }

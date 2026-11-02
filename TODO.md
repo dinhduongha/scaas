@@ -527,7 +527,13 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   - [ ] Relay-fee starvation (re-review minor 4): a subject that keeps other jobs in flight keeps its own relay-fee job
     `SUBJECT_HELD` until it expires (hurts that subject only); if it shows up, refuse new non-relay holds while a relay-fee
     job of the subject waits.
-- [ ] **Relay-fee minimum before mainnet** (owner ruling 2026-10-28, final review owner rulings item 7): the flat
+- [ ] **Relay-fee minimum before mainnet** (owner ruling 2026-10-28, final review owner rulings item 7; options and the
+  research in [docs/research/relay-fee-minimum.md](docs/research/relay-fee-minimum.md)). **Owner ruling 2026-10-31: option (c)
+  on every family** — a fee that reaches the node's lane needs a per-token price (native units per base unit) and must
+  cover the family's simulated cost of the job (Soroban resource + inclusion fee, Cosmos / Sui / Aptos gas, Hedera via
+  the EVM quote, Solana tx fee + first-use rent, EVM address `relay` priced like `uaRelay`); `min_amount` stays as the
+  per-chain floor; sponsored (bound-payee) fees stay unpriced; **option (d), a floor in the router contracts, is ruled
+  out** (no contract change, the freeze does not wait). Build with P6i (node). Was: the flat
   `params.relay_fee.min_amount` (one floor per chain, default 1 base unit, every token and call) stays until before mainnet;
   re-decide then between a per-token minimum and gas-proportional pricing (TON `min_ton_value` and Solana
   `min_lamports_value` already price per token).
