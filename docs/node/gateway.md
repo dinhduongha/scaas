@@ -148,22 +148,22 @@ from the store: before that, the built gateway's in-memory `mpsc` feeds only the
 door A work is not journaled and has no digest guard until it becomes a `~gateway` job).
 
 <a id="ua-register"></a><a id="NODE-GW-03"></a>**NODE-GW-03** — **Gateway `call` jobs exist only for the UA
-registry's eight writes.** `POST /v1/op` is no such door: it takes a registered token's signed `mtx*` entries only (typed-signing N1). Gateway `call` jobs in `~gateway` go only to the chain's `ua_registry` (node config `[[chains]] ua_registry`), for the eight
+registry's nine writes.** `POST /v1/op` is no such door: it takes a registered token's signed `mtx*` entries only (typed-signing N1). Gateway `call` jobs in `~gateway` go only to the chain's `ua_registry` (node config `[[chains]] ua_registry`), for the eight
 writes of [CTR-UA-36](../contracts/accounts.md#CTR-UA-36): `register` (`0x4e229efb`), `registerMsig` (`0x82b86a46`), `registerWebAuthn` (`0xee03a1fe`), `registerMuSig2` (`0xe1eddcdf`),
-`registerFrost` (`0x7bd63410`), `setKemKey` (`0xa00cce2a`), `storePqzPop` (`0x7fac161a`) and `setPqzKey` (`0x3c6897f1`) — all relayable by anyone, gasless, no fee
+`registerFrost` (`0x7bd63410`), `setKemKey` (`0xa00cce2a`), `storePqzPop` (`0x7fac161a`), `setPqzKey` (`0x3c6897f1`) and `acceptMembership` (`0x73fd7d54`, [CTR-UA-37](../contracts/accounts.md#CTR-UA-37)) — all relayable by anyone, gasless, no fee
 ([CTR-UA-31](../contracts/accounts.md#CTR-UA-31)); `POST /v1/ua/register` builds the entry's calldata from the checked body, as the plain rows of [the table](job-api.md#named-entries) do. A relayed PQ registration whose `eth_estimateGas`
 of the full call exceeds min(block gas limit, relayer per-transaction cap) is split: `register` without `pqzPop`, then
 `storePqzPop` (the SCaaS testnet: 200 M block, relayer cap `max_gas_per_tx` 64 M, so every PQ registration with its
-proof, 84.7–108.9 M, is relayed split there). Owner 2026-10-30, ruling R-node: the node relays all eight writes (call
+proof, 84.7–108.9 M, is relayed split there). Owner 2026-10-30, ruling R-node: the node relays all nine writes (call
 table rows, guard rule `Rule::UaRegistry`; a relayed `register` / `registerMsig` with its proof over the cap is refused `UA_REGISTER_SPLIT: <why>;
-send register without pqzPop, then storePqzPop`) and the sponsor policy below covers all eight; the call-table rows and the refusal
+send register without pqzPop, then storePqzPop`) and the sponsor policy below covers all nine; the call-table rows and the refusal
 are built (`ua8` `64c233d4`, the typed rows in `typed-signing` Part R); **this route and the sponsor policy are not built** (no gateway route, no sponsor-policy code;
 `TODO.md`), so relaying goes through job-API `call` jobs today (`op` with the entry and named `args`). It is a gateway
 capability, not an `allow_call` grant ("gateway capability, not a namespace grant") ([NODE-JOB-09](job-api.md#NODE-JOB-09) is unchanged for namespaces);
 `job_live_call` dedupes retries; every registration lives in `~gateway`, so the per-namespace index
 ([NODE-JOB-13](job-api.md#NODE-JOB-13)) dedupes them node-wide. Sponsored registration spam is bounded by the per-chain
 registration quota and the sponsor budget; the one `~gateway` `call` sponsor policy shape allowed is `contract =
-chain.ua_registry` (node config `[[chains]] ua_registry`), `selector` ∈ the eight above, `max_tx_per_payer_hour = 0`
+chain.ua_registry` (node config `[[chains]] ua_registry`), `selector` ∈ the nine above, `max_tx_per_payer_hour = 0`
 ([sponsorship.md#admin](sponsorship.md#admin)). The universal-account migration uses this route
 ([contracts/accounts.md#migration](../contracts/accounts.md#migration)).
 

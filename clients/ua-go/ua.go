@@ -634,7 +634,7 @@ func UAAuthDomainSeparator(d Domain) [32]byte {
 }
 
 // UAAuthDigest is the EIP-712 digest of UAAuth(ua, purpose, digest): what native signers behind the registry sign, except
-// that under the three portable purposes (IsPortablePurpose) a code-less native msig member signs the record's typed digest
+// that under the portable purposes (IsPortablePurpose) a code-less native msig member signs the record's typed digest
 // instead (CTR-MTX-14, TS-D4).
 func UAAuthDigest(d Domain, ua, purpose, digest [32]byte) [32]byte {
 	t := Keccak256([]byte(UAAuthType))

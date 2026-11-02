@@ -308,6 +308,7 @@ sol! {
         function setKemKey(bytes32 ua, uint64 version, KemKey kem, UASig sig) external;
         function storePqzPop(bytes32 ua, bytes pqzPop) external;
         function setPqzKey(bytes32 ua, bytes pqzKey, bytes32 pqzPopHash, UASig sig) external;
+        function acceptMembership(bytes32 ua, MemberSig memberSig) external;
     }
 
     /// `MandateWallet` errors (CTR-ACC-06/07): a `call` job's revert reason names them, so the client re-reads

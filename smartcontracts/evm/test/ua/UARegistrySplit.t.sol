@@ -854,6 +854,7 @@ contract UARegistrySplitTest is UARegistryBase {
         delete ids;
         vm.setNonceUnsafe(address(this), 1_000); // the verifiers' addresses: the same in both runs (a state revert keeps it)
         r = SplitDiff.start(12_000, address(UARegistryLib));
+        r.accepts = keccak256(bytes(art)) == keccak256(bytes(NEW));
         _deploy(R1, chainUidA, address(0), false, BUDGET, address(0), true, _all(false));
         _gen1Registrations(r, R1);
         _authRows(r, R1);
@@ -903,13 +904,16 @@ contract UARegistrySplitTest is UARegistryBase {
         return vm.readFile(string.concat("out/", n, ".sol/", n, ".json"));
     }
 
-    /// The 53 selectors, every function, event and error name of the pre-split ABI, `SSTORE2WriteFailed` among them.
+    /// The 55 selectors, every function, event and error name of the pre-split ABI, `SSTORE2WriteFailed` among them. CTR-UA-37
+    /// added `acceptMembership` and `memberAccepted` to `IUARegistry` (53 -> 55): the pre-split contract keeps the interface by two stubs.
     function test_abiUnchanged() public view {
         (string memory a, string memory b) = (_art("UARegistryPreSplit"), _art("UARegistry"));
         string[] memory fa = vm.parseJsonKeys(a, ".methodIdentifiers");
         string[] memory fb = vm.parseJsonKeys(b, ".methodIdentifiers");
         assertEq(fa.length, fb.length);
-        assertEq(fb.length, 53, "selectors");
+        assertEq(fb.length, 55, "selectors");
+        assertEq(vm.parseJsonString(b, ".methodIdentifiers['acceptMembership(bytes32,(uint16,bytes,bytes))']"), "73fd7d54");
+        assertEq(vm.parseJsonString(b, ".methodIdentifiers['memberAccepted(bytes32,uint256)']"), "cb936f22");
         for (uint256 i; i < fa.length; ++i) {
             assertEq(fa[i], fb[i]);
             string memory k = string.concat(".methodIdentifiers['", fa[i], "']");
@@ -1243,6 +1247,10 @@ contract UARegistrySplitTest is UARegistryBase {
         bytes memory ds = _msigKey(2, m);
         bytes32 mu = UARegistry(at).registerMsig(UACall.structure(ds), _none(), new IUARegistry.MemberSig[](0), "");
         _put(g, "registerMsig regular", vm.lastCallGas().gasTotalUsed);
+        if (keccak256(bytes(art)) == keccak256(bytes(NEW))) { // CTR-UA-37: the pre-split registry has no acceptance
+            UARegistry(at).acceptMembership(mu, _acceptEoaSig(ds, ALICE));
+            UARegistry(at).acceptMembership(mu, _acceptKeySig(ds, 0x0101, _key(0x0101)));
+        }
         bytes32 md = _memberDigest(mu, UAKinds.PURPOSE_METATX, DIGEST);
         IUARegistry.MemberSig[] memory s2 = new IUARegistry.MemberSig[](2);
         s2[_indexOf(ds, alice)] = IUARegistry.MemberSig(_indexOf(ds, alice), "", _ecdsa(ALICE, UARegistry(at).uaAuthDigest(alice, UAKinds.PURPOSE_MEMBER, md)));
@@ -1252,8 +1260,9 @@ contract UARegistrySplitTest is UARegistryBase {
         _meter(g, at, mu, sm, "msig 2-of-2");
     }
 
-    /// `requireAuthorized`, every kind, native and `msig`, stays within the spike's +37 gas (bound here: +64, to take a code
-    /// layout's change of JUMPDEST order); `register` state gas does not move. Rows `GAS|label|before|after|delta`.
+    /// `requireAuthorized`, every kind and native, stays within the spike's +37 gas (bound here: +64, to take a code layout's
+    /// change of JUMPDEST order); an `msig` adds the one read of its accepted bits, `MSIG_ACCEPTED_GAS` (CTR-UA-37); `register`
+    /// state gas does not move. Rows `GAS|label|before|after|delta`.
     function test_gasHotPath() public {
         uint256 snap = vm.snapshotState();
         Gas memory a = _gasRun(OLD);
@@ -1263,7 +1272,9 @@ contract UARegistrySplitTest is UARegistryBase {
         for (uint256 i; i < a.n; ++i) {
             int256 delta = int256(b.used[i]) - int256(a.used[i]);
             emit log_string(string.concat("GAS|", a.labels[i], "|", vm.toString(a.used[i]), "|", vm.toString(b.used[i]), "|", vm.toString(delta)));
-            if (_starts(a.labels[i], "requireAuthorized")) assertLe(delta, 64, a.labels[i]);
+            if (_starts(a.labels[i], "requireAuthorized")) {
+                assertLe(delta, _starts(a.labels[i], "requireAuthorized msig") ? int256(64 + 2_500) : int256(64), a.labels[i]);
+            }
             if (_starts(a.labels[i], "register state")) assertEq(delta, 0, a.labels[i]);
         }
     }

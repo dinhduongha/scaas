@@ -235,6 +235,13 @@ U8Array32 pqzKeyRecordDigest({
   pqzPopHash: pqzPopHash,
 );
 
+/// typed `UAMembership{ua, member}`: what `member` signs to accept its slot in the `msig` `ua` (CTR-UA-37): a native member this
+/// digest itself, a derived member `member_digest(ua, ua_message(MSIG, PURPOSE_MEMBERSHIP, ·))` under `member`.
+U8Array32 membershipDigest({
+  required U8Array32 ua,
+  required U8Array32 member,
+}) => ScaasUa.instance.api.crateApiUaMembershipDigest(ua: ua, member: member);
+
 /// The signed, portable, write-once PQZ key record: accepted only by a registration without a PQZ key (`already_set` = it has
 /// one: `UAPqzKeySet`). The holder rules of [`holder_pop_message`]; the key and its proof (or hash) are both required.
 PqzKeyRecord pqzKeyRecordMessage({

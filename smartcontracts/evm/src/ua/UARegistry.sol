@@ -81,6 +81,10 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///         views and `requireAuthorized` stay here. The library's address is in this contract's code, so it is part of the
 ///         registry's CREATE2 address.
 ///
+///         CTR-UA-37 (owner 2026-11-02): listing in an `msig` is no consent. A member accepts its slot (`acceptMembership`, a portable
+///         `UAMembership`, in `UARegistryLib`); `memberAccepted` reads it, the slots of the `pop` are accepted at registration, and
+///         every verification but that `pop` counts accepted slots only: one read of one word, here and in `UARegistryLib._msig`.
+///
 ///         Open in UA-2a: HIP-632 (`hedera-native` members' 64-byte ed25519 signatures) needs a non-static CALL, which a
 ///         `view` `requireAuthorized` cannot make; such members verify as ECDSA/1271 only.
 ///         UNAUDITED.

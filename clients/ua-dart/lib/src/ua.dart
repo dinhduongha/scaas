@@ -394,7 +394,7 @@ Uint8List uaAuthDomainSeparator(Domain d) => _k([
     ]);
 
 /// EIP-712 digest of UAAuth(ua, purpose, digest): what native signers behind the registry sign, except that
-/// under the three portable purposes ([isPortablePurpose]) a code-less native msig member signs the record's typed digest
+/// under the portable purposes ([isPortablePurpose]) a code-less native msig member signs the record's typed digest
 /// instead (CTR-MTX-14, TS-D4).
 Uint8List uaAuthDigest(Domain d, Uint8List ua, Uint8List purpose, Uint8List digest) => _k([
       Uint8List.fromList([0x19, 0x01]),

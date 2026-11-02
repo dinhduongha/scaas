@@ -350,6 +350,13 @@ abstract contract UARegistryBase is Test {
 
     // ----- acceptance (CTR-UA-37) -----
 
+    /// Every slot of `d` accepted with `sig`, for members that answer anything (accept-all and burn-all verifiers and wallets).
+    function _acceptWith(UARegistry r, bytes memory d, bytes memory sig) internal {
+        uint256 count = uint16(bytes2(abi.encodePacked(d[2], d[3])));
+        bytes32 ua = UAKinds.uaOf(UAKinds.MSIG, d);
+        for (uint256 i; i < count; ++i) r.acceptMembership(ua, IUARegistry.MemberSig(uint16(i), "", sig));
+    }
+
     /// What a derived member signs under `member` to accept its slot.
     function _membershipMd(bytes32 ua, bytes32 member) internal pure returns (bytes32) {
         return _memberDigest(ua, UAKinds.PURPOSE_MEMBERSHIP, UAKinds.membershipDigest(ua, member));

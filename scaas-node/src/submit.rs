@@ -2028,6 +2028,8 @@ pub(crate) mod tests {
             setKemKeyCall { ua, version: 2, kem: kem(6), sig: sig(3309, 7) }.abi_encode(),
             storePqzPopCall { ua, pqzPop: b(30_381, 8) }.abi_encode(),
             setPqzKeyCall { ua, pqzKey: b(18_432, 9), pqzPopHash: B256::repeat_byte(10), sig: sig(3309, 11) }.abi_encode(),
+            // CTR-UA-37: an `msig` member accepts its place; anyone submits, so the member needs no gas
+            acceptMembershipCall { ua, memberSig: crate::abi::MemberSig { index: 3, keyData: Bytes::new(), sig: b(3309, 36) } }.abi_encode(),
             registerMsigCall { structure: MsigStructure { threshold: 2, members: members(2) }, attrs: attrs(), pop: pops(2),
                 pqzPop: b(pqz_pop, 12) }.abi_encode(),
             // typed-signing R1b (TS-D13): the typed single-key entries (no PQZ / KEM holders: empty attributes)
@@ -2058,6 +2060,8 @@ pub(crate) mod tests {
         assert_eq!(setKemKeyCall::SELECTOR, [0xa0, 0x0c, 0xce, 0x2a]);
         assert_eq!(storePqzPopCall::SELECTOR, [0x7f, 0xac, 0x16, 0x1a]);
         assert_eq!(setPqzKeyCall::SELECTOR, [0x3c, 0x68, 0x97, 0xf1]);
+        assert_eq!(acceptMembershipCall::SIGNATURE, "acceptMembership(bytes32,(uint16,bytes,bytes))");
+        assert_eq!(acceptMembershipCall::SELECTOR, [0x73, 0xfd, 0x7d, 0x54]);
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
         let (reg, other) = (Address::repeat_byte(0x5e), Address::repeat_byte(0x5f));
         let cfg = move |c: &mut ChainCfg| c.ua_registry = Some(reg);

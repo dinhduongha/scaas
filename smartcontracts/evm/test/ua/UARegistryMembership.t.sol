@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {Vm, VmSafe} from "forge-std/Vm.sol";
+import {VmSafe} from "forge-std/Vm.sol";
+import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -170,7 +171,8 @@ contract UARegistryMembershipTest is UARegistryBase {
         assertTrue(r.memberAccepted(ua, s.index));
     }
 
-    /// A contract member answers ERC-1271 over the typed digest; a wallet that does not answer leaves the slot open.
+    /// A contract member answers ERC-1271 over the typed digest: the wallet sees that digest; a wallet that refuses, or answers
+    /// for another signer, leaves the slot open.
     function test_membershipContractAccepts() public {
         address w = address(new MockWallet(vm.addr(ALICE), 0, 0, address(0)));
         Member[] memory m = new Member[](2);
@@ -179,11 +181,16 @@ contract UARegistryMembershipTest is UARegistryBase {
         bytes memory d = _msigKey(2, m);
         bytes32 ua = _regMsig(r, d, "");
         uint16 i = _indexOf(d, _pad(w));
-        bytes memory good = _ecdsa(ALICE, UAKinds.membershipDigest(ua, _pad(w)));
+        bytes32 typed = UAKinds.membershipDigest(ua, _pad(w));
+        bytes memory good = _ecdsa(ALICE, typed);
         vm.expectRevert(_unauthorized(ua));
-        r.acceptMembership(ua, IUARegistry.MemberSig(i, "", _ecdsa(BOB, UAKinds.membershipDigest(ua, _pad(w)))));
+        r.acceptMembership(ua, IUARegistry.MemberSig(i, "", _ecdsa(BOB, typed)));
+        assertFalse(r.memberAccepted(ua, i));
+        vm.expectCall(w, abi.encodeWithSelector(IERC1271.isValidSignature.selector, typed, good));
+        vm.expectEmit(address(r));
+        emit IUARegistry.UAMembershipAccepted(ua, i, _pad(w));
         r.acceptMembership(ua, IUARegistry.MemberSig(i, "", good));
-        assertTrue(r.memberAccepted(ua, i));
+        assertEq(_bits(r, ua), 1 << i);
     }
 
     // ----- the bitmap at registration -----
@@ -387,13 +394,21 @@ contract UARegistryMembershipTest is UARegistryBase {
         r.acceptMembership(ua, _acceptEoaSig(d, ALICE));
     }
 
-    /// An acceptance is no `pop`, no KEM record signature, no PQZ key record signature.
+    /// An acceptance is no `pop`, no KEM record signature, no PQZ key record signature: the same two signatures that pass as
+    /// acceptances are refused at each, and the record's own signatures pass there.
     function test_membershipAcceptanceIsNoRecordSig() public {
         (bytes memory d, bytes32 ua) = _pqMsig();
         IUARegistry.UASig memory s = _two(_acceptKeySig(d, ML, ml1), _acceptKeySig(d, ML, ml2));
         vm.expectRevert(IUARegistry.UAPoP.selector);
         r.registerMsig(UACall.structure(d), _none(), s.members, "");
-        _regMsig(r, d, _pqPop(d, ml1, ml2));
+        // the `pop` signed slots 1 and 3; the other acceptance must verify as one, so the two are real signatures
+        _regMsig(r, d, _pqPop(d, ml1, ml3));
+        uint16 i2 = _indexOf(d, UAKinds.uaOf(ML, ml2));
+        assertFalse(r.memberAccepted(ua, i2));
+        vm.expectEmit(address(r));
+        emit IUARegistry.UAMembershipAccepted(ua, i2, UAKinds.uaOf(ML, ml2));
+        r.acceptMembership(ua, _acceptKeySig(d, ML, ml2));
+        assertTrue(r.memberAccepted(ua, i2));
         bytes memory pk = _kemPk(2);
         vm.expectRevert(_unauthorized(ua));
         r.setKemKey(ua, 1, UACall.kem(pk), s);
@@ -402,6 +417,8 @@ contract UARegistryMembershipTest is UARegistryBase {
         r.setPqzKey(ua, key, keccak256("proof"), s);
         bytes32 rd = UAKinds.kemRecordDigest(ua, 1, pk);
         r.setKemKey(ua, 1, UACall.kem(pk), _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml2, UAKinds.PURPOSE_KEM, rd)));
+        (uint64 v,,) = r.kemKeyOf(ua);
+        assertEq(v, 1);
     }
 
     /// Non-empty `keyData`, native and derived (CTR-UA-33).
@@ -473,7 +490,8 @@ contract UARegistryMembershipTest is UARegistryBase {
         r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, TX_DIGEST, s);
     }
 
-    /// One acceptance, every registry: no chain, no registry in what is signed; each registry keeps its own bit.
+    /// One acceptance, every registry: nothing of a chain or a registry in what is signed, and each registry checks it for itself:
+    /// the bytes accepted on `r` accept on `x`, on another chain, and one flipped byte does not; `x` keeps its own bits.
     function test_membershipPortable() public {
         (bytes memory d, bytes32 ua) = _classical();
         UARegistry x = _deploy(REG_N, keccak256("another chain"), address(0), false, BUDGET, address(0), true, _pqCfgs());
@@ -484,12 +502,25 @@ contract UARegistryMembershipTest is UARegistryBase {
         IUARegistry.MemberSig memory p = _acceptKeySig(d, P256, p1);
         r.acceptMembership(ua, n);
         r.acceptMembership(ua, p);
-        assertFalse(x.memberAccepted(ua, n.index), "a registry of its own");
+        assertEq(_bits(x, ua), 0, "a registry of its own");
         vm.chainId(7);
-        x.acceptMembership(ua, n);
-        x.acceptMembership(ua, p);
-        assertTrue(x.memberAccepted(ua, n.index));
-        assertTrue(x.memberAccepted(ua, p.index));
+        assertEq(UAKinds.membershipDigest(ua, _pad(vm.addr(ALICE))), _acceptDigestOn31337(ua), "no chain in the digest");
+        for (uint256 i; i < 2; ++i) {
+            IUARegistry.MemberSig memory s = i == 0 ? n : p;
+            bytes memory bad = abi.encodePacked(s.sig);
+            bad[0] ^= 0x01;
+            vm.expectRevert(_unauthorized(ua));
+            x.acceptMembership(ua, IUARegistry.MemberSig(s.index, "", bad));
+            x.acceptMembership(ua, s);
+        }
+        assertEq(_bits(x, ua), _bits(r, ua));
+        assertEq(_bits(x, ua), 1 << n.index | 1 << p.index);
+    }
+
+    /// The digest by hand, with the domain's constant: the same words whatever `block.chainid` is.
+    function _acceptDigestOn31337(bytes32 ua) internal view returns (bytes32) {
+        return keccak256(abi.encodePacked(hex"1901", UAKinds.PORTABLE_DOMAIN_SEPARATOR,
+            keccak256(abi.encode(UAKinds.UA_MEMBERSHIP_TYPEHASH, ua, _pad(vm.addr(ALICE))))));
     }
 
     // ----- a gen-2 registry in front of a gen-1 record (as `setKemKey`, UA8-D11) -----
@@ -529,20 +560,62 @@ contract UARegistryMembershipTest is UARegistryBase {
         g.setPqzKey(ua, key, hash, s);
     }
 
+    // ----- starvation (T-AUTH-4: a starved caller sees `UAVerifyGas`, never a verdict) -----
+
+    /// Gen 1's bits out of reach on a gen-2 host: `UAVerifyGas`, not a refusal and not an empty revert.
+    function test_membershipGen2HostStarvedIsVerifyGas() public {
+        (bytes memory d, bytes32 ua) = _pqRegistered(r);
+        UARegistry g = _gen2(true);
+        bytes memory key = new bytes(16_384);
+        bytes32 hash = keccak256("proof");
+        bytes32 rd = UAKinds.pqzKeyRecordDigest(ua, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key), hash);
+        IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_PQZ_KEY, rd), _mlSig(d, ml2, UAKinds.PURPOSE_PQZ_KEY, rd));
+        vm.mockCallRevert(address(r), abi.encodeWithSelector(IUARegistry.memberAccepted.selector), "");
+        vm.expectRevert(UAKinds.UAVerifyGas.selector);
+        g.setPqzKey(ua, key, hash, s);
+        vm.clearMockedCalls();
+        g.setPqzKey(ua, key, hash, s);
+    }
+
+    /// A member starved in its own check at `acceptMembership`: `UAVerifyGas`, the slot stays open, with gas it accepts.
+    function test_membershipStarvedMemberIsVerifyGas() public {
+        address w = address(new MockWallet(vm.addr(ALICE), 0, 0, address(0)));
+        Member[] memory m = new Member[](1);
+        m[0] = Member(UAKinds.EVM_EOA, _pad(w), 1);
+        bytes memory d = _msigKey(1, m);
+        bytes32 ua = _regMsig(r, d, "");
+        IUARegistry.MemberSig memory s = IUARegistry.MemberSig(0, "", _ecdsa(ALICE, UAKinds.membershipDigest(ua, _pad(w))));
+        bytes memory call_ = abi.encodeCall(r.acceptMembership, (ua, s));
+        (bool ok, bytes memory ret) = address(r).call{gas: 60_000}(call_);
+        assertFalse(ok);
+        assertEq(bytes4(ret), UAKinds.UAVerifyGas.selector);
+        assertFalse(r.memberAccepted(ua, 0));
+        (ok,) = address(r).call{gas: 400_000}(call_);
+        assertTrue(ok);
+        assertTrue(r.memberAccepted(ua, 0));
+    }
+
     // ----- the cost -----
 
-    /// Authorizing reads the one bitmap slot once, however many members sign, and never the `pop` chunks beyond the structure.
+    function _reads(VmSafe.AccountAccess[] memory a, bytes32 slot) internal pure returns (uint256 n) {
+        for (uint256 i; i < a.length; ++i) {
+            VmSafe.StorageAccess[] memory sa = a[i].storageAccesses;
+            for (uint256 j; j < sa.length; ++j) if (sa[j].slot == slot && !sa[j].isWrite) ++n;
+        }
+    }
+
+    /// Authorizing, and a stored record's signature, read the one bitmap slot once, however many members sign.
     function test_membershipVerifyReadsOneSlot() public {
         (bytes memory d, bytes32 ua) = _pqRegistered(r);
         bytes32 slot = keccak256(abi.encode(ua, uint256(15)));
         vm.startStateDiffRecording();
         r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, TX_DIGEST, _txSig(d, ml1, ml2));
-        VmSafe.AccountAccess[] memory a = vm.stopAndReturnStateDiff();
-        uint256 reads;
-        for (uint256 i; i < a.length; ++i) {
-            VmSafe.StorageAccess[] memory sa = a[i].storageAccesses;
-            for (uint256 j; j < sa.length; ++j) if (sa[j].slot == slot && !sa[j].isWrite) ++reads;
-        }
-        assertEq(reads, 1);
+        assertEq(_reads(vm.stopAndReturnStateDiff(), slot), 1, "requireAuthorized");
+        bytes memory pk = _kemPk(3);
+        bytes32 rd = UAKinds.kemRecordDigest(ua, 1, pk);
+        IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml2, UAKinds.PURPOSE_KEM, rd));
+        vm.startStateDiffRecording();
+        r.setKemKey(ua, 1, UACall.kem(pk), s);
+        assertEq(_reads(vm.stopAndReturnStateDiff(), slot), 1, "setKemKey");
     }
 }

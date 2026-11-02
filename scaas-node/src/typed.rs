@@ -197,6 +197,7 @@ const PLAIN: &[(&str, &[&str], &str)] = &[
     ("setKemKey", REG, "bytes32 ua,uint64 version,KemKey kem,UASig sig"),
     ("storePqzPop", REG, "bytes32 ua,bytes pqzPop"),
     ("setPqzKey", REG, "bytes32 ua,bytes pqzKey,bytes32 pqzPopHash,UASig sig"),
+    ("acceptMembership", REG, "bytes32 ua,MemberSig memberSig"),
     ("mtxSettle", D, "Settlement[] s"),
     ("mtxExchange", D, "ExchangePlan p,Interaction[] interactions"),
     ("mtxExchangeVia", D, "ExchangePlan p,address executor,bytes data"),

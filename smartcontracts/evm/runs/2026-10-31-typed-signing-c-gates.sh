@@ -452,6 +452,52 @@ clientkeys|node|CancelUAOrder nests the order as signed; checkCancel takes it on
 clientkeys|node|G1: the 128 encoded bytes word by word, abi.encode(G1) = the packed point
 clientkeys|node|owner op: UASig{signature: Schnorr over uaMessage(kind, zether-owner, digest)}
 clientkeys|node|typed owner ops: ZetherRollOver / ZetherSetRollOverMode digests, ownerSig as UASig.signature, the direct calldata
+forge|forge|test_msigPopNotMinimalRefused
+forge|forge|test_msigKemSigNotMinimalRefused
+forge|forge|test_msigPqzKeySigNotMinimalRefused
+forge|forge|test_msigRequireAuthorizedKeepsRule
+forge|forge|test_msigFrontRunSlotDropRefused
+forge|forge|test_membershipDigestByHand
+forge|forge|test_membershipNativeAccepts
+forge|forge|test_membershipRegisteredAccepts
+forge|forge|test_membershipContractAccepts
+forge|forge|test_membershipPopSignersAccepted
+forge|forge|test_membershipEmptyPopWritesNothing
+forge|forge|test_membershipPopExempt
+forge|forge|test_membershipRefusedUntilEnoughWeight
+forge|forge|test_membershipUnacceptedRefusedRequireAuthorized
+forge|forge|test_membershipUnacceptedRefusedErc1271
+forge|forge|test_membershipUnacceptedRefusedSetKemKey
+forge|forge|test_membershipUnacceptedRefusedSetPqzKey
+forge|forge|test_membershipWrongMemberRefused
+forge|forge|test_membershipWrongUaRefused
+forge|forge|test_membershipIndexOutOfRangeRefused
+forge|forge|test_membershipRecordSigIsNoAcceptance
+forge|forge|test_membershipNativePopIsNoAcceptance
+forge|forge|test_membershipAcceptanceIsNoRecordSig
+forge|forge|test_membershipKeyDataRefused
+forge|forge|test_membershipNotAnMsigRefused
+forge|forge|test_membershipIdempotent
+forge|forge|test_membershipTopSlot
+forge|forge|test_membershipPortable
+forge|forge|test_membershipGen2HoldsNoGen1Acceptance
+forge|forge|test_membershipGen2HostReadsGen1Bits
+forge|forge|test_membershipGen2HostStarvedIsVerifyGas
+forge|forge|test_membershipStarvedMemberIsVerifyGas
+forge|forge|test_membershipVerifyReadsOneSlot
+forge|forge|test_membershipVectors
+forge|forge|test_namedUAMsigUnacceptedRefused
+clientkeys|node|acceptance (CTR-UA-37): every row by hand, the wallet JSON, the native signer, the purpose apart from the records
+ua-rs|cargo|membership_rows
+ua-qt|qt|test_membershipRows
+ua-py|unittest|test_membership_rows
+ua-go|go|TestMembershipRows
+ua-cs|cs|MembershipRows
+ua-c|unittest|test_membership_rows
+ua-cxx|ctest|membership_rows
+ua-dart|dart|membership rows
+ua-dart-frb|dart|membership rows
+cargo-scaas-node|cargo|accept_membership_job_decodes
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

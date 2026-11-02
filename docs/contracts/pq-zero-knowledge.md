@@ -654,7 +654,7 @@ members whose kind is not 0x0130–0x0133 (`slhdsa128s` counts as PQ weight in a
 7,856-byte signature and a ≈ 1.4 M gas cap on every spend). Every other kind — classical signers, `slhdsa128s`, Zether,
 a classical-dominant `msig` — reverts `UAPqzHolder`. **Authorization bound (review2 C0-5, controller proposal, owner may
 override):** an `msig` holder must also be usable — `register` reverts `UAPqzHolder` unless its worst-case authorization
-(register step 4's bound `w`: the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` + the caller's hold; plus `w / 63 + SigCheck.GAS_MARGIN`, the hold of a gen-2 registry that forwards the authorization to this one) plus
+(register step 4's bound `w`: the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` + `MSIG_ACCEPTED_GAS` + the caller's hold; plus `w / 63 + SigCheck.GAS_MARGIN`, the hold of a gen-2 registry that forwards the authorization to this one) plus
 `PqzSet.PQZ_DEBIT_MIN_GAS` is at most 2^24 (the per-transaction cap of EIP-7825, not a chain's own block limit).
 `PQZ_DEBIT_MIN_GAS` is generated from `set.toml` `debit_min_gas`: the full relayed transaction of the cheapest PQZL debit
 (burn 1) on the costlier relay path (`uaExecute`, ML-DSA-65 fee UA at 68,006 gas [estimate]) — 6,836,270 at

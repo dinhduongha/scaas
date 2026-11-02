@@ -25,6 +25,7 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///         same `_derived`, its kind was checked against its record at registration (`_membersWorst`); the verifier call
 ///         stays in the one place, and this library needs no member's verifier address.
 ///         Called directly every entry reverts: solc's library call protection covers each one, none is `view` or `pure`.
+///         `acceptMembership` (CTR-UA-37) runs here too; its member check is `_memberOk`, as a stored record's.
 ///         UNAUDITED.
 library UARegistryLib {
     /// @notice EIP-7825 per-transaction gas cap, the bound of a PQZ `msig` holder (`_attrs`).
@@ -34,8 +35,7 @@ library UARegistryLib {
     ///         member's `pop`, so the figure does not depend on how the member registered), the call or the gen-1
     ///         hand-off, cold accounts (measured worst, cold under `--isolate`: 28,544 for a member handed to gen 1,
     ///         21,224 for a derived member here), plus what the caller must hold for the largest cap (400 k / 63 + 5 k):
-    ///         39,893, rounded up (35,000 before CTR-UA-33: 19,987 + 11,349 = 31,336). CTR-UA-37's one cold read of the
-    ///         accepted bits, once per authorization, is inside this figure, not a term of its own. Also added in `_membersWorst`:
+    ///         39,893, rounded up (35,000 before CTR-UA-33: 19,987 + 11,349 = 31,336). Also added in `_membersWorst`:
     ///         `(held - 400 k) / 63` for the largest held member cap above 400 k, and for each member gen 2 hands to gen 1 the hold gen 2 keeps
     ///         around that call (the member counts `cap + cap / 63 + SigCheck.GAS_MARGIN`; gen 1 holds again
     ///         inside). `UAGas.t.sol` `test_T_GAS_msigAtBudget` authorizes msigs
@@ -43,6 +43,10 @@ library UARegistryLib {
     ///         (8 x `slhdsa128s`, 7,856 B each, + 1 clone, exactly at the bound 12,020,873; least frame gas 11,875,412,
     ///         145 k spare): no per-kind size term (review2 C4-2).
     uint256 internal constant MSIG_MEMBER_GAS = 45_000;
+    /// CTR-UA-37: the accepted bits' cold read, once per authorization and not per member, so a term of `_membersWorst` of its own:
+    /// measured +2,236 (`requireAuthorized`, `msig` 2-of-2, 49,634 -> 51,870, `UARegistrySplit.t.sol` `test_gasHotPath`), rounded up.
+    /// Without it a member of 400 k handed to gen 1, at the bound, starves (`test_T_GAS_msigAtBudget`).
+    uint256 internal constant MSIG_ACCEPTED_GAS = 2_500;
     /// `keccak256("")`: the hash of an empty proof, refused as a `pqzPopHash` (ruling A6-m).
     bytes32 internal constant EMPTY_PROOF_HASH = keccak256("");
 
@@ -622,8 +626,7 @@ library UARegistryLib {
     /// sign `member_digest` under `member`. (The members come typed, TS-D12: no encoding to canonicalise.) A stored signature
     /// is minimal too (owner 2026-10-31, U8S-D1): with T the slots' total weight and N the threshold, T >= N and
     /// T - weight(i) < N for every slot, i.e. T - min(weight) < N.
-    /// Only an accepted slot counts (CTR-UA-37), except in the registration's own `pop`, which is what accepts its signers;
-    /// the view, not the slot: a gen 2 that hosts a gen-1 record (`setPqzKey`) reads gen 1's bits, which live with the record.
+    /// Only an accepted slot counts (CTR-UA-37), except in the registration's own `pop`, which is what accepts its signers.
     function _msig(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory d, IUARegistry.MemberSig[] memory sigs)
         private
         view
@@ -632,12 +635,12 @@ library UARegistryLib {
         bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purposeTag, digest));
         (uint256 threshold, uint256 count) = (UAStore.u16(d, 0), UAStore.u16(d, 2));
         uint256 acc;
+        uint256 yes = purposeTag == UAKinds.PURPOSE_POP_V2 ? type(uint256).max : _accepted(ua, sigs);
         uint256 wMin = type(uint256).max; // the smallest slot weight
         uint256 next; // lowest index the next MemberSig may use
         for (uint256 i; i < sigs.length; ++i) {
             IUARegistry.MemberSig memory s = sigs[i];
-            if (acc >= threshold || s.index < next || s.index >= count) return false;
-            if (purposeTag != UAKinds.PURPOSE_POP_V2 && !IUARegistry(address(this)).memberAccepted(ua, s.index)) return false;
+            if (acc >= threshold || s.index < next || s.index >= count || yes >> s.index & 1 == 0) return false;
             next = uint256(s.index) + 1;
             if (!_memberOk(d, md, digest, s)) return false;
             uint256 w = UAStore.u16(d, 4 + 36 * uint256(s.index) + 34);
@@ -645,6 +648,23 @@ library UARegistryLib {
             if (w < wMin) wMin = w;
         }
         return acc >= threshold && acc - wMin < threshold;
+    }
+
+    /// The accepted bits `sigs` are checked against: one read for a record held here. The bits live with the record, so a gen 2
+    /// hosting a gen-1 record (`setPqzKey`) asks gen 1 slot by slot, that word having no getter; gen 1's view cannot revert but out of
+    /// gas, and a starved caller sees `UAVerifyGas`, never a verdict.
+    function _accepted(bytes32 ua, IUARegistry.MemberSig[] memory sigs) private view returns (uint256 bits) {
+        UAStore.Layout storage s = UAStore.layout();
+        if (s.records[ua].kind != 0) return s.accepted[ua];
+        IUARegistry g1 = IUARegistry(_pred());
+        for (uint256 i; i < sigs.length; ++i) {
+            uint256 index = sigs[i].index;
+            try g1.memberAccepted(ua, index) returns (bool yes) {
+                if (yes) bits |= 1 << index;
+            } catch {
+                revert UAKinds.UAVerifyGas();
+            }
+        }
     }
 
     /// The signature `s` of member `s.index` of the structure `d`: a registered member over `md` under `member`, without key
@@ -663,8 +683,8 @@ library UARegistryLib {
     // ----- the msig bound -----
 
     /// Step 4 for `msig`: every member ∈ MEMBER of this profile and native or registered under its stated kind; the
-    /// worst case of a minimal authorizing set (the `c` largest caps + `c` × `MSIG_MEMBER_GAS`, + the caller's hold for
-    /// the largest of this generation's caps beyond the 400 k that `MSIG_MEMBER_GAS` covers) fits `verifyBudget`.
+    /// worst case of a minimal authorizing set (the `c` largest caps + `c` × `MSIG_MEMBER_GAS` + `MSIG_ACCEPTED_GAS`, + the caller's
+    /// hold for the largest of this generation's caps beyond the 400 k that `MSIG_MEMBER_GAS` covers) fits `verifyBudget`.
     function _membersWorst(bytes memory d) private view returns (uint256 worst) {
         IUARegistry self = IUARegistry(address(this));
         (uint256 threshold, uint256 count) = (UAStore.u16(d, 0), UAStore.u16(d, 2));
@@ -696,7 +716,7 @@ library UARegistryLib {
         for (uint256 acc; acc < threshold; ++c) {
             acc += weights[c];
         }
-        worst = c * MSIG_MEMBER_GAS;
+        worst = c * MSIG_MEMBER_GAS + MSIG_ACCEPTED_GAS;
         for (uint256 i; i < c; ++i) {
             worst += caps[count - 1 - i];
         }

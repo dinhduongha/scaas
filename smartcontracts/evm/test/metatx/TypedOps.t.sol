@@ -765,6 +765,8 @@ contract TypedOpsTest is UALedgerBase {
         m[1] = Member(UAKinds.EVM_EOA, _pad(bob), 1);
         bytes memory d = _msigKey(2, m);
         bytes32 ua = UACall.register(lreg, UAKinds.MSIG, d, _none(), "", "");
+        lreg.acceptMembership(ua, _acceptEoaSig(d, ALICE_PK));
+        lreg.acceptMembership(ua, _acceptEoaSig(d, BOB_PK));
         tok.mintToUA(ua, 1_000);
         MetaTxLib.Envelope memory e = _env(address(0), 0, 0, 0, address(0));
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX,
@@ -781,6 +783,35 @@ contract TypedOpsTest is UALedgerBase {
         tok.uaBurn(_uaE(e, ua), 100, s);
 
         s.members = all;
+        tok.uaBurn(_uaE(e, ua), 100, s);
+        assertEq(tok.balanceOfUA(ua), 900);
+    }
+
+    /// CTR-UA-37 in the UA envelope: every member's signature is good, no slot accepted: the token refuses, nothing moves, the
+    /// nonce stays; the same call goes through once enough weight accepted, and an `msig` that accepted one slot of two still fails.
+    function test_namedUAMsigUnacceptedRefused() public {
+        Member[] memory m = new Member[](2);
+        m[0] = Member(UAKinds.EVM_EOA, _pad(alice), 1);
+        m[1] = Member(UAKinds.EVM_EOA, _pad(bob), 1);
+        bytes memory d = _msigKey(2, m);
+        bytes32 ua = UACall.register(lreg, UAKinds.MSIG, d, _none(), "", "");
+        tok.mintToUA(ua, 1_000);
+        MetaTxLib.Envelope memory e = _env(address(0), 0, 0, 0, address(0));
+        bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX,
+            _digest(address(tok), "UABurn(bytes32 from,uint256 amount,", ua, abi.encode(uint256(100)), e));
+        uint16 ia = _indexOf(d, _pad(alice));
+        uint16 ib = 1 - ia;
+        IUARegistry.UASig memory s;
+        s.members = new IUARegistry.MemberSig[](2);
+        s.members[ia] = IUARegistry.MemberSig(ia, "", _nativeSig(lreg, ALICE_PK, UAKinds.PURPOSE_MEMBER, md));
+        s.members[ib] = IUARegistry.MemberSig(ib, "", _nativeSig(lreg, BOB_PK, UAKinds.PURPOSE_MEMBER, md));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        tok.uaBurn(_uaE(e, ua), 100, s);
+        lreg.acceptMembership(ua, _acceptEoaSig(d, ALICE_PK));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        tok.uaBurn(_uaE(e, ua), 100, s);
+        assertEq(tok.balanceOfUA(ua), 1_000);
+        lreg.acceptMembership(ua, _acceptEoaSig(d, BOB_PK));
         tok.uaBurn(_uaE(e, ua), 100, s);
         assertEq(tok.balanceOfUA(ua), 900);
     }

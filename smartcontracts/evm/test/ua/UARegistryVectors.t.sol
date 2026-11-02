@@ -227,6 +227,7 @@ contract UARegistryVectorsTest is UARegistryBase {
         bytes32 ua = UACall.register(reg, UAKinds.MSIG, d, _none(), "", "");
         emit log_named_uint("register msig (4 members)", g - gasleft());
         assertEq(ua, vm.parseJsonBytes32(sj, ".msig.ua"));
+        _acceptVectorMsig(ua);
         uint256 valid;
         uint256 sets;
         for (uint256 i; vm.keyExistsJson(sj, string.concat(".msig.sets[", vm.toString(i), "]")); ++i) {
@@ -290,11 +291,25 @@ contract UARegistryVectorsTest is UARegistryBase {
             reg.requireAuthorized(ua, p, dg, a);
         }
         bytes32 m = UACall.register(reg, UAKinds.MSIG, vm.parseJsonBytes(sj, ".msig.keyData"), _none(), "", "");
+        _acceptVectorMsig(m);
         uint256 valid;
         for (uint256 i; vm.keyExistsJson(sj, string.concat(".msig.sets[", vm.toString(i), "]")); ++i) {
             if (_msigSetTyped(m, i)) ++valid;
         }
         assertEq(valid, 2);
+    }
+
+    /// signatures.json's structure is portable.json's `msig-classical`: every member accepts with its row (CTR-UA-37).
+    function _acceptVectorMsig(bytes32 ua) internal {
+        vm.pauseGasMetering(); // a 2.5 MB JSON string per cheatcode call
+        string memory j = vm.readFile("../vectors/ua/portable.json");
+        vm.resumeGasMetering();
+        for (uint256 i; i < 4; ++i) {
+            string memory row = string.concat(".memberships[", vm.toString(i), "].");
+            assertEq(vm.parseJsonBytes32(j, string.concat(row, "ua")), ua);
+            reg.acceptMembership(ua, IUARegistry.MemberSig(uint16(vm.parseJsonUint(j, string.concat(row, "index"))), "",
+                vm.parseJsonBytes(j, string.concat(row, "sig"))));
+        }
     }
 
     /// One msig set in its typed form (`uaSig`): the vector's members equal the `sig` blob's; valid sets pass, and with
@@ -346,6 +361,11 @@ contract UARegistryVectorsTest is UARegistryBase {
         bytes memory d = _msigKey(2, m); // sorts m by id
         bytes32 ua = UACall.register(reg, UAKinds.MSIG, d, _none(), "", "");
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX, digest);
+        for (uint256 i; i < 2; ++i) {
+            bytes32 am = UAKinds.uaMessage(m[i].kind, UAKinds.PURPOSE_MEMBER, _membershipMd(ua, m[i].id));
+            reg.acceptMembership(ua, IUARegistry.MemberSig(_indexOf(d, m[i].id), "",
+                m[i].kind == UAKinds.WEBAUTHN_P256 ? _assertion(sk[0], bytes32(_slice32(waKey, 64)), am) : _p256(sk[1], am)));
+        }
 
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](2);
         bytes memory wa;

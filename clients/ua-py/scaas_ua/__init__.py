@@ -431,7 +431,7 @@ def ua_auth_domain_separator(generation, chain_id, registry, chain_uid):
 
 def ua_auth_digest(generation, chain_id, registry, chain_uid, ua, purpose, digest):
     """EIP-712 digest of ``UAAuth(ua, purpose, digest)`` under the registry's domain: what native signers sign,
-    except that under the three portable purposes (``is_portable_purpose``) a code-less native msig member signs the
+    except that under the portable purposes (``is_portable_purpose``) a code-less native msig member signs the
     record's typed digest instead (CTR-MTX-14, TS-D4)."""
     s = keccak256(UAAUTH_TYPEHASH, _sized(ua, 32, 'ua'), _sized(purpose, 32, 'purposeTag'), _sized(digest, 32, 'digest'))
     return keccak256(b'\x19\x01', ua_auth_domain_separator(generation, chain_id, registry, chain_uid), s)

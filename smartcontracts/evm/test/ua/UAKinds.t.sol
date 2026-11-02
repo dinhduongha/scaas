@@ -88,15 +88,15 @@ contract UAKindsTest is Test {
                 vm.parseJsonBytes32(j, _at("groups", i, "GROUP"))
             );
         }
-        // every purpose at v1 (kem, pqz-key: UA-8), then pop v2 (UA-8 P1)
-        bytes32[14] memory p = [
+        // every purpose at v1 (kem, pqz-key: UA-8; membership: CTR-UA-37), then pop v2 (UA-8 P1)
+        bytes32[15] memory p = [
             UAKinds.PURPOSE_POP, UAKinds.PURPOSE_METATX, UAKinds.PURPOSE_METATX_CANCEL,
             UAKinds.PURPOSE_MEMBER, UAKinds.PURPOSE_ZETHER_AUTH, UAKinds.PURPOSE_ZETHER_OWNER, UAKinds.PURPOSE_KEYOP,
             UAKinds.PURPOSE_RECEIVER_FEE, UAKinds.PURPOSE_VP, UAKinds.PURPOSE_VC_ANCHOR, UAKinds.PURPOSE_TRADE,
-            UAKinds.PURPOSE_KEM, UAKinds.PURPOSE_PQZ_KEY, UAKinds.PURPOSE_POP_V2
+            UAKinds.PURPOSE_KEM, UAKinds.PURPOSE_PQZ_KEY, UAKinds.PURPOSE_MEMBERSHIP, UAKinds.PURPOSE_POP_V2
         ];
-        assertEq(_count(j, "purposes"), 14);
-        for (uint256 i; i < 14; ++i) assertEq(p[i], vm.parseJsonBytes32(j, _at("purposes", i, "purposeTag")));
+        assertEq(_count(j, "purposes"), 15);
+        for (uint256 i; i < 15; ++i) assertEq(p[i], vm.parseJsonBytes32(j, _at("purposes", i, "purposeTag")));
         assertEq(UAKinds.MSG_TAG, vm.parseJsonBytes32(j, ".constants.MSG_TAG"));
         assertEq(UAKinds.PURPOSE_POP, vm.parseJsonBytes32(j, ".constants.POP_TAG"));
         assertEq(UAKinds.DOMAIN_TYPEHASH, vm.parseJsonBytes32(j, ".constants.DOMAIN_TYPEHASH"));
@@ -324,19 +324,20 @@ contract UAKindsTest is Test {
     function test_portableTypehashesPinned() public {
         vm.pauseGasMetering(); // a 2.5 MB JSON string per cheatcode call; correctness test, not a gas test
         string memory j = _p();
-        string[5] memory t = ["UAKemRecord", "UAPortableRecord", "UARegistration", "UAPqzKey", "UAPqzKeyRecord"];
-        bytes32[5] memory got = [
+        string[6] memory t = ["UAKemRecord", "UAPortableRecord", "UARegistration", "UAPqzKey", "UAPqzKeyRecord", "UAMembership"];
+        bytes32[6] memory got = [
             UAKinds.UA_KEM_RECORD_TYPEHASH, UAKinds.UA_PORTABLE_RECORD_TYPEHASH, UAKinds.UA_REGISTRATION_TYPEHASH,
-            UAKinds.UA_PQZ_KEY_TYPEHASH, UAKinds.UA_PQZ_KEY_RECORD_TYPEHASH
+            UAKinds.UA_PQZ_KEY_TYPEHASH, UAKinds.UA_PQZ_KEY_RECORD_TYPEHASH, UAKinds.UA_MEMBERSHIP_TYPEHASH
         ];
-        bytes32[5] memory pinned = [
+        bytes32[6] memory pinned = [
             bytes32(0x0ab7989827627b89c268e88a0a0b06b62aefa70b0a466014931ca44acfa9a201),
             0x0c1553cfab3c35326558484df79963dced75ead85272d2a85985f264757bfe7f,
             0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e,
             0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00,
-            0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567
+            0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567,
+            0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4
         ];
-        for (uint256 i; i < 5; ++i) {
+        for (uint256 i; i < 6; ++i) {
             string memory p = string.concat(".typed.types.", t[i]);
             assertEq(got[i], pinned[i], t[i]);
             assertEq(got[i], keccak256(bytes(vm.parseJsonString(j, string.concat(p, ".type")))), t[i]);

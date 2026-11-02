@@ -772,6 +772,7 @@ mod tests {
         assert_eq!(sel("setKemKey", "registry"), U::setKemKeyCall::SELECTOR);
         assert_eq!(sel("storePqzPop", "registry"), U::storePqzPopCall::SELECTOR);
         assert_eq!(sel("setPqzKey", "registry"), U::setPqzKeyCall::SELECTOR);
+        assert_eq!(sel("acceptMembership", "registry"), U::acceptMembershipCall::SELECTOR);
         let cast = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
         assert_eq!(sel("deploy", "factory"), cast("deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)"));
         assert_eq!(sel("mtxExecuteAsOwner", "wallet"), cast("mtxExecuteAsOwner(bytes,uint256,uint256,bytes)"));

@@ -355,14 +355,15 @@ contract UARegistryPqTest is UARegistryBase {
         UACall.register(r, UAKinds.MSIG, tk, _none(), "", "");
     }
 
-    /// T-GAS: at the largest `mldsa65` cap the structure bound admits for the treasury (5,911,000) the `msig` itself
-    /// registers (step 4) but not as a PQZ holder (review2 C0-5): 2 x 5.911 M + the cheapest PQZL debit is over 2^24.
+    /// T-GAS: at the largest `mldsa65` cap the structure bound admits for the treasury (5,910,000; 5,911,000 before
+    /// `MSIG_ACCEPTED_GAS`, CTR-UA-37) the `msig` itself registers (step 4) but not as a PQZ holder (review2 C0-5): 2 x 5.91 M
+    /// + the cheapest PQZL debit is over 2^24.
     /// The vector's treasury PoP binds a PQZ key, so its signing sets are not run here with the real verifiers
     /// (`test_T_GAS_pqHybrid` does for the hybrid; `UARegistryPq.t.sol:382` `test_T_GAS_msigPqHold` for the treasury's bound).
     function test_T_GAS_pqTreasury() public {
         string memory pj = _pj();
         UARegistry.KindConfig[] memory c = _realPq();
-        c[2].cap = 5_911_000;
+        c[2].cap = 5_910_000;
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _withPqz(c));
         _members(r, pj);
         bytes32 tua = r.uaOf(UAKinds.MSIG, vm.parseJsonBytes(pj, ".msig.treasury.keyData"));
@@ -405,12 +406,12 @@ contract UARegistryPqTest is UARegistryBase {
     /// The msig bound with PQ caps (register step 4, P6c): members burning their whole cap authorize within
     /// `verifyBudget` at the largest cap the bound admits; one more thousand gas of cap and the structure is refused.
     function test_T_GAS_msigPqHold() public {
-        MockVerifier burner = new MockVerifier(0, 5_901_000);
-        (UARegistry r, bytes memory d) = _burnMembers(REG_A, address(burner), 5_911_000);
+        MockVerifier burner = new MockVerifier(0, 5_900_000);
+        (UARegistry r, bytes memory d) = _burnMembers(REG_A, address(burner), 5_910_000);
         bytes32 id = r.uaOf(UAKinds.MSIG, d);
         bytes32 ua = UACall.register(r, UAKinds.MSIG, d, _none(), _burnSigs(r, d, id, UAKinds.PURPOSE_POP_V2, _regDigest(id, UAKinds.MSIG)), "");
         r.requireAuthorized{gas: BUDGET}(ua, UAKinds.PURPOSE_METATX, DIGEST, UACall.auth(ua, abi.encode(d, _burnSigs(r, d, ua, UAKinds.PURPOSE_METATX, DIGEST))));
-        (UARegistry r2,) = _burnMembers(address(0x5ca6), address(burner), 5_912_000);
+        (UARegistry r2,) = _burnMembers(address(0x5ca6), address(burner), 5_911_000);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
         UACall.register(r2, UAKinds.MSIG, d, _none(), "", "");
     }
@@ -458,7 +459,7 @@ contract UARegistryPqTest is UARegistryBase {
         m[1] = Member(UAKinds.EVM_EOA, _pad(a), 1);
         bytes memory d = _msigKey(2, m);
         uint256 held = CAP_MLDSA65 + CAP_MLDSA65 / 63 + 5_000; // gen 1's hold inside gen 2's 63/64
-        uint256 bound = 445_000 + 45_000 + held + (held - 400_000) / 63;
+        uint256 bound = 445_000 + 45_000 + held + (held - 400_000) / 63 + 2_500; // MSIG_ACCEPTED_GAS
         UARegistry.KindConfig[] memory none = new UARegistry.KindConfig[](0);
         UARegistry tight = _deploy(address(0x5d20), chainUidA, address(home), false, uint64(bound - 1), impl, true, none);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));

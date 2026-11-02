@@ -13,7 +13,7 @@ import { hex, keccak_256, utf8ToBytes, concatBytes, word } from '../src/bytes.js
 import { hashStruct, hashTypedData } from '../src/evm.js';
 import { personalSignDigest } from '../legacy/typed-signing/ua-portable-raw.js';
 import { portableJson } from '../scripts/ua-portable-vectors.mjs';
-import { B, nativeOk, bytesAt, sigOk, memberSigs, msigOk } from './ua-verify.js';
+import { B, nativeOk, bytesAt, sigOk, verify, memberSigs, msigOk } from './ua-verify.js';
 
 import { dir } from './ua-vectors-dir.js';
 const TEXT = readFileSync(new URL('portable.json', dir), 'utf8');
@@ -160,11 +160,12 @@ test('portable PoP has no chain context', () => {
     PURPOSE_POP_V2: { tag: 'scaas.ua.purpose.pop.v2', hash: hex(h('scaas.ua.purpose.pop.v2')) },
     PURPOSE_KEM: { tag: 'scaas.ua.purpose.kem.v1', hash: hex(h('scaas.ua.purpose.kem.v1')) },
     PURPOSE_PQZ_KEY: { tag: 'scaas.ua.purpose.pqz-key.v1', hash: hex(h('scaas.ua.purpose.pqz-key.v1')) },
+    PURPOSE_MEMBERSHIP: { tag: 'scaas.ua.purpose.membership.v1', hash: hex(h('scaas.ua.purpose.membership.v1')) },
     PQZ_KEY_GROUP: { tag: 'scaas.ua.group.pqz-mlwe.v1', hash: hex(h('scaas.ua.group.pqz-mlwe.v1')) },
   });
   assert.deepEqual(P.checked, { none: 0, chain: 1, relayer: 2 });
   assert.equal('KEM_RECORD_TAG' in ua || 'PQZ_KEY_RECORD_TAG' in ua, false, 'the raw record tags are legacy (TS-D3)');
-  assert.deepEqual([ua.POP_V2_TAG, ua.KEM_TAG, ua.PQZ_KEY_TAG, ua.GROUP('pqz-mlwe')].map(hex),
+  assert.deepEqual([ua.POP_V2_TAG, ua.KEM_TAG, ua.PQZ_KEY_TAG, ua.MEMBERSHIP_TAG, ua.GROUP('pqz-mlwe')].map(hex),
     Object.values(P.tags).map((t) => t.hash));
   // pqzKeyHash = keyHash(0x0142, pqzKey) = keccak256(PQZ_KEY_GROUP ‖ pqzKey), not a plain keccak of the key
   const k = row('mldsa65/n2048-kmax1024');
@@ -442,7 +443,12 @@ test('acceptance (CTR-UA-37): every row by hand, the wallet JSON, the native sig
     assert.equal(hex(m.digest), r.digest, r.name);
     assert.equal(hex(m.message), r.message, r.name);
     assert.equal(r.memberDigest, hex(keccak_256(concatBytes(B(r.ua), B(r.message)))), r.name);
-    if (r.memberKind === 1) assert.equal(r.sig.length, 2 + 130, r.name);
+    if (r.memberKind === 1) assert.ok(nativeOk(`0x${r.member.slice(26)}`, B(r.digest), r.sig), r.name);
+    else {
+      const m = hex(ua.uaMessage(r.memberKind, ua.purposeTag('member'), B(r.memberDigest)));
+      const key = P.registrations.find((x) => x.ua === r.member).keyData;
+      assert.ok(r.memberKind >= 0x0130 ? sigOk(r.memberKind, key, m, r.sig) : verify(r.memberKind, key, m, r.sig), r.name);
+    }
   }
 });
 

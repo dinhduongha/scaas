@@ -339,6 +339,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         _reg(reg, a);
         _reg(reg, b);
         (bytes memory d, bytes32 ms) = _msigOf(reg, a.ua, b.ua);
+        _acceptAll(reg, d, ms, a, b);
         IUARegistry.MemberSig[] memory s = _memberSigs(reg, d, ms, a, b);
         _req(reg, ms, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s));
         uint16 im = _indexOf(d, a.ua);
@@ -356,6 +357,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         _reg(reg, b);
         UARegistry gen2 = _gen2Empty();
         (bytes memory d, bytes32 ms) = _msigOf(gen2, a.ua, b.ua);
+        _acceptAll(gen2, d, ms, a, b);
         IUARegistry.MemberSig[] memory s = _memberSigs(gen2, d, ms, a, b);
         _req(gen2, ms, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s));
         uint16 i = _indexOf(d, b.ua);
@@ -371,6 +373,17 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         m[2] = Member(UAKinds.EVM_EOA, _pad(vm.addr(PK_E)), 1);
         d = _msigKey(3, m);
         ms = UACall.register(r, UAKinds.MSIG, d, _none(), "", "");
+    }
+
+    /// Group members `a`, `b` and the EOA accept, each with its own signature.
+    function _acceptAll(UARegistry r, bytes memory d, bytes32 ms, Group memory a, Group memory b) internal {
+        Group[2] memory g = [a, b];
+        for (uint256 i; i < 2; ++i) {
+            bytes memory sig = _gsign(g[i].kind, g[i].secret, g[i].vk,
+                UAKinds.uaMessage(g[i].kind, UAKinds.PURPOSE_MEMBER, _membershipMd(ms, g[i].ua)));
+            r.acceptMembership(ms, IUARegistry.MemberSig(_indexOf(d, g[i].ua), "", sig));
+        }
+        r.acceptMembership(ms, _acceptEoaSig(d, PK_E));
     }
 
     function _memberSigs(UARegistry r, bytes memory d, bytes32 ms, Group memory a, Group memory b)
@@ -478,7 +491,8 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
             m[0] = Member(kind, mu, uint16(i + 1)); // another id per generation
             bytes memory d = _msigKey(uint16(i + 1), m);
             bytes32 ms = UACall.register(regs[i], UAKinds.MSIG, d, _none(), "", "");
-            uint256 bound = GROUP_CAP + 45_000; // UARegistry.MSIG_MEMBER_GAS
+            regs[i].acceptMembership(ms, s[0]);
+            uint256 bound = GROUP_CAP + 45_000 + 2_500; // MSIG_MEMBER_GAS + MSIG_ACCEPTED_GAS
             if (i == 1) bound += GROUP_CAP / 63 + 5_000; // gen 1's own hold (register step 4)
             (bool ok,) = address(regs[i]).call{gas: bound}(
                 _reqCall(ms, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s))

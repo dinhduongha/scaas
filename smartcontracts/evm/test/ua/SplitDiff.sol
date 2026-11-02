@@ -2,17 +2,22 @@
 pragma solidity ^0.8.24;
 
 import {Vm, VmSafe} from "forge-std/Vm.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 
 /// typed-signing R2: one run of a scenario as a list of row hashes, in memory (it outlives `vm.revertToState`), so the same
 /// scenario on the pre-split registry and on the split one compares row by row. A read's row is its success flag and raw
 /// return or revert data. A write's row is that, plus its logs (emitter, topics, data), every storage write in order (account,
 /// slot, new value), every contract it created (address, code), and every call out of the registry (kind, callee, calldata:
 /// which verifier the immutables named, what it was asked): the stored bytes themselves, not only what a view shows.
+/// One declared difference (CTR-UA-37, added after the split): a `registerMsig` that goes through writes the slots of its `pop` to
+/// `accepted[ua]` (Layout slot 15) on a registry with acceptance. That one slot of that one write leaves the `[storage]` row, and
+/// `attempt` checks it directly instead: exactly the `pop`'s bits on such a registry, 0 on the pre-split one.
 library SplitDiff {
     Vm internal constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     struct Run {
         address lib; // calls to it, and a registry's calls to itself, are the split's own: left out of a row
+        bool accepts; // this run's registry has CTR-UA-37
         string[] labels;
         bytes32[] rows;
         uint256 n;
@@ -47,7 +52,20 @@ library SplitDiff {
         push(r, label, h);
     }
 
-    function _writes(Run memory r, address to, VmSafe.AccountAccess[] memory d)
+    /// The declared slot of a `registerMsig` that went through, 0 for any other call; checks what it holds.
+    function _declared(Run memory r, address to, bytes memory data, bool ok, bytes memory ret) private view returns (bytes32 slot) {
+        if (!ok || data.length < 4 || bytes4(data) != IUARegistry.registerMsig.selector) return 0;
+        bytes memory args = new bytes(data.length - 4);
+        for (uint256 i; i < args.length; ++i) args[i] = data[i + 4];
+        (, , IUARegistry.MemberSig[] memory pop,) =
+            abi.decode(args, (IUARegistry.MsigStructure, IUARegistry.UAAttrs, IUARegistry.MemberSig[], bytes));
+        uint256 bits;
+        for (uint256 i; i < pop.length; ++i) bits |= 1 << pop[i].index;
+        slot = keccak256(abi.encode(abi.decode(ret, (bytes32)), uint256(15)));
+        require(uint256(vm.load(to, slot)) == (r.accepts ? bits : 0), "SplitDiff: the declared slot");
+    }
+
+    function _writes(Run memory r, address to, VmSafe.AccountAccess[] memory d, bytes32 declared)
         private
         pure
         returns (bytes32 slots, bytes32 created, bytes32 calls)
@@ -69,7 +87,7 @@ library SplitDiff {
             }
             VmSafe.StorageAccess[] memory a = d[i].storageAccesses;
             for (uint256 j; j < a.length; ++j) {
-                if (!a[j].isWrite || a[j].reverted) continue;
+                if (!a[j].isWrite || a[j].reverted || (a[j].account == to && a[j].slot == declared && declared != 0)) continue;
                 bytes32 k = keccak256(abi.encode(a[j].account, a[j].slot));
                 uint256 m;
                 while (m < n && key[m] != k) ++m;
@@ -95,7 +113,7 @@ library SplitDiff {
         (ok, ret) = to.call(data);
         VmSafe.AccountAccess[] memory d = vm.stopAndReturnStateDiff();
         Vm.Log[] memory l = vm.getRecordedLogs();
-        (bytes32 slots, bytes32 created, bytes32 calls) = _writes(r, to, d);
+        (bytes32 slots, bytes32 created, bytes32 calls) = _writes(r, to, d, _declared(r, to, data, ok, ret));
         push(r, string.concat(label, " [result]"), keccak256(abi.encode(ok, ret)));
         push(r, string.concat(label, " [logs]"), _logs(l));
         push(r, string.concat(label, " [storage]"), slots);

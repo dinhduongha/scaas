@@ -493,6 +493,7 @@ contract UARegistryUA8Test is UARegistryBase {
         assert(IUARegistry.setKemKey.selector == bytes4(0xa00cce2a));
         assert(IUARegistry.storePqzPop.selector == bytes4(0x7fac161a));
         assert(IUARegistry.setPqzKey.selector == bytes4(0x3c6897f1));
+        assert(IUARegistry.acceptMembership.selector == bytes4(0x73fd7d54));
         assert(IUARegistry.requireAuthorized.selector == bytes4(0x58d5ff4f));
     }
 
@@ -787,6 +788,15 @@ contract UARegistryUA8Test is UARegistryBase {
         _members(a, rows);
         slots = abi.decode(pop, (IUARegistry.MemberSig[]));
         assertEq(UACall.register(a, UAKinds.MSIG, d, _none(), abi.encode(_one(slots[1])), ""), ua);
+        _acceptSlot(a, rows, d, ua, 0, 0); // the `pop` signer is accepted, the weight-1 slot accepts: the rule under test decides
+    }
+
+    /// Slot `index` of `d` accepts (CTR-UA-37), `sk` for a native member.
+    function _acceptSlot(UARegistry a, Row[] memory rows, bytes memory d, bytes32 ua, uint256 index, uint256 sk) internal {
+        (, bytes32 id) = _member(d, index);
+        bytes32 typed = UAKinds.membershipDigest(ua, id);
+        bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBERSHIP, typed));
+        a.acceptMembership(ua, IUARegistry.MemberSig(uint16(index), "", _memberSig(rows, d, index, md, typed, sk)));
     }
 
     /// Both slots verify and the old rule passes, but the weight-2 slot alone reaches the threshold: `UAPoP`. The weight-1
@@ -869,6 +879,50 @@ contract UARegistryUA8Test is UARegistryBase {
         vm.expectRevert(IUARegistry.UAPoP.selector);
         UACall.register(a, UAKinds.MSIG, d, _none(), abi.encode(extra), "");
         assertEq(UACall.register(a, UAKinds.MSIG, d, _none(), pop, ""), ua);
+    }
+
+    /// CTR-UA-37: every `memberships` row of portable.json by its real verifier: the digests against the contract's, then the
+    /// signature accepted on a registry where the `msig` is registered without a `pop`-signed slot of that member. `msig-pq-native`
+    /// is PQ-eligible and its `pop` accepts both slots, so its rows are checked at the member's own verify and read accepted.
+    function test_membershipVectors() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        vm.pauseGasMetering();
+        string memory j = vm.readFile("../vectors/ua/portable.json");
+        vm.resumeGasMetering();
+        UARegistry a = _regA(false);
+        _members(a, rows);
+        Row memory classical = _find(rows, "msig-classical");
+        Row memory native = rows[MSIG_NATIVE_ROW];
+        assertEq(UACall.register(a, UAKinds.MSIG, classical.keyData, _none(), "", ""), classical.ua);
+        assertEq(UACall.register(a, UAKinds.MSIG, native.keyData, native.attrs, native.pop, native.pqzPop), native.ua);
+        for (uint256 i; i < 6; ++i) _membershipRow(a, rows, j, string.concat(".memberships[", vm.toString(i), "]."), classical.ua);
+    }
+
+    function _membershipRow(UARegistry a, Row[] memory rows, string memory j, string memory p, bytes32 classical) internal {
+        bytes32 ua = vm.parseJsonBytes32(j, string.concat(p, "ua"));
+        bytes32 member = vm.parseJsonBytes32(j, string.concat(p, "member"));
+        uint16 index = uint16(vm.parseJsonUint(j, string.concat(p, "index")));
+        uint16 kind = uint16(vm.parseJsonUint(j, string.concat(p, "memberKind")));
+        bytes memory sig = vm.parseJsonBytes(j, string.concat(p, "sig"));
+        bytes32 typed = UAKinds.membershipDigest(ua, member);
+        bytes32 message = UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBERSHIP, typed);
+        bytes32 md = UAKinds.memberDigest(ua, message);
+        assertEq(vm.parseJsonBytes32(j, string.concat(p, "digest")), typed, "digest");
+        assertEq(vm.parseJsonBytes32(j, string.concat(p, "message")), message, "message");
+        assertEq(vm.parseJsonBytes32(j, string.concat(p, "memberDigest")), md, "memberDigest");
+        if (ua == classical) {
+            assertFalse(a.memberAccepted(ua, index));
+            vm.expectEmit(address(a));
+            emit IUARegistry.UAMembershipAccepted(ua, index, member);
+            a.acceptMembership(ua, IUARegistry.MemberSig(index, "", sig));
+        } else if (kind == UAKinds.EVM_EOA) {
+            assertEq(ECDSA.recover(typed, sig), address(uint160(uint256(member))));
+        } else {
+            _allowMl65(_byUa(rows, member).keyData, UAKinds.uaMessage(kind, UAKinds.PURPOSE_MEMBER, md), sig);
+            a.requireAuthorized(member, UAKinds.PURPOSE_MEMBER, md, UACall.sig(sig));
+        }
+        assertTrue(a.memberAccepted(ua, index), "accepted");
     }
 
     /// Review focus 2: stripping or swapping `pqzKey`, `pqzPopHash`, `kemVersion` or `kemPk` (portable.json negatives
@@ -1064,7 +1118,7 @@ contract UARegistryUA8Test is UARegistryBase {
         c[0] = UARegistry.KindConfig(0x0133, address(new BurnAll()), 1_400_000);
         address clone = address(0x5cf40);
         vm.etch(clone, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
-        uint256 bound = 8 * (1_400_000 + 45_000) + 400_000 + 45_000 + uint256(1_400_000 - 400_000) / 63;
+        uint256 bound = 8 * (1_400_000 + 45_000) + 400_000 + 45_000 + uint256(1_400_000 - 400_000) / 63 + 2_500;
         UARegistry r = _deploy(address(0x5cea0), chainUidA, address(0), false, uint64(bound), address(impl), true, c);
         Member[] memory m = new Member[](9);
         for (uint256 i; i < 8; ++i) {
@@ -1074,7 +1128,7 @@ contract UARegistryUA8Test is UARegistryBase {
         _storedPop(r, _msigKey(9, m), 9);
         // 12 members, a budget that admits them
         c[0].verifier = address(new AcceptAll());
-        UARegistry big = _deploy(address(0x5cea1), chainUidA, address(0), false, uint64(12 * 1_445_000 + uint256(1_000_000) / 63),
+        UARegistry big = _deploy(address(0x5cea1), chainUidA, address(0), false, uint64(12 * 1_445_000 + uint256(1_000_000) / 63 + 2_500),
             address(0), true, c);
         Member[] memory m12 = new Member[](12);
         for (uint256 i; i < 12; ++i) {
@@ -2354,6 +2408,7 @@ contract UARegistryUA8Test is UARegistryBase {
         ua = UAKinds.uaOf(UAKinds.MSIG, d);
         bytes memory pop = _msigSigs(rows, d, ua, UAKinds.PURPOSE_POP_V2, _regDigest(ua, UAKinds.MSIG), 0, 1, sk);
         assertEq(UACall.register(a, UAKinds.MSIG, d, _none(), pop, ""), ua);
+        _acceptSlot(a, rows, d, ua, 2, sk); // the third slot, outside the `pop`
     }
 
     /// Versions 1–3 signed by each 2-member subset land; one member, and two out of order, are refused.
@@ -3165,6 +3220,7 @@ contract UARegistryUA8Test is UARegistryBase {
     function _splitRun(string memory art, Row[] memory rows, Neg[] memory negs) internal returns (SplitDiff.Run memory r) {
         registryArtifact = art;
         r = SplitDiff.start(3_000, address(UARegistryLib));
+        r.accepts = keccak256(bytes(art)) == keccak256("UARegistry.sol:UARegistry");
         _allowAll(rows);
         _splitNegatives(r, rows, negs);
         address at = address(_regA(true));
@@ -3295,9 +3351,9 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("register mldsa65/n2048-kmax1024")) return (3341208, 81220050);
         if (h == keccak256("register fndsa512")) return (2740640, 6384690);
         if (h == keccak256("register slhdsa128s")) return (1123151, 13246740);
-        if (h == keccak256("register msig-classical")) return (165539, 1115370);
-        if (h == keccak256("register msig-pq/n2048-kmax1024")) return (3468184, 83776680);
-        if (h == keccak256("register msig-pq-native")) return (308120, 6843690);
+        if (h == keccak256("register msig-classical")) return (165778, 1115370);
+        if (h == keccak256("register msig-pq/n2048-kmax1024")) return (3468184, 83874600);
+        if (h == keccak256("register msig-pq-native")) return (308120, 6941610);
         if (h == keccak256("setKemKey mldsa65/v2 n2048-kmax1024")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024")) return (15299, 0);
         if (h == keccak256("setKemKey fndsa512/v2 n2048-kmax1024")) return (2509996, 3947400);
@@ -3312,12 +3368,12 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("storePqzPop mldsa65 n2048-kmax1024")) return (1825688, 43806960);
         if (h == keccak256("storePqzPop again (no-op) n2048-kmax1024")) return (1825688, 0);
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2048-kmax1024")) return (1825688, 44002800);
-        if (h == keccak256("register msig-pq without pqzPop n2048-kmax1024")) return (1663896, 40165560);
+        if (h == keccak256("register msig-pq without pqzPop n2048-kmax1024")) return (1663896, 40263480);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2048-kmax1024")) return (1825688, 43806960);
         if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024")) return (143722, 0);
         if (h == keccak256("registrationOf msig-pq on gen 1 n2048-kmax1024")) return (99494, 0);
         if (h == keccak256("register mldsa65/n2304-kmax4096")) return (3613592, 87704190);
-        if (h == keccak256("register msig-pq/n2304-kmax4096")) return (3740568, 90260820);
+        if (h == keccak256("register msig-pq/n2304-kmax4096")) return (3740568, 90358740);
         if (h == keccak256("setKemKey mldsa65/v2 n2304-kmax4096")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096")) return (15299, 0);
         if (h == keccak256("setKemKey fndsa512/v2 n2304-kmax4096")) return (2509996, 3947400);
@@ -3329,12 +3385,12 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("storePqzPop mldsa65 n2304-kmax4096")) return (1967000, 47157660);
         if (h == keccak256("storePqzPop again (no-op) n2304-kmax4096")) return (1967000, 0);
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2304-kmax4096")) return (1967000, 47353500);
-        if (h == keccak256("register msig-pq without pqzPop n2304-kmax4096")) return (1794968, 43299000);
+        if (h == keccak256("register msig-pq without pqzPop n2304-kmax4096")) return (1794968, 43396920);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2304-kmax4096")) return (1967000, 47157660);
         if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096")) return (153454, 0);
         if (h == keccak256("registrationOf msig-pq on gen 1 n2304-kmax4096")) return (105419, 0);
         if (h == keccak256("register mldsa65/n2560-kmax16384")) return (3881880, 94139370);
-        if (h == keccak256("register msig-pq/n2560-kmax16384")) return (4008856, 96696000);
+        if (h == keccak256("register msig-pq/n2560-kmax16384")) return (4008856, 96793920);
         if (h == keccak256("setKemKey mldsa65/v2 n2560-kmax16384")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2560-kmax16384")) return (15299, 0);
         if (h == keccak256("setKemKey fndsa512/v2 n2560-kmax16384")) return (2509996, 3947400);
@@ -3346,12 +3402,12 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("storePqzPop mldsa65 n2560-kmax16384")) return (2104216, 50459400);
         if (h == keccak256("storePqzPop again (no-op) n2560-kmax16384")) return (2104216, 0);
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2560-kmax16384")) return (2104216, 50655240);
-        if (h == keccak256("register msig-pq without pqzPop n2560-kmax16384")) return (1926040, 46432440);
+        if (h == keccak256("register msig-pq without pqzPop n2560-kmax16384")) return (1926040, 46530360);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2560-kmax16384")) return (2104216, 50459400);
         if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384")) return (163568, 0);
         if (h == keccak256("registrationOf msig-pq on gen 1 n2560-kmax16384")) return (111562, 0);
         if (h == keccak256("register mldsa65/n2816-kmax65536")) return (4201368, 102054060);
-        if (h == keccak256("register msig-pq/n2816-kmax65536")) return (4328344, 104610690);
+        if (h == keccak256("register msig-pq/n2816-kmax65536")) return (4328344, 104708610);
         if (h == keccak256("setKemKey mldsa65/v2 n2816-kmax65536")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2816-kmax65536")) return (15299, 0);
         if (h == keccak256("setKemKey fndsa512/v2 n2816-kmax65536")) return (2509996, 3947400);
@@ -3363,7 +3419,7 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("storePqzPop mldsa65 n2816-kmax65536")) return (2292632, 55240650);
         if (h == keccak256("storePqzPop again (no-op) n2816-kmax65536")) return (2292632, 0);
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2816-kmax65536")) return (2292632, 55436490);
-        if (h == keccak256("register msig-pq without pqzPop n2816-kmax65536")) return (2057112, 49565880);
+        if (h == keccak256("register msig-pq without pqzPop n2816-kmax65536")) return (2057112, 49663800);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2816-kmax65536")) return (2292632, 55240650);
         if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536")) return (182107, 0);
         if (h == keccak256("registrationOf msig-pq on gen 1 n2816-kmax65536")) return (125760, 0);
@@ -3457,7 +3513,7 @@ contract UARegistryUA8Test is UARegistryBase {
         // 12 x slhdsa128s members
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
         c[0] = UARegistry.KindConfig(0x0133, address(new AcceptAll()), 1_400_000);
-        UARegistry big = _deploy(address(0x5cea2), chainUidA, address(0), false, uint64(12 * 1_445_000 + uint256(1_000_000) / 63),
+        UARegistry big = _deploy(address(0x5cea2), chainUidA, address(0), false, uint64(12 * 1_445_000 + uint256(1_000_000) / 63 + 2_500),
             address(0), true, c);
         Member[] memory m12 = new Member[](12);
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](12);
