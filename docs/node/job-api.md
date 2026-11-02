@@ -389,7 +389,7 @@ The lane scheduler leases queued rows of its chain with `hold = 0` and `lane_hin
 
 <a id="NODE-JOB-21"></a>**NODE-JOB-21** — **The node's own queue claims by kind: a stopped kind never hides another**
 (owner decision 2026-11-02; SPECIFIED). A kind can be stopped on a lane while others run, today Soroban `call` jobs at
-`breaker.call_budget_pct` of the hour's budget, with a plain `signed_op`. The scheduler leases past a stopped kind inside the store, so its queued rows
+`breaker.call_budget_pct` of the hour's budget, with a plain `signed_op` that is no token payment. The scheduler leases past a stopped kind inside the store, so its queued rows
 take no slot of the round and the oldest job of a running kind is always reached, however long the backlog. Each namespace has a
 `call` quota (`max_live_call_jobs`, beside `max_live_jobs`; over it `429 QUOTA` at `POST /v1/jobs`), so one namespace's backlog
 of free jobs stays bounded. This is the node's guarantee, not a consumer's: the node is open and any consumer can run it. The
@@ -512,14 +512,17 @@ from, signature, contract, valid_until, kind?, extra?}}`.
   node rebuilds the auth entry from these fields on its own network id, and the host checks `signature` over what it rebuilt: the
   account signs `sha256` of that `HashIdPreimage` (`clientkeys`: `authPreimage`, `authDigest`, `signedAuth`). `op.auth[]` and `extra.auth[]` carry
   the same `{payload, from, signature}`.
-- `signature` stays hex, one crypto object: 64 bytes of a `G…` account, or the `ScVal` XDR a `C…` subject's `__check_auth` reads, at
+- `signature` stays `0x…` hex, one crypto object: 64 bytes of a `G…` account, or the `ScVal` XDR a `C…` subject's `__check_auth` reads, at
   most 8,192 B and nested at most 64 XDR levels.
 - The call is the invocation the subject signed; no field names it. A `G…` account or a `C…` contract only signs: the lane submits.
 - Contracts: it runs only on a token, a mandate (`params.mandates`, `C…`), the DEX or the router of the chain's `params`, and never on
   the registry, even one listed there; anything else is `CALL_TARGET_REFUSED`, `dead` on its one claim, nothing sent. A `G…` `msig`
   member whose signature the registry needs submits that write itself; a `call` job carries no other signer.
-- A plain `signed_op` (no `op.kind`; a job with no kind is one) counts in the `call` share: it stops at `breaker.call_budget_pct` of
-  the hour's budget while `ua_metatx` jobs and a `signed_op` with `op.kind` run to all of it.
+- Budget: a plain `signed_op` (no `op.kind`; a job with no kind is one) whose root is a token payment, `invocation.function` `pay`,
+  `pay_meta` or `transfer` on a contract of the chain's tokens, runs to all of the hour's budget. The host call is exactly that root,
+  so a client cannot mislabel one, and `build` refuses a job read as one that builds any other call (`CALL_TARGET_REFUSED`, nothing
+  sent). Every other plain `signed_op`, and one that does not parse, counts in the `call` share and stops at
+  `breaker.call_budget_pct`. `ua_metatx` jobs and a `signed_op` with `op.kind` run to all of it.
 - Its relay fee (`op.kind = "relay_fee"`) is built from the signed root, the eight `relay` arguments, with `payer` the signer and
   `relayer` this lane, so the job carries `payload`, `from`, `signature`, `contract`, `valid_until` and `ref`, and no call of its own. A
   multi-party DEX `settle` is a `ua_metatx` job, its native legs in `op.auth`.

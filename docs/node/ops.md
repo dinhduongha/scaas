@@ -637,8 +637,8 @@ Pi. An indexer-only node (`modules.submit` off) has no lane to limit and needs n
 hour and a 10 XLM floor on both Soroban chains as a starting point, not as a recommendation: failures alone never reach that
 budget, a lane landing at most 720 transactions an hour at 0.07 XLM each at worst, so set it lower to stop failing jobs inside
 the hour. The floor compares the account that pays, under a fee bump the fee account alone (owner ruling 2026-11-01). `call`
-jobs and a plain `signed_op` stop at `breaker.call_budget_pct` of the budget (default 50, owner decisions 2026-11-01 and 2026-11-02) and
-every other kind runs to all of it. A landed failure counts against
+jobs and a plain `signed_op` that is no token payment stop at `breaker.call_budget_pct` of the budget (default 50, owner decisions
+2026-11-01 and 2026-11-02) and everything else runs to all of it. A landed failure counts against
 the budget (`FAILED` Soroban transactions are billed): the breaker opens at the budget and no later job is claimed, while a
 job in flight is still followed to its report. When `tx_fee` cannot read a landed transaction's fee, the budget misses it:
 that is a `warn!` log and `scaas_fee_unread_total{chain,lane}`, never a guessed fee, and `ScaasFeeUnread` alerts on an increase.
