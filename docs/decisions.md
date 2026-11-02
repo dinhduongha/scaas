@@ -1758,21 +1758,23 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 **Rule.** On a regulated `NORMAL_ZETHER`, `WRAPPED_ZETHER`, `NORMAL_PQZ` or `WRAPPED_PQZ`:
 - **FREEZE** of an account blocks its shield, unshield and transfer, and locks its public balance. A frozen account still receives shielded credits: it may be a decoy, and a refusal would break the ring and name it. It cannot take the credit out.
 - **PAUSE** stops the whole token, shielded transfers included.
-- **A denylist, not an allowlist:** a denied account cannot receive into a public balance. The check sits on the public balance, so a multi-recipient transfer with decoys is not checked.
+- **A denylist, not an allowlist,** when `DENYLIST` is on: a denied account cannot receive into a public balance. The check sits on the public balance, so a multi-recipient transfer with decoys is not checked.
 - **FORCE** acts on public balances only, as `MODERATE` does (CTR-GOV-13): a shielded balance never moves without its owner's proof.
 - **Who sees what is not on chain.** An auditor decides what to share, off chain; no on-chain viewing right exists.
-**Status.** Rules decided, not designed in detail, not built. Whether a regulated form fits the size limit is **not known**: `WrappedPqzToken` has no room today (CTR-GOV-02). The denylist is the receiver check of [CTR-GOV-18](#ctr-gov-18--receiver-check-deniedflags-beside-requiredflags-denylist-by-default).
+**Status.** Rules decided, not designed in detail, not built. Whether a regulated form fits the size limit is **not known**: `WrappedPqzToken` has no room today (CTR-GOV-02). The denylist is the receiver check of [CTR-GOV-18](#ctr-gov-18--receiver-check-two-feature-bits-allowlist-and-denylist-off-by-default).
 **Why.** Regulation needs to stop an account and the token and to reach public value, without weakening what a shielded balance promises: only its owner's proof moves it.
 **Cost if wrong.** A regulator cannot seize shielded value on chain: it must wait for an unshield, which FREEZE blocks.
 **Source.** Owner 2026-11-02.
 
-### CTR-GOV-18 — Receiver check: deniedFlags beside requiredFlags, denylist by default
+### CTR-GOV-18 — Receiver check: two feature bits, ALLOWLIST and DENYLIST, off by default
 - old: governance:denied-flags · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-18 · superseded-by: —
 
-**Rule.** The receiver check of flag 8 has two sets on the same `ComplianceRegistry`: `R(a) = (flags(a) & requiredFlags) == requiredFlags && (flags(a) & deniedFlags) == 0`. **A denylist is the default:** where a token has the receiver check, it is created with `deniedFlags` set and `requiredFlags` = 0, and an allowlist is the choice a creator makes for an asset that needs known holders. Both together mean: known, and not denied.
-**Status.** Decided, not built. It changes CTR-AS-07 and the `ALLOWLIST ⇔ registry ≠ 0 && requiredFlags ≠ 0` row of CTR-AS-17: the check needs `registry ≠ 0` and at least one set non-empty. The token without the flag has no check: its transfer adds no read (CTR-GOV-11). The controller reads "default for every token" this way; the owner may override.
-**Why.** Money for general use, such as a CBDC or a stablecoin, must reach a new holder at once and needs only to stop a bad one; a security needs its holders known in advance. One check serves both. `FREEZE` stops a sender and expires; a denied account cannot receive; a sanctioned account takes both.
-**Cost if wrong.** A denylist acts after the fact. A dead registry stops no one instead of stopping everyone.
+**Rule.** The receiver check has two feature bits on the same `ComplianceRegistry`, both off by default, so by default nobody is stopped. `ALLOWLIST` keeps bit 8 and reads `requiredFlags`; `DENYLIST` takes a new bit and reads `deniedFlags`:
+`R(a) = (!ALLOWLIST || (flags(a) & requiredFlags) == requiredFlags) && (!DENYLIST || (flags(a) & deniedFlags) == 0)`.
+Both on means: known, and not denied. Each bit is disabled and locked on its own. Features only lose bits after creation, so a token created with a bit off never gets it: the issuer chooses at creation.
+**Status.** Decided, not built. It changes CTR-AS-07 and CTR-AS-17's `ALLOWLIST ⇔ registry ≠ 0 && requiredFlags ≠ 0` row. A token with both off adds no read (CTR-GOV-11). An earlier draft of this entry had one bit with two flag sets and a denylist by default.
+**Why.** One bit, one meaning: a wallet reads the two controls directly. Money for general use, such as a CBDC or a stablecoin, turns on `DENYLIST`; a security needing known holders turns on `ALLOWLIST`. `FREEZE` stops a sender and expires; a denied account cannot receive; a sanctioned account takes both.
+**Cost if wrong.** A token created with both off can never stop anyone. A denylist acts after the fact.
 **Source.** Owner 2026-11-02.
 
 ## 17. Contracts — Meta-transactions
