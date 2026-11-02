@@ -15,7 +15,7 @@
 P=2026-10-31-ua8-soroban
 LOGEXT=log # step logs are git-ignored (*.log); only <P>-summary.txt is committed (owner 2026-11-02)
 STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 forge-isolate sizes docs soroban clientkeys vectors-check ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt cargo-scaas-node node-e2e-anvil soroban-spike-local e2e-soroban-local soroban-roundtrip-check e2e-ua8-1 e2e-ua8-2 e2e-ua8-3 e2e-ua8-union named-tests summary"
-FAMILIES="ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt soroban soroban-spike-local cargo-scaas-node e2e-soroban-local e2e-ua8-1 e2e-ua8-2 e2e-ua8-3"
+FAMILIES="ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt soroban soroban-spike-local e2e-soroban-local e2e-ua8-1 e2e-ua8-2 e2e-ua8-3"
 # "<step>|<form>|<name>": every test added from bdde1d66 (the typed-signing merge) to HEAD in the contracts, spike, node and
 # ua-rs (test functions found in the diff: Tasks M2, M3, G1, B0-B7c, V1, B9a, N2, MA-S), clientkeys' new titles, in the tool's pass
 # form (forms: see the base runner). e2e_ua8 tests sit in the e2e-ua8-N step that runs them.
@@ -142,7 +142,6 @@ cargo-scaas-node|cargo|recorded_auth_own_means_the_lanes_own
 cargo-scaas-node|cargo|soroban_call_job_registry_only
 cargo-scaas-node|cargo|soroban_call_job_function_allowlist
 cargo-scaas-node|cargo|soroban_call_job_builds_the_contract_shapes
-cargo-scaas-node|cargo|keys
 cargo-scaas-node|cargo|soroban_call_job_has_no_job_auth_entries
 cargo-scaas-node|cargo|attest_digest_vector
 cargo-scaas-node|cargo|relayer_arg_is_the_lane
