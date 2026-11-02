@@ -1628,7 +1628,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 ### CTR-GOV-03 — A plain transfer stays +0: one regulated implementation per kind, never per feature
 - old: governance:D3 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-03 · superseded-by: —
 
-**Rule.** A plain transfer's gas does not rise, in the sense of CTR-GOV-11: no new read. A regulated instance is known on the hot path by its implementation, not by a storage read: one regulated implementation per kind, never one per feature. Ids 8 `NORMAL_REGULATED` and 9 `WRAPPED_REGULATED` are real enum members, off until built with flags 5–8 ([CTR-GOV-16](#ctr-gov-16--regulated-kinds-are-real-enum-members-before-the-factory-freezes)). The confidential kinds will have regulated versions too (owner 2026-11-02): "one regulated implementation per kind" covers them. How they work is **open, owner, not designed**.
+**Rule.** A plain transfer's gas does not rise, in the sense of CTR-GOV-11: no new read. A regulated instance is known on the hot path by its implementation, not by a storage read: one regulated implementation per kind, never one per feature. Ids 8 `NORMAL_REGULATED` and 9 `WRAPPED_REGULATED` are real enum members, off until built with flags 5–8 ([CTR-GOV-16](#ctr-gov-16--regulated-kinds-are-real-enum-members-before-the-factory-freezes)). The confidential kinds will have regulated versions too (owner 2026-11-02): "one regulated implementation per kind" covers them, under [CTR-GOV-17](#ctr-gov-17--regulated-confidential-kinds-the-rules).
 **Status.** Decided as recommended, not built. It conflicts with CTR-AS-17's placement ("on the ordinary kinds, not separate kinds"); the Change to CTR-AS-17 is drafted and waits for the owner. The refusal of flags 5–8 on the confidential kinds at creation is the current built state, not a permanent rule.
 **Why.** `_update` and `_uaMove` read no governance slot today; a `features` read there would charge every holder of every plain token for a control their token does not have. Two implementations meet the rule by construction.
 **Cost if wrong.** More catalogue rows and more artifacts in the size gate and the audit. The alternatives were immutable-args clones (every clone address formula changes, factory bytecode before the freeze) or accepting the read (the rule breaks on the entry that matters most).
@@ -1720,7 +1720,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 - old: governance:moderate-public · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-13 · superseded-by: —
 
 **Rule.** `MODERATE` moves public balances only, on every kind; it never moves a shielded balance. [CTR-GOV-08](#ctr-gov-08--moderate-later-with-flags-5-8) stands otherwise.
-**Status.** Decided, not built. Regulated confidential kinds are open (CTR-GOV-03); this rule binds them when they are designed.
+**Status.** Decided, not built. It binds the regulated confidential kinds (CTR-GOV-17).
 **Why.** A shielded balance cannot be moved without its owner's proof.
 **Cost if wrong.** A regulator of a confidential kind has no moderator's reach over shielded value.
 **Source.** Owner 2026-11-02.
@@ -1747,10 +1747,24 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 - old: governance:enum-ids · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-16 · superseded-by: —
 
 **Rule.** The factory's kind enum gets real members before it freezes: placeholders 6 and 7 (a Solidity enum has no gaps), 8 `NORMAL_REGULATED`, 9 `WRAPPED_REGULATED`, and four ids for the regulated confidential kinds: one each for `NORMAL_ZETHER`, `WRAPPED_ZETHER`, `NORMAL_PQZ`, `WRAPPED_PQZ`. Every one is off until its implementation is published. It amends CTR-GOV-03's "reserved in the enum comment".
-**Status.** Decided, not built. The four confidential ids reserve a number only: how those kinds work stays open, owner, not designed.
+**Status.** Decided, not built. The four confidential ids reserve a number only; their rules are CTR-GOV-17.
 **Why.** A kind named in a comment does not decode: `createToken` with kind 8 reverts. After a freeze a regulated kind could only come from a second factory, whose token is an outside leg to [CTR-GOV-05](#ctr-gov-05--a-wrapped-kind-refuses-a-scaas-leg-with-force-or-moderate) and `KIND_OUTSIDE` to the DEX (attack B-03).
 **Cost if wrong.** A few unused enum values.
 **Source.** Owner 2026-11-02; `research/governance/permission-model-v2-attack.md` B-03.
+
+### CTR-GOV-17 — Regulated confidential kinds: the rules
+- old: governance:regulated-confidential · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-17 · superseded-by: —
+
+**Rule.** On a regulated `NORMAL_ZETHER`, `WRAPPED_ZETHER`, `NORMAL_PQZ` or `WRAPPED_PQZ`:
+- **FREEZE** of an account blocks its shield, unshield and transfer, and locks its public balance.
+- **PAUSE** stops the whole token, shielded transfers included.
+- **A denylist, not an allowlist:** a denied account cannot receive into a public balance. The check sits on the public balance, so a multi-recipient transfer with decoys is not checked.
+- **FORCE** acts on public balances only, as `MODERATE` does (CTR-GOV-13): a shielded balance never moves without its owner's proof.
+- **Who sees what is not on chain.** An auditor decides what to share, off chain; no on-chain viewing right exists.
+**Status.** Rules decided, not designed in detail, not built. Whether a regulated form fits the size limit is **not known**: `WrappedPqzToken` has no room today (CTR-GOV-02). This denylist is the confidential kinds' form; flag 8 `ALLOWLIST` on the public kinds (CTR-AS-17) stays as written.
+**Why.** Regulation needs to stop an account and the token and to reach public value, without weakening what a shielded balance promises: only its owner's proof moves it.
+**Cost if wrong.** A regulator cannot seize shielded value on chain: it must wait for an unshield, which FREEZE blocks.
+**Source.** Owner 2026-11-02.
 
 ## 17. Contracts — Meta-transactions
 
@@ -9046,6 +9060,7 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 | governance:moderate-public | CTR-GOV-13 | current |
 | governance:operator-delay | CTR-GOV-15 | current |
 | governance:plus0 | CTR-GOV-11 | current |
+| governance:regulated-confidential | CTR-GOV-17 | current |
 | net-aptos:L1 | NET-ALL-06 | current |
 | net-aptos:L2 | NET-ALL-07 | current |
 | net-aptos:L3 | NET-ALL-08 | current |
