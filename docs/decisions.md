@@ -1681,7 +1681,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 **Status.** Decided as recommended, later: built with flags 5–8. Only the bit number is taken now, 0 B.
 **Why.** A moderator without the refusals reaches tender deposits, vesting clones, wrapper reserves and pools; refusing a `from` with code leaves Safe-held balances out of reach, the lesser hole.
 **Cost if wrong.** Three normative sentences rewritten; bytes on the plain kinds later.
-**Change (owner 2026-11-03).** `moderatedTransfer` and `forceTransfer` move on an unhooked body with their own refusals of both pools and `this`: a hook would stop them on the frozen account they exist for.
+**Change (owner 2026-11-03).** `forceTransfer` moves on an unhooked body with its own refusals of both pools and `this`: a hook would stop it on the frozen account it exists for. `moderatedTransfer` stays on the hooked path: "passes `FREEZE` and `ALLOWLIST`" above means it is subject to them, so a frozen `from` is refused, a paused token refuses it and the receiver check applies (`permission-model.md` F11). A review read the word as a bypass and the controller relayed that; corrected the same day.
 **Source.** `research/governance/permission-model.md` §3, §6; `research/governance/permission-model-attack.md` A4.
 
 ### CTR-GOV-09 — Delayed relaxing and RECORD: later, with the asset suite
