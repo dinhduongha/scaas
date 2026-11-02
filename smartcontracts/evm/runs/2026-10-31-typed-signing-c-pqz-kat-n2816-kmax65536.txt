@@ -1,36 +1,36 @@
-# pqz-kat-n2816-kmax65536 at commit 7c644e7e
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/ffi)
+# pqz-kat-n2816-kmax65536 at commit da4d0e00
    Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/ffi)
    Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/pqzl/rust)
-    Finished `release` profile [optimized + debuginfo] target(s) in 12.50s
+    Finished `release` profile [optimized + debuginfo] target(s) in 10.73s
 keys / cbd / matrix / enc: 0.2 s
-pqzl TRANSFER           proof  54849 B  prove+verify 2.50 s
-pqzl TRANSFER0          proof  54505 B  prove+verify 3.78 s
-pqzl BURN               proof  54026 B  prove+verify 8.34 s
-pqzl REFRESH            proof  53996 B  prove+verify 7.29 s
-pqzl REGISTER           proof  35479 B  prove+verify 1.62 s
-pqzl DISCLOSE-SENDER    proof  35913 B  prove+verify 1.25 s
+pqzl TRANSFER           proof  54849 B  prove+verify 2.31 s
+pqzl TRANSFER0          proof  54505 B  prove+verify 2.47 s
+pqzl BURN               proof  54026 B  prove+verify 4.19 s
+pqzl REFRESH            proof  53996 B  prove+verify 7.77 s
+pqzl REGISTER           proof  35479 B  prove+verify 1.70 s
+pqzl DISCLOSE-SENDER    proof  35913 B  prove+verify 1.29 s
 pqzl DISCLOSE-RECEIVER  proof  36828 B  prove+verify 0.71 s
-pqzl DISCLOSE-AUDITOR   proof  36859 B  prove+verify 0.90 s
-pqzl M1-on              proof  54824 B  prove+verify 2.20 s
-pqzl M2-on              proof  57779 B  prove+verify 2.60 s
-pqzl M4-on              proof  59548 B  prove+verify 2.69 s
-pqzl M8-on              proof  79208 B  prove+verify 5.27 s
+pqzl DISCLOSE-AUDITOR   proof  36859 B  prove+verify 0.92 s
+pqzl M1-on              proof  54824 B  prove+verify 2.31 s
+pqzl M2-on              proof  57779 B  prove+verify 2.73 s
+pqzl M4-on              proof  59548 B  prove+verify 2.83 s
+pqzl M8-on              proof  79208 B  prove+verify 5.81 s
 pqzl M1-off             proof  54504 B  prove+verify 2.16 s
-pqzl M2-off             proof  55020 B  prove+verify 9.02 s
-pqzl M4-off             proof  58086 B  prove+verify 2.39 s
-pqzl M8-off             proof  76340 B  prove+verify 4.30 s
+pqzl M2-off             proof  55020 B  prove+verify 6.20 s
+pqzl M4-off             proof  58086 B  prove+verify 2.33 s
+pqzl M8-off             proof  76340 B  prove+verify 4.40 s
 pqzl M2-off-two-real    proof  55007 B  prove+verify 1.94 s
-pqzl M4-off-decoys      proof  58088 B  prove+verify 2.22 s
-pqzl M8-on-boundary     proof  79207 B  prove+verify 11.07 s
+pqzl M4-off-decoys      proof  58088 B  prove+verify 2.21 s
+pqzl M8-on-boundary     proof  79207 B  prove+verify 7.32 s
 pqzl M8-on-boundary-leg3-auditor proof  36832 B
 pqzl M8-on-boundary-leg4-auditor proof  36843 B
 pqzl M4-on-leg2-auditor proof  36843 B
 pqzl M8-on-boundary-leg4-receiver proof  36842 B
-proofs: 74.9 s
-negative: 431 rows (301 decoder, 130 verifier): 111.4 s
-worst case: 286.1 s
-total: 292.3 s
+proofs: 64.3 s
+negative: 431 rows (301 decoder, 130 verifier): 94.8 s
+worst case: 250.5 s
+total: 257.5 s
 same matrix.json 1167 B
 same cbd.json 4359 B
 same keygen.json 3107 B
