@@ -1,6 +1,6 @@
 # B3 fix round 1, on HEAD 6303dc33 + the fix working tree
 $ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry
-   Compiling scaas-ua-registry v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/ua-registry)
+   Compiling scaas-ua-registry v0.1.0 (smartcontracts/soroban/contracts/ua-registry)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 3.09s
      Running unittests src/lib.rs (smartcontracts/soroban/target/debug/deps/scaas_ua_registry-c54d5d54c1d28043)
 
@@ -113,11 +113,11 @@ test result: ok. 102 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fi
 rc=0
 $ CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban
 == test soroban
-   Compiling scaas-ua-registry v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/ua-registry)
-   Compiling scaas-mandate v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/mandate)
-   Compiling scaas-dex v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/dex)
-   Compiling scaas-relay-fee v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/relay-fee)
-   Compiling scaas-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/token)
+   Compiling scaas-ua-registry v0.1.0 (smartcontracts/soroban/contracts/ua-registry)
+   Compiling scaas-mandate v0.1.0 (smartcontracts/soroban/contracts/mandate)
+   Compiling scaas-dex v0.1.0 (smartcontracts/soroban/contracts/dex)
+   Compiling scaas-relay-fee v0.1.0 (smartcontracts/soroban/contracts/relay-fee)
+   Compiling scaas-token v0.1.0 (smartcontracts/soroban/contracts/token)
 warning: use of deprecated method `soroban_sdk::ledger::Ledger::protocol_version`: Protocol version won't be available in the future
   --> contracts/token/src/test.rs:50:40
    |

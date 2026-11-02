@@ -1,9 +1,9 @@
 == test soroban
-   Compiling scaas-ua-registry v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/ua-registry)
-   Compiling scaas-mandate v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/mandate)
-   Compiling scaas-relay-fee v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/relay-fee)
-   Compiling scaas-dex v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/dex)
-   Compiling scaas-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/token)
+   Compiling scaas-ua-registry v0.1.0 (smartcontracts/soroban/contracts/ua-registry)
+   Compiling scaas-mandate v0.1.0 (smartcontracts/soroban/contracts/mandate)
+   Compiling scaas-relay-fee v0.1.0 (smartcontracts/soroban/contracts/relay-fee)
+   Compiling scaas-dex v0.1.0 (smartcontracts/soroban/contracts/dex)
+   Compiling scaas-token v0.1.0 (smartcontracts/soroban/contracts/token)
 warning: use of deprecated method `soroban_sdk::ledger::Ledger::protocol_version`: Protocol version won't be available in the future
   --> contracts/token/src/test.rs:50:40
    |

@@ -1,4 +1,4 @@
-   Compiling scaas-ua-registry v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/ua-registry)
+   Compiling scaas-ua-registry v0.1.0 (smartcontracts/soroban/contracts/ua-registry)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 5.10s
      Running unittests src/lib.rs (target/debug/deps/scaas_ua_registry-dbecadbefa297ecc)
 
