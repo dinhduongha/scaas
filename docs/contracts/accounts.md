@@ -523,8 +523,9 @@ explorers show listed and accepted apart.
   bitmap slot and never parses `pop`; that cold read, once per authorization and not per member, is its own term of the registration bound,
   `MSIG_ACCEPTED_GAS = 2,500` (measured +2,236: `requireAuthorized`, `msig` 2-of-2, 49,634 -> 51,870), so an `msig` registered at the bound
   still authorizes at it. Single-key kinds do not read it.
-- **Scope.** Built on EVM (`UARegistry`). Soroban's twin is in progress on `ua8-soroban`. NEAR and Algorand have no registry and are not covered:
-  their `msig` counts member weight with no acceptance (`near/common/src/ua.rs`, `algorand/contracts/account.py`), and each is its own decision.
+- **Scope** (owner 2026-11-02). Built on EVM (`UARegistry`). Soroban's twin is in progress on `ua8-soroban`. NEAR takes the rule in its own UA round: it has
+  no registry, and its `msig` counts member weight with no acceptance today (`near/common/src/ua.rs`). Algorand takes the rule in its own UA round: it has no
+  registry either, and its `msig` counts member weight with no acceptance today (`algorand/contracts/account.py`).
 - **No decline, no leave.** The UA id derives from the structure, so a member cannot be removed.
 - **No revoke.** An acceptance cannot be withdrawn: a revoke could drop a held `msig` below its threshold and lock what it holds. The owner
   may add it later.
