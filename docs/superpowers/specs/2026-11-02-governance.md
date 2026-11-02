@@ -92,10 +92,10 @@ family. Form: the DEX round spec and the `typed-signing` plan.
 | C4 | Names: `RETIRED_6`, `RETIRED_7`, `NORMAL_ZETHER_REGULATED`, `WRAPPED_ZETHER_REGULATED`, `NORMAL_PQZ_REGULATED`, `WRAPPED_PQZ_REGULATED`; the holder's typed struct names; `GovernanceUse`; `GovernanceHolderFactory` | CTR-GOV-16 gives numbers and the four kinds, not names | A rename before the freeze |
 | C5 | Bit 18 `PUBLISH` reads "adds a release **or an environment** to a catalogue" | gaps §4: no bit covered `publishEnv`, the most powerful of the four registrar powers. No code: the bit is for a later factory | One sentence of a reserved row |
 | C6 | The rules of §1 to §4 become one component doc, `docs/contracts/governance.md`, at build | The register's rows point at themselves today; "one rule, one place" wants a home, and README §3 keeps the list | Text moves between two files |
-| C7 | An expired root counts as live until it is revoked (§1.7). Proposed as a Change to CTR-GOV-09, §12.9, awaiting the owner's word | The owner asked for a definition. `Counts.roots` is a stored number and no holder list exists on chain, so an expiry cannot move it without a walk. It fails toward the protection: a renounce takes one more `revokeRole`, and a frozen account stays frozen until its own bound or the owner's revoke | An exact count needs a holder list or a stored latest expiry, a new release |
+| C7 | An expired root counts as live until it is revoked (§1.7). A Change to CTR-GOV-09, accepted by the owner 2026-11-03 | The owner asked for a definition. `Counts.roots` is a stored number and no holder list exists on chain, so an expiry cannot move it without a walk. It fails toward the protection: a renounce takes one more `revokeRole`, and a frozen account stays frozen until its own bound or the owner's revoke | An exact count needs a holder list or a stored latest expiry, a new release |
 | C8 | `cancelGrant(bit, account)` is the way to cancel a pending, where agy offered a revoke of a non-holder and Claude an overwrite | A confirm with other terms keeps its revert (CTR-GOV-04); a revoke would also bar the account or take the role; an entry says what it does. One more selector on every contract and one more holder op | One entry to drop before the build |
 | C9 | The operator generation is a named `uint64 generation`, a signed word of every holder struct, compared with the stored value before the self-call | Explicit parameters: a wallet shows it, the node builds it from a named field, and a stale envelope gets a named error, not a bad signature | Every holder typehash moves, before any is deployed |
-| C10 | `F` on the payer of a wrap or a wrap-shield applies when the destination is another id. A shield keeps `F` on the payer whatever `toUA` is | agy C-2's route runs through `wrapToUA`; a wrap into one's own frozen balance is a credit, and credits are never refused (CTR-AS-05). The underlying is another asset, so a frozen account can still hand it to someone else: this closes the account's own route only. A wrap-shield into one's own id spends that same other asset, so it follows the wrap. A shield spends the locked public balance itself (`_poolMove`, `_toPool`), which CTR-GOV-17 locks | One condition in `_wrap`, the order entries and the wrap-shield entries, when built |
+| C10 | `F` on the payer of a wrap applies when the destination is another id. A shield and, by the owner's word of 2026-11-03, a wrap-shield keep `F` on the payer whatever `toUA` is | agy C-2's route runs through `wrapToUA`; a wrap into one's own frozen balance is a credit, and credits are never refused (CTR-AS-05). The underlying is another asset, so a frozen account can still hand it to someone else: this closes the account's own route only. A wrap-shield into one's own id spends that same other asset, so it follows the wrap. A shield spends the locked public balance itself (`_poolMove`, `_toPool`), which CTR-GOV-17 locks | One condition in `_wrap`, the order entries and the wrap-shield entries, when built |
 | C11 | Under `PAUSE`: `rescue`, direct `addReserve` and `mtxPrepareAcc` stay open; every relayed op that stays open runs at fee `NONE` | `rescue` moves what the token does not owe, `addReserve` is "unchanged" in asset-suite §2.4, prepare is what a roll-over needs; a fee leg is a transfer (CTR-AS-06) | One line of a table of a kind not built |
 
 ### 0.1 Disposition of the three reviews
@@ -176,9 +176,9 @@ Each reviewer's other refuted claims stand: they were tested against the code an
 |---|---|
 | Fable M-1 | Fixed, §1.5, §1.6, §1.7, §2.2, §10.3, G41. A grantor's revoke bars nobody, and the confirm re-runs every check and makes the root the owner proposed, so deleting the pending only let a grantor cancel the owner's proposal |
 | Fable M-2 | Fixed, §1.8, §3.1, §3.3, §10.3. The holder refuses its factory, its implementation and clones of it, by the clone code hash of §12.7. A token has no such hash, and another release's clone or one not yet deployed passes: disclosed. **Its wallet sentence is rejected:** printing "no controller" for every contract that is no `SmartKeyAccount` clone or UA would misname a Safe, which can call the holder |
-| Fable M-3 | Fixed, C10, §4.3: Wrap-shield takes C10's condition. Shield keeps `F` on the payer whatever `toUA` is, as the finding says: it spends the locked public balance, and C10 now says why. CTR-GOV-17's "blocks its shield" reads as that shield (controller reading, owner may override) |
+| Fable M-3 | Fixed, C10, §4.3. Owner 2026-11-03: a frozen payer's wrap-shield is refused whatever `toUA` is, as a shield is (CTR-GOV-17) |
 | Fable M-4 | Fixed, §4.2. `WrappedLib` links `GovernanceLib`; `ZetherWrappedLib` and `PqzWrappedLib` link `WrappedLib`, not `GovernanceLib` itself, so the closure takes all three |
-| Fable M-5 | Recorded as proposed Change lines, §12.9, **awaiting the owner's word**. Nothing goes in the register before it |
+| Fable M-5 | Accepted by the owner 2026-11-03: Change lines in the register, §12.9 |
 | Fable M-6 | Fixed, §5.2, §5.4, §5.5, §7.4, §10.3. The cap is the token's: it binds wraps and stays after `disableFeature(MINTABLE)`. The finding's other option, lifting it on wraps, is not taken |
 | Fable M-7 | Fixed, §5.4, §7.4, §10.3: the refusal stays, stated with what it costs |
 | Fable M-8 | Fixed, §11, §12.7. **Its failure is corrected:** a missing field is `422 BAD_PAYLOAD` at accept, not a silent `dead`. The node builds from the job's field, never from `generation()`, and the guard compares the two at lease, since intake reads no chain. The field sits in `args`, apart from `origin.generation` |
@@ -674,7 +674,7 @@ Below, `F(x)` is FREEZE on id `x`, `P` is PAUSE, `R(x)` the denylist, when `DENY
 | Path | Entry | `F` on | `P` | `R` on | Where the check would sit |
 |---|---|---|---|---|---|
 | Shield | `mtxShield(toUA, amount)` | the payer, whatever `toUA` is: it spends the locked public balance (C10). Never `toUA` | yes | none: a shielded credit | entry body, before `ZetherLib.shield` |
-| Wrap-shield | `mtxWrapShield(underlying, amountIn, toUA)` | the payer when `toUA` is another id (C10). Never `toUA` | yes | none | entry body, before `WrappedLib.wrap` |
+| Wrap-shield | `mtxWrapShield(underlying, amountIn, toUA)` | the payer, whatever `toUA` is (owner 2026-11-03, CTR-GOV-17). Never `toUA` | yes | none | entry body, before `WrappedLib.wrap` |
 | Transfer | `mtxConfidentialTransfer`, `…Compact` (`_multi`), `…Single` | `uaOf(t.yFrom)` and the beneficiary. Never a `yTo`, never a leg | yes | the beneficiary; **not** `f.legs[j]`'s `decoyFee` | layer, top of `_multi` and `mtxConfidentialTransferSingle`, before `ZetherLib`; the decoy loop untouched |
 | Unshield | `mtxUnshield(b, amount, recipient, proof)` | `uaOf(b.yFrom)` and the beneficiary | yes | `recipient` and the beneficiary | layer, top of the entry, before `ZetherLib.unshield` |
 | Unshield-unwrap | `mtxUnshieldUnwrap(b, x, proof)` | `uaOf(b.yFrom)` and the beneficiary | yes | the beneficiary; not `x.recipient`: it receives another asset (CTR-AS-05) | `WrappedZetherToken`, top of the entry, before `ZetherLib.unshield` |
@@ -689,7 +689,7 @@ Below, `F(x)` is FREEZE on id `x`, `P` is PAUSE, `R(x)` the denylist, when `DENY
 | Path | Entry | `F` on | `P` | `R` on | Where the check would sit |
 |---|---|---|---|---|---|
 | Shield | `mtxShield(toUA, amount)` | the payer in `_toPool`, whatever `toUA` is: it spends the locked public balance (C10). Never `toUA` | yes | none | entry body, before `_toPool` |
-| Wrap-shield | `mtxWrapShield(underlying, amountIn, toUA)` | the payer when `toUA` is another id (C10). Never `toUA` | yes | none | entry body, before `WrappedLib.wrap` |
+| Wrap-shield | `mtxWrapShield(underlying, amountIn, toUA)` | the payer, whatever `toUA` is (owner 2026-11-03, CTR-GOV-17). Never `toUA` | yes | none | entry body, before `WrappedLib.wrap` |
 | Transfer | `mtxConfidentialTransfer`, `…Compact` (`_multi`), `…Single`, `…SingleCompact` (`_single`) | `t.fromUA` and the beneficiary, and the `shieldIn` payer when `shieldIn ≠ 0`. Never `toUA`, never a leg | yes | the beneficiary; **not** `t.legs[j].ua`'s `decoyFee` | layer, first in `_single` / `_multi`, before `_pullShieldIn`, so a refusal stays cheap (C2-5) and precedes a 9-13 M gas proof |
 | Unshield | `mtxUnshield(b, amount, recipient, …)` (`_burn`) | `b.fromUA` and the beneficiary, and the `shieldIn` payer | yes | `recipient` and the beneficiary | `F`, `P`, `R(beneficiary)` first in `_burn`; `R(recipient)` in the entry, before `_burn`, which unshield-unwrap shares |
 | Unshield-unwrap | `mtxUnshieldUnwrap(b, x, …)` | `b.fromUA` and the beneficiary, and the `shieldIn` payer | yes | the beneficiary; not `x.recipient` | first in `_burn`, as above |
@@ -1309,11 +1309,11 @@ Each amends an owner ruling. The owner accepted the first four on 2026-11-02; th
 
 The Change lines of 2026-11-03 are also in the register, each the owner's: CTR-GOV-02, -08, -09, and the amended rules of CTR-GOV-12, -17, -19.
 
-**Proposed, awaiting the owner's word.** Not in the register and not the owner's until that word: two controller readings of owner words (Fable M-5). Neither is unsafe: the first fails toward the protection, and each sentence of the second is true on its kinds. T17 writes them only on that word.
+**Accepted by the owner, 2026-11-03,** and in the register: two readings of owner words (Fable M-5).
 
-> CTR-GOV-09, Change (proposed): an expired root counts as live until it is revoked, for the relaxing rule and for the renounce rule of CTR-GOV-02. `Counts.roots` is a stored number, and the chain sees an expiry only by a walk. Source: C7, §1.7.
+> CTR-GOV-09, Change: an expired root counts as live until it is revoked, for the relaxing rule and for the renounce rule of CTR-GOV-02. `Counts.roots` is a stored number, and the chain sees an expiry only by a walk. Source: C7, §1.7.
 
-> CTR-GOV-10, Change (proposed): bit 5 has one sentence per class of kind. Public kinds: the account in any role, the envelope `from` of a meta-tx op included. Confidential kinds: the account as a proof's sender. Source: CTR-GOV-17 U4, §1.2.
+> CTR-GOV-10, Change: bit 5 has one sentence per class of kind. Public kinds: the account in any role, the envelope `from` of a meta-tx op included. Confidential kinds: the account as a proof's sender. Source: CTR-GOV-17 U4, §1.2.
 
 ### 12.10 networks/evm.md, NET-EVM-06, CTR-GOV-19
 

@@ -11,7 +11,7 @@
 |---|---|
 | **Hybrid underlying (CTR-GOV-12)** | **In this build, on every `WRAPPED*` kind. No owner word is needed.** CTR-GOV-12 is an owner ruling and spec §5 and step S6 build it. Its one gate was §9 and §5.6: the `Grant` on bit 1 and the bytes on the confidential kinds. CTR-GOV-19 (owner 2026-11-03) lifted that gate and builds the whole record. C1 is the owner's now: `executeRate` drops `c ≥ supply` on a hybrid, a rate fall needs no `addReserve` (CTR-GOV-12). C2 (`maxSupply` in `scaas.underlying`, a `capped` copy in leg slot a) stands unless the owner overrides it |
 | **The Change to CTR-AS-17 (spec §12.1)** | **Needs the owner's word before T17 applies it.** CTR-GOV-03 records that it "waits for the owner". The accepted Change lines of §12.9 are already in the register. T17 keeps §12.1 in a separate commit, so it can land or wait alone |
-| **C7 and bit 5 (spec §12.9)** | **Proposed Change lines to CTR-GOV-09 and CTR-GOV-10, awaiting the owner's word.** T17 writes them to the register only on that word. Nothing waits for it: the build follows the spec's text meanwhile |
+| **C7 and bit 5 (spec §12.9)** | Accepted by the owner 2026-11-03, in the register. |
 | **Merging `main` into `governance`** | Needs the owner's word, at a task boundary, after `ua8-soroban` lands (§"Branches"). The spec's "rebased as the owner directs" defaults to: no rebase, the build goes on top of the prototype commits |
 | **The probe's outcome** | **Settled.** T0: A refuses, C passes. Owner 2026-11-03: the SCaaS testnet leaves EIP-7954 out (CTR-GOV-19). T0b measures what that route left unmeasured |
 | **NET-EVM-06's Change (spec §12.10)** | Taken by that ruling: T16 and T17 apply it |

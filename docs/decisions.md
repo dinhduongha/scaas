@@ -1693,6 +1693,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 **Cost if wrong.** A delay on a relaxation also delays a correct release.
 **Change (owner 2026-11-02).** The mask covers `renounceRole`, a `setGrant` to a past `validUntil`, and a parent's revoke killing a leaf. Attack B-28.
 **Change (owner 2026-11-03).** The relaxing rule counts live roots, not listed holders. An edit that makes a protected power end before `now + grantDelay` takes the delay, not only an expiry already past.
+**Change (owner 2026-11-03).** an expired root counts as live until it is revoked, for the relaxing rule and for the renounce rule of CTR-GOV-02. `Counts.roots` is a stored number, and the chain sees an expiry only by a walk.
 **Source.** `research/governance/permission-model.md` §3 A9, escalation F6, §6; `research/governance/permission-model-attack.md` A9.
 
 ### CTR-GOV-10 — Bit bands: 0-63 one meaning, 64-127 per application, 128 and above refused
@@ -1702,6 +1703,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 **Status.** Decided, not built. The allocation of bits 10–20 is a proposal read against the specs in the governance gaps note.
 **Why.** A wallet names a bit without reading the contract, and the top band gives exhaustion an answer other than renumbering.
 **Cost if wrong.** A second meaning for a bit on one contract would break every wallet's reading of that bit.
+**Change (owner 2026-11-03).** bit 5 has one sentence per class of kind. Public kinds: the account in any role, the envelope `from` of a meta-tx op included. Confidential kinds: the account as a proof's sender.
 **Source.** `research/governance/permission-model.md` §1.4, opening decisions A, B, C.
 
 ### CTR-GOV-11 — "+0" on a plain transfer means no new read
@@ -1763,7 +1765,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 - old: governance:regulated-confidential · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-17 · superseded-by: —
 
 **Rule.** On a regulated `NORMAL_ZETHER`, `WRAPPED_ZETHER`, `NORMAL_PQZ` or `WRAPPED_PQZ`:
-- **FREEZE** of an account blocks its shield, unshield and transfer, and locks its public balance. A frozen account still receives shielded credits: it may be a decoy, and a refusal would break the ring and name it. It cannot take the credit out, but it may roll a credit over into its own balance, since that moves nothing out. A frozen `beneficiaryUA` is refused: that name is public, not a decoy. The check reads the proof's sender, so a frozen account may submit another account's proof as envelope `from`, against CTR-AS-05's rule on these kinds.
+- **FREEZE** of an account blocks its shield, wrap-shield, unshield and transfer, whatever the destination, and locks its public balance. A frozen account still receives shielded credits: it may be a decoy, and a refusal would break the ring and name it. It cannot take the credit out, but it may roll a credit over into its own balance, since that moves nothing out. A frozen `beneficiaryUA` is refused: that name is public, not a decoy. The check reads the proof's sender, so a frozen account may submit another account's proof as envelope `from`, against CTR-AS-05's rule on these kinds.
 - **PAUSE** means what it means on the public kinds (CTR-AS-06): unwrap is never paused. It stops shielded and public transfers, shield, unshield and unshield-unwrap (owner 2026-11-03); direct unwrap of public units, holder burn and `FORCE` stay open, and roll-over too, since it moves nothing out (controller reading, owner may override). Freeze and pause durations are CTR-AS-05's and CTR-AS-06's.
 - **A denylist, not an allowlist,** when `DENYLIST` is on: a denied account cannot receive into a public balance. `ALLOWLIST` is invalid on these four kinds: decoys hide the real receiver. The check sits on the public balance, so a multi-recipient transfer with decoys is not checked, and each leg's `decoyFee` stays unchecked: a denied or frozen account named as a leg still receives it, since a refusal would reveal the decoy. That fee is bounded only by `minDecoyFee ≤ d < 2^64` and one leg is enough, so a sender can reach a denied account's public balance by it: accepted by the owner, 2026-11-03. The disclosure states this exception.
 - **FORCE** acts on public balances only, as `MODERATE` does (CTR-GOV-13): a shielded balance never moves without its owner's proof.
