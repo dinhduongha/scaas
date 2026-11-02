@@ -110,12 +110,13 @@ TAG = {MLDSA44: kc("scaas.ua.mldsa44.v1"), MLDSA65: kc("scaas.ua.mldsa65.v1"), S
 # ------------------------------------------------------------------ UA-8 registration (portable PoP, UAAttrs) on the
 # registry's explicit ABI (typed-signing R1: KemKey, UAAttrs without a KEM version, UASig; the register KEM key is version 0)
 KEM_S, KEM_T = "(uint8,bytes,bytes32)", ("t", ["w", "b", "w"])  # KemKey{scheme, mlkemEk, x25519}
-UASIG_S, UASIG_T = "(bytes,bytes,(uint16,bytes,bytes)[])", ("t", ["b", "b", ("a", ("t", ["w", "b", "b"]))])  # keyData, signature, MemberSig[]
+MEMBER_S, MEMBER_T = "(uint16,(uint16,bytes)[],bytes)", ("t", ["w", ("a", ("t", ["w", "b"])), "b"])  # MemberSig{index, InnerSig[] members, sig}; this file signs flat: `members` empty
+UASIG_S, UASIG_T = f"(bytes,bytes,{MEMBER_S}[])", ("t", ["b", "b", ("a", MEMBER_T)])  # keyData, signature, MemberSig[]
 ATTRS_S, ATTRS_T = f"(bytes,bytes32,{KEM_S},bytes32)", ("t", ["b", "w", KEM_T, "w"])  # UAAttrs{pqzKey, pqzPopHash, kem, kemPkHash}
 REGISTER = f"register(uint16,bytes,{ATTRS_S},bytes,bytes)"
 REGISTER_T = ["w", "b", ATTRS_T, "b", "b"]  # kind, keyData, attrs, pop, pqzPop
-REGISTER_MSIG = f"registerMsig((uint16,(uint16,bytes32,uint16)[]),{ATTRS_S},(uint16,bytes,bytes)[],bytes)"
-REGISTER_MSIG_T = [("t", ["w", ("a", ("t", ["w", "w", "w"]))]), ATTRS_T, ("a", ("t", ["w", "b", "b"])), "b"]  # MsigStructure, attrs, MemberSig[], pqzPop
+REGISTER_MSIG = f"registerMsig((uint16,(uint16,bytes32,uint16)[]),{ATTRS_S},{MEMBER_S}[],bytes)"
+REGISTER_MSIG_T = [("t", ["w", ("a", ("t", ["w", "w", "w"]))]), ATTRS_T, ("a", MEMBER_T), "b"]  # MsigStructure, attrs, MemberSig[], pqzPop
 SET_KEM, SET_KEM_T = f"setKemKey(bytes32,uint64,{KEM_S},{UASIG_S})", ["w", "w", KEM_T, UASIG_T]
 SET_PQZ, SET_PQZ_T = f"setPqzKey(bytes32,bytes,bytes32,{UASIG_S})", ["w", "b", "w", UASIG_T]
 REQ_AUTH, REQ_AUTH_T = f"requireAuthorized(bytes32,bytes32,bytes32,{UASIG_S})", ["w", "w", "w", UASIG_T]
@@ -180,7 +181,7 @@ def kem_key(kem):
 
 def sig_v(s):
     """A clientkeys `UASig` JSON as ABI values."""
-    return [hb(s["keyData"]), hb(s["signature"]), [[m["index"], hb(m["keyData"]), hb(m["sig"])] for m in s["members"]]]
+    return [hb(s["keyData"]), hb(s["signature"]), [[m["index"], [], hb(m["sig"])] for m in s["members"]]]
 
 
 def attrs_v(t):
@@ -198,7 +199,7 @@ def register_msig_cd(a, pqzPop=None):
     """`registerMsig` calldata, the same split as `register_cd`."""
     s = a["structure"]
     return cd(REGISTER_MSIG, REGISTER_MSIG_T, [s["threshold"], [[m["kind"], hb(m["id"]), m["weight"]] for m in s["members"]]],
-              attrs_v(a["attrs"]), [[m["index"], hb(m["keyData"]), hb(m["sig"])] for m in a["pop"]],
+              attrs_v(a["attrs"]), [[m["index"], [], hb(m["sig"])] for m in a["pop"]],
               hb(a["pqzPop"]) if pqzPop is None else pqzPop)
 
 
@@ -600,7 +601,7 @@ def ua_sig(pq, signer, purpose, digest):
     if signer.kind != MSIG:
         return ml_sig(pq, signer, purpose, digest)
     md = kc(signer.ua, ua_msg(MSIG, purpose, digest))
-    return [b"", b"", [[i, b"", ml_sig(pq, m, P_MEMBER, md)[1]] for i, m in enumerate(signer.members)]]
+    return [b"", b"", [[i, [], ml_sig(pq, m, P_MEMBER, md)[1]] for i, m in enumerate(signer.members)]]
 
 
 def ml_auth(pq, signer, purpose, digest):
@@ -864,7 +865,7 @@ def self_test():
           and len(register_cd(c["args"])) == c["length"], f"{r['name']}: hash-commit args + fill = the row's kemCommit")
     f = c["kemFill"]
     fill = cd(SET_KEM, SET_KEM_T, hb(f["ua"]), 0, kem_v(f["kem"]), sig_v(f["sig"]))
-    check(fill[:4].hex() == "a00cce2a" and kem_key(at["kemPk"]) == kem_v(f["kem"]), "setKemKey fill calldata (selector 0xa00cce2a)")
+    check(fill[:4].hex() == "6a3318f9" and kem_key(at["kemPk"]) == kem_v(f["kem"]), "setKemKey fill calldata (selector 0x6a3318f9)")
     k = next(x for x in P["kemRecords"] if x["id"] == "mldsa65/v1")
     check(portable("kem", kind=k["kind"], ua=hb(k["ua"]), kemVersion=k["version"], kemPk=hb(k["kemPk"])) == hb(k["message"])
           and kem_key(hb(k["kemPk"])) == kem_v(k["args"]["kem"]), f"KEM record {k['id']}: message, KemKey")
@@ -872,7 +873,7 @@ def self_test():
     qa = dict(ua=hb(q["ua"]), pqzKey=hb(q["pqzKey"]))
     check(portable("keyrec", kind=q["kind"], pqzPopHash=hb(q["pqzPopHash"]), **qa) == hb(q["message"])
           and portable("keyreg", **qa) == hb(q["pqzRegMessage"]), f"PQZ key record {q['name']}: setPqzKey and R_REG messages")
-    check(sel(SET_PQZ).hex() == "3c6897f1" and sel(REQ_AUTH).hex() == "58d5ff4f", "setPqzKey / requireAuthorized selectors")
+    check(sel(SET_PQZ).hex() == "0052c1b5" and sel(REQ_AUTH).hex() == "9600639d", "setPqzKey / requireAuthorized selectors")
     kem = at["kemPk"]
     ret = "0x" + encs(["w", KEM_T, "b"], [0, kem_key(kem), b"\x07"]).hex()
     none = "0x" + encs(["w", KEM_T, "b"], [0, [0, b"", bytes(32)], b""]).hex()
@@ -887,7 +888,7 @@ def self_test():
     g = reg_args(MSIG, kd, pqzKey=ma["pqzKey"], pqzPop=hb(m["pqzPop"]), kemPk=ma["kemPk"], pop=m["args"]["pop"], kemCommit=False)
     check(dict(g["args"], entry=g["entry"]) == m["args"], f"{m['name']}: registrationArgs = the row's args")
     data = register_msig_cd(g["args"])
-    check(data[:4].hex() == "82b86a46" and len(data) == g["length"], f"{m['name']}: registerMsig calldata {len(data):,} B = registryCalldataLength, selector 0x82b86a46")
+    check(data[:4].hex() == "61947129" and len(data) == g["length"], f"{m['name']}: registerMsig calldata {len(data):,} B = registryCalldataLength, selector 0x61947129")
     named_rows()
     abi_check()
 
