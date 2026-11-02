@@ -82,7 +82,7 @@ The worst case of a contract's bits is the worst case of **that contract's own c
 | 4 | `WRAP_DISABLEABLE` | a holder closes an inflow, one-way | power | yes | no | as built |
 | 5 | `FREEZE` | a holder stops one account, bounded in time | power | no | yes | refused, regulated kinds |
 | 6 | `FORCE` | a holder moves units out of a frozen account to a recorded beneficiary; public balances only | power | no | yes | refused, regulated kinds |
-| 7 | `PAUSE` | a holder stops the whole token, bounded in time (what "whole" leaves open is U1, §4.3) | power | no | yes | refused, regulated kinds |
+| 7 | `PAUSE` | a holder stops the whole token, bounded in time (§4.3, U1) | power | no | yes | refused, regulated kinds |
 | 8 | `ALLOWLIST` | a receiver of a public balance must hold `requiredFlags` in a `ComplianceRegistry` pinned at creation (§4.4) | capability, parameters `registry`, `requiredFlags` | — | — | refused, regulated kinds |
 | 9 | `DENYLIST` | a receiver of a public balance must hold none of `deniedFlags` in that registry (§4.4) | capability, parameters `registry`, `deniedFlags` | — | — | refused, regulated kinds |
 | 10 | `RECORD` | a holder writes a compliance record another power relies on; one holder is refused both this and `FORCE` | power | no | yes | number only (CTR-GOV-09) |
@@ -512,17 +512,17 @@ Below, `F(x)` is FREEZE on id `x`, `P` is PAUSE, `R(x)` the denylist, when `DENY
 
 **FORCE, both layers.** One entry on `_uaMove`, under CTR-AS-04's record rules, refusing `pad(UA_POOL)` and `pad(SHIELD_POOL)` as `from`: it reaches a public balance only. `totalShielded`, an `acc`, a pending are never read or written by it.
 
-**What this implies, stated.** A denied or frozen account named as a leg receives `decoyFee` into its public balance, because the rule leaves that transfer unchecked and the fee is paid to every leg, the real recipient included, so that it reveals no decoy. A frozen leg's fee is locked with the balance; a denied leg holds public units a named transfer could not have sent it. A shield with `toUA` a frozen account is a shielded credit and passes.
+**What this implies, stated.** Accepted by the owner, and part of the disclosure: a denied or frozen account named as a leg receives `decoyFee` into its public balance, because the rule leaves that transfer unchecked and the fee is paid to every leg, the real recipient included, so that it reveals no decoy. A frozen leg's fee is locked with the balance; a denied leg holds public units a named transfer could not have sent it. A shield with `toUA` a frozen account is a shielded credit and passes.
 
-**Left undetermined.** Not filled in here.
+**Settled by the owner, 2026-11-02 (CTR-GOV-17).** Only U6 stays open.
 
-| # | Question | What the rulings say |
+| # | Question | Ruling |
 |---|---|---|
-| U1 | Does "stops the whole token" reach what CTR-AS-06 never pauses: direct `unwrap`, holder `burn`, forced transfer? And unshield-unwrap, and roll-over | CTR-GOV-17: whole token. CTR-AS-06: exits stay open, and CTR-AS-17 applies it to any token with the flags. The two collide on a confidential regulated kind |
-| U2 | May a frozen account's credits be rolled over into its balance | "It cannot take the credit out"; roll-over moves nothing out, and on PQZ anyone may run it. No rule names it |
-| U3 | A frozen `beneficiaryUA` | The transfer path checks FREEZE on the sender only, never on a recipient or decoy; CTR-AS-05 says a frozen account cannot receive a relayer fee. A beneficiary is neither a recipient nor a decoy |
-| U4 | A frozen envelope `from` submitting another account's proof | CTR-AS-05: a frozen `from` of any meta-tx op is refused. On these paths the envelope signer and the proof's sender differ |
-| U5 | Which freeze and pause durations apply | CTR-AS-05 and -06 apply by CTR-AS-17; a shielded balance has no other exit, so their cost differs. Nothing says otherwise |
+| U1 | What "stops the whole token" reaches | Everything but `FORCE`: shielded transfer, shield, unshield, unshield-unwrap, roll-over, direct `unwrap`, holder `burn`. It differs from CTR-AS-06 on public kinds, because a pause is bounded in time |
+| U2 | Roll-over of a frozen account's credits | Allowed: it moves nothing out. Stopped only by `PAUSE` |
+| U3 | A frozen `beneficiaryUA` | Refused: that name is public, not a decoy |
+| U4 | A frozen envelope `from` submitting another account's proof | Allowed on these kinds: the check reads the proof's sender, against CTR-AS-05's rule |
+| U5 | Freeze and pause durations | CTR-AS-05's and CTR-AS-06's |
 | U6 | Whether a regulated form fits | **Not known.** §9. `WrappedPqzToken` has no room today |
 
 ### 4.4 The receiver check, CTR-GOV-18
@@ -1066,7 +1066,7 @@ CTR-MTX-16, the sentence "no call **out** to another contract with the signer's 
 
 ### 12.9 Register Change lines, on owner rulings
 
-Each amends an owner ruling, so each needs the owner's word.
+Each amends an owner ruling. The owner accepted them on 2026-11-02; they are in `docs/decisions.md`.
 
 > CTR-GOV-04, Change: `setGrant` that creates a holder or widens any term takes the same two calls, and the pending binds a `termsHash` the confirm must match; a pure narrowing runs at once. `grantDelay = 0` means one call. `grantDelay ≤ 30 days`. Source: attack B-01, B-27.
 

@@ -1641,6 +1641,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 **Status.** Decided as recommended, not built, not in the prototype of D1 and D2.
 **Why.** An executable pending grant survives a renounce or a transfer and makes "owner 0 means nothing above can change" false; a window and an owner-only confirm remove both. A delay on `acceptOwnership` gives a stalemate with a shared key, not recovery.
 **Cost if wrong.** `grantRole` tests double; a config field through init on every kind.
+**Change (owner 2026-11-02).** `setGrant` that creates a holder or widens any term takes the same two calls, and the pending binds a `termsHash` the confirm must match; a pure narrowing runs at once. `grantDelay = 0` means one call. `grantDelay ≤ 30 days`. Attack B-01, B-27.
 **Source.** `research/governance/permission-model.md` §3 A1, A2, A20, §6; `research/governance/permission-model-attack.md` A1, A2, A6.
 
 ### CTR-GOV-05 — A wrapped kind refuses a SCaaS leg with FORCE or MODERATE
@@ -1650,6 +1651,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 **Status.** Decided as recommended, not built.
 **Why.** A leg's issuer who can move the wrapper's balance empties a wrapper that shows no power of its own. Under wrapped PQZ or Zether that is value gone behind intact ciphertexts, with no record and no proof.
 **Cost if wrong.** A few bytes in `WrappedLib`, one read per leg at init; a legitimate regulated leg cannot be wrapped.
+**Change (owner 2026-11-02).** The check reads `isRegisteredToken`, not `isToken`. An unregistered leg is an outside leg, disclosed as one. Attack B-15.
 **Source.** `research/governance/permission-model.md` §3 A4, §6; `research/governance/permission-model-attack.md` A4, A5.
 
 ### CTR-GOV-06 — Rescue to an immutable rescueTo
@@ -1668,6 +1670,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 **Status.** Decided as recommended, not built.
 **Why.** Without it every Soroban token is write-once forever, and a fixed supply there is "initial mint, then renounce", which needs the entry.
 **Cost if wrong.** Small per family; a family frozen first cannot add it later without a new deployment.
+**Change (owner 2026-11-02).** TON, Solana, Cosmos and Aptos take the same entries in their rounds. Semantics, every family: a two-step with acceptance; a renounce clears the pending; the admin is an option; a renounce is one-way. Sui takes the two-step and a burn, not `store`. Attack B-23, B-24.
 **Source.** `research/governance/permission-model.md` §4, §6.
 
 ### CTR-GOV-08 — MODERATE: later, with flags 5-8
@@ -1686,6 +1689,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 **Status.** Decided as recommended, later: built with the asset suite. It rewrites CTR-AS-03's "losing a role relaxes at once". The mask costs 0 B until the asset suite sets it.
 **Why.** Revoking the last issuer ends every freeze at once, so one owner key releases what a threshold guards; and one holder must not both write an order and execute it.
 **Cost if wrong.** A delay on a relaxation also delays a correct release.
+**Change (owner 2026-11-02).** The mask covers `renounceRole`, a `setGrant` to a past `validUntil`, and a parent's revoke killing a leaf. Attack B-28.
 **Source.** `research/governance/permission-model.md` §3 A9, escalation F6, §6; `research/governance/permission-model-attack.md` A9.
 
 ### CTR-GOV-10 — Bit bands: 0-63 one meaning, 64-127 per application, 128 and above refused
@@ -1756,9 +1760,9 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 - old: governance:regulated-confidential · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-17 · superseded-by: —
 
 **Rule.** On a regulated `NORMAL_ZETHER`, `WRAPPED_ZETHER`, `NORMAL_PQZ` or `WRAPPED_PQZ`:
-- **FREEZE** of an account blocks its shield, unshield and transfer, and locks its public balance. A frozen account still receives shielded credits: it may be a decoy, and a refusal would break the ring and name it. It cannot take the credit out.
-- **PAUSE** stops the whole token, shielded transfers included.
-- **A denylist, not an allowlist,** when `DENYLIST` is on: a denied account cannot receive into a public balance. The check sits on the public balance, so a multi-recipient transfer with decoys is not checked.
+- **FREEZE** of an account blocks its shield, unshield and transfer, and locks its public balance. A frozen account still receives shielded credits: it may be a decoy, and a refusal would break the ring and name it. It cannot take the credit out, but it may roll a credit over into its own balance, since that moves nothing out. A frozen `beneficiaryUA` is refused: that name is public, not a decoy. The check reads the proof's sender, so a frozen account may submit another account's proof as envelope `from`, against CTR-AS-05's rule on these kinds.
+- **PAUSE** stops the whole token, shielded transfers, unshield, unwrap and burn included, and only `FORCE` still runs: unlike CTR-AS-06 on public kinds, because a pause is bounded in time. Freeze and pause durations are CTR-AS-05's and CTR-AS-06's.
+- **A denylist, not an allowlist,** when `DENYLIST` is on: a denied account cannot receive into a public balance. `ALLOWLIST` is invalid on these four kinds: decoys hide the real receiver. The check sits on the public balance, so a multi-recipient transfer with decoys is not checked, and each leg's `decoyFee` stays unchecked: a denied or frozen account named as a leg still receives it, since a refusal would reveal the decoy. The disclosure states this exception.
 - **FORCE** acts on public balances only, as `MODERATE` does (CTR-GOV-13): a shielded balance never moves without its owner's proof.
 - **Who sees what is not on chain.** An auditor decides what to share, off chain; no on-chain viewing right exists.
 **Status.** Rules decided, not designed in detail, not built. Whether a regulated form fits the size limit is **not known**: `WrappedPqzToken` has no room today (CTR-GOV-02). The denylist is the receiver check of [CTR-GOV-18](#ctr-gov-18--receiver-check-two-feature-bits-allowlist-and-denylist-off-by-default).
@@ -1771,7 +1775,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 
 **Rule.** The receiver check has two feature bits on the same `ComplianceRegistry`, both off by default, so by default nobody is stopped. `ALLOWLIST` keeps bit 8 and reads `requiredFlags`; `DENYLIST` takes bit 9, beside it, and reads `deniedFlags`; `MODERATE` moves to bit 21:
 `R(a) = (!ALLOWLIST || (flags(a) & requiredFlags) == requiredFlags) && (!DENYLIST || (flags(a) & deniedFlags) == 0)`.
-Both on means: known, and not denied. Each bit is disabled and locked on its own. Features only lose bits after creation, so a token created with a bit off never gets it: the issuer chooses at creation.
+Both on means: known, and not denied. `ELIGIBLE_CONTRACT` satisfies `requiredFlags` (CTR-AS-16), never `deniedFlags`. Each bit is disabled and locked on its own. Features only lose bits after creation, so a token created with a bit off never gets it: the issuer chooses at creation.
 **Status.** Decided, not built. It changes CTR-AS-07 and CTR-AS-17's `ALLOWLIST ⇔ registry ≠ 0 && requiredFlags ≠ 0` row. A token with both off adds no read (CTR-GOV-11). An earlier draft of this entry had one bit with two flag sets and a denylist by default.
 **Why.** One bit, one meaning: a wallet reads the two controls directly. Money for general use, such as a CBDC or a stablecoin, turns on `DENYLIST`; a security needing known holders turns on `ALLOWLIST`. `FREEZE` stops a sender and expires; a denied account cannot receive; a sanctioned account takes both.
 **Cost if wrong.** A token created with both off can never stop anyone. A denylist acts after the fact.

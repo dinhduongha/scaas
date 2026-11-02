@@ -43,6 +43,6 @@ them. Nothing above bit 4 is built.
 **Open points.**
 
 - `MINTABLE` is valid only on `NORMAL*` today; hybrid underlying (CTR-GOV-12) needs it on a wrapped kind.
-- Flags 5-9 are refused on the confidential kinds today. CTR-GOV-17 opens them on the regulated forms of those kinds, with
-  `FORCE` and `MODERATE` on public balances only.
+- Flags 5-9 are refused on the confidential kinds today. CTR-GOV-17 opens 5, 6, 7 and 9 on the regulated forms of those kinds,
+  with `FORCE` and `MODERATE` on public balances only; bit 8 `ALLOWLIST` stays invalid there.
 - `publishEnv`, the factory's strongest power, has no bit.
