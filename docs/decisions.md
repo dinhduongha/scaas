@@ -1781,6 +1781,15 @@ Both on means: known, and not denied. `ELIGIBLE_CONTRACT` satisfies `requiredFla
 **Cost if wrong.** A token created with both off can never stop anyone. A denylist acts after the fact.
 **Source.** Owner 2026-11-02.
 
+### CTR-GOV-19 — The PQZ kinds take a higher code size ceiling on the chains that run them
+- old: governance:pqz-size · status: current · owner: yes · date: 2026-11-03 · normative: decisions.md#CTR-GOV-19 · superseded-by: —
+
+**Rule.** `NormalPqzToken`, `WrappedPqzToken` and their regulated forms run only where the PQZ precompile exists, so only on a chain whose configuration is under its operator's control. On such a chain the code size limit (`maxCodeSize`) is raised for them; the 64 KiB ceiling of the size gate does not bind these kinds. How to reduce their size is decided later. Every other kind keeps the 64 KiB ceiling and the 64,500 B stop line.
+**Status.** Decided, not built. The new figure, the size gate's per-kind ceiling and the chainspec of the SCaaS testnet and 22776 are set at the build; a chain's limit stays the operator's, and a deploy refused by it fails closed. Whether a limit above 64 KiB holds under Amsterdam's EIP-7954 on the client must be probed at the next reset. It lifts the block on `WrappedPqzToken` in CTR-GOV-02, not on `WrappedZetherToken`, which runs on public chains.
+**Why.** The precompile already needs a chain of that kind, and code size on it is the operator's setting, unlike on a public chain.
+**Cost if wrong.** Above 65,536 B every jump widens, about 4.7 KB at once (inferred), and deploy gas grows with the runtime. A customer chain has one more setting to change.
+**Source.** Owner 2026-11-03; `research/governance/prototype/RESULTS.md`.
+
 ## 17. Contracts — Meta-transactions
 
 ### CTR-MTX-01 — Payment is a MetaTransfer with entryRef ≠ 0
@@ -9076,6 +9085,7 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 | governance:moderate-public | CTR-GOV-13 | current |
 | governance:operator-delay | CTR-GOV-15 | current |
 | governance:plus0 | CTR-GOV-11 | current |
+| governance:pqz-size | CTR-GOV-19 | current |
 | governance:regulated-confidential | CTR-GOV-17 | current |
 | net-aptos:L1 | NET-ALL-06 | current |
 | net-aptos:L2 | NET-ALL-07 | current |
