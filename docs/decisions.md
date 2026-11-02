@@ -1623,6 +1623,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 **Status.** Decided as recommended, subject to measuring; not built. If `WrappedPqzToken` measures over its stop line the fallback already stated is grants on `NORMAL*` and the DEX only, said plainly, not a lever hunt. Measured: as designed it does not fit `WrappedPqzToken` (65,520 B). Owner 2026-11-02: reduce the size rather than cut the record. Owner 2026-11-03: the whole record is built; size is decided later (CTR-GOV-19).
 **Why.** The owner's examples (a loan approval in a band, a subtree, a group) and the mint allowance need a limit bound to the number the contract acts on; a separate holder clone cannot carry them, and a holder that reports its own limit is believed for nothing.
 **Cost if wrong.** Bytes on every kind, and two disclosure shapes on one chain if one kind goes flat-only. CTR-TOK-22's "revoke every role, then renounce" turns from advice into a revert for unlocked bits.
+**Change (owner 2026-11-03).** `renounceOwnership` reverts while a bit that is not locked has a live root: a dead leaf does not count. Reviews of the spec, 2026-11-03.
 **Source.** `research/governance/permission-model.md` §1.3, §6, §7; `research/governance/permission-model-attack.md` A3, A10, A19.
 
 ### CTR-GOV-03 — A plain transfer stays +0: one regulated implementation per kind, never per feature
@@ -1680,6 +1681,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 **Status.** Decided as recommended, later: built with flags 5–8. Only the bit number is taken now, 0 B.
 **Why.** A moderator without the refusals reaches tender deposits, vesting clones, wrapper reserves and pools; refusing a `from` with code leaves Safe-held balances out of reach, the lesser hole.
 **Cost if wrong.** Three normative sentences rewritten; bytes on the plain kinds later.
+**Change (owner 2026-11-03).** `moderatedTransfer` and `forceTransfer` move on an unhooked body with their own refusals of both pools and `this`: a hook would stop them on the frozen account they exist for.
 **Source.** `research/governance/permission-model.md` §3, §6; `research/governance/permission-model-attack.md` A4.
 
 ### CTR-GOV-09 — Delayed relaxing and RECORD: later, with the asset suite
@@ -1690,6 +1692,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 **Why.** Revoking the last issuer ends every freeze at once, so one owner key releases what a threshold guards; and one holder must not both write an order and execute it.
 **Cost if wrong.** A delay on a relaxation also delays a correct release.
 **Change (owner 2026-11-02).** The mask covers `renounceRole`, a `setGrant` to a past `validUntil`, and a parent's revoke killing a leaf. Attack B-28.
+**Change (owner 2026-11-03).** The relaxing rule counts live roots, not listed holders. An edit that makes a protected power end before `now + grantDelay` takes the delay, not only an expiry already past.
 **Source.** `research/governance/permission-model.md` §3 A9, escalation F6, §6; `research/governance/permission-model-attack.md` A9.
 
 ### CTR-GOV-10 — Bit bands: 0-63 one meaning, 64-127 per application, 128 and above refused
@@ -1761,8 +1764,8 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 
 **Rule.** On a regulated `NORMAL_ZETHER`, `WRAPPED_ZETHER`, `NORMAL_PQZ` or `WRAPPED_PQZ`:
 - **FREEZE** of an account blocks its shield, unshield and transfer, and locks its public balance. A frozen account still receives shielded credits: it may be a decoy, and a refusal would break the ring and name it. It cannot take the credit out, but it may roll a credit over into its own balance, since that moves nothing out. A frozen `beneficiaryUA` is refused: that name is public, not a decoy. The check reads the proof's sender, so a frozen account may submit another account's proof as envelope `from`, against CTR-AS-05's rule on these kinds.
-- **PAUSE** stops the whole token, shielded transfers, unshield, unwrap and burn included, and only `FORCE` still runs: unlike CTR-AS-06 on public kinds, because a pause is bounded in time. Freeze and pause durations are CTR-AS-05's and CTR-AS-06's.
-- **A denylist, not an allowlist,** when `DENYLIST` is on: a denied account cannot receive into a public balance. `ALLOWLIST` is invalid on these four kinds: decoys hide the real receiver. The check sits on the public balance, so a multi-recipient transfer with decoys is not checked, and each leg's `decoyFee` stays unchecked: a denied or frozen account named as a leg still receives it, since a refusal would reveal the decoy. The disclosure states this exception.
+- **PAUSE** means what it means on the public kinds (CTR-AS-06): unwrap is never paused. It stops shielded and public transfers, shield and unshield; unwrap, unshield-unwrap, holder burn and `FORCE` stay open, and roll-over too, since an exit may need it (controller reading, owner may override). Freeze and pause durations are CTR-AS-05's and CTR-AS-06's.
+- **A denylist, not an allowlist,** when `DENYLIST` is on: a denied account cannot receive into a public balance. `ALLOWLIST` is invalid on these four kinds: decoys hide the real receiver. The check sits on the public balance, so a multi-recipient transfer with decoys is not checked, and each leg's `decoyFee` stays unchecked: a denied or frozen account named as a leg still receives it, since a refusal would reveal the decoy. That fee is bounded only by `minDecoyFee ≤ d < 2^64` and one leg is enough, so a sender can reach a denied account's public balance by it: accepted by the owner, 2026-11-03. The disclosure states this exception.
 - **FORCE** acts on public balances only, as `MODERATE` does (CTR-GOV-13): a shielded balance never moves without its owner's proof.
 - **Who sees what is not on chain.** An auditor decides what to share, off chain; no on-chain viewing right exists.
 **Status.** Rules decided, not designed in detail, not built. Whether a regulated form fits the size limit is **not known**: `WrappedPqzToken` has no room today (CTR-GOV-02). The denylist is the receiver check of [CTR-GOV-18](#ctr-gov-18--receiver-check-two-feature-bits-allowlist-and-denylist-off-by-default).
