@@ -1761,9 +1761,18 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 - **A denylist, not an allowlist:** a denied account cannot receive into a public balance. The check sits on the public balance, so a multi-recipient transfer with decoys is not checked.
 - **FORCE** acts on public balances only, as `MODERATE` does (CTR-GOV-13): a shielded balance never moves without its owner's proof.
 - **Who sees what is not on chain.** An auditor decides what to share, off chain; no on-chain viewing right exists.
-**Status.** Rules decided, not designed in detail, not built. Whether a regulated form fits the size limit is **not known**: `WrappedPqzToken` has no room today (CTR-GOV-02). This denylist is the confidential kinds' form; flag 8 `ALLOWLIST` on the public kinds (CTR-AS-17) stays as written.
+**Status.** Rules decided, not designed in detail, not built. Whether a regulated form fits the size limit is **not known**: `WrappedPqzToken` has no room today (CTR-GOV-02). The denylist is the receiver check of [CTR-GOV-18](#ctr-gov-18--receiver-check-deniedflags-beside-requiredflags-denylist-by-default).
 **Why.** Regulation needs to stop an account and the token and to reach public value, without weakening what a shielded balance promises: only its owner's proof moves it.
 **Cost if wrong.** A regulator cannot seize shielded value on chain: it must wait for an unshield, which FREEZE blocks.
+**Source.** Owner 2026-11-02.
+
+### CTR-GOV-18 — Receiver check: deniedFlags beside requiredFlags, denylist by default
+- old: governance:denied-flags · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-18 · superseded-by: —
+
+**Rule.** The receiver check of flag 8 has two sets on the same `ComplianceRegistry`: `R(a) = (flags(a) & requiredFlags) == requiredFlags && (flags(a) & deniedFlags) == 0`. **A denylist is the default:** where a token has the receiver check, it is created with `deniedFlags` set and `requiredFlags` = 0, and an allowlist is the choice a creator makes for an asset that needs known holders. Both together mean: known, and not denied.
+**Status.** Decided, not built. It changes CTR-AS-07 and the `ALLOWLIST ⇔ registry ≠ 0 && requiredFlags ≠ 0` row of CTR-AS-17: the check needs `registry ≠ 0` and at least one set non-empty. The token without the flag has no check: its transfer adds no read (CTR-GOV-11). The controller reads "default for every token" this way; the owner may override.
+**Why.** Money for general use, such as a CBDC or a stablecoin, must reach a new holder at once and needs only to stop a bad one; a security needs its holders known in advance. One check serves both. `FREEZE` stops a sender and expires; a denied account cannot receive; a sanctioned account takes both.
+**Cost if wrong.** A denylist acts after the fact. A dead registry stops no one instead of stopping everyone.
 **Source.** Owner 2026-11-02.
 
 ## 17. Contracts — Meta-transactions
@@ -9055,6 +9064,7 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 | governance:D9 | CTR-GOV-09 | current |
 | governance:bands | CTR-GOV-10 | current |
 | governance:bits-13-14 | CTR-GOV-14 | current |
+| governance:denied-flags | CTR-GOV-18 | current |
 | governance:enum-ids | CTR-GOV-16 | current |
 | governance:hybrid | CTR-GOV-12 | current |
 | governance:moderate-public | CTR-GOV-13 | current |

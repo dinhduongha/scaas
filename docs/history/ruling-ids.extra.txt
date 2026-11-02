@@ -273,3 +273,4 @@ governance:bits-13-14	decisions.md:1711	governance owner decision 2026-11-02
 governance:operator-delay	decisions.md:1720	governance owner decision 2026-11-02
 governance:enum-ids	decisions.md:1729	governance owner decision 2026-11-02
 governance:regulated-confidential	decisions.md:1738	governance owner decision 2026-11-02
+governance:denied-flags	decisions.md:1752	governance owner decision 2026-11-02
