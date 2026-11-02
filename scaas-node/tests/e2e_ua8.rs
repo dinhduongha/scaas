@@ -903,7 +903,7 @@ async fn copy_kem(c: &Copy, name: &str, rec: &Rec, relayer: &Value) {
         kem_eq(&format!("{name} v{v}: Soroban against EVM A"), &sk, &ak);
         same(&format!("{name} v{v}: Soroban against EVM A"), "sig", &ssig, &asig);
 
-        c.lane_b.mined(&c.b, &format!("setKemKey {name} v{v}"), ("setKemKey", json!({"ua": h(&ua), "version": v, "kem": evm_kem(&sk), "sig": evm_sig(rec.kind, &ssig)}))).await;
+        c.lane_b.mined(&c.b, &format!("setKemKey {name} v{v}"), ("setKemKey", json!({"ua": h(&ua), "version": v.to_string(), "kem": evm_kem(&sk), "sig": evm_sig(rec.kind, &ssig)}))).await;
         let (bk, bsig) = c.b.kem_at(&ua, v).await;
         kem_eq(&format!("{name} v{v}: EVM B against Soroban"), &bk, &sk);
         same(&format!("{name} v{v}: EVM B against Soroban"), "sig", &bsig, &ssig);
