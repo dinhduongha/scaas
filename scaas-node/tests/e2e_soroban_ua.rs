@@ -641,7 +641,7 @@ async fn e2e_soroban_ua_member_accepts_then_counts() {
     assert!(member_accepted(st, &ua, 1));
     let (state, last) = node.run(0, job(915, &m[1], s1)).await;
     println!("MA a repeat: job {state}, reason {}", last["error"]);
-    assert_eq!(state, "dead", "{last}");
+    assert_eq!(state, "consumed", "{last}");
     assert!(report_of(&node.state.lock().unwrap(), 915, "signed").is_null(), "never signed");
     let before = view_i128(&st.token, "ua_balance", &["--ua", &hx(&to)]);
     node.mined("ua_pay by the msig, its two slots accepted", 0, pay(916)).await;

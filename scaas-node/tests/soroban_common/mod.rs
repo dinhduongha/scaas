@@ -183,9 +183,11 @@ pub fn wasm(name: &str) -> String {
     format!("{dir}/target/wasm32v1-none/release/scaas_{name}.wasm")
 }
 
-/// `name`'s Wasm hash, the `sha256` a contract instance names.
+/// The hash a contract instance names: `sha256` of the file `build.sh soroban` left and `deploy.sh` deployed. Another build of the same
+/// source, a package alone (`wasm`) among them, gives other bytes.
 pub fn wasm_hash(name: &str) -> String {
-    alloy::hex::encode(Sha256::digest(std::fs::read(wasm(name)).unwrap()))
+    let path = format!("{}/../smartcontracts/soroban/target/wasm32v1-none/release/scaas_{name}.wasm", env!("CARGO_MANIFEST_DIR"));
+    alloy::hex::encode(Sha256::digest(std::fs::read(path).unwrap()))
 }
 
 /// The token's `registry: Option<Address>` is passed only when set (omitted = `None`, the UA ledger off).
