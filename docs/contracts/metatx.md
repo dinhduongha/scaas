@@ -613,8 +613,8 @@ with execution order measures the access list, not the code.
 bound of 8,000 (`runs/2026-10-27-metatx-split-overhead.txt`). Since typed-signing the test subtracts the same op called directly, and
 the bound is 8,000 on PQZL and 10,000 on PQZH (owner 2026-11-01): the difference is 6,774–7,726 on PQZL op 7 M = 8 and 8,938–9,807 on
 PQZH M = 4, the relayed path's per-byte cost on a larger envelope (`runs/2026-11-01-typed-signing-c4-review-overhead.txt`). The cheapest PQZL debit on `uaExecute` rose by about
-6.9 k at every set (`debit_min_gas`: n2048-kmax1024 6,826,921; n2304-kmax4096 6,998,368; n2560-kmax16384 7,168,690;
-n2816-kmax65536 7,358,343). The `n2560-kmax16384` rollover at `ROLL_MAX` 64 is 12,418,528 (`mtxExecute`) and 12,576,880
+6.9 k at every set (`debit_min_gas`: n2048-kmax1024 6,836,270; n2304-kmax4096 7,007,758; n2560-kmax16384 7,178,057;
+n2816-kmax65536 7,367,761). The `n2560-kmax16384` rollover at `ROLL_MAX` 64 is 12,418,528 (`mtxExecute`) and 12,576,880
 (`uaExecute`), 6,032 under 0.75 · 2^24 = 12,582,912: the next token-path change that adds more than about 6 k forces 48
 (`runs/2026-10-27-metatx-split-rollscan-n2560-kmax16384.txt`). Pay-meta adds 37-52 gas to the token paths (PayMeta code).
 A `SmartKeyAccount`-signed `mtxExecute` needs 446,904 relayer call gas at least (`runs/2026-10-27-metatx-split-node-floor.txt`).

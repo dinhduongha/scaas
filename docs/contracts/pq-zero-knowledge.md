@@ -657,10 +657,10 @@ override):** an `msig` holder must also be usable — `register` reverts `UAPqzH
 (register step 4's bound `w`: the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` + the caller's hold; plus `w / 63 + SigCheck.GAS_MARGIN`, the hold of a gen-2 registry that forwards the authorization to this one) plus
 `PqzSet.PQZ_DEBIT_MIN_GAS` is at most 2^24 (the per-transaction cap of EIP-7825, not a chain's own block limit).
 `PQZ_DEBIT_MIN_GAS` is generated from `set.toml` `debit_min_gas`: the full relayed transaction of the cheapest PQZL debit
-(burn 1) on the costlier relay path (`uaExecute`, ML-DSA-65 fee UA at 68,006 gas [estimate]) — 6,826,921 at
-`n2048-kmax1024`, 6,998,368 at `n2304-kmax4096`, 7,168,690 at `n2560-kmax16384`, 7,358,343 at `n2816-kmax65536`, from
-`runs/2026-10-27-metatx-split-gas-<set>.txt` (metatx split, T8; the pre-split values were 6,820,062 / 6,991,487 / 7,161,789 / 7,351,418). So the worst-case authorization may not exceed 9.96 M / 9.79 M / 9.62 M /
-9.43 M; `{fndsa512 × 4, slhdsa128s}, t = 5` (≈ 11.6 M) and `{fndsa512 × 4}, t = 4` (≈ 10.2 M) are refused, a 2-of-2
+(burn 1) on the costlier relay path (`uaExecute`, ML-DSA-65 fee UA at 68,006 gas [estimate]) — 6,836,270 at
+`n2048-kmax1024`, 7,007,758 at `n2304-kmax4096`, 7,178,057 at `n2560-kmax16384`, 7,367,761 at `n2816-kmax65536`, from
+`runs/2026-10-27-metatx-split-gas-<set>.txt` (metatx split, T8; the pre-split values were 6,820,062 / 6,991,487 / 7,161,789 / 7,351,418). So the worst-case authorization may not exceed 9.94 M / 9.77 M / 9.60 M /
+9.41 M; `{fndsa512 × 4, slhdsa128s}, t = 5` (≈ 11.6 M) and `{fndsa512 × 4}, t = 4` (≈ 10.2 M) are refused, a 2-of-2
 `mldsa65` quorum on the precompile is not. Single-key holders are unaffected (their cap is ≤ 2.5 M). A PQ-eligible `msig` registers with its m-of-n `pop`, so nobody
 can fix it without a key. One key = one purpose: the PQZ key decrypts and proves, the signer's key authorizes; the UA's
 PQ signing kinds ([CTR-UA-23](accounts.md#CTR-UA-23)) invite exactly this hybrid. A leaked PQZ key is a read-only breach
