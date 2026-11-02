@@ -118,12 +118,6 @@ soroban|cargo|kem_record_digests_match_portable_json
 soroban|cargo|pqz_key_record_digests_match_portable_json
 soroban|cargo|portable_digests_with_attrs_match
 soroban|cargo|kem_record_of_no_key_is_the_zero_record
-soroban-spike-local|cargo|spike_register_pqz_kem_model_budget
-soroban-spike-local|cargo|spike_register_split_and_store_pqz_pop_budget
-soroban-spike-local|cargo|spike_msig_pqz_kem_model_budget
-soroban-spike-local|cargo|spike_set_kem_key_model_budget
-soroban-spike-local|cargo|spike_set_pqz_key_model_budget
-soroban-spike-local|cargo|spike_keccak_budget
 cargo-scaas-node|cargo|a_landed_failure_counts_against_the_budget_once
 cargo-scaas-node|cargo|an_unread_fee_reports_the_job_and_is_counted
 cargo-scaas-node|cargo|a_refused_send_ends_the_job

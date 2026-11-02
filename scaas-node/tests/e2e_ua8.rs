@@ -191,6 +191,40 @@ impl Rec {
             registerCall { kind: self.kind, keyData: self.key_data.clone().into(), attrs, pop: self.pop.clone().into(), pqzPop: none }.abi_encode()
         }
     }
+
+    /// The same call as a node job: entry and named fields, the node builds the calldata (typed-signing N1).
+    fn evm_job(&self) -> (&'static str, Value) {
+        let attrs = evm_attrs(&self.attrs);
+        if self.kind == MSIG {
+            let s = MsigStructure::from_key_data(&self.key_data).unwrap();
+            let members: Vec<Value> = s.members.iter().map(|m| json!({"kind": m.kind, "id": h(&m.id), "weight": m.weight})).collect();
+            let pop = evm_member_sigs(&decode_member_sigs(&self.pop).unwrap_or_default());
+            ("registerMsig", json!({"structure": {"threshold": s.threshold, "members": members}, "attrs": attrs, "pop": pop, "pqzPop": "0x"}))
+        } else {
+            ("register", json!({"kind": self.kind, "keyData": h(&self.key_data), "attrs": attrs, "pop": h(&self.pop), "pqzPop": "0x"}))
+        }
+    }
+}
+
+fn evm_kem(k: &KemKey) -> Value {
+    json!({"scheme": k.scheme, "mlkemEk": h(&k.mlkem_ek), "x25519": h(&k.x25519)})
+}
+
+fn evm_attrs(a: &UAAttrs) -> Value {
+    json!({"pqzKey": h(&a.pqz_key), "pqzPopHash": h(&a.pqz_pop_hash), "kem": evm_kem(&a.kem), "kemPkHash": h(&a.kem_pk_hash)})
+}
+
+fn evm_member_sigs(m: &[MemberSig]) -> Vec<Value> {
+    m.iter().map(|s| json!({"index": s.index, "keyData": h(&s.key_data), "sig": h(&s.sig)})).collect()
+}
+
+/// A stored portable signature as an entry's named `UASig`.
+fn evm_sig(kind: u16, stored: &[u8]) -> Value {
+    if kind == MSIG {
+        json!({"keyData": "0x", "signature": "0x", "members": evm_member_sigs(&decode_member_sigs(stored).unwrap())})
+    } else {
+        json!({"keyData": "0x", "signature": h(stored), "members": []})
+    }
 }
 
 fn attrs_json(a: &UAAttrs) -> Value {
@@ -668,10 +702,10 @@ impl EvmLane {
     }
 
     /// One `call` job on the registry, expecting `mined`, its gas logged.
-    async fn mined(&self, e: &Evm, what: &str, data: Vec<u8>) {
+    async fn mined(&self, e: &Evm, what: &str, (entry, args): (&str, Value)) {
         let id = JOB.fetch_add(1, Ordering::Relaxed);
         let target = format!("{:#x}", e.registry);
-        self.state.lock().unwrap().jobs.push(json!({"id": id, "kind": "call", "call": {"target": target, "calldata": h(&data), "validUntil": (now() + 600).to_string()}}));
+        self.state.lock().unwrap().jobs.push(json!({"id": id, "kind": "call", "op": {"entry": entry, "token": target, "args": args, "validUntil": (now() + 600).to_string()}}));
         let mut s = self.sub.lock().await;
         s.poll_outbox().await;
         for _ in 0..200 {
@@ -827,9 +861,9 @@ async fn copy_registration(c: &Copy, name: &str, relayer: &Value) -> Rec {
     let on_s = c.s.rec(&ua).await;
     on_s.eq(&format!("{name}: Soroban against EVM A"), &on_a);
 
-    c.lane_b.mined(&c.b, &format!("register {name}"), on_s.calldata()).await;
+    c.lane_b.mined(&c.b, &format!("register {name}"), on_s.evm_job()).await;
     if !on_s.pqz_pop.is_empty() {
-        c.lane_b.mined(&c.b, &format!("storePqzPop {name}"), storePqzPopCall { ua: ua.into(), pqzPop: on_s.pqz_pop.clone().into() }.abi_encode()).await;
+        c.lane_b.mined(&c.b, &format!("storePqzPop {name}"), ("storePqzPop", json!({"ua": h(&ua), "pqzPop": h(&on_s.pqz_pop)}))).await;
     }
     let on_b = c.b.rec(&ua).await;
     on_b.eq(&format!("{name}: EVM B against Soroban"), &on_s);
@@ -869,7 +903,7 @@ async fn copy_kem(c: &Copy, name: &str, rec: &Rec, relayer: &Value) {
         kem_eq(&format!("{name} v{v}: Soroban against EVM A"), &sk, &ak);
         same(&format!("{name} v{v}: Soroban against EVM A"), "sig", &ssig, &asig);
 
-        c.lane_b.mined(&c.b, &format!("setKemKey {name} v{v}"), setKemKeyCall { ua: ua.into(), version: v, kem: sol_kem(&sk), sig: sol_sig(rec.kind, &ssig) }.abi_encode()).await;
+        c.lane_b.mined(&c.b, &format!("setKemKey {name} v{v}"), ("setKemKey", json!({"ua": h(&ua), "version": v, "kem": evm_kem(&sk), "sig": evm_sig(rec.kind, &ssig)}))).await;
         let (bk, bsig) = c.b.kem_at(&ua, v).await;
         kem_eq(&format!("{name} v{v}: EVM B against Soroban"), &bk, &sk);
         same(&format!("{name} v{v}: EVM B against Soroban"), "sig", &bsig, &ssig);
@@ -904,7 +938,7 @@ async fn copy_pqz(c: &Copy, name: &str, record: &str, rec: &Rec, proof: Vec<u8>,
     same(&w, "pqz_pop_hash", &shash, &ahash);
     same(&w, "sig", &ssig, &asig);
 
-    c.lane_b.mined(&c.b, &format!("setPqzKey {record}"), setPqzKeyCall { ua: ua.into(), pqzKey: skey.clone().into(), pqzPopHash: shash.into(), sig: sol_sig(rec.kind, &ssig) }.abi_encode()).await;
+    c.lane_b.mined(&c.b, &format!("setPqzKey {record}"), ("setPqzKey", json!({"ua": h(&ua), "pqzKey": h(&skey), "pqzPopHash": h(&shash), "sig": evm_sig(rec.kind, &ssig)}))).await;
     let (bkey, bhash, bsig) = c.b.pqz(&ua).await;
     let w = format!("{record}: EVM B against Soroban");
     same(&w, "key", &bkey, &skey);
@@ -917,7 +951,7 @@ async fn copy_pqz(c: &Copy, name: &str, record: &str, rec: &Rec, proof: Vec<u8>,
     c.s.mined(&format!("copy store_pqz_pop {record}"), "store_pqz_pop", json!({"ua": h(&ua), "pqz_pop": h(&apop)})).await;
     let spop = by(&read(&c.s.registry, "pqz_pop_of", vec![sc_bytes(&ua)]).await);
     same(&format!("{record}: Soroban against EVM A"), "pqz_pop", &spop, &apop);
-    c.lane_b.mined(&c.b, &format!("storePqzPop {record}"), storePqzPopCall { ua: ua.into(), pqzPop: spop.clone().into() }.abi_encode()).await;
+    c.lane_b.mined(&c.b, &format!("storePqzPop {record}"), ("storePqzPop", json!({"ua": h(&ua), "pqzPop": h(&spop)}))).await;
     let bpop = c.b.pqz_pop(&ua).await;
     same(&format!("{record}: EVM B against Soroban"), "pqz_pop", &bpop, &spop);
 
