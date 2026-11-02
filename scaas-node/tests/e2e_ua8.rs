@@ -23,6 +23,7 @@ use ml_dsa::signature::Keypair as _;
 use ml_dsa::{MlDsa65, Seed, SigningKey};
 use pqcrypto_falcon::falconpadded512 as falcon;
 use pqcrypto_traits::sign::{DetachedSignature as _, PublicKey as _};
+use slh_dsa::{Sha2_128s, SigningKey as SlhKey};
 use scaas_node::adapter::{lane_step, lane_step_metered, Built, ChainAdapter};
 use scaas_node::adapters::soroban::{ua8_call_job, SorobanAdapter};
 use scaas_node::chain::Chain;
@@ -1524,7 +1525,7 @@ async fn e2e_ua8_relayer_table() {
     for (si, set) in SETS.iter().enumerate() {
         let (attrs, proof, _) = set_attrs(set);
         let slh_pqz = [6, 5, 5, 5][si];
-        let cases = [(&slh, &[6usize, 7, 8][..], 7usize, &[1usize, 5, 7, 8][..], &[4usize, 5, 6, 7][..], slh_pqz, &[7usize, 8][..], 7usize),
+        let cases = [(&slh, &[5usize, 6, 7, 8][..], 7usize, &[1usize, 5, 7, 8][..], &[4usize, 5, 6, 7][..], slh_pqz, &[7usize, 8][..], 7usize),
                      (&fnd, &[16, 17][..], 16, &[8, 16, 17][..], &[15][..], 15, &[15][..], 15)];
         for (pool, plain, edge, whole, pqz, pqz_edge, kem, kem_edge) in cases {
             let name = pool.name;
@@ -1827,9 +1828,31 @@ impl Falcon {
     }
 }
 
-/// P5: a mixed `msig`, one `fndsa512` slot and one `mldsa65` slot, both signing, end to end: `register` of the `fndsa512` member by
+/// A seeded `slhdsa128s` key (FIPS 205 internal functions, no rng), signing what the kind signs: `signed_message`.
+struct Slh {
+    key: Vec<u8>,
+    ua: [u8; 32],
+    sk: SlhKey<Sha2_128s>,
+}
+
+impl Slh {
+    fn new(seed: u8) -> Slh {
+        let sk = SlhKey::<Sha2_128s>::slh_keygen_internal(&[seed; 16], &[seed ^ 0x55; 16], &[seed ^ 0xaa; 16]);
+        let vk: &slh_dsa::VerifyingKey<Sha2_128s> = sk.as_ref();
+        let key = vk.to_bytes().as_slice().to_vec();
+        Slh { ua: scaas_ua::ua_of(SLHDSA128S, &key).unwrap(), key, sk }
+    }
+
+    fn sign(&self, ua_msg: &[u8; 32]) -> Vec<u8> {
+        let m = scaas_ua::pq::signed_message(SLHDSA128S, ua_msg);
+        // M' = 0x00 || ctx length 0 || m
+        self.sk.slh_sign_internal(&[&[0u8, 0][..], &m[..]], None).to_bytes().as_slice().to_vec()
+    }
+}
+
+/// P5: a mixed `msig`, one `fndsa512` slot, one `mldsa65` slot and one `slhdsa128s` slot, all signing, end to end: `register` of the `fndsa512` member by
 /// its real `pop`, `ua8_precheck` reading the members from the chain and running `check_registration` over the real signature
-/// (the group `vk` slice of `signature_ok`, a `slhdsa128s` slot and a BLS slot with `pop = false` have no positive on a host). The same record is also
+/// (the group `vk` slice of `signature_ok` and a BLS slot with `pop = false` have no positive on a host). The same record is also
 /// accepted by EVM, which verifies both slots itself, so the node's positive is not its own opinion.
 #[tokio::test]
 #[ignore]
@@ -1838,7 +1861,7 @@ async fn e2e_ua8_relayer_checked_msig_slot() {
     // this test's own fake Odoo: the stack's runs on the runtime of the test that made it
     let n = Node::new(c.s.registry.clone()).await;
     let (me, none) = (json!(g(&key(0))), Value::Null);
-    let (fk, ml) = (Falcon::new(), Ml::new(0x33));
+    let (fk, ml, sl) = (Falcon::new(), Ml::new(0x33), Slh::new(0x44));
     let d = register_digest(FNDSA512, &fk.ua, &no_attrs(), &[0; 32]);
     let member = Rec { kind: FNDSA512, key_data: fk.key.clone(), attrs: no_attrs(), pop: fk.sign(&scaas_ua::ua_message(FNDSA512, &ua8::pop_v2_tag(), &d).unwrap()), pqz_pop: vec![] };
     let (f, args) = member.job_args(&me);
@@ -1846,14 +1869,19 @@ async fn e2e_ua8_relayer_checked_msig_slot() {
     let (f, args) = ml_rec(&ml, &no_attrs(), &[0; 32], vec![]).job_args(&none);
     n.mined("P5 register the mldsa65 member", f, args).await;
 
-    let mut list = vec![(FNDSA512, fk.ua, 1u16), (MLDSA65, ml.ua, 1)];
+    let d = register_digest(SLHDSA128S, &sl.ua, &no_attrs(), &[0; 32]);
+    let slh_member = Rec { kind: SLHDSA128S, key_data: sl.key.clone(), attrs: no_attrs(), pop: sl.sign(&scaas_ua::ua_message(SLHDSA128S, &ua8::pop_v2_tag(), &d).unwrap()), pqz_pop: vec![] };
+    let (f, args) = slh_member.job_args(&me);
+    n.mined("P5 register the slhdsa128s member, relayer mode", f, args).await;
+
+    let mut list = vec![(FNDSA512, fk.ua, 1u16), (MLDSA65, ml.ua, 1), (SLHDSA128S, sl.ua, 1)];
     list.sort_by_key(|m| m.1);
-    let kd = scaas_ua::encode_msig(2, &list);
+    let kd = scaas_ua::encode_msig(3, &list);
     let ua = scaas_ua::ua_of(MSIG, &kd).unwrap();
     let d = register_digest(MSIG, &ua, &no_attrs(), &[0; 32]);
     let slots: Vec<MemberSig> = list.iter().enumerate().map(|(i, m)| {
         let msg = member_message(m.0, &ua, &ua8::pop_v2_tag(), &d);
-        MemberSig { index: i as u16, key_data: vec![], sig: if m.0 == FNDSA512 { fk.sign(&msg) } else { ml.sign(&msg) } }
+        MemberSig { index: i as u16, key_data: vec![], sig: match m.0 { FNDSA512 => fk.sign(&msg), SLHDSA128S => sl.sign(&msg), _ => ml.sign(&msg) } }
     }).collect();
     let rec = Rec { kind: MSIG, key_data: kd, attrs: no_attrs(), pop: encode_member_sigs(&slots), pqz_pop: vec![] };
 
@@ -1866,6 +1894,15 @@ async fn e2e_ua8_relayer_checked_msig_slot() {
     println!("P5 flipped fndsa512 slot: job {state}, reason {}", last["error"]);
     assert_eq!((state.as_str(), tx.is_none()), ("dead", true), "{last}");
     assert!(last["error"].as_str().unwrap_or_default().contains("UAPoP"), "{last}");
+    // one bit of the slhdsa128s slot: the same refusal, so the slot is checked, not skipped
+    let at = list.iter().position(|m| m.0 == SLHDSA128S).unwrap();
+    let mut bad = slots.clone();
+    bad[at].sig[40] ^= 1;
+    let (f, args) = Rec { pop: encode_member_sigs(&bad), ..rec.clone() }.job_args(&me);
+    let (state, last, tx) = n.run(0, call_job(&n.registry, f, args)).await;
+    println!("P5 flipped slhdsa128s slot: job {state}, reason {}", last["error"]);
+    assert_eq!((state.as_str(), tx.is_none()), ("dead", true), "{last}");
+    assert!(last["error"].as_str().unwrap_or_default().contains("UAPoP"), "{last}");
     // no relayer named: the chain cannot verify the slot
     let (f, args) = rec.job_args(&none);
     let (state, last, _) = n.run(0, call_job(&n.registry, f, args)).await;
@@ -1873,7 +1910,7 @@ async fn e2e_ua8_relayer_checked_msig_slot() {
     assert_eq!(state, "dead", "{last}");
 
     let (f, args) = rec.job_args(&me);
-    n.mined("P5 register_msig fndsa512 + mldsa65 slots, relayer mode", f, args).await;
+    n.mined("P5 register_msig fndsa512 + mldsa65 + slhdsa128s slots, relayer mode", f, args).await;
     n.rec(&ua).await.eq("P5: Soroban against the arguments", &rec);
     let marks = n.checked_of(&ua).await;
     assert_eq!(marks[0], (2, Some(g(&key(0)))), "the record carries the lane's mark");
@@ -1882,7 +1919,8 @@ async fn e2e_ua8_relayer_checked_msig_slot() {
     c.a.send("P5 register the fndsa512 member", member.calldata()).await;
     c.a.cache_key("P5 mldsa65 member", &ml.key).await;
     c.a.send("P5 register the mldsa65 member", ml_rec(&ml, &no_attrs(), &[0; 32], vec![]).calldata()).await;
-    c.a.send("P5 registerMsig fndsa512 + mldsa65 slots", rec.calldata()).await;
+    c.a.send("P5 register the slhdsa128s member", slh_member.calldata()).await;
+    c.a.send("P5 registerMsig fndsa512 + mldsa65 + slhdsa128s slots", rec.calldata()).await;
     c.a.rec(&ua).await.eq("P5: EVM A against Soroban", &n.rec(&ua).await);
-    println!("P5 result: an fndsa512 slot signed, passed check_registration, stored marked Relayer on Soroban and verified by EVM; remaining without a positive on a host: group vk slice, slhdsa128s slot, BLS slot with pop = false");
+    println!("P5 result: an fndsa512 slot and an slhdsa128s slot signed, passed check_registration, stored marked Relayer on Soroban and verified by EVM; remaining without a positive on a host: group vk slice, BLS slot with pop = false");
 }

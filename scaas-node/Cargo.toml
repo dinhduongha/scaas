@@ -49,4 +49,12 @@ p256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
 pqcrypto-falcon = { version = "=0.4.1", default-features = false }
 pqcrypto-traits = { version = "=0.3.5", default-features = false }
 # e2e_ua8: seeded `mldsa65` members for the network-fit msigs, at the pin of `scaas-ua`'s `pq`
-ml-dsa = { version = "=0.1.1", default-features = false, features = ["alloc"] }
+ml-dsa = { version = "=0.1.1", default-features = false}
+# e2e_ua8: a seeded `slhdsa128s` member for the relayer-checked msig slot, at the pin of `scaas-ua`'s `pq` (no rng: the FIPS 205 internal functions)
+slh-dsa = { version = "=0.2.0-rc.5", default-features = false }
+
+# its signing is slow unoptimised (about 2^22 hashes)
+[profile.dev.package.slh-dsa]
+opt-level = 3
+[profile.dev.package.sha2]
+opt-level = 3
