@@ -180,7 +180,7 @@
 test at test/ua8.test.js:344:1
 ✖ msigSlotsMinimal: 2-of-(1,1) both slots minimal; 2-of-(1,2) both slots not; one slot of weight 2 minimal; below threshold not (0.601933ms)
   TypeError: ua.msigSlotsMinimal is not a function
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/clients/clientkeys/test/ua8.test.js:345:19)
+      at TestContext.<anonymous> (file://clients/clientkeys/test/ua8.test.js:345:19)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -195,7 +195,7 @@ test at test/ua8.test.js:361:1
   Caught error:
   
   TypeError: signers.portableMemberSigs is not a function
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/clients/clientkeys/test/ua8.test.js:363:10)
+      at TestContext.<anonymous> (file://clients/clientkeys/test/ua8.test.js:363:10)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -205,10 +205,10 @@ test at test/ua8.test.js:361:1
     generatedMessage: true,
     code: 'ERR_ASSERTION',
     actual: TypeError: signers.portableMemberSigs is not a function
-        at file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/clients/clientkeys/test/ua8.test.js:363:31
+        at file://clients/clientkeys/test/ua8.test.js:363:31
         at getActual (node:assert:580:5)
         at strict.throws (node:assert:728:24)
-        at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/clients/clientkeys/test/ua8.test.js:363:10)
+        at TestContext.<anonymous> (file://clients/clientkeys/test/ua8.test.js:363:10)
         at Test.runInAsyncScope (node:async_hooks:226:14)
         at Test.run (node:internal/test_runner/test:1402:25)
         at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -222,7 +222,7 @@ test at test/ua8.test.js:361:1
 test at test/ua8.test.js:368:1
 ✖ portable.json msig rows are minimal (0.386988ms)
   TypeError: ua.msigSlotsMinimal is not a function
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/clients/clientkeys/test/ua8.test.js:372:18)
+      at TestContext.<anonymous> (file://clients/clientkeys/test/ua8.test.js:372:18)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
