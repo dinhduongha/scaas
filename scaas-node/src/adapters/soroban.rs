@@ -4725,8 +4725,15 @@ mod tests {
     /// simulated: every row, unchanged, and one flipped byte.
     #[tokio::test]
     async fn accept_job_prechecks_a_marked_slot() {
-        let (a, calls) = listed(classical()).await;
+        let f = row("registrations", "fndsa512");
+        let mut records = classical();
+        records.push(row_rec(f, false));
+        let (a, calls) = listed(records).await;
         let me = json!(stub_lane());
+        let mut single = accept_op(membership("msig-classical/1"), &me);
+        single["args"]["ua"] = f["ua"].clone();
+        refused(run_kind(&a, "ua_metatx", &single).await, "UAUnauthorized");
+        assert_eq!(logged(&calls), ["record_of"], "a single key has no slot: never simulated");
         for n in ["msig-classical/0", "msig-classical/3"] {
             run_kind(&a, "ua_metatx", &accept_op(membership(n), &NONE)).await.unwrap();
             assert_eq!(logged(&calls), ["record_of", "accept_membership", "SEND"], "{n}");

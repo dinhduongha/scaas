@@ -1070,6 +1070,9 @@ fn check_membership_rows() {
         let other = MemberSig { index: if index == 0 { 1 } else { 0 }, ..slot.clone() };
         assert_eq!(check(&d, &ua, &other), Err(UAError::Unauthorized), "{}: another slot's member", r["name"]);
         assert_eq!(check(&d, &[1; 32], &slot), Err(UAError::Unauthorized), "another id");
+        let mut other = d.clone();
+        other[1] = 1; // the same members under another threshold: the signature is over `ua`, the structure is not its
+        assert_eq!(check(&other, &ua, &slot), Err(UAError::Unauthorized), "the key data of another id");
     }
     let r = &arr(&p, "memberships")[0];
     let d = bytes(&find(&p, "registrations", "name", &r["msig"])["keyData"]);
