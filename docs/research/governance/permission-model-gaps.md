@@ -2,6 +2,16 @@
 
 # Permission model: the gaps closed before the prototype (2026-11-02)
 
+**Status note, added after CTR-GOV-11 to -18; the text below is kept as written.** Read it with these corrections, and with the spec [2026-11-02-governance.md](../../superpowers/specs/2026-11-02-governance.md), which disposes of every open item.
+
+- **`operatorDelay` is dropped** (CTR-GOV-15): §1.2's clone argument and §1.6's delay, its "bypassed" sentence and its "after D" display are false. Rotation is two calls with no delay. The attack's B-20 and B-21 follow.
+- **Bit numbers.** `DENYLIST` is bit 9, `MODERATE` moved to bit 21 (CTR-GOV-18). Every "bit 9" for `MODERATE` here and in v2 reads 21; the leg refusal is bit 6 or bit 21.
+- **Bits 13 and 14 are unused for ever and the tender has no rescue** (CTR-GOV-14): §4's rows on them and §6's two rows are settled.
+- **Hybrid** is decided (CTR-GOV-12): §3.8 (3), its "proposal" and §6's row are overtaken. §3.8 (1)'s "Open: nothing" was false: `setGrant` had to go under the delay (B-01).
+- **"Never on confidential kinds"** in §3.8 (2) is replaced: `MODERATE` and `FORCE` move public balances only, on every kind (CTR-GOV-13, -17).
+- **Regulated confidential kinds** are no longer "open, not designed": the rules are CTR-GOV-17, and §6, §7 and the Change of §5 are overtaken on that point. Enum ids are real members 8-13, not "two more ids" or a comment (CTR-GOV-16).
+- **§5's Change to CTR-AS-17** says "rises by 0 gas": it reads "no new read" (CTR-GOV-11). The reworded text is in the spec, §12.1. `ALLOWLIST` is joined there by `DENYLIST` (CTR-GOV-18).
+
 Companion of [permission-model.md](permission-model.md) (v2). The owner's decisions D1-D9 are in the register as CTR-GOV-01 to
 -09, the bit bands as CTR-GOV-10; gap 1 was that. This note holds gaps 2-6 and does not reopen a decision. Everything here is
 design text: nothing in §1, §2 or §5 is built, and the cryptography it leans on is `UNAUDITED`.
