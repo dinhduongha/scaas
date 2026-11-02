@@ -1,0 +1,69 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
+Governance plan T0 (CTR-GOV-19): a contract above 64 KiB under Amsterdam's EIP-7954 with maxCodeSize 0x20000, 2026-11-03.
+Script runs/2026-11-03-code-size-probe.sh, full output in its git-ignored per-arm logs.
+
+VERDICT: arm A refuses, arm C passes, on both images. With EIP-7954 active the code limit is 65,536 B whatever maxCodeSize says:
+EIP-7954 caps below maxCodeSize 0x20000. Without eip7954TransitionTimestamp, maxCodeSize alone carries the code.
+T0's table: "A refuses, C passes": owner word, the chain would leave EIP-7954 out, against "Amsterdam from block 1" (NET-EVM-06).
+The build continues. maxCodeSize 0x20000 does not go into patch-chainspec.py or the RUNBOOK on this result.
+
+step | commit | rc | rows as T0 expected
+0 pqz6 | a15778da + this diff | 0 | 2/2, import 2/2
+A pqz6 | a15778da + this diff | 1 | 3/6 (65,537, 70,000, 119,000 refused), import 2/2
+B pqz6 | a15778da + this diff | 1 | 3/4 (131,072 refused), import 1/1
+C pqz6 | a15778da + this diff | 0 | 6/6, import 6/6
+A stock | a15778da + this diff | 1 | 3/6, the same three, import 2/2
+C stock | a15778da + this diff | 0 | 6/6, import 6/6
+
+Images: scaas/nethermind-pqz:2.2.0-pqz6 = sha256:656d91d6…3e83; nethermind/nethermind:2.2.0 = sha256:bb26a861…5bd3.
+Every gasUsed below is the same on both images where both ran.
+
+Chainspec and config, on top of copy.sh genesis0 (engine-pqz.json, --testnet-reset) and the Amsterdam transitions, timestamp 1:
+arm | maxCodeSize | maxCodeSizeTransition | eip7954TransitionTimestamp | genesis gasLimit | TargetBlockGasLimit
+0 | 0x10000 | 0 | 1 | 0xbebc200 | 200,000,000
+A | 0x20000 | 0 | 1 | 0xbebc200 | 200,000,000
+B | 0x20000 | 0 | 1 | 0x11e1a300 | 300,000,000
+C | 0x20000 | 0 | removed | 0xbebc200 | 200,000,000
+Config in every arm: Init.IsMining dropped, JsonRpc debug module, JsonRpc.GasCap = the target.
+
+arm | row | tx.gas | status | eth_getCode | gasUsed
+0 | 65,536 | 110,000,000 | 1 | 65,536 | 100,504,388
+0 | 65,537 | 110,000,000 | 0 | 0 | 16,777,216
+A | 65,536 | 130,000,000 | 1 | 65,536 | 100,504,388
+A | 65,537 | 130,000,000 | 0 | 0 | 16,777,216
+A | 70,000 real jump | 130,000,000 | 0 | 0 | 16,777,216
+A | 119,000 | 198,900,000 | 0 | 0 | 16,777,216
+A | 119,800, added row | 199,900,000 | 0 | 0 | 16,777,216
+A | 119,800 | 200,100,000 | not included | - | -
+B | 131,072 | 290,000,000 | 0 | 0 | 16,777,216
+B | 131,073 | 290,000,000 | 0 | 0 | 16,777,216
+B | init code 131,073 | 30,000,000 | not included | - | -
+B | init code 140,000 | 30,000,000 | not included | - | -
+C | 65,536 | 130,000,000 | 1 | 65,536 | 100,504,388
+C | 65,537 | 130,000,000 | 1 | 65,537 | 100,505,947
+C | 70,000 real jump, eth_call 42 | 130,000,000 | 1 | 70,000 | 107,627,940
+C | 119,000 | 198,900,000 | 1 | 119,000 | 182,338,192
+C | 119,800, added row | 199,900,000 | 1 | 119,800 | 183,562,782
+C | 119,800 | 200,100,000 | not included | - | -
+
+Errors, exact:
+- A refused create in a block: status 0, gasUsed 2^24. The same create by eth_call: {'code': -32000, 'message': 'out of gas'}. The size is the
+  cause, not gas: the same size at the same tx.gas deploys in arm C with 29,494,053 gas left at 65,537 B.
+- Init code above the limit, at eth_sendRawTransaction: 'transaction invalid, max initcode size exceeded'.
+- tx.gas above the block: 'gas limit reached, Gas limit: 200000000, gas limit of rejected tx: 200100000'.
+
+Read from the rows:
+- Init limit with EIP-7954 active: 131,073 B refused at maxCodeSize 0x20000, so it does not follow maxCodeSize. 131,072 B itself was not sent.
+- At 200 M the plan's 119,753 B is the deploy gate's formula (runtime × 1,530 + 2^24), not the chain's limit: 119,800 B deployed in arm C at
+  tx.gas 199,900,000 with gasUsed 183,562,782. The largest size that fits at 200 M was not searched.
+
+Not measured: arm B's rows with EIP-7954 removed (T0 runs B "as A"), so neither the code ceiling at 0x20000 nor the init limit is known on C's route.
+
+Differences from T0:
+- One node container at a time (controller's limit for this run), 1700m; no nginx. The signer ran alone on 127.0.0.1:18545, then a second
+  node with the follower's config, signer stopped, imported blocks 1..head from RLP (debug_getRawBlock, Nethermind's Hive plugin; its Hive.Enabled
+  key draws an "Invalid configuration settings" warning and is needed). Rows are read on the signer; head hash, code sizes and the jump's
+  eth_call 42 are read again on the importing node. Import is not live sync: P2P was not exercised.
+- Added row: 119,800 B at tx.gas 199,900,000, reported, not judged.
+- chain/copy.sh: cast 1.8.5 wraps --json output in {"data": …}; init read a bare list.

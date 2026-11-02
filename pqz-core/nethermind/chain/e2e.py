@@ -17,6 +17,9 @@ corpus, default n2304-kmax4096), the SCaaS testnet's image 2.2.0-pqz5 since 2026
   e2e.py fill    --engine E --key K [--n 8] the largest honest inputs a transaction can carry (PQZH transfers before
                                             Amsterdam), sent straight to PQZ, to fill a block
   e2e.py head                               number, hash, gasLimit, timestamp of the head
+  e2e.py codesize --key K [--sizes … --gas N --record R]  code size rows (cmd_codesize)
+  e2e.py codedump --record R                blocks 1..head as RLP to <R>.rlp
+  e2e.py codeverify --record R              on a node that imported <R>.rlp: head hash, code sizes, the jump's call
 
 Common: --rpc URL (default http://127.0.0.1:18545); --schedule N: the engine file's schedule in force (default the
 last; path A before T: 0). A row the schedule lacks (op 7 before its schedule) is expected as a miss: …00 at the
@@ -498,26 +501,89 @@ def cmd_burst(a):
     check(all(4 <= g <= 6 for g in gaps), "burst: signer block interval 5 s ± 1 s")
 
 
+def jump_code(n):
+    """n bytes of runtime: PUSH3 to a JUMPDEST past 0xFFFF, which returns 42; zero (STOP) bytes around it."""
+    dest = 0x10010
+    head = bytes([0x62]) + dest.to_bytes(3, "big") + bytes([0x56])
+    tail = bytes.fromhex("5b602a60005260206000f3")
+    return head + bytes(dest - len(head)) + tail + bytes(n - dest - len(tail))
+
+
 def cmd_codesize(a):
     """64 KiB code (EIP-7954 under Amsterdam; maxCodeSize 0x10000 before): a create transaction whose initcode returns
     65,536 zero bytes deploys, 65,537 fails (status 0). Under EIP-8037 the code deposit is state gas (1,530 per byte,
     ≈ 100.3 M for 64 KiB) and the block reserves tx.gas in its state dimension, so the block gas limit must exceed tx.gas:
-    this command waits for the ramp (TargetBlockGasLimit, 1/1024 per block)."""
+    this command waits for the ramp (TargetBlockGasLimit, 1/1024 per block).
+
+    --sizes n:kind,… (default 65536:ok,65537:fail), --gas tx.gas of every row. Kinds: ok deploys n zero bytes; fail
+    status 0; jump deploys n real bytes and eth_call answers 42 (jump_code); out is not included; any reports n zero
+    bytes; init is n bytes of init code returning one byte, reported. out and init may be refused by the pool. --record
+    appends each deployed row, for codedump and codeverify."""
     s = Sender(a.key)
-    gas = 110_000_000
-    while True:
+    gas = a.gas
+    rows = [(int(n), k) for n, k in (r.split(":") for r in a.sizes.split(","))]
+    while all(k not in ("out", "any") for _, k in rows):
         b = rpc("eth_getBlockByNumber", ["latest", False])
         if int(b["gasLimit"], 16) > gas + 1_000_000:
             break
         log(f"waiting: block {int(b['number'], 16)} gasLimit {int(b['gasLimit'], 16):,} <= {gas:,}")
         time.sleep(300)
-    for n, ok in ((65_536, True), (65_537, False)):
-        init = bytes([0x62]) + n.to_bytes(3, "big") + bytes([0x60, 0x00, 0xF3])  # RETURN(0, n): n zero bytes
-        rc = receipt(s.send(None, "0x" + init.hex(), gas))
+    for n, kind in rows:
+        may_miss = kind in ("out", "init")
+        what = f"{kind} {n:,} B, tx.gas {gas:,}"
+        if kind == "init":
+            init = bytes.fromhex("60016000f3") + bytes(n - 5)
+        elif kind == "jump":  # PUSH3 n, DUP1, PUSH1 13, PUSH1 0, CODECOPY, PUSH1 0, RETURN, then the code
+            init = bytes([0x62]) + n.to_bytes(3, "big") + bytes.fromhex("80600d6000396000f3") + jump_code(n)
+        else:
+            init = bytes([0x62]) + n.to_bytes(3, "big") + bytes([0x60, 0x00, 0xF3])  # RETURN(0, n): n zero bytes
+        try:
+            rc = receipt(s.send(None, "0x" + init.hex(), gas), 40 if may_miss else 180)
+        except RuntimeError as e:
+            check(may_miss, f"{what}: not included: {e}")
+            continue
         addr = rc.get("contractAddress")
         size = (len(rpc("eth_getCode", [addr, "latest"])) - 2) // 2 if addr else 0
-        check((rc["status"] == "0x1") == ok and size == (n if ok else 0),
-              f"create {n:,} B code: status {rc['status']} (want {'0x1' if ok else '0x0'}), eth_getCode {size:,} B, gasUsed {int(rc['gasUsed'], 16):,}, block {int(rc['blockNumber'], 16)}")
+        st = int(rc["status"], 16)
+        answer = int(rpc("eth_call", [{"to": addr}, "latest"]) or "0x0", 16) if kind == "jump" and st else None
+        why = ""
+        if not st:  # the receipt says only status 0; the same create by eth_call names the error
+            try:
+                why = f", eth_call {rpc('eth_call', [{'data': '0x' + init.hex(), 'gas': hex(gas)}, 'latest'])[:20]}"
+            except RuntimeError as e:
+                why = f", eth_call refuses: {e}"
+        good = {"ok": st == 1 and size == n, "jump": st == 1 and size == n and answer == 42, "fail": st == 0 and size == 0,
+                "out": False}.get(kind, True)
+        check(good, f"{what}: status {rc['status']}, eth_getCode {size:,} B, gasUsed {int(rc['gasUsed'], 16):,}, "
+                    f"block {int(rc['blockNumber'], 16)}" + (f", eth_call {answer}" if answer is not None else "") + why)
+        if a.record and st:
+            with open(a.record, "a") as f:
+                f.write(json.dumps({"addr": addr, "size": size, "jump": kind == "jump"}) + "\n")
+
+
+def cmd_codedump(a):
+    """Blocks 1..head as RLP to <record>.rlp, for a second node to import on its own; the head goes into the record."""
+    head = int(rpc("eth_blockNumber"), 16)
+    with open(a.record + ".rlp", "wb") as f:
+        for i in range(1, head + 1):
+            f.write(bytes.fromhex(rpc("debug_getRawBlock", [hex(i)]).removeprefix("0x")))
+    with open(a.record, "a") as f:
+        f.write(json.dumps({"head": head, "hash": rpc("eth_getBlockByNumber", [hex(head), False])["hash"]}) + "\n")
+    log(f"dumped blocks 1..{head}")
+
+
+def cmd_codeverify(a):
+    """On the importing node: the record's head with its hash, then every deployed row's code size and the jump's call."""
+    rows = [json.loads(line) for line in open(a.record)]
+    head, t = rows[-1], time.time()
+    while int(rpc("eth_blockNumber"), 16) < head["head"] and time.time() - t < 180:
+        time.sleep(2)
+    got = rpc("eth_getBlockByNumber", [hex(head["head"]), False])
+    check(bool(got) and got["hash"] == head["hash"], f"block {head['head']} imported, hash {got and got['hash']}")
+    for r in rows[:-1] if got else ():
+        size = (len(rpc("eth_getCode", [r["addr"], "latest"])) - 2) // 2
+        ans = int(rpc("eth_call", [{"to": r["addr"]}, "latest"]) or "0x0", 16) if r["jump"] else None
+        check(size == r["size"] and ans in (None, 42), f"import: {r['addr']} eth_getCode {size:,} B" + (f", eth_call {ans}" if r["jump"] else ""))
 
 
 def cmd_fill(a):
@@ -554,6 +620,9 @@ def main():
     p.add_argument("--calls", type=int, default=50)
     p.add_argument("--n", type=int, default=8)
     p.add_argument("--no-ua", action="store_true")
+    p.add_argument("--sizes", default="65536:ok,65537:fail", help="codesize rows, n:kind,… (cmd_codesize)")
+    p.add_argument("--gas", type=int, default=110_000_000, help="codesize: tx.gas of every row")
+    p.add_argument("--record", help="codesize, codedump, codeverify: the rows file")
     p.add_argument("--schedule", type=int, default=-1)
     p.add_argument("--corpus", default=CORPUS, help="corpus.jsonl (default bin/corpus.jsonl)")
     a = p.parse_args()
@@ -562,7 +631,8 @@ def main():
     AMS = "blockAccessListHash" in rpc("eth_getBlockByNumber", ["latest", False])
     log(f"head rules: {'Amsterdam (EIP-7928 header field present)' if AMS else 'before Amsterdam'}")
     {"head": cmd_head, "before": cmd_before, "probe": cmd_probe, "stock": cmd_stock, "e2e": cmd_e2e,
-     "burst": cmd_burst, "fill": cmd_fill, "codesize": cmd_codesize}[a.cmd](a)
+     "burst": cmd_burst, "fill": cmd_fill, "codesize": cmd_codesize, "codedump": cmd_codedump,
+     "codeverify": cmd_codeverify}[a.cmd](a)
     log(f"{a.cmd}: {'FAILED ' + str(len(FAILS)) if FAILS else 'all checks passed'}")
     sys.exit(1 if FAILS else 0)
 
