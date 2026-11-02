@@ -45,7 +45,7 @@ contract PipeHarness {
 
 /// The UA registry as the library sees it: `kindOf` as set; `requireAuthorized` accepts exactly
 /// `auth.signature == abi.encode(purpose, digest)`, so a pass proves the purpose and the digest the library sent
-/// (typed-signing R1: the library hands the registry `UAKinds.uaSig(from, auth)`, `auth = abi.encode("", signature)`).
+/// (typed-signing R1: the library sends the registry `UAKinds.uaAuthCall(from, purpose, digest, auth)`, `auth = abi.encode("", signature)`).
 contract PipeRegistryMock {
     mapping(bytes32 => uint16) public kindOf;
 
@@ -160,6 +160,20 @@ contract MtxPipelineLibTest is Test {
         MtxPipelineLib.Envelope memory s = _env(MetaTxLib.pad(address(h)));
         vm.expectRevert(IMetaTx.SelfSender.selector);
         h.preCall(c, s, f, false, bad);
+    }
+
+    /// The generic `bytes auth` goes to the registry by a low-level `staticcall` (`UAKinds.uaAuthCall`): an address without code
+    /// answers success, and that is no authorization. The positive control is the same call on the real mock.
+    function test_authorize_registryWithoutCodeRefuses() public {
+        MtxPipelineLib.Ctx memory c = _ctx();
+        MtxPipelineLib.Envelope memory e = _env(UA);
+        MtxPipelineLib.CallFacts memory f = _facts();
+        bytes memory auth = _uaAuth(e);
+        c.registry = address(0xC0DE);
+        vm.expectRevert(bytes(""));
+        h.preCall(c, e, f, true, auth);
+        c.registry = address(reg);
+        h.preCall(c, e, f, true, auth);
     }
 
     /// UA path: ledger on > envelope > authorize(PURPOSE_METATX) > MetaTxUnknownOp > call shape > fee (UA_POOL).

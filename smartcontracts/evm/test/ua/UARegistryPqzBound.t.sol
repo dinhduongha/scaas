@@ -77,7 +77,7 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](ks.length);
         for (uint256 i; i < ks.length; ++i) {
             bytes32 id = UAKinds.uaOf(ks[i], keys[i]);
-            s[i] = IUARegistry.MemberSig(_indexOf(d, id), "", _sig(keys[i], UAKinds.uaMessage(ks[i], UAKinds.PURPOSE_MEMBER, md)));
+            s[i] = IUARegistry.MemberSig(_indexOf(d, id), new IUARegistry.InnerSig[](0), _sig(keys[i], UAKinds.uaMessage(ks[i], UAKinds.PURPOSE_MEMBER, md)));
         }
         for (uint256 i = 1; i < s.length; ++i) {
             for (uint256 j = i; j > 0 && s[j - 1].index > s[j].index; --j) (s[j - 1], s[j]) = (s[j], s[j - 1]);

@@ -343,9 +343,9 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         IUARegistry.MemberSig[] memory s = _memberSigs(reg, d, ms, a, b);
         _req(reg, ms, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s));
         uint16 im = _indexOf(d, a.ua);
-        s[im].keyData = a.vk;
+        s[im].members = UACall.aList();
         _expectUnauthorized(reg, ms, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s));
-        s[im].keyData = "";
+        s[im].members = new IUARegistry.InnerSig[](0);
         s[im].sig = _flip(s[im].sig, 63);
         _expectUnauthorized(reg, ms, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s));
     }
@@ -361,7 +361,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         IUARegistry.MemberSig[] memory s = _memberSigs(gen2, d, ms, a, b);
         _req(gen2, ms, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s));
         uint16 i = _indexOf(d, b.ua);
-        s[i].keyData = b.vk;
+        s[i].members = UACall.aList();
         _expectUnauthorized(gen2, ms, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s));
     }
 
@@ -381,7 +381,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         for (uint256 i; i < 2; ++i) {
             bytes memory sig = _gsign(g[i].kind, g[i].secret, g[i].vk,
                 UAKinds.uaMessage(g[i].kind, UAKinds.PURPOSE_MEMBER, _membershipMd(ms, g[i].ua)));
-            r.acceptMembership(ms, IUARegistry.MemberSig(_indexOf(d, g[i].ua), "", sig));
+            r.acceptMembership(ms, IUARegistry.MemberSig(_indexOf(d, g[i].ua), new IUARegistry.InnerSig[](0), sig));
         }
         r.acceptMembership(ms, _acceptEoaSig(d, PK_E));
     }
@@ -396,12 +396,12 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         uint16 ib = _indexOf(d, b.ua);
         uint16 ie = _indexOf(d, _pad(vm.addr(PK_E)));
         s[ia] = IUARegistry.MemberSig(
-            ia, "", _gsign(a.kind, a.secret, a.vk, UAKinds.uaMessage(a.kind, UAKinds.PURPOSE_MEMBER, md))
+            ia, new IUARegistry.InnerSig[](0), _gsign(a.kind, a.secret, a.vk, UAKinds.uaMessage(a.kind, UAKinds.PURPOSE_MEMBER, md))
         );
         s[ib] = IUARegistry.MemberSig(
-            ib, "", _gsign(b.kind, b.secret, b.vk, UAKinds.uaMessage(b.kind, UAKinds.PURPOSE_MEMBER, md))
+            ib, new IUARegistry.InnerSig[](0), _gsign(b.kind, b.secret, b.vk, UAKinds.uaMessage(b.kind, UAKinds.PURPOSE_MEMBER, md))
         );
-        s[ie] = IUARegistry.MemberSig(ie, "", _nativeSig(r, PK_E, UAKinds.PURPOSE_MEMBER, md));
+        s[ie] = IUARegistry.MemberSig(ie, new IUARegistry.InnerSig[](0), _nativeSig(r, PK_E, UAKinds.PURPOSE_MEMBER, md));
     }
 
     // ----- T-GAS -----
@@ -485,7 +485,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         bytes32 mu = UACall.register(r1, kind, g.keyData, _none(), "", "");
         Member[] memory m = new Member[](1);
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](1);
-        s[0] = IUARegistry.MemberSig(0, "", new bytes(sigLen));
+        s[0] = IUARegistry.MemberSig(0, new IUARegistry.InnerSig[](0), new bytes(sigLen));
         UARegistry[2] memory regs = [r1, r2];
         for (uint256 i; i < 2; ++i) {
             m[0] = Member(kind, mu, uint16(i + 1)); // another id per generation

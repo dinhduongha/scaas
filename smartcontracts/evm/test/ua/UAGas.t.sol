@@ -210,7 +210,7 @@ contract UAGasTest is UARegistryBase {
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
         UACall.register(tight, UAKinds.MSIG, d, _none(), "", "");
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](9);
-        for (uint16 j; j < 9; ++j) s[j] = IUARegistry.MemberSig(j, "", _big);
+        for (uint16 j; j < 9; ++j) s[j] = IUARegistry.MemberSig(j, new IUARegistry.InnerSig[](0), _big);
         bytes32 ua = UACall.register(r, UAKinds.MSIG, d, _none(), abi.encode(s), ""); // all PQ but the clone: PQ-eligible, m-of-n PoP
         uint256 least = _leastGas(
             address(r),
@@ -303,7 +303,7 @@ contract UAGasTest is UARegistryBase {
         uint16 count = uint16(bytes2(abi.encodePacked(d[2], d[3])));
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](count);
         for (uint16 j; j < count; ++j) {
-            s[j] = IUARegistry.MemberSig(j, "", _big);
+            s[j] = IUARegistry.MemberSig(j, new IUARegistry.InnerSig[](0), _big);
         }
         return _msigAuth(d, s);
     }
@@ -363,7 +363,7 @@ contract UAGasTest is UARegistryBase {
             _acceptWith(r, d, big);
             IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](t[x]);
             for (uint16 j; j < t[x]; ++j) {
-                s[j] = IUARegistry.MemberSig(j, "", big); // CTR-UA-33: the registry reads each key from its record
+                s[j] = IUARegistry.MemberSig(j, new IUARegistry.InnerSig[](0), big); // CTR-UA-33: the registry reads each key from its record
             }
             IUARegistry.UASig memory auth;
             auth.members = s; // TS-D12: an msig's `UASig` is its members only
@@ -429,7 +429,7 @@ contract UAGasTest is UARegistryBase {
             assembly ("memory-safe") {
                 id := mload(add(add(d, 38), mul(36, j)))
             }
-            r.acceptMembership(ua, IUARegistry.MemberSig(j, "", _ecdsa(_pkOf(id, ids), UAKinds.membershipDigest(ua, id))));
+            r.acceptMembership(ua, IUARegistry.MemberSig(j, new IUARegistry.InnerSig[](0), _ecdsa(_pkOf(id, ids), UAKinds.membershipDigest(ua, id))));
         }
     }
 
@@ -445,7 +445,7 @@ contract UAGasTest is UARegistryBase {
             assembly ("memory-safe") {
                 id := mload(add(add(d, 38), mul(36, j)))
             }
-            s[j] = IUARegistry.MemberSig(j, "", _ecdsa(_pkOf(id, ids), r.uaAuthDigest(id, UAKinds.PURPOSE_MEMBER, md)));
+            s[j] = IUARegistry.MemberSig(j, new IUARegistry.InnerSig[](0), _ecdsa(_pkOf(id, ids), r.uaAuthDigest(id, UAKinds.PURPOSE_MEMBER, md)));
         }
         return _msigAuth(d, s);
     }

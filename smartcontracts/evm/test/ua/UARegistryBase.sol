@@ -354,7 +354,7 @@ abstract contract UARegistryBase is Test {
     function _acceptWith(UARegistry r, bytes memory d, bytes memory sig) internal {
         uint256 count = uint16(bytes2(abi.encodePacked(d[2], d[3])));
         bytes32 ua = UAKinds.uaOf(UAKinds.MSIG, d);
-        for (uint256 i; i < count; ++i) r.acceptMembership(ua, IUARegistry.MemberSig(uint16(i), "", sig));
+        for (uint256 i; i < count; ++i) r.acceptMembership(ua, IUARegistry.MemberSig(uint16(i), new IUARegistry.InnerSig[](0), sig));
     }
 
     /// What a derived member signs under `member` to accept its slot.
@@ -365,12 +365,12 @@ abstract contract UARegistryBase is Test {
     /// The acceptance of the EOA of `pk` in the structure `d`.
     function _acceptEoaSig(bytes memory d, uint256 pk) internal pure returns (IUARegistry.MemberSig memory) {
         (bytes32 ua, bytes32 id) = (UAKinds.uaOf(UAKinds.MSIG, d), _pad(vm.addr(pk)));
-        return IUARegistry.MemberSig(_indexOf(d, id), "", _ecdsa(pk, UAKinds.membershipDigest(ua, id)));
+        return IUARegistry.MemberSig(_indexOf(d, id), new IUARegistry.InnerSig[](0), _ecdsa(pk, UAKinds.membershipDigest(ua, id)));
     }
 
     /// The acceptance of the registered `key` of `kind` in the structure `d` (the stand-in verifier's signature).
     function _acceptKeySig(bytes memory d, uint16 kind, bytes memory key) internal pure returns (IUARegistry.MemberSig memory) {
         (bytes32 ua, bytes32 id) = (UAKinds.uaOf(UAKinds.MSIG, d), UAKinds.uaOf(kind, key));
-        return IUARegistry.MemberSig(_indexOf(d, id), "", _sig(key, UAKinds.uaMessage(kind, UAKinds.PURPOSE_MEMBER, _membershipMd(ua, id))));
+        return IUARegistry.MemberSig(_indexOf(d, id), new IUARegistry.InnerSig[](0), _sig(key, UAKinds.uaMessage(kind, UAKinds.PURPOSE_MEMBER, _membershipMd(ua, id))));
     }
 }

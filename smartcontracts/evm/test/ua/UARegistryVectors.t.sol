@@ -307,7 +307,7 @@ contract UARegistryVectorsTest is UARegistryBase {
         for (uint256 i; i < 4; ++i) {
             string memory row = string.concat(".memberships[", vm.toString(i), "].");
             assertEq(vm.parseJsonBytes32(j, string.concat(row, "ua")), ua);
-            reg.acceptMembership(ua, IUARegistry.MemberSig(uint16(vm.parseJsonUint(j, string.concat(row, "index"))), "",
+            reg.acceptMembership(ua, IUARegistry.MemberSig(uint16(vm.parseJsonUint(j, string.concat(row, "index"))), new IUARegistry.InnerSig[](0),
                 vm.parseJsonBytes(j, string.concat(row, "sig"))));
         }
     }
@@ -317,13 +317,13 @@ contract UARegistryVectorsTest is UARegistryBase {
     function _msigSetTyped(bytes32 ua, uint256 i) internal returns (bool valid) {
         string memory row = string.concat(".msig.sets[", vm.toString(i), "].");
         IUARegistry.UASig memory a;
-        a.members = abi.decode(vm.parseJsonBytes(sj, string.concat(row, "sig")), (IUARegistry.MemberSig[]));
+        a.members = UACall.memberSigs(vm.parseJsonBytes(sj, string.concat(row, "sig")));
         assertEq(vm.parseJsonBytes(sj, string.concat(row, "uaSig.keyData")), "");
         assertEq(vm.parseJsonBytes(sj, string.concat(row, "uaSig.signature")), "");
         for (uint256 j; j < a.members.length; ++j) {
             string memory e = string.concat(row, "uaSig.members[", vm.toString(j), "].");
             assertEq(vm.parseJsonUint(sj, string.concat(e, "index")), a.members[j].index);
-            assertEq(vm.parseJsonBytes(sj, string.concat(e, "keyData")), a.members[j].keyData);
+            assertEq(vm.parseJsonBytes(sj, string.concat(e, "keyData")).length, a.members[j].members.length);
             assertEq(vm.parseJsonBytes(sj, string.concat(e, "sig")), a.members[j].sig);
         }
         assertFalse(vm.keyExistsJson(sj, string.concat(row, "uaSig.members[", vm.toString(a.members.length), "]")));
@@ -363,7 +363,7 @@ contract UARegistryVectorsTest is UARegistryBase {
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX, digest);
         for (uint256 i; i < 2; ++i) {
             bytes32 am = UAKinds.uaMessage(m[i].kind, UAKinds.PURPOSE_MEMBER, _membershipMd(ua, m[i].id));
-            reg.acceptMembership(ua, IUARegistry.MemberSig(_indexOf(d, m[i].id), "",
+            reg.acceptMembership(ua, IUARegistry.MemberSig(_indexOf(d, m[i].id), new IUARegistry.InnerSig[](0),
                 m[i].kind == UAKinds.WEBAUTHN_P256 ? _assertion(sk[0], bytes32(_slice32(waKey, 64)), am) : _p256(sk[1], am)));
         }
 
@@ -374,7 +374,7 @@ contract UARegistryVectorsTest is UARegistryBase {
             bytes32 msg_ = UAKinds.uaMessage(m[i].kind, UAKinds.PURPOSE_MEMBER, md);
             bytes memory sig = isWa ? _assertion(sk[0], bytes32(_slice32(waKey, 64)), msg_) : _p256(sk[1], msg_);
             if (isWa) wa = sig;
-            s[i] = IUARegistry.MemberSig(_indexOf(d, m[i].id), "", sig);
+            s[i] = IUARegistry.MemberSig(_indexOf(d, m[i].id), new IUARegistry.InnerSig[](0), sig);
         }
         _req(reg, ua, UAKinds.PURPOSE_METATX, digest, _msigAuth(d, s));
 
@@ -382,7 +382,7 @@ contract UARegistryVectorsTest is UARegistryBase {
         s[w].sig = bytes.concat(wa, hex"00"); // a trailing byte: not the canonical encoding
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
         _req(reg, ua, UAKinds.PURPOSE_METATX, digest, _msigAuth(d, s));
-        (s[w].sig, s[w].keyData) = (wa, waKey);
+        (s[w].sig, s[w].members) = (wa, UACall.aList());
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
         _req(reg, ua, UAKinds.PURPOSE_METATX, digest, _msigAuth(d, s));
     }

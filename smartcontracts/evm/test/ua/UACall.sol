@@ -75,6 +75,11 @@ library UACall {
         }
     }
 
+    /// A one-signature inner list: on a signing member it fails the slot, as `keyData` did before nested `msig`s.
+    function aList() internal pure returns (IUARegistry.InnerSig[] memory l) {
+        l = new IUARegistry.InnerSig[](1);
+    }
+
     /// `abi.encode(MemberSig[])` decoded; "" is no member signature. Test-only: any other non-empty bytes (the older
     /// tests' junk pops, e.g. `hex"01"`) become one junk member signature (index 0, `sig` = the bytes), so a "pop given"
     /// case stays one.
@@ -85,7 +90,35 @@ library UACall {
             m[0].sig = pop;
             return m;
         }
-        m = abi.decode(pop, (IUARegistry.MemberSig[]));
+        m = memberSigs(pop);
+    }
+
+    /// `abi.encode(MemberSig[])` of trusted test bytes, read by hand: the legacy pipeline's `abi.decode` of a list inside a list of
+    /// structs is `Stack too deep`.
+    function memberSigs(bytes memory b) internal pure returns (IUARegistry.MemberSig[] memory m) {
+        m = new IUARegistry.MemberSig[](_at(b, 32));
+        for (uint256 i; i < m.length; ++i) {
+            uint256 t = 64 + _at(b, 64 + 32 * i);
+            uint256 l = t + _at(b, t + 32);
+            m[i].index = uint16(_at(b, t));
+            m[i].sig = _bytesAt(b, t + _at(b, t + 64));
+            m[i].members = new IUARegistry.InnerSig[](_at(b, l));
+            for (uint256 j; j < m[i].members.length; ++j) {
+                uint256 e = l + 32 + _at(b, l + 32 + 32 * j);
+                m[i].members[j] = IUARegistry.InnerSig(uint16(_at(b, e)), _bytesAt(b, e + _at(b, e + 32)));
+            }
+        }
+    }
+
+    function _at(bytes memory b, uint256 o) private pure returns (uint256 v) {
+        assembly ("memory-safe") {
+            v := mload(add(add(b, 32), o))
+        }
+    }
+
+    function _bytesAt(bytes memory b, uint256 o) private pure returns (bytes memory r) {
+        r = new bytes(_at(b, o));
+        for (uint256 i; i < r.length; ++i) r[i] = b[o + 32 + i];
     }
 
     /// `register`, or the typed entry of kind `msig` / `webauthn-p256` / MuSig2 / FROST (key data and pop in their byte
@@ -223,18 +256,24 @@ library UACall {
     /// `abi.encode(MemberSig[])` (first word 0x20) as `members`, anything else as `signature`. Test-only heuristic: no
     /// vector signature of a single key starts with the word 0x20.
     function sig(bytes memory s) internal pure returns (IUARegistry.UASig memory u) {
-        if (s.length >= 64 && uint256(bytes32(s)) == 0x20) u.members = abi.decode(s, (IUARegistry.MemberSig[]));
+        if (s.length >= 64 && uint256(bytes32(s)) == 0x20) u.members = memberSigs(s);
         else u.signature = s;
     }
 
-    /// The `UASig` of a pre-R1 `bytes auth` (the tokens' conversion, `UAKinds.uaSig`). Test-only: bytes that are no
+    /// The `UASig` of a pre-R1 `bytes auth` (what the tokens' `UAKinds.uaAuthCall` sends). Test-only: bytes that are no
     /// `abi.encode(keyData, sig)` (the older tests' junk and empty auths) travel as `signature`, so they stay junk.
     function auth(bytes32 ua, bytes memory a) internal pure returns (IUARegistry.UASig memory s) {
         if (!UAKinds.inNativeSpace(ua) && (a.length < 96 || uint256(bytes32(a)) != 0x40)) {
             s.signature = a;
             return s;
         }
-        return UAKinds.uaSig(ua, a);
+        if (UAKinds.inNativeSpace(ua)) {
+            s.signature = a;
+            return s;
+        }
+        (bytes memory k, bytes memory b) = abi.decode(a, (bytes, bytes));
+        if (k.length != 0 && keccak256(abi.encodePacked(UAKinds.MSIG_TAG, k)) == ua) s.members = memberSigs(b);
+        else (s.keyData, s.signature) = (k, b);
     }
 
     /// `auth` of each transfer of a batch.

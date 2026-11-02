@@ -339,7 +339,12 @@ library MtxPipelineLib {
         private view
     {
         if (!UAKinds.inNativeSpace(from)) {
-            return IUARegistry(c.registry).requireAuthorized(from, purpose, digest, UAKinds.uaSig(from, auth)); // R1 → C2
+            address r = c.registry;
+            (bool ok, bytes memory ret) = r.staticcall(UAKinds.uaAuthCall(from, purpose, digest, auth)); // R1 → C2
+            if (ok && r.code.length != 0) return; // no code: no authorization, as the typed call's check
+            assembly ("memory-safe") {
+                revert(add(ret, 32), mload(ret))
+            }
         }
         _authorizeNative(c, from, digest, auth);
     }

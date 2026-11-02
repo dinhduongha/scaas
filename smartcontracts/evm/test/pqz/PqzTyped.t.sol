@@ -917,7 +917,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
         s.members = new IUARegistry.MemberSig[](2);
         for (uint256 i; i < 2; ++i) {
             string memory m = string.concat(q, "[", vm.toString(i), "]");
-            s.members[i] = IUARegistry.MemberSig(uint16(j.readUint(string.concat(m, ".index"))), j.readBytes(string.concat(m, ".keyData")), j.readBytes(string.concat(m, ".sig")));
+            s.members[i] = IUARegistry.MemberSig(uint16(j.readUint(string.concat(m, ".index"))), new IUARegistry.InnerSig[](0), j.readBytes(string.concat(m, ".sig")));
         }
     }
 

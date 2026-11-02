@@ -108,7 +108,7 @@ contract UARegistryMembershipTest is UARegistryBase {
     {
         bytes32 ua = UAKinds.uaOf(UAKinds.MSIG, d);
         bytes32 md = _memberDigest(ua, purpose, digest);
-        return IUARegistry.MemberSig(_indexOf(d, UAKinds.uaOf(ML, key)), "", _sig(key, UAKinds.uaMessage(ML, UAKinds.PURPOSE_MEMBER, md)));
+        return IUARegistry.MemberSig(_indexOf(d, UAKinds.uaOf(ML, key)), new IUARegistry.InnerSig[](0), _sig(key, UAKinds.uaMessage(ML, UAKinds.PURPOSE_MEMBER, md)));
     }
 
     /// `a`, `b` in index order, as a `UASig`.
@@ -196,12 +196,12 @@ contract UARegistryMembershipTest is UARegistryBase {
         bytes32 typed = UAKinds.membershipDigest(ua, _pad(w));
         bytes memory good = _ecdsa(ALICE, typed);
         vm.expectRevert(_unauthorized(ua));
-        r.acceptMembership(ua, IUARegistry.MemberSig(i, "", _ecdsa(BOB, typed)));
+        r.acceptMembership(ua, IUARegistry.MemberSig(i, new IUARegistry.InnerSig[](0), _ecdsa(BOB, typed)));
         assertFalse(r.memberAccepted(ua, i));
         vm.expectCall(w, abi.encodeWithSelector(IERC1271.isValidSignature.selector, typed, good));
         vm.expectEmit(address(r));
         emit IUARegistry.UAMembershipAccepted(ua, i, _pad(w));
-        r.acceptMembership(ua, IUARegistry.MemberSig(i, "", good));
+        r.acceptMembership(ua, IUARegistry.MemberSig(i, new IUARegistry.InnerSig[](0), good));
         assertEq(_bits(r, ua), 1 << i);
     }
 
@@ -248,9 +248,9 @@ contract UARegistryMembershipTest is UARegistryBase {
         _regMsig(r, d, "");
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX, TX_DIGEST);
         IUARegistry.MemberSig memory a = IUARegistry.MemberSig(
-            _indexOf(d, _pad(vm.addr(ALICE))), "", _nativeSig(r, ALICE, UAKinds.PURPOSE_MEMBER, md));
+            _indexOf(d, _pad(vm.addr(ALICE))), new IUARegistry.InnerSig[](0), _nativeSig(r, ALICE, UAKinds.PURPOSE_MEMBER, md));
         IUARegistry.MemberSig memory p = IUARegistry.MemberSig(
-            _indexOf(d, UAKinds.uaOf(P256, p1)), "", _sig(p1, UAKinds.uaMessage(P256, UAKinds.PURPOSE_MEMBER, md)));
+            _indexOf(d, UAKinds.uaOf(P256, p1)), new IUARegistry.InnerSig[](0), _sig(p1, UAKinds.uaMessage(P256, UAKinds.PURPOSE_MEMBER, md)));
         IUARegistry.UASig memory s = _two(a, p);
         vm.expectRevert(_unauthorized(ua));
         r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, TX_DIGEST, s);
@@ -283,10 +283,10 @@ contract UARegistryMembershipTest is UARegistryBase {
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX, TX_DIGEST);
         IUARegistry.UASig memory s;
         s.members = new IUARegistry.MemberSig[](1);
-        s.members[0] = IUARegistry.MemberSig(0, "", _ecdsa(ALICE, r.uaAuthDigest(_pad(w), UAKinds.PURPOSE_MEMBER, md)));
+        s.members[0] = IUARegistry.MemberSig(0, new IUARegistry.InnerSig[](0), _ecdsa(ALICE, r.uaAuthDigest(_pad(w), UAKinds.PURPOSE_MEMBER, md)));
         vm.expectRevert(_unauthorized(ua));
         r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, TX_DIGEST, s);
-        r.acceptMembership(ua, IUARegistry.MemberSig(0, "", _ecdsa(ALICE, UAKinds.membershipDigest(ua, _pad(w)))));
+        r.acceptMembership(ua, IUARegistry.MemberSig(0, new IUARegistry.InnerSig[](0), _ecdsa(ALICE, UAKinds.membershipDigest(ua, _pad(w)))));
         r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, TX_DIGEST, s);
     }
 
@@ -332,11 +332,11 @@ contract UARegistryMembershipTest is UARegistryBase {
         // bob's key over the digest of alice's slot: right signer, wrong `member`
         uint16 ia = _indexOf(d, _pad(vm.addr(ALICE)));
         vm.expectRevert(_unauthorized(ua));
-        r.acceptMembership(ua, IUARegistry.MemberSig(ia, "", _ecdsa(BOB, UAKinds.membershipDigest(ua, _pad(vm.addr(ALICE))))));
+        r.acceptMembership(ua, IUARegistry.MemberSig(ia, new IUARegistry.InnerSig[](0), _ecdsa(BOB, UAKinds.membershipDigest(ua, _pad(vm.addr(ALICE))))));
         // a derived member's digest names the member too
         uint16 ip = _indexOf(d, UAKinds.uaOf(P256, p1));
         vm.expectRevert(_unauthorized(ua));
-        r.acceptMembership(ua, IUARegistry.MemberSig(ip, "", _sig(p1, UAKinds.uaMessage(P256, UAKinds.PURPOSE_MEMBER, _membershipMd(ua, _pad(vm.addr(ALICE)))))));
+        r.acceptMembership(ua, IUARegistry.MemberSig(ip, new IUARegistry.InnerSig[](0), _sig(p1, UAKinds.uaMessage(P256, UAKinds.PURPOSE_MEMBER, _membershipMd(ua, _pad(vm.addr(ALICE)))))));
         r.acceptMembership(ua, _acceptEoaSig(d, BOB));
         assertTrue(r.memberAccepted(ua, _indexOf(d, _pad(vm.addr(BOB)))));
     }
@@ -409,7 +409,7 @@ contract UARegistryMembershipTest is UARegistryBase {
         _regMsig(r, d, "");
         uint16 i = _indexOf(d, _pad(vm.addr(ALICE)));
         vm.expectRevert(_unauthorized(ua));
-        r.acceptMembership(ua, IUARegistry.MemberSig(i, "", _ecdsa(ALICE, _regDigest(ua, UAKinds.MSIG))));
+        r.acceptMembership(ua, IUARegistry.MemberSig(i, new IUARegistry.InnerSig[](0), _ecdsa(ALICE, _regDigest(ua, UAKinds.MSIG))));
         r.acceptMembership(ua, _acceptEoaSig(d, ALICE));
     }
 
@@ -446,14 +446,13 @@ contract UARegistryMembershipTest is UARegistryBase {
         _regMsig(r, d, "");
         IUARegistry.MemberSig memory n = _acceptEoaSig(d, ALICE);
         IUARegistry.MemberSig memory p = _acceptKeySig(d, P256, p1);
-        (bytes memory nk, bytes memory pk) = (n.keyData, p.keyData);
-        n.keyData = hex"01";
+        n.members = UACall.aList();
         vm.expectRevert(_unauthorized(ua));
         r.acceptMembership(ua, n);
-        p.keyData = p1;
+        p.members = UACall.aList();
         vm.expectRevert(_unauthorized(ua));
         r.acceptMembership(ua, p);
-        (n.keyData, p.keyData) = (nk, pk);
+        (n.members, p.members) = (new IUARegistry.InnerSig[](0), new IUARegistry.InnerSig[](0));
         r.acceptMembership(ua, n);
         r.acceptMembership(ua, p);
     }
@@ -546,7 +545,7 @@ contract UARegistryMembershipTest is UARegistryBase {
             bytes memory bad = abi.encodePacked(s.sig);
             bad[0] ^= 0x01;
             vm.expectRevert(_unauthorized(ua));
-            x.acceptMembership(ua, IUARegistry.MemberSig(s.index, "", bad));
+            x.acceptMembership(ua, IUARegistry.MemberSig(s.index, new IUARegistry.InnerSig[](0), bad));
             x.acceptMembership(ua, s);
         }
         assertEq(_bits(x, ua), _bits(r, ua));
@@ -620,7 +619,7 @@ contract UARegistryMembershipTest is UARegistryBase {
         m[0] = Member(UAKinds.EVM_EOA, _pad(w), 1);
         bytes memory d = _msigKey(1, m);
         bytes32 ua = _regMsig(r, d, "");
-        IUARegistry.MemberSig memory s = IUARegistry.MemberSig(0, "", _ecdsa(ALICE, UAKinds.membershipDigest(ua, _pad(w))));
+        IUARegistry.MemberSig memory s = IUARegistry.MemberSig(0, new IUARegistry.InnerSig[](0), _ecdsa(ALICE, UAKinds.membershipDigest(ua, _pad(w))));
         bytes memory call_ = abi.encodeCall(r.acceptMembership, (ua, s));
         (bool ok, bytes memory ret) = address(r).call{gas: 60_000}(call_);
         assertFalse(ok);

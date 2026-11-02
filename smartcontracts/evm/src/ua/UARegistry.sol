@@ -643,7 +643,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// member indexes, stop at the threshold (a MemberSig after it fails, which keeps the registration bound sound),
     /// `member_digest = keccak256(ua ‖ ua_msg)`; native members sign `UAAuth` (CTR-UA-24, CTR-MTX-14), derived members
     /// sign `member_digest` under `member`. (The members come typed, TS-D12: no encoding to canonicalise.) Only an accepted
-    /// slot counts (CTR-UA-37): a good signature of a slot that only is listed fails.
+    /// slot counts (CTR-UA-37): a good signature of a slot that only is listed fails. An `msig` member is this same check one level
+    /// down, under `member` over `md`, by `_memberOk`.
     function _msig(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory d, MemberSig[] memory sigs)
         private
         view
@@ -665,12 +666,19 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// The signature `s` of member `s.index` of the structure `d` over `md` under `member`, without key data (native:
-    /// none; registered: `_derived` reads the member's record, CTR-UA-33).
+    /// none; registered: `_derived` reads the member's record, CTR-UA-33). An `msig` member: `s.members` by `_msig` over its own
+    /// record, or its generation's; `lift` leaves them no list, so a level below has no signature and fails its threshold.
     function _memberOk(bytes memory d, bytes32 md, MemberSig memory s) private view returns (bool) {
         uint256 o = 4 + 36 * uint256(s.index);
         (uint16 kind, bytes32 id) = (uint16(UAStore.u16(d, o)), bytes32(UAStore.word(d, o + 2)));
-        if (!UAKinds.isNative(kind)) return _derived(id, kind, UAKinds.PURPOSE_MEMBER, md, s.keyData, s.sig);
-        if (s.keyData.length != 0) return false;
+        if (kind == UAKinds.MSIG) {
+            if (s.sig.length != 0) return false;
+            MemberSig[] memory inner = UAStore.lift(s.members);
+            if (_s.records[id].kind == 0) return UAStore.via(predecessor, id, UAKinds.PURPOSE_MEMBER, md, UASig("", "", inner));
+            return _msig(id, UAKinds.PURPOSE_MEMBER, md, UAStore.keyRest(id), inner);
+        }
+        if (s.members.length != 0) return false;
+        if (!UAKinds.isNative(kind)) return _derived(id, kind, UAKinds.PURPOSE_MEMBER, md, "", s.sig);
         return _native(id, UAKinds.PURPOSE_MEMBER, md, s.sig);
     }
 

@@ -194,20 +194,32 @@ contract DexKatTest is Test {
         return vm.parseBytes(vm.parseJsonString(vm.readFile(OUT), string.concat(".", key)));
     }
 
+    /// Same selector as `ISCaaSDex.mtxHybrid`: the calldata decoder, as `mtxExchangeBatch` below.
+    function mtxHybrid(ISCaaSDex.HybridPlan calldata p, ISCaaSDex.Interaction[] calldata xs) external pure returns (bytes memory) {
+        return abi.encodeCall(ISCaaSDex.mtxHybrid, (p, xs));
+    }
+
+    /// Same selector as `ISCaaSDex.mtxHybridVia`.
+    function mtxHybridVia(ISCaaSDex.HybridPlan calldata p, address ex, bytes calldata data) external pure returns (bytes memory) {
+        return abi.encodeCall(ISCaaSDex.mtxHybridVia, (p, ex, data));
+    }
+
+    function _rtSelf(bytes memory c) internal view {
+        (bool ok, bytes memory r) = address(this).staticcall(c);
+        assertTrue(ok);
+        assertEq(abi.decode(r, (bytes)), c);
+    }
+
     function _rtHybrid() internal view {
         bytes memory c = _kat("hybrid_calldata");
         assertEq(bytes4(c), ISCaaSDex.mtxHybrid.selector);
-        (ISCaaSDex.HybridPlan memory p, ISCaaSDex.Interaction[] memory xs) =
-            abi.decode(this.tail(c), (ISCaaSDex.HybridPlan, ISCaaSDex.Interaction[]));
-        assertEq(abi.encodeCall(ISCaaSDex.mtxHybrid, (p, xs)), c);
+        _rtSelf(c);
     }
 
     function _rtHybridVia() internal view {
         bytes memory c = _kat("hybrid_via_calldata");
         assertEq(bytes4(c), ISCaaSDex.mtxHybridVia.selector);
-        (ISCaaSDex.HybridPlan memory p, address ex, bytes memory data) =
-            abi.decode(this.tail(c), (ISCaaSDex.HybridPlan, address, bytes));
-        assertEq(abi.encodeCall(ISCaaSDex.mtxHybridVia, (p, ex, data)), c);
+        _rtSelf(c);
     }
 
     /// Same selector as `ISCaaSDex.mtxExchangeBatch`, so the calldata is decoded by the compiler's calldata decoder

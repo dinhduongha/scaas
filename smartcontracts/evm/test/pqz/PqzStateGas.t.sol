@@ -822,7 +822,7 @@ contract PqzStatePinGasTest is PqzSlots {
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](n);
         for (uint16 i; i < n; ++i) {
             d = abi.encodePacked(d, UAKinds.MLDSA65, ids[i], uint16(1));
-            s[i] = IUARegistry.MemberSig(i, "", new bytes(ML65_SIG));
+            s[i] = IUARegistry.MemberSig(i, new IUARegistry.InnerSig[](0), new bytes(ML65_SIG));
         }
         ua = reg.uaOf(UAKinds.MSIG, d);
         bytes memory pqz = _pk(seed0 + 50);

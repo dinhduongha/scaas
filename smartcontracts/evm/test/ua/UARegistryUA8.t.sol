@@ -9,7 +9,6 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IUAPopVerifier} from "../../src/ua/IUAVerifier.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UARegistryLib} from "../../src/ua/UARegistryLib.sol";
-import {UARegistryPreSplit} from "../../legacy/typed-signing/UARegistryPreSplit.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {SSTORE2} from "../../src/common/SSTORE2.sol";
 import {PqUA} from "../../src/ua/PqUA.sol";
@@ -386,7 +385,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// Each `mldsa65` member signature of the `MemberSig[]` blob `sigs` of the `msig` `d` over `md` (under `member`).
     function _allowMembers(Row[] memory rows, bytes memory d, bytes32 md, bytes memory sigs) internal {
-        IUARegistry.MemberSig[] memory s = abi.decode(sigs, (IUARegistry.MemberSig[]));
+        IUARegistry.MemberSig[] memory s = UACall.memberSigs(sigs);
         for (uint256 k; k < s.length; ++k) {
             (uint16 kind, bytes32 id) = _member(d, s[k].index);
             if (kind != UAKinds.MLDSA65) continue;
@@ -653,7 +652,7 @@ contract UARegistryUA8Test is UARegistryBase {
         // the vector's native member signature recovers to the member over the typed registration digest
         bytes32 rd = _regDigest(m.ua, UAKinds.MSIG, m.attrs);
         assertEq(UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_POP_V2, rd), m.popMessage);
-        IUARegistry.MemberSig[] memory s = abi.decode(m.pop, (IUARegistry.MemberSig[]));
+        IUARegistry.MemberSig[] memory s = UACall.memberSigs(m.pop);
         (uint16 k0, bytes32 id0) = _member(m.keyData, s[0].index);
         assertEq(k0, UAKinds.EVM_EOA, "member 0 is the native one");
         assertEq(ECDSA.recover(rd, s[0].sig), address(uint160(uint256(id0))));
@@ -688,7 +687,7 @@ contract UARegistryUA8Test is UARegistryBase {
         bytes32 md = UAKinds.memberDigest(m.ua, m.popMessage);
         bytes32[3] memory wrong =
             [MessageHashUtils.toEthSignedMessageHash(md), MessageHashUtils.toEthSignedMessageHash(rd), md];
-        IUARegistry.MemberSig[] memory s = abi.decode(m.pop, (IUARegistry.MemberSig[]));
+        IUARegistry.MemberSig[] memory s = UACall.memberSigs(m.pop);
         for (uint256 i; i < 3; ++i) {
             s[0].sig = _ecdsa(sk, wrong[i]);
             bytes memory pop = abi.encode(s);
@@ -700,7 +699,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// High s, 64 bytes, v 0 and v 1 for the native member's typed signature: `UAPoP`.
     function _malformedNativeSig(UARegistry a, Row memory m) internal {
-        IUARegistry.MemberSig[] memory s = abi.decode(m.pop, (IUARegistry.MemberSig[]));
+        IUARegistry.MemberSig[] memory s = UACall.memberSigs(m.pop);
         (uint16 k0,) = _member(m.keyData, s[0].index);
         assertEq(k0, UAKinds.EVM_EOA, "member 0 is the native one");
         bytes memory good = s[0].sig;
@@ -725,7 +724,7 @@ contract UARegistryUA8Test is UARegistryBase {
     function _portableNotForRequireAuthorized(UARegistry a, Row memory m, bytes32 rd) internal {
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, m.ua));
         a.requireAuthorized(m.ua, UAKinds.PURPOSE_POP_V2, rd, UACall.auth(m.ua, abi.encode(m.keyData, m.pop)));
-        IUARegistry.MemberSig[] memory s = abi.decode(m.pop, (IUARegistry.MemberSig[]));
+        IUARegistry.MemberSig[] memory s = UACall.memberSigs(m.pop);
         s[0].sig = _nativeSig(a, _nativeSk(), UAKinds.PURPOSE_MEMBER, UAKinds.memberDigest(m.ua, m.popMessage));
         a.requireAuthorized(m.ua, UAKinds.PURPOSE_POP_V2, rd, UACall.auth(m.ua, abi.encode(m.keyData, abi.encode(s))));
         (bytes32 purpose, bytes32 dg, bytes memory auth) = this.loadAuthNeg();
@@ -748,7 +747,7 @@ contract UARegistryUA8Test is UARegistryBase {
         vm.etch(address(uint160(uint256(id))), address(w).code);
         vm.expectRevert(IUARegistry.UAPoP.selector);
         UACall.register(a, m.kind, m.keyData, m.attrs, m.pop, m.pqzPop); // the key's typed pop: code ⇒ ERC-1271 only
-        IUARegistry.MemberSig[] memory s = abi.decode(m.pop, (IUARegistry.MemberSig[]));
+        IUARegistry.MemberSig[] memory s = UACall.memberSigs(m.pop);
         s[0].sig = _ecdsa(ownerSk, UAKinds.memberDigest(m.ua, m.popMessage));
         bytes memory overMd = abi.encode(s);
         vm.expectRevert(IUARegistry.UAPoP.selector);
@@ -786,7 +785,7 @@ contract UARegistryUA8Test is UARegistryBase {
         (d, ua, pop) = _notMinimal(rows);
         a = _regA(false);
         _members(a, rows);
-        slots = abi.decode(pop, (IUARegistry.MemberSig[]));
+        slots = UACall.memberSigs(pop);
         assertEq(UACall.register(a, UAKinds.MSIG, d, _none(), abi.encode(_one(slots[1])), ""), ua);
         _acceptSlot(a, rows, d, ua, 0, 0); // the `pop` signer is accepted, the weight-1 slot accepts: the rule under test decides
     }
@@ -796,7 +795,7 @@ contract UARegistryUA8Test is UARegistryBase {
         (, bytes32 id) = _member(d, index);
         bytes32 typed = UAKinds.membershipDigest(ua, id);
         bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBERSHIP, typed));
-        a.acceptMembership(ua, IUARegistry.MemberSig(uint16(index), "", _memberSig(rows, d, index, md, typed, sk)));
+        a.acceptMembership(ua, IUARegistry.MemberSig(uint16(index), new IUARegistry.InnerSig[](0), _memberSig(rows, d, index, md, typed, sk)));
     }
 
     /// Both slots verify and the old rule passes, but the weight-2 slot alone reaches the threshold: `UAPoP`. The weight-1
@@ -809,7 +808,7 @@ contract UARegistryUA8Test is UARegistryBase {
         _members(a, rows);
         vm.expectRevert(IUARegistry.UAPoP.selector);
         UACall.register(a, UAKinds.MSIG, d, _none(), pop, "");
-        IUARegistry.MemberSig[] memory s = abi.decode(pop, (IUARegistry.MemberSig[]));
+        IUARegistry.MemberSig[] memory s = UACall.memberSigs(pop);
         vm.expectRevert(IUARegistry.UAPoP.selector);
         UACall.register(a, UAKinds.MSIG, d, _none(), abi.encode(_one(s[0])), "");
         assertEq(UACall.register(a, UAKinds.MSIG, d, _none(), abi.encode(_one(s[1])), ""), ua);
@@ -822,7 +821,7 @@ contract UARegistryUA8Test is UARegistryBase {
         bytes memory sig = _msigSigs(rows, d, ua, UAKinds.PURPOSE_KEM, UAKinds.kemRecordDigest(ua, 1, pk), 0, 1, 0);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
         a.setKemKey(ua, 1, UACall.kem(pk), UACall.sig(sig));
-        bytes memory one = abi.encode(_one(abi.decode(sig, (IUARegistry.MemberSig[]))[1]));
+        bytes memory one = abi.encode(_one(UACall.memberSigs(sig)[1]));
         a.setKemKey(ua, 1, UACall.kem(pk), UACall.sig(one));
         _assertKemAt(a, ua, 1, pk, one);
     }
@@ -835,7 +834,7 @@ contract UARegistryUA8Test is UARegistryBase {
         bytes memory sig = _msigSigs(rows, d, ua, UAKinds.PURPOSE_PQZ_KEY, rd, 0, 1, 0);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
         a.setPqzKey(ua, x.attrs.pqzKey, x.attrs.pqzPopHash, UACall.sig(sig));
-        bytes memory one = abi.encode(_one(abi.decode(sig, (IUARegistry.MemberSig[]))[1]));
+        bytes memory one = abi.encode(_one(UACall.memberSigs(sig)[1]));
         a.setPqzKey(ua, x.attrs.pqzKey, x.attrs.pqzPopHash, UACall.sig(one));
         assertEq(a.pqzKeySigOf(ua), one);
     }
@@ -847,7 +846,7 @@ contract UARegistryUA8Test is UARegistryBase {
         bytes32 dg = keccak256("a metatx digest");
         bytes memory sig = _msigSigs(rows, d, ua, UAKinds.PURPOSE_METATX, dg, 0, 1, 0);
         a.requireAuthorized(ua, UAKinds.PURPOSE_METATX, dg, UACall.sig(sig));
-        a.requireAuthorized(ua, UAKinds.PURPOSE_METATX, dg, UACall.sig(abi.encode(_one(abi.decode(sig, (IUARegistry.MemberSig[]))[1]))));
+        a.requireAuthorized(ua, UAKinds.PURPOSE_METATX, dg, UACall.sig(abi.encode(_one(UACall.memberSigs(sig)[1]))));
     }
 
     /// The minimal `pop` of portable.json's `msig-pq-native` (2-of-2) minus either slot is refused, and so is a slot added
@@ -858,7 +857,7 @@ contract UARegistryUA8Test is UARegistryBase {
         Row memory m = rows[MSIG_NATIVE_ROW];
         UARegistry a = _regA(false);
         _members(a, rows);
-        IUARegistry.MemberSig[] memory s = abi.decode(m.pop, (IUARegistry.MemberSig[]));
+        IUARegistry.MemberSig[] memory s = UACall.memberSigs(m.pop);
         for (uint256 i; i < 2; ++i) {
             vm.expectRevert(IUARegistry.UAPoP.selector);
             UACall.register(a, m.kind, m.keyData, m.attrs, abi.encode(_one(s[i])), m.pqzPop);
@@ -872,10 +871,10 @@ contract UARegistryUA8Test is UARegistryBase {
         bytes32 rd = _regDigest(ua, UAKinds.MSIG);
         bytes memory pop = _msigSigs(rows, d, ua, UAKinds.PURPOSE_POP_V2, rd, 0, 1, _nativeSk());
         bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_POP_V2, rd));
-        IUARegistry.MemberSig[] memory p = abi.decode(pop, (IUARegistry.MemberSig[]));
+        IUARegistry.MemberSig[] memory p = UACall.memberSigs(pop);
         IUARegistry.MemberSig[] memory extra = new IUARegistry.MemberSig[](3);
         (extra[0], extra[1]) = (p[0], p[1]);
-        extra[2] = IUARegistry.MemberSig(2, "", _memberSig(rows, d, 2, md, rd, _nativeSk()));
+        extra[2] = IUARegistry.MemberSig(2, new IUARegistry.InnerSig[](0), _memberSig(rows, d, 2, md, rd, _nativeSk()));
         vm.expectRevert(IUARegistry.UAPoP.selector);
         UACall.register(a, UAKinds.MSIG, d, _none(), abi.encode(extra), "");
         assertEq(UACall.register(a, UAKinds.MSIG, d, _none(), pop, ""), ua);
@@ -915,7 +914,7 @@ contract UARegistryUA8Test is UARegistryBase {
             assertFalse(a.memberAccepted(ua, index));
             vm.expectEmit(address(a));
             emit IUARegistry.UAMembershipAccepted(ua, index, member);
-            a.acceptMembership(ua, IUARegistry.MemberSig(index, "", sig));
+            a.acceptMembership(ua, IUARegistry.MemberSig(index, new IUARegistry.InnerSig[](0), sig));
         } else if (kind == UAKinds.EVM_EOA) {
             assertEq(ECDSA.recover(typed, sig), address(uint160(uint256(member))));
         } else {
@@ -1139,7 +1138,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     function _storedPop(UARegistry r, bytes memory d, uint16 n) internal {
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](n);
-        for (uint16 j; j < n; ++j) s[j] = IUARegistry.MemberSig(j, "", new bytes(7_856));
+        for (uint16 j; j < n; ++j) s[j] = IUARegistry.MemberSig(j, new IUARegistry.InnerSig[](0), new bytes(7_856));
         bytes memory pop = abi.encode(s);
         bytes32 ua = UACall.register(r, UAKinds.MSIG, d, _none(), pop, "");
         assertEq(r.popOf(ua), pop);
@@ -1188,7 +1187,7 @@ contract UARegistryUA8Test is UARegistryBase {
         _members(a, rows);
         uint256 sk = _nativeSk();
         _delegate(m, sk, 0x5E55);
-        IUARegistry.MemberSig[] memory s = abi.decode(m.pop, (IUARegistry.MemberSig[]));
+        IUARegistry.MemberSig[] memory s = UACall.memberSigs(m.pop);
         bytes32 md = UAKinds.memberDigest(m.ua, m.popMessage);
         bytes32 rd = _regDigest(m.ua, UAKinds.MSIG, m.attrs);
         s[0].sig = _ecdsa(0x5E55, rd);
@@ -2382,7 +2381,7 @@ contract UARegistryUA8Test is UARegistryBase {
         UARegistry a = _regA(false);
         _kemSetup(a, rows, ks);
         KemRec memory k = _kemRec(ks, "msig-pq/v2");
-        IUARegistry.MemberSig[] memory s = abi.decode(k.sig, (IUARegistry.MemberSig[]));
+        IUARegistry.MemberSig[] memory s = UACall.memberSigs(k.sig);
         assertEq(s.length, 2);
         IUARegistry.MemberSig[] memory one = new IUARegistry.MemberSig[](1);
         one[0] = s[0];
@@ -2419,7 +2418,7 @@ contract UARegistryUA8Test is UARegistryBase {
         for (uint64 v = 1; v <= 3; ++v) {
             bytes32 kd = UAKinds.kemRecordDigest(ua, v, pk);
             bytes memory sig = _msigSigs(rows, d, ua, UAKinds.PURPOSE_KEM, kd, pairs[v - 1][0], pairs[v - 1][1], sk);
-            IUARegistry.MemberSig[] memory p = abi.decode(sig, (IUARegistry.MemberSig[]));
+            IUARegistry.MemberSig[] memory p = UACall.memberSigs(sig);
             IUARegistry.MemberSig[] memory bad = new IUARegistry.MemberSig[](1);
             bad[0] = p[1];
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
@@ -2447,10 +2446,7 @@ contract UARegistryUA8Test is UARegistryBase {
         bytes32 kd = UAKinds.kemRecordDigest(ua, 4, pk);
         bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_KEM, kd));
         uint256 other = ni == 0 ? 1 : 0;
-        IUARegistry.MemberSig[] memory q = abi.decode(
-            _msigSigs(rows, d, ua, UAKinds.PURPOSE_KEM, kd, other < ni ? other : ni, other < ni ? ni : other, sk),
-            (IUARegistry.MemberSig[])
-        );
+        IUARegistry.MemberSig[] memory q = UACall.memberSigs(_msigSigs(rows, d, ua, UAKinds.PURPOSE_KEM, kd, other < ni ? other : ni, other < ni ? ni : other, sk));
         uint256 qn = q[0].index == ni ? 0 : 1;
         bytes memory typedSig = q[qn].sig;
         q[qn].sig = _nativeSig(a, sk, UAKinds.PURPOSE_MEMBER, md);
@@ -2479,8 +2475,8 @@ contract UARegistryUA8Test is UARegistryBase {
     ) internal returns (bytes memory) {
         bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purpose, typed));
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](2);
-        s[0] = IUARegistry.MemberSig(uint16(i), "", _memberSig(rows, d, i, md, typed, sk));
-        s[1] = IUARegistry.MemberSig(uint16(j), "", _memberSig(rows, d, j, md, typed, sk));
+        s[0] = IUARegistry.MemberSig(uint16(i), new IUARegistry.InnerSig[](0), _memberSig(rows, d, i, md, typed, sk));
+        s[1] = IUARegistry.MemberSig(uint16(j), new IUARegistry.InnerSig[](0), _memberSig(rows, d, j, md, typed, sk));
         return abi.encode(s);
     }
 
@@ -3519,7 +3515,7 @@ contract UARegistryUA8Test is UARegistryBase {
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](12);
         for (uint16 i; i < 12; ++i) {
             m12[i] = Member(0x0133, UACall.register(big, 0x0133, abi.encodePacked(keccak256(abi.encode("slhk", i))), _none(), hex"01", ""), 1);
-            s[i] = IUARegistry.MemberSig(i, "", new bytes(7_856));
+            s[i] = IUARegistry.MemberSig(i, new IUARegistry.InnerSig[](0), new bytes(7_856));
         }
         bytes memory d = _msigKey(12, m12); // threshold 12: the KEM signature is as large as the pop (calldata-floor bound)
         bytes32 ua = UACall.register(big, UAKinds.MSIG, d, _none(), abi.encode(s), "");

@@ -22,10 +22,19 @@ interface IUARegistry is IERC5267 {
         uint40 index; // the UA's position in its kind's list (`uaAt`)
     }
 
-    /// One `msig` member's signature (CTR-UA-33: `keyData` always empty; the member's key is read from its record).
+    /// One signature of a member of an inner `msig`: its slot `index` there, its `sig`. No list of its own, so a third level has no
+    /// form (owner 2026-11-02: verification goes two levels only).
+    struct InnerSig {
+        uint16 index;
+        bytes sig;
+    }
+
+    /// One `msig` slot's signature (CTR-UA-33: a member's key is read from its record). A signing member: `sig`, `members` empty; an
+    /// `msig` member: `members`, its own slots up to its own threshold, `sig` empty. `members` sits where `keyData` sat: an empty array
+    /// encodes as empty bytes do, so a flat signature's bytes, every stored `pop`, did not change.
     struct MemberSig {
         uint16 index;
-        bytes keyData;
+        InnerSig[] members;
         bytes sig;
     }
 

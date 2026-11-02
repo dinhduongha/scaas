@@ -193,6 +193,15 @@ library UAStore {
         );
     }
 
+    /// An inner `msig`'s signatures as the `MemberSig`s `_msig` checks: none carries a list, so nothing is checked below the inner level.
+    function lift(IUARegistry.InnerSig[] memory inner) internal pure returns (IUARegistry.MemberSig[] memory s) {
+        IUARegistry.InnerSig[] memory none;
+        s = new IUARegistry.MemberSig[](inner.length);
+        for (uint256 i; i < inner.length; ++i) {
+            s[i] = IUARegistry.MemberSig(inner[i].index, none, inner[i].sig);
+        }
+    }
+
     /// `requireAuthorized` on `target` as a verdict. Records and kinds of gen 1 are checked by gen 1 (its verifiers, its
     /// `UAAuth` domain for native members of its structures); in `UARegistryLib` `target` is also the registry itself, for
     /// a derived `msig` member. Any revert there is a failed check, except starvation: a starved caller must see
