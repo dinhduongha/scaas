@@ -124,7 +124,8 @@ notes start with the research banner. Prefer Mermaid for flows; SVG overviews wh
 | Other | the header of `.github/workflows/ci.yml` lists every job's commands |
 
 State what you ran and its result. Report a failure with its output; do not edit a pin, a bound or a test to go green. A small change: edit, one
-test, the touched gates. Multi-step gates log per step and resume.
+test, the touched gates. Multi-step gates log per step and resume. Full output stays in git-ignored `.log` files; commit one
+`step | commit | rc | counts` summary and short evidence a doc quotes, with no absolute paths.
 
 ## Git
 
