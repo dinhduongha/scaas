@@ -5,13 +5,13 @@
 //! id (P11, U8S-D8): such an attestation is never a signature, so it never makes a key able to authorise.
 #![no_std]
 use scaas_ua_common::{
-    attest_digest, h32, kem_pk, kem_pk_record_hash, kem_record_digest, kem_record_hash, portable_record_hash, pqz_key_hash,
-    pqz_key_record_digest, registration_digest, Checked, FrostKey, KemKey, MemberSig, MsigStructure, MuSig2Key, Registration,
-    UaAttrs, UaSig, WebAuthnKey, PURPOSE_KEM, PURPOSE_MEMBER, PURPOSE_POP_V2, PURPOSE_PQZ_KEY,
+    attest_digest, h32, kem_pk, kem_pk_record_hash, kem_record_digest, kem_record_hash, membership_digest, portable_record_hash,
+    pqz_key_hash, pqz_key_record_digest, registration_digest, Checked, FrostKey, KemKey, MemberSig, MsigStructure, MuSig2Key,
+    Registration, UaAttrs, UaSig, WebAuthnKey, PURPOSE_KEM, PURPOSE_MEMBER, PURPOSE_MEMBERSHIP, PURPOSE_POP_V2, PURPOSE_PQZ_KEY,
 };
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contracttype, crypto::Hash, panic_with_error, xdr::FromXdr,
-    Address, Bytes, BytesN, Env, IntoVal, String, TryFromVal, Val, Vec,
+    Address, Bytes, BytesN, Env, IntoVal, Map, String, TryFromVal, Val, Vec,
 };
 
 pub(crate) mod abi;
@@ -63,6 +63,7 @@ const TTL_BUMP: u32 = 60 * DAY;
 /// `(key, sig, Checked, pqz_pop_hash)`, `PqzP(ua)` = the proof bytes, `Kem(ua, version)` = `(pk, sig, Checked)`,
 /// `KemMax(ua)` = the highest `set_kem_key` version: the bytes stay in state, `Ua(ua)` holds neither key (U8S-D3). A
 /// `set_pqz_key` key's hash is only in `PqzK`: `Ua(ua).attrs` keeps the `register` arguments, and is not rewritten.
+/// `Accepted(ua)` = an `msig`'s one `AcceptedEntry`, written at registration: read once by a verify, never parsing `pop`.
 #[contracttype]
 #[derive(Clone)]
 pub(crate) enum Key {
@@ -77,6 +78,7 @@ pub(crate) enum Key {
     PqzP(BytesN<32>),
     Kem(BytesN<32>, u64),
     KemMax(BytesN<32>),
+    Accepted(BytesN<32>),
 }
 
 /// `Registration` with `pop` replaced by `pop_hash = keccak256(pop)` (owner ruling 2026-10-30 after T0: the full record
@@ -136,6 +138,18 @@ pub struct UaKemKeySet {
     pub checked: Checked,
 }
 
+/// CTR-UA-37: slot `index` of the `msig` `ua`, member `member`, accepted by `accept_membership`; `checked` says whose word it is.
+/// Slots that signed the `pop` are accepted at registration, without this event: `UaRegistered` and `pop_of` carry them.
+#[contractevent(topics = ["UaMembershipAccepted"], data_format = "vec")]
+pub struct UaMembershipAccepted {
+    #[topic]
+    pub ua: BytesN<32>,
+    #[topic]
+    pub member: BytesN<32>,
+    pub index: u32,
+    pub checked: Checked,
+}
+
 /// `keccak256("scaas.ua.group.<g>.v1")` (pinned by `kinds.json` `groups`).
 const GROUP_P256: [u8; 32] = h32("42536053999ec2faea9af0b9b0ddeca9a126a2f05231603786f112854f12c1df");
 const GROUP_ED25519: [u8; 32] = h32("68b4870b8635a91eb90f5a22ac6c350df50d0ca1f9ba92db6b38b0718ea5b25c");
@@ -159,6 +173,8 @@ const KEM_PK_LENGTH: u32 = 1_601;
 
 type PqzEntry = (Bytes, Bytes, Checked, BytesN<32>);
 type KemEntry = (Bytes, Bytes, Checked);
+/// `Accepted(ua)`: bit `i` = slot `i` accepted, and the relayer of each accepted slot the chain could not verify (P11 rule 3).
+pub(crate) type AcceptedEntry = (u32, Map<u32, Address>);
 
 fn get<V: TryFromVal<Env, Val>>(env: &Env, k: &Key) -> Option<V> {
     let s = env.storage().persistent();
@@ -389,58 +405,75 @@ fn attest(env: &Env, by: &By) -> Checked {
     Checked::Relayer(r.clone())
 }
 
-/// An `msig` signature over `(ua, purpose, digest)`: `sigs` with strictly increasing indexes below `count`, members under
-/// purpose `member` over `member_digest(ua, ua_message(MSIG, purpose, digest))` until the threshold (a slot after it
-/// fails). A registered member's slot carries an empty `keyData` (its key read
-/// from `Signer(id)` alone; non-empty ⇒ `short`); a `G…` member's slot is empty and checked by the host over
-/// `(ua, purpose, digest)`; an `evm-eoa` member signs the record's typed digest `portable` itself (ECDSA, a portable
-/// record only; typed-signing TS-D4, `eth_signTypedData_v4`, no `personal_sign`); an `evm-eoa` slot outside `portable` is
-/// `NotVerifiable` (SOR-D6). In `portable` an `evm-contract` slot or a relayer-checked member's slot is a part the chain
-/// cannot verify (U8S-D8): `attest` once for all of them, its bytes stored unread. Outside `portable` nothing attests: an
-/// `evm-contract` slot is `NotVerifiable`, a relayer-checked member has no `Signer`, so `short`. A slot past the threshold, a
-/// refused slot signature or an unmet threshold is `short`. `portable` is a stored signature, so it is minimal too (owner
-/// 2026-10-31, U8S-D1, every slot's weight counts, native ones included): with T the slots' total weight and N the
-/// threshold, T - min(weight) < N, else `short`. Returns who checked the signature.
+/// A slot's `Key::Accepted` value, `0` bits for what holds none (any id but an `msig`).
+fn accepted(env: &Env, ua: &BytesN<32>) -> AcceptedEntry {
+    get(env, &Key::Accepted(ua.clone())).unwrap_or_else(|| (0, Map::new(env)))
+}
+
+/// An `msig` member kind whose signature no Soroban host can read: `attest`ed, never checked here.
+fn attested_slot(kind: u32) -> bool {
+    kind == EVM_CONTRACT || relayer_checked(kind)
+}
+
+/// The signature `s` of the member `(kind, id)` of the `msig` `ua` over `(purpose, digest)`, `md` its member digest. A registered
+/// member's slot carries an empty `keyData` (its key read from `Signer(id)` alone; non-empty ⇒ `short`); a `G…` member's slot is empty
+/// and checked by the host over `(ua, purpose, digest)`; an `evm-eoa` member signs the record's typed digest `portable` itself (ECDSA,
+/// a portable record only; typed-signing TS-D4, `eth_signTypedData_v4`, no `personal_sign`); an `evm-eoa` slot outside `portable` is
+/// `NotVerifiable` (SOR-D6). In `portable` an `evm-contract` slot or a relayer-checked member's slot is a part the chain cannot verify
+/// (U8S-D8): `attest` once per signature, `checked` keeps the mark. Outside `portable` nothing attests: an `evm-contract` slot is
+/// `NotVerifiable`, a relayer-checked member has no `Signer`, so `short`. A refused slot signature is `short`.
+#[allow(clippy::too_many_arguments)]
+fn check_slot(env: &Env, ua: &BytesN<32>, s: &MemberSig, kind: u32, id: &[u8; 32], purpose: &BytesN<32>, digest: &BytesN<32>, md: &BytesN<32>, portable: Option<&Hash<32>>, relayer: &By, checked: &mut Checked, short: Error) {
+    if !s.key_data.is_empty() {
+        fail(env, short);
+    }
+    match kind {
+        k if portable.is_some() && attested_slot(k) => {
+            if *checked == Checked::Chain {
+                *checked = attest(env, relayer);
+            }
+        }
+        EVM_CONTRACT => fail(env, Error::NotVerifiable),
+        EVM_EOA => {
+            let typed = portable.unwrap_or_else(|| fail(env, Error::NotVerifiable));
+            let id20: BytesN<20> = Bytes::from_array(env, id).slice(12..32).try_into().unwrap();
+            verify::check_evm_eoa(env, &id20, typed, &s.sig, short);
+        }
+        STELLAR_ACCOUNT => {
+            if !s.sig.is_empty() {
+                fail(env, short);
+            }
+            let args = (ua.clone(), purpose.clone(), digest.clone()).into_val(env);
+            stellar_account(env, id).require_auth_for_args(args);
+        }
+        _ => {
+            let (_, key) = get::<(u32, Bytes)>(env, &Key::Signer(BytesN::from_array(env, id)))
+                .unwrap_or_else(|| fail(env, short));
+            let pm = BytesN::from_array(env, &PURPOSE_MEMBER);
+            verify::check(env, kind, &key, &ua_message(env, kind, &pm, md), &s.sig, short);
+        }
+    }
+}
+
+/// An `msig` signature over `(ua, purpose, digest)`: `sigs` with strictly increasing indexes below `count`, each an accepted slot
+/// (CTR-UA-37: one read of `Accepted(ua)`, the `pop` exempt, being what accepts its signers), members by `check_slot` under purpose
+/// `member` over `member_digest(ua, ua_message(MSIG, purpose, digest))` until the threshold (a slot after it fails). A slot past the
+/// threshold, an unaccepted slot or an unmet threshold is `short`. `portable` is a stored signature, so it is minimal too (owner
+/// 2026-10-31, U8S-D1, every slot's weight counts, native ones included): with T the slots' total weight and N the threshold,
+/// T - min(weight) < N, else `short`. Returns who checked the signature.
 #[allow(clippy::too_many_arguments)]
 fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, digest: &BytesN<32>, sigs: &Vec<MemberSig>, portable: Option<&Hash<32>>, relayer: &By, short: Error) -> Checked {
     let md = member_digest(env, ua, &ua_message(env, MSIG, purpose, digest));
-    let pm = BytesN::from_array(env, &PURPOSE_MEMBER);
+    let yes = if purpose.to_array() == PURPOSE_POP_V2 { u32::MAX } else { accepted(env, ua).0 };
     let (threshold, count) = (u16_at(d, 0), u16_at(d, 2));
     let (mut acc, mut w_min, mut next, mut checked) = (0, u32::MAX, 0, Checked::Chain);
     for s in sigs.iter() {
-        if acc >= threshold || s.index < next || s.index >= count {
+        if acc >= threshold || s.index < next || s.index >= count || yes >> s.index & 1 == 0 {
             fail(env, short);
         }
         next = s.index + 1;
         let (kind, id, w) = member(d, s.index);
-        if !s.key_data.is_empty() {
-            fail(env, short);
-        }
-        match kind {
-            k if portable.is_some() && (k == EVM_CONTRACT || relayer_checked(k)) => {
-                if checked == Checked::Chain {
-                    checked = attest(env, relayer);
-                }
-            }
-            EVM_CONTRACT => fail(env, Error::NotVerifiable),
-            EVM_EOA => {
-                let typed = portable.unwrap_or_else(|| fail(env, Error::NotVerifiable));
-                let id20: BytesN<20> = Bytes::from_array(env, &id).slice(12..32).try_into().unwrap();
-                verify::check_evm_eoa(env, &id20, typed, &s.sig, short);
-            }
-            STELLAR_ACCOUNT => {
-                if !s.sig.is_empty() {
-                    fail(env, short);
-                }
-                let args = (ua.clone(), purpose.clone(), digest.clone()).into_val(env);
-                stellar_account(env, &id).require_auth_for_args(args);
-            }
-            _ => {
-                let (_, key) = get::<(u32, Bytes)>(env, &Key::Signer(BytesN::from_array(env, &id)))
-                    .unwrap_or_else(|| fail(env, short));
-                verify::check(env, kind, &key, &ua_message(env, kind, &pm, &md), &s.sig, short);
-            }
-        }
+        check_slot(env, ua, &s, kind, &id, purpose, digest, &md, portable, relayer, &mut checked, short);
         acc += w;
         w_min = w_min.min(w);
     }
@@ -702,6 +735,16 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
     if signable {
         put(env, &Key::Signer(ua.clone()), &(kind, key_data.clone()));
     }
+    if kind == MSIG {
+        let (mut bits, mut marks) = (0u32, Map::new(env));
+        for s in members.iter() {
+            bits |= 1 << s.index;
+            if let (Checked::Relayer(r), true) = (&checked, attested_slot(member(&key_data, s.index).0)) {
+                marks.set(s.index, r.clone());
+            }
+        }
+        put(env, &Key::Accepted(ua.clone()), &(bits, marks));
+    }
     let no_sig = Bytes::new(env);
     let sig_hash = BytesN::from_array(env, &EMPTY_HASH);
     if !attrs.pqz_key.is_empty() {
@@ -833,8 +876,8 @@ impl UaRegistry {
     }
 
     /// CTR-UA-17's Soroban form: `NotRegistered`, then `Unauthorized` unless `signable` and `purpose` is not a portable
-    /// one (`pop` v2, `kem`, `pqz-key`), then the kind's check over `ua_message(kind, purpose, digest)`; `msig` members
-    /// under purpose `member` until the threshold. `auth` (TS-D12): a single key only `signature`, an `msig` only
+    /// one (`pop` v2, `kem`, `pqz-key`, `membership`), then the kind's check over `ua_message(kind, purpose, digest)`; `msig` members
+    /// under purpose `member` until the threshold, accepted slots only (CTR-UA-37). `auth` (TS-D12): a single key only `signature`, an `msig` only
     /// `members`, any other field set is `Unauthorized`. Extends `Ua(ua)`.
     pub fn require_authorized(env: Env, ua: BytesN<32>, purpose: BytesN<32>, digest: BytesN<32>, auth: UaSig) {
         let Some((kind, key)) = get::<(u32, Bytes)>(&env, &Key::Signer(ua.clone())) else {
@@ -842,7 +885,7 @@ impl UaRegistry {
             fail(&env, e)
         };
         let p = purpose.to_array();
-        if p == PURPOSE_POP_V2 || p == PURPOSE_KEM || p == PURPOSE_PQZ_KEY {
+        if p == PURPOSE_POP_V2 || p == PURPOSE_KEM || p == PURPOSE_PQZ_KEY || p == PURPOSE_MEMBERSHIP {
             fail(&env, Error::Unauthorized);
         }
         if !sig_fields_ok(kind, &auth) {
@@ -1014,6 +1057,55 @@ impl UaRegistry {
         get::<PqzEntry>(&env, &Key::PqzK(ua)).map_or(Bytes::new(&env), |e| e.1)
     }
 
+    /// CTR-UA-37, EVM `acceptMembership`: slot `member_sig.index` of the `msig` `ua` accepts its place. Anyone submits; `key_data` empty.
+    /// `Unauthorized` for an id that is no `msig` here, an index past the members or a bad signature (a host verify's failure is a host
+    /// error, plan finding F1). A slot already accepted is a no-op, no second event, whatever the call carries. The member signs
+    /// typed(`UAMembership{ua, member}`), so one signature serves every registry; `check_slot` by kind: an `evm-eoa` member that digest,
+    /// a registered member `member_digest` under `member`, a `G…` member an auth entry over `(ua, PURPOSE_MEMBERSHIP, typed)`, `sig`
+    /// empty. No threshold, no minimal form: one slot speaks for itself. A slot the chain cannot verify takes `relayer` (`attest`, the
+    /// digest of these three arguments) and keeps its mark in `Accepted(ua)`. No revoke, no decline: the id derives from the structure.
+    pub fn accept_membership(env: Env, ua: BytesN<32>, member_sig: MemberSig, relayer: Option<Address>) {
+        let Some(r) = get::<Registration>(&env, &Key::Ua(ua.clone())).filter(|r| r.kind == MSIG) else { fail(&env, Error::Unauthorized) };
+        let index = member_sig.index;
+        if index >= u16_at(&r.key_data, 2) {
+            fail(&env, Error::Unauthorized);
+        }
+        let (bits, mut marks) = accepted(&env, &ua);
+        if bits >> index & 1 != 0 {
+            return;
+        }
+        let (kind, id, _) = member(&r.key_data, index);
+        let member_id = BytesN::from_array(&env, &id);
+        let typed = membership_digest(&env, &ua, &member_id);
+        let (p, digest) = (BytesN::from_array(&env, &PURPOSE_MEMBERSHIP), typed.to_bytes());
+        let md = member_digest(&env, &ua, &ua_message(&env, MSIG, &p, &digest));
+        let by = by(&env, "accept_membership", &relayer, || (ua.clone(), member_sig.clone(), relayer.clone()).into_val(&env));
+        let mut checked = Checked::Chain;
+        check_slot(&env, &ua, &member_sig, kind, &id, &p, &digest, &md, Some(&typed), &by, &mut checked, Error::Unauthorized);
+        if let Checked::Relayer(r) = &checked {
+            marks.set(index, r.clone());
+        }
+        put(&env, &Key::Accepted(ua.clone()), &(bits | 1 << index, marks));
+        bump_instance(&env);
+        UaMembershipAccepted { ua, member: member_id, index, checked }.publish(&env);
+    }
+
+    /// Has slot `index` of `ua` agreed (CTR-UA-37: it signed the `pop` here, or `accept_membership`)? False for a slot that is only
+    /// listed, past the members and for any other id. Only accepted slots count at verify.
+    pub fn member_accepted(env: Env, ua: BytesN<32>, index: u32) -> bool {
+        accepted(&env, &ua).0.checked_shr(index).is_some_and(|b| b & 1 != 0)
+    }
+
+    /// Whose word the slot's acceptance is (P11): `Chain`, a listed `Relayer`, `None` for a slot not accepted.
+    pub fn member_checked(env: Env, ua: BytesN<32>, index: u32) -> Checked {
+        let (bits, marks) = accepted(&env, &ua);
+        match marks.get(index) {
+            Some(r) => Checked::Relayer(r),
+            None if bits.checked_shr(index).is_some_and(|b| b & 1 != 0) => Checked::Chain,
+            None => Checked::None,
+        }
+    }
+
     /// TS-D5: the name of a kind id of the table, enabled here or not; `KindUnknown` for any other id.
     pub fn kind_name(env: Env, kind: u32) -> String {
         digest::kind_name(&env, kind)
@@ -1084,6 +1176,8 @@ impl UaRegistry {
 
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+mod test_membership;
 #[cfg(test)]
 mod test_ua8;
 #[cfg(test)]

@@ -768,9 +768,24 @@ fn arg_vals(env: &Env, p: &Value) -> SVec<Val> {
     v
 }
 
+/// `register_listed`, and every slot of an `msig` row accepts (CTR-UA-37): until then it authorizes nothing.
+fn register_row(env: &Env, reg: &RegClient, r: &Value) -> BytesN<32> {
+    let ua = register_listed(env, reg, r);
+    accept_row(env, reg, r);
+    ua
+}
+
+/// Every `memberships` row of a registration: the member's own `accept_membership`.
+fn accept_row(env: &Env, reg: &RegClient, r: &Value) {
+    for m in r["memberships"].as_array().into_iter().flatten() {
+        let slot = MemberSig { index: m["index"].as_u64().unwrap() as u32, key_data: Bytes::new(env), sig: Bytes::from_slice(env, &hx(&m["sig"])) };
+        reg.accept_membership(&BytesN::from_array(env, &hx(&r["ua"]).try_into().unwrap()), &slot, &None);
+    }
+}
+
 /// A vector's `registrations[]` row: `register`, or `register_msig` of an `msig` (`portable.json`: `args.pop`; the
 /// `ua-ops.json` one has none, U8S-D2).
-fn register_row(env: &Env, reg: &RegClient, r: &Value) -> BytesN<32> {
+fn register_listed(env: &Env, reg: &RegClient, r: &Value) -> BytesN<32> {
     let (kind, none) = (r["kind"].as_u64().unwrap() as u32, Bytes::new(env));
     if kind != 0x0120 {
         return reg.register(&kind, &Bytes::from_slice(env, &hx(&r["keyData"])), &UaAttrs::none(env), &Bytes::from_slice(env, &hx(&r["pop"])), &none, &None);
@@ -827,6 +842,42 @@ fn ua_ops_vectors_token_rows() {
         }
     }
     assert_eq!((digests, calls), (7 * 7, 5 * 7));
+}
+
+/// CTR-UA-37: every token row of the `msig` is refused while its slots only are listed, with no state moved, and the same call runs once
+/// they accepted: the five UA entries through `check`, one good `auth` each.
+#[test]
+fn ua_ops_msig_authorizes_nothing_until_accepted() {
+    let s = setup();
+    let env = &s.env;
+    let o = ops();
+    let regs = o["registrations"].as_array().unwrap();
+    let ms = regs.iter().find(|r| r["kind"] == 0x0120).unwrap();
+    for r in regs {
+        let ua = register_listed(env, &s.reg, r);
+        s.mint_ua(&ua, 1_000_000);
+    }
+    let id = n(env, hx(&ms["ua"]).try_into().unwrap());
+    let mut calls = StdVec::new();
+    for e in o["entries"].as_array().unwrap() {
+        let f = e["fn"].as_str().unwrap();
+        if e["contract"] != o["contracts"]["token"] || e["name"] != f || !["ua_transfer", "ua_pay", "ua_pay_meta", "ua_burn", "ua_cancel_nonce"].contains(&f) {
+            continue;
+        }
+        let p = e["perKind"].as_array().unwrap().iter().find(|p| p["kind"] == "msig").unwrap();
+        let mut all = arg_vals(env, p);
+        all.push_back(auth_of(env, p).into_val(env));
+        let r = env.try_invoke_contract::<(), soroban_sdk::Error>(&s.t.address, &Symbol::new(env, f), all.clone());
+        assert!(r.is_err(), "{f}: a listed msig authorizes nothing");
+        assert_eq!(s.t.ua_balance(&id), 1_000_000, "{f}");
+        calls.push((f, all));
+    }
+    assert_eq!(calls.len(), 5);
+    accept_row(env, &s.reg, ms);
+    for (f, all) in calls {
+        let r = env.try_invoke_contract::<(), soroban_sdk::Error>(&s.t.address, &Symbol::new(env, f), all);
+        assert!(r.is_ok(), "{f}: {r:?}");
+    }
 }
 
 // ---------- S10 owner ruling 2026-10-31: no `soroban-contract` (C…) msig member ----------

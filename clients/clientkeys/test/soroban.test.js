@@ -95,6 +95,16 @@ test('soroban ua-ops: every auth verifies under its kind', () => {
     const m = ua.holderPopMessage(r.kind, { ua: B(r.ua), keyData: B(r.keyData) });
     assert.ok(r.kind === 0x0120 ? r.pop === '0x' && !ua.msigPqzEligible(B(r.keyData)) : sigOk(r.kind, r.keyData, hex(m.message), r.pop), r.name);
   }
+  // an msig accepts before it signs (CTR-UA-37): every slot's row by its member, over the typed digest of this ua and member
+  const ms = V.registrations.find((r) => r.kind === 0x0120);
+  assert.deepEqual(ms.memberships.map((x) => x.member), ms.members.map((x) => x.id));
+  for (const x of ms.memberships) {
+    const r = ua.membershipMessage({ ua: B(ms.ua), member: B(x.member) });
+    assert.equal(x.digest, hex(r.digest));
+    assert.equal(x.memberDigest, hex(r.memberDigest));
+    const kind = ms.members[x.index].kind;
+    assert.ok(sigOk(kind, keyOf(x.member), hex(ua.uaMessage(kind, ua.purposeTag('member'), B(x.memberDigest))), x.sig), x.member);
+  }
   for (const e of V.entries) {
     assert.equal(e.purposeTag, hex(ua.purposeTag(e.purpose)), e.name);
     for (const p of e.perKind) {

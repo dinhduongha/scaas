@@ -144,7 +144,11 @@ const registrationRow = (sg) => {
   return { name: sg.name, kind: sg.kind, kindName: 'msig', keyData: hex(sg.keyData), ua: hex(sg.ua),
     threshold: sg.threshold, members: sg.members.map((x) => ({ index: x.index, kind: x.kind, id: hex(x.ua), weight: x.weight })),
     registrationDigest: hex(m.registrationDigest), popMessage: hex(m.message), memberDigest: hex(m.memberDigest), popSigners: [],
-    pop: '0x' }; // classical-dominant (2 of its 3 weights): no pop of its own, as EVM (U8S-D2)
+    pop: '0x', // classical-dominant (2 of its 3 weights): no pop of its own, as EVM (U8S-D2)
+    memberships: sg.members.map((x) => {
+      const r = ua.membershipMessage({ ua: sg.ua, member: x.ua });
+      return { index: x.index, member: hex(x.ua), digest: hex(r.digest), memberDigest: hex(r.memberDigest), sig: hex(x.sign(ua.uaMessage(x.kind, MEMBER, r.memberDigest))) };
+    }) };
 };
 
 function build() {
@@ -181,6 +185,8 @@ function build() {
     'register(kind, keyData, empty attrs, pop, empty pqz_pop, None) (portable, no network), the msig',
     'register_msig({threshold, members}, empty attrs, [], empty pqz_pop, None); the single-key rows are',
     'portable.json\'s; mldsa65 signs as mldsa65#2, mldsa65#1 is an msig member; the msig is classical-dominant: empty pop.',
+    'memberships: each slot\'s accept_membership(ua, {index, empty key_data, sig}, None) (CTR-UA-37): until they run the msig',
+    'authorizes nothing, so a test registers it and then accepts; a portable.json memberships row is the same signature\'s form.',
   ].join(' ');
   return { note, version: 1, network: { passphrase: PASSPHRASE, networkId: hex(NET) }, contracts: C, registrations, entries };
 }

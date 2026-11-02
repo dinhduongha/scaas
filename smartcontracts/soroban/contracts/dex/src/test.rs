@@ -4,7 +4,7 @@ use std::{vec, vec::Vec as StdVec};
 use super::*;
 use ed25519_dalek::Signer as _;
 use scaas_token::{Token, TokenClient};
-use scaas_ua_common::{h32, op_digest, MsigMember, MsigStructure, UaAttrs, UaSig, PURPOSE_METATX, PURPOSE_POP_V2, PURPOSE_TRADE, kem_record_hash, portable_record_hash, registration_digest};
+use scaas_ua_common::{h32, MemberSig, op_digest, MsigMember, MsigStructure, UaAttrs, UaSig, PURPOSE_METATX, PURPOSE_POP_V2, PURPOSE_TRADE, kem_record_hash, portable_record_hash, registration_digest};
 use scaas_ua_registry::{UaRegistry, UaRegistryClient as RegClient};
 use serde_json::Value;
 use soroban_sdk::testutils::{Address as _, AuthorizedFunction, Ledger, MockAuth, MockAuthInvoke};
@@ -547,8 +547,23 @@ fn dex_ua_destination_receives_proceeds() {
     assert_eq!((s.a.balance(&s.dex.address), s.b.balance(&s.dex.address), s.dex.filled(&s.dex.order_hash(&ask))), (0, 0, 400));
 }
 
-/// A vector's `registrations[]` row: `register`, or `register_msig` of the `msig` (its `pop` is empty, U8S-D2).
+/// `register_listed`, and every slot of an `msig` row accepts (CTR-UA-37): until then it authorizes nothing.
 fn register_row(env: &Env, reg: &RegClient, r: &Value) -> BytesN<32> {
+    let ua = register_listed(env, reg, r);
+    accept_row(env, reg, r);
+    ua
+}
+
+/// Every `memberships` row of a registration: the member's own `accept_membership`.
+fn accept_row(env: &Env, reg: &RegClient, r: &Value) {
+    for m in r["memberships"].as_array().into_iter().flatten() {
+        let slot = MemberSig { index: m["index"].as_u64().unwrap() as u32, key_data: Bytes::new(env), sig: Bytes::from_slice(env, &hx(&m["sig"])) };
+        reg.accept_membership(&BytesN::from_array(env, &hx(&r["ua"]).try_into().unwrap()), &slot, &None);
+    }
+}
+
+/// A vector's `registrations[]` row: `register`, or `register_msig` of the `msig` (its `pop` is empty, U8S-D2).
+fn register_listed(env: &Env, reg: &RegClient, r: &Value) -> BytesN<32> {
     let (kind, none) = (r["kind"].as_u64().unwrap() as u32, Bytes::new(env));
     if kind != 0x0120 {
         return reg.register(&kind, &Bytes::from_slice(env, &hx(&r["keyData"])), &UaAttrs::none(env), &Bytes::from_slice(env, &hx(&r["pop"])), &none, &None);
@@ -600,6 +615,39 @@ fn settle_by_source(env: &Env, dex: &DexClient, m: &Order, t: &Order, fill: i128
         Err(Ok(e)) => Err(e),
         Err(Err(e)) => panic!("settle: {e:?}"),
     }
+}
+
+/// CTR-UA-37: an order and a cancel of a listed `msig`: the token's `ua_trade` and the DEX's `ua_cancel`, the two paths of the registry here,
+/// refuse a good `auth`, nothing moves, and the same calls run once its slots accepted.
+#[test]
+fn ua_ops_msig_trade_and_cancel_refused_until_accepted() {
+    let s = ua_setup(false);
+    let env = &s.env;
+    let v = s.ua(9);
+    let o = ops();
+    let regs = o["registrations"].as_array().unwrap();
+    let ms = regs.iter().find(|r| r["kind"] == 0x0120).unwrap();
+    for r in regs {
+        register_listed(env, &s.reg, r);
+    }
+    let of = |name: &str| o["entries"].as_array().unwrap().iter().find(|e| e["name"] == name).unwrap()["perKind"].as_array().unwrap().iter().find(|p| p["kind"] == "msig").unwrap().clone();
+    let (p, c) = (of("ua_order"), of("ua_cancel"));
+    let ask = Order::try_from_val(env, &arg_vals(env, &p).get(1).unwrap()).unwrap();
+    let Holder::Ua(ua) = ask.maker.clone() else { panic!() };
+    s.fund(&s.a, &ua, ask.sell_amount);
+    s.fund(&s.b, &v.id, ask.buy_amount);
+    let bid = Order { maker: v.h(), destination: v.h(), relayer: ask.relayer.clone(), sell_token: ask.buy_token.clone(), sell_amount: ask.buy_amount,
+                      buy_token: ask.sell_token.clone(), buy_amount: ask.sell_amount, max_fee_ppm: 0, expiry: NOW + 60, salt: 900 };
+    let bid_auth = s.sign_order(&v, &s.dex.address, &bid);
+    let auth = auth_of(env, &p);
+    assert!(settle_by_source(env, &s.dex, &ask, &bid, ask.sell_amount / 2, &auth, &bid_auth).is_err());
+    assert!(s.dex.try_ua_cancel(&ask, &auth_of(env, &c)).is_err());
+    assert_eq!((s.a.ua_balance(&ua), s.dex.filled(&s.dex.order_hash(&ask))), (ask.sell_amount, 0));
+    accept_row(env, &s.reg, ms);
+    settle_by_source(env, &s.dex, &ask, &bid, ask.sell_amount / 2, &auth, &bid_auth).unwrap();
+    assert_eq!(s.b.ua_balance(&ua), ask.buy_amount / 2);
+    s.dex.ua_cancel(&ask, &auth_of(env, &c));
+    assert_eq!(s.dex.filled(&s.dex.order_hash(&ask)), ask.sell_amount);
 }
 
 /// SOR-D12: the DEX, the token and the registry at `ua-ops.json`'s ids and network id. Per kind, the `ua_order` row

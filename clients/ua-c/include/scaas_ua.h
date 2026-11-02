@@ -442,6 +442,14 @@ ScaasUaStatus scaas_ua_pqz_key_record_digest(const uint8_t *ua32,
                                              uint8_t *out32);
 
 /**
+ * The typed `UAMembership{ua, member}` digest: what `member` signs to accept its slot in the `msig` `ua` (CTR-UA-37): a native
+ * member this digest itself, a derived member `member_digest(ua, ua_message(MSIG, PURPOSE_MEMBERSHIP, ·))` under `member`.
+ */
+ScaasUaStatus scaas_ua_membership_digest(const uint8_t *ua32,
+                                         const uint8_t *member32,
+                                         uint8_t *out32);
+
+/**
  * The signed, portable, write-once PQZ key record into `*out`: accepted only by a registration without a PQZ key
  * (`already_set` = it has one: `SCAAS_UA_ERR_PQZ_KEY_SET`). The holder rules of `scaas_ua_holder_pop_message`; the key and
  * its proof (or 32-byte hash) are both required.

@@ -4,7 +4,7 @@ use super::*;
 use ed25519_dalek::Signer as _;
 use scaas_mandate::{Holder, MandateWallet, MandateWalletClient};
 use scaas_relay_executor::{RelayExecutor, RelayExecutorClient};
-use scaas_ua_common::{h32, op_digest, MsigMember, MsigStructure, UaAttrs, UaSig, PURPOSE_METATX, PURPOSE_METATX_CANCEL, PURPOSE_POP_V2, kem_record_hash, portable_record_hash, registration_digest};
+use scaas_ua_common::{h32, MemberSig, op_digest, MsigMember, MsigStructure, UaAttrs, UaSig, PURPOSE_METATX, PURPOSE_METATX_CANCEL, PURPOSE_POP_V2, kem_record_hash, portable_record_hash, registration_digest};
 use scaas_ua_registry::{UaRegistry, UaRegistryClient as RegClient};
 use scaas_token::{Token, TokenClient};
 use sha2::{Digest, Sha256};
@@ -500,8 +500,23 @@ fn hx(v: &serde_json::Value) -> std::vec::Vec<u8> {
     (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
 }
 
-/// A vector's `registrations[]` row: `register`, or `register_msig` of the `msig` (its `pop` is empty, U8S-D2).
+/// `register_listed`, and every slot of an `msig` row accepts (CTR-UA-37): until then it authorizes nothing.
 fn register_row(env: &Env, reg: &RegClient, r: &serde_json::Value) -> BytesN<32> {
+    let ua = register_listed(env, reg, r);
+    accept_row(env, reg, r);
+    ua
+}
+
+/// Every `memberships` row of a registration: the member's own `accept_membership`.
+fn accept_row(env: &Env, reg: &RegClient, r: &serde_json::Value) {
+    for m in r["memberships"].as_array().into_iter().flatten() {
+        let slot = MemberSig { index: m["index"].as_u64().unwrap() as u32, key_data: Bytes::new(env), sig: Bytes::from_slice(env, &hx(&m["sig"])) };
+        reg.accept_membership(&BytesN::from_array(env, &hx(&r["ua"]).try_into().unwrap()), &slot, &None);
+    }
+}
+
+/// A vector's `registrations[]` row: `register`, or `register_msig` of the `msig` (its `pop` is empty, U8S-D2).
+fn register_listed(env: &Env, reg: &RegClient, r: &serde_json::Value) -> BytesN<32> {
     let (kind, none) = (r["kind"].as_u64().unwrap() as u32, Bytes::new(env));
     if kind != 0x0120 {
         return reg.register(&kind, &Bytes::from_slice(env, &hx(&r["keyData"])), &UaAttrs::none(env), &Bytes::from_slice(env, &hx(&r["pop"])), &none, &None);
@@ -816,6 +831,34 @@ fn ua_ops_vectors_ua_relay_row() {
         n += 1;
     }
     assert_eq!((n, s.token.balance(&s.relayer), s.token.balance(&s.router.address)), (7, 700, 0));
+}
+
+/// CTR-UA-37: a listed `msig` pays no relay fee: its `ua_relay` is refused, nothing moves, and the same call settles once its slots accepted.
+#[test]
+fn ua_ops_msig_relay_refused_until_accepted() {
+    let s = ua_setup();
+    let (e, o) = (&s.env, ops());
+    let regs = o["registrations"].as_array().unwrap();
+    for r in regs {
+        let ua = register_listed(e, &s.reg, r);
+        s.mint_ua(&ua, 1_000);
+    }
+    let row = o["entries"].as_array().unwrap().iter().find(|x| x["name"] == "ua_relay").unwrap();
+    let rl = &row["relay"];
+    let p = row["perKind"].as_array().unwrap().iter().find(|p| p["kind"] == "msig").unwrap();
+    let (f, call) = (rl["func"].as_str().unwrap(), arg_vals(e, rl));
+    let salt = BytesN::from_array(e, &hx(&rl["salt"]).try_into().unwrap());
+    let a = arg_vals(e, p);
+    let from = BytesN::<32>::try_from_val(e, &a.get(0).unwrap()).unwrap();
+    let to = Holder::try_from_val(e, &a.get(1).unwrap()).unwrap();
+    let amount = i128::try_from_val(e, &a.get(2).unwrap()).unwrap();
+    let vu = u64::try_from_val(e, &a.get(4).unwrap()).unwrap();
+    assert!(s.relay_ua(&from, f, &call, &salt, &to, amount, vu, &auth_of(e, p)).is_err());
+    assert_eq!(s.token.ua_balance(&from), 1_000);
+    accept_row(e, &s.reg, regs.iter().find(|r| r["kind"] == 0x0120).unwrap());
+    let r = s.relay_ua(&from, f, &call, &salt, &to, amount, vu, &auth_of(e, p));
+    assert!(r.is_ok(), "{r:?}");
+    assert_eq!(s.token.ua_balance(&from), 1_000 - amount);
 }
 
 /// T8 review (critical; controller ruling 2026-10-31): a relayer makes a victim's router-bound `ua_pay` the target of

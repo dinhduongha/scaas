@@ -113,6 +113,9 @@ Bytes pqzRegMessage(uint16_t kind, const Bytes& ua, const Bytes& pqzKey, const s
 Bytes pqzKeyDigest(const Bytes& ua, const Bytes& pqzKeyHash);  // typed(UAPqzKey{ua, pqzKeyHash})
 // typed(UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}): what setPqzKey's signature signs under uaMessage(kind, PURPOSE_PQZ_KEY, ·)
 Bytes pqzKeyRecordDigest(const Bytes& ua, const Bytes& pqzKeyHash, const Bytes& pqzPopHash);
+// typed(UAMembership{ua, member}): what member signs to accept its slot in the msig ua (CTR-UA-37): a native member this digest
+// itself, a derived member memberDigest(ua, uaMessage(MSIG, PURPOSE_MEMBERSHIP, ·)) under member
+Bytes membershipDigest(const Bytes& ua, const Bytes& member);
 // The signed, portable, write-once PQZ key record of setPqzKey: alreadySet = the registration has a key (UAPqzKeySet). The holder
 // rules of holderPopMessage; the key and its proof (or hash) are both required.
 PqzKeyRecord pqzKeyRecordMessage(uint16_t kind, const Bytes& ua, const Bytes& keyData, const Bytes& pqzKey,

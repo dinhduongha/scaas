@@ -137,7 +137,7 @@ export const groupTagString = (group) => {
 export const GROUP = (group) => tagHash(groupTagString(group));
 export const MSG_TAG = tagHash('scaas.ua.msg.v1');
 export const PURPOSES = Object.freeze(['pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner',
-  'keyop', 'receiver-fee', 'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key']);
+  'keyop', 'receiver-fee', 'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership']);
 /** `keccak256("scaas.ua.purpose.<p>.v<version>")`; every purpose has v1, `pop` also v2 (the portable PoP, UA-8 P1). */
 export const purposeTagString = (p, version = 1) => {
   if (!PURPOSES.includes(p) || !(version === 1 || (version === 2 && p === 'pop'))) fail('UAPurposeUnknown', `${p} v${version}`);
@@ -150,6 +150,8 @@ export const POP_V2_TAG = purposeTag('pop', 2);
 export const KEM_TAG = purposeTag('kem');
 /** A PQZ key attached after `register` (`setPqzKey`, ruling A1-I1): its purpose. */
 export const PQZ_KEY_TAG = purposeTag('pqz-key');
+/** A derived `msig` member's acceptance of its slot (`acceptMembership`, CTR-UA-37): its purpose. */
+export const MEMBERSHIP_TAG = purposeTag('membership');
 /** The KEM scheme byte, `kemPk[0]` (CTR-UA-32): 1 = ML-KEM-1024 + X25519 (X-Wing order), `kemPk = 0x01 ‖ ek (1,568 B) ‖
  *  X25519 pk (32 B)`; 2 = ML-KEM-1024 + HQC + X25519, reserved (after FIPS 207), refused today (`UAKemScheme`). */
 export const KEM_SCHEME = Object.freeze({ mlkem1024X25519: 1, mlkem1024HqcX25519: 2 });
@@ -241,6 +243,7 @@ export const PORTABLE_TYPES = Object.freeze({
   UARegistration: Object.freeze([field('record', 'UAPortableRecord'), field('pqzPopHash', 'bytes32')]),
   UAPqzKey: Object.freeze([field('ua', 'bytes32'), field('pqzKeyHash', 'bytes32')]),
   UAPqzKeyRecord: Object.freeze([field('key', 'UAPqzKey'), field('pqzPopHash', 'bytes32')]),
+  UAMembership: Object.freeze([field('ua', 'bytes32'), field('member', 'bytes32')]),
 });
 /** `keccak256(encodeType(T))` per struct (primary type, then the referenced types sorted by name). */
 export const PORTABLE_TYPEHASH = Object.freeze(Object.fromEntries(Object.keys(PORTABLE_TYPES)
@@ -407,10 +410,26 @@ export function pqzKeyRecordMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopH
     pqzRegMessage: uaMessage(0x0142, PQZ_KEY_TAG, keyDigest), typedData, ...(kind === 0x0120 ? { memberDigest: memberDigest(ua, message) } : {}) };
 }
 
-/** The portable purposes (POP_V2, KEM, PQZ_KEY): the only ones where a code-less native msig member signs the record's typed
+/** The typed `UAMembership{ua, member}` digest: what `member` signs to accept its slot in the `msig` `ua` (CTR-UA-37). */
+export const membershipDigest = ({ ua, member }) => typed(keccak_256(concatBytes(TH.UAMembership, sized(ua, 32, 'ua'), sized(member, 32, 'member'))));
+
+/**
+ * What a member of the `msig` `ua` signs to accept its place (`acceptMembership(ua, MemberSig{index, "", sig})`, CTR-UA-37):
+ * `{ digest, message, memberDigest, typedData }`. A native member signs `digest` = `hashTypedData(typedData)` itself or answers
+ * ERC-1271 over it (no UAAuth); a derived member signs `memberDigest` = `memberDigest(ua, message)` under `member`,
+ * `message = uaMessage(MSIG, PURPOSE_MEMBERSHIP, digest)`. Portable: the same signature on every registry, no nonce.
+ */
+export function membershipMessage({ ua, member }) {
+  const digest = membershipDigest({ ua, member });
+  const message = uaMessage(0x0120, MEMBERSHIP_TAG, digest);
+  const typedData = portableTypedData('UAMembership', { ua: h32(ua, 'ua'), member: h32(member, 'member') });
+  return { digest, message, memberDigest: memberDigest(ua, message), typedData };
+}
+
+/** The portable purposes (POP_V2, KEM, PQZ_KEY, MEMBERSHIP): the only ones where a code-less native msig member signs the record's typed
  *  digest itself (`eth_signTypedData_v4`, 65-byte r ‖ s ‖ v, low-s, v 27 / 28; a contract member answers ERC-1271
  *  `isValidSignature(typedDigest, sig)`; TS-D4); every other purpose stays UAAuth (CTR-MTX-14). */
-export const isPortablePurpose = (tag) => [POP_V2_TAG, KEM_TAG, PQZ_KEY_TAG].some((t) => hex(t) === hex(sized(tag, 32, 'purposeTag')));
+export const isPortablePurpose = (tag) => [POP_V2_TAG, KEM_TAG, PQZ_KEY_TAG, MEMBERSHIP_TAG].some((t) => hex(t) === hex(sized(tag, 32, 'purposeTag')));
 
 export function uaAuthDomainSeparator({ generation, chainId, registry, chainUid }) {
   if (!Number.isInteger(generation) || generation < 1) throw new Error('generation must be a positive integer');

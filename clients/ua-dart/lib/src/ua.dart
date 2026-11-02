@@ -172,6 +172,7 @@ const portableTypes = {
   'UARegistration': 'UARegistration(UAPortableRecord record,bytes32 pqzPopHash)' + _kemType + _recordType,
   'UAPqzKey': _pqzKeyType,
   'UAPqzKeyRecord': 'UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)' + _pqzKeyType,
+  'UAMembership': 'UAMembership(bytes32 ua,bytes32 member)',
 };
 
 Uint8List portableTypehash(String name) =>
@@ -318,6 +319,10 @@ Uint8List pqzKeyDigest(Uint8List ua, Uint8List pqzKeyHash) => _typed(hashStruct(
 Uint8List pqzKeyRecordDigest(Uint8List ua, Uint8List pqzKeyHash, Uint8List pqzPopHash) =>
     _typed(hashStruct('UAPqzKeyRecord', [hashStruct('UAPqzKey', [ua, pqzKeyHash]), pqzPopHash]));
 
+/// The typed `UAMembership{ua, member}`: what `member` signs to accept its slot in the `msig` `ua` (CTR-UA-37): a native member
+/// this digest itself, a derived member `memberDigest(ua, uaMessage(MSIG, PURPOSE_MEMBERSHIP, ·))` under `member`.
+Uint8List membershipDigest(Uint8List ua, Uint8List member) => _typed(hashStruct('UAMembership', [ua, member]));
+
 /// The PQZ key record of `setPqzKey` (ruling A1-I1), see [pqzKeyRecordMessage]. [message] is what the UA signs,
 /// [pqzRegMessage] what the key's `R_REG` proves over.
 typedef PqzKeyRecord = ({
@@ -358,7 +363,7 @@ PqzKeyRecord pqzKeyRecordMessage(int kind, Uint8List ua, Uint8List keyData, Obje
 /// (eth_signTypedData_v4, 65-byte r ‖ s ‖ v; a contract member answers ERC-1271 over it; TS-D4); every other purpose stays
 /// UAAuth (CTR-MTX-14).
 bool isPortablePurpose(Uint8List tag) =>
-    [popV2Tag, purposeTag('kem'), purposeTag('pqz-key')].any((t) => _same(t, tag));
+    [popV2Tag, purposeTag('kem'), purposeTag('pqz-key'), purposeTag('membership')].any((t) => _same(t, tag));
 
 /// True when the msig members outside kinds 0x0130-0x0133 weigh less than its threshold (CTR-PQZ-12).
 bool msigPqzEligible(Object? keyData) {
@@ -389,7 +394,7 @@ Uint8List uaAuthDomainSeparator(Domain d) => _k([
     ]);
 
 /// EIP-712 digest of UAAuth(ua, purpose, digest): what native signers behind the registry sign, except that
-/// under the three portable purposes ([isPortablePurpose]) a code-less native msig member signs the record's typed digest
+/// under the portable purposes ([isPortablePurpose]) a code-less native msig member signs the record's typed digest
 /// instead (CTR-MTX-14, TS-D4).
 Uint8List uaAuthDigest(Domain d, Uint8List ua, Uint8List purpose, Uint8List digest) => _k([
       Uint8List.fromList([0x19, 0x01]),

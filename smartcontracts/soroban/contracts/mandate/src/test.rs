@@ -7,7 +7,7 @@ use std::vec::Vec as StdVec;
 use super::*;
 use ed25519_dalek::Signer as _;
 use scaas_token::{Token, TokenClient};
-use scaas_ua_common::{h32, MsigMember, MsigStructure, UaAttrs, UaSig, PURPOSE_POP_V2, kem_record_hash, portable_record_hash, registration_digest};
+use scaas_ua_common::{h32, MemberSig, MsigMember, MsigStructure, UaAttrs, UaSig, PURPOSE_POP_V2, kem_record_hash, portable_record_hash, registration_digest};
 use scaas_ua_registry::{UaRegistry, UaRegistryClient as RegClient};
 use serde_json::Value;
 use soroban_sdk::testutils::{Address as _, Ledger as _, MockAuth, MockAuthInvoke};
@@ -531,8 +531,23 @@ fn mandate_pay_stale_epoch_refused() {
 
 // ---------- ua-ops.json ----------
 
-/// A vector's `registrations[]` row: `register`, or `register_msig` of the `msig` (its `pop` is empty, U8S-D2).
+/// `register_listed`, and every slot of an `msig` row accepts (CTR-UA-37): until then it authorizes nothing.
 fn register_row(env: &Env, reg: &RegClient, r: &Value) -> BytesN<32> {
+    let ua = register_listed(env, reg, r);
+    accept_row(env, reg, r);
+    ua
+}
+
+/// Every `memberships` row of a registration: the member's own `accept_membership`.
+fn accept_row(env: &Env, reg: &RegClient, r: &Value) {
+    for m in r["memberships"].as_array().into_iter().flatten() {
+        let slot = MemberSig { index: m["index"].as_u64().unwrap() as u32, key_data: Bytes::new(env), sig: Bytes::from_slice(env, &hx(&m["sig"])) };
+        reg.accept_membership(&BytesN::from_array(env, &hx(&r["ua"]).try_into().unwrap()), &slot, &None);
+    }
+}
+
+/// A vector's `registrations[]` row: `register`, or `register_msig` of the `msig` (its `pop` is empty, U8S-D2).
+fn register_listed(env: &Env, reg: &RegClient, r: &Value) -> BytesN<32> {
     let (kind, none) = (r["kind"].as_u64().unwrap() as u32, Bytes::new(env));
     if kind != 0x0120 {
         return reg.register(&kind, &Bytes::from_slice(env, &hx(&r["keyData"])), &UaAttrs::none(env), &Bytes::from_slice(env, &hx(&r["pop"])), &none, &None);
@@ -634,4 +649,29 @@ fn ua_ops_vectors_mandate_rows() {
         }
     }
     assert_eq!((digests, calls), (5 * 7, 5 * 7));
+}
+
+/// CTR-UA-37: a mandate owned by a listed `msig` moves nothing: its `mtx_set_mandate` is refused, the same call runs once its slots accepted.
+#[test]
+fn ua_ops_msig_mandate_owner_refused_until_accepted() {
+    let o = ops();
+    let (mandate, regs) = (&o["contracts"]["mandate"], o["registrations"].as_array().unwrap());
+    let e = o["entries"].as_array().unwrap().iter().find(|e| e["contract"] == *mandate && e["fn"] == "mtx_set_mandate").unwrap();
+    let p = e["perKind"].as_array().unwrap().iter().find(|p| p["kind"] == "msig").unwrap();
+    let ms = regs.iter().find(|r| r["kind"] == 0x0120).unwrap();
+    let s = base();
+    let env = &s.env;
+    for r in regs {
+        register_listed(env, &s.reg, r);
+    }
+    let w = s.mandate(&Holder::Ua(BytesN::from_array(env, &hx(&ms["ua"]).try_into().unwrap())), 0);
+    let mut all = arg_vals(env, p);
+    all.push_back(auth_of(env, p).into_val(env));
+    let set = |all: &soroban_sdk::Vec<soroban_sdk::Val>| env.try_invoke_contract::<(), soroban_sdk::Error>(&w.address, &Symbol::new(env, "mtx_set_mandate"), all.clone());
+    assert!(set(&all).is_err());
+    assert!(w.mandate(&s.t.address).is_none());
+    accept_row(env, &s.reg, ms);
+    let r = set(&all);
+    assert!(r.is_ok(), "{r:?}");
+    assert!(w.mandate(&s.t.address).is_some());
 }

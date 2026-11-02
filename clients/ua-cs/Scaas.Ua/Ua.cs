@@ -66,7 +66,7 @@ public static partial class UA
 
     public static readonly string[] Purposes =
         ["pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
-         "vc-anchor", "trade", "kem", "pqz-key"];
+         "vc-anchor", "trade", "kem", "pqz-key", "membership"];
 
     public const string DomainType =
         "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)";
@@ -207,6 +207,7 @@ public static partial class UA
         ["UARegistration"] = "UARegistration(UAPortableRecord record,bytes32 pqzPopHash)" + KemType + RecordType,
         ["UAPqzKey"] = PqzKeyType,
         ["UAPqzKeyRecord"] = "UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)" + PqzKeyType,
+        ["UAMembership"] = "UAMembership(bytes32 ua,bytes32 member)",
     };
 
     public static byte[] PortableTypehash(string name) => Keccak256(Utf8(PortableTypes[name]));
@@ -311,6 +312,11 @@ public static partial class UA
     public static byte[] PqzKeyRecordDigest(byte[] ua, byte[] pqzKeyHash, byte[] pqzPopHash) =>
         Typed(HashStruct("UAPqzKeyRecord", HashStruct("UAPqzKey", ua, pqzKeyHash), pqzPopHash));
 
+    /// <summary>The typed <c>UAMembership{ua, member}</c>: what <c>member</c> signs to accept its slot in the msig <c>ua</c> (CTR-UA-37):
+    /// a native member this digest itself, a derived member <c>MemberDigest(ua, UAMessage(MSIG, PURPOSE_MEMBERSHIP, ·))</c> under
+    /// <c>member</c>.</summary>
+    public static byte[] MembershipDigest(byte[] ua, byte[] member) => Typed(HashStruct("UAMembership", ua, member));
+
     /// <summary>The PQZ key record of <c>setPqzKey</c> (ruling A1-I1): <c>Message</c> is what the UA signs, <c>PqzRegMessage</c> what the key's R_REG proves over.</summary>
     public sealed record PqzKeyRecord(byte[] PqzKeyHash, byte[] PqzPopHash, byte[] PqzKeyDigest, byte[] RecordDigest, byte[] Message,
         byte[] PqzRegMessage, byte[]? MemberDigest);
@@ -363,10 +369,10 @@ public static partial class UA
             Keccak256(Utf8(d.Generation.ToString(CultureInfo.InvariantCulture))), Word(d.ChainId), AddressWord(d.Registry),
             Sized(d.ChainUid, 32, "chainUid"));
 
-    /// <summary>The portable purposes (POP_V2, KEM, PQZ_KEY): the only ones where a code-less native msig member signs the record's
+    /// <summary>The portable purposes (POP_V2, KEM, PQZ_KEY, MEMBERSHIP): the only ones where a code-less native msig member signs the record's
     /// typed digest itself (<c>eth_signTypedData_v4</c>, 65-byte r ‖ s ‖ v; a contract member answers ERC-1271 over it; TS-D4).</summary>
     public static bool IsPortablePurpose(byte[] tag) =>
-        new[] { PopV2Tag, PurposeTag("kem"), PurposeTag("pqz-key") }.Any(t => t.AsSpan().SequenceEqual(tag));
+        new[] { PopV2Tag, PurposeTag("kem"), PurposeTag("pqz-key"), PurposeTag("membership") }.Any(t => t.AsSpan().SequenceEqual(tag));
 
     /// <summary>EIP-712 digest of <c>UAAuth(ua, purpose, digest)</c>: what native signers behind the registry sign, except that
     /// under the three portable purposes (<see cref="IsPortablePurpose"/>) a code-less native msig member signs the record's typed

@@ -180,6 +180,17 @@ class Vectors(unittest.TestCase):
         return ua.holder_pop_message(row['kind'], b(row['ua']), b(row['keyData']), key or None,
                                      None if hash_only or not pop else pop, h if any(h) else None, pk or None)
 
+    def test_membership_rows(self):
+        """CTR-UA-37: every acceptance row: the typed digest, the message and memberDigest a derived member signs."""
+        self.assertEqual(len(P['memberships']), 6)
+        for r in P['memberships']:
+            u = b(r['ua'])
+            d = ua.membership_digest(u, b(r['member']))
+            self.assertEqual(hx(d), r['digest'], r['name'])
+            m = ua.ua_message(0x0120, ua.purpose_tag('membership'), d)
+            self.assertEqual(hx(m), r['message'], r['name'])
+            self.assertEqual(hx(ua.member_digest(u, m)), r['memberDigest'], r['name'])
+
     def test_portable_typed(self):
         """TS-D1: the domain separator and the five typehashes pinned and re-derived; every row's typedData (the JSON
         eth_signTypedData_v4 signs) hashes to its digest, its message carries the row's words (kind included)."""
@@ -194,7 +205,8 @@ class Vectors(unittest.TestCase):
                   'UAPortableRecord': '0x0c1553cfab3c35326558484df79963dced75ead85272d2a85985f264757bfe7f',
                   'UARegistration': '0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e',
                   'UAPqzKey': '0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00',
-                  'UAPqzKeyRecord': '0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567'}
+                  'UAPqzKeyRecord': '0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567',
+                  'UAMembership': '0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4'}
         self.assertEqual(set(t['types']), set(pinned))
         self.assertEqual(set(ua.PORTABLE_TYPES), set(pinned))
         for name, th in pinned.items():

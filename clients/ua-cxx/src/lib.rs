@@ -117,6 +117,7 @@ mod ffi {
         fn pqz_reg_message(kind: u16, ua: &[u8], pqz_key: &[u8], kem_pk: &[u8]) -> Result<Vec<u8>>;
         fn pqz_key_digest(ua: &[u8], pqz_key_hash: &[u8]) -> Result<Vec<u8>>;
         fn pqz_key_record_digest(ua: &[u8], pqz_key_hash: &[u8], pqz_pop_hash: &[u8]) -> Result<Vec<u8>>;
+        fn membership_digest(ua: &[u8], member: &[u8]) -> Result<Vec<u8>>;
         #[allow(clippy::too_many_arguments)]
         fn pqz_key_record_message(
             kind: u16,
@@ -283,6 +284,9 @@ fn pqz_reg_message(kind: u16, ua_id: &[u8], pqz_key: &[u8], kem_pk: &[u8]) -> R<
 }
 fn pqz_key_digest(ua_id: &[u8], pqz_key_hash: &[u8]) -> R<Vec<u8>> {
     guard(|| Ok(ua::ua8::pqz_key_digest(&a(ua_id)?, &a(pqz_key_hash)?).to_vec()))
+}
+fn membership_digest(ua_id: &[u8], member: &[u8]) -> R<Vec<u8>> {
+    guard(|| Ok(ua::ua8::membership_digest(&a(ua_id)?, &a(member)?).to_vec()))
 }
 fn pqz_key_record_digest(ua_id: &[u8], pqz_key_hash: &[u8], pqz_pop_hash: &[u8]) -> R<Vec<u8>> {
     guard(|| Ok(ua::ua8::pqz_key_record_digest(&a(ua_id)?, &a(pqz_key_hash)?, &a(pqz_pop_hash)?).to_vec()))

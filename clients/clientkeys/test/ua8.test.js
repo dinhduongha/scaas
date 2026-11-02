@@ -39,6 +39,7 @@ const TYPES = {
     '0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e'],
   UAPqzKey: [PK_T, '0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00'],
   UAPqzKeyRecord: ['UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)' + PK_T, '0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567'],
+  UAMembership: ['UAMembership(bytes32 ua,bytes32 member)', '0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4'],
 };
 const TH = Object.fromEntries(Object.entries(TYPES).map(([k, [, t]]) => [k, B(t)]));
 const typedHand = (structHash) => keccak_256(concatBytes(Uint8Array.of(0x19, 0x01), B(DS_P), structHash));
@@ -161,11 +162,12 @@ test('portable PoP has no chain context', () => {
     PURPOSE_POP_V2: { tag: 'scaas.ua.purpose.pop.v2', hash: hex(h('scaas.ua.purpose.pop.v2')) },
     PURPOSE_KEM: { tag: 'scaas.ua.purpose.kem.v1', hash: hex(h('scaas.ua.purpose.kem.v1')) },
     PURPOSE_PQZ_KEY: { tag: 'scaas.ua.purpose.pqz-key.v1', hash: hex(h('scaas.ua.purpose.pqz-key.v1')) },
+    PURPOSE_MEMBERSHIP: { tag: 'scaas.ua.purpose.membership.v1', hash: hex(h('scaas.ua.purpose.membership.v1')) },
     PQZ_KEY_GROUP: { tag: 'scaas.ua.group.pqz-mlwe.v1', hash: hex(h('scaas.ua.group.pqz-mlwe.v1')) },
   });
   assert.deepEqual(P.checked, { none: 0, chain: 1, relayer: 2 });
   assert.equal('KEM_RECORD_TAG' in ua || 'PQZ_KEY_RECORD_TAG' in ua, false, 'the raw record tags are legacy (TS-D3)');
-  assert.deepEqual([ua.POP_V2_TAG, ua.KEM_TAG, ua.PQZ_KEY_TAG, ua.GROUP('pqz-mlwe')].map(hex),
+  assert.deepEqual([ua.POP_V2_TAG, ua.KEM_TAG, ua.PQZ_KEY_TAG, ua.MEMBERSHIP_TAG, ua.GROUP('pqz-mlwe')].map(hex),
     Object.values(P.tags).map((t) => t.hash));
   // pqzKeyHash = keyHash(0x0142, pqzKey) = keccak256(PQZ_KEY_GROUP ‖ pqzKey), not a plain keccak of the key
   const k = row('mldsa65/n2048-kmax1024');
@@ -426,8 +428,35 @@ test('pqz key record: signed, portable, write-once, only for a registration with
   assert.match(P.note, /one PQZ key per UA/);
 });
 
+test('acceptance (CTR-UA-37): every row by hand, the wallet JSON, the native signer, the purpose apart from the records', () => {
+  assert.equal(P.memberships.length, 6);
+  assert.equal(P.tags.PURPOSE_MEMBERSHIP.tag, 'scaas.ua.purpose.membership.v1');
+  assert.equal(hex(ua.MEMBERSHIP_TAG), P.tags.PURPOSE_MEMBERSHIP.hash);
+  const noRecord = [ua.POP_V2_TAG, ua.KEM_TAG, ua.PQZ_KEY_TAG].map(hex);
+  assert.equal(noRecord.includes(hex(ua.MEMBERSHIP_TAG)), false);
+  for (const r of P.memberships) {
+    const reg = P.registrations.find((x) => x.name === r.msig);
+    assert.equal(r.ua, reg.ua, r.name);
+    assert.deepEqual({ index: r.index, kind: r.memberKind, id: r.member }, (({ index, kind, id }) => ({ index, kind, id }))(reg.members[r.index]), r.name);
+    const digest = typedHand(keccak_256(concatBytes(TH.UAMembership, B(r.ua), B(r.member))));
+    assert.equal(r.digest, hex(digest), r.name);
+    assert.equal(hex(hashTypedData(r.typedData)), r.digest, r.name);
+    assert.equal(r.typedData.primaryType, 'UAMembership', r.name);
+    const m = ua.membershipMessage({ ua: B(r.ua), member: B(r.member) });
+    assert.equal(hex(m.digest), r.digest, r.name);
+    assert.equal(hex(m.message), r.message, r.name);
+    assert.equal(r.memberDigest, hex(keccak_256(concatBytes(B(r.ua), B(r.message)))), r.name);
+    if (r.memberKind === 1) assert.ok(nativeOk(`0x${r.member.slice(26)}`, B(r.digest), r.sig), r.name);
+    else {
+      const m = hex(ua.uaMessage(r.memberKind, ua.purposeTag('member'), B(r.memberDigest)));
+      const key = P.registrations.find((x) => x.ua === r.member).keyData;
+      assert.ok(r.memberKind >= 0x0130 ? sigOk(r.memberKind, key, m, r.sig) : kindVerify(r.memberKind, key, m, r.sig, false), r.name);
+    }
+  }
+});
+
 test('TS-D4 scope: a code-less native msig member signs the typed digest of the portable records only', () => {
-  for (const t of [ua.POP_V2_TAG, ua.KEM_TAG, ua.PQZ_KEY_TAG]) assert.ok(ua.isPortablePurpose(t));
+  for (const t of [ua.POP_V2_TAG, ua.KEM_TAG, ua.PQZ_KEY_TAG, ua.MEMBERSHIP_TAG]) assert.ok(ua.isPortablePurpose(t));
   for (const p of ['pop', 'metatx', 'member', 'keyop', 'trade']) assert.equal(ua.isPortablePurpose(ua.purposeTag(p)), false, p);
   assert.equal('personalSignDigest' in ua, false, 'personal_sign is legacy (TS-D4)');
   for (const phrase of [/eth_signTypedData_v4/, /UAAuth .*CTR-MTX-14/, /ERC-1271 isValidSignature\(typedDigest/,

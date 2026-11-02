@@ -62,7 +62,7 @@ for name, res, args in [
     ('kem_record_digest', st, [u8, u64, u8, sz, P]), ('kem_record_message', st, [u16, u8, u64, u8, sz, P]),
     ('holder_pop_message', st, [u16, u8, u8, sz, u8, sz, u8, sz, u8, sz, u8, sz, P]),
     ('pqz_reg_message', st, [u16, u8, u8, sz, u8, sz, P]), ('pqz_key_digest', st, [u8, u8, P]),
-    ('pqz_key_record_digest', st, [u8, u8, u8, P]),
+    ('pqz_key_record_digest', st, [u8, u8, u8, P]), ('membership_digest', st, [u8, u8, P]),
     ('pqz_key_record_message', st, [u16, u8, u8, sz, u8, sz, u8, sz, u8, sz, bl, P]),
     ('is_portable_purpose', st, [u8, P]), ('msig_pqz_eligible', st, [u8, sz, P]),
     ('ua_auth_domain_separator', st, [u32, u64, u8, u8, P]),
@@ -234,7 +234,7 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(hx(opt32(L.group_tag, g)), r['GROUP'])
         self.assertIsNone(opt32(L.group_tag, b'nope'))
         self.assertIsNone(opt_text(L.group_tag_string, b'nope'))
-        self.assertEqual(len(K['purposes']), 14)  # 13 purposes, `pop` has v1 and v2
+        self.assertEqual(len(K['purposes']), 15)  # 14 purposes, `pop` has v1 and v2
         for r in K['purposes']:
             self.assertEqual(hx(out32(L.purpose_tag_v, r['purpose'].encode(), r['version'])), r['purposeTag'], r['purpose'])
             if r['version'] == 1:
@@ -498,6 +498,16 @@ class Vectors(unittest.TestCase):
             self.assertEqual(code_of(lambda: text(fn, bad)), code, bad)
         self.assertEqual(code_of(lambda: text(L.set_kem_key_args, None)), 'UAArgument')
         self.assertEqual(code_of(lambda: text(L.set_pqz_key_args, None)), 'UAArgument')
+
+    def test_membership_rows(self):
+        self.assertEqual(len(PV['memberships']), 6)
+        for r in PV['memberships']:
+            u = b(r['ua'])
+            d = out32(L.membership_digest, u, b(r['member']))
+            self.assertEqual(hx(d), r['digest'], r['name'])
+            m = out32(L.ua_message, 0x0120, out32(L.purpose_tag, b'membership'), d)
+            self.assertEqual(hx(m), r['message'], r['name'])
+            self.assertEqual(hx(out32(L.member_digest, u, m)), r['memberDigest'], r['name'])
 
     def test_portable_purposes(self):
         def portable(tag):

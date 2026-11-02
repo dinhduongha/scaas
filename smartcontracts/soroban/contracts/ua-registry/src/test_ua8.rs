@@ -32,15 +32,20 @@ type PqzEntry = (Bytes, Bytes, Checked, BytesN<32>);
 type Tried<T> = Result<Result<T, soroban_sdk::ConversionError>, Result<soroban_sdk::Error, soroban_sdk::InvokeError>>;
 type Slot = (u32, StdVec<u8>, StdVec<u8>);
 /// A host verify's failure as the caller sees it (plan finding F1): the contract cannot answer `Unauthorized` for it.
-const HOST_REFUSED: soroban_sdk::Error = soroban_sdk::Error::from_type_and_code(soroban_sdk::xdr::ScErrorType::Context, soroban_sdk::xdr::ScErrorCode::InvalidAction);
+pub(crate) const HOST_REFUSED: soroban_sdk::Error = soroban_sdk::Error::from_type_and_code(soroban_sdk::xdr::ScErrorType::Context, soroban_sdk::xdr::ScErrorCode::InvalidAction);
 
 /// A registry listing one relayer, whose auth is mocked; the relayer as the entries take it.
-fn relayed() -> (Env, UaRegistryClient<'static>, Option<Address>) {
+pub(crate) fn relayed() -> (Env, UaRegistryClient<'static>, Option<Address>) {
     let env = test::new_env();
     let relayer = Address::generate(&env);
     let c = test::deploy(&env, &[relayer.clone()]);
     env.mock_all_auths();
     (env, c, Some(relayer))
+}
+
+/// A KEM key of the vectors, for an in-test `msig`'s record.
+pub(crate) fn kem_row_key(env: &Env) -> KemKey {
+    kem_id(env, "mldsa65/v1").kem
 }
 
 /// The `Relayer` mark of `relayed()`'s relayer.
@@ -49,7 +54,7 @@ fn marked(by: &Option<Address>) -> Checked {
 }
 
 /// `x` with its first byte flipped: same form, not the same signature.
-fn flipped(env: &Env, x: &Bytes) -> Bytes {
+pub(crate) fn flipped(env: &Env, x: &Bytes) -> Bytes {
     let mut v = vecu8(x);
     v[0] ^= 1;
     b(env, &v)
@@ -1158,7 +1163,7 @@ fn valid_rows() -> StdVec<Value> {
 }
 
 /// `msig-classical`'s derived members; its fourth is an `evm-eoa`.
-fn classical_members(env: &Env, c: &UaRegistryClient, by: &Option<Address>) {
+pub(crate) fn classical_members(env: &Env, c: &UaRegistryClient, by: &Option<Address>) {
     for name in ["bls-bn254-minsig", "schnorr-bn254", "p256"] {
         portable(env, name).on_by(c, by);
     }
@@ -1200,7 +1205,7 @@ fn ua8_relayer_unlisted_refused() {
 }
 
 /// `relayer`'s auth of the one word `attest` asks for: the auth is an entry on `function`, over `digest_of`'s digest of `args`.
-fn authorise(env: &Env, c: &UaRegistryClient, relayer: &Address, function: &str, digest_of: &str, args: SVec<soroban_sdk::Val>) {
+pub(crate) fn authorise(env: &Env, c: &UaRegistryClient, relayer: &Address, function: &str, digest_of: &str, args: SVec<soroban_sdk::Val>) {
     let d = attest_digest(env, &c.address, digest_of, args);
     env.mock_auths(&[MockAuth { address: relayer, invoke: &MockAuthInvoke { contract: &c.address, fn_name: function, args: (d,).into_val(env), sub_invokes: &[] } }]);
 }
@@ -1404,6 +1409,7 @@ fn ua8_relayer_msig_signable_counts_chain_members() {
     assert_eq!((rec.pop_checked, rec.signable), (marked(&by), true), "the `mldsa65` member alone reaches the threshold");
     let (pt, d) = (n(&env, METATX), n(&env, [0x71; 32]));
     assert_eq!(err(c.try_require_authorized(&m.ua, &pt, &d, &test::msig_auth(&env, &s))), Error::Unauthorized, "a relayer slot never authorises");
+    m.accepted_by(&env, &c, &[&a]);
     c.require_authorized(&m.ua, &pt, &d, &test::msig_auth(&env, &[m.slot(&env, &a, METATX, &d)]));
 
     let m = msig(&env, 1, &[(0x0131, q.ua(&env).to_array(), 1), (0x0132, f.ua.to_array(), 1)]);
@@ -1461,6 +1467,7 @@ fn ua8_relayer_evm_contract_slot() {
     let rd = test::reg_digest(&env, &m.ua, 0x0120);
     msig_tried(&env, &c, &m, &[m.slot(&env, &q, PURPOSE_POP_V2, &rd)], &None).unwrap().unwrap();
     let (pt, d) = (n(&env, METATX), n(&env, [0x72; 32]));
+    c.accept_membership(&m.ua, &MemberSig { index: m.index(&id), key_data: Bytes::new(&env), sig: b(&env, &[1; 65]) }, &by);
     let slot = test::msig_auth(&env, &[(m.index(&id), vec![], vec![1; 65])]);
     assert_eq!(err(c.try_require_authorized(&m.ua, &pt, &d, &slot)), Error::NotVerifiable, "no attestation at signing");
     c.require_authorized(&m.ua, &pt, &d, &test::msig_auth(&env, &[m.slot(&env, &q, METATX, &d)]));
@@ -1822,6 +1829,7 @@ fn ua8_relayer_marked_record_blocks_no_chain_kind() {
         c.require_authorized(&ua, &pt, &d, &UaSig::single(&env, s.sign(&env, &test::msg(&env, 0x0108, METATX, &d))));
         let m = msig(&env, 1, &[(0x0108, ua.to_array(), 1)]);
         m.register(&env, &c, &SVec::new(&env));
+        m.accepted_by(&env, &c, &[&s]);
         c.require_authorized(&m.ua, &pt, &d, &test::msig_auth(&env, &[m.slot(&env, &s, METATX, &d)]));
     }
 }

@@ -81,7 +81,7 @@ void main() {
       expect(hx(groupTag(group: r['group'])!), r['GROUP']);
     }
     expect(groupTag(group: 'nope'), isNull);
-    expect(rows(k, 'purposes').length, 14); // 13 purposes, `pop` has v1 and v2
+    expect(rows(k, 'purposes').length, 15); // 14 purposes, `pop` has v1 and v2
     for (final r in rows(k, 'purposes')) {
       expect(hx(purposeTagV(purpose: r['purpose'], version: r['version'])), r['purposeTag']);
       if (r['version'] == 1) expect(hx(purposeTag(purpose: r['purpose'])), r['purposeTag']);
@@ -341,6 +341,18 @@ void main() {
     }
     expect(n, rows(pv, 'pqzKeyRecords').length);
     expect(msigRows > 0, isTrue);
+  });
+
+  test('membership rows', () {
+    expect(rows(pv, 'memberships').length, 6);
+    for (final r in rows(pv, 'memberships')) {
+      final ua = b32(r['ua']);
+      final d = membershipDigest(ua: ua, member: b32(r['member']));
+      expect(hx(d), r['digest']);
+      final m = uaMessage(kind: 0x0120, purpose: purposeTag(purpose: 'membership'), digest: d);
+      expect(hx(m), r['message']);
+      expect(hx(memberDigest(structureUa: ua, uaMsg: m)), r['memberDigest']);
+    }
   });
 
   test('portable purposes', () {

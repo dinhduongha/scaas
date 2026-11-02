@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -520525724;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1818959460;
 
 // Section: executor
 
@@ -703,6 +703,37 @@ fn wire__crate__api__ua__member_digest_impl(
             transform_result_sse::<_, ()>((move || {
                 let output_ok =
                     Ok::<_, ()>(crate::api::ua::member_digest(api_structure_ua, api_ua_msg))?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__ua__membership_digest_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "membership_digest",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_ua = <[u8; 32]>::sse_decode(&mut deserializer);
+            let api_member = <[u8; 32]>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>(crate::api::ua::membership_digest(api_ua, api_member))?;
                 std::result::Result::Ok(output_ok)
             })())
         },
@@ -1684,27 +1715,28 @@ fn pde_ffi_dispatcher_sync_impl(
         19 => wire__crate__api__ua__kind_info_impl(ptr, rust_vec_len, data_len),
         20 => wire__crate__api__ua__kind_tag_string_impl(ptr, rust_vec_len, data_len),
         21 => wire__crate__api__ua__member_digest_impl(ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__ua__msg_tag_impl(ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__ua__msig_pqz_eligible_impl(ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__ua__native_id_impl(ptr, rust_vec_len, data_len),
-        25 => wire__crate__api__ua__portable_domain_separator_impl(ptr, rust_vec_len, data_len),
-        26 => wire__crate__api__ua__portable_record_digest_impl(ptr, rust_vec_len, data_len),
-        27 => wire__crate__api__ua__pqz_key_digest_impl(ptr, rust_vec_len, data_len),
-        28 => wire__crate__api__ua__pqz_key_record_digest_impl(ptr, rust_vec_len, data_len),
-        29 => wire__crate__api__ua__pqz_key_record_message_impl(ptr, rust_vec_len, data_len),
-        30 => wire__crate__api__ua__pqz_reg_message_impl(ptr, rust_vec_len, data_len),
-        31 => wire__crate__api__ua__purpose_tag_impl(ptr, rust_vec_len, data_len),
-        32 => wire__crate__api__ua__purpose_tag_v_impl(ptr, rust_vec_len, data_len),
-        33 => wire__crate__api__ua__registration_args_impl(ptr, rust_vec_len, data_len),
-        34 => wire__crate__api__ua__registration_digest_impl(ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__ua__set_kem_key_args_impl(ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__ua__set_pqz_key_args_impl(ptr, rust_vec_len, data_len),
-        37 => wire__crate__api__ua__tag_impl(ptr, rust_vec_len, data_len),
-        38 => wire__crate__api__ua__ua_auth_digest_impl(ptr, rust_vec_len, data_len),
-        39 => wire__crate__api__ua__ua_auth_domain_separator_impl(ptr, rust_vec_len, data_len),
-        40 => wire__crate__api__ua__ua_message_impl(ptr, rust_vec_len, data_len),
-        41 => wire__crate__api__ua__ua_of_impl(ptr, rust_vec_len, data_len),
-        42 => wire__crate__api__ua__validate_key_data_impl(ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__ua__membership_digest_impl(ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__ua__msg_tag_impl(ptr, rust_vec_len, data_len),
+        24 => wire__crate__api__ua__msig_pqz_eligible_impl(ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__ua__native_id_impl(ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__ua__portable_domain_separator_impl(ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__ua__portable_record_digest_impl(ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__ua__pqz_key_digest_impl(ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__ua__pqz_key_record_digest_impl(ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__ua__pqz_key_record_message_impl(ptr, rust_vec_len, data_len),
+        31 => wire__crate__api__ua__pqz_reg_message_impl(ptr, rust_vec_len, data_len),
+        32 => wire__crate__api__ua__purpose_tag_impl(ptr, rust_vec_len, data_len),
+        33 => wire__crate__api__ua__purpose_tag_v_impl(ptr, rust_vec_len, data_len),
+        34 => wire__crate__api__ua__registration_args_impl(ptr, rust_vec_len, data_len),
+        35 => wire__crate__api__ua__registration_digest_impl(ptr, rust_vec_len, data_len),
+        36 => wire__crate__api__ua__set_kem_key_args_impl(ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__ua__set_pqz_key_args_impl(ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__ua__tag_impl(ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__ua__ua_auth_digest_impl(ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__ua__ua_auth_domain_separator_impl(ptr, rust_vec_len, data_len),
+        41 => wire__crate__api__ua__ua_message_impl(ptr, rust_vec_len, data_len),
+        42 => wire__crate__api__ua__ua_of_impl(ptr, rust_vec_len, data_len),
+        43 => wire__crate__api__ua__validate_key_data_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

@@ -31,7 +31,7 @@ const PQ_SIGNATURES: &str = include_str!("../../../../vectors/ua/pq_signatures.j
 pub(crate) const PORTABLE: &str = include_str!("../../../../vectors/ua/portable.json");
 
 const DAY: u32 = 17_280;
-const NETWORK: [u8; 32] = [7; 32];
+pub(crate) const NETWORK: [u8; 32] = [7; 32];
 const RP: [u8; 32] = [0x5a; 32];
 /// The single-key `registrations[]` rows of an S3 kind with empty `attrs`.
 const S3_ROWS: [&str; 7] = ["webauthn-p256", "p256", "ed25519", "secp256k1", "mldsa44", "mldsa65#1", "mldsa65#2"];
@@ -217,7 +217,7 @@ pub(crate) fn k1(seed: u8) -> k256::ecdsa::SigningKey {
 }
 
 /// `r ‖ s ‖ v` (v = 27 / 28) of a low-s secp256k1 signature over a 32-byte prehash.
-fn k1_sign(sk: &k256::ecdsa::SigningKey, h: &[u8; 32]) -> StdVec<u8> {
+pub(crate) fn k1_sign(sk: &k256::ecdsa::SigningKey, h: &[u8; 32]) -> StdVec<u8> {
     let (sig, rid) = sk.sign_prehash_recoverable(h).unwrap();
     assert!(sig.normalize_s().is_none(), "k256 signs low-s");
     let mut v = sig.to_bytes().to_vec();
@@ -317,7 +317,7 @@ impl Msig {
         self.ids.iter().position(|x| x == id).unwrap() as u32
     }
     /// `member_digest(ua, ua_message(msig, purpose, digest))`.
-    fn md(&self, env: &Env, purpose: [u8; 32], d: &BytesN<32>) -> BytesN<32> {
+    pub(crate) fn md(&self, env: &Env, purpose: [u8; 32], d: &BytesN<32>) -> BytesN<32> {
         digest::member_digest(env, &self.ua, &digest::ua_message(env, 0x0120, &n(env, purpose), d))
     }
     /// A registered member's slot: empty `keyData`, the signature under purpose `member` over `md`.
@@ -327,6 +327,22 @@ impl Msig {
     }
     pub(crate) fn register(&self, env: &Env, c: &UaRegistryClient, pop: &SVec<MemberSig>) -> BytesN<32> {
         c.register_msig(&self.s, &no_attrs(env), pop, &Bytes::new(env), &None)
+    }
+    /// `typed(UAMembership{ua, member})` (CTR-UA-37).
+    pub(crate) fn membership(&self, env: &Env, member: &[u8; 32]) -> BytesN<32> {
+        membership_digest(env, &self.ua, &n(env, *member)).to_bytes()
+    }
+    /// A registered member's acceptance of its own slot.
+    pub(crate) fn acceptance(&self, env: &Env, s: &Sk) -> MemberSig {
+        let d = self.membership(env, &s.ua(env).to_array());
+        let (index, _, sig) = self.slot(env, s, PURPOSE_MEMBERSHIP, &d);
+        MemberSig { index, key_data: Bytes::new(env), sig: b(env, &sig) }
+    }
+    /// Each of `signers` accepts its slot.
+    pub(crate) fn accepted_by(&self, env: &Env, c: &UaRegistryClient, signers: &[&Sk]) {
+        for s in signers {
+            c.accept_membership(&self.ua, &self.acceptance(env, s), &None);
+        }
     }
 }
 
@@ -560,6 +576,7 @@ fn msig_2of3(env: &Env, c: &UaRegistryClient) -> (Msig, Sk, Sk) {
     let rec = c.record_of(&ua).unwrap();
     assert!(rec.signable && rec.pop_checked == Checked::Chain);
     assert!(c.receivable(&ua));
+    m.accepted_by(env, c, &[&e, &p]);
     (m, e, p)
 }
 
@@ -621,7 +638,7 @@ fn kind_msig_negatives_fail() {
 
 // ---------- native members ----------
 
-fn ledger_account(pk: [u8; 32]) -> (std::boxed::Box<xdr::LedgerKey>, (std::boxed::Box<xdr::LedgerEntry>, Option<u32>)) {
+pub(crate) fn ledger_account(pk: [u8; 32]) -> (std::boxed::Box<xdr::LedgerKey>, (std::boxed::Box<xdr::LedgerEntry>, Option<u32>)) {
     let id = AccountId(PublicKey::PublicKeyTypeEd25519(Uint256(pk)));
     (
         std::boxed::Box::new(xdr::LedgerKey::Account(xdr::LedgerKeyAccount { account_id: id.clone() })),
@@ -648,7 +665,7 @@ fn ledger_account(pk: [u8; 32]) -> (std::boxed::Box<xdr::LedgerKey>, (std::boxed
 }
 
 /// A real ed25519-signed auth entry of account `sk` rooted at `contract.f(args)`.
-fn signed_entry(env: &Env, sk: &ed25519_dalek::SigningKey, nonce: i64, contract: &Address, f: &str, args: SVec<Val>) -> SorobanAuthorizationEntry {
+pub(crate) fn signed_entry(env: &Env, sk: &ed25519_dalek::SigningKey, nonce: i64, contract: &Address, f: &str, args: SVec<Val>) -> SorobanAuthorizationEntry {
     let root = SorobanAuthorizedInvocation {
         function: SorobanAuthorizedFunction::ContractFn(InvokeContractArgs {
             contract_address: contract.into(),
@@ -711,6 +728,10 @@ fn msig_soroban_native_member_host_auth() {
     let empty_slot = msig_auth(&env, &[(0, vec![], vec![])]);
     m.register(&env, &c, &SVec::new(&env));
     assert!(c.record_of(&m.ua).unwrap().signable);
+    // CTR-UA-37: the member accepts first, by the same host auth
+    let accept: SVec<Val> = (m.ua.clone(), n(&env, PURPOSE_MEMBERSHIP), m.membership(&env, &gpk)).into_val(&env);
+    env.set_auths(&[signed_entry(&env, &gsk, 4, &c.address, "accept_membership", accept)]);
+    c.accept_membership(&m.ua, &MemberSig { index: 0, key_data: Bytes::new(&env), sig: Bytes::new(&env) }, &None);
     // require_authorized: the same member over (ua, metatx, digest).
     let (pm, d) = (n(&env, PURPOSE_METATX), n(&env, [0x51; 32]));
     env.set_auths(&[]);
@@ -727,7 +748,7 @@ fn msig_soroban_native_member_host_auth() {
 }
 
 /// An EOA key's 20-byte address as a native-space id.
-fn eoa(env: &Env, sk: &k256::ecdsa::SigningKey) -> [u8; 32] {
+pub(crate) fn eoa(env: &Env, sk: &k256::ecdsa::SigningKey) -> [u8; 32] {
     let pt = sk.verifying_key().to_encoded_point(false);
     let h = env.crypto().keccak256(&b(env, &pt.as_bytes()[1..])).to_array();
     let mut id = [0u8; 32];
@@ -758,6 +779,9 @@ fn msig_evm_eoa_member_typed_digest() {
     let m = msig(&env, 1, &[(0x0001, id, 1), (0x0102, e.ua(&env).to_array(), 1)]);
     m.register(&env, &c, &SVec::new(&env));
     assert!(c.receivable(&m.ua));
+    let accepted = MemberSig { index: m.index(&id), key_data: Bytes::new(&env), sig: b(&env, &k1_sign(&k, &m.membership(&env, &id).to_array())) };
+    c.accept_membership(&m.ua, &accepted, &None);
+    m.accepted_by(&env, &c, &[&e]);
     let (pm, d) = (n(&env, PURPOSE_METATX), n(&env, [0x61; 32]));
     let eoa_slot = msig_auth(&env, &[(m.index(&id), vec![], k1_sign(&k, &m.md(&env, PURPOSE_METATX, &d).to_array()))]);
     assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &d, &eoa_slot)), Error::NotVerifiable);
@@ -936,6 +960,7 @@ fn member_large_pop_same_budget() {
         c.register(&0x0100, &s.key_data(&env), &no_attrs(&env), &b(&env, &pop), &Bytes::new(&env), &None);
         let m = msig(&env, 1, &[(0x0100, ua.to_array(), 1)]);
         m.register(&env, &c, &SVec::new(&env));
+        m.accepted_by(&env, &c, &[&s]);
         let d = n(&env, [0xb1; 32]);
         let auth = msig_auth(&env, &[m.slot(&env, &s, PURPOSE_METATX, &d)]);
         c.require_authorized(&m.ua, &n(&env, PURPOSE_METATX), &d, &auth);
@@ -1041,9 +1066,11 @@ fn msig_require_authorized_keeps_rule() {
     let (d, pm) = (n(&env, [0x71; 32]), n(&env, PURPOSE_METATX));
     let m = msig(&env, 2, &[(ids[0].0, ids[0].1, 1), (ids[1].0, ids[1].1, 2)]);
     m.register(&env, &c, &SVec::new(&env));
+    m.accepted_by(&env, &c, &[&e, &p]);
     c.require_authorized(&m.ua, &pm, &d, &msig_auth(&env, &two_slots(&env, &m, &e, &p, PURPOSE_METATX, &d)));
     let m = msig(&env, 2, &[(ids[0].0, ids[0].1, 2), (ids[1].0, ids[1].1, 1)]);
     m.register(&env, &c, &SVec::new(&env));
+    m.accepted_by(&env, &c, &[&e, &p]);
     let auth = msig_auth(&env, &two_slots(&env, &m, &e, &p, PURPOSE_METATX, &d));
     assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &d, &auth)), Error::Unauthorized);
 }

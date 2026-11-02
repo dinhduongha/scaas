@@ -81,7 +81,7 @@ _SCHEME = {s[0]: s for s in SCHEMES}
 GROUPS = ('p256', 'ed25519', 'secp256k1', 'bn254-g1', 'bls12381-g1', 'bls12381-g2', 'bn254-g2', 'mldsa44', 'mldsa65',
           'fndsa512', 'slhdsa128s', 'pqz-mlwe')
 PURPOSES = ('pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'receiver-fee',
-            'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key')
+            'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership')
 
 
 def kind_info(kind):
@@ -244,6 +244,7 @@ PORTABLE_TYPES = {
     'UARegistration': 'UARegistration(UAPortableRecord record,bytes32 pqzPopHash)' + _KEM_TYPE + _RECORD_TYPE,
     'UAPqzKey': _PQZ_KEY_TYPE,
     'UAPqzKeyRecord': 'UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)' + _PQZ_KEY_TYPE,
+    'UAMembership': 'UAMembership(bytes32 ua,bytes32 member)',
 }
 
 
@@ -384,6 +385,12 @@ def pqz_key_record_digest(ua, pqz_key_hash, pqz_pop_hash):
     return _typed(hash_struct('UAPqzKeyRecord', hash_struct('UAPqzKey', ua, pqz_key_hash), pqz_pop_hash))
 
 
+def membership_digest(ua, member):
+    """The typed ``UAMembership{ua, member}``: what ``member`` signs to accept its slot in the ``msig`` ``ua`` (CTR-UA-37): a native
+    member this digest itself, a derived member ``member_digest(ua, ua_message(MSIG, PURPOSE_MEMBERSHIP, ·))`` under ``member``."""
+    return _typed(hash_struct('UAMembership', ua, member))
+
+
 PqzKeyRecord = namedtuple('PqzKeyRecord', 'pqz_key_hash pqz_pop_hash pqz_key_digest record_digest message pqz_reg_message '
                                           'member_digest')
 
@@ -410,7 +417,7 @@ def pqz_key_record_message(kind, ua, key_data, pqz_key, pqz_pop=None, pqz_pop_ha
 def is_portable_purpose(purpose_tag_bytes):
     """POP_V2, KEM, PQZ_KEY: the only purposes where a code-less native msig member signs the record's typed digest itself
     (eth_signTypedData_v4, 65-byte r ‖ s ‖ v; a contract member answers ERC-1271 over it; TS-D4)."""
-    return bytes(purpose_tag_bytes) in (POP_V2_TAG, purpose_tag('kem'), purpose_tag('pqz-key'))
+    return bytes(purpose_tag_bytes) in (POP_V2_TAG, purpose_tag('kem'), purpose_tag('pqz-key'), purpose_tag('membership'))
 
 
 def _address_word(a):
@@ -424,7 +431,7 @@ def ua_auth_domain_separator(generation, chain_id, registry, chain_uid):
 
 def ua_auth_digest(generation, chain_id, registry, chain_uid, ua, purpose, digest):
     """EIP-712 digest of ``UAAuth(ua, purpose, digest)`` under the registry's domain: what native signers sign,
-    except that under the three portable purposes (``is_portable_purpose``) a code-less native msig member signs the
+    except that under the portable purposes (``is_portable_purpose``) a code-less native msig member signs the
     record's typed digest instead (CTR-MTX-14, TS-D4)."""
     s = keccak256(UAAUTH_TYPEHASH, _sized(ua, 32, 'ua'), _sized(purpose, 32, 'purposeTag'), _sized(digest, 32, 'digest'))
     return keccak256(b'\x19\x01', ua_auth_domain_separator(generation, chain_id, registry, chain_uid), s)

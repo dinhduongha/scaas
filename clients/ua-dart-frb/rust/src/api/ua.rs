@@ -264,6 +264,12 @@ pub fn pqz_key_digest(ua: [u8; 32], pqz_key_hash: [u8; 32]) -> [u8; 32] {
 pub fn pqz_key_record_digest(ua: [u8; 32], pqz_key_hash: [u8; 32], pqz_pop_hash: [u8; 32]) -> [u8; 32] {
     scaas_ua::ua8::pqz_key_record_digest(&ua, &pqz_key_hash, &pqz_pop_hash)
 }
+/// typed `UAMembership{ua, member}`: what `member` signs to accept its slot in the `msig` `ua` (CTR-UA-37): a native member this
+/// digest itself, a derived member `member_digest(ua, ua_message(MSIG, PURPOSE_MEMBERSHIP, ·))` under `member`.
+#[frb(sync)]
+pub fn membership_digest(ua: [u8; 32], member: [u8; 32]) -> [u8; 32] {
+    scaas_ua::ua8::membership_digest(&ua, &member)
+}
 /// The PQZ key record of `setPqzKey` (ruling A1-I1): `message` is what the UA signs, `pqz_reg_message` what the key's `R_REG`
 /// proves over; `member_digest` as in [`HolderPop`].
 pub struct PqzKeyRecord {

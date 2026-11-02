@@ -213,6 +213,8 @@ pub const PURPOSE_MEMBER: [u8; 32] = h32("fbd8600564b68d09f75fe5d3e6acb8fe3c5a3a
 pub const PURPOSE_POP_V2: [u8; 32] = h32("0ffb2c52d2a16294393778508b3fff52351664d2c5bbe5deb3d3278f56281f93");
 pub const PURPOSE_KEM: [u8; 32] = h32("99f2818f111f001f1f71ec2f8756cff7e9858c0fcb204b353c21f95b2ff3f2b8");
 pub const PURPOSE_PQZ_KEY: [u8; 32] = h32("8f354ac3b315d85e2c32c80857a1600c5aebe8bbe14a265d56079725a6602330");
+/// A member's acceptance of its `msig` slot (CTR-UA-37): never a `pop`, `kem` or `pqz-key` signature, and the reverse.
+pub const PURPOSE_MEMBERSHIP: [u8; 32] = h32("d7c6b488053a6f35540715ec029fa684c9445475cb4e38d564225334f7b3f253");
 
 /// typed-signing TS-D1 (owner 2026-10-31 decisions 2 + 8), byte-identical to EVM `UAKinds`: the portable records are
 /// EIP-712 structs under `EIP712Domain(string name,string version)` = ("SCaaS UA Portable", "1"), no chain id, contract
@@ -232,6 +234,8 @@ pub const PQZ_KEY_GROUP: [u8; 32] = h32("0b46b017252788e1ba969e603cf986c143943e1
 pub const UA_PQZ_KEY_TYPEHASH: [u8; 32] = h32("827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00");
 /// `keccak256("UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)" ‖ UAPqzKey type)`.
 pub const UA_PQZ_KEY_RECORD_TYPEHASH: [u8; 32] = h32("aba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567");
+/// `keccak256("UAMembership(bytes32 ua,bytes32 member)")`.
+pub const UA_MEMBERSHIP_TYPEHASH: [u8; 32] = h32("2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4");
 
 /// A `uint` ABI word (`abi.encode` of `uint8` / `uint16` / `uint64`).
 fn uint_word(v: u64) -> [u8; 32] {
@@ -319,6 +323,12 @@ pub fn pqz_key_digest(env: &Env, ua: &BytesN<32>, pqz_key_hash: &BytesN<32>) -> 
 pub fn pqz_key_record_digest(env: &Env, ua: &BytesN<32>, pqz_key_hash: &BytesN<32>, pqz_pop_hash: &BytesN<32>) -> Hash<32> {
     let k = keccak_words(env, &[&UA_PQZ_KEY_TYPEHASH, &ua.to_array(), &pqz_key_hash.to_array()]);
     let s = keccak_words(env, &[&UA_PQZ_KEY_RECORD_TYPEHASH, &k.to_array(), &pqz_pop_hash.to_array()]);
+    portable_digest(env, &s.into())
+}
+
+/// typed(`UAMembership{ua, member}`), EVM `UAKinds.membershipDigest`: what `member` signs to accept its slot in the `msig` `ua`.
+pub fn membership_digest(env: &Env, ua: &BytesN<32>, member: &BytesN<32>) -> Hash<32> {
+    let s = keccak_words(env, &[&UA_MEMBERSHIP_TYPEHASH, &ua.to_array(), &member.to_array()]);
     portable_digest(env, &s.into())
 }
 
