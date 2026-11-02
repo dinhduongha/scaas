@@ -14,10 +14,10 @@
 # (3 GB, removed on exit) and two anvils: at least 6 GB available, one step at a time.
 P=2026-10-31-ua8-soroban
 LOGEXT=log # step logs are git-ignored (*.log); only <P>-summary.txt is committed (owner 2026-11-02)
-STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 forge-isolate sizes docs soroban clientkeys vectors-check ua-rs ua-rs-pq ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt cargo-scaas-node soroban-spike-local e2e-soroban-local soroban-roundtrip-check e2e-ua8-1 e2e-ua8-2 e2e-ua8-3 e2e-ua8-union named-tests summary"
-FAMILIES="ua-rs ua-rs-pq ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt soroban soroban-spike-local cargo-scaas-node e2e-soroban-local e2e-ua8-1 e2e-ua8-2 e2e-ua8-3"
+STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 forge-isolate sizes docs soroban clientkeys vectors-check ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt cargo-scaas-node node-e2e-anvil soroban-spike-local e2e-soroban-local soroban-roundtrip-check e2e-ua8-1 e2e-ua8-2 e2e-ua8-3 e2e-ua8-union named-tests summary"
+FAMILIES="ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt soroban soroban-spike-local cargo-scaas-node e2e-soroban-local e2e-ua8-1 e2e-ua8-2 e2e-ua8-3"
 # "<step>|<form>|<name>": every test added from bdde1d66 (the typed-signing merge) to HEAD in the contracts, spike, node and
-# ua-rs (test functions found in the diff: Tasks M2, M3, G1, B0-B7c, V1, B9a, N2), clientkeys' new titles, in the tool's pass
+# ua-rs (test functions found in the diff: Tasks M2, M3, G1, B0-B7c, V1, B9a, N2, MA-S), clientkeys' new titles, in the tool's pass
 # form (forms: see the base runner). e2e_ua8 tests sit in the e2e-ua8-N step that runs them.
 NEW_TESTS=$(cat <<'NAMES'
 forge|forge|test_gen1KindGate_refusesMissingZether
@@ -226,6 +226,43 @@ clientkeys|node|verifyPqzKeyRecord accepts every row and refuses a flipped byte
 clientkeys|node|verify* fail closed: each case one field off a row that passes (ua-rs check_fails_closed)
 clientkeys|node|verifyRegistration refuses every kinds.json invalid key by its error; valid[] reaches the signature (ua-rs check_refuses_invalid_keys)
 clientkeys|node|the group kinds have no verifier here: refused, never accepted (C14; ua-rs checks them)
+soroban|cargo|ua_ops_msig_authorizes_nothing_until_accepted
+soroban|cargo|ua_ops_msig_trade_and_cancel_refused_until_accepted
+soroban|cargo|ua_ops_msig_mandate_owner_refused_until_accepted
+soroban|cargo|ua_ops_msig_relay_refused_until_accepted
+soroban|cargo|rows_digests_rebuild
+soroban|cargo|rows_accept_unchanged
+soroban|cargo|a_row_with_a_changed_byte_refused
+soroban|cargo|native_and_registered_members_accept
+soroban|cargo|g_member_accepts_by_a_signed_entry
+soroban|cargo|nothing_until_the_accepted_weight_reaches_the_threshold
+soroban|cargo|records_count_accepted_slots_only
+soroban|cargo|a_relayer_checked_slot
+soroban|cargo|the_attestation_binds
+soroban|cargo|an_evm_contract_slot_needs_a_relayer
+soroban|cargo|a_c_member_has_no_slot
+soroban|cargo|wrong_acceptances_refused
+soroban|cargo|an_acceptance_is_no_authorization
+soroban|cargo|accepting_twice_is_a_no_op
+soroban|cargo|top_slot
+soroban|cargo|a_pop_marks_its_attested_slots
+soroban|cargo|ttl_and_size_of_the_entry
+soroban|cargo|rows_cover_chain_and_relayer_kinds
+cargo-scaas-node|cargo|accept_job_runs_on_the_registry_alone
+cargo-scaas-node|cargo|accept_job_attests_one_word
+cargo-scaas-node|cargo|accept_job_prechecks_a_marked_slot
+cargo-scaas-node|cargo|accept_job_on_an_accepted_slot_is_refused_unsent
+cargo-scaas-node|cargo|accept_job_a_marked_slot_beside_a_g_member_fails_closed
+cargo-scaas-node|cargo|accept_job_refuses_an_evm_contract_slot
+cargo-scaas-node|cargo|accept_job_needs_a_g_members_entry
+cargo-scaas-node|cargo|accept_job_is_in_the_call_share
+e2e-soroban-local|cargo|e2e_soroban_ua_member_accepts_then_counts
+e2e-soroban-local|cargo|e2e_soroban_ua_membership_rows_and_a_g_member
+ua-rs|cargo|membership_rows
+ua-rs-pq|cargo|check_membership_rows
+clientkeys|node|accept_membership (CTR-UA-37): the op a node takes, a row unchanged, the G member's entry
+clientkeys|node|acceptance (CTR-UA-37): every row by hand, the wallet JSON, the native signer, the purpose apart from the records
+clientkeys|node|verifyMembership accepts every row and refuses a flipped byte (ua-rs check_membership_rows)
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"
