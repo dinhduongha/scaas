@@ -5565,13 +5565,15 @@ Controller calls, owner may override (each built, ua8-soroban MA-S):
 - old: — · status: current · owner: yes · date: 2026-11-02 · normative: networks/soroban.md#NET-SOR-29 · superseded-by: —
 
 **Rule.** Owner 2026-11-02, on the whole-branch review of `ua8-soroban`: `params.max_resource_fee_per_job` caps what any Soroban job may declare (`RESOURCE_FEE_OVER_CAP`), and a `ua_metatx` on a mandate runs only a Wasm of `params.mandate_wasm_hashes`, read from the contract's instance through the host (`MANDATE_WASM_REFUSED`). Amends [NET-SOR-14](networks/soroban.md#NET-SOR-14): its "jobs free to the client cannot stop a payment" was not true and is rewritten; amends [NET-SOR-22](networks/soroban.md#NET-SOR-22)'s TODO and [NET-SOR-23](networks/soroban.md#NET-SOR-23)'s "any mandate".
+Owner 2026-11-03: **a `ua_metatx` on a listed mandate names a registered `token`** (`policy.token`), which closes the gap the Cost line below had left open; refused, `dead`, nothing simulated, and `op_consumed` answers unknown. Status: built, ua8-soroban RV.
 Controller calls, owner may override (each built, ua8-soroban RV):
 - **Unset cap: the node does not start** on a chain whose lanes run, beside the two limits of [NODE-OPS-11](node/ops.md#NODE-OPS-11), for their reason; absent in the adapter it is 0, every job refused, so no path skips it.
 - **Unset allow-list: every `ua_metatx` on a mandate is refused** and the node starts, as `params.dex` and `params.ua_registry` unset serve none. No job else needs it.
 - **The hash is read on every job and every `op_consumed`,** not kept: one read beside a simulation, and nothing to go stale.
 - **`signed_op` keeps `params.mandates`:** addresses an operator named, already a list.
+- **The refusal is `TOKEN_NOT_SERVED`,** the node's name for an unregistered token (`guard.rs`), no second name for one meaning. **Every `mtx_*` is held to it,** those that only store included: the ruling names the job, not the call, and all five carry `token`. The check sits in `listed`, the allow-list `build` and `op_consumed` share, so neither can drift. **If wrong:** a store-only `mtx_*` on an unserved token goes back to the Wasm check alone; the name is one constant.
 **Why.** The review's proof: a free `mtx_*` job on a contract nobody configured ran past the `call` share on the lane's fee, and "0.07 XLM at worst" held only for the failures measured; a failed job's fee grows with its size and CPU, with no bound but the breaker.
-**Cost if wrong.** Node configuration, no contract and no migration: a list or cap too tight refuses jobs by name, `dead`, nothing sent. A listed mandate still calls the `token` its job names, unlisted: that gap is open for the owner.
+**Cost if wrong.** Node configuration, no contract and no migration: a list or cap too tight refuses jobs by name, `dead`, nothing sent. A mandate's owner or delegate on a token the node does not serve submits its own transaction.
 **Source.** `docs/networks/soroban.md` NET-SOR-29, `scaas-node/src/adapters/soroban.rs`, the RV fix wave of the `ua8-soroban` plan.
 
 ### NET-SOR-80 — Non-positive pay refused with ZeroAmount

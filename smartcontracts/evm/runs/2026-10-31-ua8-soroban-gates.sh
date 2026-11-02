@@ -274,6 +274,7 @@ cargo-scaas-node|cargo|a_failed_sequence_read_puts_the_claimed_job_back
 cargo-scaas-node|cargo|a_ua_metatx_missing_a_native_signer_is_refused_unsent
 cargo-scaas-node|cargo|a_ua_metatx_runs_only_a_listed_mandate_wasm
 cargo-scaas-node|cargo|an_unlisted_mandate_never_reports_consumed
+cargo-scaas-node|cargo|a_mandate_job_names_a_registered_token
 cargo-scaas-node|cargo|mandate_wasm_hashes_are_a_list_of_hashes
 cargo-scaas-node|cargo|a_job_over_the_resource_fee_cap_is_refused_unsent
 cargo-scaas-node|cargo|a_token_registered_after_the_start_is_served

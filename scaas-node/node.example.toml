@@ -162,7 +162,8 @@ finality = { mode = "instant", quorum = 1 }      # SCP: a closed ledger is final
 # mandates = ["C…", …]: the mandates a signed_op may call. A signed_op runs only on these, tokens, dex and the router, never on
 # ua_registry (CALL_TARGET_REFUSED).
 # mandate_wasm_hashes = ["<64 hex>", …]: the code a ua_metatx job may run on a mandate, sha256 of the scaas_mandate.wasm deployed, compared
-# with the contract's instance. Absent: no such job runs (MANDATE_WASM_REFUSED, dead, nothing simulated).
+# with the contract's instance. Absent: no such job runs (MANDATE_WASM_REFUSED, dead, nothing simulated). The job's token must be one of
+# this chain's tokens (TOKEN_NOT_SERVED, dead, nothing simulated).
 # ua_registry = "C…": the UaRegistry, the only target of `call` jobs (register*, set_kem_key, set_pqz_key, store_pqz_pop;
 # unset: refused). Its relayers() answers once: a lane not listed gets no relayer-mode job, a failed read fails only such
 # a job, and every part the chain cannot verify passes scaas_ua's check before it is simulated.

@@ -1487,21 +1487,22 @@ fn ua_relay_policy(call: &InvokeContractArgs, lane: &ScAddress, policy: &RelayFe
 }
 
 /// The allow-list by contract class: a token ∈ `policy.tokens`, the router, `policy.dex`, `params.ua_registry`. A mandate is any contract
-/// here, this being pure: `build` and `op_consumed` read its code (`mandate_wasm_ok`).
+/// here, this being pure: `build` and `op_consumed` read its code (`mandate_wasm_ok`); its job names a `token` ∈ `policy.tokens` (argument
+/// 0 of every `mtx_*`), which the mandate calls (owner 2026-11-03).
 fn listed(call: &InvokeContractArgs, f: &UaFn, policy: &RelayFeePolicy) -> bool {
     let c = &call.contract_address;
     match f.class {
         Class::Token => policy.token(c),
         Class::Router => policy.router.as_ref() == Some(c),
         Class::Dex => policy.dex.as_ref() == Some(c),
-        Class::Mandate => true,
+        Class::Mandate => matches!(call.args.first(), Some(ScVal::Address(t)) if policy.token(t)),
         Class::Registry => policy.ua_registry.as_ref() == Some(c),
     }
 }
 
 /// A `ua_metatx` job (spec §9.1, SOR-D14): the allow-list (token ∈ `policy.tokens`: `ua_transfer`, `ua_pay`,
 /// `ua_pay_meta`, `ua_burn`, `ua_cancel_nonce`; router = `policy.router`: `ua_relay`; DEX = `policy.dex`: `settle`,
-/// `ua_cancel`; a listed Wasm, checked in `build`: the mandate's `mtx_*`; `params.ua_registry`: `accept_membership`), `relayer` `None` or this lane
+/// `ua_cancel`; a listed Wasm, checked in `build`, naming a token ∈ `policy.tokens`: the mandate's `mtx_*`; `params.ua_registry`: `accept_membership`), `relayer` `None` or this lane
 /// (`ua_relay`, and each `settle` order: this lane), `valid_until` from the signed arguments, never a UA pay to the router or its executor
 /// outside `ua_relay`. Auth: `op.auth` entries for native legs only (as `host_call`), and when the relayer is this lane one
 /// `SourceAccount` entry rooted at exactly the call (S8, §8), or, on the registry, the listed lane's one word (`attest_entry`). Returns the
@@ -1511,6 +1512,9 @@ pub fn ua_metatx_job(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &
 {
     let (call, f) = ua_call(op)?;
     if !listed(&call, f, policy) {
+        if f.class == Class::Mandate {
+            bail!("{TOKEN_NOT_SERVED}: {} on {} names a token this chain does not register", f.name, call.contract_address);
+        }
         bail!("{} is not allowed on {} (not this chain's {:?} contract)", f.name, call.contract_address, f.class);
     }
     let (a, me) = (call.args.as_slice(), ScVal::Address(lane.clone()));
@@ -1663,6 +1667,8 @@ const HEX_ARGS_REFUSED: &str = "HEX_ARGS_REFUSED";
 const CALL_TARGET_REFUSED: &str = "CALL_TARGET_REFUSED";
 /// `ua_metatx` on a mandate whose code is not in `params.mandate_wasm_hashes` (`mandate_wasm_ok`).
 const MANDATE_WASM_REFUSED: &str = "MANDATE_WASM_REFUSED";
+/// A `ua_metatx` on a mandate names a `token` not in `policy.tokens` (owner 2026-11-03): the name the EVM guard gives an unregistered token.
+const TOKEN_NOT_SERVED: &str = "TOKEN_NOT_SERVED";
 /// A simulation declares more resource fee than `params.max_resource_fee_per_job`.
 const RESOURCE_FEE_OVER_CAP: &str = "RESOURCE_FEE_OVER_CAP";
 
@@ -3170,7 +3176,7 @@ mod tests {
     }
 
     /// Spec §9.1: token functions on a registered token, `ua_relay` on the router, `settle` / `ua_cancel` on
-    /// `params.dex`, the mandate's `mtx_*` on any contract; anything else, or the wrong arity, is refused.
+    /// `params.dex`, the mandate's `mtx_*` on any contract, naming a registered token; anything else, or the wrong arity, is refused.
     #[test]
     fn ua_metatx_allowlist() {
         let p = policy();
@@ -5672,6 +5678,31 @@ mod tests {
         assert_eq!(a.op_consumed(&job).await.unwrap(), Some(true), "listed: its answer counts");
         net.lock().unwrap().executable = Some(ContractExecutable::Wasm(Hash([8; 32])));
         assert_eq!(a.op_consumed(&job).await.unwrap(), None);
+    }
+
+    /// Owner 2026-11-03: a listed mandate calls the `token` its job names, so a free `mtx_*` names a token the chain registers, or code nobody
+    /// listed runs inside the job. Every mandate function, one change from a job that goes: `TOKEN_NOT_SERVED`, `dead`, nothing simulated.
+    /// `op_consumed` holds the same rule: that token's `paid` is never `consumed`.
+    #[tokio::test]
+    async fn a_mandate_job_names_a_registered_token() {
+        let on = |f: &str, token: &str| {
+            let mut j = ua_row(WALLET2, f);
+            j["op"]["args"]["token"] = json!(token);
+            j
+        };
+        let (a, calls, _) = spend_adapter(void_answer(), Net::default(), false).await;
+        for f in UA_FNS.iter().filter(|f| f.class == Class::Mandate) {
+            assert_eq!(f.args[0], ("token", "Address"), "{}: read as a token", f.name);
+            assert_eq!(job_step(&a, &calls, on(f.name, CONTRACT)).await.0, 1, "{}: a registered token goes", f.name);
+            logged(&calls);
+            let (sent, state, why) = job_step(&a, &calls, on(f.name, WALLET)).await;
+            assert_eq!((sent, state.as_str()), (0, "dead"), "{}: {why}", f.name);
+            assert!(why.contains(TOKEN_NOT_SERVED), "{}: {why}", f.name);
+            assert_eq!(logged(&calls), Vec::<String>::new(), "{}: nothing simulated", f.name);
+        }
+        let (a, _, _) = spend_adapter(Arc::new(|_| view_ok(ScVal::Bool(true))), Net::default(), false).await;
+        assert_eq!(a.op_consumed(&as_job(&on("mtx_mandate_pay", CONTRACT))).await.unwrap(), Some(true), "registered: its answer counts");
+        assert_eq!(a.op_consumed(&as_job(&on("mtx_mandate_pay", WALLET))).await.unwrap(), None);
     }
 
     #[test]

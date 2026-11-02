@@ -324,7 +324,7 @@ every other row, `ua*` entries included, is a job of a namespace with the grant.
 | `BAD_PAYLOAD` | a field missing, unknown, or not its type (the path is named) |
 | `MANDATE_LANE` | above |
 | `BAD_SIGNATURE` | above |
-| `CALL_TARGET_REFUSED` / `TOKEN_NOT_SERVED` | the target does not meet the kind's rule ([call table](#call-table)) |
+| `CALL_TARGET_REFUSED` / `TOKEN_NOT_SERVED` | the target does not meet the kind's rule ([call table](#call-table)); `TOKEN_NOT_SERVED` also a Soroban mandate job's `token` ([NET-SOR-29](../networks/soroban.md#NET-SOR-29)) |
 
 ## <a id="intake"></a>6. Intake
 
@@ -539,7 +539,7 @@ order, and takes the op digest (the job id), `valid_until` and every check from 
   ([NET-SOR-15](../networks/soroban.md#NET-SOR-15)); a deadline already past is `dead`, unsent. `accept_membership` alone names no
   deadline in its arguments, so there it is required and bounded as a `call` job's.
 - A job on a mandate runs only on a Wasm of `params.mandate_wasm_hashes`, else `MANDATE_WASM_REFUSED`, `dead`, nothing simulated; unset,
-  none runs. Any job's declared resource fee over `params.max_resource_fee_per_job` is `RESOURCE_FEE_OVER_CAP`
+  none runs. Its `token` is a token of the chain's list, else `TOKEN_NOT_SERVED`, `dead`, nothing simulated. Any job's declared resource fee over `params.max_resource_fee_per_job` is `RESOURCE_FEE_OVER_CAP`
   ([NET-SOR-29](../networks/soroban.md#NET-SOR-29)). A job with no `op.auth` whose simulation records another signer is refused before signing.
 
 | Contract | `function` | `args` |

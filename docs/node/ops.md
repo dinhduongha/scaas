@@ -640,7 +640,7 @@ most 720 transactions an hour, each at most that cap: the failures measured cost
 the budget, so set it lower to stop failing jobs inside the hour. The floor compares the account that pays, under a fee bump the fee account alone (owner ruling 2026-11-01). `call`
 jobs and a plain `signed_op` that is no token payment stop at `breaker.call_budget_pct` of the budget (default 50, owner decisions
 2026-11-01 and 2026-11-02) and everything else runs to all of it, free `ua_metatx` jobs included, so those can stop a payment until the
-window ends. `ua_metatx` on a mandate needs `params.mandate_wasm_hashes`: unset, none runs. A landed failure counts against
+window ends. `ua_metatx` on a mandate needs `params.mandate_wasm_hashes` (unset, none runs) and names a registered token. A landed failure counts against
 the budget (`FAILED` Soroban transactions are billed): the breaker opens at the budget and no later job is claimed, while a
 job in flight is still followed to its report. When `tx_fee` cannot read a landed transaction's fee, the budget misses it:
 that is a warning in the log and `scaas_fee_unread_total{chain,lane}`, never a guessed fee, and `ScaasFeeUnread` alerts on an increase.
