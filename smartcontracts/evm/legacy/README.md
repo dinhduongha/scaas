@@ -121,3 +121,10 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `mtxExecute` behind a shape check. `executeMetaTransaction` stays in `MetaTxBase` (owner 2026-11-01). Not built.
   `FlatUaUnwrap.sol` — the flat `uaUnwrap(bytes32 from, …)` of `MetaTokenBase` before the typed-signing C2 review: it
   duplicated the named `uaUnwrap(UAEnvelope, …, UASig)` / `uaUnwrapLeg` (owner 2026-11-01). Not built.
+- `msig-nested/`: `test/ua/UARegistrySplit.t.sol`, the differential of the registry split against
+  `typed-signing/UARegistryPreSplit.sol`, as it stood before nested `msig` (spec `2026-11-02-msig-nested`) replaced
+  `MemberSig.keyData` by `InnerSig[] members`: the pre-split source reads `keyData`, so neither side compiles any more. A
+  finished refactor's check; its `abi.decode` of `MemberSig[]` would be `Stack too deep` here too. What still applies is in
+  `test/ua/UARegistryLibMsig.t.sol`: `_msigIndexGuards`, the nested-offset note, `test_gasHotPath` against the figures of
+  `159d267e`. `test_split_portableRowsSame` and `test_split_storePqzPopWithAVerify` still name the pre-split artifact and
+  fail until they move here on landing. Not built.
