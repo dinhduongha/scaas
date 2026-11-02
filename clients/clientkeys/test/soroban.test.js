@@ -133,6 +133,27 @@ test('soroban ua-ops: every auth verifies under its kind', () => {
   }
 });
 
+test('accept_membership (CTR-UA-37): the op a node takes, a row unchanged, the G member\'s entry', () => {
+  const P = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/ua/portable.json', import.meta.url), 'utf8'));
+  const registry = V.contracts.token;
+  const row = P.memberships[0];
+  const op = sor.acceptMembershipOp({ registry, ua: B(row.ua), index: row.index, sig: B(row.sig), validUntil: 1_800_000_300 });
+  assert.deepEqual(op, { contract: registry, function: 'accept_membership', valid_until: 1_800_000_300,
+    args: { ua: row.ua, member_sig: { index: row.index, key_data: '0x', sig: row.sig }, relayer: null } });
+  assert.deepEqual(sor.jobValue({ type: 'MemberSig', value: op.args.member_sig }).xdr,
+    sor.struct({ index: sor.u32(row.index), key_data: sor.bytes(new Uint8Array(0)), sig: sor.bytes(B(row.sig)) }).xdr);
+  const g = 'GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6';
+  const member = sor.decodeStrkey(g).payload;
+  const invocation = sor.membershipInvocation({ registry, ua: B(row.ua), member });
+  const typed = ua.membershipMessage({ ua: B(row.ua), member }).digest;
+  assert.deepEqual(invocation.args.map((a) => a.value), [row.ua, P.tags.PURPOSE_MEMBERSHIP.hash, hex(typed)]);
+  const net = sor.networkId(V.network.passphrase);
+  const auth = [sor.signedAuth({ networkId: net, nonce: 7, expiry: 100, invocation, from: g, sign: () => new Uint8Array(64) })];
+  const signed = sor.acceptMembershipOp({ registry, ua: B(row.ua), index: 2, relayer: g, validUntil: 1, auth });
+  assert.deepEqual(signed.auth, auth);
+  assert.deepEqual([signed.args.member_sig.sig, signed.args.relayer], ['0x', g]);
+});
+
 test('soroban URN: derived ids never as strkey; a native send to a URN is refused', () => {
   for (const r of V.registrations) {
     const urn = sor.uaUrn(r.kind, B(r.ua));

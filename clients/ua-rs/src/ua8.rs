@@ -724,24 +724,28 @@ fn signature_ok(kind: u16, d: &[u8], ua: &[u8; 32], purpose: &[u8; 32], digest: 
         return Ok(false);
     }
     let structure = MsigStructure::from_key_data(d)?;
-    let (md, tag) = (member_digest(ua, &message), purpose_tag("member")?);
+    let md = member_digest(ua, &message);
     for s in &slots {
-        let (m, key) = (&structure.members[s.index as usize], &keys[s.index as usize]);
-        let vk = &key[..match point_size(m.kind) {
-            0 => key.len(),
-            head => head, // a group kind signs against its stored `vk`
-        }];
-        let ok = s.key_data.is_empty()
-            && match m.kind {
-                0x0001 => crate::verify::native_ecdsa(m.id[12..].try_into().expect("20 bytes"), digest, &s.sig),
-                k if is_native(k) => return Err(UAError::NotVerifiable),
-                k => crate::verify::verify(k, vk, &ua_message(k, &tag, &md)?, &s.sig, false),
-            };
-        if !ok {
+        if !slot_ok(&structure.members[s.index as usize], &keys[s.index as usize], digest, &md, s)? {
             return Ok(false);
         }
     }
     Ok(true)
+}
+
+/// One member's slot, without key data: a derived member under `member` over `md`, an `evm-eoa` member over `digest` itself;
+/// another native member is a part nothing here can check.
+fn slot_ok(m: &MsigMember, key: &[u8], digest: &[u8; 32], md: &[u8; 32], s: &MemberSig) -> Result<bool> {
+    let vk = &key[..match point_size(m.kind) {
+        0 => key.len(),
+        head => head, // a group kind signs against its stored `vk`
+    }];
+    Ok(s.key_data.is_empty()
+        && match m.kind {
+            0x0001 => crate::verify::native_ecdsa(m.id[12..].try_into().expect("20 bytes"), digest, &s.sig),
+            k if is_native(k) => return Err(UAError::NotVerifiable),
+            k => crate::verify::verify(k, vk, &ua_message(k, &purpose_tag("member")?, md)?, &s.sig, false),
+        })
 }
 
 /// `true` iff `(kind, d)` is the record of `ua`.
@@ -809,4 +813,20 @@ pub fn check_pqz_key_record(kind: u16, key_data: &[u8], ua: &[u8; 32], pqz_key: 
     }
     let r = pqz_key_record_message(kind, ua, key_data, pqz_key, None, Some(pqz_pop_hash), false)?;
     signature_ok(kind, key_data, ua, &purpose_tag("pqz-key")?, &r.record_digest, sig, members)?.then_some(()).ok_or(UAError::Unauthorized)
+}
+
+/// An acceptance as `accept_membership` / `acceptMembership` checks it, without its state (a slot already accepted is the chain's
+/// no-op), CTR-UA-37: `ua` the id of the `msig` `key_data`, `slot.index` one of its members, the member's signature over
+/// typed(`UAMembership{ua, member}`). One slot, no threshold. `Err` as `check_registration` for a part it cannot check.
+pub fn check_membership(key_data: &[u8], ua: &[u8; 32], slot: &MemberSig, members: &Members) -> Result<()> {
+    if !is_record_of(0x0120, key_data, ua)? {
+        return Err(UAError::Unauthorized);
+    }
+    let structure = MsigStructure::from_key_data(key_data)?;
+    let i = slot.index as usize;
+    let m = structure.members.get(i).ok_or(UAError::Unauthorized)?;
+    let keys = member_keys(key_data, members)?;
+    let digest = membership_digest(ua, &m.id);
+    let md = member_digest(ua, &ua_message(0x0120, &purpose_tag("membership")?, &digest)?);
+    slot_ok(m, &keys[i], &digest, &md, slot)?.then_some(()).ok_or(UAError::Unauthorized)
 }

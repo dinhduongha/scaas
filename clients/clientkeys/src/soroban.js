@@ -6,7 +6,7 @@ import { base32 } from '@scure/base';
 import { sha256, concatBytes, utf8ToBytes, fromHex, hex } from './bytes.js';
 import { be } from './metaop.js';
 import { strkey } from './seed.js';
-import { UAError, KINDS, kindInfo, uaMessage, encodeMsig as encodeMsigKeyData } from './ua.js';
+import { UAError, KINDS, kindInfo, uaMessage, encodeMsig as encodeMsigKeyData, membershipMessage, MEMBERSHIP_TAG } from './ua.js';
 
 // ScValType discriminants (Stellar-contract.x)
 const TYPE = { bool: 0, void: 1, u32: 3, i32: 4, u64: 5, i64: 6, timepoint: 7, duration: 8, u128: 9, i128: 10, u256: 11, i256: 12, bytes: 13, string: 14,
@@ -98,6 +98,7 @@ const JOB_TYPES = {
   Timepoint: fixed('timepoint', 64, false), Duration: fixed('duration', 64, false),
   Holder: (h) => ('Ua' in h ? holderUa(h.Ua) : holderAddr(h.Addr)),
   UaSig: (x) => uaSig({ signature: x.signature, members: x.members.map((m) => ({ index: m.index, keyData: m.key_data, sig: m.sig })) }),
+  MemberSig: (m) => struct({ index: u32(m.index), key_data: bytes(m.key_data), sig: bytes(m.sig) }),
   Order: (o) => struct(Object.fromEntries(Object.keys(ORDER_TYPE).map((k) => [k, jobValue({ type: ORDER_TYPE[k], value: o[k] })]))),
   'Vec<Val>': (l) => vec(l.map(jobValue)),
   Map: (entries) => {
@@ -128,6 +129,22 @@ export const signedAuth = ({ networkId: n, nonce, expiry, invocation, from, sign
 });
 
 export const networkId = (passphrase) => sha256(utf8ToBytes(passphrase));
+
+/** `accept_membership` as a node `ua_metatx` op (CTR-UA-37, docs/node/job-api.md): anyone submits, so the member needs no XLM. `sig`: an
+ *  `evm-eoa` member over `membershipMessage(...).digest`, a registered member under `member` over its `memberDigest`, a `G…` member
+ *  empty, its signature being `auth` (`signedAuth` over `membershipInvocation`). `relayer`: the lane that attests a slot the chain cannot
+ *  read, else `null`. `validUntil`: unix seconds, within the node's hour; nothing signed names it. */
+export function acceptMembershipOp({ registry, ua: id, index, sig = new Uint8Array(0), relayer = null, validUntil, auth }) {
+  return { contract: registry, function: 'accept_membership', valid_until: validUntil, ...(auth ? { auth } : {}),
+    args: { ua: hex(raw(id)), member_sig: { index, key_data: '0x', sig: hex(raw(sig)) }, relayer } };
+}
+
+/** What a `G…` member's entry authorizes: the registry's `require_auth_for_args((ua, PURPOSE_MEMBERSHIP, typed))` on `accept_membership`. */
+export function membershipInvocation({ registry, ua: id, member }) {
+  const value = (b) => ({ type: 'BytesN<32>', value: hex(raw(b)) });
+  return { contract: registry, function: 'accept_membership', sub_invocations: [],
+    args: [value(id), value(MEMBERSHIP_TAG), value(membershipMessage({ ua: raw(id), member: raw(member) }).digest)] };
+}
 
 /** NET-SOR-16 (spec §2): `sha256(xdr(Vec[Symbol("scaas_metaop_v1"), Bytes(network_id), Address(contract), Symbol(fn),
  *  Vec(args)]))`, the entry's arguments without `auth`. */

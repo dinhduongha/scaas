@@ -4,7 +4,7 @@
 //! Nonce auth là ngẫu nhiên (host ghi cặp (địa chỉ, nonce) đã dùng) ⇒ không head-of-line (R62).
 //! Tuỳ chọn fee-bump (CAP-15): `params.fee_bump_lane = i` ⇒ account của lane `i` trả phí cho mọi lane.
 //! Thiết kế: `docs/history/specs/2026-10-03-net-soroban.md`.
-//! UA-Soroban (spec `2026-10-30-ua-soroban-design.md` §8, §9): `ua_metatx` jobs (`ua_metatx_job`, named fields, `UA_FNS`), the lane-authority
+//! UA-Soroban (spec `2026-10-30-ua-soroban-design.md` §8, §9): `ua_metatx` jobs (`ua_metatx_job`, named fields, `UA_FNS`, `accept_membership` on the registry among them), the lane-authority
 //! rule (`check_recorded_auth`), Protocol 23 auto-restore within `params.max_deposit_per_job` (`sim_data`), UA events.
 //! UA-8 (UA8-D23): `call` jobs for the registry writes (`ua8_call_job`), the off-chain check before a relayer's attestation
 //! (`ua8_precheck`). Every job names its fields and the node builds the XDR (owner 2026-10-31, 2026-11-02): a blob where a field
@@ -599,7 +599,7 @@ impl ChainAdapter for SorobanAdapter {
         let pk = lane_pk(self.signer(lane).map_err(rv)?).map_err(rv)?;
         let lane_addr = ScAddress::from_str(&stellar_account_strkey(&pk)).map_err(|e| SimError::Revert(e.to_string()))?;
         self.load_executor().await?;
-        let registry_write = job.kind.as_deref() == Some("call");
+        let registry_write = job.kind.as_deref() == Some("call") || is_accept(job);
         if registry_write && !op["args"]["relayer"].is_null() {
             self.load_relayers().await?;
         }
@@ -621,7 +621,7 @@ impl ChainAdapter for SorobanAdapter {
         }
         let data = sim_data(&sim, self.max_deposit)?;
         check_recorded_auth(&sim, &call, &auth).map_err(rv)?;
-        if registry_write {
+        if registry_write && !auth.iter().any(|e| matches!(e.credentials, SorobanCredentials::Address(_))) {
             check_no_other_signer(&sim).map_err(rv)?;
         }
         let mut tx = tx;
@@ -866,10 +866,11 @@ impl ChainAdapter for SorobanAdapter {
         built.and_then(|(call, _)| ua_valid_until(&call).ok()).unwrap_or_else(|| job.op.as_ref().and_then(|o| o["valid_until"].as_u64()).unwrap_or(0))
     }
 
-    /// By kind, less a plain `signed_op` whose root is a token payment. Anything `token_payment` cannot read stays in the share.
+    /// By kind, less a plain `signed_op` whose root is a token payment. Anything `token_payment` cannot read stays in the share. A member's
+    /// acceptance is a registry write free to the client, so it counts as a `call` job.
     fn in_call_share(&self, job: &Job) -> bool {
         let payment = matches!(job.kind.as_deref(), None | Some("signed_op")) && job.op.as_ref().is_some_and(|op| token_payment(op, &self.relay_fee).is_some());
-        crate::adapter::call_share_by_kind(job) && !payment
+        (crate::adapter::call_share_by_kind(job) || is_accept(job)) && !payment
     }
 
     /// Spec §9.1: a `ua_metatx` job's id is its op digest, recomputed from its arguments (`settle`: none, the job's own).
@@ -1025,8 +1026,8 @@ pub fn job_call(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &Relay
 }
 
 /// Owner ruling 2026-11-02: a `signed_op` is no open host call. It runs on a token, a mandate, the DEX or the router the chain's
-/// `params` name, and never on the registry, whatever else lists it: a registry write is a `call` job, and a `G…` member that must
-/// sign one submits it itself.
+/// `params` name, and never on the registry, whatever else lists it: a registry write is a `call` job (a `G…` member that must sign one
+/// submits it itself), or the one `ua_metatx` of `Class::Registry`, by name.
 fn known_contract(c: &ScAddress, policy: &RelayFeePolicy) -> Result<()> {
     if policy.ua_registry.as_ref() == Some(c) {
         bail!("{CALL_TARGET_REFUSED}: a signed_op never runs on the registry; a registry write is a call job");
@@ -1175,7 +1176,7 @@ pub fn job_tx(network: &[u8; 32], kind: Option<&str>, op: &Value, lane: &ScAddre
     let (call, auth, valid_until) = match kind {
         Some("ua_metatx") => {
             let (call, auth, _) = ua_metatx_job(network, op, lane, policy)?;
-            let valid_until = ua_valid_until(&call)?;
+            let valid_until = if op["function"] == ACCEPT { bounded_deadline(op)? } else { ua_valid_until(&call)? };
             (call, auth, valid_until)
         }
         None | Some("signed_op") => {
@@ -1186,12 +1187,7 @@ pub fn job_tx(network: &[u8; 32], kind: Option<&str>, op: &Value, lane: &ScAddre
         }
         Some("call") => {
             let registry = policy.ua_registry.as_ref().ok_or_else(|| anyhow!("a call job needs params.ua_registry (the chain's UaRegistry)"))?;
-            let valid_until = op["valid_until"].as_u64().ok_or_else(|| anyhow!("op.valid_until missing"))?;
-            // nothing signed names this deadline, so the node bounds it: `0` is no `max_time`, and `follow` waits for it
-            let (now, max) = (crate::submit::now(), crate::mesh::accept::MeshParams::default().max_valid_for_secs);
-            if valid_until <= now || valid_until > now.saturating_add(max) {
-                bail!("op.valid_until {valid_until} is not within {max} s after now ({now})");
-            }
+            let valid_until = bounded_deadline(op)?;
             let listed = policy.relayers.get().is_some_and(|l| l.contains(lane));
             let (call, auth) = ua8_call_job(network, op, lane, registry, listed)?;
             (call, auth, valid_until)
@@ -1201,6 +1197,16 @@ pub fn job_tx(network: &[u8; 32], kind: Option<&str>, op: &Value, lane: &ScAddre
     within_depth(&call)?;
     auth.iter().try_for_each(within_depth)?;
     Ok((call, auth, valid_until))
+}
+
+/// `op.valid_until` of a job whose deadline nothing signed names, so the node bounds it: `0` is no `max_time`, and `follow` waits for it.
+fn bounded_deadline(op: &Value) -> Result<u64> {
+    let valid_until = op["valid_until"].as_u64().ok_or_else(|| anyhow!("op.valid_until missing"))?;
+    let (now, max) = (crate::submit::now(), crate::mesh::accept::MeshParams::default().max_valid_for_secs);
+    if valid_until <= now || valid_until > now.saturating_add(max) {
+        bail!("op.valid_until {valid_until} is not within {max} s after now ({now})");
+    }
+    Ok(valid_until)
 }
 
 /// The named path's `XDR_DEPTH`: what a job built must read back as any XDR a job puts in does.
@@ -1215,6 +1221,7 @@ enum Class {
     Router,
     Dex,
     Mandate,
+    Registry,
 }
 
 /// One allow-listed `ua_metatx` function (spec §9.1): its contract class, its arguments in the contract's order, name and
@@ -1238,9 +1245,13 @@ const fn uf(name: &'static str, class: Class, args: &'static [(&'static str, &'s
 
 const ID: &str = "BytesN<32>";
 const OPT: &str = "Option<Address>";
+/// CTR-UA-37: a member's acceptance, the one `ua_metatx` of `Class::Registry`: its signature is the member's and over no call, so it carries
+/// no deadline, no op digest and no `auth` argument.
+const ACCEPT: &str = "accept_membership";
 
 /// The contracts' signatures (T5–T8, T6b's `epoch` in the delegate entries): the one table of the `ua_metatx` job API.
-const UA_FNS: [UaFn; 13] = [
+const UA_FNS: [UaFn; 14] = [
+    uf(ACCEPT, Class::Registry, &[("ua", ID), ("member_sig", "MemberSig"), ("relayer", OPT)], None, Some(2), None, None),
     uf("ua_transfer", Class::Token, &[("from", ID), ("to", "Holder"), ("amount", "i128"), ("lane", ID), ("nonce", "u64"), ("valid_until", "u64"), ("relayer", OPT),
                                       ("auth", "UaSig")], Some(5), Some(6), Some(0), Some(3)),
     uf("ua_pay", Class::Token, &[("from", ID), ("to", "Holder"), ("amount", "i128"), ("pay_ref", ID), ("valid_until", "u64"), ("relayer", OPT), ("auth", "UaSig")],
@@ -1352,7 +1363,7 @@ fn ua_relay_ref(network: &[u8; 32], a: &[ScVal]) -> Result<[u8; 32]> {
 fn ua_digest(network: &[u8; 32], call: &InvokeContractArgs, f: &UaFn) -> Result<Option<[u8; 32]>> {
     let a = call.args.as_slice();
     match f.name {
-        "settle" => Ok(None),
+        "settle" | ACCEPT => Ok(None),
         "ua_relay" => {
             let ScVal::Address(token) = &a[5] else { bail!("ua_relay token malformed") };
             let rf = ScVal::Bytes(ua_relay_ref(network, a)?.to_vec().try_into()?);
@@ -1379,7 +1390,7 @@ fn ua_relay_policy(call: &InvokeContractArgs, lane: &ScAddress, policy: &RelayFe
     crate::adapter::relay_fee_ours(*to == holder_addr(&call.contract_address), *to == holder_addr(lane), amount, &policy.params)
 }
 
-/// The allow-list by contract class: a token ∈ `policy.tokens`, the router, `policy.dex`, any mandate.
+/// The allow-list by contract class: a token ∈ `policy.tokens`, the router, `policy.dex`, any mandate, `params.ua_registry`.
 fn listed(call: &InvokeContractArgs, f: &UaFn, policy: &RelayFeePolicy) -> bool {
     let c = &call.contract_address;
     match f.class {
@@ -1387,16 +1398,17 @@ fn listed(call: &InvokeContractArgs, f: &UaFn, policy: &RelayFeePolicy) -> bool 
         Class::Router => policy.router.as_ref() == Some(c),
         Class::Dex => policy.dex.as_ref() == Some(c),
         Class::Mandate => true,
+        Class::Registry => policy.ua_registry.as_ref() == Some(c),
     }
 }
 
 /// A `ua_metatx` job (spec §9.1, SOR-D14): the allow-list (token ∈ `policy.tokens`: `ua_transfer`, `ua_pay`,
 /// `ua_pay_meta`, `ua_burn`, `ua_cancel_nonce`; router = `policy.router`: `ua_relay`; DEX = `policy.dex`: `settle`,
-/// `ua_cancel`; any contract: the mandate's `mtx_*`), `relayer` `None` or this lane (`ua_relay`, and each `settle`
-/// order: this lane), `valid_until` from the signed arguments, never a UA pay to the router or its executor outside
-/// `ua_relay`. Auth: `op.auth` entries for native legs only (as `host_call`), and when the relayer is this lane one
-/// `SourceAccount` entry rooted at exactly the call (S8, §8). Returns the call, its auth and the op digest (zero for
-/// `settle`).
+/// `ua_cancel`; any contract: the mandate's `mtx_*`; `params.ua_registry`: `accept_membership`), `relayer` `None` or this lane
+/// (`ua_relay`, and each `settle` order: this lane), `valid_until` from the signed arguments, never a UA pay to the router or its executor
+/// outside `ua_relay`. Auth: `op.auth` entries for native legs only (as `host_call`), and when the relayer is this lane one
+/// `SourceAccount` entry rooted at exactly the call (S8, §8), or, on the registry, the listed lane's one word (`attest_entry`). Returns the
+/// call, its auth and the op digest (zero for `settle`, `accept_membership`).
 pub fn ua_metatx_job(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &RelayFeePolicy)
     -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>, [u8; 32])>
 {
@@ -1424,7 +1436,13 @@ pub fn ua_metatx_job(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &
             Some(_) => bail!("{}: the relayer must be None or this lane", f.name),
         },
     };
-    ua_valid_until(&call)?;
+    if f.class == Class::Registry {
+        if lane_bound && !policy.relayers.get().is_some_and(|l| l.contains(lane)) {
+            bail!("this lane is not in the registry's relayers(): no relayer-mode job");
+        }
+    } else {
+        ua_valid_until(&call)?;
+    }
     if pays_router(&call, policy) {
         bail!("a pay or approval to the relay-fee router or its executor is refused (outside ua_relay's own fee; CTR-MTX-27)");
     }
@@ -1434,7 +1452,7 @@ pub fn ua_metatx_job(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &
     let digest = ua_digest(network, &call, f)?.unwrap_or_default();
     let mut auth = auth_entries(&op["auth"])?;
     if lane_bound {
-        auth.push(source_entry(&call));
+        auth.push(if f.class == Class::Registry { attest_entry(network, &call)? } else { source_entry(&call) });
     }
     Ok((call, auth, digest))
 }
@@ -1456,8 +1474,8 @@ fn check_recorded_auth(sim: &Value, call: &InvokeContractArgs, own: &[SorobanAut
     Ok(())
 }
 
-/// A `call` job carries no auth entry, so a call that records someone else's (the slot of a `G…` member, host-authorised)
-/// wants a signature this transaction will not have: it could only fail on chain, on the lane's fee.
+/// A registry write with no subject's entry, a `call` job's or an acceptance's with no `op.auth`: a call that records someone else's (the
+/// slot of a `G…` member, host-authorised) wants a signature this transaction will not have: it could only fail on chain, on the lane's fee.
 fn check_no_other_signer(sim: &Value) -> Result<()> {
     if recorded_auth(sim)?.iter().any(|e| !matches!(e.credentials, SorobanCredentials::SourceAccount)) {
         bail!("the call needs another account's signature, which a call job does not carry");
@@ -1521,12 +1539,25 @@ fn chain_kind(kind: u16) -> bool {
     matches!(kind, 0x0100 | 0x0101 | 0x0102 | 0x0108 | MSIG | 0x0130 | 0x0131)
 }
 
-/// One registry write of a `call` job, in `scaas_ua`'s types: the XDR and the off-chain check read the same values.
+/// One registry write of a `call` job, in `scaas_ua`'s types: the XDR and the off-chain check read the same values. `Accept` is the
+/// `ua_metatx` on the registry, here for its off-chain check alone: its XDR comes from `UA_FNS`, as every `ua_metatx`.
 enum Ua8Write {
     Register(RegisterArgs),
     SetKem(SetKemKeyArgs),
     SetPqz { ua: [u8; 32], pqz_key: Vec<u8>, pqz_pop_hash: [u8; 32], sig: UASig },
     StorePop { ua: [u8; 32], pqz_pop: Vec<u8> },
+    Accept { ua: [u8; 32], slot: MemberSig },
+}
+
+/// A `ua_metatx` job on `accept_membership`.
+fn is_accept(job: &Job) -> bool {
+    job.kind.as_deref() == Some("ua_metatx") && job.op.as_ref().is_some_and(|op| op["function"] == ACCEPT)
+}
+
+/// `accept_membership`'s arguments for `ua8_precheck`; `ua_call` has refused any other shape before it.
+fn accept_write(op: &Value) -> Result<(Ua8Write, Option<ScAddress>)> {
+    let [ua, member_sig, relayer] = named(&op["args"], ACCEPT, ["ua", "member_sig", "relayer"])?;
+    Ok((Ua8Write::Accept { ua: b32_of(ua)?, slot: member_sig_of(member_sig)? }, relayer_of(relayer)?))
 }
 
 /// A blob where a job has named fields, on any job kind and at any level (explicit parameters, owner 2026-10-31).
@@ -1702,6 +1733,7 @@ fn ua_value(ty: &str, v: &Value) -> Result<ScVal> {
         "String" => ScVal::String(ScString(v.as_str().ok_or_else(|| anyhow!("{v} is not a string"))?.try_into()?)),
         "Holder" => holder_of(v)?,
         "UaSig" => sc_sig(&sig_of(v)?)?,
+        "MemberSig" => sc_member_sig(&member_sig_of(v)?)?,
         "Order" => sc_struct_of(ORDER.iter().map(|f| f.0).zip(args_of("order", &ORDER, v)?).collect())?,
         "Vec<Val>" => sc_vec(list_of(v, relayed_of)?)?,
         "Void" if v.is_null() => ScVal::Void,
@@ -1819,9 +1851,12 @@ fn sc_attrs(a: &UAAttrs) -> Result<ScVal> {
     sc_struct([("pqz_key", sc_bytes(&a.pqz_key)?), ("pqz_pop_hash", sc_bytes(&a.pqz_pop_hash)?), ("kem", sc_kem(&a.kem)?), ("kem_pk_hash", sc_bytes(&a.kem_pk_hash)?)])
 }
 
+fn sc_member_sig(s: &MemberSig) -> Result<ScVal> {
+    sc_struct([("index", ScVal::U32(s.index.into())), ("key_data", sc_bytes(&s.key_data)?), ("sig", sc_bytes(&s.sig)?)])
+}
+
 fn sc_member_sigs(m: &[MemberSig]) -> Result<ScVal> {
-    let one = |s: &MemberSig| sc_struct([("index", ScVal::U32(s.index.into())), ("key_data", sc_bytes(&s.key_data)?), ("sig", sc_bytes(&s.sig)?)]);
-    sc_vec(m.iter().map(one).collect::<Result<_>>()?)
+    sc_vec(m.iter().map(sc_member_sig).collect::<Result<_>>()?)
 }
 
 fn sc_sig(s: &UASig) -> Result<ScVal> {
@@ -1863,6 +1898,7 @@ fn ua8_args(w: &Ua8Write, relayer: ScVal) -> Result<(&'static str, Vec<ScVal>)> 
             ("set_pqz_key", vec![sc_bytes(ua)?, sc_bytes(pqz_key)?, sc_bytes(pqz_pop_hash)?, sc_sig(sig)?, relayer])
         }
         Ua8Write::StorePop { ua, pqz_pop } => ("store_pqz_pop", vec![sc_bytes(ua)?, sc_bytes(pqz_pop)?]),
+        Ua8Write::Accept { .. } => bail!("{ACCEPT} is a ua_metatx job"),
     })
 }
 
@@ -1885,10 +1921,14 @@ pub fn ua8_call_job(network: &[u8; 32], op: &Value, lane: &ScAddress, registry: 
     if relayer.is_none() {
         return Ok((call, vec![]));
     }
-    let d = attest_digest(network, registry, &call.function_name, &call.args)?;
-    let word = InvokeContractArgs { contract_address: registry.clone(), function_name: call.function_name.clone(), args: vec![sc_bytes(&d)?].try_into()? };
-    let auth = vec![source_entry(&word)];
+    let auth = vec![attest_entry(network, &call)?];
     Ok((call, auth))
+}
+
+/// The lane's `SourceAccount` entry on a registry write it attests: the entry's function, over the one word `attest_digest` of the arguments.
+fn attest_entry(network: &[u8; 32], call: &InvokeContractArgs) -> Result<SorobanAuthorizationEntry> {
+    let d = attest_digest(network, &call.contract_address, &call.function_name, &call.args)?;
+    Ok(source_entry(&InvokeContractArgs { contract_address: call.contract_address.clone(), function_name: call.function_name.clone(), args: vec![sc_bytes(&d)?].try_into()? }))
 }
 
 /// The contract's `attest`, as a superset: this write has a part the chain cannot verify, a signature of a kind outside
@@ -1897,10 +1937,11 @@ fn ua8_marked(w: &Ua8Write, kind: u16, key_data: &[u8]) -> Result<bool> {
     if kind != MSIG {
         return Ok(!chain_kind(kind));
     }
-    let slots = match w {
+    let slots: &[MemberSig] = match w {
         Ua8Write::Register(RegisterArgs::RegisterMsig { pop, .. }) => pop,
         Ua8Write::SetKem(a) => &a.sig.members,
         Ua8Write::SetPqz { sig, .. } => &sig.members,
+        Ua8Write::Accept { slot, .. } => std::slice::from_ref(slot),
         _ => return Ok(false),
     };
     let members = MsigStructure::from_key_data(key_data)?.members;
@@ -1932,6 +1973,8 @@ fn ua8_check(w: &Ua8Write, kind: u16, key_data: &[u8], members: &ua8::Members) -
             ua8::check_pqz_key_record(kind, key_data, ua, pqz_key, pqz_pop_hash, &ua_sig_bytes(kind, sig)?, members)
         }
         Ua8Write::StorePop { .. } => Ok(()),
+        Ua8Write::Accept { ua, slot } if kind == MSIG => ua8::check_membership(key_data, ua, slot, members),
+        Ua8Write::Accept { .. } => Err(UAError::Unauthorized),
     }
 }
 
@@ -1987,12 +2030,12 @@ impl SorobanAdapter {
     async fn ua8_precheck(&self, op: &Value) -> std::result::Result<(), SimError> {
         let rv = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
         let registry = self.relay_fee.ua_registry.as_ref().ok_or_else(|| SimError::Revert("params.ua_registry is not set".into()))?;
-        let (w, relayer) = ua8_write(op).map_err(rv)?;
+        let (w, relayer) = if op["function"] == ACCEPT { accept_write(op) } else { ua8_write(op) }.map_err(rv)?;
         let (kind, key_data) = match &w {
             Ua8Write::Register(a) => (register_kind(a), a.key_data()),
             Ua8Write::SetKem(a) if a.version == 0 => return Ok(()),
             Ua8Write::StorePop { .. } => return Ok(()),
-            Ua8Write::SetKem(SetKemKeyArgs { ua, .. }) | Ua8Write::SetPqz { ua, .. } => {
+            Ua8Write::SetKem(SetKemKeyArgs { ua, .. }) | Ua8Write::SetPqz { ua, .. } | Ua8Write::Accept { ua, .. } => {
                 let (kind, key, _) = self.ua8_record(registry, ua).await?.ok_or_else(|| SimError::Revert("the UA is not registered".into()))?;
                 // the answer decides whether anything is checked, so it must be this id's, as `Members` is
                 if scaas_ua::ua_of(kind, &key) != Ok(*ua) {
@@ -2767,7 +2810,9 @@ mod tests {
         {"type": "Timepoint", "value": 5, "xdr": "000000070000000000000005"},
         {"type": "Duration", "value": "6", "xdr": "000000080000000000000006"},
         {"type": "Map", "value": [{"key": {"type": "u32", "value": 2}, "val": {"type": "bool", "value": true}}, {"key": {"type": "u32", "value": 1}, "val": {"type": "bool", "value": false}}],
-         "xdr": "0000001100000001000000020000000300000001000000000000000000000003000000020000000000000001"}
+         "xdr": "0000001100000001000000020000000300000001000000000000000000000003000000020000000000000001"},
+        {"type": "MemberSig", "value": {"index": 3, "key_data": "0x", "sig": "0xab"},
+         "xdr": "0000001100000001000000030000000f00000005696e64657800000000000003000000030000000f000000086b65795f646174610000000d000000000000000f00000003736967000000000d00000001ab000000"}
     ]"#;
 
     #[test]
@@ -2777,7 +2822,7 @@ mod tests {
             let v = relayed_of(&json!({"type": r["type"], "value": r["value"]})).unwrap_or_else(|e| panic!("{}: {e:#}", r["type"]));
             assert_eq!(hex(&v.to_xdr(Limits::none()).unwrap()), r["xdr"].as_str().unwrap(), "{}", r["type"]);
         }
-        assert_eq!(rows.len(), 10, "every row, each type at least once");
+        assert_eq!(rows.len(), 11, "every row, each type at least once");
         for (ty, bad) in [("u128", json!("-1")), ("u128", json!(1)), ("i32", json!(2_147_483_648u64)), ("i64", json!("9223372036854775808")), ("String", json!(1)),
                           ("u256", json!(format!("1{}", "0".repeat(78)))), ("i256", json!(format!("1{}", "0".repeat(77)))), ("Timepoint", json!(-1)), ("Duration", json!("x")),
                           ("u256", json!("0x10")), ("i256", json!("0x10")), ("u128", json!("")), ("i128", json!("-")),
@@ -4589,6 +4634,172 @@ mod tests {
         *answer.lock().unwrap() = json!({});
         run(&a, &job).await.unwrap();
         assert_eq!(logged(&calls), ["register", "SEND"], "read once");
+    }
+
+    // -- CTR-UA-37: `accept_membership`, a `ua_metatx` job on the registry
+
+    /// A `portable.json` `memberships` row as a job names it.
+    fn accept_op(r: &Value, relayer: &Value) -> Value {
+        let vu = crate::submit::now() + 600;
+        json!({"contract": REGISTRY, "function": "accept_membership", "valid_until": vu,
+               "args": {"ua": r["ua"], "member_sig": {"index": r["index"], "key_data": "0x", "sig": r["sig"]}, "relayer": relayer}})
+    }
+    fn membership(name: &str) -> &'static Value {
+        portable()["memberships"].as_array().unwrap().iter().find(|r| r["name"] == name).unwrap()
+    }
+    /// `msig-classical` and its members, as the registry answers them.
+    fn classical() -> Vec<([u8; 32], ScVal)> {
+        let mut r = ["msig-classical", "bls-bn254-minsig", "schnorr-bn254"].map(|n| row_rec(row("registrations", n), false)).to_vec();
+        r.push(row_rec(row("registrations", "p256"), true));
+        r
+    }
+    fn registry_policy() -> RelayFeePolicy {
+        RelayFeePolicy { ua_registry: Some(sc(REGISTRY)), ..policy() }
+    }
+
+    /// The allow-list: this function on `params.ua_registry` alone, as a `ua_metatx`; `known_contract` holds, a `signed_op` never runs on
+    /// the registry, a `call` job stays the eight writes; nothing signed names the deadline, so the node bounds it.
+    #[test]
+    fn accept_job_runs_on_the_registry_alone() {
+        let (p, op) = (registry_policy(), accept_op(membership("msig-classical/0"), &NONE));
+        let tx = |k: &str, o: &Value, p: &RelayFeePolicy| job_tx(&NET7, Some(k), o, &lane(), p);
+        let (call, auth, vu) = tx("ua_metatx", &op, &p).unwrap();
+        assert_eq!((call.contract_address.clone(), call.function_name.0.as_slice(), call.args.len()), (sc(REGISTRY), &b"accept_membership"[..], 3));
+        assert_eq!((auth.len(), Some(vu)), (0, op["valid_until"].as_u64()));
+        assert_eq!(ua_digest(&NET7, &call, UA_FNS.iter().find(|f| f.name == "accept_membership").unwrap()).unwrap(), None, "nothing signs a digest of the call");
+        let mut other = op.clone();
+        other["contract"] = json!(WALLET);
+        assert!(tx("ua_metatx", &other, &p).unwrap_err().to_string().contains("not allowed"));
+        assert!(tx("ua_metatx", &op, &policy()).unwrap_err().to_string().contains("not allowed"), "no params.ua_registry");
+        let e = tx("call", &op, &p).unwrap_err().to_string();
+        assert!(e.contains("auth") || e.contains("not a registry write"), "{e}");
+        let mut plain = op.clone();
+        plain.as_object_mut().unwrap().remove("auth");
+        assert!(format!("{:#}", tx("call", &plain, &p).unwrap_err()).contains("not a registry write"));
+        // `known_contract`: the same call as the subject's own signed invocation
+        let subject = json!({"payload": {"nonce": "1", "expiry": 9, "invocation": {"contract": REGISTRY, "function": "accept_membership", "args": [], "sub_invocations": []}},
+                             "from": FROM, "signature": sig(), "contract": REGISTRY, "valid_until": op["valid_until"], "extra": {}});
+        assert!(format!("{:#}", tx("signed_op", &subject, &p).unwrap_err()).contains(CALL_TARGET_REFUSED));
+        // the deadline, one change each
+        for (vu, why) in [(json!(null), "op.valid_until missing"), (json!(1), "not within"), (json!(crate::submit::now() + 7_200), "not within")] {
+            let mut o = op.clone();
+            o["valid_until"] = vu;
+            assert!(format!("{:#}", tx("ua_metatx", &o, &p).unwrap_err()).contains(why), "{why}");
+        }
+        // named parameters: a blob or an unknown field is refused at every level
+        let mut blob = op.clone();
+        blob["args"]["member_sig"] = json!("0xab");
+        assert!(format!("{:#}", tx("ua_metatx", &blob, &p).unwrap_err()).contains(HEX_ARGS_REFUSED));
+        let mut extra = op.clone();
+        extra["args"]["member_sig"]["memo"] = json!(1);
+        assert!(tx("ua_metatx", &extra, &p).is_err());
+        let mut past = op.clone();
+        past["args"]["member_sig"]["index"] = json!(70_000);
+        assert!(tx("ua_metatx", &past, &p).is_err(), "an index its u16 cannot hold");
+    }
+
+    /// `relayer` is this lane and a listed one, and then the job carries the registry's one word, `attest_digest` of its three arguments,
+    /// in the registry's own form, never the lane's authority over the call. A subject's `op.auth` entry goes through as on any `ua_metatx`.
+    #[test]
+    fn accept_job_attests_one_word() {
+        let (p, me) = (registry_policy(), json!(lane().to_string()));
+        let op = accept_op(membership("msig-classical/1"), &me);
+        assert!(job_tx(&NET7, Some("ua_metatx"), &op, &lane(), &p).unwrap_err().to_string().contains("relayers()"), "a lane the list does not hold");
+        p.relayers.set(vec![lane()]).unwrap();
+        let (call, auth, _) = job_tx(&NET7, Some("ua_metatx"), &op, &lane(), &p).unwrap();
+        let d = attest_digest(&NET7, &sc(REGISTRY), &call.function_name, &call.args).unwrap();
+        assert_eq!(auth.len(), 1);
+        assert!(matches!(auth[0].credentials, SorobanCredentials::SourceAccount));
+        let SorobanAuthorizedFunction::ContractFn(root) = &auth[0].root_invocation.function else { panic!() };
+        assert_eq!((root.contract_address.clone(), root.function_name.clone(), root.args.as_slice()), (sc(REGISTRY), call.function_name.clone(), &[byt(&d)][..]));
+        let mut other = op.clone();
+        other["args"]["relayer"] = json!(FROM);
+        assert!(job_tx(&NET7, Some("ua_metatx"), &other, &lane(), &p).unwrap_err().to_string().contains("this lane"));
+        let mut signed = accept_op(membership("msig-classical/0"), &NONE);
+        signed["auth"] = json!([{"payload": cross_payload(), "from": FROM, "signature": sig()}]);
+        let (_, auth, _) = job_tx(&NET7, Some("ua_metatx"), &signed, &lane(), &p).unwrap();
+        assert!(matches!(auth.as_slice(), [e] if matches!(e.credentials, SorobanCredentials::Address(_))));
+    }
+
+    /// A slot the chain verifies is simulated with no relayer; a relayer-checked one passes `check_membership` first or nothing is
+    /// simulated: every row, unchanged, and one flipped byte.
+    #[tokio::test]
+    async fn accept_job_prechecks_a_marked_slot() {
+        let (a, calls) = listed(classical()).await;
+        let me = json!(stub_lane());
+        for n in ["msig-classical/0", "msig-classical/3"] {
+            run_kind(&a, "ua_metatx", &accept_op(membership(n), &NONE)).await.unwrap();
+            assert_eq!(logged(&calls), ["record_of", "accept_membership", "SEND"], "{n}");
+        }
+        for n in ["msig-classical/1", "msig-classical/2"] {
+            refused(run_kind(&a, "ua_metatx", &accept_op(membership(n), &NONE)).await, "needs a relayer");
+            assert_eq!(logged(&calls), ["record_of"], "{n}: never simulated");
+            let mut bad = accept_op(membership(n), &me);
+            flip(&mut bad["args"]["member_sig"]["sig"]);
+            refused(run_kind(&a, "ua_metatx", &bad).await, "UAUnauthorized");
+            assert_eq!(logged(&calls).last().unwrap(), "record_of", "{n}: never simulated");
+            run_kind(&a, "ua_metatx", &accept_op(membership(n), &me)).await.unwrap();
+            assert_eq!(logged(&calls).last().unwrap(), "SEND", "{n}");
+        }
+        let mut past = accept_op(membership("msig-classical/1"), &me);
+        past["args"]["member_sig"]["index"] = json!(4);
+        refused(run_kind(&a, "ua_metatx", &past).await, "UAUnauthorized");
+        let mut gone = accept_op(membership("msig-classical/1"), &me);
+        gone["args"]["ua"] = json!(h(&[0x66; 32]));
+        refused(run_kind(&a, "ua_metatx", &gone).await, "not registered");
+    }
+
+    /// An `evm-contract` slot: nothing here can run ERC-1271, so `check_membership` is `NotVerifiable` and the job dies before simulation.
+    #[tokio::test]
+    async fn accept_job_refuses_an_evm_contract_slot() {
+        let r = row("registrations", "msig-classical");
+        let d = strip(&r["keyData"]);
+        let contract = [&d[..4], &[0, 2], &d[6..]].concat();
+        let ua = scaas_ua::ua_of(0x0120, &contract).unwrap();
+        let (a, calls) = listed(vec![(ua, rec(0x0120, &contract, false)), row_rec(row("registrations", "bls-bn254-minsig"), false),
+                                     row_rec(row("registrations", "schnorr-bn254"), false), row_rec(row("registrations", "p256"), true)]).await;
+        let mut op = accept_op(membership("msig-classical/0"), &json!(stub_lane()));
+        op["args"]["ua"] = json!(h(&ua));
+        refused(run_kind(&a, "ua_metatx", &op).await, "NotVerifiable");
+        assert_eq!(logged(&calls).last().unwrap(), "record_of", "never simulated");
+    }
+
+    /// A `G…` member's acceptance is the member's auth entry: with none the simulation records its signature and the job fails unsent;
+    /// `op.auth` carries it, and the job goes.
+    #[tokio::test]
+    async fn accept_job_needs_a_g_members_entry() {
+        let signer = SorobanAuthorizationEntry {
+            credentials: SorobanCredentials::Address(SorobanAddressCredentials { address: sc(FROM), nonce: 1, signature_expiration_ledger: 1, signature: ScVal::Void }),
+            root_invocation: source_entry(&InvokeContractArgs { contract_address: sc(REGISTRY), function_name: ScSymbol("accept_membership".try_into().unwrap()), args: Default::default() }).root_invocation,
+        };
+        let recorded = signer.to_xdr_base64(Limits::none()).unwrap();
+        let answer: Answer = Arc::new(move |c| match c.function_name.0.as_slice() {
+            b"record_of" => view_ok(ScVal::Void),
+            _ => json!({"results": [{"xdr": ScVal::Void.to_xdr_base64(Limits::none()).unwrap(), "auth": [recorded.clone()]}], "transactionData": data(100, &[])}),
+        });
+        let d = encode_msig(1, &[(0x0011, [0x22; 32], 1)]);
+        let ua = scaas_ua::ua_of(0x0120, &d).unwrap();
+        let records = registry(vec![], vec![(ua, rec(0x0120, &d, true))]);
+        let both: Answer = Arc::new(move |c| if c.function_name.0.as_slice() == b"record_of" { records(c) } else { answer(c) });
+        let (a, calls) = ua8_adapter(both).await;
+        let slot = json!({"name": "g", "ua": h(&ua), "index": 0, "sig": "0x"});
+        refused(run_kind(&a, "ua_metatx", &accept_op(&slot, &NONE)).await, "does not carry");
+        assert_eq!(logged(&calls), ["record_of", "accept_membership"], "simulated, never sent");
+        let mut op = accept_op(&slot, &NONE);
+        op["auth"] = json!([{"payload": cross_payload(), "from": FROM, "signature": sig()}]);
+        run_kind(&a, "ua_metatx", &op).await.unwrap();
+        assert_eq!(logged(&calls), ["record_of", "accept_membership", "SEND"]);
+    }
+
+    /// Free to the client, as a `call` job: in the call share, and no other `ua_metatx` joins it.
+    #[tokio::test]
+    async fn accept_job_is_in_the_call_share() {
+        let (a, _) = ua8_adapter(Arc::new(|_| json!({}))).await;
+        let job = |kind: &str, op: Value| -> Job { serde_json::from_value(json!({"id": 7, "kind": kind, "op": op})).unwrap() };
+        assert!(a.in_call_share(&job("ua_metatx", accept_op(membership("msig-classical/0"), &NONE))));
+        let (c, f, args) = ua_ops(ScVal::Void).remove(0);
+        assert!(!a.in_call_share(&job("ua_metatx", ua_op(c, f, args))));
+        assert!(a.in_call_share(&job("call", json!({}))));
     }
 
     /// `check_recorded_auth` applies, and a call that wants anyone else's authority cannot land: the job carries no entry.

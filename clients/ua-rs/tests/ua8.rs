@@ -1050,6 +1050,36 @@ fn check_refuses_negatives() {
     println!("{refused} negatives refused by their error, {stateful} state-only, {other_entry} not a record");
 }
 
+/// CTR-UA-37, the relayer's check before it attests a slot the chain cannot read: every `memberships` row passes, one change each refuses.
+#[cfg(feature = "pq")]
+#[test]
+fn check_membership_rows() {
+    let p = load("portable.json");
+    for r in arr(&p, "memberships") {
+        let d = bytes(&find(&p, "registrations", "name", &r["msig"])["keyData"]);
+        let ua = b32(&r["ua"]);
+        let index = r["index"].as_u64().unwrap() as u16;
+        let slot = MemberSig { index, key_data: vec![], sig: bytes(&r["sig"]) };
+        let check = |d: &[u8], ua: &[u8; 32], s: &MemberSig| check_membership(d, ua, s, &keys(&p));
+        assert_eq!(check(&d, &ua, &slot), Ok(()), "{}", r["name"]);
+        let mut flipped = slot.clone();
+        flipped.sig[3] ^= 1;
+        assert_eq!(check(&d, &ua, &flipped), Err(UAError::Unauthorized), "{}", r["name"]);
+        assert_eq!(check(&d, &ua, &MemberSig { key_data: vec![1], ..slot.clone() }), Err(UAError::Unauthorized), "{}", r["name"]);
+        assert_eq!(check(&d, &ua, &MemberSig { index: 9, ..slot.clone() }), Err(UAError::Unauthorized), "past the members");
+        let other = MemberSig { index: if index == 0 { 1 } else { 0 }, ..slot.clone() };
+        assert_eq!(check(&d, &ua, &other), Err(UAError::Unauthorized), "{}: another slot's member", r["name"]);
+        assert_eq!(check(&d, &[1; 32], &slot), Err(UAError::Unauthorized), "another id");
+    }
+    let r = &arr(&p, "memberships")[0];
+    let d = bytes(&find(&p, "registrations", "name", &r["msig"])["keyData"]);
+    let contract = [&d[..4], &[0, 2], &d[6..]].concat();
+    let ua = ua_of(0x0120, &contract).unwrap();
+    let slot = MemberSig { index: 0, key_data: vec![], sig: bytes(&r["sig"]) };
+    assert_eq!(check_membership(&contract, &ua, &slot, &keys(&p)), Err(UAError::NotVerifiable), "ERC-1271 runs nowhere here");
+    assert_eq!(check_membership(&d, &b32(&r["ua"]), &MemberSig { index: 0, ..slot }, &|_| None), Err(UAError::MemberUnknown));
+}
+
 /// `check_*` fail closed: each case is one field off a row that passes (the first assert of each block).
 #[cfg(feature = "pq")]
 #[test]

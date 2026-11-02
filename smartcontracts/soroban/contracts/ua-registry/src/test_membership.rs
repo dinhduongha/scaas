@@ -279,7 +279,6 @@ fn a_relayer_checked_slot() {
     m.register(&env, &c, &test::member_sigs(&env, &[m.slot(&env, &q, PURPOSE_POP_V2, &rd)]));
     let fi = m.index(&f.ua.to_array());
     let kem = crate::test_ua8::kem_row_key(&env);
-    let d = kem_record_digest(&env, &m.ua, 1, &kem_pk(&env, &kem)).to_bytes();
     let attested = test::msig_auth(&env, &[(fi, vec![], vec![0xf5; 666])]);
     assert_eq!(err(c.try_set_kem_key(&m.ua, &1, &kem, &attested, &by)), Error::Unauthorized, "the bit is asked before the relayer");
     assert_eq!(err(c.try_set_kem_key(&m.ua, &1, &kem, &attested, &None)), Error::Unauthorized);
