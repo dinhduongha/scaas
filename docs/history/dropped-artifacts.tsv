@@ -1191,3 +1191,8 @@ PqzSafety.requireAllowedChain()	obsolete	the PQZ chain-id allowlist is removed (
 chainid ∈ {31337, 1337, 7622}	obsolete	the PQZ chain-id allowlist is removed (owner ruling 2026-10-31: no chain lock, capability only); the gate is the precompile self-test, contracts/pq-zero-knowledge.md#CTR-PQZ-01; the old code is in smartcontracts/evm/legacy/zether-ungate/
 src/chains/private7622	renamed	smartcontracts/evm/src/chains/scaas-testnet/ (the SCaaS testnet identifier private7622 -> scaas-testnet, owner ruling 2026-10-31), networks/evm.md#NET-EVM-02
 extra.auth = [{from, payload, signature, public_key}]	renamed	extra.auth = [{payload, from, signature}]; the node never read public_key, and a DEX settle is a ua_metatx job with op.auth (N2), networks/soroban.md#NET-SOR-07
+op["valid_until"]	internal-path	`job_tx`; the deadline of a Soroban job, networks/soroban.md#NET-SOR-15
+soroban.rs:325-327	internal-path	line reference of 2026-10-03, `sim_data`, networks/soroban.md#NET-SOR-11
+soroban.rs:368-378	internal-path	line reference of 2026-10-03, `submit`, networks/soroban.md#NET-SOR-14
+:380-387	internal-path	line reference of 2026-10-03, `tx_status`, networks/soroban.md#NET-SOR-14
+soroban.rs:313	internal-path	line reference of 2026-10-03, `job_tx` and `tx_deadline`, networks/soroban.md#NET-SOR-15

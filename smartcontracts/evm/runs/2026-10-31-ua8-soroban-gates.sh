@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 # ua8-soroban Task B9: the closing gates of branch ua8-soroban at one commit (the Soroban round, the typed-signing merge it
 # carries, the node's Soroban jobs and spend stop). Not a copy: it sets the step list, log prefix and test names, then runs
 # 2026-10-27-metatx-split-gates.sh (the same step contract, commands, resume and guard).
@@ -256,6 +257,30 @@ ua-rs-pq|cargo|check_membership_rows
 clientkeys|node|accept_membership (CTR-UA-37): the op a node takes, a row unchanged, the G member's entry
 clientkeys|node|acceptance (CTR-UA-37): every row by hand, the wallet JSON, the native signer, the purpose apart from the records
 clientkeys|node|verifyMembership accepts every row and refuses a flipped byte (ua-rs check_membership_rows)
+forge|forge|test_msigPopLightestInMiddleRefused
+soroban|cargo|msig_pop_lightest_slot_in_the_middle_refused
+soroban|cargo|ua8_instance_ttl
+soroban|cargo|ua8_relayer_register_kem_event_names_it
+soroban|cargo|a_high_s_evm_eoa_slot_is_refused
+cargo-scaas-node|cargo|a_signed_op_deadline_is_bounded
+cargo-scaas-node|cargo|a_past_deadline_ends_on_one_claim
+cargo-scaas-node|cargo|a_lost_transaction_holds_the_lane_for_the_bound_at_most
+cargo-scaas-node|cargo|a_view_the_host_refuses_is_unknown
+cargo-scaas-node|cargo|a_failed_view_read_is_not_unknown
+cargo-scaas-node|cargo|a_failed_sequence_read_puts_the_claimed_job_back
+cargo-scaas-node|cargo|a_ua_metatx_missing_a_native_signer_is_refused_unsent
+cargo-scaas-node|cargo|a_ua_metatx_runs_only_a_listed_mandate_wasm
+cargo-scaas-node|cargo|an_unlisted_mandate_never_reports_consumed
+cargo-scaas-node|cargo|mandate_wasm_hashes_are_a_list_of_hashes
+cargo-scaas-node|cargo|a_job_over_the_resource_fee_cap_is_refused_unsent
+cargo-scaas-node|cargo|a_token_registered_after_the_start_is_served
+cargo-scaas-node|cargo|a_kem_version_may_be_a_decimal_string
+cargo-scaas-node|cargo|store_pqz_pop_over_a_stored_proof_is_refused_unsent
+cargo-scaas-node|cargo|a_re_run_acceptance_is_consumed
+cargo-scaas-node|cargo|a_record_over_the_read_bound_is_the_jobs_answer
+cargo-scaas-node|cargo|deep_xdr_from_an_rpc_is_refused_not_a_stack_overflow
+cargo-scaas-node|cargo|a_rejected_send_past_its_deadline_is_dead
+cargo-scaas-node|cargo|a_failed_sign_puts_the_claimed_job_back
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"
