@@ -59,6 +59,49 @@ contract PipeRegistryMock {
     }
 }
 
+/// `requireAuthorized` answering by `mode`, so the generic path's low-level call and the typed path's high-level call can be read
+/// against each other through the real pipeline.
+contract PipeRegistryProbe {
+    uint256 internal constant SEEN = 0;
+    uint256 internal constant RETURNS_DATA = 1;
+    uint256 internal constant EMPTY_REVERT = 2;
+    uint256 internal constant LONG_REVERT = 3;
+
+    error Seen(uint256 gasReceived, bytes32 dataHash);
+
+    uint256 public mode;
+
+    function setMode(uint256 m) external { mode = m; }
+
+    function longRevert() public pure returns (bytes memory b) {
+        b = new bytes(5001);
+        b[5000] = 0xAB;
+    }
+
+    function requireAuthorized(bytes32, bytes32, bytes32, IUARegistry.UASig calldata) external view {
+        uint256 m = mode;
+        if (m == SEEN) revert Seen(gasleft(), keccak256(msg.data));
+        if (m == RETURNS_DATA) {
+            assembly ("memory-safe") {
+                mstore(0, 7)
+                return(0, 32)
+            }
+        }
+        if (m == EMPTY_REVERT) {
+            assembly ("memory-safe") {
+                revert(0, 0)
+            }
+        }
+        if (m == LONG_REVERT) {
+            bytes memory b = longRevert();
+            assembly ("memory-safe") {
+                revert(add(b, 32), mload(b))
+            }
+        }
+        assert(false);
+    }
+}
+
 /// MtxPipelineLib (metatx split, spec §3.2): the order of every check, the one written slot, the library guard and the
 /// digests against `MetaTxLib`.
 contract MtxPipelineLibTest is Test {
@@ -174,6 +217,68 @@ contract MtxPipelineLibTest is Test {
         h.preCall(c, e, f, true, auth);
         c.registry = address(reg);
         h.preCall(c, e, f, true, auth);
+    }
+
+    uint256 internal constant ROUTE_GAS = 2_000_000;
+
+    /// The same registry on both paths: `preCall` (generic `bytes auth`, the low-level call) and `preTransferUA` (`UASig`, the typed call).
+    function _routes(address r) internal returns (bool okBytes, bytes memory outBytes, bool okTyped, bytes memory outTyped) {
+        MtxPipelineLib.Ctx memory c = _ctx();
+        c.registry = r;
+        MtxPipelineLib.Envelope memory e = _env(UA);
+        MetaTxLib.UAMetaTransfer memory t = _xfer(UA, MetaTxLib.pad(bob));
+        bytes memory viaBytes = abi.encodeCall(PipeHarness.preCall, (c, e, _facts(), true, _uaAuth(e)));
+        bytes memory viaTyped = abi.encodeCall(PipeHarness.preTransfer, (c, t, true, 101, _tauth(t)));
+        (okBytes, outBytes) = address(h).call{gas: ROUTE_GAS}(viaBytes);
+        (okTyped, outTyped) = address(h).call{gas: ROUTE_GAS}(viaTyped);
+    }
+
+    function _refusedAlike(address r, bytes memory want) internal {
+        (bool okBytes, bytes memory outBytes, bool okTyped, bytes memory outTyped) = _routes(r);
+        assertFalse(okBytes, "low-level");
+        assertFalse(okTyped, "typed");
+        assertEq(outBytes, want, "low-level");
+        assertEq(outTyped, want, "typed");
+    }
+
+    function _seen(bytes memory out) internal pure returns (uint256 g, bytes32 d) {
+        assertEq(bytes4(out), PipeRegistryProbe.Seen.selector);
+        assembly ("memory-safe") {
+            g := mload(add(out, 36))
+            d := mload(add(out, 68))
+        }
+    }
+
+    /// The low-level call answers as the typed call it replaced, on every row: the revert data whole, an empty revert, a panic, no code,
+    /// a precompile (no code, and it answers), return data the interface does not declare, the gas forwarded and the bytes sent.
+    function test_authorize_lowLevelAnswersAsTheTypedCall() public {
+        PipeRegistryProbe p = new PipeRegistryProbe();
+
+        _refusedAlike(address(0xC0DE), "");
+        _refusedAlike(address(2), "");
+
+        p.setMode(2);
+        _refusedAlike(address(p), "");
+        p.setMode(3);
+        _refusedAlike(address(p), p.longRevert());
+        p.setMode(4);
+        _refusedAlike(address(p), abi.encodeWithSignature("Panic(uint256)", 1));
+
+        p.setMode(0);
+        (,bytes memory outBytes,, bytes memory outTyped) = _routes(address(p));
+        (uint256 gasBytes, bytes32 dataBytes) = _seen(outBytes);
+        (uint256 gasTyped,) = _seen(outTyped);
+        assertGt(gasBytes, ROUTE_GAS * 9 / 10, "all but 1/64 forwarded");
+        assertApproxEqAbs(gasBytes, gasTyped, 30_000, "as much gas as the typed call");
+        bytes32 digest = h.callDigest(DS, MetaTxLib.UAMETATX_TYPEHASH, _env(UA));
+        IUARegistry.UASig memory s;
+        s.signature = abi.encode(UAKinds.PURPOSE_METATX, digest);
+        assertEq(dataBytes, keccak256(abi.encodeCall(IUARegistry.requireAuthorized, (UA, UAKinds.PURPOSE_METATX, digest, s))), "the typed call's bytes");
+
+        p.setMode(1);
+        (bool okBytes,, bool okTyped,) = _routes(address(p));
+        assertTrue(okBytes, "low-level");
+        assertTrue(okTyped, "typed");
     }
 
     /// UA path: ledger on > envelope > authorize(PURPOSE_METATX) > MetaTxUnknownOp > call shape > fee (UA_POOL).

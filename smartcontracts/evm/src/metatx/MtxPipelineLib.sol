@@ -340,8 +340,9 @@ library MtxPipelineLib {
     {
         if (!UAKinds.inNativeSpace(from)) {
             address r = c.registry;
+            if (r.code.length == 0) revert(); // the typed call's own check, before the call: no code, no authorization
             (bool ok, bytes memory ret) = r.staticcall(UAKinds.uaAuthCall(from, purpose, digest, auth)); // R1 → C2
-            if (ok && r.code.length != 0) return; // no code: no authorization, as the typed call's check
+            if (ok) return;
             assembly ("memory-safe") {
                 revert(add(ret, 32), mload(ret))
             }
