@@ -236,6 +236,14 @@ wallet shows the record's fields, not a hash. Members come typed ([CTR-UA-36](#C
 stored form and there is no second encoding of one signature to refuse. A classical-dominant `msig` has no PoP of its own (its
 members proved theirs) and registers with an empty `pop`.
 
+**Minimal form of a stored `msig` signature** (owner 2026-10-31, U8S-D1: "with `T` = the slots' total weight and `N` the threshold,
+require `T ≥ N` and, for every slot `i`, `T − weight(i) < N` (each slot necessary)"). It applies to the three portable purposes, the
+signatures the registry stores and copies byte for byte (`pop` v2, `kem`, `pqz-key`): `UARegistryLib._msig` on EVM, one pass summing
+`T` and keeping the smallest slot weight `w_min` (accept iff `T ≥ N` and `T − w_min < N`), every slot counting its member's weight,
+native members included. Failure is `UAPoP` in `register` and `UAUnauthorized` in `setKemKey` / `setPqzKey`; no new error, no ABI change.
+A transaction authorisation (`requireAuthorized`, `UARegistry._msig`) is not stored and keeps its rule (a slot after the threshold
+fails). A front-runner that drops a slot from a valid `pop` gets a refusal.
+
 The PQZ key and the KEM record are the fields not implied by `keyData`; the signer's PoP covers their hashes, so a
 front-runner can neither strip them (the PoP over the real hashes fails over the zero record) nor swap them (another key changes the
 hash). The `R_REG` proof is over the same portable record under the kind tag `0x0142`, so it is bound to the signer's

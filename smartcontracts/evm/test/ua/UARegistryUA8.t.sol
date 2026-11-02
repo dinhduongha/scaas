@@ -756,6 +756,121 @@ contract UARegistryUA8Test is UARegistryBase {
         assertEq(UACall.register(a, m.kind, m.keyData, m.attrs, abi.encode(s), m.pqzPop), m.ua);
     }
 
+    // ----- U8S-D1 (owner 2026-10-31): a stored msig signature is minimal, every slot necessary -----
+
+    function _one(IUARegistry.MemberSig memory s) internal pure returns (IUARegistry.MemberSig[] memory one) {
+        one = new IUARegistry.MemberSig[](1);
+        one[0] = s;
+    }
+
+    /// 2-of-(mldsa65#1 w1, mldsa65#2 w2): both slots verify and the old rule passes (1, then 3 >= 2), but the weight-2
+    /// slot alone reaches the threshold. `pop` signs both slots; `d` / `ua` are the structure and its UA.
+    function _notMinimal(Row[] memory rows) internal returns (bytes memory d, bytes32 ua, bytes memory pop) {
+        Member[] memory mm = new Member[](2);
+        mm[0] = Member(UAKinds.MLDSA65, rows[ML65_1].ua, 1);
+        mm[1] = Member(UAKinds.MLDSA65, rows[ML65_1 + 1].ua, 2);
+        d = _msigKey(2, mm);
+        ua = UAKinds.uaOf(UAKinds.MSIG, d);
+        pop = _msigSigs(rows, d, ua, UAKinds.PURPOSE_POP_V2, _regDigest(ua, UAKinds.MSIG), 0, 1, 0);
+    }
+
+    /// The not-minimal `msig` registered by its weight-2 slot alone (the minimal `pop`).
+    function _notMinimalRegistered()
+        internal
+        returns (UARegistry a, Row[] memory rows, bytes memory d, bytes32 ua, IUARegistry.MemberSig[] memory slots)
+    {
+        rows = _rows();
+        _allowAll(rows);
+        bytes memory pop;
+        (d, ua, pop) = _notMinimal(rows);
+        a = _regA(false);
+        _members(a, rows);
+        slots = abi.decode(pop, (IUARegistry.MemberSig[]));
+        assertEq(UACall.register(a, UAKinds.MSIG, d, _none(), abi.encode(_one(slots[1])), ""), ua);
+    }
+
+    /// Both slots verify and the old rule passes, but the weight-2 slot alone reaches the threshold: `UAPoP`. The weight-1
+    /// slot alone is below it; the weight-2 slot alone registers.
+    function test_msigPopNotMinimalRefused() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        (bytes memory d, bytes32 ua, bytes memory pop) = _notMinimal(rows);
+        UARegistry a = _regA(false);
+        _members(a, rows);
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        UACall.register(a, UAKinds.MSIG, d, _none(), pop, "");
+        IUARegistry.MemberSig[] memory s = abi.decode(pop, (IUARegistry.MemberSig[]));
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        UACall.register(a, UAKinds.MSIG, d, _none(), abi.encode(_one(s[0])), "");
+        assertEq(UACall.register(a, UAKinds.MSIG, d, _none(), abi.encode(_one(s[1])), ""), ua);
+    }
+
+    /// The KEM record of that `msig`: both slots are `UAUnauthorized`, the weight-2 slot lands.
+    function test_msigKemSigNotMinimalRefused() public {
+        (UARegistry a, Row[] memory rows, bytes memory d, bytes32 ua,) = _notMinimalRegistered();
+        bytes memory pk = _kemPk(41);
+        bytes memory sig = _msigSigs(rows, d, ua, UAKinds.PURPOSE_KEM, UAKinds.kemRecordDigest(ua, 1, pk), 0, 1, 0);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        a.setKemKey(ua, 1, UACall.kem(pk), UACall.sig(sig));
+        bytes memory one = abi.encode(_one(abi.decode(sig, (IUARegistry.MemberSig[]))[1]));
+        a.setKemKey(ua, 1, UACall.kem(pk), UACall.sig(one));
+        _assertKemAt(a, ua, 1, pk, one);
+    }
+
+    /// The PQZ key record of the same `msig`: both slots are `UAUnauthorized`, the weight-2 slot lands.
+    function test_msigPqzKeySigNotMinimalRefused() public {
+        (UARegistry a, Row[] memory rows, bytes memory d, bytes32 ua,) = _notMinimalRegistered();
+        Row memory x = _pqzRow(rows);
+        bytes32 rd = UAKinds.pqzKeyRecordDigest(ua, _h(x.attrs.pqzKey), x.attrs.pqzPopHash);
+        bytes memory sig = _msigSigs(rows, d, ua, UAKinds.PURPOSE_PQZ_KEY, rd, 0, 1, 0);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        a.setPqzKey(ua, x.attrs.pqzKey, x.attrs.pqzPopHash, UACall.sig(sig));
+        bytes memory one = abi.encode(_one(abi.decode(sig, (IUARegistry.MemberSig[]))[1]));
+        a.setPqzKey(ua, x.attrs.pqzKey, x.attrs.pqzPopHash, UACall.sig(one));
+        assertEq(a.pqzKeySigOf(ua), one);
+    }
+
+    /// U8S-D1 scope: a transaction authorisation is not stored and keeps the old rule: the same redundant set passes
+    /// `requireAuthorized`, as does the weight-2 slot alone.
+    function test_msigRequireAuthorizedKeepsRule() public {
+        (UARegistry a, Row[] memory rows, bytes memory d, bytes32 ua,) = _notMinimalRegistered();
+        bytes32 dg = keccak256("a metatx digest");
+        bytes memory sig = _msigSigs(rows, d, ua, UAKinds.PURPOSE_METATX, dg, 0, 1, 0);
+        a.requireAuthorized(ua, UAKinds.PURPOSE_METATX, dg, UACall.sig(sig));
+        a.requireAuthorized(ua, UAKinds.PURPOSE_METATX, dg, UACall.sig(abi.encode(_one(abi.decode(sig, (IUARegistry.MemberSig[]))[1]))));
+    }
+
+    /// The minimal `pop` of portable.json's `msig-pq-native` (2-of-2) minus either slot is refused, and so is a slot added
+    /// to a minimal `pop` of 2-of-(1, 1, 1): nobody re-shapes a `pop` into another stored one (final review A-m1).
+    function test_msigFrontRunSlotDropRefused() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        Row memory m = rows[MSIG_NATIVE_ROW];
+        UARegistry a = _regA(false);
+        _members(a, rows);
+        IUARegistry.MemberSig[] memory s = abi.decode(m.pop, (IUARegistry.MemberSig[]));
+        for (uint256 i; i < 2; ++i) {
+            vm.expectRevert(IUARegistry.UAPoP.selector);
+            UACall.register(a, m.kind, m.keyData, m.attrs, abi.encode(_one(s[i])), m.pqzPop);
+        }
+        Member[] memory mm = new Member[](3);
+        mm[0] = Member(UAKinds.MLDSA65, rows[ML65_1].ua, 1);
+        mm[1] = Member(UAKinds.MLDSA65, rows[ML65_1 + 1].ua, 1);
+        mm[2] = Member(UAKinds.EVM_EOA, _pad(vm.addr(_nativeSk())), 1);
+        bytes memory d = _msigKey(2, mm);
+        bytes32 ua = UAKinds.uaOf(UAKinds.MSIG, d);
+        bytes32 rd = _regDigest(ua, UAKinds.MSIG);
+        bytes memory pop = _msigSigs(rows, d, ua, UAKinds.PURPOSE_POP_V2, rd, 0, 1, _nativeSk());
+        bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_POP_V2, rd));
+        IUARegistry.MemberSig[] memory p = abi.decode(pop, (IUARegistry.MemberSig[]));
+        IUARegistry.MemberSig[] memory extra = new IUARegistry.MemberSig[](3);
+        (extra[0], extra[1]) = (p[0], p[1]);
+        extra[2] = IUARegistry.MemberSig(2, "", _memberSig(rows, d, 2, md, rd, _nativeSk()));
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        UACall.register(a, UAKinds.MSIG, d, _none(), abi.encode(extra), "");
+        assertEq(UACall.register(a, UAKinds.MSIG, d, _none(), pop, ""), ua);
+    }
+
     /// Review focus 2: stripping or swapping `pqzKey`, `pqzPopHash`, `kemVersion` or `kemPk` (portable.json negatives
     /// with error `UAPoP`) is `UAPoP`.
     function test_ua8_popCoversAttrs() public {
