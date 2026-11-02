@@ -441,19 +441,20 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
                     report(odoo, Report { error: Some(error), ..rep(job, state) }).await;
                     return None;
                 }
-                if let Some(r) = sent.as_ref().err().and_then(|e| e.downcast_ref::<Rejected>()) {
-                    if consumed {
-                        return None;
-                    }
-                    report(odoo, Report { error: Some(r.to_string()), ..rep(job, "queued") }).await;
-                    return Some(r.to_string());
-                }
+                // Before `Rejected`: a job past its deadline back in the queue would be rejected the same way on every claim.
                 if now() > f.valid_until.saturating_add(EXPIRY_GRACE) {
                     // Payload chủ thể đã hết hạn: tx (nếu còn đâu đó) sẽ bị contract từ chối.
                     if !consumed {
                         report(odoo, Report { error: Some("expired before inclusion".into()), ..rep(job, "dead") }).await;
                     }
                     return None;
+                }
+                if let Some(r) = sent.as_ref().err().and_then(|e| e.downcast_ref::<Rejected>()) {
+                    if consumed {
+                        return None;
+                    }
+                    report(odoo, Report { error: Some(r.to_string()), ..rep(job, "queued") }).await;
+                    return Some(r.to_string());
                 }
                 match f.signed {
                     Some(signed) if sent.is_err() && !consumed => match adapter.op_consumed(f.job).await {
@@ -610,8 +611,18 @@ pub(crate) async fn step_once(
             return Ok(Step::Retry(format!("rpc: {r}")));
         }
     };
-    let seq = adapter.sequence(lane).await?;
-    let signed = adapter.sign(built, lane, seq).await?;
+    // Claimed: a failure here is the job's to report, as `Transport`, or it stays claimed with nobody holding it.
+    let signed = async {
+        let seq = adapter.sequence(lane).await?;
+        anyhow::Ok((seq, adapter.sign(built, lane, seq).await?))
+    };
+    let (seq, signed) = match signed.await {
+        Ok(s) => s,
+        Err(e) => {
+            report(odoo, Report { error: Some(format!("before signing: {e:#}")), ..rep(job.id, "queued") }).await;
+            return Ok(Step::Retry(format!("before signing: {e:#}")));
+        }
+    };
     let signer = adapter.lanes()[lane].address.clone();
     // Journal TRƯỚC khi gửi (review I5): không ghi được thì không gửi, job về hàng đợi.
     if !report(odoo, Report { tx_hash: Some(signed.tx_id.clone()), outer_nonce: Some(seq), signer_address: Some(signer), ..rep(job.id, "signed") }).await {
@@ -948,6 +959,12 @@ pub(crate) mod tests {
         subject: Option<alloy::primitives::B256>,
         /// `submit` answers `Refused`.
         refused: bool,
+        /// `submit` answers `Rejected`.
+        rejected: bool,
+        /// `build`'s deadline, past: `now() - 600`.
+        expired: bool,
+        /// `sign` fails.
+        unsignable: bool,
     }
 
     fn racy(build_revert: bool, consumed: Option<bool>, sends: &[bool], statuses: &[TxStatus]) -> Racy {
@@ -962,6 +979,9 @@ pub(crate) mod tests {
             consumed_unreadable: Default::default(),
             subject: None,
             refused: false,
+            rejected: false,
+            expired: false,
+            unsignable: false,
         }
     }
 
@@ -981,15 +1001,21 @@ pub(crate) mod tests {
             if self.build_revert {
                 return Err(SimError::Revert("lane nonce already used".into()));
             }
-            Ok(Built { job_id: job.id, body: vec![], valid_until: now() + 600, meta: Value::Null })
+            Ok(Built { job_id: job.id, body: vec![], valid_until: if self.expired { now() - 600 } else { now() + 600 }, meta: Value::Null })
         }
         async fn sign(&self, b: Built, _: usize, sequence: u64) -> Result<Signed> {
+            if self.unsignable {
+                anyhow::bail!("signer down");
+            }
             Ok(Signed { job_id: b.job_id, tx_id: "0x0f".into(), raw: vec![], valid_until: b.valid_until, sequence })
         }
         async fn submit(&self, _: &Signed) -> Result<()> {
             self.submits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             if self.refused {
                 return Err(Refused("for good".into()).into());
+            }
+            if self.rejected {
+                return Err(Rejected("txTOO_LATE".into()).into());
             }
             match self.sends.lock().unwrap().pop_front() {
                 Some(true) => Ok(()),
@@ -1043,6 +1069,28 @@ pub(crate) mod tests {
         tokio::time::timeout(Duration::from_secs(10), step).await.expect("lane held").unwrap();
         let states = o.lock().unwrap().reports.iter().map(|r| r["chain_state"].as_str().unwrap().to_string()).collect();
         (states, o)
+    }
+
+    /// A send rejected past the job's deadline: every claim would be rejected the same way, so `dead`, not back at the head of the queue.
+    /// Inside the deadline `Rejected` stays a free requeue.
+    #[tokio::test]
+    async fn a_rejected_send_past_its_deadline_is_dead() {
+        let a = Racy { rejected: true, expired: true, ..racy(false, Some(false), &[], &[TxStatus::Unknown]) };
+        let (states, o) = race(&a, &InflightSet::default()).await;
+        assert_eq!(states, ["signed", "dead"]);
+        assert_eq!(o.lock().unwrap().reports[1]["error"], "expired before inclusion");
+        let a = Racy { rejected: true, ..racy(false, Some(false), &[], &[TxStatus::Unknown]) };
+        assert_eq!(race(&a, &InflightSet::default()).await.0, ["signed", "queued"]);
+    }
+
+    /// A failure between the claim and the journal, on any family: the job goes back with its reason, or it stays claimed with no report.
+    #[tokio::test]
+    async fn a_failed_sign_puts_the_claimed_job_back() {
+        let a = Racy { unsignable: true, ..racy(false, Some(false), &[], &[TxStatus::Unknown]) };
+        let (states, o) = race(&a, &InflightSet::default()).await;
+        assert_eq!(states, ["queued"]);
+        assert!(o.lock().unwrap().reports[0]["error"].as_str().unwrap().contains("signer down"));
+        assert_eq!(a.submits.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
     /// R80 (§8.4 `follow`): đã tiêu thụ trước lần gửi lại ⇒ `consumed`, KHÔNG gửi lại, vẫn theo tx tới trạng thái cuối

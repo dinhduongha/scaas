@@ -271,6 +271,7 @@ impl Node {
         cfg.params.insert("relay_fee".into(), rf.into());
         cfg.params.insert("dex".into(), st.dex.clone().into());
         cfg.params.insert("ua_registry".into(), st.registry.clone().into());
+        cfg.params.insert("mandate_wasm_hashes".into(), toml::Value::Array(vec![wasm_hash("mandate").into()]));
         let adapter = SorobanAdapter::new(&cfg, &[key(0), key(1)]).unwrap();
         assert_eq!(adapter.lanes()[0].address, g(&key(0)));
         Node { state, odoo, adapter }
@@ -481,6 +482,10 @@ async fn e2e_soroban_ua_mandate_pays_ua_payee() {
     let d = digest(&st.mandate, "mtx_mandate_pay", &[addr(&st.token), h_ua(&ml), i128v(5_000), bytes(&pay_ref), ScVal::U64(epoch), ScVal::U64(vu), ScVal::Void]);
     let args = json!({"token": st.token, "payee": {"Ua": ua0x(&ml)}, "amount": "5000", "pay_ref": ua0x(&pay_ref), "epoch": epoch, "valid_until": vu, "relayer": null,
                       "auth": PASSKEY.sign(&d, "metatx")});
+    // the executable read through the real RPC: another contract's Wasm is refused, with the same job
+    let (state, last) = node.run(1, ua_job(402, &st.token, "mtx_mandate_pay", args.clone(), vec![])).await;
+    assert_eq!(state, "dead", "{last}");
+    assert!(last["error"].as_str().unwrap().contains("MANDATE_WASM_REFUSED"), "{last}");
     let tx = node.mined("mtx_mandate_pay passkey delegate -> mldsa65 payee", 1, ua_job(401, &st.mandate, "mtx_mandate_pay", args, vec![])).await;
     assert_eq!(view_i128(&st.token, "ua_balance", &["--ua", &hx(&ml)]), before + 5_000);
     assert_eq!(view(&st.mandate, "paid", &["--pay_ref", &hx(&pay_ref)]), "true");
@@ -636,7 +641,7 @@ async fn e2e_soroban_ua_member_accepts_then_counts() {
     assert!(member_accepted(st, &ua, 1));
     let (state, last) = node.run(0, job(915, &m[1], s1)).await;
     println!("MA a repeat: job {state}, reason {}", last["error"]);
-    assert_eq!(state, "dead", "{last}");
+    assert_eq!(state, "consumed", "{last}");
     assert!(report_of(&node.state.lock().unwrap(), 915, "signed").is_null(), "never signed");
     let before = view_i128(&st.token, "ua_balance", &["--ua", &hx(&to)]);
     node.mined("ua_pay by the msig, its two slots accepted", 0, pay(916)).await;

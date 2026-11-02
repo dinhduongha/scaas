@@ -15,5 +15,3 @@ soroban-sdk = { workspace = true }
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
 serde_json = { workspace = true }
-# B0: the msig member signatures of the unit tests (already in the lock through soroban-env-host, no new package)
-ml-dsa = { version = "=0.1.1", default-features = false, features = ["alloc"] }

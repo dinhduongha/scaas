@@ -596,6 +596,16 @@ fn portable_msig_rows_minimal() {
     assert_eq!(sig_indexes(&bytes(&r["pop"])), [0, 1]);
     assert_eq!(ua8::msig_slots_minimal(&kd, &[0, 1]), Ok(false));
     assert_eq!(ua8::msig_slots_minimal(&kd, &[1]), Ok(true), "the weight-2 slot alone is the minimal set");
+    // the builder never makes a set the registry refuses, as `portableMemberSigs`; the minimal set builds
+    let slot = |index| MemberSig { index, key_data: vec![], sig: vec![1] };
+    let input = |members| RegistrationInput { kind: 0x0120, key_data: kd.clone(), members, ..Default::default() };
+    assert_eq!(registration_args(&input(vec![slot(0), slot(1)])), Err(UAError::Pop));
+    assert!(registration_args(&input(vec![slot(1)])).is_ok());
+    assert!(registration_args(&input(vec![])).is_ok(), "an empty pop is a registry rule of its own");
+    // the lightest slot is not the first: T - weight(0) = 4 < 5 alone would pass, T - weight(1) = 5 refuses
+    let light = bytes(&neg["lightestInMiddle"]["keyData"]);
+    assert_eq!(ua8::msig_slots_minimal(&light, &[0, 1, 2]), Ok(false));
+    assert_eq!(ua8::msig_slots_minimal(&light, &[0, 2]), Ok(true));
 }
 
 // --- typed-signing R1: the registry's explicit arguments (TS-D10 … TS-D12; owner KEM rulings 2026-10-31) ---

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! MA-S, CTR-UA-37 on Soroban (owner 2026-11-02): listing in an `msig` is no consent, a member accepts, and at verify only accepted
 //! members count. `portable.json` `memberships` are the rows EVM verifies, read here unchanged.
 extern crate std;
@@ -305,6 +306,31 @@ fn a_relayer_checked_slot() {
     assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &n(&env, [1; 32]), &attested)), Error::Unauthorized, "an attestation is never a signature");
 }
 
+/// Owner 2026-11-02: a listed relayer's junk takes the slot for good, on that registry: the member's real acceptance is a no-op, and the junk
+/// stays, its relayer named. The bound: nothing counts it as a signature, and a client's re-check refuses its bytes (CTR-UA-34 rule 6).
+#[test]
+fn a_listed_relayers_junk_acceptance_is_write_once() {
+    let (env, c, by) = relayed();
+    let f = portable(&env, "fndsa512");
+    f.on_by(&c, &by);
+    let q = test::ml(61);
+    q.register(&env, &c);
+    let m = msig(&env, 1, &[(0x0132, f.ua.to_array(), 1), (0x0131, q.ua(&env).to_array(), 1)]);
+    let rd = test::reg_digest(&env, &m.ua, 0x0120);
+    m.register(&env, &c, &test::member_sigs(&env, &[m.slot(&env, &q, PURPOSE_POP_V2, &rd)]));
+    let fi = m.index(&f.ua.to_array());
+    let junk = MemberSig { index: fi, key_data: Bytes::new(&env), sig: b(&env, &[0xf5; 666]) };
+    c.accept_membership(&m.ua, &junk, &by);
+    let real = MemberSig { index: fi, key_data: Bytes::new(&env), sig: b(&env, &[0xaa; 666]) }; // stands for the member's real signature
+    c.accept_membership(&m.ua, &real, &by);
+    assert_eq!(env.events().all().events().len(), 0, "a no-op");
+    assert_eq!(c.membership_sig_of(&m.ua, &fi), junk.sig, "the junk stays for good");
+    assert_eq!(c.member_checked(&m.ua, &fi), Checked::Relayer(by.clone().unwrap()), "its relayer named");
+    let auth = test::msig_auth(&env, &[(fi, vec![], vec![0xf5; 666])]);
+    let pm = n(&env, PURPOSE_METATX);
+    assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &n(&env, [1; 32]), &auth)), Error::Unauthorized, "the slot never signs");
+}
+
 /// The attestation binds every argument of `accept_membership` under its own name (`attest_digest`): another slot, another signature,
 /// another `ua`, another relayer or another function's digest does not pass, and the changed call stores on its own attestation.
 #[test]
@@ -547,6 +573,29 @@ fn ttl_and_size_of_the_entry() {
     let size = entry.clone().to_xdr(&env).len();
     assert!(size <= 1_024, "{size} B");
     assert_eq!(crate::AcceptedEntry::from_xdr(&env, &entry.to_xdr(&env)).unwrap().0, 0xffff);
+}
+
+/// The high-s twin of a good `evm-eoa` signature accepts nothing: the low-s rule of every native signature holds here too.
+#[test]
+fn a_high_s_evm_eoa_slot_is_refused() {
+    let (env, c) = test::setup();
+    let (k, e) = (test::k1(6), test::ed(7));
+    e.register(&env, &c);
+    let id = test::eoa(&env, &k);
+    let m = msig(&env, 1, &[(0x0001, id, 1), (0x0102, e.ua(&env).to_array(), 2)]);
+    m.register(&env, &c, &NO_SLOTS(&env));
+    let good = test::k1_sign(&k, &m.membership(&env, &id).to_array());
+    const N: [u8; 32] = h32("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
+    let (mut high, mut borrow) = (good.clone(), 0i32);
+    for j in (0..32).rev() {
+        let d = N[j] as i32 - good[32 + j] as i32 - borrow;
+        high[32 + j] = (d & 0xff) as u8;
+        borrow = (d < 0) as i32;
+    }
+    high[64] = 27 + 28 - good[64];
+    let slot = |sig: StdVec<u8>| MemberSig { index: m.index(&id), key_data: Bytes::new(&env), sig: b(&env, &sig) };
+    assert_eq!(err(c.try_accept_membership(&m.ua, &slot(high), &None)), Error::Unauthorized);
+    c.accept_membership(&m.ua, &slot(good), &None);
 }
 
 /// What the rows cover: `evm-eoa`, a `Chain` kind and a relayer-checked kind each, so `rows_accept_unchanged` walks every path of a slot.

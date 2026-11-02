@@ -66,7 +66,7 @@ test('soroban ua-ops.json reproduced byte for byte', () => {
   assert.equal(uaOpsJson(), TEXT);
   assert.equal(V.network.networkId, hex(sor.networkId(V.network.passphrase)));
   assert.deepEqual(V.entries.map((e) => e.name), ['ua_transfer', 'ua_pay', 'ua_pay_meta', 'ua_burn', 'ua_cancel_nonce',
-    'ua_order', 'ua_cancel', 'ua_relay', 'mtx_mandate_pay', 'mtx_set_mandate', 'mtx_set_payee', 'mtx_revoke', 'mtx_withdraw']);
+    'ua_order', 'ua_cancel', 'ua_relay', 'ua_pay_lane', 'mtx_mandate_pay', 'mtx_set_mandate', 'mtx_set_payee', 'mtx_revoke', 'mtx_withdraw']);
   for (const e of V.entries) {
     assert.deepEqual(e.perKind.map((p) => p.kind), ['webauthn-p256', 'p256', 'ed25519', 'secp256k1', 'mldsa44', 'mldsa65', 'msig'], e.name);
   }
@@ -120,11 +120,16 @@ test('soroban ua-ops: every auth verifies under its kind', () => {
       const other = ua.uaMessage(r.kind, B(e.purposeTag), sha256(d));
       assert.equal(r.kind === 0x0120 ? msigOk(r, hex(ua.memberDigest(B(r.ua), other)), p.auth, keyOf) : sigOk(r.kind, r.keyData, hex(other), p.auth), false, what);
       // a UA argument is the signer's own id (from / ua / order.maker), never another's
-      if (['ua_transfer', 'ua_pay', 'ua_pay_meta', 'ua_burn', 'ua_cancel_nonce', 'ua_relay'].includes(e.name)) {
+      if (['ua_transfer', 'ua_pay', 'ua_pay_meta', 'ua_burn', 'ua_cancel_nonce', 'ua_relay', 'ua_pay_lane'].includes(e.name)) {
         assert.equal(p.args[0].xdr, hex(sor.scvalXdr(sor.bytesN(B(p.ua)))), what);
       }
     }
   }
+  // ua_pay_lane: Some(lane) is the address itself, and the digest differs from the same op with None
+  const bound = V.entries.find((e) => e.name === 'ua_pay_lane').perKind[0];
+  assert.deepEqual(bound.args.at(-1), { name: 'relayer', type: 'Option<Address>', xdr: hex(sor.scvalXdr(sor.addr('GCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIQAN7'))) });
+  assert.notEqual(hex(sor.opDigest({ networkId: B(V.network.networkId), contract: V.contracts.token, fn: 'ua_pay',
+    args: [...bound.args.slice(0, -1).map((x) => ({ xdr: B(x.xdr) })), sor.none()] })), bound.digest);
   // ua_relay: the inner ua_pay's pay_ref is the router's relay_ref, relayer = Some(router)
   const relay = V.entries.find((e) => e.name === 'ua_relay');
   for (const p of relay.perKind) {

@@ -77,7 +77,7 @@
    Compiling itoa v1.0.18
    Compiling memchr v2.8.3
    Compiling foldhash v0.2.0
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/clients/ua-rs)
+   Compiling scaas-ua v0.1.0 (clients/ua-rs)
    Compiling hex v0.4.3
 error[E0425]: cannot find function `msig_slots_minimal` in module `ua8`
    --> tests/ua8.rs:349:25

@@ -1,7 +1,7 @@
 # RED at ec4912a5 + B4 tests + stub entries (register_musig2, register_frost, ua_of_musig2, ua_of_frost refuse KindDisabled); lines capped at 300 characters
 $ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry -p scaas-token --no-fail-fast
-   Compiling scaas-ua-registry v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/ua-registry)
-   Compiling scaas-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/token)
+   Compiling scaas-ua-registry v0.1.0 (smartcontracts/soroban/contracts/ua-registry)
+   Compiling scaas-token v0.1.0 (smartcontracts/soroban/contracts/token)
 warning: use of deprecated method `soroban_sdk::ledger::Ledger::protocol_version`: Protocol version won't be available in the future
   --> contracts/token/src/test.rs:50:40
    |
@@ -52,7 +52,7 @@ failures:
 
 ---- test_ua::ua8_relayer_checked_ua_authorises_nothing stdout ----
 
-thread 'test_ua::ua8_relayer_checked_ua_authorises_nothing' (278799) panicked at /home/ha/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+thread 'test_ua::ua8_relayer_checked_ua_authorises_nothing' (278799) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
 HostError: Error(Contract, #1)
 
 Event log (newest first):
@@ -214,7 +214,7 @@ Writing test snapshot file for test "test_ua8::ua8_kem_rules" to "test_snapshots
 
 ---- test_ua8::ua8_register_relayer_slots_largest_fit stdout ----
 
-thread 'test_ua8::ua8_register_relayer_slots_largest_fit' (278878) panicked at /home/ha/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+thread 'test_ua8::ua8_register_relayer_slots_largest_fit' (278878) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
 HostError: Error(Contract, #1)
 
 Event log (newest first):
@@ -229,7 +229,7 @@ Writing test snapshot file for test "test_ua8::ua8_register_relayer_slots_larges
 
 ---- test_ua8::ua8_register_relayer_slots_over_limit stdout ----
 
-thread 'test_ua8::ua8_register_relayer_slots_over_limit' (278879) panicked at /home/ha/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+thread 'test_ua8::ua8_register_relayer_slots_over_limit' (278879) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
 HostError: Error(Contract, #1)
 
 Event log (newest first):
@@ -388,7 +388,7 @@ Writing test snapshot file for test "test_ua8::ua8_set_pqz_key_negatives" to "te
 
 ---- test_ua8::ua8_set_pqz_key_relayer_slots_largest_fit stdout ----
 
-thread 'test_ua8::ua8_set_pqz_key_relayer_slots_largest_fit' (278976) panicked at /home/ha/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+thread 'test_ua8::ua8_set_pqz_key_relayer_slots_largest_fit' (278976) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
 HostError: Error(Contract, #1)
 
 Event log (newest first):
@@ -403,7 +403,7 @@ Writing test snapshot file for test "test_ua8::ua8_set_pqz_key_relayer_slots_lar
 
 ---- test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2048 stdout ----
 
-thread 'test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2048' (278977) panicked at /home/ha/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+thread 'test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2048' (278977) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
 HostError: Error(Contract, #1)
 
 Event log (newest first):
@@ -420,7 +420,7 @@ note: panic did not contain expected string
  expected substring: "contract data entry"
 ---- test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2816 stdout ----
 
-thread 'test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2816' (278978) panicked at /home/ha/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+thread 'test_ua8::ua8_set_pqz_key_relayer_slots_over_limit_n2816' (278978) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
 HostError: Error(Contract, #1)
 
 Event log (newest first):

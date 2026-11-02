@@ -618,6 +618,14 @@ test('portable.json msig rows are minimal', () => {
   assert.ok(msigOk(r, r.memberDigest, r.pop, keyOf, B(r.registrationDigest)), 'every member signature verifies; 1, then 3 >= 2 (the old rule)');
   assert.equal(ua.msigSlotsMinimal(r.keyData, [0, 1]), false);
   assert.equal(ua.msigSlotsMinimal(r.keyData, [1]), true, 'the weight-2 slot alone is the minimal set');
+  assert.throws(() => ua.registrationArgs({ ...regInput(r), pop: ix(r.pop).map((index) => ({ index, sig: '0x01' })) }), { code: 'UAPoP' }, 'never built');
+  assert.equal(ua.registrationArgs({ ...regInput(r), pop: [{ index: 1, sig: '0x01' }] }).args.pop.length, 1);
+  // the lightest slot is not the first: every slot verifies, T - weight(0) = 4 < 5 alone would pass, T - weight(1) = 5 refuses
+  const light = neg.lightestInMiddle;
+  assert.deepEqual([light.threshold, light.members.map((m) => m.weight), ix(light.pop)], [5, [2, 1, 3], [0, 1, 2]]);
+  assert.ok(msigOk(light, light.memberDigest, light.pop, keyOf, B(light.registrationDigest)), 'every member signature verifies');
+  assert.equal(ua.msigSlotsMinimal(light.keyData, [0, 1, 2]), false);
+  assert.equal(ua.msigSlotsMinimal(light.keyData, [0, 2]), true);
 });
 
 // --- typed-signing R1: the registry's explicit arguments (TS-D10 … TS-D12; owner KEM rulings 2026-10-31) ---

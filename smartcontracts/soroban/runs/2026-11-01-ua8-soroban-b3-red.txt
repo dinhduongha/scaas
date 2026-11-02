@@ -1,6 +1,6 @@
 # B3 RED at commit e75da3fc + B3 tests + stub entries (set_kem_key / set_pqz_key / store_pqz_pop panic NotRegistered, views empty)
 $ scripts/capped cargo test -j2 --manifest-path smartcontracts/soroban/Cargo.toml -p scaas-ua-registry
-   Compiling scaas-ua-registry v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/ua-registry)
+   Compiling scaas-ua-registry v0.1.0 (smartcontracts/soroban/contracts/ua-registry)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 3.68s
      Running unittests src/lib.rs (smartcontracts/soroban/target/debug/deps/scaas_ua_registry-c54d5d54c1d28043)
 
@@ -169,7 +169,7 @@ Writing test snapshot file for test "test_ua8::ua8_portable_sig_fields" to "test
 
 ---- test_ua8::ua8_pqz_bytes_in_state stdout ----
 
-thread 'test_ua8::ua8_pqz_bytes_in_state' (210262) panicked at /home/ha/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-30.0.0-rc.1/src/unwrap.rs:46:14:
+thread 'test_ua8::ua8_pqz_bytes_in_state' (210262) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-30.0.0-rc.1/src/unwrap.rs:46:14:
 called `Result::unwrap()` on an `Err` value: HostError: Error(Object, UnexpectedSize)
 
 Event log (newest first):
@@ -213,7 +213,7 @@ Writing test snapshot file for test "test_ua8::ua8_set_pqz_key_negatives" to "te
 
 ---- test_ua8::ua8_store_pqz_pop_hash_checked stdout ----
 
-thread 'test_ua8::ua8_store_pqz_pop_hash_checked' (210348) panicked at /home/ha/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+thread 'test_ua8::ua8_store_pqz_pop_hash_checked' (210348) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
 HostError: Error(Contract, #9)
 
 Event log (newest first):
@@ -242,7 +242,7 @@ Writing test snapshot file for test "test_ua8::ua8_set_pqz_key_rules" to "test_s
 
 ---- test_ua8::ua8_store_pqz_pop_idempotent stdout ----
 
-thread 'test_ua8::ua8_store_pqz_pop_idempotent' (210349) panicked at /home/ha/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+thread 'test_ua8::ua8_store_pqz_pop_idempotent' (210349) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
 HostError: Error(Contract, #9)
 
 Event log (newest first):
@@ -273,7 +273,7 @@ Writing test snapshot file for test "test_ua8::ua8_views_of_register" to "test_s
 
 ---- test_ua8::ua8_set_pqz_key_msig_largest_fits stdout ----
 
-thread 'test_ua8::ua8_set_pqz_key_msig_largest_fits' (210279) panicked at /home/ha/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+thread 'test_ua8::ua8_set_pqz_key_msig_largest_fits' (210279) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
 HostError: Error(Contract, #9)
 
 Event log (newest first):
@@ -288,7 +288,7 @@ Writing test snapshot file for test "test_ua8::ua8_set_pqz_key_msig_largest_fits
 
 ---- test_ua8::ua8_set_pqz_key_msig_over_limit_n2816 stdout ----
 
-thread 'test_ua8::ua8_set_pqz_key_msig_over_limit_n2816' (210319) panicked at /home/ha/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+thread 'test_ua8::ua8_set_pqz_key_msig_over_limit_n2816' (210319) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
 HostError: Error(Contract, #9)
 
 Event log (newest first):
@@ -305,7 +305,7 @@ note: panic did not contain expected string
  expected substring: "contract data entry"
 ---- test_ua8::ua8_set_pqz_key_msig_over_limit_n2048 stdout ----
 
-thread 'test_ua8::ua8_set_pqz_key_msig_over_limit_n2048' (210280) panicked at /home/ha/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
+thread 'test_ua8::ua8_set_pqz_key_msig_over_limit_n2048' (210280) panicked at <cargo>/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
 HostError: Error(Contract, #9)
 
 Event log (newest first):

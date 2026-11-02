@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! `scaas_ua::pq` (feature `pq`: ml-dsa, slh-dsa, pqcrypto-falcon) against the PQ vectors of smartcontracts/vectors/ua: the
 //! deterministic keys and signatures of pq_kat.json with their mutations, the published vectors of pq_external.json (ACVP,
 //! the EIP-8051 / EIP-8355 rows, Falcon KATs) and pq_signatures.json. Every vector was written by noble (or imported and

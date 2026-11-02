@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 // The test side of src/ua-verify.js (the verifiers themselves), shared by test/ua-sig.test.js (signatures.json), test/ua8.test.js
 // (portable.json) and test/soroban.test.js (ua-ops.json): the lenient msig reading of transaction authorisations.
 import { B, bytesAt, wordAt, kindVerify, nativeOk } from '../src/ua-verify.js';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! B2, B3 (U8S-D3–D7): `register` with PQZ / KEM attributes and the later writes against `portable.json` (the authority
 //! for bytes): the bytes stay in contract state, unproven, and `registration_of` returns exactly the `register` arguments,
 //! as EVM `registrationOf`. B4 (U8S-D8, UA8-D18–D20): the relayer-checked mode, a listed relayer's auth mocked. B7 (C15): the
@@ -7,7 +8,7 @@ use std::{format, vec, vec::Vec as StdVec};
 
 use serde_json::Value;
 use soroban_sdk::{
-    testutils::{storage::Persistent as _, Address as _, Events as _, Ledger as _, MockAuth, MockAuthInvoke},
+    testutils::{storage::{Instance as _, Persistent as _}, Address as _, Events as _, Ledger as _, MockAuth, MockAuthInvoke},
     xdr::{Limits, WriteXdr},
     Address, Bytes, BytesN, Env, Event as _, IntoVal, Vec as SVec,
 };
@@ -337,6 +338,32 @@ fn ua8_ua_of_typed() {
     assert_eq!(err(c.try_ua_of_msig(&MsigStructure { threshold: 0x1_0002, ..s })), Error::KeyData);
 }
 
+/// EVM `msigOf` and `webAuthnKeyOf` on the bytes EVM's `test_typedViewsMatchTheRows` reads: each view is its row's typed `args`, whatever form
+/// registered it, and the empty form for an id of another kind or no record. `ua8_relayer_group_kinds_typed` has the MuSig2 and FROST views.
+#[test]
+fn ua8_typed_views_match_the_rows() {
+    let (env, c) = setup();
+    let none = Bytes::new(&env);
+    let (no_key, no_msig) = (WebAuthnKey { x: n(&env, [0; 32]), y: n(&env, [0; 32]), rp_id_hash: n(&env, [0; 32]) }, MsigStructure { threshold: 0, members: SVec::new(&env) });
+    let row = derived(PORTABLE, "registrations", "webauthn-p256");
+    let r = portable_row(&env, &row);
+    assert_eq!((c.web_authn_key_of(&r.ua), c.msig_of(&r.ua)), (no_key.clone(), no_msig.clone()), "no record");
+    r.on(&c);
+    let a = &row["args"]["key"];
+    assert_eq!(c.web_authn_key_of(&r.ua), WebAuthnKey { x: n32(&env, &a["x"]), y: n32(&env, &a["y"]), rp_id_hash: n32(&env, &a["rpIdHash"]) });
+    assert_eq!(c.msig_of(&r.ua), no_msig);
+    assert_eq!((c.mu_sig2_key_of(&r.ua).agg_key, c.frost_key_of(&r.ua).group_key), (none.clone(), none));
+    let (env2, c2, m) = registered(&format!("msig-pq/{SET}"));
+    let row = derived(PORTABLE, "registrations", &format!("msig-pq/{SET}"));
+    let want = &row["args"]["structure"];
+    let got = c2.msig_of(&m.ua);
+    assert_eq!(got.threshold as u64, want["threshold"].as_u64().unwrap());
+    let members: StdVec<(u32, BytesN<32>, u32)> = got.members.iter().map(|x| (x.kind, x.id, x.weight)).collect();
+    let rows: StdVec<(u32, BytesN<32>, u32)> = want["members"].as_array().unwrap().iter().map(|x| (kind_of(&x["kind"]), n32(&env2, &x["id"]), kind_of(&x["weight"]))).collect();
+    assert_eq!(members, rows);
+    assert_eq!(c2.web_authn_key_of(&m.ua).x, n(&env2, [0; 32]));
+}
+
 /// TS-D13: `register_webauthn` from the row's typed `args.key` is the packed `register`: the same id, the same record.
 #[test]
 fn ua8_register_webauthn_typed() {
@@ -461,6 +488,24 @@ fn ua8_entries_extend_ttl() {
     for k in &keys {
         assert_eq!(ttl(k), 60 * DAY, "extended on read");
     }
+}
+
+/// Every write extends the contract's instance, `relayers()` too, and no other view: the list stays live while the registry is used.
+#[test]
+fn ua8_instance_ttl() {
+    let (env, c) = setup();
+    let ttl = || env.as_contract(&c.address, || env.storage().instance().get_ttl());
+    assert_eq!(ttl(), 60 * DAY, "from the constructor");
+    env.ledger().with_mut(|l| l.sequence_number += 31 * DAY);
+    let r = portable(&env, "mldsa65#1");
+    assert_eq!(c.record_of(&r.ua), None);
+    assert_eq!(ttl(), 29 * DAY, "a view leaves it");
+    r.on(&c);
+    assert_eq!(ttl(), 60 * DAY, "extended by the write");
+    env.ledger().with_mut(|l| l.sequence_number += 31 * DAY);
+    assert_eq!(ttl(), 29 * DAY);
+    c.relayers();
+    assert_eq!(ttl(), 60 * DAY, "`relayers()` extends it");
 }
 
 /// `Attrs` keeps its code point, unused: T3's refused cases now register, or are their own error (`register_attrs_accepted`).
@@ -1537,12 +1582,38 @@ fn ua8_relayer_register_parts_take_pop_checked() {
     r.attrs.pqz_key = portable(&env, &format!("mldsa65/{SET}")).attrs.pqz_key;
     r.attrs.pqz_pop_hash = n(&env, [9; 32]);
     r.on_by(&c, &by);
+    let pqz = UaPqzKeySet {
+        ua: r.ua.clone(),
+        pqz_key_hash: pqz_key_hash(&env, &r.attrs.pqz_key),
+        pqz_pop_hash: r.attrs.pqz_pop_hash.clone(),
+        sig_hash: env.crypto().keccak256(&Bytes::new(&env)).into(),
+        checked: m.clone(),
+    };
+    assert!(env.events().all().events().contains(&pqz.to_xdr(&env, &c.address)), "the PQZ event names the relayer");
     assert_eq!(c.pqz_key_of(&r.ua).unwrap().3, m);
     assert_eq!(c.kem_key_of(&r.ua), None);
     c.set_kem_key(&r.ua, &0, &whole, &UaSig::none(&env), &None);
     assert!(env.auths().is_empty());
     assert_eq!(c.kem_key_of(&r.ua), Some((0, whole.clone(), Bytes::new(&env), m.clone())));
     assert_eq!(c.checked_of(&r.ua), (m.clone(), Checked::None, m));
+}
+
+/// `register`'s KEM event names the relayer too, with the full key in the call.
+#[test]
+fn ua8_relayer_register_kem_event_names_it() {
+    let (env, c, by) = relayed();
+    let m = marked(&by);
+    let r = portable(&env, "fndsa512");
+    r.on_by(&c, &by);
+    let kem = UaKemKeySet {
+        ua: r.ua.clone(),
+        version: 0,
+        kem_pk_hash: env.crypto().keccak256(&kem_pk(&env, &r.attrs.kem)).into(),
+        sig_hash: env.crypto().keccak256(&Bytes::new(&env)).into(),
+        checked: m.clone(),
+    };
+    assert!(env.events().all().events().contains(&kem.to_xdr(&env, &c.address)));
+    assert_eq!(c.kem_key_of(&r.ua).unwrap().3, m);
 }
 
 /// P11.6: a listed relayer that stores a bad record takes that write-once slot, on all three writes: the bytes it stored stay
@@ -1679,6 +1750,12 @@ fn ua8_relayer_group_kinds_typed() {
         let rec = c.record_of(&ua).unwrap();
         assert_eq!((rec.key_data, rec.pop_checked, rec.signable), (b(&env, &kd), marked(&by), false), "{}", row["name"]);
         assert_eq!(c.key_owner(&n32(&env, &row["keyHash"])), Some(ua.clone()), "{}", row["name"]);
+        let empty = (MuSig2Key { agg_key: none.clone(), member_keys: SVec::new(&env) }, FrostKey { group_key: none.clone(), threshold: 0, members: SVec::new(&env) });
+        if kind == 0x0110 || kind == 0x0112 {
+            assert_eq!((c.mu_sig2_key_of(&ua), c.frost_key_of(&ua)), (musig2_of(&env, &kd, size), empty.1), "{}", row["name"]);
+        } else {
+            assert_eq!((c.mu_sig2_key_of(&ua), c.frost_key_of(&ua)), (empty.0, frost_of(&env, &kd, size)), "{}", row["name"]);
+        }
         let packed = c.try_register(&kind, &b(&env, &kd), &attrs, &pop, &none, &by);
         assert_eq!(err(packed), Error::AlreadyRegistered, "one record, either form");
         if kind == 0x0110 || kind == 0x0112 {

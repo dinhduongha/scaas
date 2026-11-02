@@ -1,4 +1,4 @@
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/clients/ua-rs)
+   Compiling scaas-ua v0.1.0 (clients/ua-rs)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 1.23s
      Running tests/ua8.rs (target/debug/deps/ua8-21f28f2691dd2c04)
 

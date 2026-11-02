@@ -183,6 +183,13 @@ pub fn wasm(name: &str) -> String {
     format!("{dir}/target/wasm32v1-none/release/scaas_{name}.wasm")
 }
 
+/// The hash a contract instance names: `sha256` of the file `build.sh soroban` left and `deploy.sh` deployed. Another build of the same
+/// source, a package alone (`wasm`) among them, gives other bytes.
+pub fn wasm_hash(name: &str) -> String {
+    let path = format!("{}/../smartcontracts/soroban/target/wasm32v1-none/release/scaas_{name}.wasm", env!("CARGO_MANIFEST_DIR"));
+    alloy::hex::encode(Sha256::digest(std::fs::read(path).unwrap()))
+}
+
 /// The token's `registry: Option<Address>` is passed only when set (omitted = `None`, the UA ledger off).
 pub fn deploy_token(admin_secret: &str, admin: &str, registry: Option<&str>) -> String {
     let w = wasm("token");
@@ -340,6 +347,7 @@ pub fn odoo_at(addr: SocketAddr) -> Odoo {
 pub fn chain_cfg(fee_bump: bool) -> ChainCfg {
     let mut params = toml::Table::new();
     params.insert("network_passphrase".into(), passphrase().into());
+    params.insert("max_resource_fee_per_job".into(), 1_000_000_000.into());
     if fee_bump {
         params.insert("fee_bump_lane".into(), 0.into());
     }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # T0 spike (plan UA-Soroban T0): the unit tests, the Wasm, then the network figures on the pinned Protocol 30 quickstart.
 # Run with CAPPED_SLOTS=1 (a docker container runs). Writes runs/<date>-<SPIKE_TAG>-{settings.json,cargo.txt} (SPIKE_TAG default
-# ua-soroban-t0; B0 of ua8-soroban runs it with SPIKE_TAG=ua8-soroban-b0); the caller tees the log.
+# ua-soroban-t0); the caller tees the log. B0 of ua8-soroban ran it with its models, now in legacy/ua8-b0.
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd "$HERE/../../.." && pwd)

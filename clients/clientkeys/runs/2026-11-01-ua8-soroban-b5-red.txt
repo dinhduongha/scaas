@@ -1,5 +1,5 @@
 # npm test at commit 3022dee7 with the B5 tests, before verifyRegistration
-129:file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/clients/clientkeys/test/ua8.test.js:17
+129:file://clients/clientkeys/test/ua8.test.js:17
 132:SyntaxError: The requested module './ua-verify.js' does not provide an export named 'decodeMemberSigs'
 139:✖ test/ua8.test.js (178.579871ms)
 168:ℹ tests 153

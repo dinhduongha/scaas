@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 # ua8-soroban Task B9: the closing gates of branch ua8-soroban at one commit (the Soroban round, the typed-signing merge it
 # carries, the node's Soroban jobs and spend stop). Not a copy: it sets the step list, log prefix and test names, then runs
 # 2026-10-27-metatx-split-gates.sh (the same step contract, commands, resume and guard).
@@ -14,10 +15,10 @@
 # (3 GB, removed on exit) and two anvils: at least 6 GB available, one step at a time.
 P=2026-10-31-ua8-soroban
 LOGEXT=log # step logs are git-ignored (*.log); only <P>-summary.txt is committed (owner 2026-11-02)
-STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 forge-isolate sizes docs soroban clientkeys vectors-check ua-rs ua-rs-pq ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt cargo-scaas-node soroban-spike-local e2e-soroban-local soroban-roundtrip-check e2e-ua8-1 e2e-ua8-2 e2e-ua8-3 e2e-ua8-union named-tests summary"
-FAMILIES="ua-rs ua-rs-pq ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt soroban soroban-spike-local cargo-scaas-node e2e-soroban-local e2e-ua8-1 e2e-ua8-2 e2e-ua8-3"
+STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 forge-isolate sizes docs soroban clientkeys vectors-check ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt cargo-scaas-node node-e2e-anvil soroban-spike-local e2e-soroban-local soroban-roundtrip-check e2e-ua8-1 e2e-ua8-2 e2e-ua8-3 e2e-ua8-union named-tests summary"
+FAMILIES="ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt soroban soroban-spike-local e2e-soroban-local e2e-ua8-1 e2e-ua8-2 e2e-ua8-3"
 # "<step>|<form>|<name>": every test added from bdde1d66 (the typed-signing merge) to HEAD in the contracts, spike, node and
-# ua-rs (test functions found in the diff: Tasks M2, M3, G1, B0-B7c, V1, B9a, N2), clientkeys' new titles, in the tool's pass
+# ua-rs (test functions found in the diff: Tasks M2, M3, G1, B0-B7c, V1, B9a, N2, MA-S), clientkeys' new titles, in the tool's pass
 # form (forms: see the base runner). e2e_ua8 tests sit in the e2e-ua8-N step that runs them.
 NEW_TESTS=$(cat <<'NAMES'
 forge|forge|test_gen1KindGate_refusesMissingZether
@@ -118,12 +119,6 @@ soroban|cargo|kem_record_digests_match_portable_json
 soroban|cargo|pqz_key_record_digests_match_portable_json
 soroban|cargo|portable_digests_with_attrs_match
 soroban|cargo|kem_record_of_no_key_is_the_zero_record
-soroban-spike-local|cargo|spike_register_pqz_kem_model_budget
-soroban-spike-local|cargo|spike_register_split_and_store_pqz_pop_budget
-soroban-spike-local|cargo|spike_msig_pqz_kem_model_budget
-soroban-spike-local|cargo|spike_set_kem_key_model_budget
-soroban-spike-local|cargo|spike_set_pqz_key_model_budget
-soroban-spike-local|cargo|spike_keccak_budget
 cargo-scaas-node|cargo|a_landed_failure_counts_against_the_budget_once
 cargo-scaas-node|cargo|an_unread_fee_reports_the_job_and_is_counted
 cargo-scaas-node|cargo|a_refused_send_ends_the_job
@@ -148,7 +143,6 @@ cargo-scaas-node|cargo|recorded_auth_own_means_the_lanes_own
 cargo-scaas-node|cargo|soroban_call_job_registry_only
 cargo-scaas-node|cargo|soroban_call_job_function_allowlist
 cargo-scaas-node|cargo|soroban_call_job_builds_the_contract_shapes
-cargo-scaas-node|cargo|keys
 cargo-scaas-node|cargo|soroban_call_job_has_no_job_auth_entries
 cargo-scaas-node|cargo|attest_digest_vector
 cargo-scaas-node|cargo|relayer_arg_is_the_lane
@@ -226,6 +220,71 @@ clientkeys|node|verifyPqzKeyRecord accepts every row and refuses a flipped byte
 clientkeys|node|verify* fail closed: each case one field off a row that passes (ua-rs check_fails_closed)
 clientkeys|node|verifyRegistration refuses every kinds.json invalid key by its error; valid[] reaches the signature (ua-rs check_refuses_invalid_keys)
 clientkeys|node|the group kinds have no verifier here: refused, never accepted (C14; ua-rs checks them)
+soroban|cargo|ua_ops_msig_authorizes_nothing_until_accepted
+soroban|cargo|ua_ops_msig_trade_and_cancel_refused_until_accepted
+soroban|cargo|ua_ops_msig_mandate_owner_refused_until_accepted
+soroban|cargo|ua_ops_msig_relay_refused_until_accepted
+soroban|cargo|rows_digests_rebuild
+soroban|cargo|rows_accept_unchanged
+soroban|cargo|a_row_with_a_changed_byte_refused
+soroban|cargo|native_and_registered_members_accept
+soroban|cargo|g_member_accepts_by_a_signed_entry
+soroban|cargo|nothing_until_the_accepted_weight_reaches_the_threshold
+soroban|cargo|records_count_accepted_slots_only
+soroban|cargo|a_relayer_checked_slot
+soroban|cargo|the_attestation_binds
+soroban|cargo|an_evm_contract_slot_needs_a_relayer
+soroban|cargo|a_c_member_has_no_slot
+soroban|cargo|wrong_acceptances_refused
+soroban|cargo|an_acceptance_is_no_authorization
+soroban|cargo|accepting_twice_is_a_no_op
+soroban|cargo|top_slot
+soroban|cargo|a_pop_marks_its_attested_slots
+soroban|cargo|ttl_and_size_of_the_entry
+soroban|cargo|rows_cover_chain_and_relayer_kinds
+cargo-scaas-node|cargo|accept_job_runs_on_the_registry_alone
+cargo-scaas-node|cargo|accept_job_attests_one_word
+cargo-scaas-node|cargo|accept_job_prechecks_a_marked_slot
+cargo-scaas-node|cargo|accept_job_on_an_accepted_slot_is_refused_unsent
+cargo-scaas-node|cargo|accept_job_a_marked_slot_beside_a_g_member_fails_closed
+cargo-scaas-node|cargo|accept_job_refuses_an_evm_contract_slot
+cargo-scaas-node|cargo|accept_job_needs_a_g_members_entry
+cargo-scaas-node|cargo|accept_job_is_in_the_call_share
+e2e-soroban-local|cargo|e2e_soroban_ua_member_accepts_then_counts
+e2e-soroban-local|cargo|e2e_soroban_ua_membership_rows_and_a_g_member
+ua-rs|cargo|membership_rows
+ua-rs-pq|cargo|check_membership_rows
+clientkeys|node|accept_membership (CTR-UA-37): the op a node takes, a row unchanged, the G member's entry
+clientkeys|node|acceptance (CTR-UA-37): every row by hand, the wallet JSON, the native signer, the purpose apart from the records
+clientkeys|node|verifyMembership accepts every row and refuses a flipped byte (ua-rs check_membership_rows)
+forge|forge|test_msigPopLightestInMiddleRefused
+forge|forge|test_typedViewsMatchTheRows
+soroban|cargo|msig_pop_lightest_slot_in_the_middle_refused
+soroban|cargo|ua8_instance_ttl
+soroban|cargo|ua8_relayer_register_kem_event_names_it
+soroban|cargo|a_high_s_evm_eoa_slot_is_refused
+soroban|cargo|a_listed_relayers_junk_acceptance_is_write_once
+soroban|cargo|ua8_typed_views_match_the_rows
+cargo-scaas-node|cargo|a_signed_op_deadline_is_bounded
+cargo-scaas-node|cargo|a_past_deadline_ends_on_one_claim
+cargo-scaas-node|cargo|a_lost_transaction_holds_the_lane_for_the_bound_at_most
+cargo-scaas-node|cargo|a_view_the_host_refuses_is_unknown
+cargo-scaas-node|cargo|a_failed_view_read_is_not_unknown
+cargo-scaas-node|cargo|a_failed_sequence_read_puts_the_claimed_job_back
+cargo-scaas-node|cargo|a_ua_metatx_missing_a_native_signer_is_refused_unsent
+cargo-scaas-node|cargo|a_ua_metatx_runs_only_a_listed_mandate_wasm
+cargo-scaas-node|cargo|an_unlisted_mandate_never_reports_consumed
+cargo-scaas-node|cargo|a_mandate_job_names_a_registered_token
+cargo-scaas-node|cargo|mandate_wasm_hashes_are_a_list_of_hashes
+cargo-scaas-node|cargo|a_job_over_the_resource_fee_cap_is_refused_unsent
+cargo-scaas-node|cargo|a_token_registered_after_the_start_is_served
+cargo-scaas-node|cargo|a_kem_version_may_be_a_decimal_string
+cargo-scaas-node|cargo|store_pqz_pop_over_a_stored_proof_is_refused_unsent
+cargo-scaas-node|cargo|a_re_run_acceptance_is_consumed
+cargo-scaas-node|cargo|a_record_over_the_read_bound_is_the_jobs_answer
+cargo-scaas-node|cargo|deep_xdr_from_an_rpc_is_refused_not_a_stack_overflow
+cargo-scaas-node|cargo|a_rejected_send_past_its_deadline_is_dead
+cargo-scaas-node|cargo|a_failed_sign_puts_the_claimed_job_back
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

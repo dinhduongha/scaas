@@ -6,7 +6,7 @@
 #![no_std]
 use scaas_ua_common::{
     attest_digest, h32, kem_pk, kem_pk_record_hash, kem_record_digest, kem_record_hash, membership_digest, portable_record_hash,
-    pqz_key_hash, pqz_key_record_digest, registration_digest, Checked, FrostKey, KemKey, MemberSig, MsigStructure, MuSig2Key,
+    pqz_key_hash, pqz_key_record_digest, registration_digest, Checked, FrostKey, FrostMember, KemKey, MemberSig, MsigMember, MsigStructure, MuSig2Key,
     Registration, UaAttrs, UaSig, WebAuthnKey, PURPOSE_KEM, PURPOSE_MEMBER, PURPOSE_MEMBERSHIP, PURPOSE_POP_V2, PURPOSE_PQZ_KEY,
 };
 use soroban_sdk::{
@@ -217,6 +217,20 @@ fn word(d: &Bytes, o: u32) -> [u8; 32] {
 
 fn u16_at(d: &Bytes, o: u32) -> u32 {
     (d.get_unchecked(o) as u32) << 8 | d.get_unchecked(o + 1) as u32
+}
+
+/// The kind and key data of a record of one of `kinds`; the typed views' read.
+fn key_data_of(env: &Env, ua: BytesN<32>, kinds: &[u32]) -> Option<(u32, Bytes)> {
+    get::<Registration>(env, &Key::Ua(ua)).filter(|r| kinds.contains(&r.kind)).map(|r| (r.kind, r.key_data))
+}
+
+/// One point of a group kind: 33 B secp256k1, 64 B bn254.
+fn point_size(kind: u32) -> u32 {
+    if kind == MUSIG2_SECP256K1 || kind == FROST_SECP256K1 {
+        33
+    } else {
+        64
+    }
 }
 
 /// The stored record; `NotRegistered` for an unregistered id (C17).
@@ -1127,6 +1141,63 @@ impl UaRegistry {
 
     pub fn record_of(env: Env, ua: BytesN<32>) -> Option<Registration> {
         get(&env, &Key::Ua(ua))
+    }
+
+    /// EVM `msigOf`: the typed form of a stored `msig`, empty (threshold 0, no member) for any other id. Reads `Ua(ua)` as `record_of`.
+    pub fn msig_of(env: Env, ua: BytesN<32>) -> MsigStructure {
+        let mut s = MsigStructure { threshold: 0, members: Vec::new(&env) };
+        if let Some((_, d)) = key_data_of(&env, ua, &[MSIG]) {
+            s.threshold = u16_at(&d, 0);
+            for i in 0..u16_at(&d, 2) {
+                let (kind, id, weight) = member(&d, i);
+                s.members.push_back(MsigMember { kind, id: BytesN::from_array(&env, &id), weight });
+            }
+        }
+        s
+    }
+
+    /// EVM `webAuthnKeyOf`: the typed key of a stored `webauthn-p256`, all zero for any other id.
+    pub fn web_authn_key_of(env: Env, ua: BytesN<32>) -> WebAuthnKey {
+        let at = |d: &Bytes, o| BytesN::from_array(&env, &word(d, o));
+        match key_data_of(&env, ua, &[WEBAUTHN_P256]) {
+            Some((_, d)) => WebAuthnKey { x: at(&d, 0), y: at(&d, 32), rp_id_hash: at(&d, 64) },
+            None => WebAuthnKey { x: zero(&env), y: zero(&env), rp_id_hash: zero(&env) },
+        }
+    }
+
+    /// EVM `muSig2KeyOf`: the typed key of a stored MuSig2 kind, empty for any other id.
+    pub fn mu_sig2_key_of(env: Env, ua: BytesN<32>) -> MuSig2Key {
+        let mut k = MuSig2Key { agg_key: Bytes::new(&env), member_keys: Vec::new(&env) };
+        if let Some((kind, d)) = key_data_of(&env, ua, &[MUSIG2_SECP256K1, MUSIG2_BN254]) {
+            let size = point_size(kind);
+            k.agg_key = d.slice(..size);
+            for i in 0..u16_at(&d, size) {
+                let o = size + 2 + i * size;
+                k.member_keys.push_back(d.slice(o..o + size));
+            }
+        }
+        k
+    }
+
+    /// EVM `frostKeyOf`: the typed key of a stored FROST kind, empty for any other id.
+    pub fn frost_key_of(env: Env, ua: BytesN<32>) -> FrostKey {
+        let mut k = FrostKey { group_key: Bytes::new(&env), threshold: 0, members: Vec::new(&env) };
+        if let Some((kind, d)) = key_data_of(&env, ua, &[FROST_SECP256K1, FROST_BN254]) {
+            let size = point_size(kind);
+            k.group_key = d.slice(..size);
+            k.threshold = u16_at(&d, size);
+            let member_size = (k.threshold + 1) * size + 32;
+            for i in 0..u16_at(&d, size + 2) {
+                let o = size + 4 + i * member_size;
+                let mut commitments = Vec::new(&env);
+                for j in 0..k.threshold {
+                    commitments.push_back(d.slice(o + j * size..o + (j + 1) * size));
+                }
+                let r = o + k.threshold * size;
+                k.members.push_back(FrostMember { commitments, r: d.slice(r..r + size), z: BytesN::from_array(&env, &word(&d, r + size)) });
+            }
+        }
+        k
     }
 
     /// The UA holding a key: a record of a `Chain` kind before a marked one (`KeyR`).

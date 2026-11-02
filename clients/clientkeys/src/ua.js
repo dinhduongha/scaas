@@ -570,6 +570,8 @@ export function registrationArgs({ kind, keyData, pqzKey, pqzPopHash, pqzPop, ke
   const attrs = { pqzKey: hex(orEmpty(pqzKey)), pqzPopHash: hex(hasPqz || present(pqzPopHash) ? proofHashOf(pqzPop, pqzPopHash) : Z32),
     kem: kemKeyOf(kemPk), kemPkHash: ZW };
   const msig = k === 0x0120;
+  // every stored msig signature is minimal (owner 2026-10-31): the registry refuses any other set, so it is never built
+  if (msig && pop?.length && !msigSlotsMinimal(keyData, pop.map((s) => s.index))) throw new UAError('UAPoP', 'msig pop slots not minimal');
   const entry = msig ? 'registerMsig' : TYPED_ENTRY[k] ?? 'register';
   const common = { attrs, pqzPop: hex(orEmpty(pqzPop)) };
   const args = msig ? { structure: msigStructure(keyData), ...common, pop: (pop ?? []).map(memberSigJson) }
