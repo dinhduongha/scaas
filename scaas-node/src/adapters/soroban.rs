@@ -1478,7 +1478,7 @@ fn check_recorded_auth(sim: &Value, call: &InvokeContractArgs, own: &[SorobanAut
 /// slot of a `G…` member, host-authorised) wants a signature this transaction will not have: it could only fail on chain, on the lane's fee.
 fn check_no_other_signer(sim: &Value) -> Result<()> {
     if recorded_auth(sim)?.iter().any(|e| !matches!(e.credentials, SorobanCredentials::SourceAccount)) {
-        bail!("the call needs another account's signature, which a call job does not carry");
+        bail!("the call needs another account's signature, which this job does not carry");
     }
     Ok(())
 }

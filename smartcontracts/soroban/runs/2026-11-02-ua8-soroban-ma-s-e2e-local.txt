@@ -1,0 +1,353 @@
+== e2e-local: 30699cdb+uncommitted 2026-11-02T07:53:51Z; stellar 30.0.0 (90a3d42d9327ccfaa0d301373766f45beae3e6d9)
+== build Wasm
+== build soroban
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/dex/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+   Compiling scaas-ua-common v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/ua-common)
+   Compiling scaas-dex v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/dex)
+    Finished `release` profile [optimized] target(s) in 1.51s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_dex.wasm (14694 bytes optimized (original size was 18122 bytes))
+    Wasm Hash: 3963d36f2e56afc818524f9d7e77f9802b46780250ac41394d8d01caa7990524
+    Wasm Size: 14694 bytes optimized (original size was 18122 bytes)
+    Exported Functions: 8 found
+      • __constructor
+      • cancel
+      • filled
+      • market
+      • order_hash
+      • set_market
+      • settle
+      • ua_cancel
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/token/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+   Compiling scaas-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/token)
+    Finished `release` profile [optimized] target(s) in 1.28s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_token.wasm (26651 bytes optimized (original size was 31198 bytes))
+    Wasm Hash: df541cf468add24ac137faadbed86723ac393ba2a800b969cade25c17470d259
+    Wasm Size: 26651 bytes optimized (original size was 31198 bytes)
+    Exported Functions: 30 found
+      • __constructor
+      • admin
+      • allowance
+      • approve
+      • balance
+      • burn
+      • burn_from
+      • decimals
+      • meta_pay_id
+      • mint
+      • mint_to_ua
+      • name
+      • pay
+      • pay_meta
+      • pay_to_ua
+      • ref_used
+      • registry
+      • symbol
+      • transfer
+      • transfer_from
+      • transfer_to_ua
+      • ua_balance
+      • ua_burn
+      • ua_cancel_nonce
+      • ua_nonce
+      • ua_pay
+      • ua_pay_meta
+      • ua_ref_used
+      • ua_trade
+      • ua_transfer
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/ua-registry/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+   Compiling scaas-ua-registry v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/ua-registry)
+    Finished `release` profile [optimized] target(s) in 1.84s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_ua_registry.wasm (56835 bytes optimized (original size was 64645 bytes))
+    Wasm Hash: 4c6258d827b021c53779d060656f4d14e9638ec40f2eb3a8c2b1b8bf9b5cbf1a
+    Wasm Size: 56835 bytes optimized (original size was 64645 bytes)
+    Exported Functions: 34 found
+      • __constructor
+      • accept_membership
+      • checked_of
+      • kem_key_at
+      • kem_key_of
+      • key_owner
+      • kind_name
+      • member_accepted
+      • member_checked
+      • pop_of
+      • pqz_key_of
+      • pqz_key_sig_of
+      • pqz_pop_of
+      • receivable
+      • record_of
+      • register
+      • register_frost
+      • register_msig
+      • register_musig2
+      • register_webauthn
+      • registration_of
+      • relayers
+      • require_authorized
+      • set_kem_key
+      • set_pqz_key
+      • store_pqz_pop
+      • ua_at
+      • ua_count
+      • ua_of
+      • ua_of_frost
+      • ua_of_msig
+      • ua_of_musig2
+      • ua_of_webauthn
+      • ua_page
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/mandate/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+   Compiling scaas-mandate v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/mandate)
+    Finished `release` profile [optimized] target(s) in 0.83s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_mandate.wasm (16554 bytes optimized (original size was 19087 bytes))
+    Wasm Hash: fca1b6562f7690f263dcf49c699c0b93f14633e9ba7b5acdb4512a7bb9ed46c9
+    Wasm Size: 16554 bytes optimized (original size was 19087 bytes)
+    Exported Functions: 12 found
+      • __constructor
+      • epoch
+      • mandate
+      • mtx_mandate_pay
+      • mtx_revoke
+      • mtx_set_mandate
+      • mtx_set_payee
+      • mtx_withdraw
+      • owner
+      • paid
+      • registry
+      • ua_nonce
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/relay-executor/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.09s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_relay_executor.wasm (1187 bytes optimized (original size was 1316 bytes))
+    Wasm Hash: e23732b60b42551e811c796609c60b8c6499205f1d2af816d558f6c4ba6c9c00
+    Wasm Size: 1187 bytes optimized (original size was 1316 bytes)
+    Exported Functions: 3 found
+      • __constructor
+      • exec
+      • router
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/relay-fee/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+   Compiling scaas-relay-fee v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/relay-fee)
+    Finished `release` profile [optimized] target(s) in 0.53s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_relay_fee.wasm (7630 bytes optimized (original size was 8585 bytes))
+    Wasm Hash: 37330478cb2c3fc0c66a788f2efe8784edda1d5f9b1fd6b03a334cac97991a27
+    Wasm Size: 7630 bytes optimized (original size was 8585 bytes)
+    Exported Functions: 5 found
+      • __constructor
+      • executor
+      • relay
+      • relay_ref
+      • ua_relay
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/smart-key-account/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.09s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_smart_key_account.wasm (10529 bytes optimized (original size was 11975 bytes))
+    Wasm Hash: f02a6780eee4d41ba0489b8b8a258f42bc71be69ab9951ae5239c76d374c705d
+    Wasm Size: 10529 bytes optimized (original size was 11975 bytes)
+    Exported Functions: 5 found
+      • __check_auth
+      • __constructor
+      • add_key
+      • keys
+      • remove_key
+✅ Build Complete
+
+== registry interface
+ℹ️  Loading contract spec from file...
+registry interface: ok
+== quickstart
+quickstart: scaas-stellar up (stellar/quickstart@sha256:e05d68bb3b2629a829310dc3434fc0ee3f801854bdfa1a7c8c362d2f1c9060f8), rpc http://127.0.0.1:31980/rpc
+quickstart: protocolVersion 30, testnet limits applied
+== cargo test --test e2e_soroban
+   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/scaas-node)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 23.81s
+     Running tests/e2e_soroban.rs (target/debug/deps/e2e_soroban-d52db3c01e499221)
+
+running 1 test
+test soroban_payments_anti_lock_fee_bump_and_finality ... ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/token/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+   Compiling scaas-ua-common v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/ua-common)
+   Compiling scaas-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/smartcontracts/soroban/contracts/token)
+    Finished `release` profile [optimized] target(s) in 2.18s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_token.wasm (26651 bytes optimized (original size was 31198 bytes))
+    Wasm Hash: 707f4c014045a889eb8d64e778d88a31618b2eaedc73b66655ec01ece54d4fb0
+    Wasm Size: 26651 bytes optimized (original size was 31198 bytes)
+    Exported Functions: 30 found
+      • __constructor
+      • admin
+      • allowance
+      • approve
+      • balance
+      • burn
+      • burn_from
+      • decimals
+      • meta_pay_id
+      • mint
+      • mint_to_ua
+      • name
+      • pay
+      • pay_meta
+      • pay_to_ua
+      • ref_used
+      • registry
+      • symbol
+      • transfer
+      • transfer_from
+      • transfer_to_ua
+      • ua_balance
+      • ua_burn
+      • ua_cancel_nonce
+      • ua_nonce
+      • ua_pay
+      • ua_pay_meta
+      • ua_ref_used
+      • ua_trade
+      • ua_transfer
+✅ Build Complete
+
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/home/ha/.cargo/registry/src= SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=1 STELLAR_CLI_VERSION=30.0.0 cargo rustc --manifest-path=contracts/token/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+    Finished `release` profile [optimized] target(s) in 0.06s
+ℹ️  Build Summary:
+    Wasm File: target/wasm32v1-none/release/scaas_token.wasm (26651 bytes optimized (original size was 31198 bytes))
+    Wasm Hash: 707f4c014045a889eb8d64e778d88a31618b2eaedc73b66655ec01ece54d4fb0
+    Wasm Size: 26651 bytes optimized (original size was 31198 bytes)
+    Exported Functions: 30 found
+      • __constructor
+      • admin
+      • allowance
+      • approve
+      • balance
+      • burn
+      • burn_from
+      • decimals
+      • meta_pay_id
+      • mint
+      • mint_to_ua
+      • name
+      • pay
+      • pay_meta
+      • pay_to_ua
+      • ref_used
+      • registry
+      • symbol
+      • transfer
+      • transfer_from
+      • transfer_to_ua
+      • ua_balance
+      • ua_burn
+      • ua_cancel_nonce
+      • ua_nonce
+      • ua_pay
+      • ua_pay_meta
+      • ua_ref_used
+      • ua_trade
+      • ua_transfer
+✅ Build Complete
+
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 19.22s
+
+== cargo test --test e2e_soroban_ua
+   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8-soroban/scaas-node)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.46s
+     Running tests/e2e_soroban_ua.rs (target/debug/deps/e2e_soroban_ua-4aecfba874f12c1a)
+
+running 10 tests
+test e2e_soroban_dex_both_native ... deploy.sh soroban local ua_registry: CBZ3HBC5JMYLN7DDERGOJMZNGPGXSKSRTY6LTAB32KC6SE4MZG3OUSQU
+deploy.sh soroban local token: CC4KFGSKIQW2LOI6XA3ZPDRQRD5JK2CQYU7Y6OECTBBKMRLPZ6UZRISK
+deploy.sh soroban local token: CA7M5E3LQUKJUFBFSCUAW5LUGUCH4TIX5EZC4TQV7PT6KCCHERHKVW42
+deploy.sh soroban local relay_fee: CDNQAHCPKVIRTDURZ5RE7GCFCXOGVZS7SY6OV4UWPAY5H2ECURAIG47X
+deploy.sh soroban local mandate: CC5GLULUZSUNX2APH5YA7P5SS3O5WFM4RBA2E4NTMXSFFJLK57XQC3NL
+deploy.sh soroban local dex: CCM5KP6O4AHNBMHMIQCNEZI5GU2CWF3SMESYGMVHVUHG35QIBD32ZZGQ
+T10 stack: registry CBZ3HBC5JMYLN7DDERGOJMZNGPGXSKSRTY6LTAB32KC6SE4MZG3OUSQU token CC4KFGSKIQW2LOI6XA3ZPDRQRD5JK2CQYU7Y6OECTBBKMRLPZ6UZRISK token_b CA7M5E3LQUKJUFBFSCUAW5LUGUCH4TIX5EZC4TQV7PT6KCCHERHKVW42 router CDNQAHCPKVIRTDURZ5RE7GCFCXOGVZS7SY6OV4UWPAY5H2ECURAIG47X executor CC42RO2KQXA64AC5E4ESQD5PLSIVBB3TFB24OP3BEKJZGWKHOCINBBDP mandate CC5GLULUZSUNX2APH5YA7P5SS3O5WFM4RBA2E4NTMXSFFJLK57XQC3NL dex CCM5KP6O4AHNBMHMIQCNEZI5GU2CWF3SMESYGMVHVUHG35QIBD32ZZGQ
+T10 register webauthn-p256 (lane 0 via CLI): tx c4554058a5afced9497e801aa5c7d77832cad8dc789298e174ab554ec1aa6142 ledger 226 cpu_insns 5076283 resource_fee 1791707 fee_charged 1553062 stroops
+T10 register mldsa65#2 (lane 0 via CLI): tx dffa635d899dc05c7c0d167cea7bfef83a665aeabe4411c83b5896eb278e708a ledger 227 cpu_insns 4966431 resource_fee 8193287 fee_charged 7121921 stroops
+T10 set_market (fees off): tx 166471f8fb0e584522af4c44ce5a47a675bf1e461c7465dfffa723c8c3a1a214 ledger 229 cpu_insns 700447 resource_fee 216985 fee_charged 181403 stroops
+T10 mint (maker, token A): tx d4bcf3a22c74afcd1f3982f71beb53c7a453751520a881954ea730c659b97dcd ledger 230 cpu_insns 782559 resource_fee 162283 fee_charged 133724 stroops
+T10 mint (taker, token B): tx 958db82e0833a39b44b039752ba1c772be23bb876831047ac05e06e401330388 ledger 231 cpu_insns 782559 resource_fee 162283 fee_charged 133724 stroops
+T10 approve (maker -> DEX, token A): tx 2097d35f25950c5ab3cf12b8778906da4ab1391b04501c8fa97f6eaa48437023 ledger 232 cpu_insns 806454 resource_fee 22364 fee_charged 12182 stroops
+T10 approve (taker -> DEX, token B): tx b38992cf1439592de7899a438526b93eed21567c80bb3cff5a260f20912794c5 ledger 234 cpu_insns 807004 resource_fee 22364 fee_charged 12182 stroops
+T10 settle, two native makers (ua_metatx job, lane 0): tx 4329dd9696d283381f2101a821a170b3378282c5b6d2049d50fea75da6a96bb0 ledger 236 cpu_insns 6130702 resource_fee 1083442 fee_charged 818647 stroops
+ok
+test e2e_soroban_native_relay_fee ... T10 mint (native payer): tx e8999b857d5b1f8adbdcc30f9977192d27739593d2cf3710959d22e843b0762f ledger 238 cpu_insns 814724 resource_fee 17548 fee_charged 7871 stroops
+native relay, a signature over other bytes: job state dead, reason "simulation: HostError: Error(Auth, InvalidAction)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDNQAHCPKVIRTDURZ5RE7GCFCXOGVZS7SY6OV4UWPAY5H2ECURAIG47X, topics:[error, Error(Auth, InvalidAction)], data:\"escalating error to VM trap from failed host function call: require_auth_for_args\"\n   1: [Dia"
+T10 relay native fee, open mode (ua_metatx job, lane 0): tx 36be18d45bdf074e31d54c456bfd055301d9ece58767d1c220c89896878ef14b ledger 240 cpu_insns 4054314 resource_fee 581776 fee_charged 435668 stroops
+native relay fee row: {"amount":"250","block_hash":"0xf373e79cc410c62f41459c3503566c099e71ac754a00fa123d165782e72bc02b","block_number":240,"contract":"CC4KFGSKIQW2LOI6XA3ZPDRQRD5JK2CQYU7Y6OECTBBKMRLPZ6UZRISK","entry_ref":"0x46fedddd3d217eaab35342accda8cfb9ef1ca20a1b28e24ffa59cbe9c7e6eff5","event":"PaymentSettled","from":"GD6VIGKJETQEJ7L7BTHZBLOQU7Z75ESYYORJRJX3XPKTXWSDS7DVGOMZ","log_index":0,"relay_payee":"GB3TCCIC6KLYKM72PX7KA6RNYC2BHC7DQYDMEAAN7PDMUZQD7UKJGSSY","relay_target":"CC4KFGSKIQW2LOI6XA3ZPDRQRD5JK2CQYU7Y6OECTBBKMRLPZ6UZRISK","to":"CDNQAHCPKVIRTDURZ5RE7GCFCXOGVZS7SY6OV4UWPAY5H2ECURAIG47X","tx_hash":"0x36be18d45bdf074e31d54c456bfd055301d9ece58767d1c220c89896878ef14b"}
+ok
+test e2e_soroban_ua_dex_leg ... T10 set_market (fees off): tx a400ad04f198ab1e8f69a4c4ae9825c7e42fab0f774efe554eab440132584d4c ledger 242 cpu_insns 723427 resource_fee 17669 fee_charged 8086 stroops
+T10 mint_to_ua (mldsa65, token A): tx 1e527679da5ccf03cc53b2e98f61c227e754c9dddbd91bcb8c37fb0fffc588b9 ledger 244 cpu_insns 1768151 resource_fee 309109 fee_charged 262013 stroops
+T10 mint (taker, token B): tx 9bf32afa42f97a64deed71d480d28bbe27a214c13746b8135f0643570b7b1ca9 ledger 245 cpu_insns 814724 resource_fee 17548 fee_charged 7871 stroops
+T10 approve (taker -> DEX, token B): tx 6612c12495190e684b1ce5f80060284bbfb04a77b1fcec4735c55f5451606155 ledger 246 cpu_insns 823294 resource_fee 21786 fee_charged 11681 stroops
+T10 settle UA maker (mldsa65) vs native taker (ua_metatx job, lane 0): tx fe81a6eea3bc32ccbd3aad9553c5c9af271fad31c913665a7e9b0e48daceca69 ledger 248 cpu_insns 10889028 resource_fee 956422 fee_charged 724332 stroops
+ok
+test e2e_soroban_ua_lane_authority_not_lent ... T10 mint_to_ua (passkey): tx b153d9f0cdc9d04bb4a75ce6040bbabca62fb5aacdbee55231c08164c714953e ledger 249 cpu_insns 1735259 resource_fee 168163 fee_charged 139448 stroops
+T10 lane authority not lent (host refusal at simulation): job state dead, reason "simulation: HostError: Error(Auth, InvalidAction)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CDNQAHCPKVIRTDURZ5RE7GCFCXOGVZS7SY6OV4UWPAY5H2ECURAIG47X, topics:[error, Error(Auth, InvalidAction)], data:\"escalating error to VM trap from failed host function call: call\"\n   1: [Diagnostic Event] co"
+ok
+test e2e_soroban_ua_mandate_pays_ua_payee ... T10 mtx_set_mandate (native owner, delegate = passkey UA): tx 3d2e7e5431e18758dd4f6e57c34ec0e4adb3366d0df424410360afb394f1b068 ledger 251 cpu_insns 895572 resource_fee 585727 fee_charged 502697 stroops
+T10 mtx_set_payee (native owner, payee = mldsa65 UA): tx 39bfe14f5f0c87e532299ac8b7e7927f9432a0418de88721e322d1e5790214d4 ledger 254 cpu_insns 751632 resource_fee 209764 fee_charged 175300 stroops
+T10 mint (to the mandate): tx fee985d4fcf5bc86f51e3dd5d79f6b0cc9f6e6f2beb00021b1ca8c578b5bcd1e ledger 256 cpu_insns 781266 resource_fee 158370 fee_charged 130315 stroops
+T10 mtx_mandate_pay passkey delegate -> mldsa65 payee (ua_metatx job, lane 1): tx 0b0270fb226bb50cb7c3febcbc59449a1e8e228204be2af53aca96f99f03d1f0 ledger 258 cpu_insns 7594915 resource_fee 393929 fee_charged 293982 stroops
+T10 mandate PaymentSettled row: {"amount":"5000","block_hash":"0x0d4ac4fd46b584d9c8d38df1bac1ffe8c1292d1fb6326cfe78ffdfbf38b0fe9d","block_number":258,"contract":"CC4KFGSKIQW2LOI6XA3ZPDRQRD5JK2CQYU7Y6OECTBBKMRLPZ6UZRISK","entry_ref":"0xcd275f0b66b89af89b20dc0f664f4252888942b9fea6e346efd9248ed21c6690","event":"PaymentSettled","from":"CC5GLULUZSUNX2APH5YA7P5SS3O5WFM4RBA2E4NTMXSFFJLK57XQC3NL","log_index":2,"to":"0xab3b7198a4753f06b0a9b0e4fdffd92759ea2f3c7031ccd1b87c2f666e1b4428","tx_hash":"0x0b0270fb226bb50cb7c3febcbc59449a1e8e228204be2af53aca96f99f03d1f0"}
+ok
+test e2e_soroban_ua_member_accepts_then_counts ... T10 register "ed25519" (ua_metatx job, lane 0): tx fb10bb53b99c84a71629014e14ef446673301382c290556125e136ce60dbfc5b ledger 259 cpu_insns 2199172 resource_fee 1561634 fee_charged 1175414 stroops
+T10 register "p256" (ua_metatx job, lane 0): tx dd3d21d5423739ffb7317cd633d8e44ec77dd05dc770cbb248f77f959aa13921 ledger 260 cpu_insns 4894637 resource_fee 1634768 fee_charged 1230986 stroops
+T10 register "mldsa65#1" (ua_metatx job, lane 0): tx 26b1ad84f4393ef28e0d6e89dafa920ed192689256f22dcb172f98533491b896 ledger 261 cpu_insns 5000242 resource_fee 9308737 fee_charged 7036140 stroops
+T10 register "msig-2of3" (ua_metatx job, lane 0): tx 2f2d6302bd3019cbb850c65a781cd450a689ffb282f44f490f57ab5e9fb03308 ledger 262 cpu_insns 2253262 resource_fee 1666846 fee_charged 1255345 stroops
+T10 mint_to_ua (msig): tx b0e2159b6fffc6a03c02cae657a40e0891ee46c8fa02654101c2526af3767072 ledger 263 cpu_insns 1735836 resource_fee 168164 fee_charged 139449 stroops
+MA no slot accepted: job dead, reason "simulation: HostError: Error(Contract, #10)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CC4KFGSKIQW2LOI6XA3ZPDRQRD5JK2CQYU7Y6OECTBBKMRLPZ6UZRISK, topics:[error, Error(Contract, #10)], data:\"escalating error to VM trap from failed host function call: call\"\n   1: [Diagnostic Event] contract:CC4KF"
+T10 accept_membership slot 0 (ua_metatx job, lane 0): tx d51fd4e2e09b6543a54d69b1689adf1cebe4a44b6b98f921dbd3664fa36290bf ledger 265 cpu_insns 1849581 resource_fee 22701 fee_charged 10075 stroops
+MA one of two slots accepted: job dead, reason "simulation: HostError: Error(Contract, #10)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CC4KFGSKIQW2LOI6XA3ZPDRQRD5JK2CQYU7Y6OECTBBKMRLPZ6UZRISK, topics:[error, Error(Contract, #10)], data:\"escalating error to VM trap from failed host function call: call\"\n   1: [Diagnostic Event] contract:CC4KF"
+MA a flipped acceptance: job dead, reason "simulation: HostError: Error(Crypto, InvalidInput)\n\nEvent log (newest first):\n   0: [Diagnostic Event] contract:CBZ3HBC5JMYLN7DDERGOJMZNGPGXSKSRTY6LTAB32KC6SE4MZG3OUSQU, topics:[error, Error(Crypto, InvalidInput)], data:\"escalating error to VM trap from failed host function call: verify_sig_ml_dsa_65\"\n   1: [Di"
+T10 accept_membership slot 1 (ua_metatx job, lane 0): tx 0240ed69af83ac5aaf9704fe86f77fac3d2568392e135cac7e3f06a605fa49e3 ledger 266 cpu_insns 4282133 resource_fee 41357 fee_charged 25941 stroops
+T10 accept_membership slot 1 again: a no-op (ua_metatx job, lane 0): tx 7e976b49743de3fe61ffcdd3bc7b64589d4d39ecb256889d83f23d2dca75ba9a ledger 267 cpu_insns 1088155 resource_fee 33796 fee_charged 19566 stroops
+T10 ua_pay by the msig, its two slots accepted (ua_metatx job, lane 0): tx eecf32165ef03eec5519ea01c9ff2da08799f5e91dedb582ce814a54ad7fa567 ledger 268 cpu_insns 6968361 resource_fee 278073 fee_charged 206833 stroops
+ok
+test e2e_soroban_ua_membership_rows_and_a_g_member ... T10 register "bls-bn254-minsig" (ua_metatx job, lane 0): tx b5de540390f47f7a93db0b6946e137549136a2a5ab52b8f92f3a8ac199d141eb ledger 269 cpu_insns 1782799 resource_fee 1508897 fee_charged 1135303 stroops
+T10 register "schnorr-bn254" (ua_metatx job, lane 0): tx 4a775059840528bf44fbbbe9bb8903b7c308baccf4ce210e48e2ff0ea3ed3e08 ledger 270 cpu_insns 1774935 resource_fee 1473021 fee_charged 1108153 stroops
+T10 register "msig-classical" (ua_metatx job, lane 0): tx 2636051e1e60661f49a0dbe2b51c16c7d623690d81464f9992eb0b43d987355c ledger 271 cpu_insns 2340924 resource_fee 1295784 fee_charged 974418 stroops
+T10 accept_membership "msig-classical/0" (ua_metatx job, lane 0): tx b7957558451a5b10ec311544bf268dc1bdbc55cc7b644924a01226f7d20aeabb ledger 272 cpu_insns 3667055 resource_fee 23622 fee_charged 10876 stroops
+MA "msig-classical/0": member_checked Chain
+MA "msig-classical/1" no relayer: job dead, reason "simulation: a part of kind 0x0120 needs a relayer (NotVerifiable): this job names none"
+T10 accept_membership "msig-classical/1" (ua_metatx job, lane 0): tx 5d512c409e3fcba4b6ccac25fd1a99388e3ef1033bc98edf27012487387def93 ledger 274 cpu_insns 1337857 resource_fee 80152 fee_charged 53500 stroops
+MA "msig-classical/1": member_checked {"Relayer":"GB3TCCIC6KLYKM72PX7KA6RNYC2BHC7DQYDMEAAN7PDMUZQD7UKJGSSY"}
+MA "msig-classical/2" no relayer: job dead, reason "simulation: a part of kind 0x0120 needs a relayer (NotVerifiable): this job names none"
+T10 accept_membership "msig-classical/2" (ua_metatx job, lane 0): tx b672972c70c07acec3882bd3a87d2a8a713aa4b0c2117a1e2aa4854b31cecb6c ledger 275 cpu_insns 1344831 resource_fee 80371 fee_charged 53690 stroops
+MA "msig-classical/2": member_checked {"Relayer":"GB3TCCIC6KLYKM72PX7KA6RNYC2BHC7DQYDMEAAN7PDMUZQD7UKJGSSY"}
+T10 accept_membership "msig-classical/3" (ua_metatx job, lane 0): tx 3554c82fb4ae0765b9b627ff5d9338b95a32b38675e39f29f64db6611018bf69 ledger 276 cpu_insns 4552014 resource_fee 24979 fee_charged 12056 stroops
+MA "msig-classical/3": member_checked Chain
+T10 register "msig-g" (ua_metatx job, lane 0): tx 10db0626208ee06cfcfa90720f97121fd72802b6a18534e06d5b0133d40557bd ledger 278 cpu_insns 1767026 resource_fee 1390811 fee_charged 1046249 stroops
+MA G member, no entry: job dead, reason "simulation: the call needs another account's signature, which a call job does not carry"
+T10 accept_membership a G member, relayed (ua_metatx job, lane 1): tx 8d7ad11a3faeda2aa591dc92d2b34863fe889065037287debd3a6ebf9c1ba978 ledger 280 cpu_insns 1780907 resource_fee 32614 fee_charged 18308 stroops
+ok
+test e2e_soroban_ua_register_passkey_and_mldsa65 ... T10 register webauthn-p256: ua 0x766d7245671c64dafe1478ea07b04c23350bffdf6a823ae6c492813e564136e3 tx c4554058a5afced9497e801aa5c7d77832cad8dc789298e174ab554ec1aa6142 ledger 226 cpu_insns 5076283 resource_fee 1791707 fee_charged 1553062 stroops
+T10 register mldsa65#2: ua 0xab3b7198a4753f06b0a9b0e4fdffd92759ea2f3c7031ccd1b87c2f666e1b4428 tx dffa635d899dc05c7c0d167cea7bfef83a665aeabe4411c83b5896eb278e708a ledger 227 cpu_insns 4966431 resource_fee 8193287 fee_charged 7121921 stroops
+ok
+test e2e_soroban_ua_relay_fee ... T10 mint_to_ua (passkey): tx c01a8137677cba9ccae63e285cdea0e943125179ed113fee7b88b81f75a4c49c ledger 282 cpu_insns 1769668 resource_fee 23429 fee_charged 13596 stroops
+T10 ua_relay passkey fee, open mode (ua_metatx job, lane 0): tx f9b051e5a971a790d25f2da46d2e233c79bef8778dc8dc52e0bc237635382384 ledger 285 cpu_insns 8136458 resource_fee 256778 fee_charged 190395 stroops
+T10 ua_relay fee row (PaymentSettled + RelayFeePaid): {"amount":"250","block_hash":"0xfdf8e8e96b58dbc2c668da579d7cc51d3f68bb2629dc244f75051af9547cb2f1","block_number":285,"contract":"CC4KFGSKIQW2LOI6XA3ZPDRQRD5JK2CQYU7Y6OECTBBKMRLPZ6UZRISK","entry_ref":"0xba2ae95de93247d68c10426ee3ff7f15680dff776a1ca595a102b28ce502d8f0","event":"PaymentSettled","from":"0x766d7245671c64dafe1478ea07b04c23350bffdf6a823ae6c492813e564136e3","log_index":2,"relay_payee":"GB3TCCIC6KLYKM72PX7KA6RNYC2BHC7DQYDMEAAN7PDMUZQD7UKJGSSY","relay_target":"CC4KFGSKIQW2LOI6XA3ZPDRQRD5JK2CQYU7Y6OECTBBKMRLPZ6UZRISK","to":"CDNQAHCPKVIRTDURZ5RE7GCFCXOGVZS7SY6OV4UWPAY5H2ECURAIG47X","tx_hash":"0xf9b051e5a971a790d25f2da46d2e233c79bef8778dc8dc52e0bc237635382384"}
+ok
+test e2e_soroban_ua_transfer_to_ua_and_ua_pay_relayed ... T10 mint (native): tx 79d0ab57b8e055e67ee2a7a06159b0c189548c05fcfb6d01e7c8ef0ec9d9fe04 ledger 287 cpu_insns 782559 resource_fee 162283 fee_charged 133724 stroops
+T10 transfer_to_ua (native -> passkey UA): tx 543b7a4c53c22de3d88d21b7f4afdca96bc766656be79dac88ec5db6879ec8ba ledger 289 cpu_insns 1890699 resource_fee 27358 fee_charged 17485 stroops
+T10 ua_pay passkey -> mldsa65 (ua_metatx job, lane 0): tx 307162dc135c5f419932af15acddb822121711d068014ab49ba773ba96387482 ledger 291 cpu_insns 6330309 resource_fee 241286 fee_charged 177434 stroops
+T10 ua_pay rows: {"amount":"1000","block_hash":"0x4629b76c01410a9b595f7f15d7c17c7267ace420e940febf266ca428e2d515ab","block_number":291,"contract":"CC4KFGSKIQW2LOI6XA3ZPDRQRD5JK2CQYU7Y6OECTBBKMRLPZ6UZRISK","entry_ref":"0xb2630c49c27a4084faadf869d00d7b957ff0b562ec63f329774218dcf441680b","event":"PaymentSettled","from":"0x766d7245671c64dafe1478ea07b04c23350bffdf6a823ae6c492813e564136e3","log_index":1,"to":"0xab3b7198a4753f06b0a9b0e4fdffd92759ea2f3c7031ccd1b87c2f666e1b4428","tx_hash":"0x307162dc135c5f419932af15acddb822121711d068014ab49ba773ba96387482"}
+ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 104.61s
+
+== e2e-local: PASS

@@ -479,14 +479,15 @@ order, and takes the op digest (the job id), `valid_until` and every check from 
 - <a id="soroban-job-values"></a>Values by contract type: `BytesN<32>` and `Bytes` are `0x…` hex; `i128`, `u128`, `u256` and `i256` decimal strings; `u32` and `i32`
   numbers; `u64`, `i64`, `Timepoint` and `Duration` a number or a decimal string (a client that cannot write one past 2^53, such as
   an order `salt`); `bool` a boolean; `Address` a `G…` or `C…`; `Option<Address>` null or an address; `Symbol` and `String` strings;
-  `Holder` `{"Addr": "G…"}` or `{"Ua": "0x…"}`; `UaSig` `{key_data, signature, members}`, as a `call` job's `sig`; `Order` `{maker,
-  destination, relayer, sell_token, sell_amount, buy_token, buy_amount, max_fee_ppm, expiry, salt}`.
+  `Holder` `{"Addr": "G…"}` or `{"Ua": "0x…"}`; `UaSig` `{key_data, signature, members}`, as a `call` job's `sig`; `MemberSig` `{index,
+  key_data, sig}`; `Order` `{maker, destination, relayer, sell_token, sell_amount, buy_token, buy_amount, max_fee_ppm, expiry, salt}`.
 - `ua_relay`'s `args` is the relayed call's arguments, whose types the contract does not declare: a list of `{type, value}`, `type` one of
   the names above, `Vec<Val>` (a list of `{type, value}`), `Map` (a list of `{key, val}`, each a `{type, value}`, in any order; the
   node sorts it) or `Void` (`value` null). `Error` and the host's ledger-key values are no argument a job can name.
 - `op.auth`: `[{payload, from, signature}]`, a native leg's authorization, `payload` as [below](#soroban-signed-op). A job never names
   a `SourceAccount` entry; the lane's own entry is the node's. `op.valid_until` is optional and never read: the deadline is the
-  built call's, also after a restart.
+  built call's, also after a restart. `accept_membership` alone names no deadline in its arguments, so there it is required and
+  bounded as a `call` job's.
 
 | Contract | `function` | `args` |
 |---|---|---|
@@ -503,6 +504,26 @@ order, and takes the op digest (the job id), `valid_until` and every check from 
 | mandate | `mtx_revoke` | `token, by, epoch, lane, nonce, valid_until, relayer, auth` |
 | mandate | `mtx_withdraw` | `token, to, amount, lane, nonce, valid_until, relayer, auth` |
 | mandate | `mtx_mandate_pay` | `token, payee, amount, pay_ref, epoch, valid_until, relayer, auth` |
+| registry | `accept_membership` | `ua, member_sig, relayer` |
+
+<a id="soroban-accept-membership"></a>`accept_membership` ([NET-SOR-28](../networks/soroban.md#NET-SOR-28), `ua8-soroban` MA-S; BUILT): a member of an `msig` accepts its
+slot and holds no XLM: the member signs, the lane submits. `contract` must equal `params.ua_registry` (unset: refused); this function
+is a `ua_metatx` so that `op.auth` can carry a `G…` member's entry, which a `call` job cannot, and it is the only `ua_metatx` on the
+registry: a `signed_op` still never runs there, and `call` jobs stay the eight writes. `op.valid_until` is required, after now and at most
+3,600 s later. `member_sig` is the slot: `key_data` `0x`, `sig` the member's signature (`clientkeys`: `acceptMembershipOp`).
+
+| Slot's member | `sig` | `relayer` | `op.auth` |
+|---|---|---|---|
+| `evm-eoa` | ECDSA over the typed digest | null | none |
+| a registered `Chain` kind | under `member` over `memberDigest` | null | none |
+| `G…` | `0x` | null | the member's entry over `(ua, PURPOSE_MEMBERSHIP, typed)` (`clientkeys`: `membershipInvocation`, `signedAuth`) |
+| a relayer-checked kind | as a `Chain` kind | this lane, listed in `relayers()` | none |
+
+Rules at `build`, as a `call` job's: a slot the chain cannot verify needs a `relayer` and passes `scaas_ua::ua8::check_membership` before
+simulation, a refused one is `dead` and nothing is sent; the lane's one entry is over `attest_digest` of `(ua, member_sig, relayer)`; an
+`evm-contract` slot is `NotVerifiable` here, no off-chain check reaches ERC-1271. With no `op.auth`, a simulation that records another
+signer is refused before signing. The job has no op digest (the job's own id), is free to the client and counts in the call share
+(`call_budget_pct`, [NET-SOR-14](../networks/soroban.md#NET-SOR-14)). A slot already accepted lands as a no-op on the lane's fee.
 
 <a id="soroban-signed-op"></a>**Soroban `signed_op`** (`ua8-soroban` N2 review, owner rulings of 2026-11-02; BUILT). Payload: `{kind: "signed_op", op: {payload,
 from, signature, contract, valid_until, kind?, extra?}}`.
@@ -517,7 +538,8 @@ from, signature, contract, valid_until, kind?, extra?}}`.
 - The call is the invocation the subject signed; no field names it. A `G…` account or a `C…` contract only signs: the lane submits.
 - Contracts: it runs only on a token, a mandate (`params.mandates`, `C…`), the DEX or the router of the chain's `params`, and never on
   the registry, even one listed there; anything else is `CALL_TARGET_REFUSED`, `dead` on its one claim, nothing sent. A `G…` `msig`
-  member whose signature the registry needs submits that write itself; a `call` job carries no other signer.
+  member whose signature the registry needs submits that write itself, a `call` job carrying no other signer; its acceptance alone is
+  relayed, as [`accept_membership`](#soroban-accept-membership).
 - Budget: a plain `signed_op` (no `op.kind`; a job with no kind is one) whose root is a token payment, `invocation.function` `pay`,
   `pay_meta` or `transfer` on a contract of the chain's tokens, runs to all of the hour's budget. The host call is exactly that root,
   so a client cannot mislabel one, and `build` refuses a job read as one that builds any other call (`CALL_TARGET_REFUSED`, nothing

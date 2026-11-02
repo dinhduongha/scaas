@@ -20,6 +20,7 @@ use scaas_node::adapter::{index_step, lane_step, ChainAdapter};
 use scaas_node::adapters::soroban::{holder_addr, op_digest, relay_ref, SorobanAdapter};
 use scaas_node::config::TokenCfg;
 use scaas_node::odoo::Odoo;
+use scaas_node::signer::Signer as _;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use soroban_common::*;
@@ -29,6 +30,7 @@ use stellar_xdr::{
 use tokio::sync::OnceCell;
 
 const OPS: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/soroban/vectors/ua-ops.json"));
+const PORTABLE: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/vectors/ua/portable.json"));
 const SIGNER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../clients/clientkeys/scripts/soroban-sign.mjs");
 /// Account indexes of the test mnemonic (`soroban_common::key`): lanes 0 and 1, the deployer (admin, mandate owner,
 /// native payer), the DEX's native taker, and a bystander.
@@ -48,6 +50,7 @@ struct UaKey {
 }
 const PASSKEY: UaKey = UaKey { kind: "webauthn-p256", index: 0, row: "webauthn-p256" };
 const MLDSA65: UaKey = UaKey { kind: "mldsa65", index: 2, row: "mldsa65#2" };
+const MSIG: UaKey = UaKey { kind: "msig", index: 0, row: "msig-2of3" };
 
 impl UaKey {
     fn registration(&self) -> Value {
@@ -266,6 +269,7 @@ impl Node {
         rf.insert("min_amount".into(), 1.into());
         cfg.params.insert("relay_fee".into(), rf.into());
         cfg.params.insert("dex".into(), st.dex.clone().into());
+        cfg.params.insert("ua_registry".into(), st.registry.clone().into());
         let adapter = SorobanAdapter::new(&cfg, &[key(0), key(1)]).unwrap();
         assert_eq!(adapter.lanes()[0].address, g(&key(0)));
         Node { state, odoo, adapter }
@@ -305,6 +309,40 @@ impl Node {
         assert!(o.indexed_block >= head, "indexed {} < head {head}", o.indexed_block);
         o.ingested.clone()
     }
+}
+
+/// A registry write as the node's `call` job.
+fn call_job(id: i64, st: &Stack, f: &str, args: Value) -> Value {
+    json!({"id": id, "kind": "call", "op": {"contract": st.registry, "function": f, "args": args, "valid_until": now() + 600}})
+}
+
+/// `row` of `ua-ops.json` or `portable.json` through the node, once a stack: `register`, or `register_msig` of an `msig` with an empty `pop`.
+async fn ensure_registered(node: &Node, st: &Stack, id: i64, r: &Value, relayer: Value) {
+    let ua = r["ua"].as_str().unwrap();
+    if view(&st.registry, "record_of", &["--ua", ua.trim_start_matches("0x")]) != "null" {
+        return;
+    }
+    let z = format!("0x{}", "00".repeat(32));
+    let attrs = json!({"pqz_key": "0x", "pqz_pop_hash": z, "kem": {"scheme": 0, "mlkem_ek": "0x", "x25519": z}, "kem_pk_hash": z});
+    let job = if r["kind"] == 0x0120 {
+        let members: Vec<Value> = r["members"].as_array().unwrap().iter().map(|m| json!({"kind": m["kind"], "id": m["id"], "weight": m["weight"]})).collect();
+        call_job(id, st, "register_msig", json!({"structure": {"threshold": r["threshold"], "members": members}, "attrs": attrs, "pop": [], "pqz_pop": "0x", "relayer": relayer}))
+    } else {
+        call_job(id, st, "register", json!({"kind": r["kind"], "key_data": r["keyData"], "attrs": attrs, "pop": r["pop"], "pqz_pop": "0x", "relayer": relayer}))
+    };
+    node.mined(&format!("register {}", r["name"]), 0, job).await;
+}
+
+/// CTR-UA-37: `accept_membership` as the node's job, `valid_until` named by the job: nothing signed names one.
+fn accept_job(id: i64, st: &Stack, ua: &str, index: &Value, sig: &str, relayer: Value, auth: Vec<Value>) -> Value {
+    let args = json!({"ua": ua, "member_sig": {"index": index, "key_data": "0x", "sig": sig}, "relayer": relayer});
+    let mut job = ua_job(id, &st.registry, "accept_membership", args, auth);
+    job["op"]["valid_until"] = json!(now() + 600);
+    job
+}
+
+fn member_accepted(st: &Stack, ua: &str, index: u64) -> bool {
+    view(&st.registry, "member_accepted", &["--ua", ua.trim_start_matches("0x"), "--index", &index.to_string()]) == "true"
 }
 
 fn row<'a>(rows: &'a [Value], event: &str, tx: &str) -> &'a Value {
@@ -537,6 +575,121 @@ async fn e2e_soroban_native_relay_fee() {
     assert_eq!(r["entry_ref"], ua0x(&rf));
     assert_eq!(r["relay_payee"], json!(lane0), "open mode: the submitting lane is paid");
     println!("native relay fee row: {}", serde_json::to_string(r).unwrap());
+}
+
+/// CTR-UA-37 on a real host, through the node. A listed `msig` holds funds and spends none: a good signature of an unaccepted slot is
+/// refused at simulation, nothing sent, with no slot accepted and with one of the two needed; a member's bad acceptance is refused too;
+/// the same payment runs after the second slot accepts. A repeat is a no-op, mined.
+#[tokio::test]
+#[ignore]
+async fn e2e_soroban_ua_member_accepts_then_counts() {
+    let st = stack().await;
+    let node = Node::new(st).await;
+    let ops: Value = serde_json::from_str(OPS).unwrap();
+    let rows = ops["registrations"].as_array().unwrap();
+    let by_name = |n: &str| rows.iter().find(|r| r["name"] == n).unwrap().clone();
+    for (i, n) in ["ed25519", "p256", "mldsa65#1", "msig-2of3"].iter().enumerate() {
+        ensure_registered(&node, st, 900 + i as i64, &by_name(n), Value::Null).await;
+    }
+    let (ms, id) = (MSIG.registration(), MSIG.id());
+    let ua = ua0x(&id);
+    assert_eq!(view(&st.registry, "receivable", &["--ua", &hx(&id)]), "true", "listed: it may hold");
+    send("mint_to_ua (msig)", DEPLOYER, &st.token, "mint_to_ua", &["--to", &hx(&id), "--amount", "5000"]).await;
+    let to = PASSKEY.id();
+    let (pay_ref, vu, lane0) = (fresh(), now() + 600, g(&key(0)));
+    let d = digest(&st.token, "ua_pay", &[bytes(&id), h_ua(&to), i128v(700), bytes(&pay_ref), ScVal::U64(vu), addr(&lane0)]);
+    let args = json!({"from": ua, "to": {"Ua": ua0x(&to)}, "amount": "700", "pay_ref": ua0x(&pay_ref), "valid_until": vu, "relayer": lane0, "auth": MSIG.sign(&d, "metatx")});
+    let pay = |job: i64| ua_job(job, &st.token, "ua_pay", args.clone(), vec![]);
+    let seq = node.adapter.sequence(0).await.unwrap();
+    let refused = async |job: i64, what: &str| {
+        let (state, last) = node.run(0, pay(job)).await;
+        println!("MA {what}: job {state}, reason {}", last["error"]);
+        assert_eq!(state, "dead", "{what}: {last}");
+        assert!(last["error"].as_str().unwrap().starts_with("simulation:"), "the chain's refusal: {last}");
+        assert!(report_of(&node.state.lock().unwrap(), job, "signed").is_null(), "{what}: never signed");
+        assert_eq!(view_i128(&st.token, "ua_balance", &["--ua", &hx(&id)]), 5_000, "{what}");
+    };
+    refused(910, "no slot accepted").await;
+    assert_eq!(node.adapter.sequence(0).await.unwrap(), seq, "the lane's sequence is unchanged");
+
+    let m = ms["memberships"].as_array().unwrap();
+    let job = |n: i64, r: &Value, sig: &str| accept_job(n, st, &ua, &r["index"], sig, Value::Null, vec![]);
+    let (s0, s1) = (m[0]["sig"].as_str().unwrap(), m[1]["sig"].as_str().unwrap());
+    node.mined("accept_membership slot 0", 0, job(911, &m[0], s0)).await;
+    assert!(member_accepted(st, &ua, 0) && !member_accepted(st, &ua, 1));
+    refused(912, "one of two slots accepted").await;
+
+    // a member's bad acceptance: one byte, refused by the chain, the slot stays out
+    let bad = format!("{}{}", &s1[..s1.len() - 2], if s1.ends_with("00") { "01" } else { "00" });
+    let (state, last) = node.run(0, job(913, &m[1], &bad)).await;
+    println!("MA a flipped acceptance: job {state}, reason {}", last["error"]);
+    assert_eq!(state, "dead", "{last}");
+    assert!(!member_accepted(st, &ua, 1));
+
+    node.mined("accept_membership slot 1", 0, job(914, &m[1], s1)).await;
+    assert!(member_accepted(st, &ua, 1));
+    node.mined("accept_membership slot 1 again: a no-op", 0, job(915, &m[1], s1)).await;
+    let before = view_i128(&st.token, "ua_balance", &["--ua", &hx(&to)]);
+    node.mined("ua_pay by the msig, its two slots accepted", 0, pay(916)).await;
+    assert_eq!(view_i128(&st.token, "ua_balance", &["--ua", &hx(&id)]), 4_300);
+    assert_eq!(view_i128(&st.token, "ua_balance", &["--ua", &hx(&to)]), before + 700);
+}
+
+/// The `memberships` rows of `msig-classical`, unchanged, on a real host through the node: `evm-eoa` and `p256` by the chain with no relayer,
+/// the two relayer-checked members on the lane's attestation over `attest_digest`, marked in state. And a `G…` member: no entry, the
+/// simulation records its signature and the job dies unsent; its signed entry in `op.auth`, it accepts.
+#[tokio::test]
+#[ignore]
+async fn e2e_soroban_ua_membership_rows_and_a_g_member() {
+    let st = stack().await;
+    let node = Node::new(st).await;
+    let p: Value = serde_json::from_str(PORTABLE).unwrap();
+    let rows = p["registrations"].as_array().unwrap();
+    let by_name = |n: &str| rows.iter().find(|r| r["name"] == n).unwrap().clone();
+    let lane0 = g(&key(0));
+    for (i, n) in ["bls-bn254-minsig", "schnorr-bn254"].iter().enumerate() {
+        ensure_registered(&node, st, 920 + i as i64, &by_name(n), json!(lane0)).await;
+    }
+    ensure_registered(&node, st, 922, &by_name("p256"), Value::Null).await;
+    ensure_registered(&node, st, 923, &by_name("msig-classical"), Value::Null).await;
+    let ua = by_name("msig-classical")["ua"].as_str().unwrap().to_string();
+    let rows: Vec<&Value> = p["memberships"].as_array().unwrap().iter().filter(|r| r["msig"] == "msig-classical").collect();
+    assert_eq!(rows.len(), 4);
+    for (i, r) in rows.iter().enumerate() {
+        let (index, sig) = (r["index"].as_u64().unwrap(), r["sig"].as_str().unwrap());
+        let relayer_checked = ![0x0001, 0x0101].contains(&r["memberKind"].as_u64().unwrap());
+        if relayer_checked {
+            let (state, last) = node.run(0, accept_job(930 + i as i64, st, &ua, &r["index"], sig, Value::Null, vec![])).await;
+            println!("MA {} no relayer: job {state}, reason {}", r["name"], last["error"]);
+            assert!(state == "dead" && last["error"].as_str().unwrap().contains("needs a relayer"), "{last}");
+        }
+        let relayer = if relayer_checked { json!(lane0) } else { Value::Null };
+        node.mined(&format!("accept_membership {}", r["name"]), 0, accept_job(940 + i as i64, st, &ua, &r["index"], sig, relayer, vec![])).await;
+        assert!(member_accepted(st, &ua, index), "{}", r["name"]);
+        let mark = view(&st.registry, "member_checked", &["--ua", ua.trim_start_matches("0x"), "--index", &index.to_string()]);
+        println!("MA {}: member_checked {mark}", r["name"]);
+        assert_eq!(mark.contains(&lane0), relayer_checked, "{mark}");
+    }
+
+    let member = key(BYSTANDER);
+    fund(&g(&member)).await;
+    let gid: [u8; 32] = member.public_key().try_into().unwrap();
+    let kd = scaas_ua::encode_msig(1, &[(0x0011, gid, 1)]);
+    let id = scaas_ua::ua_of(0x0120, &kd).unwrap();
+    let structure = json!({"name": "msig-g", "ua": ua0x(&id), "kind": 0x0120, "threshold": 1, "members": [{"kind": 0x0011, "id": ua0x(&gid), "weight": 1}]});
+    ensure_registered(&node, st, 950, &structure, Value::Null).await;
+    let gua = ua0x(&id);
+    let (state, last) = node.run(0, accept_job(951, st, &gua, &json!(0), "0x", Value::Null, vec![])).await;
+    println!("MA G member, no entry: job {state}, reason {}", last["error"]);
+    assert_eq!(state, "dead", "{last}");
+    assert!(report_of(&node.state.lock().unwrap(), 951, "signed").is_null(), "never signed");
+    let tag = scaas_ua::purpose_tag("membership").unwrap();
+    let root = invocation(&st.registry, "accept_membership", vec![bytes(&id), bytes(&tag), bytes(&scaas_ua::ua8::membership_digest(&id, &gid))], vec![]);
+    let nonce = i64::from_be_bytes(fresh()[..8].try_into().unwrap());
+    let (payload, signature) = signed_auth(&member, nonce, latest_ledger().await as u32 + 1_000, &root);
+    let auth = vec![json!({"payload": payload, "from": g(&member), "signature": signature})];
+    node.mined("accept_membership a G member, relayed", 1, accept_job(952, st, &gua, &json!(0), "0x", Value::Null, auth)).await;
+    assert!(member_accepted(st, &gua, 0));
 }
 
 /// A DEX `settle` of two native makers through `lane_step`: named orders, two `op.auth` entries and the lane's own entry.

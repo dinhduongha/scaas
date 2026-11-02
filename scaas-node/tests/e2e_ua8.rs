@@ -25,7 +25,7 @@ use pqcrypto_falcon::falconpadded512 as falcon;
 use pqcrypto_traits::sign::{DetachedSignature as _, PublicKey as _};
 use slh_dsa::{Sha2_128s, SigningKey as SlhKey};
 use scaas_node::adapter::{lane_step, lane_step_metered, Built, ChainAdapter};
-use scaas_node::adapters::soroban::{ua8_call_job, SorobanAdapter};
+use scaas_node::adapters::soroban::{ua8_call_job, ua_metatx_job, RelayFeePolicy, SorobanAdapter};
 use scaas_node::chain::Chain;
 use scaas_node::breaker::Breaker;
 use scaas_node::config::{BreakerCfg, ChainCfg, FinalityCfg};
@@ -419,6 +419,14 @@ static JOB: AtomicI64 = AtomicI64::new(1_000);
 fn call_job(registry: &str, f: &str, args: Value) -> Value {
     let id = JOB.fetch_add(1, Ordering::Relaxed);
     json!({"id": id, "kind": "call", "op": {"contract": registry, "function": f, "args": args, "valid_until": now() + 600}})
+}
+
+/// A member's acceptance as the node's `ua_metatx` job (CTR-UA-37).
+fn accept_job(registry: &str, ua: &[u8; 32], slot: &MemberSig, relayer: &Value) -> Value {
+    let id = JOB.fetch_add(1, Ordering::Relaxed);
+    let member_sig = json!({"index": slot.index, "key_data": h(&slot.key_data), "sig": h(&slot.sig)});
+    json!({"id": id, "kind": "ua_metatx", "op": {"contract": registry, "function": "accept_membership", "valid_until": now() + 600,
+           "args": {"ua": h(ua), "member_sig": member_sig, "relayer": relayer}}})
 }
 
 /// The node on one Soroban registry: the adapter over lanes 0 and 1, a fake Odoo.
@@ -1169,6 +1177,13 @@ async fn e2e_ua8_network_fit() {
         let light: Vec<usize> = heavy.every().into_iter().filter(|i| *i != at).collect();
         let (f, args) = heavy.rec(&light, &no_attrs(), &[0; 32], vec![]).job_args(&none);
         n.mined(&format!("register_msig 15 slots {set}"), f, args).await;
+        // the heavy member is listed, the `pop` did not hold it (CTR-UA-37): the largest `Ua(ua)` an acceptance loads, one `mldsa65` slot
+        let heavy_id = heavy.members[at].0.ua;
+        let m = member_message(MLDSA65, &heavy.ua, &scaas_ua::purpose_tag("membership").unwrap(), &ua8::membership_digest(&heavy.ua, &heavy_id));
+        let slot = MemberSig { index: at as u16, key_data: vec![], sig: heavy.members[at].0.sign(&m) };
+        let (state, last, tx) = n.run(0, accept_job(&n.registry, &heavy.ua, &slot, &none)).await;
+        assert_eq!(state, "mined", "{last}");
+        fit(&format!("accept_membership Ua(ua) of 15 slots {set}, 1 slot"), &tx.unwrap()).await;
         let d = ua8::pqz_key_record_digest(&heavy.ua, &pqz_hash, &attrs.pqz_pop_hash);
         n.mined(&format!("set_pqz_key msig Ua(ua) of 15 slots {set}, 1 slot"), "set_pqz_key", pqz_args(&heavy.ua, &attrs, msig_sig(&heavy.slots(&[at], &pqz_tag, &d)))).await;
 
@@ -1469,15 +1484,30 @@ impl Pool {
         Rec { kind: MSIG, key_data, attrs: attrs.clone(), pop: encode_member_sigs(&self.slots(0..count as u16)), pqz_pop }
     }
 
-    /// `count` members needed for a later record and one heavy member that registers alone: a later write's size does not need
-    /// a `register` of the same size. `(record, the later record's slots)`.
-    fn light_and_heavy(&self, start: usize, count: usize, weight: u16) -> (Rec, Vec<MemberSig>) {
+    /// `count` members needed for a later record and one heavy member: a later write's size does not need a `register` of the same
+    /// size. Only an accepted slot writes (CTR-UA-37), so up to `edge` the light members sign the `pop` and past it the heavy member
+    /// registers alone and `accept_all` follows. `(record, the later record's slots)`.
+    fn light_and_heavy(&self, start: usize, count: usize, weight: u16, edge: usize) -> (Rec, Vec<MemberSig>) {
         let mut list: Vec<_> = self.ids[start..start + count].iter().map(|id| (self.kind, *id, 1u16)).collect();
         list.push((self.kind, self.ids[start + count], count as u16 + weight));
         let key_data = scaas_ua::encode_msig(count as u16, &list);
         let at = count as u16; // sorted: the pool is, and the heavy member is the last of the slice
-        let rec = Rec { kind: MSIG, key_data, attrs: no_attrs(), pop: encode_member_sigs(&self.slots(at..at + 1)), pqz_pop: vec![] };
+        let pop = if count <= edge { self.slots(0..at) } else { self.slots(at..at + 1) };
+        let rec = Rec { kind: MSIG, key_data, attrs: no_attrs(), pop: encode_member_sigs(&pop), pqz_pop: vec![] };
         (rec, self.slots(0..count as u16))
+    }
+}
+
+/// Each slot's acceptance on the lane's word: the node's own XDR past its off-chain check, as `table_row`, a slot here being junk bytes.
+async fn accept_all(n: &Node, ua: &[u8; 32], slots: &[MemberSig]) {
+    let lane = sc(&g(&key(0)));
+    let mut cfg = chain_cfg(false);
+    cfg.params.insert("ua_registry".into(), n.registry.clone().into());
+    let policy = RelayFeePolicy::from_cfg(&cfg).unwrap();
+    policy.relayers.set(vec![lane.clone()]).unwrap();
+    for s in slots {
+        let (call, auth, _) = ua_metatx_job(&network(), &accept_job(&n.registry, ua, s, &json!(g(&key(0))))["op"], &lane, &policy).unwrap();
+        n.raw_send(&format!("ACCEPT slot {} of {} B", s.index, s.sig.len()), 0, call, auth).await.unwrap();
     }
 }
 
@@ -1540,7 +1570,7 @@ async fn e2e_ua8_relayer_table() {
                 assert_eq!(ok, c <= edge, "register_msig {c} {name} + PQZ + KEM + proof at {set}: the limit moved");
             }
             for &c in pqz {
-                let (rec, slots) = pool.light_and_heavy(si, c, 1);
+                let (rec, slots) = pool.light_and_heavy(si, c, 1, edge);
                 let (f, args) = rec.job_args(&me);
                 assert!(table_row(&n, &format!("register_msig heavy member, {c} light {name} {set}"), f, args).await);
                 let ok = table_row(&n, &format!("set_pqz_key {c} {name} slots {set}"), "set_pqz_key", json!({"ua": h(&rec.ua()), "pqz_key": h(&attrs.pqz_key), "pqz_pop_hash": h(&attrs.pqz_pop_hash),
@@ -1548,9 +1578,12 @@ async fn e2e_ua8_relayer_table() {
                 assert_eq!(ok, c <= pqz_edge, "set_pqz_key {c} {name} at {set}: the limit moved");
             }
             for &c in kem {
-                let (rec, slots) = pool.light_and_heavy(si, c, 2);
+                let (rec, slots) = pool.light_and_heavy(si, c, 2, edge);
                 let (f, args) = rec.job_args(&me);
                 assert!(table_row(&n, &format!("register_msig heavy member, {c} light {name} for KEM {set}"), f, args).await);
+                if c > edge {
+                    accept_all(&n, &rec.ua(), &slots).await;
+                }
                 let ok = table_row(&n, &format!("set_kem_key {c} {name} slots {set}"), "set_kem_key", json!({"ua": h(&rec.ua()), "version": 1, "kem": kem_json(&kem1),
                     "sig": sig_json(MSIG, &encode_member_sigs(&slots)), "relayer": me})).await;
                 assert_eq!(ok, c <= kem_edge, "set_kem_key {c} {name} at {set}: the limit moved");
