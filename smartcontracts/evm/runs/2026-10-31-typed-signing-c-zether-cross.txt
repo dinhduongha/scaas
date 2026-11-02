@@ -1,20 +1,19 @@
-# zether-cross at commit e1e3d06b
-   Compiling zether-prover v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/zether-prover)
-    Finished `release` profile [optimized] target(s) in 11.04s
+# zether-cross at commit 28fba50a
+    Finished `release` profile [optimized] target(s) in 0.07s
 No files changed, compilation skipped
 
 Ran 10 tests for test/zether/ZetherProverCross.t.sol:ZetherProverCrossBls12381Test
-[PASS] test_bundleFull_compact() (gas: 17735021)
-[PASS] test_bundleNone_auditorOff() (gas: 17305053)
-[PASS] test_bundleOptional_decoyFee() (gas: 21255201)
-[PASS] test_bundleOptional_default() (gas: 20580477)
-[PASS] test_compactOptional_relayed_optOut() (gas: 18171609)
-[PASS] test_named_multi_relayed() (gas: 19921813)
-[PASS] test_named_single_relayed() (gas: 12535079)
-[PASS] test_named_unshield_relayed() (gas: 7776949)
-[PASS] test_single_bundleFull() (gas: 11426553)
+[PASS] test_bundleFull_compact() (gas: 17734913)
+[PASS] test_bundleNone_auditorOff() (gas: 17305077)
+[PASS] test_bundleOptional_decoyFee() (gas: 21255429)
+[PASS] test_bundleOptional_default() (gas: 20580585)
+[PASS] test_compactOptional_relayed_optOut() (gas: 18171717)
+[PASS] test_named_multi_relayed() (gas: 19921801)
+[PASS] test_named_single_relayed() (gas: 12535247)
+[PASS] test_named_unshield_relayed() (gas: 7776877)
+[PASS] test_single_bundleFull() (gas: 11426577)
 [PASS] test_statementDifferential() (gas: 152625277)
-Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 14.31s (20.84s CPU time)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 15.14s (21.08s CPU time)
 
-Ran 1 test suite in 14.31s (14.31s CPU time): 10 tests passed, 0 failed, 0 skipped (10 total tests)
+Ran 1 test suite in 15.14s (15.14s CPU time): 10 tests passed, 0 failed, 0 skipped (10 total tests)
 rc=0
