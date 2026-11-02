@@ -164,4 +164,4 @@ python3 ../../scripts/size_gate.py sizes.json size-baseline.json
 
 The `main` column is the same file run at `2a864638`; `GovGas.t.sol` is written on ABI strings and literal bits for that. The fallback column: `git apply` the patch under `docs/research/governance/prototype/` from the repository root.
 
-Full suite on `0e1cf3ac`: 179 suites, 2,095 passed, 3 failed (the three pins of §7), 14 skipped. On `main` the same suite has no failure in those three.
+Full suite on `0e1cf3ac`: 179 suites, 2,095 passed, 3 failed (the three pins of §7), 14 skipped. The full suite was not run on `main`. On D1 alone it gave 2,071 passed, 4 failed: `DexKat` and three wiring failures fixed in the D2 commit; the two size pins first fail at D2.
