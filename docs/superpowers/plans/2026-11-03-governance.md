@@ -3,26 +3,27 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-11-03):** plan only, nothing built from it. The code on branch `governance` is the D1 + D2 prototype, written to measure.
+**Status (2026-11-03):** plan only, nothing built from it but T0. The code on branch `governance` is the D1 + D2 prototype, written to measure. Corrected the same day to the spec as the three reviews changed it (spec §0 G30-G59, §0.1).
 
 **Owner words, at the top:**
 
 | Item | State |
 |---|---|
-| **Hybrid underlying (CTR-GOV-12)** | **In this build, on every `WRAPPED*` kind. No owner word is needed.** CTR-GOV-12 is an owner ruling and spec §5 and step S6 build it. Its one gate was §9 and §5.6: the `Grant` on bit 1 and the bytes on the confidential kinds. CTR-GOV-19 (owner 2026-11-03) lifted that gate and builds the whole record. Controller calls C1 (`executeRate` drops `c ≥ supply` on a hybrid) and C2 (`maxSupply` in `scaas.underlying`, a `capped` copy in leg slot a) stand unless the owner overrides them; C1 is the one worth reading |
+| **Hybrid underlying (CTR-GOV-12)** | **In this build, on every `WRAPPED*` kind. No owner word is needed.** CTR-GOV-12 is an owner ruling and spec §5 and step S6 build it. Its one gate was §9 and §5.6: the `Grant` on bit 1 and the bytes on the confidential kinds. CTR-GOV-19 (owner 2026-11-03) lifted that gate and builds the whole record. C1 is the owner's now: `executeRate` drops `c ≥ supply` on a hybrid, a rate fall needs no `addReserve` (CTR-GOV-12). C2 (`maxSupply` in `scaas.underlying`, a `capped` copy in leg slot a) stands unless the owner overrides it |
 | **The Change to CTR-AS-17 (spec §12.1)** | **Needs the owner's word before T17 applies it.** CTR-GOV-03 records that it "waits for the owner". The Change lines of §12.9 are accepted and already in the register. T17 keeps §12.1 in a separate commit, so it can land or wait alone |
 | **Merging `main` into `governance`** | Needs the owner's word, at a task boundary, after `ua8-soroban` lands (§"Branches"). The spec's "rebased as the owner directs" defaults to: no rebase, the build goes on top of the prototype commits |
-| **The probe's outcome** | Needs a word only if T0 fails its first two arms: the contracts still build, the SCaaS testnet route does not (T0's table) |
+| **The probe's outcome** | **Settled.** T0: A refuses, C passes. Owner 2026-11-03: the SCaaS testnet leaves EIP-7954 out (CTR-GOV-19). T0b measures what that route left unmeasured |
+| **NET-EVM-06's Change (spec §12.10)** | Taken by that ruling: T16 and T17 apply it |
 
 **Goal:** promote the prototype to the spec and build the rest on EVM: D1 `GovernanceBase` / `GovernanceLib` on the six token kinds and `SCaaSDex`; D2 the whole `Grant` record with the fixes of B-01 to B-12 and the findings around them; D4 the two-call delay with `termsHash`; real enum ids; D5 with `isRegisteredToken`; D6 rescue; hybrid; `GovernanceHolder` and the relay rule; the selector audit and "+0" pins; the size gate's new ceiling; the node, clients and vectors; `docs/contracts/governance.md` and the §12 Changes. D7 is a separate part, not started here. Regulated implementations are not built: enum ids and refusals only.
 
 **Architecture:** one branch `governance` (worktree `.claude/worktrees/governance`), on top of the prototype commits. A probe and the tool chain first (T0-T2), so nothing later runs without them. Contracts in one worktree, sequentially (T3-T10: they share `GovernanceLib`, `MetaTokenBase`, `WrappedLib`, `SCaaSDex`), the holder and its rows (T11-T12), the audit (T13), then bits, node and deploy beside each other (T14-T16), docs (T17), the gate runner (T18), the whole-branch review (T19), the report (T20).
 
-**Tech Stack:** Solidity / Foundry 1.8.5, solc 0.8.37, Amsterdam, `via_ir = false`, optimizer 200; Rust `scaas-node` (alloy 1.6, rustc 1.90); Node `node --test` (`clients/clientkeys`); `ua-rs`, `ua-c`, `ua-cxx`, `ua-qt`, `ua-cs`, `ua-py`, `ua-go`, `ua-dart`, `ua-dart-frb`; Python 3 (`docs_check`, `size_gate`); Docker for T0 only.
+**Tech Stack:** Solidity / Foundry 1.8.5, solc 0.8.37, Amsterdam, `via_ir = false`, optimizer 200; Rust `scaas-node` (alloy 1.6, rustc 1.90); Node `node --test` (`clients/clientkeys`); `ua-rs`, `ua-c`, `ua-cxx`, `ua-qt`, `ua-cs`, `ua-py`, `ua-go`, `ua-dart`, `ua-dart-frb`; Python 3 (`docs_check`, `size_gate`); Docker for T0 and T0b only.
 
-**Spec:** [`docs/superpowers/specs/2026-11-02-governance.md`](../specs/2026-11-02-governance.md) (§0 G1-G29, C1-C6). Rulings: [`docs/decisions.md`](../../decisions.md) CTR-GOV-01 to -19. Findings: `docs/research/governance/permission-model-v2-attack.md` (B-01 to B-34, R-01 to R-19). Measurement: `docs/research/governance/prototype/RESULTS.md`.
+**Spec:** [`docs/superpowers/specs/2026-11-02-governance.md`](../specs/2026-11-02-governance.md) (§0 G1-G59, C1-C11, §0.1 the reviews). Rulings: [`docs/decisions.md`](../../decisions.md) CTR-GOV-01 to -19. Findings: `docs/research/governance/permission-model-v2-attack.md` (B-01 to B-34, R-01 to R-19). Measurement: `docs/research/governance/prototype/RESULTS.md`.
 
-**Owner 2026-11-03, binding this plan:** size no longer blocks the build. Every kind, `WrappedZetherToken` included, first runs on the SCaaS testnet at a higher `maxCodeSize`; the whole `Grant` record is built; reducing size comes later. **No size lever is planned.** Spec §9 stays as the record of what a public chain still needs; its gate S0 is gone. Regulated implementations stay out: their rules stay in CTR-GOV-17 and -18 for a later round.
+**Owner 2026-11-03, binding this plan:** size no longer blocks the build. Every kind, `WrappedZetherToken` included, first runs on the SCaaS testnet at a higher `maxCodeSize`; the whole `Grant` record is built; reducing size comes later. **No size lever is planned.** Spec §9 is the record of what a public chain still needs; S0 is now the route, T0, T0b, T2. Regulated implementations stay out: their rules stay in CTR-GOV-17 and -18 for a later round.
 
 ## Global Constraints
 
@@ -39,20 +40,20 @@
 - **Mutants:** a negative test must be able to fail. Each mutant is one change, on a clean tree, its suite run, restored by `git checkout -- <file>`. Log them as `runs/2026-11-03-governance-t<n>-mutants.txt`, one row `mutant | test that went red | rc`. A mutant that no test catches is a finding, not a note.
 - Heavy commands through `scripts/capped`, foreground, never inside `timeout`. cargo `-j2`. `dotnet build-server shutdown` after capped dotnet. Docker capped by `--memory` or compose `mem_limit`. No `nohup`, `&`, `until`, `sleep` loops, `pgrep -f`, `git stash`, `git add -f`. At most 3 agents at once, no two gate runs at once. `at-set.sh` rewrites `src/pqz/PqzSet.sol`: one run per work tree, restored after.
 - No timing or gas calibration; forge gas figures are deterministic and need no go. No full `pqz-core/gate.sh`: nothing in `pqzl`, `pqzh`, `stmt`, `ffi` or a set parameter moves. If a set's `debit_min_gas` or a calibrated row moves, stop and ask.
-- **Never touch the live testnet stack,** its containers or its RPC port. T0 runs on a throwaway copy. **The reset is the controller's.** 22776 is the owner's.
+- **Never touch the live testnet stack,** its containers or its RPC port. T0 and T0b run on a throwaway copy. **The reset is the controller's.** 22776 is the owner's.
 - Commit per task on `governance`, staged by explicit path: `governance T<n>: …`, ending with the session's `Co-Authored-By` trailer. **No merge, no push.** `HANDOFF.md` stays local; no commit holding only `TODO.md`.
 - English in code, commits, docs. Full output in git-ignored `.log` files; commit `step | commit | rc | counts` summaries and short evidence, no absolute paths.
 
 ## Plan decisions (GD-*; controller calls, owner may override; recorded in full by T17)
 
 - **GD-1 "+0" first.** Spec S9 puts the pin late. It costs nothing to place first and guards every later task, so T1 lands it before any contract changes. The selector audit stays late (T13): it needs the holder.
-- **GD-2 The final storage shape lands once.** T3 writes `GovernanceStorage` of spec §1.4 and `Grant.barred` in full, with the layout pin; T5-T10 use fields and move no slot. So the layout pin moves once and later diffs stay small.
+- **GD-2 The final storage shape lands once.** T3 writes `GovernanceStorage` of spec §1.4, `ownerGeneration`, `PendingGrant.generation` and `Grant.barred` in full, with the layout pin; T5-T10 use fields and move no slot. So the layout pin moves once and later diffs stay small.
 - **GD-3 One config change.** T7 adds `grantDelay`, `rescueTo` and `maxSupply` to `TokenConfig`, and `grantDelay`, `rescueTo` to `DexConfig`, in one commit, so the encoders (`script/pqz/e2e.py`'s `CFG`, `scaas-node/tests/e2e.rs`' `DexConfig`, 20 positional `DexConfig(...)` in tests) change once. Until T9 and T10 give them meaning they fail closed: `maxSupply ≠ 0` reverts `MaxSupplyInvalid()`, `rescueTo ≠ 0` reverts `RescueConfigInvalid()`.
 - **GD-4 The code limit is declared, not derived from a chain id.** `DeployBase` refuses a release whose runtime exceeds `CHAIN_CODE_LIMIT` (env, default 65,536, the value of EIP-7954), naming the contract, before anything is sent. The SCaaS testnet's runbook sets 131,072. One rule on every chain, no list of chain ids. A chain's own limit stays the last word: a deploy it refuses fails closed.
 - **GD-5 The list is a pin.** `size-baseline.json` gains `_above64KiB`, sorted. `size_gate.py` prints the list every run and errors when the computed list differs from it, in either direction, so a kind that crosses is named in a commit.
 - **GD-6 Where new pins live.** `fs_permissions` reads `./test/vectors`, `./test/v2/layout`, `../vectors`, and writes `./test/vectors`, `../vectors/metatx`. So: `test/vectors/plus_zero_slots.json`, `test/vectors/selector_audit.json`, `test/v2/layout/namespaces.json`, `test/v2/layout/GovernanceHolder.json` (spec §10.4's `test/governance/layout/` is not readable and needs nothing of its own). `foundry.toml` gains one entry only: `{ access = "read-write", path = "../vectors/governance" }`.
-- **GD-7 `setGrant` on the holder.** `_namedCall` (words ≠ call arguments) is on `ERC20MetaTx`, which the holder is not. `MetaTxBase._named` runs `_run`; the holder adds one private helper on `_metaOf`, `_namedHash`, `_run`. `_namedCallUA` already sits on `UAMetaTxBase`. Overriding `_execute` to refuse does not touch `_named`: it goes to `_run`, not `_execute`.
-- **GD-8 The holder's `deploy` is relayable.** A derived UA has no gas, and spec §3.6 says no first gas is needed, so the permissionless `GovernanceHolderFactory.deploy` gets a `PLAIN` row, as `SmartKeyAccountFactory.deploy` has. New contract kind `holder_factory`, `Rule::HolderFactory`, config `holder_factory` (unset: refused). Spec §12.7 did not name it. `implementation()` read once from that factory gives the clone code hash of `Rule::Holder`.
+- **GD-7 `setGrant` on the holder.** `_namedCall` (words ≠ call arguments) is on `ERC20MetaTx`, which the holder is not. `MetaTxBase._named` runs `_run`; the holder adds one private helper on `_metaOf`, `_namedHash`, `_run`. `_namedCallUA` already sits on `UAMetaTxBase`. Overriding `_execute` to refuse does not touch that helper: it goes to `_run`, not `_execute`. Every holder struct carries `generation`, a word and no call argument, so every op, not only `setGrant`, goes through the helper.
+- **GD-8 The holder's `deploy` is relayable.** A derived UA has no gas, and spec §3.6 says no first gas is needed, so the permissionless `GovernanceHolderFactory.deploy` gets a `PLAIN` row, as `SmartKeyAccountFactory.deploy` has. New contract kind `holder_factory`, `Rule::HolderFactory`, config `holder_factories`, a list (empty: refused), so the second holder release of spec §3.2 is a config row. `IMPLEMENTATION()` read once from each gives the set of clone code hashes of `Rule::Holder`, as `SmartKeyAccountFactory` names it.
 - **GD-9 What "every language" holds.** Typed-signing C7 found that only `clientkeys` and `zether-prover` build typed EVM digests, so holder rows go to `clientkeys` and the node, and spec S8's "every `ua-*`" does not apply. `governance_bits.json` goes to every language (T14), in the seats of `kindName`'s table. The DEX `admin` rename is real in one non-Solidity file, `scaas-node/tests/e2e.rs`, plus docs: a word search finds no client that reads it. No wizard exists in this repo; "wizard default 2 days" is a doc line.
 - **GD-10 `maxSupply` in the indexer.** Spec S6 says the indexer reads it. `scaas-node/src/indexer.rs` reads no token parameter at all, so there is no seat. Not built; `maxSupply()` is the wallet's view. Add when a feed asks.
 - **GD-11 Legacy.** T3 copies `AdminLib.sol` and `ITokenAdmin.sol` as they stand at `main`, and the prototype's `requireRole`, to `smartcontracts/evm/legacy/governance/` with a line in `legacy/README.md`; `requireRole` goes by spec G14, a ruling on that API. The prototype's own superseded lines are not legacy: they never shipped.
@@ -60,9 +61,11 @@
 - **GD-13 `dex_order_kat.json` regenerates in each task that moves `NormalToken` or `SCaaSDex` bytecode** (`WRITE_KAT=true forge test --match-contract DexKatTest`), from T3 on, so every task ends green and every reader follows. The review check: only clone addresses, domains and signatures move in its diff.
 - **GD-14 The B-06 fixture.** `normalInit` sets `features = 7`, owner 0, and takes a minter. 29 of its 51 calls pass a non-zero minter, so T5's rule refuses them. `normalInit` sets `lockedFeatures = 1 << 1` when `minter ≠ 0`: the holder survives with no owner, which is what those tests meant.
 - **GD-15 Findings that stay as stated behaviour.** B-13 and B-16 are accepted by spec §1.7 and §7.4: their `test_attack_*` become `test_stated_*`, kept as pins of the behaviour.
-- **GD-16 A third "+0" row.** Spec §10.2 pins `transfer`, `mtxTransfer` and asks a control in `_uaMove`, which neither reaches. T1 adds `transferToUA` so that control can fail.
+- **GD-16 The "+0" rows on the UA path.** Spec §10.2 now pins `transfer`, `mtxTransfer`, `transferToUA` and `uaExecuteTransfer`: the first two never reach `_uaMove`, so a control there could not fail on them (Codex 11), and the last is the UA → UA branch.
 - **GD-17 CTR-GOV-18's test row.** Spec §10.3's row needs `ComplianceRegistry` and the hook. Only "`ALLOWLIST` refused on the four confidential kinds" lands now; the rest goes to the regulated round with its code.
 - **GD-18 The two size pins.** `Factory.t` `test_sizes` and `HederaV2.t` `test_implementationSizes` assert 39,945 and 50,770. Spec §10.4: no pin moves to go green, and B-26 is expected to clear them, so they stay red through T2 and T3 re-reads them. Later features can pass them on merit: the first task whose measured `NormalToken` passes 39,945, or `WrappedToken` 50,770, moves that literal with old → new, to read `size-baseline.json`, so the ratchet is one number.
+- **GD-19 The refusal of 5-9 keeps each kind's error.** `_validBits()` loses `REGULATED` on `NormalToken` and `WrappedToken`, and their `_init` passes `_validBits() | GovernanceBits.REGULATED`, so `Features.t` and `GovernanceLib.t` keep `FeatureNotBuilt` unchanged and the confidential kinds keep `FeatureInvalidForKind`. No test moves.
+- **GD-20 `_addLeg` reads the factory as `msg.sender`.** `initialize` has checked it and DELEGATECALL keeps it, so `initToken`, `ZetherWrappedLib.init` and `PqzWrappedLib.init` keep their signatures. T8 tests it through all three.
 
 ## Prototype review against the spec
 
@@ -89,10 +92,16 @@ Read at `d1132a40`, `src/governance/`, `src/dex/SCaaSDex.sol`, `src/metatx/`. Wh
 | P-17 | `IGovernance` lacks the views, errors and `GrantProposed` of §2.2; `GrantNotNarrower` field 8; no `IRescuable` | §2 | each with its task |
 | P-18 | `test_transferTouchesNoGovernanceSlot` covers one entry, one kind, `root..root+7` | B-33, §10.2 | T1 replaces it |
 | P-19 | `test/metatx/AdminLib.t.sol`, `helpers/AdminHarness.sol` keep the old name | `GovernanceLib` | T3, `git mv` |
+| P-20 | `NormalToken._validBits()`, `WrappedToken._validBits()` hold `REGULATED`, so `validBits()` reports bits 5-9 (agy I-6) | §1.2 | T3 (GD-19) |
+| P-21 | `_clear` returns on a non-holder, so a revoke can write nothing (Claude M-8) | §1.5 | T6 |
+| P-22 | `_narrows` reads `t.maxUses > p.maxUses`; the leaf path reads no parent expiry (agy I-3) | §1.5 | T6 |
+| P-23 | `WrappedLib.initToken` passes `TOKEN_ROLES`, `TOKEN_CONTRACT_ONLY` | §1.2 | T3 |
 
 **Held, keep as they are:** `$()` and the root constant; `_debit`; `useLimited` debiting the parent with the same function; `_scopeNarrows` in the stub; a revoke keeping the record; the two guard hooks; masks passed as arguments; `_grant` idempotent on `WHOLE`; `WrappedLib` keeping `NotGuardian`, `NotRateAdmin`, `RateFixed` around `use` (no size work). `_lowest` runs only on a non-zero word on every path read.
 
 **B-01 to B-12:** B-01 T7. B-02 T5. B-03 T4. B-04 T6. B-05 T6. B-06 T5. B-07 T6. B-08 T6. B-09 T5. B-10 T5. B-11 T6. B-12 T6. **The rest:** B-13 stated (GD-15), B-14 T11, B-15 T8, B-16 stated, B-17 and B-18 T6, B-19 T5, B-20 to B-22 T11, B-23 to B-25 Part D7 and the family rounds, B-26 T3, B-27 T7, B-28 routed to CTR-GOV-09's mask, B-29, B-30, B-32, B-34 T17 (and B-34's sentence T14), B-31 T3 and T5, B-33 T1.
+
+**The reviews (spec §0.1), where each lands:** agy C-1, Claude M-7 T6. agy C-3, Claude M-4 (pending), M-5, M-6, Codex 2, 7, agy I-2 T7. agy I-1, I-3, Claude M-8 T6. agy I-6, M-1 T3. agy I-7, M-2.2 T10. agy M-2.1 T8. agy I-5, Claude I-9, M-14 T11, T15. Claude I-4, M-9 (reserve) T9. Codex 3, 4, Claude M-4 (envelope) T11. Codex 10 T14, T17. Codex 11 T1. Claude I-7 T7. The regulated rows (Claude I-1, I-2, I-3, I-5, M-9, M-10, M-11, M-12, Codex 1, 5, 6, agy C-2) land as spec text only: T14's sentences and T17's docs.
 
 ## What lands for the regulated round
 
@@ -101,13 +110,13 @@ Read at `d1132a40`, `src/governance/`, `src/dex/SCaaSDex.sol`, `src/metatx/`. Wh
 | Lands now | Task |
 |---|---|
 | `GovernanceBits`: `FREEZE` 5, `FORCE` 6, `PAUSE` 7, `ALLOWLIST` 8, `DENYLIST` 9, `RECORD` 10, `MODERATE` 21, `REGULATED` = bits 5-9. Already there | prototype |
-| `NORMAL`, `WRAPPED`: any of 5-9 refused `FeatureNotBuilt(bit)`, one test per bit. The four confidential kinds: `FeatureInvalidForKind(bit)`, 8 included | T3 |
+| `NORMAL`, `WRAPPED`: any of 5-9 refused `FeatureNotBuilt(bit)`, one test per bit, and none of them in `validBits()` (GD-19). The four confidential kinds: `FeatureInvalidForKind(bit)`, 8 included | T3 |
 | `roles.issuer ≠ 0` refused `RoleWithoutFeature(5)`, `roles.compliance ≠ 0` refused `RoleWithoutFeature(10)` | T3 |
 | Enum ids 8-13, off; 6 and 7 refused | T4 |
 | `test_regulatedKindPublishesOnTheSameFactory`: a mock of kind 8 decodes `abi.encode(TokenConfig, a RegulatedParams-shaped struct)` in its own `_initRaw`, then publishes, enables and creates on the same factory, is `isRegisteredToken` and `KIND_SCAAS` to the DEX | T4 |
-| `governance_bits.json` rows and sentences for 5-10, 21: bits 8, 9 "no holder, parameters" | T14 |
+| `governance_bits.json` rows and sentences for 5-10, 21: bits 8, 9 "no holder, parameters"; bit 5 one sentence per class of kind, bit 7 one sentence | T14 |
 
-**Does not land:** `RegulatedParams`, `registry`, `requiredFlags`, `deniedFlags`, `cooldownUntil`, `termsHash`, `ComplianceRegistry`, `hasFlags`, `canReceive`, `requiredFlags()`, `deniedFlags()`, `registry()`, `NotEligible`, `RegulatedConfigInvalid`, `TokenStore.KIND_*` for 8-13, any hook in `_update` or `_uaMove`, `_delayedRelaxBits`, any storage slot, any `TokenConfig` field.
+**Does not land:** `RegulatedParams`, `complianceRegistry`, `requiredFlags`, `deniedFlags`, `cooldownUntil`, `termsHash`, `ComplianceRegistry`, `hasFlags`, `canReceive`, `requiredFlags()`, `deniedFlags()`, `complianceRegistry()`, `NotEligible`, `RegulatedConfigInvalid`, `TokenStore.KIND_*` for 8-13, any hook in `_update` or `_uaMove`, `_delayedRelaxBits`, any storage slot, any `TokenConfig` field.
 
 **Why nothing is owed later:** `createToken(kind, version, initArgs, salt)` passes `initArgs` opaque to `initialize` (`IFactoryToken`: "a later version may take another encoding without a factory change"), and `_initRaw` and `_init` are virtual. So a regulated implementation decodes its own encoding: `TokenConfig` plus `RegulatedParams`. A wallet needs no view on a plain kind: `features()` says bits 8 and 9 are off, and features only lose bits.
 
@@ -118,7 +127,7 @@ Read at `d1132a40`, `src/governance/`, `src/dex/SCaaSDex.sol`, `src/metatx/`. Wh
 | Item | Today | After T2 |
 |---|---|---|
 | Runtime ceiling, baseline or not | none | 131,072 B (`maxCodeSize` `0x20000`, CTR-GOV-19): above it is an error |
-| Init ceiling | none past the baseline | 131,072 B, the limit EIP-7954 gives; T0 reports whether the client's follows `maxCodeSize` |
+| Init ceiling | none past the baseline | 131,072 B, the lower figure, until T0b reads the SCaaS testnet's route. T0: with EIP-7954 active the client refuses 131,073 B, so that limit does not follow `maxCodeSize`; without it the limit is not measured |
 | List of contracts above 65,536 B | none | printed every run, pinned as `_above64KiB` (GD-5) |
 | Ratchet | shrink only, 13 errors on this branch (RESULTS §1) | the same; moved in each task with old → new |
 
@@ -126,7 +135,7 @@ Read at `d1132a40`, `src/governance/`, `src/dex/SCaaSDex.sol`, `src/metatx/`. Wh
 
 **Forge and anvil.** Under Amsterdam forge refuses a create above 65,536 B, so T2 sets `code_size_limit = 131072` in `foundry.toml` before any kind crosses. RESULTS' probe past the cliff was built, never deployed. `scripts/e2e-zether.sh` runs anvil with `--code-size-limit 65536`; T2 raises it. `deploy.sh`, `e2e.rs`, `e2e_hedera.rs` already pass `--disable-code-size-limit` to forge; T16 raises their anvil limit where a kind above 64 KiB is deployed.
 
-**Deploy gas against the 200 M block.** Need = `runtime × 1,530 + 2^24` (`DeployBase._releaseGasNeed`, EIP-8037: `tx.gas` must fit the block).
+**Deploy gas against the 200 M block.** Need = `runtime × 1,530 + 2^24` (`DeployBase._releaseGasNeed`, EIP-8037: `tx.gas` must fit the block). That is the deploy gate's formula, not the chain's limit: T0's arm C deployed 119,800 B at `tx.gas` 199,900,000, `gasUsed` 183,562,782. The largest size that fits at 200 M was not searched.
 
 | Runtime | Need | 200 M block |
 |---|---|---|
@@ -135,7 +144,7 @@ Read at `d1132a40`, `src/governance/`, `src/dex/SCaaSDex.sol`, `src/metatx/`. Wh
 | **119,753 B** | 200.0 M | **the largest that fits** |
 | 131,072 B, `0x20000` | 217.3 M | **does not fit** |
 
-So at 200 M the block is the real ceiling, 119,753 B, not `maxCodeSize`, and the deploy gate refuses first. Nothing planned comes near it; a contract above it would need a block of its own, which is the controller's reset. `--gas-estimate-multiplier 105` asks 5 % more of the block: T16's simulated run reports `tx.gas` beside the formula. Deploy gate figures at `NormalToken` 77.2 M, `WrappedToken` 93.5 M, `NormalZetherToken` 100.8 M, `NormalPqzToken` 101.0 M, `SCaaSDex` 65.3 M all fit, from the B-26 column of spec §9.
+So at 200 M the deploy gate's ceiling is 119,753 B, not `maxCodeSize`, and it refuses first, fail closed. Nothing planned comes near it; a contract above it would need a block of its own, which is the controller's reset. `--gas-estimate-multiplier 105` asks 5 % more of the block: T16's simulated run reports `tx.gas` beside the formula. Deploy gate figures at `NormalToken` 77.2 M, `WrappedToken` 93.5 M, `NormalZetherToken` 100.8 M, `NormalPqzToken` 101.0 M, `SCaaSDex` 65.3 M all fit, from the B-26 column of spec §9.
 
 ## Review Focus (every task review reads these)
 
@@ -145,8 +154,9 @@ So at 200 M the block is the real ceiling, 119,753 B, not `maxCodeSize`, and the
 4. A hybrid's cap holds on every path that raises `totalSupply()`; a non-hybrid wrap reads no new slot.
 5. No read on `transfer` or `mtxTransfer` on any kind: `PlusZero.t.sol`, not a gas figure.
 6. A library split is not free: `this`, `msg.sender`, DELEGATECALL storage, reentrancy guards, `LinkClosure` pins, in `GovernanceUse` and in `WrappedLib` → `GovernanceLib`.
-7. Holder: no generic path, `_subject()` checked at run time, the operator in the salt, no `receive`, one lane per target stated.
+7. Holder: no generic path, `_subject()` checked at run time, `acceptOperator` against the pending, `generation` signed and bumped, the operator in the salt, no `receive`, one lane per target stated.
 8. Allow-lists equal in both directions after every row added.
+9. `Counts` by spec §1.7's table, every row, `r` read first. A pending never outlives a revoke, a renounce or a change of owner: A → B → A revives nothing, of a pending or of an envelope.
 
 ---
 
@@ -158,13 +168,13 @@ So at 200 M the block is the real ceiling, 119,753 B, not `maxCodeSize`, and the
 | `smartcontracts/evm/src/governance/{GovernanceHolderBase,GovernanceHolder,GovernanceHolderFactory,IRescuable}.sol` | new |
 | `smartcontracts/evm/src/metatx/{MetaTokenBase,NormalToken,WrappedToken,WrappedLib}.sol`, `src/zether/{WrappedZetherToken,ZetherWrappedLib,NormalZetherToken}.sol`, `src/pqz/{WrappedPqzToken,PqzWrappedLib,NormalPqzToken}.sol` | `use`, config, hybrid, rescue |
 | `smartcontracts/evm/src/factory/{IOpenFactory,OpenFactory,IFactoryToken}.sol`, `src/dex/{SCaaSDex,ISCaaSDex,DexPuller}.sol` | enum, `TokenConfig`, `DexConfig`, `DexPuller.rescue` |
-| `smartcontracts/evm/test/governance/{PlusZero,CodeCeiling,GovRegulatedBits,GovDelay,GovLeg,GovHybrid,GovRescue,GovDeploy,Holder,HolderPqMsig,HolderTypehash,SelectorAudit,GovBitsVector}.t.sol` | new suites; `GovGrant`, `GovAttackV2`, `GovGas` kept |
+| `smartcontracts/evm/test/governance/{PlusZero,CodeCeiling,GovRegulatedBits,GovDelay,GovExamples,GovLeg,GovHybrid,GovRescue,GovDeploy,Holder,HolderPqMsig,HolderTypehash,SelectorAudit,GovBitsVector}.t.sol` | new suites; `GovGrant`, `GovAttackV2`, `GovGas` kept |
 | `smartcontracts/evm/test/vectors/{plus_zero_slots,selector_audit}.json`, `test/v2/layout/{namespaces,GovernanceHolder}.json` | new pins |
 | `smartcontracts/vectors/governance/governance_bits.json`, `smartcontracts/vectors/typed/typed_ops.json`, `smartcontracts/evm/test/vectors/dex_order_kat.json` | new, regenerated |
 | `scripts/size_gate.py`, `smartcontracts/evm/size-baseline.json`, `smartcontracts/evm/foundry.toml`, `smartcontracts/evm/script/DeployBase.sol`, `smartcontracts/scripts/deploy.sh`, `scripts/e2e-zether.sh` | ceiling, list, deploy gate |
 | `scaas-node/src/{typed,guard,config,addresses}.rs`, `scaas-node/node.example.toml`, `scaas-node/tests/{e2e,e2e_hedera}.rs` | rows, rules, config, e2e |
 | `clients/clientkeys/{src/evm.js,scripts/typed-ops-vectors.mjs,test/typed-ops.test.js}`, every client's bit reader (T14) | rows, bits |
-| `pqz-core/nethermind/chain/{e2e.py,patch-chainspec.py,RUNBOOK.md}`, `pqz-core/nethermind/runs/2026-11-03-code-size-probe.{sh,txt}` | probe, reset tooling |
+| `pqz-core/nethermind/chain/{e2e.py,patch-chainspec.py,RUNBOOK.md}`, `pqz-core/nethermind/runs/2026-11-03-code-size-probe.{sh,txt}` | probe, its arm D, reset tooling: `maxCodeSize` `0x20000`, EIP-7954 out |
 | `docs/contracts/governance.md`, `docs/{contracts,node,networks}/…`, `docs/decisions.md`, `README.md`, `docs/README.md`, `AGENTS.md`, `TODO.md` | T17 |
 | `smartcontracts/evm/runs/2026-11-03-governance-gates.sh` | closing gates |
 
@@ -178,7 +188,7 @@ So at 200 M the block is the real ceiling, 119,753 B, not `maxCodeSize`, and the
 
 | Stage | Tasks | How |
 |---|---|---|
-| Route and guards | T0, T1, T2 | T0 anytime, Docker only, no forge overlap needed; T1 then T2 |
+| Route and guards | T0 (done), T0b, T1, T2 | T0b anytime, Docker only, no forge overlap needed; T1 then T2 |
 | Contracts | T3 → T4 → T5 → T6 → T7 → T8 → T9 → T10 | sequential, one worktree: same files. All four sets once at T10 |
 | Holder | T11 → T12 → T13 | T12 needs T11's entries, T13 needs both |
 | Beside each other | T14, T15, T16 | after T13; disjoint files. T15 needs T12's rows |
@@ -187,7 +197,7 @@ So at 200 M the block is the real ceiling, 119,753 B, not `maxCodeSize`, and the
 
 | Spec step | Tasks |
 |---|---|
-| S0 | gone (CTR-GOV-19); T0 and T2 take its place |
+| S0 | T0, T0b, T2, T16 (the route of CTR-GOV-19) |
 | S1 | T3 |
 | S2 | T4 |
 | S3 | T5, T6 |
@@ -205,36 +215,35 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 
 ---
 
-### Task T0: the local probe (CTR-GOV-19, "probed before the reset")
+### Task T0: the local probe (CTR-GOV-19): DONE, `fee41265`
 
-**Question:** does a contract above 64 KiB deploy under Amsterdam's EIP-7954 with `maxCodeSize` `0x20000` on Nethermind 2.2.0? `pqz-core/nethermind/runs/2026-10-21-glamsterdam-gas-impact.md` records `CodeSizeConstants.MaxCodeSizeEip7954` and a chainspec override before it. Whether the fork's constant caps the override is what nobody has run.
+**Result** (`pqz-core/nethermind/runs/2026-11-03-code-size-probe.txt`): arm A refuses, arm C passes, on `scaas/nethermind-pqz:2.2.0-pqz6` and stock `nethermind/nethermind:2.2.0`. With EIP-7954 active the code limit is 65,536 B whatever `maxCodeSize` says. With `eip7954TransitionTimestamp` removed, `maxCodeSize` `0x20000` alone carries the code: 70,000 B with a real jump answered 42, 119,800 B deployed. **Owner 2026-11-03:** the SCaaS testnet leaves EIP-7954 out, every other Amsterdam EIP stays (CTR-GOV-19). The probe ran one node at a time, the follower by RLP import.
 
-**Files:**
-- Create: `pqz-core/nethermind/runs/2026-11-03-code-size-probe.sh` (kept, experiment code stays in the repo), `…-code-size-probe.txt` (summary)
-- Modify: `pqz-core/nethermind/chain/e2e.py` (`codesize` takes `--sizes` and `--gas`; `(65_536, True), (65_537, False)` stays the default)
+**Left unmeasured:** arm B ran with EIP-7954 active, so neither the code ceiling at `0x20000` nor the init limit is known on arm C's route. T0b takes both.
 
-**How:** `chain/copy.sh` with `COPY=scratchpad/gov-probe` (git-ignored), its own compose project `pqzcopy`, network `10.76.22.0/24`, `mem_limit` 1700m + 1700m + 64m, port `127.0.0.1:18545` only. First `docker ps --filter name=pqzcopy-` must be empty, and at least 4 GB available. The genesis comes from `copy.sh`'s replica plus the Amsterdam transitions of `runs/2026-10-21-testnet-reset-2.2.0.sh`, and `Blocks.TargetBlockGasLimit` from its config step. Image: the newest local `scaas/nethermind-pqz:2.2.0-*` named by the RUNBOOK, stock `nethermind/nethermind:2.2.0` as the second run if the first refuses. **The live directory is never read.** RPC reads go to the follower, so a block a follower cannot import shows.
+### Task T0b: the ceiling and the init code limit without EIP-7954 (CTR-GOV-19: "not measured")
 
-| Arm | Chainspec | Rows, each one `status`, `eth_getCode` length, `gasUsed` | Must show |
+**Question:** on arm C's route, is the code ceiling 131,072 B, and what is the init code limit? Under EIP-7954 the client refused 131,073 B of init code; without it the limit is not known, and `docs/networks/evm.md` records that it followed `maxCodeSize` before Amsterdam. Every deploy sends init code, runtime plus constructor plus arguments, so a limit below a kind's `.init` row stops that kind.
+
+**Files:** `pqz-core/nethermind/runs/2026-11-03-code-size-probe.sh` (arm D), `…-code-size-probe.txt` (rows added, the verdict line kept)
+
+**How:** as T0, the same limits, one node at a time, `127.0.0.1:18545`, **the live directory never read**, stock image and the local `pqz` image.
+
+| Arm | Chainspec | Rows, each one `status`, `eth_getCode` length, `gasUsed`, or the refusal's text | Must show |
 |---|---|---|---|
-| 0, control | `maxCodeSize` `0x10000` | 65,536 deploys; 65,537 status 0 | the probe can fail |
-| A | `maxCodeSize` `0x20000`, `maxCodeSizeTransition` 0, `eip7954TransitionTimestamp` 1, genesis `gasLimit` `0xbebc200` | 65,536; 65,537; 70,000 with a real jump (`PUSH3` to a `JUMPDEST` past 0xFFFF, `eth_call` answers 42 on signer and follower); 119,000 deploys; 119,800 not included | the route holds at 200 M |
-| B | as A, `gasLimit` and target 300 M | 131,072 deploys; 131,073 status 0; init code of 131,073 and 140,000 B: accepted or refused | the ceiling is real, and which init limit applies |
-| C, only if A refuses 65,537 | as A, `eip7954TransitionTimestamp` removed | the rows of A | whether `maxCodeSize` alone carries it |
+| D | as C, `gasLimit` and target 300 M | 131,072 deploys; 131,073 status 0; init code of 131,072, 131,073, 262,144 and 262,145 B: accepted or refused; a `WrappedPqzToken`-sized init read from `size-baseline.json`'s largest `.init` row | the ceiling, and which init limit applies |
 
 | Outcome | Next |
 |---|---|
-| A passes | CTR-GOV-19's route holds. T16 writes `maxCodeSize` `0x20000` into `patch-chainspec.py` and the RUNBOOK. The reset stays the controller's |
-| A refuses, C passes | **Owner word:** the chain would leave EIP-7954 out, against "Amsterdam from block 1" (NET-EVM-06). The build continues |
-| Both refuse | **Owner word:** the SCaaS testnet needs a client patch or size work sooner. The build continues on forge and anvil (T2's limit); T16 stops short of the RUNBOOK |
+| The ceiling is 131,072 B and the init limit is at or above every `.init` row | `size_gate.py`'s init ceiling moves to the measured limit, old → new in the commit, by T2 if it has run. T16 writes the figure into the RUNBOOK section |
+| The init limit is below a `.init` row, or the ceiling is lower | **Owner word.** The build continues on forge and anvil; the gate names the kind; T16 stops short of the RUNBOOK |
 
-- [ ] **Step 1:** Extend `e2e.py codesize`; `python3 -I pqz-core/nethermind/chain/e2e.py --help` runs.
-- [ ] **Step 2:** Write the script: one arm per run, `copy.sh init`, `up`, the rows, `down`, `wipe`. Per-step `.log`, resume at the same commit; first line `# <arm> at commit <sha>`, last `rc=<n>`.
-- [ ] **Step 3:** Run arm 0, then A, B, then C if needed, foreground. Arm 0 must pass before A means anything.
-- [ ] **Step 4:** Check `docker ps --filter name=pqzcopy-` is empty and nothing of the probe runs. Remove `scratchpad/gov-probe` through `copy.sh wipe`.
-- [ ] **Step 5:** Commit script, `e2e.py`, summary: `governance T0: code size probe, <verdict>`.
+- [ ] **Step 1:** Add arm D to the script; per-step `.log`, resume at the same commit; first line `# <arm> at commit <sha>`, last `rc=<n>`.
+- [ ] **Step 2:** `docker ps --filter name=pqzcopy-` empty and at least 4 GB available, then run arm D, foreground, on both images.
+- [ ] **Step 3:** Check `docker ps --filter name=pqzcopy-` is empty. Remove the copy through `copy.sh wipe`.
+- [ ] **Step 4:** Commit script and summary: `governance T0b: ceiling and init code limit without EIP-7954, <verdict>`.
 
-**Mutants:** arm 0 is the control. **Pins:** none. **Gates:** `python3 -I pqz-core/nethermind/chain/patch-chainspec.py --check`; no container of the probe left.
+**Mutants:** arm 0 of T0 is the control; 131,073 B must fail. **Pins:** none here. **Gates:** no container of the probe left.
 
 ### Task T1: "+0" pinned on every kind (CTR-GOV-11, B-33; GD-1, GD-16)
 
@@ -242,13 +251,13 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 - Create: `test/governance/PlusZero.t.sol`, `test/vectors/plus_zero_slots.json`
 - Modify: `test/governance/GovGrant.t.sol` (`test_transferTouchesNoGovernanceSlot` removed: replaced)
 
-**Changes:** per kind (six) and entry (`transfer`, `mtxTransfer`, `transferToUA`): a balance on both sides, lane past nonce 0, `vm.record()`, the call, `vm.accesses(token)`. The sorted set of read slots and of written slots is compared with the pin. Not a range around a root. Written on ABI strings and literal bits, as `GovGas.t.sol`, so the same file runs on `main`. `PLUS_ZERO_WRITE=true` writes the file. `TokenConfig` moves at T7: from then on the fixture encodes the new shape and the pin stays; re-recording needs T1's commit, and the run log says so.
+**Changes:** per kind (six) and entry (`transfer`, `mtxTransfer`, `transferToUA`, `uaExecuteTransfer` UA → UA): a balance on both sides, lane past nonce 0, `vm.record()`, the call, `vm.accesses(token)`. The sorted set of read slots and of written slots is compared with the pin. Not a range around a root. Written on ABI strings and literal bits, as `GovGas.t.sol`, so the same file runs on `main`. `PLUS_ZERO_WRITE=true` writes the file. `TokenConfig` moves at T7: from then on the fixture encodes the new shape and the pin stays; re-recording needs T1's commit, and the run log says so.
 
-- [ ] **Step 1: Failing tests:** `test_plusZero_transfer_{normal,wrapped,normalZether,wrappedZether,normalPqz,wrappedPqz}`, the same for `mtxTransfer`, `transferToUA`: 18 tests, red: no pin yet.
+- [ ] **Step 1: Failing tests:** `test_plusZero_transfer_{normal,wrapped,normalZether,wrappedZether,normalPqz,wrappedPqz}`, the same for `mtxTransfer`, `transferToUA`, `uaExecuteTransfer`: 24 tests, red: no pin yet.
 - [ ] **Step 2: Record at `2a864638`.** `git worktree add .claude/worktrees/gov-pin 2a864638`, real `lib/`, copy the test in, `PLUS_ZERO_WRITE=true ../../scripts/capped forge test --match-path test/governance/PlusZero.t.sol`, copy the JSON back, `git worktree remove .claude/worktrees/gov-pin`. `main`'s checkout is not touched.
 - [ ] **Step 3:** On the branch, `../../scripts/capped forge test --match-path test/governance/PlusZero.t.sol`: PASS. A difference here means the prototype added a read: stop, it is the finding this test exists for.
-- [ ] **Step 4: Mutants,** each must go red on all six kinds: a `features` read in `_update`; a `roles[1][from]` read in `_update`; the same two in `_uaMove`.
-- [ ] **Step 5:** Commit `governance T1: no new read on transfer, mtxTransfer, transferToUA, every kind, pinned at 2a864638`.
+- [ ] **Step 4: Mutants,** each must go red on all six kinds: a `features` read and a `roles[1][from]` read in `_update`, red on `transfer` and `mtxTransfer`; the same two in `_uaMove`, red on `transferToUA` and `uaExecuteTransfer`. A mutant that goes red on no row is a finding.
+- [ ] **Step 5:** Commit `governance T1: no new read on the native and UA paths, every kind, pinned at 2a864638`.
 
 **Pins:** new, none moved. **Gates:** `forge test --match-path 'test/governance/*.t.sol'`.
 
@@ -279,17 +288,18 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 **Changes:**
 - `library GovernanceUse` in `GovernanceBase.sol`: `use`, the whole-shape fast path and one DELEGATECALL to `GovernanceLib.useLimited`. Five call sites renamed. `requireRole` gone.
 - `GovernanceStorage` of §1.4 in full, `Counts`, `PendingGrant`, `Grant.barred`. `holderCount` reads `counts[bit].holders`. New fields inert until their task.
-- `_scalarBits()`, `_scopeBits()`; per-kind masks: `NORMAL*` roles bit 1, contract-only 0, scalar bit 1, scope 0; `WRAPPED*` roles 1, 3, 4, contract-only 3, scalar 1, scope 0; `SCaaSDex` roles 11, 12, scalar 0, scope 0. `WrappedLib.initToken` takes the kind's masks.
+- `_scalarBits()`, `_scopeBits()`; per-kind masks: `NORMAL*` roles bit 1, contract-only 0, scalar bit 1, scope 0; `WRAPPED*` roles 1, 3, 4, contract-only 3, scalar 1, scope 0; `SCaaSDex` roles 11, 12, scalar 0, scope 0. `WrappedLib.initToken` takes the kind's masks, passed by `WrappedToken`, `ZetherWrappedLib.init`, `PqzWrappedLib.init`.
+- `_validBits()` of `NormalToken`, `WrappedToken` without `REGULATED`, their `_init` passing `_validBits() | REGULATED` (GD-19).
 - `init`: `roles.compliance` refused with bit 10; every "flags 5–8" in code becomes 5-9.
 - `initHolder`, called only by `SCaaSDex.initialize`.
-- DEX: `setMarket`, `setExchangeTarget`, `setListedOnly`, `setFeeSplit` under `governed`; `supportsInterface` answers `IGovernance` and ERC-165; no "admin" left in `SCaaSDex.sol`. `DexCreated`'s last field reads `owner()`.
+- DEX: `setMarket`, `setExchangeTarget`, `setListedOnly`, `setFeeSplit` under `governed`; `supportsInterface` answers `IGovernance` and `IERC165`; no "admin" left in `SCaaSDex.sol`. `DexCreated`'s last field reads `owner()`.
 - `namespaces.json` and a labelled test for `scaas.token`, `scaas.governance`, `scaas.underlying`, `scaas.ua.ledger`, `scaas.metatx`: root, then each field's offset by a write and `vm.load`. `test_storageLayoutIsPinned` gains the two PQZ kinds and `SCaaSDex`.
 
-- [ ] **Step 1: Failing tests:** `test_limitedUseIsOneDelegatecall`, `test_normalKindHasNoRateRole` (`NoSuchRole(3)`), `test_complianceWordIsBitTen`, `test_regulatedBitsRefusedOnPlainKinds` (5-9, each alone and all together), `test_regulatedBitsInvalidOnConfidentialKinds` (Zether two, PQZ two, apart), `test_dexPowerRefusedInsideASettlement` (each of four), `test_dexAnswersIGovernance`, `test_dexInitHoldsBothBitsThroughInitHolder`, `test_namespaceRootsAndOffsetsArePinned`.
+- [ ] **Step 1: Failing tests:** `test_limitedUseIsOneDelegatecall`, `test_normalKindHasNoRateRole` (`NoSuchRole(3)`), `test_complianceWordIsBitTen`, `test_regulatedBitsRefusedOnPlainKinds` (5-9, each alone and all together), `test_regulatedBitsInvalidOnConfidentialKinds` (Zether two, PQZ two, apart), `test_validBitsHoldsNoRegulatedBit` (six kinds), `test_dexPowerRefusedInsideASettlement` (each of four), `test_dexAnswersIGovernance`, `test_dexInitHoldsBothBitsThroughInitHolder`, `test_namespaceRootsAndOffsetsArePinned`.
 - [ ] **Step 2:** `../../scripts/capped forge test --match-path 'test/{governance/*,v2/Layout,v2/LinkClosure}.t.sol'`: FAIL.
 - [ ] **Step 3: Implement.** `grep` for `requireRole`, `AdminLib` in `src/` and `script/`: none but `legacy/`.
 - [ ] **Step 4:** PASS; whole `forge test`; regenerate `dex_order_kat.json`; size gate after moving the baseline; log `runs/2026-11-03-governance-sizes-t3.txt`.
-- [ ] **Step 5: Mutants:** `governed` off `setMarket`; `governed` off `setFeeSplit`; `use` skipping `LIMITED`; a `WRAPPED` mask equal to `NORMAL`'s; `compliance` back to bit 8; a field reordered in `GovernanceStorage`; `initHolder` replaced by `grantRole`.
+- [ ] **Step 5: Mutants:** `governed` off `setMarket`; `governed` off `setFeeSplit`; `use` skipping `LIMITED`; a `WRAPPED` mask equal to `NORMAL`'s; `compliance` back to bit 8; `| REGULATED` dropped from a plain kind's `_init`; `REGULATED` back in a plain kind's `_validBits()`; a field reordered in `GovernanceStorage`; `initHolder` replaced by `grantRole`.
 - [ ] **Step 6:** Commit `governance T3: GovernanceUse, final storage, masks per kind, DEX guard and interface`.
 
 **Pins, old → new:** `size-baseline.json` (B-26: `NormalToken` −1,096, `NormalZetherToken` −1,082, `NormalPqzToken` −1,058, `SCaaSDex` −1,065, `WrappedLib` −1,077, wrapped tokens 0, measured values in the commit); `test_libraryOpcodes` `WrappedLib` DELEGATECALL count 1 → measured; `dex_order_kat.json` (spec §10.4's failure, by its generator); `Factory.t` and `HederaV2.t` turn green with no move: B-26 brings `NormalToken` under 39,945, re-read here (GD-18); `Layout` new rows; `Features.t` comment "`pendingOwner` at slot + 3" stays (+3 holds, packed). **Gates:** whole `forge test`, size gate, T1 green. Typehashes: none move.
@@ -313,7 +323,7 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 
 **Files:** `src/governance/{GovernanceBase,GovernanceLib,IGovernance}.sol`, `test/v2/helpers/V2Fixture.sol`, `test/governance/{GovGrant,GovAttackV2}.t.sol`
 
-**Changes:** the check table of §1.5, every caller: word masks passed as arguments, `GrantWordRefused(bit, field)`, `(perWindow == 0) != (window == 0)` both directions, `scope` rule, `GrantBudgetRequired`. `RoleGranted` for a new holder (B-31). `OwnerAccountPool` in `init` and `transferOwnership`. `init` runs the renounce loop when `owner == 0`. `GrantNotNarrower` NatSpec gains field 8.
+**Changes:** the check table of §1.5, every caller: word masks passed as arguments, `GrantWordRefused(bit, field)`, `(perWindow == 0) != (window == 0)` both directions, `scope` rule, `GrantBudgetRequired`, with the sentence of spec §1.5 in its NatSpec: the budget bounds spending, not the number of leaves. `RoleGranted` for a new holder (B-31). `OwnerAccountPool` in `init` and `transferOwnership`. `init` runs the renounce loop when `owner == 0`. `GrantNotNarrower` NatSpec gains field 8.
 
 - [ ] **Step 1: Failing tests:** each `test_attack_*` below becomes `test_fixed_*`, with its positive control kept, and goes red first: `delegableHolderAddsAHolderWithNoOwnerCall`, `createdWithoutOwnerKeepsAnUnlockedMinter`, `noScalarMeansNoTotalAndNoWindow`, `aFloorBricksAPowerWithNoScalar`, `aScopeOnABuiltPowerBindsNothing`, `aPoolCanBeOwner`. New: `test_eachWordRefusedOnAScalarlessBit` (each of `min`, `max`, `total`, `perWindow`, `window`, on a wrapped kind and the DEX), `test_windowWithoutPerWindowRefused`, `test_newHolderEmitsRoleGranted`, `test_lockedMinterSurvivesNoOwner`.
 - [ ] **Step 2:** `../../scripts/capped forge test --match-path 'test/governance/*.t.sol'`: FAIL.
@@ -324,48 +334,49 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 
 **Pins, old → new:** baseline library and token rows; `dex_order_kat.json` if `SCaaSDex` bytecode moved; gas pins of `GovGas` if a row is asserted. **Gates:** whole `forge test`, size gate.
 
-### Task T6: D2, leaves, revoke, roots (spec §1.5, §1.7; B-04, B-05, B-07, B-08, B-11, B-12, B-17, B-18; P-11 to P-14)
+### Task T6: D2, leaves, revoke, roots (spec §1.5, §1.7; B-04, B-05, B-07, B-08, B-11, B-12, B-17, B-18; agy C-1, I-1, I-3, Claude M-7, M-8; P-11 to P-14, P-21, P-22)
 
 **Files:** `src/governance/{GovernanceLib,IGovernance}.sol`, `test/governance/{GovGrant,GovAttackV2}.t.sol`
 
-**Changes:** the leaf path of §1.5 with the table's checks, `owner ≠ 0`, `GrantBarred`; `_narrows` by comparison, `window` equal (field 8); `_grant` over `LIMITED` clears `grantor`, bumps the epoch; an owner edit changing `scope` or clearing `delegable` bumps the epoch; a leaf the owner edits becomes a root, `roots + 1`; the owner's apply clears `barred`; `GrantWindowInUse`; revoke by the owner, or by the grantor only while `roles == LIMITED` and the grantor still holds; a revoke by the owner sets `barred`, a revoke of a non-holder stays a no-op; `renounceOwnership` and `init` count `roots`; `_clear` keeps `Counts` right for a root and a leaf.
+**Changes:** the leaf path of §1.5 with the table's checks, `owner ≠ 0`, `GrantBarred`, an expired parent refused (`GrantExpired(bit, caller)`), `maxUses` by what remains (`p.uses + t.maxUses ≤ p.maxUses`); `_narrows` by comparison, `window` equal (field 8); `_grant` over `LIMITED` bumps the epoch; the owner's apply, by either entry, writes `grantor = 0`, `grantorEpoch = 0`, `barred = false`; an owner edit changing `scope` or clearing `delegable` bumps the epoch; `GrantWindowInUse` by the one condition of §1.5, in `uint256`, skipped on a `WHOLE` holder; revoke by the owner, or by the grantor only while `roles == LIMITED` and the grantor still holds; a revoke by the owner writes `barred` before `_clear`'s early return, a non-holder included; `renounceOwnership` and `init` read `roots`; `Counts` by §1.7's table, every row, `r` read first, `_clear` reading `grantor` before it clears `r`.
 
-- [ ] **Step 1: Failing tests:** to `test_fixed_*`, each red first: `revokedGrantorStripsAnOwnerGrantedHolder`, `parentGrantsBackALeafTheOwnerRevoked`, `deadLeavesBlockTheRenounce`, `afterRenounceALockedBitsHolderAddsHolders`, `leafKeepsAScopeItsParentLost`, `endingDelegationLeavesTheLeaves`, `changingTheWindowRefreshesTheBudget`, `aLeafsWindowIsNotNarrowed`, `narrowingBelowSpentPanicsTheLeafPath`, `wholeThenLimitedRevivesLeaves`. New: `test_ownerReadmitsABarredAccount`, `test_countsHoldRootsAndLeavesAcrossEveryPath` (grant, leaf, upgrade, revoke, renounce), `test_hasRoleMeansListed`.
+- [ ] **Step 1: Failing tests:** to `test_fixed_*`, each red first: `revokedGrantorStripsAnOwnerGrantedHolder`, `parentGrantsBackALeafTheOwnerRevoked`, `deadLeavesBlockTheRenounce`, `afterRenounceALockedBitsHolderAddsHolders`, `leafKeepsAScopeItsParentLost`, `endingDelegationLeavesTheLeaves`, `changingTheWindowRefreshesTheBudget`, `aLeafsWindowIsNotNarrowed`, `narrowingBelowSpentPanicsTheLeafPath`, `wholeThenLimitedRevivesLeaves`. New: `test_ownerReadmitsABarredAccount`, one `test_counts_row<n>` for each of rows 1-11 of §1.7, reading `holders` and `roots` after it (row 4 and 5 then revoke the old root and try the renounce; a revoked leaf re-granted by the owner, both entries, then revoked to zero), `test_hasRoleMeansListed`, `test_leafThatRenouncesFirstIsBarred`, `test_expiredParentAddsNobody`, `test_exhaustedParentAddsNobody`, `test_leafMaxUsesByWhatRemains`, `test_windowChangeIntoASpentPeriodRefused` (agy I-1's sequence), `test_windowChangeAfterBothGridsPassed`, `test_wholeHolderStaleWindowRefusesNothing`, `test_expiredRootCountsUntilRevoked`.
 - [ ] **Step 2:** `../../scripts/capped forge test --match-path 'test/governance/*.t.sol'`: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** PASS; `test_refuted_*` still pass; whole `forge test`.
-- [ ] **Step 5: Mutants,** one per check: the live-grantor check; `barred` set; `barred` read; `roots` replaced by `holders`; `owner ≠ 0`; the epoch bump on scope; on delegation end; on upgrade; `GrantWindowInUse`; `window` equal; a subtraction back in `_narrows`. Add RESULTS' seven to the same log: no parent debit, no epoch bump, an edit refreshing spent, a wrapped power skipping `use`, no renounce rule, `narrows` skipping `total`, a leaf delegating.
+- [ ] **Step 5: Mutants,** one per check: the live-grantor check; `barred` set; `barred` after the early return; `barred` read; `roots` replaced by `holders`; `roots + 1` dropped on row 4; on row 5; `_clear` deciding on a stale `grantor`; `owner ≠ 0`; the parent's expiry; `maxUses` against `p.maxUses`, not what remains; the epoch bump on scope; on delegation end; on upgrade; `GrantWindowInUse`; its new-grid arm alone; the `WHOLE` skip; `window` equal; a subtraction back in `_narrows`. Add RESULTS' seven to the same log: no parent debit, no epoch bump, an edit refreshing spent, a wrapped power skipping `use`, no renounce rule, `narrows` skipping `total`, a leaf delegating.
 - [ ] **Step 6:** Commit `governance T6: leaves die with their parent's right, a revoke bars, the renounce rule counts roots`.
 
 **Pins, old → new:** baseline library row; `dex_order_kat.json` only if the DEX's bytecode moved (a library change does not move it). **Gates:** whole `forge test`, size gate.
 
-### Task T7: D4, two calls, `termsHash`, `grantDelay` (spec §1.6, §2.2, §2.3; CTR-GOV-04 and its Change; B-01, B-27; A20; P-15; GD-3)
+### Task T7: D4, two calls, `termsHash`, `grantDelay` (spec §1.6, §1.9, §2.2, §2.3; CTR-GOV-04 and its Change; B-01, B-27; A20; Codex 2, 7, agy C-3, I-2, Claude I-7, M-5, M-6; P-15; GD-3)
 
-**Files:** `src/governance/{GovernanceBase,GovernanceLib,IGovernance}.sol`, `src/factory/IFactoryToken.sol`, `src/metatx/{MetaTokenBase,NormalToken,WrappedLib}.sol`, the Zether and PQZ kinds' init, `src/dex/{SCaaSDex,ISCaaSDex}.sol`, `script/pqz/e2e.py` (`CFG`, `create`), `scaas-node/tests/e2e.rs` (`DexConfig { address owner; … }`, the comment at `:699`), `test/governance/GovDelay.t.sol` (new), positional `DexConfig(...)` in tests
+**Files:** `src/governance/{GovernanceBase,GovernanceLib,IGovernance}.sol`, `src/factory/IFactoryToken.sol`, `src/metatx/{MetaTokenBase,NormalToken,WrappedLib}.sol`, the Zether and PQZ kinds' init, `src/dex/{SCaaSDex,ISCaaSDex}.sol`, `script/pqz/e2e.py` (`CFG`, `create`), `scaas-node/tests/e2e.rs` (`DexConfig { address owner; … }`, the comment at `:699`), `test/governance/{GovDelay,GovExamples}.t.sol` (new), `src/zether/ZetherWrappedLib.sol`, `src/pqz/PqzWrappedLib.sol` (they decode `TokenConfig`), positional `DexConfig(...)` in tests
 
 **Changes:**
-- The table of §1.6 in one body shared by `grantRole` and `setGrant`. Live pending: `eta ≠ 0`, `proposer == owner`, `now ≤ eta + grantDelay`. `termsHash = keccak256(abi.encode(GrantTerms))`, 0 for `grantRole`. Confirm deletes the pending and re-runs every check.
-- Immediate cases: `grantDelay == 0`; `grantRole` on `WHOLE`; `setGrant` on a `WHOLE` root with `delegable` false; a pure field-by-field narrowing of a `LIMITED` root. Everything else two calls, a leaf the owner would make a root included.
+- The table of §1.6 in one body shared by `grantRole` and `setGrant`. Live pending: `eta ≠ 0`, `generation == ownerGeneration`, `now ≤ eta + grantDelay`. `acceptOwnership` and `renounceOwnership` bump `ownerGeneration`; `transferOwnership` does not. `termsHash = keccak256(abi.encode(GrantTerms))`, 0 for `grantRole`. Confirm deletes the pending and re-runs every check.
+- Immediate cases: `grantDelay == 0`; `grantRole` on `WHOLE`; `setGrant` on a `WHOLE` root with `delegable` false; a pure field-by-field narrowing of a `LIMITED` root, where `0 → finite` narrows on each of `total`, `perWindow`, `validUntil`, `maxUses` and a new `window` comes with the limit it carries. Everything else two calls, a leaf the owner would make a root included.
+- `revokeRole`, `renounceRole` and an immediate narrowing delete `pending[bit][account]`. `cancelGrant(bit, account)`, owner, `GrantCancelled`; `pendingGrant` returns `live`.
 - `GrantProposed(bit, account, proposer, eta, whole, terms)`, `pendingGrant`, `grantDelay()`, `lastProposedAt()`, `GrantNotReady`, `GrantTermsMismatch`, `GrantDelayTooLong` (30 days).
 - `TokenConfig` gains `uint64 grantDelay`, `address rescueTo`, `uint256 maxSupply`; `DexConfig` becomes `{owner, relayerSharePpm, treasury, listedOnly, grantDelay, rescueTo}`. `ConfigFieldForOtherKind(5)` for `maxSupply` on `NORMAL*`. `init`'s arguments in one memory struct if the stack needs it; no `via_ir`.
 - `acceptOwnership`, `revokeRole`, `disableFeature`, `renounceOwnership`, `renounceRole` stay at once.
 
-- [ ] **Step 1: Failing tests** (`GovDelay.t.sol`): `test_newHolderTakesTwoCalls`, `test_eachWidenedWordTakesTwoCalls`, `test_eachNarrowedWordRunsAtOnce`, `test_confirmWithOtherTermsReverts`, `test_leafMadeARootTakesTwoCalls`, `test_grantRoleOnLimitedTakesTwoCalls`, `test_confirmBeforeEtaReverts`, `test_afterTheWindowThePendingIsDead`, `test_afterRenounceNobodyConfirms`, `test_afterTransferTheNewOwnerProposesAgain`, `test_delayZeroIsOneCall`, `test_delayAboveThirtyDaysRefused`, `test_dexInitHoldsBothBitsWithADelay`, `test_holderCountCountsInitOnceAndNeverAPending`, `test_lastProposedAtMoves`, `test_configFieldsFailClosedUntilBuilt`. `test_attack_setGrantMakesAnUnboundedHolderInOneCall` → `test_fixed_*`.
+- [ ] **Step 1: Failing tests** (`GovDelay.t.sol`): `test_newHolderTakesTwoCalls`, `test_eachWidenedWordTakesTwoCalls`, `test_eachNarrowedWordRunsAtOnce`, `test_confirmWithOtherTermsReverts`, `test_leafMadeARootTakesTwoCalls`, `test_grantRoleOnLimitedTakesTwoCalls`, `test_confirmBeforeEtaReverts`, `test_afterTheWindowThePendingIsDead`, `test_afterRenounceNobodyConfirms`, `test_afterTransferTheNewOwnerProposesAgain`, `test_delayZeroIsOneCall`, `test_aToBToAKillsThePending`, `test_cancelledTransferKillsNothing`, `test_revokeDeletesThePending` (the revoked, barred account is not restored by a confirm), `test_renounceDeletesThePending`, `test_narrowingDeletesThePending`, `test_cancelGrantLiveAndDead`, `test_pendingGrantSaysLive`, `test_finiteOnEachUnboundedWordRunsAtOnce`, `test_windowWithItsLimitRunsAtOnce`, `test_finiteToUnboundedTakesTwoCalls`, `test_delayAboveThirtyDaysRefused`, `test_dexInitHoldsBothBitsWithADelay`, `test_holderCountCountsInitOnceAndNeverAPending`, `test_lastProposedAtMoves`, `test_configFieldsFailClosedUntilBuilt`. `test_attack_setGrantMakesAnUnboundedHolderInOneCall` → `test_fixed_*`. `GovExamples.t.sol`, mocks of spec §1.9: `test_loanApprovalInABand`, `test_loanLeafDebitsItsManager`, `test_subtreeAddAndRemove`, `test_subtreeOutsideTheScopeRefused`, `test_subtreeHeadWithNoBudgetRefused`, `test_moveWithinAGroup`, `test_moveOutOfTheGroupRefused`.
 - [ ] **Step 2:** `../../scripts/capped forge test --match-path 'test/governance/*.t.sol'`: FAIL.
 - [ ] **Step 3: Implement.** `cd scaas-node && ../scripts/capped cargo test -j2 --test e2e --no-run`: compiles; `python3 -I smartcontracts/evm/script/pqz/e2e.py --self-test`.
 - [ ] **Step 4:** PASS; whole `forge test`; regenerate `dex_order_kat.json`; size gate; `_above64KiB` updated if a kind crossed (say so; expect the jump); log `runs/2026-11-03-governance-sizes-t7.txt`.
-- [ ] **Step 5: Mutants:** `setGrant` applies at once; no `termsHash` compare; no window; no proposer check; a leaf edit treated as a narrowing; count at propose; DEX init through `grantRole`; the 30-day bound dropped.
+- [ ] **Step 5: Mutants:** `setGrant` applies at once; no `termsHash` compare; no window; no generation compare; generation not bumped at accept; not bumped at renounce; each of the three deletes dropped; `0 → finite` read as a widening; `_scopeNarrows` accepting all, in the `FamilyTree` mock; a leaf edit treated as a narrowing; count at propose; DEX init through `grantRole`; the 30-day bound dropped.
 - [ ] **Step 6:** Commit `governance T7: two calls within a window, terms bound, grantDelay at creation`.
 
 **Pins, old → new:** baseline every kind and `SCaaSDex`; `dex_order_kat.json`; gas pins `MetaTxGasV2.t`, `DexGas.t` only by dispatcher drift. Layout: none (GD-2). Typehashes: none. **Gates:** whole `forge test`, size gate, T1 green, node e2e compiles.
 
 ### Task T8: D5, the leg check (spec §6.1; CTR-GOV-05 and its Change; B-15)
 
-**Files:** `src/metatx/WrappedLib.sol` (`_addLeg`, `initToken` takes the factory), `WrappedToken`, `ZetherWrappedLib`, `PqzWrappedLib` (pass `FACTORY`), `test/governance/GovLeg.t.sol` (new), `test/governance/GovAttackV2.t.sol`
+**Files:** `src/metatx/WrappedLib.sol` (`_addLeg`; GD-20), `test/governance/GovLeg.t.sol` (new), `test/governance/GovAttackV2.t.sol`
 
-**Changes:** the check of §6.1 before the leg is stored, `u ≠ NATIVE`. `isRegisteredToken`, never `isToken`. Bits 5, 7, 8, 9 stay allowed.
+**Changes:** the check of §6.1 before the leg is stored, `u ≠ NATIVE`, reading the factory as `msg.sender`. `isRegisteredToken`, never `isToken`. Bits 5, 7, 8, 9 stay allowed.
 
-- [ ] **Step 1: Failing tests:** `test_registeredForceLegRefused`, `test_registeredModerateLegRefused` (a mock kind 8 from T4), `test_unregisteredLegIsOutside`, `test_secondFactoryLegIsOutside`, `test_registeredPlainLegAccepted`, `test_pauseAndFreezeLegsStayAllowed`. `test_attack_isTokenTrustsAnUnregisteredLeg` → `test_fixed_*`.
+- [ ] **Step 1: Failing tests:** `test_registeredForceLegRefused`, `test_registeredModerateLegRefused` (a mock kind 8 from T4), `test_unregisteredLegIsOutside`, `test_secondFactoryLegIsOutside`, `test_registeredPlainLegAccepted`, `test_pauseAndFreezeLegsStayAllowed`, `test_legCheckRunsOnEveryWrappedKind` (`WRAPPED`, Zether, PQZ, apart: `msg.sender` through two DELEGATECALLs). `test_attack_isTokenTrustsAnUnregisteredLeg` → `test_fixed_*`.
 - [ ] **Step 2:** `../../scripts/capped forge test --match-path 'test/governance/*.t.sol'`: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** PASS; `forge test --match-path 'test/{v2/Wrapped,v2/Multi,zether/ZetherWrapped,pqz/PqzWrapped}.t.sol'`; whole `forge test`.
@@ -374,7 +385,7 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 
 **Pins, old → new:** baseline wrapped tokens and `WrappedLib` if listed; `createToken` of a wrapped kind gains one `isRegisteredToken` and one `features()` per leg at init (gas pins, if any assert it). **Gates:** whole `forge test`, size gate.
 
-### Task T9: hybrid (spec §5; CTR-GOV-12, CTR-TOK-05; C1, C2; GD-10)
+### Task T9: hybrid (spec §5; CTR-GOV-12, CTR-TOK-05; C1, C2; Claude I-4, M-9; GD-10)
 
 **Files:** `src/governance/GovernanceBits.sol` (`WRAPPED_BITS` gains bit 1), `src/metatx/{WrappedLib,WrappedToken}.sol`, `IWrappedToken`, `src/zether/WrappedZetherToken.sol`, `src/pqz/WrappedPqzToken.sol`, `test/governance/GovHybrid.t.sol` (new), `test/v2/Layout.t.sol` and `namespaces.json`
 
@@ -383,25 +394,26 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 - `Leg` slot a gains `bool capped`. `WrappedStorage` appends `uint256 maxSupply`; `reserve` keeps its offset.
 - `mint`, `mintToUA`, `maxSupply()` on the wrapped kinds, `GovernanceUse.use` with the amount, public balance only.
 - One cap, `totalSupply() + minted ≤ maxSupply`, `MaxSupplyExceeded`, on every row of §5.2: `wrap`, `wrapToUA`, `mtxWrapShield`; `mtxWrapOrder`, `uaWrapOrder` through `_sigQuote`'s callers; `mint`, `mintToUA`. The token passes `supply`, as `executeRate` does; `maxSupply` is read only when `L.capped`.
-- `_requireCollateral`: the final `c < supply` only when the leg is not capped. `RateDecreaseWithDisabledLeg`, the step, the delay, the window stay. `_quote`, `addReserve`, `payOutTo` unchanged.
-- `disableFeature(MINTABLE)` leaves `capped` set: units already minted are still unbacked, so the claim stays off.
+- `_requireCollateral`: the final `c < supply` only when the token is not capped: a rate fall needs no `addReserve` (C1, the owner's, CTR-GOV-12). `RateDecreaseWithDisabledLeg` stays, on a hybrid too (spec §5.3); the step, the delay, the window stay. `_quote`, `addReserve`, `payOutTo` unchanged.
+- A hybrid is `maxSupply ≠ 0`. `disableFeature(MINTABLE)` leaves `maxSupply` and `capped`: units already minted are still unbacked, so the claim stays off.
+- `mtxUnshieldUnwrap` of `WrappedZetherToken` and `WrappedPqzToken` quotes the leg before the proof, by the quote `payOutTo` picks. Zether and PQZ apart.
 
-- [ ] **Step 1: Failing tests,** each path at the cap and one over: `test_capHolds_{wrap,wrapToUA,mtxWrapShieldZether,mtxWrapShieldPqz,mtxWrapOrder,uaWrapOrder,mint,mintToUA}`; `test_unwrapToEmptyThenInsufficientReserve`; `test_unitsTransferAfterTheReserveIsEmpty`; `test_executeRateOnAHybridShortOfSupply`; `test_executeRateNonHybridStillChecksSupply`; `test_mintableWithoutMaxSupplyRefused`; `test_maxSupplyWithoutMintableRefused`; `test_limitedMinterBindsOnAWrappedKind` (`total`, `perWindow`); `test_nonHybridWrapReadsNoNewSlot` (compares sets of slots at a fixed-rate wrap: `_totalSupply` is read by `_mint` on that path anyway, so passing `supply` adds no slot); `test_minterNeverMintsIntoAShieldedBalance`.
+- [ ] **Step 1: Failing tests,** each path at the cap and one over: `test_capHolds_{wrap,wrapToUA,mtxWrapShieldZether,mtxWrapShieldPqz,mtxWrapOrder,uaWrapOrder,mint,mintToUA}`; `test_unwrapToEmptyThenInsufficientReserve`; `test_unitsTransferAfterTheReserveIsEmpty`; `test_executeRateOnAHybridShortOfSupply`; `test_rateFallOnAHybridNeedsNoAddReserve`; `test_rateFallWithDisabledLegStillRefusedOnAHybrid`; `test_executeRateNonHybridStillChecksSupply`; `test_disableMintableLeavesAHybrid` (`capped`, cap on wrap, no mint); `test_unshieldUnwrapShortReserveRevertsBeforeTheProof{Zether,Pqz}` (no verifier call); `test_mintableWithoutMaxSupplyRefused`; `test_maxSupplyWithoutMintableRefused`; `test_limitedMinterBindsOnAWrappedKind` (`total`, `perWindow`); `test_nonHybridWrapReadsNoNewSlot` (compares sets of slots at a fixed-rate wrap: `_totalSupply` is read by `_mint` on that path anyway, so passing `supply` adds no slot); `test_minterNeverMintsIntoAShieldedBalance`.
 - [ ] **Step 2:** `../../scripts/capped forge test --match-path test/governance/GovHybrid.t.sol`: FAIL.
 - [ ] **Step 3: Implement.** Zether and PQZ kinds apart, each its own commit-sized diff in the same task.
 - [ ] **Step 4:** PASS; whole `forge test`; T1 green; `test_reserveSlotIsWhereIndexersReadIt` unchanged; size gate; `_above64KiB`; log `runs/2026-11-03-governance-sizes-t9.txt`.
-- [ ] **Step 5: Mutants:** each path without the cap, one at a time; `c ≥ supply` kept on a capped leg; `c ≥ supply` dropped on an uncapped leg; `capped` removed so a plain wrap reads `maxSupply`; `reserve` raised by a mint.
+- [ ] **Step 5: Mutants:** each path without the cap, one at a time; `c ≥ supply` kept on a capped token; `c ≥ supply` dropped on an uncapped token; `RateDecreaseWithDisabledLeg` skipped on a capped token; `capped` removed so a plain wrap reads `maxSupply`; `reserve` raised by a mint; the quote moved after the proof, each kind.
 - [ ] **Step 6:** Commit `governance T9: hybrid wrapped kinds, one cap on every path, no backing claim`.
 
 **Pins, old → new:** baseline wrapped tokens; `wrap` gas pins (+ about 100: one warm read); `namespaces.json` new rows only, `reserve` unmoved; `wrap_rate_vectors.json` unchanged (a check, not a pin to move). **Gates:** whole `forge test`, size gate, `forge test --match-path 'test/{zether,pqz}/*.t.sol'`.
 
-### Task T10: D6, rescue, `DexPuller` (spec §6.2; CTR-GOV-06, -14; A15, A16, R-16)
+### Task T10: D6, rescue, `DexPuller` (spec §6.2; CTR-GOV-06, -14; A15, A16, R-16; agy I-7, M-2)
 
 **Files:** `src/governance/{GovernanceBits,GovernanceLib,GovernanceBase,IRescuable}.sol` (`NORMAL_BITS`, `WRAPPED_BITS` gain bit 17), `src/metatx/{MetaTokenBase,NormalToken,WrappedToken,WrappedLib}.sol`, both confidential wrapped tokens, `src/dex/{DexPuller,SCaaSDex}.sol`, `test/governance/GovRescue.t.sol` (new)
 
-**Changes:** `RESCUABLE ⇔ rescueTo ≠ 0`, `RescueConfigInvalid()`, always locked. `rescue(address asset)`: anyone, not on an allow-list, `nonReentrant`, one direct entry on every kind, `WrappedPqzToken` last. `WrappedLib.rescue` on `WRAPPED*`, `GovernanceLib` on `NORMAL*`. The table of §6.2: `address(this)` refused; foreign, every leg's balance unchanged, ≤ 8 reads; a leg, `balanceOf − reserve` with the check after; native less a native leg's reserve, refused to a designator. `Rescued`. `rescueTo()` and `rescue` in `IRescuable`, so `IGovernance`'s interface id stays one. `new DexPuller(cfg.rescueTo)`, `rescue(address token)`, 0 reverts `RescueOff()`; only `balanceOf` and `transfer`. **Not on `SCaaSDex`, `SealedBidTender`.**
+**Changes:** `RESCUABLE ⇔ rescueTo ≠ 0`, `RescueConfigInvalid()`, which also refuses `rescueTo` as `this`, `UA_POOL`, `SHIELD_POOL`; always locked. `rescue(address asset)`: anyone, not on an allow-list, `nonReentrant`, one direct entry on every kind, `WrappedPqzToken` last. `WrappedLib.rescue` on `WRAPPED*`, `GovernanceLib` on `NORMAL*`. The table of §6.2, first match: `address(this)` refused; `address(0)` on every kind, by value, less a native leg's reserve, refused to a designator; `NORMAL*`, whole balance; a leg, `balanceOf ≥ reserve` before the subtraction and after the transfer, `balanceOf − reserve`; foreign, every leg's balance unchanged, ≤ 8 reads. `Rescued`. `IRescuable` as spec §6.2, so `IGovernance`'s interface id stays one; `MetaTokenBase.supportsInterface` answers it while bit 17 is set. `new DexPuller(cfg.rescueTo)`, `rescue(address token)`, 0 reverts `RescueOff()`; only `balanceOf` and `transfer`. **Not on `SCaaSDex`, `SealedBidTender`.**
 
-- [ ] **Step 1: Failing tests:** `test_rescueForeignToken`, `test_rescueNativeLessReserve`, `test_rescueLegSurplusOnly`, `test_rescueAliasOfALegRefused`, `test_rescuePastAShortLeg`, `test_rescueReentrantAssetRefused`, `test_rescueOwnTokenRefused`, `test_rescueToDesignatorRefusedNative`, `test_rescueOffWithoutTheBit`, `test_rescueOnNormalTakesAll`, `test_pullerRescueWholeBalance`, `test_pullerRescueOff`, `test_pullerRescueCannotSpendAllowances`, `test_interfaceIdIsOneOnDexAndToken`.
+- [ ] **Step 1: Failing tests:** `test_rescueForeignToken`, `test_rescueNativeLessReserve`, `test_rescueLegSurplusOnly`, `test_rescueAliasOfALegRefused`, `test_rescuePastAShortLeg`, `test_rescueReentrantAssetRefused`, `test_rescueOwnTokenRefused`, `test_rescueToDesignatorRefusedNative`, `test_rescueOffWithoutTheBit`, `test_rescueOnNormalTakesAll`, `test_rescueNativeOnNormal`, `test_rescueLegShortfallNamesItsError`, `test_rescueToThisOrAPoolRefusedAtInit` (three rows), `test_tokenAnswersIRescuableOnlyWithTheBit`, `test_pullerRescueWholeBalance`, `test_pullerRescueOff`, `test_pullerRescueCannotSpendAllowances`, `test_interfaceIdIsOneOnDexAndToken`.
 - [ ] **Step 2:** `../../scripts/capped forge test --match-path test/governance/GovRescue.t.sol`: FAIL.
 - [ ] **Step 3: Implement,** `WrappedPqzToken` last.
 - [ ] **Step 4:** PASS; whole `forge test`; regenerate `dex_order_kat.json`; size gate; `_above64KiB`; log `runs/2026-11-03-governance-sizes-t10.txt`.
@@ -411,23 +423,23 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 
 **Pins, old → new:** baseline; `dex_order_kat.json`; `namespaces.json` no move (GD-2). **Gates:** whole `forge test`, four sets, size gate, T1 green.
 
-### Task T11: `GovernanceHolder` and the relay rule (spec §3; CTR-GOV-15; B-14, B-20, B-21, B-22; C4; GD-6, GD-7)
+### Task T11: `GovernanceHolder` and the relay rule (spec §3; CTR-GOV-15; B-14, B-20, B-21, B-22; Codex 3, 4, Claude M-4, M-14, agy M-2; C4, C9; GD-6, GD-7)
 
 **Files:**
 - Create: `src/governance/{GovernanceHolderBase,GovernanceHolder,GovernanceHolderFactory}.sol`, `test/governance/{Holder,HolderPqMsig,HolderTypehash}.t.sol`, `test/v2/layout/GovernanceHolder.json`
 - Modify: `test/metatx/MsgSenderLint.t.sol` (`FILES` gains the holder), `test/governance/GovAttackV2.t.sol` (`HolderSketch` gives way to the real holder), `test/v2/Layout.t.sol`
 
 **Changes:**
-- `GovernanceHolderBase is UAMetaTxBase`, own namespace `scaas.holder`: `operator`, `pendingOperator`, `proposeOperator`, `acceptOperator`, `_execute`, `uaExecute`, `uaBatch` overridden to refuse (`MtxSelectorNotAllowed`), so `mtxExecute`, `mtxBatch`, `executeMetaTransaction` fall too; `mtxCancelNonce`, `uaCancelNonce` stay. `supportedModes() == 0x03`, no `receive`. Domain `("SCaaS GovernanceHolder", "1", chainId, holder, chain_uid)`.
-- `GovernanceHolder`, the closed table of §3.2: 20 ops, each one direct entry starting with the `_subject()` check (`acceptOperator` against `pendingOperator`), one `mtx<Op>`, one `ua<Op>`, `target` the first explicit parameter, on `_named` / `_namedUA`; `setGrant`'s `terms` nested (GD-7). 40 typed structs, `<Op>` and `UA<Op>`.
-- `GovernanceHolderFactory`: the shape of `SmartKeyAccountFactory`; salt `keccak256(abi.encode(operator, salt))`; `predict`, `deploy`, `HolderDeployed`, `implementation()`; `initialize(bytes32)` by the factory only; operator 0 refused.
+- `GovernanceHolderBase is UAMetaTxBase`, own namespace `scaas.holder`, root `0x86d8592a976ab91a258d36c502084dc93b41b1785adce6f7419d9b3d4ee9be00`, the immutable `FACTORY`: `operator`, `pendingOperator`, `generation`, `proposeOperator`, `acceptOperator`, a `generation` bump on every `acceptOperator`, `_execute`, `uaExecute`, `uaBatch` overridden to refuse (`MtxSelectorNotAllowed`), so `mtxExecute`, `mtxBatch`, `executeMetaTransaction` fall too; `mtxCancelNonce`, `uaCancelNonce` stay. `supportedModes() == 0x03`, no `receive`. Domain `("SCaaS GovernanceHolder", "1", chainId, holder, chain_uid)`.
+- `GovernanceHolder`, the closed table of §3.2: 21 ops, `cancelGrant` included, each one direct entry starting with the `_subject()` check (`acceptOperator` exempt, against a non-zero `pendingOperator`, on all three forms), one `mtx<Op>`, one `ua<Op>`, each taking `generation` then `target`, refusing `GenerationStale` first, on the helper of GD-7 and `_namedCallUA`; `setGrant`'s `terms` nested. 42 typed structs, `<Op>` and `UA<Op>`, `generation` after `from`. `mtxCancelNonce`, `uaCancelNonce` take none.
+- `GovernanceHolderFactory`: the shape of `SmartKeyAccountFactory`; salt `keccak256(abi.encode(operator, salt))`; `predict`, `deploy`, `HolderDeployed`, `IMPLEMENTATION()`, `chainUid()`; `initialize(bytes32)` by `FACTORY` only (`NotFactory`), once (`AlreadyInitialized`); operator 0 refused (`ZeroOperator`), a pool or the holder itself refused there and at `proposeOperator` (`OperatorInvalid`).
 - Relay rule: stated in T17, enforced in T13: no governance selector on `mtxSelectors()` or `_uaAllowed` of a governed contract.
 
-- [ ] **Step 1: Failing tests** (`Holder.t.sol`): `test_eachOpByOperatorDirect`, `test_eachOpByMtx`, `test_eachOpByUa` (one row per op over the 20), `test_strangerRefused`, `test_replacedOperatorsEnvelopeRefusedNonceUnspent`, `test_rotationTwoCalls`, `test_proposeZeroCancels`, `test_secondProposeOverwrites`, `test_acceptWithoutPendingRefused`, `test_rotationKillsPresignedEnvelopes`, `test_saltBindsTheOperator` (B-20), `test_repeatDeployReturnsTheAddress`, `test_noReceive`, `test_targetReentersRefused`, `test_noCodeTargetReverts`, `test_nestedTermsRoundTrip`, `test_changedTargetRefused`, `test_replayAcrossHoldersRefused`, `test_starvedRelayerUAVerifyGasNonceUnspent`, `test_eachGenericPathRefusesEveryOp` (`mtxExecute`, `mtxBatch`, `executeMetaTransaction`, `uaExecute`, `uaBatch`; B-14). `test_attack_theHoldersOpIsReachableAsABytesBlob` → `test_fixed_*`. `HolderPqMsig.t.sol`: `test_pqMsigGrantsARoleThroughUaGrantRole`, a real PQ `msig` at threshold through the registry, which the attack round only read; `test_msigBelowAcceptedThresholdInert`; `test_msigAtTheBoundPaysNoOwnFee` (B-30, stated: fee 0 or another payer). `HolderTypehash.t.sol`: `test_<Op>TypehashIsPinned` for all 40, literal hashes from `cast keccak` over the strings, with `SetGrant`'s string of §3.2 verbatim.
+- [ ] **Step 1: Failing tests** (`Holder.t.sol`): `test_eachOpByOperatorDirect`, `test_eachOpByMtx`, `test_eachOpByUa` (one row per op over the 21), `test_strangerRefused`, `test_replacedOperatorsEnvelopeRefusedNonceUnspent`, `test_rotationTwoCalls`, `test_proposeZeroCancels`, `test_secondProposeOverwrites`, `test_acceptWithoutPendingRefused`, `test_acceptOperatorByThePendingOnEveryForm` (direct, `mtx`, `ua`), `test_acceptByAnyoneElseRefused`, `test_rotationKillsPresignedEnvelopes`, `test_aToBToALeavesTheEnvelopeStale` (`GenerationStale`, nonce unspent, on `mtx` and `ua`), `test_generationIsASignedWord`, `test_operatorRefused` (0, each pool, the holder; at `initialize` and `proposeOperator`), `test_initializeOnlyByTheFactoryOnce`, `test_cancelNonceTakesNoGeneration`, `test_cancelGrantThroughTheHolder`, `test_saltBindsTheOperator` (B-20), `test_repeatDeployReturnsTheAddress`, `test_noReceive`, `test_targetReentersRefused`, `test_noCodeTargetReverts`, `test_nestedTermsRoundTrip`, `test_changedTargetRefused`, `test_replayAcrossHoldersRefused`, `test_starvedRelayerUAVerifyGasNonceUnspent`, `test_eachGenericPathRefusesEveryOp` (`mtxExecute`, `mtxBatch`, `executeMetaTransaction`, `uaExecute`, `uaBatch`; B-14). `test_attack_theHoldersOpIsReachableAsABytesBlob` → `test_fixed_*`. `HolderPqMsig.t.sol`: `test_pqMsigGrantsARoleThroughUaGrantRole`, a real PQ `msig` at threshold through the registry, which the attack round only read; `test_msigBelowAcceptedThresholdInert`; `test_msigAtTheBoundPaysNoOwnFee` (B-30, stated: fee 0 or another payer). `HolderTypehash.t.sol`: `test_<Op>TypehashIsPinned` for all 42, literal hashes from `cast keccak` over the strings, with `SetGrant`'s string of §3.2 verbatim.
 - [ ] **Step 2:** `../../scripts/capped forge test --match-path 'test/governance/Holder*.t.sol'`: FAIL.
 - [ ] **Step 3: Implement.** Base first, then one group of §3.2 at a time.
 - [ ] **Step 4:** PASS; `R-*` as `test_refuted_*` now on the real holder; `forge test --match-path test/metatx/MsgSenderLint.t.sol`; whole `forge test`; size gate (a baseline entry only if over a limit).
-- [ ] **Step 5: Mutants:** `_execute` override removed; `uaExecute` override removed; `uaBatch` override removed; the `_subject()` check dropped on one op; `acceptOperator` without pending; the operator out of the salt; `target` unsigned; `_mtxRule` row wrong for `setGrant`.
+- [ ] **Step 5: Mutants:** `_execute` override removed; `uaExecute` override removed; `uaBatch` override removed; the `_subject()` check dropped on one op; `acceptOperator` without pending; `acceptOperator` under the operator check; `generation` not bumped; `generation` not compared; `generation` left out of the words; the operator out of the salt; `target` unsigned; `_mtxRule` row wrong for `setGrant`.
 - [ ] **Step 6:** Commit `governance T11: GovernanceHolder, typed entries only, operator in the salt`.
 
 **Pins:** all new; **existing typehashes must not move** (`*TypehashIsPinned` green unchanged). `dex_order_kat.json`: unaffected. **Gates:** whole `forge test`, `forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol'`, size gate.
@@ -436,7 +448,7 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 
 **Files:** `clients/clientkeys/src/evm.js` (`TYPED_OPS`, `OP_BUILDERS`), `clients/clientkeys/scripts/{typed-ops-vectors.mjs,typed-ops-cast-check.mjs}`, `clients/clientkeys/test/typed-ops.test.js`, `smartcontracts/vectors/typed/typed_ops.json` (regenerated), `smartcontracts/evm/test/metatx/TypedOps.t.sol`, `clients/zether-prover/tests/typed_ops.rs` (must still pass; it reads its own rows)
 
-**Changes:** domain kind `holder`, the 40 rows, `GrantTerms` nested, `CancelNonce` and `UACancelNonce` gain `holder`. Spec S8 says the rows are written against whichever of this and `msig-nested` lands first (§"Branches"): every value comes from the generator, nothing by hand.
+**Changes:** domain kind `holder`, the 42 rows, `generation` a named field of each, `GrantTerms` nested, `CancelNonce` and `UACancelNonce` gain `holder`. Spec S8 says the rows are written against whichever of this and `msig-nested` lands first (§"Branches"): every value comes from the generator, nothing by hand.
 
 - [ ] **Step 1: Failing tests:** `npm test` rows over the new structs, type strings equal to `HolderTypehash.t.sol`'s; `test_holderRowsRunOnARealHolder` in `TypedOps.t.sol` (selector, calldata, digest, `from` recovered, op executed).
 - [ ] **Step 2:** `cd clients/clientkeys && ../../scripts/capped npm test`: FAIL.
@@ -461,7 +473,7 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 
 **Pins:** new. **Gates:** `forge test --match-path 'test/governance/*.t.sol'`.
 
-### Task T14: `governance_bits.json`, every language (spec §1.2, §5.5; B-34; GD-9)
+### Task T14: `governance_bits.json`, every language (spec §1.2, §1.8, §4.3, §5.5; B-34; Codex 10; G33; GD-9)
 
 **Files:**
 - Create: `test/governance/GovBitsVector.t.sol`, `smartcontracts/vectors/governance/governance_bits.json`
@@ -476,7 +488,7 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 
 `zether-prover` is no wallet: no reader.
 
-**Changes:** the file carries `bit → name → type → one disclosure sentence`, written by a forge test from `GovernanceBits` and `_roleBits()`, `WRITE_BITS=true`. Rows 0-21; 13, 14 "unused"; 15, 16 "reserved"; bit 1 two sentences, plain and hybrid (§5.5 verbatim); 8 and 9 "no holder, parameters"; the leg sentence of §1.8 step 6 (B-34); the once-only "`grantDelay` delays an address, never who controls it" (CTR-GOV-15). The word for bits 64-127 is `bitLabel`'s, no row.
+**Changes:** the file carries `bit → name → type → one disclosure sentence`, written by a forge test from `GovernanceBits` and `_roleBits()`, `WRITE_BITS=true`. Rows 0-21; 13, 14 "unused"; 15, 16 "reserved"; bit 1 two sentences, plain and hybrid (§5.5 verbatim, its two brackets marked: the mint clause while bit 1 is set, the rate clause while bit 3 is set, keyed on `maxSupply() ≠ 0`); bit 5 two, public and confidential kinds; bit 7 one, "unwrap of public units is never paused"; 8 and 9 "no holder, parameters", naming `complianceRegistry()`; the delegable holder's "can add unlimited leaves at once, sharing a remaining budget of N"; the leg sentence of §1.8 step 6 (B-34); the once-only "`grantDelay` delays an address, never who controls it" (CTR-GOV-15). The word for bits 64-127 is `bitLabel`'s, no row.
 
 - [ ] **Step 1: Failing tests:** `test_bitsVectorEqualsTheConstants`, then one reader test per row of the table, each comparing every row of the file and failing on a missing bit.
 - [ ] **Step 2:** Each package's own command: FAIL (no file, no reader).
@@ -492,31 +504,31 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 **Files:** `scaas-node/src/typed.rs` (`TYPED`, `PLAIN`, `NESTED`, `domain_name`), `scaas-node/src/guard.rs` (`Rule`, `rule_of`, `Facts`, `allowed`, `the_plain_rows_are_pinned`), `scaas-node/src/config.rs`, `scaas-node/src/addresses.rs`, `scaas-node/node.example.toml`, `scaas-node/tests/e2e.rs`
 
 **Changes:**
-- `typed.rs`: contract kind `holder`, `domain_name` → `"SCaaS GovernanceHolder"`; `GrantTerms` in `NESTED`; 40 `TYPED` rows; `HOLDER_FACT` and `("deploy", HOLDER_FACT, "bytes32 operator,bytes32 salt")` in `PLAIN`; `ALL` gains `holder` (only `CancelNonce` uses it); `UACancelNonce` moves from `T` to `T` plus `holder`.
-- `guard.rs`: `Rule::Holder`: target's code hash equals the clone hash of `holder_factory.implementation()`, and `chainUid()` equals `chain.chain_uid`; `Rule::HolderFactory`: `w.to == holder_factory`. No `holder_factory` configured: refused. A lane stays no holder.
+- `typed.rs`: contract kind `holder`, `domain_name` → `"SCaaS GovernanceHolder"`; `GrantTerms` in `NESTED`; 42 `TYPED` rows; `HOLDER_FACT` and `("deploy", HOLDER_FACT, "bytes32 operator,bytes32 salt")` in `PLAIN`; `ALL` gains `holder` (only `CancelNonce` uses it); `UACancelNonce` moves from `T` to `T` plus `holder`.
+- `guard.rs`: `Rule::Holder`: target's code hash is one of the clone hashes of `holder_factories`, each `IMPLEMENTATION()` read once, and `chainUid()` equals `chain.chain_uid`; `Rule::HolderFactory`: `w.to` is one of `holder_factories`. `check_named`'s relay branch today runs only `require_bound` on the inner target: when the inner call is a `holder` row it runs `Rule::Holder` too (agy I-5). None configured: refused. A lane stays no holder.
 - `HEX_ARGS_REFUSED` unchanged. No existing job's shape changes.
 - Untrusted decode: `GrantTerms` is flat, one depth; `require_bound` as the other kinds.
 
-- [ ] **Step 1: Failing tests:** `typed_ops_kat_every_entry` over the new rows; `a_holder_op_runs_only_on_a_clone_of_the_chains_implementation`, `a_holder_generic_entry_is_no_row`, `a_token_governance_entry_is_no_row`, `a_chain_without_holder_factory_refuses_holder_jobs`, `holder_deploy_targets_only_the_factory`; `the_plain_rows_are_pinned` gains `deploy`; ignored e2e `holder_grant_role_relayed_at_fee_zero_on_anvil`.
+- [ ] **Step 1: Failing tests:** `typed_ops_kat_every_entry` over the new rows; `a_holder_op_runs_only_on_a_clone_of_the_chains_implementation`, `a_holder_generic_entry_is_no_row`, `a_token_governance_entry_is_no_row`, `a_chain_without_holder_factory_refuses_holder_jobs`, `holder_deploy_targets_only_the_factory`, `a_holder_op_relayed_through_the_router_checks_the_inner_target`, `a_second_holder_factory_is_a_config_row`; `the_plain_rows_are_pinned` gains `deploy`; ignored e2e `holder_grant_role_relayed_at_fee_zero_on_anvil`.
 - [ ] **Step 2:** `cd scaas-node && CAPPED_MEM=6G ../scripts/capped cargo test -j2 typed`: FAIL. The 6 GB run only with nothing else heavy.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** `CAPPED_MEM=6G ../scripts/capped sh -c 'cargo clippy -j2 --all-targets -- -D warnings && cargo test -j2'`; `../scripts/capped cargo test -j2 --test e2e -- --ignored --test-threads=1`.
-- [ ] **Step 5: Mutants:** the code-hash check dropped; the `chainUid` check dropped; a generic `uaExecute` row added on `holder` (`a_holder_generic_entry_is_no_row` red); `Rule::HolderFactory` allowing an unconfigured factory.
+- [ ] **Step 5: Mutants:** the code-hash check dropped; the same on the relay branch; the `chainUid` check dropped; a generic `uaExecute` row added on `holder` (`a_holder_generic_entry_is_no_row` red); `Rule::HolderFactory` allowing an unconfigured factory.
 - [ ] **Step 6:** Commit `governance T15: holder rows, target by clone code hash, deploy row, allow-lists equal`.
 
 **Pins:** rows new; `submit.rs` literal selector pins unmoved. **Gates:** `cargo-scaas-node`, `node-e2e-anvil`.
 
-### Task T16: deploy, release figures, the reset's inputs (CTR-GOV-19; spec S8; NET-EVM-06; GD-4, GD-12)
+### Task T16: deploy, release figures, the reset's inputs (CTR-GOV-19 and T0's result; spec S0, S8, §12.10; NET-EVM-06's Change; GD-4, GD-12)
 
-**Files:** `smartcontracts/evm/script/DeployBase.sol` (`GovernanceHolderFactory` by CREATE2, JSON key `governance_holder_factory`; `DEPLOY_WRAPPED` path; `_requireReleaseGas` NatSpec figures), `smartcontracts/evm/test/helpers/DeployHarness.sol`, `test/governance/GovDeploy.t.sol` (new), `smartcontracts/scripts/deploy.sh` (`CHAIN_CODE_LIMIT`, comments), `pqz-core/nethermind/chain/patch-chainspec.py` (`RESET` gains `maxCodeSize` `0x20000`, self-check row; **only if T0's arm A passed**), `pqz-core/nethermind/chain/e2e.py`, `pqz-core/nethermind/chain/RUNBOOK.md` (a new section for the reset: not executed), `scaas-node/tests/{e2e,e2e_hedera}.rs` anvil flags where a kind above 64 KiB deploys, `smartcontracts/evm/runs/2026-11-03-governance-deploy-gas.txt`
+**Files:** `smartcontracts/evm/script/DeployBase.sol` (`GovernanceHolderFactory` by CREATE2, JSON key `governance_holder_factory`; `DEPLOY_WRAPPED` path; `_requireReleaseGas` NatSpec figures), `smartcontracts/evm/test/helpers/DeployHarness.sol`, `test/governance/GovDeploy.t.sol` (new), `smartcontracts/scripts/deploy.sh` (`CHAIN_CODE_LIMIT`, comments), `pqz-core/nethermind/chain/patch-chainspec.py` (`--testnet-reset`: `RESET` gains `maxCodeSize` `0x20000`, and `eip7954TransitionTimestamp` is removed from `params`, owner 2026-11-03; its `unexpected diff` check allows exactly that removal; self-check rows), `pqz-core/nethermind/chain/e2e.py`, `pqz-core/nethermind/chain/RUNBOOK.md` (a new section for the reset: not executed; the EIP list of the 2026-10-21 section is a record and stays), `scaas-node/tests/{e2e,e2e_hedera}.rs` anvil flags where a kind above 64 KiB deploys, `smartcontracts/evm/runs/2026-11-03-governance-deploy-gas.txt`
 
-**Changes:** figures from `size-baseline.json`, no literal in code but the NatSpec line. Simulated run as `runs/2026-11-01-typed-signing-deploy-gas.txt`, profile `scaas-testnet`, `DEPLOY_ZETHER=true`, `DEPLOY_WRAPPED=true`, plus the PQZ kinds: regular + state and × 1.05 per kind, against 200 M. The reset itself is the controller's: this task leaves a tool and a runbook section, and runs nothing on the SCaaS testnet.
+**Changes:** the chainspec of the next reset follows arm C of T0: every Amsterdam key of `runs/2026-10-21-testnet-reset-2.2.0.sh` but `eip7954TransitionTimestamp`, `maxCodeSize` `0x20000`, with the init limit T0b read in the RUNBOOK section. That is NET-EVM-06's Change. `--testnet-reset` still refuses every chain but 7622; 22776 stays the owner's. Figures from `size-baseline.json`, no literal in code but the NatSpec line. Simulated run as `runs/2026-11-01-typed-signing-deploy-gas.txt`, profile `scaas-testnet`, `DEPLOY_ZETHER=true`, `DEPLOY_WRAPPED=true`, plus the PQZ kinds: regular + state and × 1.05 per kind, against 200 M. The reset itself is the controller's: this task leaves a tool and a runbook section, and runs nothing on the SCaaS testnet.
 
-- [ ] **Step 1: Failing tests:** `test_deployWrappedPath`, `test_holderFactoryDeployedAndGated` (`_gate`), `test_everyKindsReleaseFitsTwoHundredMillion` (each baseline runtime through `_checkReleaseGas` at 200 M), `patch-chainspec.py --check` row for `maxCodeSize`.
+- [ ] **Step 1: Failing tests:** `test_deployWrappedPath`, `test_holderFactoryDeployedAndGated` (`_gate`), `test_everyKindsReleaseFitsTwoHundredMillion` (each baseline runtime through `_checkReleaseGas` at 200 M), `patch-chainspec.py --check` rows: `maxCodeSize` set, `eip7954TransitionTimestamp` gone, every other Amsterdam key kept, the removal refused without `--testnet-reset` and on any other chain.
 - [ ] **Step 2:** `../../scripts/capped forge test --match-path 'test/{governance/GovDeploy,ua/UADeploy,zether/ZetherDeploy}.t.sol'`: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** PASS; `scripts/e2e-zether.sh`; `cargo test -j2 --test e2e_hedera -- --ignored`; the simulated run committed.
-- [ ] **Step 5: Mutants:** `_requireReleaseGas` skipped for one kind; a release gate at the wrong key of the baseline.
+- [ ] **Step 5: Mutants:** `_requireReleaseGas` skipped for one kind; a release gate at the wrong key of the baseline; `patch-chainspec.py` leaving `eip7954TransitionTimestamp` in; removing a second key.
 - [ ] **Step 6:** Commit `governance T16: every kind has a deploy path, figures against the 200 M block, the reset's inputs`.
 
 **Pins, old → new:** `_requireReleaseGas` NatSpec (`NormalToken` 37,228 B = 73.7 M, `WrappedZetherToken` 62,169 B = 111.9 M, `WrappedPqzToken` 63,423 B = 113.8 M → measured). **Gates:** `GovDeploy`, `UADeploy`, `ZetherDeploy`, `e2e-zether`, `e2e_hedera`.
@@ -525,11 +537,11 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 
 **Files, each change a line, the spec holds the text:**
 - Create: `docs/contracts/governance.md`, from spec §1, §2, §3, §4.1, §5, §6, §7. Tags: BUILT what T3-T16 built; SPECIFIED §4.3, §4.4; PLANNED the regulated implementations, `MODERATE`, `RECORD`, family rows. Table of what a wallet reads (§1.8). The msig table of §3.5 with its status.
-- `docs/contracts/token-wrappers.md` §12.2: CTR-TOK-22 rows, Administration bullet, CTR-TOK-05, -10, -21, -24, -25, hybrid rows; CTR-TOK-24's gate text and the Size row of `docs/contracts/README.md` gain the ceiling and the list.
-- `docs/contracts/asset-suite.md`: §12.3 CTR-AS-03, §12.4 CTR-AS-07, §2.2, §2.3, §2.4, §2.6, I5, A7, A15, CTR-AS-02. **§12.1 CTR-AS-17 in its own commit, on the owner's word.**
-- `docs/contracts/dex.md`, `docs/contracts/README.md` §3, `architecture.md`: §12.5. `tender.md`: no word (§12.6). `zether.md` CTR-ZTH-47, `pq-zero-knowledge.md`: §12.6, apart. `metatx.md`, code comments in `MetaTxBase`, `SigCheck`, `_uaMove`: §12.8.
-- `docs/node/job-api.md`: §12.7, GD-8's `deploy` row and config key. `docs/networks/evm.md`: the code size row, the release table, `CHAIN_CODE_LIMIT`, the 119,753 B figure; `NET-EVM-06`.
-- `docs/decisions.md`: GD-1 to GD-18 in full; Change lines with commits; CTR-GOV-19's status with T0's verdict; CTR-GOV-02's status. `docs_check` C3: a new anchor needs its register entry in the same commit. Every rule keeps its id; `normative:` of a CTR-GOV entry moves to `contracts/governance.md` where the doc holds it.
+- `docs/contracts/token-wrappers.md` §12.2: CTR-TOK-22 rows, Administration bullet, CTR-TOK-05, -06, -10, -21, -24, -25, hybrid rows, the `scaas.admin` lines, the test plan's invariants; CTR-TOK-24's gate text and the Size row of `docs/contracts/README.md` gain the ceiling and the list.
+- `docs/contracts/asset-suite.md`: §12.3 CTR-AS-03, §12.4 CTR-AS-07, §2.1, §2.2, §2.3, §2.4, §2.6, §2.7, I1, I5, A7, A15, CTR-AS-02, CTR-AS-09, §10. **§12.1 CTR-AS-17 in its own commit, on the owner's word.**
+- `docs/contracts/dex.md`, `docs/contracts/README.md` §3, `architecture.md`: §12.5. `tender.md`: no word (§12.6). `zether.md` CTR-ZTH-47 and its reserve invariant, `pq-zero-knowledge.md` its two escrow lines: §12.6, apart. `metatx.md`, code comments in `MetaTxBase`, `SigCheck`, `_uaMove`: §12.8.
+- `docs/node/job-api.md`: §12.7, GD-8's `deploy` row and config key. `docs/networks/evm.md`: §12.10: the Forks row, the code size row with T0b's init limit, the anvil line, the release table, `CHAIN_CODE_LIMIT`, the 119,753 B figure as the gate's; NET-EVM-06's Change, in the doc and in the register.
+- `docs/decisions.md`: GD-1 to GD-20 in full, C7 to C11 of the spec; Change lines with commits; the Change of NET-EVM-06; CTR-GOV-19's status with T0's and T0b's verdicts; CTR-GOV-02's status. `docs_check` C3: a new anchor needs its register entry in the same commit. Every rule keeps its id; `normative:` of a CTR-GOV entry moves to `contracts/governance.md` where the doc holds it.
 - `README.md` §4: "What exists today" and "The design (PLANNED)" rewritten to the built state, the regulated parts PLANNED; `docs/README.md` lines 57, 147.
 - `AGENTS.md`: **`CALL_TABLE` in the Node section → `typed.rs` `TYPED` / `PLAIN`**, and `guard.rs` for the rule per kind. The Size gate bullet: ceiling 131,072 B, the list, and "`WrappedPqzToken` is within about 1 KB of the stop line" goes (CTR-GOV-19). The Node row of the map gains nothing.
 - The spec's status line. `TODO.md` with this commit, never alone.
@@ -555,7 +567,7 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 
 ### Task T19: whole-branch review and fix wave
 
-- [ ] **Step 1:** Dispatch the whole-branch review (superpowers:requesting-code-review) over `main..governance`, one reader who gets the code and the spec, not this plan's conclusions. Focus: the Review Focus list; §1.6's table cell by cell against the code; `Counts` on every path; the cap on every path of §5.2; `use` on every power (a power reached by `hasRole` alone is a P0 here); the same-class rule: a fix to one path is checked on the other wrapped kinds, Zether and PQZ apart; the node's allow-lists in both directions; `docs_check` clean; no absolute path, secret or email in a run log.
+- [ ] **Step 1:** Dispatch the whole-branch review (superpowers:requesting-code-review) over `main..governance`, one reader who gets the code and the spec, not this plan's conclusions. Focus: the Review Focus list; §1.6's table cell by cell against the code; `Counts` against §1.7's table, row by row; the two generations; the cap on every path of §5.2; `use` on every power (a power reached by `hasRole` alone is a P0 here); the same-class rule: a fix to one path is checked on the other wrapped kinds, Zether and PQZ apart; the node's allow-lists in both directions; `docs_check` clean; no absolute path, secret or email in a run log.
 - [ ] **Step 2: Fix wave:** each finding fixed with a failing test first, in its owning task's files; commits `governance fix: …`. A finding that changes a §0 row, a ruling or a GD goes to the controller.
 - [ ] **Step 3:** Re-run T18 (steps whose inputs changed re-run at the new commit); commit the summary.
 - [ ] **Step 4:** Re-review of the fixes only; repeat Steps 2-3 until "ready". Everything cryptographic stays `UNAUDITED`; this is a review by one AI reader, named as such.
@@ -585,7 +597,7 @@ Its content, recorded here so nothing is lost: `set_admin` (records a pending), 
 
 | Overlap with `msig-nested` | If `msig-nested` lands first | If `governance` lands first |
 |---|---|---|
-| `IUARegistry.MemberSig` `{index, members, sig}`, `InnerSig`; `UAKinds.uaAuthCall`; `MtxPipelineLib` | every `ua<Op>` selector of the holder comes out of the generator on the new shape; `HolderPqMsig.t.sol`'s fixture one field | its selector count grows by the holder's 20 `ua*` names; the same one field |
+| `IUARegistry.MemberSig` `{index, members, sig}`, `InnerSig`; `UAKinds.uaAuthCall`; `MtxPipelineLib` | every `ua<Op>` selector of the holder comes out of the generator on the new shape; `HolderPqMsig.t.sol`'s fixture one field | its selector count grows by the holder's 21 `ua*` names; the same one field |
 | `scaas-node/src/typed.rs` `NESTED` | adjacent lines: `InnerSig`, `MemberSig` beside `GrantTerms` | the same |
 | `test/v2/DexKat.t.sol`, `dex_order_kat.json`, `test/metatx/TypedOps.t.sol` | textual conflict with T3, T7, T12; take either side, regenerate | the same |
 | `_membersWorst` recursive | `docs/contracts/governance.md`'s table: counts stay, worst figures move (`slhdsa128s` 11,958,373) | it updates that table |
@@ -596,7 +608,7 @@ Its content, recorded here so nothing is lost: `set_admin` (records a pending), 
 |---|---|
 | `script/DeployBase.sol` (`_checkGen1Kinds`, another hunk), `test/helpers/DeployHarness.sol`, `test/ua/UADeploy.t.sol`, `test/ua/UARegistryUA8.t.sol` | T2, T16 |
 | `clients/ua-rs/src/lib.rs`, `clients/ua-c/src/lib.rs`, and the vector tests of `ua-c`, `ua-cxx`, `ua-py`, `ua-qt`, `ua-dart`, `ua-dart-frb` | T14: additive, a new function and a new test beside theirs |
-| `scaas-node/src/config.rs`, `scaas-node/node.example.toml` | T15: one key each. `typed.rs` and `guard.rs` are not touched there |
+| `scaas-node/src/config.rs`, `scaas-node/node.example.toml` | T15: one key each, `holder_factories`. `typed.rs` and `guard.rs` are not touched there |
 | `docs/node/job-api.md`, `docs/contracts/accounts.md`, `docs/decisions.md`, `TODO.md` | T17 |
 
 No contract under `src/` overlaps. S12 is Part D7.
@@ -611,5 +623,7 @@ None blocks a task; each has the default the plan follows.
 
 1. **CTR-AS-17's Change (§12.1):** apply as drafted? Default: T17 leaves it out of the main docs commit and holds it for the word. The rest of T17 proceeds.
 2. **`main` into `governance` after `ua8-soroban` lands:** go? Default: wait for the word, keep building.
-3. **`maxCodeSize` `0x20000`** is the controller's proposal, and at a 200 M block 119,753 B is the real bound. Default: keep it; no contract comes near.
-4. **C1, C2 on the hybrid; GD-8 the holder factory's `deploy` row:** controller calls. Default: as written.
+3. **`maxCodeSize` `0x20000`** is the controller's proposal, and at a 200 M block 119,753 B is the deploy gate's bound. Default: keep it; no contract comes near.
+4. **C2 on the hybrid; GD-8 the holder factory's `deploy` row:** controller calls. Default: as written.
+5. **C7, an expired root counts until it is revoked:** the definition the owner asked for, with its reason. An exact count needs a holder list or a stored expiry. Default: as written.
+6. **`RateDecreaseWithDisabledLeg` on a hybrid (spec §5.3):** kept, so a hybrid with a disabled leg cannot lower a rate. Default: kept.
