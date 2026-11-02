@@ -1,0 +1,12 @@
+# red-forge at commit 38544bcf plus the C4 tree: test/pqz/PqzTyped.t.sol against the old vectors
+[FAIL: statement_transfer.json.rows[0] pqzl: 0x1e612ecfd69126fdddcb3a031113a6a0e2d5f85bec4e753155364fa7936becc8 != 0xbb55cd42da6f7b0dbae2b66c1ba840c6cda1ab7e2a43db2409a4f4427cfc00c6] test_pqzAuthDigestVectors() (gas: 719
+Ran 13 tests for test/pqz/PqzTyped.t.sol:PqzTypedRowsTest
+Ran 18 tests for test/pqz/PqzTyped.t.sol:PqzNamedTest
+Ran 4 test suites in 1.55s (4.79s CPU time): 43 tests passed, 1 failed, 0 skipped (44 total tests)
+Ran 5 tests for test/pqz/PqzTyped.t.sol:PqzAuthDigestTest
+Ran 8 tests for test/pqz/PqzTyped.t.sol:PqzExplicitStatementTest
+Suite result: FAILED. 4 passed; 1 failed; 0 skipped; finished in 1.55s (325.23ms CPU time)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 1.55s (8.91s CPU time)
+Suite result: ok. 18 passed; 0 failed; 0 skipped; finished in 153.19ms (123.77ms CPU time)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 1.55s (290.94ms CPU time)
+rc=1

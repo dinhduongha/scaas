@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {DexLegs} from "../helpers/DexLegs.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {P256Verifier} from "../../src/ua/verifiers/P256Verifier.sol";
@@ -140,9 +141,9 @@ contract UATradeVectorsTest is UARegistryBase {
     }
 
     /// A shape-1 leg from an order at path `r` (`order.message.`, `auth`).
-    function _leg(address sell, string memory r, uint256 fill) internal view returns (ISCaaSDex.Leg memory) {
+    function _leg(address sell, string memory r, uint256 fill) internal view returns (ISCaaSDex.DexLeg memory) {
         ITradeToken.UATradeOrder memory o = _order(string.concat(r, "order.message."));
-        return ISCaaSDex.Leg(sell, 1, abi.encode(o), vm.parseJsonBytes(vj, string.concat(r, "auth")), fill);
+        return DexLegs.uaLeg(sell, o, UACall.auth(o.from, vm.parseJsonBytes(vj, string.concat(r, "auth"))), fill);
     }
 
     function _fund(NormalToken t, bytes32 id, uint256 v) internal {
@@ -155,7 +156,7 @@ contract UATradeVectorsTest is UARegistryBase {
     function test_typeHashesPurposeDomain() public view {
         assertEq(vm.parseJsonBytes32(vj, ".typeHashes.UATradeOrder"), TradeLib.UA_TRADE_ORDER_TYPEHASH);
         assertEq(vm.parseJsonBytes32(vj, ".typeHashes.UAInvalidateNonces"), TradeLib.UA_INVALIDATE_NONCES_TYPEHASH);
-        assertEq(vm.parseJsonBytes32(vj, ".typeHashes.CancelOrder"), TradeLib.CANCEL_ORDER_TYPEHASH);
+        assertEq(vm.parseJsonBytes32(vj, ".typeHashes.CancelUAOrder"), TradeLib.CANCEL_UA_ORDER_TYPEHASH);
         assertEq(vm.parseJsonBytes32(vj, ".purposeTag"), UAKinds.PURPOSE_TRADE);
         bytes32 ds = keccak256(abi.encode(
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
@@ -166,15 +167,15 @@ contract UATradeVectorsTest is UARegistryBase {
     /// Every signer: the token recomputes the three digests; the order settles against the native maker (the native row
     /// is the maker's own id: no settlement, `SelfTrade`); the cancel and the invalidation pass through the token.
     function test_rows_digests_settle_cancel_invalidate() public {
-        ISCaaSDex.Leg memory maker = _leg(address(B), ".nativeMaker.", 2000);
-        bytes32 makerId = abi.decode(maker.order, (ITradeToken.UATradeOrder)).from;
+        ISCaaSDex.DexLeg memory maker = _leg(address(B), ".nativeMaker.", 2000);
+        bytes32 makerId = maker.uaOrder.from;
         uint256 n;
         for (uint256 i; vm.keyExistsJson(vj, string.concat(".rows[", vm.toString(i), "]")); ++i) {
             string memory r = _row(i);
             ITradeToken.UATradeOrder memory o = _order(string.concat(r, "order.message."));
             bytes32 h = vm.parseJsonBytes32(vj, string.concat(r, "orderHash"));
             assertEq(A.uaTradeOrderDigest(o), h);
-            assertEq(A.cancelOrderDigest(h), vm.parseJsonBytes32(vj, string.concat(r, "cancelDigest")));
+            assertEq(A.cancelUAOrderDigest(o), vm.parseJsonBytes32(vj, string.concat(r, "cancelDigest")));
             assertEq(A.uaInvalidateNoncesDigest(o.from, 1, 5), vm.parseJsonBytes32(vj, string.concat(r, "invalidateDigest")));
             uint256 snap = vm.snapshotState();
             if (o.from != makerId) {
@@ -183,7 +184,7 @@ contract UATradeVectorsTest is UARegistryBase {
                 ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](1);
                 ss[0].ref = h;
                 ss[0].taker = _leg(address(A), r, 1000);
-                ss[0].makers = new ISCaaSDex.Leg[](1);
+                ss[0].makers = new ISCaaSDex.DexLeg[](1);
                 ss[0].makers[0] = maker;
                 vm.prank(RELAYER);
                 uint256 g = gasleft();
@@ -195,9 +196,9 @@ contract UATradeVectorsTest is UARegistryBase {
                 assertEq(B.balanceOfUA(o.from), 2000 - 6);
                 assertEq(A.pulled(h), 1000);
             }
-            A.uaCancelOrder(o, vm.parseJsonBytes(vj, string.concat(r, "cancelAuth")));
+            A.uaCancelOrder(o, UACall.auth(o.from, vm.parseJsonBytes(vj, string.concat(r, "cancelAuth"))));
             assertEq(A.pulled(h), 1000);
-            A.uaInvalidateNonces(o.from, 1, 5, vm.parseJsonBytes(vj, string.concat(r, "invalidateAuth")));
+            A.uaInvalidateNonces(o.from, 1, 5, UACall.auth(o.from, vm.parseJsonBytes(vj, string.concat(r, "invalidateAuth"))));
             assertEq(A.uaMinNonce(o.from, 1), 5);
             vm.revertToState(snap);
             ++n;
@@ -205,7 +206,7 @@ contract UATradeVectorsTest is UARegistryBase {
         assertEq(n, 11);
     }
 
-    function _pqLeg(uint256 i, uint256 fill) internal view returns (ISCaaSDex.Leg memory) {
+    function _pqLeg(uint256 i, uint256 fill) internal view returns (ISCaaSDex.DexLeg memory) {
         string memory r = string.concat(".pq[", vm.toString(i), "].");
         return _leg(vm.parseJsonAddress(vj, string.concat(r, "sellToken")), r, fill);
     }
@@ -215,11 +216,11 @@ contract UATradeVectorsTest is UARegistryBase {
         ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](1);
         ss[0].ref = "pq";
         ss[0].taker = _pqLeg(0, 500 * makers);
-        _fund(A, abi.decode(ss[0].taker.order, (ITradeToken.UATradeOrder)).from, 1000);
-        ss[0].makers = new ISCaaSDex.Leg[](makers);
+        _fund(A, ss[0].taker.uaOrder.from, 1000);
+        ss[0].makers = new ISCaaSDex.DexLeg[](makers);
         for (uint256 i; i < makers; ++i) {
             ss[0].makers[i] = _pqLeg(i + 1, 1000);
-            _fund(B, abi.decode(ss[0].makers[i].order, (ITradeToken.UATradeOrder)).from, 1000);
+            _fund(B, ss[0].makers[i].uaOrder.from, 1000);
         }
         return abi.encodeCall(ISCaaSDex.mtxSettle, (ss));
     }

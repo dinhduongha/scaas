@@ -129,7 +129,7 @@ test('metatx3 receiverFee (UA-5a): an mldsa65 payer and an mldsa65 payee, both s
   const payee = V.extraKeys.find((x) => x.name === 'mldsa65' && x.index === 1);
   assert.deepEqual([r.transfer.message.from, r.transfer.message.to], [payer.ua, payee.ua]);
   assert.equal(hex(hashTypedData(r.transfer)), r.paymentDigest);
-  assert.equal(r.receiverFee.message.paymentDigest, r.paymentDigest);
+  assert.deepEqual(r.receiverFee.message.payment, r.transfer.message);
   assert.equal(hex(hashTypedData(r.receiverFee)), r.receiverFeeDigest);
   // abi.encode(bytes(""), sig): heads 0x40, 0x60; keyData length 0; sig length; sig
   const sigOf = (auth) => { const b = fromHex(auth); return hex(b.subarray(128, 128 + Number(BigInt(hex(b.subarray(96, 128)))))); };

@@ -215,15 +215,9 @@ async fn fake(
             for j in body["jobs"].as_array().unwrap() {
                 o.next_job += 1;
                 let id = 1000 + o.next_job;
-                // a token-side order entry is a `metatx` job naming its entry; everything else a `call` on the DEX
-                o.jobs.push(if j["kind"] == "metatx" {
-                    let mut x = j.clone();
-                    x["id"] = json!(id);
-                    x
-                } else {
-                    json!({"id": id, "kind": "call", "call": {
-                        "target": j["target"], "calldata": j["calldata"], "validUntil": j["valid_until"]}})
-                });
+                // every job carries its named op; a client keeps the kind it was given (`settle` and `cancel` go as `call`)
+                let kind = if j["kind"] == "metatx" { "metatx" } else { "call" };
+                o.jobs.push(json!({"id": id, "kind": kind, "op": j["op"]}));
             }
             json!({"ok": true})
         }
@@ -403,7 +397,8 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     // before simulation; a meta-transaction to a contract that is not a registered token (here: no contract) too.
     let steal = IToken::transferCall { to: Address::repeat_byte(0x7e), value: U256::from(1u64) }.abi_encode();
     let mut jobs = vec![json!({"id": 3, "kind": "call", "call": {"target": format!("{token:#x}"),
-        "calldata": format!("0x{}", alloy::hex::encode(steal)), "validUntil": (now() + 300).to_string()}})];
+        "calldata": format!("0x{}", alloy::hex::encode(steal)), "validUntil": (now() + 300).to_string()}}),
+        json!({"id": 33, "kind": "call", "op": {"entry": "transfer", "token": format!("{token:#x}"), "args": {}}})];
     let elsewhere = Address::repeat_byte(0x99);
     jobs.push(job(4, elsewhere, &m, "0x", sign(&payer, &token_domain(&dep, chain_id, elsewhere), &m)));
     state.lock().unwrap().jobs.extend(jobs);
@@ -412,20 +407,26 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let reports = state.lock().unwrap().reports.clone();
     let of = |id: i64| reports.iter().rev().find(|r| r["job_id"] == id).unwrap().clone();
     assert_eq!(of(3)["chain_state"], "dead");
-    assert!(of(3)["error"].as_str().unwrap().starts_with("CALL_TARGET_REFUSED"), "{}", of(3));
+    assert!(of(3)["error"].as_str().unwrap().contains("HEX_DATA_REFUSED"), "{}", of(3));
+    assert!(of(33)["error"].as_str().unwrap().contains("UNKNOWN_ENTRY"), "{}", of(33));
     assert_eq!(of(4)["chain_state"], "dead");
     assert!(of(4)["error"].as_str().unwrap().starts_with("TOKEN_NOT_SERVED"), "{}", of(4));
     let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
     assert_eq!(p.get_transaction_count(relayer.address()).await.unwrap(), nonce, "nothing signed or sent");
 
-    // NODE-JOB-20 against the real token: a `call` struct runs only a selector of its published allowlist. A self-call
-    // of `transfer` is refused before simulation; `cancelNonce(99)` lands and moves the payer's lane 99.
+    // Against the real token: a `call` struct is hex, refused before simulation; the named `mtxCancelNonce` lands, its typed
+    // digest computed by the node, and moves the payer's lane 99.
     let call = |data: Vec<u8>, batch: u64| Mtx::Call(scaas_node::abi::MetaTransaction { from: payer.address(), data: data.into(),
         batch: U256::from(batch), nonce: U256::ZERO, validUntil: U256::from(now() + 300), mode: 0, relayer: Address::ZERO,
         fee: U256::ZERO, feeRecipient: Address::ZERO });
     let bad = call(IToken::transferCall { to: Address::repeat_byte(0x7e), value: U256::from(1u64) }.abi_encode(), 5);
-    let good = call(alloy::hex::decode(format!("cfdd7aea{:064x}", 99)).unwrap(), 6);
-    state.lock().unwrap().jobs.extend([job(5, token, &bad, "0x", sign(&payer, &d, &bad)), job(6, token, &good, "0x", sign(&payer, &d, &good))]);
+    // the node reads no digest from a contract any more, so the contract checks the local ones here, on the live token
+    let Mtx::Call(ref as_call) = bad else { unreachable!() };
+    assert_eq!(view(&rpc, token, IToken::mtxDigestCall { m: as_call.clone() }).await, bad.digest(&d), "mtxDigest");
+    let Mtx::Transfer(ref as_transfer) = m else { unreachable!() };
+    assert_eq!(view(&rpc, token, IToken::mtxTransferDigestCall { t: as_transfer.clone() }).await, m.digest(&d), "mtxTransferDigest");
+    let good = json!({"id": 6, "kind": "metatx", "op": signed_op(&payer, cancel_op(payer.address(), token, 99, 6), chain_id, d.salt)});
+    state.lock().unwrap().jobs.extend([job(5, token, &bad, "0x", sign(&payer, &d, &bad)), good]);
     s.poll_outbox().await;
     for _ in 0..50 {
         s.track().await;
@@ -437,7 +438,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let reports = state.lock().unwrap().reports.clone();
     let of = |id: i64| reports.iter().rev().find(|r| r["job_id"] == id).unwrap().clone();
     assert_eq!(of(5)["chain_state"], "dead");
-    assert!(of(5)["error"].as_str().unwrap().starts_with("SELECTOR_NOT_ALLOWED"), "{}", of(5));
+    assert!(of(5)["error"].as_str().unwrap().contains("HEX_DATA_REFUSED"), "{}", of(5));
     assert_eq!(of(6)["chain_state"], "mined", "{}", of(6));
     let lane99 = IToken::mtxNonceCall { from: payer.address(), batch: U256::from(99) }.abi_encode();
     let out = p.call(TransactionRequest::default().to(token).input(lane99.into())).await.unwrap();
@@ -474,14 +475,13 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let out = p.call(TransactionRequest::default().to(router).input(scaas_node::abi::IMtxRelayFee::EXECUTORCall {}.abi_encode().into()))
         .await.unwrap();
     assert_eq!(Address::abi_decode(&out).unwrap(), router.create(1), "the executor the node derives (never paid)");
-    let inner = call(alloy::hex::decode(format!("cfdd7aea{:064x}", 77)).unwrap(), 8);
-    let call_data = inner.calldata(alloy::hex::decode(&sign(&payer, &d, &inner)[2..]).unwrap().into());
-    let r = scaas_node::metatx::relay_ref(chain_id, token, &call_data);
-    let Mtx::Transfer(t) = payment(payer.address(), router, 10, r, scaas_node::metatx::pay_lane(&r), MODE_RESTRICT_RELAYER, router, 0, Address::ZERO)
-        else { unreachable!() };
-    let fee_sig = sign(&payer, &d, &Mtx::Transfer(t.clone()));
-    let relay = scaas_node::abi::IMtxRelayFee::relayCall { target: token, callData: call_data, token, t,
-        sig: alloy::hex::decode(&fee_sig[2..]).unwrap().into() }.abi_encode();
+    let inner = signed_op(&payer, cancel_op(payer.address(), token, 77, 8), chain_id, d.salt);
+    let parsed = scaas_node::typed::Op::parse(&inner, None).unwrap();
+    let r = scaas_node::metatx::relay_ref(chain_id, token, &parsed.data);
+    let inner_digest = parsed.typed.digest_on(chain_id, d.salt).unwrap();
+    let relay = signed_op(&payer, json!({"entry": "mtxRelayFee", "contract": "token", "token": format!("{token:#x}"), "call": inner,
+        "args": {"from": format!("{:#x}", payer.address()), "payee": format!("{router:#x}"), "value": "10",
+            "validUntil": (now() + 300).to_string(), "relayer": format!("{router:#x}")}}), chain_id, d.salt);
     let mut rcfg = cfg.clone();
     rcfg.params = toml::toml! { relay_fee = { min_amount = 10 } };
     rcfg.params["relay_fee"].as_table_mut().unwrap().insert("router".into(), format!("{router:#x}").into());
@@ -489,8 +489,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let mut s3 = Submitter::start(Chain::with_signer(&rcfg, relayer.clone()).unwrap(), odoo.clone(), rcfg.clone(), "e2e-3".into(), Default::default())
         .await
         .unwrap();
-    state.lock().unwrap().jobs.push(json!({"id": 9, "kind": "call", "call": {"target": format!("{router:#x}"),
-        "calldata": format!("0x{}", alloy::hex::encode(relay)), "validUntil": (now() + 300).to_string()}}));
+    state.lock().unwrap().jobs.push(json!({"id": 9, "kind": "metatx", "op": relay}));
     s3.poll_outbox().await;
     for _ in 0..50 {
         s3.track().await;
@@ -509,6 +508,8 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     while scaas_node::indexer::step(&ichain, &odoo, Some(router)).await.unwrap() {}
     let ingested = state.lock().unwrap().ingested.clone();
     assert!(ingested.iter().all(|e| e["event"] != "RelayFeePaid"), "never a row");
+    assert!(ingested.iter().any(|e| e["event"] == "MetaTransactionExecuted" && e["digest"] == format!("{inner_digest:#x}")),
+        "the chain emitted the named entry's digest as the node computed it");
     let fee = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{r:#x}")).expect("fee settled");
     assert_eq!((fee["relay_target"].as_str(), fee["relay_payee"].as_str()),
         (Some(format!("{token:#x}").as_str()), Some(format!("{:#x}", relayer.address()).as_str())));
@@ -540,6 +541,68 @@ fn sign_hash(signer: &PrivateKeySigner, h: B256) -> String {
 }
 
 /// A `TradeOrder` on the venue's DEX: sells `amount` for at least `receive_amount` of `receive`, home-bound to the lane.
+/// The plain rows against forge's ABI: names and order of every argument and nested field, which a selector cannot pin
+/// (`pop` / `pqzPop` swapped keep it). Reads `out/`: the deploy of any other test here builds it.
+#[test]
+#[ignore]
+fn plain_rows_match_the_forge_abi() {
+    use scaas_node::typed::{nested, rows};
+    fn same(inputs: &[Value], fields: &[(String, String)], at: &str) {
+        assert_eq!(inputs.len(), fields.len(), "{at}");
+        for (i, (ty, name)) in inputs.iter().zip(fields) {
+            let abi = i["type"].as_str().unwrap();
+            // `SmartKeyAccount.mtxExecuteAsOwner` calls its last argument `signature`, the wallet `sig`: one row, the position counts
+            let abi_name = i["name"].as_str().unwrap().trim_end_matches('_');
+            assert!(abi_name == name || (abi_name == "signature" && name == "sig"), "{at}: {abi_name} / {name}");
+            let base = ty.trim_end_matches("[]");
+            match nested(base) {
+                Some(f) => {
+                    assert_eq!(abi.trim_start_matches("tuple"), &ty[base.len()..], "{at}.{name}");
+                    same(i["components"].as_array().unwrap(), f, &format!("{at}.{name}"));
+                }
+                None => assert_eq!(abi, ty, "{at}.{name}"),
+            }
+        }
+    }
+    let mut n = 0;
+    for r in rows().iter().filter(|r| !r.typed) {
+        for c in r.contracts {
+            let art = match (*c, r.entry) {
+                ("dex", _) => "ISCaaSDex",
+                ("registry", _) => "IUARegistry",
+                ("factory", _) => "SmartKeyAccountFactory",
+                ("account", _) => "SmartKeyAccount",
+                ("wallet", "mtxExecuteAsOwnerRaw") => "HederaMandateWallet",
+                _ => "MandateWallet",
+            };
+            let p = format!("{}/../smartcontracts/evm/out/{art}.sol/{art}.json", env!("CARGO_MANIFEST_DIR"));
+            let v: Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{p}: {e} (forge build)"))).unwrap();
+            let f = v["abi"].as_array().unwrap().iter()
+                .find(|f| f["type"] == "function" && f["name"] == r.entry && f["inputs"].as_array().unwrap().len() == r.fields.len())
+                .unwrap_or_else(|| panic!("{art}.{} with {} arguments", r.entry, r.fields.len()));
+            same(f["inputs"].as_array().unwrap(), &r.fields, r.entry);
+            n += 1;
+        }
+    }
+    assert_eq!(n, 22, "21 rows, mtxExecuteAsOwner on two contracts");
+}
+
+/// A named `mtxCancelNonce(lane)` of `from` on `token`, fee 0, open relayer.
+fn cancel_op(from: Address, token: Address, lane: u64, batch: u64) -> Value {
+    let z = format!("{:#x}", Address::ZERO);
+    json!({"entry": "mtxCancelNonce", "contract": "token", "token": format!("{token:#x}"), "args": {"lane": lane.to_string()},
+        "envelope": {"from": format!("{from:#x}"), "batch": batch.to_string(), "nonce": "0", "validUntil": (now() + 300).to_string(),
+            "mode": 0, "relayer": z, "fee": "0", "feeRecipient": z}})
+}
+
+/// `op` signed by `key` over the typed digest the node computes for it.
+fn signed_op(key: &PrivateKeySigner, mut op: Value, chain_id: u64, uid: B256) -> Value {
+    op["signature"] = json!(format!("0x{}", "11".repeat(65)));
+    let d = scaas_node::typed::Op::parse(&op, None).unwrap().typed.digest_on(chain_id, uid).unwrap();
+    op["signature"] = json!(format!("0x{}", alloy::hex::encode(key.sign_hash_sync(&d).unwrap().as_bytes())));
+    op
+}
+
 #[allow(clippy::too_many_arguments)]
 fn order(from: &PrivateKeySigner, receive: Address, amount: u64, receive_amount: u64, fee: u64, nonce: u64, relayer: Address,
     dex: Address) -> TradeOrder
@@ -745,7 +808,7 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     //    `mtxCancelOrder` entry job).
     let td = domain("SCaaS MetaToken", chain_id, token_a, uid);
     let high_s = {
-        let s = alice.sign_hash_sync(&cancel_digest(&td, ask_hash)).unwrap();
+        let s = alice.sign_hash_sync(&cancel_digest(&td, &ask)).unwrap();
         let n = U256::from_str_radix("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16).unwrap();
         let flipped = alloy::primitives::Signature::new(s.r(), n - s.s(), !s.v());
         format!("0x{}", alloy::hex::encode(flipped.as_bytes()))
@@ -754,7 +817,7 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     assert_eq!(st, 400);
     assert_eq!(venue.rows().await, before);
     let (st, body) = post("/v1/dex/cancel", json!({"chain": chain_id, "orderHash": format!("{ask_hash:#x}"),
-        "signature": sign_hash(&alice, cancel_digest(&td, ask_hash))})).await;
+        "signature": sign_hash(&alice, cancel_digest(&td, &ask))})).await;
     assert_eq!(st, 202, "{body}");
     assert!(venue.rows().await.is_empty());
     venue.sync_once().await.unwrap();
@@ -1139,12 +1202,11 @@ async fn view<C: SolCall>(rpc: &str, to: Address, c: C) -> C::Return {
     C::abi_decode_returns(&p.call(TransactionRequest::default().to(to).input(c.abi_encode().into())).await.unwrap()).unwrap()
 }
 
-/// `requireAuthorized`'s derived auth: `abi.encode(bytes keyData, bytes sig)`, the signature over the registry's
-/// `uaMessage(kind, purpose, digest)`.
-async fn ua_auth(rpc: &str, registry: Address, owner: &PrivateKeySigner, purpose: &[u8], digest: B256) -> alloy::primitives::Bytes {
+/// A derived UA's `UASig` as explicit JSON: the key, the signature over the registry's `uaMessage(kind, purpose, digest)`.
+async fn ua_auth(rpc: &str, registry: Address, owner: &PrivateKeySigner, purpose: &[u8], digest: B256) -> Value {
     let msg = view(rpc, registry, uaMessageCall { kind: UA_SECP256K1, purposeTag: keccak256(purpose), digest }).await;
     let sig = owner.sign_hash_sync(&msg).unwrap().as_bytes().to_vec();
-    (alloy::primitives::Bytes::from(owner.public_key().to_vec()), alloy::primitives::Bytes::from(sig)).abi_encode_params().into()
+    json!({"keyData": format!("0x{}", alloy::hex::encode(owner.public_key())), "signature": format!("0x{}", alloy::hex::encode(sig)), "members": []})
 }
 
 /// Review I1 / minor 4: every transaction the lane signed for a priced relay-fee job (`hashes`: the first and each
@@ -1172,7 +1234,7 @@ fn quote_covers(sent: &[(u64, u128)], spent: U256, what: &str) -> u128 {
 #[tokio::test]
 #[ignore]
 async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
-    use scaas_node::abi::{IMtxRelayFee, IUALedger, UAMetaTransfer};
+    use scaas_node::abi::{IUALedger, UAMetaTransfer};
     use scaas_node::metatx::{meta_pay_id, pay_lane, relay_ref, UaMtx};
     let chain_id = 31905;
     let (_anvil, rpc) = start_anvil(chain_id, 31905).await;
@@ -1212,10 +1274,10 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
         .await
         .unwrap();
     let d = token_domain(&dep, chain_id, token);
-    let ua_job = |id: i64, m: &UaMtx, auth: &alloy::primitives::Bytes| {
+    let ua_job = |id: i64, m: &UaMtx, auth: &Value| {
         let (kind, wire) = m.to_wire();
         json!({"id": id, "kind": "ua_metatx", "token": format!("{token:#x}"), "digest": format!("{:#x}", m.digest(&d)),
-               "struct": kind, "m": wire, "auth": format!("0x{}", alloy::hex::encode(auth))})
+               "struct": kind, "m": wire, "auth": auth})
     };
     let last = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap();
     let signed = |id: i64| state.lock().unwrap().reports.iter().find(|r| r["job_id"] == id && r["chain_state"] == "signed")
@@ -1239,34 +1301,30 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
     assert_eq!(balance(&rpc, token, shop).await, U256::from(1_000u64), "the UA paid the shop");
 
     // (2) UA relay fee for the payer's fee-less cancelNonce(55) (address path), open mode
-    let inner = Mtx::Call(scaas_node::abi::MetaTransaction { from: payer.address(),
-        data: alloy::hex::decode(format!("cfdd7aea{:064x}", 55)).unwrap().into(), batch: U256::from(12), nonce: U256::ZERO,
-        validUntil: U256::from(now() + 300), mode: 0, relayer: Address::ZERO, fee: U256::ZERO, feeRecipient: Address::ZERO });
-    let call_data = inner.calldata(alloy::hex::decode(&sign(&payer, &d, &inner)[2..]).unwrap().into());
-    let r = relay_ref(chain_id, token, &call_data);
-    let relay_job = |id: i64, value: u64, call_data: alloy::primitives::Bytes| {
-        let r = relay_ref(chain_id, token, &call_data);
-        let t = UAMetaTransfer { from: ua, to: router.into_word(), value: U256::from(value), entryRef: r, batch: pay_lane(&r),
-            nonce: U256::ZERO, validUntil: U256::from(now() + 300), mode: MODE_RESTRICT_RELAYER, relayer: router,
-            fee: U256::ZERO, feeRecipient: Address::ZERO };
-        let (rpc, owner, d) = (rpc.clone(), owner.clone(), d.clone());
+    let inner = signed_op(&payer, cancel_op(payer.address(), token, 55, 12), chain_id, d.salt);
+    let r = relay_ref(chain_id, token, &scaas_node::typed::Op::parse(&inner, None).unwrap().data);
+    let relay_job = |id: i64, value: u64, inner: Value| {
+        let mut op = json!({"entry": "uaRelayFee", "contract": "token", "token": format!("{token:#x}"), "call": inner,
+            "args": {"from": format!("{ua:#x}"), "payee": format!("{:#x}", router.into_word()), "value": value.to_string(),
+                "validUntil": (now() + 300).to_string(), "relayer": format!("{router:#x}")},
+            "auth": {"keyData": "0x", "signature": "0x", "members": []}});
+        let digest = scaas_node::typed::Op::parse(&op, None).unwrap().typed.digest_on(chain_id, d.salt).unwrap();
+        let (rpc, owner) = (rpc.clone(), owner.clone());
         async move {
-            let auth = ua_auth(&rpc, registry, &owner, b"scaas.ua.purpose.metatx.v1", UaMtx::Transfer(t.clone()).digest(&d)).await;
-            let data = IMtxRelayFee::uaRelayCall { target: token, callData: call_data, token, t, auth }.abi_encode();
-            json!({"id": id, "kind": "call", "call": {"target": format!("{router:#x}"),
-                "calldata": format!("0x{}", alloy::hex::encode(data)), "validUntil": (now() + 300).to_string()}})
+            op["auth"] = ua_auth(&rpc, registry, &owner, b"scaas.ua.purpose.metatx.v1", digest).await;
+            json!({"id": id, "kind": "ua_metatx", "op": op})
         }
     };
     // a fee of 1 is worth 10^11 wei, under the quote: nothing signed, retried later (the quote follows the fees)
     let n0 = p.get_transaction_count(relayer.address()).await.unwrap();
-    let j = relay_job(2, 1, call_data.clone()).await;
+    let j = relay_job(2, 1, inner.clone()).await;
     state.lock().unwrap().jobs.push(j);
     run_outbox(&mut s).await;
     let l = last(2);
     assert!(l["chain_state"] == "queued" && l["error"].as_str().unwrap().starts_with("RELAY_FEE_REFUSED"), "{l}");
     assert_eq!(p.get_transaction_count(relayer.address()).await.unwrap(), n0, "nothing signed or sent");
     // a fee of 1,000 (10^14 wei at the price) covers it
-    let j = relay_job(3, 1_000, call_data.clone()).await;
+    let j = relay_job(3, 1_000, inner.clone()).await;
     state.lock().unwrap().jobs.push(j);
     let (b0, f0) = (eth().await, balance(&rpc, token, relayer.address()).await);
     run_outbox(&mut s).await;
@@ -1299,17 +1357,14 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
     // review I1 / minor 4: a priced uaRelay whose send is stuck (no blocks) is replaced, every replacement at or under
     // the job's fee ceiling (2 x the first max fee; unclamped, 25 % bumps pass it on the fourth); once mined, the lane's
     // cost is inside the quote. A second lane runner (stuck after 1 s) on the same key, the first one idle.
-    let inner = Mtx::Call(scaas_node::abi::MetaTransaction { from: payer.address(),
-        data: alloy::hex::decode(format!("cfdd7aea{:064x}", 56)).unwrap().into(), batch: U256::from(13), nonce: U256::ZERO,
-        validUntil: U256::from(now() + 300), mode: 0, relayer: Address::ZERO, fee: U256::ZERO, feeRecipient: Address::ZERO });
-    let call_data = inner.calldata(alloy::hex::decode(&sign(&payer, &d, &inner)[2..]).unwrap().into());
+    let inner = signed_op(&payer, cancel_op(payer.address(), token, 56, 13), chain_id, d.salt);
     let mut cfg2 = cfg.clone();
     cfg2.stuck_after_secs = 1;
     let mut s2 = Submitter::start(Chain::with_signer(&cfg2, relayer.clone()).unwrap(), odoo.clone(), cfg2, "e2e-ua-2".into(), Default::default())
         .await
         .unwrap();
     let _: Value = p.raw_request("evm_setAutomine".into(), (false,)).await.unwrap();
-    let j = relay_job(4, 1_000, call_data).await;
+    let j = relay_job(4, 1_000, inner).await;
     state.lock().unwrap().jobs.push(j);
     let b0 = eth().await;
     s2.poll_outbox().await;

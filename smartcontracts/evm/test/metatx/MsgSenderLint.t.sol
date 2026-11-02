@@ -11,7 +11,7 @@ import {Test} from "forge-std/Test.sol";
 /// are `//` are skipped (block comments are not). A change here is deliberate: update the pin in the same commit and
 /// say why.
 contract MsgSenderLintTest is Test {
-    string[14] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/MtxPipelineLib.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
+    string[15] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/UAMetaTxBase.sol", "src/metatx/MtxPipelineLib.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
         "src/metatx/NormalToken.sol", "src/metatx/WrappedToken.sol", "src/metatx/WrappedLib.sol",
         "src/metatx/AdminLib.sol", "src/hedera/HederaLib.sol", "src/trade/TradeLib.sol", "src/zether/ZetherLayer.sol",
         "src/zether/ZetherLib.sol", "src/zether/NormalZetherToken.sol", "src/zether/WrappedZetherToken.sol"];
@@ -64,11 +64,13 @@ contract MsgSenderLintTest is Test {
         // metatx split T4: the fee defaults left with `_checkTransfer` / `_checkUATransfer` / `_callFee` (now in
         // MtxPipelineLib); the event of `_execute` came down from MetaTxBase in T3.
         // dex-round T4 (DX7): the two `restorePulled` overloads read their caller directly (`o.dex`), as `mtxTrade`.
-        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 8,
-            "ERC20MetaTx: event relayer x4 (_execute, _executeTransfer, _uaExecute, _uaExecuteTransfer), mtxTrade and uaTrade caller (CTR-DEX-15, -25), restorePulled caller x2 (DX7)");
-        assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 1, "MetaTokenBase: factory check in initialize");
+        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 7,
+            "ERC20MetaTx: event relayer x3 (_execute, _executeTransfer, _uaExecuteTransfer), mtxTrade and uaTrade caller (CTR-DEX-15, -25), restorePulled caller x2 (DX7)");
+        assertEq(_count("src/metatx/UAMetaTxBase.sol", "msg.sender", false), 1, "UAMetaTxBase: event relayer (_uaSettle)");
+        assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 4,
+            "MetaTokenBase: factory check in initialize; the relayer of mtxRelayFee, uaRelayFee (struct word x2, `_relayHash`), bound to the direct caller");
         assertEq(_count("src/metatx/NormalToken.sol", "msg.sender", false), 0, "NormalToken");
-        assertEq(_count("src/metatx/WrappedToken.sol", "msg.sender", false), 4, "WrappedToken: mtxWrap and uaWrap submitter x2 (CTR-TOK-20)");
+        assertEq(_count("src/metatx/WrappedToken.sol", "msg.sender", false), 4, "WrappedToken: mtxWrapOrder and uaWrapOrder submitter x2 (CTR-TOK-20)");
         assertEq(_count("src/metatx/WrappedLib.sol", "msg.sender", false), 0, "WrappedLib");
         assertEq(_count("src/trade/TradeLib.sol", "msg.sender", false), 0, "TradeLib: the caller is a parameter");
         assertEq(_count("src/metatx/AdminLib.sol", "msg.sender", false), 0, "AdminLib");

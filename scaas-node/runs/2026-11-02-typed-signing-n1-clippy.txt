@@ -1,0 +1,4 @@
+# cargo-scaas-node at commit 890f291a + the N1 tree
+    Checking scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/scaas-node)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.10s
+rc=0

@@ -132,8 +132,14 @@ pub trait ChainAdapter: Send + Sync {
     async fn op_consumed(&self, _job: &Job) -> Result<Option<bool>> {
         Ok(None)
     }
-    /// G2's in-flight key of a claimed job. Default: the job's own digest; an EVM meta-tx answers the token's
-    /// `mtxDigest`, never the job's field (review T2 m6). `Revert` = no key (its simulation answers for it).
+    /// The second half of G2's key where a job's digest does not fix its bytes: an EVM op (`Work::call_key`, EVM and Hedera);
+    /// `None` elsewhere.
+    fn call_key(&self, _job: &Job) -> Option<alloy::primitives::B256> {
+        None
+    }
+
+    /// G2's in-flight key of a claimed job. Default: the job's own digest; an EVM meta-tx answers the typed digest the node
+    /// computes, never the job's field (review T2 m6). `Revert` = no key (its simulation answers for it).
     async fn digest(&self, job: &Job) -> std::result::Result<Option<alloy::primitives::B256>, SimError> {
         Ok(job_digest(job))
     }
@@ -499,7 +505,7 @@ pub async fn lane_step_metered(
 
 /// Kết quả một vòng lane. `Retry` = job đã về hàng đợi, every cause: the queue is oldest first, so it comes straight back, and
 /// the runner backs off (merge TODO c) so a job put back is never a tight loop.
-enum Step {
+pub(crate) enum Step {
     Idle,
     Done,
     Retry(String),
@@ -520,7 +526,7 @@ fn calls_stopped(adapter: &dyn ChainAdapter, breaker: Option<&Mutex<Breaker>>) -
     adapter.family() == Family::Soroban && breaker.is_some_and(|k| k.lock().is_ok_and(|mut k| k.calls_stopped(now())))
 }
 
-async fn step_once(
+pub(crate) async fn step_once(
     adapter: &dyn ChainAdapter,
     odoo: &Odoo,
     lane: usize,
@@ -541,7 +547,7 @@ async fn step_once(
             continue;
         }
         // N2: digest đang bay ở lane/đường khác ⇒ bỏ qua TRƯỚC claim (không claim, không báo).
-        if job_digest(&j).is_some_and(|d| inflight.contains(&d)) {
+        if job_digest(&j).is_some_and(|d| inflight.contains(&d)) || adapter.call_key(&j).is_some_and(|c| inflight.contains(&c)) {
             continue;
         }
         if odoo.relay_claim(&[j.id], worker).await?.contains(&j.id) {
@@ -559,7 +565,8 @@ async fn step_once(
             return Ok(Step::Retry(format!("rpc: {r}")));
         }
     };
-    let _guard = match digest.map(|d| inflight.try_acquire(d)) {
+    let call = adapter.call_key(&job);
+    let _guard = match digest.map(|d| call.map_or_else(|| inflight.try_acquire(d), |c| inflight.try_acquire_op(d, c))) {
         Some(None) => {
             report(odoo, Report { error: Some("in flight on another path".into()), ..rep(job.id, "queued") }).await;
             return Ok(Step::Retry("in flight on another path".into()));
@@ -757,7 +764,13 @@ pub(crate) mod tests {
     }
     pub(crate) type Shared = Arc<std::sync::Mutex<Fake>>;
 
-    pub(crate) async fn fake_odoo(fake: Fake) -> (Odoo, Shared) {
+    pub(crate) async fn fake_odoo(mut fake: Fake) -> (Odoo, Shared) {
+        fake.jobs = fake.jobs.into_iter().map(crate::submit::tests::resign).collect();
+        if let Some(a) = fake.inflight.as_array_mut() {
+            for j in a {
+                j["payload"] = crate::submit::tests::resign(j["payload"].clone());
+            }
+        }
         use axum::extract::{Path, State};
         use axum::Json;
         async fn h(State(s): State<Shared>, Path((_m, method)): Path<(String, String)>, Json(b): Json<Value>) -> Json<Value> {

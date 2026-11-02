@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {UACall} from "../ua/UACall.sol";
 import {Test} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -54,10 +55,11 @@ contract HederaV2Test is Test {
         // for the UA-5a receivers; +2.3 / +3.4 KB for UA-5b (UATradeOrder, uaWrap); +1.6 KB for the guard on every entry
         // (review W-Q, CTR-MTX-18); +13 B for MetaTxBase on MtxPipelineLib's internals (metatx split T2; T3 moves the
         // tokens onto the library); +964 / +973 B for typed-signing R1's `UAKinds.uaSig` (the tokens' `bytes auth` as the
-        // registry's `UASig`, removed when C2 types the parameters) (size-baseline.json holds the exact ratchet)
-        assertLe(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1).code.length, 39_889);
+        // registry's `UASig`, removed when C2 types the parameters); +56 / +1,118 B for typed-signing C0's named path
+        // (size-baseline.json holds the exact ratchet)
+        assertLe(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1).code.length, 39_945);
         // Transitional (P1d D2): over EIP-170 until the size work (the only ceiling: 65,536 B, owner 2026-10-21)
-        assertLe(f.implementationOf(IOpenFactory.TokenKind.WRAPPED, 1).code.length, 49_652);
+        assertLe(f.implementationOf(IOpenFactory.TokenKind.WRAPPED, 1).code.length, 50_770);
     }
 
     function _edSign(bytes32 digest) internal pure returns (bytes memory) {
@@ -122,7 +124,7 @@ contract HederaV2Test is Test {
         bytes32 d = IERC20MetaTx(t).mtxTransferDigest(x);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(payerPk, d);
         bytes memory payerSig = abi.encodePacked(r, s, v);
-        bytes memory payeeSig = _edSign(IMetaTokenV2(t).receiverFeeDigest(d, 30, feeTo, block.timestamp));
+        bytes memory payeeSig = _edSign(IMetaTokenV2(t).receiverFeeDigest(x, 30, feeTo, block.timestamp));
         uint256 aliceBefore = IERC20MetaTx(t).balanceOf(alice);
         vm.prank(relayer);
         IMetaTokenV2(t).mtxPayReceiverFee(x, payerSig, 30, feeTo, block.timestamp, payeeSig);
@@ -238,10 +240,10 @@ contract HederaV2Test is Test {
             validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
         bytes32 d = IUALedger(t).uaTransferDigest(x);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(payerPk, d);
-        bytes memory payeeSig = _edSign(IMetaTokenV2(t).receiverFeeDigest(d, 30, feeTo, block.timestamp));
+        bytes memory payeeSig = _edSign(IMetaTokenV2(t).uaReceiverFeeDigest(x, 30, feeTo, block.timestamp));
         uint256 aliceBefore = IERC20MetaTx(t).balanceOf(alice);
         vm.prank(relayer);
-        IMetaTokenV2(t).uaPayReceiverFee(x, abi.encodePacked(r, s, v), 30, feeTo, block.timestamp, payeeSig);
+        IMetaTokenV2(t).uaPayReceiverFee(x, UACall.auth(x.from, abi.encodePacked(r, s, v)), 30, feeTo, block.timestamp, UACall.auth(x.to, payeeSig));
         assertEq(IERC20MetaTx(t).balanceOf(payer), 300);
         assertEq(IERC20MetaTx(t).balanceOf(alice), aliceBefore + 200 - 30);
         assertEq(IERC20MetaTx(t).balanceOf(feeTo), 30);

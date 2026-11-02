@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {UACall} from "./UACall.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
@@ -31,17 +32,17 @@ contract UALedgerNamedTest is UALedgerBase {
         vm.expectEmit(address(tok));
         emit IUALedger.UAMetaTransactionExecuted(uaP, RELAYER, 1, 0, tok.uaTransferDigest(t), RELAYER, 0);
         vm.prank(RELAYER);
-        tok.uaTransfer(uaP, uaB, 10, 1, 0, t.validUntil, RR, RELAYER, a);
+        tok.uaTransfer(uaP, uaB, 10, 1, 0, t.validUntil, RR, RELAYER, UACall.auth(uaP, a));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, a);
+        tok.uaExecuteTransfer(t, UACall.auth(t.from, a));
         t = _t(uaP, uaB, 10);
         a = _authT(address(tok), t);
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, a);
+        tok.uaExecuteTransfer(t, UACall.auth(t.from, a));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 2, 1));
         vm.prank(RELAYER);
-        tok.uaTransfer(uaP, uaB, 10, 1, 1, t.validUntil, RR, RELAYER, a);
+        tok.uaTransfer(uaP, uaB, 10, 1, 1, t.validUntil, RR, RELAYER, UACall.auth(uaP, a));
         assertEq(tok.balanceOfUA(uaB), 20);
     }
 
@@ -50,12 +51,12 @@ contract UALedgerNamedTest is UALedgerBase {
         (t.mode, t.fee, t.feeRecipient) = (RR | RF | PCT, 5_000, FEE_TO);
         bytes memory a = _authT(address(tok), t);
         vm.prank(RELAYER);
-        tok.uaTransferWithFee(uaP, _pad(bob), 1_000, 1, 0, t.validUntil, t.mode, RELAYER, 5_000, FEE_TO, a);
+        tok.uaTransferWithFee(uaP, _pad(bob), 1_000, 1, 0, t.validUntil, t.mode, RELAYER, 5_000, FEE_TO, UACall.auth(uaP, a));
         assertEq(tok.balanceOf(FEE_TO), 5);
         assertEq(tok.balanceOf(bob), 1_000);
         // the fee shape: a fee mode and a bound, non-zero recipient
         vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.MtxModeShape.selector, RR | PCT));
-        tok.uaTransferWithFee(uaP, _pad(bob), 1, 1, 1, t.validUntil, RR | PCT, RELAYER, 1, FEE_TO, a);
+        tok.uaTransferWithFee(uaP, _pad(bob), 1, 1, 1, t.validUntil, RR | PCT, RELAYER, 1, FEE_TO, UACall.auth(uaP, a));
     }
 
     /// `uaPay(f,t,a,p,v,mode,r,x,R,s) ≡ uaExecuteTransfer({f,t,a,p,payLane(p),0,v,mode,r,x,R}, s)`: the payment is
@@ -68,10 +69,10 @@ contract UALedgerNamedTest is UALedgerBase {
         vm.expectEmit(address(tok));
         emit IUALedger.UAPaymentSettled(uaP, uaB, 300, 0, RELAYER, payId);
         vm.prank(RELAYER);
-        tok.uaPay(uaP, uaB, 300, payId, t.validUntil, RR, RELAYER, 0, address(0), a);
+        tok.uaPay(uaP, uaB, 300, payId, t.validUntil, RR, RELAYER, 0, address(0), UACall.auth(uaP, a));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, a);
+        tok.uaExecuteTransfer(t, UACall.auth(t.from, a));
     }
 
     /// `uaPay` is pay: it needs `PAYABLE`, like `mtxPay`; a `UAMetaTransfer` with `entryRef` set is never gated.
@@ -81,7 +82,7 @@ contract UALedgerNamedTest is UALedgerBase {
         NormalToken np = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
         np.initialize(address(this), 1, abi.encode(c));
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, AdminLib.PAYABLE));
-        np.uaPay(uaP, uaB, 1, keccak256("p"), block.timestamp + 1, RR, RELAYER, 0, address(0), "");
+        np.uaPay(uaP, uaB, 1, keccak256("p"), block.timestamp + 1, RR, RELAYER, 0, address(0), UACall.auth(uaP, ""));
         // a UAMetaTransfer with `entryRef` set is not gated
         np.mint(alice, 10);
         bytes32 ref = keccak256("p");
@@ -89,40 +90,18 @@ contract UALedgerNamedTest is UALedgerBase {
         (t.entryRef, t.batch, t.nonce) = (ref, np.payLane(ref), 0);
         bytes memory auth = _authFor(t.from, np.uaTransferDigest(t));
         vm.prank(RELAYER);
-        np.uaExecuteTransfer(t, auth);
+        np.uaExecuteTransfer(t, UACall.auth(t.from, auth));
         assertEq(np.balanceOf(bob), 7);
     }
 
-    /// `uaUnwrap(f,u,w,r,min,b,n,v,mode,rel,s) ≡ uaExecute({f, unwrap(u,w,r,min), b,n,v,mode,rel,0,0}, s)`.
-    function test_T_V3_1_uaUnwrap() public {
-        _wrapFor(alice, 1_000);
-        vm.prank(alice);
-        wrp.transferToUA(uaP, 1_000);
-        bytes memory data = abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 250, bob, 250);
-        MetaTxLib.UAMetaTransaction memory m = _m(address(wrp), uaP, data);
-        bytes memory a = _authM(address(wrp), m);
-        vm.prank(RELAYER);
-        bytes memory ret = wrp.uaUnwrap(uaP, address(und), 250, bob, 250, 1, 0, m.validUntil, RR, RELAYER, a);
-        (uint256 out, uint256 burned) = abi.decode(ret, (uint256, uint256));
-        assertEq(out, 250);
-        assertEq(burned, 250);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        vm.prank(RELAYER);
-        wrp.uaExecute(m, a);
-        assertEq(und.balanceOf(bob), 250);
-        assertEq(wrp.balanceOfUA(uaP), 750);
-    }
-
-    /// No fee in the named form; on the NORMAL kind no `unwrap` is on the UA allowlist.
+    /// On the NORMAL kind no `unwrap` is on the UA allowlist.
     function test_uaUnwrap_refusals() public {
-        uint256 until = block.timestamp + 300;
-        vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.MtxModeShape.selector, RR | FIX));
-        wrp.uaUnwrap(uaP, address(und), 1, bob, 0, 1, 0, until, RR | FIX, RELAYER, "");
         bytes memory data = abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 1, bob, 0);
-        bytes memory a = _authM(address(tok), _m(address(tok), uaP, data));
+        MetaTxLib.UAMetaTransaction memory m = _m(address(tok), uaP, data);
+        bytes memory a = _authM(address(tok), m);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, bytes4(data)));
         vm.prank(RELAYER);
-        tok.uaUnwrap(uaP, address(und), 1, bob, 0, 1, 0, until, RR, RELAYER, a);
+        tok.uaExecute(m, a);
     }
 
     /// M2: `UA_POOL` holds every derived balance; an unwrap never pays out to it.
@@ -136,9 +115,6 @@ contract UALedgerNamedTest is UALedgerBase {
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, POOL));
         vm.prank(RELAYER);
         wrp.uaExecute(m, a);
-        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, POOL));
-        vm.prank(RELAYER);
-        wrp.uaUnwrap(uaP, address(und), 10, POOL, 0, 1, 0, m.validUntil, RR, RELAYER, a);
     }
 
     /// C5-4: `SHIELD_POOL` is no unwrap recipient either (the plain unwrap would pay the underlying to a keyless address).
@@ -157,6 +133,6 @@ contract UALedgerNamedTest is UALedgerBase {
 
     function test_uaTransfer_modeShape() public {
         vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.MtxModeShape.selector, RR | RF));
-        tok.uaTransfer(uaP, uaB, 1, 1, 0, block.timestamp + 1, RR | RF, RELAYER, "");
+        tok.uaTransfer(uaP, uaB, 1, 1, 0, block.timestamp + 1, RR | RF, RELAYER, UACall.auth(uaP, ""));
     }
 }

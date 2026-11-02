@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {DexLegs} from "../helpers/DexLegs.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {UADexBase} from "../ua/UADex.t.sol";
@@ -91,14 +92,14 @@ contract DexModesTest is UADexBase {
     function _leg(uint256 pk, address sell, ITradeToken.TradeOrder memory o, uint256 sellFill, uint256 floor)
         internal view returns (ISCaaSDex.ExchangeLeg memory)
     {
-        return ISCaaSDex.ExchangeLeg(sell, 0, abi.encode(o), _ecdsa(pk, _h(sell, o)), sellFill, floor);
+        return DexLegs.xLeg(sell, o, _ecdsa(pk, _h(sell, o)), sellFill, floor);
     }
 
     /// A shape-1 exchange leg.
     function _uaXLeg(address sell, ITradeToken.UATradeOrder memory o, uint256 sellFill, uint256 floor)
         internal view returns (ISCaaSDex.ExchangeLeg memory)
     {
-        return ISCaaSDex.ExchangeLeg(sell, 1, abi.encode(o), _uaLeg(sell, o, sellFill).sig, sellFill, floor);
+        return DexLegs.exchange(_uaLeg(sell, o, sellFill), sellFill, floor);
     }
 
     /// A maker of a mode-3 plan: its floor is its own price `⌈fill · receiveAmount / amount⌉` (spec §3.3).
@@ -306,7 +307,7 @@ contract DexModesTest is UADexBase {
         ITradeToken.TradeOrder memory t = _taker(1);
         bytes32 hb = _h(address(B), _bobM());
         vm.prank(bob);
-        B.mtxCancelOrder(_bobM(), _ecdsa(BOB_PK, B.cancelOrderDigest(hb)));
+        B.mtxCancelOrder(_bobM(), _ecdsa(BOB_PK, B.cancelOrderDigest(_bobM())));
         uint256 q = _quote(address(A), 560);
         _expect(_m3(t, _buffered(q)), _v2(address(A), 560, q), _err(ITradeToken.OrderClosed.selector, hb));
 
@@ -315,7 +316,7 @@ contract DexModesTest is UADexBase {
         ISCaaSDex.DexOrder[] memory os = new ISCaaSDex.DexOrder[](1);
         os[0] = ISCaaSDex.DexOrder(address(usdc), d);
         bytes[] memory sigs = new bytes[](1);
-        sigs[0] = _ecdsa(DAVE_PK, dex.cancelOrderDigest(hd));
+        sigs[0] = _ecdsa(DAVE_PK, dex.cancelDexOrderDigest(address(usdc), d));
         dex.mtxCancelOrders(os, sigs);
         t = _nat(alice, address(usdc), 1000, 1800, 3_000);
         ISCaaSDex.ExchangePlan memory p =

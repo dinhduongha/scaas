@@ -11,10 +11,13 @@ import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
 import {HederaLib} from "../../src/hedera/HederaLib.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {ZetherLib} from "../../src/zether/ZetherLib.sol";
+import {ZetherWrappedLib} from "../../src/zether/ZetherWrappedLib.sol";
 import {PqzStateLib} from "../../src/pqz/PqzStateLib.sol";
 import {PqzTransferLib} from "../../src/pqz/PqzTransferLib.sol";
 import {PqzBurnLib} from "../../src/pqz/PqzBurnLib.sol";
 import {PqzViewLib} from "../../src/pqz/PqzViewLib.sol";
+import {PqzWrappedLib} from "../../src/pqz/PqzWrappedLib.sol";
+import {UARegistryLib} from "../../src/ua/UARegistryLib.sol";
 
 /// @notice A plain release environment (plan 5g-Z2): no dependencies, no pinned libraries.
 function plainEnv(address factory, address ska, bytes32 uid, address registry, bool hedera)
@@ -49,15 +52,27 @@ function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory
         || kind == IOpenFactory.TokenKind.WRAPPED_PQZ;
     bool zth = kind == IOpenFactory.TokenKind.NORMAL_ZETHER || kind == IOpenFactory.TokenKind.WRAPPED_ZETHER;
     bool pqz = kind == IOpenFactory.TokenKind.NORMAL_PQZ || kind == IOpenFactory.TokenKind.WRAPPED_PQZ;
-    l = new address[](4 + (und ? 1 : 0) + (zth ? 1 : 0) + (pqz ? 4 : 0));
+    bool zwr = kind == IOpenFactory.TokenKind.WRAPPED_ZETHER;
+    bool pwr = kind == IOpenFactory.TokenKind.WRAPPED_PQZ;
+    l = new address[](4 + (und ? 1 : 0) + (zth ? 1 : 0) + (zwr ? 1 : 0) + (pqz ? 4 : 0) + (pwr ? 1 : 0));
     (l[0], l[1], l[2], l[3]) = (address(AdminLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
     uint256 n = 4;
     if (und) l[n++] = address(WrappedLib);
     if (zth) l[n++] = address(ZetherLib);
+    if (zwr) l[n++] = address(ZetherWrappedLib);
     if (pqz) {
         (l[n], l[n + 1], l[n + 2], l[n + 3]) =
             (address(PqzStateLib), address(PqzTransferLib), address(PqzBurnLib), address(PqzViewLib));
+        n += 4;
     }
+    if (pwr) l[n] = address(PqzWrappedLib);
+}
+
+/// @notice The link closure of `UARegistry` (typed-signing R2). No release env pins it: the registry has no factory, its
+///         init code embeds the address. Checked against `linkReferences` by `LinkClosure.t.sol`.
+function registryClosureLibs() pure returns (address[] memory l) {
+    l = new address[](1);
+    l[0] = address(UARegistryLib);
 }
 
 /// @notice `e` with `kind`'s link closure pinned (libraries and their code hashes).

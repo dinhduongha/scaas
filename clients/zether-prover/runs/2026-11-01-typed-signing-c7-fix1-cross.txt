@@ -1,0 +1,15 @@
+280 |     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Ran 7 tests for test/zether/ZetherProverCross.t.sol:ZetherProverCrossBls12381Test
+[PASS] test_bundleFull_compact() (gas: 17735394)
+[PASS] test_bundleNone_auditorOff() (gas: 17305102)
+[PASS] test_bundleOptional_decoyFee() (gas: 21255544)
+[PASS] test_bundleOptional_default() (gas: 20580686)
+[PASS] test_compactOptional_relayed_optOut() (gas: 18172088)
+[PASS] test_single_bundleFull() (gas: 11426649)
+[PASS] test_statementDifferential() (gas: 152701640)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 12.87s (17.58s CPU time)
+
+Ran 1 test suite in 12.87s (12.87s CPU time): 7 tests passed, 0 failed, 0 skipped (7 total tests)

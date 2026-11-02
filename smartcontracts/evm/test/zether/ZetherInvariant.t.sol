@@ -12,6 +12,7 @@ import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
+import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 
@@ -178,7 +179,7 @@ contract ZetherHandler is ZetherFixture {
         Tx memory t = _proveMulti(tok, us[i], to, vs, acc[i], ben, ZetherTypes.TransferMode.BUNDLE);
         decoyFee = 0;
         s0 = w.totalSupply();
-        tok.mtxConfidentialTransfer(t.payload, t.proof, "", ZetherTypes.UA.unwrap(ben), "");
+        tok.mtxConfidentialTransfer(_zMulti(t.payload, ben), t.proof);
         require(w.totalSupply() == s0, "fees do not change the supply");
         feeUA[j] += d * SCALE;
         feeUA[o] += d * SCALE;
@@ -213,9 +214,9 @@ contract ZetherHandler is ZetherFixture {
 
     function _uu(uint8 i, uint8 l, uint256 amt, uint256 out, ZetherTypes.UA ben) internal {
         bytes memory pl = _unshieldPayload(tok, us[i]);
-        bytes memory st = stm.unshieldUnwrapStatement(address(w), pl, amt, bytes32(uint256(uint160(address(0xD00D)))), ben, address(leg[l]), out, 0);
+        bytes memory st = stm.unshieldUnwrapStatement(address(w), _zBurn(pl, ben), amt, bytes32(uint256(uint160(address(0xD00D)))), address(leg[l]), out, 0);
         s0 = w.totalSupply();
-        w.mtxUnshieldUnwrap(pl, _proveU(us[i], st, amt, acc[i], ben, tok), "", ZetherTypes.UA.unwrap(ben), "", IConfidentialWrappedToken.Unwrap(address(leg[l]), bytes32(uint256(uint160(address(0xD00D)))), amt, out));
+        w.mtxUnshieldUnwrap(_zBurn(pl, ben), IConfidentialWrappedToken.Unwrap(address(leg[l]), bytes32(uint256(uint160(address(0xD00D)))), amt, out), _proveU(us[i], st, amt, acc[i], ben, tok));
         require(w.totalSupply() == s0 - amt * SCALE, "unshield-unwrap burns exactly from the pool");
     }
 
@@ -227,7 +228,7 @@ contract ZetherHandler is ZetherFixture {
         (ZetherTypes.UA ben, uint256 fee) = _ben(k, i, amt);
         (bytes memory pl, bytes memory pr) = _proveUnshield(tok, us[i], amt, acc[i], address(this), ben, 0);
         s0 = w.totalSupply();
-        tok.mtxUnshield(pl, pr, "", ZetherTypes.UA.unwrap(ben), "", amt, bytes32(uint256(uint160(address(this)))));
+        tok.mtxUnshield(_zBurn(pl, ben), amt, bytes32(uint256(uint160(address(this)))), pr);
         require(w.totalSupply() == s0, "unshield moves, not mints");
         acc[i] -= amt + fee;
         if (fee != 0) feeUA[uint8(k % 3)] += fee * SCALE;

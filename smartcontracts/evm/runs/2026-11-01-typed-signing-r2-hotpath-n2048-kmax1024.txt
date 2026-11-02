@@ -1,0 +1,92 @@
+# hotpath-n2048-kmax1024 at commit f4003909
+== at-set.sh: n2048-kmax1024 (n2048-kmax1024), forge test --match-path test/ua/* --match-test test_gasHotPath|test_deployGas|test_msigPopAtTheBudget|test_split_storePqzPopWithAVerify -vv
+No files changed, compilation skipped
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 3 tests for test/ua/UARegistrySplit.t.sol:UARegistrySplitTest
+[PASS] test_deployGas() (gas: 205220306)
+Logs:
+  DEPLOY|pre-split UARegistry|3593112|71659080|75252192
+  DEPLOY|UARegistry|2392984|43019010|45411994
+  DEPLOY|UARegistryLib|2030488|48095550|50126038
+
+[PASS] test_gasHotPath() (gas: 161826011)
+Logs:
+  GAS|register regular 256|149064|155142|6078
+  GAS|register state 256|1164330|1164330|0
+  GAS|requireAuthorized 256|16933|16970|37
+  GAS|register regular 257|149165|155473|6308
+  GAS|register state 257|1115370|1115370|0
+  GAS|requireAuthorized 257|16960|16997|37
+  GAS|register regular 258|150866|157156|6290
+  GAS|register state 258|1066410|1066410|0
+  GAS|requireAuthorized 258|16979|17016|37
+  GAS|register regular 259|145190|151484|6294
+  GAS|register state 259|1066410|1066410|0
+  GAS|requireAuthorized 259|17036|17073|37
+  GAS|register regular 260|141554|147868|6314
+  GAS|register state 260|1115370|1115370|0
+  GAS|requireAuthorized 260|17127|17164|37
+  GAS|register regular 261|156193|162504|6311
+  GAS|register state 261|1213290|1213290|0
+  GAS|requireAuthorized 261|17281|17318|37
+  GAS|register regular 262|170160|176495|6335
+  GAS|register state 262|1409130|1409130|0
+  GAS|requireAuthorized 262|17510|17547|37
+  GAS|register regular 263|223852|230164|6312
+  GAS|register state 263|1213290|1213290|0
+  GAS|requireAuthorized 263|17396|17433|37
+  GAS|register regular 272|195158|201467|6309
+  GAS|register state 272|1448910|1448910|0
+  GAS|requireAuthorized 272|19560|19575|15
+  GAS|register regular 273|250737|257107|6370
+  GAS|register state 273|1889550|1889550|0
+  GAS|requireAuthorized 273|19617|19632|15
+  GAS|register regular 274|187158|193461|6303
+  GAS|register state 274|1643220|1643220|0
+  GAS|requireAuthorized 274|19695|19710|15
+  GAS|register regular 275|217918|224330|6412
+  GAS|register state 275|2377620|2377620|0
+  GAS|requireAuthorized 275|19740|19755|15
+  GAS|register regular 304|192442|198780|6338
+  GAS|register state 304|3209940|3209940|0
+  GAS|requireAuthorized 304|23286|23301|15
+  GAS|register regular 305|209956|216410|6454
+  GAS|register state 305|4189140|4189140|0
+  GAS|requireAuthorized 305|23944|23959|15
+  GAS|register regular 306|375728|381957|6229
+  GAS|register state 306|2574990|2574990|0
+  GAS|requireAuthorized 306|20899|20914|15
+  GAS|register regular 307|156257|162312|6055
+  GAS|register state 307|1251540|1251540|0
+  GAS|requireAuthorized 307|20188|20203|15
+  GAS|register regular 321|168762|175130|6368
+  GAS|register state 321|1398420|1398420|0
+  GAS|requireAuthorized 321|19583|19587|4
+  GAS|register regular 264|149528|155838|6310
+  GAS|register state 264|1115370|1115370|0
+  GAS|requireAuthorized 264|17364|17401|37
+  GAS|requireAuthorized native eoa|12465|12470|5
+  GAS|requireAuthorized native 1271|14332|14283|-49
+  GAS|registerMsig regular|134288|143129|8841
+  GAS|requireAuthorized msig 2-of-2|49678|49640|-38
+
+[PASS] test_msigPopAtTheBudget() (gas: 79352047)
+Logs:
+  GAS|registerMsig 8 members at the budget|11443002|11489473|46471
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 177.38ms (298.11ms CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 1 test for test/ua/UARegistryUA8.t.sol:UARegistryUA8Test
+[PASS] test_split_storePqzPopWithAVerify() (gas: 1039915114)
+Logs:
+  GAS|storePqzPop n2048-kmax1024|48414298|48426380|12082
+  GAS|storePqzPop on gen 2 n2048-kmax1024|48731408|48745905|14497
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 4.20s (4.18s CPU time)
+
+Ran 2 test suites in 4.20s (4.38s CPU time): 4 tests passed, 0 failed, 0 skipped (4 total tests)
+rc=0

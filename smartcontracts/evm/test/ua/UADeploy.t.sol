@@ -224,18 +224,30 @@ contract UADeployTest is Test {
         assertEq(address(_registry(31337, false)), reg);
     }
 
-    /// NET-EVM-06: the registry is the largest transaction of a plain deploy, so its gate binds there, not `NormalToken`'s.
+    /// NET-EVM-06: the registry and `UARegistryLib` each have the gate of a release (typed-signing R2): the deploy refuses
+    /// one below each figure and reaches the next gate at it. Passing both reaches `NormalToken`'s, which binds a plain
+    /// deploy now; at that figure the deploy goes through.
     function test_registryDeployGate() public {
         DeployHarness h = new DeployHarness();
+        string memory base = vm.readFile("./size-baseline.json");
         uint256 need = h.gasNeed("UARegistry");
-        assertEq(need, vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".UARegistry") * 1530 + 16_777_216);
-        assertGt(need, h.gasNeed("NormalToken"));
-        assertGt(need, h.gasNeed("SCaaSDex"));
-        h.limitBlockGas(need - 1);
-        vm.expectRevert(bytes(string.concat("block gas limit ", vm.toString(need - 1), " < ", vm.toString(need),
-            " needed to deploy the UARegistry release (NET-EVM-06)")));
+        uint256 lib = h.gasNeed("UARegistryLib");
+        uint256 token = h.gasNeed("NormalToken");
+        assertEq(need, vm.parseJsonUint(base, ".UARegistry") * 1530 + 16_777_216);
+        assertEq(lib, vm.parseJsonUint(base, ".UARegistryLib") * 1530 + 16_777_216);
+        assertLt(need, lib);
+        assertLt(lib, token);
+        _refused(h, need - 1, need, "UARegistry");
+        _refused(h, need, lib, "UARegistryLib");
+        _refused(h, lib, token, "NormalToken");
+        h.limitBlockGas(token);
         h.deploy(UID, false, ska);
-        h.limitBlockGas(need);
+    }
+
+    function _refused(DeployHarness h, uint256 limit, uint256 need, string memory name) internal {
+        h.limitBlockGas(limit);
+        vm.expectRevert(bytes(string.concat("block gas limit ", vm.toString(limit), " < ", vm.toString(need),
+            " needed to deploy the ", name, " release (NET-EVM-06)")));
         h.deploy(UID, false, ska);
     }
 }

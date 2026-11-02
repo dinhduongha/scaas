@@ -11,11 +11,13 @@ import {MtxPipelineLib} from "../src/metatx/MtxPipelineLib.sol";
 import {HederaLib} from "../src/hedera/HederaLib.sol";
 import {TradeLib} from "../src/trade/TradeLib.sol";
 import {ZetherLib} from "../src/zether/ZetherLib.sol";
+import {ZetherWrappedLib} from "../src/zether/ZetherWrappedLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {NormalToken} from "../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 import {UARegistry} from "../src/ua/UARegistry.sol";
 import {IUARegistry} from "../src/ua/IUARegistry.sol";
+import {UARegistryLib} from "../src/ua/UARegistryLib.sol";
 import {MtxRelayFee, MtxRelayExecutor} from "../src/metatx/MtxRelayFee.sol";
 import {UAKinds} from "../src/ua/UAKinds.sol";
 import {WebAuthnP256Verifier} from "../src/ua/verifiers/WebAuthnP256Verifier.sol";
@@ -89,8 +91,9 @@ abstract contract DeployBase is Script {
     ///         regular gas, which EIP-7825 caps at `TX_REGULAR_GAS_CAP` (2^24): the transaction needs
     ///         `runtime x 1,530 + 2^24` and may not exceed the block gas limit. Runtime sizes are `size-baseline.json`'s
     ///         (the contracts over the EIP-170 limit; any other is priced at `EIP170_LIMIT`).
-    ///         `NormalToken` 39,889 B = 77.8 M, `UARegistry` 46,768 B = 88.3 M, `WrappedZetherToken` 61,808 B = 111.3 M,
-    ///         `WrappedPqzToken` 62,616 B = 112.6 M (the figures move with the baseline).
+    ///         `NormalToken` 37,228 B = 73.7 M, `UARegistry` 28,429 B = 60.3 M, `UARegistryLib` 32,667 B = 66.8 M,
+    ///         `WrappedZetherToken` 62,169 B = 111.9 M, `WrappedPqzToken` 63,423 B = 113.8 M (the figures move with the
+    ///         baseline).
     uint256 internal constant STATE_GAS_PER_BYTE = 1530;
     uint256 internal constant TX_REGULAR_GAS_CAP = 1 << 24;
     uint256 internal constant EIP170_LIMIT = 24_576;
@@ -161,12 +164,13 @@ abstract contract DeployBase is Script {
         require(u != bytes32(0), "RPC gave no block 0 hash");
     }
 
-    /// @notice The token factory (`noticePeriod`) and the UA registry (`_deployUARegistry`) by CREATE2; when the deployer
+    /// @notice The token factory (`noticePeriod`) and the UA registry (`_deployUARegistry`, with `UARegistryLib`) by CREATE2; when the deployer
     ///         is the registrar (plan 5g-Z2: only the factory deploys releases), env version 1 of `NORMAL` and of the DEX
     ///         (`_env`: the factory, `chain_uid`, the registry, the `SmartKeyAccount` implementation, Hedera, the linked
     ///         libraries with their code hashes), then the `NORMAL` release (on that registry: the UA ledger, CTR-UA-18)
     ///         and the `SCaaSDex` release, each version 1; otherwise the registrar publishes and deploys them later from
     ///         the same init code. Writes `token_factory`, `implementation_normal`, `dex_implementation`, `ua_registry`,
+    ///         `ua_registry_lib`,
     ///         `mtx_relay_fee`, `mtx_relay_executor`, `chain_uid` into the JSON object `"deploy"`; with `DEPLOY_ZETHER` also the Zether stack (`_deployZether`,
     ///         not on Hedera). NORMAL and `WRAPPED` both exceed EIP-170 (the UA ledger): deploy with
     ///         `--code-size-limit 65536` (deploy.sh); `WRAPPED` is still not deployed here (owner: wait for Glamsterdam).
@@ -301,11 +305,16 @@ abstract contract DeployBase is Script {
         assembly ("memory-safe") {
             mstore(k, n)
         }
+        // `UARegistryLib` is linked like every library: forge deploys it by CREATE2 before the script's first transaction
+        // (`create2_library_salt`), so its address, and through the code that embeds it the registry's, depend on the two
+        // sources only. Its own transaction is a release like the registry's: the same gate.
         _requireReleaseGas("UARegistry");
+        _requireReleaseGas("UARegistryLib");
         reg = new UARegistry{salt: salt}(uid, address(0), isHedera, budget, smartKeyAccountImpl, true, k);
         _checkGen1Kinds(reg, bls, isHedera);
         _gate(address(reg));
         vm.serializeAddress("deploy", "ua_registry", address(reg));
+        vm.serializeAddress("deploy", "ua_registry_lib", address(UARegistryLib));
     }
 
     /// @notice The gen-1 kind gate (U8S-D9, owner ruling 2026-10-31, option (a)): every gen-1 deploy carries every kind the
@@ -335,12 +344,12 @@ abstract contract DeployBase is Script {
         } catch {}
     }
 
-    /// @notice The link closure of a Zether token (task 6): `WrappedLib` only in `WRAPPED_ZETHER`.
+    /// @notice The link closure of a Zether token (task 6): `WrappedLib` and `ZetherWrappedLib` only in `WRAPPED_ZETHER`.
     function _zetherLibs(bool underlying) internal view returns (address[] memory l) {
-        l = new address[](underlying ? 6 : 5);
+        l = new address[](underlying ? 7 : 5);
         (l[0], l[1], l[2], l[3], l[4]) =
             (address(AdminLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(ZetherLib));
-        if (underlying) l[5] = address(WrappedLib);
+        if (underlying) (l[5], l[6]) = (address(WrappedLib), address(ZetherWrappedLib));
     }
 
     /// @notice Any chain but Hedera (CTR-ZTH-52; `_deployTokenFactory` requires the EIP-2537 probe first, and a chain

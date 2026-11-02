@@ -1,0 +1,31 @@
+# deploy-hedera-dry at commit db79e158
+No files changed, compilation skipped
+Script ran successfully.
+
+== Logs ==
+  {"chain_uid":"0xe5f920b00afe9f90ab0a9bcc3154f07507555dc74054986bdf5443029cc47bce","dex_implementation":"0xafAeAAa945f0DfED52acB01FC7ef6e3DB0913f8F","implementation_normal":"0xe25390B0C92D164cFBD2C807D68255ACE0DC610D","mtx_relay_executor":"0xdDAd70d84A1F6eaeD0394247ec84AAE36eCD86AC","mtx_relay_fee":"0xc9dd52CaA6D4081cB1254E6591E2080aF93225f2","network":"hedera","token_factory":"0x71a0dE78208114d7587064B5fE854eB26656A75A","ua_registry":"0xF0616d4F51ec7E56FDfBd8ef5D49451bC2C1EF96","ua_registry_lib":"0x60766f9F8E65F5A145C60D025b7212F5A690026F"}
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated max fee per gas: 2.000000001 gwei
+Estimated base fee per gas: 1 gwei
+Estimated max priority fee per gas: 0.000000001 gwei
+
+Estimated total gas used for script: 539059933
+
+Estimated amount required: 1.078119866539059933 ETH
+
+==========================
+
+SIMULATION COMPLETE. To broadcast these transactions, add --broadcast and wallet configuration(s) to the previous command. See forge script --help for more.
+
+Transactions saved to: /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/evm/broadcast/DeployHedera.s.sol/31337/dry-run/run-latest.json
+
+Sensitive values saved to: /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/evm/cache/DeployHedera.s.sol/31337/dry-run/run-latest.json
+
+
+rc=0

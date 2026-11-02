@@ -1,0 +1,3 @@
+# named-tests at commit ca2d7b41
+named-tests: 470 names, 0 problem(s)
+rc=0

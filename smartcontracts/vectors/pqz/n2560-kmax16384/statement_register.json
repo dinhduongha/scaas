@@ -1,6 +1,6 @@
 {
  "file": "statement_register.json",
- "description": "Statements (pq-zether.md 7.2, 7.7, 7.9; serialization v1, P6e plan D15 / R6) built from keygen seeds and Enc parameters: header / words (ints, or hex bytes left-padded to a 32-byte word: addresses 20 B, salt 16 B; opTag, proofSystemId and auditorOn follow from the form and id), objects (keys by KeyGen seed; T = Enc + Trivial(plus_trivial); out = u || v_j; a disclosure's u, v = leg of an Enc), stmt = the bytes under the PQZL id (the PQZH statement differs only in bytes 32..63), keccak256 and authDigest = keccak256(SCAAS-PQZ-AUTH-V1 || keccak256(stmt)) per id; transfers: entryRef, the disclosure bundle R = salt || u || v_t || [v_a] || toUA.",
+ "description": "Statements (pq-zether.md 7.2, 7.7, 7.9; serialization v1, P6e plan D15 / R6) built from keygen seeds and Enc parameters: header / words (ints, or hex bytes left-padded to a 32-byte word: addresses 20 B, salt 16 B; opTag, proofSystemId and auditorOn follow from the form and id), objects (keys by KeyGen seed; T = Enc + Trivial(plus_trivial); out = u || v_j; a disclosure's u, v = leg of an Enc), stmt = the bytes under the PQZL id (the PQZH statement differs only in bytes 32..63), keccak256 per id and, on a debit (a register or disclosure statement authorises nothing), auth_digest = the EIP-712 digest of the typed PqzAuth(op, the 20 header words, bodyHash = keccak256(stmt[640..])) under the token's domain (name SCaaS PqzToken, version 1, the header's chainId, token, chainUid as salt); transfers: entryRef, the disclosure bundle R = salt || u || v_t || [v_a] || toUA.",
  "generator": "pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11",
  "rows": [
   {
@@ -19,10 +19,6 @@
    "stmt_keccak": {
     "pqzl": "ee12b8ccfe7c3861f9b0b34a1a872452b641570a6689409df68b7472499c20c8",
     "pqzh": "5d60f31d2d00b1169a1297769c20f5040c4f5ac801d91303d56c4e9aa6c8ba6b"
-   },
-   "auth_digest": {
-    "pqzl": "aaf2a7bd4c3e89164b1bf13df4d6ba5ae433f55900b72b66ee6657a08fdb0813",
-    "pqzh": "9cdee72f2ff04b0d6a012c1fd7efbe95ca0563035c3db81e0c4110abc8b20c6f"
    }
   }
  ]

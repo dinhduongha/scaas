@@ -117,3 +117,7 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `IUARegistryPackedKeys.sol` — `register` as it stood after typed-signing R1 and before R1b (TS-D13): the packed key
   data of `webauthn-p256`, MuSig2 and FROST, now `registerWebAuthn` / `registerMuSig2` / `registerFrost` (typed keys, the
   same assembled bytes and ids; `register` refuses those kinds). Not built.
+  `MtxExecuteWithFee.sol` — `mtxExecuteWithFee` of `MetaTokenBase` before typed-signing C2 (TS-D14): it duplicated
+  `mtxExecute` behind a shape check. `executeMetaTransaction` stays in `MetaTxBase` (owner 2026-11-01). Not built.
+  `FlatUaUnwrap.sol` — the flat `uaUnwrap(bytes32 from, …)` of `MetaTokenBase` before the typed-signing C2 review: it
+  duplicated the named `uaUnwrap(UAEnvelope, …, UASig)` / `uaUnwrapLeg` (owner 2026-11-01). Not built.

@@ -5,6 +5,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {MetaTxBase} from "./MetaTxBase.sol";
+import {UAMetaTxBase} from "./UAMetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
 import {IERC20Payment} from "./IERC20Payment.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
@@ -12,8 +13,8 @@ import {SigCheck} from "../common/SigCheck.sol";
 import {ITradeToken} from "../trade/ITradeToken.sol";
 import {TradeLib} from "../trade/TradeLib.sol";
 import {IUALedger} from "./IUALedger.sol";
-import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 
 /// @title The token base of every SCaaS token (CTR-MTX-07): ERC-20 on `MetaTxBase`.
@@ -26,38 +27,14 @@ import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 ///         UAs, shown as the holder `UA_POOL`, and the `ua*` pipelines on the same lanes. Every signature (the
 ///         relayed paths, trade, cancel, invalidate, receiver-fee) is checked in `MtxPipelineLib` (`requireSignature`
 ///         / `authorize`; a derived UA by the registry's `requireAuthorized`), never here (owner 2026-10-27).
-abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, IUALedger {
+abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken, IUALedger {
     using MetaTxLib for MetaTxLib.MetaTransfer;
     using MetaTxLib for MetaTxLib.UAMetaTransaction;
     using MetaTxLib for MetaTxLib.UAMetaTransfer;
 
-    /// @notice The UA registry of this chain (an implementation immutable; 0 = the UA ledger is off).
-    address internal immutable _REGISTRY;
-    /// @notice The EIP-1167 clone code hash of the chain's `SmartKeyAccount` implementation (0 = none): such a signer
-    ///         gets 400k gas for ERC-1271, every other contract wallet 50k.
-    bytes32 internal immutable _SMART_KEY_CLONE_CODEHASH;
-
-    /// @notice Set on implementations deployed for Hedera (CTR-TOK-23): 64-byte signatures from accounts without code
-    ///         take the HIP-632 path.
-    bool public immutable IS_HEDERA;
-
-    /// @custom:storage-location erc7201:scaas.ua.ledger
-    struct UALedgerStorage {
-        mapping(bytes32 ua => uint256) balance;
-        mapping(bytes32 digest => bool) cancelUsed;
-    }
-
-    // keccak256(abi.encode(uint256(keccak256("scaas.ua.ledger")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant _UA_STORAGE = 0x9e2def943e5a7ec3982e5d00524104579a6b98ce8b31343ac0092718cc04e900;
-
     constructor(bytes32 chainUid_, address registry_, address smartKeyAccountImpl_, bool hedera_)
-        ERC20("", "") MetaTxBase(_domainName(), chainUid_)
-    {
-        _REGISTRY = registry_;
-        _SMART_KEY_CLONE_CODEHASH = smartKeyAccountImpl_ == address(0) ? bytes32(0) : keccak256(abi.encodePacked(
-            hex"363d3d373d3d3d363d73", smartKeyAccountImpl_, hex"5af43d82803e903d91602b57fd5bf3"));
-        IS_HEDERA = hedera_;
-    }
+        ERC20("", "") UAMetaTxBase(_domainName(), chainUid_, registry_, smartKeyAccountImpl_, hedera_)
+    {}
 
     /// @notice The EIP-712 domain name (CTR-MTX-02): `"SCaaS MetaToken"`; a confidential kind overrides it.
     function _domainName() internal pure virtual returns (string memory) {
@@ -81,8 +58,32 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         return MtxPipelineLib.transferDigest(_domainSeparatorV4(), false, _padded(t));
     }
 
-    function registry() public view returns (address) {
-        return _REGISTRY;
+    // `UAMetaTxBase` holds these seven and `IUALedger` names them too: the join spelled out (the id stays `IUALedger`'s).
+
+    function registry() public view override(IUALedger, UAMetaTxBase) returns (address) {
+        return UAMetaTxBase.registry();
+    }
+
+    function uaNonce(bytes32 ua, uint256 batch) public view override(IUALedger, UAMetaTxBase) returns (uint256) {
+        return UAMetaTxBase.uaNonce(ua, batch);
+    }
+
+    function uaDigest(MetaTxLib.UAMetaTransaction calldata m)
+        public view override(IUALedger, UAMetaTxBase) returns (bytes32)
+    {
+        return UAMetaTxBase.uaDigest(m);
+    }
+
+    function uaExecute(MetaTxLib.UAMetaTransaction calldata m, bytes calldata auth)
+        public override(IUALedger, UAMetaTxBase) returns (bytes memory)
+    {
+        return UAMetaTxBase.uaExecute(m, auth);
+    }
+
+    function uaBatch(MetaTxLib.UAMetaTransaction[] calldata ms, bytes[] calldata auths)
+        public override(IUALedger, UAMetaTxBase) returns (bool)
+    {
+        return UAMetaTxBase.uaBatch(ms, auths);
     }
 
     /// @notice A native id reads the ERC-20 balance of its address; a derived UA its UA-ledger balance.
@@ -90,38 +91,32 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         return UAKinds.inNativeSpace(ua) ? balanceOf(address(uint160(uint256(ua)))) : _ua().balance[ua];
     }
 
-    /// @notice The one nonce map (CTR-UA-26): `uaNonce(pad(a), b) == mtxNonce(a, b)`.
-    function uaNonce(bytes32 ua, uint256 batch) external view returns (uint256) {
-        return _nonce(ua, batch);
-    }
-
-    function uaDigest(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32) {
-        return MtxPipelineLib.callDigest(_domainSeparatorV4(), MetaTxLib.UAMETATX_TYPEHASH, _uaEnvelopeOf(m));
-    }
-
     function uaTransferDigest(MetaTxLib.UAMetaTransfer calldata t) external view returns (bytes32) {
         return MtxPipelineLib.transferDigest(_domainSeparatorV4(), true, t);
     }
 
-    /// @notice The `metatx-cancel` digest (accounts.md §1.5): `CANCEL_TAG` is the purpose tag itself.
-    function uaCancelDigest(bytes32 ua, uint256 batch, uint256 validUntil) public view returns (bytes32) {
-        return keccak256(abi.encode(
-            UAKinds.PURPOSE_METATX_CANCEL, block.chainid, CHAIN_UID, address(this), ua, batch, validUntil
-        ));
+    function uaCancelDigest(bytes32 ua, uint256 batch, uint256 validUntil)
+        public view override(IUALedger, UAMetaTxBase) returns (bytes32)
+    {
+        return UAMetaTxBase.uaCancelDigest(ua, batch, validUntil);
     }
 
     // ------------------------------------------------------------------ trade orders (CTR-DEX-15, -25, -02)
 
     function tradeOrderDigest(TradeOrder calldata o) public view returns (bytes32) {
-        return _hashTypedDataV4(TradeLib.hashStruct(o));
+        return _hashTypedDataV4(TradeLib.orderHash(TradeLib.core(o), false));
     }
 
     function uaTradeOrderDigest(UATradeOrder calldata o) public view returns (bytes32) {
-        return _hashTypedDataV4(TradeLib.hashStructUA(o));
+        return _hashTypedDataV4(TradeLib.orderHash(o, true));
     }
 
-    function cancelOrderDigest(bytes32 orderHash) public view returns (bytes32) {
-        return _hashTypedDataV4(keccak256(abi.encode(TradeLib.CANCEL_ORDER_TYPEHASH, orderHash)));
+    function cancelOrderDigest(TradeOrder calldata o) public view returns (bytes32) {
+        return _hashTypedDataV4(TradeLib.cancelHash(TradeLib.core(o), false));
+    }
+
+    function cancelUAOrderDigest(UATradeOrder calldata o) public view returns (bytes32) {
+        return _hashTypedDataV4(TradeLib.cancelHash(o, true));
     }
 
     function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) public view returns (bytes32) {
@@ -158,7 +153,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
 
     /// @notice CTR-DEX-25: `mtxTrade` for an id; the UA rule under purpose `trade` (a native id signs `h` itself); the
     ///         fill moves through the UA ledger (a derived seller: `Transfer(UA_POOL, dex)` + `UATransfer`).
-    function uaTrade(UATradeOrder calldata o, bytes calldata auth, TradeFill calldata f) external nonReentrant {
+    function uaTrade(UATradeOrder calldata o, IUARegistry.UASig calldata auth, TradeFill calldata f) external nonReentrant {
         _uaOn();
         bytes32 h = uaTradeOrderDigest(o);
         UATradeOrder memory c = o;
@@ -179,16 +174,14 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
 
     /// @notice Cancel signatures never expire (CTR-DEX-02); anyone may submit one.
     function mtxCancelOrder(TradeOrder calldata o, bytes calldata sig) external nonReentrant {
-        bytes32 h = tradeOrderDigest(o);
-        MtxPipelineLib.requireSignature(_mtxCtx(), o.from, cancelOrderDigest(h), sig);
-        TradeLib.cancel(h, o.amount, TradeLib.pad(o.from), false);
+        MtxPipelineLib.requireSignature(_mtxCtx(), o.from, cancelOrderDigest(o), sig);
+        TradeLib.cancel(tradeOrderDigest(o), o.amount, TradeLib.pad(o.from), false);
     }
 
-    function uaCancelOrder(UATradeOrder calldata o, bytes calldata auth) external nonReentrant {
+    function uaCancelOrder(UATradeOrder calldata o, IUARegistry.UASig calldata auth) external nonReentrant {
         _uaOn();
-        bytes32 h = uaTradeOrderDigest(o);
-        MtxPipelineLib.authorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, cancelOrderDigest(h), auth);
-        TradeLib.cancel(h, o.amount, o.from, true);
+        MtxPipelineLib.authorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, cancelUAOrderDigest(o), auth);
+        TradeLib.cancel(uaTradeOrderDigest(o), o.amount, o.from, true);
     }
 
     function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig) external nonReentrant {
@@ -196,7 +189,9 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         TradeLib.invalidate(TradeLib.pad(from), batch, newMin, false);
     }
 
-    function uaInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, bytes calldata auth) external nonReentrant {
+    function uaInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth)
+        external nonReentrant
+    {
         _uaOn();
         MtxPipelineLib.authorize(
             _mtxCtx(), from, UAKinds.PURPOSE_TRADE, uaInvalidateNoncesDigest(from, batch, newMin), auth);
@@ -208,7 +203,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
     function mtxExecuteTransfer(MetaTxLib.MetaTransfer calldata t, bytes calldata signature)
         external nonReentrant returns (bool)
     {
-        _executeTransfer(t, signature);
+        _executeTransfer(t, 0, signature);
         return true;
     }
 
@@ -219,16 +214,19 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         uint256 n = ts.length;
         if (n == 0) revert MtxBatchEmpty();
         if (n != signatures.length) revert MtxBatchLengthMismatch();
-        for (uint256 i; i < n; ++i) _executeTransfer(ts[i], signatures[i]);
+        for (uint256 i; i < n; ++i) _executeTransfer(ts[i], 0, signatures[i]);
         return true;
     }
 
     /// @dev Every typed entry (struct, batch, the named builders, receiver-pays) goes through here: steps 1-4 in
     ///      `MtxPipelineLib.preTransfer` (ids padded, `have` read here), so everything is checked before the nonce and
-    ///      the transfers, which cannot fail afterwards. Returns the digest.
-    function _executeTransfer(MetaTxLib.MetaTransfer memory t, bytes calldata signature) internal returns (bytes32) {
+    ///      the transfers, which cannot fail afterwards. `signed`: the struct the signer signed when it is not `t`
+    ///      (`RelayFee`), else 0. Returns the digest.
+    function _executeTransfer(MetaTxLib.MetaTransfer memory t, bytes32 signed, bytes calldata signature)
+        internal returns (bytes32)
+    {
         MtxPipelineLib.Out memory o =
-            MtxPipelineLib.preTransfer(_mtxCtx(), _padded(t), false, balanceOf(t.from), signature); // 1-4
+            MtxPipelineLib.preTransfer(_mtxCtx(), _padded(t), signed, balanceOf(t.from), signature); // 1-4
         if (o.fee != 0) _transfer(t.from, o.feeTo, o.fee);                                         // 5
         _transfer(t.from, t.to, t.value);
         if (t.entryRef != 0) emit PaymentSettled(t.from, t.to, t.value, o.fee, o.feeTo, t.entryRef);
@@ -244,37 +242,36 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
 
     // ------------------------------------------------------------------ the generic pipeline on MtxPipelineLib
 
-    /// @notice The token's immutables for `MtxPipelineLib` (metatx split R2): the only place that builds a `Ctx`.
-    function _mtxCtx() internal view returns (MtxPipelineLib.Ctx memory) {
-        return MtxPipelineLib.Ctx(_domainSeparatorV4(), _REGISTRY, _SMART_KEY_CLONE_CODEHASH, IS_HEDERA);
-    }
-
     /// @dev CTR-MTX-17 on the library: 1-4 and the fee amount in `preCall` (the fee is checked before the call, owner
     ///      2026-10-27), 5 the self-call, 6 the fee move, 7 the event. `data` stays here: the library gets its hash.
     function _execute(MetaTxLib.MetaTransaction memory m, bytes calldata signature)
-        internal override returns (bytes memory ret)
+        internal override returns (bytes memory)
     {
-        MtxPipelineLib.Out memory o =
-            MtxPipelineLib.preCall(_mtxCtx(), _envelopeOf(m), _callFacts(m.data, false), false, signature); // 1-4
+        return _settle(m, MtxPipelineLib.preCall(_mtxCtx(), _envelopeOf(m), _callFacts(m.data, false), false, signature));
+    }
+
+    /// @dev `_execute` of a named entry (TS-D14): 1-4 in `preNamed` over the entry's own struct, the rest shared.
+    function _named(bytes32 typehash, bytes4 sel, MetaTxLib.Envelope calldata e, bytes memory args, bytes calldata sig)
+        internal override returns (bytes memory)
+    {
+        return _namedCall(typehash, e, args, abi.encodePacked(sel, args), sig);
+    }
+
+    /// @dev `_named` where the struct's words are not the call's arguments: nested structs and `bytes` hash into `words`
+    ///      (EIP-712), `data` is the op's call.
+    function _namedCall(bytes32 typehash, MetaTxLib.Envelope calldata e, bytes memory words, bytes memory data, bytes calldata sig)
+        internal returns (bytes memory)
+    {
+        MetaTxLib.MetaTransaction memory m = _metaOf(e, data);
+        return _settle(m, MtxPipelineLib.preNamed(
+            _mtxCtx(), typehash, _envelopeOf(m, 0), words, _callFacts(m.data, false), false, sig));
+    }
+
+    /// @dev Steps 5-7 of the address path.
+    function _settle(MetaTxLib.MetaTransaction memory m, MtxPipelineLib.Out memory o) private returns (bytes memory ret) {
         ret = _selfCall(MetaTxLib.pad(m.from), m.data, _envelopeBinding(m));                                 // 5
         if (o.fee != 0) _transfer(m.from, o.feeTo, o.fee);                                                    // 6
         emit MetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, o.digest, o.feeTo, o.fee);         // 7
-    }
-
-    /// @dev What the library needs of `data` and of this kind's hooks: selector (zero-padded when shorter than 4),
-    ///      length, the rule, the basis word when present (else 0) and, on the UA path, the UA verdict.
-    function _callFacts(bytes memory data, bool ua) internal view returns (MtxPipelineLib.CallFacts memory f) {
-        f.sel = bytes4(data);
-        f.len = data.length;
-        MtxRule memory r = _mtxRule(f.sel);
-        (f.feeClass, f.amountArg, f.staticLen) = (r.feeClass, r.amountArg, r.staticLen);
-        uint256 basisEnd = 36 + 32 * uint256(r.amountArg);
-        if (r.feeClass == FEE_CLASS_AMOUNT && data.length >= basisEnd) {
-            uint256 basis;
-            assembly ("memory-safe") { basis := mload(add(data, basisEnd)) }
-            f.basis = basis;
-        }
-        if (ua) f.uaAllowed = _uaAllowed(f.sel);
     }
 
     // ------------------------------------------------------------------ allowance (CTR-TOK-01)
@@ -329,90 +326,41 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         return true;
     }
 
-    function uaExecute(MetaTxLib.UAMetaTransaction calldata m, bytes calldata auth)
-        external nonReentrant returns (bytes memory)
-    {
-        return _uaExecute(m, auth);
-    }
-
-    /// @notice Atomic, items in order, each with a fresh ticket (as `mtxBatch`).
-    function uaBatch(MetaTxLib.UAMetaTransaction[] calldata ms, bytes[] calldata auths)
+    function uaExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth)
         external nonReentrant returns (bool)
     {
-        uint256 n = ms.length;
-        if (n == 0) revert MtxBatchEmpty();
-        if (n != auths.length) revert MtxBatchLengthMismatch();
-        for (uint256 i; i < n; ++i) {
-            _requireBatchable(bytes4(ms[i].data));
-            _uaExecute(ms[i], auths[i]);
-        }
-        return true;
-    }
-
-    function uaExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, bytes calldata auth)
-        external nonReentrant returns (bool)
-    {
-        _uaExecuteTransfer(t, auth);
+        _uaExecuteTransfer(t, 0, auth);
         return true;
     }
 
     /// @notice Atomic, items in order; never mixed with `UAMetaTransaction`s (as `mtxBatchTransfer`).
-    function uaBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, bytes[] calldata auths)
+    function uaBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths)
         external nonReentrant returns (bool)
     {
         uint256 n = ts.length;
         if (n == 0) revert MtxBatchEmpty();
         if (n != auths.length) revert MtxBatchLengthMismatch();
-        for (uint256 i; i < n; ++i) _uaExecuteTransfer(ts[i], auths[i]);
+        for (uint256 i; i < n; ++i) _uaExecuteTransfer(ts[i], 0, auths[i]);
         return true;
     }
 
-    /// @notice A derived UA's `cancelNonce`, signed under purpose `metatx-cancel`; each signature works once. Native ids
-    ///         use `cancelNonce` (the same map, `pad(sender)`).
-    function uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, bytes calldata auth) external nonReentrant {
-        _uaOn();
-        if (UAKinds.inNativeSpace(ua)) revert UAKindNotAccepted(ua, 0);
-        if (block.timestamp > validUntil) revert MetaTxExpired(validUntil, block.timestamp);
-        bytes32 d = uaCancelDigest(ua, batch, validUntil);
-        UALedgerStorage storage $ = _ua();
-        if ($.cancelUsed[d]) revert UACancelUsed();
-        IUARegistry(_REGISTRY).requireAuthorized(ua, UAKinds.PURPOSE_METATX_CANCEL, d, UAKinds.uaSig(ua, auth)); // R1 → C2
-        $.cancelUsed[d] = true;
-        emit UANonceCancelled(ua, batch, _bumpNonce(ua, batch));
-    }
-
-    /// @dev The generic UA pipeline (CTR-MTX-17 on a `bytes32` signer) on the library: `preCall(ua = true)` runs the
-    ///      ledger check, 1 envelope, 2 authorization, 3 the UA allowlist (`MetaTxUnknownOp`), the address path's shape
-    ///      and fee class and the fee amount, 4 nonce; then 5 self-call under the id, 6 fee from the signer's ledger,
-    ///      7 event.
-    function _uaExecute(MetaTxLib.UAMetaTransaction memory m, bytes calldata auth) internal returns (bytes memory ret) {
-        MtxPipelineLib.Out memory o =
-            MtxPipelineLib.preCall(_mtxCtx(), _uaEnvelopeOf(m), _callFacts(m.data, true), true, auth); // 1-4
-        ret = _selfCall(m.from, m.data, _uaEnvelopeBinding(m));                                         // 5
-        if (o.fee != 0) _uaMove(m.from, MetaTxLib.pad(o.feeTo), o.fee);                                // 6
-        emit UAMetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, o.digest, o.feeTo, o.fee); // 7
-    }
-
-    /// @dev The envelope of `m` for the library: `data` as its hash (over this memory copy).
-    function _uaEnvelopeOf(MetaTxLib.UAMetaTransaction memory m)
-        internal pure returns (MtxPipelineLib.Envelope memory)
+    function uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, IUARegistry.UASig calldata auth)
+        public override(IUALedger, UAMetaTxBase)
     {
-        return MtxPipelineLib.Envelope(m.from, keccak256(m.data), m.batch, m.nonce, m.validUntil, m.mode, m.relayer,
-            m.fee, m.feeRecipient);
+        UAMetaTxBase.uaCancelNonce(ua, batch, validUntil, auth);
     }
 
-    /// @notice The envelope binding a proof inside the UA path's self-call carries (CTR-PQZ-15, P6g plan D4,
-    ///         CTR-ZTH-51): 0 by default; the confidential layers return their own (tags `SCAAS-PQZ-UA-ENVELOPE-V1`,
-    ///         `SCAAS-ZETHER-UA-ENVELOPE-V1`), never 0, so step 5 writes it on every envelope of theirs (the address
-    ///         path's `_envelopeBinding` rule).
-    function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory) internal view virtual returns (bytes32) {
-        return bytes32(0);
+    /// @dev Step 6 of the UA path: the fee from the signer's ledger.
+    function _uaChargeFee(MetaTxLib.UAMetaTransaction memory m, address feeTo, uint256 fee) internal override {
+        _uaMove(m.from, MetaTxLib.pad(feeTo), fee);
     }
 
-    /// @dev The typed UA pipeline (CTR-MTX-23 on ids): steps 1-4 in `MtxPipelineLib.preTransfer` (`have` read here),
-    ///      everything checked before the nonce and the moves.
-    function _uaExecuteTransfer(MetaTxLib.UAMetaTransfer memory t, bytes calldata auth) internal returns (bytes32) {
-        MtxPipelineLib.Out memory o = MtxPipelineLib.preTransfer(_mtxCtx(), t, true, balanceOfUA(t.from), auth); // 1-4
+    /// @dev The typed UA pipeline (CTR-MTX-23 on ids): steps 1-4 in `MtxPipelineLib.preTransferUA` (`have` read here),
+    ///      everything checked before the nonce and the moves; `signed` as in `_executeTransfer`.
+    function _uaExecuteTransfer(MetaTxLib.UAMetaTransfer memory t, bytes32 signed, IUARegistry.UASig calldata auth)
+        internal returns (bytes32)
+    {
+        MtxPipelineLib.Out memory o = MtxPipelineLib.preTransferUA(_mtxCtx(), t, signed, balanceOfUA(t.from), auth); // 1-4
         if (o.fee != 0) _uaMove(t.from, MetaTxLib.pad(o.feeTo), o.fee);                                // 5
         _uaMove(t.from, t.to, t.value);
         if (t.entryRef != 0) emit UAPaymentSettled(t.from, t.to, t.value, o.fee, o.feeTo, t.entryRef);
@@ -432,13 +380,6 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
     function _uaMint(bytes32 to, uint256 v) internal {
         _requireDerivedReceiver(to);
         _uaMove(bytes32(0), to, v);
-    }
-
-    /// @notice The UA allowlist (CTR-UA-26): selectors a `UAMetaTransaction` may call; none on the base, `NORMAL` adds
-    ///         `burn`, the wrapper kinds their `unwrap`s and `unwrapToUA`. `approve`, `trade`, transfers and the dedicated
-    ///         `…ToUA` functions are never on it (`MetaTxUnknownOp`).
-    function _uaAllowed(bytes4) internal view virtual returns (bool) {
-        return false;
     }
 
     /// @dev Every UA-ledger move: derived sides in `balance`, native sides (or `UA_POOL` for a derived side) through
@@ -473,14 +414,6 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         uint256 b = $.balance[ua];
         if (b < value) revert UAInsufficientBalance(ua, b, value);
         unchecked { $.balance[ua] = b - value; }
-    }
-
-    function _uaOn() private view {
-        if (_REGISTRY == address(0)) revert UALedgerOff();
-    }
-
-    function _ua() private pure returns (UALedgerStorage storage $) {
-        assembly ("memory-safe") { $.slot := _UA_STORAGE }
     }
 
     function _msgSender() internal view virtual override(Context, MetaTxBase) returns (address) {

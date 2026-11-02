@@ -1,0 +1,790 @@
+# hotpath-n2304-kmax4096 at commit f4003909
+== at-set.sh: n2304-kmax4096 (n2304-kmax4096), forge test --match-path test/ua/* --match-test test_gasHotPath|test_deployGas|test_msigPopAtTheBudget|test_split_storePqzPopWithAVerify -vv
+Compiling 199 files with Solc 0.8.37
+Solc 0.8.37 finished in 41.52s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> legacy/zether-msm/ZetherVerifierPerEquation.sol:89:28:
+   |
+89 |     error PrecompileFailed(uint256 at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> legacy/zether-msm/ZetherVerifierPerEquation.sol:268:13:
+    |
+268 |             uint256 at = 4 + 2 * n + 2 * j;
+    |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> legacy/zether-msm/ZetherVerifierPerEquation.sol:372:9:
+    |
+372 |         uint256 at = HEADER + 6 * p;
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/factory/OpenFactory.sol:284:26:
+    |
+284 |         private returns (address at, Release memory r)
+    |                          ^^^^^^^^^^
+
+Warning (6335): "layout" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/ua/UAStore.sol:57:5:
+   |
+57 |     function layout() internal pure returns (Layout storage s) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/zether/ZetherVerifier.sol:87:28:
+   |
+87 |     error PrecompileFailed(uint256 at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:233:9:
+    |
+233 |         uint256 at;     // the slot of this proof's `A`
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/account/SmartKeyAccount.sol:310:9:
+    |
+310 |         uint256 at;
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/zether/helpers/ZetherFixture.sol:419:37:
+    |
+419 |     function _zWord(bytes memory b, uint256 at) internal pure returns (bytes32 w) {
+    |                                     ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/zether/helpers/ZetherFixture.sol:423:38:
+    |
+423 |     function _zPoint(bytes memory b, uint256 at) internal pure returns (IZetherToken.G1 memory) {
+    |                                      ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UAGas.t.sol:251:26:
+    |
+251 |     function _registerAt(address at, address pred, UARegistry.KindConfig[] memory cfg, bytes memory d, uint256 bound)
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:212:64:
+    |
+212 |     function _reg(SplitDiff.Run memory r, string memory label, address at, bytes memory data) internal returns (bytes32 ua) {
+    |                                                                ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:256:67:
+    |
+256 |     function _holder(SplitDiff.Run memory r, string memory label, address at, uint16 kind, bytes memory pk, uint256 salt, bool commit)
+    |                                                                   ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:311:57:
+    |
+311 |     function _gen1Registrations(SplitDiff.Run memory r, address at) internal {
+    |                                                         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:318:51:
+    |
+318 |     function _attachments(SplitDiff.Run memory r, address at) internal returns (bytes32 h2, bytes memory proof2) {
+    |                                                   ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:334:45:
+    |
+334 |     function _msigs(SplitDiff.Run memory r, address at) internal returns (bytes32 ms) {
+    |                                             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:361:51:
+    |
+361 |     function _msigRecords(SplitDiff.Run memory r, address at, bytes32 ms, bytes memory d, bytes memory fn) internal {
+    |                                                   ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:375:53:
+    |
+375 |     function _packedEntries(SplitDiff.Run memory r, address at) internal {
+    |                                                     ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:385:45:
+    |
+385 |     function _cache(SplitDiff.Run memory r, address at) internal {
+    |                                             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:408:57:
+    |
+408 |     function _registerNegatives(SplitDiff.Run memory r, address at) internal {
+    |                                                         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:426:56:
+    |
+426 |     function _pqzAttrNegatives(SplitDiff.Run memory r, address at, bytes memory key, bytes memory pop) internal {
+    |                                                        ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:441:56:
+    |
+441 |     function _kemAttrNegatives(SplitDiff.Run memory r, address at, bytes memory key, bytes memory pop) internal {
+    |                                                        ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:461:55:
+    |
+461 |     function _holderNegatives(SplitDiff.Run memory r, address at) internal {
+    |                                                       ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:512:59:
+    |
+512 |     function _attachmentNegatives(SplitDiff.Run memory r, address at, bytes32 h2) internal {
+    |                                                           ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:527:55:
+    |
+527 |     function _pqzKeyNegatives(SplitDiff.Run memory r, address at, bytes32 h2, bytes32 slh) internal {
+    |                                                       ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:549:55:
+    |
+549 |     function _kemKeyNegatives(SplitDiff.Run memory r, address at, bytes32 h2, bytes32 slh) internal {
+    |                                                       ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:569:58:
+    |
+569 |     function _kemCommitNegatives(SplitDiff.Run memory r, address at) internal {
+    |                                                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:579:51:
+    |
+579 |     function _invalidRows(SplitDiff.Run memory r, address at) internal {
+    |                                                   ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:591:53:
+    |
+591 |     function _msigNegatives(SplitDiff.Run memory r, address at) internal {
+    |                                                     ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:618:50:
+    |
+618 |     function _debitBound(SplitDiff.Run memory r, address at) internal {
+    |                                                  ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:646:49:
+    |
+646 |     function _malformed(SplitDiff.Run memory r, address at) internal {
+    |                                                 ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:660:48:
+    |
+660 |     function _authRows(SplitDiff.Run memory r, address at) internal {
+    |                                                ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:684:46:
+    |
+684 |     function _dumpUa(SplitDiff.Run memory r, address at, uint256 i) internal view {
+    |                                              ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:708:44:
+    |
+708 |     function _dump(SplitDiff.Run memory r, address at) internal view {
+    |                                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistrySplit.t.sol:996:13:
+    |
+996 |             address at = i == 0 ? R1 : R2;
+    |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistrySplit.t.sol:1062:13:
+     |
+1062 |             address at = i == 0 ? R1 : R2;
+     |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistrySplit.t.sol:1084:13:
+     |
+1084 |             address at = i == 0 ? R1 : R2;
+     |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistrySplit.t.sol:1135:35:
+     |
+1135 |     function _meter(Gas memory g, address at, bytes32 ua, IUARegistry.UASig memory s, string memory label) internal {
+     |                                   ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistrySplit.t.sol:1146:9:
+     |
+1146 |         address at = R8;
+     |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistrySplit.t.sol:1209:47:
+     |
+1209 |     function _msigAtBudget(string memory art, address at) internal returns (uint256 regular) {
+     |                                               ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistryUA8.t.sol:2559:40:
+     |
+2559 |             (uint16 k, bytes memory d, IUARegistry.UAAttrs memory at, bytes memory p, bytes memory z) = a.registrationOf(x.ua);
+     |                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistryUA8.t.sol:2711:17:
+     |
+2711 |             (,, IUARegistry.UAAttrs memory at,,) = a.registrationOf(x.ua);
+     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistryUA8.t.sol:3015:53:
+     |
+3015 |     function _splitRegister(SplitDiff.Run memory r, address at, Row memory x, string memory label) internal {
+     |                                                     ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistryUA8.t.sol:3034:52:
+     |
+3034 |     function _splitRecords(SplitDiff.Run memory r, address at, Row[] memory rows, KemRec[] memory ks, KeyRec[] memory kr)
+     |                                                    ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+    --> test/ua/UARegistryUA8.t.sol:3055:9:
+     |
+3055 |         address at = address(_regA(true));
+     |         ^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> src/ua/UAKinds.sol:267:56:
+    |
+267 |     function kemRecordHash(bytes32 ua, uint64 version, bytes memory kemPk) internal pure returns (bytes32) {
+    |                                                        ^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> src/ua/UAKinds.sol:281:5:
+    |
+281 |     function kemPk(IUARegistry.KemKey memory k) internal pure returns (bytes memory) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> src/ua/UAKinds.sol:352:58:
+    |
+352 |     function kemRecordDigest(bytes32 ua, uint64 version, bytes memory kemPk) internal pure returns (bytes32) {
+    |                                                          ^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> src/ua/UAKinds.sol:281:5:
+    |
+281 |     function kemPk(IUARegistry.KemKey memory k) internal pure returns (bytes memory) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:43:14:
+   |
+43 |             (bool ok, uint256 hx, uint256 hy) = _hint(keyData, h, l, i);
+   |              ^^^^^^^
+Note: The shadowed declaration is here:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:51:10:
+   |
+51 |         (bool ok, uint256 qy) = Bip340.liftX(qx);
+   |          ^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:143:38:
+    |
+143 |     function _newToken(bool auditor, bytes32 salt) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:65:5:
+   |
+65 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:147:38:
+    |
+147 |     function _newToken(bool auditor, bytes32 salt, uint256 maxShielded) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:65:5:
+   |
+65 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/pqzh/Pqzh.sol:249:64:
+    |
+249 |     function pw(uint256[64] memory t, uint256 bits, uint256 n, uint256 off) internal pure returns (uint256 r) {
+    |                                                                ^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/pqzh/Pqzh.sol:162:5:
+    |
+162 |     function off(bytes calldata x) internal pure returns (uint256 o) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:516:44:
+    |
+516 |     function cacheExpandedKey(uint16 kind, bytes calldata pk, uint256 part) external returns (bytes32 ua) {
+    |                                            ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:516:63:
+    |
+516 |     function cacheExpandedKey(uint16 kind, bytes calldata pk, uint256 part) external returns (bytes32 ua) {
+    |                                                               ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:516:95:
+    |
+516 |     function cacheExpandedKey(uint16 kind, bytes calldata pk, uint256 part) external returns (bytes32 ua) {
+    |                                                                                               ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:520:36:
+    |
+520 |     function register(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
+    |                                    ^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:520:60:
+    |
+520 |     function register(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
+    |                                                            ^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:520:84:
+    |
+520 |     function register(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
+    |                                                                                    ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:521:9:
+    |
+521 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:521:50:
+    |
+521 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |                                                  ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:526:31:
+    |
+526 |     function registerWebAuthn(WebAuthnKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                               ^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:526:57:
+    |
+526 |     function registerWebAuthn(WebAuthnKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                                                         ^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:526:81:
+    |
+526 |     function registerWebAuthn(WebAuthnKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                                                                                 ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:527:9:
+    |
+527 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:527:50:
+    |
+527 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |                                                  ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:532:42:
+    |
+532 |     function registerMuSig2(uint16 kind, MuSig2Key calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                                          ^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:532:66:
+    |
+532 |     function registerMuSig2(uint16 kind, MuSig2Key calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                                                                  ^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:532:90:
+    |
+532 |     function registerMuSig2(uint16 kind, MuSig2Key calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                                                                                          ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:533:9:
+    |
+533 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:533:50:
+    |
+533 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |                                                  ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:538:41:
+    |
+538 |     function registerFrost(uint16 kind, FrostKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                                         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:538:64:
+    |
+538 |     function registerFrost(uint16 kind, FrostKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                                                                ^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:538:88:
+    |
+538 |     function registerFrost(uint16 kind, FrostKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
+    |                                                                                        ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:539:9:
+    |
+539 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:539:50:
+    |
+539 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |                                                  ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:544:27:
+    |
+544 |     function registerMsig(MsigStructure calldata structure, UAAttrs calldata attrs, MemberSig[] calldata pop,
+    |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:544:61:
+    |
+544 |     function registerMsig(MsigStructure calldata structure, UAAttrs calldata attrs, MemberSig[] calldata pop,
+    |                                                             ^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:544:85:
+    |
+544 |     function registerMsig(MsigStructure calldata structure, UAAttrs calldata attrs, MemberSig[] calldata pop,
+    |                                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:545:9:
+    |
+545 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:545:50:
+    |
+545 |         bytes calldata pqzPop) external returns (bytes32 ua)
+    |                                                  ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:550:26:
+    |
+550 |     function storePqzPop(bytes32 ua, bytes calldata pqzPop) external {
+    |                          ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:550:38:
+    |
+550 |     function storePqzPop(bytes32 ua, bytes calldata pqzPop) external {
+    |                                      ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:554:36:
+    |
+554 |     function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, UASig calldata sig) external {
+    |                                    ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:554:59:
+    |
+554 |     function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, UASig calldata sig) external {
+    |                                                           ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:554:79:
+    |
+554 |     function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, UASig calldata sig) external {
+    |                                                                               ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:558:36:
+    |
+558 |     function setKemKey(bytes32 ua, uint64 version, KemKey calldata kem, UASig calldata sig) external {
+    |                                    ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:558:52:
+    |
+558 |     function setKemKey(bytes32 ua, uint64 version, KemKey calldata kem, UASig calldata sig) external {
+    |                                                    ^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/ua/UARegistry.sol:558:73:
+    |
+558 |     function setKemKey(bytes32 ua, uint64 version, KemKey calldata kem, UASig calldata sig) external {
+    |                                                                         ^^^^^^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> src/ua/UARegistryLib.sol:671:5:
+    |
+671 |     function _nativeCap() private view returns (uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Secp256k1Verifier.sol:14:5:
+   |
+14 |     function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) public view returns (bool) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:82:5:
+   |
+82 |     function _coef(bytes32 l, bytes calldata pk) private view returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> script/DeployBase.sol:330:5:
+    |
+330 |     function _zetherLibs(bool underlying) internal view returns (address[] memory l) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> test/helpers/Catalogue.sol:50:1:
+   |
+50 | function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory l) {
+   | ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/wallet/MandateWallet.t.sol:643:5:
+    |
+643 |     function _edOwnerCall(bytes memory data, uint256 nonce) internal returns (MetaTxLib.MetaTransaction memory m) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:561:5:
+    |
+561 |     function _w(bytes calldata s, uint256 i) private view returns (uint256 v) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:568:5:
+    |
+568 |     function _seed(Ctx memory c, bytes calldata stmt) private view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:573:5:
+    |
+573 |     function _observe(Ctx memory c, uint256 ptr, uint256 len) private view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:584:5:
+    |
+584 |     function _sample(Ctx memory c) private view returns (uint256 r) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:653:5:
+    |
+653 |     function _cd(uint256 p) private view returns (uint256 v) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:661:5:
+    |
+661 |     function _alphaPowers(Ctx memory c) private view returns (uint256[] memory packed) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:700:5:
+    |
+700 |     function _combine(uint256[] memory packed, uint256 ptr, uint256 w, uint256 E) private view returns (uint256 o, uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:772:5:
+    |
+772 |     function _rows(Ctx memory c, Tree memory tr, uint256 p, uint256 ti) private view returns (uint256 rowsBytes, uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:787:5:
+    |
+787 |     function _deep(Ctx memory c, uint256 x) private view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:846:5:
+    |
+846 |     function _gather(uint256[] memory ev, uint256 k, uint256 pos, uint256 folded, uint256 p, uint256 E)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:862:5:
+    |
+862 |     function _leaf(uint256[] memory ev, uint256 k, uint256 E) private view returns (bytes32 h) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/ua/UARegistryBase.sol:280:5:
+    |
+280 |     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/ua/UARegistrySplit.t.sol:660:5:
+    |
+660 |     function _authRows(SplitDiff.Run memory r, address at) internal {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 3 tests for test/ua/UARegistrySplit.t.sol:UARegistrySplitTest
+[PASS] test_deployGas() (gas: 205220306)
+Logs:
+  DEPLOY|pre-split UARegistry|3593112|71659080|75252192
+  DEPLOY|UARegistry|2392984|43019010|45411994
+  DEPLOY|UARegistryLib|2030488|48095550|50126038
+
+[PASS] test_gasHotPath() (gas: 161826011)
+Logs:
+  GAS|register regular 256|149064|155142|6078
+  GAS|register state 256|1164330|1164330|0
+  GAS|requireAuthorized 256|16933|16970|37
+  GAS|register regular 257|149165|155473|6308
+  GAS|register state 257|1115370|1115370|0
+  GAS|requireAuthorized 257|16960|16997|37
+  GAS|register regular 258|150866|157156|6290
+  GAS|register state 258|1066410|1066410|0
+  GAS|requireAuthorized 258|16979|17016|37
+  GAS|register regular 259|145190|151484|6294
+  GAS|register state 259|1066410|1066410|0
+  GAS|requireAuthorized 259|17036|17073|37
+  GAS|register regular 260|141554|147868|6314
+  GAS|register state 260|1115370|1115370|0
+  GAS|requireAuthorized 260|17127|17164|37
+  GAS|register regular 261|156193|162504|6311
+  GAS|register state 261|1213290|1213290|0
+  GAS|requireAuthorized 261|17281|17318|37
+  GAS|register regular 262|170160|176495|6335
+  GAS|register state 262|1409130|1409130|0
+  GAS|requireAuthorized 262|17510|17547|37
+  GAS|register regular 263|223852|230164|6312
+  GAS|register state 263|1213290|1213290|0
+  GAS|requireAuthorized 263|17396|17433|37
+  GAS|register regular 272|195158|201467|6309
+  GAS|register state 272|1448910|1448910|0
+  GAS|requireAuthorized 272|19560|19575|15
+  GAS|register regular 273|250737|257107|6370
+  GAS|register state 273|1889550|1889550|0
+  GAS|requireAuthorized 273|19617|19632|15
+  GAS|register regular 274|187158|193461|6303
+  GAS|register state 274|1643220|1643220|0
+  GAS|requireAuthorized 274|19695|19710|15
+  GAS|register regular 275|217918|224330|6412
+  GAS|register state 275|2377620|2377620|0
+  GAS|requireAuthorized 275|19740|19755|15
+  GAS|register regular 304|192442|198780|6338
+  GAS|register state 304|3209940|3209940|0
+  GAS|requireAuthorized 304|23286|23301|15
+  GAS|register regular 305|209956|216410|6454
+  GAS|register state 305|4189140|4189140|0
+  GAS|requireAuthorized 305|23944|23959|15
+  GAS|register regular 306|375728|381957|6229
+  GAS|register state 306|2574990|2574990|0
+  GAS|requireAuthorized 306|20899|20914|15
+  GAS|register regular 307|156257|162312|6055
+  GAS|register state 307|1251540|1251540|0
+  GAS|requireAuthorized 307|20188|20203|15
+  GAS|register regular 321|168762|175130|6368
+  GAS|register state 321|1398420|1398420|0
+  GAS|requireAuthorized 321|19583|19587|4
+  GAS|register regular 264|149528|155838|6310
+  GAS|register state 264|1115370|1115370|0
+  GAS|requireAuthorized 264|17364|17401|37
+  GAS|requireAuthorized native eoa|12465|12470|5
+  GAS|requireAuthorized native 1271|14332|14283|-49
+  GAS|registerMsig regular|134288|143129|8841
+  GAS|requireAuthorized msig 2-of-2|49678|49640|-38
+
+[PASS] test_msigPopAtTheBudget() (gas: 79352047)
+Logs:
+  GAS|registerMsig 8 members at the budget|11443002|11489473|46471
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 186.82ms (452.87ms CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 1 test for test/ua/UARegistryUA8.t.sol:UARegistryUA8Test
+[PASS] test_split_storePqzPopWithAVerify() (gas: 1066707822)
+Logs:
+  GAS|storePqzPop n2304-kmax4096|51836782|51849530|12748
+  GAS|storePqzPop on gen 2 n2304-kmax4096|52163880|52179046|15166
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 3.74s (3.71s CPU time)
+
+Ran 2 test suites in 3.74s (3.92s CPU time): 4 tests passed, 0 failed, 0 skipped (4 total tests)
+rc=0

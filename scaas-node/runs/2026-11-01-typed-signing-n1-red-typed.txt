@@ -1,0 +1,111 @@
+   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/scaas-node)
+warning: unused variable: `row`
+   --> src/typed.rs:613:17
+    |
+613 | pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&Value>, fee_recipient: Option<Address>) -> Result<A...
+    |                 ^^^ help: if this is intentional, prefix it with an underscore: `_row`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `envelope`
+   --> src/typed.rs:613:28
+    |
+613 | pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&Value>, fee_recipient: Option<Address>) -> Result<A...
+    |                            ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_envelope`
+
+warning: unused variable: `args`
+   --> src/typed.rs:613:54
+    |
+613 | pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&Value>, fee_recipient: Option<Address>) -> Result<A...
+    |                                                      ^^^^ help: if this is intentional, prefix it with an underscore: `_args`
+
+warning: unused variable: `sig`
+   --> src/typed.rs:613:68
+    |
+613 | ...ption<&Value>, args: &Value, sig: Option<&Value>, fee_recipient: Option<Address>) -> Result<Assembled> {
+    |                                 ^^^ help: if this is intentional, prefix it with an underscore: `_sig`
+
+warning: unused variable: `fee_recipient`
+   --> src/typed.rs:613:89
+    |
+613 | ...g: Option<&Value>, fee_recipient: Option<Address>) -> Result<Assembled> {
+    |                       ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_fee_recipient`
+
+warning: `scaas-node` (lib test) generated 5 warnings (run `cargo fix --lib -p scaas-node --tests` to apply 5 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 38.64s
+     Running unittests src/lib.rs (scaas-node/target/debug/deps/scaas_node-7ea8f2ba056438ed)
+
+running 9 tests
+test typed::tests::call_op_round_trips_a_plain_entry ... FAILED
+test typed::tests::relay_fee_call_object ... FAILED
+test typed::tests::hex_fields_are_refused_by_name_and_a_declared_bytes_field_is_not ... FAILED
+test typed::tests::typed_ops_kat_every_entry ... FAILED
+test typed::tests::mandate_ops_run_on_their_own_lane_at_nonce_zero ... FAILED
+test typed::tests::an_op_is_exact ... FAILED
+test typed::tests::digest_and_calldata_cannot_diverge ... FAILED
+test typed::tests::the_signer_is_found_where_the_row_keeps_it ... FAILED
+test typed::tests::unbound_fields_stay_out_of_the_digest_and_off_the_wire ... FAILED
+
+failures:
+
+---- typed::tests::call_op_round_trips_a_plain_entry stdout ----
+
+thread 'typed::tests::call_op_round_trips_a_plain_entry' (1596258) panicked at src/typed.rs:1259:60:
+settle_calldata: RED: not built yet
+
+---- typed::tests::relay_fee_call_object stdout ----
+
+thread 'typed::tests::relay_fee_call_object' (1596262) panicked at src/typed.rs:1195:67:
+called `Result::unwrap()` on an `Err` value: RED: not built yet
+
+---- typed::tests::hex_fields_are_refused_by_name_and_a_declared_bytes_field_is_not stdout ----
+
+thread 'typed::tests::hex_fields_are_refused_by_name_and_a_declared_bytes_field_is_not' (1596260) panicked at src/typed.rs:1099:31:
+called `Result::unwrap()` on an `Err` value: RED: not built yet
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- typed::tests::typed_ops_kat_every_entry stdout ----
+
+thread 'typed::tests::typed_ops_kat_every_entry' (1596264) panicked at src/typed.rs:1006:98:
+AddKey on account: RED: not built yet
+
+---- typed::tests::mandate_ops_run_on_their_own_lane_at_nonce_zero stdout ----
+
+thread 'typed::tests::mandate_ops_run_on_their_own_lane_at_nonce_zero' (1596261) panicked at src/typed.rs:1169:9:
+the vector's lane 7
+
+---- typed::tests::an_op_is_exact stdout ----
+
+thread 'typed::tests::an_op_is_exact' (1596257) panicked at src/typed.rs:1125:9:
+mtxUnwrapLeg's field
+
+---- typed::tests::digest_and_calldata_cannot_diverge stdout ----
+
+thread 'typed::tests::digest_and_calldata_cannot_diverge' (1596259) panicked at src/typed.rs:1061:67:
+AddKey: RED: not built yet
+
+---- typed::tests::the_signer_is_found_where_the_row_keeps_it stdout ----
+
+thread 'typed::tests::the_signer_is_found_where_the_row_keeps_it' (1596263) panicked at src/typed.rs:1245:60:
+Unwrap: RED: not built yet
+
+---- typed::tests::unbound_fields_stay_out_of_the_digest_and_off_the_wire stdout ----
+
+thread 'typed::tests::unbound_fields_stay_out_of_the_digest_and_off_the_wire' (1596265) panicked at src/typed.rs:1147:44:
+called `Result::unwrap()` on an `Err` value: RED: not built yet
+
+
+failures:
+    typed::tests::an_op_is_exact
+    typed::tests::call_op_round_trips_a_plain_entry
+    typed::tests::digest_and_calldata_cannot_diverge
+    typed::tests::hex_fields_are_refused_by_name_and_a_declared_bytes_field_is_not
+    typed::tests::mandate_ops_run_on_their_own_lane_at_nonce_zero
+    typed::tests::relay_fee_call_object
+    typed::tests::the_signer_is_found_where_the_row_keeps_it
+    typed::tests::typed_ops_kat_every_entry
+    typed::tests::unbound_fields_stay_out_of_the_digest_and_off_the_wire
+
+test result: FAILED. 0 passed; 9 failed; 0 ignored; 0 measured; 474 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `--lib`

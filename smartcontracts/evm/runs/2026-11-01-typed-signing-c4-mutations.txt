@@ -1,0 +1,27 @@
+# mutations at commit 38544bcf plus the C4 tree: each reverted after its run; every one caught
+== M1 AUTH typehash, salt uint256: rc=1 8 lines
+test_pqzAuthDigestVectors()
+test_pqzAuthTypehashPinned()
+test_pqzAuthWalletDigest()
+test_typedOpsVectors_PqzAuth()
+== M2 bodyHash over the whole statement: rc=1 4 lines
+test_pqzAuthDigestVectors()
+test_pqzAuthWalletDigest()
+== M3 op 1 statement swaps v_t and v_f: rc=1 4 lines
+test_pqzExplicitStatementBytes_single()
+test_pqzExplicitStatementBytes_singleCompact()
+== M4 PqzLeg hash swaps v and vAuditor: rc=1
+test_pqzNamedTransfer()
+test_pqzNamedTransferCompact()
+test_pqzNamedTransferCompactUA()
+test_pqzNamedTransferUA()
+test_typedOpsVectors_PqzTransfer()
+test_typedOpsVectors_UAPqzTransfer()
+== M5 op 7 blob swaps v and v_a: rc=1
+test_pqzStoredCiphertextUnchanged()
+== M6 memo stored without its salt: rc=1
+test_pqzStoredCiphertextUnchanged()
+== M7 uaUnshield on the address typehash: rc=1
+test_pqzNamedUnshieldUA()
+test_typedOpsVectors_UAPqzUnshield()
+rc=0

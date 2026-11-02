@@ -4,14 +4,17 @@ pragma solidity ^0.8.24;
 import {NormalToken} from "../metatx/NormalToken.sol";
 import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
 import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
+import {UAMetaTxBase} from "../metatx/UAMetaTxBase.sol";
 import {MetaTxBase} from "../metatx/MetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {AdminLib} from "../metatx/AdminLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {PqzLayer} from "./PqzLayer.sol";
 import {PqzCore} from "./PqzCore.sol";
 import {PqzStateLib} from "./PqzStateLib.sol";
+import {IPqzToken} from "./IPqzToken.sol";
 
 /// @title Kind `NORMAL_PQZ` (CTR-TOK-21, CTR-PQZ-22): the standalone token with the PQZ layer (P6g plan D1).
 /// @notice **UNAUDITED.** Any chain whose `PQZ` precompile passes the self-test (`PqzSafety`); never on Hedera.
@@ -51,7 +54,7 @@ contract NormalPqzToken is NormalToken, PqzLayer {
     }
 
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory m)
-        internal view override(ERC20MetaTx, PqzLayer) returns (bytes32)
+        internal view override(UAMetaTxBase, PqzLayer) returns (bytes32)
     {
         return PqzLayer._uaEnvelopeBinding(m);
     }
@@ -71,14 +74,14 @@ contract NormalPqzToken is NormalToken, PqzLayer {
         a = new uint8[](10);
         (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
-        (s[2], c[2]) = (this.mtxShield.selector, FEE_CLASS_ABSOLUTE);
-        (s[3], c[3]) = (this.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
-        (s[4], c[4]) = (this.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[5], c[5]) = (this.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
-        (s[6], c[6]) = (this.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
-        (s[7], c[7]) = (this.mtxConfidentialTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[8], c[8]) = (this.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
-        (s[9], c[9]) = (this.mtxPrepareAcc.selector, FEE_CLASS_ABSOLUTE);
+        (s[2], c[2]) = (IConfidentialToken.mtxShield.selector, FEE_CLASS_ABSOLUTE);
+        (s[3], c[3]) = (IPqzToken.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
+        (s[4], c[4]) = (IPqzToken.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
+        (s[5], c[5]) = (IPqzToken.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
+        (s[6], c[6]) = (IPqzToken.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
+        (s[7], c[7]) = (IPqzToken.mtxConfidentialTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
+        (s[8], c[8]) = (IConfidentialToken.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
+        (s[9], c[9]) = (IPqzToken.mtxPrepareAcc.selector, FEE_CLASS_ABSOLUTE);
     }
 
     function _mtxRule(bytes4 sel) internal view override(NormalToken, MetaTxBase) returns (MtxRule memory) {
@@ -87,7 +90,7 @@ contract NormalPqzToken is NormalToken, PqzLayer {
     }
 
     /// @notice `burn` and the PQZ ops (CTR-PQZ-15: the PQ-complete path).
-    function _uaAllowed(bytes4 sel) internal view override(NormalToken, ERC20MetaTx) returns (bool) {
+    function _uaAllowed(bytes4 sel) internal view override(NormalToken, UAMetaTxBase) returns (bool) {
         return _isPqzOp(sel) || NormalToken._uaAllowed(sel);
     }
 }

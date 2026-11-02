@@ -431,7 +431,7 @@ locally before sending.** Default validity windows: transfers, pay and unwrap â‰
 envelopes (Aptos, Solana OCMS, GRAM cell, Hedera ED25519) the review also shows "your wallet will display:
 `scaas.metaop.v1:0xABCDâ€¦1234`" and "approve SCaaS messages only on `<origin>`"; when a family moves to the readable message
 ([NET-ALL-23](../networks/README.md#NET-ALL-23)), the review shows that text. Why: extension wallets show hex for most
-families; the app's review is the only real check. Cost: non-curated tokens take an explicit-add step. A portable UA record
+families; the app's review is the only real check. Cost: non-curated tokens take an explicit-add step. A named EVM operation ([CLI-SGN-42](signers-clientkeys.md#CLI-SGN-42)) is reviewed from its typed struct, field by field (recipient, amount, minimum out, the envelope's lane, deadline, relayer and fee), after `checkOp`; a confidential op shows the real recipient and legs and the hashed `proof`, the encrypted amount being absent by construction; a wrap order, a nested cancel and a `RelayFee` show the nested order or the target and call hash, never a bare digest (typed-signing C1, C6; SPECIFIED for the app, built in clientkeys). A portable UA record
 ([CLI-SGN-41](signers-clientkeys.md#CLI-SGN-41)) is reviewed from its typed data: the review renders the record's fields and the kind's name from the
 kind table or `kindName` ([CTR-UA-35](../contracts/accounts.md#CTR-UA-35)), the signed `uint16` beside it, never a hash alone (owner 2026-10-31; SPECIFIED, built with the app round).
 

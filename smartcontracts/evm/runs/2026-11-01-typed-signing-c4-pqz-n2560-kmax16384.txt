@@ -1,0 +1,639 @@
+# pqz-n2560-kmax16384 at commit 682f7a9f
+== at-set.sh: n2560-kmax16384 (n2560-kmax16384), forge test --match-path test/pqz/*
+Compiling 208 files with Solc 0.8.37
+Solc 0.8.37 finished in 67.64s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> legacy/zether-msm/ZetherVerifierPerEquation.sol:89:28:
+   |
+89 |     error PrecompileFailed(uint256 at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> legacy/zether-msm/ZetherVerifierPerEquation.sol:268:13:
+    |
+268 |             uint256 at = 4 + 2 * n + 2 * j;
+    |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> legacy/zether-msm/ZetherVerifierPerEquation.sol:372:9:
+    |
+372 |         uint256 at = HEADER + 6 * p;
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/factory/OpenFactory.sol:284:26:
+    |
+284 |         private returns (address at, Release memory r)
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/zether/ZetherVerifier.sol:87:28:
+   |
+87 |     error PrecompileFailed(uint256 at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:233:9:
+    |
+233 |         uint256 at;     // the slot of this proof's `A`
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/account/SmartKeyAccount.sol:310:9:
+    |
+310 |         uint256 at;
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/zether/helpers/ZetherFixture.sol:419:37:
+    |
+419 |     function _zWord(bytes memory b, uint256 at) internal pure returns (bytes32 w) {
+    |                                     ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/zether/helpers/ZetherFixture.sol:423:38:
+    |
+423 |     function _zPoint(bytes memory b, uint256 at) internal pure returns (IZetherToken.G1 memory) {
+    |                                      ^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> src/ua/UAKinds.sol:267:56:
+    |
+267 |     function kemRecordHash(bytes32 ua, uint64 version, bytes memory kemPk) internal pure returns (bytes32) {
+    |                                                        ^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> src/ua/UAKinds.sol:281:5:
+    |
+281 |     function kemPk(IUARegistry.KemKey memory k) internal pure returns (bytes memory) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> src/ua/UAKinds.sol:352:58:
+    |
+352 |     function kemRecordDigest(bytes32 ua, uint64 version, bytes memory kemPk) internal pure returns (bytes32) {
+    |                                                          ^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> src/ua/UAKinds.sol:281:5:
+    |
+281 |     function kemPk(IUARegistry.KemKey memory k) internal pure returns (bytes memory) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:43:14:
+   |
+43 |             (bool ok, uint256 hx, uint256 hy) = _hint(keyData, h, l, i);
+   |              ^^^^^^^
+Note: The shadowed declaration is here:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:51:10:
+   |
+51 |         (bool ok, uint256 qy) = Bip340.liftX(qx);
+   |          ^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:143:38:
+    |
+143 |     function _newToken(bool auditor, bytes32 salt) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:65:5:
+   |
+65 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:147:38:
+    |
+147 |     function _newToken(bool auditor, bytes32 salt, uint256 maxShielded) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:65:5:
+   |
+65 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> test/zether/ZetherTyped.t.sol:89:47:
+   |
+89 |     function single(ZetherLib.Ctx calldata c, ZetherLib.Acct calldata a, IZetherToken.ZetherSingle calldata t)
+   |                                               ^^^^^^^^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/metatx/NamedEntry.t.sol:38:1:
+   |
+38 | function a(address v) pure returns (string memory) {
+   | ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> test/zether/ZetherTyped.t.sol:95:46:
+   |
+95 |     function multi(ZetherLib.Ctx calldata c, ZetherLib.Acct calldata a, IZetherToken.ZetherMulti calldata t, ZetherTypes.TransferMode m)
+   |                                              ^^^^^^^^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/metatx/NamedEntry.t.sol:38:1:
+   |
+38 | function a(address v) pure returns (string memory) {
+   | ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/ZetherTyped.t.sol:101:45:
+    |
+101 |     function burn(ZetherLib.Ctx calldata c, ZetherLib.Acct calldata a, IZetherToken.ZetherBurn calldata b, uint256 amount, bytes32 recipient)
+    |                                             ^^^^^^^^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/metatx/NamedEntry.t.sol:38:1:
+   |
+38 | function a(address v) pure returns (string memory) {
+   | ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/pqzh/Pqzh.sol:249:64:
+    |
+249 |     function pw(uint256[64] memory t, uint256 bits, uint256 n, uint256 off) internal pure returns (uint256 r) {
+    |                                                                ^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/pqzh/Pqzh.sol:162:5:
+    |
+162 |     function off(bytes calldata x) internal pure returns (uint256 o) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Secp256k1Verifier.sol:14:5:
+   |
+14 |     function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) public view returns (bool) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:82:5:
+   |
+82 |     function _coef(bytes32 l, bytes calldata pk) private view returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> script/DeployBase.sol:322:5:
+    |
+322 |     function _zetherLibs(bool underlying) internal view returns (address[] memory l) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> test/helpers/Catalogue.sol:49:1:
+   |
+49 | function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory l) {
+   | ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/wallet/MandateWallet.t.sol:643:5:
+    |
+643 |     function _edOwnerCall(bytes memory data, uint256 nonce) internal returns (MetaTxLib.MetaTransaction memory m) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/pqz/PqzShared.t.sol:134:5:
+    |
+134 |     function test_allowlists_normalKind() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:561:5:
+    |
+561 |     function _w(bytes calldata s, uint256 i) private view returns (uint256 v) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:568:5:
+    |
+568 |     function _seed(Ctx memory c, bytes calldata stmt) private view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:573:5:
+    |
+573 |     function _observe(Ctx memory c, uint256 ptr, uint256 len) private view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:584:5:
+    |
+584 |     function _sample(Ctx memory c) private view returns (uint256 r) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:653:5:
+    |
+653 |     function _cd(uint256 p) private view returns (uint256 v) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:661:5:
+    |
+661 |     function _alphaPowers(Ctx memory c) private view returns (uint256[] memory packed) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:700:5:
+    |
+700 |     function _combine(uint256[] memory packed, uint256 ptr, uint256 w, uint256 E) private view returns (uint256 o, uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:772:5:
+    |
+772 |     function _rows(Ctx memory c, Tree memory tr, uint256 p, uint256 ti) private view returns (uint256 rowsBytes, uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:787:5:
+    |
+787 |     function _deep(Ctx memory c, uint256 x) private view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:846:5:
+    |
+846 |     function _gather(uint256[] memory ev, uint256 k, uint256 pos, uint256 folded, uint256 p, uint256 E)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:862:5:
+    |
+862 |     function _leaf(uint256[] memory ev, uint256 k, uint256 E) private view returns (bytes32 h) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/ua/UARegistryBase.sol:276:5:
+    |
+276 |     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Ran 3 tests for test/pqz/PqzRelay.t.sol:PqzRelayTest
+[PASS] test_percentAndBatchRefused() (gas: 762554)
+[PASS] test_v1BindingAndFee() (gas: 34478853)
+[PASS] test_v3FeeUA() (gas: 43589157)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 194.54ms (23.78ms CPU time)
+
+Ran 2 tests for test/pqz/PqzPool.t.sol:PqzPoolWrappedTest
+[PASS] test_relayedUnwrapBound() (gas: 29752751)
+[PASS] test_wrapShieldMintsToPool_unwrapBurnsFromPool() (gas: 30449455)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 267.26ms (13.92ms CPU time)
+
+Ran 5 tests for test/pqz/PqzShared.t.sol:PqzSharedTest
+[PASS] test_allowlists_normalKind() (gas: 24535)
+[PASS] test_relayedPrepareAndRollOver() (gas: 95225008)
+[PASS] test_unshieldRecipient_refused() (gas: 6818803)
+[PASS] test_unshieldToDerivedUA() (gas: 30533382)
+[PASS] test_unshieldUnwrap_toUA() (gas: 143354793)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 191.80ms (37.06ms CPU time)
+
+Ran 13 tests for test/pqz/PqzGuards.t.sol:PqzGuardsTest
+[PASS] test_C0_13_emptySinglePartsAreBadPayload() (gas: 29513)
+[PASS] test_beneficiary_anyRegisteredUA() (gas: 193750728)
+[PASS] test_init_pqzhRefusedWithoutValueSets() (gas: 816568311)
+[PASS] test_init_zeroAuditorRefused() (gas: 335461)
+[PASS] test_interface_declaresTheViews() (gas: 182363237)
+[PASS] test_pqzhValue_flagMatchesTheSet() (gas: 303)
+[SKIP] test_pqzhValue_msigHolderRefused() (gas: 0)
+[SKIP] test_pqzhValue_singleKeyHolders() (gas: 0)
+[PASS] test_relay_shieldInAboveTheCapIsStillAmountOutOfRange() (gas: 3323255)
+[PASS] test_relay_shieldInPulledBeforeTheLibrary() (gas: 3304804)
+[PASS] test_valueIn_keyOfAnotherLengthRefused() (gas: 621757)
+[PASS] test_verdict_failedCallRevertsNotRejects() (gas: 3311602)
+[PASS] test_verifyTransferAmount_failedCallRevertsShapeErrorsAreFalse() (gas: 182602308)
+Suite result: ok. 11 passed; 0 failed; 2 skipped; finished in 486.01ms (284.61ms CPU time)
+
+Ran 8 tests for test/pqz/PqzTyped.t.sol:PqzExplicitStatementTest
+[PASS] test_pqzExplicitStatementBytes_burn() (gas: 4082454)
+[PASS] test_pqzExplicitStatementBytes_compact() (gas: 8673940)
+[PASS] test_pqzExplicitStatementBytes_op7() (gas: 413328207)
+[PASS] test_pqzExplicitStatementBytes_single() (gas: 12476703)
+[PASS] test_pqzExplicitStatementBytes_singleCompact() (gas: 6800007)
+[PASS] test_pqzExplicitStatementBytes_transfer() (gas: 3451614)
+[PASS] test_pqzExplicitStatementBytes_unshieldUnwrap() (gas: 5356150)
+[PASS] test_pqzStoredCiphertextUnchanged() (gas: 289082111)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 589.16ms (314.51ms CPU time)
+
+Ran 18 tests for test/pqz/PqzTyped.t.sol:PqzNamedTest
+[PASS] test_pqzNamedEntryNotAllowlisted() (gas: 7131211)
+[PASS] test_pqzNamedPrepareAcc() (gas: 28101777)
+[PASS] test_pqzNamedPrepareAccUA() (gas: 28104452)
+[PASS] test_pqzNamedRollOver() (gas: 62615640)
+[PASS] test_pqzNamedRollOverUA() (gas: 62618345)
+[PASS] test_pqzNamedTransfer() (gas: 34608514)
+[PASS] test_pqzNamedTransferCompact() (gas: 35381243)
+[PASS] test_pqzNamedTransferCompactUA() (gas: 35390632)
+[PASS] test_pqzNamedTransferSingle() (gas: 33941041)
+[PASS] test_pqzNamedTransferSingleCompact() (gas: 34266657)
+[PASS] test_pqzNamedTransferSingleCompactUA() (gas: 34297369)
+[PASS] test_pqzNamedTransferSingleUA() (gas: 33971773)
+[PASS] test_pqzNamedTransferUA() (gas: 34618010)
+[PASS] test_pqzNamedUnshield() (gas: 28927681)
+[PASS] test_pqzNamedUnshieldUA() (gas: 28938882)
+[PASS] test_pqzNamedUnshieldUnwrap() (gas: 30201938)
+[PASS] test_pqzNamedUnshieldUnwrapUA() (gas: 30213052)
+[PASS] test_pqzNamedWrapShield() (gas: 1423180)
+Suite result: ok. 18 passed; 0 failed; 0 skipped; finished in 307.53ms (121.22ms CPU time)
+
+Ran 10 tests for test/pqz/PqzCt.t.sol:PqzCtTest
+[PASS] test_canonical() (gas: 12701837)
+[PASS] test_ids() (gas: 11818)
+[PASS] test_pack_layout() (gas: 4412830)
+[PASS] test_pack_roundTrip(uint256) (runs: 256, μ: 1504869, ~: 1504869)
+[PASS] test_pack_roundTripEdges() (gas: 1545118)
+[PASS] test_pack_sizesAndHeadroom() (gas: 3520)
+[PASS] test_safetyNoChainLock() (gas: 106604)
+[PASS] test_selfTest() (gas: 11019)
+[PASS] test_sumsAreExact() (gas: 25975440)
+[PASS] test_trivialAgainstVectors() (gas: 18494621)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 1.82s (1.93s CPU time)
+
+Ran 3 tests for test/pqz/PqzUA8.t.sol:PqzUA8Test
+[PASS] test_ua8_pqzTokenAcceptsAfterStorePqzPop() (gas: 224778855)
+[PASS] test_ua8_pqzTokenRefusesUnproven() (gas: 227391210)
+[PASS] test_ua8_pqzTokenSetPqzKeyThenProve() (gas: 345442591)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 532.82ms (367.71ms CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 4 tests for test/pqz/PqzWrapped.t.sol:PqzWrappedTest
+[PASS] test_largestImplementationFitsOneOsakaTx() (gas: 99828588)
+[PASS] test_publicWrapThenShield() (gas: 28458691)
+[PASS] test_reentryIntoTheRestatedAdminEntriesRefused() (gas: 8723129)
+[PASS] test_wrapShieldAndUnshieldUnwrap() (gas: 33680337)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 172.90ms (24.25ms CPU time)
+
+Ran 1 test for test/pqz/PqzPool.t.sol:PqzPoolInvariantTest
+[PASS] invariant_shieldPool() (runs: 16, calls: 384, reverts: 0)
+
+╭----------------+----------------+-------+---------+----------╮
+| Contract       | Selector       | Calls | Reverts | Discards |
++==============================================================+
+| PqzPoolHandler | multi          | 60    | 0       | 0        |
+|----------------+----------------+-------+---------+----------|
+| PqzPoolHandler | shield         | 55    | 0       | 0        |
+|----------------+----------------+-------+---------+----------|
+| PqzPoolHandler | transfer       | 51    | 0       | 0        |
+|----------------+----------------+-------+---------+----------|
+| PqzPoolHandler | unshield       | 55    | 0       | 0        |
+|----------------+----------------+-------+---------+----------|
+| PqzPoolHandler | unshieldUnwrap | 63    | 0       | 0        |
+|----------------+----------------+-------+---------+----------|
+| PqzPoolHandler | wrapPublic     | 46    | 0       | 0        |
+|----------------+----------------+-------+---------+----------|
+| PqzPoolHandler | wrapShield     | 54    | 0       | 0        |
+╰----------------+----------------+-------+---------+----------╯
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 3.05s (2.71s CPU time)
+
+Ran 20 tests for test/pqz/PqzState.t.sol:PqzStateTest
+[PASS] test_capClampCapReachedAndRefresh() (gas: 105582637)
+[PASS] test_creditsBeyondTheOldCapAccepted() (gas: 209004316)
+[PASS] test_hint_staleFreshAndAfterDebit() (gas: 596027814)
+[PASS] test_opBlobIsTheBundle() (gas: 186104222)
+[PASS] test_prepareAcc() (gas: 66796693)
+[PASS] test_restoreFromState() (gas: 561065697)
+[PASS] test_rollFlood_killsAnInFlightDebit_pendingRange() (gas: 271920358)
+[PASS] test_rollRace_rolloverPastP() (gas: 907202330)
+[PASS] test_rollRace_rolloverUpToP() (gas: 463918624)
+[PASS] test_rollRace_unrollThenRollover() (gas: 923646132)
+[PASS] test_rollTooYoungAndYoungInline() (gas: 102981648)
+[PASS] test_rolloverPastTheQueueReverts() (gas: 63658474)
+[PASS] test_shieldIn() (gas: 40344217)
+[PASS] test_trivial_bothSidesOfPAndUnits() (gas: 266771792)
+[PASS] test_trivial_mergeAndAppend() (gas: 183256215)
+[PASS] test_trivial_noMergeIntoASpentTail() (gas: 29432182)
+[PASS] test_trivial_sameBlockResidual() (gas: 36061504)
+[PASS] test_trivial_thirdPartyShieldBetweenProveAndSubmit() (gas: 32032294)
+[PASS] test_unrollAtTheInlineEdgeAfterRollMax() (gas: 391924573)
+[PASS] test_zeroURefused() (gas: 319617643)
+Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 2.87s (2.63s CPU time)
+
+Ran 16 tests for test/pqz/PqzMulti.t.sol:PqzMultiTest
+[PASS] test_auditorAsParty_refused() (gas: 66837991)
+[PASS] test_bundleShape_unique() (gas: 1554869)
+[PASS] test_decoyFee_bounds() (gas: 36162673)
+[PASS] test_decoyFee_perLegUniform() (gas: 71285255)
+[PASS] test_minDecoyFee_initBounds() (gas: 275610)
+[PASS] test_multi_M1_bundleIsTheSingleBundle() (gas: 187283528)
+[PASS] test_multi_M8_twoGroups() (gas: 1020435780)
+[PASS] test_multi_allowlisted() (gas: 31495)
+[PASS] test_multi_checks() (gas: 41558629)
+[PASS] test_multi_disclosureByLeg() (gas: 1900902781)
+[PASS] test_multi_disclosureKindWord_vectors() (gas: 2450013094)
+[PASS] test_multi_emptyPartsAreBadPayload() (gas: 602641)
+[PASS] test_multi_modes() (gas: 43039276)
+[PASS] test_multi_partLengths() (gas: 7677897)
+[PASS] test_multi_pqzh() (gas: 210)
+[PASS] test_multi_statementAndEffects() (gas: 637875812)
+Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 4.67s (4.50s CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 2 tests for test/pqz/PqzStateGas.t.sol:PqzStateTrivialRollGasTest
+[PASS] test_gas_rollMax_afterTrivialRoll() (gas: 13125914)
+[PASS] test_trivialRoll_noZeroSlot() (gas: 2253893)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 571.63ms (63.36ms CPU time)
+
+Ran 5 tests for test/pqz/PqzTyped.t.sol:PqzAuthDigestTest
+[PASS] test_pqzAuthDigestIsNotTheOldDigest() (gas: 3142186)
+[PASS] test_pqzAuthDigestVectors() (gas: 5247253788)
+[PASS] test_pqzAuthTypehashPinned() (gas: 7089972)
+[PASS] test_pqzAuthWalletDigest() (gas: 57154900)
+[PASS] test_typedOpsVectors_PqzAuth() (gas: 9179432)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 1.92s (2.04s CPU time)
+
+Ran 21 tests for test/pqz/PqzNormal.t.sol:PqzNormalTest
+[PASS] test_auditorModes() (gas: 56772316)
+[PASS] test_burnStatementLayout() (gas: 32059767)
+[PASS] test_compactAndNoneRetired() (gas: 79977126)
+[PASS] test_constructorChecksTheEnv() (gas: 38167901)
+[PASS] test_createToken_anyChainId_selfTestDecides() (gas: 4261531)
+[PASS] test_directModeBound_single() (gas: 33617909)
+[PASS] test_disclosure() (gas: 229563796)
+[PASS] test_factoryGate() (gas: 4114434)
+[PASS] test_initPinsThePrecompile() (gas: 261216000)
+[PASS] test_inlineAboveRolled() (gas: 588050378)
+[PASS] test_inlineBelowRolled() (gas: 592860210)
+[PASS] test_inlineTooFar() (gas: 1998557691)
+[PASS] test_keylessUAIsNoPqzAccount() (gas: 194485974)
+[PASS] test_lifecycle() (gas: 503482732)
+[PASS] test_newVerifierNewEnvNewRelease() (gas: 433091069)
+[PASS] test_rollover() (gas: 2136087335)
+[PASS] test_shieldChecks() (gas: 1041425)
+[PASS] test_shield_delegatedCallerRefused() (gas: 397495)
+[PASS] test_transferChecks() (gas: 234211112)
+[PASS] test_transferStatementMatchesVector() (gas: 353648558)
+[PASS] test_transfer_delegatedSubmitterOnlyRefusedOnAPull() (gas: 30841497)
+Suite result: ok. 21 passed; 0 failed; 0 skipped; finished in 4.80s (3.71s CPU time)
+
+Ran 7 tests for test/pqz/UAPqzVerifier.t.sol:UAPqzVerifierTest
+[PASS] test_anyChainId() (gas: 656039944)
+[PASS] test_constructorPins() (gas: 348379763)
+[PASS] test_constructorProbes() (gas: 351716523)
+[PASS] test_noPqzhRefused() (gas: 192)
+[PASS] test_registerPqzKey() (gas: 396836215)
+[PASS] test_registerRefused() (gas: 402655398)
+[PASS] test_verifyInputAndVerdict() (gas: 910424926)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 5.41s (739.15ms CPU time)
+
+Ran 6 tests for test/pqz/PqzPool.t.sol:PqzPoolTest
+[PASS] test_events() (gas: 301267136)
+[PASS] test_pool_neitherPayeeNorSpender() (gas: 5467901)
+[PASS] test_relayedModeBound() (gas: 32936511)
+[PASS] test_shield_toPoolAndFree() (gas: 1236363)
+[PASS] test_txFee_toBeneficiaryPublicBalance() (gas: 236223592)
+[PASS] test_views() (gas: 194626514)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 11.25s (285.07ms CPU time)
+
+Ran 1 test for test/pqz/PqzState.t.sol:PqzStateInvariantTest
+[PASS] invariant_everyEntryInExactlyOnePlace() (runs: 16, calls: 512, reverts: 0)
+
+╭-----------------+----------+-------+---------+----------╮
+| Contract        | Selector | Calls | Reverts | Discards |
++=========================================================+
+| PqzStateHandler | advance  | 110   | 0       | 0        |
+|-----------------+----------+-------+---------+----------|
+| PqzStateHandler | credit   | 95    | 0       | 0        |
+|-----------------+----------+-------+---------+----------|
+| PqzStateHandler | debit    | 110   | 0       | 0        |
+|-----------------+----------+-------+---------+----------|
+| PqzStateHandler | roll     | 93    | 0       | 0        |
+|-----------------+----------+-------+---------+----------|
+| PqzStateHandler | shield   | 104   | 0       | 0        |
+╰-----------------+----------+-------+---------+----------╯
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 13.03s (12.70s CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 39 tests for test/pqz/MtxSplitOverhead.t.sol:MtxSplitOverheadTest
+[PASS] test_gasTable_holderRows() (gas: 1873015715)
+[PASS] test_gasTable_pqzh() (gas: 6354184154)
+[PASS] test_gasTable_pqzh_ua() (gas: 6408614102)
+[PASS] test_gasTable_pqzl() (gas: 1801892693)
+[PASS] test_gasTable_pqzl_ua() (gas: 1826671113)
+[PASS] test_gas_burn() (gas: 27086828)
+[PASS] test_gas_op1_bundle_16inline() (gas: 30613482)
+[PASS] test_gas_op1_bundle_freshRef() (gas: 27702579)
+[PASS] test_gas_op1_bundle_materialised_hint() (gas: 118013061)
+[PASS] test_gas_op1_bundle_materialised_noHint() (gas: 28464988)
+[PASS] test_gas_op1_compact() (gas: 27917328)
+[PASS] test_gas_op1_relayedFullTx_freshRef() (gas: 48803108)
+[PASS] test_gas_op1_relayedFullTx_materialisedNoHint() (gas: 50017153)
+[PASS] test_gas_op1_shieldIn() (gas: 27606164)
+[PASS] test_gas_op7_M4() (gas: 29494657)
+[PASS] test_gas_op7_M8() (gas: 58209408)
+[PASS] test_gas_op7_M8_relayedFullTx() (gas: 81531977)
+[PASS] test_gas_op7_M8_txTotal() (gas: 80602870)
+[PASS] test_gas_op7_relayedFullTx_M1() (gas: 46642269)
+[PASS] test_gas_op7_relayedFullTx_M2() (gas: 47638846)
+[PASS] test_gas_op7_relayedFullTx_M4() (gas: 50317523)
+[PASS] test_gas_prepareAcc_half0() (gas: 28011960)
+[PASS] test_gas_prepareAcc_half0_relayed() (gas: 28179508)
+[PASS] test_gas_prepareAcc_half0_relayedFullTx() (gas: 57895969)
+[PASS] test_gas_prepareAcc_half1() (gas: 28011990)
+[PASS] test_gas_prepareAcc_half1_relayed() (gas: 28179625)
+[PASS] test_gas_prepareAcc_half1_relayedFullTx() (gas: 57895966)
+[PASS] test_gas_refresh() (gas: 26988804)
+[PASS] test_gas_roll128() (gas: 9227743)
+[PASS] test_gas_rollMax() (gas: 22240872)
+[PASS] test_gas_rollMax_relayed() (gas: 11896414)
+[PASS] test_gas_rollMax_relayedFullTx() (gas: 45899374)
+[PASS] test_gas_roll_1() (gas: 6879258)
+[PASS] test_gas_roll_16() (gas: 8031072)
+[PASS] test_gas_shield_append() (gas: 336161)
+[PASS] test_gas_shield_firstEntry() (gas: 431270)
+[PASS] test_gas_shield_merge() (gas: 135038)
+[SKIP] test_pqzhN2048FitsBothPaths() (gas: 0)
+[SKIP] test_splitOverhead_dataSizeBound() (gas: 0)
+Suite result: ok. 37 passed; 0 failed; 2 skipped; finished in 14.41s (29.10s CPU time)
+
+Ran 13 tests for test/pqz/PqzTyped.t.sol:PqzTypedRowsTest
+[PASS] test_typedOpsVectors_PqzTransfer() (gas: 2014792199)
+[PASS] test_typedOpsVectors_PqzTransferSingle() (gas: 2013505603)
+[PASS] test_typedOpsVectors_PqzUnshield() (gas: 1010476851)
+[PASS] test_typedOpsVectors_PqzUnshieldUnwrap() (gas: 788969196)
+[PASS] test_typedOpsVectors_PrepareAcc() (gas: 435755328)
+[PASS] test_typedOpsVectors_RollOver() (gas: 435751294)
+[PASS] test_typedOpsVectors_UAPqzTransfer() (gas: 2159250241)
+[PASS] test_typedOpsVectors_UAPqzTransferSingle() (gas: 2157929010)
+[PASS] test_typedOpsVectors_UAPqzUnshield() (gas: 1060811452)
+[PASS] test_typedOpsVectors_UAPqzUnshieldUnwrap() (gas: 834729084)
+[PASS] test_typedOpsVectors_UAPrepareAcc() (gas: 463556091)
+[PASS] test_typedOpsVectors_UARollOver() (gas: 463551831)
+[PASS] test_typedOpsVectors_WrapShield() (gas: 260327393)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 13.10s (9.10s CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 38 tests for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[PASS] test_gasTable_holderRows() (gas: 1873015628)
+[PASS] test_gasTable_pqzh() (gas: 6354184154)
+[PASS] test_gasTable_pqzh_ua() (gas: 6408614102)
+[PASS] test_gasTable_pqzl() (gas: 1801892693)
+[PASS] test_gasTable_pqzl_ua() (gas: 1826671135)
+[PASS] test_gas_burn() (gas: 27086828)
+[PASS] test_gas_op1_bundle_16inline() (gas: 30613394)
+[PASS] test_gas_op1_bundle_freshRef() (gas: 27702579)
+[PASS] test_gas_op1_bundle_materialised_hint() (gas: 118013061)
+[PASS] test_gas_op1_bundle_materialised_noHint() (gas: 28464988)
+[PASS] test_gas_op1_compact() (gas: 27917350)
+[PASS] test_gas_op1_relayedFullTx_freshRef() (gas: 48803108)
+[PASS] test_gas_op1_relayedFullTx_materialisedNoHint() (gas: 50017065)
+[PASS] test_gas_op1_shieldIn() (gas: 27606164)
+[PASS] test_gas_op7_M4() (gas: 29494657)
+[PASS] test_gas_op7_M8() (gas: 58209430)
+[PASS] test_gas_op7_M8_relayedFullTx() (gas: 81531977)
+[PASS] test_gas_op7_M8_txTotal() (gas: 80602892)
+[PASS] test_gas_op7_relayedFullTx_M1() (gas: 46642246)
+[PASS] test_gas_op7_relayedFullTx_M2() (gas: 47638846)
+[PASS] test_gas_op7_relayedFullTx_M4() (gas: 50317545)
+[PASS] test_gas_prepareAcc_half0() (gas: 28011960)
+[PASS] test_gas_prepareAcc_half0_relayed() (gas: 28179552)
+[PASS] test_gas_prepareAcc_half0_relayedFullTx() (gas: 57895991)
+[PASS] test_gas_prepareAcc_half1() (gas: 28012012)
+[PASS] test_gas_prepareAcc_half1_relayed() (gas: 28179537)
+[PASS] test_gas_prepareAcc_half1_relayedFullTx() (gas: 57895966)
+[PASS] test_gas_refresh() (gas: 26988826)
+[PASS] test_gas_roll128() (gas: 9227743)
+[PASS] test_gas_rollMax() (gas: 22240872)
+[PASS] test_gas_rollMax_relayed() (gas: 11896436)
+[PASS] test_gas_rollMax_relayedFullTx() (gas: 45899418)
+[PASS] test_gas_roll_1() (gas: 6879280)
+[PASS] test_gas_roll_16() (gas: 8031027)
+[PASS] test_gas_shield_append() (gas: 336161)
+[PASS] test_gas_shield_firstEntry() (gas: 431314)
+[PASS] test_gas_shield_merge() (gas: 135060)
+[SKIP] test_pqzhN2048FitsBothPaths() (gas: 0)
+Suite result: ok. 37 passed; 0 failed; 1 skipped; finished in 13.98s (30.05s CPU time)
+
+Ran 21 test suites in 14.47s (93.63s CPU time): 230 tests passed, 0 failed, 5 skipped (235 total tests)
+rc=0

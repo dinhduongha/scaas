@@ -660,7 +660,7 @@ Why it matters:
 
 The signed structures on EVM ([docs/contracts/metatx.md](docs/contracts/metatx.md)): `MetaTransaction` for every
 contract and, on tokens only, the typed `MetaTransfer` ([CTR-MTX-23](docs/contracts/metatx.md#CTR-MTX-23)). Both share
-the lanes, so one signature spends one lane slot whichever struct carries it.
+the lanes, so one signature spends one lane slot whichever struct carries it. Beside them every operation has a **named entry point with its own typed struct and explicit parameters** (`mtxUnwrap`, `mtxCancelOrder`, `mtxConfidentialTransfer*`, …; [CTR-MTX-28](docs/contracts/metatx.md#CTR-MTX-28), [CTR-MTX-29](docs/contracts/metatx.md#CTR-MTX-29)): the wallet shows the operation's own fields. The generic `mtxExecute` / `mtxBatch` / `uaExecute` / `uaBatch` stay for a mixed batch or an operation with no named entry, and the node's job API takes the named entries as explicit JSON ([job-api.md](docs/node/job-api.md#named-entries)).
 
 | Field | Purpose |
 |---|---|
@@ -1126,3 +1126,7 @@ its whole group, and a general-purpose service open to all (running a blockchain
 excluded because one of its users is; that user stays excluded. Everyone else needs a Vegan Enterprise License (contact ha@dad.vn); the
 license has the exact terms. Contributions are accepted under the CLA in [CONTRIBUTING.md](CONTRIBUTING.md).
 Third-party components keep their own licenses.
+
+**No patents.** The authors have filed no patent application on this work and will not file one. It is published as prior
+art, so that it stays free for everyone to use and nobody can patent it. This covers the authors' own rights only:
+third-party patents have not been cleared (see [G-LIC](docs/contracts/pq-zero-knowledge.md)).

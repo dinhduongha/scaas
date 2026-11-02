@@ -139,6 +139,8 @@ abstract contract UARegistryBase is Test {
     address internal constant REG_A = 0x5Ca0000000000000000000000000000000000001;
     bytes32 internal constant DIGEST = keccak256("scaas.ua.test.digest");
 
+    /// What `_deploy` deploys; `test/ua/UARegistrySplit.t.sol` points it at the pre-split source for one run of a scenario.
+    string internal registryArtifact = "UARegistry.sol:UARegistry";
     bytes32 internal chainUidA;
     MockVerifier internal mock;
     UARegistry internal reg;
@@ -152,6 +154,8 @@ abstract contract UARegistryBase is Test {
     }
 
     function setUp() public virtual {
+        // `UA_REGISTRY_ARTIFACT=UARegistryPreSplit.sol:UARegistryPreSplit` runs a suite's `_deploy`s on the pre-split source
+        registryArtifact = vm.envOr("UA_REGISTRY_ARTIFACT", registryArtifact);
         chainUidA = vm.parseJsonBytes32(_structures(), ".contexts.A.chainUid");
         string memory j = _kindsJson();
         for (uint256 i; i < 8; ++i) {
@@ -207,7 +211,7 @@ abstract contract UARegistryBase is Test {
         bool msig,
         UARegistry.KindConfig[] memory cfgs
     ) internal returns (UARegistry) {
-        deployCodeTo("UARegistry.sol:UARegistry", abi.encode(uid, pred, hedera, budget, ska, msig, cfgs), where);
+        deployCodeTo(registryArtifact, abi.encode(uid, pred, hedera, budget, ska, msig, cfgs), where);
         return UARegistry(where);
     }
 
@@ -342,5 +346,31 @@ abstract contract UARegistryBase is Test {
 
     function _msigAuth(bytes memory d, IUARegistry.MemberSig[] memory sigs) internal pure returns (bytes memory) {
         return abi.encode(d, abi.encode(sigs));
+    }
+
+    // ----- acceptance (CTR-UA-37) -----
+
+    /// Every slot of `d` accepted with `sig`, for members that answer anything (accept-all and burn-all verifiers and wallets).
+    function _acceptWith(UARegistry r, bytes memory d, bytes memory sig) internal {
+        uint256 count = uint16(bytes2(abi.encodePacked(d[2], d[3])));
+        bytes32 ua = UAKinds.uaOf(UAKinds.MSIG, d);
+        for (uint256 i; i < count; ++i) r.acceptMembership(ua, IUARegistry.MemberSig(uint16(i), "", sig));
+    }
+
+    /// What a derived member signs under `member` to accept its slot.
+    function _membershipMd(bytes32 ua, bytes32 member) internal pure returns (bytes32) {
+        return _memberDigest(ua, UAKinds.PURPOSE_MEMBERSHIP, UAKinds.membershipDigest(ua, member));
+    }
+
+    /// The acceptance of the EOA of `pk` in the structure `d`.
+    function _acceptEoaSig(bytes memory d, uint256 pk) internal pure returns (IUARegistry.MemberSig memory) {
+        (bytes32 ua, bytes32 id) = (UAKinds.uaOf(UAKinds.MSIG, d), _pad(vm.addr(pk)));
+        return IUARegistry.MemberSig(_indexOf(d, id), "", _ecdsa(pk, UAKinds.membershipDigest(ua, id)));
+    }
+
+    /// The acceptance of the registered `key` of `kind` in the structure `d` (the stand-in verifier's signature).
+    function _acceptKeySig(bytes memory d, uint16 kind, bytes memory key) internal pure returns (IUARegistry.MemberSig memory) {
+        (bytes32 ua, bytes32 id) = (UAKinds.uaOf(UAKinds.MSIG, d), UAKinds.uaOf(kind, key));
+        return IUARegistry.MemberSig(_indexOf(d, id), "", _sig(key, UAKinds.uaMessage(kind, UAKinds.PURPOSE_MEMBER, _membershipMd(ua, id))));
     }
 }

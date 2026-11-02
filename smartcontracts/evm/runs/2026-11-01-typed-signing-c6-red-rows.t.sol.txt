@@ -1,0 +1,34 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+pragma solidity ^0.8.24;
+
+import {UALedgerBase} from "../ua/UALedgerBase.sol";
+import {TYPED_OPS, domainField, msgField} from "./NamedEntry.t.sol";
+import {tryRowAs} from "./TypedOps.t.sol";
+
+/// RED harness of typed-signing C6, kept in runs/: each C6 row's own calldata on a token, re-signed under its domain.
+contract C6RowsRedTest is UALedgerBase {
+    string internal j;
+
+    function setUp() public override {
+        super.setUp();
+        j = vm.readFile(TYPED_OPS);
+        tok.mint(vm.parseJsonAddress(j, ".key.address"), 1e12);
+    }
+
+    function _go(string memory op) internal {
+        (bool ok, bytes memory ret) = tryRowAs(j, op, "token", address(tok), address(tok), RELAYER, vm.parseJsonBytes(j, domainField(op, "token", "calldata")));
+        assertTrue(ok, vm.toString(ret));
+    }
+
+    function test_red_ReceiverFee() public { _go("ReceiverFee"); }
+    function test_red_UAReceiverFee() public { _go("UAReceiverFee"); }
+    function test_red_RelayFee() public { _go("RelayFee"); }
+    function test_red_UARelayFee() public { _go("UARelayFee"); }
+    function test_red_CancelOrder() public { _go("CancelOrder"); }
+    function test_red_CancelUAOrder() public { _go("CancelUAOrder"); }
+    function test_red_CancelWrapOrder() public { _go("CancelWrapOrder"); }
+    function test_red_CancelUAWrapOrder() public { _go("CancelUAWrapOrder"); }
+    function test_red_WrapOrder() public { _go("WrapOrder"); }
+    function test_red_UAWrapOrder() public { _go("UAWrapOrder"); }
+    function test_red_UACancelNonce() public { _go("UACancelNonce"); }
+}

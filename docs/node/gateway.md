@@ -2,7 +2,7 @@
 
 The gateway is the node's public intake: anyone — a wallet, the console app, a partner, an agent — may post a signed
 meta-transaction, a signed family op, a UA meta-transaction or a DEX order. It is served on `[modules] gateway_bind`
-(default `127.0.0.1:8547`, normally behind a reverse proxy). Status: `/v1/metatx` (EVM) and `/v1/dex/*` **BUILT**;
+(default `127.0.0.1:8547`, normally behind a reverse proxy). Status: `/v1/metatx`, `/v1/op` (EVM) and `/v1/dex/*` **BUILT**;
 durable door-A jobs, `/v1/gateway`, `/v1/ops`, UA routes, CORS and the error contract **SPECIFIED**.
 
 **Contents**
@@ -83,7 +83,8 @@ A duplicate returns `200` with the stored state (idempotent).
 | Route | Body / answer | Accept checks, in order |
 |---|---|---|
 | `GET /v1/gateway` | above | — |
-| `POST /v1/metatx {chain, token, struct?, m, signature}` (`struct` = `call` \| `transfer`, default `transfer`; [CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)) | `202 {"status":"queued"}` today; the target adds `"intent_id"` (+ `exclusive` when published on the mesh) | token registered and active (`TOKEN_NOT_SERVED`); strict parse; normalization ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) before simulation; the lanes' guard: chain binding, `data` shape and selector ([NODE-JOB-20](job-api.md#NODE-JOB-20)), refused ⇒ `400`; simulation, then `mtxDigest` / `mtxTransferDigest`; [door A rules](#door-a-intake). On Hedera chains (295–298) `sig_bytes` may be **64** bytes (HIP-632 ED25519); 65–2048 bytes elsewhere |
+| `POST /v1/op {chain, op}` (EVM, typed-signing N1) | `202 {"status":"queued"}` | `op` = one `mtx*` [named entry](job-api.md#named-entries) on a **registered token**: an entry reaches this route only if the old door allowed it (`token not served` otherwise, zero simulations: the factory, the registry, a DEX, a wallet, a relay fee are jobs of a namespace with the grant, never door A; a `ua*` entry is `FEATURE_UNSUPPORTED`, the old door had no UA path, it is a `ua_metatx` job); parse; expiry (`expired`); the guard with its signature pre-check; the simulation; the typed digest as the in-flight key, computed locally |
+| `POST /v1/metatx {chain, token, contract?, m, signature}` (a `MetaTransfer`; `contract` = its token kind, default `token`; `struct = call` is refused `HEX_DATA_REFUSED`; [CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)) | `202 {"status":"queued"}` today; the target adds `"intent_id"` (+ `exclusive` when published on the mesh) | token registered and active (`TOKEN_NOT_SERVED`); strict parse; normalization ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) before simulation; expiry; the guard (chain binding, the node's named-entry table per contract kind and its signature pre-check, [NODE-JOB-20](job-api.md#NODE-JOB-20)), refused ⇒ `400`; simulation; then the typed digest, computed locally (no `mtxDigest` / `mtxTransferDigest` read); [door A rules](#door-a-intake). `sig_bytes` is 65–2048 bytes (the gateway serves no Hedera chain, 295–298, so no 64-byte HIP-632 signature arrives here) |
 | `POST /v1/ops {chain, op}` | `op` = the job API `signed_op` payload; `202 {"status": "queued", "intent_id": "<digest hex>"}` | below |
 | `POST /v1/ua-metatx {chain, token, struct?, m: WireUAMetaTransaction \| WireUAMetaTransfer, auth}` | `ua_metatx` job | token `features ∋ ua` (v3: `registry() ≠ 0`); `from >> 160 ≠ 0` ⇒ registry record ([UA record cache](#ua-cache), `UA_NOT_REGISTERED`); cheap kinds verified locally ([NODE-GSP-15](gossip.md#NODE-GSP-15)); node computes `uaDigest` |
 | `POST /v1/ua/register {chain, entry, …args}` (the [CTR-UA-36](../contracts/accounts.md#CTR-UA-36) arguments as named fields, the shape of clientkeys `registrationArgs`: `{chain, entry, kind?, keyData? \| structure? \| key?, attrs: {pqzKey?: 0x…, pqzPopHash?: 0x…, kem?: {scheme: n, mlkemEk: 0x…, x25519: 0x…}, kemPkHash?: 0x…}, pop, pqzPop?: 0x…}`; the PQZ and KEM attributes only for a PQ holder, [CTR-UA-16](../contracts/accounts.md#CTR-UA-16), [CTR-UA-32](../contracts/accounts.md#CTR-UA-32); `pqzPop` may be omitted and given later by a `storePqzPop` call job) | `call` job to `chain.ua_registry` ([NODE-GW-03](#NODE-GW-03)) with the entry's selector; a PQ registration whose full-call estimate exceeds min(block gas limit, relayer cap) is relayed split: `register` without the proof, then `storePqzPop` | id recomputed, `>> 160 ≠ 0`; not registered (`UA_ALREADY_REGISTERED`, `UA_KEY_IN_USE`); the node recomputes `h = keccak256(GROUP(pqz-mlwe) ‖ pqzKey)` and the KEM record hash and verifies the PoP of cheap kinds over the portable `registrationDigest` ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07): no `chain_uid` in it); it never verifies `R_REG` locally (simulation does); body limit 160 KiB; per-chain registration quota |
@@ -147,22 +148,22 @@ from the store: before that, the built gateway's in-memory `mpsc` feeds only the
 door A work is not journaled and has no digest guard until it becomes a `~gateway` job).
 
 <a id="ua-register"></a><a id="NODE-GW-03"></a>**NODE-GW-03** — **Gateway `call` jobs exist only for the UA
-registry's eight writes.** Gateway `call` jobs in `~gateway` go only to the chain's `ua_registry` (node config `[[chains]] ua_registry`), for the eight
+registry's nine writes.** `POST /v1/op` is no such door: it takes a registered token's signed `mtx*` entries only (typed-signing N1). Gateway `call` jobs in `~gateway` go only to the chain's `ua_registry` (node config `[[chains]] ua_registry`), for the eight
 writes of [CTR-UA-36](../contracts/accounts.md#CTR-UA-36): `register` (`0x4e229efb`), `registerMsig` (`0x82b86a46`), `registerWebAuthn` (`0xee03a1fe`), `registerMuSig2` (`0xe1eddcdf`),
-`registerFrost` (`0x7bd63410`), `setKemKey` (`0xa00cce2a`), `storePqzPop` (`0x7fac161a`) and `setPqzKey` (`0x3c6897f1`) — all relayable by anyone, gasless, no fee
-([CTR-UA-31](../contracts/accounts.md#CTR-UA-31)); `POST /v1/ua/register` builds the entry's calldata from the checked body. A relayed PQ registration whose `eth_estimateGas`
+`registerFrost` (`0x7bd63410`), `setKemKey` (`0xa00cce2a`), `storePqzPop` (`0x7fac161a`), `setPqzKey` (`0x3c6897f1`) and `acceptMembership` (`0x73fd7d54`, [CTR-UA-37](../contracts/accounts.md#CTR-UA-37)) — all relayable by anyone, gasless, no fee
+([CTR-UA-31](../contracts/accounts.md#CTR-UA-31)); `POST /v1/ua/register` builds the entry's calldata from the checked body, as the plain rows of [the table](job-api.md#named-entries) do. A relayed PQ registration whose `eth_estimateGas`
 of the full call exceeds min(block gas limit, relayer per-transaction cap) is split: `register` without `pqzPop`, then
 `storePqzPop` (the SCaaS testnet: 200 M block, relayer cap `max_gas_per_tx` 64 M, so every PQ registration with its
-proof, 84.7–108.9 M, is relayed split there). Owner 2026-10-30, ruling R-node: the node relays all eight writes (call
+proof, 84.7–108.9 M, is relayed split there). Owner 2026-10-30, ruling R-node: the node relays all nine writes (call
 table rows, guard rule `Rule::UaRegistry`; a relayed `register` / `registerMsig` with its proof over the cap is refused `UA_REGISTER_SPLIT: <why>;
-send register without pqzPop, then storePqzPop`) and the sponsor policy below covers all eight; the call-table rows and the refusal
+send register without pqzPop, then storePqzPop`) and the sponsor policy below covers all nine; the call-table rows and the refusal
 are built (`ua8` `64c233d4`, the typed rows in `typed-signing` Part R); **this route and the sponsor policy are not built** (no gateway route, no sponsor-policy code;
-`TODO.md`), so relaying goes through job-API `call` jobs today. It is a gateway
+`TODO.md`), so relaying goes through job-API `call` jobs today (`op` with the entry and named `args`). It is a gateway
 capability, not an `allow_call` grant ("gateway capability, not a namespace grant") ([NODE-JOB-09](job-api.md#NODE-JOB-09) is unchanged for namespaces);
 `job_live_call` dedupes retries; every registration lives in `~gateway`, so the per-namespace index
 ([NODE-JOB-13](job-api.md#NODE-JOB-13)) dedupes them node-wide. Sponsored registration spam is bounded by the per-chain
 registration quota and the sponsor budget; the one `~gateway` `call` sponsor policy shape allowed is `contract =
-chain.ua_registry` (node config `[[chains]] ua_registry`), `selector` ∈ the eight above, `max_tx_per_payer_hour = 0`
+chain.ua_registry` (node config `[[chains]] ua_registry`), `selector` ∈ the nine above, `max_tx_per_payer_hour = 0`
 ([sponsorship.md#admin](sponsorship.md#admin)). The universal-account migration uses this route
 ([contracts/accounts.md#migration](../contracts/accounts.md#migration)).
 
@@ -209,9 +210,11 @@ block 0 is the `chain_uid`); every contract a meta-transaction, order entry or `
 
 <a id="eip-7702"></a>An EIP-7702 delegated `from` (code `0xef0100 ‖ address`) is an EOA: only its own key's ECDSA
 counts, never ERC-1271 through its delegate ([CTR-UA-24](../contracts/accounts.md#CTR-UA-24), owner ruling D1,
-2026-10-30). The node does not read a `from`'s code at accept. In code today:
-- `POST /v1/metatx` runs no local signature check: it simulates the call, and the contracts refuse a designator's
-  signature that does not recover (`MetaTxBadSignature` ⇒ `400 simulation: …`); a recovering one passes as for any EOA.
+2026-10-30). In code today:
+- `POST /v1/metatx` and `POST /v1/op` run the guard's local pre-check over the typed digest (every lane runs it too): a 65-byte
+  signature that recovers to `from` passes without a chain read; one that does not reads `from`'s code: none ⇒ `BAD_SIGNATURE`, nothing
+  simulated; code, a designator's included, goes on to the simulation, where the contracts refuse a designator's signature that does not
+  recover (`MetaTxBadSignature` ⇒ `400 simulation: …`). Any other length is the contract's (a Hedera account signature is 64 bytes).
 - The mesh check (`check_evm`) is synchronous and has no chain access: `sig_kind = "eoa"` ⇒ a local low-s `ecrecover ==
   from` (`BAD_SIGNATURE` otherwise), `"erc1271"` ⇒ no local check, left to simulation, which refuses a designator `from`.
 - The `~gateway` sponsor-policy door's local `BAD_SIGNATURE` check ([sponsorship.md#evaluation](sponsorship.md#evaluation))

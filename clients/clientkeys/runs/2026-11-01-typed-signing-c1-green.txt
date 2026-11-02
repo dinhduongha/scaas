@@ -1,0 +1,10 @@
+﹣ bundles load and work (0.199746ms) # no vendored bundle next to this checkout
+ℹ tests 192
+ℹ suites 0
+ℹ pass 190
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 0
+ℹ duration_ms 37203.660291
+typed_ops.json: 74 structs, 130 digests and 129 calldatas equal to cast's

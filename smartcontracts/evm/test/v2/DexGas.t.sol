@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Vm} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {DexLegs} from "../helpers/DexLegs.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {UADexBase} from "../ua/UADex.t.sol";
@@ -45,7 +46,7 @@ contract DexGasTest is UADexBase {
     function _hybridPlan(uint256 n) internal view returns (ISCaaSDex.HybridPlan memory p) {
         p.ref = "gas";
         p.taker = _natLeg(address(A), _order(alice, address(B), 1000, 1800, 1), 1000);
-        p.makers = new ISCaaSDex.Leg[](n);
+        p.makers = new ISCaaSDex.DexLeg[](n);
         for (uint256 i; i < n; ++i) {
             p.makers[i] = _natLeg(address(B), _order(bob, address(A), 2000, 1000, i + 1), 800 / n);
         }
@@ -74,7 +75,7 @@ contract DexGasTest is UADexBase {
         ITradeToken.TradeOrder memory o = _order(alice, address(B), 1000, 1800, nonce);
         p.ref = ref;
         p.legs = new ISCaaSDex.ExchangeLeg[](1);
-        p.legs[0] = ISCaaSDex.ExchangeLeg(address(A), 0, abi.encode(o), _natLeg(address(A), o, 1000).sig, 1000, 1800);
+        p.legs[0] = DexLegs.xLeg(address(A), o, _natLeg(address(A), o, 1000).sig, 1000, 1800);
     }
 
     /// Bound 1.5 x 0.60 M (one taker, one maker, one hop).
@@ -113,8 +114,8 @@ contract DexGasTest is UADexBase {
 
     /// Bound 1.5 x 354,530 (CTR-DEX-26, measured): alice sells 500 A for >= 1000 B, bob sells 1000 B for >= 500 A.
     function test_GAS_settle_1x1_unchanged() public {
-        ISCaaSDex.Leg memory t = _natLeg(address(A), _order(alice, address(B), 500, 1000, 1), 500);
-        ISCaaSDex.Leg memory m = _natLeg(address(B), _order(bob, address(A), 1000, 500, 1), 1000);
+        ISCaaSDex.DexLeg memory t = _natLeg(address(A), _order(alice, address(B), 500, 1000, 1), 500);
+        ISCaaSDex.DexLeg memory m = _natLeg(address(B), _order(bob, address(A), 1000, 500, 1), 1000);
         ISCaaSDex.Settlement[] memory ss = _s(t, m);
         vm.prank(RELAYER);
         dex.mtxSettle(ss);

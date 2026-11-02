@@ -1,0 +1,66 @@
+# deploy at commit db79e158
+# at db79e158, profile scaas-testnet
+# broadcast rc=0 (200 M)
+| # | tx | to | input B | anvil gasUsed (no 8037) | sim total (tx.gas/1.05) | tx.gas x1.05 |
+|---|---|---|---|---|---|---|
+| 0 | AdminLib | 0x5c13b2040a31c056fa3a8fc1fd4206242c883368 | 3,357 | 762,382 | 5,601,882 | 5,881,976 |
+| 1 | HederaLib | 0xf72aa12b710a84da86233caaac8b494073135b11 | 852 | 219,892 | 1,572,464 | 1,651,087 |
+| 2 | ZetherLib | 0x7c1af88200a6ad3803bd240eee3d8d28a69f526b | 19,645 | 4,291,593 | 34,276,123 | 35,989,929 |
+| 3 | WrappedLib | 0xc410ce94e361c36bc7d05462dc399ebe0f98ee96 | 15,769 | 3,451,675 | 26,001,436 | 27,301,508 |
+| 4 | ZetherWrappedLib | 0x179ac150038ea362b4ba3c4a691b94d8e531edec | 5,043 | 1,127,717 | 8,865,434 | 9,308,706 |
+| 5 | TradeLib | 0x8a429f80245e561c4b5ab44e9f06d4ac416c9327 | 5,134 | 1,147,365 | 9,023,717 | 9,474,903 |
+| 6 | UARegistryLib | 0x60766f9f8e65f5a145c60d025b7212f5a690026f | 31,400 | 6,838,801 | 54,732,628 | 57,469,259 |
+| 7 | PqzViewLib | 0xb3388a869cc43cf671364650d6486d1d3d3502e3 | 17,576 | 3,842,775 | 28,970,853 | 30,419,396 |
+| 8 | PqzTransferLib | 0xba75419f430ceb5a1bf44b781787196904fb97ec | 17,589 | 3,845,516 | 28,992,136 | 30,441,743 |
+| 9 | PqzStateLib | 0x37ce55685d374af3d4b1bfba0ae61d42f89e11e8 | 8,403 | 1,855,233 | 13,894,666 | 14,589,399 |
+| 10 | PqzWrappedLib | 0xb88edad208f0035da79d098430b1d9d8946e1e0e | 4,945 | 1,106,521 | 8,694,936 | 9,129,683 |
+| 11 | MtxPipelineLib | 0xb83360b64b5619438f60cf4058a9d7596daf4fb4 | 11,462 | 2,518,364 | 18,922,604 | 19,868,734 |
+| 12 | PqzBurnLib | 0x4bc84c2f791c47f271558876535165ebcee7f980 | 9,995 | 2,200,084 | 16,511,084 | 17,336,638 |
+| 13 | SmartKeyAccountFactory | 0x52cc52627fdbee6ee73807d34d47f3b44bcb1351 | 23,190 | 4,948,482 | 39,349,117 | 41,316,573 |
+| 14 | OpenFactory | 0xf9e9ac5ec90704721474a4aed0ac15b69ed52d97 | 16,174 | 3,468,721 | 27,599,636 | 28,979,618 |
+| 15 | WebAuthnP256Verifier | 0x1e70f0abc6c209d05ed2746c1613947c91e11628 | 6,141 | 1,308,039 | 10,174,188 | 10,682,897 |
+| 16 | P256Verifier | 0x94e9eba0b09fc5d7bd2f19babcdbc67b423d62e6 | 3,666 | 771,828 | 5,541,249 | 5,818,311 |
+| 17 | Ed25519Verifier | 0xe8ef243fe4605ce9ce9cf9ba7d7e8a5e30b14245 | 17,603 | 3,852,838 | 29,053,629 | 30,506,310 |
+| 18 | Bip340Verifier | 0x514adaef3397997208d8fc95031c83725ec71e52 | 1,534 | 372,702 | 2,800,883 | 2,940,927 |
+| 19 | Secp256k1Verifier | 0xad62c7780eba1115f835f768d05ab3fcf611f3eb | 948 | 245,994 | 1,682,438 | 1,766,560 |
+| 20 | SchnorrBn254Verifier | 0xe673e6223c4d8fcaedb7c33201b9fc0d170ef4ae | 3,611 | 817,485 | 6,020,827 | 6,321,868 |
+| 21 | SchnorrBls12381Verifier | 0xc20f91e72b616117d872e8ac35cb906b5b61ace2 | 3,611 | 817,485 | 6,020,827 | 6,321,868 |
+| 22 | BlsMinSigBls12381Verifier | 0x97ddc02eabed2fbc195fae920070f568b8b0142e | 4,864 | 1,087,876 | 8,077,597 | 8,481,477 |
+| 23 | BlsMinSigBn254Verifier | 0xf4b07d8a7ce100dcc2627e7209844eb67b517507 | 2,955 | 675,034 | 5,231,557 | 5,493,135 |
+| 24 | Musig2Secp256k1Verifier | 0xba72cc8eff832cca6acdd78eb28016da687754ab | 3,824 | 868,186 | 6,408,238 | 6,728,650 |
+| 25 | UAFrostSecp256k1Verifier | 0xc3936ed893a63dd267881e0ccc487bfc5f199ff5 | 4,633 | 1,044,103 | 8,193,735 | 8,603,422 |
+| 26 | Musig2Bn254Verifier | 0x0189c7620768df871ee472b849fc215c743dfc20 | 5,369 | 1,198,324 | 9,434,215 | 9,905,926 |
+| 27 | FrostBn254Verifier | 0x013b588e61992078a878488eca722a69f141055f | 4,655 | 1,049,105 | 7,774,937 | 8,163,684 |
+| 28 | ZetherSchnorrBls12381Verifier | 0x30797220c956e170468ce937e5769c3c71e22ec9 | 3,621 | 819,551 | 6,392,280 | 6,711,894 |
+| 29 | UAMldsaVerifier | 0x0cd8084ca16b2da155c01d2ef0ead5ba17661fbc | 13,025 | 2,505,540 | 18,706,875 | 19,642,219 |
+| 30 | UAMldsaVerifier | 0x0f89bca833649cbc78b40ef49d8e783ef837b7dc | 13,025 | 2,505,603 | 18,706,943 | 19,642,290 |
+| 31 | UAFndsaVerifier | 0xd8f932580ec7ea9eee10418eab65ed2ff21a5424 | 5,848 | 1,304,015 | 10,304,336 | 10,819,553 |
+| 32 | UASlhdsaVerifier | 0x4deee31a221696bb7613a55745600762df1aea57 | 2,324 | 544,147 | 4,175,957 | 4,384,755 |
+| 33 | UARegistry | 0xf47589d8273c72e6d06131a1ef303954a630e670 | 36,987 | 6,311,076 | 46,450,307 | 48,772,822 |
+| 34 | MtxRelayFee | 0xc9dd52caa6d4081cb1254e6591e2080af93225f2 | 3,848 | 875,330 | 6,421,472 | 6,742,546 |
+| 35 | OpenFactory.publishEnv | 0xf9e9ac5ec90704721474a4aed0ac15b69ed52d97 | 709 | 396,381 | 2,022,526 | 2,123,652 |
+| 36 | OpenFactory.deployImplementation | 0xf9e9ac5ec90704721474a4aed0ac15b69ed52d97 | 39,717 | 8,356,481 | 65,785,392 | 69,074,662 |
+| 37 | OpenFactory.publishDexEnv | 0xf9e9ac5ec90704721474a4aed0ac15b69ed52d97 | 485 | 237,731 | 1,151,562 | 1,209,140 |
+| 38 | OpenFactory.deployDexImplementation | 0xf9e9ac5ec90704721474a4aed0ac15b69ed52d97 | 29,829 | 6,300,039 | 46,841,472 | 49,183,546 |
+| 39 | ZetherStatements | 0x4bae5614f9622b0e51d63bd3544555f7b833e295 | 9,207 | 2,035,043 | 16,153,355 | 16,961,023 |
+| 40 | ZetherDisclosure | 0x6611c919c09b25766b12777595a8615a94e289c8 | 5,168 | 1,160,024 | 8,617,824 | 9,048,715 |
+| 41 | ZetherInnerProductVerifierBls12381 | 0xd729cc34e488e87a1d8873fcad68292455815aa9 | 12,584 | 12,570,319 | 50,409,755 | 52,930,243 |
+| 42 | ZetherTransferVerifierBls12381 | 0xa069664be149608fbdfe80d9ec1152c75ff847ad | 13,697 | 2,880,999 | 21,580,951 | 22,659,999 |
+| 43 | ZetherBurnVerifierBls12381 | 0x8c16ce02446514a2d701c916ae960f89816c6b0b | 6,649 | 1,353,868 | 9,998,681 | 10,498,615 |
+| 44 | OpenFactory.publishEnv | 0xf9e9ac5ec90704721474a4aed0ac15b69ed52d97 | 901 | 553,714 | 2,892,008 | 3,036,608 |
+| 45 | OpenFactory.publishEnv | 0xf9e9ac5ec90704721474a4aed0ac15b69ed52d97 | 1,029 | 645,898 | 3,391,354 | 3,560,922 |
+| 46 | OpenFactory.deployImplementation | 0xf9e9ac5ec90704721474a4aed0ac15b69ed52d97 | 56,549 | 11,789,138 | 92,863,982 | 97,507,181 |
+| 47 | OpenFactory.deployImplementation | 0xf9e9ac5ec90704721474a4aed0ac15b69ed52d97 | 65,989 | 13,861,870 | 109,305,334 | 114,770,601 |
+| 48 | OpenFactory.setKindEnabled | 0xf9e9ac5ec90704721474a4aed0ac15b69ed52d97 | 69 | 28,704 | 31,772 | 33,361 |
+| 49 | OpenFactory.setKindEnabled | 0xf9e9ac5ec90704721474a4aed0ac15b69ed52d97 | 69 | 28,704 | 31,772 | 33,361 |
+| 50 | OpenFactory.publishEnv | 0xf9e9ac5ec90704721474a4aed0ac15b69ed52d97 | 1,125 | 715,693 | 3,557,348 | 3,735,215 |
+| 51 | OpenFactory.deployImplementation | 0xf9e9ac5ec90704721474a4aed0ac15b69ed52d97 | 66,309 | 14,126,563 | 105,286,785 | 110,551,124 |
+# Deploy.s.sol block limit 100,000,000 DEPLOY_ZETHER=False: rc=0: 
+# Deploy.s.sol block limit 100,000,000 DEPLOY_ZETHER=True: rc=1: block gas limit 100000000 < 111895786 needed to deploy the WrappedZetherToken
+# Deploy.s.sol block limit 80,000,000 DEPLOY_ZETHER=False: rc=0: 
+# Deploy.s.sol block limit 80,000,000 DEPLOY_ZETHER=True: rc=1: block gas limit 80000000 < 97470946 needed to deploy the NormalZetherToken
+# Deploy.s.sol block limit 65,000,000 DEPLOY_ZETHER=False: rc=1: block gas limit 65000000 < 73736056 needed to deploy the NormalToken
+# Deploy.s.sol block limit 65,000,000 DEPLOY_ZETHER=True: rc=1: block gas limit 65000000 < 73736056 needed to deploy the NormalToken
+# Deploy.s.sol block limit 60,000,000 DEPLOY_ZETHER=False: rc=1: block gas limit 60000000 < 64689166 needed to deploy the UARegistryLib
+# Deploy.s.sol block limit 60,000,000 DEPLOY_ZETHER=True: rc=1: block gas limit 60000000 < 64689166 needed to deploy the UARegistryLib
+rc=0

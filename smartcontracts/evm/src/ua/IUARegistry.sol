@@ -130,6 +130,9 @@ interface IUARegistry is IERC5267 {
     event UAKemKeySet(bytes32 indexed ua, uint64 indexed version, bytes32 keyHash, KemKey kem, bytes sig);
     /// One part of an ML-DSA id's expanded key stored (P6c), at `ptr` (SSTORE2).
     event UAKeyCached(bytes32 indexed ua, uint16 indexed kind, uint256 part, address ptr);
+    /// Slot `index` of the `msig` `ua`, member `member`, accepted by `acceptMembership` (CTR-UA-37). Slots that signed the
+    /// `pop` are accepted at registration, without this event: `UARegistered` and `popOf` carry them.
+    event UAMembershipAccepted(bytes32 indexed ua, uint16 index, bytes32 indexed member);
 
     error UAKindDisabled(uint16 kind); // not enabled in this generation (incl. kinds a predecessor offers)
     error UAKeyData(uint16 kind); // non-canonical, curve, subgroup, identity, ordering, threshold, cap bound
@@ -276,6 +279,14 @@ interface IUARegistry is IERC5267 {
     /// not committed (`UAKemVersion`) → the key: scheme 1 (`UAKemScheme`), 1,601 B assembled (`UAKemKeyLength`) →
     /// signature (`UAUnauthorized`; version 0: a non-empty `sig`) / version 0 the committed hash (`UAKemKeyHash`).
     function setKemKey(bytes32 ua, uint64 version, KemKey calldata kem, UASig calldata sig) external;
+    /// CTR-UA-37. Anyone submits, the member signs: slot `memberSig.index` of the `msig` `ua` accepts its place. `keyData`
+    /// empty (CTR-UA-33). A native member signs the typed `UAMembership{ua, member}` itself (`eth_signTypedData_v4`) or
+    /// answers ERC-1271 over it; a derived member signs `memberDigest(ua, uaMessage(MSIG, PURPOSE_MEMBERSHIP, typed))` under
+    /// `member`. Portable: no chain, no registry, so the same signature accepts on every registry (no nonce needed). A slot
+    /// already accepted is a no-op, no second event. `UAUnauthorized` for an id that is no `msig` on this registry (gen 2: a
+    /// gen-1 record goes to gen 1, UA8-D11, as `setKemKey`), an index past the members or a bad signature. No revoke: an
+    /// acceptance cannot be withdrawn.
+    function acceptMembership(bytes32 ua, MemberSig calldata memberSig) external;
 
     /// `pqzKey`: the SSTORE2 pointer of the UA's PQZ key, proven or not (UA8-D9: a directory), 0 = none (gen 2 forwards
     /// gen-1 records).
@@ -290,6 +301,10 @@ interface IUARegistry is IERC5267 {
         bytes memory pop, bytes memory pqzPop);
     /// The typed structure of an `msig` (TS-D10); empty (threshold 0, no members) for any other id.
     function msigOf(bytes32 ua) external view returns (MsigStructure memory);
+    /// Has member slot `index` of `ua` agreed (CTR-UA-37: it signed the `pop` here, or `acceptMembership`)? False for a slot
+    /// that is only listed in `msigOf`, for any other id and past the members. Only accepted slots count at verify. Gen 2
+    /// forwards gen-1 records.
+    function memberAccepted(bytes32 ua, uint256 index) external view returns (bool);
     /// The typed key of a `webauthn-p256` / MuSig2 / FROST UA (TS-D13); empty for any other id (gen 2 forwards gen-1
     /// records).
     function webAuthnKeyOf(bytes32 ua) external view returns (WebAuthnKey memory);

@@ -5,12 +5,21 @@ import {MetaTokenBase} from "./MetaTokenBase.sol";
 import {AdminLib} from "./AdminLib.sol";
 import {MetaTxBase} from "./MetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
+import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title Kind `NORMAL` (CTR-TOK-21): a standalone token, no underlying.
 /// @notice Flags valid here: `PAYABLE`, `MINTABLE` (role `minter`), `BURNABLE` (holder burn). A supply cap or a mint
 ///         rate limit, if an issuer needs one, lives in its minter contract. Built by `OpenFactory.createToken`
 ///         (CTR-TOK-25): `initialSupply` is minted to `initialHolder`; `legs`, `rate`, `conf` must be empty.
 contract NormalToken is MetaTokenBase {
+    bytes32 internal constant BURN_TYPEHASH = keccak256(
+        "Burn(address from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+    bytes32 internal constant UA_BURN_TYPEHASH = keccak256(
+        "UABurn(bytes32 from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+
     /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env`; this kind takes
     ///      no `implArgs`.
     constructor(uint16, Env memory env, bytes memory) MetaTokenBase(env) {}
@@ -42,6 +51,19 @@ contract NormalToken is MetaTokenBase {
     function burn(uint256 amount) external nonReentrant {
         AdminLib.requireFeature(AdminLib.BURNABLE);
         _burn(_msgSender(), amount);
+    }
+
+    /// @notice The signed `burn(amount)` (TS-D14), `AMOUNT(0)` as on the generic path.
+    function mtxBurn(MetaTxLib.Envelope calldata e, uint256 amount, bytes calldata sig)
+        external nonReentrant returns (bytes memory)
+    {
+        return _named(BURN_TYPEHASH, this.burn.selector, e, abi.encode(amount), sig);
+    }
+
+    function uaBurn(MetaTxLib.UAEnvelope calldata e, uint256 amount, IUARegistry.UASig calldata auth)
+        external nonReentrant returns (bytes memory)
+    {
+        return _namedUA(UA_BURN_TYPEHASH, this.burn.selector, e, abi.encode(amount), auth);
     }
 
     /// @notice The allowlist (CTR-MTX-19): `cancelNonce` (base), `burn(uint256)` `AMOUNT(0)`.

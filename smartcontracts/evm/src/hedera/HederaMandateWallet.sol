@@ -7,10 +7,10 @@ import {SigCheck} from "../common/SigCheck.sol";
 
 /// @title `MandateWallet` on Hedera (NET-HED-03).
 /// @notice A 64-byte signature from an address without code (a native ED25519 account) is checked by HIP-632
-///         `isAuthorizedRaw` over the same `MetaTransaction` digest, on the same lane nonces (CTR-TOK-23's rule for
-///         tokens); every other signature takes the EVM path. So an ED25519 owner signs its owner calls
-///         (`mtxExecuteAsOwnerRaw`, the spec's name for them, or `mtxExecuteAsOwner` / `mtxExecute`), and an owner
-///         call `execute(token, payWithFee…)` is how it pays by hand: `isValidSignature` (ERC-1271, under STATICCALL
+///         `isAuthorizedRaw` over the same digest, a `MetaTransaction` or a named entry's struct, on the same lane nonces
+///         (CTR-TOK-23's rule for tokens); every other signature takes the EVM path. So an ED25519 owner signs its owner
+///         calls (`mtxExecuteAsOwnerRaw`, the spec's name for them, `mtxExecuteAsOwner`, `mtxExecute` or a named typed entry), and
+///         an owner call `execute(token, payWithFee…)` is how it pays by hand: `isValidSignature` (ERC-1271, under STATICCALL
 ///         where HIP-632 halts) stays ECDSA, so a meta-transaction with `from = wallet` works for ECDSA owners only.
 contract HederaMandateWallet is MandateWallet {
     constructor(address owner_, bytes32 chainUid_) MandateWallet(owner_, chainUid_) {}

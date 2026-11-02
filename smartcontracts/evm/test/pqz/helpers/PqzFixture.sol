@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {PqzRegistryBase, PQZ_UID, PQZL_ID} from "./PqzRegistryBase.sol";
 import {PqzCtHarness} from "./PqzCtHarness.sol";
+import {PqzArgs} from "./PqzArgs.sol";
 import {OpenFactory} from "../../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
@@ -24,7 +25,7 @@ import {Catalogue, pqzEnv} from "../../helpers/Catalogue.sol";
 ///         a test changes it; everything else is real. The test is the client: it mirrors each account's `acc` and
 ///         entries (arbitrary canonical bytes; the proofs are mocked; the token reads both from its own state, plan 5h) and the alice / bob / auditor keys of
 ///         `statement_transfer.json`, so a transfer can rebuild the vector's statement body.
-abstract contract PqzFixture is PqzRegistryBase {
+abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     OpenFactory internal factory;
     NormalPqzToken internal normalImpl;
     PqzLayer internal tok;
@@ -142,19 +143,6 @@ abstract contract PqzFixture is PqzRegistryBase {
         return bytes.concat(abi.encode(p, block.number + 100, shieldIn, from, ben, rec.length, decoy), salt, r, out, memo);
     }
 
-    function _outLen(uint256 m, bool withAud) internal pure returns (uint256) {
-        return PqzCt.PK * _groups(m, withAud) + PqzCt.V * (m + 1) + (withAud ? PqzCt.V * m : 0);
-    }
-
-    /// op 7's randomness groups (R0-1): `⌈M / S_AUD⌉` with the auditor copies, `⌈M / 4⌉` without; leg `j` in `_groupOf`.
-    function _groups(uint256 m, bool withAud) internal pure returns (uint256) {
-        return withAud ? (m + PqzSet.S_AUD - 1) / PqzSet.S_AUD : (m + 3) / 4;
-    }
-
-    function _groupOf(uint256 j, bool withAud) internal pure returns (uint256) {
-        return withAud ? j / PqzSet.S_AUD : j / 4;
-    }
-
     /// The op blob's `R` of a single transfer for `out = u ‖ v_t ‖ v_f ‖ [v_a]` (P46: every `u`, `v` packed):
     /// `salt ‖ P(u ‖ v_t) ‖ [P(v_a)] ‖ toUA`; the blob is `R ‖ P(v_f)`.
     function _rOf(bytes memory out, bytes32 to) internal view returns (bytes memory) {
@@ -244,7 +232,7 @@ abstract contract PqzFixture is PqzRegistryBase {
     {
         out = _out(seed, withAud);
         bytes memory pl = _payloadFor(t, from, to, ben, out);
-        ref = t.mtxConfidentialTransferSingle(pl, hex"c0de", _mlAuth(), _benT(pl), "");
+        ref = t.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "");
         _afterDebit(from, _cut(out, 0, PqzCt.PK), _cut(out, PqzCt.CT, PqzCt.V));
         pend[to].push(_cut(out, 0, PqzCt.CT));
         if (ben != 0) feeIn[ben] += t.confidentialFee(); // txFee: the beneficiary's public balance (D19)
@@ -296,20 +284,5 @@ abstract contract PqzFixture is PqzRegistryBase {
 
     function _cut(bytes memory b, uint256 off, uint256 len) internal pure returns (bytes memory) {
         return _slice(b, off, len);
-    }
-
-    /// @dev The shared `beneficiary` argument (plan 5h D20): the payload's beneficiary word, op 7 / burn at 128, op 1 at
-    ///      160; 0 for a payload too short to hold it (the library's `BadPayload` then).
-    function _benM(bytes memory pl) internal pure returns (bytes32) {
-        return _word(pl, 128);
-    }
-
-    function _benT(bytes memory pl) internal pure returns (bytes32) {
-        return _word(pl, 160);
-    }
-
-    function _word(bytes memory pl, uint256 off) internal pure returns (bytes32 w) {
-        if (pl.length < off + 32) return 0;
-        assembly ("memory-safe") { w := mload(add(add(pl, 32), off)) }
     }
 }

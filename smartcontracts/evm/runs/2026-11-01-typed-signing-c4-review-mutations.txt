@@ -1,0 +1,23 @@
+# review-mutations at the C4 review tree: each reverted after its run; every one caught
+== N1 salt dropped from hashTransfer: rc=1, 8 failing
+   test_pqzNamedFeePaid | MetaTxBadSignature()
+   test_pqzNamedFeePaidUA | MetaTxBadSignature()
+   test_pqzNamedTransferSingle | MetaTxBadSignature()
+   test_pqzNamedTransferSingleCompact | MetaTxBadSignature()
+   test_pqzNamedTransferSingleCompactUA | MetaTxBadSignature()
+   test_pqzNamedTransferSingleUA | MetaTxBadSignature()
+   test_typedOpsVectors_PqzTransferSingle | PqzTransferSingle: the op's own check, the signature passed: 0x0bdf5a6b0000000000000000000
+   test_typedOpsVectors_UAPqzTransferSingle | UAPqzTransferSingle: the op's own check, the signature passed: 0x0bdf5a6b00000000000000000
+== N1b the same, with the wallet JSON blind to the salt too (the positive path passes, the negatives alone must fail): rc=1, 6 failing
+   test_pqzNamedTransferSingle | next call did not revert as expected
+   test_pqzNamedTransferSingleCompact | next call did not revert as expected
+   test_pqzNamedTransferSingleCompactUA | next call did not revert as expected
+   test_pqzNamedTransferSingleUA | next call did not revert as expected
+   test_typedOpsVectors_PqzTransferSingle | PqzTransferSingle: the op's own check, the signature passed: 0x0bdf5a6b0000000000000000000
+   test_typedOpsVectors_UAPqzTransferSingle | UAPqzTransferSingle: the op's own check, the signature passed: 0x0bdf5a6b00000000000000000
+== N2 two length checks removed: op 1 vTo, op 7 vAuditor: rc=1, 2 failing
+   test_partLengths_op1 | next call did not revert as expected
+   test_partLengths_op7 | next call did not revert as expected
+== N3 a signed entry on the allowlist: rc=1, 1 failing
+   test_pqzNamedEntryNotAllowlisted | call reverted as expected, but without data
+rc=0

@@ -1,0 +1,24 @@
+# docs at commit 682f7a9f
+test_docs_check: ok
+  note: accepted budget contracts/accounts.md: 2293 lines > 1.3 x 1100
+  note: accepted budget contracts/dex.md: 922 lines > 1.3 x 400
+  note: accepted budget contracts/metatx.md: 1224 lines > 1.3 x 650
+  note: accepted budget contracts/pq-zero-knowledge.md: 2619 lines > 1.3 x 950
+  note: accepted budget contracts/zether.md: 1941 lines > 1.3 x 700
+  note: accepted budget decisions.md: 8567 lines > 1.3 x 3000
+  note: accepted budget networks/README.md: 715 lines > 1.3 x 400
+  note: accepted budget networks/aptos.md: 729 lines > 1.3 x 500
+  note: accepted budget networks/cosmos.md: 352 lines > 1.3 x 220
+  note: accepted budget networks/evm.md: 404 lines > 1.3 x 200
+  note: accepted budget networks/hedera.md: 390 lines > 1.3 x 250
+  note: accepted budget networks/solana.md: 907 lines > 1.3 x 550
+  note: accepted budget networks/soroban.md: 382 lines > 1.3 x 230
+  note: accepted budget networks/sui.md: 473 lines > 1.3 x 300
+  note: accepted budget networks/ton.md: 477 lines > 1.3 x 280
+  note: accepted budget node/README.md: 389 lines > 1.3 x 250
+  warn: budget clients/signers-clientkeys.md: 971 lines > 1.3 x 650
+  warn: budget contracts/token-wrappers.md: 1029 lines > 1.3 x 650
+  warn: budget node/dex-venue.md: 541 lines > 1.3 x 400
+  warn: budget node/ops.md: 750 lines > 1.3 x 550
+check: 0 error(s), 4 warning(s), 16 note(s)
+rc=0

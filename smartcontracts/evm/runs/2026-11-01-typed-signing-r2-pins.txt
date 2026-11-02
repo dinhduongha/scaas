@@ -1,0 +1,89 @@
+name | regular before | regular after | delta | state before | state after
+popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024 | 13360 | 13360 | +0 | 0 | 0
+popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096 | 13360 | 13360 | +0 | 0 | 0
+popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384 | 13360 | 13360 | +0 | 0 | 0
+popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536 | 13360 | 13360 | +0 | 0 | 0
+popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024 | 15299 | 15299 | +0 | 0 | 0
+popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096 | 15299 | 15299 | +0 | 0 | 0
+popOf (the blob setKemKey decodes) mldsa65/v2 n2560-kmax16384 | 15299 | 15299 | +0 | 0 | 0
+popOf (the blob setKemKey decodes) mldsa65/v2 n2816-kmax65536 | 15299 | 15299 | +0 | 0 | 0
+popOf (the blob setKemKey decodes) msig-12-slhdsa128s (96,832 B pop) | 252226 | 252226 | +0 | 0 | 0
+popOf (the blob setKemKey decodes) msig-pq/v2 n2048-kmax1024 | 18534 | 18534 | +0 | 0 | 0
+popOf (the blob setKemKey decodes) msig-pq/v2 n2304-kmax4096 | 18534 | 18534 | +0 | 0 | 0
+popOf (the blob setKemKey decodes) msig-pq/v2 n2560-kmax16384 | 18534 | 18534 | +0 | 0 | 0
+popOf (the blob setKemKey decodes) msig-pq/v2 n2816-kmax65536 | 18534 | 18534 | +0 | 0 | 0
+popOf unregistered (view baseline) | 2861 | 2861 | +0 | 0 | 0
+register bip340 | 154894 | 161195 | +6301 | 1115370 | 1115370
+register bls-bn254-minsig | 347070 | 353388 | +6318 | 1262250 | 1262250
+register bls12381-minsig | 332260 | 338614 | +6354 | 1556010 | 1556010
+register ed25519 | 317606 | 323901 | +6295 | 1115370 | 1115370
+register fndsa512 | 2733963 | 2740640 | +6677 | 6384690 | 6384690
+register mldsa44 | 4340849 | 4347671 | +6822 | 6881940 | 6881940
+register mldsa65 with pqzPop n2048-kmax1024 | 3341208 | 3341208 | +0 | 81317970 | 81317970
+register mldsa65 with pqzPop n2304-kmax4096 | 3613592 | 3613592 | +0 | 87802110 | 87802110
+register mldsa65 with pqzPop n2560-kmax16384 | 3881880 | 3881880 | +0 | 94237290 | 94237290
+register mldsa65 with pqzPop n2816-kmax65536 | 4201368 | 4201368 | +0 | 102151980 | 102151980
+register mldsa65 without pqzPop n2048-kmax1024 | 1536920 | 1536920 | +0 | 37511010 | 37511010
+register mldsa65 without pqzPop n2304-kmax4096 | 1667992 | 1667992 | +0 | 40644450 | 40644450
+register mldsa65 without pqzPop n2560-kmax16384 | 1799064 | 1799064 | +0 | 43777890 | 43777890
+register mldsa65 without pqzPop n2816-kmax65536 | 1930136 | 1930136 | +0 | 46911330 | 46911330
+register mldsa65#1 | 387992 | 387992 | +0 | 9232020 | 9232020
+register mldsa65#2 | 387992 | 387992 | +0 | 9134100 | 9134100
+register mldsa65/n2048-kmax1024 | 3341208 | 3341208 | +0 | 81220050 | 81220050
+register mldsa65/n2304-kmax4096 | 3613592 | 3613592 | +0 | 87704190 | 87704190
+register mldsa65/n2560-kmax16384 | 3881880 | 3881880 | +0 | 94139370 | 94139370
+register mldsa65/n2816-kmax65536 | 4201368 | 4201368 | +0 | 102054060 | 102054060
+register msig-classical | 153420 | 165539 | +12119 | 1115370 | 1115370
+register msig-pq without pqzPop n2048-kmax1024 | 1663896 | 1663896 | +0 | 40165560 | 40165560
+register msig-pq without pqzPop n2304-kmax4096 | 1794968 | 1794968 | +0 | 43299000 | 43299000
+register msig-pq without pqzPop n2560-kmax16384 | 1926040 | 1926040 | +0 | 46432440 | 46432440
+register msig-pq without pqzPop n2816-kmax65536 | 2057112 | 2057112 | +0 | 49565880 | 49565880
+register msig-pq-native | 308120 | 308120 | +0 | 6843690 | 6843690
+register msig-pq/n2048-kmax1024 | 3468184 | 3468184 | +0 | 83776680 | 83776680
+register msig-pq/n2304-kmax4096 | 3740568 | 3740568 | +0 | 90260820 | 90260820
+register msig-pq/n2560-kmax16384 | 4008856 | 4008856 | +0 | 96696000 | 96696000
+register msig-pq/n2816-kmax65536 | 4328344 | 4328344 | +0 | 104610690 | 104610690
+register p256 | 158089 | 164402 | +6313 | 1164330 | 1164330
+register schnorr-bls12381 | 196398 | 202734 | +6336 | 1409130 | 1409130
+register schnorr-bn254 | 169273 | 175599 | +6326 | 1213290 | 1213290
+register secp256k1 | 153806 | 160128 | +6322 | 1213290 | 1213290
+register slhdsa128s | 1115472 | 1123151 | +7679 | 13246740 | 13246740
+register webauthn-p256 | 175715 | 181861 | +6146 | 1702890 | 1702890
+register zether-bls12381 | 208973 | 215365 | +6392 | 1594260 | 1594260
+registrationOf msig-pq on gen 1 n2048-kmax1024 | 99493 | 99494 | +1 | 0 | 0
+registrationOf msig-pq on gen 1 n2304-kmax4096 | 105418 | 105419 | +1 | 0 | 0
+registrationOf msig-pq on gen 1 n2560-kmax16384 | 111561 | 111562 | +1 | 0 | 0
+registrationOf msig-pq on gen 1 n2816-kmax65536 | 125759 | 125760 | +1 | 0 | 0
+registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024 | 143721 | 143722 | +1 | 0 | 0
+registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096 | 153453 | 153454 | +1 | 0 | 0
+registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384 | 163567 | 163568 | +1 | 0 | 0
+registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536 | 182106 | 182107 | +1 | 0 | 0
+setKemKey fndsa512/v2 n2048-kmax1024 | 2505516 | 2509996 | +4480 | 3947400 | 3947400
+setKemKey fndsa512/v2 n2304-kmax4096 | 2505516 | 2509996 | +4480 | 3947400 | 3947400
+setKemKey fndsa512/v2 n2560-kmax16384 | 2505516 | 2509996 | +4480 | 3947400 | 3947400
+setKemKey fndsa512/v2 n2816-kmax65536 | 2505516 | 2509996 | +4480 | 3947400 | 3947400
+setKemKey mldsa65/v2 n2048-kmax1024 | 357272 | 357272 | +0 | 7991190 | 7991190
+setKemKey mldsa65/v2 n2304-kmax4096 | 357272 | 357272 | +0 | 7991190 | 7991190
+setKemKey mldsa65/v2 n2560-kmax16384 | 357272 | 357272 | +0 | 7991190 | 7991190
+setKemKey mldsa65/v2 n2816-kmax65536 | 357272 | 357272 | +0 | 7991190 | 7991190
+setKemKey msig-12-slhdsa128s (96,832 B pop) | 6337432 | 6337432 | +0 | 151930530 | 151930530
+setKemKey msig-pq/v2 n2048-kmax1024 | 594840 | 594840 | +0 | 13797540 | 13797540
+setKemKey msig-pq/v2 n2304-kmax4096 | 594840 | 594840 | +0 | 13797540 | 13797540
+setKemKey msig-pq/v2 n2560-kmax16384 | 594840 | 594840 | +0 | 13797540 | 13797540
+setKemKey msig-pq/v2 n2816-kmax65536 | 594840 | 594840 | +0 | 13797540 | 13797540
+storePqzPop again (no-op) n2048-kmax1024 | 1825688 | 1825688 | +0 | 0 | 0
+storePqzPop again (no-op) n2304-kmax4096 | 1967000 | 1967000 | +0 | 0 | 0
+storePqzPop again (no-op) n2560-kmax16384 | 2104216 | 2104216 | +0 | 0 | 0
+storePqzPop again (no-op) n2816-kmax65536 | 2292632 | 2292632 | +0 | 0 | 0
+storePqzPop mldsa65 n2048-kmax1024 | 1825688 | 1825688 | +0 | 43806960 | 43806960
+storePqzPop mldsa65 n2304-kmax4096 | 1967000 | 1967000 | +0 | 47157660 | 47157660
+storePqzPop mldsa65 n2560-kmax16384 | 2104216 | 2104216 | +0 | 50459400 | 50459400
+storePqzPop mldsa65 n2816-kmax65536 | 2292632 | 2292632 | +0 | 55240650 | 55240650
+storePqzPop msig-pq on gen 1 n2048-kmax1024 | 1825688 | 1825688 | +0 | 43806960 | 43806960
+storePqzPop msig-pq on gen 1 n2304-kmax4096 | 1967000 | 1967000 | +0 | 47157660 | 47157660
+storePqzPop msig-pq on gen 1 n2560-kmax16384 | 2104216 | 2104216 | +0 | 50459400 | 50459400
+storePqzPop msig-pq on gen 1 n2816-kmax65536 | 2292632 | 2292632 | +0 | 55240650 | 55240650
+storePqzPop msig-pq on gen 2 (gen 1 record) n2048-kmax1024 | 1825688 | 1825688 | +0 | 44002800 | 44002800
+storePqzPop msig-pq on gen 2 (gen 1 record) n2304-kmax4096 | 1967000 | 1967000 | +0 | 47353500 | 47353500
+storePqzPop msig-pq on gen 2 (gen 1 record) n2560-kmax16384 | 2104216 | 2104216 | +0 | 50655240 | 50655240
+storePqzPop msig-pq on gen 2 (gen 1 record) n2816-kmax65536 | 2292632 | 2292632 | +0 | 55436490 | 55436490

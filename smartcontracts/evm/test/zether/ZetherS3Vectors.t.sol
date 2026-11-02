@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
+import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {Test} from "forge-std/Test.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {IZetherVerifier, IZetherBurnVerifier} from "../../src/zether/IZetherVerifier.sol";
@@ -181,20 +182,20 @@ contract ZetherS3VectorsTest is Test {
         for (uint256 i; i < 192; ++i) out[i] = st[off + i];
     }
 
-    /// `directCalldata` = `mtxConfidentialTransferSingle(payload, proof, beneficiary)`: the direct call, and unchanged the
-    /// envelope's `data` (CTR-ZTH-34; no `authSig` since UA-6 U9).
+    /// `directCalldata` = `mtxConfidentialTransferSingle(ZetherSingle, proof)`: the direct call, and unchanged the envelope's
+    /// `data` (CTR-ZTH-34; no `authSig` since UA-6 U9).
     function test_s3DirectCalldataIsTheEntryPointCall() public view {
         string memory j = vm.readFile(string.concat(DIR, "transfer_bls12381.json"));
         bytes memory op = j.readBytes(".directCalldata");
-        assertEq(bytes4(op), ZetherLayer.mtxConfidentialTransferSingle.selector);
+        assertEq(bytes4(op), IZetherToken.mtxConfidentialTransferSingle.selector);
         bytes memory args = new bytes(op.length - 4);
         for (uint256 i; i < args.length; ++i) args[i] = op[4 + i];
-        (bytes memory pl, bytes memory pr, bytes memory auth, bytes32 ben, bytes memory hint) =
-            abi.decode(args, (bytes, bytes, bytes, bytes32, bytes));
-        assertEq(pl, j.readBytes(".payload"));
+        (IZetherToken.ZetherSingle memory t, bytes memory pr) = abi.decode(args, (IZetherToken.ZetherSingle, bytes));
+        bytes memory pl = j.readBytes(".payload");
+        assertEq(bytes.concat(abi.encode(uint256(t.accSeq), uint256(t.sendCounter), t.validUntilBlock), t.salt,
+            abi.encode(t.yFrom, t.yTo, t.cOut, t.dOut, t.cDeb, t.cAud)), pl, "the explicit parameters are the payload's bytes");
         assertEq(pr, j.readBytes(".proof"));
-        assertEq(ben, j.readBytes32(".request.beneficiary"));
-        assertEq(auth.length + hint.length, 0, "Zether: auth and accHint empty");
+        assertEq(t.beneficiaryUA, j.readBytes32(".request.beneficiary"));
     }
 
     /// Mở tiết lộ của S3 qua contract `ZetherDisclosure` thật (token giả etch tại địa chỉ token của vector): bốn kind

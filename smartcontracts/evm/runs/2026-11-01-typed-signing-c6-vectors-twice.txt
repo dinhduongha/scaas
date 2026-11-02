@@ -1,0 +1,2 @@
+# vectors-twice at commit 11a1fa3b
+rc=0

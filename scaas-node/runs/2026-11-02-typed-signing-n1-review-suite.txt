@@ -1,0 +1,33 @@
+# cargo-scaas-node (test) at commit d99fe48f + the N1 review tree (smartcontracts/algorand/out linked from the main checkout for the run)
+     Running unittests src/lib.rs (scaas-node/target/debug/deps/scaas_node-7ea8f2ba056438ed)
+test result: ok. 494 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.94s
+     Running unittests src/main.rs (scaas-node/target/debug/deps/scaas_node-0f290f7e9a9343f6)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/e2e.rs (scaas-node/target/debug/deps/e2e-f5e08e3069fb3f57)
+test result: ok. 0 passed; 0 failed; 7 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/e2e_algorand.rs (scaas-node/target/debug/deps/e2e_algorand-9d4367e1b2442416)
+test result: ok. 0 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/e2e_aptos.rs (scaas-node/target/debug/deps/e2e_aptos-7a2c94f138055038)
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/e2e_cosmos.rs (scaas-node/target/debug/deps/e2e_cosmos-d5da351e248a5605)
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/e2e_hedera.rs (scaas-node/target/debug/deps/e2e_hedera-ebfbe2f9f86cc8a6)
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/e2e_near.rs (scaas-node/target/debug/deps/e2e_near-8fff549061f6767b)
+test result: ok. 0 passed; 0 failed; 12 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/e2e_solana.rs (scaas-node/target/debug/deps/e2e_solana-c4e55384d0e53921)
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/e2e_soroban.rs (scaas-node/target/debug/deps/e2e_soroban-5129c6e0beac1bda)
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/e2e_soroban_ua.rs (scaas-node/target/debug/deps/e2e_soroban_ua-692f8bf6ee0560ea)
+test result: ok. 0 passed; 0 failed; 6 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/e2e_sui.rs (scaas-node/target/debug/deps/e2e_sui-c657626a209e8063)
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/e2e_ton.rs (scaas-node/target/debug/deps/e2e_ton-0459e59d611f2b1e)
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/fuzz.rs (scaas-node/target/debug/deps/fuzz-6a5a1fcac547764c)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.73s
+     Running tests/mesh_vectors.rs (scaas-node/target/debug/deps/mesh_vectors-a234247c0bbdfa7c)
+test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.49s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+rc=0

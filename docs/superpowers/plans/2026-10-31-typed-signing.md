@@ -212,8 +212,8 @@ House rules for every task:
   `MetaTransaction` / `UAMetaTransaction` structs, typehashes, `mtxDigest` / `uaDigest`, `mtxSelectors`, `_mtxRule` and
   `_uaAllowed` (the generic path still serves every allowlisted op and atomic mixed batches, CTR-MTX-11). Clients and the
   node build the named typed entry by default and use the generic path only for a mixed batch or an op with no named
-  entry. Controller call, owner may override: `executeMetaTransaction` (EIP-1776 alias) and `mtxExecuteWithFee` are
-  removed (→ legacy) — they duplicate `mtxExecute`. The direct (non-meta) functions stay as they are. Mechanism: the
+  entry. Controller call, owner may override: `mtxExecuteWithFee` is removed (→ legacy), it duplicates `mtxExecute`.
+  `executeMetaTransaction` stays in `MetaTxBase` (owner ruling 2026-11-01). The direct (non-meta) functions stay as they are. Mechanism: the
   named entry builds the op's call and runs the existing ticket self-call (`_selfCall`, as `uaUnwrap` does today), so the
   op bodies and `_msgSender()` semantics are unchanged; nonces are shared with the generic path (one `(from, batch)`
   lane, so the same op cannot be replayed through the other entry).
@@ -643,7 +643,7 @@ typehashes computed with cast 1.8.5 for these exact strings, re-pinned by C1 / C
 | `mtxRotateKey` | `SmartKeyAccount` | `RotateKey(address from,uint256 index,uint8 kind,bytes32 x,bytes32 y,bytes32 rpIdHash,bytes32 originHash,E)` | `0x5b8f8761…64fb0777` |
 | `mtxSetGuardian` | `SmartKeyAccount` | `SetGuardian(address from,address guardian,E)` | `0xd2603850…6b967689f6` |
 | `mtxCancelRecovery` | `SmartKeyAccount` | `CancelRecovery(address from,E)` | `0x3df995dd…1213adda` |
-| `mtxExecute` | `SmartKeyAccount`, `MandateWallet` | `Execute(address from,address target,uint256 value,bytes data,E)` — the wallet shows target and value; the inner `data` stays hex (it is an arbitrary call by nature) | C5 pins |
+| `mtxExecute` | `SmartKeyAccount`, `MandateWallet` | `Execute(address from,address target,uint256 value,bytes data,E)` — the wallet shows target and value; the inner `data` stays hex (it is an arbitrary call by nature) | `0xe0b649e9…c6053f1df7` (C1 pins the string, C5 on chain) |
 
 Other typed structs (exact):
 
@@ -688,12 +688,12 @@ with every envelope word ABI-encoded — never `encodePacked` on `uint32 mode`),
 `WrappedToken`, `mtxShield` on `WrappedPqzToken` and `WrappedZetherToken`, `mtxSetMandate`), the generic entries kept
 (owner 2026-10-31: nothing is freed, so the projection counts only added bytes); run log `runs/2026-10-31-typed-signing-c0-sizes.txt`.
 
-- [ ] Step 1: tests `test_c0_unwrapTyped` (a wallet-made `Unwrap` signature executes; the same op through the kept
+- [x] Step 1: tests `test_c0_unwrapTyped` (a wallet-made `Unwrap` signature executes; the same op through the kept
   `mtxExecute` still executes and shares the `(from, batch)` nonce lane, so one signature cannot run twice), `test_c0_shieldTyped` (PQZ, Zether), `test_c0_setMandateTyped`.
-- [ ] Step 2: `forge build --sizes`; record per contract: entry cost (bytes per `mtx` / `ua` entry), freed bytes, and a
+- [x] Step 2: `forge build --sizes`; record per contract: entry cost (bytes per `mtx` / `ua` entry), freed bytes, and a
   projection for the full Part C entry list (C2–C6 counts: `WrappedPqzToken` ≈ 18 `mtx` + 11 `ua` entries,
   `WrappedZetherToken` ≈ 19 + 13, `NormalToken` 2 + 1, …).
-- [ ] Step 2b: **size audit (owner 2026-10-31: C0 extended; measure and report only, adopt nothing).** Structural
+- [x] Step 2b: **size audit (owner 2026-10-31: C0 extended; measure and report only, adopt nothing).** Structural
   levers only, no byte-shaving (owner rule). For the seven tokens + `UARegistry`: a per-contract breakdown (which
   libraries / internal functions / modifiers are inlined, bytes each, what is duplicated across entries). Then try on
   `WrappedPqzToken` (and project to the others), each lever alone on a scratch copy, recording runtime size, the gas
@@ -704,41 +704,54 @@ with every envelope word ABI-encoded — never `encodePacked` on `uint32 mode`),
      profile (200 → 50 / 1); 5. `via_ir = true` (measure only: build time, size, gas). Report a table (lever × contract:
      bytes saved, gas delta per call, effort, risk) in the run log and `docs/research/evm-size-levers.md`, with a
      recommendation; the owner chooses which levers C2–C6 use.
-- [ ] Step 3: **decision gate (TS-D18):** every projected runtime ≤ 65,536 B (with or without the levers the owner
+- [x] Step 3: **decision gate (TS-D18):** every projected runtime ≤ 65,536 B (with or without the levers the owner
   picks) ⇒ continue with pattern A; else STOP and report to the controller (owner decides B′ / dropping
   proof-authorised envelope entries). Either way stop after Step 2b for the owner's lever choice.
-- [ ] Step 4: commit `typed-signing C0: named-entry pattern and size projection` (the spike code is kept as the start
+- [x] Step 4: commit `typed-signing C0: named-entry pattern and size projection` (the spike code is kept as the start
   of C2–C5).
+- **C0 result (2026-11-01):** the stop rule applied. Without a lever `WrappedPqzToken` and `WrappedZetherToken` end about
+  11.9 KB and 12.8 KB over 65,536 B; `docs/research/evm-size-levers.md` has the table and the recommended set. C1 waits for
+  the owner's lever choice. Findings for C3 / C4 are in §7 of that note (Appendix X.3's `mtxUnshield` Envelope shape does
+  not fit the legacy code generator's stack).
 
 ### Task C1: clientkeys typed builders + `typed_ops.json`
 
 **Files:** `clients/clientkeys/src/evm.js` (one `<op>TypedData({domain…, message})` + `<op>Calldata(td, sig)` per named
 entry, built from one table of type strings; `checkCall` → `checkOp(td, expectations)` per struct family (CLI-SGN-27:
 check then sign exactly what was checked); `receiverFeeTypedData` nested; `cancelOrderTypedData` nested;
-`buildRelayFee` → `RelayFee`; `ownerCallTypedData` → the SmartKeyAccount structs; the `MetaTransaction` builders →
-legacy), `clients/clientkeys/src/zether.js` (`ZetherRollOver` / `ZetherSetRollOverMode` digests, confidential
+`buildRelayFee` → `RelayFee`; `ownerCallTypedData` → the SmartKeyAccount structs; the `MetaTransaction` builders
+stay, TS-D14), `clients/clientkeys/src/zether.js` (`ZetherRollOver` / `ZetherSetRollOverMode` digests, confidential
 envelope builders from the explicit structs), new `clients/clientkeys/scripts/typed-ops-vectors.mjs` →
 `smartcontracts/vectors/typed/typed_ops.json` (per struct: `typeString`, `typehash`, a domain per contract kind, a
 message, `structHash`, `digest`, the entry's calldata, a native ECDSA signature), regenerate `metatx3.json` /
 `uatrade_kat.json` via `ua-sig-vectors.mjs` (the UA ops / cancels move); tests `test/{evm,relayfee,paymeta,ua-metatx3,ua-trade,zether}.test.js`.
 
-- [ ] Step 1: failing tests: `every typehash pinned`, `hashTypedData(td) == row.digest`, `calldata decodes to the
+- [x] Step 1: failing tests: `every typehash pinned`, `hashTypedData(td) == row.digest`, `calldata decodes to the
   message`, `checkOp refuses a changed field`, `nested cancel / receiver fee`, `canonical zero for unbound relayer`.
-- [ ] Steps 2–4: FAIL → implement → `npm test` PASS; generators twice, no diff. Step 5: commit
+- [x] Steps 2–4: FAIL → implement → `npm test` PASS; generators twice, no diff. Step 5: commit
   `typed-signing C1: clientkeys typed builders for every named entry, typed_ops.json`.
+- **C1 result (2026-11-01):** 74 structs (59 with `E`), every plan typehash as printed, every row equal to `cast` (`scripts/typed-ops-cast-check.mjs`); the C0
+  entries run `typed_ops.json` rows (`NamedEntry.t.sol`). The generic builders stay in `src/evm.js` (owner ruling above). `metatx3.json` / `uatrade_kat.json`
+  are not regenerated: C6 does, and drops the `legacy/typed-signing/evm-pre-named.js` imports. Calls for C2–C6 (router `relay`, `mtxWrapOrder` with
+  `underlying`, wrap-order cancels, `Payout`, `AccountSig`): decisions.md CLI-SGN-27, change of 2026-11-01. Independent review: `checkWrapOrder` /
+  `checkUAWrapOrder` added and `checkOp` refuses a wrap order; `checkOp` takes only whole expectations and keeps a named relayer / fee recipient; strict
+  bools and uints; `cast-check` compares calldata with the message and runs in `vectors-check`. No vector moved.
 
 ### Task C2: base + public tokens
 
-**Files:** `MetaTxLib.sol`, `MetaTxBase.sol`, `MtxPipelineLib.sol`, `ERC20MetaTx.sol`, `MetaTokenBase.sol`,
+**Files:** `MetaTxLib.sol`, `MetaTxBase.sol`, new `UAMetaTxBase.sol` (owner ruling 2026-11-01, Owner rulings below), `MtxPipelineLib.sol`, `ERC20MetaTx.sol`, `MetaTokenBase.sol`,
 `NormalToken.sol`, `WrappedToken.sol`, `IMetaTx.sol`, `IERC20MetaTx.sol`, `IUALedger.sol`, `IWrappedToken.sol`
-(ERC-165 ids re-pinned); the `ua*` entries take `UASig` (removes R1's decode helper); legacy
-`smartcontracts/evm/legacy/typed-signing/` (generic entries, `MetaTransaction` structs / typehashes, `mtxSelectors`);
+(ERC-165 ids re-pinned); the named `ua*` entries take `UASig`; the generic `uaExecute` / `uaBatch` keep `bytes auth` and R1's decode helper (TS-D14); legacy
+`smartcontracts/evm/legacy/typed-signing/` (`mtxExecuteWithFee` only; `executeMetaTransaction` stays in `MetaTxBase`, owner 2026-11-01; the four generic entries, their structs and `mtxSelectors` stay, owner 2026-10-31);
 tests `test/metatx/*`, `test/v2/*` that used `mtxExecute` / `uaExecute` / `mtxBatch`, new `test/metatx/TypedOps.t.sol`
 (reads `typed_ops.json`), `test/ua/UAMetaTx3Vectors.t.sol`, gas `test/v2/MetaTxGasV2.t.sol` (`AMS_*` re-pinned).
 
+- [ ] Step 0: first commits, on their own, before the entries: lever 2 (`_enter` / `_exit`), then `UAMetaTxBase` (a pure move: whole suite
+  green, every token's `mtxSelectors`, ERC-165 ids and storage layout unchanged; new test `test_uaBaseRefusesFee`, a minimal
+  non-token contract on `UAMetaTxBase` that runs a UA-signed call at fee 0, refuses fee ≠ 0, and reads `_ticketSubject()`).
 - [ ] Step 1: failing tests `test_typedOpsVectors_<op>` for `CancelNonce`, `Burn`, `UABurn`, `Wrap`, `WrapLeg`,
   `Unwrap`, `UAUnwrap`, `UnwrapLeg`, `UAUnwrapLeg`, `AddReserve`, `WrapToUA`, `UnwrapToUA`, `UAUnwrapToUA`;
-  `test_genericEntriesGone` (selectors absent), `test_namedEntryReplayRefused` (nonce), `test_namedEntryOtherOpDigestRefused`
+  `test_removedAliasesGone` (`mtxExecuteWithFee` selector absent), `test_genericEntriesKept` (the four generic entries and `executeMetaTransaction` still run), `test_namedEntryReplayRefused` (nonce), `test_namedEntryOtherOpDigestRefused`
   (an `Unwrap` signature on `mtxUnwrapLeg`), `test_namedEntryFeeClass` (amount-class fee on unwrap, absolute on wrap),
   `test_relayFeeRouterRunsNamedEntry` (router + executor call `mtxUnwrap` with fee 0).
 - [ ] Steps 2–4: FAIL → implement → `test/metatx`, `test/v2`, `test/ua` PASS; whole suite (default set); `sizes`
@@ -759,6 +772,8 @@ rows regenerated by their generator (zether-prover `vectors.rs`) — statement r
   owner digests) → `test/zether` PASS; `ZetherE2E.s.sol` dry run on anvil; whole suite; `sizes`; gas pins.
 - [ ] Step 5: commit `typed-signing C3: classical Zether named entries, explicit transfer parameters, typed owner ops`.
 
+- **C3 result (2026-11-01):** every Zether row of `typed_ops.json` runs: its calldata is the struct's and the signature passes under a token's own domain (`ZetherTypedRowsTest`). Statement and record bytes unchanged on every prover row; only `directCalldata` moved in the zether-prover vectors. Lever 1 is on `WrappedZetherToken` in `ZetherWrappedLib`: 60,759 B, 64,475 B without it (`docs/research/evm-size-levers.md` §9). Controller calls: decisions.md, the two C3 entries of 2026-11-01. Findings for C4: PQZ's `IConfidentialToken` signatures sit unchanged in `IPqzToken` / `IPqzWrappedToken`; a typehash is one string literal, never `string.concat`.
+
 ### Task C4: PQZ + `PqzAuth`
 
 **Files:** `src/pqz/{PqzLayer,PqzCore,PqzStateLib,NormalPqzToken,WrappedPqzToken,IPqzToken}.sol`; tests `test/pqz/*`;
@@ -776,6 +791,8 @@ rows regenerated by their generator (zether-prover `vectors.rs`) — statement r
   `sizes`; gas pins. Stop rule: a calibrated row or `debit_min_gas` moves ⇒ report.
 - [ ] Step 5: commit `typed-signing C4: PQZ named entries, explicit op parameters, typed PqzAuth`.
 
+- **C4 result (2026-11-01):** every PQZ row of `typed_ops.json` runs on `NormalPqzToken` and `WrappedPqzToken`: its calldata is the struct's and the signature passes under the token's own domain (`PqzTypedRowsTest`). Statement, op blob and memo bytes unchanged against the packed code kept live as `PqzPackedRef`; `pqz-vectors` moved only `auth_digest` (and the statement files' `description`) at the four sets; every PQZH `n2048-kmax1024` form of X.6 fits as a named entry on both paths, the tightest 23,656 gas (369 B) under 2^24 as X.6 said. Lever 1 is on `WrappedPqzToken` in `PqzWrappedLib`: 62,000 B. Controller calls: decisions.md, CTR-PQZ-21, the two C4 entries of 2026-11-01. `debit_min_gas` stays pinned to CG (owner ruling 2026-11-01); the task report has the figures per set. e2e.py is on the new ABI but has not run on a chain. C4 review: `test_splitOverhead_dataSizeBound` now takes the direct op off both sides and fails on PQZH op 7 M = 4 (up to 9,807 against 8,000) at `n2304-kmax4096` and `n2048-kmax1024`: the pipeline's cost per envelope byte on the bigger typed calldata, open for the owner (decisions.md, CTR-PQZ-21).
+
 ### Task C5: MandateWallet + SmartKeyAccount
 
 **Files:** `src/wallet/MandateWallet.sol` (+ the Hedera variant under `src/hedera/`), `src/account/SmartKeyAccount.sol`
@@ -790,14 +807,22 @@ rows regenerated by their generator (zether-prover `vectors.rs`) — statement r
 
 **Files:** `src/trade/{TradeLib,ITradeToken}.sol`, `src/metatx/{ERC20MetaTx,MetaTokenBase,WrappedToken,WrappedLib,MtxRelayFee,IERC20MetaTx}.sol`,
 `src/dex/{SCaaSDex,ISCaaSDex}.sol`; tests `test/v2/{Trade,DexOutside,ReceiverPays}.t.sol`, `test/metatx/MtxRelayFee.t.sol`,
-`test/ua/UATradeVectors.t.sol`; `uatrade_kat.json` + the DEX KAT regenerated (C1's generators).
+`test/ua/UATradeVectors.t.sol`; `uatrade_kat.json` + the DEX KAT regenerated (C1's generators); `clients/clientkeys/src/evm.js`
+(remove `checkTradeOrder`'s wrap branch: a wrap is then only a `WrapOrder`, `checkWrapOrder`; `checkCancel` refuses `CancelOrder` /
+`CancelUAOrder` on a stored order with `dex == receiveToken`, which can no longer verify), `clients/clientkeys/scripts/ua-sig-vectors.mjs`
+(drop the `legacy/typed-signing/evm-pre-named.js` imports), `clients/clientkeys/test/{typed-ops,evm}.test.js`. The router keeps
+`_shape`'s refusal of the executor as payee: the token's `mtxRelayFee` does not know the executor.
 
 - [ ] Step 1: failing tests: `test_cancelOrderNested`, `test_cancelUAOrderNested`, `test_cancelWrapOrderNested`,
   `test_cancelDexOrderNested`, `test_wrapOrderTyped` (`dex == receiveToken` ⇒ `WrapOrder`), `test_tradeOrderStillTradeOrder`,
   `test_mtxWrapOrderRenamed`, `test_receiverFeeNested` (+UA), `test_relayFeeTyped` (+UA; lane `payLane(ref)`, nonce 0,
-  relayer = router, open mode), `test_relayFeeDirectCallRefused` (`msg.sender != relayer`), `test_uaCancelNonceTyped`.
+  relayer = router, open mode), `test_relayFeeDirectCallRefused` (`msg.sender != relayer`), `test_relayFeeExecutorPayeeRefused`,
+  `test_uaCancelNonceTyped`; clientkeys `after C6 a wrap is only a WrapOrder: checkTradeOrder and checkCancel refuse the TradeOrder form`
+  (replaces C1's `until C6 the chain takes a wrap as a TradeOrder`).
 - [ ] Steps 2–4 → PASS; whole suite; `sizes`; gas pins. Step 5: commit
   `typed-signing C6: nested cancels, WrapOrder, ReceiverFee, RelayFee path, UACancelNonce typed`.
+
+- **C6 result (2026-11-01):** every order, cancel, receiver-fee and relay-fee row of `typed_ops.json` runs under the kind's own domain on a token, a Zether and a PQZ kind, `CancelDexOrder` under the DEX's, the router's calldata at the rows' addresses (`test/metatx/TradeTyped.t.sol`, `MtxRelayFee.t.sol`). `metatx-parity.json`: 1,723 of 1,998 rows moved, fields `gas` and `digests` only; no outcome, revert, event, nonce or balance moved. `uaWrapOrder` and `uaPayReceiverFee` take `UASig`, so `uaTrade`, `uaInvalidateNonces` and the UA transfer entries moved to it too (Appendix X row 9), and the DEX to `DexLeg` (row 20). `WrappedPqzToken` 63,423 B, `WrappedZetherToken` 62,169 B; `debit_min_gas` measured +43 at every set, +9,319 to +9,388 over the pin (kept until CG). Controller calls: decisions.md, the C6 entry of 2026-11-01. Findings for N1: `scaas-node` `abi.rs` still has `Leg`, `bytes auth`, `mtxWrap` and the flat digests, and its KAT tests read the regenerated files.
 
 ### Task C7: reproducers that build EVM op digests
 
@@ -809,6 +834,8 @@ a chain-bound digest (X0 lists them by grep of `metatx-cancel`, `UAMetaTransacti
 - [ ] Steps: failing vector tests over `typed_ops.json` / `metatx3.json` / `uatrade_kat.json` → implement → package
   steps PASS → commit `typed-signing C7: reproducers build the typed op digests`.
 
+- **C7 result (2026-11-01):** the only packages that build a typed EVM op digest are `clientkeys` (C1, C6) and `zether-prover`; the `ua-*` packages build portable records, registry arguments and `relay_ref` (all unchanged, tests green: ua-rs, ua-py, ua-go). `zether-prover` gets `typedDigest` (one generic encoder, one type-string table `typed::OPS`) over every Zether row of `typed_ops.json` (47, asserted; the 27 left out listed with reasons in `tests/typed_ops.rs`) and `namedCall` (named relayed entry calldata for transfer single / multi / compact, unshield, unshield-unwrap, equal to the vector's calldata). Mutants killed: array order, `bytes` hashing, envelope order, payload leg order, proof / sig order (`runs/2026-11-01-typed-signing-c7-fix1-mutants.txt`). `ZetherProverCross` passes through the real `zether-cli`. `PqzAuth` has no client builder beyond clientkeys (PQZ ops come from `e2e.py` and the node). Decisions: the C7 entry of 2026-11-01.
+
 ### Task C8: scripts and deploy
 
 **Files:** `smartcontracts/evm/script/*` (Deploy scripts that call removed entries, `ZetherE2E.s.sol`, `pqz/e2e.py`
@@ -817,6 +844,8 @@ reset (work order item 6) deploys the new contracts (controller call).
 
 - [ ] Steps: `forge script` dry runs on anvil for each touched script; e2e.py self-checks → commit
   `typed-signing C8: scripts on the named entries`.
+
+- **C8 result (2026-11-01):** `script/pqz/e2e.py` drives every PQZ op on its named entry (sections 5b, 6b; `NAMED`, `Signed`): typed struct from clientkeys, ECDSA, ML-DSA-65 and msig `UASig`; `pqzAuth` the typed `PqzAuth`; one PQZ holder registers by `registerMsig`; `UARegistryLib` linked and deployed behind `require_release_gas`. The generic section 5 stays (TS-D14). It has **not run on a chain**: it needs the `PQZ` precompile, so the next reset is its first run. Offline: `--self-test` checks the 19 named entries' calldata and digest against `typed_ops.json`, `PqzAuth`, `registerMsig` against `portable.json`, the 60 signatures and encoders of the file against `out/`; `test_e2e_linked.py` runs `Signed`. `ZetherE2E.s.sol` adds three relayed named entries through `zether-cli namedCall`, broadcast on anvil by `scripts/e2e-zether.sh` with the deploy path; `DeployBase` takes no code change (comment figures only). No script deploys a gen 2. Decisions: the C8 entry of 2026-11-01. Logs: `runs/2026-11-01-typed-signing-c8-*`.
 
 ---
 
@@ -834,12 +863,17 @@ reset (work order item 6) deploys the new contracts (controller call).
   entry table (alloy `sol!`), checks the typed digest locally against the signature (gateway pre-check), and uses the
   typed digest as the dedup key (no chain view; `mtxDigest` is gone). Hex `data` / `calldata` fields are refused with
   a named error.
+- Mandate lanes (C5 review): the node and clients build `PayUnderMandate` with `batch = mandatePayLane(ref)` and `DelegateRevoke`
+  with `batch = mandateRevokeLane(token, epoch)`, both at nonce 0: a revoke is the kill switch, it must not queue behind a pending
+  nonce on a shared lane. The node does not yet allow the named selectors of the wallets; that is this task too.
 - `guard.rs`: the allow-list per entry selector (rules per contract kind); `dex.rs` `cancel_digest` nested;
   `venue.rs` cancels; indexer: `MetaTransactionExecuted` keeps its fields (digest = the typed digest); new events from C
   (if any) indexed.
 - [ ] Steps: failing tests `typed_ops_kat_every_entry` (digest + calldata against `typed_ops.json`), `job_api_explicit_json_roundtrip`,
   `hex_data_refused`, `guard_allows_every_named_entry_only`, `relay_fee_call_object`, `dedup_by_typed_digest`;
   `cargo-scaas-node` + `node-e2e-anvil` steps PASS; commit `typed-signing N1: node explicit job API for the named entries`.
+
+- **N1 result (2026-11-02):** `scaas-node/src/typed.rs`: one table of 77 typed rows (74 structs of `typed_ops.json`, `Execute` twice, the two invalidations) and 20 plain ones, one parser; digest and calldata come from one parse (`digest_and_calldata_cannot_diverge`), every row equal to the vector (`typed_ops_kat_every_entry`). The guard's allow-list is that table per contract kind, both directions through `Guard::check` (`guard_allows_every_named_entry_only`). Hex is refused on every kind (`HEX_DATA_REFUSED`), mandate lanes enforced (`MANDATE_LANE`), relay fees take a named `call` and go through the router, the signature pre-check runs on every path, the in-flight key is the typed digest held with the bytes. `node-e2e-anvil` passes on the real contracts: named `mtxCancelNonce`, `mtxRelayFee`, `uaRelayFee`, `mtxCancelOrder`, `mtxSettle`. Job shapes: `docs/node/job-api.md` §5.3. Controller calls: decisions.md, the N1 entry of 2026-11-02. Superseded code: `scaas-node/legacy/typed-signing/`. `POST /v1/op` takes registered tokens only. The wallet's four flat builders stay as plain rows (owner 2026-11-01). Consumers follow: `op` on every EVM job, `op` instead of `calldata` on the venue's `settle` / `cancel` / `invalidate` jobs, `auth` as an object.
 
 ### Task N2: Soroban jobs explicit
 
@@ -865,7 +899,7 @@ replaced by named typed entries, TS-D14), **-05 / -06** (`ReceiverFee` nested), 
 burn / reserve entries; **CTR-DEX-02 / -15 / -18 / -25** (nested cancels); **CTR-ACC-05 / -07 / -10** and the mandate
 entries (wallet named entries, `Execute`); **CTR-ZTH-16 / -17** (typed owner ops), **-34** (envelope binding of named
 entries), **-35 / -37 / -38 / -51** (explicit parameters); **CTR-PQZ-21** (batching), the PQZ auth entry (`PqzAuth`) and
-the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-42** (typed op builders), **CLI-APP-09**;
+the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-35 / -36** (a wrap is a `WrapOrder`, `checkWrapOrder`, `mtxWrapOrder`; `checkTradeOrder` no longer takes one), **CLI-SGN-42** (typed op builders), **CLI-APP-09**;
 **NET-ALL-23** (EVM: typed EIP-712 is the readable form), **NET-ALL-84** (explicit parameters every family);
 **NODE-JOB-*** (job API explicit JSON; ids re-checked). TS-D14–D21 in the alias index. Re-check every id is free.
 
@@ -928,6 +962,50 @@ the op parameter entries; **CLI-SGN-27** (checks per struct), **CLI-SGN-42** (ty
   6,998,368 -> 7,004,731; n2560-kmax16384 7,168,690 -> 7,175,039; n2816-kmax65536 7,358,343 -> 7,364,677). `set.toml`
   keeps the pinned figures; Part C changes the same path, so CG re-measures after C2 and re-pins once, with the full
   gate that a set-parameter change needs. Until then the pinned floor is below the measured minimum by that amount.
+- **Size levers for C2–C6 (owner ruling 2026-11-01, on `docs/research/evm-size-levers.md`):** lever 2 (shared
+  `nonReentrant` body: `_enter` / `_exit` `private` in `MetaTxBase`, land it first in C2) and lever 1 (the init path and
+  the selector table of the wrapped confidential kinds behind external library calls, with `LinkClosure.test_libraryOpcodes`'
+  DELEGATECALL count raised for that library, and the library in the release's link closure). Mock: `WrappedPqzToken`
+  61,378 B, `WrappedZetherToken` 61,704 B, least margin 3,832 B; the mock does not run, so C3 / C4 re-check real sizes.
+  `optimizer_runs` stays 200, `via_ir` off. Above about 64.5 KB on real code: stop and ask; lever 3 or B′ is the reserve.
+- **C2–C6 follow C1's table (controller calls, owner may override; CLI-SGN-27 change of 2026-11-01):** `uaShield` keeps
+  `bytes auth` as the C0 spike; `Payout` (`amount`, `recipient` in one calldata struct) is PQZ only, Zether's `mtxUnshield`
+  is flat; `mtxWrapOrder(address underlying, WrapOrder, sig)` keeps the leg; wrap-order cancels use `mtxCancelOrder` /
+  `uaCancelOrder`; the router is `relay(target, callData, token, from, payee, value, validUntil, sig)`; `AccountSig` on the
+  account's own five entries and its `Execute`, `bytes sig` on every `mtxCancelNonce`. `metatx3.json` and
+  `uatrade_kat.json` regenerate in C6, not C1.
+- **`UAMetaTxBase` (owner ruling 2026-11-01):** `uaExecute` is a general entry, so contracts that are not tokens must be
+  able to take UA-signed calls later. A new `abstract contract UAMetaTxBase is MetaTxBase` (`src/metatx/UAMetaTxBase.sol`)
+  holds `_REGISTRY`, `_mtxCtx`, `uaExecute`, `uaBatch`, `_uaExecute`, `_namedUA`, `_uaSettle`, the envelope and digest helpers
+  of the UA path, and the non-ledger part of `_callFacts` / `_uaAllowed`. The fee step becomes a hook `_uaChargeFee`, whose
+  default refuses a fee ≠ 0 (a contract with no ledger runs at fee 0, owner's relayable rule); `ERC20MetaTx is
+  UAMetaTxBase` overrides it with `_uaMove`. Not in `MetaTxBase`: `SmartKeyAccount` and `MandateWallet` stay without a
+  registry or UA code. A non-token contract must read `_ticketSubject()`, since `_msgSender()` is `UA_POOL` for every derived
+  subject. Pure move, no storage change, no ABI or selector change for tokens; built at the start of C2 with lever 2.
+- **`executeMetaTransaction` stays (owner ruling 2026-11-01, replaces the plan's removal):** it stays where it is, in `MetaTxBase`
+  and `IMetaTx` beside `mtxExecute`: it signs `address from`, so it is not part of `UAMetaTxBase`. The wallets keep it, no ERC-165 id
+  changes. Only `mtxExecuteWithFee` goes to legacy. It shares the EIP-1776 name only: selector `0x47aea5b5`, against `0x0c53c51c` of
+  the common `executeMetaTransaction(address,bytes,bytes32,bytes32,uint8)`, and ERC-1776 itself defines no such function.
+- **Flat `uaUnwrap` goes to legacy (owner ruling 2026-11-01):** the flat `uaUnwrap(bytes32 from, …)` overload duplicates the named
+  `uaUnwrap(UAEnvelope, …, UASig)`, so it moves to `smartcontracts/evm/legacy/typed-signing/`. `mtxCancelNonce` is declared in
+  `IMetaTx`, like every entry present on every contract, and the ERC-165 id is re-pinned (controller correction of a brief that
+  said to leave `IMetaTx` unchanged; that was about `executeMetaTransaction`). Both are done in C2's review fix round.
+- **`UARegistry` is split, R2 alone (owner ruling 2026-11-01, later the same day; it replaces "`UARegistry` is not split", itself the replacement of the R1′ + R2 ruling):** the measurement showed R1′ does
+  not remove the ABI coders under legacy codegen and raises total bytes, so R1′ is not built; R2 is. Registration, the PQZ attachment,
+  KEM records and the ML-DSA cache move to `UARegistryLib` by DELEGATECALL; the views and `requireAuthorized` stay; no `fallback`. Order:
+  after C6, before C7. This "R2" is the size lever of `docs/research/evm-size-levers.md` §8, not Part R's Task R2 above. Table and
+  sources: §8, `smartcontracts/evm/runs/2026-11-01-registry-split/`, `smartcontracts/evm/runs/2026-11-01-typed-signing-r2-*`.
+- **R2 result (2026-11-01):** `UARegistry` 27,997 B, `UARegistryLib` 31,315 B, total 59,312 B; the 53 selectors and the ABI's names unchanged; `requireAuthorized` within +37 gas at all four sets. The pre-split source is frozen in `smartcontracts/evm/legacy/typed-signing/UARegistryPreSplit.sol`; `test/ua/UARegistrySplit.t.sol` and `test_split_portableRowsSame` compare it with the split, real signatures included, on results, logs, storage, created contracts and calls out; 11 mutants caught. Whole suite, `test/ua` + `test/pqz` at the other three sets, clientkeys, a `forge script` broadcast with the library: green. No vector embeds the registry's address: every writer re-run moved only `gas` in `metatx-parity.json`, kept out of the replay. No calibrated row moved; `debit_min_gas` pin untouched, the debit row +30 at every set. One difference on malformed calldata only: decisions.md. Figures: `docs/research/evm-size-levers.md` §8.
+- **Wallet builders stay (owner ruling 2026-11-01):** the flat `mtxPayUnderMandate(token, …)`, `mtxRevoke`, `mtxExecuteAsOwner` and
+  `mtxExecuteAsOwnerRaw` stay beside the named entries: they sign the generic `MetaTransaction`, add no digest, and `mandate_pay_kat`
+  and `mandate_revoke_kat` depend on them.
+- **C3 review fix round, done (2026-11-01):** no critical, high or medium finding. L1: the prover's `ownerAuth` returns `sig`, the raw R‖z of
+  `UASig.signature` (was `auth`, the old packed blob). T1: typed `UAUnauthorized` reverts in `test_zetherSetRollOverModeTyped` and
+  `test_zetherOwnerRollOverTyped`. T2: `test_typedOpsVectors_ZetherRollOver` / `_ZetherSetRollOverMode`: the row's struct hash and calldata, then a
+  real owner signs the row's typehash in the token's domain and the entry passes. T3: `ZetherProverCross.test_statementDifferential`, M = 1, 2, 3, 4,
+  7 by four auditor settings by two forms; M stops at 7 because the prover refuses M = 8 in the dearest form (EIP-7825 cap); CI's `zether-prover`
+  job now runs the suite. T4: the selector test reads the heads of the builders' calldata, `test_zetherEntrySelectorPins` pins the same words to the
+  compiled ABI. T5: `transferMemo` is `17 + 40·M`. Mutations: both owner typehashes and a statement word order, all caught.
 - **`UARegistry` deploy gate (owner ruling 2026-11-01):** the registry gets a gate like the releases:
   `_requireReleaseGas("UARegistry")` in `DeployBase` and `require_release_gas("UARegistry")` in `e2e.py`, need 88.3 M
   (46,716 B × 1,530 + 2^24), test `test_registryDeployGate`, NET-EVM-06.

@@ -62,6 +62,7 @@ contract GasProbe {
 contract UAGasTest is UARegistryBase {
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;
     uint256 internal constant MSIG_MEMBER_GAS = 45_000; // UARegistry.MSIG_MEMBER_GAS
+    uint256 internal constant MSIG_ACCEPTED_GAS = 2_500; // UARegistryLib.MSIG_ACCEPTED_GAS: once per authorization
 
     bytes internal _big;
     bytes internal _memberPop; // `_derivedOverhead`'s registration pop when set (I1: a padded pop)
@@ -194,7 +195,8 @@ contract UAGasTest is UARegistryBase {
         address clone = address(0x5cf40);
         vm.etch(clone, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
         // bound: 8 x (cap + member gas) + the clone (400 k + member gas) + the registry's own hold (1.4 M - 400 k) / 63
-        uint256 bound = 8 * (1_400_000 + MSIG_MEMBER_GAS) + SMART_KEY_1271_GAS + MSIG_MEMBER_GAS + (1_400_000 - SMART_KEY_1271_GAS) / 63;
+        uint256 bound = 8 * (1_400_000 + MSIG_MEMBER_GAS) + SMART_KEY_1271_GAS + MSIG_MEMBER_GAS + (1_400_000 - SMART_KEY_1271_GAS) / 63
+            + MSIG_ACCEPTED_GAS;
         UARegistry tight = _deploy(address(0x5ce30), chainUidA, address(0), false, uint64(bound - 1), _impl, true, c);
         UARegistry r = _deploy(address(0x5ce31), chainUidA, address(0), false, uint64(bound), _impl, true, c);
         Member[] memory m = new Member[](9);
@@ -220,11 +222,12 @@ contract UAGasTest is UARegistryBase {
     }
 
     /// The bound of msig key data `d` whose threshold needs every member (weights 1, threshold = count) or whose only
-    /// member is the threshold: Σ (cap + MSIG_MEMBER_GAS), + gen 1's hold for a derived member handed to gen 1, + the
+    /// member is the threshold: MSIG_ACCEPTED_GAS + Σ (cap + MSIG_MEMBER_GAS), + gen 1's hold for a derived member handed to gen 1, + the
     /// registry's own hold (held - 400 k) / 63 for the largest held cap above 400 k (a handed member holds in gen 2 too).
     function _boundOf(bytes memory d, bool handed) internal pure returns (uint256 b) {
         uint256 count = uint16(bytes2(abi.encodePacked(d[2], d[3])));
         uint256 held;
+        b = MSIG_ACCEPTED_GAS;
         for (uint256 j; j < count; ++j) {
             uint16 kind = uint16(bytes2(abi.encodePacked(d[4 + 36 * j], d[5 + 36 * j])));
             uint256 cap = kind < 0x0100 ? SMART_KEY_1271_GAS : _cap(kind);
@@ -261,6 +264,7 @@ contract UAGasTest is UARegistryBase {
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
         UACall.register(tight, UAKinds.MSIG, d, _none(), "", "");
         ua = UACall.register(r, UAKinds.MSIG, d, _none(), "", "");
+        _acceptWith(r, d, _big);
     }
 
     /// Asserts `call` succeeds with `bound` gas for the callee frame; returns the least frame gas that succeeds. Each
@@ -356,6 +360,7 @@ contract UAGasTest is UARegistryBase {
         for (uint256 x; x < 2; ++x) {
             bytes memory d = _msigKey(t[x] * w, m);
             bytes32 ua = UACall.register(r, UAKinds.MSIG, d, _none(), "", "");
+            _acceptWith(r, d, big);
             IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](t[x]);
             for (uint16 j; j < t[x]; ++j) {
                 s[j] = IUARegistry.MemberSig(j, "", big); // CTR-UA-33: the registry reads each key from its record
@@ -405,6 +410,7 @@ contract UAGasTest is UARegistryBase {
         for (uint256 x; x < 2; ++x) {
             bytes memory d = _msigKey(t[x], m);
             bytes32 ua = UACall.register(r, UAKinds.MSIG, d, _none(), "", "");
+            _acceptNatives(r, d, ua, t[x], ids);
             bytes memory auth = _nativeAuth(r, d, ua, t[x], ids);
             vm.cool(address(r));
             _cool(accounts);
@@ -414,6 +420,17 @@ contract UAGasTest is UARegistryBase {
             used[x] = g - gasleft();
         }
         return (used[1] - used[0]) / 15;
+    }
+
+    /// The first `n` slots accept, each by its key (a wallet's owner, as `_nativeAuth`).
+    function _acceptNatives(UARegistry r, bytes memory d, bytes32 ua, uint16 n, bytes32[] memory ids) internal {
+        for (uint16 j; j < n; ++j) {
+            bytes32 id;
+            assembly ("memory-safe") {
+                id := mload(add(add(d, 38), mul(36, j)))
+            }
+            r.acceptMembership(ua, IUARegistry.MemberSig(j, "", _ecdsa(_pkOf(id, ids), UAKinds.membershipDigest(ua, id))));
+        }
     }
 
     function _nativeAuth(UARegistry r, bytes memory d, bytes32 ua, uint16 n, bytes32[] memory ids)
@@ -440,14 +457,15 @@ contract UAGasTest is UARegistryBase {
         revert("pk");
     }
 
-    /// Register step 4: Σ of the c largest caps + c × MSIG_MEMBER_GAS ≤ verifyBudget (here 1,145,000 + 135,000).
+    /// Register step 4: Σ of the c largest caps + c × MSIG_MEMBER_GAS + MSIG_ACCEPTED_GAS ≤ verifyBudget (here 1,145,000 + 135,000
+    /// + 2,500).
     function test_T_GAS_structureOverBudgetRefused() public {
         Member[] memory m = new Member[](3);
         uint16[3] memory kinds = [uint16(0x0100), uint16(0x0101), uint16(0x0107)];
         UARegistry tight =
             _deploy(address(0x5cc1), chainUidA, address(0), false, 1_200_000, address(0), true, _cfgs(address(mock)));
         UARegistry roomy =
-            _deploy(address(0x5cc2), chainUidA, address(0), false, 1_280_000, address(0), true, _cfgs(address(mock)));
+            _deploy(address(0x5cc2), chainUidA, address(0), false, 1_282_500, address(0), true, _cfgs(address(mock)));
         for (uint256 i; i < 3; ++i) {
             bytes memory k = _key(kinds[i]);
             m[i] = Member(kinds[i], _register(tight, kinds[i], k), 1);
@@ -513,7 +531,7 @@ contract UAGasTest is UARegistryBase {
             }
             if (cap > maxCap) maxCap = cap;
         }
-        uint256 worst = 16 * (maxCap + maxCap / 63 + 5_000 + MSIG_MEMBER_GAS);
+        uint256 worst = 16 * (maxCap + maxCap / 63 + 5_000 + MSIG_MEMBER_GAS) + MSIG_ACCEPTED_GAS;
         emit log_named_uint("msig worst case (16 x largest cap, handed)", worst);
         assertLe(worst, BUDGET, "msig worst case over the budget");
     }

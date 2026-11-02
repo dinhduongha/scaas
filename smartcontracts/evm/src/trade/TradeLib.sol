@@ -18,7 +18,35 @@ library TradeLib {
         "TradeOrder(address from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,"
         "address relayer,address dex,address destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"
     );
-    bytes32 internal constant CANCEL_ORDER_TYPEHASH = keccak256("CancelOrder(bytes32 orderHash)");
+    bytes32 internal constant WRAP_ORDER_TYPEHASH = keccak256(
+        "WrapOrder(address from,address wrappedToken,uint256 amount,uint256 minMinted,uint256 minFill,uint256 fee,"
+        "address relayer,address destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"
+    );
+    bytes32 internal constant UA_WRAP_ORDER_TYPEHASH = keccak256(
+        "UAWrapOrder(bytes32 from,address wrappedToken,uint256 amount,uint256 minMinted,uint256 minFill,uint256 fee,"
+        "address relayer,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"
+    );
+    // The cancel nests the struct the order was signed in (TS-D19); one string literal per typehash.
+    bytes32 internal constant CANCEL_ORDER_TYPEHASH = keccak256(
+        "CancelOrder(TradeOrder order)TradeOrder(address from,address receiveToken,uint256 amount,uint256 receiveAmount,"
+        "uint256 minFill,uint256 fee,address relayer,address dex,address destination,uint8 flags,uint256 batch,"
+        "uint256 nonce,uint256 validUntil)"
+    );
+    bytes32 internal constant CANCEL_UA_ORDER_TYPEHASH = keccak256(
+        "CancelUAOrder(UATradeOrder order)UATradeOrder(bytes32 from,address receiveToken,uint256 amount,"
+        "uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,bytes32 destination,uint8 flags,"
+        "uint256 batch,uint256 nonce,uint256 validUntil)"
+    );
+    bytes32 internal constant CANCEL_WRAP_ORDER_TYPEHASH = keccak256(
+        "CancelWrapOrder(WrapOrder order)WrapOrder(address from,address wrappedToken,uint256 amount,uint256 minMinted,"
+        "uint256 minFill,uint256 fee,address relayer,address destination,uint8 flags,uint256 batch,uint256 nonce,"
+        "uint256 validUntil)"
+    );
+    bytes32 internal constant CANCEL_UA_WRAP_ORDER_TYPEHASH = keccak256(
+        "CancelUAWrapOrder(UAWrapOrder order)UAWrapOrder(bytes32 from,address wrappedToken,uint256 amount,"
+        "uint256 minMinted,uint256 minFill,uint256 fee,address relayer,bytes32 destination,uint8 flags,uint256 batch,"
+        "uint256 nonce,uint256 validUntil)"
+    );
     bytes32 internal constant INVALIDATE_NONCES_TYPEHASH =
         keccak256("InvalidateNonces(address from,uint256 batch,uint256 minNonce)");
     bytes32 internal constant UA_TRADE_ORDER_TYPEHASH = keccak256(
@@ -61,17 +89,38 @@ library TradeLib {
         }
     }
 
-    /// @dev EIP-712 struct hash of `o` (the token wraps it in its domain).
+    /// @dev EIP-712 struct hash of `o` as a `TradeOrder`: what a `DexOrder` nests, whatever its fields (CTR-DEX-18).
     function hashStruct(ITradeToken.TradeOrder memory o) internal pure returns (bytes32) {
+        return _tradeHash(core(o), TRADE_ORDER_TYPEHASH);
+    }
+
+    /// @dev EIP-712 struct hash of a token's order (the token wraps it in its domain; `ua`: the id struct). An order with
+    ///      `dex == receiveToken` is a wrap, the wrapped token pulling for itself (TS-D19): it is signed as `WrapOrder`,
+    ///      which has no `dex`; every other order as `TradeOrder`. One accepted form per order.
+    function orderHash(ITradeToken.UATradeOrder memory c, bool ua) internal pure returns (bytes32) {
+        if (c.dex == c.receiveToken) return _wrapHash(c, ua ? UA_WRAP_ORDER_TYPEHASH : WRAP_ORDER_TYPEHASH);
+        return _tradeHash(c, ua ? UA_TRADE_ORDER_TYPEHASH : TRADE_ORDER_TYPEHASH);
+    }
+
+    function _tradeHash(ITradeToken.UATradeOrder memory o, bytes32 typehash) private pure returns (bytes32) {
         return keccak256(abi.encode(
-            TRADE_ORDER_TYPEHASH, o.from, o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.fee, o.relayer, o.dex,
+            typehash, o.from, o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.fee, o.relayer, o.dex,
             o.destination, o.flags, o.batch, o.nonce, o.validUntil));
     }
 
-    function hashStructUA(ITradeToken.UATradeOrder memory o) internal pure returns (bytes32) {
+    function _wrapHash(ITradeToken.UATradeOrder memory o, bytes32 typehash) private pure returns (bytes32) {
         return keccak256(abi.encode(
-            UA_TRADE_ORDER_TYPEHASH, o.from, o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.fee, o.relayer,
-            o.dex, o.destination, o.flags, o.batch, o.nonce, o.validUntil));
+            typehash, o.from, o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.fee, o.relayer, o.destination,
+            o.flags, o.batch, o.nonce, o.validUntil));
+    }
+
+    /// @notice EIP-712 struct hash of the cancel of a token's order: the nested struct the order was signed in (TS-D19).
+    ///         A library call: a rare path, and four type strings the tokens need not carry.
+    function cancelHash(ITradeToken.UATradeOrder memory c, bool ua) public pure returns (bytes32) {
+        bytes32 t = c.dex == c.receiveToken
+            ? (ua ? CANCEL_UA_WRAP_ORDER_TYPEHASH : CANCEL_WRAP_ORDER_TYPEHASH)
+            : (ua ? CANCEL_UA_ORDER_TYPEHASH : CANCEL_ORDER_TYPEHASH);
+        return keccak256(abi.encode(t, orderHash(c, ua)));
     }
 
     /// @dev The one form of both structs: the same 13 static ABI words in the same order, a native id being its address
@@ -160,7 +209,7 @@ library TradeLib {
         emit ITradeToken.PullRestored(h, amount);
     }
 
-    /// @notice After the `CancelOrder` signature: closed forever; an already closed order is a no-op. Either way this
+    /// @notice After the cancel's signature: closed forever; an already closed order is a no-op. Either way this
     ///         transaction's pulls can no longer be restored (DX7).
     function cancel(bytes32 h, uint256 amount, bytes32 from, bool ua) public {
         bytes32 t = _inTx(h);

@@ -26,6 +26,14 @@ contract DexKatTest is Test {
     address constant RELAYER = address(0xBEEF);
     address constant TREASURY = address(0x7EA5);
     string constant OUT = "./test/vectors/dex_order_kat.json";
+    bytes32 constant DEX_ORDER = keccak256(
+        "DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,address receiveToken,uint256 amount,"
+        "uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,address destination,"
+        "uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)");
+    bytes32 constant CANCEL_DEX_ORDER = keccak256(
+        "CancelDexOrder(DexOrder order)DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,address receiveToken,"
+        "uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,address destination,"
+        "uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)");
     address alice = vm.addr(ALICE_PK);
     address dave = vm.addr(DAVE_PK);
     NormalToken a;
@@ -100,9 +108,9 @@ contract DexKatTest is Test {
 
     /// The DEX-side cancel closes Dave's remainder; the DEX-side invalidate raises his lane 1 to 5.
     function _cancels(string memory k, ITradeToken.TradeOrder memory m, bytes32 hm, bytes32 domainSep) internal {
-        bytes32 cancelDigest = dex.cancelOrderDigest(hm);
-        assertEq(cancelDigest, keccak256(abi.encodePacked(hex"1901", domainSep,
-            keccak256(abi.encode(TradeLib.CANCEL_ORDER_TYPEHASH, hm)))));
+        bytes32 cancelDigest = dex.cancelDexOrderDigest(address(usdc), m);
+        bytes32 dexOrderHash = keccak256(abi.encode(DEX_ORDER, address(usdc), _tradeStruct(m)));
+        assertEq(cancelDigest, keccak256(abi.encodePacked(hex"1901", domainSep, keccak256(abi.encode(CANCEL_DEX_ORDER, dexOrderHash)))));
         ISCaaSDex.DexOrder[] memory os = new ISCaaSDex.DexOrder[](1);
         os[0] = ISCaaSDex.DexOrder(address(usdc), m);
         bytes[] memory sigs = new bytes[](1);
@@ -130,8 +138,8 @@ contract DexKatTest is Test {
     {
         p.ref = keccak256("scaas.kat.exchange");
         p.legs = new ISCaaSDex.ExchangeLeg[](2);
-        p.legs[0] = ISCaaSDex.ExchangeLeg(address(usdc), 0, abi.encode(m), _sign(DAVE_PK, hm), 1000e6, 500e6);
-        p.legs[1] = ISCaaSDex.ExchangeLeg(address(a), 0, abi.encode(t), _sign(ALICE_PK, a.tradeOrderDigest(t)), 500e6, 1000e6);
+        p.legs[0] = DexLegs.xLeg(address(usdc), m, _sign(DAVE_PK, hm), 1000e6, 500e6);
+        p.legs[1] = DexLegs.xLeg(address(a), t, _sign(ALICE_PK, a.tradeOrderDigest(t)), 500e6, 1000e6);
         p.extraTokens = new address[](1);
         p.extraTokens[0] = address(0xE7A);
     }
@@ -166,9 +174,9 @@ contract DexKatTest is Test {
     {
         ISCaaSDex.HybridPlan memory p;
         p.ref = keccak256("scaas.kat.hybrid");
-        p.taker = ISCaaSDex.Leg(address(a), 0, abi.encode(t), _sign(ALICE_PK, a.tradeOrderDigest(t)), 500e6);
-        p.makers = new ISCaaSDex.Leg[](1);
-        p.makers[0] = ISCaaSDex.Leg(address(usdc), 0, abi.encode(m), _sign(DAVE_PK, hm), 1000e6);
+        p.taker = DexLegs.leg(address(a), t, _sign(ALICE_PK, a.tradeOrderDigest(t)), 500e6);
+        p.makers = new ISCaaSDex.DexLeg[](1);
+        p.makers[0] = DexLegs.leg(address(usdc), m, _sign(DAVE_PK, hm), 1000e6);
         p.outsideSell = 100e6;
         p.outsideFloor = 200e6;
         p.extraTokens = new address[](1);

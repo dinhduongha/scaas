@@ -7,6 +7,7 @@ import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
+import {DexLegs} from "../helpers/DexLegs.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {UniswapExecutor} from "../../src/dex/UniswapExecutor.sol";
@@ -169,15 +170,15 @@ contract UniswapForkTest is Test {
     }
 
     function _leg(uint256 pk, address sell, ITradeToken.TradeOrder memory o, uint256 fill)
-        internal view returns (ISCaaSDex.Leg memory)
+        internal view returns (ISCaaSDex.DexLeg memory)
     {
-        return ISCaaSDex.Leg(sell, 0, abi.encode(o), _sig(pk, sell, o), fill);
+        return DexLegs.leg(sell, o, _sig(pk, sell, o), fill);
     }
 
     function _xLeg(uint256 pk, address sell, ITradeToken.TradeOrder memory o, uint256 sellFill, uint256 floor)
         internal view returns (ISCaaSDex.ExchangeLeg memory)
     {
-        return ISCaaSDex.ExchangeLeg(sell, 0, abi.encode(o), _sig(pk, sell, o), sellFill, floor);
+        return DexLegs.xLeg(sell, o, _sig(pk, sell, o), sellFill, floor);
     }
 
     function _plan(bytes32 ref, ISCaaSDex.ExchangeLeg memory l) internal pure returns (ISCaaSDex.ExchangePlan memory p) {
@@ -379,7 +380,7 @@ contract UniswapForkTest is Test {
         p.outsideSell = 1 ether;
         p.outsideFloor = _buffered(q);
         p.taker = _leg(DAVE_PK, WETH, _order(dave, USDC, sell, (2000e6 + p.outsideFloor) * 95 / 100, FEE), sell);
-        p.makers = new ISCaaSDex.Leg[](2);
+        p.makers = new ISCaaSDex.DexLeg[](2);
         p.makers[0] = _leg(ERIN_PK, USDC, me, 1000e6);
         p.makers[1] = _leg(FRANK_PK, USDC, mf, 1000e6);
     }
@@ -458,8 +459,8 @@ contract UniswapForkTest is Test {
         assertEq(IERC20(WETH).balanceOf(dave), 9 ether);
         assertEq(IERC20(WETH).balanceOf(erin), 10 ether + internalW);
         assertEq(IERC20(USDC).balanceOf(erin), 99_000e6);
-        assertEq(dex.pulled(dex.dexOrderDigest(WETH, abi.decode(p.legs[0].order, (ITradeToken.TradeOrder)))), 1 ether);
-        assertEq(dex.pulled(dex.dexOrderDigest(USDC, abi.decode(p.legs[1].order, (ITradeToken.TradeOrder)))), 1000e6);
+        assertEq(dex.pulled(dex.dexOrderDigest(WETH, p.legs[0].order)), 1 ether);
+        assertEq(dex.pulled(dex.dexOrderDigest(USDC, p.legs[1].order)), 1000e6);
         _clean();
     }
 

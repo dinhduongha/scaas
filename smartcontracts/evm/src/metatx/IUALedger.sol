@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title The UA ledger of every SCaaS token (accounts.md CTR-UA-18, CTR-UA-19, CTR-UA-26): balances of derived UAs by
 ///        `bytes32` id, shown to ERC-20 observers as the one holder `UA_POOL`, and the `ua*` meta-transactions whose
@@ -41,7 +42,12 @@ interface IUALedger {
     function transferToUA(bytes32 to, uint256 amount) external returns (bool);
     function uaExecute(MetaTxLib.UAMetaTransaction calldata m, bytes calldata auth) external returns (bytes memory);
     function uaBatch(MetaTxLib.UAMetaTransaction[] calldata ms, bytes[] calldata auths) external returns (bool);
-    function uaExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, bytes calldata auth) external returns (bool);
-    function uaBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, bytes[] calldata auths) external returns (bool);
-    function uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, bytes calldata auth) external;
+    function uaExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth)
+        external returns (bool);
+    function uaBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths)
+        external returns (bool);
+    /// @notice `mtxRelayFee` on ids: `from` signed `UARelayFee{…, relayer}` under `metatx`.
+    function uaRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value,
+        uint256 validUntil, IUARegistry.UASig calldata auth) external;
+    function uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, IUARegistry.UASig calldata auth) external;
 }

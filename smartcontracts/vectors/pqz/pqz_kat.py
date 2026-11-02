@@ -146,8 +146,18 @@ def entry_ref(chain_id, chain_uid, token, from_ua, send_counter):
                      word(send_counter))
 
 
-def auth_digest(stmt):
-    return keccak256(b"SCAAS-PQZ-AUTH-V1", keccak256(stmt))
+PQZ_AUTH_TYPEHASH = keccak256(
+    b"PqzAuth(uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,"
+    b"bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,"
+    b"bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash)")
+EIP712_DOMAIN_TYPEHASH = keccak256(b"EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)")
+
+
+def auth_digest(op, stmt):
+    """The typed `PqzAuth` (TS-D19): hashStruct = typehash, op, the 640 header bytes as words, bodyHash = keccak256(stmt[640:]),
+    under the token's domain: name, version 1, and the statement's own chainId, token and chainUid (the salt) words."""
+    domain = keccak256(EIP712_DOMAIN_TYPEHASH, keccak256(b"SCaaS PqzToken"), keccak256(b"1"), stmt[64:96], stmt[96:128], stmt[512:544])
+    return keccak256(b"\x19\x01", domain, keccak256(PQZ_AUTH_TYPEHASH, word(op), stmt[:640], kec(stmt[640:])))
 
 
 def ct_hash(ct):
@@ -1171,11 +1181,14 @@ def check_statement(j, d):
             leg = ct.pop("leg")
             cmp(bad, f"{form} ct = TRANSFER out, leg", (ct, leg), (statement_rows(d)["TRANSFER"]["objects"]["out"],
                                                                   2 if form == "DISCLOSE-AUDITOR" else 0))
+        debit = OP_BYTE[form.rstrip("0")] <= 2  # only a debit is authorised: a register or disclosure row has no digest
+        cmp(bad, f"{form} auth_digest present", "auth_digest" in r, debit)
         for n, idb in IDS.items():
             s = with_id(st, idb)
             parse(OP_BYTE[form.rstrip("0")], s)
             cmp(bad, f"{form} {n} stmt_keccak", r["stmt_keccak"][n], kec(s).hex())
-            cmp(bad, f"{form} {n} auth_digest", r["auth_digest"][n], keccak256(b"SCAAS-PQZ-AUTH-V1", kec(s)).hex())
+            if debit:
+                cmp(bad, f"{form} {n} auth_digest", r["auth_digest"].get(n), auth_digest(OP_BYTE[form.rstrip("0")], s).hex())
         if form.startswith("TRANSFER"):
             h = {k: fval(v) for k, v in r["header"].items()}
             cmp(bad, f"{form} entry_ref", r["entry_ref"],
@@ -1232,7 +1245,7 @@ def check_mdisc(j, d):
             s = with_id(st, idb)
             parse(5, s)
             cmp(bad, f"{case} {n} stmt_keccak", r["stmt_keccak"][n], kec(s).hex())
-            cmp(bad, f"{case} {n} auth_digest", r["auth_digest"][n], keccak256(b"SCAAS-PQZ-AUTH-V1", kec(s)).hex())
+        cmp(bad, f"{case} auth_digest absent", "auth_digest" in r, False)
     if not any(r["objects"]["window"] for r in j.get("disclosures", [])):
         bad.append("disclosures: no nonzero window")
     return bad
@@ -1307,7 +1320,7 @@ def check_multi(j, d):
         for n in r["ids"]:
             s = with_id(st, IDS[n])
             cmp(bad, f"{case} {n} stmt_keccak", r["stmt_keccak"][n], kec(s).hex())
-            cmp(bad, f"{case} {n} auth_digest", r["auth_digest"][n], keccak256(b"SCAAS-PQZ-AUTH-V1", kec(s)).hex())
+            cmp(bad, f"{case} {n} auth_digest", r["auth_digest"][n], auth_digest(7, s).hex())
         cmp(bad, f"{case} entry_ref", r["entry_ref"],
             entry_ref(h["chainId"], h["chainUid"], h["token"], h["fromUA"], h["sendCounter"]).hex())
     cmp(bad, "cases", seen, MULTI_CASES)

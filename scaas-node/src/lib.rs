@@ -22,3 +22,4 @@ pub mod odoo;
 pub mod signer;
 pub mod store;
 pub mod submit;
+pub mod typed;

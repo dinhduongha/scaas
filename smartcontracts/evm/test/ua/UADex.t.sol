@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {UACall} from "./UACall.sol";
 import {Vm} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
@@ -8,6 +9,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
+import {DexLegs} from "../helpers/DexLegs.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -101,30 +103,30 @@ abstract contract UADexBase is UALedgerBase {
 
     /// A shape-1 leg: a derived signer through the registry under `trade`, a padded native by its own signature.
     function _uaLeg(address sell, ITradeToken.UATradeOrder memory o, uint256 fill)
-        internal view returns (ISCaaSDex.Leg memory)
+        internal view returns (ISCaaSDex.DexLeg memory)
     {
         bytes32 h = ITradeToken(sell).uaTradeOrderDigest(o);
         bytes memory auth = UAKinds.inNativeSpace(o.from)
             ? _ecdsa(_pk(address(uint160(uint256(o.from)))), h)
             : _auth(lreg, lreg.kindOf(o.from), _key(lreg.kindOf(o.from)), UAKinds.PURPOSE_TRADE, h);
-        return ISCaaSDex.Leg(sell, 1, abi.encode(o), auth, fill);
+        return DexLegs.uaLeg(sell, o, UACall.auth(o.from, auth), fill);
     }
 
     /// A shape-0 leg (a SCaaS token's `TradeOrder`, or an outside token's `DexOrder`).
     function _natLeg(address sell, ITradeToken.TradeOrder memory o, uint256 fill)
-        internal view returns (ISCaaSDex.Leg memory)
+        internal view returns (ISCaaSDex.DexLeg memory)
     {
         bytes32 h = sell == address(usdc) ? dex.dexOrderDigest(sell, o) : ITradeToken(sell).tradeOrderDigest(o);
-        return ISCaaSDex.Leg(sell, 0, abi.encode(o), _ecdsa(_pk(o.from), h), fill);
+        return DexLegs.leg(sell, o, _ecdsa(_pk(o.from), h), fill);
     }
 
-    function _s(ISCaaSDex.Leg memory taker, ISCaaSDex.Leg memory maker)
+    function _s(ISCaaSDex.DexLeg memory taker, ISCaaSDex.DexLeg memory maker)
         internal pure returns (ISCaaSDex.Settlement[] memory ss)
     {
         ss = new ISCaaSDex.Settlement[](1);
         ss[0].ref = "ua";
         ss[0].taker = taker;
-        ss[0].makers = new ISCaaSDex.Leg[](1);
+        ss[0].makers = new ISCaaSDex.DexLeg[](1);
         ss[0].makers[0] = maker;
     }
 
@@ -201,7 +203,7 @@ contract UADexTest is UADexBase {
     function test_uaVsUa_and_aSecondFillVerifiesNothing() public {
         ITradeToken.UATradeOrder memory t = _ua(uaP, address(B), 500, 1000, 0);
         ITradeToken.UATradeOrder memory m = _ua(uaB, address(A), 2000, 1000, 0);
-        ISCaaSDex.Leg memory ml = _uaLeg(address(B), m, 1000);
+        ISCaaSDex.DexLeg memory ml = _uaLeg(address(B), m, 1000);
         assertTrue(_settle(_s(_uaLeg(address(A), t, 500), ml)));
         assertEq(B.balanceOfUA(uaP), 1000);
         assertEq(A.balanceOfUA(uaB), 500);
@@ -258,7 +260,7 @@ contract UADexTest is UADexBase {
         _expectOne(_s(_uaLeg(address(C), tc, 1000), _natLeg(address(A), _nat(alice, address(C), 1000, 1000, 0), 1000)),
             abi.encodeWithSelector(ISCaaSDex.UALegNotLedger.selector, address(C)));
         ITradeToken.UATradeOrder memory tu = _ua(_pad(dave), address(A), 1000, 1000, 0);
-        ISCaaSDex.Leg memory lu = ISCaaSDex.Leg(address(usdc), 1, abi.encode(tu), hex"00", 1000); // usdc has no digest
+        ISCaaSDex.DexLeg memory lu = DexLegs.uaLeg(address(usdc), tu, UACall.auth(tu.from, hex"00"), 1000); // usdc has no digest
         _expectOne(_s(lu, _natLeg(address(A), _nat(alice, address(usdc), 1000, 1000, 0), 1000)),
             abi.encodeWithSelector(ISCaaSDex.UALegNotLedger.selector, address(usdc)));
         // an unknown tag
@@ -343,12 +345,12 @@ contract UADexTest is UADexBase {
         ISCaaSDex.ExchangePlan memory p;
         p.ref = "x";
         p.legs = new ISCaaSDex.ExchangeLeg[](1);
-        ISCaaSDex.Leg memory l = _uaLeg(address(A), o, 1000);
-        p.legs[0] = ISCaaSDex.ExchangeLeg(address(A), 1, l.order, l.sig, 1000, 1900);
+        ISCaaSDex.DexLeg memory l = _uaLeg(address(A), o, 1000);
+        p.legs[0] = DexLegs.exchange(l, 1000, 1900);
         // `uaTrade` is never an interaction (the DEX is `o.dex` of every order)
         ISCaaSDex.Interaction[] memory bad = new ISCaaSDex.Interaction[](1);
         bad[0] = ISCaaSDex.Interaction(address(A),
-            abi.encodeCall(ITradeToken.uaTrade, (o, l.sig, ITradeToken.TradeFill(1, 2, 0, RELAYER))));
+            abi.encodeCall(ITradeToken.uaTrade, (o, l.auth, ITradeToken.TradeFill(1, 2, 0, RELAYER))));
         vm.prank(RELAYER);
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, address(A), ITradeToken.uaTrade.selector));
         dex.mtxExchange(p, bad);

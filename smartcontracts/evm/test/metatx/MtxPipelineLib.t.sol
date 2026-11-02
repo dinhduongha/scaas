@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {UACall} from "../ua/UACall.sol";
 import {Test} from "forge-std/Test.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
@@ -23,7 +24,8 @@ contract PipeHarness {
     function preTransfer(MtxPipelineLib.Ctx calldata c, MetaTxLib.UAMetaTransfer calldata t, bool ua, uint256 have,
         bytes calldata auth) external returns (MtxPipelineLib.Out memory)
     {
-        return MtxPipelineLib.preTransfer(c, t, ua, have, auth);
+        return ua ? MtxPipelineLib.preTransferUA(c, t, 0, have, UACall.auth(t.from, auth))
+            : MtxPipelineLib.preTransfer(c, t, 0, have, auth);
     }
 
     function callDigest(bytes32 ds, bytes32 typehash, MtxPipelineLib.Envelope calldata e)
@@ -90,7 +92,7 @@ contract MtxPipelineLibTest is Test {
 
     /// AMOUNT(0) on a 36-byte static selector, basis 100 (fee cap 1).
     function _facts() internal pure returns (MtxPipelineLib.CallFacts memory) {
-        return MtxPipelineLib.CallFacts(SEL, 36, 2, 0, 36, 100, true);
+        return MtxPipelineLib.CallFacts(SEL, 36, 2, 0, 36, 100, true, MetaTxLib.MODE_KNOWN_MASK);
     }
 
     function _sig(uint256 pk, bytes32 d) internal pure returns (bytes memory) {
@@ -354,7 +356,7 @@ contract MtxPipelineLibTest is Test {
         (bool ok, bytes memory ret) = lib.call(abi.encodeWithSelector(MtxPipelineLib.preCall.selector, c, e, f, false, sig));
         assertFalse(ok);
         assertEq(ret.length, 0, "preCall: the guard's empty revert");
-        (ok, ret) = lib.call(abi.encodeWithSelector(MtxPipelineLib.preTransfer.selector, c, t, true, 101, tauth));
+        (ok, ret) = lib.call(abi.encodeWithSelector(MtxPipelineLib.preTransfer.selector, c, t, bytes32(0), 101, tauth));
         assertFalse(ok);
         assertEq(ret.length, 0, "preTransfer: the guard's empty revert");
 

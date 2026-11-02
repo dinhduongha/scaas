@@ -58,12 +58,12 @@ contract PqzWrappedTest is PqzFixture {
         bytes memory nb = _blob(21, PqzCt.CT);
         bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), nb);
         IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 400, 400 * SCALE);
-        bytes memory st = w.unshieldUnwrapStatement(pl, x, 0);
+        bytes memory st = w.unshieldUnwrapStatement(_bs(pl), x, 0);
         assertEq(bytes32(_cut(st, 544, 32)), w.unwrapBinding(address(usd), 400 * SCALE), "direct: leg and minOut bound");
         assertEq(uint256(bytes32(_cut(st, 288, 32))), 400);
         vm.expectCall(PQZ, abi.encodePacked(uint8(2), uint32(ST_BURN), st, hex"c0de"));
         g = gasleft();
-        w.mtxUnshieldUnwrap(pl, hex"c0de", _mlAuth(), _benM(pl), "", x);
+        w.mtxUnshieldUnwrap(_bs(pl), x, hex"c0de", _pqAuth(), "");
         console2.log("mtxUnshieldUnwrap (mocked proof) gas", g - gasleft());
         assertEq(usd.balanceOf(address(0xD00D)), 400 * SCALE);
         assertEq(w.totalShielded(), 600);
@@ -72,11 +72,11 @@ contract PqzWrappedTest is PqzFixture {
         pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), _blob(22, PqzCt.CT));
         x = IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 10, 10 * SCALE + 1);
         vm.expectRevert();
-        w.mtxUnshieldUnwrap(pl, hex"c0de", _mlAuth(), _benM(pl), "", x);
+        w.mtxUnshieldUnwrap(_bs(pl), x, hex"c0de", _pqAuth(), "");
         // an unknown leg
         x = IConfidentialWrappedToken.Unwrap(address(0xBAD), bytes32(uint256(uint160(address(0xD00D)))), 10, 0);
         vm.expectRevert();
-        w.mtxUnshieldUnwrap(pl, hex"c0de", _mlAuth(), _benM(pl), "", x);
+        w.mtxUnshieldUnwrap(_bs(pl), x, hex"c0de", _pqAuth(), "");
     }
 
     /// W-Q(f) / CTR-MTX-18: the kind's restated `disableFeature` and `executeRate` carry the guard too; a hook leg that
@@ -111,7 +111,7 @@ contract PqzWrappedTest is PqzFixture {
         // burn through mtxUnshield moves public units out of the pool (supply unchanged)
         bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), bob, bytes32(0)),
             _blob(23, PqzCt.CT));
-        w.mtxUnshield(pl, hex"c0de", _mlAuth(), _benM(pl), "", 5, bytes32(uint256(uint160(address(this)))));
+        w.mtxUnshield(_bs(pl), 5, bytes32(uint256(uint160(address(this)))), hex"c0de", _pqAuth(), "");
         assertEq(w.totalSupply(), 50 * SCALE);
         assertEq(w.balanceOf(address(this)), 35 * SCALE);
         assertEq(usd.balanceOf(address(w)), w.totalSupply());

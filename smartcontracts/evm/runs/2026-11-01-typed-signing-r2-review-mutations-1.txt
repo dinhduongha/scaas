@@ -1,0 +1,13 @@
+## msig-threshold-stop: library `_msig`: no stop at the threshold
+file src/ua/UARegistryLib.sol, restored by cmp: same
+CAUGHT rc=1 compiled=True
+  [FAIL: SplitDiff: no revert: msig: a MemberSig after the threshold] test_diff() (gas: 1988867891)
+## msig-index-count: library `_msig`: no check against the member count
+file src/ua/UARegistryLib.sol, restored by cmp: same
+CAUGHT rc=1 compiled=True
+  [FAIL: first row that differs: msig: an index past the members [calls] != ] test_diff() (gas: 5101582358)
+## msig-index-order: library `_msig`: a member twice, or out of order
+file src/ua/UARegistryLib.sol, restored by cmp: same
+CAUGHT rc=1 compiled=True
+  [FAIL: SplitDiff: no revert: msig: members out of order] test_diff() (gas: 1910538027)
+mutants not caught or not restored: 0

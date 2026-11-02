@@ -66,9 +66,9 @@ contract TradeKatTest is Test {
             o.relayer, o.dex, o.destination, o.flags, o.batch, o.nonce, o.validUntil));
         bytes32 h = keccak256(abi.encodePacked(hex"1901", domainSep, structHash));
         assertEq(h, tok.tradeOrderDigest(o));
-        bytes32 cancelStruct = keccak256(abi.encode(TradeLib.CANCEL_ORDER_TYPEHASH, h));
+        bytes32 cancelStruct = keccak256(abi.encode(TradeLib.CANCEL_ORDER_TYPEHASH, structHash));
         bytes32 cancelDigest = keccak256(abi.encodePacked(hex"1901", domainSep, cancelStruct));
-        assertEq(cancelDigest, tok.cancelOrderDigest(h));
+        assertEq(cancelDigest, tok.cancelOrderDigest(o));
         bytes32 invStruct = keccak256(abi.encode(TradeLib.INVALIDATE_NONCES_TYPEHASH, o.from, uint256(7), uint256(43)));
         bytes32 invDigest = keccak256(abi.encodePacked(hex"1901", domainSep, invStruct));
         assertEq(invDigest, tok.invalidateNoncesDigest(o.from, 7, 43));

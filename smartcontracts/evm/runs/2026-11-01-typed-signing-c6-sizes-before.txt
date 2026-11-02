@@ -1,0 +1,21 @@
+# sizes-before at commit 3aa90da6
+DexPuller 628 682
+HederaLib 767 819
+MtxPipelineLib 10844 10896
+MtxRelayExecutor 554 602
+MtxRelayFee 2982 3707
+NormalPqzToken 51741 54375
+NormalToken 35750 38009
+NormalZetherToken 51639 55218
+PqzStateLib 8318 8370
+PqzViewLib 17491 17543
+PqzWrappedLib 4860 4912
+SCaaSDex 26967 28627
+TradeLib 4027 4079
+WrappedLib 14076 14128
+WrappedPqzToken 62000 64644
+WrappedToken 46284 48550
+WrappedZetherToken 60759 64348
+ZetherLib 19560 19612
+ZetherWrappedLib 4958 5010
+rc=0

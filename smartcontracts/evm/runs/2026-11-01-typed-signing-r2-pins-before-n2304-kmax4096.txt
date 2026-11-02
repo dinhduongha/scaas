@@ -1,0 +1,70 @@
+# pins-before-n2304-kmax4096 at worktree 1cba6901+R2
+== at-set.sh: n2304-kmax4096 (n2304-kmax4096), forge test --match-path test/ua/UARegistryUA8.t.sol --match-test test_T_GAS -vv
+No files changed, compilation skipped
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 3 tests for test/ua/UARegistryUA8.t.sol:UARegistryUA8Test
+[FAIL: GAS_REPIN: pins NOT checked] test_T_GAS_register_ua8PerKind() (gas: 654852629)
+Logs:
+  GAS|register webauthn-p256|175715|1702890
+  GAS|register p256|158089|1164330
+  GAS|register ed25519|317606|1115370
+  GAS|register bip340|154894|1115370
+  GAS|register secp256k1|153806|1213290
+  GAS|register schnorr-bn254|169273|1213290
+  GAS|register schnorr-bls12381|196398|1409130
+  GAS|register bls12381-minsig|332260|1556010
+  GAS|register bls-bn254-minsig|347070|1262250
+  GAS|register zether-bls12381|208973|1594260
+  GAS|register mldsa44|4340849|6881940
+  GAS|register mldsa65#1|387992|9232020
+  GAS|register mldsa65#2|387992|9134100
+  GAS|register mldsa65/n2304-kmax4096|3613592|87704190
+  GAS|register fndsa512|2733963|6384690
+  GAS|register slhdsa128s|1115472|13246740
+  GAS|register msig-classical|153420|1115370
+  GAS|register msig-pq/n2304-kmax4096|3740568|90260820
+  GAS|register msig-pq-native|308120|6843690
+
+[FAIL: GAS_REPIN: pins NOT checked] test_T_GAS_setKemKey() (gas: 1156505203)
+Logs:
+  GAS|setKemKey mldsa65/v2 n2304-kmax4096|357272|7991190
+  GAS|popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096|15299|0
+  GAS|setKemKey fndsa512/v2 n2304-kmax4096|2505516|3947400
+  GAS|popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096|13360|0
+  GAS|setKemKey msig-pq/v2 n2304-kmax4096|594840|13797540
+  GAS|popOf (the blob setKemKey decodes) msig-pq/v2 n2304-kmax4096|18534|0
+  msig 12 x slhdsa128s pop bytes: 96832
+  GAS|setKemKey msig-12-slhdsa128s (96,832 B pop)|6337432|151930530
+  GAS|popOf (the blob setKemKey decodes) msig-12-slhdsa128s (96,832 B pop)|252226|0
+  GAS|popOf unregistered (view baseline)|2861|0
+
+[FAIL: GAS_REPIN: pins NOT checked] test_T_GAS_storePqzPop() (gas: 656612634)
+Logs:
+  R_REG proof bytes n2304-kmax4096: 30381
+  GAS|register mldsa65 with pqzPop n2304-kmax4096|3613592|87802110
+  GAS|register mldsa65 without pqzPop n2304-kmax4096|1667992|40644450
+  GAS|storePqzPop mldsa65 n2304-kmax4096|1967000|47157660
+  GAS|storePqzPop again (no-op) n2304-kmax4096|1967000|0
+  GAS|storePqzPop msig-pq on gen 2 (gen 1 record) n2304-kmax4096|1967000|47353500
+  GAS|register msig-pq without pqzPop n2304-kmax4096|1794968|43299000
+  GAS|storePqzPop msig-pq on gen 1 n2304-kmax4096|1967000|47157660
+  GAS|registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096|153453|0
+  GAS|registrationOf msig-pq on gen 1 n2304-kmax4096|105418|0
+
+Suite result: FAILED. 0 passed; 3 failed; 0 skipped; finished in 13.06s (32.38s CPU time)
+
+Ran 1 test suite in 13.06s (13.06s CPU time): 0 tests passed, 3 failed, 0 skipped (3 total tests)
+
+Failing tests:
+Encountered 3 failing tests in test/ua/UARegistryUA8.t.sol:UARegistryUA8Test
+[FAIL: GAS_REPIN: pins NOT checked] test_T_GAS_register_ua8PerKind() (gas: 654852629)
+[FAIL: GAS_REPIN: pins NOT checked] test_T_GAS_setKemKey() (gas: 1156505203)
+[FAIL: GAS_REPIN: pins NOT checked] test_T_GAS_storePqzPop() (gas: 656612634)
+
+Encountered a total of 3 failing tests, 0 tests succeeded
+
+Tip: Run `forge test --rerun` to retry only the 3 failed tests
+Tip: Run `forge test --debug --match-test <TEST_NAME>` to inspect one failing test in the debugger
+rc=1

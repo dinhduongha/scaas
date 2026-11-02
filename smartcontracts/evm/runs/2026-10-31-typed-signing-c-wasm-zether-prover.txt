@@ -1,0 +1,6 @@
+# wasm-zether-prover at commit da4d0e00
+    Finished `release` profile [optimized] target(s) in 0.03s
+    Finished `release` profile [optimized] target(s) in 0.06s
+bls12381: proveTransfer 626 ms in wasm
+wasm smoke: 9 checks passed
+rc=0

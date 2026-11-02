@@ -1,0 +1,7 @@
+test owner_digest_refuses_unknown_op_and_missing_field ... FAILED
+test owner_digests_equal_typed_ops_rows ... FAILED
+thread 'owner_digest_refuses_unknown_op_and_missing_field' (1338827) panicked at tests/typed_ops.rs:34:5:
+thread 'owner_digests_equal_typed_ops_rows' (1338828) panicked at tests/typed_ops.rs:18:106:
+called `Result::unwrap()` on an `Err` value: "missing field `curve`"
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+error: test failed, to rerun pass `--test typed_ops`

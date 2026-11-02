@@ -120,7 +120,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
             tok.transferToUA(t.from, t.value + t.fee);
             vm.prank(t.relayer);
             uint256 g = gasleft();
-            tok.uaExecuteTransfer(t, auth);
+            tok.uaExecuteTransfer(t, UACall.auth(t.from, auth));
             g -= gasleft();
             emit log_named_uint(string.concat("uaExecuteTransfer ", vm.parseJsonString(pj, string.concat(r, "name"))), g);
             assertEq(tok.balanceOfUA(t.from), 0);
@@ -164,7 +164,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
         bytes32 d = vm.parseJsonBytes32(pj, string.concat(r, "paymentDigest"));
         assertEq(tok.uaTransferDigest(t), d);
         (uint256 f, address feeTo, uint256 until) = _rfFields(pj, r);
-        assertEq(tok.receiverFeeDigest(d, f, feeTo, until), vm.parseJsonBytes32(pj, string.concat(r, "receiverFeeDigest")));
+        assertEq(tok.uaReceiverFeeDigest(t, f, feeTo, until), vm.parseJsonBytes32(pj, string.concat(r, "receiverFeeDigest")));
         return (t, f, _rfCalldata(pj, r, t));
     }
 
@@ -180,7 +180,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
         bytes memory payerAuth = vm.parseJsonBytes(pj, string.concat(r, "payerAuth"));
         bytes memory payeeAuth = vm.parseJsonBytes(pj, string.concat(r, "payeeAuth"));
         (uint256 fee, address feeTo, uint256 until) = _rfFields(pj, r);
-        return abi.encodeCall(tok.uaPayReceiverFee, (t, payerAuth, fee, feeTo, until, payeeAuth));
+        return abi.encodeCall(tok.uaPayReceiverFee, (t, UACall.auth(t.from, payerAuth), fee, feeTo, until, UACall.auth(t.to, payeeAuth)));
     }
 
     /// EIP-2028 calldata gas (4 per zero byte, 16 otherwise) and the EIP-7623 floor (10 per token, 4 tokens per non-zero byte).

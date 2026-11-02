@@ -32,3 +32,6 @@ scratchpad/
 
 # local scratch notes and artifacts: kept across reboots, never committed (owner 2026-10-13)
 /scratchpad/
+
+# session hand-over notes: local only (owner 2026-11-02)
+HANDOFF.md

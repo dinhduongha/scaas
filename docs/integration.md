@@ -168,12 +168,12 @@ process ([NODE-JOB-06](node/job-api.md#NODE-JOB-06)). Why: one lane journal per 
 
 | Kind | Payload |
 |---|---|
-| `metatx` | `{token, signature, struct: "call"\|"transfer", metatx: {…}}`: a `MetaTransaction` (an allowlisted call of any SCaaS contract) or a token's `MetaTransfer` (transfer or payment) ([NODE-JOB-20](node/job-api.md#NODE-JOB-20), [CTR-MTX-15](contracts/metatx.md#CTR-MTX-15)); `uint256` as decimal strings; addresses lowercase |
+| `metatx` | `{op: {entry, contract, token, envelope, args, signature}}`, one [named entry](node/job-api.md#named-entries), or a token's `MetaTransfer` (transfer or payment): `{token, contract?, signature, struct: "transfer", metatx: {…}}`; hex `data` / `calldata` is refused ([NODE-JOB-20](node/job-api.md#NODE-JOB-20), [CTR-MTX-15](contracts/metatx.md#CTR-MTX-15)); `uint256` as decimal strings; addresses lowercase |
 | `signed_op` | `{op: {op_kind: "pay", payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload`. Soroban names its `payload` ([job-api.md](node/job-api.md#soroban-signed-op)) |
-| `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.mtxPayUnderMandate(...)` (as built `MandateWallet.payUnderMandate(...)`), `SmartKeyAccountFactory.deploy(...)`; the signature lives inside the calldata; selector and target must match a call-table row; no native value |
-| `ua_metatx` (SPECIFIED) | MetaToken v3 `UAMetaTransaction` or `UAMetaTransfer` with `from: bytes32` and its `auth`; same lifecycle as `metatx` |
+| `call` | `{op: {entry, token, args, validUntil}}` — e.g. the flat `MandateWallet.mtxPayUnderMandate` (`struct: "mtxPayUnderMandate"`), `mtxRevoke`, `SmartKeyAccountFactory.deploy`; named fields, the signature one of them, the node builds the calldata (the old `{call: {target, calldata, validUntil}}` is refused; the call behind the flat entry is `MandateWallet.payUnderMandate(...)`); entry and target must match a call-table row; no native value |
+| `ua_metatx` | A `ua*` named entry with `auth` the `UASig` object, or `{token, contract?, struct: "transfer", m: WireUAMetaTransfer, auth}`; same lifecycle as `metatx` |
 | `pqz_call` (SPECIFIED; private chain only) | **Direct open calls only**: `{chain, contract, selector ∈ {mtxConfidentialTransfer, mtxConfidentialTransferCompact, mtxConfidentialTransferSingle, mtxConfidentialTransferSingleCompact, mtxUnshield, mtxRollOver}, calldata}` to a configured PQZ token (plan 5h names; direct `mtxShield` / `mtxWrapShield` take the caller's own public units / underlying and are never a node job) |
-| PQZ envelopes (SPECIFIED) | **No new kind**: a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` or `ua_metatx` jobs with `struct = call` (domain `("SCaaS PqzToken", "1", chainId, token, chainUid)`), `m.data` = the direct calldata of `mtxConfidentialTransfer*`/`mtxUnshield`/`mtxShield` (and `mtxUnshieldUnwrap` on `WRAPPED_PQZ`; opaque to the client); `mtxRollOver` and `mtxPrepareAcc` are relayable too (on both PQZ allow-lists since Task R, owner 2026-10-20; the outer fee may be 0; anyone may also call them directly); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `mtxUnshield` (public units from `SHIELD_POOL` to `recipient`) or `mtxUnshieldUnwrap` (the underlying) |
+| PQZ envelopes (SPECIFIED) | **No new kind**: a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` or `ua_metatx` jobs naming their entry with `contract = pqz` (domain `("SCaaS PqzToken", "1", chainId, token, chainUid)`), the named fields of `mtxConfidentialTransfer*`/`mtxUnshield`/`mtxShield` (and `mtxUnshieldUnwrap` on `WRAPPED_PQZ`); `mtxRollOver` and `mtxPrepareAcc` are relayable too (on both PQZ allow-lists since Task R, owner 2026-10-20; the outer fee may be 0; anyone may also call them directly); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `mtxUnshield` (public units from `SHIELD_POOL` to `recipient`) or `mtxUnshieldUnwrap` (the underlying) |
 
 **Accept checks.** The node checks every item in a fixed order without RPC and answers per item; the rules and their
 order are [job-api.md#intake](node/job-api.md#intake). What a client must get right before it pushes:
@@ -524,8 +524,8 @@ wallets sign `pay` through the custody adapter under `SigningPolicyService` (`va
 sign the `payUnderMandate` `MetaTransaction` in the wallet's domain and push a `call` job to
 `MandateWallet.mtxPayUnderMandate` (as built `payUnderMandate` with the typed `PayUnderMandate`). A run ends `done` when the payment
 transaction is done (the accounting module posts and reconciles) or `failed`. Kill: off-chain immediately, and for
-delegated wallets an `mtxRevoke` job (as built `revokeWithSig`); the revoke is the delegate's `MetaTransaction` with `data =
-revoke(token, epoch)` and the wallet's current `epoch[token]` ([CTR-ACC-07](contracts/mandates.md#CTR-ACC-07)).
+delegated wallets a `call` job naming the flat `mtxRevoke` (`token`, `epoch`, `validUntil`, `sig`); the revoke is the delegate's `MetaTransaction` with `data =
+revoke(token, epoch)` and the wallet's current `epoch[token]` ([CTR-ACC-07](contracts/mandates.md#CTR-ACC-07)); the node derives no lane for it, the contract does.
 
 ## 9. Families and addresses
 

@@ -63,6 +63,9 @@ library UAKinds {
     bytes32 internal constant PURPOSE_POP_V2 = keccak256("scaas.ua.purpose.pop.v2");
     bytes32 internal constant PURPOSE_KEM = keccak256("scaas.ua.purpose.kem.v1");
     bytes32 internal constant PURPOSE_PQZ_KEY = keccak256("scaas.ua.purpose.pqz-key.v1");
+    /// A derived `msig` member's acceptance of its slot (`acceptMembership`, CTR-UA-37): never a `pop`, `kem` or `pqz-key`
+    /// signature, and the reverse.
+    bytes32 internal constant PURPOSE_MEMBERSHIP = keccak256("scaas.ua.purpose.membership.v1");
     /// typed-signing TS-D1 (owner 2026-10-31 decisions 2 + 8): the portable domain `EIP712Domain(string name,string
     /// version)` = ("SCaaS UA Portable", "1"), no chain id, verifying contract or salt (a record registers a UA on every
     /// chain, CTR-UA-07); `kind` is `uint16` (its name: `name(kind)`, the registry's `kindName`).
@@ -78,6 +81,7 @@ library UAKinds {
     bytes32 internal constant UA_PQZ_KEY_TYPEHASH = keccak256("UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)");
     bytes32 internal constant UA_PQZ_KEY_RECORD_TYPEHASH =
         keccak256("UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)");
+    bytes32 internal constant UA_MEMBERSHIP_TYPEHASH = keccak256("UAMembership(bytes32 ua,bytes32 member)");
     /// First byte of `kemPk` = the KEM scheme id (CTR-UA-32). Scheme 1 = ML-KEM-1024 + X25519; 2 (ML-KEM-1024 + HQC +
     /// X25519, after FIPS 207) is reserved and refused until enabled.
     uint8 internal constant KEM_SCHEME_MLKEM1024_X25519 = 1;
@@ -362,6 +366,11 @@ library UAKinds {
     /// typed(`UAPqzKeyRecord`): `setPqzKey`'s signature signs `uaMessage(kind, PURPOSE_PQZ_KEY, ·)`.
     function pqzKeyRecordDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 pqzPopHash) internal pure returns (bytes32) {
         return portableDigest(pqzKeyRecordHash(pqzKeyHash_(ua, pqzKeyHash), pqzPopHash));
+    }
+
+    /// typed(`UAMembership{ua, member}`): what `member` signs to accept its place in the `msig` `ua` (CTR-UA-37).
+    function membershipDigest(bytes32 ua, bytes32 member) internal pure returns (bytes32) {
+        return portableDigest(keccak256(abi.encode(UA_MEMBERSHIP_TYPEHASH, ua, member)));
     }
 
     function uaAuthDomainSeparator(uint256 generation, uint256 chainId, address registry, bytes32 chainUid)
