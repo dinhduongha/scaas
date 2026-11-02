@@ -124,7 +124,7 @@ export const authDigest = (payload) => sha256(authPreimage(payload));
  *  `nonce` goes as a decimal string, past 2^53; `sign` takes the 32-byte digest and gives the bytes the host reads: an ed25519 signature
  *  of a `G…`, the `ScVal` XDR a `C…` subject's `__check_auth` reads. */
 export const signedAuth = ({ networkId: n, nonce, expiry, invocation, from, sign }) => ({
-  payload: { nonce: String(nonce), expiry, invocation }, from, signature: hex(sign(authDigest({ networkId: n, nonce, expiry, invocation }))).slice(2),
+  payload: { nonce: String(nonce), expiry, invocation }, from, signature: hex(sign(authDigest({ networkId: n, nonce, expiry, invocation }))),
 });
 
 export const networkId = (passphrase) => sha256(utf8ToBytes(passphrase));

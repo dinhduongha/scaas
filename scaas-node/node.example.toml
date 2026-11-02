@@ -165,8 +165,8 @@ finality = { mode = "instant", quorum = 1 }      # SCP: a closed ledger is final
 params = { network_passphrase = "Test SDF Network ; September 2015", base_fee = 100, max_deposit_per_job = 10000000 }
 # Required on every soroban chain whose lanes run, both above 0: a job is free to the client and its fee is the lane's. In
 # stroops, per lane; a landed failure counts (up to 0.07 XLM a job, the largest success 9.96 XLM). 100 XLM an hour, a 10 XLM
-# floor. With fee_bump_lane the floor compares the fee account alone, the account that pays. call_budget_pct (default 50): a plain signed_op and `call`
-# jobs stop at this share of the budget, every other kind runs to all of it.
+# floor. With fee_bump_lane the floor compares the fee account alone, the account that pays. call_budget_pct (default 50): `call` jobs and a plain
+# signed_op that is no token payment stop at this share of the budget, everything else runs to all of it.
 breaker = { gas_budget_per_hour = "1000000000", min_relayer_balance = "100000000", call_budget_pct = 50 }
 
 [[chains]]                                       # Pi Network: Soroban family, Stellar-compatible

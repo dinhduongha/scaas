@@ -71,10 +71,6 @@ fn hex(b: &[u8]) -> String {
     alloy::hex::encode(b)
 }
 
-fn unhex(s: &str) -> Result<Vec<u8>> {
-    Ok(alloy::hex::decode(s.trim())?)
-}
-
 pub fn network_id(passphrase: &str) -> [u8; 32] {
     Sha256::digest(passphrase.as_bytes()).into()
 }
@@ -84,9 +80,9 @@ fn lane_pk(s: &LocalSigner) -> Result<[u8; 32]> {
 }
 
 /// Chữ ký trong credentials: account `G…` ⇒ `Vec[Map{public_key, signature}]` (định dạng account gốc của host);
-/// account contract `C…` ⇒ ScVal XDR (hex) mà `__check_auth` của nó đọc, chèn nguyên văn.
-pub fn credential_signature(from: &ScAddress, signature: &str) -> Result<ScVal> {
-    let sig = unhex(signature)?;
+/// account contract `C…` ⇒ ScVal XDR mà `__check_auth` của nó đọc, chèn nguyên văn. `0x…` hex, as every byte value of a job.
+pub fn credential_signature(from: &ScAddress, signature: &Value) -> Result<ScVal> {
+    let sig = hex_of(signature)?;
     match from {
         ScAddress::Account(AccountId(PublicKey::PublicKeyTypeEd25519(Uint256(pk)))) => {
             if sig.len() != 64 {
@@ -124,7 +120,7 @@ pub fn auth_entry(x: &Value) -> Result<(SorobanAuthorizationEntry, InvokeContrac
     let from = x["from"].as_str().ok_or_else(|| anyhow!("op.from missing"))?;
     let address = ScAddress::from_str(from).map_err(|_| anyhow!("bad subject address {from}"))?;
     let ScVal::I64(nonce) = ua_value("i64", nonce)? else { bail!("payload.nonce is an i64") };
-    let signature = credential_signature(&address, x["signature"].as_str().ok_or_else(|| anyhow!("op.signature missing"))?)?;
+    let signature = credential_signature(&address, &x["signature"]).context("op.signature")?;
     let call = call.clone();
     Ok((
         SorobanAuthorizationEntry {
@@ -870,6 +866,12 @@ impl ChainAdapter for SorobanAdapter {
         built.and_then(|(call, _)| ua_valid_until(&call).ok()).unwrap_or_else(|| job.op.as_ref().and_then(|o| o["valid_until"].as_u64()).unwrap_or(0))
     }
 
+    /// By kind, less a plain `signed_op` whose root is a token payment. Anything `token_payment` cannot read stays in the share.
+    fn in_call_share(&self, job: &Job) -> bool {
+        let payment = matches!(job.kind.as_deref(), None | Some("signed_op")) && job.op.as_ref().is_some_and(|op| token_payment(op, &self.relay_fee).is_some());
+        crate::adapter::call_share_by_kind(job) && !payment
+    }
+
     /// Spec §9.1: a `ua_metatx` job's id is its op digest, recomputed from its arguments (`settle`: none, the job's own).
     async fn digest(&self, job: &Job) -> std::result::Result<Option<alloy::primitives::B256>, SimError> {
         if job.kind.as_deref() == Some("ua_metatx") {
@@ -922,7 +924,7 @@ fn bytes_arg(v: &ScVal) -> Option<&[u8]> {
 }
 
 fn op_bytes(op: &Value, k: &str) -> Result<Vec<u8>> {
-    unhex(op[k].as_str().ok_or_else(|| anyhow!("op.{k} missing"))?.trim_start_matches("0x"))
+    hex_of(&op[k]).with_context(|| format!("op.{k}"))
 }
 
 /// Pay-meta job: the signed invocation is the token's `pay_meta`; `op.salt` / `op.meta` must be the signed
@@ -1033,6 +1035,26 @@ fn known_contract(c: &ScAddress, policy: &RelayFeePolicy) -> Result<()> {
         return Ok(());
     }
     bail!("{CALL_TARGET_REFUSED}: {c} is not a token, mandate, DEX or router of this chain's params")
+}
+
+/// The owner's refinement of 2026-11-02: a plain `signed_op` whose root is a token payment, `pay`, `pay_meta` or `transfer` on a contract
+/// of `policy.tokens`, read from the job's named JSON. The host call is exactly that root, so a client cannot mislabel it. `None`: any
+/// other call, another `op.kind`, or a job that does not parse.
+fn token_payment(op: &Value, policy: &RelayFeePolicy) -> Option<InvokeContractArgs> {
+    if !matches!(crate::adapter::op_kind(op, &crate::adapter::PAY_KINDS), Ok(None)) {
+        return None;
+    }
+    let (call, _) = host_call(op).ok()?;
+    let pays = matches!(call.function_name.0.as_slice(), b"pay" | b"pay_meta" | b"transfer");
+    (pays && policy.tokens.contains(&call.contract_address)).then_some(call)
+}
+
+/// What the budget gate read is what runs: a job read as a token payment that builds any other host call is refused.
+fn runs_as_read(op: &Value, call: &InvokeContractArgs, policy: &RelayFeePolicy) -> Result<()> {
+    match token_payment(op, policy) {
+        Some(read) if read != *call => bail!("{CALL_TARGET_REFUSED}: read as a token payment on {}, but the job builds another call", read.contract_address),
+        _ => Ok(()),
+    }
 }
 
 /// CTR-MTX-27: a call that pays (or approves for later pays) the router or its executor: a token `pay` / `pay_meta` /
@@ -1159,6 +1181,7 @@ pub fn job_tx(network: &[u8; 32], kind: Option<&str>, op: &Value, lane: &ScAddre
         None | Some("signed_op") => {
             let valid_until = op["valid_until"].as_u64().ok_or_else(|| anyhow!("op.valid_until missing"))?;
             let (call, auth) = job_call(network, op, lane, policy)?;
+            runs_as_read(op, &call, policy)?;
             (call, auth, valid_until)
         }
         Some("call") => {
@@ -2003,6 +2026,10 @@ mod tests {
     /// `smartcontracts/soroban/contracts/token/src/test.rs::cross_implementation_vector` (= Python `test_fam_soroban`).
     const PREIMAGE: &str = "00000009baefd734b8d3e48472cff83912375fedbc7573701912fe308af730180f97d74a000000000000002a000003e800000000000000012222222222222222222222222222222222222222222222222222222222222222000000037061790000000005000000120000000000000000e3726830a0b60cb5f52c844cffcd4eed65eba5c155e89b26411562724e71e54400000012000000000000000033333333333333333333333333333333333333333333333333333333333333330000000a000000000000000000000000000030390000000d00000020111111111111111111111111111111111111111111111111111111111111111100000005000000006b49d32c00000000";
 
+    fn unhex(s: &str) -> Result<Vec<u8>> {
+        Ok(alloy::hex::decode(s)?)
+    }
+
     fn op(payload: Value, sig: &str) -> Value {
         json!({"payload": payload, "from": FROM, "signature": sig, "contract": CONTRACT, "valid_until": 1_800_000_300u64, "extra": {}})
     }
@@ -2010,7 +2037,7 @@ mod tests {
     #[test]
     fn cross_implementation_vector_decodes_into_the_call() {
         assert_eq!(hex(&Sha256::digest(unhex(PREIMAGE).unwrap())), "0a2127bfdc94f6062f0ec27f6db966ae719dafaca90bc537666eab606b901103");
-        let (call, auth) = host_call(&op(cross_payload(), &"ab".repeat(64))).unwrap();
+        let (call, auth) = host_call(&op(cross_payload(), &sig())).unwrap();
         assert_eq!(call.contract_address.to_string(), CONTRACT);
         assert_eq!(call.function_name.0.as_slice(), b"pay");
         assert_eq!(call.args.len(), 5);
@@ -2032,36 +2059,37 @@ mod tests {
                 network_id: Hash(network_id(NETWORK)), nonce: c.nonce, signature_expiration_ledger: c.signature_expiration_ledger, invocation: e.root_invocation.clone(),
             }).to_xdr(Limits::none()).unwrap()
         };
-        let (_, auth) = host_call(&op(cross_payload(), &"ab".repeat(64))).unwrap();
+        let (_, auth) = host_call(&op(cross_payload(), &sig())).unwrap();
         assert_eq!(hex(&preimage(&auth[0])), PREIMAGE);
         let HashIdPreimage::SorobanAuthorization(mut p) = HashIdPreimage::from_xdr(unhex(PREIMAGE).unwrap(), Limits::none()).unwrap() else { panic!() };
         p.nonce = i64::MIN;
         p.invocation.sub_invocations = vec![inv(CONTRACT, "pay", vec![addr(FROM), i128v(7)], vec![inv(WALLET, "deep", vec![], vec![])])].try_into().unwrap();
         let named = json!({"nonce": p.nonce.to_string(), "expiry": p.signature_expiration_ledger, "invocation": invocation(&p.invocation)});
-        let (call, auth) = host_call(&op(named, &"ab".repeat(64))).unwrap();
+        let (call, auth) = host_call(&op(named, &sig())).unwrap();
         assert_eq!(hex(&preimage(&auth[0])), hex(&HashIdPreimage::SorobanAuthorization(p).to_xdr(Limits::none()).unwrap()));
         assert_eq!(call.function_name.0.as_slice(), b"pay", "the host call is the root, not what it calls");
     }
 
     #[test]
     fn wrong_contract_and_bad_signatures_are_refused() {
-        let mut o = op(cross_payload(), &"ab".repeat(64));
+        let mut o = op(cross_payload(), &sig());
         o["contract"] = json!("CBCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEJ5HZ");
         assert!(host_call(&o).is_err());
-        assert!(host_call(&op(cross_payload(), "abcd")).is_err(), "account signatures are 64 bytes");
-        assert!(format!("{:#}", host_call(&op(json!("00000001"), &"ab".repeat(64))).unwrap_err()).contains(HEX_ARGS_REFUSED));
+        assert!(host_call(&op(cross_payload(), "0xabcd")).is_err(), "account signatures are 64 bytes");
+        assert!(format!("{:#}", host_call(&op(cross_payload(), &"ab".repeat(64))).unwrap_err()).contains("0x"), "bytes are 0x… hex, as every leaf");
+        assert!(format!("{:#}", host_call(&op(json!("00000001"), &sig())).unwrap_err()).contains(HEX_ARGS_REFUSED));
         // one change each
         for (k, bad) in [("nonce", json!(1.5)), ("expiry", json!(-1)), ("invocation", json!(null)), ("memo", json!(1))] {
             let mut p = cross_payload();
             p[k] = bad;
-            assert!(host_call(&op(p, &"ab".repeat(64))).is_err(), "{k}");
+            assert!(host_call(&op(p, &sig())).is_err(), "{k}");
         }
         let mut p = cross_payload();
         p["invocation"]["sub_invocations"] = json!("0x00");
-        assert!(format!("{:#}", host_call(&op(p, &"ab".repeat(64))).unwrap_err()).contains(HEX_ARGS_REFUSED), "a hex tree");
+        assert!(format!("{:#}", host_call(&op(p, &sig())).unwrap_err()).contains(HEX_ARGS_REFUSED), "a hex tree");
         let mut p = cross_payload();
         p["invocation"].as_object_mut().unwrap().remove("function");
-        assert!(host_call(&op(p, &"ab".repeat(64))).is_err());
+        assert!(host_call(&op(p, &sig())).is_err());
     }
 
     #[test]
@@ -2168,7 +2196,7 @@ mod tests {
         json!({"nonce": p.nonce, "expiry": p.signature_expiration_ledger, "invocation": invocation(&p.invocation)})
     }
     fn sig() -> String {
-        "ab".repeat(64)
+        format!("0x{}", "ab".repeat(64))
     }
     fn meta_row() -> Value {
         let rows: Vec<Value> = serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
@@ -2317,6 +2345,9 @@ mod tests {
         // The payment's ref is not the call's; the job's declared ref is not the call's.
         assert!(bad(relay_job(&[9; 32], &rf)));
         assert!(bad(relay_job(&rf, &[9; 32])));
+        let mut bare = ok.clone();
+        bare["ref"] = json!(hex(&rf));
+        assert!(bad(bare), "bytes are 0x… hex, as every leaf");
         // A signed root that is not the eight arguments of `relay`.
         let mut short = ok.clone();
         short["payload"] = json!(payload(inv(WALLET2, "relay", vec![addr(WALLET)], vec![])));
@@ -2767,9 +2798,10 @@ mod tests {
     #[test]
     fn deep_xdr_is_refused_not_a_stack_overflow() {
         let c = sc(CONTRACT);
-        assert!(credential_signature(&c, &hex(&deep_xdr(15))).is_ok());
+        let xdr = |n: usize| json!(format!("0x{}", hex(&deep_xdr(n))));
+        assert!(credential_signature(&c, &xdr(15)).is_ok());
         for n in [16, 64, 680] {
-            assert!(format!("{:#}", credential_signature(&c, &hex(&deep_xdr(n))).unwrap_err()).to_lowercase().contains("depth"), "{n} levels");
+            assert!(format!("{:#}", credential_signature(&c, &xdr(n)).unwrap_err()).to_lowercase().contains("depth"), "{n} levels");
         }
     }
 
@@ -2850,13 +2882,12 @@ mod tests {
         }
     }
 
-    /// Owner ruling 2026-11-02: a plain `signed_op` counts in the `call` share. At 50 % it is not claimed and the payment behind it
-    /// runs; one with `op.kind` is a payment.
+    /// Owner ruling 2026-11-02: a plain `signed_op` that is no token payment counts in the `call` share. At 50 % it is not claimed and
+    /// the payment behind it runs; one with `op.kind` is a payment.
     #[tokio::test]
     async fn a_plain_signed_op_stops_at_the_call_share() {
         let (a, calls, _) = spend_adapter(registry(vec![], vec![]), Net::default(), false).await;
-        let plain = |id: i64| json!({"id": id, "kind": "signed_op", "op": {"payload": payload(inv(CONTRACT, "pay", vec![addr(FROM), addr(WALLET), i128v(1), byt(&[3; 32]), ScVal::U64(1)], vec![])),
-            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": VU, "extra": {}}});
+        let plain = |id: i64| signed_on(id, CONTRACT, "approve");
         assert_eq!(budget_step(&a, &spent_lane(BUDGET / 2 - 1, 50), vec![plain(7), pay_of(&a, 8)]).await, (vec![7], 1), "one stroop under the share");
         assert_eq!(sends(&calls), 1);
         assert_eq!(budget_step(&a, &spent_lane(BUDGET / 2, 50), vec![plain(7), pay_of(&a, 8)]).await, (vec![8], 1), "at the share: held, the payment runs");
@@ -2868,6 +2899,77 @@ mod tests {
         let meta = json!({"id": 10, "kind": "signed_op", "op": {"kind": "pay_meta", "payload": payload(inv(CONTRACT, "pay_meta", args, vec![])), "from": FROM,
                           "signature": sig(), "contract": CONTRACT, "valid_until": VU, "salt": format!("0x{}", hex(&[1; 32])), "meta": "0x6d", "extra": {}}});
         assert_eq!(budget_step(&a, &spent_lane(BUDGET / 2, 50), vec![meta]).await, (vec![10], 1), "a pay-meta is a payment");
+    }
+
+    /// A plain `signed_op`, `function` on `contract`, its deadline `VU`.
+    fn signed_on(id: i64, contract: &str, function: &str) -> Value {
+        json!({"id": id, "kind": "signed_op", "op": {"payload": payload(inv(contract, function, vec![addr(FROM), addr(WALLET), i128v(1), byt(&[3; 32]), ScVal::U64(1)], vec![])),
+            "from": FROM, "signature": sig(), "contract": contract, "valid_until": VU, "extra": {}}})
+    }
+
+    /// The owner's refinement of 2026-11-02: a plain `signed_op` whose root is a token payment runs to the whole budget. Its name on any
+    /// other contract, any other function on a token, a job that does not parse, and a `call` job stay in the share.
+    #[tokio::test]
+    async fn a_token_payment_runs_to_the_budget() {
+        let (a, calls, _) = spend_adapter(registry(vec![], vec![]), Net::default(), false).await;
+        let held = || spent_lane(BUDGET / 2, 50);
+        assert_eq!(budget_step(&a, &held(), vec![signed_on(7, CONTRACT, "approve"), signed_on(8, CONTRACT, "pay")]).await, (vec![8], 1), "the native pay runs, the other is held");
+        assert_eq!(sends(&calls), 1);
+        for (id, f) in [(9, "transfer"), (10, "pay_meta")] {
+            assert_eq!(budget_step(&a, &held(), vec![signed_on(id, CONTRACT, f)]).await, (vec![id], 1), "{f}");
+            assert_eq!(sends(&calls), id as usize - 7, "{f}");
+        }
+        assert_eq!(budget_step(&a, &spent_lane(BUDGET - 1, 50), vec![signed_on(11, CONTRACT, "pay")]).await, (vec![11], 1), "to the last stroop");
+        assert_eq!(budget_step(&a, &spent_lane(BUDGET, 50), vec![signed_on(12, CONTRACT, "pay")]).await, (vec![], 0), "not past the budget");
+        let sent = sends(&calls);
+
+        let unlisted = executor().to_string();
+        for (c, why) in [(unlisted.as_str(), "an unlisted contract"), (WALLET, "the mandate"), (DEX, "the DEX")] {
+            assert_eq!(budget_step(&a, &held(), vec![signed_on(20, c, "pay")]).await, (vec![], 0), "a pay name on {why}");
+        }
+        for f in ["approve", "burn", "payment"] {
+            assert_eq!(budget_step(&a, &held(), vec![signed_on(21, CONTRACT, f)]).await, (vec![], 0), "{f} on a token");
+        }
+        let mut broken = signed_on(22, CONTRACT, "pay");
+        broken["op"]["signature"] = json!("zz");
+        let mut no_args = signed_on(23, CONTRACT, "pay");
+        no_args["op"]["payload"]["invocation"].as_object_mut().unwrap().remove("args");
+        let mut hexed = signed_on(24, CONTRACT, "pay");
+        hexed["op"]["payload"] = json!(PREIMAGE);
+        let mut salted = signed_on(25, CONTRACT, "pay");
+        salted["op"]["salt"] = json!("0x00");
+        let call = json!({"id": 26, "kind": "call", "op": signed_on(26, CONTRACT, "pay")["op"]});
+        for j in [broken, no_args, hexed, salted, call] {
+            assert_eq!(budget_step(&a, &held(), vec![j.clone()]).await, (vec![], 0), "unparsable, or no plain signed_op: {j}");
+        }
+        // positive control: under the share each of the known ones goes on
+        for (i, (id, c, f)) in [(30, WALLET, "pay"), (31, DEX, "pay"), (32, CONTRACT, "approve")].into_iter().enumerate() {
+            assert_eq!(budget_step(&a, &spent_lane(BUDGET / 2 - 1, 50), vec![signed_on(id, c, f)]).await, (vec![id], 1), "{c} {f}");
+            assert_eq!(sends(&calls), sent + i + 1, "{c} {f}");
+        }
+    }
+
+    /// `op.contract` naming another contract than the signed root: the read refuses it, so at the share it is held, and under the share
+    /// `build` refuses it, `dead`, nothing sent. A job read as a payment that builds any other call is refused by name.
+    #[tokio::test]
+    async fn a_job_whose_root_and_built_call_differ_is_refused() {
+        let (a, calls, _) = spend_adapter(registry(vec![], vec![]), Net::default(), false).await;
+        let mut other = signed_on(7, CONTRACT, "pay");
+        other["op"]["contract"] = json!(DEX);
+        assert_eq!(budget_step(&a, &spent_lane(BUDGET / 2, 50), vec![other.clone()]).await, (vec![], 0), "held: not read as a payment");
+        let (sent, state, error) = job_step(&a, &calls, other).await;
+        assert_eq!((sent, state.as_str()), (0, "dead"), "{error}");
+        assert!(error.contains("its call is to"), "{error}");
+
+        let (p, op) = (&a.relay_fee, signed_on(8, CONTRACT, "pay")["op"].clone());
+        let (call, _) = host_call(&op).unwrap();
+        assert!(runs_as_read(&op, &call, p).is_ok(), "the job's own root");
+        for built in [InvokeContractArgs { function_name: ScSymbol("approve".try_into().unwrap()), ..call.clone() },
+                      InvokeContractArgs { contract_address: sc(DEX), ..call.clone() },
+                      InvokeContractArgs { args: vec![addr(FROM)].try_into().unwrap(), ..call.clone() }] {
+            let e = runs_as_read(&op, &built, p).unwrap_err().to_string();
+            assert!(e.contains(CALL_TARGET_REFUSED), "{e}");
+        }
     }
 
     /// A `ua_metatx` needs no `op.valid_until`, so `recover_lane` reads the deadline from the built call: a job in flight across a
@@ -4595,7 +4697,7 @@ mod tests {
             let n = p.len();
             p[i % n] = b;
             if let Ok(v) = serde_json::from_slice::<Value>(&p) {
-                let _ = host_call(&op(v, &"ab".repeat(64)));
+                let _ = host_call(&op(v, &sig()));
             }
         }
     }
@@ -4637,6 +4739,8 @@ mod tests {
         c.tokens = vec![crate::config::TokenCfg { address: CONTRACT.into(), decimals: 7 }];
         c.params.insert("network_passphrase".into(), "x".into());
         c.params.insert("ua_registry".into(), REGISTRY.into());
+        c.params.insert("dex".into(), DEX.into());
+        c.params.insert("mandates".into(), toml::Value::Array(vec![WALLET.into()]));
         if fee_bump {
             c.params.insert("fee_bump_lane".into(), 0.into());
         }

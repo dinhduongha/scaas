@@ -141,13 +141,16 @@ pub trait ChainAdapter: Send + Sync {
     fn subject(&self, _job: &Job) -> Option<(alloy::primitives::B256, bool)> {
         None
     }
-    /// NODE-GW-07 at lane start: an EVM chain whose RPC's block 0 is not the configured `chain_uid` never runs a
-    /// lane (review T4 I2). Default: nothing to check.
     /// The deadline of a job picked up after a restart, its bytes gone. Default: `op.valid_until`, 0 when it names none.
     fn job_valid_until(&self, job: &Job) -> u64 {
         job.op.as_ref().and_then(|o| o["valid_until"].as_u64()).unwrap_or(0)
     }
-
+    /// Whether this job counts in the `call` share of the budget, read before its claim. Default: by its kind (`call_share_by_kind`).
+    fn in_call_share(&self, job: &Job) -> bool {
+        call_share_by_kind(job)
+    }
+    /// NODE-GW-07 at lane start: an EVM chain whose RPC's block 0 is not the configured `chain_uid` never runs a
+    /// lane (review T4 I2). Default: nothing to check.
     async fn start_check(&self) -> Result<()> {
         Ok(())
     }
@@ -299,7 +302,7 @@ pub async fn lane_runner(
         }
         let held = calls_stopped(adapter.as_ref(), Some(&breaker));
         if held != calls_held {
-            warn!(chain = %key, lane, held, "`call` jobs and plain `signed_op`s at their share of the gas budget");
+            warn!(chain = %key, lane, held, "jobs of the `call` share at their part of the gas budget");
             calls_held = held;
         }
         let why = match step_once(adapter.as_ref(), &odoo, lane, &worker, Some(&breaker), &inflight).await {
@@ -503,9 +506,9 @@ enum Step {
 }
 
 /// Owner rulings I-2 and 2026-11-02: `call` jobs and a plain `signed_op` (no `op.kind`; a job with no kind is one) stop at
-/// `call_budget_pct` of the hour's budget, every other kind runs to all of it. Soroban's, whose `call` job is free to the client;
-/// Hedera's run on this runner with the EVM rules, and EVM has its own runner.
-fn in_call_share(j: &Job) -> bool {
+/// `call_budget_pct` of the hour's budget, every other kind runs to all of it; `in_call_share` lets a family refine it. Soroban's,
+/// whose `call` job is free to the client; Hedera's run on this runner with the EVM rules, and EVM has its own runner.
+pub fn call_share_by_kind(j: &Job) -> bool {
     match j.kind.as_deref() {
         Some("call") => true,
         None | Some("signed_op") => j.op.as_ref().is_none_or(|o| o["kind"].is_null()),
@@ -534,7 +537,7 @@ async fn step_once(
     let jobs = odoo.relay_poll_ref(adapter.chain_key().into(), if held { HELD_CALLS_POLL } else { 5 }).await?;
     let mut job = None;
     for j in jobs {
-        if held && in_call_share(&j) {
+        if held && adapter.in_call_share(&j) {
             continue;
         }
         // N2: digest đang bay ở lane/đường khác ⇒ bỏ qua TRƯỚC claim (không claim, không báo).

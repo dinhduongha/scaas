@@ -102,7 +102,7 @@ pub fn signed_auth(signer: &LocalSigner, nonce: i64, expiry: u32, root: &Soroban
     .to_xdr(Limits::none())
     .unwrap();
     let sig = signer.sign(&Sha256::digest(&pre)).unwrap();
-    (json!({"nonce": nonce.to_string(), "expiry": expiry, "invocation": job_invocation(root)}), alloy::hex::encode(sig))
+    (json!({"nonce": nonce.to_string(), "expiry": expiry, "invocation": job_invocation(root)}), format!("0x{}", alloy::hex::encode(sig)))
 }
 
 /// `S…` strkey (seed ed25519) cho CLI.

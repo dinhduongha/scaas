@@ -39,7 +39,7 @@ test('soroban op digest: the token cross vector reproduced', () => {
   const digests = [];
   const job = sor.signedAuth({ networkId: net, nonce: -1, expiry: 1000, invocation, from: 'GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6',
     sign: (d) => { digests.push(h(d)); return new Uint8Array(64).fill(0xab); } });
-  assert.deepEqual(job, { payload: { nonce: '-1', expiry: 1000, invocation }, from: 'GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6', signature: 'ab'.repeat(64) });
+  assert.deepEqual(job, { payload: { nonce: '-1', expiry: 1000, invocation }, from: 'GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6', signature: `0x${'ab'.repeat(64)}` });
   assert.deepEqual(digests, [h(sor.authDigest({ networkId: net, ...job.payload }))], 'the signature is over the bytes the named payload rebuilds');
   const under = { ...invocation, sub_invocations: [{ ...invocation, function: 'relay', args: [] }] };
   assert.ok(h(sor.authPreimage({ networkId: net, nonce: -1, expiry: 1, invocation: under })).includes('000000057265' + '6c6179'), 'a sub-invocation');

@@ -519,6 +519,8 @@ async fn e2e_soroban_native_relay_fee() {
     let (state, last) = node.run(0, job(700, &other)).await;
     println!("native relay, a signature over other bytes: job state {state}, reason {}", last["error"]);
     assert_eq!(state, "dead", "{last}");
+    let reason = last["error"].as_str().unwrap();
+    assert!(reason.starts_with("simulation:") && reason.contains("Error(Auth,"), "the host's auth refusal at simulation: {reason}");
     assert!(report_of(&node.state.lock().unwrap(), 700, "signed").is_null(), "never signed");
     assert_eq!(node.adapter.sequence(0).await.unwrap(), seq, "the lane's sequence is unchanged");
 
