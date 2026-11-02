@@ -306,6 +306,31 @@ fn a_relayer_checked_slot() {
     assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &n(&env, [1; 32]), &attested)), Error::Unauthorized, "an attestation is never a signature");
 }
 
+/// Owner 2026-11-02: a listed relayer's junk takes the slot for good, on that registry: the member's real acceptance is a no-op, and the junk
+/// stays, its relayer named. The bound: nothing counts it as a signature, and a client's re-check refuses its bytes (CTR-UA-34 rule 6).
+#[test]
+fn a_listed_relayers_junk_acceptance_is_write_once() {
+    let (env, c, by) = relayed();
+    let f = portable(&env, "fndsa512");
+    f.on_by(&c, &by);
+    let q = test::ml(61);
+    q.register(&env, &c);
+    let m = msig(&env, 1, &[(0x0132, f.ua.to_array(), 1), (0x0131, q.ua(&env).to_array(), 1)]);
+    let rd = test::reg_digest(&env, &m.ua, 0x0120);
+    m.register(&env, &c, &test::member_sigs(&env, &[m.slot(&env, &q, PURPOSE_POP_V2, &rd)]));
+    let fi = m.index(&f.ua.to_array());
+    let junk = MemberSig { index: fi, key_data: Bytes::new(&env), sig: b(&env, &[0xf5; 666]) };
+    c.accept_membership(&m.ua, &junk, &by);
+    let real = MemberSig { index: fi, key_data: Bytes::new(&env), sig: b(&env, &[0xaa; 666]) }; // stands for the member's real signature
+    c.accept_membership(&m.ua, &real, &by);
+    assert_eq!(env.events().all().events().len(), 0, "a no-op");
+    assert_eq!(c.membership_sig_of(&m.ua, &fi), junk.sig, "the junk stays for good");
+    assert_eq!(c.member_checked(&m.ua, &fi), Checked::Relayer(by.clone().unwrap()), "its relayer named");
+    let auth = test::msig_auth(&env, &[(fi, vec![], vec![0xf5; 666])]);
+    let pm = n(&env, PURPOSE_METATX);
+    assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &n(&env, [1; 32]), &auth)), Error::Unauthorized, "the slot never signs");
+}
+
 /// The attestation binds every argument of `accept_membership` under its own name (`attest_digest`): another slot, another signature,
 /// another `ua`, another relayer or another function's digest does not pass, and the changed call stores on its own attestation.
 #[test]

@@ -809,7 +809,7 @@ fn auth_of(env: &Env, p: &Value) -> UaSig {
 }
 
 /// SOR-D12: the token at `ua-ops.json`'s id and network id; every token row's digest is recomputed, and each `perKind`
-/// `auth` of `ua_transfer` / `ua_pay` / `ua_pay_meta` / `ua_burn` / `ua_cancel_nonce` runs as the call it signs.
+/// `auth` of `ua_transfer` / `ua_pay` / `ua_pay_lane` / `ua_pay_meta` / `ua_burn` / `ua_cancel_nonce` runs as the call it signs.
 #[test]
 fn ua_ops_vectors_token_rows() {
     let s = setup();
@@ -827,7 +827,10 @@ fn ua_ops_vectors_token_rows() {
             continue;
         }
         let f = e["fn"].as_str().unwrap();
-        let run = e["name"] == f && ["ua_transfer", "ua_pay", "ua_pay_meta", "ua_burn", "ua_cancel_nonce"].contains(&f);
+        let run = (e["name"] == f || e["name"] == "ua_pay_lane") && ["ua_transfer", "ua_pay", "ua_pay_meta", "ua_burn", "ua_cancel_nonce"].contains(&f);
+        if e["name"] == "ua_pay_lane" {
+            env.mock_all_auths(); // the lane's own authority, the transaction source's on chain; the UA's `auth` still decides
+        }
         for p in e["perKind"].as_array().unwrap() {
             let args = arg_vals(env, p);
             assert_eq!(op_digest(env, &s.t.address, f, args.clone()).to_array().to_vec(), hx(&p["digest"]), "{} {}", e["name"], p["kind"]);
@@ -841,7 +844,7 @@ fn ua_ops_vectors_token_rows() {
             }
         }
     }
-    assert_eq!((digests, calls), (7 * 7, 5 * 7));
+    assert_eq!((digests, calls), (8 * 7, 6 * 7)); // `ua_pay_lane` added a row, with `relayer = Some(lane)`
 }
 
 /// CTR-UA-37: every token row of the `msig` is refused while its slots only are listed, with no state moved, and the same call runs once

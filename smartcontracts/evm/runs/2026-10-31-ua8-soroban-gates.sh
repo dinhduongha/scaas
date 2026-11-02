@@ -258,10 +258,13 @@ clientkeys|node|accept_membership (CTR-UA-37): the op a node takes, a row unchan
 clientkeys|node|acceptance (CTR-UA-37): every row by hand, the wallet JSON, the native signer, the purpose apart from the records
 clientkeys|node|verifyMembership accepts every row and refuses a flipped byte (ua-rs check_membership_rows)
 forge|forge|test_msigPopLightestInMiddleRefused
+forge|forge|test_typedViewsMatchTheRows
 soroban|cargo|msig_pop_lightest_slot_in_the_middle_refused
 soroban|cargo|ua8_instance_ttl
 soroban|cargo|ua8_relayer_register_kem_event_names_it
 soroban|cargo|a_high_s_evm_eoa_slot_is_refused
+soroban|cargo|a_listed_relayers_junk_acceptance_is_write_once
+soroban|cargo|ua8_typed_views_match_the_rows
 cargo-scaas-node|cargo|a_signed_op_deadline_is_bounded
 cargo-scaas-node|cargo|a_past_deadline_ends_on_one_claim
 cargo-scaas-node|cargo|a_lost_transaction_holds_the_lane_for_the_bound_at_most

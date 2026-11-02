@@ -574,6 +574,35 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// Every portable.json registration row registers with its own arguments (msig members first; the four parameter
     /// sets' rows each in a state of their own: they share their UA ids).
+    /// `msigOf` and `webAuthnKeyOf` are their rows' typed `args`: Soroban's `ua8_typed_views_match_the_rows` reads the same bytes.
+    function test_typedViewsMatchTheRows() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        UARegistry a = _regA(false);
+        _registerAll(a, rows);
+        string memory j = vm.readFile(PJ);
+        string memory wa = string.concat(".registrations[", vm.toString(_rowAt(rows, "webauthn-p256")), "].args.key");
+        IUARegistry.WebAuthnKey memory k = a.webAuthnKeyOf(_find(rows, "webauthn-p256").ua);
+        assertEq(k.x, _jw(j, string.concat(wa, ".x")));
+        assertEq(k.y, _jw(j, string.concat(wa, ".y")));
+        assertEq(k.rpIdHash, _jw(j, string.concat(wa, ".rpIdHash")));
+        string memory name = string.concat("msig-pq/", _setName());
+        string memory st = string.concat(".registrations[", vm.toString(_rowAt(rows, name)), "].args.structure");
+        IUARegistry.MsigStructure memory s = a.msigOf(_find(rows, name).ua);
+        assertEq(s.threshold, _ju(j, string.concat(st, ".threshold")));
+        assertEq(s.members.length, 2);
+        for (uint256 i; i < s.members.length; ++i) {
+            string memory p = string.concat(st, ".members[", vm.toString(i), "]");
+            assertEq(s.members[i].kind, _ju(j, string.concat(p, ".kind")));
+            assertEq(s.members[i].id, _jw(j, string.concat(p, ".id")));
+            assertEq(s.members[i].weight, _ju(j, string.concat(p, ".weight")));
+        }
+    }
+
+    function _rowAt(Row[] memory rows, string memory name) internal pure returns (uint256 i) {
+        while (keccak256(bytes(rows[i].name)) != keccak256(bytes(name))) ++i;
+    }
+
     function test_ua8_everyKindFromVectors() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
