@@ -20,9 +20,9 @@ use scaas_ua::ua8::{self, FrostKey, FrostMember, KemKey, MemberSig, MsigMember, 
 use scaas_ua::UAError;
 use sha2::{Digest, Sha256};
 use stellar_xdr::{
-    AccountId, ConfigSettingEntry, ConfigSettingId, DecoratedSignature, FeeBumpTransaction, FeeBumpTransactionEnvelope, FeeBumpTransactionExt,
-    FeeBumpTransactionInnerTx, HostFunction, Int128Parts, Int256Parts, InvokeContractArgs, InvokeHostFunctionOp, LedgerEntry, LedgerEntryData,
-    LedgerKey, LedgerKeyAccount, LedgerKeyConfigSetting, Limits, Memo, MuxedAccount, Operation, OperationBody, Preconditions, PublicKey,
+    AccountId, ConfigSettingEntry, ConfigSettingId, ContractDataDurability, ContractDataEntry, ContractExecutable, DecoratedSignature, FeeBumpTransaction,
+    FeeBumpTransactionEnvelope, FeeBumpTransactionExt, FeeBumpTransactionInnerTx, Hash, HostFunction, Int128Parts, Int256Parts, InvokeContractArgs,
+    InvokeHostFunctionOp, LedgerEntry, LedgerEntryData, LedgerKey, LedgerKeyAccount, LedgerKeyConfigSetting, LedgerKeyContractData, Limits, Memo, MuxedAccount, Operation, OperationBody, Preconditions, PublicKey,
     ReadXdr, ScAddress, ScMap, ScMapEntry, ScString, ScSymbol, ScVal, ScVec, SequenceNumber, Signature, SignatureHint,
     SorobanAddressCredentials, SorobanAuthorizationEntry, SorobanAuthorizedFunction, SorobanAuthorizedInvocation, SorobanCredentials,
     SorobanTransactionData, SorobanTransactionDataExt, TimeBounds, TimePoint, Transaction, TransactionEnvelope, TransactionExt,
@@ -40,7 +40,7 @@ const DEFAULT_BASE_FEE: u32 = 100;
 const RESOURCE_FEE_MARGIN_PCT: i64 = 15;
 /// `getEvents`: tối đa 5 contract mỗi bộ lọc.
 const CONTRACTS_PER_FILTER: usize = 5;
-/// How deep XDR a job puts in may nest. `Limits::len` alone leaves the depth open, about 2,700 levels in 64 KiB of hex, and a stack
+/// How deep XDR a job puts in may nest (`xdr_limits` allows twice that around it). `Limits::len` alone leaves the depth open, about 2,700 levels in 64 KiB of hex, and a stack
 /// overflow aborts the whole node. A `Vec` level costs four, so this holds 15 (`deep_xdr_is_refused_not_a_stack_overflow`); a contract's own
 /// shapes need far fewer.
 const XDR_DEPTH: u32 = 64;
@@ -60,6 +60,9 @@ pub struct SorobanAdapter {
     /// `params.max_deposit_per_job` (stroops; absent = 0): the most resource fee a job that restores archived entries
     /// may declare (NODE-LANE-18, spec §7).
     max_deposit: u64,
+    /// `params.max_resource_fee_per_job` (stroops; absent = 0, every job refused, and a chain with lanes does not start): the most
+    /// resource fee, margin included, any job may declare (NET-SOR-22).
+    max_resource_fee: u64,
     hashes: Mutex<HashMap<u64, String>>,
     /// The last `tx_max_size_bytes` the network answered, used while a later read fails.
     tx_limit: Mutex<Option<usize>>,
@@ -215,9 +218,9 @@ pub fn decode_event(ev: &Value) -> Option<Value> {
     let topics: Vec<ScVal> = ev["topic"]
         .as_array()?
         .iter()
-        .map(|t| ScVal::from_xdr_base64(t.as_str()?, Limits::len(4096)).ok())
+        .map(|t| ScVal::from_xdr_base64(t.as_str()?, xdr_limits(4096)).ok())
         .collect::<Option<_>>()?;
-    let value = ScVal::from_xdr_base64(ev["value"].as_str()?, Limits::len(4096)).ok()?;
+    let value = ScVal::from_xdr_base64(ev["value"].as_str()?, xdr_limits(4096)).ok()?;
     let ledger = ev["ledger"].as_u64()?;
     let tx = ev["txHash"].as_str()?;
     if tx.len() != 64 || !tx.bytes().all(|c| c.is_ascii_hexdigit()) {
@@ -326,12 +329,8 @@ impl SorobanAdapter {
             base_fee: p.get("base_fee").and_then(|v| v.as_integer()).map(|v| v as u32).unwrap_or(DEFAULT_BASE_FEE),
             quorum: cfg.finality.quorum.max(1),
             relay_fee: RelayFeePolicy::from_cfg(cfg).with_context(|| format!("chain {}", cfg.chain_key()))?,
-            max_deposit: match p.get("max_deposit_per_job") {
-                None => 0,
-                Some(v) => v.as_integer().and_then(|n| u64::try_from(n).ok()).ok_or_else(|| {
-                    anyhow!("chain {}: params.max_deposit_per_job must be a non-negative integer (stroops), not {v}", cfg.chain_key())
-                })?,
-            },
+            max_deposit: stroops(cfg, "max_deposit_per_job")?,
+            max_resource_fee: stroops(cfg, "max_resource_fee_per_job")?,
             hashes: Mutex::new(HashMap::new()),
             tx_limit: Mutex::new(None),
             entry_limit: Mutex::new(None),
@@ -402,10 +401,20 @@ impl SorobanAdapter {
     }
 
     /// A read-only call by simulation from lane 0; `None` = it needs a restore (an archived entry): unknown, never a
-    /// default value. A simulation error is an `Err` (fail closed): `SimRefused` when the host refused the call.
+    /// default value. A simulation error is an `Err` (fail closed): `SimRefused` when the host refused the call or its answer is
+    /// over what the node reads, which a retry never changes.
     async fn view(&self, contract: &ScAddress, f: &str, args: Vec<ScVal>) -> Result<Option<ScVal>> {
         let (value, restore) = self.sim_view(contract, f, args).await?;
         Ok(value.filter(|_| !restore))
+    }
+
+    /// `view` for `op_consumed`: a view the host refuses says nothing about the op, so the answer is unknown. As a failed read the job
+    /// would go back to the queue on every claim, and the queue is per chain.
+    async fn view_or_unknown(&self, contract: &ScAddress, f: &str, args: Vec<ScVal>) -> Result<Option<ScVal>> {
+        match self.view(contract, f, args).await {
+            Err(e) if e.is::<SimRefused>() => Ok(None),
+            r => r,
+        }
     }
 
     /// A read-only call by simulation: its value, and whether the simulation needs a restore (it may still have read the
@@ -419,10 +428,10 @@ impl SorobanAdapter {
         }
         let mut restore = sim.get("restorePreamble").is_some_and(|r| !r.is_null());
         if let Some(d) = sim["transactionData"].as_str() {
-            restore |= restores(&SorobanTransactionData::from_xdr_base64(d, Limits::len(1 << 20))?);
+            restore |= restores(&SorobanTransactionData::from_xdr_base64(d, xdr_limits(1 << 20))?);
         }
         match sim["results"][0]["xdr"].as_str() {
-            Some(x) => Ok((Some(ScVal::from_xdr_base64(x, Limits { depth: 64, len: 1 << 16 })?), restore)),
+            Some(x) => Ok((Some(ScVal::from_xdr_base64(x, Limits { depth: XDR_DEPTH, len: 1 << 16 }).map_err(|e| SimRefused(format!("{f}: answer over the read bound: {e}")))?), restore)),
             None if restore => Ok((None, true)),
             None => bail!("{f}: simulation without a result"),
         }
@@ -498,7 +507,7 @@ impl SorobanAdapter {
         let k = k.to_xdr_base64(Limits::none()).map_err(|e| e.to_string())?;
         let r = self.rpc("getLedgerEntries", json!({"keys": [k]})).await.map_err(|e| format!("{e:#}"))?;
         let x = r["entries"][0]["xdr"].as_str().ok_or("no entry")?;
-        match LedgerEntryData::from_xdr_base64(x, Limits::len(1 << 16)) {
+        match LedgerEntryData::from_xdr_base64(x, xdr_limits(1 << 16)) {
             Ok(LedgerEntryData::ConfigSetting(c)) => Ok(c),
             other => Err(format!("not a setting: {other:?}")),
         }
@@ -526,6 +535,27 @@ impl SorobanAdapter {
         Ok(LedgerKey::Account(LedgerKeyAccount { account_id: account }).to_xdr_base64(Limits::none())?)
     }
 
+    /// Owner 2026-11-02: a `ua_metatx` is free to the client and outside the `call` share, so on a mandate it runs only code the operator
+    /// listed: the contract's instance entry, read through the host, names a Wasm of `params.mandate_wasm_hashes`. A failed read is
+    /// `Transport`; no instance, an executable that is no Wasm, or a hash not listed is `Revert`, `MANDATE_WASM_REFUSED`, unset refusing all.
+    async fn mandate_wasm_ok(&self, c: &ScAddress) -> std::result::Result<(), SimError> {
+        let refused = |why: String| SimError::Revert(format!("{MANDATE_WASM_REFUSED}: {c} {why}"));
+        let k = LedgerKey::ContractData(LedgerKeyContractData { contract: c.clone(), key: ScVal::LedgerKeyContractInstance, durability: ContractDataDurability::Persistent });
+        let k = k.to_xdr_base64(Limits::none()).map_err(|e| refused(e.to_string()))?;
+        let r = self.rpc("getLedgerEntries", json!({"keys": [k]})).await.map_err(|e| SimError::Transport(format!("{e:#}")))?;
+        if r.get("latestLedger").is_none() {
+            return Err(SimError::Transport(format!("getLedgerEntries without latestLedger: {r}")));
+        }
+        let Some(x) = r["entries"][0]["xdr"].as_str() else { return Err(refused("has no contract instance".into())) };
+        let data = LedgerEntryData::from_xdr_base64(x, xdr_limits(1 << 20)).map_err(|e| refused(format!("instance unreadable: {e}")))?;
+        let LedgerEntryData::ContractData(ContractDataEntry { val: ScVal::ContractInstance(i), .. }) = data else { return Err(refused("has no contract instance".into())) };
+        match i.executable {
+            ContractExecutable::Wasm(Hash(h)) if self.relay_fee.mandate_wasms.contains(&h) => Ok(()),
+            ContractExecutable::Wasm(Hash(h)) => Err(refused(format!("runs Wasm {}, not in params.mandate_wasm_hashes", hex(&h)))),
+            e => Err(refused(format!("runs {e:?}, no Wasm"))),
+        }
+    }
+
     /// CTR-ACC-07: a delegate's `mtx_revoke` / `mtx_mandate_pay` refused `StaleEpoch` (the mandate's error #13): the
     /// reason names `epoch(token)`, re-read now, so the client re-signs (EVM: the revert names `StaleEpoch(current,
     /// signed)`). `None` = not that refusal.
@@ -547,7 +577,7 @@ impl SorobanAdapter {
 
 /// `txSOROBAN_INVALID`, plain or inside a fee bump's `txFEE_BUMP_INNER_FAILED`. Bytes that do not decode are not it.
 fn soroban_invalid(error_result: &Value) -> bool {
-    let Some(r) = error_result.as_str().and_then(|x| TransactionResult::from_xdr_base64(x, Limits::len(1 << 16)).ok()) else { return false };
+    let Some(r) = error_result.as_str().and_then(|x| TransactionResult::from_xdr_base64(x, xdr_limits(1 << 16)).ok()) else { return false };
     match r.result {
         TransactionResultResult::TxSorobanInvalid => true,
         TransactionResultResult::TxFeeBumpInnerFailed(p) => matches!(p.result.result, InnerTransactionResultResult::TxSorobanInvalid),
@@ -567,9 +597,19 @@ impl std::fmt::Display for SimRefused {
 
 impl std::error::Error for SimRefused {}
 
-/// Bytes the node built itself: what a job put in, bounded by `job_tx`, inside the transaction's own levels.
-fn built_limits(len: usize) -> Limits {
+/// XDR an RPC answers, or the node built around what a job put in, inside a transaction's own levels: bounded by length and depth,
+/// as `Limits::len` alone is not. A stack overflow aborts the whole node.
+fn xdr_limits(len: usize) -> Limits {
     Limits { depth: 2 * XDR_DEPTH, len }
+}
+
+/// `params.<key>`, a non-negative integer of stroops; absent = 0.
+fn stroops(cfg: &ChainCfg, key: &str) -> Result<u64> {
+    match cfg.params.get(key) {
+        None => Ok(0),
+        Some(v) => v.as_integer().and_then(|n| u64::try_from(n).ok())
+            .ok_or_else(|| anyhow!("chain {}: params.{key} must be a non-negative integer (stroops), not {v}", cfg.chain_key())),
+    }
 }
 
 fn clone_signer(s: &LocalSigner) -> Result<LocalSigner> {
@@ -604,6 +644,10 @@ impl ChainAdapter for SorobanAdapter {
             self.load_relayers().await?;
         }
         let (call, auth, valid_until) = job_tx(&self.network_id, job.kind.as_deref(), &op, &lane_addr, &self.relay_fee).map_err(rv)?;
+        let valid_until = tx_deadline(valid_until).map_err(rv)?;
+        if job.kind.as_deref() == Some("ua_metatx") && UA_FNS.iter().any(|f| f.class == Class::Mandate && f.name.as_bytes() == call.function_name.0.as_slice()) {
+            self.mandate_wasm_ok(&call.contract_address).await?;
+        }
         if registry_write {
             self.ua8_precheck(&op).await?;
         }
@@ -620,8 +664,11 @@ impl ChainAdapter for SorobanAdapter {
             }
         }
         let data = sim_data(&sim, self.max_deposit)?;
+        if u64::try_from(data.resource_fee).map_or(true, |f| f > self.max_resource_fee) {
+            return Err(SimError::Revert(format!("{RESOURCE_FEE_OVER_CAP}: {} stroops declared, params.max_resource_fee_per_job {}", data.resource_fee, self.max_resource_fee)));
+        }
         check_recorded_auth(&sim, &call, &auth).map_err(rv)?;
-        if registry_write && !auth.iter().any(|e| matches!(e.credentials, SorobanCredentials::Address(_))) {
+        if !auth.iter().any(|e| matches!(e.credentials, SorobanCredentials::Address(_))) {
             check_no_other_signer(&sim).map_err(rv)?;
         }
         let mut tx = tx;
@@ -644,7 +691,7 @@ impl ChainAdapter for SorobanAdapter {
     }
 
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
-        let mut tx = Transaction::from_xdr(&built.body, built_limits(built.body.len()))?;
+        let mut tx = Transaction::from_xdr(&built.body, xdr_limits(built.body.len()))?;
         tx.seq_num = SequenceNumber(sequence as i64 + 1);
         let inner_hash = tx.hash(self.network_id)?;
         let inner = TransactionV1Envelope { signatures: vec![Self::decorated(self.signer(lane)?, &inner_hash)?].try_into()?, tx };
@@ -674,7 +721,7 @@ impl ChainAdapter for SorobanAdapter {
     }
 
     async fn submit(&self, signed: &Signed) -> Result<()> {
-        let env = TransactionEnvelope::from_xdr(&signed.raw, built_limits(signed.raw.len()))?;
+        let env = TransactionEnvelope::from_xdr(&signed.raw, xdr_limits(signed.raw.len()))?;
         let r = self.rpc("sendTransaction", json!({"transaction": env.to_xdr_base64(Limits::none())?})).await?;
         match r["status"].as_str() {
             Some("PENDING") | Some("DUPLICATE") => Ok(()),
@@ -703,7 +750,7 @@ impl ChainAdapter for SorobanAdapter {
             bail!("getTransaction {tx_id}: {}, not landed", r["status"]);
         }
         let x = r["resultXdr"].as_str().ok_or_else(|| anyhow!("getTransaction {tx_id} without resultXdr"))?;
-        let fee = TransactionResult::from_xdr_base64(x, Limits::len(1 << 16))?.fee_charged;
+        let fee = TransactionResult::from_xdr_base64(x, xdr_limits(1 << 16))?.fee_charged;
         Ok(Some(u128::try_from(fee).with_context(|| format!("feeCharged {fee}"))?))
     }
 
@@ -718,7 +765,7 @@ impl ChainAdapter for SorobanAdapter {
         }
         let Some(e) = r["entries"].get(0) else { return Ok(Some(0)) };
         let x = e["xdr"].as_str().ok_or_else(|| anyhow!("account entry without xdr"))?;
-        match LedgerEntryData::from_xdr_base64(x, Limits::len(1 << 16))? {
+        match LedgerEntryData::from_xdr_base64(x, xdr_limits(1 << 16))? {
             LedgerEntryData::Account(a) => Ok(Some(u128::try_from(a.balance)?)),
             _ => bail!("not an account entry"),
         }
@@ -728,7 +775,7 @@ impl ChainAdapter for SorobanAdapter {
         let k = self.account_key(lane)?;
         let r = self.rpc("getLedgerEntries", json!({"keys": [k]})).await?;
         let x = r["entries"][0]["xdr"].as_str().ok_or_else(|| anyhow!("lane {} account does not exist", self.lanes[lane].address))?;
-        match LedgerEntryData::from_xdr_base64(x, Limits::len(1 << 16))? {
+        match LedgerEntryData::from_xdr_base64(x, xdr_limits(1 << 16))? {
             LedgerEntryData::Account(a) => Ok(a.seq_num.0 as u64),
             _ => bail!("not an account entry"),
         }
@@ -793,6 +840,13 @@ impl ChainAdapter for SorobanAdapter {
         Ok(crate::indexer::join_pay_events(out))
     }
 
+    /// Owner 2026-11-02: the client's list, as EVM's, so a token registered after the start is served without a restart.
+    fn refresh_tokens(&self, nc: &crate::odoo::NodeConfig) {
+        if let Ok(mut t) = self.relay_fee.tokens.write() {
+            *t = nc.tokens.iter().filter_map(|t| ScAddress::from_str(&t.address).ok()).collect();
+        }
+    }
+
     /// Reads `relayers()` early and only logs a failure: the list concerns relayer-mode jobs alone, and `build` reads it for them.
     async fn start_check(&self) -> Result<()> {
         if let Err(e) = self.load_relayers().await {
@@ -803,7 +857,8 @@ impl ChainAdapter for SorobanAdapter {
 
     /// R80 for `ua_metatx` jobs (spec §9.3, NET-SOR-12): a pay ref spent (`ua_ref_used(ua, pay_ref)` on the token; the
     /// mandate's `paid(pay_ref)`), or the UA's lane past the job's nonce (`ua_nonce(ua, lane) > nonce`; a mandate owner
-    /// entry reads `owner()` first). A view that needs a restore, a native signer, or a job without a lane is unknown.
+    /// entry reads `owner()` first), or a slot accepted (`member_accepted`). A view that needs a restore or that the host refuses, a
+    /// native signer, or a job without a lane is unknown.
     /// `signed_op` jobs keep the host's random nonces: unknown.
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
         if job.kind.as_deref() != Some("ua_metatx") {
@@ -815,6 +870,13 @@ impl ChainAdapter for SorobanAdapter {
             return Ok(None);
         }
         let (a, c) = (call.args.as_slice(), &call.contract_address);
+        if f.class == Class::Mandate {
+            match self.mandate_wasm_ok(c).await {
+                Ok(()) => {}
+                Err(SimError::Revert(_)) => return Ok(None),
+                Err(SimError::Transport(e)) => bail!("{e}"),
+            }
+        }
         let b32 = |b: [u8; 32]| -> Result<ScVal> { Ok(ScVal::Bytes(b.to_vec().try_into()?)) };
         let by_ref = match f.name {
             "ua_pay" => Some((c.clone(), "ua_ref_used", vec![a[0].clone(), a[3].clone()])),
@@ -824,26 +886,29 @@ impl ChainAdapter for SorobanAdapter {
             }
             "ua_relay" => {
                 let ScVal::Address(token) = &a[5] else { return Ok(None) };
-                if !self.relay_fee.tokens.contains(token) {
+                if !self.relay_fee.token(token) {
                     return Ok(None);
                 }
                 Some((token.clone(), "ua_ref_used", vec![a[0].clone(), b32(ua_relay_ref(&self.network_id, a)?)?]))
             }
             "mtx_mandate_pay" => Some((c.clone(), "paid", vec![a[3].clone()])),
+            ACCEPT => {
+                let Some(index) = field(&a[1], "index") else { return Ok(None) };
+                Some((c.clone(), "member_accepted", vec![a[0].clone(), index.clone()]))
+            }
             _ => None,
         };
         if let Some((contract, view, args)) = by_ref {
-            return match self.view(&contract, view, args).await? {
-                None => Ok(None),
-                Some(ScVal::Bool(b)) => Ok(Some(b)),
-                Some(v) => bail!("{view} is not a bool: {v:?}"),
-            };
+            return Ok(match self.view_or_unknown(&contract, view, args).await? {
+                Some(ScVal::Bool(b)) => Some(b),
+                _ => None,
+            });
         }
         let Some(l) = f.lane else { return Ok(None) };
         let ScVal::U64(nonce) = a[l + 1] else { return Ok(None) };
         let signer = match f.from {
             Some(i) => a[i].clone(),
-            None => match self.view(c, "owner", vec![]).await? {
+            None => match self.view_or_unknown(c, "owner", vec![]).await? {
                 Some(o) => o,
                 None => return Ok(None),
             },
@@ -853,17 +918,18 @@ impl ChainAdapter for SorobanAdapter {
             (_, Some(Holder::Ua(u))) => ScVal::Bytes(u.to_vec().try_into()?),
             _ => return Ok(None), // a native signer: host authorisation, no lane
         };
-        match self.view(c, "ua_nonce", vec![ua, a[l].clone()]).await? {
-            None => Ok(None),
-            Some(ScVal::U64(next)) => Ok(Some(next > nonce)),
-            Some(v) => bail!("ua_nonce is not a u64: {v:?}"),
-        }
+        Ok(match self.view_or_unknown(c, "ua_nonce", vec![ua, a[l].clone()]).await? {
+            Some(ScVal::U64(next)) => Some(next > nonce),
+            _ => None,
+        })
     }
 
-    /// A `ua_metatx` names its deadline in its arguments, so a job picked up after a restart reads it from the built call.
+    /// A `ua_metatx` names its deadline in its arguments, so a job picked up after a restart reads it from the built call, bounded as `build` bounds it.
     fn job_valid_until(&self, job: &Job) -> u64 {
         let built = (job.kind.as_deref() == Some("ua_metatx")).then_some(job.op.as_ref()).flatten().and_then(|op| ua_call(op).ok());
-        built.and_then(|(call, _)| ua_valid_until(&call).ok()).unwrap_or_else(|| job.op.as_ref().and_then(|o| o["valid_until"].as_u64()).unwrap_or(0))
+        let signed = built.and_then(|(call, _)| ua_valid_until(&call).ok()).unwrap_or_else(|| job.op.as_ref().and_then(|o| o["valid_until"].as_u64()).unwrap_or(0));
+        // what `tx_deadline` gave the transaction before the restart is no later than this
+        signed.min(crate::submit::now().saturating_add(max_valid_for()))
     }
 
     /// By kind, less a plain `signed_op` whose root is a token payment. Anything `token_payment` cannot read stays in the share. A member's
@@ -952,7 +1018,8 @@ pub fn pay_meta_job(op: &Value, max_meta: usize) -> Result<(InvokeContractArgs, 
 /// router, a registered token, and a fee that reaches this lane and is at least `min_amount` (`relay_fee_ours`).
 pub struct RelayFeePolicy {
     pub router: Option<ScAddress>,
-    pub tokens: Vec<ScAddress>,
+    /// The chain's registered tokens: the config's until the client's `node_config` answers (`refresh_tokens`), as EVM's.
+    pub tokens: std::sync::RwLock<Vec<ScAddress>>,
     pub params: crate::config::RelayParams,
     /// `params.dex` (`C…`): the DEX whose `settle` / `ua_cancel` `ua_metatx` jobs serve; `None` = none.
     pub dex: Option<ScAddress>,
@@ -960,13 +1027,19 @@ pub struct RelayFeePolicy {
     pub executor: OnceLock<ScAddress>,
     /// `params.ua_registry` (`C…`): the only target of `call` jobs, never of a `signed_op`; `None` = none are relayed.
     pub ua_registry: Option<ScAddress>,
-    /// `params.mandates` (`C…`): the mandates a `signed_op` may call; a `ua_metatx` job serves any.
+    /// `params.mandates` (`C…`): the mandates a `signed_op` may call.
     pub mandates: Vec<ScAddress>,
+    /// `params.mandate_wasm_hashes` (64 hex each): the code a `ua_metatx` on a mandate may run (`mandate_wasm_ok`); none = no such job.
+    pub mandate_wasms: Vec<[u8; 32]>,
     /// The registry's `relayers()`, kept from the first read that answers (`load_relayers`): unset, nobody is listed.
     pub relayers: OnceLock<Vec<ScAddress>>,
 }
 
 impl RelayFeePolicy {
+    fn token(&self, c: &ScAddress) -> bool {
+        self.tokens.read().is_ok_and(|t| t.contains(c))
+    }
+
     /// `params.relay_fee = { router = "C…", min_amount = N, relay_bound_payee }`, `params.max_pay_meta_bytes`
     /// (`ChainCfg::relay_params`) and the chain's registered `tokens`. A `router` that is set but is not a contract
     /// strkey is a startup error, never a silently disabled router.
@@ -979,7 +1052,7 @@ impl RelayFeePolicy {
                 _ => bail!("params.relay_fee.router {r:?} is not a Soroban contract address (C…)"),
             },
         };
-        let tokens = cfg.tokens.iter()
+        let tokens: Vec<ScAddress> = cfg.tokens.iter()
             .map(|t| ScAddress::from_str(&t.address).map_err(|e| anyhow!("tokens: {} is not a Soroban address: {e}", t.address)))
             .collect::<Result<_>>()?;
         let contract = |k: &str| match cfg.params.get(k) {
@@ -999,7 +1072,14 @@ impl RelayFeePolicy {
                 _ => Err(anyhow!("params.mandates: {m} is not a Soroban contract address (C…)")),
             })
             .collect::<Result<_>>()?;
-        Ok(Self { router, tokens, params, dex: contract("dex")?, executor: OnceLock::new(), ua_registry: contract("ua_registry")?, relayers: OnceLock::new(), mandates })
+        let mandate_wasms = match cfg.params.get("mandate_wasm_hashes") {
+            None => &[][..],
+            Some(m) => m.as_array().ok_or_else(|| anyhow!("params.mandate_wasm_hashes {m} is not a list"))?.as_slice(),
+        };
+        let mandate_wasms = mandate_wasms.iter()
+            .map(|h| h.as_str().and_then(|h| alloy::hex::decode(h).ok()).and_then(|h| h.try_into().ok()).ok_or_else(|| anyhow!("params.mandate_wasm_hashes: {h} is not 32 bytes of hex")))
+            .collect::<Result<_>>()?;
+        Ok(Self { router, tokens: tokens.into(), params, dex: contract("dex")?, executor: OnceLock::new(), ua_registry: contract("ua_registry")?, relayers: OnceLock::new(), mandates, mandate_wasms })
     }
 }
 
@@ -1032,7 +1112,7 @@ fn known_contract(c: &ScAddress, policy: &RelayFeePolicy) -> Result<()> {
     if policy.ua_registry.as_ref() == Some(c) {
         bail!("{CALL_TARGET_REFUSED}: a signed_op never runs on the registry; a registry write is a call job");
     }
-    if policy.tokens.contains(c) || policy.mandates.contains(c) || policy.dex.as_ref() == Some(c) || policy.router.as_ref() == Some(c) {
+    if policy.token(c) || policy.mandates.contains(c) || policy.dex.as_ref() == Some(c) || policy.router.as_ref() == Some(c) {
         return Ok(());
     }
     bail!("{CALL_TARGET_REFUSED}: {c} is not a token, mandate, DEX or router of this chain's params")
@@ -1047,7 +1127,7 @@ fn token_payment(op: &Value, policy: &RelayFeePolicy) -> Option<InvokeContractAr
     }
     let (call, _) = host_call(op).ok()?;
     let pays = matches!(call.function_name.0.as_slice(), b"pay" | b"pay_meta" | b"transfer");
-    (pays && policy.tokens.contains(&call.contract_address)).then_some(call)
+    (pays && policy.token(&call.contract_address)).then_some(call)
 }
 
 /// What the budget gate read is what runs: a job read as a token payment that builds any other host call is refused.
@@ -1118,7 +1198,7 @@ pub fn relay_fee_job(
     };
     let salt: [u8; 32] = bytes_arg(&call.args[4]).and_then(|b| b.try_into().ok()).ok_or_else(|| anyhow!("salt is 32 bytes"))?;
     let ScVal::Address(token) = &call.args[5] else { bail!("token argument malformed") };
-    if !policy.tokens.contains(token) {
+    if !policy.token(token) {
         bail!("token is not registered on this chain");
     }
     let amount = scval_i128(&call.args[7]).and_then(|a| u128::try_from(a).ok()).ok_or_else(|| anyhow!("amount argument malformed or negative"))?;
@@ -1180,7 +1260,7 @@ pub fn job_tx(network: &[u8; 32], kind: Option<&str>, op: &Value, lane: &ScAddre
             (call, auth, valid_until)
         }
         None | Some("signed_op") => {
-            let valid_until = op["valid_until"].as_u64().ok_or_else(|| anyhow!("op.valid_until missing"))?;
+            let valid_until = bounded_deadline(op)?;
             let (call, auth) = job_call(network, op, lane, policy)?;
             runs_as_read(op, &call, policy)?;
             (call, auth, valid_until)
@@ -1199,14 +1279,30 @@ pub fn job_tx(network: &[u8; 32], kind: Option<&str>, op: &Value, lane: &ScAddre
     Ok((call, auth, valid_until))
 }
 
-/// `op.valid_until` of a job whose deadline nothing signed names, so the node bounds it: `0` is no `max_time`, and `follow` waits for it.
+/// `op.valid_until` of a job whose deadline nothing the node reads signs, so the node bounds it: on chain `0` is no `max_time`, the
+/// transaction good for ever, while `follow` reads it as long past and reports `dead` at its first poll.
 fn bounded_deadline(op: &Value) -> Result<u64> {
     let valid_until = op["valid_until"].as_u64().ok_or_else(|| anyhow!("op.valid_until missing"))?;
-    let (now, max) = (crate::submit::now(), crate::mesh::accept::MeshParams::default().max_valid_for_secs);
+    let (now, max) = (crate::submit::now(), max_valid_for());
     if valid_until <= now || valid_until > now.saturating_add(max) {
         bail!("op.valid_until {valid_until} is not within {max} s after now ({now})");
     }
     Ok(valid_until)
+}
+
+fn max_valid_for() -> u64 {
+    crate::mesh::accept::MeshParams::default().max_valid_for_secs
+}
+
+/// The transaction's `max_time` (NET-SOR-15): never past, or `txTOO_LATE` puts the job back in the queue on every claim, and at most
+/// `max_valid_for()` from now whatever the client signed, since a lost transaction holds its lane to this deadline. NODE-LANE-16 lets
+/// the bound narrow; a later claim builds a new transaction while the signed deadline lasts.
+fn tx_deadline(signed: u64) -> Result<u64> {
+    let now = crate::submit::now();
+    if signed <= now {
+        bail!("expired before inclusion: valid_until {signed}, now {now}");
+    }
+    Ok(signed.min(now.saturating_add(max_valid_for())))
 }
 
 /// The named path's `XDR_DEPTH`: what a job built must read back as any XDR a job puts in does.
@@ -1379,7 +1475,7 @@ fn ua_digest(network: &[u8; 32], call: &InvokeContractArgs, f: &UaFn) -> Result<
 fn ua_relay_policy(call: &InvokeContractArgs, lane: &ScAddress, policy: &RelayFeePolicy) -> Result<()> {
     let a = call.args.as_slice();
     let ScVal::Address(token) = &a[5] else { bail!("ua_relay token malformed") };
-    if !policy.tokens.contains(token) {
+    if !policy.token(token) {
         bail!("token is not registered on this chain");
     }
     let to = &a[6];
@@ -1390,11 +1486,12 @@ fn ua_relay_policy(call: &InvokeContractArgs, lane: &ScAddress, policy: &RelayFe
     crate::adapter::relay_fee_ours(*to == holder_addr(&call.contract_address), *to == holder_addr(lane), amount, &policy.params)
 }
 
-/// The allow-list by contract class: a token ∈ `policy.tokens`, the router, `policy.dex`, any mandate, `params.ua_registry`.
+/// The allow-list by contract class: a token ∈ `policy.tokens`, the router, `policy.dex`, `params.ua_registry`. A mandate is any contract
+/// here, this being pure: `build` and `op_consumed` read its code (`mandate_wasm_ok`).
 fn listed(call: &InvokeContractArgs, f: &UaFn, policy: &RelayFeePolicy) -> bool {
     let c = &call.contract_address;
     match f.class {
-        Class::Token => policy.tokens.contains(c),
+        Class::Token => policy.token(c),
         Class::Router => policy.router.as_ref() == Some(c),
         Class::Dex => policy.dex.as_ref() == Some(c),
         Class::Mandate => true,
@@ -1404,7 +1501,7 @@ fn listed(call: &InvokeContractArgs, f: &UaFn, policy: &RelayFeePolicy) -> bool 
 
 /// A `ua_metatx` job (spec §9.1, SOR-D14): the allow-list (token ∈ `policy.tokens`: `ua_transfer`, `ua_pay`,
 /// `ua_pay_meta`, `ua_burn`, `ua_cancel_nonce`; router = `policy.router`: `ua_relay`; DEX = `policy.dex`: `settle`,
-/// `ua_cancel`; any contract: the mandate's `mtx_*`; `params.ua_registry`: `accept_membership`), `relayer` `None` or this lane
+/// `ua_cancel`; a listed Wasm, checked in `build`: the mandate's `mtx_*`; `params.ua_registry`: `accept_membership`), `relayer` `None` or this lane
 /// (`ua_relay`, and each `settle` order: this lane), `valid_until` from the signed arguments, never a UA pay to the router or its executor
 /// outside `ua_relay`. Auth: `op.auth` entries for native legs only (as `host_call`), and when the relayer is this lane one
 /// `SourceAccount` entry rooted at exactly the call (S8, §8), or, on the registry, the listed lane's one word (`attest_entry`). Returns the
@@ -1474,8 +1571,8 @@ fn check_recorded_auth(sim: &Value, call: &InvokeContractArgs, own: &[SorobanAut
     Ok(())
 }
 
-/// A registry write with no subject's entry, a `call` job's or an acceptance's with no `op.auth`: a call that records someone else's (the
-/// slot of a `G…` member, host-authorised) wants a signature this transaction will not have: it could only fail on chain, on the lane's fee.
+/// Any job with no subject's entry: a call that records someone else's (the slot of a `G…` member, a native mandate owner, host-authorised)
+/// wants a signature this transaction will not have: it could only fail on chain, on the lane's fee.
 fn check_no_other_signer(sim: &Value) -> Result<()> {
     if recorded_auth(sim)?.iter().any(|e| !matches!(e.credentials, SorobanCredentials::SourceAccount)) {
         bail!("the call needs another account's signature, which this job does not carry");
@@ -1489,7 +1586,7 @@ fn recorded_auth(sim: &Value) -> Result<Vec<SorobanAuthorizationEntry>> {
     for r in sim["results"].as_array().into_iter().flatten() {
         for e in r["auth"].as_array().into_iter().flatten() {
             let x = e.as_str().ok_or_else(|| anyhow!("simulation auth entry is not base64 XDR"))?;
-            out.push(SorobanAuthorizationEntry::from_xdr_base64(x, Limits { depth: 64, len: 1 << 20 })?);
+            out.push(SorobanAuthorizationEntry::from_xdr_base64(x, xdr_limits(1 << 20))?);
         }
     }
     Ok(out)
@@ -1504,7 +1601,7 @@ fn restores(data: &SorobanTransactionData) -> bool {
 /// compares (measured, `e2e_ua8_spend_stop`: 65,536 B lands, 65,540 B fails). `None` = it names none it can read: the job goes on.
 fn largest_data_write(sim: &Value) -> Option<usize> {
     sim["stateChanges"].as_array()?.iter()
-        .filter_map(|c| LedgerEntry::from_xdr_base64(c["after"].as_str()?, Limits::len(1 << 21)).ok())
+        .filter_map(|c| LedgerEntry::from_xdr_base64(c["after"].as_str()?, xdr_limits(1 << 21)).ok())
         .filter(|e| matches!(e.data, LedgerEntryData::ContractData(_)))
         .filter_map(|e| e.to_xdr(Limits::none()).ok())
         .map(|b| b.len())
@@ -1522,7 +1619,7 @@ fn sim_data(sim: &Value, max_deposit: u64) -> std::result::Result<SorobanTransac
         return Err(SimError::Revert("contract state is archived; restore it first".into()));
     }
     let data = sim["transactionData"].as_str().ok_or_else(|| SimError::Transport("no transactionData".into()))?;
-    let mut data = SorobanTransactionData::from_xdr_base64(data, Limits::len(1 << 20)).map_err(|e| SimError::Transport(e.to_string()))?;
+    let mut data = SorobanTransactionData::from_xdr_base64(data, xdr_limits(1 << 20)).map_err(|e| SimError::Transport(e.to_string()))?;
     data.resource_fee = data.resource_fee.saturating_add(data.resource_fee.saturating_mul(RESOURCE_FEE_MARGIN_PCT) / 100);
     if restores(&data) && u64::try_from(data.resource_fee).map_or(true, |f| f > max_deposit) {
         return Err(SimError::Revert(format!("restore over max_deposit_per_job ({} > {max_deposit} stroops)", data.resource_fee)));
@@ -1564,6 +1661,10 @@ fn accept_write(op: &Value) -> Result<(Ua8Write, Option<ScAddress>)> {
 const HEX_ARGS_REFUSED: &str = "HEX_ARGS_REFUSED";
 /// A `signed_op` on a contract the chain's `params` do not name, or on the registry (owner ruling 2026-11-02).
 const CALL_TARGET_REFUSED: &str = "CALL_TARGET_REFUSED";
+/// `ua_metatx` on a mandate whose code is not in `params.mandate_wasm_hashes` (`mandate_wasm_ok`).
+const MANDATE_WASM_REFUSED: &str = "MANDATE_WASM_REFUSED";
+/// A simulation declares more resource fee than `params.max_resource_fee_per_job`.
+const RESOURCE_FEE_OVER_CAP: &str = "RESOURCE_FEE_OVER_CAP";
 
 fn hex_refused(what: &str) -> anyhow::Error {
     anyhow!("{HEX_ARGS_REFUSED}: {what} takes named fields, not a hex blob")
@@ -1801,7 +1902,7 @@ fn ua8_write(op: &Value) -> Result<(Ua8Write, Option<ScAddress>)> {
         }
         "set_kem_key" => {
             let [ua, version, kem, sig, relayer] = named(a, f, ["ua", "version", "kem", "sig", "relayer"])?;
-            (Ua8Write::SetKem(SetKemKeyArgs { ua: b32_of(ua)?, version: num_of(version)?, kem: kem_of(kem)?, sig: sig_of(sig)? }), relayer_of(relayer)?)
+            (Ua8Write::SetKem(SetKemKeyArgs { ua: b32_of(ua)?, version: int64_of(version, "u64")?, kem: kem_of(kem)?, sig: sig_of(sig)? }), relayer_of(relayer)?)
         }
         "set_pqz_key" => {
             let [ua, pqz_key, pqz_pop_hash, sig, relayer] = named(a, f, ["ua", "pqz_key", "pqz_pop_hash", "sig", "relayer"])?;
@@ -2022,6 +2123,17 @@ impl SorobanAdapter {
         }
     }
 
+    /// `store_pqz_pop` over stored bytes is a no-op on chain, on the lane's fee in `call_budget_pct`: refused here, as `not_yet_accepted`. This
+    /// check saves a fee and decides nothing else, so any other answer leaves the job to its simulation.
+    async fn pop_not_stored(&self, registry: &ScAddress, ua: &[u8; 32]) -> std::result::Result<(), SimError> {
+        let id = sc_bytes(ua).map_err(|e| SimError::Revert(e.to_string()))?;
+        match self.sim_view(registry, "pqz_pop_of", vec![id]).await {
+            Ok((Some(ScVal::Bytes(b)), _)) if !b.is_empty() => Err(SimError::Revert("the PQZ proof is already stored: nothing to send".into())),
+            Err(e) if !e.is::<SimRefused>() => Err(SimError::Transport(format!("pqz_pop_of: {e:#}"))),
+            _ => Ok(()),
+        }
+    }
+
     /// An `msig`'s derived members as the contract reads them (`check_members`): a `Chain` kind's `Signer`, whose bytes
     /// `record_of` returns when `signable`, a marked kind's `Ua`. What is absent `check_*` refuses as `MemberUnknown`.
     async fn ua8_members(&self, registry: &ScAddress, key_data: &[u8]) -> std::result::Result<HashMap<[u8; 32], (u16, Vec<u8>)>, SimError> {
@@ -2039,7 +2151,8 @@ impl SorobanAdapter {
 
     /// UA8-D23, the gate behind `Checked::Relayer`: a write with a part the chain cannot verify passes `check_*` here, before
     /// it is simulated, or the job fails with no submit. A part the chain verifies is not checked: `check_*` refuses a valid
-    /// `G…` member, and the chain is that part's check. A fill of a hash commit (version 0) and `store_pqz_pop` attest nothing.
+    /// `G…` member, and the chain is that part's check. A fill of a hash commit (version 0) and `store_pqz_pop` attest nothing; a stored proof is
+    /// refused unsent (`pop_not_stored`).
     async fn ua8_precheck(&self, op: &Value) -> std::result::Result<(), SimError> {
         let rv = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
         let registry = self.relay_fee.ua_registry.as_ref().ok_or_else(|| SimError::Revert("params.ua_registry is not set".into()))?;
@@ -2047,7 +2160,7 @@ impl SorobanAdapter {
         let (kind, key_data) = match &w {
             Ua8Write::Register(a) => (register_kind(a), a.key_data()),
             Ua8Write::SetKem(a) if a.version == 0 => return Ok(()),
-            Ua8Write::StorePop { .. } => return Ok(()),
+            Ua8Write::StorePop { ua, .. } => return self.pop_not_stored(registry, ua).await,
             Ua8Write::SetKem(SetKemKeyArgs { ua, .. }) | Ua8Write::SetPqz { ua, .. } | Ua8Write::Accept { ua, .. } => {
                 let (kind, key, _) = self.ua8_record(registry, ua).await?.ok_or_else(|| SimError::Revert("the UA is not registered".into()))?;
                 // the answer decides whether anything is checked, so it must be this id's, as `Members` is
@@ -2322,9 +2435,9 @@ mod tests {
     const LANE: &str = "GAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTHCM6";
 
     fn policy() -> RelayFeePolicy {
-        RelayFeePolicy { router: Some(ScAddress::from_str(WALLET2).unwrap()), tokens: vec![ScAddress::from_str(CONTRACT).unwrap()],
+        RelayFeePolicy { router: Some(ScAddress::from_str(WALLET2).unwrap()), tokens: vec![ScAddress::from_str(CONTRACT).unwrap()].into(),
                          params: rp(5), dex: Some(ScAddress::from_str(DEX).unwrap()), executor: OnceLock::new(),
-                         ua_registry: None, relayers: OnceLock::new(), mandates: vec![] }
+                         ua_registry: None, relayers: OnceLock::new(), mandates: vec![], mandate_wasms: vec![] }
     }
 
     fn rp(min_amount: u128) -> crate::config::RelayParams {
@@ -2416,7 +2529,7 @@ mod tests {
         assert!(relay_fee_job(&NET7, &ok, &lane, &other).is_err());
         let none = RelayFeePolicy { router: None, ..policy() };
         assert!(relay_fee_job(&NET7, &ok, &lane, &none).is_err());
-        let no_token = RelayFeePolicy { tokens: vec![], ..policy() };
+        let no_token = RelayFeePolicy { tokens: vec![].into(), ..policy() };
         assert!(relay_fee_job(&NET7, &ok, &lane, &no_token).is_err());
         let dear = RelayFeePolicy { params: rp(8), ..policy() };
         assert!(relay_fee_job(&NET7, &ok, &lane, &dear).is_err());
@@ -2436,6 +2549,8 @@ mod tests {
     const DEX: &str = "CBTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGM2VL";
     const MANDATE: &str = "CBKVKVKVKVKVKVKVKVKVKVKVKVKVKVKVKVKVKVKVKVKVKVKVKVKVLO6Q";
     const VU: u64 = 1_800_000_300;
+    /// The Wasm the test chains' params list and their mandates run.
+    const MANDATE_WASM: [u8; 32] = [9; 32];
     const UA: [u8; 32] = [0x77; 32];
 
     fn executor() -> ScAddress {
@@ -2566,8 +2681,8 @@ mod tests {
         let net = network_id(v["network"]["passphrase"].as_str().unwrap());
         let c = &v["contracts"];
         let at = |k: &str| sc(c[k].as_str().unwrap());
-        let policy = RelayFeePolicy { router: Some(at("router")), tokens: vec![at("token")], params: rp(5), dex: Some(at("dex")),
-                                      executor: OnceLock::new(), ua_registry: None, relayers: OnceLock::new(), mandates: vec![] };
+        let policy = RelayFeePolicy { router: Some(at("router")), tokens: vec![at("token")].into(), params: rp(5), dex: Some(at("dex")),
+                                      executor: OnceLock::new(), ua_registry: None, relayers: OnceLock::new(), mandates: vec![], mandate_wasms: vec![] };
         let xdr = |s: &Value| ScVal::from_xdr(strip(s), Limits::none()).unwrap();
         let mut n = 0;
         for e in v["entries"].as_array().unwrap() {
@@ -2598,7 +2713,9 @@ mod tests {
                 fields.insert("auth".into(), job_value("UaSig", &auth));
                 want.push(auth);
                 let op = json!({"contract": contract, "function": function, "args": fields});
-                let (call, _, digest) = ua_metatx_job(&net, &op, &lane(), &policy).unwrap_or_else(|x| panic!("{} {}: {x:#}", e["name"], row["kind"]));
+                // a row bound to one lane runs on that lane
+                let me = op["args"]["relayer"].as_str().map_or_else(lane, sc);
+                let (call, _, digest) = ua_metatx_job(&net, &op, &me, &policy).unwrap_or_else(|x| panic!("{} {}: {x:#}", e["name"], row["kind"]));
                 assert_eq!(call.contract_address.to_string(), contract);
                 assert_eq!(call.function_name.0.as_slice(), function.as_bytes());
                 assert_eq!(call.args.as_slice(), want.as_slice(), "{} {}: the node's XDR is the row's", e["name"], row["kind"]);
@@ -2606,7 +2723,7 @@ mod tests {
                 n += 1;
             }
         }
-        assert_eq!(n, 12 * 7, "every job row of the vector file");
+        assert_eq!(n, 13 * 7, "every job row of the vector file");
     }
 
     /// N2: a job as a client writes it, by hand: the node builds the XDR from the named fields, in the contract's order, a struct's
@@ -2910,6 +3027,8 @@ mod tests {
         let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: vec![url], lanes: vec![0], ..Default::default() };
         c.tokens = [CONTRACT, REGISTRY].iter().map(|t| crate::config::TokenCfg { address: t.to_string(), decimals: 7 }).collect();
         c.params.insert("network_passphrase".into(), "x".into());
+        c.params.insert("max_resource_fee_per_job".into(), 1_000_000_000.into());
+        c.params.insert("mandate_wasm_hashes".into(), toml::Value::Array(vec![hex(&MANDATE_WASM).into()]));
         c.params.insert("ua_registry".into(), REGISTRY.into());
         c.params.insert("dex".into(), DEX.into());
         c.params.insert("mandates".into(), toml::Value::Array(vec![WALLET.into()]));
@@ -2965,7 +3084,7 @@ mod tests {
     /// A plain `signed_op`, `function` on `contract`, its deadline `VU`.
     fn signed_on(id: i64, contract: &str, function: &str) -> Value {
         json!({"id": id, "kind": "signed_op", "op": {"payload": payload(inv(contract, function, vec![addr(FROM), addr(WALLET), i128v(1), byt(&[3; 32]), ScVal::U64(1)], vec![])),
-            "from": FROM, "signature": sig(), "contract": contract, "valid_until": VU, "extra": {}}})
+            "from": FROM, "signature": sig(), "contract": contract, "valid_until": crate::submit::now() + 600, "extra": {}}})
     }
 
     /// The owner's refinement of 2026-11-02: a plain `signed_op` whose root is a token payment runs to the whole budget. Its name on any
@@ -3281,7 +3400,7 @@ mod tests {
         assert!(e.contains("executor"), "{e}");
         let e = ua_metatx_job(&NET7, &ua_op(WALLET2, "ua_relay", ua_relay_args(h_ua(UA), LANE)), &lane(), &p).unwrap_err().to_string();
         assert!(e.contains("relay_bound_payee"), "a UA payee is bound to someone else: {e}");
-        let e = ua_metatx_job(&NET7, &ua_op(WALLET2, "ua_relay", ua_relay_args(h_addr(WALLET2), LANE)), &lane(), &RelayFeePolicy { tokens: vec![], ..policy() })
+        let e = ua_metatx_job(&NET7, &ua_op(WALLET2, "ua_relay", ua_relay_args(h_addr(WALLET2), LANE)), &lane(), &RelayFeePolicy { tokens: vec![].into(), ..policy() })
             .unwrap_err().to_string();
         assert!(e.contains("token"), "{e}");
     }
@@ -3296,7 +3415,7 @@ mod tests {
         p.executor.set(executor()).unwrap();
         let ex = executor().to_string();
         let host = |f: &str, args: Vec<ScVal>| json!({"payload": payload(inv(CONTRACT, f, args, vec![])),
-            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": VU, "extra": {}});
+            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": crate::submit::now() + 600, "extra": {}});
         let approve = |x: &str, n: u64| vec![addr(FROM), addr(x), i128v(n), ScVal::U32(100)];
         let tf_spender = |x: &str| vec![addr(x), addr(FROM), addr(LANE), i128v(5)];
         let tf_to = |x: &str| vec![addr(LANE), addr(FROM), addr(x), i128v(5)];
@@ -3360,7 +3479,7 @@ mod tests {
         p.executor.set(executor()).unwrap();
         let ex = executor().to_string();
         let pay = |to: &str| json!({"payload": payload(inv(CONTRACT, "pay", vec![addr(FROM), addr(to), i128v(1), byt(&[3; 32]), ScVal::U64(1)], vec![])),
-            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": VU, "extra": {}});
+            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": crate::submit::now() + 600, "extra": {}});
         assert!(job_call(&NET7, &pay(WALLET), &lane(), &p).is_ok());
         assert!(job_call(&NET7, &pay(&ex), &lane(), &p).unwrap_err().to_string().contains("executor"));
         let r = meta_row();
@@ -3385,9 +3504,9 @@ mod tests {
     fn soroban_unknown_job_kind_refused() {
         let p = policy();
         let pay = json!({"payload": payload(inv(CONTRACT, "pay", vec![addr(FROM), addr(WALLET), i128v(1), byt(&[3; 32]), ScVal::U64(1)], vec![])),
-            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": VU, "extra": {}});
+            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": crate::submit::now() + 600, "extra": {}});
         for k in [None, Some("signed_op")] {
-            assert_eq!(job_tx(&NET7, k, &pay, &lane(), &p).unwrap().2, VU, "{k:?}");
+            assert_eq!(Some(job_tx(&NET7, k, &pay, &lane(), &p).unwrap().2), pay["valid_until"].as_u64(), "{k:?}");
         }
         let (c, f, args) = ua_ops(ScVal::Void).remove(0);
         assert_eq!(job_tx(&NET7, Some("ua_metatx"), &ua_op(c, f, args), &lane(), &p).unwrap().2, VU);
@@ -3533,11 +3652,13 @@ mod tests {
         no_entries_result: bool,
         /// `getLedgerEntries` answers an entry with no `xdr`.
         bare_entry: bool,
+        /// Every contract's executable; `None` = no instance entry.
+        executable: Option<ContractExecutable>,
     }
 
     impl Default for Net {
         fn default() -> Self {
-            Self { tx: json!({"status": "SUCCESS", "ledger": 5}), entry_limit: Some(ENTRY_MAX), accounts: None, refuses: None, no_entries_result: false, bare_entry: false }
+            Self { tx: json!({"status": "SUCCESS", "ledger": 5}), entry_limit: Some(ENTRY_MAX), accounts: None, refuses: None, no_entries_result: false, bare_entry: false, executable: Some(ContractExecutable::Wasm(Hash(MANDATE_WASM))) }
         }
     }
 
@@ -3574,6 +3695,7 @@ mod tests {
                                     entries.extend(e.map(|e| e.to_xdr_base64(Limits::none()).unwrap()));
                                 }
                                 (LedgerKey::ConfigSetting(_), l) => entries.extend(l.map(bandwidth)),
+                                (LedgerKey::ContractData(k), _) => entries.extend(net.executable.clone().map(|e| instance(&k.contract, e))),
                                 (LedgerKey::Account(k), _) => {
                                     let AccountId(PublicKey::PublicKeyTypeEd25519(Uint256(pk))) = k.account_id;
                                     match &net.accounts {
@@ -3610,6 +3732,17 @@ mod tests {
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         url
+    }
+
+    /// A contract's instance entry, as `getLedgerEntries` answers it.
+    fn instance(contract: &ScAddress, executable: ContractExecutable) -> String {
+        LedgerEntryData::ContractData(ContractDataEntry {
+            ext: stellar_xdr::ExtensionPoint::V0,
+            contract: contract.clone(),
+            key: ScVal::LedgerKeyContractInstance,
+            durability: ContractDataDurability::Persistent,
+            val: ScVal::ContractInstance(stellar_xdr::ScContractInstance { executable, storage: None }),
+        }).to_xdr_base64(Limits::none()).unwrap()
     }
 
     /// `tx_max_size_bytes`'s answer.
@@ -3651,6 +3784,8 @@ mod tests {
         let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: vec![url], lanes: vec![0], ..Default::default() };
         c.tokens = vec![crate::config::TokenCfg { address: CONTRACT.into(), decimals: 7 }];
         c.params.insert("network_passphrase".into(), "x".into());
+        c.params.insert("max_resource_fee_per_job".into(), 1_000_000_000.into());
+        c.params.insert("mandate_wasm_hashes".into(), toml::Value::Array(vec![hex(&MANDATE_WASM).into()]));
         if router {
             let mut t = toml::Table::new();
             t.insert("router".into(), WALLET2.into());
@@ -4112,6 +4247,8 @@ mod tests {
         let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: vec![url], lanes: vec![0], ..Default::default() };
         c.tokens = vec![crate::config::TokenCfg { address: CONTRACT.into(), decimals: 7 }];
         c.params.insert("network_passphrase".into(), "x".into());
+        c.params.insert("max_resource_fee_per_job".into(), 1_000_000_000.into());
+        c.params.insert("mandate_wasm_hashes".into(), toml::Value::Array(vec![hex(&MANDATE_WASM).into()]));
         c.params.insert("ua_registry".into(), REGISTRY.into());
         c.params.insert("max_deposit_per_job".into(), max_deposit.into());
         let s = LocalSigner::Ed(ed25519_dalek::SigningKey::from_bytes(&[1; 32]));
@@ -4363,6 +4500,8 @@ mod tests {
         let url = rpc_stub_limit(registry(vec![], vec![]), calls.clone(), Arc::new(Mutex::new(limit))).await;
         let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: vec![url], lanes: vec![0], ..Default::default() };
         c.params.insert("network_passphrase".into(), "x".into());
+        c.params.insert("max_resource_fee_per_job".into(), 1_000_000_000.into());
+        c.params.insert("mandate_wasm_hashes".into(), toml::Value::Array(vec![hex(&MANDATE_WASM).into()]));
         c.params.insert("ua_registry".into(), REGISTRY.into());
         if fee_bump {
             c.params.insert("fee_bump_lane".into(), 0.into());
@@ -4551,7 +4690,7 @@ mod tests {
         for v in [now + 60, now + max - 60] {
             o["valid_until"] = json!(v);
             run(&a, &o).await.unwrap();
-            assert_eq!(logged(&calls), ["store_pqz_pop", "SEND"], "{v}");
+            assert_eq!(logged(&calls), ["pqz_pop_of", "store_pqz_pop", "SEND"], "{v}");
         }
     }
 
@@ -4574,7 +4713,7 @@ mod tests {
         run(&a, &fill).await.unwrap();
         assert_eq!(logged(&calls), ["set_kem_key", "SEND"], "a marked kind's fill needs no relayer");
         run(&a, &ops(&NONE)[7]).await.unwrap();
-        assert_eq!(logged(&calls), ["store_pqz_pop", "SEND"]);
+        assert_eq!(logged(&calls), ["pqz_pop_of", "store_pqz_pop", "SEND"]);
         // an unregistered id: nothing to check, refused before its write
         let mut lost = rec_op("set_kem_key", row("kemRecords", "fndsa512/v1"), &NONE);
         lost["args"]["ua"] = json!(h(&[0x77; 32]));
@@ -4630,7 +4769,7 @@ mod tests {
         assert_eq!(logged(&calls), ["relayers"], "logged, the lane starts");
 
         let pay = json!({"payload": payload(inv(CONTRACT, "pay", vec![addr(FROM), addr(WALLET), i128v(1), byt(&[3; 32]), ScVal::U64(1)], vec![])),
-            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": VU, "extra": {}});
+            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": crate::submit::now() + 600, "extra": {}});
         run_kind(&a, "signed_op", &pay).await.unwrap();
         assert_eq!(logged(&calls), ["pay", "SEND"]);
         run(&a, &reg_op(row("registrations", "ed25519"), &NONE)).await.unwrap();
@@ -4773,7 +4912,7 @@ mod tests {
         refused(run_kind(&a, "ua_metatx", &gone).await, "not registered");
     }
 
-    /// A slot already accepted: a no-op on chain, on the lane's fee, so nothing is simulated or sent; the same job on a slot not yet accepted
+    /// A slot already accepted: a no-op on chain, on the lane's fee, so nothing is simulated or sent (`a_re_run_acceptance_is_consumed`: its report); the same job on a slot not yet accepted
     /// goes. A `member_accepted` that answers no bool, or no RPC, sends nothing either.
     #[tokio::test]
     async fn accept_job_on_an_accepted_slot_is_refused_unsent() {
@@ -5011,6 +5150,8 @@ mod tests {
         let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: vec![url], lanes: vec![0, 1], ..Default::default() };
         c.tokens = vec![crate::config::TokenCfg { address: CONTRACT.into(), decimals: 7 }];
         c.params.insert("network_passphrase".into(), "x".into());
+        c.params.insert("max_resource_fee_per_job".into(), 1_000_000_000.into());
+        c.params.insert("mandate_wasm_hashes".into(), toml::Value::Array(vec![hex(&MANDATE_WASM).into()]));
         c.params.insert("ua_registry".into(), REGISTRY.into());
         c.params.insert("dex".into(), DEX.into());
         c.params.insert("mandates".into(), toml::Value::Array(vec![WALLET.into()]));
@@ -5064,6 +5205,8 @@ mod tests {
         assert_eq!(a.lane_balance(1).await.unwrap(), Some(0), "the fee account does not exist");
         let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: vec!["http://127.0.0.1:1".into()], lanes: vec![0], ..Default::default() };
         c.params.insert("network_passphrase".into(), "x".into());
+        c.params.insert("max_resource_fee_per_job".into(), 1_000_000_000.into());
+        c.params.insert("mandate_wasm_hashes".into(), toml::Value::Array(vec![hex(&MANDATE_WASM).into()]));
         assert!(SorobanAdapter::new(&c, &[lane_key(1)]).unwrap().lane_balance(0).await.is_err());
     }
 
@@ -5290,7 +5433,7 @@ mod tests {
         })).await;
         a.start_check().await.unwrap();
         let pay = json!({"payload": payload(inv(CONTRACT, "pay", vec![addr(FROM), addr(WALLET), i128v(1), byt(&[3; 32]), ScVal::U64(1)], vec![])),
-            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": VU, "extra": {}});
+            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": crate::submit::now() + 600, "extra": {}});
         let (odoo, o) = fake_odoo(Fake { jobs: vec![json!({"id": 7, "kind": "signed_op", "op": pay})], tokens: json!([]), ..Default::default() }).await;
         crate::adapter::lane_step(&a, &odoo, 0, "n#0").await.unwrap();
         let states: Vec<String> = o.lock().unwrap().reports.iter().map(|r| r["chain_state"].as_str().unwrap().to_string()).collect();
@@ -5377,5 +5520,271 @@ mod tests {
         assert_eq!(budget_step(&a, &spent_lane(BUDGET / 2, 50), jobs.clone()).await, (vec![99], 1), "the 50th job is read");
         jobs.insert(0, call_of(100));
         assert_eq!(budget_step(&a, &spent_lane(BUDGET / 2, 50), jobs).await, (vec![], 0), "the 51st is not");
+    }
+
+    // ---- RV, the whole-branch review: each proof of a defect, turned into the rule it broke
+
+    fn void_answer() -> Answer {
+        Arc::new(|_| json!({"transactionData": data(100, &[]), "results": [{"xdr": ScVal::Void.to_xdr_base64(Limits::none()).unwrap(), "auth": []}]}))
+    }
+
+    /// The row of `f` in `ua_ops`, its relayer `None`, on `contract`.
+    fn ua_row(contract: &str, f: &str) -> Value {
+        let (_, f, args) = ua_ops(ScVal::Void).into_iter().find(|o| o.1 == f).unwrap();
+        json!({"id": 7, "kind": "ua_metatx", "op": ua_op(contract, f, args)})
+    }
+
+    fn as_job(j: &Value) -> Job {
+        serde_json::from_value(j.clone()).unwrap()
+    }
+
+    /// A `signed_op`'s deadline nothing the node reads signs: `0` is no `max_time` on chain, while `follow` would read it as long past and
+    /// report `dead` with the transaction in flight. Refused before anything is sent, with the past and the over-long; the same job
+    /// with a deadline in the bound goes.
+    #[tokio::test]
+    async fn a_signed_op_deadline_is_bounded() {
+        let (a, calls, _) = spend_adapter(void_answer(), Net::default(), false).await;
+        for v in [json!(0), json!(1), json!(crate::submit::now() + max_valid_for() + 60)] {
+            let mut j = signed_on(7, CONTRACT, "pay");
+            j["op"]["valid_until"] = v.clone();
+            let (sent, state, why) = job_step(&a, &calls, j).await;
+            assert_eq!((sent, state.as_str()), (0, "dead"), "{v}: {why}");
+            assert!(why.contains("not within"), "{v}: {why}");
+        }
+        assert_eq!(job_step(&a, &calls, signed_on(7, CONTRACT, "pay")).await.1, "mined");
+    }
+
+    /// A signed deadline already past is refused at `build`: on one claim `dead`, unsent. Sent, `txTOO_LATE` is `Rejected`, and the job
+    /// came back to the queue on every claim, holding the chain's queue.
+    #[tokio::test]
+    async fn a_past_deadline_ends_on_one_claim() {
+        let net = Net { refuses: Some(refusal(stellar_xdr::TransactionResultResult::TxTooLate)), ..Net::default() };
+        let (a, calls, _) = spend_adapter(void_answer(), net, false).await;
+        let (c, f, mut args) = ua_ops(ScVal::Void).into_iter().find(|o| o.1 == "ua_transfer").unwrap();
+        args[5] = u64v(crate::submit::now() - 1);
+        let (sent, state, why) = job_step(&a, &calls, json!({"id": 7, "kind": "ua_metatx", "op": ua_op(c, f, args)})).await;
+        assert_eq!((sent, state.as_str()), (0, "dead"), "{why}");
+        assert!(why.contains("expired before inclusion"), "{why}");
+    }
+
+    /// A lost transaction holds its lane to `max_time`, so a client's deadline only narrows the bound: `max_time` is the shorter of the two,
+    /// `follow` reads the same value, and after a restart the bound holds too.
+    #[tokio::test]
+    async fn a_lost_transaction_holds_the_lane_for_the_bound_at_most() {
+        let (a, _, _) = spend_adapter(void_answer(), Net::default(), false).await;
+        let (c, f, mut args) = ua_ops(ScVal::Void).into_iter().find(|o| o.1 == "ua_transfer").unwrap();
+        let (now, max) = (crate::submit::now(), max_valid_for());
+        for signed in [now + 60, now + max + 60, u64::MAX] {
+            args[5] = u64v(signed);
+            let job = ua_job(c, f, args.clone());
+            let built = a.build(&job, 0).await.unwrap();
+            let Preconditions::Time(t) = Transaction::from_xdr(&built.body, Limits::none()).unwrap().cond else { panic!("no time bounds") };
+            assert_eq!(t.max_time.0, built.valid_until);
+            assert!(built.valid_until == signed.min(built.valid_until) && built.valid_until <= crate::submit::now() + max, "{signed}");
+            assert!(signed > now + max || built.valid_until == signed, "{signed}: a deadline in the bound stays");
+            assert!(a.job_valid_until(&job) <= crate::submit::now() + max && a.job_valid_until(&job) >= built.valid_until, "{signed}");
+        }
+    }
+
+    /// A contract that answers none of the views: not a failed read, so `dead` on one claim, not `queued` for ever at the head of the chain's
+    /// queue. All four views of `op_consumed`, by ref, `owner()`, `ua_nonce` and the token's.
+    #[tokio::test]
+    async fn a_view_the_host_refuses_is_unknown() {
+        let answer: Answer = Arc::new(|_| json!({"error": "HostError: Error(Storage, MissingValue)"}));
+        let (a, calls, _) = spend_adapter(answer, Net::default(), false).await;
+        for (c, f) in [(WALLET2, "mtx_mandate_pay"), (WALLET2, "mtx_set_payee"), (CONTRACT, "ua_transfer"), (CONTRACT, "ua_pay")] {
+            let job = ua_row(c, f);
+            assert_eq!(a.op_consumed(&as_job(&job)).await.unwrap(), None, "{f}");
+            let (sent, state, why) = job_step(&a, &calls, job).await;
+            assert_eq!((sent, state.as_str()), (0, "dead"), "{f}: {why}");
+        }
+    }
+
+    /// A failed read stays a failed read, a job back in the queue: only the host's refusal is an answer.
+    #[tokio::test]
+    async fn a_failed_view_read_is_not_unknown() {
+        let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: vec!["http://127.0.0.1:1".into()], lanes: vec![0], ..Default::default() };
+        c.params.insert("network_passphrase".into(), "x".into());
+        let down = SorobanAdapter::new(&c, &[lane_key(1)]).unwrap();
+        assert!(down.view_or_unknown(&sc(CONTRACT), "paid", vec![]).await.is_err());
+    }
+
+    /// The lane account gone after the claim: `queued` and a retry, as a transport failure in `build`. The job never stays claimed with no report.
+    #[tokio::test]
+    async fn a_failed_sequence_read_puts_the_claimed_job_back() {
+        use crate::adapter::tests::{fake_odoo, Fake};
+        let (a, calls, _) = spend_adapter(void_answer(), Net { accounts: Some(vec![]), ..Net::default() }, false).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![signed_on(7, CONTRACT, "pay")], tokens: json!([]), ..Default::default() }).await;
+        let step = crate::adapter::step_once(a.as_ref(), &odoo, 0, "n#0", None, &Default::default()).await.unwrap();
+        assert!(matches!(step, crate::adapter::Step::Retry(ref why) if why.contains("does not exist")));
+        let f = o.lock().unwrap();
+        assert_eq!((f.claims, sends(&calls)), (1, 0));
+        assert_eq!(f.reports.iter().map(|r| r["chain_state"].as_str().unwrap()).collect::<Vec<_>>(), ["queued"]);
+    }
+
+    /// `ua_metatx` with no `op.auth` whose simulation records a native holder's authority: the transaction can only fail on chain, on the
+    /// lane's fee, so it is refused unsent, as a registry write. The same job with the holder's entry in `op.auth` goes.
+    #[tokio::test]
+    async fn a_ua_metatx_missing_a_native_signer_is_refused_unsent() {
+        let root = inv(WALLET, "mtx_set_payee", vec![], vec![]);
+        let signer = SorobanAuthorizationEntry {
+            credentials: SorobanCredentials::Address(SorobanAddressCredentials { address: sc(FROM), nonce: 1, signature_expiration_ledger: 1, signature: ScVal::Void }),
+            root_invocation: root,
+        };
+        let e = signer.to_xdr_base64(Limits::none()).unwrap();
+        let answer: Answer = Arc::new(move |_| json!({"results": [{"xdr": ScVal::Void.to_xdr_base64(Limits::none()).unwrap(), "auth": [e]}], "transactionData": data(100, &[])}));
+        let (a, calls, _) = spend_adapter(answer, Net::default(), false).await;
+        let job = ua_row(WALLET, "mtx_set_payee");
+        let (sent, state, why) = job_step(&a, &calls, job.clone()).await;
+        assert_eq!((sent, state.as_str()), (0, "dead"), "{why}");
+        assert!(why.contains("another account's signature"), "{why}");
+        let mut signed = job;
+        signed["op"]["auth"] = json!([{"payload": payload(inv(WALLET, "mtx_set_payee", vec![], vec![])), "from": FROM, "signature": sig()}]);
+        assert_eq!(job_step(&a, &calls, signed).await.0, 1, "its entry carried");
+    }
+
+    /// Owner 2026-11-02: a free `mtx_*` job runs past the `call` share, so it runs only listed code, read from the instance through the host.
+    /// Another Wasm, no instance and a built-in contract are `MANDATE_WASM_REFUSED`, `dead`, nothing simulated. A failed read goes back to
+    /// the queue. The listed Wasm goes.
+    #[tokio::test]
+    async fn a_ua_metatx_runs_only_a_listed_mandate_wasm() {
+        let (a, calls, net) = spend_adapter(void_answer(), Net::default(), false).await;
+        assert!(!a.in_call_share(&as_job(&ua_row(WALLET2, "mtx_set_payee"))), "past the share: why this list exists");
+        for e in [Some(ContractExecutable::Wasm(Hash([8; 32]))), None, Some(ContractExecutable::StellarAsset)] {
+            net.lock().unwrap().executable = e.clone();
+            let (sent, state, why) = job_step(&a, &calls, ua_row(WALLET2, "mtx_set_payee")).await;
+            assert_eq!((sent, state.as_str()), (0, "dead"), "{e:?}: {why}");
+            assert!(why.contains(MANDATE_WASM_REFUSED), "{e:?}: {why}");
+        }
+        assert_eq!(logged(&calls), Vec::<String>::new(), "nothing simulated");
+        net.lock().unwrap().executable = Some(ContractExecutable::Wasm(Hash(MANDATE_WASM)));
+        net.lock().unwrap().no_entries_result = true;
+        assert_eq!(job_step(&a, &calls, ua_row(WALLET2, "mtx_set_payee")).await.1, "queued", "a failed read is no refusal");
+        net.lock().unwrap().no_entries_result = false;
+        assert_eq!(job_step(&a, &calls, ua_row(WALLET2, "mtx_set_payee")).await.0, 1);
+    }
+
+    /// A contract with code nobody listed answers what it likes: its `paid` is never `consumed`, the job's own answer stays unknown.
+    #[tokio::test]
+    async fn an_unlisted_mandate_never_reports_consumed() {
+        let (a, _, net) = spend_adapter(Arc::new(|_| view_ok(ScVal::Bool(true))), Net::default(), false).await;
+        let job = as_job(&ua_row(WALLET2, "mtx_mandate_pay"));
+        assert_eq!(a.op_consumed(&job).await.unwrap(), Some(true), "listed: its answer counts");
+        net.lock().unwrap().executable = Some(ContractExecutable::Wasm(Hash([8; 32])));
+        assert_eq!(a.op_consumed(&job).await.unwrap(), None);
+    }
+
+    #[test]
+    fn mandate_wasm_hashes_are_a_list_of_hashes() {
+        let cfg = |v: toml::Value| {
+            let mut c = ChainCfg::default();
+            c.params.insert("mandate_wasm_hashes".into(), v);
+            c
+        };
+        let good = RelayFeePolicy::from_cfg(&cfg(toml::Value::Array(vec![hex(&MANDATE_WASM).into()]))).unwrap();
+        assert_eq!(good.mandate_wasms, [MANDATE_WASM]);
+        assert!(RelayFeePolicy::from_cfg(&ChainCfg::default()).unwrap().mandate_wasms.is_empty(), "unset: none");
+        for bad in [toml::Value::from("00"), toml::Value::Array(vec!["0011".into()]), toml::Value::Array(vec!["zz".into()]), toml::Value::Array(vec![7.into()])] {
+            assert!(format!("{:#}", RelayFeePolicy::from_cfg(&cfg(bad.clone())).err().expect("accepted")).contains("mandate_wasm_hashes"), "{bad}");
+        }
+    }
+
+    /// NET-SOR-22's cap: what the job declares, margin included, up to the cap and not a stroop past it; on a restore as well. Unset, nothing goes.
+    #[tokio::test]
+    async fn a_job_over_the_resource_fee_cap_is_refused_unsent() {
+        const AT_CAP: i64 = 869_565_218; // 15 % on top is the test chain's cap, 1,000,000,000
+        let fee = Arc::new(Mutex::new(AT_CAP));
+        let f = fee.clone();
+        let answer: Answer = Arc::new(move |_| json!({"transactionData": data(*f.lock().unwrap(), &[]), "results": [{"xdr": ScVal::Void.to_xdr_base64(Limits::none()).unwrap(), "auth": []}]}));
+        let (a, calls, _) = spend_adapter(answer.clone(), Net::default(), false).await;
+        assert_eq!(job_step(&a, &calls, signed_on(7, CONTRACT, "pay")).await.0, 1, "at the cap");
+        *fee.lock().unwrap() = AT_CAP + 1;
+        let (sent, state, why) = job_step(&a, &calls, signed_on(7, CONTRACT, "pay")).await;
+        assert_eq!((sent, state.as_str()), (0, "dead"), "{why}");
+        assert!(why.contains(RESOURCE_FEE_OVER_CAP), "{why}");
+        *fee.lock().unwrap() = 1;
+        let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: a.rpc.clone(), lanes: vec![0], ..Default::default() };
+        c.tokens = vec![crate::config::TokenCfg { address: CONTRACT.into(), decimals: 7 }];
+        c.params.insert("network_passphrase".into(), "x".into());
+        let unset = SorobanAdapter::new(&c, &[lane_key(1)]).unwrap();
+        assert!(job_step(&unset, &calls, signed_on(7, CONTRACT, "pay")).await.2.contains(RESOURCE_FEE_OVER_CAP), "unset: fail closed");
+    }
+
+    /// Owner 2026-11-02: the registered tokens are the client's, re-read as EVM's: a token added after the start is served with no restart,
+    /// one dropped is refused, and the config's list only stands until the first answer.
+    #[tokio::test]
+    async fn a_token_registered_after_the_start_is_served() {
+        use crate::adapter::tests::{fake_odoo, Fake};
+        let (a, calls, _) = spend_adapter(void_answer(), Net::default(), false).await;
+        let (sent, _, why) = job_step(&a, &calls, signed_on(7, WALLET2, "pay")).await;
+        assert_eq!(sent, 0);
+        assert!(why.contains(CALL_TARGET_REFUSED), "{why}");
+        let (odoo, _) = fake_odoo(Fake { tokens: json!([{"address": WALLET2, "decimals": 7}]), ..Default::default() }).await;
+        crate::adapter::recover_lane(a.as_ref(), &odoo, 0, "n#0").await.unwrap();
+        assert_eq!(job_step(&a, &calls, signed_on(7, WALLET2, "pay")).await.0, 1);
+        assert!(job_step(&a, &calls, signed_on(7, CONTRACT, "pay")).await.2.contains(CALL_TARGET_REFUSED), "no longer the client's");
+    }
+
+    /// A `u64` is a decimal string past 2^53 here too: `set_kem_key`'s `version`, as `ua_value`'s every other.
+    #[test]
+    fn a_kem_version_may_be_a_decimal_string() {
+        let row = ops(&NONE).into_iter().find(|o| o["function"] == "set_kem_key").unwrap();
+        let mut op = row.clone();
+        op["args"]["version"] = json!("18446744073709551615");
+        let Ua8Write::SetKem(k) = ua8_write(&op).unwrap().0 else { panic!() };
+        assert_eq!(k.version, u64::MAX);
+        op["args"]["version"] = json!("0x01");
+        assert!(ua8_write(&op).is_err());
+        assert!(ua8_write(&row).is_ok(), "a number stays one");
+    }
+
+    /// A proof already stored: a no-op on chain, on the lane's fee, so unsent. No proof stored, or no bytes in the answer: the simulation decides.
+    #[tokio::test]
+    async fn store_pqz_pop_over_a_stored_proof_is_refused_unsent() {
+        let base = registry(vec![], vec![]);
+        let stored = Arc::new(Mutex::new(byt(&[1])));
+        let s = stored.clone();
+        let reply: Answer = Arc::new(move |c| if c.function_name.0.as_slice() == b"pqz_pop_of" { view_ok(s.lock().unwrap().clone()) } else { base(c) });
+        let (a, calls) = ua8_adapter(reply).await;
+        let op = ops(&NONE).remove(7);
+        assert_eq!(op["function"], "store_pqz_pop");
+        refused(run(&a, &op).await, "already stored");
+        assert_eq!(logged(&calls), ["pqz_pop_of"], "never simulated, never sent");
+        for answer in [byt(&[]), ScVal::Void] {
+            *stored.lock().unwrap() = answer;
+            run(&a, &op).await.unwrap();
+            assert_eq!(logged(&calls), ["pqz_pop_of", "store_pqz_pop", "SEND"]);
+        }
+    }
+
+    /// A re-run acceptance: the slot holds one, so the job is `consumed`, the op done, not `dead` as a job that failed.
+    #[tokio::test]
+    async fn a_re_run_acceptance_is_consumed() {
+        let base = registry(vec![addr(&stub_lane())], classical());
+        let reply: Answer = Arc::new(move |c| if c.function_name.0.as_slice() == b"member_accepted" { view_ok(ScVal::Bool(true)) } else { base(c) });
+        let (a, calls) = ua8_adapter(reply).await;
+        let job = json!({"id": 7, "kind": "ua_metatx", "op": accept_op(membership("msig-classical/0"), &NONE)});
+        let (sent, state, why) = job_step(&a, &calls, job).await;
+        assert_eq!((sent, state.as_str()), (0, "consumed"), "{why}");
+    }
+
+    /// `record_of` over the read bound is what this record answers, for good: `Revert`. As `Transport` the job came back to the queue for ever.
+    #[tokio::test]
+    async fn a_record_over_the_read_bound_is_the_jobs_answer() {
+        let (a, _) = ua8_adapter(Arc::new(|_| view_ok(byt(&vec![7; 1 << 16])))).await;
+        let e = a.ua8_record(&sc(REGISTRY), &UA).await.unwrap_err();
+        assert!(matches!(e, SimError::Revert(ref r) if r.contains("read bound")), "{e:?}");
+    }
+
+    /// What an RPC answers is bounded by depth, as what a job puts in: `Limits::len` alone would overflow the stack and abort the node.
+    #[test]
+    fn deep_xdr_from_an_rpc_is_refused_not_a_stack_overflow() {
+        // `SorobanTransactionData`: no ext, a read-only footprint of one `ContractData` key, that key a `Vec` in a `Vec` …
+        let mut x = [0u32.to_be_bytes(), 1u32.to_be_bytes(), 6u32.to_be_bytes(), 1u32.to_be_bytes()].concat();
+        x.extend_from_slice(&[0; 32]);
+        x.extend_from_slice(&deep_xdr(20_000));
+        let x = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, x);
+        let e = sim_data(&json!({"transactionData": x}), 0).unwrap_err();
+        assert!(matches!(e, SimError::Transport(ref r) if r.to_lowercase().contains("depth")), "{e:?}");
     }
 }

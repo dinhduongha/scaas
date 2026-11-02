@@ -14,9 +14,8 @@ mod soroban_common;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use scaas_node::adapter::{index_step, lane_step, ChainAdapter};
+use scaas_node::adapter::{index_step, lane_step, recover_lane, ChainAdapter};
 use scaas_node::adapters::soroban::SorobanAdapter;
-use scaas_node::config::TokenCfg;
 use scaas_node::signer::LocalSigner;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -85,14 +84,10 @@ async fn soroban_payments_anti_lock_fee_bump_and_finality() {
     state.lock().unwrap().indexed_block = start - 1;
     let odoo = odoo_at(start_fake(state.clone()).await);
     let signers = [key(0), key(1)];
-    // a `signed_op` runs on the chain's own contracts only
-    let cfg = |fee_bump: bool| {
-        let mut c = chain_cfg(fee_bump);
-        c.tokens = [&t1, &t2].iter().map(|t| TokenCfg { address: t.to_string(), decimals: 7 }).collect();
-        c
-    };
-    let adapter = SorobanAdapter::new(&cfg(false), &signers).unwrap();
+    let adapter = SorobanAdapter::new(&chain_cfg(false), &signers).unwrap();
     assert_eq!(adapter.lanes()[1].address, g(&lane1));
+    // a `signed_op` runs on the chain's registered tokens, the client's list (`refresh_tokens`), none in the config
+    recover_lane(&adapter, &odoo, 0, "n#0").await.unwrap();
     let seq0 = adapter.sequence(0).await.unwrap();
 
     let exp = start as u32 + 1000;
@@ -119,7 +114,8 @@ async fn soroban_payments_anti_lock_fee_bump_and_finality() {
     assert_eq!(adapter.sequence(0).await.unwrap(), seq0 + 1);
 
     // Fee-bump: lane 0 pays for lane 1's tx.
-    let bumped = SorobanAdapter::new(&cfg(true), &signers).unwrap();
+    let bumped = SorobanAdapter::new(&chain_cfg(true), &signers).unwrap();
+    recover_lane(&bumped, &odoo, 1, "n#1").await.unwrap();
     let z = sign_pay(&subject, &t1, &g(&payee), 3_000, [0xC3; 32], 77, exp, 4);
     state.lock().unwrap().jobs.push(z.job.clone());
     assert!(lane_step(&bumped, &odoo, 1, "n#1").await.unwrap());

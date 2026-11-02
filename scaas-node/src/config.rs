@@ -592,6 +592,9 @@ impl Config {
             if c.family == "soroban" && self.modules.submit && !(set(c.breaker.gas_budget_per_hour) && set(c.breaker.min_relayer_balance)) {
                 bail!("chain {key}: a soroban lane needs breaker.gas_budget_per_hour and breaker.min_relayer_balance, both above 0 (stroops; node.example.toml)");
             }
+            if c.family == "soroban" && self.modules.submit && !c.params.get("max_resource_fee_per_job").and_then(|v| v.as_integer()).is_some_and(|n| n > 0) {
+                bail!("chain {key}: a soroban lane needs params.max_resource_fee_per_job above 0 (stroops; node.example.toml)");
+            }
         }
         self.validate_store_sections(&seen)
     }
@@ -1065,17 +1068,25 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
     /// case; an indexer-only node has no lane to limit.
     #[test]
     fn soroban_lanes_need_both_spend_limits() {
-        let raw = |modules: &str, breaker: &str| format!("{modules}{OK}\n[keys]\nmnemonic = {{ env = \"SCAAS_TEST_MNEMONIC\" }}\n\
+        let raw = |modules: &str, params: &str, breaker: &str| format!("{modules}{OK}\n[keys]\nmnemonic = {{ env = \"SCAAS_TEST_MNEMONIC\" }}\n\
             [[chains]]\nfamily = \"soroban\"\nnetwork = \"local\"\nrpc_urls = [\"http://p\"]\nlanes = [0]\n\
-            params = {{ network_passphrase = \"x\" }}\n{breaker}\n");
-        let check = |modules: &str, breaker: &str| toml::from_str::<Config>(&raw(modules, breaker)).unwrap().validate();
+            params = {{ network_passphrase = \"x\"{params} }}\n{breaker}\n");
+        let fee_cap = ", max_resource_fee_per_job = 1";
+        let with_cap = |modules: &str, params: &str, breaker: &str| toml::from_str::<Config>(&raw(modules, params, breaker)).unwrap().validate();
+        let check = |modules: &str, breaker: &str| with_cap(modules, fee_cap, breaker);
         check("", "breaker = { gas_budget_per_hour = 1, min_relayer_balance = 1 }").unwrap();
         for bad in ["", "breaker = { gas_budget_per_hour = 1 }", "breaker = { min_relayer_balance = 1 }",
                     "breaker = { gas_budget_per_hour = 1, min_relayer_balance = 0 }", "breaker = { gas_budget_per_hour = 0, min_relayer_balance = 1 }"] {
             let e = check("", bad).unwrap_err().to_string();
             assert!(e.contains("gas_budget_per_hour") && e.contains("min_relayer_balance"), "{bad}: {e}");
         }
-        check("[modules]\nsubmit = false\n", "").unwrap();
+        // the third limit, the per-job cap: as the budget, the amount is the operator's, so no default
+        let limits = "breaker = { gas_budget_per_hour = 1, min_relayer_balance = 1 }";
+        for bad in ["", ", max_resource_fee_per_job = 0", ", max_resource_fee_per_job = \"x\""] {
+            let e = with_cap("", bad, limits).unwrap_err().to_string();
+            assert!(e.contains("max_resource_fee_per_job"), "{bad}: {e}");
+        }
+        with_cap("[modules]\nsubmit = false\n", "", "").unwrap();
         for ok in [1, 100] {
             check("", &format!("breaker = {{ gas_budget_per_hour = 1, min_relayer_balance = 1, call_budget_pct = {ok} }}")).unwrap();
         }
@@ -1091,7 +1102,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         // Soroban family, Pi Network passphrase, SLIP-44 314159 (bip_utils 2.9.3, the 24-word "abandon … art").
         let raw = format!("{OK}\n[keys]\nmnemonic = {{ env = \"SCAAS_TEST_MNEMONIC\" }}\n\
             [[chains]]\nfamily = \"soroban\"\nnetwork = \"pi-testnet\"\nrpc_urls = [\"http://p\"]\nlanes = [0, 1]\n\
-            coin_type = 314159\nparams = {{ network_passphrase = \"Pi Testnet\" }}\n\
+            coin_type = 314159\nparams = {{ network_passphrase = \"Pi Testnet\", max_resource_fee_per_job = 1 }}\n\
             breaker = {{ gas_budget_per_hour = 1, min_relayer_balance = 1 }}\n");
         let c: Config = toml::from_str(&raw).unwrap();
         c.validate().unwrap();

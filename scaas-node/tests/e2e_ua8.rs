@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! UA-8 on Soroban (plan ua8-soroban B7, C15): a UA record copied EVM → Soroban → EVM byte for byte on a real Protocol 30
 //! host and two anvil chains, and what only a real host can answer. `smartcontracts/soroban/scripts/e2e-ua8-local.sh` runs it
 //! (env: see `soroban_common`, `UA8_EVM_A` / `UA8_EVM_B` = `<chain id>,<rpc url>`); `#[ignore]`, one test at a time.
