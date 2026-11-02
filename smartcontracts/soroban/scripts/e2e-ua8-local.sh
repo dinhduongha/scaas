@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 # UA-8 local e2e on the pinned Protocol 30 quickstart (plan ua8-soroban B7, C15): a UA record copied EVM -> Soroban -> EVM.
 # Build the Wasm and the EVM deploy (capped), start the quickstart and two anvil chains (taken down on every exit), then
 # the node's `e2e_ua8` (capped, one slot, -j2). Refuses to start under 6 GB available (oomd kills the terminal).

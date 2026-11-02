@@ -72,12 +72,8 @@ pub enum Key {
     Key(BytesN<32>),
     List(u32, u32),
     Count(u32),
-    // B0 (ua8-soroban, U8S-D3): the real registry's `Signer` and the Part B entries
+    // B0 (ua8-soroban, U8S-D3): the real registry's `Signer`
     Signer(BytesN<32>),
-    PqzK(BytesN<32>),
-    PqzP(BytesN<32>),
-    Kem(BytesN<32>, u64),
-    KemMax(BytesN<32>),
 }
 
 pub fn h(env: &Env, data: &Bytes) -> BytesN<32> {

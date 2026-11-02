@@ -764,15 +764,23 @@ contract UARegistryUA8Test is UARegistryBase {
         one[0] = s;
     }
 
-    /// 2-of-(mldsa65#1 w1, mldsa65#2 w2): both slots verify and the old rule passes (1, then 3 >= 2), but the weight-2
-    /// slot alone reaches the threshold. `pop` signs both slots; `d` / `ua` are the structure and its UA.
+    /// portable.json `msig-pop-not-minimal`: its full registration under `field`, no mutation of a row.
+    function loadNotMinimal(string memory field) external view returns (Row memory) {
+        string memory j = vm.readFile(PJ);
+        for (uint256 i; _jx(j, string.concat(".negatives[", vm.toString(i), "]")); ++i) {
+            string memory p = string.concat(".negatives[", vm.toString(i), "]");
+            if (keccak256(bytes(_js(j, string.concat(p, ".name")))) != keccak256("msig-pop-not-minimal")) continue;
+            return _parseRow(j, string.concat(p, ".", field));
+        }
+        revert("no msig-pop-not-minimal");
+    }
+
+    /// The row's 2-of-(mldsa65#1 w1, mldsa65#2 w2), by lower id first: both slots verify and the old rule passes (1, then
+    /// 3 >= 2), but the weight-2 slot alone reaches the threshold. `pop` signs both slots; `d` / `ua` are the structure and its UA.
     function _notMinimal(Row[] memory rows) internal returns (bytes memory d, bytes32 ua, bytes memory pop) {
-        Member[] memory mm = new Member[](2);
-        mm[0] = Member(UAKinds.MLDSA65, rows[ML65_1].ua, 1);
-        mm[1] = Member(UAKinds.MLDSA65, rows[ML65_1 + 1].ua, 2);
-        d = _msigKey(2, mm);
-        ua = UAKinds.uaOf(UAKinds.MSIG, d);
-        pop = _msigSigs(rows, d, ua, UAKinds.PURPOSE_POP_V2, _regDigest(ua, UAKinds.MSIG), 0, 1, 0);
+        Row memory m = this.loadNotMinimal("registration");
+        _allowMembers(rows, m.keyData, UAKinds.memberDigest(m.ua, m.popMessage), m.pop);
+        return (m.keyData, m.ua, m.pop);
     }
 
     /// The not-minimal `msig` registered by its weight-2 slot alone (the minimal `pop`).
@@ -816,6 +824,26 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// The KEM record of that `msig`: both slots are `UAUnauthorized`, the weight-2 slot lands.
+    /// The row's `lightestInMiddle`, Soroban's `msig_pop_lightest_slot_in_the_middle_refused` on the same bytes: 5-of-(2, 1, 3) by
+    /// index, all three signed. T - min is 5, so the weight-1 slot is not needed, while the first slot alone would pass (6 - 2 = 4 < 5).
+    function test_msigPopLightestInMiddleRefused() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        Row memory m = this.loadNotMinimal("lightestInMiddle");
+        _allowMembers(rows, m.keyData, UAKinds.memberDigest(m.ua, m.popMessage), m.pop);
+        UARegistry a = _regA(false);
+        _members(a, rows);
+        Row memory x = _find(rows, string.concat("mldsa65/", _setName()));
+        UACall.register(a, x.kind, x.keyData, x.attrs, x.pop, x.pqzPop);
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        UACall.register(a, UAKinds.MSIG, m.keyData, m.attrs, m.pop, "");
+        IUARegistry.MemberSig[] memory s = abi.decode(m.pop, (IUARegistry.MemberSig[]));
+        assertEq(s.length, 3);
+        IUARegistry.MemberSig[] memory two = new IUARegistry.MemberSig[](2);
+        (two[0], two[1]) = (s[0], s[2]);
+        assertEq(UACall.register(a, UAKinds.MSIG, m.keyData, m.attrs, abi.encode(two), ""), m.ua);
+    }
+
     function test_msigKemSigNotMinimalRefused() public {
         (UARegistry a, Row[] memory rows, bytes memory d, bytes32 ua,) = _notMinimalRegistered();
         bytes memory pk = _kemPk(41);

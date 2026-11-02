@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! MA-S, CTR-UA-37 on Soroban (owner 2026-11-02): listing in an `msig` is no consent, a member accepts, and at verify only accepted
 //! members count. `portable.json` `memberships` are the rows EVM verifies, read here unchanged.
 extern crate std;
@@ -547,6 +548,29 @@ fn ttl_and_size_of_the_entry() {
     let size = entry.clone().to_xdr(&env).len();
     assert!(size <= 1_024, "{size} B");
     assert_eq!(crate::AcceptedEntry::from_xdr(&env, &entry.to_xdr(&env)).unwrap().0, 0xffff);
+}
+
+/// The high-s twin of a good `evm-eoa` signature accepts nothing: the low-s rule of every native signature holds here too.
+#[test]
+fn a_high_s_evm_eoa_slot_is_refused() {
+    let (env, c) = test::setup();
+    let (k, e) = (test::k1(6), test::ed(7));
+    e.register(&env, &c);
+    let id = test::eoa(&env, &k);
+    let m = msig(&env, 1, &[(0x0001, id, 1), (0x0102, e.ua(&env).to_array(), 2)]);
+    m.register(&env, &c, &NO_SLOTS(&env));
+    let good = test::k1_sign(&k, &m.membership(&env, &id).to_array());
+    const N: [u8; 32] = h32("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
+    let (mut high, mut borrow) = (good.clone(), 0i32);
+    for j in (0..32).rev() {
+        let d = N[j] as i32 - good[32 + j] as i32 - borrow;
+        high[32 + j] = (d & 0xff) as u8;
+        borrow = (d < 0) as i32;
+    }
+    high[64] = 27 + 28 - good[64];
+    let slot = |sig: StdVec<u8>| MemberSig { index: m.index(&id), key_data: Bytes::new(&env), sig: b(&env, &sig) };
+    assert_eq!(err(c.try_accept_membership(&m.ua, &slot(high), &None)), Error::Unauthorized);
+    c.accept_membership(&m.ua, &slot(good), &None);
 }
 
 /// What the rows cover: `evm-eoa`, a `Chain` kind and a relayer-checked kind each, so `rows_accept_unchanged` walks every path of a slot.

@@ -1027,6 +1027,24 @@ fn msig_pop_not_minimal_refused() {
     assert_eq!(ua, n32(&env, &neg["registration"]["ua"]));
 }
 
+/// The row's `lightestInMiddle`, EVM's `test_msigPopLightestInMiddleRefused` on the same bytes: 5-of-(2, 1, 3) by index, all three
+/// signed. `T - w_min` is 5, so the weight-1 slot is not needed, while the first slot alone would pass (6 - 2 = 4 < 5). Slots 0 and 2 register.
+#[test]
+fn msig_pop_lightest_slot_in_the_middle_refused() {
+    let (env, c) = setup();
+    for row in ["mldsa65#1", "mldsa65#2", "mldsa65/n2048-kmax1024"] {
+        portable(&env, row).on(&c);
+    }
+    let r = derived(PORTABLE, "negatives", "msig-pop-not-minimal")["lightestInMiddle"].clone();
+    let s = structure_of(&env, &hx(&r["keyData"])).unwrap();
+    let slots = members_of(&env, &b(&env, &hx(&r["pop"])));
+    assert_eq!(slots.len(), 3);
+    assert_eq!(err(c.try_register_msig(&s, &no_attrs(&env), &slots, &Bytes::new(&env), &None)), Error::Pop);
+    let two = |i: u32| (i, vec![], vecu8(&slots.get(i).unwrap().sig));
+    let ua = c.register_msig(&s, &no_attrs(&env), &member_sigs(&env, &[two(0), two(2)]), &Bytes::new(&env), &None);
+    assert_eq!(ua, n32(&env, &r["ua"]));
+}
+
 /// Every slot counts its member's weight, a native one too: 2-of-(`G…` 1, `mldsa65` 2) with the `G…` member's host auth
 /// present is `Pop`, as its slot is not needed; the PQ slot alone registers.
 #[test]

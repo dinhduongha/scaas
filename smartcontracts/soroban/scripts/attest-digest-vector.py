@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """The vector of `ua8_attest_digest_vector` (ua-registry) and `attest_digest_vector` (scaas-node): `attest_digest` built here by
 hand from the XDR definitions, stdlib only, so neither Rust implementation vouches for the other. usage: attest-digest-vector.py"""
 import hashlib

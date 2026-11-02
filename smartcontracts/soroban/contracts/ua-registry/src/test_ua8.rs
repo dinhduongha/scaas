@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! B2, B3 (U8S-D3–D7): `register` with PQZ / KEM attributes and the later writes against `portable.json` (the authority
 //! for bytes): the bytes stay in contract state, unproven, and `registration_of` returns exactly the `register` arguments,
 //! as EVM `registrationOf`. B4 (U8S-D8, UA8-D18–D20): the relayer-checked mode, a listed relayer's auth mocked. B7 (C15): the
@@ -7,7 +8,7 @@ use std::{format, vec, vec::Vec as StdVec};
 
 use serde_json::Value;
 use soroban_sdk::{
-    testutils::{storage::Persistent as _, Address as _, Events as _, Ledger as _, MockAuth, MockAuthInvoke},
+    testutils::{storage::{Instance as _, Persistent as _}, Address as _, Events as _, Ledger as _, MockAuth, MockAuthInvoke},
     xdr::{Limits, WriteXdr},
     Address, Bytes, BytesN, Env, Event as _, IntoVal, Vec as SVec,
 };
@@ -461,6 +462,20 @@ fn ua8_entries_extend_ttl() {
     for k in &keys {
         assert_eq!(ttl(k), 60 * DAY, "extended on read");
     }
+}
+
+/// Every write extends the contract's instance, a read none: the `relayers()` list stays live while the registry is written to.
+#[test]
+fn ua8_instance_ttl() {
+    let (env, c) = setup();
+    let ttl = || env.as_contract(&c.address, || env.storage().instance().get_ttl());
+    assert_eq!(ttl(), 60 * DAY, "from the constructor");
+    env.ledger().with_mut(|l| l.sequence_number += 31 * DAY);
+    let r = portable(&env, "mldsa65#1");
+    assert_eq!(c.record_of(&r.ua), None);
+    assert_eq!(ttl(), 29 * DAY, "a view leaves it");
+    r.on(&c);
+    assert_eq!(ttl(), 60 * DAY, "extended by the write");
 }
 
 /// `Attrs` keeps its code point, unused: T3's refused cases now register, or are their own error (`register_attrs_accepted`).
@@ -1537,12 +1552,38 @@ fn ua8_relayer_register_parts_take_pop_checked() {
     r.attrs.pqz_key = portable(&env, &format!("mldsa65/{SET}")).attrs.pqz_key;
     r.attrs.pqz_pop_hash = n(&env, [9; 32]);
     r.on_by(&c, &by);
+    let pqz = UaPqzKeySet {
+        ua: r.ua.clone(),
+        pqz_key_hash: pqz_key_hash(&env, &r.attrs.pqz_key),
+        pqz_pop_hash: r.attrs.pqz_pop_hash.clone(),
+        sig_hash: env.crypto().keccak256(&Bytes::new(&env)).into(),
+        checked: m.clone(),
+    };
+    assert!(env.events().all().events().contains(&pqz.to_xdr(&env, &c.address)), "the PQZ event names the relayer");
     assert_eq!(c.pqz_key_of(&r.ua).unwrap().3, m);
     assert_eq!(c.kem_key_of(&r.ua), None);
     c.set_kem_key(&r.ua, &0, &whole, &UaSig::none(&env), &None);
     assert!(env.auths().is_empty());
     assert_eq!(c.kem_key_of(&r.ua), Some((0, whole.clone(), Bytes::new(&env), m.clone())));
     assert_eq!(c.checked_of(&r.ua), (m.clone(), Checked::None, m));
+}
+
+/// `register`'s KEM event names the relayer too, with the full key in the call.
+#[test]
+fn ua8_relayer_register_kem_event_names_it() {
+    let (env, c, by) = relayed();
+    let m = marked(&by);
+    let r = portable(&env, "fndsa512");
+    r.on_by(&c, &by);
+    let kem = UaKemKeySet {
+        ua: r.ua.clone(),
+        version: 0,
+        kem_pk_hash: env.crypto().keccak256(&kem_pk(&env, &r.attrs.kem)).into(),
+        sig_hash: env.crypto().keccak256(&Bytes::new(&env)).into(),
+        checked: m.clone(),
+    };
+    assert!(env.events().all().events().contains(&kem.to_xdr(&env, &c.address)));
+    assert_eq!(c.kem_key_of(&r.ua).unwrap().3, m);
 }
 
 /// P11.6: a listed relayer that stores a bad record takes that write-once slot, on all three writes: the bytes it stored stay
