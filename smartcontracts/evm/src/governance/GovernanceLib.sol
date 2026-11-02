@@ -14,8 +14,9 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 ///         set flag, disables disableable flags, transfers (two-step) or renounces ownership. Role holders keep their
 ///         roles after the owner renounces; a holder may renounce its own role.
 library GovernanceLib {
-    /// @dev The value of `roles` for a whole-shape holder.
+    /// @dev The value of `roles`: 0 none, `WHOLE` no limit, `LIMITED` a `Grant` binds it.
     uint8 internal constant WHOLE = 1;
+    uint8 internal constant LIMITED = 2;
 
     /// @notice Initial role holders (CTR-TOK-25 `Roles`); each only for a set flag, 0 = none.
     struct Roles {
@@ -33,6 +34,10 @@ library GovernanceLib {
         address owner;
         address pendingOwner;
         mapping(uint256 bit => mapping(address account => uint8)) roles;
+        mapping(uint256 bit => uint256) holderCount;
+        mapping(uint256 bit => mapping(address holder => IGovernance.Grant)) grants;
+        /// @dev Bumped when a holder loses the bit, which kills every leaf it granted, without a walk.
+        mapping(uint256 bit => mapping(address holder => uint32)) epoch;
     }
 
     // keccak256(abi.encode(uint256(keccak256("scaas.governance")) - 1)) & ~bytes32(uint256(0xff))
@@ -81,20 +86,47 @@ library GovernanceLib {
         _grant(s, bit, account, caller, roleBits, contractOnly);
     }
 
+    /// @notice The owner, or the grantor of a leaf.
     function revokeRole(uint8 bit, address account, address caller) public {
-        GovernanceStorage storage s = _onlyOwner(caller);
-        if (s.roles[bit][account] != 0) {
-            s.roles[bit][account] = 0;
-            emit IGovernance.RoleRevoked(bit, account, caller);
+        GovernanceStorage storage s = $();
+        if (caller == address(0) || (caller != s.owner && caller != s.grants[bit][account].grantor)) {
+            revert IGovernance.NotOwner(caller);
         }
+        _clear(s, bit, account, caller);
     }
 
     /// @notice A holder gives up its own role (replaces `renounceMinter`/`renounceRateAdmin`/`renounceGuardian`).
     function renounceRole(uint8 bit, address caller) public {
         GovernanceStorage storage s = $();
         if (s.roles[bit][caller] == 0) revert IGovernance.MissingRole(bit, caller);
-        s.roles[bit][caller] = 0;
-        emit IGovernance.RoleRevoked(bit, caller, caller);
+        _clear(s, bit, caller, caller);
+    }
+
+    /// @notice CTR-GOV-02: the owner replaces any grant; a holder with a `delegable` grant sets a leaf that narrows its own,
+    ///         on an account that holds nothing or is its own leaf. Spent, uses and the window carry over: an edit never
+    ///         refreshes a budget. Returns whether this is a leaf and its parent's scope: the order on scopes is the contract's.
+    function setGrant(uint8 bit, address holder, IGovernance.GrantTerms calldata t, address caller, uint256 roleBits,
+        uint256 contractOnly) public returns (bool leaf, bytes32 parentScope)
+    {
+        GovernanceStorage storage s = $();
+        IGovernance.Grant storage g = s.grants[bit][holder];
+        uint8 r = s.roles[bit][holder];
+        leaf = caller != s.owner || caller == address(0);
+        if (leaf) {
+            IGovernance.Grant storage p = s.grants[bit][caller];
+            if (s.roles[bit][caller] != LIMITED || !p.delegable) revert IGovernance.NotOwner(caller);
+            if (r != 0 && g.grantor != caller) revert IGovernance.NotOwner(caller);
+            _narrows(t, p);
+            parentScope = p.scope;
+        }
+        _check(s, bit, holder, roleBits, contractOnly);
+        if (t.perWindow != 0 && t.window == 0) revert IGovernance.GrantNotNarrower(3);
+        (g.min, g.max, g.total, g.perWindow) = (t.min, t.max, t.total, t.perWindow);
+        (g.window, g.validUntil, g.maxUses, g.scope, g.delegable) = (t.window, t.validUntil, t.maxUses, t.scope, t.delegable);
+        (g.grantor, g.grantorEpoch) = leaf ? (caller, s.epoch[bit][caller]) : (address(0), uint32(0));
+        if (r == 0) ++s.holderCount[bit];
+        s.roles[bit][holder] = LIMITED;
+        emit IGovernance.GrantSet(bit, holder, leaf ? caller : address(0));
     }
 
     /// @notice One-way: clears a set, unlocked flag (replaces `disableControls`).
@@ -122,9 +154,14 @@ library GovernanceLib {
         emit IGovernance.OwnershipTransferred(previous, caller);
     }
 
-    /// @notice The owner becomes 0 forever; role holders keep their roles (to freeze everything, revoke first).
-    function renounceOwnership(address caller) public {
+    /// @notice The owner becomes 0 forever. Refused while a set bit that is not locked has holders (CTR-GOV-02): revoke
+    ///         first. A locked bit's holders survive: a lock promises the power is permanent.
+    function renounceOwnership(address caller, uint256 roleBits) public {
         GovernanceStorage storage s = _onlyOwner(caller);
+        for (uint256 live = s.features & ~s.lockedFeatures & roleBits; live != 0; live &= live - 1) {
+            uint8 bit = _lowest(live);
+            if (s.holderCount[bit] != 0) revert IGovernance.OwnerHasHolders(bit);
+        }
         s.owner = address(0);
         s.pendingOwner = address(0);
         emit IGovernance.OwnershipTransferred(caller, address(0));
@@ -147,6 +184,32 @@ library GovernanceLib {
         if (s.roles[bit][account] == 0) revert IGovernance.MissingRole(bit, account);
     }
 
+    /// @notice The one check of a power (CTR-GOV-02): the flag is set and `account` holds it; a limited holder's grant binds
+    ///         `scalar`, which must be the number the contract acts on. Returns the grant's `scope` (0 for a whole-shape
+    ///         holder, which pays no more than `requireRole`).
+    function use(uint8 bit, address account, uint256 scalar) internal returns (bytes32) {
+        GovernanceStorage storage s = $();
+        if (s.features & _bit(bit) == 0) revert IGovernance.FeatureNotSet(bit);
+        uint8 r = s.roles[bit][account];
+        if (r == WHOLE) return bytes32(0);
+        if (r == 0) revert IGovernance.MissingRole(bit, account);
+        return useLimited(bit, account, scalar);
+    }
+
+    /// @notice A limited holder: its own terms, then, for a leaf, the parent's epoch and the parent's terms on the same scalar.
+    function useLimited(uint8 bit, address account, uint256 scalar) public returns (bytes32) {
+        GovernanceStorage storage s = $();
+        IGovernance.Grant storage g = s.grants[bit][account];
+        _debit(bit, account, g, scalar);
+        address p = g.grantor;
+        if (p != address(0)) {
+            if (s.roles[bit][p] != LIMITED || s.epoch[bit][p] != g.grantorEpoch) revert IGovernance.GrantExhausted(7);
+            _debit(bit, p, s.grants[bit][p], scalar);
+        }
+        emit IGovernance.GrantUsed(bit, account, scalar);
+        return g.scope;
+    }
+
     function requireFeature(uint8 bit) internal view {
         if ($().features & _bit(bit) == 0) revert IGovernance.FeatureNotSet(bit);
     }
@@ -156,15 +219,66 @@ library GovernanceLib {
     function _grant(GovernanceStorage storage s, uint8 bit, address account, address caller, uint256 roleBits,
         uint256 contractOnly) private
     {
+        _check(s, bit, account, roleBits, contractOnly);
+        uint8 r = s.roles[bit][account];
+        if (r == WHOLE) return;
+        if (r == 0) ++s.holderCount[bit];
+        s.roles[bit][account] = WHOLE;
+        emit IGovernance.RoleGranted(bit, account, caller);
+    }
+
+    function _check(GovernanceStorage storage s, uint8 bit, address account, uint256 roleBits, uint256 contractOnly)
+        private view
+    {
         if (bit >= 128) revert IGovernance.FeatureReserved(bit);
         if (account == address(0)) revert IGovernance.RoleAccountZero(bit);
         if (account == MetaTxLib.UA_POOL || account == MetaTxLib.SHIELD_POOL) revert IGovernance.RoleAccountPool(bit, account);
         if (roleBits & _bit(bit) == 0) revert IGovernance.NoSuchRole(bit);
         if (s.features & _bit(bit) == 0) revert IGovernance.RoleWithoutFeature(bit);
         if (contractOnly & _bit(bit) != 0 && !SigCheck.isContract(account)) revert IGovernance.RoleNotContract(bit, account);
-        if (s.roles[bit][account] != 0) return;
-        s.roles[bit][account] = WHOLE;
-        emit IGovernance.RoleGranted(bit, account, caller);
+    }
+
+    /// @dev Epoch first: the leaves of `account` die with its right.
+    function _clear(GovernanceStorage storage s, uint8 bit, address account, address caller) private {
+        if (s.roles[bit][account] == 0) return;
+        s.roles[bit][account] = 0;
+        --s.holderCount[bit];
+        ++s.epoch[bit][account];
+        emit IGovernance.RoleRevoked(bit, account, caller);
+    }
+
+    /// @dev One holder's terms against `x`, spent written back. Windows are MandateWallet's grid on multiples of `window`.
+    function _debit(uint8 bit, address account, IGovernance.Grant storage g, uint256 x) private {
+        if (g.validUntil != 0 && block.timestamp > g.validUntil) revert IGovernance.GrantExpired(bit, account);
+        if (x < g.min) revert IGovernance.GrantExhausted(0);
+        if (x > g.max) revert IGovernance.GrantExhausted(1);
+        if (g.maxUses != 0) {
+            if (g.uses >= g.maxUses) revert IGovernance.GrantExhausted(5);
+            ++g.uses;
+        }
+        if (g.total != 0) {
+            uint256 spent = uint256(g.spentTotal) + x;
+            if (spent > g.total) revert IGovernance.GrantExhausted(2);
+            g.spentTotal = uint128(spent);
+        }
+        if (g.perWindow != 0) {
+            uint32 w = g.window;
+            uint32 start = uint32(block.timestamp - block.timestamp % w);
+            uint256 spent = (start == g.windowStart ? uint256(g.spentInWindow) : 0) + x;
+            if (spent > g.perWindow) revert IGovernance.GrantExhausted(3);
+            (g.spentInWindow, g.windowStart) = (uint128(spent), start);
+        }
+    }
+
+    /// @dev Child within parent, field by field; for the four fields with 0 = no bound, a bounded parent wants a bounded child.
+    function _narrows(IGovernance.GrantTerms calldata t, IGovernance.Grant storage p) private view {
+        if (t.delegable) revert IGovernance.GrantNotNarrower(6);
+        if (t.min < p.min) revert IGovernance.GrantNotNarrower(0);
+        if (t.max > p.max) revert IGovernance.GrantNotNarrower(1);
+        if (p.total != 0 && (t.total == 0 || t.total > p.total - p.spentTotal)) revert IGovernance.GrantNotNarrower(2);
+        if (p.perWindow != 0 && (t.perWindow == 0 || t.perWindow > p.perWindow)) revert IGovernance.GrantNotNarrower(3);
+        if (p.validUntil != 0 && (t.validUntil == 0 || t.validUntil > p.validUntil)) revert IGovernance.GrantNotNarrower(4);
+        if (p.maxUses != 0 && (t.maxUses == 0 || t.maxUses > p.maxUses)) revert IGovernance.GrantNotNarrower(5);
     }
 
     function _onlyOwner(address caller) private view returns (GovernanceStorage storage s) {

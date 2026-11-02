@@ -350,6 +350,7 @@ library WrappedLib {
         if (!GovernanceLib.hasFeature(GovernanceBits.WRAP_DISABLEABLE) || !GovernanceLib.hasRole(GovernanceBits.WRAP_DISABLEABLE, caller)) {
             revert IWrappedToken.NotGuardian();
         }
+        GovernanceLib.use(GovernanceBits.WRAP_DISABLEABLE, caller, 0); // a limited holder's grant binds it
         Leg storage L = $().legs[indexOf(u)];
         if (!L.wrapEnabled) revert IWrappedToken.WrapDisabledFor(u);
         L.wrapEnabled = false;
@@ -358,9 +359,10 @@ library WrappedLib {
 
     // ------------------------------------------------------------------ rates (CTR-TOK-06, CTR-TOK-13)
 
-    function _onlyRateAdmin(address caller) private view {
+    function _onlyRateAdmin(address caller) private {
         if (!GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE)) revert IWrappedToken.RateFixed();
         if (!GovernanceLib.hasRole(GovernanceBits.RATE_ADJUSTABLE, caller)) revert IWrappedToken.NotRateAdmin();
+        GovernanceLib.use(GovernanceBits.RATE_ADJUSTABLE, caller, 0); // a limited holder's grant binds it
     }
 
     /// @notice The step is checked ONCE, here, against the current rate (which cannot change while pending).

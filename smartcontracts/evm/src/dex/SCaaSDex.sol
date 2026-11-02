@@ -182,8 +182,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
     function _roleBits() internal pure override returns (uint256) { return GovernanceBits.DEX_BITS; }
     function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
 
-    function _power(uint8 bit) private view returns (DexStorage storage) {
-        GovernanceLib.requireRole(bit, _caller());
+    function _power(uint8 bit) private returns (DexStorage storage) {
+        GovernanceLib.use(bit, _caller(), 0);
         return _s();
     }
 

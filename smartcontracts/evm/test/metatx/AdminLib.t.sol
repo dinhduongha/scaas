@@ -196,8 +196,9 @@ contract AdminLibTest is Test {
         h.disableFeature(1);
     }
 
+    /// CTR-GOV-02: the flag is locked, so its holder survives the renounce (an unlocked one refuses it, `GovGrant.t.sol`).
     function test_twoStepTransferAndRenounce_rolesSurvive() public {
-        h.init(TokenStore.KIND_NORMAL, MINTABLE, 0, ownerA, _roles(minter));
+        h.init(TokenStore.KIND_NORMAL, MINTABLE, MINTABLE, ownerA, _roles(minter));
         vm.prank(ownerA);
         vm.expectEmit(address(h));
         emit IGovernance.OwnershipTransferStarted(ownerA, ownerB);

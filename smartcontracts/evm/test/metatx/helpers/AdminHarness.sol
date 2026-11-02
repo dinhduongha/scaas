@@ -27,7 +27,7 @@ contract AdminHarness {
     function disableFeature(uint8 bit) external { GovernanceLib.disableFeature(bit, msg.sender); }
     function transferOwnership(address o) external { GovernanceLib.transferOwnership(o, msg.sender); }
     function acceptOwnership() external { GovernanceLib.acceptOwnership(msg.sender); }
-    function renounceOwnership() external { GovernanceLib.renounceOwnership(msg.sender); }
+    function renounceOwnership() external { GovernanceLib.renounceOwnership(msg.sender, GovernanceBits.TOKEN_ROLES); }
 
     function features() external view returns (uint256) { return GovernanceLib.$().features; }
     function lockedFeatures() external view returns (uint256) { return GovernanceLib.$().lockedFeatures; }

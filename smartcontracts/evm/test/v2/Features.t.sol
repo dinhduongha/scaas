@@ -179,7 +179,7 @@ contract FeaturesTest is Test {
     // ------------------------------------------------------------------ owner through the token
 
     function test_ownerAdministersThroughTheToken() public {
-        NormalToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, address(0), 0));
+        NormalToken t = _token(impl, _cfg(MINTABLE, MINTABLE, ownerA, address(0), 0)); // locked: the holder survives (CTR-GOV-02)
         vm.prank(ownerA);
         vm.expectEmit(address(t));
         emit IGovernance.RoleGranted(1, minter, ownerA);
