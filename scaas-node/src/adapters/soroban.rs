@@ -40,8 +40,9 @@ const DEFAULT_BASE_FEE: u32 = 100;
 const RESOURCE_FEE_MARGIN_PCT: i64 = 15;
 /// `getEvents`: tối đa 5 contract mỗi bộ lọc.
 const CONTRACTS_PER_FILTER: usize = 5;
-/// How deep XDR a job puts in may nest. `Limits::len` alone leaves the depth open, about 2,700 levels in 64 KiB, and a stack
-/// overflow aborts the whole node. A `Vec` level costs four, so this holds 16; a contract's own shapes need far fewer.
+/// How deep XDR a job puts in may nest. `Limits::len` alone leaves the depth open, about 2,700 levels in 64 KiB of hex, and a stack
+/// overflow aborts the whole node. A `Vec` level costs four, so this holds 15 (`deep_xdr_is_refused_not_a_stack_overflow`); a contract's own
+/// shapes need far fewer.
 const XDR_DEPTH: u32 = 64;
 const EVENT_PAGE: u64 = 1000;
 
@@ -134,15 +135,21 @@ pub fn auth_entry(x: &Value) -> Result<(SorobanAuthorizationEntry, InvokeContrac
     ))
 }
 
+/// `op.auth` or `extra.auth`: absent, or a list of `{payload, from, signature}`.
+fn auth_entries(v: &Value) -> Result<Vec<SorobanAuthorizationEntry>> {
+    match v {
+        Value::Null => Ok(vec![]),
+        _ => list_of(v, |x| Ok(auth_entry(x)?.0)),
+    }
+}
+
 /// The host call and auth entries of a `signed_op`: the call is the invocation the subject signed; `extra.auth` adds
 /// co-signers' entries (NET-SOR-07). The call never comes from the job (`HEX_ARGS_REFUSED`, `job_tx`).
 pub fn host_call(op: &Value) -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>)> {
     let (main, call) = auth_entry(op)?;
     let contract = op["contract"].as_str().and_then(|c| ScAddress::from_str(c).ok()).ok_or_else(|| anyhow!("bad contract"))?;
     let mut auth = vec![main];
-    for a in op["extra"]["auth"].as_array().into_iter().flatten() {
-        auth.push(auth_entry(a)?.0);
-    }
+    auth.extend(auth_entries(&op["extra"]["auth"])?);
     if call.contract_address != contract {
         bail!("op targets {} but its call is to {}", op["contract"], call.contract_address);
     }
@@ -979,7 +986,11 @@ impl RelayFeePolicy {
                 _ => Err(anyhow!("params.{k} {v} is not a Soroban contract address (C…)")),
             },
         };
-        let mandates = cfg.params.get("mandates").and_then(|m| m.as_array()).map_or(&[][..], Vec::as_slice).iter()
+        let mandates = match cfg.params.get("mandates") {
+            None => &[][..],
+            Some(m) => m.as_array().ok_or_else(|| anyhow!("params.mandates {m} is not a list"))?.as_slice(),
+        };
+        let mandates = mandates.iter()
             .map(|m| match m.as_str().map(ScAddress::from_str) {
                 Some(Ok(a @ ScAddress::Contract(_))) => Ok(a),
                 _ => Err(anyhow!("params.mandates: {m} is not a Soroban contract address (C…)")),
@@ -1398,16 +1409,7 @@ pub fn ua_metatx_job(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &
         ua_relay_policy(&call, lane, policy)?;
     }
     let digest = ua_digest(network, &call, f)?.unwrap_or_default();
-    let mut auth = Vec::new();
-    match &op["auth"] {
-        Value::Null => {}
-        Value::Array(v) => {
-            for x in v {
-                auth.push(auth_entry(x)?.0);
-            }
-        }
-        _ => bail!("op.auth is a list of {{payload, from, signature}}"),
-    }
+    let mut auth = auth_entries(&op["auth"])?;
     if lane_bound {
         auth.push(source_entry(&call));
     }
@@ -1620,9 +1622,10 @@ fn holder_of(v: &Value) -> Result<ScVal> {
     }
 }
 
-/// A decimal string: the form of every integer a JSON number cannot hold.
+/// A decimal string: the form of every integer a JSON number cannot hold. Digits only: alloy's `U256` also parses `0x…`.
 fn decimal_of<T: FromStr>(v: &Value, ty: &str) -> Result<T> {
-    v.as_str().and_then(|s| s.parse().ok()).ok_or_else(|| anyhow!("{v} is not a {ty} as a decimal string"))
+    let digits = |s: &&str| s.strip_prefix('-').unwrap_or(s).bytes().all(|b| b.is_ascii_digit());
+    v.as_str().filter(digits).and_then(|s| s.parse().ok()).ok_or_else(|| anyhow!("{v} is not a {ty} as a decimal string"))
 }
 
 /// A 64-bit integer: a number or, for a client that cannot write one past 2^53, a decimal string.
@@ -2330,7 +2333,7 @@ mod tests {
         assert!(relay_fee_job(&NET7, &ok, &lane, &RelayFeePolicy { params: rp(7), ..policy() }).is_ok());
     }
 
-    /// A symbol a job can name only badly, over 32 bytes: refused, no panic.
+    /// A symbol over 32 bytes: refused, no panic.
     #[test]
     fn relay_fee_job_survives_a_long_symbol() {
         let mut o = relay_job(&[1; 32], &[2; 32]);
@@ -2619,6 +2622,8 @@ mod tests {
         let mut o = ua.clone();
         o["auth"] = json!([{"payload": PREIMAGE, "from": FROM, "signature": sig()}]);
         refused(job(&o), "a hex op.auth payload").await;
+        o["auth"] = json!(PREIMAGE);
+        refused(job(&o), "op.auth as a blob").await;
         let mut o = ua.clone();
         o["auth"] = json!([{"payload": payload(inv(CONTRACT, "pay", vec![], vec![])), "from": FROM, "signature": sig()}]);
         assert_eq!(job_step(&a, &calls, job(&o)).await.0, 1, "a named op.auth payload");
@@ -2647,6 +2652,8 @@ mod tests {
         let mut o = pay.clone();
         o["extra"]["auth"] = json!([{"payload": PREIMAGE, "from": FROM, "signature": sig()}]);
         refused(signed(&o), "a hex extra.auth payload").await;
+        o["extra"]["auth"] = json!(PREIMAGE);
+        refused(signed(&o), "extra.auth as a blob").await;
         let mut o = pay.clone();
         o["extra"]["auth"] = json!([{"payload": payload(inv(WALLET, "co", vec![], vec![])), "from": FROM, "signature": sig()}]);
         assert_eq!(job_step(&a, &calls, signed(&o)).await.0, 1, "a named extra.auth payload");
@@ -2659,8 +2666,7 @@ mod tests {
 
         // an order: `ua_cancel` needs `params.dex`
         let (ad, callsd) = allow_adapter().await;
-        let lane0 = order(h_ua(UA), LANE, VU);
-        let cancel = ua_op(DEX, "ua_cancel", vec![lane0, auth_arg()]);
+        let cancel = ua_op(DEX, "ua_cancel", vec![order(h_ua(UA), LANE, VU), auth_arg()]);
         assert_eq!(job_step(&ad, &callsd, job(&cancel)).await.0, 1, "the passing ua_cancel");
         let mut o = cancel.clone();
         o["args"]["order"] = hexed(vec![]);
@@ -2743,6 +2749,7 @@ mod tests {
         assert_eq!(rows.len(), 10, "every row, each type at least once");
         for (ty, bad) in [("u128", json!("-1")), ("u128", json!(1)), ("i32", json!(2_147_483_648u64)), ("i64", json!("9223372036854775808")), ("String", json!(1)),
                           ("u256", json!(format!("1{}", "0".repeat(78)))), ("i256", json!(format!("1{}", "0".repeat(77)))), ("Timepoint", json!(-1)), ("Duration", json!("x")),
+                          ("u256", json!("0x10")), ("i256", json!("0x10")), ("u128", json!("")), ("i128", json!("-")),
                           ("Map", json!({"a": {"type": "u32", "value": 1}})), ("Error", json!(1))] {
             assert!(relayed_of(&json!({"type": ty, "value": bad})).is_err(), "{ty} {bad}");
         }
@@ -2755,13 +2762,13 @@ mod tests {
         b
     }
 
-    /// XDR nested past the bound is refused by depth, where `Limits::len` alone would recurse about 2,700 levels in 64 KiB and a
+    /// XDR nested past the bound is refused by depth, where `Limits::len` alone would recurse about 2,700 levels in 64 KiB of hex and a
     /// stack overflow would abort the whole node. A `C…` subject's `signature` is the one job XDR left.
     #[test]
     fn deep_xdr_is_refused_not_a_stack_overflow() {
         let c = sc(CONTRACT);
-        assert!(credential_signature(&c, &hex(&deep_xdr(4))).is_ok());
-        for n in [64, 680] {
+        assert!(credential_signature(&c, &hex(&deep_xdr(15))).is_ok());
+        for n in [16, 64, 680] {
             assert!(format!("{:#}", credential_signature(&c, &hex(&deep_xdr(n))).unwrap_err()).to_lowercase().contains("depth"), "{n} levels");
         }
     }
@@ -2827,11 +2834,11 @@ mod tests {
             assert_eq!((sent, state.as_str()), (0, "dead"), "{why}: {error}");
             assert!(error.contains(CALL_TARGET_REFUSED), "{why}: {error}");
         }
-        assert!(RelayFeePolicy::from_cfg(&{
+        for bad in [toml::Value::Array(vec![FROM.into()]), WALLET.into()] {
             let mut c = ChainCfg::default();
-            c.params.insert("mandates".into(), toml::Value::Array(vec![FROM.into()]));
-            c
-        }).is_err(), "a mandate is a contract");
+            c.params.insert("mandates".into(), bad.clone());
+            assert!(RelayFeePolicy::from_cfg(&c).is_err(), "{bad}: a list of contracts");
+        }
     }
 
     /// Owner ruling 2026-11-02: a plain `signed_op` counts in the `call` share. At 50 % it is not claimed and the payment behind it
@@ -2855,17 +2862,20 @@ mod tests {
     }
 
     /// A `ua_metatx` needs no `op.valid_until`, so `recover_lane` reads the deadline from the built call: a job in flight across a
-    /// restart is not `dead` at the first `Unknown` while its transaction may still land.
+    /// restart is not `dead` at the first `Unknown` while its transaction may still land. The widest deadline a job can sign counts too.
     #[tokio::test]
     async fn restart_takes_a_ua_metatx_deadline_from_the_built_call() {
         use crate::adapter::tests::{fake_odoo, Fake};
         let (a, _, _) = spend_adapter(registry(vec![], vec![]), Net { tx: json!({"status": "NOT_FOUND"}), ..Net::default() }, false).await;
-        let (c, f, args) = ua_ops(ScVal::Void).remove(1);
-        let inflight = json!([{"job_id": 8, "state": "signed", "tx_hash": "0x0a", "nonce": 123456, "payload": {"id": 8, "kind": "ua_metatx", "op": ua_op(c, f, args)}}]);
-        let (odoo, o) = fake_odoo(Fake { inflight, tokens: json!([]), ..Default::default() }).await;
-        tokio::time::timeout(std::time::Duration::from_secs(10), crate::adapter::recover_lane(a.as_ref(), &odoo, 0, "n#0")).await.expect("recovery hung").unwrap();
-        let f = o.lock().unwrap();
-        assert_eq!(f.reports.last().unwrap()["chain_state"], "queued", "{:?}", f.reports);
+        for deadline in [crate::submit::now() + 600, u64::MAX] {
+            let (c, f, mut args) = ua_ops(ScVal::Void).remove(1);
+            args[4] = u64v(deadline);
+            let inflight = json!([{"job_id": 8, "state": "signed", "tx_hash": "0x0a", "nonce": 123456, "payload": {"id": 8, "kind": "ua_metatx", "op": ua_op(c, f, args)}}]);
+            let (odoo, o) = fake_odoo(Fake { inflight, tokens: json!([]), ..Default::default() }).await;
+            tokio::time::timeout(std::time::Duration::from_secs(10), crate::adapter::recover_lane(a.as_ref(), &odoo, 0, "n#0")).await.expect("recovery hung").unwrap();
+            let f = o.lock().unwrap();
+            assert_eq!(f.reports.last().unwrap()["chain_state"], "queued", "{deadline}: {:?}", f.reports);
+        }
     }
 
     /// Spec §9.1: token functions on a registered token, `ua_relay` on the router, `settle` / `ua_cancel` on

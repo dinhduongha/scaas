@@ -36,6 +36,11 @@ test('soroban op digest: the token cross vector reproduced', () => {
     typed('i128', '12345'), typed('Bytes', hex(new Uint8Array(32).fill(0x11))), typed('u64', 1_800_000_300)] };
   assert.equal(h(sor.authPreimage({ networkId: net, nonce: 42, expiry: 1000, invocation })), PREIMAGE);
   assert.equal(h(sor.authDigest({ networkId: net, nonce: 42, expiry: 1000, invocation })), '0a2127bfdc94f6062f0ec27f6db966ae719dafaca90bc537666eab606b901103');
+  const digests = [];
+  const job = sor.signedAuth({ networkId: net, nonce: -1, expiry: 1000, invocation, from: 'GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6',
+    sign: (d) => { digests.push(h(d)); return new Uint8Array(64).fill(0xab); } });
+  assert.deepEqual(job, { payload: { nonce: '-1', expiry: 1000, invocation }, from: 'GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6', signature: 'ab'.repeat(64) });
+  assert.deepEqual(digests, [h(sor.authDigest({ networkId: net, ...job.payload }))], 'the signature is over the bytes the named payload rebuilds');
   const under = { ...invocation, sub_invocations: [{ ...invocation, function: 'relay', args: [] }] };
   assert.ok(h(sor.authPreimage({ networkId: net, nonce: -1, expiry: 1, invocation: under })).includes('000000057265' + '6c6179'), 'a sub-invocation');
   // the node's table of every other type, against its XDR

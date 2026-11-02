@@ -83,7 +83,9 @@ const fixed = (type, bits, signed) => (n) => val(type, int(n, bits, signed));
 const ORDER_TYPE = { maker: 'Holder', destination: 'Holder', relayer: 'Address', sell_token: 'Address', sell_amount: 'i128', buy_token: 'Address', buy_amount: 'i128',
   max_fee_ppm: 'u32', expiry: 'u64', salt: 'u64' };
 const INT = /^[iu]\d+$|^Timepoint$|^Duration$/;
-/** The order the node sorts a `Map` in: by ScVal type, then by value. */
+/** The order the node sorts a `Map` in: by ScVal type, then by value.
+ *  ponytail: a `Vec`, `Map` or `Holder` key compares by its XDR, length word first, the node by element; such a key out of order
+ *  only fails at simulation (the signature is over other bytes). Compare element by element if a contract ever takes one. */
 function mapRank({ type, value }) {
   if (INT.test(type)) return BigInt(value);
   return type === 'Symbol' || type === 'String' || type === 'Bytes' ? value : hex(jobValue({ type, value }).xdr);
@@ -118,6 +120,12 @@ const invocationXdr = ({ contract, function: fn, args, sub_invocations: subs }) 
 export const authPreimage = ({ networkId: n, nonce, expiry, invocation }) =>
   concatBytes(u32be(9), n, int(nonce, 64, true), u32be(expiry), invocationXdr(invocation));
 export const authDigest = (payload) => sha256(authPreimage(payload));
+/** One subject's authorization as a job names it: a `signed_op`'s `{payload, from, signature}`, or an `op.auth[]` / `extra.auth[]` row.
+ *  `nonce` goes as a decimal string, past 2^53; `sign` takes the 32-byte digest and gives the bytes the host reads: an ed25519 signature
+ *  of a `G…`, the `ScVal` XDR a `C…` subject's `__check_auth` reads. */
+export const signedAuth = ({ networkId: n, nonce, expiry, invocation, from, sign }) => ({
+  payload: { nonce: String(nonce), expiry, invocation }, from, signature: hex(sign(authDigest({ networkId: n, nonce, expiry, invocation }))).slice(2),
+});
 
 export const networkId = (passphrase) => sha256(utf8ToBytes(passphrase));
 

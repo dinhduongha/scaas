@@ -110,7 +110,7 @@ impl Breaker {
         [self.spiking, budget, floor]
     }
 
-    /// `call` jobs stop here, at `call_budget_pct` of the hour's budget; every other kind runs to `gas_budget`.
+    /// `call` jobs and a plain `signed_op` stop here, at `call_budget_pct` of the hour's budget; every other kind runs to `gas_budget`.
     pub fn calls_stopped(&mut self, now: u64) -> bool {
         self.roll(now);
         self.cfg.gas_budget_per_hour.is_some_and(|b| self.spent.saturating_mul(100) >= b.saturating_mul(self.cfg.call_budget_pct.into()))

@@ -299,7 +299,7 @@ pub async fn lane_runner(
         }
         let held = calls_stopped(adapter.as_ref(), Some(&breaker));
         if held != calls_held {
-            warn!(chain = %key, lane, held, "`call` jobs at their share of the gas budget");
+            warn!(chain = %key, lane, held, "`call` jobs and plain `signed_op`s at their share of the gas budget");
             calls_held = held;
         }
         let why = match step_once(adapter.as_ref(), &odoo, lane, &worker, Some(&breaker), &inflight).await {
@@ -439,7 +439,7 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
                     report(odoo, Report { error: Some(r.to_string()), ..rep(job, "queued") }).await;
                     return Some(r.to_string());
                 }
-                if now() > f.valid_until + EXPIRY_GRACE {
+                if now() > f.valid_until.saturating_add(EXPIRY_GRACE) {
                     // Payload chủ thể đã hết hạn: tx (nếu còn đâu đó) sẽ bị contract từ chối.
                     if !consumed {
                         report(odoo, Report { error: Some("expired before inclusion".into()), ..rep(job, "dead") }).await;
