@@ -42,20 +42,19 @@ suite and the confidential layer. The node (`scaas-node`). Clients: signers, wal
 
 **The EVM token model.** One base tree serves every token.
 
-<p align="center"><img src="assets/token-tree.svg" width="860" alt="EVM token tree: MetaTxBase, ERC20MetaTx, MetaTokenBase, then the kinds NORMAL and WRAPPED (built in P1) and NORMAL_ZETHER and WRAPPED_ZETHER (target, P3); libraries AdminLib, WrappedLib, HederaLib (built), TradeLib (P2) and ZetherLib (P3) (target)."></p>
+<p align="center"><img src="assets/token-tree.svg" width="860" alt="EVM token tree: MetaTxBase, ERC20MetaTx, MetaTokenBase, then six kinds: NORMAL and WRAPPED, NORMAL_ZETHER and WRAPPED_ZETHER, NORMAL_PQZ and WRAPPED_PQZ, the confidential four unaudited; external libraries AdminLib, WrappedLib, HederaLib, TradeLib, ZetherLib and the four PQZ libraries, all built."></p>
 
-- **Kinds.** A token has one of four kinds: `NORMAL` (a plain issuer token), `WRAPPED` (a wrapper of one to eight
-  legs, each an ERC-20 or the native coin), or the same two with the confidential layer, `NORMAL_ZETHER` and
-  `WRAPPED_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)). The post-quantum confidential kinds
-  `NORMAL_PQZ`, `WRAPPED_PQZ` are built on the private chains and unaudited; the combined kinds 6 and 7 were dropped (CTR-TOK-21)
-  ([pq-zero-knowledge.md](contracts/pq-zero-knowledge.md)).
+- **Kinds.** A token has one of six kinds: `NORMAL` (a plain issuer token), `WRAPPED` (a wrapper of one to eight
+  legs, each an ERC-20 or the native coin), the same two with classical Zether, `NORMAL_ZETHER` and
+  `WRAPPED_ZETHER`, and the same two with PQZ, `NORMAL_PQZ` and `WRAPPED_PQZ` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)). The confidential kinds are built and unaudited, PQZ on the SCaaS testnet; the
+  combined kinds 6 and 7 were dropped ([pq-zero-knowledge.md](contracts/pq-zero-knowledge.md)).
 - **Signing is not a kind.** Every token accepts the same intents from an EOA, a `SmartKeyAccount` (ERC-1271) or a
-  Universal Account with a PQ key (`mldsa44`, `mldsa65`, `fndsa512`) through the UA ledger in the token base
-  ([CTR-UA-18](contracts/accounts.md#CTR-UA-18), [CTR-UA-23](contracts/accounts.md#CTR-UA-23); specified, not built).
+  Universal Account of any signing kind, post-quantum included, through the UA ledger in the token base
+  ([CTR-UA-18](contracts/accounts.md#CTR-UA-18), [CTR-UA-23](contracts/accounts.md#CTR-UA-23)).
 - **Features** are chosen at creation and never set later (disableable flags can be cleared): `PAYABLE`, `MINTABLE`,
   `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, and for regulated tokens `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`.
 - **Owner.** One owner administers a token, grants roles and may renounce
-  ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). An open factory creates tokens and DEX clones.
+  ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). An open factory creates tokens and DEX clones. A wider governance model is decided and not built ([CTR-GOV-01](decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)).
 
 ## 2. Who it is for
 
@@ -83,8 +82,8 @@ suite and the confidential layer. The node (`scaas-node`). Clients: signers, wal
 | Trading | A signed-order, price-time order book; settlement in one transaction; managed markets for regulated assets; DEX clones from the open factory | [contracts/dex.md](contracts/dex.md), [node/dex-venue.md](node/dex-venue.md) |
 | Procurement | Sealed-bid tenders with deposits, commit/reveal and refunds | [contracts/tender.md](contracts/tender.md) |
 | Asset tokenization | Regulated tokens, vesting and streaming, distributions, corporate actions, templates | [contracts/asset-suite.md](contracts/asset-suite.md) |
-| Confidential amounts | Zether: identities visible, amounts and balances hidden; shield, multi-recipient transfer with decoys, unshield; disclosure to an auditor through four openings. A post-quantum variant (PQZ) waits for a lattice precompile on public chains | [contracts/zether.md](contracts/zether.md), [contracts/pq-zero-knowledge.md](contracts/pq-zero-knowledge.md) |
-| Many chains | Six families — EVM (including Hedera), Cosmos, Soroban (Stellar, Pi Network), Move (Aptos, Sui), GRAM, Solana — with one signing and relaying model | [networks/README.md](networks/README.md) |
+| Confidential amounts | Zether: identities visible, amounts and balances hidden; shield, multi-recipient transfer with decoys, unshield; disclosure to an auditor through four openings. PQZ, the post-quantum line, is built and runs on the SCaaS testnet; a public chain needs its lattice precompile. Both are unaudited and on EVM only | [contracts/zether.md](contracts/zether.md), [contracts/pq-zero-knowledge.md](contracts/pq-zero-knowledge.md) |
+| Many chains | Eight families — EVM (including Hedera), Cosmos, Soroban (Stellar, Pi Network), Move (Aptos, Sui), GRAM, Solana, NEAR, Algorand — with one relaying model; the depth differs per family, see the root [README](../README.md#3-contracts-what-is-built-on-what) | [networks/README.md](networks/README.md) |
 | The node | Job API for server-side clients, a public gateway, finality-gated event feeds, gas breakers, sponsorship policies, an admin API with built-in users or OIDC | [node/README.md](node/README.md) |
 | Relayer mesh | Relayers that share intents with admitted partners or an open gossip network; private chains never leave the admitted set | [node/mesh.md](node/mesh.md), [node/gossip.md](node/gossip.md) |
 | Operations | SLOs, metrics and alerts, FinOps usage reports, incident runbooks, backup and disaster recovery | [node/ops.md](node/ops.md), [node/runbooks.md](node/runbooks.md) |
@@ -145,7 +144,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | Doc | Covers |
 |---|---|
 | [architecture.md](architecture.md) | How the parts fit and why: contract layer, node roles, topology, sequence diagrams, trust model |
-| [decisions.md](decisions.md) | The register: every ruling, its old ids, owner flag and rationale; `ARCH-POS` system-wide positions |
+| [decisions.md](decisions.md) | The register: every ruling, its old ids, owner flag and rationale; `ARCH-POS` system-wide positions; `CTR-GOV` governance, decided, not built |
 
 ### Contracts (`CTR-*`)
 
@@ -159,7 +158,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [dex.md](contracts/dex.md) | `TradeOrder`, the DEX, AMM exchange path, `DexPuller` |
 | [tender.md](contracts/tender.md) | Sealed-bid tender |
 | [asset-suite.md](contracts/asset-suite.md) | Regulated flags, vesting, distributions, `ExchangeOffer`, templates |
-| [zether.md](contracts/zether.md) · [pq-zero-knowledge.md](contracts/pq-zero-knowledge.md) | Confidential layer: shield / transfer / unshield, proofs, disclosure; post-quantum variant (waits for a precompile) |
+| [zether.md](contracts/zether.md) · [pq-zero-knowledge.md](contracts/pq-zero-knowledge.md) | Classical Zether and PQZ: shield / transfer / unshield, proofs, disclosure |
 | [settlement.md](contracts/settlement.md) | Map of every settlement kind: entry points, who checks what, fees, finality |
 
 ### Node (`NODE-*`)
@@ -187,13 +186,15 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [evm.md](networks/evm.md) · [hedera.md](networks/hedera.md) | EVM chains and Hedera |
 | [cosmos.md](networks/cosmos.md) · [soroban.md](networks/soroban.md) · [ton.md](networks/ton.md) | CosmWasm, Stellar / Pi, GRAM |
 | [sui.md](networks/sui.md) · [aptos.md](networks/aptos.md) · [solana.md](networks/solana.md) | Move families and Solana |
+| [near.md](networks/near.md) | NEAR |
+| [algorand.md](networks/algorand.md) | Algorand |
 
 ### Clients (`CLI-*`) and integration (`INT-*`)
 
 | Doc | Covers |
 |---|---|
 | [signers-clientkeys.md](clients/signers-clientkeys.md) | Signers, key vault, what a wallet checks before signing |
-| [ua-libraries.md](clients/ua-libraries.md) | UA identity layer in Solidity, JS, Rust, Python, Go, C#; C++, QML and Dart bindings |
+| [ua-libraries.md](clients/ua-libraries.md) | UA identity layer in Solidity, JS, Rust, Python, Go, C#; C, C++, QML and Dart bindings |
 | [app.md](clients/app.md) | Console and dApp |
 | [integration.md](integration.md) | Connecting any ERP or back office |
 | [integration-odoo-example.md](integration-odoo-example.md) | One worked ERP connector (example only) |
@@ -203,7 +204,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | Where | What |
 |---|---|
 | [history/README.md](history/README.md) | Frozen designs, the original requirements note and its [trace](history/blockchain-trace.md), the old-id inventory (read-only) |
-| `research/` | Background and rationale only |
+| `research/` | Background and rationale only; `research/governance/` holds the permission model, its gaps, the measurement and the comparison |
 
 ## <a id="precedence"></a>8. Precedence
 

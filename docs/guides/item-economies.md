@@ -7,7 +7,7 @@ recipes, how to set the tokens up, and what is built today versus still to come.
 
 Status at a glance: the item tokens (with mint and burn), gasless transfers and the DEX are **BUILT** on EVM; the
 **recipe contract** that converts items is **NOT SPECIFIED** yet — you can design for it today and write it as an
-ordinary contract (§6), and a SCaaS template is planned ([README §16](../../README.md#16-use-cases)).
+ordinary contract (§6), and a SCaaS template is planned ([README §17](../../README.md#17-use-cases)).
 
 ## 1. The idea in one paragraph
 
@@ -78,7 +78,7 @@ something you can spend.
 5. **Decide what is transferable.** By default every item can be given, sold or traded. Items that must stay with one
    player (soul-bound) need the receiver allowlist (SPECIFIED, §7).
 6. **Decide who pays the gas.** Usually the game's relayer at fee 0 — players sign, the game submits. Or players pay a
-   small fee in one of the item tokens. See [README §8](../../README.md#8-who-pays-the-fee-every-model).
+   small fee in one of the item tokens. See [README §9](../../README.md#9-who-pays-the-fee-every-model).
 
 ## 5. Creating the item tokens
 
