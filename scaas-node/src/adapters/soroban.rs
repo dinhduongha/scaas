@@ -2789,6 +2789,15 @@ mod tests {
         assert!((4..64).contains(&deepest), "{deepest}");
         let e = job_tx(&network_id("x"), Some("ua_metatx"), &op(deepest + 1), &me, &p).unwrap_err();
         assert!(format!("{e:#}").contains("nested"), "{e:#}");
+        // an `op.auth` entry is in no call: it has the bound of its own
+        let with_auth = |n: usize| {
+            let mut o = op(1);
+            o["auth"] = json!([{"payload": payload(inv(CONTRACT, "pay", vec![nest(n)], vec![])), "from": FROM, "signature": sig()}]);
+            o
+        };
+        assert!(job_tx(&network_id("x"), Some("ua_metatx"), &with_auth(1), &me, &p).is_ok());
+        let e = job_tx(&network_id("x"), Some("ua_metatx"), &with_auth(16), &me, &p).unwrap_err();
+        assert!(format!("{e:#}").contains("nested"), "{e:#}");
         let answer: Answer = Arc::new(|c| match c.function_name.0.as_slice() {
             b"executor" => view_ok(ScVal::Address(executor())),
             _ => view_ok(ScVal::Void),
