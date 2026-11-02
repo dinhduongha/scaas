@@ -97,7 +97,7 @@ A duplicate returns `200` with the stored state (idempotent).
 {"chain": "sui:testnet",
  "op": {"family": "sui", "contract": "<account id | token | registry, family canonical>",
         "from": "<subject, family canonical>", "op_kind": "pay",
-        "payload": "0x<MetaOp bytes / XDR / BOC, as the family encoder builds>",
+        "payload": "0x<MetaOp bytes / BOC, as the family encoder builds>",
         "signature": "<packSignature().signature>", "public_key": "<packSignature().publicKey | null>",
         "auth_kind": "seed | wallet | passkey", "digest": "0x… (optional; must equal the node's)",
         "valid_until": 1790000300, "extra": {"coin_type": "0x2::sui::SUI"}}}
@@ -141,7 +141,7 @@ In words:
 8. Simulation (`SIMULATION_REVERT`).
 9. INSERT a `signed_op` job in `~gateway`, origin key = digest (G2 durable).
 
-Soroban: accepted, never published on the mesh ([NODE-MESH-07](mesh.md#NODE-MESH-07)). GRAM: `attach_nanoton` is the
+Soroban: accepted with its named `payload` ([job-api.md](job-api.md#soroban-signed-op)), never published on the mesh ([NODE-MESH-07](mesh.md#NODE-MESH-07)). GRAM: `attach_nanoton` is the
 node's. Limits: 64 KiB body, the per-chain breaker and the gateway concurrency limit. `/v1/ops` needs lanes that lease
 from the store: before that, the built gateway's in-memory `mpsc` feeds only the EVM submitter (Transitional (BUILT):
 door A work is not journaled and has no digest guard until it becomes a `~gateway` job).

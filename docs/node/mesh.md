@@ -354,8 +354,8 @@ sender-chosen id; with id = digest the two are one value).
 nonce, valid_until, relayer, fee_effective, selector, token}` by calling the existing helpers and decoders above
 (`metatx::digest`, the adapters' `MetaOp::decode`/`parse_metaop`, `sha2`/`sha3`). No new family encoder; one new
 decoder: a small `serde` struct for the Cosmos `MetaOp` JSON (on the fuzz list). The job API uses the same library for
-its node-computed digests ([NODE-JOB-02](job-api.md#NODE-JOB-02)); Soroban: SHA-256 of the `HashIdPreimage` the payload
-carries (job API only).
+its node-computed digests ([NODE-JOB-02](job-api.md#NODE-JOB-02)); Soroban: SHA-256 of the `HashIdPreimage` the payload's
+named fields rebuild (job API only; no mesh arm, `FAMILY_NOT_SUPPORTED`).
 
 `token` (= `token_of`, [NODE-MESH-13](#NODE-MESH-13)) per family, with the account-derivation check that binds `contract`
 to it:
