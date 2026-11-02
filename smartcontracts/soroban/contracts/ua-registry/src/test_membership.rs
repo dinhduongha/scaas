@@ -85,14 +85,17 @@ fn rows_accept_unchanged() {
     assert_eq!((0..4).filter(|i| c.member_accepted(&classical.ua, i)).count(), 0, "an empty `pop` accepts nobody");
     pq.on(&c);
     assert!(c.member_accepted(&pq.ua, &0) && c.member_accepted(&pq.ua, &1), "a pop signer reads accepted with no call");
-    let events = |ua: &BytesN<32>, member: &BytesN<32>, index, checked| UaMembershipAccepted { ua: ua.clone(), member: member.clone(), index, checked }.to_xdr(&env, &c.address);
+    let events = |ua: &BytesN<32>, member: &BytesN<32>, index, checked, sig: &Bytes| {
+        UaMembershipAccepted { ua: ua.clone(), member: member.clone(), index, sig_hash: env.crypto().keccak256(sig).into(), checked }.to_xdr(&env, &c.address)
+    };
     for name in ["msig-classical/0", "msig-classical/3"] {
         let r = row(name);
         c.accept_membership(&classical.ua, &slot_of(&env, &r), &None);
         let i = r["index"].as_u64().unwrap() as u32;
-        assert_eq!(env.events().all().events(), [events(&classical.ua, &n32(&env, &r["member"]), i, Checked::Chain)], "{name}");
+        assert_eq!(env.events().all().events(), [events(&classical.ua, &n32(&env, &r["member"]), i, Checked::Chain, &slot_of(&env, &r).sig)], "{name}");
         assert!(c.member_accepted(&classical.ua, &i), "{name}");
         assert_eq!(c.member_checked(&classical.ua, &i), Checked::Chain, "{name}");
+        assert_eq!(c.membership_sig_of(&classical.ua, &i), Bytes::new(&env), "{name}: the chain checked it, nothing to re-check");
     }
     assert!(env.auths().is_empty(), "the chain's own check asks nobody");
     for name in ["msig-classical/1", "msig-classical/2"] {
@@ -101,8 +104,9 @@ fn rows_accept_unchanged() {
         assert_eq!(err(c.try_accept_membership(&classical.ua, &slot_of(&env, &r), &None)), Error::NotVerifiable, "{name}");
         assert!(!c.member_accepted(&classical.ua, &i), "{name}");
         c.accept_membership(&classical.ua, &slot_of(&env, &r), &by);
-        assert_eq!(env.events().all().events(), [events(&classical.ua, &n32(&env, &r["member"]), i, Checked::Relayer(by.clone().unwrap()))], "{name}");
+        assert_eq!(env.events().all().events(), [events(&classical.ua, &n32(&env, &r["member"]), i, Checked::Relayer(by.clone().unwrap()), &slot_of(&env, &r).sig)], "{name}");
         assert_eq!(c.member_checked(&classical.ua, &i), Checked::Relayer(by.clone().unwrap()), "{name}");
+        assert_eq!(c.membership_sig_of(&classical.ua, &i), slot_of(&env, &r).sig, "{name}: the row's bytes, for a client to re-check");
     }
     assert_eq!((0..4).filter(|i| c.member_accepted(&classical.ua, i)).count(), 4);
     // the `pop` already accepted these two: the rows are a no-op here, no second word on the same slot
@@ -200,6 +204,7 @@ fn g_member_accepts_by_a_signed_entry() {
     env.set_auths(&[test::signed_entry(&env, &gsk, 5, &c.address, "accept_membership", args)]);
     c.accept_membership(&m.ua, &empty, &None);
     assert_eq!((c.member_accepted(&m.ua, &0), c.member_checked(&m.ua, &0)), (true, Checked::Chain));
+    assert_eq!(c.membership_sig_of(&m.ua, &0), Bytes::new(&env), "the host checked it");
     authorize(6).unwrap().unwrap();
 }
 
@@ -287,9 +292,14 @@ fn a_relayer_checked_slot() {
     assert_eq!(err(c.try_accept_membership(&m.ua, &slot, &Some(Address::generate(&env)))), Error::RelayerNotListed);
     assert_eq!(c.member_checked(&m.ua, &fi), Checked::None);
     c.accept_membership(&m.ua, &slot, &by);
-    assert_eq!(env.events().all().events(), [UaMembershipAccepted { ua: m.ua.clone(), member: f.ua.clone(), index: fi, checked: Checked::Relayer(by.clone().unwrap()) }.to_xdr(&env, &c.address)]);
+    let sig_hash: BytesN<32> = env.crypto().keccak256(&slot.sig).into();
+    assert_eq!(env.events().all().events(), [UaMembershipAccepted { ua: m.ua.clone(), member: f.ua.clone(), index: fi, sig_hash, checked: Checked::Relayer(by.clone().unwrap()) }.to_xdr(&env, &c.address)]);
     assert_eq!(c.member_checked(&m.ua, &fi), Checked::Relayer(by.clone().unwrap()));
-    c.set_kem_key(&m.ua, &1, &kem, &attested, &by);
+    assert_eq!(c.membership_sig_of(&m.ua, &fi), slot.sig, "junk bytes too: a client's re-check finds them out");
+    assert_eq!(c.membership_sig_of(&m.ua, &m.index(&q.ua(&env).to_array())), Bytes::new(&env), "a `pop` slot: `pop_of` holds it");
+    env.as_contract(&c.address, || env.storage().persistent().remove(&Key::AcceptSig(m.ua.clone(), fi)));
+    assert_eq!(c.membership_sig_of(&m.ua, &fi), Bytes::new(&env));
+    c.set_kem_key(&m.ua, &1, &kem, &attested, &by); // no verify reads the entry
     assert_eq!(c.kem_key_of(&m.ua).unwrap().3, Checked::Relayer(by.clone().unwrap()));
     let pm = n(&env, PURPOSE_METATX);
     assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &n(&env, [1; 32]), &attested)), Error::Unauthorized, "an attestation is never a signature");
@@ -346,6 +356,7 @@ fn an_evm_contract_slot_needs_a_relayer() {
     assert_eq!(err(c.try_accept_membership(&m.ua, &slot, &None)), Error::NotVerifiable);
     c.accept_membership(&m.ua, &slot, &by);
     assert_eq!(c.member_checked(&m.ua, &slot.index), Checked::Relayer(by.unwrap()));
+    assert_eq!(c.membership_sig_of(&m.ua, &slot.index), slot.sig);
 }
 
 /// A `C…` member cannot be listed, so it has no slot to accept (S10, owner ruling 2026-10-31); `MemberUnknown`, before any acceptance.
@@ -521,6 +532,16 @@ fn ttl_and_size_of_the_entry() {
         c.accept_membership(&big.ua, &MemberSig { index, key_data: Bytes::new(&env), sig: b(&env, &[1; 7_856]) }, &by);
     }
     assert_eq!((0..16).filter(|i| c.member_accepted(&big.ua, i)).count(), 16);
+    // each attested signature in an entry of its own, as every other entry here: 16 of 7,856 B fit no single one
+    let sig_key = Key::AcceptSig(big.ua.clone(), 3);
+    let sig_ttl = || env.as_contract(&c.address, || env.storage().persistent().get_ttl(&sig_key));
+    assert_eq!(sig_ttl(), 60 * DAY);
+    env.ledger().with_mut(|l| l.sequence_number += 31 * DAY);
+    assert_eq!(sig_ttl(), 29 * DAY);
+    c.member_accepted(&big.ua, &3);
+    assert_eq!(sig_ttl(), 29 * DAY, "the bit's view leaves it");
+    assert_eq!(c.membership_sig_of(&big.ua, &3).len(), 7_856);
+    assert_eq!(sig_ttl(), 60 * DAY, "its own view reads it");
     let entry: crate::AcceptedEntry = env.as_contract(&c.address, || env.storage().persistent().get(&Key::Accepted(big.ua.clone())).unwrap());
     use soroban_sdk::xdr::{FromXdr as _, ToXdr as _};
     let size = entry.clone().to_xdr(&env).len();

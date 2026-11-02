@@ -523,7 +523,7 @@ Rules at `build`, as a `call` job's: a slot the chain cannot verify needs a `rel
 simulation, a refused one is `dead` and nothing is sent; the lane's one entry is over `attest_digest` of `(ua, member_sig, relayer)`; an
 `evm-contract` slot is `NotVerifiable` here, no off-chain check reaches ERC-1271. With no `op.auth`, a simulation that records another
 signer is refused before signing. The job has no op digest (the job's own id), is free to the client and counts in the call share
-(`call_budget_pct`, [NET-SOR-14](../networks/soroban.md#NET-SOR-14)). A slot already accepted lands as a no-op on the lane's fee.
+(`call_budget_pct`, [NET-SOR-14](../networks/soroban.md#NET-SOR-14)). `build` reads `member_accepted` first: a slot already accepted is `dead`, nothing simulated or sent, since on chain it is a no-op on the lane's fee. A relayer-checked slot beside a `G…` member is `UAKeyData`, `dead`: see [NET-SOR-28](../networks/soroban.md#NET-SOR-28).
 
 <a id="soroban-signed-op"></a>**Soroban `signed_op`** (`ua8-soroban` N2 review, owner rulings of 2026-11-02; BUILT). Payload: `{kind: "signed_op", op: {payload,
 from, signature, contract, valid_until, kind?, extra?}}`.

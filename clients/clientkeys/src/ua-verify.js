@@ -211,13 +211,14 @@ function signatureOk(kind, d, id, purpose, digest, sig, members) {
   if (!slots || !ua.msigSlotsMinimal(d, slots.map((s) => s.index))) return false;
   const all = ua.msigStructure(d).members;
   const md = ua.memberDigest(id, message);
-  return slots.every((s) => {
-    const m = all[s.index];
-    if (s.keyData.length !== 0) return false;
-    if (m.kind === 0x0001) return nativeOk(`0x${m.id.slice(26)}`, digest, hex(s.sig));
-    if (ua.isNativeKind(m.kind) || isGroup(m.kind)) refuse('UANotVerifiable', `slot ${s.index}`);
-    return kindVerify(m.kind, keys[s.index], ua.uaMessage(m.kind, ua.purposeTag('member'), md), s.sig, false);
-  });
+  return slots.every((s) => s.keyData.length === 0 && slotOk(all[s.index], keys[s.index], digest, md, s));
+}
+/** One member's slot: a derived member under `member` over `md`, an `evm-eoa` member over `digest` itself; throws for a native
+ *  member nothing here can check. */
+function slotOk(m, key, digest, md, s) {
+  if (m.kind === 0x0001) return nativeOk(`0x${m.id.slice(26)}`, digest, hex(s.sig));
+  if (ua.isNativeKind(m.kind) || isGroup(m.kind)) refuse('UANotVerifiable', `slot ${s.index}`);
+  return kindVerify(m.kind, key, ua.uaMessage(m.kind, ua.purposeTag('member'), md), s.sig, false);
 }
 /** A registration row `{ kind, keyData, attrs, pop, pqzPop }` as `register` checks it, on bytes only (ua-rs `check_registration`):
  *  the id from canonical key data, the attributes, the `pop`; the PQZ proof is not checked. Throws `UAError`; returns nothing.
@@ -231,6 +232,16 @@ export function verifyRegistration({ kind, keyData, attrs, pop, pqzPop }, member
 function recordOf(row, members) {
   const r = members(row.ua);
   return r && hex(ua.deriveUA(r.kind, r.keyData)) === row.ua ? r : refuse('UAUnauthorized', row.ua);
+}
+/** An acceptance `{ ua, index, sig }` as `acceptMembership` checks it, without its state (ua-rs `check_membership`, CTR-UA-37): what a
+ *  client runs on the bytes of a slot a relayer attested (Soroban `membership_sig_of`, CTR-UA-34 rule 4). */
+export function verifyMembership(row, members) {
+  const { kind, keyData } = recordOf(row, members);
+  const m = kind === 0x0120 ? ua.msigStructure(keyData).members[row.index] : undefined;
+  if (!m) refuse('UAUnauthorized', row.ua);
+  const keys = memberKeys(keyData, members);
+  const { digest, memberDigest } = ua.membershipMessage({ ua: B(row.ua), member: B(m.id) });
+  if (!slotOk(m, keys[row.index], digest, memberDigest, { index: row.index, sig: B(row.sig) })) refuse('UAUnauthorized', row.ua);
 }
 /** A KEM record row `{ ua, version, kemPk, sig }` as `setKemKey` (version ≥ 1) checks it (ua-rs `check_kem_record`). */
 export function verifyKemRecord(row, members) {

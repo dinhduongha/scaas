@@ -22,6 +22,7 @@ use scaas_node::config::TokenCfg;
 use scaas_node::odoo::Odoo;
 use scaas_node::signer::Signer as _;
 use serde_json::{json, Value};
+use scaas_ua::ua8::{check_membership, MemberSig};
 use sha2::{Digest, Sha256};
 use soroban_common::*;
 use stellar_xdr::{
@@ -341,6 +342,11 @@ fn accept_job(id: i64, st: &Stack, ua: &str, index: &Value, sig: &str, relayer: 
     job
 }
 
+/// A `registrations[]` row of `portable.json` by its id.
+fn row_of<'a>(p: &'a Value, ua: &str) -> Option<&'a Value> {
+    p["registrations"].as_array().unwrap().iter().find(|r| r["ua"] == ua)
+}
+
 fn member_accepted(st: &Stack, ua: &str, index: u64) -> bool {
     view(&st.registry, "member_accepted", &["--ua", ua.trim_start_matches("0x"), "--index", &index.to_string()]) == "true"
 }
@@ -579,7 +585,7 @@ async fn e2e_soroban_native_relay_fee() {
 
 /// CTR-UA-37 on a real host, through the node. A listed `msig` holds funds and spends none: a good signature of an unaccepted slot is
 /// refused at simulation, nothing sent, with no slot accepted and with one of the two needed; a member's bad acceptance is refused too;
-/// the same payment runs after the second slot accepts. A repeat is a no-op, mined.
+/// the same payment runs after the second slot accepts. A repeat is refused unsent: on chain a no-op, on the lane's fee.
 #[tokio::test]
 #[ignore]
 async fn e2e_soroban_ua_member_accepts_then_counts() {
@@ -628,7 +634,10 @@ async fn e2e_soroban_ua_member_accepts_then_counts() {
 
     node.mined("accept_membership slot 1", 0, job(914, &m[1], s1)).await;
     assert!(member_accepted(st, &ua, 1));
-    node.mined("accept_membership slot 1 again: a no-op", 0, job(915, &m[1], s1)).await;
+    let (state, last) = node.run(0, job(915, &m[1], s1)).await;
+    println!("MA a repeat: job {state}, reason {}", last["error"]);
+    assert_eq!(state, "dead", "{last}");
+    assert!(report_of(&node.state.lock().unwrap(), 915, "signed").is_null(), "never signed");
     let before = view_i128(&st.token, "ua_balance", &["--ua", &hx(&to)]);
     node.mined("ua_pay by the msig, its two slots accepted", 0, pay(916)).await;
     assert_eq!(view_i128(&st.token, "ua_balance", &["--ua", &hx(&id)]), 4_300);
@@ -670,6 +679,48 @@ async fn e2e_soroban_ua_membership_rows_and_a_g_member() {
         println!("MA {}: member_checked {mark}", r["name"]);
         assert_eq!(mark.contains(&lane0), relayer_checked, "{mark}");
     }
+
+    // CTR-UA-34 rule 4: the bytes of a slot accepted on the lane's word, read back from the chain, re-checked off chain as a client does
+    let (kd_of, keys) = (|n: &str| unhex(by_name(n)["keyData"].as_str().unwrap()), |id: [u8; 32]| {
+        let hexid = ua0x(&id);
+        row_of(&p, &hexid).map(|r| (r["kind"].as_u64().unwrap() as u16, unhex(r["keyData"].as_str().unwrap())))
+    });
+    let classical_ua: [u8; 32] = unhex(&ua).try_into().unwrap();
+    for r in &rows {
+        let index = r["index"].as_u64().unwrap();
+        let stored = view(&st.registry, "membership_sig_of", &["--ua", ua.trim_start_matches("0x"), "--index", &index.to_string()]);
+        if [0x0001, 0x0101].contains(&r["memberKind"].as_u64().unwrap()) {
+            assert_eq!(stored, "", "{}: the chain checked it", r["name"]);
+            continue;
+        }
+        assert_eq!(format!("0x{stored}"), r["sig"].as_str().unwrap(), "{}: the row's bytes", r["name"]);
+        let slot = MemberSig { index: index as u16, key_data: vec![], sig: unhex(&stored) };
+        check_membership(&kd_of("msig-classical"), &classical_ua, &slot, &keys).unwrap_or_else(|e| panic!("{}: {e:?}", r["name"]));
+    }
+
+    // a bad signature in the record: the node refuses it, a listed relayer's own transaction does not need the node, the chain reads no
+    // byte of it, and the same re-check finds it out
+    let (bls, sch) = (by_name("bls-bn254-minsig"), by_name("schnorr-bn254"));
+    let mut list = [(0x0107u16, <[u8; 32]>::try_from(unhex(bls["ua"].as_str().unwrap())).unwrap(), 1u16), (0x0104, unhex(sch["ua"].as_str().unwrap()).try_into().unwrap(), 1)];
+    list.sort_by_key(|m| m.1);
+    let bad_kd = scaas_ua::encode_msig(1, &list);
+    let bad_id = scaas_ua::ua_of(0x0120, &bad_kd).unwrap();
+    let structure = json!({"name": "msig-junk", "ua": ua0x(&bad_id), "kind": 0x0120, "threshold": 1,
+                           "members": list.iter().map(|m| json!({"kind": m.0, "id": ua0x(&m.1), "weight": 1})).collect::<Vec<_>>()});
+    ensure_registered(&node, st, 924, &structure, Value::Null).await;
+    let junk = ua0x(&[0x5a; 32]);
+    let (state, last) = node.run(0, accept_job(925, st, &ua0x(&bad_id), &json!(0), &junk, json!(lane0), vec![])).await;
+    println!("MA junk through the node: job {state}, reason {}", last["error"]);
+    assert_eq!(state, "dead", "{last}");
+    let slot_json = format!("{{\"index\":0,\"key_data\":\"\",\"sig\":\"{}\"}}", junk.trim_start_matches("0x"));
+    send("accept_membership junk on a listed relayer's own word", 0, &st.registry, "accept_membership", &["--ua", &hx(&bad_id), "--member_sig", &slot_json, "--relayer", &format!("\"{lane0}\"")]).await;
+    assert!(member_accepted(st, &ua0x(&bad_id), 0), "the mark says whose word it is, not that it is good");
+    let stored = view(&st.registry, "membership_sig_of", &["--ua", &hx(&bad_id), "--index", "0"]);
+    assert_eq!(format!("0x{stored}"), junk);
+    let slot = MemberSig { index: 0, key_data: vec![], sig: unhex(&stored) };
+    let e = check_membership(&bad_kd, &bad_id, &slot, &keys).unwrap_err();
+    println!("MA junk in the record, re-checked off chain: {e:?}");
+    assert_eq!(e, scaas_ua::UAError::Unauthorized);
 
     let member = key(BYSTANDER);
     fund(&g(&member)).await;

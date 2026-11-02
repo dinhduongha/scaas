@@ -2009,6 +2009,19 @@ impl SorobanAdapter {
         }
     }
 
+    /// An acceptance of a slot that holds one is a no-op on chain: free to the client, on the lane's fee and in `call_budget_pct`, so it
+    /// is refused here, unsent. As `ua8_record`: a failed RPC is `Transport`, what the state answers `Revert`.
+    async fn not_yet_accepted(&self, registry: &ScAddress, ua: &[u8; 32], index: u16) -> std::result::Result<(), SimError> {
+        let id = sc_bytes(ua).map_err(|e| SimError::Revert(e.to_string()))?;
+        match self.sim_view(registry, "member_accepted", vec![id, ScVal::U32(index.into())]).await {
+            Ok((Some(ScVal::Bool(false)), _)) => Ok(()),
+            Ok((Some(ScVal::Bool(true)), _)) => Err(SimError::Revert(format!("slot {index} is already accepted: nothing to send"))),
+            Ok((v, _)) => Err(SimError::Revert(format!("member_accepted answered {v:?}"))),
+            Err(e) if e.is::<SimRefused>() => Err(SimError::Revert(format!("member_accepted: {e:#}"))),
+            Err(e) => Err(SimError::Transport(format!("member_accepted: {e:#}"))),
+        }
+    }
+
     /// An `msig`'s derived members as the contract reads them (`check_members`): a `Chain` kind's `Signer`, whose bytes
     /// `record_of` returns when `signable`, a marked kind's `Ua`. What is absent `check_*` refuses as `MemberUnknown`.
     async fn ua8_members(&self, registry: &ScAddress, key_data: &[u8]) -> std::result::Result<HashMap<[u8; 32], (u16, Vec<u8>)>, SimError> {
@@ -2044,6 +2057,9 @@ impl SorobanAdapter {
                 (kind, key)
             }
         };
+        if let Ua8Write::Accept { ua, slot } = &w {
+            self.not_yet_accepted(registry, ua, slot.index).await?;
+        }
         if !ua8_marked(&w, kind, &key_data).map_err(|e| rv(e.context("key data")))? {
             return Ok(());
         }
@@ -4083,6 +4099,7 @@ mod tests {
         Arc::new(move |c| match c.function_name.0.as_slice() {
             b"relayers" => view_ok(vecv(relayers.clone())),
             b"record_of" => view_ok(records.iter().find(|r| c.args[0] == byt(&r.0)).map_or(ScVal::Void, |r| r.1.clone())),
+            b"member_accepted" => view_ok(ScVal::Bool(false)),
             _ => view_ok(ScVal::Void),
         })
     }
@@ -4733,14 +4750,14 @@ mod tests {
         let mut single = accept_op(membership("msig-classical/1"), &me);
         single["args"]["ua"] = f["ua"].clone();
         refused(run_kind(&a, "ua_metatx", &single).await, "UAUnauthorized");
-        assert_eq!(logged(&calls), ["record_of"], "a single key has no slot: never simulated");
+        assert_eq!(logged(&calls), ["record_of", "member_accepted"], "a single key has no slot: never simulated");
         for n in ["msig-classical/0", "msig-classical/3"] {
             run_kind(&a, "ua_metatx", &accept_op(membership(n), &NONE)).await.unwrap();
-            assert_eq!(logged(&calls), ["record_of", "accept_membership", "SEND"], "{n}");
+            assert_eq!(logged(&calls), ["record_of", "member_accepted", "accept_membership", "SEND"], "{n}");
         }
         for n in ["msig-classical/1", "msig-classical/2"] {
             refused(run_kind(&a, "ua_metatx", &accept_op(membership(n), &NONE)).await, "needs a relayer");
-            assert_eq!(logged(&calls), ["record_of"], "{n}: never simulated");
+            assert_eq!(logged(&calls), ["record_of", "member_accepted"], "{n}: never simulated");
             let mut bad = accept_op(membership(n), &me);
             flip(&mut bad["args"]["member_sig"]["sig"]);
             refused(run_kind(&a, "ua_metatx", &bad).await, "UAUnauthorized");
@@ -4754,6 +4771,45 @@ mod tests {
         let mut gone = accept_op(membership("msig-classical/1"), &me);
         gone["args"]["ua"] = json!(h(&[0x66; 32]));
         refused(run_kind(&a, "ua_metatx", &gone).await, "not registered");
+    }
+
+    /// A slot already accepted: a no-op on chain, on the lane's fee, so nothing is simulated or sent; the same job on a slot not yet accepted
+    /// goes. A `member_accepted` that answers no bool, or no RPC, sends nothing either.
+    #[tokio::test]
+    async fn accept_job_on_an_accepted_slot_is_refused_unsent() {
+        let (records, answer) = (classical(), Arc::new(Mutex::new(ScVal::Bool(true))));
+        let base = registry(vec![addr(&stub_lane())], records);
+        let a2 = answer.clone();
+        let reply: Answer = Arc::new(move |c| if c.function_name.0.as_slice() == b"member_accepted" { view_ok(a2.lock().unwrap().clone()) } else { base(c) });
+        let (a, calls) = ua8_adapter(reply).await;
+        let op = accept_op(membership("msig-classical/0"), &NONE);
+        refused(run_kind(&a, "ua_metatx", &op).await, "already accepted");
+        assert_eq!(logged(&calls), ["record_of", "member_accepted"], "never simulated, never sent");
+        *answer.lock().unwrap() = ScVal::Void;
+        refused(run_kind(&a, "ua_metatx", &op).await, "member_accepted answered");
+        assert_eq!(logged(&calls), ["record_of", "member_accepted"]);
+        *answer.lock().unwrap() = ScVal::Bool(false);
+        run_kind(&a, "ua_metatx", &op).await.unwrap();
+        assert_eq!(logged(&calls), ["record_of", "member_accepted", "accept_membership", "SEND"]);
+    }
+
+    /// CTR-UA-34's open item, on this job: `derive_ua` refuses an `msig` with a `G…` member, so a relayer-checked slot beside one fails closed
+    /// here, before simulation; the `G…` slot of the same structure, which the chain checks, needs no off-chain check and goes on.
+    #[tokio::test]
+    async fn accept_job_a_marked_slot_beside_a_g_member_fails_closed() {
+        let f = row("registrations", "fndsa512");
+        let (fid, g) = (<[u8; 32]>::try_from(strip(&f["ua"])).unwrap(), [0x22u8; 32]);
+        let mut list = [(0x0011u16, g, 1u16), (0x0132, fid, 1)];
+        list.sort_by_key(|m| m.1);
+        let d = encode_msig(1, &list);
+        let ua = scaas_ua::ua_of(0x0120, &d).unwrap();
+        let (a, calls) = listed(vec![(ua, rec(0x0120, &d, true)), row_rec(f, false)]).await;
+        let at = |id: &[u8; 32]| list.iter().position(|m| m.1 == *id).unwrap();
+        let slot = |id: &[u8; 32]| json!({"ua": h(&ua), "index": at(id), "sig": "0x"});
+        refused(run_kind(&a, "ua_metatx", &accept_op(&slot(&fid), &json!(stub_lane()))).await, "UAKeyData");
+        assert_eq!(logged(&calls), ["record_of", "member_accepted"], "never simulated");
+        run_kind(&a, "ua_metatx", &accept_op(&slot(&g), &NONE)).await.unwrap();
+        assert_eq!(logged(&calls).last().unwrap(), "SEND");
     }
 
     /// An `evm-contract` slot: nothing here can run ERC-1271, so `check_membership` is `NotVerifiable` and the job dies before simulation.
@@ -4780,22 +4836,19 @@ mod tests {
             root_invocation: source_entry(&InvokeContractArgs { contract_address: sc(REGISTRY), function_name: ScSymbol("accept_membership".try_into().unwrap()), args: Default::default() }).root_invocation,
         };
         let recorded = signer.to_xdr_base64(Limits::none()).unwrap();
-        let answer: Answer = Arc::new(move |c| match c.function_name.0.as_slice() {
-            b"record_of" => view_ok(ScVal::Void),
-            _ => json!({"results": [{"xdr": ScVal::Void.to_xdr_base64(Limits::none()).unwrap(), "auth": [recorded.clone()]}], "transactionData": data(100, &[])}),
-        });
+        let answer: Answer = Arc::new(move |_| json!({"results": [{"xdr": ScVal::Void.to_xdr_base64(Limits::none()).unwrap(), "auth": [recorded.clone()]}], "transactionData": data(100, &[])}));
         let d = encode_msig(1, &[(0x0011, [0x22; 32], 1)]);
         let ua = scaas_ua::ua_of(0x0120, &d).unwrap();
         let records = registry(vec![], vec![(ua, rec(0x0120, &d, true))]);
-        let both: Answer = Arc::new(move |c| if c.function_name.0.as_slice() == b"record_of" { records(c) } else { answer(c) });
+        let both: Answer = Arc::new(move |c| if matches!(c.function_name.0.as_slice(), b"record_of" | b"member_accepted") { records(c) } else { answer(c) });
         let (a, calls) = ua8_adapter(both).await;
         let slot = json!({"name": "g", "ua": h(&ua), "index": 0, "sig": "0x"});
         refused(run_kind(&a, "ua_metatx", &accept_op(&slot, &NONE)).await, "does not carry");
-        assert_eq!(logged(&calls), ["record_of", "accept_membership"], "simulated, never sent");
+        assert_eq!(logged(&calls), ["record_of", "member_accepted", "accept_membership"], "simulated, never sent");
         let mut op = accept_op(&slot, &NONE);
         op["auth"] = json!([{"payload": cross_payload(), "from": FROM, "signature": sig()}]);
         run_kind(&a, "ua_metatx", &op).await.unwrap();
-        assert_eq!(logged(&calls), ["record_of", "accept_membership", "SEND"]);
+        assert_eq!(logged(&calls), ["record_of", "member_accepted", "accept_membership", "SEND"]);
     }
 
     /// Free to the client, as a `call` job: in the call share, and no other `ua_metatx` joins it.

@@ -14,7 +14,7 @@ import { hashStruct, hashTypedData } from '../src/evm.js';
 import { personalSignDigest } from '../legacy/typed-signing/ua-portable-raw.js';
 import { portableJson } from '../scripts/ua-portable-vectors.mjs';
 import * as signers from '../scripts/ua-signers.mjs';
-import { B, nativeOk, bytesAt, sigOk, memberSigs, msigOk, SECP_N, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord, decodeMemberSigs,
+import { B, nativeOk, bytesAt, sigOk, memberSigs, msigOk, SECP_N, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord, verifyMembership, decodeMemberSigs,
   encodeMemberSigs, kindVerify } from './ua-verify.js';
 
 import { dir } from './ua-vectors-dir.js';
@@ -821,6 +821,17 @@ test('verifyRegistration accepts every row and refuses every negative', () => {
     }
   }
   assert.deepEqual([refused, stateful, otherEntry], [63, 4, 1]);
+});
+
+test('verifyMembership accepts every row and refuses a flipped byte (ua-rs check_membership_rows)', () => {
+  for (const r of P.memberships) {
+    verifyMembership(r, keysOf);
+    for (const bad of flipped(r.memberKind, r.sig)) refuses(() => verifyMembership({ ...r, sig: bad }, keysOf), 'UAUnauthorized', r.name);
+    refuses(() => verifyMembership({ ...r, index: 9 }, keysOf), 'UAUnauthorized', r.name);
+    refuses(() => verifyMembership({ ...r, index: r.index === 0 ? 1 : 0 }, keysOf), 'UAUnauthorized', r.name);
+    refuses(() => verifyMembership({ ...r, ua: `0x${'09'.repeat(32)}` }, keysOf), 'UAUnauthorized', r.name);
+    refuses(() => verifyMembership({ ...r, ua: r.member }, keysOf), 'UAUnauthorized', `${r.name}: a member is no msig`);
+  }
 });
 
 test('verifyKemRecord accepts every row and refuses a flipped byte', () => {

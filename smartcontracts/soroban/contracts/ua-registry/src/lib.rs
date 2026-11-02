@@ -64,6 +64,8 @@ const TTL_BUMP: u32 = 60 * DAY;
 /// `KemMax(ua)` = the highest `set_kem_key` version: the bytes stay in state, `Ua(ua)` holds neither key (U8S-D3). A
 /// `set_pqz_key` key's hash is only in `PqzK`: `Ua(ua).attrs` keeps the `register` arguments, and is not rewritten.
 /// `Accepted(ua)` = an `msig`'s one `AcceptedEntry`, written at registration: read once by a verify, never parsing `pop`.
+/// `AcceptSig(ua, index)` = the signature of a slot accepted on a relayer's word, stored for a client's re-check (CTR-UA-34 rule 4), never
+/// read by a verify.
 #[contracttype]
 #[derive(Clone)]
 pub(crate) enum Key {
@@ -79,6 +81,7 @@ pub(crate) enum Key {
     Kem(BytesN<32>, u64),
     KemMax(BytesN<32>),
     Accepted(BytesN<32>),
+    AcceptSig(BytesN<32>, u32),
 }
 
 /// `Registration` with `pop` replaced by `pop_hash = keccak256(pop)` (owner ruling 2026-10-30 after T0: the full record
@@ -138,7 +141,8 @@ pub struct UaKemKeySet {
     pub checked: Checked,
 }
 
-/// CTR-UA-37: slot `index` of the `msig` `ua`, member `member`, accepted by `accept_membership`; `checked` says whose word it is.
+/// CTR-UA-37: slot `index` of the `msig` `ua`, member `member`, accepted by `accept_membership`; `checked` says whose word it is,
+/// `sig_hash` = `keccak256` of the slot's `sig` (U8S-D4; empty for a `G…` member; the bytes of an attested slot: `membership_sig_of`).
 /// Slots that signed the `pop` are accepted at registration, without this event: `UaRegistered` and `pop_of` carry them.
 #[contractevent(topics = ["UaMembershipAccepted"], data_format = "vec")]
 pub struct UaMembershipAccepted {
@@ -147,6 +151,7 @@ pub struct UaMembershipAccepted {
     #[topic]
     pub member: BytesN<32>,
     pub index: u32,
+    pub sig_hash: BytesN<32>,
     pub checked: Checked,
 }
 
@@ -1063,7 +1068,8 @@ impl UaRegistry {
     /// typed(`UAMembership{ua, member}`), so one signature serves every registry; `check_slot` by kind: an `evm-eoa` member that digest,
     /// a registered member `member_digest` under `member`, a `G…` member an auth entry over `(ua, PURPOSE_MEMBERSHIP, typed)`, `sig`
     /// empty. No threshold, no minimal form: one slot speaks for itself. A slot the chain cannot verify takes `relayer` (`attest`, the
-    /// digest of these three arguments) and keeps its mark in `Accepted(ua)`. No revoke, no decline: the id derives from the structure.
+    /// digest of these three arguments), keeps its mark in `Accepted(ua)` and its signature in `AcceptSig(ua, index)`, for a client to
+    /// re-check (CTR-UA-34 rule 4). No revoke, no decline: the id derives from the structure.
     pub fn accept_membership(env: Env, ua: BytesN<32>, member_sig: MemberSig, relayer: Option<Address>) {
         let Some(r) = get::<Registration>(&env, &Key::Ua(ua.clone())).filter(|r| r.kind == MSIG) else { fail(&env, Error::Unauthorized) };
         let index = member_sig.index;
@@ -1084,16 +1090,24 @@ impl UaRegistry {
         check_slot(&env, &ua, &member_sig, kind, &id, &p, &digest, &md, Some(&typed), &by, &mut checked, Error::Unauthorized);
         if let Checked::Relayer(r) = &checked {
             marks.set(index, r.clone());
+            put(&env, &Key::AcceptSig(ua.clone(), index), &member_sig.sig);
         }
         put(&env, &Key::Accepted(ua.clone()), &(bits | 1 << index, marks));
         bump_instance(&env);
-        UaMembershipAccepted { ua, member: member_id, index, checked }.publish(&env);
+        let sig_hash = env.crypto().keccak256(&member_sig.sig).into();
+        UaMembershipAccepted { ua, member: member_id, index, sig_hash, checked }.publish(&env);
     }
 
     /// Has slot `index` of `ua` agreed (CTR-UA-37: it signed the `pop` here, or `accept_membership`)? False for a slot that is only
     /// listed, past the members and for any other id. Only accepted slots count at verify.
     pub fn member_accepted(env: Env, ua: BytesN<32>, index: u32) -> bool {
         accepted(&env, &ua).0.checked_shr(index).is_some_and(|b| b & 1 != 0)
+    }
+
+    /// The bytes of a slot accepted on a relayer's word, for a client to re-check (`check_membership`); empty for a slot the chain
+    /// checked or that signed the `pop` (`pop_of` holds those) and for a slot not accepted.
+    pub fn membership_sig_of(env: Env, ua: BytesN<32>, index: u32) -> Bytes {
+        get(&env, &Key::AcceptSig(ua, index)).unwrap_or(Bytes::new(&env))
     }
 
     /// Whose word the slot's acceptance is (P11): `Chain`, a listed `Relayer`, `None` for a slot not accepted.
