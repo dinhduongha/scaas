@@ -1,0 +1,137 @@
+smartcontracts/evm/src/dex/SCaaSDex.sol            |  4 +--
+ .../evm/src/governance/GovernanceBase.sol          | 35 ++++++++++++----------
+ smartcontracts/evm/src/governance/IGovernance.sol  |  2 --
+ smartcontracts/evm/src/metatx/NormalToken.sol      |  3 +-
+ smartcontracts/evm/test/governance/GovGrant.t.sol  | 25 ++--------------
+ 5 files changed, 26 insertions(+), 43 deletions(-)
+
+--- Changes ---
+
+smartcontracts/evm/src/dex/SCaaSDex.sol
+  @@ -17,7 +17,7 @@ import {UAKinds} from "../ua/UAKinds.sol";
+  -import {GovernanceBase} from "../governance/GovernanceBase.sol";
+  +import {GovernanceBase, GovernanceGrants} from "../governance/GovernanceBase.sol";
+   import {GovernanceBits} from "../governance/GovernanceBits.sol";
+   import {GovernanceLib} from "../governance/GovernanceLib.sol";
+   
+  @@ -46,7 +46,7 @@ import {GovernanceLib} from "../governance/GovernanceLib.sol";
+  -contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, GovernanceBase {
+  +contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, GovernanceGrants {
+       uint256 internal constant PPM = 1_000_000;
+       uint8 internal constant ESCROW = 2;
+       uint8 internal constant KIND_SCAAS = 1;
+  +2 -2
+
+smartcontracts/evm/src/governance/GovernanceBase.sol
+  @@ -27,11 +27,6 @@ abstract contract GovernanceBase is IGovernance {
+  -    /// @dev Whether `child` narrows `parent` for `bit`: equality unless the contract defines an order on its scopes.
+  -    function _scopeNarrows(uint8, bytes32 parent, bytes32 child) internal view virtual returns (bool) {
+  -        return parent == child;
+  -    }
+  -
+       function features() external view returns (uint256) { return GovernanceLib.$().features; }
+       function lockedFeatures() external view returns (uint256) { return GovernanceLib.$().lockedFeatures; }
+       function owner() external view returns (address) { return GovernanceLib.$().owner; }
+  @@ -39,9 +34,6 @@ abstract contract GovernanceBase is IGovernance {
+  -    function grantOf(uint8 bit, address holder) external view returns (Grant memory) {
+  -        return GovernanceLib.$().grants[bit][holder];
+  -    }
+   
+       /// @notice Bits 64–127 only; a contract with no application bit answers with a refusal.
+       function bitLabel(uint8 bit) external view virtual returns (BitType, bytes4, string memory) {
+  @@ -51,13 +43,6 @@ abstract contract GovernanceBase is IGovernance {
+  -    /// @notice The owner sets any holder's grant; a holder with a `delegable` grant sets a narrower leaf. Spent is carried.
+  -    function setGrant(uint8 bit, address holder, GrantTerms calldata terms) external governed {
+  -        (bool leaf, bytes32 parentScope) =
+  -            GovernanceLib.setGrant(bit, holder, terms, _caller(), _roleBits(), _contractOnlyBits());
+  -        if (leaf && !_scopeNarrows(bit, parentScope, terms.scope)) revert GrantNotNarrower(7);
+  -    }
+  -
+       function revokeRole(uint8 bit, address account) external governed { GovernanceLib.revokeRole(bit, account, _caller()); }
+       function renounceRole(uint8 bit) external governed { GovernanceLib.renounceRole(bit, _caller()); }
+       function disableFeature(uint8 bit) external virtual governed { GovernanceLib.disableFeature(bit, _caller()); }
+  @@ -65,3 +50,23 @@ abstract contract GovernanceBase is IGovernance {
+  +
+  +/// @title The grant entries, on the kinds that carry them (v2 §7 fallback: `NORMAL*` and the DEX).
+  +abstract contract GovernanceGrants is GovernanceBase {
+  +    /// @dev Whether `child` narrows `parent` for `bit`: equality unless the contract defines an order on its scopes.
+  +    function _scopeNarrows(uint8, bytes32 parent, bytes32 child) internal view virtual returns (bool) {
+  +        return parent == child;
+  +    }
+  +
+  +    function grantOf(uint8 bit, address holder) external view returns (Grant memory) {
+  +        return GovernanceLib.$().grants[bit][holder];
+  +    }
+  +
+  +
+  +    /// @notice The owner sets any holder's grant; a holder with a `delegable` grant sets a narrower leaf. Spent is carried.
+  +    function setGrant(uint8 bit, address holder, GrantTerms calldata terms) external governed {
+  +        (bool leaf, bytes32 parentScope) =
+  +            GovernanceLib.setGrant(bit, holder, terms, _caller(), _roleBits(), _contractOnlyBits());
+  +        if (leaf && !_scopeNarrows(bit, parentScope, terms.scope)) revert GrantNotNarrower(7);
+  +    }
+  +}
+  +20 -15
+
+smartcontracts/evm/src/governance/IGovernance.sol
+  @@ -80,8 +80,6 @@ interface IGovernance {
+  -    function grantOf(uint8 bit, address holder) external view returns (Grant memory);
+  -    function setGrant(uint8 bit, address holder, GrantTerms calldata terms) external;
+       /// @notice The label of an application bit (64–127): its type, the entry it gates, a name for a wallet.
+       function bitLabel(uint8 bit) external view returns (BitType, bytes4, string memory);
+       function grantRole(uint8 bit, address account) external;
+  +0 -2
+
+smartcontracts/evm/src/metatx/NormalToken.sol
+  @@ -5,6 +5,7 @@ import {MetaTokenBase} from "./MetaTokenBase.sol";
+  +import {GovernanceGrants} from "../governance/GovernanceBase.sol";
+   import {MetaTxBase} from "./MetaTxBase.sol";
+   import {IMetaTx} from "./IMetaTx.sol";
+   import {MetaTxLib} from "../common/MetaTxLib.sol";
+  @@ -14,7 +15,7 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
+  -contract NormalToken is MetaTokenBase {
+  +contract NormalToken is MetaTokenBase, GovernanceGrants {
+       bytes32 internal constant BURN_TYPEHASH = keccak256(
+           "Burn(address from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+       );
+  +2 -1
+
+smartcontracts/evm/test/governance/GovGrant.t.sol
+  @@ -10,6 +10,7 @@ import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+  +import {GovernanceGrants} from "../../src/governance/GovernanceBase.sol";
+   import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+   import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+   import {MockERC20} from "../helpers/Mocks.sol";
+  @@ -302,28 +303,6 @@ contract GovGrantTest is Test {
+  -    /// `hasRole` is true for a limited holder: every power on the wrapped kinds must go through `use`.
+  -    function test_wrappedPowerIsBound() public {
+  -        MockERC20 usd = new MockERC20("USD", "USD", 6);
+  -        IFactoryToken.TokenConfig memory c;
+  -        c.name = "W";
+  -        c.symbol = "W";
+  -        c.decimals = 6;
+  -        c.features = (1 << 0) | (1 << GovernanceBits.WRAP_DISABLEABLE);
+  -        c.owner = OWNER;
+  -        c.legs = new IFactoryToken.Leg[](1);
+  -        c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
+  -        WrappedToken w = WrappedToken(payable(f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(c), "w")));
+  -        IGovernance.GrantTerms memory g = _open();
+  -        g.validUntil = uint64(block.timestamp + 1 hours);
+  -        vm.prank(OWNER);
+  -        w.setGrant(GovernanceBits.WRAP_DISABLEABLE, MANAGER, g);
+  -        vm.warp(block.timestamp + 2 hours);
+  -        vm.prank(MANAGER);
+  -        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantExpired.selector, GovernanceBits.WRAP_DISABLEABLE, MANAGER));
+  -        w.disableWrap(address(usd), bytes32(uint256(1)));
+  -    }
+  -
+       function test_dexPowerIsBound() public {
+           Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
+           SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(OWNER, 0, address(0xAA), false)), "d"));
+  @@ -380,7 +359,7 @@ contract GovGrantTest is Test {
+  -        _gas("setGrant fresh, every field set", OWNER, address(t), abi.encodeCall(IGovernance.setGrant, (MINT, MANAGER, g)));
+  +        _gas("setGrant fresh, every field set", OWNER, address(t), abi.encodeCall(GovernanceGrants.setGrant, (MINT, MANAGER, g)));
+       }
+   
+       function test_gas_mintLimited_everyBound() public {
+  +2 -23
