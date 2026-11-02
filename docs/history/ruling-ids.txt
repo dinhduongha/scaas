@@ -710,6 +710,7 @@ governance:hybrid	decisions.md:1693
 governance:moderate-public	decisions.md:1702
 governance:bits-13-14	decisions.md:1711
 governance:operator-delay	decisions.md:1720
+governance:enum-ids	decisions.md:1729
 net-aptos:L1	history/specs/2026-10-04-net-aptos.md:37
 net-aptos:L2	history/specs/2026-10-04-net-aptos.md:38
 net-aptos:L3	history/specs/2026-10-04-net-aptos.md:39

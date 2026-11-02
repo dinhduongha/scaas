@@ -1620,7 +1620,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 - old: governance:D2 · status: open · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-02 · superseded-by: —
 
 **Rule.** A limit on a power lives in the contract that owns the power, in `GovernanceBase`: `use(bit, holder, scalar) → scope`, `setGrant`, `grantOf`. Two levels: the owner grants, a holder with a `delegable` grant may grant a narrower leaf, a leaf cannot delegate. An edit carries `spent` and never refreshes a budget. `renounceOwnership` reverts while a bit that is not locked has holders. **Subject to measuring** the bytes first (owner): the default until the measurement is read is the rule as stated.
-**Status.** Decided as recommended, subject to measuring; not built. If `WrappedPqzToken` measures over its stop line the fallback already stated is grants on `NORMAL*` and the DEX only, said plainly, not a lever hunt.
+**Status.** Decided as recommended, subject to measuring; not built. If `WrappedPqzToken` measures over its stop line the fallback already stated is grants on `NORMAL*` and the DEX only, said plainly, not a lever hunt. Measured: as designed it does not fit `WrappedPqzToken` (65,520 B). Owner 2026-11-02: reduce the size rather than cut the record; the controller writes the spec with the whole record and treats size as a gate before the build.
 **Why.** The owner's examples (a loan approval in a band, a subtree, a group) and the mint allowance need a limit bound to the number the contract acts on; a separate holder clone cannot carry them, and a holder that reports its own limit is believed for nothing.
 **Cost if wrong.** Bytes on every kind, and two disclosure shapes on one chain if one kind goes flat-only. CTR-TOK-22's "revoke every role, then renounce" turns from advice into a revert for unlocked bits.
 **Source.** `research/governance/permission-model.md` §1.3, §6, §7; `research/governance/permission-model-attack.md` A3, A10, A19.
@@ -1628,7 +1628,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 ### CTR-GOV-03 — A plain transfer stays +0: one regulated implementation per kind, never per feature
 - old: governance:D3 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-03 · superseded-by: —
 
-**Rule.** A plain transfer's gas does not rise, in the sense of CTR-GOV-11: no new read. A regulated instance is known on the hot path by its implementation, not by a storage read: one regulated implementation per kind, never one per feature. Ids 8 `NORMAL_REGULATED` and 9 `WRAPPED_REGULATED` are reserved in the enum comment now (0 B) and built with flags 5–8. `WrappedPqzToken` and `WrappedZetherToken` will have regulated versions too (owner 2026-11-02): "one regulated implementation per kind" covers them. How they work is **open, owner, not designed**; nothing here fixes the regulated set at two.
+**Rule.** A plain transfer's gas does not rise, in the sense of CTR-GOV-11: no new read. A regulated instance is known on the hot path by its implementation, not by a storage read: one regulated implementation per kind, never one per feature. Ids 8 `NORMAL_REGULATED` and 9 `WRAPPED_REGULATED` are real enum members, off until built with flags 5–8 ([CTR-GOV-16](#ctr-gov-16--regulated-kinds-are-real-enum-members-before-the-factory-freezes)). The confidential kinds will have regulated versions too (owner 2026-11-02): "one regulated implementation per kind" covers them. How they work is **open, owner, not designed**.
 **Status.** Decided as recommended, not built. It conflicts with CTR-AS-17's placement ("on the ordinary kinds, not separate kinds"); the Change to CTR-AS-17 is drafted and waits for the owner. The refusal of flags 5–8 on the confidential kinds at creation is the current built state, not a permanent rule.
 **Why.** `_update` and `_uaMove` read no governance slot today; a `features` read there would charge every holder of every plain token for a control their token does not have. Two implementations meet the rule by construction.
 **Cost if wrong.** More catalogue rows and more artifacts in the size gate and the audit. The alternatives were immutable-args clones (every clone address formula changes, factory bytecode before the freeze) or accepting the read (the rule breaks on the entry that matters most).
@@ -1708,10 +1708,10 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 **Source.** Owner 2026-11-02; `research/governance/permission-model-v2-attack.md` §4.
 
 ### CTR-GOV-12 — Hybrid underlying: wrap and issuer mint on one token, the reserve can run out
-- old: governance:hybrid · status: open · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-12 · superseded-by: —
+- old: governance:hybrid · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-12 · superseded-by: —
 
-**Rule.** A wrapped token may also be minted by its issuer, under a cap. The owner's example: a government issues a CBDC on a public chain; a foreign user deposits USDC and receives e-VND at the rate, up to a cap; the user must understand and accept that others can drain the USDC reserve, in which case the user still holds e-VND and can change it at a bank.
-**Status.** Owner chose option B of the review, labelled pro-rata; the example describes redemption until the reserve is empty. Which of the two is the rule is waiting for the owner, so this entry is `open`. Not built: `MINTABLE` is refused on a wrapped kind, no `maxSupply` exists, and the reserve invariant changes.
+**Rule.** A wrapped token may also be minted by its issuer, under a cap. **Redemption runs until the reserve is empty:** any unit redeems at the rate while the reserve lasts, first come, with no pro-rata share and no queue. When it is empty the units stay valid and redemption of the underlying stops; a holder's way out is then off chain. The owner's example: a government issues a CBDC on a public chain; a foreign user deposits USDC and receives e-VND at the rate, up to a cap; the user must understand and accept that others can drain the USDC reserve, in which case the user still holds e-VND and can change it at a bank.
+**Status.** Decided, not built. `MINTABLE` is refused on a wrapped kind today, no `maxSupply` exists, and the reserve invariant changes: a hybrid token no longer claims full backing. The risk is part of the token's disclosure.
 **Why.** The redeemable reserve serves a holder who wants out; the unit itself stays money off chain.
 **Cost if wrong.** A holder who reads the token as fully backed loses the exit. The risk must be shown by the token's disclosure, not left to a document.
 **Source.** Owner 2026-11-02; `research/governance/permission-model-gaps.md` §3.8.
@@ -1734,14 +1734,23 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 **Cost if wrong.** A later contract wanting these as bits takes new numbers.
 **Source.** Owner 2026-11-02; `research/governance/permission-model-gaps.md` §4.
 
-### CTR-GOV-15 — operatorDelay on a governance holder
+### CTR-GOV-15 — No operator delay on a governance holder
 - old: governance:operator-delay · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-15 · superseded-by: —
 
-**Rule.** A holder's operator changes in two calls: `proposeOperator(next)` by the operator, `acceptOperator()` signed by `next` after `operatorEta = now + operatorDelay`. The delay is immutable, 0 allowed, bounded, shown by a wallet, and part of the holder's CREATE2 salt with the operator. Acceptance has a window `[eta, eta + operatorDelay]`, dead after. A new `proposeOperator` always rewrites the eta, `proposeOperator(0)` cancels, and the pending is readable.
-**Status.** Decided (option A of the review, keep it), not built. The salt, window and cancel come from attack B-20 and B-21.
-**What it gives.** Visible notice of an honest change of operator on a non-owner holder. It does not close every path around [CTR-GOV-04](#ctr-gov-04--two-call-grantdelay-and-holdercount) (attack B-22): `grantDelay` delays an address, never its controller; a contract holder rotates by its own rules, a quorum can hand keys over off chain, and a compromised operator keeps its power through the delay. The disclosure says this once.
-**Cost if wrong.** An emergency rotation waits for the delay.
+**Rule.** A holder's operator changes in two calls and with no delay: `proposeOperator(next)` by the operator, `acceptOperator()` signed by `next`; `proposeOperator(0)` cancels and the pending is readable. The disclosure says once: `grantDelay` delays an address, never who controls it.
+**Status.** Decided, not built. The note's proposed `operatorDelay` is dropped: the owner first kept it, then followed the attack's reading.
+**Why.** It would not close what it claimed (attack B-22): a token cannot compare it with `grantDelay`, an owner holder moves control by `transferOwnership` at once, a contract holder rotates by its own rules, a quorum hands keys over off chain, and a compromised operator keeps its power through the delay. It would also slow an emergency rotation and need the salt, window and cancel of B-20 and B-21.
+**Cost if wrong.** Nobody sees an honest change of operator in advance.
 **Source.** Owner 2026-11-02; `research/governance/permission-model-gaps.md` §1.6; `research/governance/permission-model-v2-attack.md` B-20 to B-22.
+
+### CTR-GOV-16 — Regulated kinds are real enum members before the factory freezes
+- old: governance:enum-ids · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-16 · superseded-by: —
+
+**Rule.** The factory's kind enum gets real members before it freezes: placeholders 6 and 7 (a Solidity enum has no gaps), 8 `NORMAL_REGULATED`, 9 `WRAPPED_REGULATED`, and four ids for the regulated confidential kinds: one each for `NORMAL_ZETHER`, `WRAPPED_ZETHER`, `NORMAL_PQZ`, `WRAPPED_PQZ`. Every one is off until its implementation is published. It amends CTR-GOV-03's "reserved in the enum comment".
+**Status.** Decided, not built. The four confidential ids reserve a number only: how those kinds work stays open, owner, not designed.
+**Why.** A kind named in a comment does not decode: `createToken` with kind 8 reverts. After a freeze a regulated kind could only come from a second factory, whose token is an outside leg to [CTR-GOV-05](#ctr-gov-05--a-wrapped-kind-refuses-a-scaas-leg-with-force-or-moderate) and `KIND_OUTSIDE` to the DEX (attack B-03).
+**Cost if wrong.** A few unused enum values.
+**Source.** Owner 2026-11-02; `research/governance/permission-model-v2-attack.md` B-03.
 
 ## 17. Contracts — Meta-transactions
 
@@ -9032,7 +9041,8 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 | governance:D9 | CTR-GOV-09 | current |
 | governance:bands | CTR-GOV-10 | current |
 | governance:bits-13-14 | CTR-GOV-14 | current |
-| governance:hybrid | CTR-GOV-12 | open |
+| governance:enum-ids | CTR-GOV-16 | current |
+| governance:hybrid | CTR-GOV-12 | current |
 | governance:moderate-public | CTR-GOV-13 | current |
 | governance:operator-delay | CTR-GOV-15 | current |
 | governance:plus0 | CTR-GOV-11 | current |
