@@ -865,7 +865,7 @@ contract UARegistryUA8Test is UARegistryBase {
         UACall.register(a, x.kind, x.keyData, x.attrs, x.pop, x.pqzPop);
         vm.expectRevert(IUARegistry.UAPoP.selector);
         UACall.register(a, UAKinds.MSIG, m.keyData, m.attrs, m.pop, "");
-        IUARegistry.MemberSig[] memory s = abi.decode(m.pop, (IUARegistry.MemberSig[]));
+        IUARegistry.MemberSig[] memory s = UACall.memberSigs(m.pop);
         assertEq(s.length, 3);
         IUARegistry.MemberSig[] memory two = new IUARegistry.MemberSig[](2);
         (two[0], two[1]) = (s[0], s[2]);
