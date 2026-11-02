@@ -199,6 +199,7 @@ R_REG proof          = over                         uaMessage(0x0142, PURPOSE_PO
 | `UARegistration` | `UARegistration(UAPortableRecord record,bytes32 pqzPopHash)UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)` | `0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e` |
 | `UAPqzKey` | `UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)` | `0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00` |
 | `UAPqzKeyRecord` | `UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)` | `0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567` |
+| `UAMembership` | `UAMembership(bytes32 ua,bytes32 member)` | `0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4` |
 
 | Record | Signed or proven message | Who |
 |---|---|---|
@@ -207,6 +208,7 @@ R_REG proof          = over                         uaMessage(0x0142, PURPOSE_PO
 | `setKemKey` (version ≥ 1) | `uaMessage(kind, PURPOSE_KEM, typed(UAKemRecord{ua, version, scheme, kemPkHash}))` | KEM holders ([CTR-UA-32](#CTR-UA-32)) |
 | `setPqzKey` | `uaMessage(kind, PURPOSE_PQZ_KEY, typed(UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}))` | PQZ holders ([CTR-UA-16](#CTR-UA-16)) |
 | `R_REG` of a key from `setPqzKey` | `uaMessage(0x0142, PURPOSE_PQZ_KEY, typed(UAPqzKey{ua, pqzKeyHash}))` | pqz prover |
+| `acceptMembership` ([CTR-UA-37](#CTR-UA-37)) | a native member `typed(UAMembership{ua, member})`; a derived member `memberDigest(ua, uaMessage(MSIG, PURPOSE_MEMBERSHIP, typed(UAMembership{ua, member})))` under `member` | each `msig` member |
 | Zether PoP (`0x0141`) | Schnorr over `uaMessage(0x0141, PURPOSE_POP_V2, typed(UARegistration{UAPortableRecord{ua, 0x0141, 0, UAKemRecord{ua, 0, 0, 0}}, 0}))` | zether-prover |
 
 `PURPOSE_POP_V2 = keccak256("scaas.ua.purpose.pop.v2")` (the versioned tag `scaas.ua.purpose.pop.v2`; the v1 tag and the
@@ -493,6 +495,35 @@ arguments (`IUARegistry`, [§1.8](#registry); client builders [CLI-SGN-41](../cl
   Uniswap callbacks).
 - **Tokens.** Since typed-signing C2-C6 the named `ua*` entries take `UASig` (`uaUnwrap`, the UA transfer, trade, cancel and receiver-fee entries, `uaCancelNonce`, the confidential twins; [CTR-MTX-28](metatx.md#CTR-MTX-28)). The generic `uaExecute` / `uaBatch` and `uaShield` keep `bytes auth` = `abi.encode(keyData, sig)` (TS-D14, owner table): `UAKinds.uaSig` converts it to a `UASig` for the registry (an `msig` is told by `keccak256(TAG(msig) ‖ keyData) == ua`). On a named `ua*` entry a native id signs with `UASig.signature`; `keyData` and `members` are ignored there, being unsigned.
 - **The registry is split in two (owner ruling 2026-11-01, typed-signing registry split; it replaces "`UARegistry` is not split" and the earlier two-library ruling).** `UARegistry` (27,997 B) keeps the views and `requireAuthorized`; `UARegistryLib` (31,315 B) holds every `register*`, `storePqzPop`, `setPqzKey`, `setKemKey` and the ML-DSA key cache, reached by DELEGATECALL. One library only: the views stay in the registry and there is no `fallback`. A behaviour-preserving refactor: the 53 selectors, the ABI, every digest, event and error are unchanged; `requireAuthorized` costs at most +37 gas at all four sets, `register` about +6 k and `registerMsig` about +8.8 k regular gas. The one difference is on malformed calldata only (a nested offset aimed at an appended word reads it as the caller's own argument, `test_nestedOffsetReadsAWordAsItsOwnArgument`). The constructor refuses a library without code (`UAConfig(0)`). Both contracts have a deploy gate ([NET-EVM-06](../networks/evm.md#NET-EVM-06)). The pre-split source is frozen in `smartcontracts/evm/legacy/typed-signing/UARegistryPreSplit.sol`. Figures: `docs/research/evm-size-levers.md` §8. The `ua8-soroban` minimal-`msig` rule (U8S-D1) lands in `UARegistryLib._msig`.
+
+<a id="CTR-UA-37"></a>**CTR-UA-37** — **Listing in an `msig` is no consent; a member's acceptance is, and only accepted members count at
+verify** (owner 2026-11-02; the form and the names are controller calls, owner may override; [decisions.md](../decisions.md)).
+Registration is unchanged: a PQ-eligible `msig` is signed by a threshold of its members, a classical-dominant one has an empty `pop`, so a
+member can be listed without knowing it. `msigOf` makes no claim that a member agreed; `memberAccepted(ua, index)` does. Wallets and
+explorers show listed and accepted apart.
+
+- **Accepting.** `acceptMembership(ua, MemberSig{index, "", sig})`, one slot per call; anyone submits, so a member needs no gas.
+  `index` is the slot, `keyData` empty ([CTR-UA-33](#CTR-UA-33)). A native member signs `typed(UAMembership{ua, member})`
+  (`eth_signTypedData_v4`) or answers ERC-1271 over it; a derived member signs `memberDigest` under `member`, with the purpose
+  `PURPOSE_MEMBERSHIP = keccak256("scaas.ua.purpose.membership.v1")`, so a `pop`, `kem` or `pqz-key` signature is never an acceptance, nor the reverse.
+  The struct is portable (domain `DS_P`, no chain, no registry): the same signature accepts on every registry, as
+  [CTR-UA-07](#CTR-UA-07) records do, and needs no nonce. Accepting twice is a no-op with no second event.
+  Refused with `UAUnauthorized`: an id that is no `msig` on this registry, an index past the members, a bad signature.
+- **State.** One bitmap slot per `msig`, bit `i` = slot `i`, written at registration: a slot that signed the stored `pop` is accepted from
+  the start (a portable `pop` does this on each registry it is copied to); an empty `pop` writes nothing, so every slot starts unaccepted.
+  Each registry keeps its own bits: on a new chain a member accepts there too, with the same signature.
+- **Verify.** In every `msig` verification (`requireAuthorized`, the ERC-1271 and UA envelope paths through it, `setKemKey`, `setPqzKey`) a
+  `MemberSig` of an unaccepted slot fails the verification, even with a good signature. The registration's own `pop` is exempt: it is what
+  accepts its signers. **Until the accepted weight reaches the threshold, the `msig` can authorize nothing, on any contract, for any purpose:
+  payments, mandates, roles, orders, keys, records.** A client computes the accepted weight from `msigOf` and `memberAccepted`, shows
+  the `msig` as not active, and does not name it as a signer, party, role holder or payer until then. The verify path reads the one
+  bitmap slot and never parses `pop`; that cold read, once per authorization, is counted inside `MSIG_MEMBER_GAS`.
+- **No decline, no leave.** The UA id derives from the structure, so a member cannot be removed.
+- **No revoke.** An acceptance cannot be withdrawn: a revoke could drop a held `msig` below its threshold and lock what it holds. The owner
+  may add it later.
+- **Generations.** The bits live with the record. A gen-1 record on a gen 2 is settled as `setKemKey` does (UA8-D11): `acceptMembership` there
+  is `UAUnauthorized` and the member accepts on gen 1; `memberAccepted` forwards to gen 1, and so does the verify, including `setPqzKey` on a
+  gen 2 that hosts the record.
 
 ### 1.5 Keys, purposes, tags
 

@@ -135,7 +135,24 @@ fn domain_separator_pinned() {
     assert_eq!(derived, PORTABLE_DOMAIN_SEPARATOR);
 }
 
-/// TS-D1: the five portable typehashes (type strings: primary, then the referenced types sorted by name).
+/// CTR-UA-37: every acceptance row: its typed digest, the message and `memberDigest` a derived member signs under `member`.
+#[test]
+fn membership_rows() {
+    let p = load("portable.json");
+    let rows = arr(&p, "memberships");
+    assert_eq!(rows.len(), 6);
+    for r in rows {
+        let (ua, member) = (b32(&r["ua"]), b32(&r["member"]));
+        let d = membership_digest(&ua, &member);
+        assert_eq!(hx(&d), r["digest"], "{}", r["name"]);
+        let m = ua_message(0x0120, &purpose_tag("membership").unwrap(), &d).unwrap();
+        assert_eq!(hx(&m), r["message"], "{}", r["name"]);
+        assert_eq!(hx(&member_digest(&ua, &m)), r["memberDigest"], "{}", r["name"]);
+        assert!(is_portable_purpose(&purpose_tag("membership").unwrap()));
+    }
+}
+
+/// TS-D1, CTR-UA-37: the six portable typehashes (type strings: primary, then the referenced types sorted by name).
 #[test]
 fn portable_typehashes_pinned() {
     let p = load("portable.json");
@@ -145,6 +162,7 @@ fn portable_typehashes_pinned() {
         ("UARegistration", "0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e"),
         ("UAPqzKey", "0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00"),
         ("UAPqzKeyRecord", "0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567"),
+        ("UAMembership", "0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4"),
     ];
     assert_eq!(PORTABLE_TYPES.map(|(n, _)| n), want.map(|(n, _)| n));
     assert_eq!(p["typed"]["types"].as_object().unwrap().len(), want.len());

@@ -46,12 +46,13 @@ pub const PORTABLE_DOMAIN_SEPARATOR: [u8; 32] = [
     0xef, 0x22, 0xea, 0x79, 0x1b, 0xce, 0xa9, 0xef, 0xc6, 0x4c, 0xa1,
 ];
 /// The portable structs' EIP-712 `encodeType` (primary, then the referenced types sorted by name); `kind` is `uint16`.
-pub const PORTABLE_TYPES: [(&str, &str); 5] = [
+pub const PORTABLE_TYPES: [(&str, &str); 6] = [
     ("UAKemRecord", "UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)"),
     ("UAPortableRecord", "UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)"),
     ("UARegistration", "UARegistration(UAPortableRecord record,bytes32 pqzPopHash)UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)"),
     ("UAPqzKey", "UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)"),
     ("UAPqzKeyRecord", "UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)"),
+    ("UAMembership", "UAMembership(bytes32 ua,bytes32 member)"),
 ];
 /// `keccak256(encodeType)` of a portable struct by name (panics on another name).
 pub fn portable_typehash(name: &str) -> [u8; 32] {
@@ -121,6 +122,12 @@ pub fn pqz_key_digest(ua: &[u8; 32], pqz_key_hash: &[u8; 32]) -> [u8; 32] {
 /// `ua_message(kind, PURPOSE_PQZ_KEY, ·)` (and a native msig member signs itself, TS-D4).
 pub fn pqz_key_record_digest(ua: &[u8; 32], pqz_key_hash: &[u8; 32], pqz_pop_hash: &[u8; 32]) -> [u8; 32] {
     typed(&keccak(&[&portable_typehash("UAPqzKeyRecord"), &pqz_key_hash_struct(ua, pqz_key_hash), pqz_pop_hash]))
+}
+/// The typed `UAMembership{ua, member}` digest: what `member` signs to accept its slot in the `msig` `ua` (CTR-UA-37,
+/// `acceptMembership`): a native member this digest itself (or ERC-1271 over it), a derived member
+/// `member_digest(ua, ua_message(MSIG, PURPOSE_MEMBERSHIP, ·))` under `member`.
+pub fn membership_digest(ua: &[u8; 32], member: &[u8; 32]) -> [u8; 32] {
+    typed(&keccak(&[&portable_typehash("UAMembership"), ua, member]))
 }
 
 /// A PQZ / KEM holder: a single-key PQ kind, or an `msig` whose key data is PQ-eligible (`key_data` shows it).
@@ -270,11 +277,12 @@ pub fn pqz_key_record_message(
     })
 }
 
-/// The portable purposes (POP_V2, KEM, PQZ_KEY): the only ones where a code-less or EIP-7702-designator native msig member
+/// The portable purposes (POP_V2, KEM, PQZ_KEY, MEMBERSHIP): the only ones where a code-less or EIP-7702-designator native msig member
 /// signs the record's typed digest itself (`eth_signTypedData_v4`, 65-byte r ‖ s ‖ v, low-s, v 27 / 28; a contract member
 /// answers ERC-1271 `isValidSignature(typedDigest, sig)`; TS-D4); every other purpose stays UAAuth (CTR-MTX-14).
 pub fn is_portable_purpose(tag: &[u8; 32]) -> bool {
-    [pop_v2_tag(), purpose_tag("kem").expect("kem"), purpose_tag("pqz-key").expect("pqz-key")].contains(tag)
+    [pop_v2_tag(), purpose_tag("kem").expect("kem"), purpose_tag("pqz-key").expect("pqz-key"), purpose_tag("membership").expect("membership")]
+        .contains(tag)
 }
 
 // --- the registry's explicit arguments (typed-signing R1: TS-D10 … TS-D12; owner KEM rulings 2026-10-31) ---

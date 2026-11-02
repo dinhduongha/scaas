@@ -342,6 +342,11 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         }
     }
 
+    function memberAccepted(bytes32 ua, uint256 index) external view returns (bool) {
+        if (_elsewhere(ua)) return IUARegistry(predecessor).memberAccepted(ua, index);
+        return _s.accepted[ua] >> index & 1 != 0;
+    }
+
     /// TS-D13: the typed keys of `webauthn-p256` / MuSig2 / FROST records (empty for any other id).
     function webAuthnKeyOf(bytes32 ua) external view returns (WebAuthnKey memory k) {
         if (_elsewhere(ua)) return IUARegistry(predecessor).webAuthnKeyOf(ua);
@@ -559,6 +564,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         _lib(UARegistryLib.setKemKey.selector, _s.records[ua].kind);
     }
 
+    function acceptMembership(bytes32 ua, MemberSig calldata memberSig) external {
+        _lib(UARegistryLib.acceptMembership.selector, 0);
+    }
+
     // ----- requireAuthorized -----
 
     function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, UASig calldata auth) external view {
@@ -629,7 +638,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// accounts.md §1.9 `msig` row, a transaction authorization (the portable one: `UARegistryLib._msig`): strictly increasing
     /// member indexes, stop at the threshold (a MemberSig after it fails, which keeps the registration bound sound),
     /// `member_digest = keccak256(ua ‖ ua_msg)`; native members sign `UAAuth` (CTR-UA-24, CTR-MTX-14), derived members
-    /// sign `member_digest` under `member`. (The members come typed, TS-D12: no encoding to canonicalise.)
+    /// sign `member_digest` under `member`. (The members come typed, TS-D12: no encoding to canonicalise.) Only an accepted
+    /// slot counts (CTR-UA-37): a good signature of a slot that only is listed fails.
     function _msig(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory d, MemberSig[] memory sigs)
         private
         view
@@ -637,11 +647,12 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     {
         bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purposeTag, digest));
         (uint256 threshold, uint256 count) = (UAStore.u16(d, 0), UAStore.u16(d, 2));
+        uint256 accepted = _s.accepted[ua]; // CTR-UA-37: one slot, never `pop`
         uint256 acc;
         uint256 next; // lowest index the next MemberSig may use
         for (uint256 i; i < sigs.length; ++i) {
             MemberSig memory s = sigs[i];
-            if (acc >= threshold || s.index < next || s.index >= count) return false;
+            if (acc >= threshold || s.index < next || s.index >= count || accepted >> s.index & 1 == 0) return false;
             next = uint256(s.index) + 1;
             if (!_memberOk(d, md, s)) return false;
             acc += UAStore.u16(d, 4 + 36 * uint256(s.index) + 34);

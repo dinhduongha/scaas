@@ -50,6 +50,9 @@ library UAStore {
         /// another set's length, never provable here), kept so `registrationOf` still returns the `register` arguments.
         mapping(bytes32 ua => address) regPqzKey;
         mapping(bytes32 ua => bytes32) regPqzPopHash;
+        /// 15. CTR-UA-37: an `msig`'s accepted slots, bit `i` = member slot `i`: the slots of its `pop`, written at
+        /// registration, then `acceptMembership`. It lives with the record (gen 2 reads gen 1's).
+        mapping(bytes32 ua => uint256) accepted;
     }
 
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;

@@ -347,4 +347,23 @@ abstract contract UARegistryBase is Test {
     function _msigAuth(bytes memory d, IUARegistry.MemberSig[] memory sigs) internal pure returns (bytes memory) {
         return abi.encode(d, abi.encode(sigs));
     }
+
+    // ----- acceptance (CTR-UA-37) -----
+
+    /// What a derived member signs under `member` to accept its slot.
+    function _membershipMd(bytes32 ua, bytes32 member) internal pure returns (bytes32) {
+        return _memberDigest(ua, UAKinds.PURPOSE_MEMBERSHIP, UAKinds.membershipDigest(ua, member));
+    }
+
+    /// The acceptance of the EOA of `pk` in the structure `d`.
+    function _acceptEoaSig(bytes memory d, uint256 pk) internal pure returns (IUARegistry.MemberSig memory) {
+        (bytes32 ua, bytes32 id) = (UAKinds.uaOf(UAKinds.MSIG, d), _pad(vm.addr(pk)));
+        return IUARegistry.MemberSig(_indexOf(d, id), "", _ecdsa(pk, UAKinds.membershipDigest(ua, id)));
+    }
+
+    /// The acceptance of the registered `key` of `kind` in the structure `d` (the stand-in verifier's signature).
+    function _acceptKeySig(bytes memory d, uint16 kind, bytes memory key) internal pure returns (IUARegistry.MemberSig memory) {
+        (bytes32 ua, bytes32 id) = (UAKinds.uaOf(UAKinds.MSIG, d), UAKinds.uaOf(kind, key));
+        return IUARegistry.MemberSig(_indexOf(d, id), "", _sig(key, UAKinds.uaMessage(kind, UAKinds.PURPOSE_MEMBER, _membershipMd(ua, id))));
+    }
 }

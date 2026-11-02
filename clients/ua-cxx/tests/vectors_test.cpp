@@ -87,7 +87,7 @@ static void table_groups_purposes_constants() {
         CHECK(hx(*groupTag(g)) == r["GROUP"].get<std::string>(), g);
     }
     CHECK(!groupTag("nope") && !groupTagString("nope"), "unknown group");
-    CHECK(k["purposes"].size() == 14, "purposes size");  // 13 purposes, `pop` has v1 and v2
+    CHECK(k["purposes"].size() == 15, "purposes size");  // 14 purposes, `pop` has v1 and v2
     for (auto& r : k["purposes"]) {
         CHECK(hx(purposeTag(r["purpose"], r["version"].get<uint32_t>())) == r["purposeTag"].get<std::string>(), r["purpose"].get<std::string>());
         if (r["version"] == 1) CHECK(hx(purposeTag(r["purpose"])) == r["purposeTag"].get<std::string>(), r["purpose"].get<std::string>());
@@ -327,6 +327,19 @@ static void pqz_key_record() {
     CHECK(n == int(p["pqzKeyRecords"].size()) && msigRows, "pqzKeyRecords counts");
 }
 
+static void membership_rows() {
+    json p = load("portable.json");
+    CHECK(p["memberships"].size() == 6, "memberships");
+    for (auto& r : p["memberships"]) {
+        Bytes u = bytes(r["ua"]);
+        Bytes d = membershipDigest(u, bytes(r["member"]));
+        CHECK(d == bytes(r["digest"]), "membership digest");
+        Bytes m = uaMessage(0x0120, purposeTag("membership"), d);
+        CHECK(m == bytes(r["message"]), "membership message");
+        CHECK(memberDigest(u, m) == bytes(r["memberDigest"]), "membership memberDigest");
+    }
+}
+
 static void portable_purposes() {
     json p = load("portable.json");
     CHECK(isPortablePurpose(purposeTag("pop", 2)) && isPortablePurpose(purposeTag("kem")) && isPortablePurpose(purposeTag("pqz-key")), "portable");
@@ -507,7 +520,7 @@ int main(int argc, char** argv) {
         {"table_groups_purposes_constants", table_groups_purposes_constants}, {"valid_rows", valid_rows},
         {"invalid_rows", invalid_rows}, {"natives_native_space_canonical_ids", natives_native_space_canonical_ids},
         {"messages", messages}, {"structures", structures}, {"portable", portable}, {"kem_record", kem_record},
-        {"pqz_key_record", pqz_key_record}, {"portable_purposes", portable_purposes},
+        {"pqz_key_record", pqz_key_record}, {"membership_rows", membership_rows}, {"portable_purposes", portable_purposes},
         {"holder_refusals", holder_refusals}, {"registration_args", registration_args}, {"set_key_args", set_key_args}};
     if (argc != 2 || !tests.count(argv[1])) { std::fprintf(stderr, "usage: vectors_test <name>\n"); return 2; }
     try { tests[argv[1]](); } catch (const std::exception& e) { std::fprintf(stderr, "exception: %s\n", e.what()); return 1; }

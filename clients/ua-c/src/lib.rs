@@ -632,6 +632,13 @@ pub extern "C" fn scaas_ua_pqz_key_record_digest(
     run(|| put(out32.cast(), ua::ua8::pqz_key_record_digest(arr(ua32)?, arr(pqz_key_hash32)?, arr(pqz_pop_hash32)?)))
 }
 
+/// The typed `UAMembership{ua, member}` digest: what `member` signs to accept its slot in the `msig` `ua` (CTR-UA-37): a native
+/// member this digest itself, a derived member `member_digest(ua, ua_message(MSIG, PURPOSE_MEMBERSHIP, ·))` under `member`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_membership_digest(ua32: *const u8, member32: *const u8, out32: *mut u8) -> ScaasUaStatus {
+    run(|| put(out32.cast(), ua::ua8::membership_digest(arr(ua32)?, arr(member32)?)))
+}
+
 /// The PQZ key record of `setPqzKey` (ruling A1-I1), as `scaas_ua_pqz_key_record_message` writes it. `message` is what the UA
 /// signs, `pqz_reg_message` what the key's `R_REG` proves over; `member_digest` as in `ScaasUaHolderPop`.
 #[repr(C)]

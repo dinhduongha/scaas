@@ -221,6 +221,16 @@ TestCase {
         compare(UaKinds.chainKeyHash(1099511627783), "0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950")
     }
 
+    function test_membershipRows() {
+        const rows = vectors.load("portable.json").memberships
+        compare(rows.length, 6)
+        for (const r of rows) {
+            compare(UaKinds.membershipDigest(r.ua, r.member), r.digest, r.name)
+            compare(UaKinds.uaMessage(0x0120, UaKinds.purposeTag("membership"), r.digest), r.message, r.name)
+            compare(UaKinds.memberDigest(r.ua, r.message), r.memberDigest, r.name)
+        }
+    }
+
     function test_portablePurposes() {
         const pp = vectors.load("portable.json")
         verify(UaKinds.isPortablePurpose(pp.tags.PURPOSE_POP_V2.hash) && UaKinds.isPortablePurpose(pp.tags.PURPOSE_KEM.hash)

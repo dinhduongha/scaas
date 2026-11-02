@@ -1133,6 +1133,13 @@ contract UARegistryPreSplit is IUARegistry, SaltedEIP712 {
 
     // ----- requireAuthorized -----
 
+    /// CTR-UA-37 came after the split: this reference has no acceptance, only the interface's two names.
+    function acceptMembership(bytes32 ua, MemberSig calldata) external pure {
+        revert UAUnauthorized(ua);
+    }
+
+    function memberAccepted(bytes32, uint256) external pure returns (bool) {}
+
     function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, UASig calldata auth) external view {
         if (!_authorized(ua, purposeTag, digest, auth)) revert UAUnauthorized(ua);
     }

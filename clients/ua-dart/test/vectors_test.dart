@@ -296,6 +296,18 @@ void main() {
 
   // TS-D1: the domain separator and the five typehashes pinned and re-derived; every row's typedData (the JSON
   // eth_signTypedData_v4 signs) hashes to its digest and its message carries the row's words (kind included).
+  test('membership rows', () {
+    final rows = (p['memberships'] as List).cast<Map>();
+    expect(rows.length, 6);
+    for (final r in rows) {
+      final d = membershipDigest(_b(r['ua']), _b(r['member']));
+      expect(_hx(d), r['digest']);
+      final m = uaMessage(0x0120, purposeTag('membership'), d);
+      expect(_hx(m), r['message']);
+      expect(_hx(memberDigest(_b(r['ua']), m)), r['memberDigest']);
+    }
+  });
+
   test('portable typed', () {
     final ty = p['typed'] as Map, dom = ty['domain'] as Map, types = ty['types'] as Map;
     const ds = '0x9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1';
@@ -310,6 +322,7 @@ void main() {
       'UARegistration': '0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e',
       'UAPqzKey': '0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00',
       'UAPqzKeyRecord': '0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567',
+      'UAMembership': '0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4',
     };
     expect([types.length, portableTypes.length], [pinned.length, pinned.length]);
     pinned.forEach((name, th) {

@@ -129,6 +129,7 @@ Bytes pqzRegMessage(uint16_t kind, const Bytes& ua, const Bytes& key, const std:
     return call([&] { return bytes(ffi::pqz_reg_message(kind, sl(ua), sl(key), sl(orNone(kemPk)))); });
 }
 Bytes pqzKeyDigest(const Bytes& ua, const Bytes& pqzKeyHash) { return call([&] { return bytes(ffi::pqz_key_digest(sl(ua), sl(pqzKeyHash))); }); }
+Bytes membershipDigest(const Bytes& ua, const Bytes& member) { return call([&] { return bytes(ffi::membership_digest(sl(ua), sl(member))); }); }
 Bytes pqzKeyRecordDigest(const Bytes& ua, const Bytes& pqzKeyHash, const Bytes& pqzPopHash) {
     return call([&] { return bytes(ffi::pqz_key_record_digest(sl(ua), sl(pqzKeyHash), sl(pqzPopHash))); });
 }

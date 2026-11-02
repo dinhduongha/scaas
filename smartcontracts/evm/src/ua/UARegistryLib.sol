@@ -34,7 +34,8 @@ library UARegistryLib {
     ///         member's `pop`, so the figure does not depend on how the member registered), the call or the gen-1
     ///         hand-off, cold accounts (measured worst, cold under `--isolate`: 28,544 for a member handed to gen 1,
     ///         21,224 for a derived member here), plus what the caller must hold for the largest cap (400 k / 63 + 5 k):
-    ///         39,893, rounded up (35,000 before CTR-UA-33: 19,987 + 11,349 = 31,336). Also added in `_membersWorst`:
+    ///         39,893, rounded up (35,000 before CTR-UA-33: 19,987 + 11,349 = 31,336). CTR-UA-37's one cold read of the
+    ///         accepted bits, once per authorization, is inside this figure, not a term of its own. Also added in `_membersWorst`:
     ///         `(held - 400 k) / 63` for the largest held member cap above 400 k, and for each member gen 2 hands to gen 1 the hold gen 2 keeps
     ///         around that call (the member counts `cap + cap / 63 + SigCheck.GAS_MARGIN`; gen 1 holds again
     ///         inside). `UAGas.t.sol` `test_T_GAS_msigAtBudget` authorizes msigs
@@ -199,6 +200,14 @@ library UARegistryLib {
         _consent(kind, d, ua, attrs, sig, members, pqzPop); // 5–7
         bytes memory pop = members.length != 0 ? abi.encode(members) : sig;
         _record(ua, kind, d, kh, attrs, pop); // 8
+        // CTR-UA-37: a slot that signed the `pop` agreed; an empty `pop` writes nothing
+        if (members.length != 0) {
+            uint256 bits;
+            for (uint256 i; i < members.length; ++i) {
+                bits |= 1 << members[i].index;
+            }
+            s.accepted[ua] = bits;
+        }
         (uint8 q, uint8 k) = (UAStore.checked(s.pqzKey[ua].proven), UAStore.checked(s.kem[ua][0].length != 0));
         emit IUARegistry.UARegistered(ua, kind, d, attrs, keccak256(pop), pqzPop, UAKinds.CHECKED_CHAIN, q, k);
     }
@@ -531,6 +540,27 @@ library UARegistryLib {
         emit IUARegistry.UAKemKeySet(ua, version, keccak256(kemPk), kem, stored);
     }
 
+    // ----- acceptance (CTR-UA-37) -----
+
+    /// Slot `memberSig.index` of the `msig` `ua` accepts its place (`IUARegistry.acceptMembership`): the check of a stored
+    /// record's member (`_memberOk`) over typed(`UAMembership{ua, member}`), no threshold, no minimal form: one slot speaks
+    /// for itself. A gen-1 record on gen 2 is refused here as in `setKemKey` (UA8-D11): the bits live with the record, gen 1.
+    function acceptMembership(bytes32 ua, IUARegistry.MemberSig calldata memberSig) external {
+        UAStore.Layout storage s = UAStore.layout();
+        if (s.records[ua].kind != UAKinds.MSIG) revert IUARegistry.UAUnauthorized(ua);
+        bytes memory d = UAStore.keyRest(ua);
+        uint16 index = memberSig.index;
+        if (index >= UAStore.u16(d, 2)) revert IUARegistry.UAUnauthorized(ua);
+        uint256 bits = s.accepted[ua];
+        if (bits >> index & 1 != 0) return;
+        bytes32 member = bytes32(UAStore.word(d, 4 + 36 * uint256(index) + 2));
+        bytes32 typed = UAKinds.membershipDigest(ua, member);
+        bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBERSHIP, typed));
+        if (!_memberOk(d, md, typed, memberSig)) revert IUARegistry.UAUnauthorized(ua);
+        s.accepted[ua] = bits | 1 << index;
+        emit IUARegistry.UAMembershipAccepted(ua, index, member);
+    }
+
     /// Empty -> `UAKemKeyLength`; scheme id (first byte) not enabled -> `UAKemScheme`; other length -> `UAKemKeyLength`.
     function _checkKemPk(bytes memory pk) private pure {
         if (pk.length == 0) revert IUARegistry.UAKemKeyLength(0);
@@ -592,6 +622,8 @@ library UARegistryLib {
     /// sign `member_digest` under `member`. (The members come typed, TS-D12: no encoding to canonicalise.) A stored signature
     /// is minimal too (owner 2026-10-31, U8S-D1): with T the slots' total weight and N the threshold, T >= N and
     /// T - weight(i) < N for every slot, i.e. T - min(weight) < N.
+    /// Only an accepted slot counts (CTR-UA-37), except in the registration's own `pop`, which is what accepts its signers;
+    /// the view, not the slot: a gen 2 that hosts a gen-1 record (`setPqzKey`) reads gen 1's bits, which live with the record.
     function _msig(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory d, IUARegistry.MemberSig[] memory sigs)
         private
         view
@@ -605,6 +637,7 @@ library UARegistryLib {
         for (uint256 i; i < sigs.length; ++i) {
             IUARegistry.MemberSig memory s = sigs[i];
             if (acc >= threshold || s.index < next || s.index >= count) return false;
+            if (purposeTag != UAKinds.PURPOSE_POP_V2 && !IUARegistry(address(this)).memberAccepted(ua, s.index)) return false;
             next = uint256(s.index) + 1;
             if (!_memberOk(d, md, digest, s)) return false;
             uint256 w = UAStore.u16(d, 4 + 36 * uint256(s.index) + 34);

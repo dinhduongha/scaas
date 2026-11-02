@@ -80,7 +80,7 @@ var Groups = []string{"p256", "ed25519", "secp256k1", "bn254-g1", "bls12381-g1",
 	"mldsa65", "fndsa512", "slhdsa128s", "pqz-mlwe"}
 
 var Purposes = []string{"pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop",
-	"receiver-fee", "vp", "vc-anchor", "trade", "kem", "pqz-key"}
+	"receiver-fee", "vp", "vc-anchor", "trade", "kem", "pqz-key", "membership"}
 
 const (
 	DomainType   = "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
@@ -300,6 +300,7 @@ var (
 	PopV2Tag, _      = PurposeTagV("pop", 2)
 	kemPurpose, _    = PurposeTag("kem")
 	pqzKeyPurpose, _ = PurposeTag("pqz-key")
+	membershipPurpose, _ = PurposeTag("membership")
 )
 
 // KemSchemeMlkem1024X25519 is kemPk[0] of the one enabled KEM scheme (CTR-UA-32); 2 (ML-KEM-1024 + HQC + X25519, after
@@ -336,6 +337,7 @@ var (
 		"UARegistration":   "UARegistration(UAPortableRecord record,bytes32 pqzPopHash)" + kemType + recordType,
 		"UAPqzKey":         pqzKeyType,
 		"UAPqzKeyRecord":   "UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)" + pqzKeyType,
+		"UAMembership":     "UAMembership(bytes32 ua,bytes32 member)",
 	}
 )
 
@@ -560,6 +562,12 @@ func PqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash [32]byte) [32]byte {
 	return typed(HashStruct("UAPqzKeyRecord", HashStruct("UAPqzKey", ua, pqzKeyHash), pqzPopHash))
 }
 
+// MembershipDigest is the typed UAMembership{ua, member}: what member signs to accept its slot in the msig ua (CTR-UA-37): a
+// native member this digest itself, a derived member MemberDigest(ua, UAMessage(MSIG, PURPOSE_MEMBERSHIP, ·)) under member.
+func MembershipDigest(ua, member [32]byte) [32]byte {
+	return typed(HashStruct("UAMembership", ua, member))
+}
+
 // PqzKeyRecord is the PQZ key record of setPqzKey (ruling A1-I1), see PqzKeyRecordMessage. Message is what the UA signs,
 // PqzRegMessage what the key's R_REG proves over.
 type PqzKeyRecord struct {
@@ -605,11 +613,11 @@ func PqzKeyRecordMessage(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzP
 	return r, nil
 }
 
-// IsPortablePurpose: POP_V2, KEM, PQZ_KEY are the only purposes where a code-less native msig member signs the record's typed
+// IsPortablePurpose: POP_V2, KEM, PQZ_KEY, MEMBERSHIP are the only purposes where a code-less native msig member signs the record's typed
 // digest itself (eth_signTypedData_v4, 65-byte r ‖ s ‖ v; a contract member answers ERC-1271 over it; TS-D4); every other
 // purpose stays UAAuth (CTR-MTX-14).
 func IsPortablePurpose(tag [32]byte) bool {
-	return tag == PopV2Tag || tag == kemPurpose || tag == pqzKeyPurpose
+	return tag == PopV2Tag || tag == kemPurpose || tag == pqzKeyPurpose || tag == membershipPurpose
 }
 
 // Domain is the registry's EIP-712 domain ("SCaaS UARegistry", "<generation>", chainId, registry, salt = chainUid).

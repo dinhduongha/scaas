@@ -272,6 +272,7 @@ public class VectorTests
             ["UARegistration"] = "0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e",
             ["UAPqzKey"] = "0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00",
             ["UAPqzKeyRecord"] = "0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567",
+            ["UAMembership"] = "0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4",
         };
         Assert.Equal(pinned.Count, ty.GetProperty("types").EnumerateObject().Count());
         Assert.Equal(pinned.Count, UA.PortableTypes.Count);
@@ -336,6 +337,22 @@ public class VectorTests
             n++;
         }
         Assert.Equal(p.GetProperty("registrations").GetArrayLength() + p.GetProperty("kemRecords").GetArrayLength() + p.GetProperty("pqzKeyRecords").GetArrayLength(), n);
+    }
+
+    [Fact]
+    public void MembershipRows()
+    {
+        var rows = Load("portable.json").GetProperty("memberships");
+        Assert.Equal(6, rows.GetArrayLength());
+        foreach (var r in rows.EnumerateArray())
+        {
+            var ua = B(r.GetProperty("ua"));
+            var d = UA.MembershipDigest(ua, B(r.GetProperty("member")));
+            Assert.Equal(r.GetProperty("digest").GetString(), Hx(d));
+            var m = UA.UAMessage(0x0120, UA.PurposeTag("membership"), d);
+            Assert.Equal(r.GetProperty("message").GetString(), Hx(m));
+            Assert.Equal(r.GetProperty("memberDigest").GetString(), Hx(UA.MemberDigest(ua, m)));
+        }
     }
 
     [Fact]

@@ -141,6 +141,15 @@ const pqzKeyRecord = (s, set, signerOf = s) => {
     args: { ua: reg.ua, pqzKey: hex(pqzKey), pqzPopHash: hex(m.pqzPopHash), sig: ua.uaSig(list ? { members: list } : { signature: sig }) } };
 };
 const pqzKeyRecords = [fn, nativeMsig].flatMap((s) => SETS.map((set) => pqzKeyRecord(s, set)));
+// --- acceptMembership(ua, MemberSig{index, "", sig}) (CTR-UA-37): each member of two structures; digest = typed(UAMembership{ua,
+// member}), a native member over it, a derived member over uaMessage(memberKind, member, memberDigest) ---
+const membership = (s, m) => {
+  const r = ua.membershipMessage({ ua: s.ua, member: m.ua });
+  const sig = ua.isNativeKind(m.kind) ? ecdsa(nativeSk, r.digest) : m.sign(ua.uaMessage(m.kind, MEMBER, r.memberDigest));
+  return { name: `${s.name}/${m.index}`, msig: s.name, ua: hex(s.ua), index: m.index, member: hex(m.ua), memberKind: m.kind, digest: hex(r.digest),
+    message: hex(r.message), memberDigest: hex(r.memberDigest), sig: hex(sig), typedData: r.typedData };
+};
+const memberships = [classicalMsig, nativeMsig].flatMap((s) => s.members.map((m) => membership(s, m)));
 /** A valid signature of `s` over the PQZ key record (ua of s, the fndsa512 row's key and proof hash), for the setPqzKey negatives. */
 const recordSigBy = (s, r) => s.sign(ua.uaMessage(s.kind, ua.PQZ_KEY_TAG,
   ua.pqzKeyRecordDigest({ ua: s.ua, pqzKeyHash: r.pqzKeyHash, pqzPopHash: r.pqzPopHash })));
@@ -253,6 +262,10 @@ const note = [
   + 'is refused (native-member-personal-sign). Only for PURPOSE_POP_V2, PURPOSE_KEM and PURPOSE_PQZ_KEY; every other purpose '
   + 'stays UAAuth (chain-bound EIP-712: CTR-MTX-14). A contract member answers ERC-1271 isValidSignature(typedDigest, sig) on '
   + 'each chain: portable only where that wallet exists with the same behaviour.',
+  'Acceptance (CTR-UA-37): memberships[i] = acceptMembership(ua, MemberSig{index, 0x, sig}) of the member at slot index of the msig '
+  + 'row msig: digest = typed(UAMembership{ua, member}), message = ua_msg(0x0120, PURPOSE_MEMBERSHIP, digest), memberDigest = '
+  + 'keccak256(ua | message); a native member signs digest itself (ECDSA, or ERC-1271 over it), a derived member signs '
+  + 'ua_msg(memberKind, member, memberDigest) under member. The same signature on every registry; no nonce.',
   'Typed arguments (typed-signing R1, TS-D10 ... TS-D12; the byte fields above stay): registrations[i].args = the named '
   + 'arguments of register(kind, keyData, attrs, pop, pqzPop) (a single key) or registerMsig(structure, attrs, pop, pqzPop) (an msig: '
   + 'structure = {threshold, members: [{kind, id, weight}]} assembled by the registry to keyData, pop = [{index, keyData, sig}] stored '
@@ -287,8 +300,9 @@ const build = () => ({
   note, version: 2,
   typed: typedSection,
   tags: { PURPOSE_POP_V2: tag('scaas.ua.purpose.pop.v2'), PURPOSE_KEM: tag('scaas.ua.purpose.kem.v1'),
-    PURPOSE_PQZ_KEY: tag('scaas.ua.purpose.pqz-key.v1'), PQZ_KEY_GROUP: tag('scaas.ua.group.pqz-mlwe.v1') },
-  checked: ua.CHECKED, kemScheme: ua.KEM_SCHEME.mlkem1024X25519, kemPkLength: ua.KEM_PK_LENGTH, sets: PQZ_SETS, registrations, kemRecords, pqzKeyRecords, negatives,
+    PURPOSE_PQZ_KEY: tag('scaas.ua.purpose.pqz-key.v1'), PURPOSE_MEMBERSHIP: tag('scaas.ua.purpose.membership.v1'),
+    PQZ_KEY_GROUP: tag('scaas.ua.group.pqz-mlwe.v1') },
+  checked: ua.CHECKED, kemScheme: ua.KEM_SCHEME.mlkem1024X25519, kemPkLength: ua.KEM_PK_LENGTH, sets: PQZ_SETS, registrations, kemRecords, pqzKeyRecords, memberships, negatives,
 });
 
 /** portable.json's exact text. */
@@ -299,5 +313,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'portable.json'), portableJson());
   console.log(`portable.json: ${registrations.length} registrations, ${kemRecords.length} KEM records, ${pqzKeyRecords.length} PQZ key `
-    + `records, ${negatives.length} negatives; written to ${out}`);
+    + `records, ${memberships.length} memberships, ${negatives.length} negatives; written to ${out}`);
 }

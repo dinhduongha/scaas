@@ -89,7 +89,10 @@ pub mod qobject {
         /// `UAMessage(kind, PURPOSE_PQZ_KEY, ·)` (and a native `msig` member signs itself, TS-D4).
         #[qinvokable] #[cxx_name = "pqzKeyRecordDigest"]
         fn pqz_key_record_digest(self: Pin<&mut Self>, ua: &QString, pqz_key_hash: &QString, pqz_pop_hash: &QString) -> QString;
-        /// True for the three portable purposes (POP_V2, KEM, PQZ_KEY), where a native `msig` member signs the record's typed
+        /// typed `UAMembership{ua, member}`: what `member` signs to accept its slot in the `msig` `ua` (CTR-UA-37).
+        #[qinvokable] #[cxx_name = "membershipDigest"]
+        fn membership_digest(self: Pin<&mut Self>, ua: &QString, member: &QString) -> QString;
+        /// True for the portable purposes (POP_V2, KEM, PQZ_KEY, MEMBERSHIP), where a native `msig` member signs the record's typed
         /// digest itself (TS-D4); false (see `lastError`) for a tag that is not 32 bytes.
         #[qinvokable] #[cxx_name = "isPortablePurpose"]
         fn is_portable_purpose(self: Pin<&mut Self>, tag: &QString) -> bool;
@@ -362,6 +365,9 @@ impl qobject::UaKinds {
     }
     pub fn pqz_key_record_digest(self: Pin<&mut Self>, ua: &QString, pqz_key_hash: &QString, pqz_pop_hash: &QString) -> QString {
         self.hex(|| Ok(ua::ua8::pqz_key_record_digest(&fixed(ua)?, &fixed(pqz_key_hash)?, &fixed(pqz_pop_hash)?).to_vec()))
+    }
+    pub fn membership_digest(self: Pin<&mut Self>, ua: &QString, member: &QString) -> QString {
+        self.hex(|| Ok(ua::ua8::membership_digest(&fixed(ua)?, &fixed(member)?).to_vec()))
     }
     pub fn is_portable_purpose(self: Pin<&mut Self>, tag: &QString) -> bool {
         self.run(|| Ok(ua::ua8::is_portable_purpose(&fixed(tag)?)))
