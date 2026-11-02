@@ -1,7 +1,6 @@
-# ua-rs-json at commit e1e3d06b
-    Checking scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.62s
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+# ua-rs-json at commit ca2d7b41
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
      Running unittests src/lib.rs (target/debug/deps/scaas_ua-30dcfeb20d2b2260)
 
 running 2 tests
@@ -15,7 +14,7 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 1 test
 test dalek_verify_strict_matches_every_case ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
 
      Running tests/groups_verify.rs (target/debug/deps/groups_verify-224e8687eec2dfd1)
 
@@ -25,7 +24,7 @@ test official_sections ... ok
 test group_negatives_refused ... ok
 test groups_register_and_sign ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
 
      Running tests/json.rs (target/debug/deps/json-4707ec714c3db292)
 
@@ -50,7 +49,7 @@ running 2 tests
 test algorand_vectors ... ok
 test near_vectors ... ok
 
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
      Running tests/signatures.rs (target/debug/deps/signatures-95bf41c0e1a5ed73)
 
@@ -62,28 +61,29 @@ test msig_sets ... ok
 test derived_positives_verify ... ok
 test derived_negatives_refused ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.68s
 
      Running tests/ua8.rs (target/debug/deps/ua8-f32409f36352724a)
 
-running 15 tests
+running 16 tests
 test malformed_msig_key_data ... ok
-test kem_record_vectors ... ok
 test domain_separator_pinned ... ok
-test portable_typehashes_pinned ... ok
 test native_member_typed_digest ... ok
-test kem_repair_fills_a_front_run_commit ... ok
-test registration_args_typed_keys ... ok
-test registration_hash_commit_when_over_limit ... ok
-test tags ... ok
+test kem_record_vectors ... ok
 test portable_rows_typed ... ok
+test registration_args_typed_keys ... ok
+test kem_repair_fills_a_front_run_commit ... ok
+test registration_hash_commit_when_over_limit ... ok
+test membership_rows ... ok
+test tags ... ok
+test portable_typehashes_pinned ... ok
 test registration_refuses_malformed_kem ... ok
 test pqz_key_record_vectors ... ok
-test negatives_refused ... ok
-test registration_args_typed ... ok
 test portable_vectors ... ok
+test registration_args_typed ... ok
+test negatives_refused ... ok
 
-test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
 
      Running tests/vectors.rs (target/debug/deps/vectors-d4f5b65acd95c14f)
 

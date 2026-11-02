@@ -1,13 +1,7 @@
-# ua-c at commit e1e3d06b
-    Checking scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
-    Checking scaas-ua-c v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-c)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.48s
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
-   Compiling scaas-ua-c v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-c)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.73s
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
-   Compiling scaas-ua-c v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-c)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.77s
+# ua-c at commit ca2d7b41
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.12s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.09s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
      Running unittests src/lib.rs (target/debug/deps/scaas_ua_c-09031a74662c0069)
 
 running 0 tests
@@ -19,7 +13,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 1 test
 test header_matches_src ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
 
 smoke ok
 test_buffer_too_small (tests.test_vectors.Abi.test_buffer_too_small)
@@ -32,6 +26,7 @@ test_null_arguments (tests.test_vectors.Abi.test_null_arguments) ... ok
 test_holder_refusals (tests.test_vectors.Vectors.test_holder_refusals) ... ok
 test_invalid_rows (tests.test_vectors.Vectors.test_invalid_rows) ... ok
 test_kem_record (tests.test_vectors.Vectors.test_kem_record) ... ok
+test_membership_rows (tests.test_vectors.Vectors.test_membership_rows) ... ok
 test_messages (tests.test_vectors.Vectors.test_messages) ... ok
 test_natives_native_space_canonical_ids (tests.test_vectors.Vectors.test_natives_native_space_canonical_ids) ... ok
 test_portable (tests.test_vectors.Vectors.test_portable) ... ok
@@ -44,7 +39,7 @@ test_table_groups_purposes_constants (tests.test_vectors.Vectors.test_table_grou
 test_valid_rows (tests.test_vectors.Vectors.test_valid_rows) ... ok
 
 ----------------------------------------------------------------------
-Ran 18 tests in 2.110s
+Ran 19 tests in 2.127s
 
 OK
 rc=0

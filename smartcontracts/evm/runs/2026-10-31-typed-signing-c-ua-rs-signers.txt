@@ -1,6 +1,5 @@
-# ua-rs-signers at commit e1e3d06b
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.10s
+# ua-rs-signers at commit ca2d7b41
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
      Running unittests src/lib.rs (target/debug/deps/scaas_ua-b6f229682a55de26)
 
 running 2 tests
@@ -29,7 +28,7 @@ test bip327_sign_and_verify ... ok
 test signers_refuse_malformed_input ... ok
 test groups_json_regenerates_byte_for_byte ... ok
 
-test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 6.57s
+test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 6.16s
 
      Running tests/groups_verify.rs (target/debug/deps/groups_verify-062e3f5ceebacdf8)
 
@@ -39,7 +38,7 @@ test official_sections ... ok
 test group_negatives_refused ... ok
 test groups_register_and_sign ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
 
      Running tests/metatx.rs (target/debug/deps/metatx-b403a62ffb21d59f)
 
@@ -67,28 +66,29 @@ test msig_sets ... ok
 test derived_positives_verify ... ok
 test derived_negatives_refused ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.68s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s
 
      Running tests/ua8.rs (target/debug/deps/ua8-d4ac34e3d94ef468)
 
-running 15 tests
+running 16 tests
 test malformed_msig_key_data ... ok
 test kem_repair_fills_a_front_run_commit ... ok
-test kem_record_vectors ... ok
-test domain_separator_pinned ... ok
-test registration_args_typed_keys ... ok
+test membership_rows ... ok
 test native_member_typed_digest ... ok
-test registration_hash_commit_when_over_limit ... ok
 test portable_rows_typed ... ok
-test portable_typehashes_pinned ... ok
+test registration_args_typed_keys ... ok
+test domain_separator_pinned ... ok
+test registration_hash_commit_when_over_limit ... ok
+test kem_record_vectors ... ok
 test tags ... ok
+test portable_typehashes_pinned ... ok
 test registration_refuses_malformed_kem ... ok
 test pqz_key_record_vectors ... ok
-test portable_vectors ... ok
 test negatives_refused ... ok
+test portable_vectors ... ok
 test registration_args_typed ... ok
 
-test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
 
      Running tests/vectors.rs (target/debug/deps/vectors-4e5c4f9d1bfcbf35)
 

@@ -1,6 +1,5 @@
-# ua-rs at commit e1e3d06b
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.23s
+# ua-rs at commit ca2d7b41
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s
      Running unittests src/lib.rs (target/debug/deps/scaas_ua-e94670f462f34927)
 
 running 2 tests
@@ -24,7 +23,7 @@ test official_sections ... ok
 test group_negatives_refused ... ok
 test groups_register_and_sign ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
 
      Running tests/metatx.rs (target/debug/deps/metatx-5a69b0f06c5f8837)
 
@@ -52,19 +51,20 @@ test msig_sets ... ok
 test derived_positives_verify ... ok
 test derived_negatives_refused ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.68s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s
 
      Running tests/ua8.rs (target/debug/deps/ua8-6433b6ec445a999d)
 
-running 15 tests
+running 16 tests
 test malformed_msig_key_data ... ok
+test membership_rows ... ok
 test domain_separator_pinned ... ok
 test kem_repair_fills_a_front_run_commit ... ok
 test portable_rows_typed ... ok
-test registration_args_typed_keys ... ok
 test kem_record_vectors ... ok
-test native_member_typed_digest ... ok
+test registration_args_typed_keys ... ok
 test registration_hash_commit_when_over_limit ... ok
+test native_member_typed_digest ... ok
 test portable_typehashes_pinned ... ok
 test tags ... ok
 test registration_refuses_malformed_kem ... ok
@@ -73,19 +73,19 @@ test portable_vectors ... ok
 test negatives_refused ... ok
 test registration_args_typed ... ok
 
-test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
 
      Running tests/vectors.rs (target/debug/deps/vectors-35e97f9ce83d64ab)
 
 running 6 tests
+test table_groups_purposes_constants ... ok
 test natives_native_space_canonical_ids ... ok
 test messages ... ok
-test table_groups_purposes_constants ... ok
 test valid_rows ... ok
 test invalid_rows ... ok
 test structures ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
    Doc-tests scaas_ua
 

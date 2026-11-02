@@ -1,4 +1,4 @@
-# ua-dart-frb at commit e1e3d06b
+# ua-dart-frb at commit ca2d7b41
 Resolving dependencies...
 Downloading packages...
   _fe_analyzer_shared 85.0.0 (111.0.0 available)
@@ -19,9 +19,7 @@ Downloading packages...
 Got dependencies!
 15 packages have newer versions incompatible with dependency constraints.
 Try `dart pub outdated` for more information.
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
-   Compiling scaas_ua_frb v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-dart-frb/rust)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.01s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.29s
 00:00 [32m+0[0m: [1m[90mloading test/vectors_test.dart[0m[0m
 00:00 [32m+0[0m: test/vectors_test.dart: (setUpAll)[0m
 00:00 [32m+0[0m: test/vectors_test.dart: table, groups, purposes, constants[0m
@@ -34,10 +32,11 @@ Try `dart pub outdated` for more information.
 00:00 [32m+7[0m: test/vectors_test.dart: portable[0m
 00:00 [32m+8[0m: test/vectors_test.dart: kem record[0m
 00:00 [32m+9[0m: test/vectors_test.dart: pqz key record[0m
-00:00 [32m+10[0m: test/vectors_test.dart: portable purposes[0m
-00:00 [32m+11[0m: test/vectors_test.dart: holder refusals[0m
-00:00 [32m+12[0m: test/vectors_test.dart: registration args[0m
-00:01 [32m+13[0m: test/vectors_test.dart: set key args[0m
-00:01 [32m+14[0m: test/vectors_test.dart: (tearDownAll)[0m
-00:01 [32m+14[0m: All tests passed![0m
+00:00 [32m+10[0m: test/vectors_test.dart: membership rows[0m
+00:00 [32m+11[0m: test/vectors_test.dart: portable purposes[0m
+00:00 [32m+12[0m: test/vectors_test.dart: holder refusals[0m
+00:00 [32m+13[0m: test/vectors_test.dart: registration args[0m
+00:01 [32m+14[0m: test/vectors_test.dart: set key args[0m
+00:01 [32m+15[0m: test/vectors_test.dart: (tearDownAll)[0m
+00:01 [32m+15[0m: All tests passed![0m
 rc=0
