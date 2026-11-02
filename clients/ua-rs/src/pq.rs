@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Feature `pq`: the PQ kinds' verifiers for the off-chain check (`ua8::check_*`, UA8-D24, C14), independent of the JS
 //! generator (noble): `ml-dsa`, `slh-dsa`, `pqcrypto-falcon` (PQClean `falcon-padded-512`). ML-DSA and SLH-DSA verify `pq_msg =
 //! keccak256(TAG(kind) ‖ ua_msg)` with the empty context, Falcon `ua_msg` itself (CTR-UA-23). A kind whose crate disagrees

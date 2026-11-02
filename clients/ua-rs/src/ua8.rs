@@ -611,6 +611,11 @@ pub fn registration_args(i: &RegistrationInput) -> Result<Registration> {
     };
     let kem = KemKey::from_kem_pk(&i.kem_pk)?;
     let attrs = UAAttrs { pqz_key: i.pqz_key.clone(), pqz_pop_hash, kem: kem.clone(), kem_pk_hash: [0; 32] };
+    // every stored msig signature is minimal (owner 2026-10-31): the registry refuses any other set, so it is never built
+    let slots: Vec<u16> = i.members.iter().map(|m| m.index).collect();
+    if i.kind == 0x0120 && !slots.is_empty() && !msig_slots_minimal(&i.key_data, &slots)? {
+        return Err(UAError::Pop);
+    }
     let build = |attrs: UAAttrs| -> Result<RegisterArgs> {
         let (kind, pop, pqz_pop) = (i.kind, i.pop.clone(), i.pqz_pop.clone());
         Ok(match kind {
