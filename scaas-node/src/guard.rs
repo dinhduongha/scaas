@@ -860,7 +860,7 @@ mod tests {
             }
         }
         assert_eq!((sent, relayed, refused), (123, 6, 123), "the walk reached every row with an entry; the relay fees: submit.rs");
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 96, "table rows");
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 97, "table rows");
         // the wallet's flat builders (owner 2026-11-01): allowed on a bound contract, never on a registered token
         let wallet = Guard::new(&cfg, Default::default()).unwrap();
         let token = Guard::new(&cfg, Arc::new(RwLock::new(vec![Address::repeat_byte(0x77)]))).unwrap();

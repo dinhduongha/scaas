@@ -486,6 +486,8 @@ forge|forge|test_membershipGen2HostStarvedIsVerifyGas
 forge|forge|test_membershipStarvedMemberIsVerifyGas
 forge|forge|test_membershipVerifyReadsOneSlot
 forge|forge|test_membershipVectors
+forge|forge|test_membershipKindReadFromTheRecord
+forge|forge|test_membershipGen2HostCallCost
 forge|forge|test_namedUAMsigUnacceptedRefused
 clientkeys|node|acceptance (CTR-UA-37): every row by hand, the wallet JSON, the native signer, the purpose apart from the records
 ua-rs|cargo|membership_rows

@@ -944,6 +944,8 @@ existing `MetaTransaction` EIP-712 builder (address path, domain `("SCaaS PqzTok
 vectors (`smartcontracts/vectors/ua/kinds.json`) carry the `pqz-mlwe` scheme row (seed → pk, keyHash, `pqz_reg_message`). Protocol detail:
 [contracts/pq-zether](../contracts/pq-zero-knowledge.md). SPECIFIED.
 
+An `msig` member accepts its place with `membershipMessage({ ua, member })` (`digest` for a native member, `memberDigest` under `member` for a derived one), sent as `acceptMembership` by anyone ([CTR-UA-37](../contracts/accounts.md#CTR-UA-37)). Listing in `msigOf` is no consent: a client adds the weights of the slots where `memberAccepted` is true, shows the `msig` as not active below the threshold, and does not name it as a signer, party, role holder or payer until then. Below the threshold it can authorize nothing, for any purpose on any contract.
+
 ## 12. Zether balance reading
 
 <a id="zether-balance"></a>

@@ -9,6 +9,18 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UACall} from "./UACall.sol";
 import {MockWallet, UARegistryBase} from "./UARegistryBase.sol";
 
+/// The gas of one `memberAccepted` from a contract, the shape of `UARegistryLib._accepted` on a gen-2 host.
+contract AcceptedProbe {
+    function cost(UARegistry r, bytes32 ua, uint256 i) external view returns (uint256 cold, uint256 warm) {
+        uint256 g = gasleft();
+        r.memberAccepted(ua, i);
+        cold = g - gasleft();
+        g = gasleft();
+        r.memberAccepted(ua, i);
+        warm = g - gasleft();
+    }
+}
+
 /// CTR-UA-37 (owner 2026-11-02): listing in `msigOf` is no consent, `memberAccepted` is; only accepted slots count at verify.
 contract UARegistryMembershipTest is UARegistryBase {
     uint16 internal constant ML = 0x0131; // PQ, stored: an `msig` of these is PQ-eligible
@@ -362,6 +374,13 @@ contract UARegistryMembershipTest is UARegistryBase {
             r.acceptMembership(ua, s);
             assertEq(_bits(r, ua), 0);
         }
+        // the bound alone refuses: past the members the member check reads junk, so here it would pass if it were reached
+        vm.mockCall(address(r), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector), "");
+        s.index = 3;
+        vm.expectRevert(_unauthorized(ua));
+        r.acceptMembership(ua, s);
+        vm.clearMockedCalls();
+        assertEq(_bits(r, ua), 0);
         s.index = own;
         r.acceptMembership(ua, s);
     }
@@ -448,6 +467,23 @@ contract UARegistryMembershipTest is UARegistryBase {
             r.acceptMembership(ids[i], s);
             assertFalse(r.memberAccepted(ids[i], 0));
         }
+    }
+
+    /// The record's kind decides, not the bytes: an `msig` structure under a record of another kind is refused with a good
+    /// signature, and accepts once the record says `msig` again.
+    function test_membershipKindReadFromTheRecord() public {
+        (bytes memory d, bytes32 ua) = _classical();
+        _regMsig(r, d, "");
+        IUARegistry.MemberSig memory s = _acceptEoaSig(d, ALICE);
+        bytes32 slot = keccak256(abi.encode(ua, uint256(0))); // `records`: kind in the low 16 bits
+        bytes32 w = vm.load(address(r), slot);
+        assertEq(uint16(uint256(w)), UAKinds.MSIG);
+        vm.store(address(r), slot, bytes32(uint256(w) & ~uint256(0xffff) | P256));
+        vm.expectRevert(_unauthorized(ua));
+        r.acceptMembership(ua, s);
+        vm.store(address(r), slot, w);
+        r.acceptMembership(ua, s);
+        assertTrue(r.memberAccepted(ua, s.index));
     }
 
     /// Accepting twice is a no-op: no event, no write; a `pop` signer's acceptance too.
@@ -602,6 +638,20 @@ contract UARegistryMembershipTest is UARegistryBase {
             VmSafe.StorageAccess[] memory sa = a[i].storageAccesses;
             for (uint256 j; j < sa.length; ++j) if (sa[j].slot == slot && !sa[j].isWrite) ++n;
         }
+    }
+
+    /// A gen 2 hosting a gen-1 record asks gen 1 per slot: this path's real cost, a write paying its own gas outside `verifyBudget`.
+    function test_membershipGen2HostCallCost() public {
+        (bytes memory d, bytes32 ua) = _pqRegistered(r);
+        UARegistry g = _gen2(true);
+        uint16 i = _indexOf(d, UAKinds.uaOf(ML, ml1));
+        vm.cool(address(r));
+        (uint256 cold, uint256 warm) = new AcceptedProbe().cost(r, ua, i);
+        emit log_named_uint("gen 1 memberAccepted, first slot (cold)", cold);
+        emit log_named_uint("gen 1 memberAccepted, next slot (warm)", warm);
+        assertLt(cold, 6_500, "measured 6,055");
+        assertLt(warm, 1_500, "measured 1,146");
+        assertTrue(g.memberAccepted(ua, i));
     }
 
     /// Authorizing, and a stored record's signature, read the one bitmap slot once, however many members sign.

@@ -1058,7 +1058,7 @@ mod tests {
         }
         assert_eq!((structs, domains, calldata), (74, 130, 129), "every row was walked");
         assert_eq!(rows().iter().filter(|r| r.typed).count(), 77, "75 vector rows (Execute twice), the two invalidations");
-        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 20);
+        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 21);
     }
 
     /// One parse, two outputs: every field of every op moves the digest exactly when it moves the bytes sent (an unbound
