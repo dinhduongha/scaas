@@ -1,18 +1,18 @@
-# gas-n2304-kmax4096 at commit e1e3d06b
+# gas-n2304-kmax4096 at commit 7c644e7e
 == at-set.sh: n2304-kmax4096 (n2304-kmax4096), forge test --match-path test/pqz/PqzStateGas.t.sol --match-contract PqzStatePinGasTest --match-test test_gasTable -vv
 No files changed, compilation skipped
 
 Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
   lastCallGas(): replaced by `lastFrameGas`
 Ran 5 tests for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
-[PASS] test_gasTable_holderRows() (gas: 1660600434)
+[PASS] test_gasTable_holderRows() (gas: 1660600346)
 Logs:
-  GAS n2304-kmax4096 pqzl | burn 1, 2-of-2 mldsa65 msig holder, mtxExecute | calldata 72740 (zero 15300) | std 980240 | floor 4670360
-    | pqz 4849567 | exec 1064807 | regular 6909476 (model 6909614) | state 21084930 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | burn 1, 2-of-2 mldsa65 msig holder, mtxExecute | calldata 72740 (zero 15299) | std 980252 | floor 4670360
+    | pqz 4849567 | exec 1064807 | regular 6909488 (model 6909626) | state 21084930 | fits 2^24 yes
   GAS n2304-kmax4096 pqzl-ua | burn 1, 2-of-2 mldsa65 msig holder, uaExecute | calldata 76100 (zero 15403) | std 1032764 | floor 4885400
     | pqz 4849567 | exec 1153639 | regular 7050832 (model 7050970) | state 21084930 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzl | burn 1, 3-of-3 mldsa65 msig holder, mtxExecute | calldata 76260 (zero 18815) | std 994380 | floor 4895640
-    | pqz 4849567 | exec 1166598 | regular 7025407 (model 7025545) | state 21084930 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | burn 1, 3-of-3 mldsa65 msig holder, mtxExecute | calldata 76260 (zero 18814) | std 994392 | floor 4895640
+    | pqz 4849567 | exec 1166598 | regular 7025419 (model 7025557) | state 21084930 | fits 2^24 yes
   GAS n2304-kmax4096 pqzl-ua | burn 1, 3-of-3 mldsa65 msig holder, uaExecute | calldata 79620 (zero 18918) | std 1046904 | floor 5110680
     | pqz 4849567 | exec 1255475 | regular 7166808 (model 7166946) | state 21084930 | fits 2^24 yes
   GAS n2304-kmax4096 pqzl-ua | burn 1, mldsa65 holder, slhdsa128s fee UA, uaExecute | calldata 76932 (zero 11709) | std 1090404 | floor 4938648
@@ -34,7 +34,7 @@ Logs:
   GAS n2304-kmax4096 pqzh-ua | burn 1, mldsa65 holder, fndsa512 fee UA, uaExecute | calldata 275492 (zero 12433) | std 4258676 | floor 17646488
     | pqz 4887857 | exec 4804030 | regular 17646488 (model 17646488) | state 20889090 | fits 2^24 NO
 
-[PASS] test_gasTable_pqzh() (gas: 5112595360)
+[PASS] test_gasTable_pqzh() (gas: 5112595496)
 Logs:
   GAS n2304-kmax4096 pqzh | op 1, auditor, fresh ref | calldata 275236 (zero 12579) | std 4252828 | floor 17630104
     | pqz 5524337 | exec 2624234 | regular 17630104 (model 17630104) | state 21439890 | fits 2^24 NO
@@ -46,13 +46,13 @@ Logs:
     | pqz 5524337 | exec 2950707 | regular 18484120 (model 18484120) | state 21537810 | fits 2^24 NO
   GAS n2304-kmax4096 pqzh | op 7 M = 1, auditor, fresh ref | calldata 275428 (zero 12773) | std 4253572 | floor 17642392
     | pqz 5055337 | exec 2642651 | regular 17642392 (model 17642392) | state 21439890 | fits 2^24 NO
-  GAS n2304-kmax4096 pqzh | op 7 M = 1, no auditor, fresh ref | calldata 275300 (zero 12726) | std 4252088 | floor 17634200
+  GAS n2304-kmax4096 pqzh | op 7 M = 1, no auditor, fresh ref | calldata 275300 (zero 12727) | std 4252076 | floor 17634200
     | pqz 5638597 | exec 2589297 | regular 17634200 (model 17634200) | state 21299130 | fits 2^24 NO
-  GAS n2304-kmax4096 pqzh | op 7 M = 2, auditor, fresh ref | calldata 276612 (zero 13052) | std 4269168 | floor 17718168
+  GAS n2304-kmax4096 pqzh | op 7 M = 2, auditor, fresh ref | calldata 276612 (zero 13051) | std 4269180 | floor 17718168
     | pqz 5235158 | exec 2742875 | regular 17718168 (model 17718168) | state 21966210 | fits 2^24 NO
   GAS n2304-kmax4096 pqzh | op 7 M = 2, no auditor, fresh ref | calldata 275620 (zero 12936) | std 4254688 | floor 17654680
     | pqz 5772337 | exec 2676200 | regular 17654680 (model 17654680) | state 21684690 | fits 2^24 NO
-  GAS n2304-kmax4096 pqzh | op 7 M = 4, auditor, fresh ref | calldata 339908 (zero 20746) | std 5189576 | floor 21769112
+  GAS n2304-kmax4096 pqzh | op 7 M = 4, auditor, fresh ref | calldata 339908 (zero 20745) | std 5189588 | floor 21769112
     | pqz 6459506 | exec 3959352 | regular 21769112 (model 21769112) | state 43288290 | fits 2^24 NO
   GAS n2304-kmax4096 pqzh | op 7 M = 4, no auditor, fresh ref | calldata 276996 (zero 13366) | std 4271544 | floor 17742744
     | pqz 6395886 | exec 2862078 | regular 17742744 (model 17742744) | state 22455810 | fits 2^24 NO
@@ -64,18 +64,18 @@ Logs:
     | pqz 4340210 | exec 6212534 | regular 14861208 (model 14861208) | state 357949620 | fits 2^24 yes
   GAS n2304-kmax4096 pqzh | register: the R_REG verifyPop call alone (what the PQZ_MLWE cap must cover) | calldata 226308 (zero 19340) | std 3388848 | floor 14498712
     | pqz 4340210 | exec 565381 | regular 14498712 (model 14498712) | state 0 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzh | disclosure SENDER, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 912) | std 3315584 | floor 13321112
+  GAS n2304-kmax4096 pqzh | disclosure SENDER, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 913) | std 3315572 | floor 13321112
     | pqz 4290968 | exec 869467 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzh | disclosure RECEIVER, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 911) | std 3315596 | floor 13321112
+  GAS n2304-kmax4096 pqzh | disclosure RECEIVER, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 912) | std 3315584 | floor 13321112
     | pqz 3767968 | exec 869626 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzh | disclosure AUDITOR, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 911) | std 3315596 | floor 13321112
+  GAS n2304-kmax4096 pqzh | disclosure AUDITOR, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 912) | std 3315584 | floor 13321112
     | pqz 3767968 | exec 872682 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
   GAS n2304-kmax4096 pqzh | disclosure RECEIVER, op 7 M = 8 entry leg 5 (verifyTransferAmount) | calldata 207908 (zero 910) | std 3315608 | floor 13321112
     | pqz 3767968 | exec 929564 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
   GAS n2304-kmax4096 pqzh | disclosure AUDITOR, op 7 M = 8 entry leg 5 (verifyTransferAmount) | calldata 207908 (zero 910) | std 3315608 | floor 13321112
     | pqz 3767968 | exec 932620 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
 
-[PASS] test_gasTable_pqzh_ua() (gas: 5161589323)
+[PASS] test_gasTable_pqzh_ua() (gas: 5161589527)
 Logs:
   GAS n2304-kmax4096 pqzh-ua | op 1, auditor, fresh ref | calldata 278596 (zero 12683) | std 4305340 | floor 17845144
     | pqz 5524337 | exec 2715586 | regular 17845144 (model 17845144) | state 21439890 | fits 2^24 NO
@@ -105,18 +105,18 @@ Logs:
     | pqz 4340210 | exec 6212534 | regular 14861208 (model 14861208) | state 357949620 | fits 2^24 yes
   GAS n2304-kmax4096 pqzh-ua | register: the R_REG verifyPop call alone (what the PQZ_MLWE cap must cover) | calldata 226308 (zero 19340) | std 3388848 | floor 14498712
     | pqz 4340210 | exec 565381 | regular 14498712 (model 14498712) | state 0 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzh-ua | disclosure SENDER, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 912) | std 3315584 | floor 13321112
+  GAS n2304-kmax4096 pqzh-ua | disclosure SENDER, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 913) | std 3315572 | floor 13321112
     | pqz 4290968 | exec 869467 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzh-ua | disclosure RECEIVER, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 911) | std 3315596 | floor 13321112
+  GAS n2304-kmax4096 pqzh-ua | disclosure RECEIVER, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 912) | std 3315584 | floor 13321112
     | pqz 3767968 | exec 869626 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzh-ua | disclosure AUDITOR, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 911) | std 3315596 | floor 13321112
+  GAS n2304-kmax4096 pqzh-ua | disclosure AUDITOR, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 912) | std 3315584 | floor 13321112
     | pqz 3767968 | exec 872682 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
   GAS n2304-kmax4096 pqzh-ua | disclosure RECEIVER, op 7 M = 8 entry leg 5 (verifyTransferAmount) | calldata 207908 (zero 910) | std 3315608 | floor 13321112
     | pqz 3767968 | exec 929564 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
   GAS n2304-kmax4096 pqzh-ua | disclosure AUDITOR, op 7 M = 8 entry leg 5 (verifyTransferAmount) | calldata 207908 (zero 910) | std 3315608 | floor 13321112
     | pqz 3767968 | exec 932620 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
 
-[PASS] test_gasTable_pqzl() (gas: 1709965266)
+[PASS] test_gasTable_pqzl() (gas: 1709965354)
 Logs:
   GAS n2304-kmax4096 pqzl | op 1, auditor, fresh ref | calldata 70308 (zero 11837) | std 982884 | floor 4514712
     | pqz 7045125 | exec 1143783 | regular 9186654 (model 9186792) | state 21439890 | fits 2^24 yes
@@ -126,14 +126,14 @@ Logs:
     | pqz 7045125 | exec 2254734 | regular 10297617 (model 10297755) | state 21537810 | fits 2^24 yes
   GAS n2304-kmax4096 pqzl | op 1, auditor, materialised acc, hint | calldata 83652 (zero 11838) | std 1196376 | floor 5368728
     | pqz 7045125 | exec 1397236 | regular 9653599 (model 9653737) | state 21537810 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzl | op 7 M = 1, auditor, fresh ref | calldata 70500 (zero 12015) | std 983820 | floor 4527000
-    | pqz 4725125 | exec 1160899 | regular 6884706 (model 6884844) | state 21439890 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzl | op 7 M = 1, no auditor, fresh ref | calldata 70052 (zero 11982) | std 977048 | floor 4498328
-    | pqz 5150355 | exec 1121710 | regular 7263975 (model 7264113) | state 21299130 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzl | op 7 M = 2, auditor, fresh ref | calldata 71780 (zero 12284) | std 1001072 | floor 4608920
-    | pqz 4837955 | exec 1239329 | regular 7093218 (model 7093356) | state 21966210 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzl | op 7 M = 2, no auditor, fresh ref | calldata 70884 (zero 12194) | std 987816 | floor 4551576
-    | pqz 4988143 | exec 1194034 | regular 7184855 (model 7184993) | state 21684690 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | op 7 M = 1, auditor, fresh ref | calldata 70500 (zero 12016) | std 983808 | floor 4527000
+    | pqz 4725125 | exec 1160899 | regular 6884694 (model 6884832) | state 21439890 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | op 7 M = 1, no auditor, fresh ref | calldata 70052 (zero 11983) | std 977036 | floor 4498328
+    | pqz 5150355 | exec 1121710 | regular 7263963 (model 7264101) | state 21299130 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | op 7 M = 2, auditor, fresh ref | calldata 71780 (zero 12283) | std 1001084 | floor 4608920
+    | pqz 4837955 | exec 1239329 | regular 7093230 (model 7093368) | state 21966210 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | op 7 M = 2, no auditor, fresh ref | calldata 70884 (zero 12192) | std 987840 | floor 4551576
+    | pqz 4988143 | exec 1194034 | regular 7184879 (model 7185017) | state 21684690 | fits 2^24 yes
   GAS n2304-kmax4096 pqzl | op 7 M = 4, auditor, fresh ref | calldata 107556 (zero 19857) | std 1482612 | floor 6898584
     | pqz 5378723 | exec 1845560 | regular 8721757 (model 8721895) | state 43288290 | fits 2^24 yes
   GAS n2304-kmax4096 pqzl | op 7 M = 4, no auditor, fresh ref | calldata 72484 (zero 12603) | std 1008508 | floor 4653976
@@ -150,18 +150,18 @@ Logs:
     | pqz 3508587 | exec 1181671 | regular 5287948 (model 5288086) | state 84971610 | fits 2^24 yes
   GAS n2304-kmax4096 pqzl | register: the R_REG verifyPop call alone (what the PQZ_MLWE cap must cover) | calldata 48996 (zero 18693) | std 559620 | floor 3150744
     | pqz 3508587 | exec 126375 | regular 4209444 (model 4209582) | state 0 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzl | disclosure SENDER, op 1 entry (verifyTransferAmount) | calldata 31012 (zero 249) | std 493204 | floor 1999768
-    | pqz 3387387 | exec 425774 | regular 4321227 (model 4321365) | state 0 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzl | disclosure RECEIVER, op 1 entry (verifyTransferAmount) | calldata 31748 (zero 257) | std 504884 | floor 2046872
-    | pqz 3343453 | exec 426925 | regular 4290124 (model 4290262) | state 0 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzl | disclosure AUDITOR, op 1 entry (verifyTransferAmount) | calldata 31780 (zero 277) | std 505156 | floor 2048920
-    | pqz 3343456 | exec 430026 | regular 4293500 (model 4293638) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | disclosure SENDER, op 1 entry (verifyTransferAmount) | calldata 31012 (zero 250) | std 493192 | floor 1999768
+    | pqz 3387387 | exec 425774 | regular 4321215 (model 4321353) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | disclosure RECEIVER, op 1 entry (verifyTransferAmount) | calldata 31748 (zero 258) | std 504872 | floor 2046872
+    | pqz 3343453 | exec 426925 | regular 4290112 (model 4290250) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | disclosure AUDITOR, op 1 entry (verifyTransferAmount) | calldata 31780 (zero 278) | std 505144 | floor 2048920
+    | pqz 3343456 | exec 430026 | regular 4293488 (model 4293626) | state 0 | fits 2^24 yes
   GAS n2304-kmax4096 pqzl | disclosure RECEIVER, op 7 M = 8 entry leg 5 (verifyTransferAmount) | calldata 31748 (zero 256) | std 504896 | floor 2046872
     | pqz 3343453 | exec 468047 | regular 4331258 (model 4331396) | state 0 | fits 2^24 yes
   GAS n2304-kmax4096 pqzl | disclosure AUDITOR, op 7 M = 8 entry leg 5 (verifyTransferAmount) | calldata 31780 (zero 276) | std 505168 | floor 2048920
     | pqz 3343456 | exec 471151 | regular 4334637 (model 4334775) | state 0 | fits 2^24 yes
 
-[PASS] test_gasTable_pqzl_ua() (gas: 1734308531)
+[PASS] test_gasTable_pqzl_ua() (gas: 1734308663)
 Logs:
   GAS n2304-kmax4096 pqzl-ua | op 1, auditor, fresh ref | calldata 73668 (zero 11941) | std 1035396 | floor 4729752
     | pqz 7045125 | exec 1232509 | regular 9327892 (model 9328030) | state 21439890 | fits 2^24 yes
@@ -195,18 +195,18 @@ Logs:
     | pqz 3508587 | exec 1181671 | regular 5287948 (model 5288086) | state 84971610 | fits 2^24 yes
   GAS n2304-kmax4096 pqzl-ua | register: the R_REG verifyPop call alone (what the PQZ_MLWE cap must cover) | calldata 48996 (zero 18693) | std 559620 | floor 3150744
     | pqz 3508587 | exec 126375 | regular 4209444 (model 4209582) | state 0 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzl-ua | disclosure SENDER, op 1 entry (verifyTransferAmount) | calldata 31012 (zero 249) | std 493204 | floor 1999768
-    | pqz 3387387 | exec 425774 | regular 4321227 (model 4321365) | state 0 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzl-ua | disclosure RECEIVER, op 1 entry (verifyTransferAmount) | calldata 31748 (zero 257) | std 504884 | floor 2046872
-    | pqz 3343453 | exec 426925 | regular 4290124 (model 4290262) | state 0 | fits 2^24 yes
-  GAS n2304-kmax4096 pqzl-ua | disclosure AUDITOR, op 1 entry (verifyTransferAmount) | calldata 31780 (zero 277) | std 505156 | floor 2048920
-    | pqz 3343456 | exec 430026 | regular 4293500 (model 4293638) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | disclosure SENDER, op 1 entry (verifyTransferAmount) | calldata 31012 (zero 250) | std 493192 | floor 1999768
+    | pqz 3387387 | exec 425774 | regular 4321215 (model 4321353) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | disclosure RECEIVER, op 1 entry (verifyTransferAmount) | calldata 31748 (zero 258) | std 504872 | floor 2046872
+    | pqz 3343453 | exec 426925 | regular 4290112 (model 4290250) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | disclosure AUDITOR, op 1 entry (verifyTransferAmount) | calldata 31780 (zero 278) | std 505144 | floor 2048920
+    | pqz 3343456 | exec 430026 | regular 4293488 (model 4293626) | state 0 | fits 2^24 yes
   GAS n2304-kmax4096 pqzl-ua | disclosure RECEIVER, op 7 M = 8 entry leg 5 (verifyTransferAmount) | calldata 31748 (zero 256) | std 504896 | floor 2046872
     | pqz 3343453 | exec 468047 | regular 4331258 (model 4331396) | state 0 | fits 2^24 yes
   GAS n2304-kmax4096 pqzl-ua | disclosure AUDITOR, op 7 M = 8 entry leg 5 (verifyTransferAmount) | calldata 31780 (zero 276) | std 505168 | floor 2048920
     | pqz 3343456 | exec 471151 | regular 4334637 (model 4334775) | state 0 | fits 2^24 yes
 
-Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 4.95s (15.15s CPU time)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 6.18s (21.43s CPU time)
 
-Ran 1 test suite in 4.96s (4.95s CPU time): 5 tests passed, 0 failed, 0 skipped (5 total tests)
+Ran 1 test suite in 6.18s (6.18s CPU time): 5 tests passed, 0 failed, 0 skipped (5 total tests)
 rc=0

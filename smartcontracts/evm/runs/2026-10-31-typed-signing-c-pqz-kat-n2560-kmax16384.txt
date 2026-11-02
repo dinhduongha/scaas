@@ -1,62 +1,45 @@
-# pqz-kat-n2560-kmax16384 at commit e1e3d06b
-   Compiling version_check v0.9.5
-   Compiling typenum v1.20.1
-   Compiling subtle v2.6.1
-   Compiling cpufeatures v0.2.17
-   Compiling keccak v0.1.6
-   Compiling cfg-if v1.0.5
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/pqzl/rust)
+# pqz-kat-n2560-kmax16384 at commit 7c644e7e
    Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/stmt)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/ffi)
-   Compiling generic-array v0.14.7
-   Compiling crypto-common v0.1.7
-   Compiling block-buffer v0.10.4
-   Compiling inout v0.1.4
-   Compiling cipher v0.4.4
-   Compiling digest v0.10.7
-   Compiling aes v0.8.4
-   Compiling sha3 v0.10.8
-   Compiling hmac v0.12.1
-   Compiling sha2 v0.10.9
-   Compiling hkdf v0.12.4
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/pqzl/rust)
    Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/pqzh/ligero)
-    Finished `release` profile [optimized + debuginfo] target(s) in 11.90s
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 9.14s
 keys / cbd / matrix / enc: 0.1 s
-pqzl TRANSFER           proof  50392 B  prove+verify 1.73 s
-pqzl TRANSFER0          proof  50053 B  prove+verify 3.88 s
-pqzl BURN               proof  49536 B  prove+verify 1.42 s
-pqzl REFRESH            proof  49542 B  prove+verify 2.22 s
-pqzl REGISTER           proof  32539 B  prove+verify 1.40 s
-pqzl DISCLOSE-SENDER    proof  32967 B  prove+verify 1.00 s
+pqzl TRANSFER           proof  50392 B  prove+verify 1.77 s
+pqzl TRANSFER0          proof  50053 B  prove+verify 3.92 s
+pqzl BURN               proof  49536 B  prove+verify 1.43 s
+pqzl REFRESH            proof  49542 B  prove+verify 2.27 s
+pqzl REGISTER           proof  32539 B  prove+verify 1.42 s
+pqzl DISCLOSE-SENDER    proof  32967 B  prove+verify 1.03 s
 pqzl DISCLOSE-RECEIVER  proof  33866 B  prove+verify 0.69 s
-pqzl DISCLOSE-AUDITOR   proof  33872 B  prove+verify 0.97 s
-pqzh TRANSFER           proof 301194 B  prove+verify 1.64 s
-pqzh TRANSFER0          proof 299123 B  prove+verify 1.56 s
-pqzh BURN               proof 298116 B  prove+verify 1.55 s
-pqzh REFRESH            proof 299860 B  prove+verify 1.64 s
-pqzh REGISTER           proof 230910 B  prove+verify 0.90 s
+pqzl DISCLOSE-AUDITOR   proof  33872 B  prove+verify 0.96 s
+pqzh TRANSFER           proof 301194 B  prove+verify 1.65 s
+pqzh TRANSFER0          proof 299123 B  prove+verify 1.57 s
+pqzh BURN               proof 298116 B  prove+verify 1.57 s
+pqzh REFRESH            proof 299860 B  prove+verify 1.67 s
+pqzh REGISTER           proof 230910 B  prove+verify 0.91 s
 pqzh DISCLOSE-SENDER    proof 231454 B  prove+verify 0.91 s
 pqzh DISCLOSE-RECEIVER  proof 231614 B  prove+verify 0.89 s
-pqzh DISCLOSE-AUDITOR   proof 231230 B  prove+verify 0.95 s
-pqzl M1-on              proof  50376 B  prove+verify 2.67 s
-pqzh M1-on              proof 301066 B  prove+verify 1.58 s
-pqzl M2-on              proof  51219 B  prove+verify 3.55 s
-pqzh M2-on              proof 300714 B  prove+verify 1.59 s
-pqzl M4-on              proof  54861 B  prove+verify 2.76 s
-pqzh M4-on              proof 300610 B  prove+verify 1.77 s
-pqzl M8-on              proof  72687 B  prove+verify 9.82 s
-pqzl M1-off             proof  50091 B  prove+verify 8.36 s
-pqzh M1-off             proof 301162 B  prove+verify 1.86 s
-pqzl M2-off             proof  50543 B  prove+verify 5.32 s
-pqzh M2-off             proof 300650 B  prove+verify 8.01 s
-pqzl M4-off             proof  51556 B  prove+verify 8.81 s
-pqzh M4-off             proof 300554 B  prove+verify 2.70 s
-pqzl M8-off             proof  69863 B  prove+verify 5.10 s
-pqzl M2-off-two-real    proof  50560 B  prove+verify 6.86 s
-pqzh M2-off-two-real    proof 300586 B  prove+verify 1.88 s
-pqzl M4-off-decoys      proof  51576 B  prove+verify 4.94 s
-pqzh M4-off-decoys      proof 301162 B  prove+verify 1.75 s
-pqzl M8-on-boundary     proof  72761 B  prove+verify 12.36 s
+pqzh DISCLOSE-AUDITOR   proof 231230 B  prove+verify 0.96 s
+pqzl M1-on              proof  50376 B  prove+verify 2.70 s
+pqzh M1-on              proof 301066 B  prove+verify 1.60 s
+pqzl M2-on              proof  51219 B  prove+verify 3.64 s
+pqzh M2-on              proof 300714 B  prove+verify 1.63 s
+pqzl M4-on              proof  54861 B  prove+verify 2.62 s
+pqzh M4-on              proof 300610 B  prove+verify 1.66 s
+pqzl M8-on              proof  72687 B  prove+verify 6.59 s
+pqzl M1-off             proof  50091 B  prove+verify 6.18 s
+pqzh M1-off             proof 301162 B  prove+verify 1.57 s
+pqzl M2-off             proof  50543 B  prove+verify 2.37 s
+pqzh M2-off             proof 300650 B  prove+verify 1.63 s
+pqzl M4-off             proof  51556 B  prove+verify 2.20 s
+pqzh M4-off             proof 300554 B  prove+verify 1.61 s
+pqzl M8-off             proof  69863 B  prove+verify 4.16 s
+pqzl M2-off-two-real    proof  50560 B  prove+verify 4.04 s
+pqzh M2-off-two-real    proof 300586 B  prove+verify 1.66 s
+pqzl M4-off-decoys      proof  51576 B  prove+verify 3.23 s
+pqzh M4-off-decoys      proof 301162 B  prove+verify 1.58 s
+pqzl M8-on-boundary     proof  72761 B  prove+verify 6.70 s
 pqzl M8-on-boundary-leg3-auditor proof  33875 B
 pqzh M8-on-boundary-leg3-auditor proof 228403 B
 pqzl M8-on-boundary-leg4-auditor proof  33871 B
@@ -65,10 +48,10 @@ pqzl M4-on-leg2-auditor proof  33875 B
 pqzh M4-on-leg2-auditor proof 229733 B
 pqzl M8-on-boundary-leg4-receiver proof  33881 B
 pqzh M8-on-boundary-leg4-receiver proof 228805 B
-proofs: 120.2 s
-negative: 825 rows (511 decoder, 314 verifier): 151.8 s
-worst case: 199.3 s
-total: 208.4 s
+proofs: 87.8 s
+negative: 825 rows (511 decoder, 314 verifier): 137.9 s
+worst case: 180.4 s
+total: 193.3 s
 same matrix.json 1121 B
 same cbd.json 4382 B
 same keygen.json 3058 B

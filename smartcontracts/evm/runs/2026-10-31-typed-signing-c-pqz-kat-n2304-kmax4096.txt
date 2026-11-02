@@ -1,62 +1,45 @@
-# pqz-kat-n2304-kmax4096 at commit e1e3d06b
-   Compiling version_check v0.9.5
-   Compiling typenum v1.20.1
-   Compiling subtle v2.6.1
-   Compiling cpufeatures v0.2.17
-   Compiling cfg-if v1.0.5
-   Compiling keccak v0.1.6
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/pqzl/rust)
+# pqz-kat-n2304-kmax4096 at commit 7c644e7e
    Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/stmt)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/ffi)
-   Compiling generic-array v0.14.7
-   Compiling crypto-common v0.1.7
-   Compiling block-buffer v0.10.4
-   Compiling inout v0.1.4
-   Compiling cipher v0.4.4
-   Compiling digest v0.10.7
-   Compiling sha3 v0.10.8
-   Compiling hmac v0.12.1
-   Compiling aes v0.8.4
-   Compiling sha2 v0.10.9
-   Compiling hkdf v0.12.4
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/pqzl/rust)
    Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/pqzh/ligero)
-    Finished `release` profile [optimized + debuginfo] target(s) in 16.04s
-keys / cbd / matrix / enc: 0.1 s
-pqzl TRANSFER           proof  46662 B  prove+verify 1.80 s
-pqzl TRANSFER0          proof  46329 B  prove+verify 1.61 s
-pqzl BURN               proof  45835 B  prove+verify 1.87 s
-pqzl REFRESH            proof  45819 B  prove+verify 2.01 s
-pqzl REGISTER           proof  30381 B  prove+verify 0.85 s
-pqzl DISCLOSE-SENDER    proof  30814 B  prove+verify 0.66 s
-pqzl DISCLOSE-RECEIVER  proof  31546 B  prove+verify 0.51 s
-pqzl DISCLOSE-AUDITOR   proof  31558 B  prove+verify 0.52 s
-pqzh TRANSFER           proof 248120 B  prove+verify 1.74 s
-pqzh TRANSFER0          proof 247240 B  prove+verify 1.74 s
-pqzh BURN               proof 248504 B  prove+verify 1.79 s
-pqzh REFRESH            proof 248728 B  prove+verify 1.78 s
-pqzh REGISTER           proof 204872 B  prove+verify 1.06 s
-pqzh DISCLOSE-SENDER    proof 204872 B  prove+verify 1.02 s
-pqzh DISCLOSE-RECEIVER  proof 204968 B  prove+verify 1.01 s
-pqzh DISCLOSE-AUDITOR   proof 204680 B  prove+verify 0.99 s
-pqzl M1-on              proof  46678 B  prove+verify 3.08 s
-pqzh M1-on              proof 249400 B  prove+verify 1.78 s
-pqzl M2-on              proof  47503 B  prove+verify 1.64 s
-pqzh M2-on              proof 248872 B  prove+verify 1.75 s
-pqzl M4-on              proof  63885 B  prove+verify 3.11 s
-pqzh M4-on              proof 293112 B  prove+verify 2.45 s
-pqzl M8-on              proof  80290 B  prove+verify 6.86 s
-pqzl M1-off             proof  46342 B  prove+verify 1.52 s
-pqzh M1-off             proof 246984 B  prove+verify 1.83 s
-pqzl M2-off             proof  46857 B  prove+verify 4.48 s
-pqzh M2-off             proof 248440 B  prove+verify 1.74 s
-pqzl M4-off             proof  47821 B  prove+verify 1.53 s
-pqzh M4-off             proof 249512 B  prove+verify 1.81 s
-pqzl M8-off             proof  64607 B  prove+verify 3.26 s
-pqzl M2-off-two-real    proof  46802 B  prove+verify 2.37 s
-pqzh M2-off-two-real    proof 248152 B  prove+verify 1.85 s
-pqzl M4-off-decoys      proof  47801 B  prove+verify 1.90 s
-pqzh M4-off-decoys      proof 248872 B  prove+verify 2.16 s
-pqzl M8-on-boundary     proof  80288 B  prove+verify 7.99 s
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 14.76s
+keys / cbd / matrix / enc: 0.3 s
+pqzl TRANSFER           proof  46662 B  prove+verify 4.26 s
+pqzl TRANSFER0          proof  46329 B  prove+verify 4.32 s
+pqzl BURN               proof  45835 B  prove+verify 9.22 s
+pqzl REFRESH            proof  45819 B  prove+verify 6.82 s
+pqzl REGISTER           proof  30381 B  prove+verify 0.89 s
+pqzl DISCLOSE-SENDER    proof  30814 B  prove+verify 0.65 s
+pqzl DISCLOSE-RECEIVER  proof  31546 B  prove+verify 0.69 s
+pqzl DISCLOSE-AUDITOR   proof  31558 B  prove+verify 0.66 s
+pqzh TRANSFER           proof 248120 B  prove+verify 6.84 s
+pqzh TRANSFER0          proof 247240 B  prove+verify 3.01 s
+pqzh BURN               proof 248504 B  prove+verify 1.81 s
+pqzh REFRESH            proof 248728 B  prove+verify 1.80 s
+pqzh REGISTER           proof 204872 B  prove+verify 1.17 s
+pqzh DISCLOSE-SENDER    proof 204872 B  prove+verify 1.32 s
+pqzh DISCLOSE-RECEIVER  proof 204968 B  prove+verify 2.86 s
+pqzh DISCLOSE-AUDITOR   proof 204680 B  prove+verify 1.05 s
+pqzl M1-on              proof  46678 B  prove+verify 3.12 s
+pqzh M1-on              proof 249400 B  prove+verify 1.81 s
+pqzl M2-on              proof  47503 B  prove+verify 1.68 s
+pqzh M2-on              proof 248872 B  prove+verify 1.76 s
+pqzl M4-on              proof  63885 B  prove+verify 3.57 s
+pqzh M4-on              proof 293112 B  prove+verify 2.51 s
+pqzl M8-on              proof  80290 B  prove+verify 7.41 s
+pqzl M1-off             proof  46342 B  prove+verify 1.60 s
+pqzh M1-off             proof 246984 B  prove+verify 1.84 s
+pqzl M2-off             proof  46857 B  prove+verify 4.51 s
+pqzh M2-off             proof 248440 B  prove+verify 1.76 s
+pqzl M4-off             proof  47821 B  prove+verify 1.55 s
+pqzh M4-off             proof 249512 B  prove+verify 1.82 s
+pqzl M8-off             proof  64607 B  prove+verify 3.25 s
+pqzl M2-off-two-real    proof  46802 B  prove+verify 2.38 s
+pqzh M2-off-two-real    proof 248152 B  prove+verify 1.70 s
+pqzl M4-off-decoys      proof  47801 B  prove+verify 1.52 s
+pqzh M4-off-decoys      proof 248872 B  prove+verify 1.77 s
+pqzl M8-on-boundary     proof  80288 B  prove+verify 4.97 s
 pqzl M8-on-boundary-leg5-auditor proof  31571 B
 pqzh M8-on-boundary-leg5-auditor proof 204584 B
 pqzl M8-on-boundary-leg6-auditor proof  31543 B
@@ -65,10 +48,10 @@ pqzl M4-on-leg2-auditor proof  31547 B
 pqzh M4-on-leg2-auditor proof 204680 B
 pqzl M8-on-boundary-leg6-receiver proof  31551 B
 pqzh M8-on-boundary-leg6-receiver proof 205640 B
-proofs: 78.7 s
-negative: 825 rows (511 decoder, 314 verifier): 101.5 s
-worst case: 117.3 s
-total: 127.1 s
+proofs: 102.7 s
+negative: 825 rows (511 decoder, 314 verifier): 125.2 s
+worst case: 143.0 s
+total: 165.2 s
 same matrix.json 1087 B
 same cbd.json 4345 B
 same keygen.json 3020 B
