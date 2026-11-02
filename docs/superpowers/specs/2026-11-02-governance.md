@@ -841,7 +841,7 @@ Still-open items of the gaps note and the earlier round:
 
 ## 9. Size gate — SPECIFIED, a condition before the build; CTR-GOV-02 stays open
 
-**Owner 2026-11-03, CTR-GOV-19.** The PQZ kinds take a higher ceiling on the chains that run them; how to reduce them is decided later. So this gate no longer binds `NormalPqzToken` or `WrappedPqzToken`. It still binds every other kind: `WrappedZetherToken` runs on public chains, has 216 B of room at D1 + D2 and must still fit D4, D6, hybrid and its regulated form. The measured options are on branch `token-core`, `docs/research/governance/prototype/size-options.md`. The text below is the state before that ruling.
+**Owner 2026-11-03, CTR-GOV-19: this gate no longer blocks the build.** Every kind, `WrappedZetherToken` included, first runs on the SCaaS testnet at a higher `maxCodeSize`; the whole `Grant` record is built. Reducing size, and what `WrappedZetherToken` needs before a public chain, is decided later. The measured options are on branch `token-core`, `docs/research/governance/prototype/size-options.md`. The text below is the state before that ruling and stays as the record of what must be solved before a public chain.
 
 **No code of this spec lands until the gate is read.** CTR-GOV-02 stays `open`. The owner is choosing how to reduce size; this spec does not choose, and names no method. The owner's words of 2026-11-02: reduce the size rather than cut the record.
 

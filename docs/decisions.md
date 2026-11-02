@@ -1617,10 +1617,10 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 **Source.** `research/governance/permission-model.md` §1, §2, §6.
 
 ### CTR-GOV-02 — The Grant record in the contract, subject to measuring
-- old: governance:D2 · status: open · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-02 · superseded-by: —
+- old: governance:D2 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-02 · superseded-by: —
 
 **Rule.** A limit on a power lives in the contract that owns the power, in `GovernanceBase`: `use(bit, holder, scalar) → scope`, `setGrant`, `grantOf`. Two levels: the owner grants, a holder with a `delegable` grant may grant a narrower leaf, a leaf cannot delegate. An edit carries `spent` and never refreshes a budget. `renounceOwnership` reverts while a bit that is not locked has holders. **Subject to measuring** the bytes first (owner): the default until the measurement is read is the rule as stated.
-**Status.** Decided as recommended, subject to measuring; not built. If `WrappedPqzToken` measures over its stop line the fallback already stated is grants on `NORMAL*` and the DEX only, said plainly, not a lever hunt. Measured: as designed it does not fit `WrappedPqzToken` (65,520 B). Owner 2026-11-02: reduce the size rather than cut the record; the controller writes the spec with the whole record and treats size as a gate before the build.
+**Status.** Decided as recommended, subject to measuring; not built. If `WrappedPqzToken` measures over its stop line the fallback already stated is grants on `NORMAL*` and the DEX only, said plainly, not a lever hunt. Measured: as designed it does not fit `WrappedPqzToken` (65,520 B). Owner 2026-11-02: reduce the size rather than cut the record. Owner 2026-11-03: the whole record is built; size is decided later (CTR-GOV-19).
 **Why.** The owner's examples (a loan approval in a band, a subtree, a group) and the mint allowance need a limit bound to the number the contract acts on; a separate holder clone cannot carry them, and a holder that reports its own limit is believed for nothing.
 **Cost if wrong.** Bytes on every kind, and two disclosure shapes on one chain if one kind goes flat-only. CTR-TOK-22's "revoke every role, then renounce" turns from advice into a revert for unlocked bits.
 **Source.** `research/governance/permission-model.md` §1.3, §6, §7; `research/governance/permission-model-attack.md` A3, A10, A19.
@@ -1781,14 +1781,14 @@ Both on means: known, and not denied. `ELIGIBLE_CONTRACT` satisfies `requiredFla
 **Cost if wrong.** A token created with both off can never stop anyone. A denylist acts after the fact.
 **Source.** Owner 2026-11-02.
 
-### CTR-GOV-19 — The PQZ kinds take a higher code size ceiling on the chains that run them
+### CTR-GOV-19 — Build first on the SCaaS testnet at a higher code size ceiling; reduce later
 - old: governance:pqz-size · status: current · owner: yes · date: 2026-11-03 · normative: decisions.md#CTR-GOV-19 · superseded-by: —
 
-**Rule.** `NormalPqzToken`, `WrappedPqzToken` and their regulated forms run only where the PQZ precompile exists, so only on a chain whose configuration is under its operator's control. On such a chain the code size limit (`maxCodeSize`) is raised for them; the 64 KiB ceiling of the size gate does not bind these kinds. How to reduce their size is decided later. Every other kind keeps the 64 KiB ceiling and the 64,500 B stop line.
-**Status.** Decided, not built. The new figure, the size gate's per-kind ceiling and the chainspec of the SCaaS testnet and 22776 are set at the build; a chain's limit stays the operator's, and a deploy refused by it fails closed. Whether a limit above 64 KiB holds under Amsterdam's EIP-7954 on the client must be probed at the next reset. It lifts the block on `WrappedPqzToken` in CTR-GOV-02, not on `WrappedZetherToken`, which runs on public chains.
+**Rule.** `NormalPqzToken`, `WrappedPqzToken` and their regulated forms run only where the PQZ precompile exists, so only on a chain whose configuration is under its operator's control. On such a chain the code size limit (`maxCodeSize`) is raised for them. **Every kind, `WrappedZetherToken` included, first runs on the SCaaS testnet at that higher limit:** size does not block the governance build. How to reduce size, and what `WrappedZetherToken` needs before a public chain, is decided later.
+**Status.** Decided, not built. The controller proposes `maxCodeSize` `0x20000` on the SCaaS testnet, owner may override; 22776 stays the owner's. The size gate's ceiling moves with it; a chain's limit stays the operator's, and a deploy refused by it fails closed. Whether a limit above 64 KiB holds under Amsterdam's EIP-7954 on the client is probed before the reset. A kind above 64 KiB is not deployable on a public chain until the owner decides: the size gate names which.
 **Why.** The precompile already needs a chain of that kind, and code size on it is the operator's setting, unlike on a public chain.
 **Cost if wrong.** Above 65,536 B every jump widens, about 4.7 KB at once (inferred), and deploy gas grows with the runtime. A customer chain has one more setting to change.
-**Source.** Owner 2026-11-03; `research/governance/prototype/RESULTS.md`.
+**Source.** Owner 2026-11-03, two statements; `research/governance/prototype/RESULTS.md`; measured options on branch `token-core`.
 
 ## 17. Contracts — Meta-transactions
 
@@ -9069,7 +9069,7 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 | msig-nested:N14 | CTR-UA-38 | current |
 | msig-nested:N15 | CTR-UA-38 | current |
 | governance:D1 | CTR-GOV-01 | current |
-| governance:D2 | CTR-GOV-02 | open |
+| governance:D2 | CTR-GOV-02 | current |
 | governance:D3 | CTR-GOV-03 | current |
 | governance:D4 | CTR-GOV-04 | current |
 | governance:D5 | CTR-GOV-05 | current |
