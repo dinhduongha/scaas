@@ -584,7 +584,7 @@ fn plain_rows_match_the_forge_abi() {
             n += 1;
         }
     }
-    assert_eq!(n, 21, "20 rows, mtxExecuteAsOwner on two contracts");
+    assert_eq!(n, 22, "21 rows, mtxExecuteAsOwner on two contracts");
 }
 
 /// A named `mtxCancelNonce(lane)` of `from` on `token`, fee 0, open relayer.
