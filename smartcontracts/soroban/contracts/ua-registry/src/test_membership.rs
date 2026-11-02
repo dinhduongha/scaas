@@ -1,7 +1,7 @@
 //! MA-S, CTR-UA-37 on Soroban (owner 2026-11-02): listing in an `msig` is no consent, a member accepts, and at verify only accepted
 //! members count. `portable.json` `memberships` are the rows EVM verifies, read here unchanged.
 extern crate std;
-use std::{format, vec, vec::Vec as StdVec};
+use std::{vec, vec::Vec as StdVec};
 
 use serde_json::Value;
 use soroban_sdk::{
@@ -33,7 +33,7 @@ fn slot_of(env: &Env, r: &Value) -> MemberSig {
     MemberSig { index: r["index"].as_u64().unwrap() as u32, key_data: Bytes::new(env), sig: b(env, &hx(&r["sig"])) }
 }
 
-/// A 2-of-3 of in-test `mldsa65` and ed25519 keys, classical-dominant: an empty `pop`, nobody accepted; `signable`.
+/// A 2-of-3 of in-test ed25519 keys, classical-dominant: an empty `pop`, nobody accepted; `signable`.
 fn two_of_three(env: &Env, c: &UaRegistryClient) -> (Msig, Sk, Sk, Sk) {
     let (x, y, z) = (test::ed(71), test::ed(72), test::ed(73));
     for s in [&x, &y, &z] {
@@ -105,7 +105,7 @@ fn rows_accept_unchanged() {
         assert_eq!(c.member_checked(&classical.ua, &i), Checked::Relayer(by.clone().unwrap()), "{name}");
     }
     assert_eq!((0..4).filter(|i| c.member_accepted(&classical.ua, i)).count(), 4);
-    // the `pop` already accepted these two: a no-op, so a registry where a row is signed once serves it twice
+    // the `pop` already accepted these two: the rows are a no-op here, no second word on the same slot
     for name in ["msig-pq-native/0", "msig-pq-native/1"] {
         let r = row(name);
         c.accept_membership(&pq.ua, &slot_of(&env, &r), &None);
@@ -528,9 +528,9 @@ fn ttl_and_size_of_the_entry() {
     assert_eq!(crate::AcceptedEntry::from_xdr(&env, &entry.to_xdr(&env)).unwrap().0, 0xffff);
 }
 
-/// A failed row of `memberships` names its kind; every row's kind is one the entry treats, none a `C…`.
+/// What the rows cover: `evm-eoa`, a `Chain` kind and a relayer-checked kind each, so `rows_accept_unchanged` walks every path of a slot.
 #[test]
 fn rows_cover_chain_and_relayer_kinds() {
     let kinds: StdVec<u32> = rows().iter().map(|r| kind_of(&r["memberKind"])).collect();
-    assert_eq!(kinds, [0x0001, 0x0107, 0x0104, 0x0101, 0x0001, 0x0131], "{}", format!("{kinds:x?}"));
+    assert_eq!(kinds, [0x0001, 0x0107, 0x0104, 0x0101, 0x0001, 0x0131]);
 }

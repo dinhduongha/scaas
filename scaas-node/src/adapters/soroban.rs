@@ -4796,7 +4796,9 @@ mod tests {
     async fn accept_job_is_in_the_call_share() {
         let (a, _) = ua8_adapter(Arc::new(|_| json!({}))).await;
         let job = |kind: &str, op: Value| -> Job { serde_json::from_value(json!({"id": 7, "kind": kind, "op": op})).unwrap() };
-        assert!(a.in_call_share(&job("ua_metatx", accept_op(membership("msig-classical/0"), &NONE))));
+        let op = accept_op(membership("msig-classical/0"), &NONE);
+        assert!(a.in_call_share(&job("ua_metatx", op.clone())));
+        assert_eq!(Some(a.job_valid_until(&job("ua_metatx", op.clone()))), op["valid_until"].as_u64(), "after a restart, the job's own deadline");
         let (c, f, args) = ua_ops(ScVal::Void).remove(0);
         assert!(!a.in_call_share(&job("ua_metatx", ua_op(c, f, args))));
         assert!(a.in_call_share(&job("call", json!({}))));

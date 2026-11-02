@@ -405,7 +405,7 @@ fn attest(env: &Env, by: &By) -> Checked {
     Checked::Relayer(r.clone())
 }
 
-/// A slot's `Key::Accepted` value, `0` bits for what holds none (any id but an `msig`).
+/// `Accepted(ua)`; no bits for an id that holds none (any id but an `msig`).
 fn accepted(env: &Env, ua: &BytesN<32>) -> AcceptedEntry {
     get(env, &Key::Accepted(ua.clone())).unwrap_or_else(|| (0, Map::new(env)))
 }
