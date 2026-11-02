@@ -36,7 +36,7 @@ Each row: the decision, the options weighed, the choice and why, the cost if it 
 | N7 | [CTR-UA-37](../../contracts/accounts.md#CTR-UA-37) at two levels | (a) a slot of `U` accepted by `I`'s threshold over `UAMembership{U, I}`, both words read at verify; (b) `I`'s own acceptance implied | **(a)** §4. Each word speaks for its own structure. The `pop` exemption stops at the outer: `I` signs a `pop` of `U` by its accepted slots. | (b) would make a listing in `U` an act of `I`'s members without their threshold | controller call |
 | N8 | [CTR-PQZ-12](../../contracts/pq-zero-knowledge.md#CTR-PQZ-12), `_pqEligible`, records | (a) an `msig` member is PQ iff PQ-eligible itself; (b) always classical; (c) always PQ | **(a)** §5: it is the rule's reason (no classical-only subset can authorize) applied one level down. (b) refuses sound structures; (c) is unsound. `pop`, KEM and PQZ records follow with no other change; a copy registers `I` first. `_pqEligible` stops being `pure`: it reads the member's structure. | (c) would let a classical forger hold a PQ slot; (a) has a test each way | controller call |
 | N9 | The bound | (a) recursion over `_worst`, `w` as the slot's cap, one `held`; (b) a fixed cap per `msig` member; (c) a groups × members shape | **(a)** §6: the limit is the total of signatures across both levels. **Measured:** an inner `msig` costs at most 18,646 gas cold (`--isolate`), against the 47,500 the bound gives it, so no new constant; `MSIG_MEMBER_GAS` holds at 48 ML-DSA-65 signatures (31.2 k to 32.0 k per signature). The controller's starting figures hold. | Under-counting starves an `msig` at the bound: `UAVerifyGas`, never a verdict, but its funds wait | controller call |
-| N10 | Generic `bytes auth` | (a) a hand decoder in `UAKinds`; (b) refuse nested `msig`s there; (c) forward the blob, the registry decodes | **(c)** §7: no parser on an untrusted path, one rule on every entry. solc cannot compile `abi.decode` of this type on the legacy pipeline. | `MtxPipelineLib` gains a low-level call: the no-code check is the guard, `test/metatx` covers the refusal | controller call |
+| N10 | Generic `bytes auth` | (a) a hand decoder in `UAKinds`; (b) refuse nested `msig`s there; (c) forward the blob, the registry decodes | **(c)** §7: no parser on an untrusted path, one rule on every entry. solc cannot compile a decoder of this type from memory on the legacy pipeline (§7). | `MtxPipelineLib` gains a low-level call: the no-code check is the guard, `test/metatx` covers the refusal | controller call |
 | N11 | Soroban | | The same rule, `Signer(id)` as the inner's key read, limits in bytes per entry, plus a signer count Soroban did not need before (§8). Not built here. | | "one rule on every chain"; the constant is that round's |
 | N12 | NEAR, Algorand | | Each takes the rule in its own UA round, separately (§8). | | owner scope |
 | N13 | The same id at both levels | (a) allowed; (b) refused | **(a)**: the rule does not forbid it, a key may sit in `U` and in `I`, or in two inner `msig`s, and each slot counts in the bound. Refusing needs a scan of 256 ids for nothing the structure's author could not write otherwise. | One signer counted in two slots: the structure says so, and it is public | controller call |
@@ -226,10 +226,21 @@ One more signature is refused at the real budget for every PQ row (`test_edges_o
 
 `UAKinds.uaSig` decoded `abi.encode(MemberSig[])` from memory for the tokens' generic `uaExecute` / `uaBatch` / `uaShield` (TS-D14). solc's legacy pipeline cannot
 compile that decoder for a list inside a list of structs: `Stack too deep`, in the generated Yul, with every field order and with `bytes[]` in place of `InnerSig[]`
-(a word-only inner struct compiles). `via_ir` is not an option here. The prototype replaces it with `UAKinds.uaAuthCall`: the blob goes to the registry unparsed, past its
-one offset word, and the registry's calldata decoder reads it; `MtxPipelineLib._authorize` makes the `staticcall` and refuses an address without code, the check a
-high-level call would make. No hand-written decoder on an untrusted path. Calldata decoding and memory encoding of the type compile; only a **memory decoder**
-does not, so `abi.decode` of `MemberSig[]`, or of anything holding `UASig`, is unavailable in Solidity from now on (`test/v2/DexKat.t.sol` did, and now goes through the calldata decoder, as its `mtxExchangeBatch` round trip already did).
+(a word-only inner struct compiles). The error names no file or function, only `AsmCodeGen.cpp:62`: a `--match-path` run that does not reach the file stays green, so check with a plain `forge build`. `via_ir` is not an option here. The prototype replaces it with `UAKinds.uaAuthCall`: the blob goes to the registry unparsed, past its
+one offset word, and the registry's calldata decoder reads it; `MtxPipelineLib._authorize` refuses an address without code and then makes the `staticcall`: the check a
+high-level call makes, where solc puts it. No hand-written decoder on an untrusted path.
+
+Which forms of `MemberSig[]`, or of anything holding `UASig` (`DexLeg`, `ExchangeLeg`, the plans holding them), compile, each tested alone with solc at `foundry.toml`'s settings:
+
+| Form | Legacy pipeline |
+|---|---|
+| `abi.decode` from `bytes memory` | `Stack too deep` |
+| The return-data decoder: an external call returning the type | `Stack too deep` |
+| `abi.decode` from `bytes calldata`, the calldata decoder of an external function | compiles |
+| `memory` parameters of an external or public function, calldata-to-memory copies | compile |
+| `abi.encode`, `abi.encodeCall`, a calldata pass-through, events | compile |
+
+So a contract or test can decode the type only from calldata: `test/v2/DexKat.t.sol` goes through its own external function, as its `mtxExchangeBatch` round trip already did, and no external call may return it. Trusted test bytes go through `UACall.memberSigs`.
 
 ## 8. Soroban (same rule, SPECIFIED, not built here)
 
@@ -272,22 +283,23 @@ without a registry of records.
 
 | Surface | Change |
 |---|---|
-| Selectors | 50 function names. The registry's five: `registerMsig` `0x82b86a46` → `0x61947129`, `setKemKey` `0xa00cce2a` → `0x6a3318f9`, `setPqzKey` `0x3c6897f1` → `0x0052c1b5`, `acceptMembership` `0x73fd7d54` → `0x2c1ac986`, `requireAuthorized` `0x58d5ff4f` → `0x9600639d`. Every entry taking a `UASig`: `NormalToken` 13, `WrappedToken` 16, `NormalZetherToken` 25, `WrappedZetherToken` 29, `NormalPqzToken` 30, `WrappedPqzToken` 36, `SCaaSDex` 8. No selector changes meaning: the tuple string `(uint16,bytes,bytes)` becomes `(uint16,(uint16,bytes)[],bytes)` |
+| Selectors | 50 function names. The registry's five: `registerMsig` `0x82b86a46` → `0x61947129`, `setKemKey` `0xa00cce2a` → `0x6a3318f9`, `setPqzKey` `0x3c6897f1` → `0x0052c1b5`, `acceptMembership` `0x73fd7d54` → `0x2c1ac986`, `requireAuthorized` `0x58d5ff4f` → `0x9600639d`. Every entry taking a `UASig`: `NormalToken` 13, `WrappedToken` 16, `NormalZetherToken` 25, `WrappedZetherToken` 29, `NormalPqzToken` 30, `WrappedPqzToken` 36, `SCaaSDex` 8, `MtxRelayFee` 1 (`uaRelay`, the one name no token has). No selector changes meaning: the tuple string `(uint16,bytes,bytes)` becomes `(uint16,(uint16,bytes)[],bytes)` |
 | `mtxSelectors` | The source does not move (`.selector`), the values do: `mtxConfidentialTransfer*`, `mtxUnshield`, `mtxUnshieldUnwrap`, and on Zether `mtxRollOverSigned`, `mtxSetRollOverMode`. Allow-lists stay equal to `_uaAllowed` per kind in both directions; `typed.rs`, `guard.rs` `CALL_TABLE` and the parity fixture regenerate. Measured: `MetaTxParity` 64 + 48 mismatches, all these selectors |
 | Typehashes | none: `MemberSig` is in no EIP-712 type |
 | Storage layout (`test/v2/layout/`, `UAStore.Layout`) | none: no new state |
 | `scaas-node` | `abi.rs`, `typed.rs` struct table (`InnerSig`, `MemberSig`), `submit.rs` literal selector pins, `guard.rs` `CALL_TABLE`, `adapters/soroban.rs`, `tests/e2e_ua8.rs`, `tests/e2e_soroban_ua.rs`. JSON `members: [{index, keyData, sig}]` becomes `[{index, members: [{index, sig}], sig}]`: a job shape change needs a note for operators, and the typed decode stays bounded by the type's depth of 2 |
+| `script/pqz/e2e.py` | Done here: `MEMBER_S` / `MEMBER_T`, its three flat slot builders and its literal pins of `registerMsig`, `setKemKey`, `setPqzKey`, `requireAuthorized`, so `--self-test` has no ABI failure. 14 rows stay red against `vectors/typed` until that is regenerated (all clear on a throwaway copy with the new selectors). Clients need no change for it: this file signs flat |
 | Clients | `clientkeys` (`evm.js`, `ua.js`, `ua-verify.js`, `soroban.js`, scripts, tests with `(uint16,bytes,bytes)` selectors), `ua-rs` (`json.rs`, `ua8.rs`), `ua-py`, `ua-go`, `ua-cs`, `ua-dart`: selectors, the typed shape, the nested verify; flat encoders keep their bytes |
 | Vectors | `smartcontracts/vectors/ua/{portable,structures}.json`, `vectors/typed`, `soroban/vectors`: flat `pop` bytes keep; selectors, the `keyData` field name of member rows and every KAT that holds a CREATE2 address move; new nested rows, including a non-zero negative at each level |
 | CREATE2 addresses, `dex_order_kat` | `IUARegistry.sol` and `UAKinds.sol` enter every importer's metadata, so token and DEX addresses move; regenerate, re-pin |
-| Size | Measured on this prototype, ratchet untouched, so `size_gate.py` reports 16 errors: `UARegistry` 28,429 → 29,211 B, `UARegistryLib` 32,667 → 34,308 B, `NormalToken` 37,228 → 37,487, `WrappedToken` 48,015 → 48,278, `NormalZetherToken` 52,741 → 52,874, `WrappedZetherToken` 62,169 → 62,305, `NormalPqzToken` 52,891 → 53,042, `WrappedPqzToken` 63,423 → 63,563 (1,973 B under the 64 KiB ceiling), `SCaaSDex` 27,957 → 28,089, `PqzBurnLib` 9,910 → 10,040, `PqzTransferLib` 17,504 → 17,634. Every token grows by the encoder of the deeper `UASig`. On landing the baseline moves with these figures |
-| Gas pins | A flat `msig` pays about 115 gas per member for the empty list: `requireAuthorized` 16 members 5,113,989 → 5,115,826, 9 `slhdsa128s` + 1 clone 11,818,215 → 11,819,460, per derived member 21,135 → 21,292. The tightest flat row at its bound stays inside it: gen 2, one 400 k member, 458,340 → 458,577 of 459,029. Two pins break: `test_T_GAS_register_ua8PerKind` (181,861 → 181,882), `test_T_GAS_storePqzPop` (153,454 → 153,498); old → new go in that commit |
+| Size | Measured on this prototype, ratchet untouched, so `size_gate.py` reports 16 errors: `UARegistry` 28,429 → 29,211 B, `UARegistryLib` 32,667 → 34,452 B, `NormalToken` 37,228 → 37,487, `WrappedToken` 48,015 → 48,278, `NormalZetherToken` 52,741 → 52,874, `WrappedZetherToken` 62,169 → 62,305, `NormalPqzToken` 52,891 → 53,042, `WrappedPqzToken` 63,423 → 63,563 (1,973 B under the 64 KiB ceiling), `SCaaSDex` 27,957 → 28,089, `PqzBurnLib` 9,910 → 10,040, `PqzTransferLib` 17,504 → 17,634. Every token grows by the encoder of the deeper `UASig`. On landing the baseline moves with these figures |
+| Gas pins | A flat `msig` pays about 115 gas per member for the empty list: `requireAuthorized` 16 members 5,113,989 → 5,115,826, 9 `slhdsa128s` + 1 clone 11,818,215 → 11,819,460, per derived member 21,135 → 21,292. The tightest flat row at its bound stays inside it: gen 2, one 400 k member, 458,340 → 458,577 of 459,029. Four rows are over their pins, at every parameter set, the same deltas, and no state gas moves; `test_T_GAS_*` stop at their first bad row, so list them with `GAS_REPIN=1`. `register msig-classical` 165,778 → 165,943 and `register webauthn-p256` 181,861 → 181,878, set-free; `registrationOf msig-pq` on gen 1, +22: 99,494 → 99,516 (`n2048-kmax1024`), 105,419 → 105,441 (`n2304-kmax4096`), 111,562 → 111,584 (`n2560-kmax16384`), 125,760 → 125,782 (`n2816-kmax65536`); on gen 2 with a gen 1 record, +44, two hops: 143,722 → 143,766, 153,454 → 153,498, 163,568 → 163,612, 182,107 → 182,151. The last three have untouched bodies, which fits the dispatchers of five moved selectors; not separated further. Old → new go in that commit. `register msig-classical` was 169,078 on the prototype, +3,300, none of it for nesting: 2,167 was `hederaNative()` read per slot, 968 `registerMsig` copying the structure to memory for `_packed`, both gone (`UARegistryLib` +144 B, `test_gasHotPath` holds the line). Of the +165 left, a 2-member flat `registerMsig` is below `159d267e` (143,320 → 143,014), so it grows with the members: about 40 gas a slot over the pin at four, `_slotCap`'s frame and `held`, the price of one recursion for both levels. It costs once, at registration |
 | Registry tests | §10 |
 | Docs | §11 |
 
 ## 10. Prototype status
 
-Built on `msig-nested`: `IUARegistry` (`InnerSig`, `MemberSig`), `UAKinds` (`isMember`, `uaAuthCall`), `UAStore.lift`, `UARegistry._memberOk`, `UARegistryLib` (`_msig`, `_memberOk`, `_pqEligible`, `_worst`, `_slotCap`, `_packed`, `_msigBytes`), `MtxPipelineLib._authorize`. New tests: `test/ua/UARegistryNested.t.sol`, `UARegistryNestedGas.t.sol`, `UAMsigGroupMember.t.sol`, `MtxPipelineLib.t.sol` `test_authorize_registryWithoutCodeRefuses`. Test changes: `MemberSig` constructors, `UACall.memberSigs` (a hand reader of trusted test bytes), `UACall.aList` for the old `keyData` negatives, `DexKat` through the calldata decoder. Not built: Soroban, node, clients, vectors, docs. **UNAUDITED.**
+Built on `msig-nested`: `IUARegistry` (`InnerSig`, `MemberSig`), `UAKinds` (`isMember`, `uaAuthCall`), `UAStore.lift`, `UARegistry._memberOk`, `UARegistryLib` (`_msig`, `_memberOk`, `_pqEligible`, `_worst`, `_slotCap`, `_packed`, `_msigBytes`), `MtxPipelineLib._authorize`. New tests: `test/ua/UARegistryNested.t.sol`, `UARegistryNestedGas.t.sol`, `UAMsigGroupMember.t.sol`, `UARegistryLibMsig.t.sol`, `MtxPipelineLib.t.sol` `test_authorize_registryWithoutCodeRefuses`, `test_authorize_lowLevelAnswersAsTheTypedCall`. Test changes: `MemberSig` constructors, `UACall.memberSigs` (a hand reader of trusted test bytes), `UACall.aList` for the old `keyData` negatives, `DexKat` through the calldata decoder. Not built: Soroban, node, clients, vectors, docs. **UNAUDITED.**
 
 **A negative must be able to fail.** Each mutant, one change, restored after its run:
 
@@ -295,11 +307,19 @@ Built on `msig-nested`: `IUARegistry` (`InnerSig`, `MemberSig`), `UAKinds` (`isM
 |---|---|
 | `pop` exemption reaches the inner level | `test_popInnerSlotNeedsItsOwnAcceptance` |
 | every `msig` member counts as PQ | `test_pqEligibleCountsInnerByItsOwnRule` |
-| no code check after the low-level call | `test_authorize_registryWithoutCodeRefuses` |
+| no code check before the low-level call | `test_authorize_registryWithoutCodeRefuses`, `test_authorize_lowLevelAnswersAsTheTypedCall` |
 | no refusal of a third level | `test_twoLevelsOnly` |
 | a list on a signing member ignored | `test_nestedNegatives` |
 | `md_I` not bound to `md_U` (source and test helper alike) | `test_digestChainBindsOuterAndInner` |
 | `MSIG_MEMBER_GAS` 45,000 → 20,000 | 6 of 9 in `UARegistryNestedGas.t.sol`, `authorizes with the bound` |
+| failure of the low-level call ignored | `test_preCall_orderUaPath`, `test_authorize_lowLevelAnswersAsTheTypedCall` |
+| revert data of the low-level call dropped | `test_preCall_orderUaPath`, `test_authorize_lowLevelAnswersAsTheTypedCall` |
+| half the gas forwarded | `test_authorize_lowLevelAnswersAsTheTypedCall` |
+| head words of `uaAuthCall` swapped | `test_genericAuthIsTheTypedCall` |
+| no canonical offset check, or a 32-byte `sig` accepted, in `uaAuthCall` | `test_genericAuthMalformed` |
+| `UARegistryLib._msig`: no stop at the threshold | `test_libMsig_stopsAtTheThreshold`, `calls out: 3 != 2`: the verdict alone stays `UAPoP` |
+| `UARegistryLib._msig`: no strictly increasing index | `test_libMsig_sameMemberTwice`, `test_libMsig_popRows` |
+| `UARegistryLib._msig`: no check of an index past the members | `test_libMsig_indexPastTheMembers`, `calls out: 2 != 1`: the verdict alone stays `UAPoP` |
 
 **Tests this prototype breaks, on purpose; none is edited to pass, no pin moved:**
 
@@ -307,15 +327,17 @@ Built on `msig-nested`: `IUARegistry` (`InnerSig`, `MemberSig`), `UAKinds` (`isM
 |---|---|---|
 | `UAKinds.t.sol` `test_invalidRows`, `test_kindTable` | `kinds.json` "structure member": an `msig` member was invalid | regenerate |
 | `UARegistry.t.sol` `test_T_AUTH_2_msigRegistration`, `test_T_REG_2_negativeKeyData` | they expect the refusal of an `msig` member | rewrite to the new refusal |
-| `UARegistryVectors.t.sol` `test_vectors_msig`, `test_requireAuthorizedUASigEveryKind` | `signatures.json` rows `native-member-keydata`, `derived-member-keydata`: no field for them; those bytes now fail the registry's ABI decoder, a bare revert, not `UAUnauthorized` | drop the rows, add a list-on-a-signing-slot row |
+| `UARegistryVectors.t.sol` `test_vectors_msig`, `test_requireAuthorizedUASigEveryKind` | `signatures.json` rows `native-member-keydata`, `derived-member-keydata`: no field for them. The tests stop in the test helper: `UACall.memberSigs` reads a `keyData` length as a list count and runs out of gas in the test's own frame (`InvalidOperandOOG`), and the registry is never called. On the registry itself, through `UAKinds.uaAuthCall`, both rows are a bare revert at about 21 k gas, not `UAUnauthorized`, and the other 8 rows answer as designed | drop the rows, add a list-on-a-signing-slot row |
 | `UARegistryUA8.t.sol` `test_ua8_writeSelectorsPinned`; `ConfidentialSelectors.t.sol` 2 | literal selectors | new values |
 | `UARegistryUA8.t.sol` `test_T_GAS_register_ua8PerKind`, `test_T_GAS_storePqzPop` | gas pins, §9 | old → new |
 | `UARegistryUA8.t.sol` `test_split_portableRowsSame`, `test_split_storePqzPopWithAVerify` | the pre-split source | move to `legacy/` |
 | `DexKat.t.sol` `test_dexKat`, `test_dexKat_newEntriesRoundTrip` | `dex_order_kat` | regenerate |
-| `MetaTxParity.t.sol` `test_parity`, `test_ruleTableParity`; `MtxRelayFee.t.sol` `test_relayFeeRows`; `TradeTyped.t.sol` 18; `TypedOps.t.sol` 6 | selectors and calldata in `vectors/typed`, the parity fixture | regenerate |
-| `PqzTyped.t.sol`, `ZetherTyped.t.sol`, 22 tests | rows of `vectors/typed` with the old `ua*` calldata; read as selector drift, not checked row by row | regenerate, then read what is left |
+| `MetaTxParity.t.sol` `test_parity`, `test_ruleTableParity`; `MtxRelayFee.t.sol` `test_relayFeeRows`; `TradeTyped.t.sol` 18; `TypedOps.t.sol` 6 | selectors and calldata in `vectors/typed`, the parity fixture. Of `MetaTxParity`'s 112 mismatches, 96 are selector identities; 16 are one `digest` over a signed inner `data` that holds a moved selector (with the old inner selector, every `digests.*` row returns to the fixture) | regenerate |
+| `PqzTyped.t.sol`, `ZetherTyped.t.sol`, 22 tests | rows of `vectors/typed` with the old selector: nothing dispatches, the revert is empty, so "the op's own check" is a misleading message. Checked row by row: with only `abi` and the selector rewritten in a throwaway copy, all 22, with `TradeTyped`, `TypedOps` and `test_relayFeeRows`, reach their op's own check, 206 of 206 | regenerate |
 
-`UARegistrySplit.t.sol` moved to `smartcontracts/evm/legacy/msig-nested/test/ua/`: the pre-split source reads `MemberSig.keyData`, so it no longer compiles, and it is a differential of a finished refactor. Its non-differential tests go with it for now (`test_gasHotPath`, the nested-offset test): carry them over on landing. `size-baseline.json`, `test/v2/layout/` and every pin are as they were.
+**At the other parameter sets** (`at-set.sh`, `forge test`): the same tests fail for the same reasons, and the same four gas rows (§9). Two differences, both by design. `MetaTxParity.test_parity` skips: its fixture is written at `n2304-kmax4096` only, so its 64 mismatches are that set's. `test_pqzhN2048FitsBothPaths`, in `PqzStateGas`, `MtxSplitOverhead` and `PqzPackGas`, runs at `n2048-kmax1024` only and fails there, 66 against 63: it reads `abi` from `vectors/typed` and sends the old selector, so it regenerates with that file. With only `abi` and the selector rewritten in a throwaway copy, the row suites and these three pass at every set: 328, 324 and 318 of 328, the rest skipped, 0 failed.
+
+`UARegistrySplit.t.sol` moved to `smartcontracts/evm/legacy/msig-nested/test/ua/`: the pre-split source reads `MemberSig.keyData`, so it no longer compiles, and it is a differential of a finished refactor. What still applies is in `test/ua/UARegistryLibMsig.t.sol`: `UARegistryLib._msig`'s guards (the file's `_msigIndexGuards`), the nested-offset note with its post-split half, `test_gasHotPath` against the figures of `159d267e`, the last commit where the differential ran. `size-baseline.json`, `test/v2/layout/` and every pin are as they were.
 
 ## 11. Doc changes on landing
 
