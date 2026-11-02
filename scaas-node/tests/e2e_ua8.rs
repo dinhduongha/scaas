@@ -65,7 +65,8 @@ alloy::sol! {
     struct SolAttrs { bytes pqzKey; bytes32 pqzPopHash; SolKem kem; bytes32 kemPkHash; }
     struct SolMember { uint16 kind; bytes32 id; uint16 weight; }
     struct SolStructure { uint16 threshold; SolMember[] members; }
-    struct SolMemberSig { uint16 index; bytes keyData; bytes sig; }
+    struct SolInnerSig { uint16 index; bytes sig; }
+    struct SolMemberSig { uint16 index; SolInnerSig[] members; bytes sig; }
     struct SolSig { bytes keyData; bytes signature; SolMemberSig[] members; }
     function cacheExpandedKey(uint16 kind, bytes pk, uint256 part) external returns (bytes32 ua);
     function register(uint16 kind, bytes keyData, SolAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
@@ -216,7 +217,7 @@ fn evm_attrs(a: &UAAttrs) -> Value {
 }
 
 fn evm_member_sigs(m: &[MemberSig]) -> Vec<Value> {
-    m.iter().map(|s| json!({"index": s.index, "keyData": h(&s.key_data), "sig": h(&s.sig)})).collect()
+    m.iter().map(|s| json!({"index": s.index, "members": [], "sig": h(&s.sig)})).collect()
 }
 
 /// A stored portable signature as an entry's named `UASig`.
@@ -237,7 +238,7 @@ fn kem_json(k: &KemKey) -> Value {
 }
 
 fn member_sigs_json(m: &[MemberSig]) -> Vec<Value> {
-    m.iter().map(|s| json!({"index": s.index, "key_data": h(&s.key_data), "sig": h(&s.sig)})).collect()
+    m.iter().map(|s| json!({"index": s.index, "key_data": "0x", "sig": h(&s.sig)})).collect()
 }
 
 /// A stored portable signature (`signature`, or an `msig`'s `abi.encode(MemberSig[])`) as the job's `sig`.
@@ -258,7 +259,7 @@ fn sol_attrs(a: &UAAttrs) -> SolAttrs {
 }
 
 fn sol_member_sigs(m: &[MemberSig]) -> Vec<SolMemberSig> {
-    m.iter().map(|s| SolMemberSig { index: s.index, keyData: s.key_data.clone().into(), sig: s.sig.clone().into() }).collect()
+    m.iter().map(|s| SolMemberSig { index: s.index, members: vec![], sig: s.sig.clone().into() }).collect()
 }
 
 fn sol_sig(kind: u16, stored: &[u8]) -> SolSig {
@@ -459,7 +460,7 @@ fn call_job(registry: &str, f: &str, args: Value) -> Value {
 /// A member's acceptance as the node's `ua_metatx` job (CTR-UA-37).
 fn accept_job(registry: &str, ua: &[u8; 32], slot: &MemberSig, relayer: &Value) -> Value {
     let id = JOB.fetch_add(1, Ordering::Relaxed);
-    let member_sig = json!({"index": slot.index, "key_data": h(&slot.key_data), "sig": h(&slot.sig)});
+    let member_sig = json!({"index": slot.index, "key_data": "0x", "sig": h(&slot.sig)});
     json!({"id": id, "kind": "ua_metatx", "op": {"contract": registry, "function": "accept_membership", "valid_until": now() + 600,
            "args": {"ua": h(ua), "member_sig": member_sig, "relayer": relayer}}})
 }
@@ -796,7 +797,7 @@ impl<'a> Ms<'a> {
 
     /// The slots of `signers` (member indexes) over `(purpose, digest)`.
     fn slots(&self, signers: &[usize], purpose: &[u8; 32], digest: &[u8; 32]) -> Vec<MemberSig> {
-        signers.iter().map(|&i| MemberSig { index: i as u16, key_data: vec![], sig: self.members[i].0.sign(&member_message(MLDSA65, &self.ua, purpose, digest)) }).collect()
+        signers.iter().map(|&i| MemberSig { index: i as u16, members: vec![], sig: self.members[i].0.sign(&member_message(MLDSA65, &self.ua, purpose, digest)) }).collect()
     }
 
     fn rec(&self, signers: &[usize], attrs: &UAAttrs, pqz_key_hash: &[u8; 32], pqz_pop: Vec<u8>) -> Rec {
@@ -1012,7 +1013,7 @@ async fn g_member_job(n: &Node, ml: &Ml, signer: u32, relayer: &Value) -> Value 
     let ua = scaas_ua::ua_of(MSIG, &kd).unwrap();
     let d = register_digest(MSIG, &ua, &no_attrs(), &[0; 32]);
     let slots: Vec<MemberSig> = list.iter().enumerate().map(|(i, m)| MemberSig {
-        index: i as u16, key_data: vec![],
+        index: i as u16, members: vec![],
         sig: if m.0 == MLDSA65 { ml.sign(&member_message(MLDSA65, &ua, &ua8::pop_v2_tag(), &d)) } else { vec![] },
     }).collect();
     let rec = Rec { kind: MSIG, key_data: kd, attrs: no_attrs(), pop: encode_member_sigs(&slots), pqz_pop: vec![] };
@@ -1215,7 +1216,7 @@ async fn e2e_ua8_network_fit() {
         // the heavy member is listed, the `pop` did not hold it (CTR-UA-37): the largest `Ua(ua)` an acceptance loads, one `mldsa65` slot
         let heavy_id = heavy.members[at].0.ua;
         let m = member_message(MLDSA65, &heavy.ua, &scaas_ua::purpose_tag("membership").unwrap(), &ua8::membership_digest(&heavy.ua, &heavy_id));
-        let slot = MemberSig { index: at as u16, key_data: vec![], sig: heavy.members[at].0.sign(&m) };
+        let slot = MemberSig { index: at as u16, members: vec![], sig: heavy.members[at].0.sign(&m) };
         let (state, last, tx) = n.run(0, accept_job(&n.registry, &heavy.ua, &slot, &none)).await;
         assert_eq!(state, "mined", "{last}");
         fit(&format!("accept_membership Ua(ua) of 15 slots {set}, 1 slot"), &tx.unwrap()).await;
@@ -1257,7 +1258,7 @@ async fn e2e_ua8_network_fit() {
     members.sort_by_key(|m| m.1);
     let msig_of = |k: usize, c: usize| {
         let kd = scaas_ua::encode_msig(c as u16, &members[k..k + c]);
-        let slots: Vec<MemberSig> = (0..c as u16).map(|index| MemberSig { index, key_data: vec![], sig: sig.clone() }).collect();
+        let slots: Vec<MemberSig> = (0..c as u16).map(|index| MemberSig { index, members: vec![], sig: sig.clone() }).collect();
         Rec { kind: MSIG, key_data: kd, attrs: no_attrs(), pop: encode_member_sigs(&slots), pqz_pop: vec![] }
     };
     let relayed = |rec: &Rec| {
@@ -1509,7 +1510,7 @@ impl Pool {
     }
 
     fn slots(&self, indexes: impl Iterator<Item = u16>) -> Vec<MemberSig> {
-        indexes.map(|index| MemberSig { index, key_data: vec![], sig: self.sig.clone() }).collect()
+        indexes.map(|index| MemberSig { index, members: vec![], sig: self.sig.clone() }).collect()
     }
 
     /// `count` members from `start`, every one needed: `extra` on one weight only tells two records of the same members apart.
@@ -1949,7 +1950,7 @@ async fn e2e_ua8_relayer_checked_msig_slot() {
     let d = register_digest(MSIG, &ua, &no_attrs(), &[0; 32]);
     let slots: Vec<MemberSig> = list.iter().enumerate().map(|(i, m)| {
         let msg = member_message(m.0, &ua, &ua8::pop_v2_tag(), &d);
-        MemberSig { index: i as u16, key_data: vec![], sig: match m.0 { FNDSA512 => fk.sign(&msg), SLHDSA128S => sl.sign(&msg), _ => ml.sign(&msg) } }
+        MemberSig { index: i as u16, members: vec![], sig: match m.0 { FNDSA512 => fk.sign(&msg), SLHDSA128S => sl.sign(&msg), _ => ml.sign(&msg) } }
     }).collect();
     let rec = Rec { kind: MSIG, key_data: kd, attrs: no_attrs(), pop: encode_member_sigs(&slots), pqz_pop: vec![] };
 

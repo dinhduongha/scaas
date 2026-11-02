@@ -2019,7 +2019,7 @@ pub(crate) mod tests {
         let sig = |n: usize, v: u8| UASig { keyData: Bytes::new(), signature: b(n, v), members: vec![] };
         let attrs = || UAAttrs { pqzKey: b(18_432, 2), pqzPopHash: B256::repeat_byte(3), kem: kem(4), kemPkHash: B256::ZERO };
         let members = |n: u16| (0..n).map(|i| MsigMember { kind: 0x0131, id: B256::repeat_byte(0x20 + i as u8), weight: 1 }).collect();
-        let pops = |n: u16| (0..n).map(|i| crate::abi::MemberSig { index: i, keyData: Bytes::new(), sig: b(3309, 13) }).collect();
+        let pops = |n: u16| (0..n).map(|i| crate::abi::MemberSig { index: i, members: vec![], sig: b(3309, 13) }).collect();
         let none = || UAAttrs { pqzKey: Bytes::new(), pqzPopHash: B256::ZERO, kem: KemKey { scheme: 0, mlkemEk: Bytes::new(), x25519: B256::ZERO },
             kemPkHash: B256::ZERO };
         vec![
@@ -2029,7 +2029,7 @@ pub(crate) mod tests {
             storePqzPopCall { ua, pqzPop: b(30_381, 8) }.abi_encode(),
             setPqzKeyCall { ua, pqzKey: b(18_432, 9), pqzPopHash: B256::repeat_byte(10), sig: sig(3309, 11) }.abi_encode(),
             // CTR-UA-37: an `msig` member accepts its place; anyone submits, so the member needs no gas
-            acceptMembershipCall { ua, memberSig: crate::abi::MemberSig { index: 3, keyData: Bytes::new(), sig: b(3309, 36) } }.abi_encode(),
+            acceptMembershipCall { ua, memberSig: crate::abi::MemberSig { index: 3, members: vec![], sig: b(3309, 36) } }.abi_encode(),
             registerMsigCall { structure: MsigStructure { threshold: 2, members: members(2) }, attrs: attrs(), pop: pops(2),
                 pqzPop: b(pqz_pop, 12) }.abi_encode(),
             // typed-signing R1b (TS-D13): the typed single-key entries (no PQZ / KEM holders: empty attributes)
@@ -2053,15 +2053,15 @@ pub(crate) mod tests {
         use crate::abi::IUARegistry::*;
         assert_eq!(registerCall::SIGNATURE, "register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)");
         assert_eq!(registerCall::SELECTOR, [0x4e, 0x22, 0x9e, 0xfb]);
-        assert_eq!(registerMsigCall::SELECTOR, [0x82, 0xb8, 0x6a, 0x46]);
+        assert_eq!(registerMsigCall::SELECTOR, [0x61, 0x94, 0x71, 0x29]);
         assert_eq!(registerWebAuthnCall::SELECTOR, [0xee, 0x03, 0xa1, 0xfe]);
         assert_eq!(registerMuSig2Call::SELECTOR, [0xe1, 0xed, 0xdc, 0xdf]);
         assert_eq!(registerFrostCall::SELECTOR, [0x7b, 0xd6, 0x34, 0x10]);
-        assert_eq!(setKemKeyCall::SELECTOR, [0xa0, 0x0c, 0xce, 0x2a]);
+        assert_eq!(setKemKeyCall::SELECTOR, [0x6a, 0x33, 0x18, 0xf9]);
         assert_eq!(storePqzPopCall::SELECTOR, [0x7f, 0xac, 0x16, 0x1a]);
-        assert_eq!(setPqzKeyCall::SELECTOR, [0x3c, 0x68, 0x97, 0xf1]);
-        assert_eq!(acceptMembershipCall::SIGNATURE, "acceptMembership(bytes32,(uint16,bytes,bytes))");
-        assert_eq!(acceptMembershipCall::SELECTOR, [0x73, 0xfd, 0x7d, 0x54]);
+        assert_eq!(setPqzKeyCall::SELECTOR, [0x00, 0x52, 0xc1, 0xb5]);
+        assert_eq!(acceptMembershipCall::SIGNATURE, "acceptMembership(bytes32,(uint16,(uint16,bytes)[],bytes))");
+        assert_eq!(acceptMembershipCall::SELECTOR, [0x2c, 0x1a, 0xc9, 0x86]);
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
         let (reg, other) = (Address::repeat_byte(0x5e), Address::repeat_byte(0x5f));
         let cfg = move |c: &mut ChainCfg| c.ua_registry = Some(reg);
@@ -2353,7 +2353,7 @@ pub(crate) mod tests {
     async fn ua_relay_fee_needs_a_price_and_covers_the_quote() {
         let sig = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
         assert_eq!(crate::abi::IUALedger::uaPayMetaCall::SELECTOR,
-            sig("uaPayMeta(bytes32,bytes32,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,bytes,bytes)[]))"));
+            sig("uaPayMeta(bytes32,bytes32,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
         let mut cfg = test_cfg("http://127.0.0.1:9");
         relay_params(&mut cfg, &[]);
         let rf = guard::RelayFee::from_cfg(&cfg).unwrap().unwrap();

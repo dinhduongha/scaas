@@ -11,7 +11,7 @@ const zMulti = (t) => [t.accSeq, t.sendCounter, t.validUntilBlock, t.salt, t.ben
   t.legs.map((l) => [G(l.yTo), G(l.cOut), G(l.cAud), G(l.dAud)]), t.sealedMemo];
 const zBurn = (t) => [t.accSeq, t.sendCounter, t.validUntilBlock, t.beneficiaryUA, G(t.yFrom)];
 const uw = (u) => [u.underlying, u.recipient, u.amount, u.minOut];
-const uaTuple = (s) => [s.keyData, s.signature, s.members.map((x) => [x.index, x.keyData, x.sig])];
+const uaTuple = (s) => [s.keyData, s.signature, s.members.map((x) => [x.index, x.members.map((y) => [y.index, y.sig]), x.sig])];
 const CONF = {
   PqzTransferSingle: (m, x) => [pqzArgsSingle(m.args), m.proof, uaTuple(x.pqzAuth), m.accHint],
   PqzTransferSingleCompact: (m, x) => [pqzArgsSingle(m.args), m.proof, uaTuple(x.pqzAuth), m.accHint],

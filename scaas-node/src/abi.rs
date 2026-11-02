@@ -59,9 +59,12 @@ sol! {
         uint256 validUntil;
     }
 
-    /// `IUARegistry.MemberSig` / `UASig` (typed-signing R1): a UA's authorization, explicit fields on every named entry.
+    /// `IUARegistry.InnerSig` / `MemberSig` / `UASig` (typed-signing R1): a UA's authorization, explicit fields on every named entry.
+    /// `InnerSig` has no list: the type is two levels deep, and that is the depth bound of a decode (owner 2026-11-02).
     #[derive(Debug, PartialEq, Eq)]
-    struct MemberSig { uint16 index; bytes keyData; bytes sig; }
+    struct InnerSig { uint16 index; bytes sig; }
+    #[derive(Debug, PartialEq, Eq)]
+    struct MemberSig { uint16 index; InnerSig[] members; bytes sig; }
     #[derive(Debug, PartialEq, Eq)]
     struct UASig { bytes keyData; bytes signature; MemberSig[] members; }
 

@@ -26,6 +26,21 @@ fn record_sig(r: &Value) -> Value {
     if r["kind"] == 0x0120 { json!({ "members": r["args"]["sig"]["members"] }) } else { json!({ "signature": r["sig"] }) }
 }
 
+/// Nested `msig`: the JSON shim with `inner`, every row of nested.json; without it a nested record's holder check stops at `MemberUnknown`.
+#[test]
+fn registration_args_nested_rows() {
+    let path = format!("{}/../../smartcontracts/vectors/ua/nested.json", env!("CARGO_MANIFEST_DIR"));
+    let n: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let rows = n["registrations"].as_array().unwrap();
+    let inner: serde_json::Map<String, Value> = rows.iter().filter(|r| r["kind"] == 0x0120).map(|r| (r["ua"].as_str().unwrap().to_string(), r["keyData"].clone())).collect();
+    for r in rows.iter().filter(|r| r["kind"] == 0x0120) {
+        let mut i: Value = serde_json::from_str(&reg_input(r, Some(false))).unwrap();
+        i["inner"] = Value::Object(inner.clone());
+        let got = out(registration_args_json(&i.to_string()));
+        assert_eq!(got["args"], r["args"], "{}", r["name"]);
+    }
+}
+
 #[test]
 fn registration_args_rows() {
     let p = portable();

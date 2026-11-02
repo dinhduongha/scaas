@@ -29,7 +29,8 @@ const MEMBER = ua.purposeTag('member');
 // only for the negative that frames a native member's portable signature as UAAuth (chain-bound) instead of the typed digest
 const { contexts } = JSON.parse(readFileSync(join(OUT, 'structures.json'), 'utf8'));
 // each UA's own filler PQZ key (one UA per proven PQZ key); mldsa65's at n2048-kmax1024 is kinds.json's `pqzKey`
-const PQZ_LABEL = { mldsa65: '', 'msig-pq': ' msig-pq', fndsa512: ' fndsa512', 'msig-pq-native': ' msig-pq-native' };
+const PQZ_LABEL = { mldsa65: '', 'msig-pq': ' msig-pq', fndsa512: ' fndsa512', 'msig-pq-native': ' msig-pq-native',
+  'msig-nested-native': ' msig-nested-native' };
 
 // --- signers: { name, kind, keyData, ua, sign(msg32, opts) } ---
 const signer = (name, kind, keyData, sign) => ({ name, kind, keyData, ua: ua.deriveUA(kind, keyData), sign });
@@ -45,17 +46,21 @@ const pq = (name, index = 0) => {
 const native = { kind: 0x0001, ua: nativeUa };
 
 /** An msig over `members` ({ kind, ua, sign? } with a weight): sorted by id; `signMembers(md, typedDigest, indices)` =
- *  abi.encode(MemberSig[]), derived members over uaMessage(kind, member, md) with empty key data (stored kinds), a native
- *  member by ECDSA over the record's typed digest itself (TS-D4: eth_signTypedData_v4, chain-free, no UAAuth domain);
- *  `nativeSig` replaces the native member's signature (the negatives); only a minimal slot set (owner 2026-10-31: every
- *  signature this file stores is a portable one). `memberList`: any set, unchecked. */
-function msig(name, threshold, members) {
+ *  abi.encode(MemberSig[]), derived members over uaMessage(kind, member, md) (a slot carries no key data, CTR-UA-33), a native
+ *  member by ECDSA over the record's typed digest itself (TS-D4: eth_signTypedData_v4, chain-free, no UAAuth domain),
+ *  an `msig` member by its own list over `innerDigest(id, md)`, its first `threshold` slots or `signers`, `sig` empty;
+ *  `nativeSig(md)` replaces the native member's signature (the negatives); only a minimal slot set (owner 2026-10-31: every
+ *  signature this file stores is a portable one). `memberList`: any set, unchecked. `inner`: an `msig` member's key data by id. */
+function msig(name, threshold, members, signers) {
   const ms = members.map(([m, weight]) => ({ ...m, weight }))
     .sort((a, b) => (hex(a.ua) < hex(b.ua) ? -1 : 1)).map((m, index) => ({ ...m, index }));
   const keyData = ua.encodeMsig(threshold, ms.map((m) => ({ kind: m.kind, id: m.ua, weight: m.weight })));
-  const list = (md, typedDigest, indices, nativeSig = () => ecdsa(nativeSk, typedDigest)) => indices.map((i) => ({
-    index: i, keyData: NONE, sig: ua.isNativeKind(ms[i].kind) ? nativeSig() : ms[i].sign(ua.uaMessage(ms[i].kind, MEMBER, md)) }));
-  return { ...signer(name, 0x0120, keyData, null), threshold, members: ms, signMembers: (...a) => portableMemberSigs(keyData, list(...a)), memberList: list };
+  const inner = (id) => ms.find((m) => m.kind === 0x0120 && hex(m.ua) === id)?.keyData;
+  const list = (md, typedDigest, indices, nativeSig = () => ecdsa(nativeSk, typedDigest)) => indices.map((i) => (ms[i].kind === 0x0120
+    ? { index: i, members: ms[i].memberList(ua.innerDigest(ms[i].ua, md), typedDigest, ms[i].signers, nativeSig), sig: NONE }
+    : { index: i, members: [], sig: ua.isNativeKind(ms[i].kind) ? nativeSig(md) : ms[i].sign(ua.uaMessage(ms[i].kind, MEMBER, md)) }));
+  return { ...signer(name, 0x0120, keyData, null), threshold, members: ms, inner, signers: signers ?? ms.map((m) => m.index).slice(0, threshold),
+    signMembers: (...a) => portableMemberSigs(keyData, list(...a), inner), memberList: list };
 }
 
 /** [v0 (the register key), v1, v2, v3]: each version its own key (a new key always goes to a new version). */
@@ -73,20 +78,20 @@ const nativeMsig = msig('msig-pq-native', 2, [[native, 1], [ml1, 1]]);
 const KEM = { mldsa65: kemKeys('mldsa65'), fndsa512: kemKeys('fndsa512'), 'msig-pq': kemKeys('msig-pq') };
 
 /** One registration: the `register` arguments, every digest between them, and the signer's pop over the portable PoP. */
-function registration(s, { set = '', kem = false, raw = false, slots = 2 } = {}) {
+function registration(s, { set = '', kem = false, raw = false, slots = 2, signers } = {}) {
   const pqzKey = set ? pqzKeyOf(set, PQZ_LABEL[s.name]) : NONE;
   const pqzPop = set ? pqzPopOf(set) : NONE;
   const kemPk = kem ? KEM[s.name][0] : NONE;
-  const m = ua.holderPopMessage(s.kind, { ua: s.ua, keyData: s.keyData, pqzKey, pqzPop, kemPk });
+  const m = ua.holderPopMessage(s.kind, { ua: s.ua, keyData: s.keyData, pqzKey, pqzPop, kemPk, inner: s.inner });
   const isMsig = s.kind === 0x0120;
-  const popSigners = isMsig && ua.msigPqzEligible(s.keyData) ? s.members.map((x) => x.index).slice(0, slots) : [];
+  const popSigners = isMsig && ua.msigPqzEligible(s.keyData, s.inner) ? signers ?? s.members.map((x) => x.index).slice(0, slots) : [];
   const popList = isMsig ? s.memberList(m.memberDigest, m.registrationDigest, popSigners) : null;
-  const pop = isMsig ? (popSigners.length ? (raw ? encodeMemberSigs(popList) : portableMemberSigs(s.keyData, popList)) : NONE) : s.sign(m.message, { pop: true });
+  const pop = isMsig ? (popSigners.length ? (raw ? encodeMemberSigs(popList) : portableMemberSigs(s.keyData, popList, s.inner)) : NONE) : s.sign(m.message, { pop: true });
   // typed-signing R1: the explicit registry arguments (register / registerMsig), and for a KEM row its hash-commit form
-  const input = { kind: s.kind, keyData: s.keyData, pqzKey, pqzPopHash: m.pqzPopHash, pqzPop, kemPk, pop: popList ?? pop };
+  const input = { kind: s.kind, keyData: s.keyData, pqzKey, pqzPopHash: m.pqzPopHash, pqzPop, kemPk, pop: popList ?? pop, inner: s.inner };
   // a raw row is not minimal, which `registrationArgs` refuses to build: its arguments are the row's own
   const full = ua.registrationArgs({ ...input, pop: raw ? [] : input.pop, kemCommit: false });
-  if (raw) full.args.pop = popList.map((m) => ({ index: m.index, keyData: hex(m.keyData), sig: hex(m.sig) }));
+  if (raw) full.args.pop = ua.uaSig({ members: popList }).members;
   const commit = kem ? ua.registrationArgs({ ...input, kemCommit: true }) : null;
   return {
     name: set ? `${s.name}/${set}` : s.name, kind: s.kind, kindName: ua.kindInfo(s.kind).name, set, keyData: hex(s.keyData),
@@ -115,7 +120,7 @@ const registrations = [
 
 // --- KEM records: setKemKey versions 1-3 of each KEM holder (version 0 is its register key), signed over uaMessage(kind, kem,
 // kemRecordDigest) (an msig by members); structHash = hashStruct(UAKemRecord), digest = the typed UAKemRecord digest ---
-const kemRecords = [[ml, 'mldsa65'], [fn, 'fndsa512'], [pqMsig, 'msig-pq']].flatMap(([s, name]) => KEM[name].slice(1).map((kemPk, i) => {
+const kemRecord = (s, name) => (kemPk, i) => {
   const version = i + 1;
   const record = { ua: s.ua, version, kemPk };
   const digest = ua.kemRecordDigest(record);
@@ -127,13 +132,14 @@ const kemRecords = [[ml, 'mldsa65'], [fn, 'fndsa512'], [pqMsig, 'msig-pq']].flat
     digest: hex(digest), message: hex(message), ...(md ? { memberDigest: hex(md) } : {}),
     sig: hex(sig), typedData: ua.portableTypedData('UAKemRecord', ua.kemRecordStruct(record)),
     args: { ua: hex(s.ua), version, kem: ua.kemKeyOf(kemPk), sig: ua.uaSig(list ? { members: list } : { signature: sig }) } };
-}));
+};
+const kemRecords = [[ml, 'mldsa65'], [fn, 'fndsa512'], [pqMsig, 'msig-pq']].flatMap(([s, name]) => KEM[name].slice(1).map(kemRecord(s, name)));
 
 // --- PQZ key records (setPqzKey, ruling A1-I1): a holder registered without a PQZ key attaches one later, at every set ---
 const pqzKeyRecord = (s, set, signerOf = s) => {
-  const reg = registrations.find((r) => r.ua === hex(s.ua));
+  const reg = { ua: hex(s.ua) };
   const pqzKey = pqzKeyOf(set, PQZ_LABEL[s.name]);
-  const m = ua.pqzKeyRecordMessage(s.kind, { ua: s.ua, keyData: s.keyData, pqzKey, pqzPop: pqzPopOf(set) });
+  const m = ua.pqzKeyRecordMessage(s.kind, { ua: s.ua, keyData: s.keyData, pqzKey, pqzPop: pqzPopOf(set), inner: s.inner });
   const list = s.kind === 0x0120 ? s.memberList(m.memberDigest, m.recordDigest, [0, 1]) : null;
   const sig = list ? encodeMemberSigs(list) : signerOf.sign(m.message);
   return { name: `${s.name}/${set}`, set, kind: s.kind, ua: reg.ua, pqzKey: hex(pqzKey), pqzKeyHash: hex(m.pqzKeyHash),
@@ -143,7 +149,7 @@ const pqzKeyRecord = (s, set, signerOf = s) => {
     args: { ua: reg.ua, pqzKey: hex(pqzKey), pqzPopHash: hex(m.pqzPopHash), sig: ua.uaSig(list ? { members: list } : { signature: sig }) } };
 };
 const pqzKeyRecords = [fn, nativeMsig].flatMap((s) => SETS.map((set) => pqzKeyRecord(s, set)));
-// --- acceptMembership(ua, MemberSig{index, "", sig}) (CTR-UA-37): each member of two structures; digest = typed(UAMembership{ua,
+// --- acceptMembership(ua, MemberSig{index, [], sig}) (CTR-UA-37): each member of two structures; digest = typed(UAMembership{ua,
 // member}), a native member over it, a derived member over uaMessage(memberKind, member, memberDigest) ---
 const membership = (s, m) => {
   const r = ua.membershipMessage({ ua: s.ua, member: m.ua });
@@ -247,6 +253,133 @@ const negatives = [
     B(kemRecords.find((k) => k.id === 'fndsa512/v1').digest)))) }, 'UAPoP'),
 ];
 
+// --- nested.json: nested `msig` (spec 2026-11-02-msig-nested): its records in the order they register, in their own file because
+// a family that has not taken the rule reads portable.json and refuses an `msig` member. Real verifiers: fndsa512, not the ML-DSA mock ---
+const f0 = pq('fndsa512');
+const f1 = pq('fndsa512', 1);
+const f2 = pq('fndsa512', 2);
+const p256 = classical('p256');
+const ed = classical('ed25519');
+const pqInner = msig('msig-inner-pq', 2, [[f0, 1], [f1, 1]]);
+const nativeInner = msig('msig-inner-native', 2, [[native, 1], [f0, 1]]);
+const nativeInner2 = msig('msig-inner-native-2', 2, [[native, 1], [f1, 1]]);
+const classicalInner = msig('msig-inner-classical', 1, [[p256, 1], [ed, 1]]);
+const nestedPq = msig('msig-nested-pq', 2, [[pqInner, 1], [f2, 1]]);
+const nestedNative = msig('msig-nested-native', 2, [[nativeInner, 1], [f2, 1]]);
+const nestedTwice = msig('msig-nested-twice', 2, [[nativeInner, 1], [nativeInner2, 1]]); // N5: one native signature serves both slots
+const nestedClassical = msig('msig-nested-classical', 2, [[classicalInner, 2], [f2, 1]]); // a classical-dominant inner: an empty pop
+// the minimal rule: T - weight(i) < N. `heavyInner` signed by both slots: its weight-2 slot alone reaches 2
+const byId = (l) => [...l].sort((a, b) => (hex(a.ua) < hex(b.ua) ? -1 : 1));
+const heavyInner = msig('msig-inner-heavy', 2, byId([f0, f1]).map((m, i) => [m, i + 1]), [1]);
+const heavyInnerOuter = msig('msig-nested-heavy-inner', 2, [[heavyInner, 1], [f2, 1]]);
+const heavyOuter = msig('msig-nested-heavy-outer', 2, [[pqInner, 2], [f2, 1]]);
+const innerIndex = (s) => s.members.findIndex((m) => m.kind === 0x0120);
+KEM['msig-nested-pq'] = kemKeys('msig-nested-pq');
+const nestedRows = [
+  registration(p256), registration(ed), registration(f0), registration(f1), registration(f2),
+  registration(pqInner), registration(nativeInner), registration(nativeInner2), registration(classicalInner), registration(heavyInner, { signers: [1] }),
+  registration(nestedPq, { kem: true }), registration(nestedNative), registration(nestedTwice), registration(nestedClassical),
+  registration(heavyInnerOuter), registration(heavyOuter, { signers: [innerIndex(heavyOuter)] }),
+];
+const nestedKem = KEM['msig-nested-pq'].slice(1, 2).map(kemRecord(nestedPq, 'msig-nested-pq'));
+const nestedPqzKey = SETS.map((set) => pqzKeyRecord(nestedNative, set));
+/** An inner slot's acceptance: a threshold of its own accepted slots signs for it (spec §4); a leaf's as `membership`. */
+const nestedMembership = (s, m) => {
+  if (m.kind !== 0x0120) return { ...membership(s, m), members: [] };
+  const r = ua.membershipMessage({ ua: s.ua, member: m.ua });
+  const list = m.memberList(ua.innerDigest(m.ua, r.memberDigest), r.digest, m.signers);
+  return { name: `${s.name}/${m.index}`, msig: s.name, ua: hex(s.ua), index: m.index, member: hex(m.ua), memberKind: m.kind, digest: hex(r.digest),
+    message: hex(r.message), memberDigest: hex(r.memberDigest), sig: '0x', members: ua.uaSig({ members: list }).members, typedData: r.typedData };
+};
+// in the order they run: `msig-inner-classical` has an empty pop, so its signer accepts before it can accept its slot in the outer
+const nestedMemberships = [
+  ...classicalInner.members.map((m) => nestedMembership(classicalInner, m)),
+  ...nestedClassical.members.map((m) => nestedMembership(nestedClassical, m)),
+];
+/** What `ua-rs` / clientkeys read to rebuild `md_I`: one row per `msig` slot of `s`, over the row's `memberDigest`. */
+const innerDigests = (r, s) => s.members.filter((m) => m.kind === 0x0120).map((m) => ({ index: m.index, inner: hex(m.ua),
+  memberDigest: hex(ua.innerDigest(m.ua, B(r.memberDigest))) }));
+// requireAuthorized: chain-bound, a native leaf over UAAuth in its registry's domain (context A, gen 1), `metatx`, not portable
+const authMd = ua.memberDigest(nestedNative.ua, ua.uaMessage(0x0120, ua.purposeTag('metatx'), DIGEST));
+const leafAuth = (md) => ecdsa(nativeSk, uaAuthMd(md));
+const authRow = (name, valid, list) => ({ name, valid, ua: hex(nestedNative.ua), purposeTag: hex(ua.purposeTag('metatx')), digest: hex(DIGEST),
+  memberDigest: hex(authMd), sig: hex(encodeMemberSigs(list)), uaSig: ua.uaSig({ members: list }) });
+const authGood = () => nestedNative.memberList(authMd, Z, [0, 1], leafAuth);
+const withSlot = (list, i, f) => list.map((x, j) => (j === i ? f(x) : x));
+const innerSlot = innerIndex(nestedNative);
+const leafSlot = 1 - innerSlot;
+const authorizations = [
+  authRow('two-levels', true, authGood()),
+  authRow('one-level-short', false, nestedNative.memberList(authMd, Z, [0, 1], leafAuth).map((x) => (x.members.length
+    ? { ...x, members: nativeInner.memberList(authMd, Z, nativeInner.signers, leafAuth) } : x))),
+  authRow('inner-below-threshold', false, withSlot(authGood(), innerSlot, (x) => ({ ...x, members: x.members.slice(0, 1) }))),
+  authRow('sig-on-msig-slot', false, withSlot(authGood(), innerSlot, (x) => ({ ...x, sig: new Uint8Array(1).fill(1) }))),
+  authRow('list-on-signing-slot', false, withSlot(authGood(), leafSlot, (x) => ({ ...x, members: [{ index: 0, sig: new Uint8Array(65) }] }))),
+];
+// --- the negatives: one change from a pop that registers; `error` the registry's, row by row a client's too ---
+const raw = (s, indices, nativeSig) => {
+  const r = nestedRows.find((x) => x.name === s.name);
+  return { r, md: B(r.memberDigest), typed: B(r.registrationDigest), list: s.memberList(B(r.memberDigest), B(r.registrationDigest), indices, nativeSig) };
+};
+const nestedNeg = (name, s, list, error = 'UAPoP') => ({ name, row: s.name, error, pop: hex(encodeMemberSigs(list)), popTyped: ua.uaSig({ members: list }).members });
+const good = (s) => raw(s, [0, 1]).list;
+const nestedNegatives = [
+  nestedNeg('list-on-signing-slot', nestedPq, withSlot(good(nestedPq), 1 - innerIndex(nestedPq), (x) => ({ ...x, members: [{ index: 0, sig: new Uint8Array(1).fill(1) }] }))),
+  nestedNeg('sig-on-msig-slot', nestedPq, withSlot(good(nestedPq), innerIndex(nestedPq), (x) => ({ ...x, sig: new Uint8Array(1).fill(1) }))),
+  nestedNeg('no-list-on-msig-slot', nestedPq, withSlot(good(nestedPq), innerIndex(nestedPq), (x) => ({ ...x, members: [], sig: new Uint8Array(666).fill(1) }))),
+  nestedNeg('inner-below-threshold', nestedPq, withSlot(good(nestedPq), innerIndex(nestedPq), (x) => ({ ...x, members: x.members.slice(0, 1) }))),
+  nestedNeg('inner-index-past-the-members', nestedPq, withSlot(good(nestedPq), innerIndex(nestedPq), (x) => ({ ...x, members: [x.members[0], { ...x.members[1], index: 2 }] }))),
+  nestedNeg('inner-unsorted', nestedPq, withSlot(good(nestedPq), innerIndex(nestedPq), (x) => ({ ...x, members: [...x.members].reverse() }))),
+  nestedNeg('inner-leaf-bad-signature', nestedPq, withSlot(good(nestedPq), innerIndex(nestedPq), (x) => ({ ...x, members: x.members.map((y, j) => (j === 0
+    ? { ...y, sig: new Uint8Array(y.sig.length).fill(1) } : y)) }))),
+  // one level short: the leaves signed the outer's member digest, not md_I
+  nestedNeg('one-level-short', nestedPq, withSlot(good(nestedPq), innerIndex(nestedPq), (x) => {
+    const { md, typed } = raw(nestedPq, []);
+    return { ...x, members: pqInner.memberList(md, typed, pqInner.signers) };
+  })),
+  // the same inner, the list of another outer: md_I holds md_U
+  nestedNeg('list-of-another-outer', nestedTwice, withSlot(good(nestedTwice), innerIndex(nestedTwice), (x) => {
+    const { md, typed } = raw(nestedNative, []);
+    return { ...x, members: nativeInner.memberList(ua.innerDigest(nativeInner.ua, md), typed, nativeInner.signers) };
+  })),
+  // TS-D4 at the inner level: a native leaf's portable signature is the typed digest, never UAAuth
+  nestedNeg('native-leaf-uaauth', nestedNative, raw(nestedNative, [0, 1], leafAuth).list),
+  // N6: a redundant signature at either level
+  nestedNeg('inner-not-minimal', heavyInnerOuter, withSlot(good(heavyInnerOuter), innerIndex(heavyInnerOuter), (x) => {
+    const { md, typed } = raw(heavyInnerOuter, []);
+    return { ...x, members: heavyInner.memberList(ua.innerDigest(heavyInner.ua, md), typed, [0, 1]) };
+  })),
+  nestedNeg('outer-not-minimal', heavyOuter, good(heavyOuter)),
+];
+/** A structure the registry refuses by its records: `registerMsig` reverts `UAMemberUnknown(member)`, no signature reached. */
+const refused = (name, s, member) => ({ name, keyData: hex(s.keyData), ua: hex(s.ua), structure: ua.msigStructure(s.keyData), member: hex(member.ua), error: 'UAMemberUnknown' });
+const unregistered = msig('msig-inner-unregistered', 1, [[f2, 1]]);
+const structures = [
+  refused('third-level', msig('msig-third-level', 1, [[nestedPq, 1]]), pqInner), // listing U names U's own `msig` member (N1)
+  refused('inner-not-registered', msig('msig-outer-of-unregistered', 1, [[unregistered, 1]]), unregistered),
+];
+const inners = (...l) => Object.fromEntries(l.map((m) => [hex(m.ua), hex(m.keyData)]));
+const eligibility = [
+  ['a PQ-eligible inner counts as PQ', nestedPq, inners(pqInner), true],
+  ['an inner with a native member, classical below its threshold, counts as PQ', nestedNative, inners(nativeInner), true],
+  ['a classical-dominant inner counts its whole outer weight as classical', nestedClassical, inners(classicalInner), false],
+].map(([reason, s, inner, eligible]) => ({ reason, keyData: hex(s.keyData), inner, eligible }));
+const nestedNote = 'Generated by clients/clientkeys/scripts/ua-portable-vectors.mjs; never edit by hand. Nested msig (spec 2026-11-02-msig-nested, '
+  + 'CTR-UA-09): every row the same shape as portable.json\'s. registrations: in the order they register, each record\'s member first. An msig slot is '
+  + 'MemberSig{index, members: InnerSig{index, sig}[], sig: 0x}, a signing slot MemberSig{index, [], sig}. md_I = keccak256(I | ua_msg(0x0120, member, md_U)): '
+  + 'innerDigests[j].memberDigest, for the row\'s memberDigest md_U; a derived leaf of I signs under member over md_I, a native leaf the row\'s typed digest '
+  + 'in the portable purposes and UAAuth(id, member, md_I) elsewhere (context A of structures.json, gen 1). msig-nested-twice: one native signature serves both '
+  + 'slots of that record (N5). kemRecords, pqzKeyRecords: as portable.json\'s. memberships: acceptMembership(ua, MemberSig{index, members, sig}) in the order '
+  + 'they run, a member of msig kind by its accepted slots over innerDigest(member, memberDigest) (sig 0x). authorizations: requireAuthorized(ua, purposeTag, '
+  + 'digest, UASig{0x, 0x, members}), valid or refused UAUnauthorized. negatives: registerMsig of `row` with `pop`, refused with `error`, every member signature '
+  + 'otherwise as a registering one. structures: registerMsig refused UAMemberUnknown(member) by the records (a third level, an unregistered inner). eligibility: '
+  + 'msig_pqz_eligible(keyData) with inner = id -> key data. All of it UNAUDITED.';
+const nestedBuild = () => ({ note: nestedNote, version: 1, registrations: nestedRows.map((r) => {
+  const s = [pqInner, nativeInner, nativeInner2, classicalInner, heavyInner, nestedPq, nestedNative, nestedTwice, nestedClassical, heavyInnerOuter, heavyOuter]
+    .find((x) => x.name === r.name);
+  return s && r.memberDigest ? { ...r, innerDigests: innerDigests(r, s) } : r;
+}), kemRecords: nestedKem, pqzKeyRecords: nestedPqzKey, memberships: nestedMemberships, authorizations, negatives: nestedNegatives, structures, eligibility });
+
 const tag = (t) => ({ tag: t, hash: hex(keccak_256(new TextEncoder().encode(t))) });
 const note = [
   'Generated by clients/clientkeys/scripts/ua-portable-vectors.mjs (src/ua.js, @noble/curves 2.4.0, @noble/post-quantum 0.7.1); '
@@ -272,19 +405,19 @@ const note = [
   + 'the registration has no PQZ key (UAPqzKeySet otherwise; holder rules as register). Client rule: one PQZ key per UA, '
   + 'ever (a UA that signs records for two PQZ keys can end with different keys on different chains).',
   'msig: a derived member signs memberDigest = keccak256(ua | message) of the portable message (popMessage, the KEM record '
-  + 'message, the PQZ key record message) under member, with empty key data for stored kinds. A code-less native EOA member '
+  + 'message, the PQZ key record message) under member; a slot carries no key data. A code-less native EOA member '
   + '(its own key only) signs the record\'s typed digest itself, typedDigest = registrationDigest / digest / recordDigest (what '
-  + 'eth_signTypedData_v4 of typedData returns), 65-byte r | s | v, low-s, v in {27, 28}, empty key data; EIP-191 personal_sign '
+  + 'eth_signTypedData_v4 of typedData returns), 65-byte r | s | v, low-s, v in {27, 28}; EIP-191 personal_sign '
   + 'is refused (native-member-personal-sign). Only for PURPOSE_POP_V2, PURPOSE_KEM and PURPOSE_PQZ_KEY; every other purpose '
   + 'stays UAAuth (chain-bound EIP-712: CTR-MTX-14). A contract member answers ERC-1271 isValidSignature(typedDigest, sig) on '
   + 'each chain: portable only where that wallet exists with the same behaviour.',
-  'Acceptance (CTR-UA-37): memberships[i] = acceptMembership(ua, MemberSig{index, 0x, sig}) of the member at slot index of the msig '
+  'Acceptance (CTR-UA-37): memberships[i] = acceptMembership(ua, MemberSig{index, [], sig}) of the member at slot index of the msig '
   + 'row msig: digest = typed(UAMembership{ua, member}), message = ua_msg(0x0120, PURPOSE_MEMBERSHIP, digest), memberDigest = '
   + 'keccak256(ua | message); a native member signs digest itself (ECDSA, or ERC-1271 over it), a derived member signs '
   + 'ua_msg(memberKind, member, memberDigest) under member. The same signature on every registry; no nonce.',
   'Typed arguments (typed-signing R1, TS-D10 ... TS-D12; the byte fields above stay): registrations[i].args = the named '
   + 'arguments of register(kind, keyData, attrs, pop, pqzPop) (a single key) or registerMsig(structure, attrs, pop, pqzPop) (an msig: '
-  + 'structure = {threshold, members: [{kind, id, weight}]} assembled by the registry to keyData, pop = [{index, keyData, sig}] stored '
+  + 'structure = {threshold, members: [{kind, id, weight}]} assembled by the registry to keyData, pop = [{index, members, sig}] stored '
   + 'as abi.encode(MemberSig[])), with attrs = {pqzKey, pqzPopHash, kem: KemKey{scheme, mlkemEk, x25519} (kemPk = scheme | mlkemEk | '
   + 'x25519, the empty key = none), kemPkHash}; registrations[i].kemCommit (KEM rows) = the same registration with the KEM record\'s '
   + 'hash only (kem = {scheme, 0x, 0}, kemPkHash = keccak256(kemPk); the same pop: the record words are equal) and its fill = '
@@ -323,11 +456,14 @@ const build = () => ({
 
 /** portable.json's exact text. */
 export const portableJson = () => `${JSON.stringify(build(), null, 2)}\n`;
+/** nested.json's exact text. */
+export const nestedJson = () => `${JSON.stringify(nestedBuild(), null, 2)}\n`;
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const out = process.argv[2] ?? OUT;
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'portable.json'), portableJson());
+  writeFileSync(join(out, 'nested.json'), nestedJson());
   console.log(`portable.json: ${registrations.length} registrations, ${kemRecords.length} KEM records, ${pqzKeyRecords.length} PQZ key `
     + `records, ${memberships.length} memberships, ${negatives.length} negatives; written to ${out}`);
 }

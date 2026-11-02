@@ -272,7 +272,6 @@ for (const kind of [0x0105, 0x0141]) {
   bad(0x0120, ua.encodeMsig(5, m), 'threshold > total weight');
   bad(0x0120, ua.encodeMsig(2, m.map((x, i) => (i === 0 ? { ...x, weight: 0 } : x))), 'weight = 0');
   bad(0x0120, ua.encodeMsig(1, sortM([mem(0x0141, id(0x0141)), mem(0x0101, id(0x0101))])), 'Zether member');
-  bad(0x0120, ua.encodeMsig(1, sortM([mem(0x0120, msigUa), mem(0x0101, id(0x0101))])), 'structure member');
   bad(0x0120, ua.encodeMsig(1, sortM([mem(0x0109, label('unknown member')), mem(0x0101, id(0x0101))])), 'unknown member kind');
   bad(0x0120, ua.encodeMsig(1, sortM([mem(0x0010, label('solana member')), mem(0x0101, id(0x0101))])), 'foreign native member');
   bad(0x0120, msigHedera, 'hedera-native outside a Hedera profile');

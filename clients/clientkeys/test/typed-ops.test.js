@@ -205,7 +205,7 @@ test('calldata decodes to the message: selector of the full signature, every par
 test('the overloads: selectors from the full signature, the C0 shapes', () => {
   const env = '(address,uint256,uint256,uint256,uint32,address,uint256,address)';
   const uaEnv = '(bytes32,uint256,uint256,uint256,uint32,address,uint256,address)';
-  const uaSig = '(bytes,bytes,(uint16,bytes,bytes)[])';
+  const uaSig = '(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])';
   const one = (name) => Object.values(V.ops[name].domains)[0];
   assert.equal(one('Unwrap').abi, `mtxUnwrap(${env},uint256,address,uint256,bytes)`);
   assert.equal(one('Shield').abi, `mtxShield(${env},bytes32,uint256,bytes)`);

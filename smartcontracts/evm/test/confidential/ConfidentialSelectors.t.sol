@@ -34,7 +34,7 @@ contract ConfidentialSelectorsTest is Test {
     /// The PQZ layer's explicit entries (Appendix X.3); `IPqzToken` has the direct forms only, the signed ones are `PqzLayer`'s,
     /// read from `typed_ops.json` in `PqzTyped.t.sol`.
     function test_pqzExplicitSignaturesPinned() public pure {
-        string memory tail = ",bytes,(bytes,bytes,(uint16,bytes,bytes)[]),bytes)";
+        string memory tail = ",bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)";
         string memory single = "(uint64,uint256,uint256,bytes32,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes)";
         string memory multi = "(uint64,uint256,uint256,bytes32,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)";
         string memory burn = "(uint64,uint256,uint256,bytes32,bytes32,bytes,bytes)";
@@ -58,7 +58,7 @@ contract ConfidentialSelectorsTest is Test {
         string memory legs = string.concat("(", G1, ",", G1, ",", G1, ",", G1, ")[]");
         string memory multi = string.concat(head, "uint256,", G1, ",", G1, ",", G1, ",", legs, ",bytes)");
         string memory burn = string.concat("(uint64,uint64,uint256,bytes32,", G1, ")");
-        string memory sig = "(bytes,bytes,(uint16,bytes,bytes)[])";
+        string memory sig = "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])";
         assertEq(IZetherToken.mtxConfidentialTransferSingle.selector,
             bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferSingle(", single, ",bytes)")))));
         assertEq(IZetherToken.mtxConfidentialTransfer.selector,

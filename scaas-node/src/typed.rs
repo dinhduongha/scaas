@@ -69,7 +69,8 @@ const NESTED: &[(&str, &str)] = &[
     ("UAWrapOrder", "bytes32 from,address wrappedToken,uint256 amount,uint256 minMinted,uint256 minFill,uint256 fee,address relayer,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil"),
     ("DexOrder", "address sellToken,TradeOrder order"),
     // the calldata-only structs: `UASig`, the account's `AccountSig`, the registry's and the DEX's
-    ("MemberSig", "uint16 index,bytes keyData,bytes sig"),
+    ("InnerSig", "uint16 index,bytes sig"),
+    ("MemberSig", "uint16 index,InnerSig[] members,bytes sig"),
     ("UASig", "bytes keyData,bytes signature,MemberSig[] members"),
     ("AccountSig", "uint256 keyIndex,bytes32[] proof,bytes signature"),
     ("SubjectKey", "uint8 kind,bytes32 x,bytes32 y,bytes32 rpIdHash,bytes32 originHash"),
@@ -1131,6 +1132,47 @@ mod tests {
             }
         }
         assert!(walked > 1_500, "{walked}");
+    }
+
+    /// Nested `msig` (spec 2026-11-02-msig-nested): a slot is `{index, members: [{index, sig}], sig}`. The old `keyData` and a list under an
+    /// inner slot are refused by the type: its two levels are the depth bound of the decode, the parse recurses over the type, not the JSON.
+    #[test]
+    fn member_sig_json_is_two_levels() {
+        let good = json!({"index": 0, "members": [{"index": 1, "sig": "0x01"}], "sig": "0x"});
+        assert_eq!(to_json("MemberSig", &parse("MemberSig", &good, "s").unwrap()), good);
+        let flat = json!({"index": 3, "members": [], "sig": "0xab"});
+        assert_eq!(to_json("MemberSig", &parse("MemberSig", &flat, "s").unwrap()), flat);
+        let err = |j: Value| parse("MemberSig", &j, "s").unwrap_err().to_string();
+        assert_eq!(err(json!({"index": 0, "keyData": "0x", "sig": "0x"})), "BAD_PAYLOAD: s.keyData: unknown field");
+        assert_eq!(err(json!({"index": 0, "members": [{"index": 0, "members": [], "sig": "0x"}], "sig": "0x"})),
+            "BAD_PAYLOAD: s.members[0].members: unknown field");
+        assert_eq!(err(json!({"index": 0, "members": "0x", "sig": "0x"})), "BAD_PAYLOAD: s.members: not an array", "a packed list");
+        let mut deep = json!({"index": 0, "sig": "0x"});
+        for _ in 0..100_000 {
+            deep = json!({"index": 0, "members": [deep], "sig": "0x"});
+        }
+        assert!(err(deep.clone()).ends_with("unknown field"), "a hostile depth stops at the type's");
+        std::mem::forget(deep); // serde_json's drop recurses over the 100,000 levels
+    }
+
+    /// The typed bytes a job builds are `abi.encode(MemberSig[])`, the stored form, nested too, and a blob that claims more than it holds
+    /// is an error, not a walk: `abi_decode` follows the same two levels.
+    #[test]
+    fn nested_sig_bytes_are_the_stored_form() {
+        use alloy::sol_types::SolValue;
+        let slots = json!([{"index": 0, "members": [{"index": 1, "sig": "0x01"}, {"index": 2, "sig": "0x02"}], "sig": "0x"},
+            {"index": 3, "members": [], "sig": "0xab"}]);
+        let typed = crate::abi::MemberSig::abi_decode_sequence(&[]).is_err(); // no slot in nothing
+        assert!(typed);
+        let sig = json!({"keyData": "0x", "signature": "0x", "members": slots});
+        let auth = crate::abi::UASig::abi_decode(&parse("UASig", &sig, "auth").unwrap().abi_encode()).unwrap();
+        let ours = scaas_ua::ua8::encode_member_sigs(&[
+            scaas_ua::ua8::MemberSig { index: 0, members: vec![scaas_ua::ua8::InnerSig { index: 1, sig: vec![1] }, scaas_ua::ua8::InnerSig { index: 2, sig: vec![2] }], sig: vec![] },
+            scaas_ua::ua8::MemberSig { index: 3, members: vec![], sig: vec![0xab] }]);
+        assert_eq!(auth.members.abi_encode(), ours);
+        let mut hostile = ours.clone();
+        hostile[32 + 31] = 0xff; // 255 slots claimed
+        assert!(<Vec<crate::abi::MemberSig>>::abi_decode(&hostile).is_err());
     }
 
     #[test]

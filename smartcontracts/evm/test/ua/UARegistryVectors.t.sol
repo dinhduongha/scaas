@@ -323,7 +323,9 @@ contract UARegistryVectorsTest is UARegistryBase {
         for (uint256 j; j < a.members.length; ++j) {
             string memory e = string.concat(row, "uaSig.members[", vm.toString(j), "].");
             assertEq(vm.parseJsonUint(sj, string.concat(e, "index")), a.members[j].index);
-            assertEq(vm.parseJsonBytes(sj, string.concat(e, "keyData")).length, a.members[j].members.length);
+            uint256 n;
+            while (vm.keyExistsJson(sj, string.concat(e, "members[", vm.toString(n), "]"))) ++n;
+            assertEq(n, a.members[j].members.length);
             assertEq(vm.parseJsonBytes(sj, string.concat(e, "sig")), a.members[j].sig);
         }
         assertFalse(vm.keyExistsJson(sj, string.concat(row, "uaSig.members[", vm.toString(a.members.length), "]")));

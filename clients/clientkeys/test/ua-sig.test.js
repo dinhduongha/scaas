@@ -133,11 +133,11 @@ function msigOk(structureUa, purposeTag, digest, auth) {
       const kind = (keyData[o] << 8) | keyData[o + 1];
       const id = keyData.subarray(o + 2, o + 34);
       const weight = (keyData[o + 34] << 8) | keyData[o + 35];
-      const mkd = bytesAt(sigs, t, t + 32);
+      const list = wordAt(sigs, t + wordAt(sigs, t + 32)); // a signing member has none
       const sig = bytesAt(sigs, t, t + 64);
       const ok = ua.isNativeKind(kind)
-        ? mkd.length === 0 && nativeOk(hex(id.subarray(12)), ua.uaAuthDigest(domain(V.msig.context, V.msig.generation), id, tag('member'), md), hex(sig))
-        : mkd.length === 0 && registered.has(`${kind}:${hex(id)}`)
+        ? list === 0 && nativeOk(hex(id.subarray(12)), ua.uaAuthDigest(domain(V.msig.context, V.msig.generation), id, tag('member'), md), hex(sig))
+        : list === 0 && registered.has(`${kind}:${hex(id)}`)
           && verify(kind, registered.get(`${kind}:${hex(id)}`), hex(ua.uaMessage(kind, tag('member'), md)), hex(sig)); // CTR-UA-33
       if (!ok) return false;
       sum += weight;

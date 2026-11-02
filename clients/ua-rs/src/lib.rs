@@ -222,8 +222,14 @@ pub fn is_signing(kind: u16) -> bool {
 pub fn is_pqz_holder(kind: u16) -> bool {
     matches!(kind, 0x0130..=0x0132)
 }
-/// An `msig` whose members of kinds outside 0x0130-0x0133 weigh less than its threshold (CTR-PQZ-12).
+/// An `msig` whose classical members weigh less than its threshold (CTR-PQZ-12). The key data alone does not show an `msig` member,
+/// so one is `MemberUnknown` here: [`msig_pqz_eligible_with`] reads its record.
 pub fn msig_pqz_eligible(key_data: &[u8]) -> Result<bool> {
+    msig_pqz_eligible_with(key_data, &|_| None)
+}
+/// `msig_pqz_eligible` with `inner`, an `msig` member's key data by its id: a member is PQ if its kind is in 0x0130-0x0133, or it is an
+/// `msig` that is PQ-eligible itself; none, or an `inner` that holds an `msig` (two levels only), is `MemberUnknown`.
+pub fn msig_pqz_eligible_with(key_data: &[u8], inner: &dyn Fn([u8; 32]) -> Option<Vec<u8>>) -> Result<bool> {
     let u16_at = |o: usize| key_data.get(o..o + 2).map(|s| u16::from_be_bytes([s[0], s[1]]) as usize);
     let bad = || UAError::KeyData("length");
     let count = u16_at(2).ok_or_else(bad)?;
@@ -233,14 +239,20 @@ pub fn msig_pqz_eligible(key_data: &[u8]) -> Result<bool> {
     let mut classical = 0usize;
     for i in 0..count {
         let o = 4 + 36 * i;
-        if !(0x0130..=0x0133).contains(&u16_at(o).ok_or_else(bad)?) {
+        let kind = u16_at(o).ok_or_else(bad)?;
+        let pq = (0x0130..=0x0133).contains(&kind) || (kind == 0x0120 && {
+            let id: [u8; 32] = key_data[o + 2..o + 34].try_into().expect("32 bytes");
+            msig_pqz_eligible(&inner(id).ok_or(UAError::MemberUnknown)?)?
+        });
+        if !pq {
             classical += u16_at(o + 34).ok_or_else(bad)?;
         }
     }
     Ok(classical < u16_at(0).ok_or_else(bad)?)
 }
+/// An `msig` too, one level down (owner 2026-11-02): a record that holds one is refused as a member by the registry.
 pub fn is_member(kind: u16, hedera_native: bool) -> bool {
-    single_signing(kind) || kind == 0x0001 || kind == 0x0002 || (hedera_native && kind == 0x0003)
+    single_signing(kind) || kind == 0x0120 || kind == 0x0001 || kind == 0x0002 || (hedera_native && kind == 0x0003)
 }
 
 // tag / keyHash / message accept a kind or a scheme; id derivation and key-data validation accept kinds only

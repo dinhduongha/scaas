@@ -70,9 +70,11 @@ export function holderUa(id) {
   return variant('Ua', bytesN(b));
 }
 /** A `UaSig` (TS-D12): a single key `{ signature }`, an `msig` `{ members: [{ index, keyData, sig }] }`; `key_data` stays
- *  empty on Soroban (the key is read from the record). */
+ *  empty on Soroban (the key is read from the record). A nested list has no form here: the Soroban registry refuses an `msig`
+ *  member until its round (NET-SOR-18). */
 export function uaSig({ signature = new Uint8Array(0), members = [] }) {
   const none = bytes(new Uint8Array(0));
+  if (members.some((m) => m.members?.length)) throw new UAError('MemberUnknown', 'no msig member on Soroban (NET-SOR-18)');
   const slots = members.map((m) => struct({ index: u32(m.index), key_data: bytes(m.keyData), sig: bytes(m.sig) }));
   return struct({ key_data: none, members: vec(slots), signature: bytes(signature) });
 }
@@ -197,5 +199,6 @@ export function assertNativeRecipient(text) {
  *  meet its own slot by Soroban invoker auth). Members: `G…` accounts (0x0011) and registered derived UAs. */
 export function encodeMsig(threshold, members) {
   if (members.some((m) => m.kind === 0x0012)) throw new UAError('MemberUnknown', 'a soroban-contract (C…) msig member is refused on Soroban (S10)');
+  if (members.some((m) => m.kind === 0x0120)) throw new UAError('KeyData', 'an msig member is refused on Soroban until its round (NET-SOR-18)');
   return encodeMsigKeyData(threshold, members);
 }

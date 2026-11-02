@@ -69,7 +69,7 @@ test('buildRelayFee: an open inner envelope stays open; a bound payee; the UA pa
   assert.equal(u.typedData.primaryType, 'UARelayFee');
   assert.equal(u.typedData.message.payee, padId(ROUTER), 'open mode on the UA path: payee = pad(router)');
   assert.equal(hex(u.calldata(new Uint8Array(2)).subarray(0, 4)),
-    sel('uaRelay(address,bytes,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,bytes,bytes)[]))'));
+    sel('uaRelay(address,bytes,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))'));
 });
 
 test('mtxExecuteCalldata: the signed call the payment commits to', () => {

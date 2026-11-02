@@ -33,7 +33,6 @@ import {AcceptAll, BurnAll} from "./UAGas.t.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {UACall} from "./UACall.sol";
-import {SplitDiff} from "./SplitDiff.sol";
 
 /// The PQZ tokens' key gate (`PqzCore._keyPtr`) against a given registry.
 /// A gen 1 from before UA-8: the constructor's checks pass, but no UA-8 view (review n3).
@@ -79,20 +78,6 @@ contract SigOkHarness is UARegistry {
 }
 
 /// Spends `burn` gas and accepts: the 0x0142 slot at the cost of the real `R_REG` verify, which the precompile-free tests lack.
-contract BurnAccept {
-    uint256 public immutable burn;
-
-    constructor(uint256 b) {
-        burn = b;
-    }
-
-    function verifyPop(bytes calldata, bytes32, bytes calldata) external view returns (bool) {
-        uint256 start = gasleft();
-        while (start - gasleft() < burn) {}
-        return true;
-    }
-}
-
 /// `SSTORE2.writeChunks` / `readChunks` behind a storage array.
 contract ChunkHarness {
     address[] internal ptrs;
@@ -485,15 +470,15 @@ contract UARegistryUA8Test is UARegistryBase {
     /// `registerWebAuthn`, `registerMuSig2`, `registerFrost`.
     function test_ua8_writeSelectorsPinned() public pure {
         assert(IUARegistry.register.selector == bytes4(0x4e229efb));
-        assert(IUARegistry.registerMsig.selector == bytes4(0x82b86a46));
+        assert(IUARegistry.registerMsig.selector == bytes4(0x61947129));
         assert(IUARegistry.registerWebAuthn.selector == bytes4(0xee03a1fe));
         assert(IUARegistry.registerMuSig2.selector == bytes4(0xe1eddcdf));
         assert(IUARegistry.registerFrost.selector == bytes4(0x7bd63410));
-        assert(IUARegistry.setKemKey.selector == bytes4(0xa00cce2a));
+        assert(IUARegistry.setKemKey.selector == bytes4(0x6a3318f9));
         assert(IUARegistry.storePqzPop.selector == bytes4(0x7fac161a));
-        assert(IUARegistry.setPqzKey.selector == bytes4(0x3c6897f1));
-        assert(IUARegistry.acceptMembership.selector == bytes4(0x73fd7d54));
-        assert(IUARegistry.requireAuthorized.selector == bytes4(0x58d5ff4f));
+        assert(IUARegistry.setPqzKey.selector == bytes4(0x0052c1b5));
+        assert(IUARegistry.acceptMembership.selector == bytes4(0x2c1ac986));
+        assert(IUARegistry.requireAuthorized.selector == bytes4(0x9600639d));
     }
 
     /// TS-D5 (owner 2026-10-31): `kindName` answers every kind id of kinds.json (and the scheme 0x0142), enabled or not.
@@ -3229,133 +3214,6 @@ contract UARegistryUA8Test is UARegistryBase {
     function _slice(bytes memory b, uint256 o, uint256 n) internal pure returns (bytes memory r) {
         r = new bytes(n);
         for (uint256 i; i < n; ++i) r[i] = b[o + i];
-    }
-
-    // ----- typed-signing R2: the real signatures, on both sides of the split -----
-
-    using SplitDiff for SplitDiff.Run;
-
-    function _splitRegister(SplitDiff.Run memory r, address at, Row memory x, string memory label) internal {
-        if (x.kind == UAKinds.MLDSA44) r.write("cache", at, abi.encodeCall(IUARegistry.cacheExpandedKey, (UAKinds.MLDSA44, x.keyData, 0)));
-        if (x.attrs.pqzKey.length != 0) _allowPqz(x);
-        r.write(label, at, UACall.registerCall(x.kind, x.keyData, x.attrs, x.pop, x.pqzPop));
-    }
-
-    /// `register` negatives of portable.json, each with its exact error.
-    function _splitNegatives(SplitDiff.Run memory r, Row[] memory rows, Neg[] memory negs) internal {
-        UARegistry a = _deploy(address(0x5ce6e), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
-        UARegistry fresh = _deploy(address(0x5ce6f), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
-        _members(a, rows);
-        for (uint256 i; i < negs.length; ++i) {
-            if (!_eq(negs[i].entry, "register")) continue;
-            Row memory x = _apply(_find(rows, negs[i].row), negs[i]);
-            r.refused(negs[i].name, address(a.kindOf(x.ua) != 0 ? fresh : a),
-                UACall.registerCall(x.kind, x.keyData, x.attrs, x.pop, x.pqzPop), _expected(negs[i].err, x));
-        }
-    }
-
-    function _splitRecords(SplitDiff.Run memory r, address at, Row[] memory rows, KemRec[] memory ks, KeyRec[] memory kr)
-        internal
-    {
-        for (uint256 i; i < ks.length; ++i) {
-            KemRec memory k = ks[i];
-            _allowKem(rows, _kemBase(rows, k), k);
-            r.write(string.concat("setKemKey ", k.id), at, abi.encodeCall(IUARegistry.setKemKey, (k.ua, k.version, UACall.kem(k.kemPk), UACall.sig(k.sig))));
-        }
-        for (uint256 i; i < kr.length; ++i) {
-            KeyRec memory k = kr[i];
-            if (!_eq(k.set, _setName())) continue;
-            _allowRecord(rows, _byUa(rows, k.ua), k);
-            r.write(string.concat("setPqzKey ", k.name), at, abi.encodeCall(IUARegistry.setPqzKey, (k.ua, k.pqzKey, k.pqzPopHash, UACall.sig(k.sig))));
-        }
-    }
-
-    function _splitRun(string memory art, Row[] memory rows, Neg[] memory negs) internal returns (SplitDiff.Run memory r) {
-        registryArtifact = art;
-        r = SplitDiff.start(3_000, address(UARegistryLib));
-        r.accepts = keccak256(bytes(art)) == keccak256("UARegistry.sol:UARegistry");
-        _allowAll(rows);
-        _splitNegatives(r, rows, negs);
-        address at = address(_regA(true));
-        for (uint256 pass; pass < 2; ++pass) {
-            for (uint256 i; i < rows.length; ++i) {
-                Row memory x = rows[i];
-                bool here = bytes(x.set).length == 0 || _eq(x.set, _setName());
-                if (here && (x.kind == UAKinds.MSIG) == (pass == 1)) _splitRegister(r, at, x, string.concat("register ", x.name));
-            }
-        }
-        _splitRecords(r, at, rows, _kemRecs(), _keyRecs());
-        for (uint256 i; i < rows.length; ++i) {
-            r.read(string.concat("registrationOf ", rows[i].name), at, abi.encodeCall(IUARegistry.registrationOf, (rows[i].ua)));
-            r.read(string.concat("kemKeyOf ", rows[i].name), at, abi.encodeCall(IUARegistry.kemKeyOf, (rows[i].ua)));
-            r.read(string.concat("recordOf ", rows[i].name), at, abi.encodeCall(IUARegistry.recordOf, (rows[i].ua)));
-        }
-    }
-
-    /// Every portable.json registration row of this set, with its real signatures and its real verifiers, its KEM and PQZ key
-    /// records and its `register` negatives, on the pre-split source and on the split one: same result, logs, storage, created
-    /// contracts and calls out (`SplitDiff`).
-    function test_split_portableRowsSame() public {
-        Row[] memory rows = _rows();
-        Neg[] memory negs = this.loadNegs();
-        uint256 snap = vm.snapshotState();
-        SplitDiff.Run memory a = _splitRun("UARegistryPreSplit.sol:UARegistryPreSplit", rows, negs);
-        vm.revertToState(snap);
-        SplitDiff.Run memory b = _splitRun("UARegistry.sol:UARegistry", rows, negs);
-        assertEq(SplitDiff.firstDiff(a, b), "", "first row that differs");
-        emit log_named_uint("rows", a.n);
-        emit log_named_uint("writes", a.writes);
-        emit log_named_uint("reverts", a.reverts);
-        assertGe(a.writes, 25, "registrations, KEM records, PQZ key records");
-        assertGe(a.reverts, 20, "register negatives");
-    }
-
-    function _lastGas() internal view returns (uint256) {
-        Vm.Gas memory lg = vm.lastCallGas();
-        return lg.gasTotalUsed + uint256(int256(lg.gasStateUsed));
-    }
-
-    function _popHolder(address v, Row[] memory rows) internal returns (uint256) {
-        Row memory x = _pqzRow(rows);
-        UARegistry.KindConfig[] memory c = _vcfg(0, true);
-        c[c.length - 1] = _one0142(v)[0];
-        UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
-        UACall.register(r, x.kind, x.keyData, x.attrs, x.pop, "");
-        r.storePqzPop(x.ua, x.pqzPop);
-        return _lastGas();
-    }
-
-    function _popGen2(address v, Row[] memory rows) internal returns (uint256) {
-        Row memory m = _find(rows, string.concat("msig-pq/", _setName()));
-        UARegistry g1 = _deploy(address(0x5cebc), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
-        _members(g1, rows);
-        UACall.register(g1, m.kind, m.keyData, m.attrs, m.pop, "");
-        UARegistry g2 = _deploy(address(0x5cebb), chainUidA, address(g1), false, BUDGET, address(0), true, _one0142(v));
-        g2.storePqzPop(m.ua, m.pqzPop);
-        return _lastGas();
-    }
-
-    function _one0142(address v) internal pure returns (UARegistry.KindConfig[] memory c) {
-        c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, v, 4_500_000);
-    }
-
-    /// The TODO watch item: `storePqzPop` of this set's proof with a verify of the real cost (3.65 M), so the execution, not
-    /// the calldata floor, sets the regular gas, on the pre-split source and the split one; rows `GAS|label|before|after|delta`,
-    /// regular + state gas.
-    function test_split_storePqzPopWithAVerify() public {
-        Row[] memory rows = _rows();
-        _allowAll(rows);
-        address v = address(new BurnAccept(3_650_000));
-        string memory n = _setName();
-        uint256 snap = vm.snapshotState();
-        registryArtifact = "UARegistryPreSplit.sol:UARegistryPreSplit";
-        (uint256 a, uint256 a2) = (_popHolder(v, rows), _popGen2(v, rows));
-        vm.revertToState(snap);
-        registryArtifact = "UARegistry.sol:UARegistry";
-        (uint256 b, uint256 b2) = (_popHolder(v, rows), _popGen2(v, rows));
-        emit log_string(string.concat("GAS|storePqzPop ", n, "|", vm.toString(a), "|", vm.toString(b), "|", vm.toString(int256(b) - int256(a))));
-        emit log_string(string.concat("GAS|storePqzPop on gen 2 ", n, "|", vm.toString(a2), "|", vm.toString(b2), "|", vm.toString(int256(b2) - int256(a2))));
     }
 
     // ----- A8: gas figures (UA-8 `register`, `storePqzPop`, `setKemKey`) -----

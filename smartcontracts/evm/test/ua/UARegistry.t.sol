@@ -681,11 +681,17 @@ contract UARegistryTest is UARegistryBase {
         m[1] = Member(0x0100, p256Ua, 1);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAMemberUnknown.selector, p256Ua));
         UACall.register(reg, UAKinds.MSIG, _msigKey(2, m), _none(), "", "");
-        // nested structure, Zether member: refused by the layout (UAKinds, kinds.json) — UAKeyData
+        // an `msig` member: it must be registered, and hold no `msig` itself (two levels only)
         (, bytes32 inner) = _registerMsig();
-        m[1] = Member(UAKinds.MSIG, inner, 1);
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
+        m[1] = Member(UAKinds.MSIG, bytes32(uint256(inner) ^ 1), 1);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAMemberUnknown.selector, m[1].id));
         UACall.register(reg, UAKinds.MSIG, _msigKey(2, m), _none(), "", "");
+        m[1] = Member(UAKinds.MSIG, inner, 1);
+        bytes32 outer = UACall.register(reg, UAKinds.MSIG, _msigKey(2, m), _none(), "", "");
+        m[1] = Member(UAKinds.MSIG, outer, 1);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAMemberUnknown.selector, inner)); // `outer` holds it, one level too deep
+        UACall.register(reg, UAKinds.MSIG, _msigKey(2, m), _none(), "", "");
+        // Zether member: refused by the layout (UAKinds, kinds.json) — UAKeyData
         m[1] = Member(0x0140, bytes32(uint256(1) << 200), 1);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
         UACall.register(reg, UAKinds.MSIG, _msigKey(2, m), _none(), "", "");

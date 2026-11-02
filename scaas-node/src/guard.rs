@@ -34,7 +34,7 @@ use crate::typed;
 
 pub const SEL_MTX_SETTLE: [u8; 4] = ISCaaSDex::mtxSettleCall::SELECTOR;
 pub const SEL_MTX_INVALIDATE_NONCES: [u8; 4] = [0xdb, 0xac, 0x32, 0xd0];
-/// `uaInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,bytes,bytes)[]))`.
+/// `uaInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))`.
 pub const SEL_UA_INVALIDATE_NONCES: [u8; 4] = crate::abi::ITokenUa::uaInvalidateNoncesCall::SELECTOR;
 
 /// What a contract kind requires of its target (job-api.md §11).
@@ -780,7 +780,7 @@ mod tests {
         assert_eq!(sel("mtxPayUnderMandate", "wallet"), cast("mtxPayUnderMandate(address,address,uint256,bytes32,uint64,uint256,bytes)"));
         assert_eq!(sel("mtxRevoke", "wallet"), cast("mtxRevoke(address,uint64,uint256,bytes)"));
         assert_eq!(R::relayCall::SELECTOR, cast("relay(address,bytes,address,address,address,uint256,uint256,bytes)"));
-        let ua_sig = "(bytes,bytes,(uint16,bytes,bytes)[])";
+        let ua_sig = "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])";
         assert_eq!(R::uaRelayCall::SELECTOR, cast(&format!("uaRelay(address,bytes,address,bytes32,bytes32,uint256,uint256,{ua_sig})")));
         assert_eq!(SEL_UA_INVALIDATE_NONCES, cast(&format!("uaInvalidateNonces(bytes32,uint256,uint256,{ua_sig})")));
         assert_eq!(rule_of("registry"), Some(Rule::UaRegistry));
@@ -883,7 +883,7 @@ mod tests {
             "mtxTrade((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes,(uint256,uint256,uint256,address))",
             "mtxWrap(address,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes)",
             "mtxRelayFee(address,address,bytes32,address,uint256,uint256,bytes)",
-            "uaRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,bytes,bytes)[]))"] {
+            "uaRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"] {
             for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory"] {
                 let t = typed::Typed { contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None };
                 let w = Work { job_id: Some(1), to: target, data: cast(s).into(), valid_until: 0, meta: None, entry: true, typed: Some(t) };

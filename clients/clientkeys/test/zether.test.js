@@ -338,7 +338,7 @@ test('typed owner ops: ZetherRollOver / ZetherSetRollOverMode digests, ownerSig 
   assert.deepEqual([sig.keyData, sig.members], ['0x', []]);
   assert.ok(schnorrVerify(curve, fromHex(k.Y), uaMessage(0x0141, purposeTag('zether-owner'), digest), fromHex(sig.signature)));
   const sel = (s) => hex(keccak_256(utf8ToBytes(s)).subarray(0, 4));
-  const UASIG = '(bytes,bytes,(uint16,bytes,bytes)[])';
+  const UASIG = '(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])';
   assert.equal(hex(zetherRollOverCalldata(td, sig).subarray(0, 4)), sel(`mtxRollOverSigned(bytes32,uint64,uint64,${UASIG})`));
   const mode = { ...at, message: { ua: k.UA, mode: 1, modeNonce: 2, validUntilBlock: 1000 } };
   assert.notEqual(hex(zetherSetRollOverModeDigest(mode)), hex(digest));

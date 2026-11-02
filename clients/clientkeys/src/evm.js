@@ -174,7 +174,8 @@ const STRUCTS = Object.fromEntries(Object.entries({
   ZetherMulti: 'uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,uint256 decoyFee,'
     + 'G1 yFrom,G1 dOut,G1 cDeb,ZetherLeg[] legs,bytes sealedMemo',
   ZetherBurn: 'uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom',
-  Envelope: `address from,${E}`, UAEnvelope: `bytes32 from,${E}`, MemberSig: 'uint16 index,bytes keyData,bytes sig',
+  Envelope: `address from,${E}`, UAEnvelope: `bytes32 from,${E}`, InnerSig: 'uint16 index,bytes sig',
+  MemberSig: 'uint16 index,InnerSig[] members,bytes sig',
   UASig: 'bytes keyData,bytes signature,MemberSig[] members', AccountSig: 'uint256 keyIndex,bytes32[] proof,bytes signature',
   Payout: 'uint256 amount,bytes32 recipient',
 }).map(([name, list]) => [name, fields(list)]));

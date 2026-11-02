@@ -149,11 +149,11 @@ fn msig_ok(v: &Value, ua: &[u8; 32], purpose: &[u8; 32], digest: &[u8; 32], auth
         let id: [u8; 32] = key[o + 2..o + 34].try_into().ok()?;
         let (mkd, sig) = (dyn_bytes(sigs, t, t + 32)?, dyn_bytes(sigs, t, t + 64)?);
         let ok = if is_native(kind) {
-            // R12: a native member's MemberSig carries no key data
+            // a native member's MemberSig carries no list: `mkd` reads its length as bytes
             let d = domain(v, s(&v["msig"]["context"]), num(&v["msig"]["generation"]) as u32);
             mkd.is_empty() && native_ecdsa(&id[12..].try_into().ok()?, &ua_auth_digest(&d, &id, &member, &md), sig)
         } else {
-            // CTR-UA-33: a registered member's MemberSig carries no key data; the key is its record's (the derived rows)
+            // CTR-UA-33: a registered member's MemberSig carries no list; the key is its record's (the derived rows)
             let rec = arr(&v["derived"])
                 .iter()
                 .find(|r| b32(&r["ua"]) == id && num(&r["kind"]) as u16 == kind) // by (kind, id), as `_derived`
