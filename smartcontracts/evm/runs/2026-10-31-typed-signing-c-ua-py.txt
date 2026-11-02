@@ -1,4 +1,4 @@
-# ua-py at commit ca2d7b41
+# ua-py at commit c91be72a
 test_malformed_kem_refused (tests.test_vectors.TypedRegistryArgs.test_malformed_kem_refused)
 PRV L6: the registry's KEM key check runs before a form is chosen; a setKemKey without a key is no call. ... ok
 test_registration_args_typed (tests.test_vectors.TypedRegistryArgs.test_registration_args_typed) ... ok
@@ -25,7 +25,7 @@ test_table_groups_purposes_constants (tests.test_vectors.Vectors.test_table_grou
 test_valid_rows (tests.test_vectors.Vectors.test_valid_rows) ... ok
 
 ----------------------------------------------------------------------
-Ran 18 tests in 0.219s
+Ran 18 tests in 0.201s
 
 OK
 rc=0
