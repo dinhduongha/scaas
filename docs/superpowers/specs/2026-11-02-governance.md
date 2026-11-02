@@ -1,6 +1,6 @@
 # Governance: `GovernanceBase`, the grant record, the holder, the enum, hybrid underlying, the receiver check — design
 
-**Status:** SPECIFIED, nothing BUILT. Written 2026-11-02 on branch `governance` at `08e92597`, from the rulings CTR-GOV-01 to -18; corrected 2026-11-03 at `9f1744c7` from three reviews of `d1132a40` (Claude, Codex, agy; §0.1) and the owner's rulings of that day. A measured prototype of D1 and D2 sits on the same
+**Status:** SPECIFIED, nothing BUILT. Written 2026-11-02 on branch `governance` at `08e92597`, from the rulings CTR-GOV-01 to -18; corrected 2026-11-03 at `9f1744c7` from three reviews of `d1132a40` (Claude, Codex, agy; §0.1) and the owner's rulings of that day, and after `6e09e008` from the final review (Fable; §0.1). A measured prototype of D1 and D2 sits on the same
 branch (`66c3e74b`, `0e1cf3ac`); it is not a build of this spec. Rows of §0 cite the ruling or finding they rest on; the rows marked **controller call** are the controller's and the owner may
 override them. CTR-GOV-19 ended the size gate: §9 is the record of what a public chain still needs, and it blocks nothing. Everything cryptographic here stays `UNAUDITED`.
 
@@ -62,7 +62,7 @@ family. Form: the DEX round spec and the `typed-signing` plan.
 | G38 | An ownership generation: A → B → A revives no pending | Codex 2, Claude M-4 | §1.4, §1.6 |
 | G39 | An operator generation, a signed word: A → B → A revives no envelope; two calls and zero delay stay | Codex 4, Claude M-4, CTR-GOV-15 | §3.1, §3.2, §3.4 |
 | G40 | `acceptOperator` is exempt from the operator check; its subject is the pending operator | Codex 3 | §3.1, §3.4 |
-| G41 | A revoke, a renounce and a narrowing delete the pending; `cancelGrant` cancels one | agy C-3, Claude M-6 | §1.5, §1.6 |
+| G41 | The owner's revoke, the holder's own renounce and a narrowing delete the pending; a grantor's revoke does not; `cancelGrant` cancels one | agy C-3, Claude M-6, Fable M-1 | §1.5, §1.6 |
 | G42 | `0 → finite` is a narrowing on every bound, the window pair included | Codex 7, Claude M-5, agy I-2 | §1.6 |
 | G43 | `Counts` transitions complete, one test each | agy C-1, Claude M-7 | §1.7, §10.3 |
 | G44 | Leaf creation refuses an expired or exhausted parent; `maxUses` is read by what remains | agy I-3 | §1.5 |
@@ -92,10 +92,10 @@ family. Form: the DEX round spec and the `typed-signing` plan.
 | C4 | Names: `RETIRED_6`, `RETIRED_7`, `NORMAL_ZETHER_REGULATED`, `WRAPPED_ZETHER_REGULATED`, `NORMAL_PQZ_REGULATED`, `WRAPPED_PQZ_REGULATED`; the holder's typed struct names; `GovernanceUse`; `GovernanceHolderFactory` | CTR-GOV-16 gives numbers and the four kinds, not names | A rename before the freeze |
 | C5 | Bit 18 `PUBLISH` reads "adds a release **or an environment** to a catalogue" | gaps §4: no bit covered `publishEnv`, the most powerful of the four registrar powers. No code: the bit is for a later factory | One sentence of a reserved row |
 | C6 | The rules of §1 to §4 become one component doc, `docs/contracts/governance.md`, at build | The register's rows point at themselves today; "one rule, one place" wants a home, and README §3 keeps the list | Text moves between two files |
-| C7 | An expired root counts as live until it is revoked (§1.7) | The owner asked for a definition. `Counts.roots` is a stored number and no holder list exists on chain, so an expiry cannot move it without a walk. It fails toward the protection: a renounce takes one more `revokeRole`, and a frozen account stays frozen until its own bound or the owner's revoke | An exact count needs a holder list or a stored latest expiry, a new release |
+| C7 | An expired root counts as live until it is revoked (§1.7). Proposed as a Change to CTR-GOV-09, §12.9, awaiting the owner's word | The owner asked for a definition. `Counts.roots` is a stored number and no holder list exists on chain, so an expiry cannot move it without a walk. It fails toward the protection: a renounce takes one more `revokeRole`, and a frozen account stays frozen until its own bound or the owner's revoke | An exact count needs a holder list or a stored latest expiry, a new release |
 | C8 | `cancelGrant(bit, account)` is the way to cancel a pending, where agy offered a revoke of a non-holder and Claude an overwrite | A confirm with other terms keeps its revert (CTR-GOV-04); a revoke would also bar the account or take the role; an entry says what it does. One more selector on every contract and one more holder op | One entry to drop before the build |
 | C9 | The operator generation is a named `uint64 generation`, a signed word of every holder struct, compared with the stored value before the self-call | Explicit parameters: a wallet shows it, the node builds it from a named field, and a stale envelope gets a named error, not a bad signature | Every holder typehash moves, before any is deployed |
-| C10 | `F` on the payer of a wrap applies when the destination is not the payer | agy C-2's route runs through `wrapToUA`; a wrap into one's own frozen balance is a credit, and credits are never refused (CTR-AS-05). The underlying is another asset, so a frozen account can still hand it to someone else: this closes the account's own route only | One condition in `_wrap` and the order entries, when built |
+| C10 | `F` on the payer of a wrap or a wrap-shield applies when the destination is another id. A shield keeps `F` on the payer whatever `toUA` is | agy C-2's route runs through `wrapToUA`; a wrap into one's own frozen balance is a credit, and credits are never refused (CTR-AS-05). The underlying is another asset, so a frozen account can still hand it to someone else: this closes the account's own route only. A wrap-shield into one's own id spends that same other asset, so it follows the wrap. A shield spends the locked public balance itself (`_poolMove`, `_toPool`), which CTR-GOV-17 locks | One condition in `_wrap`, the order entries and the wrap-shield entries, when built |
 | C11 | Under `PAUSE`: `rescue`, direct `addReserve` and `mtxPrepareAcc` stay open; every relayed op that stays open runs at fee `NONE` | `rescue` moves what the token does not owe, `addReserve` is "unchanged" in asset-suite §2.4, prepare is what a roll-over needs; a fee leg is a transfer (CTR-AS-06) | One line of a table of a kind not built |
 
 ### 0.1 Disposition of the three reviews
@@ -144,7 +144,7 @@ Reviews of `d1132a40`, by Claude, Codex and agy. agy rated three findings Critic
 | agy C-2.3 | `forceTransfer`: fixed, §4.3, CTR-GOV-08 Change |
 | agy C-2.4 | Fixed in part, §4.3, C10. Not a bypass of a freeze: `wrapToUA` moves no frozen value, the underlying is another asset. The route is closed for one's own account only |
 | agy C-2.5 | Fixed, §4.3 |
-| agy C-3 | Fixed, §1.5, §1.6. Sequence A needs the revoke to delete the pending; sequence B needs a cancel |
+| agy C-3 | Fixed, §1.5, §1.6. Sequence A needs the owner's revoke to delete the pending (narrowed by Fable M-1); sequence B needs a cancel |
 | agy I-1 | Fixed, §1.5, in one condition: the "old window still active" arm is implied. Its last step, a stale record under `WHOLE`, is fixed too: the check skips a `WHOLE` holder |
 | agy I-2 | Fixed, §1.6 |
 | agy I-3 | Fixed, §1.5 |
@@ -170,6 +170,20 @@ Each reviewer's other refuted claims stand: they were tested against the code an
 | Is §7.5's and §7.6's "`shieldScale`, `maxShielded` `≤ 2^54` / `≤ 2^62`" true? agy: true. Claude, Codex: false | **Claude and Codex** | `ZetherLib.init` and `PqzStateLib.init` bound `maxShielded` alone: `shieldScale == 0` reverts, and `maxShielded > type(uint256).max / shieldScale` reverts. `maxShielded = 1` with `shieldScale = 2^70` passes both. agy's citation shows the constant, which applies to the cap |
 | Is envelope replay after a rotation refuted? agy R-2: yes. Codex 4: A → B → A replays | **Codex** | agy tested one way: `O1`'s envelope fails while `O2` is operator, which is true. But a revert leaves the nonce unspent and no signed word changes, so when the operator returns to `O1` the withheld envelope runs. Hence §3.1's generation |
 
+**The final review of `6e09e008`, by Fable.** No Critical, no Important, nine Minor, each checked here against the text and the code. Its Refuted list changes nothing.
+
+| Finding | Disposition |
+|---|---|
+| Fable M-1 | Fixed, §1.5, §1.6, §1.7, §2.2, §10.3, G41. A grantor's revoke bars nobody, and the confirm re-runs every check and makes the root the owner proposed, so deleting the pending only let a grantor cancel the owner's proposal |
+| Fable M-2 | Fixed, §1.8, §3.1, §3.3, §10.3. The holder refuses its factory, its implementation and clones of it, by the clone code hash of §12.7. A token has no such hash, and another release's clone or one not yet deployed passes: disclosed. **Its wallet sentence is rejected:** printing "no controller" for every contract that is no `SmartKeyAccount` clone or UA would misname a Safe, which can call the holder |
+| Fable M-3 | Fixed, C10, §4.3: Wrap-shield takes C10's condition. Shield keeps `F` on the payer whatever `toUA` is, as the finding says: it spends the locked public balance, and C10 now says why. CTR-GOV-17's "blocks its shield" reads as that shield (controller reading, owner may override) |
+| Fable M-4 | Fixed, §4.2. `WrappedLib` links `GovernanceLib`; `ZetherWrappedLib` and `PqzWrappedLib` link `WrappedLib`, not `GovernanceLib` itself, so the closure takes all three |
+| Fable M-5 | Recorded as proposed Change lines, §12.9, **awaiting the owner's word**. Nothing goes in the register before it |
+| Fable M-6 | Fixed, §5.2, §5.4, §5.5, §7.4, §10.3. The cap is the token's: it binds wraps and stays after `disableFeature(MINTABLE)`. The finding's other option, lifting it on wraps, is not taken |
+| Fable M-7 | Fixed, §5.4, §7.4, §10.3: the refusal stays, stated with what it costs |
+| Fable M-8 | Fixed, §11, §12.7. **Its failure is corrected:** a missing field is `422 BAD_PAYLOAD` at accept, not a silent `dead`. The node builds from the job's field, never from `generation()`, and the guard compares the two at lease, since intake reads no chain. The field sits in `args`, apart from `origin.generation` |
+| Fable M-9 | Fixed, §1.2. The finding's sentence still left out unshield and the fee leg, and roll-over stays open too, so the sentence names them |
+
 ## 1. The model — SPECIFIED
 
 ### 1.1 One sentence
@@ -194,7 +208,7 @@ The worst case of a contract's bits is the worst case of **that contract's own c
 | 4 | `WRAP_DISABLEABLE` | a holder closes an inflow, one-way | power | yes | no | as built |
 | 5 | `FREEZE` | a holder stops one account from sending, bounded in time. **Public kinds:** that account in any role, the envelope `from` of a meta-tx op included (CTR-AS-05). **Confidential kinds:** that account as a proof's sender; an envelope `from` is not read (§4.3, U4) | power | no | yes | refused, regulated kinds |
 | 6 | `FORCE` | a holder moves units out of a frozen account to a recorded beneficiary; public balances only | power | no | yes | refused, regulated kinds |
-| 7 | `PAUSE` | a holder stops the token's transfers, bounded in time; unwrap of public units is never paused (CTR-AS-06, §4.3) | power | no | yes | refused, regulated kinds |
+| 7 | `PAUSE` | a holder stops transfers, mints, wraps, shields, unshields and every relayed fee, bounded in time; unwrap of public units, holder burn, a forced transfer and roll-over are never paused (CTR-AS-06, §4.3) | power | no | yes | refused, regulated kinds |
 | 8 | `ALLOWLIST` | a receiver of a public balance must hold `requiredFlags` in a `ComplianceRegistry` pinned at creation (§4.4) | capability, parameters `complianceRegistry`, `requiredFlags` | — | — | refused, regulated kinds |
 | 9 | `DENYLIST` | a receiver of a public balance must hold none of `deniedFlags` in that registry (§4.4) | capability, parameters `complianceRegistry`, `deniedFlags` | — | — | refused, regulated kinds |
 | 10 | `RECORD` | a holder writes a compliance record another power relies on; one holder is refused both this and `FORCE` | power | no | yes | number only (CTR-GOV-09) |
@@ -213,7 +227,7 @@ The worst case of a contract's bits is the worst case of **that contract's own c
 
 `MODERATE` had a number and no code; CTR-GOV-18 moved it from 9 to 21 so that the two receiver bits sit together. Bit 10 maps `Roles.compliance`; bits 8 and 9 have no holder, so the `compliance` word stops meaning "the `ALLOWLIST` role" (§12.3), and `init` refuses a non-zero `roles.compliance` with `RoleWithoutFeature(10)`, not 8.
 
-Bit 7 is one sentence, since a public kind has no shielded path and the words "of public units" bind nothing there. Bit 5 is two: U4 is a ruling against CTR-AS-05 on the confidential kinds, so CTR-GOV-10's "one meaning" reads here as one sentence per class of kind, recorded in this table and in `governance_bits.json`. Per contract in this release:
+Bit 7 is one sentence, since a public kind has no shielded path and the shielded words bind nothing there. Bit 5 is two: U4 is a ruling against CTR-AS-05 on the confidential kinds, so CTR-GOV-10's "one meaning" reads here as one sentence per class of kind, recorded in this table and in `governance_bits.json`, and proposed as a Change to CTR-GOV-10, §12.9. Per contract in this release:
 
 | Contract | `_validBits()` | `_roleBits()` | `_contractOnlyBits()` | `_scalarBits()` | `_scopeBits()` |
 |---|---|---|---|---|---|
@@ -314,7 +328,7 @@ A wrong `_scopeNarrows` is application code the base cannot see (v2 §7.2); the 
 
 **Edits.** One rule: an edit never refreshes a budget. `spentTotal`, `spentInWindow`, `uses` carry. A change of `window` on a holder that is not `WHOLE` is refused (`GrantWindowInUse`, B-12) while `spentInWindow ≠ 0` and the period that spent ends after the start of the current period on the new grid: `windowStart + g.window > now − now % t.window`, with `now` for the right side when `t.window == 0`, in `uint256`. The grid start depends on `window`, so a period already over on the old grid can lie inside the new one, and `_debit` would read it as unspent (agy I-1: 100 spent at day 15 on a 10-day grid, a change to 30 days at day 21, 100 more the same day). A `WHOLE` holder had no bound: stale words of its kept record refuse nothing.
 
-**Revoke.** Owner, or the leaf's grantor while `roles[bit][account] == LIMITED` and the grantor still holds the bit (B-04); `_grant` clears `grantor`. A revoke keeps the record and bumps the epoch, or revoke then grant would refresh a budget. A revoke by the owner sets `barred`: only the owner re-admits that account (B-05). It writes `barred` first, before the early return on a non-holder, so a leaf that front-runs the revoke with `renounceRole` is barred all the same. Every revoke and every renounce deletes `pending[bit][account]`: a pending must not restore in one call what a revoke took, `barred` included (agy C-3).
+**Revoke.** Owner, or the leaf's grantor while `roles[bit][account] == LIMITED` and the grantor still holds the bit (B-04); `_grant` clears `grantor`. A revoke keeps the record and bumps the epoch, or revoke then grant would refresh a budget. A revoke by the owner sets `barred`: only the owner re-admits that account (B-05). It writes `barred` first, before the early return on a non-holder, so a leaf that front-runs the revoke with `renounceRole` is barred all the same. The owner's revoke and the holder's own renounce delete `pending[bit][account]`: a pending must not restore in one call what a revoke took, `barred` included (agy C-3). A grantor's revoke leaves it: it bars nobody, and the confirm re-runs every check and makes the account the root the owner proposed (Fable M-1).
 
 **`hasRole` means listed, not able to act** (B-07). A dead leaf stays listed and counted; a wallet reads `grantOf` and still simulates.
 
@@ -327,7 +341,7 @@ stateDiagram-v2
     None --> Applied: grantDelay == 0, or a pure narrowing
     Pending --> Applied: same owner generation, same terms, now in [eta, eta + grantDelay]
     Pending --> Pending: before eta, or other terms: revert, nothing changes
-    Pending --> None: cancelGrant, a revoke, a renounce, a narrowing applied at once
+    Pending --> None: cancelGrant, an owner revoke, a renounce, a narrowing applied at once
     Pending --> Dead: window passed, or the owner changed
     Dead --> Pending: the current owner proposes again
 ```
@@ -356,7 +370,7 @@ The rate timelock stays as built. `grantDelay` delays an address, never who cont
 
 ### 1.7 The renounce rule, live roots, `Counts`
 
-**Live root.** A root is a holder with `grantor == 0`; a leaf never counts, live or dead. An **expired root** is a `LIMITED` root past its `validUntil` (`validUntil ≠ 0`, `now > validUntil`): it cannot act, its leaves cannot act since their parent's debit reverts, and only an owner's edit revives it, in two calls. A root out of budget is not expired. `Counts.roots` is the count both rules read (CTR-GOV-02, -09 Changes), and it is a stored number: the chain sees an expiry only by a walk, and no holder list exists on chain. So **an expired root counts as live until it is revoked** (C7). For the renounce rule that costs the owner one `revokeRole`. For the relaxing rule it fails toward the protection: the bit stays active, a freeze or a pause ends by its own bound (CTR-AS-05, CTR-AS-06), and the owner's revoke is the relaxation.
+**Live root.** A root is a holder with `grantor == 0`; a leaf never counts, live or dead. An **expired root** is a `LIMITED` root past its `validUntil` (`validUntil ≠ 0`, `now > validUntil`): it cannot act, its leaves cannot act since their parent's debit reverts, and only an owner's edit revives it, in two calls. A root out of budget is not expired. `Counts.roots` is the count both rules read (CTR-GOV-02, -09 Changes), and it is a stored number: the chain sees an expiry only by a walk, and no holder list exists on chain. So **an expired root counts as live until it is revoked** (C7; proposed Change, §12.9). For the renounce rule that costs the owner one `revokeRole`. For the relaxing rule it fails toward the protection: the bit stays active, a freeze or a pause ends by its own bound (CTR-AS-05, CTR-AS-06), and the owner's revoke is the relaxation.
 
 `renounceOwnership` reverts `OwnerHasHolders(bit)` while a set bit in `features & ~lockedFeatures & _roleBits()` has `roots ≠ 0`. Dead leaves do not count: they would otherwise block it until the owner walks them by hand (B-07), and revoking every root kills every leaf.
 
@@ -372,8 +386,8 @@ The rate timelock stays as built. `grantDelay` delays an address, never who cont
 | 4 | leaf | the owner's `setGrant` | root, `LIMITED`, `grantor` 0 | 0 | +1 |
 | 5 | leaf | the owner's `grantRole` | root, `WHOLE`, `grantor` 0 | 0 | +1 |
 | 6 | root | the owner's `setGrant` or `grantRole` | root | 0 | 0 |
-| 7 | root | `revokeRole`, `renounceRole` | `r == 0`, record kept | −1 | −1 |
-| 8 | leaf | `revokeRole`, `renounceRole` | `r == 0`, record kept | −1 | 0 |
+| 7 | root | `revokeRole`, `renounceRole` | `r == 0`, record kept, pending deleted | −1 | −1 |
+| 8 | leaf | `revokeRole`, `renounceRole` | `r == 0`, record kept; pending deleted by the owner's revoke or the renounce, kept by a grantor's revoke | −1 | 0 |
 | 9 | `r == 0` | `revokeRole` by the owner | `barred` set, pending deleted | 0 | 0 |
 | 10 | leaf whose parent went | nobody: the leaf is dead, listed | unchanged | 0 | 0 |
 | 11 | root past `validUntil` | nobody: it counts until row 7 | unchanged | 0 | 0 |
@@ -388,7 +402,7 @@ A DEX handover (B-13): `transferOwnership` moves neither bit 11 nor 12, since th
 2. `kind()`, `features()`, `lockedFeatures()`: one sentence per set bit. `lockedFeatures` says the power exists for ever, the reverse of "locked" in most systems.
 3. `owner()`: 0 means nothing above can change. Else `grantDelay()`, `pendingOwner()`, and a warning when `lastProposedAt()` is within `2 × grantDelay`: read `GrantProposed` and `pendingGrant`, which says whether a pending is live.
 4. Per power bit: `holderCount(bit)` against the indexed `RoleGranted` / `RoleRevoked` list, then per holder `grantOf`. A delegable holder prints "can add unlimited leaves at once, sharing a remaining budget of N".
-5. A contract holder: a clone of a holder implementation prints "operator X" and `pendingOperator`; anything else prints "whole shape, mutable by its own rules". Once, for every contract holder: **`grantDelay` delays an address, never who controls it** (CTR-GOV-15).
+5. A contract holder: a clone of a holder implementation prints "operator X" and `pendingOperator`; anything else prints "whole shape, mutable by its own rules". An operator that is itself a holder clone, a holder implementation or factory, or a token (`isToken`) prints "no controller: this operator cannot call", and a wallet never recurses to that operator's own operator (§3.1). Once, for every contract holder: **`grantDelay` delays an address, never who controls it** (CTR-GOV-15).
 6. Per leg of `underlyings()`: recurse on `isRegisteredToken`, others print "unknown issuer powers". A leg with bit 5, 7, 8 or 9 prints "its issuer can stop unwraps of this leg" (B-34). A registered leg never has 6 or 21.
 7. Bits 8 and 9, read apart: `complianceRegistry()`, never `registry()`, which is the UA registry; `requiredFlags()`, `deniedFlags()` and the compliance registry's controller, "X can change this list at once" (A13). A bit that is off prints that it can never come on: features only lose bits, so the issuer chose at creation. Both off prints "this token can never stop a receiver".
 8. A hybrid, `maxSupply() ≠ 0`: §5.5. `rescueTo()` when bit 17 is set.
@@ -435,7 +449,7 @@ Each is one direct entry under the contract's guard. None is on `mtxSelectors()`
 | `grantRole(uint8 bit, address account)` | owner | §1.6; `roles = WHOLE`; a `LIMITED` holder's epoch bumps | `GrantProposed`, `RoleGranted` | `NotOwner`, `FeatureReserved`, `RoleAccountZero`, `RoleAccountPool`, `NoSuchRole`, `RoleWithoutFeature`, `RoleNotContract`, `GrantNotReady`, `GrantTermsMismatch` |
 | `setGrant(uint8 bit, address holder, GrantTerms terms)` | owner, or a delegable holder of `bit` | §1.5, §1.6 | `GrantProposed`, `GrantSet`, and `RoleGranted` for a new holder (B-31) | the above, and `GrantWordRefused`, `GrantBudgetRequired`, `GrantNotNarrower`, `GrantBarred`, `GrantWindowInUse`, `GrantExpired` |
 | `cancelGrant(uint8 bit, address account)` | owner | deletes a pending, live or dead; none is a no-op | `GrantCancelled` | `NotOwner` |
-| `revokeRole(uint8 bit, address account)` | owner, or the live grantor | at once; record kept, epoch bumped, pending deleted; `barred` if by the owner, a non-holder too | `RoleRevoked` | `NotOwner` |
+| `revokeRole(uint8 bit, address account)` | owner, or the live grantor | at once; record kept, epoch bumped; by the owner, pending deleted and `barred` set, a non-holder too | `RoleRevoked` | `NotOwner` |
 | `renounceRole(uint8 bit)` | a holder | at once; pending deleted | `RoleRevoked` | `MissingRole` |
 | `disableFeature(uint8 bit)` | owner | one-way | `FeatureDisabled` | `NotOwner`, `FeatureLocked`, `FeatureNotSet` |
 | `transferOwnership(address newOwner)` | owner | two-step, no delay; 0 cancels | `OwnershipTransferStarted` | `NotOwner`, `OwnerAccountPool` |
@@ -482,13 +496,13 @@ A `UAMetaTxBase` child, the base meant for contracts that are not tokens. The ho
 | Shape | EIP-1167 clone by CREATE2, made by a per-chain `GovernanceHolderFactory` in the shape of `SmartKeyAccountFactory`: implementation built in the constructor, `predict`, permissionless `deploy`, a repeat `deploy` returns the address. Not a `TokenKind`. `OpenFactory` does not know it |
 | Salt | `keccak256(abi.encode(operator, salt))`. The operator is in the salt, or the first deployer would choose it (B-20). No other argument exists: CTR-GOV-15 removed `operatorDelay` |
 | Domain | `("SCaaS GovernanceHolder", "1", chainId, holder, chain_uid)` |
-| Immutables | the chain's UA registry, `chain_uid`, the `SmartKeyAccount` implementation, `IS_HEDERA`, `FACTORY`, the factory that built the implementation |
+| Immutables | the chain's UA registry, `chain_uid`, the `SmartKeyAccount` implementation, `IS_HEDERA`, `FACTORY`, the factory that built the implementation, `IMPL`, the implementation's own address, `CLONE_CODEHASH`, the code hash of its clones, computed as `_SMART_KEY_CLONE_CODEHASH` is: the hash the node reads by (§12.7) |
 | State | `operator`, `pendingOperator` (`bytes32`), `generation` (`uint64`), own ERC-7201 namespace `scaas.holder`, root `0x86d8592a976ab91a258d36c502084dc93b41b1785adce6f7419d9b3d4ee9be00`. `operator` written once by `initialize` and by `acceptOperator`; `generation` starts at 0 and only `acceptOperator` bumps it |
 | The check | every direct op but `acceptOperator` starts `if (_subject() != operator) revert NotOperator(_subject())`. `acceptOperator` is exempt: it requires `pendingOperator ≠ 0` and `_subject() == pendingOperator`, else `NotPendingOperator(_subject())`, on its direct, `mtx` and `ua` forms. A native operator may call directly; a derived one only through a signed entry |
 | Holds nothing | no `receive`, no balance, no allowance |
 | Fee | `supportedModes() == 0x03`, fee mode `NONE`. A relayer is paid, if at all, through `MtxRelayFee` |
 | Factory | `predict(bytes32 operator, bytes32 salt)`, `deploy(bytes32 operator, bytes32 salt)`, `IMPLEMENTATION()`, `chainUid()`, `HolderDeployed(address indexed holder, bytes32 indexed operator)`. `initialize(bytes32 operator)` by `FACTORY` only (`NotFactory()`), once (`AlreadyInitialized()`), in the same call |
-| Operator refused | 0 (`ZeroOperator()`); `pad(UA_POOL)`, `pad(SHIELD_POOL)` and `pad(this)` (`OperatorInvalid(bytes32)`), at `initialize` and at `proposeOperator`. `proposeOperator(0)` is the cancel |
+| Operator refused | 0 (`ZeroOperator()`); `pad(UA_POOL)`, `pad(SHIELD_POOL)`, `pad(FACTORY)`, `pad(IMPL)`, and a padded address whose code hash is `CLONE_CODEHASH`, which covers `pad(this)` (`OperatorInvalid(bytes32)`), at `initialize` and at `proposeOperator`. None can call a holder entry: §3.2's table is closed and reaches no holder selector. `proposeOperator(0)` is the cancel. **Passes, disclosed (§1.8 step 5):** a token, which has no such hash here; a clone of another release; a clone not yet deployed, whose address has no code. Such a holder is inert, which is self-inflicted. No rotation lands on one: `acceptOperator` needs the next operator's call |
 | Views, events, errors | `operator()`, `pendingOperator()`, `generation()`; `OperatorProposed(bytes32 indexed next)`, `OperatorChanged(bytes32 indexed previous, bytes32 indexed next)`; `NotOperator(bytes32 subject)`, `NotPendingOperator(bytes32 subject)`, `GenerationStale(uint64 signed, uint64 current)`, and those of the two rows above |
 
 ### 3.2 Entries
@@ -545,7 +559,7 @@ sequenceDiagram
     H->>T: grantRole(bit, account), msg.sender == holder
 ```
 
-Each member registers a single-key PQ UA; `registerMsig` registers the structure; each member calls `acceptMembership` (CTR-UA-37). Below the accepted threshold the `msig` authorizes nothing, so a holder naming it is inert, and a client reads `memberAccepted` first. The creator deploys the holder, or predicts its address, and names it `TokenConfig.owner`. A counterfactual owner works; a contract-only bit needs code at the grant, so deploy the holder first. The holder never reads a member.
+Each member registers a single-key PQ UA; `registerMsig` registers the structure; each member calls `acceptMembership` (CTR-UA-37). Below the accepted threshold the `msig` authorizes nothing, so a holder naming it is inert, and a client reads `memberAccepted` first. The creator deploys the holder, or predicts its address, and names it `TokenConfig.owner`. A contract operator must be able to call the holder: one that cannot leaves it inert for good (§3.1). A counterfactual owner works; a contract-only bit needs code at the grant, so deploy the holder first. The holder never reads a member.
 
 ### 3.4 Rotation, CTR-GOV-15
 
@@ -627,7 +641,7 @@ No factory change is needed: `publishEnv(kind, envVersion, env)`, `deployImpleme
 
 The regulated implementation of a kind is the same source with a hook compiled into `_update` and `_uaMove`, never into `_poolMove` (§4.3), and takes the combinations of flags 5-9 that asset-suite §2.2's init checks accept: `FORCE ⇒ FREEZE`, and `FORCE` wants a holder of bit 10 `RECORD`, outside the mask. Designing it is not this spec's work beyond the rules below. It needs bytes nobody has measured: §9.
 
-**What a regulated release needs, though the factory needs nothing.** `GovernanceLib.init` refuses bits 5-9 with `FeatureNotBuilt` and a non-zero `roles.issuer` or `roles.compliance` in its own body. A regulated release lifts both, so it links a `GovernanceLib` of its own through `Env.libs`, and the plain kinds drop `| REGULATED` in the release that takes that body (§1.2). Its role masks come from the kind (§1.2), not from a shared constant, and they hold bits 5-7 and 10.
+**What a regulated release needs, though the factory needs nothing.** `GovernanceLib.init` refuses bits 5-9 with `FeatureNotBuilt` and a non-zero `roles.issuer` or `roles.compliance` in its own body. A regulated release lifts both, so it takes a `GovernanceLib` of its own. A `public` library's address is linked into its caller's bytecode: `WrappedLib` links `GovernanceLib`, and `ZetherWrappedLib` and `PqzWrappedLib` link `WrappedLib`. So a regulated wrapped kind takes a `WrappedLib`, and on the confidential kinds a `ZetherWrappedLib` or `PqzWrappedLib`, linked to that body, each in `Env.libs`, and `LinkClosure.t.sol` proves the closure. An old `WrappedLib` in a new `Env` fails closed, `FeatureNotBuilt`. The plain kinds drop `| REGULATED` in the release that takes that body (§1.2). Its role masks come from the kind (§1.2), not from a shared constant, and they hold bits 5-7 and 10.
 
 ### 4.3 Regulated confidential kinds, CTR-GOV-17
 
@@ -659,8 +673,8 @@ Below, `F(x)` is FREEZE on id `x`, `P` is PAUSE, `R(x)` the denylist, when `DENY
 
 | Path | Entry | `F` on | `P` | `R` on | Where the check would sit |
 |---|---|---|---|---|---|
-| Shield | `mtxShield(toUA, amount)` | the payer, never `toUA` | yes | none: a shielded credit | entry body, before `ZetherLib.shield` |
-| Wrap-shield | `mtxWrapShield(underlying, amountIn, toUA)` | the payer, never `toUA` | yes | none | entry body, before `WrappedLib.wrap` |
+| Shield | `mtxShield(toUA, amount)` | the payer, whatever `toUA` is: it spends the locked public balance (C10). Never `toUA` | yes | none: a shielded credit | entry body, before `ZetherLib.shield` |
+| Wrap-shield | `mtxWrapShield(underlying, amountIn, toUA)` | the payer when `toUA` is another id (C10). Never `toUA` | yes | none | entry body, before `WrappedLib.wrap` |
 | Transfer | `mtxConfidentialTransfer`, `…Compact` (`_multi`), `…Single` | `uaOf(t.yFrom)` and the beneficiary. Never a `yTo`, never a leg | yes | the beneficiary; **not** `f.legs[j]`'s `decoyFee` | layer, top of `_multi` and `mtxConfidentialTransferSingle`, before `ZetherLib`; the decoy loop untouched |
 | Unshield | `mtxUnshield(b, amount, recipient, proof)` | `uaOf(b.yFrom)` and the beneficiary | yes | `recipient` and the beneficiary | layer, top of the entry, before `ZetherLib.unshield` |
 | Unshield-unwrap | `mtxUnshieldUnwrap(b, x, proof)` | `uaOf(b.yFrom)` and the beneficiary | yes | the beneficiary; not `x.recipient`: it receives another asset (CTR-AS-05) | `WrappedZetherToken`, top of the entry, before `ZetherLib.unshield` |
@@ -674,8 +688,8 @@ Below, `F(x)` is FREEZE on id `x`, `P` is PAUSE, `R(x)` the denylist, when `DENY
 
 | Path | Entry | `F` on | `P` | `R` on | Where the check would sit |
 |---|---|---|---|---|---|
-| Shield | `mtxShield(toUA, amount)` | the payer in `_toPool`, never `toUA` | yes | none | entry body, before `_toPool` |
-| Wrap-shield | `mtxWrapShield(underlying, amountIn, toUA)` | the payer, never `toUA` | yes | none | entry body, before `WrappedLib.wrap` |
+| Shield | `mtxShield(toUA, amount)` | the payer in `_toPool`, whatever `toUA` is: it spends the locked public balance (C10). Never `toUA` | yes | none | entry body, before `_toPool` |
+| Wrap-shield | `mtxWrapShield(underlying, amountIn, toUA)` | the payer when `toUA` is another id (C10). Never `toUA` | yes | none | entry body, before `WrappedLib.wrap` |
 | Transfer | `mtxConfidentialTransfer`, `…Compact` (`_multi`), `…Single`, `…SingleCompact` (`_single`) | `t.fromUA` and the beneficiary, and the `shieldIn` payer when `shieldIn ≠ 0`. Never `toUA`, never a leg | yes | the beneficiary; **not** `t.legs[j].ua`'s `decoyFee` | layer, first in `_single` / `_multi`, before `_pullShieldIn`, so a refusal stays cheap (C2-5) and precedes a 9-13 M gas proof |
 | Unshield | `mtxUnshield(b, amount, recipient, …)` (`_burn`) | `b.fromUA` and the beneficiary, and the `shieldIn` payer | yes | `recipient` and the beneficiary | `F`, `P`, `R(beneficiary)` first in `_burn`; `R(recipient)` in the entry, before `_burn`, which unshield-unwrap shares |
 | Unshield-unwrap | `mtxUnshieldUnwrap(b, x, …)` | `b.fromUA` and the beneficiary, and the `shieldIn` payer | yes | the beneficiary; not `x.recipient` | first in `_burn`, as above |
@@ -734,7 +748,7 @@ A wrapped token may also be minted by its issuer, under a cap. Redemption runs u
 
 ### 5.2 Creation and the cap
 
-`MINTABLE` joins `_validBits()` on every `WRAPPED*` kind. `TokenConfig.maxSupply`: on a wrapped kind, at creation, `MINTABLE ⇔ maxSupply ≠ 0`, else `MaxSupplyInvalid()`. **A hybrid is a wrapped token with `maxSupply ≠ 0`**, immutable. `disableFeature(MINTABLE)` ends the minting, not the hybrid: units already minted stay unbacked, the cap and `capped` stay, and the disclosure stays. `initialSupply` stays refused on a wrapped kind; the issuer mints through `minter`. CTR-GOV-12 names every wrapped kind: bytes on the confidential ones go to §9.
+`MINTABLE` joins `_validBits()` on every `WRAPPED*` kind. `TokenConfig.maxSupply`: on a wrapped kind, at creation, `MINTABLE ⇔ maxSupply ≠ 0`, else `MaxSupplyInvalid()`. **A hybrid is a wrapped token with `maxSupply ≠ 0`**, immutable. `disableFeature(MINTABLE)` ends the minting, not the hybrid: units already minted stay unbacked, the cap and `capped` stay, and the disclosure stays. The cap is a property of the token, not of the mint: `maxSupply` caps wraps too, and after `disableFeature(MINTABLE)` it goes on capping them, so deposits stop at `maxSupply` until an unwrap or a burn makes room. `initialSupply` stays refused on a wrapped kind; the issuer mints through `minter`. CTR-GOV-12 names every wrapped kind: bytes on the confidential ones go to §9.
 
 `mint(address to, uint256 amount)` and `mintToUA(bytes32 to, uint256 amount)` are the entries of `NormalToken`, through `use` on bit 1, into a public balance. A minter never mints into a shielded balance. `maxSupply()` is a view.
 
@@ -765,15 +779,15 @@ Today, CTR-TOK-05: `collateralValue() ≥ totalSupply()`. **On a hybrid it is no
 
 ### 5.4 Redemption
 
-`_quote` does not change: `out > reserve` reverts `InsufficientReserve`. That is "until empty", and first come is what a block's order gives. A multi-leg hybrid bounds each unwrap by the chosen leg. Unshield-unwrap goes through the same `payOutTo`, and on a hybrid an empty reserve is ordinary, so `mtxUnshieldUnwrap` quotes the chosen leg first, by `quoteUnwrap` or `quoteUnwrapToUA` as `payOutTo` picks, before the proof: the refusal costs the relayer the cheap prefix, not a proof's gas (Claude M-9). `WrappedZetherToken` and `WrappedPqzToken` each, on every wrapped confidential token. `addReserve` stays open to anyone. Units are fungible: no unit is marked backed.
+`_quote` does not change: `out > reserve` reverts `InsufficientReserve`. That is "until empty", and first come is what a block's order gives. A multi-leg hybrid bounds each unwrap by the chosen leg. Unshield-unwrap goes through the same `payOutTo`, and on a hybrid an empty reserve is ordinary, so `mtxUnshieldUnwrap` quotes the chosen leg first, by `quoteUnwrap` or `quoteUnwrapToUA` as `payOutTo` picks, before the proof: the refusal costs the relayer the cheap prefix, not a proof's gas (Claude M-9). `WrappedZetherToken` and `WrappedPqzToken` each, on every wrapped confidential token. `addReserve` stays open to anyone, and stays refused on a disabled leg (`WrapDisabledFor`), on a hybrid too. So the reserve of a leg a guardian closed only falls: neither a wrap nor a top-up can raise it, even when the issuer wants to fund redemptions, and when it is empty that leg's redemption ends for good; the way out is another leg or off chain. Units are fungible: no unit is marked backed.
 
-Nothing stops a minter from minting and unwrapping at once: "others can drain" includes the issuer's own minted units. The rule accepts it, and the disclosure says so.
+Nothing stops a minter from minting and unwrapping at once: "others can drain" includes the issuer's own minted units. Nothing stops it from minting to the cap either: every later wrap reverts `MaxSupplyExceeded`, so an issuer can shut deposits first and drain the reserve after. The rule accepts both, and the disclosure says so.
 
 ### 5.5 The disclosure
 
 Readable on chain, not left to a document, and keyed on `maxSupply() ≠ 0`, never on bit 1: `maxSupply()`, `totalSupply()`, `collateralValue()`, bits 1 and 3. `governance_bits.json` carries the sentence, and a wallet prints it before a user wraps:
 
-> *This token is not fully backed. [Its issuer can mint up to {maxSupply − totalSupply} more units.] [Its issuer can lower the rate with no top-up, which also leaves the reserve short.] Any unit, the issuer's included, redeems for the underlying at the rate while the reserve lasts, first come, with no share and no queue. When the reserve is empty your units stay valid, and redeeming the underlying on chain stops; your way out is then off chain.*
+> *This token is not fully backed. Supply, wraps included, is capped at {maxSupply}; at the cap, deposits stop. [Its issuer can mint up to {maxSupply − totalSupply} more units, and by filling the cap it can stop deposits.] [Its issuer can lower the rate with no top-up, which also leaves the reserve short.] Any unit, the issuer's included, redeems for the underlying at the rate while the reserve lasts, first come, with no share and no queue. When the reserve is empty your units stay valid, and redeeming the underlying on chain stops; your way out is then off chain.*
 
 The first bracket prints only while bit 1 is set, the second only while bit 3 is set.
 
@@ -913,9 +927,9 @@ Replaces gov-inventory's line numbers, from code at `08e92597` and the rulings. 
 | `rateDelay`, `maxRateStepBps` | 2-30 days, 1-1000 bps | `rate` | — |
 | Wrap paused while a change is pending | — | — | every adjustable leg, until execute, cancel or `eta + 7 days`. A revoked rate admin's proposal outlives it to that end (B-16): the owner can grant a canceller, under the delay, or, on an unlocked bit, `disableFeature(RATE_ADJUSTABLE)`, which cancels at once and fixes the rate |
 | `disableWrap` | — | `WRAP_DISABLEABLE`, `guardian` | holder, at once, one-way per leg; unwrap stays open |
-| `addReserve` | — | — | anyone, no mint; refused on a disabled leg and under a shortfall |
+| `addReserve` | — | — | anyone, no mint; refused on a disabled leg, a hybrid's too (§5.4), and under a shortfall |
 | Stray underlying | — | `rescueTo` | `rescue`, surplus only |
-| Hybrid: `maxSupply` | — | ≠ 0 ⇔ `MINTABLE` at creation; ≠ 0 is what makes it a hybrid | — ; mint as §7.3, under the cap, while bit 1 is set. A rate may fall with no `addReserve`; §5 |
+| Hybrid: `maxSupply` | — | ≠ 0 ⇔ `MINTABLE` at creation; ≠ 0 is what makes it a hybrid | — ; mint as §7.3, under the cap, while bit 1 is set. The cap binds wraps too and stays after `disableFeature(MINTABLE)`. A rate may fall with no `addReserve`; §5 |
 
 ### 7.5 Classical Zether
 
@@ -1118,7 +1132,7 @@ Every `test_attack_*` of `GovAttackV2.t.sol` passes while its hole is open, so e
 | B-27 | delay 0 is one call; DEX init holds both bits; delay > 30 days refused | DEX init through `grantRole` |
 | A20 | `holderCount`: INIT once, idempotent, pendings never, leaves counted | count at propose |
 | Codex 2 | A → B → A leaves the pending dead; a cancelled `transferOwnership` kills nothing; a renounce kills it | generation not compared; not bumped at accept |
-| agy C-3 | a revoke, a renounce, a narrowing each delete the pending; a revoked account is not restored by a confirm; `cancelGrant`, live and dead | each delete dropped |
+| agy C-3 | the owner's revoke, a renounce, a narrowing each delete the pending; a revoked account is not restored by a confirm; `cancelGrant`, live and dead; a grantor's revoke keeps the pending, and the confirm makes the account a root (Fable M-1) | each delete dropped; a grantor's revoke deleting it |
 | Codex 7 | `0 → finite` on each of `total`, `perWindow`, `validUntil`, `maxUses` runs at once; a window with its limit runs at once; `finite → 0` takes two calls | `0 → finite` read as a widening |
 | agy C-1 | one test per row of §1.7's table, `holders` and `roots` read after each; then the renounce rule and a revoke on the result | row 4 or 5 without `roots + 1`; `_clear` on a stale `grantor` |
 | CTR-GOV-02 Change | a dead leaf does not block a renounce; an expired root does, until revoked | `roots` replaced by `holders` |
@@ -1136,10 +1150,10 @@ Every `test_attack_*` of `GovAttackV2.t.sol` passes while its hole is open, so e
 | B-12, B-17 | window change while spent refused; leaf window equal | each dropped |
 | B-14 | `mtxExecute`, `mtxBatch`, `executeMetaTransaction`, `uaExecute`, `uaBatch` refuse every op on the holder | override removed |
 | B-15 | unregistered and second-factory legs are outside; a registered `FORCE` or `MODERATE` leg refused, with a mock | reads `isToken` |
-| CTR-GOV-12 | each row of §5.2 at the cap and one over; unwrap to empty; `InsufficientReserve` after; units still transfer; `executeRate` on a hybrid short of supply; a rate fall with no `addReserve`; `RateDecreaseWithDisabledLeg` still refused on a hybrid; after `disableFeature(MINTABLE)` it stays a hybrid and the mint clause goes | a path without the cap; `c ≥ supply` kept on a capped token; dropped on an uncapped one |
+| CTR-GOV-12 | each row of §5.2 at the cap and one over; unwrap to empty; `InsufficientReserve` after; units still transfer; `executeRate` on a hybrid short of supply; a rate fall with no `addReserve`; `RateDecreaseWithDisabledLeg` still refused on a hybrid; after `disableFeature(MINTABLE)` it stays a hybrid, wraps stay capped and the mint clause goes; a mint to the cap stops wraps; `addReserve` refused on a hybrid's disabled leg | a path without the cap; the cap lifted on wraps once bit 1 is off; `addReserve` open on a disabled leg; `c ≥ supply` kept on a capped token; dropped on an uncapped one |
 | CTR-GOV-12 | a non-hybrid wrap reads no new slot | `capped` removed |
 | CTR-GOV-06 | each row of §6.2, first match; alias leg; reentrant asset; rescue past a short leg; a leg with a shortfall names `ReserveShortfall`; the native asset on `NORMAL*`; `rescueTo` as `this` and each pool refused at `init` | post-check dropped; `nonReentrant` dropped |
-| CTR-GOV-15 | rotation, `(0)` cancels, a dead pending, an old operator's envelope; A → B → A leaves A's envelope `GenerationStale`, nonce unspent; `acceptOperator` by the pending operator on all three forms; pools and the holder refused as operator | accept without pending; `acceptOperator` under the operator check; `generation` unbumped; `generation` unsigned |
+| CTR-GOV-15 | rotation, `(0)` cancels, a dead pending, an old operator's envelope; A → B → A leaves A's envelope `GenerationStale`, nonce unspent; `acceptOperator` by the pending operator on all three forms; pools, the factory, the implementation, the holder and another clone refused as operator; a token operator passes and is inert | accept without pending; `acceptOperator` under the operator check; `generation` unbumped; `generation` unsigned; the `CLONE_CODEHASH` compare dropped |
 | CTR-GOV-16 | every id decodes; 6, 7 refused; 8-13 off; a mock implementation of 8 publishes, enables and creates on the same factory | enum order swapped |
 | CTR-GOV-18 | `R` over bit 8 and bit 9 on and off against flags held and missing; each bit disabled alone; a lapsed denial; `ELIGIBLE_CONTRACT` against `deniedFlags`; `ALLOWLIST` refused on the four confidential kinds; no registry call with both off | formula drops a side; disabling one bit clears both |
 
@@ -1178,7 +1192,7 @@ From v2 §6, adjusted by the findings. The enum moves up, because every later st
 | S7 | D6, `DexPuller` | `rescueTo` | none | `dex_order_kat.json` again | every kind, `SCaaSDex` | `rescueTo` | none | CTR-DEX-22 |
 | S8 | `GovernanceHolder`, its factory, `DeployBase` | `test/v2/layout/` new row | all new, pinned | `typed_ops.json` rows | new entry, ratchet if over a limit | `clientkeys` digests | §12.7 | §3 |
 | S9 | selector audit, "+0" pins | — | — | `governance_bits.json` | — | every client reads it | — | — |
-| S10 | node rows: `"holder"` in `typed.rs` `TYPED`, `ALL`, `UACancelNonce`, `domain_name`; `GrantTerms` in `NESTED`; the factory's `deploy` in `PLAIN`; `guard.rs` `rule_of`, a target rule by clone code hash over a set of factories, on the direct and the relay path; `config.rs`; `abi.rs` | — | — | `typed_ops_kat_every_entry` | — | — | yes | NODE-JOB-01, -19, -20 |
+| S10 | node rows: `"holder"` in `typed.rs` `TYPED`, `ALL`, `UACancelNonce`, `domain_name`; `GrantTerms` in `NESTED`; the factory's `deploy` in `PLAIN`; `guard.rs` `rule_of`, a target rule by clone code hash over a set of factories, on the direct and the relay path; `generation` in `args` of each holder row, read back at lease; `config.rs`; `abi.rs` | — | — | `typed_ops_kat_every_entry` | — | — | yes | NODE-JOB-01, -19, -20, the operator note on `generation` |
 | S11 | §12 applied, `docs/contracts/governance.md` | — | — | — | — | — | — | yes |
 | S12 | D7 Soroban, after `ua8-soroban` merges, same freeze window | — | — | Soroban vectors | — | clients of `admin()` | Soroban rows if any | §6.3 |
 
@@ -1275,7 +1289,7 @@ Reserve invariants, each gaining "on a non-hybrid; a hybrid claims none (CTR-GOV
 
 ### 12.7 node, `docs/node/job-api.md`
 
-NODE-JOB-19 and NODE-JOB-20: "a role holder never calls one through a token" stays, and gains: "A `GovernanceHolder` is a registered contract kind `holder`: its `mtx*` and `ua*` entries are rows of the table, relayed at fee 0, target a clone of a holder implementation of this chain (by code hash, over the config's `holder_factories`, each read once by `IMPLEMENTATION()`), `chainUid()` equal to `chain.chain_uid`. The rule runs on the direct path and on the inner target of `MtxRelayFee.relayCall` and `uaRelayCall`. `GovernanceHolderFactory.deploy` is a row, target one of `holder_factories`, so a derived or PQ operator needs no first gas. Its generic entries are refused by the contract and are no rows." NODE-JOB-01 gains the rule of the kind. `typed.rs`: `holder` joins `ALL` and `UACancelNonce`'s contracts, `GrantTerms` joins `NESTED`, `deploy` joins `PLAIN`. A list, not one address, so the second holder release of §3.2 is a config row. A lane stays no holder: it relays what the operator signed. No existing job's shape changes.
+NODE-JOB-19 and NODE-JOB-20: "a role holder never calls one through a token" stays, and gains: "A `GovernanceHolder` is a registered contract kind `holder`: its `mtx*` and `ua*` entries are rows of the table, relayed at fee 0, target a clone of a holder implementation of this chain (by code hash, over the config's `holder_factories`, each read once by `IMPLEMENTATION()`), `chainUid()` equal to `chain.chain_uid`. The rule runs on the direct path and on the inner target of `MtxRelayFee.relayCall` and `uaRelayCall`. `GovernanceHolderFactory.deploy` is a row, target one of `holder_factories`, so a derived or PQ operator needs no first gas. Its generic entries are refused by the contract and are no rows." NODE-JOB-01 gains the rule of the kind. `typed.rs`: `holder` joins `ALL` and `UACancelNonce`'s contracts, `GrantTerms` joins `NESTED`, `deploy` joins `PLAIN`. A list, not one address, so the second holder release of §3.2 is a config row. A lane stays no holder: it relays what the operator signed. `generation` is a named `uint64` field in `args` of every `holder` job but `CancelNonce` and `UACancelNonce`, which carry none (§3.4); it is the holder's word, apart from `origin.generation`. The node builds the struct from that field, so a job without it is `422 BAD_PAYLOAD` at accept, as any missing field. Intake reads no chain, so at lease the holder rule reads `generation()`, uncached, and a job whose field differs is refused by name, `HOLDER_GENERATION_STALE`, before simulation: nothing is sent, and it never goes `dead` without that cause. The operator note says it: after a rotation a client re-signs at the current generation. No existing job's shape changes.
 
 ### 12.8 metatx.md, code comments
 
@@ -1294,6 +1308,12 @@ Each amends an owner ruling. The owner accepted the first four on 2026-11-02; th
 > CTR-GOV-09, Change: the mask covers `renounceRole`, a `setGrant` to a past `validUntil`, and a parent's revoke killing a leaf. Source: attack B-28.
 
 The Change lines of 2026-11-03 are also in the register, each the owner's: CTR-GOV-02, -08, -09, and the amended rules of CTR-GOV-12, -17, -19.
+
+**Proposed, awaiting the owner's word.** Not in the register and not the owner's until that word: two controller readings of owner words (Fable M-5). Neither is unsafe: the first fails toward the protection, and each sentence of the second is true on its kinds. T17 writes them only on that word.
+
+> CTR-GOV-09, Change (proposed): an expired root counts as live until it is revoked, for the relaxing rule and for the renounce rule of CTR-GOV-02. `Counts.roots` is a stored number, and the chain sees an expiry only by a walk. Source: C7, §1.7.
+
+> CTR-GOV-10, Change (proposed): bit 5 has one sentence per class of kind. Public kinds: the account in any role, the envelope `from` of a meta-tx op included. Confidential kinds: the account as a proof's sender. Source: CTR-GOV-17 U4, §1.2.
 
 ### 12.10 networks/evm.md, NET-EVM-06, CTR-GOV-19
 
