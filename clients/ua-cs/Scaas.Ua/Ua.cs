@@ -360,7 +360,7 @@ public static partial class UA
         {
             var k = (d[o] << 8) | d[o + 1];
             var pq = k == 0x0120
-                ? MsigPqzEligible(inner?.Invoke(d[(o + 2)..(o + 34)]) ?? throw new UAException("UAMemberUnknown", "an msig member's record"))
+                ? MsigPqzEligible(inner?.Invoke(d[(o + 2)..(o + 34)]) ?? throw new UAException("UAMemberUnknown", "0x" + Convert.ToHexStringLower(d[(o + 2)..(o + 34)])))
                 : k is >= 0x0130 and <= 0x0133;
             if (!pq) classical += (d[o + 34] << 8) | d[o + 35];
         }

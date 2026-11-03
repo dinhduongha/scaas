@@ -612,6 +612,23 @@ public class VectorTests
     static byte[]? NestedKey(byte[] id) => N.GetProperty("registrations").EnumerateArray()
         .Where(r => Kind(r) == 0x0120 && B(r.GetProperty("ua")).SequenceEqual(id)).Select(r => (byte[]?)B(r.GetProperty("keyData"))).FirstOrDefault();
 
+    static UA.MemberSig[] SlotsOf(JsonElement pop) => pop.EnumerateArray().Select(m => new UA.MemberSig(m.GetProperty("index").GetUInt16(),
+        m.GetProperty("members").EnumerateArray().Select(x => new UA.InnerSig(x.GetProperty("index").GetUInt16(), B(x.GetProperty("sig")))).ToArray(),
+        B(m.GetProperty("sig")))).ToArray();
+
+    /// <summary><c>Σ slots</c> of <c>abi.encode(MemberSig[])</c> as the library counts it: signing slot 192 + ⌈sig/32⌉×32, msig slot 192 + Σ leaves,
+    /// leaf 128 + ⌈sig/32⌉×32.</summary>
+    static int SlotsLen(JsonElement pop)
+    {
+        int Len(UA.UASig s) => new UA.SetKemKeyArgs([], 1, UA.KemKeyOf(null), s).CalldataLength();
+        return Len(new UA.UASig(members: SlotsOf(pop))) - Len(new UA.UASig());
+    }
+
+    static JsonElement NestedRow(string name) => N.GetProperty("registrations").EnumerateArray().First(r => r.GetProperty("name").GetString() == name);
+
+    static void NotReplayed(byte[] keyData, ushort index, byte[] stored) =>
+        Assert.Equal("UAUnauthorized", Assert.Throws<UAException>(() => UA.ReplayedMemberSig(keyData, index, stored)).Code);
+
     [Fact]
     public void NestedEligibility()
     {
@@ -621,26 +638,50 @@ public class VectorTests
             Assert.Equal(r.GetProperty("eligible").GetBoolean(), UA.MsigPqzEligible(B(r.GetProperty("keyData")), id => B(inner.GetProperty(Hx(id)))));
             Assert.Equal("UAMemberUnknown", Assert.Throws<UAException>(() => UA.MsigPqzEligible(B(r.GetProperty("keyData")))).Code);
         }
-        var third = B(N.GetProperty("structures")[0].GetProperty("keyData"));
-        Assert.Equal("UAMemberUnknown", Assert.Throws<UAException>(() => UA.MsigPqzEligible(third, NestedKey)).Code);
+    }
+
+    [Fact]
+    public void NestedStructures()
+    {
+        Assert.Equal(2, N.GetProperty("structures").GetArrayLength());
+        foreach (var s in N.GetProperty("structures").EnumerateArray())
+        {
+            var d = B(s.GetProperty("keyData"));
+            Assert.Equal(s.GetProperty("ua").GetString(), Hx(UA.UAOf(0x0120, d)));
+            SameJson(UA.MsigStructureOf(d), s.GetProperty("structure"));
+            var e = Assert.Throws<UAException>(() => UA.MsigPqzEligible(d, NestedKey));
+            Assert.Equal(s.GetProperty("error").GetString(), e.Code);
+            Assert.Equal(s.GetProperty("member").GetString(), e.Reason);
+        }
     }
 
     [Fact]
     public void NestedRegistrations()
     {
-        var rows = N.GetProperty("registrations").EnumerateArray().Concat(N.GetProperty("afterAcceptance").EnumerateArray()).Where(r => Kind(r) == 0x0120).ToArray();
-        Assert.Equal(12, rows.Length);
+        var rows = N.GetProperty("registrations").EnumerateArray().Concat(N.GetProperty("afterAcceptance").EnumerateArray()).ToArray();
+        Assert.Equal(17, rows.Length);
         foreach (var r in rows)
         {
-            var (ua, d, kem) = (B(r.GetProperty("ua")), B(r.GetProperty("keyData")), B(r.GetProperty("attrs").GetProperty("kemPk")));
-            var g = UA.HolderPopMessage(0x0120, ua, d, kemPk: kem, inner: NestedKey);
+            var (kind, ua, d, kem) = (Kind(r), B(r.GetProperty("ua")), B(r.GetProperty("keyData")), B(r.GetProperty("attrs").GetProperty("kemPk")));
+            Assert.Equal(r.GetProperty("ua").GetString(), Hx(UA.UAOf(kind, d)));
+            var g = UA.HolderPopMessage(kind, ua, d, kemPk: kem, inner: NestedKey);
+            Assert.Equal(r.GetProperty("kemRecordHash").GetString(), Hx(g.KemRecordHash));
+            Assert.Equal(r.GetProperty("portableRecordDigest").GetString(), Hx(g.PortableRecordDigest));
             Assert.Equal(r.GetProperty("registrationDigest").GetString(), Hx(g.RegistrationDigest));
             Assert.Equal(r.GetProperty("popMessage").GetString(), Hx(g.Message));
-            var slots = r.GetProperty("args").GetProperty("pop").EnumerateArray().Select(m => new UA.MemberSig(m.GetProperty("index").GetUInt16(),
-                m.GetProperty("members").EnumerateArray().Select(x => new UA.InnerSig(x.GetProperty("index").GetUInt16(), B(x.GetProperty("sig")))).ToArray(),
-                B(m.GetProperty("sig")))).ToArray();
-            var (args, _) = UA.RegistrationArgs(0x0120, d, kemPk: kem, members: slots, kemCommit: false);
-            SameJson(args, r.GetProperty("args"));
+            var msig = kind == 0x0120;
+            var slots = msig ? SlotsOf(r.GetProperty("args").GetProperty("pop")) : null;
+            var pop = msig ? null : B(r.GetProperty("pop"));
+            SameJson(UA.RegistrationArgs(kind, d, kemPk: kem, pop: pop, members: slots, kemCommit: false).Args, r.GetProperty("args"));
+            if (r.TryGetProperty("kemCommit", out var c))
+            {
+                var (args, fill) = UA.RegistrationArgs(kind, d, kemPk: kem, pop: pop, members: slots, kemCommit: true);
+                SameJson(args, c.GetProperty("register"));
+                SameJson(fill!, c.GetProperty("fill"));
+            }
+            if (!msig) continue;
+            Assert.Equal(r.GetProperty("memberDigest").GetString(), Hx(g.MemberDigest!));
+            if (slots!.Length > 0) Assert.Equal(B(r.GetProperty("pop")).Length, SlotsLen(r.GetProperty("args").GetProperty("pop")) + 64);
             if (!r.TryGetProperty("innerDigests", out var ds)) continue;
             foreach (var x in ds.EnumerateArray())
                 Assert.Equal(x.GetProperty("memberDigest").GetString(), Hx(UA.InnerDigest(B(x.GetProperty("inner")), B(r.GetProperty("memberDigest")))));
@@ -648,18 +689,109 @@ public class VectorTests
     }
 
     [Fact]
+    public void NestedRecords()
+    {
+        Assert.Equal(1, N.GetProperty("kemRecords").GetArrayLength());
+        Assert.Equal(4, N.GetProperty("pqzKeyRecords").GetArrayLength());
+        foreach (var r in N.GetProperty("kemRecords").EnumerateArray())
+        {
+            var (ua, v, pk) = (B(r.GetProperty("ua")), r.GetProperty("version").GetUInt64(), B(r.GetProperty("kemPk")));
+            var m = UA.KemRecordMessage(Kind(r), ua, v, pk);
+            Assert.Equal(r.GetProperty("structHash").GetString(), Hx(UA.KemRecordHash(ua, v, pk)));
+            Assert.Equal(r.GetProperty("digest").GetString(), Hx(UA.KemRecordDigest(ua, v, pk)));
+            Assert.Equal(r.GetProperty("message").GetString(), Hx(m));
+            Assert.Equal(r.GetProperty("memberDigest").GetString(), Hx(UA.MemberDigest(ua, m)));
+            var list = r.GetProperty("args").GetProperty("sig").GetProperty("members");
+            SameJson(UA.NewSetKemKeyArgs(ua, v, pk, new UA.UASig(members: SlotsOf(list))), r.GetProperty("args"));
+            Assert.Equal(B(r.GetProperty("sig")).Length, SlotsLen(list) + 64);
+        }
+        foreach (var r in N.GetProperty("pqzKeyRecords").EnumerateArray())
+        {
+            var (ua, key, h) = (B(r.GetProperty("ua")), B(r.GetProperty("pqzKey")), B(r.GetProperty("pqzPopHash")));
+            var g = UA.PqzKeyRecordMessage(Kind(r), ua, NestedKey(ua)!, key, pqzPopHash: h, inner: NestedKey);
+            Assert.Equal(r.GetProperty("pqzKeyHash").GetString(), Hx(g.PqzKeyHash));
+            Assert.Equal(r.GetProperty("pqzKeyDigest").GetString(), Hx(g.PqzKeyDigest));
+            Assert.Equal(r.GetProperty("recordDigest").GetString(), Hx(g.RecordDigest));
+            Assert.Equal(r.GetProperty("message").GetString(), Hx(g.Message));
+            Assert.Equal(r.GetProperty("pqzRegMessage").GetString(), Hx(g.PqzRegMessage));
+            Assert.Equal(r.GetProperty("memberDigest").GetString(), Hx(g.MemberDigest!));
+            var list = r.GetProperty("args").GetProperty("sig").GetProperty("members");
+            SameJson(UA.NewSetPqzKeyArgs(ua, key, h, new UA.UASig(members: SlotsOf(list))), r.GetProperty("args"));
+            Assert.Equal(B(r.GetProperty("sig")).Length, SlotsLen(list) + 64);
+        }
+    }
+
+    [Fact]
     public void NestedMemberships()
     {
+        Assert.Equal(4, N.GetProperty("memberships").GetArrayLength());
         foreach (var m in N.GetProperty("memberships").EnumerateArray())
         {
-            var msg = UA.UAMessage(0x0120, UA.PurposeTag("membership"), B(m.GetProperty("digest")));
+            var d = UA.MembershipDigest(B(m.GetProperty("ua")), B(m.GetProperty("member")));
+            var msg = UA.UAMessage(0x0120, UA.PurposeTag("membership"), d);
+            Assert.Equal(m.GetProperty("digest").GetString(), Hx(d));
             Assert.Equal(m.GetProperty("message").GetString(), Hx(msg));
             Assert.Equal(m.GetProperty("memberDigest").GetString(), Hx(UA.MemberDigest(B(m.GetProperty("ua")), msg)));
         }
     }
 
+    /// <summary>CTR-UA-37: membershipSigOf's bytes give back the slot, an msig slot its list, with no new signature.</summary>
+    [Fact]
+    public void NestedReplay()
+    {
+        var replays = 0;
+        foreach (var m in N.GetProperty("memberships").EnumerateArray())
+        {
+            var (key, index, stored) = (NestedKey(B(m.GetProperty("ua")))!, m.GetProperty("index").GetUInt16(), B(m.GetProperty("stored")));
+            var slot = UA.ReplayedMemberSig(key, index, stored);
+            Assert.Equal(index, slot.Index);
+            Assert.Equal(m.GetProperty("sig").GetString(), Hx(slot.Sig));
+            SameJson(slot.Members, m.GetProperty("members"));
+            NotReplayed(key, 16, []);
+            if (slot.Members.Length == 0) continue;
+            replays++;
+            Assert.Equal(m.GetProperty("stored").GetString(), Hx(UA.EncodeInnerSigs(slot.Members)));
+            NotReplayed(key, index, [.. stored, 0]);
+            NotReplayed(key, index, []);
+            var wide = (byte[])stored.Clone();
+            wide[64 + 32 + 29] = 1; // a leaf index over uint16
+            NotReplayed(key, index, wide);
+        }
+        Assert.Equal(1, replays);
+    }
+
+    [Fact]
+    public void NestedAuthorizations()
+    {
+        Assert.Equal(5, N.GetProperty("authorizations").GetArrayLength());
+        foreach (var a in N.GetProperty("authorizations").EnumerateArray())
+        {
+            var md = UA.MemberDigest(B(a.GetProperty("ua")), UA.UAMessage(0x0120, B(a.GetProperty("purposeTag")), B(a.GetProperty("digest"))));
+            Assert.Equal(a.GetProperty("memberDigest").GetString(), Hx(md));
+            var list = a.GetProperty("uaSig").GetProperty("members");
+            SameJson(new UA.UASig(members: SlotsOf(list)), a.GetProperty("uaSig"));
+            Assert.Equal(B(a.GetProperty("sig")).Length, SlotsLen(list) + 64);
+        }
+    }
+
+    /// <summary>Shape and size only: these refusals are the registry's, this library verifies no signature.</summary>
+    [Fact]
+    public void NestedNegatives()
+    {
+        Assert.Equal(12, N.GetProperty("negatives").GetArrayLength());
+        foreach (var n in N.GetProperty("negatives").EnumerateArray())
+        {
+            var r = NestedRow(n.GetProperty("row").GetString()!);
+            var list = n.GetProperty("popTyped");
+            var (args, _) = UA.RegistrationArgs(0x0120, B(r.GetProperty("keyData")), kemPk: B(r.GetProperty("attrs").GetProperty("kemPk")), members: SlotsOf(list), kemCommit: false);
+            SameJson(args.Pop, list);
+            Assert.NotEqual(n.GetProperty("pop").GetString(), r.GetProperty("pop").GetString());
+            Assert.Equal(B(n.GetProperty("pop")).Length, SlotsLen(list) + 64);
+        }
+    }
+
     static void SameJson(object args, JsonElement want) =>
-        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(UA.RegistryJson(args)), JsonNode.Parse(want.GetRawText())), want.GetRawText()[..64]);
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(UA.RegistryJson(args)), JsonNode.Parse(want.GetRawText())), string.Concat(want.GetRawText().Take(64)));
 
     [Fact]
     public void RegistrationArgsTyped()
