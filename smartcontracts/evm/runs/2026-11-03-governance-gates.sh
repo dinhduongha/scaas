@@ -33,23 +33,24 @@ extra_step() {
     *) echo "unknown step $1"; return 2 ;;
   esac
 }
-# "<step>|<form>|<name>": every test function added from main (b25796b6) to HEAD in smartcontracts/evm/test (forms: see the base runner).
+# "<step>|<form>|<name>": every test function added from main (b25796b6) to HEAD in smartcontracts/evm/test, a test_attack_* fixed by a task
+# under its test_fixed_* name (forms: see the base runner).
 NEW_TESTS=$(cat <<'NAMES'
 forge|forge|test_createAboveSixtyFourKiBDeploys
 forge|forge|test_releaseAboveTheChainLimitIsRefusedByName
 forge|forge|test_chainCodeLimitDefaultsToEip7954
 forge|forge|test_attack_setGrantMakesAnUnboundedHolderInOneCall
-forge|forge|test_attack_delegableHolderAddsAHolderWithNoOwnerCall
+forge|forge|test_fixed_delegableHolderAddsAHolderWithNoOwnerCall
 forge|forge|test_fixed_aReservedKindDecodes
 forge|forge|test_stated_aSecondFactorysTokenIsOutsideToTheFirst
 forge|forge|test_attack_revokedGrantorStripsAnOwnerGrantedHolder
 forge|forge|test_attack_parentGrantsBackALeafTheOwnerRevoked
-forge|forge|test_attack_createdWithoutOwnerKeepsAnUnlockedMinter
+forge|forge|test_fixed_createdWithoutOwnerKeepsAnUnlockedMinter
 forge|forge|test_attack_deadLeavesBlockTheRenounce
 forge|forge|test_attack_afterRenounceALockedBitsHolderAddsHolders
-forge|forge|test_attack_noScalarMeansNoTotalAndNoWindow
-forge|forge|test_attack_aFloorBricksAPowerWithNoScalar
-forge|forge|test_attack_aScopeOnABuiltPowerBindsNothing
+forge|forge|test_fixed_noScalarMeansNoTotalAndNoWindow
+forge|forge|test_fixed_aFloorBricksAPowerWithNoScalar
+forge|forge|test_fixed_aScopeOnABuiltPowerBindsNothing
 forge|forge|test_attack_leafKeepsAScopeItsParentLost
 forge|forge|test_attack_endingDelegationLeavesTheLeaves
 forge|forge|test_attack_changingTheWindowRefreshesTheBudget
@@ -64,7 +65,7 @@ forge|forge|test_attack_revokedRateAdminsProposalOutlivesIt
 forge|forge|test_attack_aLeafsWindowIsNotNarrowed
 forge|forge|test_attack_narrowingBelowSpentPanicsTheLeafPath
 forge|forge|test_attack_wholeThenLimitedRevivesLeaves
-forge|forge|test_attack_aPoolCanBeOwner
+forge|forge|test_fixed_aPoolCanBeOwner
 forge|forge|test_refuted_reGrantThroughAnotherParentRefreshes
 forge|forge|test_refuted_holderWidensItself
 forge|forge|test_refuted_lockBypass
@@ -134,6 +135,10 @@ forge|forge|test_retiredKindsRefusedAtDeployImplementation
 forge|forge|test_regulatedKindsOffUntilPublished
 forge|forge|test_unregisteredRefusesEveryKindFromTwo
 forge|forge|test_namespaceRootsAndOffsetsArePinned
+forge|forge|test_eachWordRefusedOnAScalarlessBit
+forge|forge|test_windowWithoutPerWindowRefused
+forge|forge|test_newHolderEmitsRoleGranted
+forge|forge|test_lockedMinterSurvivesNoOwner
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

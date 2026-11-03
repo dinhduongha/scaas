@@ -1,0 +1,10 @@
+# governance T5 mutants at 7d0c6a86 (clean tree), each one change, suite test/governance/*.t.sol,
+# restored by git checkout -- <file> after each.
+mutant | test that went red | rc
+m1 _scalarBits() passed as 0 (GovernanceBase.setGrant) | test_total, test_bandOnTheScalar, test_windowOnTheGrid, test_windowWithoutPerWindowRefused, test_fixed_delegableHolderAddsAHolderWithNoOwnerCall and 24 more (every grant with a scalar word on MINT) | 1
+m2 _scopeBits() passed as 0 | test_fixed_aScopeOnABuiltPowerBindsNothing, test_leafMustNarrow, test_attack_leafKeepsAScopeItsParentLost | 1
+m3 GrantBudgetRequired check dropped | test_fixed_delegableHolderAddsAHolderWithNoOwnerCall | 1
+m4 renounce rule at init (B-06) dropped | test_fixed_createdWithoutOwnerKeepsAnUnlockedMinter, test_lockedMinterSurvivesNoOwner | 1
+m5 OwnerAccountPool dropped in transferOwnership | test_fixed_aPoolCanBeOwner | 1
+m6 RoleGranted dropped on a new setGrant holder | test_newHolderEmitsRoleGranted | 1
+# survivors: none
