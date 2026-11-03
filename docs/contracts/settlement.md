@@ -230,7 +230,7 @@ a callback) execute the **same signed orders** against pools, multi-hop or cycle
 surplus above each signed limit to its signer ([CTR-DEX-21](dex.md#CTR-DEX-21)), conservation over every snapshotted
 token. A plan is atomic with no `try`. Interactions may not call the DEX, the puller or `mtxTrade`; targets may be
 listed ([CTR-DEX-23](dex.md#CTR-DEX-23)); the holder approves the puller, never the DEX
-([CTR-DEX-22](dex.md#CTR-DEX-22)). Node: the TradeEngine, off unless enabled, EVM only
+([CTR-DEX-22](dex.md#CTR-DEX-22)). Node: the `OrderRouter`, off unless enabled, EVM only
 ([NODE-DEX-17](../node/dex-venue.md#NODE-DEX-17)); it keeps no surplus ([NODE-DEX-18](../node/dex-venue.md#NODE-DEX-18)).
 Status **BUILT** (P2c, `SCaaSDex`): the DEX also refuses a sell token that arrives inexact, resets every allowance an
 `approve` interaction granted and refuses `increaseAllowance` and Permit2 `approve` (controller ruling, pending the owner; [dex.md](dex.md#CTR-DEX-23)).
@@ -307,7 +307,7 @@ pages under [networks/](../networks/README.md).
 | Generic call | allowlist, data shape, fee class, ticket (one self-call) | none | reads `data` by the cached allowlist, full simulation of unwrap |
 | Signature wrap | underlying: signature, price, fee bound, funds only to `dex` | wrapper: quote, `received == amount`, mint | metatx job; clients refuse unregistered wrappers |
 | Order book | SCaaS leg: signature, expiry, lane, closed state, every bound on Path A | match, listing, relayer, self-trade, Path B and outside-leg checks, payout, fee split, conservation | book, matcher, intake rules mirror the contract, simulation, DEX watcher |
-| Exchange | as the order book, floor figures | price floors, snapshots, targets, surplus, conservation | TradeEngine quotes, buffer, simulates the whole call |
+| Exchange | as the order book, floor figures | price floors, snapshots, targets, surplus, conservation | `OrderRouter` quotes, buffer, simulates the whole call |
 | Zether | base envelope, then proof, registration, counters | none | canonical re-encoding of `data` |
 | Mandate | payment path of the token | `MandateWallet`: delegate, caps, payee, epoch | call-table check, `chainUid()` check |
 | Non-EVM | none | the family's contract: signature, lane, relayer | per-family adapter, same gate |

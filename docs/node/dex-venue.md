@@ -4,7 +4,7 @@ The DEX venue is the node's off-chain order book in front of a `SCaaSDex` clone 
 it admits signed orders at the gateway, matches them price-time, and settles each match — one taker against one or
 more makers — with `mtxSettle` jobs in `~dex`. The contracts are the arbiter of every fill; the venue only decides
 which matches are worth sending. Status: book, matcher, intake, routes and watcher **BUILT** (book persisted in the
-legacy client); token-verified orders and `mtxSettle` ([trade orders](#trade-orders)) **BUILT** (P5); the TradeEngine
+legacy client); token-verified orders and `mtxSettle` ([trade orders](#trade-orders)) **BUILT** (P5); the `OrderRouter`
 (P7), the store-backed book **SPECIFIED**; book gossip and managed markets
 **SPECIFIED**; non-EVM books **PLANNED**.
 
@@ -14,7 +14,7 @@ legacy client); token-verified orders and `mtxSettle` ([trade orders](#trade-ord
    - 1.1 [Markets and sides](#11-markets-and-sides)
 2. [Matching](#2-matching)
 3. [Token-verified orders](#3-token-verified-orders)
-4. [TradeEngine](#4-tradeengine)
+4. [OrderRouter](#4-orderrouter)
 5. [Intake](#intake)
 6. [Routes](#routes)
 7. [Watcher](#7-watcher)
@@ -123,7 +123,7 @@ does with it.
   2026-10-30, T11, `dex.rs`, `dex/venue.rs`): `min_fill` returns the signed `minFill`; the matcher skips a maker
   leg whose base amount is below the market's `min_base_amount` unless the leg closes the order on chain; `Book::depth`
   keeps the normal levels and `Book::depth_min_fill` the bucket, which the `depth` JSON returns as `min_fill:
-  {bids, asks}` (the ticker reads only the normal levels). **Still SPECIFIED** (built with the TradeEngine, TODO step 6,
+  {bids, asks}` (the ticker reads only the normal levels). **Still SPECIFIED** (built with the `OrderRouter`, TODO step 6,
   because it needs plan pricing): "no settlement worth less than its gas", for hybrids and plans on every chain.
 - **IOC, FOK, escrow.** `IOC` (flag 1): the token closes the order at its single pull, so nothing of it rests. FOK:
   `minFill = amount`. `ESCROW` (flag 2, implies IOC): the whole `amount` is pulled into the DEX and the unmatched part
@@ -171,16 +171,19 @@ DEX can report any fill and take the signed `amount`; the owner accepted that re
 the defence off chain — clients refuse to sign for an unlisted `dex` ([CLI-SGN-35](../clients/signers-clientkeys.md#CLI-SGN-35))
 and the node never carries such an order. Cost: a new DEX needs a chain-profile entry before the venue serves it.
 
-## 4. TradeEngine
+## 4. OrderRouter
 
-<a id="trade-engine"></a><a id="NODE-DEX-17"></a>**NODE-DEX-17** — **The TradeEngine executes orders against AMMs through
-`mtxExchange`/`mtxExchangeVia`** ([CTR-DEX-20](../contracts/dex.md#CTR-DEX-20)); off unless the chain enables it. Status:
-**SPECIFIED** (the planner, quoter, routes, jobs and `GET /v1/dex/exchanges/{ref}` are built in TODO step 6, TradeEngine
+<a id="order-router"></a><a id="4-tradeengine"></a><a id="trade-engine"></a><a id="NODE-DEX-17"></a>**NODE-DEX-17** — **The `OrderRouter` executes orders against AMMs through
+`mtxExchange`/`mtxExchangeVia`** ([CTR-DEX-20](../contracts/dex.md#CTR-DEX-20)); off unless the chain enables it. It
+routes one order to the best liquidity: the book, AMMs, or both in one hybrid call. For the book it calls the matching
+engine ([§2](#2-matching)), a separate part that is built; the Soroban relay-fee router and `MtxRelayFee` are other
+things. Named `OrderRouter` by the owner on 2026-11-03 (before: TradeEngine). Status:
+**SPECIFIED** (the planner, quoter, routes, jobs and `GET /v1/dex/exchanges/{ref}` are built in TODO step 6, `OrderRouter`
 EVM; the contracts it drives — [CTR-DEX-27](../contracts/dex.md#CTR-DEX-27), [-28](../contracts/dex.md#CTR-DEX-28),
 [-29](../contracts/dex.md#CTR-DEX-29) — and the node's ABI and call-table rows for the three new entries are built).
-Off unless the chain enables it (`trade_engine.enabled`). Intake: an order on a listed market enters the book; one whose
+Off unless the chain enables it (`order_router.enabled`). Intake: an order on a listed market enters the book; one whose
 pair is no listed market, or whose `receiveToken` is its sell token (a cycle), is exchange-only — never in the book, both
-tokens known, else `TOKEN_NOT_SERVED`. Each tick (`trade_engine.tick`; also the CoW window):
+tokens known, else `TOKEN_NOT_SERVED`. Each tick (`order_router.tick`; also the CoW window):
 
 1. **Listed-market orders, book first.** An incoming order that the book absorbs within every order's `minFill` is
    settled by `mtxSettle` (mode 1). If the book is short and a route reaches the order's limit, the makers and the
@@ -275,7 +278,7 @@ a dependency for no need at the volumes served.
 
 <a id="watcher"></a><a id="NODE-DEX-04"></a>**NODE-DEX-04** — **The DEX watcher has its own cursor.** One task per
 chain with the same finality helpers as the indexer (`finality::{safe_head, next_range, quorum_ok}`) and a **separate
-cursor** (`dex_cursor`) reads, **by emitter** (review C6-3: a log from any other address, a listed outside token included, is dropped, never acted on): leg and failure events from the DEX only, cancel and invalidation from the DEX (outside tokens' orders) or a SCaaS token (only the orders it sells), `UANoncesInvalidated(pad(addr), batch, minNonce)` (review C6-7; it drops the dead shape-0 orders of that lane from the in-memory book; the client store is not sent it) from a SCaaS token (**residual:** `UANoncesInvalidated` updates the in-memory book only; after a restart the dead orders return from the client store until a failed match heals them, bounded per order, gas only, no funds; the cheap closure, checking the nonce floor on chain when the book loads, is not built); the DEX's `LegSettled`, `MatchFailed` (an empty reason reported `out_of_gas`), `ExchangeFailed(ref, reason)` of a failing plan in an `mtxExchangeBatch` ([CTR-DEX-28](../contracts/dex.md#CTR-DEX-28)) — **SPECIFIED**: the ABI declares the event but no watcher decodes it yet; built with the TradeEngine, TODO step 6. **Built** (DEX round): `guard::reason_is_out_of_gas`, used by the venue's `revert_name`: an empty reason, or `InteractionFailed(_, _, "")` (a target that ran out of gas), reads as `out_of_gas`, `OrderCancelled`,
+cursor** (`dex_cursor`) reads, **by emitter** (review C6-3: a log from any other address, a listed outside token included, is dropped, never acted on): leg and failure events from the DEX only, cancel and invalidation from the DEX (outside tokens' orders) or a SCaaS token (only the orders it sells), `UANoncesInvalidated(pad(addr), batch, minNonce)` (review C6-7; it drops the dead shape-0 orders of that lane from the in-memory book; the client store is not sent it) from a SCaaS token (**residual:** `UANoncesInvalidated` updates the in-memory book only; after a restart the dead orders return from the client store until a failed match heals them, bounded per order, gas only, no funds; the cheap closure, checking the nonce floor on chain when the book loads, is not built); the DEX's `LegSettled`, `MatchFailed` (an empty reason reported `out_of_gas`), `ExchangeFailed(ref, reason)` of a failing plan in an `mtxExchangeBatch` ([CTR-DEX-28](../contracts/dex.md#CTR-DEX-28)) — **SPECIFIED**: the ABI declares the event but no watcher decodes it yet; built with the `OrderRouter`, TODO step 6. **Built** (DEX round): `guard::reason_is_out_of_gas`, used by the venue's `revert_name`: an empty reason, or `InteractionFailed(_, _, "")` (a target that ran out of gas), reads as `out_of_gas`, `OrderCancelled`,
 `NoncesInvalidated` and the market tokens' `OrderCancelled`, `NoncesInvalidated` (BUILT, P5; `UALegSettled`, a shape-1
 leg's `LegSettled` with ids, read the same way, BUILT with UA-5b ([CTR-DEX-26](../contracts/dex.md#CTR-DEX-26)); the
 venue itself sends shape-0 legs until its UA order intake (UA F5); `ExchangeLegSettled` with P7,
@@ -544,7 +547,7 @@ cancel-all; an outside-token `DexOrder` through the puller. Built (P5) in `dex.r
 maker offered less than its minimum is skipped; FOK filled across two makers; an IOC remainder never rests; `ESCROW` refused;
 signed `fee` below the taker rate ⇒ `FEE_TOO_LOW`; `dex` off the chain's list ⇒ `DEX_NOT_LISTED` at intake and never
 replicated; cancel on the sell token closes the order on the mined `OrderCancelled`; the DEX's balances unchanged after
-every settlement. DEX round (BUILT, 2026-10-30): `min_fill` is the signed `minFill`; a maker filled at a fraction of its order; a leg below `min_base_amount` skipped unless it closes the order; a large `minFill` in the `min_fill` depth bucket and out of the ticker; the call table pins `mtxHybrid`, `mtxHybridVia` and `mtxExchangeBatch` (19 rows, only a listed DEX) with their selectors and an encode / decode round trip against the three new `dex_order_kat.json` keys; a wrapped empty `InteractionFailed` is `out_of_gas`; e2e on anvil: a fill below half an order settles through the gateway. TradeEngine: route finder (hops, cycles), coincidence of wants, quote → plan → simulation,
+every settlement. DEX round (BUILT, 2026-10-30): `min_fill` is the signed `minFill`; a maker filled at a fraction of its order; a leg below `min_base_amount` skipped unless it closes the order; a large `minFill` in the `min_fill` depth bucket and out of the ticker; the call table pins `mtxHybrid`, `mtxHybridVia` and `mtxExchangeBatch` (19 rows, only a listed DEX) with their selectors and an encode / decode round trip against the three new `dex_order_kat.json` keys; a wrapped empty `InteractionFailed` is `out_of_gas`; e2e on anvil: a fill below half an order settles through the gateway. `OrderRouter`: route finder (hops, cycles), coincidence of wants, quote → plan → simulation,
 exchange-only intake split, `amm_fill` on resting orders, fee-by-role refusal, `/v1/dex/exchanges/{ref}`. Managed markets: intake refusals
 per reason; drop on `AccountFrozen`/`Paused`/revocation/attester disable; pre-settle re-check; unbound and fee refusals;
 gossip refusal and admin-trust-only listing. Book gossip: merge commutativity/idempotence (proptest over update orders ⇒
