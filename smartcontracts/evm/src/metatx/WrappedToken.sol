@@ -74,12 +74,18 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
 
     /// @dev `initialSupply`, `initialHolder`, `conf` must be empty; legs and rate are checked in `WrappedLib`.
     function _validBits() internal pure virtual override returns (uint256) {
-        return GovernanceBits.WRAPPED_BITS | GovernanceBits.REGULATED;
+        return GovernanceBits.WRAPPED_BITS;
     }
 
+    /// @dev The `WRAPPED*` masks (spec §1.2): roles 1, 3, 4; bit 3 contract-only.
+    function _roleBits() internal pure virtual override returns (uint256) { return GovernanceBits.WRAPPED_ROLES; }
+    function _contractOnlyBits() internal pure virtual override returns (uint256) { return GovernanceBits.WRAPPED_CONTRACT_ONLY; }
+
+    /// @dev 5-9 pass the kind's mask and reach `init`'s `FeatureNotBuilt` (GD-19); `validBits()` holds none of them.
     function _init(TokenConfig memory cfg) internal virtual override {
         _requireUnused(cfg, true, false, false, true);
-        WrappedLib.initToken(cfg, IS_HEDERA, TokenStore.KIND_WRAPPED, _validBits());
+        WrappedLib.initToken(cfg, IS_HEDERA, TokenStore.KIND_WRAPPED, _validBits() | GovernanceBits.REGULATED, _roleBits(),
+            _contractOnlyBits());
     }
 
     // ------------------------------------------------------------------ wrap / unwrap / reserve

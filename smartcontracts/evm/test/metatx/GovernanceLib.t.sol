@@ -6,12 +6,12 @@ import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
-import {AdminHarness} from "./helpers/AdminHarness.sol";
+import {GovernanceLibHarness} from "./helpers/GovernanceLibHarness.sol";
 import {Puller} from "../helpers/WalletMocks.sol";
 
 /// CTR-TOK-22: creation-time flag validation, owner, roles, `disableFeature`.
-contract AdminLibTest is Test {
-    AdminHarness internal h;
+contract GovernanceLibTest is Test {
+    GovernanceLibHarness internal h;
     address internal ownerA = address(0x0A);
     address internal ownerB = address(0x0B);
     address internal minter = address(0x111);
@@ -24,7 +24,7 @@ contract AdminLibTest is Test {
     uint256 internal constant WRAPDIS = 1 << 4;
 
     function setUp() public {
-        h = new AdminHarness();
+        h = new GovernanceLibHarness();
     }
 
     function _roles(address m) internal pure returns (GovernanceLib.Roles memory r) {
@@ -48,7 +48,7 @@ contract AdminLibTest is Test {
         for (uint8 k; k < 4; ++k) {
             for (uint8 b; b < 9; ++b) {
                 if (b >= 5) continue; // regulated: separate test
-                AdminHarness x = new AdminHarness();
+                GovernanceLibHarness x = new GovernanceLibHarness();
                 if (valid[k] & (1 << b) != 0) {
                     x.init(k, 1 << b, 0, address(0), none);
                     assertEq(x.features(), 1 << b);
@@ -98,7 +98,7 @@ contract AdminLibTest is Test {
         h.init(TokenStore.KIND_NORMAL, 0, 0, address(0), r);
         r.issuer = address(0);
         r.compliance = address(1);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, uint8(8)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, uint8(10))); // `compliance` is bit 10 RECORD (spec §1.2)
         h.init(TokenStore.KIND_NORMAL, 0, 0, address(0), r);
     }
 
@@ -188,7 +188,7 @@ contract AdminLibTest is Test {
         vm.stopPrank();
         assertTrue(h.hasRole(1, minter)); // the role stays, but the flag gate refuses it
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(1)));
-        h.requireRole(1, minter);
+        h.use(1, minter);
     }
 
     function test_lockedFlagCannotBeDisabled() public {

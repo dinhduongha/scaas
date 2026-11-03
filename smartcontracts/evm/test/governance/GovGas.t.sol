@@ -101,7 +101,7 @@ contract GovGasNormal is GovRows {
     function test_transfer() public { _plain("NormalToken transfer", t); }
     function test_mtxTransfer() public { _mtx("NormalToken mtxTransfer", t); }
 
-    /// A whole-shape holder: the prototype's `use` must cost what `requireRole` costs.
+    /// A whole-shape holder: `use` pays one feature read and one role read, no call (B-26).
     function test_mintWholeShape() public {
         _row("NormalToken mint whole-shape", m, G_MINTER, abi.encodeWithSignature("mint(address,uint256)", G_TO, 1));
     }

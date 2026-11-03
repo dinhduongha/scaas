@@ -26,7 +26,8 @@ library PqzWrappedLib {
     function init(bytes calldata initArgs, address registry, address verifier) public {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         if (cfg.initialSupply != 0 || cfg.initialHolder != address(0)) revert IFactoryToken.ConfigFieldForOtherKind(1);
-        WrappedLib.initToken(cfg, false, TokenStore.KIND_WRAPPED_PQZ, GovernanceBits.WRAPPED_BITS);
+        WrappedLib.initToken(cfg, false, TokenStore.KIND_WRAPPED_PQZ, GovernanceBits.WRAPPED_BITS,
+            GovernanceBits.WRAPPED_ROLES, GovernanceBits.WRAPPED_CONTRACT_ONLY);
         PqzStateLib.init(cfg.conf, registry, verifier);
     }
 

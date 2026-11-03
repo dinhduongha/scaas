@@ -1,0 +1,231 @@
+{
+  "_comment": "ERC-7201 namespaces of the token kinds (spec §1.4, §10.4): root, then each field's namespace slot, its slot inside a mapping's value or struct, and its byte in that word. Pinned by test/v2/Layout.t.sol test_namespaceRootsAndOffsetsArePinned (a write through the source's accessor, then vm.load); a mapping field is read at the keys the test names.",
+  "token": {
+    "id": "scaas.token",
+    "root": "0x83083067f3d1caf66741d4eeefa9d3f4f0e5b0793677731d6fee7e67b774ac00",
+    "labels": [
+      "creator",
+      "version",
+      "kind",
+      "decimals",
+      "initialized",
+      "name",
+      "symbol"
+    ],
+    "slots": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      2
+    ],
+    "inner": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bytes": [
+      0,
+      20,
+      28,
+      29,
+      30,
+      0,
+      0
+    ]
+  },
+  "governance": {
+    "id": "scaas.governance",
+    "root": "0x0a3a361961b35589cdb03530b6f9e23a4db6ca9a0dad5ddf5d7761c7fabc8700",
+    "labels": [
+      "features",
+      "lockedFeatures",
+      "owner",
+      "grantDelay",
+      "ownerGeneration",
+      "pendingOwner",
+      "lastProposedAt",
+      "roles[1][A]",
+      "counts[1].holders",
+      "counts[1].roots",
+      "grants[1][A].barred",
+      "epoch[1][A]",
+      "pending[1][A].eta",
+      "pending[1][A].proposer",
+      "pending[1][A].generation",
+      "pending[1][A].termsHash",
+      "rescueTo"
+    ],
+    "slots": [
+      0,
+      1,
+      2,
+      2,
+      2,
+      3,
+      3,
+      4,
+      5,
+      5,
+      6,
+      7,
+      8,
+      8,
+      8,
+      8,
+      9
+    ],
+    "inner": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      5,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0
+    ],
+    "bytes": [
+      0,
+      0,
+      0,
+      20,
+      28,
+      0,
+      20,
+      0,
+      0,
+      16,
+      25,
+      0,
+      0,
+      8,
+      28,
+      0,
+      0
+    ]
+  },
+  "underlying": {
+    "id": "scaas.underlying",
+    "root": "0x38d6f7edefffa65376a58a6aced8a2c86698d3a0b5d15a785f69ed89d0cd1000",
+    "labels": [
+      "legs[1].token",
+      "legs[1].decimals",
+      "legs[1].wrapEnabled",
+      "legs[1].adjustable",
+      "legs[1].num",
+      "legs[1].den",
+      "legs[1].reserve",
+      "legIndex[A]",
+      "pending.leg",
+      "pending.num",
+      "pending.den",
+      "pending.eta",
+      "legCount",
+      "rateDelay",
+      "maxRateStepBps"
+    ],
+    "slots": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      2,
+      2,
+      2,
+      2,
+      3,
+      3,
+      3
+    ],
+    "inner": [
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bytes": [
+      0,
+      20,
+      21,
+      22,
+      0,
+      12,
+      0,
+      0,
+      0,
+      1,
+      13,
+      25,
+      0,
+      1,
+      5
+    ]
+  },
+  "uaLedger": {
+    "id": "scaas.ua.ledger",
+    "root": "0x9e2def943e5a7ec3982e5d00524104579a6b98ce8b31343ac0092718cc04e900",
+    "labels": [
+      "balance[0xa1]",
+      "cancelUsed[0xa3]"
+    ],
+    "slots": [
+      0,
+      1
+    ],
+    "inner": [
+      0,
+      0
+    ],
+    "bytes": [
+      0,
+      0
+    ]
+  },
+  "metatx": {
+    "id": "scaas.metatx",
+    "root": "0x06b01547c739946503c06c80685cc72ae2fec5074fd602f84cd2fa888722ac00",
+    "labels": [
+      "nonce[0xb1][2]"
+    ],
+    "slots": [
+      0
+    ],
+    "inner": [
+      0
+    ],
+    "bytes": [
+      0
+    ]
+  }
+}

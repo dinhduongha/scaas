@@ -65,6 +65,15 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
         return GovernanceBits.WRAPPED_BITS;
     }
 
+    /// @dev `WrappedToken`'s masks, restated for the second base.
+    function _roleBits() internal pure override(WrappedToken, MetaTokenBase) returns (uint256) {
+        return GovernanceBits.WRAPPED_ROLES;
+    }
+
+    function _contractOnlyBits() internal pure override(WrappedToken, MetaTokenBase) returns (uint256) {
+        return GovernanceBits.WRAPPED_CONTRACT_ONLY;
+    }
+
     /// @dev Never reached: `_initRaw` is the kind's init.
     function _init(TokenConfig memory) internal override(WrappedToken, MetaTokenBase) {}
 

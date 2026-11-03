@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test, Vm, console} from "forge-std/Test.sol";
+import {VmSafe} from "forge-std/Vm.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
@@ -11,9 +13,45 @@ import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {ITradeToken} from "../../src/trade/ITradeToken.sol";
+import {DexLegs} from "../helpers/DexLegs.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
+
+/// A token whose every transfer out calls its hook: the way into a running settlement.
+contract GovHookERC20 is MockERC20 {
+    address public hookTarget;
+
+    constructor() MockERC20("Hook", "HK", 18) {}
+
+    function setHook(address h) external { hookTarget = h; }
+
+    function _update(address from, address to, uint256 v) internal override {
+        super._update(from, to, v);
+        if (from != address(0) && hookTarget != address(0)) GovDexHolder(hookTarget).hook();
+    }
+}
+
+/// The DEX's owner, holding bits 11 and 12, calls each of the four powers from inside a settlement and records how each
+/// answered (0: it ran).
+contract GovDexHolder {
+    SCaaSDex public dex;
+    bytes4[] public errs;
+
+    function setDex(SCaaSDex d) external { dex = d; }
+
+    function n() external view returns (uint256) { return errs.length; }
+
+    function hook() external {
+        if (errs.length != 0) return;
+        try dex.setMarket(address(0x51), address(0x52), true) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setExchangeTarget(address(0x53), true) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setListedOnly(true) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setFeeSplit(0, address(0xAA)) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+    }
+}
 
 /// @notice The prototype's `Grant` (CTR-GOV-02): every bound with its positive control, two levels, the epoch kill, spent
 ///         carried on edit, `holderCount`, the renounce rule; a limited holder bound on a wrapped kind and on the DEX too.
@@ -340,6 +378,111 @@ contract GovGrantTest is Test {
         vm.prank(OFFICER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, GovernanceBits.FEE_ROUTING, OFFICER));
         d.setFeeSplit(0, address(0xAA));
+    }
+
+    /// The DELEGATECALLs of the current call to `GovernanceLib` with selector `sel`.
+    function _libCalls(Vm.AccountAccess[] memory acc, bytes4 sel) internal pure returns (uint256 k) {
+        for (uint256 i; i < acc.length; ++i) {
+            if (acc[i].kind == VmSafe.AccountAccessKind.DelegateCall && acc[i].data.length >= 4 && bytes4(acc[i].data) == sel) ++k;
+        }
+    }
+
+    /// B-26: `use` is `GovernanceUse`, inlined; a whole-shape holder makes no call, a limited one exactly one DELEGATECALL to
+    /// `GovernanceLib.useLimited` (no copy of its body in the token).
+    function test_limitedUseIsOneDelegatecall() public {
+        vm.prank(OWNER);
+        t.grantRole(MINT, MANAGER);
+        vm.startStateDiffRecording();
+        _mint(MANAGER, 1);
+        assertEq(_libCalls(vm.stopAndReturnStateDiff(), GovernanceLib.useLimited.selector), 0, "whole shape: no call");
+        IGovernance.GrantTerms memory g = _open();
+        g.total = 100;
+        _set(OFFICER, g);
+        vm.startStateDiffRecording();
+        _mint(OFFICER, 1);
+        assertEq(_libCalls(vm.stopAndReturnStateDiff(), GovernanceLib.useLimited.selector), 1, "limited: one DELEGATECALL");
+    }
+
+    /// B-27: the DEX's owner holds bits 11 and 12 from `initialize` through `initHolder`, once each, not by `grantRole`.
+    function test_dexInitHoldsBothBitsThroughInitHolder() public {
+        Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
+        vm.startStateDiffRecording();
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(OWNER, 0, address(0xAA), false)), "d"));
+        Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
+        assertEq(_libCalls(acc, GovernanceLib.initHolder.selector), 2, "initHolder, once per bit");
+        assertEq(_libCalls(acc, GovernanceLib.grantRole.selector), 0, "no grantRole at init");
+        assertTrue(d.hasRole(GovernanceBits.LISTING, OWNER));
+        assertTrue(d.hasRole(GovernanceBits.FEE_ROUTING, OWNER));
+        assertEq(d.holderCount(GovernanceBits.LISTING), 1);
+        assertEq(d.holderCount(GovernanceBits.FEE_ROUTING), 1);
+        assertEq(d.owner(), OWNER);
+        // no owner: no holder either
+        d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(address(0), 0, address(0xAA), false)), "d0"));
+        assertEq(d.holderCount(GovernanceBits.LISTING), 0);
+        assertEq(d.holderCount(GovernanceBits.FEE_ROUTING), 0);
+    }
+
+    /// B-31: every `GovernanceBase` contract answers `IGovernance` and `IERC165`, the DEX too.
+    function test_dexAnswersIGovernance() public {
+        Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(OWNER, 0, address(0xAA), false)), "d"));
+        assertTrue(d.supportsInterface(type(IGovernance).interfaceId));
+        assertTrue(d.supportsInterface(type(IERC165).interfaceId));
+        assertFalse(d.supportsInterface(0xffffffff));
+        assertTrue(t.supportsInterface(type(IGovernance).interfaceId)); // the same id on a token
+    }
+
+    /// B-31: no governance entry runs inside a settlement. The DEX's owner holds both bits and calls each of the four
+    /// powers from a token hook while `mtxSettle` runs; each is refused by the guard. The settlement itself goes through.
+    function test_dexPowerRefusedInsideASettlement() public {
+        GovDexHolder h = new GovDexHolder();
+        Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(address(h), 0, address(0xAA), false)), "d"));
+        h.setDex(d);
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.features, c.initialSupply, c.initialHolder) = ("A", "A", 1, 1e6, vm.addr(ALICE_PK));
+        NormalToken a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a"));
+        GovHookERC20 hk = new GovHookERC20();
+        vm.prank(address(h));
+        d.setMarket(address(a), address(hk), true); // control: outside a settlement it runs
+        hk.mint(vm.addr(DAVE_PK), 1e6);
+        address puller = d.puller();
+        vm.prank(vm.addr(DAVE_PK));
+        hk.approve(puller, type(uint256).max);
+        hk.setHook(address(h));
+        DexLegs.Settlement[] memory ss = new DexLegs.Settlement[](1);
+        ss[0] = _hookSettlement(d, a, address(hk));
+        vm.prank(address(0xBEEF));
+        bool[] memory ok = d.mtxSettle(DexLegs.wire(ss));
+        assertTrue(ok[0], "the settlement runs");
+        assertEq(h.n(), 4);
+        bytes4 guard = bytes4(keccak256("ReentrancyGuardReentrantCall()"));
+        for (uint256 i; i < 4; ++i) assertEq(h.errs(i), guard);
+    }
+
+    uint256 constant ALICE_PK = 0xA11CE;
+    uint256 constant DAVE_PK = 0xDA7E;
+
+    /// Dave sells 2000 of the hook token for 1000 A; Alice sells 1000 A for it, at Dave's price.
+    function _hookSettlement(SCaaSDex d, NormalToken a, address hk) internal view returns (DexLegs.Settlement memory st) {
+        st.ref = bytes32(uint256(1));
+        st.makers = new DexLegs.Leg[](1);
+        ITradeToken.TradeOrder memory o = _tradeOrder(vm.addr(DAVE_PK), address(a), 2000, 1000, address(d));
+        st.makers[0] = DexLegs.Leg(hk, o, _sign(DAVE_PK, d.dexOrderDigest(hk, o)), 2000);
+        o = _tradeOrder(vm.addr(ALICE_PK), hk, 1000, 2000, address(d));
+        st.taker = DexLegs.Leg(address(a), o, _sign(ALICE_PK, a.tradeOrderDigest(o)), 1000);
+    }
+
+    function _sign(uint256 pk, bytes32 digest) internal pure returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
+    function _tradeOrder(address from, address receiveToken, uint256 amount, uint256 receiveAmount, address dex)
+        internal view returns (ITradeToken.TradeOrder memory o)
+    {
+        (o.from, o.receiveToken, o.amount, o.receiveAmount, o.dex) = (from, receiveToken, amount, receiveAmount, dex);
+        (o.batch, o.nonce, o.validUntil) = (1, 1, block.timestamp + 300);
     }
 
     // ------------------------------------------------------------------ gas, for docs/research/governance/prototype/

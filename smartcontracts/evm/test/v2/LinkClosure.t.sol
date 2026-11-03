@@ -157,8 +157,9 @@ contract LinkClosureTest is Test {
             assertFalse(destruct, string.concat(name, ": SELFDESTRUCT"));
             assertFalse(callcode, string.concat(name, ": CALLCODE"));
             bytes32 h = keccak256(bytes(name));
-            uint256 want = h == keccak256("MtxPipelineLib") || h == keccak256("ZetherWrappedLib") || h == keccak256("PqzWrappedLib") ? 2
-                : h == keccak256("WrappedLib") ? 1 : 0;
+            // WrappedLib: `GovernanceLib.init` and, since B-26, `GovernanceUse.use`'s one call to `useLimited` (1 -> 2)
+            uint256 want = h == keccak256("MtxPipelineLib") || h == keccak256("ZetherWrappedLib") || h == keccak256("PqzWrappedLib")
+                || h == keccak256("WrappedLib") ? 2 : 0;
             assertEq(delegates, want, string.concat(name, ": DELEGATECALL count"));
         }
     }

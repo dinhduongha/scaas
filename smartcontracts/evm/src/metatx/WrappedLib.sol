@@ -14,6 +14,7 @@ import {ITradeToken} from "../trade/ITradeToken.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {GovernanceUse} from "../governance/GovernanceBase.sol";
 import {GovernanceBits} from "../governance/GovernanceBits.sol";
 import {TokenStore} from "./TokenStore.sol";
 import {MetaTokenBase} from "./MetaTokenBase.sol";
@@ -80,9 +81,11 @@ library WrappedLib {
     // ------------------------------------------------------------------ init
 
     /// @notice The token's `_init`: legs 1–8 (the factory's index reads the same `legs`), the metadata, the
-    ///         flags/owner/roles of `kind` (`GovernanceLib.init`: `WRAPPED` or `WRAPPED_ZETHER`), the rate config, then
+    ///         flags/owner/roles of `kind` (`GovernanceLib.init` with the kind's masks, spec §1.2), the rate config, then
     ///         the legs in their given order (never changes).
-    function initToken(IFactoryToken.TokenConfig memory c, bool isHedera, uint8 kind, uint256 valid) public {
+    function initToken(IFactoryToken.TokenConfig memory c, bool isHedera, uint8 kind, uint256 valid, uint256 roleBits,
+        uint256 contractOnly) public
+    {
         uint256 n = c.legs.length;
         if (n == 0 || n > MAX_LEGS) revert MetaTokenBase.UnderlyingCountInvalid(n);
         TokenStore.TokenStorage storage t = TokenStore.$();
@@ -90,8 +93,7 @@ library WrappedLib {
         t.symbol = c.symbol;
         t.decimals = c.decimals;
         t.kind = kind;
-        GovernanceLib.init(c.features, c.lockedFeatures, c.owner, c.roles, valid, GovernanceBits.TOKEN_ROLES,
-            GovernanceBits.TOKEN_CONTRACT_ONLY);
+        GovernanceLib.init(c.features, c.lockedFeatures, c.owner, c.roles, valid, roleBits, contractOnly);
         bool adjustable = GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE);
         WrappedStorage storage s = $();
         IFactoryToken.RateConfig memory rate = c.rate;
@@ -350,7 +352,7 @@ library WrappedLib {
         if (!GovernanceLib.hasFeature(GovernanceBits.WRAP_DISABLEABLE) || !GovernanceLib.hasRole(GovernanceBits.WRAP_DISABLEABLE, caller)) {
             revert IWrappedToken.NotGuardian();
         }
-        GovernanceLib.use(GovernanceBits.WRAP_DISABLEABLE, caller, 0); // a limited holder's grant binds it
+        GovernanceUse.use(GovernanceBits.WRAP_DISABLEABLE, caller, 0); // a limited holder's grant binds it
         Leg storage L = $().legs[indexOf(u)];
         if (!L.wrapEnabled) revert IWrappedToken.WrapDisabledFor(u);
         L.wrapEnabled = false;
@@ -362,7 +364,7 @@ library WrappedLib {
     function _onlyRateAdmin(address caller) private {
         if (!GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE)) revert IWrappedToken.RateFixed();
         if (!GovernanceLib.hasRole(GovernanceBits.RATE_ADJUSTABLE, caller)) revert IWrappedToken.NotRateAdmin();
-        GovernanceLib.use(GovernanceBits.RATE_ADJUSTABLE, caller, 0); // a limited holder's grant binds it
+        GovernanceUse.use(GovernanceBits.RATE_ADJUSTABLE, caller, 0); // a limited holder's grant binds it
     }
 
     /// @notice The step is checked ONCE, here, against the current rate (which cannot change while pending).

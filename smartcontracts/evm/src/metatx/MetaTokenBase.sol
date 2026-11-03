@@ -130,8 +130,12 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     function _guardOut(bool outer) internal override { _exit(outer); }
 
     function _caller() internal view override returns (address) { return _msgSender(); }
-    function _roleBits() internal pure override returns (uint256) { return GovernanceBits.TOKEN_ROLES; }
-    function _contractOnlyBits() internal pure override returns (uint256) { return GovernanceBits.TOKEN_CONTRACT_ONLY; }
+    /// @dev The `NORMAL*` masks (spec §1.2): roles bit 1, no contract-only bit; `WrappedToken` overrides both. Every token
+    ///      kind: scalar bit 1, no scope.
+    function _roleBits() internal pure virtual override returns (uint256) { return GovernanceBits.NORMAL_ROLES; }
+    function _contractOnlyBits() internal pure virtual override returns (uint256) { return 0; }
+    function _scalarBits() internal pure override returns (uint256) { return GovernanceBits.TOKEN_SCALAR; }
+    function _scopeBits() internal pure override returns (uint256) { return 0; }
 
     /// @notice ERC-165; `IERC20Payment` only while `PAYABLE` is set.
     function supportsInterface(bytes4 id) external view returns (bool) {

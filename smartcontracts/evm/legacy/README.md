@@ -128,3 +128,6 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `test/ua/UARegistryLibMsig.t.sol`: `_msigIndexGuards`, the nested-offset note, `test_gasHotPath` against the figures of
   `159d267e`. `test/ua/SplitDiff.sol` and `test/ua/UARegistryUA8-split.sol.txt`, the two `test_split_*` of `UARegistryUA8.t.sol`
   with their helpers and `BurnAccept`, moved here on landing. Not built.
+- `governance/`: `AdminLib.sol` and `ITokenAdmin.sol` as they stood at `main` (`db9f9d86`), before `GovernanceLib` /
+  `IGovernance` replaced them (CTR-GOV-01, governance T3), and `RequireRole.sol.txt`, the prototype's
+  `GovernanceLib.requireRole`, removed by spec G14 (B-31: it skipped a limited holder's grant). Not built.

@@ -38,6 +38,8 @@ interface IGovernance {
         address grantor;
         uint32 grantorEpoch;
         bool delegable;
+        /// @dev Set by the owner's revoke: only the owner re-admits the account (B-05, spec §1.5).
+        bool barred;
     }
 
     event RoleGranted(uint8 indexed bit, address indexed account, address indexed sender);

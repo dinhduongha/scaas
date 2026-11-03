@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-/// @title Identity and metadata of a token (ERC-7201 `scaas.token`), split from the governance fields (CTR-GOV-01). Prototype.
+/// @title Identity and metadata of a token (ERC-7201 `scaas.token`), split from the governance fields (CTR-GOV-01).
 library TokenStore {
     // ------------------------------------------------------------------ kinds (CTR-TOK-21, fresh enum)
     uint8 internal constant KIND_NORMAL = 0;

@@ -15,7 +15,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
-import {GovernanceBase} from "../../src/governance/GovernanceBase.sol";
+import {GovernanceBase, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
@@ -37,9 +37,11 @@ contract BranchApp is GovernanceBase {
     function _validBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
     function _roleBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
     function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
+    function _scalarBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
+    function _scopeBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
 
     function approve(bytes32 branch, uint128 principal) external {
-        require(GovernanceLib.use(APPROVE, msg.sender, principal) == branch, "branch");
+        require(GovernanceUse.use(APPROVE, msg.sender, principal) == branch, "branch");
         approved[branch] += principal;
     }
 }

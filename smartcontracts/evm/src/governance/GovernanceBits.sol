@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 /// @title The global table of bits 0–63 (owner 2026-11-02, CTR-GOV-10): one meaning on every SCaaS contract, allocated once,
-///        never renumbered. Bits 64–127 belong to each application contract, bits 128 and above are refused. Prototype.
+///        never renumbered. Bits 64–127 belong to each application contract, bits 128 and above are refused.
 library GovernanceBits {
     uint8 internal constant PAYABLE = 0;
     uint8 internal constant MINTABLE = 1;
@@ -24,13 +24,17 @@ library GovernanceBits {
     uint256 internal constant REGULATED = (1 << FREEZE) | (1 << FORCE) | (1 << PAUSE) | (1 << ALLOWLIST) | (1 << DENYLIST);
     uint256 internal constant ALWAYS_LOCKED = (1 << PAYABLE) | (1 << BURNABLE) | (1 << RESCUABLE);
 
-    // Per kind (CTR-TOK-22). The confidential kinds' refusal of flags 5–8 is today's built state (CTR-AS-17), not a
-    // permanent rule: their regulated versions are open, owner, not designed (CTR-GOV-03).
+    // Per kind (CTR-TOK-22, spec §1.2). No kind of this release takes a bit of 5-9: `NORMAL` and `WRAPPED` refuse them as not
+    // built, the confidential kinds as invalid; that is today's built state (CTR-AS-17, CTR-GOV-03), not a permanent rule.
     uint256 internal constant NORMAL_BITS = (1 << PAYABLE) | (1 << MINTABLE) | (1 << BURNABLE);
     uint256 internal constant WRAPPED_BITS = (1 << PAYABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE);
-    /// @dev Every token kind: the bits with a holder, and those whose holder must have code.
-    uint256 internal constant TOKEN_ROLES = (1 << MINTABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE);
-    uint256 internal constant TOKEN_CONTRACT_ONLY = 1 << RATE_ADJUSTABLE;
+    /// @dev The masks of each kind (spec §1.2): the bits with a holder, those whose holder must have code, those whose power
+    ///      passes the number it acts on (B-09), those whose power reads `use`'s scope (B-10). Every token kind: scalar bit 1,
+    ///      no scope.
+    uint256 internal constant NORMAL_ROLES = 1 << MINTABLE;
+    uint256 internal constant WRAPPED_ROLES = (1 << MINTABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE);
+    uint256 internal constant WRAPPED_CONTRACT_ONLY = 1 << RATE_ADJUSTABLE;
+    uint256 internal constant TOKEN_SCALAR = 1 << MINTABLE;
 
     uint256 internal constant DEX_BITS = (1 << LISTING) | (1 << FEE_ROUTING);
 }

@@ -11,8 +11,10 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 /// @notice External library: the contract keeps one-line wrappers (`GovernanceBase`), the logic is linked at deploy
 ///         (CTR-TOK-24). `features`/`lockedFeatures` are written once by `init`; a flag can later only be cleared, once, by
 ///         the owner and only when not locked. One `owner` (0 = no administration ever) grants and revokes the role of a
-///         set flag, disables disableable flags, transfers (two-step) or renounces ownership. Role holders keep their
-///         roles after the owner renounces; a holder may renounce its own role.
+///         set flag, disables disableable flags, transfers (two-step) or renounces ownership. The renounce is refused while
+///         a set bit that is not locked has holders (CTR-GOV-02, spec §1.7); a locked bit's holders survive it, since a lock
+///         promises the power is permanent. A holder may renounce its own role. A power runs through `GovernanceUse.use`
+///         (`GovernanceBase.sol`): a whole-shape holder inline, a limited one by one DELEGATECALL to `useLimited` (B-26).
 library GovernanceLib {
     /// @dev The value of `roles`: 0 none, `WHOLE` no limit, `LIMITED` a `Grant` binds it.
     uint8 internal constant WHOLE = 1;
@@ -23,21 +25,44 @@ library GovernanceLib {
         address minter;      // MINTABLE
         address rateAdmin;   // RATE_ADJUSTABLE, contract only
         address guardian;    // WRAP_DISABLEABLE
-        address issuer;      // FREEZE / FORCE / PAUSE (not built)
-        address compliance;  // FORCE / ALLOWLIST (not built)
+        address issuer;      // FREEZE / FORCE / PAUSE (bit 5; not built)
+        address compliance;  // RECORD (bit 10; not built): bits 8 and 9 have no holder (spec §1.2)
+    }
+
+    /// @notice A bit's holders, leaves included, and its live roots (`grantor == 0`): `holderCount` is `holders`, the
+    ///         renounce rule reads `roots` (spec §1.7). One slot.
+    struct Counts {
+        uint128 holders;
+        uint128 roots;
+    }
+
+    /// @notice A proposed grant (spec §1.6): live while `eta != 0`, `generation == ownerGeneration` and
+    ///         `now <= eta + grantDelay`. `termsHash` 0 is a `grantRole`.
+    struct PendingGrant {
+        uint64 eta;
+        address proposer;
+        uint32 generation;
+        bytes32 termsHash;
     }
 
     /// @custom:storage-location erc7201:scaas.governance
+    /// @dev Spec §1.4, the final shape (GD-2): `grantDelay`, `ownerGeneration`, `lastProposedAt`, `pending`, `rescueTo`,
+    ///      `Counts.roots` and `Grant.barred` have no writer until their task; no slot moves after.
     struct GovernanceStorage {
-        uint256 features;
-        uint256 lockedFeatures;
-        address owner;
-        address pendingOwner;
-        mapping(uint256 bit => mapping(address account => uint8)) roles;
-        mapping(uint256 bit => uint256) holderCount;
-        mapping(uint256 bit => mapping(address holder => IGovernance.Grant)) grants;
+        uint256 features;                                                       // +0, written by init, cleared one-way
+        uint256 lockedFeatures;                                                 // +1, no writer after init
+        address owner;                                                          // +2
+        uint64 grantDelay;                                                      //    no writer after init (spec §1.6)
+        uint32 ownerGeneration;                                                 //    completed changes of owner
+        address pendingOwner;                                                   // +3
+        uint64 lastProposedAt;
+        mapping(uint256 bit => mapping(address account => uint8)) roles;        // +4, 0 none, 1 WHOLE, 2 LIMITED
+        mapping(uint256 bit => Counts) counts;                                  // +5
+        mapping(uint256 bit => mapping(address holder => IGovernance.Grant)) grants; // +6
         /// @dev Bumped when a holder loses the bit, which kills every leaf it granted, without a walk.
-        mapping(uint256 bit => mapping(address holder => uint32)) epoch;
+        mapping(uint256 bit => mapping(address holder => uint32)) epoch;        // +7
+        mapping(uint256 bit => mapping(address account => PendingGrant)) pending; // +8
+        address rescueTo;                                                       // +9, no writer after init
     }
 
     // keccak256(abi.encode(uint256(keccak256("scaas.governance")) - 1)) & ~bytes32(uint256(0xff))
@@ -65,7 +90,7 @@ library GovernanceLib {
         s.features = features;
         s.lockedFeatures = locked | (features & GovernanceBits.ALWAYS_LOCKED);
         if (roles.issuer != address(0)) revert IGovernance.RoleWithoutFeature(GovernanceBits.FREEZE);
-        if (roles.compliance != address(0)) revert IGovernance.RoleWithoutFeature(GovernanceBits.ALLOWLIST);
+        if (roles.compliance != address(0)) revert IGovernance.RoleWithoutFeature(GovernanceBits.RECORD);
         if (roles.minter != address(0)) _grant(s, GovernanceBits.MINTABLE, roles.minter, address(0), roleBits, contractOnly);
         if (roles.rateAdmin != address(0)) {
             _grant(s, GovernanceBits.RATE_ADJUSTABLE, roles.rateAdmin, address(0), roleBits, contractOnly);
@@ -77,6 +102,12 @@ library GovernanceLib {
             s.owner = owner;
             emit IGovernance.OwnershipTransferred(address(0), owner);
         }
+    }
+
+    /// @notice The DEX's owner holds bits 11 and 12 from `initialize` (spec §2.3, B-27): an INIT grant, undelayed, as
+    ///         `init`'s roles. Reachable from a contract's `initialize` alone.
+    function initHolder(uint8 bit, address account, uint256 roleBits, uint256 contractOnly) public {
+        _grant($(), bit, account, address(0), roleBits, contractOnly);
     }
 
     // ------------------------------------------------------------------ owner
@@ -124,7 +155,7 @@ library GovernanceLib {
         (g.min, g.max, g.total, g.perWindow) = (t.min, t.max, t.total, t.perWindow);
         (g.window, g.validUntil, g.maxUses, g.scope, g.delegable) = (t.window, t.validUntil, t.maxUses, t.scope, t.delegable);
         (g.grantor, g.grantorEpoch) = leaf ? (caller, s.epoch[bit][caller]) : (address(0), uint32(0));
-        if (r == 0) ++s.holderCount[bit];
+        if (r == 0) ++s.counts[bit].holders;
         s.roles[bit][holder] = LIMITED;
         emit IGovernance.GrantSet(bit, holder, leaf ? caller : address(0));
     }
@@ -160,7 +191,7 @@ library GovernanceLib {
         GovernanceStorage storage s = _onlyOwner(caller);
         for (uint256 live = s.features & ~s.lockedFeatures & roleBits; live != 0; live &= live - 1) {
             uint8 bit = _lowest(live);
-            if (s.holderCount[bit] != 0) revert IGovernance.OwnerHasHolders(bit);
+            if (s.counts[bit].holders != 0) revert IGovernance.OwnerHasHolders(bit);
         }
         s.owner = address(0);
         s.pendingOwner = address(0);
@@ -175,25 +206,6 @@ library GovernanceLib {
 
     function hasRole(uint8 bit, address account) internal view returns (bool) {
         return $().roles[bit][account] != 0;
-    }
-
-    /// @dev The flag is set and `account` holds its role.
-    function requireRole(uint8 bit, address account) internal view {
-        GovernanceStorage storage s = $();
-        if (s.features & _bit(bit) == 0) revert IGovernance.FeatureNotSet(bit);
-        if (s.roles[bit][account] == 0) revert IGovernance.MissingRole(bit, account);
-    }
-
-    /// @notice The one check of a power (CTR-GOV-02): the flag is set and `account` holds it; a limited holder's grant binds
-    ///         `scalar`, which must be the number the contract acts on. Returns the grant's `scope` (0 for a whole-shape
-    ///         holder, which pays no more than `requireRole`).
-    function use(uint8 bit, address account, uint256 scalar) internal returns (bytes32) {
-        GovernanceStorage storage s = $();
-        if (s.features & _bit(bit) == 0) revert IGovernance.FeatureNotSet(bit);
-        uint8 r = s.roles[bit][account];
-        if (r == WHOLE) return bytes32(0);
-        if (r == 0) revert IGovernance.MissingRole(bit, account);
-        return useLimited(bit, account, scalar);
     }
 
     /// @notice A limited holder: its own terms, then, for a leaf, the parent's epoch and the parent's terms on the same scalar.
@@ -222,7 +234,7 @@ library GovernanceLib {
         _check(s, bit, account, roleBits, contractOnly);
         uint8 r = s.roles[bit][account];
         if (r == WHOLE) return;
-        if (r == 0) ++s.holderCount[bit];
+        if (r == 0) ++s.counts[bit].holders;
         s.roles[bit][account] = WHOLE;
         emit IGovernance.RoleGranted(bit, account, caller);
     }
@@ -242,7 +254,7 @@ library GovernanceLib {
     function _clear(GovernanceStorage storage s, uint8 bit, address account, address caller) private {
         if (s.roles[bit][account] == 0) return;
         s.roles[bit][account] = 0;
-        --s.holderCount[bit];
+        --s.counts[bit].holders;
         ++s.epoch[bit][account];
         emit IGovernance.RoleRevoked(bit, account, caller);
     }

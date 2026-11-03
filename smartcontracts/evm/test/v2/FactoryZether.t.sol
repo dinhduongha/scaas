@@ -40,7 +40,8 @@ contract MockWrappedZether is WrappedToken {
 
     function _init(TokenConfig memory cfg) internal override {
         _requireUnused(cfg, true, false, false, false);
-        WrappedLib.initToken(cfg, IS_HEDERA, TokenStore.KIND_WRAPPED_ZETHER, GovernanceBits.WRAPPED_BITS);
+        WrappedLib.initToken(cfg, IS_HEDERA, TokenStore.KIND_WRAPPED_ZETHER, GovernanceBits.WRAPPED_BITS, _roleBits(),
+            _contractOnlyBits());
     }
 }
 
