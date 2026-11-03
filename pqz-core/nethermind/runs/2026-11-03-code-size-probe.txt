@@ -60,6 +60,41 @@ Read from the rows:
 
 Not measured: arm B's rows with EIP-7954 removed (T0 runs B "as A"), so neither the code ceiling at 0x20000 nor the init limit is known on C's route.
 
+T0b (plan T0b, CTR-GOV-19: "not measured"), arm D, 2026-11-03.
+VERDICT T0b: on C's route the code ceiling is 131,072 B and the init code limit (262,144 B, 2 x maxCodeSize) is above every
+.init row of size-baseline.json (largest 66,200 B, WrappedPqzToken). Plan T0b's table, first row: size_gate.py's init ceiling
+moves to the measured limit when T2 adds it (T2 has not run); T16 writes the figure into the RUNBOOK section.
+
+step | commit | rc | rows as T0b expected
+D pqz6 | a5fcf6b7 + this diff | 0 | 2/2 code rows, 5 init rows reported, import 4/4
+D stock | a5fcf6b7 + this diff | 0 | 2/2 code rows, 5 init rows reported, import 4/4
+
+Arm D chainspec and config: as C (maxCodeSize 0x20000, maxCodeSizeTransition 0, eip7954TransitionTimestamp removed), genesis
+gasLimit 0x11e1a300, TargetBlockGasLimit 300,000,000, JsonRpc.GasCap 300,000,000. Same images as T0 (Id above).
+Init rows: init code of n bytes returning one byte (e2e.py codesize kind init), sent ascending, tx.gas 290,000,000.
+
+arm | row | tx.gas | status | eth_getCode | gasUsed
+D | 131,072 | 290,000,000 | 1 | 131,072 | 200,817,476
+D | 131,073 | 290,000,000 | 0 | 0 | 16,777,216 (eth_call: 'out of gas', as arm A's refusal)
+D | init code 66,200 (largest .init row) | 290,000,000 | 1 | 1 | 4,260,800
+D | init code 131,072 | 290,000,000 | 1 | 1 | 8,412,608
+D | init code 131,073 | 290,000,000 | 1 | 1 | 8,412,672
+D | init code 262,144 | 290,000,000 | refused at the pool | - | -
+D | init code 262,145 | 290,000,000 | refused at the pool | - | -
+Every figure is the same on both images; the importing node read every deployed row again (131,072 B, and 1 B for each init row).
+
+Refusals, exact (both images):
+- 262,144 B: 'transaction invalid, intrinsic gas too low: Intrinsic gas (execution 1089008, floor 16801216) exceeded cap of 16777216.'
+- 262,145 B: 'transaction invalid, max initcode size exceeded'
+
+Read from the rows:
+- Code ceiling without EIP-7954: maxCodeSize 0x20000 itself, 131,072 B deploys and 131,073 B is status 0.
+- Init limit: 131,073 B is accepted, so the limit is not 131,072 B on this route. 262,145 B is refused for its size, and 262,144 B is refused
+  for gas, not size, although its floor is lower than 262,145 B's: the pool checks size first [inference from the two texts], so the
+  size limit is 262,144 B, 2 x maxCodeSize, as before Amsterdam (docs/networks/evm.md).
+- 262,144 B of init code is still refused, by the calldata floor: 16,801,216 = 262,144 x 64 + 24,000 against the 2^24 cap. The largest
+  init that fits that floor is about 261,768 B at this composition [est., not sent]. Both bounds sit far above 66,200 B.
+
 Differences from T0:
 - One node container at a time (controller's limit for this run), 1700m; no nginx. The signer ran alone on 127.0.0.1:18545, then a second
   node with the follower's config, signer stopped, imported blocks 1..head from RLP (debug_getRawBlock, Nethermind's Hive plugin; its Hive.Enabled

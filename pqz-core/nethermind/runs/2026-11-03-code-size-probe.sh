@@ -1,13 +1,14 @@
 #!/bin/sh
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 # Governance plan T0 (CTR-GOV-19): does a contract above 64 KiB deploy under Amsterdam's EIP-7954 with maxCodeSize 0x20000?
-#   sh runs/2026-11-03-code-size-probe.sh <0 | A | B | C> [image]     one arm, foreground; default image 2.2.0-pqz6
+#   sh runs/2026-11-03-code-size-probe.sh <0 | A | B | C | D> [image]     one arm, foreground; default image 2.2.0-pqz6
+# Arm D (plan T0b): as C (EIP-7954 out), gasLimit and target 300 M: the code ceiling at 0x20000 and the init code limit.
 # A throwaway copy under $COPY (default <repo>/scratchpad/gov-probe), project pqzcopy, 127.0.0.1:18545. The live directory
 # is never read. One node container at a time (1700m): the signer makes the blocks, then a second node, signer stopped, imports them
 # from RLP through Nethermind's Hive plugin, so a block another node refuses shows. Per-arm log <this name>-<arm>-<tag>.log
 # (git-ignored), first line "# <arm> at commit <sha>", last "rc=<n>"; an arm that ended rc=0 at this commit is skipped.
 set -eu
-ARM=${1:?0 | A | B | C}
+ARM=${1:?0 | A | B | C | D}
 IMAGE=${2:-scaas/nethermind-pqz:2.2.0-pqz6}
 HERE=$(cd "$(dirname "$0")" && pwd)
 C=$(cd "$HERE/../chain" && pwd)
@@ -65,10 +66,10 @@ for e in (2780, 7708, 7778, 7928, 7954, 7976, 7981, 8024, 8037, 8038, 8246):
 target = 200_000_000
 if arm != "0":
     p["maxCodeSize"] = "0x20000"
-if arm == "B":
+if arm in ("B", "D"):
     target = 300_000_000
     g["genesis"]["gasLimit"] = hex(target)
-if arm == "C":
+if arm in ("C", "D"):
     del p["eip7954TransitionTimestamp"]
 json.dump(g, open(f"{copy}/genesis.arm.json", "w"), indent=1)
 print(f"params: arm {arm} maxCodeSize {p['maxCodeSize']} maxCodeSizeTransition {p['maxCodeSizeTransition']} "
@@ -101,6 +102,14 @@ A|C)
 B)
   rows 131072:ok,131073:fail 290000000 || fail=1
   rows 131073:init,140000:init 30000000 || fail=1 ;;
+D)
+  rows 131072:ok,131073:fail 290000000 || fail=1
+  # init code rows, accepted or refused, ascending: a refusal at the pool takes no nonce. The largest .init row of
+  # size-baseline.json (WrappedPqzToken's) first.
+  INIT=$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print(max(v for k, v in d.items() if k.endswith(".init")))' \
+    "$ROOT/smartcontracts/evm/size-baseline.json")
+  echo "PROBE-largest-init size-baseline.json $INIT B"
+  rows "$INIT:init,131072:init,131073:init,262144:init,262145:init" 290000000 || fail=1 ;;
 esac
 e2e codedump --record "$COPY/rows.jsonl" || fail=1
 node_log signer
