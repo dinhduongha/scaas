@@ -174,7 +174,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [gateway.md](node/gateway.md) | Public intake of signed intents |
 | [admin-auth.md](node/admin-auth.md) | Admin endpoints and authentication |
 | [sponsorship.md](node/sponsorship.md) | Who pays gas, sponsor rules |
-| [dex-venue.md](node/dex-venue.md) | Order book, matching, settle jobs, trade engine |
+| [dex-venue.md](node/dex-venue.md) | Order book, matching, settle jobs, `OrderRouter` |
 | [mesh.md](node/mesh.md) · [gossip.md](node/gossip.md) | Relayer mesh envelope, acceptance, gossip |
 | [ops.md](node/ops.md) · [runbooks.md](node/runbooks.md) | Operations, alerts, runbooks |
 | [threat-model.md](node/threat-model.md) | Node threat model |
