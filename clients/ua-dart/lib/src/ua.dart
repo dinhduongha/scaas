@@ -535,7 +535,7 @@ List<Map<String, Object?>> _memberSigsJson(List<MemberSig> members) => [
         }
     ];
 
-/// `abi.encode(InnerSig[])` of (index, sig) records: what `membershipSigOf` returns for an msig slot.
+/// `abi.encode(InnerSig[])` of (index, sig) records: what `UAMemberSig` carries for an msig slot.
 Uint8List encodeInnerSigs(List<(int, Uint8List)> members) {
   final heads = <int>[..._word(32), ..._word(members.length)], tails = <int>[];
   final at = 32 * members.length;
@@ -546,7 +546,7 @@ Uint8List encodeInnerSigs(List<(int, Uint8List)> members) {
   return Uint8List.fromList(heads + tails);
 }
 
-/// The slot a copy sends to `acceptMembership` from `membershipSigOf(ua, index)` alone (CTR-UA-37): an msig slot's stored bytes are
+/// The slot a copy sends to `acceptMembership` from the bytes of its `UAMemberSig` alone, which hash to `memberSigHashOf(ua, index)` (CTR-UA-37): an msig slot's stored bytes are
 /// `abi.encode(InnerSig[])`, canonical, at most 16; a signing slot's its sig. UAUnauthorized otherwise.
 MemberSig replayedMemberSig(Object? keyData, int index, Uint8List stored) {
   final slots = msigStructure(keyData)['members'] as List;

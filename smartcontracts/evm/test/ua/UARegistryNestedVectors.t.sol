@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {Vm} from "forge-std/Vm.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -109,7 +110,15 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
             bytes32 want = vm.parseJsonBytes32(j, string.concat(row, ".ua"));
             assertEq(_register(i), want, row);
             if (_uint16(string.concat(row, ".kind")) != UAKinds.MSIG) continue;
-            assertEq(r.popOf(want), _bytes(string.concat(row, ".pop")), "the stored bytes are the row's");
+            bytes memory pop = _bytes(string.concat(row, ".pop"));
+            assertEq(r.popOf(want), pop.length == 0 ? bytes("") : abi.encodePacked(keccak256(pop)), "an msig keeps keccak256(pop)");
+            string memory hs = string.concat(row, ".memberSigHashes");
+            uint256 nh = _count(hs);
+            assertEq(nh, pop.length == 0 ? 0 : UACall.memberSigs(pop).length, "a hash per slot of the pop");
+            for (uint256 h; h < nh; ++h) {
+                string memory e = string.concat(hs, "[", vm.toString(h), "]");
+                assertEq(r.memberSigHashOf(want, _uint16(string.concat(e, ".index"))), vm.parseJsonBytes32(j, string.concat(e, ".hash")), e);
+            }
             string memory digests = string.concat(row, ".innerDigests");
             for (uint256 d; d < _count(digests); ++d) {
                 string memory e = string.concat(digests, "[", vm.toString(d), "]");
@@ -183,18 +192,25 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
                 vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
                 r.acceptMembership(ua, bad);
             }
+            bytes memory stored = _bytes(string.concat(m, ".stored"));
+            bytes32 storedHash = vm.parseJsonBytes32(j, string.concat(m, ".storedHash"));
+            assertEq(keccak256(stored), storedHash, "storedHash");
+            vm.expectEmit(address(r));
+            emit IUARegistry.UAMemberSig(ua, vm.parseJsonBytes32(j, string.concat(m, ".member")), index, UAKinds.PURPOSE_MEMBERSHIP, stored);
             r.acceptMembership(ua, s);
             assertTrue(r.memberAccepted(ua, index));
-            assertEq(r.membershipSigOf(ua, index), _bytes(string.concat(m, ".stored")));
+            assertEq(r.memberSigHashOf(ua, index), storedHash);
         }
     }
 
-    /// CTR-UA-37: on a second registry the row's `pop` is refused until each acceptance is replayed from the first's state, then the same bytes
-    /// register, with no new signature.
+    /// CTR-UA-37: on a second registry the row's `pop` is refused until each acceptance is replayed from the first's events, checked against
+    /// its kept hash, then the same bytes register, with no new signature.
     function test_nestedVectors_copyReplaysTheAcceptance() public {
         vm.pauseGasMetering(); // a 700 KB JSON string per cheatcode call
         _registerUpTo("");
-        for (uint256 i; i < _count(".memberships"); ++i) _accept(r, r, i);
+        vm.recordLogs();
+        for (uint256 i; i < _count(".memberships"); ++i) _accept(new Vm.Log[](0), r, r, i);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
         string memory row = ".afterAcceptance[0]";
         IUARegistry.MsigStructure memory st = UACall.structure(_bytes(string.concat(row, ".keyData")));
         IUARegistry.MemberSig[] memory pop = _typed(string.concat(row, ".args.pop"));
@@ -207,13 +223,13 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         _registerUpTo("");
         vm.expectRevert(IUARegistry.UAPoP.selector);
         r.registerMsig(st, _none(), pop, "");
-        for (uint256 i; i < _count(".memberships"); ++i) _accept(first, r, i);
+        for (uint256 i; i < _count(".memberships"); ++i) _accept(logs, first, r, i);
         assertEq(r.registerMsig(st, _none(), pop, ""), ua);
         assertEq(r.popOf(ua), first.popOf(ua));
     }
 
-    /// Row `i` of `memberships` on `to`, read back from `from`'s state only.
-    function _accept(UARegistry from, UARegistry to, uint256 i) internal {
+    /// Row `i` of `memberships` on `to`, read back from `from`'s events (`logs`) and hash only.
+    function _accept(Vm.Log[] memory logs, UARegistry from, UARegistry to, uint256 i) internal {
         string memory m = _p("memberships", i, "");
         bytes32 ua = vm.parseJsonBytes32(j, string.concat(m, ".ua"));
         uint16 index = _uint16(string.concat(m, ".index"));
@@ -221,7 +237,7 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
             to.acceptMembership(ua, IUARegistry.MemberSig(index, _inner(string.concat(m, ".members")), _bytes(string.concat(m, ".sig"))));
             return;
         }
-        bytes memory stored = from.membershipSigOf(ua, index);
+        bytes memory stored = _acceptedSig(logs, from, ua, index);
         if (from.msigOf(ua).members[index].kind == UAKinds.MSIG) {
             to.acceptMembership(ua, IUARegistry.MemberSig(index, abi.decode(stored, (IUARegistry.InnerSig[])), ""));
         } else {

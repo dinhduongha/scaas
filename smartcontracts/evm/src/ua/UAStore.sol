@@ -37,7 +37,8 @@ library UAStore {
         mapping(uint16 kind => mapping(uint256 i => bytes32 ua)) uaAt; // 5
         /// 6. The registration blob (UA8-D7): `abi.encode(bytes keyRest, bytes pop)`, `keyRest` = the key data after the
         /// stored kinds' `keyPtr` prefix (all of it for the other kinds; an `msig`'s assembled CTR-UA-09 bytes), `pop` as
-        /// `registrationOf` returns it (an `msig`: `abi.encode(MemberSig[])`, "" for none). `keyData` = `SSTORE2.read(keyPtr) ‖
+        /// `registrationOf` returns it (an `msig`: the 32 bytes of `keccak256(abi.encode(MemberSig[]))`, owner 2026-11-03, its slots
+        /// in `UAMemberSig`; "" for none). `keyData` = `SSTORE2.read(keyPtr) ‖
         /// keyRest`: stored once. (Before typed-signing R1 a third word, the KEM version, always 0.)
         mapping(bytes32 ua => address[]) reg;
         mapping(bytes32 ua => bytes32) pqzPopHash; // 7: the PQZ key's proof hash (`attrs.pqzPopHash`)
@@ -53,9 +54,10 @@ library UAStore {
         /// 15. CTR-UA-37: an `msig`'s accepted slots, bit `i` = member slot `i`: the slots of its `pop`, written at
         /// registration, then `acceptMembership`. It lives with the record (gen 2 reads gen 1's).
         mapping(bytes32 ua => uint256) accepted;
-        /// 16. CTR-UA-37 (owner 2026-11-03): the signature of a slot accepted by `acceptMembership`, written once, with its bit: `sig`, or an
-        /// `msig` member's `abi.encode(InnerSig[])`. A slot of the `pop` has none: the `pop` holds it.
-        mapping(bytes32 ua => mapping(uint256 index => address[])) acceptSig;
+        /// 16. CTR-UA-33 / CTR-UA-37 (owner 2026-11-03): `keccak256` of the signature object of an `msig`'s slot `index`, the slot's `sig` or
+        /// an `msig` member's `abi.encode(InnerSig[])`, written once with its bit: at registration for each slot of the `pop`, by
+        /// `acceptMembership` for a slot that accepts later. The bytes are in that slot's `UAMemberSig`.
+        mapping(bytes32 ua => mapping(uint256 index => bytes32)) memberSigHash;
     }
 
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;

@@ -744,11 +744,11 @@ pub fn encode_member_sigs(sigs: &[MemberSig]) -> Vec<u8> {
     };
     [word(32).to_vec(), abi_list(sigs.iter().map(slot).collect())].concat()
 }
-/// `abi.encode(InnerSig[])`: what `membershipSigOf` returns for an `msig` slot.
+/// `abi.encode(InnerSig[])`: what `UAMemberSig` carries for an `msig` slot.
 pub fn encode_inner_sigs(members: &[InnerSig]) -> Vec<u8> {
     [word(32).to_vec(), abi_list(members.iter().map(inner_sig).collect())].concat()
 }
-/// The `MemberSig` a copy sends to `acceptMembership` from `membershipSigOf(ua, index)` alone (CTR-UA-37, owner 2026-11-03): an `msig` slot's
+/// The `MemberSig` a copy sends to `acceptMembership` from the bytes of its `UAMemberSig` alone, which hash to `memberSigHashOf(ua, index)` (CTR-UA-37, owner 2026-11-03): an `msig` slot's
 /// stored bytes are `abi.encode(InnerSig[])`, canonical, at most 16; a signing slot's its `sig`. `Unauthorized` otherwise.
 pub fn replayed_member_sig(key_data: &[u8], index: u16, stored: &[u8]) -> Result<MemberSig> {
     use crate::verify::word_usize as w;

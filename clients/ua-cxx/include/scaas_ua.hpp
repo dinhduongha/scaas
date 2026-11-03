@@ -131,7 +131,7 @@ PqzKeyRecord pqzKeyRecordMessage(uint16_t kind, const Bytes& ua, const Bytes& ke
 PqzKeyRecord pqzKeyRecordMessageWith(uint16_t kind, const Bytes& ua, const Bytes& keyData, const std::string& inner, const Bytes& pqzKey,
                                      const std::optional<Bytes>& pqzPop = std::nullopt,
                                      const std::optional<Bytes>& pqzPopHash = std::nullopt, bool alreadySet = false);
-// The MemberSig a copy sends to acceptMembership from membershipSigOf(ua, index) alone (CTR-UA-37), as the slot JSON {index, members:
+// The MemberSig a copy sends to acceptMembership from the bytes of its UAMemberSig alone, which hash to memberSigHashOf(ua, index) (CTR-UA-37), as the slot JSON {index, members:
 // [{index, sig}], sig} of a registrationArgs pop entry: keyData the msig ua's, stored a signing slot's sig or an msig slot's
 // abi.encode(InnerSig[]), canonical, at most 16 entries. Anything else, or an index past the members, is UAUnauthorized.
 std::string replayedMemberSig(const Bytes& keyData, uint16_t index, const Bytes& stored);

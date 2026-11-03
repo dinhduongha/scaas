@@ -17,9 +17,9 @@ use std::time::Duration;
 use alloy::network::EthereumWallet;
 use alloy::primitives::{Address, Bytes, B256};
 use alloy::providers::{Provider, ProviderBuilder};
-use alloy::rpc::types::TransactionRequest;
+use alloy::rpc::types::{Filter, TransactionRequest};
 use alloy::signers::local::PrivateKeySigner;
-use alloy::sol_types::SolCall;
+use alloy::sol_types::{SolCall, SolEvent};
 use ml_dsa::signature::Keypair as _;
 use ml_dsa::{MlDsa65, Seed, SigningKey};
 use pqcrypto_falcon::falconpadded512 as falcon;
@@ -80,6 +80,8 @@ alloy::sol! {
     function pqzKeyOf(bytes32 ua) external view returns (address ptr, bytes32 pqzPopHash, bool proven);
     function pqzKeySigOf(bytes32 ua) external view returns (bytes);
     function pqzPopOf(bytes32 ua) external view returns (bytes);
+    function memberSigHashOf(bytes32 ua, uint256 index) external view returns (bytes32);
+    event UAMemberSig(bytes32 indexed ua, bytes32 indexed member, uint16 index, bytes32 purpose, bytes sig);
     event UARegistered(bytes32 indexed ua, uint16 indexed kind, bytes keyData, SolAttrs attrs, bytes32 popHash, bytes pqzPop, uint8 checkedPop, uint8 checkedPqzPop, uint8 checkedKem);
 }
 
@@ -650,7 +652,29 @@ impl Evm {
         let r = self.view(registrationOfCall { ua: ua.into() }).await;
         let a = r.attrs;
         let attrs = UAAttrs { pqz_key: a.pqzKey.to_vec(), pqz_pop_hash: a.pqzPopHash.0, kem: kem_sol(&a.kem), kem_pk_hash: a.kemPkHash.0 };
-        Rec { kind: r.kind, key_data: r.keyData.to_vec(), attrs, pop: r.pop.to_vec(), pqz_pop: r.pqzPop.to_vec() }
+        let pop = if r.kind == MSIG && !r.pop.is_empty() { self.msig_pop(ua, &r.keyData, &r.pop).await } else { r.pop.to_vec() };
+        Rec { kind: r.kind, key_data: r.keyData.to_vec(), attrs, pop, pqz_pop: r.pqzPop.to_vec() }
+    }
+
+    /// Owner 2026-11-03: an `msig` keeps `keccak256(pop)` (`popOf`'s 32 bytes) and a hash per slot, not the `pop`: it is rebuilt from the
+    /// registry's `UAMemberSig` events of purpose `pop`, in index order, each slot checked against `memberSigHashOf`, the whole against `hash`.
+    async fn msig_pop(&self, ua: &[u8; 32], key_data: &[u8], hash: &[u8]) -> Vec<u8> {
+        let p = ProviderBuilder::new().connect_http(self.rpc.parse().unwrap());
+        let f = Filter::new().address(self.registry).event_signature(UAMemberSig::SIGNATURE_HASH).topic1(B256::from(*ua)).from_block(0);
+        let tag = scaas_ua::purpose_tag_v("pop", 2).unwrap();
+        let mut slots = vec![];
+        for l in p.get_logs(&f).await.unwrap() {
+            let e = l.log_decode::<UAMemberSig>().unwrap().inner.data;
+            if e.purpose.0 != tag {
+                continue;
+            }
+            let kept = self.view(memberSigHashOfCall { ua: ua.into(), index: alloy::primitives::U256::from(e.index) }).await;
+            assert_eq!(kept, alloy::primitives::keccak256(&e.sig), "slot {} of an msig: the event's bytes are the kept hash's", e.index);
+            slots.push(scaas_ua::ua8::replayed_member_sig(key_data, e.index, &e.sig).unwrap());
+        }
+        let pop = scaas_ua::ua8::encode_member_sigs(&slots);
+        assert_eq!(alloy::primitives::keccak256(&pop).as_slice(), hash, "an msig's pop from its events: popOf's hash");
+        pop
     }
 
     async fn kem_at(&self, ua: &[u8; 32], version: u64) -> (KemKey, Vec<u8>) {

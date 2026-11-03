@@ -48,9 +48,9 @@ forge|forge|test_spliceAliasedElement
 forge|forge|test_cloneCapPortableOnGen2
 forge|forge|test_newGen2OverOldGen1
 forge|forge|test_copyReplaysTheStoredAcceptance
-forge|forge|test_membershipSigOf
+forge|forge|test_memberSigHashOf
+forge|forge|test_popMemberSigHashes
 forge|forge|test_acceptanceCostRows
-forge|forge|test_membershipSigOfNoneForAPopSlot
 forge|forge|test_gen1InnerBitsReadOnGen2
 forge|forge|test_gen1InnerNativeCapAtTheBound
 forge|forge|test_nested_mldsa65

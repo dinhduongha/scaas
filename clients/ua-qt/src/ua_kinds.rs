@@ -87,7 +87,7 @@ pub mod qobject {
         /// As `pqzKeyRecordMessage`, with `inner` as in `msigPqzEligibleWith`.
         #[qinvokable] #[cxx_name = "pqzKeyRecordMessageWith"]
         fn pqz_key_record_message_with(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, already_set: bool, inner: &QString) -> QString;
-        /// The `MemberSig` a copy sends to `acceptMembership` from `membershipSigOf(ua, index)` alone (CTR-UA-37), as the slot JSON
+        /// The `MemberSig` a copy sends to `acceptMembership` from the bytes of its `UAMemberSig` alone, which hash to `memberSigHashOf(ua, index)` (CTR-UA-37), as the slot JSON
         /// `{index, members: [{index, sig}], sig}` of a `registrationArgs` `pop` entry: `key_data` the `msig` `ua`'s, `stored` a signing slot's
         /// `sig` or an `msig` slot's `abi.encode(InnerSig[])`, canonical, at most 16 entries. Anything else, or an index past the members, is
         /// `UAUnauthorized`.

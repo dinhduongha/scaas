@@ -734,6 +734,9 @@ void main() {
       if (!msig) continue;
       expect(_hx(g.memberDigest!), r['memberDigest'], reason: name);
       if (slots.isNotEmpty) expect(slotsLen(r['args']['pop']) + 64, _b(r['pop']).length, reason: name);
+      // owner 2026-11-03: memberSigHashOf per slot, the hash of the bytes its UAMemberSig carries
+      expect([for (final s in slots) {'index': s.$1, 'hash': _hx(keccak256([s.$2.isEmpty ? s.$3! : encodeInnerSigs(s.$2)]))}],
+          r['memberSigHashes'], reason: name);
       for (final x in ((r['innerDigests'] as List?) ?? const []).cast<Map>()) {
         expect(_hx(innerDigest(_b(x['inner']), _b(r['memberDigest']))), x['memberDigest'], reason: name);
       }
@@ -774,12 +777,13 @@ void main() {
     }
   });
 
-  // CTR-UA-37: membershipSigOf's bytes give back the slot, an msig slot its list, with no new signature
+  // CTR-UA-37: the bytes of UAMemberSig give back the slot, an msig slot its list, with no new signature
   test('nested replay', () {
     void refused(Uint8List key, int index, Uint8List stored) => expect(_err(() => replayedMemberSig(key, index, stored)).code, 'UAUnauthorized');
     var replays = 0;
     for (final m in (n['memberships'] as List).cast<Map>()) {
       final key = nestedKey(_b(m['ua']))!, index = m['index'] as int, stored = _b(m['stored']);
+      expect(_hx(keccak256([stored])), m['storedHash'], reason: '${m['name']}: storedHash');
       final slot = replayedMemberSig(key, index, stored);
       expect(uaSig(members: [slot])['members'], [{'index': index, 'members': m['members'], 'sig': m['sig']}], reason: m['name'] as String);
       refused(key, 16, Uint8List(0));

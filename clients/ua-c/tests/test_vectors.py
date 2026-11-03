@@ -11,6 +11,8 @@ import threading
 import types
 import unittest
 
+from Crypto.Hash import keccak
+
 HERE = pathlib.Path(__file__).resolve().parent
 LIB = C.CDLL(os.environ.get('SCAAS_UA_C_LIB', str(HERE.parent / 'target' / 'debug' / 'libscaas_ua_c.so')))
 VEC = pathlib.Path(os.environ.get('SCAAS_UA_VECTORS', str(HERE.parents[2] / 'smartcontracts' / 'vectors' / 'ua')))
@@ -580,6 +582,7 @@ class Vectors(unittest.TestCase):
         self.assertEqual(len(NV['memberships']), 4)
         for m in NV['memberships']:
             d, st_ = b(next(r for r in regs if r['ua'] == m['ua'])['keyData']), b(m['stored'])
+            self.assertEqual(hx(keccak.new(digest_bits=256, data=st_).digest()), m['storedHash'], m['name'])  # the event's bytes, the kept hash
             got = json.loads(text(L.replayed_member_sig, d, len(d), m['index'], st_, len(st_)))
             self.assertEqual(got, {'index': m['index'], 'members': m['members'], 'sig': m['sig']}, m['name'])
             self.assertEqual(code_of(lambda: text(L.replayed_member_sig, d, len(d), 16, st_, len(st_))), 'UAUnauthorized', m['name'])

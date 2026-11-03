@@ -162,7 +162,7 @@ type MemberSig struct {
 	Sig     Hex        `json:"sig"`
 }
 
-// EncodeInnerSigs is abi.encode(InnerSig[]): what membershipSigOf returns for an msig slot.
+// EncodeInnerSigs is abi.encode(InnerSig[]): what UAMemberSig carries for an msig slot.
 func EncodeInnerSigs(members []InnerSig) []byte {
 	out, tails, at := append(word(32), word(uint64(len(members)))...), []byte{}, 32*len(members)
 	for _, m := range members {
@@ -175,7 +175,7 @@ func EncodeInnerSigs(members []InnerSig) []byte {
 	return append(out, tails...)
 }
 
-// ReplayedMemberSig is the MemberSig a copy sends to acceptMembership from membershipSigOf(ua, index) alone (CTR-UA-37): an msig slot's
+// ReplayedMemberSig is the MemberSig a copy sends to acceptMembership from the bytes of its UAMemberSig alone, which hash to memberSigHashOf(ua, index) (CTR-UA-37): an msig slot's
 // stored bytes are abi.encode(InnerSig[]), canonical, at most 16; a signing slot's its sig. UAUnauthorized otherwise.
 func ReplayedMemberSig(keyData []byte, index uint16, stored []byte) (*MemberSig, error) {
 	s, err := MsigStructureOf(keyData)

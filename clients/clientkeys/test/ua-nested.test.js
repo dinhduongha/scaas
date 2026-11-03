@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as ua from '../src/ua.js';
 import * as sor from '../src/soroban.js';
-import { hex, abiEncode, concatBytes, word } from '../src/bytes.js';
+import { hex, abiEncode, concatBytes, word, keccak_256 } from '../src/bytes.js';
 import { nestedJson } from '../scripts/ua-portable-vectors.mjs';
 import { B, kindVerify, nativeOk, encodeMemberSigs, decodeMemberSigs, encodeInnerSigs, replayedMemberSig, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord,
   verifyMembership, verifyAuthorization } from '../src/ua-verify.js';
@@ -44,6 +44,11 @@ test('registrations: every row verifies, typed list and stored bytes agree, md_I
   for (const r of msigs.filter((x) => x.pop !== '0x')) {
     assert.equal(hex(encodeMemberSigs(typedSlots(r.args.pop))), r.pop, r.name);
     assert.deepEqual(typedSlots(r.args.pop).map((s) => s.index), decodeMemberSigs(r.pop).map((s) => s.index), r.name);
+  }
+  // owner 2026-11-03: memberSigHashOf per slot, the hash of the bytes its UAMemberSig carries
+  for (const r of msigs) {
+    const slots = r.pop === '0x' ? [] : decodeMemberSigs(r.pop);
+    assert.deepEqual(slots.map((s) => ({ index: s.index, hash: hex(keccak_256(s.members.length ? encodeInnerSigs(s.members) : s.sig)) })), r.memberSigHashes, r.name);
   }
   for (const r of nested) {
     for (const d of r.innerDigests) {
@@ -149,6 +154,7 @@ test('CTR-UA-37: the stored acceptance replays with no new signature, an msig sl
   assert.equal(N.memberships.length, 4);
   for (const m of N.memberships) {
     const { keyData } = records(m.ua);
+    assert.equal(hex(keccak_256(B(m.stored))), m.storedHash, `${m.name}: the event's bytes hash to memberSigHashOf`);
     const again = replayedMemberSig(keyData, m.index, m.stored);
     assert.equal(hex(again.sig), m.sig, m.name);
     assert.deepEqual(again.members.map((x) => ({ index: x.index, sig: hex(x.sig) })), m.members, m.name);

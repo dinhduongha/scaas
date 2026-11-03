@@ -522,6 +522,9 @@ class NestedRows(unittest.TestCase):
                 self.assertEqual((args, fill), (r['kemCommit']['register'], r['kemCommit']['fill']), name)
             if msig and pop:
                 self.assertEqual(slots_len(r['args']['pop']) + 64, len(b(r['pop'])), name)
+            if msig:  # owner 2026-11-03: memberSigHashOf per slot, the hash of the bytes its UAMemberSig carries
+                self.assertEqual([{'index': i, 'hash': hx(ua.keccak256(ua.encode_inner_sigs(inner) if inner else sig))} for i, inner, sig in pop],
+                                 r['memberSigHashes'], name)
             for x in r.get('innerDigests', []):
                 self.assertEqual(hx(ua.inner_digest(b(x['inner']), b(r['memberDigest']))), x['memberDigest'], name)
 
@@ -552,10 +555,12 @@ class NestedRows(unittest.TestCase):
             self.assertEqual((hx(d), hx(msg), hx(ua.member_digest(b(m['ua']), msg))), (m['digest'], m['message'], m['memberDigest']), m['name'])
 
     def test_nested_replay(self):
-        """CTR-UA-37: ``membershipSigOf``'s bytes give back the slot, an msig slot its list, with no new signature."""
+        """CTR-UA-37: the bytes of ``UAMemberSig``, which hash to ``memberSigHashOf`` (``storedHash``), give back the slot, an
+        msig slot its list, with no new signature."""
         replays = 0
         for m in self.N['memberships']:
             key, stored = self.keys[m['ua']], b(m['stored'])
+            self.assertEqual(hx(ua.keccak256(stored)), m['storedHash'], m['name'])
             slot = ua.replayed_member_sig(key, m['index'], stored)
             self.assertEqual(ua.ua_sig(members=[slot])['members'], [{'index': m['index'], 'members': m['members'], 'sig': m['sig']}], m['name'])
             self.refused('UAUnauthorized', ua.replayed_member_sig, key, 16, b'')

@@ -152,7 +152,7 @@ mod ffi {
             already_set: bool,
             inner: &str,
         ) -> Result<PqzKeyRecord>;
-        // the slot JSON {index, members: [{index, sig}], sig} of membershipSigOf's bytes
+        // the slot JSON {index, members: [{index, sig}], sig} of the bytes of UAMemberSig
         fn replayed_member_sig(key_data: &[u8], index: u16, stored: &[u8]) -> Result<String>;
         fn is_portable_purpose(tag: &[u8]) -> Result<bool>;
         fn ua_auth_domain_separator(generation: u32, chain_id: u64, registry: &[u8], chain_uid: &[u8]) -> Result<Vec<u8>>;

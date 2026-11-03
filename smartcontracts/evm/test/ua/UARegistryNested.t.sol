@@ -522,7 +522,7 @@ contract UARegistryNestedTest is UARegistryBase {
         assertEq(UACall.register(p.r, UAKinds.MSIG, p.du, _none(), abi.encode(s), ""), p.ua);
         assertTrue(p.r.memberAccepted(p.ua, p.iSlot));
         assertTrue(p.r.memberAccepted(p.ua, p.lSlot));
-        assertEq(p.r.popOf(p.ua), abi.encode(s), "the stored pop holds the inner list");
+        assertEq(p.r.popOf(p.ua), abi.encodePacked(keccak256(abi.encode(s))), "an msig keeps the hash of the pop, the inner list in it");
     }
 
     function test_popInnerSlotNeedsItsOwnAcceptance() public {
@@ -933,11 +933,11 @@ contract UARegistryNestedTest is UARegistryBase {
         new UARegistry(chainUidA, address(old), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
     }
 
-    // ----- CTR-UA-37: the acceptance is kept and replayed (owner 2026-11-03) -----
+    // ----- CTR-UA-33 / CTR-UA-37: a member signature's hash is kept, its bytes are in `UAMemberSig`, a copy replays them (owner 2026-11-03) -----
 
-    /// What a copy sends for slot `index`, from `membershipSigOf` alone.
-    function _replay(UARegistry from, UARegistry to, bytes32 ua, bytes memory d, uint16 index) internal {
-        bytes memory stored = from.membershipSigOf(ua, index);
+    /// What a copy sends for slot `index`: the bytes of `from`'s `UAMemberSig` among `logs`, checked against `from`'s hash.
+    function _replay(Vm.Log[] memory logs, UARegistry from, UARegistry to, bytes32 ua, bytes memory d, uint16 index) internal {
+        bytes memory stored = _acceptedSig(logs, from, ua, index);
         if (UACall.structure(d).members[index].kind == UAKinds.MSIG) {
             to.acceptMembership(ua, IUARegistry.MemberSig(index, abi.decode(stored, (IUARegistry.InnerSig[])), ""));
         } else {
@@ -945,80 +945,132 @@ contract UARegistryNestedTest is UARegistryBase {
         }
     }
 
-    /// The same bytes register on a second registry once the inner's acceptance is replayed from state, no new signature. The review's
-    /// `test_rv_copyOfNestedPopRefused`, with its positive control read from `membershipSigOf`.
+    /// The same records register on a second registry from the events alone, no new signature: each `pop` rebuilt from its `UAMemberSig`
+    /// (checked against `memberSigHashOf` and `popOf`), the inner's acceptance replayed first. The review's `test_rv_copyOfNestedPopRefused`,
+    /// with its positive control read from the events.
     function test_copyReplaysTheStoredAcceptance() public {
+        vm.recordLogs();
         Pq memory p = _pqOuter();
         p.r.acceptMembership(p.iu, _acceptEoaSig(p.di, PK_A));
         bytes32 mdi = _pqMdi(p, UAKinds.PURPOSE_POP_V2, p.rd);
         IUARegistry.MemberSig[] memory s =
             _pqSigs(p, UAKinds.PURPOSE_POP_V2, p.rd, _mixedLeaves(p.di, p.id, p.k, mdi, _ecdsa(PK_A, p.rd)));
         UACall.register(p.r, UAKinds.MSIG, p.du, _none(), abi.encode(s), "");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
 
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
         c[0] = UARegistry.KindConfig(ML65, address(mock), 200_000);
         c[1] = UARegistry.KindConfig(P256, address(mock), 400_000);
         UARegistry b = _deploy(address(0x5cba), chainUidA, address(0), false, BUDGET, address(0), true, c);
         for (uint256 i; i < 3; ++i) UACall.register(b, ML65, p.k[i], _none(), p.r.popOf(p.id[i]), "");
-        UACall.register(b, UAKinds.MSIG, p.di, _none(), p.r.popOf(p.iu), "");
-        bytes memory stored = p.r.popOf(p.ua);
+        UACall.register(b, UAKinds.MSIG, p.di, _none(), _popFromLogs(logs, p.r, p.iu), "");
+        bytes memory stored = _popFromLogs(logs, p.r, p.ua);
+        assertEq(stored, abi.encode(s), "the rebuilt pop is the registered one");
         vm.expectRevert(IUARegistry.UAPoP.selector);
         UACall.register(b, UAKinds.MSIG, p.du, _none(), stored, "");
 
-        _replay(p.r, b, p.iu, p.di, _indexOf(p.di, _eoa(PK_A)));
-        assertTrue(b.memberAccepted(p.iu, _indexOf(p.di, _eoa(PK_A))));
+        uint16 a = _indexOf(p.di, _eoa(PK_A));
+        _replay(logs, p.r, b, p.iu, p.di, a);
+        assertTrue(b.memberAccepted(p.iu, a));
+        assertEq(b.memberSigHashOf(p.iu, a), p.r.memberSigHashOf(p.iu, a), "the copy keeps the same hash");
         assertEq(UACall.register(b, UAKinds.MSIG, p.du, _none(), stored, ""), p.ua);
+        assertEq(b.popOf(p.ua), p.r.popOf(p.ua));
     }
 
-    /// `sig` for a signing slot, `abi.encode(InnerSig[])` for an `msig` slot, write-once as its bit, none for a slot not accepted, gen 2 forwarding
-    /// gen 1's.
-    function test_membershipSigOf() public {
+    /// An acceptance: the hash of `sig` for a signing slot, of `abi.encode(InnerSig[])` for an `msig` slot, the bytes in `UAMemberSig` under
+    /// `PURPOSE_MEMBERSHIP`; write-once as its bit (no second event); zero for a slot not accepted; gen 2 forwarding gen 1's.
+    function test_memberSigHashOf() public {
         (bytes memory di, bytes32 iu) = _inner(2, PK_A);
         (bytes memory du, bytes32 ua) = _outer(iu, PK_B);
         uint16 iSlot = _indexOf(du, iu);
         uint16 bSlot = 1 - iSlot;
-        assertEq(reg.membershipSigOf(ua, bSlot), "", "not accepted");
+        assertEq(reg.memberSigHashOf(ua, bSlot), bytes32(0), "not accepted");
         IUARegistry.MemberSig memory eoa = _acceptEoaSig(du, PK_B);
+        vm.expectEmit(address(reg));
+        emit IUARegistry.UAMemberSig(ua, _eoa(PK_B), bSlot, UAKinds.PURPOSE_MEMBERSHIP, eoa.sig);
         reg.acceptMembership(ua, eoa);
-        assertEq(reg.membershipSigOf(ua, bSlot), eoa.sig);
+        assertEq(reg.memberSigHashOf(ua, bSlot), keccak256(eoa.sig));
 
         bytes32 typed = UAKinds.membershipDigest(ua, iu);
         IUARegistry.InnerSig[] memory l = _leaves(di, _mdInner(iu, _memberDigest(ua, UAKinds.PURPOSE_MEMBERSHIP, typed)));
+        vm.expectEmit(address(reg));
+        emit IUARegistry.UAMemberSig(ua, iu, iSlot, UAKinds.PURPOSE_MEMBERSHIP, abi.encode(l));
         reg.acceptMembership(ua, IUARegistry.MemberSig(iSlot, l, ""));
-        assertEq(reg.membershipSigOf(ua, iSlot), abi.encode(l));
+        assertEq(reg.memberSigHashOf(ua, iSlot), keccak256(abi.encode(l)));
 
-        bytes memory before = reg.membershipSigOf(ua, iSlot);
+        bytes32 before = reg.memberSigHashOf(ua, iSlot);
+        vm.recordLogs();
         reg.acceptMembership(ua, IUARegistry.MemberSig(iSlot, _leaves(di, bytes32(uint256(1))), "")); // a no-op: nothing is read or written
-        assertEq(reg.membershipSigOf(ua, iSlot), before, "write-once");
+        assertEq(vm.getRecordedLogs().length, 0, "no second event");
+        assertEq(reg.memberSigHashOf(ua, iSlot), before, "write-once");
 
         UARegistry g2 = _deploy(address(0x5cc5), chainUidA, address(reg), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
-        assertEq(g2.membershipSigOf(ua, iSlot), before, "gen 2 forwards a gen-1 record");
-        assertEq(g2.membershipSigOf(ua, 99), "");
+        assertEq(g2.memberSigHashOf(ua, iSlot), before, "gen 2 forwards a gen-1 record");
+        assertEq(g2.memberSigHashOf(ua, 99), bytes32(0));
     }
 
-    /// The price of keeping the signature: rows `GAS|acceptMembership …|regular|state|stored bytes`, a 65 B `sig` and a two-leaf list.
+    /// A registration: an `msig` stores no `pop` bytes; `popOf` and `registrationOf` give `keccak256(pop)` as 32 bytes; each slot of the `pop`
+    /// has its hash at its own index and its bytes in a `PURPOSE_POP_V2` `UAMemberSig`, emitted in index order; a slot outside the `pop` has
+    /// none; a valid acceptance of a `pop` slot later is a no-op and keeps the `pop`'s hash. A single key keeps its `pop` bytes.
+    function test_popMemberSigHashes() public {
+        vm.recordLogs();
+        Pq memory p = _pqOuter();
+        p.r.acceptMembership(p.iu, _acceptEoaSig(p.di, PK_A));
+        bytes32 mdi = _pqMdi(p, UAKinds.PURPOSE_POP_V2, p.rd);
+        IUARegistry.MemberSig[] memory s =
+            _pqSigs(p, UAKinds.PURPOSE_POP_V2, p.rd, _mixedLeaves(p.di, p.id, p.k, mdi, _ecdsa(PK_A, p.rd)));
+        UACall.register(p.r, UAKinds.MSIG, p.du, _none(), abi.encode(s), "");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        _popSlots(logs, p.r, p.ua, p.du, abi.encode(s));
+        _popSlots(logs, p.r, p.iu, p.di, _popFromLogs(logs, p.r, p.iu));
+        // a valid acceptance of a slot of the inner's pop: no write, no event
+        IUARegistry.MemberSig memory acc = _acceptKeySig(p.di, ML65, p.k[0]);
+        bytes32 h = p.r.memberSigHashOf(p.iu, acc.index);
+        assertTrue(h != 0 && h != keccak256(acc.sig));
+        vm.recordLogs();
+        p.r.acceptMembership(p.iu, acc);
+        assertEq(vm.getRecordedLogs().length, 0, "a pop slot: no-op");
+        assertEq(p.r.memberSigHashOf(p.iu, acc.index), h, "write-once");
+        assertEq(p.r.popOf(p.id[0]), _pop(p.r, ML65, p.k[0]), "a single key keeps its pop bytes");
+    }
+
+    /// The `msig` `ua` registered with `pop`: `popOf` / `registrationOf` the 32-byte hash, each slot's hash at its index, the rest none.
+    function _popSlots(Vm.Log[] memory logs, UARegistry r, bytes32 ua, bytes memory d, bytes memory pop) internal view {
+        assertEq(r.popOf(ua), abi.encodePacked(keccak256(pop)), "popOf of an msig: keccak256(pop)");
+        (,,, bytes memory rp,) = r.registrationOf(ua);
+        assertEq(rp, abi.encodePacked(keccak256(pop)), "registrationOf: the same hash");
+        assertEq(_popFromLogs(logs, r, ua), pop, "rebuilt from the events");
+        IUARegistry.MemberSig[] memory m = UACall.memberSigs(pop);
+        uint256 seen;
+        for (uint256 i; i < m.length; ++i) {
+            bytes memory b = m[i].members.length == 0 ? m[i].sig : abi.encode(m[i].members);
+            assertEq(r.memberSigHashOf(ua, m[i].index), keccak256(b), "at its own index");
+            seen |= 1 << m[i].index;
+        }
+        uint256 n = UACall.structure(d).members.length;
+        for (uint256 i; i < n; ++i) {
+            if (seen >> i & 1 == 0 && !r.memberAccepted(ua, i)) assertEq(r.memberSigHashOf(ua, i), bytes32(0), "a slot outside the pop");
+        }
+    }
+
+    /// The price of keeping the hash: rows `GAS|acceptMembership …|regular|state|bytes in the event`, a 65 B `sig` and a two-leaf list.
     function test_acceptanceCostRows() public {
         (bytes memory di, bytes32 iu) = _inner(2, PK_A);
         (bytes memory du, bytes32 ua) = _outer(iu, PK_B);
         uint16 iSlot = _indexOf(du, iu);
-        reg.acceptMembership(ua, _acceptEoaSig(du, PK_B));
-        _costRow("acceptMembership native", ua, 1 - iSlot);
+        IUARegistry.MemberSig memory eoa = _acceptEoaSig(du, PK_B);
+        reg.acceptMembership(ua, eoa);
+        _costRow("acceptMembership native", eoa.sig.length);
         bytes32 typed = UAKinds.membershipDigest(ua, iu);
         IUARegistry.InnerSig[] memory l = _leaves(di, _mdInner(iu, _memberDigest(ua, UAKinds.PURPOSE_MEMBERSHIP, typed)));
         reg.acceptMembership(ua, IUARegistry.MemberSig(iSlot, l, ""));
-        _costRow("acceptMembership inner list", ua, iSlot);
+        _costRow("acceptMembership inner list", abi.encode(l).length);
     }
 
-    function _costRow(string memory name, bytes32 ua, uint256 index) internal {
+    function _costRow(string memory name, uint256 bytesInTheEvent) internal {
         Vm.Gas memory g = vm.lastCallGas();
         emit log_string(string.concat("GAS|", name, "|", vm.toString(g.gasTotalUsed), "|", vm.toString(uint256(int256(g.gasStateUsed))), "|",
-            vm.toString(reg.membershipSigOf(ua, index).length)));
-    }
-
-    /// A slot of the `pop` is accepted with none stored: the `pop` holds its signature.
-    function test_membershipSigOfNoneForAPopSlot() public {
-        Pq memory p = _pqOuter();
-        for (uint256 i; i < 3; ++i) assertEq(p.r.membershipSigOf(p.iu, i), "");
+            vm.toString(bytesInTheEvent)));
     }
 
     // ----- review M4 -----

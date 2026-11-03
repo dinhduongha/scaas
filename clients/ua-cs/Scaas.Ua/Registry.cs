@@ -130,7 +130,7 @@ public static partial class UA
             [.. Enumerable.Range(0, t).Select(j => d[(o + j * s)..(o + (j + 1) * s)])], d[(o + t * s)..(o + (t + 1) * s)], d[(o + (t + 1) * s)..(o + per)]))]);
     }
 
-    /// <summary><c>abi.encode(InnerSig[])</c>: what membershipSigOf returns for an msig slot.</summary>
+    /// <summary><c>abi.encode(InnerSig[])</c>: what UAMemberSig carries for an msig slot.</summary>
     public static byte[] EncodeInnerSigs(InnerSig[] members)
     {
         var tails = members.Select(m => (byte[])[.. Word(m.Index), .. Word(64), .. Word((ulong)m.Sig.Length), .. m.Sig, .. new byte[-m.Sig.Length & 31]]).ToArray();
@@ -139,7 +139,7 @@ public static partial class UA
         return [.. Word(32), .. Word((ulong)members.Length), .. heads.SelectMany(h => h), .. tails.SelectMany(t => t)];
     }
 
-    /// <summary>The MemberSig a copy sends to acceptMembership from membershipSigOf(ua, index) alone (CTR-UA-37): an msig slot's stored bytes are
+    /// <summary>The MemberSig a copy sends to acceptMembership from the bytes of its UAMemberSig alone, which hash to memberSigHashOf(ua, index) (CTR-UA-37): an msig slot's stored bytes are
     /// <c>abi.encode(InnerSig[])</c>, canonical, at most 16; a signing slot's its sig. UAUnauthorized otherwise.</summary>
     public static MemberSig ReplayedMemberSig(byte[] keyData, ushort index, byte[] stored)
     {

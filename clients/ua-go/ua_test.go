@@ -1127,6 +1127,21 @@ func TestNestedRegistrations(t *testing.T) {
 			if len(in.Members) > 0 && slotsLen(r["args"].(obj)["pop"])+64 != len(bs(r["pop"])) {
 				t.Fatal(name, "slot sizes")
 			}
+			// owner 2026-11-03: memberSigHashOf per slot, the hash of the bytes its UAMemberSig carries
+			hs := r["memberSigHashes"].([]any)
+			if len(hs) != len(in.Members) {
+				t.Fatal(name, "memberSigHashes")
+			}
+			for i, s := range in.Members {
+				b := []byte(s.Sig)
+				if len(s.Members) > 0 {
+					b = EncodeInnerSigs(s.Members)
+				}
+				h := Keccak256(b)
+				if e := hs[i].(obj); uint16(e["index"].(float64)) != s.Index || hx(h[:]) != e["hash"] {
+					t.Fatal(name, "memberSigHashes", i)
+				}
+			}
 		} else {
 			in.Pop = bs(r["pop"])
 		}
@@ -1224,7 +1239,7 @@ func TestNestedMemberships(t *testing.T) {
 	}
 }
 
-// CTR-UA-37: membershipSigOf's bytes give back the slot, an msig slot its list, with no new signature.
+// CTR-UA-37: the bytes of UAMemberSig give back the slot, an msig slot its list, with no new signature.
 func TestNestedReplay(t *testing.T) {
 	n := load(t, "nested.json")
 	refused := func(keyData []byte, index uint16, stored []byte) {
@@ -1236,6 +1251,9 @@ func TestNestedReplay(t *testing.T) {
 	replays := 0
 	for _, m := range rows(n, "memberships") {
 		name, index, key, stored := m["name"].(string), uint16(m["index"].(float64)), nestedKeys(n)(b32(m["ua"])), bs(m["stored"])
+		if h := Keccak256(stored); hx(h[:]) != m["storedHash"] {
+			t.Fatal(name, "storedHash")
+		}
 		slot, err := ReplayedMemberSig(key, index, stored)
 		if err != nil {
 			t.Fatal(name, err)

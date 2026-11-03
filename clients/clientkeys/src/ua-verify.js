@@ -177,9 +177,9 @@ export function encodeMemberSigs(slots) {
   return slots.length === 0 ? new Uint8Array(0) : concatBytes(word(32), list(slots.map(memberSig)));
 }
 const toBytes = (v) => (v instanceof Uint8Array ? v : fromHex(v));
-/** `abi.encode(InnerSig[])`: what `membershipSigOf` returns for an `msig` slot. */
+/** `abi.encode(InnerSig[])`: what `UAMemberSig` carries for an `msig` slot. */
 export const encodeInnerSigs = (members) => concatBytes(word(32), list(members.map(innerSig)));
-/** The `MemberSig` a copy sends to `acceptMembership` from `membershipSigOf(ua, index)` alone (CTR-UA-37, owner 2026-11-03): an `msig` slot's
+/** The `MemberSig` a copy sends to `acceptMembership` from the bytes of its `UAMemberSig` alone, which hash to `memberSigHashOf(ua, index)` (CTR-UA-37, owner 2026-11-03): an `msig` slot's
  *  stored bytes are `abi.encode(InnerSig[])`, canonical, at most 16; a signing slot's its `sig`. */
 export function replayedMemberSig(keyData, index, stored) {
   const m = ua.msigStructure(keyData).members[index] ?? refuse('UAUnauthorized', `slot ${index}`);

@@ -315,7 +315,7 @@ PqzKeyRecord pqzKeyRecordMessageWith({
   inner: inner,
 );
 
-/// The `MemberSig` a copy sends to `acceptMembership` from `membershipSigOf(ua, index)` alone (CTR-UA-37), as the slot JSON `{index,
+/// The `MemberSig` a copy sends to `acceptMembership` from the bytes of its `UAMemberSig` alone, which hash to `memberSigHashOf(ua, index)` (CTR-UA-37), as the slot JSON `{index,
 /// members: [{index, sig}], sig}` of a [`registration_args`] `pop` entry: `key_data` the `msig` `ua`'s, `stored` a signing slot's `sig` or
 /// an `msig` slot's `abi.encode(InnerSig[])`, canonical, at most 16 entries. Anything else, or an index past the members, is
 /// `UAUnauthorized`; an index outside u16 `UAArgument`.

@@ -218,17 +218,27 @@ library UARegistryLib {
         (ua, kh) = _identify(kind, d); // 1–4
         _consent(kind, d, ua, attrs, sig, members, pqzPop); // 5–7
         bytes memory pop = members.length != 0 ? abi.encode(members) : sig;
-        _record(ua, kind, d, kh, attrs, pop); // 8
+        // owner 2026-11-03: an `msig` keeps `keccak256(pop)`, not its bytes; each slot's bytes go in `UAMemberSig`, its hash in state
+        _record(ua, kind, d, kh, attrs, members.length != 0 ? abi.encodePacked(keccak256(pop)) : pop); // 8
         // CTR-UA-37: a slot that signed the `pop` agreed; an empty `pop` writes nothing
         if (members.length != 0) {
             uint256 bits;
             for (uint256 i; i < members.length; ++i) {
-                bits |= 1 << members[i].index;
+                IUARegistry.MemberSig memory m = members[i];
+                bits |= 1 << m.index;
+                _memberSig(ua, d, m.index, UAKinds.PURPOSE_POP_V2, m.members.length == 0 ? m.sig : abi.encode(m.members));
             }
             s.accepted[ua] = bits;
         }
         (uint8 q, uint8 k) = (UAStore.checked(s.pqzKey[ua].proven), UAStore.checked(s.kem[ua][0].length != 0));
         emit IUARegistry.UARegistered(ua, kind, d, attrs, keccak256(pop), pqzPop, UAKinds.CHECKED_CHAIN, q, k);
+    }
+
+    /// The signature object `b` of the `msig` `ua`'s slot `index` (owner 2026-11-03): its hash kept, written once with the slot's bit, its
+    /// bytes in `UAMemberSig`, under `purpose` (`PURPOSE_POP_V2` or `PURPOSE_MEMBERSHIP`). `d`: the `msig`'s key data.
+    function _memberSig(bytes32 ua, bytes memory d, uint16 index, bytes32 purpose, bytes memory b) private {
+        UAStore.layout().memberSigHash[ua][index] = keccak256(b);
+        emit IUARegistry.UAMemberSig(ua, bytes32(UAStore.word(d, 4 + 36 * uint256(index) + 2)), index, purpose, b);
     }
 
     /// Steps 5–7: the attributes, the PoP over the registration digest (`UAPoP`), the PQZ key (and its proof).
@@ -583,8 +593,9 @@ library UARegistryLib {
         bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBERSHIP, typed));
         if (!_memberOk(d, md, typed, memberSig, true)) revert IUARegistry.UAUnauthorized(ua);
         s.accepted[ua] = bits | 1 << index;
-        // owner 2026-11-03: kept so a copy replays it (`membershipSigOf`), written once as the bit it goes with
-        s.acceptSig[ua][index] = SSTORE2.writeChunks(memberSig.members.length == 0 ? memberSig.sig : abi.encode(memberSig.members));
+        // owner 2026-11-03: the hash kept, written once as the bit it goes with, the bytes in `UAMemberSig`: a copy checks them against
+        // `memberSigHashOf` and replays them
+        _memberSig(ua, d, index, UAKinds.PURPOSE_MEMBERSHIP, memberSig.members.length == 0 ? memberSig.sig : abi.encode(memberSig.members));
         emit IUARegistry.UAMembershipAccepted(ua, index, member);
     }
 

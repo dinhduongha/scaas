@@ -139,9 +139,14 @@ interface IUARegistry is IERC5267 {
     event UAKemKeySet(bytes32 indexed ua, uint64 indexed version, bytes32 keyHash, KemKey kem, bytes sig);
     /// One part of an ML-DSA id's expanded key stored (P6c), at `ptr` (SSTORE2).
     event UAKeyCached(bytes32 indexed ua, uint16 indexed kind, uint256 part, address ptr);
-    /// Slot `index` of the `msig` `ua`, member `member`, accepted by `acceptMembership` (CTR-UA-37). Slots that signed the
-    /// `pop` are accepted at registration, without this event: `UARegistered` and `popOf` carry them.
+    /// Slot `index` of the `msig` `ua`, member `member`, accepted by `acceptMembership` (CTR-UA-37), its signature in the `UAMemberSig`
+    /// before it. Slots that signed the `pop` are accepted at registration, without this event: their `UAMemberSig` carry them.
     event UAMembershipAccepted(bytes32 indexed ua, uint16 index, bytes32 indexed member);
+    /// One member signature of the `msig` `ua` (CTR-UA-33, CTR-UA-37, owner 2026-11-03): slot `index`, member `member`. `purpose`:
+    /// `PURPOSE_POP_V2`, a slot of the registration's `pop` (one event per slot, in the `pop`'s order, before `UARegistered`), or
+    /// `PURPOSE_MEMBERSHIP`, an acceptance. `sig`: the exact bytes whose `keccak256` `memberSigHashOf(ua, index)` returns, the slot's `sig`
+    /// or an `msig` member's `abi.encode(InnerSig[])`. State keeps the hashes only: a copy rebuilds the `pop` from these events.
+    event UAMemberSig(bytes32 indexed ua, bytes32 indexed member, uint16 index, bytes32 purpose, bytes sig);
 
     error UAKindDisabled(uint16 kind); // not enabled in this generation (incl. kinds a predecessor offers)
     error UAKeyData(uint16 kind); // non-canonical, curve, subgroup, identity, ordering, threshold, cap bound
@@ -228,8 +233,9 @@ interface IUARegistry is IERC5267 {
     /// id and every digest are the packed form's (from `structure`). `pop`: empty unless the structure is PQ-eligible, then m-of-n member
     /// signatures over the registration (derived members sign `memberDigest` under `member`; a native member signs the
     /// typed `registrationDigest` itself (TS-D4, `eth_signTypedData_v4`): an EOA — code-less or an EIP-7702 designator —
-    /// by ECDSA with its own key only, never ERC-1271 through the delegate; a contract by ERC-1271 over it). Stored as
-    /// `abi.encode(pop)` (`popOf`, `registrationOf`; "" for none).
+    /// by ECDSA with its own key only, never ERC-1271 through the delegate; a contract by ERC-1271 over it). Owner 2026-11-03:
+    /// stored as `keccak256(abi.encode(pop))` (`popOf`, `registrationOf`; "" for none) and each slot's hash (`memberSigHashOf`), each
+    /// slot's bytes in its `UAMemberSig`.
     function registerMsig(MsigStructure calldata structure, UAAttrs calldata attrs, MemberSig[] calldata pop,
         bytes calldata pqzPop) external returns (bytes32 ua);
     /// `register` for `webauthn-p256` from its typed key (typed-signing TS-D13; `register(0x0100, …)` takes the packed
@@ -292,8 +298,8 @@ interface IUARegistry is IERC5267 {
     /// signs the typed `UAMembership{ua, member}` itself (`eth_signTypedData_v4`) or answers ERC-1271 over it; a derived member signs
     /// `memberDigest(ua, uaMessage(MSIG, PURPOSE_MEMBERSHIP, typed))` under `member`; an `msig` member by a threshold of its own
     /// accepted slots, `memberSig.members`, each one level down, `sig` empty. Portable: no chain, no registry, so the same signature
-    /// accepts on every registry (no nonce needed), and it is kept (`membershipSigOf`), so a copy replays it with no new signature
-    /// (owner 2026-11-03). A slot already accepted is a no-op, no second event. `UAUnauthorized` for an id that is no `msig` on this
+    /// accepts on every registry (no nonce needed): its bytes are in `UAMemberSig` and its hash is kept (`memberSigHashOf`), so a copy
+    /// replays it with no new signature (owner 2026-11-03). A slot already accepted is a no-op, no second event. `UAUnauthorized` for an id that is no `msig` on this
     /// registry (gen 2: a gen-1 record goes to gen 1, UA8-D11, as `setKemKey`), an index past the members or a bad signature. No
     /// revoke: an acceptance cannot be withdrawn.
     function acceptMembership(bytes32 ua, MemberSig calldata memberSig) external;
@@ -305,8 +311,8 @@ interface IUARegistry is IERC5267 {
     /// its signature with `pqzKeyOf`, `pqzPopOf`, `pqzKeySigOf`; ruling A4-c3), and a `register` key it replaced (ruling
     /// R-cross-set) still is, with an empty `pqzPop` (this chain never stored its proof). For a key from `register`, `pqzPop` is the
     /// stored proof (given in `register` or by `storePqzPop`; it hashes to `attrs.pqzPopHash`; ruling A5-c2). An `msig`:
-    /// `keyData` the assembled CTR-UA-09 bytes, `pop` = `abi.encode(MemberSig[])` ("" for none; `msigOf` for the typed
-    /// structure). A hash-committed KEM key stays in its committed form (`kem` = scheme only, `kemPkHash`), filled or not.
+    /// `keyData` the assembled CTR-UA-09 bytes, `pop` = the 32 bytes of `keccak256(abi.encode(MemberSig[]))` ("" for none; owner
+    /// 2026-11-03: the slots are in `UAMemberSig`; `msigOf` for the typed structure). A hash-committed KEM key stays in its committed form (`kem` = scheme only, `kemPkHash`), filled or not.
     function registrationOf(bytes32 ua) external view returns (uint16 kind, bytes memory keyData, UAAttrs memory attrs,
         bytes memory pop, bytes memory pqzPop);
     /// The typed structure of an `msig` (TS-D10); empty (threshold 0, no members) for any other id.
@@ -315,10 +321,11 @@ interface IUARegistry is IERC5267 {
     /// that is only listed in `msigOf`, for any other id and past the members. Only accepted slots count at verify. Gen 2
     /// forwards gen-1 records.
     function memberAccepted(bytes32 ua, uint256 index) external view returns (bool);
-    /// The signature that accepted slot `index` (CTR-UA-37, as Soroban's `membership_sig_of`), to replay on another registry: `sig`, or an
-    /// `msig` member's `abi.encode(InnerSig[])`, the slot's kind says which (`msigOf`). Empty for a slot of the `pop` (its signature is in the
-    /// `pop`), one not accepted, any other id. Gen 2 forwards gen-1 records.
-    function membershipSigOf(bytes32 ua, uint256 index) external view returns (bytes memory);
+    /// `keccak256` of the signature object of the `msig` `ua`'s slot `index` (CTR-UA-33, CTR-UA-37, owner 2026-11-03): of `sig`, or of an
+    /// `msig` member's `abi.encode(InnerSig[])`, the slot's kind says which (`msigOf`): a slot of the `pop` from registration, a slot that
+    /// accepted later from `acceptMembership`. The bytes are in that slot's `UAMemberSig`; a copy checks them against this hash. Zero for a slot
+    /// not accepted and any other id. Gen 2 forwards gen-1 records.
+    function memberSigHashOf(bytes32 ua, uint256 index) external view returns (bytes32);
     /// The EIP-1167 codehash of this registry's `SmartKeyAccount` clones, 0 for none: gen 2 gives a clone the 400 k cap in a gen-1 structure by it.
     function smartKeyCloneHash() external view returns (bytes32);
     /// The typed key of a `webauthn-p256` / MuSig2 / FROST UA (TS-D13); empty for any other id (gen 2 forwards gen-1
@@ -326,6 +333,9 @@ interface IUARegistry is IERC5267 {
     function webAuthnKeyOf(bytes32 ua) external view returns (WebAuthnKey memory);
     function muSig2KeyOf(bytes32 ua) external view returns (MuSig2Key memory);
     function frostKeyOf(bytes32 ua) external view returns (FrostKey memory);
+    /// The stored `pop` (CTR-UA-33): the `pop` bytes of a single key; of an `msig`, the 32 bytes of `keccak256(abi.encode(MemberSig[]))`
+    /// (owner 2026-11-03; its slots are in `UAMemberSig`), "" for an empty `pop`. A reader tells which by the record's kind. "" for an id not
+    /// registered (gen 2 forwards gen-1 records).
     function popOf(bytes32 ua) external view returns (bytes memory);
     function pqzPopOf(bytes32 ua) external view returns (bytes memory);
     /// `setPqzKey`'s signature; empty when the key came with `register` (its consent is the `pop`) or there is none.

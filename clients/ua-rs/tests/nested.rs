@@ -56,6 +56,12 @@ fn nested_rows_encode_and_digests() {
         if !bytes(&r["pop"]).is_empty() {
             assert_eq!(decode_member_sigs(&bytes(&r["pop"])).unwrap(), typed(&r["args"]["pop"]), "{}", r["name"]);
         }
+        // owner 2026-11-03: `memberSigHashOf` per slot, the hash of the bytes its `UAMemberSig` carries
+        let hashes: Vec<Value> = typed(&r["args"]["pop"]).iter().map(|s| {
+            let b = if s.members.is_empty() { s.sig.clone() } else { encode_inner_sigs(&s.members) };
+            serde_json::json!({ "index": s.index, "hash": format!("0x{}", hex::encode(keccak256(&b))) })
+        }).collect();
+        assert_eq!(Value::Array(hashes), r["memberSigHashes"], "{}", r["name"]);
         for d in r["innerDigests"].as_array().into_iter().flatten() {
             assert_eq!(inner_digest(&b32(&d["inner"]), &b32(&r["memberDigest"])), Ok(b32(&d["memberDigest"])), "{}", r["name"]);
             lists += 1;
@@ -106,7 +112,8 @@ fn nested_minimal_at_both_levels() {
     assert_eq!(registration_args(&input).unwrap_err(), UAError::Pop);
 }
 
-/// CTR-UA-37: `membershipSigOf`'s bytes give back the slot, an `msig` slot its list, with no new signature.
+/// CTR-UA-37: the bytes of `UAMemberSig`, which hash to `memberSigHashOf` (`storedHash`), give back the slot, an `msig` slot its
+/// list, with no new signature.
 #[test]
 fn nested_replay_rows() {
     let n = nested();
@@ -114,6 +121,7 @@ fn nested_replay_rows() {
     for m in rows(&n, "memberships") {
         let index = m["index"].as_u64().unwrap() as u16;
         let d = bytes(&rows(&n, "registrations").iter().find(|r| r["ua"] == m["ua"]).unwrap()["keyData"]);
+        assert_eq!(keccak256(&bytes(&m["stored"])).to_vec(), bytes(&m["storedHash"]), "{}: storedHash", m["name"]);
         let want = typed(&serde_json::json!([{ "index": index, "members": m["members"], "sig": m["sig"] }])).remove(0);
         assert_eq!(replayed_member_sig(&d, index, &bytes(&m["stored"])), Ok(want.clone()), "{}", m["name"]);
         if !want.members.is_empty() {

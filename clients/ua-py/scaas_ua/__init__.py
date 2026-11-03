@@ -757,7 +757,7 @@ def ua_sig(key_data=b'', signature=b'', members=()):
 
 
 def encode_inner_sigs(members):
-    """``abi.encode(InnerSig[])`` of (index, sig) tuples: what ``membershipSigOf`` returns for an msig slot."""
+    """``abi.encode(InnerSig[])`` of (index, sig) tuples: what ``UAMemberSig`` carries for an msig slot."""
     tails = [_word(int(i)) + _word(64) + _word(len(s)) + bytes(s) + bytes(-len(s) % 32) for i, s in members]
     heads, at = [], 32 * len(tails)
     for t in tails:
@@ -767,7 +767,7 @@ def encode_inner_sigs(members):
 
 
 def replayed_member_sig(key_data, index, stored):
-    """The (index, inner, sig) slot a copy sends to ``acceptMembership`` from ``membershipSigOf(ua, index)`` alone (CTR-UA-37): an msig slot's
+    """The (index, inner, sig) slot a copy sends to ``acceptMembership`` from the bytes of its ``UAMemberSig`` alone, which hash to ``memberSigHashOf(ua, index)`` (CTR-UA-37): an msig slot's
     stored bytes are ``abi.encode(InnerSig[])``, canonical, at most 16; a signing slot's its sig. UAUnauthorized otherwise."""
     members, b = msig_structure(key_data)['members'], bytes(stored)
     refused = UAError('UAUnauthorized', f'slot {index}')

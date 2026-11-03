@@ -789,9 +789,9 @@ pub extern "C" fn scaas_ua_pqz_key_record_message_with(
     })
 }
 
-/// The `MemberSig` a copy sends to `acceptMembership` from `membershipSigOf(ua, index)` alone (CTR-UA-37), as one slot JSON
+/// The `MemberSig` a copy sends to `acceptMembership` from the bytes of its `UAMemberSig` alone, which hash to `memberSigHashOf(ua, index)` (CTR-UA-37), as one slot JSON
 /// `{index, members: [{index, sig}], sig}` (the shape of a `pop` entry of `scaas_ua_registration_args`; NUL-terminated, `*out_len` counts
-/// the NUL). `key_data` is the `msig` `ua`'s; `stored` the bytes `membershipSigOf` returned: a signing slot's `sig`, an `msig` slot's
+/// the NUL). `key_data` is the `msig` `ua`'s; `stored` the bytes `UAMemberSig` carried: a signing slot's `sig`, an `msig` slot's
 /// `abi.encode(InnerSig[])`, canonical, at most 16 entries. Anything else, or an index past the members, is `SCAAS_UA_ERR_UNAUTHORIZED`;
 /// malformed key data `SCAAS_UA_ERR_KEY_DATA`.
 #[no_mangle]

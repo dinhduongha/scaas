@@ -682,6 +682,14 @@ public class VectorTests
             if (!msig) continue;
             Assert.Equal(r.GetProperty("memberDigest").GetString(), Hx(g.MemberDigest!));
             if (slots!.Length > 0) Assert.Equal(B(r.GetProperty("pop")).Length, SlotsLen(r.GetProperty("args").GetProperty("pop")) + 64);
+            // owner 2026-11-03: memberSigHashOf per slot, the hash of the bytes its UAMemberSig carries
+            var hs = r.GetProperty("memberSigHashes").EnumerateArray().ToArray();
+            Assert.Equal(slots.Length, hs.Length);
+            for (var i = 0; i < slots.Length; i++)
+            {
+                Assert.Equal(slots[i].Index, hs[i].GetProperty("index").GetUInt16());
+                Assert.Equal(hs[i].GetProperty("hash").GetString(), Hx(UA.Keccak256(slots[i].Members.Length > 0 ? UA.EncodeInnerSigs(slots[i].Members) : slots[i].Sig)));
+            }
             if (!r.TryGetProperty("innerDigests", out var ds)) continue;
             foreach (var x in ds.EnumerateArray())
                 Assert.Equal(x.GetProperty("memberDigest").GetString(), Hx(UA.InnerDigest(B(x.GetProperty("inner")), B(r.GetProperty("memberDigest")))));
@@ -735,7 +743,7 @@ public class VectorTests
         }
     }
 
-    /// <summary>CTR-UA-37: membershipSigOf's bytes give back the slot, an msig slot its list, with no new signature.</summary>
+    /// <summary>CTR-UA-37: the bytes of UAMemberSig give back the slot, an msig slot its list, with no new signature.</summary>
     [Fact]
     public void NestedReplay()
     {
@@ -743,6 +751,7 @@ public class VectorTests
         foreach (var m in N.GetProperty("memberships").EnumerateArray())
         {
             var (key, index, stored) = (NestedKey(B(m.GetProperty("ua")))!, m.GetProperty("index").GetUInt16(), B(m.GetProperty("stored")));
+            Assert.Equal(m.GetProperty("storedHash").GetString(), Hx(UA.Keccak256(stored)));
             var slot = UA.ReplayedMemberSig(key, index, stored);
             Assert.Equal(index, slot.Index);
             Assert.Equal(m.GetProperty("sig").GetString(), Hx(slot.Sig));

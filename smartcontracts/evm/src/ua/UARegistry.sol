@@ -60,7 +60,8 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///
 ///         UA-8 (portable registrations, spec 2026-10-25-ua8-portable-registrations): the PoP has no chain context, so
 ///         anyone may copy a registration to any registry; every `register` field is stored (UA8-D7): `keyData` once
-///         (the stored kinds' `keyPtr` prefix, the rest in the registration blob), `pop` in the blob, `pqzPop` and each KEM
+///         (the stored kinds' `keyPtr` prefix, the rest in the registration blob), `pop` in the blob (an `msig`'s: its
+///         32-byte `keccak256`, a hash per slot in `memberSigHash`, the bytes in `UAMemberSig`; owner 2026-11-03), `pqzPop` and each KEM
 ///         record (`pk ‖ sig`) as their own blobs, each in `SSTORE2.writeChunks` pieces. Later KEM records come by the UA's
 ///         signed portable record (`setKemKey`: once per version, any order, never overwritten).
 ///
@@ -168,7 +169,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             // review n3: gen 1 speaks the UA-8 views gen 2 forwards to (`pqzKeyOf`, `registrationOf`, `checkedOf`)
             try p.checkedOf(0) {} catch { revert UAConfig(0); }
             // and the `InnerSig` ABI of its hand-offs: on an older gen 1 every one would read as a refused signature
-            try p.membershipSigOf(0, 0) {} catch { revert UAConfig(0); }
+            try p.memberSigHashOf(0, 0) {} catch { revert UAConfig(0); }
         }
         uint256[20] memory k;
         for (uint256 i; i < kinds_.length; ++i) {
@@ -353,9 +354,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return _s.accepted[ua] >> index & 1 != 0;
     }
 
-    function membershipSigOf(bytes32 ua, uint256 index) external view returns (bytes memory) {
-        if (_elsewhere(ua)) return IUARegistry(predecessor).membershipSigOf(ua, index);
-        return SSTORE2.readChunks(_s.acceptSig[ua][index]);
+    function memberSigHashOf(bytes32 ua, uint256 index) external view returns (bytes32) {
+        if (_elsewhere(ua)) return IUARegistry(predecessor).memberSigHashOf(ua, index);
+        return _s.memberSigHash[ua][index];
     }
 
     function smartKeyCloneHash() external view returns (bytes32) {
