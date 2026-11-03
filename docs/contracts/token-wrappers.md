@@ -742,14 +742,14 @@ function createDex(uint64 version, bytes calldata initArgs, bytes32 salt) extern
 struct TokenConfig {
     string name; string symbol; uint8 decimals;
     uint256 features; uint256 lockedFeatures;
-    address owner;                             // 0 = no administration ever
-    Roles roles;                               // initial holders (optional, each only for a set flag): minter, rateAdmin, guardian, issuer, compliance
+    bytes32 owner;                             // a UA id (a native account: its address padded to 32 bytes; CTR-GOV-01 Change, owner 2026-11-04); 0 = no administration ever
+    Roles roles;                               // initial holders, UA ids (optional, each only for a set flag): minter, rateAdmin (a native id with code), guardian, issuer, compliance
     uint256 initialSupply; address initialHolder;   // NORMAL* only; initialHolder is ignored when initialSupply == 0
     Leg[] legs;                                // underlying (address(0) = native coin, CTR-TOK-26), num, den — WRAPPED* only, 1..8
     RateConfig rate;                           // with RATE_ADJUSTABLE
     ConfidentialConfig conf;                   // auditorKey (empty = none), shieldScale, maxShielded, confidentialFee, disclosureMode {BUNDLE, COMPACT}, auditorMode {NONE, FULL, OPTIONAL}, minDecoyFee (both confidential layers; the least per-leg `decoyFee`, renamed from `multiLegFee`, owner 2026-10-20) — confidential kinds only (modes: CTR-ZTH-48/49, built in P3b; the token refuses a key that does not match auditorMode); no verifier field since plan 5g-Z2: the verifiers are the release's env deps, CTR-ZTH-20
 }
-struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool listedOnly; }
+struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo; } // owner a UA id
 ```
 
 - **Creation (unchanged pattern).** `CREATE2` of an EIP-1167 clone, then `initialize(creator, version, initArgs)` **in the same call** (no
@@ -760,7 +760,7 @@ struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool
   (deploy, deprecate; [CTR-TOK-03](#CTR-TOK-03)); it is append-only.
 - **One event per creation:** `TokenCreated(token, creator, kind, version, implementation, features, lockedFeatures,
   owner, underlyings)`, where `lockedFeatures` is the value the token stored (`locked | (features & ALWAYS_LOCKED)`, read
-  back from `lockedFeatures()` after `initialize`), not the requested one; `DexCreated(dex, creator, version, implementation, admin)` for a DEX clone
+  back from `lockedFeatures()` after `initialize`), not the requested one; `DexCreated(dex, creator, version, implementation, owner)` for a DEX clone; `owner` is a `bytes32` UA id in both events
   ([CTR-DEX-24](dex.md#CTR-DEX-24)).
 - **Registry views:** `isToken`, `versionOf`; for a DEX `isDex`, `dexVersionOf` (advisory, tokens never consult them,
   [CTR-DEX-24](dex.md#CTR-DEX-24)); catalogue `deployDexImplementation`, `dexReleaseOf`, `dexImplementationOf`,
@@ -847,7 +847,7 @@ The block is the **built** function set, grouped by the built contracts; the rol
 //   mtxExecute, the named functions and the trade entry points — metatx.md#interfaces, dex.md#CTR-DEX-15
 function mtxSelectors() external view returns (bytes4[] memory, uint8[] memory, uint8[] memory);   // per kind, CTR-MTX-19
 // MetaTokenBase: kind(), creator(), version(), supportsInterface(bytes4), IS_HEDERA; ITokenAdmin: features(), lockedFeatures(), owner(),
-//   pendingOwner(), hasRole(uint8,address), grantRole, revokeRole, renounceRole, disableFeature, transferOwnership, acceptOwnership, renounceOwnership
+//   pendingOwner() (both bytes32 UA ids), hasRole(uint8,bytes32), grantRole, revokeRole, renounceRole, disableFeature, transferOwnership, acceptOwnership, renounceOwnership
 // NormalToken
 function mint(address to, uint256 amount) external;  function burn(uint256 amount) external;
 // WrappedToken (CTR-TOK-21), 1–8 legs: the single-asset ABI reverts UnderlyingRequired unless exactly one leg
@@ -875,7 +875,7 @@ function disableWrap(address underlying, bytes32 reason) external;           // 
 | `MetaTokenBase` | `PaymentSettled` | `PayToZero()`, `MtxModeShape(uint32 mode)`, `MtxBatchEmpty()`, `MtxBatchLengthMismatch()`, `NotFactory()`, `AlreadyInitialized()`, `UnderlyingCountInvalid(uint256)` |
 | `ITokenAdmin` (on `MetaTokenBase`) | `RoleGranted`, `RoleRevoked`, `FeatureDisabled`, `OwnershipTransferStarted`, `OwnershipTransferred` | `FeatureInvalidForKind`, `FeatureNotBuilt`, `LockedNotSubset`, `RoleWithoutFeature`, `RoleNotContract`, `NoSuchRole`, `FeatureLocked`, `FeatureNotSet`, `NotOwner`, `NotPendingOwner`, `MissingRole`, `RoleAccountZero(uint8)` |
 | `NormalToken` | — (no `MinterRenounced`) | — (no `NotMinter`) |
-| `WrappedToken` (events and errors declared in `IWrappedToken`) | `Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted)`, `Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned, uint256 underlyingOut)`, `ReserveAdded(address indexed from, address indexed underlying, uint256 amount)`, `RateChangeProposed(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen, uint64 eta)`, `RateChangeCancelled(address indexed underlying)`, `RateChanged(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen)`, `WrapDisabled(address indexed underlying, address indexed guardian, bytes32 reason)` | `UnderlyingInvalid(address)`, `DecimalsUnreadable(address)`, `RateInvalid(uint256,uint256)`, `RateConfigInvalid()`, `WrapTooSmall()`, `UnwrapTooSmall()`, `UnwrapBelowMin(uint256 out, uint256 minOut)`, `UnwrapRecipientInvalid(address)`, `InsufficientReserve(address,uint256,uint256)`, `ReserveShortfall(address,uint256,uint256)`, `UnderlyingTransferMismatch(address,uint256,uint256)`, `UnknownUnderlying(address)`, `RateFixed()`, `NotRateAdmin()`, `RateChangePending()`, `NoRateChangePending()`, `RateChangeNotReady(uint64)`, `RateChangeExpired(uint64)`, `RateStepTooLarge()`, `RateChangeUndercollateralized(uint256,uint256)`, `WrapPausedForRateChange(address)`, `WrapDisabledFor(address)`, `DuplicateUnderlying(address)`, `RateDecreaseWithDisabledLeg()`, `UnderlyingRequired()`, `NotGuardian()`, `NativeValueMismatch(uint256 value, uint256 expected)`, `NativeNotGasless()`, `WrapOrderInvalid(address)`, `WrapReceivedMismatch(uint256,uint256)`, `FailedCall()`, `SafeERC20FailedOperation(address)`, `InsufficientBalance(uint256,uint256)`, `HtsQueryFailed(address u, int64 responseCode)`, `AssociateFailed(int64)` |
+| `WrappedToken` (events and errors declared in `IWrappedToken`) | `Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted)`, `Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned, uint256 underlyingOut)`, `ReserveAdded(address indexed from, address indexed underlying, uint256 amount)`, `RateChangeProposed(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen, uint64 eta)`, `RateChangeCancelled(address indexed underlying)`, `RateChanged(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen)`, `WrapDisabled(address indexed underlying, bytes32 indexed guardian, bytes32 reason)` (the guardian a UA id, CTR-GOV-01 Change) | `UnderlyingInvalid(address)`, `DecimalsUnreadable(address)`, `RateInvalid(uint256,uint256)`, `RateConfigInvalid()`, `WrapTooSmall()`, `UnwrapTooSmall()`, `UnwrapBelowMin(uint256 out, uint256 minOut)`, `UnwrapRecipientInvalid(address)`, `InsufficientReserve(address,uint256,uint256)`, `ReserveShortfall(address,uint256,uint256)`, `UnderlyingTransferMismatch(address,uint256,uint256)`, `UnknownUnderlying(address)`, `RateFixed()`, `NotRateAdmin()`, `RateChangePending()`, `NoRateChangePending()`, `RateChangeNotReady(uint64)`, `RateChangeExpired(uint64)`, `RateStepTooLarge()`, `RateChangeUndercollateralized(uint256,uint256)`, `WrapPausedForRateChange(address)`, `WrapDisabledFor(address)`, `DuplicateUnderlying(address)`, `RateDecreaseWithDisabledLeg()`, `UnderlyingRequired()`, `NotGuardian()`, `NativeValueMismatch(uint256 value, uint256 expected)`, `NativeNotGasless()`, `WrapOrderInvalid(address)`, `WrapReceivedMismatch(uint256,uint256)`, `FailedCall()`, `SafeERC20FailedOperation(address)`, `InsufficientBalance(uint256,uint256)`, `HtsQueryFailed(address u, int64 responseCode)`, `AssociateFailed(int64)` |
 | `OpenFactory` | `TokenCreated(…)` ([CTR-TOK-25](#CTR-TOK-25)); built; the v1 factory keeps `TokenDeployed(…)` (Zether) | as [above](#factory-interface) |
 
 The node's event normaliser adds `Wrapped`, `Unwrapped`, `ReserveAdded`, `RateChange*`, `WrapDisabled`,

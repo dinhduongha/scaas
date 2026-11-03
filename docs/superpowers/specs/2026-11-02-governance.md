@@ -12,7 +12,7 @@ handled them); [prototype/RESULTS.md](../../research/governance/prototype/RESULT
 (`WrappedLib`, `MetaTokenBase`, `NormalToken`, `WrappedToken`, `MetaTxBase`, `UAMetaTxBase`, `ERC20MetaTx`), `src/factory/`, `src/dex/`, `src/zether/ZetherLayer.sol`, `ZetherLib.sol`, `src/pqz/PqzLayer.sol`, `test/governance/`, and the admin surface of each non-EVM
 family. Form: the DEX round spec and the `typed-signing` plan.
 
-**Words.** *Holder*: an address with a non-zero `roles[bit][address]`. *Root*: a holder with no grantor. *Leaf*: a holder set by a delegable root. *Whole shape*: a holder with no `Grant`. *Limited*: a holder bound by a `Grant`. *Live pending*: §1.6. *Live root*, *expired root*: §1.7.
+**Words.** *Holder*: a UA id with a non-zero `roles[bit][id]` (an address before the CTR-GOV-01 Change of 2026-11-04, §1.4). *Root*: a holder with no grantor. *Leaf*: a holder set by a delegable root. *Whole shape*: a holder with no `Grant`. *Limited*: a holder bound by a `Grant`. *Live pending*: §1.6. *Live root*, *expired root*: §1.7.
 *Hybrid*: a wrapped token with `maxSupply ≠ 0`, fixed at creation; `disableFeature(MINTABLE)` leaves it a hybrid (§5.2). Tags on figures: **[M]** measured in RESULTS or the attack round, **[est.]** not measured, **[I]** inferred.
 
 ## 0. Decisions — SPECIFIED
@@ -261,6 +261,7 @@ abstract contract GovernanceBase is IGovernance {
     function _guardIn() internal virtual returns (bool);
     function _guardOut(bool outer) internal virtual;
     function _caller() internal view virtual returns (address);
+    function _govSubject() internal view returns (bytes32); // CTR-GOV-01 Change: GOV_ROUTER's subject, else the native id of _caller()
     function _validBits() internal pure virtual returns (uint256);        // both bands
     function _roleBits() internal pure virtual returns (uint256);         // subset with holders
     function _contractOnlyBits() internal pure virtual returns (uint256); // subset whose holder must have code
@@ -276,25 +277,30 @@ abstract contract GovernanceBase is IGovernance {
 
 Root `0x0a3a361961b35589cdb03530b6f9e23a4db6ca9a0dad5ddf5d7761c7fabc8700`. `scaas.token` keeps `creator`, `version`, `kind`, `decimals`, `initialized`, `name`, `symbol` (`TokenStore`). `reserve` stays in `scaas.underlying`.
 
+**Every identity is a UA id, `bytes32`** (CTR-GOV-01 Change, owner 2026-11-04; [Change spec](2026-11-04-governance-ua-identity.md) §1, §4): `owner`, `pendingOwner`, every key of `roles`, `grants`, `epoch`, `pending`, `Grant.grantor`, `PendingGrant.proposer`. A native account's id is its address padded to 32 bytes (`bytes32(uint256(uint160(a)))`), a derived UA's its registered id. `rescueTo` is a payout destination and stays an `address`. All chains are test-only, so the layout was renewed, not migrated (`test/v2/layout/namespaces.json`). BUILT on branch `governance` (plan T10b).
+
 ```solidity
 struct Counts { uint128 holders; uint128 roots; }                       // one slot: `holderCount` is `holders`, the renounce rule reads `roots`
-struct PendingGrant { uint64 eta; address proposer; uint32 generation; bytes32 termsHash; } // 0 termsHash = `grantRole`
+struct PendingGrant { uint64 eta; uint32 generation; bytes32 proposer; bytes32 termsHash; } // three slots; 0 termsHash = `grantRole`
 /// @custom:storage-location erc7201:scaas.governance
 struct GovernanceStorage {
     uint256 features;                                                   // +0, written by init, cleared one-way
     uint256 lockedFeatures;                                             // +1, no writer after init
-    address owner; uint64 grantDelay; uint32 ownerGeneration;           // +2, grantDelay has no writer after init; §1.6
-    address pendingOwner; uint64 lastProposedAt;                        // +3
-    mapping(uint256 bit => mapping(address => uint8)) roles;            // +4, 0 none, 1 WHOLE, 2 LIMITED
-    mapping(uint256 bit => Counts) counts;                              // +5
-    mapping(uint256 bit => mapping(address => IGovernance.Grant)) grants; // +6
-    mapping(uint256 bit => mapping(address => uint32)) epoch;           // +7
-    mapping(uint256 bit => mapping(address => PendingGrant)) pending;   // +8
-    address rescueTo;                                                   // +9, no writer after init
+    bytes32 owner;                                                      // +2
+    bytes32 pendingOwner;                                               // +3
+    uint64 grantDelay; uint32 ownerGeneration; uint64 lastProposedAt;   // +4, grantDelay has no writer after init; §1.6
+    mapping(uint256 bit => mapping(bytes32 => uint8)) roles;            // +5, 0 none, 1 WHOLE, 2 LIMITED
+    mapping(uint256 bit => Counts) counts;                              // +6
+    mapping(uint256 bit => mapping(bytes32 => IGovernance.Grant)) grants; // +7
+    mapping(uint256 bit => mapping(bytes32 => uint32)) epoch;           // +8
+    mapping(uint256 bit => mapping(bytes32 => PendingGrant)) pending;   // +9
+    address rescueTo;                                                   // +10, no writer after init
 }
 ```
 
-`init` and `transferOwnership` refuse `UA_POOL` and `SHIELD_POOL` as owner (`OwnerAccountPool`, B-19). `grantDelay` above 30 days is refused (`GrantDelayTooLong`): `MAX_NOTICE_PERIOD`'s reason applies (B-27).
+**Who is calling.** `_govSubject()` is the subject of every governance check and of every power's own entry (`mint`, `mintToUA`, `disableWrap`, the rate entries, the DEX's setters): when `msg.sender` is the release's `GOV_ROUTER` (an immutable from `Env.govRouter`; 0 = no router on this chain), `IGovernanceRouter(GOV_ROUTER).subject()`, the UA the router authenticated for that call, 0 outside a live call, which every check refuses; from any other caller its native id. No signature is verified in the governed contract. BUILT; the router itself is SPECIFIED (plan T11).
+
+`init` and `transferOwnership` refuse `UA_POOL` and `SHIELD_POOL` as owner (`OwnerAccountPool`, B-19), as native ids; `_check` refuses them as holders (`RoleAccountPool`) and 0 (`RoleAccountZero`). A contract-only bit (`_contractOnlyBits()`, `RATE_ADJUSTABLE` on `WRAPPED*`) is held only by a native id whose address has code at the grant: a derived UA is refused `RoleNotContract`. `grantDelay` above 30 days is refused (`GrantDelayTooLong`): `MAX_NOTICE_PERIOD`'s reason applies (B-27).
 
 ### 1.5 The grant record
 
@@ -431,17 +437,17 @@ interface IGovernance {
         uint128 min; uint128 max; uint128 total; uint128 perWindow;
         uint32 window; uint64 validUntil; uint32 maxUses; bool delegable; bytes32 scope;
     }
-    struct Grant {             // six slots
+    struct Grant {             // six slots; `grantor` a UA id, 0 on a root
         uint128 min; uint128 max; uint128 total; uint128 spentTotal;
         uint128 perWindow; uint128 spentInWindow; uint32 window; uint32 windowStart;
-        uint64 validUntil; uint32 maxUses; uint32 uses;
+        uint64 validUntil; uint32 maxUses; uint32 uses; uint32 grantorEpoch; bool delegable; bool barred;
         bytes32 scope;
-        address grantor; uint32 grantorEpoch; bool delegable; bool barred;
+        bytes32 grantor;
     }
 }
 ```
 
-`GovernanceLib.Roles` is unchanged: `minter`, `rateAdmin`, `guardian`, `issuer`, `compliance`. The word `compliance` maps bit 10 `RECORD` (§1.2).
+`GovernanceLib.Roles`: `minter`, `rateAdmin`, `guardian`, `issuer`, `compliance`, each a `bytes32` UA id (CTR-GOV-01 Change). The word `compliance` maps bit 10 `RECORD` (§1.2). Every `address` of an identity in §2.2 and §2.3 below is a `bytes32` UA id since that Change: entries, views, events and errors alike; payout destinations (`rescueTo`, `treasury`) stay addresses.
 
 ### 2.2 Entries, every `GovernanceBase` contract
 
@@ -449,38 +455,38 @@ Each is one direct entry under the contract's guard. None is on `mtxSelectors()`
 
 | Entry | Caller | Effect | Events | Errors |
 |---|---|---|---|---|
-| `grantRole(uint8 bit, address account)` | owner | §1.6; `roles = WHOLE`; a `LIMITED` holder's epoch bumps | `GrantProposed`, `RoleGranted` | `NotOwner`, `FeatureReserved`, `RoleAccountZero`, `RoleAccountPool`, `NoSuchRole`, `RoleWithoutFeature`, `RoleNotContract`, `GrantNotReady`, `GrantTermsMismatch` |
-| `setGrant(uint8 bit, address holder, GrantTerms terms)` | owner, or a delegable holder of `bit` | §1.5, §1.6 | `GrantProposed`, `GrantSet`, and `RoleGranted` for a new holder (B-31) | the above, and `GrantWordRefused`, `GrantBudgetRequired`, `GrantNotNarrower`, `GrantBarred`, `GrantWindowInUse`, `GrantExpired` |
-| `cancelGrant(uint8 bit, address account)` | owner | deletes a pending, live or dead; none is a no-op | `GrantCancelled` | `NotOwner` |
-| `revokeRole(uint8 bit, address account)` | owner, or the live grantor | at once; record kept, epoch bumped; by the owner, pending deleted and `barred` set, a non-holder too | `RoleRevoked` | `NotOwner` |
+| `grantRole(uint8 bit, bytes32 account)` | owner | §1.6; `roles = WHOLE`; a `LIMITED` holder's epoch bumps | `GrantProposed`, `RoleGranted` | `NotOwner`, `FeatureReserved`, `RoleAccountZero`, `RoleAccountPool`, `NoSuchRole`, `RoleWithoutFeature`, `RoleNotContract`, `GrantNotReady`, `GrantTermsMismatch` |
+| `setGrant(uint8 bit, bytes32 holder, GrantTerms terms)` | owner, or a delegable holder of `bit` | §1.5, §1.6 | `GrantProposed`, `GrantSet`, and `RoleGranted` for a new holder (B-31) | the above, and `GrantWordRefused`, `GrantBudgetRequired`, `GrantNotNarrower`, `GrantBarred`, `GrantWindowInUse`, `GrantExpired` |
+| `cancelGrant(uint8 bit, bytes32 account)` | owner | deletes a pending, live or dead; none is a no-op | `GrantCancelled` | `NotOwner` |
+| `revokeRole(uint8 bit, bytes32 account)` | owner, or the live grantor | at once; record kept, epoch bumped; by the owner, pending deleted and `barred` set, a non-holder too | `RoleRevoked` | `NotOwner` |
 | `renounceRole(uint8 bit)` | a holder | at once; pending deleted | `RoleRevoked` | `MissingRole` |
 | `disableFeature(uint8 bit)` | owner | one-way | `FeatureDisabled` | `NotOwner`, `FeatureLocked`, `FeatureNotSet` |
-| `transferOwnership(address newOwner)` | owner | two-step, no delay; 0 cancels | `OwnershipTransferStarted` | `NotOwner`, `OwnerAccountPool` |
+| `transferOwnership(bytes32 newOwner)` | owner | two-step, no delay; 0 cancels | `OwnershipTransferStarted` | `NotOwner`, `OwnerAccountPool` |
 | `acceptOwnership()` | `pendingOwner` | at once | `OwnershipTransferred` | `NotPendingOwner` |
 | `renounceOwnership()` | owner | owner 0 for ever, `pendingOwner` cleared | `OwnershipTransferred` | `NotOwner`, `OwnerHasHolders` |
 
 | View | Returns |
 |---|---|
 | `features()`, `lockedFeatures()`, `validBits()` | `uint256` |
-| `owner()`, `pendingOwner()` | `address` |
+| `owner()`, `pendingOwner()` | `bytes32` |
 | `grantDelay()`, `lastProposedAt()` | `uint64` |
-| `hasRole(uint8 bit, address account)` | `bool`, listed |
+| `hasRole(uint8 bit, bytes32 account)` | `bool`, listed |
 | `holderCount(uint8 bit)` | `uint256`, holders, leaves included, pendings never |
-| `pendingGrant(uint8 bit, address account)` | `(uint64 eta, address proposer, bytes32 termsHash, bool live)`, dead ones too |
-| `grantOf(uint8 bit, address holder)` | `Grant` |
+| `pendingGrant(uint8 bit, bytes32 account)` | `(uint64 eta, bytes32 proposer, bytes32 termsHash, bool live)`, dead ones too |
+| `grantOf(uint8 bit, bytes32 holder)` | `Grant` |
 | `bitLabel(uint8 bit)` | `(BitType, bytes4, string)`, bits 128-255; a contract with none reverts `FeatureInvalidForKind` |
 | `supportsInterface(bytes4)` | every `GovernanceBase` contract answers `IGovernance` and `IERC165`, the DEX too (B-31); a token answers `IRescuable` while bit 17 is set |
 
-**Events, kept:** `RoleGranted(uint8 indexed bit, address indexed account, address indexed sender)`, `RoleRevoked(same)`, `FeatureDisabled(uint8 indexed bit, address indexed by)`, `OwnershipTransferStarted`, `OwnershipTransferred`.
-**New:** `GrantCancelled(uint8 indexed bit, address indexed account, address indexed by)`, `GrantSet(uint8 indexed bit, address indexed holder, address indexed grantor)`, `GrantUsed(uint8 indexed bit, address indexed holder, uint256 scalar)`, `GrantProposed(uint8 indexed bit, address indexed account, address indexed proposer, uint64 eta, bool whole, GrantTerms terms)`. A wallet compares `terms` with `termsHash`: a narrow grant shown during the delay cannot confirm as a wide one.
+**Events, kept:** `RoleGranted(uint8 indexed bit, bytes32 indexed account, bytes32 indexed sender)`, `RoleRevoked(same)`, `FeatureDisabled(uint8 indexed bit, bytes32 indexed by)`, `OwnershipTransferStarted(bytes32 indexed, bytes32 indexed)`, `OwnershipTransferred(bytes32 indexed, bytes32 indexed)`; `WrapDisabled`'s `guardian` is `bytes32 indexed` too.
+**New:** `GrantCancelled(uint8 indexed bit, bytes32 indexed account, bytes32 indexed by)`, `GrantSet(uint8 indexed bit, bytes32 indexed holder, bytes32 indexed grantor)`, `GrantUsed(uint8 indexed bit, bytes32 indexed holder, uint256 scalar)`, `GrantProposed(uint8 indexed bit, bytes32 indexed account, bytes32 indexed proposer, uint64 eta, bool whole, GrantTerms terms)`. A wallet compares `terms` with `termsHash`: a narrow grant shown during the delay cannot confirm as a wide one.
 
-**Errors, kept:** `FeatureInvalidForKind(bit)`, `FeatureNotBuilt(bit)`, `LockedNotSubset()`, `RoleWithoutFeature(bit)`, `RoleNotContract(bit, account)`, `RoleAccountZero(bit)`, `NoSuchRole(bit)`, `FeatureLocked(bit)`, `FeatureNotSet(bit)`, `NotOwner(caller)`, `NotPendingOwner(caller)`, `MissingRole(bit, account)`.
+**Errors, kept:** `FeatureInvalidForKind(bit)`, `FeatureNotBuilt(bit)`, `LockedNotSubset()`, `RoleWithoutFeature(bit)`, `RoleNotContract(bit, account)`, `RoleAccountZero(bit)`, `NoSuchRole(bit)`, `FeatureLocked(bit)`, `FeatureNotSet(bit)`, `NotOwner(caller)`, `NotPendingOwner(caller)`, `MissingRole(bit, account)`; every `account`, `caller`, `holder` in an error is a `bytes32` UA id.
 **From the prototype:** `FeatureReserved(bit)`, `RoleAccountPool(bit, account)`, `GrantNotNarrower(uint8 field)` (0 min, 1 max, 2 total, 3 perWindow, 4 validUntil, 5 maxUses, 6 delegable, 7 scope, 8 window), `GrantExhausted(uint8 field)` (0 min, 1 max, 2 total, 3 perWindow, 5 maxUses, 7 parent), `GrantExpired(bit, holder)`, `OwnerHasHolders(bit)`.
-**New:** `GrantDelayTooLong(uint64 delay)`, `GrantNotReady(uint8 bit, address account, uint64 eta)`, `GrantTermsMismatch(uint8 bit, address account)`, `GrantWordRefused(uint8 bit, uint8 field)`, `GrantBudgetRequired(uint8 bit)`, `GrantBarred(uint8 bit, address account)`, `GrantWindowInUse(uint8 bit, address holder)`, `OwnerAccountPool(address account)`.
+**New:** `GrantDelayTooLong(uint64 delay)`, `GrantNotReady(uint8 bit, bytes32 account, uint64 eta)`, `GrantTermsMismatch(uint8 bit, bytes32 account)`, `GrantWordRefused(uint8 bit, uint8 field)`, `GrantBudgetRequired(uint8 bit)`, `GrantBarred(uint8 bit, bytes32 account)`, `GrantWindowInUse(uint8 bit, bytes32 holder)`, `OwnerAccountPool(bytes32 account)`.
 
 ### 2.3 Per contract
 
-**Creation.** `TokenConfig` gains `uint64 grantDelay`, `address rescueTo`, `uint256 maxSupply` (`WRAPPED*` only, `ConfigFieldForOtherKind(5)` elsewhere). A regulated kind adds the parameters of §4.4. `DexConfig` becomes `{address owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo}`. Wizard default for `grantDelay` 2 days, dev chains 0.
+**Creation.** `TokenConfig` gains `uint64 grantDelay`, `address rescueTo`, `uint256 maxSupply` (`WRAPPED*` only, `ConfigFieldForOtherKind(5)` elsewhere). A regulated kind adds the parameters of §4.4. `TokenConfig.owner` is a `bytes32` UA id (CTR-GOV-01 Change). `DexConfig` becomes `{bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo}`. `IFactoryToken.Env` gains `address govRouter` (last field), every governed contract's `GOV_ROUTER`; `TokenCreated` and `DexCreated` carry `bytes32 owner`. Wizard default for `grantDelay` 2 days, dev chains 0.
 
 **`SCaaSDex`.** `owner()` replaces `admin()`. `setMarket`, `setExchangeTarget`, `setListedOnly` under bit 11, `setFeeSplit` under bit 12, each through `use` with scalar 0 and under the `governed` guard, so no governance entry runs inside a settlement (B-31). `initialize` calls `GovernanceLib.initHolder` for both bits when `owner ≠ 0`: `grantRole` would only propose (B-27). `initHolder` is reachable from `initialize` alone. `DexCreated`'s last field reads `owner()`.
 

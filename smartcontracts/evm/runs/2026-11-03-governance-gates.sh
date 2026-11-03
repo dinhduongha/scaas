@@ -247,6 +247,15 @@ forge|forge|test_pullerRescueCannotSpendAllowances
 forge|forge|test_interfaceIdIsOneOnDexAndToken
 forge|forge|test_rescueOnTheZetherKinds
 forge|forge|test_rescueOnThePqzKinds
+forge|forge|test_govRouterIsTheReleases
+forge|forge|test_derivedUAOwnsAndGrantsThroughTheRouter
+forge|forge|test_derivedUAMintsThroughTheRouter
+forge|forge|test_dexOwnedByADerivedUA
+forge|forge|test_nativeCallerIsItsPaddedAddress
+forge|forge|test_routerSubjectReadOnlyFromTheRouter
+forge|forge|test_routerSubjectZeroRefused
+forge|forge|test_contractOnlyBitToADerivedUARefused
+forge|forge|test_poolsAndZeroRefusedAsOwnerAndHolder
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

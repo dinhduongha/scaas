@@ -494,9 +494,10 @@ order can be charged more than it signed.
 `initialize`; the `DexPuller` is deployed by `initialize`; `isDex(addr)` is advisory: tokens never consult it** (owner).
 
 ```solidity
-struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool listedOnly; }
+struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo; }
 function createDex(uint64 version, bytes calldata initArgs, bytes32 salt) external returns (address); // initArgs = abi.encode(DexConfig)
-// event DexCreated(address dex, address creator, uint64 version, address implementation, address admin)
+// event DexCreated(address dex, address creator, uint64 version, address implementation, bytes32 owner)
+// owner: a UA id (a native account: its address padded to 32 bytes; CTR-GOV-01 Change, owner 2026-11-04)
 ```
 
 - **Clone.** `CREATE2` of an EIP-1167 clone and `initialize(creator, version, initArgs)` in the same call, as for tokens
