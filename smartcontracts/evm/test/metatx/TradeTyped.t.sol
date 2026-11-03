@@ -377,6 +377,7 @@ contract OrderRowsPqzTest is OrderRows, PqzFixture {
     function _wrappedKind(address leg) internal override returns (WrappedToken) {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = 1 << GovernanceBits.PAYABLE;
+        c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
@@ -403,6 +404,7 @@ contract OrderRowsZetherTest is OrderRows, ZetherFixture {
     function _wrappedKind(address leg) internal override returns (WrappedToken) {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         c.features = 1 << GovernanceBits.PAYABLE;
+        c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(leg, 1, 1);

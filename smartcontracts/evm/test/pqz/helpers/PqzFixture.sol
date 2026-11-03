@@ -82,6 +82,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         c.decimals = 6;
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE) | (1 << GovernanceBits.BURNABLE);
         c.roles.minter = address(this);
+        c.lockedFeatures = 1 << GovernanceBits.MINTABLE; // no owner: the minter survives creation on a locked bit (B-06, GD-14)
         bool withAud = aMode != uint8(ZetherTypes.AuditorMode.NONE);
         c.conf = IFactoryToken.ConfidentialConfig(
             withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, minDecoy
@@ -101,6 +102,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     function _newWrapped(bytes32 s) internal returns (WrappedPqzToken) {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = (1 << GovernanceBits.PAYABLE);
+        c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);

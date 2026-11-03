@@ -99,8 +99,11 @@ library GovernanceLib {
             _grant(s, GovernanceBits.WRAP_DISABLEABLE, roles.guardian, address(0), roleBits, contractOnly);
         }
         if (owner != address(0)) {
+            _notPool(owner);
             s.owner = owner;
             emit IGovernance.OwnershipTransferred(address(0), owner);
+        } else {
+            _noLiveHolder(s, roleBits); // B-06: no token is born in the state a renounce refuses (spec §1.7)
         }
     }
 
@@ -136,26 +139,45 @@ library GovernanceLib {
     /// @notice CTR-GOV-02: the owner replaces any grant; a holder with a `delegable` grant sets a leaf that narrows its own,
     ///         on an account that holds nothing or is its own leaf. Spent, uses and the window carry over: an edit never
     ///         refreshes a budget. Returns whether this is a leaf and its parent's scope: the order on scopes is the contract's.
+    ///         Every caller: a word the contract does not bind is refused (`scalarBits`, `scopeBits`, B-09, B-10), and a
+    ///         `delegable` grant needs a finite budget (B-02), which bounds what is spent, not the number of leaves: a leaf
+    ///         spends nothing until it acts, so a wallet prints "can add unlimited leaves at once, sharing a remaining budget".
     function setGrant(uint8 bit, address holder, IGovernance.GrantTerms calldata t, address caller, uint256 roleBits,
-        uint256 contractOnly) public returns (bool leaf, bytes32 parentScope)
+        uint256 contractOnly, uint256 scalarBits, uint256 scopeBits) public returns (bool leaf, bytes32 parentScope)
+    {
+        (leaf, parentScope) = _leafPath(bit, holder, t, caller);
+        _check($(), bit, holder, roleBits, contractOnly);
+        _words(bit, t, scalarBits, scopeBits);
+        _write(bit, holder, t, caller, leaf);
+    }
+
+    /// @dev A caller that is not the owner sets a leaf: it holds a `delegable` `LIMITED` grant, the target holds nothing or
+    ///      is its own leaf, and the terms narrow its own. Returns the parent's scope, which the contract's order checks.
+    function _leafPath(uint8 bit, address holder, IGovernance.GrantTerms calldata t, address caller)
+        private view returns (bool leaf, bytes32 parentScope)
     {
         GovernanceStorage storage s = $();
-        IGovernance.Grant storage g = s.grants[bit][holder];
-        uint8 r = s.roles[bit][holder];
         leaf = caller != s.owner || caller == address(0);
         if (leaf) {
             IGovernance.Grant storage p = s.grants[bit][caller];
             if (s.roles[bit][caller] != LIMITED || !p.delegable) revert IGovernance.NotOwner(caller);
-            if (r != 0 && g.grantor != caller) revert IGovernance.NotOwner(caller);
+            if (s.roles[bit][holder] != 0 && s.grants[bit][holder].grantor != caller) revert IGovernance.NotOwner(caller);
             _narrows(t, p);
             parentScope = p.scope;
         }
-        _check(s, bit, holder, roleBits, contractOnly);
-        if (t.perWindow != 0 && t.window == 0) revert IGovernance.GrantNotNarrower(3);
+    }
+
+    /// @dev Writes the terms; spent, uses and the window's start carry (an edit never refreshes a budget).
+    function _write(uint8 bit, address holder, IGovernance.GrantTerms calldata t, address caller, bool leaf) private {
+        GovernanceStorage storage s = $();
+        IGovernance.Grant storage g = s.grants[bit][holder];
         (g.min, g.max, g.total, g.perWindow) = (t.min, t.max, t.total, t.perWindow);
         (g.window, g.validUntil, g.maxUses, g.scope, g.delegable) = (t.window, t.validUntil, t.maxUses, t.scope, t.delegable);
         (g.grantor, g.grantorEpoch) = leaf ? (caller, s.epoch[bit][caller]) : (address(0), uint32(0));
-        if (r == 0) ++s.counts[bit].holders;
+        if (s.roles[bit][holder] == 0) {
+            ++s.counts[bit].holders;
+            emit IGovernance.RoleGranted(bit, holder, caller); // B-31: the indexed holder list is whole
+        }
         s.roles[bit][holder] = LIMITED;
         emit IGovernance.GrantSet(bit, holder, leaf ? caller : address(0));
     }
@@ -172,6 +194,7 @@ library GovernanceLib {
 
     function transferOwnership(address newOwner, address caller) public {
         GovernanceStorage storage s = _onlyOwner(caller);
+        _notPool(newOwner);
         s.pendingOwner = newOwner;
         emit IGovernance.OwnershipTransferStarted(caller, newOwner);
     }
@@ -189,10 +212,7 @@ library GovernanceLib {
     ///         first. A locked bit's holders survive: a lock promises the power is permanent.
     function renounceOwnership(address caller, uint256 roleBits) public {
         GovernanceStorage storage s = _onlyOwner(caller);
-        for (uint256 live = s.features & ~s.lockedFeatures & roleBits; live != 0; live &= live - 1) {
-            uint8 bit = _lowest(live);
-            if (s.counts[bit].holders != 0) revert IGovernance.OwnerHasHolders(bit);
-        }
+        _noLiveHolder(s, roleBits);
         s.owner = address(0);
         s.pendingOwner = address(0);
         emit IGovernance.OwnershipTransferred(caller, address(0));
@@ -248,6 +268,35 @@ library GovernanceLib {
         if (roleBits & _bit(bit) == 0) revert IGovernance.NoSuchRole(bit);
         if (s.features & _bit(bit) == 0) revert IGovernance.RoleWithoutFeature(bit);
         if (contractOnly & _bit(bit) != 0 && !SigCheck.isContract(account)) revert IGovernance.RoleNotContract(bit, account);
+    }
+
+    /// @dev The renounce rule (CTR-GOV-02): no set, unlocked power bit has a holder. `renounceOwnership`, and `init` with no owner.
+    function _noLiveHolder(GovernanceStorage storage s, uint256 roleBits) private view {
+        for (uint256 live = s.features & ~s.lockedFeatures & roleBits; live != 0; live &= live - 1) {
+            uint8 bit = _lowest(live);
+            if (s.counts[bit].holders != 0) revert IGovernance.OwnerHasHolders(bit);
+        }
+    }
+
+    function _notPool(address account) private pure {
+        if (account == MetaTxLib.UA_POOL || account == MetaTxLib.SHIELD_POOL) revert IGovernance.OwnerAccountPool(account);
+    }
+
+    /// @dev The words `bit` binds on this contract (spec §1.5): a scalarless bit takes only `validUntil`, `maxUses` and
+    ///      `delegable`; `scope` is non-zero exactly on a scoped bit; `perWindow` and `window` come together; a delegable grant
+    ///      has a finite budget.
+    function _words(uint8 bit, IGovernance.GrantTerms calldata t, uint256 scalarBits, uint256 scopeBits) private pure {
+        bool scalar = scalarBits & _bit(bit) != 0;
+        if (!scalar) {
+            if (t.min != 0) revert IGovernance.GrantWordRefused(bit, 0);
+            if (t.max != type(uint128).max) revert IGovernance.GrantWordRefused(bit, 1);
+            if (t.total != 0) revert IGovernance.GrantWordRefused(bit, 2);
+            if (t.perWindow != 0) revert IGovernance.GrantWordRefused(bit, 3);
+            if (t.window != 0) revert IGovernance.GrantWordRefused(bit, 8);
+        }
+        if ((scopeBits & _bit(bit) == 0) != (t.scope == 0)) revert IGovernance.GrantWordRefused(bit, 7);
+        if ((t.perWindow == 0) != (t.window == 0)) revert IGovernance.GrantWordRefused(bit, 3);
+        if (t.delegable && (scalar ? t.total == 0 : t.maxUses == 0)) revert IGovernance.GrantBudgetRequired(bit);
     }
 
     /// @dev Epoch first: the leaves of `account` die with its right.

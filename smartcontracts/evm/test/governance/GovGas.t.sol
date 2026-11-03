@@ -114,6 +114,7 @@ contract GovGasNormal is GovRows {
     function _minted() internal pure returns (IFactoryToken.TokenConfig memory c) {
         c = _tokenConfig(1_000 ether);
         c.features = 3; // PAYABLE | MINTABLE
+        c.lockedFeatures = 2; // no owner: the minter survives creation on a locked bit (B-06)
         c.roles.minter = G_MINTER;
     }
 }
@@ -183,6 +184,7 @@ contract GovGasPqz is GovRows, PqzFixture {
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = 1; // PAYABLE
+        c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
@@ -209,6 +211,7 @@ contract GovGasZether is GovRows, ZetherFixture {
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         c.features = 1; // PAYABLE
+        c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);

@@ -74,7 +74,7 @@ abstract contract GovernanceBase is IGovernance {
     /// @notice The owner sets any holder's grant; a holder with a `delegable` grant sets a narrower leaf. Spent is carried.
     function setGrant(uint8 bit, address holder, GrantTerms calldata terms) external governed {
         (bool leaf, bytes32 parentScope) =
-            GovernanceLib.setGrant(bit, holder, terms, _caller(), _roleBits(), _contractOnlyBits());
+            GovernanceLib.setGrant(bit, holder, terms, _caller(), _roleBits(), _contractOnlyBits(), _scalarBits(), _scopeBits());
         if (leaf && !_scopeNarrows(bit, parentScope, terms.scope)) revert GrantNotNarrower(7);
     }
 

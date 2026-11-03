@@ -36,8 +36,8 @@ contract BaseHarness is MetaTokenBase {
     function mint(address to, uint256 v) external { _mint(to, v); }
 }
 
-/// Kind-NORMAL `TokenConfig` with the behaviour built before P1c: `PAYABLE | MINTABLE | BURNABLE`, nothing locked, no
-/// owner, `minter` (0 = none), `supply` to `holder`. Callers `abi.encode` it (after adjusting fields).
+/// Kind-NORMAL `TokenConfig` with the behaviour built before P1c: `PAYABLE | MINTABLE | BURNABLE`, `MINTABLE` locked with a
+/// minter, no owner, `minter` (0 = none), `supply` to `holder`. Callers `abi.encode` it (after adjusting fields).
 function normalInit(string memory n, string memory s, uint8 d, uint256 supply, address holder, address minter)
     pure returns (IFactoryToken.TokenConfig memory c)
 {
@@ -46,6 +46,7 @@ function normalInit(string memory n, string memory s, uint8 d, uint256 supply, a
     c.decimals = d;
     c.features = 7;
     c.roles.minter = minter;
+    if (minter != address(0)) c.lockedFeatures = 1 << 1; // no owner: the minter survives on a locked bit (B-06, GD-14)
     c.initialSupply = supply;
     c.initialHolder = holder;
 }
@@ -60,7 +61,7 @@ struct Rate {
 }
 
 /// `TokenConfig` of kind WRAPPED for legs `us` at `nums/dens`: `PAYABLE` (as built), `RATE_ADJUSTABLE` with `cfg.adjustable`,
-/// `WRAP_DISABLEABLE` with a non-zero `guardian`; nothing locked; `owner` (0 = none).
+/// `WRAP_DISABLEABLE` with a non-zero `guardian`; `owner` (0 = none: then every set flag is locked, B-06).
 function wrappedInit(address[] memory us, uint256[] memory nums, uint256[] memory dens, uint8 dec, Rate memory cfg,
     address guardian, address owner) pure returns (IFactoryToken.TokenConfig memory c)
 {
@@ -73,6 +74,7 @@ function wrappedInit(address[] memory us, uint256[] memory nums, uint256[] memor
     c.owner = owner;
     c.roles.rateAdmin = cfg.rateAdmin;
     c.roles.guardian = guardian;
+    if (owner == address(0)) c.lockedFeatures = c.features; // no owner disables nothing; holders survive creation (B-06, GD-14)
     c.legs = new IFactoryToken.Leg[](us.length);
     for (uint256 i; i < us.length; ++i) c.legs[i] = IFactoryToken.Leg(us[i], nums[i], dens[i]);
     c.rate = IFactoryToken.RateConfig(cfg.rateDelay, cfg.maxRateStepBps);

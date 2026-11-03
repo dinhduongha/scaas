@@ -215,6 +215,7 @@ contract ZetherWrappedTest is ZetherFixture {
         c.decimals = 6;
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.RATE_ADJUSTABLE);
         c.roles.rateAdmin = address(this);
+        c.lockedFeatures = 1 << GovernanceBits.RATE_ADJUSTABLE; // no owner: the rate admin survives creation on a locked bit (B-06, GD-14)
         c.rate = IFactoryToken.RateConfig(2 days, 1000);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);

@@ -106,9 +106,9 @@ contract GovernanceLibTest is Test {
         GovernanceLib.Roles memory r;
         r.rateAdmin = address(0xEE);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleNotContract.selector, uint8(3), address(0xEE)));
-        h.init(TokenStore.KIND_WRAPPED, RATE, 0, address(0), r);
+        h.init(TokenStore.KIND_WRAPPED, RATE, RATE, address(0), r); // no owner: locked, so the holder survives (B-06)
         r.rateAdmin = address(new Puller());
-        h.init(TokenStore.KIND_WRAPPED, RATE, 0, address(0), r);
+        h.init(TokenStore.KIND_WRAPPED, RATE, RATE, address(0), r); // no owner: locked, so the holder survives (B-06)
         assertTrue(h.hasRole(3, r.rateAdmin));
     }
 
@@ -225,7 +225,7 @@ contract GovernanceLibTest is Test {
     }
 
     function test_noOwnerMeansNoAdministration() public {
-        h.init(TokenStore.KIND_NORMAL, MINTABLE, 0, address(0), _roles(minter));
+        h.init(TokenStore.KIND_NORMAL, MINTABLE, MINTABLE, address(0), _roles(minter)); // locked: B-06
         vm.prank(address(0));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, address(0)));
         h.disableFeature(1);

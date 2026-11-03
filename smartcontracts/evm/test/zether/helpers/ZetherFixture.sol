@@ -136,6 +136,7 @@ abstract contract ZetherFixture is Test {
         c.decimals = 6;
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE) | (1 << GovernanceBits.BURNABLE);
         c.roles.minter = address(this);
+        c.lockedFeatures = 1 << GovernanceBits.MINTABLE; // no owner: the minter survives creation on a locked bit (B-06, GD-14)
         c.conf = IFactoryToken.ConfidentialConfig(
             auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, maxShielded, FEE, dMode,
             auditor ? aMode : 0, minDecoy

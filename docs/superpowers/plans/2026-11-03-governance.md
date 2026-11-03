@@ -277,6 +277,8 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 - [ ] **Step 5: Mutants:** the ceiling check dropped; the list compare dropped; `_checkCodeFits` not called.
 - [ ] **Step 6:** Commit `governance T2: 131,072 B ceiling, the list above 64 KiB, the chain's code limit declared at deploy`.
 
+**Deviation (controller, 2026-11-03):** `foundry.toml` gets no `code_size_limit`. forge 1.8.5 applies no code size limit in tests (131,073 B deploys), and with the key set every suite whose test contract's init code exceeds 262,144 B fails `setUp` (`UADeploy` 440,212 B, `CodeCeiling` 423,447 B). The 131,072 B ceiling is held by `size_gate.py` and by the chain; `test_createAboveTheCeilingReverts` is not written.
+
 **Pins, old → new in the commit:** `size-baseline.json` every kind and `SCaaSDex` from `main` to measured (`NormalToken` 37,228 → 40,575, `WrappedToken` 48,015 → 50,166, `NormalZetherToken` 52,741 → 55,974, `WrappedZetherToken` 62,169 → 64,284, `NormalPqzToken` 52,891 → 56,088, `WrappedPqzToken` 63,423 → 65,520, `SCaaSDex` 27,957 → 32,757, `AdminLib` 3,272 → `GovernanceLib` 7,634), inits likewise, reason in `_comment`: CTR-GOV-19; `ZetherDeploy.t` `65536` → 131,072. **Gates:** size gate, whole `forge test`, `scripts/e2e-zether.sh`.
 
 ### Task T3: D1 promoted (spec §1.1-§1.4, §2.2, §2.3; G1, G2, G14; B-26, B-31; P-1 to P-7, P-15 to P-19; GD-2, GD-11)

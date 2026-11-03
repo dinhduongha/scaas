@@ -173,6 +173,7 @@ contract GovRegulatedBitsZetherTest is GovRegulatedRows, ZetherFixture {
     function _rCfg(bool wrapped, uint256 features) internal override returns (IFactoryToken.TokenConfig memory c) {
         c = _cfg(false, uint256(1) << 40);
         c.features = features;
+        c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
         c.roles.minter = address(0);
         if (wrapped) {
             c.legs = new IFactoryToken.Leg[](1);
@@ -206,6 +207,7 @@ contract GovRegulatedBitsPqzTest is GovRegulatedRows, PqzFixture {
     function _rCfg(bool wrapped, uint256 features) internal override returns (IFactoryToken.TokenConfig memory c) {
         c = _cfg(uint256(1) << 40);
         c.features = features;
+        c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
         c.roles.minter = address(0);
         if (wrapped) {
             c.legs = new IFactoryToken.Leg[](1);

@@ -67,8 +67,17 @@ interface IGovernance {
     /// @notice `UA_POOL` and `SHIELD_POOL` hold no power.
     error RoleAccountPool(uint8 bit, address account);
     /// @notice A leaf's term is wider than its parent's (`field`: 0 min, 1 max, 2 total, 3 perWindow, 4 validUntil, 5 maxUses,
-    ///         6 delegable, 7 scope).
+    ///         6 delegable, 7 scope, 8 window).
     error GrantNotNarrower(uint8 field);
+    /// @notice A word the contract does not bind for `bit` (spec §1.5, B-09, B-10): outside `_scalarBits()` any of `min` (0),
+    ///         `max` (1), `total` (2), `perWindow` (3), `window` (8); outside `_scopeBits()` a non-zero `scope`, inside it a zero
+    ///         one (7); `perWindow` and `window` not set together (3).
+    error GrantWordRefused(uint8 bit, uint8 field);
+    /// @notice A `delegable` grant with no finite budget: `total` on a scalar bit, `maxUses` on another (B-02). The budget
+    ///         bounds what the leaves spend, not how many leaves exist: a leaf spends nothing until it acts.
+    error GrantBudgetRequired(uint8 bit);
+    /// @notice `UA_POOL` and `SHIELD_POOL` are never owner (B-19).
+    error OwnerAccountPool(address account);
     /// @notice The scalar or the use is outside the grant (`field`: 0 min, 1 max, 2 total, 3 perWindow, 5 maxUses, 7 parent).
     error GrantExhausted(uint8 field);
     error GrantExpired(uint8 bit, address holder);

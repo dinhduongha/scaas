@@ -19,6 +19,7 @@ import {DexLegs} from "../helpers/DexLegs.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
+import {BranchApp} from "./GovAttackV2.t.sol";
 
 /// A token whose every transfer out calls its hook: the way into a running settlement.
 contract GovHookERC20 is MockERC20 {
@@ -190,12 +191,12 @@ contract GovGrantTest is Test {
 
     function _manager(uint128 total) internal {
         IGovernance.GrantTerms memory g = _open();
-        (g.min, g.max, g.total, g.delegable, g.scope) = (1, 100, total, true, bytes32(uint256(7)));
+        (g.min, g.max, g.total, g.delegable) = (1, 100, total, true);
         _set(MANAGER, g);
     }
 
     function _leafTerms(uint128 total) internal pure returns (IGovernance.GrantTerms memory g) {
-        (g.min, g.max, g.total, g.scope) = (1, 50, total, bytes32(uint256(7)));
+        (g.min, g.max, g.total) = (1, 50, total);
     }
 
     function test_leafDebitsItsParent() public {
@@ -226,11 +227,21 @@ contract GovGrantTest is Test {
         g = _leafTerms(60);
         g.delegable = true;
         _setLeaf(g, 6);
-        g = _leafTerms(60);
-        g.scope = bytes32(uint256(8));
-        _setLeaf(g, 7);
         vm.prank(MANAGER);
         t.setGrant(MINT, OFFICER, _leafTerms(60)); // the positive control
+        // scope, on a contract whose power reads it: the order is the contract's (equality by default)
+        BranchApp a = new BranchApp(OWNER);
+        IGovernance.GrantTerms memory p = _open();
+        (p.total, p.delegable, p.scope) = (100, true, bytes32(uint256(7)));
+        vm.prank(OWNER);
+        a.setGrant(64, MANAGER, p);
+        (p.total, p.delegable, p.scope) = (10, false, bytes32(uint256(8)));
+        vm.prank(MANAGER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, uint8(7)));
+        a.setGrant(64, OFFICER, p);
+        p.scope = bytes32(uint256(7));
+        vm.prank(MANAGER);
+        a.setGrant(64, OFFICER, p);
     }
 
     function _setLeaf(IGovernance.GrantTerms memory g, uint8 field) internal {
@@ -333,11 +344,105 @@ contract GovGrantTest is Test {
         t.setGrant(MINT, MetaTxLib.SHIELD_POOL, _open());
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NoSuchRole.selector, uint8(0)));
         t.setGrant(0, MANAGER, _open()); // a capability has no holder
+        vm.stopPrank();
+    }
+
+    function _word(IGovernance target, uint8 bit, IGovernance.GrantTerms memory g, uint8 field) internal {
+        vm.prank(OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantWordRefused.selector, bit, field));
+        target.setGrant(bit, MANAGER, g);
+    }
+
+    /// B-09 (spec §1.5): on a bit outside `_scalarBits()` each of `min`, `max`, `total`, `perWindow`, `window` is refused by
+    /// name; only `validUntil`, `maxUses`, `delegable` bind it. A wrapped kind's `WRAP_DISABLEABLE` and the DEX's `LISTING`.
+    function test_eachWordRefusedOnAScalarlessBit() public {
+        WrappedToken w = _wrapped("ws");
+        SCaaSDex d = _dexOf("ds");
+        uint8[2] memory bits = [GovernanceBits.WRAP_DISABLEABLE, GovernanceBits.LISTING];
+        IGovernance[2] memory on = [IGovernance(address(w)), IGovernance(address(d))];
+        for (uint256 i; i < 2; ++i) {
+            IGovernance.GrantTerms memory g = _open();
+            g.min = 1;
+            _word(on[i], bits[i], g, 0);
+            g = _open();
+            g.max = 1;
+            _word(on[i], bits[i], g, 1);
+            g = _open();
+            g.total = 1;
+            _word(on[i], bits[i], g, 2);
+            g = _open();
+            (g.perWindow, g.window) = (1, 1 days);
+            _word(on[i], bits[i], g, 3);
+            g = _open();
+            g.window = 1 days;
+            _word(on[i], bits[i], g, 8);
+            g = _open(); // positive control: the three words that bind such a bit
+            (g.validUntil, g.maxUses, g.delegable) = (uint64(block.timestamp + 1 days), 3, true);
+            vm.prank(OWNER);
+            on[i].setGrant(bits[i], MANAGER, g);
+            assertEq(on[i].grantOf(bits[i], MANAGER).maxUses, 3);
+        }
+    }
+
+    /// `perWindow` and `window` come together, both directions: `GrantWordRefused(bit, 3)`.
+    function test_windowWithoutPerWindowRefused() public {
         IGovernance.GrantTerms memory g = _open();
         g.perWindow = 1;
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, uint8(3)));
-        t.setGrant(MINT, MANAGER, g); // no window for a per-window bound
-        vm.stopPrank();
+        _word(t, MINT, g, 3);
+        g = _open();
+        g.window = 1 days;
+        _word(t, MINT, g, 3);
+        (g.perWindow, g.window) = (1, 1 days); // positive control
+        _set(MANAGER, g);
+        assertEq(t.grantOf(MINT, MANAGER).window, 1 days);
+    }
+
+    function _granted(Vm.Log[] memory logs) internal pure returns (uint256 k) {
+        for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == IGovernance.RoleGranted.selector) ++k;
+    }
+
+    /// B-31: `setGrant` on a new holder emits `RoleGranted`, so the indexed holder list is whole; an edit does not.
+    function test_newHolderEmitsRoleGranted() public {
+        vm.expectEmit(address(t));
+        emit IGovernance.RoleGranted(MINT, MANAGER, OWNER);
+        _set(MANAGER, _open());
+        vm.recordLogs();
+        _set(MANAGER, _open());
+        assertEq(_granted(vm.getRecordedLogs()), 0, "an edit adds no holder");
+        _manager(100);
+        vm.expectEmit(address(t));
+        emit IGovernance.RoleGranted(MINT, OFFICER, MANAGER);
+        vm.prank(MANAGER);
+        t.setGrant(MINT, OFFICER, _leafTerms(10));
+    }
+
+    /// B-06 and GD-14: with no owner, a minter survives creation only on a locked bit.
+    function test_lockedMinterSurvivesNoOwner() public {
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals, c.features, c.roles.minter) = ("G", "G", 18, 7, MANAGER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.OwnerHasHolders.selector, MINT));
+        f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "n0");
+        c.lockedFeatures = 1 << MINT;
+        NormalToken n = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "n0"));
+        assertEq(n.owner(), address(0));
+        assertTrue(n.hasRole(MINT, MANAGER));
+        vm.prank(MANAGER);
+        n.mint(TO, 1);
+    }
+
+    function _wrapped(bytes32 salt) internal returns (WrappedToken) {
+        MockERC20 usd = new MockERC20("USD", "USD", 6);
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals, c.owner) = ("W", "W", 6, OWNER);
+        c.features = (1 << 0) | (1 << GovernanceBits.WRAP_DISABLEABLE);
+        c.legs = new IFactoryToken.Leg[](1);
+        c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
+        return WrappedToken(payable(f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(c), salt)));
+    }
+
+    function _dexOf(bytes32 salt) internal returns (SCaaSDex) {
+        Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
+        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(OWNER, 0, address(0xAA), false)), salt));
     }
 
     /// `hasRole` is true for a limited holder: every power on the wrapped kinds must go through `use`.
@@ -500,8 +605,7 @@ contract GovGrantTest is Test {
     function test_gas_setGrant_fresh() public {
         IGovernance.GrantTerms memory g = _open();
         (g.min, g.total, g.perWindow, g.window, g.validUntil, g.maxUses) = (1, 1e6, 1e5, 1 days, uint64(block.timestamp + 365 days), 1000);
-        g.scope = bytes32(uint256(7));
-        _gas("setGrant fresh, every field set", OWNER, address(t), abi.encodeCall(IGovernance.setGrant, (MINT, MANAGER, g)));
+        _gas("setGrant fresh, every word NORMAL binds", OWNER, address(t), abi.encodeCall(IGovernance.setGrant, (MINT, MANAGER, g)));
     }
 
     function test_gas_mintLimited_everyBound() public {
