@@ -22,9 +22,11 @@ export CAPPED_SLOTS=${CAPPED_SLOTS:-2} CAPPED_MEM=${CAPPED_MEM:-3G}
 run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
   case $1 in
     forge-isolate) cd smartcontracts/evm && ../../scripts/capped forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' ;;
-    forge-*) scripts/capped smartcontracts/evm/script/pqz/at-set.sh "${1#forge-}" test ;;
+    forge-n[0-9]*-kmax[0-9]*) scripts/capped smartcontracts/evm/script/pqz/at-set.sh "${1#forge-}" test ;; # other forge-* steps: extra_step
     sizes) cd smartcontracts/evm || return 1
-      j=$(mktemp) && ../../scripts/capped forge build src --sizes --json > "$j" &&
+      python3 -I ../../scripts/size_gate.py --self-test || return 1
+      j=$(mktemp) && ../../scripts/capped forge build src --sizes --json > "$j"
+      [ -s "$j" ] && # forge exits 1 when a contract is above 64 KiB; the gate below judges the sizes
         python3 -I ../../scripts/size_gate.py "$j" size-baseline.json; rc=$?; rm -f "$j"; return $rc ;;
     gen-set) python3 -I pqz-core/params/sets/gen_set.py --all --check ;;
     docs) python3 scripts/test_docs_check.py && python3 scripts/docs_check.py check &&
