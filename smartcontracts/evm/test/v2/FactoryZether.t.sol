@@ -28,7 +28,8 @@ contract MockNormalZether is NormalToken {
     function _init(TokenConfig memory cfg) internal override {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles, _validBits(), _roleBits(), _contractOnlyBits());
+        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles, _validBits(),
+            _roleBits(), _contractOnlyBits());
     }
 }
 

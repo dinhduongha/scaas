@@ -47,7 +47,7 @@ contract DexKatTest is Test {
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 6, 1e9, alice, address(0))), "a"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(address(this), 500_000, TREASURY, false)), "dex"));
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(address(this), 500_000, TREASURY, false, 0, address(0))), "dex"));
         usdc = new MockERC20("USD Coin", "USDC", 6);
         dex.setMarket(address(a), address(usdc), true);
         usdc.mint(dave, 1e9);

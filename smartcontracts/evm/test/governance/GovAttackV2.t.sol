@@ -28,7 +28,7 @@ contract BranchApp is GovernanceBase {
 
     constructor(address owner_) {
         GovernanceLib.Roles memory none;
-        GovernanceLib.init(uint256(1) << APPROVE, 0, owner_, none, uint256(1) << APPROVE, uint256(1) << APPROVE, 0);
+        GovernanceLib.init(uint256(1) << APPROVE, 0, owner_, 0, address(0), none, uint256(1) << APPROVE, uint256(1) << APPROVE, 0);
     }
 
     function _guardIn() internal pure override returns (bool) { return false; }
@@ -195,18 +195,29 @@ contract GovAttackV2Test is Test {
 
     function _dex(bytes32 salt) internal returns (SCaaSDex) {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(OWNER, 0, address(0xAA), false)), salt));
+        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(OWNER, 0, address(0xAA), false, 0, address(0))), salt));
     }
 
     // ------------------------------------------------------------------ delay (B-01, B-02)
 
-    /// B-01: one `setGrant`, no second call, and the holder is unbounded. CTR-GOV-04 speaks of `grantRole` only.
-    function test_attack_setGrantMakesAnUnboundedHolderInOneCall() public {
-        assertFalse(t.hasRole(MINT, OFFICER)); // positive control: nothing before the call
+    /// B-01, fixed (spec §1.6, CTR-GOV-04's Change): with a `grantDelay`, `setGrant` that makes a holder takes the owner's
+    /// two calls, as `grantRole` does; the first proposes, the confirm in the window applies.
+    function test_fixed_setGrantMakesAnUnboundedHolderInOneCall() public {
+        IFactoryToken.TokenConfig memory c = _config(0, OWNER);
+        c.grantDelay = 2 days;
+        NormalToken d = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "d"));
         vm.prank(OWNER);
-        t.setGrant(MINT, OFFICER, _open());
-        _mint(OFFICER, type(uint128).max); // the largest scalar any bound can name
-        assertEq(t.balanceOf(TO), type(uint128).max);
+        d.setGrant(MINT, OFFICER, _open());
+        assertFalse(d.hasRole(MINT, OFFICER));
+        vm.prank(OFFICER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, OFFICER));
+        d.mint(TO, 1);
+        vm.warp(block.timestamp + 2 days);
+        vm.prank(OWNER); // positive control: the confirm
+        d.setGrant(MINT, OFFICER, _open());
+        vm.prank(OFFICER);
+        d.mint(TO, type(uint128).max);
+        assertEq(d.balanceOf(TO), type(uint128).max);
     }
 
     /// B-02, fixed (spec §1.5, C3): a delegable grant needs a finite budget, `total` on a scalar bit and `maxUses` on another.

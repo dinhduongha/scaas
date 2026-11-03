@@ -159,7 +159,7 @@ contract DexExchangeTest is Test {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 0, 1e6, alice, address(0))), "a"));
         b = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("B", "B", 0, 1e6, bob, address(0))), "b"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(admin, 200_000, treasury, false)), "dex"));
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(admin, 200_000, treasury, false, 0, address(0))), "dex"));
         puller = dex.puller();
         usdc = new MockERC20("USD Coin", "USDC", 6);
         c = new MockERC20("Hop", "C", 18);

@@ -49,6 +49,11 @@ interface IGovernance {
     event GrantUsed(uint8 indexed bit, address indexed holder, uint256 scalar);
     event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    /// @notice The first of the owner's two calls (spec §1.6): `terms` for a wallet to compare with `termsHash`; `whole` is
+    ///         a `grantRole`, its terms empty.
+    event GrantProposed(uint8 indexed bit, address indexed account, address indexed proposer, uint64 eta, bool whole,
+        GrantTerms terms);
+    event GrantCancelled(uint8 indexed bit, address indexed account, address indexed by);
 
     error FeatureInvalidForKind(uint8 bit);
     error FeatureNotBuilt(uint8 bit);
@@ -87,6 +92,12 @@ interface IGovernance {
     error GrantWindowInUse(uint8 bit, address holder);
     /// @notice `renounceOwnership` while a bit that is not locked has holders (CTR-GOV-02).
     error OwnerHasHolders(uint8 bit);
+    /// @notice A `grantDelay` above 30 days at creation (B-27).
+    error GrantDelayTooLong(uint64 delay);
+    /// @notice The confirm before `eta`.
+    error GrantNotReady(uint8 bit, address account, uint64 eta);
+    /// @notice A live pending at `(bit, account)` holds other terms: cancel it, or let it die, and propose again.
+    error GrantTermsMismatch(uint8 bit, address account);
 
     function features() external view returns (uint256);
     function lockedFeatures() external view returns (uint256);
@@ -95,6 +106,13 @@ interface IGovernance {
     function hasRole(uint8 bit, address account) external view returns (bool);
     function validBits() external view returns (uint256);
     function holderCount(uint8 bit) external view returns (uint256);
+    function grantDelay() external view returns (uint64);
+    function lastProposedAt() external view returns (uint64);
+    /// @notice A pending at `(bit, account)`, dead ones too: `live` while `eta != 0`, the owner generation that proposed it
+    ///         is the current one and `now <= eta + grantDelay` (spec §1.6).
+    function pendingGrant(uint8 bit, address account)
+        external view returns (uint64 eta, address proposer, bytes32 termsHash, bool live);
+    function cancelGrant(uint8 bit, address account) external;
     function grantOf(uint8 bit, address holder) external view returns (Grant memory);
     function setGrant(uint8 bit, address holder, GrantTerms calldata terms) external;
     /// @notice The label of an application bit (64–127): its type, the entry it gates, a name for a wallet.

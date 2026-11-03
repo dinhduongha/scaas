@@ -421,8 +421,10 @@ def dec_bytes(h, i=0):
 MTX = ("t", ["w", "b", "w", "w", "w", "w", "w", "w", "w"])
 MTX_S = "(address,bytes,uint256,uint256,uint256,uint32,address,uint256,address)"
 UMTX_S = "(bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)"
+# IFactoryToken.TokenConfig: name, symbol, decimals, features, lockedFeatures, owner, roles, initialSupply, initialHolder, legs,
+# rate, conf, grantDelay, rescueTo, maxSupply
 CFG = ("t", ["b", "b", "w", "w", "w", "w", ("t", ["w"] * 5), "w", "w", ("a", ("t", ["w", "w", "w"])), ("t", ["w", "w"]),
-             ("t", ["b", "w", "w", "w", "w", "w", "w"])])
+             ("t", ["b", "w", "w", "w", "w", "w", "w"]), "w", "w", "w"])
 # IFactoryToken.Env (plan 5g-Z2): factory, chainUid, registry, smartKeyAccountImpl, hedera, deps, libs, libCodeHashes
 ENV = ("t", ["w", "w", "w", "w", "w", ("a", "w"), ("a", "w"), ("a", "w")])
 ENV_S = "(address,bytes32,address,address,bool,address[],address[],bytes32[])"
@@ -1152,7 +1154,7 @@ def run(kd, kr, ke):
     def create(kind, name, sym, legs, dmode, amode, feat, supply=0, holder=0, conf=True, salt=b"p6g"):
         aud_key = aud.ua if amode else b""
         c = [name, sym, 6, feat, 0, sd.addr, [sd.addr if feat & 2 else 0, 0, 0, 0, 0], supply, holder, legs, [0, 0],
-             [aud_key, SCALE, MAXS, FEE, dmode, amode, MIN_DECOY] if conf else [b"", 0, 0, 0, 0, 0, 0]]
+             [aud_key, SCALE, MAXS, FEE, dmode, amode, MIN_DECOY] if conf else [b"", 0, 0, 0, 0, 0, 0], 0, 0, 0]
         # plan 5g-Z2: initArgs = abi.encode(TokenConfig), opaque to the factory; the verifier is the release's
         data = cd("createToken(uint8,uint64,bytes,bytes32)", ["w", "w", "b", "w"], kind, 1, encs([CFG], [c]), kc(salt))
         r = sd.send(fac, data, f"createToken {sym} (kind {kind})")

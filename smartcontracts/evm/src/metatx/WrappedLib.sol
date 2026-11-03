@@ -93,7 +93,9 @@ library WrappedLib {
         t.symbol = c.symbol;
         t.decimals = c.decimals;
         t.kind = kind;
-        GovernanceLib.init(c.features, c.lockedFeatures, c.owner, c.roles, valid, roleBits, contractOnly);
+        if (c.maxSupply != 0) revert IWrappedToken.MaxSupplyInvalid(); // the hybrid is not built yet (spec §5.2)
+        GovernanceLib.init(c.features, c.lockedFeatures, c.owner, c.grantDelay, c.rescueTo, c.roles, valid, roleBits,
+            contractOnly);
         bool adjustable = GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE);
         WrappedStorage storage s = $();
         IFactoryToken.RateConfig memory rate = c.rate;

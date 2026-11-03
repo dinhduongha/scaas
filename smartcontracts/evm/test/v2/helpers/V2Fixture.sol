@@ -29,7 +29,7 @@ contract BaseHarness is MetaTokenBase {
     function _init(TokenConfig memory cfg) internal override {
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         GovernanceLib.Roles memory none;
-        GovernanceLib.init(1 << GovernanceBits.PAYABLE, 0, address(0), none, _validBits(), _roleBits(), _contractOnlyBits());
+        GovernanceLib.init(1 << GovernanceBits.PAYABLE, 0, address(0), 0, address(0), none, _validBits(), _roleBits(), _contractOnlyBits());
         _mint(cfg.initialHolder, cfg.initialSupply);
     }
 

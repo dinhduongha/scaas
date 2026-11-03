@@ -5,6 +5,7 @@ import {SigCheck} from "../common/SigCheck.sol";
 import {IGovernance} from "./IGovernance.sol";
 import {GovernanceBits} from "./GovernanceBits.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {IRescuable} from "./IRescuable.sol";
 
 /// @title Features, owner and roles of every SCaaS contract (CTR-GOV-01, CTR-TOK-22), in the ERC-7201 namespace
 ///        `scaas.governance`.
@@ -19,6 +20,8 @@ library GovernanceLib {
     /// @dev The value of `roles`: 0 none, `WHOLE` no limit, `LIMITED` a `Grant` binds it.
     uint8 internal constant WHOLE = 1;
     uint8 internal constant LIMITED = 2;
+    /// @dev The longest `grantDelay` (spec §1.4, B-27): `MAX_NOTICE_PERIOD`'s reason applies.
+    uint64 internal constant MAX_GRANT_DELAY = 30 days;
 
     /// @notice Initial role holders (CTR-TOK-25 `Roles`); each only for a set flag, 0 = none.
     struct Roles {
@@ -74,11 +77,14 @@ library GovernanceLib {
 
     // ------------------------------------------------------------------ init (CTR-TOK-22 "Validation in the token")
 
-    /// @notice Validates the flags against the contract's masks and writes features, owner and initial roles. Called
-    ///         once by the contract's `initialize`.
-    function init(uint256 features, uint256 locked, address owner, Roles memory roles, uint256 valid, uint256 roleBits,
-        uint256 contractOnly) public
+    /// @notice Validates the flags against the contract's masks and writes features, owner, `grantDelay` and initial roles.
+    ///         Called once by the contract's `initialize`. `grantDelay` above 30 days is refused (B-27); `rescueTo` has no
+    ///         meaning yet and fails closed (`RescueConfigInvalid`).
+    function init(uint256 features, uint256 locked, address owner, uint64 grantDelay, address rescueTo, Roles memory roles,
+        uint256 valid, uint256 roleBits, uint256 contractOnly) public
     {
+        if (grantDelay > MAX_GRANT_DELAY) revert IGovernance.GrantDelayTooLong(grantDelay);
+        if (rescueTo != address(0)) revert IRescuable.RescueConfigInvalid();
         if (features >> 128 != 0) revert IGovernance.FeatureReserved(_lowest(features >> 128) + 128);
         uint256 bad = features & ~valid;
         if (bad != 0) revert IGovernance.FeatureInvalidForKind(_lowest(bad));
@@ -89,6 +95,7 @@ library GovernanceLib {
         GovernanceStorage storage s = $();
         s.features = features;
         s.lockedFeatures = locked | (features & GovernanceBits.ALWAYS_LOCKED);
+        s.grantDelay = grantDelay;
         if (roles.issuer != address(0)) revert IGovernance.RoleWithoutFeature(GovernanceBits.FREEZE);
         if (roles.compliance != address(0)) revert IGovernance.RoleWithoutFeature(GovernanceBits.RECORD);
         if (roles.minter != address(0)) _grant(s, GovernanceBits.MINTABLE, roles.minter, address(0), roleBits, contractOnly);
@@ -115,9 +122,22 @@ library GovernanceLib {
 
     // ------------------------------------------------------------------ owner
 
+    /// @notice Spec §1.6: on a `WHOLE` holder a no-op; else, with a `grantDelay`, two calls (terms 0).
     function grantRole(uint8 bit, address account, address caller, uint256 roleBits, uint256 contractOnly) public {
         GovernanceStorage storage s = _onlyOwner(caller);
+        _check(s, bit, account, roleBits, contractOnly);
+        if (s.roles[bit][account] == WHOLE) return;
+        IGovernance.GrantTerms memory none;
+        if (s.grantDelay != 0 && !_due(s, bit, account, caller, true, none)) return;
         _grant(s, bit, account, caller, roleBits, contractOnly);
+    }
+
+    /// @notice Deletes a pending, live or dead; none is a no-op (spec §1.6, agy C-3).
+    function cancelGrant(uint8 bit, address account, address caller) public {
+        GovernanceStorage storage s = _onlyOwner(caller);
+        if (s.pending[bit][account].eta == 0) return;
+        delete s.pending[bit][account];
+        emit IGovernance.GrantCancelled(bit, account, caller);
     }
 
     /// @notice The owner, or the grantor of a leaf while the account is its `LIMITED` leaf and the grantor still holds the
@@ -127,6 +147,7 @@ library GovernanceLib {
         GovernanceStorage storage s = $();
         if (caller != address(0) && caller == s.owner) {
             s.grants[bit][account].barred = true;
+            delete s.pending[bit][account]; // a confirm must not restore what the revoke took (agy C-3)
         } else if (caller == address(0) || caller != s.grants[bit][account].grantor || s.roles[bit][account] != LIMITED
             || s.roles[bit][caller] == 0)
         {
@@ -139,6 +160,7 @@ library GovernanceLib {
     function renounceRole(uint8 bit, address caller) public {
         GovernanceStorage storage s = $();
         if (s.roles[bit][caller] == 0) revert IGovernance.MissingRole(bit, caller);
+        delete s.pending[bit][caller];
         _clear(s, bit, caller, caller);
     }
 
@@ -152,9 +174,72 @@ library GovernanceLib {
         uint256 contractOnly, uint256 scalarBits, uint256 scopeBits) public returns (bool leaf, bytes32 parentScope)
     {
         (leaf, parentScope) = _leafPath(bit, holder, t, caller);
-        _check($(), bit, holder, roleBits, contractOnly);
+        GovernanceStorage storage s = $();
+        _check(s, bit, holder, roleBits, contractOnly);
         _words(bit, t, scalarBits, scopeBits);
+        if (!leaf && s.grantDelay != 0) { // the owner's path (spec §1.6)
+            if (_narrowing(s, bit, holder, t)) delete s.pending[bit][holder];
+            else if (!_due(s, bit, holder, caller, false, t)) return (false, bytes32(0));
+        }
         _write(bit, holder, t, caller, leaf);
+    }
+
+    /// @dev Spec §1.6: a pure narrowing of a root, applied at once. On a `WHOLE` root any terms not `delegable`; on a
+    ///      `LIMITED` root every word field by field: `min` not lower, `max` not higher, each of `total`, `perWindow`,
+    ///      `validUntil`, `maxUses` 0 before (0 is no bound, so `0 → finite` narrows) or finite and not higher, `window`
+    ///      equal or new with the limit it carries, `scope` equal, `delegable` not raised. A leaf the owner would make a root
+    ///      drops its parent's bound, and a new holder adds one: neither is a narrowing.
+    function _narrowing(GovernanceStorage storage s, uint8 bit, address holder, IGovernance.GrantTerms calldata t)
+        private view returns (bool)
+    {
+        uint8 r = s.roles[bit][holder];
+        if (r == WHOLE) return !t.delegable;
+        IGovernance.Grant storage g = s.grants[bit][holder];
+        if (r == 0 || g.grantor != address(0)) return false;
+        return t.min >= g.min && t.max <= g.max && _within(g.total, t.total) && _within(g.perWindow, t.perWindow)
+            && _within(g.validUntil, t.validUntil) && _within(g.maxUses, t.maxUses)
+            && (t.window == g.window || (g.perWindow == 0 && t.perWindow != 0)) && t.scope == g.scope
+            && (!t.delegable || g.delegable);
+    }
+
+    /// @dev A bound with 0 = none: `next` narrows `was`.
+    function _within(uint256 was, uint256 next) private pure returns (bool) {
+        return was == 0 || (next != 0 && next <= was);
+    }
+
+    /// @dev Spec §1.6: a live pending at `(bit, account)` with the same terms, in its window, is deleted and the call
+    ///      applies (true); other terms revert `GrantTermsMismatch`, before `eta` `GrantNotReady`; with no live pending the
+    ///      call proposes (false). `termsHash` is `keccak256(abi.encode(GrantTerms))`, 0 for `grantRole`.
+    function _due(GovernanceStorage storage s, uint8 bit, address account, address caller, bool whole,
+        IGovernance.GrantTerms memory t) private returns (bool)
+    {
+        bytes32 h = whole ? bytes32(0) : keccak256(abi.encode(t));
+        PendingGrant storage p = s.pending[bit][account];
+        if (_live(s, p)) {
+            if (p.termsHash != h) revert IGovernance.GrantTermsMismatch(bit, account);
+            if (block.timestamp < p.eta) revert IGovernance.GrantNotReady(bit, account, p.eta);
+            delete s.pending[bit][account];
+            return true;
+        }
+        uint64 eta = uint64(block.timestamp) + s.grantDelay;
+        (p.eta, p.proposer, p.generation, p.termsHash) = (eta, caller, s.ownerGeneration, h);
+        s.lastProposedAt = uint64(block.timestamp);
+        emit IGovernance.GrantProposed(bit, account, caller, eta, whole, t);
+        return false;
+    }
+
+    /// @dev Live: proposed, by the current owner generation, and `now <= eta + grantDelay`.
+    function _live(GovernanceStorage storage s, PendingGrant storage p) private view returns (bool) {
+        return p.eta != 0 && p.generation == s.ownerGeneration && block.timestamp <= uint256(p.eta) + s.grantDelay;
+    }
+
+    /// @notice `pendingGrant(bit, account)`: dead ones too, with `live`.
+    function pendingGrant(uint8 bit, address account)
+        public view returns (uint64 eta, address proposer, bytes32 termsHash, bool live)
+    {
+        GovernanceStorage storage s = $();
+        PendingGrant storage p = s.pending[bit][account];
+        return (p.eta, p.proposer, p.termsHash, _live(s, p));
     }
 
     /// @dev A caller that is not the owner sets a leaf (spec §1.5): it holds a `delegable` `LIMITED` grant, an owner exists
@@ -242,6 +327,7 @@ library GovernanceLib {
         address previous = s.owner;
         s.owner = caller;
         s.pendingOwner = address(0);
+        ++s.ownerGeneration; // every pending of the previous term dies (Codex 2)
         emit IGovernance.OwnershipTransferred(previous, caller);
     }
 
@@ -252,6 +338,7 @@ library GovernanceLib {
         _noLiveHolder(s, roleBits);
         s.owner = address(0);
         s.pendingOwner = address(0);
+        ++s.ownerGeneration;
         emit IGovernance.OwnershipTransferred(caller, address(0));
     }
 

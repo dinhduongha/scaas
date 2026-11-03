@@ -8,6 +8,8 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IRescuable} from "../../src/governance/IRescuable.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
@@ -40,6 +42,22 @@ abstract contract GovRegulatedRows is Test {
         c = _rCfg(wrapped, 1 | REGULATED);
         vm.expectRevert(abi.encodeWithSelector(err, uint8(5)));
         _rCreate(wrapped, c, "all");
+    }
+
+    /// GD-3: `maxSupply` and `rescueTo` fail closed until their task: `maxSupply` is another kind's field on a `NORMAL*` kind
+    /// (`ConfigFieldForOtherKind(5)`) and no hybrid yet on a `WRAPPED*` one (`MaxSupplyInvalid`); `rescueTo` is refused on both.
+    function _configFailsClosed(bool wrapped) internal {
+        IFactoryToken.TokenConfig memory c = _rCfg(wrapped, 1);
+        c.maxSupply = 1;
+        vm.expectRevert(wrapped ? abi.encodeWithSelector(IWrappedToken.MaxSupplyInvalid.selector)
+            : abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, uint8(5)));
+        _rCreate(wrapped, c, "c");
+        c.maxSupply = 0;
+        c.rescueTo = address(0xBEEF);
+        vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
+        _rCreate(wrapped, c, "c");
+        c.rescueTo = address(0); // positive control
+        _rCreate(wrapped, c, "c");
     }
 
     function _noRegulatedValid(bool wrapped) internal {
@@ -141,7 +159,7 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         assertEq(req, 3);
         assertEq(den, 4);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(OWNER, 0, address(0xAA), false)), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(OWNER, 0, address(0xAA), false, 0, address(0))), "d"));
         address n = _rCreate(false, _rCfg(false, 1), "n");
         vm.prank(OWNER);
         d.setMarket(t, n, true);
@@ -195,6 +213,11 @@ contract GovRegulatedBitsZetherTest is GovRegulatedRows, ZetherFixture {
         _noRegulatedValid(false);
         _noRegulatedValid(true);
     }
+
+    function test_configFieldsFailClosedUntilBuilt() public {
+        _configFailsClosed(false);
+        _configFailsClosed(true);
+    }
 }
 
 /// `NORMAL_PQZ` and `WRAPPED_PQZ`.
@@ -228,5 +251,10 @@ contract GovRegulatedBitsPqzTest is GovRegulatedRows, PqzFixture {
     function test_validBitsHoldsNoRegulatedBit() public {
         _noRegulatedValid(false);
         _noRegulatedValid(true);
+    }
+
+    function test_configFieldsFailClosedUntilBuilt() public {
+        _configFailsClosed(false);
+        _configFailsClosed(true);
     }
 }

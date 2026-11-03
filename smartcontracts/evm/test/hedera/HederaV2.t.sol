@@ -56,10 +56,10 @@ contract HederaV2Test is Test {
         // (review W-Q, CTR-MTX-18); +13 B for MetaTxBase on MtxPipelineLib's internals (metatx split T2; T3 moves the
         // tokens onto the library); +964 / +973 B for typed-signing R1's `UAKinds.uaSig` (the tokens' `bytes auth` as the
         // registry's `UASig`, removed when C2 types the parameters); +56 / +1,118 B for typed-signing C0's named path
-        // (size-baseline.json holds the exact ratchet)
-        assertLe(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1).code.length, 39_945);
+        // (size-baseline.json holds the exact ratchet); governance T7 (GD-18): past 39,945 B, the literal reads the baseline
+        assertLe(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1).code.length, vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".NormalToken"));
         // Transitional (P1d D2): over EIP-170 until the size work (the only ceiling: 65,536 B, owner 2026-10-21)
-        assertLe(f.implementationOf(IOpenFactory.TokenKind.WRAPPED, 1).code.length, 50_770);
+        assertLe(f.implementationOf(IOpenFactory.TokenKind.WRAPPED, 1).code.length, vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".WrappedToken"));
     }
 
     function _edSign(bytes32 digest) internal pure returns (bytes memory) {

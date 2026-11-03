@@ -33,6 +33,8 @@ interface IWrappedToken {
     error DuplicateUnderlying(address u);
     error RateInvalid(uint256 num, uint256 den);
     error RateConfigInvalid();
+    /// @notice `maxSupply` at creation without a hybrid (spec §5.2).
+    error MaxSupplyInvalid();
     error WrapTooSmall();
     error UnwrapTooSmall();
     error UnwrapBelowMin(uint256 out, uint256 minOut);

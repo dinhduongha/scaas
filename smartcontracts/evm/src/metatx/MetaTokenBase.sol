@@ -91,10 +91,12 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         _init(abi.decode(initArgs, (TokenConfig)));
     }
 
-    /// @dev `ConfigFieldForOtherKind` for a set field the kind does not use; `conf` is used only by `*_ZETHER`.
+    /// @dev `ConfigFieldForOtherKind` for a set field the kind does not use; `conf` is used only by `*_ZETHER`; `maxSupply`
+    ///      only by `WRAPPED*`, as `legs`.
     function _requireUnused(TokenConfig memory cfg, bool supply, bool legs, bool rate, bool conf) internal pure {
         if (supply && (cfg.initialSupply != 0 || cfg.initialHolder != address(0))) revert ConfigFieldForOtherKind(1);
         if (legs && cfg.legs.length != 0) revert ConfigFieldForOtherKind(2);
+        if (legs && cfg.maxSupply != 0) revert ConfigFieldForOtherKind(5);
         if (rate && (cfg.rate.rateDelay != 0 || cfg.rate.maxRateStepBps != 0)) revert ConfigFieldForOtherKind(3);
         ConfidentialConfig memory c = cfg.conf;
         if (conf && (c.auditorKey.length != 0 || c.shieldScale != 0 || c.maxShielded != 0

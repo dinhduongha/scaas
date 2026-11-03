@@ -39,8 +39,8 @@ contract NormalToken is MetaTokenBase {
         _requireUnused(cfg, false, true, true, true);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         // 5-9 pass the kind's mask and reach `init`'s `FeatureNotBuilt` (GD-19); `validBits()` holds none of them
-        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles, _validBits() | GovernanceBits.REGULATED,
-            _roleBits(), _contractOnlyBits());
+        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles,
+            _validBits() | GovernanceBits.REGULATED, _roleBits(), _contractOnlyBits());
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
 

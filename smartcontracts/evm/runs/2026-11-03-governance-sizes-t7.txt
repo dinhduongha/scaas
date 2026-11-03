@@ -1,0 +1,18 @@
+# governance T7 sizes at the default set (n2304-kmax4096), forge build src --sizes --json; they decide nothing (spec §11)
+# before = T6 (ead16677), after = the T7 tree; libraries from their artifacts, as size_gate.py reads them
+contract | runtime before | runtime after | delta | init after
+NormalToken | 39798 | 40535 | 737 | 42784
+WrappedToken | 50527 | 51267 | 740 | 53523
+NormalZetherToken | 49664 | 50302 | 638 | 53871
+WrappedZetherToken | 60596 | 61195 | 599 | 64774
+NormalPqzToken | 55251 | 55933 | 682 | 58557
+WrappedPqzToken | 70110 | 70725 | 615 | 73361
+SCaaSDex | 32089 | 32797 | 708 | 34457
+GovernanceLib | 10121 | 13225 | 3104 | 13277
+WrappedLib | 16258 | 16436 | 178 | 16488
+ZetherWrappedLib | 11499 | 11602 | 103 | 11654
+PqzWrappedLib | 4893 | 5018 | 125 | 5070
+ZetherLib | 26138 | 26274 | 136 | 26326
+OpenFactory | 15732 | 15732 | 0 | 16126
+above 65,536 B: WrappedPqzToken
+size gate: 0 error(s), 87 contracts

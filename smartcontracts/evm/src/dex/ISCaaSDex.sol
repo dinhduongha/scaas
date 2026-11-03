@@ -12,11 +12,15 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 interface ISCaaSDex {
     /// @notice Written once by `initialize` (CTR-DEX-24). `relayerSharePpm` of every fee goes to the submitter, the
     ///         rest to `treasury`. `listedOnly`: every exchange target or executor must be listed (CTR-DEX-23).
+    ///         `grantDelay`: the owner's two calls (spec §1.6), at most 30 days. `rescueTo`: the `DexPuller`'s rescue
+    ///         (spec §6.2), not built yet: non-zero is refused.
     struct DexConfig {
         address owner;
         uint32 relayerSharePpm;
         address treasury;
         bool listedOnly;
+        uint64 grantDelay;
+        address rescueTo;
     }
 
     /// @notice One order in one settlement; `fill` = its `sellFill` in this call (Path B: the matched part). Tagged

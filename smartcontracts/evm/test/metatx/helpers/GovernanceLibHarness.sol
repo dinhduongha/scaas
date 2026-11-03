@@ -12,7 +12,7 @@ contract GovernanceLibHarness {
 
     function init(uint8 kind, uint256 features_, uint256 locked, address owner_, GovernanceLib.Roles memory roles) external {
         k = kind;
-        GovernanceLib.init(features_, locked, owner_, roles, _validFor(kind), _roles(), _contractOnly());
+        GovernanceLib.init(features_, locked, owner_, 0, address(0), roles, _validFor(kind), _roles(), _contractOnly());
     }
 
     /// The valid mask each kind passes to `init`: the plain kinds `_validBits() | REGULATED`, so 5-9 reach

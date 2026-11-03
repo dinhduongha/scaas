@@ -50,7 +50,7 @@ abstract contract UADexBase is UALedgerBase {
         A = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 0, 1e6, alice, address(0))), "A"));
         B = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("B", "B", 0, 1e6, bob, address(0))), "B"));
         C = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 2, abi.encode(normalInit("C", "C", 0, 1e6, bob, address(0))), "C"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(address(this), 200_000, TREASURY, false)), "dex"));
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(address(this), 200_000, TREASURY, false, 0, address(0))), "dex"));
         usdc = new MockERC20("USD Coin", "USDC", 6);
         usdc.mint(dave, 1e6);
         address puller = dex.puller();

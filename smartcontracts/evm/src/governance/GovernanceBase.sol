@@ -59,6 +59,11 @@ abstract contract GovernanceBase is IGovernance {
     function hasRole(uint8 bit, address account) external view returns (bool) { return GovernanceLib.hasRole(bit, account); }
     function validBits() external pure returns (uint256) { return _validBits(); }
     function holderCount(uint8 bit) external view returns (uint256) { return GovernanceLib.$().counts[bit].holders; }
+    function grantDelay() external view returns (uint64) { return GovernanceLib.$().grantDelay; }
+    function lastProposedAt() external view returns (uint64) { return GovernanceLib.$().lastProposedAt; }
+    function pendingGrant(uint8 bit, address account) external view returns (uint64, address, bytes32, bool) {
+        return GovernanceLib.pendingGrant(bit, account);
+    }
     function grantOf(uint8 bit, address holder) external view returns (Grant memory) {
         return GovernanceLib.$().grants[bit][holder];
     }
@@ -71,13 +76,15 @@ abstract contract GovernanceBase is IGovernance {
     function grantRole(uint8 bit, address account) external governed {
         GovernanceLib.grantRole(bit, account, _caller(), _roleBits(), _contractOnlyBits());
     }
-    /// @notice The owner sets any holder's grant; a holder with a `delegable` grant sets a narrower leaf. Spent is carried.
+    /// @notice The owner sets any holder's grant, a widening in two calls (spec §1.6); a holder with a `delegable` grant sets
+    ///         a narrower leaf at once. Spent is carried.
     function setGrant(uint8 bit, address holder, GrantTerms calldata terms) external governed {
         (bool leaf, bytes32 parentScope) =
             GovernanceLib.setGrant(bit, holder, terms, _caller(), _roleBits(), _contractOnlyBits(), _scalarBits(), _scopeBits());
         if (leaf && !_scopeNarrows(bit, parentScope, terms.scope)) revert GrantNotNarrower(7);
     }
 
+    function cancelGrant(uint8 bit, address account) external governed { GovernanceLib.cancelGrant(bit, account, _caller()); }
     function revokeRole(uint8 bit, address account) external governed { GovernanceLib.revokeRole(bit, account, _caller()); }
     function renounceRole(uint8 bit) external governed { GovernanceLib.renounceRole(bit, _caller()); }
     function disableFeature(uint8 bit) external virtual governed { GovernanceLib.disableFeature(bit, _caller()); }

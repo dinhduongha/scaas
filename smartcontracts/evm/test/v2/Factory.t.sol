@@ -564,10 +564,11 @@ contract FactoryTest is Test {
         // +13 B: metatx split T2; +964 B: typed-signing R1's `UAKinds.uaSig` (`uaCancelNonce`'s `bytes auth` as the
         // registry's `UASig`, removed when C2 types the parameter); typed-signing C0: +56 B (the base's named path), +1,118 B
         // on the wrapped kind (`mtxUnwrap`, `_named`)
-        assertLe(address(normalImpl).code.length, 39_945);
+        // governance T7 (GD-18): past 39,945 B, the literal reads the baseline, so the ratchet is one number
+        assertLe(address(normalImpl).code.length, vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".NormalToken"));
         assertLe(address(f).code.length, 24_576);
         // Transitional (P1d D2): over EIP-170 until the size work (the only ceiling: 65,536 B, owner 2026-10-21); +973 B:
         // typed-signing R1's `UAKinds.uaSig`, as above
-        assertLe(address(wrappedImpl).code.length, 50_770);
+        assertLe(address(wrappedImpl).code.length, vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".WrappedToken"));
     }
 }
