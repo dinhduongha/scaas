@@ -10,15 +10,25 @@ import {IConfidentialToken, IConfidentialWrappedToken} from "../confidential/ICo
 import {IZetherToken, IZetherWrappedToken} from "./IZetherToken.sol";
 import {IZetherVerifier} from "./IZetherVerifier.sol";
 import {ZetherLib} from "./ZetherLib.sol";
+import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 
-/// @title The hot-path-free code of `WrappedZetherToken` behind external calls (size lever 1, owner 2026-11-01): the init
-///        path and the selector table, the two parts of the token no signed op runs.
+/// @title The wrapped-only code of `WrappedZetherToken` behind external calls: the init path and the selector table (size
+///        lever 1, owner 2026-11-01), and the body of `mtxUnshieldUnwrap` and its signed forms (CTR-ZTH-94).
 /// @notice **UNAUDITED.** External library in the release's link closure of `WRAPPED_ZETHER` only. `init` chains
 ///         `WrappedLib` and `ZetherLib` by DELEGATECALL, still in the token's context: `LinkClosure.test_libraryOpcodes`
-///         pins exactly these two. No state of its own, no immutable.
+///         pins exactly these two; the unshield runs `ZetherLib`'s internal code inlined here. No state of its own, no
+///         immutable.
 library ZetherWrappedLib {
     uint8 private constant ABSOLUTE = MtxPipelineLib.FEE_CLASS_ABSOLUTE;
     uint8 private constant AMOUNT = MtxPipelineLib.FEE_CLASS_AMOUNT;
+    /// @dev Moved from `WrappedZetherToken` (CTR-ZTH-94), unchanged.
+    bytes32 private constant UNSHIELD_UNWRAP_TYPEHASH = keccak256(
+        "ZetherUnshieldUnwrap(address from,ZetherBurn args,Unwrap unwrap,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)"
+    );
+    bytes32 private constant UA_UNSHIELD_UNWRAP_TYPEHASH = keccak256(
+        "UAZetherUnshieldUnwrap(bytes32 from,ZetherBurn args,Unwrap unwrap,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)"
+    );
 
     /// @notice The kind's init from the factory's raw `initArgs`: `initialSupply` and `initialHolder` empty, `legs`, the
     ///         rate and `conf` are checked by the two libraries. Never on Hedera (`ZetherLayer` refuses that env).
@@ -54,5 +64,46 @@ library ZetherWrappedLib {
         (s[16], c[16]) = (IZetherToken.mtxRollOverBatch.selector, ABSOLUTE);
         (s[17], c[17]) = (IZetherToken.mtxRollOverSigned.selector, ABSOLUTE);
         (s[18], c[18]) = (IZetherToken.mtxSetRollOverMode.selector, ABSOLUTE);
+    }
+
+    // ------------------------------------------------------------------ unshield-unwrap (CTR-ZTH-45, CTR-ZTH-94)
+
+    /// @notice The proof part of a direct `mtxUnshieldUnwrap`, forwarded: its arguments as the token got them, then the
+    ///         token's `Env`. A direct call (binding 0) binds the leg and `minOut` (`ZetherLib.unwrapBinding`); returns
+    ///         the inner fee. The token checked the leg and the payee before, and pays out after.
+    function unshieldUnwrap(IZetherToken.ZetherBurn calldata b, IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof)
+        public returns (uint256)
+    {
+        ZetherLib.Env memory env = ZetherLib.envTail();
+        if (env.binding == 0) env.binding = ZetherLib.unwrapBinding(x.underlying, x.minOut);
+        return ZetherLib.unshieldWith(b, proof, x.amount, x.recipient, env);
+    }
+
+    /// @notice What the signed `mtxUnshieldUnwrap` signs and runs (as `ZetherLib.multiCall`): the `Unwrap` leg a nested
+    ///         struct.
+    function unwrapCall(MetaTxLib.Envelope calldata, IZetherToken.ZetherBurn calldata b,
+        IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof, bytes calldata)
+        public pure returns (bytes32, bytes memory, bytes memory)
+    {
+        return (UNSHIELD_UNWRAP_TYPEHASH, _unwrapWords(b, x, proof), _unwrapOp(b, x, proof));
+    }
+
+    function uaUnwrapCall(MetaTxLib.UAEnvelope calldata, IZetherToken.ZetherBurn calldata b,
+        IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof, IUARegistry.UASig calldata)
+        public pure returns (bytes32, bytes memory, bytes memory)
+    {
+        return (UA_UNSHIELD_UNWRAP_TYPEHASH, _unwrapWords(b, x, proof), _unwrapOp(b, x, proof));
+    }
+
+    function _unwrapWords(IZetherToken.ZetherBurn calldata b, IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof)
+        private pure returns (bytes memory)
+    {
+        return abi.encode(ZetherLib.hashBurn(b), ZetherLib.hashUnwrap(x), keccak256(proof));
+    }
+
+    function _unwrapOp(IZetherToken.ZetherBurn calldata b, IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof)
+        private pure returns (bytes memory)
+    {
+        return abi.encodeCall(IZetherWrappedToken.mtxUnshieldUnwrap, (b, x, proof));
     }
 }

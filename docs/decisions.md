@@ -1570,6 +1570,7 @@ It said: separate DB roles per module.
 **Cost if wrong.** An unpinned dependency changes bytecode between two runs and a deployed address no longer matches its audited source.
 **Source.** `history/specs/2026-10-03-blockchain-round3-design.md:525`
 Change (2026-10-19): controller proposal (owner may override) — **forge libraries pinned by commit and source checksum, one place for CI and local builds** (the second code review, on-chain part (plan Task 5g, branch `rev2-chain-sol`; triage W-A…W-S in `pqz-core/research/code-review-2026-10-19/U-agy-chain.md`, row W-N; report `V2-claude-ua-account-wallet.md` V2-6). Before: CI installed OpenZeppelin `fda6b85f` and forge-std tag `v1.16.2` from env variables, while local builds (every SCaaS testnet deployment) used whatever `lib/` held — an untracked symlink, the README said "v5.2+", this entry's normative text "v5.2.0" — and the local forge-std was master `88c8a288` (2026-08-28), not `v1.16.2`. Now `scripts/evm_libs.sh` holds each pin (repository, commit, source directory, sha256 over the `sha256sum` lines of its `*.sol` files sorted by path): `install` runs `forge install --no-git` at the commits (both CI jobs), `check` compares any `lib/` (a checkout, a symlink, a CI install) with the pins (CI after the install; locally before a build that is deployed). OpenZeppelin stays `fda6b85f` (no bytecode changes); CI's forge-std moves from `v1.16.2` to `88c8a288`, the tree every local test ran with (tests and scripts only). Why not a git submodule: the repo installs `lib/` without submodule bookkeeping (CI), the main checkout's `lib/openzeppelin-contracts` is a symlink a submodule would collide with, and a submodule pins a commit but checks no local tree; the checksum covers a symlinked or copied checkout too. Vendoring the sources (allowed: source, not binaries) gives the same guarantee for ~ 400 files in the tree; not needed. Verified: a fresh `install` into an empty tree and the local `lib/` give the pinned digests. Same row: `IUARegistry` declares `chainKeyHash()` (the spec's interface had it; `UARegistry` exposes it as a public immutable). Status: **done** (`a94c9ffd`).
+Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `contract-<family>`** — `contract-evm` (was `contracts`), `contract-soroban`, `contract-solana`, `contract-near` (was `near`), `contract-algorand` (was `algorand`), `contract-aptos`, `contract-sui`, `contract-cosmos`, `contract-ton`. Each runs `smartcontracts/scripts/test.sh <family>` (unit and in-process tests; localnet e2e stays local; `contract-algorand` runs test.sh's steps without its localnet pytest), with the toolchain versions used locally, installed from the official release artifacts by exact version and checked against their sha256. `contract-evm` runs the whole forge suite at each of the four PQZ sets (`script/pqz/at-set.sh <set> test`, a matrix), because forge at the default set is not enough for PQZ; `--isolate`, the size gate and the `scaas-testnet` build run once. A group runs whatever the paths through a pull-request label or a manual run: `ci-full-contracts`, `ci-full-node`, `ci-full-clients`, `ci-full-pqz`, `ci-full` (`.github/ci_changes.py`). Why: soroban, solana, aptos, sui, cosmos and ton had no CI job, and PQZ ran in CI at one set only. Cost if wrong: CI minutes. Status: **done**.
 
 ### CTR-GEN-02 — Value-holding programs immutable from deploy
 - old: CR-R3-11, UD:§20.2, owner:2026-10-07:immutable · status: current · owner: yes · date: 2026-10-07 · normative: contracts/README.md#CTR-GEN-02 · superseded-by: —
@@ -3428,6 +3429,37 @@ Change (2026-11-01, controller call, owner may override): the preconditions of t
 - old: UD:§19:reopen-conditions · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CTR-ZTH-01
 
 **What it said.** Conditions under which the curve decision would reopen.
+
+### CTR-ZTH-94 — Zether token bodies run in `ZetherLib` / `ZetherWrappedLib`
+- old: — · status: current · owner: yes · date: 2026-11-03 · normative: contracts/zether.md#CTR-ZTH-94 · superseded-by: —
+
+**Rule.** Owner ruling 2026-11-03: move the Zether token function bodies into the existing libraries, shared code into `ZetherLib`,
+wrapped-only code into `ZetherWrappedLib`. No new library (no `ZetherOpsLib`). Goal: smaller `NormalZetherToken` and
+`WrappedZetherToken` deploy transactions, so that they deploy on public chains (ETH about 60 M gas per block, BSC about 70 M) under
+EIP-8037 (a transaction fits only if regular + state gas fits the block; about 1,606 gas per byte of code), and further below the
+64 KiB ceiling (EIP-7954). Built on branch `zether-lib`, commit `1c8b57f3` (status: built, not merged; the `main` merge commit is added when it lands):
+the transfer, single and unshield ops, their signed and `ua*` forms and the typehashes of those forms run in `ZetherLib`; the
+unshield-unwrap op and its signed forms in `ZetherWrappedLib`; `NormalZetherToken`'s init path and `mtxSelectors()` table in
+`ZetherLib` (size lever 1, as C3 did on the wrapped kind). A moved entry keeps its declaration on the token and hands the library
+its own calldata (no Zether struct coder stays in the token); `mtxShield`, `mtxWrapShield`, the roll-overs and the views stay.
+No selector, ABI, typehash, event, error or storage slot changes; `ZetherLib` keeps no DELEGATECALL, `ZetherWrappedLib` two.
+**Figures.** Runtime (init): `NormalZetherToken` 52,874 → 47,470 B (56,446 → 51,042), `WrappedZetherToken` 62,305 → 58,407 B
+(65,887 → 61,986); `ZetherLib` 19,690 → 26,131 B (now a `size-baseline.json` entry, over EIP-170), `ZetherWrappedLib` 4,958 →
+11,471 B. Deploy transaction, regular + state gas: `NormalZetherToken` 84.9 M → 76.3 M, `WrappedZetherToken` 100.0 M → 93.7 M,
+so neither fits a 60 M or 70 M block yet (about 37.3 KB and 43.5 KB of runtime fit; the base kinds are 37,487 B and 48,278 B);
+`ZetherLib` 41.9 M and `ZetherWrappedLib` 18.5 M fit both. Gas per call against main (forge, deterministic): the direct transfers
+−0.3 K to −4.6 K (one calldata copy instead of an ABI encode), `mtxUnshield` +0.1 K to +0.2 K; the signed and `ua*` forms cost
+between +1.0 K and +1.9 K at the median, at most +17.0 K (`mtxConfidentialTransferCompact` signed at `M = 8`, 26.1 M gas: the library builds the op call and
+the token reads it back); `mtxUnshieldUnwrap` / `uaUnshieldUnwrap` signed +1.0 K median; `NormalZetherToken.initialize` +5.7 K once
+per clone; `mtxSelectors()` +13.2 K, an `eth_call`. No gas pin and no KAT moved.
+**Why.** The bodies were already thin calls into `ZetherLib`; what the token still carried per op was the ABI encoding of its
+calldata structs (to call the library and to build a signed entry's struct words and op call). Forwarding the calldata removes
+those coders from both kinds; the decoders of the entries' own arguments stay, since the ABI is the token's.
+**Cost if wrong.** A library split can change storage, `this`, `msg.sender`, return data or the guard: the libraries run by
+DELEGATECALL in the token's context as before, write only the token's namespaces, call nothing back, and every existing test
+passes unchanged. On malformed calldata only, a `ZetherMulti` offset aimed at a word the token appends reads that public word
+(`test_nestedOffsetReadsAnAppendedWord`).
+**Source.** Owner ruling 2026-11-03; measurements and the plan in [research/zether-library-split.md](research/zether-library-split.md).
 
 ## 24. Contracts — Universal Account
 

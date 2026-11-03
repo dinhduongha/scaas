@@ -1171,6 +1171,33 @@ leg may be the native coin like on every `WRAPPED*` kind ([CTR-TOK-26](token-wra
 - **Removed with the built `ZetherToken`** (now in `legacy/p3/`): its own underlying, `wrap`/`unwrap`/`fund`,
   `_checkEscrow`, `UnsupportedUnderlying`, `ZetherMetaTx` and the envelope, the v1 init, `burn`, the prover views.
 
+<a id="CTR-ZTH-94"></a>**CTR-ZTH-94** — **The Zether entry bodies run in the existing libraries** (owner 2026-11-03, BUILT on branch
+`zether-lib`): shared code in `ZetherLib`, wrapped-only code in `ZetherWrappedLib`, no new library. A moved entry keeps its
+declaration on the token (selector, ABI, the decoder of its arguments, `nonReentrant`); its body is one DELEGATECALL that hands the
+library the entry's **own calldata as it arrived** under the library function's selector, followed by what the library cannot read
+itself (`abi.encode(Env)` of `_env()`, for the multi-recipient forms `abi.encode(mode, Env)`, for a signed builder one `bool`), so no
+coder of a Zether struct stays in the token. The library returns what the token does with its own internals: the pool payouts
+(`_poolMove`, `_fromPool`), the named pipeline (`_namedCall` / `_namedCallUA` over the typehash, struct words and op call the library
+built), `AdminLib.init` and the initial mint.
+
+| Token entry | Body in |
+|---|---|
+| `mtxConfidentialTransfer`, `…Compact` (direct) | `ZetherLib.transferMulti` |
+| `mtxConfidentialTransferSingle` (direct) | `ZetherLib.transferSingle` |
+| `mtxUnshield` (direct) | `ZetherLib.unshield` |
+| the signed and `ua*` forms of the three, and their typehashes | `ZetherLib.multiCall` / `uaMultiCall`, `singleCall` / `uaSingleCall`, `unshieldCall` / `uaUnshieldCall` |
+| `mtxUnshieldUnwrap` (direct, wrapped) | `ZetherWrappedLib.unshieldUnwrap` (the unwrap binding and `ZetherLib`'s unshield, inlined) |
+| `mtxUnshieldUnwrap` / `uaUnshieldUnwrap` (signed, wrapped), their typehashes | `ZetherWrappedLib.unwrapCall` / `uaUnwrapCall` |
+| `NormalZetherToken`'s init (`_initRaw`) and `mtxSelectors()` | `ZetherLib.initNormal`, `initNormalConf`, `normalSelectors` (lever 1, as `ZetherWrappedLib` on the wrapped kind) |
+
+`mtxShield`, `mtxWrapShield`, the roll-overs and the views stay on the token. `ZetherLib` holds no DELEGATECALL and
+`ZetherWrappedLib` exactly two (`LinkClosure`); the release closures do not change. The libraries write the token's namespaces
+(`scaas.zether`, `scaas.token`) as before; the guard stays on the token's entries and the libraries call nothing back. One
+difference, on malformed calldata only: an offset inside `ZetherMulti` is checked where the library reads it, against the longer
+calldata, so one aimed at an appended word reads that public word as the caller's own argument where the earlier code reverted
+(`ZetherMulti.t.sol` `test_nestedOffsetReadsAnAppendedWord`, as `UARegistryLib`). Figures: [§19](#gas-measured) and
+`docs/research/zether-library-split.md`.
+
 <a id="CTR-ZTH-45"></a>**CTR-ZTH-45** — **One `mtx*` interface for both confidential layers** (owner 2026-10-20, plan 5h D20, Q3 approved; before that
 entry points carried the prefix `zether` or `pqz`, [CTR-PQZ-22](pq-zero-knowledge.md#CTR-PQZ-22)). The Zether and PQZ tokens
 implement one interface, `IConfidentialToken` (`src/confidential/IConfidentialToken.sol`), with **one selector per shared function across
@@ -1803,7 +1830,27 @@ measurement with `R` passed in).
   13 k). A stored entry is read whole: BUNDLE M = 8 pays ≈ 65 / 129 cold slots for 2 / 4 KiB, which was why commit-reveal
   (the commitment, the memo + calldata) was the cheaper on-chain check at large `M`; now `R` is one SSTORE2 data contract read with EXTCODECOPY (M = 8: 94.5 k against BUNDLE's 438.8 k). Off chain (`eth_call`) every kind is free.
 
-**Sizes** (`forge build --sizes`, runtime bytes, optimizer 200 runs; EIP-170 limit 24,576 B):
+**Sizes** (`forge build --sizes`, runtime bytes, optimizer 200 runs; the ceiling is 65,536 B under Amsterdam, EIP-7954, with
+`size-baseline.json` as a ratchet):
+
+| Contract | Before [CTR-ZTH-94](#CTR-ZTH-94) (main `db9f9d86`) | After (branch `zether-lib`) |
+|---|---|---|
+| `NormalZetherToken` (init) | 52,874 (56,446) | 47,470 (51,042) |
+| `WrappedZetherToken` (init) | 62,305 (65,887) | 58,407 (61,986) |
+| `ZetherLib` / `ZetherWrappedLib` | 19,690 / 4,958 | 26,131 / 11,471 |
+
+**Deploy transaction** (EIP-8037: it fits a block only if regular + state gas does; `ZetherDeploy.t.sol`
+`test_zetherStack_fitsOneOsakaTx`, each deploy its own transaction; the libraries measured the same way). About 1,601 gas per runtime
+byte in all (1,530 of it state gas), so a 60 M block holds about 37.3 KB of runtime and a 70 M block about 43.5 KB.
+
+| Contract | Before: regular + state | After: regular + state | 60 M | 70 M |
+|---|---|---|---|---|
+| `NormalZetherToken` | 3,731,285 + 81,178,740 = 84.9 M | 3,381,760 + 72,910,620 = 76.3 M | no (10.2 KB over) | no (3.9 KB over) |
+| `WrappedZetherToken` | 4,345,035 + 95,608,170 = 100.0 M | 4,093,293 + 89,644,230 = 93.7 M | no (21.1 KB over) | no (14.9 KB over) |
+| `ZetherLib` | about 31.6 M (by the formula) | 1,725,675 + 40,164,030 = 41.9 M | yes | yes |
+| `ZetherWrappedLib` | about 8.1 M (by the formula) | 772,803 + 17,734,230 = 18.5 M | yes | yes |
+
+Neither token kind deploys on a 60 M or 70 M block yet: the base kinds are `NormalToken` 37,487 B and `WrappedToken` 48,278 B.
 
 | Contract | Built (P3b, solc 0.8.37) |
 |---|---|

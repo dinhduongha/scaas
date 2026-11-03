@@ -202,8 +202,10 @@ families carry stronger gates, enforced in code:
 run on every PR/push that touches `smartcontracts/**` or `scaas-node/**`: (a) forge (foundry-toolchain) with
 `lib/` installed (`forge install` with `--no-git`) and checked by `scripts/evm_libs.sh` at pinned commits, each with the sha256 of the sources it
 compiles — OpenZeppelin `fda6b85f` (master after v5.2.0, before v5.3.0), forge-std `88c8a288` — because `lib/` is
-not committed (`check` also verifies a local `lib/` before a deploying build; review W-N, 2026-10-19); both profiles; (b) cargo test + clippy `-D warnings` + the anvil end-to-end tests; (c) each family's
-own job (Move test, Soroban, CosmWasm, Tact, Solana) as the family is added.
+not committed (`check` also verifies a local `lib/` before a deploying build; review W-N, 2026-10-19); both profiles; (b) cargo test + clippy `-D warnings` + the anvil end-to-end tests; (c) one job per on-chain
+family, `contract-<family>` (`contract-evm`, `contract-soroban`, `contract-solana`, `contract-near`, `contract-algorand`,
+`contract-aptos`, `contract-sui`, `contract-cosmos`, `contract-ton`), each running `smartcontracts/scripts/test.sh <family>`
+with the local toolchain versions; `contract-evm` runs the whole forge suite at every PQZ parameter set (`at-set.sh`).
 
 | Pin | Value |
 |---|---|

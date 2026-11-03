@@ -34,13 +34,7 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
     bytes32 private constant WRAP_SHIELD_TYPEHASH = keccak256(
         "WrapShield(address from,address underlying,uint256 amountIn,bytes32 toUA,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
-    bytes32 private constant UNSHIELD_UNWRAP_TYPEHASH = keccak256(
-        "ZetherUnshieldUnwrap(address from,ZetherBurn args,Unwrap unwrap,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)"
-    );
-    bytes32 private constant UA_UNSHIELD_UNWRAP_TYPEHASH = keccak256(
-        "UAZetherUnshieldUnwrap(bytes32 from,ZetherBurn args,Unwrap unwrap,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)"
-    );
-
+    // The typehashes of the unshield-unwrap entries are `ZetherWrappedLib`'s (CTR-ZTH-94).
 
     /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env` (Hedera off: `ZetherLayer`
     ///      refuses a Hedera env); no `implArgs`.
@@ -93,39 +87,37 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
     ///         The leg first (cheap), the proof and the debit, then the payout from the leg's reserve (CEI: the debit
     ///         before the one outside call).
     function mtxUnshieldUnwrap(ZetherBurn calldata b, Unwrap calldata x, bytes calldata proof) external nonReentrant {
+        proof;
         uint256 i = WrappedLib.indexOf(x.underlying);
         // a derived recipient: the leg's `transferToUA` checks it
         if (UAKinds.inNativeSpace(x.recipient)) _requirePayee(address(uint160(uint256(x.recipient))));
-        ZetherLib.Env memory env = _env();
-        if (env.binding == 0) env.binding = ZetherLib.unwrapBinding(x.underlying, x.minOut); // direct: the leg and `minOut`
-        uint256 fee = ZetherLib.unshield(b, proof, x.amount, x.recipient, env);
+        // the binding and the proof: `ZetherWrappedLib`, from this call's own arguments (CTR-ZTH-94)
+        uint256 fee = abi.decode(
+            _lib(address(ZetherWrappedLib), ZetherWrappedLib.unshieldUnwrap.selector, abi.encode(_env())), (uint256));
         uint256 wrapped = x.amount * ZetherLib.$().shieldScale;
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped); // D19: burn from the pool
         _fromPool(ZetherTypes.UA.wrap(b.beneficiaryUA), fee);
         WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut);
     }
 
-    /// @notice The signed form, the `Unwrap` leg a nested struct.
+    /// @notice The signed form, the `Unwrap` leg a nested struct; `ZetherWrappedLib` builds the struct's words and the op's
+    ///         call from this call's own arguments (CTR-ZTH-94).
     function mtxUnshieldUnwrap(MetaTxLib.Envelope calldata e, ZetherBurn calldata b, Unwrap calldata x, bytes calldata proof,
         bytes calldata sig) external nonReentrant returns (bytes memory)
     {
-        (bytes memory words, bytes memory data) = _unwrapCall(b, x, proof);
-        return _namedCall(UNSHIELD_UNWRAP_TYPEHASH, e, words, data, sig);
+        (b, x, proof);
+        (bytes32 th, bytes memory words, bytes memory data) =
+            _built(address(ZetherWrappedLib), ZetherWrappedLib.unwrapCall.selector, false);
+        return _namedCall(th, e, words, data, sig);
     }
 
     function uaUnshieldUnwrap(MetaTxLib.UAEnvelope calldata e, ZetherBurn calldata b, Unwrap calldata x, bytes calldata proof,
         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
     {
-        (bytes memory words, bytes memory data) = _unwrapCall(b, x, proof);
-        return _namedCallUA(UA_UNSHIELD_UNWRAP_TYPEHASH, e, words, data, auth);
-    }
-
-    /// @dev The words the struct hashes (TS-D17) and the op's call.
-    function _unwrapCall(ZetherBurn calldata b, Unwrap calldata x, bytes calldata proof)
-        private pure returns (bytes memory, bytes memory)
-    {
-        return (abi.encode(ZetherLib.hashBurn(b), ZetherLib.hashUnwrap(x), keccak256(proof)),
-            abi.encodeCall(IZetherWrappedToken.mtxUnshieldUnwrap, (b, x, proof)));
+        (b, x, proof);
+        (bytes32 th, bytes memory words, bytes memory data) =
+            _built(address(ZetherWrappedLib), ZetherWrappedLib.uaUnwrapCall.selector, false);
+        return _namedCallUA(th, e, words, data, auth);
     }
 
     /// @notice As `WrappedToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
