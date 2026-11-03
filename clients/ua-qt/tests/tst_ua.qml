@@ -465,18 +465,84 @@ TestCase {
         return JSON.parse(o)
     }
 
-    // nested msig (nested.json): the JSON call with `inner`; key data alone refuses an msig member by name
+    // nested msig (nested.json): the digest chain from the low-level calls, the JSON calls with `inner`. Key data alone refuses an msig member by
+    // name, so holderPopMessage and pqzKeyRecordMessage stop there on a record that needs its inner keys; this API verifies no signature
     function test_nested_rows() {
         const n = vectors.load("nested.json")
         const inner = {}
         for (const r of n.registrations) if (r.kind === 0x0120) inner[r.ua] = r.keyData
-        const rows = n.registrations.concat(n.afterAcceptance).filter((r) => r.kind === 0x0120)
-        compare(rows.length, 12)
+        const zero = "0x" + "00".repeat(32), popTag = UaKinds.purposeTagV("pop", 2), memberTag = UaKinds.purposeTag("member")
+        const rows = n.registrations.concat(n.afterAcceptance)
+        compare(rows.length, 17)
         for (const r of rows) {
+            compare(UaKinds.uaOf(r.kind, r.keyData), r.ua, r.name)
+            const kem = UaKinds.kemRecordHash(r.ua, 0, r.attrs.kemPk)
+            const rd = UaKinds.registrationDigest(r.ua, r.kind, zero, kem, zero), msg = UaKinds.uaMessage(r.kind, popTag, rd)
+            compare([kem, UaKinds.portableRecordDigest(r.ua, r.kind, zero, kem), rd, msg],
+                    [r.kemRecordHash, r.portableRecordDigest, r.registrationDigest, r.popMessage], r.name)
             const i = regInput(r)
             i.kemCommit = false
             i.inner = inner
             compare(regArgs(i).args, r.args, r.name)
+            if (r.kemCommit) {
+                i.kemCommit = true
+                const c = regArgs(i)
+                compare([c.args, c.kemFill], [r.kemCommit.register, r.kemCommit.fill], r.name)
+                UaKinds.holderPopMessage(r.kind, r.ua, r.keyData, "0x", "0x", r.attrs.kemPk)
+                compare(UaKinds.lastError, "UAMemberUnknown", r.name)
+            }
+            if (r.kind !== 0x0120) continue
+            const md = UaKinds.memberDigest(r.ua, msg)
+            compare(md, r.memberDigest, r.name)
+            for (const x of r.innerDigests || [])
+                compare(UaKinds.memberDigest(x.inner, UaKinds.uaMessage(0x0120, memberTag, md)), x.memberDigest, r.name)
+        }
+        compare([n.kemRecords.length, n.pqzKeyRecords.length], [1, 4])
+        for (const r of n.kemRecords) {
+            const m = UaKinds.kemRecordMessage(r.kind, r.ua, r.version, r.kemPk)
+            compare([UaKinds.kemRecordDigest(r.ua, r.version, r.kemPk), m, UaKinds.memberDigest(r.ua, m)], [r.digest, r.message, r.memberDigest], r.id)
+            compare(JSON.parse(UaKinds.setKemKeyArgs(JSON.stringify({ ua: r.ua, version: r.version, kemPk: r.kemPk, sig: recordSig(r) }))), r.args, r.id)
+        }
+        for (const r of n.pqzKeyRecords) {
+            const tag = UaKinds.purposeTag("pqz-key"), kd = UaKinds.pqzKeyDigest(r.ua, r.pqzKeyHash)
+            const rd = UaKinds.pqzKeyRecordDigest(r.ua, r.pqzKeyHash, r.pqzPopHash), m = UaKinds.uaMessage(r.kind, tag, rd)
+            compare([kd, rd, m, UaKinds.uaMessage(0x0142, tag, kd), UaKinds.memberDigest(r.ua, m)],
+                    [r.pqzKeyDigest, r.recordDigest, r.message, r.pqzRegMessage, r.memberDigest], r.name)
+            compare(JSON.parse(UaKinds.setPqzKeyArgs(JSON.stringify({ ua: r.ua, pqzKey: r.pqzKey, pqzPopHash: r.pqzPopHash, sig: recordSig(r) }))), r.args, r.name)
+            UaKinds.pqzKeyRecordMessage(r.kind, r.ua, inner[r.ua], r.pqzKey, "0x", r.pqzPopHash, false)
+            compare(UaKinds.lastError, "UAMemberUnknown", r.name)
+        }
+        compare(n.memberships.length, 4)
+        for (const m of n.memberships) {
+            const d = UaKinds.membershipDigest(m.ua, m.member), msg = UaKinds.uaMessage(0x0120, UaKinds.purposeTag("membership"), d)
+            compare([d, msg, UaKinds.memberDigest(m.ua, msg)], [m.digest, m.message, m.memberDigest], m.name)
+        }
+        compare(n.authorizations.length, 5)
+        const k = n.kemRecords[0]
+        for (const a of n.authorizations) {
+            compare(UaKinds.memberDigest(a.ua, UaKinds.uaMessage(0x0120, a.purposeTag, a.digest)), a.memberDigest, a.name)
+            compare(JSON.parse(UaKinds.setKemKeyArgs(JSON.stringify({ ua: k.ua, version: k.version, kemPk: k.kemPk, sig: a.uaSig }))).sig, a.uaSig, a.name)
+        }
+        // the builder's own refusal is the minimal rule at both levels; the others are the registry's, on the signatures
+        const minimal = ["inner-below-threshold", "inner-index-past-the-members", "inner-unsorted", "inner-not-minimal", "outer-not-minimal"]
+        compare(n.negatives.length, 12)
+        for (const x of n.negatives) {
+            const i = regInput(n.registrations.find((r) => r.name === x.row))
+            i.kemCommit = false
+            i.inner = inner
+            i.pop = x.popTyped
+            if (minimal.includes(x.name)) {
+                compare(UaKinds.registrationArgs(JSON.stringify(i)), "", x.name)
+                compare(UaKinds.lastError, x.error, x.name)
+            } else {
+                compare(regArgs(i).args.pop, x.popTyped, x.name)
+            }
+        }
+        compare(n.structures.length, 2)
+        for (const s of n.structures) {
+            compare(UaKinds.uaOf(0x0120, s.keyData), s.ua, s.name)
+            compare(UaKinds.msigPqzEligible(s.keyData), false, s.name)
+            compare(UaKinds.lastError, s.error, s.name)
         }
         for (const r of n.eligibility) {
             compare(UaKinds.msigPqzEligible(r.keyData), false, r.reason)

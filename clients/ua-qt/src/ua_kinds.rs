@@ -124,14 +124,15 @@ pub mod qobject {
         #[qinvokable] #[cxx_name = "encodeMsig"]
         fn encode_msig(self: Pin<&mut Self>, threshold: i32, members: &QString) -> QString;
         /// The registry's explicit arguments of a registration, JSON in and out. `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop,
-        /// kemPk, pop, kemCommit}` (an absent field is empty, an msig's `pop` is `[{index, keyData, sig}]`, `kemCommit` true / false
-        /// forces the KEM form; absent: the hash commit only when the full call is over 261,909 B). Out: `{args, kemFill,
+        /// kemPk, pop, kemCommit, inner}` (an absent field is empty, an msig's `pop` is `[{index, members: [{index, sig}], sig}]`, `inner`
+        /// `{id: keyData}` its msig members' structures, `kemCommit` true / false forces the KEM form; absent: the hash commit only when the
+        /// full call is over 261,909 B). Out: `{args, kemFill,
         /// calldataLength, kemFillCalldataLength}`, `args.entry` the registry entry, `kemFill` the `setKemKey(ua, 0, …)` of a
         /// hash-committed key (null otherwise).
         #[qinvokable] #[cxx_name = "registrationArgs"]
         fn registration_args(self: Pin<&mut Self>, input: &QString) -> QString;
         /// `setKemKey`'s explicit arguments, JSON in and out. `input`: `{ua, version, kemPk, sig}`, `sig` the `UASig` `{keyData,
-        /// signature, members: [{index, keyData, sig}]}` (absent: empty, the version-0 fill of a hash commit). Out: `{ua, version,
+        /// signature, members: [{index, members: [{index, sig}], sig}]}` (absent: empty, the version-0 fill of a hash commit). Out: `{ua, version,
         /// kem, sig}`.
         #[qinvokable] #[cxx_name = "setKemKeyArgs"]
         fn set_kem_key_args(self: Pin<&mut Self>, input: &QString) -> QString;
