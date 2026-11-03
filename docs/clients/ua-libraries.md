@@ -52,7 +52,11 @@ with more than 16 entries or key data over 580 bytes is `UAArgument` (ua-rs `jso
 missing from it or an entry that holds an `msig` (a third level). `scaas_ua_replayed_member_sig` / `replayedMemberSig` turn the bytes of a slot's
 `UAMemberSig` event (they hash to `memberSigHashOf(ua, index)`, owner 2026-11-03) into the slot JSON `{index, members: [{index, sig}], sig}` a copy sends to `acceptMembership` (CTR-UA-37), `UAUnauthorized`
 (ua-c `SCAAS_UA_ERR_UNAUTHORIZED` = 20, new) for bytes that are not that slot's. Tests: `nested.json`'s `msig-nested-pq`, its eligibility rows,
-nested PQZ key records and every `memberships` row in each wrapper (`test_nested_inner`, `nested_inner`, `nested inner`). BUILT.
+nested PQZ key records and every `memberships` row in each wrapper (`test_nested_inner`, `nested_inner`, `nested inner`). ua-cxx, ua-qt and
+ua-dart-frb export `keccak256(data)` (ua-rs `keccak256`; ua-qt hex in and out, `UAArgument` on bad hex), and their `member_sig_hashes`,
+`test_member_sig_hashes`, `member sig hashes` tests check every `msig` registration row's `memberSigHashes` in `portable.json` and `nested.json`
+(keccak256 of the slot's `sig`, or of an `msig` member's `abi.encode(InnerSig[])`, encoded in the test) and every `memberships` row's
+`storedHash` = keccak256(`stored`). BUILT.
 
 **Metatx hashes (metatx split T18).** The Rust crate and QML also carry the three hashes a wallet needs for
 [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) / [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27):

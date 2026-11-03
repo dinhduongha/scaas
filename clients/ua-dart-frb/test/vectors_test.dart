@@ -608,6 +608,55 @@ void main() {
     }
   });
 
+  /// abi.encode(InnerSig[]) of a typed list [{index, sig}]: the bytes an msig member's UAMemberSig carries.
+  Uint8List encodeInnerSigs(List list) {
+    Uint8List word(int v) => Uint8List(32)..buffer.asByteData().setUint64(24, v);
+    final head = <int>[...word(0x20), ...word(list.length)], tail = <int>[];
+    for (final x in list.cast<Map>()) {
+      final s = bytes(x['sig']);
+      head.addAll(word(32 * list.length + tail.length));
+      tail
+        ..addAll(word(x['index'] as int))
+        ..addAll(word(0x40))
+        ..addAll(word(s.length))
+        ..addAll(s)
+        ..addAll(Uint8List((32 - s.length % 32) % 32));
+    }
+    return Uint8List.fromList([...head, ...tail]);
+  }
+
+  // owner 2026-11-03: memberSigHashOf(ua, index) is keccak256 of the bytes the slot's UAMemberSig carries: its sig, or an msig member's
+  // abi.encode(InnerSig[]). Every msig registration row's memberSigHashes (portable.json, its negative, nested.json), and every memberships
+  // row's storedHash = keccak256(stored), stored being that slot's bytes.
+  test('member sig hashes', () {
+    final p = load('portable.json'), n = load('nested.json');
+    final regs = [
+      ...rows(p, 'registrations'),
+      ...rows(p, 'negatives').where((x) => x['registration'] != null).map((x) => x['registration']),
+      ...rows(n, 'registrations'),
+      ...rows(n, 'afterAcceptance'),
+    ].cast<Map>().where((r) => r['kind'] == 0x0120).toList();
+    var slots = 0, inner = 0;
+    for (final r in regs) {
+      final pop = r['args']['pop'] as List, hs = r['memberSigHashes'] as List;
+      expect(hs.length, pop.length, reason: r['name']);
+      for (var i = 0; i < pop.length; i++, slots++) {
+        final s = pop[i] as Map, members = s['members'] as List;
+        if (members.isNotEmpty) inner++;
+        expect([hs[i]['index'], hs[i]['hash']], [s['index'], hx(keccak256(data: members.isNotEmpty ? encodeInnerSigs(members) : bytes(s['sig'])))],
+            reason: '${r['name']} slot $i');
+      }
+    }
+    expect([regs.length, slots, inner], [19, 30, 7], reason: 'msig rows, slots, msig-member slots');
+    expect(rows(n, 'memberships').length, 4);
+    for (final m in rows(n, 'memberships').cast<Map>()) {
+      final stored = bytes(m['stored']), members = m['members'] as List;
+      expect(hx(keccak256(data: stored)), m['storedHash'], reason: m['name']);
+      expect(hx(members.isNotEmpty ? encodeInnerSigs(members) : bytes(m['sig'])), m['stored'], reason: "${m['name']}: the encoder's control");
+    }
+    expect(hx(keccak256(data: Uint8List(0))), '0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470');
+  });
+
   test('registration args', () {
     var commits = 0;
     for (final r in regs) {

@@ -89,6 +89,8 @@ bool isSigning(uint16_t kind);
 bool isMember(uint16_t kind, bool hederaNative);
 Bytes uaMessage(uint16_t kind, const Bytes& purposeTag, const Bytes& digest);
 Bytes chainKeyHash(uint64_t chainId);
+// keccak256(data): e.g. memberSigHashOf, the hash of a slot's sig, or of an msig member's abi.encode(InnerSig[]).
+Bytes keccak256(const Bytes& data);
 // The portable records are typed EIP-712 structs (typed-signing TS-D1): typed(s) = keccak256(0x1901 ‖ DS_P ‖ hashStruct(s)), DS_P the
 // domain EIP712Domain(string name,string version) = ("SCaaS UA Portable", "1"): no chain id, verifying contract or salt.
 Bytes portableDomainSeparator();

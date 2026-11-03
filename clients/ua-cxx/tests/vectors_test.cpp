@@ -613,6 +613,59 @@ static void nested_inner() {
     }
 }
 
+// abi.encode(InnerSig[]) of a typed list [{index, sig}]: the bytes an msig member's UAMemberSig carries.
+static Bytes encodeInnerSigs(const json& list) {
+    auto word = [](Bytes& o, size_t v) { for (int i = 31; i >= 0; --i) o.push_back(i < 8 ? uint8_t(v >> (8 * i)) : 0); };
+    Bytes head, tail;
+    word(head, 0x20);
+    word(head, list.size());
+    for (auto& x : list) {
+        Bytes s = bytes(x["sig"]);
+        word(head, 32 * list.size() + tail.size());
+        word(tail, x["index"].get<uint16_t>());
+        word(tail, 0x40);
+        word(tail, s.size());
+        tail.insert(tail.end(), s.begin(), s.end());
+        tail.resize(tail.size() + (32 - s.size() % 32) % 32, 0);
+    }
+    head.insert(head.end(), tail.begin(), tail.end());
+    return head;
+}
+
+// owner 2026-11-03: memberSigHashOf(ua, index) is keccak256 of the bytes the slot's UAMemberSig carries: its sig, or an msig member's
+// abi.encode(InnerSig[]). Every msig registration row's memberSigHashes (portable.json, its negative, nested.json), and every memberships
+// row's storedHash = keccak256(stored), stored being that slot's bytes.
+static void member_sig_hashes() {
+    json p = load("portable.json"), n = load("nested.json");
+    std::vector<const json*> rows;
+    for (auto& r : p["registrations"]) rows.push_back(&r);
+    for (auto& x : p["negatives"]) if (x.contains("registration")) rows.push_back(&x["registration"]);
+    for (auto* list : {&n["registrations"], &n["afterAcceptance"]}) for (auto& r : *list) rows.push_back(&r);
+    int msigs = 0, slots = 0, inner = 0;
+    for (auto* r : rows) {
+        if (kind((*r)["kind"]) != 0x0120) continue;
+        ++msigs;
+        std::string name = (*r)["name"];
+        auto &pop = (*r)["args"]["pop"], &hs = (*r)["memberSigHashes"];
+        CHECK(hs.size() == pop.size(), name);
+        for (size_t i = 0; i < pop.size() && i < hs.size(); ++i, ++slots) {
+            bool msig = !pop[i]["members"].empty();
+            inner += msig;
+            Bytes b = msig ? encodeInnerSigs(pop[i]["members"]) : bytes(pop[i]["sig"]);
+            CHECK(hs[i]["index"] == pop[i]["index"] && hx(keccak256(b)) == hs[i]["hash"].get<std::string>(), name + " slot " + std::to_string(i));
+        }
+    }
+    CHECK(msigs == 19 && slots == 30 && inner == 7, "msig rows, slots, msig-member slots");
+    CHECK(n["memberships"].size() == 4, "membership rows");
+    for (auto& m : n["memberships"]) {
+        std::string name = m["name"];
+        Bytes stored = bytes(m["stored"]);
+        CHECK(hx(keccak256(stored)) == m["storedHash"].get<std::string>(), name);
+        CHECK((m["members"].empty() ? bytes(m["sig"]) : encodeInnerSigs(m["members"])) == stored, name + ": the encoder's control");
+    }
+    CHECK(hx(keccak256({})) == "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470", "keccak256 of nothing");
+}
+
 static void registration_args() {
     json p = load("portable.json"), k = load("kinds.json");
     int commits = 0, withCommit = 0;
@@ -698,7 +751,8 @@ int main(int argc, char** argv) {
         {"invalid_rows", invalid_rows}, {"natives_native_space_canonical_ids", natives_native_space_canonical_ids},
         {"messages", messages}, {"structures", structures}, {"portable", portable}, {"kem_record", kem_record},
         {"pqz_key_record", pqz_key_record}, {"membership_rows", membership_rows}, {"portable_purposes", portable_purposes},
-        {"holder_refusals", holder_refusals}, {"registration_args", registration_args}, {"nested_rows", nested_rows}, {"nested_inner", nested_inner}, {"set_key_args", set_key_args}};
+        {"holder_refusals", holder_refusals}, {"registration_args", registration_args}, {"nested_rows", nested_rows}, {"nested_inner", nested_inner}, {"set_key_args", set_key_args},
+        {"member_sig_hashes", member_sig_hashes}};
     if (argc != 2 || !tests.count(argv[1])) { std::fprintf(stderr, "usage: vectors_test <name>\n"); return 2; }
     try { tests[argv[1]](); } catch (const std::exception& e) { std::fprintf(stderr, "exception: %s\n", e.what()); return 1; }
     return failures ? 1 : 0;

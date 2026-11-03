@@ -129,6 +129,9 @@ ua-c|unittest|test_nested_inner
 ua-cxx|ctest|nested_inner
 ua-qt|qt|test_nested_inner
 ua-dart-frb|dart|nested inner
+ua-cxx|ctest|member_sig_hashes
+ua-qt|qt|test_member_sig_hashes
+ua-dart-frb|dart|member sig hashes
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

@@ -120,6 +120,10 @@ U8Array32 uaMessage({
 U8Array32 chainKeyHash({required PlatformInt64 chainId}) =>
     ScaasUa.instance.api.crateApiUaChainKeyHash(chainId: chainId);
 
+/// `keccak256(data)`: e.g. `memberSigHashOf`, the hash of a slot's `sig` or of an msig member's `abi.encode(InnerSig[])`.
+U8Array32 keccak256({required List<int> data}) =>
+    ScaasUa.instance.api.crateApiUaKeccak256(data: data);
+
 /// The portable EIP-712 domain separator `DS_P` (`EIP712Domain(string name,string version)` = ("SCaaS UA Portable", "1"), no
 /// chain; typed-signing TS-D1): every portable digest is `keccak256(0x1901 ‖ DS_P ‖ hashStruct)`.
 U8Array32 portableDomainSeparator() =>

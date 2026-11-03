@@ -98,6 +98,7 @@ mod ffi {
         fn is_member(kind: u16, hedera_native: bool) -> bool;
         fn ua_message(kind: u16, purpose: &[u8], digest: &[u8]) -> Result<Vec<u8>>;
         fn chain_key_hash(chain_id: u64) -> Vec<u8>;
+        fn keccak256(data: &[u8]) -> Vec<u8>;
         fn portable_domain_separator() -> Vec<u8>;
         fn kem_record_hash(ua: &[u8], version: u64, kem_pk: &[u8]) -> Result<Vec<u8>>;
         fn portable_record_digest(ua: &[u8], kind: u16, pqz_key_hash: &[u8], kem_record_hash: &[u8]) -> Result<Vec<u8>>;
@@ -264,6 +265,9 @@ fn ua_message(kind: u16, purpose: &[u8], digest: &[u8]) -> R<Vec<u8>> {
 }
 fn chain_key_hash(chain_id: u64) -> Vec<u8> {
     ua::chain_key_hash(chain_id).to_vec()
+}
+fn keccak256(data: &[u8]) -> Vec<u8> {
+    ua::keccak256(data).to_vec()
 }
 fn portable_domain_separator() -> Vec<u8> {
     ua::ua8::PORTABLE_DOMAIN_SEPARATOR.to_vec()

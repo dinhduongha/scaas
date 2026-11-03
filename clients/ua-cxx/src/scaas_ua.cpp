@@ -103,6 +103,7 @@ bool isSigning(uint16_t k) { return ffi::is_signing(k); }
 bool isMember(uint16_t k, bool h) { return ffi::is_member(k, h); }
 Bytes uaMessage(uint16_t k, const Bytes& p, const Bytes& d) { return call([&] { return bytes(ffi::ua_message(k, sl(p), sl(d))); }); }
 Bytes chainKeyHash(uint64_t c) { return bytes(ffi::chain_key_hash(c)); }
+Bytes keccak256(const Bytes& d) { return bytes(ffi::keccak256(sl(d))); }
 Bytes portableDomainSeparator() { return bytes(ffi::portable_domain_separator()); }
 Bytes kemRecordHash(const Bytes& ua, uint64_t version, const Bytes& kemPk) {
     return call([&] { return bytes(ffi::kem_record_hash(sl(ua), version, sl(kemPk))); });

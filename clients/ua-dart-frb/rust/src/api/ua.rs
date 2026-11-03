@@ -179,6 +179,11 @@ pub fn ua_message(kind: i64, purpose: [u8; 32], digest: [u8; 32]) -> R<[u8; 32]>
 pub fn chain_key_hash(chain_id: i64) -> R<[u8; 32]> {
     Ok(scaas_ua::chain_key_hash(n(chain_id)?))
 }
+/// `keccak256(data)`: e.g. `memberSigHashOf`, the hash of a slot's `sig` or of an msig member's `abi.encode(InnerSig[])`.
+#[frb(sync)]
+pub fn keccak256(data: Vec<u8>) -> [u8; 32] {
+    scaas_ua::keccak256(&data)
+}
 /// The portable EIP-712 domain separator `DS_P` (`EIP712Domain(string name,string version)` = ("SCaaS UA Portable", "1"), no
 /// chain; typed-signing TS-D1): every portable digest is `keccak256(0x1901 ‖ DS_P ‖ hashStruct)`.
 #[frb(sync)]

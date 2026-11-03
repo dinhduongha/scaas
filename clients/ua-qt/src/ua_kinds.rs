@@ -51,6 +51,9 @@ pub mod qobject {
         fn ua_message(self: Pin<&mut Self>, kind: i32, purpose: &QString, digest: &QString) -> QString;
         /// `chain_id` is a JS number: exact up to 2^53.
         #[qinvokable] #[cxx_name = "chainKeyHash"] fn chain_key_hash(self: Pin<&mut Self>, chain_id: f64) -> QString;
+        /// `keccak256(data)` of hex bytes ("" on undecodable hex, `lastError` UAArgument): e.g. `memberSigHashOf`, the hash of a slot's
+        /// `sig` or of an msig member's `abi.encode(InnerSig[])`.
+        #[qinvokable] fn keccak256(self: Pin<&mut Self>, data: &QString) -> QString;
         /// The portable EIP-712 domain separator `DS_P` (`EIP712Domain(string name,string version)` = ("SCaaS UA Portable", "1"),
         /// no chain; typed-signing TS-D1): every portable digest is `keccak256(0x1901 ‖ DS_P ‖ hashStruct)`.
         #[qinvokable] #[cxx_name = "portableDomainSeparator"] fn portable_domain_separator(self: Pin<&mut Self>) -> QString;
@@ -330,6 +333,9 @@ impl qobject::UaKinds {
     }
     pub fn chain_key_hash(self: Pin<&mut Self>, chain_id: f64) -> QString {
         self.hex(|| Ok(ua::chain_key_hash(id(chain_id)?).to_vec()))
+    }
+    pub fn keccak256(self: Pin<&mut Self>, data: &QString) -> QString {
+        self.hex(|| Ok(ua::keccak256(&bytes(data)?).to_vec()))
     }
     pub fn portable_domain_separator(self: Pin<&mut Self>) -> QString {
         self.hex(|| Ok(ua::ua8::PORTABLE_DOMAIN_SEPARATOR.to_vec()))

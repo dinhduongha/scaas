@@ -523,6 +523,48 @@ TestCase {
         }
     }
 
+    // abi.encode(InnerSig[]) of a typed list [{index, sig}], as hex: the bytes an msig member's UAMemberSig carries
+    function encodeInnerSigs(list) {
+        const w = v => ("0".repeat(64) + v.toString(16)).slice(-64)
+        let head = w(0x20) + w(list.length), tail = ""
+        for (const x of list) {
+            const s = x.sig.slice(2)
+            head += w(32 * list.length + tail.length / 2)
+            tail += w(x.index) + w(0x40) + w(s.length / 2) + s + "0".repeat((64 - s.length % 64) % 64)
+        }
+        return "0x" + head + tail
+    }
+
+    // owner 2026-11-03: memberSigHashOf(ua, index) is keccak256 of the bytes the slot's UAMemberSig carries: its sig, or an msig member's
+    // abi.encode(InnerSig[]). Every msig registration row's memberSigHashes (portable.json, its negative, nested.json), and every memberships
+    // row's storedHash = keccak256(stored), stored being that slot's bytes
+    function test_member_sig_hashes() {
+        const pp = vectors.load("portable.json"), n = vectors.load("nested.json")
+        const rows = pp.registrations.concat(pp.negatives.filter(x => x.registration).map(x => x.registration), n.registrations, n.afterAcceptance)
+            .filter(r => r.kind === 0x0120)
+        let slots = 0, inner = 0
+        for (const r of rows) {
+            compare(r.memberSigHashes.length, r.args.pop.length, r.name)
+            r.args.pop.forEach((s, i) => {
+                const msig = s.members.length > 0
+                inner += msig ? 1 : 0
+                ++slots
+                compare([r.memberSigHashes[i].index, r.memberSigHashes[i].hash],
+                        [s.index, UaKinds.keccak256(msig ? encodeInnerSigs(s.members) : s.sig)], r.name + " slot " + i)
+            })
+        }
+        compare([rows.length, slots, inner], [19, 30, 7], "msig rows, slots, msig-member slots")
+        compare(n.memberships.length, 4)
+        for (const m of n.memberships) {
+            compare(UaKinds.keccak256(m.stored), m.storedHash, m.name)
+            compare(m.members.length > 0 ? encodeInnerSigs(m.members) : m.sig, m.stored, m.name + ": the encoder's control")
+        }
+        compare(UaKinds.keccak256("0x"), "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
+        compare(UaKinds.lastError, "")
+        compare(UaKinds.keccak256("0x0"), "")
+        compare(UaKinds.lastError, "UAArgument")
+    }
+
     // nested msig (nested.json): the digest chain from the low-level calls, the JSON calls with `inner`. Key data alone refuses an msig member by
     // name, so holderPopMessage and pqzKeyRecordMessage stop there on a record that needs its inner keys; their `With` forms take `inner`
     // (test_nested_inner). This API verifies no signature
