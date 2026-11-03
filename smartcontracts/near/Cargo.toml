@@ -3,7 +3,7 @@ resolver = "2"
 members = ["common", "token", "dex", "relayfee", "relayexec", "test-receiver", "spike-p256", "integration", "integration/target-fixture"]
 
 [workspace.dependencies]
-near-sdk = "5.30.0"
+near-sdk = { version = "5.30.0", default-features = false }  # no `wee_alloc` (unmaintained, GHSA-rc23-xxgq-x27g): std's wasm32 allocator
 near-contract-standards = "5.30.0"
 p256 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdsa"] }
 
