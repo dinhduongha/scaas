@@ -58,7 +58,7 @@ markets, read the book and book the fees.
 | Sell token (SCaaS) | verifies the `TradeOrder` signature, expiry, nonce lane, closed state, and on Path A the fill against every signed bound; moves exactly the pulled amount **to `dex`**; keeps `pulled[orderHash]` and `minNonce` |
 | `SCaaSDex` | checks the match (tokens, listing, self-trade, relayer), computes fills at each maker's price, pulls every leg, enforces Path B and outside-token legs, pays out, splits fees, asserts conservation; on the exchange path runs the route's interactions or executor and pays the surplus ([CTR-DEX-20](#CTR-DEX-20)); `mtxHybrid` / `mtxHybridVia` do both for one taker, refund its unsold remainder and restore its capacity ([CTR-DEX-27](#CTR-DEX-27)); `mtxExchangeBatch` runs independent plans, each isolated ([CTR-DEX-28](#CTR-DEX-28)) |
 | `UniswapExecutor` | the reference executor of path (b): exact-input Uniswap v3 and v4 hops, holds nothing between calls ([CTR-DEX-29](#CTR-DEX-29)) |
-| Node | the book per market, price-time priority, partial fills, settlement through `call` jobs, its own final-event watcher, intake fee policy per role ([NODE-DEX-01](../node/dex-venue.md#NODE-DEX-01)); the TradeEngine for AMM routes ([NODE-DEX-17](../node/dex-venue.md#NODE-DEX-17)) |
+| Node | the book per market, price-time priority, partial fills, settlement through `call` jobs, its own final-event watcher, intake fee policy per role ([NODE-DEX-01](../node/dex-venue.md#NODE-DEX-01)); the `OrderRouter` for AMM routes ([NODE-DEX-17](../node/dex-venue.md#NODE-DEX-17)) |
 
 ```mermaid
 sequenceDiagram
@@ -662,7 +662,7 @@ function mtxHybridVia(HybridPlan calldata p, address executor, bytes calldata da
    `UAExchangeLegSettled` with `sold = taker.fill − leftover`, `receivedFloor = Σ maker sold + outsideFloor`, `surplus =
    out − outsideFloor`, `refund` including the leftover, `limitReceive = ⌈sold · receiveAmount / amount⌉`: no new event,
    the makers' `LegSettled` / `UALegSettled` are read by the watcher and indexer today; the taker's `ExchangeLegSettled`
-   / `UAExchangeLegSettled` come with P7 / the TradeEngine ([NODE-DEX-04](../node/dex-venue.md#NODE-DEX-04),
+   / `UAExchangeLegSettled` come with P7 / the `OrderRouter` ([NODE-DEX-04](../node/dex-venue.md#NODE-DEX-04),
    SPECIFIED). The relayer
    share of every fee goes to `msg.sender` ([CTR-DEX-17](#CTR-DEX-17)).
 7. **Restore capacity** (owner 2026-10-30, follow-up: the refunded part is fillable again under the same signed order).
@@ -693,7 +693,7 @@ submitter and the order `relayer` are open roles compared without a designator c
 executor are solver-chosen and bounded by conservation and the floors, and there is no admin function. *Relayable, fee
 may be 0*: a relayer entry over user signatures, paid only by its share of each signed `fee`, which may be 0; nothing
 assumes gas price 0 or a chain's own block limit — the bound is EIP-7825 per transaction. *Non-EVM families*: unchanged
-(none had the floor, none has an exchange path; 1 × N follows with the TradeEngine). *Deployment*: redeploy, no migration
+(none had the floor, none has an exchange path; 1 × N follows with the `OrderRouter`). *Deployment*: redeploy, no migration
 (all chains are test-only): a new `TradeLib` means new token releases (a release pins the library's code hash) and a
 new `SCaaSDex` a new DEX release; tokens made before keep the 50 % floor until redeployed. *Code size*: no
 micro-optimisation and no `via_ir` (it would move every CREATE2-derived vector); `SCaaSDex` is **26,967 B** of runtime
@@ -790,7 +790,7 @@ hybrid taker's remainder ([CTR-DEX-27](#CTR-DEX-27)) is assigned by the DEX, who
 make that refund impossible through an executor) — and requires a zero balance of every intermediate hop token
 (`Leftover(token)`), so it holds nothing between calls and ends at 0 in every token. No admin, no owner, no upgrade, no
 sweep, no approvals; a stray balance sent to it becomes surplus at its next use. The DEX admin lists it with
-`setExchangeTarget` where listed-only mode or `LISTED_POOLS` asks; the node names it in `trade_engine.executor`.
+`setExchangeTarget` where listed-only mode or `LISTED_POOLS` asks; the node names it in `order_router.executor`.
 Deployed per chain only where Uniswap exists (a `uniswap_executor` key in `deployments/<chainid>.json` when deployed);
 not on 7622 (no Uniswap there), and **no deploy script yet**: it comes with the first chain that has Uniswap. v2 and v3
 routers stay on path (a). Status **BUILT** (`src/dex/UniswapExecutor.sol`, `src/dex/uniswap/IUniswapV3.sol`,
