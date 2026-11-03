@@ -126,6 +126,18 @@ fn nested_replay_rows() {
     }
 }
 
+/// An offset word next to the end of `usize` refuses, never overflows (a panic in a debug build): `word(32) ‖ word(1) ‖ word(2^64 − 80)`.
+#[test]
+fn nested_decode_offsets_checked() {
+    let word = |v: u64| [[0u8; 24].as_slice(), &v.to_be_bytes()].concat();
+    let hostile = [word(32), word(1), word(u64::MAX - 79)].concat();
+    let n = nested();
+    let m = rows(&n, "memberships").iter().find(|m| !m["members"].as_array().unwrap().is_empty()).unwrap();
+    let d = key_of(&n, b32(&m["ua"])).unwrap().1;
+    assert_eq!(replayed_member_sig(&d, m["index"].as_u64().unwrap() as u16, &hostile), Err(UAError::Unauthorized));
+    assert_eq!(decode_member_sigs(&hostile), None);
+}
+
 #[test]
 fn nested_member_kind() {
     assert!(is_member(0x0120, false));
@@ -141,8 +153,23 @@ mod verdicts {
         let pk = bytes(&a["kemPk"]);
         UAAttrs { pqz_key: bytes(&a["pqzKey"]), pqz_pop_hash: b32(&a["pqzPopHash"]), kem: KemKey::from_kem_pk(&pk).unwrap(), kem_pk_hash: [0; 32] }
     }
+    /// The accepted bits (CTR-UA-37): what each `msig` row's `pop` accepted as it registered.
+    fn popped(n: &Value, id: [u8; 32], i: u16) -> bool {
+        rows(n, "registrations").iter().any(|r| b32(&r["ua"]) == id && r["popSigners"].as_array().is_some_and(|s| s.iter().any(|x| x.as_u64() == Some(i.into()))))
+    }
+    /// Then also what the `memberships` rows accept.
+    fn after(n: &Value, id: [u8; 32], i: u16) -> bool {
+        popped(n, id, i) || rows(n, "memberships").iter().any(|m| b32(&m["ua"]) == id && m["index"].as_u64() == Some(i.into()))
+    }
+    fn check_on(n: &Value, r: &Value, pop: &[u8], accepted: Option<&Accepted>) -> Result<()> {
+        let kind = r["kind"].as_u64().unwrap() as u16;
+        check_registration_with(kind, &bytes(&r["keyData"]), &attrs(r), pop, &bytes(&r["pqzPop"]), &|id| key_of(n, id), accepted)
+    }
     fn check(n: &Value, r: &Value, pop: &[u8]) -> Result<()> {
-        check_registration(r["kind"].as_u64().unwrap() as u16, &bytes(&r["keyData"]), &attrs(r), pop, &bytes(&r["pqzPop"]), &|id| key_of(n, id))
+        check_on(n, r, pop, Some(&|id, i| popped(n, id, i)))
+    }
+    fn any_row<'a>(n: &'a Value, name: &Value) -> &'a Value {
+        rows(n, "registrations").iter().chain(rows(n, "afterAcceptance")).find(|r| r["name"] == *name).unwrap()
     }
     fn flip(sig: &[u8]) -> Vec<u8> {
         let mut m = decode_member_sigs(sig).unwrap();
@@ -154,17 +181,21 @@ mod verdicts {
     #[test]
     fn nested_check_rows() {
         let n = nested();
-        for r in rows(&n, "registrations").iter().chain(rows(&n, "afterAcceptance")) {
+        for r in rows(&n, "registrations") {
             assert_eq!(check(&n, r, &bytes(&r["pop"])), Ok(()), "{}", r["name"]);
+        }
+        for r in rows(&n, "afterAcceptance") {
+            assert_eq!(check_on(&n, r, &bytes(&r["pop"]), Some(&|id, i| after(&n, id, i))), Ok(()), "{}", r["name"]);
         }
     }
 
     #[test]
     fn nested_check_negatives() {
         let n = nested();
+        assert_eq!(rows(&n, "negatives").len(), 13);
         for x in rows(&n, "negatives") {
             assert_eq!(x["error"], "UAPoP");
-            assert_eq!(check(&n, row(&n, &x["row"]), &bytes(&x["pop"])), Err(UAError::Pop), "{}", x["name"]);
+            assert_eq!(check(&n, any_row(&n, &x["row"]), &bytes(&x["pop"])), Err(UAError::Pop), "{}", x["name"]);
         }
         for s in rows(&n, "structures") {
             let got = check_registration(0x0120, &bytes(&s["keyData"]), &UAAttrs::default(), &[], &[], &|id| key_of(&n, id));
@@ -182,35 +213,106 @@ mod verdicts {
     fn nested_check_records_and_acceptances() {
         let n = nested();
         let keys = |id| key_of(&n, id);
+        let (at, all): (&Accepted, &Accepted) = (&|id, i| popped(&n, id, i), &|id, i| after(&n, id, i));
         for k in rows(&n, "kemRecords") {
             let (ua, sig) = (b32(&k["ua"]), bytes(&k["sig"]));
             let (kind, d) = key_of(&n, ua).unwrap();
-            assert_eq!(check_kem_record(kind, &d, &ua, 1, &bytes(&k["kemPk"]), &sig, &keys), Ok(()));
-            assert_eq!(check_kem_record(kind, &d, &ua, 1, &bytes(&k["kemPk"]), &flip(&sig), &keys), Err(UAError::Unauthorized));
+            assert_eq!(check_kem_record_with(kind, &d, &ua, 1, &bytes(&k["kemPk"]), &sig, &keys, Some(at)), Ok(()));
+            assert_eq!(check_kem_record_with(kind, &d, &ua, 1, &bytes(&k["kemPk"]), &flip(&sig), &keys, Some(at)), Err(UAError::Unauthorized));
         }
         for k in rows(&n, "pqzKeyRecords") {
             let (ua, sig) = (b32(&k["ua"]), bytes(&k["sig"]));
             let (kind, d) = key_of(&n, ua).unwrap();
-            assert_eq!(check_pqz_key_record(kind, &d, &ua, &bytes(&k["pqzKey"]), &b32(&k["pqzPopHash"]), &sig, &keys), Ok(()));
-            assert_eq!(check_pqz_key_record(kind, &d, &ua, &bytes(&k["pqzKey"]), &b32(&k["pqzPopHash"]), &flip(&sig), &keys), Err(UAError::Unauthorized));
+            let pqz = |sig: &[u8]| check_pqz_key_record_with(kind, &d, &ua, &bytes(&k["pqzKey"]), &b32(&k["pqzPopHash"]), sig, &keys, Some(at));
+            assert_eq!(pqz(&sig), Ok(()));
+            assert_eq!(pqz(&flip(&sig)), Err(UAError::Unauthorized));
         }
         let mut lists = 0;
         for m in rows(&n, "memberships") {
             let (ua, d) = (b32(&m["ua"]), key_of(&n, b32(&m["ua"])).unwrap().1);
             let slot = typed(&serde_json::json!([{ "index": m["index"], "members": m["members"], "sig": m["sig"] }])).remove(0);
-            assert_eq!(check_membership(&d, &ua, &slot, &keys), Ok(()), "{}", m["name"]);
+            let accept = |slot: &MemberSig| check_membership_with(&d, &ua, slot, &keys, Some(all));
+            assert_eq!(accept(&slot), Ok(()), "{}", m["name"]);
             if slot.members.is_empty() {
                 let list = MemberSig { members: vec![InnerSig::default()], ..slot.clone() };
-                assert_eq!(check_membership(&d, &ua, &list, &keys), Err(UAError::Unauthorized), "a list on a signing slot");
+                assert_eq!(accept(&list), Err(UAError::Unauthorized), "a list on a signing slot");
             } else {
                 lists += 1;
-                assert_eq!(check_membership(&d, &ua, &MemberSig { sig: vec![1], ..slot.clone() }, &keys), Err(UAError::Unauthorized), "a sig on an msig slot");
+                assert_eq!(accept(&MemberSig { sig: vec![1], ..slot.clone() }), Err(UAError::Unauthorized), "a sig on an msig slot");
                 let mut bad = slot.clone();
                 bad.members[0].sig[20] ^= 1;
-                assert_eq!(check_membership(&d, &ua, &bad, &keys), Err(UAError::Unauthorized), "a flipped leaf");
+                assert_eq!(accept(&bad), Err(UAError::Unauthorized), "a flipped leaf");
             }
         }
         assert_eq!(lists, 1);
+    }
+
+    /// CTR-UA-37 one level down: the inner bits read through `accepted` always, unchecked (`NotVerifiable`) without it, a `pop` accepting the
+    /// slots of its own record only; a record's own bits outside its `pop` read when `accepted` comes.
+    #[test]
+    fn nested_check_inner_acceptance() {
+        let n = nested();
+        let keys = |id| key_of(&n, id);
+        let at: &Accepted = &|id, i| popped(&n, id, i);
+        let lists: Vec<&Value> = rows(&n, "registrations").iter().filter(|r| r["innerDigests"].as_array().is_some_and(|d| !d.is_empty()) && r["pop"] != "0x").collect();
+        assert_eq!(lists.len(), 5);
+        for r in lists {
+            assert_eq!(check_on(&n, r, &bytes(&r["pop"]), None), Err(UAError::NotVerifiable), "{}: never Ok unread", r["name"]);
+        }
+        for r in rows(&n, "registrations").iter().filter(|r| r["innerDigests"].as_array().is_none_or(|d| d.is_empty())) {
+            assert_eq!(check_on(&n, r, &bytes(&r["pop"]), None), Ok(()), "{}: no inner level", r["name"]);
+        }
+        let after_row = &rows(&n, "afterAcceptance")[0];
+        let neg = rows(&n, "negatives").iter().find(|x| x["name"] == "inner-slot-not-accepted").unwrap();
+        assert_eq!(neg["pop"], after_row["pop"]);
+        let pop = bytes(&after_row["pop"]);
+        assert_eq!(check_on(&n, after_row, &pop, Some(at)), Err(UAError::Pop), "before the memberships rows");
+        assert_eq!(check_on(&n, after_row, &pop, None), Err(UAError::NotVerifiable));
+        assert_eq!(check_on(&n, after_row, &pop, Some(&|id, i| after(&n, id, i))), Ok(()));
+        let k = &rows(&n, "kemRecords")[0];
+        let (ua, sig) = (b32(&k["ua"]), bytes(&k["sig"]));
+        let (kind, d) = key_of(&n, ua).unwrap();
+        let kem = |acc: Option<&Accepted>| check_kem_record_with(kind, &d, &ua, 1, &bytes(&k["kemPk"]), &sig, &keys, acc);
+        assert_eq!(kem(Some(&|id, i| id != ua && popped(&n, id, i))), Err(UAError::Unauthorized), "the record's own bits");
+        assert_eq!(kem(None), Err(UAError::NotVerifiable));
+        let p = &rows(&n, "pqzKeyRecords")[0];
+        let (ua, d) = (b32(&p["ua"]), key_of(&n, b32(&p["ua"])).unwrap().1);
+        let got = check_pqz_key_record_with(0x0120, &d, &ua, &bytes(&p["pqzKey"]), &b32(&p["pqzPopHash"]), &bytes(&p["sig"]), &keys, None);
+        assert_eq!(got, Err(UAError::NotVerifiable));
+        let m = rows(&n, "memberships").iter().find(|m| !m["members"].as_array().unwrap().is_empty()).unwrap();
+        let (ua, d) = (b32(&m["ua"]), key_of(&n, b32(&m["ua"])).unwrap().1);
+        let slot = typed(&serde_json::json!([{ "index": m["index"], "members": m["members"], "sig": m["sig"] }])).remove(0);
+        assert_eq!(check_membership_with(&d, &ua, &slot, &keys, Some(at)), Err(UAError::Unauthorized), "the inner slot not accepted yet");
+        assert_eq!(check_membership(&d, &ua, &slot, &keys), Err(UAError::NotVerifiable));
+    }
+
+    /// `requireAuthorized` of every `authorizations` row (UAAuth leaves in context A, gen 1): the valid one passes, the others `Unauthorized`.
+    #[test]
+    fn nested_check_authorizations() {
+        let n = nested();
+        let path = format!("{}/../../smartcontracts/vectors/ua/structures.json", env!("CARGO_MANIFEST_DIR"));
+        let s: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let c = &s["contexts"]["A"];
+        let domain = |generation| Domain { generation, chain_id: c["chainId"].as_u64().unwrap(), registry: bytes(&c["registry"]).try_into().unwrap(), chain_uid: b32(&c["chainUid"]) };
+        let keys = |id| key_of(&n, id);
+        let at: &Accepted = &|id, i| popped(&n, id, i);
+        assert_eq!(rows(&n, "authorizations").len(), 5);
+        let auth = |a: &Value, g: u32, acc: Option<&Accepted>| {
+            let ua = b32(&a["ua"]);
+            check_authorization(&key_of(&n, ua).unwrap().1, &ua, &b32(&a["purposeTag"]), &b32(&a["digest"]), &typed(&a["uaSig"]["members"]), &domain(g), &keys, acc)
+        };
+        for a in rows(&n, "authorizations") {
+            assert_eq!(decode_member_sigs(&bytes(&a["sig"])).unwrap(), typed(&a["uaSig"]["members"]), "{}", a["name"]);
+            let want = if a["valid"] == true { Ok(()) } else { Err(UAError::Unauthorized) };
+            assert_eq!(auth(a, 1, Some(at)), want, "{}", a["name"]);
+        }
+        let a = rows(&n, "authorizations").iter().find(|a| a["valid"] == true).unwrap();
+        let ua = b32(&a["ua"]);
+        let inner = MsigStructure::from_key_data(&key_of(&n, ua).unwrap().1).unwrap().members.iter().find(|m| m.kind == 0x0120).unwrap().id;
+        assert_eq!(auth(a, 1, None), Err(UAError::NotVerifiable));
+        assert_eq!(auth(a, 1, Some(&|id, i| id != ua && popped(&n, id, i))), Err(UAError::Unauthorized), "the outer bits");
+        assert_eq!(auth(a, 1, Some(&|id, i| id != inner && popped(&n, id, i))), Err(UAError::Unauthorized), "the inner bits");
+        assert_eq!(auth(a, 2, Some(at)), Err(UAError::Unauthorized), "another domain");
     }
 
     #[test]

@@ -80,10 +80,13 @@ ua-rs|cargo|nested_flat_bytes_unchanged_and_decode_bounded
 ua-rs|cargo|nested_minimal_at_both_levels
 ua-rs|cargo|nested_replay_rows
 ua-rs|cargo|nested_member_kind
+ua-rs|cargo|nested_decode_offsets_checked
 ua-rs-pq|cargo|verdicts::nested_check_rows
 ua-rs-pq|cargo|verdicts::nested_check_negatives
 ua-rs-pq|cargo|verdicts::nested_check_records_and_acceptances
 ua-rs-pq|cargo|verdicts::nested_n5_one_signature_two_slots
+ua-rs-pq|cargo|verdicts::nested_check_inner_acceptance
+ua-rs-pq|cargo|verdicts::nested_check_authorizations
 ua-rs-json|cargo|registration_args_nested_rows
 cargo-scaas-node|cargo|typed::tests::member_sig_json_is_two_levels
 cargo-scaas-node|cargo|typed::tests::member_sig_lists_are_bounded
@@ -102,6 +105,9 @@ clientkeys|node|Q4: the minimal rule, every weight vector of up to 4 slots of we
 clientkeys|node|flat bytes did not change: the empty list encodes as the empty keyData did
 clientkeys|node|decodeMemberSigs: canonical, 16 at each level, an index in a u16
 clientkeys|node|Soroban stays flat until its round: an msig member and a nested list are refused
+clientkeys|node|inner acceptance: accepted(id, index) read at the inner level always, unchecked without it, a pop accepting its own record only
+clientkeys|node|replayedMemberSig: truncated or out-of-range bytes are UAUnauthorized, never another throw
+clientkeys|node|authorizations: every row as requireAuthorized checks it, valid or UAUnauthorized, unchecked without the accepted bits
 ua-py|unittest|test_nested_eligibility
 ua-py|unittest|test_nested_registrations
 ua-py|unittest|test_nested_memberships

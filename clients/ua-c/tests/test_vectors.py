@@ -506,9 +506,9 @@ class Vectors(unittest.TestCase):
         with self.subTest('negatives'):
             # the builder's own refusal is the minimal rule at both levels; the others are the registry's, on the signatures
             minimal = {'inner-below-threshold', 'inner-index-past-the-members', 'inner-unsorted', 'inner-not-minimal', 'outer-not-minimal'}
-            self.assertEqual(len(NV['negatives']), 12)
+            self.assertEqual(len(NV['negatives']), 13)
             for n in NV['negatives']:
-                r = next(x for x in NV['registrations'] if x['name'] == n['row'])
+                r = next(x for x in NV['registrations'] + NV['afterAcceptance'] if x['name'] == n['row'])
                 i = reg_input(r, kemCommit=False, inner=inner, pop=n['popTyped'])
                 if n['name'] in minimal:
                     self.assertEqual(code_of(lambda: reg_args(i)), n['error'], n['name'])

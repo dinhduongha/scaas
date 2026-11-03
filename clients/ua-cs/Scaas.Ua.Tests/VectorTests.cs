@@ -778,14 +778,17 @@ public class VectorTests
     [Fact]
     public void NestedNegatives()
     {
-        Assert.Equal(12, N.GetProperty("negatives").GetArrayLength());
+        Assert.Equal(13, N.GetProperty("negatives").GetArrayLength());
         foreach (var n in N.GetProperty("negatives").EnumerateArray())
         {
-            var r = NestedRow(n.GetProperty("row").GetString()!);
+            var name = n.GetProperty("name").GetString();
+            var r = N.GetProperty("registrations").EnumerateArray().Concat(N.GetProperty("afterAcceptance").EnumerateArray())
+                .First(x => x.GetProperty("name").GetString() == n.GetProperty("row").GetString());
             var list = n.GetProperty("popTyped");
             var (args, _) = UA.RegistrationArgs(0x0120, B(r.GetProperty("keyData")), kemPk: B(r.GetProperty("attrs").GetProperty("kemPk")), members: SlotsOf(list), kemCommit: false);
             SameJson(args.Pop, list);
-            Assert.NotEqual(n.GetProperty("pop").GetString(), r.GetProperty("pop").GetString());
+            // inner-slot-not-accepted: afterAcceptance's own pop, refused by the state (its inner slot not accepted yet), not by its bytes
+            Assert.Equal(name == "inner-slot-not-accepted", n.GetProperty("pop").GetString() == r.GetProperty("pop").GetString());
             Assert.Equal(B(n.GetProperty("pop")).Length, SlotsLen(list) + 64);
         }
     }

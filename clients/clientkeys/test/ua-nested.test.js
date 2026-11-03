@@ -6,10 +6,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as ua from '../src/ua.js';
 import * as sor from '../src/soroban.js';
-import { hex, abiEncode, concatBytes } from '../src/bytes.js';
+import { hex, abiEncode, concatBytes, word } from '../src/bytes.js';
 import { nestedJson } from '../scripts/ua-portable-vectors.mjs';
 import { B, kindVerify, nativeOk, encodeMemberSigs, decodeMemberSigs, encodeInnerSigs, replayedMemberSig, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord,
-  verifyMembership } from '../src/ua-verify.js';
+  verifyMembership, verifyAuthorization } from '../src/ua-verify.js';
 import { dir } from './ua-vectors-dir.js';
 
 const TEXT = readFileSync(new URL('nested.json', dir), 'utf8');
@@ -20,6 +20,10 @@ const code = (c) => (e) => e.code === c;
 const flip = (h, at = 40) => { const b = B(h); b[at] ^= 1; return hex(b); };
 const msigs = N.registrations.filter((r) => r.kind === 0x0120);
 const nested = msigs.filter((r) => r.innerDigests?.length);
+// the accepted bits (CTR-UA-37): what each msig row's pop accepted as it registered, then also what the memberships rows accept
+const popBits = N.registrations.flatMap((r) => (r.popSigners ?? []).map((index) => `${r.ua}/${index}`));
+const atRegistration = (id, index) => popBits.includes(`${id}/${index}`);
+const afterMemberships = (id, index) => atRegistration(id, index) || N.memberships.some((m) => m.ua === id && m.index === index);
 const typedSlots = (l) => l.map((s) => ({ index: s.index, members: s.members.map((m) => ({ index: m.index, sig: B(m.sig) })), sig: B(s.sig) }));
 
 test('nested.json is what the generator writes', () => assert.equal(nestedJson(), TEXT));
@@ -36,7 +40,7 @@ test('eligibility: an msig member by its own rule, read from its record', () => 
 
 test('registrations: every row verifies, typed list and stored bytes agree, md_I rebuilds', () => {
   assert.equal(nested.length, 6);
-  for (const r of N.registrations) verifyRegistration({ ...r, attrs: r.attrs }, records);
+  for (const r of N.registrations) verifyRegistration({ ...r, attrs: r.attrs }, records, atRegistration);
   for (const r of msigs.filter((x) => x.pop !== '0x')) {
     assert.equal(hex(encodeMemberSigs(typedSlots(r.args.pop))), r.pop, r.name);
     assert.deepEqual(typedSlots(r.args.pop).map((s) => s.index), decodeMemberSigs(r.pop).map((s) => s.index), r.name);
@@ -59,12 +63,12 @@ test('N5: one native signature serves both slots of msig-nested-twice, that reco
 });
 
 test('negatives: each row refused with the error of the registry, the same record with its own pop passes', () => {
-  assert.equal(N.negatives.length, 12);
+  assert.equal(N.negatives.length, 13);
   for (const n of N.negatives) {
-    const r = row(n.row);
+    const r = [...N.registrations, ...N.afterAcceptance].find((x) => x.name === n.row);
     assert.equal(hex(encodeMemberSigs(typedSlots(n.popTyped))), n.pop, n.name);
-    assert.notEqual(n.pop, r.pop, n.name);
-    assert.throws(() => verifyRegistration({ ...r, pop: n.pop }, records), code(n.error), n.name);
+    if (n.name !== 'inner-slot-not-accepted') assert.notEqual(n.pop, r.pop, n.name); // that one: the state differs, not the bytes
+    assert.throws(() => verifyRegistration({ ...r, pop: n.pop }, records, atRegistration), code(n.error), n.name);
   }
 });
 
@@ -101,21 +105,21 @@ test('records and acceptances: every row verifies, a flipped leaf byte is refuse
   assert.equal(N.kemRecords.length, 1);
   assert.equal(N.pqzKeyRecords.length, 4);
   for (const r of N.kemRecords) {
-    verifyKemRecord(r, records);
-    assert.throws(() => verifyKemRecord({ ...r, sig: flip(r.sig, r.sig.length / 2 - 100) }, records), code('UAUnauthorized'));
+    verifyKemRecord(r, records, atRegistration);
+    assert.throws(() => verifyKemRecord({ ...r, sig: flip(r.sig, r.sig.length / 2 - 100) }, records, atRegistration), code('UAUnauthorized'));
     assert.equal(hex(encodeMemberSigs(typedSlots(r.args.sig.members))), r.sig);
   }
   for (const r of N.pqzKeyRecords) {
-    verifyPqzKeyRecord(r, records);
-    assert.throws(() => verifyPqzKeyRecord({ ...r, sig: flip(r.sig, r.sig.length / 2 - 100) }, records), code('UAUnauthorized'));
+    verifyPqzKeyRecord(r, records, atRegistration);
+    assert.throws(() => verifyPqzKeyRecord({ ...r, sig: flip(r.sig, r.sig.length / 2 - 100) }, records, atRegistration), code('UAUnauthorized'));
   }
   assert.equal(N.memberships.filter((m) => m.members.length).length, 1, 'one inner slot accepts');
   for (const m of N.memberships) {
-    verifyMembership(m, records);
+    verifyMembership(m, records, afterMemberships);
     const bad = m.members.length ? { ...m, members: m.members.map((x) => ({ ...x, sig: flip(x.sig) })) } : { ...m, sig: flip(m.sig) };
-    assert.throws(() => verifyMembership(bad, records), code('UAUnauthorized'), m.name);
-    if (m.members.length) assert.throws(() => verifyMembership({ ...m, sig: '0x01' }, records), code('UAUnauthorized'), 'a sig on an msig slot');
-    else assert.throws(() => verifyMembership({ ...m, members: [{ index: 0, sig: m.sig }] }, records), code('UAUnauthorized'), 'a list on a signing slot');
+    assert.throws(() => verifyMembership(bad, records, afterMemberships), code('UAUnauthorized'), m.name);
+    if (m.members.length) assert.throws(() => verifyMembership({ ...m, sig: '0x01' }, records, afterMemberships), code('UAUnauthorized'), 'a sig on an msig slot');
+    else assert.throws(() => verifyMembership({ ...m, members: [{ index: 0, sig: m.sig }] }, records, afterMemberships), code('UAUnauthorized'), 'a list on a signing slot');
   }
 });
 
@@ -148,7 +152,7 @@ test('CTR-UA-37: the stored acceptance replays with no new signature, an msig sl
     const again = replayedMemberSig(keyData, m.index, m.stored);
     assert.equal(hex(again.sig), m.sig, m.name);
     assert.deepEqual(again.members.map((x) => ({ index: x.index, sig: hex(x.sig) })), m.members, m.name);
-    verifyMembership({ ...m, members: m.members, sig: hex(again.sig) }, records);
+    verifyMembership({ ...m, members: m.members, sig: hex(again.sig) }, records, afterMemberships);
   }
   const m = N.memberships.find((x) => x.members.length);
   const { keyData } = records(m.ua);
@@ -156,7 +160,56 @@ test('CTR-UA-37: the stored acceptance replays with no new signature, an msig sl
   assert.throws(() => replayedMemberSig(keyData, m.index, `${m.stored}00`), code('UAUnauthorized'), 'not canonical');
   assert.throws(() => replayedMemberSig(keyData, m.index, '0x'), code('UAUnauthorized'), 'an msig slot has a list');
   assert.throws(() => replayedMemberSig(keyData, 16, '0x'), code('UAUnauthorized'), 'past the members');
-  for (const r of N.afterAcceptance) verifyRegistration(r, records);
+  for (const r of N.afterAcceptance) verifyRegistration(r, records, afterMemberships);
+});
+
+test('inner acceptance: accepted(id, index) read at the inner level always, unchecked without it, a pop accepting its own record only', () => {
+  const lists = nested.filter((r) => r.pop !== '0x');
+  assert.equal(lists.length, 5);
+  for (const r of lists) assert.throws(() => verifyRegistration(r, records), code('UANotVerifiable'), `${r.name}: never OK unread`);
+  for (const r of N.registrations.filter((x) => !x.innerDigests?.length)) verifyRegistration(r, records); // no inner level: nothing to read
+  const [after] = N.afterAcceptance;
+  const n = N.negatives.find((x) => x.name === 'inner-slot-not-accepted');
+  assert.equal(n.pop, after.pop);
+  assert.throws(() => verifyRegistration(after, records, atRegistration), code('UAPoP'), 'before the memberships rows');
+  assert.throws(() => verifyRegistration(after, records), code('UANotVerifiable'));
+  verifyRegistration(after, records, afterMemberships);
+  // a record's own bits, outside its pop, when they are given (setKemKey, setPqzKey)
+  const [k] = N.kemRecords;
+  assert.throws(() => verifyKemRecord(k, records, (id, i) => id !== k.ua && atRegistration(id, i)), code('UAUnauthorized'));
+  assert.throws(() => verifyKemRecord(k, records), code('UANotVerifiable'));
+  const p = N.pqzKeyRecords[0];
+  assert.throws(() => verifyPqzKeyRecord(p, records), code('UANotVerifiable'));
+  // an msig slot's acceptance: its list counts only the inner's accepted slots
+  const m = N.memberships.find((x) => x.members.length);
+  assert.throws(() => verifyMembership(m, records, atRegistration), code('UAUnauthorized'));
+  assert.throws(() => verifyMembership(m, records), code('UANotVerifiable'));
+  for (const x of N.memberships.filter((y) => !y.members.length)) verifyMembership(x, records); // a signing slot: no inner level
+});
+
+test('replayedMemberSig: truncated or out-of-range bytes are UAUnauthorized, never another throw', () => {
+  const m = N.memberships.find((x) => x.members.length);
+  const { keyData } = records(m.ua);
+  for (const stored of [concatBytes(word(32), word(1)), concatBytes(word(32), word(1), word(2n ** 64n - 80n)), concatBytes(word(32), word(1), word(2n ** 255n))]) {
+    assert.throws(() => replayedMemberSig(keyData, m.index, stored), code('UAUnauthorized'), hex(stored).slice(0, 200));
+  }
+});
+
+test('authorizations: every row as requireAuthorized checks it, valid or UAUnauthorized, unchecked without the accepted bits', () => {
+  const { contexts } = JSON.parse(readFileSync(new URL('structures.json', dir), 'utf8'));
+  const domain = { generation: 1, ...contexts.A };
+  assert.equal(N.authorizations.length, 5);
+  for (const a of N.authorizations) {
+    if (a.valid) verifyAuthorization(a, records, domain, atRegistration);
+    else assert.throws(() => verifyAuthorization(a, records, domain, atRegistration), code('UAUnauthorized'), a.name);
+  }
+  const a = N.authorizations.find((x) => x.valid);
+  assert.throws(() => verifyAuthorization(a, records, domain), code('UANotVerifiable'));
+  assert.throws(() => verifyAuthorization(a, records, domain, (id, i) => id !== a.ua && atRegistration(id, i)), code('UAUnauthorized'), 'the outer bits');
+  const inner = records(a.ua).members.find((x) => x.kind === 0x0120).id;
+  assert.throws(() => verifyAuthorization(a, records, domain, (id, i) => id !== inner && atRegistration(id, i)), code('UAUnauthorized'), 'the inner bits');
+  assert.throws(() => verifyAuthorization(a, records, { ...domain, generation: 2 }, atRegistration), code('UAUnauthorized'), 'another domain');
+  assert.throws(() => verifyAuthorization({ ...a, sig: flip(a.sig, a.sig.length / 2 - 40) }, records, domain, atRegistration), code('UAUnauthorized'));
 });
 
 test('Q4: the minimal rule, every weight vector of up to 4 slots of weight 1-4, every threshold, every subset', () => {

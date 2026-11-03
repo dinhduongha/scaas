@@ -808,12 +808,14 @@ void main() {
   // shape and size only: these refusals are the registry's, this library verifies no signature
   test('nested negatives', () {
     final rows = (n['negatives'] as List).cast<Map>();
-    expect(rows.length, 12);
+    expect(rows.length, 13);
+    final all = [...(n['registrations'] as List).cast<Map>(), ...(n['afterAcceptance'] as List).cast<Map>()];
     for (final x in rows) {
-      final name = x['name'] as String, r = (n['registrations'] as List).cast<Map>().firstWhere((c) => c['name'] == x['row']);
+      final name = x['name'] as String, r = all.firstWhere((c) => c['name'] == x['row']);
       final args = registrationArgs(0x0120, _b(r['keyData']), kemPk: _b(r['attrs']['kemPk']), members: slotsOf(x['popTyped']), kemCommit: false).$1;
       expect(args['pop'], x['popTyped'], reason: name);
-      expect(x['pop'], isNot(r['pop']), reason: name);
+      // inner-slot-not-accepted: afterAcceptance's own pop, refused by the state (its inner slot not accepted yet), not by its bytes
+      expect(x['pop'] == r['pop'], name == 'inner-slot-not-accepted', reason: name);
       expect(slotsLen(x['popTyped']) + 64, _b(x['pop']).length, reason: name);
     }
   });

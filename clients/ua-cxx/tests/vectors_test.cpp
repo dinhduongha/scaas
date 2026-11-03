@@ -516,19 +516,24 @@ static void nested_rows() {
     }
     // the builder's own refusal is the minimal rule at both levels; the others are the registry's, on the signatures
     const std::vector<std::string> minimal = {"inner-below-threshold", "inner-index-past-the-members", "inner-unsorted", "inner-not-minimal", "outer-not-minimal"};
-    CHECK(n["negatives"].size() == 12, "negative rows");
+    CHECK(n["negatives"].size() == 13, "negative rows");
+    int found = 0;
     for (auto& x : n["negatives"]) {
         std::string name = x["name"];
-        for (auto& r : n["registrations"]) {
-            if (r["name"] != x["row"]) continue;
-            json i = regInput(r);
-            i["kemCommit"] = false;
-            i["inner"] = inner;
-            i["pop"] = x["popTyped"];
-            if (std::find(minimal.begin(), minimal.end(), name) != minimal.end()) CHECK(code_of([&] { regArgs(i); }) == str(x["error"]), name);
-            else CHECK(regArgs(i)["args"]["pop"] == x["popTyped"], name);
+        for (auto* list : {&n["registrations"], &n["afterAcceptance"]}) {
+            for (auto& r : *list) {
+                if (r["name"] != x["row"]) continue;
+                ++found;
+                json i = regInput(r);
+                i["kemCommit"] = false;
+                i["inner"] = inner;
+                i["pop"] = x["popTyped"];
+                if (std::find(minimal.begin(), minimal.end(), name) != minimal.end()) CHECK(code_of([&] { regArgs(i); }) == str(x["error"]), name);
+                else CHECK(regArgs(i)["args"]["pop"] == x["popTyped"], name);
+            }
         }
     }
+    CHECK(found == 13, "every negative's row, afterAcceptance's included");
     CHECK(n["structures"].size() == 2, "structure rows");
     for (auto& s : n["structures"]) {
         Bytes d = bytes(s["keyData"]);

@@ -525,9 +525,9 @@ TestCase {
         }
         // the builder's own refusal is the minimal rule at both levels; the others are the registry's, on the signatures
         const minimal = ["inner-below-threshold", "inner-index-past-the-members", "inner-unsorted", "inner-not-minimal", "outer-not-minimal"]
-        compare(n.negatives.length, 12)
+        compare(n.negatives.length, 13)
         for (const x of n.negatives) {
-            const i = regInput(n.registrations.find((r) => r.name === x.row))
+            const i = regInput(n.registrations.concat(n.afterAcceptance).find((r) => r.name === x.row))
             i.kemCommit = false
             i.inner = inner
             i.pop = x.popTyped

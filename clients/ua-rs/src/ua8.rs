@@ -761,7 +761,7 @@ pub fn replayed_member_sig(key_data: &[u8], index: u16, stored: &[u8]) -> Result
         let mut members = Vec::with_capacity(n);
         for j in 0..n {
             let u = w(stored, 64 + 32 * j)?.checked_add(64)?;
-            let o = u.checked_add(w(stored, u + 32)?)?;
+            let o = u.checked_add(w(stored, u.checked_add(32)?)?)?;
             let start = o.checked_add(32)?;
             let sig = stored.get(start..start.checked_add(w(stored, o)?)?)?.to_vec();
             members.push(InnerSig { index: u16::try_from(w(stored, u)?).ok()?, sig });
@@ -783,14 +783,14 @@ pub fn decode_member_sigs(blob: &[u8]) -> Option<Vec<MemberSig>> {
     let mut out = Vec::with_capacity(n);
     for i in 0..n {
         let t = w(blob, 64 + 32 * i)?.checked_add(64)?;
-        let l = t.checked_add(w(blob, t + 32)?)?;
+        let l = t.checked_add(w(blob, t.checked_add(32)?)?)?;
         let m = w(blob, l).filter(|m| *m <= 16)?;
         let mut members = Vec::with_capacity(m);
         for j in 0..m {
-            let u = w(blob, l.checked_add(32 + 32 * j)?)?.checked_add(l + 32)?;
-            members.push(InnerSig { index: u16::try_from(w(blob, u)?).ok()?, sig: at(u, u + 32)? });
+            let u = w(blob, l.checked_add(32 + 32 * j)?)?.checked_add(l.checked_add(32)?)?;
+            members.push(InnerSig { index: u16::try_from(w(blob, u)?).ok()?, sig: at(u, u.checked_add(32)?)? });
         }
-        out.push(MemberSig { index: u16::try_from(w(blob, t)?).ok()?, members, sig: at(t, t + 64)? });
+        out.push(MemberSig { index: u16::try_from(w(blob, t)?).ok()?, members, sig: at(t, t.checked_add(64)?)? });
     }
     (encode_member_sigs(&out) == blob).then_some(out)
 }
@@ -814,14 +814,44 @@ fn member_keys(d: &[u8], members: &Members) -> Result<Vec<Vec<u8>>> {
     };
     MsigStructure::from_key_data(d)?.members.iter().map(key).collect()
 }
+/// `(id, index)` → `memberAccepted(id, index)` of the target registry (CTR-UA-37): has slot `index` of `id` agreed?
+pub type Accepted<'a> = dyn Fn([u8; 32], u16) -> bool + 'a;
+/// The accepted bits a verdict reads. `slot`: a bit the registry always reads (an inner `msig`'s, a `pop` exempting only its own record's;
+/// every bit of `requireAuthorized`); with no `accepted` it is marked unchecked, and [`Bits::verdict`] turns a pass into `NotVerifiable`,
+/// never `Ok`. `record`: a record's own bits outside its `pop` (`setKemKey`, `setPqzKey`), read when `accepted` comes, else the chain's state
+/// as before nesting.
+struct Bits<'a> {
+    accepted: Option<&'a Accepted<'a>>,
+    unchecked: std::cell::Cell<bool>,
+}
+impl<'a> Bits<'a> {
+    fn new(accepted: Option<&'a Accepted<'a>>) -> Self {
+        Bits { accepted, unchecked: Default::default() }
+    }
+    fn slot(&self, id: &[u8; 32], index: u16) -> bool {
+        self.accepted.map_or_else(|| { self.unchecked.set(true); true }, |f| f(*id, index))
+    }
+    fn record(&self, id: &[u8; 32], index: u16) -> bool {
+        self.accepted.is_none_or(|f| f(*id, index))
+    }
+    fn verdict(&self, ok: bool, refused: UAError) -> Result<()> {
+        match (ok, self.unchecked.get()) {
+            (false, _) => Err(refused),
+            (true, true) => Err(UAError::NotVerifiable),
+            (true, false) => Ok(()),
+        }
+    }
+}
 /// `members` as the key data of an `msig` member.
 fn inner_of<'a>(members: &'a Members<'a>) -> impl Fn([u8; 32]) -> Option<Vec<u8>> + 'a {
     move |id| members(id).map(|(_, key)| key)
 }
 
 /// EVM `_sigOk` + `_msig(portable = true)` over `ua_message(kind, purpose, digest)`, `Err` for a part nothing here can check.
-/// An `msig`: no slots unless PQ-eligible (U8S-D2), then the canonical minimal `MemberSig[]` (U8S-D1, both levels), each slot by [`slot_ok`].
-fn signature_ok(kind: u16, d: &[u8], ua: &[u8; 32], purpose: &[u8; 32], digest: &[u8; 32], sig: &[u8], members: &Members) -> Result<bool> {
+/// An `msig`: no slots unless PQ-eligible (U8S-D2), then the canonical minimal `MemberSig[]` (U8S-D1, both levels), each slot accepted
+/// ([`Bits::record`], outside the `pop`) and by [`slot_ok`].
+#[allow(clippy::too_many_arguments)]
+fn signature_ok(kind: u16, d: &[u8], ua: &[u8; 32], purpose: &[u8; 32], digest: &[u8; 32], sig: &[u8], members: &Members, bits: &Bits) -> Result<bool> {
     let message = ua_message(kind, purpose, digest)?;
     if kind != 0x0120 {
         return Ok(crate::verify::verify(kind, d, &message, sig, true));
@@ -836,8 +866,9 @@ fn signature_ok(kind: u16, d: &[u8], ua: &[u8; 32], purpose: &[u8; 32], digest: 
     }
     let structure = MsigStructure::from_key_data(d)?;
     let md = member_digest(ua, &message);
+    let pop = *purpose == pop_v2_tag();
     for s in &slots {
-        if !slot_ok(&structure.members[s.index as usize], &keys[s.index as usize], digest, &md, s, members)? {
+        if !(pop || bits.record(ua, s.index)) || !slot_ok(&structure.members[s.index as usize], &keys[s.index as usize], digest, &md, s, members, bits)? {
             return Ok(false);
         }
     }
@@ -845,9 +876,9 @@ fn signature_ok(kind: u16, d: &[u8], ua: &[u8; 32], purpose: &[u8; 32], digest: 
 }
 
 /// One member's slot: a derived member under `member` over `md`, an `evm-eoa` member over `digest` itself, no list on either; another
-/// native member is a part nothing here can check. An `msig` member by its own list, minimal, no `sig`, each leaf one level down over
-/// [`inner_digest`], `digest` the same.
-fn slot_ok(m: &MsigMember, key: &[u8], digest: &[u8; 32], md: &[u8; 32], s: &MemberSig, members: &Members) -> Result<bool> {
+/// native member is a part nothing here can check. An `msig` member by its own list, minimal, no `sig`, each leaf one level down an accepted
+/// slot of it ([`Bits::slot`]) over [`inner_digest`], `digest` the same.
+fn slot_ok(m: &MsigMember, key: &[u8], digest: &[u8; 32], md: &[u8; 32], s: &MemberSig, members: &Members, bits: &Bits) -> Result<bool> {
     if m.kind == 0x0120 {
         let indexes: Vec<u16> = s.members.iter().map(|x| x.index).collect();
         if !s.sig.is_empty() || !msig_slots_minimal(key, &indexes)? {
@@ -858,7 +889,7 @@ fn slot_ok(m: &MsigMember, key: &[u8], digest: &[u8; 32], md: &[u8; 32], s: &Mem
         let inner = inner_digest(&m.id, md)?;
         for x in &s.members {
             let i = x.index as usize;
-            if !leaf_ok(&leaves[i], &keys[i], digest, &inner, &x.sig)? {
+            if !bits.slot(&m.id, x.index) || !leaf_ok(&leaves[i], &keys[i], digest, &inner, &x.sig)? {
                 return Ok(false);
             }
         }
@@ -917,14 +948,29 @@ fn registration_attrs(kind: u16, ua: &[u8; 32], d: &[u8], a: &Attrs, pqz_pop: &[
 /// the `pop`. The PQZ proof itself is not checked (U8S-D6). `Err` for anything it cannot check: an unknown kind, an
 /// `evm-contract` slot (`NotVerifiable`), a member `members` does not resolve (`MemberUnknown`).
 pub fn check_registration(kind: u16, key_data: &[u8], attrs: &Attrs, pop: &[u8], pqz_pop: &[u8], members: &Members) -> Result<()> {
+    check_registration_with(kind, key_data, attrs, pop, pqz_pop, members, None)
+}
+/// [`check_registration`] on the target registry's accepted bits (CTR-UA-37): the `pop` accepts its own record's slots, never an inner
+/// `msig`'s, so with no `accepted` a `pop` with an inner list is `NotVerifiable`. The same `accepted` in every `check_*_with`.
+pub fn check_registration_with(
+    kind: u16, key_data: &[u8], attrs: &Attrs, pop: &[u8], pqz_pop: &[u8], members: &Members, accepted: Option<&Accepted>,
+) -> Result<()> {
     let ua = derive_ua(kind, key_data, false)?;
     let digest = registration_attrs(kind, &ua, key_data, attrs, pqz_pop, &inner_of(members))?;
-    signature_ok(kind, key_data, &ua, &pop_v2_tag(), &digest, pop, members)?.then_some(()).ok_or(UAError::Pop)
+    let bits = Bits::new(accepted);
+    bits.verdict(signature_ok(kind, key_data, &ua, &pop_v2_tag(), &digest, pop, members, &bits)?, UAError::Pop)
 }
 
 /// A KEM record as `setKemKey` (version ≥ 1) checks it: `ua` the id of `key_data`, a holder, the key, `sig` in the `pop` format
 /// over `kem_record_message`. Version 0 is `KemVersion`: its key is `register`'s (a commit's fill has no signature).
 pub fn check_kem_record(kind: u16, key_data: &[u8], ua: &[u8; 32], version: u64, kem_pk: &[u8], sig: &[u8], members: &Members) -> Result<()> {
+    check_kem_record_with(kind, key_data, ua, version, kem_pk, sig, members, None)
+}
+/// [`check_kem_record`] on the accepted bits, as [`check_registration_with`]; the record's own bits read too when `accepted` comes.
+#[allow(clippy::too_many_arguments)]
+pub fn check_kem_record_with(
+    kind: u16, key_data: &[u8], ua: &[u8; 32], version: u64, kem_pk: &[u8], sig: &[u8], members: &Members, accepted: Option<&Accepted>,
+) -> Result<()> {
     if !is_record_of(kind, key_data, ua)? {
         return Err(UAError::Unauthorized);
     }
@@ -932,23 +978,36 @@ pub fn check_kem_record(kind: u16, key_data: &[u8], ua: &[u8; 32], version: u64,
         return Err(UAError::KemHolder(kind));
     }
     let digest = kem_record_digest(ua, version, kem_pk)?;
-    signature_ok(kind, key_data, ua, &purpose_tag("kem")?, &digest, sig, members)?.then_some(()).ok_or(UAError::Unauthorized)
+    let bits = Bits::new(accepted);
+    bits.verdict(signature_ok(kind, key_data, ua, &purpose_tag("kem")?, &digest, sig, members, &bits)?, UAError::Unauthorized)
 }
 
 /// A PQZ key record as `setPqzKey` checks it, without its state (a key already set is the chain's `PqzKeySet`): `ua` the id of
 /// `key_data`, a holder, the key's length, the proof hash, `sig` over `pqz_key_record_digest`.
 pub fn check_pqz_key_record(kind: u16, key_data: &[u8], ua: &[u8; 32], pqz_key: &[u8], pqz_pop_hash: &[u8; 32], sig: &[u8], members: &Members) -> Result<()> {
+    check_pqz_key_record_with(kind, key_data, ua, pqz_key, pqz_pop_hash, sig, members, None)
+}
+/// [`check_pqz_key_record`] on the accepted bits, as [`check_kem_record_with`].
+#[allow(clippy::too_many_arguments)]
+pub fn check_pqz_key_record_with(
+    kind: u16, key_data: &[u8], ua: &[u8; 32], pqz_key: &[u8], pqz_pop_hash: &[u8; 32], sig: &[u8], members: &Members, accepted: Option<&Accepted>,
+) -> Result<()> {
     if !is_record_of(kind, key_data, ua)? {
         return Err(UAError::Unauthorized);
     }
     let r = pqz_key_record_message_with(kind, ua, key_data, pqz_key, None, Some(pqz_pop_hash), false, &inner_of(members))?;
-    signature_ok(kind, key_data, ua, &purpose_tag("pqz-key")?, &r.record_digest, sig, members)?.then_some(()).ok_or(UAError::Unauthorized)
+    let bits = Bits::new(accepted);
+    bits.verdict(signature_ok(kind, key_data, ua, &purpose_tag("pqz-key")?, &r.record_digest, sig, members, &bits)?, UAError::Unauthorized)
 }
 
 /// An acceptance as `accept_membership` / `acceptMembership` checks it, without its state (a slot already accepted is the chain's
 /// no-op), CTR-UA-37: `ua` the id of the `msig` `key_data`, `slot.index` one of its members, the member's signature over
 /// typed(`UAMembership{ua, member}`). One slot, no threshold. `Err` as `check_registration` for a part it cannot check.
 pub fn check_membership(key_data: &[u8], ua: &[u8; 32], slot: &MemberSig, members: &Members) -> Result<()> {
+    check_membership_with(key_data, ua, slot, members, None)
+}
+/// [`check_membership`] on the accepted bits: an `msig` slot's list counts only accepted slots of that member.
+pub fn check_membership_with(key_data: &[u8], ua: &[u8; 32], slot: &MemberSig, members: &Members, accepted: Option<&Accepted>) -> Result<()> {
     if !is_record_of(0x0120, key_data, ua)? {
         return Err(UAError::Unauthorized);
     }
@@ -958,5 +1017,48 @@ pub fn check_membership(key_data: &[u8], ua: &[u8; 32], slot: &MemberSig, member
     let keys = member_keys(key_data, members)?;
     let digest = membership_digest(ua, &m.id);
     let md = member_digest(ua, &ua_message(0x0120, &purpose_tag("membership")?, &digest)?);
-    slot_ok(m, &keys[i], &digest, &md, slot, members)?.then_some(()).ok_or(UAError::Unauthorized)
+    let bits = Bits::new(accepted);
+    bits.verdict(slot_ok(m, &keys[i], &digest, &md, slot, members, &bits)?, UAError::Unauthorized)
+}
+
+/// `requireAuthorized(ua, purpose, digest, UASig{"", "", slots})` of the `msig` `key_data`, without its state (UARegistry `_msig`, clientkeys
+/// `verifyAuthorization`): at both levels strictly increasing accepted slots that stop at the threshold, no minimal rule, no eligibility; an
+/// `msig` slot by its list one level down over [`inner_digest`], no `sig`; a derived leaf under `member` over its level's member digest, an
+/// `evm-eoa` leaf over `UAAuth(id, member, that digest)` in `domain`. Every bit is read: no `accepted` is `NotVerifiable`.
+#[allow(clippy::too_many_arguments)]
+pub fn check_authorization(
+    key_data: &[u8], ua: &[u8; 32], purpose: &[u8; 32], digest: &[u8; 32], slots: &[MemberSig], domain: &Domain, members: &Members,
+    accepted: Option<&Accepted>,
+) -> Result<()> {
+    if !is_record_of(0x0120, key_data, ua)? {
+        return Err(UAError::Unauthorized);
+    }
+    let md = member_digest(ua, &ua_message(0x0120, purpose, digest)?);
+    let bits = Bits::new(accepted);
+    bits.verdict(auth_ok(ua, key_data, &md, slots, domain, members, &bits)?, UAError::Unauthorized)
+}
+fn auth_ok(id: &[u8; 32], d: &[u8], md: &[u8; 32], slots: &[MemberSig], domain: &Domain, members: &Members, bits: &Bits) -> Result<bool> {
+    let structure = MsigStructure::from_key_data(d)?;
+    let keys = member_keys(d, members)?;
+    let (mut acc, mut next) = (0u32, 0u16);
+    for s in slots {
+        let i = s.index as usize;
+        let Some(m) = structure.members.get(i) else { return Ok(false) };
+        if acc >= structure.threshold.into() || s.index < next || !bits.slot(id, s.index) {
+            return Ok(false);
+        }
+        next = s.index + 1;
+        let ok = if m.kind == 0x0120 {
+            // `lift`: the inner slots carry no list, so a third level has nothing to sign with
+            let lifted: Vec<MemberSig> = s.members.iter().map(|x| MemberSig { index: x.index, members: vec![], sig: x.sig.clone() }).collect();
+            s.sig.is_empty() && auth_ok(&m.id, &keys[i], &inner_digest(&m.id, md)?, &lifted, domain, members, bits)?
+        } else {
+            s.members.is_empty() && leaf_ok(m, &keys[i], &ua_auth_digest(domain, &m.id, &purpose_tag("member")?, md), md, &s.sig)?
+        };
+        if !ok {
+            return Ok(false);
+        }
+        acc += u32::from(m.weight);
+    }
+    Ok(acc >= structure.threshold.into())
 }

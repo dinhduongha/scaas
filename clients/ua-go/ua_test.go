@@ -1283,14 +1283,14 @@ func TestNestedAuthorizations(t *testing.T) {
 // Shape and size only: these refusals are the registry's, this library verifies no signature.
 func TestNestedNegatives(t *testing.T) {
 	n := load(t, "nested.json")
-	if got := len(rows(n, "negatives")); got != 12 {
+	if got := len(rows(n, "negatives")); got != 13 {
 		t.Fatal(got)
 	}
 	no := false
 	for _, x := range rows(n, "negatives") {
 		name := x["name"].(string)
 		var r obj
-		for _, c := range rows(n, "registrations") {
+		for _, c := range append(rows(n, "registrations"), rows(n, "afterAcceptance")...) {
 			if c["name"] == x["row"] {
 				r = c
 			}
@@ -1300,7 +1300,8 @@ func TestNestedNegatives(t *testing.T) {
 			t.Fatal(name, err)
 		}
 		sameJSON(t, name, args.Pop, x["popTyped"])
-		if x["pop"] == r["pop"] || slotsLen(x["popTyped"])+64 != len(bs(x["pop"])) {
+		// inner-slot-not-accepted: afterAcceptance's own pop, refused by the state (its inner slot not accepted yet), not by its bytes
+		if (x["pop"] == r["pop"]) != (name == "inner-slot-not-accepted") || slotsLen(x["popTyped"])+64 != len(bs(x["pop"])) {
 			t.Fatal(name)
 		}
 	}

@@ -50,10 +50,14 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
             _bytes(string.concat(row, ".attrs.kemPk")));
     }
 
+    /// The `registrations` or `afterAcceptance` row `name`.
     function _row(string memory name) internal view returns (string memory) {
-        for (uint256 i; i < _count(".registrations"); ++i) {
-            if (keccak256(bytes(vm.parseJsonString(j, _p("registrations", i, ".name")))) == keccak256(bytes(name))) {
-                return _p("registrations", i, "");
+        string[2] memory sections = ["registrations", "afterAcceptance"];
+        for (uint256 k; k < 2; ++k) {
+            for (uint256 i; i < _count(string.concat(".", sections[k])); ++i) {
+                if (keccak256(bytes(vm.parseJsonString(j, _p(sections[k], i, ".name")))) == keccak256(bytes(name))) {
+                    return _p(sections[k], i, "");
+                }
             }
         }
         revert(string.concat("no row ", name));
@@ -248,12 +252,13 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         assertEq(valid, 1);
     }
 
-    /// Each row names a record whose members are registered and which is not itself: the first nested row and every row after it.
+    /// Each row names a record whose members are registered and which is not itself: the first nested row and every row after it, or
+    /// afterAcceptance's, whose own pop is refused here because no memberships row has run (inner-slot-not-accepted).
     function test_nestedVectors_negatives() public {
         vm.pauseGasMetering(); // a 700 KB JSON string per cheatcode call; a verdict test, not a gas test
         _registerUpTo("msig-nested-pq");
         uint256 n = _count(".negatives");
-        assertEq(n, 12);
+        assertEq(n, 13);
         for (uint256 i; i < n; ++i) {
             string memory neg = _p("negatives", i, "");
             string memory row = _row(vm.parseJsonString(j, string.concat(neg, ".row")));

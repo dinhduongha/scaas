@@ -527,10 +527,10 @@ void main() {
     }
     // the builder's own refusal is the minimal rule at both levels; the others are the registry's, on the signatures
     const minimal = {'inner-below-threshold', 'inner-index-past-the-members', 'inner-unsorted', 'inner-not-minimal', 'outer-not-minimal'};
-    expect(rows(n, 'negatives').length, 12);
+    expect(rows(n, 'negatives').length, 13);
     for (final x in rows(n, 'negatives').cast<Map>()) {
       final name = x['name'] as String;
-      final i = {...regInput(regs.firstWhere((r) => r['name'] == x['row'])), 'kemCommit': false, 'inner': inner, 'pop': x['popTyped']};
+      final i = {...regInput(all.firstWhere((r) => r['name'] == x['row'])), 'kemCommit': false, 'inner': inner, 'pop': x['popTyped']};
       if (minimal.contains(name)) {
         expect(errCode(() => regArgs(i)), x['error'], reason: name);
       } else {
