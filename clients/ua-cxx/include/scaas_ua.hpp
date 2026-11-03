@@ -80,7 +80,7 @@ bool inNativeSpace(const Bytes& id);
 bool isNative(uint16_t kind);
 bool isZether(uint16_t kind);
 bool isPqzHolder(uint16_t kind);  // 0x0130-0x0132 may hold a PQZ key
-bool msigPqzEligible(const Bytes& keyData);  // msig members outside 0x0130-0x0133 weigh less than the threshold
+bool msigPqzEligible(const Bytes& keyData);  // msig members outside 0x0130-0x0133 weigh less than the threshold; an msig member: UAMemberUnknown
 bool isSigning(uint16_t kind);
 bool isMember(uint16_t kind, bool hederaNative);
 Bytes uaMessage(uint16_t kind, const Bytes& purposeTag, const Bytes& digest);
@@ -130,13 +130,14 @@ Bytes memberDigest(const Bytes& structureUa, const Bytes& uaMsg);
 std::string canonicalId(const std::string& text);
 Bytes encodeMsig(uint16_t threshold, const std::vector<Member>& members);
 // The registry's explicit arguments of a registration, JSON in and out. In: {kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop,
-// kemCommit}: bytes as "0x…" hex, an absent field is empty, an msig's pop is [{index, keyData, sig}], kemCommit true / false forces the
+// kemCommit, inner}: bytes as "0x…" hex, an absent field is empty, an msig's pop is [{index, members: [{index, sig}], sig}], inner
+// {id: keyData} its msig members' structures, kemCommit true / false forces the
 // KEM form (absent: the hash commit only when the full call is over 261,909 B). Out: {args, kemFill, calldataLength,
 // kemFillCalldataLength}: args.entry names the registry entry, kemFill is the setKemKey(ua, 0, …) that stores a hash-committed key
 // (null otherwise). UAArgument when the input is not this JSON.
 std::string registrationArgs(const std::string& input);
 // setKemKey's explicit arguments, JSON in and out. In: {ua, version, kemPk, sig}, sig the UASig {keyData, signature, members: [{index,
-// keyData, sig}]} (absent: empty, the version-0 fill of a hash commit). Out: {ua, version, kem, sig}.
+// members: [{index, sig}], sig}]} (absent: empty, the version-0 fill of a hash commit). Out: {ua, version, kem, sig}.
 std::string setKemKeyArgs(const std::string& input);
 // setPqzKey's explicit arguments, JSON in and out. In: {ua, pqzKey, pqzPopHash, sig}, sig as setKemKeyArgs. Out: the same fields, sig complete.
 std::string setPqzKeyArgs(const std::string& input);
