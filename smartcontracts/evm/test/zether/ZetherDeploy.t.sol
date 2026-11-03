@@ -205,7 +205,7 @@ contract ZetherDeployTest is Test {
             bytes memory code = codes[i];
             address a = probe.deploy(code, bytes32(uint256(7)));
             assertTrue(a != address(0), "deploys");
-            assertLe(a.code.length, 65536, "anvil --code-size-limit 65536");
+            assertLe(a.code.length, 131_072, "anvil --code-size-limit 131072 (CTR-GOV-19)");
             // F185: regular gas with the intrinsic and the calldata (the probe's call is a transaction), x 64/63 for the
             // deployer's call holding back 1/64; the EIP-8037 state gas (code deposit, the new account) comes apart
             Vm.Gas memory vg = vm.lastCallGas();

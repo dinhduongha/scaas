@@ -8,6 +8,12 @@ forge's report leaves out a library with no view function in its ABI, so every l
 artifact (`out/` next to the baseline), known by solc's call protection at the head of its runtime. A library named in the
 baseline keeps that entry as a ratchet even when it fits; the "remove it" note is for the contracts over their limit.
 
+CTR-GOV-19: above every limit and every baseline row sits the ceiling of the SCaaS testnet, `maxCodeSize` 0x20000 with
+EIP-7954 left out: runtime 131,072 B, init code 262,144 B (2 x maxCodeSize, measured without EIP-7954,
+`pqz-core/nethermind/runs/2026-11-03-code-size-probe.txt`). The contracts above EIP-7954's 65,536 B are a pin,
+`_above64KiB` in the baseline, sorted: printed every run, and a computed list that differs from it in either direction is
+an error, so a contract that crosses is named in a commit (GD-5).
+
 usage: size_gate.py <sizes.json> <size-baseline.json>     exit 1 on a violation
 """
 import glob
@@ -18,6 +24,7 @@ import sys
 TOKENS = {'NormalToken', 'WrappedToken', 'NormalZetherToken', 'WrappedZetherToken',
           'NormalPqzToken', 'WrappedPqzToken'}
 TOKEN_LIMIT, EIP170, EIP3860 = 20_480, 24_576, 49_152
+CEILING, INIT_CEILING, EIP7954 = 131_072, 262_144, 65_536
 LIBRARY_HEAD = '0x73' + '00' * 20 + '3014'  # PUSH20 <self, filled in at deployment> ADDRESS EQ
 
 
@@ -28,6 +35,10 @@ def check(sizes, baseline, libraries=()):
         limit = TOKEN_LIMIT if name in TOKENS else EIP170
         allowed = baseline.get(name)
         allowed_init = baseline.get(f'{name}.init')
+        if rt > CEILING:
+            errs.append(f'{name}: runtime {rt} > {CEILING} (the ceiling, CTR-GOV-19)')
+        if init > INIT_CEILING:
+            errs.append(f'{name}: init {init} > {INIT_CEILING} (the init ceiling, CTR-GOV-19)')
         if init > EIP3860 and allowed_init is None:
             errs.append(f'{name}: init {init} > {EIP3860} (EIP-3860)')
         elif allowed_init is not None and init > allowed_init:
@@ -41,6 +52,21 @@ def check(sizes, baseline, libraries=()):
         elif allowed is not None and rt <= limit and name not in libraries:
             notes.append(f'{name}: fits ({rt} <= {limit}); remove it from the baseline')
     return errs, notes
+
+
+def above(sizes):
+    """The contracts whose runtime exceeds EIP-7954's 65,536 B, sorted."""
+    return sorted(name for name, s in sizes.items() if s['runtime_size'] > EIP7954)
+
+
+def above_errors(listed, pinned):
+    """`_above64KiB` against the computed list: missing, sorted, equal in both directions."""
+    if pinned is None:
+        return ['_above64KiB: missing from the baseline']
+    errs = [f'_above64KiB: not sorted ({pinned})'] if pinned != sorted(pinned) else []
+    errs += [f'{n}: runtime above {EIP7954}, not in _above64KiB' for n in listed if n not in pinned]
+    errs += [f'{n}: in _above64KiB, runtime not above {EIP7954}' for n in pinned if n not in listed]
+    return errs
 
 
 def library_sizes(root):
@@ -59,12 +85,17 @@ def library_sizes(root):
 
 def main(argv):
     sizes = json.load(open(argv[1]))
-    baseline = {k: v for k, v in json.load(open(argv[2])).items() if not k.startswith('_')}
+    raw = json.load(open(argv[2]))
+    pinned = raw.get('_above64KiB')
+    baseline = {k: v for k, v in raw.items() if not k.startswith('_')}
     libraries = library_sizes(os.path.dirname(os.path.abspath(argv[2])))
     sizes.update(libraries)
     missing = {k.removesuffix('.init') for k in baseline} - set(sizes)
     errs, notes = check(sizes, baseline, libraries)
     errs += [f'{name}: in the baseline, no such contract' for name in sorted(missing)]
+    listed = above(sizes)
+    errs += above_errors(listed, pinned)
+    print(f'above {EIP7954} B: ' + (', '.join(f"{n} {sizes[n]['runtime_size']}" for n in listed) or 'none'))
     for n in notes:
         print('note:', n)
     for e in errs:
@@ -91,6 +122,24 @@ if __name__ == '__main__':
         assert check({'L': s(9_000)}, {'L': 9_000}, {'L'}) == ([], [])
         assert check({'L': s(9_001)}, {'L': 9_000}, {'L'})[0]
         assert check({'L': s(9_000)}, {'L': 9_000})[1]
+        # CTR-GOV-19: the ceiling binds with a baseline row too, runtime and init
+        assert check({'X': s(131_072)}, {'X': 131_072}) == ([], [])
+        assert check({'X': s(131_073)}, {'X': 131_073})[0]
+        assert check({'A': s(1, 262_144)}, {'A.init': 262_144}) == ([], [])
+        assert check({'A': s(1, 262_145)}, {'A.init': 262_145})[0]
+        # GD-5: the list above 64 KiB is a pin, stale in either direction is an error
+        assert above({'A': s(65_537), 'B': s(65_536), 'C': s(70_000)}) == ['A', 'C']
+        assert above_errors(['A', 'C'], ['A', 'C']) == []
+        assert above_errors(['A', 'C'], ['A'])
+        assert above_errors(['A'], ['A', 'C'])
+        assert above_errors(['A', 'C'], ['C', 'A'])
+        assert above_errors([], None)
+        with tempfile.TemporaryDirectory() as root:  # main() compares the pin with the computed list
+            sp, bp = os.path.join(root, 'sizes.json'), os.path.join(root, 'baseline.json')
+            json.dump({'A': s(70_000, 1)}, open(sp, 'w'))
+            for pin, rc in ((['A'], 0), ([], 1), (None, 1)):
+                json.dump({'A': 70_000} | ({} if pin is None else {'_above64KiB': pin}), open(bp, 'w'))
+                assert main(['', sp, bp]) == rc
         with tempfile.TemporaryDirectory() as root:
             os.makedirs(os.path.join(root, 'src', 'a'))
             open(os.path.join(root, 'src', 'a', 'L.sol'), 'w').close()

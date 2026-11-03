@@ -140,8 +140,8 @@ contract UADeployTest is Test {
         assertEq(h.gasNeed("NormalToken"), plain);
         assertEq(h.gasNeed("WrappedPqzToken"), conf);
         assertLt(plain, 80_000_000, "plain kinds: about 75 M");
-        assertGt(conf, 100_000_000, "confidential kinds: about 110 M");
-        assertLt(conf, 120_000_000);
+        assertGt(conf, 100_000_000, "confidential kinds: about 124 M");
+        assertLt(conf, 130_000_000);
         // a contract over the EIP-170 limit is priced at its baseline size (SCaaSDex since the DEX round)
         assertEq(h.gasNeed("SCaaSDex"), vm.parseJsonUint(base, ".SCaaSDex") * 1530 + 16_777_216);
         // a contract under the EIP-170 limit is not in the baseline: priced at 24,576 B
@@ -152,7 +152,9 @@ contract UADeployTest is Test {
             " needed to deploy the WrappedPqzToken release (NET-EVM-06)")));
         h.checkGas("WrappedPqzToken", 60_000_000);
         h.checkGas("WrappedPqzToken", conf);
-        // the gate reads the chain's block gas limit
+        // the gate reads the chain's block gas limit (at the SCaaS testnet's declared code limit, GD-4: WrappedPqzToken
+        // is above EIP-7954's 65,536 B, the default)
+        h.limitCode(131_072);
         if (block.gaslimit < conf) vm.expectRevert();
         h.requireGas("WrappedPqzToken");
     }

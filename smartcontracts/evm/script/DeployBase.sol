@@ -100,12 +100,37 @@ abstract contract DeployBase is Script {
     uint256 internal constant TX_REGULAR_GAS_CAP = 1 << 24;
     uint256 internal constant EIP170_LIMIT = 24_576;
 
-    /// @notice The block gas limit the release of contract `name` needs.
-    function _releaseGasNeed(string memory name) internal view returns (uint256) {
+    /// @notice EIP-7954's code size limit, the default of `CHAIN_CODE_LIMIT` (GD-4).
+    uint256 internal constant EIP7954_CODE_LIMIT = 65_536;
+
+    /// @notice The runtime size of contract `name` by `size-baseline.json` (any contract outside it is priced at
+    ///         `EIP170_LIMIT`: the size gate refuses one above that limit with no baseline row).
+    function _baselineRuntime(string memory name) internal view returns (uint256) {
         string memory key = string.concat(".", name);
         string memory base = vm.readFile("./size-baseline.json");
-        uint256 runtime = vm.keyExistsJson(base, key) ? vm.parseJsonUint(base, key) : EIP170_LIMIT;
-        return runtime * STATE_GAS_PER_BYTE + TX_REGULAR_GAS_CAP;
+        return vm.keyExistsJson(base, key) ? vm.parseJsonUint(base, key) : EIP170_LIMIT;
+    }
+
+    /// @notice The block gas limit the release of contract `name` needs.
+    function _releaseGasNeed(string memory name) internal view returns (uint256) {
+        return _baselineRuntime(name) * STATE_GAS_PER_BYTE + TX_REGULAR_GAS_CAP;
+    }
+
+    /// @notice CTR-GOV-19, GD-4: the chain's code size limit is declared, never derived from a chain id. `CHAIN_CODE_LIMIT`
+    ///         (env), default 65,536 B (EIP-7954); the SCaaS testnet's runbook sets 131,072 (`maxCodeSize` `0x20000`,
+    ///         EIP-7954 left out). One rule on every chain. The chain's own limit stays the last word: a deploy it refuses
+    ///         fails closed.
+    function _chainCodeLimit() internal view virtual returns (uint256) {
+        return vm.envOr("CHAIN_CODE_LIMIT", EIP7954_CODE_LIMIT);
+    }
+
+    /// @notice Refuses a release whose runtime exceeds `limit`, naming the contract, before anything is sent.
+    function _checkCodeFits(string memory name, uint256 limit) internal view {
+        uint256 runtime = _baselineRuntime(name);
+        if (runtime > limit) {
+            revert(string.concat(name, " runtime ", vm.toString(runtime), " B > chain code limit ", vm.toString(limit),
+                " B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        }
     }
 
     function _checkReleaseGas(string memory name, uint256 limit) internal view {
@@ -116,8 +141,15 @@ abstract contract DeployBase is Script {
         }
     }
 
-    /// @notice Refuses before anything is sent when the chain's actual `block.gaslimit` cannot hold the release.
-    function _requireReleaseGas(string memory name) internal view virtual { _checkReleaseGas(name, block.gaslimit); }
+    /// @notice The block gas limit the deploy gate reads: the chain's actual `block.gaslimit`.
+    function _blockGasLimit() internal view virtual returns (uint256) { return block.gaslimit; }
+
+    /// @notice Refuses before anything is sent when the release's runtime exceeds the chain's declared code limit, or
+    ///         the chain's block gas limit cannot hold it.
+    function _requireReleaseGas(string memory name) internal view {
+        _checkCodeFits(name, _chainCodeLimit());
+        _checkReleaseGas(name, _blockGasLimit());
+    }
 
     /// @notice Call first in `run()`, before the broadcast.
     function _setup() internal {
@@ -176,6 +208,8 @@ abstract contract DeployBase is Script {
     ///         `mtx_relay_fee`, `mtx_relay_executor`, `chain_uid` into the JSON object `"deploy"`; with `DEPLOY_ZETHER` also the Zether stack (`_deployZether`,
     ///         not on Hedera). NORMAL and `WRAPPED` both exceed EIP-170 (the UA ledger): deploy with
     ///         `--code-size-limit 65536` (deploy.sh); `WRAPPED` is still not deployed here (owner: wait for Glamsterdam).
+    ///         Each release is refused first when its runtime exceeds the chain's declared `CHAIN_CODE_LIMIT`
+    ///         (`_checkCodeFits`, CTR-GOV-19, GD-4).
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
         internal returns (OpenFactory f)
     {
@@ -365,7 +399,7 @@ abstract contract DeployBase is Script {
     ///         `implementation_{normal,wrapped}_zether_bls12381`. **UNAUDITED.** The
     ///         implementations exceed EIP-170 and the BLS inner-product verifier takes ~14 M gas: anvil
     ///         `--code-size-limit 65536`, forge script `--code-size-limit 65536 --gas-estimate-multiplier 105` (deploy.sh
-    ///         passes both; docs/networks/evm.md).
+    ///         passes both; docs/networks/evm.md). Each release is checked against `CHAIN_CODE_LIMIT` first (`_checkCodeFits`).
     function _deployZether(OpenFactory f, bool register, address smartKeyAccountImpl, address reg) internal {
         ZetherStatements stm = new ZetherStatements{salt: salt}();
         address dis = address(new ZetherDisclosure{salt: salt}());
