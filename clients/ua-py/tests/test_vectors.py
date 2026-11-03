@@ -579,12 +579,13 @@ class NestedRows(unittest.TestCase):
 
     def test_nested_negatives(self):
         """Shape and size only: these refusals are the registry's, this library verifies no signature."""
-        self.assertEqual(len(self.N['negatives']), 12)
+        self.assertEqual(len(self.N['negatives']), 13)
         for n in self.N['negatives']:
-            r = next(x for x in self.N['registrations'] if x['name'] == n['row'])
+            r = next(x for x in self.N['registrations'] + self.N['afterAcceptance'] if x['name'] == n['row'])
             args, _ = ua.registration_args(0x0120, b(r['keyData']), kem_pk=b(r['attrs']['kemPk']), pop=slots_of(n['popTyped']), kem_commit=False)
             self.assertEqual(args['pop'], n['popTyped'], n['name'])
-            self.assertNotEqual(n['pop'], r['pop'], n['name'])
+            # inner-slot-not-accepted: afterAcceptance's own pop, refused by the state (its inner slot not accepted yet), not by its bytes
+            self.assertEqual(n['pop'] == r['pop'], n['name'] == 'inner-slot-not-accepted', n['name'])
             self.assertEqual(slots_len(n['popTyped']) + 64, len(b(n['pop'])), n['name'])
 
 
