@@ -697,7 +697,7 @@ func MsigPqzEligibleWith(keyData []byte, inner Inner) (bool, error) {
 				kd = inner([32]byte(d[o+2 : o+34]))
 			}
 			if kd == nil {
-				return false, fail("UAMemberUnknown", "an msig member's record")
+				return false, fail("UAMemberUnknown", "0x"+hex.EncodeToString(d[o+2:o+34]))
 			}
 			var err error
 			if pq, err = MsigPqzEligible(kd); err != nil {

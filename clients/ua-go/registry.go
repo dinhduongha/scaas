@@ -1,7 +1,9 @@
 package ua
 
 import (
+	"encoding/binary"
 	"encoding/hex"
+	"strconv"
 )
 
 // The registry's explicit arguments (typed-signing R1 / R1b: TS-D10 … TS-D13; owner KEM rulings 2026-10-31), as clientkeys
@@ -158,6 +160,75 @@ type MemberSig struct {
 	Index   uint16     `json:"index"`
 	Members []InnerSig `json:"members"`
 	Sig     Hex        `json:"sig"`
+}
+
+// EncodeInnerSigs is abi.encode(InnerSig[]): what membershipSigOf returns for an msig slot.
+func EncodeInnerSigs(members []InnerSig) []byte {
+	out, tails, at := append(word(32), word(uint64(len(members)))...), []byte{}, 32*len(members)
+	for _, m := range members {
+		out = append(out, word(uint64(at))...)
+		t := append(append(append(word(uint64(m.Index)), word(64)...), word(uint64(len(m.Sig)))...), m.Sig...)
+		t = append(t, make([]byte, -len(m.Sig)&31)...)
+		tails = append(tails, t...)
+		at += len(t)
+	}
+	return append(out, tails...)
+}
+
+// ReplayedMemberSig is the MemberSig a copy sends to acceptMembership from membershipSigOf(ua, index) alone (CTR-UA-37): an msig slot's
+// stored bytes are abi.encode(InnerSig[]), canonical, at most 16; a signing slot's its sig. UAUnauthorized otherwise.
+func ReplayedMemberSig(keyData []byte, index uint16, stored []byte) (*MemberSig, error) {
+	s, err := MsigStructureOf(keyData)
+	if err != nil {
+		return nil, err
+	}
+	refused := fail("UAUnauthorized", "slot "+strconv.Itoa(int(index)))
+	if int(index) >= len(s.Members) {
+		return nil, refused
+	}
+	if s.Members[index].Kind != 0x0120 {
+		return &MemberSig{index, []InnerSig{}, stored}, nil
+	}
+	// no offset, length or index reaches 2^28, so the sums below cannot overflow
+	w := func(o int) int {
+		if o+32 > len(stored) {
+			return -1
+		}
+		for _, x := range stored[o : o+28] {
+			if x != 0 {
+				return -1
+			}
+		}
+		if v := binary.BigEndian.Uint32(stored[o+28:]); v < 1<<28 {
+			return int(v)
+		}
+		return -1
+	}
+	n := w(32)
+	if w(0) != 32 || n < 0 || n > 16 {
+		return nil, refused
+	}
+	members := []InnerSig{}
+	for j := 0; j < n; j++ {
+		h := w(64 + 32*j)
+		if h < 0 {
+			return nil, refused
+		}
+		u := 64 + h
+		i, t := w(u), w(u+32)
+		if t < 0 || i < 0 || i > 0xFFFF {
+			return nil, refused
+		}
+		l := w(u + t)
+		if l < 0 || u+t+32+l > len(stored) {
+			return nil, refused
+		}
+		members = append(members, InnerSig{uint16(i), stored[u+t+32 : u+t+32+l]})
+	}
+	if string(EncodeInnerSigs(members)) != string(stored) {
+		return nil, refused
+	}
+	return &MemberSig{index, members, Hex{}}, nil
 }
 
 // UASig is the signature of requireAuthorized / setKemKey / setPqzKey (TS-D12): native — Signature; a derived single key —
