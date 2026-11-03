@@ -3428,6 +3428,37 @@ Change (2026-11-01, controller call, owner may override): the preconditions of t
 
 **What it said.** Conditions under which the curve decision would reopen.
 
+### CTR-ZTH-94 — Zether token bodies run in `ZetherLib` / `ZetherWrappedLib`
+- old: — · status: current · owner: yes · date: 2026-11-03 · normative: contracts/zether.md#CTR-ZTH-94 · superseded-by: —
+
+**Rule.** Owner ruling 2026-11-03: move the Zether token function bodies into the existing libraries, shared code into `ZetherLib`,
+wrapped-only code into `ZetherWrappedLib`. No new library (no `ZetherOpsLib`). Goal: smaller `NormalZetherToken` and
+`WrappedZetherToken` deploy transactions, so that they deploy on public chains (ETH about 60 M gas per block, BSC about 70 M) under
+EIP-8037 (a transaction fits only if regular + state gas fits the block; about 1,606 gas per byte of code), and further below the
+64 KiB ceiling (EIP-7954). Built on branch `zether-lib`, commit `1c8b57f3` (status: built, not merged; the `main` merge commit is added when it lands):
+the transfer, single and unshield ops, their signed and `ua*` forms and the typehashes of those forms run in `ZetherLib`; the
+unshield-unwrap op and its signed forms in `ZetherWrappedLib`; `NormalZetherToken`'s init path and `mtxSelectors()` table in
+`ZetherLib` (size lever 1, as C3 did on the wrapped kind). A moved entry keeps its declaration on the token and hands the library
+its own calldata (no Zether struct coder stays in the token); `mtxShield`, `mtxWrapShield`, the roll-overs and the views stay.
+No selector, ABI, typehash, event, error or storage slot changes; `ZetherLib` keeps no DELEGATECALL, `ZetherWrappedLib` two.
+**Figures.** Runtime (init): `NormalZetherToken` 52,874 → 47,470 B (56,446 → 51,042), `WrappedZetherToken` 62,305 → 58,407 B
+(65,887 → 61,986); `ZetherLib` 19,690 → 26,131 B (now a `size-baseline.json` entry, over EIP-170), `ZetherWrappedLib` 4,958 →
+11,471 B. Deploy transaction, regular + state gas: `NormalZetherToken` 84.9 M → 76.3 M, `WrappedZetherToken` 100.0 M → 93.7 M,
+so neither fits a 60 M or 70 M block yet (about 37.3 KB and 43.5 KB of runtime fit; the base kinds are 37,487 B and 48,278 B);
+`ZetherLib` 41.9 M and `ZetherWrappedLib` 18.5 M fit both. Gas per call against main (forge, deterministic): the direct transfers
+−0.3 K to −4.6 K (one calldata copy instead of an ABI encode), `mtxUnshield` +0.1 K to +0.2 K; the signed and `ua*` forms cost
+between +1.0 K and +1.9 K at the median, at most +17.0 K (`mtxConfidentialTransferCompact` signed at `M = 8`, 26.1 M gas: the library builds the op call and
+the token reads it back); `mtxUnshieldUnwrap` / `uaUnshieldUnwrap` signed +1.0 K median; `NormalZetherToken.initialize` +5.7 K once
+per clone; `mtxSelectors()` +13.2 K, an `eth_call`. No gas pin and no KAT moved.
+**Why.** The bodies were already thin calls into `ZetherLib`; what the token still carried per op was the ABI encoding of its
+calldata structs (to call the library and to build a signed entry's struct words and op call). Forwarding the calldata removes
+those coders from both kinds; the decoders of the entries' own arguments stay, since the ABI is the token's.
+**Cost if wrong.** A library split can change storage, `this`, `msg.sender`, return data or the guard: the libraries run by
+DELEGATECALL in the token's context as before, write only the token's namespaces, call nothing back, and every existing test
+passes unchanged. On malformed calldata only, a `ZetherMulti` offset aimed at a word the token appends reads that public word
+(`test_nestedOffsetReadsAnAppendedWord`).
+**Source.** Owner ruling 2026-11-03; measurements and the plan in [research/zether-library-split.md](research/zether-library-split.md).
+
 ## 24. Contracts — Universal Account
 
 ### CTR-UA-01 — Refuse BLS keys and signatures at infinity

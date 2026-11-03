@@ -331,6 +331,7 @@ struct UAEnvelope { bytes32 from; /* the same seven fields */ }
   may be 0. Clients and the node build the named entry by default and use the generic path only for a mixed batch or an operation with no named entry.
 - **Size.** The only ceiling is 65,536 B (EIP-7954). With the size levers (owner 2026-11-01: lever 2 `_enter` / `_exit`, lever 1 init path and selector table behind external library
   calls) `WrappedPqzToken` is 63,423 B and `WrappedZetherToken` 62,169 B (`smartcontracts/evm/size-baseline.json`); the task reports and `docs/research/evm-size-levers.md` have the rest.
+  Since the Zether bodies run in the libraries ([CTR-ZTH-94](zether.md#CTR-ZTH-94)), `WrappedZetherToken` is 58,407 B and `NormalZetherToken` 47,470 B.
 
 <a id="CTR-MTX-29"></a>**CTR-MTX-29** — **Every parameter is explicit** (owner 2026-10-31, general rule, the owner's text): "every parameter is explicit, as in a REST / JSON / RPC API — no packed / opaque
 `bytes` that bundle several fields". A genuine cryptographic blob stays `bytes`, "but as its own named parameter (`proof`, `ciphertext`, `kemPk`, `pqzKey`, `signature`, …)". "The statement / digest
