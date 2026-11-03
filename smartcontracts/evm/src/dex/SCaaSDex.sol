@@ -19,7 +19,6 @@ import {DexPuller} from "./DexPuller.sol";
 import {TokenCall} from "./TokenCall.sol";
 import {GovernanceBase, GovernanceUse} from "../governance/GovernanceBase.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
-import {IRescuable} from "../governance/IRescuable.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {GovernanceBits} from "../governance/GovernanceBits.sol";
 import {GovernanceLib} from "../governance/GovernanceLib.sol";
@@ -157,7 +156,6 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
         DexStorage storage s = _s();
         if (s.initialized) revert AlreadyInitialized();
         s.initialized = true;
-        if (cfg.rescueTo != address(0)) revert IRescuable.RescueConfigInvalid();
         GovernanceLib.Roles memory none;
         GovernanceLib.init(GovernanceBits.DEX_BITS, 0, cfg.owner, cfg.grantDelay, address(0), none, GovernanceBits.DEX_BITS,
             GovernanceBits.DEX_BITS, 0);
@@ -166,7 +164,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
             GovernanceLib.initHolder(GovernanceBits.FEE_ROUTING, cfg.owner, GovernanceBits.DEX_BITS, 0);
         }
         s.listedOnly = cfg.listedOnly;
-        s.puller = address(new DexPuller());
+        s.puller = address(new DexPuller(cfg.rescueTo)); // the DEX itself rescues nothing (CTR-DEX-20, spec §6.2)
         _setFeeSplit(s, cfg.relayerSharePpm, cfg.treasury);
     }
 

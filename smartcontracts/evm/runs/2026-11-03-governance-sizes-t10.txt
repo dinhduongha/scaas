@@ -1,0 +1,25 @@
+# governance T10 sizes at the default set (n2304-kmax4096), forge build src --sizes --json; they decide nothing (spec §11)
+# before = T9 (20620a1e), after = the T10 tree; libraries from their artifacts, as size_gate.py reads them
+contract | runtime before | runtime after | delta | init after
+NormalToken | 40535 | 40837 | 302 | 43086
+WrappedToken | 52131 | 52397 | 266 | 54653
+NormalZetherToken | 50302 | 50575 | 273 | 54144
+WrappedZetherToken | 62234 | 62499 | 265 | 66078
+NormalPqzToken | 55933 | 56206 | 273 | 58830
+WrappedPqzToken | 71853 | 72170 | 317 | 74806
+SCaaSDex | 32797 | 33493 | 696 | 35153
+GovernanceLib | 13094 | 14164 | 1070 | 14216
+WrappedLib | 17215 | 17983 | 768 | 18035
+ZetherWrappedLib | 11602 | 11604 | 2 | 11656
+PqzWrappedLib | 5018 | 5020 | 2 | 5072
+ZetherLib | 26274 | 26274 | 0 | 26326
+OpenFactory | 15732 | 15732 | 0 | 16126
+above 65,536 B: WrappedPqzToken
+
+# WrappedPqzToken per PQZ set (script/pqz/at-set.sh <set> build src --sizes --json)
+set | runtime | init
+n2048-kmax1024 | 72170 | 74806
+n2304-kmax4096 | 72170 | 74806
+n2560-kmax16384 | 72170 | 74806
+n2816-kmax65536 | 72170 | 74806
+# the set's constants do not change the token's bytes: one figure at all four sets; size gate: 0 error(s), 87 contracts

@@ -227,6 +227,26 @@ forge|forge|test_maxSupplyWithoutMintableRefused
 forge|forge|test_limitedMinterBindsOnAWrappedKind
 forge|forge|test_nonHybridWrapReadsNoNewSlot
 forge|forge|test_minterNeverMintsIntoAShieldedBalance
+forge|forge|test_rescueForeignToken
+forge|forge|test_rescueNativeLessReserve
+forge|forge|test_rescueLegSurplusOnly
+forge|forge|test_rescueAliasOfALegRefused
+forge|forge|test_rescuePastAShortLeg
+forge|forge|test_rescueReentrantAssetRefused
+forge|forge|test_rescueOwnTokenRefused
+forge|forge|test_rescueToDesignatorRefusedNative
+forge|forge|test_rescueOffWithoutTheBit
+forge|forge|test_rescueOnNormalTakesAll
+forge|forge|test_rescueNativeOnNormal
+forge|forge|test_rescueLegShortfallNamesItsError
+forge|forge|test_rescueToThisOrAPoolRefusedAtInit
+forge|forge|test_tokenAnswersIRescuableOnlyWithTheBit
+forge|forge|test_pullerRescueWholeBalance
+forge|forge|test_pullerRescueOff
+forge|forge|test_pullerRescueCannotSpendAllowances
+forge|forge|test_interfaceIdIsOneOnDexAndToken
+forge|forge|test_rescueOnTheZetherKinds
+forge|forge|test_rescueOnThePqzKinds
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

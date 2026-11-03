@@ -10,6 +10,7 @@ import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
+import {DexPuller} from "../../src/dex/DexPuller.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {IRescuable} from "../../src/governance/IRescuable.sol";
 import {GovernanceBase} from "../../src/governance/GovernanceBase.sol";
@@ -596,7 +597,8 @@ contract GovDelayTest is Test {
         assertEq(t.lastProposedAt(), t1 + 1 hours);
     }
 
-    /// GD-3: the new `TokenConfig` and `DexConfig` fields fail closed until their task gives them meaning.
+    /// GD-3: the new `TokenConfig` and `DexConfig` fields fail closed without their bit: `maxSupply` on `NORMAL` and without
+    /// `MINTABLE` on `WRAPPED` (T9), `rescueTo` without `RESCUABLE` (T10); the DEX's `rescueTo` is its puller's (T10).
     function test_configFieldsFailClosedUntilBuilt() public {
         IFactoryToken.TokenConfig memory c = _cfg(0);
         c.maxSupply = 1;
@@ -618,8 +620,9 @@ contract GovDelayTest is Test {
         w.rescueTo = address(0xBEEF);
         vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
         f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(w), "w");
-        vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
-        f.createDex(1, abi.encode(ISCaaSDex.DexConfig(OWNER, 0, address(0xAA), false, 0, address(0xBEEF))), "x");
+        // governance T10 (spec §6.2): the DEX's `rescueTo` is its puller's, accepted; the DEX rescues nothing itself
+        SCaaSDex dx = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(OWNER, 0, address(0xAA), false, 0, address(0xBEEF))), "y"));
+        assertEq(DexPuller(dx.puller()).rescueTo(), address(0xBEEF));
         w.rescueTo = address(0); // positive controls
         f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(w), "w");
         c.rescueTo = address(0);

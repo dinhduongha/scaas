@@ -9,6 +9,7 @@ import {GovernanceBits} from "../governance/GovernanceBits.sol";
 import {TokenStore} from "./TokenStore.sol";
 import {GovernanceBase} from "../governance/GovernanceBase.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
+import {IRescuable} from "../governance/IRescuable.sol";
 import {IMetaTx} from "./IMetaTx.sol";
 import {IERC20MetaTx} from "./IERC20MetaTx.sol";
 import {IERC20Payment} from "./IERC20Payment.sol";
@@ -28,7 +29,7 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         `mtxPayReceiverFee`) works only with
 ///         `PAYABLE`; a `MetaTransfer` (with or without `entryRef`) is never gated. Hedera is the immutable
 ///         `IS_HEDERA` (CTR-TOK-23): HIP-632 signatures through `MtxPipelineLib` (which calls `HederaLib`).
-abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IERC165, GovernanceBase {
+abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IERC165, GovernanceBase, IRescuable {
     using MetaTxLib for MetaTxLib.MetaTransfer;
 
     bytes32 private constant RELAY_FEE_TYPEHASH = keccak256(
@@ -139,12 +140,24 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     function _scalarBits() internal pure override returns (uint256) { return GovernanceBits.TOKEN_SCALAR; }
     function _scopeBits() internal pure override returns (uint256) { return 0; }
 
-    /// @notice ERC-165; `IERC20Payment` only while `PAYABLE` is set.
+    /// @notice ERC-165; `IERC20Payment` only while `PAYABLE` is set, `IRescuable` only while `RESCUABLE` is.
     function supportsInterface(bytes4 id) external view returns (bool) {
         return id == type(IERC165).interfaceId || id == type(IERC20).interfaceId || id == type(IMetaTx).interfaceId
             || id == type(IERC20MetaTx).interfaceId || id == type(IGovernance).interfaceId
             || (id == type(IERC20Payment).interfaceId && GovernanceLib.hasFeature(GovernanceBits.PAYABLE))
+            || (id == type(IRescuable).interfaceId && GovernanceLib.hasFeature(GovernanceBits.RESCUABLE))
             || (id == type(IUALedger).interfaceId && _REGISTRY != address(0));
+    }
+
+    /// @notice CTR-GOV-06 (spec §6.2): one direct entry on every kind, anyone, not allowlisted; `NORMAL*` pays the whole
+    ///         balance (`GovernanceLib.rescue`), `WRAPPED*` overrides it with `WrappedLib.rescue`.
+    function rescue(address asset) external virtual nonReentrant {
+        GovernanceLib.rescue(asset);
+    }
+
+    /// @notice Immutable: set by `init` with bit 17, no writer after.
+    function rescueTo() external view returns (address) {
+        return GovernanceLib.$().rescueTo;
     }
 
     function payLane(bytes32 payId) public pure returns (uint256) {

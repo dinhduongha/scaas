@@ -277,6 +277,11 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
         _uaMint(to, amount);
     }
 
+    /// @notice Spec §6.2 on `WRAPPED*`: a leg's surplus over its reserve, a foreign asset whole (`WrappedLib.rescue`).
+    function rescue(address asset) external virtual override nonReentrant {
+        WrappedLib.rescue(asset);
+    }
+
     // ------------------------------------------------------------------ roles: guardian, rate admin
 
     function disableWrap(address u, bytes32 reason) external nonReentrant {

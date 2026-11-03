@@ -91,8 +91,8 @@ interface IFactoryToken {
         RateConfig rate;             // WRAPPED* only, with RATE_ADJUSTABLE
         ConfidentialConfig conf;     // *_ZETHER only
         uint64 grantDelay;           // spec §1.6: the owner's two calls, at most 30 days; 0 = one call
-        address rescueTo;            // spec §6.2, `RESCUABLE`; not built yet: non-zero is refused
-        uint256 maxSupply;           // WRAPPED* only, spec §5.2, the hybrid's cap; not built yet: non-zero is refused
+        address rescueTo;            // spec §6.2: with `RESCUABLE` only, immutable; never the token or a pool
+        uint256 maxSupply;           // WRAPPED* only, spec §5.2: the hybrid's cap, with `MINTABLE` only; 0 = no hybrid
     }
 
     /// @notice A field set for another kind (`field`: 1 initialSupply/initialHolder, 2 legs, 3 rate, 4 conf, 5 maxSupply).

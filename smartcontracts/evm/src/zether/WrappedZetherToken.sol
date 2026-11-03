@@ -138,6 +138,11 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
         return _namedCallUA(th, e, words, data, auth);
     }
 
+    /// @notice As `WrappedToken` (spec §6.2); restated for the second base.
+    function rescue(address asset) external override(WrappedToken, MetaTokenBase) nonReentrant {
+        WrappedLib.rescue(asset);
+    }
+
     /// @notice As `WrappedToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
     function disableFeature(uint8 bit) external override(WrappedToken, GovernanceBase) nonReentrant {
         GovernanceLib.disableFeature(bit, _msgSender());

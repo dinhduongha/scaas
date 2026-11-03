@@ -13,7 +13,7 @@ interface ISCaaSDex {
     /// @notice Written once by `initialize` (CTR-DEX-24). `relayerSharePpm` of every fee goes to the submitter, the
     ///         rest to `treasury`. `listedOnly`: every exchange target or executor must be listed (CTR-DEX-23).
     ///         `grantDelay`: the owner's two calls (spec §1.6), at most 30 days. `rescueTo`: the `DexPuller`'s rescue
-    ///         (spec §6.2), not built yet: non-zero is refused.
+    ///         destination (spec §6.2), immutable, 0 = none; the DEX itself rescues nothing (CTR-DEX-20).
     struct DexConfig {
         address owner;
         uint32 relayerSharePpm;
