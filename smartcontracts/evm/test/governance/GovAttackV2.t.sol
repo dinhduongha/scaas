@@ -220,19 +220,23 @@ contract GovAttackV2Test is Test {
 
     // ------------------------------------------------------------------ the factory enum (B-03)
 
-    /// B-03: a reservation in a comment is not a value. Kind 8 does not decode on this factory, so a frozen factory can never make it.
-    function test_attack_aReservedKindDoesNotDecode() public {
+    /// B-03, fixed (CTR-GOV-16): kind 8 is a real member. It decodes on this factory and is refused by name until a release
+    /// is published, and the registrar can enable it, so a frozen factory can still make it.
+    function test_fixed_aReservedKindDecodes() public {
         bytes memory cfg = abi.encode(_config(0, OWNER));
         (bool ok,) = address(f).call(abi.encodeWithSelector(f.createToken.selector, uint8(0), uint64(1), cfg, bytes32("a")));
         assertTrue(ok); // positive control: the same call, kind 0
-        (ok,) = address(f).call(abi.encodeWithSelector(f.createToken.selector, uint8(8), uint64(1), cfg, bytes32("b")));
+        bytes memory ret;
+        (ok, ret) = address(f).call(abi.encodeWithSelector(f.createToken.selector, uint8(8), uint64(1), cfg, bytes32("b")));
         assertFalse(ok);
+        assertEq(ret, abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, uint8(8), uint64(1)));
         (ok,) = address(f).call(abi.encodeWithSelector(f.setKindEnabled.selector, uint8(8), true));
-        assertFalse(ok);
+        assertTrue(ok);
+        assertTrue(f.kindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED));
     }
 
-    /// B-03: a second factory is the way out, and a token of a second factory is an outside leg to `isToken`, whatever its bits.
-    function test_attack_aSecondFactorysTokenIsOutsideToTheFirst() public {
+    /// B-03, stated: a token of a second factory stays an outside leg to the first's `isToken`, whatever its bits.
+    function test_stated_aSecondFactorysTokenIsOutsideToTheFirst() public {
         OpenFactory f2 = new OpenFactory(address(this), UID, 0);
         Catalogue.plain(f2, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
         address other = f2.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(_config(0, OWNER)), "x");

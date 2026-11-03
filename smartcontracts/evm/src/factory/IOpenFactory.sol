@@ -11,13 +11,24 @@ interface IOpenFactory {
     /// @notice CTR-TOK-21, a fresh enum (nothing deployed): the value equals the implementation's `kind()`.
     ///         `NORMAL_PQZ` / `WRAPPED_PQZ` are built (P6g); ids 6 and 7 (the dropped
     ///         `*_ZETHER_PQZ` kinds) are never reused: an out-of-range kind fails ABI decoding.
+    /// @notice CTR-GOV-16, spec §4.1: every id is a real member before the factory freezes. 6 and 7 are the dropped
+    ///         `*_ZETHER_PQZ` ids, never reused: `deployImplementation` refuses them (`KindRetired`). 8-13, the regulated
+    ///         kinds, are off until a release is published and the kind enabled.
     enum TokenKind {
-        NORMAL,
-        WRAPPED,
-        NORMAL_ZETHER,
-        WRAPPED_ZETHER,
-        NORMAL_PQZ,
-        WRAPPED_PQZ
+        NORMAL,                   // 0
+        WRAPPED,                  // 1
+        NORMAL_ZETHER,            // 2
+        WRAPPED_ZETHER,           // 3
+        NORMAL_PQZ,               // 4
+        WRAPPED_PQZ,              // 5
+        RETIRED_6,                // 6, the dropped NORMAL_ZETHER_PQZ, never reused
+        RETIRED_7,                // 7, the dropped WRAPPED_ZETHER_PQZ, never reused
+        NORMAL_REGULATED,         // 8
+        WRAPPED_REGULATED,        // 9
+        NORMAL_ZETHER_REGULATED,  // 10
+        WRAPPED_ZETHER_REGULATED, // 11
+        NORMAL_PQZ_REGULATED,     // 12
+        WRAPPED_PQZ_REGULATED     // 13
     }
 
     /// @notice A release: the factory-deployed code, the env version it was deployed with (its `keccak256(abi.encode(env))`
@@ -59,6 +70,8 @@ interface IOpenFactory {
     error KindDisabled(TokenKind kind);
     error VersionAlreadyRegistered(TokenKind kind, uint64 version, address existing);
     error VersionUnknown(TokenKind kind, uint64 version);
+    /// @notice 6 and 7 are retired ids: no release of them is ever deployed (CTR-GOV-16).
+    error KindRetired(TokenKind kind);
     /// @notice The implementation's `kind()` differs (`got = type(uint256).max` when it does not answer).
     error VersionKindMismatch(TokenKind expected, uint256 got);
     error ImplementationNotAContract(address implementation);

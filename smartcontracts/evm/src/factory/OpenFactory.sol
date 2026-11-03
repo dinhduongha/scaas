@@ -99,6 +99,7 @@ contract OpenFactory is IOpenFactory {
         bytes calldata initcode,
         bytes calldata implArgs
     ) external onlyRegistrar returns (address implementation) {
+        if (kind == TokenKind.RETIRED_6 || kind == TokenKind.RETIRED_7) revert KindRetired(kind);
         if (version == 0) revert VersionUnknown(kind, 0);
         address existing = _releases[kind][version].implementation;
         if (existing != address(0)) revert VersionAlreadyRegistered(kind, version, existing);

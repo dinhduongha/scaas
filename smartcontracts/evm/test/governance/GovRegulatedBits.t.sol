@@ -9,6 +9,9 @@ import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
+import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
+import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
@@ -44,6 +47,29 @@ abstract contract GovRegulatedRows is Test {
         uint256 v = IGovernance(t).validBits();
         assertEq(v & REGULATED, 0, "validBits() holds a bit of 5-9");
         assertEq(v & 1, 1, "control: PAYABLE is valid");
+    }
+}
+
+/// The shape of what a regulated release decodes beside `TokenConfig` (spec §4.2, §4.4). Test only: nothing of it lands now.
+struct MockRegulatedParams {
+    address complianceRegistry;
+    uint256 requiredFlags;
+    uint256 deniedFlags;
+}
+
+/// A mock implementation of kind 8 `NORMAL_REGULATED`: its own encoding, `abi.encode(TokenConfig, MockRegulatedParams)`, read
+/// in its own `_initRaw`. The factory passes `initArgs` opaque, so nothing in it changes.
+contract MockNormalRegulated is NormalToken {
+    MockRegulatedParams public params;
+
+    constructor(uint16 v, Env memory env, bytes memory a) NormalToken(v, env, a) {}
+
+    function kind() public pure override returns (uint8) { return 8; }
+
+    function _initRaw(bytes calldata initArgs) internal override {
+        (TokenConfig memory cfg, MockRegulatedParams memory p) = abi.decode(initArgs, (TokenConfig, MockRegulatedParams));
+        params = p;
+        _init(cfg);
     }
 }
 
@@ -93,6 +119,34 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
             vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, uint8(5)));
             _rCreate(w == 1, c, "i");
         }
+    }
+
+    /// CTR-GOV-16, spec §4.2: a regulated kind publishes, enables and creates on the same factory with no factory change; its
+    /// token is registered and `KIND_SCAAS` to the DEX.
+    function test_regulatedKindPublishesOnTheSameFactory() public {
+        IOpenFactory.TokenKind k8 = IOpenFactory.TokenKind.NORMAL_REGULATED;
+        bytes memory args = abi.encode(_rCfg(false, 1), MockRegulatedParams(address(0xC0), 3, 4));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, k8, 1));
+        f.createToken(k8, 1, args, "r");
+        Catalogue.release(f, k8, 1, plainEnv(address(f), address(0), UID, address(0), false),
+            type(MockNormalRegulated).creationCode);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, k8));
+        f.createToken(k8, 1, args, "r");
+        f.setKindEnabled(k8, true);
+        address t = f.createToken(k8, 1, args, "r");
+        assertTrue(f.isRegisteredToken(t));
+        assertEq(NormalToken(t).kind(), 8);
+        (address reg, uint256 req, uint256 den) = MockNormalRegulated(t).params();
+        assertEq(reg, address(0xC0));
+        assertEq(req, 3);
+        assertEq(den, 4);
+        Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(OWNER, 0, address(0xAA), false)), "d"));
+        address n = _rCreate(false, _rCfg(false, 1), "n");
+        vm.prank(OWNER);
+        d.setMarket(t, n, true);
+        assertEq(d.tokenKind(t), 1, "KIND_SCAAS");
+        assertEq(d.tokenKind(n), 1, "control: a NORMAL token");
     }
 
     /// The masks are the kind's (spec §1.2): bit 3 is no role on a `NORMAL*` kind, a role without its feature on `WRAPPED*`.
