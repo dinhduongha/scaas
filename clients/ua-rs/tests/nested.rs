@@ -170,6 +170,12 @@ mod verdicts {
             let got = check_registration(0x0120, &bytes(&s["keyData"]), &UAAttrs::default(), &[], &[], &|id| key_of(&n, id));
             assert_eq!(got, Err(UAError::MemberUnknown), "{}", s["name"]);
         }
+        // an acceptance never asks eligibility, so the record check alone refuses a third level
+        let third = &rows(&n, "structures")[0];
+        let (ua, d) = (b32(&third["ua"]), bytes(&third["keyData"]));
+        let keys = |id: [u8; 32]| if id == ua { Some((0x0120, d.clone())) } else { key_of(&n, id) };
+        let slot = MemberSig { index: 0, members: vec![InnerSig::default()], sig: vec![] };
+        assert_eq!(check_membership(&d, &ua, &slot, &keys), Err(UAError::MemberUnknown), "a third level");
     }
 
     #[test]

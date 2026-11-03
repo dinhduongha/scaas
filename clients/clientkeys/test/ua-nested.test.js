@@ -75,6 +75,10 @@ test('structures: a third level, an unregistered inner are refused from the reco
     const attrs = { pqzKey: '0x', pqzPopHash: hex(new Uint8Array(32)), kemPk: '0x' };
     assert.throws(() => verifyRegistration({ kind: 0x0120, keyData: s.keyData, attrs, pop: '0x', pqzPop: '0x' }, records), code('UAMemberUnknown'), s.name);
   }
+  // an acceptance never asks eligibility, so the record check alone refuses a third level
+  const third = N.structures.find((s) => s.name === 'third-level');
+  const withThird = (id) => (id === third.ua ? { kind: 0x0120, keyData: third.keyData } : records(id));
+  assert.throws(() => verifyMembership({ ua: third.ua, index: 0, sig: '0x', members: [{ index: 0, sig: '0x' }] }, withThird), code('UAMemberUnknown'));
 });
 
 test('the minimal rule at both levels', () => {

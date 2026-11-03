@@ -850,7 +850,7 @@ fn signature_ok(kind: u16, d: &[u8], ua: &[u8; 32], purpose: &[u8; 32], digest: 
 fn slot_ok(m: &MsigMember, key: &[u8], digest: &[u8; 32], md: &[u8; 32], s: &MemberSig, members: &Members) -> Result<bool> {
     if m.kind == 0x0120 {
         let indexes: Vec<u16> = s.members.iter().map(|x| x.index).collect();
-        if !s.sig.is_empty() || s.members.is_empty() || !msig_slots_minimal(key, &indexes)? {
+        if !s.sig.is_empty() || !msig_slots_minimal(key, &indexes)? {
             return Ok(false);
         }
         let leaves = MsigStructure::from_key_data(key)?.members;

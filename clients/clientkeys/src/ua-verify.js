@@ -255,7 +255,7 @@ function signatureOk(kind, d, id, purpose, digest, sig, members) {
 function slotOk(m, key, digest, md, s, members) {
   const list = s.members ?? [];
   if (m.kind === 0x0120) {
-    if (toBytes(s.sig).length !== 0 || list.length === 0 || !ua.msigSlotsMinimal(key, list.map((x) => x.index))) return false;
+    if (toBytes(s.sig).length !== 0 || !ua.msigSlotsMinimal(key, list.map((x) => x.index))) return false;
     const leaves = ua.msigStructure(key).members;
     const keys = memberKeys(key, members);
     const inner = ua.innerDigest(fromHex(m.id), md);
