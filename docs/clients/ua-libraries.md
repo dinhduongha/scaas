@@ -42,6 +42,22 @@ read the same files. Never edit them by hand.
 Language notes: Dart's KEM version is a `BigInt` (2^64 − 1 does not fit an `int`); ua-dart-frb's package entry point refuses a version below 0 or at or above 2^64 (`UAKemVersion`) before the bridge, which would otherwise wrap it to 64 bits; ua-qt's numbers (chain id, KEM version) are JS numbers, exact up to 2^53, and a larger or fractional value is `UAArgument`; ua-qt exposes `holderPopMessage(kind, ua, keyData, pqzKey, pqzPop, kemPk)` (+ `holderPopMessageH` for a hash-only proof, `purposeTagV(purpose, version)`) and returns JSON. **ua-c ABI version 5** (1 → 2: the proof-hash argument takes `(ptr, len)`, len 0 = absent, len ≠ 32 = `UAPqzPopHash`; 2 → 3: the typed digests, `scaas_ua_portable_domain_separator`, `scaas_ua_kem_record_hash`, `scaas_ua_portable_record_digest`, the `kem_record_tag`, `pqz_key_record_tag`, `portable_pop_digest` and `personal_sign_digest` exports gone; then `scaas_ua_registration_args`, `scaas_ua_set_kem_key_args`, `scaas_ua_set_pqz_key_args`): statuses **12–17** (`UAKemHolder`, `UAKemVersion`, `UAKemKeyLength`, `UAPqzPopHash`, `UAPqzKeySet`, `UAKemScheme`), structs `ScaasUaHolderPop` and `ScaasUaPqzKeyRecord` (225 bytes, align 1), `scaas_ua_purpose_tag_v`; ua-cxx and ua-dart-frb follow through the Rust wrapper. Tests in every package read `portable.json` (25 registrations, 9 KEM records, 8 PQZ key records, 67 negatives) and pin two known answers as literals: `chainKeyHash(1099511627783)` = `keccak256("evm:1099511627783")` = `0x6e45d591…`, and the KEM record digest at version 2^64 − 1 `0xa0063a84…38f07` (ua-qt pins it at 2^53 = `0x04a0150e…990482`, the largest version a QML number carries exactly). Errors carry one code everywhere: `UAKeyData`, `UAIdInNativeSpace`, `UAKindUnknown`,
 `UAKindNotDerived`, `UAKindNotNative`, `UAIdFormat`, `UAPurposeUnknown`. The Solidity library has the on-chain subset.
 
+**Nested `msig` (`msig-nested`, [CTR-UA-38](../contracts/accounts.md#CTR-UA-38)).** Key data alone does not show an `msig` member's PQ eligibility, so
+`msigPqzEligible`, `holderPopMessage` and `pqzKeyRecordMessage` refuse a record that needs it `UAMemberUnknown`. ua-rs has the `_with` forms with an
+`inner` lookup (`msig_pqz_eligible_with`, `ua8::holder_pop_message_with`, `ua8::pqz_key_record_message_with`); the four wrappers take `inner` in
+the form the JSON calls take it, `{id: keyData}` as JSON text, no callback across the ABI: `scaas_ua_msig_pqz_eligible_with`,
+`scaas_ua_holder_pop_message_with`, `scaas_ua_pqz_key_record_message_with` in ua-c (NULL = none; additive, `SCAAS_UA_ABI_VERSION` stays 5), and
+`msigPqzEligibleWith`, `holderPopMessageWith`, `pqzKeyRecordMessageWith` in ua-cxx, ua-qt and ua-dart-frb ("" = none). An `inner` over 65,536 bytes,
+with more than 16 entries or key data over 580 bytes is `UAArgument` (ua-rs `json::inner_json`); with `inner`, `UAMemberUnknown` means a member
+missing from it or an entry that holds an `msig` (a third level). `scaas_ua_replayed_member_sig` / `replayedMemberSig` turn the bytes of a slot's
+`UAMemberSig` event (they hash to `memberSigHashOf(ua, index)`, owner 2026-11-03) into the slot JSON `{index, members: [{index, sig}], sig}` a copy sends to `acceptMembership` (CTR-UA-37), `UAUnauthorized`
+(ua-c `SCAAS_UA_ERR_UNAUTHORIZED` = 20, new) for bytes that are not that slot's. Tests: `nested.json`'s `msig-nested-pq`, its eligibility rows,
+nested PQZ key records and every `memberships` row in each wrapper (`test_nested_inner`, `nested_inner`, `nested inner`). ua-cxx, ua-qt and
+ua-dart-frb export `keccak256(data)` (ua-rs `keccak256`; ua-qt hex in and out, `UAArgument` on bad hex), and their `member_sig_hashes`,
+`test_member_sig_hashes`, `member sig hashes` tests check every `msig` registration row's `memberSigHashes` in `portable.json` and `nested.json`
+(keccak256 of the slot's `sig`, or of an `msig` member's `abi.encode(InnerSig[])`, encoded in the test) and every `memberships` row's
+`storedHash` = keccak256(`stored`). BUILT.
+
 **Metatx hashes (metatx split T18).** The Rust crate and QML also carry the three hashes a wallet needs for
 [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) / [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27):
 `meta_pay_id(salt, meta)` (`keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`), `pay_lane(p)` (`keccak256("scaas.pay.lane"

@@ -1722,9 +1722,14 @@ fn attrs_of(v: &Value) -> Result<UAAttrs> {
     Ok(UAAttrs { pqz_key: hex_of(pqz_key)?, pqz_pop_hash: b32_of(pqz_pop_hash)?, kem: kem_of(kem)?, kem_pk_hash: b32_of(kem_pk_hash)? })
 }
 
+/// Soroban's `MemberSig{index, key_data, sig}`, flat until its round: `key_data` is always empty (CTR-UA-33), so a job that fills it is
+/// refused here, as the contract refuses it; there is no list, the registry refuses an `msig` member (NET-SOR-18).
 fn member_sig_of(v: &Value) -> Result<MemberSig> {
     let [index, key_data, sig] = named(v, "member signature", ["index", "key_data", "sig"])?;
-    Ok(MemberSig { index: num_of(index)?, key_data: hex_of(key_data)?, sig: hex_of(sig)? })
+    if !hex_of(key_data)?.is_empty() {
+        bail!("a member signature carries no key_data");
+    }
+    Ok(MemberSig { index: num_of(index)?, members: vec![], sig: hex_of(sig)? })
 }
 
 fn sig_of(v: &Value) -> Result<UASig> {
@@ -1959,7 +1964,7 @@ fn sc_attrs(a: &UAAttrs) -> Result<ScVal> {
 }
 
 fn sc_member_sig(s: &MemberSig) -> Result<ScVal> {
-    sc_struct([("index", ScVal::U32(s.index.into())), ("key_data", sc_bytes(&s.key_data)?), ("sig", sc_bytes(&s.sig)?)])
+    sc_struct([("index", ScVal::U32(s.index.into())), ("key_data", sc_bytes(&[])?), ("sig", sc_bytes(&s.sig)?)])
 }
 
 fn sc_member_sigs(m: &[MemberSig]) -> Result<ScVal> {
@@ -3960,9 +3965,10 @@ mod tests {
     fn row(list: &str, name: &str) -> &'static Value {
         portable()[list].as_array().unwrap().iter().find(|r| r["name"] == name || r["id"] == name).unwrap()
     }
-    /// portable.json's `args` (camelCase, with `entry`) as the job's named fields.
+    /// portable.json's `args` (camelCase, with `entry`) as the job's named fields; a slot `{index, members, sig}` in this family's flat form.
     fn snake(v: &Value) -> Value {
         match v {
+            Value::Object(m) if m.contains_key("index") && m.contains_key("sig") => json!({"index": m["index"], "key_data": "0x", "sig": m["sig"]}),
             Value::Object(m) => {
                 let name = |k: &str| k.chars().flat_map(|c| if c.is_ascii_uppercase() { vec!['_', c.to_ascii_lowercase()] } else { vec![c] }).collect();
                 Value::Object(m.iter().filter(|(k, _)| *k != "entry").map(|(k, x)| (name(k), snake(x))).collect())

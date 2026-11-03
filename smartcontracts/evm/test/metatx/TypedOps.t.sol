@@ -708,7 +708,7 @@ contract TypedOpsTest is UALedgerBase {
         tok.mintToUA(uaP, 1_000);
         MetaTxLib.Envelope memory e = _env(address(0), 0, 0, 0, address(0));
         bytes32 d = _digest(address(tok), "UABurn(bytes32 from,uint256 amount,", uaP, abi.encode(uint256(100)), e);
-        IUARegistry.UASig memory s = UAKinds.uaSig(uaP, _authFor(uaP, d));
+        IUARegistry.UASig memory s = UACall.auth(uaP, _authFor(uaP, d));
         tok.uaBurn(_uaE(e, uaP), 100, s);
         assertEq(tok.balanceOfUA(uaP), 900);
         assertEq(tok.uaNonce(uaP, e.batch), 1);
@@ -722,7 +722,7 @@ contract TypedOpsTest is UALedgerBase {
     function _uaSigFor(bytes32 ua, address c, string memory head, bytes memory args, MetaTxLib.Envelope memory e)
         internal view returns (IUARegistry.UASig memory)
     {
-        return UAKinds.uaSig(ua, _authFor(ua, _digest(c, head, ua, args, e)));
+        return UACall.auth(ua, _authFor(ua, _digest(c, head, ua, args, e)));
     }
 
     function test_namedUADerivedUnwrap() public {
@@ -774,8 +774,8 @@ contract TypedOpsTest is UALedgerBase {
         uint16 ia = _indexOf(d, _pad(alice));
         uint16 ib = 1 - ia;
         IUARegistry.MemberSig[] memory all = new IUARegistry.MemberSig[](2);
-        all[ia] = IUARegistry.MemberSig(ia, "", _nativeSig(lreg, ALICE_PK, UAKinds.PURPOSE_MEMBER, md));
-        all[ib] = IUARegistry.MemberSig(ib, "", _nativeSig(lreg, BOB_PK, UAKinds.PURPOSE_MEMBER, md));
+        all[ia] = IUARegistry.MemberSig(ia, new IUARegistry.InnerSig[](0), _nativeSig(lreg, ALICE_PK, UAKinds.PURPOSE_MEMBER, md));
+        all[ib] = IUARegistry.MemberSig(ib, new IUARegistry.InnerSig[](0), _nativeSig(lreg, BOB_PK, UAKinds.PURPOSE_MEMBER, md));
         IUARegistry.UASig memory s;
         s.members = new IUARegistry.MemberSig[](1);
         s.members[0] = all[0];
@@ -803,8 +803,8 @@ contract TypedOpsTest is UALedgerBase {
         uint16 ib = 1 - ia;
         IUARegistry.UASig memory s;
         s.members = new IUARegistry.MemberSig[](2);
-        s.members[ia] = IUARegistry.MemberSig(ia, "", _nativeSig(lreg, ALICE_PK, UAKinds.PURPOSE_MEMBER, md));
-        s.members[ib] = IUARegistry.MemberSig(ib, "", _nativeSig(lreg, BOB_PK, UAKinds.PURPOSE_MEMBER, md));
+        s.members[ia] = IUARegistry.MemberSig(ia, new IUARegistry.InnerSig[](0), _nativeSig(lreg, ALICE_PK, UAKinds.PURPOSE_MEMBER, md));
+        s.members[ib] = IUARegistry.MemberSig(ib, new IUARegistry.InnerSig[](0), _nativeSig(lreg, BOB_PK, UAKinds.PURPOSE_MEMBER, md));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
         tok.uaBurn(_uaE(e, ua), 100, s);
         lreg.acceptMembership(ua, _acceptEoaSig(d, ALICE_PK));

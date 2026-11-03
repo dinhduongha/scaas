@@ -434,7 +434,7 @@ contract UARegistryPqTest is UARegistryBase {
         IUARegistry.MemberSig[] memory sigs = new IUARegistry.MemberSig[](2);
         for (uint256 i; i < 2; ++i) {
             bytes memory pk = _pk(0x0131, _saltOf(r, d, i));
-            sigs[i] = IUARegistry.MemberSig(uint16(i), "", _sig(pk, r.uaMessage(0x0131, UAKinds.PURPOSE_MEMBER, md)));
+            sigs[i] = IUARegistry.MemberSig(uint16(i), new IUARegistry.InnerSig[](0), _sig(pk, r.uaMessage(0x0131, UAKinds.PURPOSE_MEMBER, md)));
         }
         return abi.encode(sigs);
     }
@@ -467,7 +467,7 @@ contract UARegistryPqTest is UARegistryBase {
         UARegistry r = _deploy(address(0x5d21), chainUidA, address(home), false, uint64(bound), impl, true, none);
         // U5: PQ-eligible (native weight 1 < t = 2), so an m-of-n PoP; BurnAll accepts any signature
         IUARegistry.MemberSig[] memory pop = new IUARegistry.MemberSig[](2);
-        for (uint16 i; i < 2; ++i) pop[i] = IUARegistry.MemberSig(i, "", new bytes(i == _indexOf(d, mlId) ? 3309 : 65));
+        for (uint16 i; i < 2; ++i) pop[i] = IUARegistry.MemberSig(i, new IUARegistry.InnerSig[](0), new bytes(i == _indexOf(d, mlId) ? 3309 : 65));
         bytes32 ua = UACall.register(r, UAKinds.MSIG, d, _none(), abi.encode(pop), "");
         uint256 least = _handedLeast(r, d, ua, mlId, bound);
         emit log_named_uint("gen-2 handed mldsa65 bound", bound);
@@ -488,7 +488,7 @@ contract UARegistryPqTest is UARegistryBase {
         returns (uint256 hi)
     {
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](2);
-        for (uint16 i; i < 2; ++i) s[i] = IUARegistry.MemberSig(i, "", new bytes(i == _indexOf(d, mlId) ? 3309 : 65));
+        for (uint16 i; i < 2; ++i) s[i] = IUARegistry.MemberSig(i, new IUARegistry.InnerSig[](0), new bytes(i == _indexOf(d, mlId) ? 3309 : 65));
         bytes memory call = abi.encodeCall(r.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, UACall.auth(ua, _msigAuth(d, s))));
         GasProbe p = new GasProbe();
         assertTrue(p.probe(address(r), call, bound), "authorizes with its bound");

@@ -917,7 +917,18 @@ contract PqzTypedRowsTest is PqzNamedBase {
         s.members = new IUARegistry.MemberSig[](2);
         for (uint256 i; i < 2; ++i) {
             string memory m = string.concat(q, "[", vm.toString(i), "]");
-            s.members[i] = IUARegistry.MemberSig(uint16(j.readUint(string.concat(m, ".index"))), j.readBytes(string.concat(m, ".keyData")), j.readBytes(string.concat(m, ".sig")));
+            s.members[i] = IUARegistry.MemberSig(uint16(j.readUint(string.concat(m, ".index"))), _innerList(m), j.readBytes(string.concat(m, ".sig")));
+        }
+    }
+
+    /// Slot `m`'s list: slot 0 of the row is an `msig` member (spec 2026-11-02-msig-nested), and only it.
+    function _innerList(string memory m) internal view returns (IUARegistry.InnerSig[] memory l) {
+        uint256 n;
+        while (vm.keyExistsJson(j, string.concat(m, ".members[", vm.toString(n), "]"))) ++n;
+        l = new IUARegistry.InnerSig[](n);
+        for (uint256 k; k < n; ++k) {
+            string memory e = string.concat(m, ".members[", vm.toString(k), "]");
+            l[k] = IUARegistry.InnerSig(uint16(j.readUint(string.concat(e, ".index"))), j.readBytes(string.concat(e, ".sig")));
         }
     }
 

@@ -606,7 +606,7 @@ What makes it work:
 | BLS | `bls12381-minsig`, `bls-bn254-minsig` | Short signatures that aggregate; one pairing check on chain |
 | n-of-n group | `musig2-secp256k1`, `musig2-bn254` | Several parties produce **one** aggregate signature; the registry recomputes the group key |
 | t-of-n threshold | `frost-secp256k1`, `frost-bn254` | Any `t` of `n` parties sign; the chain checks **one** signature; key-generation proofs checked at registration |
-| Multisig policy | `msig` | A weighted threshold over up to 16 members of any signing kind — e.g. two passkeys plus an HSM, or a director's passkey plus a company EOA |
+| Multisig policy | `msig` | A weighted threshold over up to 16 members of any signing kind, or other `msig`s, two levels only (EVM; other families in their own rounds) — e.g. two passkeys plus an HSM, or a director's passkey plus a company EOA |
 | Post-quantum signing | `mldsa44`, `mldsa65`, `fndsa512` (Falcon) | Authorization that survives a quantum computer; such a UA (or a multisig whose non-PQ members' weight stays below the threshold) may carry a PQZ key for PQ confidential balances, given once in `register` and immutable |
 | Classical confidential balances | `zether-bls12381` | The Zether key is itself the UA: it signs every write by Schnorr with its secret `x`, and its Zether proof alone authorizes a spend; its public and confidential balances share one id |
 

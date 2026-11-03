@@ -94,16 +94,23 @@ export const isZetherKind = (kind) => kind === 0x0141;
 export const isSigningKind = (kind) => kind === 0x0120 || kind === 0x0141 || singleSigning(kind);
 /** Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512 (an `msig` per `msigPqzEligible`). */
 export const isPqzHolder = (kind) => kind >= 0x0130 && kind <= 0x0132;
-/** An `msig` whose members of kinds outside 0x0130–0x0133 weigh less than its threshold (CTR-PQZ-12). */
-export function msigPqzEligible(keyData) {
+/** An `msig` whose classical members weigh less than its threshold (CTR-PQZ-12): a member is PQ if its kind is in 0x0130–0x0133, or
+ *  it is an `msig` that is PQ-eligible itself. `inner(id)` gives such a member's key data, the record's; none is `UAMemberUnknown`:
+ *  the key data alone does not show it. An `inner` holding an `msig` is `UAMemberUnknown` too: two levels only. */
+export function msigPqzEligible(keyData, inner) {
   const d = bytes(keyData);
   need(d.length >= 4 && d.length === 4 + 36 * u16(d, 2), 'length');
   let classical = 0;
   for (let o = 4; o < d.length; o += 36) {
     const k = u16(d, o);
-    if (k < 0x0130 || k > 0x0133) classical += u16(d, o + 34);
+    if ((k < 0x0130 || k > 0x0133) && !(k === 0x0120 && innerPqEligible(d.subarray(o + 2, o + 34), inner))) classical += u16(d, o + 34);
   }
   return classical < u16(d, 0);
+}
+function innerPqEligible(id, inner) {
+  const kd = inner?.(hex(id));
+  if (!kd) fail('UAMemberUnknown', hex(id));
+  return msigPqzEligible(kd);
 }
 /** The minimal form of a stored `msig` signature (`pop` v2, KEM record, PQZ key record; owner 2026-10-31): with T = the
  *  signing slots' total weight and N the threshold, T >= N and T − weight(i) < N for every slot (each slot necessary), i.e.
@@ -124,8 +131,21 @@ export function msigSlotsMinimal(keyData, indexes) {
   }
   return total >= u16(d, 0) && total - min < u16(d, 0);
 }
+/** The minimal rule at both levels of an `msig` signature (`pop` v2, KEM record, PQZ key record, spec 2026-11-02-msig-nested N6): the
+ *  slots `[{index, members}]` of `keyData`, and each `msig` slot's own list over that member's key data, `inner(id)`. */
+export function msigSigMinimal(keyData, slots, inner) {
+  if (!msigSlotsMinimal(keyData, slots.map((s) => s.index))) return false;
+  const all = msigStructure(keyData).members;
+  return slots.every((s) => {
+    if (all[s.index].kind !== 0x0120 || !s.members?.length) return true; // a wrong list is the slot's check, not the rule's
+    const kd = inner?.(all[s.index].id);
+    if (!kd) fail('UAMemberUnknown', all[s.index].id);
+    return msigSlotsMinimal(kd, s.members.map((x) => x.index));
+  });
+}
+/** An `msig` member too, one level down (owner 2026-11-02): a record that holds one is refused as a member by the registry. */
 export const isMemberKind = (kind, hederaNative = false) =>
-  singleSigning(kind) || kind === 0x0001 || kind === 0x0002 || (hederaNative && kind === 0x0003);
+  singleSigning(kind) || kind === 0x0120 || kind === 0x0001 || kind === 0x0002 || (hederaNative && kind === 0x0003);
 
 export const kindTagString = (kind) => `scaas.ua.${tagged(kind).name}.v1`;
 export const TAG = (kind) => tagHash(kindTagString(kind));
@@ -322,8 +342,9 @@ export function portableTypedData(primaryType, message) {
   return { domain: { ...PORTABLE_DOMAIN }, types, primaryType, message };
 }
 
-/** A PQZ / KEM holder (UA-6 U3, UA-8 P7): mldsa44, mldsa65, fndsa512, or an `msig` whose `keyData` is PQ-eligible. */
-export const isKeyHolder = (kind, keyData) => isPqzHolder(kind) || (kind === 0x0120 && present(keyData) && msigPqzEligible(keyData));
+/** A PQZ / KEM holder (UA-6 U3, UA-8 P7): mldsa44, mldsa65, fndsa512, or an `msig` whose `keyData` is PQ-eligible (`inner`: see
+ *  `msigPqzEligible`). */
+export const isKeyHolder = (kind, keyData, inner) => isPqzHolder(kind) || (kind === 0x0120 && present(keyData) && msigPqzEligible(keyData, inner));
 const holds = isKeyHolder;
 
 /**
@@ -336,12 +357,12 @@ const holds = isKeyHolder;
  * always version 0, owner 2026-10-31; no version input); absent = omitted / empty. Only holders may carry them (`UAPqzHolder`, `UAKemHolder`; an `msig` needs
  * `keyData` to show it is PQ-eligible); a PQZ key always comes with its proof hash and only with it (`UAPqzPopHash`).
  */
-export function holderPopMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopHash, kemPk } = {}) {
+export function holderPopMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopHash, kemPk, inner } = {}) {
   const hasPqz = present(pqzKey);
   const hasKem = present(kemPk);
   const k = `0x${Number(kind).toString(16).padStart(4, '0')}`;
-  if (hasPqz && !holds(kind, keyData)) fail('UAPqzHolder', `${k} may not hold a PQZ key`);
-  if (hasKem && !holds(kind, keyData)) fail('UAKemHolder', `${k} may not hold a KEM key`);
+  if (hasPqz && !holds(kind, keyData, inner)) fail('UAPqzHolder', `${k} may not hold a PQZ key`);
+  if (hasKem && !holds(kind, keyData, inner)) fail('UAKemHolder', `${k} may not hold a KEM key`);
   const popHash = proofHashOf(pqzPop, pqzPopHash);
   if (hasPqz !== (popHash !== Z32)) fail('UAPqzPopHash', hasPqz ? 'a PQZ key needs its proof hash' : 'a proof hash without a PQZ key');
   const pqzKeyHash = hasPqz ? pqzKeyHashOf(pqzKey) : Z32;
@@ -359,12 +380,12 @@ export function holderPopMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopHash
 /** The registry's `_attrs` in its order over given attributes (ua-rs `registration_attrs`), no digest helper's defaults: the typed
  *  registration digest. `attrs`: `{ pqzKey, pqzPopHash, kemPk }` or `{ pqzKey, pqzPopHash, kem, kemPkHash }`, the KEM key version 0
  *  in whole or by its hash (a hash commit has no key bytes to check: `kem` is its scheme alone). */
-export function registrationAttrsDigest(kind, { ua, keyData, attrs: a, pqzPop }) {
+export function registrationAttrsDigest(kind, { ua, keyData, attrs: a, pqzPop, inner }) {
   const commit = present(a.kemPkHash) && !bytes(a.kemPkHash).every((b) => b === 0);
   const pqz = present(a.pqzKey);
   const kemPk = commit ? null : a.kem ? kemPkOf(a.kem) : orEmpty(a.kemPk);
-  if (pqz && !holds(kind, keyData)) fail('UAPqzHolder', String(kind));
-  if ((commit || kemPk.length !== 0) && !holds(kind, keyData)) fail('UAKemHolder', String(kind));
+  if (pqz && !holds(kind, keyData, inner)) fail('UAPqzHolder', String(kind));
+  if ((commit || kemPk.length !== 0) && !holds(kind, keyData, inner)) fail('UAKemHolder', String(kind));
   const popHash = a.pqzPopHash === undefined ? Z32 : sized(a.pqzPopHash, 32, 'pqzPopHash');
   if (pqz === popHash.every((b) => b === 0) || hex(popHash) === EMPTY_PROOF_HASH
     || (present(pqzPop) && hex(keccak_256(bytes(pqzPop))) !== hex(popHash))) fail('UAPqzPopHash', 'attrs');
@@ -397,8 +418,8 @@ export function pqzRegMessage({ ua, kind, pqzKey, kemPk }) {
  * recordDigest)`, `pqzRegMessage = uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest)` (the typed `UAPqzKey`). The holder rules
  * of `holderPopMessage` (`UAPqzHolder`); the key and its proof hash are both required.
  */
-export function pqzKeyRecordMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopHash } = {}) {
-  if (!holds(kind, keyData)) fail('UAPqzHolder', `0x${Number(kind).toString(16).padStart(4, '0')} may not hold a PQZ key`);
+export function pqzKeyRecordMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopHash, inner } = {}) {
+  if (!holds(kind, keyData, inner)) fail('UAPqzHolder', `0x${Number(kind).toString(16).padStart(4, '0')} may not hold a PQZ key`);
   const pqzKeyHash = pqzKeyHashOf(pqzKey);
   const popHash = proofHashOf(pqzPop, pqzPopHash);
   if (popHash === Z32) fail('UAPqzPopHash', 'a PQZ key needs its proof hash');
@@ -414,10 +435,11 @@ export function pqzKeyRecordMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopH
 export const membershipDigest = ({ ua, member }) => typed(keccak_256(concatBytes(TH.UAMembership, sized(ua, 32, 'ua'), sized(member, 32, 'member'))));
 
 /**
- * What a member of the `msig` `ua` signs to accept its place (`acceptMembership(ua, MemberSig{index, "", sig})`, CTR-UA-37):
+ * What a member of the `msig` `ua` signs to accept its place (`acceptMembership(ua, MemberSig{index, [], sig})`, CTR-UA-37):
  * `{ digest, message, memberDigest, typedData }`. A native member signs `digest` = `hashTypedData(typedData)` itself or answers
  * ERC-1271 over it (no UAAuth); a derived member signs `memberDigest` = `memberDigest(ua, message)` under `member`,
- * `message = uaMessage(MSIG, PURPOSE_MEMBERSHIP, digest)`. Portable: the same signature on every registry, no nonce.
+ * `message = uaMessage(MSIG, PURPOSE_MEMBERSHIP, digest)`. Portable: the same signature on every registry, no nonce. An `msig` member
+ * accepts by a threshold of its own accepted slots, `MemberSig{index, members, ""}`: each signs `digest` or `innerDigest(member, memberDigest)`.
  */
 export function membershipMessage({ ua, member }) {
   const digest = membershipDigest({ ua, member });
@@ -445,6 +467,9 @@ export function uaAuthDigest(domain, ua, purpose, digest) {
 
 export const memberDigest = (structureUa, uaMsg) =>
   keccak_256(concatBytes(sized(structureUa, 32, 'structureUa'), sized(uaMsg, 32, 'uaMsg')));
+/** `md_I = memberDigest(I, uaMessage(MSIG, member, md_U))`: what the members of the inner `msig` `inner` sign for its slot in an outer whose
+ *  `member_digest` is `md`, purpose `member` whatever the outer's. */
+export const innerDigest = (inner, md) => memberDigest(inner, uaMessage(0x0120, tagHash('scaas.ua.purpose.member.v1'), md));
 
 /** Lower-case hex; a 32-byte id with the top 96 bits zero is written as its 20-byte native id (CTR-UA-03). */
 export function canonicalId(text) {
@@ -521,9 +546,11 @@ export function typedKey(kind, keyData) {
 }
 const TYPED_ENTRY = { 0x0100: 'registerWebAuthn', 0x0110: 'registerMuSig2', 0x0112: 'registerMuSig2', 0x0111: 'registerFrost',
   0x0113: 'registerFrost' };
-const memberSigJson = ({ index, keyData = '0x', sig }) => ({ index: Number(index), keyData: hex(orEmpty(keyData)), sig: hex(bytes(sig)) });
+const innerSigJson = ({ index, sig }) => ({ index: Number(index), sig: hex(bytes(sig)) });
+const memberSigJson = ({ index, members = [], sig }) => ({ index: Number(index), members: members.map(innerSigJson), sig: hex(orEmpty(sig)) });
 /** A `UASig{keyData, signature, members}` (TS-D12): native — `signature`; a derived single key — `keyData` (empty for the stored
- *  kinds) + `signature`; an msig — `members` ({index, keyData (empty), sig}); a portable record's signature never has `keyData`. */
+ *  kinds) + `signature`; an msig — `members`, each `{index, members: [], sig}` for a signing member, `{index, members: [{index, sig}],
+ *  sig: empty}` for an `msig` member; a portable record's signature never has `keyData`. */
 export const uaSig = ({ keyData, signature, members = [] } = {}) =>
   ({ keyData: hex(orEmpty(keyData)), signature: hex(orEmpty(signature)), members: members.map(memberSigJson) });
 
@@ -533,7 +560,8 @@ const pad32 = (n) => Math.ceil(n / 32) * 32;
 const tailLen = (b) => 32 + pad32(bytes(b).length); // a `bytes` tail: length word + padded data
 const kemKeyLen = (k) => 96 + tailLen(k.mlkemEk);
 const attrsLen = (a) => 128 + tailLen(a.pqzKey) + kemKeyLen(a.kem);
-const memberSigsLen = (m) => 32 + m.reduce((n, x) => n + 32 + 96 + tailLen(x.keyData) + tailLen(x.sig), 0);
+const innerSigsLen = (m) => 32 + m.reduce((n, x) => n + 32 + 64 + tailLen(x.sig), 0);
+const memberSigsLen = (m) => 32 + m.reduce((n, x) => n + 32 + 96 + innerSigsLen(x.members) + tailLen(x.sig), 0);
 const bytesArrLen = (xs) => 32 + xs.reduce((n, x) => n + 32 + tailLen(x), 0); // a `bytes[]` tail
 const muSig2Len = (k) => 64 + tailLen(k.aggKey) + bytesArrLen(k.memberKeys);
 const frostLen = (k) => 96 + tailLen(k.groupKey) + 32 + k.members.reduce((n, m) => n + 32 + 96 + bytesArrLen(m.commitments) + tailLen(m.r), 0);
@@ -561,17 +589,17 @@ export function registryCalldataLength(entry, a) {
  * `REGISTER_CALLDATA_LIMIT`; X0: PQZH n2560-kmax16384 with a PQZ key) or when `kemCommit: true`, the hash commit (`kem` =
  * `{scheme, '0x', 0}`, `kemPkHash = keccak256(kemPk)`); then `kemFill` is the second call, `setKemKey(ua, 0, kem, UASig())` (no
  * signature: the pop signed the same `UAKemRecord{ua, 0, scheme, kemPkHash}`; anyone may send it). `kemCommit: false` forces the
- * full key. `pop`: the signer's signature bytes, or for an msig the member signatures `[{index, keyData, sig}]` (empty: none).
- * `pqzPopHash` defaults to `keccak256(pqzPop)` with a PQZ key.
+ * full key. `pop`: the signer's signature bytes, or for an msig the member signatures `[{index, members, sig}]` (empty: none).
+ * `pqzPopHash` defaults to `keccak256(pqzPop)` with a PQZ key. `inner`: an `msig` member's key data by id (`msigPqzEligible`).
  */
-export function registrationArgs({ kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit } = {}) {
+export function registrationArgs({ kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit, inner } = {}) {
   const k = Number(kind);
   const hasPqz = present(pqzKey);
   const attrs = { pqzKey: hex(orEmpty(pqzKey)), pqzPopHash: hex(hasPqz || present(pqzPopHash) ? proofHashOf(pqzPop, pqzPopHash) : Z32),
     kem: kemKeyOf(kemPk), kemPkHash: ZW };
   const msig = k === 0x0120;
   // every stored msig signature is minimal (owner 2026-10-31): the registry refuses any other set, so it is never built
-  if (msig && pop?.length && !msigSlotsMinimal(keyData, pop.map((s) => s.index))) throw new UAError('UAPoP', 'msig pop slots not minimal');
+  if (msig && pop?.length && !msigSigMinimal(keyData, pop, inner)) throw new UAError('UAPoP', 'msig pop slots not minimal');
   const entry = msig ? 'registerMsig' : TYPED_ENTRY[k] ?? 'register';
   const common = { attrs, pqzPop: hex(orEmpty(pqzPop)) };
   const args = msig ? { structure: msigStructure(keyData), ...common, pop: (pop ?? []).map(memberSigJson) }

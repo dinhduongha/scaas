@@ -82,5 +82,6 @@ bool isSigning(int kind) => kind == 0x0120 || kind == 0x0141 || _single(kind);
 
 /// Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512 (an msig per [msigPqzEligible]).
 bool isPqzHolder(int kind) => kind >= 0x0130 && kind <= 0x0132;
+/// An msig too, one level down: a record that holds one is refused as a member by the registry.
 bool isMember(int kind, [bool hederaNative = false]) =>
-    _single(kind) || kind == 0x0001 || kind == 0x0002 || (hederaNative && kind == 0x0003);
+    _single(kind) || kind == 0x0120 || kind == 0x0001 || kind == 0x0002 || (hederaNative && kind == 0x0003);

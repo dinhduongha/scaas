@@ -597,7 +597,7 @@ fn portable_msig_rows_minimal() {
     assert_eq!(ua8::msig_slots_minimal(&kd, &[0, 1]), Ok(false));
     assert_eq!(ua8::msig_slots_minimal(&kd, &[1]), Ok(true), "the weight-2 slot alone is the minimal set");
     // the builder never makes a set the registry refuses, as `portableMemberSigs`; the minimal set builds
-    let slot = |index| MemberSig { index, key_data: vec![], sig: vec![1] };
+    let slot = |index| MemberSig { index, members: vec![], sig: vec![1] };
     let input = |members| RegistrationInput { kind: 0x0120, key_data: kd.clone(), members, ..Default::default() };
     assert_eq!(registration_args(&input(vec![slot(0), slot(1)])), Err(UAError::Pop));
     assert!(registration_args(&input(vec![slot(1)])).is_ok());
@@ -614,7 +614,8 @@ fn kem_json(k: &KemKey) -> Value {
     serde_json::json!({ "scheme": k.scheme, "mlkemEk": hx(&k.mlkem_ek), "x25519": hx(&k.x25519) })
 }
 fn member_sigs_json(m: &[MemberSig]) -> Value {
-    Value::Array(m.iter().map(|s| serde_json::json!({ "index": s.index, "keyData": hx(&s.key_data), "sig": hx(&s.sig) })).collect())
+    let inner = |l: &[ua8::InnerSig]| l.iter().map(|x| serde_json::json!({ "index": x.index, "sig": hx(&x.sig) })).collect::<Vec<_>>();
+    Value::Array(m.iter().map(|s| serde_json::json!({ "index": s.index, "members": inner(&s.members), "sig": hx(&s.sig) })).collect())
 }
 fn attrs_json(a: &UAAttrs) -> Value {
     serde_json::json!({ "pqzKey": hx(&a.pqz_key), "pqzPopHash": hx(&a.pqz_pop_hash), "kem": kem_json(&a.kem), "kemPkHash": hx(&a.kem_pk_hash) })
@@ -657,7 +658,7 @@ fn member_sigs(blob: &[u8]) -> Vec<MemberSig> {
                 let o = t + w(t + 32 * k);
                 blob[o + 32..o + 32 + w(o)].to_vec()
             };
-            MemberSig { index: w(t) as u16, key_data: field(1), sig: field(2) }
+            MemberSig { index: w(t) as u16, members: vec![], sig: field(2) }
         })
         .collect()
 }
@@ -674,6 +675,7 @@ fn reg_input(row: &Value) -> RegistrationInput {
         pop: if kind == 0x0120 { vec![] } else { bytes(&row["pop"]) },
         members: if kind == 0x0120 { member_sigs(&bytes(&row["pop"])) } else { vec![] },
         kem_commit: None,
+        inners: vec![],
     }
 }
 
@@ -1069,13 +1071,13 @@ fn check_membership_rows() {
         let d = bytes(&find(&p, "registrations", "name", &r["msig"])["keyData"]);
         let ua = b32(&r["ua"]);
         let index = r["index"].as_u64().unwrap() as u16;
-        let slot = MemberSig { index, key_data: vec![], sig: bytes(&r["sig"]) };
+        let slot = MemberSig { index, members: vec![], sig: bytes(&r["sig"]) };
         let check = |d: &[u8], ua: &[u8; 32], s: &MemberSig| check_membership(d, ua, s, &keys(&p));
         assert_eq!(check(&d, &ua, &slot), Ok(()), "{}", r["name"]);
         let mut flipped = slot.clone();
         flipped.sig[3] ^= 1;
         assert_eq!(check(&d, &ua, &flipped), Err(UAError::Unauthorized), "{}", r["name"]);
-        assert_eq!(check(&d, &ua, &MemberSig { key_data: vec![1], ..slot.clone() }), Err(UAError::Unauthorized), "{}", r["name"]);
+        assert_eq!(check(&d, &ua, &MemberSig { members: vec![ua8::InnerSig::default()], ..slot.clone() }), Err(UAError::Unauthorized), "{}", r["name"]);
         assert_eq!(check(&d, &ua, &MemberSig { index: 9, ..slot.clone() }), Err(UAError::Unauthorized), "past the members");
         let other = MemberSig { index: if index == 0 { 1 } else { 0 }, ..slot.clone() };
         assert_eq!(check(&d, &ua, &other), Err(UAError::Unauthorized), "{}: another slot's member", r["name"]);
@@ -1088,7 +1090,7 @@ fn check_membership_rows() {
     let d = bytes(&find(&p, "registrations", "name", &r["msig"])["keyData"]);
     let contract = [&d[..4], &[0, 2], &d[6..]].concat();
     let ua = ua_of(0x0120, &contract).unwrap();
-    let slot = MemberSig { index: 0, key_data: vec![], sig: bytes(&r["sig"]) };
+    let slot = MemberSig { index: 0, members: vec![], sig: bytes(&r["sig"]) };
     assert_eq!(check_membership(&contract, &ua, &slot, &keys(&p)), Err(UAError::NotVerifiable), "ERC-1271 runs nowhere here");
     assert_eq!(check_membership(&d, &b32(&r["ua"]), &MemberSig { index: 0, ..slot }, &|_| None), Err(UAError::MemberUnknown));
 }
@@ -1151,9 +1153,9 @@ fn check_fails_closed() {
     assert_eq!(on(&[]), Err(UAError::Pop), "no slots");
     assert_eq!(on(&[[0u8; 31].as_slice(), &[32], &[0; 32]].concat()), Err(UAError::Pop), "abi.encode of no slots");
     assert!(enc(&[]).is_empty(), "no slots is the empty blob, as the registries and clientkeys");
-    let mut with_key = slots.clone();
-    with_key[0].key_data = keys(&p)(ids[0]).unwrap().1;
-    assert_eq!(on(&enc(&with_key)), Err(UAError::Pop), "CTR-UA-33: a slot carries no key data");
+    let mut with_list = slots.clone();
+    with_list[0].members = vec![ua8::InnerSig::default()];
+    assert_eq!(on(&enc(&with_list)), Err(UAError::Pop), "a list is an msig member's");
     let mut swapped = slots.clone();
     swapped.swap(0, 1);
     assert_eq!(on(&enc(&swapped)), Err(UAError::Pop), "order");

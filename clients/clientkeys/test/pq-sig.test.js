@@ -93,7 +93,7 @@ test('msig structures: key data, id, member digest; every member signature verif
       assert.deepEqual(s.memberSigs.map((x) => x.index), s.indices);
       for (const x of s.memberSigs) {
         const mem = m.members[x.index];
-        assert.equal(x.keyData, '0x', 'CTR-UA-33: no MemberSig carries key data (the p256 member included)');
+        assert.deepEqual(x.members, [], 'a list is an msig member\'s: no signing slot has one (the p256 member included)');
         if (mem.kind !== 0x0131) continue; // the p256 member is signatures.json's key (re-verified in ua-sig.test.js)
         assert.ok(ok(0x0131, keyOf[mem.id], hex(ua.uaMessage(0x0131, tag('member'), md)), x.sig), `${m.name} ${s.name} ${x.index}`);
         pqSigs++;

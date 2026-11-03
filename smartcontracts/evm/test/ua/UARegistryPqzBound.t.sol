@@ -10,10 +10,11 @@ import {UARegistryBase} from "./UARegistryBase.sol";
 import {UACall} from "./UACall.sol";
 
 /// Review2 T2 (C0-5): an `msig` PQZ holder is admitted only if its worst-case authorization (register step 4's bound)
-/// plus `PqzSet.PQZ_DEBIT_MIN_GAS` (the cheapest PQZL debit, full relayed transaction) fits 2^24 (EIP-7825); else
-/// `UAPqzHolder`. Stand-in verifiers with the caps of the kinds (gen-1 `DeployBase`: fndsa512 2.5 M, slhdsa128s 1.4 M).
+/// plus `PqzSet.PQZ_DEBIT_MIN_GAS` (the cheapest PQZL debit, full relayed transaction) and the authorization's own calldata fit 2^24 (EIP-7825);
+/// else `UAPqzHolder`. Stand-in verifiers with the caps of the kinds (gen-1 `DeployBase`: fndsa512 2.5 M, slhdsa128s 1.4 M).
 contract UARegistryPqzBoundTest is UARegistryBase {
     uint256 internal constant LIM = 1 << 24; // EIP-7825
+    uint256 internal constant AUTH_2_ML65 = 2 * (192 + 3_328); // two ML-DSA-65 slots, each signature padded to 3,328 B
     uint256 internal n;
 
     function _regs(address where, uint16[3] memory kinds, uint64[3] memory caps) internal returns (UARegistry r) {
@@ -77,7 +78,7 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](ks.length);
         for (uint256 i; i < ks.length; ++i) {
             bytes32 id = UAKinds.uaOf(ks[i], keys[i]);
-            s[i] = IUARegistry.MemberSig(_indexOf(d, id), "", _sig(keys[i], UAKinds.uaMessage(ks[i], UAKinds.PURPOSE_MEMBER, md)));
+            s[i] = IUARegistry.MemberSig(_indexOf(d, id), new IUARegistry.InnerSig[](0), _sig(keys[i], UAKinds.uaMessage(ks[i], UAKinds.PURPOSE_MEMBER, md)));
         }
         for (uint256 i = 1; i < s.length; ++i) {
             for (uint256 j = i; j > 0 && s[j - 1].index > s[j].index; --j) (s[j - 1], s[j]) = (s[j], s[j - 1]);
@@ -112,11 +113,11 @@ contract UARegistryPqzBoundTest is UARegistryBase {
     /// 2-of-2 worst case at cap `c`, the gen-2 forwarding hold (w / 63 + margin) and the cheapest debit.
     function _bound(uint256 c) internal pure returns (uint256) {
         uint256 w = 2 * (c + 45_000) + (c - 400_000) / 63 + 2_500; // MSIG_ACCEPTED_GAS
-        return w + w / 63 + SigCheck.GAS_MARGIN + PqzSet.PQZ_DEBIT_MIN_GAS;
+        return w + w / 63 + SigCheck.GAS_MARGIN + PqzSet.PQZ_DEBIT_MIN_GAS + 16 * AUTH_2_ML65;
     }
 
     /// The exact boundary: 2-of-2 `mldsa65` with cap `C` (worst case `2 (C + 35 k) + (C - 400 k) / 63`); the largest
-    /// `C` with worst case (+ the gen-2 hold) + `PQZ_DEBIT_MIN_GAS` <= 2^24 registers, `C + 1` does not.
+    /// `C` with worst case (+ the gen-2 hold) + `PQZ_DEBIT_MIN_GAS` + 16 per byte of the signatures' calldata <= 2^24 registers, `C + 1` does not.
     function test_register_msigHolderBoundary() public {
         uint256 lo = 400_000;
         uint256 hi = 8_000_000;

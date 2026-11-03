@@ -186,6 +186,16 @@ Further events, same object, same filters (decoders for a new kind ship before t
   `RevocationRenounced`, `MilestoneApproved`, `ExcessSwept`, `DistributionCreated`, `Claimed`, `Cancelled`, `Swept`,
   `OfferCreated`, `Exchanged`, `Closed`, `Rescued`; `TokenCreated` (flags 5–8 are fields of the token, [CTR-AS-17](../contracts/asset-suite.md#CTR-AS-17)).
 
+<a id="NODE-IDX-08"></a>**NODE-IDX-08** (owner 2026-11-03; SPECIFIED, not built) — **The node keeps and serves the bytes of an `msig`'s
+member signatures.** On EVM an `msig` record keeps hashes only: `popOf` returns `keccak256(pop)`, `memberSigHashOf(ua, index)` the hash of
+each slot's signature object, and the bytes are only in `UAMemberSig(ua, member, index, purpose, sig)`, a `pop` slot (`PURPOSE_POP_V2`)
+or an acceptance (`PURPOSE_MEMBERSHIP`) ([CTR-UA-33](../contracts/accounts.md#CTR-UA-33) A, [CTR-UA-37](../contracts/accounts.md#CTR-UA-37)).
+History expiry drops those logs, so the node indexes every `UAMemberSig` of the registries it watches after finality
+([NODE-IDX-02](#NODE-IDX-02)), keeps the `sig` bytes with `(chain, registry, ua, index, purpose, member)` for as long as the record lives,
+and serves them by `(ua)` and `(ua, index)`, together with the `msig`'s `pop` rebuilt from its `pop` slots in `index` order. It checks
+each slot against `memberSigHashOf` and the rebuilt `pop` against `popOf` before serving them, and serves none that fails. A reader
+checks again: the node is not trusted for these bytes, only for keeping them.
+
 ## <a id="feeds"></a>3. Feeds
 
 <a id="feeds"></a><a id="NODE-IDX-04"></a>**NODE-IDX-04** — **Change feeds** (a client's data platform may land them in its own

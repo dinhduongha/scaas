@@ -57,12 +57,18 @@ library SplitDiff {
         if (!ok || data.length < 4 || bytes4(data) != IUARegistry.registerMsig.selector) return 0;
         bytes memory args = new bytes(data.length - 4);
         for (uint256 i; i < args.length; ++i) args[i] = data[i + 4];
-        (, , IUARegistry.MemberSig[] memory pop,) =
-            abi.decode(args, (IUARegistry.MsigStructure, IUARegistry.UAAttrs, IUARegistry.MemberSig[], bytes));
+        // the third head is `pop`: read by hand, no memory decoder compiles for `MemberSig[]` (Stack too deep)
+        uint256 o = _at(args, 64);
         uint256 bits;
-        for (uint256 i; i < pop.length; ++i) bits |= 1 << pop[i].index;
+        for (uint256 i; i < _at(args, o); ++i) bits |= 1 << _at(args, o + 32 + _at(args, o + 32 + 32 * i));
         slot = keccak256(abi.encode(abi.decode(ret, (bytes32)), uint256(15)));
         require(uint256(vm.load(to, slot)) == (r.accepts ? bits : 0), "SplitDiff: the declared slot");
+    }
+
+    function _at(bytes memory b, uint256 o) private pure returns (uint256 v) {
+        assembly ("memory-safe") {
+            v := mload(add(add(b, 32), o))
+        }
     }
 
     function _writes(Run memory r, address to, VmSafe.AccountAccess[] memory d, bytes32 declared)

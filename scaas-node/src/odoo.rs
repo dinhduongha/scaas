@@ -281,7 +281,7 @@ mod tests {
     #[test]
     fn accept_membership_job_decodes() {
         let raw = r#"{"id": 9, "kind": "call", "op": {"entry": "acceptMembership", "token": "0xbabababababababababababababababababababa",
-            "validUntil": "1800000300", "args": {"memberSig": {"index": 3, "keyData": "0x", "sig": "0xdeadbeef"},
+            "validUntil": "1800000300", "args": {"memberSig": {"index": 3, "members": [], "sig": "0xdeadbeef"},
             "ua": "0x0000000000000000000000000000000000000000000000000000000000000042"}}}"#;
         let job: Job = serde_json::from_str(raw).unwrap();
         let w = crate::submit::work_from_job(&job, None).unwrap();
@@ -289,7 +289,7 @@ mod tests {
         let call = crate::abi::IUARegistry::acceptMembershipCall::abi_decode(&w.data).unwrap();
         assert_eq!((call.memberSig.index, call.memberSig.sig.to_vec()), (3, vec![0xde, 0xad, 0xbe, 0xef]));
         assert_eq!(call.ua, alloy::primitives::B256::with_last_byte(0x42));
-        assert!(call.memberSig.keyData.is_empty());
+        assert!(call.memberSig.members.is_empty());
     }
 
     #[test]

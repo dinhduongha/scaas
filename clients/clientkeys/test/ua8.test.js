@@ -498,7 +498,7 @@ test('native EOA member signs the typed digest (ECDSA recovers the member)', () 
     const i = r.members.findIndex((m) => ua.isNativeKind(m.kind));
     const s = memberSigs(blob).find((x) => x.index === i);
     const addr = `0x${r.members[i].id.slice(26)}`;
-    assert.equal(s.keyData.length, 0);
+    assert.equal(s.listLength, 0);
     assert.ok(nativeOk(addr, B(digest), hex(s.sig)), `${r.name}: recovers the member over the typed digest`);
   }
 });
@@ -583,7 +583,7 @@ test('msigSlotsMinimal: 2-of-(1,1) both slots minimal; 2-of-(1,2) both slots not
 });
 
 test('vector builders refuse a non-minimal portable set', () => {
-  const s = (index) => ({ index, keyData: new Uint8Array(0), sig: Uint8Array.of(index + 1) });
+  const s = (index) => ({ index, sig: Uint8Array.of(index + 1) });
   assert.throws(() => signers.portableMemberSigs(msigKd(2, 1, 2), [s(0), s(1)]), isCode('UAPoP'));
   assert.deepEqual(signers.portableMemberSigs(msigKd(2, 1, 2), [s(1)]), signers.encodeMemberSigs([s(1)]));
   assert.deepEqual(signers.portableMemberSigs(msigKd(2, 1, 1), [s(0), s(1)]), signers.encodeMemberSigs([s(0), s(1)]));
@@ -630,7 +630,7 @@ test('portable.json msig rows are minimal', () => {
 
 // --- typed-signing R1: the registry's explicit arguments (TS-D10 … TS-D12; owner KEM rulings 2026-10-31) ---
 
-const memberList = (pop) => (pop === '0x' ? [] : memberSigs(pop).map((m) => ({ index: m.index, keyData: hex(m.keyData), sig: hex(m.sig) })));
+const memberList = (pop) => (pop === '0x' ? [] : memberSigs(pop).map((m) => ({ index: m.index, members: [], sig: hex(m.sig) })));
 const regInput = (r) => ({ kind: r.kind, keyData: r.keyData, pqzKey: r.attrs.pqzKey, pqzPopHash: r.attrs.pqzPopHash, pqzPop: r.pqzPop,
   kemPk: r.attrs.kemPk, pop: r.kind === 0x0120 ? memberList(r.pop) : r.pop });
 
@@ -921,7 +921,7 @@ test('verify* fail closed: each case one field off a row that passes (ua-rs chec
   refuses(withPop('0x'), 'UAPoP', 'no slots');
   refuses(withPop(`0x${'00'.repeat(31)}20${'00'.repeat(32)}`), 'UAPoP', 'abi.encode of no slots');
   assert.equal(enc([]), '0x', 'no slots is the empty blob, as the registries and ua-rs');
-  refuses(withPop(enc([{ ...slots[0], keyData: B(keysOf(ids[0]).keyData) }, slots[1]])), 'UAPoP', 'CTR-UA-33: a slot carries no key data');
+  refuses(withPop(enc([{ ...slots[0], members: [{ index: 0, sig: new Uint8Array(65) }] }, slots[1]])), 'UAPoP', 'a list is an msig member\'s, on a signing slot it fails');
   refuses(withPop(enc([slots[1], slots[0]])), 'UAPoP', 'order');
   refuses(withPop(enc([slots[0], slots[0]])), 'UAPoP', 'repeated');
   refuses(withPop(enc(slots.slice(0, 1))), 'UAPoP', 'below the threshold');
@@ -956,7 +956,7 @@ test('verifyRegistration refuses every kinds.json invalid key by its error; vali
   const go = (r) => () => verifyRegistration({ kind: r.kind, keyData: r.keyData, attrs: none, pop: `0x${'00'.repeat(64)}`, pqzPop: '0x' }, () => undefined);
   for (const r of K.invalid) refuses(go(r), r.error, JSON.stringify(r).slice(0, 120));
   for (const r of K.valid.filter((x) => x.kind !== 0x0120 && !(x.kind >= 0x0110 && x.kind <= 0x0113))) refuses(go(r), 'UAPoP', r.keyData.slice(0, 40));
-  assert.equal(K.invalid.length, 199);
+  assert.equal(K.invalid.length, 198);
 });
 
 test('the group kinds have no verifier here: refused, never accepted (C14; ua-rs checks them)', () => {

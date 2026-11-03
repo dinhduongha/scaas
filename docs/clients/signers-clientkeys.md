@@ -353,7 +353,7 @@ returns the exact JSON for `eth_signTypedData_v4`: `{domain: {name, version}, ty
 `version` only ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)); `PORTABLE_DOMAIN`, `PORTABLE_TYPES`, `PORTABLE_TYPEHASH`, `portableDomainSeparator`, `kemRecordStruct`,
 `portableRecordStruct` are its parts, and `holderPopMessage` / `pqzKeyRecordMessage` return `typedData` next to the digests. A native `msig` member
 signs that JSON (`signTyped`), never `personal_sign` and never a raw digest; a derived member signs its `memberDigest` as before.
-`registrationArgs({kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit})` refuses an `msig` `pop` that is not a minimal slot set (`UAPoP`, as `portableMemberSigs`; `scaas-ua`: `registration_args`) and returns `{entry, args, kemFill}`, the
+`registrationArgs({kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit, inner})` (`inner`: an `msig` member's key data by id, [CTR-UA-38](../contracts/accounts.md#CTR-UA-38)) refuses an `msig` `pop` that is not a minimal slot set at both levels (`UAPoP`, as `portableMemberSigs`; `scaas-ua`: `registration_args`) and returns `{entry, args, kemFill}`, the
 [CTR-UA-36](../contracts/accounts.md#CTR-UA-36) call as named fields: `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost` for their kinds
 (the recommended path; the registry also takes `register` with packed key data for all but `msig`) and `register` for the rest, the
 KEM key in full, or the hash commit plus `kemFill` = `setKemKey(ua, 0, kem, UASig())` only when `registryCalldataLength` is over
@@ -929,7 +929,7 @@ sealed leaf (`openPqKey`), computes `h = keccak256(GROUP(pqz-mlwe) ‖ pqzKey)`,
 `pqzRegMessage({ua, kind, pqzKey, kemPk})` = `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kind, h, kemRecordHash))`), then signs the signer's `pop`
 over `holderPopMessage(kind, {ua, keyData, pqzKey, pqzPop, kemPk})` (`registrationDigest`, which covers the proof's hash; the KEM key is version 0) and submits
 the call `registrationArgs` builds ([CLI-SGN-41](#CLI-SGN-41)), `register(kind, keyData, attrs, pop, pqzPop)` or the kind's typed entry; **the PoP carries no chain context, so the same `pop` and `pqzPop` register the UA on any chain** and
-a copy elsewhere re-sends the fields unchanged (read from `registrationOf` or the logs). When `eth_estimateGas` of the full call exceeds the block gas
+a copy elsewhere re-sends the fields unchanged (read from `registrationOf` or the logs; an `msig`: the `pop` from its `UAMemberSig` events, checked against `memberSigHashOf` / `popOf`, [CTR-UA-33](../contracts/accounts.md#CTR-UA-33) A). When `eth_estimateGas` of the full call exceeds the block gas
 limit (through a relayer: min(block gas limit, the relayer's per-transaction cap), owner 2026-10-30 ruling R-node) the client registers
 with an empty `pqzPop` and then calls `storePqzPop(ua, pqzPop)`. A PQ signer is registered together
 with its PQZ key by default; a holder registered without one may add it later, once, with `pqzKeyRecordMessage` + `setPqzKey` (**one PQZ key per UA,

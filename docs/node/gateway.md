@@ -149,8 +149,8 @@ door A work is not journaled and has no digest guard until it becomes a `~gatewa
 
 <a id="ua-register"></a><a id="NODE-GW-03"></a>**NODE-GW-03** — **Gateway `call` jobs exist only for the UA
 registry's nine writes.** `POST /v1/op` is no such door: it takes a registered token's signed `mtx*` entries only (typed-signing N1). Gateway `call` jobs in `~gateway` go only to the chain's `ua_registry` (node config `[[chains]] ua_registry`), for the eight
-writes of [CTR-UA-36](../contracts/accounts.md#CTR-UA-36): `register` (`0x4e229efb`), `registerMsig` (`0x82b86a46`), `registerWebAuthn` (`0xee03a1fe`), `registerMuSig2` (`0xe1eddcdf`),
-`registerFrost` (`0x7bd63410`), `setKemKey` (`0xa00cce2a`), `storePqzPop` (`0x7fac161a`), `setPqzKey` (`0x3c6897f1`) and `acceptMembership` (`0x73fd7d54`, [CTR-UA-37](../contracts/accounts.md#CTR-UA-37)) — all relayable by anyone, gasless, no fee
+writes of [CTR-UA-36](../contracts/accounts.md#CTR-UA-36): `register` (`0x4e229efb`), `registerMsig` (`0x61947129`), `registerWebAuthn` (`0xee03a1fe`), `registerMuSig2` (`0xe1eddcdf`),
+`registerFrost` (`0x7bd63410`), `setKemKey` (`0x6a3318f9`), `storePqzPop` (`0x7fac161a`), `setPqzKey` (`0x0052c1b5`) and `acceptMembership` (`0x2c1ac986`, [CTR-UA-37](../contracts/accounts.md#CTR-UA-37)) — all relayable by anyone, gasless, no fee
 ([CTR-UA-31](../contracts/accounts.md#CTR-UA-31)); `POST /v1/ua/register` builds the entry's calldata from the checked body, as the plain rows of [the table](job-api.md#named-entries) do. A relayed PQ registration whose `eth_estimateGas`
 of the full call exceeds min(block gas limit, relayer per-transaction cap) is split: `register` without `pqzPop`, then
 `storePqzPop` (the SCaaS testnet: 200 M block, relayer cap `max_gas_per_tx` 64 M, so every PQ registration with its

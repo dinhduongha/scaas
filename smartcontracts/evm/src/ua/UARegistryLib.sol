@@ -193,6 +193,21 @@ library UARegistryLib {
         return _register(UAKinds.MSIG, d, attrs, "", pop, pqzPop);
     }
 
+    /// The CTR-UA-09 bytes of a structure read from a record. Not shared with `registerMsig`: a `memory` parameter there copies the
+    /// whole structure out of calldata first, which every flat `msig` would pay.
+    function _packed(IUARegistry.MsigStructure memory s) private pure returns (bytes memory d) {
+        IUARegistry.MsigMember[] memory m = s.members;
+        d = abi.encodePacked(s.threshold, uint16(m.length));
+        for (uint256 i; i < m.length; ++i) {
+            d = bytes.concat(d, abi.encodePacked(m[i].kind, m[i].id, m[i].weight));
+        }
+    }
+
+    /// The structure of the `msig` member `id`, here or in gen 1 (`msigOf`: the key bytes only, never its `pop`).
+    function _msigBytes(bytes32 id) private view returns (bytes memory) {
+        return _packed(IUARegistry(address(this)).msigOf(id));
+    }
+
     /// Steps 1–8. `sig` (single keys) or `members` (an msig) is the PoP; the stored `pop` is `sig`, or
     /// `abi.encode(members)` ("" for none).
     function _register(uint16 kind, bytes memory d, IUARegistry.UAAttrs calldata attrs, bytes memory sig,
@@ -203,17 +218,27 @@ library UARegistryLib {
         (ua, kh) = _identify(kind, d); // 1–4
         _consent(kind, d, ua, attrs, sig, members, pqzPop); // 5–7
         bytes memory pop = members.length != 0 ? abi.encode(members) : sig;
-        _record(ua, kind, d, kh, attrs, pop); // 8
+        // owner 2026-11-03: an `msig` keeps `keccak256(pop)`, not its bytes; each slot's bytes go in `UAMemberSig`, its hash in state
+        _record(ua, kind, d, kh, attrs, members.length != 0 ? abi.encodePacked(keccak256(pop)) : pop); // 8
         // CTR-UA-37: a slot that signed the `pop` agreed; an empty `pop` writes nothing
         if (members.length != 0) {
             uint256 bits;
             for (uint256 i; i < members.length; ++i) {
-                bits |= 1 << members[i].index;
+                IUARegistry.MemberSig memory m = members[i];
+                bits |= 1 << m.index;
+                _memberSig(ua, d, m.index, UAKinds.PURPOSE_POP_V2, m.members.length == 0 ? m.sig : abi.encode(m.members));
             }
             s.accepted[ua] = bits;
         }
         (uint8 q, uint8 k) = (UAStore.checked(s.pqzKey[ua].proven), UAStore.checked(s.kem[ua][0].length != 0));
         emit IUARegistry.UARegistered(ua, kind, d, attrs, keccak256(pop), pqzPop, UAKinds.CHECKED_CHAIN, q, k);
+    }
+
+    /// The signature object `b` of the `msig` `ua`'s slot `index` (owner 2026-11-03): its hash kept, written once with the slot's bit, its
+    /// bytes in `UAMemberSig`, under `purpose` (`PURPOSE_POP_V2` or `PURPOSE_MEMBERSHIP`). `d`: the `msig`'s key data.
+    function _memberSig(bytes32 ua, bytes memory d, uint16 index, bytes32 purpose, bytes memory b) private {
+        UAStore.layout().memberSigHash[ua][index] = keccak256(b);
+        emit IUARegistry.UAMemberSig(ua, bytes32(UAStore.word(d, 4 + 36 * uint256(index) + 2)), index, purpose, b);
     }
 
     /// Steps 5–7: the attributes, the PoP over the registration digest (`UAPoP`), the PQZ key (and its proof).
@@ -317,7 +342,7 @@ library UARegistryLib {
     }
 
     /// A PQZ / KEM holder (UA-6 U3, UA8-D12): `mldsa44`, `mldsa65`, `fndsa512`, a PQ-eligible `msig`.
-    function _holder(uint16 kind, bytes memory d) private pure returns (bool) {
+    function _holder(uint16 kind, bytes memory d) private view returns (bool) {
         return kind == UAKinds.MLDSA44 || kind == UAKinds.MLDSA65 || kind == UAKinds.FNDSA512
             || (kind == UAKinds.MSIG && _pqEligible(d));
     }
@@ -335,12 +360,15 @@ library UARegistryLib {
         // CTR-PQZ-12 (review2 C0-5, controller proposal, owner may override): an `msig` holder's worst-case
         // authorization plus the set's cheapest PQZL debit (its full relayed transaction, fee signer included) must fit
         // one transaction at the EIP-7825 cap 2^24, else every credit to it could be locked. Not the chain's own limit.
-        // UA8-D12: the PQZ key only, not the KEM record.
+        // UA8-D12: the PQZ key only, not the KEM record. The authorization's own calldata counts too, 16 gas a byte and the EIP-7976 floor of
+        // 64: `PQZ_DEBIT_MIN_GAS` holds one holder signature, which is counted again here, on the safe side.
         if (kind == UAKinds.MSIG) {
             // a gen-2 registry in front forwards the whole authorization to the one that holds the record
             // (`UAStore.via`) and holds 1/63 of it again plus the margin: counted here
             uint256 w = _membersWorst(d);
-            if (w + w / 63 + SigCheck.GAS_MARGIN + PqzSet.PQZ_DEBIT_MIN_GAS > TX_GAS_CAP) revert IUARegistry.UAPqzHolder(ua);
+            uint256 a = _authBytes(d, 192);
+            uint256 debit = PqzSet.PQZ_DEBIT_MIN_GAS;
+            if (w + w / 63 + SigCheck.GAS_MARGIN + debit + 16 * a > TX_GAS_CAP || debit + 64 * a > TX_GAS_CAP) revert IUARegistry.UAPqzHolder(ua);
         }
     }
 
@@ -352,13 +380,16 @@ library UARegistryLib {
     }
 
     /// An `msig` whose members of kinds outside 0x0130–0x0133 weigh less than its threshold (CTR-PQZ-12): it may hold
-    /// a PQZ key and registers with an m-of-n PoP (U5).
-    function _pqEligible(bytes memory d) private pure returns (bool) {
+    /// a PQZ key and registers with an m-of-n PoP (U5). An `msig` member counts as PQ iff it is PQ-eligible itself: a forger of every
+    /// classical key cannot reach its threshold.
+    function _pqEligible(bytes memory d) private view returns (bool) {
         (uint256 threshold, uint256 count) = (UAStore.u16(d, 0), UAStore.u16(d, 2));
         uint256 classical;
         for (uint256 i; i < count; ++i) {
             uint256 o = 4 + 36 * i;
-            if (!UAStore.isPq(uint16(UAStore.u16(d, o)))) classical += UAStore.u16(d, o + 34);
+            uint16 kind = uint16(UAStore.u16(d, o));
+            if (UAStore.isPq(kind) || (kind == UAKinds.MSIG && _pqEligible(_msigBytes(bytes32(UAStore.word(d, o + 2)))))) continue;
+            classical += UAStore.u16(d, o + 34);
         }
         return classical < threshold;
     }
@@ -560,8 +591,11 @@ library UARegistryLib {
         bytes32 member = bytes32(UAStore.word(d, 4 + 36 * uint256(index) + 2));
         bytes32 typed = UAKinds.membershipDigest(ua, member);
         bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBERSHIP, typed));
-        if (!_memberOk(d, md, typed, memberSig)) revert IUARegistry.UAUnauthorized(ua);
+        if (!_memberOk(d, md, typed, memberSig, true)) revert IUARegistry.UAUnauthorized(ua);
         s.accepted[ua] = bits | 1 << index;
+        // owner 2026-11-03: the hash kept, written once as the bit it goes with, the bytes in `UAMemberSig`: a copy checks them against
+        // `memberSigHashOf` and replays them
+        _memberSig(ua, d, index, UAKinds.PURPOSE_MEMBERSHIP, memberSig.members.length == 0 ? memberSig.sig : abi.encode(memberSig.members));
         emit IUARegistry.UAMembershipAccepted(ua, index, member);
     }
 
@@ -600,7 +634,8 @@ library UARegistryLib {
         if (kind == UAKinds.MSIG) {
             if (sig.length != 0) return false;
             if (!_pqEligible(d)) return members.length == 0;
-            return members.length != 0 && _msig(ua, purpose, digest, d, members);
+            bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purpose, digest));
+            return members.length != 0 && _msig(ua, md, digest, purpose == UAKinds.PURPOSE_POP_V2, d, members);
         }
         if (members.length != 0) return false;
         // A6-I1: a gen-1 holder's PQZ key record on gen 2 (the PQ holder kinds are stored: no key data in `auth`); the
@@ -626,23 +661,27 @@ library UARegistryLib {
     /// sign `member_digest` under `member`. (The members come typed, TS-D12: no encoding to canonicalise.) A stored signature
     /// is minimal too (owner 2026-10-31, U8S-D1): with T the slots' total weight and N the threshold, T >= N and
     /// T - weight(i) < N for every slot, i.e. T - min(weight) < N.
-    /// Only an accepted slot counts (CTR-UA-37), except in the registration's own `pop`, which is what accepts its signers.
-    function _msig(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory d, IUARegistry.MemberSig[] memory sigs)
+    /// Only an accepted slot counts (CTR-UA-37), except in the registration's own `pop` (`pop`), which is what accepts its signers.
+    /// An `msig` member is this same check one level down: its members sign under `member`, its native members `typed` still, its
+    /// slots are minimal too and count only if accepted in it, a `pop` above exempting no slot of it (spec 2026-11-02-msig-nested).
+    /// `md`: this structure's `member_digest`; `typed`: the record's typed digest, the same at both levels.
+    function _msig(bytes32 ua, bytes32 md, bytes32 typed, bool pop, bytes memory d, IUARegistry.MemberSig[] memory sigs)
         private
         view
         returns (bool)
     {
-        bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purposeTag, digest));
-        (uint256 threshold, uint256 count) = (UAStore.u16(d, 0), UAStore.u16(d, 2));
+        uint256 threshold = UAStore.u16(d, 0);
         uint256 acc;
-        uint256 yes = purposeTag == UAKinds.PURPOSE_POP_V2 ? type(uint256).max : _accepted(ua, sigs);
+        // the slots that may sign: past the members is none of them
+        uint256 yes = (pop ? type(uint256).max : _accepted(ua, sigs)) & ((1 << UAStore.u16(d, 2)) - 1);
+        bool here = pop || UAStore.layout().records[ua].kind != 0;
         uint256 wMin = type(uint256).max; // the smallest slot weight
         uint256 next; // lowest index the next MemberSig may use
         for (uint256 i; i < sigs.length; ++i) {
             IUARegistry.MemberSig memory s = sigs[i];
-            if (acc >= threshold || s.index < next || s.index >= count || yes >> s.index & 1 == 0) return false;
+            if (acc >= threshold || s.index < next || yes >> s.index & 1 == 0) return false;
             next = uint256(s.index) + 1;
-            if (!_memberOk(d, md, digest, s)) return false;
+            if (!_memberOk(d, md, typed, s, here)) return false;
             uint256 w = UAStore.u16(d, 4 + 36 * uint256(s.index) + 34);
             acc += w;
             if (w < wMin) wMin = w;
@@ -668,61 +707,123 @@ library UARegistryLib {
     }
 
     /// The signature `s` of member `s.index` of the structure `d`: a registered member over `md` under `member`, without key
-    /// data (the registry reads the member's record, CTR-UA-33); a native member over the typed digest `typed`.
-    function _memberOk(bytes memory d, bytes32 md, bytes32 typed, IUARegistry.MemberSig memory s) private view returns (bool) {
+    /// data (the registry reads the member's record, CTR-UA-33); a native member over the typed digest `typed`; an `msig` member by
+    /// `_msig`, under `member` over `md`. `here`: this registry holds the structure, else gen 1 does and a clone is one of gen 1's, with the 400 k
+    /// cap `_slotCap` counted for it.
+    function _memberOk(bytes memory d, bytes32 md, bytes32 typed, IUARegistry.MemberSig memory s, bool here) private view returns (bool) {
         uint256 o = 4 + 36 * uint256(s.index);
         (uint16 kind, bytes32 id) = (uint16(UAStore.u16(d, o)), bytes32(UAStore.word(d, o + 2)));
+        if (kind == UAKinds.MSIG) {
+            bytes32 inner = UAKinds.memberDigest(id, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBER, md));
+            return s.sig.length == 0 && _msig(id, inner, typed, false, _msigBytes(id), UAStore.lift(s.members));
+        }
+        if (s.members.length != 0) return false;
         if (!UAKinds.isNative(kind)) {
             return UAStore.via(address(this), id, UAKinds.PURPOSE_MEMBER, md,
-                IUARegistry.UASig(s.keyData, s.sig, new IUARegistry.MemberSig[](0)));
+                IUARegistry.UASig("", s.sig, new IUARegistry.MemberSig[](0)));
         }
-        if (s.keyData.length != 0) return false;
-        return UAStore.byCode(address(uint160(uint256(id))), typed, s.sig, _cloneHash());
+        return UAStore.byCode(address(uint160(uint256(id))), typed, s.sig, here ? _cloneHash() : IUARegistry(_pred()).smartKeyCloneHash());
     }
 
     // ----- the msig bound -----
 
     /// Step 4 for `msig`: every member ∈ MEMBER of this profile and native or registered under its stated kind; the
     /// worst case of a minimal authorizing set (the `c` largest caps + `c` × `MSIG_MEMBER_GAS` + `MSIG_ACCEPTED_GAS`, + the caller's
-    /// hold for the largest of this generation's caps beyond the 400 k that `MSIG_MEMBER_GAS` covers) fits `verifyBudget`.
+    /// hold for the largest single cap, at either level, beyond the 400 k that `MSIG_MEMBER_GAS` covers) fits `verifyBudget`.
     function _membersWorst(bytes memory d) private view returns (uint256 worst) {
         IUARegistry self = IUARegistry(address(this));
+        uint256 held;
+        (worst, held) = _worst(d, false, _nativeCap(), self.hederaNative());
+        if (held > UAStore.SMART_KEY_1271_GAS) worst += (held - UAStore.SMART_KEY_1271_GAS) / 63;
+        if (worst > self.verifyBudget()) revert IUARegistry.UAKeyData(UAKinds.MSIG);
+    }
+
+    /// One level of the bound: the worst of `d` without the caller's hold, and the largest single cap in it (`held`). An `msig` member
+    /// counts its own worst as its cap, so the total is every signature across both levels, plain members and inner thresholds
+    /// together; `inner`: this is that member, and it may hold no `msig` (`UAMemberUnknown`: two levels only).
+    function _worst(bytes memory d, bool inner, uint256 nativeCap, bool hedera) private view returns (uint256 worst, uint256 held) {
         (uint256 threshold, uint256 count) = (UAStore.u16(d, 0), UAStore.u16(d, 2));
         uint256[] memory weights = new uint256[](count);
         uint256[] memory caps = new uint256[](count);
-        (bool hedera, address g1) = (self.hederaNative(), self.predecessor());
         for (uint256 i; i < count; ++i) {
             uint256 o = 4 + 36 * i;
-            uint16 kind = uint16(UAStore.u16(d, o));
-            bytes32 id = bytes32(UAStore.word(d, o + 2));
-            if (!UAKinds.isMember(kind, hedera)) revert IUARegistry.UAMemberUnknown(id);
-            if (UAKinds.isNative(kind)) {
-                caps[i] = _nativeCap();
-            } else {
-                if (self.kindOf(id) != kind) revert IUARegistry.UAMemberUnknown(id);
-                uint256 cap = self.verifyCap(kind); // 0: this generation does not enable the kind (an enabled cap is ≠ 0)
-                if (cap == 0) {
-                    // handed to gen 1, which holds cap / 63 + GAS_MARGIN again inside the 63/64 gen 2 gives it; gen 2 holds for it too
-                    cap = IUARegistry(g1).verifyCap(kind);
-                    cap = cap + cap / 63 + SigCheck.GAS_MARGIN;
-                }
-                caps[i] = cap;
-            }
+            uint256 h;
+            (caps[i], h) = _slotCap(uint16(UAStore.u16(d, o)), bytes32(UAStore.word(d, o + 2)), inner, nativeCap, hedera);
+            if (h > held) held = h;
             weights[i] = UAStore.u16(d, o + 34);
         }
-        _sort(weights);
         _sort(caps);
-        uint256 c;
-        for (uint256 acc; acc < threshold; ++c) {
-            acc += weights[c];
-        }
+        uint256 c = _quorum(weights, threshold);
         worst = c * MSIG_MEMBER_GAS + MSIG_ACCEPTED_GAS;
         for (uint256 i; i < c; ++i) {
             worst += caps[count - 1 - i];
         }
-        uint256 held = c == 0 ? 0 : caps[count - 1]; // the largest cap among the c (P6c: PQ caps exceed 400 k)
-        if (held > UAStore.SMART_KEY_1271_GAS) worst += (held - UAStore.SMART_KEY_1271_GAS) / 63;
-        if (worst > self.verifyBudget()) revert IUARegistry.UAKeyData(UAKinds.MSIG);
+    }
+
+    /// How many of the lightest slots reach `threshold`: no quorum has more (a minimal one, or one that stops at the threshold).
+    function _quorum(uint256[] memory weights, uint256 threshold) private pure returns (uint256 c) {
+        _sort(weights);
+        for (uint256 acc; acc < threshold; ++c) {
+            acc += weights[c];
+        }
+    }
+
+    /// The bytes of the largest `MemberSig[]` a quorum of `d` signs (spec 2026-11-02-msig-nested §2): a signing slot `head + ⌈sig / 32⌉ × 32`,
+    /// `head` 192, 128 for a leaf of an inner list; an `msig` slot 192 and its own largest list.
+    function _authBytes(bytes memory d, uint256 head) private view returns (uint256 n) {
+        (uint256 threshold, uint256 count) = (UAStore.u16(d, 0), UAStore.u16(d, 2));
+        uint256[] memory weights = new uint256[](count);
+        uint256[] memory sizes = new uint256[](count);
+        for (uint256 i; i < count; ++i) {
+            uint256 o = 4 + 36 * i;
+            weights[i] = UAStore.u16(d, o + 34);
+            sizes[i] = head + _slotBytes(uint16(UAStore.u16(d, o)), bytes32(UAStore.word(d, o + 2)));
+        }
+        _sort(sizes);
+        uint256 c = _quorum(weights, threshold);
+        for (uint256 i; i < c; ++i) {
+            n += sizes[count - 1 - i];
+        }
+    }
+
+    function _slotBytes(uint16 kind, bytes32 id) private view returns (uint256) {
+        return kind == UAKinds.MSIG ? _authBytes(_msigBytes(id), 128) : (_sigBytes(kind) + 31) / 32 * 32;
+    }
+
+    /// A signature's bytes. ponytail: one figure for every classical kind and native member, 1,024 B over a WebAuthn assertion and over a wallet's usual
+    /// ERC-1271 bytes; a wallet with a longer signature is its own limit, per-kind sizes if a holder ever sits near the edge on classical slots.
+    function _sigBytes(uint16 kind) private pure returns (uint256) {
+        if (kind == UAKinds.MLDSA44) return 2_420;
+        if (kind == UAKinds.MLDSA65) return 3_309;
+        if (kind == UAKinds.FNDSA512) return 666;
+        if (kind == UAKinds.SLHDSA128S) return 7_856;
+        return 1_024;
+    }
+
+    /// What one slot may spend (`cap`) and the largest single cap in it (`held`): a native member's, a registered kind's, or an `msig`
+    /// member's own worst. A record gen 1 holds is one more call level: `cap / 63 + GAS_MARGIN`, as a member of a kind gen 1 alone
+    /// enables; gen 1's natives may be clones of its own, so they count 400 k there.
+    function _slotCap(uint16 kind, bytes32 id, bool inner, uint256 nativeCap, bool hedera)
+        private view returns (uint256 cap, uint256 held)
+    {
+        IUARegistry self = IUARegistry(address(this));
+        if (!UAKinds.isMember(kind, hedera)) revert IUARegistry.UAMemberUnknown(id);
+        if (UAKinds.isNative(kind)) return (nativeCap, nativeCap);
+        if (self.kindOf(id) != kind) revert IUARegistry.UAMemberUnknown(id);
+        if (kind == UAKinds.MSIG) {
+            if (inner) revert IUARegistry.UAMemberUnknown(id);
+            bool here = UAStore.layout().records[id].kind != 0;
+            (cap, held) = _worst(_msigBytes(id), true, here ? nativeCap : UAStore.SMART_KEY_1271_GAS, hedera);
+            if (!here) cap += cap / 63 + SigCheck.GAS_MARGIN;
+            return (cap, held);
+        }
+        cap = self.verifyCap(kind); // 0: this generation does not enable the kind (an enabled cap is ≠ 0)
+        if (cap == 0) {
+            // handed to gen 1, which holds cap / 63 + GAS_MARGIN again inside the 63/64 gen 2 gives it; gen 2 holds for it too
+            cap = IUARegistry(self.predecessor()).verifyCap(kind);
+            cap = cap + cap / 63 + SigCheck.GAS_MARGIN;
+        }
+        return (cap, cap);
     }
 
     /// A native member may be (or later become, counterfactually) a `SmartKeyAccount` clone: the bound takes its cap.

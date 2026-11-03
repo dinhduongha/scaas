@@ -111,8 +111,10 @@ function sample(name, op) {
 }
 
 // A row of the UA-signed extras: a `pqzAuth` in the msig shape, a Zether owner's `ownerSig` (Schnorr, 160 B).
-const PQZ_AUTH = { keyData: '0x', signature: '0x', members: [{ index: 0, keyData: '0x', sig: filler('pqzAuth.0', 65) },
-  { index: 2, keyData: '0x', sig: filler('pqzAuth.2', 65) }] };
+// Slot 0 an `msig` member with its list (spec 2026-11-02-msig-nested), slot 2 a signing member.
+const PQZ_AUTH = { keyData: '0x', signature: '0x', members: [
+  { index: 0, members: [{ index: 0, sig: filler('pqzAuth.0.0', 65) }, { index: 1, sig: filler('pqzAuth.0.1', 65) }], sig: '0x' },
+  { index: 2, members: [], sig: filler('pqzAuth.2', 65) }] };
 const OWNER_SIG = { keyData: '0x', signature: filler('ownerSig', 160), members: [] };
 const nativeSig = (digest) => hex(ecdsa(nativeSk, digest));
 

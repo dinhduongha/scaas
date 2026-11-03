@@ -42,8 +42,8 @@ UAError _err(void Function() f) {
   throw TestFailure('expected a UAError');
 }
 
-/// `abi.encode(MemberSig[])` (the vectors' byte form of an msig pop / sig) back to (index, keyData, sig) records.
-List<(int, Uint8List, Uint8List)> _memberSigs(Uint8List blob) {
+/// `abi.encode(MemberSig[])` of flat slots (the vectors' byte form of an msig pop / sig) back to (index, inner, sig) records.
+List<MemberSig> _memberSigs(Uint8List blob) {
   if (blob.isEmpty) return const [];
   int w(int o) => blob.sublist(o + 24, o + 32).fold(0, (v, c) => v * 256 + c);
   final base = w(0);
@@ -56,7 +56,7 @@ List<(int, Uint8List, Uint8List)> _memberSigs(Uint8List blob) {
           return blob.sublist(o + 32, o + 32 + w(o));
         }
 
-        return (w(t), field(1), field(2));
+        return (w(t), const <(int, Uint8List)>[], field(2));
       }(),
   ];
 }
@@ -672,5 +672,155 @@ void main() {
     }
     expect(n, 6);
     expect(registrationArgs(0x0101, _b(valid[1]['keyData'])).$1['entry'], 'register');
+  });
+
+  // nested msig: nested.json, the rows forge runs on the registry (spec 2026-11-02-msig-nested); no signature is verified here
+  final n = _load('nested.json') as Map;
+  Uint8List? nestedKey(Uint8List id) {
+    for (final r in (n['registrations'] as List).cast<Map>()) {
+      if (_kind(r) == 0x0120 && r['ua'] == _hx(id)) return _b(r['keyData']);
+    }
+    return null;
+  }
+
+  List<MemberSig> slotsOf(Object? list) => [
+        for (final m in (list as List).cast<Map>())
+          (m['index'] as int, [for (final x in (m['members'] as List).cast<Map>()) (x['index'] as int, _b(x['sig']))], _b(m['sig']))
+      ];
+  // `Σ slots` of abi.encode(MemberSig[]) as the library counts it: signing slot 192 + ⌈sig/32⌉×32, msig slot 192 + Σ leaves, leaf 128 + ⌈sig/32⌉×32
+  int slotsLen(Object? list) {
+    int len(List<MemberSig> m) => registryCalldataLength('setKemKey', {'kem': kemKeyOf(null), 'sig': uaSig(members: m)});
+    return len(slotsOf(list)) - len(const []);
+  }
+
+  test('nested eligibility', () {
+    for (final r in (n['eligibility'] as List).cast<Map>()) {
+      final inner = r['inner'] as Map;
+      expect(msigPqzEligible(_b(r['keyData']), (id) => _b(inner[_hx(id)])), r['eligible'], reason: r['reason'] as String);
+      expect(() => msigPqzEligible(_b(r['keyData'])), throwsA(isA<UAError>().having((e) => e.code, 'code', 'UAMemberUnknown')));
+    }
+  });
+
+  test('nested structures', () {
+    final rows = (n['structures'] as List).cast<Map>();
+    expect(rows.length, 2);
+    for (final s in rows) {
+      final d = _b(s['keyData']);
+      expect(_hx(uaOf(0x0120, d)), s['ua']);
+      expect(msigStructure(d), s['structure']);
+      final e = _err(() => msigPqzEligible(d, nestedKey));
+      expect((e.code, e.reason), (s['error'], s['member']));
+    }
+  });
+
+  test('nested registrations', () {
+    final rows = [...(n['registrations'] as List).cast<Map>(), ...(n['afterAcceptance'] as List).cast<Map>()];
+    expect(rows.length, 17);
+    for (final r in rows) {
+      final name = r['name'] as String, kind = _kind(r), msig = kind == 0x0120;
+      final kem = _b(r['attrs']['kemPk']), d = _b(r['keyData']);
+      expect(_hx(uaOf(kind, d)), r['ua'], reason: name);
+      final g = holderPopMessage(kind, _b(r['ua']), keyData: d, kemPk: kem, inner: nestedKey);
+      expect([_hx(g.kemRecordHash), _hx(g.portableRecordDigest), _hx(g.registrationDigest), _hx(g.message)],
+          [r['kemRecordHash'], r['portableRecordDigest'], r['registrationDigest'], r['popMessage']],
+          reason: name);
+      final slots = msig ? slotsOf(r['args']['pop']) : const <MemberSig>[];
+      final pop = msig ? null : _b(r['pop']);
+      expect(registrationArgs(kind, d, kemPk: kem, pop: pop, members: slots, kemCommit: false).$1, r['args'], reason: name);
+      if (r['kemCommit'] != null) {
+        final (args, fill) = registrationArgs(kind, d, kemPk: kem, pop: pop, members: slots, kemCommit: true);
+        expect([args, fill], [r['kemCommit']['register'], r['kemCommit']['fill']], reason: name);
+      }
+      if (!msig) continue;
+      expect(_hx(g.memberDigest!), r['memberDigest'], reason: name);
+      if (slots.isNotEmpty) expect(slotsLen(r['args']['pop']) + 64, _b(r['pop']).length, reason: name);
+      // owner 2026-11-03: memberSigHashOf per slot, the hash of the bytes its UAMemberSig carries
+      expect([for (final s in slots) {'index': s.$1, 'hash': _hx(keccak256([s.$2.isEmpty ? s.$3! : encodeInnerSigs(s.$2)]))}],
+          r['memberSigHashes'], reason: name);
+      for (final x in ((r['innerDigests'] as List?) ?? const []).cast<Map>()) {
+        expect(_hx(innerDigest(_b(x['inner']), _b(r['memberDigest']))), x['memberDigest'], reason: name);
+      }
+    }
+  });
+
+  test('nested records', () {
+    final kem = (n['kemRecords'] as List).cast<Map>(), pqz = (n['pqzKeyRecords'] as List).cast<Map>();
+    expect([kem.length, pqz.length], [1, 4]);
+    for (final r in kem) {
+      final u = _b(r['ua']), v = BigInt.from(r['version'] as int), pk = _b(r['kemPk']);
+      final m = kemRecordMessage(_kind(r), u, v, pk);
+      expect([_hx(kemRecordHash(u, v, pk)), _hx(kemRecordDigest(u, v, pk)), _hx(m), _hx(memberDigest(u, m))],
+          [r['structHash'], r['digest'], r['message'], r['memberDigest']]);
+      final list = r['args']['sig']['members'];
+      expect(setKemKeyArgs(u, r['version'] as int, pk, uaSig(members: slotsOf(list))), r['args']);
+      expect(slotsLen(list) + 64, _b(r['sig']).length);
+    }
+    for (final r in pqz) {
+      final u = _b(r['ua']), key = _b(r['pqzKey']), h = _b(r['pqzPopHash']);
+      final g = pqzKeyRecordMessage(_kind(r), u, nestedKey(u)!, key, pqzPopHash: h, inner: nestedKey);
+      expect([_hx(g.pqzKeyHash), _hx(g.pqzKeyDigest), _hx(g.recordDigest), _hx(g.message), _hx(g.pqzRegMessage), _hx(g.memberDigest!)],
+          [r['pqzKeyHash'], r['pqzKeyDigest'], r['recordDigest'], r['message'], r['pqzRegMessage'], r['memberDigest']],
+          reason: r['name'] as String);
+      final list = r['args']['sig']['members'];
+      expect(setPqzKeyArgs(u, key, h, uaSig(members: slotsOf(list))), r['args']);
+      expect(slotsLen(list) + 64, _b(r['sig']).length);
+    }
+  });
+
+  test('nested memberships', () {
+    final rows = (n['memberships'] as List).cast<Map>();
+    expect(rows.length, 4);
+    for (final m in rows) {
+      final d = membershipDigest(_b(m['ua']), _b(m['member']));
+      final msg = uaMessage(0x0120, purposeTag('membership'), d);
+      expect([_hx(d), _hx(msg), _hx(memberDigest(_b(m['ua']), msg))], [m['digest'], m['message'], m['memberDigest']]);
+    }
+  });
+
+  // CTR-UA-37: the bytes of UAMemberSig give back the slot, an msig slot its list, with no new signature
+  test('nested replay', () {
+    void refused(Uint8List key, int index, Uint8List stored) => expect(_err(() => replayedMemberSig(key, index, stored)).code, 'UAUnauthorized');
+    var replays = 0;
+    for (final m in (n['memberships'] as List).cast<Map>()) {
+      final key = nestedKey(_b(m['ua']))!, index = m['index'] as int, stored = _b(m['stored']);
+      expect(_hx(keccak256([stored])), m['storedHash'], reason: '${m['name']}: storedHash');
+      final slot = replayedMemberSig(key, index, stored);
+      expect(uaSig(members: [slot])['members'], [{'index': index, 'members': m['members'], 'sig': m['sig']}], reason: m['name'] as String);
+      refused(key, 16, Uint8List(0));
+      if ((m['members'] as List).isEmpty) continue;
+      replays++;
+      expect(_hx(encodeInnerSigs(slot.$2)), m['stored']);
+      refused(key, index, Uint8List.fromList([...stored, 0]));
+      refused(key, index, Uint8List(0));
+      refused(key, index, Uint8List.fromList(stored)..[64 + 32 + 29] = 1); // a leaf index over uint16
+    }
+    expect(replays, 1);
+  });
+
+  test('nested authorizations', () {
+    final rows = (n['authorizations'] as List).cast<Map>();
+    expect(rows.length, 5);
+    for (final a in rows) {
+      final name = a['name'] as String;
+      expect(_hx(memberDigest(_b(a['ua']), uaMessage(0x0120, _b(a['purposeTag']), _b(a['digest'])))), a['memberDigest'], reason: name);
+      final list = a['uaSig']['members'];
+      expect(uaSig(members: slotsOf(list)), a['uaSig'], reason: name);
+      expect(slotsLen(list) + 64, _b(a['sig']).length, reason: name);
+    }
+  });
+
+  // shape and size only: these refusals are the registry's, this library verifies no signature
+  test('nested negatives', () {
+    final rows = (n['negatives'] as List).cast<Map>();
+    expect(rows.length, 13);
+    final all = [...(n['registrations'] as List).cast<Map>(), ...(n['afterAcceptance'] as List).cast<Map>()];
+    for (final x in rows) {
+      final name = x['name'] as String, r = all.firstWhere((c) => c['name'] == x['row']);
+      final args = registrationArgs(0x0120, _b(r['keyData']), kemPk: _b(r['attrs']['kemPk']), members: slotsOf(x['popTyped']), kemCommit: false).$1;
+      expect(args['pop'], x['popTyped'], reason: name);
+      // inner-slot-not-accepted: afterAcceptance's own pop, refused by the state (its inner slot not accepted yet), not by its bytes
+      expect(x['pop'] == r['pop'], name == 'inner-slot-not-accepted', reason: name);
+      expect(slotsLen(x['popTyped']) + 64, _b(x['pop']).length, reason: name);
+    }
   });
 }

@@ -9,14 +9,15 @@ export * from '../src/ua-verify.js';
 
 /** A derived kind's signature over a 32-byte ua_msg, the BLS PoP domain. */
 export const sigOk = (kind, keyData, msg, sig) => kindVerify(kind, keyData, msg, sig, true);
-/** `abi.decode(blob, (MemberSig[]))`, MemberSig = (uint16 index, bytes keyData, bytes sig). */
+/** `abi.decode(blob, (MemberSig[]))`, MemberSig = (uint16 index, InnerSig[] members, bytes sig). */
 export function memberSigs(blob) {
   const b = B(blob);
   const a = wordAt(b, 0);
   const base = a + 32;
   return Array.from({ length: wordAt(b, a) }, (_, i) => {
     const t = base + wordAt(b, base + 32 * i);
-    return { index: wordAt(b, t), keyData: bytesAt(b, t, t + 32), sig: bytesAt(b, t, t + 64) };
+    const l = t + wordAt(b, t + 32);
+    return { index: wordAt(b, t), listLength: wordAt(b, l), sig: bytesAt(b, t, t + 64) };
   });
 }
 /** An msig signature: indices strictly increasing, each member verifies (derived members over `memberDigest` by key data
@@ -30,8 +31,8 @@ export function msigOk(r, md, blob, keyOf, nativeDigest) {
     if (!m || s.index <= last) return false;
     last = s.index;
     const ok = ua.isNativeKind(m.kind)
-      ? s.keyData.length === 0 && nativeDigest !== undefined && nativeOk(`0x${m.id.slice(26)}`, typeof nativeDigest === 'string' ? B(nativeDigest) : nativeDigest, hex(s.sig))
-      : s.keyData.length === 0 && sigOk(m.kind, keyOf(m.id), hex(ua.uaMessage(m.kind, ua.purposeTag('member'), B(md))), hex(s.sig));
+      ? s.listLength === 0 && nativeDigest !== undefined && nativeOk(`0x${m.id.slice(26)}`, typeof nativeDigest === 'string' ? B(nativeDigest) : nativeDigest, hex(s.sig))
+      : s.listLength === 0 && sigOk(m.kind, keyOf(m.id), hex(ua.uaMessage(m.kind, ua.purposeTag('member'), B(md))), hex(s.sig));
     if (!ok) return false;
     weight += m.weight;
   }

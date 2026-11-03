@@ -124,7 +124,7 @@ recovery: the guardian (checked before the signature; none = the zero holder) si
 (fail fast: keep a slot free). `add_origin` is idempotent; an msig refuses a repeated signing key; a LogicSig- or
 msig-rekeyed address can add keys natively but not remove them (NEAR parity). BUILT.
 
-<a id="NET-ALG-09"></a>**NET-ALG-09** — **An msig has at most 3 members.** `MSIG_MAX_MEMBERS` is bound by the 2,048 B of
+<a id="NET-ALG-09"></a>**NET-ALG-09** — **An msig has at most 3 members.** An `msig` member is EVM only until `ua-algorand`: the member kind is refused here ([CTR-UA-38](../contracts/accounts.md#msig-staging)). `MSIG_MAX_MEMBERS` is bound by the 2,048 B of
 app-call arguments, not by budget: with a Chrome-shaped `clientDataJSON` (286 B: a 64 B origin and Chrome's extra
 member) a passkey member costs 493 B, so 3 members take 1,823 B and 4 take 2,316 B (a 134 B `clientDataJSON` would
 allow 4 at 342 B each). A passkey field is ≤ 1 KiB. BUILT (493 / 2,316 B: `smartcontracts/algorand/runs/2026-10-28-algorand-limits.txt`;

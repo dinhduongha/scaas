@@ -119,9 +119,9 @@ export const nativeAddr = keccak_256(secp256k1.getPublicKey(be(nativeSk, 32), fa
 export const nativeUa = ua.nativeId(0x0001, nativeAddr);
 export { encodeMemberSigs };
 /** `encodeMemberSigs` for a portable purpose (`pop` v2, KEM record, PQZ key record) of the msig `keyData`: only a minimal
- *  slot set (`ua.msigSlotsMinimal`, owner 2026-10-31), else `UAError('UAPoP')` — the registry's verdict. */
-export function portableMemberSigs(keyData, list) {
-  if (!ua.msigSlotsMinimal(keyData, list.map((s) => s.index))) {
+ *  slot set at both levels (`ua.msigSigMinimal`, owner 2026-10-31), else `UAError('UAPoP')` — the registry's verdict. */
+export function portableMemberSigs(keyData, list, inner) {
+  if (!ua.msigSigMinimal(keyData, list, inner)) {
     throw new ua.UAError('UAPoP', `msig slots ${list.map((s) => s.index)} not minimal`);
   }
   return encodeMemberSigs(list);

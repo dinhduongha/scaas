@@ -23,6 +23,14 @@ auto call(F&& f) -> decltype(f()) {
     }
 }
 template <class F>
+auto argCall(F&& f) -> decltype(f()) {  // a string argument that is not UTF-8: UAArgument
+    try {
+        return call(f);
+    } catch (const std::invalid_argument&) {
+        throw Error("UAArgument", "");
+    }
+}
+template <class F>
 std::string jsonCall(F&& f) {
     try {
         return call([&] { return std::string(f()); });
@@ -90,10 +98,12 @@ bool isNative(uint16_t k) { return ffi::is_native(k); }
 bool isZether(uint16_t k) { return ffi::is_zether(k); }
 bool isPqzHolder(uint16_t k) { return ffi::is_pqz_holder(k); }
 bool msigPqzEligible(const Bytes& d) { return call([&] { return ffi::msig_pqz_eligible(sl(d)); }); }
+bool msigPqzEligibleWith(const Bytes& d, const std::string& inner) { return argCall([&] { return ffi::msig_pqz_eligible_with(sl(d), inner); }); }
 bool isSigning(uint16_t k) { return ffi::is_signing(k); }
 bool isMember(uint16_t k, bool h) { return ffi::is_member(k, h); }
 Bytes uaMessage(uint16_t k, const Bytes& p, const Bytes& d) { return call([&] { return bytes(ffi::ua_message(k, sl(p), sl(d))); }); }
 Bytes chainKeyHash(uint64_t c) { return bytes(ffi::chain_key_hash(c)); }
+Bytes keccak256(const Bytes& d) { return bytes(ffi::keccak256(sl(d))); }
 Bytes portableDomainSeparator() { return bytes(ffi::portable_domain_separator()); }
 Bytes kemRecordHash(const Bytes& ua, uint64_t version, const Bytes& kemPk) {
     return call([&] { return bytes(ffi::kem_record_hash(sl(ua), version, sl(kemPk))); });
@@ -117,9 +127,13 @@ std::optional<Bytes> memberOf(bool has, const rust::Vec<uint8_t>& v) { return ha
 }  // namespace
 HolderPop holderPopMessage(uint16_t kind, const Bytes& ua, const Bytes& keyData, const std::optional<Bytes>& pqzKey,
                            const std::optional<Bytes>& pqzPop, const std::optional<Bytes>& pqzPopHash, const std::optional<Bytes>& kemPk) {
-    return call([&] {
-        auto r = ffi::holder_pop_message(kind, sl(ua), sl(keyData), sl(orNone(pqzKey)), sl(orNone(pqzPop)), sl(orNone(pqzPopHash)),
-                                         sl(orNone(kemPk)));
+    return holderPopMessageWith(kind, ua, keyData, "", pqzKey, pqzPop, pqzPopHash, kemPk);
+}
+HolderPop holderPopMessageWith(uint16_t kind, const Bytes& ua, const Bytes& keyData, const std::string& inner, const std::optional<Bytes>& pqzKey,
+                               const std::optional<Bytes>& pqzPop, const std::optional<Bytes>& pqzPopHash, const std::optional<Bytes>& kemPk) {
+    return argCall([&] {
+        auto r = ffi::holder_pop_message_with(kind, sl(ua), sl(keyData), sl(orNone(pqzKey)), sl(orNone(pqzPop)), sl(orNone(pqzPopHash)),
+                                              sl(orNone(kemPk)), inner);
         return HolderPop{bytes(r.pqz_key_hash),   bytes(r.pqz_pop_hash), bytes(r.kem_record_hash),
                          bytes(r.portable_record_digest), bytes(r.registration_digest), bytes(r.message),
                          memberOf(r.has_member_digest, r.member_digest)};
@@ -135,11 +149,19 @@ Bytes pqzKeyRecordDigest(const Bytes& ua, const Bytes& pqzKeyHash, const Bytes& 
 }
 PqzKeyRecord pqzKeyRecordMessage(uint16_t kind, const Bytes& ua, const Bytes& keyData, const Bytes& pqzKey,
                                  const std::optional<Bytes>& pqzPop, const std::optional<Bytes>& pqzPopHash, bool alreadySet) {
-    return call([&] {
-        auto r = ffi::pqz_key_record_message(kind, sl(ua), sl(keyData), sl(pqzKey), sl(orNone(pqzPop)), sl(orNone(pqzPopHash)), alreadySet);
+    return pqzKeyRecordMessageWith(kind, ua, keyData, "", pqzKey, pqzPop, pqzPopHash, alreadySet);
+}
+PqzKeyRecord pqzKeyRecordMessageWith(uint16_t kind, const Bytes& ua, const Bytes& keyData, const std::string& inner, const Bytes& pqzKey,
+                                     const std::optional<Bytes>& pqzPop, const std::optional<Bytes>& pqzPopHash, bool alreadySet) {
+    return argCall([&] {
+        auto r = ffi::pqz_key_record_message_with(kind, sl(ua), sl(keyData), sl(pqzKey), sl(orNone(pqzPop)), sl(orNone(pqzPopHash)),
+                                                  alreadySet, inner);
         return PqzKeyRecord{bytes(r.pqz_key_hash), bytes(r.pqz_pop_hash), bytes(r.pqz_key_digest), bytes(r.record_digest),
                             bytes(r.message), bytes(r.pqz_reg_message), memberOf(r.has_member_digest, r.member_digest)};
     });
+}
+std::string replayedMemberSig(const Bytes& keyData, uint16_t index, const Bytes& stored) {
+    return call([&] { return std::string(ffi::replayed_member_sig(sl(keyData), index, sl(stored))); });
 }
 bool isPortablePurpose(const Bytes& tag) { return call([&] { return ffi::is_portable_purpose(sl(tag)); }); }
 Bytes uaAuthDomainSeparator(const Domain& d) {

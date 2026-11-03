@@ -1,5 +1,6 @@
 // The registry's explicit arguments (typed-signing R1 / R1b: TS-D10 … TS-D13; owner KEM rulings 2026-10-31), as clientkeys
 // registrationArgs and ua-rs registration_args. RegistryJson gives the named JSON of clientkeys and the node job API.
+using System.Buffers.Binary;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -21,8 +22,10 @@ public static partial class UA
     public sealed record MuSig2Key(byte[] AggKey, byte[][] MemberKeys);
     public sealed record FrostMember(byte[][] Commitments, byte[] R, byte[] Z);
     public sealed record FrostKey(byte[] GroupKey, ushort Threshold, FrostMember[] Members);
-    /// <summary>One msig member's signature (<c>KeyData</c> empty for a stored kind).</summary>
-    public sealed record MemberSig(ushort Index, byte[] KeyData, byte[] Sig);
+    /// <summary>One signature of a member of an inner msig: its slot there. No list of its own: a third level has no form.</summary>
+    public sealed record InnerSig(ushort Index, byte[] Sig);
+    /// <summary>One msig slot's signature: a signing member <c>Sig</c>, <c>Members</c> empty; an msig member <c>Members</c>, <c>Sig</c> empty.</summary>
+    public sealed record MemberSig(ushort Index, InnerSig[] Members, byte[] Sig);
 
     /// <summary><c>UASig</c> of requireAuthorized / setKemKey / setPqzKey (TS-D12): native — signature; a derived single key — keyData
     /// (empty for the stored kinds) + signature; an msig — members. A portable record's signature never has keyData.</summary>
@@ -65,7 +68,7 @@ public static partial class UA
     static int BytesArrLen(byte[][] xs) => 32 + xs.Sum(x => 32 + TailLen(x));
     static int KemLen(KemKey k) => 96 + TailLen(k.MlkemEk);
     static int AttrsLen(UAAttrs a) => 128 + TailLen(a.PqzKey) + KemLen(a.Kem);
-    static int MemberSigsLen(MemberSig[] ms) => 32 + ms.Sum(m => 32 + 96 + TailLen(m.KeyData) + TailLen(m.Sig));
+    static int MemberSigsLen(MemberSig[] ms) => 32 + ms.Sum(m => 32 + 96 + 32 + m.Members.Sum(x => 32 + 64 + TailLen(x.Sig)) + TailLen(m.Sig));
 
     sealed class HexConverter : JsonConverter<byte[]>
     {
@@ -125,6 +128,45 @@ public static partial class UA
         Need(d.Length == s + 4 + n * per, "length");
         return new FrostKey(d[..s], (ushort)t, [.. Enumerable.Range(0, n).Select(i => s + 4 + i * per).Select(o => new FrostMember(
             [.. Enumerable.Range(0, t).Select(j => d[(o + j * s)..(o + (j + 1) * s)])], d[(o + t * s)..(o + (t + 1) * s)], d[(o + (t + 1) * s)..(o + per)]))]);
+    }
+
+    /// <summary><c>abi.encode(InnerSig[])</c>: what UAMemberSig carries for an msig slot.</summary>
+    public static byte[] EncodeInnerSigs(InnerSig[] members)
+    {
+        var tails = members.Select(m => (byte[])[.. Word(m.Index), .. Word(64), .. Word((ulong)m.Sig.Length), .. m.Sig, .. new byte[-m.Sig.Length & 31]]).ToArray();
+        var at = 32UL * (ulong)members.Length;
+        var heads = tails.Select(t => { var w = Word(at); at += (ulong)t.Length; return w; }).ToArray();
+        return [.. Word(32), .. Word((ulong)members.Length), .. heads.SelectMany(h => h), .. tails.SelectMany(t => t)];
+    }
+
+    /// <summary>The MemberSig a copy sends to acceptMembership from the bytes of its UAMemberSig alone, which hash to memberSigHashOf(ua, index) (CTR-UA-37): an msig slot's stored bytes are
+    /// <c>abi.encode(InnerSig[])</c>, canonical, at most 16; a signing slot's its sig. UAUnauthorized otherwise.</summary>
+    public static MemberSig ReplayedMemberSig(byte[] keyData, ushort index, byte[] stored)
+    {
+        var slots = MsigStructureOf(keyData).Members;
+        var refused = new UAException("UAUnauthorized", $"slot {index}");
+        if (index >= slots.Length) throw refused;
+        if (slots[index].Kind != 0x0120) return new(index, [], stored);
+        // no offset, length or index reaches 2^28, so the sums below cannot overflow
+        int W(int o)
+        {
+            if (o + 32 > stored.Length || stored.AsSpan(o, 28).IndexOfAnyExcept((byte)0) >= 0) throw refused;
+            var v = BinaryPrimitives.ReadUInt32BigEndian(stored.AsSpan(o + 28));
+            return v < 1 << 28 ? (int)v : throw refused;
+        }
+        var n = W(32);
+        if (W(0) != 32 || n > 16) throw refused;
+        var members = new InnerSig[n];
+        for (var j = 0; j < n; j++)
+        {
+            var u = 64 + W(64 + 32 * j);
+            var i = W(u);
+            var o = u + W(u + 32);
+            var l = W(o);
+            if (i > 0xFFFF || o + 32 + l > stored.Length) throw refused;
+            members[j] = new((ushort)i, stored[(o + 32)..(o + 32 + l)]);
+        }
+        return EncodeInnerSigs(members).SequenceEqual(stored) ? new(index, members, []) : throw refused;
     }
 
     /// <summary><c>setKemKey(ua, version, kem, sig)</c>; <paramref name="sig"/> empty for the version-0 hash-commit fill; no key is no call.</summary>

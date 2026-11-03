@@ -147,10 +147,21 @@ pub fn is_zether(kind: i64) -> bool {
 pub fn is_pqz_holder(kind: i64) -> bool {
     k(kind).is_ok_and(scaas_ua::is_pqz_holder)
 }
-/// An `msig` whose members of kinds outside 0x0130-0x0133 weigh less than its threshold (`UAKeyData` on malformed data).
+/// An `msig` whose members of kinds outside 0x0130-0x0133 weigh less than its threshold (`UAKeyData` on malformed data); an `msig`
+/// member is `UAMemberUnknown` here, [`msig_pqz_eligible_with`] reads its record.
 #[frb(sync)]
 pub fn msig_pqz_eligible(key_data: Vec<u8>) -> R<bool> {
-    Ok(scaas_ua::msig_pqz_eligible(&key_data)?)
+    msig_pqz_eligible_with(key_data, String::new())
+}
+/// The `_with` forms take `inner`, the `msig` members' structures: `{id: keyData}` JSON as [`registration_args`]' `inner` ("" = none;
+/// over 65,536 bytes, more than 16 entries or key data over 580 bytes is `UAArgument`). An `msig` member counts as PQ iff it is
+/// PQ-eligible itself, read from its entry; a member without an entry, or an entry that holds an `msig` (two levels only), is
+/// `UAMemberUnknown`.
+#[frb(sync)]
+pub fn msig_pqz_eligible_with(key_data: Vec<u8>, inner: String) -> R<bool> {
+    let i = scaas_ua::json::inner_json(&inner)?;
+    let l = scaas_ua::json::lookup(&i);
+    Ok(scaas_ua::msig_pqz_eligible_with(&key_data, &l)?)
 }
 #[frb(sync)]
 pub fn is_signing(kind: i64) -> bool {
@@ -167,6 +178,11 @@ pub fn ua_message(kind: i64, purpose: [u8; 32], digest: [u8; 32]) -> R<[u8; 32]>
 #[frb(sync)]
 pub fn chain_key_hash(chain_id: i64) -> R<[u8; 32]> {
     Ok(scaas_ua::chain_key_hash(n(chain_id)?))
+}
+/// `keccak256(data)`: e.g. `memberSigHashOf`, the hash of a slot's `sig` or of an msig member's `abi.encode(InnerSig[])`.
+#[frb(sync)]
+pub fn keccak256(data: Vec<u8>) -> [u8; 32] {
+    scaas_ua::keccak256(&data)
 }
 /// The portable EIP-712 domain separator `DS_P` (`EIP712Domain(string name,string version)` = ("SCaaS UA Portable", "1"), no
 /// chain; typed-signing TS-D1): every portable digest is `keccak256(0x1901 ‖ DS_P ‖ hashStruct)`.
@@ -235,8 +251,25 @@ pub fn holder_pop_message(
     pqz_pop_hash: Option<Vec<u8>>,
     kem_pk: Option<Vec<u8>>,
 ) -> R<HolderPop> {
-    let h = hash(&pqz_pop_hash)?;
-    let r = scaas_ua::holder_pop_message(k(kind)?, &ua, &key_data, pqz_key.as_deref(), pqz_pop.as_deref(), h.as_ref(), kem_pk.as_deref())?;
+    holder_pop_message_with(kind, ua, key_data, pqz_key, pqz_pop, pqz_pop_hash, kem_pk, String::new())
+}
+/// [`holder_pop_message`] with `inner` as in [`msig_pqz_eligible_with`].
+#[frb(sync)]
+#[allow(clippy::too_many_arguments)]
+pub fn holder_pop_message_with(
+    kind: i64,
+    ua: [u8; 32],
+    key_data: Vec<u8>,
+    pqz_key: Option<Vec<u8>>,
+    pqz_pop: Option<Vec<u8>>,
+    pqz_pop_hash: Option<Vec<u8>>,
+    kem_pk: Option<Vec<u8>>,
+    inner: String,
+) -> R<HolderPop> {
+    let (h, i) = (hash(&pqz_pop_hash)?, scaas_ua::json::inner_json(&inner)?);
+    let l = scaas_ua::json::lookup(&i);
+    let (key, pop, kem) = (pqz_key.as_deref(), pqz_pop.as_deref(), kem_pk.as_deref());
+    let r = scaas_ua::ua8::holder_pop_message_with(k(kind)?, &ua, &key_data, key, pop, h.as_ref(), kem, &l)?;
     Ok(HolderPop {
         pqz_key_hash: r.pqz_key_hash,
         pqz_pop_hash: r.pqz_pop_hash,
@@ -293,8 +326,24 @@ pub fn pqz_key_record_message(
     pqz_pop_hash: Option<Vec<u8>>,
     already_set: bool,
 ) -> R<PqzKeyRecord> {
-    let h = hash(&pqz_pop_hash)?;
-    let r = scaas_ua::ua8::pqz_key_record_message(k(kind)?, &ua, &key_data, &pqz_key, pqz_pop.as_deref(), h.as_ref(), already_set)?;
+    pqz_key_record_message_with(kind, ua, key_data, pqz_key, pqz_pop, pqz_pop_hash, already_set, String::new())
+}
+/// [`pqz_key_record_message`] with `inner` as in [`msig_pqz_eligible_with`].
+#[frb(sync)]
+#[allow(clippy::too_many_arguments)]
+pub fn pqz_key_record_message_with(
+    kind: i64,
+    ua: [u8; 32],
+    key_data: Vec<u8>,
+    pqz_key: Vec<u8>,
+    pqz_pop: Option<Vec<u8>>,
+    pqz_pop_hash: Option<Vec<u8>>,
+    already_set: bool,
+    inner: String,
+) -> R<PqzKeyRecord> {
+    let (h, i) = (hash(&pqz_pop_hash)?, scaas_ua::json::inner_json(&inner)?);
+    let l = scaas_ua::json::lookup(&i);
+    let r = scaas_ua::ua8::pqz_key_record_message_with(k(kind)?, &ua, &key_data, &pqz_key, pqz_pop.as_deref(), h.as_ref(), already_set, &l)?;
     Ok(PqzKeyRecord {
         pqz_key_hash: r.pqz_key_hash,
         pqz_pop_hash: r.pqz_pop_hash,
@@ -304,6 +353,14 @@ pub fn pqz_key_record_message(
         pqz_reg_message: r.pqz_reg_message,
         member_digest: r.member_digest,
     })
+}
+/// The `MemberSig` a copy sends to `acceptMembership` from the bytes of its `UAMemberSig` alone, which hash to `memberSigHashOf(ua, index)` (CTR-UA-37), as the slot JSON `{index,
+/// members: [{index, sig}], sig}` of a [`registration_args`] `pop` entry: `key_data` the `msig` `ua`'s, `stored` a signing slot's `sig` or
+/// an `msig` slot's `abi.encode(InnerSig[])`, canonical, at most 16 entries. Anything else, or an index past the members, is
+/// `UAUnauthorized`; an index outside u16 `UAArgument`.
+#[frb(sync)]
+pub fn replayed_member_sig(key_data: Vec<u8>, index: i64, stored: Vec<u8>) -> R<String> {
+    Ok(scaas_ua::json::replayed_member_sig_json(&key_data, n(index)?, &stored)?)
 }
 /// POP_V2, KEM, PQZ_KEY: the only purposes where a code-less native `msig` member signs the record's typed digest itself
 /// (`eth_signTypedData_v4`, TS-D4); every other purpose stays UAAuth.
@@ -328,16 +385,16 @@ pub fn canonical_id(text: String) -> R<String> {
     Ok(scaas_ua::canonical_id(&text)?)
 }
 /// The registry's explicit arguments of a registration, JSON in and out. `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk,
-/// pop, kemCommit}` (bytes as "0x…" hex, an absent field is empty, an msig's `pop` is `[{index, keyData, sig}]`, `kemCommit`
-/// true / false forces the KEM form; absent: the hash commit only when the full call is over 261,909 B). Out: `{args, kemFill,
-/// calldataLength, kemFillCalldataLength}`, `args.entry` the registry entry, `kemFill` the `setKemKey(ua, 0, …)` of a
-/// hash-committed key (null otherwise). `UAArgument` when the input is not this JSON.
+/// pop, kemCommit, inner}` (bytes as "0x…" hex, an absent field is empty, an msig's `pop` is `[{index, members: [{index, sig}], sig}]`,
+/// `inner` `{id: keyData}` its msig members' structures, `kemCommit` true / false forces the KEM form; absent: the hash commit only when
+/// the full call is over 261,909 B). Out: `{args, kemFill, calldataLength, kemFillCalldataLength}`, `args.entry` the registry entry,
+/// `kemFill` the `setKemKey(ua, 0, …)` of a hash-committed key (null otherwise). `UAArgument` when the input is not this JSON.
 #[frb(sync)]
 pub fn registration_args(input: String) -> R<String> {
     Ok(scaas_ua::json::registration_args_json(&input)?)
 }
 /// `setKemKey`'s explicit arguments, JSON in and out. `input`: `{ua, version, kemPk, sig}`, `sig` the `UASig` `{keyData, signature,
-/// members: [{index, keyData, sig}]}` (absent: empty, the version-0 fill of a hash commit). Out: `{ua, version, kem, sig}`.
+/// members: [{index, members: [{index, sig}], sig}]}` (absent: empty, the version-0 fill of a hash commit). Out: `{ua, version, kem, sig}`.
 #[frb(sync)]
 pub fn set_kem_key_args(input: String) -> R<String> {
     Ok(scaas_ua::json::set_kem_key_args_json(&input)?)

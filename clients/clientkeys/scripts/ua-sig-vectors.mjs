@@ -246,16 +246,16 @@ const msigUa = ua.deriveUA(0x0120, msigKey);
 const msigPurpose = 'metatx';
 const memberDigest = ua.memberDigest(msigUa, ua.uaMessage(0x0120, tag(msigPurpose), DIGEST));
 const byName = Object.fromEntries(members.map((m) => [m.name, m]));
-/** One MemberSig {index, keyData, sig}: native over UAAuth(id, member, member_digest) in context A gen 1, derived via its
- *  scheme; keyData always empty (CTR-UA-33: the registry reads a registered member's key from its record). */
+/** One MemberSig {index, members, sig}: native over UAAuth(id, member, member_digest) in context A gen 1, derived via its
+ *  scheme; no list on a signing member (CTR-UA-33: the registry reads a registered member's key from its record). */
 function memberSig(name, { raw = false, secretName } = {}) {
   const m = byName[name];
   if (m.kind === 0x0001) {
-    return { index: m.index, keyData: new Uint8Array(0), sig: ecdsa(nativeSk, raw ? memberDigest : authDigest('A', 1, m.id, 'member', memberDigest)) };
+    return { index: m.index, members: [], sig: ecdsa(nativeSk, raw ? memberDigest : authDigest('A', 1, m.id, 'member', memberDigest)) };
   }
   const s = SCHEMES[name];
   const sk = secretOf(secretName ?? name, s.n);
-  return { index: m.index, keyData: new Uint8Array(0), sig: s.sign(sk, ua.uaMessage(m.kind, tag('member'), memberDigest)) };
+  return { index: m.index, members: [], sig: s.sign(sk, ua.uaMessage(m.kind, tag('member'), memberDigest)) };
 }
 const byIndex = (list) => [...list].sort((a, b) => a.index - b.index);
 const set = (name, valid, list) => {
@@ -273,10 +273,9 @@ const sets = [
   set('duplicate', false, byIndex([S('native'), S('native'), S('p256')])),
   set('wrong-member-key', false, byIndex([S('native'), S('p256', { secretName: 'p256-other' }), S('bls-bn254-minsig')])),
   set('native-raw-digest', false, byIndex([S('native', { raw: true }), S('schnorr-bn254')])),
-  // R12: a native member's MemberSig carries no key data (here its address), even with a valid signature
-  set('native-member-keydata', false, byIndex([{ ...S('native'), keyData: nativeAddr }, S('schnorr-bn254')])),
-  // CTR-UA-33: a registered member's MemberSig carries no key data either, not even its own key
-  set('derived-member-keydata', false, byIndex([S('native'), { ...S('schnorr-bn254'), keyData: fromHex(row('schnorr-bn254').keyData) }])),
+  // a list is an `msig` member's: on a native or a derived slot it fails that slot, even beside a valid signature
+  set('native-member-list', false, byIndex([{ ...S('native'), members: [{ index: 0, sig: new Uint8Array(65) }] }, S('schnorr-bn254')])),
+  set('derived-member-list', false, byIndex([S('native'), { ...S('schnorr-bn254'), members: [{ index: 0, sig: new Uint8Array(65) }] }])),
 ];
 
 // --- BIP-340 official test vectors (bip-0340/test-vectors.csv), the 32-byte-message cases 0–14 ---
@@ -599,8 +598,8 @@ function pqMsig(name, list, threshold) {
   const id = ua.deriveUA(0x0120, keyData);
   const md = ua.memberDigest(id, ua.uaMessage(0x0120, tag('metatx'), DIGEST));
   const sigOf = (m, mdv = md) => (m.kind === 0x0101
-    ? { index: m.index, keyData: new Uint8Array(0), sig: SCHEMES.p256.sign(p256Sk, ua.uaMessage(0x0101, tag('member'), mdv)) }
-    : { index: m.index, keyData: new Uint8Array(0), sig: pqSignMsg('mldsa65', m.sk, ua.uaMessage(0x0131, tag('member'), mdv)) });
+    ? { index: m.index, members: [], sig: SCHEMES.p256.sign(p256Sk, ua.uaMessage(0x0101, tag('member'), mdv)) }
+    : { index: m.index, members: [], sig: pqSignMsg('mldsa65', m.sk, ua.uaMessage(0x0131, tag('member'), mdv)) });
   // UA-6 U5 / UA-8: a PQ-eligible msig registers with an m-of-n pop over the portable PoP (purpose pop v2, members under member)
   const hp = popOf(0x0120, id, { keyData, ...PQZ_ATTRS });
   const popMd = hp.memberDigest;
@@ -610,7 +609,7 @@ function pqMsig(name, list, threshold) {
     const list = picks.map((k) => sigOf(ms[k]));
     const sig = encodeMemberSigs(list);
     return { name: n, valid, indices: picks,
-      memberSigs: list.map((x) => ({ index: x.index, keyData: hex(x.keyData), sig: hex(x.sig) })),
+      memberSigs: list.map((x) => ({ index: x.index, members: [], sig: hex(x.sig) })),
       sig: hex(sig), auth: hex(abiEncode(['bytes', 'bytes'], [keyData, sig])) };
   };
   const sets = threshold === 2 && ms.length === 3

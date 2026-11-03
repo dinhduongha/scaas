@@ -650,17 +650,17 @@ are drawn from.
 a registered single-key `mldsa65` / `mldsa44` UA (`fndsa512` where the registry enables it, FIPS 206), or a UA `msig`
 whose non-PQ members' total weight is **below** its threshold — so no classical-only subset can authorize. That `msig`
 rule is the hybrid (e.g. `mldsa65` w 1 + `p256` w 1, threshold 2) and the t-of-n ML-DSA form; the weight is summed over
-members whose kind is not 0x0130–0x0133 (`slhdsa128s` counts as PQ weight in an `msig` but is not a direct holder: a
+members whose kind is not 0x0130–0x0133 and that are not an `msig` PQ-eligible itself: a forger of every classical key cannot reach such an inner's threshold, so a classical-dominant inner counts its whole outer weight as classical ([CTR-UA-38](accounts.md#CTR-UA-38)) (`slhdsa128s` counts as PQ weight in an `msig` but is not a direct holder: a
 7,856-byte signature and a ≈ 1.4 M gas cap on every spend). Every other kind — classical signers, `slhdsa128s`, Zether,
 a classical-dominant `msig` — reverts `UAPqzHolder`. **Authorization bound (review2 C0-5, controller proposal, owner may
 override):** an `msig` holder must also be usable — `register` reverts `UAPqzHolder` unless its worst-case authorization
 (register step 4's bound `w`: the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` + `MSIG_ACCEPTED_GAS` + the caller's hold; plus `w / 63 + SigCheck.GAS_MARGIN`, the hold of a gen-2 registry that forwards the authorization to this one) plus
-`PqzSet.PQZ_DEBIT_MIN_GAS` is at most 2^24 (the per-transaction cap of EIP-7825, not a chain's own block limit).
+`PqzSet.PQZ_DEBIT_MIN_GAS` plus 16 gas per byte of the authorization's calldata is at most 2^24 (the per-transaction cap of EIP-7825, not a chain's own block limit), and so is `PQZ_DEBIT_MIN_GAS` + 64 per byte, the EIP-7976 floor. The bytes `a` are the largest `MemberSig[]` a quorum signs, both levels: a signing slot `192 + ⌈sig / 32⌉ × 32`, an `msig` slot 192 and its leaves, each `128 + ⌈sig / 32⌉ × 32`, a PQ signature at its size, every classical kind and native at 1,024 B. The debit figure holds one holder signature, which is counted again, on the safe side.
 `PQZ_DEBIT_MIN_GAS` is generated from `set.toml` `debit_min_gas`: the full relayed transaction of the cheapest PQZL debit
 (burn 1) on the costlier relay path (`uaExecute`, ML-DSA-65 fee UA at 68,006 gas [estimate]) — 6,836,182 at
 `n2048-kmax1024`, 7,007,670 at `n2304-kmax4096`, 7,177,969 at `n2560-kmax16384`, 7,367,673 at `n2816-kmax65536`, from
 `runs/2026-10-27-metatx-split-gas-<set>.txt` (metatx split, T8; the pre-split values were 6,820,062 / 6,991,487 / 7,161,789 / 7,351,418). So the worst-case authorization may not exceed 9.94 M / 9.77 M / 9.60 M /
-9.41 M; `{fndsa512 × 4, slhdsa128s}, t = 5` (≈ 11.6 M) and `{fndsa512 × 4}, t = 4` (≈ 10.2 M) are refused, a 2-of-2
+9.41 M, less its calldata term (112,640 gas for two ML-DSA-65 slots; `test_register_msigHolderBoundary`); `{fndsa512 × 4, slhdsa128s}, t = 5` (≈ 11.6 M) and `{fndsa512 × 4}, t = 4` (≈ 10.2 M) are refused, a 2-of-2
 `mldsa65` quorum on the precompile is not. Single-key holders are unaffected (their cap is ≤ 2.5 M). A PQ-eligible `msig` registers with its m-of-n `pop`, so nobody
 can fix it without a key. One key = one purpose: the PQZ key decrypts and proves, the signer's key authorizes; the UA's
 PQ signing kinds ([CTR-UA-23](accounts.md#CTR-UA-23)) invite exactly this hybrid. A leaked PQZ key is a read-only breach

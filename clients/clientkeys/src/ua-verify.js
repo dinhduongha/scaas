@@ -157,26 +157,60 @@ export function nativeOk(address, h, sig) {
   });
 }
 
-/** `abi.encode(MemberSig[])`, MemberSig = (uint16 index, bytes keyData, bytes sig); empty for no slots, as the registries. */
-export function encodeMemberSigs(list) {
-  if (list.length === 0) return new Uint8Array(0);
-  const tuples = list.map(({ index, keyData, sig }) => abiEncode(['uint16', 'bytes', 'bytes'], [index, keyData, sig]));
+const pad32 = (n) => Math.ceil(n / 32) * 32;
+const field = (v) => concatBytes(word(v.length), v, new Uint8Array(pad32(v.length) - v.length));
+/** The ABI tail of a dynamic array: its length, the offsets, the items. */
+function list(items) {
   const offsets = [];
-  let o = 32 * list.length;
-  for (const t of tuples) { offsets.push(word(o)); o += t.length; }
-  return concatBytes(word(32), word(list.length), ...offsets, ...tuples);
+  let o = 32 * items.length;
+  for (const t of items) { offsets.push(word(o)); o += t.length; }
+  return concatBytes(word(items.length), ...offsets, ...items);
+}
+const innerSig = ({ index, sig }) => concatBytes(word(index), word(64), field(toBytes(sig)));
+const memberSig = ({ index, members = [], sig }) => {
+  const inner = list(members.map(innerSig));
+  return concatBytes(word(index), word(96), word(96 + inner.length), inner, field(toBytes(sig)));
+};
+/** `abi.encode(MemberSig[])`, MemberSig = (uint16 index, InnerSig[] members, bytes sig), InnerSig = (uint16 index, bytes sig); empty for no
+ *  slots, as the registries. `members` sits where the always-empty `keyData` sat, so a flat slot's bytes did not change. */
+export function encodeMemberSigs(slots) {
+  return slots.length === 0 ? new Uint8Array(0) : concatBytes(word(32), list(slots.map(memberSig)));
 }
 const toBytes = (v) => (v instanceof Uint8Array ? v : fromHex(v));
-/** `abi.decode(blob, (MemberSig[]))`, canonical only (re-encoded and compared), at most 16 slots; else null, no slots too. */
+/** `abi.encode(InnerSig[])`: what `UAMemberSig` carries for an `msig` slot. */
+export const encodeInnerSigs = (members) => concatBytes(word(32), list(members.map(innerSig)));
+/** The `MemberSig` a copy sends to `acceptMembership` from the bytes of its `UAMemberSig` alone, which hash to `memberSigHashOf(ua, index)` (CTR-UA-37, owner 2026-11-03): an `msig` slot's
+ *  stored bytes are `abi.encode(InnerSig[])`, canonical, at most 16; a signing slot's its `sig`. */
+export function replayedMemberSig(keyData, index, stored) {
+  const m = ua.msigStructure(keyData).members[index] ?? refuse('UAUnauthorized', `slot ${index}`);
+  const b = toBytes(stored);
+  if (m.kind !== 0x0120) return { index, members: [], sig: b };
+  const members = attempt(() => { // truncated bytes throw in the reads: a refusal like any other
+    const n = b.length < 64 || wordAt(b, 0) !== 32 ? 17 : wordAt(b, 32);
+    return n <= 16 && Array.from({ length: n }, (_, j) => {
+      const u = 64 + wordAt(b, 64 + 32 * j);
+      return { index: wordAt(b, u), sig: bytesAt(b, u, u + 32) };
+    });
+  });
+  return members && eq(encodeInnerSigs(members), b) ? { index, members, sig: new Uint8Array(0) } : refuse('UAUnauthorized', `slot ${index}`);
+}
+/** `abi.decode(blob, (MemberSig[]))`, canonical only (re-encoded and compared), at most 16 slots at each level; else null, no slots too. */
 export const decodeMemberSigs = (blob) => attempt(() => {
   const b = toBytes(blob);
   const n = wordAt(b, 32);
   if (wordAt(b, 0) !== 32 || n > 16) return null;
   const out = Array.from({ length: n }, (_, i) => {
     const t = 64 + wordAt(b, 64 + 32 * i);
-    return { index: wordAt(b, t), keyData: bytesAt(b, t, t + 32), sig: bytesAt(b, t, t + 64) };
+    const l = t + wordAt(b, t + 32);
+    const m = wordAt(b, l);
+    if (m > 16) throw new Error('slots');
+    const members = Array.from({ length: m }, (_, j) => {
+      const u = l + 32 + wordAt(b, l + 32 + 32 * j);
+      return { index: wordAt(b, u), sig: bytesAt(b, u, u + 32) };
+    });
+    return { index: wordAt(b, t), members, sig: bytesAt(b, t, t + 64) };
   });
-  return out.every((s) => s.index <= 0xffff) && eq(encodeMemberSigs(out), b) ? out : null;
+  return out.every((s) => s.index <= 0xffff && s.members.every((x) => x.index <= 0xffff)) && eq(encodeMemberSigs(out), b) ? out : null;
 }) || null;
 
 const pqName = (kind) => Object.keys(PQ_KINDS).find((n) => PQ_KINDS[n].kind === kind);
@@ -190,70 +224,138 @@ export function kindVerify(kind, keyData, msg, sig, pop) {
 
 const isGroup = (kind) => kind >= 0x0110 && kind <= 0x0113;
 const refuse = (code, reason) => { throw new ua.UAError(code, reason); };
-/** Each derived member's key by its id, in member order (native members: null). `members(id)` → `{ kind, keyData }` is never
- *  trusted: the answer must be a canonical key that hashes to `id` under its stated kind. */
+/** Each derived member's key by its id, in member order (native members: null), an `msig` member's its structure. `members(id)` →
+ *  `{ kind, keyData }` is never trusted: the answer must be a canonical key that hashes to `id` under its stated kind, and an `msig`
+ *  member holds no `msig` (two levels only, as the registry refused it). */
 const memberKeys = (d, members) => ua.msigStructure(d).members.map((m) => {
   if (ua.isNativeKind(m.kind)) return null;
   const r = members(m.id);
-  const ok = r?.kind === m.kind && attempt(() => hex(ua.deriveUA(r.kind, r.keyData)) === m.id);
+  const ok = r?.kind === m.kind && attempt(() => hex(ua.deriveUA(r.kind, r.keyData)) === m.id)
+    && (m.kind !== 0x0120 || ua.msigStructure(r.keyData).members.every((x) => x.kind !== 0x0120));
   return ok ? r.keyData : refuse('UAMemberUnknown', m.id);
 });
+const innerOf = (members) => (id) => members(id)?.keyData;
+/** The accepted bits a verdict reads (CTR-UA-37), `accepted(id, index)` → `memberAccepted(id, index)` of the target registry. `slot`: a bit the
+ *  registry always reads (an inner `msig`'s, a pop exempting only its own record's; every bit of `requireAuthorized`); with no `accepted` it is
+ *  marked unchecked, and `verdict` turns a pass into `UANotVerifiable`, never an acceptance. `record`: a record's own bits outside its pop
+ *  (`setKemKey`, `setPqzKey`), read when `accepted` comes, else the chain's state as before nesting. */
+const acceptance = (accepted) => {
+  const a = { unchecked: false };
+  a.slot = (id, index) => (accepted ? accepted(id, index) === true : (a.unchecked = true));
+  a.record = (id, index) => !accepted || accepted(id, index) === true;
+  return a;
+};
+const verdict = (ok, a, code, reason) => {
+  if (!ok) refuse(code, reason);
+  if (a.unchecked) refuse('UANotVerifiable', 'an inner slot\'s acceptance: no accepted(id, index)');
+};
 /** ua-rs `signature_ok` (EVM `_sigOk` + `_msig(portable = true)`) over `uaMessage(kind, purpose, digest)`; throws for a part
- *  nothing here can check. An `msig`: no slots unless PQ-eligible (U8S-D2), then the canonical minimal `MemberSig[]` (U8S-D1),
- *  each slot without key data, a derived member under `member` over `memberDigest`, an `evm-eoa` member over `digest` (TS-D4). */
-function signatureOk(kind, d, id, purpose, digest, sig, members) {
+ *  nothing here can check. An `msig`: no slots unless PQ-eligible (U8S-D2), then the canonical minimal `MemberSig[]` (U8S-D1, both
+ *  levels), each slot accepted (`a.record`, outside the pop) and by `slotOk`. */
+function signatureOk(kind, d, id, purpose, digest, sig, members, a) {
   const message = ua.uaMessage(kind, purpose, digest);
   if (isGroup(kind)) refuse('UANotVerifiable', `kind 0x${kind.toString(16)}`);
   if (kind !== 0x0120) return kindVerify(kind, d, message, sig, true);
   const keys = memberKeys(d, members);
-  if (!ua.msigPqzEligible(d)) return toBytes(sig).length === 0;
+  if (!ua.msigPqzEligible(d, innerOf(members))) return toBytes(sig).length === 0;
   const slots = decodeMemberSigs(sig);
   if (!slots || !ua.msigSlotsMinimal(d, slots.map((s) => s.index))) return false;
   const all = ua.msigStructure(d).members;
   const md = ua.memberDigest(id, message);
-  return slots.every((s) => s.keyData.length === 0 && slotOk(all[s.index], keys[s.index], digest, md, s));
+  const pop = eq(toBytes(purpose), toBytes(ua.POP_V2_TAG));
+  return slots.every((s) => (pop || a.record(hex(toBytes(id)), s.index)) && slotOk(all[s.index], keys[s.index], digest, md, s, members, a));
 }
-/** One member's slot: a derived member under `member` over `md`, an `evm-eoa` member over `digest` itself; throws for a native
- *  member nothing here can check. */
-function slotOk(m, key, digest, md, s) {
-  if (m.kind === 0x0001) return nativeOk(`0x${m.id.slice(26)}`, digest, hex(s.sig));
-  if (ua.isNativeKind(m.kind) || isGroup(m.kind)) refuse('UANotVerifiable', `slot ${s.index}`);
-  return kindVerify(m.kind, key, ua.uaMessage(m.kind, ua.purposeTag('member'), md), s.sig, false);
+/** One member's slot: a derived member under `member` over `md`, an `evm-eoa` member over `digest` itself, no list on either; an `msig`
+ *  member by its own list, minimal, no `sig`, each leaf one level down an accepted slot of it (`a.slot`) over `innerDigest(id, md)`, `digest`
+ *  the same; throws for a native member nothing here can check. */
+function slotOk(m, key, digest, md, s, members, a) {
+  const list = s.members ?? [];
+  if (m.kind === 0x0120) {
+    if (toBytes(s.sig).length !== 0 || !ua.msigSlotsMinimal(key, list.map((x) => x.index))) return false;
+    const leaves = ua.msigStructure(key).members;
+    const keys = memberKeys(key, members);
+    const inner = ua.innerDigest(fromHex(m.id), md);
+    return list.every((x) => a.slot(m.id, x.index) && slotOk(leaves[x.index], keys[x.index], digest, inner, x, members, a));
+  }
+  return list.length === 0 && leafOk(m, key, md, s.sig, digest);
 }
-/** A registration row `{ kind, keyData, attrs, pop, pqzPop }` as `register` checks it, on bytes only (ua-rs `check_registration`):
+/** A leaf: `evm-eoa` by ECDSA over `native`, a derived member under `member` over `md`; throws for a native member nothing here can check. */
+function leafOk(m, key, md, sig, native) {
+  if (m.kind === 0x0001) return nativeOk(`0x${m.id.slice(26)}`, native, hex(sig));
+  if (ua.isNativeKind(m.kind) || isGroup(m.kind)) refuse('UANotVerifiable', `member ${m.id}`);
+  return kindVerify(m.kind, key, ua.uaMessage(m.kind, ua.purposeTag('member'), md), sig, false);
+}
+/** A registration row `{ kind, keyData, attrs, pop, pqzPop }` as `register` checks it, on bytes and the accepted bits (ua-rs `check_registration`):
  *  the id from canonical key data, the attributes, the `pop`; the PQZ proof is not checked. Throws `UAError`; returns nothing.
- *  `attrs`: `{ pqzKey, pqzPopHash, kemPk }` or the typed `{ pqzKey, pqzPopHash, kem, kemPkHash }` (the hash commit). */
-export function verifyRegistration({ kind, keyData, attrs, pop, pqzPop }, members) {
+ *  `attrs`: `{ pqzKey, pqzPopHash, kemPk }` or the typed `{ pqzKey, pqzPopHash, kem, kemPkHash }` (the hash commit). `accepted(id, index)`:
+ *  the target registry's `memberAccepted`; the pop accepts its own record's slots, never an inner `msig`'s, so without it a pop with an inner
+ *  list is `UANotVerifiable`. The same `accepted` in every verifier below. */
+export function verifyRegistration({ kind, keyData, attrs, pop, pqzPop }, members, accepted) {
   const id = ua.deriveUA(kind, keyData);
-  const digest = ua.registrationAttrsDigest(kind, { ua: id, keyData, attrs, pqzPop });
-  if (!signatureOk(kind, keyData, id, ua.POP_V2_TAG, digest, pop, members)) refuse('UAPoP');
+  const digest = ua.registrationAttrsDigest(kind, { ua: id, keyData, attrs, pqzPop, inner: innerOf(members) });
+  const a = acceptance(accepted);
+  verdict(signatureOk(kind, keyData, id, ua.POP_V2_TAG, digest, pop, members, a), a, 'UAPoP');
 }
 /** The record of `row.ua`, read through `members`: the row itself names no key data. */
 function recordOf(row, members) {
   const r = members(row.ua);
   return r && hex(ua.deriveUA(r.kind, r.keyData)) === row.ua ? r : refuse('UAUnauthorized', row.ua);
 }
-/** An acceptance `{ ua, index, sig }` as `acceptMembership` checks it, without its state (ua-rs `check_membership`, CTR-UA-37): what a
- *  client runs on the bytes of a slot a relayer attested (Soroban `membership_sig_of`, CTR-UA-34 rule 4). */
-export function verifyMembership(row, members) {
+/** An acceptance `{ ua, index, sig, members }` as `acceptMembership` checks it, without its state (ua-rs `check_membership`, CTR-UA-37): what
+ *  a client runs on the bytes of a slot a relayer attested (Soroban `membership_sig_of`, CTR-UA-34 rule 4). `members`: an `msig` member's list. */
+export function verifyMembership(row, members, accepted) {
   const { kind, keyData } = recordOf(row, members);
   const m = kind === 0x0120 ? ua.msigStructure(keyData).members[row.index] : undefined;
   if (!m) refuse('UAUnauthorized', row.ua);
   const keys = memberKeys(keyData, members);
   const { digest, memberDigest } = ua.membershipMessage({ ua: B(row.ua), member: B(m.id) });
-  if (!slotOk(m, keys[row.index], digest, memberDigest, { index: row.index, sig: B(row.sig) })) refuse('UAUnauthorized', row.ua);
+  const a = acceptance(accepted);
+  verdict(slotOk(m, keys[row.index], digest, memberDigest, { index: row.index, sig: B(row.sig), members: row.members }, members, a), a, 'UAUnauthorized', row.ua);
 }
 /** A KEM record row `{ ua, version, kemPk, sig }` as `setKemKey` (version ≥ 1) checks it (ua-rs `check_kem_record`). */
-export function verifyKemRecord(row, members) {
+export function verifyKemRecord(row, members, accepted) {
   const { kind, keyData } = recordOf(row, members);
-  if (!ua.isKeyHolder(kind, keyData)) refuse('UAKemHolder', row.ua);
+  if (!ua.isKeyHolder(kind, keyData, innerOf(members))) refuse('UAKemHolder', row.ua);
   const digest = ua.kemRecordDigest(row);
-  if (!signatureOk(kind, keyData, B(row.ua), ua.KEM_TAG, digest, row.sig, members)) refuse('UAUnauthorized', row.ua);
+  const a = acceptance(accepted);
+  verdict(signatureOk(kind, keyData, B(row.ua), ua.KEM_TAG, digest, row.sig, members, a), a, 'UAUnauthorized', row.ua);
 }
 /** A PQZ key record row `{ ua, pqzKey, pqzPopHash, sig }` as `setPqzKey` checks it, without its state (ua-rs
  *  `check_pqz_key_record`: a key already set is the chain's `UAPqzKeySet`). */
-export function verifyPqzKeyRecord(row, members) {
+export function verifyPqzKeyRecord(row, members, accepted) {
   const { kind, keyData } = recordOf(row, members);
-  const { recordDigest } = ua.pqzKeyRecordMessage(kind, { ua: row.ua, keyData, pqzKey: row.pqzKey, pqzPopHash: row.pqzPopHash });
-  if (!signatureOk(kind, keyData, B(row.ua), ua.PQZ_KEY_TAG, recordDigest, row.sig, members)) refuse('UAUnauthorized', row.ua);
+  const { recordDigest } = ua.pqzKeyRecordMessage(kind, { ua: row.ua, keyData, pqzKey: row.pqzKey, pqzPopHash: row.pqzPopHash, inner: innerOf(members) });
+  const a = acceptance(accepted);
+  verdict(signatureOk(kind, keyData, B(row.ua), ua.PQZ_KEY_TAG, recordDigest, row.sig, members, a), a, 'UAUnauthorized', row.ua);
+}
+/** An `msig` row `{ ua, purposeTag, digest, sig }` (`sig` = `abi.encode(MemberSig[])`) as `requireAuthorized(ua, purposeTag, digest,
+ *  UASig{0x, 0x, members})` checks it (UARegistry `_msig`, ua-rs `check_authorization`): at both levels strictly increasing accepted slots that
+ *  stop at the threshold, no minimal rule, no eligibility; an `msig` slot by its list one level down over `innerDigest(id, md)`, no `sig`; a
+ *  derived leaf under `member` over its level's member digest, an `evm-eoa` leaf over `UAAuth(id, member, that digest)` in `domain`
+ *  (`ua.uaAuthDigest`). Every bit is read: no `accepted` is `UANotVerifiable`. Throws `UAError`. */
+export function verifyAuthorization(row, members, domain, accepted) {
+  const { kind, keyData } = recordOf(row, members);
+  if (kind !== 0x0120) refuse('UANotVerifiable', `kind 0x${kind.toString(16)}`);
+  const a = acceptance(accepted);
+  const slots = decodeMemberSigs(row.sig);
+  const md = ua.memberDigest(B(row.ua), ua.uaMessage(0x0120, B(row.purposeTag), B(row.digest)));
+  verdict(!!slots && authOk(row.ua, keyData, md, slots, members, domain, a), a, 'UAUnauthorized', row.ua);
+}
+function authOk(id, d, md, slots, members, domain, a) {
+  const { threshold, members: all } = ua.msigStructure(d);
+  const keys = memberKeys(d, members);
+  let acc = 0;
+  let next = 0;
+  for (const s of slots) {
+    const m = all[s.index];
+    if (acc >= threshold || s.index < next || !m || !a.slot(id, s.index)) return false;
+    next = s.index + 1;
+    const list = s.members ?? [];
+    const ok = m.kind === 0x0120 // `lift`: the inner slots carry no list, so a third level has nothing to sign with
+      ? toBytes(s.sig).length === 0 && authOk(m.id, keys[s.index], ua.innerDigest(fromHex(m.id), md), list.map((x) => ({ ...x, members: [] })), members, domain, a)
+      : list.length === 0 && leafOk(m, keys[s.index], md, s.sig, ua.uaAuthDigest(domain, fromHex(m.id), ua.purposeTag('member'), md));
+    if (!ok) return false;
+    acc += m.weight;
+  }
+  return acc >= threshold;
 }

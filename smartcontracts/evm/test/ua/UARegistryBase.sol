@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IUAPopVerifier} from "../../src/ua/IUAVerifier.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
@@ -132,6 +133,9 @@ contract MockPredecessor {
 
     /// A UA-8 view: gen 2's constructor probes it (review n3).
     function checkedOf(bytes32) external pure returns (uint8, uint8, uint8) {}
+
+    /// Gen 2's constructor probes it too: the `InnerSig` ABI.
+    function memberSigHashOf(bytes32, uint256) external pure returns (bytes32) {}
 }
 
 abstract contract UARegistryBase is Test {
@@ -139,7 +143,7 @@ abstract contract UARegistryBase is Test {
     address internal constant REG_A = 0x5Ca0000000000000000000000000000000000001;
     bytes32 internal constant DIGEST = keccak256("scaas.ua.test.digest");
 
-    /// What `_deploy` deploys; `test/ua/UARegistrySplit.t.sol` points it at the pre-split source for one run of a scenario.
+    /// What `_deploy` deploys; a suite may point it at another artifact for one run of a scenario.
     string internal registryArtifact = "UARegistry.sol:UARegistry";
     bytes32 internal chainUidA;
     MockVerifier internal mock;
@@ -151,6 +155,44 @@ abstract contract UARegistryBase is Test {
         uint16 kind;
         bytes32 id;
         uint16 weight;
+    }
+
+    /// Owner 2026-11-03: the bytes of the `msig` `ua`'s slot `index` on `from`, from its `UAMemberSig` among `logs` (what the node keeps and
+    /// serves), checked against `from`'s `memberSigHashOf`. A failed check when no such event is there.
+    function _acceptedSig(Vm.Log[] memory logs, UARegistry from, bytes32 ua, uint16 index) internal view returns (bytes memory sig) {
+        bool found;
+        for (uint256 i; i < logs.length; ++i) {
+            Vm.Log memory l = logs[i];
+            if (l.emitter != address(from) || l.topics[0] != IUARegistry.UAMemberSig.selector || l.topics[1] != ua) continue;
+            (uint16 at,, bytes memory b) = abi.decode(l.data, (uint16, bytes32, bytes));
+            if (at == index) (sig, found) = (b, true);
+        }
+        assertTrue(found, "a member signature event");
+        assertEq(keccak256(sig), from.memberSigHashOf(ua, index), "the event's bytes hash to the kept hash");
+    }
+
+    /// Owner 2026-11-03: the `pop` of the `msig` `ua` on `from` rebuilt from its `PURPOSE_POP_V2` `UAMemberSig` among `logs`, in `index`
+    /// order, each slot checked against `memberSigHashOf` and the whole against `popOf` (its 32-byte hash). What a copy registers.
+    function _popFromLogs(Vm.Log[] memory logs, UARegistry from, bytes32 ua) internal view returns (bytes memory pop) {
+        IUARegistry.MsigMember[] memory m = from.msigOf(ua).members;
+        IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](m.length);
+        uint256 n;
+        for (uint256 i; i < logs.length; ++i) {
+            Vm.Log memory l = logs[i];
+            if (l.emitter != address(from) || l.topics[0] != IUARegistry.UAMemberSig.selector || l.topics[1] != ua) continue;
+            (uint16 at, bytes32 purpose, bytes memory b) = abi.decode(l.data, (uint16, bytes32, bytes));
+            if (purpose != UAKinds.PURPOSE_POP_V2) continue;
+            assertTrue(n == 0 || at > s[n - 1].index, "in index order");
+            assertEq(l.topics[2], m[at].id, "the member topic: the slot's id");
+            assertEq(keccak256(b), from.memberSigHashOf(ua, at), "slot hash");
+            s[n++] = m[at].kind == UAKinds.MSIG
+                ? IUARegistry.MemberSig(at, abi.decode(b, (IUARegistry.InnerSig[])), "")
+                : IUARegistry.MemberSig(at, new IUARegistry.InnerSig[](0), b);
+        }
+        IUARegistry.MemberSig[] memory t = new IUARegistry.MemberSig[](n);
+        for (uint256 i; i < n; ++i) t[i] = s[i];
+        pop = n == 0 ? bytes("") : abi.encode(t);
+        assertEq(n == 0 ? bytes("") : abi.encodePacked(keccak256(pop)), from.popOf(ua), "popOf: the whole pop's hash");
     }
 
     function setUp() public virtual {
@@ -354,7 +396,7 @@ abstract contract UARegistryBase is Test {
     function _acceptWith(UARegistry r, bytes memory d, bytes memory sig) internal {
         uint256 count = uint16(bytes2(abi.encodePacked(d[2], d[3])));
         bytes32 ua = UAKinds.uaOf(UAKinds.MSIG, d);
-        for (uint256 i; i < count; ++i) r.acceptMembership(ua, IUARegistry.MemberSig(uint16(i), "", sig));
+        for (uint256 i; i < count; ++i) r.acceptMembership(ua, IUARegistry.MemberSig(uint16(i), new IUARegistry.InnerSig[](0), sig));
     }
 
     /// What a derived member signs under `member` to accept its slot.
@@ -365,12 +407,12 @@ abstract contract UARegistryBase is Test {
     /// The acceptance of the EOA of `pk` in the structure `d`.
     function _acceptEoaSig(bytes memory d, uint256 pk) internal pure returns (IUARegistry.MemberSig memory) {
         (bytes32 ua, bytes32 id) = (UAKinds.uaOf(UAKinds.MSIG, d), _pad(vm.addr(pk)));
-        return IUARegistry.MemberSig(_indexOf(d, id), "", _ecdsa(pk, UAKinds.membershipDigest(ua, id)));
+        return IUARegistry.MemberSig(_indexOf(d, id), new IUARegistry.InnerSig[](0), _ecdsa(pk, UAKinds.membershipDigest(ua, id)));
     }
 
     /// The acceptance of the registered `key` of `kind` in the structure `d` (the stand-in verifier's signature).
     function _acceptKeySig(bytes memory d, uint16 kind, bytes memory key) internal pure returns (IUARegistry.MemberSig memory) {
         (bytes32 ua, bytes32 id) = (UAKinds.uaOf(UAKinds.MSIG, d), UAKinds.uaOf(kind, key));
-        return IUARegistry.MemberSig(_indexOf(d, id), "", _sig(key, UAKinds.uaMessage(kind, UAKinds.PURPOSE_MEMBER, _membershipMd(ua, id))));
+        return IUARegistry.MemberSig(_indexOf(d, id), new IUARegistry.InnerSig[](0), _sig(key, UAKinds.uaMessage(kind, UAKinds.PURPOSE_MEMBER, _membershipMd(ua, id))));
     }
 }

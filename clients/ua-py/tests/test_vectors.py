@@ -444,7 +444,7 @@ class Vectors(unittest.TestCase):
 
 
 def member_sigs(blob):
-    """``abi.encode(MemberSig[])`` (the vectors' byte form of an msig pop / sig) back to (index, keyData, sig) tuples."""
+    """``abi.encode(MemberSig[])`` of flat slots (the vectors' byte form of an msig pop / sig) back to (index, inner, sig) tuples."""
     if not blob:
         return []
     w = lambda o: int.from_bytes(blob[o:o + 32], 'big')
@@ -453,7 +453,7 @@ def member_sigs(blob):
     for i in range(w(base)):
         t = base + 32 + w(base + 32 + 32 * i)
         field = lambda k: blob[t + w(t + 32 * k) + 32:t + w(t + 32 * k) + 32 + w(t + w(t + 32 * k))]
-        out.append((w(t), field(1), field(2)))
+        out.append((w(t), [], field(2)))
     return out
 
 
@@ -466,6 +466,132 @@ def reg_input(row):
 def record_sig(r):
     s = b(r['sig'])
     return ua.ua_sig(members=member_sigs(s)) if r['kind'] == 0x0120 else ua.ua_sig(signature=s)
+
+
+def slots_of(pop):
+    return [(m['index'], [(x['index'], b(x['sig'])) for x in m['members']], b(m['sig'])) for m in pop]
+
+
+def slots_len(members):
+    """``Σ slots`` of ``abi.encode(MemberSig[])`` as the library counts it: signing slot 192 + ⌈sig/32⌉×32, msig slot 192 + Σ leaves, leaf 128 + ⌈sig/32⌉×32."""
+    fill = lambda m: dict(kem=ua.kem_key_of(b''), sig=ua.ua_sig(members=m))
+    return ua.registry_calldata_length('setKemKey', fill(slots_of(members))) - ua.registry_calldata_length('setKemKey', fill([]))
+
+
+class NestedRows(unittest.TestCase):
+    """Nested msig: nested.json, the rows forge runs on the registry (spec 2026-11-02-msig-nested). No signature is verified here."""
+
+    N = json.loads((VEC / 'nested.json').read_text())
+    keys = {r['ua']: b(r['keyData']) for r in N['registrations'] if r['kind'] == 0x0120}
+
+    def refused(self, code, f, *args, reason=None):
+        with self.assertRaises(ua.UAError) as c:
+            f(*args)
+        self.assertEqual(c.exception.code, code)
+        if reason:
+            self.assertEqual(c.exception.reason, reason)
+
+    def test_nested_eligibility(self):
+        for r in self.N['eligibility']:
+            self.assertEqual(ua.msig_pqz_eligible(b(r['keyData']), lambda i: b(r['inner'][i])), r['eligible'], r['reason'])
+            self.refused('UAMemberUnknown', ua.msig_pqz_eligible, b(r['keyData']))
+
+    def test_nested_structures(self):
+        self.assertEqual(len(self.N['structures']), 2)
+        for s in self.N['structures']:
+            d = b(s['keyData'])
+            self.assertEqual((hx(ua.ua_of(0x0120, d)), ua.msig_structure(d)), (s['ua'], s['structure']), s['name'])
+            self.refused(s['error'], ua.msig_pqz_eligible, d, self.keys.get, reason=s['member'])
+
+    def test_nested_registrations(self):
+        rows = self.N['registrations'] + self.N['afterAcceptance']
+        self.assertEqual(len(rows), 17)
+        for r in rows:
+            a, kind, msig, name = r['attrs'], r['kind'], r['kind'] == 0x0120, r['name']
+            d, kem = b(r['keyData']), b(a['kemPk'])
+            self.assertEqual(hx(ua.ua_of(kind, d)), r['ua'], name)
+            g = ua.holder_pop_message(kind, b(r['ua']), d, kem_pk=kem, inner=self.keys.get)
+            self.assertEqual((hx(g.kem_record_hash), hx(g.portable_record_digest), hx(g.registration_digest), hx(g.message)),
+                             (r['kemRecordHash'], r['portableRecordDigest'], r['registrationDigest'], r['popMessage']), name)
+            self.assertEqual(g.member_digest and hx(g.member_digest), r.get('memberDigest'), name)
+            pop = slots_of(r['args']['pop']) if msig else b(r['pop'])
+            args, _ = ua.registration_args(kind, d, kem_pk=kem, pop=pop, kem_commit=False)
+            self.assertEqual(args, r['args'], name)
+            if 'kemCommit' in r:
+                args, fill = ua.registration_args(kind, d, kem_pk=kem, pop=pop, kem_commit=True)
+                self.assertEqual((args, fill), (r['kemCommit']['register'], r['kemCommit']['fill']), name)
+            if msig and pop:
+                self.assertEqual(slots_len(r['args']['pop']) + 64, len(b(r['pop'])), name)
+            if msig:  # owner 2026-11-03: memberSigHashOf per slot, the hash of the bytes its UAMemberSig carries
+                self.assertEqual([{'index': i, 'hash': hx(ua.keccak256(ua.encode_inner_sigs(inner) if inner else sig))} for i, inner, sig in pop],
+                                 r['memberSigHashes'], name)
+            for x in r.get('innerDigests', []):
+                self.assertEqual(hx(ua.inner_digest(b(x['inner']), b(r['memberDigest']))), x['memberDigest'], name)
+
+    def test_nested_records(self):
+        self.assertEqual((len(self.N['kemRecords']), len(self.N['pqzKeyRecords'])), (1, 4))
+        for r in self.N['kemRecords']:
+            u, v, pk = b(r['ua']), r['version'], b(r['kemPk'])
+            m = ua.kem_record_message(r['kind'], u, v, pk)
+            self.assertEqual((hx(ua.kem_record_hash(u, v, pk)), hx(ua.kem_record_digest(u, v, pk)), hx(m), hx(ua.member_digest(u, m))),
+                             (r['structHash'], r['digest'], r['message'], r['memberDigest']), r['id'])
+            sig = ua.ua_sig(members=slots_of(r['args']['sig']['members']))
+            self.assertEqual(ua.set_kem_key_args(u, v, pk, sig), r['args'], r['id'])
+            self.assertEqual(slots_len(r['args']['sig']['members']) + 64, len(b(r['sig'])), r['id'])
+        for r in self.N['pqzKeyRecords']:
+            u, key, h = b(r['ua']), b(r['pqzKey']), b(r['pqzPopHash'])
+            g = ua.pqz_key_record_message(r['kind'], u, self.keys[r['ua']], key, pqz_pop_hash=h, inner=self.keys.get)
+            self.assertEqual((hx(g.pqz_key_hash), hx(g.pqz_key_digest), hx(g.record_digest), hx(g.message), hx(g.pqz_reg_message), hx(g.member_digest)),
+                             (r['pqzKeyHash'], r['pqzKeyDigest'], r['recordDigest'], r['message'], r['pqzRegMessage'], r['memberDigest']), r['name'])
+            sig = ua.ua_sig(members=slots_of(r['args']['sig']['members']))
+            self.assertEqual(ua.set_pqz_key_args(u, key, h, sig), r['args'], r['name'])
+            self.assertEqual(slots_len(r['args']['sig']['members']) + 64, len(b(r['sig'])), r['name'])
+
+    def test_nested_memberships(self):
+        self.assertEqual(len(self.N['memberships']), 4)
+        for m in self.N['memberships']:
+            d = ua.membership_digest(b(m['ua']), b(m['member']))
+            msg = ua.ua_message(0x0120, ua.purpose_tag('membership'), d)
+            self.assertEqual((hx(d), hx(msg), hx(ua.member_digest(b(m['ua']), msg))), (m['digest'], m['message'], m['memberDigest']), m['name'])
+
+    def test_nested_replay(self):
+        """CTR-UA-37: the bytes of ``UAMemberSig``, which hash to ``memberSigHashOf`` (``storedHash``), give back the slot, an
+        msig slot its list, with no new signature."""
+        replays = 0
+        for m in self.N['memberships']:
+            key, stored = self.keys[m['ua']], b(m['stored'])
+            self.assertEqual(hx(ua.keccak256(stored)), m['storedHash'], m['name'])
+            slot = ua.replayed_member_sig(key, m['index'], stored)
+            self.assertEqual(ua.ua_sig(members=[slot])['members'], [{'index': m['index'], 'members': m['members'], 'sig': m['sig']}], m['name'])
+            self.refused('UAUnauthorized', ua.replayed_member_sig, key, 16, b'')
+            if m['members']:
+                replays += 1
+                self.assertEqual(hx(ua.encode_inner_sigs(slot[1])), m['stored'], m['name'])
+                self.refused('UAUnauthorized', ua.replayed_member_sig, key, m['index'], stored + b'\0')
+                self.refused('UAUnauthorized', ua.replayed_member_sig, key, m['index'], b'')
+                wide = bytearray(stored)
+                wide[64 + 32 + 29] = 1  # a leaf index over uint16
+                self.refused('UAUnauthorized', ua.replayed_member_sig, key, m['index'], bytes(wide))
+        self.assertEqual(replays, 1)
+
+    def test_nested_authorizations(self):
+        self.assertEqual(len(self.N['authorizations']), 5)
+        for a in self.N['authorizations']:
+            md = ua.member_digest(b(a['ua']), ua.ua_message(0x0120, b(a['purposeTag']), b(a['digest'])))
+            self.assertEqual(hx(md), a['memberDigest'], a['name'])
+            self.assertEqual(ua.ua_sig(members=slots_of(a['uaSig']['members'])), a['uaSig'], a['name'])
+            self.assertEqual(slots_len(a['uaSig']['members']) + 64, len(b(a['sig'])), a['name'])
+
+    def test_nested_negatives(self):
+        """Shape and size only: these refusals are the registry's, this library verifies no signature."""
+        self.assertEqual(len(self.N['negatives']), 13)
+        for n in self.N['negatives']:
+            r = next(x for x in self.N['registrations'] + self.N['afterAcceptance'] if x['name'] == n['row'])
+            args, _ = ua.registration_args(0x0120, b(r['keyData']), kem_pk=b(r['attrs']['kemPk']), pop=slots_of(n['popTyped']), kem_commit=False)
+            self.assertEqual(args['pop'], n['popTyped'], n['name'])
+            # inner-slot-not-accepted: afterAcceptance's own pop, refused by the state (its inner slot not accepted yet), not by its bytes
+            self.assertEqual(n['pop'] == r['pop'], n['name'] == 'inner-slot-not-accepted', n['name'])
+            self.assertEqual(slots_len(n['popTyped']) + 64, len(b(n['pop'])), n['name'])
 
 
 class TypedRegistryArgs(unittest.TestCase):

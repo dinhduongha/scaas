@@ -127,7 +127,7 @@ guardian at start and at finish (after `RECOVERY_DELAY_S` = 172,800 s), **adds**
 ([CTR-ACC-03](../contracts/accounts.md#CTR-ACC-03)); any current key cancels during the delay. BUILT.
 
 <a id="NET-NEAR-04"></a>**NET-NEAR-04** — **An msig has at most 12 members; a `near-account` member counts only as the
-predecessor.** `MSIG_MAX_MEMBERS` = floor(250 Tgas / 20.005 Tgas per P-256 verify) = 12; no nested msig; a signature
+predecessor.** `MSIG_MAX_MEMBERS` = floor(250 Tgas / 20.005 Tgas per P-256 verify) = 12; no nested msig: an `msig` member is EVM only until `ua-near` ([CTR-UA-38](../contracts/accounts.md#msig-staging)); a signature
 offered for a `near-account` member is refused. BUILT.
 
 <a id="NET-NEAR-05"></a>**NET-NEAR-05** — **`POLICY_PASSKEY_FOR_VALUE` is set by the key-op action `set_policy`.** Entry

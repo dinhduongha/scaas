@@ -51,6 +51,13 @@ pub const SCAAS_UA_ERR_PQZ_POP_HASH: ScaasUaStatus = 15;
 pub const SCAAS_UA_ERR_PQZ_KEY_SET: ScaasUaStatus = 16;
 /// "UAKemScheme": the first byte of a KEM key is not an enabled KEM scheme id (only 1; 2 is reserved).
 pub const SCAAS_UA_ERR_KEM_SCHEME: ScaasUaStatus = 17;
+/// "UAMemberUnknown": an `msig` member's record is needed and was not given: key data alone does not show an `msig` member's eligibility.
+/// The `_with` calls read it from `inner`; there it means an `inner` without that member, or one whose entry holds an `msig` (a third level).
+pub const SCAAS_UA_ERR_MEMBER_UNKNOWN: ScaasUaStatus = 18;
+/// "UAPoP": a registration's `msig` signature is not minimal at both levels: the registry would refuse it, so it is never built.
+pub const SCAAS_UA_ERR_POP: ScaasUaStatus = 19;
+/// "UAUnauthorized": `scaas_ua_replayed_member_sig`'s stored bytes are not that slot's acceptance, or the index is past the members.
+pub const SCAAS_UA_ERR_UNAUTHORIZED: ScaasUaStatus = 20;
 
 /// One row of the kind table. `name` and `group` are static NUL-terminated strings (never freed); `group` is NULL when
 /// the kind has no group. `lengths[0..lengths_len]` are the accepted key-data lengths; `lengths_len == 0` means variable
@@ -94,7 +101,10 @@ impl From<ua::UAError> for Fail {
             PqzPopHash => SCAAS_UA_ERR_PQZ_POP_HASH,
             PqzKeySet => SCAAS_UA_ERR_PQZ_KEY_SET,
             KemScheme => SCAAS_UA_ERR_KEM_SCHEME,
-            Pop | Unauthorized | MemberUnknown | NotVerifiable => SCAAS_UA_ERR_INTERNAL, // ua8::check_* only, not exported here
+            MemberUnknown => SCAAS_UA_ERR_MEMBER_UNKNOWN,
+            Pop => SCAAS_UA_ERR_POP,
+            Unauthorized => SCAAS_UA_ERR_UNAUTHORIZED,
+            NotVerifiable => SCAAS_UA_ERR_INTERNAL, // ua8::check_* only, not exported here
         };
         Fail(status, e.to_string())
     }
@@ -210,7 +220,7 @@ pub extern "C" fn scaas_ua_abi_version() -> u32 {
 
 /// The static code string of a status: "UAOk", "UAKeyData" ... "UAPurposeUnknown" (the vector files' `error` values),
 /// "UAArgument", "UABuffer", "UAInternal", "UAPqzHolder", "UAKemHolder", "UAKemVersion", "UAKemKeyLength", "UAPqzPopHash",
-/// "UAPqzKeySet", "UAKemScheme"; "UAStatusUnknown" for any other value.
+/// "UAPqzKeySet", "UAKemScheme", "UAMemberUnknown", "UAPoP", "UAUnauthorized"; "UAStatusUnknown" for any other value.
 #[no_mangle]
 pub extern "C" fn scaas_ua_status_name(status: ScaasUaStatus) -> *const c_char {
     let name: &'static CStr = match status {
@@ -232,6 +242,9 @@ pub extern "C" fn scaas_ua_status_name(status: ScaasUaStatus) -> *const c_char {
         SCAAS_UA_ERR_PQZ_POP_HASH => c"UAPqzPopHash",
         SCAAS_UA_ERR_PQZ_KEY_SET => c"UAPqzKeySet",
         SCAAS_UA_ERR_KEM_SCHEME => c"UAKemScheme",
+        SCAAS_UA_ERR_MEMBER_UNKNOWN => c"UAMemberUnknown",
+        SCAAS_UA_ERR_POP => c"UAPoP",
+        SCAAS_UA_ERR_UNAUTHORIZED => c"UAUnauthorized",
         _ => c"UAStatusUnknown",
     };
     name.as_ptr()
@@ -296,10 +309,37 @@ pub extern "C" fn scaas_ua_is_pqz_holder(kind: u16) -> bool {
     safe(false, || ua::is_pqz_holder(kind))
 }
 
-/// `*out = true` iff the `msig` key data is PQ-eligible: its members outside 0x0130-0x0133 weigh less than the threshold.
+/// `*out = true` iff the `msig` key data is PQ-eligible: its members outside 0x0130-0x0133 weigh less than the threshold. An `msig`
+/// member is `SCAAS_UA_ERR_MEMBER_UNKNOWN` here: `scaas_ua_msig_pqz_eligible_with` reads its record.
 #[no_mangle]
 pub extern "C" fn scaas_ua_msig_pqz_eligible(key_data: *const u8, key_data_len: usize, out: *mut bool) -> ScaasUaStatus {
-    run(|| put(out, ua::msig_pqz_eligible(bytes(key_data, key_data_len)?)?))
+    scaas_ua_msig_pqz_eligible_with(key_data, key_data_len, ptr::null(), out)
+}
+
+// `inner` of the `_with` calls (ua::json::inner_json): NULL is none.
+fn inner_of(p: *const c_char) -> R<Vec<([u8; 32], Vec<u8>)>> {
+    if p.is_null() {
+        return Ok(vec![]);
+    }
+    Ok(ua::json::inner_json(std::str::from_utf8(cstr(p)?).map_err(|_| argument("JSON"))?)?)
+}
+
+/// `scaas_ua_msig_pqz_eligible` with `inner`, the `msig` members' structures: the JSON `{id: keyData}` of `scaas_ua_registration_args`'
+/// `inner` (NUL-terminated, bytes as "0x..." hex; NULL, "" or "null" is none; over 65,536 bytes, more than 16 entries or key data over 580
+/// bytes is `SCAAS_UA_ERR_ARGUMENT`). An `msig` member is PQ iff it is PQ-eligible itself, read from its entry. A member without an entry,
+/// or an entry that holds an `msig` (two levels only), is `SCAAS_UA_ERR_MEMBER_UNKNOWN`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_msig_pqz_eligible_with(
+    key_data: *const u8,
+    key_data_len: usize,
+    inner: *const c_char,
+    out: *mut bool,
+) -> ScaasUaStatus {
+    run(|| {
+        let i = inner_of(inner)?;
+        let eligible = ua::msig_pqz_eligible_with(bytes(key_data, key_data_len)?, &ua::json::lookup(&i))?;
+        put(out, eligible)
+    })
 }
 
 /// The 32-byte TAG of a derived kind, or of the PQZ scheme 0x0142.
@@ -441,6 +481,12 @@ pub extern "C" fn scaas_ua_chain_key_hash(chain_id: u64, out32: *mut u8) -> Scaa
     run(|| put(out32.cast(), ua::chain_key_hash(chain_id)))
 }
 
+/// `keccak256(data)`: what a member checks its own signature bytes against (`memberSigHashOf`, an `msig`'s `popOf`).
+#[no_mangle]
+pub extern "C" fn scaas_ua_keccak256(data: *const u8, data_len: usize, out32: *mut u8) -> ScaasUaStatus {
+    run(|| put(out32.cast(), ua::keccak256(bytes(data, data_len)?)))
+}
+
 /// The 32-byte portable EIP-712 domain separator `DS_P` (`EIP712Domain(string name,string version)` = ("SCaaS UA Portable",
 /// "1"), no chain id, verifying contract or salt; typed-signing TS-D1). Every portable digest is `keccak256(0x1901 ‖ DS_P ‖ hashStruct)`.
 #[no_mangle]
@@ -570,8 +616,33 @@ pub extern "C" fn scaas_ua_holder_pop_message(
     kem_pk_len: usize,
     out: *mut ScaasUaHolderPop,
 ) -> ScaasUaStatus {
+    let (p, h) = ((pqz_pop, pqz_pop_len), (pqz_pop_hash, pqz_pop_hash_len));
+    scaas_ua_holder_pop_message_with(kind, ua32, key_data, key_data_len, pqz_key, pqz_key_len, p.0, p.1, h.0, h.1, kem_pk, kem_pk_len, ptr::null(), out)
+}
+
+/// `scaas_ua_holder_pop_message` for an `msig` with `msig` members: `inner` gives their key data, as in `scaas_ua_msig_pqz_eligible_with`
+/// (NULL = none: a holder check that needs an `msig` member's record is then `SCAAS_UA_ERR_MEMBER_UNKNOWN`).
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn scaas_ua_holder_pop_message_with(
+    kind: u16,
+    ua32: *const u8,
+    key_data: *const u8,
+    key_data_len: usize,
+    pqz_key: *const u8,
+    pqz_key_len: usize,
+    pqz_pop: *const u8,
+    pqz_pop_len: usize,
+    pqz_pop_hash: *const u8,
+    pqz_pop_hash_len: usize,
+    kem_pk: *const u8,
+    kem_pk_len: usize,
+    inner: *const c_char,
+    out: *mut ScaasUaHolderPop,
+) -> ScaasUaStatus {
     run(|| {
-        let h = ua::holder_pop_message(
+        let i = inner_of(inner)?;
+        let h = ua::ua8::holder_pop_message_with(
             kind,
             arr(ua32)?,
             bytes(key_data, key_data_len)?,
@@ -579,6 +650,7 @@ pub extern "C" fn scaas_ua_holder_pop_message(
             opt_bytes(pqz_pop, pqz_pop_len)?,
             opt_hash(pqz_pop_hash, pqz_pop_hash_len)?,
             opt_bytes(kem_pk, kem_pk_len)?,
+            &ua::json::lookup(&i),
         )?;
         put(
             out,
@@ -673,8 +745,31 @@ pub extern "C" fn scaas_ua_pqz_key_record_message(
     already_set: bool,
     out: *mut ScaasUaPqzKeyRecord,
 ) -> ScaasUaStatus {
+    let (p, h) = ((pqz_pop, pqz_pop_len), (pqz_pop_hash, pqz_pop_hash_len));
+    scaas_ua_pqz_key_record_message_with(kind, ua32, key_data, key_data_len, pqz_key, pqz_key_len, p.0, p.1, h.0, h.1, already_set, ptr::null(), out)
+}
+
+/// `scaas_ua_pqz_key_record_message` for an `msig` with `msig` members: `inner` as in `scaas_ua_holder_pop_message_with`.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn scaas_ua_pqz_key_record_message_with(
+    kind: u16,
+    ua32: *const u8,
+    key_data: *const u8,
+    key_data_len: usize,
+    pqz_key: *const u8,
+    pqz_key_len: usize,
+    pqz_pop: *const u8,
+    pqz_pop_len: usize,
+    pqz_pop_hash: *const u8,
+    pqz_pop_hash_len: usize,
+    already_set: bool,
+    inner: *const c_char,
+    out: *mut ScaasUaPqzKeyRecord,
+) -> ScaasUaStatus {
     run(|| {
-        let r = ua::ua8::pqz_key_record_message(
+        let i = inner_of(inner)?;
+        let r = ua::ua8::pqz_key_record_message_with(
             kind,
             arr(ua32)?,
             bytes(key_data, key_data_len)?,
@@ -682,6 +777,7 @@ pub extern "C" fn scaas_ua_pqz_key_record_message(
             opt_bytes(pqz_pop, pqz_pop_len)?,
             opt_hash(pqz_pop_hash, pqz_pop_hash_len)?,
             already_set,
+            &ua::json::lookup(&i),
         )?;
         put(
             out,
@@ -696,6 +792,27 @@ pub extern "C" fn scaas_ua_pqz_key_record_message(
                 member_digest: r.member_digest.unwrap_or_default(),
             },
         )
+    })
+}
+
+/// The `MemberSig` a copy sends to `acceptMembership` from the bytes of its `UAMemberSig` alone, which hash to `memberSigHashOf(ua, index)` (CTR-UA-37), as one slot JSON
+/// `{index, members: [{index, sig}], sig}` (the shape of a `pop` entry of `scaas_ua_registration_args`; NUL-terminated, `*out_len` counts
+/// the NUL). `key_data` is the `msig` `ua`'s; `stored` the bytes `UAMemberSig` carried: a signing slot's `sig`, an `msig` slot's
+/// `abi.encode(InnerSig[])`, canonical, at most 16 entries. Anything else, or an index past the members, is `SCAAS_UA_ERR_UNAUTHORIZED`;
+/// malformed key data `SCAAS_UA_ERR_KEY_DATA`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_replayed_member_sig(
+    key_data: *const u8,
+    key_data_len: usize,
+    index: u16,
+    stored: *const u8,
+    stored_len: usize,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
+    run(|| {
+        let j = ua::json::replayed_member_sig_json(bytes(key_data, key_data_len)?, index, bytes(stored, stored_len)?)?;
+        write_str(out, out_len, &j)
     })
 }
 
@@ -764,8 +881,9 @@ fn json_call(f: fn(&str) -> ua::json::JsonResult<String>, input: *const c_char, 
 }
 
 /// The registry's explicit arguments of a registration, JSON in and out (NUL-terminated; `*out_len` counts the NUL).
-/// `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit}` (bytes as "0x..." hex, an absent field is
-/// empty, an msig's `pop` is `[{index, keyData, sig}]`, `kemCommit` true / false forces the KEM form, absent: the hash commit
+/// `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit, inner}` (bytes as "0x..." hex, an absent field is
+/// empty, an msig's `pop` is `[{index, members: [{index, sig}], sig}]`, `inner` `{id: keyData}` its msig members' structures,
+/// `kemCommit` true / false forces the KEM form, absent: the hash commit
 /// only when the full call is over 261,909 B). Out: `{args, kemFill, calldataLength, kemFillCalldataLength}`, `args.entry` =
 /// `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2` or `registerFrost`, `kemFill` the `setKemKey(ua, 0, ...)`
 /// that stores a hash-committed key (null otherwise). `SCAAS_UA_ERR_ARGUMENT` when the input is not this JSON.
@@ -775,7 +893,7 @@ pub extern "C" fn scaas_ua_registration_args(input: *const c_char, out: *mut c_c
 }
 
 /// `setKemKey`'s explicit arguments, JSON in and out as `scaas_ua_registration_args`. `input`: `{ua, version, kemPk, sig}`, `sig`
-/// the `UASig` `{keyData, signature, members: [{index, keyData, sig}]}` (absent: empty, the version-0 fill of a hash commit).
+/// the `UASig` `{keyData, signature, members: [{index, members: [{index, sig}], sig}]}` (absent: empty, the version-0 fill of a hash commit).
 /// Out: `{ua, version, kem, sig}`.
 #[no_mangle]
 pub extern "C" fn scaas_ua_set_kem_key_args(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {

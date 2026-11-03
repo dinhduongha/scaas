@@ -108,9 +108,9 @@ contract UARegistryUA6Test is UARegistryBase {
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_POP_V2, _regDigest(ua, UAKinds.MSIG, a));
         uint16 mi = _indexOf(d, mlUa);
         uint16 pi = _indexOf(d, p256Ua);
-        IUARegistry.MemberSig memory ms = IUARegistry.MemberSig(mi, "", _sig(mlKey, r.uaMessage(0x0131, UAKinds.PURPOSE_MEMBER, md)));
+        IUARegistry.MemberSig memory ms = IUARegistry.MemberSig(mi, new IUARegistry.InnerSig[](0), _sig(mlKey, r.uaMessage(0x0131, UAKinds.PURPOSE_MEMBER, md)));
         IUARegistry.MemberSig memory ps =
-            IUARegistry.MemberSig(pi, "", _sig(p256Key, r.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
+            IUARegistry.MemberSig(pi, new IUARegistry.InnerSig[](0), _sig(p256Key, r.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
         IUARegistry.MemberSig[] memory sigs = new IUARegistry.MemberSig[](both ? 2 : 1);
         if (!both) sigs[0] = ms;
         else (sigs[0], sigs[1]) = mi < pi ? (ms, ps) : (ps, ms);
@@ -118,10 +118,10 @@ contract UARegistryUA6Test is UARegistryBase {
     }
 
     /// `pop` (`abi.encode(MemberSig[])`) with the member at `index` carrying key data `k`.
-    function _withMemberKey(bytes memory pop, uint16 index, bytes memory k) internal pure returns (bytes memory) {
-        IUARegistry.MemberSig[] memory ms = abi.decode(pop, (IUARegistry.MemberSig[]));
+    function _withMemberKey(bytes memory pop, uint16 index, bytes memory) internal pure returns (bytes memory) {
+        IUARegistry.MemberSig[] memory ms = UACall.memberSigs(pop);
         for (uint256 i; i < ms.length; ++i) {
-            if (ms[i].index == index) ms[i].keyData = k;
+            if (ms[i].index == index) ms[i].members = UACall.aList();
         }
         return abi.encode(ms);
     }

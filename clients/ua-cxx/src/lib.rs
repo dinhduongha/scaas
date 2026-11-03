@@ -92,10 +92,13 @@ mod ffi {
         fn is_zether(kind: u16) -> bool;
         fn is_pqz_holder(kind: u16) -> bool;
         fn msig_pqz_eligible(key_data: &[u8]) -> Result<bool>;
+        // `inner`: the msig members' structures, `{id: keyData}` JSON as registration_args' `inner` ("" = none)
+        fn msig_pqz_eligible_with(key_data: &[u8], inner: &str) -> Result<bool>;
         fn is_signing(kind: u16) -> bool;
         fn is_member(kind: u16, hedera_native: bool) -> bool;
         fn ua_message(kind: u16, purpose: &[u8], digest: &[u8]) -> Result<Vec<u8>>;
         fn chain_key_hash(chain_id: u64) -> Vec<u8>;
+        fn keccak256(data: &[u8]) -> Vec<u8>;
         fn portable_domain_separator() -> Vec<u8>;
         fn kem_record_hash(ua: &[u8], version: u64, kem_pk: &[u8]) -> Result<Vec<u8>>;
         fn portable_record_digest(ua: &[u8], kind: u16, pqz_key_hash: &[u8], kem_record_hash: &[u8]) -> Result<Vec<u8>>;
@@ -114,6 +117,17 @@ mod ffi {
             pqz_pop_hash: &[u8],
             kem_pk: &[u8],
         ) -> Result<HolderPop>;
+        #[allow(clippy::too_many_arguments)]
+        fn holder_pop_message_with(
+            kind: u16,
+            ua: &[u8],
+            key_data: &[u8],
+            pqz_key: &[u8],
+            pqz_pop: &[u8],
+            pqz_pop_hash: &[u8],
+            kem_pk: &[u8],
+            inner: &str,
+        ) -> Result<HolderPop>;
         fn pqz_reg_message(kind: u16, ua: &[u8], pqz_key: &[u8], kem_pk: &[u8]) -> Result<Vec<u8>>;
         fn pqz_key_digest(ua: &[u8], pqz_key_hash: &[u8]) -> Result<Vec<u8>>;
         fn pqz_key_record_digest(ua: &[u8], pqz_key_hash: &[u8], pqz_pop_hash: &[u8]) -> Result<Vec<u8>>;
@@ -128,6 +142,19 @@ mod ffi {
             pqz_pop_hash: &[u8],
             already_set: bool,
         ) -> Result<PqzKeyRecord>;
+        #[allow(clippy::too_many_arguments)]
+        fn pqz_key_record_message_with(
+            kind: u16,
+            ua: &[u8],
+            key_data: &[u8],
+            pqz_key: &[u8],
+            pqz_pop: &[u8],
+            pqz_pop_hash: &[u8],
+            already_set: bool,
+            inner: &str,
+        ) -> Result<PqzKeyRecord>;
+        // the slot JSON {index, members: [{index, sig}], sig} of the bytes of UAMemberSig
+        fn replayed_member_sig(key_data: &[u8], index: u16, stored: &[u8]) -> Result<String>;
         fn is_portable_purpose(tag: &[u8]) -> Result<bool>;
         fn ua_auth_domain_separator(generation: u32, chain_id: u64, registry: &[u8], chain_uid: &[u8]) -> Result<Vec<u8>>;
         #[allow(clippy::too_many_arguments)]
@@ -218,7 +245,14 @@ fn is_pqz_holder(kind: u16) -> bool {
     ua::is_pqz_holder(kind)
 }
 fn msig_pqz_eligible(key_data: &[u8]) -> R<bool> {
-    guard(|| Ok(ua::msig_pqz_eligible(key_data)?))
+    msig_pqz_eligible_with(key_data, "")
+}
+fn msig_pqz_eligible_with(key_data: &[u8], inner: &str) -> R<bool> {
+    guard(|| {
+        let i = ua::json::inner_json(inner)?;
+        let eligible = ua::msig_pqz_eligible_with(key_data, &ua::json::lookup(&i))?;
+        Ok(eligible)
+    })
 }
 fn is_signing(kind: u16) -> bool {
     ua::is_signing(kind)
@@ -231,6 +265,9 @@ fn ua_message(kind: u16, purpose: &[u8], digest: &[u8]) -> R<Vec<u8>> {
 }
 fn chain_key_hash(chain_id: u64) -> Vec<u8> {
     ua::chain_key_hash(chain_id).to_vec()
+}
+fn keccak256(data: &[u8]) -> Vec<u8> {
+    ua::keccak256(data).to_vec()
 }
 fn portable_domain_separator() -> Vec<u8> {
     ua::ua8::PORTABLE_DOMAIN_SEPARATOR.to_vec()
@@ -264,9 +301,16 @@ fn opt(b: &[u8]) -> Option<&[u8]> {
 fn holder_pop_message(
     kind: u16, ua_id: &[u8], key_data: &[u8], pqz_key: &[u8], pqz_pop: &[u8], pqz_pop_hash: &[u8], kem_pk: &[u8],
 ) -> R<HolderPop> {
+    holder_pop_message_with(kind, ua_id, key_data, pqz_key, pqz_pop, pqz_pop_hash, kem_pk, "")
+}
+#[allow(clippy::too_many_arguments)]
+fn holder_pop_message_with(
+    kind: u16, ua_id: &[u8], key_data: &[u8], pqz_key: &[u8], pqz_pop: &[u8], pqz_pop_hash: &[u8], kem_pk: &[u8], inner: &str,
+) -> R<HolderPop> {
     guard(|| {
-        let h = opt_hash(pqz_pop_hash)?;
-        let r = ua::holder_pop_message(kind, &a(ua_id)?, key_data, opt(pqz_key), opt(pqz_pop), h.as_ref(), opt(kem_pk))?;
+        let (h, i) = (opt_hash(pqz_pop_hash)?, ua::json::inner_json(inner)?);
+        let l = ua::json::lookup(&i);
+        let r = ua::ua8::holder_pop_message_with(kind, &a(ua_id)?, key_data, opt(pqz_key), opt(pqz_pop), h.as_ref(), opt(kem_pk), &l)?;
         Ok(HolderPop {
             pqz_key_hash: r.pqz_key_hash.to_vec(),
             pqz_pop_hash: r.pqz_pop_hash.to_vec(),
@@ -294,9 +338,16 @@ fn pqz_key_record_digest(ua_id: &[u8], pqz_key_hash: &[u8], pqz_pop_hash: &[u8])
 fn pqz_key_record_message(
     kind: u16, ua_id: &[u8], key_data: &[u8], pqz_key: &[u8], pqz_pop: &[u8], pqz_pop_hash: &[u8], already_set: bool,
 ) -> R<PqzKeyRecord> {
+    pqz_key_record_message_with(kind, ua_id, key_data, pqz_key, pqz_pop, pqz_pop_hash, already_set, "")
+}
+#[allow(clippy::too_many_arguments)]
+fn pqz_key_record_message_with(
+    kind: u16, ua_id: &[u8], key_data: &[u8], pqz_key: &[u8], pqz_pop: &[u8], pqz_pop_hash: &[u8], already_set: bool, inner: &str,
+) -> R<PqzKeyRecord> {
     guard(|| {
-        let h = opt_hash(pqz_pop_hash)?;
-        let r = ua::ua8::pqz_key_record_message(kind, &a(ua_id)?, key_data, pqz_key, opt(pqz_pop), h.as_ref(), already_set)?;
+        let (h, i) = (opt_hash(pqz_pop_hash)?, ua::json::inner_json(inner)?);
+        let l = ua::json::lookup(&i);
+        let r = ua::ua8::pqz_key_record_message_with(kind, &a(ua_id)?, key_data, pqz_key, opt(pqz_pop), h.as_ref(), already_set, &l)?;
         Ok(PqzKeyRecord {
             pqz_key_hash: r.pqz_key_hash.to_vec(),
             pqz_pop_hash: r.pqz_pop_hash.to_vec(),
@@ -308,6 +359,9 @@ fn pqz_key_record_message(
             member_digest: r.member_digest.map(|m| m.to_vec()).unwrap_or_default(),
         })
     })
+}
+fn replayed_member_sig(key_data: &[u8], index: u16, stored: &[u8]) -> R<String> {
+    guard(|| Ok(ua::json::replayed_member_sig_json(key_data, index, stored)?))
 }
 fn is_portable_purpose(tag: &[u8]) -> R<bool> {
     guard(|| Ok(ua::ua8::is_portable_purpose(&a(tag)?)))

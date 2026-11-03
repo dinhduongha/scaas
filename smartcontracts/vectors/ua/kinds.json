@@ -397,8 +397,8 @@
       "signing": true,
       "zether": false,
       "pqzHolder": false,
-      "member": false,
-      "memberHedera": false
+      "member": true,
+      "memberHedera": true
     },
     {
       "kind": 304,
@@ -1782,13 +1782,6 @@
       "keyData": "0x000100020141aa6b3fc2afc971ac50f7683c85e512e8c27e110db677e36af2ee2994373cbacc00010101b99f05b3007d0b9e1f2e1b01b42aa8eb2d866429925796ec3330a3bed7e5e04c0001",
       "error": "UAKeyData",
       "reason": "Zether member"
-    },
-    {
-      "kind": 288,
-      "hederaNative": false,
-      "keyData": "0x000100020101b99f05b3007d0b9e1f2e1b01b42aa8eb2d866429925796ec3330a3bed7e5e04c00010120e8bfd6f40a32d90270c99f5931db439f3c00080364e75a7bdd9b9153ddb9410f0001",
-      "error": "UAKeyData",
-      "reason": "structure member"
     },
     {
       "kind": 288,

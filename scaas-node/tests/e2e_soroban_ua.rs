@@ -699,7 +699,7 @@ async fn e2e_soroban_ua_membership_rows_and_a_g_member() {
             continue;
         }
         assert_eq!(format!("0x{stored}"), r["sig"].as_str().unwrap(), "{}: the row's bytes", r["name"]);
-        let slot = MemberSig { index: index as u16, key_data: vec![], sig: unhex(&stored) };
+        let slot = MemberSig { index: index as u16, members: vec![], sig: unhex(&stored) };
         check_membership(&kd_of("msig-classical"), &classical_ua, &slot, &keys).unwrap_or_else(|e| panic!("{}: {e:?}", r["name"]));
     }
 
@@ -722,7 +722,7 @@ async fn e2e_soroban_ua_membership_rows_and_a_g_member() {
     assert!(member_accepted(st, &ua0x(&bad_id), 0), "the mark says whose word it is, not that it is good");
     let stored = view(&st.registry, "membership_sig_of", &["--ua", &hx(&bad_id), "--index", "0"]);
     assert_eq!(format!("0x{stored}"), junk);
-    let slot = MemberSig { index: 0, key_data: vec![], sig: unhex(&stored) };
+    let slot = MemberSig { index: 0, members: vec![], sig: unhex(&stored) };
     let e = check_membership(&bad_kd, &bad_id, &slot, &keys).unwrap_err();
     println!("MA junk in the record, re-checked off chain: {e:?}");
     assert_eq!(e, scaas_ua::UAError::Unauthorized);

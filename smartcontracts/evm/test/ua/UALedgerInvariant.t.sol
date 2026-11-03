@@ -141,7 +141,7 @@ contract UALedgerHandler is Test {
             MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(f, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient);
             bytes memory sig = _auth(3 + fromIdx % 2, _unwrapDigest(e, amount, recipient));
             vm.prank(RELAYER);
-            WrappedToken(address(wrp)).uaUnwrap(e, amount, recipient, 0, UAKinds.uaSig(f, sig));
+            WrappedToken(address(wrp)).uaUnwrap(e, amount, recipient, 0, UACall.auth(f, sig));
         } else {
             bytes memory auth = _auth(3 + fromIdx % 2, wrp.uaDigest(m));
             vm.prank(RELAYER);

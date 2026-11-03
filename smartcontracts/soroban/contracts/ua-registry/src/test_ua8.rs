@@ -587,11 +587,11 @@ fn ua8_kind_name_table() {
 
 // ---------- B3: `set_kem_key`, `set_pqz_key`, `store_pqz_pop`, the views (U8S-D3, D4, D6, D7; TS-D9) ----------
 
-/// A record's typed `args.sig` (EVM `UASig`).
+/// A record's typed `args.sig` (EVM `UASig`, whose slots are `{index, members, sig}`): this family's slot is flat until its round, `key_data` empty.
 fn typed_sig(env: &Env, s: &Value) -> UaSig {
     let mut members = SVec::new(env);
     for m in s["members"].as_array().unwrap() {
-        members.push_back(MemberSig { index: m["index"].as_u64().unwrap() as u32, key_data: b(env, &hx(&m["keyData"])), sig: b(env, &hx(&m["sig"])) });
+        members.push_back(MemberSig { index: m["index"].as_u64().unwrap() as u32, key_data: Bytes::new(env), sig: b(env, &hx(&m["sig"])) });
     }
     UaSig { key_data: b(env, &hx(&s["keyData"])), signature: b(env, &hx(&s["signature"])), members }
 }
