@@ -36,7 +36,8 @@ abstract contract GovernanceBase is IGovernance {
     /// @dev The caller as this contract authenticates it (`_msgSender()` on a token).
     function _caller() internal view virtual returns (address);
 
-    /// @dev Bits this contract implements (both bands).
+    /// @dev Bits this contract implements, in both bands: SCaaS's 0-127 and the application's 128-255 (CTR-GOV-10). A bit
+    ///      outside it is refused by `init` (`FeatureInvalidForKind`), so the mask is the only band check.
     function _validBits() internal pure virtual returns (uint256);
     /// @dev Subset with a holder; a valid bit outside it is a capability.
     function _roleBits() internal pure virtual returns (uint256);
@@ -68,7 +69,7 @@ abstract contract GovernanceBase is IGovernance {
         return GovernanceLib.$().grants[bit][holder];
     }
 
-    /// @notice Bits 64–127 only; a contract with no application bit answers with a refusal.
+    /// @notice Bits 128-255 only (CTR-GOV-10); a contract with no application bit answers with a refusal.
     function bitLabel(uint8 bit) external view virtual returns (BitType, bytes4, string memory) {
         revert FeatureInvalidForKind(bit);
     }

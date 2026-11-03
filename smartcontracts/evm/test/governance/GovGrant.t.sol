@@ -14,6 +14,7 @@ import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBase, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -32,6 +33,31 @@ contract GovHookERC20 is MockERC20 {
     function _update(address from, address to, uint256 v) internal override {
         super._update(from, to, v);
         if (from != address(0) && hookTarget != address(0)) GovDexHolder(hookTarget).hook();
+    }
+}
+
+/// An application in the top band (CTR-GOV-10's Change, owner 2026-11-04): bits 128 and 255, powers with no scalar or scope.
+contract TopBandApp is GovernanceBase {
+    uint256 internal constant BITS = (uint256(1) << 128) | (uint256(1) << 255);
+    mapping(uint8 => uint256) public acted;
+
+    constructor(address owner_) {
+        GovernanceLib.Roles memory none;
+        GovernanceLib.init(BITS, 0, owner_, 0, address(0), none, BITS, BITS, 0);
+    }
+
+    function _guardIn() internal pure override returns (bool) { return false; }
+    function _guardOut(bool) internal pure override {}
+    function _caller() internal view override returns (address) { return msg.sender; }
+    function _validBits() internal pure override returns (uint256) { return BITS; }
+    function _roleBits() internal pure override returns (uint256) { return BITS; }
+    function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
+    function _scalarBits() internal pure override returns (uint256) { return 0; }
+    function _scopeBits() internal pure override returns (uint256) { return 0; }
+
+    function act(uint8 bit) external {
+        GovernanceUse.use(bit, msg.sender, 0);
+        ++acted[bit];
     }
 }
 
@@ -234,14 +260,14 @@ contract GovGrantTest is Test {
         IGovernance.GrantTerms memory p = _open();
         (p.total, p.delegable, p.scope) = (100, true, bytes32(uint256(7)));
         vm.prank(OWNER);
-        a.setGrant(64, MANAGER, p);
+        a.setGrant(128, MANAGER, p);
         (p.total, p.delegable, p.scope) = (10, false, bytes32(uint256(8)));
         vm.prank(MANAGER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, uint8(7)));
-        a.setGrant(64, OFFICER, p);
+        a.setGrant(128, OFFICER, p);
         p.scope = bytes32(uint256(7));
         vm.prank(MANAGER);
-        a.setGrant(64, OFFICER, p);
+        a.setGrant(128, OFFICER, p);
     }
 
     function _setLeaf(IGovernance.GrantTerms memory g, uint8 field) internal {
@@ -336,14 +362,60 @@ contract GovGrantTest is Test {
 
     function test_refusals() public {
         vm.startPrank(OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureReserved.selector, uint8(128)));
-        t.grantRole(128, MANAGER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NoSuchRole.selector, uint8(128)));
+        t.grantRole(128, MANAGER); // an application bit this kind does not have, no band refusal (CTR-GOV-10)
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountPool.selector, MINT, MetaTxLib.UA_POOL));
         t.grantRole(MINT, MetaTxLib.UA_POOL);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountPool.selector, MINT, MetaTxLib.SHIELD_POOL));
         t.setGrant(MINT, MetaTxLib.SHIELD_POOL, _open());
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NoSuchRole.selector, uint8(0)));
         t.setGrant(0, MANAGER, _open()); // a capability has no holder
+        vm.stopPrank();
+    }
+
+    /// CTR-GOV-10's Change (owner 2026-11-04): bits 128-255 are each application's and no band is refused. An application
+    /// takes 128 and 255, grants and uses them; a token kind refuses an application bit by its own mask, not by a band.
+    function test_bitsAbove127AreApplicationBits() public {
+        TopBandApp a = new TopBandApp(OWNER);
+        assertEq(a.features(), (uint256(1) << 128) | (uint256(1) << 255));
+        vm.startPrank(OWNER);
+        a.grantRole(128, MANAGER);
+        a.grantRole(255, MANAGER);
+        vm.stopPrank();
+        vm.startPrank(MANAGER);
+        a.act(128);
+        a.act(255);
+        vm.stopPrank();
+        assertEq(a.acted(255), 1);
+        assertEq(a.holderCount(128), 1);
+        IGovernance.GrantTerms memory g = _open();
+        g.maxUses = 1;
+        vm.prank(OWNER);
+        a.setGrant(255, OFFICER, g);
+        vm.prank(OFFICER);
+        a.act(255);
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals, c.owner, c.features) = ("G", "G", 18, OWNER, 1 | (uint256(1) << 200));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(200)));
+        f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "b");
+    }
+
+    /// CTR-GOV-10's Change: bits 64-127 are SCaaS's, in the one global table; a kind without one refuses it as any SCaaS bit
+    /// it lacks, and the role of a bit it lacks is no role.
+    function test_bits64To127AreScaasBits() public {
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals, c.owner) = ("G", "G", 18, OWNER);
+        c.features = 1 | (uint256(1) << 64);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(64)));
+        f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "s");
+        c.features = 1 | (uint256(1) << 127);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(127)));
+        f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "s");
+        vm.startPrank(OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NoSuchRole.selector, uint8(127)));
+        t.grantRole(127, MANAGER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NoSuchRole.selector, uint8(128)));
+        t.grantRole(128, MANAGER);
         vm.stopPrank();
     }
 

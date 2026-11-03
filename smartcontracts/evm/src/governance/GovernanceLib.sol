@@ -85,7 +85,6 @@ library GovernanceLib {
     {
         if (grantDelay > MAX_GRANT_DELAY) revert IGovernance.GrantDelayTooLong(grantDelay);
         if (rescueTo != address(0)) revert IRescuable.RescueConfigInvalid();
-        if (features >> 128 != 0) revert IGovernance.FeatureReserved(_lowest(features >> 128) + 128);
         uint256 bad = features & ~valid;
         if (bad != 0) revert IGovernance.FeatureInvalidForKind(_lowest(bad));
         if (features & GovernanceBits.REGULATED != 0) {
@@ -387,7 +386,6 @@ library GovernanceLib {
     function _check(GovernanceStorage storage s, uint8 bit, address account, uint256 roleBits, uint256 contractOnly)
         private view
     {
-        if (bit >= 128) revert IGovernance.FeatureReserved(bit);
         if (account == address(0)) revert IGovernance.RoleAccountZero(bit);
         if (account == MetaTxLib.UA_POOL || account == MetaTxLib.SHIELD_POOL) revert IGovernance.RoleAccountPool(bit, account);
         if (roleBits & _bit(bit) == 0) revert IGovernance.NoSuchRole(bit);

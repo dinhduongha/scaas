@@ -21,9 +21,9 @@ import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 
-/// A third-party application on the base, v2 §1.6 shape: bit 64, the scope is a branch, the contract applies the predicate.
+/// A third-party application on the base, v2 §1.6 shape: bit 128, the scope is a branch, the contract applies the predicate.
 contract BranchApp is GovernanceBase {
-    uint8 internal constant APPROVE = 64;
+    uint8 internal constant APPROVE = 128;
     mapping(bytes32 => uint256) public approved;
 
     constructor(address owner_) {
@@ -444,10 +444,10 @@ contract GovAttackV2Test is Test {
         t.setGrant(MINT, MANAGER, g);
         BranchApp a = new BranchApp(OWNER);
         vm.prank(OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantWordRefused.selector, uint8(64), uint8(7)));
-        a.setGrant(64, MANAGER, _open());
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantWordRefused.selector, uint8(128), uint8(7)));
+        a.setGrant(128, MANAGER, _open());
         vm.prank(OWNER); // positive control: a scope where the power reads it
-        a.setGrant(64, MANAGER, g);
+        a.setGrant(128, MANAGER, g);
         vm.prank(MANAGER);
         a.approve(g.scope, 1);
     }
@@ -459,17 +459,17 @@ contract GovAttackV2Test is Test {
         IGovernance.GrantTerms memory g = _open();
         (g.delegable, g.scope, g.total) = (true, b7, 100);
         vm.prank(OWNER);
-        a.setGrant(64, MANAGER, g);
+        a.setGrant(128, MANAGER, g);
         IGovernance.GrantTerms memory l = _open();
         (l.scope, l.total) = (b7, 50);
         vm.prank(MANAGER);
-        a.setGrant(64, OFFICER, l);
+        a.setGrant(128, OFFICER, l);
         vm.prank(OFFICER); // positive control: the leaf acts in branch 7 while its parent is there
         a.approve(b7, 2);
 
         g.scope = b8; // the owner moves the manager; the edit is not a revoke
         vm.prank(OWNER);
-        a.setGrant(64, MANAGER, g);
+        a.setGrant(128, MANAGER, g);
         vm.prank(MANAGER); // positive control: the parent is out of branch 7
         vm.expectRevert(bytes("branch"));
         a.approve(b7, 1);
@@ -477,7 +477,7 @@ contract GovAttackV2Test is Test {
         vm.expectRevert(_ex(7));
         a.approve(b7, 5);
         assertEq(a.approved(b7), 2);
-        assertEq(a.grantOf(64, MANAGER).spentTotal, 2);
+        assertEq(a.grantOf(128, MANAGER).spentTotal, 2);
     }
 
     /// B-11, fixed: the same for `delegable`: the owner ends the delegation, the leaves die.

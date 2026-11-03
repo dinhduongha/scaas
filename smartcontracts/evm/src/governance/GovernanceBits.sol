@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-/// @title The global table of bits 0–63 (owner 2026-11-02, CTR-GOV-10): one meaning on every SCaaS contract, allocated once,
-///        never renumbered. Bits 64–127 belong to each application contract, bits 128 and above are refused.
+/// @title The global table of bits 0-127 (owner 2026-11-02, CTR-GOV-10 and its Change of 2026-11-04): one meaning on every
+///        SCaaS contract, allocated once, never renumbered. Bits 128-255 belong to each application contract, labelled by
+///        `bitLabel`; no band is refused.
 library GovernanceBits {
     uint8 internal constant PAYABLE = 0;
     uint8 internal constant MINTABLE = 1;

@@ -60,7 +60,7 @@ One direct op per operation, each with a named typed `mtx<Op>` and `ua<Op>` twin
 | Powers on the DEX | `setMarket(target, base, quote, listed)`, `setExchangeTarget(target, t, listed)`, `setListedOnly(target, on)`, `setFeeSplit(target, ppm, treasury)` |
 | Its own | `proposeOperator(next)`, `acceptOperator()` |
 
-Application bits 64-127: the application ships its own child of the same abstract base (`operator`, the check, nothing else) with one
+Application bits 128-255 (CTR-GOV-10's Change, owner 2026-11-04): the application ships its own child of the same abstract base (`operator`, the check, nothing else) with one
 typed entry per bit. `GovernanceHolder` itself is a closed table, and the node's call table mirrors it both ways (AGENTS.md, allow-lists).
 
 ### 1.4 How an `msig` of PQ members reaches it

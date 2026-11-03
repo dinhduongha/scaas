@@ -11,11 +11,10 @@ decisions of 2026-11-02 change the placement, not the model:
 - **A. `GovernanceBase` accepted.** One layer — owner, features, roles, lock, delay — in its own storage namespace,
   inheritable by any contract: tokens, `SCaaSDex`, tender, `LoanBook`, third-party applications. Not in `MetaTxBase`
   or `UAMetaTxBase`, which are authentication and relay.
-- **B. Bit bands, decided:** bits 0–63 are SCaaS's, **one global table, each bit allocated once, never renumbered,
-  the same meaning on every SCaaS contract** (`PAUSE` is the same bit on a token and on the DEX; a contract without the
-  power leaves the bit off); 64–127 are per-contract, declared by the application with a label (bit → function) so a
-  wallet can show them; 128 and above are reserved and refused today. Existing bits 0–8 and `MODERATE` at 9 stay in
-  the SCaaS band.
+- **B. Bit bands, decided** (CTR-GOV-10's Change, owner 2026-11-04): bits 0–127 are SCaaS's, **one global table, each bit allocated once, never
+  renumbered, the same meaning on every SCaaS contract** (`PAUSE` is the same bit on a token and on the DEX; a contract
+  without the power leaves the bit off); 128–255 are per-contract, declared by the application with a label (bit →
+  function) so a wallet can show them; no band is refused. Existing bits 0–8 and `MODERATE` stay in the SCaaS band.
 - **C.** The owner's three examples must run: loan approval in [1 M, 100 M] VND as a constraint on a named argument of
   the application's function (not `perCall`); add or remove members only in one's own family subtree; circulation only
   within a group.
@@ -45,7 +44,7 @@ Three pieces, because tokens cannot afford inlined logic (`WrappedPqzToken` has 
 
 | Piece | What it is | Holds |
 |---|---|---|
-| `GovernanceBits` | a constants file (library of `uint8` constants) | the global table of bits 0–63 (§1.4), nothing else |
+| `GovernanceBits` | a constants file (library of `uint8` constants) | the global table of bits 0–127 (§1.4), nothing else |
 | `GovernanceLib` | `AdminLib` renamed and extended; external library, DELEGATECALL, one body audited once | storage namespace `erc7201:scaas.governance`; `init`, grant / revoke / renounce, two-call delayed grant, `disableFeature`, owner two-step and renounce, `holderCount`, the grant record and `use` |
 | `GovernanceBase` | abstract contract, one-line wrappers over the library, the `IGovernance` ABI, three `pure virtual` masks | nothing of its own |
 
@@ -57,21 +56,20 @@ abstract contract GovernanceBase is IGovernance {
     function _roleBits()         internal pure virtual returns (uint256);  // subset with a holder (PAYABLE, BURNABLE, RESCUABLE have none)
     function _contractOnlyBits() internal pure virtual returns (uint256);  // subset whose holder must have code
     function _scopeNarrows(uint8 bit, bytes32 parent, bytes32 child) internal view virtual returns (bool) { return parent == child; }
-    function bitLabel(uint8 bit) external pure virtual returns (BitType t, bytes4 selector, string memory name); // 64–127 only
+    function bitLabel(uint8 bit) external pure virtual returns (BitType t, bytes4 selector, string memory name); // 128–255 only
 }
 enum BitType { CAPABILITY, POWER }   // §1.4: the type is `_roleBits()`, never a second declaration
 ```
 
 `_validFor(kind)` of today [V, AdminLib.sol:193–201] becomes each token kind's `_validBits()`; `ROLE_BITS` [V, :36]
 becomes `_roleBits()`; the `RATE_ADJUSTABLE` contract-only check [V, :180] becomes `_contractOnlyBits()`. The library
-refuses, in this order: a bit ≥ 128 (`FeatureReserved(bit)`, on `features`, `lockedFeatures` and in `_grant`:
-`features >> 128 != 0` reverts, `bit >= 128` reverts — the word stays `uint256` so the ABI does not move when 128+
-opens); a bit outside `_validBits()` (`FeatureInvalidForKind`, today's error, kept); a regulated bit not yet built
+refuses, in this order (no band is refused, CTR-GOV-10's Change, owner 2026-11-04: the word is `uint256` and a bit `uint8`, so the mask is the only
+band check); a bit outside `_validBits()` (`FeatureInvalidForKind`, today's error, kept); a regulated bit not yet built
 (`FeatureNotBuilt`, kept until the asset suite lands); a role on a bit outside `_roleBits()` (`NoSuchRole`); a holder
 without code on a `_contractOnlyBits()` bit (`RoleNotContract`); `UA_POOL` and `SHIELD_POOL` as a holder
 (`RoleAccountZero` reused or a new `RoleAccountPool`; the `MODERATE` report's F5, 0 token bytes). So "`AdminLib`
 accepts only known bits" stays true per contract: the SCaaS band is known from the global table, the application band
-from the contract's own mask, and 128+ is refused everywhere.
+from the contract's own mask.
 
 ### 1.3 The grant record (what "within what" means)
 
@@ -112,12 +110,12 @@ enforces its own limits at call time, which the attack round confirmed needs no 
 header], now in the base. One grant per `(bit, holder)`; a second clone for the same operator cannot exist because
 there are no clones.
 
-### 1.4 The global bit table (bits 0–63), proposed allocation
+### 1.4 The global bit table (bits 0–127), proposed allocation
 
 Decided: one table, allocated once, never reused or renumbered, the same meaning everywhere. Pinned in code as
 `GovernanceBits.sol` and in docs as the table below moved to `docs/contracts/README.md §3` when normative; a vector
 file `test/vectors/governance_bits.json` (`bit → name → one disclosure sentence`) is written by a forge test from the
-constants and read by every client, so a wallet names bits 0–63 **without reading the contract**; bits 64–127 come
+constants and read by every client, so a wallet names bits 0–127 **without reading the contract**; bits 128–255 come
 from the contract's `bitLabel(bit)`. A bit's name is general (what the holder may do to others or to the instance),
 never a contract's function name.
 
@@ -135,7 +133,7 @@ bit; `ALLOWLIST` is the one capability with a parameter (the pinned registry), s
 **not** "an admin burns": burning another account's units is a third-party move and needs `MODERATE` with a burn-sink
 scope, never `BURNABLE`. For the application band, `bitLabel(bit)` returns the type beside the selector and the name,
 derived from the same mask, so a wallet prints "anyone may `<name>`" for a capability and "holders of `<name>`: X, Y
-(limits …)" for a power without a second table; `governance_bits.json` carries the type for 0–63.
+(limits …)" for a power without a second table; `governance_bits.json` carries the type for 0–127.
 
 | Bit | Name | Meaning (same on every contract) | Type | Reduce-only | Contract-only | Today |
 |---|---|---|---|---|---|---|
@@ -163,9 +161,9 @@ derived from the same mask, so a wallet prints "anyone may `<name>`" for a capab
 | 21–63 | free | | | | | |
 
 Twenty-two bits allocated after two years of design, twelve of them in one afternoon from the inventory's ≈ 110 rows
-collapsing to general names; 42 free. **It suffices** [I]: every named power in gov-inventory, tender, asset-suite and
-the DEX maps to one of the above or to the application band, and 128+ is held back precisely so that exhaustion has an
-answer other than renumbering. What the table must never do: give a bit a second meaning on one contract (a DEX
+collapsing to general names; 106 free (CTR-GOV-10's Change, owner 2026-11-04). **It suffices** [I]: every named power in gov-inventory, tender, asset-suite and
+the DEX maps to one of the above or to the application band; the SCaaS band is 0–127 (CTR-GOV-10's Change, owner 2026-11-04),
+so exhaustion has an answer other than renumbering. What the table must never do: give a bit a second meaning on one contract (a DEX
 `PAUSE` stops settlement, a token `PAUSE` stops outflow — both "stops every outflow of this instance", one sentence).
 
 ### 1.5 Attenuation, restated after A5 and the families F3
@@ -178,23 +176,23 @@ disclosure order of v1 gains that step; nothing in code changes for it.
 
 ### 1.6 The three examples, run on the base
 
-- **Loan approval in [1 M, 100 M] VND.** `LoanBook is GovernanceBase`; `_validBits()` includes 64 `APPROVE_LOAN`,
-  `bitLabel(64) = (approveLoan.selector, "approve a loan")`. Entry: `approveLoan(uint256 loanId)` reads
+- **Loan approval in [1 M, 100 M] VND.** `LoanBook is GovernanceBase`; `_validBits()` includes 128 `APPROVE_LOAN`,
+  `bitLabel(128) = (approveLoan.selector, "approve a loan")`. Entry: `approveLoan(uint256 loanId)` reads
   `loans[loanId].principal` (the number the contract pays), requires `status == PENDING` and `borrower != sender`
-  (preconditions are application state, never grant fields), then `bytes32 branch = use(64, sender, principal)` and
-  `require(loans[loanId].branch == branch)`. Grants: the committee is `owner`; `setGrant(64, manager, {min 1e6, max 1e8,
-  total = portfolio cap, validUntil, scope = branchId, delegable})`; the manager issues `setGrant(64, officer, {min 1e6,
+  (preconditions are application state, never grant fields), then `bytes32 branch = use(128, sender, principal)` and
+  `require(loans[loanId].branch == branch)`. Grants: the committee is `owner`; `setGrant(128, manager, {min 1e6, max 1e8,
+  total = portfolio cap, validUntil, scope = branchId, delegable})`; the manager issues `setGrant(128, officer, {min 1e6,
   max 2e7, …, scope = branchId})`, accepted because it narrows. Two approvers above 50 M: the holder is an msig
   `SmartKeyAccount` or an application rule — not a grant word. `perCall` does not appear: the band is `min`/`max` on
   the principal.
-- **Add or remove members only in one's own subtree.** `FamilyTree is GovernanceBase`; 64 `ADD_MEMBER`
-  (`addMember(uint64 parent, …)`), 65 `REMOVE_MEMBER` (`removeMember(uint64 id, bytes32 ref)`: a tombstone that
-  references the record, reduce-only; erase never exists). `use(64, sender, 0)` returns `scope = bytes32(rootId)`; the
+- **Add or remove members only in one's own subtree.** `FamilyTree is GovernanceBase`; 128 `ADD_MEMBER`
+  (`addMember(uint64 parent, …)`), 129 `REMOVE_MEMBER` (`removeMember(uint64 id, bytes32 ref)`: a tombstone that
+  references the record, reduce-only; erase never exists). `use(128, sender, 0)` returns `scope = bytes32(rootId)`; the
   contract checks `isDescendant(rootId, parent)` with a `MAX_DEPTH` shape constant bounding the walk. The clan's
   `owner` grants the head `{scope = headId, delegable}`; the head grants a son `{scope = sonId}` and the base asks
-  `_scopeNarrows(64, headId, sonId) = isDescendant(headId, sonId)`. "Self" is not a set word: the subtree is the scope.
+  `_scopeNarrows(128, headId, sonId) = isDescendant(headId, sonId)`. "Self" is not a set word: the subtree is the scope.
 - **Circulation only within a group.** Two honest forms, and the owner picks by where balances live. (i) Custody:
-  `GroupLedger is GovernanceBase` holds a plain `NORMAL` token and keeps member balances; 64 `MOVE_WITHIN`
+  `GroupLedger is GovernanceBase` holds a plain `NORMAL` token and keeps member balances; 128 `MOVE_WITHIN`
   (`moveWithin(uint64 from, uint64 to, uint256 amount)`), `use` returns `scope = groupId`, both ends `isMember(groupId,
   ·)`; the token sees one holder. (ii) Wallet balances: a `NORMAL` token with bit 8 `ALLOWLIST` and the group's own
   contract pinned as the registry at INIT (receiver side, CTR-AS-07); that is a **token property, not a grant**, it is
@@ -283,7 +281,7 @@ B per `mtx` named entry [V, v1 header].
 | Item | `GovernanceLib` | each token kind | `WrappedPqzToken` note | `SCaaSDex` |
 |---|---|---|---|---|
 | move of today's admin ABI into `GovernanceBase` | 0 (rename) | ≈ 0 (the same twelve stubs, moved) | 0 | +1.2–1.6 KB (gains the whole admin surface it lacks today) |
-| band refusal (`>= 128`), masks as arguments | +60–120 B | 0 | 0 | 0 |
+| band refusal (`>= 128`; removed by CTR-GOV-10's Change, owner 2026-11-04), masks as arguments | +60–120 B | 0 | 0 | 0 |
 | two-call `grantDelay` + `pendingGrant` view + `lastProposedAt` | +350–500 B | +150–250 B (config field through `init` decode, one view) | +150–250 B | same |
 | `holderCount` | +80–120 B | +60–100 B | +60–100 B | same |
 | `Grant` record, `use`, `setGrant`, `grantOf`, `narrows`, epoch | +1.0–1.5 KB | +300–450 B (`setGrant` + `grantOf` stubs; `mint` / `mintToUA` on `use` +≈ 50 B) | **drop first**: flat holding only on this kind (its roles are `RATE_ADJUSTABLE` / `WRAP_DISABLEABLE`, contracts, no scalar); the disclosure says "no grant records on this kind" | same +≈ 0.4 KB |
@@ -379,10 +377,10 @@ this session.
 | Family | `GovernanceBase` becomes | Owner / holder / grant | Delay, lock | Cannot express |
 |---|---|---|---|---|
 | **Soroban** | a `governance` Rust module shared by `scaas-token` and the DEX: instance storage `features: u128`, `owner: Option<Address>`, `pending_owner`, roles map `(bit, Address) → u8`, grants map; `require_auth` on the owner | a contract can be any holder (its `__check_auth`); grants as on EVM; sync, atomic | ledger timestamp; lock = the same word. **Gap today:** admin is write-once (families F1), and the Soroban freeze is the same freeze as EVM's (TODO:229) — `set_admin` two-step + `renounce_admin` must land **before it** (§6 D7) | no `isContract`; a holder's code authority is not readable from the token (the contract is immutable as built, so a holder's mutability is the holder's own concern) |
-| **Solana** | no SCaaS token; the `scaas` program gets a `Governance` PDA per instance (`features: u128`, owner, pending, roles as PDAs seeded `(instance, bit, holder)`, grants as PDAs). For SPL / Token-2022 mints the model is **display only**: mint authority → `MINTABLE`, freeze authority → `FREEZE`, `PermanentDelegate` → `FORCE` (NET-SOL-09: accepted as issuer risk, owner decision, not a gap) | a policy program's PDA as holder only if its upgrade authority is `None` (escalation F14, families F10); otherwise "whole shape, mutable" | delay: slot or unix timestamp; lock on SPL = authority `None`, one-way | a duration bound on freeze; a record-gated force; `grantDelay` on `SetAuthority` |
+| **Solana** | no SCaaS token; the `scaas` program gets a `Governance` PDA per instance (`features: [u128; 2]`, bits 0–255, CTR-GOV-10's Change, owner 2026-11-04, owner, pending, roles as PDAs seeded `(instance, bit, holder)`, grants as PDAs). For SPL / Token-2022 mints the model is **display only**: mint authority → `MINTABLE`, freeze authority → `FREEZE`, `PermanentDelegate` → `FORCE` (NET-SOL-09: accepted as issuer risk, owner decision, not a gap) | a policy program's PDA as holder only if its upgrade authority is `None` (escalation F14, families F10); otherwise "whole shape, mutable" | delay: slot or unix timestamp; lock on SPL = authority `None`, one-way | a duration bound on freeze; a record-gated force; `grantDelay` on `SetAuthority` |
 | **NEAR** | a `Governance` struct in the contract state (`LookupMap` roles / grants), `predecessor_account_id` as the caller; owner is an `AccountId`; derived UA ids as `Vec<u8>` keys | a contract account as holder; **async**: `use` reserves the budget, the callback settles or releases it, and the view shows `reserved` (families F9) | block timestamp; lock = word. Write-once admin today (F1): `set_admin` / `renounce_admin` in the NEAR UA round, before its add-on audit | a synchronous read of another contract's `features` (a wrapper cannot check a leg at init); a holder account's full-access keys are an inherited power the token cannot see |
-| **Algorand** | global state: **two `uint64` words** (`features_lo` bits 0–63, `features_hi` 64–127: Algorand's global uint is 64-bit), owner, pending; roles and grants in boxes keyed `bit ‖ addr`; the holder funds the box MBR by an inner payment in the same group | an app account as holder (`Txn.sender` of an inner call); **atomic**: a failed use fails the group, no reserve state (not NEAR) | round timestamp; lock = word. Write-once admin today (F5): the same two entries in the Algorand UA round | a rekey of the owner or a holder account (silent replacement, F5); `isContract` |
-| **Aptos** | a `Governance` resource under the instance object; bits `u128`; roles as a table | the real powers are `MintRef` / `TransferRef` / `BurnRef` values; a resource that holds a Ref **is** the holder, bits are its display. A Ref stored elsewhere is unreadable (families F8) | timestamp; lock = word; object-level rotation is native [I] | the worst case of an FA: **unknowable**; the disclosure says so. `admin_sweep` stays the admin-chosen form to avoid → `rescue_to` fixed at creation |
+| **Algorand** | global state: **four `uint64` words** (bits 0–255, CTR-GOV-10's Change, owner 2026-11-04: Algorand's global uint is 64-bit), owner, pending; roles and grants in boxes keyed `bit ‖ addr`; the holder funds the box MBR by an inner payment in the same group | an app account as holder (`Txn.sender` of an inner call); **atomic**: a failed use fails the group, no reserve state (not NEAR) | round timestamp; lock = word. Write-once admin today (F5): the same two entries in the Algorand UA round | a rekey of the owner or a holder account (silent replacement, F5); `isContract` |
+| **Aptos** | a `Governance` resource under the instance object; bits `u256` (0–255, CTR-GOV-10's Change, owner 2026-11-04); roles as a table | the real powers are `MintRef` / `TransferRef` / `BurnRef` values; a resource that holds a Ref **is** the holder, bits are its display. A Ref stored elsewhere is unreadable (families F8) | timestamp; lock = word; object-level rotation is native [I] | the worst case of an FA: **unknowable**; the disclosure says so. `admin_sweep` stays the admin-chosen form to avoid → `rescue_to` fixed at creation |
 | **Sui** | a shared `Governance<T>` object with bits; `TreasuryCap<T>` wrapped inside = the `MINTABLE` holder; roles as a `Table` | **`AdminCap` has `key` without `store` and no transfer entry (families F7)**: give it `store` or a two-step transfer + burn **before `make_immutable`**, or the DEX config is frozen at the first lost key | `Clock`; lock = word; `DenyCap` and global pause are inherited powers of a regulated coin | an envelope on an `AdminCap` holder is impossible until F7 is fixed; a multisig address rotates by deriving a new address |
 | **TON** | fields in the jetton master and the DEX; bits `u128`; roles as a dict; `mintable` derived from `MINTABLE`, not the constant (families F2) | a contract as holder; **async**: a use is counted before the message; a bounce must report back or the disclosure states "spent is an upper bound" (F9) | `now()`; lock = word | a synchronous balance read, so no accounted-asset surplus rescue, foreign only; `MODERATE` cannot be added later without changing every wallet address (F6); `WithdrawFees` with a free `to` reaches bounced user proceeds (F4) → `FEE_ROUTING` with a fixed `rescue_to` |
 | **Cosmos (CW20 + DEX)** | a `governance` state item (bits, owner, pending, roles map, grants map); `info.sender` as caller; `minter: Option` becomes a `MINTABLE` holder | a contract as holder; atomic | block time; lock = word. **Code authority:** a wasm `admin` can migrate the code (families F10): `--no-admin` is a rule, SPECIFIED not built | the built DEX `Sweep{token, recipient, amount}` (F4) is the admin-chosen form: replace by `RESCUABLE` + `rescue_to` |

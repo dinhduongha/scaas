@@ -32,10 +32,10 @@ them. Nothing above bit 4 is built.
 | 19 | `0x80000` | `DEPRECATE` | a holder marks a release unusable for new instances | power | later |
 | 20 | `0x100000` | `ENABLE_KIND` | a holder turns a catalogue kind on or off | power | later |
 | 21 | `0x200000` | `MODERATE` | a holder moves units out of an account, public balances only | power | decided, CTR-GOV-08, -13, later |
-| 22-63 | | free | | | |
+| 22-127 | | free | | | |
 
-**Bands (CTR-GOV-10).** 0-63 SCaaS, one meaning everywhere. 64-127 per application contract, with a label (`APPROVE_LOAN`,
-`ADD_MEMBER`). 128 and above refused.
+**Bands (CTR-GOV-10 and its Change, owner 2026-11-04).** 0-127 SCaaS, one meaning everywhere. 128-255 per application
+contract, with a label (`APPROVE_LOAN`, `ADD_MEMBER`). No band is refused: a contract's `_validBits()` is the only check.
 
 **Types.** A capability is a behaviour of the instance with no holder. A power is tied to persons: it has holders, and a
 `Grant` can limit one.

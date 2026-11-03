@@ -67,7 +67,8 @@ interface IGovernance {
     error NotOwner(address caller);
     error NotPendingOwner(address caller);
     error MissingRole(uint8 bit, address account);
-    /// @notice Bits 128 and above are refused (CTR-GOV-10).
+    /// @notice No band is refused since CTR-GOV-10's Change (owner 2026-11-04): bits 0-127 are SCaaS's, 128-255 each
+    ///         application's, and a `uint8` bit and the `uint256` word hold no other. No path raises it; the declaration stays.
     error FeatureReserved(uint8 bit);
     /// @notice `UA_POOL` and `SHIELD_POOL` hold no power.
     error RoleAccountPool(uint8 bit, address account);
@@ -115,7 +116,7 @@ interface IGovernance {
     function cancelGrant(uint8 bit, address account) external;
     function grantOf(uint8 bit, address holder) external view returns (Grant memory);
     function setGrant(uint8 bit, address holder, GrantTerms calldata terms) external;
-    /// @notice The label of an application bit (64–127): its type, the entry it gates, a name for a wallet.
+    /// @notice The label of an application bit (128-255): its type, the entry it gates, a name for a wallet.
     function bitLabel(uint8 bit) external view returns (BitType, bytes4, string memory);
     function grantRole(uint8 bit, address account) external;
     function revokeRole(uint8 bit, address account) external;

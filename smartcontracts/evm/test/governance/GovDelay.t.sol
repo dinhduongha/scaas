@@ -18,9 +18,9 @@ import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 
-/// An application with one scalar, scoped power (bit 64) and a `grantDelay`, for the `scope` word of spec §1.6.
+/// An application with one scalar, scoped power (bit 128) and a `grantDelay`, for the `scope` word of spec §1.6.
 contract DelayApp is GovernanceBase {
-    uint8 internal constant APPROVE = 64;
+    uint8 internal constant APPROVE = 128;
 
     constructor(address owner_, uint64 delay) {
         GovernanceLib.Roles memory none;
@@ -183,15 +183,15 @@ contract GovDelayTest is Test {
         IGovernance.GrantTerms memory s = _open();
         s.scope = bytes32(uint256(7));
         vm.prank(OWNER);
-        a.setGrant(64, MANAGER, s);
+        a.setGrant(128, MANAGER, s);
         vm.warp(block.timestamp + D);
         vm.prank(OWNER);
-        a.setGrant(64, MANAGER, s);
+        a.setGrant(128, MANAGER, s);
         s.scope = bytes32(uint256(8));
         vm.prank(OWNER);
-        a.setGrant(64, MANAGER, s);
-        assertEq(a.grantOf(64, MANAGER).scope, bytes32(uint256(7)), "scope");
-        (,,, bool live) = a.pendingGrant(64, MANAGER);
+        a.setGrant(128, MANAGER, s);
+        assertEq(a.grantOf(128, MANAGER).scope, bytes32(uint256(7)), "scope");
+        (,,, bool live) = a.pendingGrant(128, MANAGER);
         assertTrue(live, "scope");
     }
 

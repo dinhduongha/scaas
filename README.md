@@ -381,7 +381,7 @@ section separates what runs today from what is designed.
 
 > [!IMPORTANT]
 > **The model below is designed, not built: PLANNED, with no spec yet.** The owner decided it on 2026-11-02 ([CTR-GOV-01](docs/decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex) to
-> [CTR-GOV-10](docs/decisions.md#ctr-gov-10--bit-bands-0-63-one-meaning-64-127-per-application-128-and-above-refused)). A prototype of its first two parts is measured on a branch, and the limit record does not fit the largest token as designed
+> [CTR-GOV-10](docs/decisions.md#ctr-gov-10--bit-bands-0-127-one-meaning-128-255-per-application-none-refused)). A prototype of its first two parts is measured on a branch, and the limit record does not fit the largest token as designed
 > ([results](docs/research/governance/prototype/RESULTS.md)). Everything cryptographic here is `UNAUDITED`.
 
 ### What exists today (BUILT)
@@ -397,7 +397,7 @@ The model answers five questions with five words, the same way at every address,
 
 | Question | Answer | In short |
 |---|---|---|
-| Does the right exist here? | a **bit** | Bits 0–63 mean the same on every SCaaS contract, so a wallet names one without reading the contract; bits 64–127 belong to each application contract, with a label; bits 128 and above are refused |
+| Does the right exist here? | a **bit** | Bits 0–127 mean the same on every SCaaS contract, so a wallet names one without reading the contract; bits 128–255 belong to each application contract, with a label; no band is refused |
 | Who has it? | a **holder** | An owner appoints holders per bit. Some bits have no holder: they bind or serve everyone (anyone may pay; every receiver is gated) |
 | Within what? | a **grant** | An optional limit on one holder: a band on the number the contract acts on, a total, a budget per window, an expiry, a use count, a scope the contract interprets. One level of narrower sub-grants; a sub-grant also spends its parent's budget |
 | Who changes that, and when? | the owner, after a **delay** | A new holder takes two calls by the owner, a set time apart, and is dead if not confirmed in time. Using a power, revoking and transferring ownership are not delayed |

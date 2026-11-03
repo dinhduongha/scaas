@@ -20,7 +20,7 @@ family. Form: the DEX round spec and the `typed-signing` plan.
 | # | Decision | Source | Section |
 |---|---|---|---|
 | G1 | One layer `GovernanceBase` on every token kind and `SCaaSDex`, own namespace `scaas.governance`, `AdminLib` → `GovernanceLib`, `IGovernance` replaces `ITokenAdmin` with every name kept; not in `MetaTxBase` or `UAMetaTxBase` | CTR-GOV-01 | §1 |
-| G2 | Bits 0-63 global, 64-127 per application, 128+ refused, word stays `uint256` | CTR-GOV-10 | §1.2 |
+| G2 | Bits 0-127 global, 128-255 per application, no band refused, word stays `uint256` (CTR-GOV-10's Change, owner 2026-11-04) | CTR-GOV-10 | §1.2 |
 | G3 | The whole `Grant` record is built; size blocks nothing, §9 keeps the record | CTR-GOV-02, -19, owner 2026-11-03 | §1.5, §9 |
 | G4 | "+0" means no new read on `transfer` and `mtxTransfer`, on every kind, pinned | CTR-GOV-03, -11, B-33 | §10.2 |
 | G5 | A regulated instance is known by its implementation; one per kind, never per feature | CTR-GOV-03 | §4 |
@@ -225,7 +225,8 @@ The worst case of a contract's bits is the worst case of **that contract's own c
 | 19 | `DEPRECATE` | a holder marks a release unusable for new instances, never undone | power | yes | no | none |
 | 20 | `ENABLE_KIND` | a holder turns a catalogue kind on or off | power | no | no | none |
 | 21 | `MODERATE` | a holder moves public units out of an account, no record, subject to `FREEZE`, `PAUSE` and the receiver check (§4.3) | power | no | yes | number only (CTR-GOV-08, -13) |
-| 22-63 | free | allocated once, by a spec, when one names a power | | | | |
+| 22-127 | free | allocated once, by a spec, when one names a power | | | | |
+| 128-255 | per application | the contract's own, labelled by `bitLabel(bit)`; never in this table (CTR-GOV-10's Change, owner 2026-11-04) | | | | |
 
 `MODERATE` had a number and no code; CTR-GOV-18 moved it from 9 to 21 so that the two receiver bits sit together. Bit 10 maps `Roles.compliance`; bits 8 and 9 have no holder, so the `compliance` word stops meaning "the `ALLOWLIST` role" (§12.3), and `init` refuses a non-zero `roles.compliance` with `RoleWithoutFeature(10)`, not 8.
 
@@ -241,7 +242,7 @@ Bit 7 is one sentence, since a public kind has no shielded path and the shielded
 
 The masks replace the shared `TOKEN_ROLES` and `TOKEN_CONTRACT_ONLY`: `WrappedLib.initToken` takes the kind's masks. A `grantRole(3, x)` on a `NORMAL*` kind moves from `RoleWithoutFeature` to `NoSuchRole`.
 
-`smartcontracts/vectors/governance/governance_bits.json` carries `bit → name → type → one disclosure sentence`, written by a forge test from the constants and read by every client. Bit 1 has two sentences, plain and hybrid; bit 5 two, public and confidential kinds. Bits 64-127 come from `bitLabel(bit)`.
+`smartcontracts/vectors/governance/governance_bits.json` carries `bit → name → type → one disclosure sentence`, written by a forge test from the constants and read by every client. Bit 1 has two sentences, plain and hybrid; bit 5 two, public and confidential kinds. Bits 128-255 come from `bitLabel(bit)`.
 
 ### 1.3 The pieces
 
@@ -411,13 +412,13 @@ A DEX handover (B-13): `transferOwnership` moves neither bit 11 nor 12, since th
 
 ### 1.9 The three examples of CTR-GOV-10, on the final rules
 
-The owner's examples must run on the model. `permission-model.md` §1.6 ran them before the attack round; these are the forms that pass §1.5 and §1.6 as they now stand. Each is an application contract with bits in 64-127, and a test with a mock of it (§10.3).
+The owner's examples must run on the model. `permission-model.md` §1.6 ran them before the attack round; these are the forms that pass §1.5 and §1.6 as they now stand. Each is an application contract with bits in 128-255, and a test with a mock of it (§10.3).
 
-**A loan approval bounded on a named argument.** `LoanBook is GovernanceBase`, bit 64 `APPROVE_LOAN`, `bitLabel(64) = (approveLoan.selector, "approve a loan")`, in `_validBits()`, `_roleBits()`, `_scalarBits()`, `_scopeBits()`. `approveLoan(uint256 loanId)` reads `principal` from its own record, the number it then pays, checks its preconditions, then `use(64, sender, principal)`, and compares the returned scope with the loan's branch. The committee, `owner`, grants in two calls `setGrant(64, manager, {min 1e6, max 1e8, total = portfolio cap, validUntil, scope = branchId, delegable})`; `total` is what `GrantBudgetRequired` asks of a scalar bit. The manager grants at once `setGrant(64, officer, {min 1e6, max 2e7, total ≤ what remains, scope = branchId})`. An approval debits the officer, then the manager, on the same principal.
+**A loan approval bounded on a named argument.** `LoanBook is GovernanceBase`, bit 128 `APPROVE_LOAN`, `bitLabel(128) = (approveLoan.selector, "approve a loan")`, in `_validBits()`, `_roleBits()`, `_scalarBits()`, `_scopeBits()`. `approveLoan(uint256 loanId)` reads `principal` from its own record, the number it then pays, checks its preconditions, then `use(128, sender, principal)`, and compares the returned scope with the loan's branch. The committee, `owner`, grants in two calls `setGrant(128, manager, {min 1e6, max 1e8, total = portfolio cap, validUntil, scope = branchId, delegable})`; `total` is what `GrantBudgetRequired` asks of a scalar bit. The manager grants at once `setGrant(128, officer, {min 1e6, max 2e7, total ≤ what remains, scope = branchId})`. An approval debits the officer, then the manager, on the same principal.
 
-**Adding or removing members only in one's own subtree.** `FamilyTree is GovernanceBase`, bits 64 `ADD_MEMBER`, 65 `REMOVE_MEMBER`, in `_scopeBits()`, not in `_scalarBits()`. `use(64, sender, 0)` returns `bytes32(rootId)`, and the contract checks `isDescendant(rootId, parent)`, bounded by a `MAX_DEPTH`. `_scopeNarrows(64, headId, sonId) = isDescendant(headId, sonId)`. The form `permission-model.md` gave, `{scope = headId, delegable}`, now reverts `GrantBudgetRequired`, by B-02. The clan's `owner` grants `{scope = headId, maxUses = N, delegable}`, and the son's leaf `{scope = sonId, maxUses ≤ what remains}`. Every add in the subtree debits the head, so N is the number of adds the subtree has; more takes the owner's edit, in two calls, and `uses` carries. A contract that wants no such limit states the largest `maxUses`, and the disclosure prints it. A removal is the same on bit 65, a tombstone that references the record.
+**Adding or removing members only in one's own subtree.** `FamilyTree is GovernanceBase`, bits 128 `ADD_MEMBER`, 129 `REMOVE_MEMBER`, in `_scopeBits()`, not in `_scalarBits()`. `use(128, sender, 0)` returns `bytes32(rootId)`, and the contract checks `isDescendant(rootId, parent)`, bounded by a `MAX_DEPTH`. `_scopeNarrows(128, headId, sonId) = isDescendant(headId, sonId)`. The form `permission-model.md` gave, `{scope = headId, delegable}`, now reverts `GrantBudgetRequired`, by B-02. The clan's `owner` grants `{scope = headId, maxUses = N, delegable}`, and the son's leaf `{scope = sonId, maxUses ≤ what remains}`. Every add in the subtree debits the head, so N is the number of adds the subtree has; more takes the owner's edit, in two calls, and `uses` carries. A contract that wants no such limit states the largest `maxUses`, and the disclosure prints it. A removal is the same on bit 129, a tombstone that references the record.
 
-**Circulation only within a group.** Two forms, by where balances live. (i) Custody: `GroupLedger is GovernanceBase` holds a plain `NORMAL` token and keeps member balances; bit 64 `MOVE_WITHIN`, in `_scalarBits()` and `_scopeBits()`; `moveWithin(uint64 from, uint64 to, uint256 amount)` passes the amount to `use`, which returns `groupId`, and both ends must be members. A delegable holder needs a `total`. The token sees one holder, and this runs in this release. (ii) Wallet balances: a token property, not a grant. Bit 8 `ALLOWLIST` with the group's contract pinned as `complianceRegistry`, which answers `hasFlags`. It needs kind 8 `NORMAL_REGULATED`, not built, and the registry's controller is disclosed.
+**Circulation only within a group.** Two forms, by where balances live. (i) Custody: `GroupLedger is GovernanceBase` holds a plain `NORMAL` token and keeps member balances; bit 128 `MOVE_WITHIN`, in `_scalarBits()` and `_scopeBits()`; `moveWithin(uint64 from, uint64 to, uint256 amount)` passes the amount to `use`, which returns `groupId`, and both ends must be members. A delegable holder needs a `total`. The token sees one holder, and this runs in this release. (ii) Wallet balances: a token property, not a grant. Bit 8 `ALLOWLIST` with the group's contract pinned as `complianceRegistry`, which answers `hasFlags`. It needs kind 8 `NORMAL_REGULATED`, not built, and the registry's controller is disclosed.
 
 ## 2. ABI — SPECIFIED
 
@@ -467,7 +468,7 @@ Each is one direct entry under the contract's guard. None is on `mtxSelectors()`
 | `holderCount(uint8 bit)` | `uint256`, holders, leaves included, pendings never |
 | `pendingGrant(uint8 bit, address account)` | `(uint64 eta, address proposer, bytes32 termsHash, bool live)`, dead ones too |
 | `grantOf(uint8 bit, address holder)` | `Grant` |
-| `bitLabel(uint8 bit)` | `(BitType, bytes4, string)`, bits 64-127; a contract with none reverts `FeatureInvalidForKind` |
+| `bitLabel(uint8 bit)` | `(BitType, bytes4, string)`, bits 128-255; a contract with none reverts `FeatureInvalidForKind` |
 | `supportsInterface(bytes4)` | every `GovernanceBase` contract answers `IGovernance` and `IERC165`, the DEX too (B-31); a token answers `IRescuable` while bit 17 is set |
 
 **Events, kept:** `RoleGranted(uint8 indexed bit, address indexed account, address indexed sender)`, `RoleRevoked(same)`, `FeatureDisabled(uint8 indexed bit, address indexed by)`, `OwnershipTransferStarted`, `OwnershipTransferred`.
@@ -537,7 +538,7 @@ The signed entries refuse `generation ≠` the stored one (`GenerationStale`) be
 
 `GrantTerms` in the struct string: `SetGrant(address from,uint64 generation,address target,uint8 bit,address holder,GrantTerms terms,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)GrantTerms(uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope)`. Every typehash is pinned by a `*TypehashIsPinned` test.
 
-Each op is on `_mtxRule` and `_uaAllowed`, because a named entry passes `_checkCall`. So `_execute` is overridden to refuse (`MtxSelectorNotAllowed`), and `uaExecute` and `uaBatch` too: otherwise `mtxExecute` reaches the same op under a `bytes data` signature, the path §3.6 rejects (B-14). `mtxBatch` and `executeMetaTransaction` fall with `_execute`. `mtxCancelNonce`, `uaCancelNonce` stay. Application bits 64-127: the application ships its own child of the same abstract base with one typed entry per bit; `GovernanceHolder` is a closed table.
+Each op is on `_mtxRule` and `_uaAllowed`, because a named entry passes `_checkCall`. So `_execute` is overridden to refuse (`MtxSelectorNotAllowed`), and `uaExecute` and `uaBatch` too: otherwise `mtxExecute` reaches the same op under a `bytes data` signature, the path §3.6 rejects (B-14). `mtxBatch` and `executeMetaTransaction` fall with `_execute`. `mtxCancelNonce`, `uaCancelNonce` stay. Application bits 128-255 (CTR-GOV-10's Change, owner 2026-11-04): the application ships its own child of the same abstract base with one typed entry per bit; `GovernanceHolder` is a closed table.
 
 **The regulated powers take a second holder release.** The table has no entry for bits 5-7, 10 or 21, and a closed table takes none later. A derived or PQ issuer reaches them through a second release, a child of the same abstract base with its own `GovernanceHolderFactory` and one typed entry per power, published with the regulated kinds. These bits are contract-only, and a holder clone is a contract. Until then a regulated kind's issuer is a contract that takes no derived signer. The node's rule takes a set of factories (§12.7), so the second release is a config row. PLANNED.
 
@@ -1043,7 +1044,7 @@ Still-open items of the gaps note and the earlier round:
 | gaps §3.8 (3) hybrid | §5 |
 | gaps §4 "every contract that has rights" | §1.1, CTR-GOV-14 |
 | gaps §4 `Roles.compliance` maps to bit 10; CTR-AS-03 | §1.2, §12.3 |
-| gaps §4 "it suffices": `approveMilestone`, `addAttester`, bond claim have no row | Accepted: bits 21-63 are for the spec that names them; §1.2 |
+| gaps §4 "it suffices": `approveMilestone`, `addAttester`, bond claim have no row | Accepted: bits 22-127 are for the spec that names them; §1.2 |
 | gaps §5, §7 the wording of CTR-AS-17, CTR-ZTH-47, token-wrappers cells | §12.1, §12.6 |
 | gaps §6 hybrid, `MODERATE`, regulated confidential, bits 13-14, tender rescue, `operatorDelay` | CTR-GOV-12, -13, -17, -14, -14, -15 |
 | gaps §6 which prototype choices stand | A leaf's revoker: kept, §1.5. A revoke keeps the record: kept. `_scopeNarrows` in the stub: kept. Parent debited by the same function: kept. `perWindow` needs `window`: kept. Two hooks for the guard: kept. Masks passed as arguments: kept. `use` in the library: reversed, B-26 |
