@@ -112,13 +112,7 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
             if (_uint16(string.concat(row, ".kind")) != UAKinds.MSIG) continue;
             bytes memory pop = _bytes(string.concat(row, ".pop"));
             assertEq(r.popOf(want), pop.length == 0 ? bytes("") : abi.encodePacked(keccak256(pop)), "an msig keeps keccak256(pop)");
-            string memory hs = string.concat(row, ".memberSigHashes");
-            uint256 nh = _count(hs);
-            assertEq(nh, pop.length == 0 ? 0 : UACall.memberSigs(pop).length, "a hash per slot of the pop");
-            for (uint256 h; h < nh; ++h) {
-                string memory e = string.concat(hs, "[", vm.toString(h), "]");
-                assertEq(r.memberSigHashOf(want, _uint16(string.concat(e, ".index"))), vm.parseJsonBytes32(j, string.concat(e, ".hash")), e);
-            }
+            assertEq(_memberSigHashes(row, want), pop.length == 0 ? 0 : UACall.memberSigs(pop).length, "a hash per slot of the pop");
             string memory digests = string.concat(row, ".innerDigests");
             for (uint256 d; d < _count(digests); ++d) {
                 string memory e = string.concat(digests, "[", vm.toString(d), "]");
@@ -130,6 +124,16 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
             }
         }
         assertEq(nestedRows, 7, "an inner of each nested row, two in msig-nested-twice");
+    }
+
+    /// The row's `memberSigHashes`, each equal to `r`'s `memberSigHashOf(ua, index)`; their count.
+    function _memberSigHashes(string memory row, bytes32 ua) internal view returns (uint256 nh) {
+        string memory hs = string.concat(row, ".memberSigHashes");
+        nh = _count(hs);
+        for (uint256 h; h < nh; ++h) {
+            string memory e = string.concat(hs, "[", vm.toString(h), "]");
+            assertEq(r.memberSigHashOf(ua, _uint16(string.concat(e, ".index"))), vm.parseJsonBytes32(j, string.concat(e, ".hash")), e);
+        }
     }
 
     function test_nestedVectors_typedPopIsTheBlob() public view {
@@ -217,6 +221,7 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         bytes32 ua = r.registerMsig(st, _none(), pop, "");
         assertEq(ua, vm.parseJsonBytes32(j, string.concat(row, ".ua")));
         assertEq(abi.encode(pop), _bytes(string.concat(row, ".pop")));
+        assertGt(_memberSigHashes(row, ua), 0, "afterAcceptance: its memberSigHashes on the chain");
 
         UARegistry first = r;
         r = _registry(address(0x5cb0));
@@ -226,6 +231,7 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         for (uint256 i; i < _count(".memberships"); ++i) _accept(logs, first, r, i);
         assertEq(r.registerMsig(st, _none(), pop, ""), ua);
         assertEq(r.popOf(ua), first.popOf(ua));
+        _memberSigHashes(row, ua);
     }
 
     /// Row `i` of `memberships` on `to`, read back from `from`'s events (`logs`) and hash only.

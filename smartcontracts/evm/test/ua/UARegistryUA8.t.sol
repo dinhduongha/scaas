@@ -117,6 +117,8 @@ contract UARegistryUA8Test is UARegistryBase {
         bytes pqzPop;
         bytes32 popMessage;
         bytes32 pqzRegMessage;
+        uint16[] msIndex; // portable.json `memberSigHashes[].index` (an `msig`)
+        bytes32[] msHash; // `memberSigHashes[].hash`
     }
 
     struct Neg {
@@ -221,7 +223,7 @@ contract UARegistryUA8Test is UARegistryBase {
         }
     }
 
-    function _parseRow(string memory j, string memory p) internal pure returns (Row memory r) {
+    function _parseRow(string memory j, string memory p) internal view returns (Row memory r) {
         r.name = _js(j, string.concat(p, ".name"));
         r.set = _js(j, string.concat(p, ".set"));
         r.kind = uint16(_ju(j, string.concat(p, ".kind")));
@@ -235,6 +237,14 @@ contract UARegistryUA8Test is UARegistryBase {
         r.pqzPop = _jb(j, string.concat(p, ".pqzPop"));
         r.popMessage = _jw(j, string.concat(p, ".popMessage"));
         r.pqzRegMessage = _jw(j, string.concat(p, ".pqzRegMessage"));
+        string memory hs = string.concat(p, ".memberSigHashes");
+        uint256 n;
+        while (_jx(j, string.concat(hs, "[", vm.toString(n), "]"))) ++n;
+        (r.msIndex, r.msHash) = (new uint16[](n), new bytes32[](n));
+        for (uint256 i; i < n; ++i) {
+            string memory e = string.concat(hs, "[", vm.toString(i), "]");
+            (r.msIndex[i], r.msHash[i]) = (uint16(_ju(j, string.concat(e, ".index"))), _jw(j, string.concat(e, ".hash")));
+        }
     }
 
     function loadRows() external view returns (Row[] memory rows) {
@@ -433,6 +443,9 @@ contract UARegistryUA8Test is UARegistryBase {
         assertEq(keccak256(_stored(r, row.ua)), keccak256(_args(row)), string.concat(row.name, ": registrationOf"));
         assertEq(r.kindOf(row.ua), row.kind);
         assertEq(r.popOf(row.ua), _popInState(row.kind, row.pop));
+        for (uint256 i; i < row.msHash.length; ++i) {
+            assertEq(r.memberSigHashOf(row.ua, row.msIndex[i]), row.msHash[i], string.concat(row.name, ": memberSigHashes"));
+        }
         assertEq(r.pqzPopOf(row.ua), row.pqzPop);
         (address ptr, bytes32 ph, bool proven) = r.pqzKeyOf(row.ua);
         assertEq(ptr.code, row.attrs.pqzKey.length == 0 ? bytes("") : bytes.concat(hex"00", row.attrs.pqzKey));
@@ -3178,7 +3191,7 @@ contract UARegistryUA8Test is UARegistryBase {
     function _apply(Row memory src, Neg memory g) internal pure returns (Row memory r) {
         r = Row(src.name, src.set, src.kind, src.keyData, src.ua,
             UACall.attrs(src.attrs.pqzKey, src.attrs.pqzPopHash, src.kemPk), src.kemPk, src.pop, src.pqzPop,
-            src.popMessage, src.pqzRegMessage);
+            src.popMessage, src.pqzRegMessage, src.msIndex, src.msHash);
         for (uint256 k; k < g.keys.length; ++k) {
             bytes32 key = keccak256(bytes(g.keys[k]));
             bytes memory v = g.values[k];
@@ -3283,7 +3296,7 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("setKemKey msig-pq/v2 n2048-kmax1024")) return (594840, 13797540);
         if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2048-kmax1024")) return (12948, 0);
         if (h == keccak256("setKemKey msig-12-slhdsa128s (96,832 B pop)")) return (6337432, 151930530);
-        if (h == keccak256("popOf (the blob setKemKey decodes) msig-12-slhdsa128s (96,832 B pop)")) return (13115, 0);
+        if (h == keccak256("popOf (the blob setKemKey decodes) msig-12-slhdsa128s (32 B: keccak256 of its 96,832 B pop)")) return (13115, 0);
         if (h == keccak256("popOf unregistered (view baseline)")) return (2834, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2048-kmax1024")) return (3341208, 81317970);
         if (h == keccak256("register mldsa65 without pqzPop n2048-kmax1024")) return (1536920, 37511010);
@@ -3449,7 +3462,7 @@ contract UARegistryUA8Test is UARegistryBase {
         big.setKemKey(ua, 1, UACall.kem(_kemPk(12)), UACall.sig(abi.encode(s)));
         _gas("setKemKey msig-12-slhdsa128s (96,832 B pop)");
         big.popOf(ua);
-        _gas("popOf (the blob setKemKey decodes) msig-12-slhdsa128s (96,832 B pop)");
+        _gas("popOf (the blob setKemKey decodes) msig-12-slhdsa128s (32 B: keccak256 of its 96,832 B pop)");
         big.popOf(bytes32(uint256(1))); // unregistered: no blob read, the view's own cost (intrinsic gas) alone
         _gas("popOf unregistered (view baseline)");
         _repinSkip();

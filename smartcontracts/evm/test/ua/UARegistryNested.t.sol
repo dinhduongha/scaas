@@ -1023,6 +1023,8 @@ contract UARegistryNestedTest is UARegistryBase {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         _popSlots(logs, p.r, p.ua, p.du, abi.encode(s));
         _popSlots(logs, p.r, p.iu, p.di, _popFromLogs(logs, p.r, p.iu));
+        _popBeforeRegistered(logs, p.r, p.ua);
+        _popBeforeRegistered(logs, p.r, p.iu);
         // a valid acceptance of a slot of the inner's pop: no write, no event
         IUARegistry.MemberSig memory acc = _acceptKeySig(p.di, ML65, p.k[0]);
         bytes32 h = p.r.memberSigHashOf(p.iu, acc.index);
@@ -1032,6 +1034,26 @@ contract UARegistryNestedTest is UARegistryBase {
         assertEq(vm.getRecordedLogs().length, 0, "a pop slot: no-op");
         assertEq(p.r.memberSigHashOf(p.iu, acc.index), h, "write-once");
         assertEq(p.r.popOf(p.id[0]), _pop(p.r, ML65, p.k[0]), "a single key keeps its pop bytes");
+    }
+
+    /// CTR-UA-33 A: every `PURPOSE_POP_V2` `UAMemberSig` of `ua` comes before its `UARegistered`, and there is one.
+    function _popBeforeRegistered(Vm.Log[] memory logs, UARegistry r, bytes32 ua) internal pure {
+        uint256 pops;
+        bool registered;
+        for (uint256 i; i < logs.length; ++i) {
+            Vm.Log memory l = logs[i];
+            if (l.emitter != address(r) || l.topics.length < 2 || l.topics[1] != ua) continue;
+            if (l.topics[0] == IUARegistry.UARegistered.selector) {
+                registered = true;
+            } else if (l.topics[0] == IUARegistry.UAMemberSig.selector) {
+                (,bytes32 purpose,) = abi.decode(l.data, (uint16, bytes32, bytes));
+                if (purpose != UAKinds.PURPOSE_POP_V2) continue;
+                assertFalse(registered, "a pop slot's UAMemberSig after UARegistered");
+                ++pops;
+            }
+        }
+        assertTrue(registered, "a UARegistered");
+        assertGt(pops, 0, "pop slots");
     }
 
     /// The `msig` `ua` registered with `pop`: `popOf` / `registrationOf` the 32-byte hash, each slot's hash at its index, the rest none.

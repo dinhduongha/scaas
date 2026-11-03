@@ -183,6 +183,7 @@ abstract contract UARegistryBase is Test {
             (uint16 at, bytes32 purpose, bytes memory b) = abi.decode(l.data, (uint16, bytes32, bytes));
             if (purpose != UAKinds.PURPOSE_POP_V2) continue;
             assertTrue(n == 0 || at > s[n - 1].index, "in index order");
+            assertEq(l.topics[2], m[at].id, "the member topic: the slot's id");
             assertEq(keccak256(b), from.memberSigHashOf(ua, at), "slot hash");
             s[n++] = m[at].kind == UAKinds.MSIG
                 ? IUARegistry.MemberSig(at, abi.decode(b, (IUARegistry.InnerSig[])), "")
