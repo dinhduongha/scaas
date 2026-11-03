@@ -838,7 +838,8 @@ kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, `secp256k1`, Schnorr
    `registrationOf`, or from the first chain's logs plus `popOf`: the event carries `popHash`,
    [CTR-UA-33](contracts/accounts.md#CTR-UA-33); [CTR-UA-31](contracts/accounts.md#CTR-UA-31)); later KEM versions come by `setKemKey`
    ([CTR-UA-32](contracts/accounts.md#CTR-UA-32)), a PQZ key by `setPqzKey` — ordinary `call` jobs, no fee.
-4. On the finalized `UARegistered` event the client reads `registrationOf(ua)` (the stored arguments equal what it sent),
+4. On the finalized `UARegistered` event the client reads `registrationOf(ua)` (the stored arguments equal what it sent; an `msig`'s `pop`
+   there is `keccak256(pop)`, [CTR-UA-33](contracts/accounts.md#CTR-UA-33) A),
    `pqzKeyOf(ua).proven` and `checkedOf(ua)`, and only then marks the account usable on that chain.
 
 Kind choice: staff/points of sale with a phone → `webauthn-p256` UA (or `SmartKeyAccount` when they want recovery);

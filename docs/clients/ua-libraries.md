@@ -49,8 +49,8 @@ the form the JSON calls take it, `{id: keyData}` as JSON text, no callback acros
 `scaas_ua_holder_pop_message_with`, `scaas_ua_pqz_key_record_message_with` in ua-c (NULL = none; additive, `SCAAS_UA_ABI_VERSION` stays 5), and
 `msigPqzEligibleWith`, `holderPopMessageWith`, `pqzKeyRecordMessageWith` in ua-cxx, ua-qt and ua-dart-frb ("" = none). An `inner` over 65,536 bytes,
 with more than 16 entries or key data over 580 bytes is `UAArgument` (ua-rs `json::inner_json`); with `inner`, `UAMemberUnknown` means a member
-missing from it or an entry that holds an `msig` (a third level). `scaas_ua_replayed_member_sig` / `replayedMemberSig` turn `membershipSigOf(ua,
-index)`'s bytes into the slot JSON `{index, members: [{index, sig}], sig}` a copy sends to `acceptMembership` (CTR-UA-37), `UAUnauthorized`
+missing from it or an entry that holds an `msig` (a third level). `scaas_ua_replayed_member_sig` / `replayedMemberSig` turn the bytes of a slot's
+`UAMemberSig` event (they hash to `memberSigHashOf(ua, index)`, owner 2026-11-03) into the slot JSON `{index, members: [{index, sig}], sig}` a copy sends to `acceptMembership` (CTR-UA-37), `UAUnauthorized`
 (ua-c `SCAAS_UA_ERR_UNAUTHORIZED` = 20, new) for bytes that are not that slot's. Tests: `nested.json`'s `msig-nested-pq`, its eligibility rows,
 nested PQZ key records and every `memberships` row in each wrapper (`test_nested_inner`, `nested_inner`, `nested inner`). BUILT.
 

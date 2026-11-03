@@ -340,7 +340,8 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   exactly the `register` arguments — `(kind, keyData, attrs, pop, pqzPop)` — and anyone rebuilds the call from state when
   logs are gone (history expiry); the event `UARegistered` carries the same bytes except `pop`, which it carries as
   `popHash = keccak256(pop)` ([CTR-UA-33](#CTR-UA-33): one rule on every family; `pop` is read with `popOf` /
-  `registrationOf`). A PQZ key added later by `setPqzKey` is not
+  `registrationOf`). An `msig` is the exception on EVM (owner 2026-11-03, CTR-UA-33 A): state keeps `keccak256(pop)` and a hash per slot,
+  the slots' bytes are in `UAMemberSig`. A PQZ key added later by `setPqzKey` is not
   in `attrs` (read it with `pqzKeyOf`, `pqzPopOf`, `pqzKeySigOf`); its bytes are at the SSTORE2 pointer `pqzKeyOf(ua).ptr`
   (`eth_getCode(ptr)` without the leading `STOP` byte), as `recordOf`'s. Cost [measured, A8]: a registration with a
   stored PQZ proof is 84.7–108.9 M gas (regular + state, [§1.15](#gas)), more than a 60 M block, so on such a chain the proof
@@ -391,6 +392,18 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   argument (`keyData`, `attrs`, `pqzPop`) and the `checked` values stay in the event. On Soroban (owner 2026-11-01) `key_data`
   stays too unless it is over 15,360 B, when `UaRegistered` carries it empty, by its length alone: the id stays the topic and
   `record_of` / `registration_of` return the bytes. Only a `frost-bn254` key reaches that, under the 16,384 B events limit.
+- **A, an `msig` on EVM** (Change, owner 2026-11-03, built on `msig-nested`). An `msig` record keeps no `pop` bytes: state keeps
+  `keccak256(pop)` of the exact bytes the registry hashed (the `abi.encode(MemberSig[])` it assembled from the typed list) and, per slot of
+  the `pop`, `keccak256` of that member's signature object (the slot's `sig`, or an `msig` member's `abi.encode(InnerSig[])`), written once
+  with the slot's bit; `memberSigHashOf(ua, index)` returns it. Each slot's bytes go in one event,
+  `UAMemberSig(ua, member, index, purpose, sig)`, `ua` and `member` indexed, `purpose` = `PURPOSE_POP_V2`, emitted in index order before
+  `UARegistered`. **`popOf(ua)` of an `msig` returns that 32-byte hash as its `bytes`**, as does `registrationOf`'s `pop`; empty for an
+  empty `pop`, and then no hash is written. A reader tells which by the record's kind (`kindOf`, `recordOf`): every single-key and derived
+  kind keeps its `pop` bytes in state, unchanged. So for an `msig` "from state alone" no longer holds: the record is state plus its events.
+  A copy rebuilds the `pop` from the `UAMemberSig` events of purpose `pop`, in `index` order, checks each slot against `memberSigHashOf` and
+  the whole against `popOf`, and sends `registerMsig` to the new registry, which verifies it. The node keeps and serves these events'
+  bytes ([NODE-IDX-08](../node/indexer-feeds.md#NODE-IDX-08), SPECIFIED). **Staging:** every other family keeps storing an `msig`'s
+  `pop` until its own round (Soroban's `registration_of` returns it, [NET-SOR-28](../networks/soroban.md#NET-SOR-28)).
 - **B.** In `UASig.members` (`MemberSig[]`, [CTR-UA-36](#CTR-UA-36); also the `pop` of `registerMsig` and the KEM / PQZ-key signatures of an `msig`), a
   `MemberSig` has no key data at all (`{index, members, sig}`, owner 2026-11-02, [CTR-UA-38](#CTR-UA-38)): a native member has none, a registered member's key is read from its own record — `vk` at `keyPtr` for the
   stored kinds, the key data in the registration blob for the classical kinds — the key bytes only, never the member's
@@ -544,13 +557,20 @@ explorers show listed and accepted apart.
 - **State.** One bitmap slot per `msig`, bit `i` = slot `i`, written at registration: a slot that signed the stored `pop` is accepted from
   the start (a portable `pop` does this on each registry it is copied to); an empty `pop` writes nothing, so every slot starts unaccepted.
   Each registry keeps its own bits: on a new chain a member accepts there too, with the same signature.
-- **The signature is kept, and a copy replays it** (owner 2026-11-03). `acceptMembership` stores it with the bit, written once, bound to `(ua, index)`, as Soroban's `AcceptSig`: the
-  slot's `sig`, or an `msig` member's `abi.encode(InnerSig[])`, the slot's kind in `msigOf` says which. `membershipSigOf(ua, index)` returns it, as Soroban's `membership_sig_of`; empty for a slot of the
-  `pop`, whose signature the `pop` holds, for a slot not accepted and for any other id; gen 2 forwards a gen-1 record. Copying a record needs no new signature: a third party sends
-  `acceptMembership` on the new registry with the stored bytes. A `pop` with a slot of an inner `msig` that accepted this way reverts `UAPoP` on that registry until the acceptance is replayed, the inner's leaves first.
-- **What an acceptance costs.** Keeping the signature is what costs: it is a contract, paid in EIP-8037 state gas, by whoever submits. Measured (`test_acceptanceCostRows`, regular + state): a native member, 65 B stored, the first bit of
-  the word: 97,867 + 578,340 (before: 58,776 + 97,920); an `msig` member, a two-leaf list, 384 B stored, a later bit: 164,803 + 968,490 (before: 124,083 + 0). The state grows with the stored bytes, about 1,530 gas a byte, from those two rows: an ML-DSA-65 `sig`
-  of 3,309 B costs about 5.4 M state gas, by that slope, not measured. Regular + state must fit one block (EIP-8037). A verification pays none of this: it reads the bit.
+- **The signature's hash is kept, its bytes are in an event, and a copy replays it** (owner 2026-11-03, Change of the same day: a hash, not
+  the bytes). `acceptMembership` stores `keccak256` of the slot's signature object, bound to `(ua, index)`, written once with the bit, no
+  SSTORE2: of the slot's `sig`, or of an `msig` member's `abi.encode(InnerSig[])`, the slot's kind in `msigOf` says which. The same store
+  holds the slots of the `pop` from registration ([CTR-UA-33](#CTR-UA-33) A), so an acceptance of a slot the `pop` set stays a no-op.
+  `memberSigHashOf(ua, index)` returns it; zero for a slot not accepted and for any other id; gen 2 forwards a gen-1 record. The bytes go
+  in `UAMemberSig(ua, member, index, purpose, sig)` with `purpose` = `PURPOSE_MEMBERSHIP`, before `UAMembershipAccepted`. Copying a record
+  needs no new signature: a third party takes the bytes from the event (or from the node, [NODE-IDX-08](../node/indexer-feeds.md#NODE-IDX-08)),
+  checks them against `memberSigHashOf`, and sends `acceptMembership` on the new registry, which verifies the signature itself. A `pop` with a
+  slot of an inner `msig` that accepted this way reverts `UAPoP` on that registry until the acceptance is replayed, the inner's leaves first.
+- **What an acceptance costs.** Measured (`test_acceptanceCostRows`, `--isolate`, regular + EIP-8037 state): a native member, 65 B in the event,
+  the first bit of the word: 75,621 + 195,840; an `msig` member, a two-leaf list, 384 B in the event, a later bit: 144,751 + 97,920. Before
+  anything was kept: 58,776 + 97,920 and 124,083 + 0; with the bytes in SSTORE2 (the first form of the ruling): 97,867 + 578,340 and
+  164,803 + 968,490. The hash is one new slot of state gas, whatever the signature's size; the event's bytes cost regular gas only. A
+  verification pays none of this: it reads the bit.
 - **Verify.** In every `msig` verification (`requireAuthorized`, the ERC-1271 and UA envelope paths through it, `setKemKey`, `setPqzKey`) a
   `MemberSig` of an unaccepted slot fails the verification, even with a good signature. The registration's own `pop` is exempt: it is what
   accepts its signers. **On a registry with this rule, until the accepted weight reaches the threshold, the `msig` can authorize nothing, on any
@@ -567,7 +587,7 @@ explorers show listed and accepted apart.
   may add it later.
 - **Generations.** The bits live with the record. A gen-1 record on a gen 2 is settled as `setKemKey` does (UA8-D11): `acceptMembership` there
   is `UAUnauthorized` and the member accepts on gen 1; `memberAccepted` forwards to gen 1, and so does the verify, including `setPqzKey` on a
-  gen 2 that hosts the record. So does `membershipSigOf`. A native member of a structure gen 1 holds is judged by gen 1's clone hash (`smartKeyCloneHash`) in the portable path on gen 2 too.
+  gen 2 that hosts the record. So does `memberSigHashOf`. A native member of a structure gen 1 holds is judged by gen 1's clone hash (`smartKeyCloneHash`) in the portable path on gen 2 too.
 
 <a id="CTR-UA-38"></a>**CTR-UA-38** — **An `msig` may hold `msig` members; verification goes two levels only** (owner 2026-11-02; [decisions.md](../decisions.md); design and measurements: spec
 `superpowers/specs/2026-11-02-msig-nested.md`). UNAUDITED. **EVM: BUILT.** Soroban, NEAR and Algorand: not built, each takes the rule in its own round, see Staging.
@@ -583,12 +603,18 @@ explorers show listed and accepted apart.
 - **Minimal.** [CTR-UA-07](#CTR-UA-07)'s rule holds at both levels in the portable path, and an acceptance's inner list is minimal too.
 - **Acceptance** ([CTR-UA-37](#CTR-UA-37)). Each word speaks for its own structure and both are read at verify. An inner `msig` accepts its slot in `U` by a threshold of its own accepted slots over `UAMembership{U, I}`. The `pop` exemption stops at the outer.
 - **PQ eligibility** ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12)). An `msig` member counts as PQ iff it is PQ-eligible itself, read from its record.
-- **Limits.** The bound of §1.8 step 4 limits what verifies: every signature across both levels. It does not limit what registers: an all-PQ structure stores its `pop`, whose regular + state gas must fit one block (EIP-8037). 32 ML-DSA-65 signatures, 111,040 B of
-  `pop`: 180,984,718 in all; 48, 166,528 B: 271,648,028, which verifies under the budget and does not fit a 200 M block. A chain's block limit is its own: the registry assumes none.
+- **Limits.** The bound of §1.8 step 4 limits what verifies: every signature across both levels. What registers must fit one block by regular +
+  state gas (EIP-8037). Since an `msig` keeps hashes, not its `pop` (owner 2026-11-03, CTR-UA-33 A), the state is a slot per `pop` slot and the
+  bytes are log data: 32 ML-DSA-65 signatures in two inner `msig`s, 111,040 B of `pop`: 9,673,506 + 1,262,250 (180,984,718 in all when the `pop`
+  was stored); 48 in three, 166,528 B: 14,695,013 + 1,409,130 (271,648,028 before, which did not fit a 200 M block). A chain's block limit is its
+  own: the registry assumes none.
 - **Generic `bytes auth`.** The tokens' generic entries forward the blob past its one offset word and the registry's calldata decoder reads it (`UAKinds.uaAuthCall`): no parser on an untrusted path. A low-level call replaces the typed one, with the no-code check before it.
-- **Generations.** A gen 2 over a gen 1 without this ABI does not deploy (`UAConfig(0)`, the constructor calls `membershipSigOf`). A gen 1 must be redeployed for it: nothing with value is live.
+- **Generations.** A gen 2 over a gen 1 without this ABI does not deploy (`UAConfig(0)`, the constructor calls `memberSigHashOf`). A gen 1 must be redeployed for it: nothing with value is live.
 - <a id="msig-staging"></a>**Staging** (owner 2026-11-03). EVM goes first; each other family in its own round, Soroban, NEAR and Algorand each separately. **Until its round a family refuses a record that holds an `msig` member**, and its flat bytes are unchanged:
   Soroban's `layout_member_ok` has no `msig` arm, so `register_msig` is `KeyData` ([NET-SOR-18](../networks/soroban.md#NET-SOR-18)); NEAR has no nested `msig` ([NET-NEAR-04](../networks/near.md#NET-NEAR-04)); Algorand refuses the member kind ([NET-ALG-09](../networks/algorand.md#NET-ALG-09)).
+  **Hashes, not bytes** (owner 2026-11-03) is EVM's too, for now: Soroban keeps the acceptance's bytes in `AcceptSig` (`membership_sig_of`) and an `msig`'s `pop` in its
+  record (`registration_of`) until a later round, for every family, after governance, moves them to a hash in state and the bytes in an event; so does the `pop` of every
+  kind there. Until then a copy from Soroban to EVM reads the bytes from Soroban's state, a copy from EVM reads them from EVM's events.
 
 ### 1.5 Keys, purposes, tags
 
@@ -1287,6 +1313,8 @@ interface IUARegistry is IERC5267 {
     event UAPqzKeyAdded(bytes32 indexed ua, bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes pqzKey, bytes sig);   // setPqzKey
     event UAKemKeySet(bytes32 indexed ua, uint64 indexed version, bytes32 keyHash, KemKey kem, bytes sig);    // setKemKey; keyHash = keccak256(kemPk) of the assembled key
     event UAKeyCached(bytes32 indexed ua, uint16 indexed kind, uint256 part, address ptr);   // P6c, ML-DSA
+    /// owner 2026-11-03: one msig member signature, purpose PURPOSE_POP_V2 (a pop slot) or PURPOSE_MEMBERSHIP; sig hashes to memberSigHashOf
+    event UAMemberSig(bytes32 indexed ua, bytes32 indexed member, uint16 index, bytes32 purpose, bytes sig);
 
     error UAKindDisabled(uint16 kind);            // not enabled in this generation (incl. kinds a predecessor offers)
     error UAKeyData(uint16 kind);                 // non-canonical, curve, subgroup, identity, ordering, threshold, cap bound
@@ -1356,7 +1384,7 @@ interface IUARegistry is IERC5267 {
     /// anyone: slot memberSig.index of the msig ua accepts its place, the member's signature (CTR-UA-37); a no-op once accepted
     function acceptMembership(bytes32 ua, MemberSig calldata memberSig) external;
     function memberAccepted(bytes32 ua, uint256 index) external view returns (bool);
-    function membershipSigOf(bytes32 ua, uint256 index) external view returns (bytes memory); // CTR-UA-37: `sig`, or abi.encode(InnerSig[])
+    function memberSigHashOf(bytes32 ua, uint256 index) external view returns (bytes32);  // CTR-UA-33 A / CTR-UA-37: keccak256(sig, or abi.encode(InnerSig[]))
     function smartKeyCloneHash() external view returns (bytes32);                             // 0 for none
 
     function recordOf(bytes32 ua) external view returns (Record memory r, address pqzKey);   // pqzKey: SSTORE2 pointer, proven or not (a directory), 0 = none
@@ -1369,7 +1397,7 @@ interface IUARegistry is IERC5267 {
     function webAuthnKeyOf(bytes32 ua) external view returns (WebAuthnKey memory);
     function muSig2KeyOf(bytes32 ua) external view returns (MuSig2Key memory);
     function frostKeyOf(bytes32 ua) external view returns (FrostKey memory);
-    function popOf(bytes32 ua) external view returns (bytes memory);
+    function popOf(bytes32 ua) external view returns (bytes memory);   // an msig: keccak256(pop) as 32 bytes (CTR-UA-33 A)
     function pqzPopOf(bytes32 ua) external view returns (bytes memory);
     function pqzKeySigOf(bytes32 ua) external view returns (bytes memory);   // setPqzKey's signature; empty when the key came with register
     function pqzKeyOf(bytes32 ua) external view returns (address ptr, bytes32 pqzPopHash, bool proven);   // what PQZ tokens read; key bytes = eth_getCode(ptr) minus the leading STOP
@@ -1881,7 +1909,7 @@ New registration flow:
    testnet relayer cap is 64 M) — it submits `register` with an empty `pqzPop` and then `storePqzPop(ua, pqzPop)`. A copy to another chain is the
    same call, built from `registrationOf`, or from the first chain's logs plus `popOf` (the event carries `popHash`, [CTR-UA-33](#CTR-UA-33);
    [CTR-UA-31](#CTR-UA-31)).
-4. On the finalized `UARegistered` the client checks `registrationOf(ua)` — the stored `(kind, keyData, attrs, pop)` equal what it sent —
+4. On the finalized `UARegistered` the client checks `registrationOf(ua)` — the stored `(kind, keyData, attrs, pop)` equal what it sent (an `msig`'s `pop` there is `keccak256(pop)`, [CTR-UA-33](#CTR-UA-33) A) —
    and `pqzKeyOf(ua).proven` / `checkedOf(ua)` for the PQZ key, and only then marks the account usable on that chain. Later KEM versions
    come by `setKemKey`.
 5. A client keeps **one PQZ key per UA per PQZ parameter set** ([CTR-UA-16](#CTR-UA-16); one key, ever, on chains of one set; on a
