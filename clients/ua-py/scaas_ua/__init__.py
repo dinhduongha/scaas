@@ -756,6 +756,38 @@ def ua_sig(key_data=b'', signature=b'', members=()):
     return {'keyData': _hx(key_data or b''), 'signature': _hx(signature or b''), 'members': _member_sigs(members)}
 
 
+def encode_inner_sigs(members):
+    """``abi.encode(InnerSig[])`` of (index, sig) tuples: what ``membershipSigOf`` returns for an msig slot."""
+    tails = [_word(int(i)) + _word(64) + _word(len(s)) + bytes(s) + bytes(-len(s) % 32) for i, s in members]
+    heads, at = [], 32 * len(tails)
+    for t in tails:
+        heads.append(_word(at))
+        at += len(t)
+    return _word(32) + _word(len(tails)) + b''.join(heads) + b''.join(tails)
+
+
+def replayed_member_sig(key_data, index, stored):
+    """The (index, inner, sig) slot a copy sends to ``acceptMembership`` from ``membershipSigOf(ua, index)`` alone (CTR-UA-37): an msig slot's
+    stored bytes are ``abi.encode(InnerSig[])``, canonical, at most 16; a signing slot's its sig. UAUnauthorized otherwise."""
+    members, b = msig_structure(key_data)['members'], bytes(stored)
+    refused = UAError('UAUnauthorized', f'slot {index}')
+    if index >= len(members):
+        raise refused
+    if members[index]['kind'] != 0x0120:
+        return index, [], b
+    w = lambda o: int.from_bytes(b[o:o + 32], 'big')
+    if len(b) < 64 or w(0) != 32 or w(32) > 16:
+        raise refused
+    inner = []
+    for j in range(w(32)):
+        u = 64 + w(64 + 32 * j)
+        o = u + w(u + 32) + 32
+        inner.append((w(u), b[o:o + w(o - 32)]))
+    if any(i > 0xFFFF for i, _ in inner) or encode_inner_sigs(inner) != b:
+        raise refused
+    return index, inner, b''
+
+
 def set_kem_key_args(ua, version, kem_pk, sig):
     """``setKemKey(ua, version, KemKey, UASig)``; ``sig`` a ua_sig (empty for the version-0 hash-commit fill); no key is no call."""
     if not kem_pk:
