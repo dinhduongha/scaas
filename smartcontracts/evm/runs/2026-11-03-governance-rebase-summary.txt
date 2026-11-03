@@ -1,0 +1,52 @@
+# governance rebased on main b25796b6 (PR #4 OrderRouter, PR #5 CTR-ZTH-94, CI per family); full output in git-ignored .log files
+# old -> new per commit (backup branch governance-backup-9c01e328, local)
+41c4e40d -> f16e0212
+f2cdcf73 -> 297a9e01
+3aae1cc4 -> cdae856a
+c8ed0b85 -> 8700e7b1
+e10628c3 -> 7dd6f072
+b2f9ce90 -> a1eaeffc
+c92ca511 -> 2959ee8b
+84f59dfa -> fcf7b978
+53278cd3 -> fd655e8c
+9fb53e81 -> 84dbaa10
+2ef4dfb8 -> a7a79a64
+605f4bca -> efeeb6ea
+6e04b520 -> cc7c365e
+47814588 -> 6c582ff0
+d69ce2ee -> 558474cf
+d51054a3 -> a38e010a
+acbdd9f8 -> c280c61f
+2fb13ac5 -> ca23cc1a
+b9d1e0d9 -> 9cfb69b7
+e1bcf0d9 -> 63082885
+17710c39 -> b013e485
+747658c3 -> f1666001
+43ff2768 -> dd713bc0
+3eb9926c -> 7d12dbe8
+7304109f -> 687afdb3
+9d10c81a -> e1976249
+67e1d43a -> fca774c2
+1e751045 -> 2c530f7c
+a402b9bb -> fbfd7d21
+b092284c -> df7285b0
+296ed3ae -> 772d64a4
+4e1f98c0 -> 501f7d45
+0dd4a917 -> dd7e5449
+a5fcf6b7 -> 033079b2
+a215e196 -> dc14ebbe
+cad1cee3 -> a678a770
+b1eb6138 -> 7edcad34
+e324e57e -> 7825361b
+59823417 -> 396b191d
+775f745d -> 662acbd1
+a71c07a8 -> 60406d42
+9c01e328 -> d81741e9
+step | commit | rc | counts
+forge-build | d81741e9 | 0 | whole tree
+forge-full | d81741e9 | 0 | 2224 passed 0 failed 14 skipped (forge, 191 suites, default set n2304-kmax4096; DexKat green, no KAT regenerated)
+forge-isolate-ua | d81741e9 | 0 | 22 passed 0 failed (UAGas, UARegistryGroups)
+size-gate | d81741e9 | 0 | self-test ok; 0 errors, 87 contracts; above 64 KiB: WrappedPqzToken 70,088; WrappedZetherToken 60,574 (4,962 B under 65,536)
+zether-prover-cross | d81741e9 | 0 | 10 passed 0 failed (forge --ffi, zether-cli from clients/zether-prover)
+clientkeys | d81741e9 | 0 | 227 passed 0 failed 2 skipped (node --test)
+docs-check | d81741e9 | 0 | 0 errors, 5 warnings, 16 notes; test_docs_check ok; facts 8852, 0 misses, 387 pending
