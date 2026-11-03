@@ -465,8 +465,67 @@ TestCase {
         return JSON.parse(o)
     }
 
+    // the With forms with inner ({id: keyData}, the JSON calls' form): msig-nested-pq's eligibility and holder record, every eligibility
+    // row and every nested PQZ key record reproduce; without inner they stay UAMemberUnknown, so does a third level. Every memberships
+    // row's stored bytes turn back into its slot through replayedMemberSig
+    function test_nested_inner() {
+        const n = vectors.load("nested.json")
+        const inner = {}
+        for (const r of n.registrations) if (r.kind === 0x0120) inner[r.ua] = r.keyData
+        const all = JSON.stringify(inner)
+        const holders = n.registrations.concat(n.afterAcceptance).filter(r => r.attrs.kemPk !== "0x" || r.attrs.pqzKey !== "0x")
+        compare(holders.map(r => r.name), ["msig-nested-pq"])
+        for (const r of holders) {
+            verify(UaKinds.msigPqzEligibleWith(r.keyData, all), r.name)
+            compare(UaKinds.lastError, "", r.name)
+            verify(!UaKinds.msigPqzEligible(r.keyData))
+            compare(UaKinds.lastError, "UAMemberUnknown", r.name)
+            const h = JSON.parse(UaKinds.holderPopMessageWith(r.kind, r.ua, r.keyData, "0x", "0x", "0x", r.attrs.kemPk, all))
+            compare([h.kemRecordHash, h.portableRecordDigest, h.registrationDigest, h.message, h.memberDigest],
+                    [r.kemRecordHash, r.portableRecordDigest, r.registrationDigest, r.popMessage, r.memberDigest], r.name)
+            compare(UaKinds.holderPopMessageWith(r.kind, r.ua, r.keyData, "0x", "0x", "0x", r.attrs.kemPk, ""), "")
+            compare(UaKinds.lastError, "UAMemberUnknown", r.name)
+        }
+        for (const r of n.eligibility) {
+            compare(UaKinds.msigPqzEligibleWith(r.keyData, JSON.stringify(r.inner)), r.eligible, r.reason)
+            compare(UaKinds.lastError, "", r.reason)
+            for (const none of ["", "null", "{}"]) {
+                verify(!UaKinds.msigPqzEligibleWith(r.keyData, none))
+                compare(UaKinds.lastError, "UAMemberUnknown", r.reason)
+            }
+        }
+        const third = n.structures[0], pq = holders[0].keyData, t = {}
+        t[third.member] = pq
+        verify(!UaKinds.msigPqzEligibleWith(third.keyData, JSON.stringify(t)))
+        compare(UaKinds.lastError, "UAMemberUnknown", "a third level")
+        for (const bad of ["not json", "[]", JSON.stringify({"0x01": "0x"}), " ".repeat(65537)]) {
+            verify(!UaKinds.msigPqzEligibleWith(pq, bad))
+            compare(UaKinds.lastError, "UAArgument", bad.slice(0, 12))
+        }
+        compare(n.pqzKeyRecords.length, 4)
+        for (const r of n.pqzKeyRecords) {
+            const g = JSON.parse(UaKinds.pqzKeyRecordMessageWith(r.kind, r.ua, inner[r.ua], r.pqzKey, "0x", r.pqzPopHash, false, all))
+            compare([g.pqzKeyHash, g.pqzPopHash, g.pqzKeyDigest, g.recordDigest, g.message, g.pqzRegMessage, g.memberDigest],
+                    [r.pqzKeyHash, r.pqzPopHash, r.pqzKeyDigest, r.recordDigest, r.message, r.pqzRegMessage, r.memberDigest], r.name)
+            compare(UaKinds.pqzKeyRecordMessageWith(r.kind, r.ua, inner[r.ua], r.pqzKey, "0x", r.pqzPopHash, false, ""), "")
+            compare(UaKinds.lastError, "UAMemberUnknown", r.name)
+        }
+        compare(n.memberships.length, 4)
+        for (const m of n.memberships) {
+            const d = n.registrations.find(r => r.ua === m.ua).keyData
+            compare(JSON.parse(UaKinds.replayedMemberSig(d, m.index, m.stored)), {index: m.index, members: m.members, sig: m.sig}, m.name)
+            compare(UaKinds.replayedMemberSig(d, 16, m.stored), "")
+            compare(UaKinds.lastError, "UAUnauthorized", m.name)
+            if (m.members.length > 0) {
+                compare(UaKinds.replayedMemberSig(d, m.index, m.stored + "00"), "")
+                compare(UaKinds.lastError, "UAUnauthorized", m.name + ": not canonical")
+            }
+        }
+    }
+
     // nested msig (nested.json): the digest chain from the low-level calls, the JSON calls with `inner`. Key data alone refuses an msig member by
-    // name, so holderPopMessage and pqzKeyRecordMessage stop there on a record that needs its inner keys; this API verifies no signature
+    // name, so holderPopMessage and pqzKeyRecordMessage stop there on a record that needs its inner keys; their `With` forms take `inner`
+    // (test_nested_inner). This API verifies no signature
     function test_nested_rows() {
         const n = vectors.load("nested.json")
         const inner = {}

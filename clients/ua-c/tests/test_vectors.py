@@ -65,7 +65,10 @@ for name, res, args in [
     ('pqz_reg_message', st, [u16, u8, u8, sz, u8, sz, P]), ('pqz_key_digest', st, [u8, u8, P]),
     ('pqz_key_record_digest', st, [u8, u8, u8, P]), ('membership_digest', st, [u8, u8, P]),
     ('pqz_key_record_message', st, [u16, u8, u8, sz, u8, sz, u8, sz, u8, sz, bl, P]),
-    ('is_portable_purpose', st, [u8, P]), ('msig_pqz_eligible', st, [u8, sz, P]),
+    ('is_portable_purpose', st, [u8, P]), ('msig_pqz_eligible', st, [u8, sz, P]), ('msig_pqz_eligible_with', st, [u8, sz, u8, P]),
+    ('holder_pop_message_with', st, [u16, u8, u8, sz, u8, sz, u8, sz, u8, sz, u8, sz, u8, P]),
+    ('pqz_key_record_message_with', st, [u16, u8, u8, sz, u8, sz, u8, sz, u8, sz, bl, u8, P]),
+    ('replayed_member_sig', st, [u8, sz, u16, u8, sz, P, P]),
     ('ua_auth_domain_separator', st, [u32, u64, u8, u8, P]),
     ('ua_auth_digest', st, [u32, u64, u8, u8, u8, u8, u8, P]), ('member_digest', st, [u8, u8, P]),
     ('canonical_id', st, [u8, P, P]), ('encode_msig', st, [u16, P, sz, P, P]), ('registration_args', st, [u8, P, P]), ('set_kem_key_args', st, [u8, P, P]), ('set_pqz_key_args', st, [u8, P, P]),
@@ -441,8 +444,8 @@ class Vectors(unittest.TestCase):
 
     def test_nested_rows(self):
         """Nested msig (nested.json): the digest chain from the low-level calls, the JSON calls with `inner`. Key data alone refuses an msig
-        member by name, so holder_pop_message and pqz_key_record_message stop there on a record that needs its inner keys; no lookup
-        crosses this ABI, and it verifies no signature."""
+        member by name, so holder_pop_message and pqz_key_record_message stop there on a record that needs its inner keys; their `_with`
+        forms take `inner` (test_nested_inner). It verifies no signature."""
         inner = {r['ua']: r['keyData'] for r in NV['registrations'] if r['kind'] == 0x0120}
         pop_tag, member_tag = out32(L.purpose_tag_v, b'pop', 2), out32(L.purpose_tag, b'member')
         eligible = lambda d: code_of(lambda: ok(L.msig_pqz_eligible(d, len(d), C.byref(C.c_bool()))))
@@ -522,6 +525,68 @@ class Vectors(unittest.TestCase):
         with self.subTest('eligibility'):
             for r in NV['eligibility']:
                 self.assertEqual(eligible(b(r['keyData'])), 'UAMemberUnknown', r['reason'])
+
+    def test_nested_inner(self):
+        """The `_with` calls with `inner` ({id: keyData}, the JSON calls' form): msig-nested-pq's eligibility and holder record, every
+        eligibility row and every nested PQZ key record reproduce; without `inner` they stay UAMemberUnknown, so does a third level. Every
+        memberships row's `stored` turns back into its slot through scaas_ua_replayed_member_sig."""
+        regs = NV['registrations']
+        inner = json.dumps({r['ua']: r['keyData'] for r in regs if r['kind'] == 0x0120}).encode()
+
+        def eligible(d, i):
+            o = C.c_bool()
+            ok(L.msig_pqz_eligible_with(d, len(d), i, C.byref(o)))
+            return o.value
+
+        def holder_with(r, i):
+            a, o = r['attrs'], HolderPop()
+            ua, d, pk = b(r['ua']), b(r['keyData']), b(a['kemPk'])
+            ok(L.holder_pop_message_with(r['kind'], ua, d, len(d), b'', 0, b'', 0, b'', 0, pk, len(pk), i, C.byref(o)))
+            return o
+
+        def key_record_with(r, i):
+            o, ua, d, k, h = PqzKeyRecord(), b(r['ua']), b(json.loads(inner)[r['ua']]), b(r['pqzKey']), b(r['pqzPopHash'])
+            ok(L.pqz_key_record_message_with(r['kind'], ua, d, len(d), k, len(k), b'', 0, h, len(h), False, i, C.byref(o)))
+            return o
+        pq = next(r for r in regs if r['name'] == 'msig-nested-pq')
+        self.assertTrue(eligible(b(pq['keyData']), inner))
+        self.assertEqual(code_of(lambda: eligible(b(pq['keyData']), None)), 'UAMemberUnknown')
+        for r in NV['eligibility']:
+            self.assertEqual(eligible(b(r['keyData']), json.dumps(r['inner']).encode()), r['eligible'], r['reason'])
+            for none in (None, b'', b'null', b'{}'):
+                self.assertEqual(code_of(lambda: eligible(b(r['keyData']), none)), 'UAMemberUnknown', r['reason'])
+        third = b(NV['structures'][0]['keyData'])
+        self.assertEqual(code_of(lambda: eligible(third, json.dumps({NV['structures'][0]['member']: pq['keyData']}).encode())),
+                         'UAMemberUnknown', 'a third level')
+        holders = [r for r in regs + NV['afterAcceptance'] if r['attrs']['kemPk'] != '0x' or r['attrs']['pqzKey'] != '0x']
+        self.assertEqual([r['name'] for r in holders], ['msig-nested-pq'])
+        for r in holders:
+            g = holder_with(r, inner)
+            self.assertEqual((hx(bytes(g.kem_record_hash)), hx(bytes(g.portable_record_digest)), hx(bytes(g.registration_digest)),
+                              hx(bytes(g.message)), mh(g)),
+                             (r['kemRecordHash'], r['portableRecordDigest'], r['registrationDigest'], r['popMessage'], r['memberDigest']))
+            self.assertEqual(code_of(lambda: holder_with(r, None)), 'UAMemberUnknown', r['name'])
+            self.assertEqual(code_of(lambda: register(r)), 'UAMemberUnknown', r['name'])
+        self.assertEqual(len(NV['pqzKeyRecords']), 4)
+        for r in NV['pqzKeyRecords']:
+            g = key_record_with(r, inner)
+            self.assertEqual((hx(bytes(g.pqz_key_hash)), hx(bytes(g.pqz_pop_hash)), hx(bytes(g.pqz_key_digest)), hx(bytes(g.record_digest)),
+                              hx(bytes(g.message)), hx(bytes(g.pqz_reg_message)), mh(g)),
+                             (r['pqzKeyHash'], r['pqzPopHash'], r['pqzKeyDigest'], r['recordDigest'], r['message'], r['pqzRegMessage'],
+                              r['memberDigest']), r['name'])
+            self.assertEqual(code_of(lambda: key_record_with(r, None)), 'UAMemberUnknown', r['name'])
+        for bad in (b'not json', b'[]', json.dumps({'0x01': '0x'}).encode(), b' ' * 65537, b'\xff'):
+            self.assertEqual(code_of(lambda: eligible(b(pq['keyData']), bad)), 'UAArgument', bad[:12])
+        self.assertEqual(len(NV['memberships']), 4)
+        for m in NV['memberships']:
+            d, st_ = b(next(r for r in regs if r['ua'] == m['ua'])['keyData']), b(m['stored'])
+            got = json.loads(text(L.replayed_member_sig, d, len(d), m['index'], st_, len(st_)))
+            self.assertEqual(got, {'index': m['index'], 'members': m['members'], 'sig': m['sig']}, m['name'])
+            self.assertEqual(code_of(lambda: text(L.replayed_member_sig, d, len(d), 16, st_, len(st_))), 'UAUnauthorized', m['name'])
+            if m['members']:
+                self.assertEqual(code_of(lambda: text(L.replayed_member_sig, d, len(d), m['index'], st_ + b'\0', len(st_) + 1)),
+                                 'UAUnauthorized', 'not canonical')
+        self.assertEqual(L.status_name(20).decode(), 'UAUnauthorized')
 
     def test_registration_args(self):
         commits = 0

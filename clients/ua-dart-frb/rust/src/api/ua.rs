@@ -147,10 +147,21 @@ pub fn is_zether(kind: i64) -> bool {
 pub fn is_pqz_holder(kind: i64) -> bool {
     k(kind).is_ok_and(scaas_ua::is_pqz_holder)
 }
-/// An `msig` whose members of kinds outside 0x0130-0x0133 weigh less than its threshold (`UAKeyData` on malformed data).
+/// An `msig` whose members of kinds outside 0x0130-0x0133 weigh less than its threshold (`UAKeyData` on malformed data); an `msig`
+/// member is `UAMemberUnknown` here, [`msig_pqz_eligible_with`] reads its record.
 #[frb(sync)]
 pub fn msig_pqz_eligible(key_data: Vec<u8>) -> R<bool> {
-    Ok(scaas_ua::msig_pqz_eligible(&key_data)?)
+    msig_pqz_eligible_with(key_data, String::new())
+}
+/// The `_with` forms take `inner`, the `msig` members' structures: `{id: keyData}` JSON as [`registration_args`]' `inner` ("" = none;
+/// over 65,536 bytes, more than 16 entries or key data over 580 bytes is `UAArgument`). An `msig` member counts as PQ iff it is
+/// PQ-eligible itself, read from its entry; a member without an entry, or an entry that holds an `msig` (two levels only), is
+/// `UAMemberUnknown`.
+#[frb(sync)]
+pub fn msig_pqz_eligible_with(key_data: Vec<u8>, inner: String) -> R<bool> {
+    let i = scaas_ua::json::inner_json(&inner)?;
+    let l = scaas_ua::json::lookup(&i);
+    Ok(scaas_ua::msig_pqz_eligible_with(&key_data, &l)?)
 }
 #[frb(sync)]
 pub fn is_signing(kind: i64) -> bool {
@@ -235,8 +246,25 @@ pub fn holder_pop_message(
     pqz_pop_hash: Option<Vec<u8>>,
     kem_pk: Option<Vec<u8>>,
 ) -> R<HolderPop> {
-    let h = hash(&pqz_pop_hash)?;
-    let r = scaas_ua::holder_pop_message(k(kind)?, &ua, &key_data, pqz_key.as_deref(), pqz_pop.as_deref(), h.as_ref(), kem_pk.as_deref())?;
+    holder_pop_message_with(kind, ua, key_data, pqz_key, pqz_pop, pqz_pop_hash, kem_pk, String::new())
+}
+/// [`holder_pop_message`] with `inner` as in [`msig_pqz_eligible_with`].
+#[frb(sync)]
+#[allow(clippy::too_many_arguments)]
+pub fn holder_pop_message_with(
+    kind: i64,
+    ua: [u8; 32],
+    key_data: Vec<u8>,
+    pqz_key: Option<Vec<u8>>,
+    pqz_pop: Option<Vec<u8>>,
+    pqz_pop_hash: Option<Vec<u8>>,
+    kem_pk: Option<Vec<u8>>,
+    inner: String,
+) -> R<HolderPop> {
+    let (h, i) = (hash(&pqz_pop_hash)?, scaas_ua::json::inner_json(&inner)?);
+    let l = scaas_ua::json::lookup(&i);
+    let (key, pop, kem) = (pqz_key.as_deref(), pqz_pop.as_deref(), kem_pk.as_deref());
+    let r = scaas_ua::ua8::holder_pop_message_with(k(kind)?, &ua, &key_data, key, pop, h.as_ref(), kem, &l)?;
     Ok(HolderPop {
         pqz_key_hash: r.pqz_key_hash,
         pqz_pop_hash: r.pqz_pop_hash,
@@ -293,8 +321,24 @@ pub fn pqz_key_record_message(
     pqz_pop_hash: Option<Vec<u8>>,
     already_set: bool,
 ) -> R<PqzKeyRecord> {
-    let h = hash(&pqz_pop_hash)?;
-    let r = scaas_ua::ua8::pqz_key_record_message(k(kind)?, &ua, &key_data, &pqz_key, pqz_pop.as_deref(), h.as_ref(), already_set)?;
+    pqz_key_record_message_with(kind, ua, key_data, pqz_key, pqz_pop, pqz_pop_hash, already_set, String::new())
+}
+/// [`pqz_key_record_message`] with `inner` as in [`msig_pqz_eligible_with`].
+#[frb(sync)]
+#[allow(clippy::too_many_arguments)]
+pub fn pqz_key_record_message_with(
+    kind: i64,
+    ua: [u8; 32],
+    key_data: Vec<u8>,
+    pqz_key: Vec<u8>,
+    pqz_pop: Option<Vec<u8>>,
+    pqz_pop_hash: Option<Vec<u8>>,
+    already_set: bool,
+    inner: String,
+) -> R<PqzKeyRecord> {
+    let (h, i) = (hash(&pqz_pop_hash)?, scaas_ua::json::inner_json(&inner)?);
+    let l = scaas_ua::json::lookup(&i);
+    let r = scaas_ua::ua8::pqz_key_record_message_with(k(kind)?, &ua, &key_data, &pqz_key, pqz_pop.as_deref(), h.as_ref(), already_set, &l)?;
     Ok(PqzKeyRecord {
         pqz_key_hash: r.pqz_key_hash,
         pqz_pop_hash: r.pqz_pop_hash,
@@ -304,6 +348,14 @@ pub fn pqz_key_record_message(
         pqz_reg_message: r.pqz_reg_message,
         member_digest: r.member_digest,
     })
+}
+/// The `MemberSig` a copy sends to `acceptMembership` from `membershipSigOf(ua, index)` alone (CTR-UA-37), as the slot JSON `{index,
+/// members: [{index, sig}], sig}` of a [`registration_args`] `pop` entry: `key_data` the `msig` `ua`'s, `stored` a signing slot's `sig` or
+/// an `msig` slot's `abi.encode(InnerSig[])`, canonical, at most 16 entries. Anything else, or an index past the members, is
+/// `UAUnauthorized`; an index outside u16 `UAArgument`.
+#[frb(sync)]
+pub fn replayed_member_sig(key_data: Vec<u8>, index: i64, stored: Vec<u8>) -> R<String> {
+    Ok(scaas_ua::json::replayed_member_sig_json(&key_data, n(index)?, &stored)?)
 }
 /// POP_V2, KEM, PQZ_KEY: the only purposes where a code-less native `msig` member signs the record's typed digest itself
 /// (`eth_signTypedData_v4`, TS-D4); every other purpose stays UAAuth.

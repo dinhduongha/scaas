@@ -39,6 +39,12 @@ pub mod qobject {
         #[qinvokable] #[cxx_name = "isPqzHolder"] fn is_pqz_holder(self: Pin<&mut Self>, kind: i32) -> bool;
         /// false on failure (see `lastError`) as well as for a non-eligible `msig`.
         #[qinvokable] #[cxx_name = "msigPqzEligible"] fn msig_pqz_eligible(self: Pin<&mut Self>, key_data: &QString) -> bool;
+        /// The `With` forms take `inner`, the `msig` members' structures: `{id: keyData}` JSON as `registrationArgs`' `inner` ("" = none;
+        /// over 65,536 bytes, more than 16 entries or key data over 580 bytes is `UAArgument`). An `msig` member counts as PQ iff it is
+        /// PQ-eligible itself, read from its entry; a member without an entry, or an entry that holds an `msig` (two levels only), is
+        /// `UAMemberUnknown`.
+        #[qinvokable] #[cxx_name = "msigPqzEligibleWith"]
+        fn msig_pqz_eligible_with(self: Pin<&mut Self>, key_data: &QString, inner: &QString) -> bool;
         #[qinvokable] #[cxx_name = "isSigning"] fn is_signing(self: Pin<&mut Self>, kind: i32) -> bool;
         #[qinvokable] #[cxx_name = "isMember"] fn is_member(self: Pin<&mut Self>, kind: i32, hedera_native: bool) -> bool;
         #[qinvokable] #[cxx_name = "uaMessage"]
@@ -70,11 +76,23 @@ pub mod qobject {
         /// As `holderPopMessage`, with only the proof's hash (`pqz_pop_hash` 32 bytes, "0x" = absent) next to or instead of the proof bytes.
         #[qinvokable] #[cxx_name = "holderPopMessageH"]
         fn holder_pop_message_h(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, kem_pk: &QString) -> QString;
+        /// As `holderPopMessageH`, with `inner` as in `msigPqzEligibleWith`.
+        #[qinvokable] #[cxx_name = "holderPopMessageWith"]
+        fn holder_pop_message_with(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, kem_pk: &QString, inner: &QString) -> QString;
         /// The `setPqzKey` record (ruling A1-I1), JSON `{pqzKeyHash, pqzPopHash, pqzKeyDigest, recordDigest, message, pqzRegMessage[, memberDigest]}`:
         /// `message` is what the UA signs, `pqzRegMessage` what the key's `R_REG` proves over. `pqz_pop` bytes and / or `pqz_pop_hash`
         /// ("0x" = absent); `already_set` = the registration has a PQZ key (`UAPqzKeySet`).
         #[qinvokable] #[cxx_name = "pqzKeyRecordMessage"]
         fn pqz_key_record_message(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, already_set: bool) -> QString;
+        /// As `pqzKeyRecordMessage`, with `inner` as in `msigPqzEligibleWith`.
+        #[qinvokable] #[cxx_name = "pqzKeyRecordMessageWith"]
+        fn pqz_key_record_message_with(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, already_set: bool, inner: &QString) -> QString;
+        /// The `MemberSig` a copy sends to `acceptMembership` from `membershipSigOf(ua, index)` alone (CTR-UA-37), as the slot JSON
+        /// `{index, members: [{index, sig}], sig}` of a `registrationArgs` `pop` entry: `key_data` the `msig` `ua`'s, `stored` a signing slot's
+        /// `sig` or an `msig` slot's `abi.encode(InnerSig[])`, canonical, at most 16 entries. Anything else, or an index past the members, is
+        /// `UAUnauthorized`.
+        #[qinvokable] #[cxx_name = "replayedMemberSig"]
+        fn replayed_member_sig(self: Pin<&mut Self>, key_data: &QString, index: i32, stored: &QString) -> QString;
         /// What the PQZ key's `R_REG` proves over: `UAMessage(0x0142, POP_V2, portableRecordDigest(…))` of the registering `kind`,
         /// `kem_pk` the register KEM key (version 0; "" or "0x" = none).
         #[qinvokable] #[cxx_name = "pqzRegMessage"]
@@ -198,6 +216,13 @@ fn optional_hash(q: &QString) -> Res<Option<[u8; 32]>> {
     let b = bytes(q)?;
     if b.is_empty() { Ok(None) } else { b.try_into().map(Some).map_err(|_| "UAPqzPopHash") }
 }
+/// `inner` of the `With` calls ("" = none), bounded as `ua::json::inner_json`.
+fn inner_of(q: &QString) -> Res<Vec<([u8; 32], Vec<u8>)>> {
+    ua::json::inner_json(&s(q)).map_err(|e| match e {
+        ua::json::JsonError::Argument => ARG,
+        ua::json::JsonError::Ua(e) => e.code(),
+    })
+}
 fn k(kind: i32) -> Res<u16> {
     u16::try_from(kind).map_err(|_| ARG)
 }
@@ -285,7 +310,14 @@ impl qobject::UaKinds {
         self.run(|| Ok(ua::is_pqz_holder(k(kind)?)))
     }
     pub fn msig_pqz_eligible(self: Pin<&mut Self>, key_data: &QString) -> bool {
-        self.run(|| from_ua(ua::msig_pqz_eligible(&key(key_data)?)))
+        self.msig_pqz_eligible_with(key_data, &QString::default())
+    }
+    pub fn msig_pqz_eligible_with(self: Pin<&mut Self>, key_data: &QString, inner: &QString) -> bool {
+        self.run(|| {
+            let i = inner_of(inner)?;
+            let l = ua::json::lookup(&i);
+            from_ua(ua::msig_pqz_eligible_with(&key(key_data)?, &l))
+        })
     }
     pub fn is_signing(self: Pin<&mut Self>, kind: i32) -> bool {
         self.run(|| Ok(ua::is_signing(k(kind)?)))
@@ -320,11 +352,15 @@ impl qobject::UaKinds {
         self.holder_pop_message_h(kind, ua, key_data, pqz_key, pqz_pop, &QString::from("0x"), kem_pk)
     }
     pub fn holder_pop_message_h(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, kem_pk: &QString) -> QString {
+        self.holder_pop_message_with(kind, ua, key_data, pqz_key, pqz_pop, pqz_pop_hash, kem_pk, &QString::default())
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn holder_pop_message_with(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, kem_pk: &QString, inner: &QString) -> QString {
         QString::from(&self.run(|| {
             let (pk, pop, kpk) = (key(pqz_key)?, bytes(pqz_pop)?, bytes(kem_pk)?);
-            let hash = optional_hash(pqz_pop_hash)?;
-            let h = from_ua(ua::ua8::holder_pop_message(
-                k(kind)?, &fixed(ua)?, &key(key_data)?, Some(&pk[..]), Some(&pop[..]), hash.as_ref(), Some(&kpk[..]),
+            let (hash, i) = (optional_hash(pqz_pop_hash)?, inner_of(inner)?);
+            let h = from_ua(ua::ua8::holder_pop_message_with(
+                k(kind)?, &fixed(ua)?, &key(key_data)?, Some(&pk[..]), Some(&pop[..]), hash.as_ref(), Some(&kpk[..]), &ua::json::lookup(&i),
             ))?;
             let mut o = serde_json::json!({
                 "pqzKeyHash": hx(&h.pqz_key_hash), "pqzPopHash": hx(&h.pqz_pop_hash), "kemRecordHash": hx(&h.kem_record_hash),
@@ -337,10 +373,14 @@ impl qobject::UaKinds {
         }))
     }
     pub fn pqz_key_record_message(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, already_set: bool) -> QString {
+        self.pqz_key_record_message_with(kind, ua, key_data, pqz_key, pqz_pop, pqz_pop_hash, already_set, &QString::default())
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn pqz_key_record_message_with(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, already_set: bool, inner: &QString) -> QString {
         QString::from(&self.run(|| {
-            let (pop, hash) = (bytes(pqz_pop)?, optional_hash(pqz_pop_hash)?);
-            let r = from_ua(ua::ua8::pqz_key_record_message(
-                k(kind)?, &fixed(ua)?, &key(key_data)?, &key(pqz_key)?, Some(&pop[..]), hash.as_ref(), already_set,
+            let (pop, hash, i) = (bytes(pqz_pop)?, optional_hash(pqz_pop_hash)?, inner_of(inner)?);
+            let r = from_ua(ua::ua8::pqz_key_record_message_with(
+                k(kind)?, &fixed(ua)?, &key(key_data)?, &key(pqz_key)?, Some(&pop[..]), hash.as_ref(), already_set, &ua::json::lookup(&i),
             ))?;
             let mut o = serde_json::json!({
                 "pqzKeyHash": hx(&r.pqz_key_hash), "pqzPopHash": hx(&r.pqz_pop_hash), "pqzKeyDigest": hx(&r.pqz_key_digest),
@@ -350,6 +390,12 @@ impl qobject::UaKinds {
                 o["memberDigest"] = hx(&m).into();
             }
             Ok(o.to_string())
+        }))
+    }
+    pub fn replayed_member_sig(self: Pin<&mut Self>, key_data: &QString, index: i32, stored: &QString) -> QString {
+        QString::from(&self.run(|| {
+            let index = u16::try_from(index).map_err(|_| ARG)?;
+            from_json(ua::json::replayed_member_sig_json(&key(key_data)?, index, &bytes(stored)?))
         }))
     }
     pub fn pqz_reg_message(self: Pin<&mut Self>, kind: i32, ua: &QString, pqz_key: &QString, kem_pk: &QString) -> QString {

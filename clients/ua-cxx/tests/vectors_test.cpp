@@ -439,7 +439,8 @@ static std::string hexOf(const char* byte, size_t n) {
 }
 
 // Nested msig (nested.json): the digest chain from the low-level calls, the JSON calls with `inner`. Key data alone refuses an msig member by
-// name, so holderPopMessage and pqzKeyRecordMessage stop there on a record that needs its inner keys; this API verifies no signature.
+// name, so holderPopMessage and pqzKeyRecordMessage stop there on a record that needs its inner keys; their `With` forms take `inner`
+// (nested_inner). This API verifies no signature.
 static void nested_rows() {
     json n = load("nested.json"), inner = json::object();
     for (auto& r : n["registrations"]) {
@@ -546,6 +547,72 @@ static void nested_rows() {
     }
 }
 
+// The With forms with inner ({id: keyData}, the JSON calls' form): msig-nested-pq's eligibility and holder record, every eligibility row and
+// every nested PQZ key record reproduce; without inner they stay UAMemberUnknown, so does a third level. Every memberships row's stored
+// bytes turn back into its slot through replayedMemberSig.
+static void nested_inner() {
+    json n = load("nested.json"), inner = json::object();
+    for (auto& r : n["registrations"]) {
+        if (kind(r["kind"]) == 0x0120) inner[r["ua"].get<std::string>()] = r["keyData"];
+    }
+    auto str = [](const json& v) { return v.get<std::string>(); };
+    auto mh = [](const std::optional<Bytes>& m) { return m ? hx(*m) : std::string(); };
+    const std::string all = inner.dump();
+    int holders = 0;
+    for (auto* list : {&n["registrations"], &n["afterAcceptance"]}) {
+        for (auto& r : *list) {
+            if (r["attrs"]["kemPk"] == "0x" && r["attrs"]["pqzKey"] == "0x") continue;
+            ++holders;
+            std::string name = r["name"];
+            Bytes ua = bytes(r["ua"]), d = bytes(r["keyData"]), pk = bytes(r["attrs"]["kemPk"]);
+            CHECK(name == "msig-nested-pq" && msigPqzEligibleWith(d, all), name);
+            CHECK(code_of([&] { msigPqzEligible(d); }) == "UAMemberUnknown", name);
+            HolderPop h = holderPopMessageWith(0x0120, ua, d, all, std::nullopt, std::nullopt, std::nullopt, pk);
+            CHECK(hx(h.kemRecordHash) == str(r["kemRecordHash"]) && hx(h.portableRecordDigest) == str(r["portableRecordDigest"]), name);
+            CHECK(hx(h.registrationDigest) == str(r["registrationDigest"]) && hx(h.message) == str(r["popMessage"]), name);
+            CHECK(mh(h.memberDigest) == str(r["memberDigest"]), name);
+            CHECK(code_of([&] { holderPopMessageWith(0x0120, ua, d, "", std::nullopt, std::nullopt, std::nullopt, pk); }) == "UAMemberUnknown", name);
+        }
+    }
+    CHECK(holders == 1, "one nested holder row");
+    for (auto& r : n["eligibility"]) {
+        std::string why = r["reason"];
+        Bytes d = bytes(r["keyData"]);
+        CHECK(msigPqzEligibleWith(d, r["inner"].dump()) == r["eligible"].get<bool>(), why);
+        for (const char* none : {"", "null", "{}"}) CHECK(code_of([&] { msigPqzEligibleWith(d, none); }) == "UAMemberUnknown", why);
+    }
+    auto& third = n["structures"][0];
+    std::string pq;
+    for (auto& r : n["registrations"]) if (r["name"] == "msig-nested-pq") pq = str(r["keyData"]);
+    CHECK(code_of([&] { msigPqzEligibleWith(bytes(third["keyData"]), json{{str(third["member"]), pq}}.dump()); }) == "UAMemberUnknown", "a third level");
+    for (const auto& bad : std::vector<std::string>{"not json", "[]", "{\"0x01\": \"0x\"}", std::string(65537, ' '), "\xff"})
+        CHECK(code_of([&] { msigPqzEligibleWith(bytes(json(pq)), bad); }) == "UAArgument", bad.substr(0, 12));
+    CHECK(n["pqzKeyRecords"].size() == 4, "record rows");
+    for (auto& r : n["pqzKeyRecords"]) {
+        std::string name = r["name"];
+        Bytes ua = bytes(r["ua"]), d = bytes(inner[str(r["ua"])]), key = bytes(r["pqzKey"]), h = bytes(r["pqzPopHash"]);
+        PqzKeyRecord g = pqzKeyRecordMessageWith(0x0120, ua, d, all, key, std::nullopt, h);
+        CHECK(hx(g.pqzKeyHash) == str(r["pqzKeyHash"]) && hx(g.pqzPopHash) == str(r["pqzPopHash"]), name);
+        CHECK(hx(g.pqzKeyDigest) == str(r["pqzKeyDigest"]) && hx(g.recordDigest) == str(r["recordDigest"]), name);
+        CHECK(hx(g.message) == str(r["message"]) && hx(g.pqzRegMessage) == str(r["pqzRegMessage"]), name);
+        CHECK(mh(g.memberDigest) == str(r["memberDigest"]), name);
+        CHECK(code_of([&] { pqzKeyRecordMessageWith(0x0120, ua, d, "", key, std::nullopt, h); }) == "UAMemberUnknown", name);
+    }
+    CHECK(n["memberships"].size() == 4, "membership rows");
+    for (auto& m : n["memberships"]) {
+        std::string name = m["name"];
+        Bytes d;
+        for (auto& r : n["registrations"]) if (r["ua"] == m["ua"]) d = bytes(r["keyData"]);
+        Bytes stored = bytes(m["stored"]);
+        uint16_t index = m["index"];
+        CHECK(json::parse(replayedMemberSig(d, index, stored)) == json({{"index", index}, {"members", m["members"]}, {"sig", m["sig"]}}), name);
+        CHECK(code_of([&] { replayedMemberSig(d, 16, stored); }) == "UAUnauthorized", name);
+        Bytes longer = stored;
+        longer.push_back(0);
+        if (!m["members"].empty()) CHECK(code_of([&] { replayedMemberSig(d, index, longer); }) == "UAUnauthorized", name + ": not canonical");
+    }
+}
+
 static void registration_args() {
     json p = load("portable.json"), k = load("kinds.json");
     int commits = 0, withCommit = 0;
@@ -631,7 +698,7 @@ int main(int argc, char** argv) {
         {"invalid_rows", invalid_rows}, {"natives_native_space_canonical_ids", natives_native_space_canonical_ids},
         {"messages", messages}, {"structures", structures}, {"portable", portable}, {"kem_record", kem_record},
         {"pqz_key_record", pqz_key_record}, {"membership_rows", membership_rows}, {"portable_purposes", portable_purposes},
-        {"holder_refusals", holder_refusals}, {"registration_args", registration_args}, {"nested_rows", nested_rows}, {"set_key_args", set_key_args}};
+        {"holder_refusals", holder_refusals}, {"registration_args", registration_args}, {"nested_rows", nested_rows}, {"nested_inner", nested_inner}, {"set_key_args", set_key_args}};
     if (argc != 2 || !tests.count(argv[1])) { std::fprintf(stderr, "usage: vectors_test <name>\n"); return 2; }
     try { tests[argv[1]](); } catch (const std::exception& e) { std::fprintf(stderr, "exception: %s\n", e.what()); return 1; }
     return failures ? 1 : 0;

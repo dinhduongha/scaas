@@ -83,9 +83,20 @@ bool isZether({required PlatformInt64 kind}) =>
 bool isPqzHolder({required PlatformInt64 kind}) =>
     ScaasUa.instance.api.crateApiUaIsPqzHolder(kind: kind);
 
-/// An `msig` whose members of kinds outside 0x0130-0x0133 weigh less than its threshold (`UAKeyData` on malformed data).
+/// An `msig` whose members of kinds outside 0x0130-0x0133 weigh less than its threshold (`UAKeyData` on malformed data); an `msig`
+/// member is `UAMemberUnknown` here, [`msig_pqz_eligible_with`] reads its record.
 bool msigPqzEligible({required List<int> keyData}) =>
     ScaasUa.instance.api.crateApiUaMsigPqzEligible(keyData: keyData);
+
+/// The `_with` forms take `inner`, the `msig` members' structures: `{id: keyData}` JSON as [`registration_args`]' `inner` ("" = none;
+/// over 65,536 bytes, more than 16 entries or key data over 580 bytes is `UAArgument`). An `msig` member counts as PQ iff it is
+/// PQ-eligible itself, read from its entry; a member without an entry, or an entry that holds an `msig` (two levels only), is
+/// `UAMemberUnknown`.
+bool msigPqzEligibleWith({required List<int> keyData, required String inner}) =>
+    ScaasUa.instance.api.crateApiUaMsigPqzEligibleWith(
+      keyData: keyData,
+      inner: inner,
+    );
 
 bool isSigning({required PlatformInt64 kind}) =>
     ScaasUa.instance.api.crateApiUaIsSigning(kind: kind);
@@ -202,6 +213,27 @@ HolderPop holderPopMessage({
   kemPk: kemPk,
 );
 
+/// [`holder_pop_message`] with `inner` as in [`msig_pqz_eligible_with`].
+HolderPop holderPopMessageWith({
+  required PlatformInt64 kind,
+  required U8Array32 ua,
+  required List<int> keyData,
+  Uint8List? pqzKey,
+  Uint8List? pqzPop,
+  Uint8List? pqzPopHash,
+  Uint8List? kemPk,
+  required String inner,
+}) => ScaasUa.instance.api.crateApiUaHolderPopMessageWith(
+  kind: kind,
+  ua: ua,
+  keyData: keyData,
+  pqzKey: pqzKey,
+  pqzPop: pqzPop,
+  pqzPopHash: pqzPopHash,
+  kemPk: kemPk,
+  inner: inner,
+);
+
 /// The message `R_REG` proves over: `ua_message(0x0142, POP_V2, portable_record_digest(ua, kind, key_hash(pqz_key),
 /// kem_record_hash))`, `kind` the registering kind, `kem_pk` the register KEM key (version 0; null / empty = none).
 U8Array32 pqzRegMessage({
@@ -260,6 +292,41 @@ PqzKeyRecord pqzKeyRecordMessage({
   pqzPop: pqzPop,
   pqzPopHash: pqzPopHash,
   alreadySet: alreadySet,
+);
+
+/// [`pqz_key_record_message`] with `inner` as in [`msig_pqz_eligible_with`].
+PqzKeyRecord pqzKeyRecordMessageWith({
+  required PlatformInt64 kind,
+  required U8Array32 ua,
+  required List<int> keyData,
+  required List<int> pqzKey,
+  Uint8List? pqzPop,
+  Uint8List? pqzPopHash,
+  required bool alreadySet,
+  required String inner,
+}) => ScaasUa.instance.api.crateApiUaPqzKeyRecordMessageWith(
+  kind: kind,
+  ua: ua,
+  keyData: keyData,
+  pqzKey: pqzKey,
+  pqzPop: pqzPop,
+  pqzPopHash: pqzPopHash,
+  alreadySet: alreadySet,
+  inner: inner,
+);
+
+/// The `MemberSig` a copy sends to `acceptMembership` from `membershipSigOf(ua, index)` alone (CTR-UA-37), as the slot JSON `{index,
+/// members: [{index, sig}], sig}` of a [`registration_args`] `pop` entry: `key_data` the `msig` `ua`'s, `stored` a signing slot's `sig` or
+/// an `msig` slot's `abi.encode(InnerSig[])`, canonical, at most 16 entries. Anything else, or an index past the members, is
+/// `UAUnauthorized`; an index outside u16 `UAArgument`.
+String replayedMemberSig({
+  required List<int> keyData,
+  required PlatformInt64 index,
+  required List<int> stored,
+}) => ScaasUa.instance.api.crateApiUaReplayedMemberSig(
+  keyData: keyData,
+  index: index,
+  stored: stored,
 );
 
 /// POP_V2, KEM, PQZ_KEY: the only purposes where a code-less native `msig` member signs the record's typed digest itself

@@ -124,6 +124,11 @@ ua-qt|qt|test_nested_rows
 ua-c|unittest|test_nested_rows
 ua-cxx|ctest|nested_rows
 ua-dart-frb|dart|nested rows
+ua-rs-json|cargo|inner_json_bounded_and_replay_rows
+ua-c|unittest|test_nested_inner
+ua-cxx|ctest|nested_inner
+ua-qt|qt|test_nested_inner
+ua-dart-frb|dart|nested inner
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

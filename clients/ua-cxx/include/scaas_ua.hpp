@@ -81,6 +81,10 @@ bool isNative(uint16_t kind);
 bool isZether(uint16_t kind);
 bool isPqzHolder(uint16_t kind);  // 0x0130-0x0132 may hold a PQZ key
 bool msigPqzEligible(const Bytes& keyData);  // msig members outside 0x0130-0x0133 weigh less than the threshold; an msig member: UAMemberUnknown
+// The With forms take inner, the msig members' structures: {id: keyData} JSON as registrationArgs' inner ("" = none; over 65,536 bytes,
+// more than 16 entries or key data over 580 bytes is UAArgument). An msig member counts as PQ iff it is PQ-eligible itself, read from its
+// entry; a member without an entry, or an entry that holds an msig (two levels only), is UAMemberUnknown.
+bool msigPqzEligibleWith(const Bytes& keyData, const std::string& inner);
 bool isSigning(uint16_t kind);
 bool isMember(uint16_t kind, bool hederaNative);
 Bytes uaMessage(uint16_t kind, const Bytes& purposeTag, const Bytes& digest);
@@ -107,6 +111,9 @@ Bytes kemRecordMessage(uint16_t kind, const Bytes& ua, uint64_t version, const B
 HolderPop holderPopMessage(uint16_t kind, const Bytes& ua, const Bytes& keyData, const std::optional<Bytes>& pqzKey = std::nullopt,
                            const std::optional<Bytes>& pqzPop = std::nullopt, const std::optional<Bytes>& pqzPopHash = std::nullopt,
                            const std::optional<Bytes>& kemPk = std::nullopt);
+HolderPop holderPopMessageWith(uint16_t kind, const Bytes& ua, const Bytes& keyData, const std::string& inner,
+                               const std::optional<Bytes>& pqzKey = std::nullopt, const std::optional<Bytes>& pqzPop = std::nullopt,
+                               const std::optional<Bytes>& pqzPopHash = std::nullopt, const std::optional<Bytes>& kemPk = std::nullopt);
 // The message R_REG proves over: uaMessage(0x0142, POP_V2, portableRecordDigest(ua, kind, keyHash(0x0142, pqzKey), kemRecordHash)),
 // kind the registering kind, kemPk the register KEM key (version 0).
 Bytes pqzRegMessage(uint16_t kind, const Bytes& ua, const Bytes& pqzKey, const std::optional<Bytes>& kemPk = std::nullopt);
@@ -121,6 +128,13 @@ Bytes membershipDigest(const Bytes& ua, const Bytes& member);
 PqzKeyRecord pqzKeyRecordMessage(uint16_t kind, const Bytes& ua, const Bytes& keyData, const Bytes& pqzKey,
                                  const std::optional<Bytes>& pqzPop = std::nullopt, const std::optional<Bytes>& pqzPopHash = std::nullopt,
                                  bool alreadySet = false);
+PqzKeyRecord pqzKeyRecordMessageWith(uint16_t kind, const Bytes& ua, const Bytes& keyData, const std::string& inner, const Bytes& pqzKey,
+                                     const std::optional<Bytes>& pqzPop = std::nullopt,
+                                     const std::optional<Bytes>& pqzPopHash = std::nullopt, bool alreadySet = false);
+// The MemberSig a copy sends to acceptMembership from membershipSigOf(ua, index) alone (CTR-UA-37), as the slot JSON {index, members:
+// [{index, sig}], sig} of a registrationArgs pop entry: keyData the msig ua's, stored a signing slot's sig or an msig slot's
+// abi.encode(InnerSig[]), canonical, at most 16 entries. Anything else, or an index past the members, is UAUnauthorized.
+std::string replayedMemberSig(const Bytes& keyData, uint16_t index, const Bytes& stored);
 // POP_V2, KEM, PQZ_KEY: the purposes where a native msig member signs the record's typed digest itself (TS-D4); every other
 // purpose stays UAAuth.
 bool isPortablePurpose(const Bytes& purposeTag);

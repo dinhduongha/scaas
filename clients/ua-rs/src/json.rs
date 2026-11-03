@@ -8,7 +8,7 @@
 //! with the selector. [`set_kem_key_args_json`] in: `{ua, version, kemPk, sig}`; [`set_pqz_key_args_json`] in: `{ua, pqzKey,
 //! pqzPopHash, sig}`, `sig` the `UASig` `{keyData, signature, members: [{index, members, sig}]}`; out: portable.json
 //! `kemRecords[i].args` / `pqzKeyRecords[i].args`.
-use crate::ua8::{registration_args, InnerSig, KemKey, MemberSig, RegisterArgs, RegistrationInput, SetKemKeyArgs, UASig, UAAttrs};
+use crate::ua8::{registration_args, replayed_member_sig, InnerSig, KemKey, MemberSig, RegisterArgs, RegistrationInput, SetKemKeyArgs, UASig, UAAttrs};
 use crate::UAError;
 use serde_json::{json, Value};
 
@@ -55,12 +55,37 @@ fn inner_in(v: &Value) -> JsonResult<Vec<InnerSig>> {
     let m = |s: &Value| Ok(InnerSig { index: u16_of(&s["index"])?, sig: unhex(&s["sig"])? });
     v.as_array().filter(|a| a.len() <= 16).ok_or(Argument)?.iter().map(m).collect()
 }
+/// `{id: keyData}`: at most 16 entries of at most `4 + 36 × 16` bytes each, an `msig` of 16 members (`Argument` otherwise). A value is a
+/// string, so the object is the one level; serde_json's recursion limit bounds the parse.
 fn inners_in(v: &Value) -> JsonResult<Vec<([u8; 32], Vec<u8>)>> {
     if v.is_null() {
         return Ok(vec![]);
     }
     let id = |k: &String| unhex(&Value::from(k.as_str()))?.try_into().map_err(|_| Argument);
-    v.as_object().ok_or(Argument)?.iter().map(|(k, d)| Ok((id(k)?, unhex(d)?))).collect()
+    let data = |d: &Value| unhex(d).and_then(|d| if d.len() <= 4 + 36 * 16 { Ok(d) } else { Err(Argument) });
+    v.as_object().filter(|o| o.len() <= 16).ok_or(Argument)?.iter().map(|(k, d)| Ok((id(k)?, data(d)?))).collect()
+}
+/// The longest `inner` text [`inner_json`] reads: 16 entries in hex are about 20 KB, the rest is room for whitespace.
+pub const INNER_JSON_MAX: usize = 65_536;
+/// `inner` alone, `{id: keyData}` as [`registration_args_json`] takes it: the `msig` members' structures for the `_with` calls of ua-c,
+/// ua-cxx, ua-qt and ua-dart-frb (no callback crosses their ABI). "" or `null` is none; over [`INNER_JSON_MAX`] bytes, more than 16
+/// entries or key data over 580 bytes is `Argument`. A missing entry, or one that holds an `msig` (a third level), is then `MemberUnknown`.
+pub fn inner_json(t: &str) -> JsonResult<Vec<([u8; 32], Vec<u8>)>> {
+    if t.is_empty() {
+        return Ok(vec![]);
+    }
+    if t.len() > INNER_JSON_MAX {
+        return Err(Argument);
+    }
+    inners_in(&parse(t)?)
+}
+/// The `inner` lookup of the `_with` calls over [`inner_json`]'s entries.
+pub fn lookup(inner: &[([u8; 32], Vec<u8>)]) -> impl Fn([u8; 32]) -> Option<Vec<u8>> + '_ {
+    move |id| inner.iter().find(|(x, _)| *x == id).map(|(_, d)| d.clone())
+}
+/// [`replayed_member_sig`] as one slot `{index, members: [{index, sig}], sig}`, the shape of a `pop` or `sig.members` entry.
+pub fn replayed_member_sig_json(key_data: &[u8], index: u16, stored: &[u8]) -> JsonResult<String> {
+    Ok(members_json(&[replayed_member_sig(key_data, index, stored)?])[0].to_string())
 }
 fn parse(t: &str) -> JsonResult<Value> {
     serde_json::from_str(t).map_err(|_| Argument)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! typed-signing R2c: the feature `json` shim (src/json.rs) against smartcontracts/vectors/ua/portable.json: every
 //! `registrations[i].args` / `kemCommit`, every `kemRecords[i].args` and `pqzKeyRecords[i].args` row, and the refusals.
-use scaas_ua::json::{registration_args_json, set_kem_key_args_json, set_pqz_key_args_json, JsonError};
+use scaas_ua::json::{inner_json, registration_args_json, replayed_member_sig_json, set_kem_key_args_json, set_pqz_key_args_json, JsonError};
 use scaas_ua::UAError;
 use serde_json::{json, Value};
 
@@ -38,6 +38,43 @@ fn registration_args_nested_rows() {
         i["inner"] = Value::Object(inner.clone());
         let got = out(registration_args_json(&i.to_string()));
         assert_eq!(got["args"], r["args"], "{}", r["name"]);
+    }
+}
+
+/// The wrappers' `inner` and replay shims: `inner` is bounded in text, entries and key data; every `memberships` row's `stored` turns back
+/// into its slot JSON.
+#[test]
+fn inner_json_bounded_and_replay_rows() {
+    let path = format!("{}/../../smartcontracts/vectors/ua/nested.json", env!("CARGO_MANIFEST_DIR"));
+    let n: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let regs = n["registrations"].as_array().unwrap();
+    let e = &n["eligibility"][0];
+    let (id, d) = e["inner"].as_object().unwrap().iter().next().unwrap();
+    let id_b: [u8; 32] = hex::decode(&id[2..]).unwrap().try_into().unwrap();
+    assert_eq!(inner_json(&e["inner"].to_string()), Ok(vec![(id_b, hex::decode(&d.as_str().unwrap()[2..]).unwrap())]));
+    assert_eq!((inner_json(""), inner_json("null")), (Ok(vec![]), Ok(vec![])));
+    let ids = |k: usize| (0..k).map(|i| (format!("0x{i:064x}"), json!("0x00"))).collect::<serde_json::Map<_, _>>();
+    assert_eq!(inner_json(&Value::Object(ids(16)).to_string()).map(|v| v.len()), Ok(16));
+    assert_eq!(inner_json(&Value::Object(ids(17)).to_string()), Err(JsonError::Argument), "17 entries");
+    for (data, ok) in [(580, true), (581, false)] {
+        let t = json!({ id: format!("0x{}", "00".repeat(data)) }).to_string();
+        assert_eq!(inner_json(&t).is_ok(), ok, "{data} bytes of key data");
+    }
+    let deep = format!("{}{}", "[".repeat(100_000), "]".repeat(100_000));
+    assert_eq!(inner_json(&deep[..65_536]), Err(JsonError::Argument), "deep");
+    assert_eq!(inner_json(&format!("{{\"{id}\": {}}}", " ".repeat(65_536))), Err(JsonError::Argument), "over the text bound");
+    for x in ["[]", "{\"0x01\": \"0x\"}", "{\"x\": 1}"] {
+        assert_eq!(inner_json(x), Err(JsonError::Argument), "{x}");
+    }
+    let ms = n["memberships"].as_array().unwrap();
+    assert_eq!(ms.len(), 4);
+    for m in ms {
+        let d = hex::decode(&regs.iter().find(|r| r["ua"] == m["ua"]).unwrap()["keyData"].as_str().unwrap()[2..]).unwrap();
+        let index = m["index"].as_u64().unwrap() as u16;
+        let stored = hex::decode(&m["stored"].as_str().unwrap()[2..]).unwrap();
+        let got = out(replayed_member_sig_json(&d, index, &stored));
+        assert_eq!(got, json!({ "index": index, "members": m["members"], "sig": m["sig"] }), "{}", m["name"]);
+        assert_eq!(replayed_member_sig_json(&d, 16, &stored), Err(JsonError::Ua(UAError::Unauthorized)), "past the members");
     }
 }
 
