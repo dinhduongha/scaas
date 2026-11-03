@@ -34,11 +34,11 @@ contract NamespaceProbe is UAMetaTxBase {
         g.pending[1][A] = GovernanceLib.PendingGrant(0x89, B, 0x8a, bytes32(uint256(0x8b)));
         WrappedLib.WrappedStorage storage w = WrappedLib.$();
         WrappedLib.Leg storage l = w.legs[1];
-        (l.token, l.decimals, l.wrapEnabled, l.adjustable) = (A, 0x91, true, true);
+        (l.token, l.decimals, l.wrapEnabled, l.adjustable, l.capped) = (A, 0x91, true, true, true);
         (l.num, l.den, l.reserve) = (0x92, 0x93, 0x94);
         w.legIndex[A] = 0x95;
         w.pending = WrappedLib.PendingRate(0x96, 0x97, 0x98, 0x99);
-        (w.legCount, w.rateDelay, w.maxRateStepBps) = (0x9a, 0x9b, 0x9c);
+        (w.legCount, w.rateDelay, w.maxRateStepBps, w.maxSupply) = (0x9a, 0x9b, 0x9c, 0x9d);
         _ua().balance[bytes32(uint256(0xa1))] = 0xa2;
         _ua().cancelUsed[bytes32(uint256(0xa3))] = true;
         MtxPipelineLib._mtxStorage().nonce[bytes32(uint256(0xb1))][2] = 0xb2;
@@ -138,6 +138,8 @@ contract LayoutTest is V2Fixture {
         f[12] = F("legCount", 0, 0, 0x9a, 1);
         f[13] = F("rateDelay", 0, 0, 0x9b, 4);
         f = _more(f, F("maxRateStepBps", 0, 0, 0x9c, 2));
+        f = _more(f, F("legs[1].capped", 1, 0, 1, 1)); // governance T9 (spec §5.2): appended, `reserve` unmoved
+        f = _more(f, F("maxSupply", 0, 0, 0x9d, 32));
         _ns(address(p), "underlying", "scaas.underlying", f);
         f = new F[](2);
         f[0] = F("balance[0xa1]", 0xa1, 0, 0xa2, 32);

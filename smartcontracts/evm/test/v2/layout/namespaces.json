@@ -138,7 +138,9 @@
       "pending.eta",
       "legCount",
       "rateDelay",
-      "maxRateStepBps"
+      "maxRateStepBps",
+      "legs[1].capped",
+      "maxSupply"
     ],
     "slots": [
       0,
@@ -155,7 +157,9 @@
       2,
       3,
       3,
-      3
+      3,
+      0,
+      4
     ],
     "inner": [
       0,
@@ -165,6 +169,8 @@
       1,
       1,
       2,
+      0,
+      0,
       0,
       0,
       0,
@@ -189,7 +195,9 @@
       25,
       0,
       1,
-      5
+      5,
+      23,
+      0
     ]
   },
   "uaLedger": {

@@ -55,8 +55,8 @@ contract WrappedTest is V2Fixture {
         (address[] memory us, uint256[] memory one) = _two();
         Rate memory fixedRate;
         IFactoryToken.TokenConfig memory c = wrappedInit(us, one, one, 6, fixedRate, address(0), address(0));
-        c.features |= 1 << GovernanceBits.MINTABLE;
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.MINTABLE));
+        c.features |= 1 << GovernanceBits.MINTABLE; // a hybrid's bit (spec §5.2, governance T9): only with `maxSupply`
+        vm.expectRevert(IWrappedToken.MaxSupplyInvalid.selector);
         this.initExt(us, abi.encode(c));
         c = wrappedInit(us, one, one, 6, fixedRate, address(0), address(0));
         c.roles.rateAdmin = address(new RateAdminForwarder());

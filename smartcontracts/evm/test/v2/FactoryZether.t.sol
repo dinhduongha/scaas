@@ -15,6 +15,7 @@ import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 
 /// Kind 2 stand-in: the public `NORMAL` kind under the confidential id and domain name, accepting `conf` (the factory's
 /// side only; the Zether layer, its verifiers and its chain gate are tested in `test/zether`).
@@ -118,8 +119,8 @@ contract FactoryZetherTest is Test {
         c.features = 1 << GovernanceBits.FREEZE;
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.FREEZE));
         f.createToken(UZ, 1, abi.encode(c), "a");
-        c.features = 1 << GovernanceBits.MINTABLE;
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.MINTABLE));
+        c.features = 1 << GovernanceBits.MINTABLE; // a hybrid's bit (spec §5.2, governance T9): only with `maxSupply`
+        vm.expectRevert(IWrappedToken.MaxSupplyInvalid.selector);
         f.createToken(UZ, 1, abi.encode(c), "a");
     }
 

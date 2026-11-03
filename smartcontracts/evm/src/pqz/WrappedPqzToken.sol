@@ -88,7 +88,7 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
     ///         `minted / shieldScale` for `toUA`.
     function mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA) external payable nonReentrant {
         address m = _msgSender();
-        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value);
+        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply());
         uint256 scale = PqzCore.$().shieldScale;
         if (minted % scale != 0) revert AmountNotScaled(minted, scale);
         PqzStateLib.shield(toUA, minted / scale, m, _REGISTRY);
@@ -110,10 +110,12 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
     function mtxUnshieldUnwrap(PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof,
         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external nonReentrant
     {
-        _burn(_envUnwrap(x, _ticketBinding()), b, proof, pqzAuth, accHint);
+        uint256 i = WrappedLib.indexOf(x.underlying);
         uint256 wrapped = x.amount * PqzCore.$().shieldScale;
+        WrappedLib.quoteTo(i, x.recipient, wrapped, x.minOut); // before the proof (spec §5.4)
+        _burn(_envUnwrap(x, _ticketBinding()), b, proof, pqzAuth, accHint);
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped);
-        WrappedLib.payOutTo(WrappedLib.indexOf(x.underlying), x.recipient, wrapped, x.minOut);
+        WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut);
     }
 
     /// @notice The signed form, the `Unwrap` leg a nested struct.

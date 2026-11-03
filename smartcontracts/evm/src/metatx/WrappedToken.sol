@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {MetaTokenBase} from "./MetaTokenBase.sol";
 import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {GovernanceUse} from "../governance/GovernanceBase.sol";
 import {GovernanceBits} from "../governance/GovernanceBits.sol";
 import {TokenStore} from "./TokenStore.sol";
 import {WrappedLib} from "./WrappedLib.sol";
@@ -212,7 +213,7 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     {
         uint256 received;
         uint256 fee;
-        (received, minted, fee) = WrappedLib.wrapBySig(u, o, sig, msg.sender);
+        (received, minted, fee) = WrappedLib.wrapBySig(u, o, sig, msg.sender, totalSupply());
         address to = o.destination == address(0) ? o.from : o.destination;
         _mint(to, minted - fee);
         if (fee != 0) _mint(msg.sender, fee);
@@ -228,7 +229,7 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     {
         uint256 received;
         uint256 fee;
-        (received, minted, fee) = WrappedLib.wrapBySigUA(u, o, auth, msg.sender);
+        (received, minted, fee) = WrappedLib.wrapBySigUA(u, o, auth, msg.sender, totalSupply());
         bytes32 to = o.destination == 0 ? o.from : o.destination;
         if (UAKinds.inNativeSpace(to)) _mint(address(uint160(uint256(to))), minted - fee);
         else _uaMint(to, minted - fee);
@@ -241,7 +242,7 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     ///      `_requireDerivedReceiver`, which also refuses 0 as a native id).
     function _wrap(uint256 i, uint256 amount, bytes32 to) private returns (uint256 minted) {
         address account = _msgSender();
-        (address u, uint256 received, uint256 m) = WrappedLib.wrap(i, amount, account, msg.value);
+        (address u, uint256 received, uint256 m) = WrappedLib.wrap(i, amount, account, msg.value, totalSupply());
         minted = m;
         if (to == 0) _mint(account, minted);
         else _uaMove(0, to, minted);
@@ -257,6 +258,23 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
         _burn(from, burned);
         address u = WrappedLib.payOut(i, recipient, out);
         emit Unwrapped(from, u, recipient, burned, out);
+    }
+
+    // ------------------------------------------------------------------ the hybrid's issuer (spec §5.2, CTR-GOV-12)
+
+    /// @notice `MINTABLE` and the `minter` role, under `maxSupply`, into a public balance; no reserve moves. Never
+    ///         allowlisted, as `NormalToken.mint`.
+    function mint(address to, uint256 amount) external nonReentrant {
+        GovernanceUse.use(GovernanceBits.MINTABLE, _msgSender(), amount);
+        WrappedLib.checkMint(totalSupply(), amount);
+        _mint(to, amount);
+    }
+
+    /// @notice `mint` into the registered SIGNING UA `to` (CTR-UA-28), its public UA balance.
+    function mintToUA(bytes32 to, uint256 amount) external nonReentrant {
+        GovernanceUse.use(GovernanceBits.MINTABLE, _msgSender(), amount);
+        WrappedLib.checkMint(totalSupply(), amount);
+        _uaMint(to, amount);
     }
 
     // ------------------------------------------------------------------ roles: guardian, rate admin
@@ -348,6 +366,10 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     /// @notice `Σ⌊reserve_i·num_i/den_i⌋`, saturating at `type(uint256).max` instead of overflowing.
     function collateralValue() external view returns (uint256) {
         return WrappedLib.collateralValue();
+    }
+
+    function maxSupply() external view returns (uint256) {
+        return WrappedLib.$().maxSupply;
     }
 
     /// @notice `(⌊amount·q⌋, ⌈minted/q⌉)`: clients round `amount` down to `used` so no dust stays in the reserve.

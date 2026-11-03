@@ -28,7 +28,9 @@ library GovernanceBits {
     // Per kind (CTR-TOK-22, spec §1.2). No kind of this release takes a bit of 5-9: `NORMAL` and `WRAPPED` refuse them as not
     // built, the confidential kinds as invalid; that is today's built state (CTR-AS-17, CTR-GOV-03), not a permanent rule.
     uint256 internal constant NORMAL_BITS = (1 << PAYABLE) | (1 << MINTABLE) | (1 << BURNABLE);
-    uint256 internal constant WRAPPED_BITS = (1 << PAYABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE);
+    /// @dev `MINTABLE` makes a hybrid (spec §5.2, CTR-GOV-12): set at creation iff `maxSupply != 0`.
+    uint256 internal constant WRAPPED_BITS =
+        (1 << PAYABLE) | (1 << MINTABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE);
     /// @dev The masks of each kind (spec §1.2): the bits with a holder, those whose holder must have code, those whose power
     ///      passes the number it acts on (B-09), those whose power reads `use`'s scope (B-10). Every token kind: scalar bit 1,
     ///      no scope.

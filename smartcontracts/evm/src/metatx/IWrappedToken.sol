@@ -33,8 +33,10 @@ interface IWrappedToken {
     error DuplicateUnderlying(address u);
     error RateInvalid(uint256 num, uint256 den);
     error RateConfigInvalid();
-    /// @notice `maxSupply` at creation without a hybrid (spec §5.2).
+    /// @notice At creation `MINTABLE` without `maxSupply`, or `maxSupply` without `MINTABLE` (spec §5.2).
     error MaxSupplyInvalid();
+    /// @notice A hybrid's cap (spec §5.2): a wrap, a wrap order or a mint would take `totalSupply()` to `supply`.
+    error MaxSupplyExceeded(uint256 supply, uint256 maxSupply);
     error WrapTooSmall();
     error UnwrapTooSmall();
     error UnwrapBelowMin(uint256 out, uint256 minOut);
@@ -111,6 +113,9 @@ interface IWrappedToken {
         bytes calldata sig) external returns (bytes memory);
     function uaUnwrapToUA(MetaTxLib.UAEnvelope calldata e, address underlying, uint256 wrapped, bytes32 to, uint256 minOut,
         IUARegistry.UASig calldata auth) external returns (bytes memory);
+    /// @notice A hybrid's issuer (spec §5.2): `MINTABLE` and its holder, under `maxSupply`, into a public balance.
+    function mint(address to, uint256 amount) external;
+    function mintToUA(bytes32 to, uint256 amount) external;
     function disableWrap(address underlying, bytes32 reason) external;
     function proposeRate(address underlying, uint96 num, uint96 den) external;
     function cancelRate() external;
@@ -121,6 +126,8 @@ interface IWrappedToken {
     function legOf(address u)
         external view returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals, bool wrapEnabled);
     function collateralValue() external view returns (uint256);
+    /// @notice The hybrid's cap on `totalSupply()`, wraps included; 0 = not a hybrid, fully backed (spec §5.5).
+    function maxSupply() external view returns (uint256);
     function previewWrap(address u, uint256 amount) external view returns (uint256 minted, uint256 used);
     function previewUnwrap(address u, uint256 wrapped) external view returns (uint256 out, uint256 burned);
     function rateAdjustable() external view returns (bool);

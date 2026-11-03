@@ -26,24 +26,26 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title Legs, reserve and rates of kind `WRAPPED` (CTR-TOK-24), in the ERC-7201 namespace `scaas.underlying`.
 /// @notice External library: the core of wrap and unwrap **without a destination** (pull, rate, reserve; pay out),
-///         rate changes with timelock, `disableWrap`. The token mints and burns (ERC-20 stays inline) and emits
-///         `Wrapped`/`Unwrapped`/`ReserveAdded`.
+///         rate changes with timelock, `disableWrap`, the hybrid's cap. The token mints and burns (ERC-20 stays inline)
+///         and emits `Wrapped`/`Unwrapped`/`ReserveAdded`.
 ///
 ///         Rate `q = num/den` = wrapped raw units per underlying raw unit (CTR-TOK-04); every output rounds DOWN:
 ///         `minted = ⌊in·q⌋`, `out = ⌊w/q⌋`, unwrap burns only `⌈out·q⌉ ≤ w`. Invariant (CTR-TOK-05):
-///         `Σ⌊reserve_i·q_i⌋ ≥ totalSupply()`; `reserve` changes only through wrap, unwrap, `addReserve`; the raw
+///         `Σ⌊reserve_i·q_i⌋ ≥ totalSupply()`, not claimed on a hybrid (`maxSupply != 0`, spec §5.3, CTR-GOV-12), whose
+///         invariant is `totalSupply() ≤ maxSupply`; `reserve` changes only through wrap, unwrap, `addReserve`; the raw
 ///         balance never prices anything. The native leg (`address(0)`, CTR-TOK-26) reads `address(this).balance`
 ///         where an ERC-20 leg reads `balanceOf(this)`.
 library WrappedLib {
     using SafeERC20 for IERC20;
 
-    /// @dev slot a: token ‖ decimals ‖ wrapEnabled ‖ adjustable (copy, so a fixed-rate wrap reads no config);
-    ///      slot b: num ‖ den; slot c: reserve.
+    /// @dev slot a: token ‖ decimals ‖ wrapEnabled ‖ adjustable ‖ capped (copies, so a fixed-rate wrap reads no config
+    ///      and a non-hybrid wrap no `maxSupply`); slot b: num ‖ den; slot c: reserve.
     struct Leg {
         address token;
         uint8 decimals;
         bool wrapEnabled;
         bool adjustable;
+        bool capped;
         uint96 num;
         uint96 den;
         uint256 reserve;
@@ -65,6 +67,7 @@ library WrappedLib {
         uint8 legCount;
         uint32 rateDelay;
         uint16 maxRateStepBps;
+        uint256 maxSupply; // spec §5.2: the hybrid's cap, 0 = not a hybrid; immutable
     }
 
     // keccak256(abi.encode(uint256(keccak256("scaas.underlying")) - 1)) & ~bytes32(uint256(0xff))
@@ -95,7 +98,9 @@ library WrappedLib {
         t.symbol = c.symbol;
         t.decimals = c.decimals;
         t.kind = kind;
-        if (c.maxSupply != 0) revert IWrappedToken.MaxSupplyInvalid(); // the hybrid is not built yet (spec §5.2)
+        // spec §5.2: a hybrid is `maxSupply != 0`, and `MINTABLE` is set at creation iff it is one
+        bool capped = c.maxSupply != 0;
+        if (capped != (c.features & (uint256(1) << GovernanceBits.MINTABLE) != 0)) revert IWrappedToken.MaxSupplyInvalid();
         GovernanceLib.init(c.features, c.lockedFeatures, c.owner, c.grantDelay, c.rescueTo, c.roles, valid, roleBits,
             contractOnly);
         bool adjustable = GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE);
@@ -109,6 +114,7 @@ library WrappedLib {
             s.rateDelay = rate.rateDelay;
             s.maxRateStepBps = rate.maxRateStepBps;
         }
+        s.maxSupply = c.maxSupply;
         for (uint256 i; i < n; ++i) _addLeg(s, c.legs[i], adjustable, isHedera);
     }
 
@@ -140,7 +146,7 @@ library WrappedLib {
         if (s.legIndex[u] != 0) revert IWrappedToken.DuplicateUnderlying(u);
         uint256 i = s.legCount;
         s.legs[i] = Leg({
-            token: u, decimals: d, wrapEnabled: true, adjustable: adjustable,
+            token: u, decimals: d, wrapEnabled: true, adjustable: adjustable, capped: s.maxSupply != 0,
             num: uint96(num), den: uint96(den), reserve: 0
         });
         s.legIndex[u] = i + 1;
@@ -149,8 +155,9 @@ library WrappedLib {
 
     // ------------------------------------------------------------------ wrap / reserve / unwrap
 
-    /// @notice Pull `amount` from `from` (or take `value` on the native leg), price the measured delta.
-    function wrap(uint256 i, uint256 amount, address from, uint256 value)
+    /// @notice Pull `amount` from `from` (or take `value` on the native leg), price the measured delta; on a hybrid,
+    ///         `supply + minted ≤ maxSupply` (`supply`: the token's `totalSupply()`, read only when capped).
+    function wrap(uint256 i, uint256 amount, address from, uint256 value, uint256 supply)
         public returns (address u, uint256 received, uint256 minted)
     {
         WrappedStorage storage s = $();
@@ -161,6 +168,20 @@ library WrappedLib {
         received = _pull(L, amount, from, value);
         minted = Math.mulDiv(received, L.num, L.den);
         if (minted == 0) revert IWrappedToken.WrapTooSmall();
+        if (L.capped) _cap(supply, minted);
+    }
+
+    /// @notice A hybrid's mint (spec §5.2): the same cap as a wrap; the token checked bit 1 and its holder before.
+    function checkMint(uint256 supply, uint256 amount) public view {
+        _cap(supply, amount);
+    }
+
+    /// @dev The one cap (spec §5.2, CTR-GOV-12): every path that raises `totalSupply()` on a hybrid; shielded value counts,
+    ///      the pool's units being in `totalSupply()`. `MaxSupplyExceeded` names the supply the call would reach.
+    function _cap(uint256 supply, uint256 added) private view {
+        uint256 max = $().maxSupply;
+        uint256 next = Math.saturatingAdd(supply, added);
+        if (next > max) revert IWrappedToken.MaxSupplyExceeded(next, max);
     }
 
     /// @notice Anyone; no mint. Refused on a leg whose wrap is disabled.
@@ -197,27 +218,27 @@ library WrappedLib {
     /// @return received the measured delta (must be `o.amount`)
     /// @return minted `⌊o.amount·num/den⌋`
     /// @return fee `⌈minted·o.fee/10⁶⌉`, the submitter's part of `minted`
-    function wrapBySig(address u, ITradeToken.WrapOrder calldata o, bytes calldata sig, address submitter)
+    function wrapBySig(address u, ITradeToken.WrapOrder calldata o, bytes calldata sig, address submitter, uint256 supply)
         public returns (uint256 received, uint256 minted, uint256 fee)
     {
         Leg storage L = _wrapLeg(u, o.wrappedToken);
-        (minted, fee) = _sigQuote(L, o.amount, o.fee);
-        uint256 before = _sigBefore(L);
+        (minted, fee) = _sigQuote(L, o.amount, o.fee, supply);
+        received = _sigBefore(L); // the balance before, in the return slot (stack)
         ITradeToken(u).mtxTrade(_tradeOf(o), sig, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
-        received = _sigReceived(L, before, o.amount);
+        received = _sigReceived(L, received, o.amount);
     }
 
     /// @notice `uaWrapOrder` (CTR-TOK-20, UA-5b): `wrapBySig` with the holder's `UAWrapOrder` pulled by the underlying's
     ///         `uaTrade`; the underlying must be a SCaaS ledger token (`IUALedger` by ERC-165, as `payOutToUA`).
-    function wrapBySigUA(address u, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth, address submitter)
-        public returns (uint256 received, uint256 minted, uint256 fee)
+    function wrapBySigUA(address u, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth, address submitter,
+        uint256 supply) public returns (uint256 received, uint256 minted, uint256 fee)
     {
         Leg storage L = _wrapLeg(u, o.wrappedToken);
         if (!ERC165Checker.supportsInterface(u, type(IUALedger).interfaceId)) revert IUALedger.UALegNotLedger(u);
-        (minted, fee) = _sigQuote(L, o.amount, o.fee);
-        uint256 before = _sigBefore(L);
+        (minted, fee) = _sigQuote(L, o.amount, o.fee, supply);
+        received = _sigBefore(L); // the balance before, in the return slot (stack)
         ITradeToken(u).uaTrade(_order(o), auth, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
-        received = _sigReceived(L, before, o.amount);
+        received = _sigReceived(L, received, o.amount);
     }
 
     /// @dev `_order` of a `WrapOrder`: the same 12 words as a `UAWrapOrder`, ids zero-padded, into the 13 of a `TradeOrder`.
@@ -255,10 +276,14 @@ library WrappedLib {
         if (receiveToken != address(this)) revert IWrappedToken.WrapOrderInvalid(receiveToken);
     }
 
-    /// @dev `minted = ⌊amount·num/den⌋`, the submitter's `fee = ⌈minted·feePpm/10⁶⌉`.
-    function _sigQuote(Leg storage L, uint256 amount, uint256 feePpm) private view returns (uint256 minted, uint256 fee) {
+    /// @dev `minted = ⌊amount·num/den⌋`, the submitter's `fee = ⌈minted·feePpm/10⁶⌉`; a hybrid's cap on `minted` (the fee is
+    ///      minted too).
+    function _sigQuote(Leg storage L, uint256 amount, uint256 feePpm, uint256 supply)
+        private view returns (uint256 minted, uint256 fee)
+    {
         minted = Math.mulDiv(amount, L.num, L.den);
         if (minted == 0) revert IWrappedToken.WrapTooSmall();
+        if (L.capped) _cap(supply, minted);
         fee = Math.mulDiv(minted, feePpm, 1_000_000, Math.Rounding.Ceil);
     }
 
@@ -342,18 +367,20 @@ library WrappedLib {
         if (sent != out) revert IWrappedToken.UnderlyingTransferMismatch(u, out, sent);
     }
 
+    /// @notice The quote `payOutTo` runs, alone: a native id by `quoteUnwrap`, a derived UA by `quoteUnwrapToUA`. An
+    ///         unshield-unwrap runs it before its proof (spec §5.4), so a short reserve costs the relayer the cheap prefix.
+    function quoteTo(uint256 i, bytes32 recipient, uint256 wrapped, uint256 minOut) public view returns (uint256 out) {
+        if (UAKinds.inNativeSpace(recipient)) (out,) = quoteUnwrap(i, wrapped, address(uint160(uint256(recipient))), minOut);
+        else (out,) = quoteUnwrapToUA(i, wrapped, minOut);
+    }
+
     /// @notice The leg payout of an unshield-unwrap (CTR-ZTH-51, UA-5c) to a recipient id, after the caller burnt
     ///         `wrapped`: a native id (its address) by `quoteUnwrap` + `payOut`, a derived UA in leg `i`'s own UA ledger
     ///         by `quoteUnwrapToUA` + `payOutToUA` (`UALegNotLedger` for an outside leg).
     function payOutTo(uint256 i, bytes32 recipient, uint256 wrapped, uint256 minOut) public returns (uint256 out) {
-        if (UAKinds.inNativeSpace(recipient)) {
-            address r = address(uint160(uint256(recipient)));
-            (out,) = quoteUnwrap(i, wrapped, r, minOut);
-            payOut(i, r, out);
-        } else {
-            (out,) = quoteUnwrapToUA(i, wrapped, minOut);
-            payOutToUA(i, recipient, out);
-        }
+        out = quoteTo(i, recipient, wrapped, minOut);
+        if (UAKinds.inNativeSpace(recipient)) payOut(i, address(uint160(uint256(recipient))), out);
+        else payOutToUA(i, recipient, out);
     }
 
     // ------------------------------------------------------------------ guardian (WRAP_DISABLEABLE)
@@ -437,7 +464,8 @@ library WrappedLib {
     }
 
     /// @dev Every leg: `balance ≥ reserve` (no phantom reserve); then `C' ≥ supply` with the new rate, summing with an
-    ///      early exit once covered but still checking every leg's balance. Returns "some leg has wrap disabled".
+    ///      early exit once covered but still checking every leg's balance. Returns "some leg has wrap disabled". On a
+    ///      hybrid (`capped`) no `C' ≥ supply`: a rate fall needs no `addReserve` (spec §5.3, C1, CTR-GOV-12).
     function _requireCollateral(WrappedStorage storage s, PendingRate memory p, uint256 supply)
         private view returns (bool anyDisabled)
     {
@@ -445,6 +473,7 @@ library WrappedLib {
         uint256 n = s.legCount;
         for (uint256 i; i < n; ++i) {
             Leg storage L = s.legs[i];
+            if (L.capped) supply = 0; // every leg carries the same copy
             uint256 r = L.reserve;
             uint256 bal = _balance(L.token);
             if (bal < r) revert IWrappedToken.ReserveShortfall(L.token, bal, r);

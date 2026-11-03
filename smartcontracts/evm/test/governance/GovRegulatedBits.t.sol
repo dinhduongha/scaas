@@ -44,8 +44,8 @@ abstract contract GovRegulatedRows is Test {
         _rCreate(wrapped, c, "all");
     }
 
-    /// GD-3: `maxSupply` and `rescueTo` fail closed until their task: `maxSupply` is another kind's field on a `NORMAL*` kind
-    /// (`ConfigFieldForOtherKind(5)`) and no hybrid yet on a `WRAPPED*` one (`MaxSupplyInvalid`); `rescueTo` is refused on both.
+    /// GD-3: `maxSupply` is another kind's field on a `NORMAL*` kind (`ConfigFieldForOtherKind(5)`) and, without `MINTABLE`, no
+    /// hybrid on a `WRAPPED*` one (`MaxSupplyInvalid`, spec §5.2); `rescueTo` is refused on both until its task.
     function _configFailsClosed(bool wrapped) internal {
         IFactoryToken.TokenConfig memory c = _rCfg(wrapped, 1);
         c.maxSupply = 1;

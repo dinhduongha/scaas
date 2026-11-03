@@ -82,7 +82,7 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
     ///         to `SHIELD_POOL`; `minted % shieldScale ≠ 0` ⇒ `AmountNotScaled` (the client sends an exact amount).
     function mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA) external payable nonReentrant {
         address m = _msgSender();
-        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value);
+        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply());
         uint256 scale = ZetherLib.$().shieldScale;
         if (minted % scale != 0) revert AmountNotScaled(minted, scale);
         ZetherLib.shield(ZetherTypes.UA.wrap(toUA), minted / scale, _REGISTRY, m);
@@ -107,10 +107,12 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
         uint256 i = WrappedLib.indexOf(x.underlying);
         // a derived recipient: the leg's `transferToUA` checks it
         if (UAKinds.inNativeSpace(x.recipient)) _requirePayee(address(uint160(uint256(x.recipient))));
+        uint256 wrapped = x.amount * ZetherLib.$().shieldScale;
+        // the leg's quote before the proof: on a hybrid an empty reserve is ordinary (spec §5.4)
+        WrappedLib.quoteTo(i, x.recipient, wrapped, x.minOut);
         // the binding and the proof: `ZetherWrappedLib`, from this call's own arguments (CTR-ZTH-94)
         uint256 fee = abi.decode(
             _lib(address(ZetherWrappedLib), ZetherWrappedLib.unshieldUnwrap.selector, abi.encode(_env())), (uint256));
-        uint256 wrapped = x.amount * ZetherLib.$().shieldScale;
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped); // D19: burn from the pool
         _fromPool(ZetherTypes.UA.wrap(b.beneficiaryUA), fee);
         WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut);

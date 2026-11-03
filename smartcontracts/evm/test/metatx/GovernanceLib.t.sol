@@ -43,7 +43,8 @@ contract GovernanceLibTest is Test {
 
     function test_validFlagsPerKind() public {
         uint256[4] memory valid = [
-            PAYABLE | MINTABLE | BURNABLE, PAYABLE | RATE | WRAPDIS, PAYABLE | MINTABLE | BURNABLE, PAYABLE | RATE | WRAPDIS
+            PAYABLE | MINTABLE | BURNABLE, PAYABLE | MINTABLE | RATE | WRAPDIS, PAYABLE | MINTABLE | BURNABLE,
+            PAYABLE | MINTABLE | RATE | WRAPDIS // governance T9: MINTABLE on the wrapped kinds, the hybrid (spec §5.2)
         ];
         for (uint8 k; k < 4; ++k) {
             for (uint8 b; b < 9; ++b) {

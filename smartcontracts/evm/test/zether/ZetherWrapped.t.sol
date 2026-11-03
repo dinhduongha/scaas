@@ -395,8 +395,8 @@ contract ZetherWrappedTest is ZetherFixture {
         c.conf = IFactoryToken.ConfidentialConfig("", SCALE, 100, FEE, 0, 0, 0);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.FREEZE));
         factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "freeze");
-        c.features = 1 << GovernanceBits.MINTABLE;
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.MINTABLE));
+        c.features = 1 << GovernanceBits.MINTABLE; // a hybrid's bit (spec §5.2, governance T9): only with `maxSupply`
+        vm.expectRevert(IWrappedToken.MaxSupplyInvalid.selector);
         factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "mint");
         // `initialSupply` / `initialHolder` are the `NORMAL*` kinds' (CTR-TOK-25): refused, never silently ignored
         c.features = 0;
