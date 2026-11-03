@@ -342,28 +342,6 @@ contract GovGrantTest is Test {
         d.setFeeSplit(0, address(0xAA));
     }
 
-    /// The rule behind "a plain transfer stays +0" (CTR-GOV-03): no read of `scaas.governance` on the hot path. The gas figure
-    /// can still move by the dispatcher (`prototype/RESULTS.md`), which is not this.
-    function test_transferTouchesNoGovernanceSlot() public {
-        address s = address(0x51);
-        vm.prank(OWNER);
-        t.grantRole(MINT, OWNER);
-        vm.prank(OWNER);
-        t.mint(s, 10);
-        vm.record();
-        vm.prank(s);
-        t.transfer(TO, 1);
-        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(t));
-        uint256 root = uint256(0x0a3a361961b35589cdb03530b6f9e23a4db6ca9a0dad5ddf5d7761c7fabc8700);
-        assertGt(reads.length, 0);
-        for (uint256 i; i < reads.length; ++i) {
-            assertFalse(uint256(reads[i]) >= root && uint256(reads[i]) < root + 8, "a governance slot on the hot path");
-        }
-        for (uint256 i; i < writes.length; ++i) {
-            assertFalse(uint256(writes[i]) >= root && uint256(writes[i]) < root + 8, "a governance slot on the hot path");
-        }
-    }
-
     // ------------------------------------------------------------------ gas, for docs/research/governance/prototype/
 
     function _gas(string memory label, address sender, address target, bytes memory cd) internal {

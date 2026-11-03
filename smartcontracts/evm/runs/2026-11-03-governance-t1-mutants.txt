@@ -1,0 +1,10 @@
+# governance T1 mutants at a215e196 + T1 tree; each one change in src/metatx/ERC20MetaTx.sol (shared by all six kinds),
+# suite test/governance/PlusZero.t.sol, restored by git checkout after each.
+mutant | test that went red | rc
+m1 features read in _update (sload root) | 12: test_plusZero_{transfer,mtxTransfer}_{normal,wrapped,normalZether,wrappedZether,normalPqz,wrappedPqz}; the 12 UA rows pass | 1
+m2 roles[1][from] read in _update | 12: test_plusZero_{transfer,mtxTransfer}_{normal,wrapped,normalZether,wrappedZether,normalPqz,wrappedPqz}; the 12 UA rows pass | 1
+m3 features read in _uaMove | 12: test_plusZero_{transferToUA,uaExecuteTransfer}_{normal,wrapped,normalZether,wrappedZether,normalPqz,wrappedPqz}; the 12 native rows pass | 1
+m4 roles[1][from] read in _uaMove | 12: test_plusZero_{transferToUA,uaExecuteTransfer}_{normal,wrapped,normalZether,wrappedZether,normalPqz,wrappedPqz}; the 12 native rows pass | 1
+# survivors: none
+# pin recorded at 2a864638 in a throwaway worktree (real lib/), PLUS_ZERO_WRITE=true forge test --match-path test/governance/PlusZero.t.sol -j1:
+# 24 passed; on the branch 24 passed with no re-record. Re-recording needs T1's commit: the fixture's TokenConfig moves at T7.
