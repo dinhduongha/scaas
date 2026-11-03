@@ -454,6 +454,10 @@ fn hash_tuple(name: &str, fields: &[(String, String)], vals: &[Val]) -> B256 {
     keccak256(buf)
 }
 
+/// `msig` has at most 16 members (CTR-UA-09), so a `MemberSig[]` or an `InnerSig[]` has at most 16 slots. The two levels of the type bound the
+/// depth of a decode; this bounds its width: the registry copies a list to memory before its first index check, 16 × 16 at most here.
+const MSIG_MAX_SLOTS: usize = 16;
+
 fn fixed(v: &[u8]) -> Val {
     let mut w = B256::ZERO;
     w[..v.len()].copy_from_slice(v);
@@ -471,6 +475,9 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
     };
     if let Some(el) = ty.strip_suffix("[]") {
         let a = j.as_array().ok_or_else(|| bad("not an array"))?;
+        if matches!(el, "MemberSig" | "InnerSig") && a.len() > MSIG_MAX_SLOTS {
+            return Err(bad("more than 16 slots"));
+        }
         let v: Result<Vec<Val>> = a.iter().enumerate().map(|(i, x)| parse(el, x, &format!("{path}[{i}]"))).collect();
         return Ok(Val::Array(v?));
     }
@@ -1142,17 +1149,35 @@ mod tests {
         assert_eq!(to_json("MemberSig", &parse("MemberSig", &good, "s").unwrap()), good);
         let flat = json!({"index": 3, "members": [], "sig": "0xab"});
         assert_eq!(to_json("MemberSig", &parse("MemberSig", &flat, "s").unwrap()), flat);
-        let err = |j: Value| parse("MemberSig", &j, "s").unwrap_err().to_string();
-        assert_eq!(err(json!({"index": 0, "keyData": "0x", "sig": "0x"})), "BAD_PAYLOAD: s.keyData: unknown field");
-        assert_eq!(err(json!({"index": 0, "members": [{"index": 0, "members": [], "sig": "0x"}], "sig": "0x"})),
+        let err = |j: &Value| parse("MemberSig", j, "s").unwrap_err().to_string();
+        assert_eq!(err(&json!({"index": 0, "keyData": "0x", "sig": "0x"})), "BAD_PAYLOAD: s.keyData: unknown field");
+        assert_eq!(err(&json!({"index": 0, "members": [{"index": 0, "members": [], "sig": "0x"}], "sig": "0x"})),
             "BAD_PAYLOAD: s.members[0].members: unknown field");
-        assert_eq!(err(json!({"index": 0, "members": "0x", "sig": "0x"})), "BAD_PAYLOAD: s.members: not an array", "a packed list");
+        assert_eq!(err(&json!({"index": 0, "members": "0x", "sig": "0x"})), "BAD_PAYLOAD: s.members: not an array", "a packed list");
         let mut deep = json!({"index": 0, "sig": "0x"});
         for _ in 0..100_000 {
-            deep = json!({"index": 0, "members": [deep], "sig": "0x"});
+            let mut o = Map::new();
+            o.insert("index".into(), json!(0));
+            o.insert("members".into(), Value::Array(vec![deep]));
+            o.insert("sig".into(), json!("0x"));
+            deep = Value::Object(o);
         }
-        assert!(err(deep.clone()).ends_with("unknown field"), "a hostile depth stops at the type's");
+        assert!(err(&deep).ends_with("unknown field"), "a hostile depth stops at the type's");
         std::mem::forget(deep); // serde_json's drop recurses over the 100,000 levels
+    }
+
+    /// At most 16 slots at each level (`msig` has 16 members), checked before the elements are read: a list past that can only be refused on
+    /// chain, after its calldata was copied to memory.
+    #[test]
+    fn member_sig_lists_are_bounded() {
+        let inner = |n: usize| Value::Array((0..n).map(|i| json!({"index": i, "sig": "0x"})).collect());
+        let outer = |n: usize, l: Value| Value::Array((0..n).map(|i| json!({"index": i, "members": l, "sig": "0x"})).collect());
+        parse("MemberSig[]", &outer(16, inner(16)), "m").unwrap();
+        let err = |j: Value| parse("MemberSig[]", &j, "m").unwrap_err().to_string();
+        assert_eq!(err(outer(17, inner(0))), "BAD_PAYLOAD: m: more than 16 slots");
+        assert_eq!(err(outer(1, inner(17))), "BAD_PAYLOAD: m[0].members: more than 16 slots");
+        let bad = Value::Array(vec![json!("not a slot"); 17]);
+        assert_eq!(err(bad), "BAD_PAYLOAD: m: more than 16 slots", "before any element is read");
     }
 
     /// The typed bytes a job builds are `abi.encode(MemberSig[])`, the stored form, nested too, and a blob that claims more than it holds
@@ -1162,8 +1187,6 @@ mod tests {
         use alloy::sol_types::SolValue;
         let slots = json!([{"index": 0, "members": [{"index": 1, "sig": "0x01"}, {"index": 2, "sig": "0x02"}], "sig": "0x"},
             {"index": 3, "members": [], "sig": "0xab"}]);
-        let typed = crate::abi::MemberSig::abi_decode_sequence(&[]).is_err(); // no slot in nothing
-        assert!(typed);
         let sig = json!({"keyData": "0x", "signature": "0x", "members": slots});
         let auth = crate::abi::UASig::abi_decode(&parse("UASig", &sig, "auth").unwrap().abi_encode()).unwrap();
         let ours = scaas_ua::ua8::encode_member_sigs(&[
