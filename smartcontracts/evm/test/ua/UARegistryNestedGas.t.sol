@@ -434,6 +434,43 @@ contract UARegistryNestedGasTest is UARegistryBase {
         UACall.register(r, UAKinds.MSIG, d, UACall.attrs(key, keccak256("proof"), ""), hex"01", "");
     }
 
+    /// A gen-1 record on a gen-2 host (`setPqzKey`): gen 1 verifies the record's native slots with its own clone hash, so gen 2 counts them
+    /// at 400 k, as `_slotCap` counts a gen-1 inner's, never at its own `_nativeCap()`. Gen 1 has a `SmartKeyAccount`, gen 2 none.
+    /// `{15 EOAs, mldsa65 of weight 16}`, 16 of 16, the mldsa65 cap 4 M on gen 1 (handed over: + 1/63 + margin): at 50 k a native slot
+    /// it fits 2^24 with the debit and the calldata (the control: the same shape held by gen 2 takes a key), at 400 k it does not.
+    function test_pqzHolderGen1RecordCountsGen1NativeCap() public {
+        address burn = address(new BurnAll());
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
+        k[0] = UARegistry.KindConfig(0x0131, burn, 4_000_000);
+        UARegistry g1 = _deploy(_at(), chainUidA, address(0), false, 12_000_000, burn, true, k);
+        UARegistry.KindConfig[] memory p = new UARegistry.KindConfig[](1);
+        p[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, burn, 400_000);
+        UARegistry g2 = _deploy(_at(), chainUidA, address(g1), false, 12_000_000, address(0), true, p);
+        bytes32 ml = UACall.register(g1, 0x0131, _pk(0x0131), _none(), hex"01", "");
+        bytes memory key = new bytes(PqzSet.PK);
+        key[0] = 0x01;
+        // the control: held by gen 2, its natives are gen 2's, 50 k each
+        (bytes memory d, IUARegistry.MemberSig[] memory s) = _nativesAnd(ml, 3000);
+        UACall.register(g2, UAKinds.MSIG, d, UACall.attrs(key, keccak256("proof"), ""), abi.encode(s), "");
+        // held by gen 1: its natives are gen 1's, 400 k each
+        (d, s) = _nativesAnd(ml, 2000);
+        bytes32 ua = UACall.register(g1, UAKinds.MSIG, d, _none(), abi.encode(s), "");
+        IUARegistry.UASig memory sig;
+        sig.members = s;
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
+        g2.setPqzKey(ua, key, keccak256("proof"), sig);
+    }
+
+    /// `{15 EOAs from key `from`, ml of weight 16}`, 16 of 16, and the `pop` of ml alone (weight 16 reaches the threshold).
+    function _nativesAnd(bytes32 ml, uint256 from) internal returns (bytes memory d, IUARegistry.MemberSig[] memory s) {
+        Member[] memory m = new Member[](16);
+        for (uint256 i; i < 15; ++i) m[i] = Member(UAKinds.EVM_EOA, _pad(vm.addr(from + i)), 1);
+        m[15] = Member(0x0131, ml, 16);
+        d = _msigKey(16, m);
+        s = new IUARegistry.MemberSig[](1);
+        s[0] = IUARegistry.MemberSig(_indexOf(d, ml), noneInner, new bytes(3309));
+    }
+
     // ----- spec §6: what registers, as one transaction (review I3) -----
 
     /// Rows `REG|name|signatures|pop bytes|regular|state`: an all-PQ structure must store its `pop`, so a verify limit is not a registration limit.

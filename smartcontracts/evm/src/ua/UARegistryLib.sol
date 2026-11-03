@@ -298,7 +298,7 @@ library UARegistryLib {
     /// Step 4: single-key kinds claim their keyHash (`UAKeyInUse`); structures check their members (no keyHash).
     function _claim(uint16 kind, bytes memory d, bool structure) private view returns (bytes32 kh) {
         if (structure) {
-            _membersWorst(d);
+            _membersWorst(d, _nativeCap());
             return 0;
         }
         kh = UAKinds.keyHashOf(kind, d);
@@ -324,7 +324,7 @@ library UARegistryLib {
         bool pqz = attrs.pqzKey.length != 0;
         bytes memory kemPk = UAKinds.kemPk(attrs.kem);
         bool commit = attrs.kemPkHash != 0;
-        if (pqz) _pqzHolder(kind, d, ua);
+        if (pqz) _pqzHolder(kind, d, ua, false);
         if ((commit || kemPk.length != 0) && !_holder(kind, d)) revert IUARegistry.UAKemHolder(ua);
         if (pqz != (attrs.pqzPopHash != 0) || attrs.pqzPopHash == EMPTY_PROOF_HASH) revert IUARegistry.UAPqzPopHash(ua);
         if (pqzPop.length != 0 && keccak256(pqzPop) != attrs.pqzPopHash) revert IUARegistry.UAPqzPopHash(ua);
@@ -348,8 +348,10 @@ library UARegistryLib {
     }
 
     /// May `ua` (`kind`, key data `d`) hold a PQZ key here (`register`, `setPqzKey`)? `UAKindDisabled(0x0142)` on a gen 2
-    /// whose gen 1 enables 0x0142, `UAPqzHolder` for a non-holder or an `msig` over the debit bound.
-    function _pqzHolder(uint16 kind, bytes memory d, bytes32 ua) private view {
+    /// whose gen 1 enables 0x0142, `UAPqzHolder` for a non-holder or an `msig` over the debit bound. `gen1`: a record gen 1 holds
+    /// (`setPqzKey` on a gen-2 host); gen 1 verifies its native slots with its own clone hash, so they count 400 k, as `_slotCap`
+    /// counts a gen-1 inner's.
+    function _pqzHolder(uint16 kind, bytes memory d, bytes32 ua, bool gen1) private view {
         // ruling A5-I1: 0x0142 lives in one generation; a gen 2 in front of a gen 1 that holds it refuses a PQZ key (the
         // portable PoP lets anyone choose the registry: a key placed here could never be proven on this chain)
         address g1 = _pred();
@@ -365,7 +367,7 @@ library UARegistryLib {
         if (kind == UAKinds.MSIG) {
             // a gen-2 registry in front forwards the whole authorization to the one that holds the record
             // (`UAStore.via`) and holds 1/63 of it again plus the margin: counted here
-            uint256 w = _membersWorst(d);
+            uint256 w = _membersWorst(d, gen1 ? UAStore.SMART_KEY_1271_GAS : _nativeCap());
             uint256 a = _authBytes(d, 192);
             uint256 debit = PqzSet.PQZ_DEBIT_MIN_GAS;
             if (w + w / 63 + SigCheck.GAS_MARGIN + debit + 16 * a > TX_GAS_CAP || debit + 64 * a > TX_GAS_CAP) revert IUARegistry.UAPqzHolder(ua);
@@ -504,7 +506,7 @@ library UARegistryLib {
             kind = r.kind;
             (d,) = UAStore.registration(ua, r.keyPtr);
         }
-        _pqzHolder(kind, d, ua);
+        _pqzHolder(kind, d, ua, host);
         _pqzKeyFree(ua, host);
         bytes32 h = _pqzKeyHash(pqzKey);
         if (pqzPopHash == 0 || pqzPopHash == EMPTY_PROOF_HASH) revert IUARegistry.UAPqzPopHash(ua);
@@ -729,11 +731,12 @@ library UARegistryLib {
 
     /// Step 4 for `msig`: every member ∈ MEMBER of this profile and native or registered under its stated kind; the
     /// worst case of a minimal authorizing set (the `c` largest caps + `c` × `MSIG_MEMBER_GAS` + `MSIG_ACCEPTED_GAS`, + the caller's
-    /// hold for the largest single cap, at either level, beyond the 400 k that `MSIG_MEMBER_GAS` covers) fits `verifyBudget`.
-    function _membersWorst(bytes memory d) private view returns (uint256 worst) {
+    /// hold for the largest single cap, at either level, beyond the 400 k that `MSIG_MEMBER_GAS` covers) fits `verifyBudget`;
+    /// `nativeCap` what one native slot of `d` may spend in the generation that verifies it.
+    function _membersWorst(bytes memory d, uint256 nativeCap) private view returns (uint256 worst) {
         IUARegistry self = IUARegistry(address(this));
         uint256 held;
-        (worst, held) = _worst(d, false, _nativeCap(), self.hederaNative());
+        (worst, held) = _worst(d, false, nativeCap, self.hederaNative());
         if (held > UAStore.SMART_KEY_1271_GAS) worst += (held - UAStore.SMART_KEY_1271_GAS) / 63;
         if (worst > self.verifyBudget()) revert IUARegistry.UAKeyData(UAKinds.MSIG);
     }

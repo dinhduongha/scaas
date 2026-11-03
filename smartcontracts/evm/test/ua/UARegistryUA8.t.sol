@@ -3286,9 +3286,9 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("register mldsa65/n2048-kmax1024")) return (3341208, 81220050);
         if (h == keccak256("register fndsa512")) return (2740679, 6384690);
         if (h == keccak256("register slhdsa128s")) return (1123194, 13246740);
-        if (h == keccak256("register msig-classical")) return (166172, 1115370);
+        if (h == keccak256("register msig-classical")) return (166182, 1115370);
         if (h == keccak256("register msig-pq/n2048-kmax1024")) return (3468184, 73250280);
-        if (h == keccak256("register msig-pq-native")) return (318100, 1262250);
+        if (h == keccak256("register msig-pq-native")) return (318110, 1262250);
         if (h == keccak256("setKemKey mldsa65/v2 n2048-kmax1024")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024")) return (15272, 0);
         if (h == keccak256("setKemKey fndsa512/v2 n2048-kmax1024")) return (2509974, 3947400);
