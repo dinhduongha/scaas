@@ -1,8 +1,19 @@
 # R52 (GA 2.1#4): contracts and the relay node. Each job runs only when a path it reads changed (.github/ci_changes.py).
 # Mirrors the local commands:
-#   smartcontracts/evm: forge test; forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' (cold gas);
-#                  FOUNDRY_PROFILE=scaas-testnet forge build;
+#   contract-evm:  per PQZ set (matrix n2048-kmax1024, n2304-kmax4096, n2560-kmax16384, n2816-kmax65536): script/pqz/at-set.sh <set> test;
+#                  once, in the n2304-kmax4096 cell (the committed set, so its at-set run is the default-set `forge test`):
+#                  forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' (cold gas); FOUNDRY_PROFILE=scaas-testnet forge build;
 #                  forge build src --sizes --json > /tmp/sizes.json; python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json
+#   contract-<family>: smartcontracts/scripts/test.sh <family> (unit and in-process tests; localnet e2e stays local), toolchains as local:
+#   contract-soroban:  test.sh soroban (cargo test; Rust 1.97.1)
+#   contract-solana:   test.sh solana (build.sh solana = cargo build-sbf, Agave 4.3.0 / platform-tools v1.57; cargo test on LiteSVM; Rust 1.97.1)
+#   contract-near:     test.sh near (check_no_authority.sh, cargo near build, cargo test: unit + near-sandbox; Rust 1.97.1, cargo-near 0.22.0)
+#   contract-algorand: ALGORAND_ARTIFACTS_CHECK=1 smartcontracts/scripts/build.sh algorand; gen_vectors.py --check; scripts/test_deploy.py
+#                      (test.sh algorand without its last step: pytest on the localnet and the node e2e of both are local only, the gate runner)
+#   contract-aptos:    test.sh aptos (aptos move test --dev; check_entry_visibility.sh; aptos CLI 9.6.0)
+#   contract-sui:      test.sh sui (sui move test; sui CLI 1.81.0, testnet-v1.81.0)
+#   contract-cosmos:   test.sh cosmos (cargo test; Rust 1.99.0)
+#   contract-ton:      test.sh ton (npm ci; npm test = tact build + jest; Node 26.8.1)
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check
 #   clients/clientkeys:    npm ci --ignore-scripts; npm test
@@ -19,25 +30,40 @@
 #   UA-8 portable registrations: smartcontracts/vectors/ua/portable.json is read by ua-rs, ua-py, ua-go, ua-cs, ua-c, ua-cxx, ua-qt, ua-dart, ua-dart-frb,
 #                  clientkeys and forge (UARegistryUA8.t.sol); the jobs above already run them, so no new job. The old chain-bound vectors are in
 #                  smartcontracts/vectors/ua/legacy/. The local closing gate: smartcontracts/evm/runs/2026-10-30-ua8-gates.sh (its logs are runs/2026-10-30-ua8-*.txt)
-#   smartcontracts/near:   smartcontracts/scripts/test.sh near (check_no_authority.sh, cargo near build, cargo test: unit + near-sandbox)
-#   smartcontracts/algorand: ALGORAND_ARTIFACTS_CHECK=1 smartcontracts/scripts/build.sh algorand; gen_vectors.py --check;
-#                  scripts/test_deploy.py (pytest on the localnet and the node e2e of both: local only, the gate runner)
+# Force a group on whatever the paths: (1) a pull-request label ci-full-contracts | ci-full-node | ci-full-clients | ci-full-pqz | ci-full;
+#   (2) Actions tab > scaas-ci > Run workflow, or `gh workflow run ci.yml -f full=ci-full-node --ref <branch>` (runs that group and docs only).
 name: scaas-ci
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled] # labeled: a ci-full-* label reruns with that group on
     paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'pqz-core/**', '.github/workflows/ci.yml', '.github/ci_changes.py']
   push:
     branches: [main]
     paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'pqz-core/**', '.github/workflows/ci.yml', '.github/ci_changes.py']
+  workflow_dispatch:
+    inputs:
+      full:
+        description: the group to run whatever the paths (docs runs too)
+        type: choice
+        options: [ci-full, ci-full-contracts, ci-full-node, ci-full-clients, ci-full-pqz]
+        default: ci-full
 
 jobs:
-  # Which jobs this pull request needs (.github/ci_changes.py: a job runs when a path it reads changed); a push to main, a
-  # change under .github/, or a failed diff runs every job.
+  # Which jobs this run needs (.github/ci_changes.py: a job runs when a path it reads changed, or when a ci-full-* label
+  # or the manual run's choice names its group); a push to main, a change under .github/, or a failed diff runs every job.
   changes:
     runs-on: ubuntu-latest
     outputs:
-      contracts: ${{ steps.f.outputs.contracts }}
+      contract_evm: ${{ steps.f.outputs.contract_evm }}
+      contract_soroban: ${{ steps.f.outputs.contract_soroban }}
+      contract_solana: ${{ steps.f.outputs.contract_solana }}
+      contract_near: ${{ steps.f.outputs.contract_near }}
+      contract_algorand: ${{ steps.f.outputs.contract_algorand }}
+      contract_aptos: ${{ steps.f.outputs.contract_aptos }}
+      contract_sui: ${{ steps.f.outputs.contract_sui }}
+      contract_cosmos: ${{ steps.f.outputs.contract_cosmos }}
+      contract_ton: ${{ steps.f.outputs.contract_ton }}
       node: ${{ steps.f.outputs.node }}
       docs: ${{ steps.f.outputs.docs }}
       clientkeys: ${{ steps.f.outputs.clientkeys }}
@@ -52,8 +78,6 @@ jobs:
       ua_cs: ${{ steps.f.outputs.ua_cs }}
       ua_dart_frb: ${{ steps.f.outputs.ua_dart_frb }}
       ua_dart: ${{ steps.f.outputs.ua_dart }}
-      near: ${{ steps.f.outputs.near }}
-      algorand: ${{ steps.f.outputs.algorand }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,12 +86,21 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.event.pull_request.base.sha }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          FULL: ${{ inputs.full }}
         run: python3 .github/ci_changes.py
 
-  contracts:
+  # PQZ contracts are built for one parameter set (src/pqz/PqzSet.sol): every set runs the whole suite (AGENTS.md).
+  # n2304-kmax4096 is the committed set (gen_set.py --check), so its cell is the default-set `forge test` and also runs
+  # the once-only steps.
+  contract-evm:
     needs: changes
-    if: needs.changes.outputs.contracts == 'true'
+    if: needs.changes.outputs.contract_evm == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        set: [n2048-kmax1024, n2304-kmax4096, n2560-kmax16384, n2816-kmax65536]
     defaults:
       run:
         working-directory: smartcontracts/evm
@@ -81,18 +114,188 @@ jobs:
         run: |
           ../../scripts/evm_libs.sh install
           ../../scripts/evm_libs.sh check
-      - name: forge test (default profile)
-        run: forge test
+      - name: forge test at ${{ matrix.set }} (at-set.sh)
+        run: script/pqz/at-set.sh ${{ matrix.set }} test
       # the registry's gas bounds (msig at verifyBudget, stored-member bound, T-GAS) hold cold: every call its own tx
       - name: forge test --isolate (UAGas, UARegistryGroups)
+        if: matrix.set == 'n2304-kmax4096'
         run: forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol'
       - name: size gate (CTR-TOK-24, ratchet)
+        if: matrix.set == 'n2304-kmax4096'
         run: |
           python3 ../../scripts/size_gate.py --self-test
           forge build src --sizes --json > /tmp/sizes.json || true
           python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json
       - name: forge build (scaas-testnet profile)
+        if: matrix.set == 'n2304-kmax4096'
         run: FOUNDRY_PROFILE=scaas-testnet forge build
+
+  contract-soroban:
+    needs: changes
+    if: needs.changes.outputs.contract_soroban == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1 # smartcontracts/soroban/rust-toolchain.toml
+          targets: wasm32v1-none
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: smartcontracts/soroban
+      # host tests only: test.sh soroban does not build the wasm, so no stellar CLI here
+      - name: test.sh soroban
+        run: smartcontracts/scripts/test.sh soroban
+
+  contract-solana:
+    needs: changes
+    if: needs.changes.outputs.contract_solana == 'true'
+    runs-on: ubuntu-latest
+    env:
+      AGAVE: v4.3.0
+      AGAVE_SHA256: c97289a8abb1d0efb497d8b5cb285baabd9b7f8ea6647f5d145c5dc8ff3611e8 # GitHub release asset digest; binaries byte-identical to the local install
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1 # smartcontracts/solana/rust-toolchain.toml (host tests; cargo build-sbf brings its own rustc)
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: smartcontracts/solana
+      # build.sh solana puts ~/.local/share/solana/install/active_release/bin on PATH, where agave-install puts it locally
+      - name: Agave ${{ env.AGAVE }} (official release tarball)
+        run: |
+          curl -sSfL -o /tmp/agave.tar.bz2 "https://github.com/anza-xyz/agave/releases/download/$AGAVE/solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+          echo "$AGAVE_SHA256  /tmp/agave.tar.bz2" | sha256sum -c -
+          mkdir -p ~/.local/share/solana/install
+          tar -xjf /tmp/agave.tar.bz2 -C ~/.local/share/solana/install
+          mv ~/.local/share/solana/install/solana-release ~/.local/share/solana/install/active_release
+          ~/.local/share/solana/install/active_release/bin/cargo-build-sbf --version
+      # cargo build-sbf downloads its platform tools (v1.57 for Agave 4.3.0) into ~/.cache/solana on first use
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/solana
+          key: solana-platform-tools-${{ env.AGAVE }}
+      - name: test.sh solana
+        run: smartcontracts/scripts/test.sh solana
+
+  contract-near:
+    needs: changes
+    if: needs.changes.outputs.contract_near == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1 # smartcontracts/near/rust-toolchain.toml
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: smartcontracts/near
+      # cargo-near depends on hidapi, whose build script needs libudev
+      - run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
+      - name: cargo-near
+        run: cargo install cargo-near --version 0.22.0 --locked
+      # build + unit + near-workspaces tests on near-sandbox (fetched by near-workspaces; one sandbox at a time)
+      - name: test.sh near
+        run: smartcontracts/scripts/test.sh near
+
+  # test.sh algorand's last step (pytest on the localnet, started by algokit in docker) is local only, like every
+  # family's localnet e2e: the steps below are test.sh algorand without it.
+  contract-algorand:
+    needs: changes
+    if: needs.changes.outputs.contract_algorand == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: build (puyapy, artifacts.json --check)
+        run: ALGORAND_ARTIFACTS_CHECK=1 smartcontracts/scripts/build.sh algorand
+      - name: vectors --check
+        run: smartcontracts/algorand/.venv/bin/python -I smartcontracts/algorand/scripts/gen_vectors.py --check
+      - name: deploy.py unit
+        run: smartcontracts/algorand/.venv/bin/python -I -W ignore smartcontracts/algorand/scripts/test_deploy.py
+
+  contract-aptos:
+    needs: changes
+    if: needs.changes.outputs.contract_aptos == 'true'
+    runs-on: ubuntu-latest
+    env:
+      APTOS: 9.6.0
+      APTOS_SHA256: 4e28e71659a53e8eacff29d127685f2f282a8c008ff6e51047daedc72576bb8d # GitHub release asset digest; Linux-x86_64, byte-identical to the local binary
+    steps:
+      - uses: actions/checkout@v4
+      - name: aptos CLI ${{ env.APTOS }} (official release zip)
+        run: |
+          curl -sSfL -o /tmp/aptos.zip "https://github.com/aptos-labs/aptos-core/releases/download/aptos-cli-v$APTOS/aptos-cli-$APTOS-Linux-x86_64.zip"
+          echo "$APTOS_SHA256  /tmp/aptos.zip" | sha256sum -c -
+          mkdir -p ~/.local/bin && unzip -o /tmp/aptos.zip aptos -d ~/.local/bin
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          ~/.local/bin/aptos --version
+      # AptosFramework at the rev pinned in Move.toml (fetched once: --skip-fetch-latest-git-deps only skips updates)
+      - name: test.sh aptos
+        run: smartcontracts/scripts/test.sh aptos
+
+  contract-sui:
+    needs: changes
+    if: needs.changes.outputs.contract_sui == 'true'
+    runs-on: ubuntu-latest
+    env:
+      SUI: testnet-v1.81.0 # sui 1.81.0-bf0c491c17b8, the local CLI
+      SUI_SHA256: e0b38c877fd0c84d559ffa165a65af2fb47bd7b0e2a6413deac6f9e59ee6c31b # GitHub release asset digest; its `sui` is byte-identical to the local one
+    steps:
+      - uses: actions/checkout@v4
+      # the release tarball is ~1.1 GB (every Sui binary): keep only `sui`, cached by version
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/sui
+          key: sui-cli-${{ env.SUI }}-${{ env.SUI_SHA256 }}
+      - name: sui CLI ${{ env.SUI }} (official release tarball)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          curl -sSfL -o /tmp/sui.tgz "https://github.com/MystenLabs/sui/releases/download/$SUI/sui-$SUI-ubuntu-x86_64.tgz"
+          echo "$SUI_SHA256  /tmp/sui.tgz" | sha256sum -c -
+          mkdir -p ~/.local/bin && tar -xzf /tmp/sui.tgz -C ~/.local/bin ./sui
+          rm /tmp/sui.tgz
+      - run: |
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          ~/.local/bin/sui --version
+      # the framework at the rev pinned in Move.lock
+      - name: test.sh sui
+        run: smartcontracts/scripts/test.sh sui
+
+  contract-cosmos:
+    needs: changes
+    if: needs.changes.outputs.contract_cosmos == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.99.0 # smartcontracts/cosmos has no rust-toolchain.toml: the local default (rustup default), where its tests pass
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: smartcontracts/cosmos
+      - name: test.sh cosmos
+        run: smartcontracts/scripts/test.sh cosmos
+
+  contract-ton:
+    needs: changes
+    if: needs.changes.outputs.contract_ton == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.8.1 # the local node; package-lock.json pins no engine above >= 20
+          cache: npm
+          cache-dependency-path: smartcontracts/ton/package-lock.json
+      # npm ci (lockfile) + npm test (tact build, jest on @ton/sandbox)
+      - name: test.sh ton
+        run: smartcontracts/scripts/test.sh ton
 
   node:
     needs: changes
@@ -446,40 +649,3 @@ jobs:
       # asserts are off here (plain `dart run`), like a release build
       - run: dart run test/vectors_test.dart
         working-directory: clients/ua-dart
-
-  near:
-    needs: changes
-    if: needs.changes.outputs.near == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.97.1 # smartcontracts/near/rust-toolchain.toml
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: smartcontracts/near
-      # cargo-near depends on hidapi, whose build script needs libudev
-      - run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
-      - name: cargo-near
-        run: cargo install cargo-near --version 0.22.0 --locked
-      # build + unit + near-workspaces tests on near-sandbox (fetched by near-workspaces; one sandbox at a time)
-      - name: test.sh near
-        run: smartcontracts/scripts/test.sh near
-
-  algorand:
-    needs: changes
-    if: needs.changes.outputs.algorand == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: build (puyapy, artifacts.json --check)
-        run: ALGORAND_ARTIFACTS_CHECK=1 smartcontracts/scripts/build.sh algorand
-      - name: vectors --check
-        run: smartcontracts/algorand/.venv/bin/python -I smartcontracts/algorand/scripts/gen_vectors.py --check
-      - name: deploy.py unit
-        run: smartcontracts/algorand/.venv/bin/python -I -W ignore smartcontracts/algorand/scripts/test_deploy.py
