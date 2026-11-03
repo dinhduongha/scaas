@@ -194,6 +194,8 @@ forge|forge|test_subtreeOutsideTheScopeRefused
 forge|forge|test_subtreeHeadWithNoBudgetRefused
 forge|forge|test_moveWithinAGroup
 forge|forge|test_moveOutOfTheGroupRefused
+forge|forge|test_bitsAbove127AreApplicationBits
+forge|forge|test_bits64To127AreScaasBits
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

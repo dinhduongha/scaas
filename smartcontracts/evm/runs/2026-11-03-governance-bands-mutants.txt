@@ -1,0 +1,7 @@
+# governance CTR-GOV-10 Change (bands) mutants at 33fc080d (clean tree), each one change, suite test/governance/*.t.sol,
+# restored by git checkout -- <file> after each.
+mutant | test that went red | rc
+b1 the old edge restored at 64 (_check: bit >= 64 refused, FeatureReserved) | test_bits64To127AreScaasBits, test_bitsAbove127AreApplicationBits, test_refusals, every application mock test (BranchApp, DelayApp, LoanBook, FamilyTree, GroupLedger): 14 | 1
+b2 the refusal restored at 128 (_check: bit >= 128 refused) | the same 14 | 1
+b3 init's band refusal restored (features >> 128) | test_bitsAbove127AreApplicationBits and the 11 application mock tests: 12 | 1
+# survivors: none
