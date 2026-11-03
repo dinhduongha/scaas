@@ -50,6 +50,10 @@ contract AllowlistTest is Test {
     WrappedToken internal ledgered;
     bytes32 internal constant UA = keccak256("scaas.allowlist.ua");
 
+    /// The test plays the factory: it registered no token, so the leg check (CTR-GOV-05, spec §6.1) reads every leg as an
+    /// outside leg and asks it nothing.
+    function isRegisteredToken(address) external pure returns (bool) { return false; }
+
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
