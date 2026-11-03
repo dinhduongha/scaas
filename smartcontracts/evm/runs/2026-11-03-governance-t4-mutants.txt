@@ -1,0 +1,7 @@
+# governance T4 mutants at a71c07a8 (clean tree), each one change, suite test/{v2/Factory,governance/*}.t.sol,
+# restored by git checkout -- <file> after each.
+mutant | test that went red | rc
+m1 enum order swapped (8 and 9) | test_regulatedKindPublishesOnTheSameFactory (VersionKindMismatch(9, 8)), test_fixed_aReservedKindDecodes | 1
+m2 KindRetired check dropped | test_retiredKindsRefusedAtDeployImplementation (VersionKindMismatch(6, 0) != KindRetired(6)) | 1
+m3 _enabled starting with bit 8 | test_regulatedKindsOffUntilPublished, test_kindEnabled, test_regulatedKindPublishesOnTheSameFactory | 1
+# survivors: none
