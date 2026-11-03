@@ -120,10 +120,16 @@ library GovernanceLib {
         _grant(s, bit, account, caller, roleBits, contractOnly);
     }
 
-    /// @notice The owner, or the grantor of a leaf.
+    /// @notice The owner, or the grantor of a leaf while the account is its `LIMITED` leaf and the grantor still holds the
+    ///         bit (B-04). The owner's revoke bars the account, a non-holder too, before `_clear`'s early return: only the owner
+    ///         re-admits it (B-05, Claude M-8).
     function revokeRole(uint8 bit, address account, address caller) public {
         GovernanceStorage storage s = $();
-        if (caller == address(0) || (caller != s.owner && caller != s.grants[bit][account].grantor)) {
+        if (caller != address(0) && caller == s.owner) {
+            s.grants[bit][account].barred = true;
+        } else if (caller == address(0) || caller != s.grants[bit][account].grantor || s.roles[bit][account] != LIMITED
+            || s.roles[bit][caller] == 0)
+        {
             revert IGovernance.NotOwner(caller);
         }
         _clear(s, bit, account, caller);
@@ -151,8 +157,10 @@ library GovernanceLib {
         _write(bit, holder, t, caller, leaf);
     }
 
-    /// @dev A caller that is not the owner sets a leaf: it holds a `delegable` `LIMITED` grant, the target holds nothing or
-    ///      is its own leaf, and the terms narrow its own. Returns the parent's scope, which the contract's order checks.
+    /// @dev A caller that is not the owner sets a leaf (spec §1.5): it holds a `delegable` `LIMITED` grant, an owner exists
+    ///      (B-08: nothing above changes once the owner is 0, the holder list included), the caller is not expired, the target
+    ///      holds nothing or is its own leaf and is not barred (B-05), and the terms narrow its own, so an expired parent or
+    ///      one with nothing left adds nobody. Returns the parent's scope, which the contract's order checks.
     function _leafPath(uint8 bit, address holder, IGovernance.GrantTerms calldata t, address caller)
         private view returns (bool leaf, bytes32 parentScope)
     {
@@ -160,26 +168,55 @@ library GovernanceLib {
         leaf = caller != s.owner || caller == address(0);
         if (leaf) {
             IGovernance.Grant storage p = s.grants[bit][caller];
-            if (s.roles[bit][caller] != LIMITED || !p.delegable) revert IGovernance.NotOwner(caller);
-            if (s.roles[bit][holder] != 0 && s.grants[bit][holder].grantor != caller) revert IGovernance.NotOwner(caller);
+            if (s.owner == address(0) || s.roles[bit][caller] != LIMITED || !p.delegable) revert IGovernance.NotOwner(caller);
+            if (p.validUntil != 0 && block.timestamp > p.validUntil) revert IGovernance.GrantExpired(bit, caller);
+            IGovernance.Grant storage h = s.grants[bit][holder];
+            if (s.roles[bit][holder] != 0 && h.grantor != caller) revert IGovernance.NotOwner(caller);
+            if (h.barred) revert IGovernance.GrantBarred(bit, holder);
             _narrows(t, p);
             parentScope = p.scope;
         }
     }
 
-    /// @dev Writes the terms; spent, uses and the window's start carry (an edit never refreshes a budget).
+    /// @dev Writes the terms; spent, uses and the window's start carry (an edit never refreshes a budget). `Counts` by spec §1.7,
+    ///      `r` read first: a leaf is a holder with `grantor != 0`. The owner's apply makes a root (`grantor`, `grantorEpoch`,
+    ///      `barred` cleared) and, on a `LIMITED` holder whose `scope` changes or whose delegation ends, kills its leaves (B-11).
     function _write(uint8 bit, address holder, IGovernance.GrantTerms calldata t, address caller, bool leaf) private {
         GovernanceStorage storage s = $();
         IGovernance.Grant storage g = s.grants[bit][holder];
+        uint8 r = s.roles[bit][holder];
+        if (r != WHOLE && t.window != g.window && g.spentInWindow != 0) _windowFree(bit, holder, g, t.window);
+        if (leaf) {
+            if (r == 0) ++s.counts[bit].holders; // row 2; row 3 moves nothing
+            (g.grantor, g.grantorEpoch) = (caller, s.epoch[bit][caller]);
+        } else {
+            if (r == LIMITED && (t.scope != g.scope || (g.delegable && !t.delegable))) ++s.epoch[bit][holder];
+            _root(s, bit, r, g);
+        }
         (g.min, g.max, g.total, g.perWindow) = (t.min, t.max, t.total, t.perWindow);
         (g.window, g.validUntil, g.maxUses, g.scope, g.delegable) = (t.window, t.validUntil, t.maxUses, t.scope, t.delegable);
-        (g.grantor, g.grantorEpoch) = leaf ? (caller, s.epoch[bit][caller]) : (address(0), uint32(0));
-        if (s.roles[bit][holder] == 0) {
-            ++s.counts[bit].holders;
-            emit IGovernance.RoleGranted(bit, holder, caller); // B-31: the indexed holder list is whole
-        }
+        if (r == 0) emit IGovernance.RoleGranted(bit, holder, caller); // B-31: the indexed holder list is whole
         s.roles[bit][holder] = LIMITED;
         emit IGovernance.GrantSet(bit, holder, leaf ? caller : address(0));
+    }
+
+    /// @dev The owner's apply, by either entry (spec §1.5, §1.7): rows 1, 4, 5, 6; the record becomes a root's.
+    function _root(GovernanceStorage storage s, uint8 bit, uint8 r, IGovernance.Grant storage g) private {
+        Counts storage c = s.counts[bit];
+        if (r == 0) {
+            ++c.holders;
+            ++c.roots;
+        } else if (g.grantor != address(0)) {
+            ++c.roots;
+        }
+        if (g.grantor != address(0) || g.barred) (g.grantor, g.grantorEpoch, g.barred) = (address(0), 0, false);
+    }
+
+    /// @dev B-12, agy I-1: a holder that spent in a period which ends after the start of the current period on the new grid
+    ///      cannot change `window`, or `_debit` would read that spent as another period's. `uint256`, `now` for a window of 0.
+    function _windowFree(uint8 bit, address holder, IGovernance.Grant storage g, uint32 window) private view {
+        uint256 start = window == 0 ? block.timestamp : block.timestamp - block.timestamp % window;
+        if (uint256(g.windowStart) + g.window > start) revert IGovernance.GrantWindowInUse(bit, holder);
     }
 
     /// @notice One-way: clears a set, unlocked flag (replaces `disableControls`).
@@ -254,7 +291,8 @@ library GovernanceLib {
         _check(s, bit, account, roleBits, contractOnly);
         uint8 r = s.roles[bit][account];
         if (r == WHOLE) return;
-        if (r == 0) ++s.counts[bit].holders;
+        if (r == LIMITED) ++s.epoch[bit][account]; // B-18: an upgrade kills the leaves; a later narrowing revives none
+        _root(s, bit, r, s.grants[bit][account]);
         s.roles[bit][account] = WHOLE;
         emit IGovernance.RoleGranted(bit, account, caller);
     }
@@ -270,11 +308,12 @@ library GovernanceLib {
         if (contractOnly & _bit(bit) != 0 && !SigCheck.isContract(account)) revert IGovernance.RoleNotContract(bit, account);
     }
 
-    /// @dev The renounce rule (CTR-GOV-02): no set, unlocked power bit has a holder. `renounceOwnership`, and `init` with no owner.
+    /// @dev The renounce rule (CTR-GOV-02, spec §1.7): no set, unlocked power bit has a live root. A dead leaf does not count
+    ///      (B-07); an expired root does until it is revoked (C7). `renounceOwnership`, and `init` with no owner.
     function _noLiveHolder(GovernanceStorage storage s, uint256 roleBits) private view {
         for (uint256 live = s.features & ~s.lockedFeatures & roleBits; live != 0; live &= live - 1) {
             uint8 bit = _lowest(live);
-            if (s.counts[bit].holders != 0) revert IGovernance.OwnerHasHolders(bit);
+            if (s.counts[bit].roots != 0) revert IGovernance.OwnerHasHolders(bit);
         }
     }
 
@@ -299,11 +338,15 @@ library GovernanceLib {
         if (t.delegable && (scalar ? t.total == 0 : t.maxUses == 0)) revert IGovernance.GrantBudgetRequired(bit);
     }
 
-    /// @dev Epoch first: the leaves of `account` die with its right.
+    /// @dev Rows 7 and 8 of spec §1.7: `grantor` read before `r` is cleared; the record is kept; the epoch bump kills the
+    ///      leaves of `account` without a walk.
     function _clear(GovernanceStorage storage s, uint8 bit, address account, address caller) private {
         if (s.roles[bit][account] == 0) return;
+        bool root = s.grants[bit][account].grantor == address(0);
         s.roles[bit][account] = 0;
-        --s.counts[bit].holders;
+        Counts storage c = s.counts[bit];
+        --c.holders;
+        if (root) --c.roots;
         ++s.epoch[bit][account];
         emit IGovernance.RoleRevoked(bit, account, caller);
     }
@@ -331,15 +374,20 @@ library GovernanceLib {
         }
     }
 
-    /// @dev Child within parent, field by field; for the four fields with 0 = no bound, a bounded parent wants a bounded child.
+    /// @dev Child within parent, field by field (spec §1.5); for the four fields with 0 = no bound, a bounded parent wants a
+    ///      bounded child. `total` and `maxUses` against what remains, by comparison, never a subtraction (B-18, agy I-3); under
+    ///      a window the child's `window` equals the parent's (B-17).
     function _narrows(IGovernance.GrantTerms calldata t, IGovernance.Grant storage p) private view {
         if (t.delegable) revert IGovernance.GrantNotNarrower(6);
         if (t.min < p.min) revert IGovernance.GrantNotNarrower(0);
         if (t.max > p.max) revert IGovernance.GrantNotNarrower(1);
-        if (p.total != 0 && (t.total == 0 || t.total > p.total - p.spentTotal)) revert IGovernance.GrantNotNarrower(2);
-        if (p.perWindow != 0 && (t.perWindow == 0 || t.perWindow > p.perWindow)) revert IGovernance.GrantNotNarrower(3);
+        if (p.total != 0 && (t.total == 0 || uint256(p.spentTotal) + t.total > p.total)) revert IGovernance.GrantNotNarrower(2);
+        if (p.perWindow != 0) {
+            if (t.perWindow == 0 || t.perWindow > p.perWindow) revert IGovernance.GrantNotNarrower(3);
+            if (t.window != p.window) revert IGovernance.GrantNotNarrower(8);
+        }
         if (p.validUntil != 0 && (t.validUntil == 0 || t.validUntil > p.validUntil)) revert IGovernance.GrantNotNarrower(4);
-        if (p.maxUses != 0 && (t.maxUses == 0 || t.maxUses > p.maxUses)) revert IGovernance.GrantNotNarrower(5);
+        if (p.maxUses != 0 && (t.maxUses == 0 || uint256(p.uses) + t.maxUses > p.maxUses)) revert IGovernance.GrantNotNarrower(5);
     }
 
     function _onlyOwner(address caller) private view returns (GovernanceStorage storage s) {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {Test, stdError} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -266,8 +266,9 @@ contract GovAttackV2Test is Test {
 
     // ------------------------------------------------------------------ the revoke (B-04, B-05)
 
-    /// B-04: the revoke path reads the record's `grantor`, which outlives both the leaf and the grantor's own right.
-    function test_attack_revokedGrantorStripsAnOwnerGrantedHolder() public {
+    /// B-04, fixed (spec §1.5): a grantor revokes only while the account is its `LIMITED` leaf and it still holds the bit. The
+    /// owner's take-over clears `grantor`; a revoked grantor cannot reach even its own dead leaf.
+    function test_fixed_revokedGrantorStripsAnOwnerGrantedHolder() public {
         _manager(100);
         _leaf(50);
         vm.startPrank(OWNER);
@@ -275,25 +276,49 @@ contract GovAttackV2Test is Test {
         t.revokeRole(MINT, MANAGER); // and removes the manager
         vm.stopPrank();
         assertFalse(t.hasRole(MINT, MANAGER));
+        assertEq(t.grantOf(MINT, OFFICER).grantor, address(0));
 
-        vm.prank(OFFICER2); // positive control: a stranger is refused
+        vm.prank(OFFICER2); // a stranger is refused
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, OFFICER2));
         t.revokeRole(MINT, OFFICER);
-
-        vm.prank(MANAGER); // a holder of nothing
+        vm.prank(MANAGER); // a holder of nothing, and the officer is no longer its leaf
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, MANAGER));
         t.revokeRole(MINT, OFFICER);
-        assertFalse(t.hasRole(MINT, OFFICER));
+        assertTrue(t.hasRole(MINT, OFFICER));
+
+        _manager(100); // a revoked grantor and its own leaf: refused while it holds nothing
+        vm.prank(MANAGER);
+        t.setGrant(MINT, OFFICER2, _leafTerms(50));
+        vm.prank(OWNER);
+        t.revokeRole(MINT, MANAGER);
+        vm.prank(MANAGER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, MANAGER));
+        t.revokeRole(MINT, OFFICER2);
+        _manager(100); // positive control: a grantor that holds revokes its leaf
+        vm.prank(MANAGER);
+        t.revokeRole(MINT, OFFICER2);
+        assertFalse(t.hasRole(MINT, OFFICER2));
     }
 
-    /// B-05: the owner's revoke of a leaf lasts one transaction: its parent grants it back at once.
-    function test_attack_parentGrantsBackALeafTheOwnerRevoked() public {
+    function _leafTerms(uint128 total) internal pure returns (IGovernance.GrantTerms memory g) {
+        g.max = NONE;
+        g.total = total;
+    }
+
+    /// B-05, fixed (spec §1.5): the owner's revoke bars the account; its parent cannot grant it back.
+    function test_fixed_parentGrantsBackALeafTheOwnerRevoked() public {
         _manager(100);
         _leaf(50);
         vm.prank(OWNER);
         t.revokeRole(MINT, OFFICER);
-        _refused(OFFICER, 1, abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, OFFICER)); // positive control
-        _leaf(50);
-        _mint(OFFICER, 1);
+        _refused(OFFICER, 1, abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, OFFICER));
+        assertTrue(t.grantOf(MINT, OFFICER).barred);
+        vm.prank(MANAGER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantBarred.selector, MINT, OFFICER));
+        t.setGrant(MINT, OFFICER, _leafTerms(50));
+        vm.prank(MANAGER); // positive control: another account is added
+        t.setGrant(MINT, OFFICER2, _leafTerms(50));
+        _mint(OFFICER2, 1);
     }
 
     // ------------------------------------------------------------------ the renounce rule (B-06, B-07, B-08)
@@ -313,36 +338,41 @@ contract GovAttackV2Test is Test {
         n.mint(TO, 1);
     }
 
-    /// B-07: revoking the parent "kills every leaf without a walk", and the walk comes back at the renounce: a dead leaf counts.
-    function test_attack_deadLeavesBlockTheRenounce() public {
+    /// B-07, fixed (spec §1.7): the renounce rule reads live roots. A dead leaf stays listed and counted in `holderCount`, and
+    /// does not block the renounce.
+    function test_fixed_deadLeavesBlockTheRenounce() public {
         _manager(100);
         _leaf(50);
         _mint(OFFICER, 1);
+        vm.prank(OWNER); // positive control: a live root blocks it
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.OwnerHasHolders.selector, MINT));
+        t.renounceOwnership();
         vm.prank(OWNER);
         t.revokeRole(MINT, MANAGER);
         _refused(OFFICER, 1, _ex(7)); // dead
         assertTrue(t.hasRole(MINT, OFFICER)); // and reported as a holder
         assertEq(t.holderCount(MINT), 1);
         vm.prank(OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.OwnerHasHolders.selector, MINT));
         t.renounceOwnership();
-        vm.prank(OWNER);
-        t.revokeRole(MINT, OFFICER); // positive control: only the walk clears it
-        vm.prank(OWNER);
-        t.renounceOwnership();
+        assertEq(t.owner(), address(0));
     }
 
-    /// B-08: `owner() == 0` on a locked bit, and the holder set still grows: "owner 0 means nothing above can change".
-    function test_attack_afterRenounceALockedBitsHolderAddsHolders() public {
+    /// B-08, fixed (spec §1.5): once the owner is 0 nothing above changes, the holder list included: a locked bit's delegable
+    /// holder survives the renounce and adds nobody.
+    function test_fixed_afterRenounceALockedBitsHolderAddsHolders() public {
         t = _token("l", 1 << MINT, OWNER);
         _manager(100);
+        vm.prank(MANAGER); // positive control: with an owner, the leaf is added
+        t.setGrant(MINT, OFFICER2, _leafTerms(10));
         vm.prank(OWNER);
         t.renounceOwnership();
         assertEq(t.owner(), address(0));
-        assertEq(t.holderCount(MINT), 1);
-        _leaf(50);
         assertEq(t.holderCount(MINT), 2);
-        _mint(OFFICER, 50);
+        vm.prank(MANAGER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, MANAGER));
+        t.setGrant(MINT, OFFICER, _leafTerms(50));
+        assertEq(t.holderCount(MINT), 2);
+        _mint(MANAGER, 50); // the locked power itself survives
     }
 
     // ------------------------------------------------------------------ the grant record (B-09 to B-12)
@@ -411,8 +441,8 @@ contract GovAttackV2Test is Test {
         a.approve(g.scope, 1);
     }
 
-    /// B-11: scope narrows at the grant only. The parent moves to another branch; its leaf keeps the old one and debits the parent.
-    function test_attack_leafKeepsAScopeItsParentLost() public {
+    /// B-11, fixed (spec §1.5): the owner's edit that changes a parent's scope bumps its epoch, so its leaves die.
+    function test_fixed_leafKeepsAScopeItsParentLost() public {
         BranchApp a = new BranchApp(OWNER);
         (bytes32 b7, bytes32 b8) = (bytes32(uint256(7)), bytes32(uint256(8)));
         IGovernance.GrantTerms memory g = _open();
@@ -423,6 +453,8 @@ contract GovAttackV2Test is Test {
         (l.scope, l.total) = (b7, 50);
         vm.prank(MANAGER);
         a.setGrant(64, OFFICER, l);
+        vm.prank(OFFICER); // positive control: the leaf acts in branch 7 while its parent is there
+        a.approve(b7, 2);
 
         g.scope = b8; // the owner moves the manager; the edit is not a revoke
         vm.prank(OWNER);
@@ -431,25 +463,27 @@ contract GovAttackV2Test is Test {
         vm.expectRevert(bytes("branch"));
         a.approve(b7, 1);
         vm.prank(OFFICER);
+        vm.expectRevert(_ex(7));
         a.approve(b7, 5);
-        assertEq(a.approved(b7), 5);
-        assertEq(a.grantOf(64, MANAGER).spentTotal, 5);
+        assertEq(a.approved(b7), 2);
+        assertEq(a.grantOf(64, MANAGER).spentTotal, 2);
     }
 
-    /// B-11: the same for `delegable`: the owner ends the delegation, the leaves live on.
-    function test_attack_endingDelegationLeavesTheLeaves() public {
+    /// B-11, fixed: the same for `delegable`: the owner ends the delegation, the leaves die.
+    function test_fixed_endingDelegationLeavesTheLeaves() public {
         _manager(100);
         _leaf(50);
+        _mint(OFFICER, 1); // positive control: alive under a delegating parent
         IGovernance.GrantTerms memory g = _open();
         g.total = 100;
         vm.prank(OWNER);
         t.setGrant(MINT, MANAGER, g);
         assertFalse(t.grantOf(MINT, MANAGER).delegable);
-        _mint(OFFICER, 1);
+        _refused(OFFICER, 1, _ex(7));
     }
 
-    /// B-12: "an edit never refreshes a budget": changing `window` moves the grid, and the spent no longer matches.
-    function test_attack_changingTheWindowRefreshesTheBudget() public {
+    /// B-12, fixed (spec §1.5): changing `window` while the spent period still runs on the new grid is refused.
+    function test_fixed_changingTheWindowRefreshesTheBudget() public {
         IGovernance.GrantTerms memory g = _open();
         (g.perWindow, g.window) = (50, 1 days);
         vm.startPrank(OWNER);
@@ -462,9 +496,10 @@ contract GovAttackV2Test is Test {
         _refused(MANAGER, 1, _ex(3));
         g.window = 1 days + 1; // one second longer, narrower by any reading
         vm.prank(OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantWindowInUse.selector, MINT, MANAGER));
         t.setGrant(MINT, MANAGER, g);
-        _mint(MANAGER, 50); // the same second
-        assertEq(t.balanceOf(TO), 100);
+        _refused(MANAGER, 1, _ex(3)); // the same second
+        assertEq(t.balanceOf(TO), 50);
     }
 
     // ------------------------------------------------------------------ the DEX (B-13)
@@ -661,9 +696,8 @@ contract GovAttackV2Test is Test {
         w.wrap(address(usd), 1);
     }
 
-    /// B-17: `_narrows` has no word for `window`: a leaf may state its parent's per-window figure per second. The parent's own debit
-    /// still binds, which is the positive control; the record a wallet prints does not.
-    function test_attack_aLeafsWindowIsNotNarrowed() public {
+    /// B-17, fixed (spec §1.5): under a parent with a window, a leaf's `window` equals the parent's, `GrantNotNarrower(8)`.
+    function test_fixed_aLeafsWindowIsNotNarrowed() public {
         IGovernance.GrantTerms memory g = _open();
         (g.total, g.perWindow, g.window, g.delegable) = (1000, 100, 1 days, true);
         vm.prank(OWNER);
@@ -671,15 +705,22 @@ contract GovAttackV2Test is Test {
         IGovernance.GrantTerms memory l = _open();
         (l.total, l.perWindow, l.window) = (1000, 100, 1);
         vm.prank(MANAGER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, uint8(8)));
         t.setGrant(MINT, OFFICER, l); // 8,640,000 a day against the parent's 100
-        assertEq(t.grantOf(MINT, OFFICER).window, 1);
+        l.window = 1 days + 1;
+        vm.prank(MANAGER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, uint8(8)));
+        t.setGrant(MINT, OFFICER, l);
+        l.window = 1 days; // positive control: the parent's window
+        vm.prank(MANAGER);
+        t.setGrant(MINT, OFFICER, l);
         _mint(OFFICER, 100);
-        vm.warp(block.timestamp + 1);
         _refused(OFFICER, 1, _ex(3));
     }
 
-    /// B-18: an owner's narrowing edit below `spent` turns the leaf path into a bare Panic, not a named refusal.
-    function test_attack_narrowingBelowSpentPanicsTheLeafPath() public {
+    /// B-18, fixed (spec §1.5): `total` narrows by comparison, never a subtraction: an owner's edit below `spent` leaves the
+    /// leaf path a named refusal.
+    function test_fixed_narrowingBelowSpentPanicsTheLeafPath() public {
         _manager(100);
         _mint(MANAGER, 60);
         IGovernance.GrantTerms memory g = _open();
@@ -689,20 +730,25 @@ contract GovAttackV2Test is Test {
         IGovernance.GrantTerms memory l = _open();
         l.total = 1;
         vm.prank(MANAGER);
-        vm.expectRevert(stdError.arithmeticError);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, uint8(2)));
+        t.setGrant(MINT, OFFICER, l);
+        (g.total, g.delegable) = (61, true); // positive control: one unit left, one unit granted
+        vm.prank(OWNER);
+        t.setGrant(MINT, MANAGER, g);
+        vm.prank(MANAGER);
         t.setGrant(MINT, OFFICER, l);
     }
 
-    /// B-18: upgrading a parent to whole shape stops its leaves with "exhausted"; narrowing it again revives them with no epoch
-    /// bump, though the owner has seen them dead.
-    function test_attack_wholeThenLimitedRevivesLeaves() public {
+    /// B-18, fixed (spec §1.5): `_grant` over a `LIMITED` holder bumps its epoch: the leaves stay dead when it is narrowed again.
+    function test_fixed_wholeThenLimitedRevivesLeaves() public {
         _manager(100);
         _leaf(50);
+        _mint(OFFICER, 1); // positive control
         vm.prank(OWNER);
         t.grantRole(MINT, MANAGER);
         _refused(OFFICER, 1, _ex(7));
         _manager(100);
-        _mint(OFFICER, 1);
+        _refused(OFFICER, 1, _ex(7));
     }
 
     /// B-19, fixed (spec §1.4, G15): `init` and `transferOwnership` refuse `UA_POOL` and `SHIELD_POOL` as owner.

@@ -81,6 +81,10 @@ interface IGovernance {
     /// @notice The scalar or the use is outside the grant (`field`: 0 min, 1 max, 2 total, 3 perWindow, 5 maxUses, 7 parent).
     error GrantExhausted(uint8 field);
     error GrantExpired(uint8 bit, address holder);
+    /// @notice The owner's revoke barred `account`: only the owner re-admits it (B-05, spec §1.5).
+    error GrantBarred(uint8 bit, address account);
+    /// @notice A change of `window` while the spent period still runs on the new grid (B-12, spec §1.5).
+    error GrantWindowInUse(uint8 bit, address holder);
     /// @notice `renounceOwnership` while a bit that is not locked has holders (CTR-GOV-02).
     error OwnerHasHolders(uint8 bit);
 

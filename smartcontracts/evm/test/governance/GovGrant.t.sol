@@ -590,6 +590,400 @@ contract GovGrantTest is Test {
         (o.batch, o.nonce, o.validUntil) = (1, 1, block.timestamp + 300);
     }
 
+    // ------------------------------------------------------------------ leaves, revoke, roots (spec §1.5, §1.7; T6)
+
+    bytes32 constant GOV_ROOT = 0x0a3a361961b35589cdb03530b6f9e23a4db6ca9a0dad5ddf5d7761c7fabc8700;
+    address constant OFFICER3 = address(0x0E);
+
+    /// `Counts` of `bit` on `on`, read from `scaas.governance` + 5 (no view returns `roots`); `holders` is `holderCount`.
+    function _counts(address on, uint8 bit) internal view returns (uint256 holders, uint256 roots) {
+        uint256 w = uint256(vm.load(on, keccak256(abi.encode(uint256(bit), uint256(GOV_ROOT) + 5))));
+        (holders, roots) = (uint128(w), w >> 128);
+        assertEq(holders, IGovernance(on).holderCount(bit), "holders is holderCount");
+    }
+
+    function _isOn(address on, uint256 holders, uint256 roots) internal view {
+        (uint256 h, uint256 r) = _counts(on, MINT);
+        assertEq(h, holders, "holders");
+        assertEq(r, roots, "roots");
+    }
+
+    function _is(uint256 holders, uint256 roots) internal view {
+        _isOn(address(t), holders, roots);
+    }
+
+    function _revoke(address a) internal {
+        vm.prank(OWNER);
+        t.revokeRole(MINT, a);
+    }
+
+    function _leaf(address a, uint128 total) internal {
+        vm.prank(MANAGER);
+        t.setGrant(MINT, a, _leafTerms(total));
+    }
+
+    function _renounceRefused() internal {
+        vm.prank(OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.OwnerHasHolders.selector, MINT));
+        t.renounceOwnership();
+    }
+
+    function _renounce() internal {
+        vm.prank(OWNER);
+        t.renounceOwnership();
+        assertEq(t.owner(), address(0));
+    }
+
+    /// Row 1: the owner's apply, either entry, or INIT, on `r == 0`: holders +1, roots +1. A leaf revoked by its grantor keeps
+    /// `grantor` in its record; the owner's grant makes it a root all the same (agy C-1), and it revokes to zero.
+    function test_counts_row1() public {
+        vm.prank(OWNER);
+        t.grantRole(MINT, OFFICER);
+        _is(1, 1);
+        _set(OFFICER2, _open());
+        _is(2, 2);
+        _revoke(OFFICER);
+        _revoke(OFFICER2);
+        _is(0, 0);
+        _manager(100);
+        _leaf(OFFICER3, 10);
+        vm.prank(MANAGER);
+        t.revokeRole(MINT, OFFICER3);
+        assertEq(t.grantOf(MINT, OFFICER3).grantor, MANAGER, "the kept record");
+        _is(1, 1);
+        _set(OFFICER3, _open()); // setGrant
+        _is(2, 2);
+        assertEq(t.grantOf(MINT, OFFICER3).grantor, address(0));
+        vm.prank(OFFICER3);
+        t.renounceRole(MINT);
+        _is(1, 1);
+        _leaf(OFFICER3, 10);
+        vm.prank(MANAGER);
+        t.revokeRole(MINT, OFFICER3);
+        vm.prank(OWNER);
+        t.grantRole(MINT, OFFICER3); // grantRole
+        _is(2, 2);
+        _revoke(OFFICER3);
+        _revoke(MANAGER);
+        _is(0, 0);
+        _renounce();
+        IFactoryToken.TokenConfig memory c; // INIT
+        (c.name, c.symbol, c.decimals, c.features, c.lockedFeatures, c.roles.minter) = ("G", "G", 18, 7, 1 << MINT, MANAGER);
+        _isOn(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "r1"), 1, 1);
+    }
+
+    /// Row 2: a delegable holder adds a leaf: holders +1, roots 0; the leaf blocks no renounce.
+    function test_counts_row2() public {
+        _manager(100);
+        _is(1, 1);
+        _leaf(OFFICER, 10);
+        _is(2, 1);
+        _revoke(MANAGER);
+        _is(1, 0);
+        _renounce();
+    }
+
+    /// Row 3: the grantor edits its leaf: no count moves.
+    function test_counts_row3() public {
+        _manager(100);
+        _leaf(OFFICER, 10);
+        _leaf(OFFICER, 20);
+        _is(2, 1);
+        assertEq(t.grantOf(MINT, OFFICER).total, 20);
+        assertEq(t.grantOf(MINT, OFFICER).grantor, MANAGER);
+    }
+
+    /// Row 4: the owner's `setGrant` on a leaf makes a `LIMITED` root: roots +1. Then the old root goes, the renounce is refused,
+    /// and the new root's revoke does not underflow.
+    function test_counts_row4() public {
+        _manager(100);
+        _leaf(OFFICER, 10);
+        _set(OFFICER, _leafTerms(10));
+        _is(2, 2);
+        assertEq(t.grantOf(MINT, OFFICER).grantor, address(0));
+        _revoke(MANAGER);
+        _is(1, 1);
+        _renounceRefused();
+        _mint(OFFICER, 1); // a root: alive though its old parent went
+        _revoke(OFFICER);
+        _is(0, 0);
+        _renounce();
+    }
+
+    /// Row 5: the owner's `grantRole` on a leaf makes a `WHOLE` root: roots +1, the same sequence after.
+    function test_counts_row5() public {
+        _manager(100);
+        _leaf(OFFICER, 10);
+        vm.prank(OWNER);
+        t.grantRole(MINT, OFFICER);
+        _is(2, 2);
+        assertEq(t.grantOf(MINT, OFFICER).grantor, address(0));
+        _revoke(MANAGER);
+        _is(1, 1);
+        _renounceRefused();
+        _mint(OFFICER, 1000);
+        _revoke(OFFICER);
+        _is(0, 0);
+        _renounce();
+    }
+
+    /// Row 6: the owner's `setGrant` or `grantRole` on a root: no count moves.
+    function test_counts_row6() public {
+        _manager(100);
+        _set(MANAGER, _open());
+        _is(1, 1);
+        vm.prank(OWNER);
+        t.grantRole(MINT, MANAGER);
+        _is(1, 1);
+        _set(MANAGER, _open());
+        _is(1, 1);
+    }
+
+    /// Row 7: a root revoked or renounced: holders −1, roots −1, the record kept.
+    function test_counts_row7() public {
+        vm.prank(OWNER);
+        t.grantRole(MINT, OFFICER);
+        IGovernance.GrantTerms memory g = _open();
+        g.total = 7;
+        _set(OFFICER2, g);
+        _is(2, 2);
+        _revoke(OFFICER);
+        _is(1, 1);
+        vm.prank(OFFICER2);
+        t.renounceRole(MINT);
+        _is(0, 0);
+        assertEq(t.grantOf(MINT, OFFICER2).total, 7, "the record is kept");
+        _renounce();
+    }
+
+    /// Row 8: a leaf revoked by the owner, by its grantor, or renounced: holders −1, roots 0, the record kept.
+    function test_counts_row8() public {
+        _manager(100);
+        _leaf(OFFICER, 10);
+        _leaf(OFFICER2, 10);
+        _leaf(OFFICER3, 10);
+        _is(4, 1);
+        _revoke(OFFICER);
+        _is(3, 1);
+        vm.prank(MANAGER);
+        t.revokeRole(MINT, OFFICER2);
+        _is(2, 1);
+        vm.prank(OFFICER3);
+        t.renounceRole(MINT);
+        _is(1, 1);
+        assertEq(t.grantOf(MINT, OFFICER3).total, 10, "the record is kept");
+        assertEq(t.grantOf(MINT, OFFICER3).grantor, MANAGER);
+    }
+
+    /// Row 9: the owner's revoke of a non-holder bars it and moves no count.
+    function test_counts_row9() public {
+        _manager(100);
+        _revoke(OFFICER);
+        _is(1, 1);
+        assertTrue(t.grantOf(MINT, OFFICER).barred);
+        assertFalse(t.hasRole(MINT, OFFICER));
+    }
+
+    /// Row 10: a leaf whose parent went is dead and listed; nothing moves its counts.
+    function test_counts_row10() public {
+        _manager(100);
+        _leaf(OFFICER, 10);
+        _revoke(MANAGER);
+        _is(1, 0);
+        _refused(OFFICER, 1, _ex(7));
+        _is(1, 0);
+    }
+
+    /// Row 11: a root past `validUntil` cannot act and still counts.
+    function test_counts_row11() public {
+        IGovernance.GrantTerms memory g = _open();
+        g.validUntil = uint64(block.timestamp + 1 hours);
+        _set(MANAGER, g);
+        vm.warp(block.timestamp + 2 hours);
+        _refused(MANAGER, 1, abi.encodeWithSelector(IGovernance.GrantExpired.selector, MINT, MANAGER));
+        _is(1, 1);
+    }
+
+    /// C7: an expired root counts as live until it is revoked; the renounce waits for that revoke.
+    function test_expiredRootCountsUntilRevoked() public {
+        IGovernance.GrantTerms memory g = _open();
+        g.validUntil = uint64(block.timestamp + 1 hours);
+        _set(MANAGER, g);
+        vm.warp(block.timestamp + 2 hours);
+        _renounceRefused();
+        _revoke(MANAGER);
+        _renounce();
+    }
+
+    /// B-07: `hasRole` means listed, not able to act: a dead leaf is listed, counted, and its record readable.
+    function test_hasRoleMeansListed() public {
+        _manager(100);
+        _leaf(OFFICER, 10);
+        _revoke(MANAGER);
+        assertTrue(t.hasRole(MINT, OFFICER));
+        assertEq(t.holderCount(MINT), 1);
+        assertEq(t.grantOf(MINT, OFFICER).total, 10);
+        _refused(OFFICER, 1, _ex(7));
+        _revoke(OFFICER);
+        assertFalse(t.hasRole(MINT, OFFICER));
+    }
+
+    /// B-05: only the owner re-admits a barred account, by either entry; then the bar is gone.
+    function test_ownerReadmitsABarredAccount() public {
+        _manager(100);
+        _leaf(OFFICER, 10);
+        _revoke(OFFICER);
+        assertTrue(t.grantOf(MINT, OFFICER).barred);
+        vm.prank(MANAGER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantBarred.selector, MINT, OFFICER));
+        t.setGrant(MINT, OFFICER, _leafTerms(10));
+        vm.prank(OWNER);
+        t.grantRole(MINT, OFFICER);
+        assertFalse(t.grantOf(MINT, OFFICER).barred, "grantRole re-admits");
+        _mint(OFFICER, 1);
+        _revoke(OFFICER);
+        assertTrue(t.grantOf(MINT, OFFICER).barred);
+        _set(OFFICER, _open());
+        assertFalse(t.grantOf(MINT, OFFICER).barred, "setGrant re-admits");
+        _mint(OFFICER, 1);
+        vm.prank(OFFICER);
+        t.renounceRole(MINT); // a renounce bars nobody
+        _leaf(OFFICER, 10);
+        assertEq(t.grantOf(MINT, OFFICER).grantor, MANAGER);
+    }
+
+    /// Claude M-8: a leaf that renounces before the owner's revoke is barred all the same.
+    function test_leafThatRenouncesFirstIsBarred() public {
+        _manager(100);
+        _leaf(OFFICER, 10);
+        vm.prank(OFFICER);
+        t.renounceRole(MINT);
+        _revoke(OFFICER);
+        assertTrue(t.grantOf(MINT, OFFICER).barred);
+        _is(1, 1);
+        vm.prank(MANAGER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantBarred.selector, MINT, OFFICER));
+        t.setGrant(MINT, OFFICER, _leafTerms(10));
+        _leaf(OFFICER2, 10); // positive control
+    }
+
+    /// agy I-3: an expired parent adds nobody, though the terms narrow.
+    function test_expiredParentAddsNobody() public {
+        IGovernance.GrantTerms memory g = _open();
+        (g.min, g.max, g.total, g.delegable, g.validUntil) = (1, 100, 100, true, uint64(block.timestamp + 1 hours));
+        _set(MANAGER, g);
+        IGovernance.GrantTerms memory l = _leafTerms(10);
+        l.validUntil = g.validUntil;
+        vm.prank(MANAGER); // positive control
+        t.setGrant(MINT, OFFICER, l);
+        vm.warp(block.timestamp + 1 hours + 1);
+        vm.prank(MANAGER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantExpired.selector, MINT, MANAGER));
+        t.setGrant(MINT, OFFICER2, l);
+    }
+
+    /// agy I-3: a parent with nothing left adds nobody: `total` spent on a scalar bit, `maxUses` used on the DEX's `LISTING`.
+    function test_exhaustedParentAddsNobody() public {
+        _manager(100);
+        _mint(MANAGER, 90);
+        _leaf(OFFICER, 10); // positive control: what remains
+        _mint(OFFICER, 10);
+        vm.prank(MANAGER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, uint8(2)));
+        t.setGrant(MINT, OFFICER2, _leafTerms(1));
+
+        SCaaSDex d = _dexOf("ex");
+        IGovernance.GrantTerms memory g = _open();
+        (g.maxUses, g.delegable) = (2, true);
+        vm.prank(OWNER);
+        d.setGrant(GovernanceBits.LISTING, MANAGER, g);
+        (g.maxUses, g.delegable) = (1, false);
+        vm.startPrank(MANAGER);
+        d.setListedOnly(true);
+        d.setGrant(GovernanceBits.LISTING, OFFICER, g); // positive control: one use left
+        d.setListedOnly(false);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, uint8(5)));
+        d.setGrant(GovernanceBits.LISTING, OFFICER2, g);
+        vm.stopPrank();
+    }
+
+    /// agy I-3: a leaf's `maxUses` is bounded by what remains of its parent's.
+    function test_leafMaxUsesByWhatRemains() public {
+        IGovernance.GrantTerms memory g = _open();
+        (g.total, g.maxUses, g.delegable) = (100, 5, true);
+        _set(MANAGER, g);
+        _mint(MANAGER, 1);
+        _mint(MANAGER, 1);
+        _mint(MANAGER, 1);
+        IGovernance.GrantTerms memory l = _leafTerms(10);
+        l.maxUses = 3;
+        vm.prank(MANAGER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, uint8(5)));
+        t.setGrant(MINT, OFFICER, l);
+        l.maxUses = 2;
+        vm.prank(MANAGER);
+        t.setGrant(MINT, OFFICER, l);
+        _mint(OFFICER, 1);
+        _mint(OFFICER, 1);
+        _refused(OFFICER, 1, _ex(5));
+    }
+
+    uint256 constant T0 = 700 * 30 days; // on the 10-day and the 30-day grid
+
+    function _windowed(uint32 window) internal returns (IGovernance.GrantTerms memory g) {
+        g = _open();
+        (g.perWindow, g.window) = (100, window);
+        _set(MANAGER, g);
+    }
+
+    function _windowRefused(IGovernance.GrantTerms memory g) internal {
+        vm.prank(OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantWindowInUse.selector, MINT, MANAGER));
+        t.setGrant(MINT, MANAGER, g);
+    }
+
+    /// agy I-1: 100 spent at day 15 on a 10-day grid; at day 21 the old period is over, but on a 30-day grid day 15 lies in the
+    /// current period, so the change is refused and no second 100 is minted that day.
+    function test_windowChangeIntoASpentPeriodRefused() public {
+        vm.warp(T0 + 15 days);
+        IGovernance.GrantTerms memory g = _windowed(10 days);
+        _mint(MANAGER, 100);
+        vm.warp(T0 + 21 days);
+        g.window = 30 days;
+        _windowRefused(g);
+        g.window = 10 days; // positive control: the window unchanged
+        _set(MANAGER, g);
+        assertEq(t.grantOf(MINT, MANAGER).window, 10 days);
+    }
+
+    /// agy I-1: once the spent period is over on the new grid too, the change runs and the new period is whole.
+    function test_windowChangeAfterBothGridsPassed() public {
+        vm.warp(T0 + 15 days);
+        IGovernance.GrantTerms memory g = _windowed(10 days);
+        _mint(MANAGER, 100);
+        g.window = 30 days;
+        vm.warp(T0 + 30 days - 1);
+        _windowRefused(g);
+        vm.warp(T0 + 30 days);
+        _set(MANAGER, g);
+        _mint(MANAGER, 100);
+        _refused(MANAGER, 1, _ex(3));
+    }
+
+    /// agy I-1: a `WHOLE` holder had no bound; the stale words of its kept record refuse nothing.
+    function test_wholeHolderStaleWindowRefusesNothing() public {
+        vm.warp(T0 + 15 days);
+        IGovernance.GrantTerms memory g = _windowed(10 days);
+        _mint(MANAGER, 100);
+        vm.warp(T0 + 21 days);
+        g.window = 30 days;
+        _windowRefused(g); // positive control: while LIMITED
+        vm.prank(OWNER);
+        t.grantRole(MINT, MANAGER);
+        _set(MANAGER, g);
+        assertEq(t.grantOf(MINT, MANAGER).window, 30 days);
+    }
+
     // ------------------------------------------------------------------ gas, for docs/research/governance/prototype/
 
     function _gas(string memory label, address sender, address target, bytes memory cd) internal {
