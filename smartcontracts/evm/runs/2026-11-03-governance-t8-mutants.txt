@@ -1,0 +1,7 @@
+# governance T8 mutants at 233b874b (clean tree), each one change, suite test/governance/*.t.sol,
+# restored by git checkout -- src/metatx/WrappedLib.sol after each.
+mutant | test that went red | rc
+m1 _addLeg asks isToken, not isRegisteredToken | test_unregisteredLegIsOutside, test_fixed_isTokenTrustsAnUnregisteredLeg, test_legCheckRunsOnEveryWrappedKind (WRAPPED, Zether, PQZ), PlusZeroPlainTest setUp (its fixture factory has no isToken) | 1
+m2 bit 21 MODERATE dropped from the mask | test_registeredModerateLegRefused, test_legCheckRunsOnEveryWrappedKind (WRAPPED, Zether, PQZ) | 1
+m3 bit 6 FORCE dropped from the mask | test_registeredForceLegRefused, test_secondFactoryLegIsOutside, test_pauseAndFreezeLegsStayAllowed, test_legCheckRunsOnEveryWrappedKind (WRAPPED, Zether, PQZ) | 1
+# survivors: none
