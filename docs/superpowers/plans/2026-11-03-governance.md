@@ -426,6 +426,20 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 
 **Pins, old → new:** baseline; `dex_order_kat.json`; `namespaces.json` no move (GD-2). **Gates:** whole `forge test`, four sets, size gate, T1 green.
 
+### Task T10b: identity by UA (owner 2026-11-04; CTR-GOV-01 Change; spec `2026-11-04-governance-ua-identity.md` §1, §2, §4)
+
+**Files:** `src/governance/{GovernanceBase,GovernanceLib,IGovernance}.sol`, the six kinds and their libraries (`MetaTokenBase`, `NormalToken`, `WrappedToken`, `WrappedLib`, Zether and PQZ kinds and libraries where they touch governance), `src/dex/{SCaaSDex,ISCaaSDex,DexPuller}.sol`, `src/factory/IFactoryToken.sol` (`TokenConfig.owner`), every governance test and fixture, `test/v2/layout/` pins, `script/pqz/e2e.py`, `scaas-node/tests/e2e.rs` (`DexConfig.owner`).
+
+**Changes:** every governance identity `bytes32` (spec §1, §4): storage keys and owner words, `Grant.grantor`, `PendingGrant.proposer`, entries, views, events, `init` and the configs. `_govSubject()` replaces `_caller()` for every governance check and every power's entry: the native id of `msg.sender`, or `IGovernanceRouter(GOV_ROUTER).subject()` when `msg.sender == GOV_ROUTER` (an immutable; the router itself is T11: until then a mock router in tests and `GOV_ROUTER` from the release config, `address(0)` meaning "no router on this chain"). `UA_POOL`, `SHIELD_POOL`, 0 refused as owner and holder. Contract-only bits: the holder must be a native id whose address has code. Payout destinations stay `address`.
+
+- [ ] **Step 1: Failing tests:** a derived UA is owner and grants through the mock router; a native caller's id is its padded address; the router's subject is read only while `msg.sender == GOV_ROUTER`; a router subject 0 is refused; a contract-only bit to a derived UA refused; every existing governance test on `bytes32`.
+- [ ] **Step 2: Implement.** Storage layout renewed (owner and pendingOwner a slot each; `grantDelay`, `ownerGeneration`, `lastProposedAt` packed in their own), layout pins regenerated.
+- [ ] **Step 3:** whole `forge test`, `--isolate`, size gate, `zether-cross`, `clientkeys`, docs; `dex_order_kat.json` by its generator; `e2e.rs` compiles; `e2e.py --self-test`.
+- [ ] **Step 4: Mutants:** the router branch dropped; the router subject read when `msg.sender != GOV_ROUTER`; native id computed from `tx.origin`; `UA_POOL` accepted as owner; the contract-only check skipped for a derived UA.
+- [ ] **Step 5:** Commit `governance T10b: every governance identity is a UA`.
+
+**Pins, old → new:** baseline every kind, `SCaaSDex`, `GovernanceLib`; layout pins; `dex_order_kat.json`; gas pins only by the wider words, each with its reason. **Gates:** the runner, all four PQZ sets once.
+
 ### Task T11: `GovernanceHolder` and the relay rule (spec §3; CTR-GOV-15; B-14, B-20, B-21, B-22; Codex 3, 4, Claude M-4, M-14, agy M-2; C4, C9; GD-6, GD-7)
 
 **Files:**
