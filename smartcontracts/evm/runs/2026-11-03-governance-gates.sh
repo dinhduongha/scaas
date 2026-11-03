@@ -60,7 +60,7 @@ forge|forge|test_refuted_replayAcrossHolders
 forge|forge|test_refuted_relayerAltersTheTarget
 forge|forge|test_refuted_replacedOperatorsEnvelope
 forge|forge|test_refuted_targetReentersTheHolder
-forge|forge|test_attack_isTokenTrustsAnUnregisteredLeg
+forge|forge|test_fixed_isTokenTrustsAnUnregisteredLeg
 forge|forge|test_attack_revokedRateAdminsProposalOutlivesIt
 forge|forge|test_fixed_aLeafsWindowIsNotNarrowed
 forge|forge|test_fixed_narrowingBelowSpentPanicsTheLeafPath
@@ -196,6 +196,13 @@ forge|forge|test_moveWithinAGroup
 forge|forge|test_moveOutOfTheGroupRefused
 forge|forge|test_bitsAbove127AreApplicationBits
 forge|forge|test_bits64To127AreScaasBits
+forge|forge|test_registeredForceLegRefused
+forge|forge|test_registeredModerateLegRefused
+forge|forge|test_unregisteredLegIsOutside
+forge|forge|test_secondFactoryLegIsOutside
+forge|forge|test_registeredPlainLegAccepted
+forge|forge|test_pauseAndFreezeLegsStayAllowed
+forge|forge|test_legCheckRunsOnEveryWrappedKind
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

@@ -10,6 +10,8 @@ import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165C
 import {IWrappedToken} from "./IWrappedToken.sol";
 import {IUALedger} from "./IUALedger.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
+import {IOpenFactory} from "../factory/IOpenFactory.sol";
+import {IGovernance} from "../governance/IGovernance.sol";
 import {ITradeToken} from "../trade/ITradeToken.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {SigCheck} from "../common/SigCheck.sol";
@@ -120,6 +122,13 @@ library WrappedLib {
         } else {
             if (u == address(this) || !SigCheck.isContract(u)) revert IWrappedToken.UnderlyingInvalid(u);
             if (isHedera && !HederaLib.checkAndAssociate(u)) revert IWrappedToken.UnderlyingInvalid(u);
+            // CTR-GOV-05 (spec §6.1, B-15): a leg this factory registered must not carry FORCE or MODERATE. `msg.sender` is
+            // the factory (`initialize` checked it; DELEGATECALL keeps it, GD-20). `isRegisteredToken`, never `isToken`: an
+            // unregistered leg or a second factory's token is an outside leg, never read. Features only lose bits.
+            if (IOpenFactory(msg.sender).isRegisteredToken(u) && IGovernance(u).features()
+                & ((uint256(1) << GovernanceBits.FORCE) | (uint256(1) << GovernanceBits.MODERATE)) != 0) {
+                revert IWrappedToken.UnderlyingInvalid(u);
+            }
             (bool ok, bytes memory ret) = u.staticcall(abi.encodeCall(IERC20Metadata.decimals, ()));
             if (!ok || ret.length != 32 || uint256(bytes32(ret)) > type(uint8).max) {
                 revert IWrappedToken.DecimalsUnreadable(u);

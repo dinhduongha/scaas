@@ -664,23 +664,31 @@ contract GovAttackV2Test is Test {
 
     // ------------------------------------------------------------------ smaller holes (B-15 to B-19)
 
-    /// B-15: `isToken` is true for an implementation nobody vetted, so `features()` there is a self-report: CTR-GOV-05 as worded
-    /// reads a lie and passes the leg as "a SCaaS leg, checked".
-    function test_attack_isTokenTrustsAnUnregisteredLeg() public {
+    /// B-15, fixed (spec §6.1): `isToken` is true for an implementation nobody vetted, so `features()` there is a self-report.
+    /// The leg check asks the factory `isRegisteredToken`, so the lying leg is an outside leg: never asked for its features,
+    /// accepted and disclosed as outside, and its own code still moves its balances (stated: an outside leg is as good as its
+    /// issuer). Positive control: a registered leg's `features()` is read once.
+    function test_fixed_isTokenTrustsAnUnregisteredLeg() public {
         LyingLeg impl = new LyingLeg(address(f), UID);
         address leg = f.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, address(impl), "", "leg");
         assertTrue(f.isToken(leg));
-        assertFalse(f.isRegisteredToken(leg)); // the read that would have told it apart
-        assertEq(IGovernance(leg).features() & (1 << 6 | 1 << 9), 0);
+        assertFalse(f.isRegisteredToken(leg));
 
         IFactoryToken.TokenConfig memory c = _config(0, OWNER);
         c.features = 1;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
+        vm.expectCall(address(f), abi.encodeCall(IOpenFactory.isRegisteredToken, (leg)), 1);
+        vm.expectCall(leg, abi.encodeCall(IGovernance.features, ()), 0);
         address w = f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(c), "w");
         LyingLeg(leg).fund(w, 10);
-        LyingLeg(leg).seize(w, TO, 10); // the power `features()` denied
+        LyingLeg(leg).seize(w, TO, 10);
         assertEq(LyingLeg(leg).balanceOf(w), 0);
+
+        address good = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(_config(0, OWNER)), "good");
+        c.legs[0] = IFactoryToken.Leg(good, 1, 1);
+        vm.expectCall(good, abi.encodeCall(IGovernance.features, ()), 1);
+        f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(c), "w2");
     }
 
     /// B-16: a revoked rate admin's proposal outlives it. Wrap stays paused, and the owner has no way to cancel but to grant a

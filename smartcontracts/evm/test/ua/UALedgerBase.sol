@@ -37,6 +37,10 @@ abstract contract UALedgerBase is UARegistryBase {
     uint32 internal constant FIX = MetaTxLib.MODE_FEE_FIXED;
     address internal constant POOL = MetaTxLib.UA_POOL;
 
+    /// The test plays the factory: it registered no token, so the leg check (CTR-GOV-05, spec §6.1) reads every leg as an
+    /// outside leg and asks it nothing.
+    function isRegisteredToken(address) external pure returns (bool) { return false; }
+
     UARegistry internal lreg;
     NormalToken internal tok;
     WrappedToken internal wrp;

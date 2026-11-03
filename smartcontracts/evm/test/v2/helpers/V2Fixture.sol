@@ -97,6 +97,10 @@ abstract contract V2Fixture is Test {
     uint32 internal constant PCT = MetaTxLib.MODE_FEE_PERCENT;
     uint32 internal constant FIX = MetaTxLib.MODE_FEE_FIXED;
 
+    /// The test plays the factory: it registered no token, so the leg check (CTR-GOV-05, spec §6.1) reads every leg as an
+    /// outside leg and asks it nothing.
+    function isRegisteredToken(address) external pure returns (bool) { return false; }
+
     /// `cfgData` = `abi.encode(TokenConfig)`; `us` must equal its legs (what the factory would index).
     function _clone(address impl, address creator_, address[] memory us, bytes memory cfgData)
         internal returns (address t)

@@ -71,7 +71,8 @@ contract MsgSenderLintTest is Test {
             "MetaTokenBase: factory check in initialize; the relayer of mtxRelayFee, uaRelayFee (struct word x2, `_relayHash`), bound to the direct caller");
         assertEq(_count("src/metatx/NormalToken.sol", "msg.sender", false), 0, "NormalToken");
         assertEq(_count("src/metatx/WrappedToken.sol", "msg.sender", false), 4, "WrappedToken: mtxWrapOrder and uaWrapOrder submitter x2 (CTR-TOK-20)");
-        assertEq(_count("src/metatx/WrappedLib.sol", "msg.sender", false), 0, "WrappedLib");
+        // governance T8 (spec §6.1, GD-20): `_addLeg` asks the factory, `msg.sender` through the DELEGATECALL, `isRegisteredToken`
+        assertEq(_count("src/metatx/WrappedLib.sol", "msg.sender", false), 1, "WrappedLib: the factory in _addLeg's leg check (CTR-GOV-05)");
         assertEq(_count("src/trade/TradeLib.sol", "msg.sender", false), 0, "TradeLib: the caller is a parameter");
         assertEq(_count("src/governance/GovernanceLib.sol", "msg.sender", false), 0, "GovernanceLib");
         assertEq(_count("src/hedera/HederaLib.sol", "msg.sender", false), 0, "HederaLib");
