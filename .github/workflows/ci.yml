@@ -1,4 +1,5 @@
-# R52 (GA 2.1#4): contracts and the relay node. Mirrors the local commands:
+# R52 (GA 2.1#4): contracts and the relay node. Each job runs only when a path it reads changed (.github/ci_changes.py).
+# Mirrors the local commands:
 #   smartcontracts/evm: forge test; forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' (cold gas);
 #                  FOUNDRY_PROFILE=scaas-testnet forge build;
 #                  forge build src --sizes --json > /tmp/sizes.json; python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json
@@ -25,13 +26,47 @@ name: scaas-ci
 
 on:
   pull_request:
-    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'pqz-core/**', '.github/workflows/ci.yml']
+    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'pqz-core/**', '.github/workflows/ci.yml', '.github/ci_changes.py']
   push:
     branches: [main]
-    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'pqz-core/**', '.github/workflows/ci.yml']
+    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'pqz-core/**', '.github/workflows/ci.yml', '.github/ci_changes.py']
 
 jobs:
+  # Which jobs this pull request needs (.github/ci_changes.py: a job runs when a path it reads changed); a push to main, a
+  # change under .github/, or a failed diff runs every job.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      contracts: ${{ steps.f.outputs.contracts }}
+      node: ${{ steps.f.outputs.node }}
+      docs: ${{ steps.f.outputs.docs }}
+      clientkeys: ${{ steps.f.outputs.clientkeys }}
+      pqz: ${{ steps.f.outputs.pqz }}
+      zether_prover: ${{ steps.f.outputs.zether_prover }}
+      ua_rs: ${{ steps.f.outputs.ua_rs }}
+      ua_cxx: ${{ steps.f.outputs.ua_cxx }}
+      ua_c: ${{ steps.f.outputs.ua_c }}
+      ua_qt: ${{ steps.f.outputs.ua_qt }}
+      ua_py: ${{ steps.f.outputs.ua_py }}
+      ua_go: ${{ steps.f.outputs.ua_go }}
+      ua_cs: ${{ steps.f.outputs.ua_cs }}
+      ua_dart_frb: ${{ steps.f.outputs.ua_dart_frb }}
+      ua_dart: ${{ steps.f.outputs.ua_dart }}
+      near: ${{ steps.f.outputs.near }}
+      algorand: ${{ steps.f.outputs.algorand }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: f
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: python3 .github/ci_changes.py
+
   contracts:
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -60,6 +95,8 @@ jobs:
         run: FOUNDRY_PROFILE=scaas-testnet forge build
 
   node:
+    needs: changes
+    if: needs.changes.outputs.node == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -95,6 +132,8 @@ jobs:
         run: cargo test --test e2e -- --ignored --test-threads=1
 
   docs:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -106,6 +145,8 @@ jobs:
         run: python3 scripts/docs_check.py facts check
 
   clientkeys:
+    needs: changes
+    if: needs.changes.outputs.clientkeys == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -125,6 +166,8 @@ jobs:
   # (Rust generator and the independent Python checker), the crates' tests, a fuzz smoke on the committed corpora.
   # The full gate (differential, wasm32 replay, 2 h campaigns) is pqz-core/gate.sh, run on the owner's machine.
   pqz:
+    needs: changes
+    if: needs.changes.outputs.pqz == 'true'
     runs-on: ubuntu-24.04
     # one parameter set end to end (pqz-ffi's default; plan 5h Task 8d: the Rust generator and the Python checker on the
     # same files, review 8d1 M2); the other sets: pqz-core/gate.sh
@@ -165,6 +208,8 @@ jobs:
           for t in precompile mutate codec; do fuzz/run.sh "$t" 60 ci; done
 
   zether-prover:
+    needs: changes
+    if: needs.changes.outputs.zether_prover == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -198,6 +243,8 @@ jobs:
           ZETHER_CLI=$PWD/../../clients/zether-prover/target/release/zether-cli forge test --ffi --match-path test/zether/ZetherProverCross.t.sol
 
   ua-rs:
+    needs: changes
+    if: needs.changes.outputs.ua_rs == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -228,6 +275,8 @@ jobs:
         run: cargo test --features pq --test pq --test ua8
 
   ua-cxx:
+    needs: changes
+    if: needs.changes.outputs.ua_cxx == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -250,6 +299,8 @@ jobs:
         run: ctest --test-dir build --output-on-failure
 
   ua-c:
+    needs: changes
+    if: needs.changes.outputs.ua_c == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -277,6 +328,8 @@ jobs:
         run: python3 -m unittest -v tests.test_vectors
 
   ua-qt:
+    needs: changes
+    if: needs.changes.outputs.ua_qt == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -299,6 +352,8 @@ jobs:
         run: ctest --output-on-failure
 
   ua-py:
+    needs: changes
+    if: needs.changes.outputs.ua_py == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -314,6 +369,8 @@ jobs:
         run: python -m unittest -v tests.test_vectors
 
   ua-go:
+    needs: changes
+    if: needs.changes.outputs.ua_go == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -330,6 +387,8 @@ jobs:
         run: go test ./...
 
   ua-cs:
+    needs: changes
+    if: needs.changes.outputs.ua_cs == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -343,6 +402,8 @@ jobs:
         run: dotnet test
 
   ua-dart-frb:
+    needs: changes
+    if: needs.changes.outputs.ua_dart_frb == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -363,6 +424,8 @@ jobs:
       #   && flutter_rust_bridge_codegen generate && git diff --exit-code
 
   ua-dart:
+    needs: changes
+    if: needs.changes.outputs.ua_dart == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -385,6 +448,8 @@ jobs:
         working-directory: clients/ua-dart
 
   near:
+    needs: changes
+    if: needs.changes.outputs.near == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -404,6 +469,8 @@ jobs:
         run: smartcontracts/scripts/test.sh near
 
   algorand:
+    needs: changes
+    if: needs.changes.outputs.algorand == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
