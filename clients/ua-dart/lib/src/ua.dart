@@ -377,7 +377,7 @@ bool msigPqzEligible(Object? keyData, [Uint8List? Function(Uint8List id)? inner]
     final bool pq;
     if (k == 0x0120) {
       final kd = inner?.call(d.sublist(o + 2, o + 34));
-      if (kd == null) throw UAError('UAMemberUnknown', 'an msig member\'s record');
+      if (kd == null) throw UAError('UAMemberUnknown', _hexOf(d.sublist(o + 2, o + 34)));
       pq = msigPqzEligible(kd);
     } else {
       pq = k >= 0x0130 && k <= 0x0133;
@@ -534,6 +534,42 @@ List<Map<String, Object?>> _memberSigsJson(List<MemberSig> members) => [
           'sig': _hexOf(s),
         }
     ];
+
+/// `abi.encode(InnerSig[])` of (index, sig) records: what `membershipSigOf` returns for an msig slot.
+Uint8List encodeInnerSigs(List<(int, Uint8List)> members) {
+  final heads = <int>[..._word(32), ..._word(members.length)], tails = <int>[];
+  final at = 32 * members.length;
+  for (final (i, s) in members) {
+    heads.addAll(_word(at + tails.length));
+    tails.addAll([..._word(i), ..._word(64), ..._word(s.length), ...s, ...Uint8List((32 - s.length % 32) % 32)]);
+  }
+  return Uint8List.fromList(heads + tails);
+}
+
+/// The slot a copy sends to `acceptMembership` from `membershipSigOf(ua, index)` alone (CTR-UA-37): an msig slot's stored bytes are
+/// `abi.encode(InnerSig[])`, canonical, at most 16; a signing slot's its sig. UAUnauthorized otherwise.
+MemberSig replayedMemberSig(Object? keyData, int index, Uint8List stored) {
+  final slots = msigStructure(keyData)['members'] as List;
+  final refused = UAError('UAUnauthorized', 'slot $index');
+  if (index < 0 || index >= slots.length) throw refused;
+  if ((slots[index] as Map)['kind'] != 0x0120) return (index, const [], stored);
+  // no offset, length or index reaches 2^28, so the sums below stay exact on the VM and in JS
+  int w(int o) {
+    if (o + 32 > stored.length || stored.sublist(o, o + 28).any((x) => x != 0) || stored[o + 28] > 0x0f) throw refused;
+    return (stored[o + 28] << 24) | (stored[o + 29] << 16) | (stored[o + 30] << 8) | stored[o + 31];
+  }
+
+  final n = w(32);
+  if (w(0) != 32 || n > 16) throw refused;
+  final members = <(int, Uint8List)>[];
+  for (var j = 0; j < n; j++) {
+    final u = 64 + w(64 + 32 * j), i = w(u), o = u + w(u + 32), l = w(o);
+    if (i > 0xffff || o + 32 + l > stored.length) throw refused;
+    members.add((i, stored.sublist(o + 32, o + 32 + l)));
+  }
+  if (!_same(encodeInnerSigs(members), stored)) throw refused;
+  return (index, members, Uint8List(0));
+}
 
 /// `UASig{keyData, signature, members}` (TS-D12) of `requireAuthorized` / `setKemKey` / `setPqzKey`: native — [signature]; a derived
 /// single key — [keyData] (empty for the stored kinds) + [signature]; an msig — [members]. A portable record's signature never has [keyData].

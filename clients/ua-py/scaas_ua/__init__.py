@@ -771,7 +771,7 @@ def replayed_member_sig(key_data, index, stored):
     stored bytes are ``abi.encode(InnerSig[])``, canonical, at most 16; a signing slot's its sig. UAUnauthorized otherwise."""
     members, b = msig_structure(key_data)['members'], bytes(stored)
     refused = UAError('UAUnauthorized', f'slot {index}')
-    if index >= len(members):
+    if not 0 <= index < len(members):
         raise refused
     if members[index]['kind'] != 0x0120:
         return index, [], b
