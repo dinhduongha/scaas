@@ -50,6 +50,20 @@ class PqzKeyRecord(C.Structure):  # ScaasUaPqzKeyRecord
 
 
 P, u8, u16, u32, u64, sz, bl, st = C.c_void_p, C.c_char_p, C.c_uint16, C.c_uint32, C.c_uint64, C.c_size_t, C.c_bool, C.c_int32
+def member_sig_bytes(s):
+    """A member's signature object: the slot's `sig`, or `abi.encode(InnerSig[])` of an `msig` member's leaves."""
+    if not s['members']:
+        return bytes.fromhex(s['sig'][2:])
+    w = lambda x: x.to_bytes(32, 'big')
+    leaves = [(x['index'], bytes.fromhex(x['sig'][2:])) for x in s['members']]
+    tuples = [w(i) + w(64) + w(len(sig)) + sig + bytes(-len(sig) % 32) for i, sig in leaves]
+    offs, o = [], 32 * len(tuples)
+    for t in tuples:
+        offs.append(w(o))
+        o += len(t)
+    return w(32) + w(len(tuples)) + b''.join(offs) + b''.join(tuples)
+
+
 L = types.SimpleNamespace()  # L.tag is scaas_ua_tag
 for name, res, args in [
     ('abi_version', u32, []), ('status_name', C.c_char_p, [st]), ('last_error', C.c_char_p, []),
@@ -579,9 +593,15 @@ class Vectors(unittest.TestCase):
             self.assertEqual(code_of(lambda: key_record_with(r, None)), 'UAMemberUnknown', r['name'])
         for bad in (b'not json', b'[]', json.dumps({'0x01': '0x'}).encode(), b' ' * 65537, b'\xff'):
             self.assertEqual(code_of(lambda: eligible(b(pq['keyData']), bad)), 'UAArgument', bad[:12])
+        msig_rows = [r for r in PV['registrations'] + NV['registrations'] + NV['afterAcceptance'] if r['kind'] == 0x0120]
+        self.assertEqual(sum(len(r['memberSigHashes']) for r in msig_rows), sum(len(r['args']['pop']) for r in msig_rows))
+        for r in msig_rows:  # owner 2026-11-03: memberSigHashOf per slot, the hash of the bytes its UAMemberSig carries
+            got = [{'index': s['index'], 'hash': hx(keccak.new(digest_bits=256, data=member_sig_bytes(s)).digest())} for s in r['args']['pop']]
+            self.assertEqual(got, r['memberSigHashes'], r['name'])
         self.assertEqual(len(NV['memberships']), 4)
         for m in NV['memberships']:
             d, st_ = b(next(r for r in regs if r['ua'] == m['ua'])['keyData']), b(m['stored'])
+            self.assertEqual(member_sig_bytes(m), st_, m['name'])  # control: the test's encoder against the kept bytes
             self.assertEqual(hx(keccak.new(digest_bits=256, data=st_).digest()), m['storedHash'], m['name'])  # the event's bytes, the kept hash
             got = json.loads(text(L.replayed_member_sig, d, len(d), m['index'], st_, len(st_)))
             self.assertEqual(got, {'index': m['index'], 'members': m['members'], 'sig': m['sig']}, m['name'])
