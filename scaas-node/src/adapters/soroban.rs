@@ -3965,9 +3965,10 @@ mod tests {
     fn row(list: &str, name: &str) -> &'static Value {
         portable()[list].as_array().unwrap().iter().find(|r| r["name"] == name || r["id"] == name).unwrap()
     }
-    /// portable.json's `args` (camelCase, with `entry`) as the job's named fields.
+    /// portable.json's `args` (camelCase, with `entry`) as the job's named fields; a slot `{index, members, sig}` in this family's flat form.
     fn snake(v: &Value) -> Value {
         match v {
+            Value::Object(m) if m.contains_key("index") && m.contains_key("sig") => json!({"index": m["index"], "key_data": "0x", "sig": m["sig"]}),
             Value::Object(m) => {
                 let name = |k: &str| k.chars().flat_map(|c| if c.is_ascii_uppercase() { vec!['_', c.to_ascii_lowercase()] } else { vec![c] }).collect();
                 Value::Object(m.iter().filter(|(k, _)| *k != "entry").map(|(k, x)| (name(k), snake(x))).collect())
