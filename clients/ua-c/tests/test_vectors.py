@@ -440,17 +440,88 @@ class Vectors(unittest.TestCase):
         self.assertTrue(msig_runs)
 
     def test_nested_rows(self):
-        """Nested msig (nested.json): the JSON call with `inner`, the digest chain; key data alone refuses an msig member by name."""
+        """Nested msig (nested.json): the digest chain from the low-level calls, the JSON calls with `inner`. Key data alone refuses an msig
+        member by name, so holder_pop_message and pqz_key_record_message stop there on a record that needs its inner keys; no lookup
+        crosses this ABI, and it verifies no signature."""
         inner = {r['ua']: r['keyData'] for r in NV['registrations'] if r['kind'] == 0x0120}
-        rows = [r for r in NV['registrations'] + NV['afterAcceptance'] if r['kind'] == 0x0120]
-        self.assertEqual(len(rows), 12)
-        for r in rows:
-            with self.subTest(r['name']):
-                self.assertEqual(reg_args(reg_input(r, kemCommit=False, inner=inner))['args'], r['args'])
-        for r in NV['eligibility']:
-            d = bytes.fromhex(r['keyData'][2:])
-            e = C.c_bool()
-            self.assertEqual(code_of(lambda: ok(L.msig_pqz_eligible(d, len(d), C.byref(e)))), 'UAMemberUnknown', r['reason'])
+        pop_tag, member_tag = out32(L.purpose_tag_v, b'pop', 2), out32(L.purpose_tag, b'member')
+        eligible = lambda d: code_of(lambda: ok(L.msig_pqz_eligible(d, len(d), C.byref(C.c_bool()))))
+        with self.subTest('registrations'):
+            rows = NV['registrations'] + NV['afterAcceptance']
+            self.assertEqual(len(rows), 17)
+            for r in rows:
+                ua, k, d, pk = b(r['ua']), r['kind'], b(r['keyData']), b(r['attrs']['kemPk'])
+                self.assertEqual(hx(out32(lambda o: kd(L.ua_of, k, d, o))), r['ua'], r['name'])
+                kem_hash = out32(L.kem_record_hash, ua, 0, pk, len(pk))
+                rd = out32(L.registration_digest, ua, k, bytes(32), kem_hash, bytes(32))
+                msg = out32(L.ua_message, k, pop_tag, rd)
+                self.assertEqual((hx(kem_hash), hx(out32(L.portable_record_digest, ua, k, bytes(32), kem_hash)), hx(rd), hx(msg)),
+                                 (r['kemRecordHash'], r['portableRecordDigest'], r['registrationDigest'], r['popMessage']), r['name'])
+                self.assertEqual(reg_args(reg_input(r, kemCommit=False, inner=inner))['args'], r['args'], r['name'])
+                if 'kemCommit' in r:
+                    c = reg_args(reg_input(r, kemCommit=True, inner=inner))
+                    self.assertEqual((c['args'], c['kemFill']), (r['kemCommit']['register'], r['kemCommit']['fill']), r['name'])
+                    self.assertEqual(code_of(lambda: register(r)), 'UAMemberUnknown', r['name'])
+                if k != 0x0120:
+                    continue
+                md = out32(L.member_digest, ua, msg)
+                self.assertEqual(hx(md), r['memberDigest'], r['name'])
+                for x in r.get('innerDigests', []):
+                    want = out32(L.member_digest, b(x['inner']), out32(L.ua_message, 0x0120, member_tag, md))
+                    self.assertEqual(hx(want), x['memberDigest'], r['name'])
+        with self.subTest('records'):
+            self.assertEqual((len(NV['kemRecords']), len(NV['pqzKeyRecords'])), (1, 4))
+            for r in NV['kemRecords']:
+                ua, v, pk = b(r['ua']), r['version'], b(r['kemPk'])
+                m = out32(L.kem_record_message, r['kind'], ua, v, pk, len(pk))
+                self.assertEqual((hx(out32(L.kem_record_digest, ua, v, pk, len(pk))), hx(m), hx(out32(L.member_digest, ua, m))),
+                                 (r['digest'], r['message'], r['memberDigest']), r['id'])
+                i = {'ua': r['ua'], 'version': v, 'kemPk': r['kemPk'], 'sig': record_sig(r)}
+                self.assertEqual(json.loads(text(L.set_kem_key_args, json.dumps(i).encode())), r['args'], r['id'])
+            for r in NV['pqzKeyRecords']:
+                ua, h, tag = b(r['ua']), b(r['pqzKeyHash']), out32(L.purpose_tag, b'pqz-key')
+                rd = out32(L.pqz_key_record_digest, ua, h, b(r['pqzPopHash']))
+                pk = out32(L.pqz_key_digest, ua, h)
+                m = out32(L.ua_message, 0x0120, tag, rd)
+                self.assertEqual((hx(pk), hx(rd), hx(m), hx(out32(L.ua_message, 0x0142, tag, pk)), hx(out32(L.member_digest, ua, m))),
+                                 (r['pqzKeyDigest'], r['recordDigest'], r['message'], r['pqzRegMessage'], r['memberDigest']), r['name'])
+                i = {'ua': r['ua'], 'pqzKey': r['pqzKey'], 'pqzPopHash': r['pqzPopHash'], 'sig': record_sig(r)}
+                self.assertEqual(json.loads(text(L.set_pqz_key_args, json.dumps(i).encode())), r['args'], r['name'])
+                self.assertEqual(code_of(lambda: key_record(r['kind'], ua, b(inner[r['ua']]), b(r['pqzKey']), b'', b(r['pqzPopHash']))),
+                                 'UAMemberUnknown', r['name'])
+        with self.subTest('memberships'):
+            self.assertEqual(len(NV['memberships']), 4)
+            for m in NV['memberships']:
+                ua, d = b(m['ua']), out32(L.membership_digest, b(m['ua']), b(m['member']))
+                msg = out32(L.ua_message, 0x0120, out32(L.purpose_tag, b'membership'), d)
+                self.assertEqual((hx(d), hx(msg), hx(out32(L.member_digest, ua, msg))), (m['digest'], m['message'], m['memberDigest']), m['name'])
+        with self.subTest('authorizations'):
+            self.assertEqual(len(NV['authorizations']), 5)
+            for a in NV['authorizations']:
+                md = out32(L.member_digest, b(a['ua']), out32(L.ua_message, 0x0120, b(a['purposeTag']), b(a['digest'])))
+                self.assertEqual(hx(md), a['memberDigest'], a['name'])
+                k = NV['kemRecords'][0]
+                i = {'ua': k['ua'], 'version': k['version'], 'kemPk': k['kemPk'], 'sig': a['uaSig']}
+                self.assertEqual(json.loads(text(L.set_kem_key_args, json.dumps(i).encode()))['sig'], a['uaSig'], a['name'])
+        with self.subTest('negatives'):
+            # the builder's own refusal is the minimal rule at both levels; the others are the registry's, on the signatures
+            minimal = {'inner-below-threshold', 'inner-index-past-the-members', 'inner-unsorted', 'inner-not-minimal', 'outer-not-minimal'}
+            self.assertEqual(len(NV['negatives']), 12)
+            for n in NV['negatives']:
+                r = next(x for x in NV['registrations'] if x['name'] == n['row'])
+                i = reg_input(r, kemCommit=False, inner=inner, pop=n['popTyped'])
+                if n['name'] in minimal:
+                    self.assertEqual(code_of(lambda: reg_args(i)), n['error'], n['name'])
+                else:
+                    self.assertEqual(reg_args(i)['args']['pop'], n['popTyped'], n['name'])
+        with self.subTest('structures'):
+            self.assertEqual(len(NV['structures']), 2)
+            for s in NV['structures']:
+                self.assertEqual(hx(out32(lambda o: kd(L.ua_of, 0x0120, b(s['keyData']), o))), s['ua'], s['name'])
+                self.assertEqual(eligible(b(s['keyData'])), s['error'], s['name'])
+        with self.subTest('eligibility'):
+            for r in NV['eligibility']:
+                self.assertEqual(eligible(b(r['keyData'])), 'UAMemberUnknown', r['reason'])
 
     def test_registration_args(self):
         commits = 0

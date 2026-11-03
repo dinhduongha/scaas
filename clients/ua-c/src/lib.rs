@@ -53,6 +53,8 @@ pub const SCAAS_UA_ERR_PQZ_KEY_SET: ScaasUaStatus = 16;
 pub const SCAAS_UA_ERR_KEM_SCHEME: ScaasUaStatus = 17;
 /// "UAMemberUnknown": an `msig` member's record is needed and was not given: key data alone does not show an `msig` member's eligibility.
 pub const SCAAS_UA_ERR_MEMBER_UNKNOWN: ScaasUaStatus = 18;
+/// "UAPoP": a registration's `msig` signature is not minimal at both levels: the registry would refuse it, so it is never built.
+pub const SCAAS_UA_ERR_POP: ScaasUaStatus = 19;
 
 /// One row of the kind table. `name` and `group` are static NUL-terminated strings (never freed); `group` is NULL when
 /// the kind has no group. `lengths[0..lengths_len]` are the accepted key-data lengths; `lengths_len == 0` means variable
@@ -97,7 +99,8 @@ impl From<ua::UAError> for Fail {
             PqzKeySet => SCAAS_UA_ERR_PQZ_KEY_SET,
             KemScheme => SCAAS_UA_ERR_KEM_SCHEME,
             MemberUnknown => SCAAS_UA_ERR_MEMBER_UNKNOWN,
-            Pop | Unauthorized | NotVerifiable => SCAAS_UA_ERR_INTERNAL, // ua8::check_* only, not exported here
+            Pop => SCAAS_UA_ERR_POP,
+            Unauthorized | NotVerifiable => SCAAS_UA_ERR_INTERNAL, // ua8::check_* only, not exported here
         };
         Fail(status, e.to_string())
     }
@@ -213,7 +216,7 @@ pub extern "C" fn scaas_ua_abi_version() -> u32 {
 
 /// The static code string of a status: "UAOk", "UAKeyData" ... "UAPurposeUnknown" (the vector files' `error` values),
 /// "UAArgument", "UABuffer", "UAInternal", "UAPqzHolder", "UAKemHolder", "UAKemVersion", "UAKemKeyLength", "UAPqzPopHash",
-/// "UAPqzKeySet", "UAKemScheme", "UAMemberUnknown"; "UAStatusUnknown" for any other value.
+/// "UAPqzKeySet", "UAKemScheme", "UAMemberUnknown", "UAPoP"; "UAStatusUnknown" for any other value.
 #[no_mangle]
 pub extern "C" fn scaas_ua_status_name(status: ScaasUaStatus) -> *const c_char {
     let name: &'static CStr = match status {
@@ -236,6 +239,7 @@ pub extern "C" fn scaas_ua_status_name(status: ScaasUaStatus) -> *const c_char {
         SCAAS_UA_ERR_PQZ_KEY_SET => c"UAPqzKeySet",
         SCAAS_UA_ERR_KEM_SCHEME => c"UAKemScheme",
         SCAAS_UA_ERR_MEMBER_UNKNOWN => c"UAMemberUnknown",
+        SCAAS_UA_ERR_POP => c"UAPoP",
         _ => c"UAStatusUnknown",
     };
     name.as_ptr()
@@ -768,8 +772,9 @@ fn json_call(f: fn(&str) -> ua::json::JsonResult<String>, input: *const c_char, 
 }
 
 /// The registry's explicit arguments of a registration, JSON in and out (NUL-terminated; `*out_len` counts the NUL).
-/// `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit}` (bytes as "0x..." hex, an absent field is
-/// empty, an msig's `pop` is `[{index, keyData, sig}]`, `kemCommit` true / false forces the KEM form, absent: the hash commit
+/// `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit, inner}` (bytes as "0x..." hex, an absent field is
+/// empty, an msig's `pop` is `[{index, members: [{index, sig}], sig}]`, `inner` `{id: keyData}` its msig members' structures,
+/// `kemCommit` true / false forces the KEM form, absent: the hash commit
 /// only when the full call is over 261,909 B). Out: `{args, kemFill, calldataLength, kemFillCalldataLength}`, `args.entry` =
 /// `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2` or `registerFrost`, `kemFill` the `setKemKey(ua, 0, ...)`
 /// that stores a hash-committed key (null otherwise). `SCAAS_UA_ERR_ARGUMENT` when the input is not this JSON.
@@ -779,7 +784,7 @@ pub extern "C" fn scaas_ua_registration_args(input: *const c_char, out: *mut c_c
 }
 
 /// `setKemKey`'s explicit arguments, JSON in and out as `scaas_ua_registration_args`. `input`: `{ua, version, kemPk, sig}`, `sig`
-/// the `UASig` `{keyData, signature, members: [{index, keyData, sig}]}` (absent: empty, the version-0 fill of a hash commit).
+/// the `UASig` `{keyData, signature, members: [{index, members: [{index, sig}], sig}]}` (absent: empty, the version-0 fill of a hash commit).
 /// Out: `{ua, version, kem, sig}`.
 #[no_mangle]
 pub extern "C" fn scaas_ua_set_kem_key_args(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {

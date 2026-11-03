@@ -178,6 +178,11 @@ typedef struct {
  */
 #define SCAAS_UA_ERR_MEMBER_UNKNOWN 18
 
+/**
+ * "UAPoP": a registration's `msig` signature is not minimal at both levels: the registry would refuse it, so it is never built.
+ */
+#define SCAAS_UA_ERR_POP 19
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -190,7 +195,7 @@ uint32_t scaas_ua_abi_version(void);
 /**
  * The static code string of a status: "UAOk", "UAKeyData" ... "UAPurposeUnknown" (the vector files' `error` values),
  * "UAArgument", "UABuffer", "UAInternal", "UAPqzHolder", "UAKemHolder", "UAKemVersion", "UAKemKeyLength", "UAPqzPopHash",
- * "UAPqzKeySet", "UAKemScheme", "UAMemberUnknown"; "UAStatusUnknown" for any other value.
+ * "UAPqzKeySet", "UAKemScheme", "UAMemberUnknown", "UAPoP"; "UAStatusUnknown" for any other value.
  */
 const char *scaas_ua_status_name(ScaasUaStatus status);
 
@@ -514,8 +519,9 @@ ScaasUaStatus scaas_ua_canonical_id(const char *text, char *out, size_t *out_len
 
 /**
  * The registry's explicit arguments of a registration, JSON in and out (NUL-terminated; `*out_len` counts the NUL).
- * `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit}` (bytes as "0x..." hex, an absent field is
- * empty, an msig's `pop` is `[{index, keyData, sig}]`, `kemCommit` true / false forces the KEM form, absent: the hash commit
+ * `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit, inner}` (bytes as "0x..." hex, an absent field is
+ * empty, an msig's `pop` is `[{index, members: [{index, sig}], sig}]`, `inner` `{id: keyData}` its msig members' structures,
+ * `kemCommit` true / false forces the KEM form, absent: the hash commit
  * only when the full call is over 261,909 B). Out: `{args, kemFill, calldataLength, kemFillCalldataLength}`, `args.entry` =
  * `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2` or `registerFrost`, `kemFill` the `setKemKey(ua, 0, ...)`
  * that stores a hash-committed key (null otherwise). `SCAAS_UA_ERR_ARGUMENT` when the input is not this JSON.
@@ -526,7 +532,7 @@ ScaasUaStatus scaas_ua_registration_args(const char *input,
 
 /**
  * `setKemKey`'s explicit arguments, JSON in and out as `scaas_ua_registration_args`. `input`: `{ua, version, kemPk, sig}`, `sig`
- * the `UASig` `{keyData, signature, members: [{index, keyData, sig}]}` (absent: empty, the version-0 fill of a hash commit).
+ * the `UASig` `{keyData, signature, members: [{index, members: [{index, sig}], sig}]}` (absent: empty, the version-0 fill of a hash commit).
  * Out: `{ua, version, kem, sig}`.
  */
 ScaasUaStatus scaas_ua_set_kem_key_args(const char *input,
