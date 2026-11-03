@@ -328,16 +328,16 @@ pub fn canonical_id(text: String) -> R<String> {
     Ok(scaas_ua::canonical_id(&text)?)
 }
 /// The registry's explicit arguments of a registration, JSON in and out. `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk,
-/// pop, kemCommit}` (bytes as "0x…" hex, an absent field is empty, an msig's `pop` is `[{index, keyData, sig}]`, `kemCommit`
-/// true / false forces the KEM form; absent: the hash commit only when the full call is over 261,909 B). Out: `{args, kemFill,
-/// calldataLength, kemFillCalldataLength}`, `args.entry` the registry entry, `kemFill` the `setKemKey(ua, 0, …)` of a
-/// hash-committed key (null otherwise). `UAArgument` when the input is not this JSON.
+/// pop, kemCommit, inner}` (bytes as "0x…" hex, an absent field is empty, an msig's `pop` is `[{index, members: [{index, sig}], sig}]`,
+/// `inner` `{id: keyData}` its msig members' structures, `kemCommit` true / false forces the KEM form; absent: the hash commit only when
+/// the full call is over 261,909 B). Out: `{args, kemFill, calldataLength, kemFillCalldataLength}`, `args.entry` the registry entry,
+/// `kemFill` the `setKemKey(ua, 0, …)` of a hash-committed key (null otherwise). `UAArgument` when the input is not this JSON.
 #[frb(sync)]
 pub fn registration_args(input: String) -> R<String> {
     Ok(scaas_ua::json::registration_args_json(&input)?)
 }
 /// `setKemKey`'s explicit arguments, JSON in and out. `input`: `{ua, version, kemPk, sig}`, `sig` the `UASig` `{keyData, signature,
-/// members: [{index, keyData, sig}]}` (absent: empty, the version-0 fill of a hash commit). Out: `{ua, version, kem, sig}`.
+/// members: [{index, members: [{index, sig}], sig}]}` (absent: empty, the version-0 fill of a hash commit). Out: `{ua, version, kem, sig}`.
 #[frb(sync)]
 pub fn set_kem_key_args(input: String) -> R<String> {
     Ok(scaas_ua::json::set_kem_key_args_json(&input)?)
