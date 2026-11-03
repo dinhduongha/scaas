@@ -613,8 +613,8 @@ explorers show listed and accepted apart.
 - <a id="msig-staging"></a>**Staging** (owner 2026-11-03). EVM goes first; each other family in its own round, Soroban, NEAR and Algorand each separately. **Until its round a family refuses a record that holds an `msig` member**, and its flat bytes are unchanged:
   Soroban's `layout_member_ok` has no `msig` arm, so `register_msig` is `KeyData` ([NET-SOR-18](../networks/soroban.md#NET-SOR-18)); NEAR has no nested `msig` ([NET-NEAR-04](../networks/near.md#NET-NEAR-04)); Algorand refuses the member kind ([NET-ALG-09](../networks/algorand.md#NET-ALG-09)).
   **Hashes, not bytes** (owner 2026-11-03) is EVM's too, for now: Soroban keeps the acceptance's bytes in `AcceptSig` (`membership_sig_of`) and an `msig`'s `pop` in its
-  record (`registration_of`) until a later round, for every family, after governance, moves them to a hash in state and the bytes in an event; so does the `pop` of every
-  kind there. Until then a copy from Soroban to EVM reads the bytes from Soroban's state, a copy from EVM reads them from EVM's events.
+  record (`registration_of`) until a later round, for every family, after governance, moves an `msig`'s `pop` and acceptances to hashes in state and the bytes in an
+  event; a single key keeps its `pop`, on every family. Until then a copy from Soroban to EVM reads the bytes from Soroban's state, a copy from EVM reads them from EVM's events.
 
 ### 1.5 Keys, purposes, tags
 
@@ -1505,7 +1505,7 @@ The later writes (each relayable by anyone, no fee):
   (`UAPqzPopHash`) → signature (`UAUnauthorized`). `UAPoP` and `UAKeyInUse` fire only where a proof is checked (`storePqzPop`, `register` with a `pqzPop`). `UAPqzKeyAdded`.
 - `setKemKey(ua, version, kem, sig)` — check order in [CTR-UA-32](#CTR-UA-32); `UAKemKeySet`.
 
-The event carries every argument of the call: records and ids are rebuildable offline from logs, and from state alone (`registrationOf`). Every verifier `staticcall` is
+The event carries every argument of the call: records and ids are rebuildable offline from logs, and from state alone (`registrationOf`), except an `msig`'s `pop`: it comes from its `UAMemberSig` events, checked against `memberSigHashOf` / `popOf` ([CTR-UA-33](#CTR-UA-33) A). Every verifier `staticcall` is
 capped at `verifyCap[kind]`; **any failure — revert, out-of-gas (including 63/64 starvation by the caller's gas limit),
 short or malformed return — is a failed check and reverts**; nothing ever counts as success by default (test T-AUTH-4).
 
@@ -1847,7 +1847,7 @@ destruction.
   ([NODE-MESH-18](../node/mesh.md#NODE-MESH-18)); the node verifies every single-key UA kind natively before gossip
   ([NODE-GSP-15](../node/gossip.md#NODE-GSP-15)).
 - **Node**: a job payload kind `ua_metatx`; the indexer normalizes `UATransfer`, `UAMetaTransactionExecuted` and
-  `UARegistered` (with its `attrs`, `popHash`, `pqzPop` and `checked` values; `pop` by `popOf`) and pairs `Transfer` to/from `UA_POOL` with the `UATransfer` of the same log batch; gasless
+  `UARegistered` (with its `attrs`, `popHash`, `pqzPop` and `checked` values; `pop` by `popOf`; an `msig`: the `pop` from its `UAMemberSig` events, checked against `memberSigHashOf` / `popOf`, [CTR-UA-33](#CTR-UA-33) A) and pairs `Transfer` to/from `UA_POOL` with the `UATransfer` of the same log batch; gasless
   registration through the gateway (`POST /v1/ua/register`, [NODE-GW-03](../node/gateway.md#NODE-GW-03)); the later registry writes
   (`storePqzPop`, `setPqzKey`, `setKemKey`) are ordinary `call` jobs with no fee ([CTR-UA-31](#CTR-UA-31)); per-chain
   config `ua_registry` address and generation; the node never holds UA keys.
@@ -1908,6 +1908,7 @@ New registration flow:
    the split; `e2e.py --split` forces the split), a relayer with min(block gas limit, its per-transaction cap) (ruling R-node; the SCaaS
    testnet relayer cap is 64 M) — it submits `register` with an empty `pqzPop` and then `storePqzPop(ua, pqzPop)`. A copy to another chain is the
    same call, built from `registrationOf`, or from the first chain's logs plus `popOf` (the event carries `popHash`, [CTR-UA-33](#CTR-UA-33);
+   an `msig`: the `pop` from its `UAMemberSig` events, checked against `memberSigHashOf` / `popOf`, [CTR-UA-33](#CTR-UA-33) A;
    [CTR-UA-31](#CTR-UA-31)).
 4. On the finalized `UARegistered` the client checks `registrationOf(ua)` — the stored `(kind, keyData, attrs, pop)` equal what it sent (an `msig`'s `pop` there is `keccak256(pop)`, [CTR-UA-33](#CTR-UA-33) A) —
    and `pqzKeyOf(ua).proven` / `checkedOf(ua)` for the PQZ key, and only then marks the account usable on that chain. Later KEM versions

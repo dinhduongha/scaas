@@ -929,7 +929,7 @@ sealed leaf (`openPqKey`), computes `h = keccak256(GROUP(pqz-mlwe) ‖ pqzKey)`,
 `pqzRegMessage({ua, kind, pqzKey, kemPk})` = `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kind, h, kemRecordHash))`), then signs the signer's `pop`
 over `holderPopMessage(kind, {ua, keyData, pqzKey, pqzPop, kemPk})` (`registrationDigest`, which covers the proof's hash; the KEM key is version 0) and submits
 the call `registrationArgs` builds ([CLI-SGN-41](#CLI-SGN-41)), `register(kind, keyData, attrs, pop, pqzPop)` or the kind's typed entry; **the PoP carries no chain context, so the same `pop` and `pqzPop` register the UA on any chain** and
-a copy elsewhere re-sends the fields unchanged (read from `registrationOf` or the logs). When `eth_estimateGas` of the full call exceeds the block gas
+a copy elsewhere re-sends the fields unchanged (read from `registrationOf` or the logs; an `msig`: the `pop` from its `UAMemberSig` events, checked against `memberSigHashOf` / `popOf`, [CTR-UA-33](../contracts/accounts.md#CTR-UA-33) A). When `eth_estimateGas` of the full call exceeds the block gas
 limit (through a relayer: min(block gas limit, the relayer's per-transaction cap), owner 2026-10-30 ruling R-node) the client registers
 with an empty `pqzPop` and then calls `storePqzPop(ua, pqzPop)`. A PQ signer is registered together
 with its PQZ key by default; a holder registered without one may add it later, once, with `pqzKeyRecordMessage` + `setPqzKey` (**one PQZ key per UA,

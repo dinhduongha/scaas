@@ -836,7 +836,8 @@ kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, `secp256k1`, Schnorr
    cap) through a relayer (the SCaaS testnet relayer cap is 64 M, so a relayed PQ registration splits there) — `register` goes without
    `pqzPop` and `storePqzPop(ua, pqzPop)` follows. The **same call registers the UA on any other chain** (build it from
    `registrationOf`, or from the first chain's logs plus `popOf`: the event carries `popHash`,
-   [CTR-UA-33](contracts/accounts.md#CTR-UA-33); [CTR-UA-31](contracts/accounts.md#CTR-UA-31)); later KEM versions come by `setKemKey`
+   [CTR-UA-33](contracts/accounts.md#CTR-UA-33); an `msig`: the `pop` from its `UAMemberSig` events, checked against `memberSigHashOf` / `popOf`,
+   [CTR-UA-33](contracts/accounts.md#CTR-UA-33) A; [CTR-UA-31](contracts/accounts.md#CTR-UA-31)); later KEM versions come by `setKemKey`
    ([CTR-UA-32](contracts/accounts.md#CTR-UA-32)), a PQZ key by `setPqzKey` — ordinary `call` jobs, no fee.
 4. On the finalized `UARegistered` event the client reads `registrationOf(ua)` (the stored arguments equal what it sent; an `msig`'s `pop`
    there is `keccak256(pop)`, [CTR-UA-33](contracts/accounts.md#CTR-UA-33) A),
