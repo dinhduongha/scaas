@@ -173,6 +173,11 @@ typedef struct {
  */
 #define SCAAS_UA_ERR_KEM_SCHEME 17
 
+/**
+ * "UAMemberUnknown": an `msig` member's record is needed and was not given: key data alone does not show an `msig` member's eligibility.
+ */
+#define SCAAS_UA_ERR_MEMBER_UNKNOWN 18
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -185,7 +190,7 @@ uint32_t scaas_ua_abi_version(void);
 /**
  * The static code string of a status: "UAOk", "UAKeyData" ... "UAPurposeUnknown" (the vector files' `error` values),
  * "UAArgument", "UABuffer", "UAInternal", "UAPqzHolder", "UAKemHolder", "UAKemVersion", "UAKemKeyLength", "UAPqzPopHash",
- * "UAPqzKeySet", "UAKemScheme"; "UAStatusUnknown" for any other value.
+ * "UAPqzKeySet", "UAKemScheme", "UAMemberUnknown"; "UAStatusUnknown" for any other value.
  */
 const char *scaas_ua_status_name(ScaasUaStatus status);
 

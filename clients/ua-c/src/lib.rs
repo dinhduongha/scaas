@@ -51,6 +51,8 @@ pub const SCAAS_UA_ERR_PQZ_POP_HASH: ScaasUaStatus = 15;
 pub const SCAAS_UA_ERR_PQZ_KEY_SET: ScaasUaStatus = 16;
 /// "UAKemScheme": the first byte of a KEM key is not an enabled KEM scheme id (only 1; 2 is reserved).
 pub const SCAAS_UA_ERR_KEM_SCHEME: ScaasUaStatus = 17;
+/// "UAMemberUnknown": an `msig` member's record is needed and was not given: key data alone does not show an `msig` member's eligibility.
+pub const SCAAS_UA_ERR_MEMBER_UNKNOWN: ScaasUaStatus = 18;
 
 /// One row of the kind table. `name` and `group` are static NUL-terminated strings (never freed); `group` is NULL when
 /// the kind has no group. `lengths[0..lengths_len]` are the accepted key-data lengths; `lengths_len == 0` means variable
@@ -94,7 +96,8 @@ impl From<ua::UAError> for Fail {
             PqzPopHash => SCAAS_UA_ERR_PQZ_POP_HASH,
             PqzKeySet => SCAAS_UA_ERR_PQZ_KEY_SET,
             KemScheme => SCAAS_UA_ERR_KEM_SCHEME,
-            Pop | Unauthorized | MemberUnknown | NotVerifiable => SCAAS_UA_ERR_INTERNAL, // ua8::check_* only, not exported here
+            MemberUnknown => SCAAS_UA_ERR_MEMBER_UNKNOWN,
+            Pop | Unauthorized | NotVerifiable => SCAAS_UA_ERR_INTERNAL, // ua8::check_* only, not exported here
         };
         Fail(status, e.to_string())
     }
@@ -210,7 +213,7 @@ pub extern "C" fn scaas_ua_abi_version() -> u32 {
 
 /// The static code string of a status: "UAOk", "UAKeyData" ... "UAPurposeUnknown" (the vector files' `error` values),
 /// "UAArgument", "UABuffer", "UAInternal", "UAPqzHolder", "UAKemHolder", "UAKemVersion", "UAKemKeyLength", "UAPqzPopHash",
-/// "UAPqzKeySet", "UAKemScheme"; "UAStatusUnknown" for any other value.
+/// "UAPqzKeySet", "UAKemScheme", "UAMemberUnknown"; "UAStatusUnknown" for any other value.
 #[no_mangle]
 pub extern "C" fn scaas_ua_status_name(status: ScaasUaStatus) -> *const c_char {
     let name: &'static CStr = match status {
@@ -232,6 +235,7 @@ pub extern "C" fn scaas_ua_status_name(status: ScaasUaStatus) -> *const c_char {
         SCAAS_UA_ERR_PQZ_POP_HASH => c"UAPqzPopHash",
         SCAAS_UA_ERR_PQZ_KEY_SET => c"UAPqzKeySet",
         SCAAS_UA_ERR_KEM_SCHEME => c"UAKemScheme",
+        SCAAS_UA_ERR_MEMBER_UNKNOWN => c"UAMemberUnknown",
         _ => c"UAStatusUnknown",
     };
     name.as_ptr()

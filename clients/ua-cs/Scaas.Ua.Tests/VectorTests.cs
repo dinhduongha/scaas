@@ -579,7 +579,7 @@ public class VectorTests
 
     // ----- typed-signing R1 / R1b: the registry's explicit arguments, as clientkeys registrationArgs and ua-rs registration_args -----
 
-    /// <summary><c>abi.encode(MemberSig[])</c> (the vectors' byte form of an msig pop / sig) back to the typed list.</summary>
+    /// <summary><c>abi.encode(MemberSig[])</c> of flat slots (the vectors' byte form of an msig pop / sig) back to the typed list.</summary>
     static UA.MemberSig[] MemberSigs(byte[] blob)
     {
         if (blob.Length == 0) return [];
@@ -589,7 +589,7 @@ public class VectorTests
         {
             var t = b + 32 + W(b + 32 + 32 * i);
             byte[] Field(int k) { var p = t + W(t + 32 * k); return blob[(p + 32)..(p + 32 + W(p))]; }
-            o.Add(new((ushort)W(t), Field(1), Field(2)));
+            o.Add(new((ushort)W(t), [], Field(2)));
         }
         return [.. o];
     }
@@ -604,6 +604,59 @@ public class VectorTests
 
     static UA.UASig RecordSig(JsonElement r) =>
         Kind(r) == 0x0120 ? new UA.UASig(members: MemberSigs(B(r.GetProperty("sig")))) : new UA.UASig(signature: B(r.GetProperty("sig")));
+
+    // ----- nested msig: nested.json, the rows forge runs on the registry (spec 2026-11-02-msig-nested); no signature is verified here -----
+
+    static readonly JsonElement N = Load("nested.json");
+
+    static byte[]? NestedKey(byte[] id) => N.GetProperty("registrations").EnumerateArray()
+        .Where(r => Kind(r) == 0x0120 && B(r.GetProperty("ua")).SequenceEqual(id)).Select(r => (byte[]?)B(r.GetProperty("keyData"))).FirstOrDefault();
+
+    [Fact]
+    public void NestedEligibility()
+    {
+        foreach (var r in N.GetProperty("eligibility").EnumerateArray())
+        {
+            var inner = r.GetProperty("inner");
+            Assert.Equal(r.GetProperty("eligible").GetBoolean(), UA.MsigPqzEligible(B(r.GetProperty("keyData")), id => B(inner.GetProperty(Hx(id)))));
+            Assert.Equal("UAMemberUnknown", Assert.Throws<UAException>(() => UA.MsigPqzEligible(B(r.GetProperty("keyData")))).Code);
+        }
+        var third = B(N.GetProperty("structures")[0].GetProperty("keyData"));
+        Assert.Equal("UAMemberUnknown", Assert.Throws<UAException>(() => UA.MsigPqzEligible(third, NestedKey)).Code);
+    }
+
+    [Fact]
+    public void NestedRegistrations()
+    {
+        var rows = N.GetProperty("registrations").EnumerateArray().Concat(N.GetProperty("afterAcceptance").EnumerateArray()).Where(r => Kind(r) == 0x0120).ToArray();
+        Assert.Equal(12, rows.Length);
+        foreach (var r in rows)
+        {
+            var (ua, d, kem) = (B(r.GetProperty("ua")), B(r.GetProperty("keyData")), B(r.GetProperty("attrs").GetProperty("kemPk")));
+            var g = UA.HolderPopMessage(0x0120, ua, d, kemPk: kem, inner: NestedKey);
+            Assert.Equal(r.GetProperty("registrationDigest").GetString(), Hx(g.RegistrationDigest));
+            Assert.Equal(r.GetProperty("popMessage").GetString(), Hx(g.Message));
+            var slots = r.GetProperty("args").GetProperty("pop").EnumerateArray().Select(m => new UA.MemberSig(m.GetProperty("index").GetUInt16(),
+                m.GetProperty("members").EnumerateArray().Select(x => new UA.InnerSig(x.GetProperty("index").GetUInt16(), B(x.GetProperty("sig")))).ToArray(),
+                B(m.GetProperty("sig")))).ToArray();
+            var (args, _) = UA.RegistrationArgs(0x0120, d, kemPk: kem, members: slots, kemCommit: false);
+            SameJson(args, r.GetProperty("args"));
+            if (!r.TryGetProperty("innerDigests", out var ds)) continue;
+            foreach (var x in ds.EnumerateArray())
+                Assert.Equal(x.GetProperty("memberDigest").GetString(), Hx(UA.InnerDigest(B(x.GetProperty("inner")), B(r.GetProperty("memberDigest")))));
+        }
+    }
+
+    [Fact]
+    public void NestedMemberships()
+    {
+        foreach (var m in N.GetProperty("memberships").EnumerateArray())
+        {
+            var msg = UA.UAMessage(0x0120, UA.PurposeTag("membership"), B(m.GetProperty("digest")));
+            Assert.Equal(m.GetProperty("message").GetString(), Hx(msg));
+            Assert.Equal(m.GetProperty("memberDigest").GetString(), Hx(UA.MemberDigest(B(m.GetProperty("ua")), msg)));
+        }
+    }
 
     static void SameJson(object args, JsonElement want) =>
         Assert.True(JsonNode.DeepEquals(JsonNode.Parse(UA.RegistryJson(args)), JsonNode.Parse(want.GetRawText())), want.GetRawText()[..64]);

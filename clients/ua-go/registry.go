@@ -147,11 +147,17 @@ func TypedKey(kind uint16, keyData []byte) (any, error) {
 	return k, nil
 }
 
-// MemberSig is one msig member's signature (KeyData empty for a stored kind).
+// InnerSig is one signature of a member of an inner msig: its slot there. No list of its own: a third level has no form.
+type InnerSig struct {
+	Index uint16 `json:"index"`
+	Sig   Hex    `json:"sig"`
+}
+
+// MemberSig is one msig slot's signature: a signing member Sig, Members empty; an msig member Members, Sig empty.
 type MemberSig struct {
-	Index   uint16 `json:"index"`
-	KeyData Hex    `json:"keyData"`
-	Sig     Hex    `json:"sig"`
+	Index   uint16     `json:"index"`
+	Members []InnerSig `json:"members"`
+	Sig     Hex        `json:"sig"`
 }
 
 // UASig is the signature of requireAuthorized / setKemKey / setPqzKey (TS-D12): native — Signature; a derived single key —
@@ -229,7 +235,10 @@ func attrsLen(a UAAttrs) int { return 128 + tailLen(a.PqzKey) + kemLen(a.Kem) }
 func memberSigsLen(ms []MemberSig) int {
 	n := 32
 	for _, m := range ms {
-		n += 32 + 96 + tailLen(m.KeyData) + tailLen(m.Sig)
+		n += 32 + 96 + 32 + tailLen(m.Sig)
+		for _, x := range m.Members {
+			n += 32 + 64 + tailLen(x.Sig)
+		}
 	}
 	return n
 }

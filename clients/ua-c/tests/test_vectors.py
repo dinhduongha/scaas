@@ -17,6 +17,7 @@ VEC = pathlib.Path(os.environ.get('SCAAS_UA_VECTORS', str(HERE.parents[2] / 'sma
 K = json.loads((VEC / 'kinds.json').read_text())
 S = json.loads((VEC / 'structures.json').read_text())
 PV = json.loads((VEC / 'portable.json').read_text())
+NV = json.loads((VEC / 'nested.json').read_text())
 
 OK, ERR_KEY_DATA, ERR_ARGUMENT, ERR_BUFFER = 0, 1, 8, 9
 KEM_PK = 1601  # scheme byte + key
@@ -437,6 +438,19 @@ class Vectors(unittest.TestCase):
                 n += 1
         self.assertEqual(n, len(PV['pqzKeyRecords']))
         self.assertTrue(msig_runs)
+
+    def test_nested_rows(self):
+        """Nested msig (nested.json): the JSON call with `inner`, the digest chain; key data alone refuses an msig member by name."""
+        inner = {r['ua']: r['keyData'] for r in NV['registrations'] if r['kind'] == 0x0120}
+        rows = [r for r in NV['registrations'] + NV['afterAcceptance'] if r['kind'] == 0x0120]
+        self.assertEqual(len(rows), 12)
+        for r in rows:
+            with self.subTest(r['name']):
+                self.assertEqual(reg_args(reg_input(r, kemCommit=False, inner=inner))['args'], r['args'])
+        for r in NV['eligibility']:
+            d = bytes.fromhex(r['keyData'][2:])
+            e = C.c_bool()
+            self.assertEqual(code_of(lambda: ok(L.msig_pqz_eligible(d, len(d), C.byref(e)))), 'UAMemberUnknown', r['reason'])
 
     def test_registration_args(self):
         commits = 0

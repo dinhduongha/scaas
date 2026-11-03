@@ -21,8 +21,10 @@ public static partial class UA
     public sealed record MuSig2Key(byte[] AggKey, byte[][] MemberKeys);
     public sealed record FrostMember(byte[][] Commitments, byte[] R, byte[] Z);
     public sealed record FrostKey(byte[] GroupKey, ushort Threshold, FrostMember[] Members);
-    /// <summary>One msig member's signature (<c>KeyData</c> empty for a stored kind).</summary>
-    public sealed record MemberSig(ushort Index, byte[] KeyData, byte[] Sig);
+    /// <summary>One signature of a member of an inner msig: its slot there. No list of its own: a third level has no form.</summary>
+    public sealed record InnerSig(ushort Index, byte[] Sig);
+    /// <summary>One msig slot's signature: a signing member <c>Sig</c>, <c>Members</c> empty; an msig member <c>Members</c>, <c>Sig</c> empty.</summary>
+    public sealed record MemberSig(ushort Index, InnerSig[] Members, byte[] Sig);
 
     /// <summary><c>UASig</c> of requireAuthorized / setKemKey / setPqzKey (TS-D12): native — signature; a derived single key — keyData
     /// (empty for the stored kinds) + signature; an msig — members. A portable record's signature never has keyData.</summary>
@@ -65,7 +67,7 @@ public static partial class UA
     static int BytesArrLen(byte[][] xs) => 32 + xs.Sum(x => 32 + TailLen(x));
     static int KemLen(KemKey k) => 96 + TailLen(k.MlkemEk);
     static int AttrsLen(UAAttrs a) => 128 + TailLen(a.PqzKey) + KemLen(a.Kem);
-    static int MemberSigsLen(MemberSig[] ms) => 32 + ms.Sum(m => 32 + 96 + TailLen(m.KeyData) + TailLen(m.Sig));
+    static int MemberSigsLen(MemberSig[] ms) => 32 + ms.Sum(m => 32 + 96 + 32 + m.Members.Sum(x => 32 + 64 + TailLen(x.Sig)) + TailLen(m.Sig));
 
     sealed class HexConverter : JsonConverter<byte[]>
     {

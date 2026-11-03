@@ -465,6 +465,25 @@ TestCase {
         return JSON.parse(o)
     }
 
+    // nested msig (nested.json): the JSON call with `inner`; key data alone refuses an msig member by name
+    function test_nested_rows() {
+        const n = vectors.load("nested.json")
+        const inner = {}
+        for (const r of n.registrations) if (r.kind === 0x0120) inner[r.ua] = r.keyData
+        const rows = n.registrations.concat(n.afterAcceptance).filter((r) => r.kind === 0x0120)
+        compare(rows.length, 12)
+        for (const r of rows) {
+            const i = regInput(r)
+            i.kemCommit = false
+            i.inner = inner
+            compare(regArgs(i).args, r.args, r.name)
+        }
+        for (const r of n.eligibility) {
+            compare(UaKinds.msigPqzEligible(r.keyData), false, r.reason)
+            compare(UaKinds.lastError, "UAMemberUnknown", r.reason)
+        }
+    }
+
     function test_registration_args() {
         const pp = vectors.load("portable.json")
         let commits = 0

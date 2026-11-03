@@ -106,8 +106,9 @@ public static partial class UA
 
     /// <summary>Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512 (an msig per <see cref="MsigPqzEligible"/>).</summary>
     public static bool IsPqzHolder(ushort kind) => kind is >= 0x0130 and <= 0x0132;
+    /// <summary>An msig too, one level down: a record that holds one is refused as a member by the registry.</summary>
     public static bool IsMember(ushort kind, bool hederaNative = false) =>
-        SingleSigning(kind) || kind is 0x0001 or 0x0002 || (hederaNative && kind == 0x0003);
+        SingleSigning(kind) || kind is 0x0120 or 0x0001 or 0x0002 || (hederaNative && kind == 0x0003);
 
     public static string KindTagString(ushort kind) => $"scaas.ua.{Tagged(kind).Name}.v1";
     public static byte[] Tag(ushort kind) => Keccak256(Utf8(KindTagString(kind)));
@@ -254,7 +255,7 @@ public static partial class UA
     public static byte[] KemRecordMessage(ushort kind, byte[] ua, ulong version, byte[] kemPk) =>
         UAMessage(kind, PurposeTag("kem"), KemRecordDigest(ua, version, kemPk));
 
-    static bool Holds(ushort kind, byte[] keyData) => IsPqzHolder(kind) || (kind == 0x0120 && keyData.Length > 0 && MsigPqzEligible(keyData));
+    static bool Holds(ushort kind, byte[] keyData, Func<byte[], byte[]?>? inner) => IsPqzHolder(kind) || (kind == 0x0120 && keyData.Length > 0 && MsigPqzEligible(keyData, inner));
 
     static byte[] PqzKeyHashOf(byte[] pqzKey) =>
         Schemes[0].Lengths.Contains(pqzKey.Length) ? KeyHashOf(0x0142, pqzKey)! : throw new UAException("UAKeyData", "PQZ key length");
@@ -285,13 +286,13 @@ public static partial class UA
     /// Only holders may carry them (UAPqzHolder, UAKemHolder; an <c>msig</c> needs <paramref name="keyData"/> to show it is PQ-eligible);
     /// a PQZ key always comes with its proof hash and only with it (UAPqzPopHash).</summary>
     public static HolderPop HolderPopMessage(ushort kind, byte[] ua, byte[] keyData, byte[]? pqzKey = null, byte[]? pqzPop = null,
-        byte[]? pqzPopHash = null, byte[]? kemPk = null)
+        byte[]? pqzPopHash = null, byte[]? kemPk = null, Func<byte[], byte[]?>? inner = null)
     {
         if (pqzKey is { Length: 0 }) pqzKey = null;
         var kem = kemPk is { Length: > 0 } ? kemPk : null; // null / [] = absent
         if (pqzKey is not null || kem is not null)
         {
-            var holder = Holds(kind, keyData);
+            var holder = Holds(kind, keyData, inner);
             if (pqzKey is not null && !holder) throw new UAException("UAPqzHolder", $"0x{kind:x4} may not hold a PQZ key");
             if (kem is not null && !holder) throw new UAException("UAKemHolder", $"0x{kind:x4} may not hold a KEM key");
         }
@@ -325,9 +326,9 @@ public static partial class UA
     /// (<paramref name="alreadySet"/> = it has one: UAPqzKeySet). Holder rules of <see cref="HolderPopMessage"/>; the key and its proof hash are both required.
     /// Check order: UAPqzHolder, UAPqzKeySet, then UAKeyData / UAPqzPopHash.</summary>
     public static PqzKeyRecord PqzKeyRecordMessage(ushort kind, byte[] ua, byte[] keyData, byte[] pqzKey, byte[]? pqzPop = null,
-        byte[]? pqzPopHash = null, bool alreadySet = false)
+        byte[]? pqzPopHash = null, bool alreadySet = false, Func<byte[], byte[]?>? inner = null)
     {
-        if (!Holds(kind, keyData)) throw new UAException("UAPqzHolder", $"0x{kind:x4} may not hold a PQZ key");
+        if (!Holds(kind, keyData, inner)) throw new UAException("UAPqzHolder", $"0x{kind:x4} may not hold a PQZ key");
         if (alreadySet) throw new UAException("UAPqzKeySet");
         var keyHash = PqzKeyHashOf(pqzKey);
         var popHash = ProofHashOf(pqzPop, pqzPopHash);
@@ -347,8 +348,10 @@ public static partial class UA
         return UAMessage(0x0142, PopV2Tag, PortableRecordDigest(ua, kind, PqzKeyHashOf(pqzKey), kemHash));
     }
 
-    /// <summary>True when the msig members outside kinds 0x0130-0x0133 weigh less than its threshold (CTR-PQZ-12).</summary>
-    public static bool MsigPqzEligible(byte[] keyData)
+    /// <summary>True when the classical members of an msig weigh less than its threshold (CTR-PQZ-12): a member is PQ if its kind is in
+    /// 0x0130-0x0133, or it is an msig that is PQ-eligible itself. <paramref name="inner"/>: an msig member's key data by its id, the record's;
+    /// none, or an inner that holds an msig (two levels only), is UAMemberUnknown: the key data alone does not show it.</summary>
+    public static bool MsigPqzEligible(byte[] keyData, Func<byte[], byte[]?>? inner = null)
     {
         var d = keyData;
         if (d.Length < 4 || d.Length != 4 + 36 * ((d[2] << 8) | d[3])) throw new UAException("UAKeyData", "length");
@@ -356,7 +359,10 @@ public static partial class UA
         for (var o = 4; o < d.Length; o += 36)
         {
             var k = (d[o] << 8) | d[o + 1];
-            if (k is < 0x0130 or > 0x0133) classical += (d[o + 34] << 8) | d[o + 35];
+            var pq = k == 0x0120
+                ? MsigPqzEligible(inner?.Invoke(d[(o + 2)..(o + 34)]) ?? throw new UAException("UAMemberUnknown", "an msig member's record"))
+                : k is >= 0x0130 and <= 0x0133;
+            if (!pq) classical += (d[o + 34] << 8) | d[o + 35];
         }
         return classical < ((d[0] << 8) | d[1]);
     }
@@ -380,6 +386,10 @@ public static partial class UA
     public static byte[] UAAuthDigest(Domain d, byte[] ua, byte[] purpose, byte[] digest) =>
         Keccak256(new byte[] { 0x19, 0x01 }, UAAuthDomainSeparator(d),
             Keccak256(Keccak256(Utf8(UAAuthType)), Sized(ua, 32, "ua"), Sized(purpose, 32, "purposeTag"), Sized(digest, 32, "digest")));
+
+    /// <summary><c>md_I = MemberDigest(I, UAMessage(MSIG, member, md_U))</c>: what the members of the inner msig sign for its slot in an outer whose
+    /// member digest is <paramref name="md"/>, purpose member whatever the outer's.</summary>
+    public static byte[] InnerDigest(byte[] inner, byte[] md) => MemberDigest(inner, UAMessage(0x0120, PurposeTag("member"), md));
 
     public static byte[] MemberDigest(byte[] structureUa, byte[] uaMsg) =>
         Keccak256(Sized(structureUa, 32, "structureUa"), Sized(uaMsg, 32, "uaMsg"));

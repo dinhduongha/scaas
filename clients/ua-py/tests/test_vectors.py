@@ -444,7 +444,7 @@ class Vectors(unittest.TestCase):
 
 
 def member_sigs(blob):
-    """``abi.encode(MemberSig[])`` (the vectors' byte form of an msig pop / sig) back to (index, keyData, sig) tuples."""
+    """``abi.encode(MemberSig[])`` of flat slots (the vectors' byte form of an msig pop / sig) back to (index, inner, sig) tuples."""
     if not blob:
         return []
     w = lambda o: int.from_bytes(blob[o:o + 32], 'big')
@@ -453,7 +453,7 @@ def member_sigs(blob):
     for i in range(w(base)):
         t = base + 32 + w(base + 32 + 32 * i)
         field = lambda k: blob[t + w(t + 32 * k) + 32:t + w(t + 32 * k) + 32 + w(t + w(t + 32 * k))]
-        out.append((w(t), field(1), field(2)))
+        out.append((w(t), [], field(2)))
     return out
 
 
@@ -466,6 +466,46 @@ def reg_input(row):
 def record_sig(r):
     s = b(r['sig'])
     return ua.ua_sig(members=member_sigs(s)) if r['kind'] == 0x0120 else ua.ua_sig(signature=s)
+
+
+def slots_of(pop):
+    return [(m['index'], [(x['index'], b(x['sig'])) for x in m['members']], b(m['sig'])) for m in pop]
+
+
+class NestedRows(unittest.TestCase):
+    """Nested msig: nested.json, the rows forge runs on the registry (spec 2026-11-02-msig-nested). No signature is verified here."""
+
+    N = json.loads((VEC / 'nested.json').read_text())
+    keys = {r['ua']: b(r['keyData']) for r in N['registrations'] if r['kind'] == 0x0120}
+
+    def test_nested_eligibility(self):
+        for r in self.N['eligibility']:
+            self.assertEqual(ua.msig_pqz_eligible(b(r['keyData']), lambda i: b(r['inner'][i])), r['eligible'], r['reason'])
+            with self.assertRaises(ua.UAError) as c:
+                ua.msig_pqz_eligible(b(r['keyData']))
+            self.assertEqual(c.exception.code, 'UAMemberUnknown')
+        third = b(self.N['structures'][0]['keyData'])
+        with self.assertRaises(ua.UAError) as c:
+            ua.msig_pqz_eligible(third, self.keys.get)
+        self.assertEqual(c.exception.code, 'UAMemberUnknown', 'a third level')
+
+    def test_nested_registrations(self):
+        rows = [r for r in self.N['registrations'] + self.N['afterAcceptance'] if r['kind'] == 0x0120]
+        self.assertEqual(len(rows), 12)
+        for r in rows:
+            a = r['attrs']
+            g = ua.holder_pop_message(0x0120, b(r['ua']), b(r['keyData']), kem_pk=b(a['kemPk']), inner=self.keys.get)
+            self.assertEqual((hx(g.registration_digest), hx(g.message), hx(g.member_digest)),
+                             (r['registrationDigest'], r['popMessage'], r['memberDigest']), r['name'])
+            args, _ = ua.registration_args(0x0120, b(r['keyData']), kem_pk=b(a['kemPk']), pop=slots_of(r['args']['pop']), kem_commit=False)
+            self.assertEqual(args, r['args'], r['name'])
+            for d in r.get('innerDigests', []):
+                self.assertEqual(hx(ua.inner_digest(b(d['inner']), b(r['memberDigest']))), d['memberDigest'], r['name'])
+
+    def test_nested_memberships(self):
+        for m in self.N['memberships']:
+            msg = ua.ua_message(0x0120, ua.purpose_tag('membership'), b(m['digest']))
+            self.assertEqual((hx(msg), hx(ua.member_digest(b(m['ua']), msg))), (m['message'], m['memberDigest']), m['name'])
 
 
 class TypedRegistryArgs(unittest.TestCase):

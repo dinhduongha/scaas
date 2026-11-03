@@ -437,6 +437,30 @@ static std::string hexOf(const char* byte, size_t n) {
     return s;
 }
 
+// Nested msig (nested.json): the JSON call with `inner`; key data alone refuses an msig member by name.
+static void nested_rows() {
+    json n = load("nested.json"), inner = json::object();
+    for (auto& r : n["registrations"]) {
+        if (kind(r["kind"]) == 0x0120) inner[r["ua"].get<std::string>()] = r["keyData"];
+    }
+    int rows = 0;
+    for (auto* list : {&n["registrations"], &n["afterAcceptance"]}) {
+        for (auto& r : *list) {
+            if (kind(r["kind"]) != 0x0120) continue;
+            ++rows;
+            json i = regInput(r);
+            i["kemCommit"] = false;
+            i["inner"] = inner;
+            CHECK(regArgs(i)["args"] == r["args"], r["name"].get<std::string>());
+        }
+    }
+    CHECK(rows == 12, "msig rows");
+    for (auto& r : n["eligibility"]) {
+        Bytes d = bytes(r["keyData"]);
+        CHECK(code_of([&] { msigPqzEligible(d); }) == "UAMemberUnknown", r["reason"].get<std::string>());
+    }
+}
+
 static void registration_args() {
     json p = load("portable.json"), k = load("kinds.json");
     int commits = 0, withCommit = 0;
@@ -522,7 +546,7 @@ int main(int argc, char** argv) {
         {"invalid_rows", invalid_rows}, {"natives_native_space_canonical_ids", natives_native_space_canonical_ids},
         {"messages", messages}, {"structures", structures}, {"portable", portable}, {"kem_record", kem_record},
         {"pqz_key_record", pqz_key_record}, {"membership_rows", membership_rows}, {"portable_purposes", portable_purposes},
-        {"holder_refusals", holder_refusals}, {"registration_args", registration_args}, {"set_key_args", set_key_args}};
+        {"holder_refusals", holder_refusals}, {"registration_args", registration_args}, {"nested_rows", nested_rows}, {"set_key_args", set_key_args}};
     if (argc != 2 || !tests.count(argv[1])) { std::fprintf(stderr, "usage: vectors_test <name>\n"); return 2; }
     try { tests[argv[1]](); } catch (const std::exception& e) { std::fprintf(stderr, "exception: %s\n", e.what()); return 1; }
     return failures ? 1 : 0;

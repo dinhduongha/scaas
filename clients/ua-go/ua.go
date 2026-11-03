@@ -144,8 +144,10 @@ func IsSigning(kind uint16) bool { return kind == 0x0120 || kind == 0x0141 || si
 
 // IsPqzHolder: kinds that may hold a PQZ key attribute, mldsa44, mldsa65, fndsa512 (an msig per MsigPqzEligible).
 func IsPqzHolder(kind uint16) bool { return kind >= 0x0130 && kind <= 0x0132 }
+
+// IsMember: an msig too, one level down; a record that holds one is refused as a member by the registry.
 func IsMember(kind uint16, hederaNative bool) bool {
-	return singleSigning(kind) || kind == 0x0001 || kind == 0x0002 || (hederaNative && kind == 0x0003)
+	return singleSigning(kind) || kind == 0x0120 || kind == 0x0001 || kind == 0x0002 || (hederaNative && kind == 0x0003)
 }
 
 func KindTagString(kind uint16) (string, error) {
@@ -297,9 +299,9 @@ func addressWord(a [20]byte) []byte { return append(make([]byte, 12), a[:]...) }
 
 var (
 	// PopV2Tag is PURPOSE_POP_V2 = keccak256("scaas.ua.purpose.pop.v2").
-	PopV2Tag, _      = PurposeTagV("pop", 2)
-	kemPurpose, _    = PurposeTag("kem")
-	pqzKeyPurpose, _ = PurposeTag("pqz-key")
+	PopV2Tag, _          = PurposeTagV("pop", 2)
+	kemPurpose, _        = PurposeTag("kem")
+	pqzKeyPurpose, _     = PurposeTag("pqz-key")
 	membershipPurpose, _ = PurposeTag("membership")
 )
 
@@ -423,12 +425,12 @@ func KemRecordMessage(kind uint16, ua [32]byte, version uint64, kemPk []byte) ([
 }
 
 // holds: a PQZ / KEM holder is a single-key PQ kind, or an msig whose key data is PQ-eligible (malformed key data is UAKeyData).
-func holds(kind uint16, keyData []byte) (bool, error) {
+func holds(kind uint16, keyData []byte, inner Inner) (bool, error) {
 	if IsPqzHolder(kind) {
 		return true, nil
 	}
 	if kind == 0x0120 && len(keyData) > 0 {
-		return MsigPqzEligible(keyData)
+		return MsigPqzEligibleWith(keyData, inner)
 	}
 	return false, nil
 }
@@ -496,9 +498,14 @@ type HolderPop struct {
 // (UAPqzHolder, UAKemHolder; an msig needs keyData to show it is PQ-eligible); a PQZ key always comes with its proof hash and
 // only with it (UAPqzPopHash).
 func HolderPopMessage(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopHash, kemPk []byte) (*HolderPop, error) {
+	return HolderPopMessageWith(kind, ua, keyData, pqzKey, pqzPop, pqzPopHash, kemPk, nil)
+}
+
+// HolderPopMessageWith is HolderPopMessage for an msig with msig members: inner gives their key data.
+func HolderPopMessageWith(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopHash, kemPk []byte, inner Inner) (*HolderPop, error) {
 	hasKem := len(kemPk) != 0
 	if len(pqzKey) > 0 || hasKem {
-		ok, err := holds(kind, keyData)
+		ok, err := holds(kind, keyData, inner)
 		if err != nil {
 			return nil, err
 		}
@@ -578,7 +585,12 @@ type PqzKeyRecord struct {
 // PqzKeyRecordMessage is the signed, portable, write-once PQZ key record: accepted only by a registration without a PQZ key
 // (alreadySet = it has one: UAPqzKeySet). The holder rules of HolderPopMessage; the key and its proof hash are both required.
 func PqzKeyRecordMessage(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopHash []byte, alreadySet bool) (*PqzKeyRecord, error) {
-	ok, err := holds(kind, keyData)
+	return PqzKeyRecordMessageWith(kind, ua, keyData, pqzKey, pqzPop, pqzPopHash, alreadySet, nil)
+}
+
+// PqzKeyRecordMessageWith is PqzKeyRecordMessage for an msig with msig members: inner gives their key data.
+func PqzKeyRecordMessageWith(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopHash []byte, alreadySet bool, inner Inner) (*PqzKeyRecord, error) {
+	ok, err := holds(kind, keyData, inner)
 	if err != nil {
 		return nil, err
 	}
@@ -661,19 +673,56 @@ func CanonicalID(text string) (string, error) {
 	return "0x" + h, nil
 }
 
-// MsigPqzEligible: the weight of msig members outside kinds 0x0130-0x0133 is below the threshold (CTR-PQZ-12).
-func MsigPqzEligible(keyData []byte) (bool, error) {
+// Inner gives an msig member's key data by its id, nil if unknown.
+type Inner func(id [32]byte) []byte
+
+// MsigPqzEligible: the weight of an msig's classical members is below the threshold (CTR-PQZ-12). The key data alone does not show an
+// msig member, so one is UAMemberUnknown here: MsigPqzEligibleWith reads its record.
+func MsigPqzEligible(keyData []byte) (bool, error) { return MsigPqzEligibleWith(keyData, nil) }
+
+// MsigPqzEligibleWith: a member is PQ if its kind is in 0x0130-0x0133, or it is an msig that is PQ-eligible itself; no answer from inner,
+// or an inner that holds an msig (two levels only), is UAMemberUnknown.
+func MsigPqzEligibleWith(keyData []byte, inner Inner) (bool, error) {
 	d := keyData
 	if len(d) < 4 || len(d) != 4+36*(int(d[2])<<8|int(d[3])) {
 		return false, keyDataErr("length")
 	}
 	classical := 0
 	for o := 4; o < len(d); o += 36 {
-		if k := int(d[o])<<8 | int(d[o+1]); k < 0x0130 || k > 0x0133 {
+		k := int(d[o])<<8 | int(d[o+1])
+		pq := k >= 0x0130 && k <= 0x0133
+		if k == 0x0120 {
+			var kd []byte
+			if inner != nil {
+				kd = inner([32]byte(d[o+2 : o+34]))
+			}
+			if kd == nil {
+				return false, fail("UAMemberUnknown", "an msig member's record")
+			}
+			var err error
+			if pq, err = MsigPqzEligible(kd); err != nil {
+				return false, err
+			}
+		}
+		if !pq {
 			classical += int(d[o+34])<<8 | int(d[o+35])
 		}
 	}
 	return classical < int(d[0])<<8|int(d[1]), nil
+}
+
+// InnerDigest is md_I = MemberDigest(I, UAMessage(MSIG, member, md_U)): what the members of the inner msig sign for its slot in an outer
+// whose member digest is md, purpose member whatever the outer's.
+func InnerDigest(inner, md [32]byte) ([32]byte, error) {
+	tag, err := PurposeTag("member")
+	if err != nil {
+		return [32]byte{}, err
+	}
+	m, err := UAMessage(0x0120, tag, md)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	return MemberDigest(inner, m), nil
 }
 
 // Member is one msig member.

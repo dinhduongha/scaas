@@ -827,7 +827,7 @@ func memberSigs(blob []byte) []MemberSig {
 	for i := 0; i < w(base); i++ {
 		t := base + 32 + w(base+32+32*i)
 		field := func(k int) []byte { o := t + w(t+32*k); return blob[o+32 : o+32+w(o)] }
-		out = append(out, MemberSig{Index: uint16(w(t)), KeyData: field(1), Sig: field(2)})
+		out = append(out, MemberSig{Index: uint16(w(t)), Members: []InnerSig{}, Sig: field(2)})
 	}
 	return out
 }
@@ -1023,5 +1023,89 @@ func TestRegistrationArgsTypedKeys(t *testing.T) {
 	a, _, err := RegistrationArgs(RegistrationInput{Kind: 0x0101, KeyData: bs(rows(k, "valid")[1]["keyData"])})
 	if err != nil || a.Entry != "register" {
 		t.Fatal(err)
+	}
+}
+
+// Nested msig: nested.json, the rows forge runs on the registry (spec 2026-11-02-msig-nested). No signature is verified here.
+func nestedKeys(n obj) Inner {
+	return func(id [32]byte) []byte {
+		for _, r := range rows(n, "registrations") {
+			if kind(r["kind"]) == 0x0120 && b32(r["ua"]) == id {
+				return bs(r["keyData"])
+			}
+		}
+		return nil
+	}
+}
+
+func TestNestedEligibility(t *testing.T) {
+	n := load(t, "nested.json")
+	for _, r := range rows(n, "eligibility") {
+		in := r["inner"].(obj)
+		got, err := MsigPqzEligibleWith(bs(r["keyData"]), func(id [32]byte) []byte { return bs(in[hxp(&id)]) })
+		if err != nil || got != r["eligible"].(bool) {
+			t.Fatalf("%v: %v %v", r["reason"], got, err)
+		}
+		if _, err := MsigPqzEligible(bs(r["keyData"])); code(err) != "UAMemberUnknown" {
+			t.Fatalf("the key data alone: %v", err)
+		}
+	}
+	third := bs(rows(n, "structures")[0]["keyData"])
+	if _, err := MsigPqzEligibleWith(third, nestedKeys(n)); code(err) != "UAMemberUnknown" {
+		t.Fatalf("a third level: %v", err)
+	}
+}
+
+func TestNestedRegistrations(t *testing.T) {
+	n := load(t, "nested.json")
+	got := 0
+	for _, r := range append(rows(n, "registrations"), rows(n, "afterAcceptance")...) {
+		if kind(r["kind"]) != 0x0120 {
+			continue
+		}
+		got++
+		a, ua := r["attrs"].(obj), b32(r["ua"])
+		p, err := HolderPopMessageWith(0x0120, ua, bs(r["keyData"]), nil, nil, nil, bs(a["kemPk"]), nestedKeys(n))
+		if err != nil || hxp(&p.RegistrationDigest) != r["registrationDigest"] || hxp(&p.Message) != r["popMessage"] {
+			t.Fatalf("%v: %v", r["name"], err)
+		}
+		slots := []MemberSig{}
+		for _, s := range r["args"].(obj)["pop"].([]any) {
+			m := s.(obj)
+			inner := []InnerSig{}
+			for _, x := range m["members"].([]any) {
+				inner = append(inner, InnerSig{uint16(x.(obj)["index"].(float64)), bs(x.(obj)["sig"])})
+			}
+			slots = append(slots, MemberSig{uint16(m["index"].(float64)), inner, bs(m["sig"])})
+		}
+		no := false
+		args, _, err := RegistrationArgs(RegistrationInput{Kind: 0x0120, KeyData: bs(r["keyData"]), KemPk: bs(a["kemPk"]), Members: slots, KemCommit: &no})
+		if err != nil {
+			t.Fatalf("%v: %v", r["name"], err)
+		}
+		sameJSON(t, r["name"].(string), args.Pop, r["args"].(obj)["pop"])
+		ds, _ := r["innerDigests"].([]any)
+		for _, x := range ds {
+			d := x.(obj)
+			md, err := InnerDigest(b32(d["inner"]), b32(r["memberDigest"]))
+			if err != nil || hxp(&md) != d["memberDigest"] {
+				t.Fatalf("%v: inner digest", r["name"])
+			}
+		}
+	}
+	if got != 12 {
+		t.Fatalf("%d msig rows", got)
+	}
+}
+
+func TestNestedMemberships(t *testing.T) {
+	n := load(t, "nested.json")
+	tag, _ := PurposeTag("membership")
+	for _, m := range rows(n, "memberships") {
+		msg, err := UAMessage(0x0120, tag, b32(m["digest"]))
+		md := MemberDigest(b32(m["ua"]), msg)
+		if err != nil || hxp(&msg) != m["message"] || hxp(&md) != m["memberDigest"] {
+			t.Fatalf("%v", m["name"])
+		}
 	}
 }

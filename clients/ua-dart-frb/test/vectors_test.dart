@@ -457,6 +457,16 @@ void main() {
       };
   Map<String, dynamic> regArgs(Map<String, dynamic> i) => jsonDecode(registrationArgs(input: jsonEncode(i)));
 
+  test('nested rows', () {
+    final n = load('nested.json');
+    final msigs = [...(n['registrations'] as List), ...(n['afterAcceptance'] as List)].cast<Map>().where((r) => r['kind'] == 0x0120).toList();
+    expect(msigs.length, 12);
+    final inner = {for (final r in (n['registrations'] as List).cast<Map>().where((r) => r['kind'] == 0x0120)) r['ua']: r['keyData']};
+    for (final r in msigs) {
+      expect(regArgs({...regInput(r), 'kemCommit': false, 'inner': inner})['args'], r['args'], reason: r['name'] as String);
+    }
+  });
+
   test('registration args', () {
     var commits = 0;
     for (final r in regs) {
