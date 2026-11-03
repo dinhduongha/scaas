@@ -106,6 +106,26 @@ fn nested_minimal_at_both_levels() {
     assert_eq!(registration_args(&input).unwrap_err(), UAError::Pop);
 }
 
+/// CTR-UA-37: `membershipSigOf`'s bytes give back the slot, an `msig` slot its list, with no new signature.
+#[test]
+fn nested_replay_rows() {
+    let n = nested();
+    assert_eq!(rows(&n, "memberships").len(), 4);
+    for m in rows(&n, "memberships") {
+        let index = m["index"].as_u64().unwrap() as u16;
+        let d = bytes(&rows(&n, "registrations").iter().find(|r| r["ua"] == m["ua"]).unwrap()["keyData"]);
+        let want = typed(&serde_json::json!([{ "index": index, "members": m["members"], "sig": m["sig"] }])).remove(0);
+        assert_eq!(replayed_member_sig(&d, index, &bytes(&m["stored"])), Ok(want.clone()), "{}", m["name"]);
+        if !want.members.is_empty() {
+            assert_eq!(encode_inner_sigs(&want.members), bytes(&m["stored"]));
+            let stored = bytes(&m["stored"]);
+            assert_eq!(replayed_member_sig(&d, index, &[stored.as_slice(), &[0]].concat()), Err(UAError::Unauthorized), "not canonical");
+            assert_eq!(replayed_member_sig(&d, index, &[]), Err(UAError::Unauthorized));
+        }
+        assert_eq!(replayed_member_sig(&d, 16, &[]), Err(UAError::Unauthorized), "past the members");
+    }
+}
+
 #[test]
 fn nested_member_kind() {
     assert!(is_member(0x0120, false));
@@ -134,7 +154,7 @@ mod verdicts {
     #[test]
     fn nested_check_rows() {
         let n = nested();
-        for r in rows(&n, "registrations") {
+        for r in rows(&n, "registrations").iter().chain(rows(&n, "afterAcceptance")) {
             assert_eq!(check(&n, r, &bytes(&r["pop"])), Ok(()), "{}", r["name"]);
         }
     }

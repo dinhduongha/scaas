@@ -5,6 +5,7 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UARegistryLib} from "../../src/ua/UARegistryLib.sol";
+import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {UACall} from "./UACall.sol";
 import {BurnAll} from "./UAGas.t.sol";
@@ -349,5 +350,86 @@ contract UARegistryNestedGasTest is UARegistryBase {
         bytes memory d = _outerKey(g1, c); // inner `msig`s and leaves on gen 1
         IUARegistry.MemberSig[] memory pop = _popSigs(g1, c, d);
         _measure(c, r, d, _registerAt(tight, r, c, d, pop), bound);
+    }
+
+    // ----- CTR-PQZ-12: the holder fits 2^24 with its authorization's calldata (review I1) -----
+
+    /// `{fndsa512, inner of 16 ml65, inner of n ml65}`, n-of-n at both levels, ready for a PQZ key on a registry of caps 200 k and 2.5 M.
+    function _bigHolder(uint256 n) internal returns (UARegistry r, bytes memory d, IUARegistry.MemberSig[] memory pop, IUARegistry.UAAttrs memory a) {
+        Case memory c = _case("ml65", 0x0131, 200_000, 3309, 0, _none256());
+        address burn = address(new BurnAll());
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
+        k[0] = UARegistry.KindConfig(0x0131, burn, 200_000);
+        k[1] = UARegistry.KindConfig(0x0132, burn, 2_500_000);
+        r = _deploy(_at(), chainUidA, address(0), false, 12_000_000, address(0), true, k);
+        Member[] memory m = new Member[](3);
+        m[0] = Member(0x0132, UACall.register(r, 0x0132, _pk(0x0132), _none(), hex"01", ""), 1);
+        (, bytes32 i1) = _inner(r, c, 16);
+        (, bytes32 i2) = _inner(r, c, n);
+        m[1] = Member(UAKinds.MSIG, i1, 1);
+        m[2] = Member(UAKinds.MSIG, i2, 1);
+        d = _msigKey(3, m);
+        pop = _popSigs(r, c, d);
+        IUARegistry.MsigStructure memory st = UACall.structure(d);
+        for (uint256 i; i < 3; ++i) if (st.members[i].kind == 0x0132) pop[i].sig = new bytes(666);
+        bytes memory key = new bytes(PqzSet.PK);
+        key[0] = 0x01;
+        a = UACall.attrs(key, keccak256("proof"), "");
+    }
+
+    /// The registry's bound for that shape: its worst, the hold, the debit, 16 per byte.
+    function _holderBound(uint256 n) internal pure returns (uint256 w, uint256 total) {
+        w = (16 + n) * (200_000 + MEMBER) + (2_500_000 + MEMBER) + 2 * (MEMBER + ACCEPTED) + ACCEPTED + (2_500_000 - SMART) / 63;
+        uint256 auth = (192 + 672) + 2 * 192 + (16 + n) * (128 + 3_328);
+        total = w + w / 63 + 5_000 + PqzSet.PQZ_DEBIT_MIN_GAS + 16 * auth;
+    }
+
+    /// The review's `{fndsa512, [16, 12]}` was admitted, 17.44 M against 2^24. The largest shape of this family that registers now fits: the least
+    /// frame + the debit + 16 per byte of the authorization, every byte counted non-zero; one signature more is refused.
+    function test_pqzHolderFits2p24WithItsCalldata() public {
+        uint256 n = 15;
+        for (;; --n) {
+            (, uint256 total) = _holderBound(n);
+            if (total <= 1 << 24) break;
+        }
+        assertLt(n, 12, "the review's shape is refused");
+        (UARegistry r, bytes memory d, IUARegistry.MemberSig[] memory pop, IUARegistry.UAAttrs memory a) = _bigHolder(n + 1);
+        bytes memory p = abi.encode(pop);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, UAKinds.uaOf(UAKinds.MSIG, d)));
+        UACall.register(r, UAKinds.MSIG, d, a, p, "");
+
+        (r, d, pop, a) = _bigHolder(n);
+        bytes32 ua = UACall.register(r, UAKinds.MSIG, d, a, abi.encode(pop), "");
+        IUARegistry.UASig memory s;
+        s.members = pop;
+        (uint256 w,) = _holderBound(n);
+        uint256 least = _least(address(r), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, s)), w);
+        uint256 spend = least + PqzSet.PQZ_DEBIT_MIN_GAS + 16 * abi.encode(s).length;
+        emit log_named_uint("signatures", 17 + n);
+        emit log_named_uint("least + debit + 16 per auth byte", spend);
+        assertLe(spend, 1 << 24);
+    }
+
+    /// The EIP-7976 floor, 64 per byte: a cheap-cap kind with long signatures meets it before the regular gas does.
+    function test_pqzHolderCalldataFloor() public {
+        address burn = address(new BurnAll());
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
+        k[0] = UARegistry.KindConfig(0x0133, burn, 20_000);
+        UARegistry r = _deploy(_at(), chainUidA, address(0), false, 12_000_000, address(0), true, k);
+        Case memory c = _case("slh", 0x0133, 20_000, 7856, 0, _none256());
+        Member[] memory m = new Member[](2);
+        (, bytes32 i1) = _inner(r, c, 16);
+        (, bytes32 i2) = _inner(r, c, 16);
+        m[0] = Member(UAKinds.MSIG, i1, 1);
+        m[1] = Member(UAKinds.MSIG, i2, 1);
+        bytes memory d = _msigKey(2, m);
+        uint256 auth = 2 * 192 + 32 * (128 + 7_872);
+        uint256 w = 32 * (20_000 + MEMBER) + 2 * (MEMBER + ACCEPTED) + ACCEPTED;
+        assertLe(w + w / 63 + 5_000 + PqzSet.PQZ_DEBIT_MIN_GAS + 16 * auth, 1 << 24, "the regular term alone admits it");
+        assertGt(PqzSet.PQZ_DEBIT_MIN_GAS + 64 * auth, 1 << 24);
+        bytes memory key = new bytes(PqzSet.PK);
+        key[0] = 0x01;
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, UAKinds.uaOf(UAKinds.MSIG, d)));
+        UACall.register(r, UAKinds.MSIG, d, UACall.attrs(key, keccak256("proof"), ""), hex"01", "");
     }
 }

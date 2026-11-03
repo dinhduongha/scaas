@@ -53,6 +53,9 @@ library UAStore {
         /// 15. CTR-UA-37: an `msig`'s accepted slots, bit `i` = member slot `i`: the slots of its `pop`, written at
         /// registration, then `acceptMembership`. It lives with the record (gen 2 reads gen 1's).
         mapping(bytes32 ua => uint256) accepted;
+        /// 16. CTR-UA-37 (owner 2026-11-03): the signature of a slot accepted by `acceptMembership`, written once, with its bit: `sig`, or an
+        /// `msig` member's `abi.encode(InnerSig[])`. A slot of the `pop` has none: the `pop` holds it.
+        mapping(bytes32 ua => mapping(uint256 index => address[])) acceptSig;
     }
 
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;

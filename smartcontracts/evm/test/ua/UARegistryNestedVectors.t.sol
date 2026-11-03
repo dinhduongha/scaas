@@ -20,13 +20,17 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
     function setUp() public override {
         super.setUp();
         j = vm.readFile("../vectors/ua/nested.json");
+        r = _registry(REG_A);
+    }
+
+    function _registry(address at) internal returns (UARegistry) {
         UARegistry.KindConfig[] memory base = _cfgs(address(mock));
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](base.length + 1);
         for (uint256 i; i < base.length; ++i) c[i] = base[i];
         c[1].verifier = address(new P256Verifier());
         c[2].verifier = address(new Ed25519Verifier());
         c[base.length] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new UAFndsaVerifier()), 2_500_000);
-        r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
+        return _deploy(at, chainUidA, address(0), false, BUDGET, address(0), true, c);
     }
 
     function _p(string memory section, uint256 i, string memory field) internal pure returns (string memory) {
@@ -177,6 +181,47 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
             }
             r.acceptMembership(ua, s);
             assertTrue(r.memberAccepted(ua, index));
+            assertEq(r.membershipSigOf(ua, index), _bytes(string.concat(m, ".stored")));
+        }
+    }
+
+    /// CTR-UA-37: on a second registry the row's `pop` is refused until each acceptance is replayed from the first's state, then the same bytes
+    /// register, with no new signature.
+    function test_nestedVectors_copyReplaysTheAcceptance() public {
+        vm.pauseGasMetering(); // a 700 KB JSON string per cheatcode call
+        _registerUpTo("");
+        for (uint256 i; i < _count(".memberships"); ++i) _accept(r, r, i);
+        string memory row = ".afterAcceptance[0]";
+        IUARegistry.MsigStructure memory st = UACall.structure(_bytes(string.concat(row, ".keyData")));
+        IUARegistry.MemberSig[] memory pop = _typed(string.concat(row, ".args.pop"));
+        bytes32 ua = r.registerMsig(st, _none(), pop, "");
+        assertEq(ua, vm.parseJsonBytes32(j, string.concat(row, ".ua")));
+        assertEq(abi.encode(pop), _bytes(string.concat(row, ".pop")));
+
+        UARegistry first = r;
+        r = _registry(address(0x5cb0));
+        _registerUpTo("");
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        r.registerMsig(st, _none(), pop, "");
+        for (uint256 i; i < _count(".memberships"); ++i) _accept(first, r, i);
+        assertEq(r.registerMsig(st, _none(), pop, ""), ua);
+        assertEq(r.popOf(ua), first.popOf(ua));
+    }
+
+    /// Row `i` of `memberships` on `to`, read back from `from`'s state only.
+    function _accept(UARegistry from, UARegistry to, uint256 i) internal {
+        string memory m = _p("memberships", i, "");
+        bytes32 ua = vm.parseJsonBytes32(j, string.concat(m, ".ua"));
+        uint16 index = _uint16(string.concat(m, ".index"));
+        if (from == to) {
+            to.acceptMembership(ua, IUARegistry.MemberSig(index, _inner(string.concat(m, ".members")), _bytes(string.concat(m, ".sig"))));
+            return;
+        }
+        bytes memory stored = from.membershipSigOf(ua, index);
+        if (from.msigOf(ua).members[index].kind == UAKinds.MSIG) {
+            to.acceptMembership(ua, IUARegistry.MemberSig(index, abi.decode(stored, (IUARegistry.InnerSig[])), ""));
+        } else {
+            to.acceptMembership(ua, IUARegistry.MemberSig(index, new IUARegistry.InnerSig[](0), stored));
         }
     }
 

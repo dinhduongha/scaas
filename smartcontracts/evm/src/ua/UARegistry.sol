@@ -167,6 +167,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             }
             // review n3: gen 1 speaks the UA-8 views gen 2 forwards to (`pqzKeyOf`, `registrationOf`, `checkedOf`)
             try p.checkedOf(0) {} catch { revert UAConfig(0); }
+            // and the `InnerSig` ABI of its hand-offs: on an older gen 1 every one would read as a refused signature
+            try p.membershipSigOf(0, 0) {} catch { revert UAConfig(0); }
         }
         uint256[20] memory k;
         for (uint256 i; i < kinds_.length; ++i) {
@@ -349,6 +351,15 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     function memberAccepted(bytes32 ua, uint256 index) external view returns (bool) {
         if (_elsewhere(ua)) return IUARegistry(predecessor).memberAccepted(ua, index);
         return _s.accepted[ua] >> index & 1 != 0;
+    }
+
+    function membershipSigOf(bytes32 ua, uint256 index) external view returns (bytes memory) {
+        if (_elsewhere(ua)) return IUARegistry(predecessor).membershipSigOf(ua, index);
+        return SSTORE2.readChunks(_s.acceptSig[ua][index]);
+    }
+
+    function smartKeyCloneHash() external view returns (bytes32) {
+        return _SMART_KEY_CLONE_CODEHASH;
     }
 
     /// TS-D13: the typed keys of `webauthn-p256` / MuSig2 / FROST records (empty for any other id).

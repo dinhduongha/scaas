@@ -8,13 +8,14 @@ import * as ua from '../src/ua.js';
 import * as sor from '../src/soroban.js';
 import { hex, abiEncode, concatBytes } from '../src/bytes.js';
 import { nestedJson } from '../scripts/ua-portable-vectors.mjs';
-import { B, kindVerify, nativeOk, encodeMemberSigs, decodeMemberSigs, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord, verifyMembership } from '../src/ua-verify.js';
+import { B, kindVerify, nativeOk, encodeMemberSigs, decodeMemberSigs, encodeInnerSigs, replayedMemberSig, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord,
+  verifyMembership } from '../src/ua-verify.js';
 import { dir } from './ua-vectors-dir.js';
 
 const TEXT = readFileSync(new URL('nested.json', dir), 'utf8');
 const N = JSON.parse(TEXT);
 const row = (name) => N.registrations.find((r) => r.name === name) ?? assert.fail(`no row ${name}`);
-const records = (id) => N.registrations.find((r) => r.ua === id);
+const records = (id) => [...N.registrations, ...N.afterAcceptance].find((r) => r.ua === id);
 const code = (c) => (e) => e.code === c;
 const flip = (h, at = 40) => { const b = B(h); b[at] ^= 1; return hex(b); };
 const msigs = N.registrations.filter((r) => r.kind === 0x0120);
@@ -134,6 +135,55 @@ test('authorizations: a leaf one level down signs md_I, a native leaf UAAuth in 
     for (const x of s.members) assert.ok(leaf(leaves[x.index], x.sig, over));
     assert.ok(!leaf(leaves[s.members[0].index], s.members[0].sig, md), 'not over the outer digest');
   }
+});
+
+test('CTR-UA-37: the stored acceptance replays with no new signature, an msig slot by its list', () => {
+  assert.equal(N.memberships.length, 4);
+  for (const m of N.memberships) {
+    const { keyData } = records(m.ua);
+    const again = replayedMemberSig(keyData, m.index, m.stored);
+    assert.equal(hex(again.sig), m.sig, m.name);
+    assert.deepEqual(again.members.map((x) => ({ index: x.index, sig: hex(x.sig) })), m.members, m.name);
+    verifyMembership({ ...m, members: m.members, sig: hex(again.sig) }, records);
+  }
+  const m = N.memberships.find((x) => x.members.length);
+  const { keyData } = records(m.ua);
+  assert.equal(hex(encodeInnerSigs(m.members.map((x) => ({ index: x.index, sig: B(x.sig) })))), m.stored);
+  assert.throws(() => replayedMemberSig(keyData, m.index, `${m.stored}00`), code('UAUnauthorized'), 'not canonical');
+  assert.throws(() => replayedMemberSig(keyData, m.index, '0x'), code('UAUnauthorized'), 'an msig slot has a list');
+  assert.throws(() => replayedMemberSig(keyData, 16, '0x'), code('UAUnauthorized'), 'past the members');
+  for (const r of N.afterAcceptance) verifyRegistration(r, records);
+});
+
+test('Q4: the minimal rule, every weight vector of up to 4 slots of weight 1-4, every threshold, every subset', () => {
+  const key = (t, w) => ua.encodeMsig(t, w.map((weight, i) => ({ kind: 0x0131, id: new Uint8Array(32).fill(i + 1), weight })));
+  let sets = 0;
+  const vectors = (n) => (n === 0 ? [[]] : vectors(n - 1).flatMap((v) => [1, 2, 3, 4].map((x) => [...v, x])));
+  for (const n of [1, 2, 3, 4]) {
+    for (const w of vectors(n)) {
+      const total = w.reduce((a, b) => a + b, 0);
+      const light = [...w].sort((a, b) => a - b);
+      for (let t = 1; t <= total; t++) {
+        let c = 0;
+        for (let acc = 0; acc < t; c++) acc += light[c];
+        const d = key(t, w);
+        for (let bits = 1; bits < 1 << n; bits++) {
+          const slots = w.map((_, i) => i).filter((i) => bits >> i & 1);
+          const sum = slots.reduce((a, i) => a + w[i], 0);
+          const every = sum >= t && slots.every((i) => sum - w[i] < t); // each slot necessary, by definition
+          assert.equal(ua.msigSlotsMinimal(d, slots), every, `${w} t ${t} ${slots}`);
+          // what the registry stops at: walking the slots, no signature comes after the threshold
+          if (every) {
+            let acc = 0;
+            for (const i of slots) { assert.ok(acc < t, 'a minimal set passes stop-at-threshold'); acc += w[i]; }
+            assert.ok(slots.length <= c, 'no quorum is larger than the bound counts');
+          }
+          sets++;
+        }
+      }
+    }
+  }
+  assert.equal(sets, 42_010);
 });
 
 test('flat bytes did not change: the empty list encodes as the empty keyData did', () => {

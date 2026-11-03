@@ -724,25 +724,51 @@ fn abi_bytes(o: &mut Vec<u8>, b: &[u8]) {
     o.extend(b);
     o.resize(o.len() + b.len().next_multiple_of(32) - b.len(), 0);
 }
+fn inner_sig(s: &InnerSig) -> Vec<u8> {
+    let mut o = [word(s.index as u64), word(64)].concat();
+    abi_bytes(&mut o, &s.sig);
+    o
+}
 /// `abi.encode(MemberSig[])`, the stored form of an `msig` signature (CTR-UA-33); empty for no slots, as the registries. `members` sits where
 /// the always-empty `keyData` sat, so a flat slot's bytes did not change.
 pub fn encode_member_sigs(sigs: &[MemberSig]) -> Vec<u8> {
     if sigs.is_empty() {
         return vec![];
     }
-    let inner = |s: &InnerSig| {
-        let mut o = [word(s.index as u64), word(64)].concat();
-        abi_bytes(&mut o, &s.sig);
-        o
-    };
     let slot = |m: &MemberSig| {
-        let list = abi_list(m.members.iter().map(inner).collect());
+        let list = abi_list(m.members.iter().map(inner_sig).collect());
         let mut o = [word(m.index as u64), word(96), word(96 + list.len() as u64)].concat();
         o.extend(list);
         abi_bytes(&mut o, &m.sig);
         o
     };
     [word(32).to_vec(), abi_list(sigs.iter().map(slot).collect())].concat()
+}
+/// `abi.encode(InnerSig[])`: what `membershipSigOf` returns for an `msig` slot.
+pub fn encode_inner_sigs(members: &[InnerSig]) -> Vec<u8> {
+    [word(32).to_vec(), abi_list(members.iter().map(inner_sig).collect())].concat()
+}
+/// The `MemberSig` a copy sends to `acceptMembership` from `membershipSigOf(ua, index)` alone (CTR-UA-37, owner 2026-11-03): an `msig` slot's
+/// stored bytes are `abi.encode(InnerSig[])`, canonical, at most 16; a signing slot's its `sig`. `Unauthorized` otherwise.
+pub fn replayed_member_sig(key_data: &[u8], index: u16, stored: &[u8]) -> Result<MemberSig> {
+    use crate::verify::word_usize as w;
+    let m = *MsigStructure::from_key_data(key_data)?.members.get(index as usize).ok_or(UAError::Unauthorized)?;
+    if m.kind != 0x0120 {
+        return Ok(MemberSig { index, members: vec![], sig: stored.to_vec() });
+    }
+    let read = || -> Option<Vec<InnerSig>> {
+        let n = w(stored, 32).filter(|n| *n <= 16 && w(stored, 0) == Some(32))?;
+        let mut members = Vec::with_capacity(n);
+        for j in 0..n {
+            let u = w(stored, 64 + 32 * j)?.checked_add(64)?;
+            let o = u.checked_add(w(stored, u + 32)?)?;
+            let start = o.checked_add(32)?;
+            let sig = stored.get(start..start.checked_add(w(stored, o)?)?)?.to_vec();
+            members.push(InnerSig { index: u16::try_from(w(stored, u)?).ok()?, sig });
+        }
+        (encode_inner_sigs(&members) == stored).then_some(members)
+    };
+    Ok(MemberSig { index, members: read().ok_or(UAError::Unauthorized)?, sig: vec![] })
 }
 /// `abi.decode(blob, (MemberSig[]))`, canonical only (re-encoded and compared), at most 16 slots at each level: the type's depth of 2 is the
 /// depth bound. `None` for anything else, an empty blob included (it has no slots to return).

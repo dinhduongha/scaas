@@ -625,7 +625,7 @@ contract UARegistryMembershipTest is UARegistryBase {
         assertFalse(ok);
         assertEq(bytes4(ret), UAKinds.UAVerifyGas.selector);
         assertFalse(r.memberAccepted(ua, 0));
-        (ok,) = address(r).call{gas: 400_000}(call_);
+        (ok,) = address(r).call{gas: 2_000_000}(call_); // 2 M: the kept signature is a contract, state gas (owner 2026-11-03)
         assertTrue(ok);
         assertTrue(r.memberAccepted(ua, 0));
     }

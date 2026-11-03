@@ -132,6 +132,9 @@ contract MockPredecessor {
 
     /// A UA-8 view: gen 2's constructor probes it (review n3).
     function checkedOf(bytes32) external pure returns (uint8, uint8, uint8) {}
+
+    /// Gen 2's constructor probes it too: the `InnerSig` ABI.
+    function membershipSigOf(bytes32, uint256) external pure returns (bytes memory) {}
 }
 
 abstract contract UARegistryBase is Test {
