@@ -9068,11 +9068,6 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 | canon:D12 | ARCH-POS-06 | current |
 | canon:D14 | INT-ODOO-14 | current |
 | canon:D17 | CTR-ZTH-01 | current |
-| msig-nested:N0 | CTR-UA-38 | current |
-| msig-nested:N2 | CTR-UA-38 | current |
-| msig-nested:N5 | CTR-UA-38 | current |
-| msig-nested:N14 | CTR-UA-38 | current |
-| msig-nested:N15 | CTR-UA-38 | current |
 | governance:D1 | CTR-GOV-01 | current |
 | governance:D2 | CTR-GOV-02 | current |
 | governance:D3 | CTR-GOV-03 | current |
@@ -9092,6 +9087,11 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 | governance:plus0 | CTR-GOV-11 | current |
 | governance:pqz-size | CTR-GOV-19 | current |
 | governance:regulated-confidential | CTR-GOV-17 | current |
+| msig-nested:N0 | CTR-UA-38 | current |
+| msig-nested:N2 | CTR-UA-38 | current |
+| msig-nested:N5 | CTR-UA-38 | current |
+| msig-nested:N14 | CTR-UA-38 | current |
+| msig-nested:N15 | CTR-UA-38 | current |
 | net-aptos:L1 | NET-ALL-06 | current |
 | net-aptos:L2 | NET-ALL-07 | current |
 | net-aptos:L3 | NET-ALL-08 | current |
