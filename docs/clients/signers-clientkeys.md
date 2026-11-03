@@ -353,7 +353,7 @@ returns the exact JSON for `eth_signTypedData_v4`: `{domain: {name, version}, ty
 `version` only ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)); `PORTABLE_DOMAIN`, `PORTABLE_TYPES`, `PORTABLE_TYPEHASH`, `portableDomainSeparator`, `kemRecordStruct`,
 `portableRecordStruct` are its parts, and `holderPopMessage` / `pqzKeyRecordMessage` return `typedData` next to the digests. A native `msig` member
 signs that JSON (`signTyped`), never `personal_sign` and never a raw digest; a derived member signs its `memberDigest` as before.
-`registrationArgs({kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit})` refuses an `msig` `pop` that is not a minimal slot set (`UAPoP`, as `portableMemberSigs`; `scaas-ua`: `registration_args`) and returns `{entry, args, kemFill}`, the
+`registrationArgs({kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit, inner})` (`inner`: an `msig` member's key data by id, [CTR-UA-38](../contracts/accounts.md#CTR-UA-38)) refuses an `msig` `pop` that is not a minimal slot set at both levels (`UAPoP`, as `portableMemberSigs`; `scaas-ua`: `registration_args`) and returns `{entry, args, kemFill}`, the
 [CTR-UA-36](../contracts/accounts.md#CTR-UA-36) call as named fields: `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost` for their kinds
 (the recommended path; the registry also takes `register` with packed key data for all but `msig`) and `register` for the rest, the
 KEM key in full, or the hash commit plus `kemFill` = `setKemKey(ua, 0, kem, UASig())` only when `registryCalldataLength` is over

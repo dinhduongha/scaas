@@ -3491,12 +3491,14 @@ Change (2026-10-31, owner decisions 2 and 8 of 2026-10-31, exact strings control
 **Cost if wrong.** Off-chain facts (share distribution, distinct parties) stay attestation-only and must be shown as such.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:148`, `history/specs/2026-10-06-universal-account-design.md:1391`
 
-### CTR-UA-09 — Structures commit to members; one nesting level
+### CTR-UA-09 — Structures commit to members; verification goes two levels
 - old: R297 · status: current · owner: no · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-09 · superseded-by: —
 
 **Why.** Structures commit to sorted members and nest one level, which bounds gas and avoids cycles.
 **Cost if wrong.** Two-level governance uses `SmartKeyAccount` or Safe as a member.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:159`
+
+Change (2026-11-02, **owner ruling**, CTR-UA-38): an `msig` may hold `msig` members, verification goes two levels only; "a member may not itself be a structure" goes. MuSig2 and FROST stay members. Bounded gas stays, and `SmartKeyAccount` or Safe as a member stays as another way.
 
 ### CTR-UA-10 — One key one purpose: registry, tags, EOAs
 - old: R298(2-3-4) · status: current · owner: yes · date: 2026-10-06 · normative: contracts/accounts.md#CTR-UA-10 · superseded-by: —
@@ -4002,6 +4004,28 @@ Change (2026-10-31, owner decision 4 of 2026-10-31, derived and contract member 
 
 **Source.** owner 2026-11-02, brief `.superpowers/sdd/2026-10-31-typed-signing/task-MA-brief.md`. Status: built in typed-signing Task MA on EVM, clients and node; Soroban's twin in progress on `ua8-soroban`; NEAR in its own UA round; Algorand in its own UA round.
 
+Change (2026-11-03, **owner ruling**, built on `msig-nested`): the acceptance signature is kept in state. The spec review found that a `pop` using a slot of an inner `msig` accepted by `acceptMembership` could not be copied on its bytes alone: the bit is per registry and the signature was in no record. `acceptMembership` now stores it, SSTORE2, `acceptSig[ua][index]`, slot 16 of `UAStore.Layout`, write-once with its bit: `sig`, or an `msig` member's `abi.encode(InnerSig[])`; `membershipSigOf(ua, index)` returns it; a third party replays it on another registry, with no new signature. Slots of the `pop` stay exempt. Cost: a native acceptance 58,776 + 97,920 -> 97,867 + 578,340 regular + state gas; a two-leaf inner list 124,083 + 0 -> 164,803 + 968,490. `UARegistry` 29,211 -> 29,498 B and `UARegistryLib` 34,452 -> 35,596 B against the prototype, with the other review fixes. No registry layout pin exists; `test/v2/layout/` covers the tokens.
+
+
+### CTR-UA-38 — An `msig` may hold `msig` members; verification goes two levels only
+- old: msig-nested:N0, msig-nested:N2, msig-nested:N5, msig-nested:N14, msig-nested:N15 · status: current · owner: yes · date: 2026-11-02 · normative: contracts/accounts.md#CTR-UA-38 · superseded-by: —
+
+**Rule.** Owner 2026-11-02 (verbatim in the spec): an `msig` may have one or more `msig` members beside ordinary signing members; verification goes two levels only. It corrects CTR-UA-09's "nesting is one level". The owner's rulings, each in full:
+- **N0.** The rule above.
+- **N2 (2026-11-02).** The typed shape: `InnerSig {uint16 index; bytes sig}` and `MemberSig {uint16 index; InnerSig[] members; bytes sig}`, `members` in `keyData`'s place, so a flat signature's bytes did not move. CTR-UA-33's wording changed with it.
+- **N5 (2026-11-02).** A native signer listed in two inner `msig`s of one outer signs a portable record once; that one signature serves both slots of that record, bound to that outer and that record.
+- **N14 (2026-11-02).** MuSig2 and FROST kinds are `msig` members, right as the code has it: each is one key on chain. "Structure" in CTR-UA-09 and the MEMBER row barred only an `msig`, and this rule replaces that.
+- **N15 (2026-11-03).** An acceptance is stored, so a nested `pop` copies to another registry with no new signature: `acceptMembership` keeps the signature bound to `(ua, index)`, write-once, as Soroban's `AcceptSig`; `membershipSigOf` returns it, as `membership_sig_of`; a third party replays it on the new registry. A slot of a `pop` keeps none. See CTR-UA-37.
+- **Staging (2026-11-03).** EVM goes to `main` first; each other family takes the rule in its own round: Soroban, NEAR and Algorand, each separately. Until its round a family refuses a record that holds an `msig` member, and its flat bytes are unchanged: Soroban's `layout_member_ok` has no `msig` arm (read from the code, `register_msig` then `KeyData`), NEAR has no nested `msig`, Algorand refuses the member kind.
+
+Controller calls, the owner may override, each explained in the spec's §0: N1 how two levels are enforced (from the records at registration, plus the type: no new state); N3 selectors move, typehashes do not; N4 the digest chain `md_I = keccak256(I ‖ uaMessage(MSIG, member, md_U))`; N6 the minimal rule at both levels in the portable path; N7 each acceptance word speaks for its own structure, the `pop` exemption stops at the outer; N8 an `msig` member is PQ iff PQ-eligible itself; N9 the bound by recursion over `_worst`, no new constant; N10 the tokens' generic `bytes auth` forwards the blob, the registry decodes (`uaAuthCall`); N11 Soroban's form and a signer count it will need, not built; N12 NEAR and Algorand in their own rounds; N13 the same id at both levels is allowed. After the review, 2026-11-03, also controller calls: the calldata terms of CTR-PQZ-12; gen 1's clone hash for a structure gen 1 holds in the portable path, through a new view `smartKeyCloneHash`, not a required equal implementation, so a later gen 2 may name its own; gen 2's constructor refuses a gen 1 without this ABI by calling `membershipSigOf`; 16 slots at each level in the node's decode.
+
+**Why.** A group may be a member of a group. Two levels bound gas and audit, and ids being hashes of key data rule out a cycle. `members` in `keyData`'s place keeps every stored `pop` and the Soroban slot size: the old `MemberSig{uint16 index; bytes keyData; bytes sig}` carried a field that was always empty.
+
+**Cost if wrong.** The always-empty `keyData` is gone from the type, so a later use has no field. Every selector holding `MemberSig` moved: 50 names, none changes meaning. An acceptance now costs state gas (CTR-UA-37).
+
+**Source.** owner 2026-11-02 and 2026-11-03, relayed by the coordinator; spec `superpowers/specs/2026-11-02-msig-nested.md`, §12 for the review. Status: EVM, node and clients built on `msig-nested`; UNAUDITED.
+
 ### CTR-PQZ-01 — Separate PQZ class gated by the precompile self-test
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-01 · superseded-by: —
 
@@ -4312,6 +4336,8 @@ Change (2026-10-31): **owner — calibrated PQZ prices live on the SCaaS testnet
 **Source.** `history/specs/2026-10-06-pq-zether-design.md:318`
 
 Change (2026-10-20): controller proposal (owner may override) — UA-6 (CTR-UA-30, U3, U5, U7): the rule becomes **only a PQ signing UA carries a PQZ key and it authorizes every spend**: `requireAuthorized(fromUA, PURPOSE_ZETHER_AUTH, authDigest, authSig)` on the signing UA itself, no `authRef` hop; the weight rule of `msig` (non-PQ weight below the threshold) is read from `keyData` and a PQ-eligible `msig` registers with its m-of-n `pop`; `slhdsa128s` is no direct holder; every other kind reverts `UAPqzHolder` (replaces `UAAuthRef`). The auditor and every credited leg must hold a PQZ key (`AccountNotRegistered`). A leaked PQZ secret is a read-only breach, for an `msig` holder one view / prove key (the `survivesEncKeyLeak` wording is dropped). `R_TX`, `R_TX0`, `R_TXM`, `R_BURN`, the disclosure relations and the statement layout do not change (`ua ↔ pqzKey` is one-to-one and immutable); the PQZ statement vectors take ids as input words and stay byte-identical. Spec §4. Status: decided (owner rulings) / proposal (details); built in UA-6 (branch `ua6`, commits 9c2cbc5c, 8889a21b, a01ed25e).
+
+Change (2026-11-03, controller, owner may override; the spec review's I1; built on `msig-nested`): the `msig` holder bound counts the authorization's own calldata: `w + w / 63 + GAS_MARGIN + PQZ_DEBIT_MIN_GAS + 16 × a ≤ 2^24` and `PQZ_DEBIT_MIN_GAS + 64 × a ≤ 2^24`, the EIP-7976 floor, `a` the largest `MemberSig[]` a quorum signs, both levels. The flat formula lacked it too; nesting lifted the 16-signature limit, so the omission grew: `{fndsa512, [16, 12]}` was admitted and did not fit, 17.44 M. An `msig` member counts as PQ iff it is PQ-eligible itself (CTR-UA-38). Options: per kind exact for every kind, or one figure for the classical kinds. Choice: PQ signatures exact, every classical kind and native 1,024 B: a WebAuthn assertion or a wallet's ERC-1271 bytes have no fixed length, and a holder is PQ-dominant. Cost if wrong: a holder with many classical slots near the edge is refused, never one admitted that cannot spend, short of a wallet with a longer signature.
 
 ### CTR-PQZ-13 — 0x0142 pqz-mlwe is the PQZ key scheme id, not a UA kind
 - old: R282 · status: current · owner: no · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-13 · superseded-by: —
@@ -8805,6 +8831,11 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 | canon:D12 | ARCH-POS-06 | current |
 | canon:D14 | INT-ODOO-14 | current |
 | canon:D17 | CTR-ZTH-01 | current |
+| msig-nested:N0 | CTR-UA-38 | current |
+| msig-nested:N2 | CTR-UA-38 | current |
+| msig-nested:N5 | CTR-UA-38 | current |
+| msig-nested:N14 | CTR-UA-38 | current |
+| msig-nested:N15 | CTR-UA-38 | current |
 | net-aptos:L1 | NET-ALL-06 | current |
 | net-aptos:L2 | NET-ALL-07 | current |
 | net-aptos:L3 | NET-ALL-08 | current |

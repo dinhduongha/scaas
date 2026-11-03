@@ -226,7 +226,7 @@ not contain its hash, so there is no cycle; one signature therefore covers the U
 
 Every kind signs `registrationDigest` the same way, under its own scheme (Zether `0x0141` and the group kinds keep theirs;
 only the message changed). A PQ-eligible `msig` signs with its m-of-n (`MemberSig[]`, derived members under
-purpose `member`): **each derived member signs `memberDigest` over `uaMessage(MSIG, PURPOSE_POP_V2, registrationDigest)`**, so a PoP
+purpose `member`, an `msig` member one level down, [CTR-UA-38](#CTR-UA-38)): **each derived member signs `memberDigest` over `uaMessage(MSIG, PURPOSE_POP_V2, registrationDigest)`**, so a PoP
 that holds a PQZ key or a KEM record is signed by every member over those hashes too. **A native member signs the record's typed digest
 itself** (owner 2026-10-31; replaces the EIP-191 `personal_sign` of `memberDigest`): an EOA — code-less, or an EIP-7702 designator —
 signs the digest `eth_signTypedData_v4` returns for the record (65-byte `r ‖ s ‖ v`, low s) by its own key only, never ERC-1271 through
@@ -306,12 +306,14 @@ a FROST share distribution that went wrong off chain (a bad VSS share, one party
 invisible to the chain.
 
 <a id="structures"></a>
-<a id="CTR-UA-09"></a>**CTR-UA-09** — **Structures commit to their members; nesting is one level.** `msig` key data lists
-members by `(kind, id, weight)`, strictly sorted by id; a member may not itself be a structure. (A `bls12381-multi` kind
+<a id="CTR-UA-09"></a>**CTR-UA-09** — **Structures commit to their members; verification goes two levels.** `msig` key data lists
+members by `(kind, id, weight)`, strictly sorted by id. A member may be an `msig`, beside signing members, and verification goes two levels only: an
+`msig` that holds an `msig` member cannot itself be a member ([CTR-UA-38](#CTR-UA-38), owner 2026-11-02). (A `bls12381-multi` kind
 was cut — no consumer, and `msig` over `bls12381-minsig` covers it; number `0x0121` stays reserved.) The call takes the
-structure typed (`registerMsig`, [CTR-UA-36](#CTR-UA-36)); the registry assembles these bytes, so the id is the packed form's. Bounded gas, no
-cycles, a simple audit. Two-level governance uses `SmartKeyAccount` or Safe (native 1271) as a member. A stored signature of an
-`msig` (`pop`, KEM, PQZ key) is **minimal**: every slot necessary, see [CTR-UA-07](#CTR-UA-07) (owner 2026-10-31).
+structure typed (`registerMsig`, [CTR-UA-36](#CTR-UA-36)); the registry assembles these bytes, so the id is the packed form's. Bounded gas (§1.8 step 4), no
+cycles: an id hashes the key data that holds its members' ids, and a member is registered first. `SmartKeyAccount` or Safe (native 1271) as a member is another way to
+two-level governance. A stored signature of an
+`msig` (`pop`, KEM, PQZ key) is **minimal** at each level: every slot necessary, see [CTR-UA-07](#CTR-UA-07) (owner 2026-10-31).
 
 <a id="registration-gate"></a>
 <a id="CTR-UA-25"></a>**CTR-UA-25** — **No on-chain registration gate in v1** (owner): registration spam is bounded by
@@ -389,10 +391,10 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   argument (`keyData`, `attrs`, `pqzPop`) and the `checked` values stay in the event. On Soroban (owner 2026-11-01) `key_data`
   stays too unless it is over 15,360 B, when `UaRegistered` carries it empty, by its length alone: the id stays the topic and
   `record_of` / `registration_of` return the bytes. Only a `frost-bn254` key reaches that, under the 16,384 B events limit.
-- **B.** In `UASig.members` (`MemberSig[]`, [CTR-UA-36](#CTR-UA-36); also the `pop` of `registerMsig` and the KEM / PQZ-key signatures of an `msig`), every `MemberSig.keyData`
-  is empty: a native member has no key data, a registered member's key is read from its own record — `vk` at `keyPtr` for the
+- **B.** In `UASig.members` (`MemberSig[]`, [CTR-UA-36](#CTR-UA-36); also the `pop` of `registerMsig` and the KEM / PQZ-key signatures of an `msig`), a
+  `MemberSig` has no key data at all (`{index, members, sig}`, owner 2026-11-02, [CTR-UA-38](#CTR-UA-38)): a native member has none, a registered member's key is read from its own record — `vk` at `keyPtr` for the
   stored kinds, the key data in the registration blob for the classical kinds — the key bytes only, never the member's
-  `pop`, whose length the member chose (every member is registered or native, §1.8 step 4). A non-empty `keyData` fails the member (`UAUnauthorized`, `UAPoP` in `register`). On EVM the rule is tied to the
+  `pop`, whose length the member chose (every member is registered or native, §1.8 step 4). On EVM the rule is tied to the
   purpose `member`: `requireAuthorized(id, PURPOSE_MEMBER, …)` takes a `UASig` with an empty `keyData` for every derived
   id, so a gen 2 hands a member of a gen-1 kind to gen 1 with the empty key data and gen 1 reads its record; other purposes
   keep `keyData` + `signature` with the key data of a classical kind.
@@ -497,14 +499,14 @@ arguments (`IUARegistry`, [§1.8](#registry); client builders [CLI-SGN-41](../cl
 | Write | Selector | Takes |
 |---|---|---|
 | `register` | `0x4e229efb` | `(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop)`: every derived kind but `msig` |
-| `registerMsig` | `0x82b86a46` | `(MsigStructure structure, UAAttrs attrs, MemberSig[] pop, bytes pqzPop)`; `register(0x0120, …)` reverts `UAKeyData(0x0120)` |
+| `registerMsig` | `0x61947129` | `(MsigStructure structure, UAAttrs attrs, MemberSig[] pop, bytes pqzPop)`; `register(0x0120, …)` reverts `UAKeyData(0x0120)` |
 | `registerWebAuthn` | `0xee03a1fe` | `(WebAuthnKey key, UAAttrs attrs, bytes pop, bytes pqzPop)` |
 | `registerMuSig2` | `0xe1eddcdf` | `(uint16 kind, MuSig2Key key, UAAttrs attrs, bytes pop, bytes pqzPop)`, kind `0x0110` or `0x0112` |
 | `registerFrost` | `0x7bd63410` | `(uint16 kind, FrostKey key, UAAttrs attrs, bytes pop, bytes pqzPop)`, kind `0x0111` or `0x0113` |
-| `setKemKey` | `0xa00cce2a` | `(bytes32 ua, uint64 version, KemKey kem, UASig sig)` |
-| `setPqzKey` | `0x3c6897f1` | `(bytes32 ua, bytes pqzKey, bytes32 pqzPopHash, UASig sig)` |
+| `setKemKey` | `0x6a3318f9` | `(bytes32 ua, uint64 version, KemKey kem, UASig sig)` |
+| `setPqzKey` | `0x0052c1b5` | `(bytes32 ua, bytes pqzKey, bytes32 pqzPopHash, UASig sig)` |
 | `storePqzPop` | `0x7fac161a` | `(bytes32 ua, bytes pqzPop)` |
-| `acceptMembership` | `0x73fd7d54` | `(bytes32 ua, MemberSig memberSig)`: one slot of an `msig`, [CTR-UA-37](#CTR-UA-37) |
+| `acceptMembership` | `0x2c1ac986` | `(bytes32 ua, MemberSig memberSig)`: one slot of an `msig`, [CTR-UA-37](#CTR-UA-37) |
 
 - **Typed keys.** `webauthn-p256` (`0x0100`) and the MuSig2 / FROST kinds (`0x0110`–`0x0113`) register through their typed entry or through
   `register` with the packed key data (owner 2026-10-31): both forms give the same id and run the same `validateKeyData`, and the typed entries are the recommended client
@@ -530,8 +532,8 @@ Registration is unchanged: a PQ-eligible `msig` is signed by a threshold of its 
 member can be listed without knowing it. `msigOf` makes no claim that a member agreed; `memberAccepted(ua, index)` does. Wallets and
 explorers show listed and accepted apart.
 
-- **Accepting.** `acceptMembership(ua, MemberSig{index, "", sig})`, one slot per call; anyone submits, so a member needs no gas.
-  `index` is the slot, `keyData` empty ([CTR-UA-33](#CTR-UA-33)). A native member signs `typed(UAMembership{ua, member})`
+- **Accepting.** `acceptMembership(ua, MemberSig{index, [], sig})`, one slot per call; anyone submits, so a member needs no gas.
+  `index` is the slot. An `msig` member accepts by a threshold of its own accepted slots, `MemberSig{index, members, ""}` ([CTR-UA-38](#CTR-UA-38)). A native member signs `typed(UAMembership{ua, member})`
   (`eth_signTypedData_v4`) or answers ERC-1271 over it; a derived member signs `memberDigest` under `member`, with the purpose
   `PURPOSE_MEMBERSHIP = keccak256("scaas.ua.purpose.membership.v1")`, so a `pop`, `kem` or `pqz-key` signature is never an acceptance, nor the reverse.
   The struct is portable (domain `DS_P`, no chain, no registry): the same signature accepts on every registry, as
@@ -542,6 +544,13 @@ explorers show listed and accepted apart.
 - **State.** One bitmap slot per `msig`, bit `i` = slot `i`, written at registration: a slot that signed the stored `pop` is accepted from
   the start (a portable `pop` does this on each registry it is copied to); an empty `pop` writes nothing, so every slot starts unaccepted.
   Each registry keeps its own bits: on a new chain a member accepts there too, with the same signature.
+- **The signature is kept, and a copy replays it** (owner 2026-11-03). `acceptMembership` stores it with the bit, written once, bound to `(ua, index)`, as Soroban's `AcceptSig`: the
+  slot's `sig`, or an `msig` member's `abi.encode(InnerSig[])`, the slot's kind in `msigOf` says which. `membershipSigOf(ua, index)` returns it, as Soroban's `membership_sig_of`; empty for a slot of the
+  `pop`, whose signature the `pop` holds, for a slot not accepted and for any other id; gen 2 forwards a gen-1 record. Copying a record needs no new signature: a third party sends
+  `acceptMembership` on the new registry with the stored bytes. A `pop` with a slot of an inner `msig` that accepted this way reverts `UAPoP` on that registry until the acceptance is replayed, the inner's leaves first.
+- **What an acceptance costs.** Keeping the signature is what costs: it is a contract, paid in EIP-8037 state gas, by whoever submits. Measured (`test_acceptanceCostRows`, regular + state): a native member, 65 B stored, the first bit of
+  the word: 97,867 + 578,340 (before: 58,776 + 97,920); an `msig` member, a two-leaf list, 384 B stored, a later bit: 164,803 + 968,490 (before: 124,083 + 0). The state grows with the stored bytes, about 1,530 gas a byte, from those two rows: an ML-DSA-65 `sig`
+  of 3,309 B costs about 5.4 M state gas, by that slope, not measured. Regular + state must fit one block (EIP-8037). A verification pays none of this: it reads the bit.
 - **Verify.** In every `msig` verification (`requireAuthorized`, the ERC-1271 and UA envelope paths through it, `setKemKey`, `setPqzKey`) a
   `MemberSig` of an unaccepted slot fails the verification, even with a good signature. The registration's own `pop` is exempt: it is what
   accepts its signers. **On a registry with this rule, until the accepted weight reaches the threshold, the `msig` can authorize nothing, on any
@@ -558,7 +567,28 @@ explorers show listed and accepted apart.
   may add it later.
 - **Generations.** The bits live with the record. A gen-1 record on a gen 2 is settled as `setKemKey` does (UA8-D11): `acceptMembership` there
   is `UAUnauthorized` and the member accepts on gen 1; `memberAccepted` forwards to gen 1, and so does the verify, including `setPqzKey` on a
-  gen 2 that hosts the record.
+  gen 2 that hosts the record. So does `membershipSigOf`. A native member of a structure gen 1 holds is judged by gen 1's clone hash (`smartKeyCloneHash`) in the portable path on gen 2 too.
+
+<a id="CTR-UA-38"></a>**CTR-UA-38** — **An `msig` may hold `msig` members; verification goes two levels only** (owner 2026-11-02; [decisions.md](../decisions.md); design and measurements: spec
+`superpowers/specs/2026-11-02-msig-nested.md`). UNAUDITED. **EVM: BUILT.** Soroban, NEAR and Algorand: not built, each takes the rule in its own round, see Staging.
+
+- **Members.** An `msig` lists signing members, native members and `msig` members in any mix. MuSig2 and FROST are members too: each is one key on chain (owner 2026-11-02). An `msig` member is registered first and
+  holds no `msig` itself, else listing it reverts `UAMemberUnknown`, naming the id one level too deep. The same id may sit at both levels, or in two inner `msig`s: the structure says so, each slot counts in the bound.
+- **Shape** (owner 2026-11-02). `InnerSig {uint16 index; bytes sig}`; `MemberSig {uint16 index; InnerSig[] members; bytes sig}`, `members` where the always-empty `keyData` sat. A signing slot has `sig` and an empty list; an `msig` slot
+  its list and an empty `sig`; anything else fails the slot. `InnerSig` has no list, so a third level has no form. An empty array encodes as empty `bytes` did: a flat signature's bytes, every stored `pop`, did not move. Every signature holding
+  `MemberSig` changed selector, the tuple is `(uint16,(uint16,bytes)[],bytes)`; no typehash moved.
+- **Digest.** `md_I = keccak256(I ‖ uaMessage(MSIG, member, md_U))`: an inner slot is the `msig` check run one level down, under purpose `member` whatever the outer's. A derived leaf of `I` signs under `member` over `md_I`; a native leaf
+  signs the record's typed digest in the portable purposes, `UAAuth(id, member, md_I)` elsewhere, in the domain of the registry that holds `I`. A list made for one outer fails in another holding the same `I`.
+- **One native signature, two slots** (owner 2026-11-02). A native signer listed in two inner `msig`s of one outer signs a portable record once, and that signature serves both slots of that record, bound to that outer and that record.
+- **Minimal.** [CTR-UA-07](#CTR-UA-07)'s rule holds at both levels in the portable path, and an acceptance's inner list is minimal too.
+- **Acceptance** ([CTR-UA-37](#CTR-UA-37)). Each word speaks for its own structure and both are read at verify. An inner `msig` accepts its slot in `U` by a threshold of its own accepted slots over `UAMembership{U, I}`. The `pop` exemption stops at the outer.
+- **PQ eligibility** ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12)). An `msig` member counts as PQ iff it is PQ-eligible itself, read from its record.
+- **Limits.** The bound of §1.8 step 4 limits what verifies: every signature across both levels. It does not limit what registers: an all-PQ structure stores its `pop`, whose regular + state gas must fit one block (EIP-8037). 32 ML-DSA-65 signatures, 111,040 B of
+  `pop`: 180,984,718 in all; 48, 166,528 B: 271,648,028, which verifies under the budget and does not fit a 200 M block. A chain's block limit is its own: the registry assumes none.
+- **Generic `bytes auth`.** The tokens' generic entries forward the blob past its one offset word and the registry's calldata decoder reads it (`UAKinds.uaAuthCall`): no parser on an untrusted path. A low-level call replaces the typed one, with the no-code check before it.
+- **Generations.** A gen 2 over a gen 1 without this ABI does not deploy (`UAConfig(0)`, the constructor calls `membershipSigOf`). A gen 1 must be redeployed for it: nothing with value is live.
+- <a id="msig-staging"></a>**Staging** (owner 2026-11-03). EVM goes first; each other family in its own round, Soroban, NEAR and Algorand each separately. **Until its round a family refuses a record that holds an `msig` member**, and its flat bytes are unchanged:
+  Soroban's `layout_member_ok` has no `msig` arm, so `register_msig` is `KeyData` ([NET-SOR-18](../networks/soroban.md#NET-SOR-18)); NEAR has no nested `msig` ([NET-NEAR-04](../networks/near.md#NET-NEAR-04)); Algorand refuses the member kind ([NET-ALG-09](../networks/algorand.md#NET-ALG-09)).
 
 ### 1.5 Keys, purposes, tags
 
@@ -736,7 +766,7 @@ still need a new UA.
 |---|---|---|
 | ZETHER | `0x0141` | the confidential account of the Zether tokens (`kindOf` in `ZetherLib`); also in SIGNING |
 | SIGNING | every derived kind: single-key `0x0100`–`0x0108`, `0x0110`–`0x0113`, `0x0130`–`0x0133`, `0x0141`, and the structure `0x0120` | `requireAuthorized` (native or SIGNING); v3 `from`/`to` (native or registered SIGNING, else `UAKindNotAccepted(kind)`) |
-| MEMBER | SIGNING single-key kinds except `0x0141` (a hot Zether key stays out of `msig`s), plus the native kinds the chain profile can verify, all with `id >> 160 == 0` — on EVM `0x0001`–`0x0002`; `0x0003` **only** in a Hedera-profile registry (constructor immutable `hederaNative`, HIP-632) | `msig` members (`UAMemberUnknown`); no other family's native kind, no `hedera-native` outside Hedera and no structure is ever an EVM member |
+| MEMBER | SIGNING single-key kinds except `0x0141` (a hot Zether key stays out of `msig`s), plus `msig`, one level down ([CTR-UA-38](#CTR-UA-38)), plus the native kinds the chain profile can verify, all with `id >> 160 == 0` — on EVM `0x0001`–`0x0002`; `0x0003` **only** in a Hedera-profile registry (constructor immutable `hederaNative`, HIP-632) | `msig` members (`UAMemberUnknown`); no other family's native kind, no `hedera-native` outside Hedera and no `msig` that holds an `msig` is ever an EVM member |
 
 #### <a id="musig2-and-frost-what-the-registry-checks"></a>1.6.1 MuSig2 and FROST: what the registry checks
 
@@ -953,7 +983,7 @@ supplied in `register(kind, keyData, attrs, pop, pqzPop)` as `attrs.pqzKey` with
 signer's PoP covers; the `R_REG` proof over the portable digest ([CTR-UA-07](#CTR-UA-07)) is **optional** in the call
 (owner 2026-10-25, UA-8 P8). Holders: single-key `mldsa44`, `mldsa65`, `fndsa512`, and an `msig` whose
 members of kinds other than `0x0130`–`0x0133` weigh less than its threshold ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12));
-every other kind, `slhdsa128s` and Zether included, reverts `UAPqzHolder`. An `msig` holder whose worst-case authorization plus `PqzSet.PQZ_DEBIT_MIN_GAS` (the cheapest PQZL debit, full relayed transaction) exceeds 2^24 (EIP-7825) reverts `UAPqzHolder` too, so that no holder is registrable but unable to spend ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12), review2 C0-5). A PQ-eligible `msig` always registers with
+every other kind, `slhdsa128s` and Zether included, reverts `UAPqzHolder`. An `msig` holder whose worst-case authorization plus `PqzSet.PQZ_DEBIT_MIN_GAS` (the cheapest PQZL debit, full relayed transaction) and the authorization's own calldata exceeds 2^24 (EIP-7825) reverts `UAPqzHolder` too, so that no holder is registrable but unable to spend ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12), review2 C0-5). A PQ-eligible `msig` always registers with
 its m-of-n `pop` (a squatter could otherwise fix it without a key forever). The PQZ key is not in the id, and it never changes
 once set: **at most one PQZ key per UA per chain, written once** — with one exception, a key this chain can never prove (below). A PQ signer registered without one may add it later by
 `setPqzKey(ua, pqzKey, pqzPopHash, sig)` (controller call, owner may override: otherwise an old copied registration
@@ -1238,7 +1268,8 @@ interface IUARegistry is IERC5267 {
 
     struct KemKey { uint8 scheme; bytes mlkemEk; bytes32 x25519; }   // scheme 1: 1,568-byte ek; kemPk = scheme ‖ mlkemEk ‖ x25519 (1,601 B); all zero = no key
     struct UAAttrs { bytes pqzKey; bytes32 pqzPopHash; KemKey kem; bytes32 kemPkHash; }   // empty / 0 = absent; pqzPopHash = keccak256(pqzPop) whenever pqzKey is set; the KEM key is version 0: kem in full, or (hash commit, CTR-UA-32) kem = the scheme only + kemPkHash
-    struct MemberSig { uint16 index; bytes keyData; bytes sig; }     // keyData always empty (CTR-UA-33)
+    struct InnerSig { uint16 index; bytes sig; }                     // a slot of an inner msig: no list, so no third level (CTR-UA-38)
+    struct MemberSig { uint16 index; InnerSig[] members; bytes sig; } // a signing member: sig; an msig member: members (CTR-UA-38)
     struct UASig { bytes keyData; bytes signature; MemberSig[] members; }   // CTR-UA-36: native signature; derived keyData + signature; msig members
     struct MsigMember { uint16 kind; bytes32 id; uint16 weight; }
     struct MsigStructure { uint16 threshold; MsigMember[] members; }       // the CTR-UA-09 key data, typed
@@ -1325,6 +1356,8 @@ interface IUARegistry is IERC5267 {
     /// anyone: slot memberSig.index of the msig ua accepts its place, the member's signature (CTR-UA-37); a no-op once accepted
     function acceptMembership(bytes32 ua, MemberSig calldata memberSig) external;
     function memberAccepted(bytes32 ua, uint256 index) external view returns (bool);
+    function membershipSigOf(bytes32 ua, uint256 index) external view returns (bytes memory); // CTR-UA-37: `sig`, or abi.encode(InnerSig[])
+    function smartKeyCloneHash() external view returns (bytes32);                             // 0 for none
 
     function recordOf(bytes32 ua) external view returns (Record memory r, address pqzKey);   // pqzKey: SSTORE2 pointer, proven or not (a directory), 0 = none
     /// exactly the register arguments (a PQZ key added later by setPqzKey is not in attrs: pqzKeyOf, pqzPopOf, pqzKeySigOf);
@@ -1388,7 +1421,7 @@ it. The v3 token's own native path keeps its `UAMetaTransaction` typed data.
    `UAAlreadyRegistered`.
 4. Single-key kinds: `kh = keyHashOf(kind, keyData)`; `keyOwner[kh] == 0` here and in the predecessor — `UAKeyInUse`.
    Structures: every member's kind ∈ MEMBER of this registry's profile (`0x0003` only if `hederaNative()`) and the member
-   is native or `kindOf(member) == memberKind` (here or in the predecessor) — `UAMemberUnknown`; and the worst-case
+   is native or `kindOf(member) == memberKind` (here or in the predecessor), an `msig` member holding no `msig` itself — `UAMemberUnknown`; and the worst-case
    verify gas of a minimal authorizing set — Σ of the `c` largest member `verifyCap`s plus a fixed per-member overhead
    (`MSIG_MEMBER_GAS`) plus the one read of the accepted bits (`MSIG_ACCEPTED_GAS`, [CTR-UA-37](#CTR-UA-37)), `c` = the number of
    lightest-weight members needed to reach the threshold — is ≤
@@ -1398,12 +1431,13 @@ it. The v3 token's own native path keeps its `UAMetaTransaction` typed data.
    such entry among the `c` — a member of this generation with its cap, or a handed one with `cap + cap / 63 + 5 k`; if
    `held` is above the 400 k that `MSIG_MEMBER_GAS` holds for (the PQ caps, P6c), the bound adds `(held − 400 k) / 63`. The bound is sound because
    verification stops at the threshold, so no accepted set has more than `c` members (T-GAS authorizes an `msig`
-   registered exactly at the budget with `verifyBudget` gas).
+   registered exactly at the budget with `verifyBudget` gas). An `msig` member's own worst is that slot's cap, so the total counts every signature across both levels; `held` is the largest single
+   cap at either level, and one held by gen 1 is one more call level, its natives at 400 k ([CTR-UA-38](#CTR-UA-38)).
 5. Attributes (before the PoP, in the order of `portable.json`'s `negatives`). PQZ key (only if `attrs.pqzKey` is non-empty): on a
    generation 2 whose generation 1 enables `0x0142`, `UAKindDisabled(0x0142)` (the PQZ attachment lives in one generation; this
    check comes before the holder check, so on such a gen 2 a non-holder's PQZ key gets `UAKindDisabled` and not `UAPqzHolder`); the holder
    rule of [CTR-UA-16](#CTR-UA-16) (single-key `mldsa44`/`mldsa65`/`fndsa512`, or an `msig` whose members of other kinds weigh
-   less than its threshold, read from `keyData`, and whose worst-case authorization plus the cheapest PQZ debit fits the
+   less than its threshold, read from `keyData`, and whose worst-case authorization plus the cheapest PQZ debit and the authorization's own calldata fits the
    EIP-7825 cap) — `UAPqzHolder`. KEM key (only if `attrs.kem` or `attrs.kemPkHash` is set): a holder of the same set
    (without the debit bound) — `UAKemHolder`. A PQZ key comes with `attrs.pqzPopHash` and only with it, the hash is not
    `keccak256("")`, and given proof bytes hash to it — `UAPqzPopHash`; the key has the length of one of the four parameter
@@ -1565,12 +1599,12 @@ native   : ECDSA / 1271 over uaAuthDigest(ua, purposeTag, digest), classified by
 | `schnorr-bls12381` | `R ‖ z` (160) | as above on BLS12-381 G1 |
 | `bls12381-minsig` | G1 sig (128) | `HashToCurve.hashToG1(ua_msg, DST)` with `DST_SIG = "SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_"`, PoP uses `…_POP_`; sig in subgroup, ≠ O |
 | `bls-bn254-minsig` | G1 sig (64) | `mapToG1("SCAAS-UA-BLS-BN254-SIG-V1" ‖ ua_msg)` (POP label for PoP); pairing `0x08` |
-| `msig` | `auth.members`, `MemberSig{uint16 index; bytes keyData; bytes sig}` with strictly increasing `index`; the structure is read from the record ([CTR-UA-36](#CTR-UA-36)); a token's `bytes auth` until Part C: `abi.encode(keyData, sig)` with `sig` = `abi.encode(MemberSig[] sigs)` | for each: member `kind,id` from the structure; every `MemberSig.keyData` empty (else `UAUnauthorized`; [CTR-UA-33](#CTR-UA-33)); native ⇒ ECDSA/1271 over `uaAuthDigest(id, PURPOSE_MEMBER, member_digest)`; registered (derived) ⇒ the key from the member's own record: `vk` at its `keyPtr` (stored kinds), else the key data in its registration blob (classical kinds; every member is registered, step 4, and records are immutable); a member of a kind gen 2 does not enable goes to gen 1 with the empty key data (gen 1 reads its record); verifier over `uaMessage(kind, PURPOSE_MEMBER, member_digest)`; `member_digest = keccak256(ua ‖ ua_msg)`; **stops at the threshold**: a `MemberSig` after Σ weight ≥ threshold ⇒ `UAUnauthorized` (keeps register step 4's bound sound); an `auth` or `MemberSig[]` that does not ABI-decode reverts without data (fails closed) |
+| `msig` | `auth.members`, `MemberSig{uint16 index; InnerSig[] members; bytes sig}` with strictly increasing `index`; the structure is read from the record ([CTR-UA-36](#CTR-UA-36)); a token's `bytes auth` until Part C: `abi.encode(keyData, sig)` with `sig` = `abi.encode(MemberSig[] sigs)` | for each: member `kind,id` from the structure; every `MemberSig.keyData` empty (else `UAUnauthorized`; [CTR-UA-33](#CTR-UA-33)); native ⇒ ECDSA/1271 over `uaAuthDigest(id, PURPOSE_MEMBER, member_digest)`; registered (derived) ⇒ the key from the member's own record: `vk` at its `keyPtr` (stored kinds), else the key data in its registration blob (classical kinds; every member is registered, step 4, and records are immutable); a member of a kind gen 2 does not enable goes to gen 1 with the empty key data (gen 1 reads its record); verifier over `uaMessage(kind, PURPOSE_MEMBER, member_digest)`; `member_digest = keccak256(ua ‖ ua_msg)`; **stops at the threshold**: a `MemberSig` after Σ weight ≥ threshold ⇒ `UAUnauthorized` (keeps register step 4's bound sound); an `auth` or `MemberSig[]` that does not ABI-decode reverts without data (fails closed) |
 | `mldsa*` / `fndsa512` / `slhdsa128s` | raw signature | ML-DSA: an EIP-8355 precompile if probed, else Solidity on the cached expanded key (`verifyCached`, parts by EXTCODECOPY; P6c); FN-DSA, SLH-DSA (on SHA-256 `0x02`): Solidity; `pk` from `keyPtr` (EXTCODECOPY); ML-DSA and SLH-DSA verify `pq_msg` with the empty context, Falcon `ua_msg` ([CTR-UA-23](#CTR-UA-23); verifiers BUILT, P6a; registry BUILT, P6c) |
 | `zether-bls12381` | `R ‖ z` (160) | Zether Schnorr with tag `SCAAS-ZETHER-SCHNORR-V1` over `ua_msg` — never the UA Schnorr tag, so a Zether key never produces a `schnorr-*` signature |
 
 Members of `msig` (kinds ∈ MEMBER) may be native EOAs, native contracts (Safe, `SmartKeyAccount`), or registered
-single-key UAs (incl. PQ, MuSig2, FROST); never a Zether UA or a structure. This is how "a UA that is the hash of an
+single-key UAs (incl. PQ, MuSig2, FROST: each one key on chain), or a registered `msig` that holds no `msig` ([CTR-UA-38](#CTR-UA-38)); never a Zether UA. This is how "a UA that is the hash of an
 MPC/multisig structure pointing to members with their own schemes" is expressed (owner).
 
 Per-chain enablement:

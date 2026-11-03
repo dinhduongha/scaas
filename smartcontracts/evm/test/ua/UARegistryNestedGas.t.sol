@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {Vm} from "forge-std/Vm.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -431,5 +432,27 @@ contract UARegistryNestedGasTest is UARegistryBase {
         key[0] = 0x01;
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, UAKinds.uaOf(UAKinds.MSIG, d)));
         UACall.register(r, UAKinds.MSIG, d, UACall.attrs(key, keccak256("proof"), ""), hex"01", "");
+    }
+
+    // ----- spec §6: what registers, as one transaction (review I3) -----
+
+    /// Rows `REG|name|signatures|pop bytes|regular|state`: an all-PQ structure must store its `pop`, so a verify limit is not a registration limit.
+    function _regCost(Case memory c) internal {
+        (UARegistry.KindConfig[] memory k,) = _config(c);
+        UARegistry r = _deploy(_at(), chainUidA, address(0), false, 12_000_000, address(0), true, k);
+        bytes memory d = _outerKey(r, c);
+        bytes memory p = abi.encode(_popSigs(r, c, d));
+        UACall.register(r, UAKinds.MSIG, d, _none(), p, "");
+        Vm.Gas memory g = vm.lastCallGas();
+        emit log_string(string.concat("REG|", c.name, "|", vm.toString(_leaves(c)), "|", vm.toString(p.length), "|", vm.toString(uint256(g.gasTotalUsed)), "|",
+            vm.toString(uint256(int256(g.gasStateUsed)))));
+    }
+
+    function test_registrationCostRows() public {
+        _regCost(_case("mldsa65 200k 1L", 0x0131, 200_000, 3309, 16, _none256()));
+        _regCost(_case("mldsa65 200k [16x3]", 0x0131, 200_000, 3309, 0, _uints(16, 3)));
+        _regCost(_case("mldsa65 200k [16x2]", 0x0131, 200_000, 3309, 0, _uints(16, 2)));
+        _regCost(_case("slhdsa128s 1L", 0x0133, 1_400_000, 7856, 8, _none256()));
+        _regCost(_case("slhdsa128s [1x8]", 0x0133, 1_400_000, 7856, 0, _uints(1, 8)));
     }
 }

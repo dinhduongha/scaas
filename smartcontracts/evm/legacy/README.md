@@ -126,5 +126,5 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `MemberSig.keyData` by `InnerSig[] members`: the pre-split source reads `keyData`, so neither side compiles any more. A
   finished refactor's check; its `abi.decode` of `MemberSig[]` would be `Stack too deep` here too. What still applies is in
   `test/ua/UARegistryLibMsig.t.sol`: `_msigIndexGuards`, the nested-offset note, `test_gasHotPath` against the figures of
-  `159d267e`. `test_split_portableRowsSame` and `test_split_storePqzPopWithAVerify` still name the pre-split artifact and
-  fail until they move here on landing. Not built.
+  `159d267e`. `test/ua/SplitDiff.sol` and `test/ua/UARegistryUA8-split.sol.txt`, the two `test_split_*` of `UARegistryUA8.t.sol`
+  with their helpers and `BurnAccept`, moved here on landing. Not built.

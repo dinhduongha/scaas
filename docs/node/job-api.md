@@ -276,8 +276,14 @@ JSON; the struct names are the vector file's keys.
 | `envelope` | `from` + `batch`, `nonce`, `validUntil`, `mode`, `relayer`, `fee`, `feeRecipient`, on every entry whose struct ends with them; exactly these keys |
 | `args` | The struct's other fields under their struct names, plus what the entry takes unsigned; exactly these keys, nested structs as objects, arrays as arrays. An entry with no envelope has its whole struct here |
 | `signature` | Hex, an entry that takes `bytes` (`uaShield` too: its `auth` is `bytes`) |
-| `auth` | The object: `UASig` `{keyData, signature, members: [{index, keyData, sig}]}` on `ua*`, `AccountSig` `{keyIndex, proof, signature}` on the account's own entries |
+| `auth` | The object: `UASig` `{keyData, signature, members: [{index, members: [{index, sig}], sig}]}` on `ua*` ([below](#member-sig-shape)), `AccountSig` `{keyIndex, proof, signature}` on the account's own entries |
 | `validUntil` | Job deadline, decimal string: required when nothing else gives one (an owner rollover, `mtxCancelOrders`, a plain entry without its own). It narrows a deadline the chain enforces, never extends it: the job's deadline is the minimum. A cancel has none, so there it stands alone (else the order's) |
+
+<a id="member-sig-shape"></a>**A slot of `MemberSig` (operators: the job shape changed, EVM, branch `msig-nested`, [CTR-UA-38](../contracts/accounts.md#CTR-UA-38)).** An `msig` slot in EVM job JSON, `pop`, `sig`, `auth`, `pqzAuth`, `ownerSig`, `memberSig`, is
+`{index, members, sig}`, no longer `{index, keyData, sig}`: a signing member `{"index": 1, "members": [], "sig": "0x…"}`, an `msig` member `{"index": 0, "members": [{"index": 0, "sig": "0x…"}], "sig": "0x"}`.
+A job in the old shape is refused `BAD_PAYLOAD: …keyData: unknown field`. Every selector holding `MemberSig` moved with it, so a client on the old ABI must update with the node. The decode is bounded by the type: two levels, no field `members` on an inner slot; and by
+16 slots at each level, `BAD_PAYLOAD: …: more than 16 slots`, checked before an element is read. The node builds the calldata from these fields, so overlapping offsets, which make the registry copy far more than the calldata holds before its first index check, cannot leave
+it from a named job. Soroban jobs keep `{index, key_data, sig}` until that family's round.
 
 Values: `uint` as canonical decimal strings (`uint8`, `uint16`, `uint32` may be JSON numbers), addresses `0x` + 20 bytes, `bytes32` /
 `bytes16` `0x` + exact length, `bytes` `0x`-hex, `bool` as JSON. Anything else is `BAD_PAYLOAD` naming the path. An unbound `relayer` /
@@ -529,7 +535,7 @@ order, and takes the op digest (the job id), `valid_until` and every check from 
   numbers; `u64`, `i64`, `Timepoint` and `Duration` a number or a decimal string (a client that cannot write one past 2^53, such as
   an order `salt`); `bool` a boolean; `Address` a `G…` or `C…`; `Option<Address>` null or an address; `Symbol` and `String` strings;
   `Holder` `{"Addr": "G…"}` or `{"Ua": "0x…"}`; `UaSig` `{key_data, signature, members}`, as a `call` job's `sig`; `MemberSig` `{index,
-  key_data, sig}`; `Order` `{maker, destination, relayer, sell_token, sell_amount, buy_token, buy_amount, max_fee_ppm, expiry, salt}`.
+  key_data, sig}`, flat, `key_data` empty, a filled one refused at build (Soroban has no `msig` member until its round, [CTR-UA-38](../contracts/accounts.md#msig-staging)); `Order` `{maker, destination, relayer, sell_token, sell_amount, buy_token, buy_amount, max_fee_ppm, expiry, salt}`.
 - `ua_relay`'s `args` is the relayed call's arguments, whose types the contract does not declare: a list of `{type, value}`, `type` one of
   the names above, `Vec<Val>` (a list of `{type, value}`), `Map` (a list of `{key, val}`, each a `{type, value}`, in any order; the
   node sorts it) or `Void` (`value` null). `Error` and the host's ledger-key values are no argument a job can name.

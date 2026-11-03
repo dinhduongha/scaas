@@ -142,7 +142,7 @@ abstract contract UARegistryBase is Test {
     address internal constant REG_A = 0x5Ca0000000000000000000000000000000000001;
     bytes32 internal constant DIGEST = keccak256("scaas.ua.test.digest");
 
-    /// What `_deploy` deploys; `test/ua/UARegistrySplit.t.sol` points it at the pre-split source for one run of a scenario.
+    /// What `_deploy` deploys; a suite may point it at another artifact for one run of a scenario.
     string internal registryArtifact = "UARegistry.sol:UARegistry";
     bytes32 internal chainUidA;
     MockVerifier internal mock;
