@@ -1,5 +1,7 @@
 # Governance: `GovernanceBase`, the grant record, the holder, the enum, hybrid underlying, the receiver check — design
 
+**Accepted by the owner, 2026-11-03.** The build starts after `msig-nested` reaches `main`.
+
 **Status:** SPECIFIED, nothing BUILT. Written 2026-11-02 on branch `governance` at `08e92597`, from the rulings CTR-GOV-01 to -18; corrected 2026-11-03 at `9f1744c7` from three reviews of `d1132a40` (Claude, Codex, agy; §0.1) and the owner's rulings of that day, and after `6e09e008` from the final review (Fable; §0.1). A measured prototype of D1 and D2 sits on the same
 branch (`66c3e74b`, `0e1cf3ac`); it is not a build of this spec. Rows of §0 cite the ruling or finding they rest on; the rows marked **controller call** are the controller's and the owner may
 override them. CTR-GOV-19 ended the size gate: §9 is the record of what a public chain still needs, and it blocks nothing. Everything cryptographic here stays `UNAUDITED`.
