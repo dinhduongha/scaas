@@ -855,12 +855,16 @@ make_summary() {
       n=$(sed -E 's/\x1b\[[0-9;]*m//g' "$f" | awk '
         /^test result: .* [0-9]+ passed;/ { for (i = 1; i <= NF; i++) { if ($(i+1) ~ /^passed/) p += $i; if ($(i+1) ~ /^failed/) fl += $i; if ($(i+1) ~ /^ignored/) ig += $i } }
         /\[PASS\]/ { fp++ } /\[FAIL/ { ff++ }
+        /^Ran [0-9]+ test suites.*: [0-9]+ tests passed, [0-9]+ failed, [0-9]+ skipped/ { # forge totals: fuzz and table rows print [PASS] more than once
+          match($0, /: [0-9]+ tests passed, [0-9]+ failed, [0-9]+ skipped/); split(substr($0, RSTART + 2, RLENGTH - 2), a, /[ ,]+/)
+          rp += a[1]; rf += a[4]; rs += a[6]; ran = 1 }
         /^ℹ pass / { np = $3 } /^ℹ fail / { nf = $3 }
         /^--- PASS:/ { gp++ } /^Ran [0-9]+ tests? in/ { py += $2 }
         /Passed [A-Za-z]/ { cs++ } /Test +#[0-9]+: .* Passed/ { ct++ } /PASS +: / { qt++ }
         END { o = ""
           if (p + fl) o = o p " passed " fl " failed " ig " ignored (cargo) "
-          if (fp + ff) o = o fp " passed " ff " failed (forge) "
+          if (ran) o = o rp " passed " rf " failed " rs " skipped (forge) "
+          else if (fp + ff) o = o fp " passed " ff + 0 " failed (forge) "
           if (np + nf) o = o np " passed " nf " failed (node) "
           if (gp) o = o gp " passed (go) "; if (py) o = o py " ran (unittest) "
           if (cs) o = o cs " passed (dotnet) "; if (ct) o = o ct " passed (ctest) "; if (qt) o = o qt " passed (qt) "
