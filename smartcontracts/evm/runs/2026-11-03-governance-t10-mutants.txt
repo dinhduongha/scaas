@@ -1,0 +1,9 @@
+# governance T10 mutants at dc9bfde0 (clean tree), each one change, suite test/governance/*.t.sol,
+# restored by git checkout -- <file> after each.
+mutant | test that went red | rc
+m1 WrappedLib.rescue: the leg's post-transfer balanceOf >= reserve check dropped | test_rescueLegShortfallNamesItsError | 1
+m2 WrappedToken.rescue without nonReentrant | test_rescueReentrantAssetRefused | 1
+m3 WrappedLib.rescue: the foreign path's leg-balance read after the transfer dropped (alias) | test_rescueAliasOfALegRefused | 1
+m4 WrappedLib.rescue: a leg pays its whole balance, reserve not subtracted | test_rescueLegSurplusOnly, test_rescueNativeLessReserve, test_rescueLegShortfallNamesItsError, test_rescueOnTheZetherKinds, test_rescueOnThePqzKinds | 1
+m5 rescueTo writable: acceptOwnership also sets rescueTo to the new owner | test_rescueOnNormalTakesAll | 1
+# survivors: none
