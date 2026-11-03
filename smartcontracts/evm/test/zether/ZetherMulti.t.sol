@@ -329,6 +329,46 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         tok.mtxExecute(m, abi.encodePacked(r, sg, v));
     }
 
+    // ------------------------------------------------------------------ malformed calldata (CTR-ZTH-94)
+
+    /// `c` with the word at byte `pos` set to `v`.
+    function _setWord(bytes memory c, uint256 pos, uint256 v) internal pure returns (bytes memory out) {
+        out = bytes.concat(c);
+        assembly ("memory-safe") { mstore(add(add(out, 32), pos), v) }
+    }
+
+    /// The token hands `ZetherLib` its own calldata followed by `abi.encode(mode, Env)` (seven words), and an offset inside
+    /// `t` is checked where the library reads it, against that longer calldata. A `sealedMemo` offset aimed at the appended
+    /// binding word (0 on a direct call) reads as the empty memo, which is what the well-formed BUNDLE call has: the same
+    /// transfer, nothing the caller could not send. Aimed at the end of the appended words it is past the calldata, and refused.
+    function test_nestedOffsetReadsAnAppendedWord() public {
+        _funded(500);
+        uint256[] memory vs = new uint256[](2);
+        vs[1] = 77;
+        Tx memory t = _proveMulti(tok, alice, _to(2), vs, 500, carol.ua, ZetherTypes.TransferMode.BUNDLE);
+        IZetherToken.ZetherMulti memory z = _zMulti(t.payload, carol.ua);
+        assertEq(z.sealedMemo.length, 0, "a BUNDLE transfer has no memo");
+        bytes memory good = abi.encodeCall(IZetherToken.mtxConfidentialTransfer, (z, t.proof));
+        uint256 tAt;
+        assembly ("memory-safe") { tAt := add(4, mload(add(good, 36))) } // t's offset, from the selector's end
+        uint256 memoAt = tAt + 19 * 32; // t's head: six words, three points, `legs`, `sealedMemo`
+
+        (bool ok, bytes memory ret) = address(tok).call(_setWord(good, memoAt, good.length + 7 * 32 - tAt));
+        assertFalse(ok, "past the calldata");
+        assertEq(ret.length, 0);
+
+        uint256 snap = vm.snapshotState();
+        (ok,) = address(tok).call(_setWord(good, memoAt, good.length + 4 * 32 - tAt));
+        assertTrue(ok, "the binding word, 0, as the memo's length");
+        bytes32 entry = keccak256(tok.transferEntry(_ref(tok, alice, 0)));
+        assertTrue(_holds(tok, alice, 500 - 77 - FEE, true));
+        vm.revertToState(snap);
+        (ok,) = address(tok).call(good);
+        assertTrue(ok, "the well-formed call");
+        assertEq(keccak256(tok.transferEntry(_ref(tok, alice, 0))), entry, "the same record");
+        assertTrue(_holds(tok, alice, 500 - 77 - FEE, true));
+    }
+
     /// @dev A foreign token's entry that is not a record length: `RecordMalformed`.
     function test_disclosureBundleMode() public {
         _funded(500);

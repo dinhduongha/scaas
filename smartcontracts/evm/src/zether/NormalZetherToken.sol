@@ -32,12 +32,17 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
         return AdminLib.KIND_NORMAL_ZETHER;
     }
 
-    function _init(TokenConfig memory cfg) internal override(NormalToken, MetaTokenBase) {
-        _requireUnused(cfg, false, true, true, false);
-        _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-        AdminLib.init(AdminLib.KIND_NORMAL_ZETHER, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
-        ZetherLib.init(cfg.conf, TRANSFER_VERIFIER);
-        if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
+    /// @dev Never reached: `_initRaw` is the kind's init.
+    function _init(TokenConfig memory) internal override(NormalToken, MetaTokenBase) {}
+
+    /// @dev The init path in `ZetherLib` (CTR-ZTH-94, size lever 1 as on `WrappedZetherToken`): no `TokenConfig` coder
+    ///      stays here. In `NormalToken`'s order: the unused fields and the metadata, `AdminLib.init`, the Zether config,
+    ///      the initial mint.
+    function _initRaw(bytes calldata initArgs) internal override {
+        (uint256 features_, uint256 locked, address owner_, AdminLib.Roles memory roles) = ZetherLib.initNormal(initArgs);
+        AdminLib.init(AdminLib.KIND_NORMAL_ZETHER, features_, locked, owner_, roles);
+        (address holder, uint256 supply) = ZetherLib.initNormalConf(initArgs, TRANSFER_VERIFIER);
+        if (supply != 0) _mint(holder, supply);
     }
 
     function _domainName() internal pure override(ERC20MetaTx, ZetherLayer) returns (string memory) {
@@ -57,25 +62,12 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
     }
 
     /// @notice The allowlist (CTR-MTX-19, CTR-ZTH-34): `cancelNonce` (base), `burn(uint256)` `AMOUNT(0)`, then the
-    ///         Zether ops, each `ABSOLUTE`.
+    ///         Zether ops, each `ABSOLUTE`; the table is `ZetherLib.normalSelectors` (CTR-ZTH-94).
     function mtxSelectors()
         public pure override(NormalToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
-        s = new bytes4[](11);
-        c = new uint8[](11);
-        a = new uint8[](11);
-        (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
-        (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
-        (s[2], c[2]) = (IConfidentialToken.mtxShield.selector, FEE_CLASS_ABSOLUTE);
-        (s[3], c[3]) = (IZetherToken.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
-        (s[4], c[4]) = (IZetherToken.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[5], c[5]) = (IZetherToken.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
-        (s[6], c[6]) = (IZetherToken.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
-        (s[7], c[7]) = (IConfidentialToken.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
-        (s[8], c[8]) = (IZetherToken.mtxRollOverBatch.selector, FEE_CLASS_ABSOLUTE);
-        (s[9], c[9]) = (IZetherToken.mtxRollOverSigned.selector, FEE_CLASS_ABSOLUTE);
-        (s[10], c[10]) = (IZetherToken.mtxSetRollOverMode.selector, FEE_CLASS_ABSOLUTE);
+        return ZetherLib.normalSelectors();
     }
 
     function _mtxRule(bytes4 sel) internal view override(NormalToken, MetaTxBase) returns (MtxRule memory) {
