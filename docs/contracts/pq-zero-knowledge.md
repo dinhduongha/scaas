@@ -1312,7 +1312,7 @@ the `verifyTransferAmount` view ([integration.md](../integration.md#confidential
 <a id="authorization-check"></a>
 
 `registry.requireAuthorized(fromUA, PURPOSE_ZETHER_AUTH, authDigest, authSig)` (`authSig` is the `auth` argument of the entry points) on the signing UA itself, which must hold a
-PQZ key ([CTR-PQZ-12](#CTR-PQZ-12); `AccountNotRegistered` otherwise). `PURPOSE_ZETHER_AUTH =
+PQZ key ([CTR-PQZ-12](#CTR-PQZ-12); `AccountNotRegistered` otherwise); a revert there is `AuthRejected`, except a starved registry, `UAVerifyGas` (its own, or its frame out of gas: no revert data and at most the 1/64 the token kept; T-AUTH-4, as `UAStore.via`). `PURPOSE_ZETHER_AUTH =
 keccak256("scaas.ua.purpose.zether-auth.v1")`: `authSig = abi.encode(bytes keyData, bytes sig)` with empty `keyData` for
 stored PQ kinds ([CTR-UA-17](accounts.md#CTR-UA-17)), `msig` member signatures in the UA format. The signed message is
 **exactly** the UA tagged message ([CTR-UA-12](accounts.md#CTR-UA-12)), computed by the registry from the signer's

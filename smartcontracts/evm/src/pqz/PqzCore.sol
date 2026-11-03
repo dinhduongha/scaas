@@ -813,15 +813,19 @@ library PqzCore {
     }
 
     /// @dev The authority (registry: the signing UA `from` itself over `authDigest`, purpose `zether-auth`; UA-6 U7),
-    ///      then the proof.
+    ///      then the proof. A starved registry is `UAVerifyGas`, never `AuthRejected` (T-AUTH-4, as `UAStore.via`): its own
+    ///      `UAVerifyGas`, or its frame out of gas (no revert data, at most the 1/64 kept here; review M5).
     function _check(Op memory o, bytes memory buf, bytes calldata proof, IUARegistry.UASig calldata authSig)
         internal view
     {
         uint256 len = o.stLen;
         bytes32 d = authDigest(buf, len, o.domainSeparator);
+        uint256 g = gasleft();
         try IUARegistry(o.registry).requireAuthorized(o.from, UAKinds.PURPOSE_ZETHER_AUTH, d, authSig) {}
         catch (bytes memory err) {
-            if (err.length == 4 && bytes4(err) == UAKinds.UAVerifyGas.selector) revert UAKinds.UAVerifyGas();
+            if ((err.length == 4 && bytes4(err) == UAKinds.UAVerifyGas.selector) || (err.length == 0 && gasleft() < g / 63)) {
+                revert UAKinds.UAVerifyGas();
+            }
             revert IPqzToken.AuthRejected();
         }
         assembly ("memory-safe") {
