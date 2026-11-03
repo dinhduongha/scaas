@@ -53,8 +53,11 @@ contract LinkClosureTest is Test {
         revert(string.concat("unknown library ", n));
     }
 
+    /// @dev The artifacts of this build: `FOUNDRY_OUT` when set (`script/pqz/at-set.sh` builds into `out/at-set-<set>`), else
+    ///      `out`. A fixed `out/` read another build's artifacts, or none on a fresh checkout.
     function _json(string memory contractName) internal view returns (string memory) {
-        return vm.readFile(string.concat("out/", contractName, ".sol/", contractName, ".json"));
+        string memory out = vm.envOr("FOUNDRY_OUT", string("out"));
+        return vm.readFile(string.concat(out, "/", contractName, ".sol/", contractName, ".json"));
     }
 
     /// @dev `n`'s transitive link closure, appended to `acc` (names, no duplicates).
