@@ -11,7 +11,6 @@ import threading
 import types
 import unittest
 
-from Crypto.Hash import keccak
 
 HERE = pathlib.Path(__file__).resolve().parent
 LIB = C.CDLL(os.environ.get('SCAAS_UA_C_LIB', str(HERE.parent / 'target' / 'debug' / 'libscaas_ua_c.so')))
@@ -73,7 +72,7 @@ for name, res, args in [
     ('group_tag_string', st, [u8, P, P, P]), ('msg_tag', st, [P]), ('purpose_tag', st, [u8, P]), ('purpose_tag_v', st, [u8, u32, P]),
     ('ua_of', st, [u16, u8, sz, P]), ('derive_ua', st, [u16, u8, sz, bl, P]), ('native_id', st, [u16, u8, sz, P]),
     ('key_hash_of', st, [u16, u8, sz, P, P]), ('validate_key_data', st, [u16, u8, sz, bl]),
-    ('in_native_space', st, [u8, P]), ('ua_message', st, [u16, u8, u8, P]), ('chain_key_hash', st, [u64, P]),
+    ('in_native_space', st, [u8, P]), ('ua_message', st, [u16, u8, u8, P]), ('chain_key_hash', st, [u64, P]), ('keccak256', st, [u8, sz, P]),
     ('portable_domain_separator', st, [P]), ('kem_record_hash', st, [u8, u64, u8, sz, P]),
     ('portable_record_digest', st, [u8, u16, u8, u8, P]), ('registration_digest', st, [u8, u16, u8, u8, u8, P]),
     ('kem_record_digest', st, [u8, u64, u8, sz, P]), ('kem_record_message', st, [u16, u8, u64, u8, sz, P]),
@@ -320,6 +319,7 @@ class Vectors(unittest.TestCase):
                 w = (b(p['ua']), p['kind'], b(p['pqzKeyHash']), b(p['kemRecordHash']))
                 self.assertEqual(hx(out32(L.portable_record_digest, *w)), p['portableRecordDigest'])
                 self.assertEqual(hx(out32(L.registration_digest, *w, b(p['pqzPopHash']))), p['registrationDigest'])
+        self.assertEqual(hx(out32(L.keccak256, b'', 0)), '0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470')
         self.assertEqual(hx(out32(L.chain_key_hash, 2**40 + 7)), '0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950')  # keccak256("evm:1099511627783")
         pk, proof = b(K['pqzKey']), bytes([7]) * 32
         for p in S['pqzReg']:
@@ -596,13 +596,13 @@ class Vectors(unittest.TestCase):
         msig_rows = [r for r in PV['registrations'] + NV['registrations'] + NV['afterAcceptance'] if r['kind'] == 0x0120]
         self.assertEqual(sum(len(r['memberSigHashes']) for r in msig_rows), sum(len(r['args']['pop']) for r in msig_rows))
         for r in msig_rows:  # owner 2026-11-03: memberSigHashOf per slot, the hash of the bytes its UAMemberSig carries
-            got = [{'index': s['index'], 'hash': hx(keccak.new(digest_bits=256, data=member_sig_bytes(s)).digest())} for s in r['args']['pop']]
+            got = [{'index': s['index'], 'hash': hx(out32(L.keccak256, member_sig_bytes(s), len(member_sig_bytes(s))))} for s in r['args']['pop']]
             self.assertEqual(got, r['memberSigHashes'], r['name'])
         self.assertEqual(len(NV['memberships']), 4)
         for m in NV['memberships']:
             d, st_ = b(next(r for r in regs if r['ua'] == m['ua'])['keyData']), b(m['stored'])
             self.assertEqual(member_sig_bytes(m), st_, m['name'])  # control: the test's encoder against the kept bytes
-            self.assertEqual(hx(keccak.new(digest_bits=256, data=st_).digest()), m['storedHash'], m['name'])  # the event's bytes, the kept hash
+            self.assertEqual(hx(out32(L.keccak256, st_, len(st_))), m['storedHash'], m['name'])  # the event's bytes, the kept hash
             got = json.loads(text(L.replayed_member_sig, d, len(d), m['index'], st_, len(st_)))
             self.assertEqual(got, {'index': m['index'], 'members': m['members'], 'sig': m['sig']}, m['name'])
             self.assertEqual(code_of(lambda: text(L.replayed_member_sig, d, len(d), 16, st_, len(st_))), 'UAUnauthorized', m['name'])

@@ -1196,3 +1196,7 @@ soroban.rs:325-327	internal-path	line reference of 2026-10-03, `sim_data`, netwo
 soroban.rs:368-378	internal-path	line reference of 2026-10-03, `submit`, networks/soroban.md#NET-SOR-14
 :380-387	internal-path	line reference of 2026-10-03, `tx_status`, networks/soroban.md#NET-SOR-14
 soroban.rs:313	internal-path	line reference of 2026-10-03, `job_tx` and `tx_deadline`, networks/soroban.md#NET-SOR-15
+7622	obsolete	chain id of the Zether dev-chain allowlist (31337, 1337, 7622), removed by zether-ungate (PQZ gate by self-test only, no chain allowlist); 7622 is named `scaas-testnet` in ids and "SCaaS testnet" in prose (owner 2026-10-31), never a bare chain id
+31337	obsolete	chain id of the Zether dev-chain allowlist, removed by zether-ungate; no current rule names a chain
+1337	obsolete	chain id of the Zether dev-chain allowlist, removed by zether-ungate; no current rule names a chain
+UNAUDITED — dev chains only	obsolete	label replaced by "UNAUDITED" (owner 2026-10-31); the dev-chain limit went with the allowlist (zether-ungate)

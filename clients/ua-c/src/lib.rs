@@ -481,6 +481,12 @@ pub extern "C" fn scaas_ua_chain_key_hash(chain_id: u64, out32: *mut u8) -> Scaa
     run(|| put(out32.cast(), ua::chain_key_hash(chain_id)))
 }
 
+/// `keccak256(data)`: what a member checks its own signature bytes against (`memberSigHashOf`, an `msig`'s `popOf`).
+#[no_mangle]
+pub extern "C" fn scaas_ua_keccak256(data: *const u8, data_len: usize, out32: *mut u8) -> ScaasUaStatus {
+    run(|| put(out32.cast(), ua::keccak256(bytes(data, data_len)?)))
+}
+
 /// The 32-byte portable EIP-712 domain separator `DS_P` (`EIP712Domain(string name,string version)` = ("SCaaS UA Portable",
 /// "1"), no chain id, verifying contract or salt; typed-signing TS-D1). Every portable digest is `keccak256(0x1901 ‖ DS_P ‖ hashStruct)`.
 #[no_mangle]
