@@ -1,4 +1,4 @@
-# 2026-11-03-msig-nested at commit da54ed14
+# 2026-11-03-msig-nested at commit 0a67858b
 step | commit | rc | counts
 forge-n2048-kmax1024 | da54ed14 | 0 | 2154 passed  failed (forge) 
 forge-n2304-kmax4096 | da54ed14 | 0 | 2151 passed  failed (forge) 
@@ -6,7 +6,7 @@ forge-n2560-kmax16384 | da54ed14 | 0 | 2149 passed  failed (forge)
 forge-n2816-kmax65536 | da54ed14 | 0 | 2142 passed  failed (forge) 
 forge-isolate | da54ed14 | 0 | 22 passed  failed (forge) 
 sizes | 6c030261 | 0 | -
-docs | da54ed14 | 0 | -
+docs | 5261400c | 0 | -
 vectors-check | 6c030261 | 0 | 2 passed 0 failed 0 ignored (cargo) 
 clientkeys | 6c030261 | 0 | 227 passed 0 failed (node) 
 ua-rs | 6c030261 | 0 | 49 passed 0 failed 0 ignored (cargo) 
@@ -16,7 +16,7 @@ ua-rs-json | 6c030261 | 0 | 54 passed 0 failed 0 ignored (cargo)
 ua-py | 6c030261 | 0 | 26 ran (unittest) 
 ua-go | 6c030261 | 0 | 25 passed (go) 
 ua-cs | 6c030261 | 0 | 25 passed (dotnet) 
-ua-c | ec853914 | 0 | 1 passed 0 failed 0 ignored (cargo) 21 ran (unittest) 
+ua-c | 5261400c | 0 | 1 passed 0 failed 0 ignored (cargo) 21 ran (unittest) 
 ua-cxx | ec853914 | 0 | 17 passed (ctest) 
 ua-dart | 6c030261 | 0 | -
 ua-dart-frb | ec853914 | 0 | -
@@ -788,7 +788,7 @@ ua-rs-json: test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filte
 ua-rs-json: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
 ua-rs-json: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ua-c: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-ua-c: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+ua-c: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 soroban: test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.26s
 soroban: test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.67s
 soroban: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
