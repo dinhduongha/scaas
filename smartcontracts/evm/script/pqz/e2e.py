@@ -110,7 +110,7 @@ TAG = {MLDSA44: kc("scaas.ua.mldsa44.v1"), MLDSA65: kc("scaas.ua.mldsa65.v1"), S
 # ------------------------------------------------------------------ UA-8 registration (portable PoP, UAAttrs) on the
 # registry's explicit ABI (typed-signing R1: KemKey, UAAttrs without a KEM version, UASig; the register KEM key is version 0)
 KEM_S, KEM_T = "(uint8,bytes,bytes32)", ("t", ["w", "b", "w"])  # KemKey{scheme, mlkemEk, x25519}
-MEMBER_S, MEMBER_T = "(uint16,(uint16,bytes)[],bytes)", ("t", ["w", ("a", ("t", ["w", "b"])), "b"])  # MemberSig{index, InnerSig[] members, sig}; this file signs flat: `members` empty
+MEMBER_S, MEMBER_T = "(uint16,(uint16,bytes)[],bytes)", ("t", ["w", ("a", ("t", ["w", "b"])), "b"])  # MemberSig{index, InnerSig[] members, sig}; this file signs flat, a typed_ops row may hold a list
 UASIG_S, UASIG_T = f"(bytes,bytes,{MEMBER_S}[])", ("t", ["b", "b", ("a", MEMBER_T)])  # keyData, signature, MemberSig[]
 ATTRS_S, ATTRS_T = f"(bytes,bytes32,{KEM_S},bytes32)", ("t", ["b", "w", KEM_T, "w"])  # UAAttrs{pqzKey, pqzPopHash, kem, kemPkHash}
 REGISTER = f"register(uint16,bytes,{ATTRS_S},bytes,bytes)"
@@ -181,7 +181,7 @@ def kem_key(kem):
 
 def sig_v(s):
     """A clientkeys `UASig` JSON as ABI values."""
-    return [hb(s["keyData"]), hb(s["signature"]), [[m["index"], [], hb(m["sig"])] for m in s["members"]]]
+    return [hb(s["keyData"]), hb(s["signature"]), [[m["index"], [[x["index"], hb(x["sig"])] for x in m["members"]], hb(m["sig"])] for m in s["members"]]]
 
 
 def attrs_v(t):
