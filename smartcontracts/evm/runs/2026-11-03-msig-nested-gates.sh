@@ -5,7 +5,8 @@
 #   2026-11-03-msig-nested-gates.sh [--only <step>]      GATES_FRESH=1 re-runs every step
 # Step <s> writes runs/2026-11-03-msig-nested-<s>.log (git-ignored); the `summary` step writes the committed -summary.txt.
 # First line "# <s> at commit <sha>", last line "rc=<n>". A step is skipped when its log ends rc=0 at the current commit and the tree is clean.
-# A fresh worktree needs the git-ignored inputs as real directories: smartcontracts/evm/lib, clients/clientkeys/node_modules.
+# A fresh worktree needs the git-ignored inputs as real directories: smartcontracts/evm/lib, clients/clientkeys/node_modules, and for
+# cargo-scaas-node's Algorand adapter tests smartcontracts/algorand/out (20 of them fail without it; remove out after the run).
 # cargo-scaas-node needs CAPPED_MEM=6G, the one allowed exception, with nothing else heavy on the machine. No Soroban e2e here: Soroban did not move.
 P=2026-11-03-msig-nested
 LOGEXT=log # step logs are git-ignored (*.log); only <P>-summary.txt is committed (owner 2026-11-02)
