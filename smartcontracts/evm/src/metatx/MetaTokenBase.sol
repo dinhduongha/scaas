@@ -56,6 +56,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     ///      the chain's UA registry (0 = no UA ledger), the `SmartKeyAccount` implementation, Hedera.
     constructor(Env memory env)
         ERC20MetaTx(env.chainUid, env.registry, env.smartKeyAccountImpl, env.hedera)
+        GovernanceBase(env.govRouter)
     {
         FACTORY = env.factory;
         _SELF = address(this);

@@ -252,7 +252,7 @@ library ZetherLib {
     /// @notice `NormalZetherToken`'s init from the factory's raw `initArgs`, part 1 (CTR-ZTH-94, size lever 1 as
     ///         `ZetherWrappedLib.init`): `legs`, `rate` and `maxSupply` must be empty, the metadata is written; returns what
     ///         the token hands `GovernanceLib.init`, so this library holds no DELEGATECALL (`LinkClosure`).
-    function initNormal(bytes calldata initArgs) public returns (uint256 features, uint256 lockedFeatures, address owner,
+    function initNormal(bytes calldata initArgs) public returns (uint256 features, uint256 lockedFeatures, bytes32 owner,
         uint64 grantDelay, address rescueTo, GovernanceLib.Roles memory roles)
     {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));

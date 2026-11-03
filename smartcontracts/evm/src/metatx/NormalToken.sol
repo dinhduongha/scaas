@@ -46,13 +46,13 @@ contract NormalToken is MetaTokenBase {
 
     /// @notice `MINTABLE` and the `minter` role; never allowlisted (a minter contract's caps run on its own call).
     function mint(address to, uint256 amount) external nonReentrant {
-        GovernanceUse.use(GovernanceBits.MINTABLE, _msgSender(), amount);
+        GovernanceUse.use(GovernanceBits.MINTABLE, _govSubject(), amount);
         _mint(to, amount);
     }
 
     /// @notice `mint` into the registered SIGNING UA `to` (CTR-UA-28): the same flag and role; never allowlisted.
     function mintToUA(bytes32 to, uint256 amount) external nonReentrant {
-        GovernanceUse.use(GovernanceBits.MINTABLE, _msgSender(), amount);
+        GovernanceUse.use(GovernanceBits.MINTABLE, _govSubject(), amount);
         _uaMint(to, amount);
     }
 

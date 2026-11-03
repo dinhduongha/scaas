@@ -21,6 +21,7 @@ import {ZetherTypes} from "../../../src/zether/ZetherTypes.sol";
 import {IPqzToken} from "../../../src/pqz/IPqzToken.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {Catalogue, pqzEnv} from "../../helpers/Catalogue.sol";
+import {nid} from "../../helpers/Ids.sol";
 
 /// @notice The PQZ token stack of chain 7622 in forge (P6g plan D6): the gen-1 registry (`PqzRegistryBase`), `OpenFactory`
 ///         with the PQZ gate on, `NormalPqzToken` clones. The `PQZ` precompile answers 1 for ops 1, 2, 4, 5 unless
@@ -81,7 +82,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         c.symbol = "pqUSD";
         c.decimals = 6;
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE) | (1 << GovernanceBits.BURNABLE);
-        c.roles.minter = address(this);
+        c.roles.minter = nid(address(this));
         c.lockedFeatures = 1 << GovernanceBits.MINTABLE; // no owner: the minter survives creation on a locked bit (B-06, GD-14)
         bool withAud = aMode != uint8(ZetherTypes.AuditorMode.NONE);
         c.conf = IFactoryToken.ConfidentialConfig(
@@ -103,7 +104,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = (1 << GovernanceBits.PAYABLE);
         c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
-        c.roles.minter = address(0);
+        c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
         return WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), s)));

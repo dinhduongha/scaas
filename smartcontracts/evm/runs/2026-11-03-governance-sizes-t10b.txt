@@ -1,0 +1,18 @@
+# governance T10b sizes at the default set (n2304-kmax4096), forge build src --sizes --json; they decide nothing (spec §11)
+# before = T10 (dc9bfde0), after = the T10b tree; libraries from their artifacts, as size_gate.py reads them
+contract | runtime before | runtime after | delta | init after
+NormalToken | 40837 | 40853 | 16 | 43131
+WrappedToken | 52397 | 52297 | -100 | 54582
+NormalZetherToken | 50575 | 50547 | -28 | 54146
+WrappedZetherToken | 62499 | 62472 | -27 | 66081
+NormalPqzToken | 56206 | 56191 | -15 | 58844
+WrappedPqzToken | 72170 | 72160 | -10 | 74825
+SCaaSDex | 33493 | 33574 | 81 | 35288
+GovernanceLib | 14164 | 13181 | -983 | 13233
+WrappedLib | 17983 | 17892 | -91 | 17944
+ZetherWrappedLib | 11604 | 11520 | -84 | 11572
+PqzWrappedLib | 5020 | 4947 | -73 | 4999
+ZetherLib | 26274 | 26210 | -64 | 26262
+OpenFactory | 15732 | 15821 | 89 | 16215
+above 65,536 B: WrappedPqzToken
+# size gate: 0 error(s), 87 contracts, after size-baseline.json took these figures

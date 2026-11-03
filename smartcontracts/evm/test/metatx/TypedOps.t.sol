@@ -1007,7 +1007,7 @@ contract ConfidentialRowsPqzTest is ConfidentialRows, PqzFixture {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = 1 << GovernanceBits.PAYABLE;
         c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
-        c.roles.minter = address(0);
+        c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
         return WrappedToken(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "row"));
@@ -1034,7 +1034,7 @@ contract ConfidentialRowsZetherTest is ConfidentialRows, ZetherFixture {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         c.features = 1 << GovernanceBits.PAYABLE;
         c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
-        c.roles.minter = address(0);
+        c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
         return WrappedToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "row")));

@@ -25,6 +25,7 @@ import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {HookLeg} from "../zether/ZetherWrapped.t.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// A leg whose sender pays twice what it sends: the balance after a transfer is short of what the reserve needs.
 contract GreedyLeg is MockERC20 {
@@ -86,7 +87,7 @@ contract GovRescueTest is Test {
     function isRegisteredToken(address) external pure returns (bool) { return false; }
 
     function _base(address rescueTo) internal pure returns (IFactoryToken.TokenConfig memory c) {
-        (c.name, c.symbol, c.decimals, c.owner, c.rescueTo) = ("R", "R", 6, OWNER, rescueTo);
+        (c.name, c.symbol, c.decimals, c.owner, c.rescueTo) = ("R", "R", 6, nid(OWNER), rescueTo);
         c.features = 1 | (rescueTo != address(0) ? RESCUABLE : 0);
     }
 
@@ -279,7 +280,7 @@ contract GovRescueTest is Test {
     function test_rescueOnNormalTakesAll() public {
         NormalToken n = _normal(TO);
         vm.prank(OWNER);
-        n.transferOwnership(BOB);
+        n.transferOwnership(nid(BOB));
         vm.prank(BOB);
         n.acceptOwnership();
         assertEq(n.rescueTo(), TO);
@@ -354,7 +355,7 @@ contract GovRescueDexTest is Test {
     }
 
     function _dex(address rescueTo, bytes32 salt) internal returns (SCaaSDex) {
-        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(OWNER, 0, address(0xAA), false, 0, rescueTo)), salt));
+        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, rescueTo)), salt));
     }
 
     function test_pullerRescueWholeBalance() public {
@@ -391,7 +392,7 @@ contract GovRescueDexTest is Test {
         SCaaSDex d = _dex(TO, "d");
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features, c.owner, c.rescueTo) =
-            ("N", "N", 6, 1 | (uint256(1) << GovernanceBits.RESCUABLE), OWNER, TO);
+            ("N", "N", 6, 1 | (uint256(1) << GovernanceBits.RESCUABLE), nid(OWNER), TO);
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "t");
         assertTrue(d.supportsInterface(type(IGovernance).interfaceId));
         assertTrue(MetaTokenBase(t).supportsInterface(type(IGovernance).interfaceId));
@@ -442,7 +443,7 @@ contract GovRescueZetherTest is GovRescueConfRows, ZetherFixture {
 
     function _conf(bool wrapped) internal view override returns (IFactoryToken.TokenConfig memory c) {
         c = _cfg(false, uint256(1) << 40);
-        if (wrapped) (c.features, c.lockedFeatures, c.roles.minter) = (1, 0, address(0));
+        if (wrapped) (c.features, c.lockedFeatures, c.roles.minter) = (1, 0, 0);
     }
 
     function _make(bool wrapped, IFactoryToken.TokenConfig memory c) internal override returns (address) {
@@ -463,7 +464,7 @@ contract GovRescuePqzTest is GovRescueConfRows, PqzFixture {
 
     function _conf(bool wrapped) internal view override returns (IFactoryToken.TokenConfig memory c) {
         c = _cfg(uint256(1) << 40);
-        if (wrapped) (c.features, c.lockedFeatures, c.roles.minter) = (1, 0, address(0));
+        if (wrapped) (c.features, c.lockedFeatures, c.roles.minter) = (1, 0, 0);
     }
 
     function _make(bool wrapped, IFactoryToken.TokenConfig memory c) internal override returns (address) {

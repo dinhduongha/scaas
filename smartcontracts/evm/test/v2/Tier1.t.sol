@@ -14,6 +14,7 @@ import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// T2: tầng 1 `NormalToken` (TW2 §4, R141).
 contract Tier1Test is V2Fixture {
@@ -28,7 +29,7 @@ contract Tier1Test is V2Fixture {
         NormalToken t = _normal(address(this), 500, minter);
         assertEq(t.balanceOf(address(this)), 500);
         assertEq(t.totalSupply(), 500);
-        assertTrue(t.hasRole(1, minter));
+        assertTrue(t.hasRole(1, nid(minter)));
         assertEq(t.decimals(), 0);
         assertEq(t.kind(), TokenStore.KIND_NORMAL);
     }
@@ -59,10 +60,10 @@ contract Tier1Test is V2Fixture {
     function test_renounceMinterIsOneWay() public {
         NormalToken t = _normal(address(this), 0, minter);
         vm.expectEmit(address(t));
-        emit IGovernance.RoleRevoked(1, minter, minter);
+        emit IGovernance.RoleRevoked(1, nid(minter), nid(minter));
         vm.prank(minter);
         t.renounceRole(1);
-        assertFalse(t.hasRole(1, minter));
+        assertFalse(t.hasRole(1, nid(minter)));
         vm.prank(minter);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), minter));
         t.mint(bob, 1);

@@ -15,7 +15,7 @@ interface ISCaaSDex {
     ///         `grantDelay`: the owner's two calls (spec §1.6), at most 30 days. `rescueTo`: the `DexPuller`'s rescue
     ///         destination (spec §6.2), immutable, 0 = none; the DEX itself rescues nothing (CTR-DEX-20).
     struct DexConfig {
-        address owner;
+        bytes32 owner;
         uint32 relayerSharePpm;
         address treasury;
         bool listedOnly;

@@ -11,11 +11,19 @@ import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
 import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 
+library NamespaceProbeIds {
+    bytes32 internal constant U = 0xcafe00000000000000000000000000000000000000000000000000000000a11a;
+    bytes32 internal constant V = 0xbeef00000000000000000000000000000000000000000000000000000000b22b;
+}
+
 /// Writes every field of the five ERC-7201 namespaces through the source's own accessor, so the test reads where the
 /// compiler put each one (spec §1.4, §10.4).
 contract NamespaceProbe is UAMetaTxBase {
     address internal constant A = address(0xA11);
     address internal constant B = address(0xB22);
+    /// Two derived UA ids, top 96 bits set, so a field that kept 20 bytes would not hold them.
+    bytes32 internal constant U = NamespaceProbeIds.U;
+    bytes32 internal constant V = NamespaceProbeIds.V;
 
     constructor() UAMetaTxBase("P", bytes32(uint256(1)), address(0), address(0), false) {}
 
@@ -24,14 +32,15 @@ contract NamespaceProbe is UAMetaTxBase {
         (t.creator, t.version, t.kind, t.decimals, t.initialized) = (A, 0x71, 0x72, 0x73, true);
         (t.name, t.symbol) = ("N", "S");
         GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
-        (g.features, g.lockedFeatures, g.owner) = (0x81, 0x82, A);
+        // every governance identity a UA id (CTR-GOV-01 Change): the owner words and the mapping keys are `bytes32`
+        (g.features, g.lockedFeatures, g.owner) = (0x81, 0x82, U);
         (g.grantDelay, g.ownerGeneration) = (0x83, 0x84);
-        (g.pendingOwner, g.lastProposedAt, g.rescueTo) = (B, 0x85, B);
-        g.roles[1][A] = 2;
+        (g.pendingOwner, g.lastProposedAt, g.rescueTo) = (V, 0x85, B);
+        g.roles[1][U] = 2;
         (g.counts[1].holders, g.counts[1].roots) = (0x86, 0x87);
-        g.grants[1][A].barred = true;
-        g.epoch[1][A] = 0x88;
-        g.pending[1][A] = GovernanceLib.PendingGrant(0x89, B, 0x8a, bytes32(uint256(0x8b)));
+        (g.grants[1][U].grantorEpoch, g.grants[1][U].barred, g.grants[1][U].grantor) = (0x8c, true, V);
+        g.epoch[1][U] = 0x88;
+        g.pending[1][U] = GovernanceLib.PendingGrant(0x89, 0x8a, V, bytes32(uint256(0x8b)));
         WrappedLib.WrappedStorage storage w = WrappedLib.$();
         WrappedLib.Leg storage l = w.legs[1];
         (l.token, l.decimals, l.wrapEnabled, l.adjustable, l.capped) = (A, 0x91, true, true, true);
@@ -103,24 +112,28 @@ contract LayoutTest is V2Fixture {
         f[5] = F("name", 0, 0, uint256(bytes32("N")) | 2, 32);
         f[6] = F("symbol", 0, 0, uint256(bytes32("S")) | 2, 32);
         _ns(address(p), "token", "scaas.token", f);
-        f = new F[](17);
+        uint256 u = uint256(NamespaceProbeIds.U);
+        uint256 v = uint256(NamespaceProbeIds.V);
+        f = new F[](19);
         f[0] = F("features", 0, 0, 0x81, 32);
         f[1] = F("lockedFeatures", 0, 0, 0x82, 32);
-        f[2] = F("owner", 0, 0, a, 20);
-        f[3] = F("grantDelay", 0, 0, 0x83, 8);
-        f[4] = F("ownerGeneration", 0, 0, 0x84, 4);
-        f[5] = F("pendingOwner", 0, 0, b, 20);
+        f[2] = F("owner", 0, 0, u, 32);
+        f[3] = F("pendingOwner", 0, 0, v, 32);
+        f[4] = F("grantDelay", 0, 0, 0x83, 8);
+        f[5] = F("ownerGeneration", 0, 0, 0x84, 4);
         f[6] = F("lastProposedAt", 0, 0, 0x85, 8);
-        f[7] = F("roles[1][A]", 1, a, 2, 1);
+        f[7] = F("roles[1][A]", 1, u, 2, 1);
         f[8] = F("counts[1].holders", 1, 0, 0x86, 16);
         f[9] = F("counts[1].roots", 1, 0, 0x87, 16);
-        f[10] = F("grants[1][A].barred", 1, a, 1, 1);
-        f[11] = F("epoch[1][A]", 1, a, 0x88, 4);
-        f[12] = F("pending[1][A].eta", 1, a, 0x89, 8);
-        f[13] = F("pending[1][A].proposer", 1, a, b, 20);
-        f[14] = F("pending[1][A].generation", 1, a, 0x8a, 4);
-        f[15] = F("pending[1][A].termsHash", 1, a, 0x8b, 32);
-        f[16] = F("rescueTo", 0, 0, b, 20);
+        f[10] = F("grants[1][A].grantorEpoch", 1, u, 0x8c, 4);
+        f[11] = F("grants[1][A].barred", 1, u, 1, 1);
+        f[12] = F("grants[1][A].grantor", 1, u, v, 32);
+        f[13] = F("epoch[1][A]", 1, u, 0x88, 4);
+        f[14] = F("pending[1][A].eta", 1, u, 0x89, 8);
+        f[15] = F("pending[1][A].generation", 1, u, 0x8a, 4);
+        f[16] = F("pending[1][A].proposer", 1, u, v, 32);
+        f[17] = F("pending[1][A].termsHash", 1, u, 0x8b, 32);
+        f[18] = F("rescueTo", 0, 0, b, 20);
         _ns(address(p), "governance", "scaas.governance", f);
         f = new F[](14);
         f[0] = F("legs[1].token", 1, 0, a, 20);

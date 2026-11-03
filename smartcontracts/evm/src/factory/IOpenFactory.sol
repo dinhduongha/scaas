@@ -55,12 +55,12 @@ interface IOpenFactory {
     ///         `initialize`.
     event TokenCreated(
         address indexed token, address indexed creator, TokenKind indexed kind, uint64 version, address implementation,
-        uint256 features, uint256 lockedFeatures, address owner, address[] underlyings);
+        uint256 features, uint256 lockedFeatures, bytes32 owner, address[] underlyings);
     event DexImplementationDeployed(
         uint64 indexed version, address indexed implementation, uint16 envVersion, bytes32 envHash, bytes32 initcodeHash,
         bytes32 codeHash, uint64 usableFrom);
     event DexImplementationDeprecated(uint64 indexed version, string reason);
-    event DexCreated(address indexed dex, address indexed creator, uint64 version, address implementation, address owner);
+    event DexCreated(address indexed dex, address indexed creator, uint64 version, address implementation, bytes32 owner);
 
     error NotRegistrar();
     error ChainUidZero();

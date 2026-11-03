@@ -5,12 +5,15 @@ import {Test} from "forge-std/Test.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {GovernanceBase, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// The part every example shares: an application on the base with a `grantDelay`, no guard of its own, the caller as is.
 abstract contract ExampleApp is GovernanceBase {
+    constructor() GovernanceBase(address(0)) {}
+
     function _initApp(address owner_, uint64 delay, uint256 bits) internal {
         GovernanceLib.Roles memory none;
-        GovernanceLib.init(bits, 0, owner_, delay, address(0), none, bits, bits, 0);
+        GovernanceLib.init(bits, 0, nid(owner_), delay, address(0), none, bits, bits, 0);
     }
 
     function _guardIn() internal pure override returns (bool) { return false; }
@@ -49,7 +52,7 @@ contract LoanBook is ExampleApp {
     function approveLoan(uint256 loanId) external {
         Loan storage l = loans[loanId];
         require(!l.approved && l.principal != 0, "loan");
-        bytes32 scope = GovernanceUse.use(APPROVE_LOAN, msg.sender, l.principal);
+        bytes32 scope = GovernanceUse.use(APPROVE_LOAN, _govSubject(), l.principal);
         if (scope != 0 && scope != l.branch) revert WrongBranch(scope, l.branch);
         l.approved = true;
     }
@@ -94,7 +97,7 @@ contract FamilyTree is ExampleApp {
     }
 
     function _inScope(uint8 bit, uint256 id) private {
-        bytes32 scope = GovernanceUse.use(bit, msg.sender, 0);
+        bytes32 scope = GovernanceUse.use(bit, _govSubject(), 0);
         if (scope != 0 && !isDescendant(uint256(scope), id)) revert OutsideSubtree(scope, id);
     }
 
@@ -134,7 +137,7 @@ contract GroupLedger is ExampleApp {
     }
 
     function moveWithin(uint64 from, uint64 to, uint256 amount) external {
-        bytes32 g = GovernanceUse.use(MOVE_WITHIN, msg.sender, amount);
+        bytes32 g = GovernanceUse.use(MOVE_WITHIN, _govSubject(), amount);
         if (g != 0) {
             if (groupOf[from] != g) revert OutsideGroup(g, from);
             if (groupOf[to] != g) revert OutsideGroup(g, to);
@@ -159,12 +162,12 @@ contract GovExamplesTest is Test {
 
     function _twice(IGovernance app, uint8 bit, address holder, IGovernance.GrantTerms memory g) internal {
         vm.prank(OWNER);
-        app.setGrant(bit, holder, g);
-        assertFalse(app.hasRole(bit, holder), "proposed");
+        app.setGrant(bit, nid(holder), g);
+        assertFalse(app.hasRole(bit, nid(holder)), "proposed");
         vm.warp(block.timestamp + D);
         vm.prank(OWNER);
-        app.setGrant(bit, holder, g);
-        assertTrue(app.hasRole(bit, holder), "confirmed");
+        app.setGrant(bit, nid(holder), g);
+        assertTrue(app.hasRole(bit, nid(holder)), "confirmed");
     }
 
     function _ex(uint8 field) internal pure returns (bytes memory) {
@@ -201,7 +204,7 @@ contract GovExamplesTest is Test {
         b.approveLoan(4);
         b.approveLoan(3);
         vm.stopPrank();
-        assertEq(b.grantOf(128, MANAGER).spentTotal, 5e6);
+        assertEq(b.grantOf(128, nid(MANAGER)).spentTotal, 5e6);
     }
 
     function test_loanLeafDebitsItsManager() public {
@@ -209,14 +212,14 @@ contract GovExamplesTest is Test {
         IGovernance.GrantTerms memory l;
         (l.min, l.max, l.total, l.validUntil, l.scope) = (1e6, 2e7, 1e8, uint64(block.timestamp + 30 days), BRANCH);
         vm.prank(MANAGER); // at once: the leaf path takes no delay
-        b.setGrant(128, OFFICER, l);
+        b.setGrant(128, nid(OFFICER), l);
         vm.startPrank(OFFICER);
         b.approveLoan(5);
         vm.expectRevert(_ex(1));
         b.approveLoan(6);
         vm.stopPrank();
-        assertEq(b.grantOf(128, OFFICER).spentTotal, 1e7);
-        assertEq(b.grantOf(128, MANAGER).spentTotal, 1e7, "the manager is debited on the same principal");
+        assertEq(b.grantOf(128, nid(OFFICER)).spentTotal, 1e7);
+        assertEq(b.grantOf(128, nid(MANAGER)).spentTotal, 1e7, "the manager is debited on the same principal");
     }
 
     // ------------------------------------------------------------------ FamilyTree
@@ -226,10 +229,10 @@ contract GovExamplesTest is Test {
     function _tree() internal returns (FamilyTree tr) {
         tr = new FamilyTree(OWNER, D);
         vm.prank(OWNER);
-        tr.grantRole(128, OWNER);
+        tr.grantRole(128, nid(OWNER));
         vm.warp(block.timestamp + D);
         vm.startPrank(OWNER);
-        tr.grantRole(128, OWNER);
+        tr.grantRole(128, nid(OWNER));
         tr.addMember(1, 2);
         tr.addMember(2, 3);
         tr.addMember(1, 4);
@@ -244,7 +247,7 @@ contract GovExamplesTest is Test {
         IGovernance.GrantTerms memory l;
         (l.max, l.maxUses, l.scope) = (type(uint128).max, uses, bytes32(son));
         vm.prank(MANAGER);
-        tr.setGrant(bit, OFFICER, l);
+        tr.setGrant(bit, nid(OFFICER), l);
     }
 
     function test_subtreeAddAndRemove() public {
@@ -256,7 +259,7 @@ contract GovExamplesTest is Test {
         assertEq(tr.parentOf(5), 3);
         vm.prank(MANAGER);
         tr.addMember(2, 6);
-        assertEq(tr.grantOf(128, MANAGER).uses, 2, "every add in the subtree debits the head");
+        assertEq(tr.grantOf(128, nid(MANAGER)).uses, 2, "every add in the subtree debits the head");
         vm.prank(OFFICER);
         tr.addMember(5, 7);
         vm.prank(OFFICER); // the head's 3 adds are spent
@@ -273,7 +276,7 @@ contract GovExamplesTest is Test {
         (l.max, l.maxUses, l.scope) = (type(uint128).max, 1, bytes32(uint256(4)));
         vm.prank(MANAGER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, uint8(7)));
-        tr.setGrant(128, OFFICER, l); // 4 is outside the head's subtree
+        tr.setGrant(128, nid(OFFICER), l); // 4 is outside the head's subtree
         _leafOn(tr, 128, 3, 1);
         vm.prank(OFFICER);
         vm.expectRevert(abi.encodeWithSelector(FamilyTree.OutsideSubtree.selector, bytes32(uint256(3)), uint256(2)));
@@ -290,7 +293,7 @@ contract GovExamplesTest is Test {
         (g.max, g.delegable, g.scope) = (type(uint128).max, true, bytes32(uint256(1)));
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantBudgetRequired.selector, uint8(128)));
-        tr.setGrant(128, MANAGER, g);
+        tr.setGrant(128, nid(MANAGER), g);
         g.maxUses = 10;
         _twice(tr, 128, MANAGER, g);
     }
@@ -318,10 +321,10 @@ contract GovExamplesTest is Test {
         IGovernance.GrantTerms memory l;
         (l.max, l.total, l.scope) = (type(uint128).max, 50, GA);
         vm.prank(MANAGER);
-        gl.setGrant(128, OFFICER, l);
+        gl.setGrant(128, nid(OFFICER), l);
         vm.prank(OFFICER);
         gl.moveWithin(2, 1, 50);
-        assertEq(gl.grantOf(128, MANAGER).spentTotal, 150);
+        assertEq(gl.grantOf(128, nid(MANAGER)).spentTotal, 150);
     }
 
     function test_moveOutOfTheGroupRefused() public {
@@ -333,6 +336,6 @@ contract GovExamplesTest is Test {
         (g.max, g.scope, g.delegable) = (type(uint128).max, GA, true);
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantBudgetRequired.selector, uint8(128)));
-        gl.setGrant(128, OFFICER, g);
+        gl.setGrant(128, nid(OFFICER), g);
     }
 }

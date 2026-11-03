@@ -135,6 +135,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
     ///      `chain_uid`, the `SmartKeyAccount` implementation); no `implArgs`.
     constructor(uint16, IFactoryToken.Env memory env, bytes memory)
         SaltedEIP712("SCaaS Dex", "1", env.chainUid)
+        GovernanceBase(env.govRouter)
     {
         FACTORY = env.factory;
         SMART_KEY_ACCOUNT_IMPL = env.smartKeyAccountImpl;
@@ -159,7 +160,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
         GovernanceLib.Roles memory none;
         GovernanceLib.init(GovernanceBits.DEX_BITS, 0, cfg.owner, cfg.grantDelay, address(0), none, GovernanceBits.DEX_BITS,
             GovernanceBits.DEX_BITS, 0);
-        if (cfg.owner != address(0)) { // the owner holds both bits from creation (B-27: `grantRole` would only propose)
+        if (cfg.owner != 0) { // the owner holds both bits from creation (B-27: `grantRole` would only propose)
             GovernanceLib.initHolder(GovernanceBits.LISTING, cfg.owner, GovernanceBits.DEX_BITS, 0);
             GovernanceLib.initHolder(GovernanceBits.FEE_ROUTING, cfg.owner, GovernanceBits.DEX_BITS, 0);
         }
@@ -194,7 +195,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
     }
 
     function _power(uint8 bit) private returns (DexStorage storage) {
-        GovernanceUse.use(bit, _caller(), 0);
+        GovernanceUse.use(bit, _govSubject(), 0);
         return _s();
     }
 

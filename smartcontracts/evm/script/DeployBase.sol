@@ -258,13 +258,14 @@ abstract contract DeployBase is Script {
         vm.serializeAddress("deploy", "mtx_relay_executor", ex);
     }
 
-    /// @notice A release environment of this chain's factory `f` (plan 5g-Z2), each library's current code hash.
+    /// @notice A release environment of this chain's factory `f` (plan 5g-Z2), each library's current code hash. No
+    ///         `GovernanceRouter` is deployed yet (plan task T11): `govRouter` 0, no router on this chain.
     function _env(OpenFactory f, address reg, address ska, bool hedera, address[] memory deps, address[] memory libs)
         internal view returns (IFactoryToken.Env memory e)
     {
         bytes32[] memory h = new bytes32[](libs.length);
         for (uint256 i; i < libs.length; ++i) h[i] = libs[i].codehash;
-        e = IFactoryToken.Env(address(f), uid, reg, ska, hedera, deps, libs, h);
+        e = IFactoryToken.Env(address(f), uid, reg, ska, hedera, deps, libs, h, address(0));
     }
 
     /// @notice UA registry generation 1 (accounts.md §1.8, CTR-UA-22) on every chain, with per-chain enablement (§1.9):

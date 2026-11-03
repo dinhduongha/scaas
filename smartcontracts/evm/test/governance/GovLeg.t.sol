@@ -203,7 +203,7 @@ contract GovLegZetherTest is GovLegRows, ZetherFixture {
 
     function _wCfg(address[] memory legs) internal view override returns (IFactoryToken.TokenConfig memory c) {
         c = _cfg(false, uint256(1) << 40);
-        (c.features, c.lockedFeatures, c.roles.minter) = (PLAIN, 0, address(0));
+        (c.features, c.lockedFeatures, c.roles.minter) = (PLAIN, 0, 0);
         c.legs = new IFactoryToken.Leg[](legs.length);
         for (uint256 i; i < legs.length; ++i) c.legs[i] = IFactoryToken.Leg(legs[i], 1, 1);
     }
@@ -221,7 +221,7 @@ contract GovLegPqzTest is GovLegRows, PqzFixture {
 
     function _wCfg(address[] memory legs) internal view override returns (IFactoryToken.TokenConfig memory c) {
         c = _cfg(uint256(1) << 40);
-        (c.features, c.lockedFeatures, c.roles.minter) = (PLAIN, 0, address(0));
+        (c.features, c.lockedFeatures, c.roles.minter) = (PLAIN, 0, 0);
         c.legs = new IFactoryToken.Leg[](legs.length);
         for (uint256 i; i < legs.length; ++i) c.legs[i] = IFactoryToken.Leg(legs[i], 1, 1);
     }

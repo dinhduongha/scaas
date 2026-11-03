@@ -37,6 +37,9 @@ interface IFactoryToken {
         address[] deps;
         address[] libs;
         bytes32[] libCodeHashes;
+        /// This chain's `GovernanceRouter` (0 = none): every governed contract of the release takes it as `GOV_ROUTER`
+        /// (CTR-GOV-01 Change, owner 2026-11-04).
+        address govRouter;
     }
 
 
@@ -83,7 +86,7 @@ interface IFactoryToken {
         uint8 decimals;
         uint256 features;
         uint256 lockedFeatures;
-        address owner;               // 0 = no administration ever
+        bytes32 owner;               // a UA id (a native account: its padded address); 0 = no administration ever
         GovernanceLib.Roles roles;        // initial holders, each only for a set flag
         uint256 initialSupply;       // NORMAL* only
         address initialHolder;       // NORMAL* only

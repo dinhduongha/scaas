@@ -26,7 +26,7 @@ interface IWrappedToken {
         uint64 eta);
     event RateChangeCancelled(address indexed underlying);
     event RateChanged(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen);
-    event WrapDisabled(address indexed underlying, address indexed guardian, bytes32 reason);
+    event WrapDisabled(address indexed underlying, bytes32 indexed guardian, bytes32 reason);
 
     error UnderlyingInvalid(address u);
     error DecimalsUnreadable(address u);

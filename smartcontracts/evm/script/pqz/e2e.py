@@ -422,12 +422,13 @@ MTX = ("t", ["w", "b", "w", "w", "w", "w", "w", "w", "w"])
 MTX_S = "(address,bytes,uint256,uint256,uint256,uint32,address,uint256,address)"
 UMTX_S = "(bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)"
 # IFactoryToken.TokenConfig: name, symbol, decimals, features, lockedFeatures, owner, roles, initialSupply, initialHolder, legs,
-# rate, conf, grantDelay, rescueTo, maxSupply
+# rate, conf, grantDelay, rescueTo, maxSupply; `owner` and the five `roles` are UA ids (bytes32, a native account's address
+# padded: the same word as the address it was, CTR-GOV-01 Change)
 CFG = ("t", ["b", "b", "w", "w", "w", "w", ("t", ["w"] * 5), "w", "w", ("a", ("t", ["w", "w", "w"])), ("t", ["w", "w"]),
              ("t", ["b", "w", "w", "w", "w", "w", "w"]), "w", "w", "w"])
-# IFactoryToken.Env (plan 5g-Z2): factory, chainUid, registry, smartKeyAccountImpl, hedera, deps, libs, libCodeHashes
-ENV = ("t", ["w", "w", "w", "w", "w", ("a", "w"), ("a", "w"), ("a", "w")])
-ENV_S = "(address,bytes32,address,address,bool,address[],address[],bytes32[])"
+# IFactoryToken.Env (plan 5g-Z2): factory, chainUid, registry, smartKeyAccountImpl, hedera, deps, libs, libCodeHashes, govRouter
+ENV = ("t", ["w", "w", "w", "w", "w", ("a", "w"), ("a", "w"), ("a", "w"), "w"])
+ENV_S = "(address,bytes32,address,address,bool,address[],address[],bytes32[],address)"
 
 
 # ------------------------------------------------------------------ release deploy gate (C5-1, NET-EVM-06)
@@ -974,7 +975,7 @@ def run(kd, kr, ke):
     REG[0] = reg
     # plan 5g-Z2: the factory (notice period 0 here) deploys every release itself: env version 1 of each kind
     # (factory, chain_uid, registry, SmartKeyAccount implementation 0, Hedera false, deps, the linked libraries with
-    # their code hashes (the PQZ kinds link the four PqzStateLib / PqzTransferLib / PqzBurnLib / PqzViewLib, plan 5h D14,
+    # their code hashes, no GovernanceRouter (the PQZ kinds link the four PqzStateLib / PqzTransferLib / PqzBurnLib / PqzViewLib, plan 5h D14,
     # each deployed once by D.lib; the PQZ kinds' one dependency is this run's UAPqzVerifier, CTR-ZTH-20), then the release
     # from the init code without arguments on env 1, named explicitly (owner 2026-10-20; the factory appends
     # envVersion, env, implArgs)
@@ -983,7 +984,7 @@ def run(kd, kr, ke):
         require_release_gas(name)
         code, libs = D.linked(name)
         hashes = [keccak256(bytes.fromhex(rpc("eth_getCode", [a, "latest"])[2:])) for a in libs]
-        env = [fac, uid, reg, 0, 0, [pqv] if kind else [], libs, hashes]
+        env = [fac, uid, reg, 0, 0, [pqv] if kind else [], libs, hashes, 0]
         sd.send(fac, cd(f"publishEnv(uint8,uint16,{ENV_S})", ["w", "w", ENV], kind, 1, env), f"publishEnv(kind {kind}, 1)")
         r = sd.send(fac, cd("deployImplementation(uint8,uint64,uint16,bytes,bytes)", ["w", "w", "w", "b", "b"],
                                kind, 1, 1, code, b""),

@@ -184,7 +184,7 @@ contract PlusZeroZetherTest is PlusZeroRows, ZetherFixture {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         c.features = 1; // PAYABLE
         c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
-        c.roles.minter = address(0);
+        c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         wz = factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "pzw");
@@ -233,7 +233,7 @@ contract PlusZeroPqzTest is PlusZeroRows, PqzFixture {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = 1; // PAYABLE
         c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
-        c.roles.minter = address(0);
+        c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         wp = factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "pzw");

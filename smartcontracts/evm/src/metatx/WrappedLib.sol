@@ -420,7 +420,7 @@ library WrappedLib {
     // ------------------------------------------------------------------ guardian (WRAP_DISABLEABLE)
 
     /// @notice One-way: no re-enable (a compromised guardian reopening a depegged inflow would drain the good legs).
-    function disableWrap(address u, bytes32 reason, address caller) public {
+    function disableWrap(address u, bytes32 reason, bytes32 caller) public {
         if (!GovernanceLib.hasFeature(GovernanceBits.WRAP_DISABLEABLE) || !GovernanceLib.hasRole(GovernanceBits.WRAP_DISABLEABLE, caller)) {
             revert IWrappedToken.NotGuardian();
         }
@@ -433,14 +433,14 @@ library WrappedLib {
 
     // ------------------------------------------------------------------ rates (CTR-TOK-06, CTR-TOK-13)
 
-    function _onlyRateAdmin(address caller) private {
+    function _onlyRateAdmin(bytes32 caller) private {
         if (!GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE)) revert IWrappedToken.RateFixed();
         if (!GovernanceLib.hasRole(GovernanceBits.RATE_ADJUSTABLE, caller)) revert IWrappedToken.NotRateAdmin();
         GovernanceUse.use(GovernanceBits.RATE_ADJUSTABLE, caller, 0); // a limited holder's grant binds it
     }
 
     /// @notice The step is checked ONCE, here, against the current rate (which cannot change while pending).
-    function proposeRate(address u, uint96 num, uint96 den, address caller) public {
+    function proposeRate(address u, uint96 num, uint96 den, bytes32 caller) public {
         _onlyRateAdmin(caller);
         WrappedStorage storage s = $();
         if (_isPending(s)) revert IWrappedToken.RateChangePending();
@@ -457,7 +457,7 @@ library WrappedLib {
         emit IWrappedToken.RateChangeProposed(u, n0, d0, num, den, eta);
     }
 
-    function cancelRate(address caller) public {
+    function cancelRate(bytes32 caller) public {
         _onlyRateAdmin(caller);
         WrappedStorage storage s = $();
         if (!_isPending(s)) revert IWrappedToken.NoRateChangePending();
@@ -478,7 +478,7 @@ library WrappedLib {
     }
 
     /// @notice Only the rate admin executes: a third party cannot bundle the execution with its own wraps.
-    function executeRate(address caller, uint256 supply) public {
+    function executeRate(bytes32 caller, uint256 supply) public {
         _onlyRateAdmin(caller);
         WrappedStorage storage s = $();
         PendingRate memory p = s.pending;

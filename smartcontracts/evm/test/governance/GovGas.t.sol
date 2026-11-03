@@ -16,6 +16,7 @@ import {plainEnv, Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// @notice Plain `transfer` and `mtxTransfer` per kind, for the governance prototype (D1, D2; before and after,
 ///         `docs/research/governance/prototype/`). One row per test, so each measures from a fresh `setUp`. Written against
@@ -115,7 +116,7 @@ contract GovGasNormal is GovRows {
         c = _tokenConfig(1_000 ether);
         c.features = 3; // PAYABLE | MINTABLE
         c.lockedFeatures = 2; // no owner: the minter survives creation on a locked bit (B-06)
-        c.roles.minter = G_MINTER;
+        c.roles.minter = nid(G_MINTER);
     }
 }
 
@@ -185,7 +186,7 @@ contract GovGasPqz is GovRows, PqzFixture {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = 1; // PAYABLE
         c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
-        c.roles.minter = address(0);
+        c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         t = factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "w");
@@ -212,7 +213,7 @@ contract GovGasZether is GovRows, ZetherFixture {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         c.features = 1; // PAYABLE
         c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
-        c.roles.minter = address(0);
+        c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         t = factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "w");

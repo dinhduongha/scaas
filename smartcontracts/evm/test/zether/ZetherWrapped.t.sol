@@ -29,6 +29,7 @@ import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UACall} from "../ua/UACall.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// A leg that calls back into the token when the token pays it out or pulls it (an ERC-777-style hook).
 contract HookLeg is MockERC20 {
@@ -109,9 +110,9 @@ contract ZetherWrappedTest is ZetherFixture {
         c.symbol = "zW";
         c.decimals = 6;
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.RATE_ADJUSTABLE) | (1 << GovernanceBits.WRAP_DISABLEABLE);
-        c.owner = address(this);
-        c.roles.rateAdmin = address(this);
-        c.roles.guardian = address(this);
+        c.owner = nid(address(this));
+        c.roles.rateAdmin = nid(address(this));
+        c.roles.guardian = nid(address(this));
         c.rate = IFactoryToken.RateConfig(2 days, 1000);
         c.legs = new IFactoryToken.Leg[](legs.length);
         for (uint256 i; i < legs.length; ++i) c.legs[i] = IFactoryToken.Leg(legs[i], nums[i], dens[i]);
@@ -214,7 +215,7 @@ contract ZetherWrappedTest is ZetherFixture {
         c.symbol = "S";
         c.decimals = 6;
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.RATE_ADJUSTABLE);
-        c.roles.rateAdmin = address(this);
+        c.roles.rateAdmin = nid(address(this));
         c.lockedFeatures = 1 << GovernanceBits.RATE_ADJUSTABLE; // no owner: the rate admin survives creation on a locked bit (B-06, GD-14)
         c.rate = IFactoryToken.RateConfig(2 days, 1000);
         c.legs = new IFactoryToken.Leg[](1);

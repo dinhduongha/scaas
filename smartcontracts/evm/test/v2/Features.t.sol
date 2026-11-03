@@ -15,6 +15,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// Kind NORMAL on the flags and the owner model (CTR-TOK-21, CTR-TOK-22) and the Hedera branch (CTR-TOK-23).
 contract FeaturesTest is Test {
@@ -43,8 +44,8 @@ contract FeaturesTest is Test {
         internal view returns (IFactoryToken.TokenConfig memory c)
     {
         (c.name, c.symbol, c.decimals, c.features, c.lockedFeatures, c.owner) =
-            ("Points", "PTS", 6, features, locked, owner_);
-        c.roles.minter = minter_;
+            ("Points", "PTS", 6, features, locked, nid(owner_));
+        c.roles.minter = nid(minter_);
         (c.initialSupply, c.initialHolder) = (supply, alice);
     }
 
@@ -72,8 +73,8 @@ contract FeaturesTest is Test {
         assertEq(t.version(), 1);
         assertEq(t.features(), PAYABLE | MINTABLE | BURNABLE);
         assertEq(t.lockedFeatures(), PAYABLE | MINTABLE | BURNABLE);
-        assertEq(t.owner(), ownerA);
-        assertTrue(t.hasRole(1, minter));
+        assertEq(t.owner(), nid(ownerA));
+        assertTrue(t.hasRole(1, nid(minter)));
         assertEq(t.balanceOf(alice), 1_000);
         assertFalse(t.IS_HEDERA());
     }
@@ -182,18 +183,18 @@ contract FeaturesTest is Test {
         NormalToken t = _token(impl, _cfg(MINTABLE, MINTABLE, ownerA, address(0), 0)); // locked: the holder survives (CTR-GOV-02)
         vm.prank(ownerA);
         vm.expectEmit(address(t));
-        emit IGovernance.RoleGranted(1, minter, ownerA);
-        t.grantRole(1, minter);
+        emit IGovernance.RoleGranted(1, nid(minter), nid(ownerA));
+        t.grantRole(1, nid(minter));
         vm.prank(minter);
         t.mint(alice, 3);
         vm.prank(ownerA);
-        t.transferOwnership(address(0x0B));
+        t.transferOwnership(nid(address(0x0B)));
         vm.prank(address(0x0B));
         t.acceptOwnership();
-        assertEq(t.owner(), address(0x0B));
+        assertEq(t.owner(), nid(address(0x0B)));
         vm.prank(address(0x0B));
         t.renounceOwnership();
-        assertEq(t.owner(), address(0));
+        assertEq(t.owner(), bytes32(0));
         vm.prank(minter);
         t.mint(alice, 1);                                     // holders keep their role after the owner renounces
         vm.prank(minter);
@@ -232,9 +233,9 @@ contract FeaturesTest is Test {
         assertEq(uint256(laneBefore), 1);
         assertEq(uint256(balBefore), 100);
         vm.startPrank(ownerA);
-        t.grantRole(1, minter);
+        t.grantRole(1, nid(minter));
         t.disableFeature(1);
-        t.transferOwnership(minter);
+        t.transferOwnership(nid(minter));
         vm.stopPrank();
         assertEq(vm.load(address(t), lane), laneBefore);
         assertEq(vm.load(address(t), bal), balBefore);
@@ -243,8 +244,8 @@ contract FeaturesTest is Test {
         bytes32 tok = 0x0a3a361961b35589cdb03530b6f9e23a4db6ca9a0dad5ddf5d7761c7fabc8700;
         assertEq(uint256(vm.load(address(t), tok)), t.features());
         assertEq(t.features(), 0);
-        assertEq(address(uint160(uint256(vm.load(address(t), bytes32(uint256(tok) + 3))))), minter);
-        assertEq(t.pendingOwner(), minter);
+        assertEq(vm.load(address(t), bytes32(uint256(tok) + 3)), nid(minter)); // the whole word: a UA id
+        assertEq(t.pendingOwner(), nid(minter));
     }
 
     // ------------------------------------------------------------------ IS_HEDERA (CTR-TOK-23)

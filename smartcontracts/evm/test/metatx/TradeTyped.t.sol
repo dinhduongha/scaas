@@ -33,6 +33,7 @@ import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {VM, TYPED_OPS, checkRow, onChain, domainOf, domainField, ecdsa, rowKey} from "./NamedEntry.t.sol";
 import {swap, tryRowAs} from "./TypedOps.t.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// typed-signing C6: the order, receiver-fee, relay-fee and cancel rows of `typed_ops.json` run on every token kind, under
 /// that kind's own domain: the row by itself, its calldata equal to the message's fields, then that calldata on a contract
@@ -310,7 +311,7 @@ contract OrderRowsTokenTest is OrderRows, UALedgerBase {
         j = vm.readFile(TYPED_OPS);
         string memory op = "CancelDexOrder";
         SCaaSDex dex = SCaaSDex(Clones.clone(address(new SCaaSDex(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
-        dex.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(address(this), 200_000, address(0x7EA5), false, 0, address(0))));
+        dex.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, address(0x7EA5), false, 0, address(0))));
         string memory p = ".ops.CancelDexOrder.message.order.";
         address sell = vm.parseJsonAddress(j, string.concat(p, "sellToken"));
         string memory q = string.concat(p, "order.");
@@ -378,7 +379,7 @@ contract OrderRowsPqzTest is OrderRows, PqzFixture {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = 1 << GovernanceBits.PAYABLE;
         c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
-        c.roles.minter = address(0);
+        c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
         return WrappedToken(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "row"));
@@ -405,7 +406,7 @@ contract OrderRowsZetherTest is OrderRows, ZetherFixture {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         c.features = 1 << GovernanceBits.PAYABLE;
         c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
-        c.roles.minter = address(0);
+        c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
         return WrappedToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "row")));

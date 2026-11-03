@@ -15,6 +15,7 @@ import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// T2: tầng 2 `WrappedToken` — wrap/unwrap/reserve, tỉ lệ, làm tròn (TW2 §5, R133, R134, R137, R143).
 contract Tier2Test is V2Fixture {
@@ -328,7 +329,7 @@ contract Tier2Test is V2Fixture {
         c.maxRateStepBps = 1000;
         WrappedToken t = _single(address(usdc), 6, 1, 1, c);
         assertTrue(t.rateAdjustable());
-        assertTrue(t.hasRole(3, adm));
+        assertTrue(t.hasRole(3, nid(adm)));
         assertEq(t.rateDelay(), 30 days);
         assertEq(t.maxRateStepBps(), 1000);
     }

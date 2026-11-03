@@ -12,6 +12,7 @@ import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {NormalToken} from "../../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../../src/metatx/WrappedToken.sol";
 import {plainEnv} from "../../helpers/Catalogue.sol";
+import {nid} from "../../helpers/Ids.sol";
 
 bytes32 constant UID_ = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 
@@ -29,7 +30,7 @@ contract BaseHarness is MetaTokenBase {
     function _init(TokenConfig memory cfg) internal override {
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         GovernanceLib.Roles memory none;
-        GovernanceLib.init(1 << GovernanceBits.PAYABLE, 0, address(0), 0, address(0), none, _validBits(), _roleBits(), _contractOnlyBits());
+        GovernanceLib.init(1 << GovernanceBits.PAYABLE, 0, bytes32(0), 0, address(0), none, _validBits(), _roleBits(), _contractOnlyBits());
         _mint(cfg.initialHolder, cfg.initialSupply);
     }
 
@@ -45,7 +46,7 @@ function normalInit(string memory n, string memory s, uint8 d, uint256 supply, a
     c.symbol = s;
     c.decimals = d;
     c.features = 7;
-    c.roles.minter = minter;
+    c.roles.minter = nid(minter);
     if (minter != address(0)) c.lockedFeatures = 1 << 1; // no owner: the minter survives on a locked bit (B-06, GD-14)
     c.initialSupply = supply;
     c.initialHolder = holder;
@@ -71,9 +72,9 @@ function wrappedInit(address[] memory us, uint256[] memory nums, uint256[] memor
     c.features = 1 << GovernanceBits.PAYABLE;
     if (cfg.adjustable) c.features |= 1 << GovernanceBits.RATE_ADJUSTABLE;
     if (guardian != address(0)) c.features |= 1 << GovernanceBits.WRAP_DISABLEABLE;
-    c.owner = owner;
-    c.roles.rateAdmin = cfg.rateAdmin;
-    c.roles.guardian = guardian;
+    c.owner = nid(owner);
+    c.roles.rateAdmin = nid(cfg.rateAdmin);
+    c.roles.guardian = nid(guardian);
     if (owner == address(0)) c.lockedFeatures = c.features; // no owner disables nothing; holders survive creation (B-06, GD-14)
     c.legs = new IFactoryToken.Leg[](us.length);
     for (uint256 i; i < us.length; ++i) c.legs[i] = IFactoryToken.Leg(us[i], nums[i], dens[i]);

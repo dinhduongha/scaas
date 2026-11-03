@@ -265,14 +265,14 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     /// @notice `MINTABLE` and the `minter` role, under `maxSupply`, into a public balance; no reserve moves. Never
     ///         allowlisted, as `NormalToken.mint`.
     function mint(address to, uint256 amount) external nonReentrant {
-        GovernanceUse.use(GovernanceBits.MINTABLE, _msgSender(), amount);
+        GovernanceUse.use(GovernanceBits.MINTABLE, _govSubject(), amount);
         WrappedLib.checkMint(totalSupply(), amount);
         _mint(to, amount);
     }
 
     /// @notice `mint` into the registered SIGNING UA `to` (CTR-UA-28), its public UA balance.
     function mintToUA(bytes32 to, uint256 amount) external nonReentrant {
-        GovernanceUse.use(GovernanceBits.MINTABLE, _msgSender(), amount);
+        GovernanceUse.use(GovernanceBits.MINTABLE, _govSubject(), amount);
         WrappedLib.checkMint(totalSupply(), amount);
         _uaMint(to, amount);
     }
@@ -285,24 +285,24 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     // ------------------------------------------------------------------ roles: guardian, rate admin
 
     function disableWrap(address u, bytes32 reason) external nonReentrant {
-        WrappedLib.disableWrap(u, reason, _msgSender());
+        WrappedLib.disableWrap(u, reason, _govSubject());
     }
 
     function proposeRate(address u, uint96 num, uint96 den) external nonReentrant {
-        WrappedLib.proposeRate(u, num, den, _msgSender());
+        WrappedLib.proposeRate(u, num, den, _govSubject());
     }
 
     function cancelRate() external nonReentrant {
-        WrappedLib.cancelRate(_msgSender());
+        WrappedLib.cancelRate(_govSubject());
     }
 
     function executeRate() external virtual nonReentrant {
-        WrappedLib.executeRate(_msgSender(), totalSupply());
+        WrappedLib.executeRate(_govSubject(), totalSupply());
     }
 
     /// @notice `disableFeature(RATE_ADJUSTABLE)` also cancels a pending rate change (CTR-TOK-06).
     function disableFeature(uint8 bit) external virtual override nonReentrant {
-        GovernanceLib.disableFeature(bit, _msgSender());
+        GovernanceLib.disableFeature(bit, _govSubject());
         if (bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }
 

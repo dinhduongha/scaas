@@ -28,6 +28,7 @@ import {ZetherVerifierBase} from "../../../src/zether/ZetherVerifier.sol";
 import {IUARegistry} from "../../../src/ua/IUARegistry.sol";
 import {UACall} from "../../ua/UACall.sol";
 import {IConfidentialToken} from "../../../src/confidential/IConfidentialToken.sol";
+import {nid} from "../../helpers/Ids.sol";
 
 bytes32 constant ZUID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 
@@ -135,7 +136,7 @@ abstract contract ZetherFixture is Test {
         c.symbol = "zUSD";
         c.decimals = 6;
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE) | (1 << GovernanceBits.BURNABLE);
-        c.roles.minter = address(this);
+        c.roles.minter = nid(address(this));
         c.lockedFeatures = 1 << GovernanceBits.MINTABLE; // no owner: the minter survives creation on a locked bit (B-06, GD-14)
         c.conf = IFactoryToken.ConfidentialConfig(
             auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, maxShielded, FEE, dMode,

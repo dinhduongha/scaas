@@ -17,6 +17,7 @@ import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// Random shield / wrap-shield / transfer / roll-over / unshield / unshield-unwrap / unwrap / rate-change sequences on one
 /// `WRAPPED_ZETHER` token (legs 1:1 and 3/7, rate-adjustable, bn254, no auditor), real proofs; the plaintext balances
@@ -47,7 +48,7 @@ contract ZetherHandler is ZetherFixture {
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals) = ("Z", "Z", 6);
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.RATE_ADJUSTABLE);
-        c.roles.rateAdmin = address(this);
+        c.roles.rateAdmin = nid(address(this));
         c.lockedFeatures = 1 << GovernanceBits.RATE_ADJUSTABLE; // no owner: the rate admin survives creation on a locked bit (B-06, GD-14)
         c.rate = IFactoryToken.RateConfig(2 days, 1000);
         c.legs = new IFactoryToken.Leg[](2);

@@ -18,6 +18,7 @@ import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// @notice What lands now for the regulated round (spec §1.2, §4.2; CTR-GOV-03, -17, -18; GD-19): bits 5-9 refused on every
 ///         kind of this release, with each kind's error (`FeatureNotBuilt` on `NORMAL` and `WRAPPED`, `FeatureInvalidForKind`
@@ -104,7 +105,7 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
     }
 
     function _rCfg(bool wrapped, uint256 features) internal override returns (IFactoryToken.TokenConfig memory c) {
-        (c.name, c.symbol, c.decimals, c.features, c.owner) = ("R", "R", 18, features, OWNER);
+        (c.name, c.symbol, c.decimals, c.features, c.owner) = ("R", "R", 18, features, nid(OWNER));
         if (wrapped) {
             c.legs = new IFactoryToken.Leg[](1);
             c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
@@ -129,11 +130,11 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
     function test_complianceWordIsBitTen() public {
         for (uint256 w; w < 2; ++w) {
             IFactoryToken.TokenConfig memory c = _rCfg(w == 1, 1);
-            c.roles.compliance = address(0xC0);
+            c.roles.compliance = nid(address(0xC0));
             vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, uint8(10)));
             _rCreate(w == 1, c, "c");
-            c.roles.compliance = address(0);
-            c.roles.issuer = address(0x15);
+            c.roles.compliance = 0;
+            c.roles.issuer = nid(address(0x15));
             vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, uint8(5)));
             _rCreate(w == 1, c, "i");
         }
@@ -159,7 +160,7 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         assertEq(req, 3);
         assertEq(den, 4);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(OWNER, 0, address(0xAA), false, 0, address(0))), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), "d"));
         address n = _rCreate(false, _rCfg(false, 1), "n");
         vm.prank(OWNER);
         d.setMarket(t, n, true);
@@ -173,11 +174,11 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         NormalToken n = NormalToken(_rCreate(false, _rCfg(false, 1), "n"));
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NoSuchRole.selector, uint8(3)));
-        n.grantRole(3, holder);
+        n.grantRole(3, nid(holder));
         WrappedToken w = WrappedToken(payable(_rCreate(true, _rCfg(true, 1), "w")));
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, uint8(3)));
-        w.grantRole(3, holder);
+        w.grantRole(3, nid(holder));
     }
 }
 
@@ -192,7 +193,7 @@ contract GovRegulatedBitsZetherTest is GovRegulatedRows, ZetherFixture {
         c = _cfg(false, uint256(1) << 40);
         c.features = features;
         c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
-        c.roles.minter = address(0);
+        c.roles.minter = 0;
         if (wrapped) {
             c.legs = new IFactoryToken.Leg[](1);
             c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
@@ -231,7 +232,7 @@ contract GovRegulatedBitsPqzTest is GovRegulatedRows, PqzFixture {
         c = _cfg(uint256(1) << 40);
         c.features = features;
         c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
-        c.roles.minter = address(0);
+        c.roles.minter = 0;
         if (wrapped) {
             c.legs = new IFactoryToken.Leg[](1);
             c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);

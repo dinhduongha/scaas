@@ -24,6 +24,7 @@ import {UACall} from "../ua/UACall.sol";
 import {UALedgerBase} from "../ua/UALedgerBase.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// @notice Hybrid underlying (spec §5; CTR-GOV-12, CTR-TOK-05; C1, C2): a wrapped token with `maxSupply != 0`, whose issuer
 ///         mints under the cap. One cap on every path that raises `totalSupply()`; redemption until the reserve is empty,
@@ -51,11 +52,11 @@ contract GovHybridTest is UALedgerBase {
     /// `PAYABLE` plus `extra`, owner `OWNER`; a hybrid (`MINTABLE`, minter `MINTER`) iff `cap != 0`; the test is the rate admin
     /// (a contract), `GUARD` the guardian.
     function _cfg(address[] memory legs, uint256 cap, uint256 extra) internal pure returns (IFactoryToken.TokenConfig memory c) {
-        (c.name, c.symbol, c.decimals, c.owner, c.maxSupply) = ("H", "H", 6, OWNER, cap);
+        (c.name, c.symbol, c.decimals, c.owner, c.maxSupply) = ("H", "H", 6, nid(OWNER), cap);
         c.features = 1 | extra | (cap != 0 ? uint256(1) << MINT : 0);
-        if (cap != 0) c.roles.minter = MINTER;
-        if (extra & RATE != 0) (c.roles.rateAdmin, c.rate) = (address(1), IFactoryToken.RateConfig(2 days, 1000)); // _make: this
-        if (extra & DISABLE != 0) c.roles.guardian = GUARD;
+        if (cap != 0) c.roles.minter = nid(MINTER);
+        if (extra & RATE != 0) (c.roles.rateAdmin, c.rate) = (nid(address(1)), IFactoryToken.RateConfig(2 days, 1000)); // _make: this
+        if (extra & DISABLE != 0) c.roles.guardian = nid(GUARD);
         c.legs = new IFactoryToken.Leg[](legs.length);
         for (uint256 i; i < legs.length; ++i) c.legs[i] = IFactoryToken.Leg(legs[i], 1, 1);
     }
@@ -66,7 +67,7 @@ contract GovHybridTest is UALedgerBase {
     }
 
     function _make(IFactoryToken.TokenConfig memory c) internal returns (WrappedToken w) {
-        if (c.roles.rateAdmin != address(0)) c.roles.rateAdmin = address(this);
+        if (c.roles.rateAdmin != 0) c.roles.rateAdmin = nid(address(this));
         w = _clone();
         w.initialize(address(this), 1, abi.encode(c));
     }
@@ -333,7 +334,7 @@ contract GovHybridTest is UALedgerBase {
         IGovernance.GrantTerms memory g;
         (g.max, g.total, g.perWindow, g.window) = (type(uint128).max, 100, 50, 1 days);
         vm.prank(OWNER);
-        w.setGrant(MINT, MINTER2, g);
+        w.setGrant(MINT, nid(MINTER2), g);
         vm.prank(MINTER2);
         w.mint(alice, 50);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantExhausted.selector, uint8(3)));
@@ -393,7 +394,7 @@ contract GovHybridZetherTest is ZetherFixture {
     function _token(uint256 cap, bytes32 salt) internal returns (WrappedZetherToken) {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         c.features = 1 | (cap != 0 ? uint256(1) << GovernanceBits.MINTABLE : 0);
-        if (cap == 0) (c.lockedFeatures, c.roles.minter) = (0, address(0));
+        if (cap == 0) (c.lockedFeatures, c.roles.minter) = (0, 0);
         c.maxSupply = cap;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
@@ -464,7 +465,7 @@ contract GovHybridPqzTest is PqzFixture {
     function _token(uint256 cap, bytes32 salt) internal returns (WrappedPqzToken) {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = 1 | (cap != 0 ? uint256(1) << GovernanceBits.MINTABLE : 0);
-        if (cap == 0) (c.lockedFeatures, c.roles.minter) = (0, address(0));
+        if (cap == 0) (c.lockedFeatures, c.roles.minter) = (0, 0);
         c.maxSupply = cap;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);

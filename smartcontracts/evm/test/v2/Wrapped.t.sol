@@ -13,6 +13,7 @@ import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// Kind `WRAPPED` on `GovernanceLib` (CTR-TOK-22): flags valid for the kind, the rate role and the guardian as roles,
 /// `disableFeature(RATE_ADJUSTABLE)` cancels a pending change, the single-asset ABI rule, the leg count, and
@@ -59,7 +60,7 @@ contract WrappedTest is V2Fixture {
         vm.expectRevert(IWrappedToken.MaxSupplyInvalid.selector);
         this.initExt(us, abi.encode(c));
         c = wrappedInit(us, one, one, 6, fixedRate, address(0), address(0));
-        c.roles.rateAdmin = address(new RateAdminForwarder());
+        c.roles.rateAdmin = nid(address(new RateAdminForwarder()));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, RATE));
         this.initExt(us, abi.encode(c));
         c = wrappedInit(us, one, one, 6, _adjustable(bob), address(0), address(0));
@@ -96,10 +97,10 @@ contract WrappedTest is V2Fixture {
         vm.expectRevert(IWrappedToken.NotRateAdmin.selector);
         adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100)));
         vm.prank(wrapperOwner);
-        t.grantRole(RATE, address(adm));
+        t.grantRole(RATE, nid(address(adm)));
         adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100)));
         vm.prank(wrapperOwner);
-        t.revokeRole(RATE, address(adm));
+        t.revokeRole(RATE, nid(address(adm)));
         vm.expectRevert(IWrappedToken.NotRateAdmin.selector);
         adm.exec(address(t), abi.encodeCall(t.cancelRate, ()));
         // revoking leaves the pending change and the rate as they are
@@ -108,9 +109,9 @@ contract WrappedTest is V2Fixture {
         assertGt(eta, 0);
         assertTrue(t.rateAdjustable());
         vm.prank(wrapperOwner);
-        t.grantRole(RATE, address(adm));
+        t.grantRole(RATE, nid(address(adm)));
         adm.exec(address(t), abi.encodeCall(t.renounceRole, (RATE)));
-        assertFalse(t.hasRole(RATE, address(adm)));
+        assertFalse(t.hasRole(RATE, nid(address(adm))));
         assertTrue(t.rateAdjustable());
     }
 
@@ -125,7 +126,7 @@ contract WrappedTest is V2Fixture {
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapPausedForRateChange.selector, address(usdc)));
         t.wrap(10);
         vm.expectEmit(address(t));
-        emit IGovernance.FeatureDisabled(RATE, wrapperOwner);
+        emit IGovernance.FeatureDisabled(RATE, nid(wrapperOwner));
         vm.expectEmit(address(t));
         emit IWrappedToken.RateChangeCancelled(address(usdc));
         vm.prank(wrapperOwner);
@@ -159,7 +160,7 @@ contract WrappedTest is V2Fixture {
         vm.expectRevert(IWrappedToken.NotGuardian.selector);
         t.disableWrap(address(usdt), "x");
         vm.expectEmit(address(t));
-        emit IWrappedToken.WrapDisabled(address(usdt), bob, "depeg");
+        emit IWrappedToken.WrapDisabled(address(usdt), nid(bob), "depeg");
         vm.prank(bob);
         t.disableWrap(address(usdt), "depeg");
         vm.prank(bob);
@@ -168,7 +169,7 @@ contract WrappedTest is V2Fixture {
         // a disabled flag stops the role: the guardian keeps the role but has no power
         vm.prank(wrapperOwner);
         t.disableFeature(GUARD);
-        assertTrue(t.hasRole(GUARD, bob));
+        assertTrue(t.hasRole(GUARD, nid(bob)));
         vm.prank(bob);
         vm.expectRevert(IWrappedToken.NotGuardian.selector);
         t.disableWrap(address(usdc), "late");
