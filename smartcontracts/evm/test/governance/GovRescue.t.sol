@@ -437,6 +437,22 @@ contract GovRescueDexTest is Test {
         assertEq(foo.balanceOf(TO), 0);
     }
 
+    /// Review 2026-11-04 M-2: `DexConfig.rescueTo` follows the tokens' rule (spec §6.2): never `UA_POOL`, `SHIELD_POOL`, the
+    /// DEX or its puller (`RescueConfigInvalid`); the test plays the factory of a bare clone, so the DEX's address is known.
+    function test_dexRescueToThisOrAPoolRefusedAtInit() public {
+        SCaaSDex impl = new SCaaSDex(1, plainEnv(address(this), address(0), UID, address(0), false), "");
+        SCaaSDex d = SCaaSDex(Clones.clone(address(impl)));
+        address p = vm.computeCreateAddress(address(d), 1); // the puller: the clone's first CREATE
+        address[4] memory bad = [MetaTxLib.UA_POOL, MetaTxLib.SHIELD_POOL, address(d), p];
+        for (uint256 i; i < 4; ++i) {
+            vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
+            d.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, bad[i])));
+        }
+        d.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, TO))); // control
+        assertEq(d.puller(), p);
+        assertEq(DexPuller(p).rescueTo(), TO);
+    }
+
     /// `IRescuable` is its own interface, so `IGovernance`'s id is one on the DEX and on a token.
     function test_interfaceIdIsOneOnDexAndToken() public {
         SCaaSDex d = _dex(TO, "d");

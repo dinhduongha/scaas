@@ -22,6 +22,8 @@ import {IGovernance} from "../governance/IGovernance.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {GovernanceBits} from "../governance/GovernanceBits.sol";
 import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {IRescuable} from "../governance/IRescuable.sol";
+import {MetaTxLib} from "../common/MetaTxLib.sol";
 
 /// @title `SCaaSDex` (CTR-DEX-16, -17, -11, -03, -24, -18, -22, -08, -20, -21, -23): an EIP-1167 clone made by
 ///        `OpenFactory.createDex`.
@@ -165,7 +167,13 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
             GovernanceLib.initHolder(GovernanceBits.FEE_ROUTING, cfg.owner, GovernanceBits.DEX_BITS, 0);
         }
         s.listedOnly = cfg.listedOnly;
-        s.puller = address(new DexPuller(cfg.rescueTo)); // the DEX itself rescues nothing (CTR-DEX-20, spec §6.2)
+        address p = address(new DexPuller(cfg.rescueTo)); // the DEX itself rescues nothing (CTR-DEX-20, spec §6.2)
+        // the tokens' rule (`GovernanceLib.init`): a pool would swallow a stray, the DEX or the puller keep it (M-2)
+        address r = cfg.rescueTo;
+        if (r == MetaTxLib.UA_POOL || r == MetaTxLib.SHIELD_POOL || r == address(this) || r == p) {
+            revert IRescuable.RescueConfigInvalid();
+        }
+        s.puller = p;
         _setFeeSplit(s, cfg.relayerSharePpm, cfg.treasury);
     }
 

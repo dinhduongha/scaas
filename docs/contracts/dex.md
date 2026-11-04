@@ -602,7 +602,7 @@ Holders of an **outside** token approve the puller, never the DEX; the DEX calls
 `DexOrder`, for `mtxSettle` and the exchange path alike. Why: an interaction runs as the DEX, so any allowance the DEX
 held could be spent by `outsideToken.transferFrom(victim, attacker, x)`. SCaaS tokens need no allowance at all.
 `DexPuller.rescue(token)`, callable by anyone, sends the puller's whole balance of `token` to its immutable `rescueTo`
-(`DexConfig.rescueTo`; 0 = no rescue, `RescueOff`); it calls only `balanceOf` and `transfer`, so no allowance is spent
+(`DexConfig.rescueTo`; 0 = no rescue, `RescueOff`; never `UA_POOL`, `SHIELD_POOL`, the DEX or the puller, `RescueConfigInvalid` at `initialize`); it calls only `balanceOf` and `transfer`, so no allowance is spent
 ([CTR-GOV-06](../decisions.md#ctr-gov-06--rescue-to-an-immutable-rescueto); BUILT on branch `governance`, T10 `dc9bfde0`). The DEX itself has no `rescue`.
 
 <a id="CTR-DEX-23"></a>**CTR-DEX-23** — **What an interaction may call; listed targets** (owner). (a) refuses an
