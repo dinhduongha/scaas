@@ -42,15 +42,16 @@ contract UARegistryPqTest is UARegistryBase {
         c[4] = UARegistry.KindConfig(0x0133, address(new UASlhdsaVerifier()), CAP_SLHDSA);
     }
 
-    /// Mock verifiers for 0x0101, the four PQ kinds and the PQZ key verifier 0x0142, PQ caps `pqCap`.
+    /// Mock verifiers for 0x0101, the five PQ kinds and the PQZ key verifier 0x0142, PQ caps `pqCap`.
     function _mockPq(address v, uint64 pqCap) internal pure returns (UARegistry.KindConfig[] memory c) {
-        uint16[6] memory ks = [uint16(0x0101), 0x0130, 0x0131, 0x0132, 0x0133, 0x0142];
-        c = new UARegistry.KindConfig[](6);
-        for (uint256 i; i < 6; ++i) c[i] = UARegistry.KindConfig(ks[i], v, i == 0 ? 400_000 : pqCap);
+        uint16[7] memory ks = [uint16(0x0101), 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0142];
+        c = new UARegistry.KindConfig[](7);
+        for (uint256 i; i < 7; ++i) c[i] = UARegistry.KindConfig(ks[i], v, i == 0 ? 400_000 : pqCap);
     }
 
     function _pk(uint16 kind, uint256 salt) internal pure returns (bytes memory pk) {
-        uint256 len = kind == 0x0130 ? 1312 : kind == 0x0131 ? 1952 : kind == 0x0132 ? 897 : kind == 0x0133 ? 32 : 16384;
+        uint256 len = kind == 0x0130 ? 1312 : kind == 0x0131 ? 1952 : kind == 0x0132 ? 897 : kind == 0x0133 ? 32
+            : kind == 0x0134 ? 2592 : 16384;
         pk = new bytes(len);
         for (uint256 i; i < len; i += 32) {
             bytes32 w = keccak256(abi.encode(kind, salt, i));
@@ -66,13 +67,13 @@ contract UARegistryPqTest is UARegistryBase {
     /// table.
     function test_pqSlots() public {
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _mockPq(address(mock), 1_000_000));
-        uint16[5] memory on = [uint16(0x0130), 0x0131, 0x0132, 0x0133, 0x0142];
-        for (uint256 i; i < 5; ++i) {
+        uint16[6] memory on = [uint16(0x0130), 0x0131, 0x0132, 0x0133, 0x0134, 0x0142];
+        for (uint256 i; i < 6; ++i) {
             assertTrue(r.kindEnabled(on[i]));
             assertEq(r.verifyCap(on[i]), 1_000_000);
         }
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        uint16[4] memory refused = [uint16(0x012f), 0x0134, 0x0143, 0x0150];
+        uint16[4] memory refused = [uint16(0x012f), 0x0135, 0x0143, 0x0150];
         for (uint256 i; i < 4; ++i) {
             c[0] = UARegistry.KindConfig(refused[i], address(mock), 50_000);
             vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, refused[i]));
@@ -83,8 +84,8 @@ contract UARegistryPqTest is UARegistryBase {
     /// CTR-UA-17: PQ keys are stored (`keyPtr` = SSTORE2(pk), `keyOf`); `auth` carries the signature only.
     function test_pqStored() public {
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _mockPq(address(mock), 1_000_000));
-        uint16[4] memory ks = [uint16(0x0130), 0x0131, 0x0132, 0x0133];
-        for (uint256 i; i < 4; ++i) {
+        uint16[5] memory ks = [uint16(0x0130), 0x0131, 0x0132, 0x0133, 0x0134];
+        for (uint256 i; i < 5; ++i) {
             bytes memory pk = _pk(ks[i], 1);
             bytes32 ua = _register(r, ks[i], pk);
             (IUARegistry.Record memory rec,) = r.recordOf(ua);
@@ -100,14 +101,34 @@ contract UARegistryPqTest is UARegistryBase {
         }
     }
 
+    /// CTR-UA-39 (owner Q3): `mldsa87` has config slot 12 of its own, apart from `isPq`'s range; its cap and the PQZ key
+    /// verifier's (0x0142, slot 18, where `kind − 0x0130 + 14` would have put it) are two values, each once.
+    function test_mldsa87Slot12() public {
+        UARegistry.KindConfig[] memory c = _mockPq(address(mock), 1_000_000);
+        c[5].cap = 250_000; // 0x0134
+        UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
+        assertEq(r.verifyCap(0x0134), 250_000);
+        assertEq(r.verifyCap(0x0142), 1_000_000);
+        assertEq(r.verifyCap(0x0141), 0, "slot 13, not configured");
+        UARegistry.KindConfig[] memory two = new UARegistry.KindConfig[](2);
+        (two[0], two[1]) = (UARegistry.KindConfig(0x0134, address(mock), 250_000), UARegistry.KindConfig(0x0134, address(mock), 1));
+        vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0x0134)));
+        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, two);
+        // without a verifier for it (no precompile, CTR-UA-39 Q1): not registrable
+        UARegistry off = _deploy(address(0x5ca5), chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
+        assertFalse(off.kindEnabled(0x0134));
+        bytes memory pk = _pk(0x0134, 2);
+        _registerReverts(off, 0x0134, pk, abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, uint16(0x0134)));
+    }
+
     /// The cache's refusals: other kinds, a disabled kind, a part past the last, a verifier with a precompile; a wrong
     /// key length.
     function test_cacheRefusals() public {
         UARegistry.KindConfig[] memory c = _realPq();
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
         bytes memory pk44 = _pk(0x0130, 1);
-        uint16[3] memory others = [uint16(0x0132), 0x0133, 0x0101];
-        for (uint256 i; i < 3; ++i) {
+        uint16[4] memory others = [uint16(0x0132), 0x0133, 0x0134, 0x0101]; // 0x0134: no cache (CTR-UA-39 Q1)
+        for (uint256 i; i < 4; ++i) {
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyCache.selector, others[i]));
             r.cacheExpandedKey(others[i], pk44, 0);
         }

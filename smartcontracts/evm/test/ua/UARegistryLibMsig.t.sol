@@ -295,17 +295,18 @@ contract UARegistryLibMsigTest is UARegistryBase {
     // ----- the hot path -----
 
     /// `requireAuthorized` at `159d267e`, the last commit where the differential against the pre-split registry compiled (its `after`
-    /// column; `register` state gas in `_stateBefore`). `0`: not a row.
+    /// column; `register` state gas in `_stateBefore`). `0`: not a row. Re-pinned on `mldsa87` (CTR-UA-39, kind 0x0134: `vkLength`'s
+    /// and `_slot`'s extra arm, the immutable `_CFG12`), old -> new in its commit: 0x0100-0x0107 +84, 0x0108 +116, 0x0141 +86.
     function _before(uint256 kind) internal pure returns (uint256) {
-        if (kind == 256) return 16926;
-        if (kind == 257) return 16953;
-        if (kind == 258) return 16972;
-        if (kind == 259) return 17029;
-        if (kind == 260) return 17120;
-        if (kind == 261) return 17274;
-        if (kind == 262) return 17503;
-        if (kind == 263) return 17389;
-        if (kind == 264) return 17357;
+        if (kind == 256) return 17010;
+        if (kind == 257) return 17037;
+        if (kind == 258) return 17056;
+        if (kind == 259) return 17113;
+        if (kind == 260) return 17204;
+        if (kind == 261) return 17358;
+        if (kind == 262) return 17587;
+        if (kind == 263) return 17473;
+        if (kind == 264) return 17473;
         if (kind == 272) return 19531;
         if (kind == 273) return 19588;
         if (kind == 274) return 19666;
@@ -314,7 +315,7 @@ contract UARegistryLibMsigTest is UARegistryBase {
         if (kind == 305) return 23915;
         if (kind == 306) return 20870;
         if (kind == 307) return 20159;
-        if (kind == 321) return 19543;
+        if (kind == 321) return 19629;
         return 0;
     }
 
@@ -376,7 +377,7 @@ contract UARegistryLibMsigTest is UARegistryBase {
         sm.members = new IUARegistry.MemberSig[](2);
         sm.members[_indexOf(ds, alice)] = _member(ds, alice, _ecdsa(ALICE, UARegistry(at).uaAuthDigest(alice, UAKinds.PURPOSE_MEMBER, md)));
         sm.members[_indexOf(ds, p)] = _member(ds, p, _sig(_key(0x0101), UAKinds.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
-        _meter(at, mu, sm, "requireAuthorized msig 2-of-2", 51870, SLACK + 2 * MEMBER_LIST_GAS);
+        _meter(at, mu, sm, "requireAuthorized msig 2-of-2", 52150, SLACK + 2 * MEMBER_LIST_GAS);
     }
 
     /// `requireAuthorized`, every kind and native, stays within +64 of the recorded figures (a code layout's change of JUMPDEST order); an

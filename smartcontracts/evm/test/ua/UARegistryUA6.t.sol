@@ -29,11 +29,11 @@ contract UARegistryUA6Test is UARegistryBase {
     function setUp() public override {
         super.setUp();
         UARegistry.KindConfig[] memory base = _cfgs(address(mock));
-        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](base.length + 7);
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](base.length + 8);
         for (uint256 i; i < base.length; ++i) c[i] = base[i];
-        uint16[6] memory pq = [uint16(0x0108), 0x0130, 0x0131, 0x0132, 0x0133, 0x0142];
-        for (uint256 i; i < 6; ++i) c[base.length + i] = UARegistry.KindConfig(pq[i], address(mock), i == 0 ? 50_000 : PQ_CAP);
-        c[base.length + 6] =
+        uint16[7] memory pq = [uint16(0x0108), 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0142];
+        for (uint256 i; i < 7; ++i) c[base.length + i] = UARegistry.KindConfig(pq[i], address(mock), i == 0 ? 50_000 : PQ_CAP);
+        c[base.length + 7] =
             UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000);
         r = _deploy(REG_U, chainUidA, address(0), false, BUDGET, address(0), true, c);
         mlKey = _pk(0x0131, 100);
@@ -45,7 +45,8 @@ contract UARegistryUA6Test is UARegistryBase {
     // ----- helpers -----
 
     function _pk(uint16 kind, uint256 salt) internal pure returns (bytes memory pk) {
-        uint256 len = kind == 0x0130 ? 1312 : kind == 0x0131 ? 1952 : kind == 0x0132 ? 897 : kind == 0x0133 ? 32 : 16384;
+        uint256 len = kind == 0x0130 ? 1312 : kind == 0x0131 ? 1952 : kind == 0x0132 ? 897 : kind == 0x0133 ? 32
+            : kind == 0x0134 ? 2592 : 16384;
         pk = new bytes(len);
         for (uint256 i; i < len; i += 32) {
             bytes32 w = keccak256(abi.encode(kind, salt, i));
@@ -141,8 +142,8 @@ contract UARegistryUA6Test is UARegistryBase {
     /// `h` is claimed, the event carries the attributes and `checkedPqzPop = CHAIN`, the UA is in its kind's list and in
     /// the `0x0142` list.
     function test_UA6_holderWithKey() public {
-        uint16[3] memory ks = [uint16(0x0130), 0x0131, 0x0132];
-        for (uint256 i; i < 3; ++i) {
+        uint16[4] memory ks = [uint16(0x0130), 0x0131, 0x0132, 0x0134]; // 0x0134 mldsa87: a holder (CTR-UA-39 Q2)
+        for (uint256 i; i < 4; ++i) {
             bytes memory pk = _pk(ks[i], i);
             bytes memory pqzKey = _pk(0x0142, i);
             vm.recordLogs();

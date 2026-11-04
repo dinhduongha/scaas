@@ -12,11 +12,14 @@
 # Not here: the scaas-node suite (6 GB alone, the coordinator runs it); node-kinds builds the node and runs the kind tests only.
 P=2026-11-04-mldsa87
 LOGEXT=log # step logs are git-ignored (*.log); only <P>-summary.txt is committed (owner 2026-11-02)
-STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 forge-isolate sizes docs vectors-check clientkeys ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt cargo-zether-prover soroban-registry near-common node-kinds nethermind named-tests summary"
+STEPS="forge-n2304-kmax4096 atset-n2048-kmax1024 atset-n2560-kmax16384 atset-n2816-kmax65536 forge-isolate sizes docs vectors-check clientkeys ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt cargo-zether-prover soroban-registry near-common node-kinds nethermind named-tests summary"
 FAMILIES="ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt soroban-registry near-common node-kinds nethermind"
 
 extra_step() { # this branch's own steps (the base runner calls it for a step it does not know)
   case $1 in
+    # controller 2026-11-04: the full forge suite at the default set (forge-n2304-kmax4096); at the other three sets only the
+    # paths the kind touches (it reaches PQZ through the registry's holder rules only); at-set.sh restores PqzSet.sol
+    atset-*) scripts/capped smartcontracts/evm/script/pqz/at-set.sh "${1#atset-}" test --match-path 'test/{ua,pqz}/*' ;;
     soroban-registry) CARGO_BUILD_JOBS=2 scripts/capped sh -c 'cd smartcontracts/soroban && cargo test -j2 -p scaas-ua-registry' ;;
     near-common) CARGO_BUILD_JOBS=2 scripts/capped sh -c 'cd smartcontracts/near && cargo test -j2 -p scaas-near-common' ;;
     node-kinds) cd scaas-node && ../scripts/capped sh -c 'cargo build -j2 && cargo test -j2 --lib chain_kind' ;;

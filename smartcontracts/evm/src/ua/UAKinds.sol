@@ -38,6 +38,7 @@ library UAKinds {
     uint16 internal constant MLDSA65 = 0x0131;
     uint16 internal constant FNDSA512 = 0x0132;
     uint16 internal constant SLHDSA128S = 0x0133;
+    uint16 internal constant MLDSA87 = 0x0134; // CTR-UA-39: enabled only where a precompile verifies it
     uint16 internal constant ZETHER_BLS12381 = 0x0141;
     /// @notice A scheme id since UA-6, not a kind: the PQZ key attribute of a PQ signing UA (its tag for `R_REG`'s
     ///         `uaMessage`, its keyHash group `pqz-mlwe`, the registry slot of its verifier and the `0x0142` list).
@@ -131,7 +132,7 @@ library UAKinds {
 
     function _singleSigning(uint16 kind) private pure returns (bool) {
         return (kind >= WEBAUTHN_P256 && kind <= SECP256K1) || (kind >= MUSIG2_SECP256K1 && kind <= FROST_BN254)
-            || (kind >= MLDSA44 && kind <= SLHDSA128S);
+            || (kind >= MLDSA44 && kind <= MLDSA87);
     }
 
     function isSigning(uint16 kind) internal pure returns (bool) {
@@ -180,6 +181,7 @@ library UAKinds {
         if (kind == 0x0131) return "mldsa65";
         if (kind == 0x0132) return "fndsa512";
         if (kind == 0x0133) return "slhdsa128s";
+        if (kind == 0x0134) return "mldsa87";
         if (kind == 0x0141) return "zether-bls12381";
         if (kind == 0x0142) return "pqz-mlwe";
         revert UAKindUnknown(kind);
@@ -213,7 +215,7 @@ library UAKinds {
         if (kind == BLS12381_MINSIG) return "bls12381-g2";
         if (kind == BLS_BN254_MINSIG) return "bn254-g2";
         if (kind == MSIG) return "";
-        return name(kind); // mldsa44, mldsa65, fndsa512, slhdsa128s, the scheme pqz-mlwe: the group is the name
+        return name(kind); // mldsa44, mldsa65, fndsa512, slhdsa128s, mldsa87, the scheme pqz-mlwe: the group is the name
     }
 
     function groupTag(string memory group) internal pure returns (bytes32) {
@@ -422,7 +424,7 @@ library UAKinds {
         else if (kind == FROST_BN254) ok = _frost(d, 64);
         else if (kind == MSIG) ok = _msig(d, hederaNative);
         else if (kind == FNDSA512) ok = _fndsa(d);
-        else ok = true; // mldsa44/65, slhdsa128s: the length is the whole check
+        else ok = true; // mldsa44/65/87, slhdsa128s: the length is the whole check
         if (!ok) revert UAKeyData(kind);
     }
 
@@ -435,6 +437,7 @@ library UAKinds {
         if (kind == MLDSA44) return 1312;
         if (kind == MLDSA65) return 1952;
         if (kind == FNDSA512) return 897;
+        if (kind == MLDSA87) return 2592;
         return 0; // MuSig2, FROST, msig: variable
     }
 

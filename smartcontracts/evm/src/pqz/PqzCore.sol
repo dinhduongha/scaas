@@ -874,14 +874,14 @@ library PqzCore {
     }
 
     /// @dev The key of a holder that gets a pending entry (shield, op 1 and op 7 legs): `_keyPtr`, and on a PQZH value
-    ///      token a single-key `mldsa44` / `mldsa65` / `fndsa512` UA only (owner 2026-10-27, C0-2: the calldata of a
+    ///      token a single-key `mldsa44` / `mldsa65` / `fndsa512` / `mldsa87` UA only (owner 2026-10-27, C0-2: the calldata of a
     ///      debit by any other holder, an `msig` quorum, may not fit one transaction). The fee beneficiary is exempt (a
     ///      public credit).
     function _creditKey(address registry, bytes32 ua) internal view returns (address ptr) {
         ptr = _keyPtr(registry, ua);
         if ($().psid == PqzSet.PQZH_ID) {
             uint16 k = IUARegistry(registry).kindOf(ua);
-            if (k != UAKinds.MLDSA44 && k != UAKinds.MLDSA65 && k != UAKinds.FNDSA512) {
+            if (k != UAKinds.MLDSA44 && k != UAKinds.MLDSA65 && k != UAKinds.FNDSA512 && k != UAKinds.MLDSA87) {
                 revert IPqzToken.PqzhHolderKind(ua, k);
             }
         }

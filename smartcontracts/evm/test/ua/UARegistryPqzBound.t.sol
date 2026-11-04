@@ -27,7 +27,7 @@ contract UARegistryPqzBoundTest is UARegistryBase {
     }
 
     function _pk(uint16 kind, uint256 salt) internal pure returns (bytes memory pk) {
-        uint256 len = kind == 0x0131 ? 1952 : kind == 0x0132 ? 897 : kind == 0x0133 ? 32 : 16384;
+        uint256 len = kind == 0x0131 ? 1952 : kind == 0x0132 ? 897 : kind == 0x0133 ? 32 : kind == 0x0134 ? 2592 : 16384;
         pk = new bytes(len);
         for (uint256 i; i < len; i += 32) {
             bytes32 w = keccak256(abi.encode(kind, salt, i));
@@ -112,8 +112,32 @@ contract UARegistryPqzBoundTest is UARegistryBase {
 
     /// 2-of-2 worst case at cap `c`, the gen-2 forwarding hold (w / 63 + margin) and the cheapest debit.
     function _bound(uint256 c) internal pure returns (uint256) {
+        return _bound(c, AUTH_2_ML65);
+    }
+
+    function _bound(uint256 c, uint256 auth) internal pure returns (uint256) {
         uint256 w = 2 * (c + 45_000) + (c - 400_000) / 63 + 2_500; // MSIG_ACCEPTED_GAS
-        return w + w / 63 + SigCheck.GAS_MARGIN + PqzSet.PQZ_DEBIT_MIN_GAS + 16 * AUTH_2_ML65;
+        return w + w / 63 + SigCheck.GAS_MARGIN + PqzSet.PQZ_DEBIT_MIN_GAS + 16 * auth;
+    }
+
+    /// CTR-UA-39 (owner Q2 / Q3): 2-of-2 `mldsa87` is PQ-eligible and its bound counts each signature at 4,627 B (padded 4,640):
+    /// the largest cap that fits registers with a PQZ key, one more gas does not.
+    function test_register_msigHolderBoundary_mldsa87() public {
+        uint256 auth = 2 * (192 + 4_640);
+        uint256 lo = 400_000;
+        uint256 hi = 8_000_000;
+        while (hi - lo > 1) {
+            uint256 mid = (lo + hi) / 2;
+            if (_bound(mid, auth) <= LIM) lo = mid;
+            else hi = mid;
+        }
+        UARegistry r = _regs(address(0x5CA7005), [uint16(0x0134), 0x0132, 0x0133], [uint64(lo), 2_500_000, 1_400_000]);
+        (bytes memory d, bytes32 ua, bytes[] memory keys, uint16[] memory ks) = _members(r, 0x0134, 2, false, 2);
+        _holder(r, d, ua, keys, ks);
+        UARegistry r2 = _regs(address(0x5CA7006), [uint16(0x0134), 0x0132, 0x0133], [uint64(lo + 1), 2_500_000, 1_400_000]);
+        (d, ua, keys, ks) = _members(r2, 0x0134, 2, false, 2);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
+        UACall.register(r2, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 903)), hex"01", hex"01");
     }
 
     /// The exact boundary: 2-of-2 `mldsa65` with cap `C` (worst case `2 (C + 35 k) + (C - 400 k) / 63`); the largest

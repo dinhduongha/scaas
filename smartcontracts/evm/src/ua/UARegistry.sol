@@ -13,7 +13,7 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 
 /// @title UA registry, UA-2a/2c/3, P6c and UA-6 scope (accounts.md §1.8): the single-key kinds 0x0100–0x0108, the
 ///        group kinds 0x0110–0x0113 (MuSig2/FROST, stored), the structure `msig`, the Zether kind 0x0141
-///        (stored), the PQ signing kinds 0x0130–0x0133 (stored), the PQZ key attribute (scheme 0x0142) of PQ signing
+///        (stored), the PQ signing kinds 0x0130–0x0134 (stored), the PQZ key attribute (scheme 0x0142) of PQ signing
 ///        UAs, native EVM ids, generations.
 /// @notice Monotonic and admin-free (CTR-UA-15): no owner, no setter, no `payable`, a record never changes. `register`
 ///         derives every record field from `keyData` (CTR-UA-07), so anyone may relay it. Every verifier `staticcall` (group PoP: see below) is
@@ -47,8 +47,8 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///         each `UAMldsaVerifier.expandedKeyPart(pk, part)` stored once with SSTORE2 under its id (`uaOf(kind, pk)`,
 ///         before or after `register`); once every part is there, PoP and verify go through `verifyCached` with the part
 ///         pointers. Refused where the verifier uses a precompile (a cached Solidity path would exceed its cap).
-///         PQZ key (UA-6, CTR-UA-30, CTR-PQZ-12/13): an attribute of a holder — `mldsa44`, `mldsa65`, `fndsa512`, or an
-///         `msig` whose members of kinds outside 0x0130–0x0133 weigh less than its threshold (PQ-eligible) — given in
+///         PQZ key (UA-6, CTR-UA-30, CTR-PQZ-12/13): an attribute of a holder — `mldsa44`, `mldsa65`, `fndsa512`, `mldsa87`, or an
+///         `msig` whose members of kinds outside 0x0130–0x0134 weigh less than its threshold (PQ-eligible) — given in
 ///         its `register` (`attrs.pqzKey`, `attrs.pqzPopHash`) with the optional `R_REG` proof over the portable digest
 ///         (UA-8 P1, P8), checked by `UAPqzVerifier` in slot 0x0142; stored with SSTORE2 (`recordOf`, `pqzKeyOf`),
 ///         immutable. Only a proven key (proof checked by that verifier) is one UA per key (`keyOwner(h)`) and appended
@@ -125,6 +125,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     uint256 private immutable _CFG9; // 0x0111 frost-secp256k1 (UA-2c, stored)
     uint256 private immutable _CFG10; // 0x0112 musig2-bn254 (UA-2c, stored)
     uint256 private immutable _CFG11; // 0x0113 frost-bn254 (UA-2c, stored)
+    uint256 private immutable _CFG12; // 0x0134 mldsa87 (CTR-UA-39, stored, precompile only; the slot of zether-bn254 before UA-6)
     uint256 private immutable _CFG13; // 0x0141 zether-bls12381 (UA-3, stored; SIGNING since UA-6)
     uint256 private immutable _CFG14; // 0x0130 mldsa44 (P6c, stored, expanded-key cache)
     uint256 private immutable _CFG15; // 0x0131 mldsa65 (P6c, stored, expanded-key cache)
@@ -184,7 +185,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         (_CFG0, _CFG1, _CFG2, _CFG3) = (k[0], k[1], k[2], k[3]);
         (_CFG4, _CFG5, _CFG6, _CFG7) = (k[4], k[5], k[6], k[7]);
         (_CFG8, _CFG9, _CFG10, _CFG11) = (k[8], k[9], k[10], k[11]);
-        _CFG13 = k[13];
+        (_CFG12, _CFG13) = (k[12], k[13]);
         (_CFG14, _CFG15, _CFG16, _CFG17, _CFG18) = (k[14], k[15], k[16], k[17], k[18]);
         _CFG19 = k[19];
         _CFG_MSIG = msig_ ? uint256(uint160(address(this))) | uint256(verifyBudget_) << 160 : 0;
@@ -722,18 +723,20 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         if (s > 19) return 0;
         if (s == 19) return _CFG19;
         if (s > 13) return s < 16 ? (s == 14 ? _CFG14 : _CFG15) : (s < 18 ? (s == 16 ? _CFG16 : _CFG17) : _CFG18);
-        if (s > 11) return _CFG13; // slot 12 (zether-bn254) is in legacy/ua6/: `_slot` never returns it
+        if (s > 11) return s == 12 ? _CFG12 : _CFG13;
         if (s > 7) return s < 10 ? (s == 8 ? _CFG8 : _CFG9) : (s == 10 ? _CFG10 : _CFG11);
         if (s < 4) return s < 2 ? (s == 0 ? _CFG0 : _CFG1) : (s == 2 ? _CFG2 : _CFG3);
         return s < 6 ? (s == 4 ? _CFG4 : _CFG5) : (s == 6 ? _CFG6 : _CFG7);
     }
 
-    /// Kind-table slot: 0x0100–0x0107 → 0–7, 0x0110–0x0113 → 8–11, 0x0141 → 13, 0x0130–0x0133 → 14–17,
-    /// 0x0142 (the PQZ key verifier) → 18, 0x0108 → 19, anything else 20 (not in this code's table).
+    /// Kind-table slot: 0x0100–0x0107 → 0–7, 0x0110–0x0113 → 8–11, 0x0134 → 12, 0x0141 → 13, 0x0130–0x0133 → 14–17,
+    /// 0x0142 (the PQZ key verifier) → 18, 0x0108 → 19, anything else 20 (not in this code's table). Slot 12 was
+    /// `zether-bn254`'s (legacy/ua6/); 0x0134 is mapped before `UAStore.isPq`, whose range now holds it (CTR-UA-39 Q3).
     function _slot(uint16 kind) private pure returns (uint256) {
         if (kind >= 0x0100 && kind <= 0x0107) return kind - 0x0100;
         if (kind >= UAKinds.MUSIG2_SECP256K1 && kind <= UAKinds.FROST_BN254) return kind - 0x0110 + 8;
         if (kind == UAKinds.ZETHER_BLS12381) return 13;
+        if (kind == UAKinds.MLDSA87) return 12;
         if (UAStore.isPq(kind)) return kind - 0x0130 + 14;
         if (kind == UAKinds.PQZ_MLWE) return 18;
         if (kind == UAKinds.SECP256K1) return 19;
