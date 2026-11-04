@@ -1,212 +1,212 @@
-# 2026-11-04-fndsa1024 at commit 9d151857
+# 2026-11-04-fndsa1024 at commit 9c760b4a
 step | commit | rc | counts
-forge-n2304-kmax4096 | 9d151857 | 0 | 2165 passed  failed (forge) 
+forge-n2304-kmax4096 | bf5cb588 | 0 | 2165 passed  failed (forge) 
 atset-n2048-kmax1024 | 9d151857 | 0 | 796 passed  failed (forge) 
 atset-n2560-kmax16384 | 9d151857 | 0 | 792 passed  failed (forge) 
 atset-n2816-kmax65536 | 9d151857 | 0 | 787 passed  failed (forge) 
 forge-isolate | 9d151857 | 0 | 22 passed  failed (forge) 
 sizes | 9d151857 | 0 | -
-docs | 9d151857 | 0 | -
-vectors-check | 9d151857 | 0 | 2 passed 0 failed 0 ignored (cargo) 
-clientkeys | 9d151857 | 0 | 233 passed 0 failed (node) 
-ua-rs | 9d151857 | 0 | 49 passed 0 failed 0 ignored (cargo) 
-ua-rs-pq | 9d151857 | 0 | 68 passed 0 failed 0 ignored (cargo) 
-ua-rs-signers | 9d151857 | 0 | 57 passed 0 failed 1 ignored (cargo) 
-ua-rs-json | 9d151857 | 0 | 54 passed 0 failed 0 ignored (cargo) 
-ua-py | 9d151857 | 0 | 26 ran (unittest) 
-ua-go | 9d151857 | 0 | 25 passed (go) 
-ua-cs | 9d151857 | 0 | 25 passed (dotnet) 
-ua-c | 9d151857 | 0 | 1 passed 0 failed 0 ignored (cargo) 21 ran (unittest) 
-ua-cxx | 9d151857 | 0 | 17 passed (ctest) 
-ua-dart | 9d151857 | 0 | -
-ua-dart-frb | 9d151857 | 0 | -
-ua-qt | 9d151857 | 0 | 1 passed (ctest) 26 passed (qt) 
-cargo-zether-prover | 9d151857 | 0 | 67 passed 0 failed 0 ignored (cargo) 
-soroban-registry | 9d151857 | 0 | 164 passed 0 failed 0 ignored (cargo) 
+docs | 1b65fd5d | 0 | -
+vectors-check | 9c760b4a | 0 | 2 passed 0 failed 0 ignored (cargo) 
+clientkeys | bf5cb588 | 0 | 233 passed 0 failed (node) 
+ua-rs | bf5cb588 | 0 | 49 passed 0 failed 0 ignored (cargo) 
+ua-rs-pq | bf5cb588 | 0 | 68 passed 0 failed 0 ignored (cargo) 
+ua-rs-signers | bf5cb588 | 0 | 57 passed 0 failed 1 ignored (cargo) 
+ua-rs-json | bf5cb588 | 0 | 54 passed 0 failed 0 ignored (cargo) 
+ua-py | bf5cb588 | 0 | 26 ran (unittest) 
+ua-go | bf5cb588 | 0 | 25 passed (go) 
+ua-cs | bf5cb588 | 0 | 25 passed (dotnet) 
+ua-c | bf5cb588 | 0 | 1 passed 0 failed 0 ignored (cargo) 21 ran (unittest) 
+ua-cxx | bf5cb588 | 0 | 17 passed (ctest) 
+ua-dart | bf5cb588 | 0 | -
+ua-dart-frb | bf5cb588 | 0 | -
+ua-qt | bf5cb588 | 0 | 1 passed (ctest) 26 passed (qt) 
+cargo-zether-prover | 1b65fd5d | 0 | 67 passed 0 failed 0 ignored (cargo) 
+soroban-registry | 1b65fd5d | 0 | 164 passed 0 failed 0 ignored (cargo) 
 near-common | 9d151857 | 0 | 9 passed 0 failed 0 ignored (cargo) 
 node-kinds | 9d151857 | 0 | 2 passed 0 failed 0 ignored (cargo) 
 node-dex-kat | 9d151857 | 0 | 4 passed 0 failed 0 ignored (cargo) 
-named-tests | 9d151857 | 0 | -
+named-tests | 9c760b4a | 0 | -
 
 # result lines
-forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 12.21ms (6.93ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 5.53ms (107.76µs CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 16.90ms (10.51ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 21 passed; 0 failed; 0 skipped; finished in 7.50ms (4.13ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 32.67ms (20.33ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 21 passed; 0 failed; 0 skipped; finished in 31.03ms (20.93ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 4.06ms (300.70µs CPU time)
-forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 41.47ms (33.96ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 51 passed; 0 failed; 0 skipped; finished in 136.30ms (87.25ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 166.43ms (156.95ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 205.53ms (201.53ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 328.92ms (282.08ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 23 passed; 0 failed; 0 skipped; finished in 276.97ms (273.24ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 358.28ms (353.59ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 41 passed; 0 failed; 0 skipped; finished in 62.83ms (55.63ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 24 passed; 0 failed; 0 skipped; finished in 240.39ms (399.39ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 63.85ms (11.88ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 44 passed; 0 failed; 0 skipped; finished in 488.97ms (482.38ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 291.08ms (284.31ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 3.46ms (553.84µs CPU time)
-forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 2.76ms (245.77µs CPU time)
-forge-n2304-kmax4096: Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 12.96ms (9.84ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 71.18ms (40.04ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 28 passed; 0 failed; 0 skipped; finished in 162.11ms (156.00ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 265.48ms (261.67ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 33 passed; 0 failed; 0 skipped; finished in 194.37ms (186.52ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 29 passed; 0 failed; 0 skipped; finished in 17.51ms (13.93ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 9.94ms (3.96ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 8.64ms (5.26ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 4.28ms (923.16µs CPU time)
-forge-n2304-kmax4096: Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 20.71ms (11.25ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 2.83ms (263.78µs CPU time)
-forge-n2304-kmax4096: Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 2.17s (2.16s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 2.69s (2.69s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 52 passed; 0 failed; 0 skipped; finished in 189.63ms (179.80ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 9.06ms (2.13ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 11.72ms (8.53ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 3.85s (3.85s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 8.77ms (285.49µs CPU time)
-forge-n2304-kmax4096: Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 28.25ms (19.94ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 19 passed; 0 failed; 0 skipped; finished in 581.10ms (577.45ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 7.04ms (3.73ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 625.60ms (622.69ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 4.21s (4.06s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 8.88s (8.59s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 8.14s (8.14s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 135.67ms (132.54ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 1.11s (1.39s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 11.12ms (5.70ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 25.76ms (22.12ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 9.71ms (4.62ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 20.80ms (16.32ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 17.77ms (14.20ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 4.89s (4.87s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 9.11s (9.11s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 32 passed; 0 failed; 0 skipped; finished in 41.26ms (34.18ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 4.32s (4.26s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 1.14s (987.54ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 864.44ms (792.68ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 21.67s (21.67s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 27.76ms (21.22ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 12.17ms (3.67ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 0 passed; 0 failed; 1 skipped; finished in 19.05ms (0.00ns CPU time)
-forge-n2304-kmax4096: Suite result: ok. 0 passed; 0 failed; 1 skipped; finished in 4.21ms (0.00ns CPU time)
-forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 10.56s (10.56s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 420.54ms (109.50ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 501.77ms (65.02ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 989.28ms (986.44ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 2.89s (2.68s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 2.52s (2.51s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 754.67ms (401.17ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 2 skipped; finished in 491.20ms (302.84ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 703.66ms (511.42ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 234.02ms (31.80ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 44 passed; 0 failed; 0 skipped; finished in 9.02s (8.94s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 40.34ms (9.33ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 803.71ms (1.25s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 124.75ms (39.01ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 5.42s (5.20s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 42 passed; 0 failed; 1 skipped; finished in 34.10s (33.18s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 21 passed; 0 failed; 0 skipped; finished in 3.30s (3.14s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 219.71ms (16.97ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 6.19s (6.10s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 199.62ms (28.64ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 38 passed; 0 failed; 1 skipped; finished in 36.61s (35.68s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 18 passed; 0 failed; 0 skipped; finished in 15.21ms (9.48ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 270.69ms (266.34ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.84s (2.44s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 4.46ms (1.84ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 337.49ms (192.68ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 153.65ms (13.14ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 3.27ms (296.77µs CPU time)
-forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 307.29ms (176.79ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 178.70ms (25.84ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 11.26s (10.97s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 2.26s (2.25s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 180.65ms (176.33ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 373.38ms (228.21ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 1.73s (1.73s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 285.20ms (213.66ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 151.07ms (147.60ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 2.80s (2.79s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 2.13s (1.99s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 532.83ms (738.40ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 2.75s (2.61s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 2 skipped; finished in 714.92ms (709.39ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 10.93s (10.66s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 570.25ms (531.83ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 787.81ms (783.26ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 349.67ms (298.57ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 24 passed; 0 failed; 0 skipped; finished in 51.96ms (20.76ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 8.49s (8.44s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 349.38ms (330.60ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 40 passed; 0 failed; 0 skipped; finished in 2.26s (2.24s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 846.92ms (825.38ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 5 passed; 0 failed; 3 skipped; finished in 17.23s (17.09s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 10.03s (10.01s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 30 passed; 0 failed; 0 skipped; finished in 263.49ms (217.91ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 26 passed; 0 failed; 0 skipped; finished in 56.94s (56.91s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 57.60s (57.60s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 14.15ms (9.66ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 716.77ms (780.19ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 31 passed; 0 failed; 0 skipped; finished in 153.87ms (133.13ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 54.95s (54.95s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 0 passed; 0 failed; 1 skipped; finished in 6.22ms (0.00ns CPU time)
-forge-n2304-kmax4096: Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 34.74s (43.28s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 7.00s (6.92s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 75.25s (75.21s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 3.59s (3.53s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 37 passed; 0 failed; 1 skipped; finished in 32.93s (31.95s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 7.08s (7.04s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 2.31s (2.25s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 148.96ms (29.19ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 5.53s (5.47s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 569.76ms (503.15ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 2.24s (2.15s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 10.54s (10.48s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 8.50s (8.35s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 24 passed; 0 failed; 0 skipped; finished in 8.28s (8.22s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 2.06s (2.06s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 21 passed; 0 failed; 0 skipped; finished in 4.58s (4.51s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 21 passed; 0 failed; 0 skipped; finished in 28.04s (28.04s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 24 passed; 0 failed; 0 skipped; finished in 44.16ms (18.61ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 50.35s (50.34s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 52.66s (52.57s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 105.49ms (36.80ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 8.15s (8.11s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 30.69ms (4.93ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 2.09s (1.25s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 40 passed; 0 failed; 0 skipped; finished in 30.63s (30.55s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 406.36ms (343.83ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 8.91s (8.81s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 42.63ms (22.23ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 22 passed; 0 failed; 0 skipped; finished in 42.52ms (18.34ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 7.73s (7.48s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 7.52ms (4.04ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 31.25ms (8.03ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 86.73ms (13.49ms CPU time)
-forge-n2304-kmax4096: Suite result: ok. 0 passed; 0 failed; 1 skipped; finished in 9.58ms (0.00ns CPU time)
-forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 2.52s (1.90s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 28 passed; 0 failed; 0 skipped; finished in 8.78s (8.71s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 80.36s (80.36s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.85s (2.84s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.68s (2.67s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.52s (2.51s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.43s (2.42s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.90s (2.89s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 3.02s (3.01s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 3.35ms (355.49µs CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.31s (2.25s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 3.56s (3.44s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 33 passed; 0 failed; 0 skipped; finished in 97.12s (96.95s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 19 passed; 0 failed; 0 skipped; finished in 102.40s (102.30s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 205.48s (275.36s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 83 passed; 0 failed; 0 skipped; finished in 254.93s (1034.87s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 2.08s (3.70s CPU time)
-forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 307.43s (307.43s CPU time)
-forge-n2304-kmax4096: Ran 177 test suites in 307.82s (1924.40s CPU time): 2129 tests passed, 0 failed, 14 skipped (2143 total tests)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 8.86ms (4.80ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 21 passed; 0 failed; 0 skipped; finished in 6.12ms (3.82ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 21.86ms (15.24ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 2.61ms (100.63µs CPU time)
+forge-n2304-kmax4096: Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 22.43ms (15.66ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 21 passed; 0 failed; 0 skipped; finished in 29.49ms (21.65ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 7.75ms (158.01µs CPU time)
+forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 43.77ms (36.91ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 117.96ms (114.68ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 114.98ms (107.50ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 51 passed; 0 failed; 0 skipped; finished in 219.58ms (182.20ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 23 passed; 0 failed; 0 skipped; finished in 244.04ms (239.66ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 301.56ms (299.35ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 24 passed; 0 failed; 0 skipped; finished in 365.27ms (353.90ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 33 passed; 0 failed; 0 skipped; finished in 192.24ms (187.35ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 29 passed; 0 failed; 0 skipped; finished in 22.32ms (18.99ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 8.66ms (3.74ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 7.92ms (4.49ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 3.95ms (984.94µs CPU time)
+forge-n2304-kmax4096: Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 18.07ms (8.70ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 2.72ms (219.44µs CPU time)
+forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 524.68ms (519.95ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 3.45ms (588.79µs CPU time)
+forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 2.92ms (235.54µs CPU time)
+forge-n2304-kmax4096: Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 14.45ms (11.07ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 44 passed; 0 failed; 0 skipped; finished in 707.48ms (698.79ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 467.52ms (407.02ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 41 passed; 0 failed; 0 skipped; finished in 127.19ms (113.17ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 48.07ms (7.26ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 75.18ms (35.34ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 28 passed; 0 failed; 0 skipped; finished in 207.54ms (199.43ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 301.16ms (296.59ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 0 passed; 0 failed; 1 skipped; finished in 3.76ms (0.00ns CPU time)
+forge-n2304-kmax4096: Suite result: ok. 0 passed; 0 failed; 1 skipped; finished in 3.78ms (0.00ns CPU time)
+forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 454.68ms (58.63ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 2.37s (2.36s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 3.05s (3.05s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 52 passed; 0 failed; 0 skipped; finished in 145.81ms (140.93ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 7.19ms (1.88ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 9.87ms (7.00ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 19 passed; 0 failed; 0 skipped; finished in 641.69ms (638.35ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 7.28ms (3.34ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 2.55s (2.37s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 5.16s (5.15s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 3.22ms (333.23µs CPU time)
+forge-n2304-kmax4096: Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 39.77ms (33.96ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 739.58ms (563.68ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 942.01ms (937.76ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 830.55ms (510.03ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 323.83ms (41.07ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 9.37s (9.06s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 5.83s (5.67s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 8.51s (8.49s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 5.67s (5.64s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 11.51s (11.51s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 32 passed; 0 failed; 0 skipped; finished in 69.13ms (63.46ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 14.61s (14.29s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 644.05ms (335.37ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 253.87ms (21.93ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 6.22s (6.10s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 1.07s (915.27ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 1.01s (955.75ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 3.13s (3.13s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 98.75ms (95.03ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 1.89s (2.22s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 11.92ms (6.76ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 44 passed; 0 failed; 0 skipped; finished in 13.63s (13.55s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 179.90ms (44.90ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 24.17ms (16.63ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 8.06ms (2.42ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 89.72ms (24.10ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 42 passed; 0 failed; 1 skipped; finished in 40.99s (39.29s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 30.25s (30.24s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 28.07ms (21.50ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 10.34ms (4.80ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 20.93ms (16.25ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 19.19ms (15.43ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 4.75s (4.19s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 521.22ms (227.93ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 181.34ms (12.97ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 3.28ms (289.72µs CPU time)
+forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 194.63ms (23.96ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 235.65ms (32.24ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 38 passed; 0 failed; 1 skipped; finished in 47.04s (46.06s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 18 passed; 0 failed; 0 skipped; finished in 19.62ms (14.41ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 347.92ms (340.23ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 5.35ms (2.34ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 8.61s (8.49s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 3.13s (3.13s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 357.74ms (352.13ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 522.95ms (310.85ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 231.97ms (172.69ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 133.99ms (129.68ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 3.86s (3.71s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 2 skipped; finished in 1.27s (1.25s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 3.00s (3.00s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 2.02s (1.85s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 14.51s (14.50s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 558.18ms (94.71ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 1.43s (1.42s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 15.18s (14.88s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 2.07s (2.07s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 2 skipped; finished in 543.18ms (352.81ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 671.17ms (835.77ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 4.27s (3.96s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 10.02s (9.99s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 75.38ms (35.83ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 352.36ms (334.48ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 876.89ms (854.14ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 60.68s (68.84s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 70.31s (70.31s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 0 passed; 0 failed; 1 skipped; finished in 13.65ms (0.00ns CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 3.21s (3.19s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 3.53s (3.51s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 8.30s (8.22s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.59s (2.58s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 3.42ms (334.70µs CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.25s (2.17s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 4.44s (4.35s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 5 passed; 0 failed; 3 skipped; finished in 21.04s (20.95s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 3.67s (3.51s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 2.61s (2.54s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 198.08ms (42.51ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.35s (2.34s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 42.94s (41.92s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 3.62s (3.61s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 37 passed; 0 failed; 1 skipped; finished in 41.26s (40.21s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 3.86s (3.84s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 1.34s (1.23s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 1.39s (1.39s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 11.55s (11.35s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 436.78ms (382.42ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 24 passed; 0 failed; 0 skipped; finished in 42.80ms (18.08ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 98.17s (98.10s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 31 passed; 0 failed; 0 skipped; finished in 202.23ms (157.16ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 40 passed; 0 failed; 0 skipped; finished in 3.40s (3.38s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 10.56s (10.53s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 7.96s (7.90s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 997.39ms (889.42ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 13.65s (13.61s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 30 passed; 0 failed; 0 skipped; finished in 236.48ms (205.81ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 857.31ms (926.35ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 4.04s (3.92s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 52.21ms (25.09ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 22 passed; 0 failed; 0 skipped; finished in 47.87ms (22.31ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 4.55s (3.35s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 30.95ms (7.28ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 32.30ms (5.15ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 0 passed; 0 failed; 1 skipped; finished in 2.86ms (0.00ns CPU time)
+forge-n2304-kmax4096: Suite result: ok. 24 passed; 0 failed; 0 skipped; finished in 9.72s (9.63s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 3.44s (3.44s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 12.13s (12.09s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 21 passed; 0 failed; 0 skipped; finished in 4.54s (4.41s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 21 passed; 0 failed; 0 skipped; finished in 44.92s (44.92s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 24 passed; 0 failed; 0 skipped; finished in 44.99ms (18.35ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 8.68s (8.63s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 71.22s (71.04s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 66.73ms (9.33ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 129.88ms (61.49ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 2.95s (1.84s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 61.04s (61.02s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 95.53s (95.54s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 21 passed; 0 failed; 0 skipped; finished in 96.98s (5.71s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 10.73s (10.61s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 13.27ms (5.67ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 8.54s (7.99s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 33 passed; 0 failed; 0 skipped; finished in 112.59s (112.43s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 19 passed; 0 failed; 0 skipped; finished in 132.19s (132.01s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 40 passed; 0 failed; 0 skipped; finished in 46.22s (46.07s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 625.58ms (547.70ms CPU time)
+forge-n2304-kmax4096: Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 319.63s (366.14s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 28 passed; 0 failed; 0 skipped; finished in 9.49s (9.44s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 83 passed; 0 failed; 0 skipped; finished in 404.95s (1903.08s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 26 passed; 0 failed; 0 skipped; finished in 467.32s (75.64s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 468.33s (468.33s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 435.34s (435.89s CPU time)
+forge-n2304-kmax4096: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 3.94s (6.95s CPU time)
+forge-n2304-kmax4096: Ran 177 test suites in 477.47s (3571.36s CPU time): 2129 tests passed, 0 failed, 14 skipped (2143 total tests)
 atset-n2048-kmax1024: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 336.41ms (44.78ms CPU time)
 atset-n2048-kmax1024: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 497.22ms (731.99ms CPU time)
 atset-n2048-kmax1024: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 50.19ms (21.43ms CPU time)
@@ -399,69 +399,71 @@ atset-n2816-kmax65536: Ran 62 test suites in 236.12s (968.86s CPU time): 780 tes
 forge-isolate: Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 2.10s (5.88s CPU time)
 forge-isolate: Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 2.90s (9.09s CPU time)
 forge-isolate: Ran 2 test suites in 2.90s (5.00s CPU time): 22 tests passed, 0 failed, 0 skipped (22 total tests)
-vectors-check: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 6.26s
-vectors-check: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 6.23s
+vectors-check: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 6.53s
+vectors-check: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 6.19s
+ua-rs: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+ua-rs: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.43s
 ua-rs: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-ua-rs: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
-ua-rs: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
-ua-rs: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-ua-rs: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-ua-rs: test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
-ua-rs: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s
-ua-rs: test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
-ua-rs: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+ua-rs: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs: test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+ua-rs: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.00s
+ua-rs: test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.59s
+ua-rs: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
 ua-rs: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-ua-rs-pq: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-ua-rs-pq: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
-ua-rs-pq: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+ua-rs-pq: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-pq: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+ua-rs-pq: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
 ua-rs-pq: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ua-rs-pq: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
-ua-rs-pq: test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
-ua-rs-pq: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
-ua-rs-pq: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
-ua-rs-pq: test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.86s
-ua-rs-pq: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+ua-rs-pq: test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+ua-rs-pq: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+ua-rs-pq: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.96s
+ua-rs-pq: test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.40s
+ua-rs-pq: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
 ua-rs-pq: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-ua-rs-signers: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-ua-rs-signers: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
-ua-rs-signers: test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 6.23s
-ua-rs-signers: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
-ua-rs-signers: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-ua-rs-signers: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-ua-rs-signers: test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
-ua-rs-signers: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
-ua-rs-signers: test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
-ua-rs-signers: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+ua-rs-signers: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-signers: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+ua-rs-signers: test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 7.76s
+ua-rs-signers: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+ua-rs-signers: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-signers: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+ua-rs-signers: test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+ua-rs-signers: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.95s
+ua-rs-signers: test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+ua-rs-signers: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
 ua-rs-signers: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ua-rs-json: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-ua-rs-json: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
-ua-rs-json: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
-ua-rs-json: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+ua-rs-json: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+ua-rs-json: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+ua-rs-json: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
 ua-rs-json: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-ua-rs-json: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-ua-rs-json: test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
-ua-rs-json: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s
-ua-rs-json: test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
-ua-rs-json: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+ua-rs-json: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-json: test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+ua-rs-json: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.82s
+ua-rs-json: test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.53s
+ua-rs-json: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
 ua-rs-json: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ua-c: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-ua-c: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
-cargo-zether-prover: test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.92s
+ua-c: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+cargo-zether-prover: test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.53s
 cargo-zether-prover: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-cargo-zether-prover: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-cargo-zether-prover: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
-cargo-zether-prover: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
-cargo-zether-prover: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 51.47s
-cargo-zether-prover: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.21s
-cargo-zether-prover: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
-cargo-zether-prover: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
-cargo-zether-prover: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.49s
-cargo-zether-prover: test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.91s
+cargo-zether-prover: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+cargo-zether-prover: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.47s
+cargo-zether-prover: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+cargo-zether-prover: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 143.53s
+cargo-zether-prover: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.51s
+cargo-zether-prover: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+cargo-zether-prover: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+cargo-zether-prover: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.78s
+cargo-zether-prover: test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 21.44s
 cargo-zether-prover: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-soroban-registry: test result: ok. 164 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 24.26s
+soroban-registry: test result: ok. 164 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 94.95s
 near-common: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 near-common: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
 near-common: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 node-kinds: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 593 filtered out; finished in 0.00s
 node-dex-kat: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 591 filtered out; finished in 0.02s
 named-tests: named-tests: 13 names, 0 problem(s)
+
+# Left to CI (owner 2026-11-04): the whole scaas-node suite and the forge sets after merging main (PR #7) were run by PR #10 CI at 2a92b9e0, all checks green; merged as 9c760b4a. vectors-check, named-tests and this summary run locally at 9c760b4a.
