@@ -4,8 +4,9 @@
 A push (to main), a change to .github/, or a failed diff runs every job. Prefixes are the job's own directory plus every
 directory its tests read (vectors, contracts, ua-rs for the wrappers); when in doubt a prefix is wider, never narrower.
 `docs` runs on every pull request: it reads ids in code comments too.
-A path no component test reads starts no component job, only `docs`: Markdown anywhere, and the evidence logs under a
-`runs/` directory (`.txt`, `.log`, `.jsonl`). A `runs/` script or `.json` still counts, as does every other path.
+A path no component test reads starts no component job, only `docs`: Markdown anywhere, and everything under a `runs/`
+directory (evidence logs, one-off scripts, probe data: the owner's machine runs them, CI does not). A `runs/` file a test
+does read is named in RUNS_READ with the jobs that read it.
 
 A group is forced on, whatever the paths, by a pull-request label `ci-full-<group>` / `ci-full` (env LABELS, a JSON list)
 or by a manual run (workflow_dispatch, env FULL = the chosen `ci-full-<group>` / `ci-full`); a manual run has no diff,
@@ -67,14 +68,17 @@ def changed():
     return None if any(p.startswith('.github/') for p in paths) else paths
 
 
-EVIDENCE = ('.txt', '.log', '.jsonl')
+# the runs/ files a CI test reads (found by grep of the tests for reads of runs/ paths, 2026-11-04), with the jobs reading them
+RUNS_READ = {
+    'smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt': ['node'],  # guard.rs erc1271_floor_covers_forge_minimum
+}
 
 
 def read_by_tests(p):
-    """False for a path no component test reads: Markdown, or an evidence log under a `runs/` directory."""
+    """False for a path no component test reads: Markdown, or anything under a `runs/` directory not in RUNS_READ."""
     if p.endswith('.md'):
         return False
-    return not (('/runs/' in f'/{p}') and p.endswith(EVIDENCE))
+    return not ('/runs/' in f'/{p}')
 
 
 def needed(paths, forced=()):
@@ -82,8 +86,9 @@ def needed(paths, forced=()):
     path; the other jobs only the paths a test reads."""
     on = {j for g in forced for j in GROUPS.get(g, ())}
     code = None if paths is None else [p for p in paths if read_by_tests(p)]
-    return {job: paths is None or job in on or any(p.startswith(x) for p in (paths if job == 'docs' else code)
-                                                       for x in prefixes)
+    read = set() if paths is None else {j for p in paths for j in RUNS_READ.get(p, ())}
+    return {job: paths is None or job in on or job in read
+            or any(p.startswith(x) for p in (paths if job == 'docs' else code) for x in prefixes)
             for job, prefixes in JOBS.items()}
 
 
@@ -126,13 +131,16 @@ if __name__ == '__main__':
     assert all(needed(['docs/x.md'], ['ci-full']).values())
     assert needed(['docs/x.md'], ['bug', 'ci-full-node']) == needed(['docs/x.md'], ['ci-full-node'])  # other labels ignored
     assert needed([''], ['ci-full-pqz']) == {j: j in ('pqz', 'docs') for j in JOBS}  # manual run
-    # evidence logs and Markdown start only `docs`; a runs/ script or .json, and code beside them, still count
+    # Markdown and everything under runs/ start only `docs`; code beside them still counts
     only_docs = {j: j == 'docs' for j in JOBS}
     for p in ('scaas-node/runs/2026-11-01-x.txt', 'smartcontracts/evm/runs/a/b.log', 'pqz-core/sv/runs/g.jsonl',
               'pqz-core/README.md', 'smartcontracts/evm/src/README.md', 'runs/top.txt'):
         assert needed([p]) == only_docs, p
-    assert needed(['smartcontracts/evm/runs/2026-11-04-gates.sh'])['contract-evm']
-    assert needed(['pqz-core/ffi/vectors/runs/probe/kat.json'])['pqz']
+    for p in ('smartcontracts/evm/runs/2026-11-04-gov-smoke-7622.sh', 'pqz-core/ffi/vectors/runs/probe/kat.json',
+              'pqz-core/nethermind/runs/2026-11-04-mldsa87-probe.py', 'smartcontracts/evm/runs/x/Probe.t.sol'):
+        assert needed([p]) == only_docs, p  # one-off scripts and probe data under runs/
+    for p, js in RUNS_READ.items():  # a runs/ file a test reads starts exactly its readers (and docs)
+        assert needed([p]) == {j: j == 'docs' or j in js for j in JOBS}, p
     assert needed(['smartcontracts/evm/foundry.txt'])['contract-evm']  # a .txt outside runs/ counts
     assert needed(['scaas-node/runs/a.txt', 'scaas-node/src/x.rs'])['node']
     assert needed(['smartcontracts/evm/runs/a.txt'], ['ci-full-contracts'])['contract-evm']  # a label still forces
