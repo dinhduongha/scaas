@@ -14,7 +14,7 @@ decisions of 2026-11-02 change the placement, not the model:
 - **B. Bit bands, decided** (CTR-GOV-10's Change, owner 2026-11-04): bits 0–127 are SCaaS's, **one global table, each bit allocated once, never
   renumbered, the same meaning on every SCaaS contract** (`PAUSE` is the same bit on a token and on the DEX; a contract
   without the power leaves the bit off); 128–255 are per-contract, declared by the application with a label (bit →
-  function) so a wallet can show them; no band is refused. Existing bits 0–8 and `MODERATE` stay in the SCaaS band.
+  function) so a wallet can show them; no band is refused. Existing bits 0–9 and `MODERATE` (bit 21) stay in the SCaaS band.
 - **C.** The owner's three examples must run: loan approval in [1 M, 100 M] VND as a constraint on a named argument of
   the application's function (not `perCall`); add or remove members only in one's own family subtree; circulation only
   within a group.
@@ -110,7 +110,15 @@ enforces its own limits at call time, which the attack round confirmed needs no 
 header], now in the base. One grant per `(bit, holder)`; a second clone for the same operator cannot exist because
 there are no clones.
 
-### 1.4 The global bit table (bits 0–127), proposed allocation
+### 1.4 The global bit table (bits 0–127)
+
+> **Changed after this note** (governance build, 2026-11-04): the table below is the **built** allocation, `GovernanceBits.sol`
+> and `smartcontracts/vectors/governance/governance_bits.json` (plan T14), which are the authority. Against this note's first
+> proposal: bit 9 is `DENYLIST` ([CTR-GOV-18](../../decisions.md#ctr-gov-18--receiver-check-two-feature-bits-allowlist-and-denylist-off-by-default)),
+> `MODERATE` moved from 9 to 21 ([CTR-GOV-08](../../decisions.md#ctr-gov-08--moderate-later-with-flags-5-8)); 13 `DISQUALIFY`
+> and 14 `REVOKE_GRANT` were never allocated and stay unused for ever; 15 `ARBITRATE` and 16 `CORRECT` are reserved names with
+> no spec; the SCaaS band is 0–127 and 128–255 the application's (CTR-GOV-10's Change). Where the rest of this note says
+> "bit 9" for `MODERATE` or "flags 5–8", read bit 21 and flags 5–9.
 
 Decided: one table, allocated once, never reused or renumbered, the same meaning everywhere. Pinned in code as
 `GovernanceBits.sol` and in docs as the table below moved to `docs/contracts/README.md §3` when normative; a vector
@@ -135,32 +143,34 @@ scope, never `BURNABLE`. For the application band, `bitLabel(bit)` returns the t
 derived from the same mask, so a wallet prints "anyone may `<name>`" for a capability and "holders of `<name>`: X, Y
 (limits …)" for a power without a second table; `governance_bits.json` carries the type for 0–127.
 
-| Bit | Name | Meaning (same on every contract) | Type | Reduce-only | Contract-only | Today |
+| Bit | Name | Meaning (same on every contract) | Type | Reduce-only | Contract-only | Built state (branch `governance`) |
 |---|---|---|---|---|---|---|
-| 0 | `PAYABLE` | anyone may pay through the pay entries | capability (always locked) | — | — | [V] |
-| 1 | `MINTABLE` | a holder creates units | power | no | no | [V] |
-| 2 | `BURNABLE` | any holder of units destroys its own | capability (always locked) | — | — | [V] |
-| 3 | `RATE_ADJUSTABLE` | a holder changes a conversion rate under the rate timelock | power | no | yes | [V] |
-| 4 | `WRAP_DISABLEABLE` | a holder closes an inflow, one-way | power | yes | no | [V] |
-| 5 | `FREEZE` | a holder stops one account's outflow, bounded in time | power | no | yes | spec, refused |
-| 6 | `FORCE` | a holder moves units out of a frozen account to a recorded beneficiary | power | no | yes | spec, refused |
-| 7 | `PAUSE` | a holder stops every outflow, bounded in time | power | no | yes | spec, refused |
-| 8 | `ALLOWLIST` | every receiver is gated by a registry pinned at INIT | capability (parameter: the registry) | — | — | spec, refused |
-| 9 | `MODERATE` | a holder moves units out of any account, no record (§6 D8) | power | no | yes | proposed, reserve now |
-| 10 | `RECORD` | a holder writes a compliance record that another power relies on (the `compliance` side of `FORCE`; escalation F6: two rights, two bits) | power | no | yes | proposed |
-| 11 | `LISTING` | a holder decides what this instance trades or accepts (DEX `setMarket`, `setExchangeTarget`, `setListedOnly`) | power | no | no | DEX `admin` [V] |
-| 12 | `FEE_ROUTING` | a holder decides who receives this instance's fees, never how much (DEX `setFeeSplit`) | power | no | no | DEX `admin` [V] |
-| 13 | `DISQUALIFY` | a holder removes a counterparty from a selection, never the last one, with a public reason (tender I4) | power | yes | no | spec |
-| 14 | `REVOKE_GRANT` | a holder ends a counterparty's future entitlement early (vesting revoke, offer close) | power | yes | no | spec |
-| 15 | `ARBITRATE` | a holder releases held value to one of the parties fixed at creation | power | no | no | templates |
-| 16 | `CORRECT` | a holder appends a correction to a record; erase never exists | power | no | no | registries |
-| 17 | `RESCUABLE` | anyone may move what this instance does not owe to `rescueTo` (§3 A15/A16) | capability (always locked; parameter: `rescueTo`) | — | — | proposed |
-| 18 | `PUBLISH` | a holder adds a release to a catalogue (factory `deployImplementation`) | power | no | no | factory registrar [V]; the factory is deployed and immutable: later |
+| 0 | `PAYABLE` | anyone may pay through the pay entries | capability (always locked) | — | — | every token kind |
+| 1 | `MINTABLE` | a holder creates units | power | no | no | `NORMAL*`; `WRAPPED*` as a hybrid under `maxSupply` |
+| 2 | `BURNABLE` | any holder of units destroys its own | capability (always locked) | — | — | every token kind |
+| 3 | `RATE_ADJUSTABLE` | a holder changes a conversion rate under the rate timelock | power | no | yes | `WRAPPED*` |
+| 4 | `WRAP_DISABLEABLE` | a holder closes an inflow, one-way | power | yes | no | `WRAPPED*` |
+| 5 | `FREEZE` | a holder stops one account's outflow, bounded in time | power | no | yes | regulated implementations, SPECIFIED; refused on the plain ones |
+| 6 | `FORCE` | a holder moves units out of a frozen account to a recorded beneficiary; public balances only | power | no | yes | same |
+| 7 | `PAUSE` | a holder stops every outflow, bounded in time | power | no | yes | same |
+| 8 | `ALLOWLIST` | a receiver must hold `requiredFlags` in a `ComplianceRegistry` pinned at INIT | capability (parameters) | — | — | same; not the confidential kinds |
+| 9 | `DENYLIST` | a receiver must hold none of `deniedFlags` in that registry | capability (parameters) | — | — | same |
+| 10 | `RECORD` | a holder writes a compliance record that another power relies on | power | no | yes | name taken, no contract implements it yet |
+| 11 | `LISTING` | a holder decides what this instance trades or accepts (DEX `setMarket`, `setExchangeTarget`, `setListedOnly`) | power | no | no | `SCaaSDex` |
+| 12 | `FEE_ROUTING` | a holder decides who receives this instance's fees, never how much (DEX `setFeeSplit`) | power | no | no | `SCaaSDex` |
+| 13 | — | unused, never allocated, never reused | unused | — | — | — |
+| 14 | — | unused, never allocated, never reused | unused | — | — | — |
+| 15 | `ARBITRATE` | reserved name, no spec behind it | reserved | — | — | — |
+| 16 | `CORRECT` | reserved name, no spec behind it | reserved | — | — | — |
+| 17 | `RESCUABLE` | anyone may move what this instance does not owe to `rescueTo` | capability (always locked; parameter `rescueTo`) | — | — | every token kind; the DEX through `DexPuller.rescue` |
+| 18 | `PUBLISH` | a holder adds a release to a catalogue | power | no | no | name taken; the deployed factory is immutable: later |
 | 19 | `DEPRECATE` | a holder marks a release unusable for new instances, never undone | power | yes | no | same |
 | 20 | `ENABLE_KIND` | a holder turns a catalogue kind on or off | power | no | no | same |
-| 21–63 | free | | | | | |
+| 21 | `MODERATE` | a holder moves public units out of any account, no record ([CTR-GOV-08](../../decisions.md#ctr-gov-08--moderate-later-with-flags-5-8), [CTR-GOV-13](../../decisions.md#ctr-gov-13--moderate-only-on-public-balances)) | power | no | yes | regulated implementations, later; SPECIFIED |
+| 22–127 | free (SCaaS band) | | | | | |
+| 128–255 | application band, labelled by `bitLabel(bit)` | | | | | |
 
-Twenty-two bits allocated after two years of design, twelve of them in one afternoon from the inventory's ≈ 110 rows
+Twenty bits named (13 and 14 left unused) after two years of design, most of them in one afternoon from the inventory's ≈ 110 rows
 collapsing to general names; 106 free (CTR-GOV-10's Change, owner 2026-11-04). **It suffices** [I]: every named power in gov-inventory, tender, asset-suite and
 the DEX maps to one of the above or to the application band; the SCaaS band is 0–127 (CTR-GOV-10's Change, owner 2026-11-04),
 so exhaustion has an answer other than renumbering. What the table must never do: give a bit a second meaning on one contract (a DEX
