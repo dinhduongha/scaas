@@ -30,7 +30,8 @@ extra_step() {
     build) cd smartcontracts/evm && ../../scripts/capped forge build ;;
     forge-rest) cd smartcontracts/evm && ../../scripts/capped forge test --no-match-path "test/{${FORGE_DIRS// /,}}/**" ;;
     forge-*) cd smartcontracts/evm && ../../scripts/capped forge test --match-path "test/${1#forge-}/**" ;;
-    at-set-*) scripts/capped smartcontracts/evm/script/pqz/at-set.sh "${1#at-set-}" test ;;
+    # AT_SET_MATCH: a --match-path for the step (T19: 'test/{ua,pqz,v2}/*' after a WrappedLib change); at-set.sh logs the forge line
+    at-set-*) scripts/capped smartcontracts/evm/script/pqz/at-set.sh "${1#at-set-}" test ${AT_SET_MATCH:+--match-path "$AT_SET_MATCH"} ;;
     chainspec-check) python3 -I pqz-core/nethermind/chain/patch-chainspec.py --check && # T16: the next reset's chainspec
       python3 -I pqz-core/nethermind/chain/e2e.py selftest ;; # T19 (review I-1): the RUNBOOK's codesize wait at a 200 M block
     zether-e2e) PORT=18545 scripts/capped scripts/e2e-zether.sh ;;
