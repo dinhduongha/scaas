@@ -1,0 +1,13 @@
+# governance T13 mutants at d8f2e492 (clean tree), each one change, suite test/governance/SelectorAudit.t.sol, restored by
+# git checkout -- <file> after each.
+# red first: with an empty pin test_everySelectorIsClassified listed all 571 rows (rc=1); before the router's override
+# test_routerPublishesNoAllowList failed 3 != 0 (rc=1).
+mutant | test that went red | rc
+m1 an unclassified selector: an ungated sweep(address,uint256) added to NormalToken (it reaches the Zether and PQZ kinds too) | test_everySelectorIsClassified (unclassified: NormalToken, NormalZetherToken, NormalPqzToken .sweep) | 1
+m2 a class changed: NormalToken.mint pinned PERMISSIONLESS, no error | test_strangerRevertsOnEveryGatedRow (a governance gate refuses the stranger) | 1
+m3 a class changed: WrappedPqzToken.mint pinned BIT(3) | test_strangerRevertsOnEveryGatedRow (another bit: MissingRole names bit 1) | 1
+m4 the router's mtxSelectors publishing the generic path: the override removed (cancelNonce listed again) | test_routerPublishesNoAllowList (3 != 0) | 1
+m5a grantRole added to NormalToken's _uaAllowed | test_noGovernanceSelectorIsRelayable (relayable by uaExecute, on NormalToken, NormalZetherToken, NormalPqzToken) | 1
+m5b grantRole given an ABSOLUTE rule in NormalToken's _mtxRule | test_noGovernanceSelectorIsRelayable (relayable by mtxExecute, the three normal kinds) | 1
+m6 mint with its GovernanceUse.use removed | test_strangerRevertsOnEveryGatedRow (not its named error: ERC20InvalidReceiver, the three normal kinds) | 1
+# survivors: none
