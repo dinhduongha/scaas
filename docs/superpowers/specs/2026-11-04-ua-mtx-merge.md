@@ -293,7 +293,7 @@ nothing is renamed: each address body is widened to `bytes32` ids and moved onto
   gets `0xffffffff` and acts through `mtxExecute`.
 - **Allow-lists:** a native subject reads `_mtxRule`, a derived one `_uaAllowed` only (B); both list the six wallet
   operations, `cancelNonce` stays on `_mtxRule` only (its body refuses `UA_POOL`).
-- **Controller calls** (plan MD-11, owner may override): the flat builders `mtxPayUnderMandate(token, …, sig)`,
+- **Controller calls** (plan MD-11; (a) owner confirmed 2026-11-05): the flat builders `mtxPayUnderMandate(token, …, sig)`,
   `mtxRevoke`, `mtxExecuteAsOwner` and `mtxExecuteAsOwnerRaw` are second signed entries of operations that have their
   named entry, so they move to legacy (this reverses the owner's 2026-11-01 keep, under the owner's 2026-11-04 "exactly one
   signed entry"); `executeMetaTransaction` on the mandate wallets refuses every call (`MtxSelectorNotAllowed`), as the

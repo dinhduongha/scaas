@@ -128,8 +128,8 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
     `mtxRevoke`, `mtxExecuteAsOwner` and Hedera's `mtxExecuteAsOwnerRaw` sign an address `MetaTransaction` for an operation
     that has its named entry (`mtxPayUnderMandate(UAEnvelope, …)`, `mtxDelegateRevoke`, the generic `mtxExecute`), so under
     "exactly one signed entry" they are second entries. `mandate_pay_kat.json` and `mandate_revoke_kat.json` go with them.
-    This reverses the owner's 2026-11-01 keep (CTR-ACC-05's 2026-11-02 Change) by the later ruling: **the one point the
-    owner may want to confirm**, since the auto-pay path (mandates.md §1.1) names the flat builders today.
+    This reverses the owner's 2026-11-01 keep (CTR-ACC-05's 2026-11-02 Change) by the later ruling; **owner confirmed
+    2026-11-05**. The auto-pay path (mandates.md §1.1) moves to the named UA entries (T14, T19).
   - **(b) `executeMetaTransaction` refuses** on the mandate wallets (`MtxSelectorNotAllowed`, an `_execute` override as in
     `GovernanceRouterBase`): the EIP-1776 alias is the token's exception (R3, NET-ALL-28); kept, it would be an address
     signed path to every wallet operation.
