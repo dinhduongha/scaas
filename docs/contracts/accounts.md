@@ -884,6 +884,16 @@ expanded-key cache. As built: `UAMldsaVerifier(0x0134, …)` reverts `UAMldsaNoP
 verifier outside `forge script`, as `mldsa65`'s, P6g D15). Where enabled it is a PQZ / KEM holder ([CTR-UA-16](#CTR-UA-16)) and PQ weight in an `msig`
 ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12)). EVM first: every other family refuses `0x0134` until its own round.
 
+<a id="CTR-UA-40"></a>**CTR-UA-40** — **`fndsa1024` (0x0135), Falcon-1024 (round-3 specification v1.2, NIST level V), is enabled
+on every EVM chain in pure Solidity** (owner 2026-11-04; [decisions.md](../decisions.md)). SPECIFIED. Key data `pk` (1,793 B) =
+`0x0A ‖ h` (1,024 × 14-bit big-endian coefficients, each `< q`); padded signature 1,280 B = `0x3A ‖ salt (40) ‖ compressed s2`,
+zero-padded, over the 32-byte `ua_msg` with SHAKE256 hash-to-point, accept iff `‖s1‖² + ‖s2‖² ≤ 70,265,242`, as `fndsa512` at
+n = 1,024. The measured verify (4.73 M; 4.93 M at the largest NIST KAT) passes the 66 % rule on 12 M and on Hedera's 10.5 M; cap
+5,250,000, **provisional** until T-GAS measures it. No NTT-key cache, no SCaaS testnet precompile. It is a PQZ / KEM holder
+([CTR-UA-16](#CTR-UA-16)) and PQ weight in an `msig` ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12)); config slot 20. A final
+FIPS 206 (FN-DSA) that differs from the round-3 specification is a new kind version, never a silent change. EVM first: every other family refuses
+`0x0135` until its own round.
+
 Multi-transaction verification with stored partial state and chunked verify are rejected (resumable state is a new replay/griefing surface and a second
 audit target for no gain while the estimates fit). The ML-DSA expanded-key cache (P6c) is neither: each part is derived
 data the registry computes from the authenticated `pk` and writes once; no verification spans transactions. Structures are bounded by the same caps (register step 4): a hybrid `{mldsa65, p256}` fits everywhere, but a quorum of two Solidity-verified PQ members (2 × 4–19 M) does not, so the
