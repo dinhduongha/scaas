@@ -1,0 +1,6 @@
+# The probe's own Foundry config: the project config plus read access to this directory (its ACVP extract) and
+# this directory as the test tree. Run from smartcontracts/evm: FOUNDRY_CONFIG=runs/2026-11-04-mldsa87-probe/foundry.toml forge test -vv
+[profile.default]
+extends = "../../foundry.toml"
+test = "runs/2026-11-04-mldsa87-probe"
+fs_permissions = [{ access = "read", path = "./runs/2026-11-04-mldsa87-probe" }]
