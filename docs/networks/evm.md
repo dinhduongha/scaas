@@ -273,7 +273,10 @@ Since UA-3 it also deploys the UA registry generation 1 with its verifiers on ev
 12 M, Hedera 10.5 M): the EIP-2537 kinds and `bls-bn254-minsig` only where `script/UAPrecompileProbe.sol`, asked
 through an `eth_call` with no `to` (the node's own precompiles), passes (the Zether kind `zether-bls12381` among them, on every chain but Hedera); no chain-id lock for any kind (owner ruling 2026-10-31); the PQ signing kinds (P6c, unaudited) wherever the kind's cap is ≤ 66 % of the budget (owner ruling 2026-10-31; all four at 12 M and on Hedera's 10.5 M), ML-DSA in
 Solidity on the registry's expanded-key cache: an ML-DSA UA's cache parts (`cacheExpandedKey`, one transaction each,
-≤ 13.5 M gas) come before its `register` ([accounts.md §1.9](../contracts/accounts.md#verifiers)).
+≤ 13.5 M gas) come before its `register` ([accounts.md §1.9](../contracts/accounts.md#verifiers)). `mldsa87` (0x0134) only where
+an ML-DSA-87 precompile answers its EIP-8355 probe (`0x14`, or the SCaaS testnet's `0x…5caa0014`): elsewhere it has no verifier and
+is not registrable ([CTR-UA-39](../contracts/accounts.md#CTR-UA-39); BUILT on branch `mldsa87`; the cap 250,000 is a provisional
+estimate).
 
 It writes
 `deployments/<chainid>.json` (`token_factory`, `implementation_normal`, `dex_implementation`, `ua_registry`, `chain_uid`, `smart_key_account_factory`,
