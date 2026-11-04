@@ -26,7 +26,7 @@ library SigCheck {
     error SigCheckGasStarved(uint256 cap, uint256 gasLeft);
     /// @notice An EIP-7702 delegated EOA called directly where the caller is authority: its delegate's code is running
     ///         as the EOA, and an EOA must not run code (owner ruling 2026-10-30). Use a relayed, key-signed `mtx*`
-    ///         (fee may be 0) or clear the delegation.
+    ///         (fee may be 0), or, for an owner operation, the chain's `GovernanceRouter`; or clear the delegation.
     error CallerDelegated(address caller);
 
     /// @notice Code exactly `0xef0100 ‖ address` (23 bytes): an EIP-7702 delegation designator (EIP-3541: no deployed

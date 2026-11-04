@@ -385,8 +385,9 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     /// @dev Every UA-ledger move: derived sides in `balance`, native sides (or `UA_POOL` for a derived side) through
     ///      the ERC-20 core, so `Transfer` is emitted iff a native balance changes and `UATransfer` iff a side is derived.
     // ponytail: calls `ERC20._update` directly, skipping `_update`'s hooks and `_transfer`'s zero checks (callers
-    // exclude 0); when the REGULATED features (FREEZE / PAUSE / ALLOWLIST, GovernanceLib) are built they must also hook
-    // here, including the UA->UA branch.
+    // exclude 0); when the REGULATED features (FREEZE / PAUSE / ALLOWLIST / DENYLIST, GovernanceLib) are built they must
+    // also hook here, including the UA->UA branch. `_poolMove` carries no hook (governance spec §4.3: it moves the fees
+    // and decoy fees that stay unchecked).
     function _uaMove(bytes32 from, bytes32 to, uint256 value) internal {
         // D19: no UA-ledger caller reaches `SHIELD_POOL` (its moves bypass `_update`); only `_poolMove` does.
         if (from == MetaTxLib.pad(MetaTxLib.SHIELD_POOL) || to == MetaTxLib.pad(MetaTxLib.SHIELD_POOL)) {
