@@ -1573,7 +1573,7 @@ pub(crate) mod tests {
                 n += 1;
             }
         }
-        assert_eq!(n, 123, "every row with an entry, but the relay fees (relay_fee_call_object)");
+        assert_eq!(n, 163, "every row with an entry, but the relay fees (relay_fee_call_object)");
     }
 
     /// `EvmAdapter::call_key`, which the Hedera adapter delegates to (`the_hedera_lane_skips_bytes_already_in_flight` is the

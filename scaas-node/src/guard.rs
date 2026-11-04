@@ -51,6 +51,9 @@ pub enum Rule {
     Dex,
     /// The chain's `UARegistry` (`ua_registry`), bound to this chain: its writes (UA-8, ruling R-node; `registerMsig` since typed-signing R1, `registerWebAuthn` / `registerMuSig2` / `registerFrost` since R1b).
     UaRegistry,
+    /// One of the chain's `GovernanceRouter`s (`governance_routers`), bound to this chain (spec 2026-11-02-governance §12.7): its
+    /// typed entries only; a router is no target of any other kind's row.
+    GovRouter,
 }
 
 /// The rule of a contract kind (`typed::Row::contracts`).
@@ -61,6 +64,7 @@ pub fn rule_of(contract: &str) -> Option<Rule> {
         "dex" => Rule::Dex,
         "registry" => Rule::UaRegistry,
         "factory" => Rule::AccountFactory,
+        "gov_router" => Rule::GovRouter,
         _ => return None,
     })
 }
@@ -129,6 +133,8 @@ pub struct Facts {
     pub account_factory: bool,
     pub dex: bool,
     pub ua_registry: bool,
+    /// One of `governance_routers`.
+    pub gov_router: bool,
     /// `chainUid()` equals this chain's (NODE-GW-07).
     pub bound: bool,
 }
@@ -140,12 +146,15 @@ pub fn allowed(rule: Rule, f: &Facts) -> bool {
     f.bound
         && !f.token
         && !f.token_factory
+        // a router takes its own rows and no other kind's: its allow-list is its typed table, both directions
+        && (rule == Rule::GovRouter) == f.gov_router
         && match rule {
             Rule::Token => false,
             Rule::AccountFactory => f.account_factory,
             Rule::SelfAuth => true,
             Rule::Dex => f.dex,
             Rule::UaRegistry => f.ua_registry,
+            Rule::GovRouter => true,
         }
 }
 
@@ -211,6 +220,7 @@ fn parse_price(n: &toml::Value) -> Option<Price> {
 /// A relay-fee call (`relay` or `uaRelay`, CTR-MTX-27) with its payer and payee as ids.
 struct RelayCall {
     target: Address,
+    call: Bytes,
     token: Address,
     from: B256,
     payee: B256,
@@ -221,10 +231,25 @@ struct RelayCall {
 fn relay_call(data: &[u8]) -> Option<RelayCall> {
     use IMtxRelayFee::{relayCall, uaRelayCall};
     if let Ok(c) = relayCall::abi_decode(data) {
-        return Some(RelayCall { target: c.target, token: c.token, from: c.from.into_word(), payee: c.payee.into_word(), value: c.value, ua: false });
+        return Some(RelayCall { target: c.target, call: c.callData, token: c.token, from: c.from.into_word(), payee: c.payee.into_word(), value: c.value, ua: false });
     }
     let c = uaRelayCall::abi_decode(data).ok()?;
-    Some(RelayCall { target: c.target, token: c.token, from: c.from, payee: c.payee, value: c.value, ua: true })
+    Some(RelayCall { target: c.target, call: c.callData, token: c.token, from: c.from, payee: c.payee, value: c.value, ua: true })
+}
+
+/// The router rule on a relay fee's inner call (spec 2026-11-02-governance §12.7), both directions: a call on one of
+/// `routers` is a `gov_router` row, and an entry only the router has runs only on one of `routers`.
+pub fn relay_inner_ok(routers: &[Address], data: &[u8]) -> Result<(), String> {
+    let Some(c) = relay_call(data) else { return Ok(()) };
+    let sel = c.call.get(..4).map(|s| <[u8; 4]>::try_from(s).expect("4 bytes"));
+    let on = |kind: &str| sel.is_some_and(|s| row(s, kind).is_some());
+    let router_row = on("gov_router");
+    let elsewhere = typed::rows().iter().flat_map(|r| r.contracts).any(|k| *k != "gov_router" && on(k));
+    match (routers.contains(&c.target), router_row) {
+        (true, false) => Err(format!("CALL_TARGET_REFUSED: the relayed call on router {:#x} is no named entry of it", c.target)),
+        (false, true) if !elsewhere => Err(format!("CALL_TARGET_REFUSED: a GovernanceRouter entry relayed to {:#x}, not one of governance_routers", c.target)),
+        _ => Ok(()),
+    }
 }
 
 /// NODE-LANE (CTR-MTX-27) intake of a `relay` / `uaRelay` call before any simulation: the target is the router; the fee
@@ -377,6 +402,7 @@ pub struct Guard {
     account_factory: Option<Address>,
     ua_registry: Option<Address>,
     dexes: Vec<Address>,
+    gov_routers: Vec<Address>,
     bound: Mutex<HashSet<Address>>,
     /// Tokens whose UA ledger is on (`registry() ≠ 0`).
     ua_ledger: Mutex<HashSet<Address>>,
@@ -394,6 +420,7 @@ impl Guard {
             account_factory: cfg.account_factory,
             ua_registry: cfg.ua_registry,
             dexes: cfg.dex.into_iter().collect(),
+            gov_routers: cfg.governance_routers.clone(),
             bound: Default::default(),
             ua_ledger: Default::default(),
             op_stack: match cfg.params.get("l1_fee") {
@@ -483,6 +510,7 @@ impl Guard {
                 return Err(refused("no params.relay_fee.router on this chain".into()));
             };
             let target = relay_call_ok(rf, chain.address(), w.to, &w.data, |a| self.registered(a)).map_err(Refusal::Policy)?;
+            relay_inner_ok(&self.gov_routers, &w.data).map_err(Refusal::Policy)?;
             return self.require_bound(chain, target).await;
         }
         let Some(rule) = rule_of(contract) else { return Err(refused(format!("unknown contract kind {contract:?}"))) };
@@ -503,6 +531,7 @@ impl Guard {
             account_factory: self.account_factory == Some(w.to),
             dex: self.dexes.contains(&w.to),
             ua_registry: self.ua_registry == Some(w.to),
+            gov_router: self.gov_routers.contains(&w.to),
             bound: self.bound(chain, w.to).await?,
         };
         if allowed(rule, &facts) {
@@ -845,7 +874,8 @@ mod tests {
                     w.typed.as_mut().unwrap().signer = None; // the vector's lane 7, its one key for payer and payee
                 }
                 assert_eq!(format!("0x{}", alloy::hex::encode(&w.data[..4])), d["selector"].as_str().unwrap(), "{name}");
-                let listed = ChainCfg { dex: (kind == "dex").then_some(w.to), ..cfg.clone() };
+                let listed = ChainCfg { dex: (kind == "dex").then_some(w.to),
+                    governance_routers: if kind == "gov_router" { vec![w.to] } else { vec![] }, ..cfg.clone() };
                 let right = Guard::new(&listed, Arc::new(RwLock::new(
                     if rule_of(kind) == Some(Rule::Token) { vec![w.to] } else { vec![] }))).unwrap();
                 right.check(&chain, &w).await.unwrap_or_else(|e| panic!("{name} on {kind} is a missing row: {e:?}"));
@@ -859,8 +889,8 @@ mod tests {
                 refused += 1;
             }
         }
-        assert_eq!((sent, relayed, refused), (123, 6, 123), "the walk reached every row with an entry; the relay fees: submit.rs");
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 97, "table rows");
+        assert_eq!((sent, relayed, refused), (163, 6, 163), "the walk reached every row with an entry; the relay fees: submit.rs");
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 135, "table rows");
         // the wallet's flat builders (owner 2026-11-01): allowed on a bound contract, never on a registered token
         let wallet = Guard::new(&cfg, Default::default()).unwrap();
         let token = Guard::new(&cfg, Arc::new(RwLock::new(vec![Address::repeat_byte(0x77)]))).unwrap();
@@ -874,7 +904,7 @@ mod tests {
         }
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
-        let g = Guard::new(&ChainCfg { dex: Some(target), ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
+        let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
         let cast = |s: &str| -> Vec<u8> { alloy::primitives::keccak256(s)[..4].to_vec() };
         for s in ["transfer(address,uint256)", "approve(address,uint256)", "transferFrom(address,address,uint256)",
             "mint(address,uint256)", "cancelNonce(uint256)",
@@ -883,8 +913,13 @@ mod tests {
             "mtxTrade((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes,(uint256,uint256,uint256,address))",
             "mtxWrap(address,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes)",
             "mtxRelayFee(address,address,bytes32,address,uint256,uint256,bytes)",
-            "uaRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"] {
-            for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory"] {
+            "uaRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+            "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+            "uaExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+            "uaBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],bytes[])",
+            "grantRole(uint8,bytes32)", "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+            "transferOwnership(bytes32)", "setListedOnly(bool)"] {
+            for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
                 let t = typed::Typed { contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None };
                 let w = Work { job_id: Some(1), to: target, data: cast(s).into(), valid_until: 0, meta: None, entry: true, typed: Some(t) };
                 let e = g.check(&chain, &w).await.unwrap_err();
@@ -970,6 +1005,142 @@ mod tests {
         assert!(allowed(Rule::UaRegistry, &Facts { ua_registry: true, ..bound }));
         assert!(!allowed(Rule::UaRegistry, &Facts { ua_registry: true, bound: false, ..bound }), "NODE-GW-07");
         assert!(!allowed(Rule::UaRegistry, &Facts { ua_registry: true, token: true, ..bound }));
+        assert!(!allowed(Rule::GovRouter, &bound), "only a configured router");
+        assert!(allowed(Rule::GovRouter, &Facts { gov_router: true, ..bound }));
+        assert!(!allowed(Rule::GovRouter, &Facts { gov_router: true, bound: false, ..bound }), "NODE-GW-07");
+        for other in [Rule::SelfAuth, Rule::Dex, Rule::AccountFactory, Rule::UaRegistry] {
+            let all = Facts { gov_router: true, dex: true, account_factory: true, ua_registry: true, ..bound };
+            assert!(!allowed(other, &all), "{other:?}: a router is no target of another kind's row");
+        }
+    }
+
+    /// Spec 2026-11-02-governance §3.2, §3.6, §12.7 and T13's `selector_audit.json`, both directions: the node's `gov_router` rows are
+    /// exactly the router's `SIGNED` entries (38 ops and the two cancels; `mtxSelectors()` is empty, so the generic five are no row); no
+    /// `BIT`, `OWNER` or `HOLDER_OWN` entry of a governed contract is a row of any kind, so no governance op is relayable on it.
+    #[test]
+    fn allow_lists_equal_the_selector_audit_both_directions() {
+        let p = format!("{}/../smartcontracts/evm/test/vectors/selector_audit.json", env!("CARGO_MANIFEST_DIR"));
+        let audit: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let sel = |s: &serde_json::Value| -> [u8; 4] { alloy::primitives::keccak256(s.as_str().unwrap())[..4].try_into().unwrap() };
+        let kinds = ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"];
+        let router = audit["GovernanceRouter"].as_array().unwrap();
+        let signed: HashSet<[u8; 4]> = router.iter().filter(|r| r["class"] == "SIGNED").map(|r| sel(&r["sig"])).collect();
+        let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&"gov_router")).map(|r| r.sent).collect();
+        assert_eq!(signed.len(), 40);
+        assert_eq!(ours, signed, "the router's allow-list, both directions");
+        let generic: Vec<_> = router.iter().filter(|r| r["class"] != "SIGNED").collect();
+        assert_eq!(generic.len(), 6);
+        for r in generic {
+            assert!(row(sel(&r["sig"]), "gov_router").is_none(), "{}", r["sig"]);
+        }
+        let mut governed = 0;
+        for (contract, rows_) in audit.as_object().unwrap().iter().filter(|(k, _)| *k != "note" && *k != "GovernanceRouter") {
+            for r in rows_.as_array().unwrap() {
+                let class = r["class"].as_str().unwrap();
+                if !(class.starts_with("BIT") || class == "OWNER" || class == "HOLDER_OWN") {
+                    continue;
+                }
+                for k in kinds {
+                    assert!(row(sel(&r["sig"]), k).is_none(), "{contract}.{} ({class}) is a {k} row", r["sig"]);
+                }
+                governed += 1;
+            }
+        }
+        assert_eq!(governed, 91, "every governance entry of the six kinds and the DEX");
+    }
+
+    /// The router rule on a relay fee's inner call, both directions (spec §12.7): a router op relayed to one of `governance_routers`
+    /// passes; the same op relayed to another bound contract, and a non-router call relayed to a router, are refused by name; a cancel
+    /// the token has too stays the token's.
+    #[test]
+    fn a_router_op_relayed_through_the_relay_fee_checks_the_inner_target() {
+        use crate::typed::testkit::{op_of, vectors};
+        let v = vectors();
+        let router = Address::repeat_byte(0x9a);
+        let other = Address::repeat_byte(0x9b);
+        let inner = |name: &str, kind: &str| crate::typed::Op::parse(&op_of(name, kind, &v).unwrap(), None).unwrap().data;
+        let relay = |to: Address, call: Bytes| IMtxRelayFee::relayCall { target: to, callData: call, token: Address::repeat_byte(1),
+            from: Address::repeat_byte(2), payee: Address::repeat_byte(3), value: alloy::primitives::U256::from(1),
+            validUntil: alloy::primitives::U256::from(4_000_000_000u64), sig: Bytes::new() }.abi_encode();
+        let grant = inner("GrantRole", "gov_router");
+        relay_inner_ok(&[router], &relay(router, grant.clone())).unwrap();
+        let e = relay_inner_ok(&[router], &relay(other, grant.clone())).unwrap_err();
+        assert!(e.starts_with("CALL_TARGET_REFUSED") && e.contains("not one of governance_routers"), "{e}");
+        assert!(relay_inner_ok(&[], &relay(router, grant)).is_err(), "no router configured: refused");
+        let burn = inner("Burn", "token");
+        let e = relay_inner_ok(&[router], &relay(router, burn.clone())).unwrap_err();
+        assert!(e.contains("no named entry of it"), "{e}");
+        relay_inner_ok(&[router], &relay(other, burn)).unwrap();
+        let cancel = inner("CancelNonce", "token");
+        relay_inner_ok(&[router], &relay(router, cancel.clone())).unwrap();
+        relay_inner_ok(&[router], &relay(other, cancel)).unwrap();
+        let ua_grant = inner("UAGrantRole", "gov_router");
+        let ua = IMtxRelayFee::uaRelayCall { target: other, callData: ua_grant, token: Address::repeat_byte(1), from: B256::repeat_byte(2),
+            payee: B256::repeat_byte(3), value: alloy::primitives::U256::from(1), validUntil: alloy::primitives::U256::from(4_000_000_000u64),
+            auth: crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } }.abi_encode();
+        assert!(relay_inner_ok(&[router], &ua).is_err(), "the UA form too");
+    }
+
+    /// The same rule where it runs, the guard's relay branch: a relay fee whose inner call is a router op passes on a configured router
+    /// and is refused on any other bound contract; with no `governance_routers` it is refused (spec §12.7: "on the inner target of
+    /// `MtxRelayFee.relayCall` and `uaRelayCall`").
+    #[tokio::test]
+    async fn the_guards_relay_branch_runs_the_router_rule() {
+        use crate::typed::testkit::{op_of, vectors};
+        let v = vectors();
+        let uid = B256::repeat_byte(0x31);
+        let (cfg, _) = bound(uid).await;
+        let chain = Chain::with_signer(&cfg, signer()).unwrap();
+        let (rf, token, router) = (Address::repeat_byte(0xf4), Address::repeat_byte(0x11), Address::repeat_byte(0x9a));
+        let mut params = toml::Table::new();
+        params.insert("relay_fee".into(), toml::Value::Table([("router".to_string(), toml::Value::String(format!("{rf:#x}")))].into_iter().collect()));
+        let grant = crate::typed::Op::parse(&op_of("GrantRole", "gov_router", &v).unwrap(), None).unwrap().data;
+        let work = |target: Address| {
+            let data = IMtxRelayFee::relayCall { target, callData: grant.clone(), token, from: Address::repeat_byte(2), payee: rf,
+                value: alloy::primitives::U256::from(1), validUntil: alloy::primitives::U256::from(4_000_000_000u64), sig: Bytes::new() }.abi_encode();
+            let t = typed::Typed { contract: "token", domain_of: token, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None };
+            Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, meta: None, entry: true, typed: Some(t) }
+        };
+        let g = |routers: Vec<Address>| Guard::new(&ChainCfg { params: params.clone(), governance_routers: routers, ..cfg.clone() },
+            Arc::new(RwLock::new(vec![token]))).unwrap();
+        g(vec![router]).check(&chain, &work(router)).await.unwrap();
+        for (guard, target, what) in [(g(vec![router]), Address::repeat_byte(0x9b), "another contract"), (g(vec![]), router, "no router")] {
+            let e = guard.check(&chain, &work(target)).await.unwrap_err();
+            assert!(matches!(&e, Refusal::Policy(r) if r.contains("not one of governance_routers")), "{what}: {e:?}");
+        }
+    }
+
+    /// A router job on its chain, through the guard (spec §12.7): passes on a configured router, bound; refused with no
+    /// `governance_routers`, on another address, on a router not bound to this chain; a cancel claimed as a wallet's on the router
+    /// address is refused (a router takes its own rows only); a forged signature on a codeless signer is `BAD_SIGNATURE`.
+    #[tokio::test]
+    async fn a_router_job_runs_only_on_a_configured_router() {
+        use crate::typed::testkit::{op_of, vectors};
+        let v = vectors();
+        let uid: B256 = v["ops"]["GrantRole"]["domains"]["gov_router"]["domain"]["salt"].as_str().unwrap().parse().unwrap();
+        let (cfg, _) = bound(uid).await;
+        let chain = Chain::with_signer(&cfg, signer()).unwrap();
+        let (w, _) = crate::submit::work_of_op(Some(1), &op_of("GrantRole", "gov_router", &v).unwrap(), None).unwrap();
+        let at = |routers: Vec<Address>| Guard::new(&ChainCfg { governance_routers: routers, ..cfg.clone() }, Default::default()).unwrap();
+        at(vec![w.to]).check(&chain, &w).await.unwrap();
+        at(vec![Address::repeat_byte(0x5c), w.to]).check(&chain, &w).await.unwrap_or_else(|e| panic!("a second router is a config row: {e:?}"));
+        for (g, what) in [(at(vec![]), "no governance_routers"), (at(vec![Address::repeat_byte(0x5c)]), "another router")] {
+            let e = g.check(&chain, &w).await.unwrap_err();
+            assert!(matches!(&e, Refusal::Policy(r) if r.starts_with("CALL_TARGET_REFUSED")), "{what}: {e:?}");
+        }
+        let (other_uid, _) = bound(B256::repeat_byte(0x77)).await;
+        let unbound = Chain::with_signer(&ChainCfg { chain_uid: Some(uid), ..other_uid }, signer()).unwrap();
+        assert!(at(vec![w.to]).check(&unbound, &w).await.is_err(), "a router whose chainUid() differs");
+        let mut cancel = op_of("CancelNonce", "wallet", &v).unwrap();
+        cancel["token"] = serde_json::json!(format!("{:#x}", w.to));
+        let (cw, _) = crate::submit::work_of_op(Some(1), &cancel, None).unwrap();
+        let e = at(vec![w.to]).check(&chain, &cw).await.unwrap_err();
+        assert!(matches!(&e, Refusal::Policy(r) if r.starts_with("CALL_TARGET_REFUSED")), "{e:?}");
+        let mut forged = op_of("GrantRole", "gov_router", &v).unwrap();
+        forged["signature"] = v["ops"]["RevokeRole"]["domains"]["gov_router"]["signature"].clone();
+        let (fw, _) = crate::submit::work_of_op(Some(1), &forged, None).unwrap();
+        let e = at(vec![fw.to]).check(&chain, &fw).await.unwrap_err();
+        assert!(matches!(&e, Refusal::Policy(r) if r.starts_with("BAD_SIGNATURE")), "{e:?}");
     }
 
     /// Spec §9 / R8 (T17 fix 1): the floor covers forge's measured minimum relayer call gas of a `SmartKeyAccount`-signed

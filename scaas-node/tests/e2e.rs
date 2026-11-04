@@ -653,6 +653,7 @@ alloy::sol! {
     function approve(address spender, uint256 value) external returns (bool);
     function mint(address to, uint256 value) external;
     function puller() external view returns (address);
+    function listedOnly() external view returns (bool);
     struct SubjectKey { uint8 kind; bytes32 x; bytes32 y; bytes32 rpIdHash; bytes32 originHash; }
     function deploy(SubjectKey firstKey, address guardian) external returns (address account);
 }
@@ -1394,4 +1395,56 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
     assert_eq!(last(4)["chain_state"], "mined", "{}", last(4));
     quote_covers(&sent, b0 - eth().await, "uaRelay replaced while stuck");
     assert_eq!(view(&rpc, token, IToken::mtxNonceCall { from: payer.address(), batch: U256::from(13) }).await, U256::from(1u64));
+}
+
+/// Spec 2026-11-02-governance §3.6, §12.7 (plan T15) on the real contracts: a DEX owner with no gas signs `mtxSetListedOnly` on the
+/// chain's `GovernanceRouter` (`batch` = the target, one lane per target); as a `metatx` job on a chain with no `governance_routers` it
+/// goes `dead` `CALL_TARGET_REFUSED` with nothing sent; on a chain that names the router it is relayed at fee 0, and the DEX's
+/// `listedOnly()` reads true: the router authenticated the owner's native id for that one call.
+#[tokio::test]
+#[ignore]
+async fn router_op_relayed_at_fee_zero_on_anvil() {
+    let chain_id = 31906;
+    let (_anvil, rpc) = start_anvil(chain_id, 31906).await;
+    let owner = small_key(0x60F); // never funded
+    let dep = deploy(&rpc, chain_id, owner.address());
+    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    let router: Address = dep["governance_router"].as_str().unwrap().parse().unwrap();
+    let factory: Address = dep["token_factory"].as_str().unwrap().parse().unwrap();
+    let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
+    let deployer = key(DEPLOYER);
+    let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: owner.address().into_word(),
+        relayerSharePpm: 0, treasury: Address::repeat_byte(0x7a), listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO }.abi_encode().into(),
+        salt: B256::repeat_byte(0x60) }.abi_encode()).await;
+    assert!(!view(&rpc, dex, listedOnlyCall {}).await);
+    let z = format!("{:#x}", Address::ZERO);
+    let op = signed_op(&owner, json!({"entry": "mtxSetListedOnly", "contract": "gov_router", "token": format!("{router:#x}"),
+        "args": {"target": format!("{dex:#x}"), "on": true},
+        "envelope": {"from": format!("{:#x}", owner.address()), "batch": U256::from_be_slice(dex.as_slice()).to_string(), "nonce": "0",
+            "validUntil": (now() + 300).to_string(), "mode": 0, "relayer": z, "fee": "0", "feeRecipient": z}}), chain_id, uid);
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let odoo = odoo_at(start_fake(state.clone()).await);
+    let relayer = key(RELAYER);
+    let report = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap();
+
+    let without = chain_cfg(chain_id, &rpc, None);
+    let mut s = Submitter::start(Chain::with_signer(&without, relayer.clone()).unwrap(), odoo.clone(), without.clone(), "e2e-gov-0".into(),
+        Default::default()).await.unwrap();
+    state.lock().unwrap().jobs.push(json!({"id": 1, "kind": "metatx", "op": op.clone()}));
+    run_outbox(&mut s).await;
+    assert_eq!(report(1)["chain_state"], "dead", "{}", report(1));
+    assert!(report(1)["error"].as_str().unwrap().contains("CALL_TARGET_REFUSED"), "{}", report(1));
+    assert!(!view(&rpc, dex, listedOnlyCall {}).await, "nothing sent");
+
+    let with = ChainCfg { governance_routers: vec![router], ..without };
+    let mut s = Submitter::start(Chain::with_signer(&with, relayer.clone()).unwrap(), odoo.clone(), with.clone(), "e2e-gov-1".into(),
+        Default::default()).await.unwrap();
+    state.lock().unwrap().jobs.push(json!({"id": 2, "kind": "metatx", "op": op}));
+    run_outbox(&mut s).await;
+    assert_eq!(report(2)["chain_state"], "mined", "{}", report(2));
+    assert!(view(&rpc, dex, listedOnlyCall {}).await, "the owner's op ran through the router");
+    let lane = IToken::mtxNonceCall { from: owner.address(), batch: U256::from_be_slice(dex.as_slice()) }.abi_encode();
+    let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
+    let out = p.call(TransactionRequest::default().to(router).input(lane.into())).await.unwrap();
+    assert_eq!(U256::abi_decode(&out).unwrap(), U256::from(1u64), "the router's nonce, on the target's lane");
 }

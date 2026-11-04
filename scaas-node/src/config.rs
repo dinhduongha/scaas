@@ -282,6 +282,11 @@ pub struct ChainCfg {
     /// rows `register` / `setKemKey` / `storePqzPop` / `setPqzKey` (UA-8, ruling R-node; unset: refused).
     #[serde(default)]
     pub ua_registry: Option<Address>,
+    /// The chain's `GovernanceRouter`s (NODE-JOB-19; spec 2026-11-02-governance §12.7): the only targets of a `gov_router` row, on
+    /// the direct path and as the inner target of a relay fee. A list: a second router (another child of `GovernanceRouterBase`) is a
+    /// config row. Empty: every router job is refused.
+    #[serde(default)]
+    pub governance_routers: Vec<Address>,
     /// Ví lạnh nhận phí của meta-tx không ràng buộc `feeRecipient` (R84, EVM/Hedera); không phải khoá lane.
     /// Không đặt ⇒ ghi 0: contract trả phí cho `msg.sender` (lane gửi).
     #[serde(default)]
@@ -394,6 +399,7 @@ impl Default for ChainCfg {
             account_factory: None,
             token_factory: None,
             ua_registry: None,
+            governance_routers: vec![],
             fee_recipient: None,
             poll_ms: default_poll(),
             stuck_after_secs: default_stuck(),

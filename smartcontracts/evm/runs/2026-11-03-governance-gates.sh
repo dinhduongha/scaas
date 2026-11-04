@@ -15,7 +15,8 @@ CAPPED_MEM=${CAPPED_MEM:-4G} # capped's own default; the base would lower it to 
 ZETHER_CROSS_N=10 # test/zether/ZetherProverCross.t.sol: 10 tests, none skipped
 FORGE_DIRS="ua zether pqz governance v2"
 SETS="n2048-kmax1024 n2304-kmax4096 n2560-kmax16384 n2816-kmax65536"
-STEPS="build forge-ua forge-zether forge-pqz forge-governance forge-v2 forge-rest forge-isolate sizes zether-cross clientkeys vectors-check cargo-zether-prover docs named-tests summary"
+# cargo-scaas-node is the whole node suite: 6 GB, alone (AGENTS.md "Machine"): CAPPED_MEM=6G with nothing else heavy running
+STEPS="build forge-ua forge-zether forge-pqz forge-governance forge-v2 forge-rest forge-isolate sizes zether-cross clientkeys vectors-check cargo-zether-prover cargo-scaas-node node-e2e-anvil docs named-tests summary"
 if [ "$1" = "--only" ]; then
   case $2 in
     at-set-*|summary) for s in $SETS; do
@@ -339,6 +340,13 @@ forge|forge|test_everySelectorIsClassified
 forge|forge|test_strangerRevertsOnEveryGatedRow
 forge|forge|test_noGovernanceSelectorIsRelayable
 forge|forge|test_routerPublishesNoAllowList
+cargo-scaas-node|cargo|typed::router_ops_are_named_and_refuse_hex
+cargo-scaas-node|cargo|typed::grant_terms_decode_is_bounded
+cargo-scaas-node|cargo|guard::allow_lists_equal_the_selector_audit_both_directions
+cargo-scaas-node|cargo|guard::a_router_op_relayed_through_the_relay_fee_checks_the_inner_target
+cargo-scaas-node|cargo|guard::the_guards_relay_branch_runs_the_router_rule
+cargo-scaas-node|cargo|guard::a_router_job_runs_only_on_a_configured_router
+node-e2e-anvil|cargo|router_op_relayed_at_fee_zero_on_anvil
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

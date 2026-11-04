@@ -23,8 +23,11 @@ use crate::metatx::{addr, check_mode, native, uint, MODE_RESTRICT_FEE_RECIPIENT,
 const ENV: [&str; 7] = ["batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"];
 const E_FIELDS: &str = "uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient";
 
-const ALL: &[&str] = &["token", "zether", "pqz", "wallet", "account"];
+const ALL: &[&str] = &["token", "zether", "pqz", "wallet", "account", "gov_router"];
 const T: &[&str] = &["token", "zether", "pqz"];
+const TG: &[&str] = &["token", "zether", "pqz", "gov_router"];
+/// The chain's `GovernanceRouter` (spec 2026-11-02-governance §3.2, §12.7): its typed entries only, none on a governed contract.
+const GR: &[&str] = &["gov_router"];
 const TD: &[&str] = &["token", "zether", "pqz", "dex"];
 const ZP: &[&str] = &["zether", "pqz"];
 const Z: &[&str] = &["zether"];
@@ -45,6 +48,7 @@ pub fn domain_name(contract: &str) -> Option<&'static str> {
         "wallet" => "SCaaS MandateWallet",
         "account" => "SCaaS SmartKeyAccount",
         "dex" => "SCaaS Dex",
+        "gov_router" => "SCaaS GovernanceRouter",
         _ => return None,
     })
 }
@@ -88,6 +92,8 @@ const NESTED: &[(&str, &str)] = &[
     ("Interaction", "address target,bytes data"),
     ("ExchangePlan", "bytes32 ref,ExchangeLeg[] legs,address[] extraTokens"),
     ("HybridPlan", "bytes32 ref,DexLeg taker,DexLeg[] makers,uint256 outsideSell,uint256 outsideFloor,address[] extraTokens"),
+    // `IGovernance.GrantTerms`: flat, so a decode is one level deep; its `hashStruct` is the signed word, the struct the argument
+    ("GrantTerms", "uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope"),
 ];
 
 /// `(struct, entry, contract kinds, fields, plan)`. `E` = the envelope fields. The plan is the entry's arguments in order;
@@ -167,10 +173,49 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("CancelWrapOrder", "mtxCancelOrder", T, "WrapOrder order", "wrap!order @"),
     ("CancelUAWrapOrder", "uaCancelOrder", T, "UAWrapOrder order", "wrap!order @"),
     ("CancelDexOrder", "mtxCancelOrders", D, "DexOrder order", "[order] [@]"),
-    ("UACancelNonce", "uaCancelNonce", T, "bytes32 ua,uint256 batch,uint256 validUntil", "ua batch validUntil @"),
+    ("UACancelNonce", "uaCancelNonce", TG, "bytes32 ua,uint256 batch,uint256 validUntil", "ua batch validUntil @"),
     ("ZetherRollOver", "mtxRollOverSigned", Z, "bytes32 ua,uint64 accSeq,uint64 expectedPendingSeq,uint64 validUntilBlock", "ua expectedPendingSeq validUntilBlock @ua"),
     ("ZetherSetRollOverMode", "mtxSetRollOverMode", Z, "bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock", "ua mode validUntilBlock @ua"),
     ("PqzAuth", "", P, "uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash", ""),
+    // the `GovernanceRouter`'s closed table (spec §3.2): `mtx<Op>` / `ua<Op>`, `target` the first op word, fee mode `NONE`
+    ("GrantRole", "mtxGrantRole", GR, "address from,address target,uint8 bit,bytes32 account,E", ""),
+    ("UAGrantRole", "uaGrantRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
+    ("RevokeRole", "mtxRevokeRole", GR, "address from,address target,uint8 bit,bytes32 account,E", ""),
+    ("UARevokeRole", "uaRevokeRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
+    ("SetGrant", "mtxSetGrant", GR, "address from,address target,uint8 bit,bytes32 holder,GrantTerms terms,E", ""),
+    ("UASetGrant", "uaSetGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,E", ""),
+    ("CancelGrant", "mtxCancelGrant", GR, "address from,address target,uint8 bit,bytes32 account,E", ""),
+    ("UACancelGrant", "uaCancelGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
+    ("DisableFeature", "mtxDisableFeature", GR, "address from,address target,uint8 bit,E", ""),
+    ("UADisableFeature", "uaDisableFeature", GR, "bytes32 from,address target,uint8 bit,E", ""),
+    ("TransferOwnership", "mtxTransferOwnership", GR, "address from,address target,bytes32 newOwner,E", ""),
+    ("UATransferOwnership", "uaTransferOwnership", GR, "bytes32 from,address target,bytes32 newOwner,E", ""),
+    ("AcceptOwnership", "mtxAcceptOwnership", GR, "address from,address target,E", ""),
+    ("UAAcceptOwnership", "uaAcceptOwnership", GR, "bytes32 from,address target,E", ""),
+    ("RenounceOwnership", "mtxRenounceOwnership", GR, "address from,address target,E", ""),
+    ("UARenounceOwnership", "uaRenounceOwnership", GR, "bytes32 from,address target,E", ""),
+    ("RenounceRole", "mtxRenounceRole", GR, "address from,address target,uint8 bit,E", ""),
+    ("UARenounceRole", "uaRenounceRole", GR, "bytes32 from,address target,uint8 bit,E", ""),
+    ("Mint", "mtxMint", GR, "address from,address target,address to,uint256 amount,E", ""),
+    ("UAMint", "uaMint", GR, "bytes32 from,address target,address to,uint256 amount,E", ""),
+    ("MintToUA", "mtxMintToUA", GR, "address from,address target,bytes32 to,uint256 amount,E", ""),
+    ("UAMintToUA", "uaMintToUA", GR, "bytes32 from,address target,bytes32 to,uint256 amount,E", ""),
+    ("DisableWrap", "mtxDisableWrap", GR, "address from,address target,address leg,bytes32 reason,E", ""),
+    ("UADisableWrap", "uaDisableWrap", GR, "bytes32 from,address target,address leg,bytes32 reason,E", ""),
+    ("ProposeRate", "mtxProposeRate", GR, "address from,address target,address leg,uint96 num,uint96 den,E", ""),
+    ("UAProposeRate", "uaProposeRate", GR, "bytes32 from,address target,address leg,uint96 num,uint96 den,E", ""),
+    ("CancelRate", "mtxCancelRate", GR, "address from,address target,E", ""),
+    ("UACancelRate", "uaCancelRate", GR, "bytes32 from,address target,E", ""),
+    ("ExecuteRate", "mtxExecuteRate", GR, "address from,address target,E", ""),
+    ("UAExecuteRate", "uaExecuteRate", GR, "bytes32 from,address target,E", ""),
+    ("SetMarket", "mtxSetMarket", GR, "address from,address target,address base,address quote,bool listed,E", ""),
+    ("UASetMarket", "uaSetMarket", GR, "bytes32 from,address target,address base,address quote,bool listed,E", ""),
+    ("SetExchangeTarget", "mtxSetExchangeTarget", GR, "address from,address target,address exchangeTarget,bool listed,E", ""),
+    ("UASetExchangeTarget", "uaSetExchangeTarget", GR, "bytes32 from,address target,address exchangeTarget,bool listed,E", ""),
+    ("SetListedOnly", "mtxSetListedOnly", GR, "address from,address target,bool on,E", ""),
+    ("UASetListedOnly", "uaSetListedOnly", GR, "bytes32 from,address target,bool on,E", ""),
+    ("SetFeeSplit", "mtxSetFeeSplit", GR, "address from,address target,uint32 relayerSharePpm,address treasury,E", ""),
+    ("UASetFeeSplit", "uaSetFeeSplit", GR, "bytes32 from,address target,uint32 relayerSharePpm,address treasury,E", ""),
     // not rows of the vector file: forge pins them (`TradeKat.t.sol`)
     ("InvalidateNonces", "mtxInvalidateNonces", TD, "address from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
     ("UAInvalidateNonces", "uaInvalidateNonces", T, "bytes32 from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
@@ -1064,8 +1109,8 @@ mod tests {
                 calldata += 1;
             }
         }
-        assert_eq!((structs, domains, calldata), (74, 130, 129), "every row was walked");
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 77, "75 vector rows (Execute twice), the two invalidations");
+        assert_eq!((structs, domains, calldata), (112, 170, 169), "every row was walked");
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 115, "113 vector rows (Execute twice), the two invalidations");
         assert_eq!(rows().iter().filter(|r| !r.typed).count(), 21);
     }
 
@@ -1212,6 +1257,76 @@ mod tests {
             assert!(Op::parse(&o, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"), "args.{k}");
         }
         Op::parse(&op_of("Execute", "wallet", &v).unwrap(), FEE).unwrap();
+    }
+
+    /// The router's rows (spec 2026-11-02-governance §3.2): every op is named JSON, `target` a named field the node signs and sends; a
+    /// hex form is refused by name, and no generic entry, no governed contract and no other domain takes a router struct.
+    #[test]
+    fn router_ops_are_named_and_refuse_hex() {
+        let v = vectors();
+        let good = op_of("UASetGrant", "gov_router", &v).unwrap();
+        let p = Op::parse(&good, FEE).unwrap();
+        assert_eq!((p.typed.contract, p.row.entry), ("gov_router", "uaSetGrant"));
+        assert_eq!(p.to, good["token"].as_str().unwrap().parse::<Address>().unwrap(), "sent to the router");
+        let err = |f: &dyn Fn(&mut Value)| {
+            let mut o = good.clone();
+            f(&mut o);
+            Op::parse(&o, FEE).unwrap_err().to_string()
+        };
+        for k in ["data", "calldata"] {
+            assert!(err(&|o| o[k] = json!("0x1234")).starts_with("HEX_DATA_REFUSED"), "op.{k}");
+            assert!(err(&|o| o["args"][k] = json!("0x1234")).starts_with("HEX_DATA_REFUSED"), "args.{k}");
+        }
+        assert!(Op::parse(&json!("0xdeadbeef"), FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"), "op as hex");
+        let packed = format!("0x{}", "00".repeat(9 * 32));
+        assert_eq!(err(&|o| o["args"]["terms"] = json!(packed)), "BAD_PAYLOAD: args.terms: not an object", "GrantTerms as a blob");
+        assert!(err(&|o| o["contract"] = json!("token")).starts_with("UNKNOWN_ENTRY"), "no governed contract has the entry");
+        assert!(err(&|o| o["contract"] = json!("dex")).starts_with("UNKNOWN_ENTRY"));
+        for generic in ["mtxExecute", "mtxBatch", "uaExecute", "uaBatch", "executeMetaTransaction"] {
+            assert!(err(&|o| o["entry"] = json!(generic)).starts_with("UNKNOWN_ENTRY"), "{generic} is no row");
+        }
+        assert!(err(&|o| { o["args"].as_object_mut().unwrap().remove("target"); }).contains("args.target: missing"));
+        let other = Address::repeat_byte(0x42);
+        let mut moved = good.clone();
+        moved["args"]["target"] = json!(format!("{other:#x}"));
+        let m = Op::parse(&moved, FEE).unwrap();
+        assert_ne!(m.typed.struct_hash, p.typed.struct_hash, "target is a signed word");
+        assert_eq!(m.to, p.to, "and never where the job is sent");
+        // every router struct is on the router's domain only
+        for r in rows().iter().filter(|r| r.contracts.contains(&"gov_router")) {
+            assert!(r.contracts == GR || matches!(r.name, "CancelNonce" | "UACancelNonce"), "{}", r.name);
+        }
+    }
+
+    /// `GrantTerms` is decoded by its type: one level, nine named fields, each bounded by its width; a hostile depth or length stops at
+    /// the first field that is not its type, before anything is built.
+    #[test]
+    fn grant_terms_decode_is_bounded() {
+        let v = vectors();
+        let terms = v["ops"]["SetGrant"]["message"]["terms"].clone();
+        assert_eq!(to_json("GrantTerms", &parse("GrantTerms", &terms, "t").unwrap()), terms);
+        let err = |f: &dyn Fn(&mut Value)| {
+            let mut t = terms.clone();
+            f(&mut t);
+            parse("GrantTerms", &t, "t").unwrap_err().to_string()
+        };
+        assert_eq!(err(&|t| t["extra"] = json!(1)), "BAD_PAYLOAD: t.extra: unknown field");
+        assert_eq!(err(&|t| { t.as_object_mut().unwrap().remove("scope"); }), "BAD_PAYLOAD: t.scope: missing");
+        assert_eq!(err(&|t| t["min"] = json!("340282366920938463463374607431768211456")), "BAD_PAYLOAD: t.min: above uint128");
+        assert_eq!(err(&|t| t["window"] = json!(1u64 << 32)), "BAD_PAYLOAD: t.window: above uint32");
+        assert_eq!(err(&|t| t["validUntil"] = json!("18446744073709551616")), "BAD_PAYLOAD: t.validUntil: above uint64");
+        assert_eq!(err(&|t| t["scope"] = json!(format!("0x{}", "11".repeat(33)))), "BAD_PAYLOAD: t.scope: not bytes32");
+        assert_eq!(err(&|t| t["delegable"] = json!("true")), "BAD_PAYLOAD: t.delegable: not a bool");
+        let mut deep = json!("0x");
+        for _ in 0..100_000 {
+            let mut o = Map::new();
+            o.insert("scope".into(), deep); // never `json!`: it serializes its argument, a recursion over every level
+            deep = Value::Object(o);
+        }
+        let mut t = terms.clone();
+        t["scope"] = deep;
+        assert_eq!(parse("GrantTerms", &t, "t").unwrap_err().to_string(), "BAD_PAYLOAD: t.scope: not a string", "a hostile depth stops at the type's");
+        std::mem::forget(t); // serde_json's drop recurses over the 100,000 levels
     }
 
     /// One change from a passing op, one named error each.

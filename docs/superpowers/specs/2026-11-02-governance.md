@@ -494,7 +494,7 @@ Each is one direct entry under the contract's guard. None is on `mtxSelectors()`
 
 `createTokenUnregistered` is unchanged. No `mtx*` or `ua*` struct changes, so no existing typehash moves.
 
-## 3. `GovernanceRouter` — BUILT on branch `governance` (plan T11, the clients' rows T12); node rows SPECIFIED
+## 3. `GovernanceRouter` — BUILT on branch `governance` (plan T11, the clients' rows T12, the node rows T15)
 
 The per-operator `GovernanceHolder` this section first specified is replaced by one `GovernanceRouter` per chain
 (CTR-GOV-15 Change, owner 2026-11-04; [Change spec](2026-11-04-governance-ua-identity.md) §3). Every identity is a UA id
