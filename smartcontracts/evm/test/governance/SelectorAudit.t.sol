@@ -24,7 +24,7 @@ import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 
 /// governance T13, the selector audit (spec §10.1; CTR-GOV-11; GD-6). Every external that writes state on the six kinds,
-/// `SCaaSDex`, `DexPuller` and `GovernanceRouter`, read from the artifact's ABI in `./out`, is a row of
+/// `SCaaSDex`, `DexPuller` and `GovernanceRouter`, read from its ABI in `FOUNDRY_OUT` (else `./out`), is a row of
 /// `test/vectors/selector_audit.json` with one class: `BIT(n)`, `OWNER`, `HOLDER_OWN`, `OWN_BALANCE`, `SIGNED`, `FACTORY`,
 /// `PERMISSIONLESS(reason)`. An unclassified or moved selector fails. The sentence it pins: no entry point moves, freezes or
 /// pauses a balance its caller does not own unless gated by a feature bit. Each class is checked by behaviour, a stranger
@@ -51,14 +51,16 @@ abstract contract SelectorAuditRows is Test {
             "AuditRow(string sig,string class,string error)"), (AuditRow[]));
     }
 
-    // ------------------------------------------------------------------ the ABI in ./out
+    // ------------------------------------------------------------------ the ABI in the build's out
 
     /// The externals of `name` that are neither `view` nor `pure`, as canonical signatures (`methodIdentifiers`), by the
     /// ABI's names; refused when a name is overloaded across both, which the name alone could not classify. The five
     /// generic entries of `MetaTxBase` / `UAMetaTxBase` are rows whatever their mutability: the router overrides
     /// `uaExecute` and `uaBatch` as `pure` refusals, and they stay entries.
+    /// The artifacts of this build: `FOUNDRY_OUT` when set (`script/pqz/at-set.sh` builds into `out/at-set-<set>`),
+    /// else `out`; a fixed `out/` read another build's artifacts, or none on a fresh checkout.
     function _writes(string memory name) internal view returns (string[] memory out) {
-        string memory a = vm.readFile(string.concat("out/", name, ".sol/", name, ".json"));
+        string memory a = vm.readFile(string.concat(vm.envOr("FOUNDRY_OUT", string("out")), "/", name, ".sol/", name, ".json"));
         string[] memory sigs = vm.parseJsonKeys(a, ".methodIdentifiers");
         (string[] memory w, string[] memory r) = _byMutability(a);
         out = new string[](sigs.length);
