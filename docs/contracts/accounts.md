@@ -871,6 +871,14 @@ budget (owner ruling 2026-10-31; was ~50 % on public chains; at 66 % a kind is ~
 on a chain, the kind is disabled there (verifier address 0: not registrable), never "registrable but unusable"**: a
 registrable but unusable kind can *receive* and then never spend, locking funds. **`slhdsa128s`** (0x0133, SLH-DSA-SHA2-128s, FIPS 205; owner 2026-10-11, SPECIFIED (P6)) is the hash-based backup if lattice assumptions fall, in line with the Ethereum Foundation's hash-based direction: no EIP proposes an SLH-DSA precompile, so it verifies in pure Solidity on the SHA-256 precompile `0x02` (it probes nothing), and it is **enabled on public chains only after P6 measures its verification gas against the chain's per-transaction cap and `UA_VERIFY_BUDGET`** — measured in P6a: 1.32 M at the worst case any input can force (510 WOTS+ steps on each of the 7 layers), 0.79 M for a valid signature, ≤ 13 % of every chain's budget, so the gate passes and enabling it is a registry deploy parameter. The PQ verifiers are home-written and unaudited and carry the label **UNAUDITED**; an audit is not a deploy gate (owner ruling 2026-10-31): a PQ kind is enabled wherever the budget rule above passes; without an EIP-8355 precompile or a stored expanded key ML-DSA is over budget there, so `slhdsa128s` and `fndsa512` are the practical kinds.
 
+<a id="CTR-UA-39"></a>**CTR-UA-39** — **`mldsa87` (0x0134), ML-DSA-87 (FIPS 204, NIST level V), is enabled only where a precompile
+verifies it** (owner 2026-11-04; [decisions.md](../decisions.md)). SPECIFIED. Key data the FIPS 204 `pk` (2,592 B), signature
+4,627 B over `pq_msg` with the empty context, as every ML-DSA kind above. Its pure-Solidity verify does not pass the 66 % rule
+(cap ≈ 8.8 M on a cached expanded key, 31.9 M on the FIPS 204 key), so the kind is **disabled wherever no ML-DSA-87 precompile
+answers the EIP-8355 probe** (`0x14`; the SCaaS testnet's `MLDSA87` `0x000000000000000000000000000000005caa0014`), and it has no
+expanded-key cache. Where enabled it is a PQZ / KEM holder ([CTR-UA-16](#CTR-UA-16)) and PQ weight in an `msig`
+([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12)). EVM first: every other family refuses `0x0134` until its own round.
+
 Multi-transaction verification with stored partial state and chunked verify are rejected (resumable state is a new replay/griefing surface and a second
 audit target for no gain while the estimates fit). The ML-DSA expanded-key cache (P6c) is neither: each part is derived
 data the registry computes from the authenticated `pk` and writes once; no verification spans transactions. Structures are bounded by the same caps (register step 4): a hybrid `{mldsa65, p256}` fits everywhere, but a quorum of two Solidity-verified PQ members (2 × 4–19 M) does not, so the
