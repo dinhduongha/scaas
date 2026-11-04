@@ -126,13 +126,13 @@ data fee) ≈ **$0.005–0.02** per message, so 1,000 messages ≈ $5–20. Stor
 signature and on-chain signature check (add those); the submitter pays, there is no fee.
 
 **C7 — Matrix.** Yes, the AES key works over Matrix: Matrix is only the transport. Each message is a Matrix event of a
-custom type (proposal `vn.scaas.pqchat.v1`, content: `sessionId`, `epoch`, `sender`, `keyId`, `counter`, ciphertext in
+custom type (proposal `net.scaas.pqchat.v1`, content: `sessionId`, `epoch`, `sender`, `keyId`, `counter`, ciphertext in
 base64) in a Matrix room tied to the session (the room id may be stored in the session as a public field). Matrix's own
 end-to-end encryption (Megolm) may stay on as an outer layer; ours is the PQ layer inside. Limits: the Matrix server
 still sees metadata (who talks, when, message sizes) and standard clients such as Element cannot read the custom
 events — our clients (`clients/ua-qt`, the JS wallet) or a widget / bot decrypt them.
 **Qt client (owner 2026-10-25):** `clients/ua-qt` (Qt 6.12) gains a chat screen built on **libQuotient** (the C++/Qt
-Matrix library behind NeoChat and Quaternion, Qt 6; it registers custom event types, so `vn.scaas.pqchat.v1` is a
+Matrix library behind NeoChat and Quaternion, Qt 6; it registers custom event types, so `net.scaas.pqchat.v1` is a
 first-class event): libQuotient handles login, rooms and sync; ua-qt's existing code signs the records and
 reads `PqChat`; OpenSSL ≥ 3.5 does ML-KEM-1024, X25519 (combined per C2, a few dozen lines) and AES-GCM. No
 fork of NeoChat / Quaternion / Nheko.
