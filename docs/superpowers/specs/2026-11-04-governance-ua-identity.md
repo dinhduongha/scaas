@@ -2,7 +2,8 @@
 
 **Status:** ACCEPTED by the owner 2026-11-04 (all three points of §7). BUILT on branch `governance`: identity by UA by plan
 task T10b (`ac29de05`), the `GovernanceRouter` of §3 by T11 (governance spec §3, `src/governance/GovernanceRouter*.sol`);
-the node rows (T15) and the clients' rows (T12) are SPECIFIED. Changes `docs/superpowers/specs/2026-11-02-governance.md`
+the clients' rows by T12 (`clientkeys`, `smartcontracts/vectors/typed/typed_ops.json`, run on a real router by
+`TypedOps.t.sol`); the node rows (T15) are SPECIFIED. Changes `docs/superpowers/specs/2026-11-02-governance.md`
 (accepted 2026-11-03) §1.4, §2, §3, §3.6, §8, recorded as Changes on CTR-GOV-01 and CTR-GOV-15.
 
 **Owner, 2026-11-04:** use UA, the same on every chain — every governance identity is a UA, the same id on

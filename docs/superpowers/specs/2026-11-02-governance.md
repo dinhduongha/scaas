@@ -298,7 +298,7 @@ struct GovernanceStorage {
 }
 ```
 
-**Who is calling.** `_govSubject()` is the subject of every governance check and of every power's own entry (`mint`, `mintToUA`, `disableWrap`, the rate entries, the DEX's setters): when `msg.sender` is the release's `GOV_ROUTER` (an immutable from `Env.govRouter`; 0 = no router on this chain), `IGovernanceRouter(GOV_ROUTER).subject()`, the UA the router authenticated for that call, 0 outside a live call, which every check refuses; from any other caller its native id. No signature is verified in the governed contract. BUILT; the router itself is SPECIFIED (plan T11).
+**Who is calling.** `_govSubject()` is the subject of every governance check and of every power's own entry (`mint`, `mintToUA`, `disableWrap`, the rate entries, the DEX's setters): when `msg.sender` is the release's `GOV_ROUTER` (an immutable from `Env.govRouter`; 0 = no router on this chain), `IGovernanceRouter(GOV_ROUTER).subject()`, the UA the router authenticated for that call, 0 outside a live call, which every check refuses; from any other caller its native id. No signature is verified in the governed contract. BUILT; the router itself BUILT by plan T11 (§3).
 
 `init` and `transferOwnership` refuse `UA_POOL` and `SHIELD_POOL` as owner (`OwnerAccountPool`, B-19), as native ids; `_check` refuses them as holders (`RoleAccountPool`) and 0 (`RoleAccountZero`). A contract-only bit (`_contractOnlyBits()`, `RATE_ADJUSTABLE` on `WRAPPED*`) is held only by a native id whose address has code at the grant: a derived UA is refused `RoleNotContract`. `grantDelay` above 30 days is refused (`GrantDelayTooLong`): `MAX_NOTICE_PERIOD`'s reason applies (B-27).
 
@@ -494,7 +494,7 @@ Each is one direct entry under the contract's guard. None is on `mtxSelectors()`
 
 `createTokenUnregistered` is unchanged. No `mtx*` or `ua*` struct changes, so no existing typehash moves.
 
-## 3. `GovernanceRouter` — BUILT on branch `governance` (plan T11); node rows and clients SPECIFIED
+## 3. `GovernanceRouter` — BUILT on branch `governance` (plan T11, the clients' rows T12); node rows SPECIFIED
 
 The per-operator `GovernanceHolder` this section first specified is replaced by one `GovernanceRouter` per chain
 (CTR-GOV-15 Change, owner 2026-11-04; [Change spec](2026-11-04-governance-ua-identity.md) §3). Every identity is a UA id

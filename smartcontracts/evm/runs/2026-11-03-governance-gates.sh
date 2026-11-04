@@ -15,7 +15,7 @@ CAPPED_MEM=${CAPPED_MEM:-4G} # capped's own default; the base would lower it to 
 ZETHER_CROSS_N=10 # test/zether/ZetherProverCross.t.sol: 10 tests, none skipped
 FORGE_DIRS="ua zether pqz governance v2"
 SETS="n2048-kmax1024 n2304-kmax4096 n2560-kmax16384 n2816-kmax65536"
-STEPS="build forge-ua forge-zether forge-pqz forge-governance forge-v2 forge-rest forge-isolate sizes zether-cross clientkeys docs named-tests summary"
+STEPS="build forge-ua forge-zether forge-pqz forge-governance forge-v2 forge-rest forge-isolate sizes zether-cross clientkeys vectors-check cargo-zether-prover docs named-tests summary"
 if [ "$1" = "--only" ]; then
   case $2 in
     at-set-*|summary) for s in $SETS; do
@@ -312,6 +312,29 @@ forge|forge|test_uaSetListedOnlyTypehashIsPinned
 forge|forge|test_setFeeSplitTypehashIsPinned
 forge|forge|test_uaSetFeeSplitTypehashIsPinned
 forge|forge|test_govRouterBeforeTheReleases
+forge|forge|test_routerRow_GrantRole
+forge|forge|test_routerRow_RevokeRole
+forge|forge|test_routerRow_SetGrant
+forge|forge|test_routerRow_CancelGrant
+forge|forge|test_routerRow_DisableFeature
+forge|forge|test_routerRow_TransferOwnership
+forge|forge|test_routerRow_AcceptOwnership
+forge|forge|test_routerRow_RenounceOwnership
+forge|forge|test_routerRow_RenounceRole
+forge|forge|test_routerRow_Mint
+forge|forge|test_routerRow_MintToUA
+forge|forge|test_routerRow_DisableWrap
+forge|forge|test_routerRow_ProposeRate
+forge|forge|test_routerRow_CancelRate
+forge|forge|test_routerRow_ExecuteRate
+forge|forge|test_routerRow_SetMarket
+forge|forge|test_routerRow_SetExchangeTarget
+forge|forge|test_routerRow_SetListedOnly
+forge|forge|test_routerRow_SetFeeSplit
+forge|forge|test_routerRow_CancelNonce
+forge|forge|test_routerRow_UACancelNonce
+clientkeys|node|GovernanceRouter: 38 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only
+clientkeys|node|a router row refuses a field off GrantTerms, a value out of range, a string bool, another domain; target is signed
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

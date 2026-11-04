@@ -178,11 +178,14 @@ const STRUCTS = Object.fromEntries(Object.entries({
   MemberSig: 'uint16 index,InnerSig[] members,bytes sig',
   UASig: 'bytes keyData,bytes signature,MemberSig[] members', AccountSig: 'uint256 keyIndex,bytes32[] proof,bytes signature',
   Payout: 'uint256 amount,bytes32 recipient',
+  // a holder's terms, nested in the router's `SetGrant` / `UASetGrant` (governance spec §3.2: `hashStruct` signed, the struct the argument)
+  GrantTerms: 'uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope',
 }).map(([name, list]) => [name, fields(list)]));
 
 const DOMAIN_OF = { NormalToken: 'SCaaS MetaToken', WrappedToken: 'SCaaS MetaToken', NormalZetherToken: 'SCaaS ZetherToken',
   WrappedZetherToken: 'SCaaS ZetherToken', NormalPqzToken: 'SCaaS PqzToken', WrappedPqzToken: 'SCaaS PqzToken',
-  MandateWallet: 'SCaaS MandateWallet', SmartKeyAccount: 'SCaaS SmartKeyAccount', SCaaSDex: 'SCaaS Dex' };
+  MandateWallet: 'SCaaS MandateWallet', SmartKeyAccount: 'SCaaS SmartKeyAccount', SCaaSDex: 'SCaaS Dex',
+  GovernanceRouter: 'SCaaS GovernanceRouter' };
 const NORMAL = ['NormalToken', 'NormalZetherToken', 'NormalPqzToken'];
 const WRAPPED = ['WrappedToken', 'WrappedZetherToken', 'WrappedPqzToken'];
 const TOKENS = [...NORMAL, ...WRAPPED];
@@ -192,6 +195,7 @@ const CONFIDENTIAL = [...ZETHER, ...PQZ];
 const WRAPPED_CONFIDENTIAL = ['WrappedZetherToken', 'WrappedPqzToken'];
 const WALLET = ['MandateWallet'];
 const ACCOUNT = ['SmartKeyAccount'];
+const ROUTER = ['GovernanceRouter'];
 
 const isRaw = (s) => s instanceof Uint8Array || typeof s === 'string';
 const required = (v, what) => (v === undefined ? refuse(`${what} is required`) : v);
@@ -223,7 +227,7 @@ const PQZ_TAIL = 'bytes proof,bytes accHint';
 // is not the struct's (TS-D16), `args`: their parameters. `raw`: a struct without `E`, with the whole `entry` and `call`.
 // `on`: the contracts that take it. `amount`: the op's amount field where the fee class is AMOUNT (CTR-MTX-20).
 const OPS = {
-  CancelNonce: { fields: 'uint256 lane', on: [...TOKENS, ...WALLET, ...ACCOUNT] },
+  CancelNonce: { fields: 'uint256 lane', on: [...TOKENS, ...WALLET, ...ACCOUNT, ...ROUTER] },
   Burn: { fields: 'uint256 amount', on: NORMAL, ua: true, amount: 'amount' },
   Wrap: { fields: 'uint256 amount', on: WRAPPED },
   WrapLeg: { fields: 'address underlying,uint256 amount', on: WRAPPED },
@@ -293,13 +297,34 @@ const OPS = {
   CancelUAWrapOrder: { raw: 'UAWrapOrder order', on: TOKENS, entry: 'uaCancelOrder',
     call: (m, sig) => [['UATradeOrder', asTradeOrder(m.order)], ['UASig', uaSigOf(sig)]] },
   CancelDexOrder: { raw: 'DexOrder order', on: ['SCaaSDex'], entry: 'mtxCancelOrders', call: (m, sig) => [['DexOrder[]', [m.order]], ['bytes[]', [sig]]] },
-  UACancelNonce: { raw: 'bytes32 ua,uint256 batch,uint256 validUntil', on: TOKENS, entry: 'uaCancelNonce',
+  UACancelNonce: { raw: 'bytes32 ua,uint256 batch,uint256 validUntil', on: [...TOKENS, ...ROUTER], entry: 'uaCancelNonce',
     call: (m, sig) => [['bytes32', m.ua], ['uint256', m.batch], ['uint256', m.validUntil], ['UASig', uaSigOf(sig)]] },
   // The owner's own signature (purpose `zether-owner`), `ownerSig` of the direct ops and of `RollOverSigned` / `SetRollOverMode`.
   ZetherRollOver: { raw: 'bytes32 ua,uint64 accSeq,uint64 expectedPendingSeq,uint64 validUntilBlock', on: ZETHER, entry: 'mtxRollOverSigned',
     call: (m, sig) => [['bytes32', m.ua], ['uint64', m.expectedPendingSeq], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(sig)]] },
   ZetherSetRollOverMode: { raw: 'bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock', on: ZETHER, entry: 'mtxSetRollOverMode',
     call: (m, sig) => [['bytes32', m.ua], ['uint8', m.mode], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(sig)]] },
+  // GovernanceRouter, one per chain (governance spec §3.2, CTR-GOV-15 Change): the closed table, each op `mtx<Op>` and
+  // `ua<Op>`, `target` (the governed contract) the first op word, identities `bytes32`, fee mode NONE; no generic path.
+  GrantRole: { fields: 'address target,uint8 bit,bytes32 account', on: ROUTER, ua: true },
+  RevokeRole: { fields: 'address target,uint8 bit,bytes32 account', on: ROUTER, ua: true },
+  SetGrant: { fields: 'address target,uint8 bit,bytes32 holder,GrantTerms terms', on: ROUTER, ua: true },
+  CancelGrant: { fields: 'address target,uint8 bit,bytes32 account', on: ROUTER, ua: true },
+  DisableFeature: { fields: 'address target,uint8 bit', on: ROUTER, ua: true },
+  TransferOwnership: { fields: 'address target,bytes32 newOwner', on: ROUTER, ua: true },
+  AcceptOwnership: { fields: 'address target', on: ROUTER, ua: true },
+  RenounceOwnership: { fields: 'address target', on: ROUTER, ua: true },
+  RenounceRole: { fields: 'address target,uint8 bit', on: ROUTER, ua: true },
+  Mint: { fields: 'address target,address to,uint256 amount', on: ROUTER, ua: true },
+  MintToUA: { fields: 'address target,bytes32 to,uint256 amount', on: ROUTER, ua: true },
+  DisableWrap: { fields: 'address target,address leg,bytes32 reason', on: ROUTER, ua: true },
+  ProposeRate: { fields: 'address target,address leg,uint96 num,uint96 den', on: ROUTER, ua: true },
+  CancelRate: { fields: 'address target', on: ROUTER, ua: true },
+  ExecuteRate: { fields: 'address target', on: ROUTER, ua: true },
+  SetMarket: { fields: 'address target,address base,address quote,bool listed', on: ROUTER, ua: true },
+  SetExchangeTarget: { fields: 'address target,address exchangeTarget,bool listed', on: ROUTER, ua: true },
+  SetListedOnly: { fields: 'address target,bool on', on: ROUTER, ua: true },
+  SetFeeSplit: { fields: 'address target,uint32 relayerSharePpm,address treasury', on: ROUTER, ua: true },
   // The statement's header words verbatim (purpose `zether-auth`); signed into `pqzAuth`, no entry of its own.
   PqzAuth: { raw: 'uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,'
     + 'uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,'
@@ -426,7 +451,8 @@ function rebuilt(op, opts) {
 
 const opName = (primary) => primary.replace(/^UA/, 'ua').replace(/^[A-Z]/, (c) => c.toLowerCase());
 /** `<op>TypedData({name, contract, chainId, chainUid, message})` and `<op>Calldata(td, sig, extra)` of every struct
- *  (`extra`: `pqzAuth`, `ownerSig`, `payerSig` where the entry takes one); exported by name below and from zether.js. */
+ *  (`extra`: `pqzAuth`, `ownerSig`, `payerSig` where the entry takes one); exported by name below and from zether.js,
+ *  the `GovernanceRouter`'s (`grantRoleTypedData`, `uaSetGrantCalldata`, …) from here only. */
 export const OP_BUILDERS = Object.freeze(Object.fromEntries(Object.values(TYPED_OPS).flatMap((op) => [
   [`${opName(op.primary)}TypedData`, (o) => opTypedData(op, o)],
   ...(op.call ? [[`${opName(op.primary)}Calldata`, (td, sig, x) => op.call(td, sig, x).data]] : [])])));

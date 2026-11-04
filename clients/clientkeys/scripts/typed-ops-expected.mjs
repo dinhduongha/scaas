@@ -26,6 +26,9 @@ const CONF = {
   ZetherUnshieldUnwrap: (m) => [zBurn(m.args), uw(m.unwrap), m.proof],
   RollOverSigned: (m, x) => [m.ua, m.expectedPendingSeq, m.validUntilBlock, uaTuple(x.ownerSig)],
   SetRollOverMode: (m, x) => [m.ua, m.rollOverMode, m.validUntilBlock, uaTuple(x.ownerSig)],
+  // the router's `setGrant`: the nested terms are the call's tuple (governance spec §3.2)
+  SetGrant: (m) => [m.target, m.bit, m.holder, ['min', 'max', 'total', 'perWindow', 'window', 'validUntil', 'maxUses', 'delegable',
+    'scope'].map((k) => m.terms[k])],
 };
 const envelope = (m) => [m.from, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient];
 const tradeTuple = (o) => [o.from, o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.fee, o.relayer, o.dex, o.destination,
