@@ -1,0 +1,143 @@
+# SCaaS testnet (7622) reset 1, 2026-11-04 (owner: "Làm reset: mục 2, reset lần 1"; TODO pre-freeze work order item 2).
+# Contracts side. Node side: pqz-core/nethermind/runs/2026-11-04-testnet-reset1{,-throwaway}.txt. RUNBOOK section
+# "Code size 128 KiB on the SCaaS testnet: reset 1". Branch testnet-reset-1 at bf6f3d04 (= origin/main). Full tool output
+# stays in git-ignored local .log files beside this one; this file is the summary.
+# Chain: genesis / chainUid 0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164 (unchanged), block 1
+# 0xd80f7d60962985329f318ac297be60b91ab7e5fa72cdf0632e5d5d0a2b56da2a, image scaas/nethermind-pqz:2.2.0-pqz7
+# (sha256:c31ce7e1b0a304fb5ce9df8b0bae686ff43ddcc94486ec583e7856b3d9bffdcd), maxCodeSize 0x20000, EIP-7954 out,
+# MLDSA87 at 0x…5caa0014 with mldsa87Gas 102,000 PROVISIONAL. RPC http://192.168.1.72:8545; registrar = test key 0x…04.
+
+step | rc | counts
+node check (head, probe, MLDSA87 probe, node e2e, codesize) | 0 | probe 435 ok / 0 FAIL; mldsa87 4 ok; node e2e 84 ok / 0 FAIL; codesize 65,537 B + 119,800 B status 1
+deploy.sh evm (CHAIN_CODE_LIMIT=131072 DEPLOY_ZETHER=1 DEPLOY_WRAPPED=1 NOTICE_PERIOD=600 FOUNDRY_PROFILE=scaas-testnet) | 0 | 49 tx, 49 status 1, gasUsed 986,967,204, blocks 49-145
+eth_getCode of every address in deployments/7622.json | - | 19 keys (18 distinct), all non-empty
+script/pqz/e2e.py (PQZ_SET=n2304-kmax4096) | 0 | 386 ok / 0 FAIL, 1,014 s; log runs/2026-11-04-testnet-reset1-pqz-7622.txt
+eth_getCode of every address in deployments/7622-pqz.json + the 3 releases of the e2e log | - | 20 + 3, all non-empty
+runs/2026-11-04-mldsa87-gen2-7622.sh | 0 | verifier + gen-2 registry + 2 registrations, all status 1
+scripts/e2e-zether.sh | 0 | 82 ok / 0 FAIL; 24 tx, 24 status 1
+runs/2026-11-04-gov-smoke-7622.sh | 0 | gov-smoke: ok (runs/2026-11-04-testnet-reset1-gov-smoke-7622.txt)
+
+## deployments/7622.json (git-ignored; copy)
+{
+  "chain_uid": "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164",
+  "dex_implementation": "0x73485F5ac9dEb335CAaDFd60daef37141f3CCF70",
+  "governance_router": "0xB64D2D5f27D2d5eA951409773343D856e41Fb8E0",
+  "implementation_normal": "0x7CfAE0db6f3D87c1DAAc77c429Ec1f48435E834A",
+  "implementation_normal_zether_bls12381": "0xd9B8b7E9523a84d9b5A3a5433f555D4EA29Bd2e2",
+  "implementation_wrapped": "0x7cAF719037a24611511d6978630FBB3Dc6744A73",
+  "implementation_wrapped_zether_bls12381": "0x6417740a5c7Eb03446133B1463ad2b264B776E19",
+  "mtx_relay_executor": "0x6A789dB0905d072cbfD93C957af81C139180e463",
+  "mtx_relay_fee": "0xD5D8d5e1cD81f1E83C5B6c1a4Fd9AcfF02d89BB2",
+  "smart_key_account_factory": "0x6e16e2CFB42b534DdcE8d565542C1Ab08a688Ad4",
+  "smart_key_account_implementation": "0x428C6e1Cad562Dc16b2bf19515B9b08dD0361e8f",
+  "token_factory": "0xDd3DE30C187eDdBeCd673a09Eed8dB3c481D0cd1",
+  "ua_registry": "0x838b5D28fbc07844a070818012A8a68980688C26",
+  "ua_registry_lib": "0xbd33b655DbDBc9D946b5eB45428158F2a628C1d5",
+  "zether_burn_verifier_bls12381": "0x1c193b35fE2c313923f46C6d8aE242E0c0f78C53",
+  "zether_disclosure": "0x18a451e2021eFbd5d0fDDdcEBCAC00bEABF203E8",
+  "zether_inner_product_verifier_bls12381": "0x6E4929F97b6B16e7ef6856069FA36B5B51031956",
+  "zether_registry": "0x838b5D28fbc07844a070818012A8a68980688C26",
+  "zether_statements": "0x527a9511287d74a1f3aD2711F013c22dAc9dac7a",
+  "zether_verifier_bls12381": "0xb0CD4829E57F2cdB8846270c49b8FD5DDd3EC34b"
+}
+## deployments/7622-pqz.json (git-ignored; copy; the PQZ stack of script/pqz/e2e.py, its own registry and GovernanceRouter)
+{
+  "HederaLib": "0x6d411e0a54382ed43f02410ce1c7a7c122afa6e1",
+  "MtxPipelineLib": "0x5cf7f96627f3c9903763d128a1cc5d97556a6b99",
+  "GovernanceLib": "0x66a15edcc3b50a663e72f1457ffd49b9ae284ddc",
+  "TradeLib": "0x00de48310d77a4d56aa400248b0b1613508f5b73",
+  "PqzBurnLib": "0xd24260c102b5d128cbefa0f655e5be3c2370677c",
+  "PqzStateLib": "0x7758f98c1c487e5653795470eeab6c4698be541b",
+  "PqzTransferLib": "0x510c6297cc30a058f41eb4af1bfc9953ead8b577",
+  "PqzViewLib": "0xcbd945e77adb65651f503723ac322591f3435cc5",
+  "WrappedLib": "0xcd75ad7ac9c9325105f798c476e84176648f391a",
+  "PqzWrappedLib": "0x6d5a4d246617d711595a1657c55b17b97e20bdda",
+  "UAMldsaVerifier 44": "0xf2e246bb76df876cef8b38ae84130f4f55de395b",
+  "UAMldsaVerifier 65": "0x2946259e0334f33a064106302415ad3391bed384",
+  "UAPqzVerifier PQZL": "0xde09e74d4888bc4e65f589e8c13bce9f71ddf4c7",
+  "Secp256k1Verifier": "0x51a240271ab8ab9f9a21c82d9a85396b704e164d",
+  "UARegistry gen 1": "0xb9816fc57977d5a786e654c7cf76767be63b966e",
+  "library HederaLib": "0x6d411e0a54382ed43f02410ce1c7a7c122afa6e1",
+  "library MtxPipelineLib": "0x5cf7f96627f3c9903763d128a1cc5d97556a6b99",
+  "governance_router": "0xfec9586a1639152bfabc9f7946321f5ac9dc6f52",
+  "OpenFactory": "0x63f58053c9499e1104a6f6c6d2581d6d83067eeb",
+  "library GovernanceLib": "0x66a15edcc3b50a663e72f1457ffd49b9ae284ddc",
+  "library TradeLib": "0x00de48310d77a4d56aa400248b0b1613508f5b73",
+  "library PqzBurnLib": "0xd24260c102b5d128cbefa0f655e5be3c2370677c",
+  "library PqzStateLib": "0x7758f98c1c487e5653795470eeab6c4698be541b",
+  "library PqzTransferLib": "0x510c6297cc30a058f41eb4af1bfc9953ead8b577",
+  "library PqzViewLib": "0xcbd945e77adb65651f503723ac322591f3435cc5",
+  "library WrappedLib": "0xcd75ad7ac9c9325105f798c476e84176648f391a",
+  "library PqzWrappedLib": "0x6d5a4d246617d711595a1657c55b17b97e20bdda",
+  "tUSD (MockERC20)": "0x61ff7446c5610cd99970e37b0f1dffea00789ca4",
+  "pqUSD": "0x7588875db9778ec2825454a446fff5d14b78d2b0",
+  "pqW": "0x0ed7067da472ef13b540359f808cbf6c5bcec41f",
+  "chain_uid": "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164"
+}
+## releases of the PQZ e2e (its log)
+NormalToken release at 0x71b6e959e1afb8d63e9908dc6d849389204c3089 (64,088,074 gas)
+NormalPqzToken release at 0xf8acc490849606e72c4000e5f329f122b41ecbf7 (87,880,094 gas)
+WrappedPqzToken release at 0xe3fc1392e955758d0373f184a1e3ee272202decd (112,574,619 gas)
+
+## deployments/7622-mldsa87.json (git-ignored; copy)
+{
+  "chain_uid": "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164",
+  "ua_registry_gen1": "0x838b5D28fbc07844a070818012A8a68980688C26",
+  "ua_registry_mldsa87": "0xFA09Cb12c2bdc0d596Adf25c2D3160F5Ab1083DC",
+  "mldsa87_verifier": "0x0e8D3A7A07252A4Eb62871F3318bc846FEeB6438",
+  "mldsa87_cap": 250000
+}
+
+## UA kinds (CTR-UA-39 mldsa87 0x0134, CTR-UA-40 fndsa1024 0x0135)
+gen-1 registry 0x838b5D28fbc07844a070818012A8a68980688C26: kindEnabled(0x0134) false (DeployBase probes MLDSA87 in forge's EVM,
+  which has none), kindEnabled(0x0135) true cap 5,250,000 (UAFndsaVerifier 0x408decc8fcbf63d29fd641ce3034354888d5752a, deploy
+  broadcast); 0x0130 4,250,000, 0x0131 5,950,000, 0x0141 70,000
+UAMldsaVerifier(308, 0x…5caA0014, pq_kat.json mldsa87 probe pair) 0x0e8D3A7A07252A4Eb62871F3318bc846FEeB6438, forge create,
+  tx 0xc6fd90346741163da04d2d68ef3ab3e2ec4ba3780bb46c61235f466582d3a3a7 block 156 status 1 gasUsed 18,438,463 (the node ran
+  the constructor's probe); KIND 308, PRECOMPILE 0x…5caA0014; verify(portable.json mldsa87 PoP) = true, eth_estimateGas 493,387
+UARegistry gen 2 0xFA09Cb12c2bdc0d596Adf25c2D3160F5Ab1083DC, forge create, tx 0xb687f44644550cd663114921d118670e71c9ffbfe6697f5f53a31ebcbb4e42be
+  block 158 status 1 gasUsed 46,344,717: generation 2, predecessor gen 1, chainUid 0xf1f491ab…3164, kinds [(0x0134, verifier,
+  250,000 PROVISIONAL cap until T-GAS)]; kindEnabled(0x0134) true
+register mldsa87 (portable.json) on gen 2: ua 0x879137d7d47ce400f6479dd0b1a4bfe96c982520500ac5ac70211cac6485063b, tx
+  0xb8d7f8582f9d92c076cb2ea959fb1d6db33dcff70d0aa3d3f8b92118ad4635bc block 160 status 1 gasUsed 15,561,167; checkedOf 1 0 1
+register fndsa1024 (portable.json) on gen 1: ua 0xcf5a5a9054ce00ed6ac6c491bbecebff261dada5cee5c05dfe5e31caba097b98, tx
+  0x4b5119b27792dc642623131c9ae6ddd13dd180b890c49255c685f926d5f29289 block 162 status 1 gasUsed 14,124,722; checkedOf 1 0 1
+
+## Zether e2e (scripts/e2e-zether.sh)
+NORMAL_ZETHER token 0x16BfD88022f7191FDAF5988c31D394873d88F4b9, MockERC20 0x36ADd43F2D8Fa8c8deD3D3DdE4d994425fd0546e,
+WRAPPED_ZETHER token 0x2d68cF190BDECe004e0b52d38535640e67bAe66A; six zether-bls12381 UAs; shield 1234, roll-over, single 100,
+Compact M = 4, BUNDLE M = 2, the named single / Compact / unshield; wrap-shield 500. From the chain's state: alice 769, bob 150
+(+70 pending), carol 25 pending, decoys 0, wrapped alice 500; disclosure verifyTransferAmount(single, 100) true.
+
+## Governance smoke (CTR-GOV-15): DEX v1 0xFD812E5e97B30A48431Ffcb04B73084C1eB7fF54 (createDex tx 0xdf831aa7…bc23 status 1),
+owner = the registrar's native id; mtxSetListedOnly through GovernanceRouter 0xB64D2D5f27D2d5eA951409773343D856e41Fb8E0
+signed by the owner (EIP-712, the router's domain), sent by test key 0x…03 at fee 0: tx
+0x5863e0340a08f2be2f0d34b91f5a991d35299e7c83f3f4c424be98af106ac3aa status 1 gasUsed 181,913; listedOnly false -> true,
+router nonce 0 -> 1.
+
+## Node config: scaas-node/node.example.toml (7622 row) governance_routers = [0xB64D2D5f…b8E0 (deployments/7622.json),
+0xFeC9586a…6F52 (deployments/7622-pqz.json)]; cargo test example_config_builds_every_family: ok.
+
+## Blockscout: DB reset and source verification (sc-verifier, evm amsterdam, solc 0.8.37)
+Blockscout DB reset: explorer_db_data and explorer_app_data renamed *.pre-reset1-20261104, empty dirs, create_and_migrate
+on start; block 1 in Blockscout = the chain's 0xd80f7d60…da2a.
+verify-blockscout.sh broadcast/Deploy.s.sol/7622/run-latest.json broadcast/ZetherE2E.s.sol/7622/run-latest.json
+  runs/2026-11-04-testnet-reset1-pqz-7622.txt | rc 0 | 69 ok (65 contracts + 4 eip1167 clones linked to verified
+  releases: pqUSD, pqW, the two Zether e2e tokens), 15 skip (SSTORE2 data contracts), 0 fail
+  (the first run, without the log argument, also took the 2026-10-31 e2e logs: the genesis hash did not change, so their
+  header matches, and their ~100 dead addresses made it crawl; stopped, run again with the log named)
+by hand (forge verify-contract, constructor arguments from the creation transaction):
+  UAMldsaVerifier 0x0e8D3A7A…6438 full | UARegistry gen 2 0xFA09Cb12…83DC full with --libraries UARegistryLib 0xbd33b655…C1d5
+  (deployed by forge create --libraries, so its metadata names the library) | PqzPrecompileProbe 0x060cc260…4ce6 (node e2e)
+  full | DEX clone 0xFD812E5e…fF54 (gov smoke) eip1167 -> SCaaSDex release 0x73485F5a…CF70 (verified)
+  The PQZ stack's UARegistry 0xb9816fc5…966e first verified partial: e2e.py deployed it (block 160) from out/ just after
+  the gen-2 forge create --libraries (block 158) had recompiled that artifact with the library in its settings; verified
+  again with --libraries UARegistryLib 0xbd33b655…C1d5 (the same CREATE2 library): full.
+Result: 68 of 68 contracts with source verified, every one a full match; 5 clones linked. Not verifiable: 15 SSTORE2 data
+  contracts and the 2 synthetic e2e.py codesize contracts (0x74c343be…66db, 0x3d5326b4…8bc5; generated code, no source).
+  Every direct CREATE on the chain (23) checked through /api/v2/smart-contracts. (/api/v2/smart-contracts/counters is
+  cached and lags: it still read 45 verified while every address read verified.)
+Decoding (Blockscout API /api/v2/transactions/<hash>, decoded_input and logs):
+  governance  0x5863e034…c3aa  GovernanceRouter.mtxSetListedOnly(e, target, on, sig); logs ListedOnlySet, MetaTransactionExecuted
+  PQZ         0xdcff1246…57cb  "PQZ USD" mtxConfidentialTransferSingle(t, proof, pqzAuth, accHint); logs Debited, Credited, ConfidentialTransfer
+  Zether      0xa7f1f347…77e2  "Zether E2E" mtxConfidentialTransferSingle(t, proof); log ConfidentialTransfer
