@@ -60,6 +60,7 @@ const DERIVED = [
   [0x0133, 'slhdsa128s', [32], 'slhdsa128s'],
   [0x0141, 'zether-bls12381', [128], 'bls12381-g1'],
   [0x0108, 'secp256k1', [64], 'secp256k1'], // 2026-10-17, appended (rows keep their positions)
+  [0x0134, 'mldsa87', [2592], 'mldsa87'], // CTR-UA-39, 2026-11-04, appended
 ];
 // [number, name, native id lengths]
 const NATIVE = [
@@ -88,13 +89,13 @@ const derived = (kind) => {
 // tag / keyHash / message accept a kind or a scheme; id derivation and key-data validation accept kinds only
 const tagged = (kind) => SCHEME_BY_NUMBER.get(kind) ?? derived(kind);
 
-const singleSigning = (k) => (k >= 0x0100 && k <= 0x0108) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0133);
+const singleSigning = (k) => (k >= 0x0100 && k <= 0x0108) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0134);
 export const isNativeKind = (kind) => BY_NUMBER.get(kind)?.native === true;
 export const isZetherKind = (kind) => kind === 0x0141;
 export const isSigningKind = (kind) => kind === 0x0120 || kind === 0x0141 || singleSigning(kind);
-/** Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512 (an `msig` per `msigPqzEligible`). */
-export const isPqzHolder = (kind) => kind >= 0x0130 && kind <= 0x0132;
-/** An `msig` whose classical members weigh less than its threshold (CTR-PQZ-12): a member is PQ if its kind is in 0x0130–0x0133, or
+/** Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512, mldsa87 (CTR-UA-39; an `msig` per `msigPqzEligible`). */
+export const isPqzHolder = (kind) => (kind >= 0x0130 && kind <= 0x0132) || kind === 0x0134;
+/** An `msig` whose classical members weigh less than its threshold (CTR-PQZ-12): a member is PQ if its kind is in 0x0130–0x0134, or
  *  it is an `msig` that is PQ-eligible itself. `inner(id)` gives such a member's key data, the record's; none is `UAMemberUnknown`:
  *  the key data alone does not show it. An `inner` holding an `msig` is `UAMemberUnknown` too: two levels only. */
 export function msigPqzEligible(keyData, inner) {
@@ -103,7 +104,7 @@ export function msigPqzEligible(keyData, inner) {
   let classical = 0;
   for (let o = 4; o < d.length; o += 36) {
     const k = u16(d, o);
-    if ((k < 0x0130 || k > 0x0133) && !(k === 0x0120 && innerPqEligible(d.subarray(o + 2, o + 34), inner))) classical += u16(d, o + 34);
+    if ((k < 0x0130 || k > 0x0134) && !(k === 0x0120 && innerPqEligible(d.subarray(o + 2, o + 34), inner))) classical += u16(d, o + 34);
   }
   return classical < u16(d, 0);
 }
@@ -342,7 +343,7 @@ export function portableTypedData(primaryType, message) {
   return { domain: { ...PORTABLE_DOMAIN }, types, primaryType, message };
 }
 
-/** A PQZ / KEM holder (UA-6 U3, UA-8 P7): mldsa44, mldsa65, fndsa512, or an `msig` whose `keyData` is PQ-eligible (`inner`: see
+/** A PQZ / KEM holder (UA-6 U3, UA-8 P7): mldsa44, mldsa65, fndsa512, mldsa87, or an `msig` whose `keyData` is PQ-eligible (`inner`: see
  *  `msigPqzEligible`). */
 export const isKeyHolder = (kind, keyData, inner) => isPqzHolder(kind) || (kind === 0x0120 && present(keyData) && msigPqzEligible(keyData, inner));
 const holds = isKeyHolder;
@@ -790,6 +791,6 @@ export function validateKeyData(kind, keyData, { hederaNative = false } = {}) {
     case 0x0113: return frost(d, bnG1, 64, BN_R);
     case 0x0120: return msig(d, hederaNative);
     case 0x0132: return fndsa(d);
-    default: return undefined; // mldsa44/65, slhdsa128s: the length is the whole check (U7)
+    default: return undefined; // mldsa44/65/87, slhdsa128s: the length is the whole check (U7)
   }
 }

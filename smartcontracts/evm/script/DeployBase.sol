@@ -20,6 +20,7 @@ import {IUARegistry} from "../src/ua/IUARegistry.sol";
 import {UARegistryLib} from "../src/ua/UARegistryLib.sol";
 import {MtxRelayFee, MtxRelayExecutor} from "../src/metatx/MtxRelayFee.sol";
 import {UAKinds} from "../src/ua/UAKinds.sol";
+import {PqUA} from "../src/ua/PqUA.sol";
 import {WebAuthnP256Verifier} from "../src/ua/verifiers/WebAuthnP256Verifier.sol";
 import {P256Verifier} from "../src/ua/verifiers/P256Verifier.sol";
 import {Ed25519Verifier} from "../src/ua/verifiers/Ed25519Verifier.sol";
@@ -85,6 +86,15 @@ abstract contract DeployBase is Script {
     uint64 internal constant CAP_MLDSA65 = 5_950_000;
     uint64 internal constant CAP_FNDSA512 = 2_500_000;
     uint64 internal constant CAP_SLHDSA128S = 1_400_000;
+    /// @notice `mldsa87` (CTR-UA-39, owner 2026-11-04): enabled only through an ML-DSA-87 precompile in the EIP-8355 layout,
+    ///         probed at `0x14` (EIP-8355) and then at the SCaaS testnet's `MLDSA87`; without one it gets no verifier (Q1: the
+    ///         Solidity verify, ≈ 8.8 M on a cached key, fails the 66 % rule). The cap of the precompile path is a PROVISIONAL
+    ///         ESTIMATE (spec 2026-11-04-mldsa87 §4: 0.2–0.3 M; the `mldsa65` precompile path measured ≈ 236 k), measured by T-GAS on
+    ///         a chain before it is final. The probe runs in this script's EVM: forge's has no such precompile, so the SCaaS
+    ///         testnet deploys its `mldsa87` verifier the way it deploys `mldsa65`'s, outside `forge script` (P6g D15, `e2e.py`).
+    uint64 internal constant CAP_MLDSA87 = 250_000;
+    address internal constant MLDSA87_EIP8355 = address(0x14);
+    address internal constant MLDSA87_SCAAS_TESTNET = 0x000000000000000000000000000000005caA0014;
 
     /// @notice C5-1, NET-EVM-06. A release is one CREATE2 of the whole implementation in the registrar's transaction.
     ///         Under EIP-8037 the code deposit is state gas, `STATE_GAS_PER_BYTE` per byte of runtime, on top of the
@@ -302,6 +312,12 @@ abstract contract DeployBase is Script {
         if (_pqKindFits(CAP_SLHDSA128S, budget)) {
             k[n++] = UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new UASlhdsaVerifier{salt: salt}()), CAP_SLHDSA128S);
         }
+        (address p87, bytes memory v87, bytes memory i87) = _mldsa87Precompile();
+        if (p87 != address(0) && _pqKindFits(CAP_MLDSA87, budget)) {
+            k[n++] = UARegistry.KindConfig(
+                UAKinds.MLDSA87, address(new UAMldsaVerifier{salt: salt}(UAKinds.MLDSA87, p87, v87, i87)), CAP_MLDSA87
+            );
+        }
         assembly ("memory-safe") {
             mstore(k, n)
         }
@@ -331,6 +347,16 @@ abstract contract DeployBase is Script {
                 "gen-1 registry: EIP-2537 kind ", vm.toString(abi.encodePacked(need[i])), " the probe passes is missing"
             ));
         }
+    }
+
+    /// @notice CTR-UA-39: the first candidate (`0x14`, then the SCaaS testnet's address) that answers the `mldsa87` probe of
+    ///         `pq_kat.json` exactly (valid ⇒ the word 1, flipped ⇒ 0), with the probe inputs the verifier checks again; else 0.
+    function _mldsa87Precompile() internal view returns (address p, bytes memory valid, bytes memory invalid) {
+        string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
+        valid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid");
+        invalid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid");
+        if (PqUA.probe(MLDSA87_EIP8355, valid, invalid)) p = MLDSA87_EIP8355;
+        else if (PqUA.probe(MLDSA87_SCAAS_TESTNET, valid, invalid)) p = MLDSA87_SCAAS_TESTNET;
     }
 
     /// @notice The chain's own verdict on its pairing precompiles (`UAPrecompileProbe`), asked through `eth_call` with

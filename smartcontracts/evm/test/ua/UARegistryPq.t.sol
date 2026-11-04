@@ -7,6 +7,7 @@ import {IUAKindVerifier, IUAPopVerifier} from "../../src/ua/IUAVerifier.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
+import {PqUA} from "../../src/ua/PqUA.sol";
 import {UAFndsaVerifier} from "../../src/ua/FnDsa.sol";
 import {UASlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
 import {P256Verifier} from "../../src/ua/verifiers/P256Verifier.sol";
@@ -33,8 +34,29 @@ contract UARegistryPqTest is UARegistryBase {
 
     // ----- configuration -----
 
+    /// The `mldsa87` precompile of these tests (CTR-UA-39: no verifier without one): it answers 1 to the inputs a test allows,
+    /// each a real signature of the vectors (noble's verdict; the Solidity verdict on the same rows is `MlDsa.t`'s emulator).
+    Eip8355Allowed internal ml87;
+
+    /// Allows the `mldsa87` row `i`'s valid inputs `pk ‖ sig ‖ pq_msg`: `pop`, `popPqz`, the two `sigs`.
+    function _allow87(string memory pj, uint256 i) internal {
+        bytes memory pk = vm.parseJsonBytes(pj, _row(i, "keyData"));
+        string[4] memory f = ["pop", "popPqz", "sigs[0]", "sigs[1]"];
+        for (uint256 j; j < 4; ++j) {
+            bytes32 m = vm.parseJsonBytes32(pj, _row(i, string.concat(f[j], ".message")));
+            ml87.allow(keccak256(abi.encodePacked(pk, vm.parseJsonBytes(pj, _row(i, string.concat(f[j], ".sig"))),
+                PqUA.pqMessage(PqUA.tag(0x0134), m))));
+        }
+    }
+
     function _realPq() internal returns (UARegistry.KindConfig[] memory c) {
-        c = new UARegistry.KindConfig[](5);
+        if (address(ml87) == address(0)) ml87 = new Eip8355Allowed();
+        string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
+        bytes memory valid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid");
+        ml87.allow(keccak256(valid));
+        c = new UARegistry.KindConfig[](6);
+        c[5] = UARegistry.KindConfig(0x0134, address(new UAMldsaVerifier(
+            0x0134, address(ml87), valid, vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid"))), 250_000);
         c[0] = UARegistry.KindConfig(0x0101, address(new P256Verifier()), 400_000);
         c[1] = UARegistry.KindConfig(0x0130, address(new UAMldsaVerifier(0x0130, address(0), "", "")), CAP_MLDSA44);
         c[2] = UARegistry.KindConfig(0x0131, address(new UAMldsaVerifier(0x0131, address(0), "", "")), CAP_MLDSA65);
@@ -201,14 +223,15 @@ contract UARegistryPqTest is UARegistryBase {
         uint256 sigs;
         uint256 negs;
         for (uint256 i; vm.keyExistsJson(pj, string.concat(".kinds[", vm.toString(i), "]")); ++i) {
+            if (vm.parseJsonUint(pj, _row(i, "kind")) == 0x0134) _allow87(pj, i);
             bytes32 ua = _pqRegister(r, pj, i);
             sigs += _pqSigs(r, pj, i, ua);
             negs += _pqNegatives(r, pj, i, ua);
             ++rows;
         }
-        assertEq(rows, 4, "PQ kinds");
-        assertEq(sigs, 8, "PQ sigs");
-        assertEq(negs, 33, "PQ negatives");
+        assertEq(rows, 5, "PQ kinds");
+        assertEq(sigs, 10, "PQ sigs");
+        assertEq(negs, 42, "PQ negatives");
     }
 
     /// PoP-side refusals, the ML-DSA cache (refused before it is complete), then `register` (logged).
@@ -262,12 +285,13 @@ contract UARegistryPqTest is UARegistryBase {
         uint256 n;
         for (uint256 i; vm.keyExistsJson(pj, string.concat(".kinds[", vm.toString(i), "]")); ++i) {
             if (!vm.keyExistsJson(pj, _row(i, "popPqz"))) continue;
+            if (vm.parseJsonUint(pj, _row(i, "kind")) == 0x0134) _allow87(pj, i);
             uint256 snap = vm.snapshotState(); // the vectors share one PQZ key: one holder per state
             _pqzPopRow(r, pj, i);
             vm.revertToState(snap);
             ++n;
         }
-        assertEq(n, 3, "holder kinds");
+        assertEq(n, 4, "holder kinds"); // mldsa87 since CTR-UA-39 Q2
     }
 
     function _pqzPopRow(UARegistry r, string memory pj, uint256 i) internal {
@@ -562,5 +586,18 @@ contract PrecompileStub {
 
     fallback(bytes calldata input) external returns (bytes memory) {
         return abi.encode(keccak256(input) == good ? uint256(1) : uint256(0));
+    }
+}
+
+/// A stand-in precompile that answers the 32-byte word 1 to the inputs it was told, else 0 (EIP-8355's output form).
+contract Eip8355Allowed {
+    mapping(bytes32 => bool) public ok;
+
+    function allow(bytes32 h) external {
+        ok[h] = true;
+    }
+
+    fallback(bytes calldata input) external returns (bytes memory) {
+        return abi.encode(ok[keccak256(input)] ? uint256(1) : uint256(0));
     }
 }

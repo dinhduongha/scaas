@@ -98,3 +98,23 @@ test('no raw-digest signing: purpose and digest must be 32 bytes', () => {
   assert.throws(() => signUA('mldsa44', kp.secretKey, new Uint8Array(5), digest), /32 bytes/);
   assert.throws(() => signUA('rsa', kp.secretKey, purpose, digest), /unknown PQ kind/);
 });
+
+test('mldsa87 (CTR-UA-39): kind 0x0134, a 2,592 B key, a holder, PQ weight; pq_kat.json row from the seed, its c~ word flip refused', async () => {
+  const ua = await import('../src/ua.js');
+  assert.equal(PQ_KINDS.mldsa87.kind, 0x0134);
+  assert.equal(PQ_KINDS.mldsa87.tag, 'scaas.ua.mldsa87.v1');
+  assert.deepEqual([ua.kindInfo(0x0134).name, ua.kindInfo(0x0134).lengths, ua.kindInfo(0x0134).group], ['mldsa87', [2592], 'mldsa87']);
+  assert.ok(ua.isSigningKind(0x0134) && ua.isMemberKind(0x0134, false) && ua.isPqzHolder(0x0134) && !ua.isPqzHolder(0x0133));
+  const k = V.kinds.mldsa87;
+  const kp = pqKeygen(seed, 'mldsa87', 0, 0);
+  assert.equal(hex(kp.publicKey), k.pk);
+  assert.equal(hex(kp.ua), k.ua);
+  assert.equal(k.expanded_key, undefined, 'no expanded-key cache for 0x0134 (Q1)');
+  assert.ok(verifyUA('mldsa87', kp.publicKey, purpose, digest, fromHex(k.sig)));
+  const ct = k.mutations.find((m) => m.what.startsWith('sig[40]'));
+  assert.equal(ct.valid, false);
+  const m = (kind, w) => ({ kind, id: kind === 0x0134 ? fromHex(k.ua) : new Uint8Array(32).fill(kind & 0xff), weight: w });
+  const sort = (ms) => [...ms].sort((a, b) => Buffer.compare(Buffer.from(a.id), Buffer.from(b.id)));
+  assert.equal(ua.msigPqzEligible(ua.encodeMsig(2, sort([m(0x0101, 1), m(0x0134, 1)]))), true, 'PQ weight (Q3)');
+  assert.equal(ua.msigPqzEligible(ua.encodeMsig(1, sort([m(0x0101, 1), m(0x0134, 1)]))), false);
+});

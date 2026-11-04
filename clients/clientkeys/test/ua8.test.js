@@ -956,7 +956,7 @@ test('verifyRegistration refuses every kinds.json invalid key by its error; vali
   const go = (r) => () => verifyRegistration({ kind: r.kind, keyData: r.keyData, attrs: none, pop: `0x${'00'.repeat(64)}`, pqzPop: '0x' }, () => undefined);
   for (const r of K.invalid) refuses(go(r), r.error, JSON.stringify(r).slice(0, 120));
   for (const r of K.valid.filter((x) => x.kind !== 0x0120 && !(x.kind >= 0x0110 && x.kind <= 0x0113))) refuses(go(r), 'UAPoP', r.keyData.slice(0, 40));
-  assert.equal(K.invalid.length, 198);
+  assert.equal(K.invalid.length, 202);
 });
 
 test('the group kinds have no verifier here: refused, never accepted (C14; ua-rs checks them)', () => {

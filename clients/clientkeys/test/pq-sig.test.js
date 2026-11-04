@@ -56,7 +56,7 @@ test('every PoP and signature verifies with noble; every negative is refused', (
       negs++;
     }
   }
-  assert.equal(negs, 33);
+  assert.equal(negs, 42);
   for (const x of V.extraKeys) assert.ok(ok(x.kind, x.keyData, x.pop.message, x.pop.sig), `extra ${x.index}`);
 });
 
@@ -64,7 +64,7 @@ test('UA-6 / UA-8: a holder registers its PQZ key in the same call: pop over the
   const h = hex(ua.keyHashOf(0x0142, fromHex(V.kinds[0].pqzKey)));
   assert.notEqual(h, '0x' + '00'.repeat(32));
   const holders = V.kinds.filter((r) => r.popPqz);
-  assert.deepEqual(holders.map((r) => r.name), ['mldsa44', 'mldsa65', 'fndsa512']); // slhdsa128s holds none
+  assert.deepEqual(holders.map((r) => r.name), ['mldsa44', 'mldsa65', 'fndsa512', 'mldsa87']); // slhdsa128s holds none
   for (const r of holders) {
     const p = r.popPqz;
     assert.equal(p.pqzKeyHash, h);

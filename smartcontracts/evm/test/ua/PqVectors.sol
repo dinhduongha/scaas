@@ -59,7 +59,8 @@ abstract contract PqVectors is Test {
                 bytes32(_b(kat, string.concat(m, ".ua_msg"))), _b(kat, string.concat(m, ".sig")));
             assertEq(got, vm.parseJsonBool(kat, string.concat(m, ".valid")), vm.parseJsonString(kat, string.concat(m, ".what")));
         }
-        assertEq(n, kind == PqUA.FNDSA512 ? 6 : 8, "mutations"); // + 2 non-empty-context signatures for ML-DSA, SLH-DSA
+        // + 2 non-empty-context signatures for ML-DSA, SLH-DSA; + the c~ second-word flip for ML-DSA-87
+        assertEq(n, kind == PqUA.FNDSA512 ? 6 : kind == PqUA.MLDSA87 ? 9 : 8, "mutations");
     }
 
     /// `t` (n entries of `width` bytes, big-endian) is `root^brv(k) mod q`, and root^n = −1 (a primitive 2n-th root).

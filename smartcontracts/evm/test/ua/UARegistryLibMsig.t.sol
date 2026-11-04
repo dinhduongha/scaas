@@ -315,6 +315,7 @@ contract UARegistryLibMsigTest is UARegistryBase {
         if (kind == 305) return 23915;
         if (kind == 306) return 20870;
         if (kind == 307) return 20159;
+        if (kind == 308) return 22194; // mldsa87 (CTR-UA-39), added on its branch (mock verifier)
         if (kind == 321) return 19629;
         return 0;
     }
@@ -333,6 +334,7 @@ contract UARegistryLibMsigTest is UARegistryBase {
         if (kind == 305) return 4189140;
         if (kind == 306) return 2574990;
         if (kind == 307) return 1251540;
+        if (kind == 308) return 5168340; // mldsa87 (CTR-UA-39), added on its branch
         if (kind == 321) return 1398420;
         return 0;
     }

@@ -34,6 +34,17 @@ extra_step() { # this branch's own steps (the base runner calls it for a step it
 
 # "<step>|<form>|<name>": the tests this branch adds (forms: see the base runner)
 NEW_TESTS=$(cat <<'NAMES'
+forge|forge|test_mldsa87Kind
+forge|forge|test_mldsa87Slot12
+forge|forge|test_register_msigHolderBoundary_mldsa87
+forge|forge|test_kat_mldsa87
+forge|forge|test_mldsa87_needsPrecompile
+forge|forge|test_mldsa87OnlyWithAPrecompile
+clientkeys|node|mldsa87 (CTR-UA-39): kind 0x0134, a 2,592 B key, a holder, PQ weight; pq_kat.json row from the seed, its c~ word flip refused
+ua-rs-pq|cargo|mldsa87_kind_holder_and_weight
+node-kinds|cargo|adapters::soroban::tests::chain_kind_is_the_registry_gate_without_mldsa87
+nethermind|cs|Mldsa87_gas_needs_its_schedule_key
+nethermind|cs|Mldsa87_joins_with_the_schedule_that_carries_its_key
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

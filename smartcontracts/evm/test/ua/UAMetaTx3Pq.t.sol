@@ -12,6 +12,8 @@ import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {UACall} from "./UACall.sol";
+import {PqUA} from "../../src/ua/PqUA.sol";
+import {Eip8355Allowed} from "./UARegistryPq.t.sol";
 
 /// The UA ledger with PQ signers (P6c; accounts.md CTR-UA-26, §1.16): pq_signatures.json's `metatx3` rows — the
 /// metatx3.json structs and domain, one row per PQ kind — on a `NORMAL` clone at the vector token address, context A,
@@ -29,16 +31,18 @@ contract UAMetaTx3PqTest is UARegistryBase {
     function setUp() public override {
         super.setUp();
         string memory pj = _pj();
-        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](4);
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](5);
         c[0] = UARegistry.KindConfig(0x0130, address(new UAMldsaVerifier(0x0130, address(0), "", "")), 4_250_000);
         c[1] = UARegistry.KindConfig(0x0131, address(new UAMldsaVerifier(0x0131, address(0), "", "")), 5_950_000);
         c[2] = UARegistry.KindConfig(0x0132, address(new UAFndsaVerifier()), 2_500_000);
         c[3] = UARegistry.KindConfig(0x0133, address(new UASlhdsaVerifier()), 1_400_000);
+        c[4] = UARegistry.KindConfig(0x0134, _ml87(pj), 250_000); // CTR-UA-39: precompile only, the cap a provisional estimate
         reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
-        for (uint256 i; i < 4; ++i) {
+        for (uint256 i; i < 5; ++i) {
             string memory k = string.concat(".kinds[", vm.toString(i), "].");
             uint16 kind = uint16(vm.parseJsonUint(pj, string.concat(k, "kind")));
             bytes memory pk = vm.parseJsonBytes(pj, string.concat(k, "keyData"));
+            if (kind == 0x0134) ml87.allow(_in87(pk, vm.parseJsonBytes(pj, string.concat(k, "pop.sig")), vm.parseJsonBytes32(pj, string.concat(k, "pop.message"))));
             for (uint256 p; kind <= 0x0131 && p < (kind == 0x0130 ? 1 : 2); ++p) reg.cacheExpandedKey(kind, pk, p);
             UACall.register(reg, kind, pk, _none(), vm.parseJsonBytes(pj, string.concat(k, "pop.sig")), "");
         }
@@ -52,6 +56,33 @@ contract UAMetaTx3PqTest is UARegistryBase {
         tok = NormalToken(token);
         tok.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(0), address(this))));
         vm.warp(1_800_000_000);
+    }
+
+    Eip8355Allowed internal ml87;
+
+    /// The `mldsa87` verifier on a stand-in precompile that answers 1 to the inputs allowed here: the vectors' own valid
+    /// signatures (noble's verdict; `MlDsa.t`'s emulator verifies the KAT row in Solidity), so the rows run through the
+    /// registry and the token as on a chain with `MLDSA87`.
+    function _ml87(string memory pj) internal returns (address) {
+        ml87 = new Eip8355Allowed();
+        string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
+        bytes memory valid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid");
+        ml87.allow(keccak256(valid));
+        for (uint256 t; t < 2; ++t) {
+            string memory set = t == 0 ? ".metatx3.call[" : ".metatx3.transfer[";
+            for (uint256 i; vm.keyExistsJson(pj, string.concat(set, vm.toString(i), "]")); ++i) {
+                string memory r = string.concat(set, vm.toString(i), "].");
+                if (vm.parseJsonUint(pj, string.concat(r, "kind")) != 0x0134) continue;
+                (, bytes memory sig) = abi.decode(vm.parseJsonBytes(pj, string.concat(r, "auth")), (bytes, bytes));
+                bytes32 m = UAKinds.uaMessage(0x0134, UAKinds.PURPOSE_METATX, vm.parseJsonBytes32(pj, string.concat(r, "digest")));
+                ml87.allow(_in87(vm.parseJsonBytes(pj, ".kinds[4].keyData"), sig, m));
+            }
+        }
+        return address(new UAMldsaVerifier(0x0134, address(ml87), valid, vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid")));
+    }
+
+    function _in87(bytes memory pk, bytes memory sig, bytes32 uaMsg) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(pk, sig, PqUA.pqMessage(PqUA.tag(0x0134), uaMsg)));
     }
 
     function _f(string memory row, string memory field) internal pure returns (string memory) {
@@ -102,7 +133,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
             reg.requireAuthorized(m.from, UAKinds.PURPOSE_METATX, digest, UACall.auth(m.from, vm.parseJsonBytes(pj, string.concat(r, "auth"))));
             ++n;
         }
-        assertEq(n, 4);
+        assertEq(n, 5);
     }
 
     /// `UAMetaTransfer` rows: a payment with a FIXED fee from each PQ UA to a native payee, executed.
@@ -126,9 +157,9 @@ contract UAMetaTx3PqTest is UARegistryBase {
             assertEq(tok.balanceOfUA(t.from), 0);
             ++n;
         }
-        assertEq(n, 4);
-        assertEq(tok.balanceOf(address(0x5409)), 4 * 100_000_000);
-        assertEq(tok.balanceOf(address(0xFEE)), 4 * 100_000);
+        assertEq(n, 5);
+        assertEq(tok.balanceOf(address(0x5409)), 5 * 100_000_000);
+        assertEq(tok.balanceOf(address(0xFEE)), 5 * 100_000);
         assertEq(tok.balanceOf(MetaTxLib.UA_POOL), 0);
     }
 

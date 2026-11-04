@@ -45,7 +45,7 @@ contract UAKindsTest is Test {
     function test_kindTable() public view {
         string memory j = _k();
         uint256 n = _count(j, "kinds");
-        assertEq(n, 31);
+        assertEq(n, 32); // + mldsa87 (CTR-UA-39)
         for (uint256 i; i < n; ++i) {
             uint16 kind = uint16(vm.parseJsonUint(j, _at("kinds", i, "kind")));
             bool native = vm.parseJsonBool(j, _at("kinds", i, "native"));
@@ -186,7 +186,7 @@ contract UAKindsTest is Test {
             );
         }
         uint256 nr = _count(s, "pqzReg");
-        assertEq(nr, 3);
+        assertEq(nr, 4); // mldsa44, mldsa65, fndsa512, mldsa87
         for (uint256 i; i < nr; ++i) {
             bytes32 d = UAKinds.portableRecordDigest(
                 vm.parseJsonBytes32(s, _at("pqzReg", i, "ua")),

@@ -6,7 +6,7 @@
 //   node scripts/pq-external.mjs <download dir>
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { ml_dsa44, ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
+import { ml_dsa44, ml_dsa65, ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import { slh_dsa_sha2_128s } from '@noble/post-quantum/slh-dsa.js';
 import { falcon512padded } from '@noble/post-quantum/falcon.js';
 
@@ -33,7 +33,7 @@ const rsp = (f) => raw(f).toString('utf8').split('count = ').slice(1)
   .map((r) => Object.fromEntries([...r.matchAll(/^(\w+) ?= ?(.*)$/gm)].map((m) => [m[1], m[2].trim()])));
 const ACVP = 'https://raw.githubusercontent.com/usnistgov/ACVP-Server/975de31eb83d87039ec88934fdc47d8c312b892d/gen-val/json-files/';
 const EIPS = 'https://raw.githubusercontent.com/ethereum/EIPs/3aea9f3673a684dddfcc17c0d1f74d484e20e6ac/assets/';
-const ALG = { 'ML-DSA-44': ml_dsa44, 'ML-DSA-65': ml_dsa65, 'SLH-DSA-SHA2-128s': slh_dsa_sha2_128s };
+const ALG = { 'ML-DSA-44': ml_dsa44, 'ML-DSA-65': ml_dsa65, 'ML-DSA-87': ml_dsa87, 'SLH-DSA-SHA2-128s': slh_dsa_sha2_128s };
 
 /** ACVP sigVer, pure (external) and internal groups: `mprime` is the formatted message M' the core verifies. */
 function acvp(file, sets) {
@@ -99,7 +99,7 @@ function falcon(coreFile, h2pFile, n) {
 
 const out = {
   note: 'Imported by clients/clientkeys/scripts/pq-external.mjs; every entry re-checked with @noble/post-quantum 0.7.1.',
-  acvp_mldsa: acvp('ML-DSA-sigVer-FIPS204/internalProjection.json', ['ML-DSA-44', 'ML-DSA-65']),
+  acvp_mldsa: acvp('ML-DSA-sigVer-FIPS204/internalProjection.json', ['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87']),
   acvp_slhdsa: acvp('SLH-DSA-sigVer-FIPS205/internalProjection.json', ['SLH-DSA-SHA2-128s']),
   eip8051_nist_kat: eip8051('mldsa_nist.rsp', 10),
   eip8355: eip8355('test-vectors.json'),

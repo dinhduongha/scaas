@@ -42,6 +42,7 @@ for (const name of Object.keys(PQ_KINDS)) {
     ['ua_msg[0] ^ 0x01', kp.publicKey, sig, flip(ua, 0)],
     ['truncated sig', kp.publicKey, sig.slice(0, n - 1), ua],
   ];
+  if (name === 'mldsa87') cases.push(['sig[40] ^ 0x01 (c~, its second word)', kp.publicKey, flip(sig, 40), ua]);
   if (PQ_KINDS[name].pq) { // valid signatures under a non-empty context: the transitional form CTR-UA-23 dropped
     const ctx = { context: utf8ToBytes(PQ_KINDS[name].tag), extraEntropy: false };
     cases.push(['ctx = kind_tag, over pq_msg', kp.publicKey, PQ_KINDS[name].alg.sign(msg, kp.secretKey, ctx), ua]);
@@ -58,7 +59,7 @@ for (const name of Object.keys(PQ_KINDS)) {
     pk: hex(kp.publicKey), ua: hex(kp.ua), ua_msg: hex(ua), signed_message: hex(msg), sig: hex(sig), mutations,
   };
   if (name.startsWith('mldsa')) {
-    k.expanded_key = hex(mldsaExpandedKey(name, kp.publicKey));
+    if (name !== 'mldsa87') k.expanded_key = hex(mldsaExpandedKey(name, kp.publicKey)); // no cache for mldsa87 (CTR-UA-39 Q1)
     k.eip8355_probe_valid = hex(concatBytes(kp.publicKey, sig, msg));
     k.eip8355_probe_invalid = hex(concatBytes(kp.publicKey, flip(sig, 0), msg));
   }
