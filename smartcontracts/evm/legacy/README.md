@@ -145,4 +145,14 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   seven token rigs live on in `test/metatx/helpers/KindRigs.sol`), `test/ua/UARegistryNested.t.sol` (its two
   `uaAuthCall` tests), and `test/ua/UALedger.t.sol`, `test/metatx/{TypedOps,TradeTyped}.t.sol` as they stood before
   their cancel tests and rows changed meaning (the unordered cancel, the address cancel on tokens and the router).
-  Not built.
+  T2 (the transfer group, payments, receiver-pays, the relay fee): `src/metatx/{MetaTokenBase,MtxRelayFee,IERC20MetaTx,
+  IMetaTokenV2}.sol` and `src/common/MetaTxLib.sol` (and T1's `ERC20MetaTx.sol`, `MtxPipelineLib.sol`, `IUALedger.sol`):
+  the address `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxPayMeta`, `mtxPayReceiverFee`, `mtxRelayFee`,
+  `mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransferDigest`, `receiverFeeDigest` over `MetaTransfer` (R1, R4, R20,
+  R21, R27, R28), `_executeTransfer`, `_pay`, `_payMeta`, `_padded`, `_notPool`, `MtxPipelineLib.preTransfer` and its
+  `ReceiverFee` typehash, the `RelayFee` typehash, `MtxRelayFee.relay(address …)`, `ReceiverFeePaid`, and
+  `MetaTxLib.MetaTransfer` with its typehash and `hashStruct` (R46; the test copy that signs the retired form is
+  `test/helpers/LegacyMetaTransfer.sol`). Their `ua*` bodies took the `mtx*` names. Tests as they stood before their
+  meaning changed: `test/metatx/{ERC20MetaTx,MtxRelayFee,PayMeta,TokenKat}.t.sol`, `test/v2/{Base,MetaTxGasV2,
+  ReceiverPays}.t.sol`; vectors `test/vectors/legacy/ua-mtx-merge/{metatx_kat,metatransfer_kat}.json` (the address
+  `MetaTransaction` / `MetaTransfer` KATs; the files of the same name now hold the UA structs). Not built.
