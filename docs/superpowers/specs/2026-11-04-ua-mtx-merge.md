@@ -2,13 +2,13 @@
 
 **Status:** DRAFT for the owner; numbers to re-measure after PR #9 merges. Nothing is built. Work-order item 3 of TODO
 (owner 2026-11-03), its own round between SCaaS testnet reset 1 and reset 2. Owner 2026-11-04: the spec now, the measurement
-after PR #9 (governance) merges.
+after PR #9 (governance) merges. Revised 2026-11-04 after a Claude workflow review (§12).
 
 The spike behind it is [research/governance/prototype/merge-entries.md](../../research/governance/prototype/merge-entries.md)
 (branch `token-merge`, not to be merged); the earlier size options are `docs/research/governance/prototype/size-options.md` on
-branch `token-core` (not to be merged). The rules it changes are in [contracts/metatx.md](../../contracts/metatx.md),
-[contracts/accounts.md](../../contracts/accounts.md) and [contracts/dex.md](../../contracts/dex.md); the governance rules
-(`CTR-GOV-*`) and the router are on branch `governance` (PR #9) and are cited by id only until it merges.
+branch `token-core` (not to be merged). The rules it changes are listed in §5 with their docs; the governance rules
+(`CTR-GOV-*`), the router and the governance text of NET-EVM-06 are on branch `governance` (PR #9) and are cited by id only
+until it merges.
 
 **Tags.** **[M-old]** measured by the spike on the governance prototype D1 + D2 (`6e09e008`), before the governance build,
 the `ZetherLib` split (CTR-ZTH-94) and ML-DSA-87 / Falcon-1024; **[R]** read from code, not run; **[P]** projection, a sum
@@ -25,9 +25,10 @@ testnet resets, and it carries the base token size for public chains (TODO: "Pic
 70 M").
 
 **What this spec proposes, in one paragraph.** Every relayed, subject-signed operation of a SCaaS EVM token kind (and of
-`MtxRelayFee`, the DEX's SCaaS legs and `GovernanceRouter`) has **one** entry, named `mtx<Op>`, with the ABI of today's
-`ua<Op>` (`MetaTxLib.UAEnvelope e, <explicit op parameters>, IUARegistry.UASig auth` for a named op; the flat explicit form
-with `bytes32 from` for the transfer group) and signing the typed struct `UA<Op>` with a `bytes32 from`. A native address is its zero-padded id and signs with its own key in `auth.signature`, with **no registry
+`MtxRelayFee`, the DEX's SCaaS legs and `GovernanceRouter`) that has a `ua*` / `mtx*` pair keeps **one** entry, named
+`mtx<Op>`, with the ABI of today's `ua<Op>` (`MetaTxLib.UAEnvelope e, <explicit op parameters>, IUARegistry.UASig auth` for a
+named op; the flat explicit form with `bytes32 from` for the transfer group) and signing the typed struct `UA<Op>` with a
+`bytes32 from`. A native address is its zero-padded id and signs with its own key in `auth.signature`, with **no registry
 call**; a derived UA is authorized by `UARegistry.requireAuthorized`. A registry is needed only by a derived side, so
 `NORMAL` and `WRAPPED` at `registry() == 0` keep a relayed path for EOAs. The wallets (`MandateWallet`,
 `SmartKeyAccount`, `HederaMandateWallet`) keep `MetaTransaction` and their address entries. Direct entries
@@ -35,11 +36,12 @@ call**; a derived UA is authorized by `UARegistry.requireAuthorized`. A registry
 `legacy/`. On the old base the merge freed 8.7 to 11.5 KB per kind [M-old]; it does not alone bring `WrappedToken` under a
 60 M deploy, so §4 sets how the round picks further levers.
 
-**Recommendations, short:** take A + B + C (§2.6) as the round's base; take A2 for the five wrap entries and move
-`executeMetaTransaction`'s alias onto the merged generic entry on tokens, kept on the wallets (Q2); keep the `UA<Op>` type
-names so no UA-side vector changes (Q3); merge the router's 19 pairs too (Q4); measure lever 3 (D) and the library
-pattern (L) after PR #9 and take the smallest set that makes `NormalToken`, `WrappedToken` and their regulated stand-ins
-fit a 60 M deploy (Q5, Q6).
+**Recommendations, short:** take A + B + C (§2.6) as the round's base. `executeMetaTransaction`: the owner's 2026-11-01
+ruling stands (address form on tokens) unless the owner reverses it (Q2b); the five no-twin wrap entries move to UA structs
+only if §9 shows the bytes are needed (Q2a). Keep the `UA<Op>` type names so no existing UA-side row changes (Q3). Merge the
+router's 19 pairs too (Q4). Measure lever 3 (D, with its §8 invariants) and the library pattern (L) after PR #9 and take
+the smallest set that makes `NormalToken`, `WrappedToken` and their regulated stand-ins fit a 60 M deploy under the deploy's
+real gas ask, total × 1.05 (Q5, Q6, Q14).
 
 ## 1. Goal and non-goals
 
@@ -47,40 +49,45 @@ fit a 60 M deploy (Q5, Q6).
 
 1. One subject-signed relayed entry per operation on the six EVM token kinds (`NormalToken`, `WrappedToken`,
    `NormalZetherToken`, `WrappedZetherToken`, `NormalPqzToken`, `WrappedPqzToken`), on Hedera through the same kinds,
-   on `MtxRelayFee`, on the DEX's SCaaS legs and on `GovernanceRouter`: the `ua*` body under the `mtx*` name.
-2. Every such entry stays relayable at fee 0 (fee mode `NONE`), on a chain with or without a UA registry for a native
-   subject.
+   on `MtxRelayFee`, on the DEX's SCaaS legs and on `GovernanceRouter`: the `ua*` body under the `mtx*` name. The one
+   exception the owner has ruled is `executeMetaTransaction` (Q2b).
+2. Every operation stays relayable at fee 0 (fee mode `NONE`) through a merged entry, on a chain with or without a UA
+   registry for a native subject (§8 invariant 4 lists the entries whose point is a fee).
 3. The base token kinds fit a public chain's block for their implementation deploy: `NormalToken` and `WrappedToken` under
-   the EIP-8037 inclusion rule at 60 M (and so at 70 M); the Zether kinds measured against the same thresholds (§4).
+   the EIP-8037 inclusion rule at 60 M (and so at 70 M), counted as the gas the deploy transaction asks; the Zether kinds
+   measured against the same thresholds (§4).
 
 **Non-goals.**
 
 - **Wallets.** `MandateWallet`, `SmartKeyAccount`, `HederaMandateWallet` keep `MetaTransaction`, `mtxExecute`, `mtxBatch`,
   `mtxNonce`, `mtxDigest`, `mtxCancelNonce`, `executeMetaTransaction` and their own named entries, all with `address from`
-  (owner). They have no registry and no `ua*` twins; the spike shows them byte-identical [M-old].
+  (owner). Built today they have no registry and no `ua*` twins; the spike shows them byte-identical [M-old].
+  [CTR-ACC-12](../../contracts/mandates.md#CTR-ACC-12) (SPECIFIED, UA-5c) plans such twins; R32 / Q16 put it to the owner.
 - **Direct entries.** `transfer`, `transferFrom`, `approve`, `transferToUA`, `payWithFee`, `payWithFeeToUA`, `wrap*`,
   `unwrap*`, `addReserve`, `cancelNonce`, the direct confidential ops, every `GovernanceBase` entry and every power's own
   entry stay as they are.
 - **Ledgers.** No balance moves: derived balances stay in the separate `bytes32` ledger, natives in the ERC-20 ledger
   ([CTR-UA-18](../../contracts/accounts.md#CTR-UA-18) holds). No storage slot moves (layout pins hold).
-- **Registry, kinds, proofs.** `UARegistry`, the kinds (ML-DSA-87 `0x0134` and Falcon-1024 `0x0135` included), the PQZ and
-  Zether statements, transcripts and `proofSystemId`s do not change.
+- **Registry, kinds, proofs.** `UARegistry`'s code, the kinds (ML-DSA-87 `0x0134` and Falcon-1024 `0x0135` included), the
+  PQZ and Zether statements, transcripts and `proofSystemId`s do not change. One qualification: `UARegistryLib` compiles
+  `PqzSet.PQZ_DEBIT_MIN_GAS`, which is measured on the relay path this round rewrites; if the owner moves that set parameter
+  (R41, Q15), the registry's bytecode changes with it.
 - **PQZ kinds on public chains.** Not a target: they run only where the PQZ precompile is, on an operator-controlled chain
   (CTR-GOV-19).
 - **Other families' code.** No non-EVM contract changes in this round; the rule below binds their own rounds.
 - **Migration.** None: every chain is test-only; the SCaaS testnet takes the new contracts at reset 2.
 
-**One rule on every chain.** The merged form is the EVM expression of a rule every family can state the same way
-(proposed as R15, a new row of the family checklist
-[NET-ALL-84](../../networks/README.md#NET-ALL-84)): *per operation, a contract has its direct entry (the chain's own caller)
-and at most one contract-verified signed entry; that entry's subject is a UA id covering both spaces; a native subject uses
-it where the chain's host does not already authorize a native account for a call someone else submits, and signs it with
-its own key.* On EVM no host path exists for an EOA (no EIP-7702, [CTR-UA-24](../../contracts/accounts.md#CTR-UA-24)), so
-the one signed entry takes native ids. On Soroban the host already authorizes a native `Address` (`require_auth`) on the
-direct entry, so the signed `ua_*` entry takes derived ids only, as built
-([NET-SOR-20](../../networks/soroban.md#NET-SOR-20)); the mandate's entries are already one entry for both holder kinds
-([NET-SOR-21](../../networks/soroban.md#NET-SOR-21)). Both satisfy the same row; neither family has two contract-verified
-signed forms of one operation. NEAR and Algorand answer the row in their own UA rounds, each by its own mechanism.
+**One rule on every chain.** The merged form is the EVM expression of a rule every family can state the same way. It is
+proposed once, in [NET-ALL-28](../../networks/README.md#NET-ALL-28) (R31), and the family checklist
+[NET-ALL-84](../../networks/README.md#NET-ALL-84) only asks it (R15): *per operation, a contract has its direct entry (the
+chain's own caller) and at most one contract-verified signed entry. That entry takes every subject the chain's host cannot
+authorize for a call someone else submits, and a native subject signs it with its own key.* On EVM no host path exists for
+an EOA (no EIP-7702, [CTR-UA-24](../../contracts/accounts.md#CTR-UA-24)), so the one signed entry takes native and derived
+ids. On Soroban the host already authorizes a native `Address` (`require_auth`) on the direct entry, so the signed `ua_*`
+entry takes derived ids only, as built ([NET-SOR-20](../../networks/soroban.md#NET-SOR-20)); the mandate's entries are
+already one entry for both holder kinds ([NET-SOR-21](../../networks/soroban.md#NET-SOR-21)). Both satisfy the same row;
+neither family has two contract-verified signed forms of one operation. NEAR and Algorand answer the row in their own UA
+rounds, each by its own mechanism.
 
 ## 2. The design
 
@@ -105,7 +112,13 @@ function mtxTransfer(bytes32 from, bytes32 to, uint256 amount, uint256 batch, ui
   bytes auth)` and `mtxBatch` are today's `uaExecute` / `uaBatch` (the generic path keeps `bytes auth`, as TS-D14 kept it);
   `mtxExecuteTransfer(UAMetaTransfer t, UASig auth)` and `mtxBatchTransfer(UAMetaTransfer[], UASig[])` are today's
   `uaExecuteTransfer` / `uaBatchTransfer`; `mtxCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, UASig auth)` takes
-  `uaCancelNonce`'s form (no envelope, no fee, the used-digest set).
+  `uaCancelNonce`'s form (no envelope, no fee, the used-digest set, no nonce bound: R19).
+- **No-twin entries.** `mtxWrap`, `mtxWrapLeg`, `mtxWrapToUA`, `mtxAddReserve`, `mtxWrapShield` have no `ua*` twin and stay
+  on `Envelope` + `bytes sig` with `address from` unless Q2a moves them. If it does, they get **five new typed structs**,
+  `UAWrap`, `UAWrapLeg`, `UAWrapToUA`, `UAAddReserve`, `UAWrapShield` (new type strings and typehashes, new rows in
+  `typed_ops.json`, `clientkeys`, `zether-prover` and the node's `typed.rs`). They stay native-only: a wrap pulls the
+  underlying ERC-20 from an address and a derived id has none, so a derived `from` is refused by a named error before any
+  pull (the entries are off `_uaAllowed` already).
 - **Subject dispatch, one test:** `UAKinds.inNativeSpace(from)` (`from >> 160 == 0`).
   - **Native id:** `_authorizeNative`: `0`, `UA_POOL`, `SHIELD_POOL` refused; HIP-632 on Hedera for a 64-byte signature by an
     account without code; else `SigCheck.isValid` (ECDSA low-s by the address's own key, an EIP-7702 designator by its own
@@ -122,20 +135,23 @@ function mtxTransfer(bytes32 from, bytes32 to, uint256 amount, uint256 batch, ui
   `_uaMove`. `_uaMove` calls `ERC20._update` directly and so skips `ERC20MetaTx._update`: a regulated hook (CTR-GOV-17,
   SPECIFIED) must hook `_uaMove` too, or it misses every relayed transfer (§8).
 - **Allow-list of the generic entry:** a derived subject reads `_uaAllowed`; a native subject reads `_mtxRule`, so an EOA
-  keeps `wrap`, `addReserve`, `wrapToUA`, `cancelNonce` through `mtxExecute` (spike B fix).
+  keeps `wrap`, `addReserve`, `wrapToUA`, `cancelNonce` through `mtxExecute` (spike B fix). Controller proposal (R19):
+  `cancelNonce` joins `_uaAllowed`, so the nonce-ordered cancel exists for a derived subject too.
 - **`_msgSender()`** inside the self-call: a native subject reads as its address, `UA_POOL` only for a derived one;
   unchanged.
-- **Relayed proofs (Zether, PQZ):** the envelope binding of every relayed proof becomes the UA one, tag `TAG_UA_ENVELOPE`,
-  native subjects included. The contract computes it; the provers bind it. No statement layout or relation changes (to be
-  confirmed in the build, §8 risk 9).
+- **Relayed proofs (Zether, PQZ):** the envelope binding of every relayed proof becomes the kind's UA binding, native
+  subjects included: Zether's `TAG_UA_ENVELOPE = keccak256("SCAAS-ZETHER-UA-ENVELOPE-V1")`, PQZ's
+  `TAG_UA_ENVELOPE = keccak256("SCAAS-PQZ-UA-ENVELOPE-V1")` (two constants of one name, one per kind). The contract
+  computes it; the provers bind it. No statement layout or relation changes (to be confirmed in the build, §8 risk 9).
+  R35 and R36 rewrite the binding rules.
 
 ### 2.2 Nonce space
 
 Unchanged: one map `_uaNonce[bytes32][batch]`, natives zero-padded, already shared by both paths
 ([CTR-UA-26](../../contracts/accounts.md#CTR-UA-26)). A pay lane stays `payLane(payId)`, nonce 0. The view names follow the
-entries: `mtxNonce(bytes32, uint256)` on tokens (today's `uaNonce`); the wallets keep `mtxNonce(address, uint256)`.
-Domain unchanged: `("SCaaS MetaToken", "1", chainId, clone, salt = chainUid)`; the router's
-`("SCaaS GovernanceRouter", "1", chainId, router, chain_uid)`.
+entries: `mtxNonce(bytes32, uint256)` on tokens (today's `uaNonce`); the wallets keep `mtxNonce(address, uint256)`, so the
+node picks the view by contract kind. Domain unchanged: `("SCaaS MetaToken", "1", chainId, clone, salt = chainUid)`; the
+router's `("SCaaS GovernanceRouter", "1", chainId, router, chain_uid)`.
 
 ### 2.3 Names (controller proposal)
 
@@ -145,7 +161,8 @@ Domain unchanged: `("SCaaS MetaToken", "1", chainId, clone, salt = chainUid)`; t
   plain name takes the id form.
 - A `ua*` name with no address twin keeps its name (the registry's `uaAt`, `uaOf`, …; `uaCancelDigest`): no rename was asked.
 - **Typed struct names keep the `UA` prefix** (`UAMetaTransfer`, `UA<Op>`, `UATradeOrder`): their type strings and typehashes
-  do not change, so every UA-side vector row stays valid and only the address rows retire (Q3).
+  do not change, so every existing UA-side vector row stays valid and the address rows of merged ops retire (Q3). New rows
+  come only with Q2a's five structs.
 - Inside one contract kind every name has one meaning. Across kinds `mtxExecute` is `(UAMetaTransaction, bytes)` on a token
   and `(MetaTransaction, bytes)` on a wallet: the node's call table is per kind already ([NODE-JOB-20](../../node/job-api.md#NODE-JOB-20)).
 
@@ -164,15 +181,18 @@ Backup, not delete (AGENTS.md):
 
 | Where | Moves to `legacy/ua-mtx-merge/` |
 |---|---|
-| `smartcontracts/evm/src` | every address body of a merged pair, the address named-entry typehashes of tokens, `wrapBySig`, `_executeTransfer`, `_pay`, `_payMeta`, `_notPool`, `_tradeOf`, `preTransfer`, the address `requireSignature`; with A2 the token's address pipeline (`_execute`, `_named`, `_namedCall`, `_settle`, `preCall(false)`, `preNamed`, `envelopeBinding`) |
-| `MetaTxBase` | split: the core stays; `mtxNonce`, `mtxDigest`, `mtxExecute`, `mtxBatch`, `mtxCancelNonce`, `executeMetaTransaction` (address forms) move to `MetaTxAddressBase` / `IMetaTxAddress`, inherited by `WalletExecute`; nothing is deleted |
+| `smartcontracts/evm/src` | every address body of a merged pair, the address named-entry typehashes of tokens, `wrapBySig`, `_executeTransfer`, `_pay`, `_payMeta`, `_notPool`, `_tradeOf`, `preTransfer`, the address `requireSignature`, the address `envelopeBinding(MetaTransaction)` views; the token's address pipeline (`_execute`, `_named`, `_namedCall`, `_settle`, `preCall(false)`, `preNamed`) only as far as Q2 frees it |
+| `MetaTxBase` | split: the core stays; `mtxNonce`, `mtxDigest`, `mtxExecute`, `mtxBatch`, `mtxCancelNonce` (address forms) move to `MetaTxAddressBase` / `IMetaTxAddress`, inherited by `WalletExecute`; `executeMetaTransaction` follows Q2b; nothing is deleted |
 | `GovernanceRouter` | the 19 `_mtxCall` address entries and their 19 typehashes (if Q4) |
-| `MtxRelayFee` | `relay(address …)`; `uaRelay`'s body takes the name `relay` with `bytes32 from, payee` and a `UASig` (open mode unchanged) |
-| vectors | the address rows of `vectors/typed/typed_ops.json`, `vectors/metatx/` transfer and pay rows, the DEX order KAT's SCaaS-leg rows, regenerated by their generators; old rows under each area's `legacy/ua-mtx-merge/` as typed-signing did |
+| `MtxRelayFee` | `relay(address …)` and the `RelayFee(address from, …)` struct; `uaRelay`'s body takes the name `relay` with `bytes32 from, payee` and a `UASig` (open mode unchanged) |
+| `ITradeToken`, `WrappedLib` | `WrapOrder`, `CancelWrapOrder` and `mtxWrapOrder(address, WrapOrder, bytes)` (R39) |
+| `MetaTxLib` | `MetaTransfer` and its typehash, if Q17 says so |
+| vectors | the files of §7's Vectors row, each regenerated by its generator; old rows under each area's `legacy/ua-mtx-merge/` as typed-signing did |
 | node, clients | the address builders of the merged entries, in each crate's or package's legacy place |
 
-`MetaTxLib.MetaTransfer` keeps its pinned typehash where an outside leg or a wallet still reaches it; if nothing does in the
-build, it moves with the bodies (decided in the build, by grep, recorded).
+`MetaTxLib.MetaTransfer`'s fate is an owner row (R46, Q17), not a grep: after R20–R22, R33 and R42 no SPECIFIED EVM rule
+names it, while the non-EVM `MetaTransfer` of [NET-ALL-26](../../networks/README.md#NET-ALL-26) is each family's own
+struct and stays (R30).
 
 ### 2.6 Options and the measured spike
 
@@ -192,19 +212,20 @@ All [M-old]. Other contracts on A + B + C: `SCaaSDex` 32,377 (+134 for C), `Wrap
 `MtxRelayFee` 2,349 (−741), wallets unchanged. `WrappedPqzToken` 152 selectors from 188. EOA `mtxTransfer` +875 to +992 gas on
 every kind (calldata: a 65-byte signature in a three-field `UASig`, 420 → 580 B [R]); the direct `transfer` −45 to +55
 (dispatcher); EOA to a UA 108,919 (one `kindOf`, 5,873 cold). Not measured: generic `mtxExecute`, `mtxPayReceiverFee`,
-`mtxTrade` through the DEX, `MetaTxGasV2`'s rows.
+`mtxTrade` through the DEX, `MetaTxGasV2`'s rows. The spike's A2 moved `executeMetaTransaction` onto `UAMetaTransaction`, which
+changes its selector from `0x47aea5b5`; that shape is not proposed (Q2b), so A2's figure is an upper bound.
 
 **Recommendation.**
 
 - **A + B + C is the round's base.** B is required (without it an EOA loses `wrap`, `addReserve`, `wrapToUA`, `cancelNonce`
   on the generic entry); C is required (without it a `NORMAL` / `WRAPPED` token at `registry() == 0` has no relayed path for
   an EOA at all, and a derived `to` reverts with empty data instead of a named error).
-- **A2: yes** (Q2). It makes "one entry per operation" true on tokens with no address pipeline left, so the audit reviews one
-  path; it is the one change that removes a whole pipeline, −1.2 to −1.4 KB on the wrapped kinds [M-old]. Cost: it
-  reverses the owner's 2026-11-01 ruling that keeps `executeMetaTransaction` on tokens with `address from`; the name stays
-  as the alias of the merged `mtxExecute` (returns `bool`), and the address form stays on the wallets. If the owner keeps the
-  address form on tokens, the round measures A2 without it (the pipeline stays for that one entry).
-- **D: decided by §4's measurement**, not by default (Q5).
+- **A2 splits into two owner questions (Q2).** (a) The five wrap entries already have one signed entry each, so Goal 1 holds
+  without moving them; moving them adds five structs that serve no derived signer and changes the EOA's display, so they
+  move only if §9 shows their bytes are needed for §4's target. (b) `executeMetaTransaction` stays on tokens in its address
+  form, selector `0x47aea5b5`, returning `bool`, as the owner ruled on 2026-11-01 ("for tender and outside tools"); the
+  address pipeline stays on tokens for that one entry. Removing the name from tokens is the owner's reversal only.
+- **D: decided by §4's measurement**, not by default, and only with §8's invariant 7 (Q5).
 
 ## 3. Composition
 
@@ -213,17 +234,22 @@ every kind (calldata: a 65-byte signature in a three-field `UASig`, 420 → 580 
 - **`GovernanceBase` entries are untouched.** An owner or holder operation has one direct entry and no `mtx*` / `ua*` twin on
   the governed contract (G19 of the governance spec; selector audit `selector_audit.json`). `_govSubject()` is unchanged: a
   direct caller is its native id; a call from `GOV_ROUTER` is the subject the router authenticated.
-- **`GovernanceRouter` has 19 pairs** (`mtx<Op>` by `_mtxCall`, `ua<Op>` by `_uaCall`; 38 typed entries, 38 node rows). The
-  owner's words cover every pair, and one rule per chain argues the same shape on the router as on tokens: **merge them**
-  (Q4). `mtx<Op>` takes `UAEnvelope` + `UASig` and `_uaCall`'s flow; the subject an EOA produces is `pad(addr)`, exactly
-  what `_mtxCall` writes today, so `_govSubject()` returns the same value and no governance check moves. A new init code
-  means a new CREATE2 address: every release's `Env.govRouter` follows, the router is deployed before the releases as
-  today.
+- **The router changes under every option.** `GovernanceRouterBase` inherits `UAMetaTxBase` and overrides `uaExecute` /
+  `uaBatch` (refusing `MtxSelectorNotAllowed`) and the address `mtxExecute` / `executeMetaTransaction` / `mtxBatch` path. The
+  merge renames the first and moves the second to `MetaTxAddressBase`, so the router's bytecode, init code and CREATE2
+  address change whatever Q4 decides: every release's `Env.govRouter` follows, the router is deployed before the releases as
+  today. After the merge the router refuses `mtxExecute` / `mtxBatch` under the merged names and keeps refusing
+  `executeMetaTransaction` (Q2b). Its `mtxCancelNonce` takes the `UACancelNonce` form of R19 like a token's; the node's
+  shared `mtxCancelNonce` row (`ALL`) splits per kind.
+- **`GovernanceRouter` has 19 named pairs** (`mtx<Op>` by `_mtxCall`, `ua<Op>` by `_uaCall`; 38 typed entries, 38 node rows).
+  Q4 covers only these. The owner's words cover every pair, and one rule per chain argues the same shape on the router as on
+  tokens: **merge them**. `mtx<Op>` takes `UAEnvelope` + `UASig` and `_uaCall`'s flow; the subject an EOA produces is
+  `pad(addr)`, exactly what `_mtxCall` writes today, so `_govSubject()` returns the same value and no governance check moves.
 - **Powers' entries** (`mint`, `mintToUA`, `disableWrap`, the rate entries, the DEX setters) are reached through the router
   only; no change on the governed contracts.
 - **CTR-GOV-11 ("+0": no new read on a plain `transfer` and `mtxTransfer`)** holds on the probed kind [M-old: the same three
   slots, 8 reads, 3 writes]; `PlusZero.t.sol` re-targets its `mtxTransfer` and `uaExecuteTransfer` rows to the merged
-  entries and is re-run on every kind.
+  entries and is re-run on every kind; `plus_zero_slots.json` regenerates.
 - **CTR-GOV-19** stands: PQZ kinds on the raised ceiling only. A merged `WrappedPqzToken` may drop back under 65,536 B
   (projection §4), which removes it from `_above64KiB` but changes no rule.
 - **Bit bands, `Grant`, the two-call delay, the regulated rules** do not change. A regulated implementation, when built,
@@ -241,61 +267,77 @@ the gas bounds of the registry's `verifyBudget` are unchanged.
 
 - The confidential pairs merge like the others: `mtxShield`, `mtxConfidentialTransfer*` (four forms; the compact single on
   the PQZ kinds only), `mtxUnshield`, `mtxUnshieldUnwrap`, `mtxRollOver`, `mtxRollOverBatch`, `mtxRollOverSigned`,
-  `mtxSetRollOverMode`, `mtxPrepareAcc`, `mtxWrapShield` (A2).
+  `mtxSetRollOverMode`, `mtxPrepareAcc`; `mtxWrapShield` per Q2a.
 - **Never lose ciphertext** holds: the operation bodies do not change; every ciphertext stays in contract state.
-- Since CTR-ZTH-94 the signed and `ua*` Zether forms and their typehashes run in `ZetherLib` / `ZetherWrappedLib`. The
-  merge edits those libraries too: the library-split checklist applies (DELEGATECALL storage, `this`, `msg.sender`, return
-  data, the guard, `LinkClosure` pins). The spike predates the split, so its Zether savings are an upper bound (§4).
-- Relayed proofs bind the UA envelope (`TAG_UA_ENVELOPE`) for every subject: `zether-prover`, the PQZ provers and
-  `clientkeys` change at once (§7).
-- PQZ: `script/pqz/at-set.sh` at all four sets for the build, not for the size spike.
+- Since CTR-ZTH-94 the signed and `ua*` Zether forms and their typehashes run in `ZetherLib` / `ZetherWrappedLib`, and the
+  Zether `ua*` entries sit in `ZetherLayer`. The merge edits those files too: the library-split checklist applies
+  (DELEGATECALL storage, `this`, `msg.sender`, return data, the guard, `LinkClosure` pins). The spike predates the split, so
+  its Zether savings are an upper bound (§4).
+- Relayed proofs bind the kind's UA envelope for every subject: Zether `SCAAS-ZETHER-UA-ENVELOPE-V1`, PQZ
+  `SCAAS-PQZ-UA-ENVELOPE-V1` (R35, R36). `zether-prover` gains a UA binding function (today it computes only the address
+  binding, `SCAAS-ZETHER-ENVELOPE-V1` over `MetaTransaction`); the PQZ provers and `clientkeys` change at once (§7).
+- PQZ: `script/pqz/at-set.sh` at all four sets for the build, and for the set parameters measured on the relay path
+  (`roll_max`, `debit_min_gas`, §9 step 5); not for the size spike.
 
-### 3.4 DEX (`CTR-DEX-25`)
+### 3.4 DEX (`CTR-DEX-25`, `CTR-DEX-26`)
 
-A SCaaS token leg is `UATradeOrder` only (shape 1), its signature in `auth`; the token's `mtxTrade` is today's `uaTrade`.
-`TradeOrder` stays for outside legs (`DexOrder` nests it), with its vectors; `LegSettled` stays for outside legs, a SCaaS leg
-emits `UALegSettled`. `orderHash` / `cancelHash` lose their `ua` flag on the token side; the DEX's `record`, `cancel`,
-`invalidate` keep it for outside legs. The DEX asks for a ledger only for a derived seller (C, +134 B [M-old]). The DEX tests
-did not compile in the spike: nothing here ran (§9).
+A SCaaS token leg is `UATradeOrder` only (shape 1 of [CTR-DEX-26](../../contracts/dex.md#CTR-DEX-26)), its signature in
+`auth`; the token's `mtxTrade` is today's `uaTrade`, its `minNonce` keyed by `bytes32` (R38). `TradeOrder` stays for outside
+legs (`DexOrder` nests it), with its vectors; `LegSettled` stays for outside legs, a SCaaS leg emits `UALegSettled`.
+`orderHash` / `cancelHash` lose their `ua` flag on the token side; the DEX's `record`, `cancel`, `invalidate` keep it for
+outside legs. The DEX asks for a ledger only for a derived seller (C, +134 B [M-old]). This reverses the recorded rationale
+of CTR-DEX-25 (R12). The DEX tests did not compile in the spike: nothing here ran (§9).
+
+**The node's DEX is new work, not a rename.** Its book holds shape 0 `TradeOrder`s only today (UA intake waits for UA F5),
+its watcher tracks `LegSettled`, `POST /v1/dex/orders` takes a `TradeOrder` for a SCaaS sell token, and
+`POST /v1/dex/cancel-all` signs an address `InvalidateNonces`. After R12 the book gains `UATradeOrder` intake (a POST body
+with `bytes32 from` and a `UASig`), the UA cancel and UA invalidate in the sell token's domain, and a `UALegSettled` watcher;
+the shared typed row of `InvalidateNonces` (token kinds and the DEX) splits per kind. The public DEX gateway API changes and
+is in the operator note (§7).
 
 ### 3.5 Hedera
 
 The same kinds with `IS_HEDERA`; `_authorizeNative` keeps HIP-632 (a 64-byte signature by an account without code).
-`HederaMandateWallet` keeps the address surface. Not run in the spike; the build runs the Hedera suites and the node's Hedera
-adapter.
+`HederaMandateWallet` keeps the address surface. The Hedera `MetaOp` v1 becomes the token's `UAMetaTransfer` (R42). Not run
+in the spike; the build runs the Hedera suites, the node's Hedera adapter and `tests/e2e_hedera.rs`.
 
 ## 4. Base token size for public chains
 
-**Targets.** A token kind's implementation is deployed once per release, as one transaction. Under EIP-8037 it is included
-only if regular + state gas fits the block limit; a block's `gas_used = max(...)` is accounting and proves nothing about
-inclusion. About 1,601 to 1,606 gas per runtime byte in all, about 1,530 of it state gas, so a 60 M block holds about
-37.3 KB of runtime and a 70 M block about 43.5 KB (`docs/contracts/zether.md`, CTR-ZTH-94 figures). Tokens are clones: only
-the implementation and its libraries must fit, each its own transaction.
+**Targets.** A token kind's implementation is deployed once per release, as one `CREATE2` inside the factory's release
+transaction. Under EIP-8037 a transaction is included only if the gas it asks fits the block limit; a block's
+`gas_used = max(...)` is accounting and proves nothing about inclusion. The deploy asks total × 1.05
+(`--gas-estimate-multiplier 105`, `deploy.sh`), and governance's NET-EVM-06 fits a kind when regular × 1.05 < 2^24 and
+total × 1.05 ≤ the limit. On the governance figures that is about 1,685 gas asked per runtime byte (`WRAPPED`: 52,297 B,
+83.92 M total, 88.1 M asked), so a 60 M block holds about **35.6 KB** of runtime and a 70 M block about **41.5 KB**, before
+the frame `deployImplementation` adds. Tokens are clones: only the implementation and its libraries must fit, each its own
+transaction. If the owner rules that a public deploy drops the multiplier (R40, Q14), that is a `deploy.sh` change and the
+thresholds become about 37.3 / 43.5 KB.
 
 **Where the kinds stand.** PR #9's `size-baseline.json` (ratchet ceilings, not measurements) against the projection of the
 spike's deltas [P]:
 
-| Kind | Main | PR #9 | + A + B + C [P] | + A2 [P] | + A2 + D [P] | 60 M (37.3 KB) | 70 M (43.5 KB) |
+| Kind | Main | PR #9 | + A + B + C [P] | + A2 [P] | + A2 + D [P] | 60 M (≈35.6 KB) | 70 M (≈41.5 KB) |
 |---|---:|---:|---:|---:|---:|---|---|
-| `NormalToken` | 37,487 | 40,853 | ~32,160 | ~31,520 | ~31,530 | fits from A + B + C | fits |
-| `WrappedToken` | 48,278 | 52,297 | ~42,470 | ~41,310 | ~38,110 | **no**, ~0.8 KB over even with A2 + D | fits from A + B + C, ~1 KB margin |
-| `NormalZetherToken` | 47,470 | 50,547 | ~40,620 | ~39,580 | ~37,970 | no | fits from A + B + C |
+| `NormalToken` | 37,487 | 40,853 | ~32,160 | ~31,520 | ~31,530 | fits from A + B + C, ~3.4 KB margin | fits |
+| `WrappedToken` | 48,278 | 52,297 | ~42,470 | ~41,310 | ~38,110 | **no**, ~2.5 KB over even with A2 + D (~4.3 KB with the regulated stand-in) | no with A + B + C (~1.0 KB over); fits with A2, ~0.2 KB margin |
+| `NormalZetherToken` | 47,470 | 50,547 | ~40,620 | ~39,580 | ~37,970 | no, ~2.4 KB over with A2 + D | fits from A + B + C, ~0.9 KB margin |
 | `WrappedZetherToken` | 58,407 | 62,472 | ~50,960 | ~49,530 | ~46,400 | no | no |
 | `NormalPqzToken`, `WrappedPqzToken` | 53,042, 63,563 | 56,191, 72,160 | ~46,650, ~56,000 | | | not a target (CTR-GOV-19) | |
 
 How the projection is made: PR #9's figure minus the spike's delta for that option on the same kind. It is rough: the
 governance build differs from the prototype (+0.3 to +2.1 KB on the base kinds), the Zether bodies moved to libraries after
-the spike (so the Zether deltas are upper bounds), and `WrappedPqzToken` crosses back under the 65,536 B cliff (about 4.7 KB
-of jump widths, inferred). **None of these numbers decides anything; §9's do.**
+the spike (so the Zether deltas are upper bounds), A2's delta includes moving `executeMetaTransaction`, which Q2b does not
+propose, and `WrappedPqzToken` crosses back under the 65,536 B cliff (about 4.7 KB of jump widths, inferred). On these
+figures `WrappedToken` misses 60 M without L. **None of these numbers decides anything; §9's do.**
 
 **Levers in scope**, in the order the round measures them:
 
 | Lever | What | Rules and cost |
 |---|---|---|
 | **M** = A + B + C | the merge | §5 rules; +0.9 to +1.0 K gas per EOA relayed transfer |
-| **A2** | no-twin entries on the one path | Q2 |
+| **A2** | Q2a's wrap entries, and Q2b only if the owner reverses it | Q2 |
 | **L** | the `zether-lib` pattern on the base bodies: `ERC20MetaTx` and `UAMetaTxBase` bodies into a linked library, the decoders and the ABI stay on the token (as CTR-ZTH-94) | no ABI, storage or rule change; +1 to +2 K gas per signed call (Zether's figure, to measure); the library-split checklist; `LinkClosure` pins move with old → new; the library deploy must itself fit |
-| **D** | lever 3: the read-only views behind a `fallback` to an immutable module pinned in `Env` | no ABI change seen from outside; a module per release, one `env.deps` entry, `libCodeHashes`, about 720 test call sites; a view +3 K gas, `eth_call` only; `hasRole`, `pendingOwner` and every view another contract reads on chain stay on the token |
+| **D** | lever 3: the read-only views behind a `fallback` to an immutable module pinned in `Env` | no ABI change seen from outside; a module per release, one `env.deps` entry, `libCodeHashes`, about 720 test call sites; a view +3 K gas, `eth_call` only; `hasRole`, `pendingOwner` and every view another contract reads on chain stay on the token. **A new dispatch path on every token**: taken only with §8's invariant 7 and its tests |
 
 Out of scope, with reason: an own ERC-20 core (−0.3 to −0.4 KB [M-old], CTR-UA-18 for the one-ledger form, an own core to
 audit); B-26 (0 B on the wrapped kinds); narrowing `Grant` to `NORMAL*` and the DEX (CTR-GOV-02's fallback, a lost feature);
@@ -303,77 +345,114 @@ dropping named entries beyond the merge (rules, and the merge already removes th
 
 **How to decide (controller proposal, Q5 / Q6).**
 
-1. Target: `NormalToken` and `WrappedToken` fit a **60 M** deploy, and so does a stand-in of their regulated form (one
-   regulated implementation per kind: the six regulated entries and the hook, about +1.7 to 1.9 KB [P] in the size-options
-   note's §10). 70 M alone is not enough: Ethereum's block is the lower one, and one rule holds on every chain.
+1. Target: `NormalToken` and `WrappedToken` fit a **60 M** deploy under the fit test of R40 (as ruled), and so does a
+   stand-in of their regulated form (one regulated implementation per kind: the six regulated entries and the hook, about
+   +1.7 to 1.9 KB [P] in the size-options note's §10). 70 M alone is not enough: Ethereum's block is the lower one, and one
+   rule holds on every chain.
 2. The Zether kinds are measured against the same two thresholds and reported; whether they must fit before a public chain
    stays the owner's (CTR-GOV-19: "decided later").
-3. Take M + A2, then measure L and D on main after PR #9, each alone and together. Pick the smallest set that meets 1;
-   between two sets that both meet it, take the one with no hot-path gas cost (D before L), then the one with fewer new
-   mechanisms.
-4. **The deploy gate** (`runtime × 1,530 + 2^24`, GD-4 on PR #9) assumes the regular part at its 2^24 cap and so refuses
-   above about 28.2 KB at 60 M and 34.8 KB at 70 M, where the real limit is about 37.3 and 43.5 KB. Before any public deploy
-   it must count the measured regular gas of the deploy (a fork or local simulation), not the cap. A tool fix, no rule.
+3. Take M, then measure A2 (Q2a, and Q2b only if reversed), L and D on main after PR #9, each alone and together. Pick the
+   smallest set that meets 1; between two sets that both meet it, take the one with no hot-path gas cost (D before L), then
+   the one with fewer new mechanisms.
+4. **The deploy gate** (`runtime × 1,530 + 2^24`, GD-4 on PR #9; NET-EVM-06) assumes the regular part at its 2^24 cap and so
+   refuses above about 28.2 KB at 60 M and 34.8 KB at 70 M. The formula is the owner's and stays unless the owner changes
+   it: R40 and Q14 put the public-chain gate to the owner.
 
 ## 5. Rules: decisions for the owner
 
 Each row: the rule as written, the proposed text or "holds", why, cost. R1 to R9 are the rulings TODO names; the rest follow
-from the design.
+from the design. Rows marked **Reversed** reverse an owner ruling or an owner-recorded rationale.
 
 | # | Rule | Proposal | Why | Cost |
 |---|---|---|---|---|
 | R1 | [CTR-MTX-09](../../contracts/metatx.md#CTR-MTX-09): the named transfer entries "keep their signatures (owner: kept separate, nothing merged)" | **Reversed.** "`mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxPayMeta`, `mtxBatch`, `mtxBatchTransfer` take the form of today's `ua*` twin (the same flat explicit parameters with `bytes32` ids, `UASig` / `bytes auth`) and build `UAMetaTransfer` / `UAMetaTransaction`; one form per operation (owner 2026-11-03, the `ua*` / `mtx*` merge)." The mode shapes and the equivalences stay, on the UA structs | the owner's merge; a pair is one feature twice | the 2026-10-08 ruling "nothing merged" is reversed; every caller of the address forms moves |
-| R2 | [CTR-MTX-15](../../contracts/metatx.md#CTR-MTX-15): "Two structs, one nonce space"; `MetaTransfer` "exists on tokens only" | Tokens: `UAMetaTransaction` and `UAMetaTransfer`, one nonce space (unchanged). `MetaTransaction` stays on the wallets. `MetaTransfer` has no token entry | follows R1 | wallets that displayed `MetaTransfer` field by field now see `UAMetaTransfer` (§6) |
-| R3 | [CTR-MTX-17](../../contracts/metatx.md#CTR-MTX-17) and [CTR-MTX-22](../../contracts/metatx.md#CTR-MTX-22): `executeMetaTransaction` stays beside `mtxExecute`, `address from` | With A2: on tokens `executeMetaTransaction` is the `bool` alias of the merged `mtxExecute(UAMetaTransaction, bytes)`; the address form stays on the wallets in `MetaTxAddressBase`. Without A2: holds | one path on tokens; −1.2 to −1.4 KB with the wraps [M-old] | reverses the 2026-11-01 "stays" on tokens; an outside tool that decodes the address struct on a token breaks |
+| R2 | [CTR-MTX-15](../../contracts/metatx.md#CTR-MTX-15): "Two structs, one nonce space"; `MetaTransfer` "exists on tokens only" | Tokens: `UAMetaTransaction` and `UAMetaTransfer`, one nonce space (unchanged); `MetaTransaction` also stays on tokens for `executeMetaTransaction` (Q2b) and on the wallets. `MetaTransfer` has no token entry | follows R1 | wallets that displayed `MetaTransfer` field by field now see `UAMetaTransfer` (§6) |
+| R3 | [CTR-MTX-17](../../contracts/metatx.md#CTR-MTX-17) and [CTR-MTX-22](../../contracts/metatx.md#CTR-MTX-22): `executeMetaTransaction` stays beside `mtxExecute`, `address from` | **Holds** (owner 2026-11-01): on tokens `executeMetaTransaction(MetaTransaction, bytes)`, selector `0x47aea5b5`, returns `bool`, over the address pipeline, beside the merged `mtxExecute`; on the wallets unchanged. Only an owner reversal removes it from tokens (Q2b) | the owner's ruling; tender and outside tools decode the `bool` | the token keeps the address pipeline for one entry (size measured in §9) |
 | R4 | [CTR-MTX-23](../../contracts/metatx.md#CTR-MTX-23), [CTR-MTX-24](../../contracts/metatx.md#CTR-MTX-24): `mtxExecuteTransfer(MetaTransfer, bytes)`, `mtxBatchTransfer(MetaTransfer[], bytes[])` | `mtxExecuteTransfer(UAMetaTransfer, UASig)`, `mtxBatchTransfer(UAMetaTransfer[], UASig[])`; the steps stay, step 3 becomes the UA receiver rule (a derived `to` registered and SIGNING) | follows R1 | events become `UA…` (R18) |
-| R5 | [CTR-MTX-28](../../contracts/metatx.md#CTR-MTX-28) (TS-D14): `mtx<Op>(Envelope, …, bytes sig)` and, where UA-allowed, `ua<Op>(UAEnvelope, …, UASig)` | "`mtx<Op>(MetaTxLib.UAEnvelope e, <explicit op parameters>, IUARegistry.UASig auth)`, struct `UA<Op>`; one form" on tokens and the router; the wallets keep `Envelope` + `bytes` (or `AccountSig`). Its "Size" bullet is rewritten to §4's targets | every field stays named and typed (CTR-MTX-29 holds) | `from` is `bytes32` on screen |
-| R6 | [CTR-MTX-14](../../contracts/metatx.md#CTR-MTX-14): EIP-712 typed data, "wallets display the fields" | **Holds.** Still typed data, every field named, no blind hash; the `address` type of `from` / `to` goes on token paths | — | §6 |
+| R5 | [CTR-MTX-28](../../contracts/metatx.md#CTR-MTX-28) (TS-D14): `mtx<Op>(Envelope, …, bytes sig)` and, where UA-allowed, `ua<Op>(UAEnvelope, …, UASig)` | "`mtx<Op>(MetaTxLib.UAEnvelope e, <explicit op parameters>, IUARegistry.UASig auth)`, struct `UA<Op>`; one form" on tokens and the router for every op with a `ua*` twin; the no-twin wrap entries per Q2a; the wallets keep `Envelope` + `bytes` (or `AccountSig`). Its "Size" bullet is rewritten to §4's targets | every field stays named and typed (CTR-MTX-29 holds) | `from` is `bytes32` on screen |
+| R6 | [CTR-MTX-14](../../contracts/metatx.md#CTR-MTX-14): EIP-712 typed data, "wallets display the fields" | **Holds.** Still typed data, every field named, no blind hash; the `address` type of the fields §6 lists goes on token paths | — | §6 |
 | R7 | [CTR-UA-26](../../contracts/accounts.md#CTR-UA-26): "The UA path splits like the address path"; "The `ua*` functions keep their signatures"; `uaExecuteTransfer` mirrors `mtxExecuteTransfer` | "The signed path has two structs, a generic `UAMetaTransaction` and a typed `UAMetaTransfer`, under the `mtx*` names; they take native and derived ids." The mirror sentence goes | nothing left to mirror | none beyond R1 |
-| R8 | [CTR-UA-27](../../contracts/accounts.md#CTR-UA-27): parity; "Own struct, any id … it takes a native id too" | **Holds by construction**: this text is the merged path. "the `ua*` functions" reads "the signed entries"; "Named UA builders exist only where the address path has one" goes | parity stops being two forms | — |
-| R9 | [CTR-UA-19](../../contracts/accounts.md#CTR-UA-19): the UA-ledger meta-transactions have their own structs; registry 0 = "every `ua*` reverts `UALedgerOff`" | The UA structs are the token's only signed structs. **`registry() == 0`: a derived side reverts `UALedgerOff`; a call whose every side is native runs** (spike C) | an EOA keeps a relayed path on a plain token without a registry | `supportsInterface(IUALedger)` stays false at 0, so `IUALedger` splits (entries vs. ledger views) |
+| R8 | [CTR-UA-27](../../contracts/accounts.md#CTR-UA-27): parity; "Own struct, any id … it takes a native id too" | **Holds by construction**: this text is the merged path. "the `ua*` functions" reads "the signed entries"; "Named UA builders exist only where the address path has one" goes; its citation of `bytes32` ids in `MandateWallet` follows R32 | parity stops being two forms | — |
+| R9 | [CTR-UA-19](../../contracts/accounts.md#CTR-UA-19): the UA-ledger meta-transactions have their own structs; registry 0 = "every `ua*` reverts `UALedgerOff`" | The UA structs are the token's signed structs for every merged op. **`registry() == 0`: a derived side reverts `UALedgerOff`; a call whose every side is native runs** (spike C) | an EOA keeps a relayed path on a plain token without a registry | `supportsInterface(IUALedger)` stays false at 0, so `IUALedger` splits (entries vs. ledger views) |
 | R10 | [CTR-UA-18](../../contracts/accounts.md#CTR-UA-18): derived balances in a separate `bytes32` ledger | **Holds.** No balance moves | — | — |
 | R11 | [CTR-UA-24](../../contracts/accounts.md#CTR-UA-24): own key only, never the delegate | **Holds** [M-old] | — | — |
-| R12 | [CTR-DEX-25](../../contracts/dex.md#CTR-DEX-25): "`TradeOrder` and its vectors do not change. A native id may sign it too" | "A SCaaS token leg is a `UATradeOrder`, native or derived; `TradeOrder` and its vectors stay for outside legs." [CTR-DEX-15](../../contracts/dex.md#CTR-DEX-15) shape 0 on a SCaaS token goes | follows R1 | the DEX KAT regenerates; 30 DEX test files move to shape 1 |
+| R12 | [CTR-DEX-25](../../contracts/dex.md#CTR-DEX-25): "`TradeOrder` and its vectors do not change. A native id may sign it too"; its Why: "Widening `TradeOrder` for everyone was rejected: native wallets keep displaying an `address`, and existing vectors and node encoders stay" (owner 2026-10-13) | **Reversed** (the rationale): "A SCaaS token leg is a `UATradeOrder`, native or derived; `TradeOrder` and its vectors stay for outside legs." [CTR-DEX-26](../../contracts/dex.md#CTR-DEX-26)'s shape 0 on a SCaaS token goes | follows R1 | EOA makers on SCaaS legs sign `bytes32 from` and `bytes32 destination`; the DEX KAT regenerates; 30 DEX test files move to shape 1; the node's book gains UA intake (§3.4) |
 | R13 | CTR-GOV-11 (PR #9): "+0" = no new read on `transfer` and `mtxTransfer` | **Holds**; the pins re-target the merged entries | — | gas pins move with old → new |
-| R14 | Governance spec G19 and CTR-GOV-15's router: 19 ops, each `mtx<Op>` and `ua<Op>` | The router's pairs merge (Q4): 19 entries, `UAEnvelope` + `UASig`; G19 holds on the governed contracts | one rule for every signed entry | new router address per chain; node rows 38 → 19 |
-| R15 | AGENTS.md "one rule on every chain"; [NET-ALL-84](../../networks/README.md#NET-ALL-84) | New checklist row: "per operation, the direct entry and at most one contract-verified signed entry, its subject a UA id covering both spaces; a native uses it where the host does not authorize it for a call someone else submits" (§1) | the EVM merge and Soroban's built split are the same rule | each family's UA spec answers one more row |
+| R14 | Governance spec G19 and CTR-GOV-15's router: 19 ops, each `mtx<Op>` and `ua<Op>` | The router's 19 pairs merge (Q4): 19 entries, `UAEnvelope` + `UASig`; G19 holds on the governed contracts | one rule for every signed entry | node rows 38 → 19; the new router address comes from the base change under every option (§3.1) |
+| R15 | [NET-ALL-84](../../networks/README.md#NET-ALL-84): the family checklist | New row, a question only: "Per operation, how many contract-verified signed entries, and which subjects take them? (answer per NET-ALL-28)"; UA-Soroban cell: "one, `ua_*`, derived ids only; natives by `require_auth` on the direct entry ([NET-SOR-20](../../networks/soroban.md#NET-SOR-20))" | one rule, one place (R31) | each family's UA spec answers one more row |
 | R16 | AGENTS.md "Backup, do not delete" | **Holds**: §2.5 | — | — |
 | R17 | new (controller proposal) | A native id's `UASig` has empty `keyData` and `members`, else `MetaTxBadSignature` | fail closed on every EOA path; no relayer padding | a few bytes per entry |
 | R18 | CTR-UA-27 "Events": an address-typed event keeps its shape, a UA party gets a `UA…` event | A merged path emits the `UA…` events only; address events stay on address entries (§2.4) | one event shape per path | indexers and the node read new topics for EOAs |
-| R19 | `mtxCancelNonce` (address form: envelope, fee, relayer binding) | Takes `uaCancelNonce`'s form: no envelope, no fee, each signed cancel runs once (used-digest set). A native that wants a fee or a bound relayer uses `cancelNonce` through `mtxExecute` | one form; a cancel needs no binding (a front-runner can only run the same cancel) | the token fee on a signed cancel goes |
+| R19 | `mtxCancelNonce` (address form: envelope, fee, relayer binding, consumes `e.nonce`) | Takes `uaCancelNonce`'s form: no envelope, no fee, each signed cancel runs once (used-digest set). **It binds no nonce**: `UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)` raises whatever nonce is current when it lands, so a withheld but valid cancel can kill an operation signed after it on that lane until `validUntil`. The **nonce-ordered cancel** is `cancelNonce` through `mtxExecute` with `e.batch == lane`; controller proposal: `cancelNonce` joins `_uaAllowed` so a derived subject has it too; clients and the node offer the ordered form by default and the unordered one as an explicit choice with a short `validUntil` | one form per operation; the ordered form already exists | the token fee and the relayer binding on a signed cancel go; a native's named signed cancel becomes unordered |
+| R20 | [CTR-MTX-01](../../contracts/metatx.md#CTR-MTX-01): "A payment is a `MetaTransfer` with `entryRef ≠ 0`", `PaymentSettled` | "A relayed payment is a `UAMetaTransfer` with `entryRef ≠ 0`, run through `mtxExecuteTransfer` or built by `mtxPay` and `mtxPayReceiverFee`; it emits `UAPaymentSettled`." The direct `payWithFee` keeps `PaymentSettled` | follows R1 | `pay_ref` lookups read `UAPaymentSettled` for EOAs |
+| R21 | [CTR-MTX-05](../../contracts/metatx.md#CTR-MTX-05), [CTR-MTX-06](../../contracts/metatx.md#CTR-MTX-06): `ReceiverFee(MetaTransfer payment, …)`; the payer shape is a `MetaTransfer` | `UAReceiverFee(UAMetaTransfer payment, uint256 fee, address feeRecipient, uint256 validUntil)` is the token's only receiver-fee struct; the payer shape is a `UAMetaTransfer` with the same constraints | follows R1 | `ReceiverFee` and its vectors to legacy |
+| R22 | [CTR-MTX-11](../../contracts/metatx.md#CTR-MTX-11): "a transfer or payment is signed only as a `MetaTransfer` and a call only as a `MetaTransaction`" | On tokens: "only as a `UAMetaTransfer`, a call only as a `UAMetaTransaction`" (plus `MetaTransaction` for `executeMetaTransaction`, Q2b); wallets unchanged | follows R1 | — |
+| R23 | [CTR-MTX-12](../../contracts/metatx.md#CTR-MTX-12): "`mtxUnwrap` / `mtxUnwrapLeg` … `uaUnwrap` for a UA" | "`mtxUnwrap` / `mtxUnwrapLeg` (today's `uaUnwrap` form), for native and derived ids" | follows R5 | — |
+| R24 | [CTR-MTX-18](../../contracts/metatx.md#CTR-MTX-18) and `MsgSenderLint`'s pinned `msg.sender` read counts | The counts are re-pinned with old → new in the commit (the spike saw `4 != 7`) | the merged bodies read `msg.sender` in other places | one source pin moves |
+| R25 | [CTR-MTX-21](../../contracts/metatx.md#CTR-MTX-21): its entry table lists the `ua*` twins and `mtxCancelNonce(Envelope, lane, sig)` on every `MetaTxBase` contract | The table lists one `mtx*` form per operation on tokens and the router, `mtxCancelNonce(bytes32, uint256, uint256, UASig)` there, the address forms on the wallets; `executeMetaTransaction` per Q2b | follows R1, R19 | — |
+| R26 | [CTR-MTX-22](../../contracts/metatx.md#CTR-MTX-22): `MetaTxBase` holds `MetaTransaction`, `mtxExecute`, `mtxCancelNonce`; `UAMetaTxBase` "0 = off: `UALedgerOff`" | `MetaTxBase` holds the core; `MetaTxAddressBase` holds the address generic path (wallets, and `executeMetaTransaction` on tokens per Q2b); `UAMetaTxBase` at registry 0 per R9 | §2.5 split | — |
+| R27 | [CTR-MTX-26](../../contracts/metatx.md#CTR-MTX-26): the `mtxPayMeta` / `uaPayMeta` pair | On EVM one `mtxPayMeta` in today's `uaPayMeta` form; the non-EVM BUILT entries change only in their own rounds (R31) | follows R1 | — |
+| R28 | [CTR-MTX-27](../../contracts/metatx.md#CTR-MTX-27): `MtxRelayFee.relay` / `uaRelay`, the `RelayFee(address from, …, address payee, …)` struct; the token's `mtxRelayFee` / `uaRelayFee` | `relay(bytes32 from, …, bytes32 payee, …, UASig)` is today's `uaRelay`; `UARelayFee` is the only struct; the token's `mtxRelayFee` is today's `uaRelayFee`; `RelayFee` to legacy | follows R1 | new `MtxRelayFee` CREATE2 address; node config `params.relay_fee.router` follows |
+| R29 | [CTR-MTX-29](../../contracts/metatx.md#CTR-MTX-29): every parameter explicit | **Holds** | — | — |
+| R30 | [NET-ALL-26](../../networks/README.md#NET-ALL-26): the non-EVM "`MetaTransfer` is the EVM `MetaTransfer` (CTR-MTX-23)" | "`MetaTransfer` carries the fields of the EVM `UAMetaTransfer` (CTR-MTX-23); its `from` is the family's native account in its own form; a derived subject signs the family's UA form" | follows R1; the two kinds stay | text only; no non-EVM code moves in this round |
+| R31 | [NET-ALL-28](../../networks/README.md#NET-ALL-28): parity table `mtxTransfer` → `MetaTransfer{entry_ref: 0}`, citing CTR-MTX-09, -23, -24 | The EVM column names the merged entries over `UAMetaTransfer`; the citations follow R1 and R4. It gains the one-rule sentence of §1: "Per operation, a contract has its direct entry and at most one contract-verified signed entry. That entry takes every subject the chain's host cannot authorize for a call someone else submits: on EVM native and derived ids, on Soroban derived ids only, natives by host auth on the direct entry." | one rule, one place | NEAR and Algorand state their mechanism in their rounds |
+| R32 | [CTR-ACC-12](../../contracts/mandates.md#CTR-ACC-12) (SPECIFIED, UA-5c): `uaExecute`, `uaPayUnderMandate`, `uaRevoke`, `uaExecuteAsOwner` on the mandate wallets, "mirroring the `mtx*` ones" | Owner (Q16): (a) UA-5c builds them merged, one `mtx*` per op over `bytes32` ids, which replaces the wallets' address signed entries; or (b) CTR-ACC-12 is deferred and the wallets stay address-only | as specified it would create the pairs R31 forbids | (a) reverses "the wallets keep the address surface" for those wallets |
+| R33 | [CTR-TND-01](../../contracts/tender.md#CTR-TND-01): `commitBid(…, MetaTxLib.MetaTransfer t, bytes depositSig)` calls `token.mtxExecuteTransfer(t, sig)` | `commitBid(…, MetaTxLib.UAMetaTransfer t, IUARegistry.UASig depositSig)` calls the merged `mtxExecuteTransfer` | follows R4 | tender's spec and vectors |
+| R34 | [CTR-AS-13](../../contracts/asset-suite.md#CTR-AS-13): `ExchangeOffer.exchange` takes a `TradeOrder` leg and calls `tokenIn.mtxTrade(leg, sig, …)` on a SCaaS token | The leg is a `UATradeOrder` + `UASig` through the merged `mtxTrade` | follows R12 | asset-suite spec |
+| R35 | [CTR-ZTH-06](../../contracts/zether.md#CTR-ZTH-06), [CTR-ZTH-34](../../contracts/zether.md#CTR-ZTH-34), [CTR-ZTH-51](../../contracts/zether.md#CTR-ZTH-51): the relayed binding `SCAAS-ZETHER-ENVELOPE-V1` over an address `from` in `mtxExecute`; the UA binding beside it | On tokens the relayed binding is the UA binding for every subject, `SCAAS-ZETHER-UA-ENVELOPE-V1` over `UAMetaTransaction`; `envelopeBinding` names it; the address `envelopeBinding(MetaTransaction)` view moves to legacy | follows R1 | `zether-prover` gains the UA binding; e2e scripts follow |
+| R36 | [CTR-PQZ-21](../../contracts/pq-zero-knowledge.md#CTR-PQZ-21): binding tag `SCAAS-PQZ-ENVELOPE-V1` (address) / `SCAAS-PQZ-UA-ENVELOPE-V1` (UA) | On tokens `SCAAS-PQZ-UA-ENVELOPE-V1` for every subject; the address row and view move to legacy | follows R1 | PQZ provers and `clientkeys` |
+| R37 | [CTR-DEX-13](../../contracts/dex.md#CTR-DEX-13): "One struct, `TradeOrder`, for every leg" (owner) | "`TradeOrder` for every outside leg; a SCaaS token leg is a `UATradeOrder` (CTR-DEX-26 shape 1)" | follows R12 | — |
+| R38 | [CTR-DEX-15](../../contracts/dex.md#CTR-DEX-15): the token-side `mtxTrade(TradeOrder, bytes sig, …)`, its address-keyed `minNonce`, `tradeOrderDigest` | Rewritten: `mtxTrade(UATradeOrder, UASig, …)` (today's `uaTrade`), `minNonce(bytes32, …)`, `tradeOrderDigest` over `UATradeOrder` | follows R12 | trade KAT and node builders |
+| R39 | [CTR-TOK-20](../../contracts/token-wrappers.md#CTR-TOK-20): `mtxWrapOrder(address underlying, WrapOrder, bytes sig)` / `uaWrapOrder(…, UAWrapOrder, …)` | `mtxWrapOrder` takes `UAWrapOrder` + `UASig` (today's `uaWrapOrder`); `WrapOrder`, `CancelWrapOrder` and their vectors move to legacy | a pair, merged | — |
+| R40 | NET-EVM-06 (PR #9): the gate `runtime × 1,530 + 2^24` ("the owner's and stays") and the fit test "regular × 1.05 < 2^24 and total × 1.05 ≤ the limit" | Owner (Q14). Controller proposal: the testnet gate keeps the owner's formula; before a public deploy the gate takes the measured regular + state gas of the release transaction (a fork or local simulation, through `deployImplementation`), × 1.05, against that chain's limit | the formula refuses every token kind at 60 M; the fit test is the rule §4 uses | `DeployBase._releaseGasNeed` / `_requireReleaseGas`, `e2e.py require_release_gas`, `test_registryDeployGate` |
+| R41 | PQZ set parameters `roll_max` and `debit_min_gas`, measured on the `uaExecute` relay path (`n2560-kmax16384`: "TIGHT: uaExecute 6,032 under … re-run the rollscan after a contract change") | Re-measured at all four sets on the merged `mtxExecute` (§9 step 5) with old → new. Any change of a value is a set-parameter decision of the owner (Q15); the 2026-10-27 rule (`ROLL_MAX` 48 if the margin is gone) applies as stated | the merge adds R17's check, B's allow-list branch and C's guard to that path | if `debit_min_gas` moves: `set.toml`, `gen_set.py`'s `PqzSet` comment, `UARegistryLib` |
+| R42 | [hedera.md §2 Payload](../../networks/hedera.md#payload): "the `MetaOp` v1 **is** the token's EIP-712 `MetaTransfer`"; "a SCaaS leg's `TradeOrder`" | "`MetaOp` v1 is the token's `UAMetaTransfer`, `from` the account's long-zero address zero-padded"; "a SCaaS leg's `UATradeOrder`" | follows R1, R12 | `hedera_kat.json`, `adapters/hedera.rs`, `HederaKat.t.sol` |
+| R43 | [job-api.md](../../node/job-api.md) error table: `OP_KIND_MISMATCH` = "a `ua*` entry on a job that is not `ua_metatx`" | "an entry that the per-kind call table ([NODE-JOB-20](../../node/job-api.md#NODE-JOB-20)) does not list for the job's kind" | names no longer carry the form | — |
+| R44 | job-api.md intake step 7a ("`ua_metatx` needs `token.features ∋ ua` and a registered `from`") and [NODE-GW-05](../../node/gateway.md#NODE-GW-05)'s `POST /v1/ua-metatx` gate (`features ∋ ua`, `registry() ≠ 0`) | Both apply only to a derived `from` or `to`; an all-native `ua_metatx` job runs at `registry() == 0` | follows R9 | gateway and intake code |
+| R45 | [NODE-MESH-09](../../node/mesh.md#NODE-MESH-09) EVM body (`WireMetaTx`: the fields of `MetaTransaction` or `MetaTransfer`), [NODE-MESH-08](../../node/mesh.md#NODE-MESH-08) intent id, [NODE-MESH-16](../../node/mesh.md#NODE-MESH-16) KAT cases | The EVM and Hedera token body becomes the UA structs (`evm.ua_meta_tx`), its intent id the UA digest, its KAT cases the regenerated rows; wallets keep the address body. Owner (Q18): build it in this round, or mark mesh relaying of EVM token ops unavailable (refused by name) until it lands | the address struct has no token entry left | `src/mesh/digest.rs`, `tests/mesh_vectors.rs` |
+| R46 | `MetaTxLib.MetaTransfer` and its pinned typehash | Owner (Q17): after R20–R22, R33, R42 no EVM entry or SPECIFIED EVM rule takes it; it moves to legacy with the bodies and its vectors. The non-EVM `MetaTransfer` (R30) is each family's own and stays | backup, not delete; not decided by grep | `metatransfer_kat.json` and its consumers |
 
 ## 6. Wallet and EIP-712 display
 
 Today an EOA's wallet shows `MetaTransfer(address from, address to, uint256 value, …)`. After the merge it shows
 `UAMetaTransfer(bytes32 from, bytes32 to, uint256 value, …)` and, for a named op, `UA<Op>(bytes32 from, …)`. The operation,
 amounts, lanes, deadline, fee, relayer and fee recipient stay on screen, named; `relayer` and `feeRecipient` stay `address`.
-`from` and `to` become 32-byte words with 12 leading zero bytes for a native.
+Every field that goes from `address` to `bytes32` for an EOA, per struct: `from` and `to` (`UAMetaTransfer`, `UA<Op>`),
+`destination` (`UATradeOrder`, receives the proceeds), `payee` (`UARelayFee`), and the nested payment's `from` and `to`
+(`UAReceiverFee`); with Q2a, `from` of the five wrap structs. Each is a 32-byte word with 12 leading zero bytes for a native.
 
 What is lost: a wallet treats an `address` field as an address (checksum, address book, warnings on known bad addresses) and a
-`bytes32` as hex. That is an expectation; **no wallet was tested**. It is the one cost the bytes cannot pay back.
+`bytes32` as hex. That is an expectation; **no wallet was tested**. With a 24-digit zero prefix the leading characters a user
+compares against an address-poisoning lookalike carry no information, so only the tail is left to check, on recipient
+fields too. It is the one cost the bytes cannot pay back.
 
-- **Our clients** (`clientkeys`, every `ua-*`) show a native id as its checksummed address (top 96 bits zero) and a derived id
-  as its `urn:scaas:ua:v1:<kind name>:<hex32>` before the user signs; the typed data itself does not change.
-- **A test wallet is needed** (Q7, controller proposal): before reset 2, sign the regenerated `UAMetaTransfer` and one
-  `UA<Op>` row of `typed_ops.json` in two widely used browser wallets and one hardware wallet, and record what each shows
-  (a text note in `docs/research/`, screenshots local). Whether a clear-signing descriptor can render a `bytes32` as an
-  address is not checked.
+- **Our clients (new work, not a mitigation).** `clientkeys` renders `urn:scaas:ua:v1:…` only in its Soroban module today and
+  has no `bytes32`-id renderer on EVM; no `ua-*` has one. The round adds one to `clientkeys/src/evm.js` and each `ua-*`: a
+  padded id as its checksummed address, a derived id as its URN ([NET-ALL-21](../../networks/README.md#NET-ALL-21)), before
+  the user signs. A phishing dapp does not go through our clients, so this does not reduce the risk above.
+- **A test wallet is needed** (Q7, controller proposal): before reset 2, sign the regenerated `UAMetaTransfer`, one `UA<Op>`
+  row of `typed_ops.json`, a `UATradeOrder` with a non-zero `destination` and a `UARelayFee` row in two widely used browser
+  wallets and one hardware wallet, and record what each shows (a text note in `docs/research/`, screenshots local). Whether a
+  clear-signing descriptor can render a `bytes32` as an address is not checked.
 - The primary type name keeps the `UA` prefix (Q3), so the wallet's title reads `UAMetaTransfer` for an EOA too.
 
 ## 7. Blast radius
 
-Counts from main `783bacee` by grep [R], plus PR #9; recounted at the build.
+Counts from main `783bacee` by grep [R], plus PR #9; recounted at the build by a grep of every listed area (docs: everything
+outside `history/`, `research/` and `superpowers/`).
 
 | Area | What changes |
 |---|---|
-| Contracts | the six token kinds, `MetaTokenBase`, `ERC20MetaTx`, `UAMetaTxBase`, `MetaTxBase` (split), `MtxPipelineLib`, `WrappedLib`, `TradeLib`, `ZetherLib`, `ZetherWrappedLib`, the PQZ layer and `PqzWrappedLib`, `MtxRelayFee`, `SCaaSDex` and `DexPuller`, `GovernanceRouterBase` / `GovernanceRouter` (Q4); interfaces `IERC20MetaTx`, `IMetaTx`, `IUALedger` (split), `ITradeToken`, `IZetherToken`, `IPqzToken`, `IConfidentialToken`, `IWrappedToken`, `IMetaTokenV2`: new interface ids; `HederaMandateWallet`, `MandateWallet`, `SmartKeyAccount` byte-identical (re-checked) |
-| Node | `abi.rs`, `guard.rs` (`CALL_TABLE`, both directions against `mtxSelectors` and `_uaAllowed`), `typed.rs`, `submit.rs`, `gateway.rs`, `metatx.rs`, `indexer.rs`, `chain.rs`, `dex/venue.rs`, `adapters/hedera.rs`, the legacy pull path module; the router rows (`gov_router`). The EVM `ua_metatx` precondition `registry() ≠ 0` becomes "only for a derived side" |
-| Job shape | Controller proposal (Q8): every merged EVM entry is a `ua_metatx` job (its shape already carries `from` as bytes32 and `auth` as `UASig`; `entry` names the `mtx*` name); `metatx` stays for the wallets' address entries; a `metatx` job or a `struct: "transfer"` job naming a token's merged entry is refused by name. **Operator note** with the release: EVM clients of the address token forms must move to `ua_metatx`; a job of the old shape is refused, never silently `dead` |
+| Contracts | the six token kinds, `MetaTokenBase`, `ERC20MetaTx`, `UAMetaTxBase`, `MetaTxBase` (split), `MetaTxLib` (structs and typehashes), `MtxPipelineLib`, `WrappedLib`, `TradeLib`, `ZetherLayer`, `ZetherLib`, `ZetherWrappedLib`, the PQZ layer and `PqzWrappedLib`, `MtxRelayFee`, `SCaaSDex`, `ISCaaSDex` (leg types) and `DexPuller`, `HederaAccountAuth` (the HIP-632 entry names), `GovernanceRouterBase` / `GovernanceRouter` (under every option, §3.1); interfaces `IERC20MetaTx`, `IMetaTx`, `IUALedger` (split), `ITradeToken`, `IZetherToken`, `IPqzToken`, `IConfidentialToken`, `IWrappedToken`, `IMetaTokenV2`: new interface ids; `HederaMandateWallet`, `MandateWallet`, `SmartKeyAccount` byte-identical (re-checked) |
+| PQZ set parameters | if R41 moves a value: `pqz-core/params/sets/<set>/set.toml`, `gen_set.py` (the `PqzSet` comment), the regenerated `PqzSet.sol`, `UARegistryLib` |
+| Node | `abi.rs` (token and DEX types), `guard.rs` (`CALL_TABLE`, both directions against `mtxSelectors` and `_uaAllowed`), `typed.rs` (per-kind rows; the shared `InvalidateNonces` and `mtxCancelNonce` rows split), `submit.rs`, `chain.rs` and `adapter.rs` (the nonce view: `mtxNonce(bytes32)` on tokens, `mtxNonce(address)` on wallets, by kind), `gateway.rs` (the `ua-metatx` gate, the DEX routes), `metatx.rs`, `indexer.rs`, `dex.rs` (UA intake, `UALegSettled` watcher), `dex/venue.rs`, `adapters/hedera.rs`, `src/mesh/digest.rs` (R45), the legacy pull path module; the router rows (`gov_router`); tests `tests/e2e.rs`, `tests/e2e_hedera.rs`, `tests/mesh_vectors.rs`. Rules: R43, R44, R45 |
+| Job shape | Controller proposal (Q8): every merged EVM entry is a `ua_metatx` job (its shape already carries `from` as bytes32 and `auth` as `UASig`; `entry` names the `mtx*` name); `metatx` stays for the wallets' address entries and `executeMetaTransaction`; a `metatx` job or a `struct: "transfer"` job naming a token's merged entry is refused by name. **Operator note** with the release: EVM clients of the address token forms must move to `ua_metatx`; the public DEX API takes `UATradeOrder` for SCaaS sell tokens and the UA cancel forms; the mesh's EVM token body changes (R45); a job of the old shape is refused, never silently `dead` |
 | Events | §2.4: new topics for EOA relayed operations; the indexer maps them; `pay_ref` lookups read `UAPaymentSettled` for EOAs |
-| Clients | `clientkeys` (about 50 files touch the forms), `ua-cxx` (9), `ua-dart` (6), `ua-dart-frb` (5), `ua-qt` (3), `ua-go` (1), `zether-prover` (3, `src/typed.rs`, the envelope tag), the PQZ provers' binding; [R] grep counts |
-| Vectors | `vectors/typed/typed_ops.json` (74 rows on main, 25 of them `UA*`; 112 on PR #9, 44 `UA*`): the address rows of merged ops retire, the `UA*` rows stay byte-identical under Q3; `vectors/ua/metatx3.json`, `uatrade_kat.json` unchanged under Q3; the `vectors/metatx/` transfer, pay and relay rows, the DEX order KAT and `selector_audit.json` regenerate |
-| Docs | `metatx.md` (CTR-MTX-09, -15, -17, -22, -23, -24, -28), `accounts.md` (CTR-UA-19, -26, -27), `dex.md` (CTR-DEX-15, -25), `zether.md` and `pq-zero-knowledge.md` (entry names), `token-wrappers.md`, `networks/README.md` (R15), `node/job-api.md`, `integration.md`, `decisions.md` entries for R1-R19 as ruled |
-| Tests | on the old base 86 test files, 6 helpers and 1 script did not compile, 1,383 of 2,142 tests [M-old]; by class: call shape (most, mechanical, carried by six helpers), address events (19 files), DEX leg shape (30), meaning reversed (at least 7: a native at `registry() == 0`, a native `mtxCancelNonce`, a native off the UA list), gas or size pins (33), typehash or interface pins (5), parity tests that lose their point (`MetaTxParity`). Recount on main after PR #9 |
+| Scripts and config | `script/pqz/e2e.py` (the UA binding for EOAs, the merged entry names, Q2a's rows if taken, `require_release_gas`), `script/ZetherE2E.s.sol`, `scripts/e2e-zether.sh`, `DeployBase` (`govRouter`, the `MtxRelayFee` CREATE2, the release gate of R40), `node.example.toml` and operator config (`governance_routers`, `params.relay_fee.router`) |
+| Clients | `clientkeys`: `src/evm.js` (the forms and a `bytes32`-id renderer, §6), `scripts/typed-ops-vectors.mjs`, `typed-ops-expected.mjs`, `typed-ops-cast-check.mjs`, `ua-sig-vectors.mjs`, tests `evm`, `typed-ops`, `ua-metatx3`, `ua-sig`, `pq-sig`, `ua-trade`. `zether-prover`: `src/typed.rs`, `src/envelope.rs` (a new UA binding function, `SCAAS-ZETHER-UA-ENVELOPE-V1` over `UAMetaTransaction`), `src/api.rs`, `tests/typed_ops.rs`. The PQZ provers' binding. The `ua-*` libraries hold no entry-form code (their hits are `UAAuth` registry digests) and change only by the renderer of §6 |
+| Vectors | Retire to legacy, regenerated by their generators: `smartcontracts/evm/test/vectors/metatransfer_kat.json` (node `abi.rs`, `metatx.rs`, `tests/mesh_vectors.rs`, `clientkeys` `evm.test.js`, `TokenKat.t.sol`, `MtxCtx.t.sol`), `metatx_kat.json` (same consumers), `trade_kat.json` (node `submit.rs`, `typed.rs`, `abi.rs`, `dex.rs`, `clientkeys` `evm.test.js` / `ua-trade.test.js`, `TradeKat.t.sol`, `UATradeVectors.t.sol`), `hedera_kat.json` (node `adapters/hedera.rs`, `HederaKat.t.sol`, `gen_hedera_kat.py`), `metatx-parity.json` (with `MetaTxParity`). Regenerate: `vectors/typed/typed_ops.json` (address rows of merged ops retire; the existing `UA*` rows stay byte-identical; Q2a adds five rows), PR #9's `plus_zero_slots.json`, `dex_order_kat.json`, `selector_audit.json`. `vectors/ua/metatx3.json` (its note names `uaPayReceiverFee`) and `uatrade_kat.json`: rows unchanged under Q3, notes renamed. **Unchanged:** `vectors/metatx/paymeta.json` and `relayref.json` (payId, payLane, relayRef: no `from`, no form), so no other family is touched |
+| Docs | `contracts/`: `metatx.md` (CTR-MTX-01, -05, -06, -09, -11, -12, -14, -15, -17, -18, -21, -22, -23, -24, -26, -27, -28), `accounts.md` (CTR-UA-19, -26, -27), `dex.md` (CTR-DEX-13, -15, -25, -26), `zether.md` (CTR-ZTH-06, -34, -51, entry names), `pq-zero-knowledge.md` (CTR-PQZ-21, entry names), `token-wrappers.md` (CTR-TOK-20), `settlement.md`, `tender.md` (CTR-TND-01), `asset-suite.md` (CTR-AS-13), `mandates.md` (CTR-ACC-12); `networks/`: `README.md` (NET-ALL-26, -28, -84), `evm.md` (NET-EVM-06, the `ua_metatx` relay rows), `hedera.md` (§2 Payload, the DEX row); `node/`: `job-api.md`, `gateway.md`, `mesh.md`, `submit-lanes.md`, `dex-venue.md`, `indexer-feeds.md`, `sponsorship.md`, `threat-model.md`; `clients/`: `signers-clientkeys.md`, `app.md`; `architecture.md`, `assets/settlement-kinds.svg`, `assets/token-tree.svg`, `integration.md`; `decisions.md` entries for every R row as ruled |
+| Tests | on the old base 86 test files, 6 helpers and 1 script did not compile, 1,383 of 2,142 tests [M-old]; by class: call shape (most, mechanical, carried by six helpers), address events (19 files), DEX leg shape (30), meaning reversed (at least 7: a native at `registry() == 0`, a native `mtxCancelNonce`, a native off the UA list), gas or size pins (33), typehash or interface pins (5), source pins (`MsgSenderLint.test_msgSenderReadsArePinned`, red at `4 != 7` on the spike tip; R24), parity tests that lose their point (`MetaTxParity`). Recount on main after PR #9 |
 
 ## 8. Risks and the invariants to keep
 
@@ -387,12 +466,26 @@ Counts from main `783bacee` by grep [R], plus PR #9; recounted at the build.
    `keyData` / `members` against the record and for a native id R17 refuses anything but `signature`.
 3. **Replay domains.** The domain names the contract, the chain and `chainUid`; one typehash per operation; one lane
    `(from, batch)` per id with natives padded; old address-form signatures cannot run (their typehashes and entries are gone);
-   the router signs `target`; a signed cancel is spent by its digest.
-4. **Relayable at fee 0.** Every merged entry accepts fee mode `NONE`, on every kind, with or without a registry for a native
-   subject.
+   the router signs `target`; a signed cancel is spent by its digest. A `UACancelNonce` binds no nonce (R19): a test signs
+   an operation at nonce n + 1 after a cancel of the same lane, lands the withheld cancel, and asserts the documented outcome
+   (the operation is dead); a second test shows the ordered form (`cancelNonce` through `mtxExecute`, `e.batch == lane`)
+   cannot land after a newer operation consumed its nonce.
+4. **Relayable at fee 0.** Every operation has a merged entry that runs at fee mode `NONE`, on every kind, with and without a
+   registry for a native subject. The entries whose point is a fee are listed and not tested at `NONE`:
+   `mtxTransferWithFee` (PERCENT or FIXED with a bound non-zero recipient; at 0 it is `mtxTransfer`), the payee leg of
+   `mtxPayReceiverFee` (`fee > 0`; the payer's leg is `NONE`), `mtxRelayFee` and `MtxRelayFee.relay` (the relay fee is their
+   point; the relayed call runs at `NONE`); `mtxWrapShield` with the native coin is not relayable at all
+   ([CTR-MTX-19](../../contracts/metatx.md#CTR-MTX-19), review C0-18). Every other merged entry is tested at `NONE`.
 5. **All or nothing**, the call before its fee, as [CTR-MTX-16](../../contracts/metatx.md#CTR-MTX-16).
 6. **Never lose ciphertext**; no new read on a plain transfer (CTR-GOV-11); storage layout pinned; `_msgSender()` is
    `UA_POOL` only for a derived subject.
+7. **Lever D, if taken.** The module's code is pinned by hash in `Env` and passes a `LinkClosure`-style opcode check: no
+   `SSTORE`, `TSTORE` (the ticket slots), `CALL` with value, `DELEGATECALL`, `CREATE` / `CREATE2`, `SELFDESTRUCT` or `LOG*`.
+   The token's `fallback` is not `payable`, reverts on every selector the module does not serve, and never answers
+   `isValidSignature` (so `SigCheck._erc1271` cannot take a module return as the magic). The fallback cannot be reached as an
+   allow-listed self-call (`_mtxRule` / `_uaAllowed` list no module selector), and a call through `MtxRelayExecutor.exec` or
+   the DEX's `_interact` reaches only the read-only views. Tests: each of these, and a mutant module that writes a slot must
+   turn the opcode check red.
 
 **Risks** (spike §7, then new):
 
@@ -401,22 +494,26 @@ Counts from main `783bacee` by grep [R], plus PR #9; recounted at the build.
 3. A native `UASig`'s ignored fields (closed by R17 if taken).
 4. The DEX's refusal list (`_interact` refuses `ITradeToken.mtxTrade.selector`): with old-release tokens on one chain, old
    selectors and the old order shape would need a place. Nothing is live with value; at mainnet this returns.
-5. `mtxCancelNonce` without envelope (R19).
+5. `mtxCancelNonce` without envelope and without a nonce bound (R19, invariant 3).
 6. `mtxTransfer` from an EOA now reaches a derived `to`: the receiver rule is the UA path's.
 7. **The numbers move.** The spike's base is not PR #9's; the Zether savings are upper bounds after CTR-ZTH-94; `WrappedToken`
-   may still miss 60 M after M + A2 + D (§4).
+   misses 60 M on the projection even after M + A2 + D (§4).
 8. **Library splits** (`ZetherLib`, and L if taken): DELEGATECALL storage, `this`, `msg.sender`, return data, the guard,
    `LinkClosure` pins; the class of each fix checked in every library.
-9. **Relayed proofs.** The EOA binding moves to `TAG_UA_ENVELOPE`: a client that binds with the address tag yields a proof the
-   contract refuses. Confirm in the build that only the binding value changes, not a statement layout or relation; if a
+9. **Relayed proofs.** The EOA binding moves to the kind's UA tag: a client that binds with the address tag yields a proof
+   the contract refuses. Confirm in the build that only the binding value changes, not a statement layout or relation; if a
    layout changes, that is a new `proofSystemId`, new vectors in every client and a full gate.
-10. **New router address** (Q4): every release's `Env.govRouter` and the node's `governance_routers` change together.
+10. **New router address** (every option, §3.1): every release's `Env.govRouter` and the node's `governance_routers` change
+    together.
 11. **Interface ids** change; `mtxWrapOrder`'s ERC-165 check of a leg and the DEX's ledger check must ask the right
     interface after the `IUALedger` split.
 12. **Test repairs can hide a change of meaning**: the "meaning reversed" class is reviewed by hand, not repaired by script.
-13. **Wallet display** (§6).
+13. **Wallet display** (§6), recipient fields included.
 14. **Hedera** was not run in the spike.
 15. **EOA gas** +0.9 to +1.0 K per relayed transfer, calldata; higher where calldata costs more, on every chain alike.
+16. **Lever D's dispatch path** (invariant 7): a module that writes, calls or logs would act as the token.
+17. **PQZ set margins**: `n2560-kmax16384`'s `roll_max` margin is 6,032 gas on the relay path the merge rewrites (R41).
+18. **Mesh and the node's DEX** lose their only valid token body or gain new intake (R45, §3.4): new node work, not renames.
 
 ## 9. Measurement plan after PR #9
 
@@ -427,36 +524,49 @@ Nothing runs before PR #9 merges (owner 2026-11-04). Then, on a branch from main
    in the repo; full logs local, one summary committed).
 2. **Sizes** (`forge build src --sizes --json`, default set `n2304-kmax4096`): every kind, `SCaaSDex`, `GovernanceRouter`,
    `MtxRelayFee`, `MtxPipelineLib`, `WrappedLib`, `ZetherLib`, `ZetherWrappedLib`, `PqzWrappedLib`, the wallets, for: base;
-   M; M + A2 (with and without `executeMetaTransaction`'s address form); M + A2 + D; M + A2 + L; M + A2 + L + D; and the
-   regulated stand-in on `NormalToken` and `WrappedToken`.
-3. **Deploy gas**, regular + state, per implementation and library, each its own transaction (the method of
-   `ZetherDeploy.t.sol`), against 60 M and 70 M.
+   M; M + Q2a (the wraps); M + Q2a with and without `executeMetaTransaction`'s address form; M + A2 + D; M + A2 + L;
+   M + A2 + L + D; and the regulated stand-in on `NormalToken` and `WrappedToken`.
+3. **Deploy gas** per implementation and library, each its own transaction, by the method of governance's
+   `GovDeploy.t.sol` `test_releaseGasPerKind` (regular × 64/63 + state, × 1.05), plus the frame `deployImplementation` adds,
+   measured once on the factory path; reported as the gas asked against 60 M and 70 M, and regular × 1.05 against 2^24.
 4. **Gas** (forge, deterministic; no timing, no calibration): `GovGas` rows, `MetaTxGasV2` rows, `PlusZero` slots on every
    kind, EOA → EOA and EOA → UA, and what the spike did not run: generic `mtxExecute`, `mtxPayReceiverFee`, `mtxTrade` through
    the DEX, a Zether and a PQZ relayed op.
-5. **Tests**: the recount of §7 on the merged tree; `test/merge` and the eight mutants, plus a Hedera case and a router case.
+5. **PQZ set parameters** at all four sets through `script/pqz/at-set.sh` (one run per work tree, `PqzSet.sol` restored):
+   `test_gas_rollMax_relayedFullTx`, the rollscan, and the `debit_min_gas` measurement, on the merged `mtxExecute`, each with
+   old → new. A value that moves goes to the owner (R41, Q15).
+6. **Tests**: the recount of §7 on the merged tree; `test/merge` and the eight mutants, the R19 cancel tests, invariant 7's
+   tests if D is measured, plus a Hedera case and a router case.
 
 **What decides:** step 3 against §4's rule 1 picks the lever set; step 2 shows whether `WrappedPqzToken` leaves
-`_above64KiB`; step 4 is reported with old → new, it decides only if a lever's hot-path cost is out of line. Results go into
-this spec as a dated table and into the research note's re-measure line.
+`_above64KiB`; step 4 is reported with old → new, it decides only if a lever's hot-path cost is out of line; step 5 decides
+nothing by itself (set parameters are the owner's). Results go into this spec as a dated table and into the research note's
+re-measure line.
 
 ## 10. Open questions for the owner
 
 | # | Question | Recommendation |
 |---|---|---|
-| Q1 | Accept the merge on A + B + C and the rulings R1, R2, R4, R5, R7, R9, R12 (CTR-MTX-09 reversed) | Yes: it is the owner's direction, it needs no registry for an EOA, and B and C are what make it work |
-| Q2 | A2: the five wrap entries and `executeMetaTransaction` on the one path on tokens (R3) | Yes; `executeMetaTransaction` stays as the alias name on tokens and in its address form on the wallets |
-| Q3 | Keep the `UA` prefix on typed struct names (`UAMetaTransfer`, `UA<Op>`) | Yes: no UA-side vector or client digest changes; a rename to `MetaTransfer(bytes32 …)` buys a title on screen for a full regeneration |
-| Q4 | Merge the `GovernanceRouter`'s 19 pairs (R14) | Yes: one rule for every signed entry; G19 is untouched |
-| Q5 | Lever 3 (D) and the library pattern (L): in this round, chosen by §4's rule | Yes, measured after PR #9; take the smallest set that meets the target |
-| Q6 | Target: `NormalToken`, `WrappedToken` and their regulated stand-ins fit a 60 M deploy; the Zether kinds reported, decided later | Yes |
-| Q7 | A test of the display in real wallets before reset 2 (§6) | Yes, small and manual |
-| Q8 | Node: every merged EVM entry is a `ua_metatx` job; `metatx` for the wallets; old shapes refused by name | Yes: the shape exists; only the entry names change |
+| Q1 | Accept the merge on A + B + C and its rulings; the reversals are R1 (CTR-MTX-09, owner 2026-10-08) and R12 (CTR-DEX-25's display rationale, owner 2026-10-13); the follow-on rows R2, R4, R5, R7, R9, R20–R31, R33–R39, R42–R44 | Yes: it is the owner's direction, it needs no registry for an EOA, and B and C are what make it work |
+| Q2a | Move the five no-twin wrap entries to new UA structs (`UAWrap`, `UAWrapLeg`, `UAWrapToUA`, `UAAddReserve`, `UAWrapShield`; native-only) | Only if §9 shows their bytes are needed for §4's target; otherwise they stay on `Envelope` with `address from` (already one entry each) |
+| Q2b | `executeMetaTransaction` on tokens: (1) the 2026-11-01 ruling stands, address form, `0x47aea5b5`, `bool`; or (2) the owner reverses it and the name leaves tokens | (1), as ruled; §9 measures (2) so the owner sees its size |
+| Q3 | Keep the `UA` prefix on typed struct names (`UAMetaTransfer`, `UA<Op>`) | Yes: no existing UA-side row or client digest changes; new rows only with Q2a |
+| Q4 | Merge the `GovernanceRouter`'s 19 named pairs (R14); the router's address changes under every option | Yes: one rule for every signed entry; G19 is untouched |
+| Q5 | Lever 3 (D) and the library pattern (L): in this round, chosen by §4's rule | Yes, measured after PR #9; D only with §8 invariant 7 and its tests |
+| Q6 | Target: `NormalToken`, `WrappedToken` and their regulated stand-ins fit a 60 M deploy as asked (total × 1.05); the Zether kinds reported, decided later | Yes |
+| Q7 | A test of the display in real wallets before reset 2 (§6), with a `UATradeOrder` (`destination`) and a `UARelayFee` (`payee`) row | Yes, small and manual |
+| Q8 | Node: every merged EVM entry is a `ua_metatx` job; `metatx` for the wallets and `executeMetaTransaction`; old shapes refused by name; R43 and R44 | Yes: the job shape exists; the intake, gateway, DEX and mesh rules change with it (§7) |
 | Q9 | R17: a native `UASig` with non-empty `keyData` or `members` is refused | Yes |
 | Q10 | R18: `UA…` events only on merged paths | Yes |
-| Q11 | R15: the one-rule row in NET-ALL-84 | Yes |
-| Q12 | Review of this spec before acceptance: it reverses owner rules and touches every signed path | One adversarial review by one other model (Codex or agy, owner's choice of credits) on §2, §5 and §8 before acceptance; the full multi-model review stays with the contracts audit after the round |
+| Q11 | R15, R30, R31: the one-rule sentence in NET-ALL-28, a question row in NET-ALL-84, NET-ALL-26 re-pointed to `UAMetaTransfer` | Yes |
+| Q12 | Review of this spec before acceptance: it reverses owner rules and touches every signed path | As TODO records: after PR #9 merges and `main` is merged in, Fable for the counter-review and Codex for security, signatures and EIP-712 (§2, §5, §6, §8), both on the real base; the full multi-model review stays with the contracts audit after the round |
 | Q13 | Branches `token-merge` and `token-core` | Keep as reference, never merged; the harness is ported (§9) |
+| Q14 | R40: the public-chain deploy gate and fit test (NET-EVM-06) | The owner's formula stays as the testnet gate; a public deploy is gated on the measured regular + state gas × 1.05 of the release transaction, regular × 1.05 < 2^24 |
+| Q15 | R41: `roll_max` / `debit_min_gas` if §9 step 5 moves them | Apply the 2026-10-27 `roll_max` rule as stated; any other value change is the owner's, with old → new |
+| Q16 | R32: CTR-ACC-12 (UA-5c mandate-wallet twins) | (b) Defer it: it follows the owner's 2026-11-03 "the wallets keep the address surface"; UA-5c reopens it with (a), merged entries, as its proposal |
+| Q17 | R46: `MetaTxLib.MetaTransfer` on EVM | Move it to legacy with the bodies once R20–R22, R33 and R42 are ruled; the non-EVM `MetaTransfer` stays |
+| Q18 | R45: mesh `evm.ua_meta_tx` in this round, or mesh relaying of EVM token ops unavailable until it lands | Build it in this round: mesh EVM relaying is BUILT today and reset 2 should not drop it |
+| Q19 | R19: `cancelNonce` joins `_uaAllowed`; clients and the node offer the nonce-ordered cancel by default | Yes |
 
 ## 11. Testnet: between reset 1 and reset 2
 
@@ -464,9 +574,51 @@ this spec as a dated table and into the research note's re-measure line.
   today's two forms. Clients and node built for it use the address forms.
 - **This round** builds and tests locally only; nothing touches the live testnet stack.
 - **Reset 2** (after this round merges): without a backup, as ruled; every kind, `DEPLOY_ZETHER=1`, the new `MtxRelayFee` and
-  `GovernanceRouter` addresses, the PQZ / Zether e2e with an EOA relaying a proof under the UA binding, an EOA `mtxTransfer` to
-  an EOA and to a UA, a router op signed by an EOA, Blockscout re-verification. Signatures made against reset 1's contracts do
-  not run on reset 2 (new typehashes, new selectors, new addresses).
+  `GovernanceRouter` addresses, the PQZ / Zether e2e (`e2e.py`, `ZetherE2E.s.sol`) with an EOA relaying a proof under the UA
+  binding, an EOA `mtxTransfer` to an EOA and to a UA, a router op signed by an EOA, a DEX order with a SCaaS leg as
+  `UATradeOrder`, Blockscout re-verification. Signatures made against reset 1's contracts do not run on reset 2 (new
+  typehashes, new selectors, new addresses).
 - The size targets of §4 are not tested on the testnet (its ceiling is 128 KiB and its block 200 M); they are decided by §9's
   deploy-gas measurement on a local chain.
 - The contracts audit (work-order item 7) targets `main` after this round.
+
+## 12. Review (2026-11-04)
+
+A Claude workflow review of the first draft (security, rules, blast radius, wallet display). 32 findings confirmed, all
+resolved here; 8 not confirmed (security-1, security-2, rules-1, rules-2, rules-4, rules-5, wallet-3, wallet-7) and not acted
+on; within confirmed findings, the tag-name part of rules-10 and the `deployImplementation` detail of blast-2 were refuted.
+
+| Id | Severity | Resolution |
+|---|---|---|
+| security-3 | major | §8 invariant 7 and risk 16 for lever D (hash pin, opcode check, non-payable fallback, no `isValidSignature`, no self-call reach, mutant); §4 lever row and Q5 tie D to it |
+| security-4 | minor | R19 states that `UACancelNonce` binds no nonce, names the ordered form, proposes `cancelNonce` on `_uaAllowed` (Q19); invariant 3 adds both tests |
+| security-5 | minor | Invariant 4 restated per operation, with the fee-carrying entries listed; Goal 2 follows |
+| rules-3 | major | R20–R29 cover CTR-MTX-01, -05/-06, -11, -12, -18, -21, -22, -26, -27, -29; §7 Docs lists them |
+| rules-6 | major | R30 rewrites NET-ALL-26, R31 NET-ALL-28 (with the one-rule sentence); R15 is a question row only |
+| rules-7 | major | The one-rule text names per chain which subjects the signed entry takes (§1, R31) |
+| rules-8 | major | R32 and Q16 put CTR-ACC-12 to the owner; §1 non-goal names it |
+| rules-9 | major | R33 (CTR-TND-01), R34 (CTR-AS-13); MetaTransfer's fate is owner row R46 / Q17, not a grep |
+| rules-10 | major | R35 (CTR-ZTH-06, -34, -51) and R36 (CTR-PQZ-21); §2.1 and §3.3 name both UA tags |
+| rules-11 | major | R12 cites CTR-DEX-26; R37 (CTR-DEX-13), R38 (CTR-DEX-15), R39 (CTR-TOK-20) added |
+| rules-12 | major | §4 thresholds use the × 1.05 fit test; R40 rewrites NET-EVM-06 for public chains |
+| rules-13 | major | R43 (OP_KIND_MISMATCH), R44 (step 7a, gateway gate), R45 (mesh); Q8 rewritten |
+| rules-14 | minor | §7 Docs row extended (settlement, tender, asset-suite, mandates, hedera, evm, node docs, signers-clientkeys); R42 for Hedera |
+| blast-1 | major | R41, Q15, §9 step 5 (rollMax test, rollscan, debit at four sets); registry non-goal qualified; §7 set-parameter row |
+| blast-2 | major | §4 thresholds ≈35.6 / 41.5 KB and verdicts recomputed; §9 step 3 uses `test_releaseGasPerKind` plus the factory frame |
+| blast-3 | major | The gate formula is the owner's: R40 and Q14, not "a tool fix"; gate code listed in R40 |
+| blast-4 | major | Mesh in §7 Node, R45, Q18 and the operator note |
+| blast-5 | major | §3.4 scopes the node DEX's UA intake as new work; §7 lists `dex.rs`, routes, typed-row split, operator note |
+| blast-6 | major | §2.1, §2.3, §7 state Q2a's five new structs and rows, native-only; Q3 qualified |
+| blast-7 | major | §7 Vectors lists the real address KATs and consumers; `paymeta.json` / `relayref.json` stated unchanged |
+| blast-8 | major | §3.1: the router changes under every option, its generic entries and cancel stated; Q4 only for the 19 pairs |
+| blast-9 | major | §7 Scripts and config row; §11 names the e2e scripts |
+| blast-10 | minor | §7 Node adds `adapter.rs`, `chain.rs`, `tests/e2e.rs`, `tests/e2e_hedera.rs` and the per-kind nonce view |
+| blast-11 | minor | §7 Clients replaced with the real `clientkeys` and `zether-prover` files; `ua-*` stated unchanged but for the renderer |
+| blast-12 | minor | §7 Docs extended and a recount by grep of `docs/` stated |
+| blast-13 | minor | §7 Contracts adds `ZetherLayer`, `MetaTxLib`, `ISCaaSDex`, `HederaAccountAuth`; Tests adds the `MsgSenderLint` pin (R24) |
+| wallet-1 | major | Same as blast-6, plus the wrap display in §6 and Q2a defaulting to no move |
+| wallet-2 | major | The alias recommendation is dropped; Q2b gives the owner's two positions, the ruling stands by default (R3) |
+| wallet-4 | major | R12 quotes CTR-DEX-25's rationale and is marked Reversed; Q1 lists it as a reversal |
+| wallet-5 | minor | §6 lists every address → `bytes32` field per struct and the poisoning effect; Q7 adds `destination` and `payee` rows |
+| wallet-6 | minor | §6 marks the `bytes32`-id renderer as new work, not a mitigation; §7 Clients lists it |
+| wallet-8 | minor | Q12 follows TODO: Fable and Codex after PR #9 on the real base, Codex's scope includes §6 |
