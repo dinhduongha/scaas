@@ -314,6 +314,6 @@ void validateKeyData(int kind, Object? keyData, {bool hederaNative = false}) {
     case 0x0132:
       _fndsa(d);
     default:
-      break; // mldsa44/65, slhdsa128s, pqz-mlwe: the length is the whole check
+      break; // mldsa44/65/87, slhdsa128s, pqz-mlwe: the length is the whole check
   }
 }

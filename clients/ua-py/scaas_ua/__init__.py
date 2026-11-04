@@ -72,6 +72,7 @@ KINDS = (
     (0x0133, 'slhdsa128s', False, (32,), 'slhdsa128s'),
     (0x0141, 'zether-bls12381', False, (128,), 'bls12381-g1'),
     (0x0108, 'secp256k1', False, (64,), 'secp256k1'),  # 2026-10-17, appended as in kinds.json
+    (0x0134, 'mldsa87', False, (2592,), 'mldsa87'),  # CTR-UA-39, 2026-11-04, appended as in kinds.json
 )
 # Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.
 PQZ_KEY_LENGTHS = (16384, 18432, 20480, 22528)  # the PQZ parameter sets' public key lengths (PqzSet.PK)
@@ -79,7 +80,7 @@ SCHEMES = ((0x0142, 'pqz-mlwe', PQZ_KEY_LENGTHS, 'pqz-mlwe'),)
 _BY = {k[0]: k for k in KINDS}
 _SCHEME = {s[0]: s for s in SCHEMES}
 GROUPS = ('p256', 'ed25519', 'secp256k1', 'bn254-g1', 'bls12381-g1', 'bls12381-g2', 'bn254-g2', 'mldsa44', 'mldsa65',
-          'fndsa512', 'slhdsa128s', 'pqz-mlwe')
+          'fndsa512', 'slhdsa128s', 'mldsa87', 'pqz-mlwe')
 PURPOSES = ('pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'receiver-fee',
             'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership')
 
@@ -109,7 +110,7 @@ def _tagged(kind):
 
 
 def _single_signing(kind):
-    return 0x0100 <= kind <= 0x0108 or 0x0110 <= kind <= 0x0113 or 0x0130 <= kind <= 0x0133
+    return 0x0100 <= kind <= 0x0108 or 0x0110 <= kind <= 0x0113 or 0x0130 <= kind <= 0x0134
 
 
 def is_native(kind):
@@ -125,8 +126,8 @@ def is_signing(kind):
 
 
 def is_pqz_holder(kind):
-    """Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512 (an msig per msig_pqz_eligible)."""
-    return 0x0130 <= kind <= 0x0132
+    """Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512, mldsa87 (CTR-UA-39; an msig per msig_pqz_eligible)."""
+    return 0x0130 <= kind <= 0x0132 or kind == 0x0134
 
 
 def is_member(kind, hedera_native=False):
@@ -456,7 +457,7 @@ def canonical_id(text):
 
 def msig_pqz_eligible(key_data, inner=None):
     """True when the classical members of an msig weigh less than its threshold (CTR-PQZ-12): a member is PQ if its kind is in
-    0x0130-0x0133, or it is an msig that is PQ-eligible itself. ``inner``: an msig member's key data by its 0x-hex id, the record's; none,
+    0x0130-0x0134, or it is an msig that is PQ-eligible itself. ``inner``: an msig member's key data by its 0x-hex id, the record's; none,
     or an inner that holds an msig (two levels only), is UAMemberUnknown: the key data alone does not show it."""
     d = _bytes(key_data)
     _need(len(d) >= 4 and len(d) == 4 + 36 * int.from_bytes(d[2:4], 'big'), 'length')
@@ -464,7 +465,7 @@ def msig_pqz_eligible(key_data, inner=None):
     def pq(o):
         k = int.from_bytes(d[o:o + 2], 'big')
         if k != 0x0120:
-            return 0x0130 <= k <= 0x0133
+            return 0x0130 <= k <= 0x0134
         kd = inner(_hx(d[o + 2:o + 34])) if inner else None
         if kd is None:
             raise UAError('UAMemberUnknown', _hx(d[o + 2:o + 34]))
@@ -684,7 +685,7 @@ def validate_key_data(kind, key_data, hedera_native=False):
         _msig(d, hedera_native)
     elif kind == 0x0132:
         _fndsa(d)
-    # mldsa44/65, slhdsa128s: the length is the whole check
+    # mldsa44/65/87, slhdsa128s: the length is the whole check
 
 
 # ----- the registry's explicit arguments (typed-signing R1 / R1b: TS-D10 … TS-D13; owner KEM rulings 2026-10-31) -----

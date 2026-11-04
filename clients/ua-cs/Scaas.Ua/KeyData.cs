@@ -277,7 +277,7 @@ public static partial class UA
             case 0x0113: Frost(d, BnG1, 64, BnR); break;
             case 0x0120: Msig(d, hederaNative); break;
             case 0x0132: Fndsa(d); break;
-            default: break; // mldsa44/65, slhdsa128s, pqz-mlwe: the length is the whole check
+            default: break; // mldsa44/65/87, slhdsa128s, pqz-mlwe: the length is the whole check
         }
     }
 }

@@ -332,5 +332,5 @@ func ValidateKeyData(kind uint16, d []byte, hederaNative bool) error {
 	case 0x0132:
 		return fndsa(d)
 	}
-	return nil // mldsa44/65, slhdsa128s, pqz-mlwe: the length is the whole check
+	return nil // mldsa44/65/87, slhdsa128s, pqz-mlwe: the length is the whole check
 }
