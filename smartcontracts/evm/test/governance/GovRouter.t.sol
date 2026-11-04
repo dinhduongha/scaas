@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
+import {GovernanceRouterBase} from "../../src/governance/GovernanceRouterBase.sol";
 import {IGovernanceRouter} from "../../src/governance/IGovernanceRouter.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
@@ -610,7 +611,7 @@ contract GovRouterTest is UARegistryBase {
     /// A target without code: refused by name, nonce unspent (a call to it would succeed and do nothing).
     function test_targetWithoutCodeRefused() public {
         bytes memory cd = _op(SET_LISTED_ONLY, true, pq, address(0xC0DE), abi.encode(true));
-        vm.expectRevert(abi.encodeWithSelector(IGovernanceRouter.TargetHasNoCode.selector, address(0xC0DE)));
+        vm.expectRevert(abi.encodeWithSelector(GovernanceRouterBase.TargetHasNoCode.selector, address(0xC0DE)));
         _run(cd);
         assertEq(router.uaNonce(pq, 0), 0);
     }

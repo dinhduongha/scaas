@@ -114,6 +114,9 @@ library GovernanceRouterTypes {
 ///         path: `_execute` (`mtxExecute`, `executeMetaTransaction`, `mtxBatch`), `uaExecute` and `uaBatch` refuse; the
 ///         router's ops are on neither allow-list. `cancelNonce`, `mtxCancelNonce`, `uaCancelNonce` stay. **UNAUDITED.**
 abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
+    /// @notice A signed op names a `target` with no code: the call would do nothing and spend the nonce.
+    error TargetHasNoCode(address target);
+
     // Transient slots, written as literals (assembly takes no keccak256 constant).
     bytes32 private constant _SUBJECT = 0x20935f8cb59257160a8ea6e9f7009952d0d53b805b693a0e0c04a129f2a5ab0e; // keccak256("scaas.govrouter.subject")
     bytes32 private constant _TARGET = 0xa1dd93cf1660937b99999b07adb12f34b563f6b0925eff1ae679d08fb0b5a482; // keccak256("scaas.govrouter.target")
@@ -122,7 +125,7 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
         UAMetaTxBase(domainName, chainUid_, registry_, smartKeyAccountImpl_, hedera_)
     {}
 
-    /// @inheritdoc IGovernanceRouter
+    /// @notice The subject of the live call, to the live target only; 0 to any other caller and outside a call.
     function subject() external view returns (bytes32 s) {
         address t;
         assembly ("memory-safe") { t := tload(_TARGET) }
