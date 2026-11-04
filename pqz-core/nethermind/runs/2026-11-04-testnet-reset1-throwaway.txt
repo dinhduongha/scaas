@@ -1,0 +1,120 @@
+# SCaaS testnet reset 1, throwaway copy first (owner 2026-11-04, TODO pre-freeze item 2), as on 2026-10-22. The live directory
+# was only read (genesis.json); nothing live was changed in this part. Image scaas/nethermind-pqz:2.2.0-pqz7
+# (sha256:c31ce7e1b0a304fb5ce9df8b0bae686ff43ddcc94486ec583e7856b3d9bffdcd, runs/2026-11-04-image-pqz7.txt), commit bf6f3d04.
+
+## 1. Chainspec (from the LIVE genesis.json, read only; <scratch> = a session scratch directory)
+$ python3 -I chain/patch-chainspec.py --check; python3 -I chain/add-schedule.py --check
+patch-chainspec --check: ok
+add-schedule --check (n2304-kmax4096, pqzl 0xef1ffbcb…): ok
+$ python3 -I chain/patch-chainspec.py <live>/genesis.json chain/engine-pqz.json 0 <scratch>/genesis.reset.json --testnet-reset
+<scratch>/genesis.reset.json: engine.Pqz replaced (first timestamp 0 = 0x0, 1 schedule(s), 26 rows); diff: 1 added lines, 2 removed; params changed: eip7954TransitionTimestamp 1 -> removed, maxCodeSize 0x10000 -> 0x20000; genesis header changed: none
+# chain/engine-pqz.json = the live engine.Pqz (compared: equal). The MLDSA87 schedule by add-schedule.py --mldsa87 at the earliest
+# timestamp its rule admits (>= now + 300 s; here now + 900 s), calibration input = the same engine-pqz.json, so every row
+# stays as it is and only mldsa87Gas is added; on the live reset (started after T) every block from 1 on runs schedule 1
+$ T=$(( $(date +%s) + 900 ))   # 1793796222 = 2026-11-04T12:43:42Z
+$ python3 -I chain/add-schedule.py <scratch>/genesis.reset.json chain/engine-pqz.json 1793796222 <scratch>/genesis.new.json --mldsa87
+<scratch>/genesis.new.json: schedule 1 added at 1793796222 = 0x6aeb287e: 26 rows (14 new of ops [7]), selftest 1721000, mldsa44 49000, mldsa65 68000, mldsa87 102000 (PROVISIONAL, not calibrated)
+  (the 14 op-7 rows: every one '+0.0 %', unchanged)
+$ semantic diff <live>/genesis.json <scratch>/genesis.new.json
+top keys same True; genesis header same True; accounts same True; engine.Clique same True
+params diff {'maxCodeSize': ('0x10000', '0x20000'), 'eip7954TransitionTimestamp': (1, None)}
+schedule 0 = live schedule 0: True; schedules 2; schedule 1 = schedule 0 + mldsa87Gas 102000 at 0x6aeb287e: True
+# engine.Pqz of genesis.new.json = runs/2026-11-04-testnet-reset1-engine-pqz.json
+
+## 2. Genesis hash: the new chainspec as it is (live signer, live allocations), node with mining off, no keys, no peers
+# container reset1-genesis (pqz7, --memory 1700m --cpus 2, 127.0.0.1:22792), scratch data dir
+block 0: 0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164 gasLimit 200000000 stateRoot 0xc2dbebdba4bc62772fdc523f390cc2eb91cdb04acd5106a688dd56769a4b5185
+# = the live genesis hash 0xf1f491ab…3164: unchanged, as inferred (params and engine.Pqz are not in the header)
+PQZ-START sha256=dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601 selftest=d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d max_input=524288 id_check_head=0 (genesis, empty database) openssl=0x30500050 mldsa_kat=605390e5a369ee568b19ead1733af824c7c1d286d7d24b86283238fc44a99334 set=n2304-kmax4096 addresses=PQZ:0x…5caa0f01,MLDSA44:0x…5caa0012,MLDSA65:0x…5caa0013 schedules=[{ts 0, rows 26 […], selftest 1721000, mldsa44 49000, mldsa65 68000}; {ts 1793796222, rows 26 […], selftest 1721000, mldsa44 49000, mldsa65 68000, mldsa87 102000}]
+# container removed, data deleted
+
+## 3. Throwaway signer copy: the same chainspec with a throwaway Clique signer in extraData (allocations unchanged)
+# COPY=<repo>/scratchpad/reset1-copy, chain/copy.sh init (throwaway key), config.signer.json: Init.IsMining removed,
+# TargetBlockGasLimit / GasCap 200,000,000, MaxTxSize 2 MiB, AcceptTxWhenNotSynced; signer only (pqzcopy-signer, 1700m, 2 CPUs),
+# 127.0.0.1:18545; genesis 0x73b81750502c44af73fc47e9ed7c34ac094ee556dfe028e9d72067b8d6c7cfe3 (its own: extraData differs)
+$ e2e.py head --rpc http://127.0.0.1:18545
+head rules: Amsterdam (EIP-7928 header field present)
+head 1 0xc39453677a1bfbb5b22de9e79e75584e16f24ac074c26591845b9fe5facc7038 gasLimit 200000000 gasUsed 0 ts 1793795423
+head: all checks passed
+$ python3 -I runs/2026-11-04-mldsa87-probe.py http://127.0.0.1:18545   # BEFORE T: the address is still a plain account
+head 4 ts 1793795438
+eip8355_probe_valid (7251 B): eth_call 0x; eth_estimateGas 484033
+eip8355_probe_invalid (7251 B): eth_call 0x; eth_estimateGas 484033
+# (inactive before T, as expected; this run used a first scratch version of the script, which printed the empty answers as FAIL; the kept script takes --inactive for this case)
+$ e2e.py codesize --rpc http://127.0.0.1:18545 --key <test key 0x…04> --sizes 65537:ok,119800:ok --gas 199900000
+head rules: Amsterdam (EIP-7928 header field present)
+ok    ok 65,537 B, tx.gas 199,900,000: status 0x1, eth_getCode 65,537 B, gasUsed 100,505,947, block 8
+ok    ok 119,800 B, tx.gas 199,900,000: status 0x1, eth_getCode 119,800 B, gasUsed 183,562,782, block 10
+codesize: all checks passed
+[rc=0]
+$ PQZ_SET=n2304-kmax4096 e2e.py probe --engine runs/2026-11-04-testnet-reset1-engine-pqz.json --schedule 0 --rpc http://127.0.0.1:18545 --genesis-hash 0x73b8…cfe3
+# (first attempt stopped: smartcontracts/evm/out/PqzPrecompileProbe.sol missing in the fresh worktree; forge build, then again)
+#   rows:     351 PQZ
+#   rows:      39 MLDSA65
+#   rows:      23 MLDSA44
+#   rows:      18 gas
+#   rows:       1 OP_SELFTEST
+#   rows:       1 genesis
+#   rows:       1 eth_estimateGas
+#   rows:       1 eth_chainId
+435 ok, 0 FAIL
+ok    MLDSA65 ua mldsa65 pop sig bit flipped: 0, same gas
+probe: all checks passed
+[rc=0]
+$ PQZ_SET=n2304-kmax4096 e2e.py e2e --engine … --schedule 0 --rpc http://127.0.0.1:18545 --key <test key 0x…04> --no-ua
+sender 0x1eff47bc3a10a45d4b230b5d10e37751fe6aa718 nonce 2
+check() transactions in blocks [75, 76, 77, 78, 80, 81, 82, 83, 84, 85]
+UAMldsaVerifier skipped (--no-ua: on 7622 it is deployed with the registry in P6g, plan R5)
+e2e: all checks passed
+84 ok, 0 FAIL
+[rc=0]
+
+## 4. Before T: UAMldsaVerifier(0x0134, 0x…5caa0014, pq_kat.json mldsa87 probe valid / invalid) by forge create (negative control)
+$ forge create src/ua/MlDsa.sol:UAMldsaVerifier --rpc-url http://127.0.0.1:18545 … --broadcast --constructor-args 308 0x…5caA0014 <valid> <invalid>   # head ts 1793796168 < T
+Error: server returned an error response: error code 3: execution reverted, data: "0x88cbdc74"   # = UAMldsaNoPrecompile(): the node ran the constructor's probe, nothing sent
+[rc=1, expected]
+
+## 5. After T (head ts > 1793796222): schedule 1 in force
+$ PQZ_SET=n2304-kmax4096 e2e.py probe --engine runs/2026-11-04-testnet-reset1-engine-pqz.json --rpc http://127.0.0.1:18545 --genesis-hash 0x73b8…cfe3   # last schedule
+435 ok, 0 FAIL; probe: all checks passed
+[rc=0]
+$ python3 -I runs/2026-11-04-mldsa87-probe.py http://127.0.0.1:18545
+head 176 ts 1793796298; MLDSA87 0x000000000000000000000000000000005caa0014, expect active
+probe overhead (identity precompile) = 22 gas
+ok   eip8355_probe_valid (7251 B): eth_call 0x0000000000000000000000000000000000000000000000000000000000000001 (want the word 1); eth_estimateGas 484033
+ok   eip8355_probe_valid through the probe contract: word 1, precompile gas 102006 (want 102006 = mldsa87Gas 102000 PROVISIONAL + 6 per extra word)
+ok   eip8355_probe_invalid (7251 B): eth_call 0x0000000000000000000000000000000000000000000000000000000000000000 (want the word 0); eth_estimateGas 484033
+ok   eip8355_probe_invalid through the probe contract: word 0, precompile gas 102006 (want 102006 = mldsa87Gas 102000 PROVISIONAL + 6 per extra word)
+mldsa87-probe: all checks passed
+[rc=0]
+$ forge create … UAMldsaVerifier … (as in 4, after T)
+deployedTo 0xb99b738492F2F5cEBd4D1faee0B00eF508778050 (tx 0xafe19d7c…a713): PRECOMPILE 0x…5caA0014, KIND 308
+verify(portable.json mldsa87 keyData, popMessage, pop) = true; the same with message 0x…01 = false; eth_estimateGas of the true call 493,387
+(two more copies of the verifier were created on the copy while checking forge's --json output; copy only)
+# 2026-11-04T12:45:54Z copy down: containers and network removed, data, throwaway key and keystore deleted
+
+## 6. Continued run (the first run was stopped by a mis-click before the live reset; owner: continue), 2026-11-04T12:55Z
+# The live directory was untouched (no .bak-pre-reset1 files, data dirs in place, both nodes on pqz6). The prepared
+# genesis.new.json of section 1 lived in a session scratch directory and T = 1793796222 had passed, so the chainspec was
+# made again the same way from the LIVE genesis.json (sha256 4fd51bbd…b584, unchanged since 2026-10-31; its engine.Pqz =
+# chain/engine-pqz.json). Choice: the MLDSA87 schedule at the EARLIEST timestamp add-schedule.py admits (now + 300 s, + 10 s
+# margin), not from genesis: the RUNBOOK's MLDSA87 route is add-schedule.py --mldsa87, which refuses a timestamp in the past
+# or at 0; the live reset starts after T, so block 1 and every later block run schedule 1 (only the empty genesis block is
+# schedule 0).
+$ python3 -I chain/patch-chainspec.py --check; python3 -I chain/add-schedule.py --check
+patch-chainspec --check: ok
+add-schedule --check (n2304-kmax4096, pqzl 0xef1ffbcb…): ok
+$ python3 -I chain/patch-chainspec.py <live>/genesis.json chain/engine-pqz.json 0 <scratch>/genesis.reset.json --testnet-reset
+<scratch>/genesis.reset.json: engine.Pqz replaced (first timestamp 0 = 0x0, 1 schedule(s), 26 rows); diff: 1 added lines, 2 removed; params changed: eip7954TransitionTimestamp 1 -> removed, maxCodeSize 0x10000 -> 0x20000; genesis header changed: none
+$ T=$(( $(date +%s) + 310 ))   # 1793797293 = 2026-11-04T13:01:33Z
+$ python3 -I chain/add-schedule.py <scratch>/genesis.reset.json chain/engine-pqz.json 1793797293 <scratch>/genesis.new.json --mldsa87
+<scratch>/genesis.new.json: schedule 1 added at 1793797293 = 0x6aeb2cad: 26 rows (14 new of ops [7]), selftest 1721000, mldsa44 49000, mldsa65 68000, mldsa87 102000 (PROVISIONAL, not calibrated)
+  (the 14 op-7 rows: every one '+0.0 %', unchanged)
+# engine.Pqz of the new file = the one of section 1 apart from schedule 1's timestamp (compared: True);
+# runs/2026-11-04-testnet-reset1-engine-pqz.json now holds it (timestamp 0x6aeb2cad).
+# Genesis hash of THIS file: container reset1-genesis-check (pqz7, --memory 1700m --cpus 2, 127.0.0.1:22792, datadir on tmpfs,
+# config.rpc.json without peers, admin URLs or keys; mining off)
+block 0: 0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164 gasLimit 200000000 stateRoot 0xc2dbebdba4bc62772fdc523f390cc2eb91cdb04acd5106a688dd56769a4b5185
+PQZ-START sha256=dd0e7668… selftest=d6c01fbc… max_input=524288 id_check_head=0 (genesis, empty database) set=n2304-kmax4096
+# = the live genesis hash, unchanged; container removed. Sections 3-5 (codesize, probe, node e2e, MLDSA87 before / after T)
+# ran on the same image with the same params and rows (only T differs) and are kept; the live check repeats them.

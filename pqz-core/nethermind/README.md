@@ -8,8 +8,11 @@ Amsterdam (Glamsterdam) since its reset on 2026-10-21. The SCaaS testnet is a te
 code is unaudited. What PQZ is and how the library works: the parent [pqz-core README](../README.md), §3
 ["Two proof systems, one precompile"](../README.md#3-two-proof-systems-one-precompile).
 
-- **Image:** the plugin ships in the local Docker image `scaas/nethermind-pqz:2.2.0-pqz6` (built locally, never
-  pushed; live on the SCaaS testnet since 2026-10-31, `sha256:656d91d6…3e83`): Nethermind 2.2.0 + the reviewed library
+- **Image:** the plugin ships in the local Docker image `scaas/nethermind-pqz:2.2.0-pqz7` (built locally, never
+  pushed; live on the SCaaS testnet since reset 1 of 2026-11-04, `sha256:c31ce7e1…dcd`, `runs/2026-11-04-image-pqz7.txt`):
+  pqz6 below plus `MLDSA87` at `0x…5caa0014` (CTR-UA-39; its `mldsa87Gas` 102,000 is PROVISIONAL, not calibrated; the
+  RUNBOOK section "Code size 128 KiB" and "`MLDSA87`"), the same library `dd0e7668…e5601`. Before it, `2.2.0-pqz6` (live
+  2026-10-31 to 2026-11-04, `sha256:656d91d6…3e83`): Nethermind 2.2.0 + the reviewed library
   `dd0e7668…e5601` (byte-identical to pqz5's; set `n2304-kmax4096`, PQZL v5 `0xef1ffbcb…` / PQZH v3 `0x046859a8…`,
   `pqz_max_input()` 524,288) + the plan 5h Task 8d part 2b plugin (`id_check_head` in `PQZ-START`; the right
   `scaas.pqz.selftest` label `d6c01fbc…`), with the **calibrated** `engine.Pqz` rows (`chain/engine-pqz.json`, plan 5h
@@ -17,7 +20,7 @@ code is unaudited. What PQZ is and how the library works: the parent [pqz-core R
   multi-recipient transfer, P6-ANON S8; C PQZL core), `1.39.0-pqz3` (2026-10-19, never ran on the testnet),
   `2.2.0-pqz3` (2026-10-21; library `16dd99ce…` from `1adbd563`), `2.2.0-pqz4` (2026-10-25; library `0894d191…` from
   `54c7c88e`, the plan 5h Task 8d ids PQZL v4 / PQZH v2), `2.2.0-pqz5` (2026-10-26, provisional rows × 1.3),
-  `2.2.0-pqz6` (2026-10-31, calibrated rows). The `2.2.0-pqz5` image carries
+  `2.2.0-pqz6` (2026-10-31, calibrated rows), `2.2.0-pqz7` (2026-11-04, `MLDSA87`). The `2.2.0-pqz5` image carries
   pqz4's `scaas.pqz.selftest` label `23d7a1db…` (a Dockerfile literal then; the plugin's own start-up check uses the
   right hash `d6c01fbc…`); since plan 5h Task 8d part 2b `build-image.sh` passes the set's `SelfTest.ExpectedHash`
   as the label and checks it after the build (`2.2.0-pqz6` is the first image built so).
@@ -181,7 +184,7 @@ Dockerfile's `ffi` stage with `--build-arg PQZ_SET=<set>`, logs `runs/2026-10-26
 b), and `PQZ_SET=<set> build-image.sh <label>` builds that set's library, plugin and image (the `calib` target and
 `fresh-proofs`, which iterates both ids, stay the default set's). Provisional testnet rows per set:
 `chain/engine-pqz-provisional-<n>.json` (`n2048` / `n2304` / `n2560` / `n2816`, the R0 fix ids; the SCaaS testnet's live
-`2.2.0-pqz5` ran `engine-pqz-provisional-n2304.json` 2026-10-26 to 2026-10-31; `2.2.0-pqz6` runs the calibrated `engine-pqz.json`).
+`2.2.0-pqz5` ran `engine-pqz-provisional-n2304.json` 2026-10-26 to 2026-10-31; `2.2.0-pqz6` ran the calibrated `engine-pqz.json` until 2026-11-04; `2.2.0-pqz7` runs its rows as schedule 0 plus schedule 1 = the same rows + `mldsa87Gas` 102,000 PROVISIONAL, `runs/2026-11-04-testnet-reset1-engine-pqz.json`).
 
 **The reviewed library (review W-G, 2026-10-19).** `build-image.sh` reads `ExpectedLibrarySha256` from
 `Nethermind.Pqz/SelfTest.cs`, builds `libpqz_ffi.so` (the `ffi-export` target) and stops with `FAIL the built library is

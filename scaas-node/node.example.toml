@@ -96,8 +96,10 @@ chain_uid = "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164"
 # ua_registry = "0x..."                          # UARegistry: the only target of register / setKemKey / storePqzPop /
                                                  # setPqzKey call jobs (unset: refused); a relayed PQ register over
                                                  # max_gas_per_tx or the block gas limit is refused UA_REGISTER_SPLIT
-# governance_routers = ["0x..."]                 # GovernanceRouter ("governance_router" in deployments/<id>.json): the only
-                                                 # targets of gov_router jobs, direct or relayed (empty: refused)
+governance_routers = ["0xB64D2D5f27D2d5eA951409773343D856e41Fb8E0", "0xFeC9586a1639152bfAbC9F7946321F5aC9Dc6F52"]
+                                                 # GovernanceRouter ("governance_router" in deployments/<id>.json): the only
+                                                 # targets of gov_router jobs, direct or relayed (empty: refused); on 7622
+                                                 # since reset 1 (2026-11-04): deployments/7622.json's and 7622-pqz.json's
 # fee_recipient = "0x..."                        # cold wallet for fees of gateway meta-txs that leave feeRecipient
                                                  # unbound (R84); never a lane key. Unset: the fee goes to the sending lane.
 # tokens = [{ address = "0x...", decimals = 6 }] # registered tokens, imported into the store (R95, MESH R86)

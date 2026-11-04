@@ -186,9 +186,9 @@ the η-filtered final challenge; [params/sets/README.md](params/sets/README.md#p
   - `src/bin/pqz-vectors.rs` generates the test vectors: `smartcontracts/vectors/pqz/` for `n2048-kmax1024`,
     `smartcontracts/vectors/pqz/<set>/` for the other sets.
 
-**Live on the SCaaS testnet** (chain 7622, reset on path B on 2026-10-31; genesis hash `0xf1f491ab…3164`): the
+**Live on the SCaaS testnet** (chain 7622, reset on path B on 2026-10-31 and again on 2026-11-04, reset 1; genesis hash `0xf1f491ab…3164`): the
 Nethermind plugin `Nethermind.Pqz` ([nethermind/README.md](nethermind/README.md), image
-`scaas/nethermind-pqz:2.2.0-pqz6`, built locally, never pushed) loads `libpqz_ffi.so` (the Rust PQZL backend, set
+`scaas/nethermind-pqz:2.2.0-pqz7` since reset 1, `2.2.0-pqz6` before, built locally, never pushed) loads `libpqz_ffi.so` (the Rust PQZL backend, set
 `n2304-kmax4096`, reviewed library `dd0e7668…`) and adds three precompiles at 32-bit addresses (live since image
 `2.2.0-pqz4`, 2026-10-25; the earlier images served `0x5caa5000…0f01` / `…0012` / `…0013`):
 
