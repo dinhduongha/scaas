@@ -54,6 +54,8 @@ One contract per chain, CREATE2 at a predictable address, no owner, holds nothin
 asking a verified clone for its UA. It keeps operator rotation but needs a code-hash check per call and one deployment per
 issuer, and rotation would move powers away from the UA they were granted to, which contradicts identity by UA.
 
+**Also weighed and refused (owner 2026-11-04: keep the router):** `ua<Op>` entries in `GovernanceBase` itself, no `mtx*`. A native account signs `ua*` as its native kind, so it would cover every caller, and no shared router would exist; but each entry measures 287-301 B per kind (spec §3.6), about 13-15 entries put about 4-4.5 KB on every governed contract (estimate): `WrappedPqzToken` past the 74 KB deploy bound, `WrappedZetherToken` past 64 KiB, the base kinds further from a public block. The router adds about 0.2-0.5 KB per contract and keeps the verification in one audited place.
+
 ## 4. ABI, storage, events (EVM)
 
 - **Entries:** `grantRole(uint8, bytes32 account)`, `revokeRole(uint8, bytes32)`, `renounceRole(uint8)`,
