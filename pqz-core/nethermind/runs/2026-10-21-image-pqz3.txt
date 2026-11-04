@@ -8,7 +8,7 @@ $ python3 -I corpus.py bin/corpus.jsonl
 corpus bin/corpus.jsonl: 788 inputs {'honest': 35, 'negative': 714, 'flip': 30, 'fee0': 8, 'selftest': 1}
 [rc=0]
 
-$ docker build -f Dockerfile --progress plain --resource memory=4g --build-context ffisrc=bin/ffi-src --target ffi-export -o bin/ffi-out /home/ha/work/ainative/scaas/.claude/worktrees/nethermind-2.2
+$ docker build -f Dockerfile --progress plain --resource memory=4g --build-context ffisrc=bin/ffi-src --target ffi-export -o bin/ffi-out <repo>
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
@@ -83,7 +83,7 @@ $ docker build -f Dockerfile --progress plain --resource memory=4g --build-conte
 [rc=0]
 
 libpqz_ffi.so sha256 16dd99ce77d05a9bea9f54142979bc21511240aeff6d4442d784470a428c9caf, reviewed 16dd99ce77d05a9bea9f54142979bc21511240aeff6d4442d784470a428c9caf
-$ docker build -f Dockerfile --progress plain --resource memory=4g --build-context ffisrc=bin/ffi-src --target node --build-arg COMMIT=31b7954bc26f5c765ec6f0f44e6946cccd09f0c6+ffi@1adbd56318b3d07af76d8f61ffbbb27b4b4fd2b0 --build-arg FFI_SHA256=16dd99ce77d05a9bea9f54142979bc21511240aeff6d4442d784470a428c9caf -t scaas/nethermind-pqz:2.2.0-pqz3 /home/ha/work/ainative/scaas/.claude/worktrees/nethermind-2.2
+$ docker build -f Dockerfile --progress plain --resource memory=4g --build-context ffisrc=bin/ffi-src --target node --build-arg COMMIT=31b7954bc26f5c765ec6f0f44e6946cccd09f0c6+ffi@1adbd56318b3d07af76d8f61ffbbb27b4b4fd2b0 --build-arg FFI_SHA256=16dd99ce77d05a9bea9f54142979bc21511240aeff6d4442d784470a428c9caf -t scaas/nethermind-pqz:2.2.0-pqz3 <repo>
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile

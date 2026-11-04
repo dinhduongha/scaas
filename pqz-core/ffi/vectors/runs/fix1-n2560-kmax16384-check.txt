@@ -38,7 +38,7 @@ same selftest.json 2327 B
 same worstcase_noise.json 2578302 B
 same fee0.json 1154074 B
 pqz-vectors --check: 15 files, 10867170 B: ok
-	Command being timed: "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8b-fix/pqz-core/ffi/target/n2560-kmax16384/release/pqz-vectors --check"
+	Command being timed: "<repo>/pqz-core/ffi/target/n2560-kmax16384/release/pqz-vectors --check"
 	User time (seconds): 135.12
 	System time (seconds): 1.22
 	Percent of CPU this job got: 99%

@@ -92,7 +92,7 @@ PQZH without precompile where it fits).
 
 ## Global Constraints
 
-- Paths relative to `/home/ha/work/ainative/scaas`; worktree `.claude/worktrees/p6e-impl` on branch `p6e-relations`.
+- Paths relative to `<repo>`; worktree `.claude/worktrees/p6e-impl` on branch `p6e-relations`.
   Heavy commands — `pqz-core/pqzl/build.sh`, `params/codegen/run.sh` and `run_e_s1.sh` (docker), `rel3/relfix.sh`,
   `sv/*.sh`, every `cargo build|test|run`, node wasm runs, fuzz runs — only through `scripts/capped`, one at a time
   machine-wide. Python scripts, `cast keccak`, grep and the docs checker are light.

@@ -24,7 +24,7 @@ BLS12-381 precompiles (EIP-2537) answer with the right byte counts; EIP-7951 (se
 History: before 2026-08-31 the genesis declared Geth-style fork keys (`londonBlock: 0`, `pragueBlock: 0`, …) that
 Nethermind silently ignores, so the chain ran pre-London (no base fee, no PUSH0, no EIP-2537) and this profile had to
 be `berlin`. The chainspec was rewritten with Nethermind keys; details in
-`/home/dockers/mba-chain-nethermind/README-chainspec.md`. Lesson kept: Nethermind ignores unknown transition keys
+`~dockers/mba-chain-nethermind/README-chainspec.md`. Lesson kept: Nethermind ignores unknown transition keys
 without a log line, so every activation is **probed**, never trusted (`TRAPS.md` §"Private chain").
 
 Classical Zether is open on every chain with EIP-2537, this one included (owner ruling 2026-10-31, CTR-ZTH-52). PQZ (post-quantum

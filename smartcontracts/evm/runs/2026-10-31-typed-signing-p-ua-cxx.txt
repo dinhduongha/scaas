@@ -1,19 +1,19 @@
 # ua-cxx at commit 80f45c56
-    Checking scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
-    Checking scaas-ua-cxx v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cxx)
+    Checking scaas-ua v0.1.0 (<repo>/clients/ua-rs)
+    Checking scaas-ua-cxx v0.1.0 (<repo>/clients/ua-cxx)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.53s
--- Using the multi-header code from /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cxx/build/_deps/json-src/include/
+-- Using the multi-header code from <repo>/clients/ua-cxx/build/_deps/json-src/include/
 -- Configuring done (0.3s)
 -- Generating done (0.0s)
--- Build files have been written to: /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cxx/build
+-- Build files have been written to: <repo>/clients/ua-cxx/build
 [0/2] Re-checking globbed directories...
 [1/4] cargo build scaas-ua-cxx
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
-   Compiling scaas-ua-cxx v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cxx)
+   Compiling scaas-ua v0.1.0 (<repo>/clients/ua-rs)
+   Compiling scaas-ua-cxx v0.1.0 (<repo>/clients/ua-cxx)
     Finished `release` profile [optimized] target(s) in 3.44s
 [2/2] Linking CXX executable vectors_test
-Internal ctest changing into directory: /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cxx/build
-Test project /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cxx/build
+Internal ctest changing into directory: <repo>/clients/ua-cxx/build
+Test project <repo>/clients/ua-cxx/build
       Start  1: table_groups_purposes_constants
  1/13 Test  #1: table_groups_purposes_constants ......   Passed    0.01 sec
       Start  2: valid_rows

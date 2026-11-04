@@ -22,7 +22,7 @@ calldata floor puts a minimum on that regular gas:
 Under EIP-7623 alone the ≈ 418,900 B estimate holds (418,905 B for an all-non-zero call; the PQZ calls are ≈ 95 %
 non-zero bytes, so slightly more). **The ≈ 261,909 B limit comes from EIP-7976's 64 gas per byte, not from EIP-7623.**
 
-**The SCaaS testnet's chainspec** (`/home/dockers/mba-chain-nethermind/genesis.json`, Nethermind 2.2.0) activates
+**The SCaaS testnet's chainspec** (`~dockers/mba-chain-nethermind/genesis.json`, Nethermind 2.2.0) activates
 `eip7623TransitionTimestamp` 0, `eip7825TransitionTimestamp` 0 and, from timestamp 1, `eip7976TransitionTimestamp`,
 `eip2780TransitionTimestamp`, `eip8037TransitionTimestamp`, `eip8038TransitionTimestamp`: the **Amsterdam regime**.
 

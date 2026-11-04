@@ -1,6 +1,6 @@
 # Mining `_USER-DECISIONS.md` into the id map (SCaaS docs reorg, Phase 0)
 
-Repo: /home/dockers/odoo19/custom-addons/bamboo-dms/scaas. Source: `docs/research/_USER-DECISIONS.md` (2 705 lines,
+Repo: ~dockers/odoo19/custom-addons/bamboo-dms/scaas. Source: `docs/research/_USER-DECISIONS.md` (2 705 lines,
 Vietnamese, the owner's decisions + findings from code; line numbers include the 2-line banner at the top).
 Plan: `docs/history/plans/2026-10-07-docs-reorg.md` — read §2.6 (row `_USER-DECISIONS.md`), §3.1–§3.2 (id scheme;
 the last row of the §3.2 table is about UD units) and §8 Q14 (owner answered: UD decisions later replaced by specs are
@@ -43,7 +43,7 @@ should turn out to be restated by a spec ruling (merge) or replaced (superseded)
 
 ## Output
 
-Write `/tmp/claude-1000/-home-dockers-odoo19-custom-addons-bamboo-dms/4f1b7683-90d3-4f8a-97be-41d1bd9848db/scratchpad/ud-units.tsv`
+Write `<scratch>/ud-units.tsv`
 with header `alias	line	class	status	merge_into	superseded_by	topic	owner	date	target	title	note`
 (no tabs inside fields), covering every `##`/`###` section of the file (findings included, so the fact ledger can
 default them). Reply with counts by class/status, the list of `current` and `open` units, and doubtful calls

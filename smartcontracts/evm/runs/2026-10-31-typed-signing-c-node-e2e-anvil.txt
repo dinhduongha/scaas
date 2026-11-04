@@ -1,5 +1,5 @@
 # node-e2e-anvil at commit ca2d7b41
-   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/scaas-node)
+   Compiling scaas-node v0.1.0 (<repo>/scaas-node)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 8.54s
      Running tests/e2e.rs (target/debug/deps/e2e-f5e08e3069fb3f57)
 

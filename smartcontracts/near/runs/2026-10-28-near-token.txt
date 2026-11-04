@@ -32,15 +32,15 @@ INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bu
  │     Finished `release` profile [optimized] target(s) in 0.20s
 
 Modification timestamps of:
- |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_spike_p256.wasm" = SystemTime { tv_sec: 1793133928, tv_nsec: 574243442 }
- |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm" = SystemTime { tv_sec: 1793129403, tv_nsec: 791529972 }
+ |    "<repo>/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_spike_p256.wasm" = SystemTime { tv_sec: 1793133928, tv_nsec: 574243442 }
+ |    "<repo>/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm" = SystemTime { tv_sec: 1793129403, tv_nsec: 791529972 }
 
 • Running an optimize for size post-step with wasm-opt --enable-nontrapping-float-to-int --enable-bulk-memory...
     Finished wasm-opt -O in 191ms
 • done
 
 ✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
-     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm
+     -                Binary: <repo>/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm
      -                  Size: 84.3 KB (84274 bytes)
      - SHA-256 checksum hex : 9bee9d4175944d00002ccb269ca4bcab28146eaccd66aa635dfda793491d6a83
      - SHA-256 checksum bs58: BVhE3LQYqyEofvVvuuNsZDNKMQwTLugnRFNjtNSfoCqg
@@ -61,13 +61,13 @@ INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bu
  │     Finished `release` profile [optimized] target(s) in 0.15s
 
 Modification timestamps of:
- |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_test_receiver.wasm" = SystemTime { tv_sec: 1793133937, tv_nsec: 666366610 }
- |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm" = SystemTime { tv_sec: 1793133937, tv_nsec: 857892155 }
+ |    "<repo>/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_test_receiver.wasm" = SystemTime { tv_sec: 1793133937, tv_nsec: 666366610 }
+ |    "<repo>/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm" = SystemTime { tv_sec: 1793133937, tv_nsec: 857892155 }
 
 • Skipped running wasm-opt as final target exists and is newer than wasm produced by cargo
 
 ✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
-     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm
+     -                Binary: <repo>/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm
      -                  Size: 84.6 KB (84631 bytes)
      - SHA-256 checksum hex : e5b40e085ce6c09b48b95b7e4a6437b4f9083d87fbd8f2cc6d58602c544a9844
      - SHA-256 checksum bs58: GTfc3TVQgTG6cH4s1FkMqFrhfqNiNimnz3Lv5wQ7o8ps
@@ -88,13 +88,13 @@ INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bu
  │     Finished `release` profile [optimized] target(s) in 0.15s
 
 Modification timestamps of:
- |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_token.wasm" = SystemTime { tv_sec: 1793134175, tv_nsec: 706588185 }
- |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm" = SystemTime { tv_sec: 1793134176, tv_nsec: 79835889 }
+ |    "<repo>/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_token.wasm" = SystemTime { tv_sec: 1793134175, tv_nsec: 706588185 }
+ |    "<repo>/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm" = SystemTime { tv_sec: 1793134176, tv_nsec: 79835889 }
 
 • Skipped running wasm-opt as final target exists and is newer than wasm produced by cargo
 
 ✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
-     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm
+     -                Binary: <repo>/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm
      -                  Size: 196.0 KB (196020 bytes)
      - SHA-256 checksum hex : a3abe313874284e66213455f2e6a693230445542b5d1d6b65c5e2a8a32f665ce
      - SHA-256 checksum bs58: C1uUQSJjwqGZMBw5XR4kmyGR8ACT8gurG6fvY3uovxwo
@@ -178,7 +178,7 @@ cargo near build non-reproducible-wasm --no-abi
    Compiling p256 v0.14.0
    Compiling near-sdk v5.30.0
    Compiling rustls-webpki v0.103.16
-   Compiling scaas-near-common v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/common)
+   Compiling scaas-near-common v0.1.0 (<repo>/smartcontracts/near/common)
    Compiling rustls v0.23.46
    Compiling webpki-roots v1.0.11
    Compiling uriparse v0.6.4
@@ -206,10 +206,10 @@ cargo near build non-reproducible-wasm --no-abi
    Compiling json-patch v2.0.0
    Compiling reqwest v0.13.5
    Compiling near-jsonrpc-client v0.23.0
-   Compiling scaas-near-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/token)
-   Compiling scaas-near-spike-p256 v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/spike-p256)
-   Compiling scaas-near-test-receiver v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/test-receiver)
-   Compiling scaas-near-integration v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/integration)
+   Compiling scaas-near-token v0.1.0 (<repo>/smartcontracts/near/token)
+   Compiling scaas-near-spike-p256 v0.1.0 (<repo>/smartcontracts/near/spike-p256)
+   Compiling scaas-near-test-receiver v0.1.0 (<repo>/smartcontracts/near/test-receiver)
+   Compiling scaas-near-integration v0.1.0 (<repo>/smartcontracts/near/integration)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 13s
      Running unittests src/lib.rs (target/debug/deps/scaas_near_common-41db587762e4910d)
 

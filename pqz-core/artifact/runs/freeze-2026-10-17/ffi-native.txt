@@ -1,7 +1,7 @@
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
    Compiling digest v0.10.7
    Compiling sha3 v0.10.8
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 10.64s
      Running unittests src/lib.rs (target/release/deps/pqz_ffi-a2f0f14a3a261c37)
 
@@ -9,7 +9,7 @@ running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 0.84s
 test hooks in the production cdylib (must be 0): 0
 symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
@@ -20,8 +20,8 @@ c_abi: ok (0 failures)
     Checking keccak v0.1.6
     Checking cfg-if v1.0.5
     Checking cpufeatures v0.2.17
-    Checking pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/stmt)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/ffi)
+    Checking pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Checking generic-array v0.14.7
     Checking crypto-common v0.1.7
     Checking block-buffer v0.10.4
@@ -30,7 +30,7 @@ c_abi: ok (0 failures)
     Checking sha3 v0.10.8
     Checking sha2 v0.10.9
     Checking hkdf v0.12.4
-    Checking pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/pqzh/ligero)
+    Checking pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
 warning: very complex type used. Consider factoring parts into `type` definitions
    --> src/pqzl.rs:451:6
     |

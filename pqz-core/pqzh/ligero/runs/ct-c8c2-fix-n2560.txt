@@ -1,5 +1,5 @@
 # ct c8c2-fix-n2560: HEAD 5ffc4b918f5cad18116f60a00f1a3975477a4e38, diff sha256 e3b0c44298fc1c14, valgrind-3.22.0, rels 1, nprove 1, set n2560-kmax16384
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8c2/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 3.55s
 rustc 1.97.1 (8bab26f4f 2026-07-14)
 {"rel": "R_REG", "run": 0, "prove": "Ok(230526)", "verify": true, "fnv": "b3070d6c"}
@@ -7,7 +7,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==742397== Memcheck, a memory error detector
 ==742397== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
 ==742397== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
-==742397== Command: /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8c2/pqz-core/pqzh/ligero/target/ct-n2560-kmax16384/release/ct 1 1
+==742397== Command: <repo>/pqz-core/pqzh/ligero/target/ct-n2560-kmax16384/release/ct 1 1
 ==742397== Parent PID: 742163
 ==742397== 
 ==742397== 

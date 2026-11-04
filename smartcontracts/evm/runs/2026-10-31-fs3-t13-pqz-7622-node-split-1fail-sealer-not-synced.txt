@@ -163,13 +163,13 @@ ok    tx pqUSD mtxPrepareAcc(bob, 0): 0xffb703544c7a537fc722e992d8939930a79ecd66
 ok    tx pqUSD mtxPrepareAcc(bob, 1): 0xd4e18eba8c87e3e231c07ee0bc3a08b4c920b52ccbf842c199a9231f1634ec05 block 1867 gasUsed 22,944,465 (calldata 68 B)
 FAIL  aborted: RuntimeError: no receipt for 0x50d04bb5b19f89b4e162c7588feae04b87acd27c4d176d76958af86b782e51e4
 Traceback (most recent call last):
-  File "/home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout/smartcontracts/evm/script/pqz/e2e.py", line 534, in main
+  File "<repo>/smartcontracts/evm/script/pqz/e2e.py", line 534, in main
     run(kd, kr, ke)
-  File "/home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout/smartcontracts/evm/script/pqz/e2e.py", line 777, in run
+  File "<repo>/smartcontracts/evm/script/pqz/e2e.py", line 777, in run
     rollover(sd, C1, bob, 1, "bob's first credit")
-  File "/home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout/smartcontracts/evm/script/pqz/e2e.py", line 482, in rollover
+  File "<repo>/smartcontracts/evm/script/pqz/e2e.py", line 482, in rollover
     s.send(C.tok, cd(API["rollOver"], ["w", "w"], ua.ua, n), f"{C.name} mtxRollOver({ua.name}, {n}): {what}")
-  File "/home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout/smartcontracts/evm/script/pqz/e2e.py", line 303, in send
+  File "<repo>/smartcontracts/evm/script/pqz/e2e.py", line 303, in send
     raise RuntimeError(f"no receipt for {h}")
 RuntimeError: no receipt for 0x50d04bb5b19f89b4e162c7588feae04b87acd27c4d176d76958af86b782e51e4
 

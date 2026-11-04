@@ -121,7 +121,7 @@ node:internal/modules/esm/resolve:272
     throw new ERR_MODULE_NOT_FOUND(
           ^
 
-Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/scripts/ua-portable-vectors.mjs' imported from /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua8.test.js
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '<repo>/clients/clientkeys/scripts/ua-portable-vectors.mjs' imported from <repo>/clients/clientkeys/test/ua8.test.js
     at finalizeResolution (node:internal/modules/esm/resolve:272:11)
     at moduleResolve (node:internal/modules/esm/resolve:879:10)
     at defaultResolve (node:internal/modules/esm/resolve:1006:11)
@@ -133,7 +133,7 @@ Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/ha/work/ainative/scaas/.
     at ModuleJob.syncLink (node:internal/modules/esm/module_job:277:33)
     at ModuleJob.link (node:internal/modules/esm/module_job:389:17) {
   code: 'ERR_MODULE_NOT_FOUND',
-  url: 'file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/scripts/ua-portable-vectors.mjs'
+  url: 'file://<repo>/clients/clientkeys/scripts/ua-portable-vectors.mjs'
 }
 
 Node.js v26.8.1
@@ -149,7 +149,7 @@ Node.js v26.8.1
 ✔ software authenticator: SPKI → (x,y), assertion verifies over sha256(authData ‖ sha256(cdj)) after low-s (134.132654ms)
 ✔ clientDataJSON shape is what SmartKeyAccount checks (RS4-2) (4.022477ms)
 ✔ creationOptions: random 16-byte user handle per credential, account passkeys excluded (1.224397ms)
-file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/zether.test.js:14
+file://<repo>/clients/clientkeys/test/zether.test.js:14
 import { uaMessage, purposeTag, holderPopMessage, portablePopDigest, registrationDigest, POP_V2_TAG } from '../src/ua.js';
                                                                                          ^^^^^^^^^^
 SyntaxError: The requested module '../src/ua.js' does not provide an export named 'POP_V2_TAG'
@@ -175,10 +175,10 @@ test at test/pq-sig.test.js:26:1
 ✖ keys and ids: pq_kat.json's keys, ids from the kind table, the portable PoP (UA-8) on contexts A and B (3.265281ms)
   TypeError: Cannot convert undefined to a BigInt
       at BigInt (<anonymous>)
-      at chainKeyHash (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:162:57)
-      at popDigest (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:167:42)
-      at Module.holderPopMessage (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:180:13)
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/pq-sig.test.js:32:18)
+      at chainKeyHash (file://<repo>/clients/clientkeys/src/ua.js:162:57)
+      at popDigest (file://<repo>/clients/clientkeys/src/ua.js:167:42)
+      at Module.holderPopMessage (file://<repo>/clients/clientkeys/src/ua.js:180:13)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/pq-sig.test.js:32:18)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.start (node:internal/test_runner/test:1262:17)
@@ -188,10 +188,10 @@ test at test/pq-sig.test.js:63:1
 ✖ UA-6 / UA-8: a holder registers its PQZ key in the same call: pop over registrationDigest(portablePopDigest(ua, h, 0), pqzPopHash) (6.769422ms)
   TypeError: Cannot convert undefined to a BigInt
       at BigInt (<anonymous>)
-      at chainKeyHash (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:162:57)
-      at popDigest (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:167:42)
-      at Module.holderPopMessage (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:180:13)
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/pq-sig.test.js:72:19)
+      at chainKeyHash (file://<repo>/clients/clientkeys/src/ua.js:162:57)
+      at popDigest (file://<repo>/clients/clientkeys/src/ua.js:167:42)
+      at Module.holderPopMessage (file://<repo>/clients/clientkeys/src/ua.js:180:13)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/pq-sig.test.js:72:19)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -201,9 +201,9 @@ test at test/pq-sig.test.js:63:1
 test at test/pq-sig.test.js:82:1
 ✖ msig structures: key data, id, member digest; every member signature verifies; auth = abi.encode(keyData, sig) (25.016546ms)
   Error: UAPqzHolder: 0x120 may not hold a PQZ key
-      at fail (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:21:40)
-      at Module.holderPopMessage (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:178:37)
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/pq-sig.test.js:108:19)
+      at fail (file://<repo>/clients/clientkeys/src/ua.js:21:40)
+      at Module.holderPopMessage (file://<repo>/clients/clientkeys/src/ua.js:178:37)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/pq-sig.test.js:108:19)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -218,10 +218,10 @@ test at test/ua-sig.test.js:37:1
 ✖ derived kinds: key data, ids, portable PoP messages, every signature verifies (2.111878ms)
   TypeError: Cannot convert undefined to a BigInt
       at BigInt (<anonymous>)
-      at chainKeyHash (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:162:57)
-      at popDigest (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:167:42)
-      at Module.holderPopMessage (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:180:13)
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua-sig.test.js:44:18)
+      at chainKeyHash (file://<repo>/clients/clientkeys/src/ua.js:162:57)
+      at popDigest (file://<repo>/clients/clientkeys/src/ua.js:167:42)
+      at Module.holderPopMessage (file://<repo>/clients/clientkeys/src/ua.js:180:13)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/ua-sig.test.js:44:18)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -249,7 +249,7 @@ test at test/ua-sig.test.js:58:1
       ]
     ]
   
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua-sig.test.js:64:12)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/ua-sig.test.js:64:12)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -270,7 +270,7 @@ test at test/ua.test.js:43:1
   
   1 !== 2
   
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua.test.js:44:10)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/ua.test.js:44:10)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -297,7 +297,7 @@ test at test/ua.test.js:59:1
   -   'pop.v2'
     ]
   
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua.test.js:60:10)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/ua.test.js:60:10)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -315,7 +315,7 @@ test at test/ua.test.js:59:1
 test at test/ua.test.js:106:1
 ✖ UA-6: PQZ holders, msig eligibility, pop digest and R_REG message (1.877537ms)
   TypeError: ua.portablePopDigest is not a function
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua.test.js:121:23)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/ua.test.js:121:23)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -326,7 +326,7 @@ test at test/ua.test.js:106:1
 test at test/ua.test.js:136:1
 ✖ UA-6 vectors: schemes, holder flags, pqz_reg_message and msig eligibility rows (1.520455ms)
   TypeError: ua.portablePopDigest is not a function
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua.test.js:147:25)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/ua.test.js:147:25)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)

@@ -5,17 +5,17 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 458288524
 INFO: Loaded 1 modules   (25046 inline 8-bit counters): 25046 [0x558b30e244f0, 0x558b30e2a6c6), 
 INFO: Loaded 1 PC tables (25046 PCs): 25046 [0x558b30e2a6c8,0x558b30e8c428), 
-INFO:        0 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/build/fuzz/work/mutate
+INFO:        0 files found in <repo>/pqz-core/build/fuzz/work/mutate
 INFO:      483 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:      176 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/build/fuzz/seeds/mutate
+INFO:      176 files found in <repo>/pqz-core/build/fuzz/seeds/mutate
 INFO: seed corpus: files: 659 min: 1b max: 147b total: 9428b rss: 464Mb
 #512	pulse  cov: 2036 ft: 3835 corp: 253/2202b exec/s: 34 rss: 679Mb
 #660	INITED cov: 2305 ft: 4310 corp: 286/3400b exec/s: 27 rss: 679Mb
 #671	NEW    cov: 2305 ft: 4316 corp: 287/3406b lim: 130 exec/s: 27 rss: 679Mb L: 6/130 MS: 1 ChangeBit-
 #826	NEW    cov: 2305 ft: 4317 corp: 288/3425b lim: 130 exec/s: 31 rss: 679Mb L: 19/130 MS: 5 ChangeByte-ShuffleBytes-ChangeBit-ChangeByte-CrossOver-
 	NEW_FUNC[1/31]: 0x558b30b816b0 in core::ptr::drop_glue::<pqzl::coder::ProofParts> /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/ptr/mod.rs:825
-	NEW_FUNC[2/31]: 0x558b30b89050 in <pqzl::arith::int::Int>::gt /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/src/arith/int.rs:191
+	NEW_FUNC[2/31]: 0x558b30b89050 in <pqzl::arith::int::Int>::gt <repo>/pqz-core/pqzl/rust/src/arith/int.rs:191
 #975	NEW    cov: 2446 ft: 4546 corp: 289/3444b lim: 130 exec/s: 8 rss: 679Mb L: 19/130 MS: 4 ShuffleBytes-ChangeByte-EraseBytes-InsertByte-
 #975	DONE   cov: 2446 ft: 4546 corp: 289/3444b lim: 130 exec/s: 8 rss: 679Mb
 Done 975 runs in 121 second(s)

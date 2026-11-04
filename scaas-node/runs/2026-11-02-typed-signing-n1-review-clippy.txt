@@ -1,4 +1,4 @@
 # clippy at commit d99fe48f + the N1 review tree
-    Checking scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/scaas-node)
+    Checking scaas-node v0.1.0 (<repo>/scaas-node)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 24.64s
 rc=0

@@ -77,7 +77,7 @@
    Compiling memchr v2.8.3
    Compiling foldhash v0.2.0
    Compiling itoa v1.0.18
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
+   Compiling scaas-ua v0.1.0 (<repo>/clients/ua-rs)
    Compiling hex v0.4.3
 error[E0432]: unresolved import `scaas_ua::ua8`
  --> tests/ua8.rs:5:15

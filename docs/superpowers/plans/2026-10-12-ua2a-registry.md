@@ -35,7 +35,7 @@ already in `package.json` (no new npm dependency); Rust 1.90 with `scaas-ua` + `
 
 ## Global Constraints
 
-- Paths relative to `/home/ha/work/ainative/scaas`; worktree `.claude/worktrees/ua2a` on branch `ua2a-registry` from `main`.
+- Paths relative to `<repo>`; worktree `.claude/worktrees/ua2a` on branch `ua2a-registry` from `main`.
   Heavy commands (forge, cargo, node tests) only through `scripts/capped`, one at a time. `/usr/bin/git` and `/usr/bin/grep`
   in worktrees. forge commands run in `smartcontracts/evm`.
 - Task order is fixed: 1 vectors → 2 ECC verifiers (creates `src/ua/IUAVerifier.sol`) → 3 pairing verifiers → 4 registry
@@ -2284,7 +2284,7 @@ contract EccVerifiersTest is Test {
 - [ ] **Step 11: Commit.**
 
 ```bash
-cd /home/ha/work/ainative/scaas
+cd <repo>
 /usr/bin/git add smartcontracts/evm/src/ua/IUAVerifier.sol smartcontracts/evm/src/common/WebAuthnClientData.sol \
   smartcontracts/evm/src/ua/verifiers/P256Precompile.sol smartcontracts/evm/src/ua/verifiers/P256Verifier.sol \
   smartcontracts/evm/src/ua/verifiers/WebAuthnP256Verifier.sol smartcontracts/evm/src/ua/verifiers/Bip340Verifier.sol \
@@ -4707,9 +4707,9 @@ contract UARegistryTest is UARegistryBase {
 }
 ```
 
-- [ ] **Step 5: Build + size gate.** `/home/ha/work/ainative/scaas/scripts/capped forge build src --sizes --json > /tmp/ua2a-sizes.json; python3 ../../scripts/size_gate.py /tmp/ua2a-sizes.json size-baseline.json` (the `;` matters: `forge build --sizes` exits 1 on the three existing contracts above EIP-170, which test chains allow)
+- [ ] **Step 5: Build + size gate.** `<repo>/scripts/capped forge build src --sizes --json > /tmp/ua2a-sizes.json; python3 ../../scripts/size_gate.py /tmp/ua2a-sizes.json size-baseline.json` (the `;` matters: `forge build --sizes` exits 1 on the three existing contracts above EIP-170, which test chains allow)
   — `size gate: 0 error(s), … contracts` (`UARegistry` runtime 18,014 B, init 23,860 B).
-- [ ] **Step 6: Test.** `/home/ha/work/ainative/scaas/scripts/capped forge test --match-path test/ua/UARegistry.t.sol` —
+- [ ] **Step 6: Test.** `<repo>/scripts/capped forge test --match-path test/ua/UARegistry.t.sol` —
   `Suite result: ok. 28 passed; 0 failed; 0 skipped`.
 - [ ] **Step 7: Commit.**
 ```bash
@@ -5171,7 +5171,7 @@ contract UAGasTest is UARegistryBase {
 }
 ```
 
-- [ ] **Step 3: Test.** `/home/ha/work/ainative/scaas/scripts/capped forge test --match-path 'test/ua/UA*.t.sol' -vv` —
+- [ ] **Step 3: Test.** `<repo>/scripts/capped forge test --match-path 'test/ua/UA*.t.sol' -vv` —
   `UARegistryVectorsTest 3 passed`, `UAGasTest 5 passed`, `UARegistryTest 28 passed`, `UAKindsTest 9 passed`, 0 failed;
   logs include `register bls-bn254-minsig: 272706`, `requireAuthorized p256: 16881`, `msig per gen-1 member (gen 2): 14095`,
   `register bls-bn254-minsig: least call gas: 450243` (± a few hundred gas with other verifier builds).

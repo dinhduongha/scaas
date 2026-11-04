@@ -216,7 +216,7 @@ class TestPortalChainPayment(ChainPortalCase):
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `source /home/dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain,dms_blockchain_payment,dms_portal,dms_blockchain_bridge /dms_blockchain_bridge`
+Run: `source ~dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain,dms_blockchain_payment,dms_portal,dms_blockchain_bridge /dms_blockchain_bridge`
 Expected: error — module `dms_blockchain_bridge` not found / methods missing.
 
 - [ ] **Step 3: Implement**
@@ -613,7 +613,7 @@ Manifest: `data: ['views/portal_templates.xml']`, `assets` as in Task 1's manife
 
 **Files:** none new; a run, recorded in the progress log.
 
-- [ ] **Step 1:** `source /home/dockers/odoo19/.env && CHAIN_TEST_DB=dms_test_chain_b scripts/chain-odoo-test.sh bamboo_dms,dms_portal /dms_portal:TestAddonBoundary` (if that class exists in `dms_portal/tests/test_addon_boundary.py`; otherwise `/dms_portal`). Then `SELECT name FROM ir_module_module WHERE name LIKE 'dms_blockchain%' AND state='installed'` on that DB returns 0 rows — bridge did NOT auto-install.
+- [ ] **Step 1:** `source ~dockers/odoo19/.env && CHAIN_TEST_DB=dms_test_chain_b scripts/chain-odoo-test.sh bamboo_dms,dms_portal /dms_portal:TestAddonBoundary` (if that class exists in `dms_portal/tests/test_addon_boundary.py`; otherwise `/dms_portal`). Then `SELECT name FROM ir_module_module WHERE name LIKE 'dms_blockchain%' AND state='installed'` on that DB returns 0 rows — bridge did NOT auto-install.
 - [ ] **Step 2:** Full run of all four modules together and record counts.
 
 ---

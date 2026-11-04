@@ -1,5 +1,5 @@
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi)
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 8.64s
      Running unittests src/lib.rs (target/release/deps/pqz_ffi-1f085e699fd454ee)
 

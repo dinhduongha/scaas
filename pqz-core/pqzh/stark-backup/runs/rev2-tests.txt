@@ -71,7 +71,7 @@
    Compiling p3-multi-stark v0.9.0-rc.1
    Compiling p3-goldilocks v0.9.0-rc.1
    Compiling p3-fri v0.9.0-rc.1
-   Compiling pqzh v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzh/pqz-core/pqzh/stark-backup)
+   Compiling pqzh v0.1.0 (<repo>/pqz-core/pqzh/stark-backup)
     Finished `release` profile [optimized + debuginfo] target(s) in 2m 12s
      Running unittests src/lib.rs (target/release/deps/pqzh-ea0569fe0c9f63fd)
 

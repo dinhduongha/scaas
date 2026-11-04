@@ -1,6 +1,6 @@
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 12.80s
-     Running tests/memory.rs (/tmp/claude-1000/-home-ha-work-ainative-scaas/b5d78f27-d5f7-4ad9-9aff-f50c3b4e9443/scratchpad/tgt/release/deps/memory-dfcb7353e8355278)
+     Running tests/memory.rs (<scratch>/tgt/release/deps/memory-dfcb7353e8355278)
 
 running 1 test
 TRANSFER prove cold under 64 MiB: the vector's proof; the same Ctx then proves

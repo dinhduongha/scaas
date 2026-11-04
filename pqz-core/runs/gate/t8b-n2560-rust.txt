@@ -4,7 +4,7 @@
    Compiling zmij v1.0.23
    Compiling serde_core v1.0.229
    Compiling serde_json v1.0.154
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
    Compiling itoa v1.0.18
    Compiling memchr v2.8.3
     Finished `release` profile [optimized + debuginfo] target(s) in 33.38s
@@ -49,4 +49,4 @@ test cheating_prover_rejected has been running for over 60 seconds
 error: test failed, to rerun pass `--test cheat_b1`
 
 Caused by:
-  process didn't exit successfully: `/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2560-kmax16384/release/deps/cheat_b1-826378ec471c5aaf` (signal: 4, SIGILL: illegal instruction)
+  process didn't exit successfully: `<repo>/pqz-core/pqzl/rust/target/n2560-kmax16384/release/deps/cheat_b1-826378ec471c5aaf` (signal: 4, SIGILL: illegal instruction)

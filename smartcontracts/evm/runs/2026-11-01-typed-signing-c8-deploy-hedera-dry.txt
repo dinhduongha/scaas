@@ -23,9 +23,9 @@ Estimated amount required: 1.078119866539059933 ETH
 
 SIMULATION COMPLETE. To broadcast these transactions, add --broadcast and wallet configuration(s) to the previous command. See forge script --help for more.
 
-Transactions saved to: /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/evm/broadcast/DeployHedera.s.sol/31337/dry-run/run-latest.json
+Transactions saved to: <repo>/smartcontracts/evm/broadcast/DeployHedera.s.sol/31337/dry-run/run-latest.json
 
-Sensitive values saved to: /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/evm/cache/DeployHedera.s.sol/31337/dry-run/run-latest.json
+Sensitive values saved to: <repo>/smartcontracts/evm/cache/DeployHedera.s.sol/31337/dry-run/run-latest.json
 
 
 rc=0

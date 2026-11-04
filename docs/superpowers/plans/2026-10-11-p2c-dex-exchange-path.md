@@ -35,9 +35,9 @@ errors, mutation probe 34/34 killed (and the P2b-2 probe, patterns updated for t
 
 ## Global Constraints
 
-- Paths relative to `/home/ha/work/ainative/scaas`; forge in `smartcontracts/evm` of worktree `.claude/worktrees/p2c`
+- Paths relative to `<repo>`; forge in `smartcontracts/evm` of worktree `.claude/worktrees/p2c`
   (branch `p2c-dex` from `main`; `lib/` is not tracked: `mkdir lib`, copy `smartcontracts/evm/lib/forge-std` into it and
-  symlink `lib/openzeppelin-contracts → /home/ha/work/blockchain/openzeppelin-contracts`, as in the main checkout).
+  symlink `lib/openzeppelin-contracts → ~/work/blockchain/openzeppelin-contracts`, as in the main checkout).
   Heavy commands only through `scripts/capped`, one at a time. `/usr/bin/grep`, `rtk proxy git diff`; if a hook blocks
   bare `git`, use `/usr/bin/git`.
 - `scaas.dex` = `0xb144ea5327f344ea7e3b34dd1898f534c8ce28f9f54d0d89a1b78f8fcf7dac00`: two fields appended to `DexStorage`
@@ -1552,7 +1552,7 @@ contract DexExchangeTest is Test {
     /tmp/sizes.json size-baseline.json` → `0 error(s)`; `SCaaSDex` 21,761 B.
   - e2e: `forge build` (full), then in `scaas-node`: `cargo test --test e2e -- --ignored --test-threads=1` → 4 passed;
     `cargo test --test e2e_hedera -- --ignored` → 1 passed (a fresh worktree may reuse the main checkout's build cache
-    with `CARGO_TARGET_DIR=/home/ha/work/ainative/scaas/scaas-node/target`).
+    with `CARGO_TARGET_DIR=<repo>/scaas-node/target`).
   - **Mutation probe** (not committed; save as a scratch file and run with `scripts/capped python3 <file>`): every mutant
     must be `KILLED`. Validated: 34/34 killed. Also rerun the P2b-2 probe (its Task 1 Step 8) with the worktree path and
     the four patterns the refactor renamed (`l.o`/`l.sellToken`/`l.sig` → `o`/`sellToken`/`sig` in M10, M11, M12, M20):
@@ -1560,7 +1560,7 @@ contract DexExchangeTest is Test {
 
 ```python
 import subprocess, sys
-W='/home/ha/work/ainative/scaas/.claude/worktrees/p2c/smartcontracts/evm'
+W='<repo>/smartcontracts/evm'
 D=W+'/src/dex/SCaaSDex.sol'
 muts=[
  ('X1 no NoLegs', D, 'if (n == 0) revert NoLegs();', ''),

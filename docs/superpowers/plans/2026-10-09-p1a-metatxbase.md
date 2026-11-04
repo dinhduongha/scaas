@@ -25,7 +25,7 @@ Transitional (BUILT)) and `docs/contracts/README.md` (CTR-GEN-05, build pins); r
 
 ## Global Constraints
 
-- All paths are relative to the repository root `/home/ha/work/ainative/scaas`; every forge command runs in
+- All paths are relative to the repository root `<repo>`; every forge command runs in
   `smartcontracts/evm`.
 - **Heavy commands only through `scripts/capped`, one at a time** (`scripts/capped`: "ONE capped command at a time
   machine-wide"): `../../scripts/capped forge build`, `../../scripts/capped forge test …`, `../scripts/capped cargo …`.
@@ -118,7 +118,7 @@ Transitional (BUILT)) and `docs/contracts/README.md` (CTR-GEN-05, build pins); r
 - [ ] **Step 1: Baseline on a clean `main`**
 
 ```bash
-cd /home/ha/work/ainative/scaas
+cd <repo>
 git status --short                  # expected: no output
 git rev-parse --abbrev-ref HEAD     # expected: main
 cd smartcontracts/evm
@@ -137,7 +137,7 @@ Expected: `ZetherToken` (only).
 - [ ] **Step 2: Tag and branch**
 
 ```bash
-cd /home/ha/work/ainative/scaas
+cd <repo>
 git tag -a ref/pre-token-tree -m "Last commit before P1 of the token tree: v1/v2 token lines and the old ZetherToken, kept for reference (CTR-MTX-07)"
 test "$(git rev-parse 'ref/pre-token-tree^{commit}')" = "$(git rev-parse HEAD)" && echo tag-ok
 git switch -c p1a-metatxbase
@@ -148,7 +148,7 @@ Expected: `tag-ok`, `Switched to a new branch 'p1a-metatxbase'`.
 - [ ] **Step 3: Copy the reference sources from the tag**
 
 ```bash
-cd /home/ha/work/ainative/scaas
+cd <repo>
 mkdir -p smartcontracts/evm/legacy
 git archive ref/pre-token-tree -- \
   smartcontracts/evm/src/metatx smartcontracts/evm/src/factory \
@@ -196,7 +196,7 @@ stop and find the importer).
 - [ ] **Step 6: Tick the checklist**
 
 ```bash
-cd /home/ha/work/ainative/scaas
+cd <repo>
 sed -i 's/^- \[ \] Keep the old code for reference/- [x] Keep the old code for reference/' TODO.md
 grep -n 'Keep the old code for reference' TODO.md
 ```
@@ -2201,7 +2201,7 @@ EOF
   `scaas-node/tests/mesh_vectors.rs` (line 65), `clients/clientkeys/test/evm.test.js` (lines 16, 144)
 - Create: `smartcontracts/evm/test/metatx/MetaTxBaseKat.t.sol`
 - Create (generated): `smartcontracts/evm/test/vectors/metatx_kat.json`
-- Out of repo, report only: `/home/dockers/odoo19/custom-addons/bamboo-dms/dms_blockchain/tests/test_eip712.py:14`
+- Out of repo, report only: `~dockers/odoo19/custom-addons/bamboo-dms/dms_blockchain/tests/test_eip712.py:14`
   reads `metatx_kat.json` (v1 format) and goes red; it must read `metatx_v1_kat.json` (or move to v3 in P5).
 
 **Interfaces:**
@@ -2213,7 +2213,7 @@ EOF
 - [ ] **Step 1: Move the v1 vector and repoint its readers**
 
 ```bash
-cd /home/ha/work/ainative/scaas
+cd <repo>
 git mv smartcontracts/evm/test/vectors/metatx_kat.json smartcontracts/evm/test/vectors/metatx_v1_kat.json
 sed -i 's#test/vectors/metatx_kat\.json#test/vectors/metatx_v1_kat.json#g' \
   smartcontracts/evm/test/MetaTxKat.t.sol smartcontracts/evm/test/v2/BaseKat.t.sol \
@@ -2312,7 +2312,7 @@ contract MetaTxBaseKatTest is MtxFixture {
 - [ ] **Step 3: Run it — expect failure (no v3 file yet)**
 
 ```bash
-cd /home/ha/work/ainative/scaas/smartcontracts/evm
+cd <repo>/smartcontracts/evm
 ../../scripts/capped forge test --match-test test_metaTxKat 2>&1 | grep -E 'FAIL|PASS'
 ```
 
@@ -2383,7 +2383,7 @@ Expected: `Ran 57 test suites …: 692 tests passed, 0 failed, 0 skipped (692 to
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /home/ha/work/ainative/scaas
+cd <repo>
 git add smartcontracts/evm/test/vectors/metatx_kat.json smartcontracts/evm/test/vectors/metatx_v1_kat.json \
         smartcontracts/evm/test/metatx/MetaTxBaseKat.t.sol smartcontracts/evm/test/MetaTxKat.t.sol \
         smartcontracts/evm/test/v2/BaseKat.t.sol scaas-node/src/metatx.rs scaas-node/tests/mesh_vectors.rs \
@@ -2414,7 +2414,7 @@ EOF
 - [ ] **Step 1: Full forge suite (default profile) and the CI build profile**
 
 ```bash
-cd /home/ha/work/ainative/scaas/smartcontracts/evm
+cd <repo>/smartcontracts/evm
 ../../scripts/capped forge test 2>&1 | tail -1
 FOUNDRY_PROFILE=private7622 ../../scripts/capped forge build 2>&1 | grep -E '^Error' ; echo "exit=${PIPESTATUS[0]}"
 ```
@@ -2474,7 +2474,7 @@ with
 In the "Tests" bullet replace `` the v2 KAT `` with `` the v1 KAT `test/vectors/metatx_v1_kat.json`, the v2 KAT ``.
 
 ```bash
-cd /home/ha/work/ainative/scaas
+cd <repo>
 python3 scripts/test_docs_check.py && python3 scripts/docs_check.py check 2>&1 | tail -1
 ```
 

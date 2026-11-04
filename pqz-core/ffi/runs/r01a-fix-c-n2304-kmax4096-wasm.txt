@@ -5,11 +5,11 @@ $ cargo build --release --offline --no-default-features --features pqzl-c,set-n2
 $ cargo build --release --offline --no-default-features --features pqzl-c,set-n2304-kmax4096 --target wasm32-unknown-unknown
     Finished `release` profile [optimized] target(s) in 0.03s
 [rc=0]
-$ sha256sum /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2304-kmax4096-c-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
-d30effff3fd1165932561345b728c5f67442e7d475b31fe5d1a0f5aa29c40e8a  /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2304-kmax4096-c-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+$ sha256sum <repo>/pqz-core/ffi/target/n2304-kmax4096-c-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+d30effff3fd1165932561345b728c5f67442e7d475b31fe5d1a0f5aa29c40e8a  <repo>/pqz-core/ffi/target/n2304-kmax4096-c-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
 [rc=0]
 wasm bytes 981378
-$ llvm-nm-18 --undefined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2304-kmax4096-c-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm (imports)
+$ llvm-nm-18 --undefined-only <repo>/pqz-core/ffi/target/n2304-kmax4096-c-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm (imports)
 strings /gmp|mpfr|hexl/i: 0
 node rc=0
 wasm run 71210 ms, memory 636747776 B

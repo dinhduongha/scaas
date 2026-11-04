@@ -1,8 +1,8 @@
 # pqz-kat-n2048-kmax1024 at commit da4d0e00
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/stmt)
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/pqzl/rust)
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/pqzh/ligero)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/ffi)
+   Compiling pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 11.46s
 keys / cbd / matrix / enc: 0.1 s
 pqzl TRANSFER           proof  42729 B  prove+verify 1.83 s

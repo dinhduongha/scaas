@@ -1,6 +1,6 @@
-    Checking pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/anons/pqz-core/stmt)
-    Checking pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/anons/pqz-core/pqzh/ligero)
-    Checking pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/anons/pqz-core/ffi)
+    Checking pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
+    Checking pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
+    Checking pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
 error[E0080]: evaluation panicked: pqz-stmt feature `oversize` is bench only: not in pqz-ffi's build
   --> src/lib.rs:25:15
    |

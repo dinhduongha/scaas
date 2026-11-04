@@ -1,5 +1,5 @@
 # cargo test --test multi (R0 fix round m4: auditor copy at window 0 / at another leg's window), 2026-10-25T22:15:01Z
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 9.01s
      Running tests/multi.rs (target/n2560-kmax16384/release/deps/multi-f6b4225aae3d061e)
 

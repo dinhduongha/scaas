@@ -74,8 +74,8 @@ new address-allowlist rows; `mintToUA`, `payWithFeeToUA` never allowlisted), CTR
 
 ## Global Constraints
 
-- Paths relative to `/home/ha/work/ainative/scaas`; work in a worktree `.claude/worktrees/ua5a` on its own branch from
-  `main` (symlink `smartcontracts/evm/lib` → `/home/ha/work/ainative/scaas/smartcontracts/evm/lib` and
+- Paths relative to `<repo>`; work in a worktree `.claude/worktrees/ua5a` on its own branch from
+  `main` (symlink `smartcontracts/evm/lib` → `<repo>/smartcontracts/evm/lib` and
   `clients/clientkeys/node_modules` → the main checkout's, as the earlier worktrees do). Heavy commands (forge, node
   tests, the vector generator) only through `scripts/capped`, one at a time machine-wide (a second capped command
   waits; no `dotnet` here); `/usr/bin/git`, `/usr/bin/grep`; forge in `smartcontracts/evm`, node in `clients/clientkeys`.

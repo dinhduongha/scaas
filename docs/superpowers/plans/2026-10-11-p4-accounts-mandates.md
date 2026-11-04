@@ -49,12 +49,12 @@ checkers 0 errors and 0 fact misses, mutation probe 69/69 killed.
 
 ## Global Constraints
 
-- Paths relative to `/home/ha/work/ainative/scaas`; worktree `.claude/worktrees/p4` on branch `p4-accounts` from `main`.
+- Paths relative to `<repo>`; worktree `.claude/worktrees/p4` on branch `p4-accounts` from `main`.
   forge in `smartcontracts/evm` of the worktree: `lib/` is not tracked — `mkdir lib`, copy
-  `smartcontracts/evm/lib/forge-std` into it, symlink `lib/openzeppelin-contracts → /home/ha/work/blockchain/openzeppelin-contracts`.
+  `smartcontracts/evm/lib/forge-std` into it, symlink `lib/openzeppelin-contracts → ~/work/blockchain/openzeppelin-contracts`.
   clientkeys and TON: symlink `node_modules` from the main checkout (never `git add` it). Heavy commands only through
   `scripts/capped`, one at a time. `/usr/bin/grep`; in worktrees a hook blocks bare `git`: use `/usr/bin/git`. Rust:
-  `CARGO_TARGET_DIR=/home/ha/work/ainative/scaas/scaas-node/target` for the node.
+  `CARGO_TARGET_DIR=<repo>/scaas-node/target` for the node.
 - The family commands are the repo's own (`smartcontracts/scripts/test.sh <family>`, CI `.github/workflows/ci.yml`):
   `forge test`; size gate `forge build src --sizes --json > /tmp/sizes.json; python3 scripts/size_gate.py /tmp/sizes.json
   smartcontracts/evm/size-baseline.json`; `FOUNDRY_PROFILE=private7622 forge build`; `test.sh solana` (builds the SBF
@@ -3499,8 +3499,8 @@ index 5f6f095..f8fe9b4 100644
 #!/usr/bin/env python3
 """P4 mutation probe: apply each mutant, run the suites, record the first failing test (the killer), restore."""
 import re, subprocess, sys, json
-EVM = '/home/ha/work/ainative/scaas/.claude/worktrees/p4/smartcontracts/evm'
-CAP = '/home/ha/work/ainative/scaas/scripts/capped'
+EVM = '<repo>/smartcontracts/evm'
+CAP = '<repo>/scripts/capped'
 W, A, B = 'src/wallet/MandateWallet.sol', 'src/account/SmartKeyAccount.sol', 'src/metatx/MetaTxBase.sol'
 H = 'src/hedera/HederaMandateWallet.sol'
 M = [

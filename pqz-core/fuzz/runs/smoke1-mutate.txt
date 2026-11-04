@@ -5,18 +5,18 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 441501382
 INFO: Loaded 1 modules   (27137 inline 8-bit counters): 27137 [0x58ac21e52488, 0x58ac21e58e89), 
 INFO: Loaded 1 PC tables (27137 PCs): 27137 [0x58ac21e58e90,0x58ac21ec2ea0), 
-INFO:        0 files found in /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/work/mutate
+INFO:        0 files found in <repo>/pqz-core/build/fuzz/work/mutate
 INFO:        0 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:       64 files found in /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/seeds/mutate
+INFO:       64 files found in <repo>/pqz-core/build/fuzz/seeds/mutate
 INFO: seed corpus: files: 64 min: 2b max: 2b total: 128b rss: 207Mb
 pqz-fuzz: arena peak 95133248 B (bound 100663296 B)
 pqz-fuzz: arena peak 95154896 B (bound 100663296 B)
 pqz-fuzz: arena peak 95169680 B (bound 100663296 B)
 #64	pulse  cov: 1958 ft: 2854 corp: 16/32b exec/s: 21 rss: 470Mb
 #65	INITED cov: 3255 ft: 4455 corp: 17/34b exec/s: 13 rss: 559Mb
-	NEW_FUNC[1/4]: 0x58ac21b26128 in aes_tables /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_sv.c:481
-	NEW_FUNC[2/4]: 0x58ac21b263e8 in lz_mat /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_sv.c:875
+	NEW_FUNC[1/4]: 0x58ac21b26128 in aes_tables <repo>/pqz-core/ffi/../src/pqz_sv.c:481
+	NEW_FUNC[2/4]: 0x58ac21b263e8 in lz_mat <repo>/pqz-core/ffi/../src/pqz_sv.c:875
 #66	NEW    cov: 3338 ft: 4586 corp: 18/36b lim: 4 exec/s: 0 rss: 559Mb L: 2/2 MS: 1 ChangeByte-
 	NEW_FUNC[1/1]: 0x58ac21ad63a0 in <alloc::vec::Vec<u8>>::truncate /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/alloc/src/vec/mod.rs:1807
 #67	NEW    cov: 3341 ft: 4589 corp: 19/39b lim: 4 exec/s: 0 rss: 559Mb L: 3/3 MS: 1 InsertByte-
@@ -58,8 +58,8 @@ pqz-fuzz: arena peak 95169680 B (bound 100663296 B)
 #389	NEW    cov: 3398 ft: 4890 corp: 51/139b lim: 4 exec/s: 3 rss: 559Mb L: 3/4 MS: 5 ChangeBit-ChangeByte-ChangeBinInt-ChangeByte-PersAutoDict- DE: "\001@"-
 #408	NEW    cov: 3398 ft: 4891 corp: 52/142b lim: 4 exec/s: 3 rss: 559Mb L: 3/4 MS: 4 CrossOver-InsertByte-ChangeByte-InsertByte-
 #412	NEW    cov: 3398 ft: 4892 corp: 53/145b lim: 4 exec/s: 3 rss: 559Mb L: 3/4 MS: 4 CopyPart-ChangeBinInt-ChangeBit-CopyPart-
-	NEW_FUNC[1/7]: 0x58ac21b04ba8 in int_set_i64 /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-f69cd1781515556e/out/include/lazer.h:2391
-	NEW_FUNC[2/7]: 0x58ac21b0df98 in cval /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_rel.c:522
+	NEW_FUNC[1/7]: 0x58ac21b04ba8 in int_set_i64 <repo>/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-f69cd1781515556e/out/include/lazer.h:2391
+	NEW_FUNC[2/7]: 0x58ac21b0df98 in cval <repo>/pqz-core/ffi/../src/pqz_rel.c:522
 #420	NEW    cov: 3453 ft: 5014 corp: 54/148b lim: 4 exec/s: 3 rss: 596Mb L: 3/4 MS: 3 ChangeByte-ChangeByte-ChangeBinInt-
 #421	NEW    cov: 3453 ft: 5035 corp: 55/151b lim: 4 exec/s: 3 rss: 596Mb L: 3/4 MS: 1 ChangeBit-
 #422	NEW    cov: 3453 ft: 5038 corp: 56/154b lim: 4 exec/s: 3 rss: 596Mb L: 3/4 MS: 1 ShuffleBytes-
@@ -91,8 +91,8 @@ pqz-fuzz: arena peak 95169680 B (bound 100663296 B)
 #802	NEW    cov: 3466 ft: 5190 corp: 80/226b lim: 4 exec/s: 6 rss: 596Mb L: 4/4 MS: 1 ChangeByte-
 #1003	REDUCE cov: 3466 ft: 5190 corp: 80/225b lim: 4 exec/s: 7 rss: 596Mb L: 3/4 MS: 1 CrossOver-
 #1024	pulse  cov: 3466 ft: 5190 corp: 80/225b lim: 4 exec/s: 7 rss: 596Mb
-	NEW_FUNC[1/4]: 0x58ac21c6c378 in int_sgn /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-f69cd1781515556e/out/include/lazer.h:2424
-	NEW_FUNC[2/4]: 0x58ac21c6c5d8 in int_absgt /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-f69cd1781515556e/out/include/lazer.h:2502
+	NEW_FUNC[1/4]: 0x58ac21c6c378 in int_sgn <repo>/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-f69cd1781515556e/out/include/lazer.h:2424
+	NEW_FUNC[2/4]: 0x58ac21c6c5d8 in int_absgt <repo>/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-f69cd1781515556e/out/include/lazer.h:2502
 #1053	NEW    cov: 3539 ft: 5689 corp: 81/227b lim: 4 exec/s: 7 rss: 767Mb L: 2/4 MS: 5 CrossOver-EraseBytes-EraseBytes-CopyPart-CopyPart-
 #1203	NEW    cov: 3539 ft: 5691 corp: 82/229b lim: 4 exec/s: 8 rss: 767Mb L: 2/4 MS: 5 ChangeByte-EraseBytes-InsertByte-CrossOver-CrossOver-
 #1204	NEW    cov: 3539 ft: 5692 corp: 83/232b lim: 4 exec/s: 8 rss: 767Mb L: 3/4 MS: 1 ChangeByte-

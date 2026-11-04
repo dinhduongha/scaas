@@ -3,7 +3,7 @@
 == build algorand
 [32minfo: [0musing puyapy version 5.10.1[0m
 [33mwarning: [0mcannot determine package root for contracts/executor.py[0m
-[32minfo: [0musing python search path: ['/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/.venv/lib/python3.12/site-packages'][0m
+[32minfo: [0musing python search path: ['<repo>/smartcontracts/algorand/.venv/lib/python3.12/site-packages'][0m
 [34mcontracts/executor.py:21:2 [0m[33mwarning: [0mautosalt=False leaves this LogicSig's address on-curve, i.e. potentially decodable as a public key[0m
 [32minfo: [0mWriting out/Executor.bin[0m
 [32minfo: [0mWriting out/Executor.puya.map[0m
@@ -17,7 +17,7 @@
 [33mwarning: [0mcannot determine package root for contracts/common.py[0m
 [33mwarning: [0mcannot determine package root for contracts/account.py[0m
 [33mwarning: [0mcannot determine package root for contracts/mandate.py[0m
-[32minfo: [0musing python search path: ['/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/.venv/lib/python3.12/site-packages'][0m
+[32minfo: [0musing python search path: ['<repo>/smartcontracts/algorand/.venv/lib/python3.12/site-packages'][0m
 [34mcontracts/executor.py:21:2 [0m[33mwarning: [0mautosalt=False leaves this LogicSig's address on-curve, i.e. potentially decodable as a public key[0m
 [32minfo: [0mWriting out/RelayTarget.arc56.json[0m
 [32minfo: [0mWriting out/RelayTarget.approval.bin[0m

@@ -1,6 +1,6 @@
 # node-ua-jobs fix 2: per-feature copy of smartcontracts/evm/runs/2026-10-27-metatx-split-cargo-scaas-node.txt
 # cargo-scaas-node at commit 0ade8907
-   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/node-ua-jobs/scaas-node)
+   Compiling scaas-node v0.1.0 (<repo>/scaas-node)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 7.04s
      Running unittests src/lib.rs (target/debug/deps/scaas_node-7ea8f2ba056438ed)
 

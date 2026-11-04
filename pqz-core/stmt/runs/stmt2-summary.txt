@@ -3,7 +3,7 @@ test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 xcheck: C 6 / 6 forms equal; pqz_kat.py: 32 statements equal (fields and bytes), 186 rejections with the same reason
 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/pqz-core/stmt)
+   Compiling pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
     Finished `release` profile [optimized] target(s) in 0.28s
 rlib bytes 142834
-pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/pqz-core/stmt)
+pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)

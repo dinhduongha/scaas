@@ -19,12 +19,12 @@
 -- Determining required link libraries for target x86_64-unknown-linux-gnu
 -- Required static libs for target x86_64-unknown-linux-gnu: gcc_s;util;rt;pthread;m;dl;c
 -- Required link flags for target x86_64-unknown-linux-gnu: 
--- Found Rust: /home/ha/.rustup/toolchains/1.99.0-x86_64-unknown-linux-gnu/bin/rustc (found version "1.99.0") 
+-- Found Rust: ~/.rustup/toolchains/1.99.0-x86_64-unknown-linux-gnu/bin/rustc (found version "1.99.0") 
 -- Using Corrosion as a subdirectory
 -- CXX-Qt Found crate(s): scaas_ua_qt
 -- Configuring done (4.8s)
 -- Generating done (0.0s)
--- Build files have been written to: /tmp/claude-1000/ua-qt-build-na
+-- Build files have been written to: <tmp>/ua-qt-build-na
 [  0%] Built target tst_ua_autogen_timestamp_deps
 [  0%] Built target cargo-prebuild_scaas_ua_qt
 [  0%] Built target scaas_ua_qml_module_mock_obj_output
@@ -138,28 +138,28 @@ warning: failed to connect to jobserver from environment variable `MAKEFLAGS="s 
    Compiling cxx-qt-macro v0.10.0
    Compiling cxx-qt v0.10.0
    Compiling cxx-qt-lib v0.10.0
-   Compiling scaas_ua_qt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/ua-qt)
+   Compiling scaas_ua_qt v0.1.0 (<repo>/clients/ua-qt)
    Compiling ark-poly v0.5.0
    Compiling ark-ec v0.5.0
    Compiling ark-bn254 v0.5.0
    Compiling ark-bls12-381 v0.5.0
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/ua-rs)
+   Compiling scaas-ua v0.1.0 (<repo>/clients/ua-rs)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 48s
-Copying byproducts `libscaas_ua_qt.a` to /tmp/claude-1000/ua-qt-build-na
+Copying byproducts `libscaas_ua_qt.a` to <tmp>/ua-qt-build-na
 [ 25%] Built target _cargo-build_scaas_ua_qt
 [ 25%] Built target cargo-build_scaas_ua_qt
 [ 50%] Building CXX object CMakeFiles/tst_ua.dir/tst_ua_autogen/mocs_compilation.cpp.o
 [ 75%] Building CXX object CMakeFiles/tst_ua.dir/tests/tst_ua.cpp.o
 [100%] Linking CXX executable tst_ua
 [100%] Built target tst_ua
-Test project /tmp/claude-1000/ua-qt-build-na
+Test project <tmp>/ua-qt-build-na
     Start 1: tst_ua
 1/1 Test #1: tst_ua ...........................***Failed    0.54 sec
 ********* Start testing of ua *********
 Config: Using QtTest library 6.12.0, Qt 6.12.0 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 11.5.0 20240719 (Red Hat 11.5.0-5)), ubuntu 24.04
 PASS   : ua::UaKinds::initTestCase()
 FAIL!  : ua::UaKinds::test_algorand_digest_and_relay_ref() Uncaught exception: Property 'algorandDigest' of object UaKinds(0x60665422a010) is not a function
-   Loc: [/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/ua-qt/tests/tst_ua.qml(241)]
+   Loc: [<repo>/clients/ua-qt/tests/tst_ua.qml(241)]
 PASS   : ua::UaKinds::test_encode_msig()
 PASS   : ua::UaKinds::test_invalid_rows()
 PASS   : ua::UaKinds::test_last_error_cleared_and_notifies()
@@ -169,7 +169,7 @@ PASS   : ua::UaKinds::test_messages()
 PASS   : ua::UaKinds::test_meta_pay_id_vectors()
 PASS   : ua::UaKinds::test_natives_native_space_canonical_ids()
 FAIL!  : ua::UaKinds::test_near_digest_and_relay_ref() Uncaught exception: Property 'nearDigest' of object UaKinds(0x60665422a010) is not a function
-   Loc: [/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/ua-qt/tests/tst_ua.qml(229)]
+   Loc: [<repo>/clients/ua-qt/tests/tst_ua.qml(229)]
 PASS   : ua::UaKinds::test_relay_ref_matches_vector()
 PASS   : ua::UaKinds::test_structures()
 PASS   : ua::UaKinds::test_table_groups_purposes_constants()

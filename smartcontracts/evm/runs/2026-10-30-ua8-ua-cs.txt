@@ -1,10 +1,10 @@
 # ua-cs at commit 20129a8b
   Determining projects to restore...
-  Restored /home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-cs/Scaas.Ua.Tests/Scaas.Ua.Tests.csproj (in 1.63 sec).
-  Restored /home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-cs/Scaas.Ua/Scaas.Ua.csproj (in 1.6 sec).
-  Scaas.Ua -> /home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-cs/Scaas.Ua/bin/Debug/net10.0/Scaas.Ua.dll
-  Scaas.Ua.Tests -> /home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll
-Test run for /home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll (.NETCoreApp,Version=v10.0)
+  Restored <repo>/clients/ua-cs/Scaas.Ua.Tests/Scaas.Ua.Tests.csproj (in 1.63 sec).
+  Restored <repo>/clients/ua-cs/Scaas.Ua/Scaas.Ua.csproj (in 1.6 sec).
+  Scaas.Ua -> <repo>/clients/ua-cs/Scaas.Ua/bin/Debug/net10.0/Scaas.Ua.dll
+  Scaas.Ua.Tests -> <repo>/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll
+Test run for <repo>/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll (.NETCoreApp,Version=v10.0)
 VSTest version 18.0.2 (x64)
 
 Starting test execution, please wait...

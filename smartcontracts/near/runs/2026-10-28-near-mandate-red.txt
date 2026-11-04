@@ -1,8 +1,8 @@
 # cargo test -p scaas-near-integration --test mandate (Task 7 RED: types only, no entries) at commit 25f98847 + the Task 7 tests
-   Compiling scaas-near-common v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/common)
-   Compiling scaas-near-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/token)
-   Compiling scaas-near-spike-p256 v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/spike-p256)
-   Compiling scaas-near-integration v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/integration)
+   Compiling scaas-near-common v0.1.0 (<repo>/smartcontracts/near/common)
+   Compiling scaas-near-token v0.1.0 (<repo>/smartcontracts/near/token)
+   Compiling scaas-near-spike-p256 v0.1.0 (<repo>/smartcontracts/near/spike-p256)
+   Compiling scaas-near-integration v0.1.0 (<repo>/smartcontracts/near/integration)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 17.93s
      Running tests/mandate.rs (target/debug/deps/mandate-a504f182bf5ef0bc)
 

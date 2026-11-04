@@ -1,6 +1,6 @@
 # P6f T7 G2 demonstration: the stock image with engine.Pqz, 2026-10-15T13:16:21Z, commit fd8eb9b
 $ copy.sh patch pqz-core/nethermind/chain/engine-pqz.json 1792070271
-/home/ha/work/ainative/scaas/.claude/worktrees/p6f/scratchpad/p6f-copy/genesis.pqz.json: engine.Pqz added (first timestamp 1792070271 = 0x6ad0d27f, 1 schedule(s), 12 rows); diff: 84 added lines, 0 removed
+<repo>/scratchpad/p6f-copy/genesis.pqz.json: engine.Pqz added (first timestamp 1792070271 = 0x6ad0d27f, 1 schedule(s), 12 rows); diff: 84 added lines, 0 removed
 $ copy.sh up nethermind/nethermind:1.39.0 genesis.pqz.json
  Container pqzcopy-signer Started 
 head 441 0x6e5803538ae8e6430eae279e725a41520e072e86e0113e02871467042a788fe3 gasLimit 25801791 gasUsed 0 ts 1792070312

@@ -42,11 +42,11 @@ libm-style imports: 0
 c_abi: selftest 57c36100818414c03a4440130aa4c17ef0d2257749238d78b22ce4ff721b9ea4
 c_abi: ok (0 failures)
 # wasm32: the verify-only lib, then the prove harness (wasm/) and the digest diff against native
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi)
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/stmt)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi)
-   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi/wasm)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
+   Compiling pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
+   Compiling pqz-ffi-wasm v0.1.0 (<repo>/pqz-core/ffi/wasm)
 wasm bytes 562366
 wasm run 53378 ms, memory 192544768 B
 native = wasm32: 15 lines equal

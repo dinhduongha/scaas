@@ -2,7 +2,7 @@
 == test algorand
 == build algorand
 [32minfo: [0musing puyapy version 5.10.1[0m
-[32minfo: [0musing python search path: ['/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/.venv/lib/python3.12/site-packages'][0m
+[32minfo: [0musing python search path: ['<repo>/smartcontracts/algorand/.venv/lib/python3.12/site-packages'][0m
 ok artifacts.json
 ok smartcontracts/algorand/vectors/algorand-vectors.json
  Network scaas-algorand_default Creating 

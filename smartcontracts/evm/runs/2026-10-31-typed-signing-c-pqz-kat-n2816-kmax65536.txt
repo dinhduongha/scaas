@@ -1,7 +1,7 @@
 # pqz-kat-n2816-kmax65536 at commit da4d0e00
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/stmt)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/ffi)
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/pqzl/rust)
+   Compiling pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 10.73s
 keys / cbd / matrix / enc: 0.2 s
 pqzl TRANSFER           proof  54849 B  prove+verify 2.31 s

@@ -10,7 +10,7 @@ then the controller's triage.
 
 # Security Review of PQZH Rust (Round 2, 2026-10-19)
 
-**Target commit:** `e9cabd1` (detached worktree at `/home/ha/work/ainative/scaas/.claude/worktrees/rev2`).  
+**Target commit:** `e9cabd1` (detached worktree at `<repo>`).  
 **Scope:** Primary live code (`pqz-core/pqzh/ligero/`, the PQZH dispatch and selftest paths of `pqz-core/ffi/`, `pqz-core/stmt/`, and `pqz-core/pqzh/xcheck/`), followed by secondary backup code (`pqz-core/pqzh/stark-backup/`).  
 **Mode:** Static, read-only analysis. Nothing was built, edited, run, fuzzed, or timed. All citations reference `path:line` relative to the worktree root.
 

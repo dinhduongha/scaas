@@ -8,7 +8,7 @@ $ python3 -I corpus.py bin/corpus.jsonl
 corpus bin/corpus.jsonl (set n2304-kmax4096): 877 inputs {'honest': 43, 'negative': 795, 'flip': 30, 'fee0': 8, 'selftest': 1}
 [rc=0]
 
-$ docker build -f Dockerfile --progress plain --resource memory=4g --build-arg PQZ_SET=n2304-kmax4096 --target ffi-export -o bin/ffi-out /home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout
+$ docker build -f Dockerfile --progress plain --resource memory=4g --build-arg PQZ_SET=n2304-kmax4096 --target ffi-export -o bin/ffi-out <repo>
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
@@ -86,7 +86,7 @@ $ docker build -f Dockerfile --progress plain --resource memory=4g --build-arg P
 [rc=0]
 
 libpqz_ffi.so sha256 dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601, reviewed dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601
-$ docker build -f Dockerfile --progress plain --resource memory=4g --build-arg PQZ_SET=n2304-kmax4096 --target node --build-arg COMMIT=76c5e71178768cd8461916c415e42265980b6997 --build-arg FFI_SHA256=dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601 --build-arg SELFTEST=d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d -t scaas/nethermind-pqz:2.2.0-pqz6c /home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout
+$ docker build -f Dockerfile --progress plain --resource memory=4g --build-arg PQZ_SET=n2304-kmax4096 --target node --build-arg COMMIT=76c5e71178768cd8461916c415e42265980b6997 --build-arg FFI_SHA256=dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601 --build-arg SELFTEST=d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d -t scaas/nethermind-pqz:2.2.0-pqz6c <repo>
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
@@ -212,7 +212,7 @@ $ docker build -f Dockerfile --progress plain --resource memory=4g --build-arg P
 #38 DONE 0.2s
 [rc=0]
 
-$ docker build -f Dockerfile --progress plain --resource memory=4g --build-arg PQZ_SET=n2304-kmax4096 --target calib --build-arg COMMIT=76c5e71178768cd8461916c415e42265980b6997 --build-arg FFI_SHA256=dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601 --build-arg SELFTEST=d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d -t scaas/nethermind-pqz:2.2.0-pqz6c-calib /home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout
+$ docker build -f Dockerfile --progress plain --resource memory=4g --build-arg PQZ_SET=n2304-kmax4096 --target calib --build-arg COMMIT=76c5e71178768cd8461916c415e42265980b6997 --build-arg FFI_SHA256=dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601 --build-arg SELFTEST=d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d -t scaas/nethermind-pqz:2.2.0-pqz6c-calib <repo>
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile

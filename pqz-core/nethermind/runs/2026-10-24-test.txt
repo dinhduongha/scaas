@@ -2,15 +2,15 @@
 An issue was encountered verifying workloads. For more information, run "dotnet workload update".
   Determining projects to restore...
   All projects are up-to-date for restore.
-  Nethermind.Pqz -> /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1/pqz-core/nethermind/Nethermind.Pqz/bin/Release/net10.0/Nethermind.Pqz.dll
-  Harness -> /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1/pqz-core/nethermind/Harness/bin/Release/net10.0/Harness.dll
-  Nethermind.Pqz.Test -> /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll
-Test run for /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll (.NETCoreApp,Version=v10.0)
+  Nethermind.Pqz -> <repo>/pqz-core/nethermind/Nethermind.Pqz/bin/Release/net10.0/Nethermind.Pqz.dll
+  Harness -> <repo>/pqz-core/nethermind/Harness/bin/Release/net10.0/Harness.dll
+  Nethermind.Pqz.Test -> <repo>/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll
+Test run for <repo>/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll (.NETCoreApp,Version=v10.0)
 A total of 1 test files matched the specified pattern.
 NUnit Adapter 5.0.0.0: Test execution started
-Running all tests in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll
+Running all tests in <repo>/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll
    NUnit3TestExecutor discovered 44 of 44 NUnit test cases using Current Discovery mode, Non-Explicit run
-libpqz_ffi.so: /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1/pqz-core/ffi/target/release/libpqz_ffi.so sha256 9687fbf3ec790cd9c925b1d511f918cc199719c67548c0ca493525afec25221e
+libpqz_ffi.so: <repo>/pqz-core/ffi/target/release/libpqz_ffi.so sha256 9687fbf3ec790cd9c925b1d511f918cc199719c67548c0ca493525afec25221e
 Nethermind.Pqz.dll references: Autofac, Nethermind.Api, Nethermind.Blockchain, Nethermind.Core, Nethermind.Evm, Nethermind.Logging, Nethermind.Specs, System.Collections, System.Collections.Immutable, System.Console, System.Linq, System.Runtime, System.Runtime.InteropServices, System.Security.Cryptography, System.Text.Json, System.Threading
 ACVP ML-DSA sigVer: external 30 (of them 2 with the empty context also through the precompile), internal via VerifyMu 30, skipped 0: []
   Passed Plugin_references_only_base_image_assemblies_and_the_framework [6 ms]

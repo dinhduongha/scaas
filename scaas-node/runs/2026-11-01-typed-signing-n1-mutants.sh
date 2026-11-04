@@ -1,7 +1,7 @@
 #!/bin/bash
 # typed-signing N1 mutants: one rule, one edit, the named test must fail; restore, cmp. Usage: <script> [names...]
-cd /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing || exit 2
-S=/tmp/claude-1000/-home-ha-work-ainative-scaas/dacd2ece-9223-418f-8dc5-3794acb85386/scratchpad
+cd "$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 2
+S=$(mktemp -d) || exit 2
 run() { # name file python-replace-from python-replace-to test
   local name=$1 f=$2 from=$3 to=$4 test=$5
   cp "$f" "$S/mut.orig"

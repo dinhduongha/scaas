@@ -3,12 +3,12 @@
    Compiling typenum v1.20.1
    Compiling generic-array v0.14.7
    Compiling keccak v0.1.6
-   Compiling pqz-stmt v0.1.0 (/tmp/claude-1000/-home-ha-work-ainative-scaas/629e56fa-e47b-4948-804f-8271b3245478/scratchpad/ctbefore/pqz-core/stmt)
+   Compiling pqz-stmt v0.1.0 (<scratch>/ctbefore/pqz-core/stmt)
    Compiling crypto-common v0.1.7
    Compiling block-buffer v0.10.4
    Compiling digest v0.10.7
    Compiling sha3 v0.10.8
-   Compiling pqzh-ligero v0.1.0 (/tmp/claude-1000/-home-ha-work-ainative-scaas/629e56fa-e47b-4948-804f-8271b3245478/scratchpad/ctbefore/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero v0.1.0 (<scratch>/ctbefore/pqz-core/pqzh/ligero)
 warning: unused variable: `ns`
    --> src/fft.rs:128:13
     |
@@ -69,7 +69,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==226050==    by 0x1910F6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==226050==    by 0x1910F6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==226050==    by 0x1910F6: std::rt::lang_start_internal (rt.rs:171)
-==226050==    by 0x127F2B: main (in /tmp/claude-1000/-home-ha-work-ainative-scaas/629e56fa-e47b-4948-804f-8271b3245478/scratchpad/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
+==226050==    by 0x127F2B: main (in <scratch>/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
 ==226050== 
 ==226050== Conditional jump or move depends on uninitialised value(s)
 ==226050==    at 0x13FEF7: try_fold<core::slice::iter::Iter<u128>, (), core::iter::adapters::enumerate::{impl#1}::try_fold::enumerate::{closure_env#0}<&u128, (), core::ops::control_flow::ControlFlow<(usize, &u128), ()>, core::iter::traits::iterator::Iterator::find::check::{closure_env#0}<(usize, &u128), &mut pqzh_ligero::fft::{impl#0}::rec::{closure_env#2}>>, core::ops::control_flow::ControlFlow<(usize, &u128), ()>> (library/core/src/iter/traits/iterator.rs:2494)
@@ -410,7 +410,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==226050==    by 0x1910F6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==226050==    by 0x1910F6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==226050==    by 0x1910F6: std::rt::lang_start_internal (rt.rs:171)
-==226050==    by 0x127F2B: main (in /tmp/claude-1000/-home-ha-work-ainative-scaas/629e56fa-e47b-4948-804f-8271b3245478/scratchpad/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
+==226050==    by 0x127F2B: main (in <scratch>/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
 ==226050== 
 ==226050== Conditional jump or move depends on uninitialised value(s)
 ==226050==    at 0x48524EE: bcmp (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
@@ -435,7 +435,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==226050==    by 0x1910F6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==226050==    by 0x1910F6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==226050==    by 0x1910F6: std::rt::lang_start_internal (rt.rs:171)
-==226050==    by 0x127F2B: main (in /tmp/claude-1000/-home-ha-work-ainative-scaas/629e56fa-e47b-4948-804f-8271b3245478/scratchpad/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
+==226050==    by 0x127F2B: main (in <scratch>/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
 ==226050== 
 ==226050== Conditional jump or move depends on uninitialised value(s)
 ==226050==    at 0x1638F2: pqzh_ligero::ring::dot_int (ring.rs:73)
@@ -521,7 +521,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==226050==    by 0x1910F6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==226050==    by 0x1910F6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==226050==    by 0x1910F6: std::rt::lang_start_internal (rt.rs:171)
-==226050==    by 0x127F2B: main (in /tmp/claude-1000/-home-ha-work-ainative-scaas/629e56fa-e47b-4948-804f-8271b3245478/scratchpad/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
+==226050==    by 0x127F2B: main (in <scratch>/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
 ==226050== 
 ==226050== Conditional jump or move depends on uninitialised value(s)
 ==226050==    at 0x12DBDD: pqzh_ligero::cs::witness::<pqzh_ligero::cs::Rel> (cs.rs:546)
@@ -541,7 +541,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==226050==    by 0x1910F6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==226050==    by 0x1910F6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==226050==    by 0x1910F6: std::rt::lang_start_internal (rt.rs:171)
-==226050==    by 0x127F2B: main (in /tmp/claude-1000/-home-ha-work-ainative-scaas/629e56fa-e47b-4948-804f-8271b3245478/scratchpad/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
+==226050==    by 0x127F2B: main (in <scratch>/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
 ==226050== 
 ==226050== Conditional jump or move depends on uninitialised value(s)
 ==226050==    at 0x12DBFE: any<[u8; 16], pqzh_ligero::cs::witness::{closure_env#14}<pqzh_ligero::cs::Rel>> (library/core/src/slice/iter/macros.rs:332)
@@ -562,7 +562,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==226050==    by 0x1910F6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==226050==    by 0x1910F6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==226050==    by 0x1910F6: std::rt::lang_start_internal (rt.rs:171)
-==226050==    by 0x127F2B: main (in /tmp/claude-1000/-home-ha-work-ainative-scaas/629e56fa-e47b-4948-804f-8271b3245478/scratchpad/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
+==226050==    by 0x127F2B: main (in <scratch>/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
 ==226050== 
 ==226050== Conditional jump or move depends on uninitialised value(s)
 ==226050==    at 0x12DC08: pqzh_ligero::cs::witness::<pqzh_ligero::cs::Rel> (cs.rs:548)
@@ -582,7 +582,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==226050==    by 0x1910F6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==226050==    by 0x1910F6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==226050==    by 0x1910F6: std::rt::lang_start_internal (rt.rs:171)
-==226050==    by 0x127F2B: main (in /tmp/claude-1000/-home-ha-work-ainative-scaas/629e56fa-e47b-4948-804f-8271b3245478/scratchpad/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
+==226050==    by 0x127F2B: main (in <scratch>/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
 ==226050== 
 ==226050== Conditional jump or move depends on uninitialised value(s)
 ==226050==    at 0x12DC2A: pqzh_ligero::cs::witness::<pqzh_ligero::cs::Rel> (cs.rs:549)
@@ -602,7 +602,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==226050==    by 0x1910F6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==226050==    by 0x1910F6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==226050==    by 0x1910F6: std::rt::lang_start_internal (rt.rs:171)
-==226050==    by 0x127F2B: main (in /tmp/claude-1000/-home-ha-work-ainative-scaas/629e56fa-e47b-4948-804f-8271b3245478/scratchpad/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
+==226050==    by 0x127F2B: main (in <scratch>/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
 ==226050== 
 ==226050== Conditional jump or move depends on uninitialised value(s)
 ==226050==    at 0x12DC3C: pqzh_ligero::cs::witness::<pqzh_ligero::cs::Rel> (cs.rs:549)
@@ -622,7 +622,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==226050==    by 0x1910F6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==226050==    by 0x1910F6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==226050==    by 0x1910F6: std::rt::lang_start_internal (rt.rs:171)
-==226050==    by 0x127F2B: main (in /tmp/claude-1000/-home-ha-work-ainative-scaas/629e56fa-e47b-4948-804f-8271b3245478/scratchpad/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
+==226050==    by 0x127F2B: main (in <scratch>/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
 ==226050== 
 ==226050== Conditional jump or move depends on uninitialised value(s)
 ==226050==    at 0x1638F2: pqzh_ligero::ring::dot_int (ring.rs:73)
@@ -655,7 +655,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==226050==    by 0x1910F6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==226050==    by 0x1910F6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==226050==    by 0x1910F6: std::rt::lang_start_internal (rt.rs:171)
-==226050==    by 0x127F2B: main (in /tmp/claude-1000/-home-ha-work-ainative-scaas/629e56fa-e47b-4948-804f-8271b3245478/scratchpad/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
+==226050==    by 0x127F2B: main (in <scratch>/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
 ==226050== 
 ==226050== Conditional jump or move depends on uninitialised value(s)
 ==226050==    at 0x1638F2: pqzh_ligero::ring::dot_int (ring.rs:73)
@@ -676,7 +676,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==226050==    by 0x1910F6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==226050==    by 0x1910F6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==226050==    by 0x1910F6: std::rt::lang_start_internal (rt.rs:171)
-==226050==    by 0x127F2B: main (in /tmp/claude-1000/-home-ha-work-ainative-scaas/629e56fa-e47b-4948-804f-8271b3245478/scratchpad/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
+==226050==    by 0x127F2B: main (in <scratch>/ctbefore/pqz-core/pqzh/ligero/target/release/ct)
 ==226050== 
 ==226050== 
 ==226050== HEAP SUMMARY:

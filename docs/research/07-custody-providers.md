@@ -928,7 +928,7 @@ Standalone tuyệt đối: `depends = ['base', 'mail']` (khớp §10), **không*
 #### 07.12.1. `blockchain.custody.provider`
 
 ```python
-# /home/dockers/odoo19/custom-addons/dms_blockchain/models/blockchain_custody_provider.py
+# ~dockers/odoo19/custom-addons/dms_blockchain/models/blockchain_custody_provider.py
 from odoo import api, fields, models, _
 from odoo.exceptions import ValidationError, UserError
 

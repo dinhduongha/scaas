@@ -6,10 +6,10 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 2377610204
 INFO: Loaded 1 modules   (25591 inline 8-bit counters): 25591 [0x5af62a3d8648, 0x5af62a3dea3f), 
 INFO: Loaded 1 PC tables (25591 PCs): 25591 [0x5af62a3dea40,0x5af62a4429b0), 
-INFO:      211 files found in /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/work/mutate
+INFO:      211 files found in <repo>/pqz-core/build/fuzz/work/mutate
 INFO:      142 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:       96 files found in /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/seeds/mutate
+INFO:       96 files found in <repo>/pqz-core/build/fuzz/seeds/mutate
 INFO: seed corpus: files: 449 min: 1b max: 8b total: 2043b rss: 242Mb
 #450	INITED cov: 1555 ft: 2527 corp: 100/513b exec/s: 75 rss: 508Mb
 #452	NEW    cov: 1555 ft: 2531 corp: 101/521b lim: 11 exec/s: 75 rss: 509Mb L: 8/8 MS: 2 CMP-ChangeBinInt- DE: "\001."-
@@ -25,8 +25,8 @@ INFO: seed corpus: files: 449 min: 1b max: 8b total: 2043b rss: 242Mb
 	NEW_FUNC[1/44]: 0x5af62a070280 in <pqz_ffi::pqzl::on_worker<core::option::Option<i32>, pqz_ffi::pqzl::with_core<i32, pqz_ffi::pqzl::verify_generic::{closure#0}>::{closure#1}>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0} /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/ops/function.rs:250
 	NEW_FUNC[2/44]: 0x5af62a0714e0 in <pqz_ffi::pqzl::on_worker<core::option::Option<()>, pqz_ffi::pqzl::with_core<(), pqz_ffi::pqzl::reinit::{closure#1}>::{closure#1}>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0} /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/ops/function.rs:250
 #541	NEW    cov: 1803 ft: 3018 corp: 110/579b lim: 11 exec/s: 5 rss: 576Mb L: 5/11 MS: 3 CopyPart-InsertByte-EraseBytes-
-	NEW_FUNC[1/5]: 0x5af62a0b40f8 in aes_tables /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_sv.c:481
-	NEW_FUNC[2/5]: 0x5af62a0b43b8 in lz_mat /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_sv.c:875
+	NEW_FUNC[1/5]: 0x5af62a0b40f8 in aes_tables <repo>/pqz-core/ffi/../src/pqz_sv.c:481
+	NEW_FUNC[2/5]: 0x5af62a0b43b8 in lz_mat <repo>/pqz-core/ffi/../src/pqz_sv.c:875
 #543	RELOAD cov: 1891 ft: 3175 corp: 111/587b lim: 11 exec/s: 5 rss: 576Mb
 #543	DONE   cov: 1891 ft: 3175 corp: 111/587b lim: 11 exec/s: 5 rss: 576Mb
 ###### Recommended dictionary. ######

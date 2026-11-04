@@ -53,7 +53,7 @@ exit=1
 
 # ---- re-run 2026-10-31 with the locally patched verifier (owner ruling option (a)) ----
 # image scaas/sc-verifier:v1.11.1-amsterdam1 (sha256:378febd1f7fa24ce3b2098032a55cbde80ff9e104cdcaff5c096ff7873981296), built outside the repo:
-# /home/dockers/mba-chain-nethermind/sc-verifier/ (blockscout-rs 9457af29 + foundry-compilers 0.19.10 patched: amsterdam, settings.experimental)
+# ~dockers/mba-chain-nethermind/sc-verifier/ (blockscout-rs 9457af29 + foundry-compilers 0.19.10 patched: amsterdam, settings.experimental)
 # ./script/verify-blockscout.sh   (start 11:42:41)
   ok    AdminLib  0x5c13b2040a31c056fa3a8fc1fd4206242c883368
   ok    ZetherLib  0x8e28089a938e57e8f388af00b1961d60916b6b7c
