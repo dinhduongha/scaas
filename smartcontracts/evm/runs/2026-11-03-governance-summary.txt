@@ -1,4 +1,4 @@
-# 2026-11-03-governance at commit 55a97e0e
+# 2026-11-03-governance at commit 1c2d4771
 step | commit | rc | counts
 build | 4bf3a4d1 | 0 | -
 forge-ua | 52ef7d22 | 0 | 538 passed 0 failed 0 skipped (forge) 
@@ -13,7 +13,7 @@ zether-cross | 7844c251 | 0 | 10 passed 0 failed (forge)
 clientkeys | 7887a712 | 0 | 230 passed 0 failed (node) 
 vectors-check | 8df02f2f | 0 | 2 passed 0 failed 0 ignored (cargo) 
 cargo-zether-prover | ae818a71 | 0 | 67 passed 0 failed 0 ignored (cargo) 
-cargo-scaas-node | - | missing | -
+cargo-scaas-node | 1c2d4771 | 0 | 604 passed 0 failed 56 ignored (cargo) 
 node-e2e-anvil | 8c561cb1 | 0 | 8 passed 0 failed 0 ignored (cargo) 
 ua-rs | 7887a712 | 0 | 50 passed 0 failed 0 ignored (cargo) 
 ua-py | 7887a712 | 0 | 27 ran (unittest) 
@@ -28,7 +28,7 @@ chainspec-check | 168494e1 | 0 | -
 zether-e2e | 168494e1 | 0 | -
 node-e2e-hedera | 168494e1 | 0 | 1 passed 0 failed 0 ignored (cargo) 
 docs | 55a97e0e | 0 | -
-named-tests | 4bf3a4d1 | 0 | -
+named-tests | 1c2d4771 | 0 | -
 at-set-n2048-kmax1024 | 47f0ed21 | 0 | 2356 passed 0 failed 11 skipped (forge) 
 at-set-n2304-kmax4096 | 47f0ed21 | 0 | 2353 passed 0 failed 14 skipped (forge) 
 at-set-n2560-kmax16384 | 47f0ed21 | 0 | 2351 passed 0 failed 16 skipped (forge) 
@@ -271,6 +271,23 @@ cargo-zether-prover: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured;
 cargo-zether-prover: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.45s
 cargo-zether-prover: test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.30s
 cargo-zether-prover: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-scaas-node: test result: ok. 599 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.32s
+cargo-scaas-node: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-scaas-node: test result: ok. 0 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-scaas-node: test result: ok. 0 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-scaas-node: test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-scaas-node: test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-scaas-node: test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-scaas-node: test result: ok. 0 passed; 0 failed; 12 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-scaas-node: test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-scaas-node: test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-scaas-node: test result: ok. 0 passed; 0 failed; 10 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-scaas-node: test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-scaas-node: test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-scaas-node: test result: ok. 0 passed; 0 failed; 10 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-scaas-node: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.98s
+cargo-scaas-node: test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.36s
+cargo-scaas-node: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 node-e2e-anvil: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 88.64s
 ua-rs: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ua-rs: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
@@ -285,7 +302,7 @@ ua-rs: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered ou
 ua-c: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ua-c: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
 node-e2e-hedera: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 24.95s
-named-tests: named-tests: 303 names, 0 problem(s)
+named-tests: named-tests: 327 names, 0 problem(s)
 at-set-n2048-kmax1024: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 5.74ms (121.42µs CPU time)
 at-set-n2048-kmax1024: Suite result: ok. 30 passed; 0 failed; 0 skipped; finished in 28.87ms (21.07ms CPU time)
 at-set-n2048-kmax1024: Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 32.51ms (19.23ms CPU time)
