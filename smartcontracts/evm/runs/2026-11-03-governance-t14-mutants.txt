@@ -1,0 +1,8 @@
+# governance T14 mutants at 7887a712 (clean tree), each one change, restored by git checkout -- <file> after each.
+# red first: test_bitsVectorEqualsTheConstants failed "vm.readFile: failed to open file .../governance_bits.json" before WRITE_BITS=true (rc=1).
+mutant | test that went red | rc
+m1 a bit row's type wrong: RATE_ADJUSTABLE written "capability" in GovBitsVector.t.sol | test_bitsVectorEqualsTheConstants, test_everyBitOfAKindHasANamedRow ("RATE_ADJUSTABLE: capability != power", the mask decides) | 1
+m2 a sentence edited in governance_bits.json (bit 4 "one-way" dropped) | test_bitsVectorEqualsTheConstants ("governance_bits.json is stale") | 1
+m3 a bit moved in GovernanceBits: RESCUABLE 17 -> 18 | test_bitsVectorEqualsTheConstants, test_everyBitOfAKindHasANamedRow ("rows in bit order, none missing: 18 != 17") | 1
+m4 one native table with a wrong type: ua-go GovernanceBits bit 8 ALLOWLIST "power" | ua-go TestGovernanceBitsRows ("bit 8: file ... capability, table ... power") | 1
+m5 a client reading a stale file: ua-rs include_str! of a copy with bit 4's sentence edited | ua-rs tests/vectors.rs governance_bits_rows (the row against the file on disk) | 101
