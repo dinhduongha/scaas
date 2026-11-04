@@ -8,6 +8,7 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UALedgerBase} from "../ua/UALedgerBase.sol";
 import {UACall} from "../ua/UACall.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
@@ -187,18 +188,32 @@ contract MergedEntryTest is MergeBase {
 
     /// One dispatch, `UAKinds.inNativeSpace`: any of the upper 96 bits set makes a derived id, which the EOA's key does
     /// not authorize (bit 160 included, so `from >> 160 < 2` is no native test).
+    /// The refusal is the registry's own (the derived branch was taken), not a later check's.
     function test_derivedHighBitsAreNotTheEoa() public {
         uint8[3] memory bits = [160, 200, 255];
         for (uint256 i; i < bits.length; ++i) {
             bytes32 dirty = _pad(alice) | bytes32(uint256(1) << bits[i]);
             MetaTxLib.UAMetaTransfer memory x = _xfer(dirty, _pad(bob), 1, 0);
-            (bool ok,) = _relay(address(tok), _xferCd(x, _sig(ALICE_PK, _xferDigest(address(tok), x))));
+            bytes32 d = _xferDigest(address(tok), x);
+            (bool ok, bytes memory ret) = _relay(address(tok), _xferCd(x, _sig(ALICE_PK, d)));
             assertFalse(ok, "derived");
+            assertEq(ret, _registrySays(dirty, d), "the registry refused it");
             MetaTxLib.UAMetaTransaction memory m = _call(dirty, abi.encodeCall(IMetaTx.cancelNonce, (7)), 1, 0);
-            (ok,) = _relay(address(tok), _execCd(m, _sig(ALICE_PK, _callDigest(address(tok), m))));
+            d = _callDigest(address(tok), m);
+            (ok, ret) = _relay(address(tok), _execCd(m, _sig(ALICE_PK, d)));
             assertFalse(ok, "derived, generic");
+            assertEq(ret, _registrySays(dirty, d), "the registry refused it, generic");
         }
         assertEq(tok.balanceOf(bob), 0);
+    }
+
+    /// What the registry answers for `id`'s ECDSA-by-alice `UASig` over `d` under `metatx`: a revert, by its own error.
+    function _registrySays(bytes32 id, bytes32 d) internal view returns (bytes memory ret) {
+        bool ok;
+        (ok, ret) = REG_L.staticcall(abi.encodeCall(IUARegistry.requireAuthorized,
+            (id, UAKinds.PURPOSE_METATX, d, _sig(ALICE_PK, d))));
+        assertFalse(ok, "the registry does not authorize it");
+        assertGt(ret.length, 3);
     }
 
     function test_erc1271Holder() public {
