@@ -9,7 +9,7 @@ kinds and `SCaaSDex` (CTR-GOV-01), the whole `Grant` record on every kind (CTR-G
 enum members 8–13 (CTR-GOV-03, -11, -16), the two-call `grantDelay` with `cancelGrant` (CTR-GOV-04), the leg refusal
 (CTR-GOV-05), rescue to an immutable `rescueTo` (CTR-GOV-06), the bands 0–127 / 128–255 and `governance_bits.json`
 (CTR-GOV-10), bits 13 and 14 unused (CTR-GOV-14), the hybrid under `maxSupply` (CTR-GOV-12), identity by UA `bytes32` with
-`_govSubject()` (CTR-GOV-01 Change) and one `GovernanceRouter` per chain in place of per-operator holder clones (CTR-GOV-15
+`_govSubject()` (CTR-GOV-01 Change) and one `GovernanceRouter` per chain and UA registry in place of per-operator holder clones (CTR-GOV-15
 Change). **SPECIFIED, not built:** the regulated implementations with flags 5–9 (CTR-GOV-03, -17, -18), `MODERATE` at bit
 21 (CTR-GOV-08, -13), `_delayedRelaxBits()` and `RECORD` (CTR-GOV-09). **PLANNED:** every non-EVM family (CTR-GOV-07). The
 normative text now lives in `docs/decisions.md` (CTR-GOV-01 to -19), the summary in
@@ -425,7 +425,7 @@ then nothing is built, and `features` keeps carrying the regulated bits on both 
 Decided (CTR-GOV-03, owner 2026-11-02): (i), one regulated implementation per kind, never per feature, the confidential
 kinds included (ids 10–13, CTR-GOV-16, -17); "+0" means no new read (CTR-GOV-11). Built: the plain half only. `NORMAL`
 and `WRAPPED` refuse flags 5–9 with `FeatureNotBuilt`, the confidential kinds with `FeatureInvalidForKind`; the regulated
-implementations are SPECIFIED, and the Change to CTR-AS-17 (spec §12.1) still waits for the owner.
+implementations are SPECIFIED, and the Change to CTR-AS-17 (spec §12.1) is applied (owner 2026-11-04).
 
 ## 3. The attack findings, A1–A21, in v2
 
@@ -557,7 +557,7 @@ are decided.
 >
 > | # | Rule | Where the answer differs from the recommendation | Built state |
 > |---|---|---|---|
-> | D1 | CTR-GOV-01 | identities are UA ids `bytes32`, `_govSubject()`, one `GovernanceRouter` per chain (Change 2026-11-04) | BUILT (T3, T10b, T11) |
+> | D1 | CTR-GOV-01 | identities are UA ids `bytes32`, `_govSubject()`, one `GovernanceRouter` per chain and UA registry (Changes 2026-11-04) | BUILT (T3, T10b, T11) |
 > | D2 | CTR-GOV-02 | no kind is flat-only: the whole record on every kind, size later (CTR-GOV-19); the renounce rule counts live roots | BUILT (T5–T7) |
 > | D3 | CTR-GOV-03, -11, -16 | ids 8–13 are real enum members, not a comment; regulated means flags 5–9 with `DENYLIST` | plain half BUILT; regulated kinds SPECIFIED |
 > | D4 | CTR-GOV-04 | `setGrant` widenings take the two calls with a `termsHash`; `cancelGrant`; `grantDelay ≤ 30 days`; `grantDelay = 0` is one call | BUILT (T7) |

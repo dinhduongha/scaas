@@ -29,7 +29,7 @@ Authentication does not move into the governed contract: no signature is verifie
 | Caller | Subject the contract uses | Cost |
 |---|---|---|
 | any address (EOA, Safe, `SmartKeyAccount`, any contract) | its native id, `bytes32(uint256(uint160(msg.sender)))` | arithmetic only |
-| `GOV_ROUTER` (one per chain, an immutable of the governed contract) | `IGovernanceRouter(GOV_ROUTER).subject()`: the UA the router authenticated for this call; 0 outside a live call → refused | one STATICCALL, only on this path |
+| `GOV_ROUTER` (one per chain and UA registry, an immutable of the governed contract) | `IGovernanceRouter(GOV_ROUTER).subject()`: the UA the router authenticated for this call; 0 outside a live call → refused | one STATICCALL, only on this path |
 
 `GovernanceBase._govSubject()` replaces `_caller()` for every governance check (`use`, the owner's entries, `grantRole`
 by a grantor, `renounceRole`, `acceptOwnership`, `cancelGrant`). A power's own entry (`mint`, `freeze`, …) uses the same
@@ -37,7 +37,8 @@ subject. `UA_POOL`, `SHIELD_POOL` and `bytes32(0)` stay refused as owner and as 
 
 ## 3. `GovernanceRouter` replaces the per-operator `GovernanceHolder` (recommended)
 
-One contract per chain, CREATE2 at a predictable address, no owner, holds nothing.
+One contract per chain and UA registry (owner 2026-11-04: a router authenticates against its own registry), CREATE2 at a
+predictable address, no owner, holds nothing.
 
 - **Entries:** the closed table of spec §3.2, each as `mtx<Op>` and `ua<Op>` (fee mode `NONE`, relayable at fee 0), the
   op's parameters with `bytes32` identities and `target` a signed word. No `execute(bytes)`; the generic path is refused.

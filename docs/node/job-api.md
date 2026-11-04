@@ -663,7 +663,7 @@ of the chain's routers (config `governance_routers`, a list: a second router is 
 both directions: a relayed call on a router is one of its rows, and a router-only entry runs only on a configured router.
 Its generic entries (`mtxExecute`, `mtxBatch`, `executeMetaTransaction`, `uaExecute`, `uaBatch`) are refused by the contract
 and are no rows. `gov_router` joins `ALL` (`CancelNonce`) and `UACancelNonce`'s contracts; no factory row exists and a
-router job carries no generation: the router is deployed once per chain with the release set (`DeployBase`, deploy JSON
+router job carries no generation: the router is deployed once per chain and UA registry with the release set (`DeployBase`, deploy JSON
 `governance_router`). A lane stays no holder: it relays what the subject signed. No existing job's shape changes.
 Operators: set `governance_routers` to the deploy JSON's `governance_router`, plus the router of any other release set on the chain
 (the PQZ e2e stack's `governance_router` in `deployments/7622-pqz.json`); unset, a router job is `CALL_TARGET_REFUSED`.

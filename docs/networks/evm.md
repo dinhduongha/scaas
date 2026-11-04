@@ -235,7 +235,7 @@ sizes, `runs/2026-10-31-fs3-t13-pqz-7622-public-rpc.txt`) gave `UARegistry` 58.1
 | `NORMAL_PQZ` (`NormalPqzToken`) | 56,191 B | 59,900 B | 102.7 M | 3.92 M | 86.25 M | 90.17 M | 94.7 M | fits |
 | `WRAPPED_PQZ` (`WrappedPqzToken`) | 72,160 B | 76,009 B | **127.2 M** | 4.97 M | 110.69 M | 115.65 M | **121.4 M** | fits; above 65,536 B: needs `CHAIN_CODE_LIMIT=131072` and a chain without EIP-7954 |
 | the DEX (`SCaaSDex`) | 33,574 B | 35,928 B | 68.1 M | 2.36 M | 51.65 M | 54.01 M | 56.7 M | fits |
-| `GovernanceRouter` (one per chain, not a release) | 20,073 B | 21,126 B | none (under EIP-170) | 1.40 M | 30.90 M | 32.29 M | 33.9 M | fits |
+| `GovernanceRouter` (one per chain and UA registry, not a release) | 20,073 B | 21,126 B | none (under EIP-170) | 1.40 M | 30.90 M | 32.29 M | 33.9 M | fits |
 | `UARegistry` (split) | 29,429 B | | 61.8 M | | | | | |
 | `UARegistryLib` (linked library of the registry) | 35,946 B | | **71.8 M** | | | | | |
 

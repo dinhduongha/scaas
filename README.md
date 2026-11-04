@@ -410,7 +410,7 @@ within the verification budget of [section 7](#7-universal-accounts-one-identifi
 ```mermaid
 flowchart LR
     M["msig of PQ members<br/>threshold signs"] -->|"typed operation"| R["Relayer<br/>fee 0"]
-    R --> GR["GovernanceRouter<br/>one per chain"]
+    R --> GR["GovernanceRouter<br/>one per chain and UA registry"]
     GR -->|"registry verifies<br/>the members"| G["UA registry"]
     GR -->|"the operation"| T["Token or DEX<br/>asks the router: who?"]
 ```

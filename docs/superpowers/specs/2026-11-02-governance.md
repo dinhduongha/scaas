@@ -2,7 +2,7 @@
 
 **Accepted by the owner, 2026-11-03.** The build starts after `msig-nested` reaches `main`.
 
-**Status:** BUILT on branch `governance` by plan tasks T0–T16 (EVM), except what a section marks SPECIFIED or PLANNED: the regulated implementations (§4.3, §4.4), `_delayedRelaxBits()` (§1.3), the families of §6.3 (Part D7 first). §12 applied to the component docs by T17, except §12.1 (CTR-AS-17), which waits for the owner. Written 2026-11-02 on branch `governance` at `08e92597`, from the rulings CTR-GOV-01 to -18; corrected 2026-11-03 at `9f1744c7` from three reviews of `d1132a40` (Claude, Codex, agy; §0.1) and the owner's rulings of that day, and after `6e09e008` from the final review (Fable; §0.1). A measured prototype of D1 and D2 sits on the same
+**Status:** BUILT on branch `governance` by plan tasks T0–T16 (EVM), except what a section marks SPECIFIED or PLANNED: the regulated implementations (§4.3, §4.4), `_delayedRelaxBits()` (§1.3), the families of §6.3 (Part D7 first). §12 applied to the component docs by T17, and §12.1 (CTR-AS-17) after it (owner 2026-11-04). Written 2026-11-02 on branch `governance` at `08e92597`, from the rulings CTR-GOV-01 to -18; corrected 2026-11-03 at `9f1744c7` from three reviews of `d1132a40` (Claude, Codex, agy; §0.1) and the owner's rulings of that day, and after `6e09e008` from the final review (Fable; §0.1). A measured prototype of D1 and D2 sits on the same
 branch (`66c3e74b`, `0e1cf3ac`); it is not a build of this spec. Rows of §0 cite the ruling or finding they rest on; the rows marked **controller call** are the controller's and the owner may
 override them. CTR-GOV-19 ended the size gate: §9 is the record of what a public chain still needs, and it blocks nothing. Everything cryptographic here stays `UNAUDITED`.
 
@@ -35,7 +35,7 @@ family. Form: the DEX round spec and the `typed-signing` plan.
 | G14 | `use` leaves `GovernanceLib`, `requireRole` goes | B-26, B-31 | §1.3 |
 | G15 | `UA_POOL` and `SHIELD_POOL` are refused as owner | B-19 | §1.4 |
 | G16 | DEX: `admin` → `owner`, `LISTING`, `FEE_ROUTING`, guard on the four powers, `supportsInterface`; a handover needs `revokeRole` | CTR-GOV-01, B-13, B-31 | §2.3 |
-| G17 | `GovernanceHolder`: typed entries only, salt, generic path refused. **Since 2026-11-04 one `GovernanceRouter` per chain**, typed entries only, generic path refused (CTR-GOV-15 Change) | gaps §1, B-14, B-20, CTR-GOV-15 | §3 |
+| G17 | `GovernanceHolder`: typed entries only, salt, generic path refused. **Since 2026-11-04 one `GovernanceRouter` per chain and UA registry**, typed entries only, generic path refused (CTR-GOV-15 Change) | gaps §1, B-14, B-20, CTR-GOV-15 | §3 |
 | G18 | Two-call rotation, no delay, `proposeOperator(0)` cancels, the disclosure says it once. **Gone with the holder** (CTR-GOV-15 Change): no operator; who controls a power is the governed contract's rule | CTR-GOV-15, B-21, B-22 | §3.4 |
 | G19 | Relay rule: an owner or holder operation has no `mtx*` or `ua*` on the governed contract | gaps §2, B-29, B-30 | §3.6 |
 | G20 | Real enum members 0-13, off until published; placeholders 6 and 7 refused | CTR-GOV-16, B-03 | §4 |
@@ -496,8 +496,8 @@ Each is one direct entry under the contract's guard. None is on `mtxSelectors()`
 
 ## 3. `GovernanceRouter` — BUILT on branch `governance` (plan T11, the clients' rows T12, the node rows T15)
 
-The per-operator `GovernanceHolder` this section first specified is replaced by one `GovernanceRouter` per chain
-(CTR-GOV-15 Change, owner 2026-11-04; [Change spec](2026-11-04-governance-ua-identity.md) §3). Every identity is a UA id
+The per-operator `GovernanceHolder` this section first specified is replaced by one `GovernanceRouter` per chain and UA registry
+(CTR-GOV-15 Changes, owner 2026-11-04; [Change spec](2026-11-04-governance-ua-identity.md) §3). Every identity is a UA id
 (§1.4), so a derived UA or a PQ `msig` holds a power under its own id, and the router only authenticates it for one call.
 
 ### 3.1 Shape
@@ -505,7 +505,7 @@ The per-operator `GovernanceHolder` this section first specified is replaced by 
 | Part | Text |
 |---|---|
 | Contracts | `GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter` (abstract: the flow, the generic path refused, the owner's and a holder's ops of `IGovernance`); `GovernanceRouter` (the powers of SCaaS's kinds and the DEX). `src/governance/` |
-| Deployment | one per chain, `new GovernanceRouter{salt}(chain_uid, registry, smartKeyAccountImpl, hedera)` by the deterministic CREATE2 deployer: one predictable address per chain. `DeployBase._deployGovRouter` deploys it after the UA registry and before every release (JSON `governance_router`). `script/pqz/e2e.py` deploys it the same way (the deterministic deployer, `DeployBase`'s salt) on its own UA registry, the PQZ stack's with the `pqz-mlwe` kind, so on a chain that runs both the PQZ stack has a second router, `governance_router` of `deployments/7622-pqz.json`, which the node lists in `governance_routers` too. Not a release, not a `TokenKind`; `OpenFactory` does not know it |
+| Deployment | one per chain and UA registry (a router authenticates against its own registry; CTR-GOV-15 Change), `new GovernanceRouter{salt}(chain_uid, registry, smartKeyAccountImpl, hedera)` by the deterministic CREATE2 deployer: one predictable address per chain and registry. `DeployBase._deployGovRouter` deploys it after the UA registry and before every release (JSON `governance_router`). `script/pqz/e2e.py` deploys it the same way (the deterministic deployer, `DeployBase`'s salt) on its own UA registry, the PQZ stack's with the `pqz-mlwe` kind, so on a chain that runs both the PQZ stack has a second router, `governance_router` of `deployments/7622-pqz.json`, which the node lists in `governance_routers` too. Not a release, not a `TokenKind`; `OpenFactory` does not know it |
 | Who points at it | every governed contract's `GOV_ROUTER` immutable, from its release's `Env.govRouter`; 0 = no router on that chain (§1.4) |
 | Domain | `("SCaaS GovernanceRouter", "1", chainId, router, chain_uid)` |
 | State | none of its own (`test/v2/layout/GovernanceRouter.json` is empty): the nonce map of `scaas.metatx`, `cancelUsed` of `scaas.ua.ledger`, and the transient pair `(subject, target)` in two slots, `keccak256("scaas.govrouter.subject")`, `keccak256("scaas.govrouter.target")` |
@@ -1052,7 +1052,7 @@ Every finding of the v2 attack round. "Accepted" says why.
 | B-17 | P3 | Fixed, §1.5: same `window` |
 | B-18 | P3 | Fixed, §1.5: compare, epoch on upgrade |
 | B-19 | P3 | Fixed, §1.4 |
-| B-20 | P1 | Fixed, §3.1: the operator is in the salt, and CTR-GOV-15 removed the delay it would choose. Since the router (CTR-GOV-15 Change) no salt names an operator: one router per chain, no clone |
+| B-20 | P1 | Fixed, §3.1: the operator is in the salt, and CTR-GOV-15 removed the delay it would choose. Since the router (CTR-GOV-15 Change) no salt names an operator: one router per chain and UA registry, no clone |
 | B-21 | P1 | Fixed by CTR-GOV-15, §3.4: `proposeOperator` overwrites, `(0)` cancels, pending readable, it dies with the rotation; a completed rotation bumps `generation`. The window went with the delay; a stale pending is shown, not expired. Since the router: no rotation exists (§3.4) |
 | B-22 | P2 | Decided, CTR-GOV-15; §1.8 step 5 says it once. Since the router: no operator, a contract holder rotates by its own rules |
 | B-23 | P2 | Fixed, §6.3: TON, Solana, Cosmos, Aptos added. CTR-GOV-07 Change in §12.9 |
@@ -1248,9 +1248,9 @@ From v2 §6, adjusted by the findings. The enum moves up, because every later st
 | Asset-suite stream | `_delayedRelaxBits`, `RECORD`, `ComplianceRegistry`, the regulated hook: all on top of this |
 | Family rounds | §6.3 cells |
 
-## 12. Normative doc changes — applied by plan T17 (2026-11-04), except §12.1
+## 12. Normative doc changes — applied, including §12.1 (owner 2026-11-04)
 
-Proposed at the spec, applied to the component docs by T17 as amended by the later rulings (identity by UA, the router, the bands); §12.1 is not applied. CTR-GOV-03 records that the Change to CTR-AS-17 waits for the owner.
+Proposed at the spec, applied to the component docs by T17 as amended by the later rulings (identity by UA, the router, the bands); §12.1, the Change to CTR-AS-17, applied on the owner's word of 2026-11-04, brought up to flags 5–9, identity by UA and `GovernanceLib`.
 
 ### 12.1 asset-suite.md, CTR-AS-17, replacing its first paragraph
 

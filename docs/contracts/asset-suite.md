@@ -34,9 +34,9 @@ of eligibility attestations, and three permissionless **action contracts** — `
 
 <a id="scope"></a>
 
-EVM / Hedera (Solidity), all clones of never-upgraded implementations. The four regulated controls are creation-time
-flags of the ordinary token kinds ([CTR-AS-17](#CTR-AS-17), [CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); there are no
-regulated kinds or contracts of their own.
+EVM / Hedera (Solidity), all clones of never-upgraded implementations. The five regulated controls are creation-time
+flags 5–9 ([CTR-AS-17](#CTR-AS-17), [CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); each kind has at most one regulated
+implementation; there is none per feature.
 
 ```mermaid
 flowchart LR
@@ -53,8 +53,8 @@ flowchart LR
 | Templates | equity, bond, loyalty, voucher: off-chain presets over the above |
 | Managed markets | `SCaaSDex` unchanged; node intake + gossip rules |
 
-Not covered: confidential (Zether) regulated tokens — a confidential balance can be frozen (stuck) but not seized on
-public chains, and no Zether code changes; non-fungible assets (ERC-721/1155, PLANNED); rebasing, scaled balances or
+Not covered: confidential (Zether) regulated tokens, which follow
+[CTR-GOV-17](../decisions.md#ctr-gov-17--regulated-confidential-kinds-the-rules); non-fungible assets (ERC-721/1155, PLANNED); rebasing, scaled balances or
 balance checkpoints in any token (balances never rebase); on-chain coupon schedules, interest accrual or oracles
 (coupons are funded distributions); escrow with an arbiter and the sealed-bid tender (separate, [tender.md](tender.md));
 gasless wrap (PLANNED); HTS-native regulated tokens on Hedera (owner: HSCS contracts only); any country-specific rule
@@ -70,16 +70,25 @@ headroom below 24 576, less than the control surface; hence the controls live in
 
 <a id="regulated"></a>
 <a id="regulated-kinds"></a>
-<a id="CTR-AS-17"></a>**CTR-AS-17** — **Regulated controls are flags 5–8 (`FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`) on the
-ordinary kinds, code in `GovernanceLib`; refused on confidential kinds** (owner, T8, T11). They are creation-time flags of
-[CTR-TOK-22](token-wrappers.md#CTR-TOK-22), chosen per token and locked or disableable per flag; their roles are held and
-administered as that bullet says. The rules of [CTR-AS-03](#CTR-AS-03)…[CTR-AS-09](#CTR-AS-09) apply to any token with
-one of the flags. A token with none carries no active control and is fully permissionless. A confidential kind refuses
-flags 5–8 in `initialize` (`FeatureInvalidForKind`; the token validates, not the factory), because a confidential balance
-can be frozen (stuck) but not seized on public chains. Otherwise every control combination would need its own
-implementation.
+<a id="CTR-AS-17"></a>**CTR-AS-17** — **Regulated controls are flags 5–9 (`FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`,
+`DENYLIST`), on the ABI of a kind's regulated implementation, code in `GovernanceLib`; one regulated implementation per
+kind, never per feature; a plain `transfer` and `mtxTransfer` add no storage read, on every kind, pinned by a test**
+(owner, T8, T11; owner 2026-11-02, CTR-GOV-03, CTR-GOV-11; applied 2026-11-04). The flags stay creation-time flags of
+[CTR-TOK-22](token-wrappers.md#CTR-TOK-22), chosen per token and locked or disableable per flag; their holders are UA ids
+([CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)), administered as that bullet
+says; the rules of [CTR-AS-03](#CTR-AS-03)…[CTR-AS-09](#CTR-AS-09) apply to any token with one of the flags. What changes
+is where the hook lives: the plain implementation of a kind carries no hook in `_update` or `_uaMove` and refuses flags
+5–9, so its holders pay nothing for a control their token does not have; the regulated implementation of the same kind is
+the same source with the hook compiled in, and takes the combinations of flags 5–9 that §2.2's init checks accept. So a
+control combination still needs no implementation of its own, the reason this rule exists. Ids 8–13 are real members of
+`TokenKind`, off until published
+([CTR-GOV-16](../decisions.md#ctr-gov-16--regulated-kinds-are-real-enum-members-before-the-factory-freezes)). The four
+regulated confidential kinds follow
+[CTR-GOV-17](../decisions.md#ctr-gov-17--regulated-confidential-kinds-the-rules): rules decided, not designed in detail,
+not built. Whether they fit the size limit is not known. Today a confidential kind refuses flags 5–9 in `initialize`
+(`FeatureInvalidForKind`; the token validates, not the factory): this is the built state, not a permanent rule.
 
-**Transitional (BUILT, P1c; branch `governance`, T3 `7825361b`).** The flags exist, with bit 9 `DENYLIST` beside them ([CTR-GOV-18](../decisions.md#ctr-gov-18--receiver-check-two-feature-bits-allowlist-and-denylist-off-by-default)); `initialize` refuses 5–9 with `FeatureNotBuilt` on `NORMAL` and `WRAPPED` and with `FeatureInvalidForKind` on the confidential kinds until the controls are built. The Change of this entry drafted by the governance spec (§12.1: one regulated implementation per kind, [CTR-GOV-03](../decisions.md#ctr-gov-03--a-plain-transfer-stays-0-one-regulated-implementation-per-kind-never-per-feature)) waits for the owner.
+**Transitional (BUILT, P1c; branch `governance`, T3 `7825361b`).** The flags exist, with bit 9 `DENYLIST` beside them ([CTR-GOV-18](../decisions.md#ctr-gov-18--receiver-check-two-feature-bits-allowlist-and-denylist-off-by-default)); `initialize` refuses 5–9 with `FeatureNotBuilt` on `NORMAL` and `WRAPPED` and with `FeatureInvalidForKind` on the confidential kinds until the controls are built. The Change of this entry (governance spec §12.1: one regulated implementation per kind, [CTR-GOV-03](../decisions.md#ctr-gov-03--a-plain-transfer-stays-0-one-regulated-implementation-per-kind-never-per-feature)) is applied (owner 2026-11-04); the regulated implementations are SPECIFIED.
 
 <a id="regulated-exception"></a>
 <a id="CTR-AS-02"></a>**CTR-AS-02** — **Third exception to "Nobody alters a deployed token"** (owner;
