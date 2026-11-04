@@ -155,4 +155,10 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `test/helpers/LegacyMetaTransfer.sol`). Their `ua*` bodies took the `mtx*` names. Tests as they stood before their
   meaning changed: `test/metatx/{ERC20MetaTx,MtxRelayFee,PayMeta,TokenKat}.t.sol`, `test/v2/{Base,MetaTxGasV2,
   ReceiverPays}.t.sol`; vectors `test/vectors/legacy/ua-mtx-merge/{metatx_kat,metatransfer_kat}.json` (the address
-  `MetaTransaction` / `MetaTransfer` KATs; the files of the same name now hold the UA structs). Not built.
+  `MetaTransaction` / `MetaTransfer` KATs; the files of the same name now hold the UA structs).
+  T3 (the token kinds' own pairs): `src/metatx/{NormalToken,WrappedToken,WrappedLib,IWrappedToken}.sol` and
+  `src/trade/ITradeToken.sol`: the address `mtxBurn` over `Burn`, `mtxUnwrap` / `mtxUnwrapLeg` / `mtxUnwrapToUA` over
+  `Unwrap` / `UnwrapLeg` / `UnwrapToUA` with their typehashes (R23), and `mtxWrapOrder(address, WrapOrder, bytes)` with
+  the `WrapOrder` struct, `WrappedLib.wrapBySig` and `_tradeOf` (R39); their `ua*` bodies took the `mtx*` names. Tests as
+  they stood before their meaning changed: `test/v2/MtxWrap.t.sol` (the address wrap order), `test/metatx/NamedEntry.t.sol`
+  (the address `Unwrap` entry), `test/governance/GovHybrid.t.sol` (the cap on both wrap-order entries). Not built.
