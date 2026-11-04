@@ -16,7 +16,7 @@ P=${P:-2026-10-27-metatx-split}
 LOGEXT=${LOGEXT:-txt}
 STEPS=${STEPS-"forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 sizes gen-set docs cargo-zether-prover zether-cross wasm-zether-prover cargo-scaas-node clientkeys ua-rs ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart soroban solana cosmos sui aptos ton near algorand e2e-near e2e-algorand named-tests"}
 FAMILIES=${FAMILIES-"soroban solana cosmos sui aptos ton near algorand e2e-near e2e-algorand"}
-QT=/home/ha/usr/Qt/6.12.0/gcc_64
+# QT: the Qt 6 prefix (the directory holding bin/qmake6), from the environment; only the ua-qt step reads it
 export CAPPED_SLOTS=${CAPPED_SLOTS:-2} CAPPED_MEM=${CAPPED_MEM:-3G}
 
 run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
@@ -80,6 +80,7 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
           cmp clients/zether-prover/vectors/$f.json smartcontracts/evm/test/vectors/zether/s3/$f.json || return 1
       done ;;
     ua-qt) # as Task 18; build/ is git-ignored; ctest -V prints QtQuickTest's per-function PASS lines for named-tests
+      : "${QT:?set QT to the Qt 6 prefix (the directory holding bin/qmake6)}"
       QMAKE=$QT/bin/qmake6 LD_LIBRARY_PATH=$QT/lib QT_QPA_PLATFORM=offscreen scripts/capped sh -c \
         "cmake -S clients/ua-qt -B clients/ua-qt/build -DCMAKE_PREFIX_PATH=$QT && cmake --build clients/ua-qt/build -j2 &&
          cd clients/ua-qt/build && ctest -V --no-tests=error --output-on-failure" ;;

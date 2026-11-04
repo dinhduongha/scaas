@@ -368,6 +368,9 @@ forge|forge|test_routerDeployedAndGated
 forge|forge|test_wrappedReleaseIsGated
 forge|forge|test_everyKindsReleaseFitsTwoHundredMillion
 forge|forge|test_releaseGasPerKind
+forge|forge|test_rescueOfALegSharingALedgerWithAnotherLegRefused
+forge|forge|test_rescueLegSurplusBesideOtherLegs
+forge|forge|test_dexRescueToThisOrAPoolRefusedAtInit
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"
