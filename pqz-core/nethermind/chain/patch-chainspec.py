@@ -30,7 +30,7 @@ import tempfile
 import time
 
 ADDR = ["000000000000000000000000000000005caa0f01", "000000000000000000000000000000005caa0012",
-        "000000000000000000000000000000005caa0013"]
+        "000000000000000000000000000000005caa0013", "000000000000000000000000000000005caa0014"]  # 0014: MLDSA87, CTR-UA-39
 RESET = {"eip4895TransitionTimestamp": 1, "maximumExtraDataSize": "0xffff", "maxCodeSizeTransition": 0}
 TESTNET = 7622  # the only chain --testnet-reset may touch (owner 2026-10-15; 22776 is the future mainnet)
 RESET_GAS_LIMIT = "0xbebc200"  # 200,000,000 = config.json Blocks.TargetBlockGasLimit: no ramp after the reset

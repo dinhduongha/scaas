@@ -105,6 +105,8 @@ public class PqzSchedule
     public required long SelftestGas { get; init; }
     public required long MlDsa44Gas { get; init; }
     public required long MlDsa65Gas { get; init; }
+    /// <summary>Optional (CTR-UA-39 Q4): absent ⇒ <c>MLDSA87</c> is inactive under this schedule; present ⇒ ≥ EIP-8355's base.</summary>
+    public long? MlDsa87Gas { get; init; }
 
     private Dictionary<(byte, uint, string, int, int), long>? _rows;
 
@@ -132,6 +134,7 @@ public class PqzSchedule
         if (SelftestGas <= 0) throw new ArgumentException($"engine.Pqz schedule {Timestamp}: selftestGas {SelftestGas}");
         if (MlDsa44Gas < MlDsa.Base44) throw new ArgumentException($"engine.Pqz schedule {Timestamp}: mldsa44Gas {MlDsa44Gas} < EIP-8355's {MlDsa.Base44}");
         if (MlDsa65Gas < MlDsa.Base65) throw new ArgumentException($"engine.Pqz schedule {Timestamp}: mldsa65Gas {MlDsa65Gas} < EIP-8355's {MlDsa.Base65}");
+        if (MlDsa87Gas < MlDsa.Base87) throw new ArgumentException($"engine.Pqz schedule {Timestamp}: mldsa87Gas {MlDsa87Gas} < EIP-8355's {MlDsa.Base87}");
         MinGas = Pqz.Min(r => r.Gas);
         _rows = rows;
     }
@@ -169,7 +172,7 @@ public class PqzSchedule
     }
 
     public override string ToString() =>
-        $"{{ts {Timestamp}, rows {Pqz.Count} [{string.Join(", ", Pqz.Select(r => $"op{r.Op}/{Convert.ToHexString(r.Id)[..8].ToLowerInvariant()}/{r.StmtLen}{(r.Legs is { } m ? $"/M{m}{(r.AuditorOn == 1 ? "a" : "")}" : "")}={r.Gas}"))}], selftest {SelftestGas}, mldsa44 {MlDsa44Gas}, mldsa65 {MlDsa65Gas}}}";
+        $"{{ts {Timestamp}, rows {Pqz.Count} [{string.Join(", ", Pqz.Select(r => $"op{r.Op}/{Convert.ToHexString(r.Id)[..8].ToLowerInvariant()}/{r.StmtLen}{(r.Legs is { } m ? $"/M{m}{(r.AuditorOn == 1 ? "a" : "")}" : "")}={r.Gas}"))}], selftest {SelftestGas}, mldsa44 {MlDsa44Gas}, mldsa65 {MlDsa65Gas}{(MlDsa87Gas is { } g87 ? $", mldsa87 {g87}" : "")}}}";
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

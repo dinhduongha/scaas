@@ -8,7 +8,7 @@ using Nethermind.Specs;
 namespace Nethermind.Pqz;
 
 /// <summary>P6f D1 / R2: the release spec with the active PQZ schedule; from the first schedule's timestamp the three
-/// addresses join the precompile set together.</summary>
+/// addresses join the precompile set together, and <c>MLDSA87</c> from the first schedule that carries <c>mldsa87Gas</c>.</summary>
 // re-listing IReleaseSpec re-maps all of its members; the compiler then reports nullability mismatches inside Nethermind's
 // own ReleaseSpec (UInt256 fee members), not in this file
 #pragma warning disable CS8613, CS8766
@@ -27,6 +27,7 @@ public class PqzReleaseSpec : ReleaseSpec, IReleaseSpec
         FrozenSet<AddressAsKey> stock = base.BuildPrecompilesCache();
         if (ActiveSchedule is null) return stock;
         HashSet<AddressAsKey> set = [.. stock, PqzAddresses.Pqz, PqzAddresses.MlDsa44, PqzAddresses.MlDsa65];
+        if (ActiveSchedule.MlDsa87Gas is not null) set.Add(PqzAddresses.MlDsa87); // CTR-UA-39 Q4: with the schedule that carries the key
         FrozenSet<AddressAsKey> frozen = set.ToFrozenSet();
         BySet.AddOrUpdate(frozen, ActiveSchedule);
         return frozen;

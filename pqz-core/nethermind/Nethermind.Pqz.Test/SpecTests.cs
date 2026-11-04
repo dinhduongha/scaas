@@ -60,6 +60,20 @@ public class SpecTests
         Assert.That(PqzReleaseSpec.ScheduleOf(pqz.GetSpec(new ForkActivation(10_000, T1)))!.Timestamp, Is.EqualTo(T1));
     }
 
+    /// <summary>CTR-UA-39 Q4 (owner 2026-11-04): <c>mldsa87Gas</c> is optional per schedule; <c>MLDSA87</c> joins the set from
+    /// the first schedule that carries it, so a chainspec written before the key still parses and keeps its three.</summary>
+    [Test]
+    public void Mldsa87_joins_with_the_schedule_that_carries_its_key()
+    {
+        ISpecProvider p = Provider(WithPqz(Schedule(T1), With(Schedule(T2), "mldsa87Gas", MlDsa.Provisional87Gas)));
+        Assert.That(Set(p, T1).Contains(PqzAddresses.MlDsa87), Is.False, "a schedule without the key");
+        Assert.That(Three.All(Set(p, T1).Contains));
+        Assert.That(Set(p, T2).Contains(PqzAddresses.MlDsa87), "from the schedule with the key");
+        Assert.That(p.GetSpec(new ForkActivation(10_000, T2)).IsPrecompile(PqzAddresses.MlDsa87));
+        Assert.That(PqzReleaseSpec.ScheduleOf(p.GetSpec(new ForkActivation(10_000, T2)))!.MlDsa87Gas, Is.EqualTo(MlDsa.Provisional87Gas));
+        Assert.That(new PqzPrecompileProvider().GetPrecompiles().ContainsKey(PqzAddresses.MlDsa87), "the provider knows it");
+    }
+
     [Test]
     public void Genesis_activation_from_block_0()
     {
@@ -165,7 +179,8 @@ public class SpecTests
 
     public static readonly (string, Func<ChainSpec>)[] Bad =
     [
-        ("unknown key in a schedule", () => WithPqz(With(Schedule(T1), "mldsa87Gas", 1))),
+        ("unknown key in a schedule", () => WithPqz(With(Schedule(T1), "mldsa88Gas", 1))),
+        ("mldsa87Gas below EIP-8355", () => WithPqz(With(Schedule(T1), "mldsa87Gas", 13_499))),
         ("unknown key at the top", () => Load(g => g["engine"]!["Pqz"] = new JsonObject { ["schedules"] = new JsonArray(Schedule(T1)), ["x"] = 1 })),
         ("unknown key in a row", () => WithPqz(With(Schedule(T1), "pqz", new JsonArray(new JsonObject { ["op"] = 1, ["id"] = "0x" + Corpus.Ids["pqzl"], ["stmtLen"] = 83072, ["gas"] = 1, ["x"] = 1 })))),
         ("missing selftestGas", () => WithPqz(Without(Schedule(T1), "selftestGas"))),

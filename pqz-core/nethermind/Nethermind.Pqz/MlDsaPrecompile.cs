@@ -13,8 +13,12 @@ namespace Nethermind.Pqz;
 /// raise one, the harness reached none); every other exception stays a failed call (Nethermind's handler).</summary>
 public static class MlDsa
 {
-    public const long Base44 = 6_500, Base65 = 9_000;
-    public const int Pk44 = 1312, Sig44 = 2420, Pk65 = 1952, Sig65 = 3309;
+    public const long Base44 = 6_500, Base65 = 9_000, Base87 = 13_500;
+    public const int Pk44 = 1312, Sig44 = 2420, Pk65 = 1952, Sig65 = 3309, Pk87 = 2592, Sig87 = 4627;
+    /// <summary>PROVISIONAL, not calibrated (CTR-UA-39 Q4, owner 2026-11-04): the spec's estimate for <c>mldsa87Gas</c> by the
+    /// ML-DSA-65 ratio (68,000 at EIP-8355's 9,000 ⇒ ≈ 102,000 at its 13,500). The value a schedule carries until the
+    /// <c>Calibrate</c> run the owner allows measures it; the plugin itself prices from the schedule, never from this.</summary>
+    public const long Provisional87Gas = 102_000;
 
     public static long Gas(int len, int pk, int sig, long price) => price + 6L * ((Math.Max(0, len - pk - sig) + 31L) / 32);
 
@@ -71,4 +75,21 @@ public sealed class MlDsa65Precompile : IPrecompile<MlDsa65Precompile>
 
     public Result<byte[]> Run(ReadOnlyMemory<byte> inputData, IReleaseSpec releaseSpec) =>
         MlDsa.Verify(MLDsaAlgorithm.MLDsa65, MlDsa.Pk65, MlDsa.Sig65, inputData.Span);
+}
+
+/// <summary>ML-DSA-87 (CTR-UA-39, owner 2026-11-04): the same EIP-8355 path at <see cref="PqzAddresses.MlDsa87"/>. Its key
+/// <c>mldsa87Gas</c> is optional per schedule: a schedule without it leaves the address out of the precompile set
+/// (<see cref="PqzReleaseSpec"/>) and prices it as no schedule does (<c>ulong.MaxValue</c>).</summary>
+public sealed class MlDsa87Precompile : IPrecompile<MlDsa87Precompile>
+{
+    public static MlDsa87Precompile Instance { get; } = new();
+    public static Address Address => PqzAddresses.MlDsa87;
+    public static string Name => "MLDSA87";
+    public ulong BaseGasCost(IReleaseSpec releaseSpec) => 0UL;
+
+    public ulong DataGasCost(ReadOnlyMemory<byte> inputData, IReleaseSpec releaseSpec) =>
+        PqzReleaseSpec.ScheduleOf(releaseSpec) is { MlDsa87Gas: { } g } ? (ulong)MlDsa.Gas(inputData.Length, MlDsa.Pk87, MlDsa.Sig87, g) : ulong.MaxValue;
+
+    public Result<byte[]> Run(ReadOnlyMemory<byte> inputData, IReleaseSpec releaseSpec) =>
+        MlDsa.Verify(MLDsaAlgorithm.MLDsa87, MlDsa.Pk87, MlDsa.Sig87, inputData.Span);
 }

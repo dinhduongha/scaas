@@ -258,8 +258,8 @@ static class Run
             byte[] o1, o2;
             try
             {
-                o1 = (lvl == 44 ? MlDsa44Precompile.Instance.Run(x, null!) : MlDsa65Precompile.Instance.Run(x, null!)).Data!;
-                o2 = (lvl == 44 ? MlDsa44Precompile.Instance.Run(x, null!) : MlDsa65Precompile.Instance.Run(x, null!)).Data!;
+                o1 = MlDsaRun(lvl, x);
+                o2 = MlDsaRun(lvl, x);
             }
             catch (Exception e) { Fail($"mldsa{lvl} exception {e.GetType().Name}: {e.Message}", x); return; }
             if (o1.Length != 32 || !o1.AsSpan().SequenceEqual(o2) || o1.AsSpan(0, 31).ContainsAnyExcept((byte)0) || o1[31] > 1) { Fail($"mldsa{lvl} output", x); return; }
@@ -370,11 +370,18 @@ static class Run
         }
     }
 
-    static List<(int lvl, byte[] input, bool valid)> MlDsaBases(string root)
+    static byte[] MlDsaRun(int lvl, byte[] x) => (lvl switch
+    {
+        44 => MlDsa44Precompile.Instance.Run(x, null!),
+        65 => MlDsa65Precompile.Instance.Run(x, null!),
+        _ => MlDsa87Precompile.Instance.Run(x, null!),
+    }).Data!;
+
+        static List<(int lvl, byte[] input, bool valid)> MlDsaBases(string root)
     {
         static bool V(JsonNode? v) => v!.GetValueKind() == System.Text.Json.JsonValueKind.String ? bool.Parse((string)v!) : (bool)v!;
         static byte[] H(string s) => Convert.FromHexString(s.StartsWith("0x") ? s[2..] : s);
-        static int Lvl(int pk) => pk == MlDsa.Pk44 ? 44 : 65;
+        static int Lvl(int pk) => pk == MlDsa.Pk44 ? 44 : pk == MlDsa.Pk65 ? 65 : 87; // 87: CTR-UA-39
         List<(int, byte[], bool)> l = [];
         JsonObject ext = JsonNode.Parse(File.ReadAllText(Path.Combine(root, "smartcontracts/vectors/ua/pq_external.json")))!.AsObject();
         foreach (JsonNode? c in ext["eip8355"]!["cases"]!.AsArray())
@@ -387,7 +394,7 @@ static class Run
             l.Add((Lvl(pk.Length), [.. pk, .. H((string)c["sig"]!), .. msg], mp[1] == 0 && V(c["valid"])));
         }
         JsonObject sigs = JsonNode.Parse(File.ReadAllText(Path.Combine(root, "smartcontracts/vectors/ua/pq_signatures.json")))!.AsObject();
-        foreach (JsonObject k in sigs["kinds"]!.AsArray().Concat(sigs["extraKeys"]!.AsArray()).Select(k => k!.AsObject()).Where(k => (string)k["name"]! is "mldsa44" or "mldsa65"))
+        foreach (JsonObject k in sigs["kinds"]!.AsArray().Concat(sigs["extraKeys"]!.AsArray()).Select(k => k!.AsObject()).Where(k => (string)k["name"]! is "mldsa44" or "mldsa65" or "mldsa87"))
         {
             byte[] pk = H((string)k["keyData"]!);
             byte[] tag = Keccak.Compute(Encoding.ASCII.GetBytes($"scaas.ua.{k["name"]}.v1")).BytesToArray();

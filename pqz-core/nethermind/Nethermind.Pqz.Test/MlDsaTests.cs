@@ -11,7 +11,8 @@ using NUnit.Framework;
 
 namespace Nethermind.Pqz.Test;
 
-/// <summary>P6f Task 3: ML-DSA-44 / -65 in the EIP-8355 layout through .NET 10's MLDsa (OpenSSL), D5 / R4.</summary>
+/// <summary>P6f Task 3: ML-DSA-44 / -65 in the EIP-8355 layout through .NET 10's MLDsa (OpenSSL), D5 / R4; ML-DSA-87 since
+/// CTR-UA-39 (owner 2026-11-04).</summary>
 public class MlDsaTests
 {
     private static JsonObject Ext => JsonNode.Parse(File.ReadAllText(Repo.Path_("smartcontracts", "vectors", "ua", "pq_external.json")))!.AsObject();
@@ -23,10 +24,17 @@ public class MlDsaTests
     {
         MlDsa.Pk44 => (MLDsaAlgorithm.MLDsa44, MlDsa.Pk44, MlDsa.Sig44, i => MlDsa44Precompile.Instance.Run(i, null!).Data!),
         MlDsa.Pk65 => (MLDsaAlgorithm.MLDsa65, MlDsa.Pk65, MlDsa.Sig65, i => MlDsa65Precompile.Instance.Run(i, null!).Data!),
+        MlDsa.Pk87 => (MLDsaAlgorithm.MLDsa87, MlDsa.Pk87, MlDsa.Sig87, i => MlDsa87Precompile.Instance.Run(i, null!).Data!),
         _ => throw new ArgumentException($"pk length {pkLen}"),
     };
 
     private static byte[] Word(bool b) => [.. new byte[31], (byte)(b ? 1 : 0)];
+
+    /// <summary>The level of an input <c>pk ‖ sig ‖ 32-byte msg</c>, by its length.</summary>
+    private static int PkOf(int inputLength) =>
+        new[] { MlDsa.Pk44, MlDsa.Pk65, MlDsa.Pk87 }.First(p => Level(p) is var (_, pk, sig, _) && pk + sig + 32 == inputLength);
+
+    private static readonly int[] Pks = [MlDsa.Pk44, MlDsa.Pk65, MlDsa.Pk87];
 
     [Test]
     public void Supported_and_runtime_recorded()
@@ -80,7 +88,7 @@ public class MlDsaTests
         }
         TestContext.Progress.WriteLine($"ACVP ML-DSA sigVer: external {ext} (of them {viaPrecompile} with the empty context also through the precompile), internal via VerifyMu {intl}, skipped {skipped.Count}: [{string.Join("; ", skipped)}]");
         Assert.That(bad, Is.Empty);
-        Assert.That(ext + intl, Is.EqualTo(60 - skipped.Count));
+        Assert.That(ext + intl, Is.EqualTo(90 - skipped.Count)); // 30 per level
     }
 
     [Test]
@@ -101,7 +109,7 @@ public class MlDsaTests
     {
         JsonObject d = Sigs;
         IEnumerable<JsonObject> keys = d["kinds"]!.AsArray().Concat(d["extraKeys"]!.AsArray()).Select(k => k!.AsObject())
-            .Where(k => (string)k["name"]! is "mldsa44" or "mldsa65");
+            .Where(k => (string)k["name"]! is "mldsa44" or "mldsa65" or "mldsa87");
         foreach (JsonObject k in keys)
         {
             byte[] pk = Hex.B((string)k["keyData"]!);
@@ -122,7 +130,7 @@ public class MlDsaTests
         foreach (var (name, input, valid) in UaRows())
         {
             n++;
-            if (!Level(input.Length == MlDsa.Pk44 + MlDsa.Sig44 + 32 ? MlDsa.Pk44 : MlDsa.Pk65).run(input).AsSpan().SequenceEqual(Word(valid)))
+            if (!Level(PkOf(input.Length)).run(input).AsSpan().SequenceEqual(Word(valid)))
                 bad.Add(name);
         }
         TestContext.Progress.WriteLine($"pq_signatures ML-DSA rows through the precompile: {n}");
@@ -132,7 +140,7 @@ public class MlDsaTests
     [Test]
     public void Every_length_and_one_bit_flips()
     {
-        foreach (int pkLen in new[] { MlDsa.Pk44, MlDsa.Pk65 })
+        foreach (int pkLen in Pks)
         {
             var (_, pk, sigLen, run) = Level(pkLen);
             byte[] good = UaRows().First(r => r.valid && r.input.Length == pk + sigLen + 32).input;
@@ -159,7 +167,7 @@ public class MlDsaTests
     {
         // review W-R (2026-10-19): EIP-8355 never reverts. No real input is known to make .NET's import / verify throw
         // (every pk bit pattern decodes; a malformed signature is false), so the throw comes through the seam.
-        foreach (int pkLen in new[] { MlDsa.Pk44, MlDsa.Pk65 })
+        foreach (int pkLen in Pks)
         {
             var (alg, pk, sig, run) = Level(pkLen);
             byte[] good = UaRows().First(r => r.valid && r.input.Length == pk + sig + 32).input;
@@ -177,11 +185,11 @@ public class MlDsaTests
     [Test]
     public void Startup_known_answers()
     {
-        for (int l = 0; l < 2; l++)
+        for (int l = 0; l < 3; l++)
         {
             byte[][] c = MlDsaKat.Cases(l);
             Assert.That(c.Length, Is.EqualTo(8));
-            var (_, pk, sig, run) = Level(c[0].Length > MlDsa.Pk65 + MlDsa.Sig65 ? MlDsa.Pk65 : MlDsa.Pk44);
+            var (_, pk, sig, run) = Level(Pks[l]); // MlDsaKat's level order: 44, 65, 87
             for (int i = 0; i < c.Length; i++)
             {
                 Assert.That(run(c[i]), Is.EqualTo(Word(i == 0)), $"level {l} case {i}");
@@ -189,7 +197,8 @@ public class MlDsaTests
             }
         }
         Assert.That(MlDsaKat.Run(), Is.EqualTo(MlDsaKat.ExpectedHash));
-        Assert.That(Convert.ToHexStringLower(SHA256.HashData([1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0])), Is.EqualTo(MlDsaKat.ExpectedHash));
+        Assert.That(Convert.ToHexStringLower(SHA256.HashData([1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0])),
+            Is.EqualTo(MlDsaKat.ExpectedHash));
         TestContext.Progress.WriteLine($"ML-DSA KAT {MlDsaKat.Run()}, OpenSSL {MlDsaKat.OpenSslVersion}");
     }
 
@@ -202,6 +211,23 @@ public class MlDsaTests
         PqzSchedule s = PqzPrecompileTests.Schedule();
         IReleaseSpecStub spec = new(s);
         Assert.That(MlDsa44Precompile.Instance.DataGasCost(new byte[MlDsa.Pk44 + MlDsa.Sig44 + 32], spec.Spec), Is.EqualTo(s.MlDsa44Gas + 6));
+    }
+
+    /// <summary>CTR-UA-39 Q4: EIP-8355's ML-DSA-87 base 13,500 + 6 per word above the split; a schedule without
+    /// <c>mldsa87Gas</c> prices the address as no schedule does (it is not in that schedule's precompile set either:
+    /// SpecTests), a schedule with it at its own value. The PROVISIONAL value is the spec's estimate, above the base.</summary>
+    [Test]
+    public void Mldsa87_gas_needs_its_schedule_key()
+    {
+        Assert.That(MlDsa.Gas(MlDsa.Pk87 + MlDsa.Sig87 + 32, MlDsa.Pk87, MlDsa.Sig87, MlDsa.Base87), Is.EqualTo(13_506));
+        byte[] input = new byte[MlDsa.Pk87 + MlDsa.Sig87 + 32];
+        PqzSchedule without = PqzPrecompileTests.Schedule();
+        Assert.That(without.MlDsa87Gas, Is.Null);
+        Assert.That(MlDsa87Precompile.Instance.DataGasCost(input, new IReleaseSpecStub(without).Spec), Is.EqualTo(ulong.MaxValue));
+        PqzSchedule with = PqzPrecompileTests.Schedule(mldsa87Gas: MlDsa.Provisional87Gas);
+        Assert.That(MlDsa87Precompile.Instance.DataGasCost(input, new IReleaseSpecStub(with).Spec), Is.EqualTo(MlDsa.Provisional87Gas + 6));
+        Assert.That(MlDsa.Provisional87Gas, Is.EqualTo(102_000).And.GreaterThanOrEqualTo(MlDsa.Base87));
+        Assert.That(PqzAddresses.MlDsa87, Is.EqualTo(new Address("0x000000000000000000000000000000005caa0014")));
     }
 }
 
