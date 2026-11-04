@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {console2, Vm} from "forge-std/Test.sol";
 import {ZetherFixture} from "./helpers/ZetherFixture.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
@@ -59,14 +60,14 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
             return abi.encodeWithSelector(_sel(mode), _zMulti(t.payload, carol.ua), t.proof);
         }
         MetaTxLib.MetaTransaction memory mt = MetaTxLib.MetaTransaction({
-            from: vm.addr(PAYER_PK), data: "", batch: 1, nonce: tok.mtxNonce(vm.addr(PAYER_PK), 1),
+            from: vm.addr(PAYER_PK), data: "", batch: 1, nonce: tok.mtxNonce(MetaTxLib.pad(vm.addr(PAYER_PK)), 1),
             validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED,
             relayer: relayer, fee: 3, feeRecipient: address(0)
         });
         Tx memory u = _proveMulti(tok, alice, to, vs, 1_000_000, carol.ua, mode, tok.envelopeBinding(mt));
         mt.data = abi.encodeWithSelector(_sel(mode), _zMulti(u.payload, carol.ua), u.proof);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, tok.mtxDigest(mt));
-        return abi.encodeCall(IMetaTx.mtxExecute, (mt, abi.encodePacked(r, s, v)));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, MtxDigest.metaTx(address(tok), mt));
+        return abi.encodeCall(IMetaTx.executeMetaTransaction, (mt, abi.encodePacked(r, s, v)));
     }
 
     /// @dev The relayed cell through the signed entry (TS-D14): the same envelope and proof shape as `_build`, the struct's
@@ -76,7 +77,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
         for (uint256 j; j < m; ++j) to[j] = rs[j];
         uint256[] memory vs = new uint256[](m);
         vs[m / 2] = 1000;
-        MetaTxLib.Envelope memory e = MetaTxLib.Envelope(vm.addr(PAYER_PK), 1, tok.mtxNonce(vm.addr(PAYER_PK), 1), block.timestamp + 300,
+        MetaTxLib.Envelope memory e = MetaTxLib.Envelope(vm.addr(PAYER_PK), 1, tok.mtxNonce(MetaTxLib.pad(vm.addr(PAYER_PK)), 1), block.timestamp + 300,
             MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, relayer, 3, address(0));
         bytes32 b = tok.envelopeBinding(MetaTxLib.MetaTransaction(e.from, "", e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient));
         Tx memory u = _proveMulti(tok, alice, to, vs, 1_000_000, carol.ua, mode, b);
@@ -181,14 +182,14 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
                 cd = abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(t.payload, carol.ua), t.proof));
             } else {
                 MetaTxLib.MetaTransaction memory mt = MetaTxLib.MetaTransaction({
-                    from: vm.addr(PAYER_PK), data: "", batch: 1, nonce: tok.mtxNonce(vm.addr(PAYER_PK), 1),
+                    from: vm.addr(PAYER_PK), data: "", batch: 1, nonce: tok.mtxNonce(MetaTxLib.pad(vm.addr(PAYER_PK)), 1),
                     validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED,
                     relayer: relayer, fee: 3, feeRecipient: address(0)
                 });
                 Tx memory u = _proveTransfer(tok, alice, rs[0], 1000, 1_000_000, carol.ua, tok.envelopeBinding(mt));
                 mt.data = abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(u.payload, carol.ua), u.proof));
-                (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, tok.mtxDigest(mt));
-                cd = abi.encodeCall(IMetaTx.mtxExecute, (mt, abi.encodePacked(r, s, v)));
+                (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, MtxDigest.metaTx(address(tok), mt));
+                cd = abi.encodeCall(IMetaTx.executeMetaTransaction, (mt, abi.encodePacked(r, s, v)));
             }
             (bool ok, uint256 reg, uint256 st) = _run(cd, CAP + STATE_RESERVOIR, relayed);
             console2.log(string.concat("GAS ", bls ? "bls12381 " : "bn254 ", relayed ? "relayed " : "direct ", "single",

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {IMetaTxAddress} from "../../src/metatx/IMetaTxAddress.sol";
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
@@ -77,13 +79,20 @@ contract TokenKatTest is Test {
         bytes32 structHash = m.hashStruct();
         bytes32 domainSep = _domainSep();
         bytes32 digest = keccak256(abi.encodePacked(hex"1901", domainSep, structHash));
-        assertEq(digest, tok.mtxDigest(m));
+        assertEq(digest, MtxDigest.metaTx(address(tok), m));
         bytes memory sig = _sign(digest);
-        bytes memory data = abi.encodeCall(IMetaTx.mtxExecute, (m, sig));
-        vm.prank(RELAYER);                                                // the vector really executes, as calldata
-        (bool ok,) = address(tok).call(data);
+        // ua-mtx-merge T1, meaning: the vector's calldata is the address `mtxExecute`, which left tokens (MD-1; T2 moves
+        // this KAT to legacy): that selector finds no entry; the same struct and signature execute through
+        // `executeMetaTransaction` (R3: one struct, one domain)
+        bytes memory data = abi.encodeCall(IMetaTxAddress.mtxExecute, (m, sig));
+        vm.prank(RELAYER);
+        (bool ok, bytes memory ret) = address(tok).call(data);
+        assertFalse(ok, "no address mtxExecute on a token");
+        assertEq(ret.length, 0);
+        vm.prank(RELAYER);
+        (ok,) = address(tok).call(abi.encodeCall(IMetaTx.executeMetaTransaction, (m, sig)));
         assertTrue(ok);
-        assertEq(tok.mtxNonce(m.from, 7), 1);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(m.from), 7), 1);
 
         string memory k = "tx";
         _common(k, domainSep);

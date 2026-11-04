@@ -14,7 +14,7 @@ import {UAKinds} from "../ua/UAKinds.sol";
 
 /// @title The checks of every signed meta-tx path (metatx split, variant A; CTR-MTX-07, CTR-MTX-17, CTR-MTX-23).
 /// @notice Linked by the token kinds and run by DELEGATECALL in the token's context: steps 1–4 of CTR-MTX-17 and the fee
-///         amount, on the address path and the UA path, for `MetaTransaction` and `MetaTransfer`; the address path's
+///         amount, on the address path and on ids, for `MetaTransaction` and `MetaTransfer`; the address path's
 ///         signature rule and the UA authorization rule. The token passes its immutables in `Ctx`. `data` itself stays
 ///         in the token (owner 2026-10-21): `preCall` takes `keccak256(data)`, `preNamed` and `preNamedUA` take `args`,
 ///         the op's parameters as struct words, which they hash into the entry's struct. No state variable, no immutable,
@@ -78,28 +78,37 @@ library MtxPipelineLib {
 
     // ------------------------------------------------------------------ external (the tokens, by DELEGATECALL)
 
-    /// @notice CTR-MTX-17 steps 1-4 and the fee amount, address path (`ua = false`) or UA path (`ua = true`).
-    ///         Address path: envelope (`SelfSender`), digest, signature, call shape, nonce, fee. UA path: ledger on,
-    ///         envelope, digest, `authorize(PURPOSE_METATX)`, `MetaTxUnknownOp`, call shape, nonce, fee.
-    function preCall(Ctx calldata c, Envelope calldata e, CallFacts calldata f, bool ua, bytes calldata auth)
+    /// @notice CTR-MTX-17 steps 1-4 and the fee amount of the address path (`executeMetaTransaction`, R3): envelope
+    ///         (`SelfSender`), digest, signature, call shape, nonce, fee.
+    function preCall(Ctx calldata c, Envelope calldata e, CallFacts calldata f, bytes calldata sig)
         external returns (Out memory)
     {
-        return _pre(c, e, _structHash(ua ? MetaTxLib.UAMETATX_TYPEHASH : MetaTxLib.METATX_TYPEHASH, e), f, ua, auth);
+        return _pre(c, e, _structHash(MetaTxLib.METATX_TYPEHASH, e), f, sig);
+    }
+
+    /// @notice The same steps on an id (ua-mtx-merge, R47: a `UASig`): envelope, digest, `authorize(PURPOSE_METATX)`,
+    ///         the allowlist (B: `MetaTxUnknownOp` for a derived id off `_uaAllowed`), call shape, nonce, fee.
+    function preCallUA(Ctx calldata c, Envelope calldata e, CallFacts calldata f, IUARegistry.UASig calldata auth)
+        external returns (Out memory o)
+    {
+        o.digest = _open(c, e, _structHash(MetaTxLib.UAMETATX_TYPEHASH, e));
+        _authorize(c, e.from, UAKinds.PURPOSE_METATX, o.digest, auth);
+        _close(o, e, f, true);
     }
 
     /// @notice `preCall` of a named entry (TS-D14): the same steps, the same lanes, over the entry's own struct
     ///         (`_namedHash`); `args` = the op's parameters as struct words. `e.dataHash` is unused (0).
     function preNamed(Ctx calldata c, bytes32 typehash, Envelope calldata e, bytes calldata args, CallFacts calldata f,
-        bool ua, bytes calldata auth) external returns (Out memory)
+        bytes calldata sig) external returns (Out memory)
     {
-        return _pre(c, e, _namedHash(typehash, e, args), f, ua, auth);
+        return _pre(c, e, _namedHash(typehash, e, args), f, sig);
     }
 
-    /// @notice `preNamed` of a named `ua*` entry (TS-D14): the same steps, the `UASig` goes to the registry as it came.
+    /// @notice `preNamed` on an id (TS-D14): the same steps, the `UASig` as `preCallUA`.
     function preNamedUA(Ctx calldata c, bytes32 typehash, Envelope calldata e, bytes calldata args, CallFacts calldata f,
         IUARegistry.UASig calldata auth) external returns (Out memory o)
     {
-        o.digest = _open(c, e, _namedHash(typehash, e, args), true);
+        o.digest = _open(c, e, _namedHash(typehash, e, args));
         _authorize(c, e.from, UAKinds.PURPOSE_METATX, o.digest, auth);
         _close(o, e, f, true);
     }
@@ -120,7 +129,6 @@ library MtxPipelineLib {
     function preTransferUA(Ctx calldata c, MetaTxLib.UAMetaTransfer calldata t, bytes32 signed, uint256 have,
         IUARegistry.UASig calldata auth) external returns (Out memory o)
     {
-        if (c.registry == address(0)) revert IUALedger.UALedgerOff();
         MetaTxLib.UAMetaTransfer memory m = t;
         o.digest = _openTransfer(c, m, signed, true);
         _authorize(c, m.from, UAKinds.PURPOSE_METATX, o.digest, auth);
@@ -260,7 +268,8 @@ library MtxPipelineLib {
         if (have < need) revert IERC20MetaTx.MetaTxInsufficientForFee(need, have);
     }
 
-    /// @dev A receiver: a native id other than 0, this contract and the two pools; or a SIGNING UA of `registry`.
+    /// @dev A receiver: a native id other than 0, this contract and the two pools; or a SIGNING UA of `registry`, which
+    ///      must exist (C: only a derived side needs a registry, `UALedgerOff` by name).
     function _checkTo(address registry, bytes32 to) internal view {
         if (UAKinds.inNativeSpace(to)) {
             address a = address(uint160(uint256(to)));
@@ -270,6 +279,7 @@ library MtxPipelineLib {
             if (a == MetaTxLib.SHIELD_POOL) revert IUALedger.ShieldPoolNotPayable();
             return;
         }
+        if (registry == address(0)) revert IUALedger.UALedgerOff();
         uint16 kind = IUARegistry(registry).kindOf(to);
         if (kind == 0) revert IUALedger.UANotRegistered(to);
         if (!UAKinds.isSigning(kind)) revert IUALedger.UAKindNotAccepted(to, kind);
@@ -300,26 +310,27 @@ library MtxPipelineLib {
         _useNonce(m.from, m.batch);
     }
 
-    /// @dev The steps of `preCall` and `preNamed` over either struct hash.
-    function _pre(Ctx calldata c, Envelope calldata e, bytes32 structHash, CallFacts calldata f, bool ua,
-        bytes calldata auth) private returns (Out memory o)
+    /// @dev The steps of `preCall` and `preNamed` (address path) over either struct hash.
+    function _pre(Ctx calldata c, Envelope calldata e, bytes32 structHash, CallFacts calldata f, bytes calldata sig)
+        private returns (Out memory o)
     {
-        o.digest = _open(c, e, structHash, ua);
-        if (ua) _authorize(c, e.from, UAKinds.PURPOSE_METATX, o.digest, auth);
-        else _requireSignature(c, _native(e.from), o.digest, auth);
-        _close(o, e, f, ua);
+        o.digest = _open(c, e, structHash);
+        _requireSignature(c, _native(e.from), o.digest, sig);
+        _close(o, e, f, false);
     }
 
-    /// @dev What runs before the signature: ledger on, envelope, digest.
-    function _open(Ctx calldata c, Envelope calldata e, bytes32 structHash, bool ua) private view returns (bytes32) {
-        if (ua && c.registry == address(0)) revert IUALedger.UALedgerOff();
+    /// @dev What runs before the signature: envelope, digest. No registry check (C: `_authorize` asks for one only for a
+    ///      derived id).
+    function _open(Ctx calldata c, Envelope calldata e, bytes32 structHash) private view returns (bytes32) {
         if (_checkEnvelope(e.from, e.batch, e.nonce, e.validUntil, e.mode, e.relayer)) revert IMetaTx.SelfSender();
         return MessageHashUtils.toTypedDataHash(c.domainSeparator, structHash);
     }
 
-    /// @dev What runs after it: the UA allowlist, call shape, nonce, fee.
+    /// @dev What runs after it: the UA allowlist (B: a derived id only; inside the self-call it is `UA_POOL`, so it may
+    ///      reach `_uaAllowed` and nothing else; a native id keeps the whole `_mtxRule` list, CTR-MTX-19), call shape,
+    ///      nonce, fee.
     function _close(Out memory o, Envelope calldata e, CallFacts calldata f, bool ua) private {
-        if (ua && (f.len < 4 || !f.uaAllowed)) revert IUALedger.MetaTxUnknownOp(f.sel);
+        if (ua && !UAKinds.inNativeSpace(e.from) && (f.len < 4 || !f.uaAllowed)) revert IUALedger.MetaTxUnknownOp(f.sel);
         _checkCall(f.sel, f.len, f.feeClass, f.amountArg, f.staticLen, e.mode, f.supported);
         _useNonce(e.from, e.batch);
         (o.fee, o.feeTo) = _callFee(
@@ -333,32 +344,22 @@ library MtxPipelineLib {
         if (!SigCheck.isValid(from, digest, sig, _erc1271Gas(c, from))) revert IMetaTx.MetaTxBadSignature();
     }
 
-    /// @dev A derived id: the registry under `purpose`. A native id (whatever the purpose): 0 and the pools refused
-    ///      (C5-2, C5-3), then CTR-UA-24 (`SigCheck.isValid`) or HIP-632 on Hedera.
-    function _authorize(Ctx calldata c, bytes32 from, bytes32 purpose, bytes32 digest, bytes calldata auth)
-        private view
-    {
-        if (!UAKinds.inNativeSpace(from)) {
-            address r = c.registry;
-            if (r.code.length == 0) revert(); // the typed call's own check, before the call: no code, no authorization
-            (bool ok, bytes memory ret) = r.staticcall(UAKinds.uaAuthCall(from, purpose, digest, auth)); // R1 → C2
-            if (ok) return;
-            assembly ("memory-safe") {
-                revert(add(ret, 32), mload(ret))
-            }
-        }
-        _authorizeNative(c, from, digest, auth);
-    }
-
-    /// @dev The rule above for a `UASig`: a native id signs with `auth.signature`.
+    /// @dev The one dispatch, `UAKinds.inNativeSpace` (invariant 1). A derived id: a registry must exist (C,
+    ///      `UALedgerOff` by name), then `requireAuthorized` under `purpose`. A native id (whatever the purpose): no
+    ///      registry call (B); R17: `signature` only, a `keyData` or `members` is refused, not ignored; then
+    ///      `_authorizeNative`.
     function _authorize(Ctx calldata c, bytes32 from, bytes32 purpose, bytes32 digest, IUARegistry.UASig calldata auth)
         private view
     {
         if (!UAKinds.inNativeSpace(from)) {
+            if (c.registry == address(0)) revert IUALedger.UALedgerOff();
             return IUARegistry(c.registry).requireAuthorized(from, purpose, digest, auth);
         }
+        if (auth.keyData.length != 0 || auth.members.length != 0) revert IMetaTx.MetaTxBadSignature();
         _authorizeNative(c, from, digest, auth.signature);
     }
+
+    /// @dev 0 and the pools refused (C5-2, C5-3), then CTR-UA-24 (`SigCheck.isValid`) or HIP-632 on Hedera.
 
     function _authorizeNative(Ctx calldata c, bytes32 from, bytes32 digest, bytes calldata auth) private view {
         address a = address(uint160(uint256(from)));

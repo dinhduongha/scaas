@@ -42,7 +42,7 @@ contract BaseTest is V2Fixture {
         bytes memory s = _signCall(PK, address(t), m);
         vm.prank(relayer);
         vm.expectRevert(err);
-        t.mtxExecute(m, s);
+        t.executeMetaTransaction(m, s);
     }
 
     // ------------------------------------------------------------------ domain, init
@@ -84,7 +84,7 @@ contract BaseTest is V2Fixture {
         emit IMetaTx.MetaTransactionExecuted(alice, relayer, 7, 0, d, relayer, 0);
         _exec(x);
         assertEq(t.balanceOf(shop), 100e6);
-        assertEq(t.mtxNonce(alice, 7), 1);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 7), 1);
         _expectExecRevert(x, abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
     }
 
@@ -97,13 +97,13 @@ contract BaseTest is V2Fixture {
         emit IMetaTx.MetaNonceCancelled(alice, 5, 2);
         vm.prank(alice);
         t.cancelNonce(5);
-        assertEq(t.mtxNonce(alice, 5), 2);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 5), 2);
         // signed on another lane: a subject without gas cancels
         vm.expectEmit(address(t));
         emit IMetaTx.MetaNonceCancelled(alice, 5, 3);
         _execCall(PK, address(t), _call(alice, abi.encodeCall(t.cancelNonce, (5)), 9, RR));
-        assertEq(t.mtxNonce(alice, 5), 3);
-        assertEq(t.mtxNonce(alice, 9), 1);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 5), 3);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 9), 1);
     }
 
     // ------------------------------------------------------------------ R26, CTR-TOK-01
@@ -166,7 +166,7 @@ contract BaseTest is V2Fixture {
     /// Review L2: a transfer to 0 fails at step 3 (before the nonce), never after the fee.
     function test_transferToZeroFailsAtStepThree() public {
         _expectExecRevert(_tr(alice, address(0), 1, 0, 1, RR), abi.encodeWithSelector(IERC20MetaTx.PayToZero.selector));
-        assertEq(t.mtxNonce(alice, 1), 0);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 0);
     }
 
     /// Review L1: STATICCALL tới một selector lạ (ví dụ `nonces(address)` của ai đó dò EIP-2612) revert rẻ, không
@@ -275,7 +275,7 @@ contract BaseTest is V2Fixture {
             t.mtxTransferWithFee(alice, shop, amount, x.batch, 0, x.validUntil, x.mode, relayer, x.fee, feeTaker, s);
         } else if (which == 2) t.mtxExecuteTransfer(x, s);
         else t.mtxPay(alice, shop, amount, payId, x.validUntil, x.mode, relayer, 0, address(0), s);
-        assertEq(t.mtxNonce(alice, x.batch), 1);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), x.batch), 1);
     }
 
     function test_oneSignatureOneLaneAcrossPaths() public {
@@ -336,7 +336,7 @@ contract BaseTest is V2Fixture {
         emit IERC20Payment.PaymentSettled(alice, shop, 25e6, 0, relayer, p);
         vm.prank(relayer);
         t.mtxPay(alice, shop, 25e6, p, x.validUntil, RR, relayer, 0, address(0), s);
-        assertEq(t.mtxNonce(alice, t.payLane(p)), 1);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), t.payLane(p)), 1);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
         t.mtxPay(alice, shop, 25e6, p, x.validUntil, RR, relayer, 0, address(0), s);
@@ -379,7 +379,7 @@ contract BaseTest is V2Fixture {
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         t.mtxBatchTransfer(xs, ss);
         assertEq(t.balanceOf(shop), 0);
-        assertEq(t.mtxNonce(alice, 100), 0);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 100), 0);
     }
 
     function test_mtxBatchShape() public {

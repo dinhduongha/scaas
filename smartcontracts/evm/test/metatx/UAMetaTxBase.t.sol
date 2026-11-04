@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {UACall} from "../ua/UACall.sol";
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -78,21 +79,21 @@ contract UAMetaTxBaseTest is Test {
     }
 
     function _auth(MetaTxLib.UAMetaTransaction memory m) internal view returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, c.uaDigest(m));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, c.mtxDigest(m));
         return abi.encodePacked(r, s, v);
     }
 
     function test_uaBaseRefusesFee() public {
         // a native id at fee 0: the id as the subject, its address as the sender
         MetaTxLib.UAMetaTransaction memory m = _m(MetaTxLib.pad(signer), 0, 0, 0);
-        c.uaExecute(m, _auth(m));
+        c.mtxExecute(m, UACall.auth(m.from, _auth(m)));
         assertEq(c.subject(), MetaTxLib.pad(signer));
         assertEq(c.sender(), signer);
-        assertEq(c.uaNonce(m.from, 0), 1);
+        assertEq(c.mtxNonce(m.from, 0), 1);
 
         // a derived UA: `_msgSender()` is the pool, only `_ticketSubject()` names it
         m = _m(UA, 0, 0, 0);
-        c.uaExecute(m, abi.encode(bytes(""), bytes(hex"01")));
+        c.mtxExecute(m, UACall.auth(m.from, abi.encode(bytes(""), bytes(hex"01"))));
         assertEq(c.subject(), UA);
         assertEq(c.sender(), MetaTxLib.UA_POOL);
 
@@ -104,10 +105,10 @@ contract UAMetaTxBaseTest is Test {
         // the default hook, on a contract that claims the mode: fee ≠ 0 has no ledger, the whole call reverts
         UAFeeModes f = new UAFeeModes(keccak256("chain"), REG);
         m = _m(MetaTxLib.pad(signer), 0, FIX, 1);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, f.uaDigest(m));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, f.mtxDigest(m));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, FIX));
-        f.uaExecute(m, abi.encodePacked(r, s, v));
-        assertEq(f.uaNonce(m.from, 0), 0);
+        f.mtxExecute(m, UACall.auth(m.from, abi.encodePacked(r, s, v)));
+        assertEq(f.mtxNonce(m.from, 0), 0);
     }
 
     /// `supportedModes()` rules both paths alike (0x03 here): a PERCENT fee that rounds to 0 runs on neither.
@@ -118,63 +119,77 @@ contract UAMetaTxBaseTest is Test {
         u.data = data;
         bytes memory auth = _auth(u);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, mode));
-        c.uaExecute(u, auth);
+        c.mtxExecute(u, UACall.auth(u.from, auth));
 
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(signer, data, 0, 0, block.timestamp + 300, mode,
             address(0), 1, address(0));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, c.mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, MtxDigest.metaTx(address(c), m));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, mode));
-        c.mtxExecute(m, abi.encodePacked(r, s, v));
+        c.executeMetaTransaction(m, abi.encodePacked(r, s, v));
     }
 
-    /// A derived subject has no lane through `cancelNonce` (it would be `UA_POOL`'s); `uaCancelNonce` is its cancel.
+    /// A derived subject has no lane through `cancelNonce` (it would be `UA_POOL`'s); `mtxCancelNonce` is its cancel.
+    /// (ua-mtx-merge T1, meaning: the unordered `uaCancelNonce`, refused twice by `UACancelUsed`, is now the ordered
+    /// `mtxCancelNonce(UAEnvelope, lane, UASig)` on its own lane 3, refused twice by `MetaTxBadNonce`, Q2.)
     function test_uaBaseCancelNonce() public {
         UACancelListed l = new UACancelListed(keccak256("chain"), REG);
         MetaTxLib.UAMetaTransaction memory m = _m(UA, 0, 0, 0);
         m.data = abi.encodeCall(IMetaTx.cancelNonce, (9));
         bytes memory auth = abi.encode(bytes(""), bytes(hex"01"));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, IMetaTx.cancelNonce.selector));
-        l.uaExecute(m, auth);
-        assertEq(l.mtxNonce(MetaTxLib.UA_POOL, 9), 0);
+        l.mtxExecute(m, UACall.auth(m.from, auth));
+        assertEq(l.mtxNonce(MetaTxLib.pad(MetaTxLib.UA_POOL), 9), 0);
 
-        uint256 until = block.timestamp + 300;
+        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(UA, 3, 0, block.timestamp + 300, 0, address(0), 0, address(0));
         vm.expectEmit(address(l));
         emit IUALedger.UANonceCancelled(UA, 9, 1);
-        l.uaCancelNonce(UA, 9, until, UACall.auth(UA, auth));
-        assertEq(l.uaNonce(UA, 9), 1);
-        vm.expectRevert(IUALedger.UACancelUsed.selector);
-        l.uaCancelNonce(UA, 9, until, UACall.auth(UA, auth));
+        l.mtxCancelNonce(e, 9, UACall.auth(UA, auth));
+        assertEq(l.mtxNonce(UA, 9), 1);
+        assertEq(l.mtxNonce(UA, 3), 1);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
+        l.mtxCancelNonce(e, 9, UACall.auth(UA, auth));
     }
 
     /// The address path of a non-token takes the same `Ctx`: 400k for a `SmartKeyAccount` clone, 50k for any other wallet.
+    /// (ua-mtx-merge T1: the address path is `executeMetaTransaction` here, MD-1.)
     function test_uaBaseAddressPathUsesCtx() public {
         GasBurner1271 impl = new GasBurner1271();
         UAOnly a = new UAOnly(keccak256("chain"), REG, address(impl));
         address[2] memory wallets = [Clones.clone(address(impl)), address(impl)];
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(wallets[0], abi.encodeCall(UAOnly.poke, ()), 0, 0,
             block.timestamp + 300, 0, address(0), 0, address(0));
-        a.mtxExecute(m, bytes(hex"01"));
+        a.executeMetaTransaction(m, bytes(hex"01"));
         assertEq(a.subject(), MetaTxLib.pad(wallets[0]));
 
         m.from = wallets[1];
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        a.mtxExecute(m, bytes(hex"01"));
+        a.executeMetaTransaction(m, bytes(hex"01"));
     }
 
+    /// ua-mtx-merge T1 (C, R9), meaning: without a registry a native id runs (it was `UALedgerOff`); a derived one is
+    /// `UALedgerOff` by name.
     function test_uaBaseOffWithoutRegistry() public {
         UAOnly off = new UAOnly(keccak256("chain"), address(0), address(0));
         MetaTxLib.UAMetaTransaction memory m = _m(MetaTxLib.pad(signer), 0, 0, 0);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, off.mtxDigest(m));
+        off.mtxExecute(m, UACall.auth(m.from, abi.encodePacked(r, s, v)));
+        assertEq(off.sender(), signer);
+        m = _m(UA, 0, 0, 0);
         vm.expectRevert(IUALedger.UALedgerOff.selector);
-        off.uaExecute(m, "");
+        off.mtxExecute(m, UACall.auth(m.from, abi.encode(bytes(""), bytes(hex"01"))));
     }
 
-    /// Only the `_uaAllowed` selectors run; `cancelNonce` is on the address allowlist, not this one.
+    /// A derived id runs only the `_uaAllowed` selectors; `cancelNonce` is on the address allowlist, not this one.
+    /// (ua-mtx-merge T1, B, meaning: a native id reads `_mtxRule`, so its `cancelNonce` runs; it was `MetaTxUnknownOp`.)
     function test_uaBaseAllowlist() public {
-        MetaTxLib.UAMetaTransaction memory m = _m(MetaTxLib.pad(signer), 0, 0, 0);
+        MetaTxLib.UAMetaTransaction memory m = _m(UA, 0, 0, 0);
         m.data = abi.encodeCall(IMetaTx.cancelNonce, (1));
-        bytes memory auth = _auth(m);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, IMetaTx.cancelNonce.selector));
-        c.uaExecute(m, auth);
+        c.mtxExecute(m, UACall.auth(m.from, abi.encode(bytes(""), bytes(hex"01"))));
+        m = _m(MetaTxLib.pad(signer), 0, 0, 0);
+        m.data = abi.encodeCall(IMetaTx.cancelNonce, (1));
+        c.mtxExecute(m, UACall.auth(m.from, _auth(m)));
+        assertEq(c.mtxNonce(MetaTxLib.pad(signer), 1), 1);
     }
 
     function test_uaBaseBatch() public {
@@ -184,7 +199,7 @@ contract UAMetaTxBaseTest is Test {
         ms[1] = _m(UA, 0, 0, 0);
         auths[0] = _auth(ms[0]);
         auths[1] = abi.encode(bytes(""), bytes(hex"01"));
-        assertTrue(c.uaBatch(ms, auths));
+        assertTrue(c.mtxBatch(ms, UACall.auths(ms, auths)));
         assertEq(c.subject(), UA);
     }
 }

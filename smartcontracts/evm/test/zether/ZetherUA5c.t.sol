@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {UACall} from "../ua/UACall.sol";
 import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
@@ -47,24 +49,24 @@ contract ZetherUA5cTest is ZetherFixture {
     /// A UA envelope signed by `u` (the Zether UA is SIGNING, U8), fixed outer fee 3, restricted to the relayer.
     function _uam(User memory u, bytes memory data) internal view returns (MetaTxLib.UAMetaTransaction memory m) {
         m = MetaTxLib.UAMetaTransaction({
-            from: _id(u), data: data, batch: 1, nonce: tok.uaNonce(_id(u), 1), validUntil: block.timestamp + 300,
+            from: _id(u), data: data, batch: 1, nonce: tok.mtxNonce(_id(u), 1), validUntil: block.timestamp + 300,
             mode: RR | FIX, relayer: relayer, fee: 3, feeRecipient: address(0)
         });
     }
 
     function _uaAuth(User memory u, MetaTxLib.UAMetaTransaction memory m) internal view returns (bytes memory) {
-        return abi.encode(bytes(""), ZetherKeys.schnorr(u.x, reg.uaMessage(_zkind(), UAKinds.PURPOSE_METATX, tok.uaDigest(m)), bls));
+        return abi.encode(bytes(""), ZetherKeys.schnorr(u.x, reg.uaMessage(_zkind(), UAKinds.PURPOSE_METATX, tok.mtxDigest(m)), bls));
     }
 
     function _mt(bytes memory data) internal view returns (MetaTxLib.MetaTransaction memory m) {
         m = MetaTxLib.MetaTransaction({
-            from: payer, data: data, batch: 1, nonce: tok.mtxNonce(payer, 1), validUntil: block.timestamp + 300,
+            from: payer, data: data, batch: 1, nonce: tok.mtxNonce(MetaTxLib.pad(payer), 1), validUntil: block.timestamp + 300,
             mode: RR | FIX, relayer: relayer, fee: 3, feeRecipient: address(0)
         });
     }
 
     function _sign(MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, tok.mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, MtxDigest.metaTx(address(tok), m));
         return abi.encodePacked(r, s, v);
     }
 
@@ -95,7 +97,7 @@ contract ZetherUA5cTest is ZetherFixture {
         m.data = _single(t);
         bytes memory au = _uaAuth(bob, m);
         vm.prank(relayer);
-        tok.uaExecute(m, au);
+        tok.mtxExecute(m, UACall.auth(m.from, au));
         assertEq(tok.balanceOf(relayer), 3, "outer fee to the relayer");
         assertEq(tok.balanceOfUA(_id(bob)), 7, "from the signer's UA balance");
         assertTrue(_holds(tok, carol, 100, false));
@@ -110,13 +112,13 @@ contract ZetherUA5cTest is ZetherFixture {
         bytes memory sig = _sign(m);
         vm.prank(relayer);
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        tok.mtxExecute(m, sig);
+        tok.executeMetaTransaction(m, sig);
         vm.expectRevert(IZetherToken.ProofRejected.selector);
         tok.mtxConfidentialTransferSingle(_zSingle(t.payload, _none()), t.proof);
         u.data = _single(t);
         bytes memory au = _uaAuth(bob, u);
         vm.prank(relayer);
-        tok.uaExecute(u, au); // where it belongs
+        tok.mtxExecute(u, UACall.auth(u.from, au)); // where it belongs
     }
 
     /// Review C0-3: the retired `mtxConfidentialTransferNoBundle` selector is refused inside a UA envelope too.
@@ -126,7 +128,7 @@ contract ZetherUA5cTest is ZetherFixture {
         bytes memory au = _uaAuth(bob, u);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSignature("MetaTxUnknownOp(bytes4)", old)); // the UA path's own unknown-op error
-        tok.uaExecute(u, au);
+        tok.mtxExecute(u, UACall.auth(u.from, au));
     }
 
     /// A proof bound to an address envelope fails inside a UA envelope with the same data.
@@ -137,11 +139,11 @@ contract ZetherUA5cTest is ZetherFixture {
         bytes memory auth = _uaAuth(bob, u);
         vm.prank(relayer);
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        tok.uaExecute(u, auth);
+        tok.mtxExecute(u, UACall.auth(u.from, auth));
         m.data = _single(t);
         bytes memory sig = _sign(m);
         vm.prank(relayer);
-        tok.mtxExecute(m, sig); // where it belongs
+        tok.executeMetaTransaction(m, sig); // where it belongs
         assertTrue(_holds(tok, carol, 100, false));
     }
 
@@ -152,7 +154,7 @@ contract ZetherUA5cTest is ZetherFixture {
         bytes memory au = _uaAuth(bob, u);
         vm.prank(relayer);
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        tok.uaExecute(u, au);
+        tok.mtxExecute(u, UACall.auth(u.from, au));
         tok.mtxConfidentialTransferSingle(_zSingle(t.payload, _none()), t.proof); // the same proof as a direct call
     }
 
@@ -168,7 +170,7 @@ contract ZetherUA5cTest is ZetherFixture {
         m.data = abi.encodeCall(IZetherToken.mtxConfidentialTransfer, (_zMulti(t.payload, _none()), t.proof));
         bytes memory au = _uaAuth(bob, m);
         vm.prank(relayer);
-        tok.uaExecute(m, au);
+        tok.mtxExecute(m, UACall.auth(m.from, au));
         assertTrue(_holds(tok, carol, 50, false));
         m = _uam(bob, "");
         (bytes memory pl, bytes memory pr) = _proveUnshieldTo(tok, alice, 60, 450, _id(bob), _none(), tok.uaEnvelopeBinding(m));
@@ -176,7 +178,7 @@ contract ZetherUA5cTest is ZetherFixture {
         uint256 pool = tok.balanceOf(SHIELD_POOL_);
         au = _uaAuth(bob, m);
         vm.prank(relayer);
-        tok.uaExecute(m, au);
+        tok.mtxExecute(m, UACall.auth(m.from, au));
         assertEq(tok.balanceOfUA(_id(bob)), 10 - 6 + 60 * SCALE, "two outer fees out, the unshield in");
         assertEq(tok.balanceOf(SHIELD_POOL_), pool - 60 * SCALE);
         assertTrue(_holds(tok, alice, 390, true));
@@ -240,7 +242,7 @@ contract ZetherUA5cTest is ZetherFixture {
         m.mode = fee == 0 ? RR : RR | FIX;
         bytes memory sig = _sign(m);
         vm.prank(relayer);
-        tok.mtxExecute(m, sig);
+        tok.executeMetaTransaction(m, sig);
     }
 
     function _relayUA(User memory u, bytes memory data, uint256 fee) internal {
@@ -249,7 +251,7 @@ contract ZetherUA5cTest is ZetherFixture {
         m.mode = fee == 0 ? RR : RR | FIX;
         bytes memory au = _uaAuth(u, m);
         vm.prank(relayer);
-        tok.uaExecute(m, au);
+        tok.mtxExecute(m, UACall.auth(m.from, au));
     }
 
     function _badOwnerSig() internal pure returns (IUARegistry.UASig memory s) {
@@ -310,7 +312,7 @@ contract ZetherUA5cTest is ZetherFixture {
         bytes memory sig = _sign(m);
         vm.prank(relayer);
         vm.expectRevert();
-        tok.mtxExecute(m, sig);
+        tok.executeMetaTransaction(m, sig);
         _relayAddr(abi.encodeCall(IZetherToken.mtxRollOverSigned, (alice.ua, pend, until, _rollSig(alice, acc, pend, until))), 3);
         assertEq(tok.accountState(alice.ua).accSeq, acc + 1, "owner roll-over via the address envelope");
         assertEq(tok.balanceOf(relayer), 3);

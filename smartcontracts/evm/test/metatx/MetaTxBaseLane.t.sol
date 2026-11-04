@@ -2,14 +2,14 @@
 pragma solidity ^0.8.24;
 
 import {MtxFixture} from "../helpers/MtxFixture.sol";
-import {MetaTxBase} from "../../src/metatx/MetaTxBase.sol";
+import {MetaTxAddressBase} from "../../src/metatx/MetaTxAddressBase.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
 /// Test-only: a second signed "struct" (stands for P1b's `MetaTransfer`) sharing the lane space (CTR-MTX-15),
 /// and an allowlisted function that is NOT `nonReentrant` (CTR-MTX-18 fail-closed).
-contract LaneHarness is MetaTxBase {
-    constructor() MetaTxBase("SCaaS Lane", bytes32(uint256(1))) {}
+contract LaneHarness is MetaTxAddressBase {
+    constructor() MetaTxAddressBase("SCaaS Lane", bytes32(uint256(1))) {}
 
     function consume(address from, uint256 batch, uint256 nonce) external {
         _checkEnvelope(MetaTxLib.pad(from), batch, nonce, block.timestamp + 1, MetaTxLib.MODE_OPEN, address(0));

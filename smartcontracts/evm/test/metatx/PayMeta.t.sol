@@ -14,7 +14,7 @@ import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-import {IRig, PlainRig, PqzRig, ZetherRig} from "./MetaTxParity.t.sol";
+import {IRig, PlainRig, PqzRig, ZetherRig} from "./helpers/KindRigs.sol";
 
 /// @notice CTR-MTX-26 (metatx split T7, spec §6.1, R11): `mtxPayMeta` / `uaPayMeta` are `mtxPay` / `uaPay` with
 ///         `payId = metaPayId(salt, meta)` — the same digest, lane `payLane(payId)`, nonce 0 — and emit
@@ -149,7 +149,7 @@ contract PayMetaTest is Test {
         vm.recordLogs();
         _payMeta(t, salt, meta, x.validUntil, _ecdsa(d));
         _checkLogs(t, x.entryRef, meta, false, x.batch, d, i);
-        assertEq(MetaTokenBase(t).mtxNonce(signer, x.batch), 1, kinds[i]);
+        assertEq(MetaTokenBase(t).mtxNonce(MetaTxLib.pad(signer), x.batch), 1, kinds[i]);
         assertEq(MetaTokenBase(t).balanceOf(PAYEE), AMOUNT, kinds[i]);
         assertEq(MetaTokenBase(t).balanceOf(FEE_TO), FEE, kinds[i]);
     }
@@ -176,7 +176,7 @@ contract PayMetaTest is Test {
         vm.recordLogs();
         _uaPayMeta(t, salt, meta, x.validUntil, _ecdsa(d));
         _checkLogs(t, x.entryRef, meta, true, x.batch, d, i);
-        assertEq(MetaTokenBase(t).uaNonce(x.from, x.batch), 1, kinds[i]);
+        assertEq(MetaTokenBase(t).mtxNonce(x.from, x.batch), 1, kinds[i]);
         assertEq(MetaTokenBase(t).balanceOf(PAYEE), AMOUNT, kinds[i]);
         assertEq(MetaTokenBase(t).balanceOf(FEE_TO), FEE, kinds[i]);
     }

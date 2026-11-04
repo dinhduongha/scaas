@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
@@ -119,14 +120,14 @@ contract FeaturesTest is Test {
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice,
             data: abi.encodeCall(NormalToken.burn, (1)), batch: 1, nonce: 0, validUntil: block.timestamp + 300,
             mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
-        bytes memory s = _sig(off.mtxDigest(m));
+        bytes memory s = _sig(MtxDigest.metaTx(address(off), m));
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(2)));
-        off.mtxExecute(m, s);
+        off.executeMetaTransaction(m, s);
         NormalToken on = _token(impl, _cfg(BURNABLE, 0, address(0), address(0), 100));
-        s = _sig(on.mtxDigest(m));
+        s = _sig(MtxDigest.metaTx(address(on), m));
         vm.prank(relayer);
-        on.mtxExecute(m, s);
+        on.executeMetaTransaction(m, s);
         assertEq(on.balanceOf(alice), 99);
     }
 
@@ -213,10 +214,10 @@ contract FeaturesTest is Test {
             MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice,
                 data: abi.encodeWithSelector(sels[i]), batch: i, nonce: 0, validUntil: block.timestamp + 300,
                 mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
-            bytes memory s = _sig(t.mtxDigest(m));
+            bytes memory s = _sig(MtxDigest.metaTx(address(t), m));
             vm.prank(relayer);
             vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, sels[i]));
-            t.mtxExecute(m, s);
+            t.executeMetaTransaction(m, s);
         }
     }
 

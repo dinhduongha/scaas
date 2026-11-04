@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {V2Fixture} from "./helpers/V2Fixture.sol";
@@ -36,7 +37,7 @@ contract HookRecipient is ITokensReceived {
 
     function tokensReceived(address, uint256) external {
         if (msg.sender != w.underlying()) return;
-        seenNonce = w.mtxNonce(watched, watchedBatch);
+        seenNonce = w.mtxNonce(MetaTxLib.pad(watched), watchedBatch);
         seenBalance = w.balanceOf(watched);
         seenFeeBalance = w.balanceOf(watchedFeeTo);
         if (reenterGuarded) {
@@ -87,13 +88,13 @@ contract UnwrapOpTest is V2Fixture {
         bytes memory s = _signCall(PK, w, m);
         vm.prank(relayer);
         vm.expectRevert(err);
-        MetaTokenBase(w).mtxExecute(m, s);
-        assertEq(MetaTokenBase(w).mtxNonce(alice, m.batch), 0);
+        MetaTokenBase(w).executeMetaTransaction(m, s);
+        assertEq(MetaTokenBase(w).mtxNonce(MetaTxLib.pad(alice), m.batch), 0);
     }
 
     function test_gaslessUnwrapPaysTheRecipient() public {
         MetaTxLib.MetaTransaction memory m = _op(100e6, shop, 100e6);
-        bytes32 d = t.mtxDigest(m);
+        bytes32 d = MtxDigest.metaTx(address(t), m);
         vm.expectEmit(address(t));
         emit IWrappedToken.Unwrapped(alice, address(usdc), shop, 100e6, 100e6);
         vm.expectEmit(address(t));
@@ -232,8 +233,8 @@ contract UnwrapOpTest is V2Fixture {
         bytes memory s = _signCall(PK, address(h), m);
         vm.prank(relayer);
         vm.expectRevert();
-        h.mtxExecute(m, s);
-        assertEq(h.mtxNonce(alice, 9), 0);
+        h.executeMetaTransaction(m, s);
+        assertEq(h.mtxNonce(MetaTxLib.pad(alice), 9), 0);
         assertEq(h.balanceOf(alice), 10 ether);
     }
 

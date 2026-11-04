@@ -73,7 +73,7 @@ abstract contract PlusZeroRows is Test {
 
     function _pzUa(address t, bytes32 from, bytes32 to) internal view returns (bytes memory) {
         MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: from, to: to, value: 1, entryRef: 0,
-            batch: PZ_LANE, nonce: NormalToken(t).uaNonce(from, PZ_LANE), validUntil: block.timestamp + 600, mode: 0,
+            batch: PZ_LANE, nonce: NormalToken(t).mtxNonce(from, PZ_LANE), validUntil: block.timestamp + 600, mode: 0,
             relayer: address(0), fee: 0, feeRecipient: address(0)});
         IUARegistry.UASig memory sig = UACall.auth(from, _pzAuth(from, NormalToken(t).uaTransferDigest(x)));
         return abi.encodeCall(IUALedger.uaExecuteTransfer, (x, sig));

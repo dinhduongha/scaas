@@ -237,6 +237,13 @@ library MetaTxLib {
         "UAShield(bytes32 from,bytes32 toUA,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
+    /// @dev The signed `cancelNonce(lane)` on ids (ua-mtx-merge Q2, CTR-MTX-30): `mtxCancelNonce(UAEnvelope, lane, UASig)`,
+    ///      nonce-ordered on its own lane `batch`. Pinned by `test_uaCancelNonceTypehashIsPinned` (test/metatx/MetaTxLib.t.sol);
+    ///      the unordered `UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)` is in legacy/ua-mtx-merge/.
+    bytes32 internal constant UA_CANCEL_NONCE_TYPEHASH = keccak256(
+        "UACancelNonce(bytes32 from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+
     /// @notice Đọc cách tính phí từ nửa byte sau của `mode`.
     /// @dev Trả về `FeeMode` để `FeePolicy` dùng nguyên như cũ — enum vẫn là kiểu
     ///      chuẩn tắc của tầng phí, chỉ không còn là một trường riêng trong struct.

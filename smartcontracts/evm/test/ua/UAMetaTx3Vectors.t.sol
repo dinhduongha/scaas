@@ -131,7 +131,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             MetaTxLib.UAMetaTransaction memory m = _call(r);
             bytes32 digest = vm.parseJsonBytes32(vj, string.concat(r, "digest"));
             assertEq(MetaTxLib.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
-            assertEq(tok.uaDigest(m), digest);
+            assertEq(tok.mtxDigest(m), digest);
             _authorized(m.from, digest, vm.parseJsonBytes(vj, string.concat(r, "auth")));
             ++n;
         }
@@ -170,13 +170,13 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             string memory r = string.concat(".burn[", vm.toString(i), "].");
             MetaTxLib.UAMetaTransaction memory m = _call(r);
             assertEq(MetaTxLib.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
-            assertEq(tok.uaDigest(m), vm.parseJsonBytes32(vj, string.concat(r, "digest")));
+            assertEq(tok.mtxDigest(m), vm.parseJsonBytes32(vj, string.concat(r, "digest")));
             _fund(m.from, 1_005_000);
             uint256 supply = tok.totalSupply();
             bytes memory auth = vm.parseJsonBytes(vj, string.concat(r, "auth"));
             vm.prank(m.relayer);
             uint256 g = gasleft();
-            tok.uaExecute(m, auth);
+            tok.mtxExecute(m, UACall.auth(m.from, auth));
             g -= gasleft();
             emit log_named_uint(string.concat("uaExecute(burn) ", vm.parseJsonString(vj, string.concat(r, "name"))), g);
             assertEq(tok.balanceOfUA(m.from), 0);
@@ -197,7 +197,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             bytes32 digest = vm.parseJsonBytes32(vj, string.concat(r, "digest"));
             assertEq(bytes4(m.data), bytes4(keccak256("unwrapToUA(address,uint256,bytes32,uint256)")));
             assertEq(MetaTxLib.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
-            assertEq(tok.uaDigest(m), digest);
+            assertEq(tok.mtxDigest(m), digest);
             _authorized(m.from, digest, vm.parseJsonBytes(vj, string.concat(r, "auth")));
             ++n;
         }

@@ -130,7 +130,7 @@ contract UALedgerHandler is Test {
         uint256 fee = withFee ? amount / 100 : 0;
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
             from: f, data: abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), amount, recipient, 0),
-            batch: 1, nonce: wrp.uaNonce(f, 1), validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER,
+            batch: 1, nonce: wrp.mtxNonce(f, 1), validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER,
             relayer: RELAYER, fee: 0, feeRecipient: address(0)
         });
         if (fee != 0) {
@@ -143,9 +143,9 @@ contract UALedgerHandler is Test {
             vm.prank(RELAYER);
             WrappedToken(address(wrp)).uaUnwrap(e, amount, recipient, 0, UACall.auth(f, sig));
         } else {
-            bytes memory auth = _auth(3 + fromIdx % 2, wrp.uaDigest(m));
+            bytes memory auth = _auth(3 + fromIdx % 2, wrp.mtxDigest(m));
             vm.prank(RELAYER);
-            wrp.uaExecute(m, auth);
+            wrp.mtxExecute(m, UACall.auth(m.from, auth));
         }
         uint256 n = fee != 0 ? 2 : 1; // the burn, and the fee move out of the UA
         _settle(wrp, n, n);
@@ -204,9 +204,9 @@ contract UALedgerHandler is Test {
         amount = bound(amount, 0, tok.balanceOfUA(f) * 100 / 101) / 100 * 100;
         uint256 fee = withFee ? amount / 100 : 0;
         MetaTxLib.UAMetaTransaction memory m = _uaCall(tok, f, abi.encodeCall(NormalToken.burn, (amount)), fee);
-        bytes memory auth = _auth(3 + fromIdx % 2, tok.uaDigest(m));
+        bytes memory auth = _auth(3 + fromIdx % 2, tok.mtxDigest(m));
         vm.prank(RELAYER);
-        tok.uaExecute(m, auth);
+        tok.mtxExecute(m, UACall.auth(m.from, auth));
         uint256 n = fee != 0 ? 2 : 1;
         _settle(tok, n, n);
     }
@@ -287,9 +287,9 @@ contract UALedgerHandler is Test {
     function _unwrapToUAUnder(uint256 fromIdx, bytes32 f, bytes32 to, uint256 amount, uint256 fee) internal {
         MetaTxLib.UAMetaTransaction memory m =
             _uaCall(wrpL, f, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), amount, to, 0)), fee);
-        bytes memory auth = _auth(3 + fromIdx % 2, wrpL.uaDigest(m));
+        bytes memory auth = _auth(3 + fromIdx % 2, wrpL.mtxDigest(m));
         vm.prank(RELAYER);
-        wrpL.uaExecute(m, auth);
+        wrpL.mtxExecute(m, UACall.auth(m.from, auth));
         uint256 n = fee != 0 ? 2 : 1;
         _settle2(wrpL, n, n, tok, 1, 1);
     }
@@ -332,7 +332,7 @@ contract UALedgerHandler is Test {
         bytes32 t = _id(to % 5);
         uint256 have = t_.balanceOfUA(f);
         MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({
-            from: f, to: t, value: bound(amount, 0, have), entryRef: 0, batch: 1, nonce: t_.uaNonce(f, 1),
+            from: f, to: t, value: bound(amount, 0, have), entryRef: 0, batch: 1, nonce: t_.mtxNonce(f, 1),
             validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: RELAYER, fee: 0,
             feeRecipient: address(0)
         });
@@ -406,7 +406,7 @@ contract UALedgerHandler is Test {
         internal view returns (MetaTxLib.UAMetaTransaction memory m)
     {
         m = MetaTxLib.UAMetaTransaction({
-            from: f, data: data, batch: 1, nonce: t_.uaNonce(f, 1), validUntil: block.timestamp + 300,
+            from: f, data: data, batch: 1, nonce: t_.mtxNonce(f, 1), validUntil: block.timestamp + 300,
             mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: RELAYER, fee: 0, feeRecipient: address(0)
         });
         if (fee != 0) {

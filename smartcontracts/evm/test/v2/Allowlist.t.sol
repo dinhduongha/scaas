@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {MockERC20, StubUARegistry} from "../helpers/Mocks.sol";
@@ -104,14 +106,14 @@ contract AllowlistTest is Test {
     {
         m = MetaTxLib.MetaTransaction({from: alice, data: data, batch: ++lane, nonce: 0,
             validUntil: block.timestamp + 300, mode: mode, relayer: relayer, fee: fee, feeRecipient: address(0)});
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, MetaTokenBase(t).mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, MtxDigest.metaTx(t, m));
         sig = abi.encodePacked(r, s, v);
     }
 
     function _run(address t, bytes memory data) internal {
         (MetaTxLib.MetaTransaction memory m, bytes memory sig) = _m(t, data, RR, 0);
         vm.prank(relayer);
-        MetaTokenBase(t).mtxExecute(m, sig);
+        MetaTokenBase(t).executeMetaTransaction(m, sig);
         (m, sig) = _m(t, data, RR, 0);
         vm.prank(relayer);
         assertTrue(MetaTokenBase(t).executeMetaTransaction(m, sig));
@@ -121,7 +123,7 @@ contract AllowlistTest is Test {
         (MetaTxLib.MetaTransaction memory m, bytes memory sig) = _m(t, data, RR, 0);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(data)));
-        MetaTokenBase(t).mtxExecute(m, sig);
+        MetaTokenBase(t).executeMetaTransaction(m, sig);
     }
 
     function _pin(address t, bytes4[] memory es, uint8[] memory ec, uint8[] memory ea) internal view {
@@ -228,7 +230,7 @@ contract AllowlistTest is Test {
                 vm.expectRevert(abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, basis[i] / 100 + 1, basis[i] / 100));
             }
             vm.prank(relayer);
-            MetaTokenBase(t).mtxExecute(m, sig);
+            MetaTokenBase(t).executeMetaTransaction(m, sig);
         }
     }
 
@@ -271,9 +273,10 @@ contract AllowlistTest is Test {
                 address(1), 1, 0, 0, address(0), bytes32(0)));
             _refused(t, abi.encodeWithSignature("initialize(address,address[],uint64,bytes)",
                 alice, new address[](0), 1, ""));
-            _refused(t, abi.encodeWithSelector(IMetaTx.mtxExecute.selector));
+            _refused(t, abi.encodeWithSelector(UAMetaTxBase.mtxExecute.selector));
             _refused(t, abi.encodeWithSelector(IMetaTx.executeMetaTransaction.selector));
-            _refused(t, abi.encodeWithSelector(IMetaTx.mtxBatch.selector));
+            _refused(t, abi.encodeWithSelector(UAMetaTxBase.mtxBatch.selector));
+            _refused(t, abi.encodeWithSelector(UAMetaTxBase.mtxCancelNonce.selector));
             _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxTransfer.selector));
             _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxTransferWithFee.selector));
             _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxPay.selector));
@@ -305,7 +308,7 @@ contract AllowlistTest is Test {
         (MetaTxLib.MetaTransaction memory m, bytes memory sig) = _m(address(single), data, RR, 0);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, bytes4(keccak256("wrap(uint256)"))));
-        single.mtxExecute(m, sig);
+        single.executeMetaTransaction(m, sig);
     }
 
     // ------------------------------------------------------------------ all or nothing, re-entry
@@ -315,7 +318,7 @@ contract AllowlistTest is Test {
         (MetaTxLib.MetaTransaction memory m, bytes memory sig) =
             _m(address(single), abi.encodeWithSignature("wrap(uint256)", 10e6), RR | FIX, 3e6); // 30 %: uncapped
         vm.prank(relayer);
-        single.mtxExecute(m, sig);
+        single.executeMetaTransaction(m, sig);
         assertEq(single.balanceOf(alice), 7e6);
         assertEq(single.balanceOf(relayer), 3e6);
         assertEq(u.balanceOf(alice), 990e6);                 // pulled from the signer, not the relayer
@@ -327,8 +330,8 @@ contract AllowlistTest is Test {
             _m(address(single), abi.encodeWithSignature("unwrap(uint256,address,uint256)", 1e6, alice, 2e6), RR, 0);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapBelowMin.selector, 1e6, 2e6));
-        single.mtxExecute(m, sig);
-        assertEq(single.mtxNonce(alice, m.batch), 0);
+        single.executeMetaTransaction(m, sig);
+        assertEq(single.mtxNonce(MetaTxLib.pad(alice), m.batch), 0);
     }
 
     function test_reentryFromUnderlyingHook_reverts() public {
@@ -349,6 +352,6 @@ contract AllowlistTest is Test {
             _m(address(w), abi.encodeWithSignature("wrap(uint256)", 1e6), RR, 0);
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.Reentrancy.selector);
-        w.mtxExecute(m, sig);
+        w.executeMetaTransaction(m, sig);
     }
 }

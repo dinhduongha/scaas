@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Test, console2} from "forge-std/Test.sol";
 import {IConfidentialToken, IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -213,9 +214,9 @@ contract PqzPoolTest is PqzFixture {
         _accept(_withBinding(st, env)); // a proof of the pre-D15 binding
         bytes memory sg = _sign(m);
         vm.expectRevert(IPqzToken.ProofRejected.selector);
-        tok.mtxExecute(m, sg);
+        tok.executeMetaTransaction(m, sg);
         _accept(st);
-        tok.mtxExecute(m, sg);
+        tok.executeMetaTransaction(m, sg);
         assertEq(tok.pqzAccount(alice).sendCounter, 1);
     }
 
@@ -230,7 +231,7 @@ contract PqzPoolTest is PqzFixture {
     }
 
     function _sign(MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s_) = vm.sign(KEY, tok.mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 s_) = vm.sign(KEY, MtxDigest.metaTx(address(tok), m));
         return abi.encodePacked(r, s_, v);
     }
 }
@@ -288,8 +289,8 @@ contract PqzPoolWrappedTest is PqzFixture {
         assertEq(bytes32(_cut(st, 544, 32)), want, "envelope and leg / minOut folded");
         _mockOp(2, 0);
         vm.mockCall(PQZ, abi.encodePacked(uint8(2), uint32(st.length), st, hex"c0de"), abi.encode(uint256(1)));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(KEY, w.mtxDigest(m));
-        w.mtxExecute(m, abi.encodePacked(r, s, v));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(KEY, MtxDigest.metaTx(address(w), m));
+        w.executeMetaTransaction(m, abi.encodePacked(r, s, v));
         assertEq(usd.balanceOf(address(0xD00D)), 40 * SCALE);
     }
 }

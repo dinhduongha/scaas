@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {UACall} from "../ua/UACall.sol";
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -235,7 +237,9 @@ abstract contract SelectorAuditRows is Test {
     // ------------------------------------------------------------------ the allow-lists of a governed token
 
     /// Every gated row (`BIT`, `OWNER`, `HOLDER_OWN`, `FACTORY`) is off `mtxSelectors()`, and a native signer's own
-    /// `mtxExecute` / `uaExecute` of it is refused by the allow-list (`_mtxRule`, `_uaAllowed`), past its valid signature.
+    /// `executeMetaTransaction` / `mtxExecute` of it is refused by the allow-list, past its valid signature. (ua-mtx-merge
+    /// T1, meaning: on the merged `mtxExecute` a native signer reads `_mtxRule` (B), so `MtxSelectorNotAllowed` where
+    /// `uaExecute` answered `MetaTxUnknownOp` from `_uaAllowed`; the address `mtxExecute` left tokens, R3's alias stays.)
     function _relay(string memory name, address t) internal {
         AuditRow[] memory pin = _pin(name);
         (bytes4[] memory published,,) = IMetaTx(t).mtxSelectors();
@@ -244,8 +248,9 @@ abstract contract SelectorAuditRows is Test {
             bytes4 sel = bytes4(keccak256(bytes(pin[i].sig)));
             string memory where = string.concat(name, ".", pin[i].sig);
             for (uint256 k; k < published.length; ++k) assertTrue(published[k] != sel, string.concat(where, ": on mtxSelectors()"));
-            assertEq(_mtxProbe(t, sel), IMetaTx.MtxSelectorNotAllowed.selector, string.concat(where, ": relayable by mtxExecute"));
-            assertEq(_uaProbe(t, sel), IUALedger.MetaTxUnknownOp.selector, string.concat(where, ": relayable by uaExecute"));
+            assertEq(_mtxProbe(t, sel), IMetaTx.MtxSelectorNotAllowed.selector,
+                string.concat(where, ": relayable by executeMetaTransaction"));
+            assertEq(_uaProbe(t, sel), IMetaTx.MtxSelectorNotAllowed.selector, string.concat(where, ": relayable by mtxExecute"));
         }
     }
 
@@ -254,18 +259,18 @@ abstract contract SelectorAuditRows is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    /// The revert of a signed `mtxExecute` of `sel` (one zero word), or 0 when it ran.
+    /// The revert of a signed `executeMetaTransaction` of `sel` (one zero word), or 0 when it ran.
     function _mtxProbe(address t, bytes4 sel) internal returns (bytes4) {
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(vm.addr(SA_PK), bytes.concat(sel, bytes32(0)), 9,
-            MetaTxBase(t).mtxNonce(vm.addr(SA_PK), 9), block.timestamp + 300, 0, address(0), 0, address(0));
-        return _probe(t, abi.encodeCall(MetaTxBase.mtxExecute, (m, _sign(MetaTxBase(t).mtxDigest(m)))));
+            UAMetaTxBase(t).mtxNonce(MetaTxLib.pad(vm.addr(SA_PK)), 9), block.timestamp + 300, 0, address(0), 0, address(0));
+        return _probe(t, abi.encodeCall(MetaTxBase.executeMetaTransaction, (m, _sign(MtxDigest.metaTx(t, m)))));
     }
 
     function _uaProbe(address t, bytes4 sel) internal returns (bytes4) {
         bytes32 from = bytes32(uint256(uint160(vm.addr(SA_PK))));
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(from, bytes.concat(sel, bytes32(0)), 9,
-            UAMetaTxBase(t).uaNonce(from, 9), block.timestamp + 300, 0, address(0), 0, address(0));
-        return _probe(t, abi.encodeCall(UAMetaTxBase.uaExecute, (m, _sign(UAMetaTxBase(t).uaDigest(m)))));
+            UAMetaTxBase(t).mtxNonce(from, 9), block.timestamp + 300, 0, address(0), 0, address(0));
+        return _probe(t, abi.encodeCall(UAMetaTxBase.mtxExecute, (m, UACall.auth(m.from, _sign(UAMetaTxBase(t).mtxDigest(m))))));
     }
 
     function _probe(address t, bytes memory cd) internal returns (bytes4 e) {

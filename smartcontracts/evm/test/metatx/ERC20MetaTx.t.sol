@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {MtxFixture} from "../helpers/MtxFixture.sol";
 import {Puller} from "../helpers/WalletMocks.sol";
@@ -34,7 +35,7 @@ contract ERC20MetaTxTest is MtxFixture {
         internal view returns (MetaTxLib.MetaTransfer memory)
     {
         return MetaTxLib.MetaTransfer({
-            from: alice, to: to, value: value, entryRef: ref, batch: batch, nonce: t.mtxNonce(alice, batch),
+            from: alice, to: to, value: value, entryRef: ref, batch: batch, nonce: t.mtxNonce(MetaTxLib.pad(alice), batch),
             validUntil: block.timestamp + 300, mode: mode, relayer: relayer, fee: fee, feeRecipient: feeTo
         });
     }
@@ -47,14 +48,14 @@ contract ERC20MetaTxTest is MtxFixture {
     function _call(bytes memory data, uint256 batch, uint32 mode, uint256 fee)
         internal view returns (MetaTxLib.MetaTransaction memory m)
     {
-        m = _m(alice, data, batch, t.mtxNonce(alice, batch));
+        m = _m(alice, data, batch, t.mtxNonce(MetaTxLib.pad(alice), batch));
         m.mode = mode;
         m.relayer = relayer;
         m.fee = fee;
     }
 
     function _signM(MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t.mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, MtxDigest.metaTx(address(t), m));
         return abi.encodePacked(r, s, v);
     }
 
@@ -74,14 +75,14 @@ contract ERC20MetaTxTest is MtxFixture {
     function _exec(MetaTxLib.MetaTransaction memory m) internal {
         bytes memory s = _signM(m);
         vm.prank(relayer);
-        t.mtxExecute(m, s);
+        t.executeMetaTransaction(m, s);
     }
 
     function _execRevert(MetaTxLib.MetaTransaction memory m, bytes memory err) internal {
         bytes memory s = _signM(m);
         vm.prank(relayer);
         vm.expectRevert(err);
-        t.mtxExecute(m, s);
+        t.executeMetaTransaction(m, s);
     }
 
     // ------------------------------------------------------------------ domain, modes
@@ -107,7 +108,7 @@ contract ERC20MetaTxTest is MtxFixture {
         emit IMetaTx.MetaTransactionExecuted(alice, relayer, 7, 0, d, relayer, 0);
         _xfer(x);
         assertEq(t.balanceOf(shop), 100e6);
-        assertEq(t.mtxNonce(alice, 7), 1);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 7), 1);
         _xferRevert(x, abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
     }
 
@@ -138,7 +139,7 @@ contract ERC20MetaTxTest is MtxFixture {
         _xferRevert(x, abi.encodeWithSelector(IERC20MetaTx.FeeRecipientIsPayee.selector));
         _xferRevert(_t(shop, 1_000e6, 0, 1, FIX | RF, 1, feeTaker),
             abi.encodeWithSelector(IERC20MetaTx.MetaTxInsufficientForFee.selector, 1_000e6 + 1, 1_000e6));
-        assertEq(t.mtxNonce(alice, 1), 0); // nothing consumed
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 0); // nothing consumed
     }
 
     /// C5-3: the pools are refused at step 3 (before the balance check and the nonce), like the UA twin.
@@ -151,13 +152,13 @@ function test_C5_3_poolsRefusedAtStep3_typedPath() public {
             abi.encodeWithSelector(IUALedger.UAPoolNotPayable.selector));
         _xferRevert(_t(shop, 1_000e6, 0, 1, FIX | RF, 1, MetaTxLib.SHIELD_POOL),
             abi.encodeWithSelector(IUALedger.ShieldPoolNotPayable.selector));
-        assertEq(t.mtxNonce(alice, 1), 0);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 0);
     }
 
 function test_feeToTheTokenRefused_typedPath() public {
         _xferRevert(_t(shop, 100e6, 0, 1, FIX | RF, 1e5, address(t)),
             abi.encodeWithSelector(IERC20MetaTx.TransferToSelf.selector));
-        assertEq(t.mtxNonce(alice, 1), 0);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 0);
     }
 
     function test_restrictedRelayer_otherCallerRefused() public {
@@ -197,7 +198,7 @@ function test_feeToTheTokenRefused_typedPath() public {
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.PayToZero.selector));
         t.mtxBatchTransfer(xs, ss);
-        assertEq(t.mtxNonce(alice, 3), 0);                          // first item rolled back
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 3), 0);                          // first item rolled back
 
         vm.expectRevert(IMetaTx.MtxBatchEmpty.selector);
         t.mtxBatchTransfer(new MetaTxLib.MetaTransfer[](0), new bytes[](0));
@@ -210,7 +211,7 @@ function test_feeToTheTokenRefused_typedPath() public {
     function test_amountClass_percentOnTheBasis_afterTheCall() public {
         MetaTxLib.MetaTransaction memory m =
             _call(abi.encodeCall(ERC20MetaTxHarness.burn, (100e6)), 1, RR | PCT, 10_000); // 1 % of 100e6
-        bytes32 d = t.mtxDigest(m);
+        bytes32 d = MtxDigest.metaTx(address(t), m);
         vm.expectEmit(address(t));
         emit IMetaTx.MetaTransactionExecuted(alice, relayer, 1, 0, d, relayer, 1e6);
         _exec(m);
@@ -236,7 +237,7 @@ function test_feeToTheTokenRefused_typedPath() public {
         _execRevert(_call(abi.encodeCall(ERC20MetaTxHarness.touch, ()), 1, RR | FIX | RF, 1e6)
             .withFeeRecipient(address(t)), abi.encodeWithSelector(IERC20MetaTx.TransferToSelf.selector));
         assertEq(t.balanceOf(alice), 1_000e6);
-        assertEq(t.mtxNonce(alice, 1), 0);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 0);
     }
 
     function test_feeFailureAfterTheCall_revertsTheCall() public {
@@ -244,7 +245,7 @@ function test_feeToTheTokenRefused_typedPath() public {
         _execRevert(_call(abi.encodeCall(ERC20MetaTxHarness.burn, (1_000e6)), 1, RR | PCT, 100),
             abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, alice, 0, 1e5));
         assertEq(t.balanceOf(alice), 1_000e6);
-        assertEq(t.mtxNonce(alice, 1), 0);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 0);
     }
 
     function test_selfCallRunsAsTheSigner() public {

@@ -111,8 +111,8 @@ library GovernanceRouterTypes {
 ///         a signed word. One flow: the lock, the signature and the nonce (`MtxPipelineLib.preNamed` / `preNamedUA`), the
 ///         transient pair `(subject, target)`, the typed call `target.<op>(…)`, the pair cleared; a reverting target
 ///         reverts the whole call, the nonce included. `subject()` names the subject only to the live target. No generic
-///         path: `_execute` (`mtxExecute`, `executeMetaTransaction`, `mtxBatch`), `uaExecute` and `uaBatch` refuse; the
-///         router's ops are on neither allow-list. `cancelNonce`, `mtxCancelNonce`, `uaCancelNonce` stay. **UNAUDITED.**
+///         path: `executeMetaTransaction`, `mtxExecute` and `mtxBatch` refuse; the router's ops are on neither allow-list.
+///         `cancelNonce` and the ordered `mtxCancelNonce(UAEnvelope, lane, UASig)` stay. **UNAUDITED.**
 abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
     /// @notice A signed op names a `target` with no code: the call would do nothing and spend the nonce.
     error TargetHasNoCode(address target);
@@ -239,20 +239,25 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
 
     // ------------------------------------------------------------------ no generic path (governance spec §3.6, B-14)
 
-    /// @dev `mtxExecute`, `executeMetaTransaction`, `mtxBatch`: an op signed as a `bytes data` blob is refused, whatever it calls.
+    /// @dev `executeMetaTransaction`: an op signed as a `bytes data` blob is refused, whatever it calls.
     function _execute(MetaTxLib.MetaTransaction memory m, bytes calldata) internal pure override returns (bytes memory) {
         revert MtxSelectorNotAllowed(bytes4(m.data));
     }
 
-    function uaExecute(MetaTxLib.UAMetaTransaction calldata m, bytes calldata) public pure override returns (bytes memory) {
+    /// @dev The generic entries on ids refuse likewise (ua-mtx-merge T1: the `uaExecute` / `uaBatch` refusals, renamed).
+    function mtxExecute(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata)
+        public pure override returns (bytes memory)
+    {
         revert MtxSelectorNotAllowed(bytes4(m.data));
     }
 
-    function uaBatch(MetaTxLib.UAMetaTransaction[] calldata, bytes[] calldata) public pure override returns (bool) {
+    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata, IUARegistry.UASig[] calldata)
+        public pure override returns (bool)
+    {
         revert MtxSelectorNotAllowed(bytes4(0));
     }
 
-    /// @notice Empty: the generic path refuses every call (`_execute`, `uaExecute`, `uaBatch`), `cancelNonce` included, so
+    /// @notice Empty: the generic path refuses every call (`_execute`, `mtxExecute`, `mtxBatch`), `cancelNonce` included, so
     ///         the router publishes no allow-list row; its typed entries are no row either (governance spec §3.2). The
     ///         node's list for the router equals this, both directions.
     function mtxSelectors() public pure override returns (bytes4[] memory, uint8[] memory, uint8[] memory) {}
@@ -280,7 +285,7 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
         MtxPipelineLib.Envelope memory env = MtxPipelineLib.Envelope(
             MetaTxLib.pad(e.from), 0, e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient);
         MtxPipelineLib.Out memory o =
-            MtxPipelineLib.preNamed(_mtxCtx(), typehash, env, _signed(target, words), _facts(data), false, sig);
+            MtxPipelineLib.preNamed(_mtxCtx(), typehash, env, _signed(target, words), _facts(data), sig);
         _call(env.from, target, data);
         emit MetaTransactionExecuted(e.from, msg.sender, e.batch, e.nonce, o.digest, o.feeTo, o.fee);
         _exit(outer);

@@ -95,7 +95,7 @@ contract Tier1Test is V2Fixture {
         assertEq(t.totalSupply(), 900e6);
         assertEq(t.balanceOf(alice), 899e6);
         assertEq(t.balanceOf(feeTaker), 1e6);
-        assertEq(t.mtxNonce(alice, 1), 1);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 1);
     }
 
     function test_initRefusesUnderlyings() public {
@@ -150,6 +150,6 @@ contract Tier1Test is V2Fixture {
         bytes memory s = _signCall(pk, address(t), m);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, sel));
-        t.mtxExecute(m, s);
+        t.executeMetaTransaction(m, s);
     }
 }

@@ -95,7 +95,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
     function _call(uint256 n, address rel) internal view returns (bytes memory) {
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(bob, abi.encodeCall(MtxRegistryMock.bump, (1)), 0,
             n, block.timestamp + 300, rel == address(0) ? 0 : RR, rel, 0, address(0));
-        return abi.encodeCall(IMetaTx.mtxExecute, (m, _ecdsa(BOB_PK, target.mtxDigest(m))));
+        return abi.encodeCall(IMetaTx.executeMetaTransaction, (m, _ecdsa(BOB_PK, target.mtxDigest(m))));
     }
 
     function _ref(address t, bytes memory cd) internal view returns (bytes32) {
@@ -248,7 +248,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         vm.prank(REL);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         tok.mtxPay(alice, address(router), FEE, ref, p.validUntil, RR, REL, 0, address(0), s);
-        assertEq(tok.mtxNonce(alice, p.batch), 0);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(alice), p.batch), 0);
     }
 
     /// (3) a `callData` that executes another router-bound payment through the executor fails: the token reads the
@@ -269,7 +269,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
     function test_relay_innerRevertBubbles() public {
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(bob, abi.encodeCall(MtxRegistryMock.bump, (0)), 0,
             0, block.timestamp + 300, 0, address(0), 0, address(0));
-        bytes memory cd = abi.encodeCall(IMetaTx.mtxExecute, (m, _ecdsa(BOB_PK, target.mtxDigest(m))));
+        bytes memory cd = abi.encodeCall(IMetaTx.executeMetaTransaction, (m, _ecdsa(BOB_PK, target.mtxDigest(m))));
         Pay memory t = _pay(address(router), address(target), cd, FEE);
         bytes memory s = _sig(t);
         vm.prank(REL);
@@ -277,7 +277,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         _send(t, cd, address(tok), s);
         assertEq(tok.balanceOf(alice), 1_000_000);
         assertEq(tok.balanceOf(REL), 0);
-        assertEq(tok.mtxNonce(alice, t.batch), 0);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(alice), t.batch), 0);
     }
 
     /// (5) a second `relay` with the same `ref` fails at the pay lane (a repeatable call: an unguarded view).
@@ -307,7 +307,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         assertEq(target.count(bob), 1, "the call ran");
         assertEq(tok.balanceOf(REL), FEE);
         assertEq(tok.balanceOf(alice), 1_000_000 - FEE);
-        assertEq(tok.mtxNonce(alice, t.batch), 1);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(alice), t.batch), 1);
     }
 
     /// (6b) a bound payee is paid directly; the submitting relayer gets nothing, the router forwards nothing.
@@ -438,7 +438,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         vm.prank(REL);
         vm.expectRevert(abi.encodeWithSelector(MtxRelayFee.RelayTargetNoCode.selector, pred));
         _send(t, cd, address(tok), s);
-        assertEq(tok.mtxNonce(alice, t.batch), 0, "the lane is not burnt");
+        assertEq(tok.mtxNonce(MetaTxLib.pad(alice), t.batch), 0, "the lane is not burnt");
         assertEq(address(new MtxRegistryMock{salt: salt}("SCaaS TestRegistry", PQZ_UID)), pred);
         vm.prank(REL);
         _send(t, cd, address(tok), s);
@@ -466,7 +466,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
             vm.prank(REL);
             vm.expectRevert(abi.encodeWithSelector(MtxRelayFee.RelayTargetNoCode.selector, d));
             _send(t, cd, address(tok), s);
-            assertEq(tok.mtxNonce(alice, t.batch), 0, "the lane is not burnt");
+            assertEq(tok.mtxNonce(MetaTxLib.pad(alice), t.batch), 0, "the lane is not burnt");
         }
     }
 
@@ -509,7 +509,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         vm.prank(address(router));
         tok.mtxRelayFee(alice, t.tgt, t.cdh, PAYEE, FEE, t.validUntil, s);
         assertEq(tok.balanceOf(PAYEE), FEE);
-        assertEq(tok.mtxNonce(alice, t.batch), 1);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(alice), t.batch), 1);
         // the UA half's control: another call bytes, so another lane (`pad(alice)` shares the one spent above); from the router it passes
         u = _upay(MetaTxLib.pad(alice), MetaTxLib.pad(PAYEE), address(target), bytes.concat(cd, hex"00"), FEE);
         a.signature = _ecdsa(ALICE_PK, _digest(address(tok), UA_RELAY_FEE, u, address(router)));
@@ -534,13 +534,13 @@ contract MtxRelayFeeTest is PqzRegistryBase {
             '{"name":"relayer","type":"address"}]},"primaryType":"RelayFee","domain":', domainJson(address(tok)), ',"message":{', m, '}}'));
         assertEq(wallet, _d(t), "the wallet's digest");
         assertEq(t.batch, tok.payLane(ref));
-        assertEq(tok.mtxNonce(alice, t.batch), 0);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(alice), t.batch), 0);
         vm.expectEmit(address(tok));
         emit IMetaTx.MetaTransactionExecuted(alice, address(router), t.batch, 0, wallet, address(router), 0);
         vm.expectEmit(address(router));
         emit MtxRelayFee.RelayFeePaid(ref, address(target), address(tok), MetaTxLib.pad(alice), MetaTxLib.pad(REL), FEE);
         _relay(cd, t);
-        assertEq(tok.mtxNonce(alice, t.batch), 1, "nonce 0 of the lane");
+        assertEq(tok.mtxNonce(MetaTxLib.pad(alice), t.batch), 1, "nonce 0 of the lane");
         assertEq(tok.balanceOf(REL), FEE);
         assertEq(tok.balanceOf(address(router)), 0);
 
@@ -549,7 +549,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         bytes memory au = _ecdsa(ALICE_PK, _digest(address(tok), UA_RELAY_FEE, u, address(router)));
         vm.prank(REL);
         _usend(u, cd2, au);
-        assertEq(tok.uaNonce(u.from, u.batch), 1);
+        assertEq(tok.mtxNonce(u.from, u.batch), 1);
         assertEq(tok.balanceOf(REL), 2 * FEE);
     }
 
@@ -595,7 +595,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         _send(t, cd, address(tok), bad);
         assertEq(target.count(bob), 0, "the call rolled back");
-        assertEq(tok.mtxNonce(alice, t.batch), 0);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(alice), t.batch), 0);
 
         NormalToken tok2 = NormalToken(Clones.clone(address(new NormalToken(1,
             plainEnv(address(this), address(0), PQZ_UID, address(reg), false), ""))));

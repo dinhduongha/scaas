@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Test, console} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -322,11 +323,11 @@ contract MetaTxGasV2Test is Test {
             data: abi.encodeWithSignature("unwrap(uint256,address,uint256)", 10e6, recipient, 10e6), batch: WARM,
             nonce: 0, validUntil: block.timestamp + 600, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer,
             fee: 0, feeRecipient: address(0)});
-        (uint8 v, bytes32 r, bytes32 sg) = vm.sign(PK, w.mtxDigest(m));
-        bytes memory cd = abi.encodeCall(IMetaTx.mtxExecute, (m, abi.encodePacked(r, sg, v)));
+        (uint8 v, bytes32 r, bytes32 sg) = vm.sign(PK, MtxDigest.metaTx(address(w), m));
+        bytes memory cd = abi.encodeCall(IMetaTx.executeMetaTransaction, (m, abi.encodePacked(r, sg, v)));
         _snap();
         uint256 gu = _measure(address(w), cd);
-        console.log("mtxExecute(unwrap) (cold lane, plain token, existing holder)", gu);
+        console.log("executeMetaTransaction(unwrap) (cold lane, plain token, existing holder)", gu);
     }
 
     function test_gasCalldata() public view {

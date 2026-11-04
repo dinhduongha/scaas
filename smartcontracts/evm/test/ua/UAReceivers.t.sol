@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
@@ -109,16 +110,16 @@ contract UAReceiversTest is UALedgerBase {
     function _mtx(address token, bytes memory data, uint32 mode, uint256 fee, address feeTo)
         internal view returns (MetaTxLib.MetaTransaction memory m, bytes memory sig)
     {
-        m = MetaTxLib.MetaTransaction({from: alice, data: data, batch: 3, nonce: MetaTokenBase(token).mtxNonce(alice, 3),
+        m = MetaTxLib.MetaTransaction({from: alice, data: data, batch: 3, nonce: MetaTokenBase(token).mtxNonce(MetaTxLib.pad(alice), 3),
             validUntil: block.timestamp + 300, mode: mode, relayer: RELAYER, fee: fee, feeRecipient: feeTo});
-        sig = _ecdsa(ALICE_PK, MetaTokenBase(token).mtxDigest(m));
+        sig = _ecdsa(ALICE_PK, MtxDigest.metaTx(token, m));
     }
 
     function _relay(address token, bytes memory data, uint32 mode, uint256 fee, address feeTo, bytes memory err) internal {
         (MetaTxLib.MetaTransaction memory m, bytes memory sig) = _mtx(token, data, mode, fee, feeTo);
         if (err.length != 0) vm.expectRevert(err);
         vm.prank(RELAYER);
-        MetaTokenBase(token).mtxExecute(m, sig);
+        MetaTokenBase(token).executeMetaTransaction(m, sig);
     }
 
     function _reserve(WrappedToken w, address leg) internal view returns (uint256 r) {
@@ -444,7 +445,7 @@ contract UAReceiversTest is UALedgerBase {
         vm.expectEmit(address(w));
         emit IWrappedToken.Wrapped(alice, address(und), 1_001, 1_501);
         vm.prank(RELAYER);
-        w.mtxExecute(m, sig);
+        w.executeMetaTransaction(m, sig);
         assertEq(w.balanceOfUA(uaP), 1_501);
         assertEq(w.totalSupply(), 1_501);
         assertEq(_reserve(w, address(und)), 1_001);

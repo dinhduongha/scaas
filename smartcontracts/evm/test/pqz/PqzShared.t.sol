@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {UACall} from "../ua/UACall.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
@@ -126,10 +128,10 @@ contract PqzSharedTest is PqzFixture {
         MetaTxLib.UAMetaTransaction memory m;
         m.from = fan;
         m.data = data;
-        m.nonce = t.uaNonce(fan, 0);
+        m.nonce = t.mtxNonce(fan, 0);
         m.validUntil = block.timestamp + 1 hours;
         vm.expectRevert(abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, bytes4(data)));
-        t.uaExecute(m, _mlAuth());
+        t.mtxExecute(m, UACall.auth(m.from, _mlAuth()));
     }
 
     /// `NORMAL_PQZ`: exactly `cancelNonce`, `burn`, the six shared PQZ ops and the rollover / `mtxPrepareAcc` (owner
@@ -160,21 +162,21 @@ contract PqzSharedTest is PqzFixture {
         m.validUntil = block.timestamp + 1 hours;
         m.mode = fee == 0 ? 0 : MetaTxLib.MODE_FEE_FIXED;
         m.fee = fee;
-        (uint8 v, bytes32 r, bytes32 sg) = vm.sign(KEY, tok.mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 sg) = vm.sign(KEY, MtxDigest.metaTx(address(tok), m));
         vm.prank(relayer);
-        tok.mtxExecute(m, abi.encodePacked(r, sg, v));
+        tok.executeMetaTransaction(m, abi.encodePacked(r, sg, v));
     }
 
     function _relayUA(bytes memory data, uint256 fee) internal {
         MetaTxLib.UAMetaTransaction memory m;
         m.from = fan;
         m.data = data;
-        m.nonce = tok.uaNonce(fan, 0);
+        m.nonce = tok.mtxNonce(fan, 0);
         m.validUntil = block.timestamp + 1 hours;
         m.mode = fee == 0 ? 0 : MetaTxLib.MODE_FEE_FIXED;
         m.fee = fee;
         vm.prank(relayer);
-        tok.uaExecute(m, _mlAuth());
+        tok.mtxExecute(m, UACall.auth(m.from, _mlAuth()));
     }
 
     /// Relayed `mtxPrepareAcc` (both halves) then `mtxRollOver`: fee 0 (address envelope), then fee 5 from the signer's

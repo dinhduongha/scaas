@@ -225,7 +225,8 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
         return _named(MetaTxLib.SHIELD_TYPEHASH, IConfidentialToken.mtxShield.selector, e, abi.encode(toUA, amount), sig);
     }
 
-    function uaShield(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, bytes calldata auth)
+    /// @notice R47: an explicit `UASig` (ua-mtx-merge T1; the `bytes auth` form is in legacy/ua-mtx-merge/).
+    function uaShield(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, IUARegistry.UASig calldata auth)
         external nonReentrant returns (bytes memory)
     {
         return _namedUA(MetaTxLib.UA_SHIELD_TYPEHASH, IConfidentialToken.mtxShield.selector, e, abi.encode(toUA, amount), auth);

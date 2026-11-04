@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {IMetaTxAddress} from "../../src/metatx/IMetaTxAddress.sol";
 import {MtxFixture} from "../helpers/MtxFixture.sol";
 import {MtxRegistryMock, ReenterHook} from "../helpers/MtxRegistryMock.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
@@ -174,7 +175,7 @@ contract MetaTxBaseTest is MtxFixture {
     function test_notAllowlisted_refused() public {
         bytes[3] memory datas = [
             abi.encodeCall(MtxRegistryMock.whoAmI, ()),
-            abi.encodeCall(IMetaTx.mtxExecute, (_m(alice, _setName("a"), 1, 0), hex"")),   // no nesting
+            abi.encodeCall(IMetaTxAddress.mtxExecute, (_m(alice, _setName("a"), 1, 0), hex"")),   // no nesting
             abi.encodeCall(IMetaTx.executeMetaTransaction, (_m(alice, _setName("a"), 1, 0), hex""))
         ];
         for (uint256 i; i < 3; ++i) {

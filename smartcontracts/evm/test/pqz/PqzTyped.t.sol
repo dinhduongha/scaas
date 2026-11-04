@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {UACall} from "../ua/UACall.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {PQZ_UID} from "./helpers/PqzRegistryBase.sol";
@@ -453,7 +455,7 @@ contract PqzNamedTest is PqzNamedBase {
             : tok.mtxConfidentialTransferSingle(e, t, proof, _pqAuth(), hint, sig);
         assertEq(ref, _entryRef(tok, 0), "the entry's reference");
         assertEq(tok.pqzAccount(alice).sendCounter, 1);
-        assertEq(ua ? tok.uaNonce(u.from, LANE) : tok.mtxNonce(signer, LANE), 1);
+        assertEq(ua ? tok.mtxNonce(u.from, LANE) : tok.mtxNonce(MetaTxLib.pad(signer), LANE), 1);
         // the replay
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
@@ -495,7 +497,7 @@ contract PqzNamedTest is PqzNamedBase {
         t.vTo[7] ^= 0x01;
         vm.prank(relayer);
         _callSingle(compact, ua, e, u, t, proof, hint, sig);
-        assertEq(ua ? tok.uaNonce(u.from, LANE) : tok.mtxNonce(signer, LANE), 2, "only the unchanged call used the nonce");
+        assertEq(ua ? tok.mtxNonce(u.from, LANE) : tok.mtxNonce(MetaTxLib.pad(signer), LANE), 2, "only the unchanged call used the nonce");
     }
 
     function test_pqzNamedTransferSingle() public { _runSingle(false, false); }
@@ -529,7 +531,7 @@ contract PqzNamedTest is PqzNamedBase {
             : tok.mtxConfidentialTransfer(e, t, proof, _pqAuth(), "", sig);
         assertEq(ref, _entryRef(tok, 0));
         for (uint256 j; j < 4; ++j) assertEq(tok.pqzAccount(rec[j]).pendingCount, 1, "a credit per leg");
-        assertEq(ua ? tok.uaNonce(u.from, LANE) : tok.mtxNonce(signer, LANE), 1);
+        assertEq(ua ? tok.mtxNonce(u.from, LANE) : tok.mtxNonce(MetaTxLib.pad(signer), LANE), 1);
         _bindsMulti(compact, ua, t, proof);
     }
 
@@ -562,7 +564,7 @@ contract PqzNamedTest is PqzNamedBase {
         t.legs[2].v[7] ^= 0x01;
         vm.prank(relayer);
         _callMulti(compact, ua, t, proof, "", sig);
-        assertEq(ua ? tok.uaNonce(MetaTxLib.pad(signer), LANE) : tok.mtxNonce(signer, LANE), 2, "only the unchanged call used the nonce");
+        assertEq(ua ? tok.mtxNonce(MetaTxLib.pad(signer), LANE) : tok.mtxNonce(MetaTxLib.pad(signer), LANE), 2, "only the unchanged call used the nonce");
     }
 
     function test_pqzNamedTransfer() public { _runMulti(false, false); }
@@ -679,13 +681,14 @@ contract PqzNamedTest is PqzNamedBase {
         bytes4 sel = bytes4(VM.parseJsonBytes(j, domainField(op, "pqz", "selector")));
         bytes memory data = bytes.concat(sel, new bytes(64));
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(signer, data, LANE, 0, block.timestamp + 300, 0, address(0), 0, address(0));
-        bytes memory sig = ecdsa(PK, t.mtxDigest(m));
+        bytes memory sig = ecdsa(PK, MtxDigest.metaTx(address(t), m));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, sel));
-        t.mtxExecute(m, sig);
+        t.executeMetaTransaction(m, sig);
         MetaTxLib.UAMetaTransaction memory u = MetaTxLib.UAMetaTransaction(MetaTxLib.pad(signer), data, LANE, 0, block.timestamp + 300, 0, address(0), 0, address(0));
-        sig = ecdsa(PK, t.uaDigest(u));
-        vm.expectRevert(abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, sel));
-        t.uaExecute(u, sig);
+        sig = ecdsa(PK, t.mtxDigest(u));
+        // ua-mtx-merge T1 (B), meaning: the native signer reads `_mtxRule` on the merged entry (`MetaTxUnknownOp` before)
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, sel));
+        t.mtxExecute(u, UACall.auth(u.from, sig));
     }
 
     function test_pqzNamedEntryNotAllowlisted() public {

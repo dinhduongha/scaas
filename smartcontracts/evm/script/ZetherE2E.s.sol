@@ -157,7 +157,7 @@ contract ZetherE2E is Script {
     /// The envelope of the next named entry: the payer's, this script's sender bound, fixed fee.
     function _envelope() internal view returns (MetaTxLib.MetaTransaction memory) {
         address payer = vm.addr(PAYER_PK);
-        return MetaTxLib.MetaTransaction(payer, "", 7, ZetherLayer(t).mtxNonce(payer, 7), block.timestamp + 1 days,
+        return MetaTxLib.MetaTransaction(payer, "", 7, ZetherLayer(t).mtxNonce(MetaTxLib.pad(payer), 7), block.timestamp + 1 days,
             MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, me, RELAY_FEE, address(0));
     }
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
 import {GovernanceRouterBase} from "../../src/governance/GovernanceRouterBase.sol";
@@ -271,7 +272,7 @@ contract GovRouterTest is UARegistryBase {
     }
 
     function _envelope(GovernanceRouter r, bytes32 from, uint256 batch) internal view returns (MetaTxLib.UAEnvelope memory) {
-        return MetaTxLib.UAEnvelope(from, batch, r.uaNonce(from, batch), block.timestamp + 1 hours, 0, address(0), 0, address(0));
+        return MetaTxLib.UAEnvelope(from, batch, r.mtxNonce(from, batch), block.timestamp + 1 hours, 0, address(0), 0, address(0));
     }
 
     /// The digest `from` signs: the struct `<Op>` / `UA<Op>` over `target` and `words` (the op's own words) in `r`'s domain.
@@ -493,10 +494,10 @@ contract GovRouterTest is UARegistryBase {
         cd = _op(GRANT_ROLE, false, stranger, address(t), abi.encode(MINT, stranger));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, stranger));
         _run(cd);
-        assertEq(router.uaNonce(msig, 0), 0);
-        assertEq(router.uaNonce(stranger, 0), 0);
+        assertEq(router.mtxNonce(msig, 0), 0);
+        assertEq(router.mtxNonce(stranger, 0), 0);
         _do(OP_MINT, true, pq, address(t), abi.encode(BOB, uint256(1))); // positive control
-        assertEq(router.uaNonce(pq, 0), 1);
+        assertEq(router.mtxNonce(pq, 0), 1);
     }
 
     /// Another signer's signature: refused before anything runs, on both forms.
@@ -523,7 +524,7 @@ contract GovRouterTest is UARegistryBase {
         (bool ok, bytes memory ret) = address(router).call{gas: 3_000_000}(cd);
         assertFalse(ok);
         assertEq(bytes4(ret), UAKinds.UAVerifyGas.selector);
-        assertEq(router.uaNonce(pq, 0), 0);
+        assertEq(router.mtxNonce(pq, 0), 0);
         _run(cd); // the same envelope with gas
         assertEq(t.balanceOf(BOB), 1);
     }
@@ -539,7 +540,7 @@ contract GovRouterTest is UARegistryBase {
         bytes memory cd = _calldata(GRANT_ROLE, true, e, address(t), args, _tail(abi.encode(a)));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, msig));
         _run(cd);
-        assertEq(router.uaNonce(msig, 0), 0);
+        assertEq(router.mtxNonce(msig, 0), 0);
         _do(GRANT_ROLE, true, msig, address(t), args); // positive control: 2 of 3
         assertTrue(t.hasRole(MINT, pq));
     }
@@ -605,7 +606,7 @@ contract GovRouterTest is UARegistryBase {
         _do(ACCEPT_OWNERSHIP, false, next, address(t), "");
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, eoa));
         _run(late);
-        assertEq(router.uaNonce(eoa, 1), 0, "the nonce stays unspent: the target's refusal reverts the call");
+        assertEq(router.mtxNonce(eoa, 1), 0, "the nonce stays unspent: the target's refusal reverts the call");
     }
 
     /// A target without code: refused by name, nonce unspent (a call to it would succeed and do nothing).
@@ -613,7 +614,7 @@ contract GovRouterTest is UARegistryBase {
         bytes memory cd = _op(SET_LISTED_ONLY, true, pq, address(0xC0DE), abi.encode(true));
         vm.expectRevert(abi.encodeWithSelector(GovernanceRouterBase.TargetHasNoCode.selector, address(0xC0DE)));
         _run(cd);
-        assertEq(router.uaNonce(pq, 0), 0);
+        assertEq(router.mtxNonce(pq, 0), 0);
     }
 
     /// R-02 on the real router: `target` is a signed word, a relayer cannot move a signed op to another token.
@@ -672,58 +673,67 @@ contract GovRouterTest is UARegistryBase {
     }
 
     /// B-14, fixed (the attack round's `test_attack_theHoldersOpIsReachableAsABytesBlob` on the sketch): the generic path is
-    /// refused on every entry, whatever the blob calls: `mtxExecute`, `executeMetaTransaction`,
-    /// `mtxBatch`, `uaExecute`, `uaBatch`. The base's `cancelNonce` as the blob is refused too.
+    /// refused on every entry, whatever the blob calls: `executeMetaTransaction`, and `mtxExecute` / `mtxBatch` on ids for a
+    /// native and a derived signer. The base's `cancelNonce` as the blob is refused too. (ua-mtx-merge T1: the address
+    /// `mtxExecute` / `mtxBatch` left the router, MD-1; the `uaExecute` / `uaBatch` refusals are the `mtx*` ones.)
     function test_fixed_theRoutersOpIsNotReachableAsABytesBlob() public {
         bytes memory data = abi.encodeCall(IMetaTx.cancelNonce, (7));
         (address a, uint256 k) = makeAddrAndKey("blob signer");
         MetaTxLib.MetaTransaction memory m =
             MetaTxLib.MetaTransaction(a, data, 0, 0, block.timestamp + 1 hours, 0, address(0), 0, address(0));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(k, router.mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(k, MtxDigest.metaTx(address(router), m));
         bytes memory sig = abi.encodePacked(r, s, v);
         bytes4 refused = IMetaTx.cancelNonce.selector;
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, refused));
-        router.mtxExecute(m, sig);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, refused));
         router.executeMetaTransaction(m, sig);
-        MetaTxLib.MetaTransaction[] memory ms = new MetaTxLib.MetaTransaction[](1);
-        bytes[] memory sigs = new bytes[](1);
-        (ms[0], sigs[0]) = (m, sig);
+        // the same native signer on the merged generic entries
+        MetaTxLib.UAMetaTransaction memory n =
+            MetaTxLib.UAMetaTransaction(MetaTxLib.pad(a), data, 0, 0, block.timestamp + 1 hours, 0, address(0), 0, address(0));
+        (v, r, s) = vm.sign(k, router.mtxDigest(n));
+        MetaTxLib.UAMetaTransaction[] memory ns = new MetaTxLib.UAMetaTransaction[](1);
+        IUARegistry.UASig[] memory nas = new IUARegistry.UASig[](1);
+        ns[0] = n;
+        nas[0].signature = abi.encodePacked(r, s, v);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, refused));
-        router.mtxBatch(ms, sigs);
-        assertEq(router.mtxNonce(a, 0), 0);
+        router.mtxExecute(n, nas[0]);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(0)));
+        router.mtxBatch(ns, nas);
+        assertEq(router.mtxNonce(MetaTxLib.pad(a), 0), 0);
         _genericUaRefused(data, refused);
     }
 
     function _genericUaRefused(bytes memory data, bytes4 refused) internal {
         MetaTxLib.UAMetaTransaction memory u =
             MetaTxLib.UAMetaTransaction(pq, data, 0, 0, block.timestamp + 1 hours, 0, address(0), 0, address(0));
-        bytes memory auth = abi.encode(bytes(""), _sig(pqKey, UAKinds.uaMessage(ML44, UAKinds.PURPOSE_METATX, router.uaDigest(u))));
+        bytes memory auth = abi.encode(bytes(""), _sig(pqKey, UAKinds.uaMessage(ML44, UAKinds.PURPOSE_METATX, router.mtxDigest(u))));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, refused));
-        router.uaExecute(u, auth);
+        router.mtxExecute(u, UACall.auth(u.from, auth));
         MetaTxLib.UAMetaTransaction[] memory us = new MetaTxLib.UAMetaTransaction[](1);
         bytes[] memory auths = new bytes[](1);
         (us[0], auths[0]) = (u, auth);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(0)));
-        router.uaBatch(us, auths);
-        assertEq(router.uaNonce(pq, 0), 0);
+        router.mtxBatch(us, UACall.auths(us, auths));
+        assertEq(router.mtxNonce(pq, 0), 0);
     }
 
-    /// `cancelNonce`, `mtxCancelNonce` and `uaCancelNonce` stay: a cancelled lane kills a pre-signed op.
+    /// `cancelNonce` and the ordered `mtxCancelNonce` stay: a cancelled lane kills a pre-signed op. (ua-mtx-merge T1,
+    /// meaning: the unordered `uaCancelNonce` under `metatx-cancel` -> the ordered `mtxCancelNonce` on its own lane 5, under
+    /// the named op's purpose `metatx`, MD-5.)
     function test_cancelNonceStays() public {
         NormalToken t = _normal(pq, pq, 0);
         bytes memory cd = _op(OP_MINT, true, pq, address(t), abi.encode(BOB, uint256(1)));
-        uint256 until = block.timestamp + 1 hours;
-        bytes32 d = router.uaCancelDigest(pq, 0, until);
+        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(pq, 5, 0, block.timestamp + 1 hours, 0, address(0), 0, address(0));
+        bytes32 d = MtxDigest.typed(address(router), keccak256(abi.encode(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, e.from, uint256(0),
+            e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
         IUARegistry.UASig memory a;
-        a.signature = _sig(pqKey, UAKinds.uaMessage(ML44, UAKinds.PURPOSE_METATX_CANCEL, d));
-        router.uaCancelNonce(pq, 0, until, a);
+        a.signature = _sig(pqKey, UAKinds.uaMessage(ML44, UAKinds.PURPOSE_METATX, d));
+        router.mtxCancelNonce(e, 0, a);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
         _run(cd);
         address n = address(uint160(uint256(eoa)));
         vm.prank(n);
         router.cancelNonce(0);
-        assertEq(router.mtxNonce(n, 0), 1);
+        assertEq(router.mtxNonce(MetaTxLib.pad(n), 0), 1);
     }
 
     // ------------------------------------------------------------------ subject() and the lock

@@ -18,7 +18,8 @@ contract PipeHarness {
     function preCall(MtxPipelineLib.Ctx calldata c, MtxPipelineLib.Envelope calldata e,
         MtxPipelineLib.CallFacts calldata f, bool ua, bytes calldata auth) external returns (MtxPipelineLib.Out memory)
     {
-        return MtxPipelineLib.preCall(c, e, f, ua, auth);
+        // ua-mtx-merge T1 (R47): the UA path takes a `UASig`; the tests' `bytes auth` converts as the old bridge read it
+        return ua ? MtxPipelineLib.preCallUA(c, e, f, UACall.auth(e.from, auth)) : MtxPipelineLib.preCall(c, e, f, auth);
     }
 
     function preTransfer(MtxPipelineLib.Ctx calldata c, MetaTxLib.UAMetaTransfer calldata t, bool ua, uint256 have,
@@ -292,8 +293,10 @@ contract MtxPipelineLibTest is Test {
         f.len = 40;                        // shape
         bytes memory bad = abi.encode(bytes(""), hex"00");
 
+        // ua-mtx-merge T1 (C), meaning: the ledger check ran first; it is now the derived id's own, inside step 2, so a
+        // bad envelope is named first with or without a registry
         c.registry = address(0);
-        vm.expectRevert(IUALedger.UALedgerOff.selector);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 0, 5));
         h.preCall(c, e, f, true, bad);
         c.registry = address(reg);
 
@@ -301,6 +304,10 @@ contract MtxPipelineLibTest is Test {
         h.preCall(c, e, f, true, bad);
 
         e.nonce = 0;
+        c.registry = address(0);
+        vm.expectRevert(IUALedger.UALedgerOff.selector);
+        h.preCall(c, e, f, true, bad);
+        c.registry = address(reg);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, UA));
         h.preCall(c, e, f, true, bad);
 
@@ -416,11 +423,12 @@ contract MtxPipelineLibTest is Test {
         vm.expectRevert(IMetaTx.SelfSender.selector);
         h.preTransfer(c, _xfer(MetaTxLib.pad(address(h)), MetaTxLib.pad(bob)), false, 101, bad);
 
-        // UA path: ledger on > envelope > authorize > receiver (registry) > fee > balance
+        // UA path: envelope > authorize (a derived id: ledger on, then the registry) > receiver (registry) > fee > balance
+        // (ua-mtx-merge T1 (C), meaning: "ledger on" ran first for every id; it is now the derived side's only)
         MetaTxLib.UAMetaTransfer memory u = _xfer(UA, keccak256("unregistered"));
         u.validUntil = block.timestamp - 1;
         c.registry = address(0);
-        vm.expectRevert(IUALedger.UALedgerOff.selector);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxExpired.selector, u.validUntil, block.timestamp));
         h.preTransfer(c, u, true, 0, abi.encode(bytes(""), bad));
         c.registry = address(reg);
 
@@ -428,6 +436,10 @@ contract MtxPipelineLibTest is Test {
         h.preTransfer(c, u, true, 0, abi.encode(bytes(""), bad));
 
         u.validUntil = block.timestamp + 300;
+        c.registry = address(0);
+        vm.expectRevert(IUALedger.UALedgerOff.selector);
+        h.preTransfer(c, u, true, 0, abi.encode(bytes(""), bad));
+        c.registry = address(reg);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, UA));
         h.preTransfer(c, u, true, 0, abi.encode(bytes(""), bad));
 

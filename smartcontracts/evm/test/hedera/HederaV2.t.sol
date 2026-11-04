@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {UACall} from "../ua/UACall.sol";
 import {Test} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
@@ -140,9 +141,9 @@ contract HederaV2Test is Test {
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice,
             data: abi.encodeWithSignature("unwrap(uint256,address,uint256)", 40e6, shop, 40e6), batch: 2, nonce: 0,
             validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
-        bytes memory sig = _edSign(IMetaTx(t).mtxDigest(m));
+        bytes memory sig = _edSign(MtxDigest.metaTx(t, m));
         vm.prank(relayer);
-        IMetaTx(t).mtxExecute(m, sig);
+        IMetaTx(t).executeMetaTransaction(m, sig);
         assertEq(usdc.balanceOf(shop), 40e6);
     }
 

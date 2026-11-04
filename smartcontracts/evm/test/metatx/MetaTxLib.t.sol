@@ -95,6 +95,16 @@ contract MetaTxLibTest is Test {
         );
     }
 
+    /// ua-mtx-merge Q2: the ordered cancel on ids, `CancelNonce`'s shape with `bytes32 from` (the type string of the
+    /// unordered `UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)` it replaces changed, so its hash did).
+    function test_uaCancelNonceTypehashIsPinned() public pure {
+        assertEq(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, 0xcd17c2129240241748e841a7f0572558b9c5a900a47bc540170a8c258d291c54);
+        assertEq(
+            MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
+            keccak256("UACancelNonce(bytes32 from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)")
+        );
+    }
+
     /// CTR-UA-18: the pool address; a native id is the address zero-padded.
     function test_uaPoolAndPad() public pure {
         assertEq(MetaTxLib.UA_POOL, 0x41a67Ed99B9DC0332Eecb4D680667CCfc17A5c56);

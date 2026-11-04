@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
 import {Test, console2} from "forge-std/Test.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
@@ -249,12 +250,12 @@ contract ExplicitParamsCalldataTest is Test {
             UAEnvelope memory x = _uaEnv();
             MetaTxLib.UAMetaTransaction memory u = MetaTxLib.UAMetaTransaction(x.from, data, 0, 0, x.validUntil, x.mode,
                 address(0), 7, address(0));
-            return abi.encodeCall(IUALedger.uaExecute, (u, abi.encode(bytes(""), _rnd(9, ML65_SIG))));
+            return abi.encodeCall(UAMetaTxBase.mtxExecute, (u, UACall.auth(u.from, abi.encode(bytes(""), _rnd(9, ML65_SIG)))));
         }
         Envelope memory y = _env();
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(y.from, data, 0, 0, y.validUntil, y.mode,
             address(0), 7, address(0));
-        return abi.encodeCall(IMetaTx.mtxExecute, (m, _rnd(8, ECDSA_SIG)));
+        return abi.encodeCall(IMetaTx.executeMetaTransaction, (m, _rnd(8, ECDSA_SIG)));
     }
 
     function _feeAuth() internal pure returns (UASig memory s) {

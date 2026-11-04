@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
+import {UACall} from "../ua/UACall.sol";
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
@@ -267,8 +270,10 @@ abstract contract OrderRows is Test {
         assertEq(t.balanceOf(feeTo), fee);
     }
 
-    /// `ua` of the row is a derived id: the registry is asked with exactly the token's own digest of the row's `structHash`.
-    function test_typedOpsVectors_UACancelNonceRow() public {
+    /// ua-mtx-merge T1, meaning: the row is the unordered `UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)`
+    /// (`typed_ops.json` until T11 regenerates it, MD-7); its entry `uaCancelNonce` left the token (Q2), so the row's own
+    /// calldata finds no function and the lane stays. The ordered cancel is `test/merge`'s.
+    function test_typedOpsVectors_UACancelNonceRowHasNoEntry() public {
         j = vm.readFile(TYPED_OPS);
         string memory op = "UACancelNonce";
         NormalToken t = _normalKind();
@@ -276,14 +281,15 @@ abstract contract OrderRows is Test {
         uint256 batch = _u(_f(op, "batch"));
         uint256 until = _u(_f(op, "validUntil"));
         IUARegistry.UASig memory s = _uaSig(op);
-        bytes32 d = keccak256(abi.encodePacked(hex"1901", domainOf(address(t)), vm.parseJsonBytes32(j, string.concat(".ops.", op, ".structHash"))));
-        assertEq(t.uaCancelDigest(ua, batch, until), d);
         checkRow(j, op, _kind());
-        assertEq(keccak256(abi.encodeCall(IUALedger.uaCancelNonce, (ua, batch, until, s))),
-            keccak256(vm.parseJsonBytes(j, domainField(op, _kind(), "calldata"))), "calldata");
-        vm.mockCall(t.registry(), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX_CANCEL, d, s)), "");
-        t.uaCancelNonce(ua, batch, until, s);
-        assertEq(t.uaNonce(ua, batch), 1);
+        bytes memory cd = vm.parseJsonBytes(j, domainField(op, _kind(), "calldata"));
+        assertEq(keccak256(abi.encodeWithSignature(
+            "uaCancelNonce(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))", ua, batch, until, s)),
+            keccak256(cd), "the row: the old calldata");
+        (bool ok, bytes memory ret) = address(t).call(cd);
+        assertFalse(ok);
+        assertEq(ret.length, 0, "no such function");
+        assertEq(t.mtxNonce(ua, batch), 0);
     }
 }
 
@@ -332,30 +338,33 @@ contract OrderRowsTokenTest is OrderRows, UALedgerBase {
     }
 
     /// Relaying these entries: each has its own signature and a direct caller, so none is on the allowlist. A validly signed
-    /// `mtxExecute` / `uaExecute` of each is refused at the allowlist, the same envelope with an allowlisted op runs.
+    /// `executeMetaTransaction` / `mtxExecute` of each is refused at the allowlist, the same envelope with an allowlisted op
+    /// runs. (ua-mtx-merge T1, meaning: the address `mtxExecute` left tokens, `executeMetaTransaction` is its alias (R3);
+    /// on the merged `mtxExecute` a native signer reads `_mtxRule` (B): `MtxSelectorNotAllowed`, no longer `MetaTxUnknownOp`;
+    /// the cancel listed is the merged `mtxCancelNonce`.)
     function test_c6EntriesNotAllowlisted() public {
         bytes4[13] memory sels = [ITradeToken.mtxTrade.selector, ITradeToken.uaTrade.selector, ITradeToken.mtxCancelOrder.selector,
             ITradeToken.uaCancelOrder.selector, ITradeToken.mtxInvalidateNonces.selector, ITradeToken.uaInvalidateNonces.selector,
             IERC20MetaTx.mtxRelayFee.selector, IUALedger.uaRelayFee.selector, IMetaTokenV2.mtxPayReceiverFee.selector,
             IMetaTokenV2.uaPayReceiverFee.selector, IWrappedToken.mtxWrapOrder.selector, IWrappedToken.uaWrapOrder.selector,
-            IUALedger.uaCancelNonce.selector];
+            UAMetaTxBase.mtxCancelNonce.selector];
         bytes32 me = _pad(alice);
         for (uint256 i; i < sels.length; ++i) {
             MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(alice, abi.encodeWithSelector(sels[i], uint256(0)), 5, 0,
                 block.timestamp + 300, 0, address(0), 0, address(0));
-            bytes memory sig = ecdsa(ALICE_PK, wrpL.mtxDigest(m));
+            bytes memory sig = ecdsa(ALICE_PK, MtxDigest.metaTx(address(wrpL), m));
             vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, sels[i]));
-            wrpL.mtxExecute(m, sig);
+            wrpL.executeMetaTransaction(m, sig);
             MetaTxLib.UAMetaTransaction memory u = MetaTxLib.UAMetaTransaction(me, m.data, 5, 0, m.validUntil, 0, address(0), 0, address(0));
-            bytes memory auth = ecdsa(ALICE_PK, wrpL.uaDigest(u));
-            vm.expectRevert(abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, sels[i]));
-            wrpL.uaExecute(u, auth);
+            bytes memory auth = ecdsa(ALICE_PK, wrpL.mtxDigest(u));
+            vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, sels[i]));
+            wrpL.mtxExecute(u, UACall.auth(u.from, auth));
         }
         // the positive control: one thing differs, the call
         MetaTxLib.MetaTransaction memory ok = MetaTxLib.MetaTransaction(alice, abi.encodeCall(IMetaTx.cancelNonce, (9)), 5, 0,
             block.timestamp + 300, 0, address(0), 0, address(0));
-        wrpL.mtxExecute(ok, ecdsa(ALICE_PK, wrpL.mtxDigest(ok)));
-        assertEq(wrpL.mtxNonce(alice, 9), 1);
+        wrpL.executeMetaTransaction(ok, ecdsa(ALICE_PK, MtxDigest.metaTx(address(wrpL), ok)));
+        assertEq(wrpL.mtxNonce(MetaTxLib.pad(alice), 9), 1);
     }
 }
 

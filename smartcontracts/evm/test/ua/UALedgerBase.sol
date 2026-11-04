@@ -104,14 +104,14 @@ abstract contract UALedgerBase is UARegistryBase {
 
     function _t(bytes32 from, bytes32 to, uint256 value) internal view returns (MetaTxLib.UAMetaTransfer memory t) {
         t = MetaTxLib.UAMetaTransfer({
-            from: from, to: to, value: value, entryRef: 0, batch: 1, nonce: tok.uaNonce(from, 1),
+            from: from, to: to, value: value, entryRef: 0, batch: 1, nonce: tok.mtxNonce(from, 1),
             validUntil: block.timestamp + 300, mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
         });
     }
 
     function _m(address token, bytes32 from, bytes memory data) internal view returns (MetaTxLib.UAMetaTransaction memory m) {
         m = MetaTxLib.UAMetaTransaction({
-            from: from, data: data, batch: 1, nonce: NormalToken(token).uaNonce(from, 1),
+            from: from, data: data, batch: 1, nonce: NormalToken(token).mtxNonce(from, 1),
             validUntil: block.timestamp + 300, mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
         });
     }
@@ -137,7 +137,7 @@ abstract contract UALedgerBase is UARegistryBase {
     }
 
     function _authM(address token, MetaTxLib.UAMetaTransaction memory m) internal view returns (bytes memory) {
-        return _authFor(m.from, NormalToken(token).uaDigest(m));
+        return _authFor(m.from, NormalToken(token).mtxDigest(m));
     }
 
     function _xfer(MetaTxLib.UAMetaTransfer memory t) internal {

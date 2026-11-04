@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {IMetaTxAddress} from "../../src/metatx/IMetaTxAddress.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {Hashes} from "@openzeppelin/contracts/utils/cryptography/Hashes.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -686,7 +687,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
             abi.encodeCall(SmartKeyAccount.initialize, (_seedKey(SEED), address(0))),
             abi.encodeCall(SmartKeyAccount.mtxExecuteAsOwner, ("", 0, 0, "")),
             abi.encodeCall(SmartKeyAccount.isValidSignature, (D, "")),
-            abi.encodeCall(IMetaTx.mtxBatch, (new MetaTxLib.MetaTransaction[](0), new bytes[](0)))
+            abi.encodeCall(IMetaTxAddress.mtxBatch, (new MetaTxLib.MetaTransaction[](0), new bytes[](0)))
         ];
         for (uint256 i; i < calls.length; ++i) _signedFails(calls[i], abi.encodeWithSelector(no, bytes4(calls[i])));
     }

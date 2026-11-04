@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {UACall} from "../ua/UACall.sol";
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {console2} from "forge-std/console2.sol";
@@ -197,7 +199,7 @@ contract NamedUnwrapTest is V2Fixture {
         assertEq(usd.balanceOf(bob), 100);
         assertEq(w.balanceOf(holder), 10_000 - 101);
         assertEq(w.balanceOf(relayer), 1);
-        assertEq(w.mtxNonce(holder, LANE), 1);
+        assertEq(w.mtxNonce(MetaTxLib.pad(holder), LANE), 1);
 
         // one signature runs once
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
@@ -207,28 +209,28 @@ contract NamedUnwrapTest is V2Fixture {
         e = _env(1, 0, 0);
         MetaTxLib.MetaTransaction memory m = _generic(1, 200, 0);
         bytes memory typed = _walletSig(e, 200, 0);
-        bytes memory generic = ecdsa(PK, w.mtxDigest(m));
+        bytes memory generic = ecdsa(PK, MtxDigest.metaTx(address(w), m));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        w.mtxExecute(m, typed);
+        w.executeMetaTransaction(m, typed);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         w.mtxUnwrap(e, 200, bob, 0, generic);
 
         // the kept generic path runs the same op on the same lane: nonce 1 is gone for the typed form too
         vm.prank(relayer);
-        w.mtxExecute(m, generic);
+        w.executeMetaTransaction(m, generic);
         assertEq(usd.balanceOf(bob), 300);
-        assertEq(w.mtxNonce(holder, LANE), 2);
+        assertEq(w.mtxNonce(MetaTxLib.pad(holder), LANE), 2);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 2, 1));
         w.mtxUnwrap(e, 200, bob, 0, typed);
 
         // and back: the typed form takes nonce 2, the generic signature of nonce 2 is dead
         m = _generic(2, 300, 0);
-        generic = ecdsa(PK, w.mtxDigest(m));
+        generic = ecdsa(PK, MtxDigest.metaTx(address(w), m));
         e = _env(2, 0, 0);
         w.mtxUnwrap(e, 300, bob, 0, _walletSig(e, 300, 0));
         assertEq(usd.balanceOf(bob), 600);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 3, 2));
-        w.mtxExecute(m, generic);
+        w.executeMetaTransaction(m, generic);
     }
 
     /// The same op on a warm lane through both paths, for the run log.
@@ -242,9 +244,9 @@ contract NamedUnwrapTest is V2Fixture {
         w.mtxUnwrap(e, 100, bob, 0, sig);
         uint256 named = vm.lastCallGas().gasTotalUsed;
         MetaTxLib.MetaTransaction memory m = _generic(2, 100, 0);
-        sig = ecdsa(PK, w.mtxDigest(m));
+        sig = ecdsa(PK, MtxDigest.metaTx(address(w), m));
         vm.prank(relayer);
-        w.mtxExecute(m, sig);
+        w.executeMetaTransaction(m, sig);
         uint256 generic = vm.lastCallGas().gasTotalUsed;
         console2.log("mtxUnwrap / mtxExecute(unwrap), warm lane", named, generic);
         assertLt(named, generic + 2_000);
@@ -269,7 +271,7 @@ contract NamedUnwrapTest is V2Fixture {
         vm.prank(e.relayer);
         w.mtxUnwrap(e, wrapped, recipient, minOut, sig);
         assertEq(usd.balanceOf(recipient), wrapped);
-        assertEq(w.mtxNonce(e.from, e.batch), 1);
+        assertEq(w.mtxNonce(MetaTxLib.pad(e.from), e.batch), 1);
         assertEq(w.balanceOf(e.feeRecipient), wrapped * e.fee / 1_000_000, "the row's PERCENT fee");
     }
 
@@ -277,9 +279,9 @@ contract NamedUnwrapTest is V2Fixture {
     function test_c0_namedEntryNotAllowlisted() public {
         MetaTxLib.MetaTransaction memory m = _generic(0, 1, 0);
         m.data = abi.encodeCall(w.mtxUnwrap, (_env(0, 0, 0), uint256(1), bob, uint256(0), bytes("")));
-        bytes memory sig = ecdsa(PK, w.mtxDigest(m));
+        bytes memory sig = ecdsa(PK, MtxDigest.metaTx(address(w), m));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, w.mtxUnwrap.selector));
-        w.mtxExecute(m, sig);
+        w.executeMetaTransaction(m, sig);
     }
 }
 
@@ -337,10 +339,10 @@ contract NamedShieldPqzTest is PqzFixture {
             shieldJson(h(u.from), alice, 20, 0, 1, u.validUntil)));
         vm.roll(block.number + 1); // a new pending entry, not the block's TRIVIAL one
         vm.prank(relayer);
-        w.uaShield(u, alice, 20, sig);
+        w.uaShield(u, alice, 20, UACall.auth(u.from, sig));
         assertEq((w.pqzPending(alice, 1) >> 96) & type(uint64).max, 20);
         assertEq(w.balanceOf(signer), 70 * SCALE);
-        assertEq(w.uaNonce(u.from, 0), 2);
+        assertEq(w.mtxNonce(u.from, 0), 2);
     }
 
     /// C1: the row's `toUA` is `ZetherFixture`'s; here the registry answers for it as for `alice`: the signature is what is pinned.
@@ -366,7 +368,7 @@ contract NamedShieldPqzTest is PqzFixture {
         bytes memory sig = onChain(j, "Shield", address(w));
         vm.prank(e.relayer);
         w.mtxShield(e, toUA, amount, sig);
-        assertEq(w.mtxNonce(e.from, e.batch), 1);
+        assertEq(w.mtxNonce(MetaTxLib.pad(e.from), e.batch), 1);
         assertEq((w.pqzPending(toUA, 0) >> 96) & type(uint64).max, amount);
     }
 
@@ -378,12 +380,16 @@ contract NamedShieldPqzTest is PqzFixture {
             env.validUntil, env.mode, env.relayer, env.fee, env.feeRecipient);
         bytes32 toUA = _rowHolder(j, "UAShield", address(uint160(uint256(u.from))));
         uint256 amount = VM.parseJsonUint(j, msgField("UAShield", "amount"));
-        assertEq(abi.encodeCall(w.uaShield, (u, toUA, amount, VM.parseJsonBytes(j, domainField("UAShield", "pqz", "signature")))),
-            VM.parseJsonBytes(j, domainField("UAShield", "pqz", "calldata")), "`uaShield` keeps `bytes auth`");
+        // ua-mtx-merge T1, meaning: the row is still the pre-R47 `bytes auth` form (T11 regenerates `typed_ops.json`);
+        // `uaShield` now takes the explicit `UASig`, so the same signature runs as `UASig{signature}`
+        assertEq(abi.encodeWithSignature(
+            "uaShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,bytes)",
+            u, toUA, amount, VM.parseJsonBytes(j, domainField("UAShield", "pqz", "signature"))),
+            VM.parseJsonBytes(j, domainField("UAShield", "pqz", "calldata")), "the row: the pre-R47 `bytes auth` form");
         bytes memory sig = onChain(j, "UAShield", address(w));
         vm.prank(u.relayer);
-        w.uaShield(u, toUA, amount, sig);
-        assertEq(w.uaNonce(u.from, u.batch), 1);
+        w.uaShield(u, toUA, amount, UACall.auth(u.from, sig));
+        assertEq(w.mtxNonce(u.from, u.batch), 1);
         assertEq((w.pqzPending(toUA, 0) >> 96) & type(uint64).max, amount);
     }
 }
@@ -439,10 +445,10 @@ contract NamedShieldZetherTest is ZetherFixture {
         bytes32 d = walletDigest(address(w), "UAShield", UA_SHIELD_FIELDS, shieldJson(h(from), to, 15, 0, 0, u.validUntil));
         bytes memory auth = abi.encode(bytes(""), ZetherKeys.schnorr(alice.x, reg.uaMessage(_zkind(), UAKinds.PURPOSE_METATX, d), bls));
         vm.prank(relayer);
-        w.uaShield(u, to, 15, auth);
+        w.uaShield(u, to, 15, UACall.auth(u.from, auth));
         assertEq(w.balanceOfUA(from), 25 * SCALE);
         assertEq(w.totalShielded(), 25);
-        assertEq(w.uaNonce(from, 0), 1);
+        assertEq(w.mtxNonce(from, 0), 1);
     }
 
     /// C1: the `Shield` row, its `toUA` is `bob`.
@@ -464,7 +470,7 @@ contract NamedShieldZetherTest is ZetherFixture {
         bytes memory sig = onChain(j, "Shield", address(w));
         vm.prank(e.relayer);
         w.mtxShield(e, toUA, amount, sig);
-        assertEq(w.mtxNonce(e.from, e.batch), 1);
+        assertEq(w.mtxNonce(MetaTxLib.pad(e.from), e.batch), 1);
         assertEq(w.totalShielded(), amount);
     }
 }

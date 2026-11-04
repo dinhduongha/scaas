@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Test} from "forge-std/Test.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -185,9 +186,9 @@ contract WrapperHandler is Test {
                 | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT | MetaTxLib.MODE_FEE_PERCENT,
             relayer: relayer, fee: bound(feePpm, 0, 10_000), feeRecipient: feeTaker
         });
-        (uint8 v, bytes32 rr, bytes32 ss) = vm.sign(pks[who % 3], t.mtxDigest(m));
+        (uint8 v, bytes32 rr, bytes32 ss) = vm.sign(pks[who % 3], MtxDigest.metaTx(address(t), m));
         vm.prank(relayer);
-        try t.mtxExecute(m, abi.encodePacked(rr, ss, v)) {
+        try t.executeMetaTransaction(m, abi.encodePacked(rr, ss, v)) {
             ghostReserve[c.i] -= c.balBefore - c.u.balanceOf(address(t));
         } catch (bytes memory err) {
             _expect(err, _sels(IWrappedToken.UnwrapTooSmall.selector,

@@ -241,7 +241,7 @@ contract NativeLegTest is V2Fixture {
         bytes memory sig = _signCall(ALICE_PK, address(t), m);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.NativeValueMismatch.selector, 0, 1 ether));
-        t.mtxExecute(m, sig);
+        t.executeMetaTransaction(m, sig);
         _wrapNative(t, alice, 1 ether);
         m = _call(alice, abi.encodeWithSignature("unwrap(uint256,address,uint256)", 1 ether, bob, 1 ether), 1, RR);
         _execCall(ALICE_PK, address(t), m);

@@ -103,7 +103,7 @@ contract UALedgerNamedTest is UALedgerBase {
         bytes memory a = _authM(address(tok), m);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, bytes4(data)));
         vm.prank(RELAYER);
-        tok.uaExecute(m, a);
+        tok.mtxExecute(m, UACall.auth(m.from, a));
     }
 
     /// M2: `UA_POOL` holds every derived balance; an unwrap never pays out to it.
@@ -116,7 +116,7 @@ contract UALedgerNamedTest is UALedgerBase {
         bytes memory a = _authM(address(wrp), m);
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, POOL));
         vm.prank(RELAYER);
-        wrp.uaExecute(m, a);
+        wrp.mtxExecute(m, UACall.auth(m.from, a));
     }
 
     /// C5-4: `SHIELD_POOL` is no unwrap recipient either (the plain unwrap would pay the underlying to a keyless address).
@@ -130,7 +130,7 @@ contract UALedgerNamedTest is UALedgerBase {
         bytes memory a = _authM(address(wrp), m);
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, MetaTxLib.SHIELD_POOL));
         vm.prank(RELAYER);
-        wrp.uaExecute(m, a);
+        wrp.mtxExecute(m, UACall.auth(m.from, a));
     }
 
     function test_uaTransfer_modeShape() public {

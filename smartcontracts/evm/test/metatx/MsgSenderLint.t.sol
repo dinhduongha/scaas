@@ -11,7 +11,10 @@ import {Test} from "forge-std/Test.sol";
 /// are `//` are skipped (block comments are not). A change here is deliberate: update the pin in the same commit and
 /// say why.
 contract MsgSenderLintTest is Test {
-    string[18] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/UAMetaTxBase.sol", "src/metatx/MtxPipelineLib.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
+    // ua-mtx-merge MD-6: + MetaTxAddressBase (the address bodies moved out of MetaTxBase), MtxRelayFee, the PQZ token files,
+    // ZetherWrappedLib; `PqzLayer` and `SCaaSDex` read `this.` on purpose (pinned in `test_noExternalSelfCalls`)
+    string[24] internal FILES = ["src/metatx/MetaTxAddressBase.sol", "src/metatx/MtxRelayFee.sol", "src/pqz/NormalPqzToken.sol",
+        "src/pqz/WrappedPqzToken.sol", "src/pqz/PqzWrappedLib.sol", "src/zether/ZetherWrappedLib.sol", "src/metatx/MetaTxBase.sol", "src/metatx/UAMetaTxBase.sol", "src/metatx/MtxPipelineLib.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
         "src/metatx/NormalToken.sol", "src/metatx/WrappedToken.sol", "src/metatx/WrappedLib.sol",
         "src/governance/GovernanceLib.sol", "src/hedera/HederaLib.sol", "src/trade/TradeLib.sol", "src/zether/ZetherLayer.sol",
         "src/zether/ZetherLib.sol", "src/zether/NormalZetherToken.sol", "src/zether/WrappedZetherToken.sol",
@@ -67,7 +70,21 @@ contract MsgSenderLintTest is Test {
         // dex-round T4 (DX7): the two `restorePulled` overloads read their caller directly (`o.dex`), as `mtxTrade`.
         assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 7,
             "ERC20MetaTx: event relayer x3 (_execute, _executeTransfer, _uaExecuteTransfer), mtxTrade and uaTrade caller (CTR-DEX-15, -25), restorePulled caller x2 (DX7)");
-        assertEq(_count("src/metatx/UAMetaTxBase.sol", "msg.sender", false), 1, "UAMetaTxBase: event relayer (_uaSettle)");
+        // ua-mtx-merge T1 (Q2): 1 -> 2, the ordered `mtxCancelNonce` emits its own `UAMetaTransactionExecuted` (no self-call)
+        assertEq(_count("src/metatx/UAMetaTxBase.sol", "msg.sender", false), 2,
+            "UAMetaTxBase: event relayer (_uaSettle, mtxCancelNonce)");
+        // ua-mtx-merge MD-6: the files the merge rewrites, at their base counts (MetaTxAddressBase: new, the address
+        // bodies moved out of MetaTxBase, which kept its 8)
+        assertEq(_count("src/metatx/MetaTxAddressBase.sol", "msg.sender", false), 0, "MetaTxAddressBase");
+        assertEq(_count("src/metatx/MtxRelayFee.sol", "msg.sender", false), 4,
+            "MtxRelayFee: ROUTER at construction, the router check, the open-mode payee x2 (pay and pad)");
+        assertEq(_count("src/pqz/PqzLayer.sol", "msg.sender", false), 0, "PqzLayer");
+        assertEq(_count("src/pqz/NormalPqzToken.sol", "msg.sender", false), 0, "NormalPqzToken");
+        assertEq(_count("src/pqz/WrappedPqzToken.sol", "msg.sender", false), 0, "WrappedPqzToken");
+        assertEq(_count("src/pqz/PqzWrappedLib.sol", "msg.sender", false), 0, "PqzWrappedLib");
+        assertEq(_count("src/zether/ZetherWrappedLib.sol", "msg.sender", false), 0, "ZetherWrappedLib");
+        assertEq(_count("src/dex/SCaaSDex.sol", "msg.sender", false), 14,
+            "SCaaSDex: the factory check, _msgSender x2 (with its designator refusal), the self-call guard x2, the submitter x9");
         assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 4,
             "MetaTokenBase: factory check in initialize; the relayer of mtxRelayFee, uaRelayFee (struct word x2, `_relayHash`), bound to the direct caller");
         assertEq(_count("src/metatx/NormalToken.sol", "msg.sender", false), 0, "NormalToken");
@@ -100,5 +117,9 @@ contract MsgSenderLintTest is Test {
             all += _count(FILES[i], "this.", false);
         }
         assertGt(all, 0);
+        // ua-mtx-merge MD-6: two files read `this.` outside a selector on purpose, outside any allowlisted body
+        assertEq(_count("src/pqz/PqzLayer.sol", "this.", true), 1, "PqzLayer: `try this.disclosureStatement` (a view)");
+        assertEq(_count("src/dex/SCaaSDex.sol", "this.", true), 2,
+            "SCaaSDex: `abi.encodeCall(this.settleOne / this.exchangeOne, ...)`, calldata for its own `_selfCall`");
     }
 }

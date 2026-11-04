@@ -184,7 +184,7 @@ contract UAReceiverFeeTest is UALedgerBase {
         vm.prank(RELAYER);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaE));
         tok.uaPayReceiverFee(t, payer, 1, FEE_TO, until, old);
-        assertEq(tok.uaNonce(uaP, t.batch), 0);
+        assertEq(tok.mtxNonce(uaP, t.batch), 0);
         IUARegistry.UASig memory good = UACall.auth(t.to, _sign(uaE, UAKinds.PURPOSE_RECEIVER_FEE, rf));
         vm.prank(RELAYER);
         tok.uaPayReceiverFee(t, payer, 1, FEE_TO, until, good);

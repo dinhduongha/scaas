@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
 import {UACall} from "../ua/UACall.sol";
 import {console2} from "forge-std/Test.sol";
 import {VmSafe} from "forge-std/Vm.sol";
@@ -21,7 +23,7 @@ import {PqzRegistryBase, PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
-import {IRig, PlainRig, PqzRig, ZetherRig} from "./MetaTxParity.t.sol";
+import {IRig, PlainRig, PqzRig, ZetherRig} from "./helpers/KindRigs.sol";
 
 /// Submits `cd` to `t` with exactly `g` gas for the frame (not a transaction: no intrinsic gas, no calldata floor).
 contract GasProbe {
@@ -264,7 +266,7 @@ contract MtxCtxTest is PqzRegistryBase {
         MtxPipelineLib.Ctx memory c = _ctxOf(t, abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer,
             (MetaTxLib.MetaTransfer(address(0), address(0), 0, 0, 0, 0, 0, 0, address(0), 0, address(0)), "")),
             MtxPipelineLib.preTransfer.selector);
-        MtxPipelineLib.Ctx memory c2 = _ctxOf(t, abi.encodeCall(IMetaTx.mtxExecute,
+        MtxPipelineLib.Ctx memory c2 = _ctxOf(t, abi.encodeCall(IMetaTx.executeMetaTransaction,
             (MetaTxLib.MetaTransaction(address(0), "", 0, 0, 0, 0, address(0), 0, address(0)), "")),
             MtxPipelineLib.preCall.selector);
         assertEq(keccak256(abi.encode(c)), keccak256(abi.encode(c2)), string.concat(kind, ": one Ctx on every path"));
@@ -300,7 +302,7 @@ contract MtxCtxTest is PqzRegistryBase {
         // metatx_kat.json / metatransfer_kat.json: a `NORMAL` clone, chain 7622
         string memory j = vm.readFile("test/vectors/metatx_kat.json");
         address at = _etchNormal(vm.parseJsonAddress(j, ".verifying_contract"), vm.parseJsonBytes32(j, ".salt"), 7622);
-        assertEq(MetaTokenBase(at).mtxDigest(_katTx(j)), vm.parseJsonBytes32(j, ".digest"), "metatx_kat");
+        assertEq(MtxDigest.metaTx(at, _katTx(j)), vm.parseJsonBytes32(j, ".digest"), "metatx_kat");
         j = vm.readFile("test/vectors/metatransfer_kat.json");
         assertEq(vm.parseJsonAddress(j, ".verifying_contract"), at);
         assertEq(MetaTokenBase(at).mtxTransferDigest(_katTransfer(j)), vm.parseJsonBytes32(j, ".digest"), "metatransfer_kat");
@@ -320,7 +322,7 @@ contract MtxCtxTest is PqzRegistryBase {
         vm.etch(at, _cloneCode(_implOf(zs[0])));
         vm.chainId(vm.parseJsonUint(j, ".chainId"));
         assertEq(vm.parseJsonBytes32(j, ".chainUid"), MetaTokenBase(zs[0]).chainUid());
-        assertEq(MetaTokenBase(at).mtxDigest(_envelopeTx(j)), vm.parseJsonBytes32(j, ".digest"), "zether-prover envelope");
+        assertEq(MtxDigest.metaTx(at, _envelopeTx(j)), vm.parseJsonBytes32(j, ".digest"), "zether-prover envelope");
     }
 
     function _u(string memory j, string memory key) internal pure returns (uint256) {
@@ -370,7 +372,7 @@ contract MtxCtxTest is PqzRegistryBase {
         for (; vm.keyExistsJson(j, string.concat(list, vm.toString(n), "]")); ++n) {
             string memory r = string.concat(list, vm.toString(n), "].");
             string memory p = string.concat(r, "typedData.message.");
-            bytes32 got = transfer ? MetaTokenBase(at).uaTransferDigest(_ut3(j, p)) : MetaTokenBase(at).uaDigest(_um3(j, p));
+            bytes32 got = transfer ? MetaTokenBase(at).uaTransferDigest(_ut3(j, p)) : MetaTokenBase(at).mtxDigest(_um3(j, p));
             assertEq(got, vm.parseJsonBytes32(j, string.concat(r, "digest")), string.concat("metatx3 ", list));
         }
     }
@@ -427,12 +429,12 @@ contract MtxCtxTest is PqzRegistryBase {
         // mtxExecute: burn(1,000) with a fixed fee of 5 to the relayer
         MetaTxLib.MetaTransaction memory m = _mt(alice, abi.encodeCall(NormalToken.burn, (1_000)), 11,
             RR | MetaTxLib.MODE_FEE_FIXED, 5);
-        _checkWrites(abi.encodeCall(IMetaTx.mtxExecute, (m, _ecdsa(ALICE_PK, tok.mtxDigest(m)))), "mtxExecute",
+        _checkWrites(abi.encodeCall(IMetaTx.executeMetaTransaction, (m, _ecdsa(ALICE_PK, MtxDigest.metaTx(address(tok), m)))), "mtxExecute",
             _set(_nonceSlot(MetaTxLib.pad(alice), 11), _balSlot(alice), relayer, _supplySlot(), 0, 4));
         // uaExecute: the `mldsa65` UA burns through UA_POOL, fee from its ledger
         MetaTxLib.UAMetaTransaction memory um = _um(u, abi.encodeCall(NormalToken.burn, (1_000)), 12,
             RR | MetaTxLib.MODE_FEE_FIXED, 5);
-        _checkWrites(abi.encodeCall(IUALedger.uaExecute, (um, _mlAuth())), "uaExecute",
+        _checkWrites(abi.encodeCall(UAMetaTxBase.mtxExecute, (um, UACall.auth(um.from, _mlAuth()))), "uaExecute",
             _set(_nonceSlot(u, 12), _uaSlot(u), _balSlot(MetaTxLib.UA_POOL), _supplySlot(), relayer, 5));
         // mtxExecuteTransfer: alice -> BOB 100, fee 5
         MetaTxLib.MetaTransfer memory t = _tr(alice, BOB, 13);
@@ -461,8 +463,8 @@ contract MtxCtxTest is PqzRegistryBase {
             address(0x6A2D));
         tok.mint(acct, 1_000);
         MetaTxLib.MetaTransaction memory m = _mt(acct, abi.encodeCall(IMetaTx.cancelNonce, (9)), 1, RR, 0);
-        bytes memory sig = abi.encode(uint256(0), new bytes32[](0), _ecdsa(SKA_PK, tok.mtxDigest(m)));
-        bytes memory cd = abi.encodeCall(IMetaTx.mtxExecute, (m, sig));
+        bytes memory sig = abi.encode(uint256(0), new bytes32[](0), _ecdsa(SKA_PK, MtxDigest.metaTx(address(tok), m)));
+        bytes memory cd = abi.encodeCall(IMetaTx.executeMetaTransaction, (m, sig));
         // the ERC-1271 STATICCALL comes from the library's frame
         uint256 snap = vm.snapshotState();
         (bool ok, bytes memory ret, VmSafe.AccountAccess[] memory a) = _recorded(address(tok), cd);
@@ -489,11 +491,11 @@ contract MtxCtxTest is PqzRegistryBase {
     /// window, so the sweep runs on frames.)
     function test_minGas_mldsa65UaExecute() public {
         MetaTxLib.UAMetaTransaction memory m = _um(u, abi.encodeCall(NormalToken.burn, (10)), 2, 0, 0);
-        bytes memory cd = abi.encodeCall(IUALedger.uaExecute, (m, _mlAuth()));
+        bytes memory cd = abi.encodeCall(UAMetaTxBase.mtxExecute, (m, UACall.auth(m.from, _mlAuth())));
         uint256 snap = vm.snapshotState();
         (bool ok, bytes memory ret, VmSafe.AccountAccess[] memory a) = _recorded(address(tok), cd);
         assertTrue(ok, vm.toString(ret));
-        uint256 i = _inside(a, _libCall(a, address(tok), MtxPipelineLib.preCall.selector), address(reg));
+        uint256 i = _inside(a, _libCall(a, address(tok), MtxPipelineLib.preCallUA.selector), address(reg));
         assertTrue(a[i].kind == VmSafe.AccountAccessKind.StaticCall);
         assertEq(a[i].accessor, address(tok));
         vm.revertToState(snap);
@@ -529,7 +531,7 @@ contract MtxCtxTest is PqzRegistryBase {
     function test_hedera_hip632CallerIsToken() public {
         address t = address(htok);
         MetaTxLib.MetaTransaction memory m = _mt(hed, abi.encodeCall(IMetaTx.cancelNonce, (9)), 1, RR, 0);
-        _hip632(t, abi.encodeCall(IMetaTx.mtxExecute, (m, _ed(htok.mtxDigest(m)))), MtxPipelineLib.preCall.selector);
+        _hip632(t, abi.encodeCall(IMetaTx.executeMetaTransaction, (m, _ed(MtxDigest.metaTx(address(htok), m)))), MtxPipelineLib.preCall.selector);
         MetaTxLib.MetaTransfer memory x = _tr(hed, BOB, 2);
         _hip632(t, abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, _ed(htok.mtxTransferDigest(x)))),
             MtxPipelineLib.preTransfer.selector);
@@ -537,7 +539,7 @@ contract MtxCtxTest is PqzRegistryBase {
         _hip632(t, abi.encodeCall(IUALedger.uaExecuteTransfer, (y, UACall.auth(y.from, _ed(htok.uaTransferDigest(y))))),
             MtxPipelineLib.preTransferUA.selector);
         assertEq(htok.balanceOf(BOB), 2_000);
-        assertEq(htok.mtxNonce(hed, 1) + htok.mtxNonce(hed, 2) + htok.mtxNonce(hed, 3), 3);
+        assertEq(htok.mtxNonce(MetaTxLib.pad(hed), 1) + htok.mtxNonce(MetaTxLib.pad(hed), 2) + htok.mtxNonce(MetaTxLib.pad(hed), 3), 3);
     }
 
     function _hip632(address t, bytes memory cd, bytes4 sel) internal {

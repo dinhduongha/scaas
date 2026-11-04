@@ -130,7 +130,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
             MetaTxLib.UAMetaTransaction memory m = _call(pj, r);
             bytes32 digest = vm.parseJsonBytes32(pj, string.concat(r, "digest"));
             assertEq(MetaTxLib.hashStruct(m), vm.parseJsonBytes32(pj, string.concat(r, "structHash")));
-            assertEq(tok.uaDigest(m), digest);
+            assertEq(tok.mtxDigest(m), digest);
             reg.requireAuthorized(m.from, UAKinds.PURPOSE_METATX, digest, UACall.auth(m.from, vm.parseJsonBytes(pj, string.concat(r, "auth"))));
             ++n;
         }

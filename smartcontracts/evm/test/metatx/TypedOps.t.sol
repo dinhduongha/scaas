@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {IMetaTxAddress} from "../../src/metatx/IMetaTxAddress.sol";
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {Test, stdStorage, StdStorage} from "forge-std/Test.sol";
@@ -14,6 +16,7 @@ import {HederaMandateWallet} from "../../src/hedera/HederaMandateWallet.sol";
 import {SmartKeyAccount, SubjectKey, KeyKind, AccountSig} from "../../src/account/SmartKeyAccount.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
@@ -181,10 +184,12 @@ contract TypedOpsTest is UALedgerBase {
         string memory op = "CancelNonce";
         MetaTxLib.Envelope memory e = rowEnvelope(j, op);
         uint256 lane = _uint(op, "lane");
-        bytes memory built = abi.encodeCall(MetaTxBase.mtxCancelNonce, (e, lane, _sigOf(op)));
-        _run(op, address(tok), built);
-        assertEq(tok.mtxNonce(e.from, lane), 1, "the signed lane");
-        assertEq(tok.mtxNonce(e.from, e.batch), 1, "the cancel's own lane");
+        bytes memory built = abi.encodeCall(IMetaTxAddress.mtxCancelNonce, (e, lane, _sigOf(op)));
+        // ua-mtx-merge T1, meaning: a token has no address `mtxCancelNonce` (Q2, MD-1); the row runs on the wallets only
+        (bool ok, bytes memory ret) = address(tok).call(built);
+        assertFalse(ok, "no token entry");
+        assertEq(ret.length, 0, "no such function");
+        assertEq(tok.mtxNonce(MetaTxLib.pad(e.from), lane), 0, "the signed lane, untouched");
 
         MandateWallet wallet = new MandateWallet(e.from, chainUidA);
         _run(op, address(wallet), built);
@@ -205,7 +210,7 @@ contract TypedOpsTest is UALedgerBase {
         _run(op, address(tok), abi.encodeCall(NormalToken.mtxBurn, (e, amount, _sigOf(op))));
         assertEq(tok.balanceOf(e.from), SUPPLY - amount - _feeOf(op, amount));
         assertEq(tok.balanceOf(e.feeRecipient), _feeOf(op, amount));
-        assertEq(tok.mtxNonce(e.from, e.batch), 1);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(e.from), e.batch), 1);
     }
 
     function test_typedOpsVectors_UABurn() public {
@@ -217,7 +222,7 @@ contract TypedOpsTest is UALedgerBase {
         _run(op, address(tok), abi.encodeCall(NormalToken.uaBurn, (u, amount, _uaSigOf(op))));
         assertEq(tok.balanceOf(from), SUPPLY - amount - _feeOf(op, amount));
         assertEq(tok.balanceOf(u.feeRecipient), _feeOf(op, amount));
-        assertEq(tok.uaNonce(u.from, u.batch), 1);
+        assertEq(tok.mtxNonce(u.from, u.batch), 1);
     }
 
     function test_typedOpsVectors_Wrap() public {
@@ -230,7 +235,7 @@ contract TypedOpsTest is UALedgerBase {
         _run(op, address(wrp), abi.encodeWithSignature(_abi(op), e, amount, _sigOf(op)));
         assertEq(wrp.balanceOf(e.from), amount - e.fee, "the ABSOLUTE fee from the minted units");
         assertEq(wrp.balanceOf(e.feeRecipient), e.fee);
-        assertEq(wrp.mtxNonce(e.from, e.batch), 1);
+        assertEq(wrp.mtxNonce(MetaTxLib.pad(e.from), e.batch), 1);
     }
 
     function test_typedOpsVectors_WrapLeg() public {
@@ -265,7 +270,7 @@ contract TypedOpsTest is UALedgerBase {
         assertEq(und.balanceOf(recipient), wrapped);
         assertEq(wrp.balanceOf(signer), SUPPLY - wrapped - _feeOf(op, wrapped));
         assertEq(wrp.balanceOf(u.feeRecipient), _feeOf(op, wrapped));
-        assertEq(wrp.uaNonce(u.from, u.batch), 1);
+        assertEq(wrp.mtxNonce(u.from, u.batch), 1);
     }
 
     function test_typedOpsVectors_UnwrapLeg() public {
@@ -598,13 +603,20 @@ contract TypedOpsTest is UALedgerBase {
         assertEq(ret.length, 0, "no such function");
     }
 
-    /// `mtxCancelNonce` joined `IMetaTx`: 0xf6695913 ^ its selector (owner 2026-11-01).
+    /// ua-mtx-merge T1 (MD-1): `IMetaTx` is the core (`executeMetaTransaction`, `mtxSelectors`, `chainUid`,
+    /// `supportedModes`, `cancelNonce`); the five address entries moved to `IMetaTxAddress` (the wallets). Old id
+    /// 0x2f1aa7fe = 0xae99c265 ^ 0x8183659b, the id of the five that left; 0xf6695913 is the id before `mtxCancelNonce`
+    /// joined (owner 2026-11-01).
     function test_iMetaTxIdPinned() public view {
-        assertEq(type(IMetaTx).interfaceId, bytes4(0x2f1aa7fe));
-        assertEq(type(IMetaTx).interfaceId ^ IMetaTx.mtxCancelNonce.selector, bytes4(0xf6695913));
-        assertTrue(tok.supportsInterface(0x2f1aa7fe));
-        assertTrue(wrp.supportsInterface(0x2f1aa7fe));
-        assertFalse(tok.supportsInterface(0xf6695913));
+        assertEq(type(IMetaTx).interfaceId, bytes4(0xae99c265));
+        assertEq(type(IMetaTxAddress).interfaceId, bytes4(0x8183659b));
+        assertEq(type(IMetaTx).interfaceId ^ type(IMetaTxAddress).interfaceId, bytes4(0x2f1aa7fe));
+        assertEq(type(IMetaTx).interfaceId ^ type(IMetaTxAddress).interfaceId ^ IMetaTxAddress.mtxCancelNonce.selector,
+            bytes4(0xf6695913));
+        assertTrue(tok.supportsInterface(0xae99c265));
+        assertTrue(wrp.supportsInterface(0xae99c265));
+        assertFalse(tok.supportsInterface(0x2f1aa7fe));
+        assertFalse(tok.supportsInterface(0x8183659b));
     }
 
     function _generic(address from, uint256 nonce) internal view returns (MetaTxLib.MetaTransaction memory m) {
@@ -618,27 +630,27 @@ contract TypedOpsTest is UALedgerBase {
     }
 
     /// The generic entries (owner 2026-10-31) and `executeMetaTransaction` (owner 2026-11-01) run, and share the lane.
+    /// ua-mtx-merge T1, meaning: the address `mtxExecute` / `mtxBatch` left tokens (MD-1); the address struct runs through
+    /// `executeMetaTransaction` (R3), the generic entries are the merged `mtxExecute` / `mtxBatch` on ids.
     function test_genericEntriesKept() public {
         uint256 supply = tok.totalSupply();
         MetaTxLib.MetaTransaction memory m = _generic(alice, 0);
-        tok.mtxExecute(m, _ecdsa(ALICE_PK, tok.mtxDigest(m)));
+        tok.executeMetaTransaction(m, _ecdsa(ALICE_PK, MtxDigest.metaTx(address(tok), m)));
         m = _generic(alice, 1);
-        assertTrue(tok.executeMetaTransaction(m, _ecdsa(ALICE_PK, tok.mtxDigest(m))));
-        MetaTxLib.MetaTransaction[] memory ms = new MetaTxLib.MetaTransaction[](1);
+        assertTrue(tok.executeMetaTransaction(m, _ecdsa(ALICE_PK, MtxDigest.metaTx(address(tok), m))));
         bytes[] memory sigs = new bytes[](1);
-        ms[0] = _generic(alice, 2);
-        sigs[0] = _ecdsa(ALICE_PK, tok.mtxDigest(ms[0]));
-        assertTrue(tok.mtxBatch(ms, sigs));
+        MetaTxLib.UAMetaTransaction memory u = _genericUA(_pad(alice), 2);
+        tok.mtxExecute(u, UACall.auth(u.from, _authM(address(tok), u)));
 
-        MetaTxLib.UAMetaTransaction memory u = _genericUA(_pad(alice), 3);
-        tok.uaExecute(u, _authM(address(tok), u));
+        u = _genericUA(_pad(alice), 3);
+        tok.mtxExecute(u, UACall.auth(u.from, _authM(address(tok), u)));
         MetaTxLib.UAMetaTransaction[] memory us = new MetaTxLib.UAMetaTransaction[](1);
         us[0] = _genericUA(_pad(alice), 4);
         sigs[0] = _authM(address(tok), us[0]);
-        assertTrue(tok.uaBatch(us, sigs));
+        assertTrue(tok.mtxBatch(us, UACall.auths(us, sigs)));
 
         assertEq(tok.totalSupply(), supply - 5);
-        assertEq(tok.mtxNonce(alice, 3), 5);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(alice), 3), 5);
     }
 
     function test_namedEntryReplayRefused() public {
@@ -657,9 +669,9 @@ contract TypedOpsTest is UALedgerBase {
         tok.uaBurn(_uaE(e, _pad(e.from)), _uint(op, "amount"), _uaSigOf(op));
         MetaTxLib.MetaTransaction memory m = _generic(e.from, 0);
         m.batch = e.batch;
-        bytes memory generic = _ecdsa(pk, tok.mtxDigest(m));
+        bytes memory generic = _ecdsa(pk, MtxDigest.metaTx(address(tok), m));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        tok.mtxExecute(m, generic);
+        tok.executeMetaTransaction(m, generic);
     }
 
     function test_namedEntryOtherOpDigestRefused() public {
@@ -717,7 +729,7 @@ contract TypedOpsTest is UALedgerBase {
         IUARegistry.UASig memory s = UACall.auth(uaP, _authFor(uaP, d));
         tok.uaBurn(_uaE(e, uaP), 100, s);
         assertEq(tok.balanceOfUA(uaP), 900);
-        assertEq(tok.uaNonce(uaP, e.batch), 1);
+        assertEq(tok.mtxNonce(uaP, e.batch), 1);
 
         // the same signature on the next nonce: another digest
         e.nonce = 1;
@@ -748,7 +760,7 @@ contract TypedOpsTest is UALedgerBase {
             "UAUnwrapLeg(bytes32 from,address underlying,uint256 wrapped,address recipient,uint256 minOut,", args, e));
         assertEq(und.balanceOf(bob), 300);
         assertEq(wrp.balanceOfUA(uaP), 700);
-        assertEq(wrp.uaNonce(uaP, e.batch), 2);
+        assertEq(wrp.mtxNonce(uaP, e.batch), 2);
     }
 
     function test_namedUADerivedUnwrapToUA() public {
@@ -833,14 +845,18 @@ contract TypedOpsTest is UALedgerBase {
         assertEq(acct.mtxNonce(address(acct), e.batch), 1);
     }
 
-    /// `lane == batch`: the entry takes nonce 0, the cancel the next, so the lane skips one.
+    /// `lane == batch`: the entry takes nonce 0, the cancel the next, so the lane skips one. (ua-mtx-merge T1, meaning:
+    /// the token's cancel is the ordered `mtxCancelNonce(UAEnvelope, lane, UASig)` over `UACancelNonce`, Q2; it emits
+    /// `UANonceCancelled` for the id, R18.)
     function test_namedCancelNonceOwnLane() public {
         MetaTxLib.Envelope memory e = _env(alice, 0, 0, 0, address(0));
-        bytes32 d = _digest(address(tok), "CancelNonce(address from,uint256 lane,", _pad(alice), abi.encode(e.batch), e);
+        bytes32 d = _digest(address(tok), "UACancelNonce(bytes32 from,uint256 lane,", _pad(alice), abi.encode(e.batch), e);
         vm.expectEmit(address(tok));
-        emit IMetaTx.MetaNonceCancelled(alice, e.batch, 2);
-        tok.mtxCancelNonce(e, e.batch, _ecdsa(ALICE_PK, d));
-        assertEq(tok.mtxNonce(alice, e.batch), 2);
+        emit IUALedger.UANonceCancelled(_pad(alice), e.batch, 2);
+        IUARegistry.UASig memory a;
+        a.signature = _ecdsa(ALICE_PK, d);
+        tok.mtxCancelNonce(_uaE(e, _pad(alice)), e.batch, a);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(alice), e.batch), 2);
     }
 
     /// Every bound field is in the digest; an unbound relayer or recipient is hashed as 0 and may be anything.
@@ -877,7 +893,7 @@ contract TypedOpsTest is UALedgerBase {
         bytes32 d = _digest(address(tok), "Burn(address from,uint256 amount,", _pad(alice), abi.encode(uint256(1)), open);
         (open.relayer, open.feeRecipient) = (address(0xBAD), address(0xBAD));
         tok.mtxBurn(open, 1, _ecdsa(ALICE_PK, d));
-        assertEq(tok.mtxNonce(alice, open.batch), 1);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(alice), open.batch), 1);
     }
 
     /// The token is in the domain: a `Burn` signed for one token does not run on another.
@@ -919,7 +935,7 @@ contract TypedOpsTest is UALedgerBase {
         router.relay(address(wrp), cd, address(tok), alice, RELAYER, 25, until, s);
         assertEq(und.balanceOf(bob), 100);
         assertEq(tok.balanceOf(RELAYER), 25);
-        assertEq(wrp.mtxNonce(alice, e.batch), 1);
+        assertEq(wrp.mtxNonce(MetaTxLib.pad(alice), e.batch), 1);
     }
 }
 
@@ -932,16 +948,25 @@ abstract contract ConfidentialRows is Test {
     function _normalKind() internal virtual returns (NormalToken);
     function _wrappedKind(address leg) internal virtual returns (WrappedToken);
 
-    function test_typedOpsVectors_CancelNonceRow() public {
+    /// ua-mtx-merge T1, meaning: the address `CancelNonce` row ran on a token; a token has no address `mtxCancelNonce`
+    /// any more (Q2, MD-1: the wallets keep it), so the row, re-signed on the token, finds no entry (an empty revert,
+    /// no signature check) and the lane stays. MD-7: T11 narrows the row's `on` to the wallets.
+    function test_typedOpsVectors_CancelNonceRowHasNoTokenEntry() public {
         j = vm.readFile(TYPED_OPS);
         string memory k = _kind();
         NormalToken t = _normalKind();
         assertTrue(t.supportsInterface(type(IMetaTx).interfaceId));
         MetaTxLib.Envelope memory e = rowEnvelope(j, "CancelNonce");
         uint256 lane = vm.parseJsonUint(j, msgField("CancelNonce", "lane"));
-        runRow(j, "CancelNonce", k, address(t), abi.encodeCall(IMetaTx.mtxCancelNonce,
+        _noTokenEntry(k, address(t), abi.encodeCall(IMetaTxAddress.mtxCancelNonce,
             (e, lane, vm.parseJsonBytes(j, domainField("CancelNonce", k, "signature")))));
-        assertEq(t.mtxNonce(e.from, lane), 1);
+        assertEq(t.mtxNonce(MetaTxLib.pad(e.from), lane), 0);
+    }
+
+    function _noTokenEntry(string memory k, address t, bytes memory built) internal {
+        (bool ok, bytes memory ret) = tryRow(j, "CancelNonce", k, t, built);
+        assertFalse(ok);
+        assertEq(ret.length, 0, "no such function");
     }
 
     function test_typedOpsVectors_BurnRow() public {
@@ -970,7 +995,7 @@ abstract contract ConfidentialRows is Test {
         s.signature = vm.parseJsonBytes(j, domainField("UABurn", k, "signature"));
         t.mint(address(uint160(uint256(e.from))), FUNDS);
         runRow(j, "UABurn", k, address(t), abi.encodeCall(NormalToken.uaBurn, (e, amount, s)));
-        assertEq(t.uaNonce(e.from, e.batch), 1);
+        assertEq(t.mtxNonce(e.from, e.batch), 1);
         assertEq(t.balanceOf(e.feeRecipient), amount * e.fee / 1_000_000);
     }
 
@@ -1108,7 +1133,7 @@ contract TypedOpsRouterTest is UALedgerBase {
         vm.prank(_addr(op, "relayer"));
         (bool ok, bytes memory ret) = router.call(cd);
         if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
-        assertEq(GovernanceRouter(router).uaNonce(me, _uint(op, "batch")), 1, op);
+        assertEq(GovernanceRouter(router).mtxNonce(me, _uint(op, "batch")), 1, op);
     }
 
     function _clone(address impl, address at) internal {
@@ -1400,25 +1425,22 @@ contract TypedOpsRouterTest is UALedgerBase {
 
     // ------------------------------------------------------------------ the lane's cancels on the router's domain
 
-    function test_routerRow_CancelNonce() public {
-        string memory op = "CancelNonce";
-        _row(op);
-        assertEq(GovernanceRouter(router).mtxNonce(signer, _uint(op, "lane")), 1, "the signed lane");
+    /// ua-mtx-merge T1, meaning: the two cancel rows of the router's domain, the address `CancelNonce` and the unordered
+    /// `UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)`, find no entry on the router any more (Q2, MD-1): the
+    /// row's calldata reverts with no data and the lanes stay. The ordered cancel's row is T11's (MD-7, `typed_ops.json`).
+    function test_routerRow_CancelNonceHasNoEntry() public {
+        _noEntry("CancelNonce", MetaTxLib.pad(signer), _uint("CancelNonce", "lane"));
     }
 
-    /// `ua` of the row is a derived id: the registry is asked with the router's digest, which is the row's.
-    function test_routerRow_UACancelNonce() public {
-        string memory op = "UACancelNonce";
-        bytes32 ua = _b32(op, "ua");
-        (uint256 batch, uint256 until) = (_uint(op, "batch"), _uint(op, "validUntil"));
-        bytes32 d = GovernanceRouter(router).uaCancelDigest(ua, batch, until);
-        assertEq(d, vm.parseJsonBytes32(j, domainField(op, K, "digest")));
+    function test_routerRow_UACancelNonceOldFormHasNoEntry() public {
+        _noEntry("UACancelNonce", _b32("UACancelNonce", "ua"), _uint("UACancelNonce", "batch"));
+    }
+
+    function _noEntry(string memory op, bytes32 who, uint256 lane) internal {
         checkRow(j, op, K);
-        IUARegistry.UASig memory sig;
-        sig.signature = vm.parseJsonBytes(j, domainField(op, K, "signature"));
-        vm.mockCall(REG_L, abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX_CANCEL, d, sig)), "");
         (bool ok, bytes memory ret) = router.call(vm.parseJsonBytes(j, domainField(op, K, "calldata")));
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
-        assertEq(GovernanceRouter(router).uaNonce(ua, batch), 1);
+        assertFalse(ok, op);
+        assertEq(ret.length, 0, string.concat(op, ": no such function"));
+        assertEq(GovernanceRouter(router).mtxNonce(who, lane), 0, op);
     }
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {MtxDigest} from "../../helpers/MtxDigest.sol";
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {MetaTokenBase} from "../../../src/metatx/MetaTokenBase.sol";
@@ -216,14 +217,15 @@ abstract contract V2Fixture is Test {
     function _signCall(uint256 pk, address t, MetaTxLib.MetaTransaction memory m)
         internal view returns (bytes memory)
     {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, MetaTokenBase(t).mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, MtxDigest.metaTx(t, m));
         return abi.encodePacked(r, s, v);
     }
 
-    /// Signs with `pk` and submits through `mtxExecute` as `relayer`; returns the inner call's bytes.
-    function _execCall(uint256 pk, address t, MetaTxLib.MetaTransaction memory m) internal returns (bytes memory) {
+    /// Signs with `pk` and submits through `executeMetaTransaction` as `relayer` (ua-mtx-merge T1: a token's address
+    /// generic entry; the same pipeline the address `mtxExecute` ran).
+    function _execCall(uint256 pk, address t, MetaTxLib.MetaTransaction memory m) internal returns (bool) {
         bytes memory s = _signCall(pk, t, m);
         vm.prank(relayer);
-        return MetaTokenBase(t).mtxExecute(m, s);
+        return MetaTokenBase(t).executeMetaTransaction(m, s);
     }
 }

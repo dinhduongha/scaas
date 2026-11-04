@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {ZetherFixture} from "./helpers/ZetherFixture.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
@@ -153,7 +154,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         ZetherLayer t = _token(1, 2, true, "c-opt");
         _public(t, vm.addr(PAYER_PK), 1000);
         MetaTxLib.MetaTransaction memory mt = MetaTxLib.MetaTransaction({
-            from: vm.addr(PAYER_PK), data: "", batch: 7, nonce: t.mtxNonce(vm.addr(PAYER_PK), 7),
+            from: vm.addr(PAYER_PK), data: "", batch: 7, nonce: t.mtxNonce(MetaTxLib.pad(vm.addr(PAYER_PK)), 7),
             validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED,
             relayer: relayer, fee: 3, feeRecipient: address(0)
         });
@@ -163,17 +164,19 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         assertEq(stm.transferStatement(address(t), _zMulti(out.readBytes(".payload"), carol.ua), ZetherTypes.TransferMode.HASH, binding),
             out.readBytes(".statement"), "relayed statement bytes");
         mt.data = out.readBytes(".directCalldata");
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, t.mtxDigest(mt));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, MtxDigest.metaTx(address(t), mt));
         vm.prank(relayer);
-        bytes memory ret = t.mtxExecute(mt, abi.encodePacked(r, s, v));
-        _settled(t, out, abi.decode(ret, (bytes32)), ZetherTypes.TransferMode.HASH);
+        // ua-mtx-merge T1, meaning: `executeMetaTransaction` (R3) returns `true`, not the self-call's entryRef; the
+        // prover's ref is checked against the contract's storage there (`_settled` reads `transferEntry(ref)`)
+        assertTrue(t.executeMetaTransaction(mt, abi.encodePacked(r, s, v)));
+        _settled(t, out, out.readBytes32(".entryRef"), ZetherTypes.TransferMode.HASH);
     }
 
     // ------------------------------------------------------------------ typed-signing C7: the prover's `namedCall` settles
 
     function _envMt(address payer, ZetherLayer t) internal view returns (MetaTxLib.MetaTransaction memory) {
         return MetaTxLib.MetaTransaction({
-            from: payer, data: "", batch: 7, nonce: t.mtxNonce(payer, 7), validUntil: block.timestamp + 300,
+            from: payer, data: "", batch: 7, nonce: t.mtxNonce(MetaTxLib.pad(payer), 7), validUntil: block.timestamp + 300,
             mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, relayer: relayer, fee: 3, feeRecipient: address(0)
         });
     }
@@ -220,12 +223,12 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         address(t).call(bad);
-        assertEq(t.mtxNonce(payer, 7), 0, "nothing consumed by the refusal");
+        assertEq(t.mtxNonce(MetaTxLib.pad(payer), 7), 0, "nothing consumed by the refusal");
         vm.prank(relayer);
         bool ok;
         (ok, ret) = address(t).call(cd);
         assertTrue(ok, "the good call settles");
-        assertEq(t.mtxNonce(payer, 7), 1, "nonce consumed");
+        assertEq(t.mtxNonce(MetaTxLib.pad(payer), 7), 1, "nonce consumed");
         assertEq(t.balanceOf(payer), 1000 - 3, "relay fee paid");
     }
 

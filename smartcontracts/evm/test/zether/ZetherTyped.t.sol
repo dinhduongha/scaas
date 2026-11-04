@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {UACall} from "../ua/UACall.sol";
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {ZetherFixture} from "./helpers/ZetherFixture.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
@@ -205,9 +207,9 @@ contract ZetherTypedTest is ZetherNamedBase {
         assertEq(tok.balanceOf(payer), before - 10 * SCALE - 2);
         assertEq(tok.balanceOf(relayer), 2);
         assertEq(tok.totalShielded(), 510);
-        assertEq(tok.mtxNonce(payer, LANE), 1);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(payer), LANE), 1);
 
-        // the UA twin keeps `bytes auth` (C0)
+        // the UA twin, its auth an explicit `UASig` (ua-mtx-merge T1, R47; it kept `bytes auth` at C0)
         vm.prank(payer);
         tok.transferToUA(aId, 5 * SCALE);
         MetaTxLib.UAEnvelope memory u = _uaEnv(aId, 0, 1);
@@ -215,9 +217,9 @@ contract ZetherTypedTest is ZetherNamedBase {
             '{"name":"from","type":"bytes32"},{"name":"toUA","type":"bytes32"},{"name":"amount","type":"uint256"}', '',
             _msg(aId, string.concat('"toUA":', h(bId), ',"amount":', n(5)), u));
         vm.prank(relayer);
-        tok.uaShield(u, bId, 5, abi.encode(bytes(""), _uaAuth(alice, d).signature));
+        tok.uaShield(u, bId, 5, UACall.auth(u.from, abi.encode(bytes(""), _uaAuth(alice, d).signature)));
         assertEq(tok.totalShielded(), 515);
-        assertEq(tok.uaNonce(aId, LANE), 1);
+        assertEq(tok.mtxNonce(aId, LANE), 1);
     }
 
     // ------------------------------------------------------------------ transfer, the three forms and their twins
@@ -252,7 +254,7 @@ contract ZetherTypedTest is ZetherNamedBase {
         vm.prank(relayer);
         assertEq(tok.uaConfidentialTransferSingle(u, t, x.proof, _uaAuth(alice, d)), _ref(tok, alice, 0));
         assertTrue(_holds(tok, bob, 100, false));
-        assertEq(tok.uaNonce(aId, LANE), 1);
+        assertEq(tok.mtxNonce(aId, LANE), 1);
     }
 
     function _multiArgs(ZetherTypes.TransferMode mode, ZetherTypes.UA ben, bytes32 binding)
@@ -372,9 +374,9 @@ contract ZetherTypedTest is ZetherNamedBase {
         // the same lane as `mtxExecute`: nonce 0 is gone for the generic form of the same envelope
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(e.from, abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (t, x.proof)),
             e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient);
-        bytes memory generic = ecdsa(PAYER_PK, tok.mtxDigest(m));
+        bytes memory generic = ecdsa(PAYER_PK, MtxDigest.metaTx(address(tok), m));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        tok.mtxExecute(m, generic);
+        tok.executeMetaTransaction(m, generic);
     }
 
     // ------------------------------------------------------------------ unshield
@@ -485,7 +487,7 @@ contract ZetherTypedTest is ZetherNamedBase {
         vm.prank(relayer);
         tok.mtxSetRollOverMode(e, alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, s, sig);
         assertEq(uint8(tok.accountState(alice.ua).mode), 1);
-        assertEq(tok.mtxNonce(payer, LANE), 1);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(payer), LANE), 1);
 
         MetaTxLib.UAEnvelope memory u = _uaEnv(aId, 0, 1);
         s = _ownerSig(alice, _modeDigest(aId, 0, 1, until));
@@ -671,7 +673,7 @@ contract ZetherTypedWrappedTest is ZetherNamedBase {
         w.mtxWrapShield(e, address(usd), 10 * SCALE, aId, sig);
         assertEq(w.totalShielded(), 10);
         assertEq(w.balanceOf(SHIELD_POOL_), 10 * SCALE);
-        assertEq(w.mtxNonce(payer, LANE), 1);
+        assertEq(w.mtxNonce(MetaTxLib.pad(payer), LANE), 1);
         assertEq(w.balanceOf(relayer), 2, "the outer fee from the signer's public units");
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
         w.mtxWrapShield(e, address(usd), 10 * SCALE, aId, sig);

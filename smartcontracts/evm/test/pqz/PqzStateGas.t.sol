@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {console2, Vm} from "forge-std/Test.sol";
 import {PqzSlots} from "./PqzState.t.sol";
 import {PQZ_UID} from "./helpers/PqzRegistryBase.sol";
@@ -237,8 +238,8 @@ contract PqzStatePinGasTest is PqzSlots {
         m.from = vm.addr(key);
         m.data = data;
         m.validUntil = block.timestamp + 1 hours;
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, tok.mtxDigest(m));
-        return _gas(abi.encodeWithSignature("mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v)));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, MtxDigest.metaTx(address(tok), m));
+        return _gas(abi.encodeWithSignature("executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v)));
     }
 
     /// Fix round 1 (review I1, m3): `data` relayed as a full transaction. The envelope pays a FIXED (absolute) outer fee
@@ -291,7 +292,7 @@ contract PqzStatePinGasTest is PqzSlots {
             u.validUntil = block.timestamp + 1 hours;
             u.mode = fee == 0 ? 0 : MetaTxLib.MODE_FEE_FIXED;
             u.fee = fee;
-            return abi.encodeCall(tok.uaExecute, (u, abi.encode(bytes(""), _proof(feeSigLen))));
+            return abi.encodeCall(tok.mtxExecute, (u, UACall.auth(u.from, abi.encode(bytes(""), _proof(feeSigLen)))));
         }
         MetaTxLib.MetaTransaction memory m;
         m.from = vm.addr(RKEY);
@@ -300,9 +301,9 @@ contract PqzStatePinGasTest is PqzSlots {
         m.mode = fee == 0 ? 0 : MetaTxLib.MODE_FEE_FIXED;
         m.fee = fee;
         uint256 snap = vm.snapshotState();
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(RKEY, tok.mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(RKEY, MtxDigest.metaTx(address(tok), m));
         vm.revertToState(snap);
-        return abi.encodeWithSignature("mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v));
+        return abi.encodeWithSignature("executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v));
     }
 
     /// Fix round 1 (I1): the `ROLL_MAX` rollover as a full relayed transaction with an outer fee: the binding convention

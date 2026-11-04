@@ -256,6 +256,6 @@ contract MtxWrapTest is V2Fixture {
         bytes memory sig = _signCall(ALICE_PK, address(w), m);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, IWrappedToken.mtxWrapOrder.selector));
-        MetaTokenBase(address(w)).mtxExecute(m, sig);
+        MetaTokenBase(address(w)).executeMetaTransaction(m, sig);
     }
 }
