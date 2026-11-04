@@ -60,3 +60,4 @@ python3 runs/2026-11-04-ua-mtx-merge/results.py
 | `red_skip.py`, `run_red_skip.sh`, `red_skip_count.py`, `red_skip-passes.txt`, `red_skip.jsonl`, `red_skip-summary.txt` | the test recount on M (ported from the spike) |
 | `results.py`, `results.txt` | the tables and the Q3 reading (`results.txt` = a written head and tail around `results.py`'s tables) |
 | `sizes-<run>.json`, `t0-<run>.txt`, `suites-<run>.txt` | each run's figures and suite results (`<run>-reg` = with the stand-in) |
+| `t1_mutants.py`, `run_t1_mutants.sh` | plan T1 step 6 on the `ua-mtx-merge` branch itself (not the scratch): the spike's eight with T1's anchors, then R17, the derived `UALedgerOff` guard, the cancel's nonce check, the cancel self-calling `cancelNonce`, the cancel's lane, `canon` binding `relayer` with its bit off, `inNativeSpace` replaced by `from >> 160 < 2`; each against `test/merge`; rows in `../2026-11-04-ua-mtx-merge-t1-mutants.txt` |
