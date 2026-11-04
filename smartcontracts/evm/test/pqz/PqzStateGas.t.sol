@@ -684,10 +684,25 @@ contract PqzStatePinGasTest is PqzSlots {
 
     // ------------------------------------------------------------------ the named entries at the PQZH limit (typed-signing C4)
 
-    string internal rows;
+    mapping(string => string) internal abiOf; // `typed_ops.json`'s `domains.pqz.abi` of the ops below, by op name
+    mapping(string => bytes32) internal typehashOf;
+
+    /// `typed_ops.json` (816 KB) read once into memory, keeping only the ops' `abi` and typehash: the whole file kept in a
+    /// storage string and re-read cold (`isolate`) for each row cost more than forge's per-test gas from T12 `6d4f5b04` on.
+    function _loadOps() internal freed {
+        string memory j = vm.readFile(TYPED_OPS);
+        string[6] memory ops = [string("PqzTransferSingle"), "PqzTransferSingleCompact", "PqzTransfer", "PqzTransferCompact",
+            "PqzUnshield", "PqzUnshieldUnwrap"];
+        for (uint256 i; i < ops.length; ++i) {
+            string memory ua = string.concat("UA", ops[i]);
+            typehashOf[ops[i]] = vm.parseJsonBytes32(j, string.concat(".ops.", ops[i], ".typehash"));
+            abiOf[ops[i]] = vm.parseJsonString(j, string.concat(".ops.", ops[i], ".domains.pqz.abi"));
+            abiOf[ua] = vm.parseJsonString(j, string.concat(".ops.", ua, ".domains.pqz.abi"));
+        }
+    }
 
     function _abiOf(string memory op) internal view returns (string memory) {
-        return vm.parseJsonString(rows, string.concat(".ops.", op, ".domains.pqz.abi"));
+        return abiOf[op];
     }
 
     function _envN() internal view returns (MetaTxLib.Envelope memory e) {
@@ -705,7 +720,7 @@ contract PqzStatePinGasTest is PqzSlots {
     /// The fee signer's real signature: an entry hashing anything else reverts. `words`: the struct's own after `from`.
     function _signN(string memory op, address t, bytes memory words) internal view returns (bytes memory) {
         MetaTxLib.Envelope memory e = _envN();
-        bytes32 sh = keccak256(bytes.concat(abi.encode(vm.parseJsonBytes32(rows, string.concat(".ops.", op, ".typehash")), e.from), words,
+        bytes32 sh = keccak256(bytes.concat(abi.encode(typehashOf[op], e.from), words,
             abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(RKEY, keccak256(abi.encodePacked(hex"1901", domainOf(t), sh)));
         return abi.encodePacked(r, s, v);
@@ -781,7 +796,7 @@ contract PqzStatePinGasTest is PqzSlots {
     function test_pqzhN2048FitsBothPaths() public {
         vm.skip(!PqzSet.PQZH_VALUE);
         gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
-        rows = vm.readFile(TYPED_OPS);
+        _loadOps();
         _releaseWrapped();
         WrappedPqzToken w = _newWrapped("gasw");
         MockERC20 usd = MockERC20(w.underlying());
