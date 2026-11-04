@@ -31,7 +31,10 @@ JOBS = {
     'node': ['scaas-node/', 'clients/ua-rs/', 'smartcontracts/'],
     'docs': [''],
     'clientkeys': ['clients/clientkeys/', 'smartcontracts/', 'scaas-node/src/'],
-    'pqz': ['pqz-core/', 'smartcontracts/vectors/pqz/'],
+    # the directories the pqz job builds and tests (pqzl, ffi, stmt, pqzh/ligero, params, fuzz); pqz-core/nethermind/ (chain
+    # scripts, the C# plugin), artifact/, glic/, research/, runs/ and the top-level gate scripts are run on the owner's machine
+    'pqz': ['pqz-core/pqzl/', 'pqz-core/ffi/', 'pqz-core/stmt/', 'pqz-core/pqzh/', 'pqz-core/params/', 'pqz-core/fuzz/',
+            'smartcontracts/vectors/pqz/'],
     'zether-prover': ['clients/zether-prover/', 'smartcontracts/evm/', 'smartcontracts/vectors/'],
     'ua-rs': ['clients/ua-rs/', 'smartcontracts/'],
     'ua-cxx': ['clients/ua-cxx/', 'clients/ua-rs/', 'smartcontracts/vectors/'],
@@ -98,6 +101,11 @@ def main():
 if __name__ == '__main__':
     assert all(needed(None).values())
     assert needed(['pqz-core/pqzl/x.c']) == {j: j in ('pqz', 'docs') for j in JOBS}
+    for p in ('pqz-core/ffi/src/x.rs', 'pqz-core/stmt/src/x.rs', 'pqz-core/pqzh/ligero/src/x.rs', 'pqz-core/fuzz/run.sh'):
+        assert needed([p])['pqz'], p
+    for p in ('pqz-core/nethermind/chain/patch-chainspec.py', 'pqz-core/nethermind/Nethermind.Pqz/X.cs', 'pqz-core/gate.sh',
+              'pqz-core/artifact/results.py', 'pqz-core/glic/absence.sh'):
+        assert not needed([p])['pqz'], p  # chain scripts, plugin, local gates: not read by the pqz job
     assert needed(['clients/ua-rs/src/lib.rs'])['ua-c'] and not needed(['clients/ua-py/x.py'])['pqz']
     assert needed(['smartcontracts/vectors/ua/nested.json'])['ua-py'] and needed(['smartcontracts/vectors/pqz/a'])['pqz']
     # each family: its own directory runs its job and no other family's; shared scripts and vectors run them all
@@ -124,7 +132,7 @@ if __name__ == '__main__':
               'pqz-core/README.md', 'smartcontracts/evm/src/README.md', 'runs/top.txt'):
         assert needed([p]) == only_docs, p
     assert needed(['smartcontracts/evm/runs/2026-11-04-gates.sh'])['contract-evm']
-    assert needed(['pqz-core/nethermind/runs/probe/kat.json'])['pqz']
+    assert needed(['pqz-core/ffi/vectors/runs/probe/kat.json'])['pqz']
     assert needed(['smartcontracts/evm/foundry.txt'])['contract-evm']  # a .txt outside runs/ counts
     assert needed(['scaas-node/runs/a.txt', 'scaas-node/src/x.rs'])['node']
     assert needed(['smartcontracts/evm/runs/a.txt'], ['ci-full-contracts'])['contract-evm']  # a label still forces
