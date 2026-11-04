@@ -68,6 +68,7 @@ for name, res, args in [
     ('abi_version', u32, []), ('status_name', C.c_char_p, [st]), ('last_error', C.c_char_p, []),
     ('kind_count', sz, []), ('kind_at', st, [sz, P]), ('kind_info', st, [u16, P]),
     ('is_native', bl, [u16]), ('is_zether', bl, [u16]), ('is_pqz_holder', bl, [u16]), ('is_signing', bl, [u16]), ('is_member', bl, [u16, bl]),
+    ('governance_bit', st, [C.c_uint8, P, P]),
     ('tag', st, [u16, P]), ('kind_tag_string', st, [u16, P, P]), ('group_tag', st, [u8, P, P]),
     ('group_tag_string', st, [u8, P, P, P]), ('msg_tag', st, [P]), ('purpose_tag', st, [u8, P]), ('purpose_tag_v', st, [u8, u32, P]),
     ('ua_of', st, [u16, u8, sz, P]), ('derive_ua', st, [u16, u8, sz, bl, P]), ('native_id', st, [u16, u8, sz, P]),
@@ -854,6 +855,18 @@ class Abi(unittest.TestCase):
         self.assertEqual(L.last_error().decode(), main)
         out32(L.msg_tag)  # a later success clears it
         self.assertEqual(L.last_error().decode(), '')
+
+
+
+class GovernanceBits(unittest.TestCase):
+    def test_governance_bits_rows(self):
+        """governance T14: scaas_ua_governance_bit against governance_bits.json on disk, every row; past bit 21 UAArgument."""
+        v = json.loads((VEC.parent / 'governance' / 'governance_bits.json').read_text())
+        self.assertEqual(len(v['bits']), 22)
+        for row in v['bits']:
+            self.assertEqual(json.loads(text(L.governance_bit, row['bit'])), row, row['bit'])
+        for bit in (22, 127, 128, 255):
+            self.assertEqual(code_of(lambda: text(L.governance_bit, bit)), 'UAArgument', bit)
 
 
 if __name__ == '__main__':

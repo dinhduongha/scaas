@@ -272,6 +272,15 @@ ScaasUaStatus scaas_ua_kind_tag_string(uint16_t kind,
                                        size_t *out_len);
 
 /**
+ * Governance bit `bit`'s row of `governance_bits.json` (spec 2026-11-02-governance §1.2) as JSON, `{bit, name, type, sentences}`
+ * (NUL-terminated; `*out_len` counts the NUL). Bits 0-21; any other bit is `SCAAS_UA_ERR_ARGUMENT` (22-127 free, 128-255 the
+ * application's `bitLabel`).
+ */
+ScaasUaStatus scaas_ua_governance_bit(uint8_t bit,
+                                      char *out,
+                                      size_t *out_len);
+
+/**
  * The 32-byte GROUP tag of `group`; `*present = false` (and `out32` untouched) for an unknown or non-UTF-8 group.
  */
 ScaasUaStatus scaas_ua_group_tag(const char *group,

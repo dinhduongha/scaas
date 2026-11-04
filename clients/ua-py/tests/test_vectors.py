@@ -678,5 +678,15 @@ class TypedRegistryArgs(unittest.TestCase):
         self.assertEqual(ua.registration_args(0x0101, b(K['valid'][1]['keyData']))[0]['entry'], 'register')
 
 
+class GovernanceBits(unittest.TestCase):
+    def test_governance_bits_rows(self):
+        """governance T14: every row of governance_bits.json against GOVERNANCE_BITS, both ways, each with its sentences."""
+        v = json.loads((VEC.parent / 'governance' / 'governance_bits.json').read_text())
+        self.assertEqual(len(v['bits']), len(ua.GOVERNANCE_BITS))
+        for i, row in enumerate(v['bits']):
+            self.assertEqual((row['bit'], row['name'], row['type']), (i,) + ua.GOVERNANCE_BITS[i], i)
+            self.assertTrue(row['sentences'] and all(row['sentences'].values()), i)
+
+
 if __name__ == '__main__':
     unittest.main()

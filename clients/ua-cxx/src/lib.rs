@@ -77,6 +77,7 @@ mod ffi {
         fn kind_at(index: usize) -> KindInfo;
         fn tag(kind: u16) -> Result<Vec<u8>>;
         fn kind_tag_string(kind: u16) -> Result<String>;
+        fn governance_bit(bit: u8) -> Result<String>;
         fn group_tag(group: &str) -> Vec<u8>; // empty = unknown group
         fn group_tag_string(group: &str) -> String; // empty = unknown group
         fn msg_tag() -> Vec<u8>;
@@ -198,6 +199,10 @@ fn kind_at(index: usize) -> KindInfo {
 }
 fn tag(kind: u16) -> R<Vec<u8>> {
     guard(|| Ok(ua::tag(kind)?.to_vec()))
+}
+/// `governance_bits.json`'s row of `bit` as JSON (spec 2026-11-02-governance §1.2); past bit 21 `UAArgument`.
+fn governance_bit(bit: u8) -> R<String> {
+    guard(|| ua::governance_bit(bit).map(str::to_string).ok_or_else(|| UaErr("UAArgument: bit".into())))
 }
 fn kind_tag_string(kind: u16) -> R<String> {
     guard(|| Ok(ua::kind_tag_string(kind)?))

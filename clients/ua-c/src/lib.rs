@@ -354,6 +354,14 @@ pub extern "C" fn scaas_ua_kind_tag_string(kind: u16, out: *mut c_char, out_len:
     run(|| write_str(out, out_len, &ua::kind_tag_string(kind)?))
 }
 
+/// Governance bit `bit`'s row of `governance_bits.json` (spec 2026-11-02-governance §1.2) as JSON, `{bit, name, type, sentences}`
+/// (NUL-terminated; `*out_len` counts the NUL). Bits 0-21; any other bit is `SCAAS_UA_ERR_ARGUMENT` (22-127 free, 128-255 the
+/// application's `bitLabel`).
+#[no_mangle]
+pub extern "C" fn scaas_ua_governance_bit(bit: u8, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    run(|| write_str(out, out_len, ua::governance_bit(bit).ok_or_else(|| argument("bit"))?))
+}
+
 /// The 32-byte GROUP tag of `group`; `*present = false` (and `out32` untouched) for an unknown or non-UTF-8 group.
 #[no_mangle]
 pub extern "C" fn scaas_ua_group_tag(group: *const c_char, out32: *mut u8, present: *mut bool) -> ScaasUaStatus {

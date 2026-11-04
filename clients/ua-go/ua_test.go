@@ -1324,3 +1324,38 @@ func TestNestedNegatives(t *testing.T) {
 		}
 	}
 }
+
+// governance T14: every row of governance_bits.json against GovernanceBits, both ways, each with its sentences.
+func TestGovernanceBitsRows(t *testing.T) {
+	raw, err := os.ReadFile("../../smartcontracts/vectors/governance/governance_bits.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var v struct {
+		Bits []struct {
+			Bit       int               `json:"bit"`
+			Name      string            `json:"name"`
+			Type      string            `json:"type"`
+			Sentences map[string]string `json:"sentences"`
+		} `json:"bits"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.Bits) != len(GovernanceBits) {
+		t.Fatalf("%d rows in the file, %d in GovernanceBits", len(v.Bits), len(GovernanceBits))
+	}
+	for i, r := range v.Bits {
+		if r.Bit != i || (GovernanceBit{r.Name, r.Type}) != GovernanceBits[i] {
+			t.Errorf("bit %d: file %d %q %q, table %+v", i, r.Bit, r.Name, r.Type, GovernanceBits[i])
+		}
+		if len(r.Sentences) == 0 {
+			t.Errorf("bit %d: no sentence", i)
+		}
+		for k, s := range r.Sentences {
+			if s == "" {
+				t.Errorf("bit %d: %s empty", i, k)
+			}
+		}
+	}
+}
