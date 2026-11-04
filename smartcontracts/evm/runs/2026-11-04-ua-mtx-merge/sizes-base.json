@@ -1,0 +1,76 @@
+{
+ "GovernanceLib": {
+  "init": 13233,
+  "runtime": 13181
+ },
+ "GovernanceRouter": {
+  "init": 20998,
+  "runtime": 20073
+ },
+ "MandateWallet": {
+  "code_sha256_16_no_metadata": "536a1bf42aa7d353",
+  "init": 18299,
+  "runtime": 17528
+ },
+ "MtxPipelineLib": {
+  "init": 11576,
+  "runtime": 11524
+ },
+ "MtxRelayFee": {
+  "init": 3954,
+  "runtime": 3229
+ },
+ "NormalPqzToken": {
+  "init": 58844,
+  "runtime": 56191
+ },
+ "NormalToken": {
+  "init": 43131,
+  "runtime": 40853
+ },
+ "NormalZetherToken": {
+  "init": 54146,
+  "runtime": 50547
+ },
+ "PqzWrappedLib": {
+  "init": 4999,
+  "runtime": 4947
+ },
+ "SCaaSDex": {
+  "init": 35439,
+  "runtime": 33725
+ },
+ "SmartKeyAccount": {
+  "code_sha256_16_no_metadata": "8ebed5048d8a9e8c",
+  "init": 21673,
+  "runtime": 21003
+ },
+ "TradeLib": {
+  "init": 5101,
+  "runtime": 5049
+ },
+ "WrappedLib": {
+  "init": 17983,
+  "runtime": 17931
+ },
+ "WrappedPqzToken": {
+  "init": 74825,
+  "runtime": 72160
+ },
+ "WrappedToken": {
+  "init": 54582,
+  "runtime": 52297
+ },
+ "WrappedZetherToken": {
+  "init": 66081,
+  "runtime": 62472
+ },
+ "ZetherLib": {
+  "init": 26262,
+  "runtime": 26210
+ },
+ "ZetherWrappedLib": {
+  "init": 11572,
+  "runtime": 11520
+ }
+}

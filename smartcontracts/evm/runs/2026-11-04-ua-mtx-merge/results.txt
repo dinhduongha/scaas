@@ -1,0 +1,232 @@
+# T0 results: sizes, deploy gas and gas of the `ua*` / `mtx*` merge and levers L, D (2026-11-04)
+
+Plan `docs/superpowers/plans/2026-11-04-ua-mtx-merge.md` T0; spec §9. Base: `main` at `bf6f3d04`. Foundry 1.8.5, solc
+0.8.37, Amsterdam, optimizer 200, `isolate = true`, default set `n2304-kmax4096` (`src/pqz/PqzSet.sol` untouched). Every
+figure is **[M]**: `forge build src --sizes --json` or a forge test (deterministic; no timing calibration). Everything
+cryptographic stays UNAUDITED.
+
+**Scratch code.** M, L, D and the stand-in were built on the local branch `ua-mtx-merge-t0` (worktree
+`.claude/worktrees/ua-mtx-merge-t0`): scratch, enough to compile and measure, **never merged, never pushed**. Scratch
+commits: M = A + B + C + Q2 + R47 + R17 + router (R14) + one `envelopeBinding` (`40254b00`, src as `ce06f782`); M + L
+`bab158fb`; M + L + D `5cb89787`; M + D `c4f86b8d`. The stand-in was never committed (`standin.py`, then `git checkout`).
+How each run was built and how to rerun: `README.md`.
+
+Runs: **base**; **M** (MD-2: the build's shape); **M + L** (lever L: `TokenBodyLib`, the typed transfer group,
+receiver-pays and the trade group on the `ZetherLib` pattern); **M + D** (lever D by deletion, 43 views, a
+STATICCALL-then-DELEGATECALL `fallback`, no module built); **M + L + D**; and each with the **regulated stand-in** (six direct
+stubs freeze / unfreeze / pause / unpause / forced transfer / order record, and a hook of two governance reads in `_update`
+and `_uaMove`).
+
+## Tables
+
+### Runtime bytes [M]
+
+| Contract | base | M | M + L | M + D | M + L + D |
+|---|---:|---:|---:|---:|---:|
+| `NormalToken` | 40853 | 32098 | 30156 | 31535 | 29593 |
+| `WrappedToken` | 52297 | 42678 | 40693 | 39792 | 37807 |
+| `NormalZetherToken` | 50547 | 40552 | 38646 | 38908 | 37002 |
+| `WrappedZetherToken` | 62472 | 51040 | 49079 | 48283 | 46322 |
+| `NormalPqzToken` | 56191 | 46393 | 44359 | 41025 | 38991 |
+| `WrappedPqzToken` | 72160 | 56232 | 54145 | 49883 | 47796 |
+| `SCaaSDex` | 33725 | 33345 | 33345 | 33345 | 33345 |
+| `GovernanceRouter` | 20073 | 11744 | 11744 | 11371 | 11371 |
+| `MtxRelayFee` | 3229 | 2488 | 2488 | 2488 | 2488 |
+| `MtxPipelineLib` | 11524 | 10024 | 10024 | 10024 | 10024 |
+| `WrappedLib` | 17931 | 16761 | 16761 | 16761 | 16761 |
+| `ZetherLib` | 26210 | 25065 | 25065 | 25065 | 25065 |
+| `ZetherWrappedLib` | 11520 | 11244 | 11244 | 11244 | 11244 |
+| `PqzWrappedLib` | 4947 | 4947 | 4947 | 4947 | 4947 |
+| `TradeLib` | 5049 | 4842 | 4842 | 4842 | 4842 |
+| `GovernanceLib` | 13181 | 13181 | 13181 | 13181 | 13181 |
+| `TokenBodyLib` |  |  | 9296 |  | 9296 |
+| `MandateWallet` | 17528 | 17528 | 17528 | 17528 | 17528 |
+| `SmartKeyAccount` | 21003 | 21003 | 21003 | 21003 | 21003 |
+
+Regulated stand-in (six direct stubs + the hook in `_update` and `_uaMove`), runtime bytes [M]:
+
+| Kind | M, stand-in | M + L, stand-in | M + D, stand-in | M + L + D, stand-in |
+|---|---:|---:|---:|---:|
+| `NormalToken` | 33093 | 31151 | 32530 | 30588 |
+| `WrappedToken` | 43745 | 41760 | 40955 | 38970 |
+
+### Deploy gas asked, one release transaction each [M]
+
+Asked = (regular x 64/63 + EIP-8037 state) x 1.05 of the CREATE2 probe, plus the frame `deployImplementation` adds (measured on the same run: the `NORMAL` release through the factory minus through the probe). Fits = asked <= the limit (EIP-8037: regular + state; never `gas_used`). Every regular x 1.05 is under 2^24.
+
+| Release | base | M | M + L | M + D | M + L + D | M, stand-in | M + L, stand-in | M + D, stand-in | M + L + D, stand-in |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `NormalToken` | 69.31 M (70) | 54.65 M | 51.40 M | 53.71 M | 50.46 M | 56.32 M | 53.07 M | 55.37 M | 52.12 M |
+| `WrappedToken` | 88.48 M (no) | 72.37 M (no) | 69.05 M (70) | 67.54 M (70) | 64.22 M (70) | 74.16 M (no) | 70.84 M (no) | 69.49 M (70) | 66.17 M (70) |
+| `NormalZetherToken` | 85.65 M (no) | 68.91 M (70) | 65.72 M (70) | 66.16 M (70) | 62.97 M (70) | 70.58 M (no) | 67.39 M (70) | 67.88 M (70) | 64.69 M (70) |
+| `WrappedZetherToken` | 105.63 M (no) | 86.49 M (no) | 83.20 M (no) | 81.87 M (no) | 78.58 M (no) | 88.27 M (no) | 84.99 M (no) | 83.66 M (no) | 80.37 M (no) |
+| `NormalPqzToken` | 95.05 M (no) | 78.64 M (no) | 75.23 M (no) | 69.65 M (70) | 66.24 M (70) | 80.30 M (no) | 76.90 M (no) | 71.47 M (no) | 68.07 M (70) |
+| `WrappedPqzToken` | 121.80 M (no) | 95.13 M (no) | 91.63 M (no) | 84.49 M (no) | 81.00 M (no) | 96.91 M (no) | 93.42 M (no) | 86.28 M (no) | 82.78 M (no) |
+| `SCaaSDex` | 56.96 M | 56.33 M | 56.33 M | 56.33 M | 56.33 M | 56.33 M | 56.33 M | 56.33 M | 56.33 M |
+| `GovernanceRouter` | 33.91 M | 19.96 M | 19.96 M | 19.33 M | 19.33 M | 19.96 M | 19.96 M | 19.33 M | 19.33 M |
+| `MtxRelayFee` | 6.76 M | 5.52 M | 5.52 M | 5.52 M | 5.52 M | 5.52 M | 5.52 M | 5.52 M | 5.52 M |
+| `MtxPipelineLib` | 19.52 M | 17.01 M | 17.01 M | 17.01 M | 17.01 M | 17.01 M | 17.01 M | 17.01 M | 17.01 M |
+| `WrappedLib` | 30.25 M | 28.29 M | 28.29 M | 28.29 M | 28.29 M | 28.29 M | 28.29 M | 28.29 M | 28.29 M |
+| `TradeLib` | 8.68 M | 8.33 M | 8.33 M | 8.33 M | 8.33 M | 8.33 M | 8.33 M | 8.33 M | 8.33 M |
+| `GovernanceLib` | 22.30 M | 22.30 M | 22.30 M | 22.30 M | 22.30 M | 22.30 M | 22.30 M | 22.30 M | 22.30 M |
+| `ZetherLib` | 44.12 M | 42.20 M | 42.20 M | 42.20 M | 42.20 M | 42.20 M | 42.20 M | 42.20 M | 42.20 M |
+| `ZetherWrappedLib` | 19.51 M | 19.05 M | 19.05 M | 19.05 M | 19.05 M | 19.05 M | 19.05 M | 19.05 M | 19.05 M |
+| `PqzWrappedLib` | 8.51 M | 8.51 M | 8.51 M | 8.51 M | 8.51 M | 8.51 M | 8.51 M | 8.51 M | 8.51 M |
+| `TokenBodyLib` |  |  | 15.79 M |  | 15.79 M |  | 15.79 M |  | 15.79 M |
+| frame (factory) | 0.37 M | 0.37 M | 0.36 M | 0.37 M | 0.36 M | 0.37 M | 0.36 M | 0.37 M | 0.36 M |
+
+Marks: none = fits 60 M (and 70 M); (70) = fits 70 M only; (no) = fits neither. A token kind's figure includes the frame; a library or the router is its own plain transaction (no frame).
+
+
+### Gas, forge (`GovGas.t.sol`'s method; isolate) [M]
+
+| Row | base | M | M + L | M + D | M + L + D | M - base | calldata base -> M |
+|---|---:|---:|---:|---:|---:|---:|---|
+| NormalPqzToken generic execute cancelNonce | 181483 | 183526 | 183661 |  |  | +2043 | 580 -> 740 |
+| NormalPqzToken relayed transfer EOA to EOA | 87328 | 88721 | 96241 |  |  | +1393 | 420 -> 580 |
+| NormalPqzToken relayed transfer EOA to UA | 109342 | 109454 | 116974 |  |  | +112 | 580 -> 580 |
+| NormalPqzToken signed cancel | 181872 | 177342 | 177442 |  |  | -4530 | 452 -> 612 |
+| NormalPqzToken transfer | 46928 | 46884 | 46884 |  |  | -44 | 68 -> 68 |
+| NormalToken reg derived generic execute burn | 268782 | 270775 | 270775 |  |  | +1993 | 3940 -> 3972 |
+| NormalToken reg generic execute cancelNonce | 179905 | 181662 | 181797 |  |  | +1757 | 580 -> 740 |
+| NormalToken reg relayed transfer EOA to EOA | 87345 | 88707 | 96205 |  |  | +1362 | 420 -> 580 |
+| NormalToken reg relayed transfer EOA to UA | 109262 | 109439 | 116937 |  |  | +177 | 580 -> 580 |
+| NormalToken reg signed cancel | 180349 | 177277 | 177377 |  |  | -3072 | 452 -> 612 |
+| NormalToken reg transfer | 46873 | 46872 | 46872 |  |  | -1 | 68 -> 68 |
+| NormalToken reg0 generic execute cancelNonce | 179929 | 181666 | 181825 | 181735 | 181870 | +1737 | 580 -> 740 |
+| NormalToken reg0 receiver-pays | 327097 | 328277 | 335853 | 328232 | 335787 | +1180 | 772 -> 1092 |
+| NormalToken reg0 relayed transfer EOA to EOA | 87381 | 88723 | 96233 | 88691 | 96189 | +1342 | 420 -> 580 |
+| NormalToken reg0 signed cancel | 180385 | 177305 | 177405 | 177261 | 177349 | -3080 | 452 -> 612 |
+| NormalToken reg0 transfer | 46873 | 46876 | 46876 | 46810 | 46810 | +3 | 68 -> 68 |
+| NormalZetherToken generic execute cancelNonce | 181493 | 183620 | 183755 | 183633 | 183768 | +2127 | 580 -> 740 |
+| NormalZetherToken relayed transfer EOA to EOA | 87393 | 88721 | 96241 | 88721 | 96229 | +1328 | 420 -> 580 |
+| NormalZetherToken signed cancel | 181865 | 177321 | 177421 | 177277 | 177365 | -4544 | 452 -> 612 |
+| NormalZetherToken transfer | 46862 | 46906 | 46906 | 46862 | 46862 | +44 | 68 -> 68 |
+| WrappedPqzToken generic execute cancelNonce | 181858 | 184394 | 184529 |  |  | +2536 | 580 -> 740 |
+| WrappedPqzToken relayed transfer EOA to EOA | 87349 | 88741 | 96273 |  |  | +1392 | 420 -> 580 |
+| WrappedPqzToken relayed transfer EOA to UA | 109341 | 109474 | 117006 |  |  | +133 | 580 -> 580 |
+| WrappedPqzToken signed cancel | 182363 | 177254 | 177366 |  |  | -5109 | 452 -> 612 |
+| WrappedPqzToken transfer | 46928 | 46862 | 46862 |  |  | -66 | 68 -> 68 |
+| WrappedToken reg generic execute cancelNonce | 180289 | 182213 | 182360 |  |  | +1924 | 580 -> 740 |
+| WrappedToken reg relayed transfer EOA to EOA | 87358 | 88751 | 96249 |  |  | +1393 | 420 -> 580 |
+| WrappedToken reg relayed transfer EOA to UA | 109296 | 109472 | 116982 |  |  | +176 | 580 -> 580 |
+| WrappedToken reg signed cancel | 180810 | 177296 | 177396 |  |  | -3514 | 452 -> 612 |
+| WrappedToken reg transfer | 46884 | 46895 | 46895 |  |  | +11 | 68 -> 68 |
+| WrappedToken reg0 generic execute cancelNonce | 180313 | 182253 | 182376 | 182259 | 182394 | +1940 | 580 -> 740 |
+| WrappedToken reg0 relayed transfer EOA to EOA | 87394 | 88779 | 96277 | 88801 | 96299 | +1385 | 420 -> 580 |
+| WrappedToken reg0 signed cancel | 180834 | 177312 | 177412 | 177390 | 177478 | -3522 | 452 -> 612 |
+| WrappedToken reg0 transfer | 46884 | 46899 | 46899 | 46877 | 46877 | +15 | 68 -> 68 |
+| WrappedZetherToken generic execute cancelNonce | 181816 | 184344 | 184479 | 184231 | 184366 | +2528 | 580 -> 740 |
+| WrappedZetherToken relayed transfer EOA to EOA | 87351 | 88700 | 96208 | 88710 | 96242 | +1349 | 420 -> 580 |
+| WrappedZetherToken signed cancel | 182367 | 177278 | 177378 | 177322 | 177422 | -5089 | 452 -> 612 |
+| WrappedZetherToken transfer | 46862 | 46928 | 46928 | 46862 | 46862 | +66 | 68 -> 68 |
+
+### Q3: which lever set fits 60 M and 70 M (spec §4 rule 1: `NormalToken`, `WrappedToken` and their stand-ins) [M]
+
+Gap = (asked - limit) / (the run's asked per runtime byte of that kind): the runtime bytes still to remove. 0 = fits.
+
+| Set | Kind | asked | 60 M gap (B) | 70 M gap (B) | stand-in asked | stand-in 60 M gap (B) | stand-in 70 M gap (B) |
+|---|---|---:|---:|---:|---:|---:|---:|
+| M | `NormalToken` | 54.65 M | 0 | 0 | 56.32 M | 0 | 0 |
+| M | `WrappedToken` | 72.37 M | 7335 | 1408 | 74.16 M | 8396 | 2468 |
+| M | `NormalZetherToken` | 68.91 M | 5273 | 0 | 70.58 M | 6261 | 343 |
+| M | `WrappedZetherToken` | 86.49 M | 15699 | 9772 | 88.27 M | 16760 | 10832 |
+| M + L | `NormalToken` | 51.40 M | 0 | 0 | 53.07 M | 0 | 0 |
+| M + L | `WrappedToken` | 69.05 M | 5362 | 0 | 70.84 M | 6423 | 497 |
+| M + L | `NormalZetherToken` | 65.72 M | 3383 | 0 | 67.39 M | 4370 | 0 |
+| M + L | `WrappedZetherToken` | 83.20 M | 13748 | 7823 | 84.99 M | 14808 | 8883 |
+| M + D | `NormalToken` | 53.71 M | 0 | 0 | 55.37 M | 0 | 0 |
+| M + D | `WrappedToken` | 67.54 M | 4469 | 0 | 69.49 M | 5624 | 0 |
+| M + D | `NormalZetherToken` | 66.16 M | 3644 | 0 | 67.88 M | 4662 | 0 |
+| M + D | `WrappedZetherToken` | 81.87 M | 12957 | 7033 | 83.66 M | 14017 | 8092 |
+| M + L + D | `NormalToken` | 50.46 M | 0 | 0 | 52.12 M | 0 | 0 |
+| M + L + D | `WrappedToken` | 64.22 M | 2499 | 0 | 66.17 M | 3652 | 0 |
+| M + L + D | `NormalZetherToken` | 62.97 M | 1754 | 0 | 64.69 M | 2772 | 0 |
+| M + L + D | `WrappedZetherToken` | 78.58 M | 11006 | 5084 | 80.37 M | 12067 | 6144 |
+
+## Q3: the reading by spec §4's rule
+
+| Set | `NormalToken` 60 M / 70 M | `NormalToken` stand-in | `WrappedToken` 60 M / 70 M | `WrappedToken` stand-in | Hot-path cost [M] | New mechanism |
+|---|---|---|---|---|---|---|
+| M | fits / fits (54.65 M) | fits / fits (56.32 M) | no / no (72.37 M; 70 M gap 1,408 B) | no / no (74.16 M) | relayed transfer +1.3 to +1.4 K (calldata 420 -> 580 B) | none |
+| M + L | fits / fits (51.40 M) | fits / fits | no / fits (69.05 M) | no / **no** (70.84 M; gap 497 B) | **+7.5 K** per typed relayed transfer on top of M; `TokenBodyLib` 15.79 M, its own transaction | a linked library, `LinkClosure` pins |
+| **M + D** | fits / fits (53.71 M) | fits / fits (55.37 M) | no / **fits** (67.54 M) | no / **fits** (69.49 M: margin 0.51 M, about 300 B) | none (`transfer` -66, relayed transfer within +-30) | the view module, invariant 7 |
+| M + L + D | fits / fits (50.46 M) | fits / fits (52.12 M) | no / fits (64.22 M) | no / fits (66.17 M: margin 3.83 M, about 2.2 KB) | +7.5 K as M + L | both |
+
+1. **No set in scope fits 60 M for `WrappedToken`** (rule 4). The gap, runtime bytes still to remove: M + D 4,469 B (stand-in
+   5,624 B); M + L + D 2,499 B (stand-in 3,652 B). `NormalToken` fits 60 M with M alone, stand-in included.
+2. **70 M:** the smallest set that fits for both kinds and both stand-ins is **M + D** (M alone misses by 1,408 B, M + L misses
+   with the stand-in by 497 B). Between M + D and M + L + D, rule 3 takes M + D: no hot-path cost, one new mechanism.
+3. **Recommendation: M + D**, with the 60 M target for `WrappedToken` open past this round at a gap of 4,469 B (5,624 B
+   regulated). Caveat for the owner: M + D with the stand-in fits 70 M by about 300 B only, and the stand-in measured +995 B
+   (`NormalToken`) / +1,163 B (`WrappedToken`), below the +1.7 to 1.9 KB [P] of size-options §10. If the real regulated form
+   is about 300 B larger than the stand-in, regulated `WrappedToken` misses 70 M on M + D and needs M + L + D (margin about
+   2.2 KB, at +7.5 K gas per typed relayed transfer).
+4. **The Zether kinds** (rule 2, reported): `NormalZetherToken` fits 70 M with M already (68.91 M), 60 M with no set (best
+   M + L + D, gap 1,754 B); `WrappedZetherToken` fits neither with any set (M + L + D gap 11,006 B at 60 M, 5,084 B at 70 M).
+5. **`WrappedPqzToken` leaves `_above64KiB`:** 56,232 B at M (72,160 B at base); 49,883 B at M + D.
+6. Every regular x 1.05 is under 2^24 (largest: `WrappedPqzToken` base, 4.97 M regular). The testnet gate (`runtime x 1,530
+   + 2^24`) is unchanged and not read here (Q4).
+
+## Surprises against the spike's numbers
+
+- **M lands where §4 projected:** `NormalToken` 32,098 B (~32,160 [P]), `WrappedToken` 42,678 B (~42,470 [P]),
+  `NormalZetherToken` 40,552 (~40,620), `WrappedZetherToken` 51,040 (~50,960), `WrappedPqzToken` 56,232 (~56,000). M is
+  -8,755 B on `NormalToken` and -9,619 B on `WrappedToken` against today's base.
+- **D yields less than projected on `WrappedToken`:** M + D 39,792 B against ~39,280 [P] (+512 B): `factory()` stays (the
+  factory reads it on chain, `OpenFactory._checkImplementation`), and so do `hasRole`, `pendingOwner` and the views
+  `ZetherStatements`, `ZetherDisclosure`, `SCaaSDex`, `OpenFactory` read; the spike's deletion took `factory`, `hasRole`,
+  `pendingOwner`.
+- **L is small and costly:** -1.9 to -2.1 KB per kind, and **+7.5 K gas** on every typed relayed transfer (§4 guessed +1 to
+  +2 K, Zether's figure): a cold DELEGATECALL to the library, the calldata copied, `MtxPipelineLib` called from inside it, the
+  return decoded. Its library is 9,296 B (15.79 M to deploy).
+- **The EOA's relayed transfer costs +1.3 to +1.4 K** (spike: +875 to +992): R47's `UASig` on the generic entries does not
+  touch `mtxTransfer`; the difference is R17's check and the base's own changes since the spike. EOA to a UA: +112 to +177
+  (base `uaTransfer` from a padded EOA, the same calldata).
+- **The signed cancel gets cheaper:** -3.1 to -5.1 K (Q2's body bumps the lane itself; the address form ran a self-call).
+- **The router halves:** `GovernanceRouter` 20,073 -> 11,744 B (33.91 M -> 19.96 M asked). The 11,371 B on the D columns is
+  an artefact (the router has no `fallback`; it loses the shared `mtxDigest` view): its true figure is 11,744 B.
+- **The factory frame** `deployImplementation` adds: +0.36 to +0.37 M asked on top of the probe (included in the kinds'
+  figures above). Asked per runtime byte: about 1,688 to 1,690 gas (spec §4: 1,685).
+
+## Tests and mutants
+
+- `test/merge` on M: 41 of 41 green, 29 of them the merged-entry suite (`suites-M.txt`); M + L 44 of 44; the spike's suite ported to Q2 (ordered cancel, native and
+  derived, replay refused), R47 (`UASig` on `mtxExecute`), R17 (a native `keyData` refused).
+- Mutants on M, one at a time (`mutants.txt`): the spike's eight (anchors moved) and two new (R17 off; the cancel bumping its
+  own lane): **10 of 10 red**.
+- CTR-GOV-11 "+0": a merged `mtxTransfer` on `WrappedPqzToken` touches 3 slots, 8 reads, 3 writes (`MergedPqzSlots`), as the
+  spike; `registry() == 0` and `!= 0` give the same `mtxTransfer` row on `NormalToken` and `WrappedToken` (no registry read).
+- Wallets: `MandateWallet` 17,528 B, `SmartKeyAccount` 21,003 B on every run, runtime hash without metadata equal to base.
+
+## Test recount on M (plan T0 step 10; it replaces the spec's §7 counts)
+
+`run_red_skip.sh` on a scratch copy of the M tree: 18 passes of `forge build` each moving every test or script file with a
+compile error out, the 19th clean (`red_skip-passes.txt`, `red_skip.jsonl`, `red_skip-summary.txt`). Nothing in the tree
+was repaired.
+
+| [M] | Files | Test functions |
+|---|---:|---:|
+| Do not compile on M | 99: 92 test files, 6 helpers (`V2Fixture`, `DexLegs`, `MtxFixture`, `UALedgerBase`, `OrderJson`, `ERC20MetaTxHarness`), 1 script (`ZetherE2E.s.sol`) | 1,486 |
+| of them with an own compile error | 21 | |
+| of them only through a moved import | 78 | |
+| Compile on M (not run here) | 76 test files | 948 |
+
+By directory (files / test functions): `v2` 31 / 466, `metatx` 18 / 223, `governance` 8 / 204, `zether` 9 / 190, `ua` 14 /
+136, `pqz` 7 / 112, `wallet` 2 / 71, `account` 2 / 54, `hedera` 2 / 16, `fork` 1 / 9, `research` 1 / 5. The spike's count
+on its base was 86 test files, 6 helpers and 1 script, 1,383 tests.
+
+## Not run at T0, with reason
+
+- Step 9, the PQZ set parameters (R41) at the four sets through `at-set.sh`: `PqzStateGas.t.sol` and the rollscan
+  (`PqzPackGas.t.sol`) import the address-form test helpers (`NamedEntry.t.sol`, `V2Fixture`, ...), which no longer compile
+  on M; porting them is T5's. Proxy measured here: the generic entry of a derived `mldsa65` subject +1,993 gas, of an EOA
+  +1.7 to +2.5 K, against `n2560-kmax16384`'s 6,032 margin on that path. `PqzSet.sol` was never changed.
+- `MetaTxGasV2` rows and `PlusZero` on every kind (do not compile on M: T2); `mtxTrade` through the DEX (T6), a relayed
+  Zether op (T4) and a relayed PQZ op (T5); a Hedera case (T8) and a router case (T7).
+- Invariant 7's tests and mutants on D: D was measured by deletion with no module (plan T0 step 4); they belong to T9.
+- The D runs' registry rows (`T0GasReg.t.sol`) and the merged-entry suite: the PQZ fixture and the suite read views D moves.
+- The spike's `merge_pairs.py` was not re-run (the cherry-pick of `77fb0ef9` replays it with its hand edits); `no_twin.py`
+  (A2) is out of scope (§4) and stays on `token-merge`. The `IUALedger` split (R9's cost) is not in M: a few bytes.
+
+Gas rows vary by +-50 between runs where only the token address moves: the signature's zero bytes change the calldata gas.

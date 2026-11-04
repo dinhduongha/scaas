@@ -1,6 +1,6 @@
 > **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
 
-Measured on the governance prototype D1+D2 before the governance build; to be re-measured on main after PR #9 (spec docs/superpowers/specs/2026-11-04-ua-mtx-merge.md).
+Measured on the governance prototype D1+D2 before the governance build; re-measured on main after PR #9 (`bf6f3d04`) by T0 of the merge plan, 2026-11-04: spec docs/superpowers/specs/2026-11-04-ua-mtx-merge.md §9.1, harness and tables smartcontracts/evm/runs/2026-11-04-ua-mtx-merge/results.txt. The figures below stay as the spike measured them.
 
 # One entry per operation: every `ua*` + `mtx*` pair merged (2026-11-03)
 

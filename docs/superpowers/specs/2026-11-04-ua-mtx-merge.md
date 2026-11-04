@@ -625,6 +625,51 @@ Nothing ran before PR #9 merged (owner 2026-11-04); it is merged into this branc
 nothing by itself (set parameters are the owner's). Results go into this spec as a dated table and into the research note's
 re-measure line.
 
+### 9.1 Results of T0 (2026-11-04, at `main` `bf6f3d04`)
+
+All [M] (forge, deterministic). Full tables, the harness and how each run was built:
+`smartcontracts/evm/runs/2026-11-04-ua-mtx-merge/` (`results.txt`, `README.md`). The merged code was built as scratch on the
+local branch `ua-mtx-merge-t0`, never merged. M = A + B + C with Q2's cancel, R47, R17, the router's 19 pairs and one
+`envelopeBinding` view (MD-2). L = `TokenBodyLib` (the typed transfer group, receiver-pays and the trade group on the
+`ZetherLib` pattern). D = 43 views by deletion and a STATICCALL-then-DELEGATECALL `fallback` (no module built). Stand-in = six
+direct regulated stubs and a hook in `_update` and `_uaMove`.
+
+Runtime bytes and deploy gas asked (one release transaction: (regular x 64/63 + state) x 1.05 of the CREATE2, plus the
+factory frame of +0.36 to +0.37 M):
+
+| Kind | base | M | M + L | M + D | M + L + D | stand-in on M / M + L / M + D / M + L + D |
+|---|---:|---:|---:|---:|---:|---|
+| `NormalToken` B | 40,853 | 32,098 | 30,156 | 31,535 | 29,593 | 33,093 / 31,151 / 32,530 / 30,588 |
+| `NormalToken` asked | 69.31 M | 54.65 M | 51.40 M | 53.71 M | 50.46 M | 56.32 / 53.07 / 55.37 / 52.12 M |
+| `WrappedToken` B | 52,297 | 42,678 | 40,693 | 39,792 | 37,807 | 43,745 / 41,760 / 40,955 / 38,970 |
+| `WrappedToken` asked | 88.48 M | 72.37 M | 69.05 M | 67.54 M | 64.22 M | 74.16 / 70.84 / 69.49 / 66.17 M |
+| `NormalZetherToken` B / asked | 50,547 / 85.65 M | 40,552 / 68.91 M | 38,646 / 65.72 M | 38,908 / 66.16 M | 37,002 / 62.97 M | |
+| `WrappedZetherToken` B / asked | 62,472 / 105.63 M | 51,040 / 86.49 M | 49,079 / 83.20 M | 48,283 / 81.87 M | 46,322 / 78.58 M | |
+| `NormalPqzToken` B | 56,191 | 46,393 | 44,359 | 41,025 | 38,991 | |
+| `WrappedPqzToken` B | 72,160 | 56,232 | 54,145 | 49,883 | 47,796 | |
+| `GovernanceRouter` B | 20,073 | 11,744 | 11,744 | 11,744 | 11,744 | |
+| `TokenBodyLib` B / asked | | | 9,296 / 15.79 M | | 9,296 / 15.79 M | |
+
+Gas, `GovGas.t.sol`'s method: relayed transfer EOA to EOA base 87.3 to 87.4 K, M +1.3 to +1.4 K (calldata 420 -> 580 B), M + L
+a further +7.5 K, D +-30; EOA to a UA +112 to +177 (base: `uaTransfer`); the signed cancel -3.1 to -5.1 K; the generic entry
++1.7 to +2.5 K; a derived `mldsa65` subject on the generic entry +1,993; `transfer` +-66; `registry() == 0` and `!= 0` equal.
+Mutants on M: 10 of 10 red. Wallets byte-identical. Test recount on M (replaces §7's counts): 99 files do not compile (92 test files, 6 helpers, 1 script; 21 by an own error, 78 only through a moved import), 1,486 test functions; 76 test files with 948 test functions compile.
+
+**Reading by §4 (Q3, the owner's).** No set in scope fits 60 M for `WrappedToken`: the gap is 4,469 B on M + D (5,624 B with
+the stand-in) and 2,499 B on M + L + D (3,652 B). `NormalToken` fits 60 M on M, stand-in included. For 70 M the smallest set
+that fits both kinds and both stand-ins is **M + D** (M misses by 1,408 B; M + L misses with the stand-in by 497 B), and it
+has no hot-path cost; L costs +7.5 K gas per typed relayed transfer. **Recommendation: M + D; the 60 M target for
+`WrappedToken` stays open at 4,469 B (5,624 B regulated).** Caveat: with the stand-in M + D fits 70 M by about 300 B, and the
+stand-in (+995 / +1,163 B) is below §4's +1.7 to 1.9 KB [P]; a regulated form 300 B larger than it needs M + L + D. The Zether
+kinds: `NormalZetherToken` fits 70 M on M, 60 M on no set (gap 1,754 B on M + L + D); `WrappedZetherToken` fits neither.
+`WrappedPqzToken` leaves `_above64KiB` on M (56,232 B).
+
+Not run at T0, with reason (left to the task named): step 5's at-set runs of `PqzStateGas`, the rollscan and `debit_min_gas`
+(their tests import the address-form helpers, `NamedEntry.t.sol` among them, which no longer compile: T5 re-runs R41 at all
+four sets; the derived relay path's +1,993 gas is the proxy against the 6,032 margin of `n2560-kmax16384`); `MetaTxGasV2`
+rows and `PlusZero` on every kind (T2); `mtxTrade` through the DEX, a relayed Zether op and a relayed PQZ op (T4, T5, T6);
+invariant 7's tests and mutants on D (no module at T0: T9); a Hedera case and a router case (T8, T7).
+
 ## 10. Open questions for the owner
 
 Seven questions; each is a reversal of an owner ruling, a departure from the owner's words, a target, scope or a wallet
