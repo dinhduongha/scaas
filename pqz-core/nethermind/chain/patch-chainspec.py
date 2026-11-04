@@ -38,9 +38,9 @@ ADDR = ["000000000000000000000000000000005caa0f01", "000000000000000000000000000
 RESET = {"eip4895TransitionTimestamp": 1, "maximumExtraDataSize": "0xffff", "maxCodeSizeTransition": 0, "maxCodeSize": "0x20000"}
 RESET_REMOVE = "eip7954TransitionTimestamp"  # the one key a reset removes (CTR-GOV-19): EIP-7954 caps the code at 65,536 B
 TESTNET = 7622  # the only chain --testnet-reset may touch (owner 2026-10-15; 22776 is the future mainnet)
-RESET_GAS_LIMIT = "0xbebc200"
+RESET_GAS_LIMIT = "0xbebc200"  # 200,000,000 = config.json Blocks.TargetBlockGasLimit: no ramp after the reset
 # The Amsterdam keys of the SCaaS testnet (runs/2026-10-21-testnet-reset-2.2.0.sh); the self-check's chainspec carries them
-AMSTERDAM = [2780, 7708, 7778, 7928, 7954, 7976, 7981, 8024, 8037, 8038, 8246]  # 200,000,000 = config.json Blocks.TargetBlockGasLimit: no ramp after the reset
+AMSTERDAM = [2780, 7708, 7778, 7928, 7954, 7976, 7981, 8024, 8037, 8038, 8246]
 
 
 def main(src, eng, ts, out, *flags):
