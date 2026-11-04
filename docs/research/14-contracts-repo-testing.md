@@ -50,7 +50,7 @@ Giả định A6 là nguy hiểm nhất trong bảng vì nó làm một invarian
 ### 14.1. Cây `smartcontracts/` chuẩn (gốc repo, ngoài addon — locked #9)
 
 ```
-/home/dockers/odoo19/smartcontracts/
+~dockers/odoo19/smartcontracts/
 ├── mise.toml                      # ghim foundry, rust, node, sui, stellar, wasmd, slither
 ├── Makefile                       # test | lint | snapshot | devnet | deploy | rehearse | kat
 ├── README.md

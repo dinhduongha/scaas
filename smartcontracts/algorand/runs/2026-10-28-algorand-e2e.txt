@@ -21,7 +21,7 @@
  Container scaas-algorand-indexer-1 Starting 
  Container scaas-algorand-indexer-1 Started 
 algod up
-   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+   Compiling scaas-node v0.1.0 (<repo>/scaas-node)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 2.70s
      Running tests/e2e_algorand.rs (target/debug/deps/e2e_algorand-9d4367e1b2442416)
 

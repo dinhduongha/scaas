@@ -1,9 +1,9 @@
 # ua-cs at commit c91be72a
   Determining projects to restore...
   All projects are up-to-date for restore.
-  Scaas.Ua -> /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cs/Scaas.Ua/bin/Debug/net10.0/Scaas.Ua.dll
-  Scaas.Ua.Tests -> /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll
-Test run for /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll (.NETCoreApp,Version=v10.0)
+  Scaas.Ua -> <repo>/clients/ua-cs/Scaas.Ua/bin/Debug/net10.0/Scaas.Ua.dll
+  Scaas.Ua.Tests -> <repo>/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll
+Test run for <repo>/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll (.NETCoreApp,Version=v10.0)
 VSTest version 18.0.2 (x64)
 
 Starting test execution, please wait...

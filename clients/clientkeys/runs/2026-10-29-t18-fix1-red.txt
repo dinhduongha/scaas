@@ -157,7 +157,7 @@
 test at test/algorand.test.js:82:1
 ✖ pay-meta and relay-fee payments need nonce 0 (1.307954ms)
   AssertionError [ERR_ASSERTION]: Missing expected exception.
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/clientkeys/test/algorand.test.js:84:10)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/algorand.test.js:84:10)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -175,7 +175,7 @@ test at test/algorand.test.js:82:1
 test at test/algorand.test.js:92:1
 ✖ passkeyAssertion refuses a wrong challenge (0.731699ms)
   AssertionError [ERR_ASSERTION]: Missing expected rejection.
-      at async TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/clientkeys/test/algorand.test.js:98:3)
+      at async TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/algorand.test.js:98:3)
       at async Test.run (node:internal/test_runner/test:1409:7)
       at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
     generatedMessage: false,
@@ -197,7 +197,7 @@ test at test/near.test.js:109:1
   -   5
     ]
   
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/clientkeys/test/near.test.js:115:10)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/near.test.js:115:10)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -215,7 +215,7 @@ test at test/near.test.js:109:1
 test at test/near.test.js:123:1
 ✖ pay-meta and relay-fee payments need nonce 0 (2.921203ms)
   AssertionError [ERR_ASSERTION]: Missing expected exception.
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/clientkeys/test/near.test.js:125:10)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/near.test.js:125:10)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -233,7 +233,7 @@ test at test/near.test.js:123:1
 test at test/near.test.js:131:1
 ✖ passkeyAssertion refuses a wrong challenge, type or invalid UTF-8 (6.133564ms)
   AssertionError [ERR_ASSERTION]: Missing expected rejection.
-      at async TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/clientkeys/test/near.test.js:137:3)
+      at async TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/near.test.js:137:3)
       at async Test.run (node:internal/test_runner/test:1409:7)
       at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
     generatedMessage: false,

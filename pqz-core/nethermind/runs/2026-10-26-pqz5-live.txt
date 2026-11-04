@@ -4,7 +4,7 @@ $ docker inspect state
 exited exit 255 (stopped since 2026-10-25T08:05:36.81346856Z, host shutdown), image scaas/nethermind-pqz:2.2.0-pqz4
 
 $ patch-chainspec.py genesis.json engine-pqz-provisional-n2304.json 0x0 --testnet-reset
-/home/ha/work/ainative/scaas/scratchpad/pqz5-live/genesis.pqz5.check.json: engine.Pqz replaced (first timestamp 0 = 0x0, 1 schedule(s), 26 rows); diff: 29 added lines, 29 removed; params changed: none; genesis header changed: none
+<repo>/scratchpad/pqz5-live/genesis.pqz5.check.json: engine.Pqz replaced (first timestamp 0 = 0x0, 1 schedule(s), 26 rows); diff: 29 added lines, 29 removed; params changed: none; genesis header changed: none
 same as the start-up check's genesis.pqz5.json
 engine.Pqz ids: live ['0x15d16d77', '0xe4bc6d17'] -> new ['0x046859a8', '0xef1ffbcb']
 
@@ -52,7 +52,7 @@ entries in data/nethermind_data: 0
 deleted data/nethermind_data.pqz4-20261026 (the pqz4 chain, discarded): rc=0
 
 $ docker compose up -d blockchain-node
-time="2026-10-26T14:58:39+07:00" level=warning msg="/home/dockers/mba-chain-nethermind/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+time="2026-10-26T14:58:39+07:00" level=warning msg="~dockers/mba-chain-nethermind/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
  Container mba_chain_node_nethermind Recreate 
  Container mba_chain_node_nethermind Recreated 
  Container mba_chain_node_nethermind Starting 

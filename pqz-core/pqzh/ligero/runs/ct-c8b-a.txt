@@ -1,5 +1,5 @@
 # ct c8b-a: HEAD 6e69bfa0d770b5ca238d587de3399c8998a7d651, diff sha256 7c038382d96de9be, valgrind-3.22.0, rels 4095, nprove 1, set n2304-kmax4096
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8c/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 4.63s
 rustc 1.97.1 (8bab26f4f 2026-07-14)
 {"rel": "R_REG", "run": 0, "prove": "Ok(204358)", "verify": true, "fnv": "45604756"}

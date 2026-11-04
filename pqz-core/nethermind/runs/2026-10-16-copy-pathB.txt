@@ -4,7 +4,7 @@ $ copy.sh down && copy.sh backup pathA && copy.sh wipe
 45608	/c/data-signer
 45572	/c/bak-pathA/data-signer
 $ copy.sh genesis0 pqz-core/nethermind/chain/engine-pqz.json
-/home/ha/work/ainative/scaas/.claude/worktrees/p6f/scratchpad/p6f-copy/genesis.pqz0.json: engine.Pqz added (first timestamp 0 = 0x0, 1 schedule(s), 12 rows); diff: 87 added lines, 1 removed; params changed: eip4895TransitionTimestamp None -> 1, maxCodeSizeTransition 6432 -> 0, maximumExtraDataSize None -> 0xffff
+<repo>/scratchpad/p6f-copy/genesis.pqz0.json: engine.Pqz added (first timestamp 0 = 0x0, 1 schedule(s), 12 rows); diff: 87 added lines, 1 removed; params changed: eip4895TransitionTimestamp None -> 1, maxCodeSizeTransition 6432 -> 0, maximumExtraDataSize None -> 0xffff
 $ copy.sh up scaas/nethermind-pqz:1.39.0-pqz1 genesis.pqz0.json
  Container pqzcopy-follower Started 
 PQZ-START (signer): PQZ-START sha256=12495e8b9cdcf95b932761bae8843e499ee7b4bdd2b240869ed461fc7a257d87 selftest=ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205 addresses=PQZ:0x5caa500000000000000000000000…

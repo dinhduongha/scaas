@@ -1,4 +1,4 @@
-# T9 full forge at 004890a2 + uncommitted T9 tree (worktree /home/ha/work/ainative/scaas/.claude/worktrees/metatx-split)
+# T9 full forge at 004890a2 + uncommitted T9 tree (worktree <repo>)
 Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 2.10ms (303.02µs CPU time)
 Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 11.10ms (8.53ms CPU time)
 Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 1.73ms (175.98µs CPU time)

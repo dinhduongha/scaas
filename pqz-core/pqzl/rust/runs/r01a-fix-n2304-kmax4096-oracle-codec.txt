@@ -1,5 +1,5 @@
 # cargo test --test oracle_codec (C oracle; R0 fix round m3 challenge_resample_kat), set n2304-kmax4096
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
 warning: unused import: `std::path::PathBuf`
  --> tests/oracle_codec.rs:9:5
   |
@@ -10,7 +10,7 @@ warning: unused import: `std::path::PathBuf`
 
 warning: `pqzl` (test "oracle_codec") generated 1 warning (run `cargo fix --test "oracle_codec" -p pqzl` to apply 1 suggestion)
     Finished `release` profile [optimized + debuginfo] target(s) in 1.01s
-     Running tests/oracle_codec.rs (/tmp/claude-1000/-home-ha-work-ainative-scaas/42ffd63a-3cbe-4f3e-85ee-dd4ecfe74ea0/scratchpad/tgt-chal-n2304-kmax4096/release/deps/oracle_codec-deffee6439d12d16)
+     Running tests/oracle_codec.rs (<scratch>/tgt-chal-n2304-kmax4096/release/deps/oracle_codec-deffee6439d12d16)
 
 running 5 tests
 test challenge_resample_kat ... ok

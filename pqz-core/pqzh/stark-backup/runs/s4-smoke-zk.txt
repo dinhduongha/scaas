@@ -1,4 +1,4 @@
-   Compiling pqzh v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzhp/pqz-core/pqzh)
+   Compiling pqzh v0.1.0 (<repo>/pqz-core/pqzh)
     Finished `checked` profile [optimized + debuginfo] target(s) in 21.01s
      Running tests/smoke.rs (target/checked/deps/smoke-08d7120a191a17d1)
 

@@ -1,5 +1,5 @@
 # vectors-n2048-kmax1024 at commit 682f7a9f
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 9.54s
      Running `target/release/pqz-vectors --check`
 keys / cbd / matrix / enc: 0.1 s

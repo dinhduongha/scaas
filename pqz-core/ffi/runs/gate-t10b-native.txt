@@ -1,10 +1,10 @@
 # verify-only build (default features): libpqz_ffi.so, and the C core archive build.rs compiled
 $ cargo build --release --offline
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 0.86s
 [rc=0]
 test hooks in the production cdylib (must be 0): 0
-$ ../pqzl/check_symbols.sh /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/ffi/target/release/build/pqz-ffi-66cee2e81f56df3a/out/libpqz.a
+$ ../pqzl/check_symbols.sh <repo>/pqz-core/ffi/target/release/build/pqz-ffi-66cee2e81f56df3a/out/libpqz.a
 symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
 [rc=0]
 $ sha256sum target/release/libpqz_ffi.so
@@ -93,9 +93,9 @@ symbols /gmp|mpfr|hexl/i: 0
 strings /gmp|mpfr|hexl/i: 0
 libm-style imports: 0
 # C smoke test against pqz_ffi.h
-$ clang -std=c11 -Wall -Wextra -o /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/ffi/target/run/c_abi tests/c_abi.c -Ltarget/release -lpqz_ffi -Wl,-rpath,/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/ffi/target/release
+$ clang -std=c11 -Wall -Wextra -o <repo>/pqz-core/ffi/target/run/c_abi tests/c_abi.c -Ltarget/release -lpqz_ffi -Wl,-rpath,<repo>/pqz-core/ffi/target/release
 [rc=0]
-$ /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/ffi/target/run/c_abi
+$ <repo>/pqz-core/ffi/target/run/c_abi
 c_abi: selftest ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205
 c_abi: ok (0 failures)
 [rc=0]
@@ -107,7 +107,7 @@ $ cargo +stable clippy --release --offline --features prove,test-hooks --lib -- 
    Compiling find-msvc-tools v0.1.14
    Compiling shlex v2.0.1
     Checking keccak v0.1.6
-    Checking pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/stmt)
+    Checking pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
     Checking cfg-if v1.0.5
     Checking cpufeatures v0.2.17
    Compiling cc v1.8.0
@@ -119,8 +119,8 @@ $ cargo +stable clippy --release --offline --features prove,test-hooks --lib -- 
     Checking hmac v0.12.1
     Checking sha2 v0.10.9
     Checking hkdf v0.12.4
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/ffi)
-    Checking pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzh/ligero)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
+    Checking pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
 warning: very complex type used. Consider factoring parts into `type` definitions
    --> src/pqzl.rs:451:6
     |

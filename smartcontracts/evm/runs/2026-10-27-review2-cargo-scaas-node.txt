@@ -1,5 +1,5 @@
 # cargo-scaas-node at commit b3c845c6
-   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/review2-fix/scaas-node)
+   Compiling scaas-node v0.1.0 (<repo>/scaas-node)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 10.51s
      Running unittests src/lib.rs (target/debug/deps/scaas_node-dbe39b21340e8e02)
 

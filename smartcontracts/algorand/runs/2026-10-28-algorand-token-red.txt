@@ -2,7 +2,7 @@
 == test algorand
 == build algorand
 [32minfo: [0musing puyapy version 5.10.1[0m
-[32minfo: [0musing python search path: ['/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/.venv/lib/python3.12/site-packages'][0m
+[32minfo: [0musing python search path: ['<repo>/smartcontracts/algorand/.venv/lib/python3.12/site-packages'][0m
 [32minfo: [0mWriting out/Token.arc56.json[0m
 [32minfo: [0mWriting out/Token.approval.bin[0m
 [32minfo: [0mWriting out/Token.clear.bin[0m
@@ -821,13 +821,13 @@ tests/conftest.py:254: AssertionError
 =============================== warnings summary ===============================
 tests/test_token.py: 47 warnings
 tests/test_vectors.py: 3 warnings
-  /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/tests/conftest.py:111: DeprecationWarning: Use sign_transaction_with_signer(txn, AccountTransactionSigner(private_key)) instead. Will be removed in a future major release.
+  <repo>/smartcontracts/algorand/tests/conftest.py:111: DeprecationWarning: Use sign_transaction_with_signer(txn, AccountTransactionSigner(private_key)) instead. Will be removed in a future major release.
     wait(ALGOD.send_transaction(transaction.PaymentTxn(dispenser.addr, sp(), a, amount).sign(dispenser.sk)))
 
 tests/test_vectors.py::test_metaop_vectors
 tests/test_vectors.py::test_sign_bytes_vectors
 tests/test_vectors.py::test_pay_meta_vectors
-  /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/tests/conftest.py:292: DeprecationWarning: Use sign_transaction_with_signer(txn, AccountTransactionSigner(private_key)) instead. Will be removed in a future major release.
+  <repo>/smartcontracts/algorand/tests/conftest.py:292: DeprecationWarning: Use sign_transaction_with_signer(txn, AccountTransactionSigner(private_key)) instead. Will be removed in a future major release.
     info = wait(ALGOD.send_transaction(txn.sign(dispenser.sk)))
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html

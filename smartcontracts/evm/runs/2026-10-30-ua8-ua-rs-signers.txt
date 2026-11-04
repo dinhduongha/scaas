@@ -42,7 +42,7 @@
    Compiling frost-secp256k1 v3.0.0
    Compiling ark-bn254 v0.5.0
    Compiling ark-bls12-381 v0.5.0
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-rs)
+   Compiling scaas-ua v0.1.0 (<repo>/clients/ua-rs)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 36.58s
      Running unittests src/lib.rs (target/debug/deps/scaas_ua-99669c17fc5a47ec)
 

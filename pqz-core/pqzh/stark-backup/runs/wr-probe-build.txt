@@ -82,8 +82,8 @@
    Compiling p3-bus v0.9.0-rc.1
    Compiling p3-whir v0.9.0-rc.1
    Compiling p3-multi-stark v0.9.0-rc.1
-   Compiling pqzh v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/whirrev/pqz-core/pqzh)
-   Compiling wr-probe v0.0.0 (/home/ha/work/ainative/scaas/.claude/worktrees/whirrev/pqz-core/pqzh/runs/wr-probe)
+   Compiling pqzh v0.1.0 (<repo>/pqz-core/pqzh)
+   Compiling wr-probe v0.0.0 (<repo>/pqz-core/pqzh/runs/wr-probe)
 warning: unused `ExtField` that must be used
    --> src/main.rs:155:13
     |
@@ -98,5 +98,5 @@ help: use `let _ = ...` to ignore the resulting value
 
 warning: `wr-probe` (bin "wr-probe") generated 1 warning
     Finished `release` profile [optimized + debuginfo] target(s) in 58.55s
-   Compiling wr-probe v0.0.0 (/home/ha/work/ainative/scaas/.claude/worktrees/whirrev/pqz-core/pqzh/runs/wr-probe)
+   Compiling wr-probe v0.0.0 (<repo>/pqz-core/pqzh/runs/wr-probe)
     Finished `release` profile [optimized + debuginfo] target(s) in 8.66s

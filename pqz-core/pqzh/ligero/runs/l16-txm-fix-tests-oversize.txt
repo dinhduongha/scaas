@@ -1,4 +1,4 @@
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/anonh/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 5.72s
      Running tests/multi.rs (target/release/deps/multi-4ca5b895deb1c168)
 

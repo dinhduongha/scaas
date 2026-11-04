@@ -1,6 +1,6 @@
 # K: PQZH Rust security review, round 2 (Claude, 2026-10-19)
 
-Static, read-only review of the frozen worktree `/home/ha/work/ainative/scaas/.claude/worktrees/rev2` (detached at
+Static, read-only review of the frozen worktree `<repo>` (detached at
 `e9cabd1`). Nothing was built, run, fuzzed or timed. All `path:line` references are relative to that tree.
 
 **Primary scope (live):** `pqz-core/pqzh/ligero/` (`src/{fq,ring,fft,merkle,transcript,cs,ligero}.rs`, `client.rs`

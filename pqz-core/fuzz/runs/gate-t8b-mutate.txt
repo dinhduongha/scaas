@@ -5,16 +5,16 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 2808721327
 INFO: Loaded 1 modules   (17488 inline 8-bit counters): 17488 [0x581625b75198, 0x581625b795e8), 
 INFO: Loaded 1 PC tables (17488 PCs): 17488 [0x581625b795e8,0x581625bbdae8), 
-INFO:        0 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/build/fuzz/work/mutate
+INFO:        0 files found in <repo>/pqz-core/build/fuzz/work/mutate
 INFO:      483 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:       92 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/build/fuzz/seeds/mutate
+INFO:       92 files found in <repo>/pqz-core/build/fuzz/seeds/mutate
 INFO: seed corpus: files: 575 min: 1b max: 147b total: 9260b rss: 398Mb
 #256	pulse  cov: 1350 ft: 2101 corp: 96/475b exec/s: 28 rss: 583Mb
 #512	pulse  cov: 2633 ft: 3975 corp: 176/1785b exec/s: 15 rss: 783Mb
 #576	INITED cov: 2634 ft: 3992 corp: 187/2415b exec/s: 15 rss: 783Mb
-	NEW_FUNC[1/4]: 0x58162597cc80 in <pqzl::arith::int::Int>::mul /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/src/arith/int.rs:289
-	NEW_FUNC[2/4]: 0x58162597d2b0 in <pqzl::arith::int::Int>::sgn /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/src/arith/int.rs:131
+	NEW_FUNC[1/4]: 0x58162597cc80 in <pqzl::arith::int::Int>::mul <repo>/pqz-core/pqzl/rust/src/arith/int.rs:289
+	NEW_FUNC[2/4]: 0x58162597d2b0 in <pqzl::arith::int::Int>::sgn <repo>/pqz-core/pqzl/rust/src/arith/int.rs:131
 #617	NEW    cov: 2668 ft: 4352 corp: 188/2421b lim: 142 exec/s: 11 rss: 783Mb L: 6/142 MS: 1 ShuffleBytes-
 #670	NEW    cov: 2668 ft: 4353 corp: 189/2513b lim: 142 exec/s: 12 rss: 783Mb L: 92/142 MS: 3 CrossOver-InsertRepeatedBytes-CopyPart-
 #673	NEW    cov: 2668 ft: 4354 corp: 190/2519b lim: 142 exec/s: 12 rss: 783Mb L: 6/142 MS: 3 ChangeBit-ChangeByte-ShuffleBytes-

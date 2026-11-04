@@ -1,6 +1,6 @@
 # V2 — Claude, part 2 of 3: UA registry, kinds and verifiers, `account/`, `wallet/`
 
-Tree: `/home/ha/work/ainative/scaas/.claude/worktrees/rev3`, detached at `7aab1fe`. This was a static read only: nothing
+Tree: `<repo>`, detached at `7aab1fe`. This was a static read only: nothing
 was built, run or deployed. All paths are relative to `smartcontracts/evm/src/` unless they start with `docs/`.
 Scope: `ua/**` (24 files, ~3.5 k lines), `account/SmartKeyAccount{,Factory}.sol`, `wallet/MandateWallet.sol`. I also
 read the code those call, as far as part 2 needs it: `common/{WebAuthnClientData,SigCheck,SaltedEIP712,SSTORE2,CurveSigs}.sol`,
@@ -187,7 +187,7 @@ hypothesis.
   - Fix: add the getter to the interface.
 - **Unpinned OpenZeppelin.** OZ is not vendored and not pinned:
   - `smartcontracts/evm/.gitignore:3` ignores `lib/`, and the README says "v5.2+".
-  - The local checkout is an untracked symlink to `/home/ha/work/blockchain/openzeppelin-contracts` @ `fda6b85f`
+  - The local checkout is an untracked symlink to `~/work/blockchain/openzeppelin-contracts` @ `fda6b85f`
     (2025-03-13, between v5.2 and v5.3).
   - Several checks in scope depend on that code's exact behaviour: the low-s rule (`ECDSA.tryRecover`; used at
     `UARegistry.sol:615`, `SmartKeyAccount.sol:293`, `MandateWallet.sol:183`), `P256.verify` / `verifySolidity` and

@@ -1,5 +1,5 @@
 $ cargo test -j2 --release --offline --no-fail-fast --no-default-features --features sv,set-n2560-kmax16384 --features c-oracle,test-hooks,bench -- --nocapture
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
 warning: unused import: `std::path::PathBuf`
  --> tests/oracle_codec.rs:9:5
   |

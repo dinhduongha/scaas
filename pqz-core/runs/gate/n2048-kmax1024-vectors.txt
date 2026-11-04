@@ -1,6 +1,6 @@
 set n2048-kmax1024, vectors ../../smartcontracts/vectors/pqz; PQZL backend: the default feature (cargo flags: --no-default-features --features pqzl-rust,set-n2048-kmax1024)
 pqz-vectors --check: 16 files, 22239801 B: ok
-	Command being timed: "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2048-kmax1024/release/pqz-vectors --check"
+	Command being timed: "<repo>/pqz-core/ffi/target/n2048-kmax1024/release/pqz-vectors --check"
 pqz_kat: ok
 80048 KB
 tamper: 191 / 191 caught: ok

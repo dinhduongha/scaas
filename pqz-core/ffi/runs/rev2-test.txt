@@ -1,10 +1,10 @@
 # PQZL backend: the default feature (cargo flags: none)
 $ cargo test --release --offline --lib
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzh/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
    Compiling digest v0.10.7
    Compiling sha3 v0.10.8
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzh/pqz-core/pqzh/ligero)
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzh/pqz-core/pqzl/rust)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 5.35s
      Running unittests src/lib.rs (target/release/deps/pqz_ffi-491172871959f9ce)
 
@@ -15,7 +15,7 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 [rc=0]
 $ cargo test --release --offline --features prove,test-hooks -- --nocapture --test-threads 4
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzh/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 7.28s
      Running unittests src/lib.rs (target/release/deps/pqz_ffi-0f1211ccca603160)
 

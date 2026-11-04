@@ -1,10 +1,10 @@
 # verify-only build (no prove, no test-hooks): libpqz_ffi.so, and the C core archive if build.rs compiled one
 $ cargo build --release --offline --no-default-features --features pqzl-c
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 1.27s
 [rc=0]
 test hooks in the production cdylib (must be 0): 0
-$ ../pqzl/check_symbols.sh /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3/pqz-core/ffi/target/release/build/pqz-ffi-1d54fc12147c1ac3/out/libpqz.a
+$ ../pqzl/check_symbols.sh <repo>/pqz-core/ffi/target/release/build/pqz-ffi-1d54fc12147c1ac3/out/libpqz.a
 symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
 [rc=0]
 $ sha256sum target/release/libpqz_ffi.so
@@ -93,14 +93,14 @@ symbols /gmp|mpfr|hexl/i: 0
 strings /gmp|mpfr|hexl/i: 0
 libm-style imports: 0
 # C smoke test against pqz_ffi.h
-$ clang -std=c11 -Wall -Wextra -o /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3/pqz-core/ffi/target/run/c_abi tests/c_abi.c -Ltarget/release -lpqz_ffi -Wl,-rpath,/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3/pqz-core/ffi/target/release
+$ clang -std=c11 -Wall -Wextra -o <repo>/pqz-core/ffi/target/run/c_abi tests/c_abi.c -Ltarget/release -lpqz_ffi -Wl,-rpath,<repo>/pqz-core/ffi/target/release
 [rc=0]
-$ /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3/pqz-core/ffi/target/run/c_abi
+$ <repo>/pqz-core/ffi/target/run/c_abi
 c_abi: selftest ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205
 c_abi: ok (0 failures)
 [rc=0]
 # clippy (the crate's toolchain 1.97.1; +stable 1.90 refuses pqzl's rust-version): no float arithmetic in the crate
 $ cargo clippy --release --offline --no-default-features --features pqzl-c --features prove,test-hooks --lib -- -D clippy::float_arithmetic
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 10.51s
 [rc=0]

@@ -3,12 +3,12 @@
    Compiling typenum v1.20.1
    Compiling generic-array v0.14.7
    Compiling keccak v0.1.6
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8c2/pqz-core/stmt)
+   Compiling pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
    Compiling block-buffer v0.10.4
    Compiling crypto-common v0.1.7
    Compiling digest v0.10.7
    Compiling sha3 v0.10.8
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8c2/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 4.73s
 rustc 1.97.1 (8bab26f4f 2026-07-14)
 {"rel": "R_REG", "run": 0, "prove": "Ok(230526)", "verify": true, "fnv": "b3070d6c"}
@@ -27,7 +27,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==34695== Memcheck, a memory error detector
 ==34695== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
 ==34695== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
-==34695== Command: /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8c2/pqz-core/pqzh/ligero/target/ct-n2560-kmax16384/release/ct 4095 1
+==34695== Command: <repo>/pqz-core/pqzh/ligero/target/ct-n2560-kmax16384/release/ct 4095 1
 ==34695== Parent PID: 34338
 ==34695== 
 ==34695== 

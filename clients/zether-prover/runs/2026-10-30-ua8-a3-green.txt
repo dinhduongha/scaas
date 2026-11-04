@@ -13,7 +13,7 @@ warning: unused import: `Bls12381`
   |                                       ^^^^^^^^
 
 warning: `zether-prover` (test "recover") generated 2 warnings (run `cargo fix --test "recover" -p zether-prover` to apply 2 suggestions)
-   Compiling zether-prover v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/zether-prover)
+   Compiling zether-prover v0.1.0 (<repo>/clients/zether-prover)
 warning: unused import: `pop_tag`
    --> tests/r33_keys.rs:192:34
     |

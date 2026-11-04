@@ -2,7 +2,7 @@
 # library sources: git archive HEAD of the paths the ffi stage copies, as the build context ffisrc (build-image.sh's FFI_REV way); ffi stage rebuilt (--no-cache-filter ffi)
 # git status --short of the copied paths at HEAD (empty = clean): []
 # copied paths: LICENSE pqz-core/pqzl/check_symbols.sh pqz-core/pqzl/src pqz-core/pqzl/lazer pqz-core/pqzl/params pqz-core/params/sets pqz-core/pqzl/rust pqz-core/stmt pqz-core/pqzh/ligero pqz-core/ffi smartcontracts/vectors/pqz
-$ docker build -f pqz-core/nethermind/Dockerfile --progress plain --resource memory=4g --build-arg PQZ_SET=n2304-kmax4096 --build-context ffisrc=/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/nethermind/bin/ffi-src-m4 --no-cache-filter ffi --target ffi-export -o /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/nethermind/bin/ffi-out-n2304-kmax4096-m4 /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01
+$ docker build -f pqz-core/nethermind/Dockerfile --progress plain --resource memory=4g --build-arg PQZ_SET=n2304-kmax4096 --build-context ffisrc=<repo>/pqz-core/nethermind/bin/ffi-src-m4 --no-cache-filter ffi --target ffi-export -o <repo>/pqz-core/nethermind/bin/ffi-out-n2304-kmax4096-m4 <repo>
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile

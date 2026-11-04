@@ -1,9 +1,9 @@
 # vectors-check at commit ca2d7b41
     Finished `release` profile [optimized] target(s) in 0.09s
-kinds.json: 34 valid, 199 invalid; structures.json written to /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/vectors/ua/
-signatures.json: 10 derived kinds (99 negatives), native 4+5, msig 10 sets, 15 BIP-340 official, 11 ed25519Rfc8032; ed25519_fuzz.json: 2144 cases (291 valid, noble zip215:false alone differs on 191); metatx3.json: 11 + 11 + 11 + 11 + 11 rows; pq_signatures.json: 4 kinds (33 negatives), msig 2 structures, metatx3 4 + 4 + 1; uatrade_kat.json: 11 rows + 3 mldsa65; written to /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/vectors/ua/
-portable.json: 25 registrations, 9 KEM records, 8 PQZ key records, 6 memberships, 67 negatives; written to /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/vectors/ua/
-wrote /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/soroban/vectors/ua-ops.json
+kinds.json: 34 valid, 199 invalid; structures.json written to <repo>/smartcontracts/vectors/ua/
+signatures.json: 10 derived kinds (99 negatives), native 4+5, msig 10 sets, 15 BIP-340 official, 11 ed25519Rfc8032; ed25519_fuzz.json: 2144 cases (291 valid, noble zip215:false alone differs on 191); metatx3.json: 11 + 11 + 11 + 11 + 11 rows; pq_signatures.json: 4 kinds (33 negatives), msig 2 structures, metatx3 4 + 4 + 1; uatrade_kat.json: 11 rows + 3 mldsa65; written to <repo>/smartcontracts/vectors/ua/
+portable.json: 25 registrations, 9 KEM records, 8 PQZ key records, 6 memberships, 67 negatives; written to <repo>/smartcontracts/vectors/ua/
+wrote <repo>/smartcontracts/soroban/vectors/ua-ops.json
     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s
      Running tests/groups.rs (target/debug/deps/groups-969d879406475d70)
 
@@ -23,10 +23,10 @@ vectors/transcript_s3.json
 vectors/r33_keys.json
 vectors/r33_inputs.json
 vectors/envelope.json
-kinds.json: 34 valid, 199 invalid; structures.json written to /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/vectors/ua/
-signatures.json: 10 derived kinds (99 negatives), native 4+5, msig 10 sets, 15 BIP-340 official, 11 ed25519Rfc8032; ed25519_fuzz.json: 2144 cases (291 valid, noble zip215:false alone differs on 191); metatx3.json: 11 + 11 + 11 + 11 + 11 rows; pq_signatures.json: 4 kinds (33 negatives), msig 2 structures, metatx3 4 + 4 + 1; uatrade_kat.json: 11 rows + 3 mldsa65; written to /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/vectors/ua/
-portable.json: 25 registrations, 9 KEM records, 8 PQZ key records, 6 memberships, 67 negatives; written to /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/vectors/ua/
-wrote /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/soroban/vectors/ua-ops.json
+kinds.json: 34 valid, 199 invalid; structures.json written to <repo>/smartcontracts/vectors/ua/
+signatures.json: 10 derived kinds (99 negatives), native 4+5, msig 10 sets, 15 BIP-340 official, 11 ed25519Rfc8032; ed25519_fuzz.json: 2144 cases (291 valid, noble zip215:false alone differs on 191); metatx3.json: 11 + 11 + 11 + 11 + 11 rows; pq_signatures.json: 4 kinds (33 negatives), msig 2 structures, metatx3 4 + 4 + 1; uatrade_kat.json: 11 rows + 3 mldsa65; written to <repo>/smartcontracts/vectors/ua/
+portable.json: 25 registrations, 9 KEM records, 8 PQZ key records, 6 memberships, 67 negatives; written to <repo>/smartcontracts/vectors/ua/
+wrote <repo>/smartcontracts/soroban/vectors/ua-ops.json
     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
      Running tests/groups.rs (target/debug/deps/groups-969d879406475d70)
 

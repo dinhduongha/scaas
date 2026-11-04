@@ -5,7 +5,7 @@ $ cargo test -j2 --release --offline --no-fail-fast --features c-oracle,test-hoo
    Compiling serde_core v1.0.229
    Compiling zmij v1.0.23
    Compiling serde_json v1.0.154
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-rust/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
    Compiling itoa v1.0.18
    Compiling memchr v2.8.3
     Finished `release` profile [optimized + debuginfo] target(s) in 57.13s
@@ -1183,7 +1183,7 @@ error: 8 targets failed:
 [rc=101]
 # arithmetic KAT: kat_dump vs the upstream LaZer golden file
 $ cargo build -j2 --release --offline --features test-hooks --bin kat_dump
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-rust/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 7.68s
 [rc=0]
 $ python3 -I ../kat/check.py ../kat/lazer-3330e48.json target/kat-rust.json
@@ -1191,7 +1191,7 @@ $ python3 -I ../kat/check.py ../kat/lazer-3330e48.json target/kat-rust.json
 [rc=0]
 # keys KAT: keys_kat (pqzl/test/pqz_keys_kat.c's JSON lines) vs the independent Python check
 $ cargo build -j2 --release --offline --features test-hooks --bin keys_kat
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-rust/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 1.06s
 [rc=0]
 $ sh -c ./target/release/keys_kat 1000 > target/keys-rust.jsonl
@@ -1219,7 +1219,7 @@ to_rust.py --check: 15 files, equal
 [rc=0]
 # prover: bench proofs_fnv = the C core's (tx0c-fnv-native: 5 5 63; l3a-native-fast: 2 2 16320, the op 7 shapes)
 $ cargo build -j2 --release --offline --features bench --bin bench
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-rust/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 7.13s
 [rc=0]
 $ sh -c ./target/release/bench 5 5 63 > runs/fs3-bench-63.jsonl
@@ -1246,7 +1246,7 @@ $ sh -c cd wasm && cargo build -j2 --release --offline --target wasm32-unknown-u
    Compiling generic-array v0.14.7
    Compiling cfg-if v1.0.5
    Compiling keccak v0.1.6
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-rust/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
    Compiling crypto-common v0.1.7
    Compiling inout v0.1.4
    Compiling block-buffer v0.10.4
@@ -1254,7 +1254,7 @@ $ sh -c cd wasm && cargo build -j2 --release --offline --target wasm32-unknown-u
    Compiling digest v0.10.7
    Compiling aes v0.8.4
    Compiling sha3 v0.10.8
-   Compiling pqzl-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-rust/pqz-core/pqzl/rust/wasm)
+   Compiling pqzl-wasm v0.1.0 (<repo>/pqz-core/pqzl/rust/wasm)
     Finished `release` profile [optimized] target(s) in 6.17s
 [rc=0]
 $ sh -c node wasm/run_wasm.mjs 3 1 63 > runs/fs3-wasm-63.jsonl
@@ -1274,13 +1274,13 @@ node:fs:621
     return binding.readFileUtf8(path, stringToFlags(options.flag));
                    ^
 
-Error: ENOENT: no such file or directory, open '/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-rust/pqz-core/pqzl/rust/target/wasm-replay/in.txt'
+Error: ENOENT: no such file or directory, open '<repo>/pqz-core/pqzl/rust/target/wasm-replay/in.txt'
     at readFileSync (node:fs:621:20)
-    at file:///home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-rust/pqz-core/pqzl/rust/wasm/run_vectors.mjs:21:15 {
+    at file://<repo>/pqz-core/pqzl/rust/wasm/run_vectors.mjs:21:15 {
   errno: -2,
   code: 'ENOENT',
   syscall: 'open',
-  path: '/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-rust/pqz-core/pqzl/rust/target/wasm-replay/in.txt'
+  path: '<repo>/pqz-core/pqzl/rust/target/wasm-replay/in.txt'
 }
 
 Node.js v26.8.1

@@ -38,11 +38,11 @@ CTR-ZTH-06/08/13/21/23/34, §14 disclosure, §15 CTR-ZTH-44…47, §16 gate, §2
 
 ## Global Constraints
 
-- Paths relative to `/home/ha/work/ainative/scaas`; forge in `smartcontracts/evm` of worktree `.claude/worktrees/p3`
+- Paths relative to `<repo>`; forge in `smartcontracts/evm` of worktree `.claude/worktrees/p3`
   (branch `p3-zether` from `main`; `lib/` is not tracked: `mkdir lib`, copy `smartcontracts/evm/lib/forge-std` into it
-  and symlink `lib/openzeppelin-contracts → /home/ha/work/blockchain/openzeppelin-contracts`, as in the main checkout).
+  and symlink `lib/openzeppelin-contracts → ~/work/blockchain/openzeppelin-contracts`, as in the main checkout).
   Heavy commands only through `scripts/capped`, one at a time. `/usr/bin/grep`, `rtk proxy git diff`; if a hook blocks
-  bare `git`, use `/usr/bin/git`. Rust: `CARGO_TARGET_DIR=/home/ha/work/ainative/scaas/clients/zether-prover/target` (and
+  bare `git`, use `/usr/bin/git`. Rust: `CARGO_TARGET_DIR=<repo>/clients/zether-prover/target` (and
   `…/scaas-node/target` for the node) reuse the main checkout's build caches.
 - **Zether is UNAUDITED — NOT FOR PRODUCTION FUNDS**: every new contract says so in its NatSpec; dev chains only
   (`ZetherSafety`: 31337, 1337).
@@ -2133,8 +2133,8 @@ index aee18a5..7d7b3a2 100755
 
 ```bash
 cd clients/zether-prover
-CARGO_TARGET_DIR=/home/ha/work/ainative/scaas/clients/zether-prover/target ../../scripts/capped cargo build --release --bin zether-cli
-/home/ha/work/ainative/scaas/clients/zether-prover/target/release/zether-cli vectors vectors
+CARGO_TARGET_DIR=<repo>/clients/zether-prover/target ../../scripts/capped cargo build --release --bin zether-cli
+<repo>/clients/zether-prover/target/release/zether-cli vectors vectors
 cp vectors/{burn,disclosure,schnorr,transfer}_*.json vectors/transcript_s3.json vectors/envelope.json \
    ../../smartcontracts/evm/test/vectors/zether/s3/
 sha256sum vectors/*.json | cut -c1-16
@@ -6540,7 +6540,7 @@ index 18cc21f..b152edd 100755
 
 ```python
 import subprocess, sys
-W='/home/ha/work/ainative/scaas/.claude/worktrees/p3/smartcontracts/evm'
+W='<repo>/smartcontracts/evm'
 L=W+'/src/zether/ZetherLib.sol'
 Y=W+'/src/zether/ZetherLayer.sol'
 N=W+'/src/zether/NormalZetherToken.sol'

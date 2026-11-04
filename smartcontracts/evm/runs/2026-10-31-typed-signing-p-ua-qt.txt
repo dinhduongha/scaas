@@ -7,23 +7,23 @@
 -- CXX-Qt Found crate(s): scaas_ua_qt
 -- Configuring done (1.3s)
 -- Generating done (0.0s)
--- Build files have been written to: /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-qt/build
+-- Build files have been written to: <repo>/clients/ua-qt/build
 [  0%] Built target cargo-prebuild_scaas_ua_qt
 [  0%] Built target tst_ua_autogen_timestamp_deps
 warning: failed to connect to jobserver from environment variable `MAKEFLAGS="s -j2 --jobserver-auth=3,4"`: cannot open file descriptor 3 from the jobserver environment variable value: Bad file descriptor (os error 9)
 [  0%] Built target scaas_ua_qml_module_mock_obj_output
 [ 25%] Built target tst_ua_autogen
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
-   Compiling scaas_ua_qt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-qt)
+   Compiling scaas-ua v0.1.0 (<repo>/clients/ua-rs)
+   Compiling scaas_ua_qt v0.1.0 (<repo>/clients/ua-qt)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.68s
-Copying byproducts `libscaas_ua_qt.a` to /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-qt/build
+Copying byproducts `libscaas_ua_qt.a` to <repo>/clients/ua-qt/build
 [ 25%] Built target _cargo-build_scaas_ua_qt
 [ 25%] Built target cargo-build_scaas_ua_qt
 [ 50%] Linking CXX executable tst_ua
 [100%] Built target tst_ua
-UpdateCTestConfiguration  from :/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-qt/build/DartConfiguration.tcl
-UpdateCTestConfiguration  from :/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-qt/build/DartConfiguration.tcl
-Test project /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-qt/build
+UpdateCTestConfiguration  from :<repo>/clients/ua-qt/build/DartConfiguration.tcl
+UpdateCTestConfiguration  from :<repo>/clients/ua-qt/build/DartConfiguration.tcl
+Test project <repo>/clients/ua-qt/build
 Constructing a list of tests
 Done constructing a list of tests
 Updating test list for fixtures
@@ -33,8 +33,8 @@ Checking test dependency graph end
 test 1
     Start 1: tst_ua
 
-1: Test command: /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-qt/build/tst_ua "-input" "/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-qt/tests/tst_ua.qml"
-1: Working Directory: /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-qt/build
+1: Test command: <repo>/clients/ua-qt/build/tst_ua "-input" "<repo>/clients/ua-qt/tests/tst_ua.qml"
+1: Working Directory: <repo>/clients/ua-qt/build
 1: Environment variables: 
 1:  QT_QPA_PLATFORM=offscreen
 1: Test timeout computed to be: 10000000

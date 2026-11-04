@@ -1,4 +1,4 @@
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/stmt)
+   Compiling pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.97s
      Running unittests src/lib.rs (target/debug/deps/pqz_stmt-35a97e5f8e0f8f0c)
 

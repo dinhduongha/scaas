@@ -72,7 +72,7 @@ Source: tag `1.39.0` = commit `14aca2c5202c48a6a46c8d928fe7ed8a898d253e`, cloned
 | Image | `nethermind/nethermind:1.39.0`, RepoDigest `sha256:8af90a30989c16cb15e087bd250c623c98585e490a25950a75642460d497eae6` (local id `c510c7fb5f1b`); framework-dependent publish on `aspnet:10.0.9-resolute` (Ubuntu 26.04), entrypoint `./entrypoint.sh`, workdir `/nethermind`, plugins in `/nethermind/plugins` | `Dockerfile`, `docker image inspect` |
 | .NET ML-DSA | the host's .NET 10.0.12 reference pack has `MLDsa`, `MLDsaAlgorithm`, `MLDsaOpenSsl` (OpenSSL ≥ 3.5 needed on Linux; `SYSLIB5006` experimental IDs present in the assembly, which types carry them is checked in Task 3) | `packs/Microsoft.NETCore.App.Ref/10.0.12` |
 | EIP-8355 (pinned `3aea9f36`) | `VERIFY_MLDSA44/65/87` at 0x12/0x13/0x14; input `pk ‖ sig ‖ msg`, no context (always empty); `L < PK_LEN + SIG_LEN` ⇒ 32 zero bytes, never revert; output exactly 32 bytes; gas `BASE + 6·⌈max(0, L − PK − SIG)/32⌉`, BASE 6,500 / 9,000 / 13,500 | `eip-8355.md` §Specification |
-| Live chain `/home/dockers/mba-chain-nethermind` | container `mba_chain_node_nethermind` **stopped** (Exited (130)); compose: `nethermind/nethermind:1.39.0`, ports 8545 / 8546 / 30303 on 0.0.0.0, no restart policy, network `mba-net`; `config.json`: Clique signer `0xdE36…46BB` unlocked, `Init.DiscoveryEnabled false`, no `Blocks` / `TxPool` sections, `Plugins {}`, KZG path in the image; `genesis.json`: chainId `0x1dc6`, `gasLimit 0x1000000`, period 5, `gasLimitBoundDivisor 0x400`, Fusaka set incl. 7623 / 7825 / 7934, `maxCodeSize 0x10000` from block 6432; `data/` 406 MB (`nethermind_data/`, `nethermind_data.bak-20260831-090830/`); backup naming `genesis.json.bak-<label>-<YYYYMMDD>`, `docker-compose.yml.bak-091537`; datadir owned by the container user (README: copy / delete through a container) | `ls`, `cat`, `docker ps -a` (read only) |
+| Live chain `~dockers/mba-chain-nethermind` | container `mba_chain_node_nethermind` **stopped** (Exited (130)); compose: `nethermind/nethermind:1.39.0`, ports 8545 / 8546 / 30303 on 0.0.0.0, no restart policy, network `mba-net`; `config.json`: Clique signer `0xdE36…46BB` unlocked, `Init.DiscoveryEnabled false`, no `Blocks` / `TxPool` sections, `Plugins {}`, KZG path in the image; `genesis.json`: chainId `0x1dc6`, `gasLimit 0x1000000`, period 5, `gasLimitBoundDivisor 0x400`, Fusaka set incl. 7623 / 7825 / 7934, `maxCodeSize 0x10000` from block 6432; `data/` 406 MB (`nethermind_data/`, `nethermind_data.bak-20260831-090830/`); backup naming `genesis.json.bak-<label>-<YYYYMMDD>`, `docker-compose.yml.bak-091537`; datadir owned by the container user (README: copy / delete through a container) | `ls`, `cat`, `docker ps -a` (read only) |
 
 ## 2. Gaps found
 
@@ -98,7 +98,7 @@ Source: tag `1.39.0` = commit `14aca2c5202c48a6a46c8d928fe7ed8a898d253e`, cloned
 
 ## Global Constraints
 
-- Paths relative to `/home/ha/work/ainative/scaas`; worktree `.claude/worktrees/p6f-impl` on branch `p6f-precompiles`.
+- Paths relative to `<repo>`; worktree `.claude/worktrees/p6f-impl` on branch `p6f-precompiles`.
   New code under `pqz-core/nethermind/` (with its own `.gitignore`: `bin/`, `obj/`, `ref/`, `*.so`); the test-only
   probe contract under `smartcontracts/evm/test/p6f/`.
 - Heavy commands only through `scripts/capped`, one at a time machine-wide: every `dotnet build|test|run` (then
@@ -106,7 +106,7 @@ Source: tag `1.39.0` = commit `14aca2c5202c48a6a46c8d928fe7ed8a898d253e`, cloned
   lock; BuildKit runs outside the scope, so the Dockerfile caps itself: `cargo build -j 2`, `dotnet publish -m:2`),
   the calibration and harness runs. `docker run` of a measurement container adds `--memory 4g --cpus 4`. Long-running
   chain containers (copy, live) are not "heavy commands" and do not hold the lock.
-- **The live directory `/home/dockers/mba-chain-nethermind` is touched only in Task 10**, by the runbook, after the
+- **The live directory `~dockers/mba-chain-nethermind` is touched only in Task 10**, by the runbook, after the
   gate. Before that: read only (`cat`, `ls`, `docker inspect`), and the copy mounts the live `keystore/` and
   `password.txt` read-only (no copies of key material).
 - No built binaries in git or on GitHub: the image is local (`scaas/nethermind-pqz:*`, never `docker push`), no

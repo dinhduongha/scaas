@@ -1,6 +1,6 @@
 # Z2 status / resume notes (2026-10-20, paused for the machine shutdown; finished the same day — see "Results" at the end)
 
-- **Worktree:** `/home/ha/work/ainative/scaas/.claude/worktrees/rev2-zether-z2`
+- **Worktree:** `<repo>`
 - **Branch:** `rev2-zether-z2`, from main `c951c69d`.
 - **Head:** `3c45eab1` "WIP Z2: …" (a WIP commit) at the pause; the WIP commits were squashed into the logical commits
   listed under "Results".

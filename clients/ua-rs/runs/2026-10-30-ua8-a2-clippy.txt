@@ -61,7 +61,7 @@
     Checking ark-ec v0.5.0
     Checking ark-bls12-381 v0.5.0
     Checking ark-bn254 v0.5.0
-    Checking scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
+    Checking scaas-ua v0.1.0 (<repo>/clients/ua-rs)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 16.54s
     Checking zeroize v1.9.1
     Checking ppv-lite86 v0.2.21
@@ -101,7 +101,7 @@
     Checking frost-secp256k1 v3.0.0
     Checking ark-bls12-381 v0.5.0
     Checking ark-bn254 v0.5.0
-    Checking scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
+    Checking scaas-ua v0.1.0 (<repo>/clients/ua-rs)
 error: field `name` is never read
   --> tests/groups.rs:71:5
    |

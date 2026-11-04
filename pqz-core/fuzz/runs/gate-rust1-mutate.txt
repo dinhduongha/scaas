@@ -5,15 +5,15 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 3046839784
 INFO: Loaded 1 modules   (23403 inline 8-bit counters): 23403 [0x5d69698c8300, 0x5d69698cde6b), 
 INFO: Loaded 1 PC tables (23403 PCs): 23403 [0x5d69698cde70,0x5d6969929520), 
-INFO:      298 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/build/fuzz/work/mutate
+INFO:      298 files found in <repo>/pqz-core/build/fuzz/work/mutate
 INFO:      462 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:      176 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/build/fuzz/seeds/mutate
+INFO:      176 files found in <repo>/pqz-core/build/fuzz/seeds/mutate
 INFO: seed corpus: files: 936 min: 1b max: 190b total: 18371b rss: 528Mb
 #512	pulse  cov: 1837 ft: 3362 corp: 220/1342b exec/s: 51 rss: 749Mb
 #937	INITED cov: 3095 ft: 5246 corp: 317/4112b exec/s: 24 rss: 783Mb
 #1024	pulse  cov: 3095 ft: 5246 corp: 317/4112b lim: 152 exec/s: 25 rss: 783Mb
-	NEW_FUNC[1/1]: 0x5d696973c3e0 in pqzl::rel::parse_disc /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust/src/rel.rs:563
+	NEW_FUNC[1/1]: 0x5d696973c3e0 in pqzl::rel::parse_disc <repo>/pqz-core/pqzl/rust/src/rel.rs:563
 #1171	NEW    cov: 3116 ft: 5325 corp: 318/4127b lim: 152 exec/s: 8 rss: 783Mb L: 15/145 MS: 4 CrossOver-CrossOver-ShuffleBytes-ChangeBit-
 #1172	DONE   cov: 3116 ft: 5325 corp: 318/4127b lim: 152 exec/s: 8 rss: 783Mb
 Done 1172 runs in 133 second(s)

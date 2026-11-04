@@ -2,7 +2,7 @@
 # scripts/capped smartcontracts/algorand/scripts/localnet-pytest.sh tests/test_vectors.py -v
 ============================= test session starts ==============================
 platform linux -- Python 3.12.3, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand
+rootdir: <repo>/smartcontracts/algorand
 collected 110 items
 
 tests/test_account.py 

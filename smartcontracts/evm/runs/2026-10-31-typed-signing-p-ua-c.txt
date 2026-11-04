@@ -1,12 +1,12 @@
 # ua-c at commit 80f45c56
-    Checking scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
-    Checking scaas-ua-c v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-c)
+    Checking scaas-ua v0.1.0 (<repo>/clients/ua-rs)
+    Checking scaas-ua-c v0.1.0 (<repo>/clients/ua-c)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.61s
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
-   Compiling scaas-ua-c v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-c)
+   Compiling scaas-ua v0.1.0 (<repo>/clients/ua-rs)
+   Compiling scaas-ua-c v0.1.0 (<repo>/clients/ua-c)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.37s
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
-   Compiling scaas-ua-c v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-c)
+   Compiling scaas-ua v0.1.0 (<repo>/clients/ua-rs)
+   Compiling scaas-ua-c v0.1.0 (<repo>/clients/ua-c)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 1.49s
      Running unittests src/lib.rs (target/debug/deps/scaas_ua_c-09031a74662c0069)
 

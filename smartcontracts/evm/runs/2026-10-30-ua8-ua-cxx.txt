@@ -80,13 +80,13 @@
     Checking sha3 v0.10.9
     Checking ed25519-dalek v2.2.0
     Checking p256 v0.13.2
-   Compiling scaas-ua-cxx v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-cxx)
+   Compiling scaas-ua-cxx v0.1.0 (<repo>/clients/ua-cxx)
     Checking ark-bn254 v0.5.0
     Checking ark-bls12-381 v0.5.0
     Checking k256 v0.13.4
    Compiling cxxbridge-macro v1.0.202
     Checking foldhash v0.2.0
-    Checking scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-rs)
+    Checking scaas-ua v0.1.0 (<repo>/clients/ua-rs)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 23.58s
 -- The CXX compiler identification is GNU 13.3.0
 -- Detecting CXX compiler ABI info
@@ -97,10 +97,10 @@
 -- Performing Test CMAKE_HAVE_LIBC_PTHREAD
 -- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
 -- Found Threads: TRUE  
--- Using the multi-header code from /home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-cxx/build/_deps/json-src/include/
+-- Using the multi-header code from <repo>/clients/ua-cxx/build/_deps/json-src/include/
 -- Configuring done (51.4s)
 -- Generating done (0.0s)
--- Build files have been written to: /home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-cxx/build
+-- Build files have been written to: <repo>/clients/ua-cxx/build
 [0/2] Re-checking globbed directories...
 [1/5] cargo build scaas-ua-cxx
    Compiling proc-macro2 v1.0.107
@@ -166,7 +166,7 @@
    Compiling curve25519-dalek-derive v0.1.1
    Compiling zeroize v1.9.1
    Compiling der v0.7.10
-   Compiling scaas-ua-cxx v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-cxx)
+   Compiling scaas-ua-cxx v0.1.0 (<repo>/clients/ua-cxx)
    Compiling crypto-common v0.1.6
    Compiling block-buffer v0.10.4
    Compiling crypto-bigint v0.5.5
@@ -190,14 +190,14 @@
    Compiling ark-ec v0.5.0
    Compiling ark-bn254 v0.5.0
    Compiling ark-bls12-381 v0.5.0
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-rs)
+   Compiling scaas-ua v0.1.0 (<repo>/clients/ua-rs)
     Finished `release` profile [optimized] target(s) in 22.83s
 [2/5] Building CXX object CMakeFiles/scaas_ua.dir/src/scaas_ua.cpp.o
 [3/5] Linking CXX static library libscaas_ua.a
 [4/5] Building CXX object CMakeFiles/vectors_test.dir/tests/vectors_test.cpp.o
 [5/5] Linking CXX executable vectors_test
-Internal ctest changing into directory: /home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-cxx/build
-Test project /home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-cxx/build
+Internal ctest changing into directory: <repo>/clients/ua-cxx/build
+Test project <repo>/clients/ua-cxx/build
       Start  1: table_groups_purposes_constants
  1/11 Test  #1: table_groups_purposes_constants ......   Passed    0.01 sec
       Start  2: valid_rows

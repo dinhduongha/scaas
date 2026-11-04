@@ -188,7 +188,7 @@ Part B decisions (Soroban) are UA8-D18–D24 in Part B's header.
 
 ## Setup (before Task A1)
 
-- [ ] `git -C /home/ha/work/ainative/scaas worktree add .claude/worktrees/ua8 -b ua8 main && git tag ref/pre-ua8 main`
+- [ ] `git -C <repo> worktree add .claude/worktrees/ua8 -b ua8 main && git tag ref/pre-ua8 main`
   (local tag, never pushed). Copy the three pre-UA-8 Solidity files to `smartcontracts/evm/legacy/ua8/` with a
   `README.md` line (as `legacy/ua6/`); commit `ua8 setup: legacy copies of the pre-UA-8 registry`.
 
@@ -479,7 +479,7 @@ function kemKeyAt(bytes32 ua, uint64 version) external view returns (bytes memor
 - [ ] **Step 1: Failing tests:** ua-cs `PortableVectors`, `KemRecordVectors`, `HolderRefusals` (and the existing
   `VectorTests` on the regenerated files); `tst_ua.qml` `test_portable`, `test_kemRecord`.
 - [ ] **Step 2:** `cd clients/ua-cs && ../../scripts/capped dotnet test Scaas.Ua.Tests; dotnet build-server shutdown`;
-  ua-qt: `QMAKE=/home/ha/usr/Qt/6.12.0/gcc_64/bin/qmake6 LD_LIBRARY_PATH=/home/ha/usr/Qt/6.12.0/gcc_64/lib QT_QPA_PLATFORM=offscreen scripts/capped sh -c "cmake -S clients/ua-qt -B clients/ua-qt/build -DCMAKE_PREFIX_PATH=/home/ha/usr/Qt/6.12.0/gcc_64 && cmake --build clients/ua-qt/build -j2 && cd clients/ua-qt/build && ctest -V --output-on-failure"` — FAIL.
+  ua-qt: `QMAKE=~/usr/Qt/6.12.0/gcc_64/bin/qmake6 LD_LIBRARY_PATH=~/usr/Qt/6.12.0/gcc_64/lib QT_QPA_PLATFORM=offscreen scripts/capped sh -c "cmake -S clients/ua-qt -B clients/ua-qt/build -DCMAKE_PREFIX_PATH=~/usr/Qt/6.12.0/gcc_64 && cmake --build clients/ua-qt/build -j2 && cd clients/ua-qt/build && ctest -V --output-on-failure"` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** Step 2's commands — PASS.
 - [ ] **Step 5: Commit** `ua8 A9: ua-cs and ua-qt on the portable PoP and KEM record digests`.

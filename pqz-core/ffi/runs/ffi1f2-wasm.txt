@@ -1,11 +1,11 @@
 # wasm32: the verify-only lib, then the prove harness (wasm/) and the digest diff against native
 $ cargo build --release --offline --lib --target wasm32-unknown-unknown
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 0.45s
 [rc=0]
 $ cargo build --release --offline --target wasm32-unknown-unknown
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi)
-   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi/wasm)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
+   Compiling pqz-ffi-wasm v0.1.0 (<repo>/pqz-core/ffi/wasm)
     Finished `release` profile [optimized] target(s) in 0.66s
 [rc=0]
 $ sha256sum wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm

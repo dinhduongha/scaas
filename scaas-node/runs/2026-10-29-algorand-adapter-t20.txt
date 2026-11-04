@@ -1,6 +1,6 @@
 # scaas-node whole crate (T20 algorand adapter fix: discovery budget) at commit 870caf05 + working tree
 # ../scripts/capped cargo test -j2
-   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+   Compiling scaas-node v0.1.0 (<repo>/scaas-node)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 20.39s
      Running unittests src/lib.rs (target/debug/deps/scaas_node-7ea8f2ba056438ed)
 

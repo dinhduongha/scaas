@@ -1,6 +1,6 @@
 # V3: Claude, part 3 of 3: `common/`, `metatx/`, `factory/`, `dex/`, `trade/`, `hedera/` (+ `wallet/MandateWallet` for mandates)
 
-Static reading only. Tree `/home/ha/work/ainative/scaas/.claude/worktrees/rev3` at `7aab1fe` (detached). Paths are
+Static reading only. Tree `<repo>` at `7aab1fe` (detached). Paths are
 relative to `smartcontracts/evm/src/` unless they start with `docs/`. No build, no tests, no chain.
 
 The worktree has no `lib/` (submodules not checked out). OpenZeppelin behaviour quoted below was read from the main

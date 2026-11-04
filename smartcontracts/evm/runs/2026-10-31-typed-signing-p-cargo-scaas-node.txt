@@ -1,7 +1,7 @@
 # cargo-scaas-node at commit 80f45c56
-    Checking scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/scaas-node)
+    Checking scaas-node v0.1.0 (<repo>/scaas-node)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.84s
-   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/scaas-node)
+   Compiling scaas-node v0.1.0 (<repo>/scaas-node)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 5.84s
      Running unittests src/lib.rs (target/debug/deps/scaas_node-7ea8f2ba056438ed)
 

@@ -1,6 +1,6 @@
 # algorand adapter T20 fix 1 RED (budget_calls_added_as_simulate_reports, lane_below_min_balance_is_retried against the T20 adapter) at commit 8df92966
 # ../scripts/capped cargo test -j2 --lib adapters::algorand::tests::budget_calls_added_as_simulate_reports adapters::algorand::tests::lane_below_min_balance_is_retried
-   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+   Compiling scaas-node v0.1.0 (<repo>/scaas-node)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 13.60s
      Running unittests src/lib.rs (target/debug/deps/scaas_node-7ea8f2ba056438ed)
 

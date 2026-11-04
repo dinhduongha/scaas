@@ -1,6 +1,6 @@
 # PQZL backend: c (cargo flags: --no-default-features --features pqzl-c,set-n2816-kmax65536)
 $ cargo test --release --offline --no-default-features --features pqzl-c,set-n2816-kmax65536 --lib
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 14.38s
      Running unittests src/lib.rs (target/n2816-kmax65536-c/release/deps/pqz_ffi-9e83668f0be178cd)
 
@@ -10,7 +10,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 [rc=0]
 $ cargo test --release --offline --no-default-features --features pqzl-c,set-n2816-kmax65536 --features prove,test-hooks -- --nocapture --test-threads 4
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 25.83s
      Running unittests src/lib.rs (target/n2816-kmax65536-c/release/deps/pqz_ffi-9e39c66b82fafe52)
 

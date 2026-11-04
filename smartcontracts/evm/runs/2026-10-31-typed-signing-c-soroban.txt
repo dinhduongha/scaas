@@ -1,9 +1,9 @@
 # soroban at commit ca2d7b41
 == test soroban
-   Compiling scaas-relay-fee v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/soroban/contracts/relay-fee)
-   Compiling scaas-mandate v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/soroban/contracts/mandate)
-   Compiling scaas-dex v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/soroban/contracts/dex)
-   Compiling scaas-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/soroban/contracts/token)
+   Compiling scaas-relay-fee v0.1.0 (<repo>/smartcontracts/soroban/contracts/relay-fee)
+   Compiling scaas-mandate v0.1.0 (<repo>/smartcontracts/soroban/contracts/mandate)
+   Compiling scaas-dex v0.1.0 (<repo>/smartcontracts/soroban/contracts/dex)
+   Compiling scaas-token v0.1.0 (<repo>/smartcontracts/soroban/contracts/token)
 warning: use of deprecated method `soroban_sdk::ledger::Ledger::protocol_version`: Protocol version won't be available in the future
   --> contracts/token/src/test.rs:50:40
    |
@@ -12,7 +12,7 @@ warning: use of deprecated method `soroban_sdk::ledger::Ledger::protocol_version
    |
    = note: `#[warn(deprecated)]` on by default
 
-   Compiling scaas-ua-registry v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/soroban/contracts/ua-registry)
+   Compiling scaas-ua-registry v0.1.0 (<repo>/smartcontracts/soroban/contracts/ua-registry)
 warning: `scaas-token` (lib test) generated 1 warning
     Finished `test` profile [unoptimized + debuginfo] target(s) in 4.00s
      Running unittests src/lib.rs (target/debug/deps/scaas_dex-7068acbd67a99c46)

@@ -20,7 +20,7 @@ Modification timestamps of:
 • Skipped running wasm-opt as final target exists and is newer than wasm produced by cargo
 
 ✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
-     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm
+     -                Binary: <repo>/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm
      -                  Size: 84.1 KB (84056 bytes)
      - SHA-256 checksum hex : 1432e429804a4f90be8d6a02803b3b4b5e827784c3fabdc7cfdddeef6a62f0cb
      - SHA-256 checksum bs58: 2MrARTPQhjWjgnb5GwykqQeeaexbeTsZNA1gb6JHRJSW
@@ -45,7 +45,7 @@ Modification timestamps of:
 • Skipped running wasm-opt as final target exists and is newer than wasm produced by cargo
 
 ✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
-     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm
+     -                Binary: <repo>/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm
      -                  Size: 84.6 KB (84631 bytes)
      - SHA-256 checksum hex : e5b40e085ce6c09b48b95b7e4a6437b4f9083d87fbd8f2cc6d58602c544a9844
      - SHA-256 checksum bs58: GTfc3TVQgTG6cH4s1FkMqFrhfqNiNimnz3Lv5wQ7o8ps
@@ -63,7 +63,7 @@ INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bu
 • done
 
 • Building contract
- │    Compiling scaas-near-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/token)
+ │    Compiling scaas-near-token v0.1.0 (<repo>/smartcontracts/near/token)
  │     Finished `release` profile [optimized] target(s) in 2.96s
 
 Modification timestamps of:
@@ -73,7 +73,7 @@ Modification timestamps of:
 • done
 
 ✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
-     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm
+     -                Binary: <repo>/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm
      -                  Size: 316.3 KB (316257 bytes)
      - SHA-256 checksum hex : 11a192ac77d46987da7dfa2d1f5b410d60f36828512d32110f26a5c7747f1916
      - SHA-256 checksum bs58: 2BppxLChvX17ggWBMBiDdRukwCSNyLzFWC5zsFCd4rhB

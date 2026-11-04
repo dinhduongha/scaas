@@ -1,6 +1,6 @@
 # node ua_metatx jobs GREEN: whole crate at f0f8fd50 (e2e tests stay #[ignore])
 # cd scaas-node && ../scripts/capped cargo test -j2
-   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/node-ua-jobs/scaas-node)
+   Compiling scaas-node v0.1.0 (<repo>/scaas-node)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 16.71s
      Running unittests src/lib.rs (target/debug/deps/scaas_node-7ea8f2ba056438ed)
 

@@ -26,9 +26,9 @@ Estimated amount required: 0.508401591 ETH
 
 ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
 
-Transactions saved to: /home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout/smartcontracts/evm/broadcast/Deploy.s.sol/7622/run-latest.json
+Transactions saved to: <repo>/smartcontracts/evm/broadcast/Deploy.s.sol/7622/run-latest.json
 
-Sensitive values saved to: /home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout/smartcontracts/evm/cache/Deploy.s.sol/7622/run-latest.json
+Sensitive values saved to: <repo>/smartcontracts/evm/cache/Deploy.s.sol/7622/run-latest.json
 
 
 ## deployments/7622.json (git-ignored)

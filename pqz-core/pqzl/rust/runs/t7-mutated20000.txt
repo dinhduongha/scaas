@@ -1,4 +1,4 @@
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 5.30s
      Running tests/oracle_verify.rs (target/release/deps/oracle_verify-2e7e12c532882dab)
 

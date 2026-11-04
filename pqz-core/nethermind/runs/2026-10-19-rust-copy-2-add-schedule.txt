@@ -1,5 +1,5 @@
 # copy: third schedule at T = 1792360190 from the run 2 calibration, PQZL rows only (rehearsal values; the live values await the controller's decision)
-/home/ha/work/ainative/scaas/scratchpad/rust-copy/genesis.pqz3.json: schedule 2 added at 1792360190 = 0x6ad53efe: 26 rows (14 new of ops [1, 2, 3, 4, 5, 7] id 0x2e07e6ed…), selftest 2567000, mldsa44 49000, mldsa65 68000
+<repo>/scratchpad/rust-copy/genesis.pqz3.json: schedule 2 added at 1792360190 = 0x6ad53efe: 26 rows (14 new of ops [1, 2, 3, 4, 5, 7] id 0x2e07e6ed…), selftest 2567000, mldsa44 49000, mldsa65 68000
   op 1 id 0x2e07e6ed… stmtLen 83072 gas 3,225,000 (was 5,409,000, -40.4 %)
   op 1 id 0x2e07e6ed… stmtLen 66560 gas 3,351,000 (was 5,223,000, -35.8 %)
   op 2 id 0x2e07e6ed… stmtLen 50048 gas 4,039,000 (was 3,723,000, +8.5 %)

@@ -1,4 +1,4 @@
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 20.57s
      Running unittests src/lib.rs (target/n2560-kmax16384/release/deps/pqzl-78568917ecdc9891)
 

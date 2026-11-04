@@ -42,7 +42,7 @@ the licence inventory) — with `engine.Pqz` in its genesis from block 0 and the
 
 | Term | Meaning |
 |---|---|
-| chain host | the machine that runs the SCaaS testnet: live directory `/home/dockers/mba-chain-nethermind`, container `mba_chain_node_nethermind` (service `blockchain-node`) until 2026-10-31, then `mba_chain_sealer` + `mba_chain_rpc` (services `sealer`, `rpc`; [node split](#node-split-sealer--rpc-owner-2026-10-31)), RPC `http://127.0.0.1:8545`; the procedures below ran on the single node and keep its names |
+| chain host | the machine that runs the SCaaS testnet: live directory `~dockers/mba-chain-nethermind`, container `mba_chain_node_nethermind` (service `blockchain-node`) until 2026-10-31, then `mba_chain_sealer` + `mba_chain_rpc` (services `sealer`, `rpc`; [node split](#node-split-sealer--rpc-owner-2026-10-31)), RPC `http://127.0.0.1:8545`; the procedures below ran on the single node and keep its names |
 | copy | a replica of the SCaaS testnet with a throwaway signer key, run from `scratchpad/p6f-copy` (containers `pqzcopy-*`) |
 | chainspec | the chain's JSON configuration (`genesis.json`); the precompiles are switched on by its `engine.Pqz` section |
 | schedule, T | one entry of `engine.Pqz.schedules`: gas prices that apply from its timestamp T on |
@@ -162,7 +162,7 @@ Who: the operator, on the chain host. All must hold before step 1:
 2. The image is the one the gate used: `docker image inspect scaas/nethermind-pqz:1.39.0-pqz1 --format '{{.Id}}'`
    prints the same id.
 3. The live container is stopped: `docker inspect -f '{{.State.Status}}' mba_chain_node_nethermind` prints `exited`.
-   If not, stop it with `docker compose stop -t 120 blockchain-node` (in `/home/dockers/mba-chain-nethermind`).
+   If not, stop it with `docker compose stop -t 120 blockchain-node` (in `~dockers/mba-chain-nethermind`).
 4. The probe and e2e inputs exist in the repository (the 2026-10-16 run had to rerun its probe because they were
    missing): the forge artifact `smartcontracts/evm/out/PqzPrecompileProbe.sol/PqzPrecompileProbe.json` (build it in
    `smartcontracts/evm` with `forge build test/p6f/PqzPrecompileProbe.sol`) and `pqz-core/nethermind/bin/corpus.jsonl`
@@ -175,11 +175,11 @@ checkout. From `cd $L` on, the working directory is the live directory, so `gene
 `docker-compose.yml` are the live files.
 
 ```sh
-L=/home/dockers/mba-chain-nethermind
+L=~dockers/mba-chain-nethermind
 C=<repo>/pqz-core/nethermind/chain
 E=$C/engine-pqz.json
 TS=$(date +%Y%m%d-%H%M%S)
-B=/home/dockers/mba-chain-nethermind-backups/pqz-$TS          # dated, outside the repo and outside $L
+B=~dockers/mba-chain-nethermind-backups/pqz-$TS          # dated, outside the repo and outside $L
 A="docker run --rm --memory 512m -v $L:/l -v $(dirname $B):/b alpine:3"
 cd $L
 ```
@@ -333,7 +333,7 @@ use an image built by `build-image.sh` from the reviewed commit.
 - Restart policy: **done**, `restart: unless-stopped` on every service (owner ruling 2026-10-31, above).
 - When to delete the backups left in the live directory: `genesis.json.bak-pre-200m-20261022`,
   `data/nethermind_data.pre-200m-20261022`, `genesis.json.bak-pqz4-20261026`, `docker-compose.yml.bak-pqz4-20261026`
-  (listed 2026-10-26; the dated `pqz-<TS>` / `op7-<TS>` directories of `/home/dockers/mba-chain-nethermind-backups/`
+  (listed 2026-10-26; the dated `pqz-<TS>` / `op7-<TS>` directories of `~dockers/mba-chain-nethermind-backups/`
   were empty then).
 
 ## The multi-recipient transfer (op 7) on the SCaaS testnet (executed 2026-10-17)
@@ -370,8 +370,8 @@ match the comments in the block:
    e2e transactions with the test key `0x…04` pass.
 
 ```sh
-L=/home/dockers/mba-chain-nethermind; C=<repo>/pqz-core/nethermind/chain
-TS=$(date +%Y%m%d-%H%M%S); B=/home/dockers/mba-chain-nethermind-backups/op7-$TS
+L=~dockers/mba-chain-nethermind; C=<repo>/pqz-core/nethermind/chain
+TS=$(date +%Y%m%d-%H%M%S); B=~dockers/mba-chain-nethermind-backups/op7-$TS
 A="docker run --rm --memory 512m -v $L:/l -v $(dirname $B):/b alpine:3"
 cd $L && docker compose stop -t 120 blockchain-node
 # 1. backup as in Task 10 step 1 (chainspec, config, compose, password, keystore, data; sha256 manifests compared)
@@ -549,7 +549,7 @@ option (b), the CREATE2 deployer in the genesis alloc, Blockscout on with caps, 
 1. Image `scaas/nethermind-pqz:2.2.0-pqz6` = `sha256:656d91d6…3e83` (`CALIB=1 build-image.sh pqz6`, 2026-10-30): library
    `dd0e7668…e5601` (byte-identical to pqz5's), plugin of plan 5h Task 8d part 2b, label `scaas.pqz.selftest` `d6c01fbc…`.
 2. Rows: `chain/engine-pqz.json` = `runs/2026-10-31-fs3-t13-rows-one-baseline-engine-pqz.json` (README § Prices).
-3. Backups (stack directory `L=/home/dockers/mba-chain-nethermind`): `genesis.json.bak-pre-pqz6-20261031`,
+3. Backups (stack directory `L=~dockers/mba-chain-nethermind`): `genesis.json.bak-pre-pqz6-20261031`,
    `docker-compose.yml.bak-pre-pqz6-20261031`, and `backup-pqz5-20261031-0621/` (genesis, config, compose, password,
    keystore and the pqz5 chain data through `alpine:3 cp -a`; sha256 manifests of the 150 data files identical).
 4. Genesis alloc: `0x4e59b44847b379578588920cA78FbF26c0B4956C` = `{"balance": "0", "nonce": "1", "code":
@@ -875,7 +875,7 @@ browser calls it directly; CORS `*`, `CHECK_ORIGIN` off). Host ports published b
 backend reads `rpc` over `http://rpc:8547` (before the split: the single node, `http://blockchain-node:8547`).
 
 ```sh
-cd /home/dockers/mba-chain-nethermind
+cd ~dockers/mba-chain-nethermind
 docker compose up -d explorer-db explorer-backend explorer-frontend      # start (after the node)
 docker compose stop explorer-frontend explorer-backend explorer-db       # stop (the index stays in data/explorer_*)
 ```
@@ -962,7 +962,7 @@ times with a fixed 15 s delay, a pause between contracts, forge status polls eve
   (the newest tag, also `latest` and `main`) parses the standard JSON into `foundry-compilers-artifacts` 0.19, whose
   `EvmVersion` stops at `osaka` and whose settings drop `experimental` (which solc needs for amsterdam and writes into
   the CBOR metadata): 0 of 31 verified (`Unknown evm version: amsterdam`). The live stack uses a locally patched
-  verifier image (built outside the repo, `/home/dockers/mba-chain-nethermind/sc-verifier/`: patch, `build.sh`, README;
+  verifier image (built outside the repo, `~dockers/mba-chain-nethermind/sc-verifier/`: patch, `build.sh`, README;
   blockscout-rs `9457af29` + the two foundry-compilers 0.19.10 crates with `amsterdam` and `experimental` passed
   through, no verifier code change). Result (Deploy.s.sol only): 31 ok, 0 fail, every contract a full match (evm amsterdam, experimental
   true); with the PQZ e2e logs (five runs on this genesis) 136 ok, 0 fail: 126 contracts all full matches, 10 token

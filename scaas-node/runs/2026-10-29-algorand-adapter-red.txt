@@ -1295,7 +1295,7 @@ called `Result::unwrap()` on an `Err` value: todo
 
 thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
 called `Result::unwrap()` on an `Err` value: todo
-proptest: Saving this and future failures in /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node/proptest-regressions/adapters/algorand.txt
+proptest: Saving this and future failures in <repo>/scaas-node/proptest-regressions/adapters/algorand.txt
 proptest: If this test was run on a CI system, you may wish to add the following line to your copy of the file. (You may need to create it.)
 cc 9d6da93d81bbdbe1821ee947ec6a0d38e20c1186359a00a144b1903dc2c41dd5
 

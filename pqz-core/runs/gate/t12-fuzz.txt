@@ -3,9 +3,9 @@
    Compiling keccak v0.1.6
    Compiling cfg-if v1.0.5
    Compiling cpufeatures v0.2.17
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/pqzl/rust)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/ffi)
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/stmt)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
+   Compiling pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
    Compiling generic-array v0.14.7
    Compiling crypto-common v0.1.7
    Compiling block-buffer v0.10.4
@@ -14,12 +14,12 @@
    Compiling cipher v0.4.4
    Compiling sha3 v0.10.8
    Compiling aes v0.8.4
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/pqzh/ligero)
-   Compiling pqz-fuzz v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/fuzz)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
+   Compiling pqz-fuzz v0.1.0 (<repo>/pqz-core/fuzz)
     Finished `release` profile [optimized + debuginfo] target(s) in 8.07s
--rwxrwxr-x 1 ha ha 14560048 Oct 19 01:03 /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/build/fuzz/codec
--rwxrwxr-x 1 ha ha 14560056 Oct 19 01:03 /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/build/fuzz/mutate
--rwxrwxr-x 1 ha ha 14560496 Oct 19 01:03 /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/build/fuzz/precompile
+-rwxrwxr-x 1 ha ha 14560048 Oct 19 01:03 <repo>/pqz-core/build/fuzz/codec
+-rwxrwxr-x 1 ha ha 14560056 Oct 19 01:03 <repo>/pqz-core/build/fuzz/mutate
+-rwxrwxr-x 1 ha ha 14560496 Oct 19 01:03 <repo>/pqz-core/build/fuzz/precompile
 pqz-fuzz init (precompile): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, PQZL core: Rust
 Done 7654 runs in 128 second(s)
 stat::number_of_executed_units: 7654

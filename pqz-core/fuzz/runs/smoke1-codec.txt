@@ -1,15 +1,15 @@
 # fuzz codec, 120 s, 2026-10-14T21:02:09+07:00, commit 072bec1, Ubuntu clang version 18.1.3 (1ubuntu1), rustc 1.97.1 (8bab26f4f 2026-07-14)
-pqz-fuzz: proved the 16 honest inputs in 52.9 s, cached in /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/honest.bin
+pqz-fuzz: proved the 16 honest inputs in 52.9 s, cached in <repo>/pqz-core/build/fuzz/honest.bin
 pqz-fuzz: arena peak 94615600 B (bound 100663296 B)
 pqz-fuzz init (codec): 16 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 144 MiB, arena used 93498368 B, peak 94615600 B
 INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 3912426986
 INFO: Loaded 1 modules   (27137 inline 8-bit counters): 27137 [0x572888df3488, 0x572888df9e89), 
 INFO: Loaded 1 PC tables (27137 PCs): 27137 [0x572888df9e90,0x572888e63ea0), 
-INFO:        0 files found in /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/work/codec
+INFO:        0 files found in <repo>/pqz-core/build/fuzz/work/codec
 INFO:        0 files found in corpus/codec
 INFO:        0 files found in regress/codec
-INFO:       80 files found in /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/seeds/codec
+INFO:       80 files found in <repo>/pqz-core/build/fuzz/seeds/codec
 INFO: seed corpus: files: 80 min: 2b max: 2b total: 160b rss: 813Mb
 #81	INITED cov: 676 ft: 999 corp: 32/64b exec/s: 0 rss: 813Mb
 #83	NEW    cov: 677 ft: 1000 corp: 33/66b lim: 4 exec/s: 0 rss: 813Mb L: 2/2 MS: 2 ChangeByte-ChangeBinInt-
