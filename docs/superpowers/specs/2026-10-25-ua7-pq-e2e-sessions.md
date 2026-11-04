@@ -1,6 +1,7 @@
 # UA-7: PqChat — post-quantum chat sessions (version 2)
 
-**Status:** version 2, **revised 2026-11-04, for the owner's review**. Version 1 (controller, 2026-10-25, with the
+**Status:** version 2, **accepted by the owner 2026-11-04** (revised the same day; the open items O1–O7 and the round name
+answered the same day, §14). Version 1 (controller, 2026-10-25, with the
 owner's answers of that day) is in this file's git history. Nothing is built. Version 2 applies the owner's thirteen
 decisions of 2026-11-04 (D1–D13, §15, register entry
 [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)) and the corrections of the architecture study
@@ -108,11 +109,11 @@ never on the FIPS 204 key (18.9 M for ML-DSA-65 is above the EIP-7825 regular ca
 **P5 — KEM key rotation with secret deletion** (D6). KEM secret keys are **random**, never derived from a long-lived seed
 (a seed would regenerate a deleted key and void the deletion). Each UA's client:
 
-1. registers a new KEM version (`setKemKey`, CTR-UA-32) on a schedule (proposal: every 30 days; at once after a device loss
-   or a suspected leak) and on every chain where it chats;
+1. registers a new KEM version (`setKemKey`, CTR-UA-32) on a schedule (every 30 days, O6; at once after a device loss or a
+   suspected leak) and on every chain where it chats;
 2. rekeys, or asks a member to rekey, every session it is in, so the next epoch wraps to the new version;
 3. deletes the old secret once every session has a complete epoch on the new version and a grace period has passed
-   (proposal: 7 days, for late records). Epoch keys and chain keys are deleted as §6.3 says.
+   (7 days, O6, for late records). Epoch keys and chain keys are deleted as §6.3 says.
 
 What this gives: an adversary who obtains a KEM secret reads the epochs wrapped to that version only; **forward secrecy and
 post-compromise security are bounded by the version's lifetime**. History older than a deleted secret is readable only from
@@ -211,7 +212,7 @@ sequenceDiagram
   B->>B: decapsulate, open K, read room id, join the Matrix room
 ```
 
-**P8 — Session.** The creator lists itself as a member and an admin (proposal: the creator is always the first admin),
+**P8 — Session.** The creator lists itself as a member and an admin (the creator is always the first admin),
 draws `K` for epoch 0 and signs the session record. `admins ⊆` registered UAs; members strictly sorted, at least 2.
 Anyone may create a session with any UA (owner answer 2); consent is in clients (P12).
 
@@ -299,7 +300,7 @@ counter   = i, from 0 in each epoch, per (sender, device)
 ```
 
 A sender deletes `ck_i` and `mk_i` once used; a receiver deletes `mk_i` after decryption and keeps skipped message keys
-for at most 2,000 messages per chain (proposal). `K` stays recoverable from the chain while the KEM secret exists; the
+for at most 2,000 messages per chain (O6). `K` stays recoverable from the chain while the KEM secret exists; the
 bound on forward secrecy is the KEM rotation of P5. A sender stops using an epoch once the home chain shows a complete
 child of it.
 
@@ -486,26 +487,33 @@ The unlinkable mode (v1 C10: key-private wraps with view tags, one contract-wide
 ciphertext; `docs/research/pqchat-unlinkability.md`): later, for on-chain traffic (D10). MLS groups and an off-chain ratchet
 for 1:1 (D6): later. Per-device KEM keys (D9): later.
 
-## 14. Open items for the owner
+## 14. Open items: the owner's answers
 
-What version 2 could not settle without the owner; each has a proposal.
+Version 2 left seven items and the round name to the owner, each with a proposal. **Owner 2026-11-04: all as proposed**
+(recorded in a Change on [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)):
 
 1. **O1 — Portable signature check.** `requireAuthorized` verifies the chain-bound `UAAuth` digest; `PqChat` records are
-   portable. The registry verifies portable signatures (`pop`, `kem`, `pqz-key`) internally but exposes no view for them.
-   Proposal: a view `requirePortable(ua, purposeTag, typedDigest, UASig)` in the next registry generation (the `mldsa87`
-   kinds already need one, CTR-UA-05); until then `PqChat` cannot deploy.
-2. **O2 — Griefing the child slot.** Any member may author a plain rekey (D4), so a member can take each parent's slot
-   before an admin's membership change, paying ≈ 2.6 M gas per member each time. Proposal: accept (the griefer pays, an
-   admin removes it from the next parent); alternative: an admin's change may replace a plain-rekey sibling.
-3. **O3 — Home chain lost.** If the home chain stops, epochs can no longer be ordered. Proposal: members start a new session
-   on another home chain (a client action, history kept); no in-protocol move.
-4. **O4 — The last admin leaves.** Proposal: membership is then frozen; plain rekeys and messages continue.
-5. **O5 — History backup** with KEM deletion: proposal an opt-in export of epoch keys encrypted to a backup key the user holds
-   (it re-opens forward secrecy for what it holds).
-6. **O6 — Numbers:** KEM rotation every 30 days with a 7-day grace; skipped keys 2,000; parents ≤ 8; padding buckets; SFrame
-   E = 4. Proposals; owner may override.
-7. **O7 — First contact:** a signed contact card (UA id, Matrix id, current KEM version) exchanged out of band (QR, link);
-   proposal, no on-chain field.
+   portable, and the registry verifies portable signatures (`pop`, `kem`, `pqz-key`) only internally. **Answer:** the
+   registry gains the view `requirePortable(ua, purposeTag, typedDigest, UASig)` (reverts unless `auth` is the UA's portable
+   signature over `uaMessage(kind, purposeTag, typedDigest)`: a single key, or an `msig` in minimal form over two levels,
+   native members over the typed digest) **in the same registry generation as `mldsa87` / `fndsa1024`** (branch `mldsa87`,
+   not merged on 2026-11-04), so the registry changes once; if that branch has merged before the build reaches this task,
+   in the next registry generation. `PqChat` deploys only on a registry that has it.
+2. **O2 — The child slot taken by a plain rekey.** Any member may author a plain rekey (D4), so a member can take a parent's
+   slot before an admin's membership change. **Answer: accepted.** A plain rekey may take the child slot first; the griefer
+   pays its gas (≈ 2.6 M per member each time); the admin rekeys again from the new epoch. No precedence rule for admins.
+3. **O3 — Home chain lost.** **Answer:** if the home chain stops, the members start a new session on another chain (a client
+   action; history stays readable from the old records); there is no in-protocol move of a session's home chain.
+4. **O4 — The last admin leaves.** **Answer:** membership is then frozen (no admin can change it); plain rekeys and messages
+   continue.
+5. **O5 — History backup.** **Answer:** an opt-in export of epoch keys, encrypted to a backup key the user holds; it re-opens
+   forward secrecy for what it holds, and the client says so when the user turns it on.
+6. **O6 — Numbers.** **Answer, as proposed:** KEM rotation every 30 days, with a 7-day grace before the old secret is
+   deleted (P5); at most 2,000 skipped message keys per chain (§6.3); at most 8 `parents` (P19); padding buckets 256,
+   1,024, 4,096 and 16,384 B, then multiples of 16,384 B (§6.5); SFrame `E = 4` (P22).
+7. **O7 — First contact.** **Answer:** a signed contact card — UA id, Matrix user id, current KEM version — exchanged out of
+   band (QR code, link); no on-chain field.
+8. **Round name.** **Answer:** every family after EVM takes `PqChat` in its own round, named `pqchat-<family>`.
 
 ## 15. Owner answers and decisions
 
@@ -535,11 +543,20 @@ state with the bytes in the event, the ciphertext in state; D12 WebRTC 1:1 and M
 node no TURN or SFU; D13 group call keys from `K ‖ callSecret` wrapped per participant and rotated on join or leave, 1:1 from
 `K`.
 
+**Answers of 2026-11-04 to the open items** (owner, all as proposed; §14): O1 `requirePortable(ua, purposeTag, typedDigest,
+UASig)` in the registry generation of branch `mldsa87` (or the next one if that has merged); O2 a plain rekey may take the
+child slot first, the griefer pays, the admin rekeys again; O3 a lost home chain means a new session on another chain, no
+in-protocol move; O4 the last admin leaving freezes membership, rekeys and messages continue; O5 an opt-in export of epoch
+keys encrypted to a user-held backup key; O6 KEM rotation 30 days with a 7-day grace, 2,000 skipped keys, at most 8 parents,
+the padding buckets, SFrame `E = 4`; O7 a signed contact card exchanged out of band, no on-chain field; family rounds
+named `pqchat-<family>`.
+
 ## 16. Work
 
 For the plan (`docs/superpowers/plans/2026-11-04-ua7-pqchat.md`); EVM first, other families in their own rounds.
 
-1. Registry: the portable check view (O1), in the next registry generation.
+1. Registry: the portable check view `requirePortable` (O1), on the registry generation of branch `mldsa87` (the next
+   generation if that branch has merged first).
 2. Vectors (§12) from `clientkeys`, before any contract code.
 3. `PqChat.sol` (§4–§5, §7.2): structs and typehashes, entries, chunks, home-chain slot, roles, leave, messages with the
    signature hash; forge tests (red first): records in any order, a copied record on a second chain, the P9 removal
@@ -549,4 +566,4 @@ For the plan (`docs/superpowers/plans/2026-11-04-ua7-pqchat.md`); EVM first, oth
 5. `clients/ua-rs` reference: keys, P14 check, wraps, records, chains, envelope, ordering, call keys; then `clients/ua-qt`
    on libQuotient (event type, room, chat screen, SFrame through Qt WebEngine or LiveKit's SDK), then the JS wallet.
 6. Docs: a `docs/contracts/` component section for `PqChat` (SPECIFIED, then BUILT), `docs/clients/`, the node call table.
-7. Not in this work: the unlinkable mode, MLS, per-device KEM keys, non-EVM families.
+7. Not in this work: the unlinkable mode, MLS, per-device KEM keys, non-EVM families (each a `pqchat-<family>` round).
