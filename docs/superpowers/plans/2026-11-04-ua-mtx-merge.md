@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. Nothing is built from it; this commit writes no code, contract, test or vector.
+**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. **Owner 2026-11-04 (after T0): build M first** (A + B + C with the router's pairs, Q2, R17, R47: tasks T1-T8, T10-T23 without a lever), then a checkpoint: gates, the whole-branch review (Claude, Fable, Codex) and the PR of M into `main`. **T9 (levers D / L) is not started: the owner decides it after M.** M alone fits a 200 M block, not 70 M for `WrappedToken` (72.37 M asked, T0), so no public chain deploy before that decision. Nothing is built from it; this commit writes no code, contract, test or vector.
 
 **Spec:** [`2026-11-04-ua-mtx-merge.md`](../specs/2026-11-04-ua-mtx-merge.md), **accepted by the owner 2026-11-04** (Q1–Q7, §10);
 rules R1–R47 (§5), invariants 1–7 (§8), measurement (§9). **Ruling:** [CTR-MTX-30](../../decisions.md#CTR-MTX-30) and its five Change
@@ -531,6 +531,8 @@ ED25519, alias for ECDSA) (R42).
 **Pins, old → new:** `hedera_kat.json` by its generator; `HederaV2.t` sizes per its rule. **Gates:** whole `forge test`, size gate.
 
 ### Task T9: the size lever(s) the owner picks (Q3)
+
+**Deferred (owner 2026-11-04): not part of the M round; the owner decides D (and L) after M's PR.** T10 and later tasks run without it.
 
 **Depends on:** T8 **and the owner's Q3 answer** to T0's report. If the answer is "no lever", this task records that and ends.
 

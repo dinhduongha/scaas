@@ -1,6 +1,6 @@
 # `ua*` / `mtx*` merge: one signed entry per operation, and the base token size for public chains — design
 
-**Status:** ACCEPTED by the owner 2026-11-04 (Q1–Q7); Q3's final lever choice after the §9 measurement; numbers to re-measure. Reviewed by Claude (4 lenses), Fable, Codex. Nothing is built. Recorded as [CTR-MTX-30](../../decisions.md#CTR-MTX-30) (SPECIFIED); the answers are in §10.
+**Status:** ACCEPTED by the owner 2026-11-04 (Q1–Q7); Q3's final lever choice after the §9 measurement; numbers to re-measure. Reviewed by Claude (4 lenses), Fable, Codex. Nothing is built. Recorded as [CTR-MTX-30](../../decisions.md#CTR-MTX-30) (SPECIFIED); the answers are in §10. **Owner 2026-11-04, after T0 (§9.1): build M first; the lever (D, with L only if needed) is decided by the owner after M's PR.**
 Work-order item 3 of TODO (owner 2026-11-03), its own round between SCaaS testnet reset 1 and reset 2. Owner 2026-11-04:
 the spec now, the measurement after PR #9 (governance) merges; PR #9 is merged into this branch (`d97f5a39`). Revised
 2026-11-04 after a Claude workflow review, then after Fable's counter-review and Codex's security review (§12).
