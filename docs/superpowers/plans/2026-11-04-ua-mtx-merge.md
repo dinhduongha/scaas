@@ -3,11 +3,11 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. **Owner 2026-11-04 (after T0): build M first** (A + B + C with the router's pairs, Q2, R17, R47: tasks T1-T8, T10-T23 without a lever), then a checkpoint: gates, the whole-branch review (Claude, Fable, Codex) and the PR of M into `main`. **T9 (levers D / L) is not started: the owner decides it after M.** M alone fits a 200 M block, not 70 M for `WrappedToken` (72.37 M asked, T0), so no public chain deploy before that decision. Nothing is built from it; this commit writes no code, contract, test or vector.
+**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. **Owner 2026-11-04 (after T0): build M first** (A + B + C with the router's pairs, Q2, R17, R47: tasks T1-T8 with T3b, T10-T23 without a lever), then a checkpoint: gates, the whole-branch review (Claude, Fable, Codex) and the PR of M into `main`. **T9 (levers D / L) is not started: the owner decides it after M.** M alone fits a 200 M block, not 70 M for `WrappedToken` (72.37 M asked, T0), so no public chain deploy before that decision. Nothing is built from it; this commit writes no code, contract, test or vector. **Owner 2026-11-04 (after T1): Q6 changed:** the mandate wallets are built in this round in the merged form (task T3b, MD-11); T1 is built.
 
 **Spec:** [`2026-11-04-ua-mtx-merge.md`](../specs/2026-11-04-ua-mtx-merge.md), **accepted by the owner 2026-11-04** (Q1–Q7, §10);
-rules R1–R47 (§5), invariants 1–7 (§8), measurement (§9). **Ruling:** [CTR-MTX-30](../../decisions.md#CTR-MTX-30) and its five Change
-lines (CTR-MTX-09, CTR-MTX-29, CTR-TOK-24, CTR-UA-19, CTR-DEX-25). Spike: `docs/research/governance/prototype/merge-entries.md`
+rules R1–R47 (§5), invariants 1–7 (§8), measurement (§9). **Ruling:** [CTR-MTX-30](../../decisions.md#CTR-MTX-30), its Q6 Change, and the Change
+lines it points to (CTR-MTX-09, CTR-MTX-29, CTR-TOK-24, CTR-UA-19, CTR-DEX-25, CTR-ACC-12, CTR-UA-27). Spike: `docs/research/governance/prototype/merge-entries.md`
 (branch `token-merge`, reference code only, **never merged**).
 
 **Owner words, at the top:**
@@ -19,13 +19,14 @@ lines (CTR-MTX-09, CTR-MTX-29, CTR-TOK-24, CTR-UA-19, CTR-DEX-25). Spike: `docs/
 | Q3: the size levers | Target ruled (60 M and 70 M as deploy gas, total × 1.05); **the final lever choice is the owner's, after T0's report. T9 waits for it**; T1–T8 do not. |
 | Q4: the public-chain deploy gate | Ruled: measured regular + state × 1.05 of the release transaction, regular × 1.05 < 2^24; the SCaaS testnet keeps `runtime × 1,530 + 2^24`. T10. |
 | Q5: real-wallet display test | Ruled: before reset 2, two browser wallets and one hardware wallet. T20, owner-assisted. |
-| Q6: CTR-ACC-12 | Deferred: the wallets stay address-only and byte-identical. |
+| Q6: CTR-ACC-12 | **Changed 2026-11-04, after T1.** Old: deferred, the wallets stay address-only and byte-identical. New: `MandateWallet` and `HederaMandateWallet` are built now in the merged form, one `mtx<Op>(UAEnvelope, …, UASig)` per operation, a native signer without a registry, a derived UA through `requireAuthorized`, the address bodies to legacy; CTR-ACC-12's twins are not built; `SmartKeyAccount` stays address-only and byte-identical. T3b, MD-11. |
 | Q7: node doors | Ruled: the gateway's token doors (T15) and the mesh's `evm.ua_meta_tx` (T16) are built in this round. |
 | One PR | Owner: the spec, CTR-MTX-30 and this plan land in the same PR as the build (T23). |
 | Merge, push | The owner's word only. `main` is PR-only. |
 
 **Goal:** on EVM, one subject-signed relayed entry per operation on the six token kinds, `MtxRelayFee`, the DEX's SCaaS legs,
-`GovernanceRouter` and Hedera (the `ua<Op>` body under the `mtx<Op>` name; the cancel per Q2); an EOA relays with no registry
+`GovernanceRouter`, the mandate wallets (Q6: the address bodies widened to `bytes32`, T3b) and Hedera (the `ua<Op>` body under
+the `mtx<Op>` name; the cancel per Q2); an EOA relays with no registry
 call and, on `NORMAL` / `WRAPPED`, with no registry at all; the address bodies in `legacy/ua-mtx-merge/`; vectors, clients and
 node move at once; the gateway doors and the mesh body built; the base token size measured and the owner's lever set built;
 docs rewritten and CTR-MTX-30 BUILT.
@@ -81,7 +82,7 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 
 ## Plan decisions (MD-*; controller calls, owner may override; recorded in `decisions.md` by T19)
 
-**Owner 2026-11-04: MD-1 to MD-10 accepted as written** ("theo khuyên"), including MD-10 (the mesh refuses a derived `from` by name until a ruling on how a peer checks a derived `UASig`) and MD-5 (the cancel's signed purpose moves to the named-op purpose).
+**Owner 2026-11-04: MD-1 to MD-10 accepted as written; MD-11 (after Q6's change) is a controller call, open to the owner.** ("theo khuyên"), including MD-10 (the mesh refuses a derived `from` by name until a ruling on how a peer checks a derived `UASig`) and MD-5 (the cancel's signed purpose moves to the named-op purpose).
 
 - **MD-1 Where `executeMetaTransaction` lives.** Spec §2.5 keeps it in the `MetaTxBase` core "on tokens"; R26 puts "the address
   generic path (wallets, and `executeMetaTransaction` on tokens per R3)" in `MetaTxAddressBase`. If tokens inherited
@@ -109,7 +110,9 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
   `5476c76d`: 112 rows (68 address, 44 `UA*`). Retire 45: `Burn`, `Unwrap`, `UnwrapLeg`, `UnwrapToUA`, `Shield`, `RollOver`,
   `PrepareAcc`, the six `Pqz*` entry rows, the five `Zether*` entry rows, `RollOverSigned`, `SetRollOverMode`, `RollOverBatch`,
   `ReceiverFee`, `RelayFee`, `WrapOrder`, `CancelOrder`, `CancelWrapOrder` and the 19 router rows. `CancelNonce` stays, its
-  `on` narrowed to `MandateWallet`, `SmartKeyAccount`. Unchanged: the wallet and account rows, `Wrap`, `WrapLeg`, `AddReserve`,
+  `on` narrowed to `MandateWallet`, `SmartKeyAccount` (**Q6, 2026-11-04:** to `SmartKeyAccount` only; the six `MandateWallet`
+  address rows `SetMandate`, `SetPayee`, `RevokeMandate`, `PayUnderMandate`, `DelegateRevoke`, `Execute` retire too, and the six
+  `UA<Op>` rows of T3b are added, the only added rows; `UACancelNonce`'s `on` gains `MandateWallet`). Unchanged: the account rows, `Wrap`, `WrapLeg`, `AddReserve`,
   `WrapToUA`, `WrapShield`, `CancelUAOrder`, `CancelUAWrapOrder`, `CancelDexOrder`, and the statement rows `ZetherRollOver`,
   `ZetherSetRollOverMode`, `PqzAuth` (no entry pair). `UACancelNonce` changes its type string (Q2); no row is added.
 - **MD-8 `dex_order_kat.json` regenerates in every task that moves token or DEX bytecode** (`WRITE_KAT=true` of `DexKatTest`), so
@@ -119,6 +122,24 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 - **MD-10 Mesh, derived subjects.** R45 / Q7 make the EVM token body the UA structs but do not say how a peer checks a derived
   subject's `UASig` (today's `sig_kind`s are `eoa`, `erc1271`, `hedera_ed25519`, all local). T16 builds native subjects over the
   UA digest with today's `sig_kind`s; a derived `from` is refused by a named code until the controller rules (open item 2).
+- **MD-11 The mandate wallets' merged form** (Q6 changed by the owner 2026-11-04, after T1; controller calls, the owner may
+  override). Q6 fixes the entries, the signers, the legacy move and `SmartKeyAccount`; five points it leaves open:
+  - **(a) The flat builders go to legacy.** `mtxPayUnderMandate(token, payee, amount, entryRef, epoch, validUntil, sig)`,
+    `mtxRevoke`, `mtxExecuteAsOwner` and Hedera's `mtxExecuteAsOwnerRaw` sign an address `MetaTransaction` for an operation
+    that has its named entry (`mtxPayUnderMandate(UAEnvelope, …)`, `mtxDelegateRevoke`, the generic `mtxExecute`), so under
+    "exactly one signed entry" they are second entries. `mandate_pay_kat.json` and `mandate_revoke_kat.json` go with them.
+    This reverses the owner's 2026-11-01 keep (CTR-ACC-05's 2026-11-02 Change) by the later ruling: **the one point the
+    owner may want to confirm**, since the auto-pay path (mandates.md §1.1) names the flat builders today.
+  - **(b) `executeMetaTransaction` refuses** on the mandate wallets (`MtxSelectorNotAllowed`, an `_execute` override as in
+    `GovernanceRouterBase`): the EIP-1776 alias is the token's exception (R3, NET-ALL-28); kept, it would be an address
+    signed path to every wallet operation.
+  - **(c) Base and constructor.** `MandateWallet is UAMetaTxBase, IERC1271` (no longer `WalletExecute`); constructor
+    CTR-ACC-12's `(bytes32 owner, bytes32 chainUid, address registry)` plus `bool hedera_` (`HederaMandateWallet` passes
+    `true`); `UAMetaTxBase` gets `smartKeyAccountImpl_ = address(0)`, so every contract signer keeps today's 50 k ERC-1271 gas.
+  - **(d) Allow-lists.** `_mtxRule` and `_uaAllowed` both list the six wallet operations (`payUnderMandate`,
+    `revoke(address,uint64)`, `setMandate`, `setPayee`, `revoke(address)`, `execute`); `cancelNonce` stays on `_mtxRule` only.
+  - **(e) Names, events, errors.** Structs `UA<Op>` (spec §2.3); `MandateSet`, `MandateRevoked`, `PayeeSet`,
+    `PaidUnderMandate` and `PayeeNotAllowed` take `bytes32` ids: one shape per path (R18's reason).
 
 ## Recount at `5476c76d` (spec §7 asks for it at the build; T0 replaces it on the merged tree)
 
@@ -163,6 +184,7 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | `smartcontracts/evm/src/{trade/TradeLib,trade/ITradeToken,dex/SCaaSDex,dex/ISCaaSDex,dex/DexPuller}.sol` | DEX legs, R12, R37, R38 |
 | `smartcontracts/evm/src/governance/{GovernanceRouterBase,GovernanceRouter,IGovernanceRouter}.sol` | the router's 19 pairs, its cancel |
 | `smartcontracts/evm/src/hedera/{HederaAccountAuth,HederaLib}.sol` | HIP-632 entry names, R42 |
+| `smartcontracts/evm/src/wallet/MandateWallet.sol`, `src/hedera/HederaMandateWallet.sol` | the mandate wallets in the merged form (Q6, T3b) |
 | `smartcontracts/evm/legacy/ua-mtx-merge/` | every superseded body (MD-4) |
 | `smartcontracts/evm/test/merge/` | the spike's suite, ported and extended: invariants 1–7 |
 | `smartcontracts/evm/script/{DeployBase.sol,ZetherE2E.s.sol,pqz/e2e.py}`, `scripts/e2e-zether.sh`, `smartcontracts/scripts/deploy.sh` | deploy, Q4 gate, e2e |
@@ -185,7 +207,7 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | Stage | Tasks | How |
 |---|---|---|
 | Measure | T0 | after reset 1; report to the owner (Q3) |
-| Contracts | T1 → T2 → T3 → T4 → T5 → T6 → T7 → T8 | sequential, one worktree: same files, helpers, ratchet |
+| Contracts | T1 → T2 → T3 → T3b → T4 → T5 → T6 → T7 → T8 | sequential, one worktree: same files, helpers, ratchet |
 | Lever | T9 | after T8 **and** the owner's Q3 answer |
 | Deploy | T10 | after T9 |
 | Clients | T11 → T12; T11 → T13 | from T7 (ABI final; L and D change no ABI); **beside T8–T10**, `clients/` and `smartcontracts/vectors/` only; their forge cross-checks re-run after T10 |
@@ -393,6 +415,120 @@ on `Envelope` + `bytes sig` with `address from`; `_mtxRule` / `_uaAllowed` rows 
 **Pins, old → new:** `IWrappedToken`, `ITradeToken` ids; `WrappedLib` runtime and `LinkClosure` if its DELEGATECALL count moves;
 `MsgSenderLint` (`WrappedToken` 4 → measured). **Gates:** whole `forge test`, size gate.
 
+### Task T3b: mandate wallets, merged form (Q6 changed 2026-11-04, MD-11)
+
+**Depends on:** T3 (sequential in the worktree: `MsgSenderLint`, `test/merge/Invariants.t.sol`, the helpers); needs T1's
+`UAMetaTxBase` and T2's `payWithFee` / `payWithFeeToUA`. Before T4.
+
+**Files:**
+- Modify: `src/wallet/MandateWallet.sol` (onto `UAMetaTxBase`, ids `bytes32`), `src/hedera/HederaMandateWallet.sol` (`IS_HEDERA`
+  through the constructor; its `_requireValidSignature` override and `mtxExecuteAsOwnerRaw` leave); NatSpec only:
+  `src/wallet/WalletExecute.sol`, `src/metatx/{MetaTxAddressBase,IMetaTxAddress,UAMetaTxBase}.sol` ("the wallets" → `SmartKeyAccount`).
+  Not touched: `src/account/SmartKeyAccount.sol`.
+- Create: `smartcontracts/evm/legacy/ua-mtx-merge/src/wallet/MandateWallet.sol`,
+  `smartcontracts/evm/legacy/ua-mtx-merge/src/hedera/HederaMandateWallet.sol` (copies at T3's tip, MD-4), their tests under
+  `smartcontracts/evm/legacy/ua-mtx-merge/test/wallet/`; `test/wallet/MandateWalletMerged.t.sol`;
+  `test/vectors/mandate_kat.json` (written by `AccountKat.t`'s `MandateWalletKatTest`, `WRITE_KAT=true`).
+- Move to `smartcontracts/evm/test/vectors/legacy/ua-mtx-merge/`: `mandate_pay_kat.json`, `mandate_revoke_kat.json` (MD-11 (a));
+  their readers outside forge (node `typed.rs`, `clientkeys` `test/evm.test.js`) move in T14 and T11.
+- Tests: `test/wallet/{MandateWallet,NamedWallets}.t.sol` (`MandateFixture`, also read by `test/metatx/{NamedEntry,Sweeper7702}.t.sol`),
+  `test/account/AccountKat.t.sol`, `test/metatx/TypedOps.t.sol` (the six wallet rows: `…_RowHasNoWalletEntry` until T11
+  regenerates, as T1 did for `CancelNonce`), `test/metatx/MsgSenderLint.t.sol` (adds `src/wallet/MandateWallet.sol` and
+  `src/hedera/HederaMandateWallet.sol`, MD-6's way), `test/merge/Invariants.t.sol` (`test_walletsByteIdentical` keeps
+  `SmartKeyAccount` only; the two mandate-wallet rows leave with old → removed in the commit).
+
+**Interfaces:**
+```solidity
+contract MandateWallet is UAMetaTxBase, IERC1271 {               // MD-11 (c)
+    constructor(bytes32 owner_, bytes32 chainUid_, address registry_, bool hedera_);
+        // UAMetaTxBase("SCaaS MandateWallet", chainUid_, registry_, address(0), hedera_); domain unchanged
+    bytes32 public immutable owner;
+    struct Mandate { bytes32 delegate; uint64 expiry; uint64 periodSeconds; uint64 periodStart;
+                     uint128 maxPerPayment; uint128 maxPerPeriod; uint128 spentInPeriod; }
+    mapping(address token => Mandate) public mandates;
+    mapping(address token => mapping(bytes32 payee => bool)) public payeeAllowed;
+    // direct entries: authority by _subject() (the ticket's id in a self-call, else pad(msg.sender)), never _msgSender()
+    function setMandate(address token, bytes32 delegate, uint128 maxPerPayment, uint128 maxPerPeriod,
+        uint64 periodSeconds, uint64 expiry) external;
+    function setPayee(address token, bytes32 payee, bool allowed) external;
+    function revoke(address token) external;
+    function execute(address target, uint256 value, bytes calldata data) external returns (bytes memory);
+    function payUnderMandate(address token, bytes32 payee, uint256 amount, bytes32 entryRef, uint64 epoch_) external;
+        // native payee: payWithFee(address(uint160(uint256(payee))), …); derived: payWithFeeToUA(payee, …) (CTR-UA-28)
+    function revoke(address token, uint64 epoch_) external;
+    // one signed entry per operation, fee mode NONE
+    function mtxSetMandate(MetaTxLib.UAEnvelope calldata e, address token, bytes32 delegate, uint128 maxPerPayment,
+        uint128 maxPerPeriod, uint64 periodSeconds, uint64 expiry, IUARegistry.UASig calldata auth) external returns (bytes memory);
+    function mtxSetPayee(MetaTxLib.UAEnvelope calldata e, address token, bytes32 payee, bool allowed,
+        IUARegistry.UASig calldata auth) external returns (bytes memory);
+    function mtxRevokeMandate(MetaTxLib.UAEnvelope calldata e, address token, IUARegistry.UASig calldata auth)
+        external returns (bytes memory);
+    function mtxPayUnderMandate(MetaTxLib.UAEnvelope calldata e, address token, bytes32 payee, uint256 amount,
+        bytes32 entryRef, uint64 epoch_, IUARegistry.UASig calldata auth) external returns (bytes memory);
+    function mtxDelegateRevoke(MetaTxLib.UAEnvelope calldata e, address token, uint64 epoch_,
+        IUARegistry.UASig calldata auth) external returns (bytes memory);
+    function mtxExecute(MetaTxLib.UAEnvelope calldata e, address target, uint256 value, bytes calldata data,
+        IUARegistry.UASig calldata auth) external returns (bytes memory);
+    // inherited (UAMetaTxBase): mtxExecute(UAMetaTransaction, UASig), mtxBatch, mtxCancelNonce(UAEnvelope, uint256, UASig),
+    // mtxNonce(bytes32, uint256), mtxDigest(UAMetaTransaction), registry(); executeMetaTransaction refuses (MD-11 (b))
+    function mandatePayLane(bytes32 entryRef) external pure returns (uint256);              // unchanged
+    function mandateRevokeLane(address token, uint64 epoch_) external pure returns (uint256); // unchanged
+    function isValidSignature(bytes32 hash, bytes calldata sig) external view returns (bytes4);
+        // native owner: ECDSA by address(uint160(uint256(owner))); derived owner: 0xffffffff (CTR-ACC-12)
+}
+contract HederaMandateWallet is MandateWallet {
+    constructor(bytes32 owner_, bytes32 chainUid_, address registry_);   // MandateWallet(…, true): HIP-632 on the native branch
+}
+// UASetMandate(bytes32 from,address token,bytes32 delegate,uint128 maxPerPayment,uint128 maxPerPeriod,uint64 periodSeconds,uint64 expiry,E)
+// UASetPayee(bytes32 from,address token,bytes32 payee,bool allowed,E)
+// UARevokeMandate(bytes32 from,address token,E)
+// UAPayUnderMandate(bytes32 from,address token,bytes32 payee,uint256 amount,bytes32 entryRef,uint64 epoch,E)
+// UADelegateRevoke(bytes32 from,address token,uint64 epoch,E)
+// UAExecute(bytes32 from,address target,uint256 value,bytes data,E)
+// E = uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient
+```
+Events `MandateSet(address indexed token, bytes32 indexed delegate, …)`, `MandateRevoked(address indexed token, bytes32 indexed by)`,
+`PayeeSet(address indexed token, bytes32 indexed payee, bool)`, `PaidUnderMandate(address indexed token, bytes32 indexed payee, uint256,
+bytes32 indexed entryRef)`; error `PayeeNotAllowed(bytes32)` (MD-11 (e)). `_mtxRule` / `_uaAllowed` per MD-11 (d).
+
+- [ ] **Step 1: Legacy first.** Copy both wallets and the tests this task rewrites to `legacy/ua-mtx-merge/`; one line in
+      `legacy/README.md`.
+- [ ] **Step 2: Failing tests** (`test/wallet/MandateWalletMerged.t.sol`, each with its positive control first), on `MandateWallet`
+      and `HederaMandateWallet`:
+      `test_nativeOwnerSetMandateNoRegistry` and `test_nativeDelegatePaysNoRegistry` (wallet `registry == 0`, and with a registry
+      set, `vm.expectCall(reg, "", 0)`); `test_erc1271OwnerSignsWithItsCode` (a contract owner, 50 k cap);
+      `test_derivedOwnerSetMandateViaRegistry`, `test_derivedDelegatePaysViaRegistry`, `test_derivedPayeePaidByPayWithFeeToUA`,
+      `test_derivedSideAtRegistryZeroIsLedgerOffByName`; `test_nativeUASigWithKeyDataRefused`, `test_nativeUASigWithMembersRefused`
+      (R17, named and generic); `test_everyEntryRelayableAtFeeZero` (the six named, generic, batch, cancel; a relayer that is
+      not the signer) and `test_feeNonZeroRefused`; `test_cancelIsNonceOrdered_{native,derived}` (a withheld cancel at nonce n
+      cannot land after a newer op consumed n); `test_payeeIsSigned` and `test_executeTargetIsSigned` (a changed `payee` /
+      `target` in calldata fails); `test_derivedSubjectReadsUAAllowedOnly`; `test_checksReadSubjectNotMsgSender` (a derived
+      delegate, `UA_POOL` as `_msgSender()`, passes the delegate check by its id); `test_derivedOwnerHasNoErc1271Answer`;
+      `test_executeMetaTransactionRefused` (MD-11 (b)); `test_flatBuildersHaveNoEntry` (old `mtxPayUnderMandate(address,…)`,
+      `mtxRevoke`, `mtxExecuteAsOwner`, `mtxExecuteAsOwnerRaw` selectors revert); `test_oldAddressWalletSignatureRefused`
+      (a `PayUnderMandate` / `MetaTransaction` signature of the old form has no entry); `test_hederaEd25519OwnerSignsHip632`,
+      `test_hip632RefusedForAContract` on `HederaMandateWallet`; `test_walletUATypehashesArePinned` (the six strings above
+      and `UACancelNonce`); `test_smartKeyAccountByteIdentical` (the `ref/pre-ua-mtx-merge` hash, unchanged).
+- [ ] **Step 3:** `../../scripts/capped forge test --match-path 'test/{wallet,account,merge}/*.t.sol'`: FAIL.
+- [ ] **Step 4: Implement** the interfaces; the existing wallet tests move to the merged entries (MD-3, each reversed meaning
+      listed as `meaning: <test> old → new`); `MandateWalletKatTest` writes `mandate_kat.json` (a delegate's `mtxPayUnderMandate`
+      and `mtxDelegateRevoke` on their mandate lanes, nonce 0, both executed; EOA signer, unbound `relayer` 0).
+- [ ] **Step 5:** PASS; whole `forge test`; `--isolate` `UAGas`, `UARegistryGroups`; size gate; MD-8 if a token byte moved (it
+      should not); layout pins unmoved (the wallets have no row in `test/v2/layout/`, no token storage moves).
+- [ ] **Step 6: Mutants** (the global mutant rule): a native subject sent to the registry (`expectCall` red); the derived branch's
+      `requireAuthorized` skipped (forgery test red); R17 dropped on the wallet path; `_uaChargeFee` accepting a fee or the
+      relayer bound by default (fee-0 relay red); the cancel's nonce check skipped; `payee` left out of `UAPayUnderMandate`'s
+      hash; `target` left out of `UAExecute`'s hash; `_msgSender()` read for the delegate check instead of `_subject()`; the
+      derived owner answered by `isValidSignature`; `executeMetaTransaction` left open; HIP-632 accepted for an account with
+      code. Each turns a named test red; a mutant no test catches is a finding.
+- [ ] **Step 7:** Commit `ua-mtx-merge T3b: mandate wallets in the merged form, one signed entry per operation (Q6)`.
+
+**Pins, old → new:** wallet typehashes (six new `UA<Op>` pins; the address strings to a legacy pin of the copy, not deleted);
+`AccountKat` (`mandate_pay_kat.json`, `mandate_revoke_kat.json` → legacy, `mandate_kat.json` new); `MsgSenderLint` (two files
+added, red first with a wrong count); `test_walletsByteIdentical` (`MandateWallet`, `HederaMandateWallet` rows removed,
+`SmartKeyAccount` unchanged); size (`MandateWallet`, `HederaMandateWallet` runtime old → new in the commit; no ratchet row
+today). **Layout:** none moves. **Gates:** whole `forge test`, `--isolate`, size gate.
+
 ### Task T4: Zether
 
 **Depends on:** T3. **Zether only;** PQZ is T5.
@@ -512,8 +648,8 @@ CREATE2 address (risk 10).
 
 **Depends on:** T7.
 
-**Files:** `src/hedera/{HederaAccountAuth,HederaLib}.sol` (HIP-632 entry names; the comment block's entry list), `HederaMandateWallet`
-unchanged (byte-identical check); `test/hedera/{HederaKat,HederaV2}.t.sol`, `test/hedera/gen_hedera_kat.py`, `test/hedera/HederaMocks.sol`,
+**Files:** `src/hedera/{HederaAccountAuth,HederaLib}.sol` (HIP-632 entry names; the comment block's entry list); `HederaMandateWallet`
+is T3b's (Q6), not this task's; `test/hedera/{HederaKat,HederaV2}.t.sol`, `test/hedera/gen_hedera_kat.py`, `test/hedera/HederaMocks.sol`,
 `test/vectors/hedera_kat.json` (regenerated; old to legacy).
 
 **Interfaces:** `IS_HEDERA` kinds as T2–T7; `_authorizeNative` keeps HIP-632 (64-byte signature by an account `SigCheck.isContract`
@@ -521,7 +657,7 @@ classes as no contract); `MetaOp` v1 = the token's `UAMetaTransfer`, `from` the 
 ED25519, alias for ECDSA) (R42).
 
 - [ ] **Step 1: Failing tests:** `test_hederaEd25519EoaMtxTransfer` (long-zero padded `from`), `test_hederaEcdsaAliasMtxTransfer`,
-      `test_hip632RefusedForAContract`, `test_hederaKatIsUAMetaTransfer`, `test_hederaMandateWalletByteIdentical`.
+      `test_hip632RefusedForAContract`, `test_hederaKatIsUAMetaTransfer` (`HederaMandateWallet`'s HIP-632 rows are T3b's).
 - [ ] **Step 2:** FAIL. **Step 3: Implement**; `python3 test/hedera/gen_hedera_kat.py` writes the new KAT.
 - [ ] **Step 4:** PASS; whole `forge test`; size gate.
 - [ ] **Step 5: Mutants:** HIP-632 accepted for an account with code; the long-zero padding reversed; a 65-byte signature taken
@@ -596,19 +732,25 @@ input, not a chain id list (one rule on every chain); the testnet formula unchan
 `test/{evm,typed-ops,ua-metatx3,ua-sig,pq-sig,ua-trade,paymeta,relayfee}.test.js`, `clients/clientkeys/legacy/ua-mtx-merge/`;
 regenerated `smartcontracts/vectors/typed/typed_ops.json` (MD-7; old rows to `smartcontracts/vectors/typed/legacy/ua-mtx-merge/`),
 `smartcontracts/vectors/ua/{metatx3,uatrade_kat}.json` (rows unchanged, notes renamed); `smartcontracts/evm/test/metatx/TypedOps.t.sol`.
+**Mandate wallets (Q6, T3b):** `src/evm.js`'s `WALLET` rows and builders on the six `UA<Op>` structs and `UACancelNonce` (`on`
+gains `MandateWallet`), the flat-builder helpers to `clients/clientkeys/legacy/ua-mtx-merge/`; `test/evm.test.js`'s mandate KAT
+test reads `smartcontracts/evm/test/vectors/mandate_kat.json` (the two old KATs from its legacy place); `TypedOps.t`'s six
+`…_RowHasNoWalletEntry` tests of T3b become row tests of the `UA<Op>` rows.
 
 **Interfaces:** builders for every merged entry with `bytes32 from` / `to` / `destination` / `payee` and `UASig auth`; the cancel
 on `UACancelNonce(bytes32 from,uint256 lane,E)`; the address builders of merged entries to legacy; the wallet builders unchanged.
 
-- [ ] **Step 1: Failing tests:** every `typed_ops.json` row against `src/evm.js`; `a merged entry's calldata carries UASig{signature}
+- [ ] **Step 1: Failing tests:** every `typed_ops.json` row against `src/evm.js`; `the mandate wallet rows are UA structs with
+      bytes32 from, delegate, payee`; `mandate_kat.json equals the builders (pay and delegate revoke)`; `a merged entry's calldata carries UASig{signature}
       for an EOA`; `an unbound relayer or feeRecipient is signed as 0 and shown as unbound`; `a non-zero unbound value in the signed
       message yields the contract's refusal digest` (the forge row in `TypedOps.t`); `the cancel row is ordered and native-capable`.
 - [ ] **Step 2:** `cd clients/clientkeys && ../../scripts/capped npm test`: FAIL.
 - [ ] **Step 3: Implement;** generators run twice, files do not move the second time; cast check.
 - [ ] **Step 4:** PASS; `forge test --match-path test/metatx/TypedOps.t.sol`; `git diff` of `typed_ops.json` shows only MD-7's
-      45 retired rows, `CancelNonce`'s `on` and `UACancelNonce`'s type string.
+      45 retired rows, `CancelNonce`'s `on` and `UACancelNonce`'s type string and `on`, and Q6's six wallet rows retired and six
+      `UA<Op>` rows added (MD-7 as amended).
 - [ ] **Step 5: Mutants:** a field order swapped in one `UA<Op>` string; `relayer` left non-zero while unbound; the router domain
-      used for a token row.
+      used for a token row; a wallet row signed in the token domain; `payee` encoded as `address` in `UAPayUnderMandate`.
 - [ ] **Step 6:** Commit `ua-mtx-merge T11: clientkeys builders on the merged entries, typed_ops.json regenerated`.
 
 **Pins, old → new:** `typed_ops.json` (retired rows listed). **Gates:** `clientkeys`, `vectors-check`, `TypedOps.t`.
@@ -660,9 +802,14 @@ refusing a malformed id; one function per language, the same rows.
 `mtxCancelNonce` row split: `T` + `gov_router` on `UACancelNonce`, `WA` on `CancelNonce`; `InvalidateNonces` split per kind),
 `src/guard.rs` (`CALL_TABLE` / `allowed` against `mtxSelectors()`, `_uaAllowed`, `selector_audit.json`, both directions; B's rule:
 a derived subject on `_uaAllowed` only), `src/abi.rs`, `src/submit.rs`, `src/metatx.rs` (`Mtx`, `from_wire`), `src/chain.rs` and
-`src/adapter.rs` (nonce view by kind: `mtxNonce(bytes32)` on tokens and the router, `mtxNonce(address)` on wallets), `src/indexer.rs`
+`src/adapter.rs` (nonce view by kind: `mtxNonce(bytes32)` on tokens, the router and `wallet`, `mtxNonce(address)` on `account`), `src/indexer.rs`
 (the `UA…` topics for EOAs; `pay_ref` on `UAPaymentSettled`), the legacy pull path's job decoder, `scaas-node/legacy/ua-mtx-merge/`;
-tests in those modules.
+tests in those modules. **Mandate wallets (Q6, T3b):** `typed.rs` `W` rows on the six `UA<Op>` structs, `UACancelNonce` on
+`wallet`, `CancelNonce` and `Execute` on `account` only; `WA` splits (`mtxExecuteAsOwner` stays for `account`); the `PLAIN` rows
+`mtxExecuteAsOwnerRaw`, flat `mtxPayUnderMandate`, `mtxRevoke` to legacy (MD-11 (a)); `mandate_shape` keeps its lanes on the UA
+rows; the mandate KAT test reads `mandate_kat.json`; `guard.rs`'s wallet selector pins (lines 807–810 today) re-pinned and
+`allowed` against the wallet's `_mtxRule` / `_uaAllowed`; `abi.rs`'s `IMandateWallet` errors with `bytes32`; `submit.rs`'s mandate
+lane rows; every wallet op is a `ua_metatx` job.
 
 **Interfaces:** every merged EVM entry is a `ua_metatx` job (`from` bytes32, `auth` `UASig`, `entry` the `mtx*` name); `metatx`
 stays for the wallets' address entries and `executeMetaTransaction`; intake step 7a only for a derived `from` or `to` (R44); a
@@ -672,11 +819,12 @@ stays for the wallets' address entries and `executeMetaTransaction`; intake step
 - [ ] **Step 1: Failing tests:** `typed_ops_kat_every_entry` over the regenerated rows; `allow_lists_equal_the_selector_audit_both_directions`
       (token kinds added); `a_metatx_job_naming_a_merged_entry_is_refused_by_name`; `an_all_native_ua_metatx_runs_at_registry_zero`;
       `a_derived_side_at_registry_zero_is_refused_by_name`; `nonce_view_by_kind`; `indexer_reads_ua_topics_for_an_eoa`;
-      `pay_ref_reads_ua_payment_settled`; `cancel_row_split_per_kind`; `never_dead_while_a_tx_may_land` unchanged.
+      `pay_ref_reads_ua_payment_settled`; `cancel_row_split_per_kind`; `wallet_rows_are_ua_structs` (both directions against
+      the wallet's lists); `wallet_flat_builders_refused_by_name`; `wallet_nonce_view_is_bytes32`; `account_keeps_address_rows`; `never_dead_while_a_tx_may_land` unchanged.
 - [ ] **Step 2:** `cd scaas-node && ../scripts/capped cargo test -j2 typed guard metatx`: FAIL.
 - [ ] **Step 3: Implement.** **Step 4:** PASS on the touched modules (the whole suite runs in T21).
 - [ ] **Step 5: Mutants:** a row on the wrong kind; a derived subject allowed on `_mtxRule`; the nonce view by `address` on a
-      token; the old shape accepted silently.
+      token or a mandate wallet; the old shape accepted silently; a flat wallet builder left in `PLAIN`.
 - [ ] **Step 6:** Commit `ua-mtx-merge T14: node rows, guard and jobs on the merged entries; old shapes refused by name`.
 
 **Pins:** `submit.rs` literal selector pins moved with old → new; `the_plain_rows_are_pinned`. **Gates:** targeted `cargo test`, clippy.
@@ -690,11 +838,11 @@ stays for the wallets' address entries and `executeMetaTransaction`; intake step
 
 **Interfaces:** `POST /v1/op` takes the merged named entries with `auth: UASig`; `POST /v1/ua-metatx` (new) takes
 `UAMetaTransaction` / `UAMetaTransfer`, gate `features ∋ ua` and `registry() ≠ 0` only for a derived `from` or `to`; `POST /v1/metatx`
-refuses a token by name (its `MetaTransfer` has no token entry) and still serves the wallets.
+refuses a token and a mandate wallet by name (no address entry left, Q6) and still serves `SmartKeyAccount`.
 
 - [ ] **Step 1: Failing tests:** `op_door_takes_a_merged_entry_with_uasig`, `ua_metatx_door_runs_an_eoa_at_registry_zero`,
       `ua_metatx_door_refuses_a_derived_side_at_registry_zero_by_name`, `metatx_door_refuses_a_token_by_name`,
-      `metatx_door_serves_a_wallet`, zero simulations on every refusal.
+      `metatx_door_serves_a_smart_key_account`, `metatx_door_refuses_a_mandate_wallet_by_name` (Q6), zero simulations on every refusal.
 - [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS. **Step 5: Mutants:** the `/v1/metatx` token refusal dropped; the
       registry gate applied to an all-native request; `auth` decoded as `bytes`.
 - [ ] **Step 6:** Commit `ua-mtx-merge T15: gateway token doors on the merged entries`.
@@ -707,11 +855,11 @@ refuses a token by name (its `MetaTransfer` has no token entry) and still serves
 (regenerated by `cargo test --test mesh_vectors -- --ignored regenerate`; the version per NODE-MESH-09's own rule, open item 3).
 
 **Interfaces:** the EVM and Hedera token body `evm.ua_meta_tx` (the UA structs, camelCase named fields), intent id the UA digest;
-the wallets keep the address body; native subjects with today's `sig_kind`s over the UA digest; a derived `from` refused by name
+the mandate wallets' body is the UA structs too (Q6), `SmartKeyAccount` keeps the address body; native subjects with today's `sig_kind`s over the UA digest; a derived `from` refused by name
 (MD-10).
 
 - [ ] **Step 1: Failing tests:** every regenerated KAT case through `accept()`; `a_token_address_body_is_refused_by_name`;
-      `a_wallet_address_body_still_accepted`; `intent_id_is_the_ua_digest`; `unbound_fields_carry_zero` (NODE-LANE-10);
+      `an_account_address_body_still_accepted`; `a_mandate_wallet_ua_body_accepted`; `intent_id_is_the_ua_digest`; `unbound_fields_carry_zero` (NODE-LANE-10);
       `a_derived_from_is_refused_by_name`.
 - [ ] **Step 2:** FAIL. **Step 3: Implement**, regenerate the KAT. **Step 4:** PASS.
 - [ ] **Step 5: Mutants:** intent id over the address struct; the zero rule for unbound fields dropped; the old body accepted.
@@ -744,10 +892,11 @@ watcher beside `LegSettled`; the `InvalidateNonces` row split per kind.
 - [ ] **Step 1: Failing tests (ignored e2e, anvil):** `eoa_mtx_transfer_relayed_at_fee_zero_registry_zero`, `eoa_mtx_transfer_to_a_ua`,
       `derived_mtx_transfer_relayed`, `ordered_cancel_relayed`, `router_op_signed_by_an_eoa`, `dex_order_with_a_ua_trade_order_leg`,
       `gateway_doors_end_to_end`, `relayed_zether_proof_under_the_ua_tag`, `relayed_pqz_proof_under_the_ua_tag` (Zether and PQZ
-      apart); Hedera: `hedera_kat_is_ua_meta_transfer`, `hedera_ed25519_eoa_relayed`.
+      apart); `mandate_payment_relayed_by_an_eoa_delegate` (Q6, fee 0, no registry); Hedera: `hedera_kat_is_ua_meta_transfer`, `hedera_ed25519_eoa_relayed`.
 - [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** `../scripts/capped cargo test -j2 --test e2e -- --ignored --test-threads=1`;
       `--test e2e_hedera -- --ignored`: PASS. No `anvil` left.
-- [ ] **Step 5: Mutants:** the Hedera `from` padded as ECDSA for an ED25519 account; the e2e asserting `PaymentSettled` on a merged path.
+- [ ] **Step 5: Mutants:** the Hedera `from` padded as ECDSA for an ED25519 account; the e2e asserting `PaymentSettled` on a merged path;
+      `tests/e2e.rs`'s wallet call still on `mtxExecuteAsOwnerRaw`.
 - [ ] **Step 6:** Commit `ua-mtx-merge T18: Hedera adapter and e2e on the merged entries`.
 
 ### Task T19: docs, decisions, operator note
@@ -758,20 +907,22 @@ watcher beside `LegSettled`; the `InvalidateNonces` row split per kind.
 - `docs/contracts/metatx.md` (CTR-MTX-01, -05, -06, -09, -11, -12, -14, -15, -17, -18, -21, -22, -23, -24, -26, -27, -28, -29), `accounts.md`
   (CTR-UA-19, -26, -27), `dex.md` (CTR-DEX-13, -15, -25, -26), `zether.md` (CTR-ZTH-06, -34, -51, entry names), `pq-zero-knowledge.md`
   (CTR-PQZ-21, entry names), `token-wrappers.md` (CTR-TOK-20; the router entries), `settlement.md`, `tender.md` (CTR-TND-01, R33: spec
-  text only, no tender contract is built), `asset-suite.md` (CTR-AS-13, R34: spec text only), `mandates.md` (CTR-ACC-12 deferred, Q6),
-  `contracts/README.md`.
+  text only, no tender contract is built), `asset-suite.md` (CTR-AS-13, R34: spec text only), `mandates.md` (Q6 changed: CTR-ACC-12 in
+  the merged form, CTR-ACC-06 / -07's entry table, §1.1 the auto-pay path on the named UA entries, the status line; MD-11),
+  `contracts/README.md`; `accounts.md`'s CTR-UA-27 `MandateWallet` row (owner, delegate, payee U through the merged entries).
 - `docs/networks/README.md` (NET-ALL-26, -28 with the one-rule sentence and the EVM alias, -84 the question row), `evm.md` (NET-EVM-06
-  per Q4, the `ua_metatx` relay rows), `hedera.md` (§2 Payload, the DEX row); the other network docs only where they cite the EVM struct.
-- `docs/node/job-api.md` (job shape, step 7a, the error table R43, the call table), `gateway.md` (the three doors BUILT with code and
+  per Q4, the `ua_metatx` relay rows), `hedera.md` (§2 Payload, the DEX row, NET-HED-03's `HederaMandateWallet`); the other network docs only where they cite the EVM struct.
+- `docs/node/job-api.md` (job shape, step 7a, the error table R43, the call table, the mandate wallet's named entries), `gateway.md` (the three doors BUILT with code and
   tests), `mesh.md` (NODE-MESH-08, -09, -16), `submit-lanes.md`, `dex-venue.md`, `indexer-feeds.md`, `sponsorship.md`, `ops.md`.
-- `docs/clients/signers-clientkeys.md`, `app.md`, `ua-libraries.md` (the id display); `docs/architecture.md`, `docs/integration.md` and
+- `docs/clients/signers-clientkeys.md` (the mandate ops, Q6), `app.md`, `ua-libraries.md` (the id display); `docs/architecture.md`, `docs/integration.md` and
   the integration example doc; `assets/settlement-kinds.svg`, `assets/token-tree.svg`; `README.md`; `AGENTS.md` only if a line names
   a merged form.
-- `docs/decisions.md`: CTR-MTX-30 to BUILT with commits; a Change line on every rule R1–R47 rewrote, with its commit; MD-1 to MD-10;
+- `docs/decisions.md`: CTR-MTX-30 to BUILT with commits (its Q6 Change too); a Change line on every rule R1–R47 rewrote, with its
+  commit; CTR-ACC-12 and CTR-UA-27 to BUILT; CTR-ACC-05 / CTR-ACC-06 for the flat builders (MD-11 (a)); MD-1 to MD-11;
   `normative:` of each moved rule pointing at its component doc; the size outcome (Q3) and, if a gap remains, the TODO line.
 - **Operator note** (in `docs/node/ops.md` and the release notes section of `job-api.md`): EVM clients of the address token forms move
   to `ua_metatx`; the gateway doors; the public DEX API takes `UATradeOrder` and the UA cancel forms; the mesh body; a derived cancel
-  signs the named purpose (MD-5); an old shape is refused by name, never silently `dead`; new router and `MtxRelayFee` addresses.
+  signs the named purpose (MD-5); mandate wallets: new ids, `ua_metatx` jobs, the flat builders gone (Q6, MD-11); an old shape is refused by name, never silently `dead`; new router and `MtxRelayFee` addresses.
 - The spec's status line; `TODO.md` with this commit (never alone).
 
 - [ ] **Step 1:** Write each change; figures quoted from T0–T18 logs; status tags BUILT only where code and tests exist.
@@ -787,9 +938,10 @@ watcher beside `LegSettled`; the `InvalidateNonces` row split per kind.
 outside the repo).
 
 - [ ] **Step 1:** The controller prepares the four signing requests from the regenerated vectors: `UAMetaTransfer`, one `UA<Op>` row of
-      `typed_ops.json`, a `UATradeOrder` with a non-zero `destination`, a `UARelayFee` row; each with an unbound `relayer` at 0.
+      `typed_ops.json`, a `UATradeOrder` with a non-zero `destination`, a `UARelayFee` row, and a mandate payment
+      (`UAPayUnderMandate` in the `SCaaS MandateWallet` domain, a non-zero `payee`, Q6); each with an unbound `relayer` at 0.
 - [ ] **Step 2: Owner:** signs each in two widely used browser wallets and one hardware wallet; no key with value, a test account only.
-- [ ] **Step 3:** Record per wallet and row what is shown for each `bytes32` field (`from`, `to`, `destination`, `payee`), whether a
+- [ ] **Step 3:** Record per wallet and row what is shown for each `bytes32` field (`from`, `to`, `destination`, `payee`, `delegate`), whether a
       checksum or address book applies, and the primary type title; whether a clear-signing descriptor can render `bytes32` as an
       address is noted as not checked unless the owner checks it.
 - [ ] **Step 4:** `docs_check` rc 0; commit `ua-mtx-merge T20: real-wallet display of the merged structs (owner-assisted)`.
