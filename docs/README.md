@@ -42,7 +42,7 @@ suite and the confidential layer. The node (`scaas-node`). Clients: signers, wal
 
 **The EVM token model.** One base tree serves every token.
 
-<p align="center"><img src="assets/token-tree.svg" width="860" alt="EVM token tree: MetaTxBase, ERC20MetaTx, MetaTokenBase, then six kinds: NORMAL and WRAPPED, NORMAL_ZETHER and WRAPPED_ZETHER, NORMAL_PQZ and WRAPPED_PQZ, the confidential four unaudited; external libraries AdminLib, WrappedLib, HederaLib, TradeLib, ZetherLib and the four PQZ libraries, all built."></p>
+<p align="center"><img src="assets/token-tree.svg" width="860" alt="EVM token tree: MetaTxBase, ERC20MetaTx, MetaTokenBase, then six kinds: NORMAL and WRAPPED, NORMAL_ZETHER and WRAPPED_ZETHER, NORMAL_PQZ and WRAPPED_PQZ, the confidential four unaudited; external libraries GovernanceLib, WrappedLib, HederaLib, TradeLib, ZetherLib and the four PQZ libraries, all built."></p>
 
 - **Kinds.** A token has one of six kinds: `NORMAL` (a plain issuer token), `WRAPPED` (a wrapper of one to eight
   legs, each an ERC-20 or the native coin), the same two with classical Zether, `NORMAL_ZETHER` and
@@ -54,7 +54,7 @@ suite and the confidential layer. The node (`scaas-node`). Clients: signers, wal
 - **Features** are chosen at creation and never set later (disableable flags can be cleared): `PAYABLE`, `MINTABLE`,
   `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, and for regulated tokens `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`.
 - **Owner.** One owner administers a token, grants roles and may renounce
-  ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). An open factory creates tokens and DEX clones. A wider governance model is decided and not built ([CTR-GOV-01](decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)).
+  ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). An open factory creates tokens and DEX clones. One governance layer, `GovernanceBase`, holds owner, bits, holders, grants and the delay on every token kind and the DEX; every identity is a UA id, and a UA governs through the chain's `GovernanceRouter` (BUILT on branch `governance`, EVM; [contracts/README.md](contracts/README.md#governance), [CTR-GOV-01](decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)).
 
 ## 2. Who it is for
 
@@ -144,7 +144,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | Doc | Covers |
 |---|---|
 | [architecture.md](architecture.md) | How the parts fit and why: contract layer, node roles, topology, sequence diagrams, trust model |
-| [decisions.md](decisions.md) | The register: every ruling, its old ids, owner flag and rationale; `ARCH-POS` system-wide positions; `CTR-GOV` governance, decided, not built |
+| [decisions.md](decisions.md) | The register: every ruling, its old ids, owner flag and rationale; `ARCH-POS` system-wide positions; `CTR-GOV` governance: BUILT on branch `governance` (EVM), the regulated implementations SPECIFIED, other families PLANNED |
 
 ### Contracts (`CTR-*`)
 

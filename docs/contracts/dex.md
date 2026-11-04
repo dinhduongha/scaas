@@ -24,7 +24,7 @@ real Uniswap bytecode ([CTR-DEX-29](#CTR-DEX-29)).
 3. [The token's side: `mtxTrade`](#3-the-tokens-side-mtxtrade)
    - 3.1 [Cancel](#31-cancel)
 4. [The DEX's side: `mtxSettle`](#4-the-dexs-side-mtxsettle)
-5. [Fees and admin](#5-fees-and-admin)
+5. [Fees and governance](#5-fees-and-governance)
 6. [Outside-token legs](#6-outside-token-legs)
 7. [Exchange settlement](#7-exchange-settlement)
 8. [The named `dex`](#8-the-named-dex)
@@ -49,7 +49,7 @@ and refund in the same call, and ends with the DEX's balance of every token unch
 same orders can instead be executed against AMM pools — multi-hop routes, cycles X→…→X — with the surplus above each
 signed limit paid to its signer ([exchange settlement](#exchange), [CTR-DEX-20](#CTR-DEX-20)), and one call can take the
 book first and route only the rest outside ([hybrid](#hybrid), [CTR-DEX-27](#CTR-DEX-27)). The
-fee **rate** is the order's signed `fee` (≤ 1 %, on the received part); the DEX distributes it per its admin's split and
+fee **rate** is the order's signed `fee` (≤ 1 %, on the received part); the DEX distributes it per the split a holder of `FEE_ROUTING` set and
 can never change the amount ([CTR-DEX-17](#CTR-DEX-17)). Every user action is a signature; client systems configure
 markets, read the book and book the fees.
 
@@ -443,7 +443,7 @@ padded native ids 351,582; a derived taker × a native maker with the real verif
 12,124,252 transaction gas (11,988,900 execution, 8,452 B calldata = 114,352 gas), under 16,777,216; three revert the
 whole call with `UAVerifyGas` (17,955,669 needed).
 
-## 5. Fees and admin
+## 5. Fees and governance
 
 <a id="relayer-fee"></a>
 <a id="CTR-DEX-17"></a>**CTR-DEX-17** — **One fee: the signed `fee` rate, collected and distributed by the DEX in the
@@ -476,21 +476,29 @@ their per-fill DEX fee the same way (today a floor: Sui `dex.move:250-251`, Apto
 **SPECIFIED** (EVM: with the rebuild; non-EVM: new program versions).
 
 <a id="admin"></a>
-<a id="CTR-DEX-03"></a>**CTR-DEX-03** — `admin` is set once at creation ([CTR-DEX-24](#CTR-DEX-24)) and has no setter; in production a Safe/multisig
-(changing signers happens inside the Safe). An admin that is an EIP-7702 designator is refused at every admin call
-(`_onlyAdmin` reverts `CallerDelegated(admin)`, owner ruling D2, 2026-10-30): it clears its delegation first. The order
+<a id="CTR-DEX-03"></a>**CTR-DEX-03** — The DEX is on `GovernanceBase` ([CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)): one `owner`, a UA id (`bytes32`), set at
+creation ([CTR-DEX-24](#CTR-DEX-24)), with a two-step `transferOwnership` / `acceptOwnership` and a `renounceOwnership`; in
+production a Safe, a multisig, or a derived UA (a PQ key, an `msig`) acting through the chain's `GovernanceRouter`
+([CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)). Every governance check and every power reads
+`_govSubject()`: the native id of `msg.sender`, or the router's authenticated subject when `msg.sender` is the release's
+`GOV_ROUTER`. A native caller that is an EIP-7702 designator is refused at every governance entry (`_caller()` reverts
+`CallerDelegated`, owner ruling D2, 2026-10-30): it clears its delegation first. The order
 `relayer` binding, the settle submitter and solver interaction targets are not checked for a designator (owner rulings D3 /
-D4: open roles and solver-chosen targets, conservation-checked). The admin can do exactly four things: list or delist a market
+D4: open roles and solver-chosen targets, conservation-checked). Holders of bit 11 `LISTING` can do three things: list or delist a market
 (`setMarket(base, quote, listed)`, `base ≠ quote`, neither 0, else `BadMarket(base, quote)` (review C6-9), which also records each token's kind, [CTR-DEX-18](#CTR-DEX-18); emit
-`MarketSet(base, quote, listed)`), set the fee split (`setFeeSplit(relayerSharePpm, treasury)`, `treasury ∉ {0,
-DEX}` unless the share is 100 %; emit `FeeSplitSet(relayerSharePpm, treasury)`), list or delist an exchange target or
+`MarketSet(base, quote, listed)`), list or delist an exchange target or
 executor (`setExchangeTarget(target, listed)`; emit `ExchangeTargetSet`), and switch the DEX-wide listed-only mode
-(`setListedOnly(on)`, default off; emit `ListedOnlySet`) ([CTR-DEX-23](#CTR-DEX-23)). It changes who receives fees and in
+(`setListedOnly(on)`, default off; emit `ListedOnlySet`) ([CTR-DEX-23](#CTR-DEX-23)). Holders of bit 12 `FEE_ROUTING` can set the fee split
+(`setFeeSplit(relayerSharePpm, treasury)`, `treasury ∉ {0, DEX}` unless the share is 100 %; emit
+`FeeSplitSet(relayerSharePpm, treasury)`). `initialize` gives a non-zero owner both bits; a handover needs `revokeRole` for
+the old owner, and a new holder of either bit waits `grantDelay` (two calls, CTR-GOV-04). They change who receives fees and in
 what proportion, **never the amount**: the amount comes only from the signed `fee`. No access to funds, no upgrade, no
-sweep, no global pause (delisting a market stops that pair on `mtxSettle`; the exchange path checks only that each token is known, [CTR-DEX-20](#CTR-DEX-20), so an exchange-only pair keeps working: review C6-6). No timelock: there is nothing to wait for — no signed
-order can be charged more than it signed.
+sweep, no `rescue` entry ([CTR-DEX-20](#CTR-DEX-20) pays strays out; `DexPuller.rescue`, [CTR-DEX-22](#CTR-DEX-22)), no global pause (delisting a market stops that pair on `mtxSettle`; the exchange path checks only that each token is known, [CTR-DEX-20](#CTR-DEX-20), so an exchange-only pair keeps working: review C6-6). No
+governance entry has an `mtx*` or `ua*` twin on the DEX: a gas-less owner signs through the router. No timelock on a use of a
+power: there is nothing to wait for — no signed order can be charged more than it signed. Status: **BUILT** on branch `governance` (T3 `7825361b`: bits, guard, `supportsInterface`; T7 `c2525e28`:
+`grantDelay`; T10b `ac29de05`: owner and holders as UA ids; T11 `ea9f4e9d`: the router's DEX ops).
 
-<a id="CTR-DEX-24"></a>**CTR-DEX-24** — **`OpenFactory.createDex(version, initArgs, salt)` makes an `SCaaSDex` clone; `admin` is written once by
+<a id="CTR-DEX-24"></a>**CTR-DEX-24** — **`OpenFactory.createDex(version, initArgs, salt)` makes an `SCaaSDex` clone; `owner` is set by
 `initialize`; the `DexPuller` is deployed by `initialize`; `isDex(addr)` is advisory: tokens never consult it** (owner).
 
 ```solidity
@@ -501,9 +509,9 @@ function createDex(uint64 version, bytes calldata initArgs, bytes32 salt) extern
 ```
 
 - **Clone.** `CREATE2` of an EIP-1167 clone and `initialize(creator, version, initArgs)` in the same call, as for tokens
-  ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)); the implementation locks its own `initialize`. `admin` moves from an
-  immutable to storage written once by `initialize` (same behaviour: no setter, [CTR-DEX-03](#CTR-DEX-03)); the
-  `DexPuller` is deployed by `initialize`; the EIP-712 `verifyingContract` is the clone.
+  ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)); the implementation locks its own `initialize`. `initialize` writes the owner
+  and gives it `LISTING` and `FEE_ROUTING`; it moves by `transferOwnership` ([CTR-DEX-03](#CTR-DEX-03)); `grantDelay` (≤ 30
+  days) and `rescueTo` are immutable after it; the `DexPuller` is deployed by `initialize` with `rescueTo`; the EIP-712 `verifyingContract` is the clone.
 - **Registry.** The factory keeps `isDex(addr)` and `dexVersionOf(addr)` (`versionOf` is the token one). Clients and
   the node use them with the implementation version to warn about or refuse an unlisted `dex`; tokens do not consult them.
 
@@ -525,7 +533,7 @@ by the DEX** (a contract SCaaS does not control cannot verify it):
 
 | Item | Rule |
 |---|---|
-| Classification | at `setMarket` the DEX records each token's kind: **SCaaS** iff the chain's `OpenFactory` reports it was made from a registered, non-deprecated implementation (`versionOf`, as [CTR-TND-07](tender.md#CTR-TND-07)), else **outside** — a snapshot at `setMarket`: re-list after a deprecation (not re-checked per leg, controller proposal, review W-Q, 2026-10-19: `deprecate` only marks a version, its tokens keep working ([CTR-TOK-18](token-wrappers.md#CTR-TOK-18)), and a per-leg check would add two factory calls to every leg; turning a listed token outside also voids every order signed in its token domain, a decision for the DEX admin, who re-lists). Never taken from the leg: a submitter-chosen kind could send a fallback-only "token" down the `mtxTrade` path |
+| Classification | at `setMarket` the DEX records each token's kind: **SCaaS** iff the chain's `OpenFactory` reports it was made from a registered, non-deprecated implementation (`versionOf`, as [CTR-TND-07](tender.md#CTR-TND-07)), else **outside** — a snapshot at `setMarket`: re-list after a deprecation (not re-checked per leg, controller proposal, review W-Q, 2026-10-19: `deprecate` only marks a version, its tokens keep working ([CTR-TOK-18](token-wrappers.md#CTR-TOK-18)), and a per-leg check would add two factory calls to every leg; turning a listed token outside also voids every order signed in its token domain, a decision for a holder of `LISTING`, who re-lists). Never taken from the leg: a submitter-chosen kind could send a fallback-only "token" down the `mtxTrade` path |
 | Signed struct | the same `TradeOrder`, signed in the **DEX's** domain `("SCaaS Dex","1", chainId, DEX, chain_uid)` as `DexOrder(address sellToken,TradeOrder order)TradeOrder(…)`; `o.dex == address(this)` is required (the domain already binds the DEX; a different `dex` field would be a second, conflicting truth) |
 | Fill state | on the DEX: `pulled[h]` and `minNonce[from][batch]`, `h` = the `DexOrder` digest |
 | Checks | the full [CTR-DEX-15](#CTR-DEX-15) list, enforced by the DEX: relayer binding, expiry, nonce, flags, zero amounts, `minFill ≤ amount`, fee cap, signature (`SigCheck.isValid` with the ERC-1271 cap, [CTR-DEX-08](#CTR-DEX-08)), `p < amount`, `sellFill > 0`, overfill, the signer's minimum fill, price, fee bound |
@@ -593,18 +601,21 @@ by the DEX's `initialize`, `pull(token, from, amount)` callable only by the DEX 
 Holders of an **outside** token approve the puller, never the DEX; the DEX calls `pull` only after its own checks of the
 `DexOrder`, for `mtxSettle` and the exchange path alike. Why: an interaction runs as the DEX, so any allowance the DEX
 held could be spent by `outsideToken.transferFrom(victim, attacker, x)`. SCaaS tokens need no allowance at all.
+`DexPuller.rescue(token)`, callable by anyone, sends the puller's whole balance of `token` to its immutable `rescueTo`
+(`DexConfig.rescueTo`; 0 = no rescue, `RescueOff`); it calls only `balanceOf` and `transfer`, so no allowance is spent
+([CTR-GOV-06](../decisions.md#ctr-gov-06--rescue-to-an-immutable-rescueto); BUILT on branch `governance`, T10 `dc9bfde0`). The DEX itself has no `rescue`.
 
 <a id="CTR-DEX-23"></a>**CTR-DEX-23** — **What an interaction may call; listed targets** (owner). (a) refuses an
 interaction unless `target ∉ {DEX, puller}` (`ForbiddenTarget`), `data.length ≥ 4` and `bytes4(data) ∉
 {mtxTrade.selector, uaTrade.selector, restorePulled(TradeOrder,uint256).selector, restorePulled(UATradeOrder,uint256).selector}` (`uaTrade` BUILT with UA-5b, [CTR-DEX-26](#CTR-DEX-26)) for **every** target (`ForbiddenSelector`; else an interaction could pull a victim's resting order
 that names this DEX with an invented `receiveFill` and move the same amount out, and conservation would balance; and `restorePulled` would lower the fill state of a leg pulled in the same transaction, [CTR-DEX-27](#CTR-DEX-27)), and,
-when any leg sets `LISTED_POOLS` **or** the admin's listed-only mode is on, `exchangeTarget[target]`
+when any leg sets `LISTED_POOLS` **or** the DEX's listed-only mode (`LISTING`) is on, `exchangeTarget[target]`
 (`TargetNotListed`). (b) needs no blocklist — an executor that re-enters hits `nonReentrant`, calls `mtxTrade` is not
 `o.dex`, calls the puller is not the DEX — and the same listing condition applies to `executor`. Default: any target
 (owner). Interactions may `approve` routers (both are contracts, [CTR-TOK-01](token-wrappers.md#CTR-TOK-01)); a
 residual allowance moves nothing, because between calls the DEX holds no user funds. Grief (a target that reverts or
 burns gas) fails only its own plan.
-**Transitional (BUILT, P2c).** `SCaaSDex`: `mtxExchange`, `mtxExchangeVia`, `IExchangeExecutor`, `setExchangeTarget`, `setListedOnly`, `exchangeTarget`, `tokenKnown` (a side of at least one listed market, counted per market; a delisted token is unknown, its recorded kind stays); `NoLegs`, `TokenNotKnown`, `ForbiddenTarget`, `ForbiddenSelector(target, selector)` (`bytes4(data)`, zero-padded: 0 for empty `data`), `TargetNotListed`, `InsufficientOutput`. Path A bounds are checked at the pull by the token (by `TradeLib` on the DEX for an outside leg), Path B bounds by the DEX, as in `mtxSettle`; after the pulls each sell token's balance must have risen by exactly what was pulled (`ConservationBroken`: a fee-on-transfer or rebasing sell token fails before any interaction); a sold-only or intermediate leftover fails the final conservation check; every allowance an `approve` interaction granted is set back to 0 after the last interaction, by a gas-capped call that drops the token's revert data (W-O, as every other token call of the DEX; DEX round final fix); `increaseAllowance` and Permit2 `approve` are refused as `ForbiddenSelector` too (controller ruling, pending the owner); other allowance-raising calls (e.g. `increaseApproval`) are neither refused nor reset, so the admin lists only targets whose flows do not need them, and conservation still bounds a call; under the listing condition a token an interaction calls (`approve`, `transfer`) is a target and must be listed too; `receivedFloor` is the gross floor (controller ruling, pending the owner). The fork test with real Uniswap bytecode is built, opt-in ([CTR-DEX-29](#CTR-DEX-29)).
+**Transitional (BUILT, P2c).** `SCaaSDex`: `mtxExchange`, `mtxExchangeVia`, `IExchangeExecutor`, `setExchangeTarget`, `setListedOnly`, `exchangeTarget`, `tokenKnown` (a side of at least one listed market, counted per market; a delisted token is unknown, its recorded kind stays); `NoLegs`, `TokenNotKnown`, `ForbiddenTarget`, `ForbiddenSelector(target, selector)` (`bytes4(data)`, zero-padded: 0 for empty `data`), `TargetNotListed`, `InsufficientOutput`. Path A bounds are checked at the pull by the token (by `TradeLib` on the DEX for an outside leg), Path B bounds by the DEX, as in `mtxSettle`; after the pulls each sell token's balance must have risen by exactly what was pulled (`ConservationBroken`: a fee-on-transfer or rebasing sell token fails before any interaction); a sold-only or intermediate leftover fails the final conservation check; every allowance an `approve` interaction granted is set back to 0 after the last interaction, by a gas-capped call that drops the token's revert data (W-O, as every other token call of the DEX; DEX round final fix); `increaseAllowance` and Permit2 `approve` are refused as `ForbiddenSelector` too (controller ruling, pending the owner); other allowance-raising calls (e.g. `increaseApproval`) are neither refused nor reset, so a holder of `LISTING` lists only targets whose flows do not need them, and conservation still bounds a call; under the listing condition a token an interaction calls (`approve`, `transfer`) is a target and must be listed too; `receivedFloor` is the gross floor (controller ruling, pending the owner). The fork test with real Uniswap bytecode is built, opt-in ([CTR-DEX-29](#CTR-DEX-29)).
 
 <a id="hybrid"></a>
 <a id="CTR-DEX-27"></a>**CTR-DEX-27** — **`mtxHybrid` / `mtxHybridVia`: one listed-market taker against the book's makers at
@@ -638,7 +649,7 @@ function mtxHybridVia(HybridPlan calldata p, address executor, bytes calldata da
    (`DexMismatch`), Path B checks on the matched part and its fee `⌈receive · fee / 10⁶⌉`. The taker: `taker.fill ==
    Σ maker receive + outsideSell` (`FillMismatch(expected, got)`); its floor is `Σ maker sold + outsideFloor` and its
    fee is charged **once on that floor**. Pool listing (`LISTED_POOLS`, [CTR-DEX-23](#CTR-DEX-23)) is read from the
-   **taker's** order or the admin's `listedOnly` only: the route cannot change what a maker gets.
+   **taker's** order or the DEX's `listedOnly` only: the route cannot change what a maker gets.
 2. **Snapshot** the DEX's balance of A, B and each `extraTokens`.
 3. **Pull** the taker and every maker exactly as `mtxSettle`; the token checks the Path A bounds (for the taker its
    price limit over `Σ maker sold + outsideFloor`, its `minFill`, its fee bound); each pulled token's balance must have
@@ -790,7 +801,7 @@ hybrid taker's remainder ([CTR-DEX-27](#CTR-DEX-27)) is assigned by the DEX, who
 (controller ruling at the build, owner may override: the earlier text required a zero `tokensOut` balance, which would
 make that refund impossible through an executor) — and requires a zero balance of every intermediate hop token
 (`Leftover(token)`), so it holds nothing between calls and ends at 0 in every token. No admin, no owner, no upgrade, no
-sweep, no approvals; a stray balance sent to it becomes surplus at its next use. The DEX admin lists it with
+sweep, no approvals; a stray balance sent to it becomes surplus at its next use. A holder of `LISTING` lists it with
 `setExchangeTarget` where listed-only mode or `LISTED_POOLS` asks; the node names it in `order_router.executor`.
 Deployed per chain only where Uniswap exists (a `uniswap_executor` key in `deployments/<chainid>.json` when deployed);
 not on 7622 (no Uniswap there), and **no deploy script yet**: it comes with the first chain that has Uniswap. v2 and v3
@@ -905,8 +916,8 @@ Accepted differences that the adapter, the matcher and clients must know:
 ## 12. Managed markets
 
 <a id="managed-markets"></a>
-<a id="CTR-DEX-12"></a>**CTR-DEX-12** — **A managed market is a market on an `SCaaSDex` instance whose `admin` is
-the licensed venue operator's multisig** ([CTR-DEX-03](#CTR-DEX-03)): the operator deploys its own instance and lists
+<a id="CTR-DEX-12"></a>**CTR-DEX-12** — **A managed market is a market on an `SCaaSDex` instance whose `owner` (and holder of
+`LISTING`) is the licensed venue operator's multisig** ([CTR-DEX-03](#CTR-DEX-03)): the operator deploys its own instance and lists
 only managed pairs; its listing power covers only its venue; the contract is unchanged. On chain the regulated
 token's own checks are the arbiter ([asset-suite.md](asset-suite.md#regulated)): a settlement that slipped through
 intake fails alone (`MatchFailed`). The node side (home-bound orders only, the fee rules on regulated legs, eligibility of both parties at intake, no gossip by default) is

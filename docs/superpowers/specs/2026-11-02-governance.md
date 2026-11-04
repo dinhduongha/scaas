@@ -2,7 +2,7 @@
 
 **Accepted by the owner, 2026-11-03.** The build starts after `msig-nested` reaches `main`.
 
-**Status:** SPECIFIED, nothing BUILT. Written 2026-11-02 on branch `governance` at `08e92597`, from the rulings CTR-GOV-01 to -18; corrected 2026-11-03 at `9f1744c7` from three reviews of `d1132a40` (Claude, Codex, agy; §0.1) and the owner's rulings of that day, and after `6e09e008` from the final review (Fable; §0.1). A measured prototype of D1 and D2 sits on the same
+**Status:** BUILT on branch `governance` by plan tasks T0–T16 (EVM), except what a section marks SPECIFIED or PLANNED: the regulated implementations (§4.3, §4.4), `_delayedRelaxBits()` (§1.3), the families of §6.3 (Part D7 first). §12 applied to the component docs by T17, except §12.1 (CTR-AS-17), which waits for the owner. Written 2026-11-02 on branch `governance` at `08e92597`, from the rulings CTR-GOV-01 to -18; corrected 2026-11-03 at `9f1744c7` from three reviews of `d1132a40` (Claude, Codex, agy; §0.1) and the owner's rulings of that day, and after `6e09e008` from the final review (Fable; §0.1). A measured prototype of D1 and D2 sits on the same
 branch (`66c3e74b`, `0e1cf3ac`); it is not a build of this spec. Rows of §0 cite the ruling or finding they rest on; the rows marked **controller call** are the controller's and the owner may
 override them. CTR-GOV-19 ended the size gate: §9 is the record of what a public chain still needs, and it blocks nothing. Everything cryptographic here stays `UNAUDITED`.
 
@@ -1248,9 +1248,9 @@ From v2 §6, adjusted by the findings. The enum moves up, because every later st
 | Asset-suite stream | `_delayedRelaxBits`, `RECORD`, `ComplianceRegistry`, the regulated hook: all on top of this |
 | Family rounds | §6.3 cells |
 
-## 12. Normative doc changes — PLANNED, proposed text, applied at S11
+## 12. Normative doc changes — applied by plan T17 (2026-11-04), except §12.1
 
-Proposed. Nothing below is applied by this spec. CTR-GOV-03 records that the Change to CTR-AS-17 waits for the owner.
+Proposed at the spec, applied to the component docs by T17 as amended by the later rulings (identity by UA, the router, the bands); §12.1 is not applied. CTR-GOV-03 records that the Change to CTR-AS-17 waits for the owner.
 
 ### 12.1 asset-suite.md, CTR-AS-17, replacing its first paragraph
 

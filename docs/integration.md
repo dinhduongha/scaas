@@ -288,7 +288,8 @@ steps ([tender](#tender)), vesting releases, distribution claims and `ExchangeOf
 a role-restricted call (`createTender`, bond calls, issuer and compliance interventions, factory `create*`) reaches
 its target only through the role holder's own contract — `SmartKeyAccount.executeAsOwner`, or a `Safe.execTransaction`
 the owners already signed, pushed as a `call` job to a registered role-holder contract
-(`chain_contract.kind = role_holder`). Any other call shape needs a table row first (a node release) or is sent by the
+(`chain_contract.kind = role_holder`); an owner or holder that is a UA signs the typed operation of the chain's `GovernanceRouter`
+instead, relayed at fee 0 ([NODE-JOB-19](node/job-api.md#NODE-JOB-19)). Any other call shape needs a table row first (a node release) or is sent by the
 subject's or treasury's own wallet.
 
 ## 6. Feeds and reconciliation

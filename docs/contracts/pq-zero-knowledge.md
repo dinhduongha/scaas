@@ -758,7 +758,7 @@ Public ledgers ([CTR-PQZ-15](#CTR-PQZ-15)): the ERC-20 balances (`wrap`/`unwrap`
 ([CTR-UA-18](accounts.md#CTR-UA-18)), and one nonce map `_uaNonce[bytes32][batch]`. **Pool invariant**, tested on the
 built token: `balanceOf(SHIELD_POOL) == totalShielded · shieldScale`, `totalSupply()` moves only with wraps and
 unwraps, `Σ balanceOf == totalSupply`, escrow `underlying.balanceOf(this) ≥ totalSupply()` (the pool is part of
-`totalSupply`).
+`totalSupply`), on a non-hybrid; a hybrid `WrappedPqzToken` (`maxSupply ≠ 0`) claims none ([CTR-GOV-12](../decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)).
 
 <a id="credit-cap"></a>
 <a id="CTR-PQZ-06"></a>**CTR-PQZ-06** — **No credit is refused: an unbounded ordered queue, a capped `acc`, public amounts as
@@ -1348,7 +1348,7 @@ allowances per [CTR-TOK-01](token-wrappers.md#CTR-TOK-01), escrow invariant) on 
 to the pool; `mtxUnshield` moves it from the pool to the recipient; `mtxUnshieldUnwrap` burns it from the pool, then the leg
 pays; every fee from a hidden balance (`txFee`, `decoyFee`) moves from the pool to the recipient's public balance. So
 `totalSupply()` never moves on shield, unshield or fee, stays the true total, `Σ balanceOf == totalSupply` holds,
-`balanceOf(SHIELD_POOL) == totalShielded·shieldScale` and the escrow invariant is `reserve ≥ totalSupply()`. The pool guard lives in
+`balanceOf(SHIELD_POOL) == totalShielded·shieldScale` and the escrow invariant is `reserve ≥ totalSupply()` on a non-hybrid (a hybrid claims none, [CTR-GOV-12](../decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)). The pool guard lives in
 the shared base, `ERC20MetaTx._uaMove` (a native `SHIELD_POOL` side of a ledger move reverts, which covers outer fees,
 `uaExecute` fee calls and receiver fees); the confidential layers move the pool only through the **internal `_poolMove`**.
 `_poolMove` is deliberately unguarded and is the inheritance trust boundary of the token tree: only layer code (`PqzLayer`,

@@ -63,7 +63,7 @@ are node policy over `SCaaSDex` plus token-level enforcement).
 
 Measured runtime sizes of the base tiers (before `WrappedToken` replaced them): `SingleUnderlyingToken` 21 637, `MultiUnderlyingToken`
 22 561, `HederaMultiUnderlyingToken` 23 885 bytes — 2.9 k (Single), 2.0 k (Multi) and 0.7 k (Hedera Multi) bytes of
-headroom below 24 576, less than the control surface; hence the controls live in `AdminLib`, an external library
+headroom below 24 576, less than the control surface; hence the controls live in an external library (`AdminLib` then, `GovernanceLib` since [CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex))
 ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)).
 
 ## 2. Regulated controls
@@ -71,7 +71,7 @@ headroom below 24 576, less than the control surface; hence the controls live in
 <a id="regulated"></a>
 <a id="regulated-kinds"></a>
 <a id="CTR-AS-17"></a>**CTR-AS-17** — **Regulated controls are flags 5–8 (`FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`) on the
-ordinary kinds, code in `AdminLib`; refused on confidential kinds** (owner, T8, T11). They are creation-time flags of
+ordinary kinds, code in `GovernanceLib`; refused on confidential kinds** (owner, T8, T11). They are creation-time flags of
 [CTR-TOK-22](token-wrappers.md#CTR-TOK-22), chosen per token and locked or disableable per flag; their roles are held and
 administered as that bullet says. The rules of [CTR-AS-03](#CTR-AS-03)…[CTR-AS-09](#CTR-AS-09) apply to any token with
 one of the flags. A token with none carries no active control and is fully permissionless. A confidential kind refuses
@@ -79,25 +79,20 @@ flags 5–8 in `initialize` (`FeatureInvalidForKind`; the token validates, not t
 can be frozen (stuck) but not seized on public chains. Otherwise every control combination would need its own
 implementation.
 
-**Transitional (BUILT, P1c).** The flags exist; `initialize` refuses 5–8 with `FeatureNotBuilt` until this stream builds the controls.
+**Transitional (BUILT, P1c; branch `governance`, T3 `7825361b`).** The flags exist, with bit 9 `DENYLIST` beside them ([CTR-GOV-18](../decisions.md#ctr-gov-18--receiver-check-two-feature-bits-allowlist-and-denylist-off-by-default)); `initialize` refuses 5–9 with `FeatureNotBuilt` on `NORMAL` and `WRAPPED` and with `FeatureInvalidForKind` on the confidential kinds until the controls are built. The Change of this entry drafted by the governance spec (§12.1: one regulated implementation per kind, [CTR-GOV-03](../decisions.md#ctr-gov-03--a-plain-transfer-stays-0-one-regulated-implementation-per-kind-never-per-feature)) waits for the owner.
 
 <a id="regulated-exception"></a>
 <a id="CTR-AS-02"></a>**CTR-AS-02** — **Third exception to "Nobody alters a deployed token"** (owner;
 [CTR-TOK-10](token-wrappers.md#CTR-TOK-10)). Besides the rate admin and the guardian, the **regulated controls** of a
-token with flags 5–8 is a creation-time, visible exception. Its powers are those flags (`FREEZE`, `FORCE`, `PAUSE`,
-`ALLOWLIST`, part of the features of [CTR-TOK-22](token-wrappers.md#CTR-TOK-22)), chosen at creation and never added
-later; each is locked or disableable.
+token with flags 5–9 is a creation-time, visible exception. Its powers are those flags (`FREEZE`, `FORCE`, `PAUSE`,
+`ALLOWLIST`, `DENYLIST`, part of the features of [CTR-TOK-22](token-wrappers.md#CTR-TOK-22)), chosen at creation and never added
+later; each is locked or disableable. Bit 21 `MODERATE` joins this disclosure and `termsHash` when it is built ([CTR-GOV-08](../decisions.md#ctr-gov-08--moderate-later-with-flags-5-8)).
 `termsHash` (non-zero) commits to the issuer's disclosure document; disclosure is **mandatory**
 ([disclosure](#disclosure)). No regulated power can mint, change a rate, touch the token's own reserve or add a power.
 Otherwise holders would have to read code to learn a token can be seized.
 
 <a id="roles"></a>
-<a id="CTR-AS-03"></a>**CTR-AS-03** — **Two roles** (owner), granted at creation (and later by the token's owner, [CTR-TOK-22](token-wrappers.md#CTR-TOK-22)), each **a contract** (a multisig with an
-external seat is recommended, default 3-of-5, which the contract cannot prove): `issuer` executes (freeze, unfreeze,
-forced transfer, pause, unpause); `compliance` records and revokes orders. Neither role is
-transferable; a holder may `renounceRole` and the owner may revoke it ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)),
-and losing a role **relaxes**: when no `issuer` holder is left, `FREEZE|FORCE|PAUSE` stop being active (every freeze and
-pause ends at once); when no `compliance` holder is left, `FORCE` stops. Wallets compare the holders (`hasRole`, a role may have several, [CTR-TOK-22](token-wrappers.md#CTR-TOK-22)) to show whether the roles are separated. Without the relaxation a renounced or dead issuer would leave
+<a id="CTR-AS-03"></a>**CTR-AS-03** — **Holders per bit** (owner; [CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)). `issuer` names the holders of bits 5–7, `compliance` the holders of bit 10 `RECORD`, each **a contract** (a multisig with an external seat is recommended, default 3-of-5, which the contract cannot prove), granted at creation and later by the token's owner under `grantDelay`. `issuer` executes (freeze, unfreeze, forced transfer, pause, unpause); `compliance` records and revokes orders; one holder is refused both `FORCE` and `RECORD`. Neither is transferable; a holder may `renounceRole` and the owner may revoke it, and losing a role **relaxes**: when no live root of a bit is left, that bit stops being active, whatever dead leaves stay listed and an expired root counting until it is revoked: `FREEZE` and `PAUSE` end at once, `FORCE` stops, and `FORCE` stops too when no live root of `RECORD` is left. [CTR-GOV-09](../decisions.md#ctr-gov-09--delayed-relaxing-and-record-later-with-the-asset-suite) replaces "at once" with `grantDelay` when `_delayedRelaxBits()` is built, on every path that relaxes. Bits 5–7 and 10 are contract-only: a holder is a native id whose address has code. SPECIFIED: no regulated implementation is built. Wallets compare the holders (`hasRole`, a role may have several, [CTR-TOK-22](token-wrappers.md#CTR-TOK-22)) to show whether the roles are separated. Without the relaxation a renounced or dead issuer would leave
 frozen balances frozen forever.
 
 <a id="forced-transfer"></a>
@@ -130,15 +125,9 @@ transfer. There is no automatic reopening (an earlier draft would "reopen redeem
 everyone.
 
 <a id="compliance-registry"></a>
-<a id="CTR-AS-07"></a>**CTR-AS-07** — **Allowlist through a separate `ComplianceRegistry`** (address → `{uint64 flags,
-uint64 validUntil, uint32 attesterId}` in one slot; an immutable `admin` contract manages attesters; disabling an
-attester voids its attestations at once; no personal data). The UA registry is **not** extended (it is monotonic and
+<a id="CTR-AS-07"></a>**CTR-AS-07** — **Receiver check through a separate `ComplianceRegistry`: two feature bits, both off by default** (owner, [CTR-GOV-18](../decisions.md#ctr-gov-18--receiver-check-two-feature-bits-allowlist-and-denylist-off-by-default)). (`bytes32` account → `{uint64 flags, uint64 validUntil, uint32 attesterId}` in one slot; an immutable `admin` contract manages attesters; disabling an attester voids its attestations at once; no personal data.) The UA registry is **not** extended (it is monotonic and
 admin-free by design, [CTR-UA-15](accounts.md#CTR-UA-15)); compliance flags live only here (an earlier
-`attributes(UA)` registry extension was withdrawn and its flag bits reused below). A regulated
-token pins one registry and one `requiredFlags` mask at creation. **Only receivers of this token are checked** (`to`
-of a transfer or mint, fee recipient): a holder whose attestation lapsed can still send to an eligible party, burn and
-unwrap. The owner may `disableFeature(ALLOWLIST)` one-way when the flag is not locked ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)), so a dead registry never locks a token that left it disableable. A sender-side
-check would trap holders when an attester is slow. **Universal Accounts** (owner 2026-10-13, a constraint for when the
+`attributes(UA)` registry extension was withdrawn and its flag bits reused below). `ALLOWLIST`, bit 8, reads `requiredFlags`; `DENYLIST`, bit 9, reads `deniedFlags`; a regulated token pins one `complianceRegistry` and its masks at creation: `R(a) = (!ALLOWLIST || (flags(a) & requiredFlags) == requiredFlags) && (!DENYLIST || (flags(a) & deniedFlags) == 0)`, where `flags(a)` is the attestation's word while its attester is enabled and `validUntil` has not passed, else 0. Both off, nobody is stopped, and a token with both off adds no read. Both on means known, and not denied. Each bit is disabled and locked on its own. **Features only lose bits after creation, so a token created with a bit off never gets it: the issuer chooses at creation.** Money for general use turns on `DENYLIST`; a security needing known holders turns on `ALLOWLIST`. **Only receivers of this token are checked** (`to` of a transfer or mint, fee recipient): a denied account can still send, burn and unwrap, and a holder whose attestation lapsed can still send to an eligible party. A sanctioned account takes `FREEZE` as well, which stops a sender and expires. The owner may `disableFeature` either bit one-way when it is not locked ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)), so a dead registry never locks a token that left it disableable. A sender-side check would trap holders when an attester is slow. SPECIFIED, not built: today bits 8 and 9 are refused at creation (CTR-AS-17's Transitional line). **Universal Accounts** (owner 2026-10-13, a constraint for when the
 suite is built, [CTR-UA-27](accounts.md#CTR-UA-27)): the registry keys accounts by `bytes32` (a native address
 zero-padded) instead of `address`, the freeze set likewise, and the per-transfer checks hook the UA ledger's
 `_uaMove` and `_uaMint` too, the UA → UA branch included.
@@ -151,21 +140,19 @@ every direct path, self-call and `mtxTrade`. A frozen `from` reverts every shape
 ineligible resolved fee recipient reverts (also on `payWithFee`, whose override copies the base body, since an external
 function cannot call `super`; an event-equality test pins it). The allowance rule is unchanged and orthogonal.
 Regulated templates default to `MODE_FEE_NONE` (sponsored), because a fee-earning relayer would itself need an
-attestation. The shape check is a hook in the base that `AdminLib` extends; the module's code-check hook is named `_regIsContract`
+attestation. The shape check is a hook in the base that the regulated implementation's library extends (`GovernanceLib` and its regulated release, [CTR-TOK-24](token-wrappers.md#CTR-TOK-24)); the module's code-check hook is named `_regIsContract`
 to avoid a clash with the non-virtual `ERC20MetaTx._isContract`. Every source edit changes the CBOR
 metadata hash of all implementations, acceptable only because none is deployed.
 
 <a id="reserves-untouched"></a>
 <a id="CTR-AS-09"></a>**CTR-AS-09** — **No regulated power touches the token's own reserves, rates or legs** (owner):
-forced transfer moves wrapped units only, so its `collateralValue() ≥ totalSupply()` is untouched. A frozen holder
+forced transfer moves wrapped units only, so its `collateralValue() ≥ totalSupply()`, on a non-hybrid, is untouched. A frozen holder
 **cannot unwrap**; the beneficiary of a forced transfer can. Unwrap is open during a pause. Guardian and rate admin
-keep exactly their tier powers. A token with flags 5–8 used as the **underlying** of a wrapper is refused by the wizard (a
-blocking warning when forced): the regulated issuer could freeze or seize that wrapper's leg (breaking the wrapper's
-reserve rule, [CTR-TOK-05](token-wrappers.md#CTR-TOK-05)), and an attested wrapper would let its units bypass the
-allowlist. Otherwise a seizure could drain a leg other holders rely on.
+keep exactly their tier powers. A SCaaS token whose `features()` carry bit 6 `FORCE` or bit 21 `MODERATE` is refused as the **underlying** of a wrapped kind at `_addLeg`, read through the factory's `isRegisteredToken` ([CTR-GOV-05](../decisions.md#ctr-gov-05--a-wrapped-kind-refuses-a-scaas-leg-with-force-or-moderate); BUILT on branch `governance`, T8, `233b874b`): its issuer could seize that wrapper's leg (breaking the wrapper's
+reserve rule, [CTR-TOK-05](token-wrappers.md#CTR-TOK-05)). Bits 5, 7, 8, 9 on a leg stay allowed and are disclosed: a freeze or pause of the leg blocks only that leg, and an attested wrapper would let its units bypass the receiver check. An unregistered leg is an outside leg, disclosed as one. Otherwise a seizure could drain a leg other holders rely on.
 
 <a id="eligible-contract"></a>
-<a id="CTR-AS-16"></a>**CTR-AS-16** — `ELIGIBLE_CONTRACT` (the registry flag that satisfies any `requiredFlags`) may be
+<a id="CTR-AS-16"></a>**CTR-AS-16** — `ELIGIBLE_CONTRACT` (the registry flag that satisfies any `requiredFlags`, never `deniedFlags`) may be
 set **only by the registry admin**, only on **pass-through** contracts whose every outflow is re-checked by the token
 or goes only to a committed party (`VestingGrant`, `Distribution`, `ExchangeOffer` clones, `SCaaSDex`), with
 `validUntil = type(uint64).max`. Never on a wrapper, a Safe, a venue fee recipient or an EOA: those get ordinary flags
@@ -173,51 +160,52 @@ for their controller. Otherwise one attestation would be a master key across eve
 
 | | Controlled-token rules in short |
 |---|---|
-| 1 | Two roles, each held by a **contract** (multisig, default 3-of-5 with an external seat recommended): `issuer` executes (freeze, unfreeze, forced transfer, pause), `compliance` records and revokes orders. The token's owner grants and revokes them, a holder may `renounceRole`, the owner may `disableFeature` unless the flag is locked ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); losing a role **relaxes** powers |
+| 1 | Holders per bit, each a **contract** (multisig, default 3-of-5 with an external seat recommended): `issuer` holds bits 5–7 and executes (freeze, unfreeze, forced transfer, pause), `compliance` holds bit 10 `RECORD` and records and revokes orders; one holder is refused both `FORCE` and `RECORD`. The token's owner grants and revokes them, a holder may `renounceRole`, the owner may `disableFeature` unless the flag is locked ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); losing a role **relaxes** powers |
 | 2 | A forced transfer needs a live compliance **order record** `{subject, beneficiary, maxAmount, freezeUntil}` (`orderId` = keccak256 of the authority's canonical order identifier, the document off chain), moves only from the frozen subject to the recorded beneficiary, cumulatively ≤ `maxAmount`. There is **no court-ordered burn** |
 | 3 | A frozen account cannot send, be a meta-tx `from` or receive a relayer fee; it can still receive. Issuer-only freezes last ≤ 30 days (≤ 60 days per episode); longer ones need a compliance record |
 | 4 | `pause(ref, until)`: `until ≤ now + 7 days`, no extension, 7-day cooldown; a fee-less unwrap, holder burn and forced transfer are never paused |
-| 5 | Transfer eligibility through a separate `ComplianceRegistry` (address → flags, `validUntil`, attester; no personal data); only **receivers** are checked; checks run at the pipeline's shape step |
-| 6 | Confidential tokens: a confidential balance can be frozen (stuck) but not seized on public chains |
+| 5 | Receiver check through a separate `ComplianceRegistry` (account → flags, `validUntil`, attester; no personal data): `ALLOWLIST` (`requiredFlags`) and `DENYLIST` (`deniedFlags`), both off by default; only **receivers** are checked; checks run at the pipeline's shape step |
+| 6 | Confidential tokens: a confidential balance can be frozen (stuck) but not seized on public chains; the regulated confidential kinds follow [CTR-GOV-17](../decisions.md#ctr-gov-17--regulated-confidential-kinds-the-rules) (not built) |
 
 ### 2.1 Shape
 
 - **In the token** (every non-confidential kind): the overrides of `_update`, the shape check and `payWithFee`, the
   cheap getters, one-line external stubs for every control function, and `forceTransfer` (it needs `ERC20._update`,
   internal to the token).
-- **`AdminLib`** ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)): `recordOrder`, `revokeOrder`, `freeze`, `unfreeze`,
+- **`GovernanceLib`** and the regulated release's libraries ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)): `recordOrder`, `revokeOrder`, `freeze`, `unfreeze`,
   `pause`, `unpause`, `canReceive`, with the role and flag administration of [CTR-TOK-22](token-wrappers.md#CTR-TOK-22).
   Each stub `DELEGATECALL`s it (a Solidity external library call), so it runs on the clone's storage. Hedera is the
   per-chain `IS_HEDERA` variant ([CTR-TOK-23](token-wrappers.md#CTR-TOK-23)), not a regulated child.
-- **Storage**: the controls live in the `scaas.admin` ERC-7201 namespace ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)).
+- **Storage**: the controls live in the `scaas.regulated` ERC-7201 namespace; holders and features in `scaas.governance` ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)).
 - The build gates on `forge build --sizes` within the per-implementation cap of CTR-TOK-24.
 
 ### 2.2 Configuration and init
 
 **P1-open:** the placement of the parameters below in `TokenConfig` ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)) is decided in P1; the field list is the requirement of what must be configurable. The flags and roles
-are `features`, `lockedFeatures` and `roles`. `initialize` validates them through `AdminLib` ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)),
+are `features`, `lockedFeatures` and `roles`. `initialize` validates them through `GovernanceLib` ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)),
 **before** the initial-supply mint, so that mint already sees the allowlist. The initial supply goes to `creator`, the
 factory caller: an issuer whose treasury is a Safe makes the Safe call `createToken`.
 
 ```solidity
 struct RegulatedParams {
-    address registry;      // IComplianceRegistry; ≠ 0 iff ALLOWLIST
+    address complianceRegistry; // IComplianceRegistry; ≠ 0 iff ALLOWLIST or DENYLIST
     uint64  requiredFlags; // receivers must hold all of these; ≠ 0 iff ALLOWLIST
-    bytes32 termsHash;     // hash of the issuer's terms/disclosure document; ≠ 0 when any of flags 5–8 is set
+    uint64  deniedFlags;   // receivers must hold none of these; ≠ 0 iff DENYLIST
+    bytes32 termsHash;     // hash of the issuer's terms/disclosure document; ≠ 0 when any of flags 5–9 is set
 }
 ```
 
 | Init check | Error |
 |---|---|
-| any of flags 5–8 on a confidential kind | `FeatureInvalidForKind(bit)` |
+| any of flags 5–9 on a confidential kind (today; [CTR-GOV-17](../decisions.md#ctr-gov-17--regulated-confidential-kinds-the-rules) governs the regulated confidential kinds) | `FeatureInvalidForKind(bit)` |
 | `FORCE ⇒ FREEZE` (a forced transfer needs a frozen subject) | `RegulatedConfigInvalid()` |
 | `issuer`, `compliance` holders have code (`_regIsContract`; 7702 designators are EOAs) | `RoleNotContract(a)` |
-| `ALLOWLIST` ⇔ `registry ≠ 0 && requiredFlags ≠ 0`; registry has code | `RegulatedConfigInvalid()` |
+| `ALLOWLIST` ⇔ `requiredFlags ≠ 0`; `DENYLIST` ⇔ `deniedFlags ≠ 0`; `complianceRegistry ≠ 0` ⇔ either; it has code | `RegulatedConfigInvalid()` |
 | `termsHash ≠ 0` | `RegulatedConfigInvalid()` |
 | initial-supply recipient (`creator`) passes the receiver check | `NotEligible(creator, reason)` |
 
-Storage (namespace): **hot slot** `registry (20) ‖ active controls u8 ‖ pausedUntil u64` (29 bytes, read on every transfer);
-`requiredFlags u64 ‖ cooldownUntil u64`; `issuer`; `compliance`; `termsHash`; `mapping(address ⇒ FreezeState)`,
+Storage (namespace `scaas.regulated`): **hot slot** `complianceRegistry (20) ‖ active controls u8 ‖ pausedUntil u64` (29 bytes, read on every transfer);
+`requiredFlags u64 ‖ deniedFlags u64 ‖ cooldownUntil u64` (before `DENYLIST`: `requiredFlags u64 ‖ cooldownUntil u64`); `issuer`; `compliance`; `termsHash`; `mapping(address ⇒ FreezeState)`,
 `FreezeState = {slot a: until u64 ‖ episodeStart u64 ‖ issuerCooldownUntil u64; slot b: recordId bytes32}` (the hot path
 reads slot a only); `mapping(bytes32 ⇒ OrderRecord)`.
 
@@ -244,7 +232,7 @@ interface IRegulatedToken {
 
     error Frozen(address account);
     error TokenPaused(uint64 until);
-    error NotEligible(address account, uint8 reason);             // 1 not attested/flags missing, 2 expired, 3 attester disabled
+    error NotEligible(address account, uint8 reason);             // 1 not attested/flags missing, 2 expired, 3 attester disabled, 4 denied
     error FeeRecipientFrozen(address account);
     error NotIssuer(); error NotCompliance(); error ControlDisabled(uint8 control);
     error RefRequired(); error RoleNotContract(address a); error RegulatedConfigInvalid();
@@ -257,8 +245,9 @@ interface IRegulatedToken {
     function controls() external view returns (uint8);
     function issuer() external view returns (address);
     function compliance() external view returns (address);
-    function registry() external view returns (address);
+    function complianceRegistry() external view returns (address); // registry() is already the UA registry on every token
     function requiredFlags() external view returns (uint64);
+    function deniedFlags() external view returns (uint64);
     function termsHash() external view returns (bytes32);
     function frozenUntil(address account) external view returns (uint64); // > now ⇔ frozen (and CTRL_FREEZE set)
     function isFrozen(address account) external view returns (bool);
@@ -290,7 +279,7 @@ on-chain `checkTransfer` (size). This interface replaces an earlier `IRegulatedT
 
 ### 2.4 Semantics per path
 
-`R(a)` = receiver check (`ALLOWLIST` off ⇒ true; else `registry.hasFlags(a, requiredFlags)`). `F(a)` = `CTRL_FREEZE`
+`R(a)` = receiver check (`complianceRegistry.hasFlags(a, ALLOWLIST on ? requiredFlags : 0, DENYLIST on ? deniedFlags : 0)`; both off ⇒ true, no call; before `DENYLIST` it read `registry.hasFlags(a, requiredFlags)`). `F(a)` = `CTRL_FREEZE`
 set and `frozenUntil(a) > now`. `P` = `CTRL_PAUSE` set and `pausedUntil > now`.
 
 | Path | Reverts when |
@@ -302,7 +291,7 @@ set and `frozenUntil(a) > now`. `P` = `CTRL_PAUSE` set and `pausedUntil > now`.
 | holder `burn` (tier 1), the burn inside unwrap | `F(from)` (not `P`) |
 | unwrap (direct, multi, gasless) | `F(from)` via the burn row; a gasless unwrap with a fee during `P` refused at the shape step (`TokenPaused`), because its fee leg is a transfer; the recipient is not checked |
 | `forceTransfer` | the order rules below only (not `P`, not `F(from)`) |
-| `addReserve` (wrapper tiers) | unchanged |
+| `addReserve` (non-hybrid and hybrid wrapper tiers) | unchanged |
 
 Shape-step placement: the override computes the resolved fee recipient and fee amount exactly as the shape step does
 (`m.feeRecipient == 0 ? msg.sender : m.feeRecipient`, `FeePolicy.compute`), applies the table for the shape or selector
@@ -365,8 +354,9 @@ interface IComplianceRegistry {
     function attest(address[] calldata accounts, uint64[] calldata flags, uint64[] calldata validUntil) external;
         // enabled attester, or admin (id 0); flags 0 = revoke; ELIGIBLE_CONTRACT only by admin
     function attestationOf(address account) external view returns (uint64 flags, uint64 validUntil, uint32 attesterId);
-    function hasFlags(address account, uint64 required) external view returns (bool);
-        // attesterEnabled(id) && validUntil ≥ now && ((flags & required) == required || flags & ELIGIBLE_CONTRACT != 0)
+    function hasFlags(bytes32 account, uint64 required, uint64 denied) external view returns (bool);
+        // (required == 0 || (active && ((flags & required) == required || flags & ELIGIBLE_CONTRACT != 0)))
+        //   && !(active && flags & denied != 0), with active = attesterEnabled(id) && validUntil ≥ now
 }
 ```
 
@@ -387,11 +377,11 @@ from the optional verifiable-credential layer reach contracts only as these flag
 | Node simulation and grief score | a post-simulation revert with `Frozen`, `TokenPaused`, `NotEligible` or `FeeRecipientFrozen` is exempt from the origin's grief score only if the node's re-simulation at the inclusion block's **parent** succeeds and the inclusion block contains a transaction from the token's `issuer`/`compliance` or from the registry (admin or attester) touching the failing account; attester-caused exemptions are capped at 3 per origin per day (a colluding attester buys at most that). The node refuses at intake intents whose `validUntil` exceeds the receiver's attestation `validUntil` |
 | Allowance lockdown | unchanged: spenders are contracts; the regulated check binds `from`/`to`, so an allowance to any contract cannot move tokens to an ineligible party |
 | Single/multi wrappers (own reserves) | [CTR-AS-09](#CTR-AS-09); `wrap` is a mint (paused ⇒ refused; receiver check on `msg.sender`); `disableWrap` and the rate timelock unchanged; a pending rate change and a pause can overlap; fee-less unwrap stays open in both |
-| Flags 5–8 on an underlying | refused by the wizard; if forced, freezing the wrapper blocks only that leg and a seizure breaks that wrapper's reserve rule (a test documents it) |
+| Flags 5–9 on an underlying | bit 6 `FORCE` or bit 21 `MODERATE` on a registered SCaaS leg refused at `_addLeg` ([CTR-AS-09](#CTR-AS-09), [CTR-GOV-05](../decisions.md#ctr-gov-05--a-wrapped-kind-refuses-a-scaas-leg-with-force-or-moderate)); bits 5, 7, 8, 9 allowed and disclosed: freezing the wrapper blocks only that leg |
 | `SCaaSDex` | each leg's pull into the DEX and each payout runs the regulated check, so the DEX is attested `ELIGIBLE_CONTRACT` by the registry admin; a failing leg fails only its settlement (`MatchFailed`, whose reason for a failed payout is `SafeERC20FailedOperation(token)`, not the regulated error: review W-O); intake reads do not see freezes or eligibility, so the venue adds the pre-check above ([NODE-DEX-11](../node/dex-venue.md#NODE-DEX-11)); fee-split recipients on a regulated leg need `R` |
 | `MandateWallet` | it calls `payWithFee`; the wallet is the `from` and must not be frozen; payees need `R` |
 | Vesting / distribution / offer clones | holders like any other; attested `ELIGIBLE_CONTRACT` before funding (the address is known in advance) |
-| Zether | none (not covered) |
+| Zether, PQZ | none today; the regulated confidential kinds follow [CTR-GOV-17](../decisions.md#ctr-gov-17--regulated-confidential-kinds-the-rules) (not built) |
 
 ### <a id="disclosure"></a>2.8 Disclosure
 
@@ -420,14 +410,14 @@ Wallets mark accounts named in a live `OrderRecorded`.
 
 Invariants (each an invariant test):
 
-- I1 `Σ balances == totalSupply` (forced transfer is a move); wrapper tiers keep `collateralValue() ≥ totalSupply()`
+- I1 `Σ balances == totalSupply` (forced transfer is a move); non-hybrid wrapper tiers keep `collateralValue() ≥ totalSupply()`
   and per-leg conservation across every regulated call.
 - I2 Every `ForcedTransfer` has a live record, a subject frozen at execution, `to == beneficiary`, and cumulative
   `executed ≤ maxAmount`.
 - I3 No balance of a frozen account decreases except by `ForcedTransfer`.
 - I4 While paused, no transfer, mint or meta-tx op other than a fee-less unwrap succeeds; unwrap and burn always do
   (absent freeze and tier limits); no two pauses are closer than 7 days; no pause exceeds 7 days.
-- I5 Every receiver of a balance increase passed `R` at that block, while `ALLOWLIST` is on.
+- I5 Every receiver of a balance increase passed `R` at that block, while `ALLOWLIST` or `DENYLIST` is on.
 - I6 No regulated call changes the token's own `reserve_i`, `num_i/den_i`, `wrapEnabled_i` or `minter`; `controls()`
   only loses bits.
 - I7 No issuer-only freeze episode exceeds 60 days, and two issuer-only episodes on one account are ≥ 30 days apart.
@@ -440,15 +430,15 @@ Invariants (each an invariant test):
 | A4 | Subject front-runs a freeze | moves funds first. Mitigation: private submission (as for the guardian, [token-wrappers.md](token-wrappers.md#CTR-TOK-07)); moot on private chains |
 | A5 | Replay / over-execution of an order | cumulative `executed ≤ maxAmount`; records immutable; revocation stops it |
 | A6 | Wrong beneficiary | impossible without a new record by `compliance` |
-| A7 | Registry admin compromised | attests anyone (allowlist bypass) or voids attesters (receives fail); no fund movement; the owner can `disableFeature(ALLOWLIST)` unless the token locked it. Disclosed; registry pinned at creation |
+| A7 | Registry admin compromised | attests anyone (allowlist bypass), clears a denial, or voids attesters (receives fail); no fund movement; the owner can `disableFeature(ALLOWLIST)` or `disableFeature(DENYLIST)` unless the token locked it. Disclosed; registry pinned at creation |
 | A8 | Attestation lapse | receivers fail; holders still send to eligible parties, burn and unwrap |
 | A9 | Fee griefing with a frozen/ineligible fee recipient | fails at the shape step (cheap) |
 | A10 | Unwrap to a frozen accomplice | out of scope: the underlying is a different asset; the holder itself must be unfrozen to unwrap |
 | A11 | Rolling pauses | bounded by the cooldown; wrapper exits stay open; `NORMAL` tokens with `PAUSE` are disclosed as pausable half of the time, offers included |
 | A12 | Frozen holder escapes via DEX | `transferFrom` checks `F(from)`; the pair fails; the venue drops the maker's orders on `AccountFrozen` |
 | A13 | Forced transfer from a protocol clone | address-exact; the clone degrades as defined below |
-| A14 | Renounced or dead issuer | no `issuer` holder left stops `FREEZE|FORCE|PAUSE` (all freezes end); a dead issuer multisig leaves issuer-only freezes ending within 60 days and record-backed ones at `freezeUntil` or when compliance revokes |
-| A15 | Dead registry | `disableFeature(ALLOWLIST)` by the owner (flag not locked); migration offers then work again |
+| A14 | Renounced or dead issuer | no live root of a bit left stops that bit (`FREEZE`, `FORCE`, `PAUSE`; all freezes end; [CTR-AS-03](#CTR-AS-03)); a dead issuer multisig leaves issuer-only freezes ending within 60 days and record-backed ones at `freezeUntil` or when compliance revokes |
+| A15 | Dead registry | `disableFeature` of either bit, `ALLOWLIST` or `DENYLIST`, by the owner (flag not locked); migration offers then work again |
 
 Gas (estimates; measured numbers replace them in `test/as/RegulatedGas.t.sol`): per transfer on top of the tier row:
 hot-slot SLOAD (2 100 cold) + `FreezeState(from)` slot a (2 100 cold) ≈ **+4.3 k** without allowlist; with allowlist,
@@ -462,18 +452,18 @@ warm (≈ +0.5 k). Control calls add one library `DELEGATECALL` (≈ 2.6 k cold)
 | Area | Tests |
 |---|---|
 | Init | every init refusal; EOA and 7702 roles refused; `FORCE` without `FREEZE`; config stored before the initial-supply mint (allowlist refuses an unattested `creator`) |
-| Factory | `Factory.t.sol`: flags 5–8 on `NORMAL` and `WRAPPED` with counts 0/1/2/8/9; flags 5–8 refused on both confidential kinds in `initialize`, including through `createTokenUnregistered` |
+| Factory | `Factory.t.sol`: flags 5–9 on `NORMAL` and `WRAPPED` with counts 0/1/2/8/9; flags 5–9 refused on the confidential kinds in `initialize`, including through `createTokenUnregistered` |
 | Paths | each row of the path table on both kinds, direct and meta-tx (generic, named, `mtxBatch`), refused at the shape step (gas of a refused intent < 40 k); `payWithFee` override emits exactly the base events |
 | Freeze | issuer-only 30 d, extension to 60 d from episode start, `FreezeTooLong`, `FreezeCooldown` after expiry and after unfreeze, record-backed freeze to `freezeUntil`, ended by `revokeOrder`, open-ended record |
 | Orders | record/revoke/execute; `SubjectNotFrozen`; `OrderExceeded` at the exact edge; beneficiary frozen/ineligible; same `orderId` with two subjects |
 | Pause | 7-day bound, cooldown from actual end, passive expiry, refused while paused (`PauseCooldown`), fee-less gasless unwrap and burn during pause, fee-bearing gasless unwrap refused at the shape step, forced transfer during pause |
-| Relaxations | freeze then every `issuer` holder renounces or is revoked ⇒ holder transfers and unwraps; no `compliance` holder stops `FORCE`; `disableFeature(ALLOWLIST)` with a reverting registry |
-| Wrappers | frozen holder unwrap refused (direct, multi, gasless); a holder with a lapsed attestation unwraps; unwrap works while the registry reverts; reserves untouched by every regulated call; guardian/rate flows unchanged; flags 5–8 on an underlying: freezing the wrapper blocks only that leg |
+| Relaxations | freeze then every live root of `FREEZE` renounces or is revoked ⇒ holder transfers and unwraps; no live root of `RECORD` stops `FORCE`; `disableFeature(ALLOWLIST)` and `disableFeature(DENYLIST)` with a reverting registry |
+| Wrappers | frozen holder unwrap refused (direct, multi, gasless); a holder with a lapsed attestation unwraps; unwrap works while the registry reverts; reserves untouched by every regulated call; guardian/rate flows unchanged; flags 5, 7, 8, 9 on an underlying: freezing the wrapper blocks only that leg; 6 or 21 refused at `_addLeg` |
 | DEX | `SCaaSDex.mtxSettle` with a frozen maker, an ineligible taker, an ineligible fee recipient: only that settlement fails |
 | Keywords | the kind gas table and layout pins identical after the shape-check hook change |
 | Registry | admin contract only; attester add/remove; disable voids its attestations; batch attest; revoke by flags 0; expiry; `ELIGIBLE_CONTRACT` by admin only |
-| Hedera | the `IS_HEDERA` variants of `NORMAL` and `WRAPPED` with flags 5–8 sign via HIP-632; HTS fail-closed checks and association on `WRAPPED` |
-| Sizes | `--sizes` within the cap of CTR-TOK-24 with flags 5–8 compiled in |
+| Hedera | the `IS_HEDERA` variants of `NORMAL` and `WRAPPED` with flags 5–9 sign via HIP-632; HTS fail-closed checks and association on `WRAPPED` |
+| Sizes | `--sizes` within the cap of CTR-TOK-24 with flags 5–9 compiled in |
 | Invariant | handlers: transfers, meta-tx with fees, wraps/unwraps, freezes (both kinds), records, forced transfers, pauses with `warp`, role grants, revokes and renounces, `disableFeature`, attester disable and attestation expiry by the registry admin; invariants I1–I7 |
 
 ## 3. Vesting and streaming
@@ -891,7 +881,7 @@ Remainders and stray tokens (`rescue(token)` for any token other than the contra
 `predictDistribution/createDistribution`, `predictOffer/createOffer`; each `predict*` reverts on invalid params;
 CREATE2 salt `keccak256(abi.encode(kindTag, params))`; implementations immutable in the constructor, no registrar, no
 catalogue (a new implementation = a new `AssetFactory`); events `GrantCreated`, `DistributionCreated`, `OfferCreated`.
-Deploy scripts: `AdminLib` is deployed and linked per chain ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)); `AssetFactory` and one `ComplianceRegistry` per operator are
+Deploy scripts: `GovernanceLib` is deployed and linked per chain ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)); `AssetFactory` and one `ComplianceRegistry` per operator are
 deployed separately.
 
 ## <a id="templates"></a>7. Templates
@@ -912,8 +902,8 @@ names its kind, `initData` builder, required inputs, defaults, follow-up actions
 
 Points and vouchers do not expire on chain (balances never change); expiry is the end of the issuer's redemption
 offer, disclosed as such. A loyalty or voucher issuer who needs freeze or allowlist sets flags 5–8 on the same kind;
-the wizard then applies the mandatory disclosure. The wizard refuses a token with flags 5–8 as the underlying of any
-wrapper template.
+the wizard then applies the mandatory disclosure. A token with bit 6 `FORCE` or bit 21 `MODERATE` cannot be the underlying of any
+wrapper template: the wrapped kind refuses it at `_addLeg` ([CTR-AS-09](#CTR-AS-09)); bits 5, 7, 8, 9 on an underlying are disclosed.
 
 The configuration wizard (in the app and any client system) works over `IOpenFactory`:
 
@@ -964,9 +954,9 @@ regulated legs and eligibility at intake ([NODE-DEX-11](../node/dex-venue.md#NOD
 
 <a id="storage"></a>
 
-New implementations get `test/as/layout/*.json` pins. The controls live in the `scaas.admin` namespace
-([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)), so the kind's own slots are unchanged by flags 5–8; `VestingGrant`, `Distribution`,
-`ExchangeOffer` pinned in full. Indexers that read `reserve` by slot keep working on wrappers with flags 5–8.
+New implementations get `test/as/layout/*.json` pins. The controls live in the `scaas.regulated` namespace
+([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)), holders and features in `scaas.governance` (pinned in `test/v2/layout/namespaces.json`), so the kind's own slots are unchanged by flags 5–9; `VestingGrant`, `Distribution`,
+`ExchangeOffer` pinned in full. Indexers that read `reserve` by slot keep working on wrappers with flags 5–9 and on a hybrid (`maxSupply` sits in `scaas.underlying`, `reserve` keeps its offset).
 
 ## 11. Families
 

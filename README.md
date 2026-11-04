@@ -272,7 +272,7 @@ heavy logic sits in external libraries ([CTR-TOK-21](docs/contracts/token-wrappe
 [CTR-TOK-24](docs/contracts/token-wrappers.md#CTR-TOK-24)).
 
 <p align="center">
-  <img src="docs/assets/token-tree.svg" width="900" alt="EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then six kinds by code. NORMAL (NormalToken) and WRAPPED (WrappedToken, 1 to 8 legs, the native coin allowed) are built in phase P1; NORMAL_ZETHER and WRAPPED_ZETHER in phase P3 (unaudited); NORMAL_PQZ and WRAPPED_PQZ, the post-quantum confidential kinds, in phase P6g (unaudited, SCaaS testnet). External libraries: AdminLib, WrappedLib, HederaLib, TradeLib (P2), ZetherLib (P3) and the four PQZ libraries (P6g; split in 5h D14), all built. Features are flags chosen at creation; a token with both confidential layers is reserved.">
+  <img src="docs/assets/token-tree.svg" width="900" alt="EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then six kinds by code. NORMAL (NormalToken) and WRAPPED (WrappedToken, 1 to 8 legs, the native coin allowed) are built in phase P1; NORMAL_ZETHER and WRAPPED_ZETHER in phase P3 (unaudited); NORMAL_PQZ and WRAPPED_PQZ, the post-quantum confidential kinds, in phase P6g (unaudited, SCaaS testnet). External libraries: GovernanceLib, WrappedLib, HederaLib, TradeLib (P2), ZetherLib (P3) and the four PQZ libraries (P6g; split in 5h D14), all built. Features are flags chosen at creation; a token with both confidential layers is reserved.">
 </p>
 
 <details>
@@ -283,7 +283,7 @@ heavy logic sits in external libraries ([CTR-TOK-21](docs/contracts/token-wrappe
 | Factory | `OpenFactory` (one factory) | EIP-1167 clones at CREATE2 addresses: shared code, separate data ([section 5](#shared-code)); the version catalogue | BUILT as `OpenFactory` (`createToken`; kinds `NORMAL`, `WRAPPED`, `NORMAL_ZETHER`, `WRAPPED_ZETHER` (P3) and `NORMAL_PQZ`, `WRAPPED_PQZ` once enabled (`setKindEnabled`), gated by `PqzSafety` (P6g); releases deployed by the factory on versioned envs (5g-Z2)); the v1 line `OpenFactoryV1` is in `legacy/p5/` (P5) | [token-wrappers](docs/contracts/token-wrappers.md) |
 | Gasless contracts | `MetaTxBase` (any SCaaS contract) → `ERC20MetaTx` (every token) → `MetaTokenBase` | `EIP712`; `mtxExecute` runs a signed `MetaTransaction` as a self-call on a selector allowlist; tokens add `ERC20` + `IERC20MetaTx` and the typed `MetaTransfer` ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22), [CTR-MTX-23](docs/contracts/metatx.md#CTR-MTX-23)) | BUILT (P1a–P1c): `MetaTxBase`, `ERC20MetaTx`, `MetaTokenBase`; the v1 line is in `legacy/` (P5) | [metatx](docs/contracts/metatx.md) |
 | Payments | a signed `MetaTransfer` with an `entryRef` (`mtxPay`), or `IERC20Payment.payWithFee`; both emit `PaymentSettled` | `IERC20MetaTx` | BUILT: `MetaTransfer` and `mtxPay` on `MetaTokenBase` | [metatx](docs/contracts/metatx.md) |
-| Token kinds | six kinds by code: `NormalToken` (`NORMAL`), `WrappedToken` (`WRAPPED`, 1–8 legs, the native coin allowed), `NormalZetherToken`, `WrappedZetherToken` (the two `*_ZETHER` kinds), `NormalPqzToken`, `WrappedPqzToken` (the two `*_PQZ` kinds); `*_ZETHER_PQZ` reserved. Features by flags fixed at creation: payable, mint, burn, adjustable rate, wrap-disable, freeze, force, pause, allowlist ([CTR-TOK-21](docs/contracts/token-wrappers.md#CTR-TOK-21)) | `MetaTokenBase` | `NORMAL` and `WRAPPED` BUILT (P1c–P1d) with `AdminLib`, `WrappedLib`, `HederaLib` (over the old EIP-170 limit); `*_ZETHER` kinds with `ZetherLib` BUILT, unaudited (P3); `*_PQZ` kinds with the four PQZ libraries (`PqzStateLib`, `PqzTransferLib`, `PqzBurnLib`, `PqzViewLib`) BUILT, unaudited, deployed on the SCaaS testnet (P6g); every kind is over EIP-170 (test chains allow 64 KiB) | [token-wrappers](docs/contracts/token-wrappers.md) |
+| Token kinds | six kinds by code: `NormalToken` (`NORMAL`), `WrappedToken` (`WRAPPED`, 1–8 legs, the native coin allowed), `NormalZetherToken`, `WrappedZetherToken` (the two `*_ZETHER` kinds), `NormalPqzToken`, `WrappedPqzToken` (the two `*_PQZ` kinds); `*_ZETHER_PQZ` reserved. Features by flags fixed at creation: payable, mint, burn, adjustable rate, wrap-disable, freeze, force, pause, allowlist ([CTR-TOK-21](docs/contracts/token-wrappers.md#CTR-TOK-21)) | `MetaTokenBase` | `NORMAL` and `WRAPPED` BUILT (P1c–P1d) with `GovernanceLib` (was `AdminLib`), `WrappedLib`, `HederaLib` (over the old EIP-170 limit); `*_ZETHER` kinds with `ZetherLib` BUILT, unaudited (P3); `*_PQZ` kinds with the four PQZ libraries (`PqzStateLib`, `PqzTransferLib`, `PqzBurnLib`, `PqzViewLib`) BUILT, unaudited, deployed on the SCaaS testnet (P6g); every kind is over EIP-170 (test chains allow 64 KiB) | [token-wrappers](docs/contracts/token-wrappers.md) |
 | Tradable tokens | `mtxTrade`: the token pulls a signed `TradeOrder` into the DEX named in it | `IERC20MetaTx` | BUILT (`TradeLib`, P2; the `trade` op and the legacy `MetaTxDex` are in `legacy/p5/`, P5) | [metatx](docs/contracts/metatx.md), [legacy DEX](docs/contracts/dex.md#legacy-metatxdex) |
 | DEX | `SCaaSDex`, `DexPuller` | `EIP712` + `ReentrancyGuardTransient`; one taker against many makers per call on two paths, no maker allowance; `mtxExchange` fills the same orders against AMMs (Uniswap v2 and v3 by interactions, v3 and v4 through the reference executor), multi-hop or in a cycle, surplus to the signers ([CTR-DEX-20](docs/contracts/dex.md#CTR-DEX-20)) | BUILT (P2c: the exchange path on the new `SCaaSDex`) | [dex](docs/contracts/dex.md) |
 | Mandates | `MandateWallet` | `MetaTxBase` + `IERC1271` | BUILT (on `MetaTxBase`, P4) | [mandates](docs/contracts/mandates.md) |
@@ -377,50 +377,58 @@ Off the EVM the built signed form is `MetaOp` v1: `Relay` on Cosmos, `relay_pay`
 ## 4. Governance: who holds which power
 
 A SCaaS contract never lets anyone move a user's funds at will. But a token issuer, a DEX operator and a wrapper need some powers: mint, list a market, change a rate. This
-section separates what runs today from what is designed.
+section says who holds them and how they change hands.
 
 > [!IMPORTANT]
-> **The model below is designed, not built: PLANNED, with no spec yet.** The owner decided it on 2026-11-02 ([CTR-GOV-01](docs/decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex) to
-> [CTR-GOV-10](docs/decisions.md#ctr-gov-10--bit-bands-0-127-one-meaning-128-255-per-application-none-refused)). A prototype of its first two parts is measured on a branch, and the limit record does not fit the largest token as designed
-> ([results](docs/research/governance/prototype/RESULTS.md)). Everything cryptographic here is `UNAUDITED`.
+> **BUILT on branch `governance`, EVM only, `UNAUDITED`** (owner rulings [CTR-GOV-01](docs/decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex) to
+> [CTR-GOV-19](docs/decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)). The regulated implementations are SPECIFIED, the other families PLANNED.
+> The rules in one place: [docs/contracts/README.md, Governance](docs/contracts/README.md#governance).
 
-### What exists today (BUILT)
+### The model (BUILT)
 
-Every EVM token has a word of `features` and a word of `lockedFeatures`, both chosen at creation. A feature can later be cleared, once, unless it is locked; it is never set again. One optional `owner`
-grants and revokes the holders of a feature, in `AdminLib`, and can give all of that up ([CTR-TOK-22](docs/contracts/token-wrappers.md#CTR-TOK-22)). A holder of minting mints without a limit; a cap belongs in the
-minter contract. The DEX has one `admin`, set at creation, who can neither hand over nor give up the role ([CTR-DEX-03](docs/contracts/dex.md#CTR-DEX-03)). The factory has one registrar. The UA registry has no admin at all. The complete list is
-in [docs/contracts/README.md](docs/contracts/README.md#admin-powers-complete-list). A derived Universal Account cannot hold any of these powers today, and neither can a post-quantum key.
-
-### The design (PLANNED)
-
-The model answers five questions with five words, the same way at every address, in one layer, `GovernanceBase`, that any contract can inherit.
+The model answers five questions with five words, the same way at every address, in one layer, `GovernanceBase`, inherited by the six token kinds and `SCaaSDex`
+and by any third-party contract.
 
 | Question | Answer | In short |
 |---|---|---|
-| Does the right exist here? | a **bit** | Bits 0–127 mean the same on every SCaaS contract, so a wallet names one without reading the contract; bits 128–255 belong to each application contract, with a label; no band is refused |
-| Who has it? | a **holder** | An owner appoints holders per bit. Some bits have no holder: they bind or serve everyone (anyone may pay; every receiver is gated) |
+| Does the right exist here? | a **bit** | Bits 0–127 mean the same on every SCaaS contract, so a wallet names one without reading the contract (`governance_bits.json` gives each bit's name and disclosure sentence); bits 128–255 belong to each application contract, with a label; no band is refused |
+| Who has it? | a **holder** | An owner appoints holders per bit. Some bits have no holder: they bind or serve everyone (anyone may pay; anyone may rescue a stray asset to the address fixed at creation) |
 | Within what? | a **grant** | An optional limit on one holder: a band on the number the contract acts on, a total, a budget per window, an expiry, a use count, a scope the contract interprets. One level of narrower sub-grants; a sub-grant also spends its parent's budget |
-| Who changes that, and when? | the owner, after a **delay** | A new holder takes two calls by the owner, a set time apart, and is dead if not confirmed in time. Using a power, revoking and transferring ownership are not delayed |
-| Can it be made permanent? | a **lock** | A locked bit can never be cleared: the power exists for good, and a wallet says so. An owner cannot give up the contract while a bit that is not locked still has holders |
+| Who changes that, and when? | the owner, after a **delay** | A new holder or a wider grant takes two calls by the owner, `grantDelay` apart (fixed at creation, at most 30 days), and is dead if not confirmed in time. Using a power, narrowing, revoking and transferring ownership are not delayed |
+| Can it be made permanent? | a **lock** | A locked bit can never be cleared: the power exists for good, and a wallet says so. An owner cannot give up the contract while a bit that is not locked still has a live holder |
 
-**A UA or an `msig` as a holder.** Owners and holders are addresses, and a derived UA has none. So a UA holds a power through a small holder contract that names it as operator and compares the signer to it. The governed contract sees an ordinary
-address. That is how a threshold of post-quantum keys would become an owner, within the verification budget of [section 7](#7-universal-accounts-one-identifier-for-every-kind-of-key).
+The DEX's owner hands listing (bit 11) and the fee split (bit 12) to holders like any other power; it can transfer or renounce ownership. A wrapped token may also be a
+**hybrid**: its issuer mints unbacked units under a cap fixed at creation, and redemption runs while the reserve lasts, first come
+([CTR-GOV-12](docs/decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)). A wrapped token refuses a SCaaS leg whose issuer can move balances. A plain
+transfer reads no governance slot, pinned on every kind. The complete list of powers is in [docs/contracts/README.md](docs/contracts/README.md#admin-powers-complete-list).
+
+**Every owner and holder is a Universal Account id.** A plain account is its own address as a UA id and calls the contract directly. A derived UA, a post-quantum key or an
+`msig` of such keys signs a typed operation that a relayer sends, at fee 0, to the chain's one `GovernanceRouter`; the router has the UA registry verify the signature and calls
+the token or the DEX, which asks the router whom it authenticated. The router has no owner and holds nothing. That is how a threshold of post-quantum keys becomes an owner,
+within the verification budget of [section 7](#7-universal-accounts-one-identifier-for-every-kind-of-key).
 
 ```mermaid
 flowchart LR
-    M["msig of PQ members<br/>threshold signs"] -->|"typed intent"| R["Relayer<br/>pays gas"]
-    R --> H["Holder contract<br/>operator = the msig"]
-    H -->|"registry verifies<br/>the members"| G["UA registry"]
-    H -->|"ordinary call"| T["Token or DEX<br/>sees the holder's address"]
+    M["msig of PQ members<br/>threshold signs"] -->|"typed operation"| R["Relayer<br/>fee 0"]
+    R --> GR["GovernanceRouter<br/>one per chain"]
+    GR -->|"registry verifies<br/>the members"| G["UA registry"]
+    GR -->|"the operation"| T["Token or DEX<br/>asks the router: who?"]
 ```
 
-**Relayed administration.** An owner or holder operation has one direct entry on the governed contract and no gasless twin there. Its signed, typed, gasless form lives once, in the holder contract, so a contract near its size limit pays nothing for it, and a
-wallet shows each field. An owner that keeps the power on a plain account pays its own gas.
+**Relayed administration.** An owner or holder operation has one direct entry on the governed contract and no gasless twin there. Its signed, typed, gasless form lives once,
+in the router, so a contract near its size limit pays nothing for it, and a wallet shows each field. An owner that keeps the power on a plain account and calls directly pays
+its own gas.
 
-**Regulated tokens.** Freeze, forced transfer against a recorded order, pause and a receiver allowlist are SPECIFIED, and refused at creation today ([asset suite](docs/contracts/asset-suite.md#2-regulated-controls)). The decision is that a plain transfer gains no gas: a regulated token is a separate implementation, one per kind, never one per feature ([CTR-GOV-03](docs/decisions.md#ctr-gov-03--a-plain-transfer-stays-0-one-regulated-implementation-per-kind-never-per-feature)). Regulated versions
-of the wrapped confidential kinds are **open, owner, not designed**.
+**Regulated tokens (SPECIFIED, not built).** Freeze, forced transfer against a recorded order, pause, a receiver allowlist and a receiver denylist are bits 5–9, refused at
+creation today ([asset suite](docs/contracts/asset-suite.md#2-regulated-controls)). A plain transfer gains no gas: a regulated token is a separate implementation, one per kind,
+never one per feature ([CTR-GOV-03](docs/decisions.md#ctr-gov-03--a-plain-transfer-stays-0-one-regulated-implementation-per-kind-never-per-feature)); the enum already holds
+their ids. The regulated confidential kinds have their rules decided and are not designed in detail
+([CTR-GOV-17](docs/decisions.md#ctr-gov-17--regulated-confidential-kinds-the-rules)).
 
-Read more: the design [docs/research/governance/permission-model.md](docs/research/governance/permission-model.md), its open gaps and the full matrix of what is fixed, set at creation or changeable
+**Code size.** The whole record is built on every kind; `WrappedPqzToken` (72,160 B) is above 65,536 B, so it runs only on a chain whose code limit its operator raises: the
+SCaaS testnet's next reset ([CTR-GOV-19](docs/decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)).
+
+Background: the research [docs/research/governance/permission-model.md](docs/research/governance/permission-model.md), its open gaps and the full matrix of what is fixed, set at creation or changeable
 [permission-model-gaps.md](docs/research/governance/permission-model-gaps.md), and how it compares with other systems, weaknesses included [model-comparison.md](docs/research/governance/model-comparison.md).
 
 ---

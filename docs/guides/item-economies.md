@@ -89,8 +89,8 @@ Each item kind is one token created through `OpenFactory.createToken` (`NORMAL` 
 | `decimals` | `0` | one unit is one item |
 | `features` | `MINTABLE` and `BURNABLE` | any item can be produced and consumed by some recipe; set both for every kind, even one that is only an input today, so you can add recipes later without new tokens |
 | `lockedFeatures` | your choice | lock a flag to promise players it can never be removed |
-| `owner` | the game's admin account | it grants and revokes the minter role |
-| `roles.minter` | the recipe contract (or your admin first) | more minters can be added later with `grantRole(MINTABLE, …)` — the role is a set, not a single address |
+| `owner` | the game's admin account, as a UA id (a plain account's address, or a post-quantum key or `msig` that acts through the chain's `GovernanceRouter`) | it grants and revokes the minter role |
+| `roles.minter` | the recipe contract (or your admin first) | more minters can be added later with `grantRole(MINTABLE, …)` — the role is a set, not a single holder |
 | `initialSupply` / `initialHolder` | `0` / ignored, or a starting stock for the game treasury | items normally come into existence by drops or recipes |
 
 Token mechanics are in [token-wrappers.md](../contracts/token-wrappers.md) (kinds, features and roles: CTR-TOK-21,

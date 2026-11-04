@@ -1160,10 +1160,12 @@ leg may be the native coin like on every `WRAPPED*` kind ([CTR-TOK-26](token-wra
 `mtxWrapShield` of a native leg is payable like a native wrap. `shieldScale` = public units per shielded unit
 ([CTR-ZTH-04](#CTR-ZTH-04); shielded amounts are bounded by `2^54`).
 
-- **Reserve invariant.** `WRAPPED_ZETHER`: `Σ_i ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply()`, where `totalSupply()` includes
+- **Reserve invariant.** `WRAPPED_ZETHER`, on a non-hybrid: `Σ_i ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply()`, where `totalSupply()` includes
   `balanceOf(SHIELD_POOL) == totalShielded·shieldScale` (plan 5h: shielded value is held in the pool, not burned, so `totalSupply()`
   is the true total). Held by construction (a wrap-shield mints whole units to the pool, an unshield-unwrap burns from the pool
-  and pays at most what it removes) and checked by `executeRate` on `totalSupply()` alone. `totalShielded()` is a view.
+  and pays at most what it removes) and checked by `executeRate` on `totalSupply()` alone. `totalShielded()` is a view. A hybrid
+  (`maxSupply ≠ 0`, [CTR-GOV-12](../decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)) claims none: `totalSupply() ≤ maxSupply` holds instead, `balanceOf_i ≥ reserve_i` stays, a mint
+  adds no reserve, and `executeRate` skips only the supply comparison (BUILT on branch `governance`, T9 `20620a1e`).
 - **The minter never mints shielded.** `MINTABLE` on `NORMAL_ZETHER` mints public balance only; shielded value exists only
   through `mtxShield` / `mtxWrapShield`, which take public units or an underlying deposit.
 - **Fees.** The inner confidential fee (fixed per token, paid from `SHIELD_POOL` to the beneficiary UA's public balance) stays in `ZetherLib`, which returns the fee it debited. Relaying
@@ -1178,7 +1180,7 @@ library the entry's **own calldata as it arrived** under the library function's 
 itself (`abi.encode(Env)` of `_env()`, for the multi-recipient forms `abi.encode(mode, Env)`, for a signed builder one `bool`), so no
 coder of a Zether struct stays in the token. The library returns what the token does with its own internals: the pool payouts
 (`_poolMove`, `_fromPool`), the named pipeline (`_namedCall` / `_namedCallUA` over the typehash, struct words and op call the library
-built), `AdminLib.init` and the initial mint.
+built), `GovernanceLib.init` and the initial mint.
 
 | Token entry | Body in |
 |---|---|
@@ -1276,7 +1278,7 @@ Zether token (its own confidential account is classical by nature). Since typed-
   SCaaS ledger leg through `transferToUA` (`UALegNotLedger` otherwise). The prover takes the recipient as 32 bytes; the statement layout does
   not change. PQZ takes a `bytes32` recipient the same way.
 - **Invariant.** `totalSupply` counts `UA_POOL` and `SHIELD_POOL`, so the reserve invariant of `WRAPPED_ZETHER` ([CTR-ZTH-44](#CTR-ZTH-44))
-  is `reserve ≥ totalSupply()`.
+  is `reserve ≥ totalSupply()`, on a non-hybrid; a hybrid claims none ([CTR-GOV-12](../decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)).
 - **Unchanged:** a one-call `mtxWrapShield` from a UA source (a UA wrap-shields in two signed steps, `uaWrap` then
   `uaExecute(mtxShield)`; owner 2026-10-13); the roll-over functions; the Zether UA as the confidential account.
 
@@ -1296,9 +1298,12 @@ nothing else. **Built (P3)**; every view takes `envelopeBinding` (`transferState
 relays), and `unshieldUnwrapStatement` / `unwrapBinding` serve `mtxUnshieldUnwrap` (controller ruling, pending the owner).
 
 <a id="CTR-ZTH-47"></a>**CTR-ZTH-47** — **Regulated flags are refused on confidential kinds** (owner, T11). The flags
-valid on `NORMAL_ZETHER` / `WRAPPED_ZETHER` are `PAYABLE`; `MINTABLE` / `BURNABLE` (`NORMAL_ZETHER`);
-`RATE_ADJUSTABLE` / `WRAP_DISABLEABLE` (`WRAPPED_ZETHER`) ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)). The regulated
-flags 5–8 (`FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`) are refused at creation ([CTR-AS-17](asset-suite.md#CTR-AS-17)).
+valid on `NORMAL_ZETHER` / `WRAPPED_ZETHER` are `PAYABLE`, `RESCUABLE`; `MINTABLE` / `BURNABLE` (`NORMAL_ZETHER`);
+`MINTABLE` as a hybrid, `RATE_ADJUSTABLE` / `WRAP_DISABLEABLE` (`WRAPPED_ZETHER`) ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)). The regulated
+flags 5–9 (`FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`, `DENYLIST`) are refused at creation (`FeatureInvalidForKind`; the token
+validates, not the factory) ([CTR-AS-17](asset-suite.md#CTR-AS-17)). This is the built state, not a permanent rule: the
+regulated confidential kinds (enum ids 10 `NORMAL_ZETHER_REGULATED`, 11 `WRAPPED_ZETHER_REGULATED`, off until published)
+follow [CTR-GOV-17](../decisions.md#ctr-gov-17--regulated-confidential-kinds-the-rules); SPECIFIED, not built.
 
 <a id="precompile-gas"></a>
 <a id="CTR-ZTH-15"></a>**CTR-ZTH-15** — **The verifier forwards `gas()` to the precompiles** (it does not pin the
@@ -1903,7 +1908,7 @@ Regenerate with `zether-cli vectors vectors` (prover) and `kat.py` (py_ecc ≥ 8
 <a id="required-tests"></a>
 <a id="CTR-ZTH-22"></a>**CTR-ZTH-22** — **Mandatory tests for the load-bearing invariants:** (a) an invariant/fuzz
 handler (using `test/zether/helpers/ZetherProver.sol`) over random shield/transfer/rollOver/unshield/wrap/unwrap sequences:
-Σ of the `acc` + `pending` exponents = `totalShielded ≤ maxDecryptableShielded`, `balanceOf(SHIELD_POOL) == totalShielded·shieldScale`, escrow `held ≥ totalSupply()`
+Σ of the `acc` + `pending` exponents = `totalShielded ≤ maxDecryptableShielded`, `balanceOf(SHIELD_POOL) == totalShielded·shieldScale`, escrow `held ≥ totalSupply()` on a non-hybrid
 (the pool is part of `totalSupply()`, plan 5h; [CTR-ZTH-18](#CTR-ZTH-18)); (b) BLS points outside the subgroup placed in the
 statement/proof (`C_out`, `D_out`, `A_*`, `L_j`) ⇒ `verifyTransfer` false/revert (the implicit subgroup check through
 MSM); (c) `D_out = O` is refused (`ZetherVerifier.sol`). **Built (P3):** (a) `ZetherInvariant.t`, (b) and (c) `ZetherVerifier.t`.

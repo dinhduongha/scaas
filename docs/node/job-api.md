@@ -248,7 +248,10 @@ Non-EVM families: the node keeps per registered contract the `mtx_` entries it r
 the breaker counts per `(from, function)`.
 
 No role function (mint, rate administration, guardian) is an entry, so a role holder never calls one through a token: it
-acts through its own contract ([NODE-JOB-19](#NODE-JOB-19)). Why: a fixed table is a node release per operation, and hex a
+acts through its own contract ([NODE-JOB-19](#NODE-JOB-19)), or as a UA through the chain's `GovernanceRouter`, whose typed
+`mtx<Op>` / `ua<Op>` entries are rows of contract kind `gov_router` ([NODE-JOB-19](#NODE-JOB-19)); `GrantTerms` is a nested
+named struct (`NESTED`, one level), and `terms` sent as a blob is `422 BAD_PAYLOAD`. No governance operation of a governed contract
+is a row of any kind: its allow-list (`mtxSelectors()`, `_uaAllowed`) holds none ([CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)). Why: a fixed table is a node release per operation, and hex a
 client built is what the lane would sign; the owner chose the release. Not built: pricing by the decoded call, the breaker per
 `(from, selector)`.
 
@@ -623,7 +626,9 @@ only if the target meets the rule of the contract kind the op names: a token ent
 entry **never** on a registered token (any kind) or the token factory, and the rows below; `call` jobs carry no native value. Lane keys never hold
 a role on any contract ([NODE-GEN-01](README.md#NODE-GEN-01), owner 2026-10-07): a role-restricted call reaches its
 target only through a Safe of the role holders (the `Safe.execTransaction` row, [NODE-JOB-19](#NODE-JOB-19)), and the
-lane only relays an `execTransaction` the role holders already signed.
+lane only relays an `execTransaction` the role holders already signed. The rule of contract kind `gov_router`
+(`guard.rs` `Rule::GovRouter`): the target is one of the chain's `governance_routers` and its `chainUid()` equals
+`chain.chain_uid`; a router is no target of any other kind's row, and an empty list refuses every router job.
 
 Refusal: `403 CALL_TARGET_REFUSED` at accept (step 4), re-checked at lease; on the legacy
 pull path `dead` with `CALL_TARGET_REFUSED` before simulation. A new call shape needs a table row (a node release).
@@ -647,6 +652,18 @@ Every **role-restricted** call (`createTender`,
 signs with a chain-bound EIP-712 domain (subject account, mandate wallet, DEX) qualifies only while its `chainUid()`
 equals `chain.chain_uid` ([NODE-GW-07](gateway.md#NODE-GW-07)); a mismatch ⇒ `403 CALL_TARGET_REFUSED`.
 
+**Governance through the router** (BUILT on branch `governance`, plan T15, `efa7f54f`; governance spec §12.7). A
+`GovernanceRouter` is a registered contract kind `gov_router`: its 38 typed `mtx<Op>` and `ua<Op>` entries (the owner's and a
+holder's operations and the token and DEX powers, `target` a named field) are rows of the table, relayed at fee 0, target one
+of the chain's routers (config `governance_routers`, a list: a second router is a config row), `chainUid()` equal to
+`chain.chain_uid`. The rule runs on the direct path and on the inner target of `MtxRelayFee.relayCall` and `uaRelayCall`,
+both directions: a relayed call on a router is one of its rows, and a router-only entry runs only on a configured router.
+Its generic entries (`mtxExecute`, `mtxBatch`, `executeMetaTransaction`, `uaExecute`, `uaBatch`) are refused by the contract
+and are no rows. `gov_router` joins `ALL` (`CancelNonce`) and `UACancelNonce`'s contracts; no factory row exists and a
+router job carries no generation: the router is deployed once per chain with the release set (`DeployBase`, deploy JSON
+`governance_router`). A lane stays no holder: it relays what the subject signed. No existing job's shape changes.
+Operators: set `governance_routers` to the deploy JSON's `governance_router`; unset, a router job is `CALL_TARGET_REFUSED`.
+
 | Selector | Target rule | Typical producer |
 |---|---|---|
 | `SmartKeyAccountFactory.deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)` | the chain's account factory (`chain_contract.kind = account_factory`) | client subject-account onboarding |
@@ -658,6 +675,7 @@ equals `chain.chain_uid` ([NODE-GW-07](gateway.md#NODE-GW-07)); a mismatch ⇒ `
 | `VestingGrant.release`; `Distribution.claim`, `claimMany` | runtime code = EIP-1167 clone of the registered asset-suite implementation (codehash checked at lease, cached) | client asset-suite flows ([contracts/asset-suite.md](../contracts/asset-suite.md)) |
 | `ExchangeOffer.exchange(MetaTransaction,bytes)` | EIP-1167 clone of the registered `ExchangeOffer` implementation (like `SCaaSDex.mtxSettle`: the leg carries the holder's own signature) | client corporate actions |
 | `Safe.execTransaction` | a registered role-holder contract (`chain_contract.kind = role_holder`); the owners' signatures are inside the calldata | issuer / compliance / buyer role holders |
+| `GovernanceRouter.mtx<Op>` / `ua<Op>` (38 entries, `typed.rs` contract kind `gov_router`) | `Rule::GovRouter`: one of the chain's `governance_routers` (empty ⇒ refused), bound to this chain | owners and role holders as UAs (a PQ key, an `msig`, a native key), at fee 0 |
 
 `pqz_call` jobs are not `call` jobs: their own selector list is in the kinds table above.
 

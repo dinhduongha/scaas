@@ -8,7 +8,7 @@ rules: `docs/contracts/` (start at `docs/contracts/README.md`); reasons and old 
 
 | Area | Files (`src/`) | Status |
 |---|---|---|
-| Token kinds `NORMAL` / `WRAPPED` | `metatx/NormalToken.sol`, `metatx/WrappedToken.sol` on `MetaTokenBase` (`MetaTxBase`, `ERC20MetaTx`, `WrappedLib`, `AdminLib`) | built; EIP-1167 clones; meta-tx (address path and UA path), UA ledger, wrapper legs ([token-wrappers.md](../../docs/contracts/token-wrappers.md), [metatx.md](../../docs/contracts/metatx.md)) |
+| Token kinds `NORMAL` / `WRAPPED` | `metatx/NormalToken.sol`, `metatx/WrappedToken.sol` on `MetaTokenBase` (`MetaTxBase`, `ERC20MetaTx`, `WrappedLib`, `GovernanceLib`) | built; EIP-1167 clones; meta-tx (address path and UA path), UA ledger, wrapper legs ([token-wrappers.md](../../docs/contracts/token-wrappers.md), [metatx.md](../../docs/contracts/metatx.md)) |
 | Zether kinds `NORMAL_ZETHER` / `WRAPPED_ZETHER` | `zether/` (`ZetherLayer`, `ZetherLib`, `ZetherStatements`, per curve the transfer / burn / inner-product verifiers (`ZetherTransferVerifier*`, `ZetherBurnVerifier*`, `ZetherInnerProductVerifier*`), `ZetherDisclosure`) | built; unaudited, any chain with EIP-2537 ([zether.md](../../docs/contracts/zether.md)) |
 | PQZ kinds `NORMAL_PQZ` / `WRAPPED_PQZ` | `pqz/` (`PqzLayer`, `PqzStateLib`, `PqzTransferLib`, `PqzBurnLib`, `PqzViewLib`, `PqzCore`, `PqzCt`, `UAPqzVerifier`, `PqzSafety`) | built; any chain whose `PQZ` precompile passes the self-test (`PqzSafety`); op 7 multi-recipient transfers (`mtxConfidentialTransfer*`) and op 1 single (`mtxConfidentialTransferSingle*`) over the `PQZ` precompile ([pq-zero-knowledge.md](../../docs/contracts/pq-zero-knowledge.md)) |
 | Factory | `factory/OpenFactory.sol` (`IOpenFactory`, `IFactoryToken`) | built; open creation, versioned catalogue, the Zether / PQZ gates |
@@ -59,7 +59,7 @@ python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json
 Limits: token implementations 20,480 B, other contracts 24,576 B (EIP-170), init code 49,152 B (EIP-3860).
 `size-baseline.json` lists the contracts allowed over their limit at a recorded size that may only shrink (owner
 2026-10-11: size work waits for Glamsterdam; test chains such as 7622 allow 65,536 / 131,072 B). Logic in `public` /
-`external` library functions (the four PQZ libraries, `ZetherLib`, `WrappedLib`, `AdminLib`, …) is a separately deployed contract
+`external` library functions (the four PQZ libraries, `ZetherLib`, `WrappedLib`, `GovernanceLib`, …) is a separately deployed contract
 reached by DELEGATECALL and does not count towards a token's size; `internal` library functions are copied into it.
 
 ## EVM profiles
