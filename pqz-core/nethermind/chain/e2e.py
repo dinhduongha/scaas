@@ -18,6 +18,7 @@ corpus, default n2304-kmax4096), the SCaaS testnet's image 2.2.0-pqz5 since 2026
                                             Amsterdam), sent straight to PQZ, to fill a block
   e2e.py head                               number, hash, gasLimit, timestamp of the head
   e2e.py codesize --key K [--sizes … --gas N --record R]  code size rows (cmd_codesize)
+  e2e.py selftest                           no chain: codesize's wait condition (gas_fits)
   e2e.py codedump --record R                blocks 1..head as RLP to <R>.rlp
   e2e.py codeverify --record R              on a node that imported <R>.rlp: head hash, code sizes, the jump's call
 
@@ -509,11 +510,24 @@ def jump_code(n):
     return head + bytes(dest - len(head)) + tail + bytes(n - dest - len(tail))
 
 
+def gas_fits(limit, gas):
+    """A transaction is included only if its tx.gas is at most the block gas limit (EIP-8037: regular + state); the exact
+    limit fits (a 200 M block takes tx.gas 200,000,000)."""
+    return limit >= gas
+
+
+def cmd_selftest(_a):
+    """No chain: the rows of codesize's wait condition."""
+    for limit, gas, want in ((200_000_000, 199_900_000, True), (200_000_000, 200_000_000, True),
+                             (199_999_999, 200_000_000, False), (110_000_000, 110_000_000, True)):
+        check(gas_fits(limit, gas) == want, f"gas_fits(gasLimit {limit:,}, tx.gas {gas:,}) = {want}")
+
+
 def cmd_codesize(a):
     """64 KiB code (EIP-7954 under Amsterdam; maxCodeSize 0x10000 before): a create transaction whose initcode returns
     65,536 zero bytes deploys, 65,537 fails (status 0). Under EIP-8037 the code deposit is state gas (1,530 per byte,
-    ≈ 100.3 M for 64 KiB) and the block reserves tx.gas in its state dimension, so the block gas limit must exceed tx.gas:
-    this command waits for the ramp (TargetBlockGasLimit, 1/1024 per block).
+    ≈ 100.3 M for 64 KiB) and the block reserves tx.gas in its state dimension, so tx.gas must fit the block gas limit
+    (gas_fits: equal counts): this command waits for the ramp (TargetBlockGasLimit, 1/1024 per block).
 
     --sizes n:kind,… (default 65536:ok,65537:fail), --gas tx.gas of every row. Kinds: ok deploys n zero bytes; fail
     status 0; jump deploys n real bytes and eth_call answers 42 (jump_code); out is not included; any reports n zero
@@ -524,9 +538,9 @@ def cmd_codesize(a):
     rows = [(int(n), k) for n, k in (r.split(":") for r in a.sizes.split(","))]
     while all(k not in ("out", "any") for _, k in rows):
         b = rpc("eth_getBlockByNumber", ["latest", False])
-        if int(b["gasLimit"], 16) > gas + 1_000_000:
+        if gas_fits(int(b["gasLimit"], 16), gas):
             break
-        log(f"waiting: block {int(b['number'], 16)} gasLimit {int(b['gasLimit'], 16):,} <= {gas:,}")
+        log(f"waiting: block {int(b['number'], 16)} gasLimit {int(b['gasLimit'], 16):,} < {gas:,}")
         time.sleep(300)
     for n, kind in rows:
         may_miss = kind in ("out", "init")
@@ -627,6 +641,10 @@ def main():
     p.add_argument("--corpus", default=CORPUS, help="corpus.jsonl (default bin/corpus.jsonl)")
     a = p.parse_args()
     RPC, SCHEDULE, CORPUS = a.rpc, a.schedule, a.corpus
+    if a.cmd == "selftest":  # no RPC
+        cmd_selftest(a)
+        log(f"selftest: {'FAILED ' + str(len(FAILS)) if FAILS else 'all checks passed'}")
+        sys.exit(1 if FAILS else 0)
     global AMS
     AMS = "blockAccessListHash" in rpc("eth_getBlockByNumber", ["latest", False])
     log(f"head rules: {'Amsterdam (EIP-7928 header field present)' if AMS else 'before Amsterdam'}")
