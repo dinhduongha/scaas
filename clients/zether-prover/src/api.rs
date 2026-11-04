@@ -257,7 +257,7 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
 /// when given): the statement's fee is `fee + M · decoyFee` (owner 2026-10-20); `mode`, the stored form: `bundle` | `compact`, by default the token's (`disclosureMode` `"bundle"`, the default: `bundle`; `"compact"`: `compact`, the only
 /// form it takes), so the calldata calls `mtxConfidentialTransfer` unless a gas-saving form is asked for. `yAud` absent or null leaves the auditor out (statement `Y_a = O`, every `C_aud = O`): required on a token
 /// without auditor, refused on a `FULL` one, the sender's choice on an `OPTIONAL` one (`auditorMode`, checked when
-/// given); the same holds for `proveTransfer`. Relayed like the single format (`envelopeBinding`, CTR-ZTH-34); a relayed build requires `uaSigner` (`"ecdsa"` | `"fndsa512"` | `"mldsa65"` | `"mldsa44"` | `"slhdsa128s"` | `"mldsa87"` | `"ed25519"` | `"p256"` | `"webauthn-p256"`, caps from accounts.md; or a numeric `uaSignerGas` for any other kind such as an msig; review2 C3-2) so the gas check counts `_uaAuthorize`.
+/// given); the same holds for `proveTransfer`. Relayed like the single format (`envelopeBinding`, CTR-ZTH-34); a relayed build requires `uaSigner` (`"ecdsa"` | `"fndsa512"` | `"mldsa65"` | `"mldsa44"` | `"slhdsa128s"` | `"mldsa87"` | `"fndsa1024"` | `"ed25519"` | `"p256"` | `"webauthn-p256"`, caps from accounts.md; or a numeric `uaSignerGas` for any other kind such as an msig; review2 C3-2) so the gas check counts `_uaAuthorize`.
 pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
     let k = key::<C>(v)?;
     let h = header(v, 0, [0; 32], false)?;
@@ -288,7 +288,7 @@ pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens
     let custom = v.get("uaSignerGas").filter(|x| !x.is_null());
     let signer_gas = match (kind.or(custom), matches!(h.binding, Binding::Relayed(_))) {
         (None, false) => 0,
-        (None, true) => return Err("a relayed build needs `uaSigner` (\"ecdsa\" = mtxExecute; uaExecute: \"fndsa512\", \"mldsa65\", \"mldsa44\", \"slhdsa128s\", \"mldsa87\", \"ed25519\", \"p256\", \"webauthn-p256\") or a numeric `uaSignerGas` (e.g. an msig)".into()),
+        (None, true) => return Err("a relayed build needs `uaSigner` (\"ecdsa\" = mtxExecute; uaExecute: \"fndsa512\", \"mldsa65\", \"mldsa44\", \"slhdsa128s\", \"mldsa87\", \"fndsa1024\", \"ed25519\", \"p256\", \"webauthn-p256\") or a numeric `uaSignerGas` (e.g. an msig)".into()),
         (Some(_), false) => return Err("`uaSigner` needs an `envelopeBinding`".into()),
         (Some(_), true) => match (kind, custom) {
             (Some(_), Some(_)) => return Err("give `uaSigner` or `uaSignerGas`, not both".into()),

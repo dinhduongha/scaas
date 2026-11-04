@@ -365,7 +365,7 @@ PqzKeyRecord pqzKeyRecordMessage(int kind, Uint8List ua, Uint8List keyData, Obje
 bool isPortablePurpose(Uint8List tag) =>
     [popV2Tag, purposeTag('kem'), purposeTag('pqz-key'), purposeTag('membership')].any((t) => _same(t, tag));
 
-/// True when the classical members of an msig weigh less than its threshold (CTR-PQZ-12): a member is PQ if its kind is in 0x0130-0x0134, or it is
+/// True when the classical members of an msig weigh less than its threshold (CTR-PQZ-12): a member is PQ if its kind is in 0x0130-0x0135, or it is
 /// an msig that is PQ-eligible itself. [inner]: an msig member's key data by its id, the record's; none, or an inner that holds an msig (two levels
 /// only), is UAMemberUnknown: the key data alone does not show it.
 bool msigPqzEligible(Object? keyData, [Uint8List? Function(Uint8List id)? inner]) {
@@ -380,7 +380,7 @@ bool msigPqzEligible(Object? keyData, [Uint8List? Function(Uint8List id)? inner]
       if (kd == null) throw UAError('UAMemberUnknown', _hexOf(d.sublist(o + 2, o + 34)));
       pq = msigPqzEligible(kd);
     } else {
-      pq = k >= 0x0130 && k <= 0x0134;
+      pq = k >= 0x0130 && k <= 0x0135;
     }
     if (!pq) classical += (d[o + 34] << 8) | d[o + 35];
   }
