@@ -8,9 +8,11 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
@@ -482,13 +484,13 @@ contract UAReceiversTest is UALedgerBase {
         tok.mintToUA(uaP, 500);
         assertEq(tok.balanceOfUA(uaP), 500);
         assertEq(tok.totalSupply(), supply + 500);
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.MissingRole.selector, AdminLib.MINTABLE, alice));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, GovernanceBits.MINTABLE, alice));
         vm.prank(alice);
         tok.mintToUA(uaP, 1);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, _pad(bob)));
         tok.mintToUA(_pad(bob), 1);
-        NormalToken noMint = _normal(1 << AdminLib.PAYABLE);
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, AdminLib.MINTABLE));
+        NormalToken noMint = _normal(1 << GovernanceBits.PAYABLE);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.MINTABLE));
         noMint.mintToUA(uaP, 1);
         _relay(address(tok), abi.encodeCall(NormalToken.mintToUA, (uaP, 1)), RR, 0, address(0),
             abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, NormalToken.mintToUA.selector));
@@ -518,8 +520,8 @@ contract UAReceiversTest is UALedgerBase {
         vm.expectRevert(abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 10_001, 10_000));
         tok.payWithFeeToUA(uaP, 1_000, FeeMode.PERCENT, 10_001, FEE_TO, REF);
         vm.stopPrank();
-        NormalToken notPayable = _normal(1 << AdminLib.BURNABLE);
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, AdminLib.PAYABLE));
+        NormalToken notPayable = _normal(1 << GovernanceBits.BURNABLE);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.PAYABLE));
         vm.prank(alice);
         notPayable.payWithFeeToUA(uaP, 1, FeeMode.NONE, 0, address(0), REF);
         _relay(address(tok), abi.encodeCall(MetaTokenBase.payWithFeeToUA, (uaP, 1, FeeMode.NONE, 0, address(0), REF)), RR,

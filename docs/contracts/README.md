@@ -49,6 +49,7 @@ The node that relays these contracts is specified in [docs/node/](../node/README
 5. [Build, CI and pins](#build-ci-and-pins)
 6. [Issuer choices are not protocol decisions](#6-issuer-choices-are-not-protocol-decisions)
 7. [Availability](#7-availability)
+8. [Governance](#governance)
 
 ## 1. Conventions
 
@@ -154,18 +155,21 @@ deploy-script gate **SPECIFIED**.
 ## <a id="admin-powers-complete-list"></a>3. Admin powers (complete list)
 
 "Your key, your funds" holds for every value-holding contract except the powers listed here. Features are fixed at
-creation or deployment (disableable flags can only be cleared); roles are granted and revoked by the owner
-([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); all public on chain. None can touch a reserve or upgrade code. None can move, freeze or pause
-a subject's balance, except the regulated flags (5–8) chosen at creation (freeze, forced transfer against a
-recorded order, bounded pause). Minting is a supply power of a token's own `minter`/admin only, never a balance
-power.
+creation or deployment (disableable flags can only be cleared); roles are granted and revoked by the owner, a new holder or a wider grant only after `grantDelay`
+([CTR-TOK-22](token-wrappers.md#CTR-TOK-22), [governance](#governance)); all public on chain. None can touch a reserve or upgrade code. None can move, freeze or pause
+a subject's balance, except the regulated flags (5–9) chosen at creation (freeze, forced transfer against a
+recorded order, bounded pause, the receiver check) and `MODERATE` (bit 21, later); no kind of this release takes them. Minting is a supply power of a
+token's own `MINTABLE` holders only, never a balance power; a hybrid's minted units are unbacked, and the disclosure says so
+([CTR-GOV-12](../decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)).
 
 | Contract | Holder | Powers | Rule |
 |---|---|---|---|
 | `OpenFactory` | `registrar` (immutable; an EOA by default — the deployer — and a multisig before mainnet) | `publishEnv` / `publishDexEnv` (versioned, never changed), `deployImplementation` / `deployDexImplementation` (the factory deploys each release on a named env, usable after `noticePeriod`), `deprecate` / `deprecateDex`, `setKindEnabled`; none over any token | [token-wrappers](token-wrappers.md#factory) |
-| Any token (EVM) | the `owner` (optional; 0 = none) | `grantRole` / `revokeRole` for the roles of set flags, `disableFeature(bit)` one-way on a flag not locked at creation, two-step `transferOwnership`, `renounceOwnership` (role holders keep their roles); no power touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22) |
-| Any token (EVM), role holders | the holders of `minter`, `rateAdmin` (has code), `guardian`, `issuer`, `compliance` (the role column of the flag table; several holders allowed, may `renounceRole`) | the power of the flag only (mint to a public balance, a bounded timelocked rate change, `disableWrap`, freeze / forced transfer against a recorded order / bounded pause / allowlist); none touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22), [CTR-TOK-06](token-wrappers.md#CTR-TOK-06), [CTR-TOK-07](token-wrappers.md#CTR-TOK-07) |
-| `SCaaSDex` | `admin` set once at creation ([CTR-DEX-24](dex.md#CTR-DEX-24); built: written once by `initialize`; `SCaaSDexV1`: immutable) (a multisig in production; the venue operator's multisig for a managed market) | `setMarket` (list or delist a pair), `setFeeSplit` (relayer share and treasury of the signed fee; never the amount), `setExchangeTarget` (list or delist an exchange target or executor), `setListedOnly` (DEX-wide listed-only mode for the exchange path); none touches funds | [CTR-DEX-03](dex.md#CTR-DEX-03), [CTR-DEX-23](dex.md#CTR-DEX-23) |
+| Any token (EVM) | the `owner`, a UA id (`bytes32`; optional, 0 = none) | `grantRole` / `setGrant` for the bits of set flags, in two calls within `[eta, eta + grantDelay]` when they add a holder or widen a grant; `cancelGrant`; `revokeRole` at once; `disableFeature(bit)` one-way on a flag not locked at creation; two-step `transferOwnership`, not delayed; `renounceOwnership`, refused while a bit that is not locked has a live root; no power touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22), [CTR-GOV-04](../decisions.md#ctr-gov-04--two-call-grantdelay-and-holdercount) |
+| Any token (EVM), holders of a bit | the holders of bit 1 `MINTABLE`, 3 `RATE_ADJUSTABLE` (a native id with code), 4 `WRAP_DISABLEABLE`, each whole or within a `Grant`; the regulated bits 5–7 and 10 when built (several holders allowed, may `renounceRole`) | the power of the bit only (mint to a public balance, on a hybrid under `maxSupply`; a bounded timelocked rate change; `disableWrap`; freeze / forced transfer against a recorded order / bounded pause, later); none touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22), [CTR-TOK-06](token-wrappers.md#CTR-TOK-06), [CTR-TOK-07](token-wrappers.md#CTR-TOK-07) |
+| Any token (EVM), `rescue` | anyone (bit 17 `RESCUABLE`, always locked) | `rescue(asset)` sends what the token does not owe to `rescueTo`, an address fixed at creation (0 = no rescue); a leg's balance never falls below its reserve, and no other leg's balance moves | [CTR-GOV-06](../decisions.md#ctr-gov-06--rescue-to-an-immutable-rescueto) |
+| `SCaaSDex` | the `owner`, a UA id set at creation ([CTR-DEX-24](dex.md#CTR-DEX-24)), two-step transfer and renounce (a Safe, a multisig or a UA through the `GovernanceRouter` in production; the venue operator's multisig for a managed market); holders of bit 11 `LISTING` and bit 12 `FEE_ROUTING` | `LISTING`: `setMarket` (list or delist a pair), `setExchangeTarget` (list or delist an exchange target or executor), `setListedOnly` (DEX-wide listed-only mode for the exchange path); `FEE_ROUTING`: `setFeeSplit` (relayer share and treasury of the signed fee; never the amount); none touches funds. `DexPuller.rescue(token)`: anyone, to its immutable `rescueTo` | [CTR-DEX-03](dex.md#CTR-DEX-03), [CTR-DEX-23](dex.md#CTR-DEX-23) |
+| `GovernanceRouter` (one per chain and UA registry; BUILT on branch `governance`) | none: no owner, no state, holds nothing | none of its own: it relays the closed table of typed owner and power ops a subject signed (`mtx<Op>`, `ua<Op>`, fee 0) and names that subject to the target only for the call; the target decides | [CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder), governance spec §3 |
 | `NORMAL_ZETHER` / `WRAPPED_ZETHER` | the token `owner` and role holders per kind and flags ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); the auditor key is immutable (built, P3: set once by `initialize`; the old `ZetherToken` is in `legacy/p3/`) | as the flags — nothing touches a reserve or a shielded balance | [CTR-ZTH-09](zether.md#CTR-ZTH-09) |
 | `SealedBidTender`, `VestingGrant`, `Distribution`, `ExchangeOffer`, `UARegistry` | none | — | per file |
 | Non-EVM tier-1 tokens: Soroban `scaas-token`, GRAM `ScaasJettonMaster`, CosmWasm CW20 | Soroban and GRAM `admin`, CW20 `minter` (optional) | `mint` / `Mint`, unlimited on that token (a supply power, not a balance power) | [soroban](../networks/soroban.md#contracts), [ton](../networks/ton.md#overview), [cosmos](../networks/cosmos.md#contracts) |
@@ -211,10 +215,10 @@ with the local toolchain versions; `contract-evm` runs the whole forge suite at 
 |---|---|
 | Solidity | `solc_version = "0.8.37"`, `evm_version = "amsterdam"`, `optimizer_runs = 200`, `via_ir = false` (the 13-parameter named function is decoded by hand instead, see [metatx.md](metatx.md#named-functions)) |
 | OpenZeppelin, forge-std | commits `fda6b85f`, `88c8a288`, each with the sha256 of its sources, in `scripts/evm_libs.sh` (W-N) |
-| EVM profiles | every profile is `amsterdam` ([NET-EVM-06](../networks/evm.md#NET-EVM-06), owner 2026-10-21): `scaas-testnet` (the SCaaS testnet, [NET-EVM-02](../networks/evm.md#NET-EVM-02)), `zether`, `gnosis`, `celo`, `bsc`, `polygon`, `base`; test chains run anvil `--hardfork amsterdam --gas-limit 200000000 --code-size-limit 65536` |
+| EVM profiles | every profile is `amsterdam` ([NET-EVM-06](../networks/evm.md#NET-EVM-06), owner 2026-10-21): `scaas-testnet` (the SCaaS testnet, [NET-EVM-02](../networks/evm.md#NET-EVM-02)), `zether`, `gnosis`, `celo`, `bsc`, `polygon`, `base`; test chains run anvil `--hardfork amsterdam --gas-limit 200000000 --code-size-limit 65536` (`scripts/e2e-zether.sh`: 131072, [CTR-GOV-19](../decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)) |
 | Invariant runs | `[invariant] runs = 64, depth = 32, fail_on_revert = true` |
 | Storage layout | `extra_output = ["storageLayout"]`; the v2 layout is pinned by `test_storageLayoutIsPinned` against committed JSON |
-| Size | CI runs `scripts/size_gate.py` ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)): token implementations ≤ 20,480 B, other contracts ≤ 24,576 B (EIP-170), init code ≤ 49,152 B (EIP-3860); a contract in `size-baseline.json` may not exceed its recorded size |
+| Size | CI runs `scripts/size_gate.py` ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)): token implementations ≤ 20,480 B, other contracts ≤ 24,576 B (EIP-170), init code ≤ 49,152 B (EIP-3860); a contract in `size-baseline.json` may not exceed its recorded size; above every limit and row the ceiling of [CTR-GOV-19](../decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later), 131,072 B runtime and 262,144 B init, and the contracts above 65,536 B are a pinned list, `_above64KiB` (today `WrappedPqzToken`), an error when it differs in either direction |
 | EIP-1153 | `TLOAD`/`TSTORE` is a prerequisite of every token (transient reentrancy guard); a chain without it cannot hold an eligible token |
 
 <a id="deploy"></a>Deploy (EVM): `script/Deploy.s.sol` (forge script; env `PRIVATE_KEY` = deployer and default registrar,
@@ -246,7 +250,7 @@ user's `SmartKeyAccount` (the node and app predict it per chain). A contract wit
 argument gets the **same address on every chain**. Safety never rests on the address: the salt is in every digest
 ([CTR-GEN-05](#CTR-GEN-05)).
 
-**Transitional (BUILT, P1e).** Linked libraries (`AdminLib`, `HederaLib`, `WrappedLib`) are still placed by forge from
+**Transitional (BUILT, P1e).** Linked libraries (`GovernanceLib`, `HederaLib`, `WrappedLib`) are still placed by forge from
 the sender's nonce, not by CREATE2 (controller ruling, pending the owner), so their addresses differ per deployer.
 
 <a id="CTR-GEN-03"></a>**CTR-GEN-03** — On-chain code lives in its own tree at the repository root, one directory
@@ -284,3 +288,48 @@ Per-family availability of every contract area is one matrix in
 [NET-ALL-18](../networks/README.md#NET-ALL-18), [NET-ALL-19](../networks/README.md#NET-ALL-19)). In short: v2 token
 tiers, receiver-pays, the tender and the asset suite are EVM and Hedera first; classical Zether is EVM only (dev
 chains); PQ Zether is the private EVM chain only; the meta-transaction model itself exists natively on every family.
+
+## <a id="governance"></a>8. Governance
+
+Status: **BUILT on branch `governance`, EVM** (`GovernanceBase` on the six token kinds and `SCaaSDex`, the `Grant` record,
+the two-call delay, hybrid underlying, rescue, identity by UA, the `GovernanceRouter`, the node rows and the clients' vectors; plan tasks T1–T16), **UNAUDITED**. **SPECIFIED:** the regulated implementations (bits 5–10, 21; CTR-GOV-17, -18), `_delayedRelaxBits()` (CTR-GOV-09). **PLANNED:** every other family (CTR-GOV-07, Part D7 first for Soroban). The rules are the register's [CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex) to
+[CTR-GOV-19](../decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later); the
+design, field by field, is `superpowers/specs/2026-11-02-governance.md` with its
+[UA identity Change](../superpowers/specs/2026-11-04-governance-ua-identity.md).
+
+A bit says whether a right exists on a contract; a holder entry says who has it; an optional `Grant` says within what
+(amounts, a budget, a window, an expiry, a use count, one level of delegation); the owner changes holders and grants, a
+new holder or a wider grant only after `grantDelay` (fixed at creation, ≤ 30 days); a lock makes a bit permanent, and
+features only lose bits. Bits 0–127 mean the same on every SCaaS contract (`GovernanceBits`, and
+`smartcontracts/vectors/governance/governance_bits.json` for wallets: name, type and disclosure sentence per bit); bits
+128–255 belong to the application, named by `bitLabel(bit)`; no band is refused, a contract's `_validBits()` is the only
+check ([CTR-GOV-10](../decisions.md#ctr-gov-10--bit-bands-0-127-one-meaning-128-255-per-application-none-refused)).
+**Every identity is a UA id (`bytes32`)**, the same on every family: a native account is its padded address, a derived
+UA (PQ key, `msig`, …) its registered id. Payout destinations (`rescueTo`, the DEX `treasury`) stay addresses. A plain
+transfer reads no governance slot (CTR-GOV-11, pinned on every kind).
+
+| Piece | What it is |
+|---|---|
+| `GovernanceBase` | abstract, inherited by every governed contract: the `IGovernance` ABI as one-line wrappers, the masks per kind (`_validBits`, `_roleBits`, `_contractOnlyBits`, `_scalarBits`, `_scopeBits`), `_govSubject()`, the immutable `GOV_ROUTER`; `use(bit, holder, scalar)` (`GovernanceUse`) guards every power |
+| `GovernanceLib` | external library, DELEGATECALL, one body: `init`, `grantRole`, `setGrant`, `cancelGrant`, `revokeRole`, `renounceRole`, `disableFeature`, the ownership entries, `useLimited`, rescue; storage `erc7201:scaas.governance` |
+| `GovernanceRouter` | one per chain and UA registry, CREATE2 (the PQZ e2e stack's own registry has its own), no owner, no state, holds nothing: 19 ops as typed `mtx<Op>` (a native signer) and `ua<Op>` (any registered UA kind), fee mode `NONE`, relayable at fee 0; no generic path (`mtxSelectors()` empty) |
+| `UARegistry` | verifies a UA's authorization for the router (`requireAuthorized`, `PURPOSE_METATX`): a PQ key, an `msig` up to its accepted threshold, every registered kind |
+
+```mermaid
+flowchart LR
+    N["native account<br/>(EOA, Safe, SmartKeyAccount)"] -->|"1a. direct call:<br/>grantRole, mint, setMarket, …"| T
+    S["UA subject<br/>(PQ key, msig, …)"] -->|"1b. signs ua&lt;Op&gt; / mtx&lt;Op&gt;"| RL["relayer<br/>(scaas-node, fee 0)"]
+    RL -->|"2. ua&lt;Op&gt;(envelope, target, params, sig)"| GR["GovernanceRouter<br/>one per chain and UA registry"]
+    GR -->|"3. requireAuthorized(subject, digest, auth)"| UAR["UARegistry"]
+    GR -->|"4. target.&lt;op&gt;(params)<br/>transient (subject, target)"| T["governed contract<br/>GovernanceBase: token kind, SCaaSDex"]
+    T -->|"5. _govSubject(): msg.sender == GOV_ROUTER<br/>→ router.subject()"| GR
+    T -->|"6. use(bit, subject, scalar)<br/>DELEGATECALL"| GL["GovernanceLib<br/>scaas.governance"]
+```
+
+A native caller is its own subject (`_govSubject()` is its padded address, arithmetic only). A call from `GOV_ROUTER`
+takes the subject the router authenticated, and only while that call is live (0 otherwise, refused). No signature is
+verified in the governed contract, and no governance operation is on a governed contract's `mtx*` or `ua*` allow-list
+(the relay rule; `test/vectors/selector_audit.json` classifies every non-view entry). Who controls a power changes only
+by the governed contract's own rule: the owner grants or revokes, and ownership moves by `transferOwnership` and
+`acceptOwnership`, both signed by the UA through the router when it is no native account. The node relays the router's
+rows as contract kind `gov_router`, config `governance_routers` ([NODE-JOB-19](../node/job-api.md#NODE-JOB-19)).

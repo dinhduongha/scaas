@@ -5,9 +5,9 @@
 <p align="center"><b>The chain is the infrastructure. The smart contracts are the API services. The subject signs.</b></p>
 
 <p align="center">
-  <a href="docs/README.md#status-tags"><img alt="Status: specified, partly built, not deployed" src="https://img.shields.io/badge/status-specified%20%C2%B7%20partly%20built%20%C2%B7%20not%20deployed-0969da"></a>
-  <a href="#12-chains-and-families"><img alt="Six chain families" src="https://img.shields.io/badge/chain%20families-6-8250df"></a>
-  <a href="#11-confidential-amounts-zether-and-pq-zether"><img alt="Zether: unaudited" src="https://img.shields.io/badge/Zether-unaudited-d1242f"></a>
+  <a href="docs/README.md#status-tags"><img alt="Status: specified, partly built, test chains only" src="https://img.shields.io/badge/status-specified%20%C2%B7%20partly%20built%20%C2%B7%20test%20chains%20only-0969da"></a>
+  <a href="#13-chains-and-families"><img alt="Eight chain families" src="https://img.shields.io/badge/chain%20families-8-8250df"></a>
+  <a href="#12-confidential-amounts-zether-and-pq-zether"><img alt="Zether: unaudited" src="https://img.shields.io/badge/Zether-unaudited-d1242f"></a>
 </p>
 
 **SCaaS treats a smart-contract chain as infrastructure, its smart contracts as API services, and each contract
@@ -15,7 +15,7 @@ function as an API function.** Users authorize every valuable call with their ow
 the call to the chain and pay its gas; the contract checks everything itself.
 
 <p align="center">
-  <img src="docs/assets/scaas-overview.svg" width="900" alt="SCaaS at a glance: clients (ERP, wallets and signers, console and dApp, apps and AI agents) send subject-signed intents to relayers (scaas-node plus partner and open relayers, linked by mesh and gossip); relayers submit and pay gas to the smart contracts (tokens and wrappers, accounts and mandates, DEX, tender and assets, Zether and PQ Zether), which run on six chain families (EVM, Cosmos, Soroban, Move, GRAM (formerly TON), Solana; NEAR and Algorand planned); finalized events come back to clients as feeds.">
+  <img src="docs/assets/scaas-overview.svg" width="900" alt="SCaaS at a glance: clients (ERP, wallets and signers, console and dApp, apps and AI agents) send subject-signed intents to relayers (scaas-node plus partner and open relayers, linked by mesh and gossip); relayers submit and pay gas to the smart contracts (tokens and wrappers, accounts and mandates, DEX, tender and assets, Zether and PQ Zether), which run on eight chain families (EVM with Hedera, Cosmos, Soroban, Move, GRAM (formerly TON), Solana, NEAR, Algorand); finalized events come back to clients as feeds.">
 </p>
 
 This page explains the idea from the ground up and points to the detailed docs. It defines no rules: the rules live
@@ -36,12 +36,12 @@ in the component docs under [`docs/`](docs/README.md), each with an id and a rea
 
 | The idea | How it works | Reference |
 |---|---|---|
-| 1. [A smart chain is infrastructure](#1-a-smart-chain-is-infrastructure) | 6. [Universal Accounts](#6-universal-accounts-one-identifier-for-every-kind-of-key) | 12. [Chains and families](#12-chains-and-families) |
-| 2. [Smart contracts are API services](#2-smart-contracts-are-api-services) | 7. [Meta-transactions and EIP-1776](#7-meta-transactions-and-eip-1776) | 13. [Components and where to read more](#13-the-components-and-where-to-read-more) |
-| 3. [Contracts: what is built on what](#3-contracts-what-is-built-on-what) | 8. [Who pays the fee](#8-who-pays-the-fee-every-model) | 14. [How the design evolved](#14-how-the-design-evolved) |
-| 4. [Shared code, delegate call, separate data](#4-shared-code-delegate-call-separate-data-and-upgradeable) | 9. [Meta-transactions and liquidity](#9-meta-transactions-and-liquidity) | 15. [Repository layout](#15-repository-layout) |
-| 5. [What the traditional model gets wrong](#5-what-the-traditional-model-gets-wrong) | 10. [Open relayers](#10-open-relayers-open-and-competitive) | 16. [Use cases](#16-use-cases) |
-| | 11. [Zether and PQ Zether](#11-confidential-amounts-zether-and-pq-zether) | 17. [Free Pay](#17-free-pay) |
+| 1. [A smart chain is infrastructure](#1-a-smart-chain-is-infrastructure) | 7. [Universal Accounts](#7-universal-accounts-one-identifier-for-every-kind-of-key) | 13. [Chains and families](#13-chains-and-families) |
+| 2. [Smart contracts are API services](#2-smart-contracts-are-api-services) | 8. [Meta-transactions and EIP-1776](#8-meta-transactions-and-eip-1776) | 14. [Components and where to read more](#14-the-components-and-where-to-read-more) |
+| 3. [Contracts: what is built on what](#3-contracts-what-is-built-on-what) | 9. [Who pays the fee](#9-who-pays-the-fee-every-model) | 15. [How the design evolved](#15-how-the-design-evolved) |
+| 4. [Governance: who holds which power](#4-governance-who-holds-which-power) | 10. [Meta-transactions and liquidity](#10-meta-transactions-and-liquidity) | 16. [Repository layout](#16-repository-layout) |
+| 5. [Shared code, delegate call, separate data](#5-shared-code-delegate-call-separate-data-and-upgradeable) | 11. [Open relayers](#11-open-relayers-open-and-competitive) | 17. [Use cases](#17-use-cases) |
+| 6. [What the traditional model gets wrong](#6-what-the-traditional-model-gets-wrong) | 12. [Zether and PQ Zether](#12-confidential-amounts-zether-and-pq-zether) | 18. [Free Pay](#18-free-pay) |
 
 ---
 
@@ -66,9 +66,9 @@ flowchart LR
 
 | Service | What the chain provides | Examples |
 |---|---|---|
-| **Execution** | A virtual machine that runs contract code deterministically; every validator gets the same result | EVM, Move VM (Aptos, Sui), Soroban WASM, CosmWasm, TVM (GRAM, formerly TON), SVM (Solana) |
+| **Execution** | A virtual machine that runs contract code deterministically; every validator gets the same result | EVM, Move VM (Aptos, Sui), Soroban WASM, CosmWasm, TVM (GRAM, formerly TON), SVM (Solana), NEAR WASM, AVM (Algorand) |
 | **Storage** | Durable state owned by each contract, read and written only through its code | EVM key-value storage, Sui objects, Soroban persistent/temporary entries with a rent (TTL), Solana accounts |
-| **Payment** | Metering and billing are part of the protocol: every transaction pays a native fee, on the chain, at once — no invoice, no payment processor | ETH/xDAI gas, HBAR, SUI, XLM, GRAM, SOL; some chains bill in stablecoins (Gnosis xDAI, Celo fee currencies) or peg fees to USD (Hedera) |
+| **Payment** | Metering and billing are part of the protocol: every transaction pays a native fee, on the chain, at once — no invoice, no payment processor | ETH/xDAI gas, HBAR, SUI, XLM, GRAM, SOL, NEAR, ALGO; some chains bill in stablecoins (Gnosis xDAI, Celo fee currencies) or peg fees to USD (Hedera) |
 | **Authentication** | Every call carries a digital signature made on the **client side**; the chain verifies it. There are no server sessions and no passwords | secp256k1, ed25519, P-256 (passkeys), BLS, post-quantum schemes |
 
 Three supporting services complete the picture:
@@ -98,7 +98,7 @@ and wins on money, authority and trustworthy records; the five tables below — 
 | Latency of a write | Milliseconds | Milliseconds | Seconds to minutes, until finality |
 | Throughput | Grows with what you rent | Grows with the plan | Bounded by the chain's block space, shared with everyone |
 | Reads | Your server answers | API with row-level rules | Free: RPC, node feeds or an indexer; no signature needed |
-| Changing code | Redeploy at will | Migrate at will | Immutable at deploy; new behaviour is a new version ([section 4](#4-shared-code-delegate-call-separate-data-and-upgradeable)) |
+| Changing code | Redeploy at will | Migrate at will | Immutable at deploy; new behaviour is a new version ([section 5](#5-shared-code-delegate-call-separate-data-and-upgradeable)) |
 
 For computing and storing data, the chain is slower, smaller and dearer. Application data and logic stay where they are.
 
@@ -110,7 +110,7 @@ For computing and storing data, the chain is slower, smaller and dearer. Applica
 | | Cloud VM | Hosted backend | Smart chain + SCaaS |
 |---|---|---|---|
 | How the service is paid | A monthly invoice | A monthly plan or usage invoice | A native fee inside every transaction, settled at once |
-| Who pays | The application owner | The application owner | Whoever submits: a relayer, the subject or the payee; it can be passed on in the token ([section 8](#8-who-pays-the-fee-every-model)) |
+| Who pays | The application owner | The application owner | Whoever submits: a relayer, the subject or the payee; it can be passed on in the token ([section 9](#9-who-pays-the-fee-every-model)) |
 | Moving value between parties | Needs a bank or a payment processor | Same | Built into the protocol: a payment is an ordinary call |
 
 Only the chain has payment inside the infrastructure itself.
@@ -145,8 +145,9 @@ migration.
 | Revoking a key | Easy: short TTLs, deny lists, rotation | Easy: rotate the secret, revoke refresh tokens | Harder: on-chain rotation, guardians, backup keys (per family) |
 | Typical breach | Leaked signing key: every user impersonated | Leaked JWT secret or admin key: every user, rules bypassed | Leaked key of one user: that user only, within its mandate limits |
 
-This is where the chain wins, and why SCaaS exists. The full comparison, with the bounded admin powers and how the
-ERP trusts finalized events, is in [docs/architecture.md](docs/architecture.md#authority-model).
+This is where the chain wins, and why SCaaS exists. The full comparison and how the ERP trusts finalized events are in
+[docs/architecture.md](docs/architecture.md#authority-model); the bounded admin powers are in
+[section 4](#4-governance-who-holds-which-power) and [docs/contracts/README.md](docs/contracts/README.md#admin-powers-complete-list).
 
 </details>
 
@@ -155,7 +156,7 @@ ERP trusts finalized events, is in [docs/architecture.md](docs/architecture.md#a
 
 | | Cloud VM | Hosted backend | Smart chain + SCaaS |
 |---|---|---|---|
-| Who can see the data | The operator, and whomever it grants | The provider, and whomever it grants | Amounts and balances hidden by Zether, and by PQ Zether (post-quantum, planned); who transacts stays visible |
+| Who can see the data | The operator, and whomever it grants | The provider, and whomever it grants | Amounts and balances hidden by Zether, and by PQ Zether (post-quantum, on the SCaaS testnet), both unaudited and both on EVM only; who transacts stays visible |
 | Changing a record | Rows can be edited or deleted, often without a trace | Same | Immutable: a mistake is fixed by a new entry that references it — a wrong invoice gets a correcting invoice, never an edit — so the history is its own audit trail |
 | A private setup | A private network | Self-hosting | A private or permissioned chain with admitted peers only |
 
@@ -178,12 +179,12 @@ user.
 > - **Results can be undone until finality.** Blocks can be reorganized; SCaaS reports nothing before its finality
 >   gate ([docs/node/indexer-feeds.md](docs/node/indexer-feeds.md)).
 > - **Contracts are not automatically immutable.** Most platforms let a deployer keep an upgrade key. Immutability is a
->   *deployment decision* ([section 4](#4-shared-code-delegate-call-separate-data-and-upgradeable)).
+>   *deployment decision* ([section 5](#5-shared-code-delegate-call-separate-data-and-upgradeable)).
 > - **A private chain with one block signer is a signed database**, not a decentralized network. SCaaS uses one
 >   (SCaaS testnet) and names it as such ([docs/networks/evm.md](docs/networks/evm.md#private-chain)).
 > - **Validators can delay or censor** a transaction; they cannot forge it.
 > - **Everything is public by default**, including amounts and balances — which is why
->   [Zether](#11-confidential-amounts-zether-and-pq-zether) exists.
+>   [Zether](#12-confidential-amounts-zether-and-pq-zether) exists.
 
 ---
 
@@ -200,8 +201,8 @@ mobile apps and AI agents call them like any other API.
 | API function (`POST /payments`) | A contract function (`mtxPay(...)`, `mtxExchange(...)`, `mtxConfidentialTransfer(...)`, or any allowlisted function of any SCaaS contract) |
 | Bearer token issued by the server | The **subject's own signature** over exactly this call (EIP-712 on EVM) |
 | Quotas and limits | Caps inside the contract: per-payment and per-period mandate limits, expiry on every signature |
-| API versioning | A version catalogue in the factory; each deployed contract stays fixed ([section 4](#4-shared-code-delegate-call-separate-data-and-upgradeable)) |
-| Billing | Gas, paid by a relayer; optionally a fee in the token ([section 8](#8-who-pays-the-fee-every-model)) |
+| API versioning | A version catalogue in the factory; each deployed contract stays fixed ([section 5](#5-shared-code-delegate-call-separate-data-and-upgradeable)) |
+| Billing | Gas, paid by a relayer; optionally a fee in the token ([section 9](#9-who-pays-the-fee-every-model)) |
 | Commit acknowledgement | A finalized event, delivered by the node as a feed |
 
 The one difference from an ordinary web API is **who authorizes a write**. In a web API the server decides and
@@ -252,7 +253,7 @@ flowchart TB
         U["Universal Account<br/>registry"]
         subgraph CONF["Confidential tokens"]
             direction LR
-            Z["Zether<br/>(bn254, BLS12-381)"]
+            Z["Zether<br/>(BLS12-381)"]
             P["PQZ<br/>(post-quantum)"]
         end
     end
@@ -271,7 +272,7 @@ heavy logic sits in external libraries ([CTR-TOK-21](docs/contracts/token-wrappe
 [CTR-TOK-24](docs/contracts/token-wrappers.md#CTR-TOK-24)).
 
 <p align="center">
-  <img src="docs/assets/token-tree.svg" width="900" alt="EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then six kinds by code. NORMAL (NormalToken) and WRAPPED (WrappedToken, 1 to 8 legs, the native coin allowed) are built in phase P1; NORMAL_ZETHER and WRAPPED_ZETHER in phase P3 (unaudited); NORMAL_PQZ and WRAPPED_PQZ, the post-quantum confidential kinds, in phase P6g (unaudited, SCaaS testnet). External libraries: AdminLib, WrappedLib, HederaLib, TradeLib (P2), ZetherLib (P3) and the four PQZ libraries (P6g; split in 5h D14), all built. Features are flags chosen at creation; a token with both confidential layers is reserved.">
+  <img src="docs/assets/token-tree.svg" width="900" alt="EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then six kinds by code. NORMAL (NormalToken) and WRAPPED (WrappedToken, 1 to 8 legs, the native coin allowed) are built in phase P1; NORMAL_ZETHER and WRAPPED_ZETHER in phase P3 (unaudited); NORMAL_PQZ and WRAPPED_PQZ, the post-quantum confidential kinds, in phase P6g (unaudited, SCaaS testnet). External libraries: GovernanceLib, WrappedLib, HederaLib, TradeLib (P2), ZetherLib (P3) and the four PQZ libraries (P6g; split in 5h D14), all built. Features are flags chosen at creation; a token with both confidential layers is reserved.">
 </p>
 
 <details>
@@ -279,28 +280,28 @@ heavy logic sits in external libraries ([CTR-TOK-21](docs/contracts/token-wrappe
 
 | Area | Contracts | Built on | Status | Read |
 |---|---|---|---|---|
-| Factory | `OpenFactory` (one factory) | EIP-1167 clones at CREATE2 addresses: shared code, separate data ([section 4](#shared-code)); the version catalogue | BUILT as `OpenFactory` (`createToken`; kinds `NORMAL`, `WRAPPED`, `NORMAL_ZETHER`, `WRAPPED_ZETHER` (P3) and `NORMAL_PQZ`, `WRAPPED_PQZ` once enabled (`setKindEnabled`), gated by `PqzSafety` (P6g); releases deployed by the factory on versioned envs (5g-Z2)); the v1 line `OpenFactoryV1` is in `legacy/p5/` (P5) | [token-wrappers](docs/contracts/token-wrappers.md) |
-| Gasless contracts | `MetaTxBase` (any SCaaS contract) → `ERC20MetaTx` (every token) → `MetaTokenBase` | `EIP712`; `mtxExecute` runs a signed `MetaTransaction` as a self-call on a selector allowlist; tokens add `ERC20` + `IERC20MetaTx` and the typed `MetaTransfer` ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22), [CTR-MTX-23](docs/contracts/metatx.md#CTR-MTX-23)) | BUILT (P1a–P1c): `MetaTxBase`, `ERC20MetaTx`, `MetaTokenBase`; the older v1 line remains until the node and clientkeys move (P5) | [metatx](docs/contracts/metatx.md) |
-| Payments | a signed `MetaTransfer` with an `entryRef` (`mtxPay`), or `IERC20Payment.payWithFee`; both emit `PaymentSettled` | `IERC20MetaTx` | BUILT: `MetaTransfer` and `mtxPay` on `MetaTokenBase`; the v1 line keeps a `pay(bytes32)` data shape | [metatx](docs/contracts/metatx.md) |
-| Token kinds | four kinds by code: `NormalToken` (`NORMAL`), `WrappedToken` (`WRAPPED`, 1–8 legs, the native coin allowed), `NormalZetherToken`, `WrappedZetherToken` (the two `*_ZETHER` kinds), `NormalPqzToken`, `WrappedPqzToken` (the two `*_PQZ` kinds); `*_ZETHER_PQZ` reserved. Features by flags fixed at creation: payable, mint, burn, adjustable rate, wrap-disable, freeze, force, pause, allowlist ([CTR-TOK-21](docs/contracts/token-wrappers.md#CTR-TOK-21)) | `MetaTokenBase` | `NORMAL` and `WRAPPED` BUILT (P1c–P1d) with `AdminLib`, `WrappedLib`, `HederaLib` (`WrappedToken` still over EIP-170); `*_ZETHER` kinds with `ZetherLib` BUILT, unaudited (P3); `*_PQZ` kinds with the four PQZ libraries (`PqzStateLib`, `PqzTransferLib`, `PqzBurnLib`, `PqzViewLib`) BUILT, unaudited, deployed on the SCaaS testnet (P6g); every kind is over EIP-170 (test chains allow 64 KiB) | [token-wrappers](docs/contracts/token-wrappers.md) |
+| Factory | `OpenFactory` (one factory) | EIP-1167 clones at CREATE2 addresses: shared code, separate data ([section 5](#shared-code)); the version catalogue | BUILT as `OpenFactory` (`createToken`; kinds `NORMAL`, `WRAPPED`, `NORMAL_ZETHER`, `WRAPPED_ZETHER` (P3) and `NORMAL_PQZ`, `WRAPPED_PQZ` once enabled (`setKindEnabled`), gated by `PqzSafety` (P6g); releases deployed by the factory on versioned envs (5g-Z2)); the v1 line `OpenFactoryV1` is in `legacy/p5/` (P5) | [token-wrappers](docs/contracts/token-wrappers.md) |
+| Gasless contracts | `MetaTxBase` (any SCaaS contract) → `ERC20MetaTx` (every token) → `MetaTokenBase` | `EIP712`; `mtxExecute` runs a signed `MetaTransaction` as a self-call on a selector allowlist; tokens add `ERC20` + `IERC20MetaTx` and the typed `MetaTransfer` ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22), [CTR-MTX-23](docs/contracts/metatx.md#CTR-MTX-23)) | BUILT (P1a–P1c): `MetaTxBase`, `ERC20MetaTx`, `MetaTokenBase`; the v1 line is in `legacy/` (P5) | [metatx](docs/contracts/metatx.md) |
+| Payments | a signed `MetaTransfer` with an `entryRef` (`mtxPay`), or `IERC20Payment.payWithFee`; both emit `PaymentSettled` | `IERC20MetaTx` | BUILT: `MetaTransfer` and `mtxPay` on `MetaTokenBase` | [metatx](docs/contracts/metatx.md) |
+| Token kinds | six kinds by code: `NormalToken` (`NORMAL`), `WrappedToken` (`WRAPPED`, 1–8 legs, the native coin allowed), `NormalZetherToken`, `WrappedZetherToken` (the two `*_ZETHER` kinds), `NormalPqzToken`, `WrappedPqzToken` (the two `*_PQZ` kinds); `*_ZETHER_PQZ` reserved. Features by flags fixed at creation: payable, mint (on a wrapped kind the hybrid mint under `maxSupply`), burn, adjustable rate, wrap-disable, freeze, force, pause, allowlist, denylist, rescue, moderate ([CTR-TOK-21](docs/contracts/token-wrappers.md#CTR-TOK-21)) | `MetaTokenBase` | `NORMAL` and `WRAPPED` BUILT (P1c–P1d) with `GovernanceLib` (was `AdminLib`), `WrappedLib`, `HederaLib` (over the old EIP-170 limit); `*_ZETHER` kinds with `ZetherLib` BUILT, unaudited (P3); `*_PQZ` kinds with the four PQZ libraries (`PqzStateLib`, `PqzTransferLib`, `PqzBurnLib`, `PqzViewLib`) BUILT, unaudited, deployed on the SCaaS testnet (P6g); every kind is over EIP-170, and `WrappedPqzToken` (72,160 B) is above 65,536 B, so it runs only on a chain whose code limit its operator raises ([CTR-GOV-19](docs/decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)) | [token-wrappers](docs/contracts/token-wrappers.md) |
 | Tradable tokens | `mtxTrade`: the token pulls a signed `TradeOrder` into the DEX named in it | `IERC20MetaTx` | BUILT (`TradeLib`, P2; the `trade` op and the legacy `MetaTxDex` are in `legacy/p5/`, P5) | [metatx](docs/contracts/metatx.md), [legacy DEX](docs/contracts/dex.md#legacy-metatxdex) |
-| DEX | `SCaaSDex`, `DexPuller` | `EIP712` + `ReentrancyGuardTransient`; one taker against many makers per call on two paths, no maker allowance; `mtxExchange` fills the same orders against AMMs (Uniswap v2/v3), multi-hop or in a cycle, surplus to the signers ([CTR-DEX-20](docs/contracts/dex.md#CTR-DEX-20)) | BUILT (P2c: the exchange path on the new `SCaaSDex`) | [dex](docs/contracts/dex.md) |
+| DEX | `SCaaSDex`, `DexPuller` | `EIP712` + `ReentrancyGuardTransient`; one taker against many makers per call on two paths, no maker allowance; `mtxExchange` fills the same orders against AMMs (Uniswap v2 and v3 by interactions, v3 and v4 through the reference executor), multi-hop or in a cycle, surplus to the signers ([CTR-DEX-20](docs/contracts/dex.md#CTR-DEX-20)) | BUILT (P2c: the exchange path on the new `SCaaSDex`) | [dex](docs/contracts/dex.md) |
 | Mandates | `MandateWallet` | `MetaTxBase` + `IERC1271` | BUILT (on `MetaTxBase`, P4) | [mandates](docs/contracts/mandates.md) |
 | Smart account (optional) | `SmartKeyAccount`, `SmartKeyAccountFactory` | `MetaTxBase` + `IERC1271`; P-256 passkeys; signs its own calls as itself ([CTR-ACC-10](docs/contracts/accounts.md#CTR-ACC-10)) | BUILT (on `MetaTxBase`, P4) | [accounts](docs/contracts/accounts.md#subjectaccount) |
-| Universal Accounts | the UA registry with one verifier per kind (`smartcontracts/evm/src/ua/UARegistry.sol`; the Zether kinds since UA-3; the old Zether-only registry is backed up in `smartcontracts/evm/legacy/ua3/`, not built); next MetaToken v3 with a UA ledger (UA-4) | the signature, multisig, BLS and hash-to-curve libraries | UA registry BUILT and deployed on the SCaaS testnet (P6g; the post-quantum and `pqz-mlwe` kinds since P6c / P6g); the UA ledger in the token base BUILT (UA-4), UA receivers / wrap (UA-5a) and UA trade orders / DEX legs (UA-5b) BUILT; UA-5c SPECIFIED | [accounts](docs/contracts/accounts.md#universal-account) |
-| Zether | the `*_ZETHER` kinds (`ZetherLayer` + `ZetherLib`), `ZetherStatements`, per curve the transfer / burn / inner-product verifiers (`ZetherTransferVerifier*`, `ZetherBurnVerifier*`, `ZetherInnerProductVerifier*`), `ITransferDisclosure` | `MetaTokenBase`; EIP-196/197 and EIP-2537 precompiles | BUILT, unaudited (P3) | [zether](docs/contracts/zether.md) |
-| PQZ (post-quantum Zether) | the `*_PQZ` kinds (`PqzLayer` + the four libraries + `PqzCore`), `PqzCt`, `PqzSafety` (precompile self-test; no chain allowlist), `UAPqzVerifier` (the `pqz-mlwe` UA kind) | `MetaTokenBase`, relayed like Zether ([CTR-PQZ-21](docs/contracts/pq-zero-knowledge.md#CTR-PQZ-21)); the `PQZ` precompile (PQZL lattice / PQZH hash-based proofs, [pqz-core](pqz-core/README.md)) live on the SCaaS testnet — public chains once they offer one | BUILT, unaudited, deployed on the SCaaS testnet with real PQZL proofs end to end (P6g); the multi-recipient transfer (op 7) is in the proof engine and being activated on the SCaaS testnet (P6-ANON S8) | [pq-zero-knowledge](docs/contracts/pq-zero-knowledge.md) |
+| Universal Accounts | the UA registry with one verifier per kind (`smartcontracts/evm/src/ua/UARegistry.sol`; the Zether kind since UA-3; the old Zether-only registry is backed up in `smartcontracts/evm/legacy/ua3/`, not built), and the UA ledger in the token base | the signature, multisig, BLS and hash-to-curve libraries | UA registry BUILT and deployed on the SCaaS testnet (P6g; the post-quantum kinds since P6c); the UA ledger in the token base BUILT (UA-4), UA receivers / wrap (UA-5a) and UA trade orders / DEX legs (UA-5b) BUILT; UA-5c SPECIFIED | [accounts](docs/contracts/accounts.md#universal-account) |
+| Zether | the `*_ZETHER` kinds (`ZetherLayer` + `ZetherLib`), `ZetherStatements`, the transfer, burn and inner-product verifiers, BLS12-381 only (`ZetherTransferVerifier*`, `ZetherBurnVerifier*`, `ZetherInnerProductVerifier*`), `ITransferDisclosure` | `MetaTokenBase`; EIP-196/197 and EIP-2537 precompiles | BUILT, unaudited (P3) | [zether](docs/contracts/zether.md) |
+| PQZ (post-quantum Zether) | the `*_PQZ` kinds (`PqzLayer` + the four libraries + `PqzCore`), `PqzCt`, `PqzSafety` (precompile self-test; no chain allowlist), `UAPqzVerifier` (the `pqz-mlwe` scheme, a PQZ key carried by a post-quantum signing UA) | `MetaTokenBase`, relayed like Zether ([CTR-PQZ-21](docs/contracts/pq-zero-knowledge.md#CTR-PQZ-21)); the `PQZ` precompile (PQZL lattice / PQZH hash-based proofs, [pqz-core](pqz-core/README.md)) live on the SCaaS testnet — public chains once they offer one | BUILT, unaudited, deployed on the SCaaS testnet with real PQZL proofs end to end (P6g); the multi-recipient transfer (op 7) is in the proof engine and being activated on the SCaaS testnet (P6-ANON S8) | [pq-zero-knowledge](docs/contracts/pq-zero-knowledge.md) |
 | Asset suite | `ComplianceRegistry`, `VestingGrant`, `Distribution`, `ExchangeOffer` | regulated flags 5–8 on ordinary token kinds ([CTR-AS-17](docs/contracts/asset-suite.md#CTR-AS-17)); ERC-7201 namespaced storage | SPECIFIED | [asset-suite](docs/contracts/asset-suite.md) |
 | Tender | `SealedBidTender` | commit and reveal with deposits | SPECIFIED | [tender](docs/contracts/tender.md) |
 | Sponsorship | `SponsorshipPool` | opt-in gas sponsorship contract | PLANNED | [sponsorship](docs/node/sponsorship.md) |
-| Hedera | the same kinds with `IS_HEDERA` set, `HederaMandateWallet` | the same EVM contracts plus HIP-632 for native Hedera keys | BUILT: `IS_HEDERA` and `HederaLib` on the same token contracts (CTR-TOK-23); the `Hedera*UnderlyingToken` children are gone | [hedera](docs/networks/hedera.md) |
+| Hedera | `NORMAL` and `WRAPPED` with `IS_HEDERA` set, `HederaMandateWallet`; the Zether and PQZ kinds refuse a Hedera release | the same EVM contracts plus HIP-632 for native Hedera keys | BUILT: `IS_HEDERA` and `HederaLib` on the same token contracts (CTR-TOK-23); the `Hedera*UnderlyingToken` children are gone | [hedera](docs/networks/hedera.md) |
 
 **Tradable tokens: where they came from.** The first SCaaS code had an `ERC1776Tradeable` token: a trade order signed
 against the token itself (`MtxTradeOrder`: amount, receive token, receive amount, relayer, fee) that only a DEX could
 pull, matched one taker against several makers in one call. The design returns to that shape: the signed
 `TradeOrder` keeps those fields, the token moves funds only into the `dex` named in the order, and the DEX settles one
 taker against many makers, either pulling exactly the matched part of a resting order or pulling the whole amount and
-refunding the rest ([section 14](#14-how-the-design-evolved)).
+refunding the rest ([section 15](#15-how-the-design-evolved)).
 
 </details>
 
@@ -342,36 +343,97 @@ refunding the rest ([section 14](#14-how-the-design-evolved)).
 
 | Standard | Why not |
 |---|---|
-| ERC-2771 trusted forwarder | A forwarder sits outside the token, can swallow a failed call after charging for it, and needs a trusted address; the meta-transaction lives inside the token instead ([section 7](#7-meta-transactions-and-eip-1776)) |
+| ERC-2771 trusted forwarder | A forwarder sits outside the token, can swallow a failed call after charging for it, and needs a trusted address; the meta-transaction lives inside the token instead ([section 8](#8-meta-transactions-and-eip-1776)) |
 | ERC-4337 bundlers and paymasters | An extra mempool, bundler and entry point for something the token already does; SCaaS follows EIP-1776 |
-| UUPS, Transparent, Beacon or Diamond proxies | An upgrade key is an admin key over every balance ([section 4](#4-shared-code-delegate-call-separate-data-and-upgradeable)) |
-| Approvals by ordinary accounts | The classic drain: only a contract may call `approve` on a SCaaS token ([section 5](#5-what-the-traditional-model-gets-wrong)) |
+| UUPS, Transparent, Beacon or Diamond proxies | An upgrade key is an admin key over every balance ([section 5](#5-shared-code-delegate-call-separate-data-and-upgradeable)) |
+| Approvals by ordinary accounts | The classic drain: only a contract may call `approve` on a SCaaS token ([section 6](#6-what-the-traditional-model-gets-wrong)) |
 
 </details>
 
-**Other families** implement the same three pieces — token, mandate, DEX — on their own standards
-([docs/networks/README.md](docs/networks/README.md#model)):
+**Other families** fill the same roles — value under signed operations, a mandate, a DEX, a relay fee — on their own standards
+([docs/networks/README.md](docs/networks/README.md#model)). Only the EVM has wrappers, the exchange path against AMMs, and the confidential tokens: classical Zether and PQZ
+exist on EVM alone. Aptos, Sui and Solana have no token of their own: they run over the chain's own coins and tokens. Each row is contracts and tests in this repository; the deploy state differs per family
+([docs/networks/](docs/networks/README.md)), and the family's own page is the reference.
 
-| Family | Chains | Language | Token | Mandate and DEX | Accounts |
-|---|---|---|---|---|---|
-| [EVM](docs/networks/evm.md) | Ethereum, BSC, Polygon, Gnosis, Celo, Base, [Hedera](docs/networks/hedera.md), TRON | Solidity | `MetaTokenBase` kinds (ERC-20) | `MandateWallet`, `SCaaSDex` | UA registry, ERC-1271, passkey |
-| [Cosmos](docs/networks/cosmos.md) | CosmWasm chains | Rust (CosmWasm) | `token` (CW20) + `metaop` | `mandate`, `dex` | ADR-036 secp256k1, passkey |
-| [Soroban](docs/networks/soroban.md) | Stellar, Pi Network | Rust (WASM) | `token` (SEP-41) | `mandate`, `dex` | `account` with `__check_auth` |
-| [Aptos](docs/networks/aptos.md) | Aptos | Move | `meta` (account object per owner) | `mandate`, `dex` | `auth`, `p256` |
-| [Sui](docs/networks/sui.md) | Sui | Move | `meta` (shared `Account<T>`) | `mandate`, `dex` | `auth` |
-| [GRAM](docs/networks/ton.md) (ex-TON) | GRAM | Tact | `jetton` (TEP-74) | `mandate`, `dex` | wallet signature, passkey |
-| [Solana](docs/networks/solana.md) | Solana | Rust | program `scaas` | same program | ed25519, P-256 |
-| NEAR (planned) | NEAR | Rust (WASM) | NEP-141 | — | access keys |
-| Algorand (planned) | Algorand | Algorand Python / TEAL | ASA / ARC-200 | — | ed25519 |
+| Family | Chains | Language | Token | Mandate and DEX | Relay fee | Accounts | Universal Account |
+|---|---|---|---|---|---|---|---|
+| [EVM](docs/networks/evm.md) | SCaaS testnet; draft profiles Gnosis, Celo, BSC, Polygon, Base; TRON planned | Solidity | `MetaTokenBase` kinds (ERC-20) | `MandateWallet`, `SCaaSDex` (order book, exchange path) | `MtxRelayFee` router and executor | ERC-1271, passkey, native | registry and ledger |
+| [Hedera](docs/networks/hedera.md) (on the EVM path) | Hedera | Solidity | `NORMAL`, `WRAPPED` with `IS_HEDERA` | `HederaMandateWallet`, `SCaaSDex` | the same router | native keys by HIP-632 | the same code; no round of its own |
+| [Cosmos](docs/networks/cosmos.md) | CosmWasm chains | Rust (CosmWasm) | `token` (CW20) + `metaop` | `mandate`, `dex` (two-leg) | `relayfee` + `relayexec` | ADR-036 secp256k1, passkey | none: base contracts only |
+| [Soroban](docs/networks/soroban.md) | Stellar, Pi Network | Rust (WASM) | `token` (SEP-41) | `mandate`, `dex` (two-leg, partial fills) | `relay-fee` + `relay-executor` | `smart-key-account` with `__check_auth` | `ua-registry` and a UA ledger, on a local network |
+| [Aptos](docs/networks/aptos.md) | Aptos | Move | no token: any fungible asset, `meta` | `mandate`, `dex` (two-leg) | `relayfee` wrappers | `auth`, `p256` | none: base contracts only |
+| [Sui](docs/networks/sui.md) | Sui | Move | no token: any `Coin<T>` in a shared `Account<T>`, `meta` | `mandate`, `dex` (two-leg) | `relayfee` wrappers | `auth` | none: base contracts only |
+| [GRAM](docs/networks/ton.md) (ex-TON) | GRAM | Tact | `jetton` (TEP-74) | `mandate`, `dex` (escrow) | `relayfee` + executor | wallet signature, passkey | none: base contracts only |
+| [Solana](docs/networks/solana.md) | Solana | Rust | no token: SPL and Token-2022 accounts, program `scaas` | same program (two-leg) | in the program, with wrappers | ed25519, P-256 | none: base contracts only |
+| [NEAR](docs/networks/near.md) | NEAR | Rust (near-sdk) | `token` (NEP-141) | mandate inside `token`, `dex` (escrow) | `relayfee` + `relayexec` | SCaaS key records: ed25519, secp256k1, passkey, `msig`; never an access key | a UA ledger with lazy records, **no registry**; its UA rounds are open |
+| [Algorand](docs/networks/algorand.md) | Algorand | Algorand Python | `token` (ARC-200 in boxes, not an ASA) | `mandate`, `dex` (atomic) | `relayfee` + a LogicSig executor | one shared `account` app: ed25519, secp256k1, passkey, `msig` | a UA ledger with lazy records, **no registry**; its UA rounds are open |
 
-On every family a subject signs one of two kinds: a `MetaCall` (a call of one of the contract's allowlisted
-functions, checked by one verification library per family) or a typed `MetaTransfer`, and every signed entry point
-starts with `mtx` in the family's case (`mtx_transfer`, `MtxExecute`) ([NET-ALL-26](docs/networks/README.md#NET-ALL-26),
+Off the EVM the built signed form is `MetaOp` v1: `Relay` on Cosmos, `relay_pay` on Move, `SignedOp` on GRAM, `mtx_*` entries on NEAR and Algorand, host authorization on Soroban. One `MetaCall` and one typed
+`MetaTransfer` with `mtx` names on every family is SPECIFIED ([NET-ALL-26](docs/networks/README.md#NET-ALL-26),
 [NET-ALL-27](docs/networks/README.md#NET-ALL-27), [NET-ALL-28](docs/networks/README.md#NET-ALL-28)).
 
 ---
 
-## 4. Shared code, delegate call, separate data and upgradeable
+## 4. Governance: who holds which power
+
+A SCaaS contract never lets anyone move a user's funds at will. But a token issuer, a DEX operator and a wrapper need some powers: mint, list a market, change a rate. This
+section says who holds them and how they change hands.
+
+> [!IMPORTANT]
+> **BUILT on branch `governance`, EVM only, `UNAUDITED`** (owner rulings [CTR-GOV-01](docs/decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex) to
+> [CTR-GOV-19](docs/decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)). The regulated implementations are SPECIFIED, the other families PLANNED.
+> The rules in one place: [docs/contracts/README.md, Governance](docs/contracts/README.md#governance).
+
+### The model (BUILT)
+
+The model answers five questions with five words, the same way at every address, in one layer, `GovernanceBase`, inherited by the six token kinds and `SCaaSDex`
+and by any third-party contract.
+
+| Question | Answer | In short |
+|---|---|---|
+| Does the right exist here? | a **bit** | Bits 0–127 mean the same on every SCaaS contract, so a wallet names one without reading the contract (`governance_bits.json` gives each bit's name and disclosure sentence); bits 128–255 belong to each application contract, with a label; no band is refused |
+| Who has it? | a **holder** | An owner appoints holders per bit. Some bits have no holder: they bind or serve everyone (anyone may pay; anyone may rescue a stray asset to the address fixed at creation) |
+| Within what? | a **grant** | An optional limit on one holder: a band on the number the contract acts on, a total, a budget per window, an expiry, a use count, a scope the contract interprets. One level of narrower sub-grants; a sub-grant also spends its parent's budget |
+| Who changes that, and when? | the owner, after a **delay** | A new holder or a wider grant takes two calls by the owner, `grantDelay` apart (fixed at creation, at most 30 days), and is dead if not confirmed in time. Using a power, narrowing, revoking and transferring ownership are not delayed |
+| Can it be made permanent? | a **lock** | A locked bit can never be cleared: the power exists for good, and a wallet says so. An owner cannot give up the contract while a bit that is not locked still has a live holder |
+
+The DEX's owner hands listing (bit 11) and the fee split (bit 12) to holders like any other power; it can transfer or renounce ownership. A wrapped token may also be a
+**hybrid**: its issuer mints unbacked units under a cap fixed at creation, and redemption runs while the reserve lasts, first come
+([CTR-GOV-12](docs/decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)). A wrapped token refuses a SCaaS leg whose issuer can move balances. A plain
+transfer reads no governance slot, pinned on every kind. The complete list of powers is in [docs/contracts/README.md](docs/contracts/README.md#admin-powers-complete-list).
+
+**Every owner and holder is a Universal Account id.** A plain account is its own address as a UA id and calls the contract directly. A derived UA, a post-quantum key or an
+`msig` of such keys signs a typed operation that a relayer sends, at fee 0, to the chain's one `GovernanceRouter`; the router has the UA registry verify the signature and calls
+the token or the DEX, which asks the router whom it authenticated. The router has no owner and holds nothing. That is how a threshold of post-quantum keys becomes an owner,
+within the verification budget of [section 7](#7-universal-accounts-one-identifier-for-every-kind-of-key).
+
+```mermaid
+flowchart LR
+    M["msig of PQ members<br/>threshold signs"] -->|"typed operation"| R["Relayer<br/>fee 0"]
+    R --> GR["GovernanceRouter<br/>one per chain and UA registry"]
+    GR -->|"registry verifies<br/>the members"| G["UA registry"]
+    GR -->|"the operation"| T["Token or DEX<br/>asks the router: who?"]
+```
+
+**Relayed administration.** An owner or holder operation has one direct entry on the governed contract and no gasless twin there. Its signed, typed, gasless form lives once,
+in the router, so a contract near its size limit pays nothing for it, and a wallet shows each field. An owner that keeps the power on a plain account and calls directly pays
+its own gas.
+
+**Regulated tokens (SPECIFIED, not built).** Freeze, forced transfer against a recorded order, pause, a receiver allowlist and a receiver denylist are bits 5–9, refused at
+creation today ([asset suite](docs/contracts/asset-suite.md#2-regulated-controls)). A plain transfer gains no gas: a regulated token is a separate implementation, one per kind,
+never one per feature ([CTR-GOV-03](docs/decisions.md#ctr-gov-03--a-plain-transfer-stays-0-one-regulated-implementation-per-kind-never-per-feature)); the enum already holds
+their ids. The regulated confidential kinds have their rules decided and are not designed in detail
+([CTR-GOV-17](docs/decisions.md#ctr-gov-17--regulated-confidential-kinds-the-rules)).
+
+**Code size.** The whole record is built on every kind; `WrappedPqzToken` (72,160 B) is above 65,536 B, so it runs only on a chain whose code limit its operator raises: the
+SCaaS testnet's next reset ([CTR-GOV-19](docs/decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)).
+
+Background: the research [docs/research/governance/permission-model.md](docs/research/governance/permission-model.md), its open gaps and the full matrix of what is fixed, set at creation or changeable
+[permission-model-gaps.md](docs/research/governance/permission-model-gaps.md), and how it compares with other systems, weaknesses included [model-comparison.md](docs/research/governance/model-comparison.md).
+
+---
+
+## 5. Shared code, delegate call, separate data and upgradeable
 
 <a id="shared-code"></a>
 
@@ -412,7 +474,7 @@ regulated module) sits in a library linked once per chain.
 
 | Benefit | Why |
 |---|---|
-| **Cheap to create** | A token clone costs about 45,000 gas instead of about 2.5 M for a full deployment; a `SmartKeyAccount` clone about 287,000 instead of several million |
+| **Cheap to create** | A clone stores 45 bytes of code instead of tens of kilobytes. Creating a token, its first state included, measured about 1.3 M gas under Amsterdam's state pricing |
 | **Light on the chain's nodes** | The implementation's code is stored once per chain — clients keep code by its hash — and each new clone adds 45 bytes plus its own storage. The one implementation, called by every clone, stays hot in the clients' code caches, and state grows more slowly |
 | **One audited code base** | Auditing and verifying one implementation covers every clone; all clones of a version share one code hash, so anyone can check which code a token runs |
 | **Versions without upgrades** | A new version is a new implementation added to the factory's catalogue; it applies only to contracts created after it, and existing clones keep their pointer and their rules |
@@ -430,9 +492,8 @@ upgrade policy on Aptos, an upgrade authority on Solana, a contract admin on Cos
 - **Every program that holds user value is deployed immutable** ([CTR-GEN-02](docs/contracts/README.md#CTR-GEN-02)).
   Users verify once what a contract does and can rely on it for good.
 - **New behaviour is a new version, not a patch** (above). A bug fix is a new deployment plus a voluntary migration.
-- **The deploy gate enforces it.** Each family freezes its programs in the deploy run, and the deploy script fails if
-  a program is still upgradeable. The node re-checks at every start and halts a chain whose programs could still be
-  upgraded ([docs/networks/README.md](docs/networks/README.md#deploy-gate)).
+- **The deploy gate enforces it, in part.** SPECIFIED on every family ([docs/networks/README.md](docs/networks/README.md#deploy-gate)). Built today: the NEAR and Algorand deploy runs fail unless the program is frozen,
+  and their node adapters halt at start; Sui freezes in the run; Aptos by its `Move.toml` policy. The Solana, Cosmos and GRAM steps, and the node's re-check for the other families, are not built.
 
 The price is that there is no hotfix in place. That is deliberate: an upgrade key is an admin key over every balance.
 
@@ -440,7 +501,7 @@ The price is that there is no hotfix in place. That is deliberate: an upgrade ke
 
 Every family separates shared code from per-user data in its own way, and each has its own switch to freeze the code:
 
-| Family | Code stored once | Data per contract or user | Frozen at deploy by |
+| Family | Code stored once | Data per contract or user | Frozen at deploy by (rule; see above for what is built) |
 |---|---|---|---|
 | EVM, Hedera | one implementation per version | 45-byte EIP-1167 clones with their own storage | clones have no upgrade path; no proxy anywhere |
 | Cosmos (CosmWasm) | `store` the WASM once (`code_id`) | each `instantiate` is a contract with its own state | instantiate with `--no-admin` |
@@ -448,15 +509,17 @@ Every family separates shared code from per-user data in its own way, and each h
 | Solana | one program | data in separate accounts (subject account, lanes) | upgrade authority set to `None` |
 | Move (Aptos, Sui) | one package | objects and resources per user or token | Aptos `immutable` policy; Sui `make_immutable` on the `UpgradeCap` |
 | GRAM | one jetton-wallet code | each wallet deployed with the same code cell in its `state_init` | code is immutable as built |
+| NEAR | one WASM per contract account (no global contract) | contract state | every access key deleted; the run fails otherwise |
+| Algorand | one program per app | boxes; one shared `account` app | programs reject update and delete; hashes gated |
 
 ---
 
-## 5. What the traditional model gets wrong
+## 6. What the traditional model gets wrong
 
 Five habits of the usual blockchain, token and wallet model are the source of most losses and most of the friction that
 keeps blockchains out of everyday use. SCaaS designs each of them out.
 
-### 5.1 Users must hold the native coin to pay fees
+### 6.1 Users must hold the native coin to pay fees
 
 This is the root problem. Before you can do anything on a blockchain, you have to buy its native coin — ETH, BNB,
 SOL and so on — just to pay the fee. Picture a coffee shop asking every customer to open a crypto exchange account
@@ -476,16 +539,16 @@ and every sponsored transaction went through one provider's paymaster. The fee p
 
 With SCaaS, users never need a native coin. They sign what they want to do, a relayer sends it to the chain and pays
 the gas, and the relayer is paid in the token being used — or the merchant pays
-([section 7](#7-meta-transactions-and-eip-1776)). A company like Grab would not need a special wallet, and it would
+([section 8](#8-meta-transactions-and-eip-1776)). A company like Grab would not need a special wallet, and it would
 never sign on its customers' behalf: each customer signs with a key they already have (a passkey or an existing
 wallet), any relayer submits, and the company pays the fees in its own token, on whichever chain it uses.
 
 The same works for **loyalty points**, **prepaid cards**, **vouchers** and **prepaid service passes** (one token = one
 visit, session or ride) at a spa, a bakery, a gym or a coffee chain. Each one is just a token that any wallet or app
 can hold, and the business does not have to run any blockchain infrastructure of its own
-([use cases](#16-use-cases), "Retail and loyalty").
+([use cases](#17-use-cases), "Retail and loyalty").
 
-### 5.2 Transactions are synchronous and tied to the sender's account
+### 6.2 Transactions are synchronous and tied to the sender's account
 
 On every chain a normal transaction is built for the sender's own account and its **sequence number** (EVM nonce,
 Stellar sequence, Cosmos account sequence, GRAM wallet seqno), at the moment it is sent. That means:
@@ -505,9 +568,9 @@ for it.
 SCaaS: the subject signs an **intent** — "this operation, on this contract, valid until this time" — and **anyone**
 may execute it later, from their own account ([NET-ALL-02](docs/networks/README.md#NET-ALL-02)). Each contract keeps
 its own two-dimensional nonce space (a lane and a sequence inside it), so independent operations never wait for each
-other ([section 7](#7-meta-transactions-and-eip-1776)).
+other ([section 8](#8-meta-transactions-and-eip-1776)).
 
-### 5.3 Burning the fee coin works against the chain's own goal
+### 6.3 Burning the fee coin works against the chain's own goal
 
 A chain wants many transactions and deep liquidity, because that is what makes it useful and what pays its validators.
 Yet the common design burns part of every fee (EIP-1559's base fee and its imitators) to make the native coin scarcer
@@ -523,7 +586,7 @@ meta-transactions bring, by letting people use the chain without first buying it
 SCaaS burns nothing: the fee of an operation goes to whoever executes it, in the token used, and the cost of a payment
 does not depend on the price of a coin the user never holds.
 
-### 5.4 `approve` / `revoke`: a standing permission to drain, and three paid steps
+### 6.4 `approve` / `revoke`: a standing permission to drain, and three paid steps
 
 The standard ERC-20 flow is `approve(spender, amount)`, then the dApp's call (which uses `transferFrom`), then — if the
 user remembers — `revoke`. Two things are wrong with it:
@@ -544,7 +607,7 @@ allowance (`approve(spender, 0)`, which is what a "revoke" is in ERC-20) before 
 (for example USDC) still follows its own ERC-20 rules; its holders approve only the DEX's `DexPuller`, which pulls
 nothing without the holder's signed order.
 
-### 5.5 The operator's server holds the power
+### 6.5 The operator's server holds the power
 
 In a classic web or custody setup, the server signs on the user's behalf. Whoever controls that server — or steals
 its keys — can move funds, and the audit log is whatever the server wrote. In SCaaS no server holds a key that can
@@ -552,7 +615,7 @@ sign for a subject ([docs/architecture.md](docs/architecture.md#authority-model)
 
 ---
 
-## 6. Universal Accounts: one identifier for every kind of key
+## 7. Universal Accounts: one identifier for every kind of key
 
 On a chain, an account is simply **whoever can produce a valid signature**. But each chain natively understands only
 its own key types — an EVM chain knows secp256k1 addresses and nothing else. Real users and organizations need much
@@ -579,11 +642,11 @@ flowchart LR
 What makes it work:
 
 - **It is an identifier, not a contract.** Nothing is deployed per user: creating a UA is free and deterministic, and
-  the same key data gives the same id on every chain of every family
+  the same key data gives the same id on every family with UA ids (EVM, Hedera, Soroban, NEAR, Algorand)
   ([CTR-UA-02](docs/contracts/accounts.md#CTR-UA-02)).
 - **Native accounts are used as they are.** An EVM address, a contract account (Safe, `SmartKeyAccount`) or a native
   account of another family is already a UA and never registers. Every other kind registers once per chain, with a
-  proof that the registrant holds the key; the registry has no admin and never forgets.
+  proof that the registrant holds the key; the registry has no admin and never forgets. NEAR and Algorand have no registry yet: a UA opens there on its first signed operation.
 - **Ids never collide.** Every derived id carries a versioned kind tag and is 32 bytes, so a passkey UA can never equal
   an EVM address or a UA of another kind over the same key
   ([CTR-UA-03](docs/contracts/accounts.md#CTR-UA-03)).
@@ -601,13 +664,13 @@ What makes it work:
 
 | Use | Kinds | What it gives |
 |---|---|---|
-| Native accounts | EVM address, contract account (Safe, `SmartKeyAccount`), Hedera, Solana, Stellar, Aptos, Sui, Cosmos, GRAM wallets | Work as they are; no registration |
-| Sign with one key | `webauthn-p256` (passkey), `p256` (HSM, secure enclave), `ed25519`, `bip340` (Schnorr), `schnorr-bn254`, `schnorr-bls12381` | Sign from any device or HSM, on any EVM chain, not only with secp256k1 |
+| Native accounts | EVM address, contract account (Safe, `SmartKeyAccount`), Hedera, Solana, Stellar, Aptos, Sui, Cosmos, GRAM, NEAR, Algorand accounts | Work as they are; no registration |
+| Sign with one key | `webauthn-p256` (passkey), `p256` (HSM, secure enclave), `ed25519`, `secp256k1`, `bip340` (Schnorr), `schnorr-bn254`, `schnorr-bls12381` | Sign from any device or HSM, on any EVM chain, not only with secp256k1 |
 | BLS | `bls12381-minsig`, `bls-bn254-minsig` | Short signatures that aggregate; one pairing check on chain |
 | n-of-n group | `musig2-secp256k1`, `musig2-bn254` | Several parties produce **one** aggregate signature; the registry recomputes the group key |
 | t-of-n threshold | `frost-secp256k1`, `frost-bn254` | Any `t` of `n` parties sign; the chain checks **one** signature; key-generation proofs checked at registration |
 | Multisig policy | `msig` | A weighted threshold over up to 16 members of any signing kind, or other `msig`s, two levels only (EVM; other families in their own rounds) — e.g. two passkeys plus an HSM, or a director's passkey plus a company EOA |
-| Post-quantum signing | `mldsa44`, `mldsa65`, `fndsa512` (Falcon) | Authorization that survives a quantum computer; such a UA (or a multisig whose non-PQ members' weight stays below the threshold) may carry a PQZ key for PQ confidential balances, given once in `register` and immutable |
+| Post-quantum signing | `mldsa44`, `mldsa65`, `fndsa512` (Falcon), `slhdsa128s` (hash-based) | Authorization that survives a quantum computer; such a UA (or a multisig whose non-PQ members' weight stays below the threshold) may carry a PQZ key for PQ confidential balances; `slhdsa128s` signs but is not a direct holder of one |
 | Classical confidential balances | `zether-bls12381` | The Zether key is itself the UA: it signs every write by Schnorr with its secret `x`, and its Zether proof alone authorizes a spend; its public and confidential balances share one id |
 
 </details>
@@ -625,16 +688,14 @@ address across key changes, guardian recovery, or compatibility with contracts t
 optional smart account `SmartKeyAccount` — itself a native contract UA
 ([CTR-ACC-09](docs/contracts/accounts.md#CTR-ACC-09)).
 
-**Status.** The UA registry is BUILT and deployed on the SCaaS testnet (signing, BLS, group, threshold, multisig,
-post-quantum and Zether kinds; P6g), with the UA ledger in the token base (UA-4), UA receivers and wrap (UA-5a) and UA
-trade orders (UA-5b); UA-5c is SPECIFIED. The identity rule above (owner, 2026-10-20, CTR-UA-30) is built:
-UA-6 (built on branch `ua6`, merge pending) replaces the former separate `pqz-mlwe` kind and its `authRef` with a PQZ key carried by the PQ signer,
-removes the Zether `authRef`, and moves the bn254 Zether line to `legacy/`
-([function → kinds](docs/contracts/accounts.md#function-kinds)).
+**Status, per family.** EVM: the UA registry is BUILT and deployed on the SCaaS testnet (signing, BLS, group, threshold, multisig,
+post-quantum and Zether kinds), with the UA ledger in the token base, UA receivers and wrap and UA
+trade orders. The identity rule above (owner, 2026-10-20, CTR-UA-30) is built: a PQZ key is carried by the PQ signer, the Zether `authRef` is gone and the bn254 Zether line is in `legacy/`
+([function → kinds](docs/contracts/accounts.md#function-kinds)). Hedera runs the same code. Soroban: registry and ledger BUILT on a local network. NEAR and Algorand: a UA ledger and lazily opened records BUILT, no registry, their UA rounds open, each on its own. Cosmos, Aptos, Sui, GRAM and Solana: base contracts only, no UA yet.
 
 ---
 
-## 7. Meta-transactions and EIP-1776
+## 8. Meta-transactions and EIP-1776
 
 A **meta-transaction** separates *who authorizes* an operation from *who submits and pays for* it. SCaaS puts it
 **inside the contract itself**, following the design of [EIP-1776](https://github.com/ethereum/EIPs/issues/1776)
@@ -670,7 +731,7 @@ the lanes, so one signature spends one lane slot whichever struct carries it. Be
 | `batch`, `nonce` | Two-dimensional nonce: the lane, and the sequence inside it |
 | `validUntil` | Every signature expires |
 | `mode` | Relayer and fee-recipient binding, and the fee mode (`NONE`, `PERCENT`, `FIXED`) |
-| `relayer`, `fee`, `feeRecipient` | Who may submit (if bound), how much fee, to whom (only tokens charge a fee; other contracts accept fee `NONE`) |
+| `relayer`, `fee`, `feeRecipient` | Who may submit (if bound), how much fee, to whom (only tokens charge a fee; other contracts accept fee `NONE`, and a relay fee pays for such a call, [section 9](#9-who-pays-the-fee-every-model)) |
 
 **`mode` decides how open the intent is.** With no binding, any relayer may submit and earn the fee — the open
 market. With `MODE_RESTRICT_RELAYER`, only the named relayer may submit — the typical B2B setting with `fee = 0`.
@@ -681,14 +742,12 @@ market. With `MODE_RESTRICT_RELAYER`, only the named relayer may submit — the 
 `mtxBatchTransfer`, `mtxTrade`, `mtxExchange`…
 The signing domain carries `chainId`, the contract and `salt = chain_uid`, so a signature is valid on exactly one chain.
 
-**Same model on every family.** Cosmos, Soroban, Sui, Aptos, GRAM and Solana sign the same two kinds — a `MetaCall` of
-an allowlisted function and a typed `MetaTransfer` — with their own signature formats and replay protection, and the
-same `mtx` names in their own case; the relayer always submits from its own account
-([NET-ALL-26](docs/networks/README.md#NET-ALL-26)).
+**One model, not yet one form.** On every family a subject signs and a relayer submits from its own account, with the family's own signature formats and replay protection. The forms still differ: `MetaOp` v1 off the EVM,
+one `MetaCall` and `MetaTransfer` SPECIFIED ([NET-ALL-26](docs/networks/README.md#NET-ALL-26), [section 3](#3-contracts-what-is-built-on-what)).
 
 ---
 
-## 8. Who pays the fee: every model
+## 9. Who pays the fee: every model
 
 Because authorization and payment are separate, SCaaS can offer every reasonable answer to "who pays?". All of them
 use the same signed intent; only the fee fields and the submitter differ.
@@ -709,6 +768,7 @@ use the same signed intent; only the fee fields and the submitter differ.
 | **Receiver pays the fee** | The payer signs a payment of `N`; the payee co-signs a fee authorization from its own balance; one transaction delivers `N` and pays the relayer | Payee | BUILT on EVM (`mtxPayReceiverFee`, [receiver-pays](docs/contracts/metatx.md#receiver-pays)) |
 | **Gas sponsorship policy** | A node rule such as "inbound to wallet W, value ≥ X ⇒ accept at fee 0, book the gas to account Y" | The sponsor | SPECIFIED ([docs/node/sponsorship.md](docs/node/sponsorship.md)); an on-chain sponsorship pool is PLANNED |
 | **Sponsored call of a non-token contract** | A service company relays the user's signed call of, say, a family-tree contract and pays the native gas; the contract takes no fee (`NONE`), the company bills off chain | The service company | SPECIFIED ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22)) |
+| **Relay fee** | The payer signs a token payment bound to one call that has no fee of its own, on any contract; the relayer pays the gas and receives the token ([CTR-MTX-27](docs/contracts/metatx.md#CTR-MTX-27)) | The payer, in a token | BUILT on every family |
 | **Enterprise inbound gateway** | Partners post signed intents to the company's gateway; the company relays them with its own lanes | Company | BUILT on EVM ([docs/node/gateway.md](docs/node/gateway.md)) |
 
 </details>
@@ -720,7 +780,7 @@ break-even of a fee-earning relayer and the B2B default are in [docs/architectur
 
 ---
 
-## 9. Meta-transactions and liquidity
+## 10. Meta-transactions and liquidity
 
 Here **liquidity means transaction flow: how many transactions actually happen on the chain**, how often and by how
 many participants. A chain is only as useful as the flow of calls into its contracts. The traditional model throttles
@@ -746,8 +806,8 @@ flowchart LR
 | One account = one sequence: transactions queue one by one, and one stuck transaction stops the rest | Two-dimensional nonces: independent operations run in parallel lanes; a relayer spreads work over many lane accounts |
 | Small transactions are not worth a user's own gas | Sponsored (fee 0) and fee-in-token models make micro-payments, loyalty points and B2B line items economic |
 | Submission depends on one operator | Any relayer may submit; relayers share intents over the mesh and gossip, so more submitters carry more flow |
-| Trading needs native gas for every order and cancel | Orders and cancels are signatures in an off-chain book; only matches go on chain, several pairs per transaction ([docs/contracts/dex.md](docs/contracts/dex.md)) |
-| A new venue starts with an empty book | The same signed order also fills against existing AMMs (Uniswap v2/v3), through several pools or in a cycle, and any surplus above the signed price goes to the signer ([CTR-DEX-20](docs/contracts/dex.md#CTR-DEX-20), [CTR-DEX-21](docs/contracts/dex.md#CTR-DEX-21)) |
+| Trading needs native gas for every order and cancel | Orders and cancels are signatures in an off-chain book; only matches go on chain, several pairs per transaction on EVM, per family elsewhere ([docs/contracts/dex.md](docs/contracts/dex.md)) |
+| A new venue starts with an empty book | On EVM the same signed order also fills against existing AMMs (Uniswap v2, v3 and v4), through several pools or in a cycle, and any surplus above the signed price goes to the signer ([CTR-DEX-20](docs/contracts/dex.md#CTR-DEX-20), [CTR-DEX-21](docs/contracts/dex.md#CTR-DEX-21)) |
 | Existing tokens were not built for gasless use | A wrapper makes any existing token gasless ([docs/contracts/token-wrappers.md](docs/contracts/token-wrappers.md)), so its holders join the flow too |
 
 The result is more participants, more operations per participant and more parties able to submit them — all under
@@ -755,7 +815,7 @@ the same contract rules and the same subject signatures.
 
 ---
 
-## 10. Open relayers: open and competitive
+## 11. Open relayers: open and competitive
 
 **Anyone can run `scaas-node` as a relayer, with their own policies.** A relayer is a business, not a gatekeeper:
 
@@ -814,7 +874,7 @@ fee-earning ones. Both kinds serve the same contracts under the same rules
 
 ---
 
-## 11. Confidential amounts: Zether and PQ Zether
+## 12. Confidential amounts: Zether and PQ Zether
 
 On a public chain every amount and balance is visible to competitors. Mixers hide *who* paid *whom*, which breaks
 audit and anti-money-laundering duties. **Zether hides the opposite: amounts and balances are encrypted, identities
@@ -822,39 +882,39 @@ stay visible.** Auditors can still see that company A paid company B, and disclo
 named auditor opens any single transfer.
 
 > [!WARNING]
-> Zether is BUILT but **unaudited**: open on every chain with EIP-2537 once the kind is enabled (owner ruling 2026-10-31).
-> PQ Zether is SPECIFIED, also unaudited.
+> Zether and PQ Zether are BUILT on EVM and **unaudited**. Zether is open on every chain with EIP-2537 once the kind is enabled (owner ruling 2026-10-31), never on Hedera.
+> PQ Zether needs the `PQZ` precompile, on the SCaaS testnet today. No other family has either.
 
 | | Zether (classical) | PQ Zether |
 |---|---|---|
 | Protects | Amounts and balances, against today's attackers | The same, **also against a future quantum computer** — both reading balances later ("harvest now, decrypt later") and forging proofs to mint |
-| Encryption | ElGamal on elliptic curves (bn254 or BLS12-381, chosen per token at deploy) | Module-lattice (LWE) encryption |
+| Encryption | ElGamal on BLS12-381 | Module-lattice (LWE) encryption |
 | Proofs | Σ-protocol + two Bulletproofs range proofs | One lattice proof (LNP22) per operation, verified by a native precompile |
-| Authorization | The Zether key UA itself (Schnorr by `x`, the proof authorizes a spend) | The post-quantum signing UA that carries the PQZ key: ML-DSA-65 by default, or a multisig whose non-PQ weight is below the threshold (CTR-UA-30, UA-6) |
+| Authorization | The Zether key UA itself (Schnorr by `x`, the proof authorizes a spend) | The post-quantum signing UA that carries the PQZ key: ML-DSA-65 by default, or a multisig whose non-PQ weight is below the threshold (CTR-UA-30) |
 | Gas per transfer | ≈ 3.3 M (measured) | ≈ 2.8 M (estimate; calldata-bound, ≈ 77 KB per transfer) |
 | Gasless | Yes — `IERC20MetaTx` envelope, public fee | Yes — the same envelope, plus a post-quantum payer |
-| Where | Every EVM chain with EIP-2537 (BLS12-381), kind enabled per chain (owner ruling 2026-10-31) | Any chain whose `PQZ` precompile passes the self-test (today the SCaaS testnet; no chain-id lock, owner ruling 2026-10-31) |
-| Status | BUILT, **unaudited** | SPECIFIED, **unaudited** |
+| Where | Every EVM chain with EIP-2537 (BLS12-381), kind enabled per chain (owner ruling 2026-10-31); never on Hedera | Any chain whose `PQZ` precompile passes the self-test (today the SCaaS testnet; no chain-id lock, owner ruling 2026-10-31) |
+| Status | BUILT, **unaudited** | BUILT, **unaudited**, on the SCaaS testnet |
 
 Read more: [docs/contracts/zether.md](docs/contracts/zether.md), [docs/contracts/pq-zero-knowledge.md](docs/contracts/pq-zero-knowledge.md),
 [docs/contracts/accounts.md](docs/contracts/accounts.md).
 
 ---
 
-## 12. Chains and families
+## 13. Chains and families
 
-SCaaS groups chains into **families**: one contract code base and one node adapter per family.
+SCaaS groups chains into **eight families** (the owner's taxonomy, [docs/networks/README.md](docs/networks/README.md#families-and-chains)): one contract code base per family, with one node adapter per chain kind (Move has one for Aptos and one for Sui; Hedera has its own beside the EVM's).
 
 | Family | Chains | Execution | How the meta-transaction is done |
 |---|---|---|---|
-| [EVM](docs/networks/evm.md) | Ethereum, BSC, Polygon, Gnosis, Celo, Base, [Hedera](docs/networks/hedera.md), TRON | EVM (Solidity) | EIP-712 intent inside the token |
+| [EVM](docs/networks/evm.md) | SCaaS testnet; draft profiles Gnosis, Celo, BSC, Polygon, Base; [Hedera](docs/networks/hedera.md); TRON planned | EVM (Solidity) | EIP-712 intent inside the token |
 | [Cosmos](docs/networks/cosmos.md) | CosmWasm chains | CosmWasm (Rust) | `Relay{payload, auth}` to the contract |
 | [Soroban](docs/networks/soroban.md) | Stellar, Pi Network | Soroban WASM (Rust) | native authorization entries |
 | Move | [Aptos](docs/networks/aptos.md), [Sui](docs/networks/sui.md) | Move VM | an account object per subject, lanes inside |
 | [GRAM](docs/networks/ton.md) (formerly TON) | GRAM | TVM (Tact) | a custom jetton wallet checks the signed operation |
 | [Solana](docs/networks/solana.md) | Solana | SVM (Rust) | program-level, subject account + lane accounts |
-| NEAR (planned) | NEAR | WASM (Rust) | to be designed |
-| Algorand (planned) | Algorand | AVM | to be designed |
+| [NEAR](docs/networks/near.md) | NEAR | WASM (Rust, near-sdk) | `MetaOp` v1 in Borsh, checked by the NEP-141 token against SCaaS key records |
+| [Algorand](docs/networks/algorand.md) | Algorand | AVM (Algorand Python) | `MetaOp` v1 in ARC-4, ARC-200 in boxes, one shared `account` app |
 
 Other EVM chains can be added as profiles. Finality, signing domains, passkeys and the availability of each feature
 per family: [docs/networks/README.md](docs/networks/README.md).
@@ -865,7 +925,7 @@ or permissioned chain (your nodes and admitted peers only); a consortium (each m
 
 ---
 
-## 13. The components and where to read more
+## 14. The components and where to read more
 
 The [overview figure](#top) at the top of this page shows how the parts connect: clients sign, relayers submit and
 pay gas, contracts run on the chains. Finalized events travel back the same way: the node indexes the chain, waits
@@ -898,7 +958,7 @@ for finality and serves the result to clients as feeds.
 
 ---
 
-## 14. How the design evolved
+## 15. How the design evolved
 
 SCaaS did not start from a blank page. Two early prototypes shaped it: a **wrapped ERC-20 with meta-transactions**,
 then the **ERC1776 token family** with tradable tokens and a DEX. Most of their ideas survive; some were changed once
@@ -915,19 +975,19 @@ flowchart LR
 
 | Idea | Prototype 1: wrapped ERC-20 | Prototype 2: ERC1776 family | Today |
 |---|---|---|---|
-| Meta-transaction inside the token | `executeMetaTransaction`, `mtxTransfer`; one nonce per account; chain id and token address signed | `mtxTransfer` with a two-dimensional nonce (`batch`, `nonce`), `validUntil`, a bound relayer or any relayer (`address(0)`) | A pinned EIP-712 `MetaTransaction` for a call of any allowlisted function of **any** SCaaS contract, plus a typed `MetaTransfer` on tokens: lanes and nonces, expiry, `mode` flags; chain and contract in the domain ([section 7](#7-meta-transactions-and-eip-1776)) |
+| Meta-transaction inside the token | `executeMetaTransaction`, `mtxTransfer`; one nonce per account; chain id and token address signed | `mtxTransfer` with a two-dimensional nonce (`batch`, `nonce`), `validUntil`, a bound relayer or any relayer (`address(0)`) | A pinned EIP-712 `MetaTransaction` for a call of any allowlisted function of **any** SCaaS contract, plus a typed `MetaTransfer` on tokens: lanes and nonces, expiry, `mode` flags; chain and contract in the domain ([section 8](#8-meta-transactions-and-eip-1776)) |
 | Signature format | EIP-712 typed data | Ethereum signed-message prefix | EIP-712 only, low-s, ERC-1271 for contract accounts |
-| Fees | The sender chooses the fee amount and its recipient, both signed, at most 1 % of the amount | A fee in parts per million inside each trade order | Fee modes `NONE` / `PERCENT` / `FIXED`, capped at 1 %, recipient optionally bound ([section 8](#8-who-pays-the-fee-every-model)) |
+| Fees | The sender chooses the fee amount and its recipient, both signed, at most 1 % of the amount | A fee in parts per million inside each trade order | Fee modes `NONE` / `PERCENT` / `FIXED`, capped at 1 %, recipient optionally bound ([section 9](#9-who-pays-the-fee-every-model)) |
 | Payment reference | `mtxPay` with a sender-chosen `payId` and a `Payment` event | — | `pay(entryRef)` emits `PaymentSettled`; a random `entryRef` also picks the lane, which makes each payment pay-once |
-| Wrappers | No underlying, one underlying at a numerator/denominator rate, several underlyings with a rate each | — | The same shapes as two kinds (`NormalToken`, `WrappedToken` with 1–8 legs) with fixed or adjustable rates; basket legs fixed at creation; optional confidential variants (`*_ZETHER`) |
+| Wrappers | No underlying, one underlying at a numerator/denominator rate, several underlyings with a rate each | — | The same shapes as two kinds (`NormalToken`, `WrappedToken` with 1–8 legs) with fixed or adjustable rates; basket legs fixed at creation; optional confidential variants (`*_ZETHER`, `*_PQZ`) |
 | Factory | A factory with `new`, one wrapper per underlying | — | An open factory of immutable EIP-1167 clones and a version catalogue |
-| Code reuse | Every wrapper deployed with its full code | — | The requirements note asked to "share code through delegation, keep separate data, support several versions": clones `DELEGATECALL` one fixed implementation per version ([section 4](#shared-code)) |
+| Code reuse | Every wrapper deployed with its full code | — | The requirements note asked to "share code through delegation, keep separate data, support several versions": clones `DELEGATECALL` one fixed implementation per version ([section 5](#shared-code)) |
 | `approve` | Only contracts may call `approve` (code-size check) | The same rule, also on the NFT | Only a contract may call `approve`, decided by explicit rules instead of a code-size guess ([CTR-TOK-01](docs/contracts/token-wrappers.md#CTR-TOK-01)) |
 | Trading | — | `ERC1776Tradeable` + `Dex`: one taker against several makers, partial fills, refunds of the unmatched part, at least 50 % of the wanted amount, a fee per side | `TradeOrder` (the old `MtxTradeOrder` fields) pulled only into the named DEX; one taker against many makers per call, resting orders filled in parts or immediate orders refunded; a 50 % minimum fill; the same orders fill against AMMs through `mtxExchange` ([section 3](#3-contracts-what-is-built-on-what)) |
 | A contract receiving tokens | — | `ERC1776Holder` pulls a signed transfer into itself | Any contract can be the recipient of a signed `pay` or transfer |
 | NFTs | — | `ERC1776Nft721`: `safeTransferFrom` by meta-transaction | PLANNED with the asset suite ([asset-suite](docs/contracts/asset-suite.md)) |
-| Admin powers | An `Ownable` owner per wrapper | `ERC1776Adminable` (an admin moves its own tokens by signature), `Rescuable` (an owner or rescuer withdraws stuck tokens) | No one can move a user's funds; only bounded roles fixed at creation ([docs/architecture.md](docs/architecture.md#authority-model)) |
-| Upgrades | — | — | Immutable at deploy ([section 4](#4-shared-code-delegate-call-separate-data-and-upgradeable)) |
+| Admin powers | An `Ownable` owner per wrapper | `ERC1776Adminable` (an admin moves its own tokens by signature), `Rescuable` (an owner or rescuer withdraws stuck tokens) | No one can move a user's funds; only bounded powers chosen at creation ([section 4](#4-governance-who-holds-which-power)) |
+| Upgrades | — | — | Immutable at deploy ([section 5](#5-shared-code-delegate-call-separate-data-and-upgradeable)) |
 
 </details>
 
@@ -950,8 +1010,7 @@ flowchart LR
   cannot call SCaaS directly while delegated ([CTR-UA-24](docs/contracts/accounts.md#CTR-UA-24)).
 - **A signed-message prefix shows 32 opaque bytes to the user.** EIP-712 shows every field.
 - **An owner on every token is an admin key over balances.** Prototype owners, admin moves and rescue functions are
-  gone. A wrapper owned by its factory could not even be configured. Tokens are ownerless clones with roles fixed at
-  creation.
+  gone. A wrapper owned by its factory could not even be configured. A token's owner is optional and bounded, and flags can only be cleared ([section 4](#4-governance-who-holds-which-power)).
 - **A basket wrapper whose owner can add underlyings at will can be drained** by adding a weak one and unwrapping
   into the strong ones. Today the legs and their initial rates are fixed at creation, each unwrap is bounded by that
   leg's own reserve, and a guardian can only stop inflow into a depegged leg
@@ -959,32 +1018,33 @@ flowchart LR
 
 ---
 
-## 15. Repository layout
+## 16. Repository layout
 
 <details>
-<summary><b>Top-level folders</b> — <code>smartcontracts/</code>, <code>scaas-node/</code>, <code>clients/</code>, <code>docs/</code>, <code>scripts/</code></summary>
+<summary><b>Top-level folders</b> — <code>smartcontracts/</code>, <code>scaas-node/</code>, <code>pqz-core/</code>, <code>clients/</code>, <code>docs/</code>, <code>scripts/</code></summary>
 
 | Path | What |
 |---|---|
-| `smartcontracts/` | On-chain code by family: `evm/` (Foundry; Gnosis, Celo, private chain, Hedera), `move/{aptos,sui}`, `soroban/`, `cosmos/`, `ton/` (GRAM, formerly TON), `solana/`; `scripts/{build,test,deploy,devnet}.sh <family>`. See [`smartcontracts/README.md`](smartcontracts/README.md), [`smartcontracts/evm/README.md`](smartcontracts/evm/README.md) and [docs/contracts/](docs/contracts/README.md) |
+| `smartcontracts/` | On-chain code by family: `evm/` (Foundry; Gnosis, Celo, private chain, Hedera), `move/{aptos,sui}`, `soroban/`, `cosmos/`, `ton/` (GRAM, formerly TON), `solana/`, `near/`, `algorand/`, `vectors/`; `scripts/{build,test,deploy,devnet}.sh <family>`. See [`smartcontracts/README.md`](smartcontracts/README.md), [`smartcontracts/evm/README.md`](smartcontracts/evm/README.md) and [docs/contracts/](docs/contracts/README.md) |
 | `scaas-node/` | Rust relayer node: gateway, submit lanes, indexer, admin, mesh. See [`scaas-node/README.md`](scaas-node/README.md) and [docs/node/](docs/node/README.md) |
-| `clients/` | Everything that runs on the user's side: `clientkeys/` (browser signers: passkey, seed vault, Zether keys; [signers-clientkeys.md](docs/clients/signers-clientkeys.md)), `zether-prover/` (Rust/WASM prover for Zether proofs, balance reading and disclosure; [zether.md](docs/contracts/zether.md)), and the Universal Account identity libraries `ua-rs/` (Rust), `ua-cxx/` (C++), `ua-qt/` (QML), `ua-dart-frb/` (Dart over Rust), `ua-py/`, `ua-go/`, `ua-cs/` (C#) and `ua-dart/` (pure Dart) ([ua-libraries.md](docs/clients/ua-libraries.md)). The console and dApp `app/` (React + Vite) is planned ([app.md](docs/clients/app.md)) |
+| `clients/` | Everything that runs on the user's side: `clientkeys/` (browser signers: passkey, seed vault, Zether keys; [signers-clientkeys.md](docs/clients/signers-clientkeys.md)), `zether-prover/` (Rust/WASM prover for Zether proofs, balance reading and disclosure; [zether.md](docs/contracts/zether.md)), and the Universal Account identity libraries `ua-rs/` (Rust), `ua-c/` (C), `ua-cxx/` (C++), `ua-qt/` (QML), `ua-dart-frb/` (Dart over Rust), `ua-py/`, `ua-go/`, `ua-cs/` (C#) and `ua-dart/` (pure Dart) ([ua-libraries.md](docs/clients/ua-libraries.md)). The console and dApp `app/` (React + Vite) is planned ([app.md](docs/clients/app.md)) |
+| `pqz-core/` | The post-quantum proof engine: `pqzl`, `pqzh`, the statements, the FFI and the node plugin. See [`pqz-core/README.md`](pqz-core/README.md) |
 | `docs/` | Product docs — start at [`docs/README.md`](docs/README.md). Check: `python3 scripts/docs_check.py check` |
-| `scripts/` | [`capped`](scripts/capped): run one heavy build in a 4 GB systemd scope, one at a time machine-wide; [`docs_check.py`](scripts/docs_check.py): the docs checker; [`size_gate.py`](scripts/size_gate.py): the contract size gate |
+| `scripts/` | [`capped`](scripts/capped): run a heavy build in a 4 GB systemd scope, two at a time machine-wide; [`docs_check.py`](scripts/docs_check.py): the docs checker; [`size_gate.py`](scripts/size_gate.py): the contract size gate |
 
 </details>
 
 SCaaS depends on no ERP. One worked ERP connector lives in a separate repository and is described as an example in
 [docs/integration-odoo-example.md](docs/integration-odoo-example.md).
 
-## 16. Use cases
+## 17. Use cases
 
 What people can build by combining SCaaS contracts with meta-transactions, in eight groups. Each row names the parts
 it uses, who can pay the fee and the status. **BUILT**, **SPECIFIED** and **PLANNED** are the docs' own tags;
 **NOT SPECIFIED** means no SCaaS doc covers the use case yet: it is an idea the parts could support, not a feature.
 
 **Who can pay the fee** names the realistic payers of the gas in each case, using the models of
-[section 8](#8-who-pays-the-fee-every-model); most cases allow more than one. Tokens can take the fee in the token
+[section 9](#9-who-pays-the-fee-every-model); most cases allow more than one. Tokens can take the fee in the token
 itself; contracts outside the token set (`MandateWallet`, `SmartKeyAccount`, a registry on `MetaTxBase`) take no fee
 on chain, so whoever relays their calls pays the gas and bills off chain, if at all
 ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22)).
@@ -1004,7 +1064,7 @@ EIP-1167 clone at a CREATE2 address through a factory, then uses it by meta-tran
 | Use case | How SCaaS maps it | Who can pay the fee | Status |
 |---|---|---|---|
 | **Loyalty and cashback for supermarkets and store chains** | The chain issues points as a `NORMAL` token with its own minter ([loyalty template](docs/contracts/asset-suite.md#templates)). Members receive and spend points without holding any native coin; the store's relayer pays the gas at fee 0, and one atomic `mtxBatchTransfer` carries many signed credits ([CTR-MTX-24](docs/contracts/metatx.md#CTR-MTX-24)). Campaign payouts as a `Distribution` are specified | The store's relayer at fee 0; or the member, as a fee in points | BUILT; `Distribution` SPECIFIED |
-| **Prepaid points (PPP, like gift-card points) used for payment** | A wrapper of a stablecoin at a fixed rate (say 1 USDC → 100 points) is a prepaid point backed by its own reserve ([rates](docs/contracts/token-wrappers.md#rates)). Customers pay merchants with a signed `mtxPay` that carries the payment reference ([section 7](#7-meta-transactions-and-eip-1776)). The voucher template, where expiry is the end of a closable redemption offer, is specified ([templates](docs/contracts/asset-suite.md#templates)) | The merchant (receiver pays, or it submits the customer's signed payment itself); the issuer's relayer at fee 0; or the customer, in points | BUILT; voucher redemption SPECIFIED |
+| **Prepaid points (PPP, like gift-card points) used for payment** | A wrapper of a stablecoin at a fixed rate (say 1 USDC → 100 points) is a prepaid point backed by its own reserve ([rates](docs/contracts/token-wrappers.md#rates)). Customers pay merchants with a signed `mtxPay` that carries the payment reference ([section 8](#8-meta-transactions-and-eip-1776)). The voucher template, where expiry is the end of a closable redemption offer, is specified ([templates](docs/contracts/asset-suite.md#templates)) | The merchant (receiver pays, or it submits the customer's signed payment itself); the issuer's relayer at fee 0; or the customer, in points | BUILT; voucher redemption SPECIFIED |
 | **Virtual points in games** | In-game points are a `NORMAL` token minted by the game's own contract or treasury; players sign gasless and the game's relayer pays the gas. In-game items as NFTs (ERC-721/1155 with meta-transactions) are planned ([asset suite](docs/contracts/asset-suite.md#templates)) | The game's relayer at fee 0; or the player, in points | BUILT (points); NFTs PLANNED |
 | **Item and credit economies: conversion recipes that burn some tokens and mint others (games, stamps, bundles; no NFTs needed)** | Every kind of item or credit is its own `decimals 0` `NORMAL` token, and one unit is one item: a holder's inventory is simply its balances. A **recipe** burns given amounts of some tokens and mints given amounts of others — in general m·X + n·Y + … → k·Z (+ l·W …), any number of inputs and outputs — and recipes compose into a **multi-level graph**: an output of one recipe is an input of the next, so tiers chain (in a game: 3 stone axes → 1 iron axe, then iron axe + 2 iron ingots → steel axe; or wood + ore → tool → better tool). The same shape covers merging (many low-value units into one of higher value), splitting (a bundle into single units, a large voucher into small ones), plain exchanges between kinds, and uses outside games (10 stamps → 1 reward, a season pass → its single visits). Optional conditions fit it too: a catalyst that must be held but is not burned, a random output, cooldowns, per-holder limits, an expiry. Because any token in the graph can be both produced and consumed, every token of the set is created with both `MINTABLE` and `BURNABLE`, and the recipe contract the operator deploys holds the minter role on all of them (the role is a set: the game server or shop can hold it too); a conversion takes the holder's signed transfers of the inputs, burns them and mints the outputs in one transaction — whole or not at all, several recipe steps in a row included — and the recipe table it enforces is public. The table must be checked for loops that create value from nothing (X → Y → X ending with more X than it started with); the contract can refuse such tables by requiring the recipe graph to be acyclic or value-weighted. Holders trade or swap items on a `SCaaSDex` market or by direct signed transfers, without native coin. Units of one kind are interchangeable; an item that needs its own identity or stats (a numbered or worn sword) needs an NFT, which is PLANNED. The recipe contract and its recipe format are not specified; a step-by-step guide for game builders is [docs/guides/item-economies.md](docs/guides/item-economies.md) | The operator's relayer at fee 0; or the holder, as a fee in one of the tokens; DEX trades: the trader's signed order fee | Tokens with mint and burn BUILT; DEX BUILT on EVM; recipe contract NOT SPECIFIED; NFTs PLANNED |
 | **Membership cards and event tickets** | A card or ticket is a `decimals 0` token the organizer mints; at the door the holder's passkey (a `SmartKeyAccount` key) can sign a transfer of the ticket back to the organizer, and the gate submits it. Limiting who may receive a card needs the receiver allowlist of the regulated flags ([regulated controls](docs/contracts/asset-suite.md#2-regulated-controls)); fully non-transferable tokens and NFTs are not available, and no ticketing flow is specified | The organizer: its relayer at fee 0, or the gate submitting the holder's signed check-in | Tokens and `SmartKeyAccount` BUILT; allowlist SPECIFIED; NFTs PLANNED; ticketing NOT SPECIFIED |
@@ -1025,7 +1085,7 @@ EIP-1167 clone at a CREATE2 address through a factory, then uses it by meta-tran
 | **Multi-party split settlement (marketplace, food delivery, tax remittance to the state)** | The buyer signs one payment per party — seller, rider, platform, tax authority — each with its own `entryRef`, and a relayer lands them in one atomic `mtxBatchTransfer`, so all parts settle or none ([CTR-MTX-24](docs/contracts/metatx.md#CTR-MTX-24)). Computing the shares or the tax, enforcing the split and reconciling with the authority are not specified | The platform's relayer at fee 0; or the buyer, as a fee in the token | Batch BUILT; split and tax rules NOT SPECIFIED |
 | **Sales: the seller pays the fee to receive a CBDC or stablecoin** | Receiver pays: the buyer signs a payment of `N`, the seller co-signs a fee from its own balance, and one transaction delivers `N` and pays the relayer ([receiver-pays](docs/contracts/metatx.md#receiver-pays)). Or the seller submits the buyer's signed payment itself and pays the gas. A stablecoin takes part through a SCaaS wrapper; a CBDC token needs the regulated flags | The seller: receiver pays, or payee self-relay | BUILT on EVM; CBDC token SPECIFIED |
 | **Cross-border buying, selling and payment through licensed deposit and withdrawal gateways** | The parts: 1:1 stablecoin wrappers that holders wrap and unwrap against the reserve ([token-wrappers](docs/contracts/token-wrappers.md)), gasless payments with references, and an enterprise inbound gateway a licensed company can run ([gateway](docs/node/gateway.md)). The bank side — deposits, withdrawals, licensing and customer checks — is not specified | The licensed company (gateway, fee 0); or the customer, as a fee in the wrapper token | NOT SPECIFIED (parts BUILT) |
-| **Micro-insurance payouts and social benefits** | An insurer or agency pays claims or benefits in a `mtxBatchTransfer` to people who hold only a passkey: today a `SmartKeyAccount` with P-256 passkeys and guardian recovery, later a `webauthn-p256` UA on the UA-ledger tokens ([accounts](docs/contracts/accounts.md#subjectaccount)). Recipients spend without native coin. Claim, eligibility and payout rules are not specified | The insurer or agency, at fee 0; when recipients spend: the merchant, or a fee in the token | Batch and `SmartKeyAccount` BUILT; passkey UA SPECIFIED; claim rules NOT SPECIFIED |
+| **Micro-insurance payouts and social benefits** | An insurer or agency pays claims or benefits in a `mtxBatchTransfer` to people who hold only a passkey: a `SmartKeyAccount` with P-256 passkeys and guardian recovery, or a `webauthn-p256` UA on the UA ledger ([accounts](docs/contracts/accounts.md#subjectaccount)). Recipients spend without native coin. Claim, eligibility and payout rules are not specified | The insurer or agency, at fee 0; when recipients spend: the merchant, or a fee in the token | Batch, `SmartKeyAccount` and passkey UA BUILT on EVM; claim rules NOT SPECIFIED |
 
 </details>
 
@@ -1044,8 +1104,8 @@ EIP-1167 clone at a CREATE2 address through a factory, then uses it by meta-tran
 
 | Use case | How SCaaS maps it | Who can pay the fee | Status |
 |---|---|---|---|
-| **Passwordless accounts that survive a lost device** | A `SmartKeyAccount` holds WebAuthn P-256 passkeys beside secp256k1 keys; when a device is lost, the guardian adds a new key after a 2-day delay that any existing key can cancel ([CTR-ACC-03](docs/contracts/accounts.md#CTR-ACC-03)). A passkey can also be a UA on its own (`webauthn-p256`), but a single-key UA has no recovery: a new key is a new UA; an `msig` UA over several passkeys, with a threshold below their total weight, survives the loss of one ([section 6](#6-universal-accounts-one-identifier-for-every-kind-of-key)) | The service's relayer (account calls take no fee on chain); for payments: the user in the token, or the payee | `SmartKeyAccount` BUILT; passkey and `msig` UAs SPECIFIED |
-| **Multi-signature spending approval for a company** | Large payments need a quorum: an `msig` UA (a weighted threshold over up to 16 members of any signing kind) or a FROST t-of-n / MuSig2 n-of-n group key whose one signature the chain checks once; a Safe already signs through ERC-1271. Small everyday spends go through a `MandateWallet` delegate within its caps ([mandates](docs/contracts/mandates.md)) | The company's relayer at fee 0; or self-paid | Safe and mandates BUILT; `msig`, FROST and MuSig2 UAs SPECIFIED |
+| **Passwordless accounts that survive a lost device** | A `SmartKeyAccount` holds WebAuthn P-256 passkeys beside secp256k1 keys; when a device is lost, the guardian adds a new key after a 2-day delay that any existing key can cancel ([CTR-ACC-03](docs/contracts/accounts.md#CTR-ACC-03)). A passkey can also be a UA on its own (`webauthn-p256`), but a single-key UA has no recovery: a new key is a new UA; an `msig` UA over several passkeys, with a threshold below their total weight, survives the loss of one ([section 7](#7-universal-accounts-one-identifier-for-every-kind-of-key)) | The service's relayer (account calls take no fee on chain); for payments: the user in the token, or the payee | `SmartKeyAccount`, passkey and `msig` UAs BUILT on EVM |
+| **Multi-signature spending approval for a company** | Large payments need a quorum: an `msig` UA (a weighted threshold over up to 16 members of any signing kind) or a FROST t-of-n / MuSig2 n-of-n group key whose one signature the chain checks once; a Safe already signs through ERC-1271. Small everyday spends go through a `MandateWallet` delegate within its caps ([mandates](docs/contracts/mandates.md)) | The company's relayer at fee 0; or self-paid | Safe, mandates, `msig`, FROST and MuSig2 UAs BUILT on EVM |
 | **AI agents spending on a user's behalf** | The agent holds the delegate key of the user's `MandateWallet`: it pays only approved payees, within per-payment and per-period caps, until the expiry, and the user revokes at once. Several delegates per token, per-payee caps, a co-sign threshold and an MCP adapter are a research direction only ([node-ai-agents](docs/research/node-ai-agents.md)) | The merchant or the agent platform's relayer; or the owner, self-paid | `MandateWallet` BUILT; agent features NOT SPECIFIED (research) |
 
 </details>
@@ -1056,7 +1116,7 @@ EIP-1167 clone at a CREATE2 address through a factory, then uses it by meta-tran
 | Use case | How SCaaS maps it | Who can pay the fee | Status |
 |---|---|---|---|
 | **Supply-chain finance (invoice tokens)** | A receivable becomes a token whose units are the invoice's face value; the supplier sells it to financiers at a discount on a listed `SCaaSDex` market, and at the due date the buyer redeems it at face, for example through a redemption `ExchangeOffer` like a bond's, funded on time from its `MandateWallet` ([dex](docs/contracts/dex.md), [templates](docs/contracts/asset-suite.md#templates)). Invoice checks, double financing and the redemption contract terms are not specified | Traders: the signed order fee (≤ 1 %); redemption: the buyer's or the financier's relayer | DEX and mandates BUILT; `ExchangeOffer` SPECIFIED; invoice financing NOT SPECIFIED |
-| **Confidential payroll with Zether** | Salaries move as Zether transfers, so amounts are encrypted while payer and payees stay visible; one multi-recipient transfer pays several employees ([multi-recipient](docs/contracts/zether.md#multi-recipient)). A token created with an auditor key also encrypts every amount to the auditor, and sender or receiver can disclose single transfers ([auditor mode](docs/contracts/zether.md#auditor-mode), [disclosure](docs/contracts/zether.md#disclosure)) | The employer's relayer at fee 0; or a public fee from the employer's public balance | BUILT, unaudited; PQ Zether SPECIFIED |
+| **Confidential payroll with Zether** | Salaries move as Zether transfers, so amounts are encrypted while payer and payees stay visible; one multi-recipient transfer pays several employees ([multi-recipient](docs/contracts/zether.md#multi-recipient)). A token created with an auditor key also encrypts every amount to the auditor, and sender or receiver can disclose single transfers ([auditor mode](docs/contracts/zether.md#auditor-mode), [disclosure](docs/contracts/zether.md#disclosure)) | The employer's relayer at fee 0; or a public fee from the employer's public balance | BUILT, unaudited; PQ Zether BUILT, unaudited, on the SCaaS testnet |
 | **Contract tenders with hidden amounts (Zether / PQ Zether)** | `SealedBidTender` keeps every bid a salted commitment, bonded by a deposit, until the deadline; bids are revealed afterwards and honest losers' deposits return without anyone's approval ([tender](docs/contracts/tender.md)). Bids that stay hidden after the reveal, with Zether or PQ Zether deposits, are outside the tender's scope | The buyer's relayer or a sponsor (sponsorship policy, SPECIFIED); or a bidder submitting its own commit and reveal | SPECIFIED (sealed until reveal); confidential bids NOT SPECIFIED |
 | **Enterprises running their own relayer** | A company runs `scaas-node`: partners post signed intents to its gateway and it relays them on its own lanes ([gateway](docs/node/gateway.md)); it pays gas for its own customers at fee 0 or by a sponsorship policy ([sponsorship](docs/node/sponsorship.md)); the relayers of a business group exchange intents over the mesh's pull bus ([mesh](docs/node/mesh.md)) | The company (gateway at fee 0, or a sponsorship policy); partners may add a fee in the token | Gateway BUILT on EVM; sponsorship policy SPECIFIED; mesh envelope BUILT, bus SPECIFIED |
 
@@ -1070,7 +1130,7 @@ EIP-1167 clone at a CREATE2 address through a factory, then uses it by meta-tran
 | **Issuing shares and bonds on chain, public or private** | Equity and bond templates: a token with the regulated flags, eligibility in a `ComplianceRegistry`, dividends and coupons as a `Distribution`, redemption at maturity as an `ExchangeOffer`, trading on a managed DEX market ([templates](docs/contracts/asset-suite.md#templates)). A private chain keeps intents among admitted nodes ([profiles](docs/architecture.md#profiles)) | The issuer's relayer at fee 0; trades on a managed market carry no relayer fee on regulated legs, so the venue pays ([managed markets](docs/contracts/asset-suite.md#8-managed-markets)) | SPECIFIED |
 | **Pooled investment funds and capital contributions** | Members contribute stablecoins and receive fund units (the equity template covers units of a fund); profits go out as a `Distribution`, and an exit is a buyback `ExchangeOffer` of units for stablecoins ([templates](docs/contracts/asset-suite.md#templates)). Contribution terms, valuation and the fund's governance are not specified | The fund manager's relayer at fee 0; or members, as a fee in the token | SPECIFIED; fund rules NOT SPECIFIED |
 | **Tokenized real-world assets (fractional real estate, gold, warehoused produce)** | Fractions are a token the issuer mints, with the regulated flags and eligibility where the law requires them ([regulated controls](docs/contracts/asset-suite.md#2-regulated-controls)); an asset already tokenized on chain (a gold token, say) can be wrapped in a reserve-backed SCaaS wrapper, gasless and redeemable from a reserve anyone can read ([token-wrappers](docs/contracts/token-wrappers.md)). Custody of the physical asset, appraisal and legal title are off chain and not specified | The issuer's relayer at fee 0; or holders, as a fee in the token | Tokens and wrappers BUILT; regulated flags SPECIFIED; custody and title NOT SPECIFIED |
-| **Decentralized trading of digital assets** | Orders and cancels are signatures in the node's off-chain book; `SCaaSDex` settles one taker against many makers, with no allowance for SCaaS tokens and no gas for traders, and the same orders fill against Uniswap v2/v3 pools ([dex](docs/contracts/dex.md), [DEX venue](docs/node/dex-venue.md)). Book gossip between relayers is specified | Each trader, as its signed order fee (≤ 1 %, from what it receives), shared with the relayer | BUILT on EVM; book gossip SPECIFIED |
+| **Decentralized trading of digital assets** | Orders and cancels are signatures in the node's off-chain book; `SCaaSDex` settles one taker against many makers, with no allowance for SCaaS tokens and no gas for traders, and the same orders fill against Uniswap v2, v3 and v4 pools ([dex](docs/contracts/dex.md), [DEX venue](docs/node/dex-venue.md)). Book gossip between relayers is specified | Each trader, as its signed order fee (≤ 1 %, from what it receives), shared with the relayer | BUILT on EVM; book gossip SPECIFIED |
 
 </details>
 
@@ -1082,8 +1142,8 @@ EIP-1167 clone at a CREATE2 address through a factory, then uses it by meta-tran
 | **A CBDC issued by the state on a public chain, under strict state control** | The docs list central-bank digital currency as a use of the regulated flags: freeze, forced transfer against a recorded order, bounded pause and a receiver allowlist, chosen at creation and disclosed, with eligibility in a `ComplianceRegistry` ([permissionless vs controlled](docs/contracts/token-wrappers.md#permissionless-vs-controlled), [regulated controls](docs/contracts/asset-suite.md#2-regulated-controls)). Holders still pay without native coin. Today a token refuses these flags (`FeatureNotBuilt`) until the asset suite is built | The central bank's or a bank's relayer at fee 0, or a sponsorship policy (SPECIFIED); the merchant, by receiver pays | SPECIFIED |
 | **Transparent public budget and aid disbursement** | Every payment carries a reference and lands on a public chain, so anyone can follow the flows; contracts can be awarded by sealed tender ([tender](docs/contracts/tender.md)), and recipients spend through a `MandateWallet` limited to approved payees and per-period caps ([mandates](docs/contracts/mandates.md)). References are random by default; the agency publishes what they mean off chain. Budget rules are not specified | The agency's relayer at fee 0; suppliers, by submitting payments to themselves | Payments and mandates BUILT; tender SPECIFIED; budget rules NOT SPECIFIED |
 | **Transparent donations for temples and charities** | Donations to a public address and their spending are public flows with references. A donor who wants to hide the amount can give in a Zether token: the amount is encrypted, donor and recipient stay visible ([Zether](docs/contracts/zether.md)) | The charity's relayer at fee 0; or the donor, as a fee in the token | Payments BUILT; Zether BUILT, unaudited; donation rules NOT SPECIFIED |
-| **Group fund management** | The fund sits in a `MandateWallet`: delegates pay within per-payment and per-period caps, to approved payees, until an expiry, revocable at any time ([mandates](docs/contracts/mandates.md)). A `SmartKeyAccount` holds several keys with guardian recovery; a weighted-multisig Universal Account, one id for a group of keys, is specified ([accounts](docs/contracts/accounts.md)). Contribution, voting and pay-out rules of a fund are not specified | A delegate's or member's relayer (the wallet takes no fee on chain); or self-paid | BUILT (mandates, smart account); UA multisig SPECIFIED; fund rules NOT SPECIFIED |
-| **Shareholder and member voting** | Members sign their votes with their own UA, so anyone can check each vote; records kept for decades can be signed with post-quantum kinds (see the last row). No voting contract, weighting or tally rules are specified | The organizer's relayer (sponsored call, SPECIFIED); or a member, self-paid | NOT SPECIFIED (UA SPECIFIED) |
+| **Group fund management** | The fund sits in a `MandateWallet`: delegates pay within per-payment and per-period caps, to approved payees, until an expiry, revocable at any time ([mandates](docs/contracts/mandates.md)). A `SmartKeyAccount` holds several keys with guardian recovery; a weighted-multisig Universal Account gives one id for a group of keys ([accounts](docs/contracts/accounts.md)). Contribution, voting and pay-out rules of a fund are not specified | A delegate's or member's relayer (the wallet takes no fee on chain); or self-paid | BUILT on EVM (mandates, smart account, UA multisig); fund rules NOT SPECIFIED |
+| **Shareholder and member voting** | Members sign their votes with their own UA, so anyone can check each vote; records kept for decades can be signed with post-quantum kinds (see the last row). No voting contract, weighting or tally rules are specified | The organizer's relayer (sponsored call, SPECIFIED); or a member, self-paid | NOT SPECIFIED (UA BUILT on EVM) |
 
 </details>
 
@@ -1094,11 +1154,11 @@ EIP-1167 clone at a CREATE2 address through a factory, then uses it by meta-tran
 |---|---|---|---|
 | **Family tree (permanently stored data)** | A family-tree registry built on `MetaTxBase` stores every record in full on chain — people, names, dates, relations and their changes — so the tree outlives any company or server. Members sign calls such as `addPerson` without holding a native coin; a service company relays them, pays the gas and bills off chain ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22)). This use case deliberately departs from the platform's default of no personal data on chain ([data protection](docs/architecture.md#data-protection)): what is written can never be erased, and on a public chain anyone can read it, so a deployment needs the consent of the living people it records; a private chain limits who can read the tree | The service company (sponsored call, SPECIFIED); or a member, self-paid | `MetaTxBase` BUILT; sponsored call SPECIFIED; the registry itself NOT SPECIFIED |
 | **Provenance and traceability on a public chain (farm to table, medicines, luxury goods, certificates of origin)** | A provenance registry built on `MetaTxBase` records signed events per batch — harvested, processed, tested, shipped, sold — so a buyer can check a product's history without trusting the brand's server. Producers and inspectors sign gaslessly; the brand or a service company relays and pays ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22)). Product data (batch, origin, test results, certificates) is not personal data and can be stored in full or as hashes of off-chain documents; names of people stay off chain by default ([data protection](docs/architecture.md#data-protection)) | The brand or a service company (sponsored call, SPECIFIED); or a producer, self-paid | `MetaTxBase` BUILT; sponsored call SPECIFIED; the registry itself NOT SPECIFIED |
-| **Long-lived, quantum-resistant records** | Records that must stay valid for decades (titles, diplomas, contracts, minutes) are signed with post-quantum UA kinds — ML-DSA, or the hash-based SLH-DSA as a backup if lattice assumptions fall — so a future quantum computer cannot forge them ([CTR-UA-23](docs/contracts/accounts.md#CTR-UA-23)). The verifiers are built but unaudited (labelled so; an audit is not a deploy gate, owner 2026-10-31) and costly in Solidity (ML-DSA-44 ≈ 11.4 M gas, measured); the record contract is not specified | The record keeper (sponsored call, SPECIFIED); or the signer, self-paid | PQ verifiers BUILT (P6a, unaudited); PQ kinds SPECIFIED (P6); record contract NOT SPECIFIED |
+| **Long-lived, quantum-resistant records** | Records that must stay valid for decades (titles, diplomas, contracts, minutes) are signed with post-quantum UA kinds — ML-DSA, or the hash-based SLH-DSA as a backup if lattice assumptions fall — so a future quantum computer cannot forge them ([CTR-UA-23](docs/contracts/accounts.md#CTR-UA-23)). The verifiers are built but unaudited (labelled so; an audit is not a deploy gate, owner 2026-10-31) and costly in Solidity (ML-DSA-44 ≈ 11.4 M gas, measured); the record contract is not specified | The record keeper (sponsored call, SPECIFIED); or the signer, self-paid | PQ verifiers and kinds BUILT on EVM, unaudited; record contract NOT SPECIFIED |
 
 </details>
 
-## 17. Free Pay
+## 18. Free Pay
 
 If you find SCaaS useful, you can pay for it. This is not a donation: the developer does not need donations. Pay any
 amount you want, whenever you want, or not at all.

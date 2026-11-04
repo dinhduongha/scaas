@@ -1,0 +1,22 @@
+# governance T9 mutants at 20620a1e (clean tree), each one change, suite test/governance/*.t.sol,
+# restored by git checkout -- <file> after each.
+mutant | test that went red | rc
+m1 WrappedLib.wrap without the cap (wrap, wrapToUA, mtxWrapShield) | test_capHolds_wrap, test_capHolds_wrapToUA, test_capHolds_mtxWrapShieldZether, test_capHolds_mtxWrapShieldPqz, test_disableMintableLeavesAHybrid, test_mintToTheCapStopsWraps, test_nonHybridWrapReadsNoNewSlot | 1
+m2 _sigQuote without the cap (mtxWrapOrder, uaWrapOrder) | test_capHolds_mtxWrapOrder, test_capHolds_uaWrapOrder | 1
+m3 WrappedToken.mint without checkMint | test_capHolds_mint | 1
+m4 WrappedToken.mintToUA without checkMint | test_capHolds_mintToUA | 1
+m5 _wrap passes supply 0 (wrap, wrapToUA) | test_capHolds_wrap, test_capHolds_wrapToUA, test_disableMintableLeavesAHybrid, test_mintToTheCapStopsWraps | 1
+m6 mtxWrapOrder passes supply 0 | test_capHolds_mtxWrapOrder | 1
+m7 uaWrapOrder passes supply 0 | test_capHolds_uaWrapOrder | 1
+m8 WrappedZetherToken.mtxWrapShield passes supply 0 | test_capHolds_mtxWrapShieldZether | 1
+m9 WrappedPqzToken.mtxWrapShield passes supply 0 | test_capHolds_mtxWrapShieldPqz | 1
+m10 the cap lifted on wraps once bit 1 is off | test_disableMintableLeavesAHybrid, test_nonHybridWrapReadsNoNewSlot | 1
+m11 addReserve open on a disabled leg | test_addReserveRefusedOnADisabledLegOfAHybrid | 1
+m12 c >= supply kept on a capped token | test_executeRateOnAHybridShortOfSupply, test_rateFallOnAHybridNeedsNoAddReserve, test_rateFallWithDisabledLegStillRefusedOnAHybrid | 1
+m13 c >= supply dropped on an uncapped token | test_executeRateNonHybridStillChecksSupply | 1
+m14 RateDecreaseWithDisabledLeg skipped on a capped token | test_rateFallWithDisabledLegStillRefusedOnAHybrid | 1
+m15 `capped` not read: a wrap checks `maxSupply != 0` (a plain wrap reads maxSupply) | test_nonHybridWrapReadsNoNewSlot | 1
+m16 a mint raises leg 0's reserve | test_capHolds_mint, test_executeRateOnAHybridShortOfSupply, test_mintToTheCapStopsWraps, test_unitsTransferAfterTheReserveIsEmpty, test_unwrapToEmptyThenInsufficientReserve, test_unshieldUnwrapShortReserveRevertsBeforeTheProof{Zether,Pqz} | 1
+m17 WrappedZetherToken: the quote after the proof (the pre-proof quoteTo dropped) | test_unshieldUnwrapShortReserveRevertsBeforeTheProofZether | 1
+m18 WrappedPqzToken: the quote after the burn (the pre-burn quoteTo dropped) | test_unshieldUnwrapShortReserveRevertsBeforeTheProofPqz | 1
+# survivors: none

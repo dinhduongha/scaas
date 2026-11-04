@@ -590,8 +590,10 @@ mod tests {
         let relay = json!({"entry": "mtxRelayFee", "contract": "token", "token": format!("{token:#x}"),
             "call": crate::typed::testkit::op_of("Burn", "token", &v).unwrap(), "signature": format!("0x{}", "11".repeat(65)),
             "args": {"from": zero, "payee": zero, "value": "1", "validUntil": until, "relayer": format!("{:#x}", Address::repeat_byte(0xf4))}});
+        // a GovernanceRouter op (spec 2026-11-02-governance §12.7) is a job of a namespace with the grant, never a door-A request
+        let governance = crate::typed::testkit::op_of("GrantRole", "gov_router", &v).unwrap();
         for (what, op) in [("deploy", deploy), ("register", register), ("mtxSettle", settle), ("a wallet", owner), ("a relay fee", relay),
-            ("an unregistered contract", unregistered)] {
+            ("an unregistered contract", unregistered), ("a router op", governance)] {
             let (app, mut rx, log) = gateway("0x", vec![token]).await;
             let (st, body) = post_op_body(app, chain, &op).await;
             assert_eq!(st, StatusCode::BAD_REQUEST, "{what}: {body}");

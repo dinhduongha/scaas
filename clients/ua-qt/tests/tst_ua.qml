@@ -743,4 +743,18 @@ TestCase {
         compare(UaKinds.encodeMsig(1, "not json"), "")
         compare(UaKinds.lastError, "UAArgument")
     }
+
+    // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 21 "" and UAArgument
+    function test_governance_bits_rows() {
+        const v = vectors.load("../governance/governance_bits.json")
+        compare(v.bits.length, 22)
+        for (const r of v.bits) {
+            compare(JSON.parse(UaKinds.governanceBit(r.bit)), r, "bit " + r.bit)
+            compare(UaKinds.lastError, "")
+        }
+        for (const bit of [22, 127, 128, 255, 256, -1]) {
+            compare(UaKinds.governanceBit(bit), "", bit)
+            compare(UaKinds.lastError, "UAArgument", bit)
+        }
+    }
 }

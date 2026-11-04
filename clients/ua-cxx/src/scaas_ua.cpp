@@ -63,6 +63,7 @@ std::vector<KindInfo> kinds() {
 }
 Bytes tag(uint16_t k) { return call([&] { return bytes(ffi::tag(k)); }); }
 std::string kindTagString(uint16_t k) { return call([&] { return std::string(ffi::kind_tag_string(k)); }); }
+std::string governanceBit(uint8_t bit) { return call([&] { return std::string(ffi::governance_bit(bit)); }); }
 // Non-UTF-8 text is not a known group / purpose / id: std::invalid_argument from rust::Str becomes the matching code.
 std::optional<Bytes> groupTag(const std::string& g) {
     try {

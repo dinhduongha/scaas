@@ -196,3 +196,19 @@ fn structures() {
         assert_eq!(hx(&member_digest(&b32(&m["structureUa"]), &b32(&m["uaMsg"]))), m["memberDigest"]);
     }
 }
+
+/// governance T14: `governance_bit` against the file on disk, every row (a stale compiled-in copy fails here), and none past bit 21.
+#[test]
+fn governance_bits_rows() {
+    let path = format!("{}/../../smartcontracts/vectors/governance/governance_bits.json", env!("CARGO_MANIFEST_DIR"));
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let rows = v["bits"].as_array().unwrap();
+    assert_eq!(rows.len(), 22);
+    for bit in 0..=255u8 {
+        match (rows.get(bit as usize), governance_bit(bit)) {
+            (Some(row), Some(ours)) => assert_eq!(&serde_json::from_str::<Value>(ours).unwrap(), row, "bit {bit}"),
+            (None, None) => {}
+            (want, got) => panic!("bit {bit}: file {want:?}, governance_bit {got:?}"),
+        }
+    }
+}

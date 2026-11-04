@@ -1,0 +1,11 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+// The governance prototype's `GovernanceLib.requireRole` (branch `governance`, D1 + D2), removed by spec G14 / B-31: nothing
+// called it and it skipped a limited holder's grant. Every power runs through `GovernanceUse.use`. A fragment of the library
+// body, kept for reference; not built.
+
+    /// @dev The flag is set and `account` holds its role.
+    function requireRole(uint8 bit, address account) internal view {
+        GovernanceStorage storage s = $();
+        if (s.features & _bit(bit) == 0) revert IGovernance.FeatureNotSet(bit);
+        if (s.roles[bit][account] == 0) revert IGovernance.MissingRole(bit, account);
+    }

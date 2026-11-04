@@ -5,7 +5,9 @@ import {Vm} from "forge-std/Vm.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {WrappedLib} from "../../src/metatx/WrappedLib.sol";
 import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
 import {HederaLib} from "../../src/hedera/HederaLib.sol";
@@ -55,7 +57,7 @@ function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory
     bool zwr = kind == IOpenFactory.TokenKind.WRAPPED_ZETHER;
     bool pwr = kind == IOpenFactory.TokenKind.WRAPPED_PQZ;
     l = new address[](4 + (und ? 1 : 0) + (zth ? 1 : 0) + (zwr ? 1 : 0) + (pqz ? 4 : 0) + (pwr ? 1 : 0));
-    (l[0], l[1], l[2], l[3]) = (address(AdminLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
+    (l[0], l[1], l[2], l[3]) = (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
     uint256 n = 4;
     if (und) l[n++] = address(WrappedLib);
     if (zth) l[n++] = address(ZetherLib);
@@ -117,10 +119,10 @@ library Catalogue {
     /// @dev DEX release `version` from `code` on a DEX env with `ska` (published once per distinct env).
     function dex(OpenFactory f, uint64 version, bytes memory code, address ska) internal returns (address) {
         IFactoryToken.Env memory e = plainEnv(address(f), ska, f.chainUid(), address(0), false);
-        e.libs = new address[](1);
-        e.libs[0] = address(TradeLib);
-        e.libCodeHashes = new bytes32[](1);
-        e.libCodeHashes[0] = address(TradeLib).codehash;
+        e.libs = new address[](2);
+        (e.libs[0], e.libs[1]) = (address(GovernanceLib), address(TradeLib));
+        e.libCodeHashes = new bytes32[](2);
+        (e.libCodeHashes[0], e.libCodeHashes[1]) = (address(GovernanceLib).codehash, address(TradeLib).codehash);
         uint16 v = f.latestDexEnvVersion();
         if (v == 0 || keccak256(abi.encode(f.dexEnvOf(v))) != keccak256(abi.encode(e))) {
             vm.prank(f.registrar());

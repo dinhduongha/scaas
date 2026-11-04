@@ -16,15 +16,18 @@ P=${P:-2026-10-27-metatx-split}
 LOGEXT=${LOGEXT:-txt}
 STEPS=${STEPS-"forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 sizes gen-set docs cargo-zether-prover zether-cross wasm-zether-prover cargo-scaas-node clientkeys ua-rs ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart soroban solana cosmos sui aptos ton near algorand e2e-near e2e-algorand named-tests"}
 FAMILIES=${FAMILIES-"soroban solana cosmos sui aptos ton near algorand e2e-near e2e-algorand"}
+# QT: the Qt 6 prefix (the directory holding bin/qmake6); the environment's, else this default; only the ua-qt step reads it
 QT=${QT:-$HOME/usr/Qt/6.12.0/gcc_64}
 export CAPPED_SLOTS=${CAPPED_SLOTS:-2} CAPPED_MEM=${CAPPED_MEM:-3G}
 
 run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
   case $1 in
     forge-isolate) cd smartcontracts/evm && ../../scripts/capped forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' ;;
-    forge-*) scripts/capped smartcontracts/evm/script/pqz/at-set.sh "${1#forge-}" test ;;
+    forge-n[0-9]*-kmax[0-9]*) scripts/capped smartcontracts/evm/script/pqz/at-set.sh "${1#forge-}" test ;; # other forge-* steps: extra_step
     sizes) cd smartcontracts/evm || return 1
-      j=$(mktemp) && ../../scripts/capped forge build src --sizes --json > "$j" &&
+      python3 -I ../../scripts/size_gate.py --self-test || return 1
+      j=$(mktemp) && ../../scripts/capped forge build src --sizes --json > "$j"
+      [ -s "$j" ] && # forge exits 1 when a contract is above 64 KiB; the gate below judges the sizes
         python3 -I ../../scripts/size_gate.py "$j" size-baseline.json; rc=$?; rm -f "$j"; return $rc ;;
     gen-set) python3 -I pqz-core/params/sets/gen_set.py --all --check ;;
     docs) python3 scripts/test_docs_check.py && python3 scripts/docs_check.py check &&
@@ -78,6 +81,7 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
           cmp clients/zether-prover/vectors/$f.json smartcontracts/evm/test/vectors/zether/s3/$f.json || return 1
       done ;;
     ua-qt) # as Task 18; build/ is git-ignored; ctest -V prints QtQuickTest's per-function PASS lines for named-tests
+      : "${QT:?set QT to the Qt 6 prefix (the directory holding bin/qmake6)}"
       QMAKE=$QT/bin/qmake6 LD_LIBRARY_PATH=$QT/lib QT_QPA_PLATFORM=offscreen scripts/capped sh -c \
         "cmake -S clients/ua-qt -B clients/ua-qt/build -DCMAKE_PREFIX_PATH=$QT && cmake --build clients/ua-qt/build -j2 &&
          cd clients/ua-qt/build && ctest -V --no-tests=error --output-on-failure" ;;
@@ -853,12 +857,16 @@ make_summary() {
       n=$(sed -E 's/\x1b\[[0-9;]*m//g' "$f" | awk '
         /^test result: .* [0-9]+ passed;/ { for (i = 1; i <= NF; i++) { if ($(i+1) ~ /^passed/) p += $i; if ($(i+1) ~ /^failed/) fl += $i; if ($(i+1) ~ /^ignored/) ig += $i } }
         /\[PASS\]/ { fp++ } /\[FAIL/ { ff++ }
+        /^Ran [0-9]+ test suites.*: [0-9]+ tests passed, [0-9]+ failed, [0-9]+ skipped/ { # forge totals: fuzz and table rows print [PASS] more than once
+          match($0, /: [0-9]+ tests passed, [0-9]+ failed, [0-9]+ skipped/); split(substr($0, RSTART + 2, RLENGTH - 2), a, /[ ,]+/)
+          rp += a[1]; rf += a[4]; rs += a[6]; ran = 1 }
         /^ℹ pass / { np = $3 } /^ℹ fail / { nf = $3 }
         /^--- PASS:/ { gp++ } /^Ran [0-9]+ tests? in/ { py += $2 }
         /Passed [A-Za-z]/ { cs++ } /Test +#[0-9]+: .* Passed/ { ct++ } /PASS +: / { qt++ }
         END { o = ""
           if (p + fl) o = o p " passed " fl " failed " ig " ignored (cargo) "
-          if (fp + ff) o = o fp " passed " ff " failed (forge) "
+          if (ran) o = o rp " passed " rf " failed " rs " skipped (forge) "
+          else if (fp + ff) o = o fp " passed " ff + 0 " failed (forge) "
           if (np + nf) o = o np " passed " nf " failed (node) "
           if (gp) o = o gp " passed (go) "; if (py) o = o py " ran (unittest) "
           if (cs) o = o cs " passed (dotnet) "; if (ct) o = o ct " passed (ctest) "; if (qt) o = o qt " passed (qt) "

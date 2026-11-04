@@ -6,11 +6,13 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
@@ -78,10 +80,10 @@ contract UALedgerNamedTest is UALedgerBase {
     /// `uaPay` is pay: it needs `PAYABLE`, like `mtxPay`; a `UAMetaTransfer` with `entryRef` set is never gated.
     function test_uaPay_needsPayable() public {
         IFactoryToken.TokenConfig memory c = normalInit("NoPay", "NP", 6, 0, address(0), address(this));
-        c.features = 1 << AdminLib.MINTABLE;
+        c.features = 1 << GovernanceBits.MINTABLE;
         NormalToken np = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
         np.initialize(address(this), 1, abi.encode(c));
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, AdminLib.PAYABLE));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.PAYABLE));
         np.uaPay(uaP, uaB, 1, keccak256("p"), block.timestamp + 1, RR, RELAYER, 0, address(0), UACall.auth(uaP, ""));
         // a UAMetaTransfer with `entryRef` set is not gated
         np.mint(alice, 10);

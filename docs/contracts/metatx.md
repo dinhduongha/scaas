@@ -45,7 +45,9 @@ contract**, and the contract runs the signed call **on itself only**: `mtxExecut
 allowlisted functions ([CTR-MTX-17](#CTR-MTX-17)); on a token, `mtxExecuteTransfer` moves this token's balance
 (transfer, payment, [CTR-MTX-23](#CTR-MTX-23)); a named entry ([CTR-MTX-28](#CTR-MTX-28)) runs one operation the same way, under its own struct. There is no ERC-2771 trusted forwarder (no
 calldata sender suffix, no 63/64 gas rule, no return bomb, no swallow mode), no call **out** to another contract with
-the signer's calldata, and no ERC-4337 bundler/paymaster dependency for token operations.
+the signer's calldata, and no ERC-4337 bundler/paymaster dependency for token operations. A `GovernanceRouter` calls
+out, by typed entries only, with named parameters the signer signed, each to a `target` it names ([CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex),
+[CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)); no generic forwarder exists, there as anywhere.
 
 The signer travels in a
 transient slot, never in calldata ([CTR-MTX-18](#CTR-MTX-18)); what may run is a fixed **selector** allowlist per
@@ -77,7 +79,7 @@ linked library every token calls by DELEGATECALL (`preCall`, `preTransfer`, `req
 `transferDigest`); `MetaTxBase` calls the same internals inlined, so `SmartKeyAccount`, `MandateWallet` and
 `HederaMandateWallet` link nothing. The library has no state of its own (it writes only the nonce slot `scaas.metatx` of
 the caller), no SELFDESTRUCT or CALLCODE; `test_libraryOpcodes` allows one DELEGATECALL in it (to `HederaLib`, a linked
-library it names) and one in `WrappedLib` (to `AdminLib`). Selectors, digests, events and the allowlist are unchanged
+library it names) and two in `WrappedLib` (to `GovernanceLib`: `init`, and `useLimited` through `GovernanceUse`, governance B-26). Selectors, digests, events and the allowlist are unchanged
 (the parity fixture `test/vectors/metatx-parity.json`, 1,822 cases, replays them). Cost, measured on the final bytecode
 (`smartcontracts/evm/runs/2026-10-27-metatx-split-overhead-final.txt`, baseline `...-baseline.txt`): +7.4 k to +7.6 k
 gas per relayed call (+8.9 k for `unwrap`, 0 for cancel), and about +550 gas per call permanently on the wallets that
@@ -90,7 +92,7 @@ The tree is `MetaTxBase → ERC20MetaTx → MetaTokenBase`
 `mtxExecute`/`mtxBatch`/`cancelNonce`; `ERC20MetaTx` holds the ERC-20, `MetaTransfer` (`entryRef`), the fee,
 the approve rule and the UA ledger; `ERC20MetaTx` also holds trade (`TradeLib`: `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces`; [CTR-DEX-15](dex.md#CTR-DEX-15); built in P2a, controller ruling, pending the owner), so every kind has it; `MetaTokenBase` holds receiver-pays (`mtxPayReceiverFee`, beside `mtxPay` and
 `payLane`, which it uses), pay behind `PAYABLE`
-(inline: no external `PayLib` built, controller ruling pending the owner), features and roles (`AdminLib`), init and provenance.
+(inline: no external `PayLib` built, controller ruling pending the owner), governance (`GovernanceBase`: owner, features, roles, grants in namespace `scaas.governance`, bodies in `GovernanceLib`, [CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)), init and provenance.
 
 Pay lives in `MetaTokenBase`, **not** in
 `ERC20MetaTx`; trade lives in `ERC20MetaTx`. The kinds (`NormalToken`, `WrappedToken`, and the two Zether kinds) sit on `MetaTokenBase`;
@@ -369,7 +371,8 @@ modifier nonReentrant() {
 `msg.sender`, after `SigCheck.requireNotDelegated(msg.sender)`: **a direct caller that is an EIP-7702 designator is
 refused** with `CallerDelegated(address caller)` (owner ruling D2 (a), 2026-10-30, [CTR-UA-24](accounts.md#CTR-UA-24),
 `6bb05818`; ≈ 313 gas per read for a warm caller, `test_requireNotDelegated_gas`). While delegated, an account acts through
-relayed `mtx*` signed by its own key (the fee may be 0) or clears its delegation first. The step-5 ticket branch is
+relayed `mtx*` signed by its own key (the fee may be 0), for an owner or holder operation through the chain's
+`GovernanceRouter` ([CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)), or clears its delegation first. The step-5 ticket branch is
 unchanged; the ticket is live while it is non-zero (1 before the guarded entry, 2 inside the allowlisted body), so an
 allowlisted body must never call `this` or forward calldata (anything it reaches through `this` sees the signer). The signer is never read from calldata, so no function can be fooled by 20 trailing bytes, and the only
 self-call path is step 5. Every allowlisted function is `nonReentrant` (a test pins it), so the one entry always
@@ -426,9 +429,9 @@ Transfer and payment are `MetaTransfer`s ([CTR-MTX-23](#CTR-MTX-23)); neither `t
 allowlisted, so one transfer has one encoding and one digest. `WrappedToken`'s two-argument `unwrap(uint256,address)` is not listed (the same intent with a
 second digest and no `minOut`). **Never allowlisted:**
 `approve` and `transferFrom` (contract accounts approve and spend through their own call path,
-[CTR-TOK-01](token-wrappers.md#CTR-TOK-01)); every role function — `mint`, `mintToUA`, the `ITokenAdmin` functions (`grantRole`, `revokeRole`, `renounceRole`, `disableFeature`, the ownership functions), `proposeRate`,
-`cancelRate`, `executeRate`, `disableWrap` (role holders act through their own
-contract, [NODE-JOB-01](../node/job-api.md#NODE-JOB-01); a signature check would skip a minter contract's caps or a
+[CTR-TOK-01](token-wrappers.md#CTR-TOK-01)); every role function — `mint`, `mintToUA`, the `IGovernance` functions (`grantRole`, `revokeRole`, `renounceRole`, `setGrant`, `cancelGrant`, `disableFeature`, the ownership functions), `proposeRate`,
+`cancelRate`, `executeRate`, `disableWrap`, the DEX's `setMarket`, `setExchangeTarget`, `setListedOnly`, `setFeeSplit` (a governance operation is no allow-list row on a governed contract, pinned by the selector audit `test/vectors/selector_audit.json`, governance T13 `d8f2e492`; role holders act through their own
+contract, or a gas-less or derived UA through the chain's `GovernanceRouter`, whose own `mtxSelectors()` is empty ([CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)), [NODE-JOB-01](../node/job-api.md#NODE-JOB-01); a signature check would skip a minter contract's caps or a
 Safe's guards; the holder still acts gaslessly through its own contract account, [CTR-UA-27](accounts.md#CTR-UA-27)); `transfer` and `pay` (they are `MetaTransfer`s); `payWithFee` and `payWithFeeToUA` (they charge their own fee); `mtxExecute`, its alias and every other `mtx…` entry
 (no nesting); `initialize`; views; Zether `mtxRollOverSigned`/`mtxSetRollOverMode` (they carry their
 own signature). For selectors with dynamic arguments (Zether) the contract cannot cheaply pin one encoding: the node
@@ -1290,7 +1293,7 @@ was built (P1b–P1d).
   Wrapper tiers `Single`/`Multi` and their Hedera children exceeded EIP-170 until P1d (controller ruling 2026-10-09,
   pending the owner, HANDOFF); the deploy scripts deploy only the `NORMAL` kind (P1e: `OpenFactory` with `NormalToken`).
 - **P1c (BUILT):** `MetaTokenBase` on `AdminLib` (namespace `scaas.token`; `ITokenAdmin` carries the admin functions, events
-  and errors): flags, owner and roles on kind `NORMAL`; `mtxPay`, `payWithFee` and `mtxPayReceiverFee` are gated by `PAYABLE`
+  and errors; since the governance build `GovernanceLib` and `IGovernance` in namespace `scaas.governance`, [CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)): flags, owner and roles on kind `NORMAL`; `mtxPay`, `payWithFee` and `mtxPayReceiverFee` are gated by `PAYABLE`
   and stay inline (no `PayLib`, controller ruling, pending the owner); `MetaTransfer` is never gated; `IS_HEDERA` with
   `HederaLib` replaces the `NORMAL` Hedera child.
 - **P1d (BUILT):** one `WrappedToken` (kind `WRAPPED`) replaces the tiers; its allowlist is six selectors

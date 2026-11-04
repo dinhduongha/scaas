@@ -656,7 +656,7 @@ members whose kind is not 0x0130–0x0135 and that are not an `msig` PQ-eligible
 7,856-byte signature and a ≈ 1.4 M gas cap on every spend). Every other kind — classical signers, `slhdsa128s`, Zether,
 a classical-dominant `msig` — reverts `UAPqzHolder`. **Authorization bound (review2 C0-5, controller proposal, owner may
 override):** an `msig` holder must also be usable — `register` reverts `UAPqzHolder` unless its worst-case authorization
-(register step 4's bound `w`: the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` + `MSIG_ACCEPTED_GAS` + the caller's hold; plus `w / 63 + SigCheck.GAS_MARGIN`, the hold of a gen-2 registry that forwards the authorization to this one) plus
+(register step 4's bound `w`: the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` + `MSIG_ACCEPTED_GAS` + the caller's hold; plus `w / 63 + SigCheck.GAS_MARGIN`, the hold of a gen-2 registry that forwards the authorization to this one; `setPqzKey` on a gen-2 host counts the native slots of a record gen 1 holds at 400 k, gen 1's clone cap, as a gen-1 inner's) plus
 `PqzSet.PQZ_DEBIT_MIN_GAS` plus 16 gas per byte of the authorization's calldata is at most 2^24 (the per-transaction cap of EIP-7825, not a chain's own block limit), and so is `PQZ_DEBIT_MIN_GAS` + 64 per byte, the EIP-7976 floor. The bytes `a` are the largest `MemberSig[]` a quorum signs, both levels: a signing slot `192 + ⌈sig / 32⌉ × 32`, an `msig` slot 192 and its leaves, each `128 + ⌈sig / 32⌉ × 32`, a PQ signature at its size, every classical kind and native at 1,024 B. The debit figure holds one holder signature, which is counted again, on the safe side.
 `PQZ_DEBIT_MIN_GAS` is generated from `set.toml` `debit_min_gas`: the full relayed transaction of the cheapest PQZL debit
 (burn 1) on the costlier relay path (`uaExecute`, ML-DSA-65 fee UA at 68,006 gas [estimate]) — 6,836,182 at
@@ -760,7 +760,7 @@ Public ledgers ([CTR-PQZ-15](#CTR-PQZ-15)): the ERC-20 balances (`wrap`/`unwrap`
 ([CTR-UA-18](accounts.md#CTR-UA-18)), and one nonce map `_uaNonce[bytes32][batch]`. **Pool invariant**, tested on the
 built token: `balanceOf(SHIELD_POOL) == totalShielded · shieldScale`, `totalSupply()` moves only with wraps and
 unwraps, `Σ balanceOf == totalSupply`, escrow `underlying.balanceOf(this) ≥ totalSupply()` (the pool is part of
-`totalSupply`).
+`totalSupply`), on a non-hybrid; a hybrid `WrappedPqzToken` (`maxSupply ≠ 0`) claims none ([CTR-GOV-12](../decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)).
 
 <a id="credit-cap"></a>
 <a id="CTR-PQZ-06"></a>**CTR-PQZ-06** — **No credit is refused: an unbounded ordered queue, a capped `acc`, public amounts as
@@ -1314,7 +1314,7 @@ the `verifyTransferAmount` view ([integration.md](../integration.md#confidential
 <a id="authorization-check"></a>
 
 `registry.requireAuthorized(fromUA, PURPOSE_ZETHER_AUTH, authDigest, authSig)` (`authSig` is the `auth` argument of the entry points) on the signing UA itself, which must hold a
-PQZ key ([CTR-PQZ-12](#CTR-PQZ-12); `AccountNotRegistered` otherwise). `PURPOSE_ZETHER_AUTH =
+PQZ key ([CTR-PQZ-12](#CTR-PQZ-12); `AccountNotRegistered` otherwise); a revert there is `AuthRejected`, except a starved registry, `UAVerifyGas` (its own, or its frame out of gas: no revert data and at most the 1/64 the token kept; T-AUTH-4, as `UAStore.via`). `PURPOSE_ZETHER_AUTH =
 keccak256("scaas.ua.purpose.zether-auth.v1")`: `authSig = abi.encode(bytes keyData, bytes sig)` with empty `keyData` for
 stored PQ kinds ([CTR-UA-17](accounts.md#CTR-UA-17)), `msig` member signatures in the UA format. The signed message is
 **exactly** the UA tagged message ([CTR-UA-12](accounts.md#CTR-UA-12)), computed by the registry from the signer's
@@ -1350,7 +1350,7 @@ allowances per [CTR-TOK-01](token-wrappers.md#CTR-TOK-01), escrow invariant) on 
 to the pool; `mtxUnshield` moves it from the pool to the recipient; `mtxUnshieldUnwrap` burns it from the pool, then the leg
 pays; every fee from a hidden balance (`txFee`, `decoyFee`) moves from the pool to the recipient's public balance. So
 `totalSupply()` never moves on shield, unshield or fee, stays the true total, `Σ balanceOf == totalSupply` holds,
-`balanceOf(SHIELD_POOL) == totalShielded·shieldScale` and the escrow invariant is `reserve ≥ totalSupply()`. The pool guard lives in
+`balanceOf(SHIELD_POOL) == totalShielded·shieldScale` and the escrow invariant is `reserve ≥ totalSupply()` on a non-hybrid (a hybrid claims none, [CTR-GOV-12](../decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)). The pool guard lives in
 the shared base, `ERC20MetaTx._uaMove` (a native `SHIELD_POOL` side of a ledger move reverts, which covers outer fees,
 `uaExecute` fee calls and receiver fees); the confidential layers move the pool only through the **internal `_poolMove`**.
 `_poolMove` is deliberately unguarded and is the inheritance trust boundary of the token tree: only layer code (`PqzLayer`,

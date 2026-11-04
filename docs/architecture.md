@@ -93,12 +93,14 @@ back. The three columns below:
 each power is public, set at creation or bounded, and none moves a subject's balance except the regulated class's
 forced transfer against a recorded order. Among them:
 
-- a token's optional `owner`, who only administers (grants and revokes the roles of the flags chosen at creation,
-  disables a flag that was not locked, renounces; [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)), and the role
+- a token's optional `owner`, a UA id in `GovernanceBase` ([CTR-GOV-01](decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)), who only administers (grants and revokes the
+  roles of the flags chosen at creation, under `grantDelay` when it adds or widens, disables a flag that was not locked,
+  renounces; [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)), and the role
   holders of those flags, such as the `rateAdmin` (step-capped, timelocked rate changes) and the `guardian` (only
   `disableWrap`) ([CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10));
-- the `SCaaSDex` `admin` (four powers — listing, the split of each order's signed fee between relayer and treasury,
-  exchange targets, listed-only mode — never the amount, [CTR-DEX-03](contracts/dex.md#CTR-DEX-03));
+- the `SCaaSDex` `owner` and the holders of its bits `LISTING` (markets, exchange targets, listed-only mode) and
+  `FEE_ROUTING` (the split of each order's signed fee between relayer and treasury) — never the amount,
+  [CTR-DEX-03](contracts/dex.md#CTR-DEX-03));
 - the admin `mint` of the standalone non-EVM tokens on Soroban, GRAM and CosmWasm (a supply power, not a balance power);
 - the GRAM DEX admin `WithdrawFees` (fees only; bounced payouts are claimed by their owners, [NET-TON-03](networks/ton.md#NET-TON-03));
 - the market admins of the other DEX programs (Soroban, Sui `AdminCap`, which also sets the network once, Aptos,
@@ -137,7 +139,7 @@ Design consequences:
 | A mixer | The identities of both parties are always visible; only amounts and balances can be hidden ([contracts/zether.md](contracts/zether.md)) |
 | A database replacement | Business data stays in the client's system of record; only commitments, settlements and the minimum identity linkage go on chain ([Service model](#service-model)) |
 | An upgradeable platform | No proxy upgrade on any contract that holds value; **immutable at deploy on every family** (EVM clones; Aptos `upgrade_policy = "immutable"`; Sui `make_immutable` on the `UpgradeCap` in the deploy run; Solana upgrade authority `None` after `initialize`; Cosmos instantiated `--no-admin`; GRAM and Soroban as built). Each family's deploy script fails if the result is still upgradeable, and the node holds such a chain `halted` with `PROGRAM_UPGRADEABLE` ([CTR-GEN-02](contracts/README.md#CTR-GEN-02), [NODE-STO-07](node/store.md#NODE-STO-07)). New behaviour = a new version plus voluntary migration |
-| A token gatekeeper | The factory is open; provenance replaces allowlists. Controlled (regulated) tokens are an explicit creation-time choice, flags 5–8 ([CTR-AS-17](contracts/asset-suite.md#CTR-AS-17); [contracts/token-wrappers.md](contracts/token-wrappers.md), [contracts/asset-suite.md](contracts/asset-suite.md)) |
+| A token gatekeeper | The factory is open; provenance replaces allowlists. Controlled (regulated) tokens are an explicit creation-time choice, flags 5–9 on one regulated implementation per kind, not built ([CTR-AS-17](contracts/asset-suite.md#CTR-AS-17); [contracts/token-wrappers.md](contracts/token-wrappers.md), [contracts/asset-suite.md](contracts/asset-suite.md)) |
 | A hosted node service | The node is infrastructure anyone can run; operators are independent, set their own policies and can only refuse or delay, never forge |
 | A single-ERP product | Any ERP integrates through the same job API ([integration.md](integration.md)) |
 | A market maker or profit-seeking relayer market | Relayer economics are cost recovery between parties with aligned interests; fee = 0 is the B2B default ([Economics](#economics)) |
@@ -235,7 +237,7 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 
 | Component | Path | Role | Status |
 |---|---|---|---|
-| EVM contracts | `smartcontracts/evm/` (Foundry; `src/{account,chains,common,dex,factory,hedera,metatx,trade,ua,wallet,zether}`) | Target: the token tree `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NORMAL`, `WRAPPED`, `NORMAL_ZETHER`, `WRAPPED_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)); the libraries `TradeLib`, `AdminLib`, `WrappedLib`, `ZetherLib`, `HederaLib`, with pay inline behind the `PAYABLE` flag in `MetaTokenBase` (no `PayLib`; [CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); `OpenFactory` for tokens and DEX clones ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); `SCaaSDex`; `MandateWallet`; `SmartKeyAccount`; `UARegistry` (`src/ua/`); the Zether verifiers (bn254, BLS12-381), `ZetherDisclosure`, `ZetherStatements`. Build profiles `scaas-testnet`, `zether`, `gnosis`, `celo` | BUILT (P1a–P1e): `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase`, kind `NORMAL` = `NormalToken`, kind `WRAPPED` = `WrappedToken` (1–8 legs, native-coin leg) + `WrappedLib`, `AdminLib`, `HederaLib`, and `OpenFactory` with `createToken`/`TokenConfig`; `TradeLib` and the `SCaaSDex` clone (P2), the `*_ZETHER` kinds and `ZetherLib` (P3), `MandateWallet` and `SmartKeyAccount` (P4); the v1 line, the old `ZetherToken` and the typed structs in `legacy/` (P3–P5). SPECIFIED: `PqzToken` |
+| EVM contracts | `smartcontracts/evm/` (Foundry; `src/{account,chains,common,confidential,dex,factory,governance,hedera,metatx,pqz,trade,ua,wallet,zether}`) | Target: the token tree `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NORMAL`, `WRAPPED`, `NORMAL_ZETHER`, `WRAPPED_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)); the libraries `TradeLib`, `GovernanceLib`, `WrappedLib`, `ZetherLib`, `HederaLib`, with pay inline behind the `PAYABLE` flag in `MetaTokenBase` (no `PayLib`; [CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); `OpenFactory` for tokens and DEX clones ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); `SCaaSDex`; `MandateWallet`; `SmartKeyAccount`; `UARegistry` (`src/ua/`); the Zether verifiers (bn254, BLS12-381), `ZetherDisclosure`, `ZetherStatements`. Build profiles `scaas-testnet`, `zether`, `gnosis`, `celo` | BUILT (P1a–P1e): `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase`, kind `NORMAL` = `NormalToken`, kind `WRAPPED` = `WrappedToken` (1–8 legs, native-coin leg) + `WrappedLib`, `AdminLib` (since the governance build `GovernanceBase` / `GovernanceLib` and the chain's `GovernanceRouter`, branch `governance`), `HederaLib`, and `OpenFactory` with `createToken`/`TokenConfig`; `TradeLib` and the `SCaaSDex` clone (P2), the `*_ZETHER` kinds and `ZetherLib` (P3), `MandateWallet` and `SmartKeyAccount` (P4); the v1 line, the old `ZetherToken` and the typed structs in `legacy/` (P3–P5). SPECIFIED: `PqzToken` |
 | Hedera contracts | the EVM implementations | No separate contracts: the EVM implementations deployed with `IS_HEDERA` (HIP-632 signatures, fail-closed HTS checks; [CTR-TOK-23](contracts/token-wrappers.md#CTR-TOK-23)) | BUILT (P1c–P1d): `IS_HEDERA` is an immutable of every implementation; `HederaLib` (`smartcontracts/evm/src/hedera/`) holds the HIP-632 path, and the HTS association is called from `WrappedLib` init; the Hedera wrapper children are deleted (the v1 `HederaMetaToken` is in `legacy/p5/`) |
 | Cosmos contracts | `smartcontracts/cosmos/` (CosmWasm workspace) | `scaas-token` (CW20 + meta-op), `scaas-mandate`, `scaas-dex`, shared `scaas-metaop` | BUILT |
 | Soroban contracts | `smartcontracts/soroban/` | SEP-41 token + `pay`, mandate, DEX; native auth as the meta-tx (Stellar and Pi Network) | BUILT |
@@ -285,7 +287,7 @@ classDiagram
     ZetherLayer <|-- NormalZetherToken
     ZetherLayer <|-- WrappedZetherToken
     MetaTokenBase ..> TradeLib : trade
-    MetaTokenBase ..> AdminLib : flags and roles
+    MetaTokenBase ..> GovernanceLib : GovernanceBase: owner, bits, roles, grants
     MetaTokenBase ..> HederaLib : if IS_HEDERA
     WrappedToken ..> WrappedLib : legs
     WrappedZetherToken ..> WrappedLib : legs
@@ -309,7 +311,7 @@ classDiagram
         acc and pending per UA, totalShielded
     }
     class TradeLib { <<library>> }
-    class AdminLib { <<library>> }
+    class GovernanceLib { <<library>> }
     class WrappedLib { <<library>> }
     class ZetherLib { <<library>> }
     class HederaLib { <<library>> }
@@ -326,15 +328,20 @@ third-party contracts are gasless in the same way as tokens ([CTR-MTX-22](contra
 registered implementation, initialized in the same call, and answers its own provenance
 ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25), [CTR-TOK-17](contracts/token-wrappers.md#CTR-TOK-17)).
 
-| Kind | `PAYABLE` | `MINTABLE` | `BURNABLE` | `RATE_ADJUSTABLE` | `WRAP_DISABLEABLE` | `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST` |
-|---|---|---|---|---|---|---|
-| `NORMAL` | yes | yes | yes | — | — | yes |
-| `WRAPPED` | yes | — | — | yes | yes | yes |
-| `NORMAL_ZETHER` | yes | yes | yes | — | — | refused |
-| `WRAPPED_ZETHER` | yes | — | — | yes | yes | refused |
+| Kind | `PAYABLE` | `MINTABLE` | `BURNABLE` | `RATE_ADJUSTABLE` | `WRAP_DISABLEABLE` | `RESCUABLE` | `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`, `DENYLIST` |
+|---|---|---|---|---|---|---|---|
+| `NORMAL` | yes | yes | yes | — | — | yes | refused (`FeatureNotBuilt`): kind 8 `NORMAL_REGULATED`, not built |
+| `WRAPPED` | yes | as a hybrid (`maxSupply ≠ 0`) | — | yes | yes | yes | refused (`FeatureNotBuilt`): kind 9 `WRAPPED_REGULATED`, not built |
+| `NORMAL_ZETHER` | yes | yes | yes | — | — | yes | refused (`FeatureInvalidForKind`) |
+| `WRAPPED_ZETHER` | yes | as a hybrid | — | yes | yes | yes | refused (`FeatureInvalidForKind`) |
 
-*Valid features per kind: the "Valid kinds" column of [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22); the
-regulated flags 5–8 are [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17).*
+*Valid features per kind: the "Valid kinds" column of [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22) and
+`validBits()`; `RESCUABLE` is set at creation iff `rescueTo ≠ 0`, `MINTABLE` on a wrapped kind iff `maxSupply ≠ 0`; the bit table and its disclosure sentences are `smartcontracts/vectors/governance/governance_bits.json`.
+The regulated flags 5–9 live on one regulated implementation per kind, never per feature
+([CTR-GOV-03](decisions.md#ctr-gov-03--a-plain-transfer-stays-0-one-regulated-implementation-per-kind-never-per-feature),
+[CTR-AS-17](contracts/asset-suite.md#CTR-AS-17)); the regulated confidential kinds follow
+[CTR-GOV-17](decisions.md#ctr-gov-17--regulated-confidential-kinds-the-rules). The PQZ kinds take the same row as their
+Zether counterparts. Governance BUILT on branch `governance` (T3 `7825361b` to T10b `ac29de05`); regulated kinds SPECIFIED.*
 
 **Why kinds are code and features are flags.** EIP-170 caps every implementation at 24,576 bytes, and the built
 Zether kinds are already over it ([CTR-ZTH-46](contracts/zether.md#CTR-ZTH-46)): one contract per combination of
@@ -346,11 +353,12 @@ library shared by every implementation, inside a per-implementation size budget
 anyone writing a class for it.
 
 **Why the owner can only give things up.** There is no upgrade key, so the flags a token is born with are the most it
-can ever do: an optional `owner` grants and revokes the roles of those flags, may clear a flag that was not locked,
-and may renounce, after which nobody administers the token (the existing role holders keep their roles; to freeze the
-power set the owner revokes every role first); a role holder exercises only its flag
+can ever do: an optional `owner` grants and revokes the roles of those flags (adding or widening a holder takes two
+calls within `[eta, eta + grantDelay]`), may clear a flag that was not locked, and may renounce, after which nobody
+administers the token (`renounceOwnership` reverts while a bit that is not locked has a live root, so the owner revokes
+them first; a locked bit's holders survive it); a role holder exercises only its flag, within its `Grant` if limited
 ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22), [CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10)).
-Wallets read `features()`, `lockedFeatures()` and the role holders, so a holder can see the whole power set before
+Wallets read `features()`, `lockedFeatures()`, `owner()`, the role holders and `grantOf`, so a holder can see the whole power set before
 accepting a token. Hedera is not a creator's choice but a per-chain parameter of each implementation (`IS_HEDERA`,
 [CTR-TOK-23](contracts/token-wrappers.md#CTR-TOK-23)); a wrapper leg may be the native coin
 ([CTR-TOK-26](contracts/token-wrappers.md#CTR-TOK-26)).
@@ -492,7 +500,7 @@ transfer is stored is fixed per token (`disclosureMode` BUNDLE or COMPACT, speci
 Verification and disclosure sit **outside** the token: one verifier per curve, the stateless `ZetherDisclosure` and
 `ZetherStatements` serve every Zether token ([CTR-ZTH-43](contracts/zether.md#CTR-ZTH-43),
 [CTR-ZTH-46](contracts/zether.md#CTR-ZTH-46)). That keeps each token under EIP-170 and gives a checker one canonical
-contract to call. Confidential kinds refuse the regulated flags ([CTR-ZTH-47](contracts/zether.md#CTR-ZTH-47)), and
+contract to call. Confidential kinds refuse the regulated flags today ([CTR-ZTH-47](contracts/zether.md#CTR-ZTH-47); their regulated forms follow [CTR-GOV-17](decisions.md#ctr-gov-17--regulated-confidential-kinds-the-rules)), and
 classical Zether is open on every chain with the BLS12-381 precompiles, unaudited, behind the per-chain kind gate ([CTR-ZTH-52](contracts/zether.md#CTR-ZTH-52)).
 
 <a id="trading"></a>
@@ -508,10 +516,10 @@ AMM pools instead of makers, with the surplus above each signed limit paid to it
 ([exchange settlement](contracts/dex.md#exchange)). A leg in an outside token is checked by the DEX and pulled through
 the separate `DexPuller`, so the DEX itself never holds a user allowance ([CTR-DEX-22](contracts/dex.md#CTR-DEX-22)).
 
-Each `SCaaSDex` is a clone made by the same factory, with an admin written once at creation
+Each `SCaaSDex` is a clone made by the same factory, with an `owner` set at creation
 ([CTR-DEX-24](contracts/dex.md#CTR-DEX-24)). The factory's `isDex` is **advisory**: wallets and the node use it to
 warn about or refuse an unknown DEX, but tokens never consult it, so the factory registrar gains no power over trades
-([CTR-DEX-19](contracts/dex.md#CTR-DEX-19)). The fee rate is in each signed order; the DEX admin decides only who
+([CTR-DEX-19](contracts/dex.md#CTR-DEX-19)). The fee rate is in each signed order; a holder of `FEE_ROUTING` decides only who
 shares it ([CTR-DEX-03](contracts/dex.md#CTR-DEX-03)).
 
 <a id="non-evm-families"></a>
@@ -854,9 +862,11 @@ target; the rules are at the linked anchors.
 | Who | Can | Cannot | Rule |
 |---|---|---|---|
 | Factory registrar (multisig before mainnet) | register implementation versions, deprecate a version (marks, never blocks), enable Zether on development chains | touch any token or DEX, change a deployed implementation, stop a token from working | [CTR-TOK-18](contracts/token-wrappers.md#CTR-TOK-18), [CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25) |
-| Token `owner` (optional; 0 = none) | grant and revoke the roles of the flags set at creation, clear a flag that was not locked, transfer or renounce ownership | set a flag, act on a flag without granting itself the role, touch a reserve | [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22) |
-| Token role holders (`minter`, `rateAdmin`, `guardian`, `issuer`, `compliance`) | the power of their flag only: mint to a public balance, a timelocked rate step, disable wrap, and on non-confidential kinds freeze, forced transfer against a recorded order, bounded pause, allowlist | mint into a shielded balance, touch a reserve, move balances outside `FORCE`, upgrade | [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22), [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17) |
-| DEX `admin` (written once at creation) | list or delist a market, set the fee split, list exchange targets, switch listed-only mode | touch funds, change a signed fee amount, pause the whole DEX | [CTR-DEX-03](contracts/dex.md#CTR-DEX-03) |
+| Token `owner` (optional, a UA id; 0 = none) | grant (two calls under `grantDelay` when adding or widening), limit by a `Grant`, and revoke the roles of the flags set at creation, clear a flag that was not locked, transfer or renounce ownership | set a flag, act on a flag without holding the role, touch a reserve, renounce while an unlocked bit has a live root | [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22), [CTR-GOV-01](decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex) |
+| Token role holders (`minter`, `rateAdmin`, `guardian`; `issuer`, `compliance` on the regulated implementations, not built) | the power of their flag only, within their `Grant`: mint to a public balance (a hybrid's minted units are unbacked, under `maxSupply`), a timelocked rate step, disable wrap, and on the regulated implementations freeze, forced transfer against a recorded order, bounded pause; a delegable holder grants narrower leaves | mint into a shielded balance, touch a reserve, move balances outside `FORCE` or `MODERATE` (public balances only), upgrade | [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22), [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17) |
+| DEX `owner` and holders of `LISTING`, `FEE_ROUTING` | list or delist a market, list exchange targets, switch listed-only mode (`LISTING`); set the fee split (`FEE_ROUTING`) | touch funds, change a signed fee amount, pause the whole DEX | [CTR-DEX-03](contracts/dex.md#CTR-DEX-03) |
+| Anyone, `rescue` | move what a token or a `DexPuller` does not owe to its immutable `rescueTo` | choose the destination, touch a leg's reserve | [CTR-GOV-06](decisions.md#ctr-gov-06--rescue-to-an-immutable-rescueto) |
+| `GovernanceRouter` (one per chain and UA registry; no owner, holds nothing) | relay a subject's signed owner or holder op (typed `mtx<Op>` / `ua<Op>`, fee 0) to the target it names, naming the subject only for that call | act without the subject's signature, run a generic call, hold a balance | [CTR-GOV-15](decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder) |
 | Auditor (ideally a k-of-n threshold key) | read the per-transfer auditor ciphertext `C_aud` of transfers that include it, give an `AUDITOR` opening | read anyone's balance (`acc`, `pending`), read a transfer whose sender left it out | [CTR-ZTH-41](contracts/zether.md#CTR-ZTH-41), [CTR-ZTH-42](contracts/zether.md#CTR-ZTH-42) |
 | Relayers and nodes | submit, delay or refuse an intent; choose the fee recipient where the intent leaves it unbound | change any signed field, move funds, sign for a subject | [CTR-MTX-17](contracts/metatx.md#CTR-MTX-17), [NODE-LANE-16](node/submit-lanes.md#NODE-LANE-16) |
 | `UARegistry`, `ZetherDisclosure`, `ZetherStatements` | nobody administers them | — | [CTR-UA-15](contracts/accounts.md#CTR-UA-15), [CTR-ZTH-43](contracts/zether.md#CTR-ZTH-43) |
@@ -945,9 +955,9 @@ Crypto-shredding, disclosure for reconciliation and the land gate are in
 | **UA** | Universal Account: an account identifier derived from key data, an EOA generalised to every signature scheme — the native address for a chain's native accounts (never registered), otherwise `keccak256(keccak256(kind_tag) ‖ key_data)` (32 bytes, kind-tagged, top 96 bits non-zero), registered per chain with a portable proof of possession that binds the UA, its attributes (PQZ key, KEM record) and the PQZ proof hash — no chain, registry or caller, so registration is relayable and copyable to any chain (UA-8) ([contracts/accounts.md](contracts/accounts.md)). The built registry uses the Zether-only `keccak256(encodedY)` form until the UA registry replaces it ([CTR-UA-22](contracts/accounts.md#CTR-UA-22)). |
 | **Mandate** | An on-chain spending authorization held by a subject's wallet contract (`MandateWallet`): delegate, per-payment and per-period caps, payees, expiry, revocation ([CTR-ACC-06](contracts/mandates.md#CTR-ACC-06)). |
 | **Kind** | The implementation a token is cloned from, chosen at creation: `NORMAL`, `WRAPPED` (1–8 legs), `NORMAL_ZETHER`, `WRAPPED_ZETHER`; the post-quantum kinds are reserved ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)). Code, not a setting. |
-| **Feature flag** | A bit of a token's `features`, chosen at creation (`PAYABLE`, `MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, the regulated `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`); per flag locked or disableable, never set later ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
-| **Owner** | A token's optional administrator: grants and revokes the roles of its flags, may clear an unlocked flag, may renounce for good; it acts on a flag only through a role ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
-| **Role holder** | An account granted the role of a flag (`minter`, `rateAdmin`, `guardian`, `issuer`, `compliance`); it can use only that flag's power and keeps the role after the owner renounces ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
+| **Feature flag** | A bit of a token's `features`, chosen at creation (`PAYABLE`, `MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, `RESCUABLE`, the regulated `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`, `DENYLIST`); per flag locked or disableable, never set later ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
+| **Owner** | A token's or a DEX's optional administrator, a UA id: grants and revokes the roles of its flags, may clear an unlocked flag, may renounce for good; it acts on a flag only through a role ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22), [CTR-GOV-01](decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)). |
+| **Role holder** | A UA id granted the role of a flag (`minter`, `rateAdmin`, `guardian`, `issuer`, `compliance`), whole or within a `Grant`; it can use only that flag's power and keeps the role after the owner renounces ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
 | **Shield / unshield** | Moving value into or out of a confidential token's shielded (encrypted) balance, from or to the public balance (`mtxShield`, `mtxUnshield`) or straight from or to an underlying leg (`mtxWrapShield`, `mtxUnshieldUnwrap`) ([CTR-ZTH-45](contracts/zether.md#CTR-ZTH-45)). |
 | **Decoy** | A recipient leg of a confidential transfer that receives an encryption of 0, added by the sender to hide the real recipient ([CTR-ZTH-37](contracts/zether.md#CTR-ZTH-37)). |
 | **Opening** | Data that proves the amount of one confidential transfer leg to a checker without revealing a key: `SENDER_S`, `RECEIVER_X`, `AUDITOR`, `SENDER_CP` ([CTR-ZTH-40](contracts/zether.md#CTR-ZTH-40)). |

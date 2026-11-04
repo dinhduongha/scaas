@@ -7,7 +7,9 @@ import {PqzArgs} from "./PqzArgs.sol";
 import {OpenFactory} from "../../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
-import {AdminLib} from "../../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../../src/metatx/TokenStore.sol";
 import {NormalPqzToken} from "../../../src/pqz/NormalPqzToken.sol";
 import {WrappedPqzToken} from "../../../src/pqz/WrappedPqzToken.sol";
 import {MockERC20} from "../../helpers/Mocks.sol";
@@ -19,6 +21,7 @@ import {ZetherTypes} from "../../../src/zether/ZetherTypes.sol";
 import {IPqzToken} from "../../../src/pqz/IPqzToken.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {Catalogue, pqzEnv} from "../../helpers/Catalogue.sol";
+import {nid} from "../../helpers/Ids.sol";
 
 /// @notice The PQZ token stack of chain 7622 in forge (P6g plan D6): the gen-1 registry (`PqzRegistryBase`), `OpenFactory`
 ///         with the PQZ gate on, `NormalPqzToken` clones. The `PQZ` precompile answers 1 for ops 1, 2, 4, 5 unless
@@ -78,8 +81,9 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         c.name = "PQZ USD";
         c.symbol = "pqUSD";
         c.decimals = 6;
-        c.features = (1 << AdminLib.PAYABLE) | (1 << AdminLib.MINTABLE) | (1 << AdminLib.BURNABLE);
-        c.roles.minter = address(this);
+        c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE) | (1 << GovernanceBits.BURNABLE);
+        c.roles.minter = nid(address(this));
+        c.lockedFeatures = 1 << GovernanceBits.MINTABLE; // no owner: the minter survives creation on a locked bit (B-06, GD-14)
         bool withAud = aMode != uint8(ZetherTypes.AuditorMode.NONE);
         c.conf = IFactoryToken.ConfidentialConfig(
             withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, minDecoy
@@ -98,8 +102,9 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     /// An `WRAPPED_PQZ` token with one 1:1 `MockERC20` leg (after `_releaseWrapped`).
     function _newWrapped(bytes32 s) internal returns (WrappedPqzToken) {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-        c.features = (1 << AdminLib.PAYABLE);
-        c.roles.minter = address(0);
+        c.features = (1 << GovernanceBits.PAYABLE);
+        c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
+        c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
         return WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), s)));

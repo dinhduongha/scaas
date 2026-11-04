@@ -9,6 +9,8 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
+import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
+import {GovernanceBase} from "../../src/governance/GovernanceBase.sol";
 
 /// @notice `DeployBase` deploys UA registry generation 1 on every chain (CTR-UA-22) with the per-chain kind set of
 ///         accounts.md §1.9: the precompile probe (`UAPrecompileProbe`: the kinds.json points outside the subgroup,
@@ -168,8 +170,8 @@ contract UADeployTest is Test {
         assertEq(h.gasNeed("NormalToken"), plain);
         assertEq(h.gasNeed("WrappedPqzToken"), conf);
         assertLt(plain, 80_000_000, "plain kinds: about 75 M");
-        assertGt(conf, 100_000_000, "confidential kinds: about 110 M");
-        assertLt(conf, 120_000_000);
+        assertGt(conf, 100_000_000, "confidential kinds: about 124 M");
+        assertLt(conf, 130_000_000);
         // a contract over the EIP-170 limit is priced at its baseline size (SCaaSDex since the DEX round)
         assertEq(h.gasNeed("SCaaSDex"), vm.parseJsonUint(base, ".SCaaSDex") * 1530 + 16_777_216);
         // a contract under the EIP-170 limit is not in the baseline: priced at 24,576 B
@@ -180,7 +182,9 @@ contract UADeployTest is Test {
             " needed to deploy the WrappedPqzToken release (NET-EVM-06)")));
         h.checkGas("WrappedPqzToken", 60_000_000);
         h.checkGas("WrappedPqzToken", conf);
-        // the gate reads the chain's block gas limit
+        // the gate reads the chain's block gas limit (at the SCaaS testnet's declared code limit, GD-4: WrappedPqzToken
+        // is above EIP-7954's 65,536 B, the default)
+        h.limitCode(131_072);
         if (block.gaslimit < conf) vm.expectRevert();
         h.requireGas("WrappedPqzToken");
     }
@@ -270,6 +274,24 @@ contract UADeployTest is Test {
         _refused(h, lib, token, "NormalToken");
         h.limitBlockGas(token);
         h.deploy(UID, false, ska);
+    }
+
+    /// Plan T11 (CTR-GOV-15 Change): the chain's `GovernanceRouter` is deployed before the releases, on the chain's registry
+    /// and `chain_uid`, and every release's `GOV_ROUTER` (`Env.govRouter`) is it: `NORMAL`, the DEX, both Zether kinds.
+    function test_govRouterBeforeTheReleases() public {
+        vm.chainId(31337);
+        DeployHarness h = new DeployHarness();
+        (, string memory json) = h.deploy(UID, true, ska);
+        GovernanceRouter r = GovernanceRouter(vm.parseJsonAddress(json, ".governance_router"));
+        assertGt(address(r).code.length, 0);
+        assertEq(r.chainUid(), UID);
+        assertEq(r.registry(), vm.parseJsonAddress(json, ".ua_registry"));
+        string[4] memory impls = ["implementation_normal", "dex_implementation", "implementation_normal_zether_bls12381",
+            "implementation_wrapped_zether_bls12381"];
+        for (uint256 i; i < 4; ++i) {
+            address impl = vm.parseJsonAddress(json, string.concat(".", impls[i]));
+            assertEq(GovernanceBase(impl).GOV_ROUTER(), address(r), impls[i]);
+        }
     }
 
     function _refused(DeployHarness h, uint256 limit, uint256 need, string memory name) internal {

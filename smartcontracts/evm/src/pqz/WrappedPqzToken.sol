@@ -7,7 +7,10 @@ import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
 import {UAMetaTxBase} from "../metatx/UAMetaTxBase.sol";
 import {MetaTxBase} from "../metatx/MetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
-import {AdminLib} from "../metatx/AdminLib.sol";
+import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {TokenStore} from "../metatx/TokenStore.sol";
+import {GovernanceBase} from "../governance/GovernanceBase.sol";
 import {WrappedLib} from "../metatx/WrappedLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {SigCheck} from "../common/SigCheck.sol";
@@ -55,7 +58,20 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
     }
 
     function kind() public pure override(WrappedToken, MetaTokenBase) returns (uint8) {
-        return AdminLib.KIND_WRAPPED_PQZ;
+        return TokenStore.KIND_WRAPPED_PQZ;
+    }
+
+    function _validBits() internal pure override(WrappedToken, GovernanceBase) returns (uint256) {
+        return GovernanceBits.WRAPPED_BITS;
+    }
+
+    /// @dev `WrappedToken`'s masks, restated for the second base.
+    function _roleBits() internal pure override(WrappedToken, MetaTokenBase) returns (uint256) {
+        return GovernanceBits.WRAPPED_ROLES;
+    }
+
+    function _contractOnlyBits() internal pure override(WrappedToken, MetaTokenBase) returns (uint256) {
+        return GovernanceBits.WRAPPED_CONTRACT_ONLY;
     }
 
     /// @dev Never reached: `_initRaw` is the kind's init.
@@ -72,7 +88,7 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
     ///         `minted / shieldScale` for `toUA`.
     function mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA) external payable nonReentrant {
         address m = _msgSender();
-        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value);
+        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply());
         uint256 scale = PqzCore.$().shieldScale;
         if (minted % scale != 0) revert AmountNotScaled(minted, scale);
         PqzStateLib.shield(toUA, minted / scale, m, _REGISTRY);
@@ -94,10 +110,12 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
     function mtxUnshieldUnwrap(PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof,
         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external nonReentrant
     {
-        _burn(_envUnwrap(x, _ticketBinding()), b, proof, pqzAuth, accHint);
+        uint256 i = WrappedLib.indexOf(x.underlying);
         uint256 wrapped = x.amount * PqzCore.$().shieldScale;
+        WrappedLib.quoteTo(i, x.recipient, wrapped, x.minOut); // before the proof (spec §5.4)
+        _burn(_envUnwrap(x, _ticketBinding()), b, proof, pqzAuth, accHint);
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped);
-        WrappedLib.payOutTo(WrappedLib.indexOf(x.underlying), x.recipient, wrapped, x.minOut);
+        WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut);
     }
 
     /// @notice The signed form, the `Unwrap` leg a nested struct.
@@ -144,15 +162,20 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
         (e.amount, e.recipient) = (x.amount, x.recipient);
     }
 
+    /// @notice As `WrappedToken` (spec §6.2); restated for the second base.
+    function rescue(address asset) external override(WrappedToken, MetaTokenBase) nonReentrant {
+        WrappedLib.rescue(asset);
+    }
+
     /// @notice As `WrappedToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
-    function disableFeature(uint8 bit) external override(WrappedToken, MetaTokenBase) nonReentrant {
-        AdminLib.disableFeature(bit, _msgSender());
-        if (bit == AdminLib.RATE_ADJUSTABLE) WrappedLib.dropPending();
+    function disableFeature(uint8 bit) external override(WrappedToken, GovernanceBase) nonReentrant {
+        GovernanceLib.disableFeature(bit, _govSubject());
+        if (bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }
 
     /// @notice The collateral check of a rate change: `totalSupply()` (the shielded value sits in `SHIELD_POOL`, D19).
     function executeRate() external override nonReentrant {
-        WrappedLib.executeRate(_msgSender(), totalSupply());
+        WrappedLib.executeRate(_govSubject(), totalSupply());
     }
 
     // ------------------------------------------------------------------ the layer's hooks

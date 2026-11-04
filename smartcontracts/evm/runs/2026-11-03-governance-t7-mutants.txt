@@ -1,0 +1,28 @@
+# governance T7 mutants at c2525e28 (clean tree), each one change, suite test/governance/*.t.sol,
+# restored by git checkout -- <file> after each.
+mutant | test that went red | rc
+m1 setGrant applies at once (the owner's two-call block dropped) | test_newHolderTakesTwoCalls, test_eachWidenedWordTakesTwoCalls, test_fixed_setGrantMakesAnUnboundedHolderInOneCall, test_leafMadeARootTakesTwoCalls, the seven GovExamples tests and 8 more | 1
+m2 no termsHash compare | test_confirmWithOtherTermsReverts | 1
+m3 no window (live ignores eta + grantDelay) | test_afterTheWindowThePendingIsDead, test_cancelGrantLiveAndDead, test_pendingGrantSaysLive | 1
+m4 no generation compare | test_afterRenounceNobodyConfirms, test_afterTransferTheNewOwnerProposesAgain, test_aToBToAKillsThePending | 1
+m5 generation not bumped at acceptOwnership | test_afterTransferTheNewOwnerProposesAgain, test_aToBToAKillsThePending | 1
+m6 generation not bumped at renounceOwnership | test_afterRenounceNobodyConfirms | 1
+m7 the owner's revoke keeps the pending | test_revokeDeletesThePending | 1
+m8 the holder's renounce keeps the pending | test_renounceDeletesThePending | 1
+m9 an immediate narrowing keeps the pending | test_narrowingDeletesThePending | 1
+m10 a grantor's revoke deletes the pending | test_grantorRevokeKeepsThePending | 1
+m11 0 -> finite read as a widening | test_finiteOnEachUnboundedWordRunsAtOnce, test_windowWithItsLimitRunsAtOnce | 1
+m12 _scopeNarrows accepting all, in the FamilyTree mock | test_subtreeOutsideTheScopeRefused | 1
+m13 a leaf edit treated as a narrowing | test_grantorRevokeKeepsThePending, test_leafMadeARootTakesTwoCalls | 1
+m14 count at propose | test_holderCountCountsInitOnceAndNeverAPending | 1
+m15 DEX init through grantRole (LISTING) | test_dexInitHoldsBothBitsThroughInitHolder, test_dexInitHoldsBothBitsWithADelay | 1
+m16 the 30-day bound dropped | test_delayAboveThirtyDaysRefused | 1
+m17 the confirm before eta (GrantNotReady dropped) | test_confirmBeforeEtaReverts | 1
+m18 cancelGrant deletes nothing | test_cancelGrantLiveAndDead, test_eachWidenedWordTakesTwoCalls, test_finiteToUnboundedTakesTwoCalls | 1
+m19 rescueTo accepted at init (tokens) | test_configFieldsFailClosedUntilBuilt (GovDelay, GovRegulatedBits Zether and PQZ) | 1
+m20 rescueTo accepted on the DEX | test_configFieldsFailClosedUntilBuilt (GovDelay) | 1
+m21 maxSupply accepted on WRAPPED* (WrappedLib.initToken) | test_configFieldsFailClosedUntilBuilt | 1
+m22 maxSupply accepted on NORMAL and NORMAL_PQZ (_requireUnused) | test_configFieldsFailClosedUntilBuilt | 1
+m23 maxSupply accepted on NORMAL_ZETHER (ZetherLib.initNormal) | test_configFieldsFailClosedUntilBuilt (GovRegulatedBitsZetherTest) | 1
+m24 grantDelay not stored at init | 29 tests, every two-call row of GovDelay and GovExamples | 1
+# survivors: none

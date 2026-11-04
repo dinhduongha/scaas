@@ -193,6 +193,17 @@ pub(crate) fn keccak(parts: &[&[u8]]) -> [u8; 32] {
     h.finalize().into()
 }
 
+/// `smartcontracts/vectors/governance/governance_bits.json` (spec 2026-11-02-governance §1.2), compiled in: written by forge
+/// (`GovBitsVector.t.sol`), one row per line.
+pub const GOVERNANCE_BITS_JSON: &str = include_str!("../../../smartcontracts/vectors/governance/governance_bits.json");
+
+/// Governance bit `bit`'s row as the file's JSON object, `{bit, name, type, sentences}`: rows 0-21; `None` past them (bits 22-127
+/// are free, bits 128-255 the application contract's own, labelled by its `bitLabel(bit)`).
+pub fn governance_bit(bit: u8) -> Option<&'static str> {
+    let head = format!("{{\"bit\": {bit}, ");
+    GOVERNANCE_BITS_JSON.lines().map(str::trim).find(|l| l.starts_with(&head)).map(|l| l.trim_end_matches(','))
+}
+
 pub fn kind_info(kind: u16) -> Result<&'static Kind> {
     KINDS.iter().find(|k| k.kind == kind).ok_or(UAError::KindUnknown(kind))
 }

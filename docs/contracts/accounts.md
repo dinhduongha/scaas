@@ -961,8 +961,17 @@ the UA ledger ([CTR-UA-28](#CTR-UA-28)). Rules for every UA form:
 - **No allowance.** A UA never grants or holds an allowance, as an EOA ([CTR-TOK-01](token-wrappers.md#CTR-TOK-01));
   a contract moves a UA's funds only against a signed, named intent (`UATradeOrder` for the DEX and `uaWrap`, a
   mandate in the payer's own `MandateWallet`); `approve` stays refused on every `ua*` function.
-- **Unchanged, no UA counterpart:** the token owner and role holders (`mint` role, rate admin, guardian, the
-  `ITokenAdmin` functions), the DEX `admin`, the factory creator and `TokenConfig.owner` / `roles` / `initialHolder`,
+- **Governance by UA, not on the token's `ua*` path** ([CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex),
+  [CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder); BUILT on branch `governance`, T10b
+  `ac29de05`, T11 `ea9f4e9d`): the token owner and role holders (`mint` role, rate admin, guardian, the `IGovernance`
+  functions), the DEX `owner` and its holders of `LISTING` and `FEE_ROUTING`, and `TokenConfig.owner` / `roles` are UA
+  ids (`bytes32`): a native account is its padded address, a derived UA (a PQ key, an `msig`) its registered id. The
+  governed contract has no `ua*` or `mtx*` twin of these entries; a native holder calls them directly or through its
+  contract account (below), and any UA signs a typed `ua<Op>` (a native address `mtx<Op>`) on the chain's
+  `GovernanceRouter`, which verifies through `requireAuthorized` (`PURPOSE_METATX`, an `msig` up to its accepted
+  threshold) and names the subject to the target for that one call. A contract-only bit (`RATE_ADJUSTABLE`) is held only
+  by a native id with code.
+- **Unchanged, no UA counterpart:** the factory creator and `initialHolder`,
   `SmartKeyAccount` keys and guardian, `addReserve`, and a one-call `mtxWrapShield` from a UA source (a UA source
   wrap-shields in two signed steps: `uaWrap`, then `uaExecute(mtxShield)`). Their holders **still act gaslessly**
   through their own contract account — `SmartKeyAccount.mtxExecuteAsOwner`, a `MandateWallet` owner's `execute` through
@@ -1714,7 +1723,7 @@ ERC-1271 is `isValidSignature(typedDigest, sig)`. The chain-bound rule is unchan
 **A designator direct caller is refused** (`SigCheck.CallerDelegated(address caller)`) wherever the caller is authority:
 `MetaTxBase._msgSender()` (so every token, `MandateWallet` and `SmartKeyAccount` entry that reads the direct caller: `transfer`,
 `approve`, `payWithFee*`, `transferToUA`, `wrap` / `unwrap`, `mtxShield`, `cancelNonce`, the owner and role functions), the
-`SmartKeyAccount` guardian (`initiateRecovery`, now through `_msgSender()`), the DEX admin (`SCaaSDex._onlyAdmin`), the
+`SmartKeyAccount` guardian (`initiateRecovery`, now through `_msgSender()`), the DEX owner and holders (`SCaaSDex._caller()`), the
 `OpenFactory` registrar, and the bound relayer of a `MODE_RESTRICT_RELAYER` envelope (`MtxPipelineLib`). The pipeline's step-5
 ticket (self-call) is unchanged. **While an account is delegated it cannot call SCaaS contracts directly.** It still acts
 through relayed `mtx*` / `ua*` signed with its own key (the fee may be 0), or it first clears its delegation (a type-4

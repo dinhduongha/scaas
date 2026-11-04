@@ -5,7 +5,7 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IOpenFactory} from "./IOpenFactory.sol";
 import {IFactoryToken} from "./IFactoryToken.sol";
 import {ISCaaSDex} from "../dex/ISCaaSDex.sol";
-import {ITokenAdmin} from "../metatx/ITokenAdmin.sol";
+import {IGovernance} from "../governance/IGovernance.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 
 /// @title `OpenFactory` (CTR-TOK-03, CTR-TOK-25): the one token factory of a chain (plan 5g-Z2).
@@ -99,6 +99,7 @@ contract OpenFactory is IOpenFactory {
         bytes calldata initcode,
         bytes calldata implArgs
     ) external onlyRegistrar returns (address implementation) {
+        if (kind == TokenKind.RETIRED_6 || kind == TokenKind.RETIRED_7) revert KindRetired(kind);
         if (version == 0) revert VersionUnknown(kind, 0);
         address existing = _releases[kind][version].implementation;
         if (existing != address(0)) revert VersionAlreadyRegistered(kind, version, existing);
@@ -251,7 +252,7 @@ contract OpenFactory is IOpenFactory {
         dex = Clones.cloneDeterministic(impl, s);
         ISCaaSDex(dex).initialize(msg.sender, version, initArgs);
         _dexVersion[dex] = version;
-        emit DexCreated(dex, msg.sender, version, impl, ISCaaSDex(dex).admin());
+        emit DexCreated(dex, msg.sender, version, impl, IGovernance(dex).owner());
     }
 
     function isDex(address dex) external view returns (bool) { return _dexVersion[dex] != 0; }
@@ -346,7 +347,7 @@ contract OpenFactory is IOpenFactory {
             _wrappers[msg.sender][us[i]].push(token);
             _byUnderlying[us[i]].push(token);
         }
-        ITokenAdmin t = ITokenAdmin(token);
+        IGovernance t = IGovernance(token);
         emit TokenCreated(token, msg.sender, kind, version, impl, t.features(), t.lockedFeatures(), t.owner(), us);
     }
 }

@@ -1,0 +1,16 @@
+# governance T11 mutants at ea9f4e9d (clean tree), each one change in src/governance/GovernanceRouterBase.sol, suite
+# test/governance/**, restored by git checkout -- <file> after each.
+# red first: the router with its behaviour stripped (subject() 0, _call a no-op, the three generic-path overrides gone):
+# 15 of GovRouter.t.sol's 21 red, rc=1 (every op by both forms, the PQ msig hand-over, the failure rows that need the call or
+# the overrides); the 6 that passed pin what the strip kept (signature and nonce checks, the domain, the fee mode, no receive,
+# the cancel entries). GovRouterTypehash.t.sol's 39 pins passed there too: their literals come from the source's strings.
+mutant | test that went red | rc
+m1 subject() without the target compare (the subject to any caller during a live call) | test_subjectOnlyToTheLiveTarget | 1
+m2 the lock dropped (_enter() not taken in _mtxCall and _uaCall) | test_refuted_targetReentersTheRouter | 1
+m3 the clear dropped (the pair left in transient storage after the call) | test_subjectClearedInTheSameTransaction | 1
+m4a the generic path left open: the _execute override removed (mtxExecute, executeMetaTransaction, mtxBatch) | test_fixed_theRoutersOpIsNotReachableAsABytesBlob | 1
+m4b the generic path left open: the uaExecute override removed | test_fixed_theRoutersOpIsNotReachableAsABytesBlob | 1
+m4c the generic path left open: the uaBatch override removed | test_fixed_theRoutersOpIsNotReachableAsABytesBlob | 1
+m5 target not in the signed words | 16 of GovRouter.t.sol's 21, test_refuted_relayerAltersTheTarget among them (each positive control: the test signs target, the mutant does not) | 1
+m6 the no-code check dropped (a call to an address without code succeeds and spends the nonce) | test_targetWithoutCodeRefused | 1
+# survivors: none

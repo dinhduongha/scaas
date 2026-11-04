@@ -16,7 +16,7 @@ import { expectedCall, norm } from '../scripts/typed-ops-expected.mjs';
 
 const { TYPED_OPS, hashTypedData, hashStruct, checkOp, checkWrapOrder, checkUAWrapOrder, checkTradeOrder, checkCancel, encodeType } = evm;
 const V = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/typed/typed_ops.json', import.meta.url)));
-const builders = { ...evm, ...zether };
+const builders = { ...evm.OP_BUILDERS, ...evm, ...zether };
 const sel = (sig) => hex(keccak_256(utf8ToBytes(sig)).subarray(0, 4));
 const ZERO = '0x' + '00'.repeat(20);
 const lower = (s) => s.replace(/^UA/, 'ua').replace(/^[A-Z]/, (c) => c.toLowerCase());
@@ -163,8 +163,8 @@ test('the table covers every allowlisted entry of every contract, and only them'
   for (const [contract, uaN] of Object.entries(EXPECTED_UA_ENTRIES)) {
     assert.deepEqual([count(contract, false), count(contract, true)], [mtxSelectorCount(contract), uaN], contract);
   }
-  assert.equal(Object.keys(TYPED_OPS).length, 74);
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 59);
+  assert.equal(Object.keys(TYPED_OPS).length, 112); // 74 + the router's 38 (governance T12)
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 97);
 });
 
 test('hashTypedData(td) == row.digest; the builder rebuilds the wallet\'s JSON; the row signs natively', () => {
@@ -218,6 +218,50 @@ test('the overloads: selectors from the full signature, the C0 shapes', () => {
   assert.ok(one('PqzUnshield').abi.includes(',(uint256,bytes32),bytes,'));
   assert.ok(one('ZetherUnshield').abi.includes(',uint256,bytes32,bytes,'));
   assert.deepEqual(TYPED_OPS.PqzUnshield.fields.map((f) => f.name).slice(1, 3), ['args', 'amount']);
+});
+
+// governance T12 (spec §3.2): the router's 38 rows read from the contract's own pin, test/governance/GovRouterTypehash.t.sol
+// (literal strings and `cast keccak` hashes), apart from the table in src/evm.js: a mismatch is a stop-and-report.
+test('GovernanceRouter: 38 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only', () => {
+  const sol = readFileSync(new URL('../../../smartcontracts/evm/test/governance/GovRouterTypehash.t.sol', import.meta.url), 'utf8');
+  const pins = [...sol.matchAll(/keccak256\(\s*((?:"[^"]*"\s*)+)\)\);\s*assertEq\(T\.\w+, (0x[0-9a-f]{64})\)/g)]
+    .map(([, lits, hash]) => [[...lits.matchAll(/"([^"]*)"/g)].map((x) => x[1]).join(''), hash]);
+  assert.equal(pins.length, 39);
+  const rows = pins.filter(([s]) => !s.startsWith('GrantTerms('));
+  assert.equal(rows.length, 38);
+  for (const [s, hash] of rows) {
+    const name = s.slice(0, s.indexOf('('));
+    const op = TYPED_OPS[name];
+    assert.ok(op, `${name}: no row`);
+    assert.equal(op.typeString, s, name);
+    assert.equal(op.typehash, hash, name);
+    assert.deepEqual([op.on, op.domains, op.envelope], [['GovernanceRouter'], ['SCaaS GovernanceRouter'], true], name);
+    assert.equal(op.entry, `${op.ua ? 'ua' : 'mtx'}${name.replace(/^UA/, '')}`, name);
+    assert.deepEqual(op.fields[1], { name: 'target', type: 'address' }, `${name}: target is the first op word`);
+    const r = V.ops[name];
+    assert.deepEqual(Object.keys(r.domains), ['gov_router'], name);
+    assert.equal(r.domains.gov_router.domain.name, 'SCaaS GovernanceRouter', name);
+    assert.deepEqual([r.message.mode, r.message.fee], [1, '0'], `${name}: fee mode NONE`);
+  }
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 40);
+  for (const n of ['CancelNonce', 'UACancelNonce']) assert.equal(V.ops[n].domains.gov_router.domain.name, 'SCaaS GovernanceRouter', n);
+});
+
+test('a router row refuses a field off GrantTerms, a value out of range, a string bool, another domain; target is signed', () => {
+  const B = evm.OP_BUILDERS;
+  const at = { contract: '0x' + '7a'.repeat(20), chainId: 7622, chainUid: '0x' + 'c1'.repeat(32) };
+  assert.throws(() => B.setGrantTypedData({ ...at, message: { terms: { floor: 1 } } }), /floor is not a field of GrantTerms/);
+  assert.throws(() => B.uaSetGrantTypedData({ ...at, message: { terms: { delegable: 'true' } } }), /Refusing to sign: .*bool/);
+  assert.throws(() => B.setGrantTypedData({ ...at, message: { terms: { window: 2 ** 32 } } }), /uint32/);
+  assert.throws(() => B.grantRoleTypedData({ ...at, message: { bit: 256 } }), /uint8/);
+  assert.throws(() => B.grantRoleTypedData({ ...at, message: { generation: 1 } }), /generation is not a field/);
+  assert.throws(() => B.grantRoleTypedData({ ...at, name: 'SCaaS MetaToken', message: {} }), /domain/);
+  assert.throws(() => evm.burnTypedData({ ...at, name: 'SCaaS GovernanceRouter', message: {} }), /domain/);
+  assert.equal(B.uaMintToUATypedData({ ...at, message: {} }).domain.name, 'SCaaS GovernanceRouter');
+  assert.equal(evm.cancelNonceTypedData({ ...at, name: 'SCaaS GovernanceRouter', message: {} }).domain.name, 'SCaaS GovernanceRouter');
+  const m = { target: '0x' + '11'.repeat(20), bit: 1, account: '0x' + '22'.repeat(32) };
+  const digest = (x) => hex(hashTypedData(B.grantRoleTypedData({ ...at, message: x })));
+  assert.notEqual(digest(m), digest({ ...m, target: '0x' + '12'.repeat(20) }));
 });
 
 test('checkOp refuses every changed field; the server supplies only the envelope', () => {

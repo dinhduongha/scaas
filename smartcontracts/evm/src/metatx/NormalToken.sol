@@ -2,7 +2,10 @@
 pragma solidity ^0.8.24;
 
 import {MetaTokenBase} from "./MetaTokenBase.sol";
-import {AdminLib} from "./AdminLib.sol";
+import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {GovernanceUse} from "../governance/GovernanceBase.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {TokenStore} from "./TokenStore.sol";
 import {MetaTxBase} from "./MetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
@@ -25,31 +28,37 @@ contract NormalToken is MetaTokenBase {
     constructor(uint16, Env memory env, bytes memory) MetaTokenBase(env) {}
 
     function kind() public pure virtual override returns (uint8) {
-        return AdminLib.KIND_NORMAL;
+        return TokenStore.KIND_NORMAL;
+    }
+
+    function _validBits() internal pure virtual override returns (uint256) {
+        return GovernanceBits.NORMAL_BITS;
     }
 
     function _init(TokenConfig memory cfg) internal virtual override {
         _requireUnused(cfg, false, true, true, true);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-        AdminLib.init(AdminLib.KIND_NORMAL, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
+        // 5-9 pass the kind's mask and reach `init`'s `FeatureNotBuilt` (GD-19); `validBits()` holds none of them
+        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles,
+            _validBits() | GovernanceBits.REGULATED, _roleBits(), _contractOnlyBits());
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
 
     /// @notice `MINTABLE` and the `minter` role; never allowlisted (a minter contract's caps run on its own call).
     function mint(address to, uint256 amount) external nonReentrant {
-        AdminLib.requireRole(AdminLib.MINTABLE, _msgSender());
+        GovernanceUse.use(GovernanceBits.MINTABLE, _govSubject(), amount);
         _mint(to, amount);
     }
 
     /// @notice `mint` into the registered SIGNING UA `to` (CTR-UA-28): the same flag and role; never allowlisted.
     function mintToUA(bytes32 to, uint256 amount) external nonReentrant {
-        AdminLib.requireRole(AdminLib.MINTABLE, _msgSender());
+        GovernanceUse.use(GovernanceBits.MINTABLE, _govSubject(), amount);
         _uaMint(to, amount);
     }
 
     /// @notice Allowlisted `AMOUNT(0)` (CTR-MTX-19): gasless through `mtxExecute`.
     function burn(uint256 amount) external nonReentrant {
-        AdminLib.requireFeature(AdminLib.BURNABLE);
+        GovernanceLib.requireFeature(GovernanceBits.BURNABLE);
         _burn(_msgSender(), amount);
     }
 

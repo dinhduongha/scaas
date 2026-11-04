@@ -5,28 +5,32 @@ import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {WrappedLib} from "../../src/metatx/WrappedLib.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 
 /// Kind 2 stand-in: the public `NORMAL` kind under the confidential id and domain name, accepting `conf` (the factory's
 /// side only; the Zether layer, its verifiers and its chain gate are tested in `test/zether`).
 contract MockNormalZether is NormalToken {
     constructor(uint16 v, Env memory env, bytes memory a) NormalToken(v, env, a) {}
 
-    function kind() public pure override returns (uint8) { return AdminLib.KIND_NORMAL_ZETHER; }
+    function kind() public pure override returns (uint8) { return TokenStore.KIND_NORMAL_ZETHER; }
 
     function _domainName() internal pure override returns (string memory) { return "SCaaS ZetherToken"; }
 
     function _init(TokenConfig memory cfg) internal override {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-        AdminLib.init(AdminLib.KIND_NORMAL_ZETHER, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
+        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles, _validBits(),
+            _roleBits(), _contractOnlyBits());
     }
 }
 
@@ -34,11 +38,12 @@ contract MockNormalZether is NormalToken {
 contract MockWrappedZether is WrappedToken {
     constructor(uint16 v, Env memory env, bytes memory a) WrappedToken(v, env, a) {}
 
-    function kind() public pure override returns (uint8) { return AdminLib.KIND_WRAPPED_ZETHER; }
+    function kind() public pure override returns (uint8) { return TokenStore.KIND_WRAPPED_ZETHER; }
 
     function _init(TokenConfig memory cfg) internal override {
         _requireUnused(cfg, true, false, false, false);
-        WrappedLib.initToken(cfg, IS_HEDERA, AdminLib.KIND_WRAPPED_ZETHER);
+        WrappedLib.initToken(cfg, IS_HEDERA, TokenStore.KIND_WRAPPED_ZETHER, GovernanceBits.WRAPPED_BITS, _roleBits(),
+            _contractOnlyBits());
     }
 }
 
@@ -111,11 +116,11 @@ contract FactoryZetherTest is Test {
     function test_wrappedZether_flagsValidatedForItsKind() public {
         _enable();
         IFactoryToken.TokenConfig memory c = _wrapped();
-        c.features = 1 << AdminLib.FREEZE;
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.FREEZE));
+        c.features = 1 << GovernanceBits.FREEZE;
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.FREEZE));
         f.createToken(UZ, 1, abi.encode(c), "a");
-        c.features = 1 << AdminLib.MINTABLE;
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.MINTABLE));
+        c.features = 1 << GovernanceBits.MINTABLE; // a hybrid's bit (spec §5.2, governance T9): only with `maxSupply`
+        vm.expectRevert(IWrappedToken.MaxSupplyInvalid.selector);
         f.createToken(UZ, 1, abi.encode(c), "a");
     }
 

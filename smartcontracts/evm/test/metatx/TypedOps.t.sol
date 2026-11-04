@@ -26,9 +26,15 @@ import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
+import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {VM, TYPED_OPS, SALTED_DOMAIN, checkRow, onChain, domainOf, rowEnvelope, rowEnvelope2, msgField, domainField} from "./NamedEntry.t.sol";
 
 /// `built` (the entry's call from the message's fields) is the row's calldata under `kind`; that calldata runs on `c` from
@@ -1003,8 +1009,9 @@ contract ConfidentialRowsPqzTest is ConfidentialRows, PqzFixture {
 
     function _wrappedKind(address leg) internal override returns (WrappedToken) {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-        c.features = 1 << AdminLib.PAYABLE;
-        c.roles.minter = address(0);
+        c.features = 1 << GovernanceBits.PAYABLE;
+        c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
+        c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
         return WrappedToken(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "row"));
@@ -1029,10 +1036,389 @@ contract ConfidentialRowsZetherTest is ConfidentialRows, ZetherFixture {
 
     function _wrappedKind(address leg) internal override returns (WrappedToken) {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
-        c.features = 1 << AdminLib.PAYABLE;
-        c.roles.minter = address(0);
+        c.features = 1 << GovernanceBits.PAYABLE;
+        c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
+        c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
         return WrappedToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "row")));
+    }
+}
+
+/// governance T12 (spec §3.2; CTR-GOV-15 Change): every `GovernanceRouter` row of `typed_ops.json` runs verbatim on a real
+/// router deployed at the row's `verifyingContract` (context A: chain id 31337, `chain_uid` A), so the row's own signature
+/// is the router's: no re-signing. Each op's `target` is a real `NormalToken`, `WrappedToken` or `SCaaSDex` cloned at the
+/// row's `target`, `GOV_ROUTER` the router, and the op's effect is read there. Both forms of an op from one snapshot: they
+/// share the subject (the key's native id) and its lane.
+contract TypedOpsRouterTest is UALedgerBase {
+    string internal constant K = "gov_router";
+    uint8 internal constant MINT = GovernanceBits.MINTABLE;
+    string internal j;
+    address internal signer;
+    bytes32 internal me;
+    address internal router;
+    address internal normalImpl;
+    address internal wrappedImpl;
+    address internal dexImpl;
+
+    /// The test is the factory of every clone and registered no token: a market's legs are outside.
+    function isToken(address) external pure returns (bool) { return false; }
+
+    function setUp() public override {
+        super.setUp();
+        j = vm.readFile(TYPED_OPS);
+        signer = vm.parseJsonAddress(j, ".key.address");
+        me = vm.parseJsonBytes32(j, ".key.ua");
+        assertEq(me, bytes32(uint256(uint160(signer))), "the key's UA is its native id");
+        router = vm.parseJsonAddress(j, domainField("GrantRole", K, "domain.verifyingContract"));
+        deployCodeTo("GovernanceRouter.sol:GovernanceRouter", abi.encode(chainUidA, REG_L, address(0), false), router);
+        IFactoryToken.Env memory e = plainEnv(address(this), address(0), chainUidA, REG_L, false);
+        e.govRouter = router;
+        normalImpl = address(new NormalToken(1, e, ""));
+        wrappedImpl = address(new WrappedToken(1, e, ""));
+        dexImpl = address(new SCaaSDex(1, e, ""));
+    }
+
+    // ------------------------------------------------------------------ the row, the targets
+
+    function _addr(string memory op, string memory f) internal view returns (address) {
+        return vm.parseJsonAddress(j, msgField(op, f));
+    }
+
+    function _b32(string memory op, string memory f) internal view returns (bytes32) {
+        return vm.parseJsonBytes32(j, msgField(op, f));
+    }
+
+    function _uint(string memory op, string memory f) internal view returns (uint256) {
+        return vm.parseJsonUint(j, msgField(op, f));
+    }
+
+    function _bool(string memory op, string memory f) internal view returns (bool) {
+        return vm.parseJsonBool(j, msgField(op, f));
+    }
+
+    function _bit(string memory op) internal view returns (uint8) {
+        return uint8(_uint(op, "bit"));
+    }
+
+    /// The row's calldata, as clientkeys built it, from the row's relayer; its lane's nonce spent.
+    function _row(string memory op) internal {
+        checkRow(j, op, K);
+        bytes memory cd = vm.parseJsonBytes(j, domainField(op, K, "calldata"));
+        vm.prank(_addr(op, "relayer"));
+        (bool ok, bytes memory ret) = router.call(cd);
+        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        assertEq(GovernanceRouter(router).uaNonce(me, _uint(op, "batch")), 1, op);
+    }
+
+    function _clone(address impl, address at) internal {
+        vm.etch(at, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
+    }
+
+    function _normalAt(string memory op, bytes32 owner_, bytes32 minter, uint64 delay) internal returns (NormalToken t) {
+        t = NormalToken(_addr(op, "target"));
+        _clone(normalImpl, address(t));
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals, c.features, c.owner, c.grantDelay) = ("G", "G", 6, 1 | (uint256(1) << MINT), owner_, delay);
+        c.roles.minter = minter;
+        t.initialize(address(this), 1, abi.encode(c));
+    }
+
+    /// Owner, guardian and rate admin the key. `RATE_ADJUSTABLE` is contract-only, so its holder has code at the grant
+    /// (spec §1.4): the grant runs with code at the key's address, removed before the row, which the key signs as an EOA.
+    function _wrappedAt(string memory op, address leg) internal returns (WrappedToken w) {
+        if (leg.code.length == 0) deployCodeTo("Mocks.sol:MockERC20", abi.encode("Leg", "LEG", uint8(6)), leg);
+        w = WrappedToken(payable(_addr(op, "target")));
+        _clone(wrappedImpl, address(w));
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals, c.features, c.owner) = ("W", "W", 6,
+            1 | (uint256(1) << GovernanceBits.RATE_ADJUSTABLE) | (uint256(1) << GovernanceBits.WRAP_DISABLEABLE), me);
+        (c.roles.guardian, c.roles.rateAdmin) = (me, me);
+        c.legs = new IFactoryToken.Leg[](1);
+        c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
+        c.rate = IFactoryToken.RateConfig(2 days, 1000);
+        vm.etch(signer, hex"00");
+        w.initialize(address(this), 1, abi.encode(c));
+        vm.etch(signer, "");
+    }
+
+    function _dexAt(string memory op) internal returns (SCaaSDex d) {
+        d = SCaaSDex(_addr(op, "target"));
+        _clone(dexImpl, address(d));
+        d.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(me, 0, address(0x7EA5), false, 0, address(0))));
+    }
+
+    function _forms(string memory op) internal pure returns (string[2] memory) {
+        return [op, string.concat("UA", op)];
+    }
+
+    // ------------------------------------------------------------------ the owner and a holder
+
+    function test_routerRow_GrantRole() public {
+        string[2] memory f = _forms("GrantRole");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            NormalToken t = _normalAt(f[i], me, 0, 0);
+            _row(f[i]);
+            assertTrue(t.hasRole(_bit(f[i]), _b32(f[i], "account")), f[i]);
+        }
+    }
+
+    function test_routerRow_RevokeRole() public {
+        string[2] memory f = _forms("RevokeRole");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            NormalToken t = _normalAt(f[i], me, 0, 0);
+            vm.prank(signer);
+            t.grantRole(_bit(f[i]), _b32(f[i], "account"));
+            _row(f[i]);
+            assertFalse(t.hasRole(_bit(f[i]), _b32(f[i], "account")), f[i]);
+            assertTrue(t.grantOf(_bit(f[i]), _b32(f[i], "account")).barred, f[i]);
+        }
+    }
+
+    /// The nested `terms` arrive whole: every field of the stored grant is the row's.
+    function test_routerRow_SetGrant() public {
+        string[2] memory f = _forms("SetGrant");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            NormalToken t = _normalAt(f[i], me, 0, 0);
+            _row(f[i]);
+            IGovernance.Grant memory g = t.grantOf(_bit(f[i]), _b32(f[i], "holder"));
+            string memory op = f[i];
+            assertEq(abi.encode(g.min, g.max, g.total, g.perWindow, g.window, g.validUntil, g.maxUses, g.delegable, g.scope),
+                abi.encode(_uint(op, "terms.min"), _uint(op, "terms.max"), _uint(op, "terms.total"), _uint(op, "terms.perWindow"),
+                    _uint(op, "terms.window"), _uint(op, "terms.validUntil"), _uint(op, "terms.maxUses"), _bool(op, "terms.delegable"),
+                    _b32(op, "terms.scope")), op);
+        }
+    }
+
+    function test_routerRow_CancelGrant() public {
+        string[2] memory f = _forms("CancelGrant");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            NormalToken t = _normalAt(f[i], me, 0, 1 hours);
+            vm.prank(signer);
+            t.grantRole(_bit(f[i]), _b32(f[i], "account"));
+            (uint64 eta,,,) = t.pendingGrant(_bit(f[i]), _b32(f[i], "account"));
+            assertTrue(eta != 0, "proposed");
+            _row(f[i]);
+            (eta,,,) = t.pendingGrant(_bit(f[i]), _b32(f[i], "account"));
+            assertEq(eta, 0, f[i]);
+        }
+    }
+
+    function test_routerRow_DisableFeature() public {
+        string[2] memory f = _forms("DisableFeature");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            NormalToken t = _normalAt(f[i], me, 0, 0);
+            _row(f[i]);
+            assertEq(t.features() & (uint256(1) << _bit(f[i])), 0, f[i]);
+        }
+    }
+
+    function test_routerRow_TransferOwnership() public {
+        string[2] memory f = _forms("TransferOwnership");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            NormalToken t = _normalAt(f[i], me, 0, 0);
+            _row(f[i]);
+            assertEq(t.pendingOwner(), _b32(f[i], "newOwner"), f[i]);
+        }
+    }
+
+    function test_routerRow_AcceptOwnership() public {
+        string[2] memory f = _forms("AcceptOwnership");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            NormalToken t = _normalAt(f[i], bytes32(uint256(uint160(address(this)))), 0, 0);
+            t.transferOwnership(me);
+            _row(f[i]);
+            assertEq(t.owner(), me, f[i]);
+        }
+    }
+
+    function test_routerRow_RenounceOwnership() public {
+        string[2] memory f = _forms("RenounceOwnership");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            NormalToken t = _normalAt(f[i], me, 0, 0);
+            _row(f[i]);
+            assertEq(t.owner(), bytes32(0), f[i]);
+        }
+    }
+
+    function test_routerRow_RenounceRole() public {
+        string[2] memory f = _forms("RenounceRole");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            NormalToken t = _normalAt(f[i], me, me, 0);
+            _row(f[i]);
+            assertFalse(t.hasRole(_bit(f[i]), me), f[i]);
+        }
+    }
+
+    // ------------------------------------------------------------------ the powers on the token kinds
+
+    function test_routerRow_Mint() public {
+        string[2] memory f = _forms("Mint");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            NormalToken t = _normalAt(f[i], me, me, 0);
+            _row(f[i]);
+            assertEq(t.balanceOf(_addr(f[i], "to")), _uint(f[i], "amount"), f[i]);
+        }
+    }
+
+    function test_routerRow_MintToUA() public {
+        string[2] memory f = _forms("MintToUA");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            NormalToken t = _normalAt(f[i], me, me, 0);
+            vm.mockCall(REG_L, abi.encodeCall(IUARegistry.kindOf, (_b32(f[i], "to"))), abi.encode(UAKinds.P256));
+            _row(f[i]);
+            assertEq(t.balanceOfUA(_b32(f[i], "to")), _uint(f[i], "amount"), f[i]);
+        }
+    }
+
+    function test_routerRow_DisableWrap() public {
+        string[2] memory f = _forms("DisableWrap");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            WrappedToken w = _wrappedAt(f[i], _addr(f[i], "leg"));
+            _row(f[i]);
+            (,,,, bool on) = w.legOf(_addr(f[i], "leg"));
+            assertFalse(on, f[i]);
+        }
+    }
+
+    function test_routerRow_ProposeRate() public {
+        string[2] memory f = _forms("ProposeRate");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            WrappedToken w = _wrappedAt(f[i], _addr(f[i], "leg"));
+            _row(f[i]);
+            (address leg, uint96 num, uint96 den, uint64 eta) = w.pendingRate();
+            assertEq(abi.encode(leg, num, den), abi.encode(_addr(f[i], "leg"), _uint(f[i], "num"), _uint(f[i], "den")), f[i]);
+            assertTrue(eta != 0, f[i]);
+        }
+    }
+
+    function test_routerRow_CancelRate() public {
+        string[2] memory f = _forms("CancelRate");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            address leg = address(new MockERC20("Leg", "LEG", 6));
+            WrappedToken w = _wrappedAt(f[i], leg);
+            vm.prank(signer);
+            w.proposeRate(leg, 101, 100);
+            _row(f[i]);
+            (,,, uint64 eta) = w.pendingRate();
+            assertEq(eta, 0, f[i]);
+        }
+    }
+
+    /// Proposed `rateDelay` before the rows' deadline, executed at it.
+    function test_routerRow_ExecuteRate() public {
+        string[2] memory f = _forms("ExecuteRate");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            address leg = address(new MockERC20("Leg", "LEG", 6));
+            WrappedToken w = _wrappedAt(f[i], leg);
+            vm.warp(_uint(f[i], "validUntil") - 2 days);
+            vm.prank(signer);
+            w.proposeRate(leg, 101, 100);
+            vm.warp(_uint(f[i], "validUntil"));
+            _row(f[i]);
+            (uint96 num, uint96 den,,,) = w.legOf(leg);
+            assertEq(abi.encode(num, den), abi.encode(uint96(101), uint96(100)), f[i]);
+        }
+    }
+
+    // ------------------------------------------------------------------ the powers on the DEX
+
+    function test_routerRow_SetMarket() public {
+        string[2] memory f = _forms("SetMarket");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            SCaaSDex d = _dexAt(f[i]);
+            _row(f[i]);
+            assertEq(d.marketListed(_addr(f[i], "base"), _addr(f[i], "quote")), _bool(f[i], "listed"), f[i]);
+        }
+    }
+
+    function test_routerRow_SetExchangeTarget() public {
+        string[2] memory f = _forms("SetExchangeTarget");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            SCaaSDex d = _dexAt(f[i]);
+            _row(f[i]);
+            assertEq(d.exchangeTarget(_addr(f[i], "exchangeTarget")), _bool(f[i], "listed"), f[i]);
+        }
+    }
+
+    function test_routerRow_SetListedOnly() public {
+        string[2] memory f = _forms("SetListedOnly");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            SCaaSDex d = _dexAt(f[i]);
+            _row(f[i]);
+            assertEq(d.listedOnly(), _bool(f[i], "on"), f[i]);
+        }
+    }
+
+    function test_routerRow_SetFeeSplit() public {
+        string[2] memory f = _forms("SetFeeSplit");
+        uint256 s = vm.snapshotState();
+        for (uint256 i; i < 2; ++i) {
+            vm.revertToState(s);
+            SCaaSDex d = _dexAt(f[i]);
+            _row(f[i]);
+            assertEq(abi.encode(d.relayerSharePpm(), d.treasury()),
+                abi.encode(uint32(_uint(f[i], "relayerSharePpm")), _addr(f[i], "treasury")), f[i]);
+        }
+    }
+
+    // ------------------------------------------------------------------ the lane's cancels on the router's domain
+
+    function test_routerRow_CancelNonce() public {
+        string memory op = "CancelNonce";
+        _row(op);
+        assertEq(GovernanceRouter(router).mtxNonce(signer, _uint(op, "lane")), 1, "the signed lane");
+    }
+
+    /// `ua` of the row is a derived id: the registry is asked with the router's digest, which is the row's.
+    function test_routerRow_UACancelNonce() public {
+        string memory op = "UACancelNonce";
+        bytes32 ua = _b32(op, "ua");
+        (uint256 batch, uint256 until) = (_uint(op, "batch"), _uint(op, "validUntil"));
+        bytes32 d = GovernanceRouter(router).uaCancelDigest(ua, batch, until);
+        assertEq(d, vm.parseJsonBytes32(j, domainField(op, K, "digest")));
+        checkRow(j, op, K);
+        IUARegistry.UASig memory sig;
+        sig.signature = vm.parseJsonBytes(j, domainField(op, K, "signature"));
+        vm.mockCall(REG_L, abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX_CANCEL, d, sig)), "");
+        (bool ok, bytes memory ret) = router.call(vm.parseJsonBytes(j, domainField(op, K, "calldata")));
+        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        assertEq(GovernanceRouter(router).uaNonce(ua, batch), 1);
     }
 }

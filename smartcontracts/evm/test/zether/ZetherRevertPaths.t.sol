@@ -7,8 +7,10 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
@@ -271,12 +273,12 @@ contract ZetherRevertPathsTest is ZetherFixture {
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 3));
         factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(r), "rate");
         r = _cfg(false, uint256(1) << 40);
-        r.features |= 1 << AdminLib.PAUSE;
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.PAUSE));
+        r.features |= 1 << GovernanceBits.PAUSE;
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.PAUSE));
         factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(r), "pause");
         r = _cfg(false, uint256(1) << 40);
-        r.features |= 1 << AdminLib.WRAP_DISABLEABLE;
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.WRAP_DISABLEABLE));
+        r.features |= 1 << GovernanceBits.WRAP_DISABLEABLE;
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.WRAP_DISABLEABLE));
         factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(r), "wrap");
     }
 
@@ -406,7 +408,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         assertEq(tok.balanceOf(address(0xA77)), 5 * SCALE);
         assertEq(tok.totalShielded(), 0);
         vm.prank(address(0xBAD));
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.MissingRole.selector, AdminLib.MINTABLE, address(0xBAD)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, GovernanceBits.MINTABLE, address(0xBAD)));
         NormalZetherToken(address(tok)).mint(address(0xBAD), 1);
     }
 
@@ -498,7 +500,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         assertEq(z.implementation(), address(normalImpl));
         assertEq(z.version(), 1);
         assertEq(z.creator(), address(this));
-        assertEq(z.kind(), AdminLib.KIND_NORMAL_ZETHER);
+        assertEq(z.kind(), TokenStore.KIND_NORMAL_ZETHER);
         assertEq(z.decimals(), 6);
         assertEq(tok.shieldScale(), SCALE);
         assertEq(tok.confidentialFee(), FEE);

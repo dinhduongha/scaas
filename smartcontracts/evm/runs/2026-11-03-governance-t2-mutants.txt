@@ -1,0 +1,8 @@
+# governance T2 mutants at cad1cee3 + T2 tree; each one change, restored from a copy of the edited file after each (cmp checked)
+mutant | test that went red | rc
+m1 runtime ceiling dropped | size_gate.py --self-test (131,073 row) | 1
+m2 init ceiling dropped | size_gate.py --self-test (262,145 row) | 1
+m3 list compare dropped in main | size_gate.py --self-test (main rows) | 1
+m4 _checkCodeFits not called in DeployBase._requireReleaseGas | CodeCeiling.t.sol test_releaseAboveTheChainLimitIsRefusedByName (next call did not revert) | 1
+# survivors: none
+# plan step 5 lists the ceiling check dropped (here m1, m2: runtime and init apart), the list compare dropped (m3), _checkCodeFits not called (m4)

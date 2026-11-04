@@ -7,7 +7,7 @@ import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
@@ -15,6 +15,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// Kind NORMAL on the flags and the owner model (CTR-TOK-21, CTR-TOK-22) and the Hedera branch (CTR-TOK-23).
 contract FeaturesTest is Test {
@@ -43,8 +44,8 @@ contract FeaturesTest is Test {
         internal view returns (IFactoryToken.TokenConfig memory c)
     {
         (c.name, c.symbol, c.decimals, c.features, c.lockedFeatures, c.owner) =
-            ("Points", "PTS", 6, features, locked, owner_);
-        c.roles.minter = minter_;
+            ("Points", "PTS", 6, features, locked, nid(owner_));
+        c.roles.minter = nid(minter_);
         (c.initialSupply, c.initialHolder) = (supply, alice);
     }
 
@@ -72,17 +73,17 @@ contract FeaturesTest is Test {
         assertEq(t.version(), 1);
         assertEq(t.features(), PAYABLE | MINTABLE | BURNABLE);
         assertEq(t.lockedFeatures(), PAYABLE | MINTABLE | BURNABLE);
-        assertEq(t.owner(), ownerA);
-        assertTrue(t.hasRole(1, minter));
+        assertEq(t.owner(), nid(ownerA));
+        assertTrue(t.hasRole(1, nid(minter)));
         assertEq(t.balanceOf(alice), 1_000);
         assertFalse(t.IS_HEDERA());
     }
 
     function test_initRefusesFlagsOfAnotherKind() public {
         NormalToken t = NormalToken(Clones.clone(impl));
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, uint8(3)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(3)));
         t.initialize(address(this), 1, abi.encode(_cfg(1 << 3, 0, address(0), address(0), 0)));
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotBuilt.selector, uint8(7)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotBuilt.selector, uint8(7)));
         t.initialize(address(this), 1, abi.encode(_cfg(1 << 7, 0, address(0), address(0), 0)));
     }
 
@@ -91,7 +92,7 @@ contract FeaturesTest is Test {
     function test_mint_needsTheFlagAndTheRole() public {
         NormalToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, minter, 0));
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.MissingRole.selector, uint8(1), alice));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), alice));
         t.mint(alice, 1);
         vm.prank(minter);
         t.mint(alice, 5);
@@ -99,13 +100,13 @@ contract FeaturesTest is Test {
         vm.prank(ownerA);
         t.disableFeature(1);
         vm.prank(minter);
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, uint8(1)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(1)));
         t.mint(alice, 1);
     }
 
     function test_mint_withoutTheFlag_fixedSupply() public {
         NormalToken t = _token(impl, _cfg(0, 0, address(0), address(0), 7));
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, uint8(1)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(1)));
         t.mint(alice, 1);
         assertEq(t.totalSupply(), 7);
     }
@@ -113,14 +114,14 @@ contract FeaturesTest is Test {
     function test_burn_onlyWithBurnable_directAndGasless() public {
         NormalToken off = _token(impl, _cfg(0, 0, address(0), address(0), 100));
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, uint8(2)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(2)));
         off.burn(1);
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice,
             data: abi.encodeCall(NormalToken.burn, (1)), batch: 1, nonce: 0, validUntil: block.timestamp + 300,
             mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
         bytes memory s = _sig(off.mtxDigest(m));
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, uint8(2)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(2)));
         off.mtxExecute(m, s);
         NormalToken on = _token(impl, _cfg(BURNABLE, 0, address(0), address(0), 100));
         s = _sig(on.mtxDigest(m));
@@ -133,7 +134,7 @@ contract FeaturesTest is Test {
 
     function test_payable_off_gatesThePayEntries_notMetaTransfer() public {
         NormalToken t = _token(impl, _cfg(0, 0, address(0), address(0), 100));
-        bytes memory off = abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, uint8(0));
+        bytes memory off = abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(0));
         vm.prank(alice);
         vm.expectRevert(off);
         t.payWithFee(shop, 1, FeeMode.NONE, 0, address(0), bytes32("r"));
@@ -179,27 +180,27 @@ contract FeaturesTest is Test {
     // ------------------------------------------------------------------ owner through the token
 
     function test_ownerAdministersThroughTheToken() public {
-        NormalToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, address(0), 0));
+        NormalToken t = _token(impl, _cfg(MINTABLE, MINTABLE, ownerA, address(0), 0)); // locked: the holder survives (CTR-GOV-02)
         vm.prank(ownerA);
         vm.expectEmit(address(t));
-        emit ITokenAdmin.RoleGranted(1, minter, ownerA);
-        t.grantRole(1, minter);
+        emit IGovernance.RoleGranted(1, nid(minter), nid(ownerA));
+        t.grantRole(1, nid(minter));
         vm.prank(minter);
         t.mint(alice, 3);
         vm.prank(ownerA);
-        t.transferOwnership(address(0x0B));
+        t.transferOwnership(nid(address(0x0B)));
         vm.prank(address(0x0B));
         t.acceptOwnership();
-        assertEq(t.owner(), address(0x0B));
+        assertEq(t.owner(), nid(address(0x0B)));
         vm.prank(address(0x0B));
         t.renounceOwnership();
-        assertEq(t.owner(), address(0));
+        assertEq(t.owner(), bytes32(0));
         vm.prank(minter);
         t.mint(alice, 1);                                     // holders keep their role after the owner renounces
         vm.prank(minter);
         t.renounceRole(1);
         vm.prank(minter);
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.MissingRole.selector, uint8(1), minter));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), minter));
         t.mint(alice, 1);
     }
 
@@ -219,7 +220,7 @@ contract FeaturesTest is Test {
         }
     }
 
-    /// AdminLib writes `scaas.token` only: the meta-tx lanes (`scaas.metatx`) and the ERC-20 slots stay put.
+    /// GovernanceLib writes `scaas.governance` only: the meta-tx lanes (`scaas.metatx`) and the ERC-20 slots stay put.
     function test_adminWritesDoNotTouchOtherNamespaces() public {
         NormalToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, address(0), 100));
         bytes32 lane = keccak256(abi.encode(uint256(1), keccak256(abi.encode(alice,
@@ -232,19 +233,19 @@ contract FeaturesTest is Test {
         assertEq(uint256(laneBefore), 1);
         assertEq(uint256(balBefore), 100);
         vm.startPrank(ownerA);
-        t.grantRole(1, minter);
+        t.grantRole(1, nid(minter));
         t.disableFeature(1);
-        t.transferOwnership(minter);
+        t.transferOwnership(nid(minter));
         vm.stopPrank();
         assertEq(vm.load(address(t), lane), laneBefore);
         assertEq(vm.load(address(t), bal), balBefore);
         assertEq(t.balanceOf(alice), 100);
-        // the admin state landed in `scaas.token`: features word (MINTABLE disabled) and pendingOwner at slot + 3
-        bytes32 tok = 0x83083067f3d1caf66741d4eeefa9d3f4f0e5b0793677731d6fee7e67b774ac00;
+        // the admin state landed in `scaas.governance`: features word (MINTABLE disabled) and pendingOwner at slot + 3
+        bytes32 tok = 0x0a3a361961b35589cdb03530b6f9e23a4db6ca9a0dad5ddf5d7761c7fabc8700;
         assertEq(uint256(vm.load(address(t), tok)), t.features());
         assertEq(t.features(), 0);
-        assertEq(address(uint160(uint256(vm.load(address(t), bytes32(uint256(tok) + 3))))), minter);
-        assertEq(t.pendingOwner(), minter);
+        assertEq(vm.load(address(t), bytes32(uint256(tok) + 3)), nid(minter)); // the whole word: a UA id
+        assertEq(t.pendingOwner(), nid(minter));
     }
 
     // ------------------------------------------------------------------ IS_HEDERA (CTR-TOK-23)

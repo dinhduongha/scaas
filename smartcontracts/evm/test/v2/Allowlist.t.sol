@@ -13,7 +13,7 @@ import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {normalInit, wrappedInit, Rate} from "./helpers/V2Fixture.sol";
 import {FeePolicy} from "../../src/common/FeePolicy.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// Underlying whose `transferFrom` re-enters the wrapper while the self-call is live.
@@ -49,6 +49,10 @@ contract AllowlistTest is Test {
     NormalToken internal pts;
     WrappedToken internal ledgered;
     bytes32 internal constant UA = keccak256("scaas.allowlist.ua");
+
+    /// The test plays the factory: it registered no token, so the leg check (CTR-GOV-05, spec §6.1) reads every leg as an
+    /// outside leg and asks it nothing.
+    function isRegisteredToken(address) external pure returns (bool) { return false; }
 
     function setUp() public {
         vm.chainId(7622);
@@ -281,19 +285,19 @@ contract AllowlistTest is Test {
         }
         _refused(address(none), abi.encodeCall(NormalToken.mint, (alice, 1)));
         _refused(address(none), abi.encodeCall(NormalToken.mintToUA, (UA, 1)));
-        _refused(address(none), abi.encodeCall(ITokenAdmin.renounceRole, (1)));
+        _refused(address(none), abi.encodeCall(IGovernance.renounceRole, (1)));
         _refused(address(single), abi.encodeWithSignature("unwrap(uint256,address)", 1, alice));
         _refused(address(single), abi.encodeWithSignature("proposeRate(address,uint96,uint96)", address(u), 1, 1));
         _refused(address(single), abi.encodeWithSignature("cancelRate()"));
         _refused(address(single), abi.encodeWithSignature("executeRate()"));
-        _refused(address(single), abi.encodeCall(ITokenAdmin.renounceRole, (3)));
+        _refused(address(single), abi.encodeCall(IGovernance.renounceRole, (3)));
         _refused(address(multi), abi.encodeWithSignature("unwrap(uint256,address)", 1, alice));
         _refused(address(multi), abi.encodeWithSignature("proposeRate(address,uint96,uint96)", address(u), 1, 1));
         _refused(address(multi), abi.encodeWithSignature("cancelRate()"));
         _refused(address(multi), abi.encodeWithSignature("executeRate()"));
-        _refused(address(multi), abi.encodeCall(ITokenAdmin.renounceRole, (3)));
+        _refused(address(multi), abi.encodeCall(IGovernance.renounceRole, (3)));
         _refused(address(multi), abi.encodeWithSignature("disableWrap(address,bytes32)", address(u), bytes32(0)));
-        _refused(address(multi), abi.encodeCall(ITokenAdmin.renounceRole, (4)));
+        _refused(address(multi), abi.encodeCall(IGovernance.renounceRole, (4)));
     }
 
     function test_wrongStaticLength_refused() public {

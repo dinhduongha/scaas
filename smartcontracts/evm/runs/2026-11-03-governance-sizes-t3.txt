@@ -1,0 +1,17 @@
+# governance T3 sizes at the default set (n2304-kmax4096), forge build src --sizes --json; they decide nothing (spec §11)
+# before = T2, after = the T3 tree; the Zether rows re-measured after the rebase on main b25796b6 (CTR-ZTH-94)
+contract | runtime before | runtime after | delta | init after
+NormalToken | 40830 | 39776 | -1054 | 42025
+WrappedToken | 50425 | 50505 | 80 | 52761
+NormalZetherToken | 50672 | 49642 | -1030 | 53211
+WrappedZetherToken | 60518 | 60574 | 56 | 64150
+NormalPqzToken | 56235 | 55229 | -1006 | 57853
+WrappedPqzToken | 70031 | 70088 | 57 | 72724
+SCaaSDex | 32889 | 32068 | -821 | 33728
+GovernanceLib | 7634 | 7917 | 283 | 7969
+WrappedLib | 17299 | 16258 | -1041 | 16310
+ZetherWrappedLib | 11474 | 11499 | 25 | 11551
+PqzWrappedLib | 4868 | 4893 | 25 | 4945
+OpenFactory | 15651 | 15651 | 0 | 16045
+above 65,536 B: WrappedPqzToken
+size gate: 0 error(s), 87 contracts

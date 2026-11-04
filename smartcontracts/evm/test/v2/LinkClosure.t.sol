@@ -6,7 +6,9 @@ import {DeployHarness} from "../helpers/DeployHarness.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {WrappedLib} from "../../src/metatx/WrappedLib.sol";
 import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
 import {HederaLib} from "../../src/hedera/HederaLib.sol";
@@ -29,13 +31,13 @@ import {closureLibs, registryClosureLibs} from "../helpers/Catalogue.sol";
 contract LinkClosureTest is Test {
     IOpenFactory.TokenKind constant NORMAL = IOpenFactory.TokenKind.NORMAL;
     string[] internal names = [
-        "AdminLib", "HederaLib", "TradeLib", "MtxPipelineLib", "WrappedLib", "ZetherLib", "ZetherWrappedLib",
+        "GovernanceLib", "HederaLib", "TradeLib", "MtxPipelineLib", "WrappedLib", "ZetherLib", "ZetherWrappedLib",
         "PqzStateLib", "PqzTransferLib", "PqzBurnLib", "PqzViewLib", "PqzWrappedLib", "UARegistryLib"
     ];
 
     function _addr(string memory n) internal pure returns (address a) {
         bytes32 h = keccak256(bytes(n));
-        if (h == keccak256("AdminLib")) return address(AdminLib);
+        if (h == keccak256("GovernanceLib")) return address(GovernanceLib);
         if (h == keccak256("HederaLib")) return address(HederaLib);
         if (h == keccak256("TradeLib")) return address(TradeLib);
         if (h == keccak256("MtxPipelineLib")) return address(MtxPipelineLib);
@@ -147,7 +149,7 @@ contract LinkClosureTest is Test {
 
     /// R6: over every library of every closure, PUSH data skipped, from the start to the last `INVALID` (solc puts its
     /// trailing data and the CBOR metadata after it): no SELFDESTRUCT (0xff), no CALLCODE (0xf2); DELEGATECALL (0xf4)
-    /// only in `MtxPipelineLib` (exactly 2, -> `HederaLib`), in `WrappedLib` (exactly 1, -> `AdminLib`, its own link
+    /// only in `MtxPipelineLib` (exactly 2, -> `HederaLib`), in `WrappedLib` (exactly 1, -> `GovernanceLib`, its own link
     /// reference), in `ZetherWrappedLib` (exactly 2, -> `WrappedLib`, `ZetherLib`, its init: size lever 1, owner 2026-11-01)
     /// and in `PqzWrappedLib` (exactly 2, -> `WrappedLib`, `PqzStateLib`, the same).
     function test_libraryOpcodes() public view {
@@ -158,8 +160,9 @@ contract LinkClosureTest is Test {
             assertFalse(destruct, string.concat(name, ": SELFDESTRUCT"));
             assertFalse(callcode, string.concat(name, ": CALLCODE"));
             bytes32 h = keccak256(bytes(name));
-            uint256 want = h == keccak256("MtxPipelineLib") || h == keccak256("ZetherWrappedLib") || h == keccak256("PqzWrappedLib") ? 2
-                : h == keccak256("WrappedLib") ? 1 : 0;
+            // WrappedLib: `GovernanceLib.init` and, since B-26, `GovernanceUse.use`'s one call to `useLimited` (1 -> 2)
+            uint256 want = h == keccak256("MtxPipelineLib") || h == keccak256("ZetherWrappedLib") || h == keccak256("PqzWrappedLib")
+                || h == keccak256("WrappedLib") ? 2 : 0;
             assertEq(delegates, want, string.concat(name, ": DELEGATECALL count"));
         }
     }

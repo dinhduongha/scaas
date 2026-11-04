@@ -8,7 +8,9 @@ import {VM, E_TYPES, TYPED_OPS, n, a, h, eJson, domainJson, ecdsa, checkRow, onC
     from "../metatx/NamedEntry.t.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -645,7 +647,7 @@ contract ZetherTypedWrappedTest is ZetherNamedBase {
         c.name = "Zether wrapped";
         c.symbol = "zW";
         c.decimals = 6;
-        c.features = 1 << AdminLib.PAYABLE;
+        c.features = 1 << GovernanceBits.PAYABLE;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         c.conf = IFactoryToken.ConfidentialConfig(bytes(""), SCALE, uint256(1) << 40, FEE, dMode, 0, 0);
@@ -930,7 +932,7 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
         c.name = "Zether wrapped";
         c.symbol = "zW";
         c.decimals = 6;
-        c.features = 1 << AdminLib.PAYABLE;
+        c.features = 1 << GovernanceBits.PAYABLE;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
         c.conf = IFactoryToken.ConfidentialConfig(bytes(""), SCALE, uint256(1) << 40, FEE, dMode, 0, 0);

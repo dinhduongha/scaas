@@ -9,6 +9,7 @@ import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {ISCaaSDex, IExchangeExecutor} from "../../src/dex/ISCaaSDex.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {DexPuller} from "../../src/dex/DexPuller.sol";
@@ -16,6 +17,7 @@ import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MockERC20, FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// Router (v3 style): pulls `amountIn` (+ `extraIn`) from the caller under its allowance, pays `amountOut`
 /// (- `shortOut`) to `to` and always claims `amountOut` (the DEX never reads it).
@@ -158,7 +160,7 @@ contract DexExchangeTest is Test {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 0, 1e6, alice, address(0))), "a"));
         b = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("B", "B", 0, 1e6, bob, address(0))), "b"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(admin, 200_000, treasury, false)), "dex"));
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0))), "dex"));
         puller = dex.puller();
         usdc = new MockERC20("USD Coin", "USDC", 6);
         c = new MockERC20("Hop", "C", 18);
@@ -809,9 +811,9 @@ contract DexExchangeTest is Test {
     // ------------------------------------------------------------------ admin (CTR-DEX-03)
 
     function test_setExchangeTarget_setListedOnly_onlyAdmin() public {
-        vm.expectRevert(_err(ISCaaSDex.NotAdmin.selector, address(this)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(11), address(this)));
         dex.setExchangeTarget(address(router), true);
-        vm.expectRevert(_err(ISCaaSDex.NotAdmin.selector, address(this)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(11), address(this)));
         dex.setListedOnly(true);
         vm.startPrank(admin);
         vm.expectEmit(address(dex));

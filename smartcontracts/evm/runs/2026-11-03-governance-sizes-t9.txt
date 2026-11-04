@@ -1,0 +1,18 @@
+# governance T9 sizes at the default set (n2304-kmax4096), forge build src --sizes --json; they decide nothing (spec §11)
+# before = T8 (233b874b), after = the T9 tree; libraries from their artifacts, as size_gate.py reads them
+contract | runtime before | runtime after | delta | init after
+NormalToken | 40535 | 40535 | 0 | 42784
+WrappedToken | 51267 | 52131 | 864 | 54387
+NormalZetherToken | 50302 | 50302 | 0 | 53871
+WrappedZetherToken | 61195 | 62234 | 1039 | 65813
+NormalPqzToken | 55933 | 55933 | 0 | 58557
+WrappedPqzToken | 70725 | 71853 | 1128 | 74489
+SCaaSDex | 32797 | 32797 | 0 | 34457
+GovernanceLib | 13094 | 13094 | 0 | 13146
+WrappedLib | 16699 | 17215 | 516 | 17267
+ZetherWrappedLib | 11602 | 11602 | 0 | 11654
+PqzWrappedLib | 5018 | 5018 | 0 | 5070
+ZetherLib | 26274 | 26274 | 0 | 26326
+OpenFactory | 15732 | 15732 | 0 | 16126
+above 65,536 B: WrappedPqzToken
+size gate: 0 error(s), 87 contracts

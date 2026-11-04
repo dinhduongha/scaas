@@ -1,0 +1,10 @@
+# governance T16 mutants at 168494e1 (clean tree), each one change, restored by git checkout -- <file> after each. Suites:
+# `python3 -I pqz-core/nethermind/chain/patch-chainspec.py --check`; `../../scripts/capped forge test --match-path test/governance/GovDeploy.t.sol`.
+# red first: before _deployWrapped, test_deployWrappedPath "the release" and test_routerDeployedAndGated "env: 0x0 != <router>" (rc=1).
+mutant | test that went red | rc
+m1 patch-chainspec leaving eip7954TransitionTimestamp in (the pop removed) | --check: AssertionError, the reset's params still hold eip7954TransitionTimestamp | 1
+m2 removing a second key: eip7976TransitionTimestamp popped too | --check: "unexpected diff" | 1
+m3 the reset guard dropped for 22776 (the chainId check off) | --check: AssertionError "reset of chain 22776" | 1
+m4 _requireReleaseGas skipped for one kind: the WRAPPED release's gate removed from _deployWrapped | test_wrappedReleaseIsGated ("next call did not revert as expected") | 1
+m5 a release gate at the wrong key of the baseline: _deployWrapped gated as "NormalToken" | test_wrappedReleaseIsGated ("next call did not revert as expected") | 1
+m6 the WRAPPED env's libraries out of the link closure's order (TradeLib before HederaLib) | test_deployWrappedPath ("link closure"; before this commit the assertion compared pinned(e) with e itself and passed) | 1

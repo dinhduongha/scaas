@@ -10,7 +10,9 @@ import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
@@ -29,8 +31,9 @@ contract PqzWrappedTest is PqzFixture {
             pqzEnv(address(factory), PQZ_UID_(), address(reg), address(pqv)), type(WrappedPqzToken).creationCode);
         usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-        c.features = (1 << AdminLib.PAYABLE);
-        c.roles.minter = address(0);
+        c.features = (1 << GovernanceBits.PAYABLE);
+        c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
+        c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         w = WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "w")));
@@ -84,8 +87,9 @@ contract PqzWrappedTest is PqzFixture {
     function test_reentryIntoTheRestatedAdminEntriesRefused() public {
         HookLeg hook = new HookLeg();
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-        c.features = (1 << AdminLib.PAYABLE);
-        c.roles.minter = address(0);
+        c.features = (1 << GovernanceBits.PAYABLE);
+        c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
+        c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(hook), 1, 1);
         WrappedPqzToken z =
@@ -93,7 +97,7 @@ contract PqzWrappedTest is PqzFixture {
         hook.mint(address(this), SCALE);
         hook.approve(address(z), SCALE);
         bytes[2] memory calls =
-            [abi.encodeCall(z.disableFeature, (AdminLib.RATE_ADJUSTABLE)), abi.encodeCall(z.executeRate, ())];
+            [abi.encodeCall(z.disableFeature, (GovernanceBits.RATE_ADJUSTABLE)), abi.encodeCall(z.executeRate, ())];
         for (uint256 i; i < 2; ++i) {
             hook.arm(address(z), calls[i]);
             vm.expectRevert(IMetaTx.Reentrancy.selector);

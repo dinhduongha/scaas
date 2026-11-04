@@ -909,4 +909,22 @@ public class VectorTests
         Assert.Equal(6, n);
         Assert.Equal("register", UA.RegistrationArgs(0x0101, B(valid[1].GetProperty("keyData"))).Args.Entry);
     }
+
+    /// <summary>governance T14: every row of governance_bits.json against UA.GovernanceBits, both ways, each with its sentences.</summary>
+    [Fact]
+    public void GovernanceBitsRows()
+    {
+        var v = JsonDocument.Parse(File.ReadAllText(Path.Combine(Dir, "..", "governance", "governance_bits.json"))).RootElement;
+        var rows = v.GetProperty("bits").EnumerateArray().ToArray();
+        Assert.Equal(UA.GovernanceBits.Length, rows.Length);
+        for (var i = 0; i < rows.Length; i++)
+        {
+            var r = rows[i];
+            Assert.Equal((i, UA.GovernanceBits[i].Name, UA.GovernanceBits[i].Type),
+                (r.GetProperty("bit").GetInt32(), r.GetProperty("name").GetString()!, r.GetProperty("type").GetString()!));
+            var s = r.GetProperty("sentences").EnumerateObject().ToArray();
+            Assert.NotEmpty(s);
+            Assert.All(s, p => Assert.False(string.IsNullOrEmpty(p.Value.GetString())));
+        }
+    }
 }

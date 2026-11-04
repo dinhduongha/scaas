@@ -7,7 +7,10 @@ import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
 import {UAMetaTxBase} from "../metatx/UAMetaTxBase.sol";
 import {MetaTxBase} from "../metatx/MetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
-import {AdminLib} from "../metatx/AdminLib.sol";
+import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {TokenStore} from "../metatx/TokenStore.sol";
+import {GovernanceBase} from "../governance/GovernanceBase.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {ZetherLayer} from "./ZetherLayer.sol";
 import {ZetherLib} from "./ZetherLib.sol";
@@ -29,18 +32,23 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
     {}
 
     function kind() public pure override(NormalToken, MetaTokenBase) returns (uint8) {
-        return AdminLib.KIND_NORMAL_ZETHER;
+        return TokenStore.KIND_NORMAL_ZETHER;
+    }
+
+    function _validBits() internal pure override(NormalToken, GovernanceBase) returns (uint256) {
+        return GovernanceBits.NORMAL_BITS;
     }
 
     /// @dev Never reached: `_initRaw` is the kind's init.
     function _init(TokenConfig memory) internal override(NormalToken, MetaTokenBase) {}
 
     /// @dev The init path in `ZetherLib` (CTR-ZTH-94, size lever 1 as on `WrappedZetherToken`): no `TokenConfig` coder
-    ///      stays here. In `NormalToken`'s order: the unused fields and the metadata, `AdminLib.init`, the Zether config,
+    ///      stays here. In `NormalToken`'s order: the unused fields and the metadata, `GovernanceLib.init`, the Zether config,
     ///      the initial mint.
     function _initRaw(bytes calldata initArgs) internal override {
-        (uint256 features_, uint256 locked, address owner_, AdminLib.Roles memory roles) = ZetherLib.initNormal(initArgs);
-        AdminLib.init(AdminLib.KIND_NORMAL_ZETHER, features_, locked, owner_, roles);
+        (uint256 features_, uint256 locked, bytes32 owner_, uint64 delay, address rescueTo_, GovernanceLib.Roles memory roles) =
+            ZetherLib.initNormal(initArgs);
+        GovernanceLib.init(features_, locked, owner_, delay, rescueTo_, roles, _validBits(), _roleBits(), _contractOnlyBits());
         (address holder, uint256 supply) = ZetherLib.initNormalConf(initArgs, TRANSFER_VERIFIER);
         if (supply != 0) _mint(holder, supply);
     }

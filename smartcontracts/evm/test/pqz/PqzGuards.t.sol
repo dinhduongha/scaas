@@ -15,6 +15,13 @@ import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 
+/// A registry frame that runs out of gas: `INVALID` spends all the gas it was given and reverts with no data.
+contract OutOfGas {
+    fallback() external {
+        assembly ("memory-safe") { invalid() }
+    }
+}
+
 /// The token guards of the contracts review fix round (review2 T1, 2026-10-27): PQZH value tokens only at sets that
 /// have them and only for single-key holders (C2-1, C0-2), the auditor (C2-3), `_keyPtr` on the value-in paths (C2-4),
 /// `shieldIn` pulled first (C2-5), a failed precompile call is no verdict (C2-6), the interface views (C2-7), the fee
@@ -159,6 +166,25 @@ contract PqzGuardsTest is PqzFixture {
         vm.mockCallRevert(PQZ, abi.encodePacked(uint8(1)), "");
         bytes memory pl = _payloadFor(tok, alice, bob, bytes32(0), _out(1, true));
         vm.expectRevert(UAKinds.UAVerifyGas.selector);
+        tok.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "");
+    }
+
+    /// Review M5 (nested-msig reviews, 2026-11-04): the authority's registry frame out of gas (no revert data, at most the 1/64
+    /// `_check` kept) is a starvation, `UAVerifyGas`, as `UAStore.via` reads it, never `AuthRejected`.
+    function test_check_registryOutOfGasIsVerifyGas() public {
+        _fund(tok, alice, 10);
+        bytes memory pl = _payloadFor(tok, alice, bob, bytes32(0), _out(1, true));
+        vm.mockFunction(address(reg), address(new OutOfGas()), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector));
+        vm.expectRevert(UAKinds.UAVerifyGas.selector);
+        tok.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "");
+    }
+
+    /// The control: an empty revert that returns its gas is a rejection, `AuthRejected`.
+    function test_check_registryEmptyRevertWithGasIsAuthRejected() public {
+        _fund(tok, alice, 10);
+        bytes memory pl = _payloadFor(tok, alice, bob, bytes32(0), _out(1, true));
+        vm.mockCallRevert(address(reg), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector), "");
+        vm.expectRevert(IPqzToken.AuthRejected.selector);
         tok.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "");
     }
 

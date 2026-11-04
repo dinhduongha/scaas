@@ -27,6 +27,7 @@ import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {UACall} from "./UACall.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// Classifies every token as a registered SCaaS token, so a DEX clone at a vector address can list the vector tokens.
 contract KindFactory {
@@ -87,7 +88,7 @@ contract UATradeVectorsTest is UARegistryBase {
         vm.etch(at, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
         dex = SCaaSDex(at);
         vm.prank(address(kf));
-        dex.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(address(this), 200_000, TREASURY, false)));
+        dex.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, TREASURY, false, 0, address(0))));
         dex.setMarket(address(A), address(B), true);
         vm.warp(1_800_000_000);
     }

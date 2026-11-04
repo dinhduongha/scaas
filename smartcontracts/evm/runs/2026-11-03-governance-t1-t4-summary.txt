@@ -1,0 +1,21 @@
+# governance T1-T4 gate summary (full output in git-ignored .log files, not committed)
+step | commit | rc | counts
+t1-governance-suites | cad1cee3 | 0 | 87 passed 0 failed (forge)
+t1-mutants | cad1cee3 | 1 each | 4 of 4 killed, 12 rows red each (runs/2026-11-03-governance-t1-mutants.txt)
+t2-size-gate | b1eb6138 | 0 | 0 errors, 87 contracts (size_gate)
+t2-forge-full | b1eb6138 | 1 | 2202 passed 3 failed 14 skipped (forge; the 3 known)
+t2-e2e-zether | b1eb6138 | 0 | passed (anvil --code-size-limit 131072)
+t2-mutants | b1eb6138 | 1 each | 4 of 4 killed (runs/2026-11-03-governance-t2-mutants.txt)
+t3-forge-full | 59823417 | 0 | 2218 passed 0 failed 14 skipped (forge, 191 suites)
+t3-size-gate | 59823417 | 0 | 0 errors, 87 contracts; above 64 KiB: WrappedPqzToken 70,088
+t3-clientkeys-evm | 59823417 | 0 | 23 passed 0 failed (node, test/evm.test.js reads dex_order_kat.json)
+t3-mutants | 59823417 | 1 each | 9 of 9 killed (runs/2026-11-03-governance-t3-mutants.txt)
+t4-forge-full | a71c07a8 | 1 | 2222 passed 1 failed 14 skipped (DexKat, before its regeneration)
+t4-dexkat | a71c07a8 | 0 | DexKatTest 2 passed after WRITE_KAT regeneration
+t4-size-gate | a71c07a8 | 0 | 0 errors, 87 contracts; above 64 KiB: WrappedPqzToken 70,088
+t4-clientkeys-evm | a71c07a8 | 0 | 23 passed 0 failed (node)
+t4-mutants | a71c07a8 | 1 each | 3 of 3 killed (runs/2026-11-03-governance-t4-mutants.txt)
+final-forge-isolate-ua | a71c07a8 | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+final-docs-check | a71c07a8 | 0 | 0 errors, 5 warnings, 16 notes (docs_check check)
+final-facts-check | a71c07a8 | 0 | 8852 facts, 0 misses, 387 pending (docs_check facts check)
+final-forge-full | a71c07a8 | 0 | 2223 passed 0 failed 14 skipped (forge, 191 suites, default set n2304-kmax4096)

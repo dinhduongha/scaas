@@ -5,7 +5,10 @@ import {Script} from "forge-std/Script.sol";
 import {OpenFactory} from "../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../src/factory/IFactoryToken.sol";
-import {AdminLib} from "../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../src/governance/GovernanceBits.sol";
+import {GovernanceRouter} from "../src/governance/GovernanceRouter.sol";
+import {TokenStore} from "../src/metatx/TokenStore.sol";
 import {WrappedLib} from "../src/metatx/WrappedLib.sol";
 import {MtxPipelineLib} from "../src/metatx/MtxPipelineLib.sol";
 import {HederaLib} from "../src/hedera/HederaLib.sol";
@@ -14,6 +17,7 @@ import {ZetherLib} from "../src/zether/ZetherLib.sol";
 import {ZetherWrappedLib} from "../src/zether/ZetherWrappedLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {NormalToken} from "../src/metatx/NormalToken.sol";
+import {WrappedToken} from "../src/metatx/WrappedToken.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 import {UARegistry} from "../src/ua/UARegistry.sol";
 import {IUARegistry} from "../src/ua/IUARegistry.sol";
@@ -66,11 +70,16 @@ abstract contract DeployBase is Script {
     /// @notice `DEPLOY_ZETHER` env (default false): also deploy the Zether stack (`_deployZether`, any chain
     ///         but Hedera; owner ruling 2026-10-31).
     bool internal deployZether;
+    /// @notice `DEPLOY_WRAPPED` env (default false): also deploy the `WRAPPED` release (`_deployWrapped`, GD-12; CTR-GOV-19:
+    ///         every kind runs on the SCaaS testnet).
+    bool internal deployWrapped;
     /// @notice `OpenFactory.noticePeriod` (plan 5g-Z2; owner ruling 2026-10-20): `NOTICE_PERIOD` env. Safe by default:
     ///         every chain not in `_isTestChain` is a mainnet (22776, Hedera 295, Ethereum, BSC, an unknown chain), with
     ///         default and floor 3 days; 7622 defaults to 10 minutes, the other test / dev chains to 0. At most 30 days
     ///         (`MAX_NOTICE_PERIOD`, the factory's).
     uint64 internal noticePeriod;
+    /// @notice This chain's `GovernanceRouter` (`_deployGovRouter`), every release's `Env.govRouter`; 0 until deployed.
+    address internal govRouter;
 
     /// @notice `UA_VERIFY_BUDGET = min(12 M, ⌊0.7 × the chain's per-transaction gas cap⌋)` (CTR-UA-23): EIP-7825
     ///         chains (16,777,216) 12 M, Hedera (15 M) 10.5 M.
@@ -105,19 +114,45 @@ abstract contract DeployBase is Script {
     ///         regular gas, which EIP-7825 caps at `TX_REGULAR_GAS_CAP` (2^24): the transaction needs
     ///         `runtime x 1,530 + 2^24` and may not exceed the block gas limit. Runtime sizes are `size-baseline.json`'s
     ///         (the contracts over the EIP-170 limit; any other is priced at `EIP170_LIMIT`).
-    ///         `NormalToken` 37,228 B = 73.7 M, `UARegistry` 28,429 B = 60.3 M, `UARegistryLib` 32,667 B = 66.8 M,
-    ///         `WrappedZetherToken` 62,169 B = 111.9 M, `WrappedPqzToken` 63,423 B = 113.8 M (the figures move with the
-    ///         baseline).
+    ///         `NormalToken` 40,853 B = 79.3 M, `WrappedToken` 52,297 B = 96.8 M, `NormalZetherToken` 50,547 B = 94.1 M,
+    ///         `WrappedZetherToken` 62,472 B = 112.4 M, `NormalPqzToken` 56,191 B = 102.7 M, `WrappedPqzToken` 72,160 B =
+    ///         127.2 M, `SCaaSDex` 33,574 B = 68.1 M, `UARegistry` 29,429 B = 61.8 M, `UARegistryLib` 35,946 B = 71.8 M: each
+    ///         fits a 200 M block (the figures move with the baseline; `GovDeploy.t.sol` reads it).
     uint256 internal constant STATE_GAS_PER_BYTE = 1530;
     uint256 internal constant TX_REGULAR_GAS_CAP = 1 << 24;
     uint256 internal constant EIP170_LIMIT = 24_576;
 
-    /// @notice The block gas limit the release of contract `name` needs.
-    function _releaseGasNeed(string memory name) internal view returns (uint256) {
+    /// @notice EIP-7954's code size limit, the default of `CHAIN_CODE_LIMIT` (GD-4).
+    uint256 internal constant EIP7954_CODE_LIMIT = 65_536;
+
+    /// @notice The runtime size of contract `name` by `size-baseline.json` (any contract outside it is priced at
+    ///         `EIP170_LIMIT`: the size gate refuses one above that limit with no baseline row).
+    function _baselineRuntime(string memory name) internal view returns (uint256) {
         string memory key = string.concat(".", name);
         string memory base = vm.readFile("./size-baseline.json");
-        uint256 runtime = vm.keyExistsJson(base, key) ? vm.parseJsonUint(base, key) : EIP170_LIMIT;
-        return runtime * STATE_GAS_PER_BYTE + TX_REGULAR_GAS_CAP;
+        return vm.keyExistsJson(base, key) ? vm.parseJsonUint(base, key) : EIP170_LIMIT;
+    }
+
+    /// @notice The block gas limit the release of contract `name` needs.
+    function _releaseGasNeed(string memory name) internal view returns (uint256) {
+        return _baselineRuntime(name) * STATE_GAS_PER_BYTE + TX_REGULAR_GAS_CAP;
+    }
+
+    /// @notice CTR-GOV-19, GD-4: the chain's code size limit is declared, never derived from a chain id. `CHAIN_CODE_LIMIT`
+    ///         (env), default 65,536 B (EIP-7954); the SCaaS testnet's runbook sets 131,072 (`maxCodeSize` `0x20000`,
+    ///         EIP-7954 left out). One rule on every chain. The chain's own limit stays the last word: a deploy it refuses
+    ///         fails closed.
+    function _chainCodeLimit() internal view virtual returns (uint256) {
+        return vm.envOr("CHAIN_CODE_LIMIT", EIP7954_CODE_LIMIT);
+    }
+
+    /// @notice Refuses a release whose runtime exceeds `limit`, naming the contract, before anything is sent.
+    function _checkCodeFits(string memory name, uint256 limit) internal view {
+        uint256 runtime = _baselineRuntime(name);
+        if (runtime > limit) {
+            revert(string.concat(name, " runtime ", vm.toString(runtime), " B > chain code limit ", vm.toString(limit),
+                " B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        }
     }
 
     function _checkReleaseGas(string memory name, uint256 limit) internal view {
@@ -128,13 +163,21 @@ abstract contract DeployBase is Script {
         }
     }
 
-    /// @notice Refuses before anything is sent when the chain's actual `block.gaslimit` cannot hold the release.
-    function _requireReleaseGas(string memory name) internal view virtual { _checkReleaseGas(name, block.gaslimit); }
+    /// @notice The block gas limit the deploy gate reads: the chain's actual `block.gaslimit`.
+    function _blockGasLimit() internal view virtual returns (uint256) { return block.gaslimit; }
+
+    /// @notice Refuses before anything is sent when the release's runtime exceeds the chain's declared code limit, or
+    ///         the chain's block gas limit cannot hold it.
+    function _requireReleaseGas(string memory name) internal view {
+        _checkCodeFits(name, _chainCodeLimit());
+        _checkReleaseGas(name, _blockGasLimit());
+    }
 
     /// @notice Call first in `run()`, before the broadcast.
     function _setup() internal {
         salt = vm.envOr("DEPLOY_SALT", keccak256("scaas.deploy.v1"));
         deployZether = vm.envOr("DEPLOY_ZETHER", false);
+        deployWrapped = vm.envOr("DEPLOY_WRAPPED", false);
         noticePeriod = _checkedNotice(block.chainid, vm.envOr("NOTICE_PERIOD", _defaultNotice(block.chainid)));
         uid = _chainUid();
         require(CREATE2_FACTORY.code.length != 0,
@@ -185,9 +228,11 @@ abstract contract DeployBase is Script {
     ///         and the `SCaaSDex` release, each version 1; otherwise the registrar publishes and deploys them later from
     ///         the same init code. Writes `token_factory`, `implementation_normal`, `dex_implementation`, `ua_registry`,
     ///         `ua_registry_lib`,
-    ///         `mtx_relay_fee`, `mtx_relay_executor`, `chain_uid` into the JSON object `"deploy"`; with `DEPLOY_ZETHER` also the Zether stack (`_deployZether`,
-    ///         not on Hedera). NORMAL and `WRAPPED` both exceed EIP-170 (the UA ledger): deploy with
-    ///         `--code-size-limit 65536` (deploy.sh); `WRAPPED` is still not deployed here (owner: wait for Glamsterdam).
+    ///         `mtx_relay_fee`, `mtx_relay_executor`, `governance_router`, `chain_uid` into the JSON object `"deploy"`; with
+    ///         `DEPLOY_WRAPPED` also the `WRAPPED` release (`_deployWrapped`, GD-12), with `DEPLOY_ZETHER` the Zether stack
+    ///         (`_deployZether`, not on Hedera). NORMAL and `WRAPPED` both exceed EIP-170 (the UA ledger).
+    ///         Each release is refused first when its runtime exceeds the chain's declared `CHAIN_CODE_LIMIT`
+    ///         (`_checkCodeFits`, CTR-GOV-19, GD-4).
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
         internal returns (OpenFactory f)
     {
@@ -198,6 +243,7 @@ abstract contract DeployBase is Script {
         }
         f = new OpenFactory{salt: salt}(registrar, uid, noticePeriod);
         UARegistry reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
+        _deployGovRouter(address(reg), smartKeyAccountImpl, isHedera); // before every release: its address is in the env
         _deployRelayFee();
         _gate(address(f));
         vm.serializeAddress("deploy", "token_factory", address(f));
@@ -205,7 +251,7 @@ abstract contract DeployBase is Script {
             // the link closure of NormalToken (task 6): MtxPipelineLib, which links HederaLib
             address[] memory libs = new address[](4);
             (libs[0], libs[1], libs[2], libs[3]) =
-                (address(AdminLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
+                (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
             f.publishEnv(IOpenFactory.TokenKind.NORMAL, 1,
                 _env(f, address(reg), smartKeyAccountImpl, isHedera, new address[](0), libs));
             _requireReleaseGas("NormalToken");
@@ -213,16 +259,32 @@ abstract contract DeployBase is Script {
             _gate(none);
             vm.serializeAddress("deploy", "implementation_normal", none);
             // The DEX release (CTR-DEX-24): clones come from `createDex`; DEX version 1.
-            address[] memory dexLibs = new address[](1);
-            dexLibs[0] = address(TradeLib);
+            address[] memory dexLibs = new address[](2);
+            (dexLibs[0], dexLibs[1]) = (address(GovernanceLib), address(TradeLib));
             f.publishDexEnv(1, _env(f, address(0), smartKeyAccountImpl, isHedera, new address[](0), dexLibs));
             _requireReleaseGas("SCaaSDex");
             address dexImpl = f.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, "");
             _gate(dexImpl);
             vm.serializeAddress("deploy", "dex_implementation", dexImpl);
         }
+        if (deployWrapped && register) _deployWrapped(f, address(reg), smartKeyAccountImpl, isHedera);
         if (deployZether) _deployZether(f, register, smartKeyAccountImpl, address(reg));
         vm.serializeBytes32("deploy", "chain_uid", uid);
+    }
+
+    /// @notice GD-12 (CTR-GOV-19: every kind runs on the SCaaS testnet), in the form of `_deployZether`: env version 1 of
+    ///         `WRAPPED` (the UA registry, the `SmartKeyAccount` implementation, Hedera, the link closure with `WrappedLib`, the
+    ///         router), the release, version 1, refused first by `_requireReleaseGas`; the kind is on from the factory's start.
+    ///         JSON `implementation_wrapped`. The release is above EIP-170: `CHAIN_CODE_LIMIT` must hold it.
+    function _deployWrapped(OpenFactory f, address reg, address smartKeyAccountImpl, bool isHedera) internal {
+        address[] memory libs = new address[](5);
+        (libs[0], libs[1], libs[2], libs[3], libs[4]) =
+            (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(WrappedLib));
+        f.publishEnv(IOpenFactory.TokenKind.WRAPPED, 1, _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
+        _requireReleaseGas("WrappedToken");
+        address w = f.deployImplementation(IOpenFactory.TokenKind.WRAPPED, 1, 1, type(WrappedToken).creationCode, "");
+        _gate(w);
+        vm.serializeAddress("deploy", "implementation_wrapped", w);
     }
 
     /// @notice `MtxRelayFee` (CTR-MTX-27) by CREATE2, the same address on every chain (no constructor argument, no
@@ -236,13 +298,24 @@ abstract contract DeployBase is Script {
         vm.serializeAddress("deploy", "mtx_relay_executor", ex);
     }
 
-    /// @notice A release environment of this chain's factory `f` (plan 5g-Z2), each library's current code hash.
+    /// @notice The chain's `GovernanceRouter` (CTR-GOV-15 Change, owner 2026-11-04; plan T11) by CREATE2: no owner, no
+    ///         state, `chain_uid` and the UA registry in its constructor, so one predictable address per chain. Deployed
+    ///         before the releases, whose `Env.govRouter` names it. JSON `governance_router`. **UNAUDITED.**
+    function _deployGovRouter(address reg, address smartKeyAccountImpl, bool isHedera) internal {
+        GovernanceRouter r = new GovernanceRouter{salt: salt}(uid, reg, smartKeyAccountImpl, isHedera);
+        _gate(address(r));
+        govRouter = address(r);
+        vm.serializeAddress("deploy", "governance_router", govRouter);
+    }
+
+    /// @notice A release environment of this chain's factory `f` (plan 5g-Z2), each library's current code hash, and the
+    ///         chain's `GovernanceRouter` (`govRouter`, deployed first by `_deployTokenFactory`).
     function _env(OpenFactory f, address reg, address ska, bool hedera, address[] memory deps, address[] memory libs)
         internal view returns (IFactoryToken.Env memory e)
     {
         bytes32[] memory h = new bytes32[](libs.length);
         for (uint256 i; i < libs.length; ++i) h[i] = libs[i].codehash;
-        e = IFactoryToken.Env(address(f), uid, reg, ska, hedera, deps, libs, h);
+        e = IFactoryToken.Env(address(f), uid, reg, ska, hedera, deps, libs, h, govRouter);
     }
 
     /// @notice UA registry generation 1 (accounts.md §1.8, CTR-UA-22) on every chain, with per-chain enablement (§1.9):
@@ -385,7 +458,7 @@ abstract contract DeployBase is Script {
     function _zetherLibs(bool underlying) internal view returns (address[] memory l) {
         l = new address[](underlying ? 7 : 5);
         (l[0], l[1], l[2], l[3], l[4]) =
-            (address(AdminLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(ZetherLib));
+            (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(ZetherLib));
         if (underlying) (l[5], l[6]) = (address(WrappedLib), address(ZetherWrappedLib));
     }
 
@@ -400,7 +473,7 @@ abstract contract DeployBase is Script {
     ///         `implementation_{normal,wrapped}_zether_bls12381`. **UNAUDITED.** The
     ///         implementations exceed EIP-170 and the BLS inner-product verifier takes ~14 M gas: anvil
     ///         `--code-size-limit 65536`, forge script `--code-size-limit 65536 --gas-estimate-multiplier 105` (deploy.sh
-    ///         passes both; docs/networks/evm.md).
+    ///         passes both; docs/networks/evm.md). Each release is checked against `CHAIN_CODE_LIMIT` first (`_checkCodeFits`).
     function _deployZether(OpenFactory f, bool register, address smartKeyAccountImpl, address reg) internal {
         ZetherStatements stm = new ZetherStatements{salt: salt}();
         address dis = address(new ZetherDisclosure{salt: salt}());
@@ -458,7 +531,7 @@ abstract contract DeployBase is Script {
         c.name = name;
         c.symbol = symbol;
         c.decimals = 6;
-        c.features = 1 << AdminLib.PAYABLE;
+        c.features = 1 << GovernanceBits.PAYABLE;
         c.initialSupply = supply;
         c.initialHolder = holder;
         return f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), tokenSalt);

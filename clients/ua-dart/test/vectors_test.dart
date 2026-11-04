@@ -829,4 +829,25 @@ void main() {
       expect(slotsLen(x['popTyped']) + 64, _b(x['pop']).length, reason: name);
     }
   });
+
+  // governance T14: every row of governance_bits.json against governanceBits, both ways, each with its sentences
+  test('governance bits rows', () {
+    final e = env('UA_VECTORS');
+    String? text;
+    if (e != null) {
+      text = readIfExists('$e/../governance/governance_bits.json');
+    } else {
+      for (var dir = cwd(); text == null && dir.lastIndexOf('/') > 0; dir = dir.substring(0, dir.lastIndexOf('/'))) {
+        text = readIfExists('$dir/smartcontracts/vectors/governance/governance_bits.json');
+      }
+    }
+    final rows = (jsonDecode(text ?? (throw StateError('governance_bits.json not found above ${cwd()}'))) as Map)['bits'] as List;
+    expect(rows.length, governanceBits.length);
+    for (var i = 0; i < rows.length; i++) {
+      final r = rows[i] as Map;
+      expect((r['bit'], r['name'], r['type']), (i, governanceBits[i].$1, governanceBits[i].$2), reason: 'bit $i');
+      final s = (r['sentences'] as Map).values;
+      expect(s.isNotEmpty && s.every((x) => (x as String).isNotEmpty), isTrue, reason: 'bit $i');
+    }
+  });
 }

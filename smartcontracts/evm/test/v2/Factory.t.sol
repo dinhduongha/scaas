@@ -8,11 +8,13 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
-import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, normalInit, wrappedInit, Rate} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 
 /// Answers nothing the factory asks.
@@ -128,14 +130,12 @@ contract FactoryTest is Test {
         vm.expectRevert(IOpenFactory.EnvInvalid.selector);
         f.publishEnv(NORMAL, 2, bad);
         // a pin that pins nothing (review 5g-Z2 P2-1): 0 (no account) or keccak256("") (no code)
-        (bad.libs[0], bad.libCodeHashes) = (address(AdminLib), new bytes32[](1));
+        (bad.libs[0], bad.libCodeHashes) = (address(GovernanceLib), new bytes32[](1));
         vm.expectRevert(IOpenFactory.EnvInvalid.selector);
         f.publishEnv(NORMAL, 2, bad);
         bad.libCodeHashes[0] = keccak256("");
         vm.expectRevert(IOpenFactory.EnvInvalid.selector);
         f.publishEnv(NORMAL, 2, bad);
-        _kindOutOfRange(abi.encodeWithSelector(f.publishEnv.selector, uint8(6), 1, e)); // D21: 6, 7 fail ABI decoding
-        _kindOutOfRange(abi.encodeWithSelector(f.publishEnv.selector, uint8(7), 1, e));
         e.registry = address(0x1234);
         vm.expectEmit(true, true, false, true, address(f));
         emit IOpenFactory.EnvPublished(0, 5, keccak256(abi.encode(e)));
@@ -165,7 +165,7 @@ contract FactoryTest is Test {
         IFactoryToken.Env memory e = plainEnv(address(f), address(0), UID_, address(0), false);
         e.libs = new address[](2);
         e.libCodeHashes = new bytes32[](2);
-        (e.libs[0], e.libCodeHashes[0]) = (address(AdminLib), address(AdminLib).codehash);
+        (e.libs[0], e.libCodeHashes[0]) = (address(GovernanceLib), address(GovernanceLib).codehash);
         (e.libs[1], e.libCodeHashes[1]) = (address(usdc), keccak256("not the code"));
         uint16 ev = Catalogue.env(f, NORMAL, e);
         vm.prank(registrar);
@@ -201,8 +201,6 @@ contract FactoryTest is Test {
         f.deployImplementation(NORMAL, 2, 1, hex"fe", ""); // INVALID: no revert data
         vm.expectRevert(IOpenFactory.EnvInvalid.selector); // a constructor's error is bubbled
         f.deployImplementation(NORMAL, 2, 1, type(BadConstructor).creationCode, "");
-        _kindOutOfRange(abi.encodeWithSelector(f.deployImplementation.selector, uint8(6), 1, 1, code, ""));
-        _kindOutOfRange(abi.encodeWithSelector(f.deployImplementation.selector, uint8(7), 1, 1, code, ""));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, NORMAL, 0));
         f.deployImplementation(NORMAL, 0, 1, code, "");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionAlreadyRegistered.selector, NORMAL, 1, address(normalImpl)));
@@ -277,7 +275,7 @@ contract FactoryTest is Test {
     function test_kindEnabled() public {
         assertTrue(f.kindEnabled(NORMAL));
         assertTrue(f.kindEnabled(WRAPPED));
-        for (uint8 k = 2; k <= 5; ++k) assertFalse(f.kindEnabled(IOpenFactory.TokenKind(k)));
+        for (uint8 k = 2; k <= 13; ++k) assertFalse(f.kindEnabled(IOpenFactory.TokenKind(k)));
         vm.expectRevert(IOpenFactory.NotRegistrar.selector);
         f.setKindEnabled(NORMAL, false);
         vm.prank(registrar);
@@ -289,15 +287,70 @@ contract FactoryTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, NORMAL));
         f.createTokenUnregistered(NORMAL, address(normalImpl), abi.encode(_normal(alice)), "off");
         vm.prank(registrar);
-        _kindOutOfRange(abi.encodeWithSelector(f.setKindEnabled.selector, uint8(6), true));
-        _kindOutOfRange(abi.encodeWithSelector(f.setKindEnabled.selector, uint8(7), true));
+        _kindOutOfRange(abi.encodeWithSelector(f.setKindEnabled.selector, uint8(14), true));
     }
 
-    /// @dev D21 (CTR-TOK-21): ids 6 and 7 were dropped from `TokenKind`, so the ABI decoder reverts (no data), as the registrar.
+    /// @dev Past the last member (13) the ABI decoder reverts with no data, as the registrar.
     function _kindOutOfRange(bytes memory callData) internal {
         (bool ok, bytes memory ret) = address(f).call(callData);
-        assertFalse(ok, "kind 6/7 accepted");
+        assertFalse(ok, "kind past 13 accepted");
         assertEq(ret.length, 0, "ABI decoding panics with no data");
+    }
+
+    // ------------------------------------------------------------------ the enum (CTR-GOV-16, spec §4.1, B-03)
+
+    /// Every id 0-13 decodes on every entry that takes a kind; 14 does not.
+    function test_everyKindIdDecodes() public {
+        for (uint8 k; k <= 13; ++k) {
+            (bool ok,) = address(f).staticcall(abi.encodeWithSelector(f.kindEnabled.selector, k));
+            assertTrue(ok, "kindEnabled decodes");
+            (ok,) = address(f).staticcall(abi.encodeWithSelector(f.latestVersion.selector, k));
+            assertTrue(ok, "latestVersion decodes");
+            (bool c, bytes memory ret) = address(f).call(
+                abi.encodeWithSelector(f.createToken.selector, k, uint64(9), abi.encode(_normal(alice)), bytes32(uint256(k))));
+            assertFalse(c);
+            assertEq(bytes4(ret), IOpenFactory.VersionUnknown.selector, "a named refusal, not a decode failure");
+        }
+        _kindOutOfRange(abi.encodeWithSelector(f.kindEnabled.selector, uint8(14)));
+        _kindOutOfRange(abi.encodeWithSelector(f.createToken.selector, uint8(14), uint64(1), abi.encode(_normal(alice)), bytes32(0)));
+    }
+
+    /// 6 and 7, the dropped `*_ZETHER_PQZ` ids, are never reused: no release can exist, so `createToken` is `VersionUnknown`.
+    function test_retiredKindsRefusedAtDeployImplementation() public {
+        bytes memory code = type(NormalToken).creationCode;
+        for (uint8 k = 6; k <= 7; ++k) {
+            IOpenFactory.TokenKind kind = IOpenFactory.TokenKind(k);
+            vm.prank(registrar);
+            f.publishEnv(kind, 1, plainEnv(address(f), address(0), UID_, address(0), false)); // an env alone is no release
+            vm.prank(registrar);
+            vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindRetired.selector, kind));
+            f.deployImplementation(kind, 1, 1, code, "");
+            vm.prank(registrar);
+            f.setKindEnabled(kind, true);
+            vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, kind, 1));
+            f.createToken(kind, 1, abi.encode(_normal(alice)), "r");
+        }
+    }
+
+    /// 8-13 are off until published: no release (`VersionUnknown`), and `_enabled` clear (`KindDisabled`, spec §4.1).
+    function test_regulatedKindsOffUntilPublished() public {
+        for (uint8 k = 8; k <= 13; ++k) {
+            IOpenFactory.TokenKind kind = IOpenFactory.TokenKind(k);
+            assertFalse(f.kindEnabled(kind));
+            assertEq(f.latestVersion(kind), 0);
+            vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, kind, 1));
+            f.createToken(kind, 1, abi.encode(_normal(alice)), "r");
+        }
+    }
+
+    /// `createTokenUnregistered` refuses every kind from 2, the retired and the regulated ids included: unvetted code
+    /// never claims a confidential or a regulated kind. The error keeps its name.
+    function test_unregisteredRefusesEveryKindFromTwo() public {
+        for (uint8 k = 2; k <= 13; ++k) {
+            vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector, k));
+            f.createTokenUnregistered(IOpenFactory.TokenKind(k), address(normalImpl), abi.encode(_normal(alice)), "u");
+        }
+        f.createTokenUnregistered(NORMAL, address(normalImpl), abi.encode(_normal(alice)), "u"); // control
     }
 
     /// `deprecate` is immediate and refuses new tokens of that version (owner 2026-10-20); tokens already made keep
@@ -446,8 +499,9 @@ contract FactoryTest is Test {
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector, k));
             f.createTokenUnregistered(IOpenFactory.TokenKind(k), address(mine), abi.encode(_normal(alice)), "c");
         }
-        for (uint8 k = 6; k <= 7; ++k) { // D21: dropped kinds fail ABI decoding
-            _kindOutOfRange(abi.encodeWithSelector(f.createTokenUnregistered.selector, k, address(mine), abi.encode(_normal(alice)), "c"));
+        for (uint8 k = 6; k <= 13; ++k) { // the retired and the regulated ids decode and are refused (spec §4.1)
+            vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector, k));
+            f.createTokenUnregistered(IOpenFactory.TokenKind(k), address(mine), abi.encode(_normal(alice)), "c");
         }
         NormalToken other = new NormalToken(1, plainEnv(address(f), address(0), keccak256("x"), address(0), false), "");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, keccak256("x")));
@@ -461,7 +515,7 @@ contract FactoryTest is Test {
     function test_factoryOnlyForwards_theTokenValidatesFlagsAndFields() public {
         IFactoryToken.TokenConfig memory c = _normal(alice);
         c.features |= 1 << 3; // RATE_ADJUSTABLE on NORMAL
-        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, 3));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, 3));
         f.createToken(NORMAL, 1, abi.encode(c), "a");
         c = _normal(alice);
         c.rate.rateDelay = 7 days;
@@ -510,10 +564,11 @@ contract FactoryTest is Test {
         // +13 B: metatx split T2; +964 B: typed-signing R1's `UAKinds.uaSig` (`uaCancelNonce`'s `bytes auth` as the
         // registry's `UASig`, removed when C2 types the parameter); typed-signing C0: +56 B (the base's named path), +1,118 B
         // on the wrapped kind (`mtxUnwrap`, `_named`)
-        assertLe(address(normalImpl).code.length, 39_945);
+        // governance T7 (GD-18): past 39,945 B, the literal reads the baseline, so the ratchet is one number
+        assertLe(address(normalImpl).code.length, vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".NormalToken"));
         assertLe(address(f).code.length, 24_576);
         // Transitional (P1d D2): over EIP-170 until the size work (the only ceiling: 65,536 B, owner 2026-10-21); +973 B:
         // typed-signing R1's `UAKinds.uaSig`, as above
-        assertLe(address(wrappedImpl).code.length, 50_770);
+        assertLe(address(wrappedImpl).code.length, vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".WrappedToken"));
     }
 }

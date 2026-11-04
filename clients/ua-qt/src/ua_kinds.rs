@@ -18,6 +18,8 @@ pub mod qobject {
         #[qinvokable] #[cxx_name = "kindInfo"] fn kind_info(self: Pin<&mut Self>, kind: i32) -> QString;
         #[qinvokable] fn tag(self: Pin<&mut Self>, kind: i32) -> QString;
         #[qinvokable] #[cxx_name = "kindTagString"] fn kind_tag_string(self: Pin<&mut Self>, kind: i32) -> QString;
+        /// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (bits 0-21; else "" and `UAArgument`).
+        #[qinvokable] #[cxx_name = "governanceBit"] fn governance_bit(self: Pin<&mut Self>, bit: i32) -> QString;
         #[qinvokable] #[cxx_name = "groupTag"] fn group_tag(self: Pin<&mut Self>, group: &QString) -> QString;
         #[qinvokable] #[cxx_name = "groupTagString"] fn group_tag_string(self: Pin<&mut Self>, group: &QString) -> QString;
         #[qinvokable] #[cxx_name = "msgTag"] fn msg_tag(self: Pin<&mut Self>) -> QString;
@@ -266,6 +268,9 @@ impl qobject::UaKinds {
     }
     pub fn tag(self: Pin<&mut Self>, kind: i32) -> QString {
         self.hex(|| Ok(from_ua(ua::tag(k(kind)?))?.to_vec()))
+    }
+    pub fn governance_bit(self: Pin<&mut Self>, bit: i32) -> QString {
+        QString::from(&self.run(|| u8::try_from(bit).ok().and_then(ua::governance_bit).map(str::to_string).ok_or(ARG)))
     }
     pub fn kind_tag_string(self: Pin<&mut Self>, kind: i32) -> QString {
         QString::from(&self.run(|| from_ua(ua::kind_tag_string(k(kind)?))))

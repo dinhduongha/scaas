@@ -753,6 +753,16 @@ static void set_key_args() {
         CHECK(code_of([&] { setPqzKeyArgs(bad.first); }) == bad.second, bad.first);
 }
 
+// governance T14: governanceBit against governance_bits.json on disk, every row; past bit 21 UAArgument
+static void governance_bits_rows() {
+    std::ifstream f(std::string(SCAAS_UA_VECTORS_DIR) + "/../governance/governance_bits.json");
+    if (!f) { std::fprintf(stderr, "cannot open governance_bits.json\n"); std::exit(2); }
+    json v = json::parse(f);
+    CHECK(v["bits"].size() == 22, "rows 0-21");
+    for (auto& r : v["bits"]) CHECK(json::parse(governanceBit(r["bit"].get<uint8_t>())) == r, std::to_string(r["bit"].get<int>()));
+    for (int bit : {22, 127, 128, 255}) CHECK(code_of([&] { governanceBit(uint8_t(bit)); }) == "UAArgument", std::to_string(bit));
+}
+
 int main(int argc, char** argv) {
     std::map<std::string, void (*)()> tests{
         {"table_groups_purposes_constants", table_groups_purposes_constants}, {"valid_rows", valid_rows},
@@ -760,7 +770,7 @@ int main(int argc, char** argv) {
         {"messages", messages}, {"structures", structures}, {"portable", portable}, {"kem_record", kem_record},
         {"pqz_key_record", pqz_key_record}, {"membership_rows", membership_rows}, {"portable_purposes", portable_purposes},
         {"holder_refusals", holder_refusals}, {"registration_args", registration_args}, {"nested_rows", nested_rows}, {"nested_inner", nested_inner}, {"set_key_args", set_key_args},
-        {"member_sig_hashes", member_sig_hashes}};
+        {"member_sig_hashes", member_sig_hashes}, {"governance_bits_rows", governance_bits_rows}};
     if (argc != 2 || !tests.count(argv[1])) { std::fprintf(stderr, "usage: vectors_test <name>\n"); return 2; }
     try { tests[argv[1]](); } catch (const std::exception& e) { std::fprintf(stderr, "exception: %s\n", e.what()); return 1; }
     return failures ? 1 : 0;

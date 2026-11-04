@@ -15,13 +15,16 @@ import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 import {IPqzWrappedToken} from "../../src/pqz/IPqzToken.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 
 /// Plan 5h Task 3 (D10–D13, D15, D19; owner fee ruling 2026-10-20): `SHIELD_POOL` on the PQZ kinds, txFee to the
 /// beneficiary's public balance, free shields, the events (pointers, D12), the views (D13), the relayed mode binding
@@ -263,7 +266,8 @@ contract PqzPoolWrappedTest is PqzFixture {
         assertEq(w.balanceOf(MetaTxLib.SHIELD_POOL), w.totalShielded() * SCALE);
         assertGe(usd.balanceOf(address(w)), w.totalSupply(), "reserve >= totalSupply");
         x.recipient = bytes32(uint256(uint160(MetaTxLib.SHIELD_POOL)));
-        vm.expectRevert(IUALedger.ShieldPoolNotPayable.selector);
+        // governance T9 (spec §5.4): the leg's quote runs before the burn and refuses the pool as a recipient
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, MetaTxLib.SHIELD_POOL));
         w.mtxUnshieldUnwrap(_bs(pl), x, hex"c0de", _pqAuth(), "");
     }
 

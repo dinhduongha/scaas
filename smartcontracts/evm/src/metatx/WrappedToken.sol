@@ -2,7 +2,10 @@
 pragma solidity ^0.8.24;
 
 import {MetaTokenBase} from "./MetaTokenBase.sol";
-import {AdminLib} from "./AdminLib.sol";
+import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {GovernanceUse} from "../governance/GovernanceBase.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {TokenStore} from "./TokenStore.sol";
 import {WrappedLib} from "./WrappedLib.sol";
 import {IWrappedToken} from "./IWrappedToken.sol";
 import {MetaTxBase} from "./MetaTxBase.sol";
@@ -67,13 +70,23 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     constructor(uint16, Env memory env, bytes memory) MetaTokenBase(env) {}
 
     function kind() public pure virtual override returns (uint8) {
-        return AdminLib.KIND_WRAPPED;
+        return TokenStore.KIND_WRAPPED;
     }
 
     /// @dev `initialSupply`, `initialHolder`, `conf` must be empty; legs and rate are checked in `WrappedLib`.
+    function _validBits() internal pure virtual override returns (uint256) {
+        return GovernanceBits.WRAPPED_BITS;
+    }
+
+    /// @dev The `WRAPPED*` masks (spec §1.2): roles 1, 3, 4; bit 3 contract-only.
+    function _roleBits() internal pure virtual override returns (uint256) { return GovernanceBits.WRAPPED_ROLES; }
+    function _contractOnlyBits() internal pure virtual override returns (uint256) { return GovernanceBits.WRAPPED_CONTRACT_ONLY; }
+
+    /// @dev 5-9 pass the kind's mask and reach `init`'s `FeatureNotBuilt` (GD-19); `validBits()` holds none of them.
     function _init(TokenConfig memory cfg) internal virtual override {
         _requireUnused(cfg, true, false, false, true);
-        WrappedLib.initToken(cfg, IS_HEDERA, AdminLib.KIND_WRAPPED);
+        WrappedLib.initToken(cfg, IS_HEDERA, TokenStore.KIND_WRAPPED, _validBits() | GovernanceBits.REGULATED, _roleBits(),
+            _contractOnlyBits());
     }
 
     // ------------------------------------------------------------------ wrap / unwrap / reserve
@@ -200,7 +213,7 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     {
         uint256 received;
         uint256 fee;
-        (received, minted, fee) = WrappedLib.wrapBySig(u, o, sig, msg.sender);
+        (received, minted, fee) = WrappedLib.wrapBySig(u, o, sig, msg.sender, totalSupply());
         address to = o.destination == address(0) ? o.from : o.destination;
         _mint(to, minted - fee);
         if (fee != 0) _mint(msg.sender, fee);
@@ -216,7 +229,7 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     {
         uint256 received;
         uint256 fee;
-        (received, minted, fee) = WrappedLib.wrapBySigUA(u, o, auth, msg.sender);
+        (received, minted, fee) = WrappedLib.wrapBySigUA(u, o, auth, msg.sender, totalSupply());
         bytes32 to = o.destination == 0 ? o.from : o.destination;
         if (UAKinds.inNativeSpace(to)) _mint(address(uint160(uint256(to))), minted - fee);
         else _uaMint(to, minted - fee);
@@ -229,7 +242,7 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     ///      `_requireDerivedReceiver`, which also refuses 0 as a native id).
     function _wrap(uint256 i, uint256 amount, bytes32 to) private returns (uint256 minted) {
         address account = _msgSender();
-        (address u, uint256 received, uint256 m) = WrappedLib.wrap(i, amount, account, msg.value);
+        (address u, uint256 received, uint256 m) = WrappedLib.wrap(i, amount, account, msg.value, totalSupply());
         minted = m;
         if (to == 0) _mint(account, minted);
         else _uaMove(0, to, minted);
@@ -247,28 +260,50 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
         emit Unwrapped(from, u, recipient, burned, out);
     }
 
+    // ------------------------------------------------------------------ the hybrid's issuer (spec §5.2, CTR-GOV-12)
+
+    /// @notice `MINTABLE` and the `minter` role, under `maxSupply`, into a public balance; no reserve moves. Never
+    ///         allowlisted, as `NormalToken.mint`.
+    function mint(address to, uint256 amount) external nonReentrant {
+        GovernanceUse.use(GovernanceBits.MINTABLE, _govSubject(), amount);
+        WrappedLib.checkMint(totalSupply(), amount);
+        _mint(to, amount);
+    }
+
+    /// @notice `mint` into the registered SIGNING UA `to` (CTR-UA-28), its public UA balance.
+    function mintToUA(bytes32 to, uint256 amount) external nonReentrant {
+        GovernanceUse.use(GovernanceBits.MINTABLE, _govSubject(), amount);
+        WrappedLib.checkMint(totalSupply(), amount);
+        _uaMint(to, amount);
+    }
+
+    /// @notice Spec §6.2 on `WRAPPED*`: a leg's surplus over its reserve, a foreign asset whole (`WrappedLib.rescue`).
+    function rescue(address asset) external virtual override nonReentrant {
+        WrappedLib.rescue(asset);
+    }
+
     // ------------------------------------------------------------------ roles: guardian, rate admin
 
     function disableWrap(address u, bytes32 reason) external nonReentrant {
-        WrappedLib.disableWrap(u, reason, _msgSender());
+        WrappedLib.disableWrap(u, reason, _govSubject());
     }
 
     function proposeRate(address u, uint96 num, uint96 den) external nonReentrant {
-        WrappedLib.proposeRate(u, num, den, _msgSender());
+        WrappedLib.proposeRate(u, num, den, _govSubject());
     }
 
     function cancelRate() external nonReentrant {
-        WrappedLib.cancelRate(_msgSender());
+        WrappedLib.cancelRate(_govSubject());
     }
 
     function executeRate() external virtual nonReentrant {
-        WrappedLib.executeRate(_msgSender(), totalSupply());
+        WrappedLib.executeRate(_govSubject(), totalSupply());
     }
 
     /// @notice `disableFeature(RATE_ADJUSTABLE)` also cancels a pending rate change (CTR-TOK-06).
     function disableFeature(uint8 bit) external virtual override nonReentrant {
-        AdminLib.disableFeature(bit, _msgSender());
-        if (bit == AdminLib.RATE_ADJUSTABLE) WrappedLib.dropPending();
+        GovernanceLib.disableFeature(bit, _govSubject());
+        if (bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }
 
     // ------------------------------------------------------------------ allowlist (CTR-MTX-19)
@@ -338,6 +373,10 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
         return WrappedLib.collateralValue();
     }
 
+    function maxSupply() external view returns (uint256) {
+        return WrappedLib.$().maxSupply;
+    }
+
     /// @notice `(⌊amount·q⌋, ⌈minted/q⌉)`: clients round `amount` down to `used` so no dust stays in the reserve.
     ///         Ignores fee-on-transfer (assumes `received == amount`).
     function previewWrap(address u, uint256 amount) external view returns (uint256 minted, uint256 used) {
@@ -349,7 +388,7 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     }
 
     function rateAdjustable() external view returns (bool) {
-        return AdminLib.hasFeature(AdminLib.RATE_ADJUSTABLE);
+        return GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE);
     }
 
     function rateDelay() external view returns (uint32) {

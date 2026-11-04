@@ -1,0 +1,12 @@
+# governance T15 mutants at efa7f54f (clean tree), each one change, suite `cd scaas-node && ../scripts/capped cargo test -j2 --lib -- typed:: guard::`
+# (33 tests), restored by git checkout -- <file> after each.
+# red first: at e50c7e45 (the router's rows in typed_ops.json, none in the node) typed_ops_kat_every_entry, digest_and_calldata_cannot_diverge,
+# guard_allows_every_named_entry_only and submit job_api_explicit_json_roundtrip panic "no row AcceptOwnership on gov_router" (rc=101).
+mutant | test that went red | rc
+m1 an allow-list entry on the node side only: the token's Burn row also on gov_router | guard::allow_lists_equal_the_selector_audit_both_directions, guard::a_router_op_relayed_through_the_relay_fee_checks_the_inner_target, typed::router_ops_are_named_and_refuse_hex | 101
+m2 an allow-list entry on the router side only: the mtxSetFeeSplit row removed from the node | guard::allow_lists_equal_the_selector_audit_both_directions, guard::guard_allows_every_named_entry_only, typed::typed_ops_kat_every_entry, typed::digest_and_calldata_cannot_diverge | 101
+m3 a hex form accepted: op.data / op.calldata skipped instead of HEX_DATA_REFUSED | typed::router_ops_are_named_and_refuse_hex, typed::hex_fields_are_refused_by_name_and_a_declared_bytes_field_is_not, typed::relay_fee_call_object | 101
+m4 a decode bound dropped: the uint width check of parse (GrantTerms' uint128 / uint64 / uint32 fields) | typed::grant_terms_decode_is_bounded | 101
+m5 the router target rule dropped from allowed (a gov_router row on any bound address, a router as any kind's target) | guard::each_rule_needs_its_target, guard::a_router_job_runs_only_on_a_configured_router | 101
+m6 the relay path's inner rule one direction dropped: a router entry relayed to an unconfigured contract | guard::a_router_op_relayed_through_the_relay_fee_checks_the_inner_target, guard::the_guards_relay_branch_runs_the_router_rule | 101
+m7 the guard's relay branch no longer calls relay_inner_ok | guard::the_guards_relay_branch_runs_the_router_rule | 101

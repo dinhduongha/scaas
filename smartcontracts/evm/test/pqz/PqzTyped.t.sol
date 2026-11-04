@@ -23,6 +23,7 @@ import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 
 string constant T_TRANSFER = '"PqzTransferArgs":[{"name":"p","type":"uint64"},{"name":"validUntilBlock","type":"uint256"},{"name":"shieldIn","type":"uint256"},'
     '{"name":"fromUA","type":"bytes32"},{"name":"toUA","type":"bytes32"},{"name":"beneficiaryUA","type":"bytes32"},{"name":"salt","type":"bytes16"},'
@@ -1049,14 +1050,16 @@ contract PqzTypedRowsTest is PqzNamedBase {
         _both(op, abi.encodeWithSignature(_head(op), _uaE(op), _burn(op), _payout(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IUALedger.UANotRegistered.selector);
     }
 
+    /// governance T9 (spec §5.4): the leg's quote runs before the burn, so the row's underlying, no leg of `w`, is the op's
+    /// first own check (`UnknownUnderlying`; `BadPayload` before).
     function test_typedOpsVectors_PqzUnshieldUnwrap() public {
         string memory op = "PqzUnshieldUnwrap";
-        _reach(op, address(w), abi.encodeWithSignature(_head(op), rowEnvelope(j, op), _burn(op), _unwrap(op), _proofOf(op), _pa(op), _hint(op), _sig(op)), IPqzToken.BadPayload.selector);
+        _reach(op, address(w), abi.encodeWithSignature(_head(op), rowEnvelope(j, op), _burn(op), _unwrap(op), _proofOf(op), _pa(op), _hint(op), _sig(op)), IWrappedToken.UnknownUnderlying.selector);
     }
 
     function test_typedOpsVectors_UAPqzUnshieldUnwrap() public {
         string memory op = "UAPqzUnshieldUnwrap";
-        _reach(op, address(w), abi.encodeWithSignature(_head(op), _uaE(op), _burn(op), _unwrap(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IPqzToken.BadPayload.selector);
+        _reach(op, address(w), abi.encodeWithSignature(_head(op), _uaE(op), _burn(op), _unwrap(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IWrappedToken.UnknownUnderlying.selector);
     }
 
     function test_typedOpsVectors_WrapShield() public {

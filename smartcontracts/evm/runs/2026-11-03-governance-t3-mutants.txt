@@ -1,0 +1,13 @@
+# governance T3 mutants at 59823417 (clean tree), each one change, suite test/{governance/*,v2/Layout,metatx/GovernanceLib}.t.sol,
+# restored by git checkout -- <file> after each.
+mutant | test that went red | rc
+m1 governed off setMarket | test_dexPowerRefusedInsideASettlement (NothingSettled(): with setMarket running inside, mtxSettle settles nothing) | 1
+m2 governed off setFeeSplit | test_dexPowerRefusedInsideASettlement (errs(3) 0 != ReentrancyGuardReentrantCall) | 1
+m3 use skipping LIMITED (LIMITED returns as WHOLE) | test_limitedUseIsOneDelegatecall, test_editNeverRefreshesABudget, test_mintToUABoundToo, 7 test_attack_* and test_refuted_reGrantThroughAnotherParentRefreshes, test_attack_leafKeepsAScopeItsParentLost | 1
+m4 WRAPPED mask equal to NORMAL's (WrappedToken._roleBits = NORMAL_ROLES) | test_normalKindHasNoRateRole, test_wrappedPowerIsBound, test_attack_revokedRateAdminsProposalOutlivesIt | 1
+m5 compliance back to bit 8 | test_complianceWordIsBitTen, test_initialRoles_onlyForSetFlags | 1
+m6 the REGULATED or-term dropped from NormalToken's init | test_regulatedBitsRefusedOnPlainKinds (FeatureInvalidForKind(5) != FeatureNotBuilt(5)) | 1
+m7 REGULATED back in NormalToken._validBits() | test_validBitsHoldsNoRegulatedBit (992 != 0) | 1
+m8 GovernanceStorage: epoch and pending swapped | test_namespaceRootsAndOffsetsArePinned (epoch[1][A]: 137 != 136) | 1
+m9 initHolder replaced by grantRole in SCaaSDex.initialize | test_dexInitHoldsBothBitsThroughInitHolder (initHolder, once per bit: 0 != 2) | 1
+# survivors: none

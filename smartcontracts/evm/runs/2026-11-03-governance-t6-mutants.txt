@@ -1,0 +1,31 @@
+# governance T6 mutants at ead16677 (clean tree), each one change, suite test/governance/*.t.sol,
+# restored by git checkout -- <file> after each.
+mutant | test that went red | rc
+m1 the live-grantor check dropped (revokeRole: grantor still holds) | test_fixed_revokedGrantorStripsAnOwnerGrantedHolder | 1
+m2 barred never set by the owner's revoke | test_counts_row9, test_fixed_parentGrantsBackALeafTheOwnerRevoked, test_leafThatRenouncesFirstIsBarred, test_ownerReadmitsABarredAccount | 1
+m3 barred set only on a holder (after the early return) | test_counts_row9, test_leafThatRenouncesFirstIsBarred | 1
+m4 barred never read on the leaf path | test_fixed_parentGrantsBackALeafTheOwnerRevoked, test_leafThatRenouncesFirstIsBarred, test_ownerReadmitsABarredAccount | 1
+m5 roots replaced by holders in the renounce rule | test_counts_row2, test_fixed_deadLeavesBlockTheRenounce | 1
+m6 roots + 1 dropped on row 4 (owner's setGrant on a leaf) | test_counts_row4 | 1
+m7 roots + 1 dropped on row 5 (owner's grantRole on a leaf) | test_counts_row5 | 1
+m8 the owner's apply keeps a stale grantor, so _clear decides on it | test_counts_row1, test_counts_row4, test_counts_row5, test_fixed_revokedGrantorStripsAnOwnerGrantedHolder, test_ownerReadmitsABarredAccount | 1
+m9 owner != 0 dropped on the leaf path | test_fixed_afterRenounceALockedBitsHolderAddsHolders | 1
+m10 the parent's expiry dropped on the leaf path | test_expiredParentAddsNobody | 1
+m11 maxUses against p.maxUses, not what remains | test_exhaustedParentAddsNobody, test_leafMaxUsesByWhatRemains | 1
+m12 no epoch bump on a scope change | test_fixed_leafKeepsAScopeItsParentLost | 1
+m13 no epoch bump on a delegation's end | test_fixed_endingDelegationLeavesTheLeaves | 1
+m14 no epoch bump on an upgrade (_grant over LIMITED) | test_fixed_wholeThenLimitedRevivesLeaves | 1
+m15 GrantWindowInUse dropped | test_fixed_changingTheWindowRefreshesTheBudget, test_wholeHolderStaleWindowRefusesNothing, test_windowChangeAfterBothGridsPassed, test_windowChangeIntoASpentPeriodRefused | 1
+m16 the new-grid arm dropped (old-grid check only: start = now) | test_wholeHolderStaleWindowRefusesNothing, test_windowChangeAfterBothGridsPassed, test_windowChangeIntoASpentPeriodRefused | 1
+m17 the WHOLE skip dropped | test_wholeHolderStaleWindowRefusesNothing | 1
+m18 the leaf's window equal to the parent's dropped | test_fixed_aLeafsWindowIsNotNarrowed | 1
+m19 a subtraction back in _narrows (t.total > p.total - p.spentTotal) | test_fixed_narrowingBelowSpentPanicsTheLeafPath | 1
+# RESULTS' seven
+m20 no parent debit | test_exhaustedParentAddsNobody, test_fixed_delegableHolderAddsAHolderWithNoOwnerCall, test_fixed_leafKeepsAScopeItsParentLost, test_leafDebitsItsParent | 1
+m21 no epoch bump at a revoke | test_revokingTheParentKillsLeaves_andAGrantBackDoesNotRevive | 1
+m22 an edit refreshes spent (spentTotal = 0 in _write) | test_editNeverRefreshesABudget, test_fixed_leafKeepsAScopeItsParentLost, test_fixed_narrowingBelowSpentPanicsTheLeafPath, test_refuted_reGrantThroughAnotherParentRefreshes | 1
+m23 a wrapped power skips use (WrappedLib, WRAP_DISABLEABLE) | test_wrappedPowerIsBound | 1
+m24 no renounce rule | test_counts_row4, test_counts_row5, test_expiredRootCountsUntilRevoked, test_fixed_deadLeavesBlockTheRenounce, test_renounceRefusedWhileAnUnlockedBitHasHolders | 1
+m25 _narrows skips total | test_exhaustedParentAddsNobody, test_fixed_narrowingBelowSpentPanicsTheLeafPath, test_leafMustNarrow, test_refuted_holderWidensItself | 1
+m26 a leaf may delegate | test_leafMustNarrow, test_refuted_holderWidensItself | 1
+# survivors: none

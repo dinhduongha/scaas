@@ -292,7 +292,8 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     /// @notice The signer inside the one self-call of step 5 (live ticket), else `msg.sender` (CTR-MTX-18). A derived
     ///         UA signer (top 96 bits non-zero) is `UA_POOL`: its balance is the pool's sub-ledger (CTR-UA-18). A direct
     ///         caller that is an EIP-7702 designator reverts `CallerDelegated`: its delegate's code is running as the EOA
-    ///         (owner ruling 2026-10-30, D2); it acts through a relayed, key-signed `mtx*` instead.
+    ///         (owner ruling 2026-10-30, D2); it acts through a relayed, key-signed `mtx*`, or, for an owner operation,
+    ///         through the chain's `GovernanceRouter`.
     function _msgSender() internal view virtual override returns (address) {
         if (msg.sender == address(this) && _tload(_TICKET) != 0) {
             uint256 s = _tload(_SENDER);
@@ -317,7 +318,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
 
     /// @dev The body of `nonReentrant`, one copy for every entry (lever 2, owner 2026-11-01). Returns whether this frame
     ///      holds the guard; only the self-call under a live ticket may enter it again, and that consumes the ticket.
-    function _enter() private returns (bool outer) {
+    function _enter() internal returns (bool outer) {
         outer = _tload(_GUARD) == 0;
         if (outer) {
             _tstore(_GUARD, 1);
@@ -327,7 +328,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         }
     }
 
-    function _exit(bool outer) private {
+    function _exit(bool outer) internal {
         if (outer) _tstore(_GUARD, 0);
     }
 

@@ -30,7 +30,7 @@ init)
   PW=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
   printf '%s' "$PW" > "$COPY/password.txt"
   cast wallet new --json > "$COPY/signer.json"
-  PK=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))[0]["private_key"])' "$COPY/signer.json")
+  PK=$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print((d["data"] if "data" in d else d)[0]["private_key"])' "$COPY/signer.json")
   ADDR=$(cast wallet address --private-key "$PK")
   cast wallet import signer --private-key "$PK" --keystore-dir "$COPY/keystore" --unsafe-password "$PW" > /dev/null
   LOW=$(echo "$ADDR" | tr 'A-F' 'a-f' | sed 's/^0x//')

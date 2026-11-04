@@ -23,7 +23,7 @@ export ZETHER_CLI="${ZETHER_CLI:-$ROOT/clients/zether-prover/target/release/zeth
 if [ -z "${RPC:-}" ]; then
   PORT="${PORT:-18545}"
   RPC="http://127.0.0.1:$PORT"
-  anvil --chain-id 31337 --hardfork amsterdam --gas-limit 200000000 --code-size-limit 65536 --port "$PORT" --silent &
+  anvil --chain-id 31337 --hardfork amsterdam --gas-limit 200000000 --code-size-limit 131072 --port "$PORT" --silent &
   ANVIL=$!
   trap 'kill "$ANVIL" 2>/dev/null || true' EXIT
   for _ in $(seq 50); do cast chain-id --rpc-url "$RPC" >/dev/null 2>&1 && break; sleep 0.2; done

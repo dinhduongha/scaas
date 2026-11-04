@@ -21,6 +21,7 @@ import {Burner1271, Bomb1271} from "./Dex.t.sol";
 import {Sweeper} from "../metatx/Sweeper7702.t.sol";
 import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// ERC-1271 wallet that needs ~100 k gas to say "valid": passes under 400 k (a `SmartKeyAccount` clone), not under 50 k.
 contract Work1271 {
@@ -155,7 +156,7 @@ contract DexOutsideTest is Test {
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), work, false);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, work);
         a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 0, 1e6, alice, address(0))), "a"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(admin, 0, treasury, false)), "dex"));
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))), "dex"));
         usdc = _list(new MockERC20("USD Coin", "USDC", 6));
         _fund(usdc, dave);
     }

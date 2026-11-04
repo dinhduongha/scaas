@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {AdminLib} from "../metatx/AdminLib.sol";
+import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {TokenStore} from "../metatx/TokenStore.sol";
 
 // Positions in `IFactoryToken.Env.deps` (plan 5g-Z2): the `*_ZETHER` kinds' transfer, burn and inner-product verifiers
 // and `ZetherDisclosure` of one curve (CTR-ZTH-20); the `*_PQZ` kinds' `UAPqzVerifier`.
@@ -35,6 +37,9 @@ interface IFactoryToken {
         address[] deps;
         address[] libs;
         bytes32[] libCodeHashes;
+        /// This chain's `GovernanceRouter` (0 = none): every governed contract of the release takes it as `GOV_ROUTER`
+        /// (CTR-GOV-01 Change, owner 2026-11-04).
+        address govRouter;
     }
 
 
@@ -81,16 +86,19 @@ interface IFactoryToken {
         uint8 decimals;
         uint256 features;
         uint256 lockedFeatures;
-        address owner;               // 0 = no administration ever
-        AdminLib.Roles roles;        // initial holders, each only for a set flag
+        bytes32 owner;               // a UA id (a native account: its padded address); 0 = no administration ever
+        GovernanceLib.Roles roles;        // initial holders, each only for a set flag
         uint256 initialSupply;       // NORMAL* only
         address initialHolder;       // NORMAL* only
         Leg[] legs;                  // WRAPPED* only, 1..8
         RateConfig rate;             // WRAPPED* only, with RATE_ADJUSTABLE
         ConfidentialConfig conf;     // *_ZETHER only
+        uint64 grantDelay;           // spec §1.6: the owner's two calls, at most 30 days; 0 = one call
+        address rescueTo;            // spec §6.2: with `RESCUABLE` only, immutable; never the token or a pool
+        uint256 maxSupply;           // WRAPPED* only, spec §5.2: the hybrid's cap, with `MINTABLE` only; 0 = no hybrid
     }
 
-    /// @notice A field set for another kind (`field`: 1 initialSupply/initialHolder, 2 legs, 3 rate, 4 conf).
+    /// @notice A field set for another kind (`field`: 1 initialSupply/initialHolder, 2 legs, 3 rate, 4 conf, 5 maxSupply).
     error ConfigFieldForOtherKind(uint8 field);
 
     /// @notice Called by the factory only, in the same call as the clone's `CREATE2`; `initArgs` is the creator's,

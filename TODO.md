@@ -672,6 +672,10 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   which delay, lockable or not). Covers smart-contract governance (releases, Env versions, `deployImplementation` — owner:
   it must not simply bind the kind's latest Env) and token governance (today's `features` / `lockedFeatures`, `AdminLib`
   roles, `owner = 0`, `RATE_ADJUSTABLE` with `rateDelay` / `maxRateStepBps`). Spec first (owner rule), then Z2 follows it.
+  - Status 2026-11-04: tokens and the DEX BUILT on branch `governance` (CTR-GOV-01 to -19; the matrix is §7 of
+    `docs/superpowers/specs/2026-11-02-governance.md`; `AdminLib` is now `GovernanceLib`). Open: the factory's own powers
+    (bits 18-20, no code), CTR-GOV-07 (Part D7 for Soroban, then each family's round), the regulated implementations,
+    later contract families.
   - Inputs (owner 2026-10-21, chat): (1) **mint allowance per minter** — `{total, perWindow, window, expiry}`, two-tier
     (USDC masterMinter pattern), a reduce-only role; (2) **moderator transfer** of a user's balance without the user's
     signature (loyalty points), bounded by a per-moderator total and per window (same primitive as (1)), own event,

@@ -6,7 +6,9 @@ import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialTok
 import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -15,6 +17,7 @@ import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// Random shield / wrap-shield / transfer / roll-over / unshield / unshield-unwrap / unwrap / rate-change sequences on one
 /// `WRAPPED_ZETHER` token (legs 1:1 and 3/7, rate-adjustable, bn254, no auditor), real proofs; the plaintext balances
@@ -44,8 +47,9 @@ contract ZetherHandler is ZetherFixture {
             type(WrappedZetherToken).creationCode)));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals) = ("Z", "Z", 6);
-        c.features = (1 << AdminLib.PAYABLE) | (1 << AdminLib.RATE_ADJUSTABLE);
-        c.roles.rateAdmin = address(this);
+        c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.RATE_ADJUSTABLE);
+        c.roles.rateAdmin = nid(address(this));
+        c.lockedFeatures = 1 << GovernanceBits.RATE_ADJUSTABLE; // no owner: the rate admin survives creation on a locked bit (B-06, GD-14)
         c.rate = IFactoryToken.RateConfig(2 days, 1000);
         c.legs = new IFactoryToken.Leg[](2);
         c.legs[0] = IFactoryToken.Leg(address(leg[0]), 1, 1);

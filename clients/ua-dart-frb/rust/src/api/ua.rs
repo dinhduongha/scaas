@@ -69,6 +69,13 @@ impl TryFrom<UaDomain> for scaas_ua::Domain {
     }
 }
 
+/// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (spec 2026-11-02-governance §1.2): bits 0-21,
+/// any other `UAArgument`.
+#[frb(sync)]
+pub fn governance_bit(bit: i64) -> R<String> {
+    scaas_ua::governance_bit(n(bit)?).map(str::to_string).ok_or_else(arg)
+}
+
 #[frb(sync)]
 pub fn kind_info(kind: i64) -> R<KindInfo> {
     let k = scaas_ua::kind_info(k(kind)?)?;

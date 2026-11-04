@@ -7,7 +7,10 @@ import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
 import {UAMetaTxBase} from "../metatx/UAMetaTxBase.sol";
 import {MetaTxBase} from "../metatx/MetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
-import {AdminLib} from "../metatx/AdminLib.sol";
+import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {TokenStore} from "../metatx/TokenStore.sol";
+import {GovernanceBase} from "../governance/GovernanceBase.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 import {SigCheck} from "../common/SigCheck.sol";
@@ -32,13 +35,18 @@ contract NormalPqzToken is NormalToken, PqzLayer {
     }
 
     function kind() public pure override(NormalToken, MetaTokenBase) returns (uint8) {
-        return AdminLib.KIND_NORMAL_PQZ;
+        return TokenStore.KIND_NORMAL_PQZ;
+    }
+
+    function _validBits() internal pure override(NormalToken, GovernanceBase) returns (uint256) {
+        return GovernanceBits.NORMAL_BITS;
     }
 
     function _init(TokenConfig memory cfg) internal override(NormalToken, MetaTokenBase) {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-        AdminLib.init(AdminLib.KIND_NORMAL_PQZ, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
+        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles, _validBits(),
+            _roleBits(), _contractOnlyBits());
         PqzStateLib.init(cfg.conf, _REGISTRY, PQZ_VERIFIER);
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
