@@ -18,7 +18,7 @@ import {UALedgerBase} from "./UALedgerBase.sol";
 /// Random mixes of native moves, mints, burns, `transferToUA`, the UA transfer entries (`mtxExecuteTransfer`, the named
 /// `mtxTransfer` / `mtxTransferWithFee`, `mtxBatchTransfer`; any side native or derived, with or without a fee) on the NORMAL
 /// clone and on the 1:1 WRAPPED clone `wrp`, plus wrap, wrap→UA and the burn under a derived UA (`unwrap` through
-/// `uaExecute` or the named `uaUnwrap`, optionally with a fee after the self-call), and the `UA_POOL` `transferFrom` refusal.
+/// `mtxExecute` or the named `mtxUnwrap`, optionally with a fee after the self-call), and the `UA_POOL` `transferFrom` refusal.
 /// UA-5a (CTR-UA-28, CTR-UA-26, CTR-MTX-05): `wrapToUA` on `wrp` and on the native-leg `wrpN`, `mintToUA`,
 /// `payWithFeeToUA`, `burn` under a derived UA, wraps of the ledger-leg `wrpL` (leg `tok` at 3/2, wrapped by this
 /// handler, a contract; `wrap` or `wrapToUA`), `unwrapToUA` from `wrpL` (direct by a native, or under `uaExecute` by a
@@ -118,7 +118,7 @@ contract UALedgerHandler is Test {
     }
 
     /// The burn under a derived UA, `amt` to `recipient`: `unwrap(und, amt, recipient, 0)` as `uaExecute` or `unwrap(amt,
-    /// recipient, 0)` as the named `uaUnwrap` (TS-D14), optionally with a 1 % fee paid after the self-call. `amt + fee` is
+    /// recipient, 0)` as the named `mtxUnwrap` (TS-D14), optionally with a 1 % fee paid after the self-call. `amt + fee` is
     /// bounded to the UA's balance.
     function unwrapUnder(uint256 fromIdx, uint256 amount, bool withFee, bool viaNamed) external {
         bytes32 f = uas[fromIdx % 2];
@@ -141,7 +141,7 @@ contract UALedgerHandler is Test {
             MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(f, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient);
             bytes memory sig = _auth(3 + fromIdx % 2, _unwrapDigest(e, amount, recipient));
             vm.prank(RELAYER);
-            WrappedToken(address(wrp)).uaUnwrap(e, amount, recipient, 0, UACall.auth(f, sig));
+            WrappedToken(address(wrp)).mtxUnwrap(e, amount, recipient, 0, UACall.auth(f, sig));
         } else {
             bytes memory auth = _auth(3 + fromIdx % 2, wrp.mtxDigest(m));
             vm.prank(RELAYER);

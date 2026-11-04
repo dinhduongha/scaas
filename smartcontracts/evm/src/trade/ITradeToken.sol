@@ -45,24 +45,9 @@ interface ITradeToken {
         uint256 validUntil;
     }
 
-    /// @notice A wrap by signature (CTR-TOK-20, TS-D19), signed in the underlying's domain: `TradeOrder` without `dex`, the
-    ///         wrapped token being both what the signer receives and the only contract that may pull.
-    struct WrapOrder {
-        address from;
-        address wrappedToken;  // receives `amount` of this token and mints
-        uint256 amount;
-        uint256 minMinted;     // signed price limit, gross of the fee
-        uint256 minFill;
-        uint256 fee;           // the submitter's part of the minted units, in ppm; <= 10 000 (1 %)
-        address relayer;       // the only submitter allowed (0 = anyone)
-        address destination;   // receives the minted units; 0 = from
-        uint8 flags;
-        uint256 batch;
-        uint256 nonce;
-        uint256 validUntil;
-    }
-
-    /// @notice `WrapOrder` with `from` and `destination` as ids, the same 12 ABI words in the same order.
+    /// @notice A wrap by signature (CTR-TOK-20, TS-D19, R39), signed in the underlying's domain: `UATradeOrder` without
+    ///         `dex`, the wrapped token being both what the signer receives and the only contract that may pull. The
+    ///         address `WrapOrder` is in legacy/ua-mtx-merge/.
     struct UAWrapOrder {
         bytes32 from;
         address wrappedToken;

@@ -67,7 +67,7 @@
    "error": ""
   },
   {
-   "sig": "mtxBurn((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes)",
+   "sig": "mtxBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -194,11 +194,6 @@
   {
    "sig": "transferToUA(bytes32,uint256)",
    "class": "OWN_BALANCE",
-   "error": ""
-  },
-  {
-   "sig": "uaBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
    "error": ""
   },
   {
@@ -364,17 +359,17 @@
    "error": ""
   },
   {
-   "sig": "mtxUnwrap((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,bytes)",
+   "sig": "mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxUnwrapLeg((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,bytes)",
+   "sig": "mtxUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxUnwrapToUA((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,bytes)",
+   "sig": "mtxUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -389,7 +384,7 @@
    "error": ""
   },
   {
-   "sig": "mtxWrapOrder(address,(address,address,uint256,uint256,uint256,uint256,address,address,uint8,uint256,uint256,uint256),bytes)",
+   "sig": "mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -480,26 +475,6 @@
   },
   {
    "sig": "uaTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -606,7 +581,7 @@
    "error": ""
   },
   {
-   "sig": "mtxBurn((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes)",
+   "sig": "mtxBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -823,11 +798,6 @@
   {
    "sig": "transferToUA(bytes32,uint256)",
    "class": "OWN_BALANCE",
-   "error": ""
-  },
-  {
-   "sig": "uaBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
    "error": ""
   },
   {
@@ -1138,17 +1108,17 @@
    "error": ""
   },
   {
-   "sig": "mtxUnwrap((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,bytes)",
+   "sig": "mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxUnwrapLeg((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,bytes)",
+   "sig": "mtxUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxUnwrapToUA((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,bytes)",
+   "sig": "mtxUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1163,7 +1133,7 @@
    "error": ""
   },
   {
-   "sig": "mtxWrapOrder(address,(address,address,uint256,uint256,uint256,uint256,address,address,uint8,uint256,uint256,uint256),bytes)",
+   "sig": "mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1318,26 +1288,6 @@
    "error": ""
   },
   {
-   "sig": "uaUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
    "sig": "unwrap(address,uint256,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
@@ -1440,7 +1390,7 @@
    "error": ""
   },
   {
-   "sig": "mtxBurn((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes)",
+   "sig": "mtxBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1647,11 +1597,6 @@
   {
    "sig": "transferToUA(bytes32,uint256)",
    "class": "OWN_BALANCE",
-   "error": ""
-  },
-  {
-   "sig": "uaBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
    "error": ""
   },
   {
@@ -1947,17 +1892,17 @@
    "error": ""
   },
   {
-   "sig": "mtxUnwrap((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,bytes)",
+   "sig": "mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxUnwrapLeg((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,bytes)",
+   "sig": "mtxUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxUnwrapToUA((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,bytes)",
+   "sig": "mtxUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1972,7 +1917,7 @@
    "error": ""
   },
   {
-   "sig": "mtxWrapOrder(address,(address,address,uint256,uint256,uint256,uint256,address,address,uint8,uint256,uint256,uint256),bytes)",
+   "sig": "mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -2118,26 +2063,6 @@
   },
   {
    "sig": "uaUnshieldUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,bytes32,bytes,bytes),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },

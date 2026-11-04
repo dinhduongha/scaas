@@ -125,9 +125,10 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     }
 
     /// @notice CTR-DEX-25: `mtxTrade` for an id; the UA rule under purpose `trade` (a native id signs `h` itself); the
-    ///         fill moves through the UA ledger (a derived seller: `Transfer(UA_POOL, dex)` + `UATransfer`).
+    ///         fill moves through the UA ledger (a derived seller: `Transfer(UA_POOL, dex)` + `UATransfer`). A registry
+    ///         is needed only for a derived seller (C, R9: `authorize` refuses it `UALedgerOff` by name), so a native
+    ///         holder's wrap order (`WrappedToken.mtxWrapOrder`, R39) runs on a token with no registry.
     function uaTrade(UATradeOrder calldata o, IUARegistry.UASig calldata auth, TradeFill calldata f) external nonReentrant {
-        _uaOn();
         bytes32 h = uaTradeOrderDigest(o);
         UATradeOrder memory c = o;
         TradeLib.precheck(c, f, h, msg.sender, address(this));

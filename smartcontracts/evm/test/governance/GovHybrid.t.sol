@@ -139,42 +139,24 @@ contract GovHybridTest is UALedgerBase {
         w.wrapToUA(address(und), 1, uaP);
     }
 
-    function _wrapOrder(WrappedToken w, uint256 amount, uint256 nonce) internal view returns (ITradeToken.WrapOrder memory o) {
-        (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill) = (alice, address(w), amount, amount, amount);
-        (o.batch, o.nonce, o.validUntil) = (7, nonce, block.timestamp + 300);
-    }
-
-    function test_capHolds_mtxWrapOrder() public {
-        WrappedToken w = _hybrid(address(tok), CAP);
-        ITradeToken.WrapOrder memory o = _wrapOrder(w, CAP, 1);
-        bytes memory sig = _ecdsa(ALICE_PK, tok.tradeOrderDigest(DexLegs.asTrade(o)));
-        vm.prank(RELAYER);
-        w.mtxWrapOrder(address(tok), o, sig);
-        assertEq(w.totalSupply(), CAP);
-        o = _wrapOrder(w, 1, 2);
-        sig = _ecdsa(ALICE_PK, tok.tradeOrderDigest(DexLegs.asTrade(o)));
-        vm.expectRevert(_over(CAP + 1));
-        vm.prank(RELAYER);
-        w.mtxWrapOrder(address(tok), o, sig);
-    }
-
     function _uaWrapOrder(WrappedToken w, uint256 amount, uint256 nonce) internal view returns (ITradeToken.UAWrapOrder memory o) {
         (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill) = (_pad(alice), address(w), amount, amount, amount);
         (o.relayer, o.batch, o.nonce, o.validUntil) = (RELAYER, 1, nonce, block.timestamp + 300);
     }
 
-    function test_capHolds_uaWrapOrder() public {
+    /// The merged `mtxWrapOrder` (R39: `UAWrapOrder` + `UASig`; the address `WrapOrder` entry is in legacy/ua-mtx-merge/).
+    function test_capHolds_mtxWrapOrder() public {
         WrappedToken w = _hybrid(address(tok), CAP);
         ITradeToken.UAWrapOrder memory o = _uaWrapOrder(w, CAP, 1);
         bytes memory sig = _ecdsa(ALICE_PK, tok.uaTradeOrderDigest(DexLegs.asTrade(o)));
         vm.prank(RELAYER);
-        w.uaWrapOrder(address(tok), o, UACall.auth(o.from, sig));
+        w.mtxWrapOrder(address(tok), o, UACall.auth(o.from, sig));
         assertEq(w.totalSupply(), CAP);
         o = _uaWrapOrder(w, 1, 2);
         sig = _ecdsa(ALICE_PK, tok.uaTradeOrderDigest(DexLegs.asTrade(o)));
         vm.expectRevert(_over(CAP + 1));
         vm.prank(RELAYER);
-        w.uaWrapOrder(address(tok), o, UACall.auth(o.from, sig));
+        w.mtxWrapOrder(address(tok), o, UACall.auth(o.from, sig));
     }
 
     function test_capHolds_mint() public {

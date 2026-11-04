@@ -8,6 +8,7 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
+import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
@@ -295,8 +296,14 @@ contract UATradeTest is UALedgerBase {
             new NormalToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
         off.initialize(address(this), 1, abi.encode(normalInit("Off", "OFF", 6, 1_000_000, alice, address(this))));
         ITradeToken.UATradeOrder memory o = _o(_pad(alice), 1000, 2000);
-        vm.expectRevert(IUALedger.UALedgerOff.selector);
+        // ua-mtx-merge T3, meaning (C, R9; pulled forward from T6 for R39's `mtxWrapOrder`): `uaTrade` needs a registry only
+        // for a derived seller; a native seller's order is checked by its own key (here an empty signature, refused), the
+        // derived seller is `UALedgerOff` by name
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         off.uaTrade(o, UACall.auth(o.from, ""), _f(600, 1200, 0));
+        ITradeToken.UATradeOrder memory d = _o(uaP, 1000, 2000);
+        vm.expectRevert(IUALedger.UALedgerOff.selector);
+        off.uaTrade(d, UACall.auth(d.from, ""), _f(600, 1200, 0));
         vm.expectRevert(IUALedger.UALedgerOff.selector);
         off.uaCancelOrder(o, UACall.auth(o.from, ""));
         vm.expectRevert(IUALedger.UALedgerOff.selector);

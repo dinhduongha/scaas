@@ -16,9 +16,6 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 ///         rate limit, if an issuer needs one, lives in its minter contract. Built by `OpenFactory.createToken`
 ///         (CTR-TOK-25): `initialSupply` is minted to `initialHolder`; `legs`, `rate`, `conf` must be empty.
 contract NormalToken is MetaTokenBase {
-    bytes32 internal constant BURN_TYPEHASH = keccak256(
-        "Burn(address from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
     bytes32 internal constant UA_BURN_TYPEHASH = keccak256(
         "UABurn(bytes32 from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
@@ -62,14 +59,9 @@ contract NormalToken is MetaTokenBase {
         _burn(_msgSender(), amount);
     }
 
-    /// @notice The signed `burn(amount)` (TS-D14), `AMOUNT(0)` as on the generic path.
-    function mtxBurn(MetaTxLib.Envelope calldata e, uint256 amount, bytes calldata sig)
-        external nonReentrant returns (bytes memory)
-    {
-        return _named(BURN_TYPEHASH, this.burn.selector, e, abi.encode(amount), sig);
-    }
-
-    function uaBurn(MetaTxLib.UAEnvelope calldata e, uint256 amount, IUARegistry.UASig calldata auth)
+    /// @notice The signed `burn(amount)` (TS-D14, ua-mtx-merge R23: today's `uaBurn` under this name), `AMOUNT(0)` as on
+    ///         the generic path: a native id by its own key with no registry, a derived UA through the registry.
+    function mtxBurn(MetaTxLib.UAEnvelope calldata e, uint256 amount, IUARegistry.UASig calldata auth)
         external nonReentrant returns (bytes memory)
     {
         return _namedUA(UA_BURN_TYPEHASH, this.burn.selector, e, abi.encode(amount), auth);

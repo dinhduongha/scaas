@@ -142,10 +142,12 @@ function domainOf(address c) view returns (bytes32) {
     return keccak256(abi.encode(SALTED_DOMAIN, keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt));
 }
 
-string constant UNWRAP_FIELDS = '{"name":"from","type":"address"},{"name":"wrapped","type":"uint256"},{"name":"recipient","type":"address"},{"name":"minOut","type":"uint256"}';
+string constant UNWRAP_FIELDS = '{"name":"from","type":"bytes32"},{"name":"wrapped","type":"uint256"},{"name":"recipient","type":"address"},{"name":"minOut","type":"uint256"}';
 
 /// C0 (TS-D14): a named entry takes the wallet's typed signature and runs the op on the kept generic pipeline; the
-/// generic `mtxExecute` stays beside it on the same `(from, batch)` lane.
+/// generic path stays beside it on the same `(from, batch)` lane. ua-mtx-merge T3 (R23), meaning: the named entry is the
+/// merged `mtxUnwrap(UAEnvelope, …, UASig)` over `UAUnwrap` (the holder's id zero-padded, its own key); the generic
+/// path beside it is the address `executeMetaTransaction` (R3). The address form is in legacy/ua-mtx-merge/.
 contract NamedUnwrapTest is V2Fixture {
     uint256 constant PK = 0xA11CE;
     uint256 constant LANE = 7;
@@ -164,8 +166,8 @@ contract NamedUnwrapTest is V2Fixture {
         vm.stopPrank();
     }
 
-    function _env(uint256 nonce, uint32 mode, uint256 fee) internal view returns (MetaTxLib.Envelope memory e) {
-        e.from = holder;
+    function _env(uint256 nonce, uint32 mode, uint256 fee) internal view returns (MetaTxLib.UAEnvelope memory e) {
+        e.from = MetaTxLib.pad(holder);
         e.batch = LANE;
         e.nonce = nonce;
         e.validUntil = block.timestamp + 300;
@@ -173,11 +175,17 @@ contract NamedUnwrapTest is V2Fixture {
         e.fee = fee;
     }
 
-    function _walletSig(MetaTxLib.Envelope memory e, uint256 wrapped, uint256 minOut) internal view returns (bytes memory) {
+    function _walletSig(MetaTxLib.UAEnvelope memory e, uint256 wrapped, uint256 minOut)
+        internal view returns (IUARegistry.UASig memory s)
+    {
         string memory tail = eJson(e.batch, e.nonce, e.validUntil, e.mode, e.fee);
-        string memory message = string.concat('"from":', a(e.from), ',"wrapped":', n(wrapped), ',"recipient":', a(bob),
+        string memory message = string.concat('"from":', h(e.from), ',"wrapped":', n(wrapped), ',"recipient":', a(bob),
             ',"minOut":', n(minOut), ',', tail);
-        return ecdsa(PK, walletDigest(address(w), "Unwrap", UNWRAP_FIELDS, message));
+        s.signature = ecdsa(PK, walletDigest(address(w), "UAUnwrap", UNWRAP_FIELDS, message));
+    }
+
+    function _native(bytes memory sig) internal pure returns (IUARegistry.UASig memory s) {
+        s.signature = sig;
     }
 
     function _generic(uint256 nonce, uint256 wrapped, uint256 minOut)
@@ -192,8 +200,8 @@ contract NamedUnwrapTest is V2Fixture {
 
     function test_c0_unwrapTyped() public {
         // the wallet's signature executes, the amount-class fee of the signed mode from the signer, after the op
-        MetaTxLib.Envelope memory e = _env(0, MetaTxLib.MODE_FEE_FIXED, 1);
-        bytes memory sig = _walletSig(e, 100, 90);
+        MetaTxLib.UAEnvelope memory e = _env(0, MetaTxLib.MODE_FEE_FIXED, 1);
+        IUARegistry.UASig memory sig = _walletSig(e, 100, 90);
         vm.prank(relayer);
         w.mtxUnwrap(e, 100, bob, 90, sig);
         assertEq(usd.balanceOf(bob), 100);
@@ -208,12 +216,12 @@ contract NamedUnwrapTest is V2Fixture {
         // the typed and the generic signature are not interchangeable
         e = _env(1, 0, 0);
         MetaTxLib.MetaTransaction memory m = _generic(1, 200, 0);
-        bytes memory typed = _walletSig(e, 200, 0);
+        IUARegistry.UASig memory typed = _walletSig(e, 200, 0);
         bytes memory generic = ecdsa(PK, MtxDigest.metaTx(address(w), m));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        w.executeMetaTransaction(m, typed);
+        w.executeMetaTransaction(m, typed.signature);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        w.mtxUnwrap(e, 200, bob, 0, generic);
+        w.mtxUnwrap(e, 200, bob, 0, _native(generic));
 
         // the kept generic path runs the same op on the same lane: nonce 1 is gone for the typed form too
         vm.prank(relayer);
@@ -233,10 +241,12 @@ contract NamedUnwrapTest is V2Fixture {
         w.executeMetaTransaction(m, generic);
     }
 
-    /// The same op on a warm lane through both paths, for the run log.
+    /// The same op on a warm lane through both paths, for the run log. ua-mtx-merge T3, meaning: the named entry is the
+    /// merged one on `UASig`, so the generic path it is held to is the merged `mtxExecute(UAMetaTransaction, UASig)` (the
+    /// same signature form); the address alias `executeMetaTransaction` is logged beside it (R3).
     function test_c0_gasNamedVsGeneric() public {
-        MetaTxLib.Envelope memory e = _env(0, 0, 0);
-        bytes memory sig = _walletSig(e, 100, 0);
+        MetaTxLib.UAEnvelope memory e = _env(0, 0, 0);
+        IUARegistry.UASig memory sig = _walletSig(e, 100, 0);
         w.mtxUnwrap(e, 100, bob, 0, sig);
         e = _env(1, 0, 0);
         sig = _walletSig(e, 100, 0);
@@ -244,41 +254,59 @@ contract NamedUnwrapTest is V2Fixture {
         w.mtxUnwrap(e, 100, bob, 0, sig);
         uint256 named = vm.lastCallGas().gasTotalUsed;
         MetaTxLib.MetaTransaction memory m = _generic(2, 100, 0);
-        sig = ecdsa(PK, MtxDigest.metaTx(address(w), m));
+        MetaTxLib.UAMetaTransaction memory u = MetaTxLib.UAMetaTransaction(e.from, m.data, LANE, 2, m.validUntil, 0,
+            address(0), 0, address(0));
+        sig = _native(ecdsa(PK, w.mtxDigest(u)));
         vm.prank(relayer);
-        w.executeMetaTransaction(m, sig);
+        w.mtxExecute(u, sig);
         uint256 generic = vm.lastCallGas().gasTotalUsed;
-        console2.log("mtxUnwrap / mtxExecute(unwrap), warm lane", named, generic);
+        m.nonce = 3;
+        bytes memory gsig = ecdsa(PK, MtxDigest.metaTx(address(w), m));
+        vm.prank(relayer);
+        w.executeMetaTransaction(m, gsig);
+        uint256 alias_ = vm.lastCallGas().gasTotalUsed;
+        console2.log("mtxUnwrap / mtxExecute(unwrap) / executeMetaTransaction(unwrap), warm lane", named, generic, alias_);
         assertLt(named, generic + 2_000);
     }
 
-    /// C1: the `Unwrap` row byte for byte on the C0 entry, and run under this token's domain.
+    /// C1: the `UAUnwrap` row byte for byte on the C0 entry, and run under this token's domain. ua-mtx-merge T3, meaning:
+    /// the address `Unwrap` row has no entry (R23; MD-7: T11 retires it); the `UAUnwrap` row (until T11 regenerates it)
+    /// holds the `uaUnwrap` selector and runs under the merged `mtxUnwrap`.
     function test_c1_unwrapRow() public {
         string memory j = VM.readFile(TYPED_OPS);
-        checkRow(j, "Unwrap", "token");
-        MetaTxLib.Envelope memory e = rowEnvelope(j, "Unwrap");
-        uint256 wrapped = VM.parseJsonUint(j, msgField("Unwrap", "wrapped"));
-        address recipient = VM.parseJsonAddress(j, msgField("Unwrap", "recipient"));
-        uint256 minOut = VM.parseJsonUint(j, msgField("Unwrap", "minOut"));
-        assertEq(abi.encodeCall(w.mtxUnwrap, (e, wrapped, recipient, minOut, VM.parseJsonBytes(j, domainField("Unwrap", "token", "signature")))),
-            VM.parseJsonBytes(j, domainField("Unwrap", "token", "calldata")));
-        usd.mint(e.from, 2 * wrapped);
-        vm.startPrank(e.from);
+        checkRow(j, "UAUnwrap", "token");
+        MetaTxLib.Envelope memory e2 = rowEnvelope2(j, "UAUnwrap");
+        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(VM.parseJsonBytes32(j, msgField("UAUnwrap", "from")), e2.batch,
+            e2.nonce, e2.validUntil, e2.mode, e2.relayer, e2.fee, e2.feeRecipient);
+        address from = address(uint160(uint256(e.from)));
+        uint256 wrapped = VM.parseJsonUint(j, msgField("UAUnwrap", "wrapped"));
+        address recipient = VM.parseJsonAddress(j, msgField("UAUnwrap", "recipient"));
+        uint256 minOut = VM.parseJsonUint(j, msgField("UAUnwrap", "minOut"));
+        bytes memory cd = VM.parseJsonBytes(j, domainField("UAUnwrap", "token", "calldata"));
+        assertEq(abi.encodeWithSignature("uaUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))", e, wrapped,
+            recipient, minOut, _native(VM.parseJsonBytes(j, domainField("UAUnwrap", "token", "signature")))), cd);
+        usd.mint(from, 2 * wrapped);
+        vm.startPrank(from);
         usd.approve(address(w), 2 * wrapped);
         w.wrap(2 * wrapped);
         vm.stopPrank();
-        bytes memory sig = onChain(j, "Unwrap", address(w));
+        IUARegistry.UASig memory sig = _native(onChain(j, "UAUnwrap", address(w))); // before the prank: an external read
         vm.prank(e.relayer);
         w.mtxUnwrap(e, wrapped, recipient, minOut, sig);
         assertEq(usd.balanceOf(recipient), wrapped);
-        assertEq(w.mtxNonce(MetaTxLib.pad(e.from), e.batch), 1);
+        assertEq(w.mtxNonce(e.from, e.batch), 1);
         assertEq(w.balanceOf(e.feeRecipient), wrapped * e.fee / 1_000_000, "the row's PERCENT fee");
+        // the address `Unwrap` row: its own calldata finds no function
+        (bool ok, bytes memory ret) = address(w).call(VM.parseJsonBytes(j, domainField("Unwrap", "token", "calldata")));
+        assertFalse(ok);
+        assertEq(ret.length, 0, "no such function");
     }
 
     /// The named entry is no self-call target: the generic path cannot call it, nor the entry itself.
     function test_c0_namedEntryNotAllowlisted() public {
         MetaTxLib.MetaTransaction memory m = _generic(0, 1, 0);
-        m.data = abi.encodeCall(w.mtxUnwrap, (_env(0, 0, 0), uint256(1), bob, uint256(0), bytes("")));
+        IUARegistry.UASig memory none;
+        m.data = abi.encodeCall(w.mtxUnwrap, (_env(0, 0, 0), uint256(1), bob, uint256(0), none));
         bytes memory sig = ecdsa(PK, MtxDigest.metaTx(address(w), m));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, w.mtxUnwrap.selector));
         w.executeMetaTransaction(m, sig);

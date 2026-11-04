@@ -39,6 +39,22 @@ import {VM, TYPED_OPS, checkRow, onChain, domainOf, domainField, ecdsa, rowKey} 
 import {swap, tryRowAs} from "./TypedOps.t.sol";
 import {nid} from "../helpers/Ids.sol";
 
+/// The address `WrapOrder` (R39: in legacy/ua-mtx-merge/ after T3), kept here to encode its retired row.
+struct LegacyWrapOrder {
+    address from;
+    address wrappedToken;
+    uint256 amount;
+    uint256 minMinted;
+    uint256 minFill;
+    uint256 fee;
+    address relayer;
+    address destination;
+    uint8 flags;
+    uint256 batch;
+    uint256 nonce;
+    uint256 validUntil;
+}
+
 /// typed-signing C6: the order, receiver-fee, relay-fee and cancel rows of `typed_ops.json` run on every token kind, under
 /// that kind's own domain: the row by itself, its calldata equal to the message's fields, then that calldata on a contract
 /// with the signature re-made over the row's `structHash`, so the entry hashes what clientkeys hashed.
@@ -154,16 +170,19 @@ abstract contract OrderRows is Test {
         w = WrappedToken(wrapper);
     }
 
-    function test_typedOpsVectors_WrapOrderRow() public {
+    /// ua-mtx-merge T3 (R39), meaning: the address `mtxWrapOrder` / `WrapOrder` left the wrapper; the row (until T11
+    /// retires it, MD-7) finds no entry. The wrap order is `UAWrapOrder`'s row, below, under `mtxWrapOrder`.
+    function test_typedOpsVectors_WrapOrderRowHasNoEntry() public {
         j = vm.readFile(TYPED_OPS);
         ITradeToken.UATradeOrder memory c = _wrapAt(_f("WrapOrder", ""));
-        ITradeToken.WrapOrder memory o = ITradeToken.WrapOrder(address(uint160(uint256(c.from))), c.receiveToken, c.amount, c.receiveAmount,
-            c.minFill, c.fee, c.relayer, address(uint160(uint256(c.destination))), c.flags, c.batch, c.nonce, c.validUntil);
+        LegacyWrapOrder memory o = LegacyWrapOrder(address(uint160(uint256(c.from))), c.receiveToken, c.amount,
+            c.receiveAmount, c.minFill, c.fee, c.relayer, address(uint160(uint256(c.destination))), c.flags, c.batch, c.nonce,
+            c.validUntil);
         (NormalToken u, WrappedToken w) = _wrapPair("WrapOrder", o.from, o.wrappedToken, o.amount);
-        _run("WrapOrder", address(w), address(u), o.relayer, abi.encodeCall(IWrappedToken.mtxWrapOrder, (address(u), o, _sigOf("WrapOrder"))));
-        assertEq(w.balanceOf(o.from), 997);
-        assertEq(w.balanceOf(o.relayer), 3);
-        assertEq(u.pulled(u.tradeOrderDigest(DexLegs.asTrade(o))), o.amount);
+        _rowHasNoEntry("WrapOrder", address(w), abi.encodeWithSignature(
+            "mtxWrapOrder(address,(address,address,uint256,uint256,uint256,uint256,address,address,uint8,uint256,uint256,uint256),bytes)",
+            address(u), o, _sigOf("WrapOrder")));
+        assertEq(w.totalSupply(), 0);
     }
 
     function test_typedOpsVectors_UAWrapOrderRow() public {
@@ -173,8 +192,10 @@ abstract contract OrderRows is Test {
             c.relayer, c.destination, c.flags, c.batch, c.nonce, c.validUntil);
         address signer = address(uint160(uint256(o.from)));
         (NormalToken u, WrappedToken w) = _wrapPair("UAWrapOrder", signer, o.wrappedToken, o.amount);
-        _run("UAWrapOrder", address(w), address(u), o.relayer,
-            abi.encodeCall(IWrappedToken.uaWrapOrder, (address(u), o, _uaSig("UAWrapOrder"))));
+        bytes memory built = abi.encodeWithSignature("uaWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+            address(u), o, _uaSig("UAWrapOrder"));
+        // ua-mtx-merge T3 (R39): the row holds the `uaWrapOrder` selector (until T11); it runs under `mtxWrapOrder`
+        _runRenamed("UAWrapOrder", address(w), address(u), o.relayer, built, IWrappedToken.mtxWrapOrder.selector);
         assertEq(w.balanceOf(signer), 997);
         assertEq(u.pulled(u.uaTradeOrderDigest(DexLegs.asTrade(o))), o.amount);
     }
@@ -384,7 +405,7 @@ contract OrderRowsTokenTest is OrderRows, UALedgerBase {
         bytes4[13] memory sels = [ITradeToken.mtxTrade.selector, ITradeToken.uaTrade.selector, ITradeToken.mtxCancelOrder.selector,
             ITradeToken.uaCancelOrder.selector, ITradeToken.mtxInvalidateNonces.selector, ITradeToken.uaInvalidateNonces.selector,
             IERC20MetaTx.mtxRelayFee.selector, IERC20MetaTx.mtxRelayFee.selector, IMetaTokenV2.mtxPayReceiverFee.selector,
-            IMetaTokenV2.mtxPayReceiverFee.selector, IWrappedToken.mtxWrapOrder.selector, IWrappedToken.uaWrapOrder.selector,
+            IMetaTokenV2.mtxPayReceiverFee.selector, IWrappedToken.mtxWrapOrder.selector, IWrappedToken.mtxWrapOrder.selector,
             UAMetaTxBase.mtxCancelNonce.selector];
         bytes32 me = _pad(alice);
         for (uint256 i; i < sels.length; ++i) {

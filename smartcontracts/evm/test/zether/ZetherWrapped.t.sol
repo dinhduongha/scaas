@@ -424,13 +424,15 @@ contract ZetherWrappedTest is ZetherFixture {
         address[] memory legs = new address[](1);
         legs[0] = address(pts);
         WrappedZetherToken z = _wrapper(legs, _ones(1), _ones(1), "zpts", false);
-        ITradeToken.WrapOrder memory o;
-        (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill) = (payer, address(z), 20 * SCALE, 20 * SCALE, 20 * SCALE);
+        ITradeToken.UAWrapOrder memory o; // the merged wrap order (R39): the payer's id, its own key
+        (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill) =
+            (MetaTxLib.pad(payer), address(z), 20 * SCALE, 20 * SCALE, 20 * SCALE);
         (o.batch, o.nonce, o.validUntil) = (7, 1, block.timestamp + 300);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, pts.tradeOrderDigest(DexLegs.asTrade(o)));
-        bytes memory sig = abi.encodePacked(r, s, v);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, pts.uaTradeOrderDigest(DexLegs.asTrade(o)));
+        IUARegistry.UASig memory a;
+        a.signature = abi.encodePacked(r, s, v);
         vm.prank(relayer);
-        z.mtxWrapOrder(address(pts), o, sig);
+        z.mtxWrapOrder(address(pts), o, a);
         assertEq(z.balanceOf(payer), 20 * SCALE);
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
             from: payer, data: abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 20)), batch: 2, nonce: 0,
@@ -438,9 +440,8 @@ contract ZetherWrappedTest is ZetherFixture {
             feeRecipient: address(0)
         });
         (v, r, s) = vm.sign(PAYER_PK, MtxDigest.metaTx(address(z), m));
-        sig = abi.encodePacked(r, s, v);
         vm.prank(relayer);
-        z.executeMetaTransaction(m, sig);
+        z.executeMetaTransaction(m, abi.encodePacked(r, s, v));
         assertEq(z.balanceOf(payer), 0);
         assertEq(z.totalShielded(), 20);
         assertEq(pts.allowance(payer, address(z)), 0);

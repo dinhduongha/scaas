@@ -90,7 +90,7 @@ contract MsgSenderLintTest is Test {
         assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 3,
             "MetaTokenBase: factory check in initialize; the relayer of mtxRelayFee (the payment's word and `_relayHash`), bound to the direct caller");
         assertEq(_count("src/metatx/NormalToken.sol", "msg.sender", false), 0, "NormalToken");
-        assertEq(_count("src/metatx/WrappedToken.sol", "msg.sender", false), 4, "WrappedToken: mtxWrapOrder and uaWrapOrder submitter x2 (CTR-TOK-20)");
+        assertEq(_count("src/metatx/WrappedToken.sol", "msg.sender", false), 2, "WrappedToken: mtxWrapOrder submitter x2 (CTR-TOK-20; ua-mtx-merge T3: 4 -> 2, the address wrap order to legacy, R39)");
         // governance T8 (spec §6.1, GD-20): `_addLeg` asks the factory, `msg.sender` through the DELEGATECALL, `isRegisteredToken`
         assertEq(_count("src/metatx/WrappedLib.sol", "msg.sender", false), 1, "WrappedLib: the factory in _addLeg's leg check (CTR-GOV-05)");
         assertEq(_count("src/trade/TradeLib.sol", "msg.sender", false), 0, "TradeLib: the caller is a parameter");

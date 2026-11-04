@@ -212,42 +212,25 @@ library WrappedLib {
         L.reserve = reserve + received;
     }
 
-    /// @notice `mtxWrapOrder` (CTR-TOK-20): the leg must accept a wrap (enabled, no pending change, no shortfall); the
-    ///         underlying's `mtxTrade` takes the order with `dex == receiveToken == wrappedToken` as the holder's
-    ///         `WrapOrder`: it checks the signature, that this token is the puller, the price (`minMinted <= minted`),
-    ///         the relayer (`submitter`) and the fee bound, and moves `o.amount` here.
+    /// @notice `mtxWrapOrder` (CTR-TOK-20, UA-5b, R39): the leg must accept a wrap (enabled, no pending change, no
+    ///         shortfall); the underlying's `uaTrade` takes the holder's `UAWrapOrder` as the `UATradeOrder` with
+    ///         `dex == receiveToken == wrappedToken`: it checks the holder, that this token is the puller, the price
+    ///         (`minMinted <= minted`), the relayer (`submitter`) and the fee bound, and moves `o.amount` here. A ledger
+    ///         is asked of the underlying (`IUALedger` by ERC-165, as `payOutToUA`) only for a derived holder (C).
     /// @return received the measured delta (must be `o.amount`)
     /// @return minted `⌊o.amount·num/den⌋`
     /// @return fee `⌈minted·o.fee/10⁶⌉`, the submitter's part of `minted`
-    function wrapBySig(address u, ITradeToken.WrapOrder calldata o, bytes calldata sig, address submitter, uint256 supply)
-        public returns (uint256 received, uint256 minted, uint256 fee)
-    {
-        Leg storage L = _wrapLeg(u, o.wrappedToken);
-        (minted, fee) = _sigQuote(L, o.amount, o.fee, supply);
-        received = _sigBefore(L); // the balance before, in the return slot (stack)
-        ITradeToken(u).mtxTrade(_tradeOf(o), sig, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
-        received = _sigReceived(L, received, o.amount);
-    }
-
-    /// @notice `uaWrapOrder` (CTR-TOK-20, UA-5b): `wrapBySig` with the holder's `UAWrapOrder` pulled by the underlying's
-    ///         `uaTrade`; the underlying must be a SCaaS ledger token (`IUALedger` by ERC-165, as `payOutToUA`).
     function wrapBySigUA(address u, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth, address submitter,
         uint256 supply) public returns (uint256 received, uint256 minted, uint256 fee)
     {
         Leg storage L = _wrapLeg(u, o.wrappedToken);
-        if (!ERC165Checker.supportsInterface(u, type(IUALedger).interfaceId)) revert IUALedger.UALegNotLedger(u);
+        if (!UAKinds.inNativeSpace(o.from) && !ERC165Checker.supportsInterface(u, type(IUALedger).interfaceId)) {
+            revert IUALedger.UALegNotLedger(u);
+        }
         (minted, fee) = _sigQuote(L, o.amount, o.fee, supply);
         received = _sigBefore(L); // the balance before, in the return slot (stack)
         ITradeToken(u).uaTrade(_order(o), auth, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
         received = _sigReceived(L, received, o.amount);
-    }
-
-    /// @dev `_order` of a `WrapOrder`: the same 12 words as a `UAWrapOrder`, ids zero-padded, into the 13 of a `TradeOrder`.
-    function _tradeOf(ITradeToken.WrapOrder memory w) private pure returns (ITradeToken.TradeOrder memory t) {
-        ITradeToken.UAWrapOrder memory u;
-        assembly ("memory-safe") { u := w }
-        ITradeToken.UATradeOrder memory c = _order(u);
-        assembly ("memory-safe") { t := c }
     }
 
     /// @dev The order the underlying checks: a wrap order is the `UATradeOrder` with `dex == receiveToken == wrappedToken`

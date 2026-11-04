@@ -36,12 +36,8 @@ library DexLegs {
         address[] extraTokens;
     }
 
-    /// The order a wrap order is at the underlying (TS-D19): `dex == receiveToken == wrappedToken`.
-    function asTrade(ITradeToken.WrapOrder memory w) internal pure returns (ITradeToken.TradeOrder memory) {
-        return ITradeToken.TradeOrder(w.from, w.wrappedToken, w.amount, w.minMinted, w.minFill, w.fee, w.relayer,
-            w.wrappedToken, w.destination, w.flags, w.batch, w.nonce, w.validUntil);
-    }
-
+    /// The order a wrap order is at the underlying (TS-D19): `dex == receiveToken == wrappedToken` (the address
+    /// `WrapOrder` is in legacy/ua-mtx-merge/, R39).
     function asTrade(ITradeToken.UAWrapOrder memory w) internal pure returns (ITradeToken.UATradeOrder memory) {
         return ITradeToken.UATradeOrder(w.from, w.wrappedToken, w.amount, w.minMinted, w.minFill, w.fee, w.relayer,
             w.wrappedToken, w.destination, w.flags, w.batch, w.nonce, w.validUntil);

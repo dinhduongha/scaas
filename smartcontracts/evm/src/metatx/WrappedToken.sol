@@ -33,9 +33,6 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     bytes4 internal constant SEL_WRAP_TO_UA = bytes4(keccak256("wrapToUA(address,uint256,bytes32)"));
     bytes4 internal constant SEL_UNWRAP_TO_UA = bytes4(keccak256("unwrapToUA(address,uint256,bytes32,uint256)"));
 
-    bytes32 internal constant UNWRAP_TYPEHASH = keccak256(
-        "Unwrap(address from,uint256 wrapped,address recipient,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
 
     bytes32 internal constant WRAP_TYPEHASH = keccak256(
         "Wrap(address from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
@@ -46,9 +43,6 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     bytes32 internal constant UA_UNWRAP_TYPEHASH = keccak256(
         "UAUnwrap(bytes32 from,uint256 wrapped,address recipient,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
-    bytes32 internal constant UNWRAP_LEG_TYPEHASH = keccak256(
-        "UnwrapLeg(address from,address underlying,uint256 wrapped,address recipient,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
     bytes32 internal constant UA_UNWRAP_LEG_TYPEHASH = keccak256(
         "UAUnwrapLeg(bytes32 from,address underlying,uint256 wrapped,address recipient,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
@@ -57,9 +51,6 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     );
     bytes32 internal constant WRAP_TO_UA_TYPEHASH = keccak256(
         "WrapToUA(address from,address underlying,uint256 amount,bytes32 to,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
-    bytes32 internal constant UNWRAP_TO_UA_TYPEHASH = keccak256(
-        "UnwrapToUA(address from,address underlying,uint256 wrapped,bytes32 to,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
     bytes32 internal constant UA_UNWRAP_TO_UA_TYPEHASH = keccak256(
         "UAUnwrapToUA(bytes32 from,address underlying,uint256 wrapped,bytes32 to,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
@@ -123,7 +114,7 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     }
 
     /// @notice `unwrap(u, …)` paid into `to` in leg `u`'s UA ledger (CTR-UA-28): burns from the subject (a native, or a
-    ///         UA through `UA_POOL` under `uaExecute`) before the one outside call, the leg's `transferToUA`.
+    ///         UA through `UA_POOL` under `mtxExecute`) before the one outside call, the leg's `transferToUA`.
     function unwrapToUA(address u, uint256 wrapped, bytes32 to, uint256 minOut)
         external nonReentrant returns (uint256 out, uint256 burned)
     {
@@ -169,62 +160,32 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     }
 
     /// @notice The signed `unwrap(wrapped, recipient, minOut)`, `AMOUNT(0)` as on the generic path; the other unwraps
-    ///         `AMOUNT(1)`, the basis `wrapped`.
-    function mtxUnwrap(MetaTxLib.Envelope calldata e, uint256 wrapped, address recipient, uint256 minOut,
-        bytes calldata sig) external nonReentrant returns (bytes memory)
-    {
-        return _named(UNWRAP_TYPEHASH, SEL_UNWRAP_MIN, e, abi.encode(wrapped, recipient, minOut), sig);
-    }
-
-    function uaUnwrap(MetaTxLib.UAEnvelope calldata e, uint256 wrapped, address recipient, uint256 minOut,
+    ///         `AMOUNT(1)`, the basis `wrapped`. ua-mtx-merge R23: today's `ua*` bodies under the `mtx*` names, for native
+    ///         and derived ids (a native one by its own key, no registry; a derived UA through the registry).
+    function mtxUnwrap(MetaTxLib.UAEnvelope calldata e, uint256 wrapped, address recipient, uint256 minOut,
         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
     {
         return _namedUA(UA_UNWRAP_TYPEHASH, SEL_UNWRAP_MIN, e, abi.encode(wrapped, recipient, minOut), auth);
     }
 
-    function mtxUnwrapLeg(MetaTxLib.Envelope calldata e, address u, uint256 wrapped, address recipient, uint256 minOut,
-        bytes calldata sig) external nonReentrant returns (bytes memory)
-    {
-        return _named(UNWRAP_LEG_TYPEHASH, SEL_UNWRAP_LEG, e, abi.encode(u, wrapped, recipient, minOut), sig);
-    }
-
-    function uaUnwrapLeg(MetaTxLib.UAEnvelope calldata e, address u, uint256 wrapped, address recipient, uint256 minOut,
+    function mtxUnwrapLeg(MetaTxLib.UAEnvelope calldata e, address u, uint256 wrapped, address recipient, uint256 minOut,
         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
     {
         return _namedUA(UA_UNWRAP_LEG_TYPEHASH, SEL_UNWRAP_LEG, e, abi.encode(u, wrapped, recipient, minOut), auth);
     }
 
-    function mtxUnwrapToUA(MetaTxLib.Envelope calldata e, address u, uint256 wrapped, bytes32 to, uint256 minOut,
-        bytes calldata sig) external nonReentrant returns (bytes memory)
-    {
-        return _named(UNWRAP_TO_UA_TYPEHASH, SEL_UNWRAP_TO_UA, e, abi.encode(u, wrapped, to, minOut), sig);
-    }
-
-    function uaUnwrapToUA(MetaTxLib.UAEnvelope calldata e, address u, uint256 wrapped, bytes32 to, uint256 minOut,
+    function mtxUnwrapToUA(MetaTxLib.UAEnvelope calldata e, address u, uint256 wrapped, bytes32 to, uint256 minOut,
         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
     {
         return _namedUA(UA_UNWRAP_TO_UA_TYPEHASH, SEL_UNWRAP_TO_UA, e, abi.encode(u, wrapped, to, minOut), auth);
     }
 
-    /// @notice Signature wrap of a SCaaS underlying (CTR-TOK-20): mints `minted − fee` to `o.destination` (or
-    ///         `o.from`) and `fee` to the submitter. Not allowlisted: a direct read of the caller (the submitter).
-    function mtxWrapOrder(address u, WrapOrder calldata o, bytes calldata sig)
-        external nonReentrant returns (uint256 minted)
-    {
-        uint256 received;
-        uint256 fee;
-        (received, minted, fee) = WrappedLib.wrapBySig(u, o, sig, msg.sender, totalSupply());
-        address to = o.destination == address(0) ? o.from : o.destination;
-        _mint(to, minted - fee);
-        if (fee != 0) _mint(msg.sender, fee);
-        emit Wrapped(to, u, received, minted - fee);
-    }
-
-    /// @notice `mtxWrapOrder` for a `UAWrapOrder` (CTR-TOK-20, UA-5b): the underlying's `uaTrade` checks the holder (a
-    ///         derived id under purpose `trade`, a native id itself); `minted − fee` goes to `o.destination` (0 ⇒
-    ///         `o.from`) — a derived id by `_uaMint` (registered SIGNING), a native one by `_mint` — and `fee` to the
-    ///         submitter. Not allowlisted: a direct read of the caller.
-    function uaWrapOrder(address u, UAWrapOrder calldata o, IUARegistry.UASig calldata auth)
+    /// @notice Signature wrap of a SCaaS underlying by a `UAWrapOrder` (CTR-TOK-20, UA-5b; ua-mtx-merge R39: today's
+    ///         `uaWrapOrder` under this name): the underlying's `uaTrade` checks the holder (a derived id under purpose
+    ///         `trade`, a native id itself); `minted − fee` goes to `o.destination` (0 ⇒ `o.from`) — a derived id by
+    ///         `_uaMint` (registered SIGNING), a native one by `_mint` — and `fee` to the submitter. Not allowlisted: a
+    ///         direct read of the caller.
+    function mtxWrapOrder(address u, UAWrapOrder calldata o, IUARegistry.UASig calldata auth)
         external nonReentrant returns (uint256 minted)
     {
         uint256 received;
