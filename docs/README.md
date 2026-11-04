@@ -253,4 +253,5 @@ from the target, a short **Transitional (BUILT)** paragraph says what runs today
 |---|---|
 | `python3 scripts/docs_check.py check` | The register (every old id covered, every current id defined exactly once), links, the absence of old ids and client-specific names in current docs, the research banners, and that diagrams are Mermaid (C11: an ASCII-art block must become `` ```mermaid ``, or `` ```text `` when it is a layout or pseudocode) |
 | `python3 scripts/docs_check.py facts check` | That every fact of the frozen sources landed in a current doc or is classified as history |
+| `python3 scripts/docs_check.py paths` | That no tracked text file outside `legacy/` holds a machine path (a home directory, a Claude session's `/tmp` dir): write `<repo>/` for the repository root, `~/` for a path under a home directory |
 | `python3 scripts/test_docs_check.py` | The checker itself |

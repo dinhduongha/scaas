@@ -50,6 +50,23 @@ def main():
     assert r.returncode == 0, r.stdout
     root = tree()
     assert 'NODE-JOB-01' in run(root, 'resolve', 'R91').stdout
+    # paths: the repo is the parent of --docs; only tracked files count, legacy/ is exempt
+    repo = Path(tempfile.mkdtemp())
+    (repo / 'x' / 'legacy').mkdir(parents=True)
+    (repo / 'docs').mkdir()
+    home = '/ho' + 'me/someone/'                       # split: this file must pass the check itself
+    (repo / 'ok.txt').write_text('built in <repo>/x and ~/usr/Qt\n')
+    (repo / 'x' / 'legacy' / 'old.txt').write_text(home + 'w\n')
+    (repo / 'untracked.txt').write_text(home + 'w\n')
+    subprocess.run(['git', 'init', '-q', str(repo)], check=True)
+    subprocess.run(['git', '-C', str(repo), 'add', 'ok.txt', 'x/legacy/old.txt'], check=True)
+    r = run(repo / 'docs', 'paths')
+    assert r.returncode == 0, r.stdout
+    for planted in (home + 'w/scaas/runs/a.txt', '/tm' + 'p/claude-1000/s/scratchpad', '/Use' + 'rs/someone/x'):
+        (repo / 'log.txt').write_text('line one\nCompiling (' + planted + ')\n')
+        subprocess.run(['git', '-C', str(repo), 'add', 'log.txt'], check=True)
+        r = run(repo / 'docs', 'paths')
+        assert r.returncode == 1 and 'log.txt:2: machine path' in r.stdout and 'legacy' not in r.stdout, r.stdout
     sys.path.insert(0, str(SCRIPT.parent))
     import docs_check as dc
     assert dc.expand('7.1–7.3, 9') == {'7.1', '7.2', '7.3', '9'} and dc.expand('10.0–10.x') == {'10'}

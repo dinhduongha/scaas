@@ -7,12 +7,13 @@
   docs_check.py resolve ID                old id -> new id(s) / new id -> old ids
   docs_check.py facts extract [--reset]   (keeps existing dispositions unless --reset)
   docs_check.py facts check [--area A] | facts trace SOURCE
+  docs_check.py paths                     no machine path in a tracked text file of the repo (the parent of --docs)
   --docs DIR                              docs root (default: <repo>/docs; tests use a temp tree)
 
 A check whose inputs do not exist yet (Phase 0: no decisions.md, no component docs) prints "pending" and
 passes; it turns into a real check as soon as its inputs appear.
 """
-import collections, csv, hashlib, re, sys
+import collections, csv, hashlib, re, subprocess, sys
 from pathlib import Path
 
 DOCS = Path(__file__).resolve().parent.parent / 'docs'
@@ -831,6 +832,32 @@ def cmd_facts_trace(source):
     return 0
 
 
+# ---------------------------------------------------------------------------------------------- machine paths
+# AGENTS.md: never commit machine paths. A home directory, a macOS home or a Claude session's /tmp dir, written so this
+# file does not match itself. Write <repo>/ for the repository root, ~/ for a path under a home directory.
+MACHINE_PATH = re.compile(rb'/home/[A-Za-z0-9._-]+/|/Users/[A-Za-z0-9._-]+/|/tmp/claude' rb'-')
+PATHS_EXEMPT = re.compile(r'(^|/)legacy/')     # superseded code is never edited; vendored trees (evm/lib) are not tracked
+
+
+def cmd_paths():
+    root = DOCS.parent
+    ls = subprocess.run(['git', '-C', str(root), 'ls-files', '-z'], capture_output=True, check=True).stdout
+    hits = 0
+    for f in sorted(x.decode() for x in ls.split(b'\0') if x):
+        if PATHS_EXEMPT.search(f) or not (root / f).is_file():
+            continue
+        b = (root / f).read_bytes()
+        if b'\0' in b[:8192]:
+            continue                                   # binary
+        for n, line in enumerate(b.split(b'\n'), 1):
+            m = MACHINE_PATH.search(line)
+            if m:
+                hits += 1
+                print(f'  ERROR: {f}:{n}: machine path {m.group(0).decode(errors="replace")!r}')
+    print(f'paths: {hits} machine path(s) in tracked files')
+    return 1 if hits else 0
+
+
 def main(argv):
     global DOCS
     if '--docs' in argv:
@@ -850,6 +877,8 @@ def main(argv):
         return cmd_check(area)
     if argv == ['--write']:
         return cmd_write()
+    if argv == ['paths']:
+        return cmd_paths()
     if len(argv) == 2 and argv[0] == 'resolve':
         return cmd_resolve(argv[1])
     if argv[:2] == ['facts', 'extract']:

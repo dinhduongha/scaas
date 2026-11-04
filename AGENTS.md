@@ -120,7 +120,7 @@ notes start with the research banner. Prefer Mermaid for flows; SVG overviews wh
 | EVM | `cd smartcontracts/evm && forge test` (per set: `script/pqz/at-set.sh`); `forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol'` |
 | Size | `forge build src --sizes --json > /tmp/sizes.json; python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json` |
 | Node | `cd scaas-node && cargo test && cargo clippy --all-targets -- -D warnings`; `cargo test --test e2e -- --ignored` |
-| Docs | `python3 scripts/docs_check.py check`; `python3 scripts/test_docs_check.py` |
+| Docs | `python3 scripts/docs_check.py check`; `python3 scripts/docs_check.py paths`; `python3 scripts/test_docs_check.py` |
 | Other | the header of `.github/workflows/ci.yml` lists every job's commands |
 
 State what you ran and its result. Report a failure with its output; do not edit a pin, a bound or a test to go green. A small change: edit, one
