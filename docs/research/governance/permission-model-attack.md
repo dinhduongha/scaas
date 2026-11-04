@@ -1,4 +1,6 @@
 > **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+>
+> **Superseded by the built model:** [contracts/README.md §8](../../contracts/README.md#governance) and CTR-GOV-01 to -19 in [decisions.md](../../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex); this note is the record of an earlier round, not rewritten.
 
 # Attack round on `permission-model.md` (2026-11-02): judgment
 
