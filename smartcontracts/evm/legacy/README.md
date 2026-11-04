@@ -161,4 +161,11 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `Unwrap` / `UnwrapLeg` / `UnwrapToUA` with their typehashes (R23), and `mtxWrapOrder(address, WrapOrder, bytes)` with
   the `WrapOrder` struct, `WrappedLib.wrapBySig` and `_tradeOf` (R39); their `ua*` bodies took the `mtx*` names. Tests as
   they stood before their meaning changed: `test/v2/MtxWrap.t.sol` (the address wrap order), `test/metatx/NamedEntry.t.sol`
-  (the address `Unwrap` entry), `test/governance/GovHybrid.t.sol` (the cap on both wrap-order entries). Not built.
+  (the address `Unwrap` entry), `test/governance/GovHybrid.t.sol` (the cap on both wrap-order entries).
+  T3b (the mandate wallets, Q6, MD-11): `src/wallet/MandateWallet.sol` and `src/hedera/HederaMandateWallet.sol` on
+  `WalletExecute` with `address` ids: the address-form bodies and events, the named entries over `SetMandate`,
+  `SetPayee`, `RevokeMandate`, `PayUnderMandate`, `DelegateRevoke`, `Execute` with `bytes` signatures, the flat builders
+  `mtxPayUnderMandate(token, …)`, `mtxRevoke`, `mtxExecuteAsOwner` and Hedera's `mtxExecuteAsOwnerRaw` (MD-11 (a)), the
+  wallets' address generic path and `executeMetaTransaction`. Tests as they stood before their meaning changed:
+  `test/wallet/{MandateWallet,NamedWallets}.t.sol`, `test/account/AccountKat.t.sol` (the writer of the vectors
+  `test/vectors/legacy/ua-mtx-merge/{mandate_pay_kat,mandate_revoke_kat}.json`). Not built.
