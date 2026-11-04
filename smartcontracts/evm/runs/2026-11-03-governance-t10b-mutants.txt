@@ -1,0 +1,14 @@
+# governance T10b mutants at 47f0ed21 (clean tree), each one change, suite test/governance/*.t.sol,
+# restored by git checkout -- <file> after each.
+# red first: the shapes kept (every identity bytes32), the behaviour of T10b stripped (no router branch in _govSubject, the
+# contract-only check without the derived-UA test): 6 of GovIdentity's 9 red, rc=1 (test_derivedUAOwnsAndGrantsThroughTheRouter,
+# test_derivedUAMintsThroughTheRouter, test_dexOwnedByADerivedUA, test_routerSubjectZeroRefused,
+# test_contractOnlyBitToADerivedUARefused, test_poolsAndZeroRefusedAsOwnerAndHolder); the three that passed there pin behaviour
+# the strip kept (test_govRouterIsTheReleases, test_nativeCallerIsItsPaddedAddress, test_routerSubjectReadOnlyFromTheRouter).
+mutant | test that went red | rc
+m1 the router branch dropped (_govSubject always the caller's native id) | test_derivedUAOwnsAndGrantsThroughTheRouter, test_derivedUAMintsThroughTheRouter, test_dexOwnedByADerivedUA, test_routerSubjectZeroRefused, test_contractOnlyBitToADerivedUARefused, test_poolsAndZeroRefusedAsOwnerAndHolder | 1
+m2 the router's subject read for every caller once GOV_ROUTER is set (the msg.sender compare dropped) | test_routerSubjectReadOnlyFromTheRouter, test_nativeCallerIsItsPaddedAddress, test_derivedUAOwnsAndGrantsThroughTheRouter | 1
+m3 the native id from tx.origin, not the caller | test_nativeCallerIsItsPaddedAddress, test_routerSubjectReadOnlyFromTheRouter, test_derivedUAOwnsAndGrantsThroughTheRouter, and 132 more across test/governance (135 failed; some suites fail in setUp) | 1
+m4 UA_POOL accepted as owner (_notPool checks SHIELD_POOL only) | test_poolsAndZeroRefusedAsOwnerAndHolder, test_fixed_aPoolCanBeOwner | 1
+m5 the contract-only check skipped for a derived UA (only the low 160 bits' code read) | test_contractOnlyBitToADerivedUARefused | 1
+# survivors: none
