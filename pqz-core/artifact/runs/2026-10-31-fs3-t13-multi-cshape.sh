@@ -2,7 +2,7 @@
 # usage: cshape.sh <t> <k list, e.g. "1 2 3">: commands k (1..6) of one shape of txm-bench.sh's loop (same body and
 # NP/NV/NF/NPW/NVW defaults), one docker run, step c-shape-<t>-<k joined>
 t=$1 K=$2
-W=/home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout
+W=$(git -C "$(dirname "$0")" rev-parse --show-toplevel) || exit 2
 cd $W && GATE=1 scripts/capped pqz-core/artifact/runs/2026-10-31-fs3-t13-multi-step.sh c-shape-$t-$(echo $K | tr -d ' ') "cd pqzl && export PQZ_ARENA_MB=3072 B=build/ov OVERSIZE=1; R=/out/pqzl-txm NP=10 NV=30 NF=200 NPW=3 NVW=3 t=$t; m=\$((64 << t)); for k in $K; do case \$k in
   1) build/ov/native/pqz_bench \"\$NP\" \"\$NV\" \$m >> \"\$R-native-generic.jsonl\" || echo \"native generic \$t rc=\$?\" ;;
   2) PQZ_VERIFY=fast build/ov/native/pqz_bench 2 \"\$NF\" \$m >> \"\$R-native-fast.jsonl\" || echo \"native fast \$t rc=\$?\" ;;

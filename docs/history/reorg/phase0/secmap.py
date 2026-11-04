@@ -1,5 +1,7 @@
 import re, csv, collections
-L = open('/home/dockers/odoo19/custom-addons/bamboo-dms/scaas/docs/history/plans/2026-10-07-docs-reorg.md', encoding='utf-8').read().split('\n')
+from pathlib import Path
+R = str(Path(__file__).resolve().parents[4])   # the repository root
+L = open(R + '/docs/history/plans/2026-10-07-docs-reorg.md', encoding='utf-8').read().split('\n')
 s = next(i for i,l in enumerate(L) if l.startswith('## 2. Source map')); e = next(i for i,l in enumerate(L) if l.startswith('### 2.4 '))
 FILES = {'2.1': ['SCaaS-2026-10-07.md'], '2.2': ['integration-2026-10-07.md']}
 NET = {f: f'2026-10-0{"4" if f in ("aptos","solana") else "3"}-net-{f}.md' for f in ['hedera','cosmos','soroban','sui','ton','aptos','solana']}
@@ -108,7 +110,7 @@ for r in out:
         col[k]['target_text'] += ' || ' + r['label'] + ': ' + r['target_text']
     else:
         r = dict(r); r['target_text'] = (r['label'] + ': ' if r['label'] else '') + r['target_text']; col[k] = r
-with open('/home/dockers/odoo19/custom-addons/bamboo-dms/scaas/docs/_work/section-map.tsv', 'w', encoding='utf-8') as fh:
+with open(R + '/docs/_work/section-map.tsv', 'w', encoding='utf-8') as fh:
     w = csv.DictWriter(fh, ['source', 'sec', 'default', 'target_text'], delimiter='\t', extrasaction='ignore', lineterminator='\n')
     w.writeheader()
     for r in col.values(): w.writerow({k: r[k].replace('\t', ' ') for k in ['source', 'sec', 'default', 'target_text']})
@@ -129,7 +131,7 @@ for l in L2:
     hint.setdefault(key, []).append(f'{part}: {c[2]}')
     if part.startswith('10.1 (3), 10.3 (2)'): hint.setdefault('10.3', []).append(f'{part}: {c[2]}')
 if '10.1' in hint: hint['10.1'] = hint.pop('~CHƯƠNG 10', []) + hint['10.1']
-with open('/home/dockers/odoo19/custom-addons/bamboo-dms/scaas/docs/_work/section-map.tsv', 'a', encoding='utf-8') as fh:
+with open(R + '/docs/_work/section-map.tsv', 'a', encoding='utf-8') as fh:
     w = csv.writer(fh, delimiter='\t', lineterminator='\n')
     for k, v in hint.items():
         w.writerow(['blockchain.md', k, '', ' || '.join(v).replace('\t', ' ')])
